@@ -637,7 +637,7 @@ static char *rna_def_property_get_func(
   if (!manualfunc) {
     if (!dp->dnastructname || !dp->dnaname) {
       CLOG_ERROR(&LOG, "%s.%s has no valid dna info.", srna->identifier, prop->identifier);
-      DefRNA.error = 1;
+      DefRNA.error = true;
       return NULL;
     }
 
@@ -654,7 +654,7 @@ static char *rna_def_property_get_func(
                        prop->identifier,
                        dp->dnatype,
                        RNA_property_typename(prop->type));
-            DefRNA.error = 1;
+            DefRNA.error = true;
             return NULL;
           }
         }
@@ -667,7 +667,7 @@ static char *rna_def_property_get_func(
                      prop->identifier,
                      dp->dnatype,
                      RNA_property_typename(prop->type));
-          DefRNA.error = 1;
+          DefRNA.error = true;
           return NULL;
         }
       }
@@ -679,7 +679,7 @@ static char *rna_def_property_get_func(
                      prop->identifier,
                      dp->dnatype,
                      RNA_property_typename(prop->type));
-          DefRNA.error = 1;
+          DefRNA.error = true;
           return NULL;
         }
       }
@@ -1020,7 +1020,7 @@ static char *rna_def_property_set_func(
     if (!dp->dnastructname || !dp->dnaname) {
       if (prop->flag & PROP_EDITABLE) {
         CLOG_ERROR(&LOG, "%s.%s has no valid dna info.", srna->identifier, prop->identifier);
-        DefRNA.error = 1;
+        DefRNA.error = true;
       }
       return NULL;
     }
@@ -1263,7 +1263,7 @@ static char *rna_def_property_length_func(
     if (!manualfunc) {
       if (!dp->dnastructname || !dp->dnaname) {
         CLOG_ERROR(&LOG, "%s.%s has no valid dna info.", srna->identifier, prop->identifier);
-        DefRNA.error = 1;
+        DefRNA.error = true;
         return NULL;
       }
     }
@@ -1289,7 +1289,7 @@ static char *rna_def_property_length_func(
       if (prop->type == PROP_COLLECTION &&
           (!(dp->dnalengthname || dp->dnalengthfixed) || !dp->dnaname)) {
         CLOG_ERROR(&LOG, "%s.%s has no valid dna info.", srna->identifier, prop->identifier);
-        DefRNA.error = 1;
+        DefRNA.error = true;
         return NULL;
       }
     }
@@ -1338,7 +1338,7 @@ static char *rna_def_property_begin_func(
   if (!manualfunc) {
     if (!dp->dnastructname || !dp->dnaname) {
       CLOG_ERROR(&LOG, "%s.%s has no valid dna info.", srna->identifier, prop->identifier);
-      DefRNA.error = 1;
+      DefRNA.error = true;
       return NULL;
     }
   }
@@ -1823,6 +1823,10 @@ static void rna_def_property_funcs(FILE *f, StructRNA *srna, PropertyDefRNA *dp)
     case PROP_ENUM: {
       EnumPropertyRNA *eprop = (EnumPropertyRNA *)prop;
 
+      if (!eprop->get && !eprop->set) {
+        rna_set_raw_property(dp, prop);
+      }
+
       eprop->get = (void *)rna_def_property_get_func(f, srna, prop, dp, (const char *)eprop->get);
       eprop->set = (void *)rna_def_property_set_func(f, srna, prop, dp, (const char *)eprop->set);
       break;
@@ -1844,7 +1848,7 @@ static void rna_def_property_funcs(FILE *f, StructRNA *srna, PropertyDefRNA *dp)
       if (!pprop->type) {
         CLOG_ERROR(
             &LOG, "%s.%s, pointer must have a struct type.", srna->identifier, prop->identifier);
-        DefRNA.error = 1;
+        DefRNA.error = true;
       }
       break;
     }
@@ -1892,21 +1896,21 @@ static void rna_def_property_funcs(FILE *f, StructRNA *srna, PropertyDefRNA *dp)
                      "%s.%s, collection must have a begin function.",
                      srna->identifier,
                      prop->identifier);
-          DefRNA.error = 1;
+          DefRNA.error = true;
         }
         if (!cprop->next) {
           CLOG_ERROR(&LOG,
                      "%s.%s, collection must have a next function.",
                      srna->identifier,
                      prop->identifier);
-          DefRNA.error = 1;
+          DefRNA.error = true;
         }
         if (!cprop->get) {
           CLOG_ERROR(&LOG,
                      "%s.%s, collection must have a get function.",
                      srna->identifier,
                      prop->identifier);
-          DefRNA.error = 1;
+          DefRNA.error = true;
         }
       }
       if (!cprop->item_type) {
@@ -1914,7 +1918,7 @@ static void rna_def_property_funcs(FILE *f, StructRNA *srna, PropertyDefRNA *dp)
                    "%s.%s, collection must have a struct type.",
                    srna->identifier,
                    prop->identifier);
-        DefRNA.error = 1;
+        DefRNA.error = true;
       }
       break;
     }
@@ -3652,7 +3656,7 @@ static void rna_generate_property(FILE *f, StructRNA *srna, const char *nest, Pr
                        errnest,
                        prop->identifier,
                        eprop->defaultvalue & ~totflag);
-            DefRNA.error = 1;
+            DefRNA.error = true;
           }
         }
         else {
@@ -3662,7 +3666,7 @@ static void rna_generate_property(FILE *f, StructRNA *srna, const char *nest, Pr
                        srna->identifier,
                        errnest,
                        prop->identifier);
-            DefRNA.error = 1;
+            DefRNA.error = true;
           }
         }
       }
@@ -3672,7 +3676,7 @@ static void rna_generate_property(FILE *f, StructRNA *srna, const char *nest, Pr
                    srna->identifier,
                    errnest,
                    prop->identifier);
-        DefRNA.error = 1;
+        DefRNA.error = true;
       }
       break;
     }
@@ -4214,7 +4218,7 @@ static void rna_generate_struct(BlenderRNA *UNUSED(brna), StructRNA *srna, FILE 
   if (srna->reg && !srna->refine) {
     CLOG_ERROR(
         &LOG, "%s has a register function, must also have refine function.", srna->identifier);
-    DefRNA.error = 1;
+    DefRNA.error = true;
   }
 
   func = srna->functions.first;
@@ -4705,7 +4709,8 @@ static const char *cpp_classes =
     "    DynamicArray() : data(NULL), length(0) {}\n"
     "    DynamicArray(int new_length) : data(NULL), length(new_length) { data = (T "
     "*)malloc(sizeof(T) * new_length); }\n"
-    "    DynamicArray(const DynamicArray<T>& other) { copy_from(other); }\n"
+    "    DynamicArray(const DynamicArray<T>& other) : data(NULL), length(0) { copy_from(other); "
+    "}\n"
     "    const DynamicArray<T>& operator = (const DynamicArray<T>& other) { copy_from(other); "
     "return *this; }\n"
     "\n"

@@ -132,19 +132,8 @@ bool RE_engine_is_opengl(RenderEngineType *render_type)
 
 RenderEngine *RE_engine_create(RenderEngineType *type)
 {
-  return RE_engine_create_ex(type, false);
-}
-
-RenderEngine *RE_engine_create_ex(RenderEngineType *type, bool use_for_viewport)
-{
   RenderEngine *engine = MEM_callocN(sizeof(RenderEngine), "RenderEngine");
   engine->type = type;
-
-  if (use_for_viewport) {
-    engine->flag |= RE_ENGINE_USED_FOR_VIEWPORT;
-
-    BLI_threaded_malloc_begin();
-  }
 
   BLI_mutex_init(&engine->update_render_passes_mutex);
 
@@ -158,10 +147,6 @@ void RE_engine_free(RenderEngine *engine)
     BPY_DECREF_RNA_INVALIDATE(engine->py_instance);
   }
 #endif
-
-  if (engine->flag & RE_ENGINE_USED_FOR_VIEWPORT) {
-    BLI_threaded_malloc_end();
-  }
 
   BLI_mutex_end(&engine->update_render_passes_mutex);
 
@@ -689,7 +674,7 @@ bool RE_bake_engine(Render *re,
   /* set render info */
   re->i.cfra = re->scene->r.cfra;
   BLI_strncpy(re->i.scene_name, re->scene->id.name + 2, sizeof(re->i.scene_name) - 2);
-  re->i.totface = re->i.totvert = re->i.totstrand = re->i.totlamp = re->i.tothalo = 0;
+  re->i.totface = re->i.totvert = re->i.totlamp = 0;
 
   /* render */
   engine = re->engine;
@@ -827,7 +812,7 @@ int RE_engine_render(Render *re, int do_all)
   /* set render info */
   re->i.cfra = re->scene->r.cfra;
   BLI_strncpy(re->i.scene_name, re->scene->id.name + 2, sizeof(re->i.scene_name));
-  re->i.totface = re->i.totvert = re->i.totstrand = re->i.totlamp = re->i.tothalo = 0;
+  re->i.totface = re->i.totvert = re->i.totlamp = 0;
 
   /* render */
   engine = re->engine;

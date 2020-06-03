@@ -31,6 +31,7 @@ struct ListBase;
 struct ModifierData;
 struct PTCacheEdit;
 struct ParticleSystem;
+struct TaskGraph;
 
 struct Curve;
 struct Hair;
@@ -150,7 +151,8 @@ int DRW_volume_material_count_get(struct Volume *volume);
 struct GPUBatch *DRW_volume_batch_cache_get_wireframes_face(struct Volume *volume);
 
 /* Mesh */
-void DRW_mesh_batch_cache_create_requested(struct Object *ob,
+void DRW_mesh_batch_cache_create_requested(struct TaskGraph *task_graph,
+                                           struct Object *ob,
                                            struct Mesh *me,
                                            const struct Scene *scene,
                                            const bool is_paint_mode,
@@ -208,6 +210,7 @@ enum {
   VFLAG_EDGE_SEAM = 1 << 4,
   VFLAG_EDGE_SHARP = 1 << 5,
   VFLAG_EDGE_FREESTYLE = 1 << 6,
+  VFLAG_HANDLE_SELECTED = 1 << 7,
   /* Beware to not go over 1 << 7 (it's a byte flag)
    * (see gpu_shader_edit_mesh_overlay_geom.glsl) */
 };

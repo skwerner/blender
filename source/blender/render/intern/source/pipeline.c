@@ -187,31 +187,21 @@ static int default_break(void *UNUSED(arg))
 
 static void stats_background(void *UNUSED(arg), RenderStats *rs)
 {
-  uintptr_t mem_in_use, mmap_in_use, peak_memory;
-  float megs_used_memory, mmap_used_memory, megs_peak_memory;
+  uintptr_t mem_in_use, peak_memory;
+  float megs_used_memory, megs_peak_memory;
   char info_time_str[32];
 
   mem_in_use = MEM_get_memory_in_use();
-  mmap_in_use = MEM_get_mapped_memory_in_use();
   peak_memory = MEM_get_peak_memory();
 
-  megs_used_memory = (mem_in_use - mmap_in_use) / (1024.0 * 1024.0);
-  mmap_used_memory = (mmap_in_use) / (1024.0 * 1024.0);
+  megs_used_memory = (mem_in_use) / (1024.0 * 1024.0);
   megs_peak_memory = (peak_memory) / (1024.0 * 1024.0);
 
   fprintf(stdout,
-          TIP_("Fra:%d Mem:%.2fM (%.2fM, Peak %.2fM) "),
+          TIP_("Fra:%d Mem:%.2fM (Peak %.2fM) "),
           rs->cfra,
           megs_used_memory,
-          mmap_used_memory,
           megs_peak_memory);
-
-  if (rs->curfield) {
-    fprintf(stdout, TIP_("Field %d "), rs->curfield);
-  }
-  if (rs->curblur) {
-    fprintf(stdout, TIP_("Blur %d "), rs->curblur);
-  }
 
   BLI_timecode_string_from_time_simple(
       info_time_str, sizeof(info_time_str), PIL_check_seconds_timer() - rs->starttime);
@@ -221,23 +211,12 @@ static void stats_background(void *UNUSED(arg), RenderStats *rs)
     fprintf(stdout, "%s", rs->infostr);
   }
   else {
-    if (rs->tothalo) {
-      fprintf(stdout,
-              TIP_("Sce: %s Ve:%d Fa:%d Ha:%d La:%d"),
-              rs->scene_name,
-              rs->totvert,
-              rs->totface,
-              rs->tothalo,
-              rs->totlamp);
-    }
-    else {
-      fprintf(stdout,
-              TIP_("Sce: %s Ve:%d Fa:%d La:%d"),
-              rs->scene_name,
-              rs->totvert,
-              rs->totface,
-              rs->totlamp);
-    }
+    fprintf(stdout,
+            TIP_("Sce: %s Ve:%d Fa:%d La:%d"),
+            rs->scene_name,
+            rs->totvert,
+            rs->totface,
+            rs->totlamp);
   }
 
   /* Flush stdout to be sure python callbacks are printing stuff after blender. */

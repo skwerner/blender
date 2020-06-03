@@ -827,10 +827,6 @@ void clipUVData(TransInfo *t)
   FOREACH_TRANS_DATA_CONTAINER (t, tc) {
     TransData *td = tc->data;
     for (int a = 0; a < tc->data_len; a++, td++) {
-      if (td->flag & TD_NOACTION) {
-        break;
-      }
-
       if ((td->flag & TD_SKIP) || (!td->loc)) {
         continue;
       }
@@ -1848,7 +1844,10 @@ static void special_aftertrans_update__mask(bContext *C, TransInfo *t)
   if (IS_AUTOKEY_ON(t->scene)) {
     Scene *scene = t->scene;
 
-    ED_mask_layer_shape_auto_key_select(mask, CFRA);
+    if (ED_mask_layer_shape_auto_key_select(mask, CFRA)) {
+      WM_event_add_notifier(C, NC_MASK | ND_DATA, &mask->id);
+      DEG_id_tag_update(&mask->id, 0);
+    }
   }
 }
 
@@ -1869,6 +1868,7 @@ static void special_aftertrans_update__node(bContext *C, TransInfo *t)
           nodeRemoveNode(bmain, ntree, node, true);
         }
       }
+      ntreeUpdateTree(bmain, ntree);
     }
   }
 }
@@ -2385,10 +2385,6 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
       ListBase pidlist;
       PTCacheID *pid;
       ob = td->ob;
-
-      if (td->flag & TD_NOACTION) {
-        break;
-      }
 
       if (td->flag & TD_SKIP) {
         continue;

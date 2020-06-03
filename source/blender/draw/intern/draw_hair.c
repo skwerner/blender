@@ -124,13 +124,10 @@ void DRW_hair_init(void)
   }
 }
 
-static DRWShadingGroup *drw_shgroup_create_hair_procedural_ex(Object *object,
-                                                              ParticleSystem *psys,
-                                                              ModifierData *md,
-                                                              DRWPass *hair_pass,
-                                                              DRWShadingGroup *shgrp_parent,
-                                                              struct GPUMaterial *gpu_mat,
-                                                              GPUShader *gpu_shader)
+DRWShadingGroup *DRW_shgroup_hair_create_sub(Object *object,
+                                             ParticleSystem *psys,
+                                             ModifierData *md,
+                                             DRWShadingGroup *shgrp_parent)
 {
   /* TODO(fclem): Pass the scene as parameter */
   const DRWContextState *draw_ctx = DRW_context_state_get();
@@ -154,24 +151,7 @@ static DRWShadingGroup *drw_shgroup_create_hair_procedural_ex(Object *object,
     need_ft_update = hair_ensure_procedural_data(object, &hair_cache, subdiv, thickness_res);
   }
 
-  DRWShadingGroup *shgrp;
-  if (shgrp_parent) {
-    shgrp = DRW_shgroup_create_sub(shgrp_parent);
-  }
-  else if (gpu_mat) {
-    shgrp = DRW_shgroup_material_create(gpu_mat, hair_pass);
-  }
-  else if (gpu_shader) {
-    shgrp = DRW_shgroup_create(gpu_shader, hair_pass);
-  }
-  else {
-    shgrp = NULL;
-    BLI_assert(0);
-  }
-
-  if (shgrp == NULL) {
-    return NULL;
-  }
+  DRWShadingGroup *shgrp = DRW_shgroup_create_sub(shgrp_parent);
 
   /* TODO optimize this. Only bind the ones GPUMaterial needs. */
   for (int i = 0; i < hair_cache->num_uv_layers; i++) {
@@ -240,10 +220,7 @@ static DRWShadingGroup *drw_shgroup_create_hair_procedural_ex(Object *object,
   DRW_shgroup_uniform_int(shgrp, "hairStrandsRes", &hair_cache->final[subdiv].strands_res, 1);
   DRW_shgroup_uniform_int_copy(shgrp, "hairThicknessRes", thickness_res);
   DRW_shgroup_uniform_float_copy(shgrp, "hairRadShape", hair_rad_shape);
-  DRW_shgroup_uniform_vec4_copy(shgrp, "hairDupliMatrix[0]", dupli_mat[0]);
-  DRW_shgroup_uniform_vec4_copy(shgrp, "hairDupliMatrix[1]", dupli_mat[1]);
-  DRW_shgroup_uniform_vec4_copy(shgrp, "hairDupliMatrix[2]", dupli_mat[2]);
-  DRW_shgroup_uniform_vec4_copy(shgrp, "hairDupliMatrix[3]", dupli_mat[3]);
+  DRW_shgroup_uniform_vec4_array_copy(shgrp, "hairDupliMatrix", dupli_mat, 4);
   DRW_shgroup_uniform_float_copy(shgrp, "hairRadRoot", hair_rad_root);
   DRW_shgroup_uniform_float_copy(shgrp, "hairRadTip", hair_rad_tip);
   DRW_shgroup_uniform_bool_copy(shgrp, "hairCloseTip", hair_close_tip);
@@ -285,29 +262,6 @@ static DRWShadingGroup *drw_shgroup_create_hair_procedural_ex(Object *object,
   }
 
   return shgrp;
-}
-
-DRWShadingGroup *DRW_shgroup_hair_create(
-    Object *object, ParticleSystem *psys, ModifierData *md, DRWPass *hair_pass, GPUShader *shader)
-{
-  return drw_shgroup_create_hair_procedural_ex(object, psys, md, hair_pass, NULL, NULL, shader);
-}
-
-DRWShadingGroup *DRW_shgroup_hair_create_sub(Object *object,
-                                             ParticleSystem *psys,
-                                             ModifierData *md,
-                                             DRWShadingGroup *shgrp)
-{
-  return drw_shgroup_create_hair_procedural_ex(object, psys, md, NULL, shgrp, NULL, NULL);
-}
-
-DRWShadingGroup *DRW_shgroup_material_hair_create(Object *object,
-                                                  ParticleSystem *psys,
-                                                  ModifierData *md,
-                                                  DRWPass *hair_pass,
-                                                  struct GPUMaterial *material)
-{
-  return drw_shgroup_create_hair_procedural_ex(object, psys, md, hair_pass, NULL, material, NULL);
 }
 
 void DRW_hair_update(void)

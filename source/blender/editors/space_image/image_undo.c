@@ -225,9 +225,9 @@ void *ED_image_paint_tile_push(ListBase *paint_tiles,
                                         "PaintTile.mask");
   }
 
-  ptile->rect.pt = MEM_mapallocN((ibuf->rect_float ? sizeof(float[4]) : sizeof(char[4])) *
-                                     square_i(ED_IMAGE_UNDO_TILE_SIZE),
-                                 "PaintTile.rect");
+  ptile->rect.pt = MEM_callocN((ibuf->rect_float ? sizeof(float[4]) : sizeof(char[4])) *
+                                   square_i(ED_IMAGE_UNDO_TILE_SIZE),
+                               "PaintTile.rect");
 
   ptile->use_float = has_float;
   ptile->valid = true;
@@ -958,7 +958,7 @@ static void image_undosys_step_decode(
   }
 
   if (us->paint_mode == PAINT_MODE_TEXTURE_3D) {
-    ED_object_mode_set(C, OB_MODE_TEXTURE_PAINT);
+    ED_object_mode_set_ex(C, OB_MODE_TEXTURE_PAINT, false, NULL);
   }
 
   /* Refresh texture slots. */

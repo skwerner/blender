@@ -44,6 +44,11 @@
 
 #define EXTERNAL_ENGINE "BLENDER_EXTERNAL"
 
+extern char datatoc_depth_frag_glsl[];
+extern char datatoc_depth_vert_glsl[];
+
+extern char datatoc_common_view_lib_glsl[];
+
 /* *********** LISTS *********** */
 
 /* GPUViewport.storage
@@ -106,7 +111,16 @@ static void external_engine_init(void *vedata)
 
   /* Depth prepass */
   if (!e_data.depth_sh) {
-    e_data.depth_sh = DRW_shader_create_3d_depth_only(GPU_SHADER_CFG_DEFAULT);
+    const GPUShaderConfigData *sh_cfg = &GPU_shader_cfg_data[GPU_SHADER_CFG_DEFAULT];
+
+    e_data.depth_sh = GPU_shader_create_from_arrays({
+        .vert = (const char *[]){sh_cfg->lib,
+                                 datatoc_common_view_lib_glsl,
+                                 datatoc_depth_vert_glsl,
+                                 NULL},
+        .frag = (const char *[]){datatoc_depth_frag_glsl, NULL},
+        .defs = (const char *[]){sh_cfg->def, NULL},
+    });
   }
 
   if (!stl->g_data) {
@@ -215,7 +229,7 @@ static void external_draw_scene_do(void *vedata)
       return;
     }
 
-    RenderEngine *engine = RE_engine_create_ex(engine_type, true);
+    RenderEngine *engine = RE_engine_create(engine_type);
     engine->tile_x = scene->r.tilex;
     engine->tile_y = scene->r.tiley;
     engine_type->view_update(engine, draw_ctx->evil_C, draw_ctx->depsgraph);
@@ -277,7 +291,7 @@ static void external_draw_scene(void *vedata)
 
 static void external_engine_free(void)
 {
-  /* All shaders are builtin. */
+  DRW_SHADER_FREE_SAFE(e_data.depth_sh);
 }
 
 static const DrawEngineDataSize external_data_size = DRW_VIEWPORT_DATA_SIZE(EXTERNAL_Data);

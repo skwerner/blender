@@ -1577,9 +1577,7 @@ static void view3d_panel_transform(const bContext *C, Panel *panel)
     }
     else {
       View3D *v3d = CTX_wm_view3d(C);
-      Scene *scene = CTX_data_scene(C);
-      const float lim = 10000.0f * max_ff(1.0f, ED_view3d_grid_scale(scene, v3d, NULL));
-      v3d_editvertex_buts(col, v3d, ob, lim);
+      v3d_editvertex_buts(col, v3d, ob, FLT_MAX);
     }
   }
   else if (ob->mode & OB_MODE_POSE) {
@@ -1644,7 +1642,7 @@ static int view3d_object_mode_menu(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
   else if (((ob->mode & OB_MODE_EDIT) == 0) && (ELEM(ob->type, OB_ARMATURE))) {
-    ED_object_mode_toggle(C, OB_MODE_POSE);
+    ED_object_mode_set(C, (ob->mode == OB_MODE_OBJECT) ? OB_MODE_POSE : OB_MODE_OBJECT);
     return OPERATOR_CANCELLED;
   }
   else {

@@ -574,13 +574,13 @@ void wm_draw_region_blend(ARegion *region, int view, bool blend)
     alpha = 1.0f;
   }
 
-  glUniform1i(GPU_shader_get_uniform_ensure(shader, "image"), 0);
-  glUniform4f(GPU_shader_get_uniform_ensure(shader, "rect_icon"),
+  glUniform1i(GPU_shader_get_uniform(shader, "image"), 0);
+  glUniform4f(GPU_shader_get_uniform(shader, "rect_icon"),
               rect_tex.xmin,
               rect_tex.ymin,
               rect_tex.xmax,
               rect_tex.ymax);
-  glUniform4f(GPU_shader_get_uniform_ensure(shader, "rect_geom"),
+  glUniform4f(GPU_shader_get_uniform(shader, "rect_geom"),
               rect_geo.xmin,
               rect_geo.ymin,
               rect_geo.xmax,
@@ -848,6 +848,7 @@ static void wm_draw_window(bContext *C, wmWindow *win)
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, GPU_texture_opengl_bindcode(texture));
 
+        wmWindowViewport(win);
         if (win->stereo3d_format->display_mode == S3D_DISPLAY_SIDEBYSIDE) {
           wm_stereo3d_draw_sidebyside(win, view);
         }
@@ -981,10 +982,6 @@ void wm_draw_update(bContext *C)
   Main *bmain = CTX_data_main(C);
   wmWindowManager *wm = CTX_wm_manager(C);
   wmWindow *win;
-
-#ifdef WITH_OPENSUBDIV
-  BKE_subsurf_free_unused_buffers();
-#endif
 
   GPU_free_unused_buffers(bmain);
 

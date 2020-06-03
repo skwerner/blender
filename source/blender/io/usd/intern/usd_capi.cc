@@ -91,7 +91,8 @@ static void export_startjob(void *customdata, short *stop, short *do_update, flo
   usd_stage->SetMetadata(pxr::UsdGeomTokens->upAxis, pxr::VtValue(pxr::UsdGeomTokens->z));
   usd_stage->SetMetadata(pxr::UsdGeomTokens->metersPerUnit,
                          pxr::VtValue(scene->unit.scale_length));
-  usd_stage->GetRootLayer()->SetDocumentation(std::string("Blender ") + versionstr);
+  usd_stage->GetRootLayer()->SetDocumentation(std::string("Blender v") +
+                                              BKE_blender_version_string());
 
   // Set up the stage for animated data.
   if (data->params.export_animation) {
@@ -185,7 +186,7 @@ bool USD_export(bContext *C,
     /* setup job */
     WM_jobs_customdata_set(wm_job, job, MEM_freeN);
     WM_jobs_timer(wm_job, 0.1, NC_SCENE | ND_FRAME, NC_SCENE | ND_FRAME);
-    WM_jobs_callbacks(wm_job, USD::export_startjob, NULL, NULL, USD::export_endjob);
+    WM_jobs_callbacks(wm_job, USD::export_startjob, nullptr, nullptr, USD::export_endjob);
 
     WM_jobs_start(CTX_wm_manager(C), wm_job);
   }

@@ -349,7 +349,6 @@ static int screen_render_exec(bContext *C, wmOperator *op)
 
   RE_SetReports(re, op->reports);
 
-  BLI_threaded_malloc_begin();
   if (is_animation) {
     RE_RenderAnim(re,
                   mainp,
@@ -363,7 +362,6 @@ static int screen_render_exec(bContext *C, wmOperator *op)
   else {
     RE_RenderFrame(re, mainp, scene, single_layer, camera_override, scene->r.cfra, is_write_still);
   }
-  BLI_threaded_malloc_end();
 
   RE_SetReports(re, NULL);
 
@@ -391,16 +389,14 @@ static void make_renderinfo_string(const RenderStats *rs,
                                    char *str)
 {
   char info_time_str[32];  // used to be extern to header_info.c
-  uintptr_t mem_in_use, mmap_in_use, peak_memory;
-  float megs_used_memory, mmap_used_memory, megs_peak_memory;
+  uintptr_t mem_in_use, peak_memory;
+  float megs_used_memory, megs_peak_memory;
   char *spos = str;
 
   mem_in_use = MEM_get_memory_in_use();
-  mmap_in_use = MEM_get_mapped_memory_in_use();
   peak_memory = MEM_get_peak_memory();
 
-  megs_used_memory = (mem_in_use - mmap_in_use) / (1024.0 * 1024.0);
-  mmap_used_memory = (mmap_in_use) / (1024.0 * 1024.0);
+  megs_used_memory = (mem_in_use) / (1024.0 * 1024.0);
   megs_peak_memory = (peak_memory) / (1024.0 * 1024.0);
 
   /* local view */
@@ -441,7 +437,7 @@ static void make_renderinfo_string(const RenderStats *rs,
     }
   }
   else {
-    if (rs->totvert || rs->totface || rs->tothalo || rs->totstrand || rs->totlamp) {
+    if (rs->totvert || rs->totface || rs->totlamp) {
       spos += sprintf(spos, "| ");
     }
 
@@ -451,38 +447,16 @@ static void make_renderinfo_string(const RenderStats *rs,
     if (rs->totface) {
       spos += sprintf(spos, TIP_("Fa:%d "), rs->totface);
     }
-    if (rs->tothalo) {
-      spos += sprintf(spos, TIP_("Ha:%d "), rs->tothalo);
-    }
-    if (rs->totstrand) {
-      spos += sprintf(spos, TIP_("St:%d "), rs->totstrand);
-    }
     if (rs->totlamp) {
       spos += sprintf(spos, TIP_("Li:%d "), rs->totlamp);
     }
 
     if (rs->mem_peak == 0.0f) {
-      spos += sprintf(spos,
-                      TIP_("| Mem:%.2fM (%.2fM, Peak %.2fM) "),
-                      megs_used_memory,
-                      mmap_used_memory,
-                      megs_peak_memory);
+      spos += sprintf(spos, TIP_("| Mem:%.2fM (Peak %.2fM) "), megs_used_memory, megs_peak_memory);
     }
     else {
       spos += sprintf(spos, TIP_("| Mem:%.2fM, Peak: %.2fM "), rs->mem_used, rs->mem_peak);
     }
-
-    if (rs->curfield) {
-      spos += sprintf(spos, TIP_("Field %d "), rs->curfield);
-    }
-    if (rs->curblur) {
-      spos += sprintf(spos, TIP_("Blur %d "), rs->curblur);
-    }
-  }
-
-  /* full sample */
-  if (rs->curfsa) {
-    spos += sprintf(spos, TIP_("| Full Sample %d "), rs->curfsa);
   }
 
   /* extra info */

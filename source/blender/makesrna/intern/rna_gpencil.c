@@ -121,7 +121,7 @@ static const EnumPropertyItem rna_enum_layer_blend_modes_items[] = {
     {eGplBlendMode_Divide, "DIVIDE", 0, "Divide", ""},
     {0, NULL, 0, NULL, NULL}};
 
-static EnumPropertyItem rna_enum_gpencil_caps_modes_items[] = {
+static const EnumPropertyItem rna_enum_gpencil_caps_modes_items[] = {
     {GP_STROKE_CAP_ROUND, "ROUND", 0, "Rounded", ""},
     {GP_STROKE_CAP_FLAT, "FLAT", 0, "Flat", ""},
     {0, NULL, 0, NULL, NULL},
@@ -1187,7 +1187,6 @@ static void rna_def_gpencil_stroke(BlenderRNA *brna)
    * (this is a special flag for fill brush). */
   prop = RNA_def_property(srna, "is_nofill_stroke", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_STROKE_NOFILL);
-  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
   RNA_def_property_ui_text(prop, "No Fill", "Special stroke to use as boundary for filling areas");
   RNA_def_property_update(prop, 0, "rna_GPencil_update");
 

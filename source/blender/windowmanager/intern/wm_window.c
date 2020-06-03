@@ -84,11 +84,11 @@
 #include "GPU_batch.h"
 #include "GPU_batch_presets.h"
 #include "GPU_context.h"
-#include "GPU_draw.h"
 #include "GPU_framebuffer.h"
 #include "GPU_immediate.h"
 #include "GPU_init_exit.h"
 #include "GPU_platform.h"
+#include "GPU_state.h"
 
 #include "UI_resources.h"
 
@@ -286,14 +286,15 @@ static int find_free_winid(wmWindowManager *wm)
 }
 
 /* don't change context itself */
-wmWindow *wm_window_new(const Main *bmain, wmWindowManager *wm, wmWindow *parent)
+wmWindow *wm_window_new(const Main *bmain, wmWindowManager *wm, wmWindow *parent, bool dialog)
 {
   wmWindow *win = MEM_callocN(sizeof(wmWindow), "window");
 
   BLI_addtail(&wm->windows, win);
   win->winid = find_free_winid(wm);
 
-  win->parent = (parent && parent->parent) ? parent->parent : parent;
+  /* Dialogs may have a child window as parent. Otherwise, a child must not be a parent too. */
+  win->parent = (!dialog && parent && parent->parent) ? parent->parent : parent;
   win->stereo3d_format = MEM_callocN(sizeof(Stereo3dFormat), "Stereo 3D Format (window)");
   win->workspace_hook = BKE_workspace_instance_hook_create(bmain);
 
@@ -307,8 +308,9 @@ wmWindow *wm_window_copy(Main *bmain,
                          const bool duplicate_layout,
                          const bool child)
 {
+  const bool is_dialog = GHOST_IsDialogWindow(win_src->ghostwin);
   wmWindow *win_parent = (child) ? win_src : win_src->parent;
-  wmWindow *win_dst = wm_window_new(bmain, wm, win_parent);
+  wmWindow *win_dst = wm_window_new(bmain, wm, win_parent, is_dialog);
   WorkSpace *workspace = WM_window_get_active_workspace(win_src);
   WorkSpaceLayout *layout_old = WM_window_get_active_layout(win_src);
   WorkSpaceLayout *layout_new;
@@ -324,7 +326,7 @@ wmWindow *wm_window_copy(Main *bmain,
   layout_new = duplicate_layout ?
                    ED_workspace_layout_duplicate(bmain, workspace, layout_old, win_dst) :
                    layout_old;
-  BKE_workspace_hook_layout_for_workspace_set(win_dst->workspace_hook, workspace, layout_new);
+  BKE_workspace_active_layout_set(win_dst->workspace_hook, workspace, layout_new);
 
   *win_dst->stereo3d_format = *win_src->stereo3d_format;
 
@@ -417,7 +419,6 @@ void wm_quit_with_optional_confirmation_prompt(bContext *C, wmWindow *win)
 void wm_window_close(bContext *C, wmWindowManager *wm, wmWindow *win)
 {
   wmWindow *win_other;
-  const bool is_dialog = (G.background == false) ? GHOST_IsDialogWindow(win->ghostwin) : false;
 
   /* First check if there is another main window remaining. */
   for (win_other = wm->windows.first; win_other; win_other = win_other->next) {
@@ -431,19 +432,10 @@ void wm_window_close(bContext *C, wmWindowManager *wm, wmWindow *win)
     return;
   }
 
-  /* Close child windows and bring windows back to front that dialogs have pushed behind the main
-   * window. */
-  LISTBASE_FOREACH (wmWindow *, iter_win, &wm->windows) {
+  /* Close child windows */
+  LISTBASE_FOREACH_MUTABLE (wmWindow *, iter_win, &wm->windows) {
     if (iter_win->parent == win) {
       wm_window_close(C, wm, iter_win);
-    }
-    else {
-      if (G.background == false) {
-        if (is_dialog && iter_win != win && iter_win->parent &&
-            (GHOST_GetWindowState(iter_win->ghostwin) != GHOST_kWindowStateMinimized)) {
-          wm_window_raise(iter_win);
-        }
-      }
     }
   }
 
@@ -834,7 +826,7 @@ wmWindow *WM_window_open(bContext *C, const rcti *rect)
 {
   wmWindowManager *wm = CTX_wm_manager(C);
   wmWindow *win_prev = CTX_wm_window(C);
-  wmWindow *win = wm_window_new(CTX_data_main(C), wm, win_prev);
+  wmWindow *win = wm_window_new(CTX_data_main(C), wm, win_prev, false);
 
   win->posx = rect->xmin;
   win->posy = rect->ymin;
@@ -905,7 +897,7 @@ wmWindow *WM_window_open_temp(bContext *C,
 
   /* add new window? */
   if (win == NULL) {
-    win = wm_window_new(bmain, wm, win_prev);
+    win = wm_window_new(bmain, wm, win_prev, dialog);
 
     win->posx = rect.xmin;
     win->posy = rect.ymin;
@@ -1992,6 +1984,90 @@ bool wm_window_get_swap_interval(wmWindow *win, int *intervalOut)
 /** \} */
 
 /* -------------------------------------------------------------------- */
+/** \name Find Window Utility
+ *
+ * \{ */
+static void wm_window_desktop_pos_get(const wmWindow *win,
+                                      const int screen_pos[2],
+                                      int r_desk_pos[2])
+{
+  /* To desktop space. */
+  r_desk_pos[0] = screen_pos[0] + (int)(U.pixelsize * win->posx);
+  r_desk_pos[1] = screen_pos[1] + (int)(U.pixelsize * win->posy);
+}
+
+static void wm_window_screen_pos_get(const wmWindow *win,
+                                     const int desktop_pos[2],
+                                     int r_scr_pos[2])
+{
+  /* To window space. */
+  r_scr_pos[0] = desktop_pos[0] - (int)(U.pixelsize * win->posx);
+  r_scr_pos[1] = desktop_pos[1] - (int)(U.pixelsize * win->posy);
+}
+
+bool WM_window_find_under_cursor(const wmWindowManager *wm,
+                                 const wmWindow *win_ignore,
+                                 const wmWindow *win,
+                                 const int mval[2],
+                                 wmWindow **r_win,
+                                 int r_mval[2])
+{
+  int desk_pos[2];
+  wm_window_desktop_pos_get(win, mval, desk_pos);
+
+  /* TODO: This should follow the order of the activated windows.
+   * The current solution is imperfect but usable in most cases. */
+  LISTBASE_FOREACH (wmWindow *, win_iter, &wm->windows) {
+    if (win_iter == win_ignore) {
+      continue;
+    }
+
+    if (win_iter->windowstate == GHOST_kWindowStateMinimized) {
+      continue;
+    }
+
+    int scr_pos[2];
+    wm_window_screen_pos_get(win_iter, desk_pos, scr_pos);
+
+    if (scr_pos[0] >= 0 && win_iter->posy >= 0 && scr_pos[0] <= WM_window_pixels_x(win_iter) &&
+        scr_pos[1] <= WM_window_pixels_y(win_iter)) {
+
+      *r_win = win_iter;
+      copy_v2_v2_int(r_mval, scr_pos);
+      return true;
+    }
+  }
+
+  return false;
+}
+
+void WM_window_pixel_sample_read(const wmWindowManager *wm,
+                                 const wmWindow *win,
+                                 const int pos[2],
+                                 float r_col[3])
+{
+  bool setup_context = wm->windrawable != win;
+
+  if (setup_context) {
+    GHOST_ActivateWindowDrawingContext(win->ghostwin);
+    GPU_context_active_set(win->gpuctx);
+  }
+
+  glReadBuffer(GL_FRONT);
+  glReadPixels(pos[0], pos[1], 1, 1, GL_RGB, GL_FLOAT, r_col);
+  glReadBuffer(GL_BACK);
+
+  if (setup_context) {
+    if (wm->windrawable) {
+      GHOST_ActivateWindowDrawingContext(wm->windrawable->ghostwin);
+      GPU_context_active_set(wm->windrawable->gpuctx);
+    }
+  }
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
 /** \name Window Screen Shot Utility
  *
  * Include here since it can involve low level buffer switching.
@@ -2367,7 +2443,7 @@ WorkSpaceLayout *WM_window_get_active_layout(const wmWindow *win)
 }
 void WM_window_set_active_layout(wmWindow *win, WorkSpace *workspace, WorkSpaceLayout *layout)
 {
-  BKE_workspace_hook_layout_for_workspace_set(win->workspace_hook, workspace, layout);
+  BKE_workspace_active_layout_set(win->workspace_hook, workspace, layout);
 }
 
 /**

@@ -34,6 +34,7 @@
 #include "BKE_idtype.h"
 #include "BKE_layer.h"
 #include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_lib_remap.h"
 #include "BKE_main.h"
 #include "BKE_object.h"
@@ -128,6 +129,28 @@ static void collection_free_data(ID *id)
   BKE_collection_object_cache_free(collection);
 }
 
+static void collection_foreach_id(ID *id, LibraryForeachIDData *data)
+{
+  Collection *collection = (Collection *)id;
+
+  LISTBASE_FOREACH (CollectionObject *, cob, &collection->gobject) {
+    BKE_LIB_FOREACHID_PROCESS(data, cob->ob, IDWALK_CB_USER);
+  }
+  LISTBASE_FOREACH (CollectionChild *, child, &collection->children) {
+    BKE_LIB_FOREACHID_PROCESS(data, child->collection, IDWALK_CB_NEVER_SELF | IDWALK_CB_USER);
+  }
+  LISTBASE_FOREACH (CollectionParent *, parent, &collection->parents) {
+    /* XXX This is very weak. The whole idea of keeping pointers to private IDs is very bad
+     * anyway... */
+    const int cb_flag = ((parent->collection != NULL &&
+                          (parent->collection->id.flag & LIB_EMBEDDED_DATA) != 0) ?
+                             IDWALK_CB_EMBEDDED :
+                             IDWALK_CB_NOP);
+    BKE_LIB_FOREACHID_PROCESS(
+        data, parent->collection, IDWALK_CB_NEVER_SELF | IDWALK_CB_LOOPBACK | cb_flag);
+  }
+}
+
 IDTypeInfo IDType_ID_GR = {
     .id_code = ID_GR,
     .id_filter = FILTER_ID_GR,
@@ -142,6 +165,7 @@ IDTypeInfo IDType_ID_GR = {
     .copy_data = collection_copy_data,
     .free_data = collection_free_data,
     .make_local = NULL,
+    .foreach_id = collection_foreach_id,
 };
 
 /***************************** Add Collection *******************************/
@@ -184,6 +208,34 @@ Collection *BKE_collection_add(Main *bmain, Collection *collection_parent, const
   Collection *collection = collection_add(bmain, collection_parent, name_custom);
   BKE_main_collection_sync(bmain);
   return collection;
+}
+
+/**
+ * Add \a collection_dst to all scene collections that reference object \a ob_src is in.
+ * Used to replace an instance object with a collection (library override operator).
+ *
+ * Logic is very similar to #BKE_collection_object_add_from().
+ */
+void BKE_collection_add_from_object(Main *bmain,
+                                    Scene *scene,
+                                    const Object *ob_src,
+                                    Collection *collection_dst)
+{
+  bool is_instantiated = false;
+
+  FOREACH_SCENE_COLLECTION_BEGIN (scene, collection) {
+    if (!ID_IS_LINKED(collection) && BKE_collection_has_object(collection, ob_src)) {
+      collection_child_add(collection, collection_dst, 0, true);
+      is_instantiated = true;
+    }
+  }
+  FOREACH_SCENE_COLLECTION_END;
+
+  if (!is_instantiated) {
+    collection_child_add(scene->master_collection, collection_dst, 0, true);
+  }
+
+  BKE_main_collection_sync(bmain);
 }
 
 /*********************** Free and Delete Collection ****************************/
@@ -734,8 +786,10 @@ bool BKE_collection_object_add(Main *bmain, Collection *collection, Object *ob)
 }
 
 /**
- * Add object to all scene collections that reference object is in
- * (used to copy objects).
+ * Add \a ob_dst to all scene collections that reference object \a ob_src is in.
+ * Used for copying objects.
+ *
+ * Logic is very similar to #BKE_collection_add_from_object()
  */
 void BKE_collection_object_add_from(Main *bmain, Scene *scene, Object *ob_src, Object *ob_dst)
 {

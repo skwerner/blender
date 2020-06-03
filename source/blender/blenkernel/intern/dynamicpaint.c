@@ -2704,15 +2704,16 @@ static void dynamic_paint_find_island_border(const DynamicPaintCreateUVSurfaceDa
       }
     }
 
+    const int final_tri_index = tempPoints[final_index].tri_index;
     /* If found pixel still lies on wrong face ( mesh has smaller than pixel sized faces) */
-    if (tempPoints[final_index].tri_index != target_tri) {
+    if (final_tri_index != target_tri && final_tri_index != -1) {
       /* Check if it's close enough to likely touch the intended triangle. Any triangle
        * becomes thinner than a pixel at its vertices, so robustness requires some margin. */
       const float final_pt[2] = {((final_index % w) + 0.5f) / w, ((final_index / w) + 0.5f) / h};
       const float threshold = square_f(0.7f) / (w * h);
 
-      if (dist_squared_to_looptri_uv_edges(
-              mlooptri, mloopuv, tempPoints[final_index].tri_index, final_pt) > threshold) {
+      if (dist_squared_to_looptri_uv_edges(mlooptri, mloopuv, final_tri_index, final_pt) >
+          threshold) {
         continue;
       }
     }
@@ -4646,9 +4647,6 @@ static int dynamicPaint_paintParticles(DynamicPaintSurface *surface,
     return 1;
   }
 
-  /* begin thread safe malloc */
-  BLI_threaded_malloc_begin();
-
   /* only continue if particle bb is close enough to canvas bb */
   if (boundsIntersectDist(&grid->grid_bounds, &part_bb, range)) {
     int c_index;
@@ -4684,7 +4682,6 @@ static int dynamicPaint_paintParticles(DynamicPaintSurface *surface,
                               &settings);
     }
   }
-  BLI_threaded_malloc_end();
   BLI_kdtree_3d_free(tree);
 
   return 1;

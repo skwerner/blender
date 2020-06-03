@@ -1960,6 +1960,12 @@ static void rna_def_brush(BlenderRNA *brna)
       {0, NULL, 0, NULL, NULL},
   };
 
+  static const EnumPropertyItem brush_pose_deform_type_items[] = {
+      {BRUSH_POSE_DEFORM_ROTATE_TWIST, "ROTATE_TWIST", 0, "Rotate/Twist", ""},
+      {BRUSH_POSE_DEFORM_SCALE_TRASLATE, "SCALE_TRANSLATE", 0, "Scale/Translate", ""},
+      {0, NULL, 0, NULL, NULL},
+  };
+
   static const EnumPropertyItem brush_pose_origin_type_items[] = {
       {BRUSH_POSE_ORIGIN_TOPOLOGY,
        "TOPOLOGY",
@@ -1972,6 +1978,11 @@ static void rna_def_brush(BlenderRNA *brna)
        0,
        "Face Sets",
        "Creates a pose segment per face sets, starting from the active face set"},
+      {BRUSH_POSE_ORIGIN_FACE_SETS_FK,
+       "FACE_SETS_FK",
+       0,
+       "Face Sets FK",
+       "Simulates an FK deformation using the Face Set under the cursor as control"},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -2092,6 +2103,11 @@ static void rna_def_brush(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "smooth_deform_type", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_items(prop, brush_smooth_deform_type_items);
+  RNA_def_property_ui_text(prop, "Deformation", "Deformation type that is used in the brush");
+  RNA_def_property_update(prop, 0, "rna_Brush_update");
+
+  prop = RNA_def_property(srna, "pose_deform_type", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_items(prop, brush_pose_deform_type_items);
   RNA_def_property_ui_text(prop, "Deformation", "Deformation type that is used in the brush");
   RNA_def_property_update(prop, 0, "rna_Brush_update");
 

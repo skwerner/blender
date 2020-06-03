@@ -39,13 +39,6 @@ struct Main;
 
 /* OpenGL drawing functions related to shading. */
 
-/* Initialize
- * - sets the default Blender opengl state, if in doubt, check
- *   the contents of this function
- * - this is called when starting Blender, for opengl rendering. */
-
-void GPU_state_init(void);
-
 /* Mipmap settings
  * - these will free textures on changes */
 
@@ -57,7 +50,7 @@ void GPU_paint_set_mipmap(struct Main *bmain, bool mipmap);
 
 /* Anisotropic filtering settings
  * - these will free textures on changes */
-void GPU_set_anisotropic(struct Main *bmain, float value);
+void GPU_set_anisotropic(float value);
 float GPU_get_anisotropic(void);
 
 /* Image updates and free

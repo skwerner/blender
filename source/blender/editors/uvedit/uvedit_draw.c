@@ -39,6 +39,7 @@
 #include "../../draw/intern/draw_cache_impl.h"
 
 #include "BLI_math.h"
+#include "BLI_task.h"
 #include "BLI_utildefines.h"
 
 #include "BKE_deform.h"
@@ -206,8 +207,10 @@ static void uvedit_get_batches(Object *ob,
   else {
     batches->faces = NULL;
   }
-
-  DRW_mesh_batch_cache_create_requested(ob, ob->data, scene, false, false);
+  struct TaskGraph *task_graph = BLI_task_graph_create();
+  DRW_mesh_batch_cache_create_requested(task_graph, ob, ob->data, scene, false, false);
+  BLI_task_graph_work_and_wait(task_graph);
+  BLI_task_graph_free(task_graph);
 
   if (draw_stretch && (sima->dt_uvstretch == SI_UVDT_STRETCH_AREA)) {
     /* after create_requested we can load the actual areas */
@@ -216,24 +219,46 @@ static void uvedit_get_batches(Object *ob,
   }
 }
 
-static void draw_uvs_shadow(SpaceImage *UNUSED(sima),
+static void draw_uvs_shadow(SpaceImage *sima,
                             const Scene *scene,
                             Object *obedit,
                             Depsgraph *depsgraph)
 {
   Object *ob_eval = DEG_get_evaluated_object(depsgraph, obedit);
   Mesh *me = ob_eval->data;
+  const float overlay_alpha = sima->uv_opacity;
   float col[4];
   UI_GetThemeColor4fv(TH_UV_SHADOW, col);
 
   DRW_mesh_batch_cache_validate(me);
   GPUBatch *edges = DRW_mesh_batch_cache_get_uv_edges(me);
-  DRW_mesh_batch_cache_create_requested(ob_eval, me, scene, false, false);
+
+  struct TaskGraph *task_graph = BLI_task_graph_create();
+  DRW_mesh_batch_cache_create_requested(task_graph, ob_eval, me, scene, false, false);
+  BLI_task_graph_work_and_wait(task_graph);
+  BLI_task_graph_free(task_graph);
 
   if (edges) {
+    if (sima->flag & SI_SMOOTH_UV) {
+      GPU_line_smooth(true);
+      GPU_blend(true);
+    }
+    else if (overlay_alpha < 1.0f) {
+      GPU_blend(true);
+    }
+
+    col[3] = overlay_alpha;
     GPU_batch_program_set_builtin(edges, GPU_SHADER_2D_UV_UNIFORM_COLOR);
     GPU_batch_uniform_4fv(edges, "color", col);
     GPU_batch_draw(edges);
+
+    if (sima->flag & SI_SMOOTH_UV) {
+      GPU_line_smooth(false);
+      GPU_blend(false);
+    }
+    else if (overlay_alpha < 1.0f) {
+      GPU_blend(false);
+    }
   }
 }
 
@@ -251,7 +276,10 @@ static void draw_uvs_texpaint(const Scene *scene, Object *ob, Depsgraph *depsgra
 
   DRW_mesh_batch_cache_validate(me);
   GPUBatch *geom = DRW_mesh_batch_cache_get_uv_edges(me);
-  DRW_mesh_batch_cache_create_requested(ob_eval, me, scene, false, false);
+  struct TaskGraph *task_graph = BLI_task_graph_create();
+  DRW_mesh_batch_cache_create_requested(task_graph, ob_eval, me, scene, false, false);
+  BLI_task_graph_work_and_wait(task_graph);
+  BLI_task_graph_free(task_graph);
 
   GPU_batch_program_set_builtin(geom, GPU_SHADER_2D_UV_UNIFORM_COLOR);
   GPU_batch_uniform_4fv(geom, "color", col);

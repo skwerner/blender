@@ -237,7 +237,7 @@ class PHYSICS_PT_settings(PhysicButtonsPanel, Panel):
             col = grid.column()
             col.prop(flow, "flow_behavior", expand=False)
             if flow.flow_behavior in {'INFLOW', 'OUTFLOW'}:
-                col.prop(flow, "use_inflow", text="Use Flow")
+                col.prop(flow, "use_inflow")
 
             col.prop(flow, "subframes", text="Sampling Substeps")
 
@@ -1174,7 +1174,7 @@ class PHYSICS_PT_cache(PhysicButtonsPanel, Panel):
 
             if domain.is_cache_baking_data and not domain.has_cache_baked_data:
                 split.enabled = False
-                split.operator("fluid.pause_bake", text="Baking All - ESC to pause")
+                split.operator("fluid.pause_bake", text="Baking All - ESC to cancel")
             elif not domain.has_cache_baked_data and not domain.is_cache_baking_data:
                 split.operator("fluid.bake_all", text="Bake All")
             else:

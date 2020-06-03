@@ -373,7 +373,7 @@ static void template_texture_select(bContext *C, void *user_p, void *UNUSED(arg)
 
   /* set user as active */
   if (user->node) {
-    ED_node_set_active(CTX_data_main(C), user->ntree, user->node);
+    ED_node_set_active(CTX_data_main(C), user->ntree, user->node, NULL);
     ct->texture = NULL;
   }
   else {
@@ -545,7 +545,7 @@ static void template_texture_show(bContext *C, void *data_p, void *prop_p)
   }
 }
 
-void uiTemplateTextureShow(uiLayout *layout, bContext *C, PointerRNA *ptr, PropertyRNA *prop)
+void uiTemplateTextureShow(uiLayout *layout, const bContext *C, PointerRNA *ptr, PropertyRNA *prop)
 {
   /* button to quickly show texture in texture tab */
   SpaceProperties *sbuts = CTX_wm_space_properties(C);

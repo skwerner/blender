@@ -687,6 +687,13 @@ elseif(WIN32)
     )
   endif()
 
+  if(WITH_FFTW3)
+    install(
+          FILES ${LIBDIR}/fftw3/lib/libfftw3-3.dll
+          DESTINATION "."
+    )
+  endif()
+
   if(WITH_WINDOWS_PDB)
     if(WITH_WINDOWS_STRIPPED_PDB)
       # Icky hack for older cmake from https://stackoverflow.com/a/21198501
@@ -936,8 +943,8 @@ elseif(APPLE)
 
   set_target_properties(blender PROPERTIES
     MACOSX_BUNDLE_INFO_PLIST ${OSX_APP_SOURCEDIR}/Contents/Info.plist
-    MACOSX_BUNDLE_SHORT_VERSION_STRING "${BLENDER_VERSION}${BLENDER_VERSION_CHAR}"
-    MACOSX_BUNDLE_LONG_VERSION_STRING "${BLENDER_VERSION}${BLENDER_VERSION_CHAR} ${BLENDER_DATE}")
+    MACOSX_BUNDLE_SHORT_VERSION_STRING "${BLENDER_VERSION}.${BLENDER_VERSION_PATCH}"
+    MACOSX_BUNDLE_LONG_VERSION_STRING "${BLENDER_VERSION}.${BLENDER_VERSION_PATCH} ${BLENDER_DATE}")
 
   # Gather the date in finder-style
   execute_process(COMMAND date "+%m/%d/%Y/%H:%M"

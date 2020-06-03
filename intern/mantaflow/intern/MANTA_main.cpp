@@ -81,6 +81,7 @@ MANTA::MANTA(int *res, FluidModifierData *mmd) : mCurrentID(++solverID)
   mUsingNoise = (mds->flags & FLUID_DOMAIN_USE_NOISE) && mUsingSmoke;
   mUsingFractions = (mds->flags & FLUID_DOMAIN_USE_FRACTIONS) && mUsingLiquid;
   mUsingMesh = (mds->flags & FLUID_DOMAIN_USE_MESH) && mUsingLiquid;
+  mUsingDiffusion = (mds->flags & FLUID_DOMAIN_USE_DIFFUSION) && mUsingLiquid;
   mUsingMVel = (mds->flags & FLUID_DOMAIN_USE_SPEED_VECTORS) && mUsingLiquid;
   mUsingGuiding = (mds->flags & FLUID_DOMAIN_USE_GUIDE);
   mUsingDrops = (mds->particle_type & FLUID_DOMAIN_PARTICLE_SPRAY) && mUsingLiquid;
@@ -228,6 +229,10 @@ MANTA::MANTA(int *res, FluidModifierData *mmd) : mCurrentID(++solverID)
       // Initialize Mantaflow variables in Python
       initMesh();
       initLiquidMesh();
+    }
+
+    if (mUsingDiffusion) {
+      initCurvature();
     }
 
     if (mUsingGuiding) {
@@ -438,6 +443,16 @@ void MANTA::initLiquidMesh(FluidModifierData *mmd)
   mUsingMesh = true;
 }
 
+void MANTA::initCurvature(FluidModifierData *mmd)
+{
+  std::vector<std::string> pythonCommands;
+  std::string finalString = parseScript(liquid_alloc_curvature, mmd);
+  pythonCommands.push_back(finalString);
+
+  runPythonString(pythonCommands);
+  mUsingDiffusion = true;
+}
+
 void MANTA::initObstacle(FluidModifierData *mmd)
 {
   if (!mPhiObsIn) {
@@ -549,7 +564,7 @@ MANTA::~MANTA()
   result = runPythonString(pythonCommands);
 
   assert(result);
-  (void)result;  // not needed in release
+  UNUSED_VARS(result);
 }
 
 /**
@@ -2982,6 +2997,7 @@ bool MANTA::updateGridsFromUni(string filename, vector<GridItem> grids)
         return false;
       }
       assert(expectedBytes == readBytes);
+      UNUSED_VARS(expectedBytes);
 
       if (with_debug)
         cout << "Fluid: Read successfully: " << filename << endl;

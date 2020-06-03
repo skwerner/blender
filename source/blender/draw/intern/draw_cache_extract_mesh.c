@@ -105,6 +105,14 @@ typedef struct MeshRenderData {
   BMEditMesh *edit_bmesh;
   BMesh *bm;
   EditMeshData *edit_data;
+
+  /* For deformed edit-mesh data. */
+  /* Use for #ME_WRAPPER_TYPE_BMESH. */
+  const float (*bm_vert_coords)[3];
+  const float (*bm_vert_normals)[3];
+  const float (*bm_poly_normals)[3];
+  const float (*bm_poly_centers)[3];
+
   int *v_origindex, *e_origindex, *p_origindex;
   int crease_ofs;
   int bweight_ofs;
@@ -126,15 +134,12 @@ typedef struct MeshRenderData {
   float (*poly_normals)[3];
   int *lverts, *ledges;
 } MeshRenderData;
-
 static MeshRenderData *mesh_render_data_create(Mesh *me,
                                                const bool is_editmode,
                                                const bool is_paint_mode,
                                                const float obmat[4][4],
                                                const bool do_final,
                                                const bool do_uvedit,
-                                               const eMRIterType iter_type,
-                                               const eMRDataType data_flag,
                                                const DRW_MeshCDMask *UNUSED(cd_used),
                                                const ToolSettings *ts)
 {
@@ -144,16 +149,28 @@ static MeshRenderData *mesh_render_data_create(Mesh *me,
 
   copy_m4_m4(mr->obmat, obmat);
 
-  const bool is_auto_smooth = (me->flag & ME_AUTOSMOOTH) != 0;
-  const float split_angle = is_auto_smooth ? me->smoothresh : (float)M_PI;
-
   if (is_editmode) {
     BLI_assert(me->edit_mesh->mesh_eval_cage && me->edit_mesh->mesh_eval_final);
     mr->bm = me->edit_mesh->bm;
     mr->edit_bmesh = me->edit_mesh;
-    mr->edit_data = me->runtime.edit_data;
     mr->me = (do_final) ? me->edit_mesh->mesh_eval_final : me->edit_mesh->mesh_eval_cage;
-    bool use_mapped = !do_uvedit && mr->me && !mr->me->runtime.is_original;
+    mr->edit_data = mr->me->runtime.edit_data;
+
+    if (mr->edit_data) {
+      EditMeshData *emd = mr->edit_data;
+      if (emd->vertexCos) {
+        BKE_editmesh_cache_ensure_vert_normals(mr->edit_bmesh, emd);
+        BKE_editmesh_cache_ensure_poly_normals(mr->edit_bmesh, emd);
+      }
+
+      mr->bm_vert_coords = mr->edit_data->vertexCos;
+      mr->bm_vert_normals = mr->edit_data->vertexNos;
+      mr->bm_poly_normals = mr->edit_data->polyNos;
+      mr->bm_poly_centers = mr->edit_data->polyCos;
+    }
+
+    bool has_mdata = (mr->me->runtime.wrapper_type == ME_WRAPPER_TYPE_MDATA);
+    bool use_mapped = has_mdata && !do_uvedit && mr->me && !mr->me->runtime.is_original;
 
     int bm_ensure_types = BM_VERT | BM_EDGE | BM_LOOP | BM_FACE;
 
@@ -184,7 +201,7 @@ static MeshRenderData *mesh_render_data_create(Mesh *me,
 
     /* Seems like the mesh_eval_final do not have the right origin indices.
      * Force not mapped in this case. */
-    if (do_final && me->edit_mesh->mesh_eval_final != me->edit_mesh->mesh_eval_cage) {
+    if (has_mdata && do_final && me->edit_mesh->mesh_eval_final != me->edit_mesh->mesh_eval_cage) {
       // mr->edit_bmesh = NULL;
       mr->extract_type = MR_EXTRACT_MESH;
     }
@@ -221,7 +238,32 @@ static MeshRenderData *mesh_render_data_create(Mesh *me,
     mr->v_origindex = CustomData_get_layer(&mr->me->vdata, CD_ORIGINDEX);
     mr->e_origindex = CustomData_get_layer(&mr->me->edata, CD_ORIGINDEX);
     mr->p_origindex = CustomData_get_layer(&mr->me->pdata, CD_ORIGINDEX);
+  }
+  else {
+    /* BMesh */
+    BMesh *bm = mr->bm;
 
+    mr->vert_len = bm->totvert;
+    mr->edge_len = bm->totedge;
+    mr->loop_len = bm->totloop;
+    mr->poly_len = bm->totface;
+    mr->tri_len = poly_to_tri_count(mr->poly_len, mr->loop_len);
+  }
+
+  return mr;
+}
+
+/* Part of the creation of the MeshRenderData that happens in a thread. */
+static void mesh_render_data_update(MeshRenderData *mr,
+                                    const eMRIterType iter_type,
+                                    const eMRDataType data_flag)
+{
+  Mesh *me = mr->me;
+  const bool is_auto_smooth = (me->flag & ME_AUTOSMOOTH) != 0;
+  const float split_angle = is_auto_smooth ? me->smoothresh : (float)M_PI;
+
+  if (mr->extract_type != MR_EXTRACT_BMESH) {
+    /* Mesh */
     if (data_flag & (MR_DATA_POLY_NOR | MR_DATA_LOOP_NOR | MR_DATA_TAN_LOOP_NOR)) {
       mr->poly_normals = MEM_mallocN(sizeof(*mr->poly_normals) * mr->poly_len, __func__);
       BKE_mesh_calc_normals_poly((MVert *)mr->mvert,
@@ -300,23 +342,27 @@ static MeshRenderData *mesh_render_data_create(Mesh *me,
   else {
     /* BMesh */
     BMesh *bm = mr->bm;
-
-    mr->vert_len = bm->totvert;
-    mr->edge_len = bm->totedge;
-    mr->loop_len = bm->totloop;
-    mr->poly_len = bm->totface;
-    mr->tri_len = poly_to_tri_count(mr->poly_len, mr->loop_len);
-
     if (data_flag & MR_DATA_POLY_NOR) {
       /* Use bmface->no instead. */
     }
     if (((data_flag & MR_DATA_LOOP_NOR) && is_auto_smooth) || (data_flag & MR_DATA_TAN_LOOP_NOR)) {
+
+      const float(*vert_coords)[3] = NULL;
+      const float(*vert_normals)[3] = NULL;
+      const float(*poly_normals)[3] = NULL;
+
+      if (mr->edit_data && mr->edit_data->vertexCos) {
+        vert_coords = mr->bm_vert_coords;
+        vert_normals = mr->bm_vert_normals;
+        poly_normals = mr->bm_poly_normals;
+      }
+
       mr->loop_normals = MEM_mallocN(sizeof(*mr->loop_normals) * mr->loop_len, __func__);
       int clnors_offset = CustomData_get_offset(&mr->bm->ldata, CD_CUSTOMLOOPNORMAL);
       BM_loops_calc_normal_vcos(mr->bm,
-                                NULL,
-                                NULL,
-                                NULL,
+                                vert_coords,
+                                vert_normals,
+                                poly_normals,
                                 is_auto_smooth,
                                 split_angle,
                                 mr->loop_normals,
@@ -360,7 +406,6 @@ static MeshRenderData *mesh_render_data_create(Mesh *me,
       mr->loop_loose_len = mr->vert_loose_len + mr->edge_loose_len * 2;
     }
   }
-  return mr;
 }
 
 static void mesh_render_data_free(MeshRenderData *mr)
@@ -394,6 +439,42 @@ BLI_INLINE BMVert *bm_original_vert_get(const MeshRenderData *mr, int idx)
   return ((mr->v_origindex != NULL) && (mr->v_origindex[idx] != ORIGINDEX_NONE) && mr->bm) ?
              BM_vert_at_index(mr->bm, mr->v_origindex[idx]) :
              NULL;
+}
+
+BLI_INLINE const float *bm_vert_co_get(const MeshRenderData *mr, const BMVert *eve)
+{
+  const float(*vert_coords)[3] = mr->bm_vert_coords;
+  if (vert_coords != NULL) {
+    return vert_coords[BM_elem_index_get(eve)];
+  }
+  else {
+    UNUSED_VARS(mr);
+    return eve->co;
+  }
+}
+
+BLI_INLINE const float *bm_vert_no_get(const MeshRenderData *mr, const BMVert *eve)
+{
+  const float(*vert_normals)[3] = mr->bm_vert_normals;
+  if (vert_normals != NULL) {
+    return vert_normals[BM_elem_index_get(eve)];
+  }
+  else {
+    UNUSED_VARS(mr);
+    return eve->co;
+  }
+}
+
+BLI_INLINE const float *bm_face_no_get(const MeshRenderData *mr, const BMFace *efa)
+{
+  const float(*poly_normals)[3] = mr->bm_poly_normals;
+  if (poly_normals != NULL) {
+    return poly_normals[BM_elem_index_get(efa)];
+  }
+  else {
+    UNUSED_VARS(mr);
+    return efa->no;
+  }
 }
 
 /** \} */
@@ -672,46 +753,15 @@ static const MeshExtract extract_lines = {
     0,
     false,
 };
-
 /** \} */
 
 /* ---------------------------------------------------------------------- */
-/** \name Extract Loose Edges Indices
+/** \name Extract Loose Edges Sub Buffer
  * \{ */
 
-static void *extract_lines_loose_init(const MeshRenderData *UNUSED(mr), void *UNUSED(buf))
+static void extract_lines_loose_subbuffer(const MeshRenderData *mr)
 {
-  return NULL;
-}
-
-static void extract_lines_loose_ledge_mesh(const MeshRenderData *UNUSED(mr),
-                                           int UNUSED(e),
-                                           const MEdge *UNUSED(medge),
-                                           void *UNUSED(elb))
-{
-  /* This function is intentionally empty. The existence of this functions ensures that
-   * `iter_type` `MR_ITER_LVERT` is set when initializing the `MeshRenderData` (See
-   * `mesh_extract_iter_type`). This flag ensures that `mr->edge_loose_len` field is filled. This
-   * field we use in the `extract_lines_loose_finish` function to create a subrange from the
-   * `ibo.lines`. */
-}
-
-static void extract_lines_loose_ledge_bmesh(const MeshRenderData *UNUSED(mr),
-                                            int UNUSED(e),
-                                            BMEdge *UNUSED(eed),
-                                            void *UNUSED(elb))
-{
-  /* This function is intentionally empty. The existence of this functions ensures that
-   * `iter_type` `MR_ITER_LVERT` is set when initializing the `MeshRenderData` (See
-   * `mesh_extract_iter_type`). This flag ensures that `mr->edge_loose_len` field is filled. This
-   * field we use in the `extract_lines_loose_finish` function to create a subrange from the
-   * `ibo.lines`. */
-}
-
-static void extract_lines_loose_finish(const MeshRenderData *mr,
-                                       void *UNUSED(ibo),
-                                       void *UNUSED(elb))
-{
+  BLI_assert(mr->cache->final.ibo.lines);
   /* Multiply by 2 because these are edges indices. */
   const int start = mr->edge_len * 2;
   const int len = mr->edge_loose_len * 2;
@@ -720,17 +770,24 @@ static void extract_lines_loose_finish(const MeshRenderData *mr,
   mr->cache->no_loose_wire = (len == 0);
 }
 
-static const MeshExtract extract_lines_loose = {
-    extract_lines_loose_init,
+static void extract_lines_with_lines_loose_finish(const MeshRenderData *mr, void *ibo, void *elb)
+{
+  GPU_indexbuf_build_in_place(elb, ibo);
+  extract_lines_loose_subbuffer(mr);
+  MEM_freeN(elb);
+}
+
+static const MeshExtract extract_lines_with_lines_loose = {
+    extract_lines_init,
     NULL,
     NULL,
+    extract_lines_loop_bmesh,
+    extract_lines_loop_mesh,
+    extract_lines_ledge_bmesh,
+    extract_lines_ledge_mesh,
     NULL,
     NULL,
-    extract_lines_loose_ledge_bmesh,
-    extract_lines_loose_ledge_mesh,
-    NULL,
-    NULL,
-    extract_lines_loose_finish,
+    extract_lines_with_lines_loose_finish,
     0,
     false,
 };
@@ -1480,7 +1537,7 @@ static void *extract_pos_nor_init(const MeshRenderData *mr, void *buf)
     BMVert *eve;
     int v;
     BM_ITER_MESH_INDEX (eve, &iter, mr->bm, BM_VERTS_OF_MESH, v) {
-      data->packed_nor[v] = GPU_normal_convert_i10_v3(eve->no);
+      data->packed_nor[v] = GPU_normal_convert_i10_v3(bm_vert_no_get(mr, eve));
     }
   }
   else {
@@ -1492,14 +1549,11 @@ static void *extract_pos_nor_init(const MeshRenderData *mr, void *buf)
   return data;
 }
 
-static void extract_pos_nor_loop_bmesh(const MeshRenderData *UNUSED(mr),
-                                       int l,
-                                       BMLoop *loop,
-                                       void *_data)
+static void extract_pos_nor_loop_bmesh(const MeshRenderData *mr, int l, BMLoop *loop, void *_data)
 {
   MeshExtract_PosNor_Data *data = _data;
   PosNorLoop *vert = data->vbo_data + l;
-  copy_v3_v3(vert->pos, loop->v->co);
+  copy_v3_v3(vert->pos, bm_vert_co_get(mr, loop->v));
   vert->nor = data->packed_nor[BM_elem_index_get(loop->v)];
   BMFace *efa = loop->f;
   vert->nor.w = BM_elem_flag_test(efa, BM_ELEM_HIDDEN) ? -1 : 0;
@@ -1536,8 +1590,8 @@ static void extract_pos_nor_ledge_bmesh(const MeshRenderData *mr, int e, BMEdge 
   int l = mr->loop_len + e * 2;
   MeshExtract_PosNor_Data *data = _data;
   PosNorLoop *vert = data->vbo_data + l;
-  copy_v3_v3(vert[0].pos, eed->v1->co);
-  copy_v3_v3(vert[1].pos, eed->v2->co);
+  copy_v3_v3(vert[0].pos, bm_vert_co_get(mr, eed->v1));
+  copy_v3_v3(vert[1].pos, bm_vert_co_get(mr, eed->v2));
   vert[0].nor = data->packed_nor[BM_elem_index_get(eed->v1)];
   vert[1].nor = data->packed_nor[BM_elem_index_get(eed->v2)];
 }
@@ -1561,7 +1615,7 @@ static void extract_pos_nor_lvert_bmesh(const MeshRenderData *mr, int v, BMVert 
   int l = mr->loop_len + mr->edge_loose_len * 2 + v;
   MeshExtract_PosNor_Data *data = _data;
   PosNorLoop *vert = data->vbo_data + l;
-  copy_v3_v3(vert->pos, eve->co);
+  copy_v3_v3(vert->pos, bm_vert_co_get(mr, eve));
   vert->nor = data->packed_nor[BM_elem_index_get(eve)];
 }
 
@@ -1627,10 +1681,10 @@ static void extract_lnor_hq_loop_bmesh(const MeshRenderData *mr, int l, BMLoop *
     normal_float_to_short_v3(&((gpuHQNor *)data)[l].x, mr->loop_normals[l]);
   }
   else if (BM_elem_flag_test(loop->f, BM_ELEM_SMOOTH)) {
-    normal_float_to_short_v3(&((gpuHQNor *)data)[l].x, loop->v->no);
+    normal_float_to_short_v3(&((gpuHQNor *)data)[l].x, bm_vert_no_get(mr, loop->v));
   }
   else {
-    normal_float_to_short_v3(&((gpuHQNor *)data)[l].x, loop->f->no);
+    normal_float_to_short_v3(&((gpuHQNor *)data)[l].x, bm_face_no_get(mr, loop->f));
   }
 }
 
@@ -1649,8 +1703,8 @@ static void extract_lnor_hq_loop_mesh(
   }
 
   /* Flag for paint mode overlay.
-   * Only use MR_EXTRACT_MAPPED in edit mode where it is used to display the edge-normals. In paint
-   * mode it will use the unmapped data to draw the wireframe. */
+   * Only use MR_EXTRACT_MAPPED in edit mode where it is used to display the edge-normals. In
+   * paint mode it will use the unmapped data to draw the wireframe. */
   if (mpoly->flag & ME_HIDE ||
       (mr->edit_bmesh && mr->extract_type == MR_EXTRACT_MAPPED && (mr->v_origindex) &&
        mr->v_origindex[mloop->v] == ORIGINDEX_NONE)) {
@@ -1704,10 +1758,10 @@ static void extract_lnor_loop_bmesh(const MeshRenderData *mr, int l, BMLoop *loo
     ((GPUPackedNormal *)data)[l] = GPU_normal_convert_i10_v3(mr->loop_normals[l]);
   }
   else if (BM_elem_flag_test(loop->f, BM_ELEM_SMOOTH)) {
-    ((GPUPackedNormal *)data)[l] = GPU_normal_convert_i10_v3(loop->v->no);
+    ((GPUPackedNormal *)data)[l] = GPU_normal_convert_i10_v3(bm_vert_no_get(mr, loop->v));
   }
   else {
-    ((GPUPackedNormal *)data)[l] = GPU_normal_convert_i10_v3(loop->f->no);
+    ((GPUPackedNormal *)data)[l] = GPU_normal_convert_i10_v3(bm_face_no_get(mr, loop->f));
   }
   BMFace *efa = loop->f;
   ((GPUPackedNormal *)data)[l].w = BM_elem_flag_test(efa, BM_ELEM_HIDDEN) ? -1 : 0;
@@ -1728,8 +1782,8 @@ static void extract_lnor_loop_mesh(
   }
 
   /* Flag for paint mode overlay.
-   * Only use MR_EXTRACT_MAPPED in edit mode where it is used to display the edge-normals. In paint
-   * mode it will use the unmapped data to draw the wireframe. */
+   * Only use MR_EXTRACT_MAPPED in edit mode where it is used to display the edge-normals. In
+   * paint mode it will use the unmapped data to draw the wireframe. */
   if (mpoly->flag & ME_HIDE ||
       (mr->edit_bmesh && mr->extract_type == MR_EXTRACT_MAPPED && (mr->v_origindex) &&
        mr->v_origindex[mloop->v] == ORIGINDEX_NONE)) {
@@ -1915,7 +1969,10 @@ static void extract_tan_ex(const MeshRenderData *mr, GPUVertBuf *vbo, const bool
     if (mr->extract_type == MR_EXTRACT_BMESH) {
       BMesh *bm = mr->bm;
       for (int v = 0; v < mr->vert_len; v++) {
-        copy_v3_v3(orco[v], BM_vert_at_index(bm, v)->co);
+        const BMVert *eve = BM_vert_at_index(bm, v);
+        /* Exceptional case where #bm_vert_co_get can be avoided, as we want the original coords.
+         * not the distorted ones. */
+        copy_v3_v3(orco[v], eve->co);
       }
     }
     else {
@@ -2092,8 +2149,16 @@ static void *extract_vcol_init(const MeshRenderData *mr, void *buf)
   GPUVertFormat format = {0};
   GPU_vertformat_deinterleave(&format);
 
-  CustomData *cd_ldata = &mr->me->ldata;
+  CustomData *cd_ldata = (mr->extract_type == MR_EXTRACT_BMESH) ? &mr->bm->ldata : &mr->me->ldata;
   uint32_t vcol_layers = mr->cache->cd_used.vcol;
+
+  /* HACK to fix T68857 */
+  if (mr->extract_type == MR_EXTRACT_BMESH && mr->cache->cd_used.edit_uv == 1) {
+    int layer = CustomData_get_active_layer(cd_ldata, CD_MLOOPUV);
+    if (layer != -1) {
+      vcol_layers |= (1 << layer);
+    }
+  }
 
   for (int i = 0; i < 8; i++) {
     if (vcol_layers & (1 << i)) {
@@ -2129,12 +2194,30 @@ static void *extract_vcol_init(const MeshRenderData *mr, void *buf)
   gpuMeshVcol *vcol_data = (gpuMeshVcol *)vbo->data;
   for (int i = 0; i < 8; i++) {
     if (vcol_layers & (1 << i)) {
-      MLoopCol *mcol = (MLoopCol *)CustomData_get_layer_n(cd_ldata, CD_MLOOPCOL, i);
-      for (int l = 0; l < mr->loop_len; l++, mcol++, vcol_data++) {
-        vcol_data->r = unit_float_to_ushort_clamp(BLI_color_from_srgb_table[mcol->r]);
-        vcol_data->g = unit_float_to_ushort_clamp(BLI_color_from_srgb_table[mcol->g]);
-        vcol_data->b = unit_float_to_ushort_clamp(BLI_color_from_srgb_table[mcol->b]);
-        vcol_data->a = unit_float_to_ushort_clamp(mcol->a * (1.0f / 255.0f));
+      if (mr->extract_type == MR_EXTRACT_BMESH) {
+        int cd_ofs = CustomData_get_n_offset(cd_ldata, CD_MLOOPCOL, i);
+        BMIter f_iter, l_iter;
+        BMFace *efa;
+        BMLoop *loop;
+        BM_ITER_MESH (efa, &f_iter, mr->bm, BM_FACES_OF_MESH) {
+          BM_ITER_ELEM (loop, &l_iter, efa, BM_LOOPS_OF_FACE) {
+            const MLoopCol *mloopcol = BM_ELEM_CD_GET_VOID_P(loop, cd_ofs);
+            vcol_data->r = unit_float_to_ushort_clamp(BLI_color_from_srgb_table[mloopcol->r]);
+            vcol_data->g = unit_float_to_ushort_clamp(BLI_color_from_srgb_table[mloopcol->g]);
+            vcol_data->b = unit_float_to_ushort_clamp(BLI_color_from_srgb_table[mloopcol->b]);
+            vcol_data->a = unit_float_to_ushort_clamp(mloopcol->a * (1.0f / 255.0f));
+            vcol_data++;
+          }
+        }
+      }
+      else {
+        const MLoopCol *mloopcol = (MLoopCol *)CustomData_get_layer_n(cd_ldata, CD_MLOOPCOL, i);
+        for (int l = 0; l < mr->loop_len; l++, mloopcol++, vcol_data++) {
+          vcol_data->r = unit_float_to_ushort_clamp(BLI_color_from_srgb_table[mloopcol->r]);
+          vcol_data->g = unit_float_to_ushort_clamp(BLI_color_from_srgb_table[mloopcol->g]);
+          vcol_data->b = unit_float_to_ushort_clamp(BLI_color_from_srgb_table[mloopcol->b]);
+          vcol_data->a = unit_float_to_ushort_clamp(mloopcol->a * (1.0f / 255.0f));
+        }
       }
     }
   }
@@ -2301,14 +2384,14 @@ static void *extract_edge_fac_init(const MeshRenderData *mr, void *buf)
   return data;
 }
 
-static void extract_edge_fac_loop_bmesh(const MeshRenderData *UNUSED(mr),
-                                        int l,
-                                        BMLoop *loop,
-                                        void *_data)
+static void extract_edge_fac_loop_bmesh(const MeshRenderData *mr, int l, BMLoop *loop, void *_data)
 {
   MeshExtract_EdgeFac_Data *data = (MeshExtract_EdgeFac_Data *)_data;
   if (BM_edge_is_manifold(loop->e)) {
-    float ratio = loop_edge_factor_get(loop->f->no, loop->v->co, loop->v->no, loop->next->v->co);
+    float ratio = loop_edge_factor_get(bm_face_no_get(mr, loop->f),
+                                       bm_vert_co_get(mr, loop->v),
+                                       bm_vert_no_get(mr, loop->v),
+                                       bm_vert_co_get(mr, loop->next->v));
     data->vbo_data[l] = ratio * 253 + 1;
   }
   else {
@@ -3133,7 +3216,7 @@ static void *extract_stretch_angle_init(const MeshRenderData *mr, void *buf)
   return data;
 }
 
-static void extract_stretch_angle_loop_bmesh(const MeshRenderData *UNUSED(mr),
+static void extract_stretch_angle_loop_bmesh(const MeshRenderData *mr,
                                              int l,
                                              BMLoop *loop,
                                              void *_data)
@@ -3150,8 +3233,12 @@ static void extract_stretch_angle_loop_bmesh(const MeshRenderData *UNUSED(mr),
     BMLoop *l_next_tmp = loop;
     luv = BM_ELEM_CD_GET_VOID_P(l_tmp, data->cd_ofs);
     luv_next = BM_ELEM_CD_GET_VOID_P(l_next_tmp, data->cd_ofs);
-    compute_normalize_edge_vectors(
-        auv, av, luv->uv, luv_next->uv, l_tmp->v->co, l_next_tmp->v->co);
+    compute_normalize_edge_vectors(auv,
+                                   av,
+                                   luv->uv,
+                                   luv_next->uv,
+                                   bm_vert_co_get(mr, l_tmp->v),
+                                   bm_vert_co_get(mr, l_next_tmp->v));
     /* Save last edge. */
     copy_v2_v2(last_auv, auv[1]);
     copy_v3_v3(last_av, av[1]);
@@ -3167,7 +3254,12 @@ static void extract_stretch_angle_loop_bmesh(const MeshRenderData *UNUSED(mr),
   else {
     luv = BM_ELEM_CD_GET_VOID_P(loop, data->cd_ofs);
     luv_next = BM_ELEM_CD_GET_VOID_P(l_next, data->cd_ofs);
-    compute_normalize_edge_vectors(auv, av, luv->uv, luv_next->uv, loop->v->co, l_next->v->co);
+    compute_normalize_edge_vectors(auv,
+                                   av,
+                                   luv->uv,
+                                   luv_next->uv,
+                                   bm_vert_co_get(mr, loop->v),
+                                   bm_vert_co_get(mr, l_next->v));
   }
   edituv_get_stretch_angle(auv, av, data->vbo_data + l);
 }
@@ -3307,7 +3399,7 @@ static void statvis_calc_overhang(const MeshRenderData *mr, float *r_overhang)
   if (mr->extract_type == MR_EXTRACT_BMESH) {
     int l = 0;
     BM_ITER_MESH (f, &iter, bm, BM_FACES_OF_MESH) {
-      float fac = angle_normalized_v3v3(f->no, dir) / (float)M_PI;
+      float fac = angle_normalized_v3v3(bm_face_no_get(mr, f), dir) / (float)M_PI;
       fac = overhang_remap(fac, min, max, minmax_irange);
       for (int i = 0; i < f->len; i++, l++) {
         r_overhang[l] = fac;
@@ -3385,7 +3477,11 @@ static void statvis_calc_thickness(const MeshRenderData *mr, float *r_thickness)
     for (int i = 0; i < mr->tri_len; i++) {
       BMLoop **ltri = looptris[i];
       const int index = BM_elem_index_get(ltri[0]->f);
-      const float *cos[3] = {ltri[0]->v->co, ltri[1]->v->co, ltri[2]->v->co};
+      const float *cos[3] = {
+          bm_vert_co_get(mr, ltri[0]->v),
+          bm_vert_co_get(mr, ltri[1]->v),
+          bm_vert_co_get(mr, ltri[2]->v),
+      };
       float ray_co[3];
       float ray_no[3];
 
@@ -3398,7 +3494,8 @@ static void statvis_calc_thickness(const MeshRenderData *mr, float *r_thickness)
 
         BMFace *f_hit = BKE_bmbvh_ray_cast(bmtree, ray_co, ray_no, 0.0f, &dist, NULL, NULL);
         if (f_hit && dist < face_dists[index]) {
-          float angle_fac = fabsf(dot_v3v3(ltri[0]->f->no, f_hit->no));
+          float angle_fac = fabsf(
+              dot_v3v3(bm_face_no_get(mr, ltri[0]->f), bm_face_no_get(mr, f_hit)));
           angle_fac = 1.0f - angle_fac;
           angle_fac = angle_fac * angle_fac * angle_fac;
           angle_fac = 1.0f - angle_fac;
@@ -3603,8 +3700,17 @@ static void statvis_calc_distort(const MeshRenderData *mr, float *r_distort)
     BMesh *bm = em->bm;
     BMFace *f;
 
+    if (mr->bm_vert_coords != NULL) {
+      BKE_editmesh_cache_ensure_poly_normals(em, mr->edit_data);
+
+      /* Most likely this is already valid, ensure just in case.
+       * Needed for #BM_loop_calc_face_normal_safe_vcos. */
+      BM_mesh_elem_index_ensure(em->bm, BM_VERT);
+    }
+
     int l = 0;
-    BM_ITER_MESH (f, &iter, bm, BM_FACES_OF_MESH) {
+    int p = 0;
+    BM_ITER_MESH_INDEX (f, &iter, bm, BM_FACES_OF_MESH, p) {
       float fac = -1.0f;
 
       if (f->len > 3) {
@@ -3613,13 +3719,23 @@ static void statvis_calc_distort(const MeshRenderData *mr, float *r_distort)
         fac = 0.0f;
         l_iter = l_first = BM_FACE_FIRST_LOOP(f);
         do {
+          const float *no_face;
           float no_corner[3];
-          BM_loop_calc_face_normal_safe(l_iter, no_corner);
+          if (mr->bm_vert_coords != NULL) {
+            no_face = mr->bm_poly_normals[p];
+            BM_loop_calc_face_normal_safe_vcos(l_iter, no_face, mr->bm_vert_coords, no_corner);
+          }
+          else {
+            no_face = f->no;
+            BM_loop_calc_face_normal_safe(l_iter, no_corner);
+          }
+
           /* simple way to detect (what is most likely) concave */
-          if (dot_v3v3(f->no, no_corner) < 0.0f) {
+          if (dot_v3v3(no_face, no_corner) < 0.0f) {
             negate_v3(no_corner);
           }
-          fac = max_ff(fac, angle_normalized_v3v3(f->no, no_corner));
+          fac = max_ff(fac, angle_normalized_v3v3(no_face, no_corner));
+
         } while ((l_iter = l_iter->next) != l_first);
         fac *= 2.0f;
       }
@@ -3842,14 +3958,14 @@ static void *extract_fdots_pos_init(const MeshRenderData *mr, void *buf)
   return vbo->data;
 }
 
-static void extract_fdots_pos_loop_bmesh(const MeshRenderData *UNUSED(mr),
+static void extract_fdots_pos_loop_bmesh(const MeshRenderData *mr,
                                          int UNUSED(l),
                                          BMLoop *loop,
                                          void *data)
 {
   float(*center)[3] = (float(*)[3])data;
   float w = 1.0f / (float)loop->f->len;
-  madd_v3_v3fl(center[BM_elem_index_get(loop->f)], loop->v->co, w);
+  madd_v3_v3fl(center[BM_elem_index_get(loop->f)], bm_vert_co_get(mr, loop->v), w);
 }
 
 static void extract_fdots_pos_loop_mesh(const MeshRenderData *mr,
@@ -3928,7 +4044,7 @@ static void extract_fdots_nor_finish(const MeshRenderData *mr, void *buf, void *
         nor[f].w = NOR_AND_FLAG_HIDDEN;
       }
       else {
-        nor[f] = GPU_normal_convert_i10_v3(efa->no);
+        nor[f] = GPU_normal_convert_i10_v3(bm_face_no_get(mr, efa));
         /* Select / Active Flag. */
         nor[f].w = (BM_elem_flag_test(efa, BM_ELEM_SELECT) ?
                         ((efa == mr->efa_act) ? NOR_AND_FLAG_ACTIVE : NOR_AND_FLAG_SELECT) :
@@ -3946,7 +4062,7 @@ static void extract_fdots_nor_finish(const MeshRenderData *mr, void *buf, void *
         nor[f].w = NOR_AND_FLAG_HIDDEN;
       }
       else {
-        nor[f] = GPU_normal_convert_i10_v3(efa->no);
+        nor[f] = GPU_normal_convert_i10_v3(bm_face_no_get(mr, efa));
         /* Select / Active Flag. */
         nor[f].w = (BM_elem_flag_test(efa, BM_ELEM_SELECT) ?
                         ((efa == mr->efa_act) ? NOR_AND_FLAG_ACTIVE : NOR_AND_FLAG_SELECT) :
@@ -4171,7 +4287,7 @@ static void *extract_skin_roots_init(const MeshRenderData *mr, void *buf)
     const MVertSkin *vs = BM_ELEM_CD_GET_VOID_P(eve, cd_ofs);
     if (vs->flag & MVERT_SKIN_ROOT) {
       vbo_data->size = (vs->radius[0] + vs->radius[1]) * 0.5f;
-      copy_v3_v3(vbo_data->local_pos, eve->co);
+      copy_v3_v3(vbo_data->local_pos, bm_vert_co_get(mr, eve));
       vbo_data++;
       root_len++;
     }
@@ -4419,10 +4535,14 @@ static const MeshExtract extract_fdot_idx = {
 /** \} */
 
 /* ---------------------------------------------------------------------- */
-/** \name Extract Loop
+/** \name ExtractTaskData
  * \{ */
+typedef struct ExtractUserData {
+  void *user_data;
+} ExtractUserData;
 
 typedef struct ExtractTaskData {
+  void *next, *prev;
   const MeshRenderData *mr;
   const MeshExtract *extract;
   eMRIterType iter_type;
@@ -4430,8 +4550,15 @@ typedef struct ExtractTaskData {
   /** Decremented each time a task is finished. */
   int32_t *task_counter;
   void *buf;
-  void *user_data;
+  ExtractUserData *user_data;
 } ExtractTaskData;
+
+static void extract_task_data_free(void *data)
+{
+  ExtractTaskData *task_data = data;
+  MEM_SAFE_FREE(task_data->user_data);
+  MEM_freeN(task_data);
+}
 
 BLI_INLINE void mesh_extract_iter(const MeshRenderData *mr,
                                   const eMRIterType iter_type,
@@ -4509,31 +4636,184 @@ BLI_INLINE void mesh_extract_iter(const MeshRenderData *mr,
   }
 }
 
-static void extract_run(TaskPool *__restrict UNUSED(pool), void *taskdata)
+static void extract_init(ExtractTaskData *data)
 {
-  ExtractTaskData *data = taskdata;
-  mesh_extract_iter(
-      data->mr, data->iter_type, data->start, data->end, data->extract, data->user_data);
+  data->user_data->user_data = data->extract->init(data->mr, data->buf);
+}
+
+static void extract_run(void *__restrict taskdata)
+{
+  ExtractTaskData *data = (ExtractTaskData *)taskdata;
+  mesh_extract_iter(data->mr,
+                    data->iter_type,
+                    data->start,
+                    data->end,
+                    data->extract,
+                    data->user_data->user_data);
 
   /* If this is the last task, we do the finish function. */
   int remainin_tasks = atomic_sub_and_fetch_int32(data->task_counter, 1);
   if (remainin_tasks == 0 && data->extract->finish != NULL) {
-    data->extract->finish(data->mr, data->buf, data->user_data);
+    data->extract->finish(data->mr, data->buf, data->user_data->user_data);
   }
 }
 
-static void extract_range_task_create(
-    TaskPool *task_pool, ExtractTaskData *taskdata, const eMRIterType type, int start, int length)
+static void extract_init_and_run(void *__restrict taskdata)
+{
+  extract_init((ExtractTaskData *)taskdata);
+  extract_run(taskdata);
+}
+
+/** \} */
+
+/* ---------------------------------------------------------------------- */
+/** \name Task Node - Update Mesh Render Data
+ * \{ */
+typedef struct MeshRenderDataUpdateTaskData {
+  MeshRenderData *mr;
+  eMRIterType iter_type;
+  eMRDataType data_flag;
+} MeshRenderDataUpdateTaskData;
+
+static void mesh_render_data_update_task_data_free(MeshRenderDataUpdateTaskData *taskdata)
+{
+  BLI_assert(taskdata);
+  mesh_render_data_free(taskdata->mr);
+  MEM_freeN(taskdata);
+}
+
+static void mesh_extract_render_data_node_exec(void *__restrict task_data)
+{
+  MeshRenderDataUpdateTaskData *update_task_data = task_data;
+  mesh_render_data_update(
+      update_task_data->mr, update_task_data->iter_type, update_task_data->data_flag);
+}
+
+static struct TaskNode *mesh_extract_render_data_node_create(struct TaskGraph *task_graph,
+                                                             MeshRenderData *mr,
+                                                             const eMRIterType iter_type,
+                                                             const eMRDataType data_flag)
+{
+  MeshRenderDataUpdateTaskData *task_data = MEM_mallocN(sizeof(MeshRenderDataUpdateTaskData),
+                                                        __func__);
+  task_data->mr = mr;
+  task_data->iter_type = iter_type;
+  task_data->data_flag = data_flag;
+
+  struct TaskNode *task_node = BLI_task_graph_node_create(
+      task_graph,
+      mesh_extract_render_data_node_exec,
+      task_data,
+      (TaskGraphNodeFreeFunction)mesh_render_data_update_task_data_free);
+  return task_node;
+}
+
+/** \} */
+
+/* ---------------------------------------------------------------------- */
+/** \name Task Node - Extract Single Threaded
+ * \{ */
+typedef struct ExtractSingleThreadedTaskData {
+  ListBase task_datas;
+} ExtractSingleThreadedTaskData;
+
+static void extract_single_threaded_task_data_free(ExtractSingleThreadedTaskData *taskdata)
+{
+  BLI_assert(taskdata);
+  LISTBASE_FOREACH_MUTABLE (ExtractTaskData *, td, &taskdata->task_datas) {
+    extract_task_data_free(td);
+  }
+  BLI_listbase_clear(&taskdata->task_datas);
+  MEM_freeN(taskdata);
+}
+
+static void extract_single_threaded_task_node_exec(void *__restrict task_data)
+{
+  ExtractSingleThreadedTaskData *extract_task_data = task_data;
+  LISTBASE_FOREACH (ExtractTaskData *, td, &extract_task_data->task_datas) {
+    extract_init_and_run(td);
+  }
+}
+
+static struct TaskNode *extract_single_threaded_task_node_create(
+    struct TaskGraph *task_graph, ExtractSingleThreadedTaskData *task_data)
+{
+  struct TaskNode *task_node = BLI_task_graph_node_create(
+      task_graph,
+      extract_single_threaded_task_node_exec,
+      task_data,
+      (TaskGraphNodeFreeFunction)extract_single_threaded_task_data_free);
+  return task_node;
+}
+
+/** \} */
+
+/* ---------------------------------------------------------------------- */
+/** \name Task Node - UserData Initializer
+ * \{ */
+typedef struct UserDataInitTaskData {
+  ListBase task_datas;
+  int32_t *task_counters;
+
+} UserDataInitTaskData;
+
+static void user_data_init_task_data_free(UserDataInitTaskData *taskdata)
+{
+  BLI_assert(taskdata);
+  LISTBASE_FOREACH_MUTABLE (ExtractTaskData *, td, &taskdata->task_datas) {
+    extract_task_data_free(td);
+  }
+  BLI_listbase_clear(&taskdata->task_datas);
+  MEM_SAFE_FREE(taskdata->task_counters);
+  MEM_freeN(taskdata);
+}
+
+static void user_data_init_task_data_exec(void *__restrict task_data)
+{
+  UserDataInitTaskData *extract_task_data = task_data;
+  LISTBASE_FOREACH (ExtractTaskData *, td, &extract_task_data->task_datas) {
+    extract_init(td);
+  }
+}
+
+static struct TaskNode *user_data_init_task_node_create(struct TaskGraph *task_graph,
+                                                        UserDataInitTaskData *task_data)
+{
+  struct TaskNode *task_node = BLI_task_graph_node_create(
+      task_graph,
+      user_data_init_task_data_exec,
+      task_data,
+      (TaskGraphNodeFreeFunction)user_data_init_task_data_free);
+  return task_node;
+}
+
+/** \} */
+/* ---------------------------------------------------------------------- */
+/** \name Extract Loop
+ * \{ */
+
+static void extract_range_task_create(struct TaskGraph *task_graph,
+                                      struct TaskNode *task_node_user_data_init,
+                                      ExtractTaskData *taskdata,
+                                      const eMRIterType type,
+                                      int start,
+                                      int length)
 {
   taskdata = MEM_dupallocN(taskdata);
   atomic_add_and_fetch_int32(taskdata->task_counter, 1);
   taskdata->iter_type = type;
   taskdata->start = start;
   taskdata->end = start + length;
-  BLI_task_pool_push(task_pool, extract_run, taskdata, true, NULL);
+  struct TaskNode *task_node = BLI_task_graph_node_create(
+      task_graph, extract_run, taskdata, MEM_freeN);
+  BLI_task_graph_edge_create(task_node_user_data_init, task_node);
 }
 
-static void extract_task_create(TaskPool *task_pool,
+static void extract_task_create(struct TaskGraph *task_graph,
+                                struct TaskNode *task_node_mesh_render_data,
+                                struct TaskNode *task_node_user_data_init,
+                                ListBase *single_threaded_task_datas,
+                                ListBase *user_data_init_task_datas,
                                 const Scene *scene,
                                 const MeshRenderData *mr,
                                 const MeshExtract *extract,
@@ -4551,58 +4831,75 @@ static void extract_task_create(TaskPool *task_pool,
 
   /* Divide extraction of the VBO/IBO into sensible chunks of works. */
   ExtractTaskData *taskdata = MEM_mallocN(sizeof(*taskdata), "ExtractTaskData");
+  taskdata->next = NULL;
+  taskdata->prev = NULL;
   taskdata->mr = mr;
   taskdata->extract = extract;
   taskdata->buf = buf;
-  taskdata->user_data = extract->init(mr, buf);
+
+  /* ExtractUserData is shared between the iterations as it holds counters to detect if the
+   * extraction is finished. To make sure the duplication of the userdata does not create a new
+   * instance of the counters we allocate the userdata in its own container.
+   *
+   * This structure makes sure that when extract_init is called, that the user data of all
+   * iterations are updated. */
+  taskdata->user_data = MEM_callocN(sizeof(ExtractUserData), __func__);
   taskdata->iter_type = mesh_extract_iter_type(extract);
   taskdata->task_counter = task_counter;
   taskdata->start = 0;
   taskdata->end = INT_MAX;
 
   /* Simple heuristic. */
-  const bool use_thread = (mr->loop_len + mr->loop_loose_len) > 8192;
+  const int chunk_size = 8192;
+  const bool use_thread = (mr->loop_len + mr->loop_loose_len) > chunk_size;
   if (use_thread && extract->use_threading) {
+
     /* Divide task into sensible chunks. */
-    const int chunk_size = 8192;
     if (taskdata->iter_type & MR_ITER_LOOPTRI) {
       for (int i = 0; i < mr->tri_len; i += chunk_size) {
-        extract_range_task_create(task_pool, taskdata, MR_ITER_LOOPTRI, i, chunk_size);
+        extract_range_task_create(
+            task_graph, task_node_user_data_init, taskdata, MR_ITER_LOOPTRI, i, chunk_size);
       }
     }
     if (taskdata->iter_type & MR_ITER_LOOP) {
       for (int i = 0; i < mr->poly_len; i += chunk_size) {
-        extract_range_task_create(task_pool, taskdata, MR_ITER_LOOP, i, chunk_size);
+        extract_range_task_create(
+            task_graph, task_node_user_data_init, taskdata, MR_ITER_LOOP, i, chunk_size);
       }
     }
     if (taskdata->iter_type & MR_ITER_LEDGE) {
       for (int i = 0; i < mr->edge_loose_len; i += chunk_size) {
-        extract_range_task_create(task_pool, taskdata, MR_ITER_LEDGE, i, chunk_size);
+        extract_range_task_create(
+            task_graph, task_node_user_data_init, taskdata, MR_ITER_LEDGE, i, chunk_size);
       }
     }
     if (taskdata->iter_type & MR_ITER_LVERT) {
       for (int i = 0; i < mr->vert_loose_len; i += chunk_size) {
-        extract_range_task_create(task_pool, taskdata, MR_ITER_LVERT, i, chunk_size);
+        extract_range_task_create(
+            task_graph, task_node_user_data_init, taskdata, MR_ITER_LVERT, i, chunk_size);
       }
     }
-    MEM_freeN(taskdata);
+    BLI_addtail(user_data_init_task_datas, taskdata);
   }
   else if (use_thread) {
     /* One task for the whole VBO. */
     (*task_counter)++;
-    BLI_task_pool_push(task_pool, extract_run, taskdata, true, NULL);
+    struct TaskNode *one_task = BLI_task_graph_node_create(
+        task_graph, extract_init_and_run, taskdata, extract_task_data_free);
+    BLI_task_graph_edge_create(task_node_mesh_render_data, one_task);
   }
   else {
     /* Single threaded extraction. */
     (*task_counter)++;
-    extract_run(NULL, taskdata);
-    MEM_freeN(taskdata);
+    BLI_addtail(single_threaded_task_datas, taskdata);
   }
 }
 
-void mesh_buffer_cache_create_requested(MeshBatchCache *cache,
+void mesh_buffer_cache_create_requested(struct TaskGraph *task_graph,
+                                        MeshBatchCache *cache,
                                         MeshBufferCache mbc,
                                         Mesh *me,
+
                                         const bool is_editmode,
                                         const bool is_paint_mode,
                                         const float obmat[4][4],
@@ -4614,8 +4911,40 @@ void mesh_buffer_cache_create_requested(MeshBatchCache *cache,
                                         const ToolSettings *ts,
                                         const bool use_hide)
 {
+  /* For each mesh where batches needs to be updated a sub-graph will be added to the task_graph.
+   * This sub-graph starts with an extract_render_data_node. This fills/converts the required data
+   * from Mesh.
+   *
+   * Small extractions and extractions that can't be multi-threaded are grouped in a single
+   * `extract_single_threaded_task_node`.
+   *
+   * Other extractions will create a node for each loop exceeding 8192 items. these nodes are
+   * linked to the `user_data_init_task_node`. the `user_data_init_task_node` prepares the userdata
+   * needed for the extraction based on the data extracted from the mesh. counters are used to
+   * check if the finalize of a task has to be called.
+   *
+   *                           Mesh extraction sub graph
+   *
+   *                                                       +----------------------+
+   *                                               +-----> | extract_task1_loop_1 |
+   *                                               |       +----------------------+
+   * +------------------+     +----------------------+     +----------------------+
+   * | mesh_render_data | --> |                      | --> | extract_task1_loop_2 |
+   * +------------------+     |                      |     +----------------------+
+   *   |                      |                      |     +----------------------+
+   *   |                      |    user_data_init    | --> | extract_task2_loop_1 |
+   *   v                      |                      |     +----------------------+
+   * +------------------+     |                      |     +----------------------+
+   * | single_threaded  |     |                      | --> | extract_task2_loop_2 |
+   * +------------------+     +----------------------+     +----------------------+
+   *                                               |       +----------------------+
+   *                                               +-----> | extract_task2_loop_3 |
+   *                                                       +----------------------+
+   */
   eMRIterType iter_flag = 0;
   eMRDataType data_flag = 0;
+
+  const bool do_lines_loose_subbuffer = mbc.ibo.lines_loose != NULL;
 
 #define TEST_ASSIGN(type, type_lowercase, name) \
   do { \
@@ -4654,7 +4983,6 @@ void mesh_buffer_cache_create_requested(MeshBatchCache *cache,
   TEST_ASSIGN(IBO, ibo, fdots);
   TEST_ASSIGN(IBO, ibo, lines_paint_mask);
   TEST_ASSIGN(IBO, ibo, lines_adjacency);
-  TEST_ASSIGN(IBO, ibo, lines_loose);
   TEST_ASSIGN(IBO, ibo, edituv_tris);
   TEST_ASSIGN(IBO, ibo, edituv_lines);
   TEST_ASSIGN(IBO, ibo, edituv_points);
@@ -4666,16 +4994,8 @@ void mesh_buffer_cache_create_requested(MeshBatchCache *cache,
   double rdata_start = PIL_check_seconds_timer();
 #endif
 
-  MeshRenderData *mr = mesh_render_data_create(me,
-                                               is_editmode,
-                                               is_paint_mode,
-                                               obmat,
-                                               do_final,
-                                               do_uvedit,
-                                               iter_flag,
-                                               data_flag,
-                                               cd_layer_used,
-                                               ts);
+  MeshRenderData *mr = mesh_render_data_create(
+      me, is_editmode, is_paint_mode, obmat, do_final, do_uvedit, cd_layer_used, ts);
   mr->cache = cache; /* HACK */
   mr->use_hide = use_hide;
   mr->use_subsurf_fdots = use_subsurf_fdots;
@@ -4685,20 +5005,32 @@ void mesh_buffer_cache_create_requested(MeshBatchCache *cache,
   double rdata_end = PIL_check_seconds_timer();
 #endif
 
-  TaskPool *task_pool;
-
-  /* Create a suspended pool as the finalize method could be called too early.
-   * See `extract_run`. */
-  task_pool = BLI_task_pool_create_suspended(NULL, TASK_PRIORITY_HIGH);
-
   size_t counters_size = (sizeof(mbc) / sizeof(void *)) * sizeof(int32_t);
   int32_t *task_counters = MEM_callocN(counters_size, __func__);
   int counter_used = 0;
 
+  struct TaskNode *task_node_mesh_render_data = mesh_extract_render_data_node_create(
+      task_graph, mr, iter_flag, data_flag);
+  ExtractSingleThreadedTaskData *single_threaded_task_data = MEM_callocN(
+      sizeof(ExtractSingleThreadedTaskData), __func__);
+  UserDataInitTaskData *user_data_init_task_data = MEM_callocN(sizeof(UserDataInitTaskData),
+                                                               __func__);
+  user_data_init_task_data->task_counters = task_counters;
+  struct TaskNode *task_node_user_data_init = user_data_init_task_node_create(
+      task_graph, user_data_init_task_data);
+
 #define EXTRACT(buf, name) \
   if (mbc.buf.name) { \
-    extract_task_create( \
-        task_pool, scene, mr, &extract_##name, mbc.buf.name, &task_counters[counter_used++]); \
+    extract_task_create(task_graph, \
+                        task_node_mesh_render_data, \
+                        task_node_user_data_init, \
+                        &single_threaded_task_data->task_datas, \
+                        &user_data_init_task_data->task_datas, \
+                        scene, \
+                        mr, \
+                        &extract_##name, \
+                        mbc.buf.name, \
+                        &task_counters[counter_used++]); \
   } \
   ((void)0)
 
@@ -4726,7 +5058,33 @@ void mesh_buffer_cache_create_requested(MeshBatchCache *cache,
   EXTRACT(vbo, skin_roots);
 
   EXTRACT(ibo, tris);
-  EXTRACT(ibo, lines);
+  if (mbc.ibo.lines) {
+    /* When `lines` and `lines_loose` are requested, schedule lines extraction that also creates
+     * the `lines_loose` sub-buffer. */
+    const MeshExtract *lines_extractor = do_lines_loose_subbuffer ?
+                                             &extract_lines_with_lines_loose :
+                                             &extract_lines;
+    extract_task_create(task_graph,
+                        task_node_mesh_render_data,
+                        task_node_user_data_init,
+                        &single_threaded_task_data->task_datas,
+                        &user_data_init_task_data->task_datas,
+                        scene,
+                        mr,
+                        lines_extractor,
+                        mbc.ibo.lines,
+                        &task_counters[counter_used++]);
+  }
+  else {
+    if (do_lines_loose_subbuffer) {
+      /* When `lines_loose` is requested without `lines` we can create the sub-buffer on the fly as
+       * the `lines` buffer should then already be up-to-date.
+       * (see `DRW_batch_requested(cache->batch.loose_edges, GPU_PRIM_LINES)` in
+       * `DRW_mesh_batch_cache_create_requested`).
+       */
+      extract_lines_loose_subbuffer(mr);
+    }
+  }
   EXTRACT(ibo, points);
   EXTRACT(ibo, fdots);
   EXTRACT(ibo, lines_paint_mask);
@@ -4736,27 +5094,29 @@ void mesh_buffer_cache_create_requested(MeshBatchCache *cache,
   EXTRACT(ibo, edituv_points);
   EXTRACT(ibo, edituv_fdots);
 
-  /* TODO(fclem) Ideally, we should have one global pool for all
-   * objects and wait for finish only before drawing when buffers
-   * need to be ready. */
-  BLI_task_pool_work_and_wait(task_pool);
+  /* Only create the edge when there are user datas that needs to be inited.
+   * The task is still part of the graph so the task_data will be freed when the graph is freed.
+   */
+  if (!BLI_listbase_is_empty(&user_data_init_task_data->task_datas)) {
+    BLI_task_graph_edge_create(task_node_mesh_render_data, task_node_user_data_init);
+  }
 
-  /* The next task(s) rely on the result of the tasks above. */
+  if (!BLI_listbase_is_empty(&single_threaded_task_data->task_datas)) {
+    struct TaskNode *task_node = extract_single_threaded_task_node_create(
+        task_graph, single_threaded_task_data);
+    BLI_task_graph_edge_create(task_node_mesh_render_data, task_node);
+  }
+  else {
+    extract_single_threaded_task_data_free(single_threaded_task_data);
+  }
 
-  /* The `lines_loose` is a sub buffer from `ibo.lines`.
-   * We schedule it here due to potential synchronization issues.*/
-  EXTRACT(ibo, lines_loose);
-
-  BLI_task_pool_work_and_wait(task_pool);
+  /* Trigger the sub-graph for this mesh. */
+  BLI_task_graph_node_push_work(task_node_mesh_render_data);
 
 #undef EXTRACT
 
-  BLI_task_pool_free(task_pool);
-  MEM_freeN(task_counters);
-
-  mesh_render_data_free(mr);
-
 #ifdef DEBUG_TIME
+  BLI_task_graph_work_and_wait(task_graph);
   double end = PIL_check_seconds_timer();
 
   static double avg = 0;

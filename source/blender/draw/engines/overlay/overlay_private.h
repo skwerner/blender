@@ -54,7 +54,7 @@ typedef struct OVERLAY_PassList {
   DRWPass *antialiasing_ps;
   DRWPass *armature_ps[2];
   DRWPass *armature_bone_select_ps;
-  DRWPass *armature_transp_ps;
+  DRWPass *armature_transp_ps[2];
   DRWPass *background_ps;
   DRWPass *clipping_frustum_ps;
   DRWPass *edit_curve_wire_ps[2];
@@ -253,8 +253,9 @@ typedef struct OVERLAY_PrivateData {
   DRWShadingGroup *particle_shapes_grp;
   DRWShadingGroup *pointcloud_dots_grp;
   DRWShadingGroup *sculpt_mask_grp;
-  DRWShadingGroup *wires_grp[2][2];     /* With and without coloring. */
-  DRWShadingGroup *wires_all_grp[2][2]; /* With and without coloring. */
+  DRWShadingGroup *wires_grp[2][2];      /* With and without coloring. */
+  DRWShadingGroup *wires_all_grp[2][2];  /* With and without coloring. */
+  DRWShadingGroup *wires_hair_grp[2][2]; /* With and without coloring. */
   DRWShadingGroup *wires_sculpt_grp[2];
 
   DRWView *view_default;
@@ -296,6 +297,7 @@ typedef struct OVERLAY_PrivateData {
   } antialiasing;
   struct {
     bool show_handles;
+    int handle_display;
   } edit_curve;
   struct {
     int ghost_ob;
@@ -588,9 +590,9 @@ GPUShader *OVERLAY_shader_edit_mesh_skin_root(void);
 GPUShader *OVERLAY_shader_edit_mesh_vert(void);
 GPUShader *OVERLAY_shader_edit_particle_strand(void);
 GPUShader *OVERLAY_shader_edit_particle_point(void);
-GPUShader *OVERLAY_shader_extra(void);
+GPUShader *OVERLAY_shader_extra(bool is_select);
 GPUShader *OVERLAY_shader_extra_groundline(void);
-GPUShader *OVERLAY_shader_extra_wire(bool use_object);
+GPUShader *OVERLAY_shader_extra_wire(bool use_object, bool is_select);
 GPUShader *OVERLAY_shader_extra_loose_point(void);
 GPUShader *OVERLAY_shader_extra_point(void);
 GPUShader *OVERLAY_shader_facing(void);

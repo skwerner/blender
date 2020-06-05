@@ -2890,8 +2890,8 @@ static void direct_link_id_common(
   id->tag = tag;
 
   if (tag & LIB_TAG_ID_LINK_PLACEHOLDER) {
-    /* For placeholder we only need to set the tag and properly init generic ID fieds above, no
-     * further data to read. */
+    /* For placeholder we only need to set the tag and properly initialize generic ID fields above,
+     * no further data to read. */
     return;
   }
 
@@ -6941,7 +6941,6 @@ static void direct_link_scene(FileData *fd, Scene *sce)
 
     direct_link_paint(fd, sce, &sce->toolsettings->imapaint.paint);
 
-    sce->toolsettings->imapaint.paintcursor = NULL;
     sce->toolsettings->particle.paintcursor = NULL;
     sce->toolsettings->particle.scene = NULL;
     sce->toolsettings->particle.object = NULL;

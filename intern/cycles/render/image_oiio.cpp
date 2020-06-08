@@ -307,7 +307,7 @@ bool OIIOImageLoader::get_tx(const ustring &colorspace,
   }
 
   if (auto_convert && progress) {
-    progress->set_status("Updating Images", "Converting " + osl_filepath());
+    progress->set_status("Updating Images", string("Converting ") + osl_filepath().c_str());
 
     bool ok = make_tx(osl_filepath().c_str(), tx_name, colorspace, extension);
     if (ok) {

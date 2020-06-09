@@ -35,7 +35,7 @@ class Geometry;
 class Hair;
 class Mesh;
 
-class BVHEmbree : public BVH {
+class BVHEmbree : public BVHExternal {
  public:
   virtual void build(Progress &progress, Stats *stats) override;
   virtual void copy_to_device(Progress &progress, DeviceScene *dscene) override;
@@ -69,6 +69,7 @@ class BVHEmbree : public BVH {
   BVHEmbree *top_level;
 
  private:
+  void build_internal(Progress &progress);
   void delete_rtcScene();
   void update_tri_vertex_buffer(RTCGeometry geom_id, const Mesh *mesh);
   void update_curve_vertex_buffer(RTCGeometry geom_id, const Hair *hair);

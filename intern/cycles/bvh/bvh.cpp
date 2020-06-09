@@ -657,8 +657,8 @@ void BVHExternal::pack_tlas()
   size_t prim_tri_verts_size = 0;
   foreach (Geometry *geom, geometry) {
     BVH *const bvh = geom->bvh;
-    prim_index_size += bvh->pack.prim_index.size();
-    prim_tri_verts_size += bvh->pack.prim_tri_verts.size();
+    prim_index_size += bvh ? bvh->pack.prim_index.size() : 0;
+    prim_tri_verts_size += bvh ? bvh->pack.prim_tri_verts.size() : 0;
   }
 
   if (prim_index_size == 0)
@@ -684,6 +684,9 @@ void BVHExternal::pack_tlas()
   // Iterate over scene mesh list instead of objects, since the 'prim_offset' is calculated based
   // on that list, which may be ordered differently from the object list.
   foreach (Geometry *geom, geometry) {
+    if (!geom->bvh) {
+      continue;
+    }
     PackedBVH &bvh_pack = geom->bvh->pack;
     int geom_prim_offset = geom->prim_offset;
 

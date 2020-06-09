@@ -144,7 +144,7 @@ int Geometry::motion_step(float time) const
 
 bool Geometry::need_build_bvh(BVHLayout layout) const
 {
-  return !transform_applied || has_surface_bssrdf || layout == BVH_LAYOUT_OPTIX;
+  return !transform_applied || has_surface_bssrdf || layout == BVH_LAYOUT_OPTIX || layout == BVH_LAYOUT_EMBREE;
 }
 
 bool Geometry::is_instanced() const

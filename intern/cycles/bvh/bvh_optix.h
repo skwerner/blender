@@ -29,7 +29,7 @@ CCL_NAMESPACE_BEGIN
 class Geometry;
 class Optix;
 
-class BVHOptiX : public BVH {
+class BVHOptiX : public BVHExternal {
   friend class BVH;
 
  public:
@@ -38,13 +38,9 @@ class BVHOptiX : public BVH {
            const vector<Object *> &objects);
   virtual ~BVHOptiX();
 
-  virtual void build(Progress &progress, Stats *) override;
   virtual void copy_to_device(Progress &progress, DeviceScene *dscene) override;
 
  private:
-  void pack_blas();
-  void pack_tlas();
-
   virtual void pack_nodes(const BVHNode *) override;
   virtual void refit_nodes() override;
 

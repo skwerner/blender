@@ -132,6 +132,22 @@ struct BVHStackEntry {
   int encodeIdx() const;
 };
 
+/* Base class for Embree and OptiX. */
+
+class BVHExternal : public BVH {
+ public:
+  virtual void build(Progress &progress, Stats *) override;
+
+ protected:
+  BVHExternal(const BVHParams &params,
+      const vector<Geometry *> &geometry,
+      const vector<Object *> &objects);
+
+ private:
+  void pack_blas();
+  void pack_tlas();
+};
+
 CCL_NAMESPACE_END
 
 #endif /* __BVH_H__ */

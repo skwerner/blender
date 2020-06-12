@@ -126,6 +126,7 @@
 #include "DNA_object_types.h"
 #include "DNA_packedFile_types.h"
 #include "DNA_particle_types.h"
+#include "DNA_pointcache_types.h"
 #include "DNA_pointcloud_types.h"
 #include "DNA_rigidbody_types.h"
 #include "DNA_scene_types.h"
@@ -1135,7 +1136,7 @@ static void write_nodetree_nolib(BlendWriter *writer, bNodeTree *ntree)
         }
         BLO_write_struct_by_name(writer, node->typeinfo->storagename, node->storage);
       }
-      else {
+      else if (node->typeinfo != &NodeTypeUndefined) {
         BLO_write_struct_by_name(writer, node->typeinfo->storagename, node->storage);
       }
     }
@@ -4547,8 +4548,7 @@ void BLO_write_raw(BlendWriter *writer, int size_in_bytes, const void *data_ptr)
 
 void BLO_write_struct_by_name(BlendWriter *writer, const char *struct_name, const void *data_ptr)
 {
-  int struct_id = BLO_get_struct_id_by_name(writer, struct_name);
-  BLO_write_struct_by_id(writer, struct_id, data_ptr);
+  BLO_write_struct_array_by_name(writer, struct_name, 1, data_ptr);
 }
 
 void BLO_write_struct_array_by_name(BlendWriter *writer,
@@ -4557,6 +4557,10 @@ void BLO_write_struct_array_by_name(BlendWriter *writer,
                                     const void *data_ptr)
 {
   int struct_id = BLO_get_struct_id_by_name(writer, struct_name);
+  if (UNLIKELY(struct_id == -1)) {
+    printf("error: can't find SDNA code <%s>\n", struct_name);
+    return;
+  }
   BLO_write_struct_array_by_id(writer, struct_id, array_size, data_ptr);
 }
 
@@ -4594,7 +4598,12 @@ void BLO_write_struct_list_by_id(BlendWriter *writer, int struct_id, ListBase *l
 
 void BLO_write_struct_list_by_name(BlendWriter *writer, const char *struct_name, ListBase *list)
 {
-  BLO_write_struct_list_by_id(writer, BLO_get_struct_id_by_name(writer, struct_name), list);
+  int struct_id = BLO_get_struct_id_by_name(writer, struct_name);
+  if (UNLIKELY(struct_id == -1)) {
+    printf("error: can't find SDNA code <%s>\n", struct_name);
+    return;
+  }
+  BLO_write_struct_list_by_id(writer, struct_id, list);
 }
 
 void blo_write_id_struct(BlendWriter *writer, int struct_id, const void *id_address, const ID *id)
@@ -4605,7 +4614,6 @@ void blo_write_id_struct(BlendWriter *writer, int struct_id, const void *id_addr
 int BLO_get_struct_id_by_name(BlendWriter *writer, const char *struct_name)
 {
   int struct_id = DNA_struct_find_nr(writer->wd->sdna, struct_name);
-  BLI_assert(struct_id >= 0);
   return struct_id;
 }
 

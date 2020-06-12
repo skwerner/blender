@@ -1643,6 +1643,21 @@ static void rna_SimulationModifier_simulation_update(Main *bmain, Scene *scene, 
 }
 #  endif
 
+/**
+ * Special set callback that just changes the first bit of the expansion flag.
+ * This way the expansion state of all the subpanels is not changed by RNA.
+ */
+static void rna_Modifier_show_expanded_set(PointerRNA *ptr, bool value)
+{
+  ModifierData *md = ptr->data;
+  if (value) {
+    md->ui_expand_flag |= (1 << 0);
+  }
+  else {
+    md->ui_expand_flag &= ~(1 << 0);
+  }
+}
+
 #else
 
 /* NOTE: *MUST* return subdivision_type property. */
@@ -6872,11 +6887,13 @@ void RNA_def_modifier(BlenderRNA *brna)
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
   prop = RNA_def_property(srna, "show_expanded", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_funcs(prop, NULL, "rna_Modifier_show_expanded_set");
   RNA_def_property_flag(prop, PROP_NO_DEG_UPDATE);
   RNA_def_property_boolean_sdna(prop, NULL, "ui_expand_flag", 0);
   RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_ui_text(prop, "Expanded", "Set modifier expanded in the user interface");
   RNA_def_property_ui_icon(prop, ICON_DISCLOSURE_TRI_RIGHT, 1);
+  RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, NULL);
 
   prop = RNA_def_property(srna, "use_apply_on_spline", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "mode", eModifierMode_ApplyOnSpline);

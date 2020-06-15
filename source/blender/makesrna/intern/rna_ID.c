@@ -1421,7 +1421,6 @@ static void rna_def_ID_override_library_property(BlenderRNA *brna)
 static void rna_def_ID_override_library(BlenderRNA *brna)
 {
   StructRNA *srna;
-  PropertyRNA *prop;
 
   srna = RNA_def_struct(brna, "IDOverrideLibrary", NULL);
   RNA_def_struct_ui_text(
@@ -1429,14 +1428,6 @@ static void rna_def_ID_override_library(BlenderRNA *brna)
 
   RNA_def_pointer(
       srna, "reference", "ID", "Reference ID", "Linked ID used as reference by this override");
-
-  prop = RNA_def_boolean(
-      srna,
-      "auto_generate",
-      true,
-      "Auto Generate Override",
-      "Automatically generate overriding operations by detecting changes in properties");
-  RNA_def_property_boolean_sdna(prop, NULL, "flag", OVERRIDE_LIBRARY_AUTO);
 
   RNA_def_collection(srna,
                      "properties",

@@ -38,6 +38,7 @@ struct CurveMapping;
 struct Depsgraph;
 struct EnumPropertyItem;
 struct GHash;
+struct GSet;
 struct GridPaintMask;
 struct ImagePool;
 struct MLoop;
@@ -268,6 +269,7 @@ typedef struct SculptClothLengthConstraint {
 typedef struct SculptClothSimulation {
   SculptClothLengthConstraint *length_constraints;
   int tot_length_constraints;
+  struct GSet *created_length_constraints;
   int capacity_length_constraints;
   float *length_constraint_tweak;
 

@@ -25,11 +25,11 @@
 
 /* **************** INVERT ******************** */
 static bNodeSocketTemplate sh_node_invert_in[] = {
-    {SOCK_FLOAT, 1, N_("Fac"), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
-    {SOCK_RGBA, 1, N_("Color"), 0.0f, 0.0f, 0.0f, 1.0f},
-    {-1, 0, ""}};
+    {SOCK_FLOAT, N_("Fac"), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
+    {SOCK_RGBA, N_("Color"), 0.0f, 0.0f, 0.0f, 1.0f},
+    {-1, ""}};
 
-static bNodeSocketTemplate sh_node_invert_out[] = {{SOCK_RGBA, 0, N_("Color")}, {-1, 0, ""}};
+static bNodeSocketTemplate sh_node_invert_out[] = {{SOCK_RGBA, N_("Color")}, {-1, ""}};
 
 static void node_shader_exec_invert(void *UNUSED(data),
                                     int UNUSED(thread),
@@ -69,7 +69,7 @@ void register_node_type_sh_invert(void)
 {
   static bNodeType ntype;
 
-  sh_node_type_base(&ntype, SH_NODE_INVERT, "Invert", NODE_CLASS_OP_COLOR, 0);
+  sh_fn_node_type_base(&ntype, SH_NODE_INVERT, "Invert", NODE_CLASS_OP_COLOR, 0);
   node_type_socket_templates(&ntype, sh_node_invert_in, sh_node_invert_out);
   node_type_exec(&ntype, NULL, NULL, node_shader_exec_invert);
   node_type_gpu(&ntype, gpu_shader_invert);

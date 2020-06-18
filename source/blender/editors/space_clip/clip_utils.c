@@ -25,9 +25,9 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_listbase.h"
 #include "BLI_math.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_animsys.h"
 #include "BKE_context.h"
@@ -43,8 +43,8 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
-#include "ED_screen.h"
 #include "ED_clip.h"
+#include "ED_screen.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -166,7 +166,8 @@ static float calculate_reprojection_error_at_marker(MovieClip *clip,
   reprojected_position[1] = (reprojected_position[1] / (reprojected_position[3] * 2.0f) + 0.5f) *
                             clip_height * aspy;
 
-  BKE_tracking_distort_v2(tracking, reprojected_position, reprojected_position);
+  BKE_tracking_distort_v2(
+      tracking, clip_width, clip_height, reprojected_position, reprojected_position);
 
   marker_position[0] = (marker->pos[0] + track->offset[0]) * clip_width;
   marker_position[1] = (marker->pos[1] + track->offset[1]) * clip_height * aspy;

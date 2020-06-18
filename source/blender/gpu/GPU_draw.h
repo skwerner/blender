@@ -24,6 +24,9 @@
 #ifndef __GPU_DRAW_H__
 #define __GPU_DRAW_H__
 
+#include "BLI_utildefines.h"
+#include "DNA_object_enums.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -34,16 +37,7 @@ struct Image;
 struct ImageUser;
 struct Main;
 
-#include "DNA_object_enums.h"
-
 /* OpenGL drawing functions related to shading. */
-
-/* Initialize
- * - sets the default Blender opengl state, if in doubt, check
- *   the contents of this function
- * - this is called when starting Blender, for opengl rendering. */
-
-void GPU_state_init(void);
 
 /* Mipmap settings
  * - these will free textures on changes */
@@ -56,7 +50,7 @@ void GPU_paint_set_mipmap(struct Main *bmain, bool mipmap);
 
 /* Anisotropic filtering settings
  * - these will free textures on changes */
-void GPU_set_anisotropic(struct Main *bmain, float value);
+void GPU_set_anisotropic(float value);
 float GPU_get_anisotropic(void);
 
 /* Image updates and free
@@ -71,6 +65,7 @@ void GPU_create_gl_tex(unsigned int *bind,
                        int recth,
                        int textarget,
                        bool mipmap,
+                       bool half_float,
                        bool use_srgb,
                        struct Image *ima);
 void GPU_create_gl_tex_compressed(unsigned int *bind,
@@ -92,18 +87,6 @@ void GPU_create_smoke_velocity(struct FluidModifierData *mmd);
 
 /* Delayed free of OpenGL buffers by main thread */
 void GPU_free_unused_buffers(struct Main *bmain);
-
-/* utilities */
-typedef enum eGPUAttrMask {
-  GPU_DEPTH_BUFFER_BIT = (1 << 0),
-  GPU_ENABLE_BIT = (1 << 1),
-  GPU_SCISSOR_BIT = (1 << 2),
-  GPU_VIEWPORT_BIT = (1 << 3),
-  GPU_BLEND_BIT = (1 << 4),
-} eGPUAttrMask;
-
-void gpuPushAttr(eGPUAttrMask mask);
-void gpuPopAttr(void);
 
 #ifdef __cplusplus
 }

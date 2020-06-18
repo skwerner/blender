@@ -24,14 +24,14 @@
  */
 
 #include <float.h>
-#include <string.h>
-#include <stdio.h>
 #include <math.h>
+#include <stdio.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_math.h"
 #include "BLI_blenlib.h"
+#include "BLI_math.h"
 #include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
@@ -44,9 +44,9 @@
 #include "DNA_node_types.h"
 #include "DNA_object_types.h"
 
+#include "BKE_brush.h"
 #include "BKE_colorband.h"
 #include "BKE_context.h"
-#include "BKE_brush.h"
 #include "BKE_image.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
@@ -67,9 +67,9 @@
 #include "ED_view3d.h"
 
 #include "WM_api.h"
-#include "WM_types.h"
 #include "WM_message.h"
 #include "WM_toolsystem.h"
+#include "WM_types.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -120,7 +120,7 @@ void imapaint_region_tiles(
 }
 
 void ED_imapaint_dirty_region(
-    Image *ima, ImBuf *ibuf, int tile_number, int x, int y, int w, int h, bool find_old)
+    Image *ima, ImBuf *ibuf, ImageUser *iuser, int x, int y, int w, int h, bool find_old)
 {
   ImBuf *tmpibuf = NULL;
   int tilex, tiley, tilew, tileh, tx, ty;
@@ -153,7 +153,7 @@ void ED_imapaint_dirty_region(
   for (ty = tiley; ty <= tileh; ty++) {
     for (tx = tilex; tx <= tilew; tx++) {
       ED_image_paint_tile_push(
-          undo_tiles, ima, ibuf, &tmpibuf, tile_number, tx, ty, NULL, NULL, false, find_old);
+          undo_tiles, ima, ibuf, &tmpibuf, iuser, tx, ty, NULL, NULL, false, find_old);
     }
   }
 
@@ -289,9 +289,9 @@ static bool image_paint_poll_ex(bContext *C, bool check_tool)
     SpaceImage *sima = CTX_wm_space_image(C);
 
     if (sima) {
-      ARegion *ar = CTX_wm_region(C);
+      ARegion *region = CTX_wm_region(C);
 
-      if ((sima->mode == SI_MODE_PAINT) && ar->regiontype == RGN_TYPE_WINDOW) {
+      if ((sima->mode == SI_MODE_PAINT) && region->regiontype == RGN_TYPE_WINDOW) {
         return 1;
       }
     }
@@ -388,6 +388,10 @@ void paint_brush_color_get(struct Scene *scene,
           break;
         }
       }
+      /* Gradient / Colorband colors are not considered PROP_COLOR_GAMMA.
+       * Brush colors are expected to be in sRGB though. */
+      IMB_colormanagement_scene_linear_to_srgb_v3(color_gr);
+
       copy_v3_v3(color, color_gr);
     }
     else {
@@ -440,7 +444,7 @@ static void gradient_draw_line(bContext *UNUSED(C), int x, int y, void *customda
     GPUVertFormat *format = immVertexFormat();
     uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_I32, 2, GPU_FETCH_INT_TO_FLOAT);
 
-    ARegion *ar = pop->vc.ar;
+    ARegion *region = pop->vc.region;
 
     immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
 
@@ -449,7 +453,8 @@ static void gradient_draw_line(bContext *UNUSED(C), int x, int y, void *customda
 
     immBegin(GPU_PRIM_LINES, 2);
     immVertex2i(pos, x, y);
-    immVertex2i(pos, pop->startmouse[0] + ar->winrct.xmin, pop->startmouse[1] + ar->winrct.ymin);
+    immVertex2i(
+        pos, pop->startmouse[0] + region->winrct.xmin, pop->startmouse[1] + region->winrct.ymin);
     immEnd();
 
     GPU_line_width(2.0);
@@ -457,7 +462,8 @@ static void gradient_draw_line(bContext *UNUSED(C), int x, int y, void *customda
 
     immBegin(GPU_PRIM_LINES, 2);
     immVertex2i(pos, x, y);
-    immVertex2i(pos, pop->startmouse[0] + ar->winrct.xmin, pop->startmouse[1] + ar->winrct.ymin);
+    immVertex2i(
+        pos, pop->startmouse[0] + region->winrct.xmin, pop->startmouse[1] + region->winrct.ymin);
     immEnd();
 
     immUnbindProgram();
@@ -505,12 +511,8 @@ static PaintOperation *texture_paint_init(bContext *C, wmOperator *op, const flo
   }
 
   if ((brush->imagepaint_tool == PAINT_TOOL_FILL) && (brush->flag & BRUSH_USE_GRADIENT)) {
-    pop->cursor = WM_paint_cursor_activate(CTX_wm_manager(C),
-                                           SPACE_TYPE_ANY,
-                                           RGN_TYPE_ANY,
-                                           image_paint_poll,
-                                           gradient_draw_line,
-                                           pop);
+    pop->cursor = WM_paint_cursor_activate(
+        SPACE_TYPE_ANY, RGN_TYPE_ANY, image_paint_poll, gradient_draw_line, pop);
   }
 
   settings->imapaint.flag |= IMAGEPAINT_DRAWING;
@@ -649,7 +651,7 @@ static void paint_stroke_done(const bContext *C, struct PaintStroke *stroke)
   }
 
   if (pop->cursor) {
-    WM_paint_cursor_end(CTX_wm_manager(C), pop->cursor);
+    WM_paint_cursor_end(pop->cursor);
   }
 
   ED_image_undo_push_end();
@@ -762,12 +764,12 @@ void PAINT_OT_image_paint(wmOperatorType *ot)
 
 bool get_imapaint_zoom(bContext *C, float *zoomx, float *zoomy)
 {
-  ScrArea *sa = CTX_wm_area(C);
-  if (sa && sa->spacetype == SPACE_IMAGE) {
-    SpaceImage *sima = sa->spacedata.first;
+  ScrArea *area = CTX_wm_area(C);
+  if (area && area->spacetype == SPACE_IMAGE) {
+    SpaceImage *sima = area->spacedata.first;
     if (sima->mode == SI_MODE_PAINT) {
-      ARegion *ar = CTX_wm_region(C);
-      ED_space_image_get_zoom(sima, ar, zoomx, zoomy);
+      ARegion *region = CTX_wm_region(C);
+      ED_space_image_get_zoom(sima, region, zoomx, zoomy);
       return 1;
     }
   }
@@ -779,19 +781,18 @@ bool get_imapaint_zoom(bContext *C, float *zoomx, float *zoomy)
 
 /************************ cursor drawing *******************************/
 
-static void toggle_paint_cursor(bContext *C, int enable)
+static void toggle_paint_cursor(Scene *scene, bool enable)
 {
-  wmWindowManager *wm = CTX_wm_manager(C);
-  Scene *scene = CTX_data_scene(C);
   ToolSettings *settings = scene->toolsettings;
+  Paint *p = &settings->imapaint.paint;
 
-  if (settings->imapaint.paintcursor && !enable) {
-    WM_paint_cursor_end(wm, settings->imapaint.paintcursor);
-    settings->imapaint.paintcursor = NULL;
+  if (p->paint_cursor && !enable) {
+    WM_paint_cursor_end(p->paint_cursor);
+    p->paint_cursor = NULL;
     paint_cursor_delete_textures();
   }
   else if (enable) {
-    paint_cursor_start(C, image_paint_poll);
+    paint_cursor_start(p, image_paint_poll);
   }
 }
 
@@ -806,12 +807,12 @@ void ED_space_image_paint_update(Main *bmain, wmWindowManager *wm, Scene *scene)
   ImagePaintSettings *imapaint = &settings->imapaint;
   bool enabled = false;
 
-  for (wmWindow *win = wm->windows.first; win; win = win->next) {
+  LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
     bScreen *screen = WM_window_get_active_screen(win);
 
-    for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
-      if (sa->spacetype == SPACE_IMAGE) {
-        if (((SpaceImage *)sa->spacedata.first)->mode == SI_MODE_PAINT) {
+    LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+      if (area->spacetype == SPACE_IMAGE) {
+        if (((SpaceImage *)area->spacedata.first)->mode == SI_MODE_PAINT) {
           enabled = true;
         }
       }
@@ -821,7 +822,7 @@ void ED_space_image_paint_update(Main *bmain, wmWindowManager *wm, Scene *scene)
   if (enabled) {
     BKE_paint_init(bmain, scene, PAINT_MODE_TEXTURE_2D, PAINT_CURSOR_TEXTURE_PAINT);
 
-    paint_cursor_start_explicit(&imapaint->paint, wm, image_paint_poll);
+    paint_cursor_start(&imapaint->paint, image_paint_poll);
   }
   else {
     paint_cursor_delete_textures();
@@ -871,10 +872,10 @@ static int grab_clone_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 static int grab_clone_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
   Brush *brush = image_paint_brush(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   GrabClone *cmv = op->customdata;
   float startfx, startfy, fx, fy, delta[2];
-  int xmin = ar->winrct.xmin, ymin = ar->winrct.ymin;
+  int xmin = region->winrct.xmin, ymin = region->winrct.ymin;
 
   switch (event->type) {
     case LEFTMOUSE:
@@ -885,8 +886,8 @@ static int grab_clone_modal(bContext *C, wmOperator *op, const wmEvent *event)
     case MOUSEMOVE:
       /* mouse moved, so move the clone image */
       UI_view2d_region_to_view(
-          &ar->v2d, cmv->startx - xmin, cmv->starty - ymin, &startfx, &startfy);
-      UI_view2d_region_to_view(&ar->v2d, event->x - xmin, event->y - ymin, &fx, &fy);
+          &region->v2d, cmv->startx - xmin, cmv->starty - ymin, &startfx, &startfy);
+      UI_view2d_region_to_view(&region->v2d, event->x - xmin, event->y - ymin, &fx, &fy);
 
       delta[0] = fx - startfx;
       delta[1] = fy - startfy;
@@ -939,7 +940,7 @@ void PAINT_OT_grab_clone(wmOperatorType *ot)
 /******************** sample color operator ********************/
 typedef struct {
   bool show_cursor;
-  short event_type;
+  short launch_event;
   float initcolor[3];
   bool sample_palette;
 } SampleColorData;
@@ -947,9 +948,9 @@ typedef struct {
 static void sample_color_update_header(SampleColorData *data, bContext *C)
 {
   char msg[UI_MAX_DRAW_STR];
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
 
-  if (sa) {
+  if (area) {
     BLI_snprintf(msg,
                  sizeof(msg),
                  TIP_("Sample color for %s"),
@@ -965,14 +966,14 @@ static int sample_color_exec(bContext *C, wmOperator *op)
   Paint *paint = BKE_paint_get_active_from_context(C);
   Brush *brush = BKE_paint_brush(paint);
   ePaintMode mode = BKE_paintmode_get_active_from_context(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   wmWindow *win = CTX_wm_window(C);
   const bool show_cursor = ((paint->flags & PAINT_SHOW_BRUSH) != 0);
   int location[2];
   paint->flags &= ~PAINT_SHOW_BRUSH;
 
   /* force redraw without cursor */
-  WM_paint_cursor_tag_redraw(win, ar);
+  WM_paint_cursor_tag_redraw(win, region);
   WM_redraw_windows(C);
 
   RNA_int_get_array(op->ptr, "location", location);
@@ -980,7 +981,7 @@ static int sample_color_exec(bContext *C, wmOperator *op)
   const bool use_sample_texture = (mode == PAINT_MODE_TEXTURE_3D) &&
                                   !RNA_boolean_get(op->ptr, "merged");
 
-  paint_sample_color(C, ar, location[0], location[1], use_sample_texture, use_palette);
+  paint_sample_color(C, region, location[0], location[1], use_sample_texture, use_palette);
 
   if (show_cursor) {
     paint->flags |= PAINT_SHOW_BRUSH;
@@ -997,10 +998,10 @@ static int sample_color_invoke(bContext *C, wmOperator *op, const wmEvent *event
   Paint *paint = BKE_paint_get_active_from_context(C);
   Brush *brush = BKE_paint_brush(paint);
   SampleColorData *data = MEM_mallocN(sizeof(SampleColorData), "sample color custom data");
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   wmWindow *win = CTX_wm_window(C);
 
-  data->event_type = event->type;
+  data->launch_event = WM_userdef_event_type_from_keymap_type(event->type);
   data->show_cursor = ((paint->flags & PAINT_SHOW_BRUSH) != 0);
   copy_v3_v3(data->initcolor, BKE_brush_color_get(scene, brush));
   data->sample_palette = false;
@@ -1012,7 +1013,7 @@ static int sample_color_invoke(bContext *C, wmOperator *op, const wmEvent *event
   WM_event_add_modal_handler(C, op);
 
   /* force redraw without cursor */
-  WM_paint_cursor_tag_redraw(win, ar);
+  WM_paint_cursor_tag_redraw(win, region);
   WM_redraw_windows(C);
 
   RNA_int_set_array(op->ptr, "location", event->mval);
@@ -1021,7 +1022,7 @@ static int sample_color_invoke(bContext *C, wmOperator *op, const wmEvent *event
   const bool use_sample_texture = (mode == PAINT_MODE_TEXTURE_3D) &&
                                   !RNA_boolean_get(op->ptr, "merged");
 
-  paint_sample_color(C, ar, event->mval[0], event->mval[1], use_sample_texture, false);
+  paint_sample_color(C, region, event->mval[0], event->mval[1], use_sample_texture, false);
   WM_cursor_modal_set(win, WM_CURSOR_EYEDROPPER);
 
   WM_event_add_notifier(C, NC_BRUSH | NA_EDITED, brush);
@@ -1036,7 +1037,7 @@ static int sample_color_modal(bContext *C, wmOperator *op, const wmEvent *event)
   Paint *paint = BKE_paint_get_active_from_context(C);
   Brush *brush = BKE_paint_brush(paint);
 
-  if ((event->type == data->event_type) && (event->val == KM_RELEASE)) {
+  if ((event->type == data->launch_event) && (event->val == KM_RELEASE)) {
     if (data->show_cursor) {
       paint->flags |= PAINT_SHOW_BRUSH;
     }
@@ -1058,18 +1059,18 @@ static int sample_color_modal(bContext *C, wmOperator *op, const wmEvent *event)
 
   switch (event->type) {
     case MOUSEMOVE: {
-      ARegion *ar = CTX_wm_region(C);
+      ARegion *region = CTX_wm_region(C);
       RNA_int_set_array(op->ptr, "location", event->mval);
-      paint_sample_color(C, ar, event->mval[0], event->mval[1], use_sample_texture, false);
+      paint_sample_color(C, region, event->mval[0], event->mval[1], use_sample_texture, false);
       WM_event_add_notifier(C, NC_BRUSH | NA_EDITED, brush);
       break;
     }
 
     case LEFTMOUSE:
       if (event->val == KM_PRESS) {
-        ARegion *ar = CTX_wm_region(C);
+        ARegion *region = CTX_wm_region(C);
         RNA_int_set_array(op->ptr, "location", event->mval);
-        paint_sample_color(C, ar, event->mval[0], event->mval[1], use_sample_texture, true);
+        paint_sample_color(C, region, event->mval[0], event->mval[1], use_sample_texture, true);
         if (!data->sample_palette) {
           data->sample_palette = true;
           sample_color_update_header(data, C);
@@ -1115,6 +1116,100 @@ void PAINT_OT_sample_color(wmOperatorType *ot)
 
 /******************** texture paint toggle operator ********************/
 
+void ED_object_texture_paint_mode_enter_ex(Main *bmain, Scene *scene, Object *ob)
+{
+  bScreen *screen;
+  Image *ima = NULL;
+  ImagePaintSettings *imapaint = &scene->toolsettings->imapaint;
+
+  /* This has to stay here to regenerate the texture paint
+   * cache in case we are loading a file */
+  BKE_texpaint_slots_refresh_object(scene, ob);
+
+  BKE_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
+
+  /* entering paint mode also sets image to editors */
+  if (imapaint->mode == IMAGEPAINT_MODE_MATERIAL) {
+    /* set the current material active paint slot on image editor */
+    Material *ma = BKE_object_material_get(ob, ob->actcol);
+
+    if (ma && ma->texpaintslot) {
+      ima = ma->texpaintslot[ma->paint_active_slot].ima;
+    }
+  }
+  else if (imapaint->mode == IMAGEPAINT_MODE_IMAGE) {
+    ima = imapaint->canvas;
+  }
+
+  if (ima) {
+    for (screen = bmain->screens.first; screen; screen = screen->id.next) {
+      ScrArea *area;
+      for (area = screen->areabase.first; area; area = area->next) {
+        SpaceLink *sl;
+        for (sl = area->spacedata.first; sl; sl = sl->next) {
+          if (sl->spacetype == SPACE_IMAGE) {
+            SpaceImage *sima = (SpaceImage *)sl;
+
+            if (!sima->pin) {
+              ED_space_image_set(bmain, sima, NULL, ima, true);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  ob->mode |= OB_MODE_TEXTURE_PAINT;
+
+  BKE_paint_init(bmain, scene, PAINT_MODE_TEXTURE_3D, PAINT_CURSOR_TEXTURE_PAINT);
+
+  BKE_paint_toolslots_brush_validate(bmain, &imapaint->paint);
+
+  if (U.glreslimit != 0) {
+    GPU_free_images(bmain);
+  }
+  GPU_paint_set_mipmap(bmain, 0);
+
+  toggle_paint_cursor(scene, true);
+
+  Mesh *me = BKE_mesh_from_object(ob);
+  BLI_assert(me != NULL);
+  DEG_id_tag_update(&me->id, ID_RECALC_COPY_ON_WRITE);
+  WM_main_add_notifier(NC_SCENE | ND_MODE, scene);
+}
+
+void ED_object_texture_paint_mode_enter(bContext *C)
+{
+  Main *bmain = CTX_data_main(C);
+  Object *ob = CTX_data_active_object(C);
+  Scene *scene = CTX_data_scene(C);
+  ED_object_texture_paint_mode_enter_ex(bmain, scene, ob);
+}
+
+void ED_object_texture_paint_mode_exit_ex(Main *bmain, Scene *scene, Object *ob)
+{
+  ob->mode &= ~OB_MODE_TEXTURE_PAINT;
+
+  if (U.glreslimit != 0) {
+    GPU_free_images(bmain);
+  }
+  GPU_paint_set_mipmap(bmain, 1);
+  toggle_paint_cursor(scene, false);
+
+  Mesh *me = BKE_mesh_from_object(ob);
+  BLI_assert(me != NULL);
+  DEG_id_tag_update(&me->id, ID_RECALC_COPY_ON_WRITE);
+  WM_main_add_notifier(NC_SCENE | ND_MODE, scene);
+}
+
+void ED_object_texture_paint_mode_exit(bContext *C)
+{
+  Main *bmain = CTX_data_main(C);
+  Object *ob = CTX_data_active_object(C);
+  Scene *scene = CTX_data_scene(C);
+  ED_object_texture_paint_mode_exit_ex(bmain, scene, ob);
+}
+
 static bool texture_paint_toggle_poll(bContext *C)
 {
   Object *ob = CTX_data_active_object(C);
@@ -1122,9 +1217,6 @@ static bool texture_paint_toggle_poll(bContext *C)
     return 0;
   }
   if (!ob->data || ID_IS_LINKED(ob->data)) {
-    return 0;
-  }
-  if (CTX_data_edit_object(C)) {
     return 0;
   }
 
@@ -1147,77 +1239,11 @@ static int texture_paint_toggle_exec(bContext *C, wmOperator *op)
   }
 
   if (ob->mode & mode_flag) {
-    ob->mode &= ~mode_flag;
-
-    if (U.glreslimit != 0) {
-      GPU_free_images(bmain);
-    }
-    GPU_paint_set_mipmap(bmain, 1);
-
-    toggle_paint_cursor(C, 0);
+    ED_object_texture_paint_mode_exit_ex(bmain, scene, ob);
   }
   else {
-    bScreen *sc;
-    Image *ima = NULL;
-    ImagePaintSettings *imapaint = &scene->toolsettings->imapaint;
-
-    /* This has to stay here to regenerate the texture paint
-     * cache in case we are loading a file */
-    BKE_texpaint_slots_refresh_object(scene, ob);
-
-    BKE_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
-
-    /* entering paint mode also sets image to editors */
-    if (imapaint->mode == IMAGEPAINT_MODE_MATERIAL) {
-      /* set the current material active paint slot on image editor */
-      Material *ma = give_current_material(ob, ob->actcol);
-
-      if (ma && ma->texpaintslot) {
-        ima = ma->texpaintslot[ma->paint_active_slot].ima;
-      }
-    }
-    else if (imapaint->mode == IMAGEPAINT_MODE_IMAGE) {
-      ima = imapaint->canvas;
-    }
-
-    if (ima) {
-      for (sc = bmain->screens.first; sc; sc = sc->id.next) {
-        ScrArea *sa;
-        for (sa = sc->areabase.first; sa; sa = sa->next) {
-          SpaceLink *sl;
-          for (sl = sa->spacedata.first; sl; sl = sl->next) {
-            if (sl->spacetype == SPACE_IMAGE) {
-              SpaceImage *sima = (SpaceImage *)sl;
-
-              if (!sima->pin) {
-                Object *obedit = CTX_data_edit_object(C);
-                ED_space_image_set(bmain, sima, obedit, ima, true);
-              }
-            }
-          }
-        }
-      }
-    }
-
-    ob->mode |= mode_flag;
-
-    BKE_paint_init(bmain, scene, PAINT_MODE_TEXTURE_3D, PAINT_CURSOR_TEXTURE_PAINT);
-
-    BKE_paint_toolslots_brush_validate(bmain, &imapaint->paint);
-
-    if (U.glreslimit != 0) {
-      GPU_free_images(bmain);
-    }
-    GPU_paint_set_mipmap(bmain, 0);
-
-    toggle_paint_cursor(C, 1);
+    ED_object_texture_paint_mode_enter_ex(bmain, scene, ob);
   }
-
-  Mesh *me = BKE_mesh_from_object(ob);
-  BLI_assert(me != NULL);
-  DEG_id_tag_update(&me->id, ID_RECALC_COPY_ON_WRITE);
-
-  WM_event_add_notifier(C, NC_SCENE | ND_MODE, scene);
 
   WM_msg_publish_rna_prop(mbus, &ob->id, ob, Object, mode);
 
@@ -1286,9 +1312,9 @@ static bool brush_colors_flip_poll(bContext *C)
 void PAINT_OT_brush_colors_flip(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Brush Colors Flip";
+  ot->name = "Swap Colors";
   ot->idname = "PAINT_OT_brush_colors_flip";
-  ot->description = "Toggle foreground and background brush colors";
+  ot->description = "Swap primary and secondary brush colors";
 
   /* api callbacks */
   ot->exec = brush_colors_flip_exec;
@@ -1303,20 +1329,20 @@ void ED_imapaint_bucket_fill(struct bContext *C,
                              wmOperator *op,
                              const int mouse[2])
 {
-  wmWindowManager *wm = CTX_wm_manager(C);
   SpaceImage *sima = CTX_wm_space_image(C);
-  Image *ima = sima->image;
 
-  BKE_undosys_step_push_init_with_type(wm->undo_stack, C, op->type->name, BKE_UNDOSYS_TYPE_IMAGE);
+  if (sima && sima->image) {
+    Image *ima = sima->image;
 
-  ED_image_undo_push_begin(op->type->name, PAINT_MODE_TEXTURE_2D);
+    ED_image_undo_push_begin(op->type->name, PAINT_MODE_TEXTURE_2D);
 
-  float mouse_init[2] = {mouse[0], mouse[1]};
-  paint_2d_bucket_fill(C, color, NULL, mouse_init, NULL, NULL);
+    float mouse_init[2] = {mouse[0], mouse[1]};
+    paint_2d_bucket_fill(C, color, NULL, mouse_init, NULL, NULL);
 
-  BKE_undosys_step_push(wm->undo_stack, C, op->type->name);
+    ED_image_undo_push_end();
 
-  DEG_id_tag_update(&ima->id, 0);
+    DEG_id_tag_update(&ima->id, 0);
+  }
 }
 
 static bool texture_paint_poll(bContext *C)

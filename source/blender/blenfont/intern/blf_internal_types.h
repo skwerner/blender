@@ -24,8 +24,8 @@
 #ifndef __BLF_INTERNAL_TYPES_H__
 #define __BLF_INTERNAL_TYPES_H__
 
-#include "GPU_vertex_buffer.h"
 #include "GPU_texture.h"
+#include "GPU_vertex_buffer.h"
 
 #define BLF_BATCH_DRAW_LEN_MAX 2048 /* in glyph */
 
@@ -33,13 +33,13 @@ typedef struct BatchBLF {
   struct FontBLF *font; /* can only batch glyph from the same font */
   struct GPUBatch *batch;
   struct GPUVertBuf *verts;
-  struct GPUVertBufRaw pos_step, tex_step, col_step;
-  unsigned int pos_loc, tex_loc, col_loc;
+  struct GPUVertBufRaw pos_step, col_step, offset_step, glyph_size_step;
+  unsigned int pos_loc, col_loc, offset_loc, glyph_size_loc;
   unsigned int glyph_len;
   float ofs[2];    /* copy of font->pos */
   float mat[4][4]; /* previous call modelmatrix. */
   bool enabled, active, simple_shader;
-  GPUTexture *tex_bind_state;
+  struct GlyphCacheBLF *glyph_cache;
 } BatchBLF;
 
 extern BatchBLF g_batch;
@@ -65,6 +65,9 @@ typedef struct GlyphCacheBLF {
   /* and dpi. */
   unsigned int dpi;
 
+  bool bold;
+  bool italic;
+
   /* and the glyphs. */
   ListBase bucket[257];
 
@@ -72,29 +75,15 @@ typedef struct GlyphCacheBLF {
   struct GlyphBLF *glyph_ascii_table[256];
 
   /* texture array, to draw the glyphs. */
-  GPUTexture **textures;
-
-  /* size of the array. */
-  unsigned int textures_len;
-
-  /* and the last texture, aka. the current texture. */
-  unsigned int texture_current;
-
-  /* We draw every glyph in a big texture, so this is the
-   * current position inside the texture. */
-  int offset_x;
-  int offset_y;
-
-  /* and the space from one to other. */
-  int pad;
+  GPUTexture *texture;
+  char *bitmap_result;
+  int bitmap_len;
+  int bitmap_len_landed;
+  int bitmap_len_alloc;
 
   /* and the bigger glyph in the font. */
   int glyph_width_max;
   int glyph_height_max;
-
-  /* next two integer power of two, to build the texture. */
-  int p2_width;
-  int p2_height;
 
   /* number of glyphs in the font. */
   int glyphs_len_max;
@@ -125,35 +114,26 @@ typedef struct GlyphBLF {
   /* avoid conversion to int while drawing */
   int advance_i;
 
-  /* texture id where this glyph is store. */
-  GPUTexture *tex;
-
   /* position inside the texture where this glyph is store. */
-  int offset_x;
-  int offset_y;
+  int offset;
 
   /* Bitmap data, from freetype. Take care that this
    * can be NULL.
    */
   unsigned char *bitmap;
 
-  /* glyph width and height. */
-  int width;
-  int height;
+  /* Glyph width and height. */
+  int dims[2];
   int pitch;
 
-  /* uv coords. */
-  float uv[2][2];
-
-  /* X and Y bearing of the glyph.
+  /**
+   * X and Y bearing of the glyph.
    * The X bearing is from the origin to the glyph left bbox edge.
    * The Y bearing is from the baseline to the top of the glyph edge.
    */
-  float pos_x;
-  float pos_y;
+  int pos[2];
 
-  /* with value of zero mean that we need build the texture. */
-  char build_tex;
+  struct GlyphCacheBLF *glyph_cache;
 } GlyphBLF;
 
 typedef struct FontBufInfoBLF {
@@ -163,9 +143,8 @@ typedef struct FontBufInfoBLF {
   /* the same but unsigned char */
   unsigned char *cbuf;
 
-  /* buffer size, keep signed so comparisons with negative values work */
-  int w;
-  int h;
+  /** Buffer size, keep signed so comparisons with negative values work. */
+  int dims[2];
 
   /* number of channels. */
   int ch;
@@ -239,19 +218,13 @@ typedef struct FontBLF {
   /* max texture size. */
   int tex_size_max;
 
-  /* cache current OpenGL texture to save calls into the API */
-  GPUTexture *tex_bind_state;
-
   /* font options. */
   int flags;
 
-  /* list of glyph cache for this font. */
-  ListBase cache;
-
-  /* current glyph cache, size and dpi.
+  /* List of glyph caches (GlyphCacheBLF) for this font for size, dpi, bold, italic.
    * Use blf_glyph_cache_acquire(font) and blf_glyph_cache_release(font) to access cache!
    */
-  GlyphCacheBLF *glyph_cache;
+  ListBase cache;
 
   /* list of kerning cache for this font. */
   ListBase kerning_caches;
@@ -285,7 +258,5 @@ typedef struct DirBLF {
   /* full path where search fonts. */
   char *path;
 } DirBLF;
-
-#define BLF_TEXTURE_UNSET ((unsigned int)-1)
 
 #endif /* __BLF_INTERNAL_TYPES_H__ */

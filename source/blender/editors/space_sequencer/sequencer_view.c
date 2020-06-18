@@ -21,232 +21,385 @@
  * \ingroup spseq
  */
 
-#include "MEM_guardedalloc.h"
-
+#include "BLI_blenlib.h"
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
 
 #include "DNA_scene_types.h"
 
 #include "BKE_context.h"
-#include "BKE_main.h"
 #include "BKE_sequencer.h"
-#include "BKE_screen.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
 
-#include "ED_image.h"
-#include "ED_screen.h"
-#include "ED_space_api.h"
-
-#include "IMB_imbuf.h"
-#include "IMB_imbuf_types.h"
-#include "IMB_colormanagement.h"
+#include "RNA_define.h"
 
 #include "UI_view2d.h"
 
-/* own include */
+#include "RNA_define.h"
+
+/* For menu, popup, icons, etc. */
+#include "ED_anim_api.h"
+#include "ED_screen.h"
+#include "ED_util_imbuf.h"
+
+/* Own include. */
 #include "sequencer_intern.h"
 
-/******************** sample backdrop operator ********************/
-
-typedef struct ImageSampleInfo {
-  ARegionType *art;
-  void *draw_handle;
-  int x, y;
-  int channels;
-
-  unsigned char col[4];
-  float colf[4];
-  float linearcol[4];
-
-  unsigned char *colp;
-  const float *colfp;
-
-  int draw;
-  int color_manage;
-} ImageSampleInfo;
-
-static void sample_draw(const bContext *C, ARegion *ar, void *arg_info)
-{
-  Scene *scene = CTX_data_scene(C);
-  ImageSampleInfo *info = arg_info;
-
-  if (info->draw) {
-    ED_image_draw_info(scene,
-                       ar,
-                       info->color_manage,
-                       false,
-                       info->channels,
-                       info->x,
-                       info->y,
-                       info->colp,
-                       info->colfp,
-                       info->linearcol,
-                       NULL,
-                       NULL);
-  }
-}
-
-static void sample_apply(bContext *C, wmOperator *op, const wmEvent *event)
-{
-  Main *bmain = CTX_data_main(C);
-  struct Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
-  Scene *scene = CTX_data_scene(C);
-  SpaceSeq *sseq = (SpaceSeq *)CTX_wm_space_data(C);
-  ARegion *ar = CTX_wm_region(C);
-  ImBuf *ibuf = sequencer_ibuf_get(bmain, depsgraph, scene, sseq, CFRA, 0, NULL);
-  ImageSampleInfo *info = op->customdata;
-  float fx, fy;
-
-  if (ibuf == NULL) {
-    IMB_freeImBuf(ibuf);
-    info->draw = 0;
-    return;
-  }
-
-  UI_view2d_region_to_view(&ar->v2d, event->mval[0], event->mval[1], &fx, &fy);
-
-  fx /= scene->r.xasp / scene->r.yasp;
-
-  fx += (float)scene->r.xsch / 2.0f;
-  fy += (float)scene->r.ysch / 2.0f;
-  fx *= (float)ibuf->x / (float)scene->r.xsch;
-  fy *= (float)ibuf->y / (float)scene->r.ysch;
-
-  if (fx >= 0.0f && fy >= 0.0f && fx < ibuf->x && fy < ibuf->y) {
-    const float *fp;
-    unsigned char *cp;
-    int x = (int)fx, y = (int)fy;
-
-    info->x = x;
-    info->y = y;
-    info->draw = 1;
-    info->channels = ibuf->channels;
-
-    info->colp = NULL;
-    info->colfp = NULL;
-
-    if (ibuf->rect) {
-      cp = (unsigned char *)(ibuf->rect + y * ibuf->x + x);
-
-      info->col[0] = cp[0];
-      info->col[1] = cp[1];
-      info->col[2] = cp[2];
-      info->col[3] = cp[3];
-      info->colp = info->col;
-
-      info->colf[0] = (float)cp[0] / 255.0f;
-      info->colf[1] = (float)cp[1] / 255.0f;
-      info->colf[2] = (float)cp[2] / 255.0f;
-      info->colf[3] = (float)cp[3] / 255.0f;
-      info->colfp = info->colf;
-
-      copy_v4_v4(info->linearcol, info->colf);
-      IMB_colormanagement_colorspace_to_scene_linear_v4(
-          info->linearcol, false, ibuf->rect_colorspace);
-
-      info->color_manage = true;
-    }
-    if (ibuf->rect_float) {
-      fp = (ibuf->rect_float + (ibuf->channels) * (y * ibuf->x + x));
-
-      info->colf[0] = fp[0];
-      info->colf[1] = fp[1];
-      info->colf[2] = fp[2];
-      info->colf[3] = fp[3];
-      info->colfp = info->colf;
-
-      /* sequencer's image buffers are in non-linear space, need to make them linear */
-      copy_v4_v4(info->linearcol, info->colf);
-      BKE_sequencer_pixel_from_sequencer_space_v4(scene, info->linearcol);
-
-      info->color_manage = true;
-    }
-  }
-  else {
-    info->draw = 0;
-  }
-
-  IMB_freeImBuf(ibuf);
-  ED_area_tag_redraw(CTX_wm_area(C));
-}
-
-static void sample_exit(bContext *C, wmOperator *op)
-{
-  ImageSampleInfo *info = op->customdata;
-
-  ED_region_draw_cb_exit(info->art, info->draw_handle);
-  ED_area_tag_redraw(CTX_wm_area(C));
-  MEM_freeN(info);
-}
-
-static int sample_invoke(bContext *C, wmOperator *op, const wmEvent *event)
-{
-  ARegion *ar = CTX_wm_region(C);
-  SpaceSeq *sseq = CTX_wm_space_seq(C);
-  ImageSampleInfo *info;
-
-  if (sseq->mainb != SEQ_DRAW_IMG_IMBUF) {
-    return OPERATOR_CANCELLED;
-  }
-
-  info = MEM_callocN(sizeof(ImageSampleInfo), "ImageSampleInfo");
-  info->art = ar->type;
-  info->draw_handle = ED_region_draw_cb_activate(
-      ar->type, sample_draw, info, REGION_DRAW_POST_PIXEL);
-  op->customdata = info;
-
-  sample_apply(C, op, event);
-
-  WM_event_add_modal_handler(C, op);
-
-  return OPERATOR_RUNNING_MODAL;
-}
-
-static int sample_modal(bContext *C, wmOperator *op, const wmEvent *event)
-{
-  switch (event->type) {
-    case LEFTMOUSE:
-    case RIGHTMOUSE: /* XXX hardcoded */
-      if (event->val == KM_RELEASE) {
-        sample_exit(C, op);
-        return OPERATOR_CANCELLED;
-      }
-      break;
-    case MOUSEMOVE:
-      sample_apply(C, op, event);
-      break;
-  }
-
-  return OPERATOR_RUNNING_MODAL;
-}
-
-static void sample_cancel(bContext *C, wmOperator *op)
-{
-  sample_exit(C, op);
-}
-
-static bool sample_poll(bContext *C)
-{
-  SpaceSeq *sseq = CTX_wm_space_seq(C);
-  return sseq && BKE_sequencer_editing_get(CTX_data_scene(C), false) != NULL;
-}
+/* -------------------------------------------------------------------- */
+/** \name Sequencer Sample Backdrop Operator
+ * \{ */
 
 void SEQUENCER_OT_sample(wmOperatorType *ot)
 {
-  /* identifiers */
+  /* Identifiers. */
   ot->name = "Sample Color";
   ot->idname = "SEQUENCER_OT_sample";
   ot->description = "Use mouse to sample color in current frame";
 
-  /* api callbacks */
-  ot->invoke = sample_invoke;
-  ot->modal = sample_modal;
-  ot->cancel = sample_cancel;
-  ot->poll = sample_poll;
+  /* Api callbacks. */
+  ot->invoke = ED_imbuf_sample_invoke;
+  ot->modal = ED_imbuf_sample_modal;
+  ot->cancel = ED_imbuf_sample_cancel;
+  ot->poll = ED_imbuf_sample_poll;
 
-  /* flags */
+  /* Flags. */
   ot->flag = OPTYPE_BLOCKING;
+
+  /* Not implemented. */
+  PropertyRNA *prop;
+  prop = RNA_def_int(ot->srna, "size", 1, 1, 128, "Sample Size", "", 1, 64);
+  RNA_def_property_subtype(prop, PROP_PIXEL);
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE | PROP_HIDDEN);
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Sequencer Frame All Operator
+ * \{ */
+
+static int sequencer_view_all_exec(bContext *C, wmOperator *op)
+{
+  ARegion *region = CTX_wm_region(C);
+  rctf box;
+
+  const int smooth_viewtx = WM_operator_smooth_viewtx_get(op);
+
+  boundbox_seq(CTX_data_scene(C), &box);
+  UI_view2d_smooth_view(C, region, &box, smooth_viewtx);
+  return OPERATOR_FINISHED;
+}
+
+void SEQUENCER_OT_view_all(wmOperatorType *ot)
+{
+  /* Identifiers. */
+  ot->name = "Frame All";
+  ot->idname = "SEQUENCER_OT_view_all";
+  ot->description = "View all the strips in the sequencer";
+
+  /* Api callbacks. */
+  ot->exec = sequencer_view_all_exec;
+  ot->poll = ED_operator_sequencer_active;
+
+  /* Flags. */
+  ot->flag = OPTYPE_REGISTER;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Go to Current Frame Operator
+ * \{ */
+
+static int sequencer_view_frame_exec(bContext *C, wmOperator *op)
+{
+  const int smooth_viewtx = WM_operator_smooth_viewtx_get(op);
+  ANIM_center_frame(C, smooth_viewtx);
+
+  return OPERATOR_FINISHED;
+}
+
+void SEQUENCER_OT_view_frame(wmOperatorType *ot)
+{
+  /* Identifiers. */
+  ot->name = "Go to Current Frame";
+  ot->idname = "SEQUENCER_OT_view_frame";
+  ot->description = "Move the view to the current frame";
+
+  /* Api callbacks. */
+  ot->exec = sequencer_view_frame_exec;
+  ot->poll = ED_operator_sequencer_active;
+
+  /* Flags. */
+  ot->flag = 0;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Preview Frame All Operator
+ * \{ */
+
+static int sequencer_view_all_preview_exec(bContext *C, wmOperator *UNUSED(op))
+{
+  bScreen *screen = CTX_wm_screen(C);
+  ScrArea *area = CTX_wm_area(C);
+#if 0
+  ARegion *region = CTX_wm_region(C);
+  SpaceSeq *sseq = area->spacedata.first;
+  Scene *scene = CTX_data_scene(C);
+#endif
+  View2D *v2d = UI_view2d_fromcontext(C);
+
+  v2d->cur = v2d->tot;
+  UI_view2d_curRect_validate(v2d);
+  UI_view2d_sync(screen, area, v2d, V2D_LOCK_COPY);
+
+#if 0
+  /* Like zooming on an image view. */
+  float zoomX, zoomY;
+  int width, height, imgwidth, imgheight;
+
+  width = region->winx;
+  height = region->winy;
+
+  seq_reset_imageofs(sseq);
+
+  imgwidth = (scene->r.size * scene->r.xsch) / 100;
+  imgheight = (scene->r.size * scene->r.ysch) / 100;
+
+  /* Apply aspect, doesn't need to be that accurate. */
+  imgwidth = (int)(imgwidth * (scene->r.xasp / scene->r.yasp));
+
+  if (((imgwidth >= width) || (imgheight >= height)) && ((width > 0) && (height > 0))) {
+    /* Find the zoom value that will fit the image in the image space. */
+    zoomX = ((float)width) / ((float)imgwidth);
+    zoomY = ((float)height) / ((float)imgheight);
+    sseq->zoom = (zoomX < zoomY) ? zoomX : zoomY;
+
+    sseq->zoom = 1.0f / power_of_2(1 / min_ff(zoomX, zoomY));
+  }
+  else {
+    sseq->zoom = 1.0f;
+  }
+#endif
+
+  ED_area_tag_redraw(CTX_wm_area(C));
+  return OPERATOR_FINISHED;
+}
+
+void SEQUENCER_OT_view_all_preview(wmOperatorType *ot)
+{
+  /* Identifiers. */
+  ot->name = "Frame All";
+  ot->idname = "SEQUENCER_OT_view_all_preview";
+  ot->description = "Zoom preview to fit in the area";
+
+  /* Api callbacks. */
+  ot->exec = sequencer_view_all_preview_exec;
+  ot->poll = ED_operator_sequencer_active;
+
+  /* Flags. */
+  ot->flag = OPTYPE_REGISTER;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Sequencer View Zoom Ratio Operator
+ * \{ */
+
+static int sequencer_view_zoom_ratio_exec(bContext *C, wmOperator *op)
+{
+  RenderData *rd = &CTX_data_scene(C)->r;
+  View2D *v2d = UI_view2d_fromcontext(C);
+
+  float ratio = RNA_float_get(op->ptr, "ratio");
+
+  float winx = (int)(rd->size * rd->xsch) / 100;
+  float winy = (int)(rd->size * rd->ysch) / 100;
+
+  float facx = BLI_rcti_size_x(&v2d->mask) / winx;
+  float facy = BLI_rcti_size_y(&v2d->mask) / winy;
+
+  BLI_rctf_resize(&v2d->cur, ceilf(winx * facx / ratio + 0.5f), ceilf(winy * facy / ratio + 0.5f));
+
+  ED_region_tag_redraw(CTX_wm_region(C));
+
+  return OPERATOR_FINISHED;
+}
+
+void SEQUENCER_OT_view_zoom_ratio(wmOperatorType *ot)
+{
+  /* Identifiers. */
+  ot->name = "Sequencer View Zoom Ratio";
+  ot->idname = "SEQUENCER_OT_view_zoom_ratio";
+  ot->description = "Change zoom ratio of sequencer preview";
+
+  /* Api callbacks. */
+  ot->exec = sequencer_view_zoom_ratio_exec;
+  ot->poll = ED_operator_sequencer_active;
+
+  /* Properties. */
+  RNA_def_float(ot->srna,
+                "ratio",
+                1.0f,
+                -FLT_MAX,
+                FLT_MAX,
+                "Ratio",
+                "Zoom ratio, 1.0 is 1:1, higher is zoomed in, lower is zoomed out",
+                -FLT_MAX,
+                FLT_MAX);
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Frame Selected Operator
+ * \{ */
+
+static int sequencer_view_selected_exec(bContext *C, wmOperator *op)
+{
+  Scene *scene = CTX_data_scene(C);
+  View2D *v2d = UI_view2d_fromcontext(C);
+  ARegion *region = CTX_wm_region(C);
+  Editing *ed = BKE_sequencer_editing_get(scene, false);
+  Sequence *last_seq = BKE_sequencer_active_get(scene);
+  Sequence *seq;
+  rctf cur_new = v2d->cur;
+
+  int xmin = MAXFRAME * 2;
+  int xmax = -MAXFRAME * 2;
+  int ymin = MAXSEQ + 1;
+  int ymax = 0;
+  int orig_height;
+  int ymid;
+  int ymargin = 1;
+  int xmargin = FPS;
+
+  if (ed == NULL) {
+    return OPERATOR_CANCELLED;
+  }
+
+  for (seq = ed->seqbasep->first; seq; seq = seq->next) {
+    if ((seq->flag & SELECT) || (seq == last_seq)) {
+      xmin = min_ii(xmin, seq->startdisp);
+      xmax = max_ii(xmax, seq->enddisp);
+
+      ymin = min_ii(ymin, seq->machine);
+      ymax = max_ii(ymax, seq->machine);
+    }
+  }
+
+  if (ymax != 0) {
+    const int smooth_viewtx = WM_operator_smooth_viewtx_get(op);
+
+    xmax += xmargin;
+    xmin -= xmargin;
+    ymax += ymargin;
+    ymin -= ymargin;
+
+    orig_height = BLI_rctf_size_y(&cur_new);
+
+    cur_new.xmin = xmin;
+    cur_new.xmax = xmax;
+
+    cur_new.ymin = ymin;
+    cur_new.ymax = ymax;
+
+    /* Only zoom out vertically. */
+    if (orig_height > BLI_rctf_size_y(&cur_new)) {
+      ymid = BLI_rctf_cent_y(&cur_new);
+
+      cur_new.ymin = ymid - (orig_height / 2);
+      cur_new.ymax = ymid + (orig_height / 2);
+    }
+
+    UI_view2d_smooth_view(C, region, &cur_new, smooth_viewtx);
+
+    return OPERATOR_FINISHED;
+  }
+  else {
+    return OPERATOR_CANCELLED;
+  }
+}
+
+void SEQUENCER_OT_view_selected(wmOperatorType *ot)
+{
+  /* Identifiers. */
+  ot->name = "Frame Selected";
+  ot->idname = "SEQUENCER_OT_view_selected";
+  ot->description = "Zoom the sequencer on the selected strips";
+
+  /* Api callbacks. */
+  ot->exec = sequencer_view_selected_exec;
+  ot->poll = ED_operator_sequencer_active;
+
+  /* Flags. */
+  ot->flag = OPTYPE_REGISTER;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Border Offset View Operator
+ * \{ */
+
+static int view_ghost_border_exec(bContext *C, wmOperator *op)
+{
+  Scene *scene = CTX_data_scene(C);
+  View2D *v2d = UI_view2d_fromcontext(C);
+
+  rctf rect;
+
+  /* Convert coordinates of rect to 'tot' rect coordinates. */
+  WM_operator_properties_border_to_rctf(op, &rect);
+  UI_view2d_region_to_view_rctf(v2d, &rect, &rect);
+
+  rect.xmin /= fabsf(BLI_rctf_size_x(&v2d->tot));
+  rect.ymin /= fabsf(BLI_rctf_size_y(&v2d->tot));
+
+  rect.xmax /= fabsf(BLI_rctf_size_x(&v2d->tot));
+  rect.ymax /= fabsf(BLI_rctf_size_y(&v2d->tot));
+
+  rect.xmin += 0.5f;
+  rect.xmax += 0.5f;
+  rect.ymin += 0.5f;
+  rect.ymax += 0.5f;
+
+  CLAMP(rect.xmin, 0.0f, 1.0f);
+  CLAMP(rect.ymin, 0.0f, 1.0f);
+  CLAMP(rect.xmax, 0.0f, 1.0f);
+  CLAMP(rect.ymax, 0.0f, 1.0f);
+
+  scene->ed->over_border = rect;
+
+  WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, scene);
+
+  return OPERATOR_FINISHED;
+}
+
+void SEQUENCER_OT_view_ghost_border(wmOperatorType *ot)
+{
+  /* Identifiers. */
+  ot->name = "Border Offset View";
+  ot->idname = "SEQUENCER_OT_view_ghost_border";
+  ot->description = "Set the boundaries of the border used for offset-view";
+
+  /* Api callbacks. */
+  ot->invoke = WM_gesture_box_invoke;
+  ot->exec = view_ghost_border_exec;
+  ot->modal = WM_gesture_box_modal;
+  ot->poll = sequencer_view_preview_poll;
+  ot->cancel = WM_gesture_box_cancel;
+
+  /* Flags. */
+  ot->flag = 0;
+
+  /* Properties. */
+  WM_operator_properties_gesture_box(ot);
+}
+
+/** \} */

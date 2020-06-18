@@ -24,30 +24,30 @@
 #include "BLI_sys_types.h"
 
 #include "DNA_anim_types.h"
-#include "DNA_scene_types.h"
-#include "DNA_space_types.h"
-#include "DNA_userdef_types.h"
-#include "DNA_screen_types.h"
-#include "DNA_object_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_mask_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
+#include "DNA_space_types.h"
+#include "DNA_userdef_types.h"
 
+#include "BLI_dlrbTree.h"
 #include "BLI_math.h"
+#include "BLI_rect.h"
 #include "BLI_timecode.h"
 #include "BLI_utildefines.h"
-#include "BLI_rect.h"
-#include "BLI_dlrbTree.h"
 
 #include "BKE_context.h"
 #include "BKE_curve.h"
 #include "BKE_fcurve.h"
 #include "BKE_global.h"
-#include "BKE_nla.h"
 #include "BKE_mask.h"
+#include "BKE_nla.h"
 
 #include "ED_anim_api.h"
-#include "ED_keyframes_edit.h"
 #include "ED_keyframes_draw.h"
+#include "ED_keyframes_edit.h"
 
 #include "RNA_access.h"
 
@@ -61,67 +61,6 @@
 
 /* *************************************************** */
 /* CURRENT FRAME DRAWING */
-
-/* Draw current frame number in a little green box beside the current frame indicator */
-void ANIM_draw_cfra_number(const bContext *C, View2D *v2d, short flag)
-{
-  Scene *scene = CTX_data_scene(C);
-  const float time = scene->r.cfra + scene->r.subframe;
-  const float cfra = (float)(time * scene->r.framelen);
-  const bool show_time = (flag & DRAWCFRA_UNIT_SECONDS) != 0;
-
-  const uiFontStyle *fstyle = UI_FSTYLE_WIDGET;
-  unsigned char col[4];
-  float color[4];
-  float xscale, x, y;
-  char numstr[32] = "  t  "; /* t is the character to start replacing from */
-  float hlen;
-  int slen;
-
-  /* because the frame number text is subject to the same scaling as the contents of the view */
-  UI_view2d_scale_get(v2d, &xscale, NULL);
-  GPU_matrix_push();
-  GPU_matrix_scale_2f(1.0f / xscale, 1.0f);
-
-  /* get timecode string
-   * - padding on str-buf passed so that it doesn't sit on the frame indicator
-   */
-  if (show_time) {
-    BLI_timecode_string_from_time(
-        &numstr[2], sizeof(numstr) - 2, 0, FRA2TIME(cfra), FPS, U.timecode_style);
-  }
-  else {
-    BLI_timecode_string_from_time_seconds(&numstr[2], sizeof(numstr) - 2, 1, cfra);
-  }
-
-  slen = UI_fontstyle_string_width(fstyle, numstr) - 1;
-  hlen = slen * 0.5f;
-
-  /* get starting coordinates for drawing */
-  x = cfra * xscale;
-  y = -0.1f * U.widget_unit;
-
-  /* draw green box around/behind text */
-  UI_GetThemeColor4fv(TH_CFRAME, color);
-  color[3] = 3.0f;
-
-  UI_draw_roundbox_corner_set(UI_CNR_ALL);
-  UI_draw_roundbox_aa(true,
-                      x - hlen - 0.1f * U.widget_unit,
-                      y + 3.0f,
-                      x + hlen + 0.1f * U.widget_unit,
-                      y - 3.0f + U.widget_unit,
-                      0.1f * U.widget_unit,
-                      color);
-
-  /* draw current frame number */
-  UI_GetThemeColor4ubv(TH_TEXT_HI, col);
-  UI_fontstyle_draw_simple(
-      fstyle, x - hlen - 0.15f * U.widget_unit, y + 0.28f * U.widget_unit, numstr, col);
-
-  /* restore view transform */
-  GPU_matrix_pop();
-}
 
 /* General call for drawing current frame indicator in animation editor */
 void ANIM_draw_cfra(const bContext *C, View2D *v2d, short flag)
@@ -441,12 +380,45 @@ static float normalization_factor_get(Scene *scene, FCurve *fcu, short flag, flo
             min_coord = min_ff(min_coord, prev_bezt->vec[1][1]);
           }
           else {
-            float step_size = (bezt->vec[1][0] - prev_bezt->vec[1][0]) / resol;
-            for (int j = 0; j <= resol; j++) {
-              float eval_time = prev_bezt->vec[1][0] + step_size * j;
-              float eval_value = evaluate_fcurve_only_curve(fcu, eval_time);
-              max_coord = max_ff(max_coord, eval_value);
-              min_coord = min_ff(min_coord, eval_value);
+            if (!ELEM(prev_bezt->ipo, BEZT_IPO_BACK, BEZT_IPO_ELASTIC)) {
+              /* Calculate min/max using bezier forward differencing. */
+              float data[120];
+              float v1[2], v2[2], v3[2], v4[2];
+
+              v1[0] = prev_bezt->vec[1][0];
+              v1[1] = prev_bezt->vec[1][1];
+              v2[0] = prev_bezt->vec[2][0];
+              v2[1] = prev_bezt->vec[2][1];
+
+              v3[0] = bezt->vec[0][0];
+              v3[1] = bezt->vec[0][1];
+              v4[0] = bezt->vec[1][0];
+              v4[1] = bezt->vec[1][1];
+
+              correct_bezpart(v1, v2, v3, v4);
+
+              BKE_curve_forward_diff_bezier(
+                  v1[0], v2[0], v3[0], v4[0], data, resol, sizeof(float) * 3);
+              BKE_curve_forward_diff_bezier(
+                  v1[1], v2[1], v3[1], v4[1], data + 1, resol, sizeof(float) * 3);
+
+              for (int j = 0; j <= resol; ++j) {
+                const float *fp = &data[j * 3];
+                max_coord = max_ff(max_coord, fp[1]);
+                min_coord = min_ff(min_coord, fp[1]);
+              }
+            }
+            else {
+              /* Calculate min/max using full fcurve evaluation.
+               * [slower than bezier forward differencing but evaluates Back/Elastic interpolation
+               * as well].*/
+              float step_size = (bezt->vec[1][0] - prev_bezt->vec[1][0]) / resol;
+              for (int j = 0; j <= resol; j++) {
+                float eval_time = prev_bezt->vec[1][0] + step_size * j;
+                float eval_value = evaluate_fcurve_only_curve(fcu, eval_time);
+                max_coord = max_ff(max_coord, eval_value);
+                min_coord = min_ff(min_coord, eval_value);
+              }
             }
           }
         }
@@ -515,7 +487,7 @@ float ANIM_unit_mapping_get_factor(Scene *scene, ID *id, FCurve *fcu, short flag
   return 1.0f;
 }
 
-static bool find_prev_next_keyframes(struct bContext *C, int *nextfra, int *prevfra)
+static bool find_prev_next_keyframes(struct bContext *C, int *r_nextfra, int *r_prevfra)
 {
   Scene *scene = CTX_data_scene(C);
   Object *ob = CTX_data_active_object(C);
@@ -594,17 +566,17 @@ static bool find_prev_next_keyframes(struct bContext *C, int *nextfra, int *prev
   /* any success? */
   if (doneprev || donenext) {
     if (doneprev) {
-      *prevfra = cfraprev;
+      *r_prevfra = cfraprev;
     }
     else {
-      *prevfra = CFRA - (cfranext - CFRA);
+      *r_prevfra = CFRA - (cfranext - CFRA);
     }
 
     if (donenext) {
-      *nextfra = cfranext;
+      *r_nextfra = cfranext;
     }
     else {
-      *nextfra = CFRA + (CFRA - cfraprev);
+      *r_nextfra = CFRA + (CFRA - cfraprev);
     }
 
     return true;
@@ -615,9 +587,9 @@ static bool find_prev_next_keyframes(struct bContext *C, int *nextfra, int *prev
 
 void ANIM_center_frame(struct bContext *C, int smooth_viewtx)
 {
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   Scene *scene = CTX_data_scene(C);
-  float w = BLI_rctf_size_x(&ar->v2d.cur);
+  float w = BLI_rctf_size_x(&region->v2d.cur);
   rctf newrct;
   int nextfra, prevfra;
 
@@ -626,8 +598,8 @@ void ANIM_center_frame(struct bContext *C, int smooth_viewtx)
       const float fps = FPS;
       newrct.xmax = scene->r.cfra + U.view_frame_seconds * fps + 1;
       newrct.xmin = scene->r.cfra - U.view_frame_seconds * fps - 1;
-      newrct.ymax = ar->v2d.cur.ymax;
-      newrct.ymin = ar->v2d.cur.ymin;
+      newrct.ymax = region->v2d.cur.ymax;
+      newrct.ymin = region->v2d.cur.ymin;
       break;
     }
 
@@ -636,8 +608,8 @@ void ANIM_center_frame(struct bContext *C, int smooth_viewtx)
       if (find_prev_next_keyframes(C, &nextfra, &prevfra)) {
         newrct.xmax = nextfra;
         newrct.xmin = prevfra;
-        newrct.ymax = ar->v2d.cur.ymax;
-        newrct.ymin = ar->v2d.cur.ymin;
+        newrct.ymax = region->v2d.cur.ymax;
+        newrct.ymin = region->v2d.cur.ymin;
         break;
       }
       /* else drop through, keep range instead */
@@ -647,11 +619,11 @@ void ANIM_center_frame(struct bContext *C, int smooth_viewtx)
     default:
       newrct.xmax = scene->r.cfra + (w / 2);
       newrct.xmin = scene->r.cfra - (w / 2);
-      newrct.ymax = ar->v2d.cur.ymax;
-      newrct.ymin = ar->v2d.cur.ymin;
+      newrct.ymax = region->v2d.cur.ymax;
+      newrct.ymin = region->v2d.cur.ymin;
       break;
   }
 
-  UI_view2d_smooth_view(C, ar, &newrct, smooth_viewtx);
+  UI_view2d_smooth_view(C, region, &newrct, smooth_viewtx);
 }
 /* *************************************************** */

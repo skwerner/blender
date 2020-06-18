@@ -25,11 +25,11 @@
 #ifndef __GHOST_SYSTEMX11_H__
 #define __GHOST_SYSTEMX11_H__
 
-#include <X11/Xlib.h>
 #include <X11/XKBlib.h> /* allow detectable autorepeate */
+#include <X11/Xlib.h>
 
-#include "GHOST_System.h"
 #include "../GHOST_Types.h"
+#include "GHOST_System.h"
 
 // For tablets
 #ifdef WITH_X11_XINPUT
@@ -137,7 +137,7 @@ class GHOST_SystemX11 : public GHOST_System {
    * \param   parentWindow    Parent (embedder) window
    * \return  The new window (or 0 if creation failed).
    */
-  GHOST_IWindow *createWindow(const STR_String &title,
+  GHOST_IWindow *createWindow(const char *title,
                               GHOST_TInt32 left,
                               GHOST_TInt32 top,
                               GHOST_TUns32 width,
@@ -182,7 +182,7 @@ class GHOST_SystemX11 : public GHOST_System {
   GHOST_TSuccess getModifierKeys(GHOST_ModifierKeys &keys) const;
 
   /**
-   * Returns the state of the mouse buttons (ouside the message queue).
+   * Returns the state of the mouse buttons (outside the message queue).
    * \param buttons   The state of the buttons.
    * \return          Indication of success.
    */
@@ -211,7 +211,7 @@ class GHOST_SystemX11 : public GHOST_System {
   }
 #endif
 
-  /* Helped function for get data from the clipboard. */
+  /** Helped function for get data from the clipboard. */
   void getClipboard_xcout(const XEvent *evt,
                           Atom sel,
                           Atom target,
@@ -337,7 +337,7 @@ class GHOST_SystemX11 : public GHOST_System {
  private:
   Display *m_display;
 
-  /* Use for scancode lookups. */
+  /** Use for scan-code look-ups. */
   XkbDescRec *m_xkb_descr;
 
 #if defined(WITH_X11_XINPUT) && defined(X_HAVE_UTF8_STRING)
@@ -349,22 +349,26 @@ class GHOST_SystemX11 : public GHOST_System {
   std::vector<GHOST_TabletX11> m_xtablets;
 #endif
 
-  /// The vector of windows that need to be updated.
+  /** The vector of windows that need to be updated. */
   std::vector<GHOST_WindowX11 *> m_dirty_windows;
 
-  /// Start time at initialization.
+  /** Start time at initialization. */
   GHOST_TUns64 m_start_time;
 
-  /// A vector of keyboard key masks
+  /** A vector of keyboard key masks. */
   char m_keyboard_vector[32];
 
-  /* to prevent multiple warp, we store the time of the last warp event
-   * and stop accumulating all events generated before that */
+  /**
+   * To prevent multiple warp, we store the time of the last warp event
+   * and stop accumulating all events generated before that.
+   */
   Time m_last_warp;
 
-  /* detect autorepeat glitch */
+  /* Detect auto-repeat glitch. */
   unsigned int m_last_release_keycode;
   Time m_last_release_time;
+
+  uint m_keycode_last_repeat_key;
 
   /**
    * Return the ghost window associated with the

@@ -45,6 +45,8 @@ class Background : public Node {
   bool transparent_glass;
   float transparent_roughness_threshold;
 
+  float volume_step_size;
+
   bool need_update;
 
   Background();
@@ -55,6 +57,8 @@ class Background : public Node {
 
   bool modified(const Background &background);
   void tag_update(Scene *scene);
+
+  Shader *get_shader(const Scene *scene);
 };
 
 CCL_NAMESPACE_END

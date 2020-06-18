@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -35,16 +35,30 @@
 #include "BLI_kdopbvh.h"
 #include "BLI_math.h"
 
+#include "BLT_translation.h"
+
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
+#include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
+#include "DNA_screen_types.h"
 
-#include "BKE_deform.h"
 #include "BKE_bvhutils.h"
-#include "BKE_modifier.h"
+#include "BKE_context.h"
+#include "BKE_deform.h"
 #include "BKE_mesh.h"
+#include "BKE_modifier.h"
+#include "BKE_screen.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
 
 #include "DEG_depsgraph.h"
+
+#include "MOD_modifiertypes.h"
+#include "MOD_ui_common.h"
 
 //#define USE_WELD_DEBUG
 //#define USE_WELD_NORMALS
@@ -798,6 +812,33 @@ static bool weld_iter_loop_of_poly_begin(WeldLoopOfPolyIter *iter,
   iter->loop_map = loop_map;
   iter->group = group_buffer;
 
+  uint group_len = 0;
+  if (group_buffer) {
+    /* First loop group needs more attention. */
+    uint loop_start, loop_end, l;
+    loop_start = iter->loop_start;
+    loop_end = l = iter->loop_end;
+    while (l >= loop_start) {
+      const uint loop_ctx = loop_map[l];
+      if (loop_ctx != OUT_OF_CONTEXT) {
+        const WeldLoop *wl = &wloop[loop_ctx];
+        if (wl->flag == ELEM_COLLAPSED) {
+          l--;
+          continue;
+        }
+      }
+      break;
+    }
+    if (l != loop_end) {
+      group_len = loop_end - l;
+      int i = 0;
+      while (l < loop_end) {
+        iter->group[i++] = ++l;
+      }
+    }
+  }
+  iter->group_len = group_len;
+
   iter->l_next = iter->loop_start;
 #ifdef USE_WELD_DEBUG
   iter->v = OUT_OF_CONTEXT;
@@ -810,8 +851,13 @@ static bool weld_iter_loop_of_poly_next(WeldLoopOfPolyIter *iter)
   uint loop_end = iter->loop_end;
   const WeldLoop *wloop = iter->wloop;
   const uint *loop_map = iter->loop_map;
-  iter->group_len = 0;
   uint l = iter->l_curr = iter->l_next;
+  if (l == iter->loop_start) {
+    /* `grupo_len` is already calculated in the first loop */
+  }
+  else {
+    iter->group_len = 0;
+  }
   while (l <= loop_end) {
     uint l_next = l + 1;
     const uint loop_ctx = loop_map[l];
@@ -822,20 +868,6 @@ static bool weld_iter_loop_of_poly_next(WeldLoopOfPolyIter *iter)
       }
       if (wl->flag == ELEM_COLLAPSED) {
         if (iter->group) {
-          if (l == iter->loop_start) {
-            uint l_prev = loop_end;
-            const uint loop_ctx_end = loop_map[l_prev];
-            if (loop_ctx_end != OUT_OF_CONTEXT) {
-              const WeldLoop *wl_prev = &wloop[loop_ctx_end];
-              while (wl_prev->flag == ELEM_COLLAPSED) {
-                iter->group[iter->group_len++] = l_prev--;
-                wl_prev--;
-                if (wl_prev->loop_orig != l_prev) {
-                  break;
-                }
-              }
-            }
-          }
           iter->group[iter->group_len++] = l;
         }
         l = l_next;
@@ -1468,6 +1500,8 @@ static void customdata_weld(
     return;
   }
 
+  CustomData_interp(source, dest, (const int *)src_indices, NULL, NULL, count, dest_index);
+
   int src_i, dest_i;
   int j;
 
@@ -1500,16 +1534,7 @@ static void customdata_weld(
     if (dest->layers[dest_i].type == type) {
       void *src_data = source->layers[src_i].data;
 
-      if (CustomData_layer_has_math(dest, dest_i)) {
-        const int size = CustomData_sizeof(type);
-        void *dst_data = dest->layers[dest_i].data;
-        void *v_dst = POINTER_OFFSET(dst_data, (size_t)dest_index * size);
-        for (j = 0; j < count; j++) {
-          CustomData_data_add(
-              type, v_dst, POINTER_OFFSET(src_data, (size_t)src_indices[j] * size));
-        }
-      }
-      else if (type == CD_MVERT) {
+      if (type == CD_MVERT) {
         for (j = 0; j < count; j++) {
           MVert *mv_src = &((MVert *)src_data)[src_indices[j]];
           add_v3_v3(co, mv_src->co);
@@ -1531,6 +1556,19 @@ static void customdata_weld(
           flag |= me_src->flag;
         }
       }
+      else if (CustomData_layer_has_interp(dest, dest_i)) {
+        /* Already calculated.
+         * TODO: Optimize by exposing `typeInfo->interp`. */
+      }
+      else if (CustomData_layer_has_math(dest, dest_i)) {
+        const int size = CustomData_sizeof(type);
+        void *dst_data = dest->layers[dest_i].data;
+        void *v_dst = POINTER_OFFSET(dst_data, (size_t)dest_index * size);
+        for (j = 0; j < count; j++) {
+          CustomData_data_add(
+              type, v_dst, POINTER_OFFSET(src_data, (size_t)src_indices[j] * size));
+        }
+      }
       else {
         CustomData_copy_layer_type_data(source, dest, type, src_indices[0], dest_index, 1);
       }
@@ -1548,13 +1586,7 @@ static void customdata_weld(
   for (dest_i = 0; dest_i < dest->totlayer; dest_i++) {
     CustomDataLayer *layer_dst = &dest->layers[dest_i];
     const int type = layer_dst->type;
-    if (CustomData_layer_has_math(dest, dest_i)) {
-      const int size = CustomData_sizeof(type);
-      void *dst_data = layer_dst->data;
-      void *v_dst = POINTER_OFFSET(dst_data, (size_t)dest_index * size);
-      CustomData_data_multiply(type, v_dst, fac);
-    }
-    else if (type == CD_MVERT) {
+    if (type == CD_MVERT) {
       MVert *mv = &((MVert *)layer_dst->data)[dest_index];
       mul_v3_fl(co, fac);
       bweight *= fac;
@@ -1583,6 +1615,15 @@ static void customdata_weld(
       me->bweight = (char)bweight;
       me->flag = flag;
     }
+    else if (CustomData_layer_has_interp(dest, dest_i)) {
+      /* Already calculated. */
+    }
+    else if (CustomData_layer_has_math(dest, dest_i)) {
+      const int size = CustomData_sizeof(type);
+      void *dst_data = layer_dst->data;
+      void *v_dst = POINTER_OFFSET(dst_data, (size_t)dest_index * size);
+      CustomData_data_multiply(type, v_dst, fac);
+    }
   }
 }
 
@@ -1602,6 +1643,7 @@ static bool bvhtree_weld_overlap_cb(void *userdata, int index_a, int index_b, in
     struct WeldOverlapData *data = userdata;
     const MVert *mvert = data->mvert;
     const float dist_sq = len_squared_v3v3(mvert[index_a].co, mvert[index_b].co);
+    BLI_assert(dist_sq <= ((data->merge_dist_sq + FLT_EPSILON) * 3));
     return dist_sq <= data->merge_dist_sq;
   }
   return false;
@@ -1625,16 +1667,17 @@ static Mesh *weldModifier_doWeld(WeldModifierData *wmd, const ModifierEvalContex
   totvert = mesh->totvert;
 
   /* Vertex Group. */
-  const int defgrp_index = defgroup_name_index(ob, wmd->defgrp_name);
+  const int defgrp_index = BKE_object_defgroup_name_index(ob, wmd->defgrp_name);
   if (defgrp_index != -1) {
     MDeformVert *dvert, *dv;
     dvert = CustomData_get_layer(&mesh->vdata, CD_MDEFORMVERT);
     if (dvert) {
+      const bool invert_vgroup = (wmd->flag & MOD_WELD_INVERT_VGROUP) != 0;
       dv = &dvert[0];
       v_mask = BLI_BITMAP_NEW(totvert, __func__);
       for (i = 0; i < totvert; i++, dv++) {
-        const bool found = defvert_find_weight(dv, defgrp_index) > 0.0f;
-        if (found) {
+        const bool found = BKE_defvert_find_weight(dv, defgrp_index) > 0.0f;
+        if (found != invert_vgroup) {
           BLI_BITMAP_ENABLE(v_mask, i);
           v_mask_act++;
         }
@@ -1645,8 +1688,18 @@ static Mesh *weldModifier_doWeld(WeldModifierData *wmd, const ModifierEvalContex
   /* Get overlap map. */
   /* TODO: For a better performanse use KD-Tree. */
   struct BVHTreeFromMesh treedata;
-  BVHTree *bvhtree = bvhtree_from_mesh_verts_ex(
-      &treedata, mvert, totvert, false, v_mask, v_mask_act, wmd->merge_dist, 2, 6, 0, NULL);
+  BVHTree *bvhtree = bvhtree_from_mesh_verts_ex(&treedata,
+                                                mvert,
+                                                totvert,
+                                                false,
+                                                v_mask,
+                                                v_mask_act,
+                                                wmd->merge_dist / 2,
+                                                2,
+                                                6,
+                                                0,
+                                                NULL,
+                                                NULL);
 
   if (v_mask) {
     MEM_freeN(v_mask);
@@ -1658,7 +1711,7 @@ static Mesh *weldModifier_doWeld(WeldModifierData *wmd, const ModifierEvalContex
 
   struct WeldOverlapData data;
   data.mvert = mvert;
-  data.merge_dist_sq = SQUARE(wmd->merge_dist);
+  data.merge_dist_sq = square_f(wmd->merge_dist);
 
   uint overlap_len;
   BVHTreeOverlap *overlap = BLI_bvhtree_overlap_ex(bvhtree,
@@ -1870,7 +1923,7 @@ static Mesh *weldModifier_doWeld(WeldModifierData *wmd, const ModifierEvalContex
   return result;
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   WeldModifierData *wmd = (WeldModifierData *)md;
   return weldModifier_doWeld(wmd, ctx, mesh);
@@ -1885,6 +1938,40 @@ static void initData(ModifierData *md)
   wmd->defgrp_name[0] = '\0';
 }
 
+static void requiredDataMask(Object *UNUSED(ob),
+                             ModifierData *md,
+                             CustomData_MeshMasks *r_cddata_masks)
+{
+  WeldModifierData *wmd = (WeldModifierData *)md;
+
+  /* Ask for vertexgroups if we need them. */
+  if (wmd->defgrp_name[0] != '\0') {
+    r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
+  }
+}
+
+static void panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  PointerRNA ob_ptr;
+  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, &ptr, "merge_threshold", 0, IFACE_("Distance"), ICON_NONE);
+  uiItemR(layout, &ptr, "max_interactions", 0, NULL, ICON_NONE);
+  modifier_vgroup_ui(layout, &ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
+
+  modifier_panel_end(layout, &ptr);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  modifier_panel_register(region_type, eModifierType_Weld, panel_draw);
+}
+
 ModifierTypeInfo modifierType_Weld = {
     /* name */ "Weld",
     /* structName */ "WeldModifierData",
@@ -1894,16 +1981,19 @@ ModifierTypeInfo modifierType_Weld = {
         eModifierTypeFlag_SupportsEditmode | eModifierTypeFlag_EnableInEditmode |
         eModifierTypeFlag_AcceptsCVs,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ NULL,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
-    /* requiredDataMask */ NULL,
+    /* requiredDataMask */ requiredDataMask,
     /* freeData */ NULL,
     /* isDisabled */ NULL,
     /* updateDepsgraph */ NULL,
@@ -1913,6 +2003,9 @@ ModifierTypeInfo modifierType_Weld = {
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };
 
 /** \} */

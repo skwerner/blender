@@ -22,24 +22,25 @@
  */
 
 /* For standard X11 cursors */
-#include <X11/cursorfont.h>
 #include <X11/Xatom.h>
+#include <X11/Xmd.h>
 #include <X11/Xutil.h>
+#include <X11/cursorfont.h>
 #ifdef WITH_X11_ALPHA
 #  include <X11/extensions/Xrender.h>
 #endif
-#include "GHOST_WindowX11.h"
-#include "GHOST_SystemX11.h"
-#include "GHOST_IconX11.h"
-#include "STR_String.h"
 #include "GHOST_Debug.h"
+#include "GHOST_IconX11.h"
+#include "GHOST_SystemX11.h"
+#include "GHOST_WindowX11.h"
 
 #ifdef WITH_XDND
 #  include "GHOST_DropTargetX11.h"
 #endif
 
-#if defined(WITH_GL_EGL)
+#ifdef WITH_GL_EGL
 #  include "GHOST_ContextEGL.h"
+#  include <EGL/eglext.h>
 #else
 #  include "GHOST_ContextGLX.h"
 #endif
@@ -52,15 +53,16 @@
 // For DPI value
 #include <X11/Xresource.h>
 
-#include <cstring>
 #include <cstdio>
+#include <cstring>
 
 /* gethostname */
 #include <unistd.h>
 
 #include <algorithm>
-#include <string>
+#include <limits.h>
 #include <math.h>
+#include <string>
 
 /* For obscure full screen mode stuff
  * lifted verbatim from blut. */
@@ -101,6 +103,18 @@ enum {
 #define _NET_WM_STATE_ADD 1
 // #define _NET_WM_STATE_TOGGLE 2 // UNUSED
 
+#ifdef WITH_GL_EGL
+
+static XVisualInfo *x11_visualinfo_from_egl(Display *display)
+{
+  int num_visuals;
+  XVisualInfo vinfo_template;
+  vinfo_template.screen = DefaultScreen(display);
+  return XGetVisualInfo(display, VisualScreenMask, &vinfo_template, &num_visuals);
+}
+
+#else
+
 static XVisualInfo *x11_visualinfo_from_glx(Display *display,
                                             bool stereoVisual,
                                             bool needAlpha,
@@ -124,11 +138,11 @@ static XVisualInfo *x11_visualinfo_from_glx(Display *display,
     return NULL;
   }
   glx_version = glx_major * 100 + glx_minor;
-#ifndef WITH_X11_ALPHA
+#  ifndef WITH_X11_ALPHA
   (void)glx_version;
-#endif
+#  endif
 
-#ifdef WITH_X11_ALPHA
+#  ifdef WITH_X11_ALPHA
   if (needAlpha && glx_version >= 103 &&
       (glXChooseFBConfig || (glXChooseFBConfig = (PFNGLXCHOOSEFBCONFIGPROC)glXGetProcAddressARB(
                                  (const GLubyte *)"glXChooseFBConfig")) != NULL) &&
@@ -170,7 +184,7 @@ static XVisualInfo *x11_visualinfo_from_glx(Display *display,
     }
   }
   else
-#endif
+#  endif
   {
     /* legacy, don't use extension */
     GHOST_X11_GL_GetAttributes(glx_attribs, 64, stereoVisual, needAlpha, false);
@@ -194,9 +208,11 @@ static XVisualInfo *x11_visualinfo_from_glx(Display *display,
   return NULL;
 }
 
+#endif  // WITH_GL_EGL
+
 GHOST_WindowX11::GHOST_WindowX11(GHOST_SystemX11 *system,
                                  Display *display,
-                                 const STR_String &title,
+                                 const char *title,
                                  GHOST_TInt32 left,
                                  GHOST_TInt32 top,
                                  GHOST_TUns32 width,
@@ -223,6 +239,7 @@ GHOST_WindowX11::GHOST_WindowX11(GHOST_SystemX11 *system,
 #ifdef WITH_XDND
       m_dropTarget(NULL),
 #endif
+      m_tabletData(GHOST_TABLET_DATA_NONE),
 #if defined(WITH_X11_XINPUT) && defined(X_HAVE_UTF8_STRING)
       m_xic(NULL),
 #endif
@@ -230,8 +247,13 @@ GHOST_WindowX11::GHOST_WindowX11(GHOST_SystemX11 *system,
       m_is_debug_context(is_debug)
 {
   if (type == GHOST_kDrawingContextTypeOpenGL) {
+#ifdef WITH_GL_EGL
+    m_visualInfo = x11_visualinfo_from_egl(m_display);
+    (void)alphaBackground;
+#else
     m_visualInfo = x11_visualinfo_from_glx(
         m_display, stereoVisual, alphaBackground, (GLXFBConfig *)&m_fbconfig);
+#endif
   }
   else {
     XVisualInfo tmp = {0};
@@ -392,9 +414,9 @@ GHOST_WindowX11::GHOST_WindowX11(GHOST_SystemX11 *system,
   /* XClassHint, title */
   {
     XClassHint *xclasshint = XAllocClassHint();
-    const int len = title.Length() + 1;
+    const int len = strlen(title) + 1;
     char *wmclass = (char *)malloc(sizeof(char) * len);
-    memcpy(wmclass, title.ReadPtr(), len * sizeof(char));
+    memcpy(wmclass, title, len * sizeof(char));
     xclasshint->res_name = wmclass;
     xclasshint->res_class = wmclass;
     XSetClassHint(m_display, m_window, xclasshint);
@@ -477,8 +499,6 @@ GHOST_WindowX11::GHOST_WindowX11(GHOST_SystemX11 *system,
 
 #ifdef WITH_X11_XINPUT
   refreshXInputDevices();
-
-  m_tabletData.Active = GHOST_kTabletModeNone;
 #endif
 
   /* now set up the rendering context. */
@@ -597,7 +617,7 @@ bool GHOST_WindowX11::getValid() const
   return GHOST_Window::getValid() && m_valid_setup;
 }
 
-void GHOST_WindowX11::setTitle(const STR_String &title)
+void GHOST_WindowX11::setTitle(const char *title)
 {
   Atom name = XInternAtom(m_display, "_NET_WM_NAME", 0);
   Atom utf8str = XInternAtom(m_display, "UTF8_STRING", 0);
@@ -607,8 +627,8 @@ void GHOST_WindowX11::setTitle(const STR_String &title)
                   utf8str,
                   8,
                   PropModeReplace,
-                  (const unsigned char *)title.ReadPtr(),
-                  title.Length());
+                  (const unsigned char *)title,
+                  strlen(title));
 
   /* This should convert to valid x11 string
    * and getTitle would need matching change */
@@ -617,13 +637,14 @@ void GHOST_WindowX11::setTitle(const STR_String &title)
   XFlush(m_display);
 }
 
-void GHOST_WindowX11::getTitle(STR_String &title) const
+std::string GHOST_WindowX11::getTitle() const
 {
   char *name = NULL;
 
   XFetchName(m_display, m_window, &name);
-  title = name ? name : "untitled";
+  std::string title = name ? name : "untitled";
   XFree(name);
+  return title;
 }
 
 void GHOST_WindowX11::getWindowBounds(GHOST_Rect &bounds) const
@@ -1318,17 +1339,40 @@ GHOST_Context *GHOST_WindowX11::newDrawingContext(GHOST_TDrawingContextType type
 #endif
 
     const int profile_mask =
-#if defined(WITH_GL_PROFILE_CORE)
-        GLX_CONTEXT_CORE_PROFILE_BIT_ARB;
-#elif defined(WITH_GL_PROFILE_COMPAT)
-        GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB;
+#ifdef WITH_GL_EGL
+#  if defined(WITH_GL_PROFILE_CORE)
+        EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT;
+#  elif defined(WITH_GL_PROFILE_COMPAT)
+        EGL_CONTEXT_OPENGL_COMPATIBILITY_PROFILE_BIT;
+#  else
+#    error  // must specify either core or compat at build time
+#  endif
 #else
-#  error  // must specify either core or compat at build time
+#  if defined(WITH_GL_PROFILE_CORE)
+        GLX_CONTEXT_CORE_PROFILE_BIT_ARB;
+#  elif defined(WITH_GL_PROFILE_COMPAT)
+        GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB;
+#  else
+#    error  // must specify either core or compat at build time
+#  endif
 #endif
 
     GHOST_Context *context;
 
     for (int minor = 5; minor >= 0; --minor) {
+#ifdef WITH_GL_EGL
+      context = new GHOST_ContextEGL(
+          m_wantStereoVisual,
+          EGLNativeWindowType(m_window),
+          EGLNativeDisplayType(m_display),
+          profile_mask,
+          4,
+          minor,
+          GHOST_OPENGL_EGL_CONTEXT_FLAGS |
+              (m_is_debug_context ? EGL_CONTEXT_OPENGL_DEBUG_BIT_KHR : 0),
+          GHOST_OPENGL_EGL_RESET_NOTIFICATION_STRATEGY,
+          EGL_OPENGL_API);
+#else
       context = new GHOST_ContextGLX(m_wantStereoVisual,
                                      m_window,
                                      m_display,
@@ -1339,6 +1383,7 @@ GHOST_Context *GHOST_WindowX11::newDrawingContext(GHOST_TDrawingContextType type
                                      GHOST_OPENGL_GLX_CONTEXT_FLAGS |
                                          (m_is_debug_context ? GLX_CONTEXT_DEBUG_BIT_ARB : 0),
                                      GHOST_OPENGL_GLX_RESET_NOTIFICATION_STRATEGY);
+#endif
 
       if (context->initializeDrawingContext())
         return context;
@@ -1346,6 +1391,18 @@ GHOST_Context *GHOST_WindowX11::newDrawingContext(GHOST_TDrawingContextType type
         delete context;
     }
 
+#ifdef WITH_GL_EGL
+    context = new GHOST_ContextEGL(m_wantStereoVisual,
+                                   EGLNativeWindowType(m_window),
+                                   EGLNativeDisplayType(m_display),
+                                   profile_mask,
+                                   3,
+                                   3,
+                                   GHOST_OPENGL_EGL_CONTEXT_FLAGS |
+                                       (m_is_debug_context ? EGL_CONTEXT_OPENGL_DEBUG_BIT_KHR : 0),
+                                   GHOST_OPENGL_EGL_RESET_NOTIFICATION_STRATEGY,
+                                   EGL_OPENGL_API);
+#else
     context = new GHOST_ContextGLX(m_wantStereoVisual,
                                    m_window,
                                    m_display,
@@ -1356,6 +1413,7 @@ GHOST_Context *GHOST_WindowX11::newDrawingContext(GHOST_TDrawingContextType type
                                    GHOST_OPENGL_GLX_CONTEXT_FLAGS |
                                        (m_is_debug_context ? GLX_CONTEXT_DEBUG_BIT_ARB : 0),
                                    GHOST_OPENGL_GLX_RESET_NOTIFICATION_STRATEGY);
+#endif
 
     if (context->initializeDrawingContext())
       return context;

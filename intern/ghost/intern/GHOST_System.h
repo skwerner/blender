@@ -27,13 +27,13 @@
 
 #include "GHOST_ISystem.h"
 
-#include "GHOST_Debug.h"
 #include "GHOST_Buttons.h"
-#include "GHOST_ModifierKeys.h"
+#include "GHOST_Debug.h"
 #include "GHOST_EventManager.h"
-#ifdef GHOST_DEBUG
+#include "GHOST_ModifierKeys.h"
+#ifdef WITH_GHOST_DEBUG
 #  include "GHOST_EventPrinter.h"
-#endif  // GHOST_DEBUG
+#endif  // WITH_GHOST_DEBUG
 
 class GHOST_DisplayManager;
 class GHOST_Event;
@@ -110,6 +110,13 @@ class GHOST_System : public GHOST_ISystem {
    * \return  Indication of success.
    */
   GHOST_TSuccess disposeWindow(GHOST_IWindow *window);
+
+  /**
+   * Create a new offscreen context.
+   * Never explicitly delete the context, use disposeContext() instead.
+   * \return  The new context (or 0 if creation failed).
+   */
+  virtual GHOST_IContext *createOffscreenContext() = 0;
 
   /**
    * Returns whether a window is valid.
@@ -212,7 +219,7 @@ class GHOST_System : public GHOST_ISystem {
    ***************************************************************************************/
 
   /**
-   * Returns the state of a modifier key (ouside the message queue).
+   * Returns the state of a modifier key (outside the message queue).
    * \param mask      The modifier key state to retrieve.
    * \param isDown    The state of a modifier key (true == pressed).
    * \return          Indication of success.
@@ -220,7 +227,7 @@ class GHOST_System : public GHOST_ISystem {
   GHOST_TSuccess getModifierKeyState(GHOST_TModifierKeyMask mask, bool &isDown) const;
 
   /**
-   * Returns the state of a mouse button (ouside the message queue).
+   * Returns the state of a mouse button (outside the message queue).
    * \param mask      The button state to retrieve.
    * \param isDown    Button state.
    * \return          Indication of success.
@@ -240,8 +247,8 @@ class GHOST_System : public GHOST_ISystem {
    ***************************************************************************************/
 
   /**
-   * Sets 3D mouse deadzone
-   * \param deadzone: Deadzone of the 3D mouse (both for rotation and pan) relative to full range
+   * Sets 3D mouse dead-zone
+   * \param deadzone: Dead-zone of the 3D mouse (both for rotation and pan) relative to full range.
    */
   void setNDOFDeadZone(float deadzone);
 #endif
@@ -288,7 +295,7 @@ class GHOST_System : public GHOST_ISystem {
   virtual GHOST_TSuccess getModifierKeys(GHOST_ModifierKeys &keys) const = 0;
 
   /**
-   * Returns the state of the mouse buttons (ouside the message queue).
+   * Returns the state of the mouse buttons (outside the message queue).
    * \param buttons   The state of the buttons.
    * \return          Indication of success.
    */
@@ -383,9 +390,9 @@ class GHOST_System : public GHOST_ISystem {
 #endif
 
   /** Prints all the events. */
-#ifdef GHOST_DEBUG
+#ifdef WITH_GHOST_DEBUG
   GHOST_EventPrinter *m_eventPrinter;
-#endif  // GHOST_DEBUG
+#endif  // WITH_GHOST_DEBUG
 
   /** Settings of the display before the display went fullscreen. */
   GHOST_DisplaySetting m_preFullScreenSetting;

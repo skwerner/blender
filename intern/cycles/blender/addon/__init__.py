@@ -22,7 +22,7 @@ bl_info = {
     "blender": (2, 80, 0),
     "description": "Cycles renderer integration",
     "warning": "",
-    "wiki_url": "https://docs.blender.org/manual/en/latest/render/cycles/",
+    "doc_url": "https://docs.blender.org/manual/en/latest/render/cycles/",
     "tracker_url": "",
     "support": 'OFFICIAL',
     "category": "Render"}
@@ -82,8 +82,8 @@ class CyclesRender(bpy.types.RenderEngine):
     def render(self, depsgraph):
         engine.render(self, depsgraph)
 
-    def bake(self, depsgraph, obj, pass_type, pass_filter, object_id, pixel_array, num_pixels, depth, result):
-        engine.bake(self, depsgraph, obj, pass_type, pass_filter, object_id, pixel_array, num_pixels, depth, result)
+    def bake(self, depsgraph, obj, pass_type, pass_filter, width, height):
+        engine.bake(self, depsgraph, obj, pass_type, pass_filter, width, height)
 
     # viewport render
     def view_update(self, context, depsgraph):

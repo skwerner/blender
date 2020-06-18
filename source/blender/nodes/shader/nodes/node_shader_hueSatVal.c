@@ -25,16 +25,16 @@
 
 /* **************** Hue Saturation ******************** */
 static bNodeSocketTemplate sh_node_hue_sat_in[] = {
-    {SOCK_FLOAT, 1, N_("Hue"), 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_NONE},
-    {SOCK_FLOAT, 1, N_("Saturation"), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 2.0f, PROP_NONE},
-    {SOCK_FLOAT, 1, N_("Value"), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 2.0f, PROP_NONE},
-    {SOCK_FLOAT, 1, N_("Fac"), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
-    {SOCK_RGBA, 1, N_("Color"), 0.8f, 0.8f, 0.8f, 1.0f},
-    {-1, 0, ""},
+    {SOCK_FLOAT, N_("Hue"), 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_NONE},
+    {SOCK_FLOAT, N_("Saturation"), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 2.0f, PROP_NONE},
+    {SOCK_FLOAT, N_("Value"), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 2.0f, PROP_NONE},
+    {SOCK_FLOAT, N_("Fac"), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
+    {SOCK_RGBA, N_("Color"), 0.8f, 0.8f, 0.8f, 1.0f},
+    {-1, ""},
 };
 static bNodeSocketTemplate sh_node_hue_sat_out[] = {
-    {SOCK_RGBA, 0, N_("Color")},
-    {-1, 0, ""},
+    {SOCK_RGBA, N_("Color")},
+    {-1, ""},
 };
 
 /* note: it would be possible to use CMP version for both nodes */
@@ -89,7 +89,7 @@ void register_node_type_sh_hue_sat(void)
 {
   static bNodeType ntype;
 
-  sh_node_type_base(&ntype, SH_NODE_HUE_SAT, "Hue Saturation Value", NODE_CLASS_OP_COLOR, 0);
+  sh_fn_node_type_base(&ntype, SH_NODE_HUE_SAT, "Hue Saturation Value", NODE_CLASS_OP_COLOR, 0);
   node_type_socket_templates(&ntype, sh_node_hue_sat_in, sh_node_hue_sat_out);
   node_type_size_preset(&ntype, NODE_SIZE_MIDDLE);
   node_type_exec(&ntype, NULL, NULL, node_shader_exec_hue_sat);

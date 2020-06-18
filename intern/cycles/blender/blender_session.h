@@ -17,15 +17,19 @@
 #ifndef __BLENDER_SESSION_H__
 #define __BLENDER_SESSION_H__
 
+#include "RNA_blender_cpp.h"
+
 #include "device/device.h"
+
+#include "render/bake.h"
 #include "render/scene.h"
 #include "render/session.h"
-#include "render/bake.h"
 
 #include "util/util_vector.h"
 
 CCL_NAMESPACE_BEGIN
 
+class BlenderSync;
 class ImageMetaData;
 class Scene;
 class Session;
@@ -62,14 +66,12 @@ class BlenderSession {
             BL::Object &b_object,
             const string &pass_type,
             const int custom_flag,
-            const int object_id,
-            BL::BakePixel &pixel_array,
-            const size_t num_pixels,
-            const int depth,
-            float pixels[]);
+            const int bake_width,
+            const int bake_height);
 
   void write_render_result(BL::RenderLayer &b_rlay, RenderTile &rtile);
   void write_render_tile(RenderTile &rtile);
+  void read_render_tile(RenderTile &rtile);
 
   /* update functions are used to update display buffer only after sample was rendered
    * only needed for better visual feedback */
@@ -151,24 +153,11 @@ class BlenderSession {
   void do_write_update_render_result(BL::RenderLayer &b_rlay,
                                      RenderTile &rtile,
                                      bool do_update_only);
-  void do_write_update_render_tile(RenderTile &rtile, bool do_update_only, bool highlight);
+  void do_write_update_render_tile(RenderTile &rtile,
+                                   bool do_update_only,
+                                   bool do_read_only,
+                                   bool highlight);
 
-  int builtin_image_frame(const string &builtin_name);
-  void builtin_image_info(const string &builtin_name, void *builtin_data, ImageMetaData &metadata);
-  bool builtin_image_pixels(const string &builtin_name,
-                            void *builtin_data,
-                            int tile,
-                            unsigned char *pixels,
-                            const size_t pixels_size,
-                            const bool associate_alpha,
-                            const bool free_cache);
-  bool builtin_image_float_pixels(const string &builtin_name,
-                                  void *builtin_data,
-                                  int tile,
-                                  float *pixels,
-                                  const size_t pixels_size,
-                                  const bool associate_alpha,
-                                  const bool free_cache);
   void builtin_images_load();
 
   /* Update tile manager to reflect resumable render settings. */

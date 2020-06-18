@@ -21,6 +21,8 @@
  * \ingroup bmesh
  */
 
+#include "bmesh_class.h"
+
 struct BMAllocTemplate;
 struct BMLoopNorEditDataArray;
 struct MLoopNorSpaceArray;
@@ -70,7 +72,9 @@ void BM_lnorspace_err(BMesh *bm);
 struct BMLoopNorEditDataArray *BM_loop_normal_editdata_array_init(BMesh *bm,
                                                                   const bool do_all_loops_of_vert);
 void BM_loop_normal_editdata_array_free(struct BMLoopNorEditDataArray *lnors_ed_arr);
-int BM_total_loop_select(BMesh *bm);
+
+bool BM_custom_loop_normals_to_vector_layer(struct BMesh *bm);
+void BM_custom_loop_normals_from_vector_layer(struct BMesh *bm, bool add_sharp_edges);
 
 void BM_edges_sharp_from_angle_set(BMesh *bm, const float split_angle);
 

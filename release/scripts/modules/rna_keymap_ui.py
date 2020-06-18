@@ -161,7 +161,12 @@ def draw_kmi(display_keymaps, kc, km, kmi, layout, level):
     if (not kmi.is_user_defined) and kmi.is_user_modified:
         row.operator("preferences.keyitem_restore", text="", icon='BACK').item_id = kmi.id
     else:
-        row.operator("preferences.keyitem_remove", text="", icon='X').item_id = kmi.id
+        row.operator(
+            "preferences.keyitem_remove",
+            text="",
+            # Abusing the tracking icon, but it works pretty well here.
+            icon=('TRACKING_CLEAR_BACKWARDS' if kmi.is_user_defined else 'X')
+        ).item_id = kmi.id
 
     # Expanded, additional event settings
     if kmi.show_expanded:
@@ -184,6 +189,9 @@ def draw_kmi(display_keymaps, kc, km, kmi, layout, level):
             if map_type == 'KEYBOARD':
                 subrow.prop(kmi, "type", text="", event=True)
                 subrow.prop(kmi, "value", text="")
+                subrow_repeat = subrow.row(align=True)
+                subrow_repeat.active = kmi.value in {'ANY', 'PRESS'}
+                subrow_repeat.prop(kmi, "repeat", text="Repeat")
             elif map_type in {'MOUSE', 'NDOF'}:
                 subrow.prop(kmi, "type", text="")
                 subrow.prop(kmi, "value", text="")
@@ -387,7 +395,7 @@ def draw_keymaps(context, layout):
 
     # layout.context_pointer_set("keyconfig", wm.keyconfigs.active)
     # row.operator("preferences.keyconfig_remove", text="", icon='X')
-    rowsub = row.split(factor=0.3, align=True)
+    rowsub = row.split(factor=0.4, align=True)
     # postpone drawing into rowsub, so we can set alert!
 
     layout.separator()
@@ -402,7 +410,8 @@ def draw_keymaps(context, layout):
         ok = True
 
     # go back and fill in rowsub
-    rowsub.prop(spref, "filter_type", text="")
+    rowsubsub = rowsub.row(align=True)
+    rowsubsub.prop(spref, "filter_type", expand=True)
     rowsubsub = rowsub.row(align=True)
     if not ok:
         rowsubsub.alert = True

@@ -27,12 +27,12 @@
 
 #include "BLI_utildefines.h"
 
+#include "bpy_capi_utils.h"
 #include "bpy_rna.h"
 #include "bpy_rna_callback.h"
-#include "bpy_capi_utils.h"
 
-#include "DNA_space_types.h"
 #include "DNA_screen_types.h"
+#include "DNA_space_types.h"
 
 #include "RNA_access.h"
 #include "RNA_enum_types.h"
@@ -58,7 +58,7 @@ static const EnumPropertyItem region_draw_mode_items[] = {
     {0, NULL, 0, NULL, NULL},
 };
 
-static void cb_region_draw(const bContext *C, ARegion *UNUSED(ar), void *customdata)
+static void cb_region_draw(const bContext *C, ARegion *UNUSED(region), void *customdata)
 {
   PyObject *cb_func, *cb_args, *result;
   PyGILState_STATE gilstate;
@@ -324,10 +324,8 @@ PyObject *pyrna_callback_classmethod_add(PyObject *UNUSED(self), PyObject *args)
       return NULL;
     }
 
-    bContext *C = BPy_GetContext();
-    struct wmWindowManager *wm = CTX_wm_manager(C);
     handle = WM_paint_cursor_activate(
-        wm, params.space_type, params.region_type, NULL, cb_wm_cursor_draw, (void *)args);
+        params.space_type, params.region_type, NULL, cb_wm_cursor_draw, (void *)args);
   }
   else if (RNA_struct_is_a(srna, &RNA_Space)) {
     const char *error_prefix = "Space.draw_handler_add";
@@ -424,9 +422,7 @@ PyObject *pyrna_callback_classmethod_remove(PyObject *UNUSED(self), PyObject *ar
             args, "OO!:WindowManager.draw_cursor_remove", &cls, &PyCapsule_Type, &py_handle)) {
       return NULL;
     }
-    bContext *C = BPy_GetContext();
-    struct wmWindowManager *wm = CTX_wm_manager(C);
-    WM_paint_cursor_end(wm, handle);
+    WM_paint_cursor_end(handle);
     capsule_clear = true;
   }
   else if (RNA_struct_is_a(srna, &RNA_Space)) {

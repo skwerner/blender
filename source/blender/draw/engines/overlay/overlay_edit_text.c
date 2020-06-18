@@ -38,7 +38,8 @@ void OVERLAY_edit_text_cache_init(OVERLAY_Data *vedata)
   GPUShader *sh;
   DRWState state;
 
-  pd->edit_curve.show_handles = (v3d->overlay.edit_flag & V3D_OVERLAY_EDIT_CU_HANDLES) != 0;
+  pd->edit_curve.show_handles = v3d->overlay.handle_display != CURVE_HANDLE_NONE;
+  pd->edit_curve.handle_display = v3d->overlay.handle_display;
   pd->shdata.edit_curve_normal_length = v3d->overlay.normals_length;
 
   /* Run Twice for in-front passes. */
@@ -56,7 +57,9 @@ void OVERLAY_edit_text_cache_init(OVERLAY_Data *vedata)
     DRW_PASS_CREATE(psl->edit_text_overlay_ps, state | pd->clipping_state);
 
     sh = OVERLAY_shader_uniform_color();
-    pd->edit_text_overlay_grp = DRW_shgroup_create(sh, psl->edit_text_overlay_ps);
+    pd->edit_text_overlay_grp = grp = DRW_shgroup_create(sh, psl->edit_text_overlay_ps);
+
+    DRW_shgroup_uniform_vec4_copy(grp, "color", (float[4]){1.0f, 1.0f, 1.0f, 1.0f});
   }
 }
 

@@ -39,12 +39,13 @@
 #include "../../draw/intern/draw_cache_impl.h"
 
 #include "BLI_math.h"
+#include "BLI_task.h"
 #include "BLI_utildefines.h"
 
 #include "BKE_deform.h"
 #include "BKE_editmesh.h"
-#include "BKE_material.h"
 #include "BKE_layer.h"
+#include "BKE_material.h"
 
 #include "BKE_scene.h"
 
@@ -61,8 +62,8 @@
 #include "ED_mesh.h"
 #include "ED_uvedit.h"
 
-#include "UI_resources.h"
 #include "UI_interface.h"
+#include "UI_resources.h"
 #include "UI_view2d.h"
 
 #include "uvedit_intern.h"
@@ -99,11 +100,11 @@ static int draw_uvs_face_check(const ToolSettings *ts)
 
 /* ------------------------- */
 
-void ED_image_draw_cursor(ARegion *ar, const float cursor[2])
+void ED_image_draw_cursor(ARegion *region, const float cursor[2])
 {
   float zoom[2], x_fac, y_fac;
 
-  UI_view2d_scale_get_inverse(&ar->v2d, &zoom[0], &zoom[1]);
+  UI_view2d_scale_get_inverse(&region->v2d, &zoom[0], &zoom[1]);
 
   mul_v2_fl(zoom, 256.0f * UI_DPI_FAC);
   x_fac = zoom[0];
@@ -206,8 +207,10 @@ static void uvedit_get_batches(Object *ob,
   else {
     batches->faces = NULL;
   }
-
-  DRW_mesh_batch_cache_create_requested(ob, ob->data, scene, false, false);
+  struct TaskGraph *task_graph = BLI_task_graph_create();
+  DRW_mesh_batch_cache_create_requested(task_graph, ob, ob->data, scene, false, false);
+  BLI_task_graph_work_and_wait(task_graph);
+  BLI_task_graph_free(task_graph);
 
   if (draw_stretch && (sima->dt_uvstretch == SI_UVDT_STRETCH_AREA)) {
     /* after create_requested we can load the actual areas */
@@ -216,24 +219,46 @@ static void uvedit_get_batches(Object *ob,
   }
 }
 
-static void draw_uvs_shadow(SpaceImage *UNUSED(sima),
+static void draw_uvs_shadow(SpaceImage *sima,
                             const Scene *scene,
                             Object *obedit,
                             Depsgraph *depsgraph)
 {
   Object *ob_eval = DEG_get_evaluated_object(depsgraph, obedit);
   Mesh *me = ob_eval->data;
+  const float overlay_alpha = sima->uv_opacity;
   float col[4];
   UI_GetThemeColor4fv(TH_UV_SHADOW, col);
 
   DRW_mesh_batch_cache_validate(me);
   GPUBatch *edges = DRW_mesh_batch_cache_get_uv_edges(me);
-  DRW_mesh_batch_cache_create_requested(ob_eval, me, scene, false, false);
+
+  struct TaskGraph *task_graph = BLI_task_graph_create();
+  DRW_mesh_batch_cache_create_requested(task_graph, ob_eval, me, scene, false, false);
+  BLI_task_graph_work_and_wait(task_graph);
+  BLI_task_graph_free(task_graph);
 
   if (edges) {
+    if (sima->flag & SI_SMOOTH_UV) {
+      GPU_line_smooth(true);
+      GPU_blend(true);
+    }
+    else if (overlay_alpha < 1.0f) {
+      GPU_blend(true);
+    }
+
+    col[3] = overlay_alpha;
     GPU_batch_program_set_builtin(edges, GPU_SHADER_2D_UV_UNIFORM_COLOR);
     GPU_batch_uniform_4fv(edges, "color", col);
     GPU_batch_draw(edges);
+
+    if (sima->flag & SI_SMOOTH_UV) {
+      GPU_line_smooth(false);
+      GPU_blend(false);
+    }
+    else if (overlay_alpha < 1.0f) {
+      GPU_blend(false);
+    }
   }
 }
 
@@ -251,7 +276,10 @@ static void draw_uvs_texpaint(const Scene *scene, Object *ob, Depsgraph *depsgra
 
   DRW_mesh_batch_cache_validate(me);
   GPUBatch *geom = DRW_mesh_batch_cache_get_uv_edges(me);
-  DRW_mesh_batch_cache_create_requested(ob_eval, me, scene, false, false);
+  struct TaskGraph *task_graph = BLI_task_graph_create();
+  DRW_mesh_batch_cache_create_requested(task_graph, ob_eval, me, scene, false, false);
+  BLI_task_graph_work_and_wait(task_graph);
+  BLI_task_graph_free(task_graph);
 
   GPU_batch_program_set_builtin(geom, GPU_SHADER_2D_UV_UNIFORM_COLOR);
   GPU_batch_uniform_4fv(geom, "color", col);
@@ -265,6 +293,7 @@ static void draw_uvs_texpaint(const Scene *scene, Object *ob, Depsgraph *depsgra
     bool prev_ma_match = (mpoly->mat_nr == (ob_eval->actcol - 1));
 
     GPU_matrix_bind(geom->interface);
+    GPU_shader_set_srgb_uniform(geom->interface);
     GPU_batch_bind(geom);
 
     /* TODO(fclem): If drawcall count becomes a problem in the future
@@ -305,6 +334,7 @@ static void draw_uvs(SpaceImage *sima,
   Object *ob_eval = batch->ob_eval;
   const ToolSettings *ts = scene->toolsettings;
   float col1[4], col2[4], col3[4], transparent[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+  const float overlay_alpha = sima->uv_opacity;
 
   if (sima->flag & SI_DRAWSHADOW) {
     bool is_cage_like_final_meshes = false;
@@ -345,7 +375,11 @@ static void draw_uvs(SpaceImage *sima,
       UI_GetThemeColor4fv(TH_FACE, col1);
       UI_GetThemeColor4fv(TH_FACE_SELECT, col2);
       UI_GetThemeColor4fv(TH_EDITMESH_ACTIVE, col3);
-      col3[3] *= 0.2; /* Simulate dithering */
+
+      col1[3] *= overlay_alpha;
+      col2[3] *= overlay_alpha;
+      col3[3] *= overlay_alpha;
+
       GPU_batch_uniform_4fv(batch->faces, "faceColor", col1);
       GPU_batch_uniform_4fv(batch->faces, "selectColor", col2);
       GPU_batch_uniform_4fv(batch->faces, "activeColor", col3);
@@ -371,9 +405,16 @@ static void draw_uvs(SpaceImage *sima,
       GPU_line_smooth(true);
       GPU_blend(true);
     }
+    else if (overlay_alpha < 1.0f) {
+      GPU_blend(true);
+    }
+
     switch (sima->dt_uv) {
       case SI_UVDT_DASH: {
-        float dash_colors[2][4] = {{0.56f, 0.56f, 0.56f, 1.0f}, {0.07f, 0.07f, 0.07f, 1.0f}};
+        float dash_colors[2][4] = {
+            {0.56f, 0.56f, 0.56f, overlay_alpha},
+            {0.07f, 0.07f, 0.07f, overlay_alpha},
+        };
         float viewport_size[4];
         GPU_viewport_size_get_f(viewport_size);
 
@@ -397,7 +438,8 @@ static void draw_uvs(SpaceImage *sima,
          * instead of modifying the provoking vert. */
         glProvokingVertex(GL_FIRST_VERTEX_CONVENTION);
 
-        UI_GetThemeColor4fv(TH_EDGE_SELECT, col2);
+        UI_GetThemeColor3fv(TH_EDGE_SELECT, col2);
+        col2[3] = overlay_alpha;
 
         GPU_batch_program_set_builtin(
             batch->edges, (interpedges) ? GPU_SHADER_2D_UV_EDGES_SMOOTH : GPU_SHADER_2D_UV_EDGES);
@@ -405,18 +447,19 @@ static void draw_uvs(SpaceImage *sima,
         if (sima->dt_uv == SI_UVDT_OUTLINE) {
           /* Black Outline. */
           GPU_line_width(3.0f);
-          GPU_batch_uniform_4f(batch->edges, "edgeColor", 0.0f, 0.0f, 0.0f, 1.0f);
-          GPU_batch_uniform_4f(batch->edges, "selectColor", 0.0f, 0.0f, 0.0f, 1.0f);
+          GPU_batch_uniform_4f(batch->edges, "edgeColor", 0.0f, 0.0f, 0.0f, overlay_alpha);
+          GPU_batch_uniform_4f(batch->edges, "selectColor", 0.0f, 0.0f, 0.0f, overlay_alpha);
           GPU_batch_draw(batch->edges);
 
-          UI_GetThemeColor4fv(TH_WIRE_EDIT, col1);
+          UI_GetThemeColor3fv(TH_WIRE_EDIT, col1);
         }
         else if (sima->dt_uv == SI_UVDT_WHITE) {
-          copy_v4_fl4(col1, 1.0f, 1.0f, 1.0f, 1.0f);
+          copy_v3_fl3(col1, 1.0f, 1.0f, 1.0f);
         }
         else {
-          copy_v4_fl4(col1, 0.0f, 0.0f, 0.0f, 1.0f);
+          copy_v3_fl3(col1, 0.0f, 0.0f, 0.0f);
         }
+        col1[3] = overlay_alpha;
 
         /* Inner Line. Use depth test to insure selection is drawn on top. */
         GPU_depth_test(true);
@@ -432,6 +475,9 @@ static void draw_uvs(SpaceImage *sima,
     }
     if (sima->flag & SI_SMOOTH_UV) {
       GPU_line_smooth(false);
+      GPU_blend(false);
+    }
+    else if (overlay_alpha < 1.0f) {
       GPU_blend(false);
     }
   }
@@ -478,9 +524,9 @@ static void draw_uvs(SpaceImage *sima,
 }
 
 static void draw_uv_shadows_get(
-    SpaceImage *sima, Object *ob, Object *obedit, bool *show_shadow, bool *show_texpaint)
+    SpaceImage *sima, Object *ob, Object *obedit, bool *r_show_shadow, bool *r_show_texpaint)
 {
-  *show_shadow = *show_texpaint = false;
+  *r_show_shadow = *r_show_texpaint = false;
 
   if (ED_space_image_show_render(sima) || (sima->flag & SI_NO_DRAW_TEXPAINT)) {
     return;
@@ -489,10 +535,10 @@ static void draw_uv_shadows_get(
   if ((sima->mode == SI_MODE_PAINT) && obedit && obedit->type == OB_MESH) {
     struct BMEditMesh *em = BKE_editmesh_from_object(obedit);
 
-    *show_shadow = EDBM_uv_check(em);
+    *r_show_shadow = EDBM_uv_check(em);
   }
 
-  *show_texpaint = (ob && ob->type == OB_MESH && ob->mode == OB_MODE_TEXTURE_PAINT);
+  *r_show_texpaint = (ob && ob->type == OB_MESH && ob->mode == OB_MODE_TEXTURE_PAINT);
 }
 
 void ED_uvedit_draw_main(SpaceImage *sima,

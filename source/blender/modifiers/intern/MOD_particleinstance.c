@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -25,26 +25,37 @@
 
 #include "BLI_utildefines.h"
 
-#include "BLI_math.h"
 #include "BLI_listbase.h"
+#include "BLI_math.h"
 #include "BLI_rand.h"
 #include "BLI_string.h"
 
+#include "BLT_translation.h"
+
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
+#include "DNA_screen_types.h"
 
+#include "BKE_context.h"
 #include "BKE_effect.h"
 #include "BKE_lattice.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_query.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
 #include "BKE_particle.h"
 #include "BKE_pointcache.h"
+#include "BKE_screen.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
 
 #include "DEG_depsgraph_build.h"
 #include "DEG_depsgraph_query.h"
 
 #include "MOD_modifiertypes.h"
+#include "MOD_ui_common.h"
 
 static void initData(ModifierData *md)
 {
@@ -110,7 +121,7 @@ static bool isDisabled(const struct Scene *scene, ModifierData *md, bool useRend
           required_mode = eModifierMode_Realtime;
         }
 
-        if (!modifier_isEnabled(scene, ob_md, required_mode)) {
+        if (!BKE_modifier_is_enabled(scene, ob_md, required_mode)) {
           return true;
         }
 
@@ -164,6 +175,9 @@ static bool particle_skip(ParticleInstanceModifierData *pimd, ParticleSystem *ps
     if (pa->alive == PARS_DEAD && (pimd->flag & eParticleInstanceFlag_Dead) == 0) {
       return true;
     }
+    if (pa->flag & (PARS_UNEXIST | PARS_NO_DISP)) {
+      return true;
+    }
   }
 
   if (pimd->particle_amount == 1.0f) {
@@ -201,7 +215,7 @@ static void store_float_in_vcol(MLoopCol *vcol, float float_value)
   vcol->a = 1.0f;
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   Mesh *result;
   ParticleInstanceModifierData *pimd = (ParticleInstanceModifierData *)md;
@@ -528,7 +542,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   }
 
   if (psys->lattice_deform_data) {
-    end_latt_deform(psys->lattice_deform_data);
+    BKE_lattice_deform_data_destroy(psys->lattice_deform_data);
     psys->lattice_deform_data = NULL;
   }
 
@@ -543,6 +557,129 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
 
   return result;
 }
+
+static void panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *row;
+  uiLayout *layout = panel->layout;
+  int toggles_flag = UI_ITEM_R_TOGGLE | UI_ITEM_R_FORCE_BLANK_DECORATE;
+
+  PointerRNA ptr;
+  PointerRNA ob_ptr;
+  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+
+  PointerRNA particle_obj_ptr = RNA_pointer_get(&ptr, "object");
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, &ptr, "object", 0, NULL, ICON_NONE);
+  if (!RNA_pointer_is_null(&particle_obj_ptr)) {
+    uiItemPointerR(layout,
+                   &ptr,
+                   "particle_system",
+                   &particle_obj_ptr,
+                   "particle_systems",
+                   "Particle System",
+                   ICON_NONE);
+  }
+  else {
+    uiItemR(layout, &ptr, "particle_system_index", 0, IFACE_("Particle System"), ICON_NONE);
+  }
+
+  uiItemS(layout);
+
+  row = uiLayoutRowWithHeading(layout, true, IFACE_("Create Instances"));
+  uiItemR(row, &ptr, "use_normal", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, &ptr, "use_children", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, &ptr, "use_size", toggles_flag, NULL, ICON_NONE);
+
+  row = uiLayoutRowWithHeading(layout, true, IFACE_("Show"));
+  uiItemR(row, &ptr, "show_alive", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, &ptr, "show_dead", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, &ptr, "show_unborn", toggles_flag, NULL, ICON_NONE);
+
+  uiItemR(layout, &ptr, "particle_amount", 0, IFACE_("Amount"), ICON_NONE);
+  uiItemR(layout, &ptr, "particle_offset", 0, IFACE_("Offset"), ICON_NONE);
+
+  uiItemS(layout);
+
+  uiItemR(layout, &ptr, "space", 0, IFACE_("Coordinate Space"), ICON_NONE);
+  row = uiLayoutRow(layout, true);
+  uiItemR(row, &ptr, "axis", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+
+  modifier_panel_end(layout, &ptr);
+}
+
+static void path_panel_draw_header(const bContext *C, Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+
+  uiItemR(layout, &ptr, "use_path", 0, IFACE_("Create Along Paths"), ICON_NONE);
+}
+
+static void path_panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *col;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  PointerRNA ob_ptr;
+  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiLayoutSetActive(layout, RNA_boolean_get(&ptr, "use_path"));
+
+  col = uiLayoutColumn(layout, true);
+  uiItemR(col, &ptr, "position", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
+  uiItemR(col, &ptr, "random_position", UI_ITEM_R_SLIDER, IFACE_("Random"), ICON_NONE);
+  col = uiLayoutColumn(layout, true);
+  uiItemR(col, &ptr, "rotation", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
+  uiItemR(col, &ptr, "random_rotation", UI_ITEM_R_SLIDER, IFACE_("Random"), ICON_NONE);
+
+  uiItemR(layout, &ptr, "use_preserve_shape", 0, NULL, ICON_NONE);
+}
+
+static void layers_panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  PointerRNA ob_ptr;
+  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+
+  PointerRNA obj_data_ptr = RNA_pointer_get(&ob_ptr, "data");
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemPointerR(layout,
+                 &ptr,
+                 "index_layer_name",
+                 &obj_data_ptr,
+                 "vertex_colors",
+                 IFACE_("Index"),
+                 ICON_NONE);
+  uiItemPointerR(layout,
+                 &ptr,
+                 "value_layer_name",
+                 &obj_data_ptr,
+                 "vertex_colors",
+                 IFACE_("Value"),
+                 ICON_NONE);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  PanelType *panel_type = modifier_panel_register(
+      region_type, eModifierType_ParticleInstance, panel_draw);
+  modifier_subpanel_register(
+      region_type, "paths", "", path_panel_draw_header, path_panel_draw, panel_type);
+  modifier_subpanel_register(region_type, "layers", "Layers", NULL, layers_panel_draw, panel_type);
+}
+
 ModifierTypeInfo modifierType_ParticleInstance = {
     /* name */ "ParticleInstance",
     /* structName */ "ParticleInstanceModifierData",
@@ -551,13 +688,16 @@ ModifierTypeInfo modifierType_ParticleInstance = {
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsMapping |
         eModifierTypeFlag_SupportsEditmode | eModifierTypeFlag_EnableInEditmode,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ NULL,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,
@@ -570,4 +710,7 @@ ModifierTypeInfo modifierType_ParticleInstance = {
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

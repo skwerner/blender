@@ -25,6 +25,8 @@
 #ifndef __GHOST_EVENTKEY_H__
 #define __GHOST_EVENTKEY_H__
 
+#include <string.h>
+
 #include "GHOST_Event.h"
 
 /**
@@ -38,12 +40,17 @@ class GHOST_EventKey : public GHOST_Event {
    * \param type  The type of key event.
    * \param key   The key code of the key.
    */
-  GHOST_EventKey(GHOST_TUns64 msec, GHOST_TEventType type, GHOST_IWindow *window, GHOST_TKey key)
+  GHOST_EventKey(GHOST_TUns64 msec,
+                 GHOST_TEventType type,
+                 GHOST_IWindow *window,
+                 GHOST_TKey key,
+                 bool is_repeat)
       : GHOST_Event(msec, type, window)
   {
     m_keyEventData.key = key;
     m_keyEventData.ascii = '\0';
     m_keyEventData.utf8_buf[0] = '\0';
+    m_keyEventData.is_repeat = is_repeat;
     m_data = &m_keyEventData;
   }
 
@@ -59,7 +66,8 @@ class GHOST_EventKey : public GHOST_Event {
                  GHOST_IWindow *window,
                  GHOST_TKey key,
                  char ascii,
-                 const char utf8_buf[6])
+                 const char utf8_buf[6],
+                 bool is_repeat)
       : GHOST_Event(msec, type, window)
   {
     m_keyEventData.key = key;
@@ -68,6 +76,7 @@ class GHOST_EventKey : public GHOST_Event {
       memcpy(m_keyEventData.utf8_buf, utf8_buf, sizeof(m_keyEventData.utf8_buf));
     else
       m_keyEventData.utf8_buf[0] = '\0';
+    m_keyEventData.is_repeat = is_repeat;
     m_data = &m_keyEventData;
   }
 

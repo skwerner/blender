@@ -51,7 +51,10 @@ ModifierTypeInfo modifierType_None = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ NULL,
     /* requiredDataMask */ NULL,
@@ -64,4 +67,7 @@ ModifierTypeInfo modifierType_None = {
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ NULL,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

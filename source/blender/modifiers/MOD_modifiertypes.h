@@ -23,6 +23,10 @@
 
 #include "BKE_modifier.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* ****************** Type structures for all modifiers ****************** */
 
 extern ModifierTypeInfo modifierType_None;
@@ -82,8 +86,13 @@ extern ModifierTypeInfo modifierType_CorrectiveSmooth;
 extern ModifierTypeInfo modifierType_MeshSequenceCache;
 extern ModifierTypeInfo modifierType_SurfaceDeform;
 extern ModifierTypeInfo modifierType_WeightedNormal;
+extern ModifierTypeInfo modifierType_Simulation;
 
 /* MOD_util.c */
 void modifier_type_init(ModifierTypeInfo *types[]);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __MOD_MODIFIERTYPES_H__ */

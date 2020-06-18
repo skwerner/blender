@@ -42,13 +42,13 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_alloca.h"
-#include "BLI_stack.h"
+#include "BLI_heap_simple.h"
 #include "BLI_kdopbvh.h"
 #include "BLI_math.h"
+#include "BLI_stack.h"
 #include "BLI_task.h"
-#include "BLI_heap_simple.h"
+#include "BLI_utildefines.h"
 
 #include "BLI_strict_flags.h"
 
@@ -719,10 +719,10 @@ static void non_recursive_bvh_div_nodes_task_cb(void *__restrict userdata,
   refit_kdop_hull(data->tree, parent, parent_leafs_begin, parent_leafs_end);
   split_axis = get_largest_axis(parent->bv);
 
-  /* Save split axis (this can be used on raytracing to speedup the query time) */
+  /* Save split axis (this can be used on ray-tracing to speedup the query time) */
   parent->main_axis = split_axis / 2;
 
-  /* Split the childs along the split_axis, note: its not needed to sort the whole leafs array
+  /* Split the children along the split_axis, note: its not needed to sort the whole leafs array
    * Only to assure that the elements are partitioned on a way that each child takes the elements
    * it would take in case the whole array was sorted.
    * Split_leafs takes care of that "sort" problem. */
@@ -1819,11 +1819,16 @@ static void bvhtree_ray_cast_data_precalc(BVHRayCastData *data, int flag)
 
   for (i = 0; i < 3; i++) {
     data->ray_dot_axis[i] = dot_v3v3(data->ray.direction, bvhtree_kdop_axes[i]);
-    data->idot_axis[i] = 1.0f / data->ray_dot_axis[i];
 
     if (fabsf(data->ray_dot_axis[i]) < FLT_EPSILON) {
-      data->ray_dot_axis[i] = 0.0;
+      data->ray_dot_axis[i] = 0.0f;
+      /* Sign is not important in this case, `data->index` is adjusted anyway. */
+      data->idot_axis[i] = FLT_MAX;
     }
+    else {
+      data->idot_axis[i] = 1.0f / data->ray_dot_axis[i];
+    }
+
     data->index[2 * i] = data->idot_axis[i] < 0.0f ? 1 : 0;
     data->index[2 * i + 1] = 1 - data->index[2 * i];
     data->index[2 * i] += 2 * i;

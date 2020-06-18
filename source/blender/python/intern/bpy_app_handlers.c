@@ -22,15 +22,15 @@
  * functions into (called via blenders generic BLI_cb api)
  */
 
-#include <Python.h>
 #include "BLI_utildefines.h"
+#include <Python.h>
 
 #include "BKE_callbacks.h"
 
-#include "RNA_types.h"
 #include "RNA_access.h"
-#include "bpy_rna.h"
+#include "RNA_types.h"
 #include "bpy_app_handlers.h"
+#include "bpy_rna.h"
 
 #include "../generic/python_utildefines.h"
 
@@ -44,8 +44,16 @@ void bpy_app_generic_callback(struct Main *main,
 static PyTypeObject BlenderAppCbType;
 
 static PyStructSequence_Field app_cb_info_fields[] = {
-    {"frame_change_pre", "on frame change for playback and rendering (before)"},
-    {"frame_change_post", "on frame change for playback and rendering (after)"},
+    {"frame_change_pre",
+     "Called after frame change for playback and rendering, before any data is evaluated for the "
+     "new frame. This makes it possible to change data and relations (for example swap an object "
+     "to another mesh) for the new frame. Note that this handler is **not** to be used as 'before "
+     "the frame changes' event. The dependency graph is not available in this handler, as data "
+     "and relations may have been altered and the dependency graph has not yet been updated for "
+     "that."},
+    {"frame_change_post",
+     "Called after frame change for playback and rendering, after the data has been evaluated "
+     "for the new frame."},
     {"render_pre", "on render (before)"},
     {"render_post", "on render (after)"},
     {"render_write", "on writing a render frame (directly after the frame is written)"},

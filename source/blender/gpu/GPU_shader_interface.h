@@ -28,10 +28,12 @@
 
 #include "GPU_common.h"
 
-typedef enum {
-  GPU_UNIFORM_NONE = 0, /* uninitialized/unknown */
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-  GPU_UNIFORM_MODEL,          /* mat4 ModelMatrix */
+typedef enum {
+  GPU_UNIFORM_MODEL = 0,      /* mat4 ModelMatrix */
   GPU_UNIFORM_VIEW,           /* mat4 ViewMatrix */
   GPU_UNIFORM_MODELVIEW,      /* mat4 ModelViewMatrix */
   GPU_UNIFORM_PROJECTION,     /* mat4 ProjectionMatrix */
@@ -51,53 +53,68 @@ typedef enum {
   GPU_UNIFORM_COLOR,          /* vec4 color */
   GPU_UNIFORM_BASE_INSTANCE,  /* int baseInstance */
   GPU_UNIFORM_RESOURCE_CHUNK, /* int resourceChunk */
-
-  GPU_UNIFORM_CUSTOM, /* custom uniform, not one of the above built-ins */
+  GPU_UNIFORM_RESOURCE_ID,    /* int resourceId */
+  GPU_UNIFORM_SRGB_TRANSFORM, /* bool srgbTarget */
 
   GPU_NUM_UNIFORMS, /* Special value, denotes number of builtin uniforms. */
 } GPUUniformBuiltin;
 
+typedef enum {
+  GPU_UNIFORM_BLOCK_VIEW = 0, /* viewBlock */
+  GPU_UNIFORM_BLOCK_MODEL,    /* modelBlock */
+  GPU_UNIFORM_BLOCK_INFO,     /* infoBlock */
+
+  GPU_NUM_UNIFORM_BLOCKS, /* Special value, denotes number of builtin uniforms block. */
+} GPUUniformBlockBuiltin;
+
 typedef struct GPUShaderInput {
-  struct GPUShaderInput *next;
   uint32_t name_offset;
-  uint name_hash;
-  /** Only for uniform inputs. */
-  GPUUniformBuiltin builtin_type;
-  /** Only for attribute inputs. */
-  uint32_t gl_type;
-  /** Only for attribute inputs. */
-  int32_t size;
+  uint32_t name_hash;
   int32_t location;
+  /** Defined at interface creation or in shader. Only for Samplers, UBOs and Vertex Attribs. */
+  int32_t binding;
 } GPUShaderInput;
 
-#define GPU_NUM_SHADERINTERFACE_BUCKETS 257
 #define GPU_SHADERINTERFACE_REF_ALLOC_COUNT 16
 
 typedef struct GPUShaderInterface {
-  int32_t program;
-  uint32_t name_buffer_offset;
-  GPUShaderInput *attr_buckets[GPU_NUM_SHADERINTERFACE_BUCKETS];
-  GPUShaderInput *uniform_buckets[GPU_NUM_SHADERINTERFACE_BUCKETS];
-  GPUShaderInput *ubo_buckets[GPU_NUM_SHADERINTERFACE_BUCKETS];
-  GPUShaderInput *builtin_uniforms[GPU_NUM_UNIFORMS];
+  /** Buffer containing all inputs names separated by '\0'. */
   char *name_buffer;
-  struct GPUBatch **batches; /* references to batches using this interface */
+  /** Reference to GPUBatches using this interface */
+  struct GPUBatch **batches;
   uint batches_len;
+  /** Input counts. */
+  uint attribute_len;
+  uint ubo_len;
+  uint uniform_len;
+  /** Enabled bindpoints that needs to be fed with data. */
+  uint16_t enabled_attr_mask;
+  uint16_t enabled_ubo_mask;
+  uint64_t enabled_tex_mask;
+  /** Opengl Location of builtin uniforms. Fast access, no lookup needed. */
+  int32_t builtins[GPU_NUM_UNIFORMS];
+  int32_t builtin_blocks[GPU_NUM_UNIFORM_BLOCKS];
+  /** Flat array. In this order: Attributes, Ubos, Uniforms. */
+  GPUShaderInput inputs[0];
 } GPUShaderInterface;
 
 GPUShaderInterface *GPU_shaderinterface_create(int32_t program_id);
 void GPU_shaderinterface_discard(GPUShaderInterface *);
 
 const GPUShaderInput *GPU_shaderinterface_uniform(const GPUShaderInterface *, const char *name);
-const GPUShaderInput *GPU_shaderinterface_uniform_ensure(const GPUShaderInterface *,
-                                                         const char *name);
-const GPUShaderInput *GPU_shaderinterface_uniform_builtin(const GPUShaderInterface *,
-                                                          GPUUniformBuiltin);
+int32_t GPU_shaderinterface_uniform_builtin(const GPUShaderInterface *shaderface,
+                                            GPUUniformBuiltin builtin);
+int32_t GPU_shaderinterface_block_builtin(const GPUShaderInterface *shaderface,
+                                          GPUUniformBlockBuiltin builtin);
 const GPUShaderInput *GPU_shaderinterface_ubo(const GPUShaderInterface *, const char *name);
 const GPUShaderInput *GPU_shaderinterface_attr(const GPUShaderInterface *, const char *name);
 
 /* keep track of batches using this interface */
 void GPU_shaderinterface_add_batch_ref(GPUShaderInterface *, struct GPUBatch *);
 void GPU_shaderinterface_remove_batch_ref(GPUShaderInterface *, struct GPUBatch *);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __GPU_SHADER_INTERFACE_H__ */

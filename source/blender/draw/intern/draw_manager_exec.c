@@ -22,6 +22,7 @@
 
 #include "draw_manager.h"
 
+#include "BLI_alloca.h"
 #include "BLI_math.h"
 #include "BLI_math_bits.h"
 #include "BLI_memblock.h"
@@ -30,8 +31,8 @@
 
 #include "GPU_extensions.h"
 #include "GPU_platform.h"
-#include "intern/gpu_shader_private.h"
 #include "intern/gpu_primitive_private.h"
+#include "intern/gpu_shader_private.h"
 
 #ifdef USE_GPU_SELECT
 #  include "GPU_select.h"
@@ -50,6 +51,7 @@ void DRW_select_load_id(uint id)
 typedef struct DRWCommandsState {
   GPUBatch *batch;
   int resource_chunk;
+  int resource_id;
   int base_inst;
   int inst_count;
   int v_first;
@@ -60,10 +62,10 @@ typedef struct DRWCommandsState {
   int obinfos_loc;
   int baseinst_loc;
   int chunkid_loc;
+  int resourceid_loc;
   /* Legacy matrix support. */
   int obmat_loc;
   int obinv_loc;
-  int mvp_loc;
   /* Selection ID state. */
   GPUVertBuf *select_buf;
   uint select_id;
@@ -112,19 +114,20 @@ void drw_state_set(DRWState state)
       /* Stencil Write */
       if (test) {
         glStencilMask(0xFF);
-        if (test & DRW_STATE_WRITE_STENCIL) {
-          glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
-        }
-        else if (test & DRW_STATE_WRITE_STENCIL_SHADOW_PASS) {
-          glStencilOpSeparate(GL_BACK, GL_KEEP, GL_KEEP, GL_INCR_WRAP);
-          glStencilOpSeparate(GL_FRONT, GL_KEEP, GL_KEEP, GL_DECR_WRAP);
-        }
-        else if (test & DRW_STATE_WRITE_STENCIL_SHADOW_FAIL) {
-          glStencilOpSeparate(GL_BACK, GL_KEEP, GL_DECR_WRAP, GL_KEEP);
-          glStencilOpSeparate(GL_FRONT, GL_KEEP, GL_INCR_WRAP, GL_KEEP);
-        }
-        else {
-          BLI_assert(0);
+        switch (test) {
+          case DRW_STATE_WRITE_STENCIL:
+            glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+            break;
+          case DRW_STATE_WRITE_STENCIL_SHADOW_PASS:
+            glStencilOpSeparate(GL_BACK, GL_KEEP, GL_KEEP, GL_INCR_WRAP);
+            glStencilOpSeparate(GL_FRONT, GL_KEEP, GL_KEEP, GL_DECR_WRAP);
+            break;
+          case DRW_STATE_WRITE_STENCIL_SHADOW_FAIL:
+            glStencilOpSeparate(GL_BACK, GL_KEEP, GL_DECR_WRAP, GL_KEEP);
+            glStencilOpSeparate(GL_FRONT, GL_KEEP, GL_INCR_WRAP, GL_KEEP);
+            break;
+          default:
+            BLI_assert(0);
         }
       }
       else {
@@ -189,26 +192,27 @@ void drw_state_set(DRWState state)
       if (test) {
         glEnable(GL_DEPTH_TEST);
 
-        if (state & DRW_STATE_DEPTH_LESS) {
-          glDepthFunc(GL_LESS);
-        }
-        else if (state & DRW_STATE_DEPTH_LESS_EQUAL) {
-          glDepthFunc(GL_LEQUAL);
-        }
-        else if (state & DRW_STATE_DEPTH_EQUAL) {
-          glDepthFunc(GL_EQUAL);
-        }
-        else if (state & DRW_STATE_DEPTH_GREATER) {
-          glDepthFunc(GL_GREATER);
-        }
-        else if (state & DRW_STATE_DEPTH_GREATER_EQUAL) {
-          glDepthFunc(GL_GEQUAL);
-        }
-        else if (state & DRW_STATE_DEPTH_ALWAYS) {
-          glDepthFunc(GL_ALWAYS);
-        }
-        else {
-          BLI_assert(0);
+        switch (test) {
+          case DRW_STATE_DEPTH_LESS:
+            glDepthFunc(GL_LESS);
+            break;
+          case DRW_STATE_DEPTH_LESS_EQUAL:
+            glDepthFunc(GL_LEQUAL);
+            break;
+          case DRW_STATE_DEPTH_EQUAL:
+            glDepthFunc(GL_EQUAL);
+            break;
+          case DRW_STATE_DEPTH_GREATER:
+            glDepthFunc(GL_GREATER);
+            break;
+          case DRW_STATE_DEPTH_GREATER_EQUAL:
+            glDepthFunc(GL_GEQUAL);
+            break;
+          case DRW_STATE_DEPTH_ALWAYS:
+            glDepthFunc(GL_ALWAYS);
+            break;
+          default:
+            BLI_assert(0);
         }
       }
       else {
@@ -221,7 +225,6 @@ void drw_state_set(DRWState state)
   {
     int test;
     if (CHANGED_ANY_STORE_VAR(DRW_STATE_STENCIL_TEST_ENABLED, test)) {
-      DST.stencil_mask = STENCIL_UNDEFINED;
       if (test) {
         glEnable(GL_STENCIL_TEST);
       }
@@ -237,50 +240,73 @@ void drw_state_set(DRWState state)
     if (CHANGED_ANY_STORE_VAR(DRW_STATE_BLEND_ALPHA | DRW_STATE_BLEND_ALPHA_PREMUL |
                                   DRW_STATE_BLEND_ADD | DRW_STATE_BLEND_MUL |
                                   DRW_STATE_BLEND_ADD_FULL | DRW_STATE_BLEND_OIT |
-                                  DRW_STATE_BLEND_ALPHA_UNDER_PREMUL | DRW_STATE_BLEND_CUSTOM,
+                                  DRW_STATE_BLEND_BACKGROUND | DRW_STATE_BLEND_CUSTOM |
+                                  DRW_STATE_LOGIC_INVERT | DRW_STATE_BLEND_SUB,
                               test)) {
       if (test) {
         glEnable(GL_BLEND);
 
-        if ((state & DRW_STATE_BLEND_ALPHA) != 0) {
-          glBlendFuncSeparate(GL_SRC_ALPHA,
-                              GL_ONE_MINUS_SRC_ALPHA, /* RGB */
-                              GL_ONE,
-                              GL_ONE_MINUS_SRC_ALPHA); /* Alpha */
+        switch (test) {
+          case DRW_STATE_BLEND_ALPHA:
+            glBlendFuncSeparate(GL_SRC_ALPHA,
+                                GL_ONE_MINUS_SRC_ALPHA, /* RGB */
+                                GL_ONE,
+                                GL_ONE_MINUS_SRC_ALPHA); /* Alpha */
+            break;
+          case DRW_STATE_BLEND_BACKGROUND:
+            /* Special blend to add color under and multiply dst by alpha. */
+            glBlendFuncSeparate(GL_ONE_MINUS_DST_ALPHA,
+                                GL_SRC_ALPHA, /* RGB */
+                                GL_ZERO,
+                                GL_SRC_ALPHA); /* Alpha */
+            break;
+          case DRW_STATE_BLEND_ALPHA_PREMUL:
+            glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+            break;
+          case DRW_STATE_BLEND_MUL:
+            glBlendFunc(GL_DST_COLOR, GL_ZERO);
+            break;
+          case DRW_STATE_BLEND_OIT:
+            glBlendFuncSeparate(GL_ONE,
+                                GL_ONE, /* RGB */
+                                GL_ZERO,
+                                GL_ONE_MINUS_SRC_ALPHA); /* Alpha */
+            break;
+          case DRW_STATE_BLEND_ADD:
+            /* Do not let alpha accumulate but premult the source RGB by it. */
+            glBlendFuncSeparate(GL_SRC_ALPHA,
+                                GL_ONE, /* RGB */
+                                GL_ZERO,
+                                GL_ONE); /* Alpha */
+            break;
+          case DRW_STATE_BLEND_ADD_FULL:
+            /* Let alpha accumulate. */
+            glBlendFunc(GL_ONE, GL_ONE);
+            break;
+          case DRW_STATE_BLEND_SUB:
+            glBlendFunc(GL_ONE, GL_ONE);
+            break;
+          case DRW_STATE_BLEND_CUSTOM:
+            /* Custom blend parameters using dual source blending.
+             * Can only be used with one Draw Buffer. */
+            glBlendFunc(GL_ONE, GL_SRC1_COLOR);
+            break;
+          case DRW_STATE_LOGIC_INVERT:
+            /* Replace logic op by blend func to support floating point framebuffer. */
+            glBlendFuncSeparate(GL_ONE_MINUS_DST_COLOR,
+                                GL_ZERO, /* RGB */
+                                GL_ZERO,
+                                GL_ONE); /* Alpha */
+            break;
+          default:
+            BLI_assert(0);
         }
-        else if ((state & DRW_STATE_BLEND_ALPHA_UNDER_PREMUL) != 0) {
-          glBlendFunc(GL_ONE_MINUS_DST_ALPHA, GL_ONE);
-        }
-        else if ((state & DRW_STATE_BLEND_ALPHA_PREMUL) != 0) {
-          glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-        }
-        else if ((state & DRW_STATE_BLEND_MUL) != 0) {
-          glBlendFunc(GL_DST_COLOR, GL_ZERO);
-        }
-        else if ((state & DRW_STATE_BLEND_OIT) != 0) {
-          glBlendFuncSeparate(GL_ONE,
-                              GL_ONE, /* RGB */
-                              GL_ZERO,
-                              GL_ONE_MINUS_SRC_ALPHA); /* Alpha */
-        }
-        else if ((state & DRW_STATE_BLEND_ADD) != 0) {
-          /* Do not let alpha accumulate but premult the source RGB by it. */
-          glBlendFuncSeparate(GL_SRC_ALPHA,
-                              GL_ONE, /* RGB */
-                              GL_ZERO,
-                              GL_ONE); /* Alpha */
-        }
-        else if ((state & DRW_STATE_BLEND_ADD_FULL) != 0) {
-          /* Let alpha accumulate. */
-          glBlendFunc(GL_ONE, GL_ONE);
-        }
-        else if ((state & DRW_STATE_BLEND_CUSTOM) != 0) {
-          /* Custom blend parameters using dual source blending.
-           * Can only be used with one Draw Buffer. */
-          glBlendFunc(GL_ONE, GL_SRC1_COLOR);
+
+        if (test == DRW_STATE_BLEND_SUB) {
+          glBlendEquation(GL_FUNC_REVERSE_SUBTRACT);
         }
         else {
-          BLI_assert(0);
+          glBlendEquation(GL_FUNC_ADD);
         }
       }
       else {
@@ -320,21 +346,6 @@ void drw_state_set(DRWState state)
       }
       else {
         GPU_depth_range(0.0f, 1.0f);
-      }
-    }
-  }
-
-  /* Logic Ops */
-  {
-    int test;
-    if ((test = CHANGED_TO(DRW_STATE_LOGIC_INVERT))) {
-      if (test == 1) {
-        glLogicOp(GL_INVERT);
-        glEnable(GL_COLOR_LOGIC_OP);
-      }
-      else {
-        glLogicOp(GL_COPY);
-        glDisable(GL_COLOR_LOGIC_OP);
       }
     }
   }
@@ -389,19 +400,23 @@ void drw_state_set(DRWState state)
   DST.state = state;
 }
 
-static void drw_stencil_set(uint mask)
+static void drw_stencil_state_set(uint write_mask, uint reference, uint compare_mask)
 {
-  if (DST.stencil_mask != mask) {
-    DST.stencil_mask = mask;
-    if ((DST.state & DRW_STATE_STENCIL_ALWAYS) != 0) {
-      glStencilFunc(GL_ALWAYS, mask, 0xFF);
-    }
-    else if ((DST.state & DRW_STATE_STENCIL_EQUAL) != 0) {
-      glStencilFunc(GL_EQUAL, mask, 0xFF);
-    }
-    else if ((DST.state & DRW_STATE_STENCIL_NEQUAL) != 0) {
-      glStencilFunc(GL_NOTEQUAL, mask, 0xFF);
-    }
+  /* Reminders:
+   * - (compare_mask & reference) is what is tested against (compare_mask & stencil_value)
+   *   stencil_value being the value stored in the stencil buffer.
+   * - (write-mask & reference) is what gets written if the test condition is fulfilled.
+   **/
+  glStencilMask(write_mask);
+  DRWState stencil_test = DST.state & DRW_STATE_STENCIL_TEST_ENABLED;
+  if (stencil_test == DRW_STATE_STENCIL_ALWAYS) {
+    glStencilFunc(GL_ALWAYS, reference, compare_mask);
+  }
+  else if (stencil_test == DRW_STATE_STENCIL_EQUAL) {
+    glStencilFunc(GL_EQUAL, reference, compare_mask);
+  }
+  else if (stencil_test == DRW_STATE_STENCIL_NEQUAL) {
+    glStencilFunc(GL_NOTEQUAL, reference, compare_mask);
   }
 }
 
@@ -438,6 +453,8 @@ void DRW_state_lock(DRWState state)
 void DRW_state_reset(void)
 {
   DRW_state_reset_ex(DRW_STATE_DEFAULT);
+
+  GPU_texture_unbind_all();
 
   /* Should stay constant during the whole rendering. */
   GPU_point_size(5);
@@ -480,7 +497,7 @@ static bool draw_culling_sphere_test(const BoundSphere *frustum_bsphere,
   /* Do a rough test first: Sphere VS Sphere intersect. */
   float center_dist_sq = len_squared_v3v3(bsphere->center, frustum_bsphere->center);
   float radius_sum = bsphere->radius + frustum_bsphere->radius;
-  if (center_dist_sq > SQUARE(radius_sum)) {
+  if (center_dist_sq > square_f(radius_sum)) {
     return false;
   }
   /* TODO we could test against the inscribed sphere of the frustum to early out positively. */
@@ -640,8 +657,7 @@ static void draw_compute_culling(DRWView *view)
 BLI_INLINE void draw_legacy_matrix_update(DRWShadingGroup *shgroup,
                                           DRWResourceHandle *handle,
                                           float obmat_loc,
-                                          float obinv_loc,
-                                          float mvp_loc)
+                                          float obinv_loc)
 {
   /* Still supported for compatibility with gpu_shader_* but should be forbidden. */
   DRWObjectMatrix *ob_mats = DRW_memblock_elem_from_handle(DST.vmempool->obmats, handle);
@@ -650,13 +666,6 @@ BLI_INLINE void draw_legacy_matrix_update(DRWShadingGroup *shgroup,
   }
   if (obinv_loc != -1) {
     GPU_shader_uniform_vector(shgroup->shader, obinv_loc, 16, 1, (float *)ob_mats->modelinverse);
-  }
-  /* Still supported for compatibility with gpu_shader_* but should be forbidden
-   * and is slow (since it does not cache the result). */
-  if (mvp_loc != -1) {
-    float mvp[4][4];
-    mul_m4_m4m4(mvp, DST.view_active->storage.persmat, ob_mats->model);
-    GPU_shader_uniform_vector(shgroup->shader, mvp_loc, 16, 1, (float *)mvp);
   }
 }
 
@@ -729,107 +738,6 @@ BLI_INLINE void draw_indirect_call(DRWShadingGroup *shgroup, DRWCommandsState *s
   }
 }
 
-enum {
-  BIND_NONE = 0,
-  BIND_TEMP = 1,    /* Release slot after this shading group. */
-  BIND_PERSIST = 2, /* Release slot only after the next shader change. */
-};
-
-static void set_bound_flags(uint64_t *slots, uint64_t *persist_slots, int slot_idx, char bind_type)
-{
-  uint64_t slot = 1llu << (unsigned long)slot_idx;
-  *slots |= slot;
-  if (bind_type == BIND_PERSIST) {
-    *persist_slots |= slot;
-  }
-}
-
-static int get_empty_slot_index(uint64_t slots)
-{
-  uint64_t empty_slots = ~slots;
-  /* Find first empty slot using bitscan. */
-  if (empty_slots != 0) {
-    if ((empty_slots & 0xFFFFFFFFlu) != 0) {
-      return (int)bitscan_forward_uint(empty_slots);
-    }
-    else {
-      return (int)bitscan_forward_uint(empty_slots >> 32) + 32;
-    }
-  }
-  else {
-    /* Greater than GPU_max_textures() */
-    return 99999;
-  }
-}
-
-static void bind_texture(GPUTexture *tex, char bind_type)
-{
-  int idx = GPU_texture_bound_number(tex);
-  if (idx == -1) {
-    /* Texture isn't bound yet. Find an empty slot and bind it. */
-    idx = get_empty_slot_index(DST.RST.bound_tex_slots);
-
-    if (idx < GPU_max_textures()) {
-      GPUTexture **gpu_tex_slot = &DST.RST.bound_texs[idx];
-      /* Unbind any previous texture. */
-      if (*gpu_tex_slot != NULL) {
-        GPU_texture_unbind(*gpu_tex_slot);
-      }
-      GPU_texture_bind(tex, idx);
-      *gpu_tex_slot = tex;
-    }
-    else {
-      printf("Not enough texture slots! Reduce number of textures used by your shader.\n");
-      return;
-    }
-  }
-  else {
-    /* This texture slot was released but the tex
-     * is still bound. Just flag the slot again. */
-    BLI_assert(DST.RST.bound_texs[idx] == tex);
-  }
-  set_bound_flags(&DST.RST.bound_tex_slots, &DST.RST.bound_tex_slots_persist, idx, bind_type);
-}
-
-static void bind_ubo(GPUUniformBuffer *ubo, char bind_type)
-{
-  int idx = GPU_uniformbuffer_bindpoint(ubo);
-  if (idx == -1) {
-    /* UBO isn't bound yet. Find an empty slot and bind it. */
-    idx = get_empty_slot_index(DST.RST.bound_ubo_slots);
-
-    /* [0..1] are reserved ubo slots. */
-    idx += 2;
-
-    if (idx < GPU_max_ubo_binds()) {
-      GPUUniformBuffer **gpu_ubo_slot = &DST.RST.bound_ubos[idx];
-      /* Unbind any previous UBO. */
-      if (*gpu_ubo_slot != NULL) {
-        GPU_uniformbuffer_unbind(*gpu_ubo_slot);
-      }
-      GPU_uniformbuffer_bind(ubo, idx);
-      *gpu_ubo_slot = ubo;
-    }
-    else {
-      /* printf so user can report bad behavior */
-      printf("Not enough ubo slots! This should not happen!\n");
-      /* This is not depending on user input.
-       * It is our responsibility to make sure there is enough slots. */
-      BLI_assert(0);
-      return;
-    }
-  }
-  else {
-    BLI_assert(idx < 64);
-    /* This UBO slot was released but the UBO is
-     * still bound here. Just flag the slot again. */
-    BLI_assert(DST.RST.bound_ubos[idx] == ubo);
-  }
-  /* Remove offset for flag bitfield. */
-  idx -= 2;
-  set_bound_flags(&DST.RST.bound_ubo_slots, &DST.RST.bound_ubo_slots_persist, idx, bind_type);
-}
-
 #ifndef NDEBUG
 /**
  * Opengl specification is strict on buffer binding.
@@ -885,28 +793,6 @@ static bool ubo_bindings_validate(DRWShadingGroup *shgroup)
 }
 #endif
 
-static void release_texture_slots(bool with_persist)
-{
-  if (with_persist) {
-    DST.RST.bound_tex_slots = 0;
-    DST.RST.bound_tex_slots_persist = 0;
-  }
-  else {
-    DST.RST.bound_tex_slots &= DST.RST.bound_tex_slots_persist;
-  }
-}
-
-static void release_ubo_slots(bool with_persist)
-{
-  if (with_persist) {
-    DST.RST.bound_ubo_slots = 0;
-    DST.RST.bound_ubo_slots_persist = 0;
-  }
-  else {
-    DST.RST.bound_ubo_slots &= DST.RST.bound_ubo_slots_persist;
-  }
-}
-
 static void draw_update_uniforms(DRWShadingGroup *shgroup,
                                  DRWCommandsState *state,
                                  bool *use_tfeedback)
@@ -914,78 +800,54 @@ static void draw_update_uniforms(DRWShadingGroup *shgroup,
   for (DRWUniformChunk *unichunk = shgroup->uniforms; unichunk; unichunk = unichunk->next) {
     DRWUniform *uni = unichunk->uniforms;
     for (int i = 0; i < unichunk->uniform_used; i++, uni++) {
-      GPUTexture *tex;
-      GPUUniformBuffer *ubo;
-      if (uni->location == -2) {
-        uni->location = GPU_shader_get_uniform_ensure(shgroup->shader,
-                                                      DST.uniform_names.buffer + uni->name_ofs);
-        if (uni->location == -1) {
-          continue;
-        }
-      }
-      const void *data = uni->pvalue;
-      if (ELEM(uni->type, DRW_UNIFORM_INT_COPY, DRW_UNIFORM_FLOAT_COPY)) {
-        data = uni->fvalue;
-      }
       switch (uni->type) {
         case DRW_UNIFORM_INT_COPY:
+          GPU_shader_uniform_vector_int(
+              shgroup->shader, uni->location, uni->length, uni->arraysize, uni->ivalue);
+          break;
         case DRW_UNIFORM_INT:
           GPU_shader_uniform_vector_int(
-              shgroup->shader, uni->location, uni->length, uni->arraysize, data);
+              shgroup->shader, uni->location, uni->length, uni->arraysize, uni->pvalue);
           break;
         case DRW_UNIFORM_FLOAT_COPY:
+          GPU_shader_uniform_vector(
+              shgroup->shader, uni->location, uni->length, uni->arraysize, uni->fvalue);
+          break;
         case DRW_UNIFORM_FLOAT:
           GPU_shader_uniform_vector(
-              shgroup->shader, uni->location, uni->length, uni->arraysize, data);
+              shgroup->shader, uni->location, uni->length, uni->arraysize, uni->pvalue);
           break;
         case DRW_UNIFORM_TEXTURE:
-          tex = (GPUTexture *)uni->pvalue;
-          BLI_assert(tex);
-          bind_texture(tex, BIND_TEMP);
-          GPU_shader_uniform_texture(shgroup->shader, uni->location, tex);
-          break;
-        case DRW_UNIFORM_TEXTURE_PERSIST:
-          tex = (GPUTexture *)uni->pvalue;
-          BLI_assert(tex);
-          bind_texture(tex, BIND_PERSIST);
-          GPU_shader_uniform_texture(shgroup->shader, uni->location, tex);
+          GPU_texture_bind_ex(uni->texture, uni->sampler_state, uni->location, false);
           break;
         case DRW_UNIFORM_TEXTURE_REF:
-          tex = *((GPUTexture **)uni->pvalue);
-          BLI_assert(tex);
-          bind_texture(tex, BIND_TEMP);
-          GPU_shader_uniform_texture(shgroup->shader, uni->location, tex);
+          GPU_texture_bind_ex(*uni->texture_ref, uni->sampler_state, uni->location, false);
           break;
         case DRW_UNIFORM_BLOCK:
-          ubo = (GPUUniformBuffer *)uni->pvalue;
-          bind_ubo(ubo, BIND_TEMP);
-          GPU_shader_uniform_buffer(shgroup->shader, uni->location, ubo);
+          GPU_uniformbuffer_bind(uni->block, uni->location);
           break;
-        case DRW_UNIFORM_BLOCK_PERSIST:
-          ubo = (GPUUniformBuffer *)uni->pvalue;
-          bind_ubo(ubo, BIND_PERSIST);
-          GPU_shader_uniform_buffer(shgroup->shader, uni->location, ubo);
+        case DRW_UNIFORM_BLOCK_REF:
+          GPU_uniformbuffer_bind(*uni->block_ref, uni->location);
           break;
         case DRW_UNIFORM_BLOCK_OBMATS:
           state->obmats_loc = uni->location;
-          ubo = DST.vmempool->matrices_ubo[0];
-          GPU_uniformbuffer_bind(ubo, 0);
-          GPU_shader_uniform_buffer(shgroup->shader, uni->location, ubo);
+          GPU_uniformbuffer_bind(DST.vmempool->matrices_ubo[0], uni->location);
           break;
         case DRW_UNIFORM_BLOCK_OBINFOS:
           state->obinfos_loc = uni->location;
-          ubo = DST.vmempool->obinfos_ubo[0];
-          GPU_uniformbuffer_bind(ubo, 1);
-          GPU_shader_uniform_buffer(shgroup->shader, uni->location, ubo);
+          GPU_uniformbuffer_bind(DST.vmempool->obinfos_ubo[0], uni->location);
           break;
         case DRW_UNIFORM_RESOURCE_CHUNK:
           state->chunkid_loc = uni->location;
           GPU_shader_uniform_int(shgroup->shader, uni->location, 0);
           break;
+        case DRW_UNIFORM_RESOURCE_ID:
+          state->resourceid_loc = uni->location;
+          break;
         case DRW_UNIFORM_TFEEDBACK_TARGET:
-          BLI_assert(data && (*use_tfeedback == false));
-          *use_tfeedback = GPU_shader_transform_feedback_enable(shgroup->shader,
-                                                                ((GPUVertBuf *)data)->vbo_id);
+          BLI_assert(uni->pvalue && (*use_tfeedback == false));
+          *use_tfeedback = GPU_shader_transform_feedback_enable(
+              shgroup->shader, ((GPUVertBuf *)uni->pvalue)->vbo_id);
           break;
           /* Legacy/Fallback support. */
         case DRW_UNIFORM_BASE_INSTANCE:
@@ -996,9 +858,6 @@ static void draw_update_uniforms(DRWShadingGroup *shgroup,
           break;
         case DRW_UNIFORM_MODEL_MATRIX_INVERSE:
           state->obinv_loc = uni->location;
-          break;
-        case DRW_UNIFORM_MODELVIEWPROJECTION_MATRIX:
-          state->mvp_loc = uni->location;
           break;
       }
     }
@@ -1076,7 +935,12 @@ static void draw_call_resource_bind(DRWCommandsState *state, const DRWResourceHa
   /* Front face is not a resource but it is inside the resource handle. */
   bool neg_scale = DRW_handle_negative_scale_get(handle);
   if (neg_scale != state->neg_scale) {
-    glFrontFace((neg_scale) ? GL_CW : GL_CCW);
+    if (DST.view_active->is_inverted) {
+      glFrontFace(neg_scale ? GL_CCW : GL_CW);
+    }
+    else {
+      glFrontFace(neg_scale ? GL_CW : GL_CCW);
+    }
     state->neg_scale = neg_scale;
   }
 
@@ -1087,13 +951,21 @@ static void draw_call_resource_bind(DRWCommandsState *state, const DRWResourceHa
     }
     if (state->obmats_loc != -1) {
       GPU_uniformbuffer_unbind(DST.vmempool->matrices_ubo[state->resource_chunk]);
-      GPU_uniformbuffer_bind(DST.vmempool->matrices_ubo[chunk], 0);
+      GPU_uniformbuffer_bind(DST.vmempool->matrices_ubo[chunk], state->obmats_loc);
     }
     if (state->obinfos_loc != -1) {
       GPU_uniformbuffer_unbind(DST.vmempool->obinfos_ubo[state->resource_chunk]);
-      GPU_uniformbuffer_bind(DST.vmempool->obinfos_ubo[chunk], 1);
+      GPU_uniformbuffer_bind(DST.vmempool->obinfos_ubo[chunk], state->obinfos_loc);
     }
     state->resource_chunk = chunk;
+  }
+
+  if (state->resourceid_loc != -1) {
+    int id = DRW_handle_id_get(handle);
+    if (state->resource_id != id) {
+      GPU_shader_uniform_int(NULL, state->resourceid_loc, id);
+      state->resource_id = id;
+    }
   }
 }
 
@@ -1113,6 +985,7 @@ static void draw_call_single_do(DRWShadingGroup *shgroup,
                                 DRWResourceHandle handle,
                                 int vert_first,
                                 int vert_count,
+                                int inst_first,
                                 int inst_count,
                                 bool do_base_instance)
 {
@@ -1121,10 +994,8 @@ static void draw_call_single_do(DRWShadingGroup *shgroup,
   draw_call_resource_bind(state, &handle);
 
   /* TODO This is Legacy. Need to be removed. */
-  if (state->obmats_loc == -1 &&
-      (state->obmat_loc != -1 || state->obinv_loc != -1 || state->mvp_loc != -1)) {
-    draw_legacy_matrix_update(
-        shgroup, &handle, state->obmat_loc, state->obinv_loc, state->mvp_loc);
+  if (state->obmats_loc == -1 && (state->obmat_loc != -1 || state->obinv_loc != -1)) {
+    draw_legacy_matrix_update(shgroup, &handle, state->obmat_loc, state->obinv_loc);
   }
 
   if (G.f & G_FLAG_PICKSEL) {
@@ -1141,7 +1012,7 @@ static void draw_call_single_do(DRWShadingGroup *shgroup,
                         batch,
                         vert_first,
                         vert_count,
-                        do_base_instance ? DRW_handle_id_get(&handle) : 0,
+                        do_base_instance ? DRW_handle_id_get(&handle) : inst_first,
                         inst_count,
                         state->baseinst_loc);
 }
@@ -1150,6 +1021,7 @@ static void draw_call_batching_start(DRWCommandsState *state)
 {
   state->neg_scale = false;
   state->resource_chunk = 0;
+  state->resource_id = -1;
   state->base_inst = 0;
   state->inst_count = 0;
   state->v_first = 0;
@@ -1207,7 +1079,7 @@ static void draw_call_batching_finish(DRWShadingGroup *shgroup, DRWCommandsState
 
   /* Reset state */
   if (state->neg_scale) {
-    glFrontFace(GL_CCW);
+    glFrontFace(DST.view_active->is_inverted ? GL_CW : GL_CCW);
   }
   if (state->obmats_loc != -1) {
     GPU_uniformbuffer_unbind(DST.vmempool->matrices_ubo[state->resource_chunk]);
@@ -1226,9 +1098,9 @@ static void draw_shgroup(DRWShadingGroup *shgroup, DRWState pass_state)
       .obinfos_loc = -1,
       .baseinst_loc = -1,
       .chunkid_loc = -1,
+      .resourceid_loc = -1,
       .obmat_loc = -1,
       .obinv_loc = -1,
-      .mvp_loc = -1,
       .drw_state_enabled = 0,
       .drw_state_disabled = 0,
   };
@@ -1239,6 +1111,11 @@ static void draw_shgroup(DRWShadingGroup *shgroup, DRWState pass_state)
   if (shader_changed) {
     if (DST.shader) {
       GPU_shader_unbind();
+
+      /* Unbinding can be costly. Skip in normal condition. */
+      if (G.debug & G_DEBUG_GPU) {
+        GPU_texture_unbind_all();
+      }
     }
     GPU_shader_bind(shgroup->shader);
     DST.shader = shgroup->shader;
@@ -1248,9 +1125,6 @@ static void draw_shgroup(DRWShadingGroup *shgroup, DRWState pass_state)
     }
     DST.batch = NULL;
   }
-
-  release_ubo_slots(shader_changed);
-  release_texture_slots(shader_changed);
 
   draw_update_uniforms(shgroup, &state, &use_tfeedback);
 
@@ -1306,7 +1180,7 @@ static void draw_shgroup(DRWShadingGroup *shgroup, DRWState pass_state)
           drw_state_set((pass_state & ~state.drw_state_disabled) | state.drw_state_enabled);
           break;
         case DRW_CMD_STENCIL:
-          drw_stencil_set(cmd->stencil.mask);
+          drw_stencil_state_set(cmd->stencil.write_mask, cmd->stencil.ref, cmd->stencil.comp_mask);
           break;
         case DRW_CMD_SELECTID:
           state.select_id = cmd->select_id.select_id;
@@ -1315,7 +1189,8 @@ static void draw_shgroup(DRWShadingGroup *shgroup, DRWState pass_state)
         case DRW_CMD_DRAW:
           if (!USE_BATCHING || state.obmats_loc == -1 || (G.f & G_FLAG_PICKSEL) ||
               cmd->draw.batch->inst[0]) {
-            draw_call_single_do(shgroup, &state, cmd->draw.batch, cmd->draw.handle, 0, 0, 0, true);
+            draw_call_single_do(
+                shgroup, &state, cmd->draw.batch, cmd->draw.handle, 0, 0, 0, 0, true);
           }
           else {
             draw_call_batching_do(shgroup, &state, &cmd->draw);
@@ -1328,6 +1203,7 @@ static void draw_shgroup(DRWShadingGroup *shgroup, DRWState pass_state)
                               cmd->procedural.handle,
                               0,
                               cmd->procedural.vert_count,
+                              0,
                               1,
                               true);
           break;
@@ -1338,18 +1214,31 @@ static void draw_shgroup(DRWShadingGroup *shgroup, DRWState pass_state)
                               cmd->instance.handle,
                               0,
                               0,
+                              0,
                               cmd->instance.inst_count,
-                              cmd->instance.use_attribs == 0);
+                              cmd->instance.use_attrs == 0);
           break;
         case DRW_CMD_DRAW_RANGE:
           draw_call_single_do(shgroup,
                               &state,
                               cmd->range.batch,
-                              (DRWResourceHandle)0,
+                              cmd->range.handle,
                               cmd->range.vert_first,
                               cmd->range.vert_count,
+                              0,
                               1,
                               true);
+          break;
+        case DRW_CMD_DRAW_INSTANCE_RANGE:
+          draw_call_single_do(shgroup,
+                              &state,
+                              cmd->instance_range.batch,
+                              cmd->instance_range.handle,
+                              0,
+                              0,
+                              cmd->instance_range.inst_first,
+                              cmd->instance_range.inst_count,
+                              false);
           break;
       }
     }
@@ -1377,6 +1266,11 @@ static void drw_draw_pass_ex(DRWPass *pass,
                              DRWShadingGroup *start_group,
                              DRWShadingGroup *end_group)
 {
+  if (pass->original) {
+    start_group = pass->original->shgroups.first;
+    end_group = pass->original->shgroups.last;
+  }
+
   if (start_group == NULL) {
     return;
   }
@@ -1399,6 +1293,10 @@ static void drw_draw_pass_ex(DRWPass *pass,
   drw_state_set(pass->state);
   drw_state_validate();
 
+  if (DST.view_active->is_inverted) {
+    glFrontFace(GL_CW);
+  }
+
   DRW_stats_query_start(pass->name);
 
   for (DRWShadingGroup *shgroup = start_group; shgroup; shgroup = shgroup->next) {
@@ -1406,22 +1304,6 @@ static void drw_draw_pass_ex(DRWPass *pass,
     /* break if upper limit */
     if (shgroup == end_group) {
       break;
-    }
-  }
-
-  /* Clear Bound textures */
-  for (int i = 0; i < DST_MAX_SLOTS; i++) {
-    if (DST.RST.bound_texs[i] != NULL) {
-      GPU_texture_unbind(DST.RST.bound_texs[i]);
-      DST.RST.bound_texs[i] = NULL;
-    }
-  }
-
-  /* Clear Bound Ubos */
-  for (int i = 0; i < DST_MAX_SLOTS; i++) {
-    if (DST.RST.bound_ubos[i] != NULL) {
-      GPU_uniformbuffer_unbind(DST.RST.bound_ubos[i]);
-      DST.RST.bound_ubos[i] = NULL;
     }
   }
 
@@ -1448,12 +1330,19 @@ static void drw_draw_pass_ex(DRWPass *pass,
     drw_state_set((DST.state & ~DRW_STATE_RASTERIZER_ENABLED) | DRW_STATE_DEFAULT);
   }
 
+  /* Reset default. */
+  if (DST.view_active->is_inverted) {
+    glFrontFace(GL_CCW);
+  }
+
   DRW_stats_query_end();
 }
 
 void DRW_draw_pass(DRWPass *pass)
 {
-  drw_draw_pass_ex(pass, pass->shgroups.first, pass->shgroups.last);
+  for (; pass; pass = pass->next) {
+    drw_draw_pass_ex(pass, pass->shgroups.first, pass->shgroups.last);
+  }
 }
 
 /* Draw only a subset of shgroups. Used in special situations as grease pencil strokes */

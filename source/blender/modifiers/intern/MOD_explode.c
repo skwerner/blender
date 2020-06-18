@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -28,24 +28,35 @@
 #include "BLI_math.h"
 #include "BLI_rand.h"
 
-#include "DNA_meshdata_types.h"
-#include "DNA_scene_types.h"
-#include "DNA_object_types.h"
-#include "DNA_mesh_types.h"
+#include "BLT_translation.h"
 
+#include "DNA_mesh_types.h"
+#include "DNA_meshdata_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
+
+#include "BKE_context.h"
 #include "BKE_deform.h"
 #include "BKE_lattice.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
 #include "BKE_particle.h"
 #include "BKE_scene.h"
+#include "BKE_screen.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
 
 #include "DEG_depsgraph_query.h"
 
 #include "MEM_guardedalloc.h"
 
 #include "MOD_modifiertypes.h"
+#include "MOD_ui_common.h"
 
 static void initData(ModifierData *md)
 {
@@ -67,7 +78,7 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
 #endif
   ExplodeModifierData *temd = (ExplodeModifierData *)target;
 
-  modifier_copyData_generic(md, target, flag);
+  BKE_modifier_copydata_generic(md, target, flag);
 
   temd->facepa = NULL;
 }
@@ -97,6 +108,7 @@ static void createFacepa(ExplodeModifierData *emd, ParticleSystemModifierData *p
   float center[3], co[3];
   int *facepa = NULL, *vertpa = NULL, totvert = 0, totface = 0, totpart = 0;
   int i, p, v1, v2, v3, v4 = 0;
+  const bool invert_vgroup = (emd->flag & eExplodeFlag_INVERT_VGROUP) != 0;
 
   mvert = mesh->mvert;
   mface = mesh->mface;
@@ -129,7 +141,9 @@ static void createFacepa(ExplodeModifierData *emd, ParticleSystemModifierData *p
       for (i = 0; i < totvert; i++, dvert++) {
         float val = BLI_rng_get_float(rng);
         val = (1.0f - emd->protect) * val + emd->protect * 0.5f;
-        if (val < defvert_find_weight(dvert, defgrp_index)) {
+        const float weight = invert_vgroup ? 1.0f - BKE_defvert_find_weight(dvert, defgrp_index) :
+                                             BKE_defvert_find_weight(dvert, defgrp_index);
+        if (val < weight) {
           vertpa[i] = -1;
         }
       }
@@ -974,7 +988,6 @@ static Mesh *explodeMesh(ExplodeModifierData *emd,
   explode = BKE_mesh_new_nomain_from_template(mesh, totdup, 0, totface - delface, 0, 0);
 
   mtface = CustomData_get_layer_named(&explode->fdata, CD_MTFACE, emd->uvname);
-  /*dupvert = CDDM_get_verts(explode);*/
 
   /* getting back to object space */
   invert_m4_m4(imat, ctx->object->obmat);
@@ -1102,7 +1115,7 @@ static Mesh *explodeMesh(ExplodeModifierData *emd,
   explode->runtime.cd_dirty_vert |= CD_MASK_NORMAL;
 
   if (psmd->psys->lattice_deform_data) {
-    end_latt_deform(psmd->psys->lattice_deform_data);
+    BKE_lattice_deform_data_destroy(psmd->psys->lattice_deform_data);
     psmd->psys->lattice_deform_data = NULL;
   }
 
@@ -1121,7 +1134,7 @@ static ParticleSystemModifierData *findPrecedingParticlesystem(Object *ob, Modif
   }
   return psmd;
 }
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   ExplodeModifierData *emd = (ExplodeModifierData *)md;
   ParticleSystemModifierData *psmd = findPrecedingParticlesystem(ctx->object, md);
@@ -1172,6 +1185,49 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   return mesh;
 }
 
+static void panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *row;
+  uiLayout *layout = panel->layout;
+  int toggles_flag = UI_ITEM_R_TOGGLE | UI_ITEM_R_FORCE_BLANK_DECORATE;
+
+  PointerRNA ptr;
+  PointerRNA ob_ptr;
+  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+
+  PointerRNA obj_data_ptr = RNA_pointer_get(&ob_ptr, "data");
+  bool has_vertex_group = RNA_string_length(&ptr, "vertex_group") != 0;
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemPointerR(layout, &ptr, "particle_uv", &obj_data_ptr, "uv_layers", NULL, ICON_NONE);
+
+  row = uiLayoutRowWithHeading(layout, true, IFACE_("Show"));
+  uiItemR(row, &ptr, "show_alive", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, &ptr, "show_dead", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, &ptr, "show_unborn", toggles_flag, NULL, ICON_NONE);
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, &ptr, "use_edge_cut", 0, NULL, ICON_NONE);
+  uiItemR(layout, &ptr, "use_size", 0, NULL, ICON_NONE);
+
+  modifier_vgroup_ui(layout, &ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
+
+  row = uiLayoutRow(layout, false);
+  uiLayoutSetActive(row, has_vertex_group);
+  uiItemR(row, &ptr, "protect", 0, NULL, ICON_NONE);
+
+  uiItemO(layout, IFACE_("Refresh"), ICON_NONE, "OBJECT_OT_explode_refresh");
+
+  modifier_panel_end(layout, &ptr);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  modifier_panel_register(region_type, eModifierType_Explode, panel_draw);
+}
+
 ModifierTypeInfo modifierType_Explode = {
     /* name */ "Explode",
     /* structName */ "ExplodeModifierData",
@@ -1184,7 +1240,10 @@ ModifierTypeInfo modifierType_Explode = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,
@@ -1197,4 +1256,7 @@ ModifierTypeInfo modifierType_Explode = {
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

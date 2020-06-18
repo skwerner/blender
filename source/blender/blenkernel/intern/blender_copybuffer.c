@@ -24,9 +24,9 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "DNA_userdef_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
+#include "DNA_userdef_types.h"
 #include "DNA_view3d_types.h"
 #include "DNA_windowmanager_types.h"
 
@@ -41,7 +41,7 @@
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_scene.h"
 
@@ -72,9 +72,10 @@ void BKE_copybuffer_tag_ID(ID *id)
  */
 bool BKE_copybuffer_save(Main *bmain_src, const char *filename, ReportList *reports)
 {
-  const int write_flags = G_FILE_RELATIVE_REMAP;
+  const int write_flags = 0;
+  const eBLO_WritePathRemap remap_mode = BLO_WRITE_PATH_REMAP_RELATIVE;
 
-  bool retval = BKE_blendfile_write_partial(bmain_src, filename, write_flags, reports);
+  bool retval = BKE_blendfile_write_partial(bmain_src, filename, write_flags, remap_mode, reports);
 
   BKE_blendfile_write_partial_end(bmain_src);
 
@@ -84,7 +85,7 @@ bool BKE_copybuffer_save(Main *bmain_src, const char *filename, ReportList *repo
 bool BKE_copybuffer_read(Main *bmain_dst,
                          const char *libname,
                          ReportList *reports,
-                         const unsigned int id_types_mask)
+                         const uint64_t id_types_mask)
 {
   BlendHandle *bh = BLO_blendhandle_from_file(libname, reports);
   if (bh == NULL) {
@@ -117,7 +118,7 @@ int BKE_copybuffer_paste(bContext *C,
                          const char *libname,
                          const short flag,
                          ReportList *reports,
-                         const unsigned int id_types_mask)
+                         const uint64_t id_types_mask)
 {
   Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);

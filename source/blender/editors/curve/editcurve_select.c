@@ -27,10 +27,11 @@
 #include "MEM_guardedalloc.h"
 
 #include "BLI_bitmap.h"
-#include "BLI_math.h"
-#include "BLI_rand.h"
 #include "BLI_heap_simple.h"
 #include "BLI_kdtree.h"
+#include "BLI_listbase.h"
+#include "BLI_math.h"
+#include "BLI_rand.h"
 
 #include "BKE_context.h"
 #include "BKE_curve.h"
@@ -41,12 +42,12 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
+#include "ED_curve.h"
 #include "ED_object.h"
 #include "ED_screen.h"
 #include "ED_select_utils.h"
 #include "ED_types.h"
 #include "ED_view3d.h"
-#include "ED_curve.h"
 
 #include "curve_intern.h"
 
@@ -198,7 +199,7 @@ bool ED_curve_nurb_select_all(const Nurb *nu)
 bool ED_curve_select_all(EditNurb *editnurb)
 {
   bool changed = false;
-  for (Nurb *nu = editnurb->nurbs.first; nu; nu = nu->next) {
+  LISTBASE_FOREACH (Nurb *, nu, &editnurb->nurbs) {
     changed |= ED_curve_nurb_select_all(nu);
   }
   return changed;
@@ -257,7 +258,7 @@ bool ED_curve_select_check(View3D *v3d, struct EditNurb *editnurb)
 bool ED_curve_deselect_all(EditNurb *editnurb)
 {
   bool changed = false;
-  for (Nurb *nu = editnurb->nurbs.first; nu; nu = nu->next) {
+  LISTBASE_FOREACH (Nurb *, nu, &editnurb->nurbs) {
     changed |= ED_curve_nurb_deselect_all(nu);
   }
   return changed;
@@ -589,8 +590,8 @@ static int de_select_all_exec(bContext *C, wmOperator *op)
         changed = ED_curve_deselect_all(cu->editnurb);
         break;
       case SEL_INVERT:
-        changed = ED_curve_select_swap(
-            cu->editnurb, (v3d->overlay.edit_flag & V3D_OVERLAY_EDIT_CU_HANDLES) == 0);
+        changed = ED_curve_select_swap(cu->editnurb,
+                                       v3d->overlay.handle_display == CURVE_HANDLE_NONE);
         break;
     }
 
@@ -771,7 +772,7 @@ static int select_row_exec(bContext *C, wmOperator *UNUSED(op))
 
   if (last == bp) {
     direction = 1 - direction;
-    BKE_nurbList_flag_set(editnurb, 0);
+    BKE_nurbList_flag_set(editnurb, SELECT, false);
   }
   last = bp;
 
@@ -825,8 +826,10 @@ static int select_next_exec(bContext *C, wmOperator *UNUSED(op))
 
   for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
     Object *obedit = objects[ob_index];
+
     ListBase *editnurb = object_editcurve_get(obedit);
     select_adjacent_cp(editnurb, 1, 0, SELECT);
+
     DEG_id_tag_update(obedit->data, ID_RECALC_SELECT);
     WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
   }
@@ -860,8 +863,10 @@ static int select_previous_exec(bContext *C, wmOperator *UNUSED(op))
 
   for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
     Object *obedit = objects[ob_index];
+
     ListBase *editnurb = object_editcurve_get(obedit);
     select_adjacent_cp(editnurb, -1, 0, SELECT);
+
     DEG_id_tag_update(obedit->data, ID_RECALC_SELECT);
     WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
   }
@@ -983,7 +988,7 @@ void CURVE_OT_select_more(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Select More";
   ot->idname = "CURVE_OT_select_more";
-  ot->description = "Select control points directly linked to already selected ones";
+  ot->description = "Select control points at the boundary of each selection region";
 
   /* api callbacks */
   ot->exec = curve_select_more_exec;
@@ -1198,7 +1203,7 @@ void CURVE_OT_select_less(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Select Less";
   ot->idname = "CURVE_OT_select_less";
-  ot->description = "Reduce current selection by deselecting boundary elements";
+  ot->description = "Deselect control points at the boundary of each selection region";
 
   /* api callbacks */
   ot->exec = curve_select_less_exec;
@@ -1391,6 +1396,7 @@ static int select_nth_exec(bContext *C, wmOperator *op)
 
     if (ed_curve_select_nth(obedit->data, &op_params) == true) {
       changed = true;
+
       DEG_id_tag_update(obedit->data, ID_RECALC_SELECT);
       WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
     }
@@ -1825,7 +1831,7 @@ static float curve_calc_dist_span(Nurb *nu, int vert_src, int vert_dst)
   int i_prev, i;
   float dist = 0.0f;
 
-  BLI_assert(nu->pntsv == 1);
+  BLI_assert(nu->pntsv <= 1);
 
   i_prev = vert_src;
   i = (i_prev + 1) % u;

@@ -28,9 +28,9 @@
 #include "MEM_guardedalloc.h"
 
 #include "DNA_gpencil_types.h"
-#include "DNA_shader_fx_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_shader_fx_types.h"
 
 #include "BLI_listbase.h"
 #include "BLI_string_utf8.h"
@@ -40,9 +40,9 @@
 
 #include "BKE_context.h"
 #include "BKE_main.h"
-#include "BKE_shader_fx.h"
-#include "BKE_report.h"
 #include "BKE_object.h"
+#include "BKE_report.h"
+#include "BKE_shader_fx.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
@@ -66,7 +66,7 @@ ShaderFxData *ED_object_shaderfx_add(
     ReportList *reports, Main *bmain, Scene *UNUSED(scene), Object *ob, const char *name, int type)
 {
   ShaderFxData *new_fx = NULL;
-  const ShaderFxTypeInfo *fxi = BKE_shaderfxType_getInfo(type);
+  const ShaderFxTypeInfo *fxi = BKE_shaderfx_get_info(type);
 
   if (ob->type != OB_GPENCIL) {
     BKE_reportf(reports, RPT_WARNING, "Effect cannot be added to object '%s'", ob->id.name + 2);
@@ -74,7 +74,7 @@ ShaderFxData *ED_object_shaderfx_add(
   }
 
   if (fxi->flags & eShaderFxTypeFlag_Single) {
-    if (BKE_shaderfx_findByType(ob, type)) {
+    if (BKE_shaderfx_findby_type(ob, type)) {
       BKE_report(reports, RPT_WARNING, "Only one Effect of this type is allowed");
       return NULL;
     }
@@ -236,7 +236,7 @@ static const EnumPropertyItem *shaderfx_add_itemf(bContext *C,
   for (a = 0; rna_enum_object_shaderfx_type_items[a].identifier; a++) {
     fx_item = &rna_enum_object_shaderfx_type_items[a];
     if (fx_item->identifier[0]) {
-      mti = BKE_shaderfxType_getInfo(fx_item->value);
+      mti = BKE_shaderfx_get_info(fx_item->value);
 
       if (mti->flags & eShaderFxTypeFlag_NoUserAdd) {
         continue;
@@ -296,11 +296,6 @@ static bool edit_shaderfx_poll_generic(bContext *C, StructRNA *rna_type, int obt
   PointerRNA ptr = CTX_data_pointer_get_type(C, "shaderfx", rna_type);
   Object *ob = (ptr.owner_id) ? (Object *)ptr.owner_id : ED_object_active_context(C);
 
-  if (!ptr.data) {
-    CTX_wm_operator_poll_msg_set(C, "Context missing 'shaderfx'");
-    return 0;
-  }
-
   if (!ob || ID_IS_LINKED(ob)) {
     return 0;
   }
@@ -356,7 +351,7 @@ static ShaderFxData *edit_shaderfx_property_get(wmOperator *op, Object *ob, int 
   ShaderFxData *fx;
   RNA_string_get(op->ptr, "shaderfx", shaderfx_name);
 
-  fx = BKE_shaderfx_findByName(ob, shaderfx_name);
+  fx = BKE_shaderfx_findby_name(ob, shaderfx_name);
 
   if (fx && type != 0 && fx->type != type) {
     fx = NULL;

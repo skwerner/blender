@@ -17,11 +17,12 @@
  */
 
 #include <string.h>
+
 #include "MEM_guardedalloc.h"
-#include "BLI_math.h"
-extern "C" {
+
 #include "BLI_jitter_2d.h"
-}
+#include "BLI_math.h"
+
 #include "COM_VectorBlurOperation.h"
 
 /* Defined */
@@ -569,15 +570,15 @@ void zbuf_accumulate_vecblur(NodeBlurData *nbd,
   zspan.zofsy = 0.0f;
 
   /* the buffers */
-  rectz = (float *)MEM_mapallocN(sizeof(float) * xsize * ysize, "zbuf accum");
+  rectz = (float *)MEM_callocN(sizeof(float) * xsize * ysize, "zbuf accum");
   zspan.rectz = (int *)rectz;
 
-  rectmove = (char *)MEM_mapallocN(xsize * ysize, "rectmove");
-  rectdraw = (DrawBufPixel *)MEM_mapallocN(sizeof(DrawBufPixel) * xsize * ysize, "rect draw");
+  rectmove = (char *)MEM_callocN(xsize * ysize, "rectmove");
+  rectdraw = (DrawBufPixel *)MEM_callocN(sizeof(DrawBufPixel) * xsize * ysize, "rect draw");
   zspan.rectdraw = rectdraw;
 
-  rectweight = (float *)MEM_mapallocN(sizeof(float) * xsize * ysize, "rect weight");
-  rectmax = (float *)MEM_mapallocN(sizeof(float) * xsize * ysize, "rect max");
+  rectweight = (float *)MEM_callocN(sizeof(float) * xsize * ysize, "rect weight");
+  rectmax = (float *)MEM_callocN(sizeof(float) * xsize * ysize, "rect max");
 
   /* debug... check if PASS_VECTOR_MAX still is in buffers */
   dvec1 = vecbufrect;
@@ -596,7 +597,7 @@ void zbuf_accumulate_vecblur(NodeBlurData *nbd,
     float minspeed = (float)nbd->minspeed;
     float minspeedsq = minspeed * minspeed;
 
-    minvecbufrect = (float *)MEM_mapallocN(4 * sizeof(float) * xsize * ysize, "minspeed buf");
+    minvecbufrect = (float *)MEM_callocN(4 * sizeof(float) * xsize * ysize, "minspeed buf");
 
     dvec1 = vecbufrect;
     dvec2 = minvecbufrect;
@@ -622,7 +623,7 @@ void zbuf_accumulate_vecblur(NodeBlurData *nbd,
   }
 
   /* make vertex buffer with averaged speed and zvalues */
-  rectvz = (float *)MEM_mapallocN(4 * sizeof(float) * (xsize + 1) * (ysize + 1), "vertices");
+  rectvz = (float *)MEM_callocN(4 * sizeof(float) * (xsize + 1) * (ysize + 1), "vertices");
   dvz = rectvz;
   for (y = 0; y <= ysize; y++) {
 
@@ -659,7 +660,7 @@ void zbuf_accumulate_vecblur(NodeBlurData *nbd,
               dvz[1] = dvec2[-3];
               div++;
             }
-            else if ((ABS(dvec2[-4]) + ABS(dvec2[-3])) < (ABS(dvz[0]) + ABS(dvz[1]))) {
+            else if ((fabsf(dvec2[-4]) + fabsf(dvec2[-3])) < (fabsf(dvz[0]) + fabsf(dvz[1]))) {
               dvz[0] = dvec2[-4];
               dvz[1] = dvec2[-3];
             }
@@ -673,7 +674,7 @@ void zbuf_accumulate_vecblur(NodeBlurData *nbd,
               dvz[1] = dvec1[1];
               div++;
             }
-            else if ((ABS(dvec1[0]) + ABS(dvec1[1])) < (ABS(dvz[0]) + ABS(dvz[1]))) {
+            else if ((fabsf(dvec1[0]) + fabsf(dvec1[1])) < (fabsf(dvz[0]) + fabsf(dvz[1]))) {
               dvz[0] = dvec1[0];
               dvz[1] = dvec1[1];
             }
@@ -683,7 +684,7 @@ void zbuf_accumulate_vecblur(NodeBlurData *nbd,
               dvz[0] = dvec2[0];
               dvz[1] = dvec2[1];
             }
-            else if ((ABS(dvec2[0]) + ABS(dvec2[1])) < (ABS(dvz[0]) + ABS(dvz[1]))) {
+            else if ((fabsf(dvec2[0]) + fabsf(dvec2[1])) < (fabsf(dvz[0]) + fabsf(dvz[1]))) {
               dvz[0] = dvec2[0];
               dvz[1] = dvec2[1];
             }

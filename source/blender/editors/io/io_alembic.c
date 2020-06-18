@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2016 Blender Foundation.
@@ -30,8 +30,8 @@
 #    include "BLI_winstuff.h"
 #  endif
 
-#  include <string.h>
 #  include <errno.h>
+#  include <string.h>
 
 #  include "MEM_guardedalloc.h"
 
@@ -133,7 +133,6 @@ static int wm_alembic_export_exec(bContext *C, wmOperator *op)
       .use_subdiv_schema = RNA_boolean_get(op->ptr, "subdiv_schema"),
       .export_hair = RNA_boolean_get(op->ptr, "export_hair"),
       .export_particles = RNA_boolean_get(op->ptr, "export_particles"),
-      .compression_type = RNA_enum_get(op->ptr, "compression_type"),
       .packuv = RNA_boolean_get(op->ptr, "packuv"),
       .triangulate = RNA_boolean_get(op->ptr, "triangulate"),
       .quad_method = RNA_enum_get(op->ptr, "quad_method"),
@@ -162,15 +161,6 @@ static void ui_alembic_export_settings(uiLayout *layout, PointerRNA *imfptr)
   uiLayout *box;
   uiLayout *row;
   uiLayout *col;
-
-#  ifdef WITH_ALEMBIC_HDF5
-  box = uiLayoutBox(layout);
-  row = uiLayoutRow(box, false);
-  uiItemL(row, IFACE_("Archive Options:"), ICON_NONE);
-
-  row = uiLayoutRow(box, false);
-  uiItemR(row, imfptr, "compression_type", 0, NULL, ICON_NONE);
-#  endif
 
   box = uiLayoutBox(layout);
   row = uiLayoutRow(box, false);
@@ -316,7 +306,7 @@ void WM_OT_alembic_export(wmOperatorType *ot)
                                  FILE_TYPE_FOLDER | FILE_TYPE_ALEMBIC,
                                  FILE_BLENDER,
                                  FILE_SAVE,
-                                 WM_FILESEL_FILEPATH,
+                                 WM_FILESEL_FILEPATH | WM_FILESEL_SHOW_PROPS,
                                  FILE_DEFAULTDISPLAY,
                                  FILE_SORT_ALPHA);
 
@@ -420,21 +410,17 @@ void WM_OT_alembic_export(wmOperatorType *ot)
                   "Use Subdivision Schema",
                   "Export meshes using Alembic's subdivision schema");
 
-  RNA_def_boolean(
-      ot->srna, "apply_subdiv", 0, "Apply Subsurf", "Export subdivision surfaces as meshes");
+  RNA_def_boolean(ot->srna,
+                  "apply_subdiv",
+                  0,
+                  "Apply Subdivision Surface",
+                  "Export subdivision surfaces as meshes");
 
   RNA_def_boolean(ot->srna,
                   "curves_as_mesh",
                   false,
                   "Curves as Mesh",
                   "Export curves and NURBS surfaces as meshes");
-
-  RNA_def_enum(ot->srna,
-               "compression_type",
-               rna_enum_abc_compression_items,
-               ABC_ARCHIVE_OGAWA,
-               "Compression",
-               "");
 
   RNA_def_float(
       ot->srna,
@@ -663,7 +649,7 @@ static int wm_alembic_import_exec(bContext *C, wmOperator *op)
   /* Switch out of edit mode to avoid being stuck in it (T54326). */
   Object *obedit = CTX_data_edit_object(C);
   if (obedit) {
-    ED_object_mode_toggle(C, OB_MODE_EDIT);
+    ED_object_mode_set(C, OB_MODE_OBJECT);
   }
 
   bool ok = ABC_import(C,
@@ -694,7 +680,7 @@ void WM_OT_alembic_import(wmOperatorType *ot)
                                  FILE_TYPE_FOLDER | FILE_TYPE_ALEMBIC,
                                  FILE_BLENDER,
                                  FILE_SAVE,
-                                 WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH,
+                                 WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH | WM_FILESEL_SHOW_PROPS,
                                  FILE_DEFAULTDISPLAY,
                                  FILE_SORT_ALPHA);
 

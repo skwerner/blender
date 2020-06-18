@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2006 Blender Foundation.
@@ -29,17 +29,19 @@
 /* Since we have versioning code here (CustomData_verify_versions()). */
 #define DNA_DEPRECATED_ALLOW
 
-#include "DNA_customdata_types.h"
-#include "DNA_meshdata_types.h"
 #include "DNA_ID.h"
+#include "DNA_customdata_types.h"
+#include "DNA_hair_types.h"
+#include "DNA_meshdata_types.h"
+#include "DNA_pointcloud_types.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_path_util.h"
-#include "BLI_string.h"
-#include "BLI_string_utils.h"
 #include "BLI_math.h"
 #include "BLI_math_color_blend.h"
 #include "BLI_mempool.h"
+#include "BLI_path_util.h"
+#include "BLI_string.h"
+#include "BLI_string_utils.h"
+#include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
@@ -313,6 +315,9 @@ static void layerInterp_mdeformvert(const void **sources,
   if (totweight) {
     dvert->totweight = totweight;
     for (i = 0, node = dest_dwlink; node; node = node->next, i++) {
+      if (node->dw.weight > 1.0f) {
+        node->dw.weight = 1.0f;
+      }
       dvert->dw[i] = node->dw;
     }
   }
@@ -693,6 +698,24 @@ static size_t layerFilesize_mdisps(CDataFile *UNUSED(cdf), const void *data, int
   }
 
   return size;
+}
+static void layerInterp_paint_mask(
+    const void **sources, const float *weights, const float *sub_weights, int count, void *dest)
+{
+  float mask = 0.0f;
+  const float *sub_weight = sub_weights;
+  for (int i = 0; i < count; i++) {
+    float weight = weights ? weights[i] : 1.0f;
+    const float *src = sources[i];
+    if (sub_weights) {
+      mask += (*src) * (*sub_weight) * weight;
+      sub_weight++;
+    }
+    else {
+      mask += (*src) * weight;
+    }
+  }
+  *(float *)dest = mask;
 }
 
 static void layerCopy_grid_paint_mask(const void *source, void *dest, int count)
@@ -1316,6 +1339,132 @@ static void layerDefault_fmap(void *data, int count)
   }
 }
 
+static void layerCopyValue_propcol(const void *source,
+                                   void *dest,
+                                   const int mixmode,
+                                   const float mixfactor)
+{
+  const MPropCol *m1 = source;
+  MPropCol *m2 = dest;
+  float tmp_col[4];
+
+  if (ELEM(mixmode,
+           CDT_MIX_NOMIX,
+           CDT_MIX_REPLACE_ABOVE_THRESHOLD,
+           CDT_MIX_REPLACE_BELOW_THRESHOLD)) {
+    /* Modes that do a full copy or nothing. */
+    if (ELEM(mixmode, CDT_MIX_REPLACE_ABOVE_THRESHOLD, CDT_MIX_REPLACE_BELOW_THRESHOLD)) {
+      /* TODO: Check for a real valid way to get 'factor' value of our dest color? */
+      const float f = (m2->col[0] + m2->col[1] + m2->col[2]) / 3.0f;
+      if (mixmode == CDT_MIX_REPLACE_ABOVE_THRESHOLD && f < mixfactor) {
+        return; /* Do Nothing! */
+      }
+      else if (mixmode == CDT_MIX_REPLACE_BELOW_THRESHOLD && f > mixfactor) {
+        return; /* Do Nothing! */
+      }
+    }
+    copy_v3_v3(m2->col, m1->col);
+  }
+  else { /* Modes that support 'real' mix factor. */
+    if (mixmode == CDT_MIX_MIX) {
+      blend_color_mix_float(tmp_col, m2->col, m1->col);
+    }
+    else if (mixmode == CDT_MIX_ADD) {
+      blend_color_add_float(tmp_col, m2->col, m1->col);
+    }
+    else if (mixmode == CDT_MIX_SUB) {
+      blend_color_sub_float(tmp_col, m2->col, m1->col);
+    }
+    else if (mixmode == CDT_MIX_MUL) {
+      blend_color_mul_float(tmp_col, m2->col, m1->col);
+    }
+    else {
+      memcpy(tmp_col, m1->col, sizeof(tmp_col));
+    }
+    blend_color_interpolate_float(m2->col, m2->col, tmp_col, mixfactor);
+
+    copy_v3_v3(m2->col, m1->col);
+  }
+  m2->col[3] = m1->col[3];
+}
+
+static bool layerEqual_propcol(const void *data1, const void *data2)
+{
+  const MPropCol *m1 = data1, *m2 = data2;
+  float tot = 0;
+
+  for (int i = 0; i < 4; i++) {
+    float c = (m1->col[i] - m2->col[i]);
+    tot += c * c;
+  }
+
+  return tot < 0.001f;
+}
+
+static void layerMultiply_propcol(void *data, float fac)
+{
+  MPropCol *m = data;
+  mul_v4_fl(m->col, fac);
+}
+
+static void layerAdd_propcol(void *data1, const void *data2)
+{
+  MPropCol *m = data1;
+  const MPropCol *m2 = data2;
+  add_v4_v4(m->col, m2->col);
+}
+
+static void layerDoMinMax_propcol(const void *data, void *vmin, void *vmax)
+{
+  const MPropCol *m = data;
+  MPropCol *min = vmin, *max = vmax;
+  minmax_v4v4_v4(min->col, max->col, m->col);
+}
+
+static void layerInitMinMax_propcol(void *vmin, void *vmax)
+{
+  MPropCol *min = vmin, *max = vmax;
+
+  copy_v4_fl(min->col, FLT_MAX);
+  copy_v4_fl(max->col, FLT_MIN);
+}
+
+static void layerDefault_propcol(void *data, int count)
+{
+  /* Default to white, full alpha. */
+  MPropCol default_propcol = {{1.0f, 1.0f, 1.0f, 1.0f}};
+  MPropCol *pcol = (MPropCol *)data;
+  int i;
+  for (i = 0; i < count; i++) {
+    copy_v4_v4(pcol[i].col, default_propcol.col);
+  }
+}
+
+static void layerInterp_propcol(
+    const void **sources, const float *weights, const float *sub_weights, int count, void *dest)
+{
+  MPropCol *mc = dest;
+  float col[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+  const float *sub_weight = sub_weights;
+  for (int i = 0; i < count; i++) {
+    float weight = weights ? weights[i] : 1.0f;
+    const MPropCol *src = sources[i];
+    if (sub_weights) {
+      madd_v4_v4fl(col, src->col, (*sub_weight) * weight);
+      sub_weight++;
+    }
+    else {
+      madd_v4_v4fl(col, src->col, weight);
+    }
+  }
+  copy_v4_v4(mc->col, col);
+}
+
+static int layerMaxNum_propcol(void)
+{
+  return MAX_MCOL;
+}
+
 static const LayerTypeInfo LAYERTYPEINFO[CD_NUMTYPES] = {
     /* 0: CD_MVERT */
     {sizeof(MVert), "MVert", 1, NULL, NULL, NULL, NULL, NULL, NULL},
@@ -1400,7 +1549,7 @@ static const LayerTypeInfo LAYERTYPEINFO[CD_NUMTYPES] = {
      layerCopyValue_normal},
     /* 9: CD_FACEMAP */
     {sizeof(int), "", 0, NULL, NULL, NULL, NULL, NULL, layerDefault_fmap, NULL},
-    /* 10: CD_PROP_FLT */
+    /* 10: CD_PROP_FLOAT */
     {sizeof(MFloatProperty),
      "MFloatProperty",
      1,
@@ -1411,9 +1560,9 @@ static const LayerTypeInfo LAYERTYPEINFO[CD_NUMTYPES] = {
      NULL,
      NULL,
      layerValidate_propFloat},
-    /* 11: CD_PROP_INT */
+    /* 11: CD_PROP_INT32 */
     {sizeof(MIntProperty), "MIntProperty", 1, N_("Int"), layerCopy_propInt, NULL, NULL, NULL},
-    /* 12: CD_PROP_STR */
+    /* 12: CD_PROP_STRING */
     {sizeof(MStringProperty),
      "MStringProperty",
      1,
@@ -1590,7 +1739,7 @@ static const LayerTypeInfo LAYERTYPEINFO[CD_NUMTYPES] = {
     /* END BMESH ONLY */
 
     /* 34: CD_PAINT_MASK */
-    {sizeof(float), "", 0, NULL, NULL, NULL, NULL, NULL, NULL},
+    {sizeof(float), "", 0, NULL, NULL, NULL, layerInterp_paint_mask, NULL, NULL},
     /* 35: CD_GRID_PAINT_MASK */
     {sizeof(GridPaintMask),
      "GridPaintMask",
@@ -1621,7 +1770,37 @@ static const LayerTypeInfo LAYERTYPEINFO[CD_NUMTYPES] = {
     {sizeof(short[4][3]), "", 0, NULL, NULL, NULL, NULL, layerSwap_flnor, NULL},
     /* 41: CD_CUSTOMLOOPNORMAL */
     {sizeof(short[2]), "vec2s", 1, NULL, NULL, NULL, NULL, NULL, NULL},
-};
+    /* 42: CD_SCULPT_FACE_SETS */
+    {sizeof(int), "", 0, NULL, NULL, NULL, NULL, NULL, NULL},
+    /* 43: CD_LOCATION */
+    {sizeof(float[3]), "vec3f", 1, NULL, NULL, NULL, NULL, NULL, NULL},
+    /* 44: CD_RADIUS */
+    {sizeof(float), "MFloatProperty", 1, NULL, NULL, NULL, NULL, NULL, NULL},
+    /* 45: CD_HAIRCURVE */
+    {sizeof(HairCurve), "HairCurve", 1, NULL, NULL, NULL, NULL, NULL, NULL},
+    /* 46: CD_HAIRMAPPING */
+    {sizeof(HairMapping), "HairMapping", 1, NULL, NULL, NULL, NULL, NULL, NULL},
+    /* 47: CD_PROP_COLOR */
+    {sizeof(MPropCol),
+     "MPropCol",
+     1,
+     N_("Col"),
+     NULL,
+     NULL,
+     layerInterp_propcol,
+     NULL,
+     layerDefault_propcol,
+     NULL,
+     layerEqual_propcol,
+     layerMultiply_propcol,
+     layerInitMinMax_propcol,
+     layerAdd_propcol,
+     layerDoMinMax_propcol,
+     layerCopyValue_propcol,
+     NULL,
+     NULL,
+     NULL,
+     layerMaxNum_propcol}};
 
 static const char *LAYERTYPENAMES[CD_NUMTYPES] = {
     /*   0-4 */ "CDMVert",
@@ -1665,9 +1844,15 @@ static const char *LAYERTYPENAMES[CD_NUMTYPES] = {
     "CDMVertSkin",
     /* 37-38 */ "CDFreestyleEdge",
     "CDFreestyleFace",
-    /* 39-41 */ "CDMLoopTangent",
+    /* 39-42 */ "CDMLoopTangent",
     "CDTessLoopNormal",
     "CDCustomLoopNormal",
+    "CDSculptFaceGroups",
+    /* 43-46 */ "CDHairPoint",
+    "CDHairCurve",
+    "CDHairMapping",
+    "CDPoint",
+    "CDPropCol",
 };
 
 const CustomData_MeshMasks CD_MASK_BAREMESH = {
@@ -1692,7 +1877,7 @@ const CustomData_MeshMasks CD_MASK_MESH = {
     .lmask = (CD_MASK_MLOOP | CD_MASK_MDISPS | CD_MASK_MLOOPUV | CD_MASK_MLOOPCOL |
               CD_MASK_CUSTOMLOOPNORMAL | CD_MASK_GRID_PAINT_MASK | CD_MASK_GENERIC_DATA),
     .pmask = (CD_MASK_MPOLY | CD_MASK_RECAST | CD_MASK_FACEMAP | CD_MASK_FREESTYLE_FACE |
-              CD_MASK_GENERIC_DATA),
+              CD_MASK_GENERIC_DATA | CD_MASK_SCULPT_FACE_SETS),
 };
 const CustomData_MeshMasks CD_MASK_EDITMESH = {
     .vmask = (CD_MASK_MDEFORMVERT | CD_MASK_PAINT_MASK | CD_MASK_MVERT_SKIN | CD_MASK_SHAPEKEY |
@@ -1701,7 +1886,7 @@ const CustomData_MeshMasks CD_MASK_EDITMESH = {
     .fmask = 0,
     .lmask = (CD_MASK_MDISPS | CD_MASK_MLOOPUV | CD_MASK_MLOOPCOL | CD_MASK_CUSTOMLOOPNORMAL |
               CD_MASK_GRID_PAINT_MASK | CD_MASK_GENERIC_DATA),
-    .pmask = (CD_MASK_RECAST | CD_MASK_FACEMAP | CD_MASK_GENERIC_DATA),
+    .pmask = (CD_MASK_RECAST | CD_MASK_FACEMAP | CD_MASK_GENERIC_DATA | CD_MASK_SCULPT_FACE_SETS),
 };
 const CustomData_MeshMasks CD_MASK_DERIVEDMESH = {
     .vmask = (CD_MASK_ORIGINDEX | CD_MASK_MDEFORMVERT | CD_MASK_SHAPEKEY | CD_MASK_MVERT_SKIN |
@@ -1712,7 +1897,7 @@ const CustomData_MeshMasks CD_MASK_DERIVEDMESH = {
               CD_MASK_PREVIEW_MLOOPCOL | CD_MASK_ORIGSPACE_MLOOP |
               CD_MASK_GENERIC_DATA), /* XXX MISSING CD_MASK_MLOOPTANGENT ? */
     .pmask = (CD_MASK_ORIGINDEX | CD_MASK_RECAST | CD_MASK_FREESTYLE_FACE | CD_MASK_FACEMAP |
-              CD_MASK_GENERIC_DATA),
+              CD_MASK_GENERIC_DATA | CD_MASK_SCULPT_FACE_SETS),
 };
 const CustomData_MeshMasks CD_MASK_BMESH = {
     .vmask = (CD_MASK_MDEFORMVERT | CD_MASK_BWEIGHT | CD_MASK_MVERT_SKIN | CD_MASK_SHAPEKEY |
@@ -1721,7 +1906,8 @@ const CustomData_MeshMasks CD_MASK_BMESH = {
     .fmask = 0,
     .lmask = (CD_MASK_MDISPS | CD_MASK_MLOOPUV | CD_MASK_MLOOPCOL | CD_MASK_CUSTOMLOOPNORMAL |
               CD_MASK_GRID_PAINT_MASK | CD_MASK_GENERIC_DATA),
-    .pmask = (CD_MASK_RECAST | CD_MASK_FREESTYLE_FACE | CD_MASK_FACEMAP | CD_MASK_GENERIC_DATA),
+    .pmask = (CD_MASK_RECAST | CD_MASK_FREESTYLE_FACE | CD_MASK_FACEMAP | CD_MASK_GENERIC_DATA |
+              CD_MASK_SCULPT_FACE_SETS),
 };
 /**
  * cover values copied by #BKE_mesh_loops_to_tessdata
@@ -1750,7 +1936,8 @@ const CustomData_MeshMasks CD_MASK_EVERYTHING = {
               CD_MASK_MLOOPTANGENT | CD_MASK_PREVIEW_MLOOPCOL | CD_MASK_ORIGSPACE_MLOOP |
               CD_MASK_GRID_PAINT_MASK | CD_MASK_GENERIC_DATA),
     .pmask = (CD_MASK_MPOLY | CD_MASK_BM_ELEM_PYPTR | CD_MASK_ORIGINDEX | CD_MASK_NORMAL |
-              CD_MASK_RECAST | CD_MASK_FACEMAP | CD_MASK_FREESTYLE_FACE | CD_MASK_GENERIC_DATA),
+              CD_MASK_RECAST | CD_MASK_FACEMAP | CD_MASK_FREESTYLE_FACE | CD_MASK_GENERIC_DATA |
+              CD_MASK_SCULPT_FACE_SETS),
 };
 
 static const LayerTypeInfo *layerType_getInfo(int type)
@@ -3537,10 +3724,9 @@ void CustomData_bmesh_copy_data_exclude_by_type(const CustomData *source,
     /* if we found a matching layer, copy the data */
     if (dest->layers[dest_i].type == source->layers[src_i].type &&
         STREQ(dest->layers[dest_i].name, source->layers[src_i].name)) {
-      const void *src_data = POINTER_OFFSET(src_block, source->layers[src_i].offset);
-      void *dest_data = POINTER_OFFSET(*dest_block, dest->layers[dest_i].offset);
-
       if (no_mask || ((CD_TYPE_AS_MASK(dest->layers[dest_i].type) & mask_exclude) == 0)) {
+        const void *src_data = POINTER_OFFSET(src_block, source->layers[src_i].offset);
+        void *dest_data = POINTER_OFFSET(*dest_block, dest->layers[dest_i].offset);
         const LayerTypeInfo *typeInfo = layerType_getInfo(source->layers[src_i].type);
         if (typeInfo->copy) {
           typeInfo->copy(src_data, dest_data, 1);
@@ -4103,7 +4289,7 @@ int CustomData_layertype_layers_max(const int type)
 
 static bool CustomData_is_property_layer(int type)
 {
-  if ((type == CD_PROP_FLT) || (type == CD_PROP_INT) || (type == CD_PROP_STR)) {
+  if ((type == CD_PROP_FLOAT) || (type == CD_PROP_INT32) || (type == CD_PROP_STRING)) {
     return true;
   }
   return false;
@@ -4221,7 +4407,7 @@ bool CustomData_verify_versions(struct CustomData *data, int index)
     /* 0 structnum is used in writing code to tag layer types that should not be written. */
     else if (typeInfo->structnum == 0 &&
              /* XXX Not sure why those three are exception, maybe that should be fixed? */
-             !ELEM(layer->type, CD_PAINT_MASK, CD_FACEMAP, CD_MTEXPOLY)) {
+             !ELEM(layer->type, CD_PAINT_MASK, CD_FACEMAP, CD_MTEXPOLY, CD_SCULPT_FACE_SETS)) {
       keeplayer = false;
       CLOG_WARN(&LOG, ".blend file read: removing a data layer that should not have been written");
     }

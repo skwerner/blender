@@ -24,6 +24,8 @@
 #include "BLI_compiler_compat.h"
 #include "BLI_ghash.h"
 #include "BLI_iterator.h"
+#include "BLI_sys_types.h"
+
 #include "DNA_listBase.h"
 
 #ifdef __cplusplus
@@ -50,26 +52,18 @@ typedef struct CollectionParent {
 struct Collection *BKE_collection_add(struct Main *bmain,
                                       struct Collection *parent,
                                       const char *name);
+void BKE_collection_add_from_object(struct Main *bmain,
+                                    struct Scene *scene,
+                                    const struct Object *ob_src,
+                                    struct Collection *collection_dst);
 void BKE_collection_free(struct Collection *collection);
 bool BKE_collection_delete(struct Main *bmain, struct Collection *collection, bool hierarchy);
-
-struct Collection *BKE_collection_copy(struct Main *bmain,
-                                       struct Collection *parent,
-                                       struct Collection *collection);
-void BKE_collection_copy_data(struct Main *bmain,
-                              struct Collection *collection_dst,
-                              const struct Collection *collection_src,
-                              const int flag);
-void BKE_collection_make_local(struct Main *bmain,
-                               struct Collection *collection,
-                               const bool lib_local);
 
 struct Collection *BKE_collection_duplicate(struct Main *bmain,
                                             struct Collection *parent,
                                             struct Collection *collection,
-                                            const bool do_hierarchy,
-                                            const bool do_objects,
-                                            const bool do_obdata);
+                                            const uint duplicate_flags,
+                                            const uint duplicate_options);
 
 /* Master Collection for Scene */
 
@@ -141,6 +135,8 @@ bool BKE_collection_objects_select(struct ViewLayer *view_layer,
 bool BKE_collection_child_add(struct Main *bmain,
                               struct Collection *parent,
                               struct Collection *child);
+
+bool BKE_collection_child_add_no_sync(struct Collection *parent, struct Collection *child);
 
 bool BKE_collection_child_remove(struct Main *bmain,
                                  struct Collection *parent,

@@ -29,7 +29,6 @@
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_alloca.h"
 #include "BLI_astar.h"
 #include "BLI_bitmap.h"
@@ -37,6 +36,7 @@
 #include "BLI_memarena.h"
 #include "BLI_polyfill_2d.h"
 #include "BLI_rand.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_bvhutils.h"
 #include "BKE_customdata.h"
@@ -1555,6 +1555,7 @@ void BKE_mesh_remap_calc_loops_from_mesh(const int mode,
                                      2,
                                      6,
                                      0,
+                                     NULL,
                                      NULL);
         }
 
@@ -1598,6 +1599,7 @@ void BKE_mesh_remap_calc_loops_from_mesh(const int mode,
                                        2,
                                        6,
                                        0,
+                                       NULL,
                                        NULL);
         }
 

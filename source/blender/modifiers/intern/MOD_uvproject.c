@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -28,17 +28,28 @@
 #include "BLI_math.h"
 #include "BLI_uvproject.h"
 
+#include "BLT_translation.h"
+
+#include "DNA_camera_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
-#include "DNA_camera_types.h"
 #include "DNA_object_types.h"
+#include "DNA_screen_types.h"
 
 #include "BKE_camera.h"
-#include "BKE_library_query.h"
+#include "BKE_context.h"
+#include "BKE_lib_query.h"
 #include "BKE_material.h"
 #include "BKE_mesh.h"
+#include "BKE_screen.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
 
 #include "MOD_modifiertypes.h"
+#include "MOD_ui_common.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -303,7 +314,7 @@ static Mesh *uvprojectModifier_do(UVProjectModifierData *umd,
   return mesh;
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   Mesh *result;
   UVProjectModifierData *umd = (UVProjectModifierData *)md;
@@ -311,6 +322,43 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   result = uvprojectModifier_do(umd, ctx, ctx->object, mesh);
 
   return result;
+}
+
+static void panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *sub;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  PointerRNA ob_ptr;
+  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+
+  PointerRNA obj_data_ptr = RNA_pointer_get(&ob_ptr, "data");
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemPointerR(layout, &ptr, "uv_layer", &obj_data_ptr, "uv_layers", NULL, ICON_NONE);
+
+  sub = uiLayoutColumn(layout, true);
+  uiItemR(sub, &ptr, "aspect_x", 0, IFACE_("Aspect X"), ICON_NONE);
+  uiItemR(sub, &ptr, "aspect_y", 0, IFACE_("Y"), ICON_NONE);
+
+  sub = uiLayoutColumn(layout, true);
+  uiItemR(sub, &ptr, "scale_x", 0, IFACE_("Scale X"), ICON_NONE);
+  uiItemR(sub, &ptr, "scale_y", 0, IFACE_("Y"), ICON_NONE);
+
+  uiItemR(layout, &ptr, "projector_count", 0, IFACE_("Projectors"), ICON_NONE);
+  RNA_BEGIN (&ptr, projector_ptr, "projectors") {
+    uiItemR(layout, &projector_ptr, "object", 0, NULL, ICON_NONE);
+  }
+  RNA_END;
+
+  modifier_panel_end(layout, &ptr);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  modifier_panel_register(region_type, eModifierType_UVProject, panel_draw);
 }
 
 ModifierTypeInfo modifierType_UVProject = {
@@ -321,13 +369,16 @@ ModifierTypeInfo modifierType_UVProject = {
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsMapping |
         eModifierTypeFlag_SupportsEditmode | eModifierTypeFlag_EnableInEditmode,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ NULL,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,
@@ -340,4 +391,7 @@ ModifierTypeInfo modifierType_UVProject = {
     /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

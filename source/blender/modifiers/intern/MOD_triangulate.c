@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
@@ -22,17 +22,28 @@
 
 #include "BLI_utildefines.h"
 
+#include "BLT_translation.h"
+
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
+#include "DNA_screen_types.h"
 
-#include "BKE_modifier.h"
+#include "BKE_context.h"
 #include "BKE_mesh.h"
+#include "BKE_modifier.h"
+#include "BKE_screen.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
 
 #include "bmesh.h"
 #include "bmesh_tools.h"
 
 #include "MOD_modifiertypes.h"
+#include "MOD_ui_common.h"
 
 static Mesh *triangulate_mesh(Mesh *mesh,
                               const int quad_method,
@@ -44,7 +55,7 @@ static Mesh *triangulate_mesh(Mesh *mesh,
   BMesh *bm;
   int total_edges, i;
   MEdge *me;
-  CustomData_MeshMasks cddata_masks = {
+  CustomData_MeshMasks cd_mask_extra = {
       .vmask = CD_MASK_ORIGINDEX, .emask = CD_MASK_ORIGINDEX, .pmask = CD_MASK_ORIGINDEX};
 
   bool keep_clnors = (flag & MOD_TRIANGULATE_KEEP_CUSTOMLOOP_NORMALS) != 0;
@@ -53,19 +64,19 @@ static Mesh *triangulate_mesh(Mesh *mesh,
     BKE_mesh_calc_normals_split(mesh);
     /* We need that one to 'survive' to/from BMesh conversions. */
     CustomData_clear_layer_flag(&mesh->ldata, CD_NORMAL, CD_FLAG_TEMPORARY);
-    cddata_masks.lmask |= CD_MASK_NORMAL;
+    cd_mask_extra.lmask |= CD_MASK_NORMAL;
   }
 
   bm = BKE_mesh_to_bmesh_ex(mesh,
                             &((struct BMeshCreateParams){0}),
                             &((struct BMeshFromMeshParams){
                                 .calc_face_normal = true,
-                                .cd_mask_extra = cddata_masks,
+                                .cd_mask_extra = cd_mask_extra,
                             }));
 
   BM_mesh_triangulate(bm, quad_method, ngon_method, min_vertices, false, NULL, NULL, NULL);
 
-  result = BKE_mesh_from_bmesh_for_eval_nomain(bm, &cddata_masks, mesh);
+  result = BKE_mesh_from_bmesh_for_eval_nomain(bm, &cd_mask_extra, mesh);
   BM_mesh_free(bm);
 
   if (keep_clnors) {
@@ -103,7 +114,7 @@ static void initData(ModifierData *md)
   tmd->min_vertices = 4;
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *UNUSED(ctx), Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *UNUSED(ctx), Mesh *mesh)
 {
   TriangulateModifierData *tmd = (TriangulateModifierData *)md;
   Mesh *result;
@@ -115,6 +126,29 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *UNUSED(c
   return result;
 }
 
+static void panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  PointerRNA ob_ptr;
+  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, &ptr, "quad_method", 0, NULL, ICON_NONE);
+  uiItemR(layout, &ptr, "ngon_method", 0, NULL, ICON_NONE);
+  uiItemR(layout, &ptr, "min_vertices", 0, NULL, ICON_NONE);
+  uiItemR(layout, &ptr, "keep_custom_normals", 0, NULL, ICON_NONE);
+
+  modifier_panel_end(layout, &ptr);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  modifier_panel_register(region_type, eModifierType_Triangulate, panel_draw);
+}
+
 ModifierTypeInfo modifierType_Triangulate = {
     /* name */ "Triangulate",
     /* structName */ "TriangulateModifierData",
@@ -124,13 +158,16 @@ ModifierTypeInfo modifierType_Triangulate = {
         eModifierTypeFlag_SupportsMapping | eModifierTypeFlag_EnableInEditmode |
         eModifierTypeFlag_AcceptsCVs,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ NULL,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ NULL,  // requiredDataMask,
@@ -141,5 +178,9 @@ ModifierTypeInfo modifierType_Triangulate = {
     /* dependsOnNormals */ NULL,
     /* foreachObjectLink */ NULL,
     /* foreachIDLink */ NULL,
+    /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

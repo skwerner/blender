@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -26,26 +26,38 @@
 #include "BLI_math.h"
 #include "BLI_task.h"
 
+#include "BLT_translation.h"
+
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
+#include "DNA_screen_types.h"
 
+#include "BKE_context.h"
 #include "BKE_customdata.h"
-#include "BKE_editmesh.h"
-#include "BKE_library.h"
-#include "BKE_library_query.h"
-#include "BKE_image.h"
-#include "BKE_mesh.h"
-#include "BKE_modifier.h"
-#include "BKE_texture.h"
 #include "BKE_deform.h"
+#include "BKE_editmesh.h"
+#include "BKE_image.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
+#include "BKE_mesh.h"
+#include "BKE_mesh_wrapper.h"
+#include "BKE_modifier.h"
 #include "BKE_object.h"
+#include "BKE_screen.h"
+#include "BKE_texture.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
 
 #include "MEM_guardedalloc.h"
 
+#include "MOD_ui_common.h"
 #include "MOD_util.h"
 
 #include "RE_shader_ext.h"
@@ -134,19 +146,28 @@ static bool isDisabled(const struct Scene *UNUSED(scene),
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
 {
   DisplaceModifierData *dmd = (DisplaceModifierData *)md;
-  if (dmd->map_object != NULL && dmd->texmapping == MOD_DISP_MAP_OBJECT) {
-    DEG_add_modifier_to_transform_relation(ctx->node, "Displace Modifier");
-    DEG_add_object_relation(
-        ctx->node, dmd->map_object, DEG_OB_COMP_TRANSFORM, "Displace Modifier");
+  bool need_transform_relation = false;
+
+  if (dmd->space == MOD_DISP_SPACE_GLOBAL &&
+      ELEM(dmd->direction, MOD_DISP_DIR_X, MOD_DISP_DIR_Y, MOD_DISP_DIR_Z, MOD_DISP_DIR_RGB_XYZ)) {
+    need_transform_relation = true;
   }
-  if (dmd->texmapping == MOD_DISP_MAP_GLOBAL ||
-      (ELEM(
-           dmd->direction, MOD_DISP_DIR_X, MOD_DISP_DIR_Y, MOD_DISP_DIR_Z, MOD_DISP_DIR_RGB_XYZ) &&
-       dmd->space == MOD_DISP_SPACE_GLOBAL)) {
-    DEG_add_modifier_to_transform_relation(ctx->node, "Displace Modifier");
-  }
+
   if (dmd->texture != NULL) {
     DEG_add_generic_id_relation(ctx->node, &dmd->texture->id, "Displace Modifier");
+
+    if (dmd->map_object != NULL && dmd->texmapping == MOD_DISP_MAP_OBJECT) {
+      MOD_depsgraph_update_object_bone_relation(
+          ctx->node, dmd->map_object, dmd->map_bone, "Displace Modifier");
+      need_transform_relation = true;
+    }
+    if (dmd->texmapping == MOD_DISP_MAP_GLOBAL) {
+      need_transform_relation = true;
+    }
+  }
+
+  if (need_transform_relation) {
+    DEG_add_modifier_to_transform_relation(ctx->node, "Displace Modifier");
   }
 }
 
@@ -174,6 +195,7 @@ static void displaceModifier_do_task(void *__restrict userdata,
   DisplaceUserdata *data = (DisplaceUserdata *)userdata;
   DisplaceModifierData *dmd = data->dmd;
   MDeformVert *dvert = data->dvert;
+  const bool invert_vgroup = (dmd->flag & MOD_DISP_INVERT_VGROUP) != 0;
   float weight = data->weight;
   int defgrp_index = data->defgrp_index;
   int direction = data->direction;
@@ -192,7 +214,8 @@ static void displaceModifier_do_task(void *__restrict userdata,
   float local_vec[3];
 
   if (dvert) {
-    weight = defvert_find_weight(dvert + iter, defgrp_index);
+    weight = invert_vgroup ? 1.0f - BKE_defvert_find_weight(dvert + iter, defgrp_index) :
+                             BKE_defvert_find_weight(dvert + iter, defgrp_index);
     if (weight == 0.0f) {
       return;
     }
@@ -396,11 +419,83 @@ static void deformVertsEM(ModifierData *md,
   Mesh *mesh_src = MOD_deform_mesh_eval_get(
       ctx->object, editData, mesh, NULL, numVerts, false, false);
 
+  /* TODO(Campbell): use edit-mode data only (remove this line). */
+  if (mesh_src != NULL) {
+    BKE_mesh_wrapper_ensure_mdata(mesh_src);
+  }
+
   displaceModifier_do((DisplaceModifierData *)md, ctx, mesh_src, vertexCos, numVerts);
 
   if (!ELEM(mesh_src, NULL, mesh)) {
     BKE_id_free(NULL, mesh_src);
   }
+}
+
+static void panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *col;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  PointerRNA ob_ptr;
+  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+
+  PointerRNA texture_ptr = RNA_pointer_get(&ptr, "texture");
+  bool has_texture = !RNA_pointer_is_null(&texture_ptr);
+  int texture_coords = RNA_enum_get(&ptr, "texture_coords");
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiTemplateID(layout, C, &ptr, "texture", "texture.new", NULL, NULL, 0, ICON_NONE, NULL);
+
+  col = uiLayoutColumn(layout, false);
+  uiLayoutSetActive(col, has_texture);
+  uiItemR(col, &ptr, "texture_coords", 0, IFACE_("Coordinates"), ICON_NONE);
+  if (texture_coords == MOD_DISP_MAP_OBJECT) {
+    uiItemR(col, &ptr, "texture_coords_object", 0, NULL, ICON_NONE);
+    PointerRNA texture_coords_obj_ptr = RNA_pointer_get(&ptr, "texture_coords_object");
+    if (!RNA_pointer_is_null(&texture_coords_obj_ptr) &&
+        (RNA_enum_get(&texture_coords_obj_ptr, "type") == OB_ARMATURE)) {
+      PointerRNA texture_coords_obj_data_ptr = RNA_pointer_get(&texture_coords_obj_ptr, "data");
+      uiItemPointerR(layout,
+                     &ptr,
+                     "texture_coords_bone",
+                     &texture_coords_obj_data_ptr,
+                     "bones",
+                     IFACE_("Bone"),
+                     ICON_NONE);
+    }
+  }
+  else if (texture_coords == MOD_DISP_MAP_UV && RNA_enum_get(&ob_ptr, "type") == OB_MESH) {
+    uiItemR(col, &ptr, "uv_layer", 0, NULL, ICON_NONE);
+  }
+
+  uiItemS(layout);
+
+  col = uiLayoutColumn(layout, false);
+  uiItemR(col, &ptr, "direction", 0, 0, ICON_NONE);
+  if (ELEM(RNA_enum_get(&ptr, "direction"),
+           MOD_DISP_DIR_X,
+           MOD_DISP_DIR_Y,
+           MOD_DISP_DIR_Z,
+           MOD_DISP_DIR_RGB_XYZ)) {
+    uiItemR(col, &ptr, "space", 0, NULL, ICON_NONE);
+  }
+
+  uiItemS(layout);
+
+  col = uiLayoutColumn(layout, false);
+  uiItemR(col, &ptr, "strength", 0, NULL, ICON_NONE);
+  uiItemR(col, &ptr, "mid_level", 0, NULL, ICON_NONE);
+
+  modifier_vgroup_ui(col, &ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
+
+  modifier_panel_end(layout, &ptr);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  modifier_panel_register(region_type, eModifierType_Displace, panel_draw);
 }
 
 ModifierTypeInfo modifierType_Displace = {
@@ -410,13 +505,16 @@ ModifierTypeInfo modifierType_Displace = {
     /* type */ eModifierTypeType_OnlyDeform,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsEditmode,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ deformVerts,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ deformVertsEM,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,
@@ -429,4 +527,7 @@ ModifierTypeInfo modifierType_Displace = {
     /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ foreachTexLink,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

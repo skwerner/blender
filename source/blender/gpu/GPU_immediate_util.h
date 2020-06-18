@@ -23,6 +23,10 @@
 #ifndef __GPU_IMMEDIATE_UTIL_H__
 #define __GPU_IMMEDIATE_UTIL_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Draw 2D rectangles (replaces glRect functions) */
 /* caller is responsible for vertex format & shader */
 void immRectf(uint pos, float x1, float y1, float x2, float y2);
@@ -47,6 +51,7 @@ void imm_draw_circle_fill_aspect_2d(
 
 /* use this version when GPUVertFormat has a vec3 position */
 void imm_draw_circle_wire_3d(uint pos, float x, float y, float radius, int nsegments);
+void imm_draw_circle_dashed_3d(uint pos, float x, float y, float radius, int nsegments);
 void imm_draw_circle_fill_3d(uint pos, float x, float y, float radius, int nsegments);
 
 /* same as 'imm_draw_disk_partial_fill_2d', except it draws a wire arc. */
@@ -65,6 +70,13 @@ void imm_draw_disk_partial_fill_2d(uint pos,
 void imm_draw_box_wire_2d(uint pos, float x1, float y1, float x2, float y2);
 void imm_draw_box_wire_3d(uint pos, float x1, float y1, float x2, float y2);
 
+void imm_draw_box_checker_2d_ex(float x1,
+                                float y1,
+                                float x2,
+                                float y2,
+                                const float color_primary[4],
+                                const float color_secondary[4],
+                                int checker_size);
 void imm_draw_box_checker_2d(float x1, float y1, float x2, float y2);
 
 void imm_draw_cube_fill_3d(uint pos, const float co[3], const float aspect[3]);
@@ -76,5 +88,9 @@ void imm_draw_cylinder_wire_3d(
     uint pos, float base, float top, float height, int slices, int stacks);
 void imm_draw_cylinder_fill_3d(
     uint pos, float base, float top, float height, int slices, int stacks);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __GPU_IMMEDIATE_UTIL_H__ */

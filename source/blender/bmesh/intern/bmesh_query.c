@@ -27,9 +27,9 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_math.h"
 #include "BLI_alloca.h"
 #include "BLI_linklist.h"
+#include "BLI_math.h"
 #include "BLI_utildefines_stack.h"
 
 #include "BKE_customdata.h"
@@ -1568,6 +1568,41 @@ float BM_loop_calc_face_normal_safe_ex(const BMLoop *l, const float epsilon_sq, 
 }
 
 /**
+ * A version of BM_loop_calc_face_normal_safe_ex which takes vertex coordinates.
+ */
+float BM_loop_calc_face_normal_safe_vcos_ex(const BMLoop *l,
+                                            const float normal_fallback[3],
+                                            float const (*vertexCos)[3],
+                                            const float epsilon_sq,
+                                            float r_normal[3])
+{
+  const int i_prev = BM_elem_index_get(l->prev->v);
+  const int i_next = BM_elem_index_get(l->next->v);
+  const int i = BM_elem_index_get(l->v);
+
+  float v1[3], v2[3], v_tmp[3];
+  sub_v3_v3v3(v1, vertexCos[i_prev], vertexCos[i]);
+  sub_v3_v3v3(v2, vertexCos[i_next], vertexCos[i]);
+
+  const float fac = ((v2[0] == 0.0f) ?
+                         ((v2[1] == 0.0f) ? ((v2[2] == 0.0f) ? 0.0f : v1[2] / v2[2]) :
+                                            v1[1] / v2[1]) :
+                         v1[0] / v2[0]);
+
+  mul_v3_v3fl(v_tmp, v2, fac);
+  sub_v3_v3(v_tmp, v1);
+  if (fac != 0.0f && !is_zero_v3(v1) && len_squared_v3(v_tmp) > epsilon_sq) {
+    /* Not co-linear, we can compute cross-product and normalize it into normal. */
+    cross_v3_v3v3(r_normal, v1, v2);
+    return normalize_v3(r_normal);
+  }
+  else {
+    copy_v3_v3(r_normal, normal_fallback);
+    return 0.0f;
+  }
+}
+
+/**
  * #BM_loop_calc_face_normal_safe_ex with pre-defined sane epsilon.
  *
  * Since this doesn't scale based on triangle size, fixed value works well.
@@ -1575,6 +1610,15 @@ float BM_loop_calc_face_normal_safe_ex(const BMLoop *l, const float epsilon_sq, 
 float BM_loop_calc_face_normal_safe(const BMLoop *l, float r_normal[3])
 {
   return BM_loop_calc_face_normal_safe_ex(l, 1e-5f, r_normal);
+}
+
+float BM_loop_calc_face_normal_safe_vcos(const BMLoop *l,
+                                         const float normal_fallback[3],
+                                         float const (*vertexCos)[3],
+                                         float r_normal[3])
+
+{
+  return BM_loop_calc_face_normal_safe_vcos_ex(l, normal_fallback, vertexCos, 1e-5f, r_normal);
 }
 
 /**
@@ -2431,6 +2475,22 @@ bool BM_edge_is_all_face_flag_test(const BMEdge *e, const char hflag, const bool
   return true;
 }
 
+bool BM_edge_is_any_face_flag_test(const BMEdge *e, const char hflag)
+{
+  if (e->l) {
+    BMLoop *l_iter, *l_first;
+
+    l_iter = l_first = e->l;
+    do {
+      if (BM_elem_flag_test(l_iter->f, hflag)) {
+        return true;
+      }
+    } while ((l_iter = l_iter->radial_next) != l_first);
+  }
+
+  return false;
+}
+
 /* convenience functions for checking flags */
 bool BM_edge_is_any_vert_flag_test(const BMEdge *e, const char hflag)
 {
@@ -2477,39 +2537,53 @@ bool BM_face_is_normal_valid(const BMFace *f)
   return len_squared_v3v3(no, f->no) < (eps * eps);
 }
 
-static void bm_mesh_calc_volume_face(const BMFace *f, float *r_vol)
+/**
+ * Use to accumulate volume calculation for faces with consistent winding.
+ *
+ * Use double precision since this is prone to float precision error, see T73295.
+ */
+static double bm_mesh_calc_volume_face(const BMFace *f)
 {
   const int tottri = f->len - 2;
   BMLoop **loops = BLI_array_alloca(loops, f->len);
   uint(*index)[3] = BLI_array_alloca(index, tottri);
-  int j;
+  double vol = 0.0;
 
   BM_face_calc_tessellation(f, false, loops, index);
 
-  for (j = 0; j < tottri; j++) {
+  for (int j = 0; j < tottri; j++) {
     const float *p1 = loops[index[j][0]]->v->co;
     const float *p2 = loops[index[j][1]]->v->co;
     const float *p3 = loops[index[j][2]]->v->co;
 
+    double p1_db[3];
+    double p2_db[3];
+    double p3_db[3];
+
+    copy_v3db_v3fl(p1_db, p1);
+    copy_v3db_v3fl(p2_db, p2);
+    copy_v3db_v3fl(p3_db, p3);
+
     /* co1.dot(co2.cross(co3)) / 6.0 */
-    float cross[3];
-    cross_v3_v3v3(cross, p2, p3);
-    *r_vol += (1.0f / 6.0f) * dot_v3v3(p1, cross);
+    double cross[3];
+    cross_v3_v3v3_db(cross, p2_db, p3_db);
+    vol += dot_v3v3_db(p1_db, cross);
   }
+  return (1.0 / 6.0) * vol;
 }
-float BM_mesh_calc_volume(BMesh *bm, bool is_signed)
+double BM_mesh_calc_volume(BMesh *bm, bool is_signed)
 {
   /* warning, calls own tessellation function, may be slow */
-  float vol = 0.0f;
+  double vol = 0.0;
   BMFace *f;
   BMIter fiter;
 
   BM_ITER_MESH (f, &fiter, bm, BM_FACES_OF_MESH) {
-    bm_mesh_calc_volume_face(f, &vol);
+    vol += bm_mesh_calc_volume_face(f);
   }
 
   if (is_signed == false) {
-    vol = fabsf(vol);
+    vol = fabs(vol);
   }
 
   return vol;

@@ -20,6 +20,7 @@
  * \ingroup EEVEE
  */
 
+#include "BLI_string_utils.h"
 #include "BLI_sys_types.h" /* bool */
 
 // #include "BLI_dynstr.h"
@@ -35,11 +36,17 @@
 
 static struct {
   struct GPUShader *shadow_sh;
+  struct GPUShader *shadow_accum_sh;
 } e_data = {NULL}; /* Engine data */
 
 extern char datatoc_shadow_vert_glsl[];
 extern char datatoc_shadow_frag_glsl[];
+extern char datatoc_shadow_accum_frag_glsl[];
 extern char datatoc_common_view_lib_glsl[];
+extern char datatoc_common_uniforms_lib_glsl[];
+extern char datatoc_bsdf_common_lib_glsl[];
+extern char datatoc_lights_lib_glsl[];
+extern char datatoc_raytrace_lib_glsl[];
 
 void eevee_contact_shadow_setup(const Light *la, EEVEE_Shadow *evsh)
 {
@@ -63,6 +70,18 @@ void EEVEE_shadows_init(EEVEE_ViewLayerData *sldata)
                                                   datatoc_shadow_frag_glsl,
                                                   datatoc_common_view_lib_glsl,
                                                   NULL);
+  }
+
+  if (!e_data.shadow_accum_sh) {
+    char *frag_str = BLI_string_joinN(datatoc_common_view_lib_glsl,
+                                      datatoc_common_uniforms_lib_glsl,
+                                      datatoc_bsdf_common_lib_glsl,
+                                      datatoc_raytrace_lib_glsl,
+                                      datatoc_lights_lib_glsl,
+                                      datatoc_shadow_accum_frag_glsl);
+
+    e_data.shadow_accum_sh = DRW_shader_create_fullscreen(frag_str, SHADER_DEFINES);
+    MEM_freeN(frag_str);
   }
 
   if (!sldata->lights) {
@@ -138,45 +157,6 @@ void EEVEE_shadows_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
 
     stl->g_data->shadow_shgrp = DRW_shgroup_create(e_data.shadow_sh, psl->shadow_pass);
   }
-}
-
-/* Add a shadow caster to the shadowpasses */
-void EEVEE_shadows_caster_add(EEVEE_ViewLayerData *UNUSED(sldata),
-                              EEVEE_StorageList *stl,
-                              struct GPUBatch *geom,
-                              Object *ob)
-{
-  DRW_shgroup_call(stl->g_data->shadow_shgrp, geom, ob);
-}
-
-void EEVEE_shadows_caster_material_add(EEVEE_ViewLayerData *sldata,
-                                       EEVEE_PassList *psl,
-                                       struct GPUMaterial *gpumat,
-                                       struct GPUBatch *geom,
-                                       struct Object *ob,
-                                       const float *alpha_threshold)
-{
-  /* TODO / PERF : reuse the same shading group for objects with the same material */
-  DRWShadingGroup *grp = DRW_shgroup_material_create(gpumat, psl->shadow_pass);
-
-  if (grp == NULL) {
-    return;
-  }
-
-  /* Unfortunately needed for correctness but not 99% of the time not needed.
-   * TODO detect when needed? */
-  DRW_shgroup_uniform_block(grp, "probe_block", sldata->probe_ubo);
-  DRW_shgroup_uniform_block(grp, "grid_block", sldata->grid_ubo);
-  DRW_shgroup_uniform_block(grp, "planar_block", sldata->planar_ubo);
-  DRW_shgroup_uniform_block(grp, "light_block", sldata->light_ubo);
-  DRW_shgroup_uniform_block(grp, "shadow_block", sldata->shadow_ubo);
-  DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
-
-  if (alpha_threshold != NULL) {
-    DRW_shgroup_uniform_float(grp, "alphaThreshold", alpha_threshold, 1);
-  }
-
-  DRW_shgroup_call(grp, geom, ob);
 }
 
 /* Make that object update shadow casting lights inside its influence bounding box. */
@@ -406,7 +386,74 @@ void EEVEE_shadows_draw(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata, DRWView
   }
 }
 
+/* -------------------------------------------------------------------- */
+
+/** \name Render Passes
+ * \{ */
+
+void EEVEE_shadow_output_init(EEVEE_ViewLayerData *sldata,
+                              EEVEE_Data *vedata,
+                              uint UNUSED(tot_samples))
+{
+  EEVEE_FramebufferList *fbl = vedata->fbl;
+  EEVEE_TextureList *txl = vedata->txl;
+  EEVEE_PassList *psl = vedata->psl;
+  EEVEE_StorageList *stl = vedata->stl;
+  EEVEE_EffectsInfo *effects = stl->effects;
+  DefaultTextureList *dtxl = DRW_viewport_texture_list_get();
+
+  float clear[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+
+  /* Create FrameBuffer. */
+  const eGPUTextureFormat texture_format = GPU_R32F;
+  DRW_texture_ensure_fullscreen_2d(&txl->shadow_accum, texture_format, 0);
+
+  GPU_framebuffer_ensure_config(&fbl->shadow_accum_fb,
+                                {GPU_ATTACHMENT_NONE, GPU_ATTACHMENT_TEXTURE(txl->shadow_accum)});
+
+  /* Clear texture. */
+  if (DRW_state_is_image_render() || effects->taa_current_sample == 1) {
+    GPU_framebuffer_bind(fbl->shadow_accum_fb);
+    GPU_framebuffer_clear_color(fbl->shadow_accum_fb, clear);
+  }
+
+  /* Create Pass and shgroup. */
+  DRW_PASS_CREATE(psl->shadow_accum_pass,
+                  DRW_STATE_WRITE_COLOR | DRW_STATE_DEPTH_ALWAYS | DRW_STATE_BLEND_ADD_FULL);
+  DRWShadingGroup *grp = DRW_shgroup_create(e_data.shadow_accum_sh, psl->shadow_accum_pass);
+  DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &dtxl->depth);
+  DRW_shgroup_uniform_texture(grp, "utilTex", EEVEE_materials_get_util_tex());
+  DRW_shgroup_uniform_block(grp, "probe_block", sldata->probe_ubo);
+  DRW_shgroup_uniform_block(grp, "grid_block", sldata->grid_ubo);
+  DRW_shgroup_uniform_block(grp, "planar_block", sldata->planar_ubo);
+  DRW_shgroup_uniform_block(grp, "light_block", sldata->light_ubo);
+  DRW_shgroup_uniform_block(grp, "shadow_block", sldata->shadow_ubo);
+  DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
+  DRW_shgroup_uniform_block(grp, "renderpass_block", sldata->renderpass_ubo.combined);
+  DRW_shgroup_uniform_texture_ref(grp, "shadowCubeTexture", &sldata->shadow_cube_pool);
+  DRW_shgroup_uniform_texture_ref(grp, "shadowCascadeTexture", &sldata->shadow_cascade_pool);
+
+  DRW_shgroup_call(grp, DRW_cache_fullscreen_quad_get(), NULL);
+}
+
+void EEVEE_shadow_output_accumulate(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *vedata)
+{
+  EEVEE_FramebufferList *fbl = vedata->fbl;
+  EEVEE_PassList *psl = vedata->psl;
+
+  if (fbl->shadow_accum_fb != NULL) {
+    GPU_framebuffer_bind(fbl->shadow_accum_fb);
+    DRW_draw_pass(psl->shadow_accum_pass);
+
+    /* Restore */
+    GPU_framebuffer_bind(fbl->main_fb);
+  }
+}
+
+/* \} */
+
 void EEVEE_shadows_free(void)
 {
   DRW_SHADER_FREE_SAFE(e_data.shadow_sh);
+  DRW_SHADER_FREE_SAFE(e_data.shadow_accum_sh);
 }

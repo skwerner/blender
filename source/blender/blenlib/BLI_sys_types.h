@@ -64,16 +64,16 @@ typedef uint64_t u_int64_t;
 #else
 
 /* FreeBSD, Solaris */
-#  include <sys/types.h>
 #  include <stdint.h>
+#  include <sys/types.h>
 
 #endif /* ifdef platform for types */
 
-#include <stddef.h> /* size_t define */
 #include <stdbool.h>
+#include <stddef.h> /* size_t define */
 
 #ifndef __cplusplus
-#  if defined(__APPLE__)
+#  if defined(__APPLE__) || defined(__NetBSD__)
 /* The <uchar.h> standard header is missing on macOS. */
 typedef unsigned int char32_t;
 #  else

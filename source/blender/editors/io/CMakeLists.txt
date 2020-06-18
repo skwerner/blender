@@ -17,16 +17,16 @@
 
 set(INC
   ../include
-  ../../alembic
   ../../blenkernel
   ../../blenlib
   ../../blentranslation
   ../../bmesh
-  ../../collada
   ../../depsgraph
+  ../../io/alembic
+  ../../io/collada
+  ../../io/usd
   ../../makesdna
   ../../makesrna
-  ../../usd
   ../../windowmanager
   ../../../../intern/guardedalloc
 )
@@ -66,10 +66,6 @@ if(WITH_ALEMBIC)
     bf_alembic
   )
   add_definitions(-DWITH_ALEMBIC)
-
-  if(WITH_ALEMBIC_HDF5)
-    add_definitions(-DWITH_ALEMBIC_HDF5)
-  endif()
 endif()
 
 if(WITH_USD)

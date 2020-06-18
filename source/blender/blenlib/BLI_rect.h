@@ -24,9 +24,9 @@
  * \ingroup bli
  */
 
-#include "DNA_vec_types.h"
-#include "BLI_sys_types.h" /* bool */
 #include "BLI_compiler_compat.h"
+#include "BLI_sys_types.h" /* bool */
+#include "DNA_vec_types.h"
 
 struct rctf;
 struct rcti;
@@ -83,6 +83,10 @@ bool BLI_rctf_compare(const struct rctf *rect_a, const struct rctf *rect_b, cons
 bool BLI_rcti_compare(const struct rcti *rect_a, const struct rcti *rect_b);
 bool BLI_rctf_isect(const struct rctf *src1, const struct rctf *src2, struct rctf *dest);
 bool BLI_rcti_isect(const struct rcti *src1, const struct rcti *src2, struct rcti *dest);
+bool BLI_rctf_isect_rect_x(const struct rctf *src1, const struct rctf *src2, float range_x[2]);
+bool BLI_rctf_isect_rect_y(const struct rctf *src1, const struct rctf *src2, float range_y[2]);
+bool BLI_rcti_isect_rect_x(const struct rcti *src1, const struct rcti *src2, int range_x[2]);
+bool BLI_rcti_isect_rect_y(const struct rcti *src1, const struct rcti *src2, int range_y[2]);
 bool BLI_rcti_isect_x(const rcti *rect, const int x);
 bool BLI_rcti_isect_y(const rcti *rect, const int y);
 bool BLI_rcti_isect_pt(const struct rcti *rect, const int x, const int y);

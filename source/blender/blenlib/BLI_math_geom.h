@@ -27,16 +27,16 @@
  * \ingroup bli
  */
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "BLI_compiler_attrs.h"
 #include "BLI_math_inline.h"
 
 #ifdef BLI_MATH_GCC_WARN_PRAGMA
 #  pragma GCC diagnostic push
 #  pragma GCC diagnostic ignored "-Wredundant-decls"
+#endif
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 /********************************** Polygons *********************************/
@@ -190,6 +190,10 @@ float dist_squared_to_projected_aabb_simple(const float projmat[4][4],
                                             const float bbmin[3],
                                             const float bbmax[3]);
 
+float closest_to_ray_v3(float r_close[3],
+                        const float p[3],
+                        const float ray_orig[3],
+                        const float ray_dir[3]);
 float closest_to_line_v2(float r_close[2], const float p[2], const float l1[2], const float l2[2]);
 double closest_to_line_v2_db(double r_close[2],
                              const double p[2],
@@ -636,6 +640,13 @@ void perspective_m4(float mat[4][4],
                     const float top,
                     const float nearClip,
                     const float farClip);
+void perspective_m4_fov(float mat[4][4],
+                        const float angle_left,
+                        const float angle_right,
+                        const float angle_up,
+                        const float angle_down,
+                        const float nearClip,
+                        const float farClip);
 void orthographic_m4(float mat[4][4],
                      const float left,
                      const float right,

@@ -28,10 +28,10 @@
 
 #include "DNA_userdef_types.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_fileops.h"
 #include "BLI_path_util.h"
 #include "BLI_string.h"
+#include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
@@ -83,6 +83,7 @@ typedef struct FileBrowseOp {
   PointerRNA ptr;
   PropertyRNA *prop;
   bool is_undo;
+  bool is_userdef;
 } FileBrowseOp;
 
 static int file_browse_exec(bContext *C, wmOperator *op)
@@ -110,7 +111,7 @@ static int file_browse_exec(bContext *C, wmOperator *op)
 
     if (BLI_is_dir(path)) {
       /* do this first so '//' isnt converted to '//\' on windows */
-      BLI_add_slash(path);
+      BLI_path_slash_ensure(path);
       if (is_relative) {
         BLI_strncpy(path, str, FILE_MAX);
         BLI_path_rel(path, BKE_main_blendfile_path(bmain));
@@ -122,7 +123,7 @@ static int file_browse_exec(bContext *C, wmOperator *op)
       }
     }
     else {
-      char *const lslash = (char *)BLI_last_slash(str);
+      char *const lslash = (char *)BLI_path_slash_rfind(str);
       if (lslash) {
         lslash[1] = '\0';
       }
@@ -148,6 +149,11 @@ static int file_browse_exec(bContext *C, wmOperator *op)
     }
   }
 
+  /* Tag user preferences as dirty. */
+  if (fbo->is_userdef) {
+    U.runtime.is_dirty = true;
+  }
+
   MEM_freeN(op->customdata);
 
   return OPERATOR_FINISHED;
@@ -164,6 +170,7 @@ static int file_browse_invoke(bContext *C, wmOperator *op, const wmEvent *event)
   PointerRNA ptr;
   PropertyRNA *prop;
   bool is_undo;
+  bool is_userdef;
   FileBrowseOp *fbo;
   char *str;
 
@@ -172,7 +179,7 @@ static int file_browse_invoke(bContext *C, wmOperator *op, const wmEvent *event)
     return OPERATOR_CANCELLED;
   }
 
-  UI_context_active_but_prop_get_filebrowser(C, &ptr, &prop, &is_undo);
+  UI_context_active_but_prop_get_filebrowser(C, &ptr, &prop, &is_undo, &is_userdef);
 
   if (!prop) {
     return OPERATOR_CANCELLED;
@@ -187,7 +194,7 @@ static int file_browse_invoke(bContext *C, wmOperator *op, const wmEvent *event)
     PointerRNA props_ptr;
 
     if (event->alt) {
-      char *lslash = (char *)BLI_last_slash(str);
+      char *lslash = (char *)BLI_path_slash_rfind(str);
       if (lslash) {
         *lslash = '\0';
       }
@@ -209,6 +216,7 @@ static int file_browse_invoke(bContext *C, wmOperator *op, const wmEvent *event)
     fbo->ptr = ptr;
     fbo->prop = prop;
     fbo->is_undo = is_undo;
+    fbo->is_userdef = is_userdef;
     op->customdata = fbo;
 
     /* normally ED_fileselect_get_params would handle this but we need to because of stupid
@@ -227,7 +235,7 @@ static int file_browse_invoke(bContext *C, wmOperator *op, const wmEvent *event)
           is_relative = false;
         }
 
-        /* annoying exception!, if were dealing with the user prefs, default relative to be off */
+        /* annoying exception!, if we're dealing with the user prefs, default relative to be off */
         RNA_property_boolean_set(op->ptr, prop_relpath, is_relative);
       }
     }

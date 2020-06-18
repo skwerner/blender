@@ -26,16 +26,20 @@
 #ifndef __GPU_VERTEX_FORMAT_H__
 #define __GPU_VERTEX_FORMAT_H__
 
-#include "GPU_common.h"
-#include "BLI_compiler_compat.h"
 #include "BLI_assert.h"
+#include "BLI_compiler_compat.h"
+#include "GPU_common.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define GPU_VERT_ATTR_MAX_LEN 16
 #define GPU_VERT_ATTR_MAX_NAMES 6
 #define GPU_VERT_ATTR_NAMES_BUF_LEN 256
 #define GPU_VERT_FORMAT_MAX_NAMES 63 /* More than enough, actual max is ~30. */
 /* Computed as GPU_VERT_ATTR_NAMES_BUF_LEN / 30 (actual max format name). */
-#define GPU_MAX_SAFE_ATTRIB_NAME 12
+#define GPU_MAX_SAFE_ATTR_NAME 12
 
 typedef enum {
   GPU_COMP_I8,
@@ -90,23 +94,24 @@ typedef struct GPUVertFormat {
   uint packed : 1;
   /** Current offset in names[]. */
   uint name_offset : 8;
-  /** Store each attrib in one contiguous buffer region. */
+  /** Store each attribute in one contiguous buffer region. */
   uint deinterleaved : 1;
 
   GPUVertAttr attrs[GPU_VERT_ATTR_MAX_LEN];
   char names[GPU_VERT_ATTR_NAMES_BUF_LEN];
 } GPUVertFormat;
 
-struct GPUShaderInterface;
+struct GPUShader;
 
 void GPU_vertformat_clear(GPUVertFormat *);
 void GPU_vertformat_copy(GPUVertFormat *dest, const GPUVertFormat *src);
-void GPU_vertformat_from_interface(GPUVertFormat *format,
-                                   const struct GPUShaderInterface *shaderface);
+void GPU_vertformat_from_shader(GPUVertFormat *format, const struct GPUShader *shader);
 
 uint GPU_vertformat_attr_add(
     GPUVertFormat *, const char *name, GPUVertCompType, uint comp_len, GPUVertFetchMode);
 void GPU_vertformat_alias_add(GPUVertFormat *, const char *alias);
+
+void GPU_vertformat_multiload_enable(GPUVertFormat *format, int load_count);
 
 void GPU_vertformat_deinterleave(GPUVertFormat *format);
 
@@ -119,7 +124,7 @@ BLI_INLINE const char *GPU_vertformat_attr_name_get(const GPUVertFormat *format,
   return format->names + attr->names[n_idx];
 }
 
-void GPU_vertformat_safe_attrib_name(const char *attrib_name, char *r_safe_name, uint max_len);
+void GPU_vertformat_safe_attr_name(const char *attr_name, char *r_safe_name, uint max_len);
 
 /* format conversion */
 
@@ -184,5 +189,9 @@ BLI_INLINE GPUPackedNormal GPU_normal_convert_i10_s3(const short data[3])
   };
   return n;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __GPU_VERTEX_FORMAT_H__ */

@@ -24,10 +24,9 @@
 /* **************** OUTPUT ******************** */
 
 static bNodeSocketTemplate sh_node_output_material_in[] = {
-    {SOCK_SHADER, 1, N_("Surface")},
-    {SOCK_SHADER, 1, N_("Volume")},
+    {SOCK_SHADER, N_("Surface")},
+    {SOCK_SHADER, N_("Volume")},
     {SOCK_VECTOR,
-     1,
      N_("Displacement"),
      0.0f,
      0.0f,
@@ -37,7 +36,7 @@ static bNodeSocketTemplate sh_node_output_material_in[] = {
      1.0f,
      PROP_NONE,
      SOCK_HIDE_VALUE},
-    {-1, 0, ""},
+    {-1, ""},
 };
 
 static int node_shader_gpu_output_material(GPUMaterial *mat,
@@ -46,9 +45,18 @@ static int node_shader_gpu_output_material(GPUMaterial *mat,
                                            GPUNodeStack *in,
                                            GPUNodeStack *out)
 {
-  GPUNodeLink *outlink;
+  GPUNodeLink *outlink, *alpha_threshold_link;
 
-  GPU_stack_link(mat, node, "node_output_material", in, out, &outlink);
+  Material *ma = GPU_material_get_material(mat);
+  if (ma && ma->blend_method == MA_BM_CLIP) {
+    alpha_threshold_link = GPU_uniform(&ma->alpha_threshold);
+  }
+  else {
+    static float no_alpha_threshold = -1.0f;
+    alpha_threshold_link = GPU_uniform(&no_alpha_threshold);
+  }
+
+  GPU_stack_link(mat, node, "node_output_material", in, out, alpha_threshold_link, &outlink);
   GPU_material_output_link(mat, outlink);
 
   return true;

@@ -80,8 +80,6 @@ void BKE_sound_reset_runtime(struct bSound *sound);
 void BKE_sound_load(struct Main *main, struct bSound *sound);
 void BKE_sound_ensure_loaded(struct Main *bmain, struct bSound *sound);
 
-void BKE_sound_free(struct bSound *sound);
-
 /* Matches AUD_Channels. */
 typedef enum eSoundChannels {
   SOUND_CHANNELS_INVALID = 0,
@@ -106,15 +104,11 @@ typedef struct SoundInfo {
  * or if the codes is not supported. */
 bool BKE_sound_info_get(struct Main *main, struct bSound *sound, SoundInfo *sound_info);
 
-void BKE_sound_copy_data(struct Main *bmain,
-                         struct bSound *sound_dst,
-                         const struct bSound *sound_src,
-                         const int flag);
-
-void BKE_sound_make_local(struct Main *bmain, struct bSound *sound, const bool lib_local);
-
 #if defined(WITH_AUDASPACE)
-AUD_Device *BKE_sound_mixdown(struct Scene *scene, AUD_DeviceSpecs specs, int start, float volume);
+AUD_Device *BKE_sound_mixdown(const struct Scene *scene,
+                              AUD_DeviceSpecs specs,
+                              int start,
+                              float volume);
 #endif
 
 void BKE_sound_reset_scene_runtime(struct Scene *scene);
@@ -122,6 +116,9 @@ void BKE_sound_create_scene(struct Scene *scene);
 void BKE_sound_ensure_scene(struct Scene *scene);
 
 void BKE_sound_destroy_scene(struct Scene *scene);
+
+void BKE_sound_lock(void);
+void BKE_sound_unlock(void);
 
 void BKE_sound_reset_scene_specs(struct Scene *scene);
 
@@ -167,7 +164,7 @@ void BKE_sound_stop_scene(struct Scene *scene);
 
 void BKE_sound_seek_scene(struct Main *bmain, struct Scene *scene);
 
-float BKE_sound_sync_scene(struct Scene *scene);
+double BKE_sound_sync_scene(struct Scene *scene);
 
 int BKE_sound_scene_playing(struct Scene *scene);
 
@@ -183,10 +180,10 @@ float BKE_sound_get_length(struct Main *bmain, struct bSound *sound);
 
 char **BKE_sound_get_device_names(void);
 
-typedef void (*SoundJackSyncCallback)(struct Main *bmain, int mode, float time);
+typedef void (*SoundJackSyncCallback)(struct Main *bmain, int mode, double time);
 
 void BKE_sound_jack_sync_callback_set(SoundJackSyncCallback callback);
-void BKE_sound_jack_scene_update(struct Scene *scene, int mode, float time);
+void BKE_sound_jack_scene_update(struct Scene *scene, int mode, double time);
 
 /* Dependency graph evaluation. */
 

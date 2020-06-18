@@ -26,11 +26,11 @@
 #ifndef __DNA_CUSTOMDATA_TYPES_H__
 #define __DNA_CUSTOMDATA_TYPES_H__
 
+#include "DNA_defs.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "DNA_defs.h"
 
 /** Descriptor and storage for a custom data layer. */
 typedef struct CustomDataLayer {
@@ -76,8 +76,8 @@ typedef struct CustomData {
    * MUST be >= CD_NUMTYPES, but we cant use a define here.
    * Correct size is ensured in CustomData_update_typemap assert().
    */
-  int typemap[42];
-  char _pad0[4];
+  int typemap[48];
+  char _pad[4];
   /** Number of layers, size of layers array. */
   int totlayer, maxlayer;
   /** In editmode, total size of all data layers. */
@@ -108,9 +108,9 @@ typedef enum CustomDataType {
   CD_ORIGINDEX = 7,
   CD_NORMAL = 8,
   CD_FACEMAP = 9, /* exclusive face group, each face can only be part of one */
-  CD_PROP_FLT = 10,
-  CD_PROP_INT = 11,
-  CD_PROP_STR = 12,
+  CD_PROP_FLOAT = 10,
+  CD_PROP_INT32 = 11,
+  CD_PROP_STRING = 12,
   CD_ORIGSPACE = 13, /* for modifier stack face location mapping */
   CD_ORCO = 14,      /* undeformed vertex coordinates, normalized to 0..1 range */
 #ifdef DNA_DEPRECATED_ALLOW
@@ -120,9 +120,9 @@ typedef enum CustomDataType {
   CD_MLOOPCOL = 17,
   CD_TANGENT = 18,
   CD_MDISPS = 19,
-  CD_PREVIEW_MCOL = 20, /* for displaying weightpaint colors */
-                        /*  CD_ID_MCOL          = 21, */
-  CD_TEXTURE_MLOOPCOL = 22,
+  CD_PREVIEW_MCOL = 20,           /* for displaying weightpaint colors */
+                                  /*  CD_ID_MCOL          = 21, */
+  /* CD_TEXTURE_MLOOPCOL = 22, */ /* UNUSED */
   CD_CLOTH_ORCO = 23,
   CD_RECAST = 24,
 
@@ -146,8 +146,17 @@ typedef enum CustomDataType {
   CD_MLOOPTANGENT = 39,
   CD_TESSLOOPNORMAL = 40,
   CD_CUSTOMLOOPNORMAL = 41,
+  CD_SCULPT_FACE_SETS = 42,
 
-  CD_NUMTYPES = 42,
+  /* Hair and PointCloud */
+  CD_LOCATION = 43,
+  CD_RADIUS = 44,
+  CD_HAIRCURVE = 45,
+  CD_HAIRMAPPING = 46,
+
+  CD_PROP_COLOR = 47,
+
+  CD_NUMTYPES = 48,
 } CustomDataType;
 
 /* Bits for CustomDataMask */
@@ -161,9 +170,9 @@ typedef enum CustomDataType {
 #define CD_MASK_ORIGINDEX (1 << CD_ORIGINDEX)
 #define CD_MASK_NORMAL (1 << CD_NORMAL)
 #define CD_MASK_FACEMAP (1 << CD_FACEMAP)
-#define CD_MASK_PROP_FLT (1 << CD_PROP_FLT)
-#define CD_MASK_PROP_INT (1 << CD_PROP_INT)
-#define CD_MASK_PROP_STR (1 << CD_PROP_STR)
+#define CD_MASK_PROP_FLOAT (1 << CD_PROP_FLOAT)
+#define CD_MASK_PROP_INT32 (1 << CD_PROP_INT32)
+#define CD_MASK_PROP_STRING (1 << CD_PROP_STRING)
 #define CD_MASK_ORIGSPACE (1 << CD_ORIGSPACE)
 #define CD_MASK_ORCO (1 << CD_ORCO)
 // #define CD_MASK_MTEXPOLY (1 << CD_MTEXPOLY)  /* DEPRECATED */
@@ -195,12 +204,17 @@ typedef enum CustomDataType {
 #define CD_MASK_MLOOPTANGENT (1LL << CD_MLOOPTANGENT)
 #define CD_MASK_TESSLOOPNORMAL (1LL << CD_TESSLOOPNORMAL)
 #define CD_MASK_CUSTOMLOOPNORMAL (1LL << CD_CUSTOMLOOPNORMAL)
+#define CD_MASK_SCULPT_FACE_SETS (1LL << CD_SCULPT_FACE_SETS)
+#define CD_MASK_PROP_COLOR (1LL << CD_PROP_COLOR)
 
 /** Data types that may be defined for all mesh elements types. */
-#define CD_MASK_GENERIC_DATA (CD_MASK_PROP_FLT | CD_MASK_PROP_INT | CD_MASK_PROP_STR)
+#define CD_MASK_GENERIC_DATA (CD_MASK_PROP_FLOAT | CD_MASK_PROP_INT32 | CD_MASK_PROP_STRING)
 
 /** Multires loop data. */
 #define CD_MASK_MULTIRES_GRIDS (CD_MASK_MDISPS | CD_GRID_PAINT_MASK)
+
+/* All data layers. */
+#define CD_MASK_ALL (~0LL)
 
 typedef struct CustomData_MeshMasks {
   uint64_t vmask;

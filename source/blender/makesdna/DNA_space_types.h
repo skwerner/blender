@@ -25,15 +25,15 @@
 #ifndef __DNA_SPACE_TYPES_H__
 #define __DNA_SPACE_TYPES_H__
 
-#include "DNA_defs.h"
-#include "DNA_listBase.h"
 #include "DNA_color_types.h" /* for Histogram */
-#include "DNA_vec_types.h"
-#include "DNA_outliner_types.h"  /* for TreeStoreElem */
-#include "DNA_image_types.h"     /* ImageUser */
+#include "DNA_defs.h"
+#include "DNA_image_types.h" /* ImageUser */
+#include "DNA_listBase.h"
 #include "DNA_movieclip_types.h" /* MovieClipUser */
-#include "DNA_sequence_types.h"  /* SequencerScopes */
 #include "DNA_node_types.h"      /* for bNodeInstanceKey */
+#include "DNA_outliner_types.h"  /* for TreeStoreElem */
+#include "DNA_sequence_types.h"  /* SequencerScopes */
+#include "DNA_vec_types.h"
 /* Hum ... Not really nice... but needed for spacebuts. */
 #include "DNA_view2d_types.h"
 
@@ -212,13 +212,13 @@ typedef enum eSpaceButtons_Context {
   BCONTEXT_SHADERFX = 15,
   BCONTEXT_OUTPUT = 16,
 
-  /* always as last... */
+  /* Keep last. */
   BCONTEXT_TOT,
 } eSpaceButtons_Context;
 
 /* SpaceProperties.flag */
 typedef enum eSpaceButtons_Flag {
-  SB_PRV_OSA = (1 << 0),
+  /* SB_PRV_OSA = (1 << 0), */ /* UNUSED */
   SB_PIN_CONTEXT = (1 << 1),
   SB_FLAG_UNUSED_2 = (1 << 2),
   SB_FLAG_UNUSED_3 = (1 << 3),
@@ -279,10 +279,10 @@ typedef struct SpaceOutliner {
 
 /* SpaceOutliner.flag */
 typedef enum eSpaceOutliner_Flag {
-  SO_TESTBLOCKS = (1 << 0),
-  SO_NEWSELECTED = (1 << 1),
-  SO_FLAG_UNUSED_1 = (1 << 2), /* cleared */
-  SO_HIDE_KEYINGSETINFO = (1 << 3),
+  /* SO_TESTBLOCKS = (1 << 0), */         /* UNUSED */
+  /* SO_NEWSELECTED = (1 << 1), */        /* UNUSED */
+  SO_FLAG_UNUSED_1 = (1 << 2),            /* cleared */
+  /* SO_HIDE_KEYINGSETINFO = (1 << 3), */ /* UNUSED */
   SO_SKIP_SORT_ALPHA = (1 << 4),
   SO_SYNC_SELECT = (1 << 5),
 } eSpaceOutliner_Flag;
@@ -436,7 +436,7 @@ typedef struct SpaceGraph {
 
 /* SpaceGraph.flag (Graph Editor Settings) */
 typedef enum eGraphEdit_Flag {
-  /* OLD DEPRECEATED SETTING */
+  /* OLD DEPRECATED SETTING */
   /* SIPO_LOCK_VIEW            = (1 << 0), */
 
   /* don't merge keyframes on the same frame after a transform */
@@ -450,7 +450,7 @@ typedef enum eGraphEdit_Flag {
   SIPO_SELCUVERTSONLY = (1 << 5),
   /* draw names of F-Curves beside the respective curves */
   /* NOTE: currently not used */
-  SIPO_DRAWNAMES = (1 << 6),
+  /* SIPO_DRAWNAMES = (1 << 6), */ /* UNUSED */
   /* show sliders in channels list */
   SIPO_SLIDERS = (1 << 7),
   /* don't show the horizontal component of the cursor */
@@ -582,9 +582,6 @@ typedef struct SpaceSeq {
   /** Multiview current eye - for internal use. */
   char multiview_eye;
   char _pad2[7];
-
-  struct GPUFX *compositor;
-  void *_pad3;
 } SpaceSeq;
 
 /* SpaceSeq.mainb */
@@ -609,7 +606,7 @@ typedef enum eSpaceSeq_Flag {
   SEQ_DRAW_COLOR_SEPARATED = (1 << 2),
   SEQ_SHOW_SAFE_MARGINS = (1 << 3),
   SEQ_SHOW_GPENCIL = (1 << 4),
-  /* SEQ_NO_DRAW_CFRANUM = (1 << 5), DEPRECATED */
+  SEQ_SHOW_FCURVES = (1 << 5),
   SEQ_USE_ALPHA = (1 << 6),     /* use RGBA display mode for preview */
   SEQ_ALL_WAVEFORMS = (1 << 7), /* draw all waveforms */
   SEQ_NO_WAVEFORMS = (1 << 8),  /* draw no waveforms */
@@ -679,7 +676,8 @@ typedef struct FileSelectParams {
   /** Text items name must match to be shown. */
   char filter_search[64];
   /** Same as filter, but for ID types (aka library groups). */
-  int filter_id;
+  int _pad0;
+  uint64_t filter_id;
 
   /** Active file used for keyboard navigation. */
   int active_file;
@@ -835,9 +833,10 @@ typedef enum eFileSel_Params_RenameFlag {
   FILE_PARAMS_RENAME_POSTSCROLL_ACTIVE = 1 << 3,
 } eFileSel_Params_RenameFlag;
 
-/* files in filesel list: file types
- * Note we could use mere values (instead of bitflags) for file types themselves,
- * but since we do not lack of bytes currently...
+/**
+ * Files in the file selector list: file types
+ * Note we could use mere values (instead of bit-flags) for file types themselves,
+ * but since we do not lack of bytes currently.
  */
 typedef enum eFileSel_File_Types {
   FILE_TYPE_BLENDER = (1 << 2),
@@ -860,6 +859,7 @@ typedef enum eFileSel_File_Types {
   /** For all kinds of recognized import/export formats. No need for specialized types. */
   FILE_TYPE_OBJECT_IO = (1 << 17),
   FILE_TYPE_USD = (1 << 18),
+  FILE_TYPE_VOLUME = (1 << 19),
 
   /** An FS directory (i.e. S_ISDIR on its path is true). */
   FILE_TYPE_DIR = (1 << 30),
@@ -956,7 +956,10 @@ typedef struct FileDirEntry {
   /** ID type, in case typeflag has FILE_TYPE_BLENDERLIB set. */
   int blentype;
 
+  /* Path to item that is relative to current folder root. */
   char *relpath;
+  /** Optional argument for shortcuts, aliases etc. */
+  char *redirection_path;
 
   /** TODO: make this a real ID pointer? */
   void *poin;
@@ -968,6 +971,8 @@ typedef struct FileDirEntry {
 
   short status;
   short flags;
+  /* eFileAttributes defined in BLI_fileops.h */
+  int attributes;
 
   ListBase variants;
   int nbr_variants;
@@ -999,11 +1004,13 @@ typedef struct FileDirEntryArr {
   char root[1024];
 } FileDirEntryArr;
 
+#if 0 /* UNUSED */
 /* FileDirEntry.status */
 enum {
   ASSET_STATUS_LOCAL = 1 << 0,  /* If active uuid is available locally/immediately. */
   ASSET_STATUS_LATEST = 1 << 1, /* If active uuid is latest available version. */
 };
+#endif
 
 /* FileDirEntry.flags */
 enum {
@@ -1069,7 +1076,9 @@ typedef struct SpaceImage {
   int flag;
 
   char pixel_snap_mode;
-  char _pad2[3];
+  char _pad2[7];
+
+  float uv_opacity;
 
   int tile_grid_shape[2];
 
@@ -1157,12 +1166,6 @@ typedef enum eSpaceImage_Flag {
   SI_SHOW_G = (1 << 28),
   SI_SHOW_B = (1 << 29),
 } eSpaceImage_Flag;
-
-/* SpaceImage.other_uv_filter */
-typedef enum eSpaceImage_OtherUVFilter {
-  SI_FILTER_SAME_IMAGE = 0,
-  SI_FILTER_ALL = 1,
-} eSpaceImage_OtherUVFilter;
 
 /** \} */
 
@@ -1718,7 +1721,7 @@ typedef enum eSpace_Type {
   SPACE_TOPBAR = 21,
   SPACE_STATUSBAR = 22,
 
-  SPACE_TYPE_LAST = SPACE_STATUSBAR,
+#define SPACE_TYPE_LAST SPACE_STATUSBAR
 } eSpace_Type;
 
 /* use for function args */

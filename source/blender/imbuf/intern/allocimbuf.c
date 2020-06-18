@@ -30,16 +30,16 @@
 #include "IMB_imbuf_types.h"
 
 #include "IMB_allocimbuf.h"
+#include "IMB_colormanagement_intern.h"
 #include "IMB_filetype.h"
 #include "IMB_metadata.h"
-#include "IMB_colormanagement_intern.h"
 
 #include "imbuf.h"
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_threads.h"
+#include "BLI_utildefines.h"
 
 static SpinLock refcounter_spin;
 
@@ -380,7 +380,7 @@ void *imb_alloc_pixels(
   }
 
   size_t size = (size_t)x * (size_t)y * (size_t)channels * typesize;
-  return MEM_mapallocN(size, name);
+  return MEM_callocN(size, name);
 }
 
 bool imb_addrectfloatImBuf(ImBuf *ibuf)

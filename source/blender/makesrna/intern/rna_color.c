@@ -18,8 +18,8 @@
  * \ingroup RNA
  */
 
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "DNA_color_types.h"
 #include "DNA_texture_types.h"
@@ -49,10 +49,10 @@
 #  include "BKE_colorband.h"
 #  include "BKE_colortools.h"
 #  include "BKE_image.h"
+#  include "BKE_linestyle.h"
 #  include "BKE_movieclip.h"
 #  include "BKE_node.h"
 #  include "BKE_sequencer.h"
-#  include "BKE_linestyle.h"
 
 #  include "DEG_depsgraph.h"
 
@@ -329,10 +329,11 @@ static void rna_ColorRamp_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *
         WM_main_add_notifier(NC_LINESTYLE, linestyle);
         break;
       }
+      /* ColorRamp for particle display is owned by the object (see T54422) */
+      case ID_OB:
       case ID_PA: {
         ParticleSettings *part = (ParticleSettings *)ptr->owner_id;
 
-        DEG_id_tag_update(&part->id, ID_RECALC_GEOMETRY | ID_RECALC_PSYS_REDO);
         WM_main_add_notifier(NC_OBJECT | ND_PARTICLE | NA_EDITED, part);
       }
       default:

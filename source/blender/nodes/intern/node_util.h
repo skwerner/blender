@@ -38,6 +38,10 @@
 
 #include "RNA_access.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct bNode;
 struct bNodeTree;
 
@@ -66,8 +70,11 @@ extern void *node_initexec_curves(struct bNodeExecContext *context,
                                   struct bNode *node,
                                   bNodeInstanceKey key);
 
-/**** Labels ****/
+/**** Updates ****/
+void node_sock_label(struct bNodeSocket *sock, const char *name);
+void node_math_update(struct bNodeTree *ntree, struct bNode *node);
 
+/**** Labels ****/
 void node_blend_label(struct bNodeTree *ntree, struct bNode *node, char *label, int maxlen);
 void node_image_label(struct bNodeTree *ntree, struct bNode *node, char *label, int maxlen);
 void node_math_label(struct bNodeTree *ntree, struct bNode *node, char *label, int maxlen);
@@ -99,5 +106,9 @@ void node_socket_set_vector(struct bNodeTree *ntree,
                             struct bNode *node,
                             struct bNodeSocket *sock,
                             const float *value);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

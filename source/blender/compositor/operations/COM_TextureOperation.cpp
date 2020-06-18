@@ -19,13 +19,11 @@
 #include "COM_TextureOperation.h"
 #include "COM_WorkScheduler.h"
 
+#include "BKE_image.h"
+#include "BKE_node.h"
+
 #include "BLI_listbase.h"
 #include "BLI_threads.h"
-#include "BKE_image.h"
-
-extern "C" {
-#include "BKE_node.h"
-}
 
 TextureBaseOperation::TextureBaseOperation() : NodeOperation()
 {

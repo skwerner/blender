@@ -21,9 +21,9 @@
  * \ingroup edcurve
  */
 
+#include "DNA_anim_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
-#include "DNA_anim_types.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -42,10 +42,10 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
+#include "ED_curve.h"
 #include "ED_object.h"
 #include "ED_screen.h"
 #include "ED_view3d.h"
-#include "ED_curve.h"
 
 #include "curve_intern.h"
 
@@ -138,7 +138,7 @@ Nurb *ED_curve_add_nurbs_primitive(
     copy_v3_v3(zvec, rv3d->viewinv[2]);
   }
 
-  BKE_nurbList_flag_set(editnurb, 0);
+  BKE_nurbList_flag_set(editnurb, SELECT, false);
 
   /* these types call this function to return a Nurb */
   if (stype != CU_PRIM_TUBE && stype != CU_PRIM_DONUT) {
@@ -521,7 +521,7 @@ static int curvesurf_prim_add(bContext *C, wmOperator *op, int type, int isSurf)
   WM_operator_view3d_unit_defaults(C, op);
 
   if (!ED_object_add_generic_get_opts(
-          C, op, 'Z', loc, rot, &enter_editmode, &local_view_bits, NULL)) {
+          C, op, 'Z', loc, rot, NULL, &enter_editmode, &local_view_bits, NULL)) {
     return OPERATOR_CANCELLED;
   }
 

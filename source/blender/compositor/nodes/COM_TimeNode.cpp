@@ -17,11 +17,11 @@
  */
 
 #include "COM_TimeNode.h"
-#include "COM_SetValueOperation.h"
 #include "COM_ExecutionSystem.h"
-extern "C" {
+#include "COM_SetValueOperation.h"
+
 #include "BKE_colortools.h"
-}
+
 #include "BLI_utildefines.h"
 
 TimeNode::TimeNode(bNode *editorNode) : Node(editorNode)

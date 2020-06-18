@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2006 Blender Foundation.
@@ -25,10 +25,15 @@
  */
 
 #include "DNA_ID.h"
+#include "DNA_boid_types.h"
 #include "DNA_dynamicpaint_types.h"
 #include "DNA_object_force_types.h"
-#include "DNA_boid_types.h"
+#include "DNA_pointcache_types.h"
 #include <stdio.h> /* for FILE */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* Point cache clearing option, for BKE_ptcache_id_clear, before
  * and after are non inclusive (they wont remove the cfra) */
@@ -60,6 +65,7 @@
 #define PTCACHE_TYPE_SMOKE_HIGHRES 4
 #define PTCACHE_TYPE_DYNAMICPAINT 5
 #define PTCACHE_TYPE_RIGIDBODY 6
+#define PTCACHE_TYPE_SIM_PARTICLES 7
 
 /* high bits reserved for flags that need to be stored in file */
 #define PTCACHE_TYPEFLAG_COMPRESS (1 << 16)
@@ -80,10 +86,12 @@ struct ListBase;
 struct Main;
 struct Object;
 struct ParticleKey;
+struct ParticleSimulationState;
 struct ParticleSystem;
 struct PointCache;
 struct RigidBodyWorld;
 struct Scene;
+struct Simulation;
 struct SoftBody;
 struct ViewLayer;
 
@@ -274,9 +282,6 @@ typedef struct PTCacheEdit {
   ListBase pathcachebufs;
 
   int totpoint, totframes, totcached, edited;
-
-  unsigned char sel_col[3];
-  unsigned char nosel_col[3];
 } PTCacheEdit;
 
 /* Particle functions */
@@ -291,6 +296,7 @@ void BKE_ptcache_id_from_dynamicpaint(PTCacheID *pid,
                                       struct Object *ob,
                                       struct DynamicPaintSurface *surface);
 void BKE_ptcache_id_from_rigidbody(PTCacheID *pid, struct Object *ob, struct RigidBodyWorld *rbw);
+void BKE_ptcache_id_from_sim_particles(PTCacheID *pid, struct ParticleSimulationState *state);
 
 PTCacheID BKE_ptcache_id_find(struct Object *ob, struct Scene *scene, struct PointCache *cache);
 void BKE_ptcache_ids_from_object(struct ListBase *lb,
@@ -380,5 +386,9 @@ void BKE_ptcache_validate(struct PointCache *cache, int framenr);
 
 /* Set correct flags after unsuccessful simulation step */
 void BKE_ptcache_invalidate(struct PointCache *cache);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

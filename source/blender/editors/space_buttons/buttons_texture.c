@@ -32,23 +32,23 @@
 
 #include "BLT_translation.h"
 
-#include "DNA_brush_types.h"
 #include "DNA_ID.h"
+#include "DNA_brush_types.h"
+#include "DNA_linestyle_types.h"
 #include "DNA_node_types.h"
-#include "DNA_object_types.h"
 #include "DNA_object_force_types.h"
+#include "DNA_object_types.h"
 #include "DNA_particle_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_space_types.h"
-#include "DNA_linestyle_types.h"
 #include "DNA_windowmanager_types.h"
 
 #include "BKE_context.h"
+#include "BKE_gpencil_modifier.h"
 #include "BKE_layer.h"
 #include "BKE_linestyle.h"
 #include "BKE_modifier.h"
-#include "BKE_gpencil_modifier.h"
 #include "BKE_node.h"
 #include "BKE_paint.h"
 #include "BKE_particle.h"
@@ -236,10 +236,10 @@ static void buttons_texture_users_from_context(ListBase *users,
     int a;
 
     /* modifiers */
-    modifiers_foreachTexLink(ob, buttons_texture_modifier_foreach, users);
+    BKE_modifiers_foreach_tex_link(ob, buttons_texture_modifier_foreach, users);
 
     /* grease pencil modifiers */
-    BKE_gpencil_modifiers_foreachTexLink(ob, buttons_texture_modifier_gpencil_foreach, users);
+    BKE_gpencil_modifiers_foreach_tex_link(ob, buttons_texture_modifier_gpencil_foreach, users);
 
     /* particle systems */
     if (psys && !limited_mode) {
@@ -373,7 +373,7 @@ static void template_texture_select(bContext *C, void *user_p, void *UNUSED(arg)
 
   /* set user as active */
   if (user->node) {
-    ED_node_set_active(CTX_data_main(C), user->ntree, user->node);
+    ED_node_set_active(CTX_data_main(C), user->ntree, user->node, NULL);
     ct->texture = NULL;
   }
   else {
@@ -545,7 +545,7 @@ static void template_texture_show(bContext *C, void *data_p, void *prop_p)
   }
 }
 
-void uiTemplateTextureShow(uiLayout *layout, bContext *C, PointerRNA *ptr, PropertyRNA *prop)
+void uiTemplateTextureShow(uiLayout *layout, const bContext *C, PointerRNA *ptr, PropertyRNA *prop)
 {
   /* button to quickly show texture in texture tab */
   SpaceProperties *sbuts = CTX_wm_space_properties(C);

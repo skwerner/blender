@@ -188,26 +188,26 @@
  * - Use two different iterator types for BMO map/buffer types.
  */
 
+#include "DNA_customdata_types.h" /* BMesh struct in bmesh_class.h uses */
+#include "DNA_listBase.h"         /* selection history uses */
+
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include "DNA_listBase.h"         /* selection history uses */
-#include "DNA_customdata_types.h" /* BMesh struct in bmesh_class.h uses */
-
-#include <stdlib.h>
-#include <stdio.h>
-#include <assert.h>
-
 #include "bmesh_class.h"
 
 /* include the rest of the API */
-#include "intern/bmesh_operator_api.h"
 #include "intern/bmesh_error.h"
+#include "intern/bmesh_operator_api.h"
 
-#include "intern/bmesh_core.h"
 #include "intern/bmesh_callback_generic.h"
 #include "intern/bmesh_construct.h"
+#include "intern/bmesh_core.h"
 #include "intern/bmesh_delete.h"
 #include "intern/bmesh_edgeloop.h"
 #include "intern/bmesh_interp.h"
@@ -215,7 +215,7 @@ extern "C" {
 #include "intern/bmesh_log.h"
 #include "intern/bmesh_marking.h"
 #include "intern/bmesh_mesh.h"
-#include "intern/bmesh_mesh_conv.h"
+#include "intern/bmesh_mesh_convert.h"
 #include "intern/bmesh_mesh_duplicate.h"
 #include "intern/bmesh_mesh_validate.h"
 #include "intern/bmesh_mods.h"

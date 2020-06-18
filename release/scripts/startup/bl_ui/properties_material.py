@@ -74,7 +74,7 @@ class MATERIAL_PT_preview(MaterialButtonsPanel, Panel):
 
 
 class MATERIAL_PT_custom_props(MaterialButtonsPanel, PropertyPanel, Panel):
-    COMPAT_ENGINES = {'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
     _context_path = "material"
     _property_type = bpy.types.Material
 
@@ -172,10 +172,11 @@ class EEVEE_MATERIAL_PT_surface(MaterialButtonsPanel, Panel):
         layout.prop(mat, "use_nodes", icon='NODETREE')
         layout.separator()
 
+        layout.use_property_split = True
+
         if mat.use_nodes:
             panel_node_draw(layout, mat.node_tree, 'OUTPUT_MATERIAL', "Surface")
         else:
-            layout.use_property_split = True
             layout.prop(mat, "diffuse_color", text="Base Color")
             layout.prop(mat, "metallic")
             layout.prop(mat, "specular_intensity", text="Specular")
@@ -196,6 +197,8 @@ class EEVEE_MATERIAL_PT_volume(MaterialButtonsPanel, Panel):
 
     def draw(self, context):
         layout = self.layout
+
+        layout.use_property_split = True
 
         mat = context.material
 

@@ -23,6 +23,8 @@
 #ifndef __DRAW_CACHE_EXTRACT_H__
 #define __DRAW_CACHE_EXTRACT_H__
 
+struct TaskGraph;
+
 /* Vertex Group Selection and display options */
 typedef struct DRW_MeshWeightState {
   int defgroup_active;
@@ -34,12 +36,17 @@ typedef struct DRW_MeshWeightState {
   /* Set of all selected bones for Multipaint. */
   bool *defgroup_sel; /* [defgroup_len] */
   int defgroup_sel_count;
+
+  /* Set of all locked and unlocked deform bones for Lock Relative mode. */
+  bool *defgroup_locked;   /* [defgroup_len] */
+  bool *defgroup_unlocked; /* [defgroup_len] */
 } DRW_MeshWeightState;
 
 /* DRW_MeshWeightState.flags */
 enum {
   DRW_MESH_WEIGHT_STATE_MULTIPAINT = (1 << 0),
   DRW_MESH_WEIGHT_STATE_AUTO_NORMALIZE = (1 << 1),
+  DRW_MESH_WEIGHT_STATE_LOCK_RELATIVE = (1 << 2),
 };
 
 typedef struct DRW_MeshCDMask {
@@ -213,12 +220,6 @@ typedef struct MeshBatchCache {
 
   GPUBatch **surface_per_mat;
 
-  /* arrays of bool uniform names (and value) that will be use to
-   * set srgb conversion for auto attributes.*/
-  char *auto_layer_names;
-  int *auto_layer_is_srgb;
-  int auto_layer_len;
-
   DRWBatchFlag batch_requested;
   DRWBatchFlag batch_ready;
 
@@ -250,15 +251,18 @@ typedef struct MeshBatchCache {
   bool no_loose_wire;
 } MeshBatchCache;
 
-void mesh_buffer_cache_create_requested(MeshBatchCache *cache,
+void mesh_buffer_cache_create_requested(struct TaskGraph *task_graph,
+                                        MeshBatchCache *cache,
                                         MeshBufferCache mbc,
                                         Mesh *me,
                                         const bool is_editmode,
+                                        const bool is_paint_mode,
                                         const float obmat[4][4],
                                         const bool do_final,
                                         const bool do_uvedit,
                                         const bool use_subsurf_fdots,
                                         const DRW_MeshCDMask *cd_layer_used,
+                                        const Scene *scene,
                                         const ToolSettings *ts,
                                         const bool use_hide);
 

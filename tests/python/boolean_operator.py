@@ -19,9 +19,9 @@
 # <pep8 compliant>
 
 # To run all tests, use
-# BLENDER_VERBOSE=1 blender path/to/bool_regression.blend --python path/to/boolean_operator.py -- --run_all_tests
+# BLENDER_VERBOSE=1 blender path/to/bool_regression.blend --python path/to/boolean_operator.py -- --run-all-tests
 # To run one test, use
-# BLENDER_VERBOSE=1 blender path/to/bool_regression.blend --python path/to/boolean_operator.py -- --run_test <index>
+# BLENDER_VERBOSE=1 blender path/to/bool_regression.blend --python path/to/boolean_operator.py -- --run-test <index>
 # where <index> is the index of the test specified in the list tests.
 
 import bpy
@@ -60,9 +60,4 @@ def main():
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except:
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+    main()

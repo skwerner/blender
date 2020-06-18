@@ -25,6 +25,8 @@
 #ifndef __DRW_RENDER_H__
 #define __DRW_RENDER_H__
 
+#include "DRW_engine_types.h"
+
 #include "BLI_listbase.h"
 #include "BLI_math_matrix.h"
 #include "BLI_math_vector.h"
@@ -37,23 +39,23 @@
 
 #include "BLT_translation.h"
 
-#include "DNA_object_types.h"
 #include "DNA_light_types.h"
 #include "DNA_material_types.h"
+#include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_world_types.h"
 
 #include "GPU_framebuffer.h"
 #include "GPU_primitive.h"
-#include "GPU_texture.h"
 #include "GPU_shader.h"
+#include "GPU_texture.h"
 
-#include "draw_common.h"
 #include "draw_cache.h"
+#include "draw_common.h"
 #include "draw_view.h"
 
-#include "draw_manager_profiling.h"
 #include "draw_debug.h"
+#include "draw_manager_profiling.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -61,8 +63,6 @@
 
 #include "DEG_depsgraph.h"
 
-struct DefaultFramebufferList;
-struct DefaultTextureList;
 struct GPUBatch;
 struct GPUFrameBuffer;
 struct GPUMaterial;
@@ -78,6 +78,7 @@ struct rcti;
 typedef struct DRWCallBuffer DRWCallBuffer;
 typedef struct DRWInterface DRWInterface;
 typedef struct DRWPass DRWPass;
+typedef struct DRWShaderLibrary DRWShaderLibrary;
 typedef struct DRWShadingGroup DRWShadingGroup;
 typedef struct DRWUniform DRWUniform;
 typedef struct DRWView DRWView;
@@ -122,7 +123,6 @@ typedef struct DrawEngineType {
   void (*cache_populate)(void *vedata, struct Object *ob);
   void (*cache_finish)(void *vedata);
 
-  void (*draw_background)(void *vedata);
   void (*draw_scene)(void *vedata);
 
   void (*view_update)(void *vedata);
@@ -133,22 +133,6 @@ typedef struct DrawEngineType {
                           struct RenderLayer *layer,
                           const struct rcti *rect);
 } DrawEngineType;
-
-#ifndef __DRW_ENGINE_H__
-/* Buffer and textures used by the viewport by default */
-typedef struct DefaultFramebufferList {
-  struct GPUFrameBuffer *default_fb;
-  struct GPUFrameBuffer *in_front_fb;
-  struct GPUFrameBuffer *color_only_fb;
-  struct GPUFrameBuffer *depth_only_fb;
-} DefaultFramebufferList;
-
-typedef struct DefaultTextureList {
-  struct GPUTexture *color;
-  struct GPUTexture *depth;
-  struct GPUTexture *depth_in_front;
-} DefaultTextureList;
-#endif
 
 /* Textures */
 typedef enum {
@@ -165,6 +149,8 @@ struct GPUTexture *DRW_texture_pool_query_2d(int w,
                                              int h,
                                              eGPUTextureFormat format,
                                              DrawEngineType *engine_type);
+struct GPUTexture *DRW_texture_pool_query_fullscreen(eGPUTextureFormat format,
+                                                     DrawEngineType *engine_type);
 
 struct GPUTexture *DRW_texture_create_1d(int w,
                                          eGPUTextureFormat format,
@@ -180,6 +166,8 @@ struct GPUTexture *DRW_texture_create_cube(int w,
                                            eGPUTextureFormat format,
                                            DRWTextureFlag flags,
                                            const float *fpixels);
+struct GPUTexture *DRW_texture_create_cube_array(
+    int w, int d, eGPUTextureFormat format, DRWTextureFlag flags, const float *fpixels);
 
 void DRW_texture_ensure_fullscreen_2d(struct GPUTexture **tex,
                                       eGPUTextureFormat format,
@@ -209,14 +197,6 @@ void DRW_uniformbuffer_free(struct GPUUniformBuffer *ubo);
     } \
   } while (0)
 
-void DRW_transform_to_display(struct GPUTexture *tex,
-                              bool use_view_transform,
-                              bool use_render_settings);
-void DRW_transform_none(struct GPUTexture *tex);
-void DRW_multisamples_resolve(struct GPUTexture *src_depth,
-                              struct GPUTexture *src_color,
-                              bool use_depth);
-
 /* Shaders */
 struct GPUShader *DRW_shader_create(const char *vert,
                                     const char *geom,
@@ -230,22 +210,21 @@ struct GPUShader *DRW_shader_create_with_transform_feedback(const char *vert,
                                                             const eGPUShaderTFBType prim_type,
                                                             const char **varying_names,
                                                             const int varying_count);
-struct GPUShader *DRW_shader_create_2d(const char *frag, const char *defines);
-struct GPUShader *DRW_shader_create_3d(const char *frag, const char *defines);
 struct GPUShader *DRW_shader_create_fullscreen(const char *frag, const char *defines);
-struct GPUShader *DRW_shader_create_3d_depth_only(eGPUShaderConfig slot);
 struct GPUMaterial *DRW_shader_find_from_world(struct World *wo,
                                                const void *engine_type,
-                                               int options,
+                                               const int options,
                                                bool deferred);
 struct GPUMaterial *DRW_shader_find_from_material(struct Material *ma,
                                                   const void *engine_type,
-                                                  int options,
+                                                  const int options,
                                                   bool deferred);
 struct GPUMaterial *DRW_shader_create_from_world(struct Scene *scene,
                                                  struct World *wo,
+                                                 struct bNodeTree *ntree,
                                                  const void *engine_type,
-                                                 int options,
+                                                 const int options,
+                                                 const bool is_volume_shader,
                                                  const char *vert,
                                                  const char *geom,
                                                  const char *frag_lib,
@@ -253,8 +232,10 @@ struct GPUMaterial *DRW_shader_create_from_world(struct Scene *scene,
                                                  bool deferred);
 struct GPUMaterial *DRW_shader_create_from_material(struct Scene *scene,
                                                     struct Material *ma,
+                                                    struct bNodeTree *ntree,
                                                     const void *engine_type,
-                                                    int options,
+                                                    const int options,
+                                                    const bool is_volume_shader,
                                                     const char *vert,
                                                     const char *geom,
                                                     const char *frag_lib,
@@ -269,50 +250,72 @@ void DRW_shader_free(struct GPUShader *shader);
     } \
   } while (0)
 
-/* Batches */
+DRWShaderLibrary *DRW_shader_library_create(void);
 
+/* Warning: Each library must be added after all its dependencies. */
+void DRW_shader_library_add_file(DRWShaderLibrary *lib, char *lib_code, const char *lib_name);
+#define DRW_SHADER_LIB_ADD(lib, lib_name) \
+  DRW_shader_library_add_file(lib, datatoc_##lib_name##_glsl, STRINGIFY(lib_name) ".glsl")
+
+char *DRW_shader_library_create_shader_string(DRWShaderLibrary *lib, char *shader_code);
+
+void DRW_shader_library_free(DRWShaderLibrary *lib);
+#define DRW_SHADER_LIB_FREE_SAFE(lib) \
+  do { \
+    if (lib != NULL) { \
+      DRW_shader_library_free(lib); \
+      lib = NULL; \
+    } \
+  } while (0)
+
+/* Batches */
+/* DRWState is a bitmask that stores the current render state and the desired render state. Based
+ * on the differences the minimum state changes can be invoked to setup the desired render state.
+ *
+ * The Write Stencil, Stencil test, Depth test and Blend state options are mutual exclusive
+ * therefore they aren't ordered as a bit mask.*/
 typedef enum {
   /** Write mask */
   DRW_STATE_WRITE_DEPTH = (1 << 0),
   DRW_STATE_WRITE_COLOR = (1 << 1),
+  /* Write Stencil. These options are mutual exclusive and packed into 2 bits */
   DRW_STATE_WRITE_STENCIL = (1 << 2),
-  DRW_STATE_WRITE_STENCIL_SHADOW_PASS = (1 << 3),
-  DRW_STATE_WRITE_STENCIL_SHADOW_FAIL = (1 << 4),
-
-  /** Depth test */
-  DRW_STATE_DEPTH_ALWAYS = (1 << 5),
-  DRW_STATE_DEPTH_LESS = (1 << 6),
-  DRW_STATE_DEPTH_LESS_EQUAL = (1 << 7),
-  DRW_STATE_DEPTH_EQUAL = (1 << 8),
-  DRW_STATE_DEPTH_GREATER = (1 << 9),
-  DRW_STATE_DEPTH_GREATER_EQUAL = (1 << 10),
+  DRW_STATE_WRITE_STENCIL_SHADOW_PASS = (2 << 2),
+  DRW_STATE_WRITE_STENCIL_SHADOW_FAIL = (3 << 2),
+  /** Depth test. These options are mutual exclusive and packed into 3 bits */
+  DRW_STATE_DEPTH_ALWAYS = (1 << 4),
+  DRW_STATE_DEPTH_LESS = (2 << 4),
+  DRW_STATE_DEPTH_LESS_EQUAL = (3 << 4),
+  DRW_STATE_DEPTH_EQUAL = (4 << 4),
+  DRW_STATE_DEPTH_GREATER = (5 << 4),
+  DRW_STATE_DEPTH_GREATER_EQUAL = (6 << 4),
   /** Culling test */
-  DRW_STATE_CULL_BACK = (1 << 11),
-  DRW_STATE_CULL_FRONT = (1 << 12),
-  /** Stencil test */
-  DRW_STATE_STENCIL_ALWAYS = (1 << 13),
-  DRW_STATE_STENCIL_EQUAL = (1 << 14),
-  DRW_STATE_STENCIL_NEQUAL = (1 << 15),
+  DRW_STATE_CULL_BACK = (1 << 7),
+  DRW_STATE_CULL_FRONT = (1 << 8),
+  /** Stencil test . These options are mutal exclusive and packed into 2 bits*/
+  DRW_STATE_STENCIL_ALWAYS = (1 << 9),
+  DRW_STATE_STENCIL_EQUAL = (2 << 9),
+  DRW_STATE_STENCIL_NEQUAL = (3 << 9),
 
-  /** Blend state */
-  DRW_STATE_BLEND_ADD = (1 << 16),
+  /** Blend state. These options are mutual exclusive and packed into 4 bits */
+  DRW_STATE_BLEND_ADD = (1 << 11),
   /** Same as additive but let alpha accumulate without premult. */
-  DRW_STATE_BLEND_ADD_FULL = (1 << 17),
+  DRW_STATE_BLEND_ADD_FULL = (2 << 11),
   /** Standard alpha blending. */
-  DRW_STATE_BLEND_ALPHA = (1 << 18),
+  DRW_STATE_BLEND_ALPHA = (3 << 11),
   /** Use that if color is already premult by alpha. */
-  DRW_STATE_BLEND_ALPHA_PREMUL = (1 << 19),
-  DRW_STATE_BLEND_ALPHA_UNDER_PREMUL = (1 << 20),
-  DRW_STATE_BLEND_OIT = (1 << 21),
-  DRW_STATE_BLEND_MUL = (1 << 22),
+  DRW_STATE_BLEND_ALPHA_PREMUL = (4 << 11),
+  DRW_STATE_BLEND_BACKGROUND = (5 << 11),
+  DRW_STATE_BLEND_OIT = (6 << 11),
+  DRW_STATE_BLEND_MUL = (7 << 11),
+  DRW_STATE_BLEND_SUB = (8 << 11),
   /** Use dual source blending. WARNING: Only one color buffer allowed. */
-  DRW_STATE_BLEND_CUSTOM = (1 << 23),
+  DRW_STATE_BLEND_CUSTOM = (9 << 11),
+  DRW_STATE_LOGIC_INVERT = (10 << 11),
 
-  DRW_STATE_IN_FRONT_SELECT = (1 << 25),
-  DRW_STATE_LOGIC_INVERT = (1 << 26),
-  DRW_STATE_SHADOW_OFFSET = (1 << 27),
-  DRW_STATE_CLIP_PLANES = (1 << 28),
-  // DRW_STATE_WIRE_SMOOTH = (1 << 29), /* UNUSED */
+  DRW_STATE_IN_FRONT_SELECT = (1 << 27),
+  DRW_STATE_SHADOW_OFFSET = (1 << 28),
+  DRW_STATE_CLIP_PLANES = (1 << 29),
   DRW_STATE_FIRST_VERTEX_CONVENTION = (1 << 30),
   /** DO NOT USE. Assumed always enabled. Only used internally. */
   DRW_STATE_PROGRAM_POINT_SIZE = (1u << 31),
@@ -361,6 +364,8 @@ DRWShadingGroup *DRW_shgroup_transform_feedback_create(struct GPUShader *shader,
                                                        DRWPass *pass,
                                                        struct GPUVertBuf *tf_target);
 
+void DRW_shgroup_add_material_resources(DRWShadingGroup *grp, struct GPUMaterial *material);
+
 /* return final visibility */
 typedef bool(DRWCallVisibilityFn)(bool vis_in, void *user_data);
 
@@ -387,10 +392,10 @@ void DRW_shgroup_call_ex(DRWShadingGroup *shgroup,
 #define DRW_shgroup_call_no_cull(shgrp, geom, ob) \
   DRW_shgroup_call_ex(shgrp, ob, NULL, geom, true, NULL)
 
-void DRW_shgroup_call_range(DRWShadingGroup *shgroup,
-                            struct GPUBatch *geom,
-                            uint v_sta,
-                            uint v_ct);
+void DRW_shgroup_call_range(
+    DRWShadingGroup *shgroup, Object *ob, struct GPUBatch *geom, uint v_sta, uint v_ct);
+void DRW_shgroup_call_instance_range(
+    DRWShadingGroup *shgroup, Object *ob, struct GPUBatch *geom, uint v_sta, uint v_ct);
 
 void DRW_shgroup_call_procedural_points(DRWShadingGroup *sh, Object *ob, uint point_ct);
 void DRW_shgroup_call_procedural_lines(DRWShadingGroup *sh, Object *ob, uint line_ct);
@@ -400,14 +405,14 @@ void DRW_shgroup_call_instances(DRWShadingGroup *shgroup,
                                 Object *ob,
                                 struct GPUBatch *geom,
                                 uint count);
-/* Warning: Only use with Shaders that have INSTANCED_ATTRIB defined. */
-void DRW_shgroup_call_instances_with_attribs(DRWShadingGroup *shgroup,
-                                             Object *ob,
-                                             struct GPUBatch *geom,
-                                             struct GPUBatch *inst_attributes);
+/* Warning: Only use with Shaders that have INSTANCED_ATTR defined. */
+void DRW_shgroup_call_instances_with_attrs(DRWShadingGroup *shgroup,
+                                           Object *ob,
+                                           struct GPUBatch *geom,
+                                           struct GPUBatch *inst_attributes);
 
-void DRW_shgroup_call_sculpt(DRWShadingGroup *sh, Object *ob, bool wire, bool mask, bool vcol);
-void DRW_shgroup_call_sculpt_with_materials(DRWShadingGroup **sh, Object *ob, bool vcol);
+void DRW_shgroup_call_sculpt(DRWShadingGroup *sh, Object *ob, bool wire, bool mask);
+void DRW_shgroup_call_sculpt_with_materials(DRWShadingGroup **sh, int num_sh, Object *ob);
 
 DRWCallBuffer *DRW_shgroup_call_buffer(DRWShadingGroup *shading_group,
                                        struct GPUVertFormat *format,
@@ -425,8 +430,22 @@ void DRW_buffer_add_entry_array(DRWCallBuffer *buffer, const void *attr[], uint 
     DRW_buffer_add_entry_array(buffer, array, (sizeof(array) / sizeof(*array))); \
   } while (0)
 
+/* Can only be called during iter phase. */
+uint32_t DRW_object_resource_id_get(Object *UNUSED(ob));
+
 void DRW_shgroup_state_enable(DRWShadingGroup *shgroup, DRWState state);
 void DRW_shgroup_state_disable(DRWShadingGroup *shgroup, DRWState state);
+
+/* Reminders:
+ * - (compare_mask & reference) is what is tested against (compare_mask & stencil_value)
+ *   stencil_value being the value stored in the stencil buffer.
+ * - (write-mask & reference) is what gets written if the test condition is fulfilled.
+ **/
+void DRW_shgroup_stencil_set(DRWShadingGroup *shgroup,
+                             uint write_mask,
+                             uint reference,
+                             uint compare_mask);
+/* TODO remove this function. Obsolete version. mask is actually reference value. */
 void DRW_shgroup_stencil_mask(DRWShadingGroup *shgroup, uint mask);
 
 /* Issue a clear command. */
@@ -439,21 +458,22 @@ void DRW_shgroup_clear_framebuffer(DRWShadingGroup *shgroup,
                                    float depth,
                                    uchar stencil);
 
+void DRW_shgroup_uniform_texture_ex(DRWShadingGroup *shgroup,
+                                    const char *name,
+                                    const struct GPUTexture *tex,
+                                    eGPUSamplerState sampler_state);
 void DRW_shgroup_uniform_texture(DRWShadingGroup *shgroup,
                                  const char *name,
                                  const struct GPUTexture *tex);
-void DRW_shgroup_uniform_texture_persistent(DRWShadingGroup *shgroup,
-                                            const char *name,
-                                            const struct GPUTexture *tex);
-void DRW_shgroup_uniform_block(DRWShadingGroup *shgroup,
-                               const char *name,
-                               const struct GPUUniformBuffer *ubo);
-void DRW_shgroup_uniform_block_persistent(DRWShadingGroup *shgroup,
-                                          const char *name,
-                                          const struct GPUUniformBuffer *ubo);
 void DRW_shgroup_uniform_texture_ref(DRWShadingGroup *shgroup,
                                      const char *name,
                                      struct GPUTexture **tex);
+void DRW_shgroup_uniform_block(DRWShadingGroup *shgroup,
+                               const char *name,
+                               const struct GPUUniformBuffer *ubo);
+void DRW_shgroup_uniform_block_ref(DRWShadingGroup *shgroup,
+                                   const char *name,
+                                   struct GPUUniformBuffer **ubo);
 void DRW_shgroup_uniform_float(DRWShadingGroup *shgroup,
                                const char *name,
                                const float *value,
@@ -503,11 +523,17 @@ void DRW_shgroup_uniform_float_copy(DRWShadingGroup *shgroup, const char *name, 
 void DRW_shgroup_uniform_vec2_copy(DRWShadingGroup *shgroup, const char *name, const float *value);
 void DRW_shgroup_uniform_vec3_copy(DRWShadingGroup *shgroup, const char *name, const float *value);
 void DRW_shgroup_uniform_vec4_copy(DRWShadingGroup *shgroup, const char *name, const float *value);
+void DRW_shgroup_uniform_vec4_array_copy(DRWShadingGroup *shgroup,
+                                         const char *name,
+                                         const float (*value)[4],
+                                         int arraysize);
 
 bool DRW_shgroup_is_empty(DRWShadingGroup *shgroup);
 
 /* Passes */
 DRWPass *DRW_pass_create(const char *name, DRWState state);
+DRWPass *DRW_pass_create_instance(const char *name, DRWPass *original, DRWState state);
+void DRW_pass_link(DRWPass *first, DRWPass *second);
 /* TODO Replace with passes inheritance. */
 void DRW_pass_state_set(DRWPass *pass, DRWState state);
 void DRW_pass_state_add(DRWPass *pass, DRWState state);
@@ -521,6 +547,8 @@ void DRW_pass_sort_shgroup_reverse(DRWPass *pass);
 bool DRW_pass_is_empty(DRWPass *pass);
 
 #define DRW_PASS_CREATE(pass, state) (pass = DRW_pass_create(#pass, state))
+#define DRW_PASS_INSTANCE_CREATE(pass, original, state) \
+  (pass = DRW_pass_create_instance(#pass, (original), state))
 
 /* Views */
 DRWView *DRW_view_create(const float viewmat[4][4],
@@ -617,6 +645,7 @@ void **DRW_duplidata_get(void *vedata);
 
 /* Settings */
 bool DRW_object_is_renderable(const struct Object *ob);
+bool DRW_object_is_in_edit_mode(const struct Object *ob);
 int DRW_object_visibility_in_active_context(const struct Object *ob);
 bool DRW_object_is_flat_normal(const struct Object *ob);
 bool DRW_object_use_hide_faces(const struct Object *ob);
@@ -651,6 +680,7 @@ bool DRW_state_do_color_management(void);
 bool DRW_state_is_scene_render(void);
 bool DRW_state_is_opengl_render(void);
 bool DRW_state_is_playback(void);
+bool DRW_state_is_navigating(void);
 bool DRW_state_show_text(void);
 bool DRW_state_draw_support(void);
 bool DRW_state_draw_background(void);
@@ -658,7 +688,7 @@ bool DRW_state_draw_background(void);
 /* Avoid too many lookups while drawing */
 typedef struct DRWContextState {
 
-  struct ARegion *ar;        /* 'CTX_wm_region(C)' */
+  struct ARegion *region;    /* 'CTX_wm_region(C)' */
   struct RegionView3D *rv3d; /* 'CTX_wm_region_view3d(C)' */
   struct View3D *v3d;        /* 'CTX_wm_view3d(C)' */
 
@@ -671,6 +701,8 @@ typedef struct DRWContextState {
   struct RenderEngineType *engine_type;
 
   struct Depsgraph *depsgraph;
+
+  struct TaskGraph *task_graph;
 
   eObjectMode object_mode;
 

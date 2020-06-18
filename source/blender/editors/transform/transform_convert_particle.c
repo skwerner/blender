@@ -21,21 +21,23 @@
  * \ingroup edtransform
  */
 
-#include "DNA_particle_types.h"
 #include "DNA_modifier_types.h"
+#include "DNA_particle_types.h"
 
 #include "MEM_guardedalloc.h"
 
 #include "BLI_math.h"
 
 #include "BKE_context.h"
-#include "BKE_report.h"
 #include "BKE_particle.h"
 #include "BKE_pointcache.h"
 
 #include "ED_particle.h"
 
 #include "transform.h"
+#include "transform_snap.h"
+
+/* Own include. */
 #include "transform_convert.h"
 
 /* -------------------------------------------------------------------- */
@@ -194,7 +196,7 @@ void createTransParticleVerts(bContext *C, TransInfo *t)
  *
  * \{ */
 
-void flushTransParticles(TransInfo *t)
+static void flushTransParticles(TransInfo *t)
 {
   FOREACH_TRANS_DATA_CONTAINER (t, tc) {
     Scene *scene = t->scene;
@@ -243,6 +245,21 @@ void flushTransParticles(TransInfo *t)
     BKE_particle_batch_cache_dirty_tag(psys, BKE_PARTICLE_BATCH_DIRTY_ALL);
     DEG_id_tag_update(&ob->id, ID_RECALC_PSYS_REDO);
   }
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Recalc Transform Particles Data
+ *
+ * \{ */
+
+void recalcData_particles(TransInfo *t)
+{
+  if (t->state != TRANS_CANCEL) {
+    applyProject(t);
+  }
+  flushTransParticles(t);
 }
 
 /** \} */

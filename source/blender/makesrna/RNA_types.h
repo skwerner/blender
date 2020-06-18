@@ -121,6 +121,8 @@ typedef enum PropertySubType {
   PROP_PASSWORD = 6,
 
   /* numbers */
+  /** A dimension in pixel units, possibly before DPI scaling (so value may not be the final pixel
+   * value but the one to apply DPI scale to). */
   PROP_PIXEL = 12,
   PROP_UNSIGNED = 13,
   PROP_PERCENTAGE = 14,
@@ -180,8 +182,8 @@ typedef enum PropertyFlag {
    */
   PROP_ANIMATABLE = (1 << 1),
   /**
-   * This flag means when the property's widget is in 'textedit' mode, it will be updated
-   * after every typed char, instead of waiting final validation. Used e.g. for text searchbox.
+   * This flag means when the property's widget is in 'text-edit' mode, it will be updated
+   * after every typed char, instead of waiting final validation. Used e.g. for text search-box.
    * It will also cause UI_BUT_VALUE_CLEAR to be set for text buttons. We could add an own flag
    * for search/filter properties, but this works just fine for now.
    */
@@ -292,8 +294,22 @@ typedef enum PropertyOverrideFlag {
   /**
    * Forbid usage of this property in comparison (& hence override) code.
    * Useful e.g. for collections of data like mesh's geometry, particles, etc.
+   * Also for runtime data that should never be considered as part of actual Blend data (e.g.
+   * depsgraph from ViewLayers...).
    */
   PROPOVERRIDE_NO_COMPARISON = (1 << 1),
+
+  /**
+   * Means the property can be fully ignored by override process.
+   * Unlike NO_COMPARISON, it can still be used by diffing code, but no override operation will be
+   * created for it, and no attempt to restore the data from linked reference either.
+   *
+   * WARNING: This flag should be used with a lot of caution, as it completely by-passes override
+   * system. It is currently only used for ID's names, since we cannot prevent local override to
+   * get a different name from the linked reference, and ID names are 'rna name property' (i.e. are
+   * used in overrides of collections of IDs). See also `BKE_lib_override_library_update()` where
+   * we deal manually with the value of that property at DNA level. */
+  PROPOVERRIDE_IGNORE = (1 << 2),
 
   /*** Collections-related ***/
 
@@ -358,6 +374,11 @@ typedef struct ArrayIterator {
   IteratorSkipFunc skip;
 } ArrayIterator;
 
+typedef struct CountIterator {
+  void *ptr;
+  int item;
+} CountIterator;
+
 typedef struct CollectionPropertyIterator {
   /* internal */
   PointerRNA parent;
@@ -366,6 +387,7 @@ typedef struct CollectionPropertyIterator {
   union {
     ArrayIterator array;
     ListBaseIterator listbase;
+    CountIterator count;
     void *custom;
   } internal;
   int idprop;
@@ -597,7 +619,7 @@ typedef enum StructFlag {
 
   /* internal flags */
   STRUCT_RUNTIME = (1 << 3),
-  STRUCT_GENERATED = (1 << 4),
+  /* STRUCT_GENERATED = (1 << 4), */ /* UNUSED */
   STRUCT_FREE_POINTERS = (1 << 5),
   /** Menus and Panels don't need properties */
   STRUCT_NO_IDPROPERTIES = (1 << 6),

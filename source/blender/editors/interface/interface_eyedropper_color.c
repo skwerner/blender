@@ -28,8 +28,8 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "DNA_space_types.h"
 #include "DNA_screen_types.h"
+#include "DNA_space_types.h"
 
 #include "BLI_math_vector.h"
 
@@ -52,9 +52,9 @@
 
 #include "interface_intern.h"
 
+#include "ED_clip.h"
 #include "ED_image.h"
 #include "ED_node.h"
-#include "ED_clip.h"
 
 #include "interface_eyedropper_intern.h"
 
@@ -82,11 +82,13 @@ static bool eyedropper_init(bContext *C, wmOperator *op)
   eye->use_accum = RNA_boolean_get(op->ptr, "use_accumulate");
 
   uiBut *but = UI_context_active_but_prop_get(C, &eye->ptr, &eye->prop, &eye->index);
+  const enum PropertySubType prop_subtype = eye->prop ? RNA_property_subtype(eye->prop) : 0;
 
   if ((eye->ptr.data == NULL) || (eye->prop == NULL) ||
       (RNA_property_editable(&eye->ptr, eye->prop) == false) ||
       (RNA_property_array_length(&eye->ptr, eye->prop) < 3) ||
-      (RNA_property_type(eye->prop) != PROP_FLOAT)) {
+      (RNA_property_type(eye->prop) != PROP_FLOAT) ||
+      (ELEM(prop_subtype, PROP_COLOR, PROP_COLOR_GAMMA) == 0)) {
     MEM_freeN(eye);
     return false;
   }
@@ -96,7 +98,7 @@ static bool eyedropper_init(bContext *C, wmOperator *op)
 
   float col[4];
   RNA_property_float_get_array(&eye->ptr, eye->prop, col);
-  if (RNA_property_subtype(eye->prop) != PROP_COLOR) {
+  if (prop_subtype != PROP_COLOR) {
     Scene *scene = CTX_data_scene(C);
     const char *display_device;
 
@@ -136,53 +138,71 @@ void eyedropper_color_sample_fl(bContext *C, int mx, int my, float r_col[3])
 {
   /* we could use some clever */
   Main *bmain = CTX_data_main(C);
-  bScreen *screen = CTX_wm_screen(C);
-  ScrArea *sa = BKE_screen_find_area_xy(screen, SPACE_TYPE_ANY, mx, my);
+  wmWindowManager *wm = CTX_wm_manager(C);
   const char *display_device = CTX_data_scene(C)->display_settings.display_device;
   struct ColorManagedDisplay *display = IMB_colormanagement_display_get_named(display_device);
 
-  if (sa) {
-    if (sa->spacetype == SPACE_IMAGE) {
-      ARegion *ar = BKE_area_find_region_xy(sa, RGN_TYPE_WINDOW, mx, my);
-      if (ar) {
-        SpaceImage *sima = sa->spacedata.first;
-        int mval[2] = {mx - ar->winrct.xmin, my - ar->winrct.ymin};
+  wmWindow *win = CTX_wm_window(C);
+  bScreen *screen = CTX_wm_screen(C);
+  ScrArea *area = BKE_screen_find_area_xy(screen, SPACE_TYPE_ANY, mx, my);
+  if (area == NULL) {
+    int mval[2] = {mx, my};
+    if (WM_window_find_under_cursor(wm, NULL, win, mval, &win, mval)) {
+      mx = mval[0];
+      my = mval[1];
+      screen = WM_window_get_active_screen(win);
+      area = BKE_screen_find_area_xy(screen, SPACE_TYPE_ANY, mx, my);
+    }
+    else {
+      win = NULL;
+    }
+  }
 
-        if (ED_space_image_color_sample(sima, ar, mval, r_col)) {
+  if (area) {
+    if (area->spacetype == SPACE_IMAGE) {
+      ARegion *region = BKE_area_find_region_xy(area, RGN_TYPE_WINDOW, mx, my);
+      if (region) {
+        SpaceImage *sima = area->spacedata.first;
+        int mval[2] = {mx - region->winrct.xmin, my - region->winrct.ymin};
+
+        if (ED_space_image_color_sample(sima, region, mval, r_col)) {
           return;
         }
       }
     }
-    else if (sa->spacetype == SPACE_NODE) {
-      ARegion *ar = BKE_area_find_region_xy(sa, RGN_TYPE_WINDOW, mx, my);
-      if (ar) {
-        SpaceNode *snode = sa->spacedata.first;
-        int mval[2] = {mx - ar->winrct.xmin, my - ar->winrct.ymin};
+    else if (area->spacetype == SPACE_NODE) {
+      ARegion *region = BKE_area_find_region_xy(area, RGN_TYPE_WINDOW, mx, my);
+      if (region) {
+        SpaceNode *snode = area->spacedata.first;
+        int mval[2] = {mx - region->winrct.xmin, my - region->winrct.ymin};
 
-        if (ED_space_node_color_sample(bmain, snode, ar, mval, r_col)) {
+        if (ED_space_node_color_sample(bmain, snode, region, mval, r_col)) {
           return;
         }
       }
     }
-    else if (sa->spacetype == SPACE_CLIP) {
-      ARegion *ar = BKE_area_find_region_xy(sa, RGN_TYPE_WINDOW, mx, my);
-      if (ar) {
-        SpaceClip *sc = sa->spacedata.first;
-        int mval[2] = {mx - ar->winrct.xmin, my - ar->winrct.ymin};
+    else if (area->spacetype == SPACE_CLIP) {
+      ARegion *region = BKE_area_find_region_xy(area, RGN_TYPE_WINDOW, mx, my);
+      if (region) {
+        SpaceClip *sc = area->spacedata.first;
+        int mval[2] = {mx - region->winrct.xmin, my - region->winrct.ymin};
 
-        if (ED_space_clip_color_sample(sc, ar, mval, r_col)) {
+        if (ED_space_clip_color_sample(sc, region, mval, r_col)) {
           return;
         }
       }
     }
   }
 
-  /* fallback to simple opengl picker */
-  glReadBuffer(GL_FRONT);
-  glReadPixels(mx, my, 1, 1, GL_RGB, GL_FLOAT, r_col);
-  glReadBuffer(GL_BACK);
-
-  IMB_colormanagement_display_to_scene_linear_v3(r_col, display);
+  if (win) {
+    /* Fallback to simple opengl picker. */
+    int mval[2] = {mx, my};
+    WM_window_pixel_sample_read(wm, win, mval, r_col);
+    IMB_colormanagement_display_to_scene_linear_v3(r_col, display);
+  }
+  else {
+    zero_v3(r_col);
+  }
 }
 
 /* sets the sample color RGB, maintaining A */
@@ -290,7 +310,10 @@ static int eyedropper_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(
 {
   /* init */
   if (eyedropper_init(C, op)) {
-    WM_cursor_modal_set(CTX_wm_window(C), WM_CURSOR_EYEDROPPER);
+    wmWindow *win = CTX_wm_window(C);
+    /* Workaround for de-activating the button clearing the cursor, see T76794 */
+    UI_context_active_but_clear(C, win, CTX_wm_region(C));
+    WM_cursor_modal_set(win, WM_CURSOR_EYEDROPPER);
 
     /* add temp handler */
     WM_event_add_modal_handler(C, op);

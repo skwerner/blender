@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -25,18 +25,30 @@
 
 #include "BLI_utildefines.h"
 
+#include "BLT_translation.h"
+
 #include "DNA_mesh_types.h"
 #include "DNA_object_types.h"
+#include "DNA_screen_types.h"
 
+#include "BKE_context.h"
 #include "BKE_editmesh.h"
-#include "BKE_library.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_mesh.h"
+#include "BKE_mesh_wrapper.h"
 #include "BKE_modifier.h"
+#include "BKE_screen.h"
 #include "BKE_shrinkwrap.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
 
 #include "DEG_depsgraph_query.h"
 
+#include "MOD_ui_common.h"
 #include "MOD_util.h"
 
 static bool dependsOnNormals(ModifierData *md);
@@ -136,12 +148,22 @@ static void deformVertsEM(ModifierData *md,
 {
   ShrinkwrapModifierData *swmd = (ShrinkwrapModifierData *)md;
   struct Scene *scene = DEG_get_evaluated_scene(ctx->depsgraph);
-  Mesh *mesh_src = MOD_deform_mesh_eval_get(
-      ctx->object, editData, mesh, NULL, numVerts, false, false);
+  Mesh *mesh_src = NULL;
+
+  if ((swmd->vgroup_name[0] != '\0') || (swmd->shrinkType == MOD_SHRINKWRAP_PROJECT)) {
+    mesh_src = MOD_deform_mesh_eval_get(ctx->object, editData, mesh, NULL, numVerts, false, false);
+  }
+
+  /* TODO(Campbell): use edit-mode data only (remove this line). */
+  if (mesh_src != NULL) {
+    BKE_mesh_wrapper_ensure_mdata(mesh_src);
+  }
 
   struct MDeformVert *dvert = NULL;
   int defgrp_index = -1;
-  MOD_get_vgroup(ctx->object, mesh_src, swmd->vgroup_name, &dvert, &defgrp_index);
+  if (swmd->vgroup_name[0] != '\0') {
+    MOD_get_vgroup(ctx->object, mesh_src, swmd->vgroup_name, &dvert, &defgrp_index);
+  }
 
   shrinkwrapModifier_deform(
       swmd, ctx, scene, ctx->object, mesh_src, dvert, defgrp_index, vertexCos, numVerts);
@@ -193,22 +215,84 @@ static bool dependsOnNormals(ModifierData *md)
   return false;
 }
 
+static void panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *row, *col;
+  uiLayout *layout = panel->layout;
+  int toggles_flag = UI_ITEM_R_TOGGLE | UI_ITEM_R_FORCE_BLANK_DECORATE;
+
+  PointerRNA ptr;
+  PointerRNA ob_ptr;
+  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+
+  uiLayoutSetPropSep(layout, true);
+
+  int wrap_method = RNA_enum_get(&ptr, "wrap_method");
+
+  uiItemR(layout, &ptr, "wrap_method", 0, NULL, ICON_NONE);
+
+  if (ELEM(wrap_method,
+           MOD_SHRINKWRAP_PROJECT,
+           MOD_SHRINKWRAP_NEAREST_SURFACE,
+           MOD_SHRINKWRAP_TARGET_PROJECT)) {
+    uiItemR(layout, &ptr, "wrap_mode", 0, NULL, ICON_NONE);
+  }
+
+  if (wrap_method == MOD_SHRINKWRAP_PROJECT) {
+    uiItemR(layout, &ptr, "project_limit", 0, IFACE_("Limit"), ICON_NONE);
+    uiItemR(layout, &ptr, "subsurf_levels", 0, NULL, ICON_NONE);
+
+    row = uiLayoutRowWithHeading(layout, true, IFACE_("Axis"));
+    uiItemR(row, &ptr, "use_project_x", toggles_flag, NULL, ICON_NONE);
+    uiItemR(row, &ptr, "use_project_y", toggles_flag, NULL, ICON_NONE);
+    uiItemR(row, &ptr, "use_project_z", toggles_flag, NULL, ICON_NONE);
+
+    uiItemR(layout, &ptr, "use_negative_direction", 0, NULL, ICON_NONE);
+    uiItemR(layout, &ptr, "use_positive_direction", 0, NULL, ICON_NONE);
+
+    uiItemR(layout, &ptr, "cull_face", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+    col = uiLayoutColumn(layout, false);
+    uiLayoutSetActive(col,
+                      RNA_boolean_get(&ptr, "use_negative_direction") &&
+                          RNA_enum_get(&ptr, "cull_face") != 0);
+    uiItemR(col, &ptr, "use_invert_cull", 0, NULL, ICON_NONE);
+  }
+
+  uiItemR(layout, &ptr, "target", 0, NULL, ICON_NONE);
+  if (wrap_method == MOD_SHRINKWRAP_PROJECT) {
+    uiItemR(layout, &ptr, "auxiliary_target", 0, NULL, ICON_NONE);
+  }
+  uiItemR(layout, &ptr, "offset", 0, NULL, ICON_NONE);
+
+  modifier_vgroup_ui(layout, &ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
+
+  modifier_panel_end(layout, &ptr);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  modifier_panel_register(region_type, eModifierType_Shrinkwrap, panel_draw);
+}
+
 ModifierTypeInfo modifierType_Shrinkwrap = {
     /* name */ "Shrinkwrap",
     /* structName */ "ShrinkwrapModifierData",
     /* structSize */ sizeof(ShrinkwrapModifierData),
     /* type */ eModifierTypeType_OnlyDeform,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_AcceptsCVs |
-        eModifierTypeFlag_AcceptsLattice | eModifierTypeFlag_SupportsEditmode |
+        eModifierTypeFlag_AcceptsVertexCosOnly | eModifierTypeFlag_SupportsEditmode |
         eModifierTypeFlag_EnableInEditmode,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ deformVerts,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ deformVertsEM,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,
@@ -221,4 +305,7 @@ ModifierTypeInfo modifierType_Shrinkwrap = {
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

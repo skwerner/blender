@@ -26,56 +26,56 @@
 
 #include <stddef.h>
 
-#include <stdlib.h>
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "MEM_guardedalloc.h"
 
 #include "DNA_anim_types.h"
 #include "DNA_boid_types.h"
-#include "DNA_particle_types.h"
+#include "DNA_curve_types.h"
+#include "DNA_listBase.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_object_force_types.h"
 #include "DNA_object_types.h"
-#include "DNA_curve_types.h"
+#include "DNA_particle_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_texture_types.h"
-#include "DNA_listBase.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_edgehash.h"
-#include "BLI_rand.h"
-#include "BLI_math.h"
 #include "BLI_blenlib.h"
-#include "BLI_kdtree.h"
+#include "BLI_edgehash.h"
 #include "BLI_kdopbvh.h"
+#include "BLI_kdtree.h"
+#include "BLI_linklist.h"
+#include "BLI_math.h"
+#include "BLI_rand.h"
+#include "BLI_string_utils.h"
 #include "BLI_task.h"
 #include "BLI_threads.h"
-#include "BLI_linklist.h"
-#include "BLI_string_utils.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_animsys.h"
 #include "BKE_boids.h"
 #include "BKE_collision.h"
 #include "BKE_colortools.h"
 #include "BKE_effect.h"
-#include "BKE_library.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_particle.h"
 
-#include "BKE_collection.h"
-#include "BKE_object.h"
-#include "BKE_material.h"
+#include "BKE_bvhutils.h"
 #include "BKE_cloth.h"
+#include "BKE_collection.h"
 #include "BKE_lattice.h"
-#include "BKE_pointcache.h"
+#include "BKE_material.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
+#include "BKE_object.h"
+#include "BKE_pointcache.h"
 #include "BKE_scene.h"
-#include "BKE_bvhutils.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_physics.h"
@@ -465,7 +465,7 @@ void psys_thread_context_init(ParticleThreadContext *ctx, ParticleSimulationData
   memset(ctx, 0, sizeof(ParticleThreadContext));
   ctx->sim = *sim;
   ctx->mesh = ctx->sim.psmd->mesh_final;
-  ctx->ma = give_current_material(sim->ob, sim->psys->part->omat);
+  ctx->ma = BKE_object_material_get(sim->ob, sim->psys->part->omat);
 }
 
 void psys_tasks_create(ParticleThreadContext *ctx,
@@ -536,7 +536,7 @@ void psys_thread_context_free(ParticleThreadContext *ctx)
   }
 
   if (ctx->sim.psys->lattice_deform_data) {
-    end_latt_deform(ctx->sim.psys->lattice_deform_data);
+    BKE_lattice_deform_data_destroy(ctx->sim.psys->lattice_deform_data);
     ctx->sim.psys->lattice_deform_data = NULL;
   }
 
@@ -1258,7 +1258,8 @@ static void set_keyed_keys(ParticleSimulationData *sim)
       key = pa->keys + k;
       key->time = -1.0; /* use current time */
 
-      psys_get_particle_state(&ksim, p % ksim.psys->totpart, key, 1);
+      const int p_ksim = (ksim.psys->totpart) ? p % ksim.psys->totpart : 0;
+      psys_get_particle_state(&ksim, p_ksim, key, 1);
 
       if (psys->flag & PSYS_KEYED_TIMING) {
         key->time = pa->time + pt->time;
@@ -2162,7 +2163,7 @@ static void psys_sph_flush_springs(SPHData *sphdata)
   BLI_buffer_field_free(&sphdata->new_springs);
 }
 
-void psys_sph_finalise(SPHData *sphdata)
+void psys_sph_finalize(SPHData *sphdata)
 {
   psys_sph_flush_springs(sphdata);
 
@@ -3449,7 +3450,7 @@ static void do_hair_dynamics(ParticleSimulationData *sim)
   bool realloc_roots;
 
   if (!psys->clmd) {
-    psys->clmd = (ClothModifierData *)modifier_new(eModifierType_Cloth);
+    psys->clmd = (ClothModifierData *)BKE_modifier_new(eModifierType_Cloth);
     psys->clmd->sim_parms->goalspring = 0.0f;
     psys->clmd->sim_parms->flags |= CLOTH_SIMSETTINGS_FLAG_RESIST_SPRING_COMPRESS;
     psys->clmd->coll_parms->flags &= ~CLOTH_COLLSETTINGS_FLAG_SELF;
@@ -3692,10 +3693,11 @@ typedef struct DynamicStepSolverTaskData {
   SpinLock spin;
 } DynamicStepSolverTaskData;
 
-static void dynamics_step_finalize_sphdata(void *__restrict UNUSED(userdata),
-                                           void *__restrict tls_userdata_chunk)
+static void dynamics_step_sphdata_reduce(const void *__restrict UNUSED(userdata),
+                                         void *__restrict UNUSED(join_v),
+                                         void *__restrict chunk_v)
 {
-  SPHData *sphdata = tls_userdata_chunk;
+  SPHData *sphdata = chunk_v;
 
   psys_sph_flush_springs(sphdata);
 }
@@ -3986,7 +3988,7 @@ static void dynamics_step(ParticleSimulationData *sim, float cfra)
         settings.use_threading = (psys->totpart > 100);
         settings.userdata_chunk = &sphdata;
         settings.userdata_chunk_size = sizeof(sphdata);
-        settings.func_finalize = dynamics_step_finalize_sphdata;
+        settings.func_reduce = dynamics_step_sphdata_reduce;
         BLI_task_parallel_range(
             0, psys->totpart, &task_data, dynamics_step_sph_ddr_task_cb_ex, &settings);
 
@@ -4018,7 +4020,7 @@ static void dynamics_step(ParticleSimulationData *sim, float cfra)
           settings.use_threading = (psys->totpart > 100);
           settings.userdata_chunk = &sphdata;
           settings.userdata_chunk_size = sizeof(sphdata);
-          settings.func_finalize = dynamics_step_finalize_sphdata;
+          settings.func_reduce = dynamics_step_sphdata_reduce;
           BLI_task_parallel_range(0,
                                   psys->totpart,
                                   &task_data,
@@ -4033,7 +4035,7 @@ static void dynamics_step(ParticleSimulationData *sim, float cfra)
           settings.use_threading = (psys->totpart > 100);
           settings.userdata_chunk = &sphdata;
           settings.userdata_chunk_size = sizeof(sphdata);
-          settings.func_finalize = dynamics_step_finalize_sphdata;
+          settings.func_reduce = dynamics_step_sphdata_reduce;
           BLI_task_parallel_range(0,
                                   psys->totpart,
                                   &task_data,
@@ -4044,7 +4046,7 @@ static void dynamics_step(ParticleSimulationData *sim, float cfra)
 
       BLI_spin_end(&task_data.spin);
 
-      psys_sph_finalise(&sphdata);
+      psys_sph_finalize(&sphdata);
       break;
     }
   }
@@ -4124,7 +4126,7 @@ static void cached_step(ParticleSimulationData *sim, float cfra, const bool use_
     }
 
     if (psys->lattice_deform_data) {
-      end_latt_deform(psys->lattice_deform_data);
+      BKE_lattice_deform_data_destroy(psys->lattice_deform_data);
       psys->lattice_deform_data = NULL;
     }
 
@@ -4135,6 +4137,34 @@ static void cached_step(ParticleSimulationData *sim, float cfra, const bool use_
       pa->flag &= ~PARS_NO_DISP;
     }
   }
+}
+
+static bool particles_has_flip(short parttype)
+{
+  return (parttype == PART_FLUID_FLIP);
+}
+
+static bool particles_has_tracer(short parttype)
+{
+  return (parttype == PART_FLUID_TRACER);
+}
+
+static bool particles_has_spray(short parttype)
+{
+  return ((parttype == PART_FLUID_SPRAY) || (parttype == PART_FLUID_SPRAYFOAM) ||
+          (parttype == PART_FLUID_SPRAYFOAMBUBBLE));
+}
+
+static bool particles_has_bubble(short parttype)
+{
+  return ((parttype == PART_FLUID_BUBBLE) || (parttype == PART_FLUID_FOAMBUBBLE) ||
+          (parttype == PART_FLUID_SPRAYFOAMBUBBLE));
+}
+
+static bool particles_has_foam(short parttype)
+{
+  return ((parttype == PART_FLUID_FOAM) || (parttype == PART_FLUID_SPRAYFOAM) ||
+          (parttype == PART_FLUID_SPRAYFOAMBUBBLE));
 }
 
 static void particles_fluid_step(ParticleSimulationData *sim,
@@ -4153,7 +4183,8 @@ static void particles_fluid_step(ParticleSimulationData *sim,
 #else
   {
     Object *ob = sim->ob;
-    FluidModifierData *mmd = (FluidModifierData *)modifiers_findByType(ob, eModifierType_Fluid);
+    FluidModifierData *mmd = (FluidModifierData *)BKE_modifiers_findby_type(ob,
+                                                                            eModifierType_Fluid);
 
     if (mmd && mmd->domain && mmd->domain->fluid) {
       FluidDomainSettings *mds = mmd->domain;
@@ -4161,7 +4192,7 @@ static void particles_fluid_step(ParticleSimulationData *sim,
       ParticleSettings *part = psys->part;
       ParticleData *pa = NULL;
 
-      int p, totpart, tottypepart = 0;
+      int p, totpart = 0, tottypepart = 0;
       int flagActivePart, activeParts = 0;
       float posX, posY, posZ, velX, velY, velZ;
       float resX, resY, resZ;
@@ -4173,15 +4204,15 @@ static void particles_fluid_step(ParticleSimulationData *sim,
       float min[3], max[3], size[3], cell_size_scaled[3], max_size;
 
       /* Sanity check: parts also enabled in fluid domain? */
-      if ((part->type == PART_FLUID_FLIP &&
+      if ((particles_has_flip(part->type) &&
            (mds->particle_type & FLUID_DOMAIN_PARTICLE_FLIP) == 0) ||
-          (part->type == PART_FLUID_SPRAY &&
+          (particles_has_spray(part->type) &&
            (mds->particle_type & FLUID_DOMAIN_PARTICLE_SPRAY) == 0) ||
-          (part->type == PART_FLUID_BUBBLE &&
+          (particles_has_bubble(part->type) &&
            (mds->particle_type & FLUID_DOMAIN_PARTICLE_BUBBLE) == 0) ||
-          (part->type == PART_FLUID_FOAM &&
+          (particles_has_foam(part->type) &&
            (mds->particle_type & FLUID_DOMAIN_PARTICLE_FOAM) == 0) ||
-          (part->type == PART_FLUID_TRACER &&
+          (particles_has_tracer(part->type) &&
            (mds->particle_type & FLUID_DOMAIN_PARTICLE_TRACER) == 0)) {
         BLI_snprintf(debugStrBuffer,
                      sizeof(debugStrBuffer),
@@ -4194,23 +4225,23 @@ static void particles_fluid_step(ParticleSimulationData *sim,
       if (part->type == PART_FLUID_FLIP) {
         tottypepart = totpart = manta_liquid_get_num_flip_particles(mds->fluid);
       }
-      if ((part->type == PART_FLUID_SPRAY) || (part->type == PART_FLUID_BUBBLE) ||
-          (part->type == PART_FLUID_FOAM) || (part->type == PART_FLUID_TRACER)) {
+      if (particles_has_spray(part->type) || particles_has_bubble(part->type) ||
+          particles_has_foam(part->type) || particles_has_tracer(part->type)) {
         totpart = manta_liquid_get_num_snd_particles(mds->fluid);
 
         /* tottypepart is the amount of particles of a snd particle type. */
         for (p = 0; p < totpart; p++) {
           flagActivePart = manta_liquid_get_snd_particle_flag_at(mds->fluid, p);
-          if ((part->type & PART_FLUID_SPRAY) && (flagActivePart & PARTICLE_TYPE_SPRAY)) {
+          if (particles_has_spray(part->type) && (flagActivePart & PARTICLE_TYPE_SPRAY)) {
             tottypepart++;
           }
-          if ((part->type & PART_FLUID_BUBBLE) && (flagActivePart & PARTICLE_TYPE_BUBBLE)) {
+          if (particles_has_bubble(part->type) && (flagActivePart & PARTICLE_TYPE_BUBBLE)) {
             tottypepart++;
           }
-          if ((part->type & PART_FLUID_FOAM) && (flagActivePart & PARTICLE_TYPE_FOAM)) {
+          if (particles_has_foam(part->type) && (flagActivePart & PARTICLE_TYPE_FOAM)) {
             tottypepart++;
           }
-          if ((part->type & PART_FLUID_TRACER) && (flagActivePart & PARTICLE_TYPE_TRACER)) {
+          if (particles_has_tracer(part->type) && (flagActivePart & PARTICLE_TYPE_TRACER)) {
             tottypepart++;
           }
         }
@@ -4261,8 +4292,8 @@ static void particles_fluid_step(ParticleSimulationData *sim,
           velY = manta_liquid_get_flip_particle_velocity_y_at(mds->fluid, p);
           velZ = manta_liquid_get_flip_particle_velocity_z_at(mds->fluid, p);
         }
-        else if ((part->type == PART_FLUID_SPRAY) || (part->type == PART_FLUID_BUBBLE) ||
-                 (part->type == PART_FLUID_FOAM) || (part->type == PART_FLUID_TRACER)) {
+        else if (particles_has_spray(part->type) || particles_has_bubble(part->type) ||
+                 particles_has_foam(part->type) || particles_has_tracer(part->type)) {
           flagActivePart = manta_liquid_get_snd_particle_flag_at(mds->fluid, p);
 
           resX = (float)manta_liquid_get_particle_res_x(mds->fluid);
@@ -4292,16 +4323,16 @@ static void particles_fluid_step(ParticleSimulationData *sim,
 
         /* Type of particle must match current particle system type
          * (only important for snd particles). */
-        if ((flagActivePart & PARTICLE_TYPE_SPRAY) && (part->type & PART_FLUID_SPRAY) == 0) {
+        if ((flagActivePart & PARTICLE_TYPE_SPRAY) && !particles_has_spray(part->type)) {
           continue;
         }
-        if ((flagActivePart & PARTICLE_TYPE_BUBBLE) && (part->type & PART_FLUID_BUBBLE) == 0) {
+        if ((flagActivePart & PARTICLE_TYPE_BUBBLE) && !particles_has_bubble(part->type)) {
           continue;
         }
-        if ((flagActivePart & PARTICLE_TYPE_FOAM) && (part->type & PART_FLUID_FOAM) == 0) {
+        if ((flagActivePart & PARTICLE_TYPE_FOAM) && !particles_has_foam(part->type)) {
           continue;
         }
-        if ((flagActivePart & PARTICLE_TYPE_TRACER) && (part->type & PART_FLUID_TRACER) == 0) {
+        if ((flagActivePart & PARTICLE_TYPE_TRACER) && !particles_has_tracer(part->type)) {
           continue;
         }
 #  if 0
@@ -4350,7 +4381,6 @@ static void particles_fluid_step(ParticleSimulationData *sim,
               1. / fabsf(ob->scale[0]), 1. / fabsf(ob->scale[1]), 1. / fabsf(ob->scale[2])};
           mul_v3_fl(scaleAbs, max_size);
           mul_v3_v3(pa->state.co, scaleAbs);
-          ;
 
           /* Match domain scale. */
           mul_m4_v3(ob->obmat, pa->state.co);
@@ -4586,7 +4616,7 @@ static void system_step(ParticleSimulationData *sim, float cfra, const bool use_
 
   /* cleanup */
   if (psys->lattice_deform_data) {
-    end_latt_deform(psys->lattice_deform_data);
+    BKE_lattice_deform_data_destroy(psys->lattice_deform_data);
     psys->lattice_deform_data = NULL;
   }
 }
@@ -4820,7 +4850,7 @@ void particle_system_update(struct Depsgraph *depsgraph,
         hcfra = 100.0f * (float)i / (float)psys->part->hair_step;
         if ((part->flag & PART_HAIR_REGROW) == 0) {
           BKE_animsys_evaluate_animdata(
-              scene, &part_local->id, part_local->adt, hcfra, ADT_RECALC_ANIM, false);
+              &part_local->id, part_local->adt, hcfra, ADT_RECALC_ANIM, false);
         }
         system_step(&sim, hcfra, use_render_params);
         psys->cfra = hcfra;
@@ -4844,9 +4874,9 @@ void particle_system_update(struct Depsgraph *depsgraph,
       hair_step(&sim, cfra, use_render_params);
     }
   }
-  else if ((part->type == PART_FLUID_FLIP) || (part->type == PART_FLUID_SPRAY) ||
-           (part->type == PART_FLUID_BUBBLE) || (part->type == PART_FLUID_FOAM) ||
-           (part->type == PART_FLUID_TRACER)) {
+  else if (particles_has_flip(part->type) || particles_has_spray(part->type) ||
+           particles_has_bubble(part->type) || particles_has_foam(part->type) ||
+           particles_has_tracer(part->type)) {
     particles_fluid_step(&sim, (int)cfra, use_render_params);
   }
   else {

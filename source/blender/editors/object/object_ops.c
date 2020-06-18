@@ -21,8 +21,8 @@
  * \ingroup edobj
  */
 
-#include <stdlib.h>
 #include <math.h>
+#include <stdlib.h>
 
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
@@ -37,9 +37,9 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
+#include "ED_object.h"
 #include "ED_screen.h"
 #include "ED_select_utils.h"
-#include "ED_object.h"
 
 #include "DEG_depsgraph.h"
 
@@ -109,6 +109,12 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(OBJECT_OT_light_add);
   WM_operatortype_append(OBJECT_OT_camera_add);
   WM_operatortype_append(OBJECT_OT_speaker_add);
+#ifdef WITH_NEW_OBJECT_TYPES
+  WM_operatortype_append(OBJECT_OT_hair_add);
+  WM_operatortype_append(OBJECT_OT_pointcloud_add);
+#endif
+  WM_operatortype_append(OBJECT_OT_volume_add);
+  WM_operatortype_append(OBJECT_OT_volume_import);
   WM_operatortype_append(OBJECT_OT_add);
   WM_operatortype_append(OBJECT_OT_add_named);
   WM_operatortype_append(OBJECT_OT_effector_add);
@@ -124,6 +130,7 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(OBJECT_OT_modifier_remove);
   WM_operatortype_append(OBJECT_OT_modifier_move_up);
   WM_operatortype_append(OBJECT_OT_modifier_move_down);
+  WM_operatortype_append(OBJECT_OT_modifier_move_to_index);
   WM_operatortype_append(OBJECT_OT_modifier_apply);
   WM_operatortype_append(OBJECT_OT_modifier_convert);
   WM_operatortype_append(OBJECT_OT_modifier_copy);
@@ -131,6 +138,8 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(OBJECT_OT_multires_reshape);
   WM_operatortype_append(OBJECT_OT_multires_higher_levels_delete);
   WM_operatortype_append(OBJECT_OT_multires_base_apply);
+  WM_operatortype_append(OBJECT_OT_multires_unsubdivide);
+  WM_operatortype_append(OBJECT_OT_multires_rebuild_subdiv);
   WM_operatortype_append(OBJECT_OT_multires_external_save);
   WM_operatortype_append(OBJECT_OT_multires_external_pack);
   WM_operatortype_append(OBJECT_OT_skin_root_mark);
@@ -259,6 +268,8 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(OBJECT_OT_hide_collection);
 
   WM_operatortype_append(OBJECT_OT_voxel_remesh);
+  WM_operatortype_append(OBJECT_OT_voxel_size_edit);
+
   WM_operatortype_append(OBJECT_OT_quadriflow_remesh);
 }
 

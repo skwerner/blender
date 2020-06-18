@@ -21,10 +21,10 @@
  * \ingroup spgraph
  */
 
+#include <float.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <float.h>
 
 #ifdef WITH_AUDASPACE
 #  include <AUD_Special.h>
@@ -54,16 +54,16 @@
 
 #include "DEG_depsgraph_build.h"
 
-#include "UI_view2d.h"
 #include "UI_interface.h"
+#include "UI_view2d.h"
 
 #include "ED_anim_api.h"
-#include "ED_keyframing.h"
 #include "ED_keyframes_edit.h"
+#include "ED_keyframing.h"
+#include "ED_markers.h"
 #include "ED_numinput.h"
 #include "ED_screen.h"
 #include "ED_transform.h"
-#include "ED_markers.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -126,7 +126,8 @@ void get_graph_keyframe_extents(bAnimContext *ac,
       float unitFac, offset;
 
       /* get range */
-      if (calc_fcurve_bounds(fcu, &txmin, &txmax, &tymin, &tymax, do_sel_only, include_handles)) {
+      if (BKE_fcurve_calc_bounds(
+              fcu, &txmin, &txmax, &tymin, &tymax, do_sel_only, include_handles)) {
         short mapping_flag = ANIM_get_normalization_flags(ac);
 
         /* apply NLA scaling */
@@ -292,15 +293,14 @@ static int graphkeys_viewall(bContext *C,
   /* Give some more space at the borders. */
   BLI_rctf_scale(&cur_new, 1.1f);
 
-  /* Take regions into account, that could block the view. */
+  /* Take regions into account, that could block the view.
+   * Marker region is supposed to be larger than the scroll-bar, so prioritize it.*/
   float pad_top = UI_TIME_SCRUB_MARGIN_Y;
-  float pad_bottom = 0;
-  if (!BLI_listbase_is_empty(ED_context_get_markers(C))) {
-    pad_bottom = UI_MARKER_MARGIN_Y;
-  }
-  BLI_rctf_pad_y(&cur_new, ac.ar->winy, pad_bottom, pad_top);
+  float pad_bottom = BLI_listbase_is_empty(ED_context_get_markers(C)) ? V2D_SCROLL_HANDLE_HEIGHT :
+                                                                        UI_MARKER_MARGIN_Y;
+  BLI_rctf_pad_y(&cur_new, ac.region->winy, pad_bottom, pad_top);
 
-  UI_view2d_smooth_view(C, ac.ar, &cur_new, smooth_viewtx);
+  UI_view2d_smooth_view(C, ac.region, &cur_new, smooth_viewtx);
   return OPERATOR_FINISHED;
 }
 
@@ -329,7 +329,7 @@ static int graphkeys_view_selected_exec(bContext *C, wmOperator *op)
 void GRAPH_OT_view_all(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "View All";
+  ot->name = "Frame All";
   ot->idname = "GRAPH_OT_view_all";
   ot->description = "Reset viewable area to show full keyframe range";
 
@@ -352,7 +352,7 @@ void GRAPH_OT_view_all(wmOperatorType *ot)
 void GRAPH_OT_view_selected(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "View Selected";
+  ot->name = "Frame Selected";
   ot->idname = "GRAPH_OT_view_selected";
   ot->description = "Reset viewable area to show selected keyframe range";
 
@@ -384,9 +384,9 @@ static int graphkeys_view_frame_exec(bContext *C, wmOperator *op)
 void GRAPH_OT_view_frame(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "View Frame";
+  ot->name = "Go to Current Frame";
   ot->idname = "GRAPH_OT_view_frame";
-  ot->description = "Reset viewable area to show range around current frame";
+  ot->description = "Move the view to the current frame";
 
   /* api callbacks */
   ot->exec = graphkeys_view_frame_exec;
@@ -410,7 +410,7 @@ static void create_ghost_curves(bAnimContext *ac, int start, int end)
   int filter;
 
   /* free existing ghost curves */
-  free_fcurves(&sipo->runtime.ghost_curves);
+  BKE_fcurves_free(&sipo->runtime.ghost_curves);
 
   /* sanity check */
   if (start >= end) {
@@ -426,7 +426,7 @@ static void create_ghost_curves(bAnimContext *ac, int start, int end)
   /* loop through filtered data and add keys between selected keyframes on every frame  */
   for (ale = anim_data.first; ale; ale = ale->next) {
     FCurve *fcu = (FCurve *)ale->key_data;
-    FCurve *gcu = MEM_callocN(sizeof(FCurve), "Ghost FCurve");
+    FCurve *gcu = BKE_fcurve_create();
     AnimData *adt = ANIM_nla_mapping_get(ac, ale);
     ChannelDriver *driver = fcu->driver;
     FPoint *fpt;
@@ -487,7 +487,7 @@ static int graphkeys_create_ghostcurves_exec(bContext *C, wmOperator *UNUSED(op)
 
   /* Ghost curves are snapshots of the visible portions of the curves,
    * so set range to be the visible range. */
-  v2d = &ac.ar->v2d;
+  v2d = &ac.region->v2d;
   start = (int)v2d->cur.xmin;
   end = (int)v2d->cur.xmax;
 
@@ -537,7 +537,7 @@ static int graphkeys_clear_ghostcurves_exec(bContext *C, wmOperator *UNUSED(op))
     return OPERATOR_CANCELLED;
   }
   /* free ghost curves */
-  free_fcurves(&sipo->runtime.ghost_curves);
+  BKE_fcurves_free(&sipo->runtime.ghost_curves);
 
   /* update this editor only */
   ED_area_tag_redraw(CTX_wm_area(C));
@@ -611,7 +611,7 @@ static void insert_graph_keys(bAnimContext *ac, eGraphKeys_InsertKey_Types mode)
   SpaceGraph *sipo = (SpaceGraph *)ac->sl;
   Scene *scene = ac->scene;
   ToolSettings *ts = scene->toolsettings;
-  short flag = 0;
+  eInsertKeyFlags flag = 0;
 
   /* filter data */
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_CURVE_VISIBLE | ANIMFILTER_FOREDIT |
@@ -640,8 +640,8 @@ static void insert_graph_keys(bAnimContext *ac, eGraphKeys_InsertKey_Types mode)
     return;
   }
 
-  /* init keyframing flag */
-  flag = ANIM_get_keyframing_flags(scene, 1);
+  /* Init key-framing flag. */
+  flag = ANIM_get_keyframing_flags(scene, true);
 
   /* insert keyframes */
   if (mode & GRAPHKEYS_INSERTKEY_CURSOR) {
@@ -807,7 +807,7 @@ static int graphkeys_click_insert_exec(bContext *C, wmOperator *op)
   /* when there are F-Modifiers on the curve, only allow adding
    * keyframes if these will be visible after doing so...
    */
-  if (fcurve_is_keyframable(fcu)) {
+  if (BKE_fcurve_is_keyframable(fcu)) {
     ListBase anim_data;
     ToolSettings *ts = ac.scene->toolsettings;
 
@@ -872,7 +872,7 @@ static int graphkeys_click_insert_exec(bContext *C, wmOperator *op)
 static int graphkeys_click_insert_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
   bAnimContext ac;
-  ARegion *ar;
+  ARegion *region;
   View2D *v2d;
   int mval[2];
   float x, y;
@@ -883,11 +883,11 @@ static int graphkeys_click_insert_invoke(bContext *C, wmOperator *op, const wmEv
   }
 
   /* store mouse coordinates in View2D space, into the operator's properties */
-  ar = ac.ar;
-  v2d = &ar->v2d;
+  region = ac.region;
+  v2d = &region->v2d;
 
-  mval[0] = (event->x - ar->winrct.xmin);
-  mval[1] = (event->y - ar->winrct.ymin);
+  mval[0] = (event->x - region->winrct.xmin);
+  mval[1] = (event->y - region->winrct.ymin);
 
   UI_view2d_region_to_view(v2d, mval[0], mval[1], &x, &y);
 
@@ -1337,8 +1337,8 @@ static void decimate_graph_keys(bAnimContext *ac, float remove_ratio, float erro
 typedef struct tDecimateGraphOp {
   bAnimContext ac;
   Scene *scene;
-  ScrArea *sa;
-  ARegion *ar;
+  ScrArea *area;
+  ARegion *region;
 
   /** A 0-1 value for determining how much we should decimate. */
   PropertyRNA *percentage_prop;
@@ -1410,7 +1410,7 @@ static void decimate_exit(bContext *C, wmOperator *op)
     return;
   }
 
-  ScrArea *sa = dgo->sa;
+  ScrArea *area = dgo->area;
   LinkData *link;
 
   for (link = dgo->bezt_arr_list.first; link != NULL; link = link->next) {
@@ -1424,7 +1424,7 @@ static void decimate_exit(bContext *C, wmOperator *op)
 
   /* Return to normal cursor and header status. */
   WM_cursor_modal_restore(win);
-  ED_area_status_text(sa, NULL);
+  ED_area_status_text(area, NULL);
 
   /* cleanup */
   op->customdata = NULL;
@@ -1451,7 +1451,7 @@ static void decimate_draw_status_header(wmOperator *op, tDecimateGraphOp *dgo)
         status_str, sizeof(status_str), "%s: %d %%", mode_str, (int)(percentage * 100.0f));
   }
 
-  ED_area_status_text(dgo->sa, status_str);
+  ED_area_status_text(dgo->area, status_str);
 }
 
 /* Calculate percentage based on position of mouse (we only use x-axis for now.
@@ -1461,7 +1461,7 @@ static void decimate_mouse_update_percentage(tDecimateGraphOp *dgo,
                                              wmOperator *op,
                                              const wmEvent *event)
 {
-  float percentage = (event->x - dgo->ar->winrct.xmin) / ((float)dgo->ar->winx);
+  float percentage = (event->x - dgo->region->winrct.xmin) / ((float)dgo->region->winx);
   RNA_property_float_set(op->ptr, dgo->percentage_prop, percentage);
 }
 
@@ -1483,8 +1483,8 @@ static int graphkeys_decimate_invoke(bContext *C, wmOperator *op, const wmEvent 
   dgo->percentage_prop = RNA_struct_find_property(op->ptr, "remove_ratio");
 
   dgo->scene = CTX_data_scene(C);
-  dgo->sa = CTX_wm_area(C);
-  dgo->ar = CTX_wm_region(C);
+  dgo->area = CTX_wm_area(C);
+  dgo->region = CTX_wm_region(C);
 
   /* initialise percentage so that it will have the correct value before the first mouse move. */
   decimate_mouse_update_percentage(dgo, op, event);
@@ -1577,8 +1577,8 @@ static int graphkeys_decimate_modal(bContext *C, wmOperator *op, const wmEvent *
 
   switch (event->type) {
     case LEFTMOUSE: /* confirm */
-    case RETKEY:
-    case PADENTER: {
+    case EVT_RETKEY:
+    case EVT_PADENTER: {
       if (event->val == KM_PRESS) {
         decimate_exit(C, op);
 
@@ -1587,7 +1587,7 @@ static int graphkeys_decimate_modal(bContext *C, wmOperator *op, const wmEvent *
       break;
     }
 
-    case ESCKEY: /* cancel */
+    case EVT_ESCKEY: /* cancel */
     case RIGHTMOUSE: {
       if (event->val == KM_PRESS) {
         decimate_reset_bezts(dgo);
@@ -2648,7 +2648,7 @@ static int graphkeys_euler_filter_exec(bContext *C, wmOperator *op)
     for (f = 0; f < 3; f++) {
       FCurve *fcu = euf->fcurves[f];
       BezTriple *bezt, *prev;
-      unsigned int i;
+      uint i;
 
       /* skip if not enough vets to do a decent analysis of... */
       if (fcu->totvert <= 2) {
@@ -3477,7 +3477,7 @@ static int graph_driver_vars_copy_exec(bContext *C, wmOperator *op)
   PointerRNA ptr = CTX_data_pointer_get_type(C, "active_editable_fcurve", &RNA_FCurve);
 
   /* if this exists, call the copy driver vars API function */
-  FCurve *fcu = (FCurve *)ptr.data;
+  FCurve *fcu = ptr.data;
 
   if (fcu) {
     ok = ANIM_driver_vars_copy(op->reports, fcu);
@@ -3517,7 +3517,7 @@ static int graph_driver_vars_paste_exec(bContext *C, wmOperator *op)
   PointerRNA ptr = CTX_data_pointer_get_type(C, "active_editable_fcurve", &RNA_FCurve);
 
   /* if this exists, call the paste driver vars API function */
-  FCurve *fcu = (FCurve *)ptr.data;
+  FCurve *fcu = ptr.data;
 
   if (fcu) {
     ok = ANIM_driver_vars_paste(op->reports, fcu, replace);
@@ -3570,7 +3570,7 @@ static int graph_driver_delete_invalid_exec(bContext *C, wmOperator *op)
   bAnimListElem *ale;
   int filter;
   bool ok = false;
-  unsigned int deleted = 0;
+  uint deleted = 0;
 
   /* get editor data */
   if (ANIM_animdata_get_context(C, &ac) == 0) {
@@ -3624,10 +3624,10 @@ static int graph_driver_delete_invalid_exec(bContext *C, wmOperator *op)
 static bool graph_driver_delete_invalid_poll(bContext *C)
 {
   bAnimContext ac;
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
 
   /* firstly, check if in Graph Editor */
-  if ((sa == NULL) || (sa->spacetype != SPACE_GRAPH)) {
+  if ((area == NULL) || (area->spacetype != SPACE_GRAPH)) {
     return 0;
   }
 

@@ -19,26 +19,18 @@
 
 #include "../node_shader_util.h"
 
+#include "GPU_draw.h"
+
 /* **************** OUTPUT ******************** */
 
 static bNodeSocketTemplate sh_node_tex_environment_in[] = {
-    {SOCK_VECTOR, 1, N_("Vector"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_NONE, SOCK_HIDE_VALUE},
-    {-1, 0, ""},
+    {SOCK_VECTOR, N_("Vector"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_NONE, SOCK_HIDE_VALUE},
+    {-1, ""},
 };
 
 static bNodeSocketTemplate sh_node_tex_environment_out[] = {
-    {SOCK_RGBA,
-     0,
-     N_("Color"),
-     0.0f,
-     0.0f,
-     0.0f,
-     0.0f,
-     0.0f,
-     1.0f,
-     PROP_NONE,
-     SOCK_NO_INTERNAL_LINK},
-    {-1, 0, ""},
+    {SOCK_RGBA, N_("Color"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_NONE, SOCK_NO_INTERNAL_LINK},
+    {-1, ""},
 };
 
 static void node_shader_init_tex_environment(bNodeTree *UNUSED(ntree), bNode *node)
@@ -66,6 +58,10 @@ static int node_shader_gpu_tex_environment(GPUMaterial *mat,
   bNode *node_original = node->original ? node->original : node;
   NodeTexImage *tex_original = node_original->storage;
   ImageUser *iuser = &tex_original->iuser;
+  eGPUSamplerState sampler = GPU_SAMPLER_REPEAT | GPU_SAMPLER_ANISO | GPU_SAMPLER_FILTER;
+  if (GPU_get_mipmap()) {
+    sampler |= GPU_SAMPLER_MIPMAP;
+  }
 
   GPUNodeLink *outalpha;
 
@@ -82,48 +78,40 @@ static int node_shader_gpu_tex_environment(GPUMaterial *mat,
 
   /* Compute texture coordinate. */
   if (tex->projection == SHD_PROJ_EQUIRECTANGULAR) {
-    /* To fix pole issue we clamp the v coordinate. The clamp value depends on the filter size. */
-    float clamp_size = (ELEM(tex->interpolation, SHD_INTERP_CUBIC, SHD_INTERP_SMART)) ? 1.5 : 0.5;
-    GPU_link(mat,
-             "node_tex_environment_equirectangular",
-             in[0].link,
-             GPU_constant(&clamp_size),
-             GPU_image(ima, iuser, 0),
-             &in[0].link);
+    GPU_link(mat, "node_tex_environment_equirectangular", in[0].link, &in[0].link);
+    /* To fix pole issue we clamp the v coordinate. */
+    sampler &= ~GPU_SAMPLER_REPEAT_T;
+    /* Force the highest mipmap and don't do anisotropic filtering.
+     * This is to fix the artifact caused by derivatives discontinuity. */
+    sampler &= ~(GPU_SAMPLER_MIPMAP | GPU_SAMPLER_ANISO);
   }
   else {
     GPU_link(mat, "node_tex_environment_mirror_ball", in[0].link, &in[0].link);
+    /* Fix pole issue. */
+    sampler &= ~GPU_SAMPLER_REPEAT;
+  }
+
+  const char *gpufunc;
+  static const char *names[] = {
+      "node_tex_image_linear",
+      "node_tex_image_cubic",
+  };
+
+  switch (tex->interpolation) {
+    case SHD_INTERP_LINEAR:
+      gpufunc = names[0];
+      break;
+    case SHD_INTERP_CLOSEST:
+      sampler &= ~(GPU_SAMPLER_FILTER | GPU_SAMPLER_MIPMAP);
+      gpufunc = names[0];
+      break;
+    default:
+      gpufunc = names[1];
+      break;
   }
 
   /* Sample texture with correct interpolation. */
-  switch (tex->interpolation) {
-    case SHD_INTERP_LINEAR:
-      /* Force the highest mipmap and don't do anisotropic filtering.
-       * This is to fix the artifact caused by derivatives discontinuity. */
-      GPU_link(mat,
-               "node_tex_image_linear_no_mip",
-               in[0].link,
-               GPU_image(ima, iuser, 0),
-               &out[0].link,
-               &outalpha);
-      break;
-    case SHD_INTERP_CLOSEST:
-      GPU_link(mat,
-               "node_tex_image_nearest",
-               in[0].link,
-               GPU_image(ima, iuser, 0),
-               &out[0].link,
-               &outalpha);
-      break;
-    default:
-      GPU_link(mat,
-               "node_tex_image_cubic",
-               in[0].link,
-               GPU_image(ima, iuser, 0),
-               &out[0].link,
-               &outalpha);
-      break;
-  }
+  GPU_link(mat, gpufunc, in[0].link, GPU_image(mat, ima, iuser, sampler), &out[0].link, &outalpha);
 
   if (out[0].hasoutput) {
     if (ELEM(ima->alpha_mode, IMA_ALPHA_IGNORE, IMA_ALPHA_CHANNEL_PACKED) ||

@@ -145,16 +145,14 @@ ccl_device_noinline_cpu bool direct_emission(KernelGlobals *kg,
 #ifdef __PASSES__
   /* use visibility flag to skip lights */
   if (ls->shader & SHADER_EXCLUDE_ANY) {
-    if (ls->shader & SHADER_EXCLUDE_DIFFUSE) {
+    if (ls->shader & SHADER_EXCLUDE_DIFFUSE)
       eval->diffuse = make_float3(0.0f, 0.0f, 0.0f);
-      eval->subsurface = make_float3(0.0f, 0.0f, 0.0f);
-    }
     if (ls->shader & SHADER_EXCLUDE_GLOSSY)
       eval->glossy = make_float3(0.0f, 0.0f, 0.0f);
     if (ls->shader & SHADER_EXCLUDE_TRANSMIT)
       eval->transmission = make_float3(0.0f, 0.0f, 0.0f);
     if (ls->shader & SHADER_EXCLUDE_SCATTER)
-      eval->scatter = make_float3(0.0f, 0.0f, 0.0f);
+      eval->volume = make_float3(0.0f, 0.0f, 0.0f);
   }
 #endif
 
@@ -328,9 +326,7 @@ ccl_device_noinline_cpu float3 indirect_background(KernelGlobals *kg,
   /* Background MIS weights. */
 #  ifdef __BACKGROUND_MIS__
   /* Check if background light exists or if we should skip pdf. */
-  int res_x = kernel_data.integrator.pdf_background_res_x;
-
-  if (!(state->flag & PATH_RAY_MIS_SKIP) && res_x) {
+  if (!(state->flag & PATH_RAY_MIS_SKIP) && kernel_data.background.use_mis) {
     /* multiple importance sampling, get background light pdf for ray
      * direction, and compute weight with respect to BSDF pdf */
     float pdf = background_light_pdf(kg, ray->P, ray->D);

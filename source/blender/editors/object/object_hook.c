@@ -26,8 +26,8 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_math.h"
 #include "BLI_listbase.h"
+#include "BLI_math.h"
 #include "BLI_string.h"
 #include "BLI_utildefines.h"
 
@@ -41,29 +41,29 @@
 
 #include "BKE_action.h"
 #include "BKE_context.h"
+#include "BKE_deform.h"
+#include "BKE_editmesh.h"
 #include "BKE_layer.h"
 #include "BKE_main.h"
 #include "BKE_modifier.h"
 #include "BKE_object.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
-#include "BKE_deform.h"
-#include "BKE_editmesh.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
 #include "DEG_depsgraph_query.h"
 
-#include "RNA_define.h"
 #include "RNA_access.h"
+#include "RNA_define.h"
 #include "RNA_enum_types.h"
 
 #include "ED_curve.h"
 #include "ED_mesh.h"
 #include "ED_screen.h"
 
-#include "WM_types.h"
 #include "WM_api.h"
+#include "WM_types.h"
 
 #include "UI_resources.h"
 
@@ -123,7 +123,7 @@ static bool return_editmesh_vgroup(Object *obedit, BMEditMesh *em, char *r_name,
     BM_ITER_MESH (eve, &iter, em->bm, BM_VERTS_OF_MESH) {
       dvert = BM_ELEM_CD_GET_VOID_P(eve, cd_dvert_offset);
 
-      if (defvert_find_weight(dvert, defgrp_index) > 0.0f) {
+      if (BKE_defvert_find_weight(dvert, defgrp_index) > 0.0f) {
         add_v3_v3(r_cent, eve->co);
         totvert++;
       }
@@ -552,14 +552,14 @@ static int add_hook_object(const bContext *C,
   }
 
   md = obedit->modifiers.first;
-  while (md && modifierType_getInfo(md->type)->type == eModifierTypeType_OnlyDeform) {
+  while (md && BKE_modifier_get_info(md->type)->type == eModifierTypeType_OnlyDeform) {
     md = md->next;
   }
 
-  hmd = (HookModifierData *)modifier_new(eModifierType_Hook);
+  hmd = (HookModifierData *)BKE_modifier_new(eModifierType_Hook);
   BLI_insertlinkbefore(&obedit->modifiers, md, hmd);
   BLI_snprintf(hmd->modifier.name, sizeof(hmd->modifier.name), "Hook-%s", ob->id.name + 2);
-  modifier_unique_name(&obedit->modifiers, (ModifierData *)hmd);
+  BKE_modifier_unique_name(&obedit->modifiers, (ModifierData *)hmd);
 
   hmd->object = ob;
   hmd->indexar = indexar;
@@ -725,7 +725,7 @@ static int object_hook_remove_exec(bContext *C, wmOperator *op)
   /* remove functionality */
 
   BLI_remlink(&ob->modifiers, (ModifierData *)hmd);
-  modifier_free((ModifierData *)hmd);
+  BKE_modifier_free((ModifierData *)hmd);
 
   DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
   WM_event_add_notifier(C, NC_OBJECT | ND_MODIFIER, ob);

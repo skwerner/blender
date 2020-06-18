@@ -100,7 +100,7 @@ class GHOST_SystemCocoa : public GHOST_System {
    * \param   parentWindow    Parent (embedder) window
    * \return  The new window (or 0 if creation failed).
    */
-  GHOST_IWindow *createWindow(const STR_String &title,
+  GHOST_IWindow *createWindow(const char *title,
                               GHOST_TInt32 left,
                               GHOST_TInt32 top,
                               GHOST_TUns32 width,
@@ -198,7 +198,7 @@ class GHOST_SystemCocoa : public GHOST_System {
   GHOST_TSuccess getModifierKeys(GHOST_ModifierKeys &keys) const;
 
   /**
-   * Returns the state of the mouse buttons (ouside the message queue).
+   * Returns the state of the mouse buttons (outside the message queue).
    * \param buttons   The state of the buttons.
    * \return          Indication of success.
    */

@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -29,18 +29,27 @@
 #include "BLI_math_vector.h"
 #include "BLI_rand.h"
 
-#include "DNA_meshdata_types.h"
 #include "DNA_mesh_types.h"
+#include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
+#include "DNA_screen_types.h"
 
 #include "DEG_depsgraph_query.h"
 
+#include "BKE_context.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
 #include "BKE_particle.h"
 #include "BKE_scene.h"
+#include "BKE_screen.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
 
 #include "MOD_modifiertypes.h"
+#include "MOD_ui_common.h"
 
 static void initData(ModifierData *md)
 {
@@ -55,7 +64,7 @@ static bool dependsOnTime(ModifierData *UNUSED(md))
   return true;
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, struct Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, struct Mesh *mesh)
 {
   Mesh *result;
   BuildModifierData *bmd = (BuildModifierData *)md;
@@ -275,6 +284,52 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, str
   return result;
 }
 
+static void panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, &ptr, "frame_start", 0, NULL, ICON_NONE);
+  uiItemR(layout, &ptr, "frame_duration", 0, NULL, ICON_NONE);
+  uiItemR(layout, &ptr, "use_reverse", 0, NULL, ICON_NONE);
+
+  modifier_panel_end(layout, &ptr);
+}
+
+static void random_panel_header_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+
+  uiItemR(layout, &ptr, "use_random_order", 0, NULL, ICON_NONE);
+}
+
+static void random_panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiLayoutSetActive(layout, RNA_boolean_get(&ptr, "use_random_order"));
+  uiItemR(layout, &ptr, "seed", 0, NULL, ICON_NONE);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  PanelType *panel_type = modifier_panel_register(region_type, eModifierType_Build, panel_draw);
+  modifier_subpanel_register(
+      region_type, "randomize", "", random_panel_header_draw, random_panel_draw, panel_type);
+}
+
 ModifierTypeInfo modifierType_Build = {
     /* name */ "Build",
     /* structName */ "BuildModifierData",
@@ -282,13 +337,16 @@ ModifierTypeInfo modifierType_Build = {
     /* type */ eModifierTypeType_Nonconstructive,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_AcceptsCVs,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ NULL,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ NULL,
@@ -301,4 +359,7 @@ ModifierTypeInfo modifierType_Build = {
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

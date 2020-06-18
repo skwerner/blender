@@ -24,22 +24,20 @@
  */
 
 #include "BLI_utildefines.h"
-#include "BLI_ghash.h"
 
-extern "C" {
 #include "DNA_scene_types.h"
-} /* extern "C" */
 
 #include "DNA_object_types.h"
 
 #include "DEG_depsgraph.h"
-#include "DEG_depsgraph_debug.h"
 #include "DEG_depsgraph_build.h"
+#include "DEG_depsgraph_debug.h"
 #include "DEG_depsgraph_query.h"
 
-#include "intern/depsgraph.h"
-#include "intern/depsgraph_type.h"
 #include "intern/debug/deg_debug.h"
+#include "intern/depsgraph.h"
+#include "intern/depsgraph_relation.h"
+#include "intern/depsgraph_type.h"
 #include "intern/node/deg_node_component.h"
 #include "intern/node/deg_node_id.h"
 #include "intern/node/deg_node_time.h"
@@ -47,31 +45,31 @@ extern "C" {
 void DEG_debug_flags_set(Depsgraph *depsgraph, int flags)
 {
   DEG::Depsgraph *deg_graph = reinterpret_cast<DEG::Depsgraph *>(depsgraph);
-  deg_graph->debug_flags = flags;
+  deg_graph->debug.flags = flags;
 }
 
 int DEG_debug_flags_get(const Depsgraph *depsgraph)
 {
   const DEG::Depsgraph *deg_graph = reinterpret_cast<const DEG::Depsgraph *>(depsgraph);
-  return deg_graph->debug_flags;
+  return deg_graph->debug.flags;
 }
 
 void DEG_debug_name_set(struct Depsgraph *depsgraph, const char *name)
 {
   DEG::Depsgraph *deg_graph = reinterpret_cast<DEG::Depsgraph *>(depsgraph);
-  deg_graph->debug_name = name;
+  deg_graph->debug.name = name;
 }
 
 const char *DEG_debug_name_get(struct Depsgraph *depsgraph)
 {
   const DEG::Depsgraph *deg_graph = reinterpret_cast<const DEG::Depsgraph *>(depsgraph);
-  return deg_graph->debug_name.c_str();
+  return deg_graph->debug.name.c_str();
 }
 
 bool DEG_debug_compare(const struct Depsgraph *graph1, const struct Depsgraph *graph2)
 {
-  BLI_assert(graph1 != NULL);
-  BLI_assert(graph2 != NULL);
+  BLI_assert(graph1 != nullptr);
+  BLI_assert(graph2 != nullptr);
   const DEG::Depsgraph *deg_graph1 = reinterpret_cast<const DEG::Depsgraph *>(graph1);
   const DEG::Depsgraph *deg_graph2 = reinterpret_cast<const DEG::Depsgraph *>(graph2);
   if (deg_graph1->operations.size() != deg_graph2->operations.size()) {
@@ -197,10 +195,10 @@ bool DEG_debug_consistency_check(Depsgraph *graph)
 /* ------------------------------------------------ */
 
 /**
- * Obtain simple statistics about the complexity of the depsgraph
- * \param[out] r_outer       The number of outer nodes in the graph
- * \param[out] r_operations  The number of operation nodes in the graph
- * \param[out] r_relations   The number of relations between (executable) nodes in the graph
+ * Obtain simple statistics about the complexity of the depsgraph.
+ * \param[out] r_outer:      The number of outer nodes in the graph
+ * \param[out] r_operations: The number of operation nodes in the graph
+ * \param[out] r_relations:  The number of relations between (executable) nodes in the graph
  */
 void DEG_stats_simple(const Depsgraph *graph,
                       size_t *r_outer,
@@ -223,17 +221,16 @@ void DEG_stats_simple(const Depsgraph *graph,
 
     for (DEG::IDNode *id_node : deg_graph->id_nodes) {
       tot_outer++;
-      GHASH_FOREACH_BEGIN (DEG::ComponentNode *, comp_node, id_node->components) {
+      for (DEG::ComponentNode *comp_node : id_node->components.values()) {
         tot_outer++;
         for (DEG::OperationNode *op_node : comp_node->operations) {
           tot_rels += op_node->inlinks.size();
         }
       }
-      GHASH_FOREACH_END();
     }
 
     DEG::TimeSourceNode *time_source = deg_graph->find_time_source();
-    if (time_source != NULL) {
+    if (time_source != nullptr) {
       tot_rels += time_source->inlinks.size();
     }
 

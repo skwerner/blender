@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
@@ -20,19 +20,30 @@
 
 #include <stddef.h>
 
+#include "BLI_listbase.h"
 #include "BLI_utildefines.h"
 
-#include "DNA_dynamicpaint_types.h"
-#include "DNA_object_types.h"
-#include "DNA_object_force_types.h"
-#include "DNA_scene_types.h"
-#include "DNA_mesh_types.h"
+#include "BLT_translation.h"
 
+#include "DNA_dynamicpaint_types.h"
+#include "DNA_mesh_types.h"
+#include "DNA_object_force_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
+
+#include "BKE_context.h"
 #include "BKE_dynamicpaint.h"
 #include "BKE_layer.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_query.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
+#include "BKE_screen.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
@@ -40,6 +51,7 @@
 #include "DEG_depsgraph_query.h"
 
 #include "MOD_modifiertypes.h"
+#include "MOD_ui_common.h"
 
 static void initData(ModifierData *md)
 {
@@ -100,7 +112,7 @@ static void requiredDataMask(Object *UNUSED(ob),
   }
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   DynamicPaintModifierData *pmd = (DynamicPaintModifierData *)md;
 
@@ -123,8 +135,7 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
   DynamicPaintModifierData *pmd = (DynamicPaintModifierData *)md;
   /* Add relation from canvases to all brush objects. */
   if (pmd->canvas != NULL && pmd->type == MOD_DYNAMICPAINT_TYPE_CANVAS) {
-    for (DynamicPaintSurface *surface = pmd->canvas->surfaces.first; surface;
-         surface = surface->next) {
+    LISTBASE_FOREACH (DynamicPaintSurface *, surface, &pmd->canvas->surfaces) {
       if (surface->effect & MOD_DPAINT_EFFECT_DO_DRIP) {
         DEG_add_forcefield_relations(
             ctx->node, ctx->object, surface->effector_weights, true, 0, "Dynamic Paint Field");
@@ -172,13 +183,29 @@ static void foreachTexLink(ModifierData *UNUSED(md),
   // walk(userData, ob, md, ""); /* re-enable when possible */
 }
 
+static void panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+
+  uiItemL(layout, IFACE_("Settings are inside the Physics tab"), ICON_NONE);
+
+  modifier_panel_end(layout, &ptr);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  modifier_panel_register(region_type, eModifierType_DynamicPaint, panel_draw);
+}
+
 ModifierTypeInfo modifierType_DynamicPaint = {
     /* name */ "Dynamic Paint",
     /* structName */ "DynamicPaintModifierData",
     /* structSize */ sizeof(DynamicPaintModifierData),
     /* type */ eModifierTypeType_Constructive,
-    /* flags */ eModifierTypeFlag_AcceptsMesh |
-        /*                          eModifierTypeFlag_SupportsMapping |*/
+    /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsMapping |
         eModifierTypeFlag_UsesPointCache | eModifierTypeFlag_Single |
         eModifierTypeFlag_UsesPreview,
 
@@ -188,7 +215,10 @@ ModifierTypeInfo modifierType_DynamicPaint = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,
@@ -201,4 +231,7 @@ ModifierTypeInfo modifierType_DynamicPaint = {
     /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ foreachTexLink,
     /* freeRuntimeData */ freeRuntimeData,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

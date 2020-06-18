@@ -16,8 +16,8 @@
 
 #include <stdlib.h>
 
-#include "render/buffers.h"
 #include "device/device.h"
+#include "render/buffers.h"
 
 #include "util/util_foreach.h"
 #include "util/util_hash.h"
@@ -43,6 +43,8 @@ BufferParams::BufferParams()
   denoising_data_pass = false;
   denoising_clean_pass = false;
   denoising_prefiltered_pass = false;
+
+  Pass::add(PASS_COMBINED, passes);
 }
 
 void BufferParams::get_offset_stride(int &offset, int &stride)
@@ -144,7 +146,7 @@ void RenderBuffers::reset(BufferParams &params_)
   params = params_;
 
   /* re-allocate buffer */
-  buffer.alloc(params.width * params.height * params.get_passes_size());
+  buffer.alloc(params.width * params.get_passes_size(), params.height);
   buffer.zero_to_device();
 }
 
@@ -256,6 +258,22 @@ bool RenderBuffers::get_pass_rect(
 {
   if (buffer.data() == NULL) {
     return false;
+  }
+
+  float *sample_count = NULL;
+  if (name == "Combined") {
+    int sample_offset = 0;
+    for (size_t j = 0; j < params.passes.size(); j++) {
+      Pass &pass = params.passes[j];
+      if (pass.type != PASS_SAMPLE_COUNT) {
+        sample_offset += pass.components;
+        continue;
+      }
+      else {
+        sample_count = buffer.data() + sample_offset;
+        break;
+      }
+    }
   }
 
   int pass_offset = 0;
@@ -418,6 +436,11 @@ bool RenderBuffers::get_pass_rect(
       }
       else {
         for (int i = 0; i < size; i++, in += pass_stride, pixels += 4) {
+          if (sample_count && sample_count[i * pass_stride] < 0.0f) {
+            scale = (pass.filter) ? -1.0f / (sample_count[i * pass_stride]) : 1.0f;
+            scale_exposure = (pass.exposure) ? scale * exposure : scale;
+          }
+
           float4 f = make_float4(in[0], in[1], in[2], in[3]);
 
           pixels[0] = f.x * scale_exposure;
@@ -427,6 +450,40 @@ bool RenderBuffers::get_pass_rect(
           /* clamp since alpha might be > 1.0 due to russian roulette */
           pixels[3] = saturate(f.w * scale);
         }
+      }
+    }
+
+    return true;
+  }
+
+  return false;
+}
+
+bool RenderBuffers::set_pass_rect(PassType type, int components, float *pixels)
+{
+  if (buffer.data() == NULL) {
+    return false;
+  }
+
+  int pass_offset = 0;
+
+  for (size_t j = 0; j < params.passes.size(); j++) {
+    Pass &pass = params.passes[j];
+
+    if (pass.type != type) {
+      pass_offset += pass.components;
+      continue;
+    }
+
+    float *out = buffer.data() + pass_offset;
+    int pass_stride = params.get_passes_size();
+    int size = params.width * params.height;
+
+    assert(pass.components == components);
+
+    for (int i = 0; i < size; i++, out += pass_stride, pixels += components) {
+      for (int j = 0; j < components; j++) {
+        out[j] = pixels[j];
       }
     }
 

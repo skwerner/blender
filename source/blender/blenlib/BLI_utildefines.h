@@ -24,13 +24,9 @@
  * \ingroup bli
  */
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /* avoid many includes for now */
-#include "BLI_sys_types.h"
 #include "BLI_compiler_compat.h"
+#include "BLI_sys_types.h"
 #include "BLI_utildefines_variadic.h"
 
 /* We could remove in future. */
@@ -38,6 +34,10 @@ extern "C" {
 
 /* include after _VA_NARGS macro */
 #include "BLI_compiler_typecheck.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* -------------------------------------------------------------------- */
 /** \name Min/Max Macros
@@ -292,33 +292,6 @@ extern "C" {
 /* -------------------------------------------------------------------- */
 /** \name Simple Math Macros
  * \{ */
-
-/* avoid multiple access for supported compilers */
-#if defined(__GNUC__) || defined(__clang__)
-
-#  define ABS(a) \
-    ({ \
-      typeof(a) a_ = (a); \
-      ((a_) < 0 ? (-(a_)) : (a_)); \
-    })
-#  define SQUARE(a) \
-    ({ \
-      typeof(a) a_ = (a); \
-      ((a_) * (a_)); \
-    })
-#  define CUBE(a) \
-    ({ \
-      typeof(a) a_ = (a); \
-      ((a_) * (a_) * (a_)); \
-    })
-
-#else
-
-#  define ABS(a) ((a) < 0 ? (-(a)) : (a))
-#  define SQUARE(a) ((a) * (a))
-#  define CUBE(a) ((a) * (a) * (a))
-
-#endif
 
 /* Float equality checks. */
 

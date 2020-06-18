@@ -41,21 +41,21 @@
  * The implementation has no global state and can be used multi-threaded.
  */
 
-#include <math.h>
-#include <stdio.h>
-#include <stddef.h>
-#include <string.h>
-#include <float.h>
 #include <ctype.h>
-#include <stdlib.h>
 #include <fenv.h>
+#include <float.h>
+#include <math.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_expr_pylike_eval.h"
-#include "BLI_utildefines.h"
-#include "BLI_math_base.h"
 #include "BLI_alloca.h"
+#include "BLI_expr_pylike_eval.h"
+#include "BLI_math_base.h"
+#include "BLI_utildefines.h"
 
 #ifdef _MSC_VER
 #  pragma fenv_access(on)
@@ -138,6 +138,24 @@ bool BLI_expr_pylike_is_valid(ExprPyLike_Parsed *expr)
 bool BLI_expr_pylike_is_constant(ExprPyLike_Parsed *expr)
 {
   return expr != NULL && expr->ops_count == 1 && expr->ops[0].opcode == OPCODE_CONST;
+}
+
+/** Check if the parsed expression uses the parameter with the given index. */
+bool BLI_expr_pylike_is_using_param(ExprPyLike_Parsed *expr, int index)
+{
+  int i;
+
+  if (expr == NULL) {
+    return false;
+  }
+
+  for (i = 0; i < expr->ops_count; i++) {
+    if (expr->ops[i].opcode == OPCODE_PARAMETER && expr->ops[i].arg.ival == index) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /** \} */

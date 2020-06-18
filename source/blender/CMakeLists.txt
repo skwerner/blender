@@ -70,6 +70,7 @@ set(SRC_DNA_INC
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_outliner_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_packedFile_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_particle_types.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_pointcache_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_rigidbody_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_scene_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_screen_types.h
@@ -90,6 +91,7 @@ set(SRC_DNA_INC
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_windowmanager_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_workspace_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_world_types.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_xr_types.h
 )
 
 add_subdirectory(datatoc)
@@ -112,6 +114,8 @@ add_subdirectory(nodes)
 add_subdirectory(modifiers)
 add_subdirectory(gpencil_modifiers)
 add_subdirectory(shader_fx)
+add_subdirectory(io)
+add_subdirectory(functions)
 add_subdirectory(makesdna)
 add_subdirectory(makesrna)
 
@@ -135,29 +139,14 @@ if(WITH_IMAGE_CINEON)
   add_subdirectory(imbuf/intern/cineon)
 endif()
 
-if(WITH_CODEC_AVI)
-  add_subdirectory(avi)
-endif()
-
 if(WITH_PYTHON)
   add_subdirectory(python)
-endif()
-
-if(WITH_OPENCOLLADA)
-  add_subdirectory(collada)
 endif()
 
 if(WITH_FREESTYLE)
   add_subdirectory(freestyle)
 endif()
 
-if(WITH_ALEMBIC)
-  add_subdirectory(alembic)
-endif()
-
 if(WIN32)
   add_subdirectory(blendthumb)
-endif()
-if(WITH_USD)
-  add_subdirectory(usd)
 endif()

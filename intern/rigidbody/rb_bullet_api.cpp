@@ -50,22 +50,22 @@
  * -- Joshua Leung, June 2010
  */
 
-#include <stdio.h>
 #include <errno.h>
+#include <stdio.h>
 
 #include "RBI_api.h"
 
 #include "btBulletDynamicsCommon.h"
 
-#include "LinearMath/btVector3.h"
-#include "LinearMath/btScalar.h"
-#include "LinearMath/btMatrix3x3.h"
-#include "LinearMath/btTransform.h"
 #include "LinearMath/btConvexHullComputer.h"
+#include "LinearMath/btMatrix3x3.h"
+#include "LinearMath/btScalar.h"
+#include "LinearMath/btTransform.h"
+#include "LinearMath/btVector3.h"
 
-#include "BulletCollision/Gimpact/btGImpactShape.h"
-#include "BulletCollision/Gimpact/btGImpactCollisionAlgorithm.h"
 #include "BulletCollision/CollisionShapes/btScaledBvhTriangleMeshShape.h"
+#include "BulletCollision/Gimpact/btGImpactCollisionAlgorithm.h"
+#include "BulletCollision/Gimpact/btGImpactShape.h"
 
 struct rbDynamicsWorld {
   btDiscreteDynamicsWorld *dynamicsWorld;
@@ -218,8 +218,8 @@ void RB_dworld_step_simulation(rbDynamicsWorld *world,
  * Exports entire dynamics world to Bullet's "*.bullet" binary format
  * which is similar to Blender's SDNA system.
  *
- * \param world Dynamics world to write to file
- * \param filename Assumed to be a valid filename, with .bullet extension
+ * \param world: Dynamics world to write to file
+ * \param filename: Assumed to be a valid filename, with .bullet extension
  */
 void RB_dworld_export(rbDynamicsWorld *world, const char *filename)
 {

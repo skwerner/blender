@@ -24,8 +24,10 @@
 
 #include "DRW_render.h"
 
-#include "eevee_private.h"
+#include "BLI_memblock.h"
+
 #include "eevee_lightcache.h"
+#include "eevee_private.h"
 
 void EEVEE_view_layer_data_free(void *storage)
 {
@@ -54,6 +56,18 @@ void EEVEE_view_layer_data_free(void *storage)
   DRW_UBO_FREE_SAFE(sldata->grid_ubo);
   DRW_UBO_FREE_SAFE(sldata->planar_ubo);
   DRW_UBO_FREE_SAFE(sldata->common_ubo);
+
+  DRW_UBO_FREE_SAFE(sldata->renderpass_ubo.combined);
+  DRW_UBO_FREE_SAFE(sldata->renderpass_ubo.diff_color);
+  DRW_UBO_FREE_SAFE(sldata->renderpass_ubo.diff_light);
+  DRW_UBO_FREE_SAFE(sldata->renderpass_ubo.spec_color);
+  DRW_UBO_FREE_SAFE(sldata->renderpass_ubo.spec_light);
+  DRW_UBO_FREE_SAFE(sldata->renderpass_ubo.emit);
+
+  if (sldata->material_cache) {
+    BLI_memblock_destroy(sldata->material_cache, NULL);
+    sldata->material_cache = NULL;
+  }
 }
 
 EEVEE_ViewLayerData *EEVEE_view_layer_data_get(void)

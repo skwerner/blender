@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2017, Blender Foundation
@@ -23,9 +23,9 @@
 
 #include <stdio.h>
 
-#include "DNA_scene_types.h"
-#include "DNA_object_types.h"
 #include "DNA_gpencil_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "BLI_utildefines.h"
 
@@ -39,7 +39,7 @@ static void initData(ShaderFxData *fx)
 
 static void copyData(const ShaderFxData *md, ShaderFxData *target)
 {
-  BKE_shaderfx_copyData_generic(md, target);
+  BKE_shaderfx_copydata_generic(md, target);
 }
 
 ShaderFxTypeInfo shaderfx_Type_Flip = {
@@ -47,7 +47,7 @@ ShaderFxTypeInfo shaderfx_Type_Flip = {
     /* structName */ "FlipShaderFxData",
     /* structSize */ sizeof(FlipShaderFxData),
     /* type */ eShaderFxType_GpencilType,
-    /* flags */ eShaderFxTypeFlag_Single,
+    /* flags */ 0,
 
     /* copyData */ copyData,
 

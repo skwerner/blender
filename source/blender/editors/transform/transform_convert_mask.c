@@ -30,10 +30,14 @@
 
 #include "BKE_context.h"
 #include "BKE_mask.h"
-#include "BKE_report.h"
 
 #include "ED_clip.h"
+#include "ED_image.h"
+#include "ED_keyframing.h"
 #include "ED_mask.h"
+
+#include "WM_api.h"
+#include "WM_types.h"
 
 #include "transform.h"
 #include "transform_convert.h"
@@ -280,7 +284,7 @@ void createTransMaskingData(bContext *C, TransInfo *t)
   }
 
   if (t->spacetype == SPACE_CLIP) {
-    SpaceClip *sc = t->sa->spacedata.first;
+    SpaceClip *sc = t->area->spacedata.first;
     MovieClip *clip = ED_space_clip_get_clip(sc);
     if (!clip) {
       return;
@@ -333,7 +337,7 @@ void createTransMaskingData(bContext *C, TransInfo *t)
     return;
   }
 
-  ED_mask_get_aspect(t->sa, t->ar, &asp[0], &asp[1]);
+  ED_mask_get_aspect(t->area, t->region, &asp[0], &asp[1]);
 
   tc->data_len = (is_prop_edit) ? count : countsel;
   td = tc->data = MEM_callocN(tc->data_len * sizeof(TransData), "TransObData(Mask Editing)");
@@ -396,11 +400,11 @@ void createTransMaskingData(bContext *C, TransInfo *t)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name Masking Transform Flush
+/** \name Recalc TransData Masking
  *
  * \{ */
 
-void flushTransMasking(TransInfo *t)
+static void flushTransMasking(TransInfo *t)
 {
   TransData2D *td;
   TransDataMasking *tdm;
@@ -409,7 +413,7 @@ void flushTransMasking(TransInfo *t)
 
   TransDataContainer *tc = TRANS_DATA_CONTAINER_FIRST_SINGLE(t);
 
-  ED_mask_get_aspect(t->sa, t->ar, &asp[0], &asp[1]);
+  ED_mask_get_aspect(t->area, t->region, &asp[0], &asp[1]);
   inv[0] = 1.0f / asp[0];
   inv[1] = 1.0f / asp[1];
 
@@ -435,6 +439,57 @@ void flushTransMasking(TransInfo *t)
       else if (tdm->which_handle == MASK_WHICH_HANDLE_RIGHT) {
         tdm->point->bezt.h2 = tdm->orig_handle_type;
       }
+    }
+  }
+}
+
+void recalcData_mask_common(TransInfo *t)
+{
+  Mask *mask = CTX_data_edit_mask(t->context);
+
+  flushTransMasking(t);
+
+  DEG_id_tag_update(&mask->id, 0);
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Special After Transform Mask
+ * \{ */
+
+void special_aftertrans_update__mask(bContext *C, TransInfo *t)
+{
+  Mask *mask = NULL;
+
+  if (t->spacetype == SPACE_CLIP) {
+    SpaceClip *sc = t->area->spacedata.first;
+    mask = ED_space_clip_get_mask(sc);
+  }
+  else if (t->spacetype == SPACE_IMAGE) {
+    SpaceImage *sima = t->area->spacedata.first;
+    mask = ED_space_image_get_mask(sima);
+  }
+  else {
+    BLI_assert(0);
+  }
+
+  if (t->scene->nodetree) {
+    /* tracks can be used for stabilization nodes,
+     * flush update for such nodes */
+    // if (nodeUpdateID(t->scene->nodetree, &mask->id))
+    {
+      WM_event_add_notifier(C, NC_MASK | ND_DATA, &mask->id);
+    }
+  }
+
+  /* TODO - dont key all masks... */
+  if (IS_AUTOKEY_ON(t->scene)) {
+    Scene *scene = t->scene;
+
+    if (ED_mask_layer_shape_auto_key_select(mask, CFRA)) {
+      WM_event_add_notifier(C, NC_MASK | ND_DATA, &mask->id);
+      DEG_id_tag_update(&mask->id, 0);
     }
   }
 }

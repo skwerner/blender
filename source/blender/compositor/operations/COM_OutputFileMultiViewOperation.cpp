@@ -16,8 +16,8 @@
  * Copyright 2015, Blender Foundation.
  */
 
-#include "COM_OutputFileOperation.h"
 #include "COM_OutputFileMultiViewOperation.h"
+#include "COM_OutputFileOperation.h"
 
 #include <string.h>
 
@@ -33,11 +33,9 @@
 #include "DNA_color_types.h"
 #include "MEM_guardedalloc.h"
 
-extern "C" {
-#include "IMB_imbuf.h"
 #include "IMB_colormanagement.h"
+#include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
-}
 
 /************************************ OpenEXR Singlelayer Multiview ******************************/
 

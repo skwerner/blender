@@ -25,17 +25,17 @@
 
 /* **************** Map Range ******************** */
 static bNodeSocketTemplate sh_node_map_range_in[] = {
-    {SOCK_FLOAT, 1, N_("Value"), 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f, PROP_NONE},
-    {SOCK_FLOAT, 1, N_("From Min"), 0.0f, 1.0f, 1.0f, 1.0f, -10000.0f, 10000.0f, PROP_NONE},
-    {SOCK_FLOAT, 1, N_("From Max"), 1.0f, 1.0f, 1.0f, 1.0f, -10000.0f, 10000.0f, PROP_NONE},
-    {SOCK_FLOAT, 1, N_("To Min"), 0.0f, 1.0f, 1.0f, 1.0f, -10000.0f, 10000.0f, PROP_NONE},
-    {SOCK_FLOAT, 1, N_("To Max"), 1.0f, 1.0f, 1.0f, 1.0f, -10000.0f, 10000.0f, PROP_NONE},
-    {SOCK_FLOAT, 1, N_("Steps"), 4.0f, 1.0f, 1.0f, 1.0f, 0.0f, 10000.0f, PROP_NONE},
-    {-1, 0, ""},
+    {SOCK_FLOAT, N_("Value"), 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f, PROP_NONE},
+    {SOCK_FLOAT, N_("From Min"), 0.0f, 1.0f, 1.0f, 1.0f, -10000.0f, 10000.0f, PROP_NONE},
+    {SOCK_FLOAT, N_("From Max"), 1.0f, 1.0f, 1.0f, 1.0f, -10000.0f, 10000.0f, PROP_NONE},
+    {SOCK_FLOAT, N_("To Min"), 0.0f, 1.0f, 1.0f, 1.0f, -10000.0f, 10000.0f, PROP_NONE},
+    {SOCK_FLOAT, N_("To Max"), 1.0f, 1.0f, 1.0f, 1.0f, -10000.0f, 10000.0f, PROP_NONE},
+    {SOCK_FLOAT, N_("Steps"), 4.0f, 1.0f, 1.0f, 1.0f, 0.0f, 10000.0f, PROP_NONE},
+    {-1, ""},
 };
 static bNodeSocketTemplate sh_node_map_range_out[] = {
-    {SOCK_FLOAT, 0, N_("Result")},
-    {-1, 0, ""},
+    {SOCK_FLOAT, N_("Result")},
+    {-1, ""},
 };
 
 static void node_shader_update_map_range(bNodeTree *UNUSED(ntree), bNode *node)
@@ -81,7 +81,7 @@ void register_node_type_sh_map_range(void)
 {
   static bNodeType ntype;
 
-  sh_node_type_base(&ntype, SH_NODE_MAP_RANGE, "Map Range", NODE_CLASS_CONVERTOR, 0);
+  sh_fn_node_type_base(&ntype, SH_NODE_MAP_RANGE, "Map Range", NODE_CLASS_CONVERTOR, 0);
   node_type_socket_templates(&ntype, sh_node_map_range_in, sh_node_map_range_out);
   node_type_init(&ntype, node_shader_init_map_range);
   node_type_update(&ntype, node_shader_update_map_range);

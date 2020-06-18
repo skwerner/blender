@@ -23,6 +23,8 @@
  * \ingroup bke
  */
 
+#include "DNA_text_types.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif

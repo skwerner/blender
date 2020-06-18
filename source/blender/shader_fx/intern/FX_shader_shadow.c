@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2018, Blender Foundation
@@ -23,13 +23,13 @@
 
 #include <stdio.h>
 
-#include "DNA_scene_types.h"
-#include "DNA_object_types.h"
 #include "DNA_gpencil_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "BLI_utildefines.h"
 
-#include "BKE_library_query.h"
+#include "BKE_lib_query.h"
 #include "BKE_modifier.h"
 #include "BKE_shader_fx.h"
 
@@ -44,7 +44,7 @@ static void initData(ShaderFxData *md)
   gpfx->rotation = 0.0f;
   ARRAY_SET_ITEMS(gpfx->offset, 15, 20);
   ARRAY_SET_ITEMS(gpfx->scale, 1.0f, 1.0f);
-  ARRAY_SET_ITEMS(gpfx->shadow_rgba, 0.54f, 0.62f, 1.0f, 0.9f);
+  ARRAY_SET_ITEMS(gpfx->shadow_rgba, 0.0f, 0.0f, 0.0f, 0.8f);
 
   gpfx->amplitude = 10.0f;
   gpfx->period = 20.0f;
@@ -59,7 +59,7 @@ static void initData(ShaderFxData *md)
 
 static void copyData(const ShaderFxData *md, ShaderFxData *target)
 {
-  BKE_shaderfx_copyData_generic(md, target);
+  BKE_shaderfx_copydata_generic(md, target);
 }
 
 static void updateDepsgraph(ShaderFxData *fx, const ModifierUpdateDepsgraphContext *ctx)

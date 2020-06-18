@@ -21,22 +21,22 @@
  * \ingroup bke
  */
 
-#include <stdlib.h>
+#include <float.h>
+#include <math.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <math.h>
-#include <float.h>
 
 #include "CLG_log.h"
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
+#include "BLI_ghash.h"
 #include "BLI_listbase.h"
 #include "BLI_string.h"
 #include "BLI_string_utils.h"
-#include "BLI_ghash.h"
+#include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
@@ -48,7 +48,8 @@
 #include "BKE_action.h"
 #include "BKE_fcurve.h"
 #include "BKE_global.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_main.h"
 #include "BKE_nla.h"
 #include "BKE_sound.h"
@@ -91,7 +92,7 @@ void BKE_nlastrip_free(ListBase *strips, NlaStrip *strip, bool do_id_user)
   //  BKE_animremap_free();
 
   /* free own F-Curves */
-  free_fcurves(&strip->fcurves);
+  BKE_fcurves_free(&strip->fcurves);
 
   /* free own F-Modifiers */
   free_fmodifiers(&strip->modifiers);
@@ -161,7 +162,7 @@ void BKE_nla_tracks_free(ListBase *tracks, bool do_id_user)
  *
  * \param use_same_action: When true, the existing action is used (instead of being duplicated)
  * \param flag: Control ID pointers management, see LIB_ID_CREATE_.../LIB_ID_COPY_...
- * flags in BKE_library.h
+ * flags in BKE_lib_id.h
  */
 NlaStrip *BKE_nlastrip_copy(Main *bmain,
                             NlaStrip *strip,
@@ -197,7 +198,7 @@ NlaStrip *BKE_nlastrip_copy(Main *bmain,
   }
 
   /* copy F-Curves and modifiers */
-  copy_fcurves(&strip_d->fcurves, &strip->fcurves);
+  BKE_fcurves_copy(&strip_d->fcurves, &strip->fcurves);
   copy_fmodifiers(&strip_d->modifiers, &strip->modifiers);
 
   /* make a copy of all the child-strips, one at a time */
@@ -215,7 +216,7 @@ NlaStrip *BKE_nlastrip_copy(Main *bmain,
 /**
  * Copy a single NLA Track.
  * \param flag: Control ID pointers management, see LIB_ID_CREATE_.../LIB_ID_COPY_...
- * flags in BKE_library.h
+ * flags in BKE_lib_id.h
  */
 NlaTrack *BKE_nlatrack_copy(Main *bmain,
                             NlaTrack *nlt,
@@ -249,7 +250,7 @@ NlaTrack *BKE_nlatrack_copy(Main *bmain,
 /**
  * Copy all NLA data.
  * \param flag: Control ID pointers management, see LIB_ID_CREATE_.../LIB_ID_COPY_...
- * flags in BKE_library.h
+ * flags in BKE_lib_id.h
  */
 void BKE_nla_tracks_copy(Main *bmain, ListBase *dst, ListBase *src, const int flag)
 {
@@ -423,6 +424,21 @@ NlaStrip *BKE_nla_add_soundstrip(Main *bmain, Scene *scene, Speaker *speaker)
 
   /* return this strip */
   return strip;
+}
+
+/** Callback used by lib_query to walk over all ID usages (mimics `foreach_id` callback of
+ * `IDTypeInfo` structure). */
+void BKE_nla_strip_foreach_id(NlaStrip *strip, LibraryForeachIDData *data)
+{
+  BKE_LIB_FOREACHID_PROCESS(data, strip->act, IDWALK_CB_USER);
+
+  LISTBASE_FOREACH (FCurve *, fcu, &strip->fcurves) {
+    BKE_fcurve_foreach_id(fcu, data);
+  }
+
+  LISTBASE_FOREACH (NlaStrip *, substrip, &strip->strips) {
+    BKE_nla_strip_foreach_id(substrip, data);
+  }
 }
 
 /* *************************************************** */
@@ -1478,12 +1494,12 @@ void BKE_nlastrip_validate_fcurves(NlaStrip *strip)
   /* if controlling influence... */
   if (strip->flag & NLASTRIP_FLAG_USR_INFLUENCE) {
     /* try to get F-Curve */
-    fcu = list_find_fcurve(&strip->fcurves, "influence", 0);
+    fcu = BKE_fcurve_find(&strip->fcurves, "influence", 0);
 
     /* add one if not found */
     if (fcu == NULL) {
       /* make new F-Curve */
-      fcu = MEM_callocN(sizeof(FCurve), "NlaStrip FCurve");
+      fcu = BKE_fcurve_create();
       BLI_addtail(&strip->fcurves, fcu);
 
       /* set default flags */
@@ -1509,12 +1525,12 @@ void BKE_nlastrip_validate_fcurves(NlaStrip *strip)
   /* if controlling time... */
   if (strip->flag & NLASTRIP_FLAG_USR_TIME) {
     /* try to get F-Curve */
-    fcu = list_find_fcurve(&strip->fcurves, "strip_time", 0);
+    fcu = BKE_fcurve_find(&strip->fcurves, "strip_time", 0);
 
     /* add one if not found */
     if (fcu == NULL) {
       /* make new F-Curve */
-      fcu = MEM_callocN(sizeof(FCurve), "NlaStrip FCurve");
+      fcu = BKE_fcurve_create();
       BLI_addtail(&strip->fcurves, fcu);
 
       /* set default flags */

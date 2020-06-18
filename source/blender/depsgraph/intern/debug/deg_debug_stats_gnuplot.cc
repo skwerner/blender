@@ -32,9 +32,7 @@
 #include "intern/depsgraph.h"
 #include "intern/node/deg_node_id.h"
 
-extern "C" {
 #include "DNA_ID.h"
-} /* extern "C" */
 
 #define NL "\r\n"
 
@@ -98,7 +96,7 @@ string gnuplotify_name(const string &name)
 void write_stats_data(const DebugContext &ctx)
 {
   // Fill in array of all stats which are to be displayed.
-  vector<StatsEntry> stats;
+  Vector<StatsEntry> stats;
   stats.reserve(ctx.graph->id_nodes.size());
   for (const IDNode *id_node : ctx.graph->id_nodes) {
     const double time = get_node_time(ctx, id_node);
@@ -108,7 +106,7 @@ void write_stats_data(const DebugContext &ctx)
     StatsEntry entry;
     entry.id_node = id_node;
     entry.time = time;
-    stats.push_back(entry);
+    stats.append(entry);
   }
   // Sort the data.
   std::sort(stats.begin(), stats.end(), stat_entry_comparator);
@@ -156,7 +154,7 @@ void DEG_debug_stats_gnuplot(const Depsgraph *depsgraph,
                              const char *label,
                              const char *output_filename)
 {
-  if (depsgraph == NULL) {
+  if (depsgraph == nullptr) {
     return;
   }
   DEG::DebugContext ctx;

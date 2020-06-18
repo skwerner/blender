@@ -27,7 +27,7 @@ struct MDeformVert;
 void BM_mesh_bevel(BMesh *bm,
                    const float offset,
                    const int offset_type,
-                   const float segments,
+                   const int segments,
                    const float profile,
                    const bool vertex_only,
                    const bool use_weights,
@@ -47,4 +47,5 @@ void BM_mesh_bevel(BMesh *bm,
                    const bool use_custom_profile,
                    const struct CurveProfile *custom_profile,
                    const int vmesh_method);
+
 #endif /* __BMESH_BEVEL_H__ */

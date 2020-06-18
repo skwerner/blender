@@ -32,6 +32,7 @@ Convenience Targets
    * debug:         Build a debug binary.
    * full:          Enable all supported dependencies & options.
    * lite:          Disable non essential features for a smaller binary and faster build.
+   * release        Complete build with all options enabled including CUDA and Optix, matching the releases on blender.org
    * headless:      Build without an interface (renderfarm or server automation).
    * cycles:        Build Cycles standalone only, without Blender.
    * bpy:           Build as a python module which can be loaded from python directly.
@@ -71,17 +72,6 @@ Testing Targets
      which are tagged to use the stricter formatting
    * test_deprecated:
      Checks for deprecation tags in our code which may need to be removed
-   * test_style_c:
-     Checks C/C++ conforms with blenders style guide:
-     https://wiki.blender.org/wiki/Source/Code_Style
-   * test_style_c_qtc:
-     Same as test_style but outputs QtCreator tasks format
-   * test_style_osl:
-     Checks OpenShadingLanguage conforms with blenders style guide:
-     https://wiki.blender.org/wiki/Source/Code_Style
-   * test_style_osl_qtc:
-     Checks OpenShadingLanguage conforms with blenders style guide:
-     https://wiki.blender.org/wiki/Source/Code_Style
 
 Static Source Code Checking
    Not associated with building Blender.
@@ -218,6 +208,10 @@ ifneq "$(findstring lite, $(MAKECMDGOALS))" ""
 	BUILD_DIR:=$(BUILD_DIR)_lite
 	CMAKE_CONFIG_ARGS:=-C"$(BLENDER_DIR)/build_files/cmake/config/blender_lite.cmake" $(CMAKE_CONFIG_ARGS)
 endif
+ifneq "$(findstring release, $(MAKECMDGOALS))" ""
+	BUILD_DIR:=$(BUILD_DIR)_release
+	CMAKE_CONFIG_ARGS:=-C"$(BLENDER_DIR)/build_files/cmake/config/blender_release.cmake" $(CMAKE_CONFIG_ARGS)
+endif
 ifneq "$(findstring cycles, $(MAKECMDGOALS))" ""
 	BUILD_DIR:=$(BUILD_DIR)_cycles
 	CMAKE_CONFIG_ARGS:=-C"$(BLENDER_DIR)/build_files/cmake/config/cycles_standalone.cmake" $(CMAKE_CONFIG_ARGS)
@@ -328,6 +322,7 @@ all: .FORCE
 debug: all
 full: all
 lite: all
+release: all
 cycles: all
 headless: all
 bpy: all
@@ -402,45 +397,6 @@ test_cmake: .FORCE
 test_deprecated: .FORCE
 	$(PYTHON) tests/check_deprecated.py
 
-test_style_c: .FORCE
-	# run our own checks on C/C++ style
-	PYTHONIOENCODING=utf_8 $(PYTHON) \
-	    "$(BLENDER_DIR)/source/tools/check_source/check_style_c.py" \
-	    "$(BLENDER_DIR)/source/blender" \
-	    "$(BLENDER_DIR)/source/creator" \
-	    --no-length-check
-
-test_style_c_qtc: .FORCE
-	# run our own checks on C/C++ style
-	USE_QTC_TASK=1 \
-	PYTHONIOENCODING=utf_8 $(PYTHON) \
-	    "$(BLENDER_DIR)/source/tools/check_source/check_style_c.py" \
-	    "$(BLENDER_DIR)/source/blender" \
-	    "$(BLENDER_DIR)/source/creator" \
-	    --no-length-check \
-	    > \
-	    "$(BLENDER_DIR)/test_style.tasks"
-	@echo "written: test_style.tasks"
-
-
-test_style_osl: .FORCE
-	# run our own checks on C/C++ style
-	PYTHONIOENCODING=utf_8 $(PYTHON) \
-	    "$(BLENDER_DIR)/source/tools/check_source/check_style_c.py" \
-	    "$(BLENDER_DIR)/intern/cycles/kernel/shaders" \
-	    "$(BLENDER_DIR)/release/scripts/templates_osl"
-
-
-test_style_osl_qtc: .FORCE
-	# run our own checks on C/C++ style
-	USE_QTC_TASK=1 \
-	PYTHONIOENCODING=utf_8 $(PYTHON) \
-	    "$(BLENDER_DIR)/source/tools/check_source/check_style_c.py" \
-	    "$(BLENDER_DIR)/intern/cycles/kernel/shaders" \
-	    "$(BLENDER_DIR)/release/scripts/templates_osl" \
-	    > \
-	    "$(BLENDER_DIR)/test_style.tasks"
-	@echo "written: test_style.tasks"
 
 # -----------------------------------------------------------------------------
 # Project Files
@@ -545,7 +501,7 @@ update: .FORCE
 	$(PYTHON) ./build_files/utils/make_update.py
 
 format: .FORCE
-	PATH="../lib/${OS_NCASE}/llvm/bin/:$(PATH)" \
+	PATH="../lib/${OS_NCASE}_${CPU}/llvm/bin/:../lib/${OS_NCASE}_centos7_${CPU}/llvm/bin/:../lib/${OS_NCASE}/llvm/bin/:$(PATH)" \
 		$(PYTHON) source/tools/utils_maintenance/clang_format_paths.py $(PATHS)
 
 

@@ -22,9 +22,9 @@
 #ifndef __GHOST_SYSTEMNULL_H__
 #define __GHOST_SYSTEMNULL_H__
 
-#include "GHOST_System.h"
 #include "../GHOST_Types.h"
 #include "GHOST_DisplayManagerNULL.h"
+#include "GHOST_System.h"
 #include "GHOST_WindowNULL.h"
 
 class GHOST_WindowNULL;
@@ -106,7 +106,7 @@ class GHOST_SystemNULL : public GHOST_System {
     return GHOST_kFailure;
   }
 
-  GHOST_IWindow *createWindow(const STR_String &title,
+  GHOST_IWindow *createWindow(const char *title,
                               GHOST_TInt32 left,
                               GHOST_TInt32 top,
                               GHOST_TUns32 width,

@@ -28,15 +28,19 @@
 #define __MATH_BASE_INLINE_C__
 
 #include <float.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <limits.h>
 
 #ifdef __SSE2__
 #  include <emmintrin.h>
 #endif
 
 #include "BLI_math_base.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* copied from BLI_utildefines.h */
 #ifdef __GNUC__
@@ -224,7 +228,7 @@ MINLINE unsigned int power_of_2_max_u(unsigned int x)
   return x + 1;
 }
 
-MINLINE unsigned power_of_2_min_u(unsigned x)
+MINLINE unsigned int power_of_2_min_u(unsigned int x)
 {
   x |= (x >> 1);
   x |= (x >> 2);
@@ -356,6 +360,14 @@ MINLINE int divide_floor_i(int a, int b)
 }
 
 /**
+ * Integer division that returns the ceiling, instead of flooring like normal C division.
+ */
+MINLINE uint divide_ceil_u(uint a, uint b)
+{
+  return (a + b - 1) / b;
+}
+
+/**
  * modulo that handles negative numbers, works the same as Python's.
  */
 MINLINE int mod_i(int i, int n)
@@ -374,6 +386,72 @@ MINLINE float wrapf(float value, float max, float min)
   float range = max - min;
   return (range != 0.0f) ? value - (range * floorf((value - min) / range)) : min;
 }
+
+// Square.
+
+MINLINE int square_s(short a)
+{
+  return a * a;
+}
+
+MINLINE int square_i(int a)
+{
+  return a * a;
+}
+
+MINLINE unsigned int square_uint(unsigned int a)
+{
+  return a * a;
+}
+
+MINLINE int square_uchar(unsigned char a)
+{
+  return a * a;
+}
+
+MINLINE float square_f(float a)
+{
+  return a * a;
+}
+
+MINLINE double square_d(double a)
+{
+  return a * a;
+}
+
+// Cube.
+
+MINLINE int cube_s(short a)
+{
+  return a * a * a;
+}
+
+MINLINE int cube_i(int a)
+{
+  return a * a * a;
+}
+
+MINLINE unsigned int cube_uint(unsigned int a)
+{
+  return a * a * a;
+}
+
+MINLINE int cube_uchar(unsigned char a)
+{
+  return a * a * a;
+}
+
+MINLINE float cube_f(float a)
+{
+  return a * a * a;
+}
+
+MINLINE double cube_d(double a)
+{
+  return a * a * a;
+}
+
+// Min/max
 
 MINLINE float min_ff(float a, float b)
 {
@@ -454,6 +532,15 @@ MINLINE size_t min_zz(size_t a, size_t b)
   return (a < b) ? a : b;
 }
 MINLINE size_t max_zz(size_t a, size_t b)
+{
+  return (b < a) ? a : b;
+}
+
+MINLINE char min_cc(char a, char b)
+{
+  return (a < b) ? a : b;
+}
+MINLINE char max_cc(char a, char b)
 {
   return (b < a) ? a : b;
 }
@@ -598,7 +685,7 @@ MINLINE int integer_digits_i(const int i)
 
 /* Calculate initial guess for arg^exp based on float representation
  * This method gives a constant bias, which can be easily compensated by
- * multiplicating with bias_coeff.
+ * multiplying with bias_coeff.
  * Gives better results for exponents near 1 (e. g. 4/5).
  * exp = exponent, encoded as uint32_t
  * e2coeff = 2^(127/exponent - 127) * bias_coeff^(1/exponent), encoded as
@@ -717,5 +804,9 @@ MINLINE unsigned char unit_ushort_to_uchar(unsigned short val)
     (v1)[3] = unit_float_to_uchar_clamp((v2[3])); \
   } \
   ((void)0)
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __MATH_BASE_INLINE_C__ */

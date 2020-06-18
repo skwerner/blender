@@ -21,21 +21,23 @@
  * \ingroup edinterface
  */
 
+#include <assert.h>
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 
 #include "DNA_object_types.h"
 #include "DNA_screen_types.h"
 
-#include "BLI_utildefines.h"
+#include "BLI_listbase.h"
 #include "BLI_math.h"
 #include "BLI_string.h"
-#include "BLI_listbase.h"
+#include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
+#include "BKE_lib_id.h"
 #include "BKE_report.h"
 
 #include "MEM_guardedalloc.h"
@@ -49,6 +51,22 @@
 #include "WM_types.h"
 
 #include "interface_intern.h"
+
+bool ui_str_has_word_prefix(const char *haystack, const char *needle, size_t needle_len)
+{
+  const char *match = BLI_strncasestr(haystack, needle, needle_len);
+  if (match) {
+    if ((match == haystack) || (*(match - 1) == ' ') || ispunct(*(match - 1))) {
+      return true;
+    }
+    else {
+      return ui_str_has_word_prefix(match + 1, needle, needle_len);
+    }
+  }
+  else {
+    return false;
+  }
+}
 
 /*************************** RNA Utilities ******************************/
 
@@ -293,7 +311,7 @@ eAutoPropButsReturn uiDefAutoButsRNA(uiLayout *layout,
                                      const bool compact)
 {
   eAutoPropButsReturn return_info = UI_PROP_BUTS_NONE_ADDED;
-  uiLayout *split, *col;
+  uiLayout *col;
   const char *name;
 
   RNA_STRUCT_BEGIN (ptr, prop) {
@@ -324,18 +342,10 @@ eAutoPropButsReturn uiDefAutoButsRNA(uiLayout *layout,
         }
         else {
           BLI_assert(label_align == UI_BUT_LABEL_ALIGN_SPLIT_COLUMN);
-          split = uiLayoutSplit(layout, 0.5f, false);
-
-          col = uiLayoutColumn(split, false);
-          uiItemL(col, (is_boolean) ? "" : name, ICON_NONE);
-          col = uiLayoutColumn(split, false);
+          col = uiLayoutColumn(layout, true);
+          /* Let uiItemFullR() create the split layout. */
+          uiLayoutSetPropSep(col, true);
         }
-
-        /* May need to add more cases here.
-         * don't override enum flag names */
-
-        /* name is shown above, empty name for button below */
-        name = (flag & PROP_ENUM_FLAG || is_boolean) ? NULL : "";
 
         break;
       }
@@ -374,6 +384,7 @@ typedef struct CollItemSearch {
   char *name;
   int index;
   int iconid;
+  uint has_sep_char : 1;
 } CollItemSearch;
 
 static int sort_search_items_list(const void *a, const void *b)
@@ -389,17 +400,24 @@ static int sort_search_items_list(const void *a, const void *b)
   }
 }
 
-void ui_rna_collection_search_cb(const struct bContext *C,
-                                 void *arg,
-                                 const char *str,
-                                 uiSearchItems *items)
+void ui_rna_collection_search_update_fn(const struct bContext *C,
+                                        void *arg,
+                                        const char *str,
+                                        uiSearchItems *items)
 {
   uiRNACollectionSearch *data = arg;
-  char *name;
-  int i = 0, iconid = 0, flag = RNA_property_flag(data->target_prop);
+  const int flag = RNA_property_flag(data->target_prop);
+  int i = 0;
   ListBase *items_list = MEM_callocN(sizeof(ListBase), "items_list");
   CollItemSearch *cis;
-  const bool skip_filter = (data->but_changed && !(*data->but_changed));
+  const bool is_ptr_target = (RNA_property_type(data->target_prop) == PROP_POINTER);
+  /* For non-pointer properties, UI code acts entirely based on the item's name. So the name has to
+   * match the RNA name exactly. So only for pointer properties, the name can be modified to add
+   * further UI hints. */
+  const bool requires_exact_data_name = !is_ptr_target;
+  const bool skip_filter = data->search_but && !data->search_but->changed;
+  char name_buf[UI_MAX_DRAW_STR];
+  char *name;
 
   /* build a temporary list of relevant items first */
   RNA_PROP_BEGIN (&data->search_ptr, itemptr, data->search_prop) {
@@ -411,30 +429,47 @@ void ui_rna_collection_search_cb(const struct bContext *C,
     }
 
     /* use filter */
-    if (RNA_property_type(data->target_prop) == PROP_POINTER) {
+    if (is_ptr_target) {
       if (RNA_property_pointer_poll(&data->target_ptr, data->target_prop, &itemptr) == 0) {
         continue;
       }
     }
 
-    /* Could use the string length here. */
-    name = RNA_struct_name_get_alloc(&itemptr, NULL, 0, NULL);
+    int iconid = ICON_NONE;
+    bool has_sep_char = false;
 
-    iconid = 0;
     if (itemptr.type && RNA_struct_is_ID(itemptr.type)) {
       iconid = ui_id_icon_get(C, itemptr.data, false);
+
+      if (requires_exact_data_name) {
+        name = RNA_struct_name_get_alloc(&itemptr, name_buf, sizeof(name_buf), NULL);
+      }
+      else {
+        const ID *id = itemptr.data;
+        BKE_id_full_name_ui_prefix_get(name_buf, id, UI_SEP_CHAR);
+        BLI_STATIC_ASSERT(sizeof(name_buf) >= MAX_ID_FULL_NAME_UI,
+                          "Name string buffer should be big enough to hold full UI ID name");
+        name = name_buf;
+        has_sep_char = (id->lib != NULL);
+      }
+    }
+    else {
+      name = RNA_struct_name_get_alloc(&itemptr, name_buf, sizeof(name_buf), NULL);
     }
 
     if (name) {
       if (skip_filter || BLI_strcasestr(name, str)) {
         cis = MEM_callocN(sizeof(CollItemSearch), "CollectionItemSearch");
         cis->data = itemptr.data;
-        cis->name = MEM_dupallocN(name);
+        cis->name = BLI_strdup(name);
         cis->index = i;
         cis->iconid = iconid;
+        cis->has_sep_char = has_sep_char;
         BLI_addtail(items_list, cis);
       }
-      MEM_freeN(name);
+      if (name != name_buf) {
+        MEM_freeN(name);
+      }
     }
 
     i++;
@@ -445,7 +480,11 @@ void ui_rna_collection_search_cb(const struct bContext *C,
 
   /* add search items from temporary list */
   for (cis = items_list->first; cis; cis = cis->next) {
-    if (UI_search_item_add(items, cis->name, cis->data, cis->iconid) == false) {
+    if (!UI_search_item_add(items,
+                            cis->name,
+                            cis->data,
+                            cis->iconid,
+                            cis->has_sep_char ? UI_BUT_HAS_SEP_CHAR : 0)) {
       break;
     }
   }
@@ -525,7 +564,7 @@ int UI_calc_float_precision(int prec, double value)
    * this is so 0.00001 is not displayed as 0.00,
    * _but_, this is only for small values si 10.0001 will not get the same treatment.
    */
-  value = ABS(value);
+  value = fabs(value);
   if ((value < pow10_neg[prec]) && (value > (1.0 / max_pow))) {
     int value_i = (int)((value * max_pow) + 0.5);
     if (value_i != 0) {
@@ -647,6 +686,7 @@ void UI_butstore_free(uiBlock *block, uiButStore *bs_handle)
   }
 
   BLI_freelistN(&bs_handle->items);
+  BLI_assert(BLI_findindex(&block->butstore, bs_handle) != -1);
   BLI_remlink(&block->butstore, bs_handle);
 
   MEM_freeN(bs_handle);
@@ -747,8 +787,7 @@ void UI_butstore_update(uiBlock *block)
   /* move this list to the new block */
   if (block->oldblock) {
     if (block->oldblock->butstore.first) {
-      block->butstore = block->oldblock->butstore;
-      BLI_listbase_clear(&block->oldblock->butstore);
+      BLI_movelisttolist(&block->butstore, &block->oldblock->butstore);
     }
   }
 

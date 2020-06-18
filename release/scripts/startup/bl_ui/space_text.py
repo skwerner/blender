@@ -30,7 +30,7 @@ class TEXT_HT_header(Header):
 
         st = context.space_data
         text = st.text
-
+        is_syntax_highlight_supported = st.is_syntax_highlight_supported()
         layout.template_header()
 
         TEXT_MT_editor_menus.draw_collapsible(context, layout)
@@ -43,7 +43,18 @@ class TEXT_HT_header(Header):
         layout.separator_spacer()
 
         row = layout.row(align=True)
-        row.template_ID(st, "text", new="text.new", unlink="text.unlink", open="text.open")
+        row.template_ID(st, "text", new="text.new",
+                        unlink="text.unlink", open="text.open")
+
+        if text:
+            is_osl = text.name.endswith((".osl", ".osl"))
+            if is_osl:
+                row.operator("node.shader_script_update",
+                             text="", icon='FILE_REFRESH')
+            else:
+                row = layout.row()
+                row.active = is_syntax_highlight_supported
+                row.operator("text.run_script", text="", icon='PLAY')
 
         layout.separator_spacer()
 
@@ -51,27 +62,9 @@ class TEXT_HT_header(Header):
         row.prop(st, "show_line_numbers", text="")
         row.prop(st, "show_word_wrap", text="")
 
-        is_syntax_highlight_supported = st.is_syntax_highlight_supported()
         syntax = row.row(align=True)
         syntax.active = is_syntax_highlight_supported
         syntax.prop(st, "show_syntax_highlight", text="")
-
-        if text:
-            text_name = text.name
-            is_osl = text_name.endswith((".osl", ".oso"))
-
-            row = layout.row()
-            if is_osl:
-                row = layout.row()
-                row.operator("node.shader_script_update")
-            else:
-                row = layout.row()
-                row.active = text_name.endswith(".py")
-                row.prop(text, "use_module")
-
-                row = layout.row()
-                row.active = is_syntax_highlight_supported
-                row.operator("text.run_script")
 
 
 class TEXT_HT_footer(Header):
@@ -136,18 +129,21 @@ class TEXT_PT_properties(Panel):
         layout.use_property_decorate = False
         st = context.space_data
 
-        flow = layout.column_flow()
         if not st.text:
-            flow.active = False
-        row = flow.row(align=True)
-        st = context.space_data
-        row.prop(st, "show_margin", text="Margin")
-        rowsub = row.row()
-        rowsub.active = st.show_margin
-        rowsub.prop(st, "margin_column", text="")
+            layout.active = False
 
-        flow.prop(st, "font_size")
-        flow.prop(st, "tab_width")
+        st = context.space_data
+
+        col = layout.column(align=False, heading="Margin")
+        row = col.row(align=True)
+        sub = row.row(align=True)
+        sub.prop(st, "show_margin", text="")
+        sub = sub.row(align=True)
+        sub.active = st.show_margin
+        sub.prop(st, "margin_column", text="")
+
+        layout.prop(st, "font_size")
+        layout.prop(st, "tab_width")
 
         text = st.text
         if text:
@@ -404,7 +400,7 @@ class TEXT_MT_edit(Menu):
         layout.separator()
 
         layout.operator("text.start_find", text="Find & Replace...")
-        layout.operator("text.find_set_selected", text="Find Next")
+        layout.operator("text.find_set_selected")
         layout.operator("text.jump", text="Jump To...")
 
         layout.separator()

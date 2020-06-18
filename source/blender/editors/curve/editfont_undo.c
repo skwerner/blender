@@ -23,8 +23,8 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_array_utils.h"
+#include "BLI_utildefines.h"
 
 #include "DNA_curve_types.h"
 #include "DNA_object_types.h"
@@ -36,11 +36,11 @@
 
 #include "DEG_depsgraph.h"
 
-#include "ED_object.h"
 #include "ED_curve.h"
+#include "ED_object.h"
 
-#include "WM_types.h"
 #include "WM_api.h"
+#include "WM_types.h"
 
 #define USE_ARRAY_STORE
 
@@ -359,7 +359,7 @@ static void font_undosys_step_decode(
     struct bContext *C, struct Main *bmain, UndoStep *us_p, int UNUSED(dir), bool UNUSED(is_final))
 {
   /* TODO(campbell): undo_system: use low-level API to set mode. */
-  ED_object_mode_set(C, OB_MODE_EDIT);
+  ED_object_mode_set_ex(C, OB_MODE_EDIT, false, NULL);
   BLI_assert(font_undosys_poll(C));
 
   FontUndoStep *us = (FontUndoStep *)us_p;

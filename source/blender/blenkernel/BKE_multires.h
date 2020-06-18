@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2007 by Nicholas Bishop
@@ -25,6 +25,10 @@
  */
 
 #include "BLI_compiler_compat.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 enum MultiresModifiedFlags;
 
@@ -53,9 +57,9 @@ void multires_mark_as_modified(struct Depsgraph *depsgraph,
                                struct Object *object,
                                enum MultiresModifiedFlags flags);
 
-void multires_flush_sculpt_updates(struct Object *ob);
-void multires_force_sculpt_rebuild(struct Object *ob);
-void multires_force_external_reload(struct Object *ob);
+void multires_flush_sculpt_updates(struct Object *object);
+void multires_force_sculpt_rebuild(struct Object *object);
+void multires_force_external_reload(struct Object *object);
 
 /* internal, only called in subsurf_ccg.c */
 void multires_modifier_update_mdisps(struct DerivedMesh *dm, struct Scene *scene);
@@ -86,24 +90,37 @@ int multires_get_level(const struct Scene *scene,
                        const struct MultiresModifierData *mmd,
                        bool render,
                        bool ignore_simplify);
+
+/* Creates mesh with multires modifier applied on current object's deform mesh. */
 struct Mesh *BKE_multires_create_mesh(struct Depsgraph *depsgraph,
-                                      struct Scene *scene,
-                                      struct MultiresModifierData *mmd,
-                                      struct Object *ob);
+                                      struct Object *object,
+                                      struct MultiresModifierData *mmd);
+
+/* Get coordinates of a deformed base mesh which is an input to the given multires modifier.
+ * NOTE: The modifiers will be re-evaluated. */
+float (*BKE_multires_create_deformed_base_mesh_vert_coords(struct Depsgraph *depsgraph,
+                                                           struct Object *object,
+                                                           struct MultiresModifierData *mmd,
+                                                           int *r_num_deformed_verts))[3];
+
 void multiresModifier_del_levels(struct MultiresModifierData *mmd,
                                  struct Scene *scene,
                                  struct Object *object,
                                  int direction);
-void multiresModifier_base_apply(struct MultiresModifierData *mmd,
-                                 struct Scene *scene,
-                                 struct Object *ob);
-void multiresModifier_subdivide(struct MultiresModifierData *mmd,
-                                struct Scene *scene,
-                                struct Object *ob,
-                                int updateblock,
-                                int simple);
-void multiresModifier_sync_levels_ex(struct Scene *scene,
-                                     struct Object *ob_dst,
+void multiresModifier_base_apply(struct Depsgraph *depsgraph,
+                                 struct Object *object,
+                                 struct MultiresModifierData *mmd);
+int multiresModifier_rebuild_subdiv(struct Depsgraph *depsgraph,
+                                    struct Object *object,
+                                    struct MultiresModifierData *mmd,
+                                    int rebuild_limit,
+                                    bool switch_view_to_lower_level);
+void multiresModifier_subdivide_legacy(struct MultiresModifierData *mmd,
+                                       struct Scene *scene,
+                                       struct Object *ob,
+                                       int updateblock,
+                                       int simple);
+void multiresModifier_sync_levels_ex(struct Object *ob_dst,
                                      struct MultiresModifierData *mmd_src,
                                      struct MultiresModifierData *mmd_dst);
 
@@ -127,6 +144,10 @@ int multires_mdisp_corners(struct MDisps *s);
 /* update multires data after topology changing */
 void multires_topology_changed(struct Mesh *me);
 
+void multires_ensure_external_read(struct Mesh *mesh, int top_level);
+void multiresModifier_ensure_external_read(struct Mesh *mesh,
+                                           const struct MultiresModifierData *mmd);
+
 /**** interpolation stuff ****/
 void old_mdisps_bilinear(float out[3], float (*disps)[3], const int st, float u, float v);
 int mdisp_rot_face_to_crn(struct MVert *mvert,
@@ -141,17 +162,43 @@ int mdisp_rot_face_to_crn(struct MVert *mvert,
 
 /* Reshaping, define in multires_reshape.c */
 
+bool multiresModifier_reshapeFromVertcos(struct Depsgraph *depsgraph,
+                                         struct Object *object,
+                                         struct MultiresModifierData *mmd,
+                                         const float (*vert_coords)[3],
+                                         const int num_vert_coords);
 bool multiresModifier_reshapeFromObject(struct Depsgraph *depsgraph,
                                         struct MultiresModifierData *mmd,
                                         struct Object *dst,
                                         struct Object *src);
 bool multiresModifier_reshapeFromDeformModifier(struct Depsgraph *depsgraph,
-                                                struct MultiresModifierData *mmd,
                                                 struct Object *ob,
-                                                struct ModifierData *md);
+                                                struct MultiresModifierData *mmd,
+                                                struct ModifierData *deform_md);
 bool multiresModifier_reshapeFromCCG(const int tot_level,
                                      struct Mesh *coarse_mesh,
                                      struct SubdivCCG *subdiv_ccg);
+
+/* Subdivide multires displacement once. */
+
+typedef enum eMultiresSubdivideModeType {
+  MULTIRES_SUBDIVIDE_CATMULL_CLARK,
+  MULTIRES_SUBDIVIDE_SIMPLE,
+  MULTIRES_SUBDIVIDE_LINEAR,
+} eMultiresSubdivideModeType;
+
+void multiresModifier_subdivide(struct Object *object,
+                                struct MultiresModifierData *mmd,
+                                const eMultiresSubdivideModeType mode);
+void multires_subdivide_create_tangent_displacement_linear_grids(struct Object *object,
+                                                                 struct MultiresModifierData *mmd);
+
+/* Subdivide displacement to the given level.
+ * If level is lower than the current top level nothing happens. */
+void multiresModifier_subdivide_to_level(struct Object *object,
+                                         struct MultiresModifierData *mmd,
+                                         const int top_level,
+                                         const eMultiresSubdivideModeType mode);
 
 /* Subdivision integration, defined in multires_subdiv.c */
 
@@ -167,7 +214,8 @@ void BKE_multires_subdiv_mesh_settings_init(struct SubdivToMeshSettings *mesh_se
                                             const struct Object *object,
                                             const struct MultiresModifierData *mmd,
                                             const bool use_render_params,
-                                            const bool ignore_simplify);
+                                            const bool ignore_simplify,
+                                            const bool ignore_control_edges);
 
 /* General helpers. */
 
@@ -182,7 +230,9 @@ BLI_INLINE void BKE_multires_construct_tangent_matrix(float tangent_matrix[3][3]
                                                       const float dPdv[3],
                                                       const int corner);
 
-int BKE_multires_sculpt_level_get(const struct MultiresModifierData *mmd);
+#ifdef __cplusplus
+}
+#endif
 
 #include "intern/multires_inline.h"
 

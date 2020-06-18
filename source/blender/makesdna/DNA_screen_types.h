@@ -26,8 +26,8 @@
 
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
-#include "DNA_view2d_types.h"
 #include "DNA_vec_types.h"
+#include "DNA_view2d_types.h"
 
 #include "DNA_ID.h"
 
@@ -129,6 +129,14 @@ typedef struct ScrAreaMap {
   ListBase areabase;
 } ScrAreaMap;
 
+typedef struct Panel_Runtime {
+  /* Applied to Panel.ofsx, but saved separately so we can track changes between redraws. */
+  int region_ofsx;
+
+  /* For instanced panels: Index of the list item the panel corresponds to. */
+  int list_index;
+} Panel_Runtime;
+
 /** The part from uiBlock that needs saved in file. */
 typedef struct Panel {
   struct Panel *next, *prev;
@@ -159,6 +167,8 @@ typedef struct Panel {
   void *activedata;
   /** Sub panels. */
   ListBase children;
+
+  Panel_Runtime runtime;
 } Panel;
 
 /**
@@ -170,7 +180,7 @@ typedef struct Panel {
  * - #ARegion.panels_category_active (#PanelCategoryStack)
  *   is basically a list of strings (category id's).
  *
- * Clicking on a tab moves it to the front of ar->panels_category_active,
+ * Clicking on a tab moves it to the front of region->panels_category_active,
  * If the context changes so this tab is no longer displayed,
  * then the first-most tab in #ARegion.panels_category_active is used.
  *
@@ -298,8 +308,8 @@ enum GlobalAreaFlag {
 };
 
 typedef enum GlobalAreaAlign {
-  GLOBAL_AREA_ALIGN_TOP,
-  GLOBAL_AREA_ALIGN_BOTTOM,
+  GLOBAL_AREA_ALIGN_TOP = 0,
+  GLOBAL_AREA_ALIGN_BOTTOM = 1,
 } GlobalAreaAlign;
 
 typedef struct ScrArea_Runtime {
@@ -409,7 +419,7 @@ typedef struct ARegion {
   short flag;
 
   /** Current split size in unscaled pixels (if zero it uses regiontype).
-   * To convert to pixels use: `UI_DPI_FAC * ar->sizex + 0.5f`.
+   * To convert to pixels use: `UI_DPI_FAC * region->sizex + 0.5f`.
    * However to get the current region size, you should usually use winx/winy from above, not this!
    */
   short sizex, sizey;
@@ -466,8 +476,8 @@ enum {
   /** Update size of regions within the area. */
   AREA_FLAG_REGION_SIZE_UPDATE = (1 << 3),
   AREA_FLAG_ACTIVE_TOOL_UPDATE = (1 << 4),
+  // AREA_FLAG_UNUSED_5 = (1 << 5),
 
-  //  AREA_FLAG_UNUSED_5           = (1 << 5),
   AREA_FLAG_UNUSED_6 = (1 << 6), /* cleared */
 
   /**
@@ -523,6 +533,8 @@ enum {
   PNL_OVERLAP = (1 << 4),
   PNL_PIN = (1 << 5),
   PNL_POPOVER = (1 << 6),
+  /** The panel has been drag-drop reordered and the instanced panel list needs to be rebuilt. */
+  PNL_INSTANCED_LIST_ORDER_CHANGED = (1 << 7),
 };
 
 /** #Panel.snap - for snapping to screen edges */
@@ -535,9 +547,17 @@ enum {
 /* #define PNL_SNAP_DIST        9.0 */
 
 /* paneltype flag */
-#define PNL_DEFAULT_CLOSED 1
-#define PNL_NO_HEADER 2
-#define PNL_LAYOUT_VERT_BAR 4
+enum {
+  PNL_DEFAULT_CLOSED = (1 << 0),
+  PNL_NO_HEADER = (1 << 1),
+  /** Makes buttons in the header shrink/stretch to fill full layout width. */
+  PNL_LAYOUT_HEADER_EXPAND = (1 << 2),
+  PNL_LAYOUT_VERT_BAR = (1 << 3),
+  /** This panel type represents data external to the UI. */
+  PNL_INSTANCED = (1 << 4),
+  /** Draw panel like a box widget. */
+  PNL_DRAW_BOX = (1 << 6),
+};
 
 /* Fallback panel category (only for old scripts which need updating) */
 #define PNL_CATEGORY_FALLBACK "Misc"
@@ -575,7 +595,7 @@ enum {
 enum {
   /* Plain values (only one is valid at a time, once masked with UILST_FLT_SORT_MASK. */
   /** Just for sake of consistency. */
-  UILST_FLT_SORT_INDEX = 0,
+  /* UILST_FLT_SORT_INDEX = 0, */ /* UNUSED */
   UILST_FLT_SORT_ALPHA = 1,
 
   /* Bitflags affecting behavior of any kind of sorting. */
@@ -670,6 +690,9 @@ enum {
   RGN_DRAWING = 8,
   /* For popups, to refresh UI layout along with drawing. */
   RGN_REFRESH_UI = 16,
+
+  /* Only editor overlays (currently gizmos only!) should be redrawn. */
+  RGN_DRAW_EDITOR_OVERLAYS = 32,
 };
 
 #endif /* __DNA_SCREEN_TYPES_H__ */

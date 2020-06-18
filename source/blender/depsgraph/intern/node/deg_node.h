@@ -114,6 +114,8 @@ enum class NodeType {
   SHADING_PARAMETERS,
   /* Point cache Component */
   POINT_CACHE,
+  /* Image Animation Component */
+  IMAGE_ANIMATION,
   /* Cache Component */
   /* TODO(sergey); Verify that we really need this. */
   CACHE,
@@ -125,6 +127,8 @@ enum class NodeType {
   DUPLI,
   /* Synchronization back to original datablock. */
   SYNCHRONIZATION,
+  /* Simulation component. */
+  SIMULATION,
 
   /* Total number of meaningful node types. */
   NUM_TYPES,
@@ -161,7 +165,7 @@ struct Node {
    * The reason why all depsgraph nodes are descended from this type (apart
    * from basic serialization benefits - from the typeinfo) is that we can
    * have relationships between these nodes. */
-  typedef vector<Relation *> Relations;
+  typedef Vector<Relation *> Relations;
 
   string name;        /* Identifier - mainly for debugging purposes. */
   NodeType type;      /* Structural type of node. */
@@ -191,11 +195,11 @@ struct Node {
 
   virtual OperationNode *get_entry_operation()
   {
-    return NULL;
+    return nullptr;
   }
   virtual OperationNode *get_exit_operation()
   {
-    return NULL;
+    return nullptr;
   }
 
   virtual NodeClass get_class() const;

@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -25,17 +25,28 @@
 
 #include "BLI_utildefines.h"
 
+#include "BLT_translation.h"
+
 #include "DNA_material_types.h"
 #include "DNA_mesh_types.h"
+#include "DNA_screen_types.h"
 
+#include "BKE_context.h"
 #include "BKE_editmesh.h"
+#include "BKE_lib_id.h"
 #include "BKE_mesh.h"
-#include "BKE_library.h"
 #include "BKE_modifier.h"
 #include "BKE_particle.h"
+#include "BKE_screen.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
 
 #include "DEG_depsgraph_query.h"
 
+#include "MOD_ui_common.h"
 #include "MOD_util.h"
 
 static void initData(ModifierData *md)
@@ -61,7 +72,7 @@ static void freeData(ModifierData *md)
   psmd->totdmvert = psmd->totdmedge = psmd->totdmface = 0;
 
   /* ED_object_modifier_remove may have freed this first before calling
-   * modifier_free (which calls this function) */
+   * BKE_modifier_free (which calls this function) */
   if (psmd->psys) {
     psmd->psys->flag |= PSYS_DELETE;
   }
@@ -74,7 +85,7 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
 #endif
   ParticleSystemModifierData *tpsmd = (ParticleSystemModifierData *)target;
 
-  modifier_copyData_generic(md, target, flag);
+  BKE_modifier_copydata_generic(md, target, flag);
 
   tpsmd->mesh_final = NULL;
   tpsmd->mesh_original = NULL;
@@ -189,7 +200,7 @@ static void deformVerts(ModifierData *md,
     BKE_mesh_tessface_ensure(psmd->mesh_original);
   }
 
-  if (mesh_src != psmd->mesh_final && mesh_src != mesh) {
+  if (!ELEM(mesh_src, NULL, mesh, psmd->mesh_final)) {
     BKE_id_free(NULL, mesh_src);
   }
 
@@ -216,7 +227,7 @@ static void deformVerts(ModifierData *md,
 
   if (DEG_is_active(ctx->depsgraph)) {
     Object *object_orig = DEG_get_original_object(ctx->object);
-    ModifierData *md_orig = modifiers_findByName(object_orig, psmd->modifier.name);
+    ModifierData *md_orig = BKE_modifiers_findby_name(object_orig, psmd->modifier.name);
     BLI_assert(md_orig != NULL);
     ParticleSystemModifierData *psmd_orig = (ParticleSystemModifierData *)md_orig;
     psmd_orig->flag = psmd->flag;
@@ -247,6 +258,43 @@ static void deformVertsEM(ModifierData *md,
 }
 #endif
 
+static void panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  PointerRNA ob_ptr;
+  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+
+  Object *ob = ob_ptr.data;
+  ModifierData *md = (ModifierData *)ptr.data;
+  ParticleSystem *psys = ((ParticleSystemModifierData *)md)->psys;
+
+  uiItemL(layout, IFACE_("Settings are in the particle tab"), ICON_NONE);
+
+  if (!(ob->mode & OB_MODE_PARTICLE_EDIT)) {
+    if (ELEM(psys->part->ren_as, PART_DRAW_GR, PART_DRAW_OB)) {
+      uiItemO(layout,
+              CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Convert"),
+              ICON_NONE,
+              "OBJECT_OT_duplicates_make_real");
+    }
+    else if (psys->part->ren_as == PART_DRAW_PATH) {
+      uiItemO(layout,
+              CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Convert"),
+              ICON_NONE,
+              "OBJECT_OT_modifier_convert");
+    }
+  }
+
+  modifier_panel_end(layout, &ptr);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  modifier_panel_register(region_type, eModifierType_ParticleSystem, panel_draw);
+}
+
 ModifierTypeInfo modifierType_ParticleSystem = {
     /* name */ "ParticleSystem",
     /* structName */ "ParticleSystemModifierData",
@@ -264,7 +312,10 @@ ModifierTypeInfo modifierType_ParticleSystem = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,
@@ -277,4 +328,7 @@ ModifierTypeInfo modifierType_ParticleSystem = {
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

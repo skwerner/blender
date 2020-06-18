@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-#include "render/background.h"
+#include "render/light.h"
 #include "device/device.h"
-#include "render/integrator.h"
+#include "render/background.h"
 #include "render/film.h"
 #include "render/graph.h"
-#include "render/light.h"
+#include "render/integrator.h"
 #include "render/mesh.h"
 #include "render/nodes.h"
 #include "render/object.h"
@@ -28,9 +28,9 @@
 
 #include "util/util_foreach.h"
 #include "util/util_hash.h"
+#include "util/util_logging.h"
 #include "util/util_path.h"
 #include "util/util_progress.h"
-#include "util/util_logging.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -120,6 +120,7 @@ NODE_DEFINE(Light)
 
   SOCKET_VECTOR(dir, "Dir", make_float3(0.0f, 0.0f, 0.0f));
   SOCKET_FLOAT(size, "Size", 0.0f);
+  SOCKET_FLOAT(angle, "Angle", 0.0f);
 
   SOCKET_VECTOR(axisu, "Axis U", make_float3(0.0f, 0.0f, 0.0f));
   SOCKET_FLOAT(sizeu, "Size U", 1.0f);
@@ -181,7 +182,10 @@ bool Light::has_contribution(Scene *scene)
 LightManager::LightManager()
 {
   need_update = true;
+  need_update_background = true;
   use_light_visibility = false;
+  last_background_enabled = false;
+  last_background_resolution = 0;
 }
 
 LightManager::~LightManager()
@@ -201,7 +205,7 @@ bool LightManager::has_background_light(Scene *scene)
   return false;
 }
 
-void LightManager::disable_ineffective_light(Scene *scene)
+void LightManager::test_enabled_lights(Scene *scene)
 {
   /* Make all lights enabled by default, and perform some preliminary checks
    * needed for finer-tuning of settings (for example, check whether we've
@@ -214,26 +218,40 @@ void LightManager::disable_ineffective_light(Scene *scene)
     has_background |= light->type == LIGHT_BACKGROUND;
   }
 
+  bool background_enabled = false;
+  int background_resolution = 0;
+
   if (has_background) {
     /* Ignore background light if:
      * - If unsupported on a device
      * - If we don't need it (no HDRs etc.)
      */
-    Shader *shader = (scene->background->shader) ? scene->background->shader :
-                                                   scene->default_background;
+    Shader *shader = scene->background->get_shader(scene);
     const bool disable_mis = !(has_portal || shader->has_surface_spatial_varying);
     VLOG_IF(1, disable_mis) << "Background MIS has been disabled.\n";
     foreach (Light *light, scene->lights) {
       if (light->type == LIGHT_BACKGROUND) {
         light->is_enabled = !disable_mis;
+        background_enabled = !disable_mis;
+        background_resolution = light->map_resolution;
       }
     }
+  }
+
+  if (last_background_enabled != background_enabled ||
+      last_background_resolution != background_resolution) {
+    last_background_enabled = background_enabled;
+    last_background_resolution = background_resolution;
+    need_update_background = true;
   }
 }
 
 bool LightManager::object_usable_as_light(Object *object)
 {
-  Mesh *mesh = object->mesh;
+  Geometry *geom = object->geometry;
+  if (geom->type != Geometry::MESH) {
+    return false;
+  }
   /* Skip objects with NaNs */
   if (!object->bounds.valid()) {
     return false;
@@ -244,10 +262,10 @@ bool LightManager::object_usable_as_light(Object *object)
   }
   /* Skip if we have no emission shaders. */
   /* TODO(sergey): Ideally we want to avoid such duplicated loop, since it'll
-   * iterate all mesh shaders twice (when counting and when calculating
+   * iterate all geometry shaders twice (when counting and when calculating
    * triangle area.
    */
-  foreach (const Shader *shader, mesh->used_shaders) {
+  foreach (const Shader *shader, geom->used_shaders) {
     if (shader->use_mis && shader->has_surface_emission) {
       return true;
     }
@@ -286,8 +304,9 @@ void LightManager::device_update_distribution(Device *,
     if (!object_usable_as_light(object)) {
       continue;
     }
+
     /* Count triangles. */
-    Mesh *mesh = object->mesh;
+    Mesh *mesh = static_cast<Mesh *>(object->geometry);
     size_t mesh_num_triangles = mesh->num_triangles();
     for (size_t i = 0; i < mesh_num_triangles; i++) {
       int shader_index = mesh->shader[i];
@@ -321,7 +340,7 @@ void LightManager::device_update_distribution(Device *,
       continue;
     }
     /* Sum area. */
-    Mesh *mesh = object->mesh;
+    Mesh *mesh = static_cast<Mesh *>(object->geometry);
     bool transform_applied = mesh->transform_applied;
     Transform tfm = object->tfm;
     int object_id = j;
@@ -353,7 +372,7 @@ void LightManager::device_update_distribution(Device *,
 
       if (shader->use_mis && shader->has_surface_emission) {
         distribution[offset].totarea = totarea;
-        distribution[offset].prim = i + mesh->tri_offset;
+        distribution[offset].prim = i + mesh->prim_offset;
         distribution[offset].mesh_light.shader_flag = shader_flag;
         distribution[offset].mesh_light.object_id = object_id;
         offset++;
@@ -431,6 +450,7 @@ void LightManager::device_update_distribution(Device *,
 
   /* update device */
   KernelIntegrator *kintegrator = &dscene->data.integrator;
+  KernelBackground *kbackground = &dscene->data.background;
   KernelFilm *kfilm = &dscene->data.film;
   kintegrator->use_direct_light = (totarea > 0.0f);
 
@@ -474,15 +494,18 @@ void LightManager::device_update_distribution(Device *,
 
     /* Portals */
     if (num_portals > 0) {
-      kintegrator->portal_offset = light_index;
-      kintegrator->num_portals = num_portals;
-      kintegrator->portal_pdf = background_mis ? 0.5f : 1.0f;
+      kbackground->portal_offset = light_index;
+      kbackground->num_portals = num_portals;
+      kbackground->portal_weight = 1.0f;
     }
     else {
-      kintegrator->num_portals = 0;
-      kintegrator->portal_offset = 0;
-      kintegrator->portal_pdf = 0.0f;
+      kbackground->num_portals = 0;
+      kbackground->portal_offset = 0;
+      kbackground->portal_weight = 0.0f;
     }
+
+    /* Map */
+    kbackground->map_weight = background_mis ? 1.0f : 0.0f;
   }
   else {
     dscene->light_distribution.free();
@@ -492,9 +515,12 @@ void LightManager::device_update_distribution(Device *,
     kintegrator->pdf_triangles = 0.0f;
     kintegrator->pdf_lights = 0.0f;
     kintegrator->use_lamp_mis = false;
-    kintegrator->num_portals = 0;
-    kintegrator->portal_offset = 0;
-    kintegrator->portal_pdf = 0.0f;
+
+    kbackground->num_portals = 0;
+    kbackground->portal_offset = 0;
+    kbackground->portal_weight = 0.0f;
+    kbackground->sun_weight = 0.0f;
+    kbackground->map_weight = 0.0f;
 
     kfilm->pass_shadow_scale = 1.0f;
   }
@@ -543,7 +569,7 @@ void LightManager::device_update_background(Device *device,
                                             Scene *scene,
                                             Progress &progress)
 {
-  KernelIntegrator *kintegrator = &dscene->data.integrator;
+  KernelBackground *kbackground = &dscene->data.background;
   Light *background_light = NULL;
 
   /* find background light */
@@ -556,32 +582,79 @@ void LightManager::device_update_background(Device *device,
 
   /* no background light found, signal renderer to skip sampling */
   if (!background_light || !background_light->is_enabled) {
-    kintegrator->pdf_background_res_x = 0;
-    kintegrator->pdf_background_res_y = 0;
+    kbackground->map_res_x = 0;
+    kbackground->map_res_y = 0;
+    kbackground->map_weight = 0.0f;
+    kbackground->sun_weight = 0.0f;
+    kbackground->use_mis = (kbackground->portal_weight > 0.0f);
     return;
   }
 
   progress.set_status("Updating Lights", "Importance map");
 
-  assert(kintegrator->use_direct_light);
+  assert(dscene->data.integrator.use_direct_light);
+
+  int2 environment_res = make_int2(0, 0);
+  Shader *shader = scene->background->get_shader(scene);
+  int num_suns = 0;
+  foreach (ShaderNode *node, shader->graph->nodes) {
+    if (node->type == EnvironmentTextureNode::node_type) {
+      EnvironmentTextureNode *env = (EnvironmentTextureNode *)node;
+      ImageMetaData metadata;
+      if (!env->handle.empty()) {
+        ImageMetaData metadata = env->handle.metadata();
+        environment_res.x = max(environment_res.x, metadata.width);
+        environment_res.y = max(environment_res.y, metadata.height);
+      }
+    }
+    if (node->type == SkyTextureNode::node_type) {
+      SkyTextureNode *sky = (SkyTextureNode *)node;
+      if (sky->type == NODE_SKY_NISHITA && sky->sun_disc) {
+        /* Ensure that the input coordinates aren't transformed before they reach the node.
+         * If that is the case, the logic used for sampling the sun's location does not work
+         * and we have to fall back to map-based sampling. */
+        const ShaderInput *vec_in = sky->input("Vector");
+        if (vec_in && vec_in->link && vec_in->link->parent) {
+          ShaderNode *vec_src = vec_in->link->parent;
+          if ((vec_src->type != TextureCoordinateNode::node_type) ||
+              (vec_in->link != vec_src->output("Generated"))) {
+            environment_res.x = max(environment_res.x, 4096);
+            environment_res.y = max(environment_res.y, 2048);
+            continue;
+          }
+        }
+
+        float latitude = sky->sun_elevation;
+        float longitude = M_2PI_F - sky->sun_rotation + M_PI_2_F;
+        float half_angle = sky->sun_size * 0.5f;
+        kbackground->sun = make_float4(cosf(latitude) * cosf(longitude),
+                                       cosf(latitude) * sinf(longitude),
+                                       sinf(latitude),
+                                       half_angle);
+        kbackground->sun_weight = 4.0f;
+        environment_res.x = max(environment_res.x, 512);
+        environment_res.y = max(environment_res.y, 256);
+        num_suns++;
+      }
+    }
+  }
+
+  /* If there's more than one sun, fall back to map sampling instead. */
+  if (num_suns != 1) {
+    kbackground->sun_weight = 0.0f;
+    environment_res.x = max(environment_res.x, 4096);
+    environment_res.y = max(environment_res.y, 2048);
+  }
+
+  /* Enable MIS for background sampling if any strategy is active. */
+  kbackground->use_mis = (kbackground->portal_weight + kbackground->map_weight +
+                          kbackground->sun_weight) > 0.0f;
 
   /* get the resolution from the light's size (we stuff it in there) */
   int2 res = make_int2(background_light->map_resolution, background_light->map_resolution / 2);
   /* If the resolution isn't set manually, try to find an environment texture. */
   if (res.x == 0) {
-    Shader *shader = (scene->background->shader) ? scene->background->shader :
-                                                   scene->default_background;
-    foreach (ShaderNode *node, shader->graph->nodes) {
-      if (node->type == EnvironmentTextureNode::node_type) {
-        EnvironmentTextureNode *env = (EnvironmentTextureNode *)node;
-        ImageMetaData metadata;
-        if (env->image_manager && !env->slots.empty() &&
-            env->image_manager->get_image_metadata(env->slots[0], metadata)) {
-          res.x = max(res.x, metadata.width);
-          res.y = max(res.y, metadata.height);
-        }
-      }
-    }
+    res = environment_res;
     if (res.x > 0 && res.y > 0) {
       VLOG(2) << "Automatically set World MIS resolution to " << res.x << " by " << res.y << "\n";
     }
@@ -591,8 +664,8 @@ void LightManager::device_update_background(Device *device,
     res = make_int2(1024, 512);
     VLOG(2) << "Setting World MIS resolution to default\n";
   }
-  kintegrator->pdf_background_res_x = res.x;
-  kintegrator->pdf_background_res_y = res.y;
+  kbackground->map_res_x = res.x;
+  kbackground->map_res_y = res.y;
 
   vector<float3> pixels;
   shade_background_pixels(device, dscene, res.x, res.y, pixels, progress);
@@ -899,11 +972,12 @@ void LightManager::device_update(Device *device,
 
   VLOG(1) << "Total " << scene->lights.size() << " lights.";
 
-  device_free(device, dscene);
+  /* Detect which lights are enabled, also determins if we need to update the background. */
+  test_enabled_lights(scene);
+
+  device_free(device, dscene, need_update_background);
 
   use_light_visibility = false;
-
-  disable_ineffective_light(scene);
 
   device_update_points(device, dscene, scene);
   if (progress.get_cancel())
@@ -913,9 +987,11 @@ void LightManager::device_update(Device *device,
   if (progress.get_cancel())
     return;
 
-  device_update_background(device, dscene, scene, progress);
-  if (progress.get_cancel())
-    return;
+  if (need_update_background) {
+    device_update_background(device, dscene, scene, progress);
+    if (progress.get_cancel())
+      return;
+  }
 
   device_update_ies(dscene);
   if (progress.get_cancel())
@@ -927,14 +1003,17 @@ void LightManager::device_update(Device *device,
   }
 
   need_update = false;
+  need_update_background = false;
 }
 
-void LightManager::device_free(Device *, DeviceScene *dscene)
+void LightManager::device_free(Device *, DeviceScene *dscene, const bool free_background)
 {
   dscene->light_distribution.free();
   dscene->lights.free();
-  dscene->light_background_marginal_cdf.free();
-  dscene->light_background_conditional_cdf.free();
+  if (free_background) {
+    dscene->light_background_marginal_cdf.free();
+    dscene->light_background_conditional_cdf.free();
+  }
   dscene->ies_lights.free();
 }
 
@@ -987,6 +1066,7 @@ int LightManager::add_ies(const string &content)
   ies_slots[slot]->hash = hash;
 
   need_update = true;
+  need_update_background = true;
 
   return slot;
 }
@@ -1005,6 +1085,7 @@ void LightManager::remove_ies(int slot)
 
   /* If the slot has no more users, update the device to remove it. */
   need_update |= (ies_slots[slot]->users == 0);
+  need_update_background |= need_update;
 }
 
 void LightManager::device_update_ies(DeviceScene *dscene)

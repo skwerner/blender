@@ -20,18 +20,16 @@
 #define __COM_NODEOPERATION_H__
 
 #include <list>
-#include <string>
 #include <sstream>
+#include <string>
 
-extern "C" {
 #include "BLI_math_color.h"
 #include "BLI_math_vector.h"
 #include "BLI_threads.h"
-}
 
-#include "COM_Node.h"
 #include "COM_MemoryBuffer.h"
 #include "COM_MemoryProxy.h"
+#include "COM_Node.h"
 #include "COM_SocketReader.h"
 
 #include "clew.h"

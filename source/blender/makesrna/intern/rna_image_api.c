@@ -21,15 +21,15 @@
  * \ingroup RNA
  */
 
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
 #include "DNA_packedFile_types.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_path_util.h"
+#include "BLI_utildefines.h"
 
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
@@ -40,12 +40,12 @@
 
 #ifdef RNA_RUNTIME
 
-#  include <errno.h>
 #  include "BKE_image.h"
 #  include "BKE_main.h"
+#  include <errno.h>
 
-#  include "IMB_imbuf.h"
 #  include "IMB_colormanagement.h"
+#  include "IMB_imbuf.h"
 
 #  include "DNA_image_types.h"
 #  include "DNA_scene_types.h"
@@ -216,14 +216,13 @@ static void rna_Image_scale(Image *image, ReportList *reports, int width, int he
   }
 }
 
-static int rna_Image_gl_load(Image *image, ReportList *reports, int frame, int tile_number)
+static int rna_Image_gl_load(Image *image, ReportList *reports, int frame)
 {
   ImageUser iuser;
   BKE_imageuser_default(&iuser);
   iuser.framenr = frame;
-  iuser.tile = tile_number;
 
-  GPUTexture *tex = GPU_texture_from_blender(image, &iuser, GL_TEXTURE_2D);
+  GPUTexture *tex = GPU_texture_from_blender(image, &iuser, NULL, GL_TEXTURE_2D);
 
   if (tex == NULL) {
     BKE_reportf(reports, RPT_ERROR, "Failed to load image texture '%s'", image->id.name + 2);
@@ -233,15 +232,14 @@ static int rna_Image_gl_load(Image *image, ReportList *reports, int frame, int t
   return GL_NO_ERROR;
 }
 
-static int rna_Image_gl_touch(Image *image, ReportList *reports, int frame, int tile_number)
+static int rna_Image_gl_touch(Image *image, ReportList *reports, int frame)
 {
   int error = GL_NO_ERROR;
 
   BKE_image_tag_time(image);
 
-  ImageTile *tile = BKE_image_get_tile(image, tile_number);
-  if (tile->gputexture[TEXTARGET_TEXTURE_2D] == NULL) {
-    error = rna_Image_gl_load(image, reports, frame, tile_number);
+  if (image->gputexture[TEXTARGET_TEXTURE_2D] == NULL) {
+    error = rna_Image_gl_load(image, reports, frame);
   }
 
   return error;
@@ -336,7 +334,6 @@ void RNA_api_image(StructRNA *srna)
   RNA_def_function_flag(func, FUNC_USE_REPORTS);
   RNA_def_int(
       func, "frame", 0, 0, INT_MAX, "Frame", "Frame of image sequence or movie", 0, INT_MAX);
-  RNA_def_int(func, "tile_number", 0, 0, INT_MAX, "Tile", "Tile of a tiled image", 0, INT_MAX);
   /* return value */
   parm = RNA_def_int(
       func, "error", 0, -INT_MAX, INT_MAX, "Error", "OpenGL error value", -INT_MAX, INT_MAX);
@@ -351,7 +348,6 @@ void RNA_api_image(StructRNA *srna)
   RNA_def_function_flag(func, FUNC_USE_REPORTS);
   RNA_def_int(
       func, "frame", 0, 0, INT_MAX, "Frame", "Frame of image sequence or movie", 0, INT_MAX);
-  RNA_def_int(func, "tile_number", 0, 0, INT_MAX, "Tile", "Tile of a tiled image", 0, INT_MAX);
   /* return value */
   parm = RNA_def_int(
       func, "error", 0, -INT_MAX, INT_MAX, "Error", "OpenGL error value", -INT_MAX, INT_MAX);

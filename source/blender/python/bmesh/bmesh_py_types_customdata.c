@@ -26,8 +26,8 @@
 
 #include <Python.h>
 
-#include "BLI_utildefines.h"
 #include "BLI_math_vector.h"
+#include "BLI_utildefines.h"
 
 #include "bmesh.h"
 
@@ -35,9 +35,9 @@
 #include "bmesh_py_types_customdata.h"
 #include "bmesh_py_types_meshdata.h"
 
-#include "../mathutils/mathutils.h"
-#include "../generic/python_utildefines.h"
 #include "../generic/py_capi_utils.h"
+#include "../generic/python_utildefines.h"
+#include "../mathutils/mathutils.h"
 
 #include "BKE_customdata.h"
 
@@ -98,7 +98,8 @@ PyDoc_STRVAR(
 PyDoc_STRVAR(bpy_bmlayeraccess_collection__bevel_weight_doc,
              "Bevel weight float in [0 - 1].\n\n:type: :class:`BMLayerCollection`");
 PyDoc_STRVAR(bpy_bmlayeraccess_collection__crease_doc,
-             "Edge crease for subsurf - float in [0 - 1].\n\n:type: :class:`BMLayerCollection`");
+             "Edge crease for subdivision surface - float in [0 - 1].\n\n:type: "
+             ":class:`BMLayerCollection`");
 PyDoc_STRVAR(
     bpy_bmlayeraccess_collection__uv_doc,
     "Accessor for :class:`BMLoopUV` UV (as a 2D Vector).\n\ntype: :class:`BMLayerCollection`");
@@ -184,17 +185,17 @@ static PyGetSetDef bpy_bmlayeraccess_vert_getseters[] = {
      (getter)bpy_bmlayeraccess_collection_get,
      (setter)NULL,
      bpy_bmlayeraccess_collection__float_doc,
-     (void *)CD_PROP_FLT},
+     (void *)CD_PROP_FLOAT},
     {"int",
      (getter)bpy_bmlayeraccess_collection_get,
      (setter)NULL,
      bpy_bmlayeraccess_collection__int_doc,
-     (void *)CD_PROP_INT},
+     (void *)CD_PROP_INT32},
     {"string",
      (getter)bpy_bmlayeraccess_collection_get,
      (setter)NULL,
      bpy_bmlayeraccess_collection__string_doc,
-     (void *)CD_PROP_STR},
+     (void *)CD_PROP_STRING},
 
     {"shape",
      (getter)bpy_bmlayeraccess_collection_get,
@@ -225,17 +226,17 @@ static PyGetSetDef bpy_bmlayeraccess_edge_getseters[] = {
      (getter)bpy_bmlayeraccess_collection_get,
      (setter)NULL,
      bpy_bmlayeraccess_collection__float_doc,
-     (void *)CD_PROP_FLT},
+     (void *)CD_PROP_FLOAT},
     {"int",
      (getter)bpy_bmlayeraccess_collection_get,
      (setter)NULL,
      bpy_bmlayeraccess_collection__int_doc,
-     (void *)CD_PROP_INT},
+     (void *)CD_PROP_INT32},
     {"string",
      (getter)bpy_bmlayeraccess_collection_get,
      (setter)NULL,
      bpy_bmlayeraccess_collection__string_doc,
-     (void *)CD_PROP_STR},
+     (void *)CD_PROP_STRING},
 
     {"bevel_weight",
      (getter)bpy_bmlayeraccess_collection_get,
@@ -263,17 +264,17 @@ static PyGetSetDef bpy_bmlayeraccess_face_getseters[] = {
      (getter)bpy_bmlayeraccess_collection_get,
      (setter)NULL,
      bpy_bmlayeraccess_collection__float_doc,
-     (void *)CD_PROP_FLT},
+     (void *)CD_PROP_FLOAT},
     {"int",
      (getter)bpy_bmlayeraccess_collection_get,
      (setter)NULL,
      bpy_bmlayeraccess_collection__int_doc,
-     (void *)CD_PROP_INT},
+     (void *)CD_PROP_INT32},
     {"string",
      (getter)bpy_bmlayeraccess_collection_get,
      (setter)NULL,
      bpy_bmlayeraccess_collection__string_doc,
-     (void *)CD_PROP_STR},
+     (void *)CD_PROP_STRING},
     {"face_map",
      (getter)bpy_bmlayeraccess_collection_get,
      (setter)NULL,
@@ -296,17 +297,17 @@ static PyGetSetDef bpy_bmlayeraccess_loop_getseters[] = {
      (getter)bpy_bmlayeraccess_collection_get,
      (setter)NULL,
      bpy_bmlayeraccess_collection__float_doc,
-     (void *)CD_PROP_FLT},
+     (void *)CD_PROP_FLOAT},
     {"int",
      (getter)bpy_bmlayeraccess_collection_get,
      (setter)NULL,
      bpy_bmlayeraccess_collection__int_doc,
-     (void *)CD_PROP_INT},
+     (void *)CD_PROP_INT32},
     {"string",
      (getter)bpy_bmlayeraccess_collection_get,
      (setter)NULL,
      bpy_bmlayeraccess_collection__string_doc,
-     (void *)CD_PROP_STR},
+     (void *)CD_PROP_STRING},
 
     {"uv",
      (getter)bpy_bmlayeraccess_collection_get,
@@ -1071,17 +1072,17 @@ PyObject *BPy_BMLayerItem_GetItem(BPy_BMElem *py_ele, BPy_BMLayerItem *py_layer)
       ret = BPy_BMDeformVert_CreatePyObject(value);
       break;
     }
-    case CD_PROP_FLT:
+    case CD_PROP_FLOAT:
     case CD_PAINT_MASK: {
       ret = PyFloat_FromDouble(*(float *)value);
       break;
     }
-    case CD_PROP_INT:
+    case CD_PROP_INT32:
     case CD_FACEMAP: {
       ret = PyLong_FromLong(*(int *)value);
       break;
     }
-    case CD_PROP_STR: {
+    case CD_PROP_STRING: {
       MStringProperty *mstring = value;
       ret = PyBytes_FromStringAndSize(mstring->s, mstring->s_len);
       break;
@@ -1134,7 +1135,7 @@ int BPy_BMLayerItem_SetItem(BPy_BMElem *py_ele, BPy_BMLayerItem *py_layer, PyObj
       ret = BPy_BMDeformVert_AssignPyObject(value, py_value);
       break;
     }
-    case CD_PROP_FLT:
+    case CD_PROP_FLOAT:
     case CD_PAINT_MASK: {
       float tmp_val = PyFloat_AsDouble(py_value);
       if (UNLIKELY(tmp_val == -1 && PyErr_Occurred())) {
@@ -1147,7 +1148,7 @@ int BPy_BMLayerItem_SetItem(BPy_BMElem *py_ele, BPy_BMLayerItem *py_layer, PyObj
       }
       break;
     }
-    case CD_PROP_INT:
+    case CD_PROP_INT32:
     case CD_FACEMAP: {
       int tmp_val = PyC_Long_AsI32(py_value);
       if (UNLIKELY(tmp_val == -1 && PyErr_Occurred())) {
@@ -1159,7 +1160,7 @@ int BPy_BMLayerItem_SetItem(BPy_BMElem *py_ele, BPy_BMLayerItem *py_layer, PyObj
       }
       break;
     }
-    case CD_PROP_STR: {
+    case CD_PROP_STRING: {
       MStringProperty *mstring = value;
       char *tmp_val;
       Py_ssize_t tmp_val_len;

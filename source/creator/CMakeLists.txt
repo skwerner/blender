@@ -41,9 +41,13 @@ set(LIB
   bf_windowmanager
 )
 
-# Note: this should not be needed, but causes issues in some situations:
-# See reply to daf290dcc80c.
-if(WITH_TBB AND WITH_OPENIMAGEDENOISE)
+if(WITH_TBB)
+  # Force TBB libraries to be in front of MKL (part of OpenImageDenoise), so
+  # that it is initialized before MKL and static library initialization order
+  # issues are avoided.
+  #
+  # This isn't fully robust but seems to work.
+  list(INSERT LIB 0 ${TBB_LIBRARIES})
   list(INSERT LIB 0 bf_blenkernel)
 endif()
 
@@ -105,6 +109,10 @@ endif()
 if(WITH_FREESTYLE)
   blender_include_dirs(../blender/freestyle)
   add_definitions(-DWITH_FREESTYLE)
+endif()
+
+if(WITH_XR_OPENXR)
+  add_definitions(-DWITH_XR_OPENXR)
 endif()
 
 # Setup the exe sources and buildinfo
@@ -296,12 +304,10 @@ if(WITH_MEM_JEMALLOC)
   )
 endif()
 
-if(WITH_INTERNATIONAL)
-  list(APPEND BLENDER_TEXT_FILES
-    ${CMAKE_SOURCE_DIR}/release/datafiles/LICENSE-droidsans.ttf.txt
-    ${CMAKE_SOURCE_DIR}/release/datafiles/LICENSE-bmonofont-i18n.ttf.txt
-  )
-endif()
+list(APPEND BLENDER_TEXT_FILES
+  ${CMAKE_SOURCE_DIR}/release/datafiles/LICENSE-droidsans.ttf.txt
+  ${CMAKE_SOURCE_DIR}/release/datafiles/LICENSE-bmonofont-i18n.ttf.txt
+)
 
 
 # -----------------------------------------------------------------------------
@@ -379,14 +385,15 @@ if(WITH_PYTHON)
   unset(FREESTYLE_EXCLUDE_CONDITIONAL)
 endif()
 
+# fonts
+install(
+  DIRECTORY
+    ${CMAKE_SOURCE_DIR}/release/datafiles/fonts
+  DESTINATION ${TARGETDIR_VER}/datafiles
+)
+
 # localization
 if(WITH_INTERNATIONAL)
-  install(
-    DIRECTORY
-      ${CMAKE_SOURCE_DIR}/release/datafiles/fonts
-    DESTINATION ${TARGETDIR_VER}/datafiles
-  )
-
   set(_locale_dir "${CMAKE_SOURCE_DIR}/release/datafiles/locale")
   set(_locale_target_dir ${TARGETDIR_VER}/datafiles/locale)
 
@@ -680,18 +687,38 @@ elseif(WIN32)
     )
   endif()
 
+  if(WITH_FFTW3)
+    install(
+          FILES ${LIBDIR}/fftw3/lib/libfftw3-3.dll
+          DESTINATION "."
+    )
+  endif()
+
+  if(WITH_WINDOWS_PDB)
+    if(WITH_WINDOWS_STRIPPED_PDB)
+      # Icky hack for older cmake from https://stackoverflow.com/a/21198501
+      # $<CONFIG> will work in newer cmake but the version currently (3.12)
+      # on the buildbot does not support this endavour.
+      install(FILES ${CMAKE_CURRENT_BINARY_DIR}/\${CMAKE_INSTALL_CONFIG_NAME}/blender_public.pdb DESTINATION . RENAME blender.pdb)
+    else()
+      install(FILES $<TARGET_PDB_FILE:blender> DESTINATION . RENAME blender.pdb)
+    endif()
+  endif()
+
   if(WITH_PYTHON)
     string(REPLACE "." "" _PYTHON_VERSION_NO_DOTS ${PYTHON_VERSION})
 
     if(NOT CMAKE_COMPILER_IS_GNUCC)
       install(
         FILES ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/bin/python${_PYTHON_VERSION_NO_DOTS}.dll
+              ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/bin/python3.dll
         DESTINATION "."
         CONFIGURATIONS Release;RelWithDebInfo;MinSizeRel
       )
 
       install(
         FILES ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/bin/python${_PYTHON_VERSION_NO_DOTS}_d.dll
+              ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/bin/python3_d.dll
         DESTINATION "."
         CONFIGURATIONS Debug
       )
@@ -794,7 +821,20 @@ elseif(WIN32)
       DESTINATION "."
     )
   endif()
-
+  if(WITH_TBB)
+    install(
+      FILES
+        ${LIBDIR}/tbb/lib/tbb.dll
+      DESTINATION "."
+      CONFIGURATIONS Release;RelWithDebInfo;MinSizeRel
+    )
+    install(
+      FILES
+        ${LIBDIR}/tbb/lib/debug/tbb_debug.dll
+      DESTINATION "."
+      CONFIGURATIONS Debug
+    )
+  endif()
   if(WITH_TBB_MALLOC_PROXY)
     install(
       FILES
@@ -850,6 +890,8 @@ elseif(WIN32)
       ${CMAKE_SOURCE_DIR}/release/windows/batch/blender_debug_gpu_glitchworkaround.cmd
       ${CMAKE_SOURCE_DIR}/release/windows/batch/blender_debug_log.cmd
       ${CMAKE_SOURCE_DIR}/release/windows/batch/blender_factory_startup.cmd
+      ${CMAKE_SOURCE_DIR}/release/windows/batch/blender_oculus.cmd
+      ${CMAKE_SOURCE_DIR}/release/windows/batch/oculus.json
     DESTINATION "."
   )
 
@@ -901,8 +943,8 @@ elseif(APPLE)
 
   set_target_properties(blender PROPERTIES
     MACOSX_BUNDLE_INFO_PLIST ${OSX_APP_SOURCEDIR}/Contents/Info.plist
-    MACOSX_BUNDLE_SHORT_VERSION_STRING "${BLENDER_VERSION}${BLENDER_VERSION_CHAR}"
-    MACOSX_BUNDLE_LONG_VERSION_STRING "${BLENDER_VERSION}${BLENDER_VERSION_CHAR} ${BLENDER_DATE}")
+    MACOSX_BUNDLE_SHORT_VERSION_STRING "${BLENDER_VERSION}.${BLENDER_VERSION_PATCH}"
+    MACOSX_BUNDLE_LONG_VERSION_STRING "${BLENDER_VERSION}.${BLENDER_VERSION_PATCH} ${BLENDER_DATE}")
 
   # Gather the date in finder-style
   execute_process(COMMAND date "+%m/%d/%Y/%H:%M"
@@ -910,6 +952,11 @@ elseif(APPLE)
   OUTPUT_STRIP_TRAILING_WHITESPACE)
 
   # Give the bundle actual creation/modification date
+  #
+  # Note that the directory might not yet exist, which happens when CMake is first run.
+  if(NOT EXISTS ${EXECUTABLE_OUTPUT_PATH}/Blender.app)
+    file(MAKE_DIRECTORY ${EXECUTABLE_OUTPUT_PATH}/Blender.app)
+  endif()
   execute_process(COMMAND SetFile -d ${SETFILE_DATE} -m ${SETFILE_DATE}
                   ${EXECUTABLE_OUTPUT_PATH}/Blender.app)
 
@@ -1045,6 +1092,12 @@ unset(LIB)
 
 setup_liblinks(blender)
 
+if(APPLE)
+  set_target_properties(blender PROPERTIES LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/osx_locals.map)
+elseif(UNIX)
+  set_target_properties(blender PROPERTIES LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/blender.map)
+endif()
+
 # -----------------------------------------------------------------------------
 # USD registry.
 # USD requires a set of JSON files that define the standard schemas. These
@@ -1052,7 +1105,7 @@ setup_liblinks(blender)
 if(WITH_USD)
   add_definitions(-DWITH_USD)
   install(DIRECTORY
-    ${LIBDIR}/usd/lib/usd
+    ${USD_LIBRARY_DIR}/usd
     DESTINATION "${TARGETDIR_VER}/datafiles"
   )
 endif()
@@ -1063,6 +1116,20 @@ endif()
 # the use of vcpkg
 if(WIN32)
   set_target_properties(blender PROPERTIES VS_GLOBAL_VcpkgEnabled "false")
+  set_target_properties(blender PROPERTIES
+    PDB_NAME "blender_private"
+    PDB_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>")
+    if (WITH_WINDOWS_PDB AND WITH_WINDOWS_STRIPPED_PDB)
+      # This is slightly messy, but single target generators like ninja will not have the
+      # CMAKE_CFG_INTDIR variable and multitarget generators like msbuild will not have
+      # CMAKE_BUILD_TYPE. This can be simplified by target_link_options and the $<CONFIG>
+      # generator expression in newer cmake (2.13+) but until that time this fill have suffice.
+      if(CMAKE_BUILD_TYPE)
+        set_property(TARGET blender APPEND PROPERTY LINK_FLAGS  " /PDBSTRIPPED:${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}/blender_public.pdb")
+      else()
+        set_property(TARGET blender APPEND PROPERTY LINK_FLAGS  " /PDBSTRIPPED:${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_CFG_INTDIR}/blender_public.pdb")
+      endif()
+  endif()
 endif()
 
 # -----------------------------------------------------------------------------

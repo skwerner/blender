@@ -24,6 +24,10 @@
 #ifndef __ED_CURVE_H__
 #define __ED_CURVE_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct BPoint;
 struct Base;
 struct BezTriple;
@@ -62,7 +66,7 @@ int ED_curve_nurb_select_count(struct View3D *v3d, struct Nurb *nu);
 bool ED_curve_nurb_select_all(const struct Nurb *nu);
 bool ED_curve_nurb_deselect_all(const struct Nurb *nu);
 
-int join_curve_exec(struct bContext *C, struct wmOperator *op);
+int ED_curve_join_objects_exec(struct bContext *C, struct wmOperator *op);
 
 /* editcurve_select.c */
 bool ED_curve_select_check(struct View3D *v3d, struct EditNurb *editnurb);
@@ -102,6 +106,10 @@ void ED_font_undosys_type(struct UndoType *ut);
 #if 0
 /* debug only */
 void printknots(struct Object *obedit);
+#endif
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif /* __ED_CURVE_H__ */

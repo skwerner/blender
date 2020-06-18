@@ -27,6 +27,7 @@
  *   for every fresh Blender run.
  */
 
+#include "BLI_utildefines.h"
 #include "DNA_listBase.h"
 
 #ifdef __cplusplus
@@ -77,6 +78,7 @@ typedef struct Global {
    *   *    799: Enable some mysterious new depsgraph behavior (05/2015).
    *   *   1112: Disable new Cloth internal springs handling (09/2014).
    *   *   1234: Disable new dyntopo code fixing skinny faces generation (04/2015).
+   *   *   3001: Enable additional Fluid modifier (Mantaflow) options (02/2020).
    *   * 16384 and above: Reserved for python (add-ons) usage.
    */
   short debug_value;
@@ -151,6 +153,8 @@ enum {
   G_DEBUG_IO = (1 << 17),                    /* IO Debugging (for Collada, ...)*/
   G_DEBUG_GPU_SHADERS = (1 << 18),           /* GLSL shaders */
   G_DEBUG_GPU_FORCE_WORKAROUNDS = (1 << 19), /* force gpu workarounds bypassing detections. */
+  G_DEBUG_XR = (1 << 20),                    /* XR/OpenXR messages */
+  G_DEBUG_XR_TIME = (1 << 21),               /* XR/OpenXR timing messages */
 
   G_DEBUG_GHOST = (1 << 20), /* Debug GHOST module. */
 };
@@ -173,19 +177,20 @@ enum {
   /** On read, use #FileGlobal.filename instead of the real location on-disk,
    * needed for recovering temp files so relative paths resolve */
   G_FILE_RECOVER = (1 << 23),
-  /** On write, remap relative file paths to the new file location. */
-  G_FILE_RELATIVE_REMAP = (1 << 24),
   /** On write, make backup `.blend1`, `.blend2` ... files, when the users preference is enabled */
   G_FILE_HISTORY = (1 << 25),
   /** BMesh option to save as older mesh format */
   /* #define G_FILE_MESH_COMPAT       (1 << 26) */
-  /** On write, restore paths after editing them (G_FILE_RELATIVE_REMAP) */
+  /** On write, restore paths after editing them (see #BLO_WRITE_PATH_REMAP_RELATIVE). */
   G_FILE_SAVE_COPY = (1 << 27),
   /* #define G_FILE_GLSL_NO_ENV_LIGHTING (1 << 28) */ /* deprecated */
 };
 
-/** Don't overwrite these flags when reading a file. */
-#define G_FILE_FLAG_ALL_RUNTIME (G_FILE_NO_UI | G_FILE_RELATIVE_REMAP | G_FILE_SAVE_COPY)
+/**
+ * Run-time only #G.fileflags which are never read or written to/from Blend files.
+ * This means we can change the values without worrying about do-versions.
+ */
+#define G_FILE_FLAG_ALL_RUNTIME (G_FILE_NO_UI | G_FILE_HISTORY | G_FILE_SAVE_COPY)
 
 /** ENDIAN_ORDER: indicates what endianness the platform where the file was written had. */
 #if !defined(__BIG_ENDIAN__) && !defined(__LITTLE_ENDIAN__)

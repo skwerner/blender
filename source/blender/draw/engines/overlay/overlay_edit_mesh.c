@@ -96,7 +96,6 @@ void OVERLAY_edit_mesh_cache_init(OVERLAY_Data *vedata)
 
   if ((flag & V3D_OVERLAY_EDIT_FACES) == 0) {
     pd->edit_mesh.do_faces = false;
-    pd->edit_mesh.do_zbufclip = false;
   }
   if ((flag & V3D_OVERLAY_EDIT_EDGES) == 0) {
     if ((tsettings->selectmode & SCE_SELECT_EDGE) == 0) {
@@ -119,18 +118,6 @@ void OVERLAY_edit_mesh_cache_init(OVERLAY_Data *vedata)
     show_face_dots = true;
   }
 
-  {
-    /* TODO(fclem) Shouldn't this be going into the paint overlay? */
-    state = DRW_STATE_WRITE_COLOR | DRW_STATE_WRITE_DEPTH | DRW_STATE_DEPTH_LESS_EQUAL;
-    DRW_PASS_CREATE(psl->edit_mesh_weight_ps, state | pd->clipping_state);
-
-    sh = OVERLAY_shader_paint_weight();
-    pd->edit_mesh_weight_grp = grp = DRW_shgroup_create(sh, psl->edit_mesh_weight_ps);
-    DRW_shgroup_uniform_float_copy(grp, "opacity", 1.0);
-    DRW_shgroup_uniform_bool_copy(grp, "drawContours", false);
-    DRW_shgroup_uniform_texture(grp, "colorramp", G_draw.weight_ramp);
-    DRW_shgroup_uniform_block(grp, "globalsBlock", G_draw.block_ubo);
-  }
   /* Run Twice for in-front passes. */
   for (int i = 0; i < 2; i++) {
     /* Complementary Depth Pass */
@@ -267,7 +254,7 @@ static void overlay_edit_mesh_add_ob_to_pass(OVERLAY_PrivateData *pd, Object *ob
     if (has_skin_roots) {
       circle = DRW_cache_circle_get();
       skin_roots = DRW_mesh_batch_cache_get_edit_skin_roots(ob->data);
-      DRW_shgroup_call_instances_with_attribs(skin_roots_shgrp, ob, circle, skin_roots);
+      DRW_shgroup_call_instances_with_attrs(skin_roots_shgrp, ob, circle, skin_roots);
     }
   }
 
@@ -284,17 +271,12 @@ void OVERLAY_edit_mesh_cache_populate(OVERLAY_Data *vedata, Object *ob)
 
   bool do_in_front = (ob->dtx & OB_DRAWXRAY) != 0;
   bool do_occlude_wire = (pd->edit_mesh.flag & V3D_OVERLAY_EDIT_OCCLUDE_WIRE) != 0;
-  bool do_show_weight = (pd->edit_mesh.flag & V3D_OVERLAY_EDIT_WEIGHT) != 0;
   bool do_show_mesh_analysis = (pd->edit_mesh.flag & V3D_OVERLAY_EDIT_STATVIS) != 0;
   bool fnormals_do = (pd->edit_mesh.flag & V3D_OVERLAY_EDIT_FACE_NORMALS) != 0;
   bool vnormals_do = (pd->edit_mesh.flag & V3D_OVERLAY_EDIT_VERT_NORMALS) != 0;
   bool lnormals_do = (pd->edit_mesh.flag & V3D_OVERLAY_EDIT_LOOP_NORMALS) != 0;
 
-  if (do_show_weight) {
-    geom = DRW_cache_mesh_surface_weights_get(ob);
-    DRW_shgroup_call_no_cull(pd->edit_mesh_weight_grp, geom, ob);
-  }
-  else if (do_show_mesh_analysis && !pd->xray_enabled) {
+  if (do_show_mesh_analysis && !pd->xray_enabled) {
     geom = DRW_cache_mesh_surface_mesh_analysis_get(ob);
     if (geom) {
       DRW_shgroup_call_no_cull(pd->edit_mesh_analysis_grp, geom, ob);
@@ -310,15 +292,15 @@ void OVERLAY_edit_mesh_cache_populate(OVERLAY_Data *vedata, Object *ob)
     struct GPUBatch *normal_geom = DRW_cache_normal_arrow_get();
     if (vnormals_do) {
       geom = DRW_mesh_batch_cache_get_edit_vnors(ob->data);
-      DRW_shgroup_call_instances_with_attribs(pd->edit_mesh_normals_grp, ob, normal_geom, geom);
+      DRW_shgroup_call_instances_with_attrs(pd->edit_mesh_normals_grp, ob, normal_geom, geom);
     }
     if (lnormals_do) {
       geom = DRW_mesh_batch_cache_get_edit_lnors(ob->data);
-      DRW_shgroup_call_instances_with_attribs(pd->edit_mesh_normals_grp, ob, normal_geom, geom);
+      DRW_shgroup_call_instances_with_attrs(pd->edit_mesh_normals_grp, ob, normal_geom, geom);
     }
     if (fnormals_do) {
       geom = DRW_mesh_batch_cache_get_edit_facedots(ob->data);
-      DRW_shgroup_call_instances_with_attribs(pd->edit_mesh_normals_grp, ob, normal_geom, geom);
+      DRW_shgroup_call_instances_with_attrs(pd->edit_mesh_normals_grp, ob, normal_geom, geom);
     }
   }
 
@@ -334,7 +316,7 @@ void OVERLAY_edit_mesh_cache_populate(OVERLAY_Data *vedata, Object *ob)
 
   if (DRW_state_show_text() && (pd->edit_mesh.flag & OVERLAY_EDIT_TEXT)) {
     const DRWContextState *draw_ctx = DRW_context_state_get();
-    DRW_text_edit_mesh_measure_stats(draw_ctx->ar, draw_ctx->v3d, ob, &draw_ctx->scene->unit);
+    DRW_text_edit_mesh_measure_stats(draw_ctx->region, draw_ctx->v3d, ob, &draw_ctx->scene->unit);
   }
 }
 
@@ -365,7 +347,6 @@ void OVERLAY_edit_mesh_draw(OVERLAY_Data *vedata)
     GPU_framebuffer_bind(fbl->overlay_default_fb);
   }
 
-  DRW_draw_pass(psl->edit_mesh_weight_ps);
   DRW_draw_pass(psl->edit_mesh_analysis_ps);
 
   DRW_draw_pass(psl->edit_mesh_depth_ps[NOT_IN_FRONT]);
@@ -399,7 +380,7 @@ void OVERLAY_edit_mesh_draw(OVERLAY_Data *vedata)
     DRW_draw_pass(psl->edit_mesh_normals_ps);
     overlay_edit_mesh_draw_components(psl, pd, false);
 
-    if (v3d->shading.type == OB_SOLID && pd->edit_mesh.ghost_ob == 1 &&
+    if (!DRW_state_is_depth() && v3d->shading.type == OB_SOLID && pd->edit_mesh.ghost_ob == 1 &&
         pd->edit_mesh.edit_ob == 1) {
       /* In the case of single ghost object edit (common case for retopology):
        * we clear the depth buffer so that only the depth of the retopo mesh
@@ -407,7 +388,11 @@ void OVERLAY_edit_mesh_draw(OVERLAY_Data *vedata)
       GPU_framebuffer_clear_depth(fbl->overlay_default_fb, 1.0f);
     }
 
-    DRW_draw_pass(psl->edit_mesh_depth_ps[IN_FRONT]);
+    if (!DRW_pass_is_empty(psl->edit_mesh_depth_ps[IN_FRONT])) {
+      DRW_view_set_active(NULL);
+      DRW_draw_pass(psl->edit_mesh_depth_ps[IN_FRONT]);
+    }
+
     overlay_edit_mesh_draw_components(psl, pd, true);
   }
 }

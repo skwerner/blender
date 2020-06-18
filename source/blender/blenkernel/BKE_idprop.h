@@ -83,6 +83,8 @@ void IDP_FreeString(struct IDProperty *prop) ATTR_NONNULL();
 
 typedef void (*IDPWalkFunc)(void *userData, IDProperty *idp);
 
+void IDP_AssignID(IDProperty *prop, ID *id, const int flag);
+
 /*-------- Group Functions -------*/
 
 /** Sync values from one group to another, only where they match */
@@ -176,6 +178,17 @@ void IDP_Reset(IDProperty *prop, const IDProperty *reference);
 #  define IDP_IDPArray(prop) ((IDProperty *)(prop)->data.pointer)
 #  define IDP_Id(prop) ((ID *)(prop)->data.pointer)
 #endif
+
+/**
+ * Call a callback for each idproperty in the hierarchy under given root one (included).
+ *
+ */
+typedef void (*IDPForeachPropertyCallback)(IDProperty *id_property, void *user_data);
+
+void IDP_foreach_property(struct IDProperty *id_property_root,
+                          const int type_filter,
+                          IDPForeachPropertyCallback callback,
+                          void *user_data);
 
 /* Format IDProperty as strings */
 char *IDP_reprN(const struct IDProperty *prop, uint *r_len);

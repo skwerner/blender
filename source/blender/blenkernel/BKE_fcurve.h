@@ -24,27 +24,26 @@
  * \ingroup bke
  */
 
+#include "DNA_curve_types.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 struct ChannelDriver;
-struct DriverTarget;
-struct DriverVar;
 struct FCM_EnvelopeData;
 struct FCurve;
 struct FModifier;
 
 struct AnimData;
 struct BezTriple;
+struct LibraryForeachIDData;
 struct PathResolvedRNA;
 struct PointerRNA;
 struct PropertyRNA;
 struct StructRNA;
 struct bAction;
 struct bContext;
-
-#include "DNA_curve_types.h"
 
 /* ************** Keyframe Tools ***************** */
 
@@ -55,66 +54,6 @@ typedef struct CfraElem {
 } CfraElem;
 
 void bezt_add_to_cfra_elem(ListBase *lb, struct BezTriple *bezt);
-
-/* ************** F-Curve Drivers ***************** */
-
-/* With these iterators for convenience, the variables "tarIndex" and "dtar" can be
- * accessed directly from the code using them, but it is not recommended that their
- * values be changed to point at other slots...
- */
-
-/* convenience looper over ALL driver targets for a given variable (even the unused ones) */
-#define DRIVER_TARGETS_LOOPER_BEGIN(dvar) \
-  { \
-    DriverTarget *dtar = &dvar->targets[0]; \
-    int tarIndex = 0; \
-    for (; tarIndex < MAX_DRIVER_TARGETS; tarIndex++, dtar++)
-
-/* convenience looper over USED driver targets only */
-#define DRIVER_TARGETS_USED_LOOPER_BEGIN(dvar) \
-  { \
-    DriverTarget *dtar = &dvar->targets[0]; \
-    int tarIndex = 0; \
-    for (; tarIndex < dvar->num_targets; tarIndex++, dtar++)
-
-/* tidy up for driver targets loopers */
-#define DRIVER_TARGETS_LOOPER_END \
-  } \
-  ((void)0)
-
-/* ---------------------- */
-
-void fcurve_free_driver(struct FCurve *fcu);
-struct ChannelDriver *fcurve_copy_driver(const struct ChannelDriver *driver);
-
-void driver_variables_copy(struct ListBase *dst_list, const struct ListBase *src_list);
-
-void BKE_driver_target_matrix_to_rot_channels(
-    float mat[4][4], int auto_order, int rotation_mode, int channel, bool angles, float r_buf[4]);
-
-void driver_free_variable(struct ListBase *variables, struct DriverVar *dvar);
-void driver_free_variable_ex(struct ChannelDriver *driver, struct DriverVar *dvar);
-
-void driver_change_variable_type(struct DriverVar *dvar, int type);
-void driver_variable_name_validate(struct DriverVar *dvar);
-struct DriverVar *driver_add_new_variable(struct ChannelDriver *driver);
-
-float driver_get_variable_value(struct ChannelDriver *driver, struct DriverVar *dvar);
-bool driver_get_variable_property(struct ChannelDriver *driver,
-                                  struct DriverTarget *dtar,
-                                  struct PointerRNA *r_ptr,
-                                  struct PropertyRNA **r_prop,
-                                  int *r_index);
-
-bool BKE_driver_has_simple_expression(struct ChannelDriver *driver);
-void BKE_driver_invalidate_expression(struct ChannelDriver *driver,
-                                      bool expr_changed,
-                                      bool varname_changed);
-
-float evaluate_driver(struct PathResolvedRNA *anim_rna,
-                      struct ChannelDriver *driver,
-                      struct ChannelDriver *driver_orig,
-                      const float evaltime);
 
 /* ************** F-Curve Modifiers *************** */
 
@@ -240,17 +179,19 @@ int BKE_fcm_envelope_find_index(struct FCM_EnvelopeData *array,
 #define BEZT_BINARYSEARCH_THRESH 0.01f /* was 0.00001, but giving errors */
 
 /* -------- Data Management  --------  */
+struct FCurve *BKE_fcurve_create(void);
+void BKE_fcurve_free(struct FCurve *fcu);
+struct FCurve *BKE_fcurve_copy(const struct FCurve *fcu);
 
-void free_fcurve(struct FCurve *fcu);
-struct FCurve *copy_fcurve(const struct FCurve *fcu);
+void BKE_fcurves_free(ListBase *list);
+void BKE_fcurves_copy(ListBase *dst, ListBase *src);
 
-void free_fcurves(ListBase *list);
-void copy_fcurves(ListBase *dst, ListBase *src);
+void BKE_fcurve_foreach_id(struct FCurve *fcu, struct LibraryForeachIDData *data);
 
 /* find matching F-Curve in the given list of F-Curves */
-struct FCurve *list_find_fcurve(ListBase *list, const char rna_path[], const int array_index);
+struct FCurve *BKE_fcurve_find(ListBase *list, const char rna_path[], const int array_index);
 
-struct FCurve *iter_step_fcurve(struct FCurve *fcu_iter, const char rna_path[]);
+struct FCurve *BKE_fcurve_iter_step(struct FCurve *fcu_iter, const char rna_path[]);
 
 /* high level function to get an fcurve from C without having the rna */
 struct FCurve *id_data_find_fcurve(
@@ -258,31 +199,28 @@ struct FCurve *id_data_find_fcurve(
 
 /* Get list of LinkData's containing pointers to the F-Curves which control the types of data
  * indicated
- * e.g.  numMatches = list_find_data_fcurves(matches, &act->curves, "pose.bones[", "MyFancyBone");
+ * e.g.  numMatches = BKE_fcurves_filter(matches, &act->curves, "pose.bones[", "MyFancyBone");
  */
-int list_find_data_fcurves(ListBase *dst,
-                           ListBase *src,
-                           const char *dataPrefix,
-                           const char *dataName);
+int BKE_fcurves_filter(ListBase *dst, ListBase *src, const char *dataPrefix, const char *dataName);
 
 /* Find an f-curve based on an rna property. */
-struct FCurve *rna_get_fcurve(struct PointerRNA *ptr,
-                              struct PropertyRNA *prop,
-                              int rnaindex,
-                              struct AnimData **r_adt,
-                              struct bAction **r_action,
-                              bool *r_driven,
-                              bool *r_special);
+struct FCurve *BKE_fcurve_find_by_rna(struct PointerRNA *ptr,
+                                      struct PropertyRNA *prop,
+                                      int rnaindex,
+                                      struct AnimData **r_adt,
+                                      struct bAction **r_action,
+                                      bool *r_driven,
+                                      bool *r_special);
 /* Same as above, but takes a context data,
  * temp hack needed for complex paths like texture ones. */
-struct FCurve *rna_get_fcurve_context_ui(struct bContext *C,
-                                         struct PointerRNA *ptr,
-                                         struct PropertyRNA *prop,
-                                         int rnaindex,
-                                         struct AnimData **r_adt,
-                                         struct bAction **r_action,
-                                         bool *r_driven,
-                                         bool *r_special);
+struct FCurve *BKE_fcurve_find_by_rna_context_ui(struct bContext *C,
+                                                 struct PointerRNA *ptr,
+                                                 struct PropertyRNA *prop,
+                                                 int rnaindex,
+                                                 struct AnimData **r_animdata,
+                                                 struct bAction **r_action,
+                                                 bool *r_driven,
+                                                 bool *r_special);
 
 /* Binary search algorithm for finding where to 'insert' BezTriple with given frame number.
  * Returns the index to insert at (data already at that index will be offset if replace is 0)
@@ -290,25 +228,25 @@ struct FCurve *rna_get_fcurve_context_ui(struct bContext *C,
 int binarysearch_bezt_index(struct BezTriple array[], float frame, int arraylen, bool *r_replace);
 
 /* get the time extents for F-Curve */
-bool calc_fcurve_range(
+bool BKE_fcurve_calc_range(
     struct FCurve *fcu, float *min, float *max, const bool do_sel_only, const bool do_min_length);
 
 /* get the bounding-box extents for F-Curve */
-bool calc_fcurve_bounds(struct FCurve *fcu,
-                        float *xmin,
-                        float *xmax,
-                        float *ymin,
-                        float *ymax,
-                        const bool do_sel_only,
-                        const bool include_handles);
+bool BKE_fcurve_calc_bounds(struct FCurve *fcu,
+                            float *xmin,
+                            float *xmax,
+                            float *ymin,
+                            float *ymax,
+                            const bool do_sel_only,
+                            const bool include_handles);
 
 /* .............. */
 
 /* Are keyframes on F-Curve of any use (to final result, and to show in editors)? */
-bool fcurve_are_keyframes_usable(struct FCurve *fcu);
+bool BKE_fcurve_are_keyframes_usable(struct FCurve *fcu);
 
 /* Can keyframes be added to F-Curve? */
-bool fcurve_is_keyframable(struct FCurve *fcu);
+bool BKE_fcurve_is_keyframable(struct FCurve *fcu);
 bool BKE_fcurve_is_protected(struct FCurve *fcu);
 
 /* The curve is an infinite cycle via Cycles modifier */

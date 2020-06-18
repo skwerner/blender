@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
@@ -61,18 +61,31 @@
 #include "BLI_math_geom.h"
 #include "BLI_stack.h"
 
+#include "BLT_translation.h"
+
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
-#include "DNA_object_types.h"
 #include "DNA_modifier_types.h"
+#include "DNA_object_types.h"
+#include "DNA_screen_types.h"
 
+#include "BKE_context.h"
 #include "BKE_deform.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_mapping.h"
 #include "BKE_modifier.h"
+#include "BKE_screen.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
+
+#include "WM_types.h" /* For skin mark clear operator UI. */
 
 #include "MOD_modifiertypes.h"
+#include "MOD_ui_common.h"
 
 #include "bmesh.h"
 
@@ -922,7 +935,13 @@ static Mesh *subdivide_base(Mesh *orig)
 
     u = e->v1;
     radrat = (half_v2(outnode[e->v2].radius) / half_v2(outnode[e->v1].radius));
-    radrat = (radrat + 1) / 2;
+    if (isfinite(radrat)) {
+      radrat = (radrat + 1) / 2;
+    }
+    else {
+      /* Happens when skin is scaled to zero. */
+      radrat = 1.0f;
+    }
 
     /* Add vertices and edge segments */
     for (j = 0; j < edge_subd[i]; j++, v++, outedge++) {
@@ -943,7 +962,7 @@ static Mesh *subdivide_base(Mesh *orig)
         weight = interpf(vg->w2, vg->w1, t);
 
         if (weight > 0) {
-          defvert_add_index_notest(&outdvert[v], vg->def_nr, weight);
+          BKE_defvert_add_index_notest(&outdvert[v], vg->def_nr, weight);
         }
       }
 
@@ -1058,7 +1077,7 @@ static void output_frames(BMesh *bm, SkinNode *sn, const MDeformVert *input_dver
           dv = CustomData_bmesh_get(&bm->vdata, v->head.data, CD_MDEFORMVERT);
 
           BLI_assert(dv->totweight == 0);
-          defvert_copy(dv, input_dvert);
+          BKE_defvert_copy(dv, input_dvert);
         }
       }
     }
@@ -1779,7 +1798,7 @@ static BMesh *build_skin(SkinNode *skin_nodes,
   skin_update_merged_vertices(skin_nodes, totvert);
 
   if (!skin_output_branch_hulls(&so, skin_nodes, totvert, emap, medge)) {
-    modifier_setError(&smd->modifier, "Hull error");
+    BKE_modifier_set_error(&smd->modifier, "Hull error");
   }
 
   /* Merge triangles here in the hope of providing better target
@@ -1862,7 +1881,7 @@ static Mesh *base_skin(Mesh *origmesh, SkinModifierData *smd)
   MEM_freeN(emapmem);
 
   if (!has_valid_root) {
-    modifier_setError(
+    BKE_modifier_set_error(
         &smd->modifier,
         "No valid root vertex found (you need one per mesh island you want to skin)");
   }
@@ -1911,7 +1930,7 @@ static void initData(ModifierData *md)
   smd->symmetry_axes = MOD_SKIN_SYMM_X;
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *UNUSED(ctx), Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *UNUSED(ctx), Mesh *mesh)
 {
   Mesh *result;
 
@@ -1928,6 +1947,64 @@ static void requiredDataMask(Object *UNUSED(ob),
   r_cddata_masks->vmask |= CD_MASK_MVERT_SKIN | CD_MASK_MDEFORMVERT;
 }
 
+static void panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *row;
+  uiLayout *layout = panel->layout;
+  int toggles_flag = UI_ITEM_R_TOGGLE | UI_ITEM_R_FORCE_BLANK_DECORATE;
+
+  PointerRNA ptr;
+  PointerRNA ob_ptr;
+  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+
+  PointerRNA op_ptr;
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, &ptr, "branch_smoothing", 0, NULL, ICON_NONE);
+
+  row = uiLayoutRowWithHeading(layout, true, IFACE_("Symmetry"));
+  uiItemR(row, &ptr, "use_x_symmetry", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, &ptr, "use_y_symmetry", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, &ptr, "use_z_symmetry", toggles_flag, NULL, ICON_NONE);
+
+  uiItemR(layout, &ptr, "use_smooth_shade", 0, NULL, ICON_NONE);
+
+  row = uiLayoutRow(layout, false);
+  uiItemO(row, IFACE_("Create Armature"), ICON_NONE, "OBJECT_OT_skin_armature_create");
+  uiItemO(row, NULL, ICON_NONE, "MESH_OT_customdata_skin_add");
+
+  row = uiLayoutRow(layout, true);
+  uiItemFullO(row,
+              "OBJECT_OT_skin_loose_mark_clear",
+              IFACE_("Mark Loose"),
+              ICON_NONE,
+              NULL,
+              WM_OP_EXEC_DEFAULT,
+              0,
+              &op_ptr);
+  RNA_enum_set(&op_ptr, "action", 0); /* SKIN_LOOSE_MARK */
+  uiItemFullO(row,
+              "OBJECT_OT_skin_loose_mark_clear",
+              IFACE_("Clear Loose"),
+              ICON_NONE,
+              NULL,
+              WM_OP_EXEC_DEFAULT,
+              0,
+              &op_ptr);
+  RNA_enum_set(&op_ptr, "action", 1); /* SKIN_LOOSE_CLEAR */
+
+  uiItemO(layout, IFACE_("Mark Root"), ICON_NONE, "OBJECT_OT_skin_root_mark");
+  uiItemO(layout, IFACE_("Equalize Radii"), ICON_NONE, "OBJECT_OT_skin_radii_equalize");
+
+  modifier_panel_end(layout, &ptr);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  modifier_panel_register(region_type, eModifierType_Skin, panel_draw);
+}
+
 ModifierTypeInfo modifierType_Skin = {
     /* name */ "Skin",
     /* structName */ "SkinModifierData",
@@ -1935,13 +2012,16 @@ ModifierTypeInfo modifierType_Skin = {
     /* type */ eModifierTypeType_Constructive,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsEditmode,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ NULL,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,
@@ -1952,5 +2032,9 @@ ModifierTypeInfo modifierType_Skin = {
     /* dependsOnNormals */ NULL,
     /* foreachObjectLink */ NULL,
     /* foreachIDLink */ NULL,
+    /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

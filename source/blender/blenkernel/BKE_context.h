@@ -25,6 +25,7 @@
  */
 
 #include "DNA_listBase.h"
+#include "DNA_object_enums.h"
 #include "RNA_types.h"
 
 #ifdef __cplusplus
@@ -65,8 +66,6 @@ struct bPoseChannel;
 struct bScreen;
 struct wmWindow;
 struct wmWindowManager;
-
-#include "DNA_object_enums.h"
 
 /* Structs */
 
@@ -115,8 +114,9 @@ typedef enum eContextObjectMode {
   CTX_MODE_EDIT_GPENCIL,
   CTX_MODE_SCULPT_GPENCIL,
   CTX_MODE_WEIGHT_GPENCIL,
+  CTX_MODE_VERTEX_GPENCIL,
 } eContextObjectMode;
-#define CTX_MODE_NUM (CTX_MODE_WEIGHT_GPENCIL + 1)
+#define CTX_MODE_NUM (CTX_MODE_VERTEX_GPENCIL + 1)
 
 /* Context */
 
@@ -177,7 +177,7 @@ struct SpaceTopBar *CTX_wm_space_topbar(const bContext *C);
 void CTX_wm_manager_set(bContext *C, struct wmWindowManager *wm);
 void CTX_wm_window_set(bContext *C, struct wmWindow *win);
 void CTX_wm_screen_set(bContext *C, struct bScreen *screen); /* to be removed */
-void CTX_wm_area_set(bContext *C, struct ScrArea *sa);
+void CTX_wm_area_set(bContext *C, struct ScrArea *area);
 void CTX_wm_region_set(bContext *C, struct ARegion *region);
 void CTX_wm_menu_set(bContext *C, struct ARegion *menu);
 void CTX_wm_gizmo_group_set(bContext *C, struct wmGizmoGroup *gzgroup);

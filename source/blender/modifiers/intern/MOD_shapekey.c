@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -25,8 +25,8 @@
 
 #include "BLI_math.h"
 
-#include "DNA_mesh_types.h"
 #include "DNA_key_types.h"
+#include "DNA_mesh_types.h"
 
 #include "BKE_key.h"
 #include "BKE_particle.h"
@@ -122,7 +122,7 @@ ModifierTypeInfo modifierType_ShapeKey = {
     /* structName */ "ShapeKeyModifierData",
     /* structSize */ sizeof(ShapeKeyModifierData),
     /* type */ eModifierTypeType_OnlyDeform,
-    /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsLattice |
+    /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsVertexCosOnly |
         eModifierTypeFlag_SupportsEditmode,
 
     /* copyData */ NULL,
@@ -131,7 +131,10 @@ ModifierTypeInfo modifierType_ShapeKey = {
     /* deformMatrices */ deformMatrices,
     /* deformVertsEM */ deformVertsEM,
     /* deformMatricesEM */ deformMatricesEM,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ NULL,
     /* requiredDataMask */ NULL,
@@ -144,4 +147,7 @@ ModifierTypeInfo modifierType_ShapeKey = {
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ NULL,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

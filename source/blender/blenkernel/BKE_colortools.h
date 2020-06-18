@@ -23,6 +23,10 @@
  * \ingroup bke
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct ColorManagedColorspaceSettings;
 struct ColorManagedDisplaySettings;
 struct ColorManagedViewSettings;
@@ -33,6 +37,8 @@ struct Histogram;
 struct ImBuf;
 struct Scopes;
 struct rctf;
+struct BlendWriter;
+struct BlendDataReader;
 
 void BKE_curvemapping_set_defaults(
     struct CurveMapping *cumap, int tot, float minx, float miny, float maxx, float maxy);
@@ -96,6 +102,11 @@ void BKE_curvemapping_table_RGBA(const struct CurveMapping *cumap, float **array
 /* non-const, these modify the curve */
 void BKE_curvemapping_premultiply(struct CurveMapping *cumap, int restore);
 
+void BKE_curvemapping_blend_write(struct BlendWriter *writer, const struct CurveMapping *cumap);
+void BKE_curvemapping_curves_blend_write(struct BlendWriter *writer,
+                                         const struct CurveMapping *cumap);
+void BKE_curvemapping_blend_read(struct BlendDataReader *reader, struct CurveMapping *cumap);
+
 void BKE_histogram_update_sample_line(struct Histogram *hist,
                                       struct ImBuf *ibuf,
                                       const struct ColorManagedViewSettings *view_settings,
@@ -137,4 +148,9 @@ void BKE_color_managed_colorspace_settings_copy(
 bool BKE_color_managed_colorspace_settings_equals(
     const struct ColorManagedColorspaceSettings *settings1,
     const struct ColorManagedColorspaceSettings *settings2);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

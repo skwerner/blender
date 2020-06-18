@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -27,21 +27,33 @@
 
 #include "BLI_math.h"
 
+#include "BLT_translation.h"
+
+#include "DNA_curveprofile_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
-#include "DNA_curveprofile_types.h"
+#include "DNA_screen_types.h"
 
+#include "BKE_context.h"
+#include "BKE_curveprofile.h"
 #include "BKE_deform.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
+#include "BKE_screen.h"
 
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
+
+#include "MOD_ui_common.h"
 #include "MOD_util.h"
 
+#include "BKE_curveprofile.h"
 #include "bmesh.h"
 #include "bmesh_tools.h"
-#include "BKE_curveprofile.h"
 
 #include "DEG_depsgraph_query.h"
 
@@ -72,7 +84,7 @@ static void copyData(const ModifierData *md_src, ModifierData *md_dst, const int
   const BevelModifierData *bmd_src = (const BevelModifierData *)md_src;
   BevelModifierData *bmd_dst = (BevelModifierData *)md_dst;
 
-  modifier_copyData_generic(md_src, md_dst, flag);
+  BKE_modifier_copydata_generic(md_src, md_dst, flag);
   bmd_dst->custom_profile = BKE_curveprofile_copy(bmd_src->custom_profile);
 }
 
@@ -91,7 +103,7 @@ static void requiredDataMask(Object *UNUSED(ob),
 /*
  * This calls the new bevel code (added since 2.64)
  */
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   Mesh *result;
   BMesh *bm;
@@ -118,6 +130,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   const float spread = bmd->spread;
   const bool use_custom_profile = (bmd->flags & MOD_BEVEL_CUSTOM_PROFILE);
   const int vmesh_method = bmd->vmesh_method;
+  const bool invert_vgroup = (bmd->flags & MOD_BEVEL_INVERT_VGROUP) != 0;
 
   bm = BKE_mesh_to_bmesh_ex(mesh,
                             &(struct BMeshCreateParams){0},
@@ -146,7 +159,10 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
         }
       }
       else if (vgroup != -1) {
-        weight = defvert_array_find_weight_safe(dvert, BM_elem_index_get(v), vgroup);
+        weight = invert_vgroup ?
+                     1.0f -
+                         BKE_defvert_array_find_weight_safe(dvert, BM_elem_index_get(v), vgroup) :
+                     BKE_defvert_array_find_weight_safe(dvert, BM_elem_index_get(v), vgroup);
         /* Check is against 0.5 rather than != 0.0 because cascaded bevel modifiers will
          * interpolate weights for newly created vertices, and may cause unexpected "selection" */
         if (weight < 0.5f) {
@@ -180,8 +196,14 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
           }
         }
         else if (vgroup != -1) {
-          weight = defvert_array_find_weight_safe(dvert, BM_elem_index_get(e->v1), vgroup);
-          weight2 = defvert_array_find_weight_safe(dvert, BM_elem_index_get(e->v2), vgroup);
+          weight = invert_vgroup ?
+                       1.0f - BKE_defvert_array_find_weight_safe(
+                                  dvert, BM_elem_index_get(e->v1), vgroup) :
+                       BKE_defvert_array_find_weight_safe(dvert, BM_elem_index_get(e->v1), vgroup);
+          weight2 = invert_vgroup ? 1.0f - BKE_defvert_array_find_weight_safe(
+                                               dvert, BM_elem_index_get(e->v2), vgroup) :
+                                    BKE_defvert_array_find_weight_safe(
+                                        dvert, BM_elem_index_get(e->v2), vgroup);
           if (weight < 0.5f || weight2 < 0.5f) {
             continue;
           }
@@ -196,7 +218,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   Object *ob = ctx->object;
 
   if (harden_normals && (ob->type == OB_MESH) && !(((Mesh *)ob->data)->flag & ME_AUTOSMOOTH)) {
-    modifier_setError(md, "Enable 'Auto Smooth' option in mesh settings for hardening");
+    BKE_modifier_set_error(md, "Enable 'Auto Smooth' in Object Data Properties");
     harden_normals = false;
   }
 
@@ -253,6 +275,149 @@ static bool isDisabled(const Scene *UNUSED(scene), ModifierData *md, bool UNUSED
   return (bmd->value == 0.0f);
 }
 
+static void panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *col;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  PointerRNA ob_ptr;
+  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+
+  uiLayoutSetPropSep(layout, true);
+
+  col = uiLayoutColumn(layout, false);
+  const char *offset_name = "";
+  if (RNA_enum_get(&ptr, "offset_type") == BEVEL_AMT_PERCENT) {
+    uiItemR(col, &ptr, "width_pct", 0, NULL, ICON_NONE);
+  }
+  else {
+    switch (RNA_enum_get(&ptr, "offset_type")) {
+      case BEVEL_AMT_DEPTH:
+        offset_name = "Depth";
+        break;
+      case BEVEL_AMT_WIDTH:
+        offset_name = "Width";
+        break;
+      case BEVEL_AMT_OFFSET:
+        offset_name = "Offset";
+        break;
+    }
+    uiItemR(col, &ptr, "width", 0, IFACE_(offset_name), ICON_NONE);
+  }
+  uiItemR(col, &ptr, "offset_type", 0, NULL, ICON_NONE);
+
+  uiItemR(layout, &ptr, "segments", 0, NULL, ICON_NONE);
+
+  uiItemS(layout);
+
+  uiItemR(layout, &ptr, "affect", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+
+  uiItemS(layout);
+
+  col = uiLayoutColumn(layout, false);
+  uiItemR(col, &ptr, "limit_method", 0, NULL, ICON_NONE);
+  int limit_method = RNA_enum_get(&ptr, "limit_method");
+  if (limit_method == MOD_BEVEL_ANGLE) {
+    uiItemR(col, &ptr, "angle_limit", 0, NULL, ICON_NONE);
+  }
+  else if (limit_method == MOD_BEVEL_VGROUP) {
+    modifier_vgroup_ui(col, &ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
+  }
+
+  modifier_panel_end(layout, &ptr);
+}
+
+static void geometry_panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, &ptr, "miter_inner", 0, IFACE_("Miter Inner"), ICON_NONE);
+  uiItemR(layout, &ptr, "miter_outer", 0, IFACE_("Outer"), ICON_NONE);
+  if (RNA_enum_get(&ptr, "miter_inner") == BEVEL_MITER_ARC) {
+    uiItemR(layout, &ptr, "spread", 0, NULL, ICON_NONE);
+  }
+  uiItemS(layout);
+
+  uiItemR(layout, &ptr, "vmesh_method", 0, IFACE_("Intersections"), ICON_NONE);
+  uiItemR(layout, &ptr, "use_clamp_overlap", 0, NULL, ICON_NONE);
+  uiItemR(layout, &ptr, "loop_slide", 0, NULL, ICON_NONE);
+}
+
+static void shading_panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *col;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, &ptr, "harden_normals", 0, NULL, ICON_NONE);
+
+  col = uiLayoutColumnWithHeading(layout, true, IFACE_("Mark"));
+  uiItemR(col, &ptr, "mark_seam", 0, IFACE_("Seam"), ICON_NONE);
+  uiItemR(col, &ptr, "mark_sharp", 0, IFACE_("Sharp"), ICON_NONE);
+
+  uiItemR(layout, &ptr, "material", 0, NULL, ICON_NONE);
+  uiItemR(layout, &ptr, "face_strength_mode", 0, NULL, ICON_NONE);
+}
+
+static void profile_panel_draw(const bContext *C, Panel *panel)
+{
+  PointerRNA ptr;
+  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  uiLayout *layout = panel->layout;
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, &ptr, "profile", UI_ITEM_R_SLIDER, IFACE_("Shape"), ICON_NONE);
+}
+
+static void custom_profile_panel_draw_header(const bContext *C, Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+
+  uiItemR(layout, &ptr, "use_custom_profile", 0, NULL, ICON_NONE);
+}
+
+static void custom_profile_panel_draw(const bContext *C, Panel *panel)
+{
+  PointerRNA ptr;
+  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  uiLayout *layout = panel->layout;
+
+  uiLayoutSetActive(layout, RNA_boolean_get(&ptr, "use_custom_profile"));
+
+  uiTemplateCurveProfile(layout, &ptr, "custom_profile");
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  PanelType *panel_type = modifier_panel_register(region_type, eModifierType_Bevel, panel_draw);
+  PanelType *bevel_profil_panel = modifier_subpanel_register(
+      region_type, "profile", "Profile", NULL, profile_panel_draw, panel_type);
+  modifier_subpanel_register(region_type,
+                             "custom",
+                             "",
+                             custom_profile_panel_draw_header,
+                             custom_profile_panel_draw,
+                             bevel_profil_panel);
+  modifier_subpanel_register(
+      region_type, "geometry", "Geometry", NULL, geometry_panel_draw, panel_type);
+  modifier_subpanel_register(
+      region_type, "shading", "Shading", NULL, shading_panel_draw, panel_type);
+}
+
 ModifierTypeInfo modifierType_Bevel = {
     /* name */ "Bevel",
     /* structName */ "BevelModifierData",
@@ -265,7 +430,10 @@ ModifierTypeInfo modifierType_Bevel = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,
     /* freeData */ freeData,
@@ -277,4 +445,7 @@ ModifierTypeInfo modifierType_Bevel = {
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* uiPanel */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

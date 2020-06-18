@@ -50,7 +50,7 @@ void animated_property_store_cb(ID *id, FCurve *fcurve, void *data_v)
 {
   AnimatedPropertyStoreCalbackData *data = reinterpret_cast<AnimatedPropertyStoreCalbackData *>(
       data_v);
-  if (fcurve->rna_path == NULL || fcurve->rna_path[0] == '\0') {
+  if (fcurve->rna_path == nullptr || fcurve->rna_path[0] == '\0') {
     return;
   }
   if (id != data->id) {
@@ -70,7 +70,7 @@ void animated_property_store_cb(ID *id, FCurve *fcurve, void *data_v)
     return;
   }
 
-  data->backup->values_backup.emplace_back(fcurve->rna_path, fcurve->array_index, value);
+  data->backup->values_backup.append({fcurve->rna_path, fcurve->array_index, value});
 }
 
 }  // namespace

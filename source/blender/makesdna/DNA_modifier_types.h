@@ -103,7 +103,8 @@ typedef enum ModifierMode {
   eModifierMode_Render = (1 << 1),
   eModifierMode_Editmode = (1 << 2),
   eModifierMode_OnCage = (1 << 3),
-  eModifierMode_Expanded = (1 << 4),
+  /* Old modifier box expansion, just for versioning. */
+  eModifierMode_Expanded_DEPRECATED = (1 << 4),
   eModifierMode_Virtual = (1 << 5),
   eModifierMode_ApplyOnSpline = (1 << 6),
   eModifierMode_DisableTemporary = (1u << 31),
@@ -115,7 +116,8 @@ typedef struct ModifierData {
   int type, mode;
   int stackindex;
   short flag;
-  char _pad[2];
+  /* An "expand" bit for each of the modifier's (sub)panels. */
+  short ui_expand_flag;
   /** MAX_NAME. */
   char name[64];
 
@@ -444,6 +446,7 @@ enum {
   MOD_BEVEL_AMT_WIDTH = 1,
   MOD_BEVEL_AMT_DEPTH = 2,
   MOD_BEVEL_AMT_PERCENT = 3,
+  MOD_BEVEL_AMT_ABSOLUTE = 4,
 };
 
 /* BevelModifierData->edge_flags */
@@ -691,12 +694,12 @@ enum {
 typedef struct ArmatureModifierData {
   ModifierData modifier;
 
-  /** Deformflag replaces armature->deformflag. */
+  /** #eArmature_DeformFlag use instead of #bArmature.deformflag. */
   short deformflag, multi;
   char _pad2[4];
   struct Object *object;
-  /** Stored input of previous modifier, for vertexgroup blending. */
-  float *prevCos;
+  /** Stored input of previous modifier, for vertex-group blending. */
+  float (*vert_coords_prev)[3];
   /** MAX_VGROUP_NAME. */
   char defgrp_name[64];
 } ArmatureModifierData;
@@ -1505,6 +1508,8 @@ enum {
 enum {
   MOD_WVG_MIX_INVERT_VGROUP_MASK = (1 << 0),
   MOD_WVG_MIX_WEIGHTS_NORMALIZE = (1 << 1),
+  MOD_WVG_MIX_INVERT_VGROUP_A = (1 << 2),
+  MOD_WVG_MIX_INVERT_VGROUP_B = (1 << 3),
 };
 
 typedef struct WeightVGProximityModifierData {

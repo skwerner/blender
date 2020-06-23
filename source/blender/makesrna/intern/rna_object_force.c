@@ -25,6 +25,7 @@
 #include "DNA_object_force_types.h"
 #include "DNA_object_types.h"
 #include "DNA_particle_types.h"
+#include "DNA_pointcache_types.h"
 #include "DNA_scene_types.h"
 
 #include "RNA_define.h"
@@ -1514,6 +1515,15 @@ static void rna_def_field(BlenderRNA *brna)
   RNA_def_property_float_sdna(prop, NULL, "f_flow");
   RNA_def_property_range(prop, 0.0f, 10.0f);
   RNA_def_property_ui_text(prop, "Flow", "Convert effector force into air flow velocity");
+  RNA_def_property_update(prop, 0, "rna_FieldSettings_update");
+
+  prop = RNA_def_property(srna, "wind_factor", PROP_FLOAT, PROP_FACTOR);
+  RNA_def_property_float_sdna(prop, NULL, "f_wind_factor");
+  RNA_def_property_range(prop, 0.0f, 1.0f);
+  RNA_def_property_ui_text(
+      prop,
+      "Wind Factor",
+      "How much the force is reduced when acting parallel to a surface, e.g. cloth");
   RNA_def_property_update(prop, 0, "rna_FieldSettings_update");
 
   /* different ui range to above */

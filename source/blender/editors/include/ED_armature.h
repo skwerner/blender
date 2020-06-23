@@ -120,12 +120,10 @@ typedef struct EditBone {
   } temp;
 } EditBone;
 
-#define BONESEL_ROOT (1 << 28)
-#define BONESEL_TIP (1 << 29)
-#define BONESEL_BONE (1 << 30)
+#define BONESEL_ROOT (1u << 29)
+#define BONESEL_TIP (1u << 30)
+#define BONESEL_BONE (1u << 31)
 #define BONESEL_ANY (BONESEL_TIP | BONESEL_ROOT | BONESEL_BONE)
-
-#define BONESEL_NOSEL (1u << 31u)
 
 /* useful macros */
 #define EBONE_VISIBLE(arm, ebone) \
@@ -176,7 +174,7 @@ void ED_operatormacros_armature(void);
 void ED_keymap_armature(struct wmKeyConfig *keyconf);
 
 /* armature_relations.c */
-int join_armature_exec(struct bContext *C, struct wmOperator *op);
+int ED_armature_join_objects_exec(struct bContext *C, struct wmOperator *op);
 
 /* armature_select.c */
 struct Base *ED_armature_base_and_ebone_from_select_buffer(struct Base **bases,

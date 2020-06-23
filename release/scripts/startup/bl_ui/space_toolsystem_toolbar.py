@@ -802,10 +802,10 @@ class _defs_edit_mesh:
         )
 
     @ToolDef.from_fn
-    def extrude_dissolve_and_intersect():
+    def extrude_manifold():
         return dict(
-            idname="builtin.extrude_dissolve_and_intersect",
-            label="Extrude Dissolve and Intersect",
+            idname="builtin.extrude_manifold",
+            label="Extrude Manifold",
             description=(
                 "Extrude, dissolves edges whose faces form a flat surface and intersect new edges"
             ),
@@ -1021,7 +1021,6 @@ class _defs_edit_curve:
                 sub.prop(cps, "corner_angle", text="")
                 layout.separator()
 
-
             col = layout.column(align=True)
             col.prop(cps, "radius_taper_start", text="Taper Start", slider=True)
             col.prop(cps, "radius_taper_end", text="End", slider=True)
@@ -1030,7 +1029,8 @@ class _defs_edit_curve:
             col.prop(cps, "radius_max", text="Max")
             col.prop(cps, "use_pressure_radius")
 
-            layout.separator()
+            if region_type != 'TOOL_HEADER' or cps.depth_mode == 'SURFACE':
+                layout.separator()
 
             if region_type != 'TOOL_HEADER':
                 row = layout.row()
@@ -1043,7 +1043,6 @@ class _defs_edit_curve:
                 if cps.use_stroke_endpoints:
                     colsub = layout.column(align=True)
                     colsub.prop(cps, "surface_plane")
-
 
         return dict(
             idname="builtin.draw",
@@ -1223,6 +1222,25 @@ class _defs_sculpt:
             idname="builtin.mesh_filter",
             label="Mesh Filter",
             icon="ops.sculpt.mesh_filter",
+            widget=None,
+            keymap=(),
+            draw_settings=draw_settings,
+        )
+
+    @ToolDef.from_fn
+    def cloth_filter():
+        def draw_settings(_context, layout, tool):
+            props = tool.operator_properties("sculpt.cloth_filter")
+            layout.prop(props, "type", expand=False)
+            layout.prop(props, "strength")
+            layout.prop(props, "cloth_mass")
+            layout.prop(props, "cloth_damping")
+            layout.prop(props, "use_face_sets")
+
+        return dict(
+            idname="builtin.cloth_filter",
+            label="Cloth Filter",
+            icon="ops.sculpt.cloth_filter",
             widget=None,
             keymap=(),
             draw_settings=draw_settings,
@@ -2309,7 +2327,7 @@ class VIEW3D_PT_tools_active(ToolSelectPanelHelper, Panel):
             None,
             (
                 _defs_edit_mesh.extrude,
-                _defs_edit_mesh.extrude_dissolve_and_intersect,
+                _defs_edit_mesh.extrude_manifold,
                 _defs_edit_mesh.extrude_normals,
                 _defs_edit_mesh.extrude_individual,
                 _defs_edit_mesh.extrude_cursor,
@@ -2402,6 +2420,7 @@ class VIEW3D_PT_tools_active(ToolSelectPanelHelper, Panel):
             _defs_sculpt.hide_border,
             None,
             _defs_sculpt.mesh_filter,
+            _defs_sculpt.cloth_filter,
             None,
             _defs_transform.translate,
             _defs_transform.rotate,

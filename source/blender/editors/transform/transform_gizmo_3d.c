@@ -39,7 +39,6 @@
 #include "BLI_array_utils.h"
 #include "BLI_listbase.h"
 #include "BLI_math.h"
-#include "BLI_string.h"
 #include "BLI_utildefines.h"
 
 #include "BKE_action.h"
@@ -48,25 +47,20 @@
 #include "BKE_editmesh.h"
 #include "BKE_global.h"
 #include "BKE_gpencil.h"
-#include "BKE_lattice.h"
 #include "BKE_layer.h"
 #include "BKE_object.h"
 #include "BKE_paint.h"
-#include "BKE_particle.h"
 #include "BKE_pointcache.h"
 #include "BKE_scene.h"
-#include "BKE_workspace.h"
 
 #include "DEG_depsgraph.h"
 
 #include "WM_api.h"
 #include "WM_message.h"
-#include "WM_toolsystem.h"
 #include "WM_types.h"
 #include "wm.h"
 
 #include "ED_armature.h"
-#include "ED_curve.h"
 #include "ED_gizmo_library.h"
 #include "ED_gizmo_utils.h"
 #include "ED_gpencil.h"
@@ -89,8 +83,6 @@
 #include "MEM_guardedalloc.h"
 
 #include "GPU_state.h"
-
-#include "DEG_depsgraph_query.h"
 
 /* return codes for select, and drawing flags */
 
@@ -595,7 +587,9 @@ bool gimbal_axis(Object *ob, float gmat[3][3])
       if (pchan->parent) {
         float parent_mat[3][3];
 
-        copy_m3_m4(parent_mat, pchan->parent->pose_mat);
+        copy_m3_m4(parent_mat,
+                   (pchan->bone->flag & BONE_HINGE) ? pchan->parent->bone->arm_mat :
+                                                      pchan->parent->pose_mat);
         mul_m3_m3m3(mat, parent_mat, tmat);
 
         /* needed if object transformation isn't identity */
@@ -633,101 +627,6 @@ bool gimbal_axis(Object *ob, float gmat[3][3])
   }
 
   return 0;
-}
-
-void ED_transform_calc_orientation_from_type(const bContext *C, float r_mat[3][3])
-{
-  ARegion *region = CTX_wm_region(C);
-  Scene *scene = CTX_data_scene(C);
-  ViewLayer *view_layer = CTX_data_view_layer(C);
-  Object *obedit = CTX_data_edit_object(C);
-  RegionView3D *rv3d = region->regiondata;
-  Object *ob = OBACT(view_layer);
-  const short orientation_type = scene->orientation_slots[SCE_ORIENT_DEFAULT].type;
-  const short orientation_index_custom = scene->orientation_slots[SCE_ORIENT_DEFAULT].index_custom;
-  const int pivot_point = scene->toolsettings->transform_pivot_point;
-
-  ED_transform_calc_orientation_from_type_ex(
-      C, r_mat, scene, rv3d, ob, obedit, orientation_type, orientation_index_custom, pivot_point);
-}
-
-void ED_transform_calc_orientation_from_type_ex(const bContext *C,
-                                                float r_mat[3][3],
-                                                /* extra args (can be accessed from context) */
-                                                Scene *scene,
-                                                RegionView3D *rv3d,
-                                                Object *ob,
-                                                Object *obedit,
-                                                const short orientation_type,
-                                                int orientation_index_custom,
-                                                const int pivot_point)
-{
-  bool ok = false;
-
-  switch (orientation_type) {
-    case V3D_ORIENT_GLOBAL: {
-      break; /* nothing to do */
-    }
-    case V3D_ORIENT_GIMBAL: {
-      if (gimbal_axis(ob, r_mat)) {
-        ok = true;
-        break;
-      }
-      /* if not gimbal, fall through to normal */
-      ATTR_FALLTHROUGH;
-    }
-    case V3D_ORIENT_NORMAL: {
-      if (obedit || ob->mode & OB_MODE_POSE) {
-        ED_getTransformOrientationMatrix(C, r_mat, pivot_point);
-        ok = true;
-        break;
-      }
-      /* no break we define 'normal' as 'local' in Object mode */
-      ATTR_FALLTHROUGH;
-    }
-    case V3D_ORIENT_LOCAL: {
-      if (ob->mode & OB_MODE_POSE) {
-        /* each bone moves on its own local axis, but  to avoid confusion,
-         * use the active pones axis for display [#33575], this works as expected on a single bone
-         * and users who select many bones will understand what's going on and what local means
-         * when they start transforming */
-        ED_getTransformOrientationMatrix(C, r_mat, pivot_point);
-        ok = true;
-        break;
-      }
-      copy_m3_m4(r_mat, ob->obmat);
-      normalize_m3(r_mat);
-      ok = true;
-      break;
-    }
-    case V3D_ORIENT_VIEW: {
-      if (rv3d != NULL) {
-        copy_m3_m4(r_mat, rv3d->viewinv);
-        normalize_m3(r_mat);
-        ok = true;
-      }
-      break;
-    }
-    case V3D_ORIENT_CURSOR: {
-      BKE_scene_cursor_rot_to_mat3(&scene->cursor, r_mat);
-      ok = true;
-      break;
-    }
-    case V3D_ORIENT_CUSTOM:
-    default: {
-      BLI_assert(orientation_type >= V3D_ORIENT_CUSTOM);
-      TransformOrientation *custom_orientation = BKE_scene_transform_orientation_find(
-          scene, orientation_index_custom);
-      if (applyTransformOrientation(custom_orientation, r_mat, NULL)) {
-        ok = true;
-      }
-      break;
-    }
-  }
-
-  if (!ok) {
-    unit_m3(r_mat);
-  }
 }
 
 /* centroid, boundbox, of selection */

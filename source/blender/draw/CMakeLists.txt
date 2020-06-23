@@ -34,6 +34,7 @@ set(INC
   ../imbuf
   ../makesdna
   ../makesrna
+  ../nodes
   ../render/extern/include
   ../render/intern/include
   ../windowmanager
@@ -213,6 +214,7 @@ data_to_c_simple(engines/eevee/shaders/effect_downsample_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/effect_downsample_cube_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/effect_gtao_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/effect_velocity_resolve_frag.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/effect_velocity_tile_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/effect_minmaxz_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/effect_mist_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/effect_motion_blur_frag.glsl SRC)
@@ -223,6 +225,8 @@ data_to_c_simple(engines/eevee/shaders/effect_temporal_aa.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/lightprobe_planar_downsample_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/lightprobe_planar_downsample_geom.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/lightprobe_planar_downsample_vert.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/object_motion_frag.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/object_motion_vert.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/prepass_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/prepass_vert.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/shadow_accum_frag.glsl SRC)
@@ -303,8 +307,8 @@ data_to_c_simple(engines/select/shaders/selection_id_3D_vert.glsl SRC)
 data_to_c_simple(engines/select/shaders/selection_id_frag.glsl SRC)
 
 data_to_c_simple(engines/basic/shaders/conservative_depth_geom.glsl SRC)
-data_to_c_simple(engines/basic/shaders/conservative_depth_vert.glsl SRC)
-data_to_c_simple(engines/basic/shaders/conservative_depth_frag.glsl SRC)
+data_to_c_simple(engines/basic/shaders/depth_vert.glsl SRC)
+data_to_c_simple(engines/basic/shaders/depth_frag.glsl SRC)
 
 data_to_c_simple(engines/overlay/shaders/antialiasing_frag.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/antialiasing_vert.glsl SRC)

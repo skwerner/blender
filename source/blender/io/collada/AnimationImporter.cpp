@@ -57,7 +57,7 @@ template<class T> static const char *bc_get_joint_name(T *node)
 
 FCurve *AnimationImporter::create_fcurve(int array_index, const char *rna_path)
 {
-  FCurve *fcu = (FCurve *)MEM_callocN(sizeof(FCurve), "FCurve");
+  FCurve *fcu = BKE_fcurve_create();
   fcu->flag = (FCURVE_VISIBLE | FCURVE_AUTO_HANDLES | FCURVE_SELECTED);
   fcu->rna_path = BLI_strdupn(rna_path, strlen(rna_path));
   fcu->array_index = array_index;
@@ -100,7 +100,7 @@ void AnimationImporter::animation_to_fcurves(COLLADAFW::AnimationCurve *curve)
     case 16: /* matrix */
     {
       for (i = 0; i < dim; i++) {
-        FCurve *fcu = (FCurve *)MEM_callocN(sizeof(FCurve), "FCurve");
+        FCurve *fcu = BKE_fcurve_create();
 
         fcu->flag = (FCURVE_VISIBLE | FCURVE_AUTO_HANDLES | FCURVE_SELECTED);
         fcu->array_index = 0;
@@ -274,7 +274,7 @@ AnimationImporter::~AnimationImporter()
   /* free unused FCurves */
   for (std::vector<FCurve *>::iterator it = unused_curves.begin(); it != unused_curves.end();
        it++) {
-    free_fcurve(*it);
+    BKE_fcurve_free(*it);
   }
 
   if (unused_curves.size()) {
@@ -344,9 +344,11 @@ bool AnimationImporter::write_animation_list(const COLLADAFW::AnimationList *ani
   return true;
 }
 
-/* \todo refactor read_node_transform to not automatically apply anything,
+/**
+ * \todo refactor read_node_transform to not automatically apply anything,
  * but rather return the transform matrix, so caller can do with it what is
- * necessary. Same for \ref get_node_mat */
+ * necessary. Same for \ref get_node_mat
+ */
 void AnimationImporter::read_node_transform(COLLADAFW::Node *node, Object *ob)
 {
   float mat[4][4];
@@ -442,7 +444,7 @@ virtual void AnimationImporter::change_eul_to_quat(Object *ob, bAction *act)
       }
 
       action_groups_remove_channel(act, eulcu[i]);
-      free_fcurve(eulcu[i]);
+      BKE_fcurve_free(eulcu[i]);
     }
 
     chan->rotmode = ROT_MODE_QUAT;

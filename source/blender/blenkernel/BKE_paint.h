@@ -38,6 +38,7 @@ struct CurveMapping;
 struct Depsgraph;
 struct EnumPropertyItem;
 struct GHash;
+struct GSet;
 struct GridPaintMask;
 struct ImagePool;
 struct MLoop;
@@ -239,7 +240,7 @@ typedef struct SculptPoseIKChainSegment {
   float initial_orig[3];
   float initial_head[3];
   float len;
-  float scale;
+  float scale[3];
   float rot[4];
   float *weights;
 
@@ -253,6 +254,7 @@ typedef struct SculptPoseIKChainSegment {
 typedef struct SculptPoseIKChain {
   SculptPoseIKChainSegment *segments;
   int tot_segments;
+  float grab_delta_offset[3];
 } SculptPoseIKChain;
 
 /* Cloth Brush */
@@ -267,6 +269,7 @@ typedef struct SculptClothLengthConstraint {
 typedef struct SculptClothSimulation {
   SculptClothLengthConstraint *length_constraints;
   int tot_length_constraints;
+  struct GSet *created_length_constraints;
   int capacity_length_constraints;
   float *length_constraint_tweak;
 
@@ -314,6 +317,8 @@ typedef struct SculptSession {
   /* Mesh Face Sets */
   /* Total number of polys of the base mesh. */
   int totfaces;
+  /* Face sets store its visibility in the sign of the integer, using the absolute value as the
+   * Face Set ID. Positive IDs are visible, negative IDs are hidden. */
   int *face_sets;
 
   /* BMesh for dynamic topology sculpting */

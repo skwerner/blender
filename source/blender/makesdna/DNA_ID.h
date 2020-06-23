@@ -225,9 +225,6 @@ typedef struct IDOverrideLibrary {
   /** List of IDOverrideProperty structs. */
   ListBase properties;
 
-  short flag;
-  char _pad[6];
-
   /* Read/write data. */
   /* Temp ID storing extra override data (used for differential operations only currently).
    * Always NULL outside of read/write context. */
@@ -235,10 +232,6 @@ typedef struct IDOverrideLibrary {
 
   IDOverrideLibraryRuntime *runtime;
 } IDOverrideLibrary;
-
-enum eOverrideLibrary_Flag {
-  OVERRIDE_LIBRARY_AUTO = 1 << 0, /* Allow automatic generation of overriding rules. */
-};
 
 /* watch it: Sequence has identical beginning. */
 /**
@@ -327,7 +320,7 @@ typedef struct Library {
 
   /* Temp data needed by read/write code. */
   int temp_index;
-  /** See BLENDER_VERSION, BLENDER_SUBVERSION, needed for do_versions. */
+  /** See BLENDER_FILE_VERSION, BLENDER_FILE_SUBVERSION, needed for do_versions. */
   short versionfile, subversionfile;
 } Library;
 
@@ -481,10 +474,6 @@ typedef enum ID_Type {
 
 #define ID_IS_OVERRIDE_LIBRARY_TEMPLATE(_id) \
   (((ID *)(_id))->override_library != NULL && ((ID *)(_id))->override_library->reference == NULL)
-
-#define ID_IS_OVERRIDE_LIBRARY_AUTO(_id) \
-  (!ID_IS_LINKED((_id)) && ID_IS_OVERRIDE_LIBRARY((_id)) && \
-   (((ID *)(_id))->override_library->flag & OVERRIDE_LIBRARY_AUTO))
 
 /* Check whether datablock type is covered by copy-on-write. */
 #define ID_TYPE_IS_COW(_id_type) (!ELEM(_id_type, ID_BR, ID_PAL, ID_IM))
@@ -679,6 +668,15 @@ typedef enum IDRecalcFlag {
    * Applies to movie clips to inform that copy-on-written version is to be refreshed for the new
    * input file or for color space changes. */
   ID_RECALC_SOURCE = (1 << 23),
+
+  /* Virtual recalc tag/marker required for undo in some cases, where actual data does not change
+   * and hence do not require an update, but conceptually we are dealing with something new.
+   *
+   * Current known case: linked IDs made local without requiring any copy. While their users do not
+   * require any update, they have actually been 'virtually' remapped from the linked ID to the
+   * local one.
+   */
+  ID_RECALC_TAG_FOR_UNDO = (1 << 24),
 
   /***************************************************************************
    * Pseudonyms, to have more semantic meaning in the actual code without

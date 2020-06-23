@@ -759,7 +759,7 @@ static void do_version_bbone_scale_fcurve_fix(ListBase *curves, FCurve *fcu)
   /* Update F-Curve's path. */
   if (replace_bbone_scale_rnapath(&fcu->rna_path)) {
     /* If matched, duplicate the curve and tweak name. */
-    FCurve *second = copy_fcurve(fcu);
+    FCurve *second = BKE_fcurve_copy(fcu);
 
     second->rna_path[strlen(second->rna_path) - 1] = 'y';
 
@@ -5075,6 +5075,23 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
    * \note Keep this message at the bottom of the function.
    */
   {
+    /* Set the cloth wind factor to 1 for old forces. */
+    if (!DNA_struct_elem_find(fd->filesdna, "PartDeflect", "float", "f_wind_factor")) {
+      LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
+        if (ob->pd) {
+          ob->pd->f_wind_factor = 1.0f;
+        }
+      }
+      LISTBASE_FOREACH (ParticleSettings *, part, &bmain->particles) {
+        if (part->pd) {
+          part->pd->f_wind_factor = 1.0f;
+        }
+        if (part->pd2) {
+          part->pd2->f_wind_factor = 1.0f;
+        }
+      }
+    }
+
     /* Keep this block, even when empty. */
   }
 }

@@ -158,10 +158,10 @@ static GLenum gpu_get_mipmap_filter(bool mag)
 }
 
 /* Anisotropic filtering settings */
-void GPU_set_anisotropic(Main *bmain, float value)
+void GPU_set_anisotropic(float value)
 {
   if (GTS.anisotropic != value) {
-    GPU_free_images(bmain);
+    GPU_samplers_free();
 
     /* Clamp value to the maximum value the graphics card supports */
     const float max = GPU_max_texture_anisotropy();
@@ -170,6 +170,8 @@ void GPU_set_anisotropic(Main *bmain, float value)
     }
 
     GTS.anisotropic = value;
+
+    GPU_samplers_init();
   }
 }
 
@@ -449,21 +451,11 @@ static uint gpu_texture_create_tile_array(Image *ima, ImBuf *main_ibuf)
     BKE_image_release_ibuf(ima, ibuf, NULL);
   }
 
-  glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, gpu_get_mipmap_filter(1));
-
   if (GPU_get_mipmap()) {
     glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, gpu_get_mipmap_filter(0));
     if (ima) {
       ima->gpuflag |= IMA_GPU_MIPMAP_COMPLETE;
     }
-  }
-  else {
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  }
-
-  if (GLEW_EXT_texture_filter_anisotropic) {
-    glTexParameterf(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAX_ANISOTROPY_EXT, GPU_get_anisotropic());
   }
 
   glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
@@ -920,6 +912,11 @@ GPUTexture *GPU_texture_from_blender(Image *ima, ImageUser *iuser, ImBuf *ibuf, 
 
   GPU_texture_orig_size_set(*tex, ibuf_intern->x, ibuf_intern->y);
 
+  if (textarget == GL_TEXTURE_1D_ARRAY) {
+    /* Special for tile mapping. */
+    GPU_texture_mipmap_mode(*tex, false, false);
+  }
+
   return *tex;
 #endif
   return NULL;
@@ -1098,17 +1095,11 @@ void GPU_create_gl_tex(uint *bind,
           GL_TEXTURE_2D, 0, internal_format, rectw, recth, 0, GL_RGBA, GL_UNSIGNED_BYTE, rect);
     }
 
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gpu_get_mipmap_filter(1));
-
     if (GPU_get_mipmap() && mipmap) {
       glGenerateMipmap(GL_TEXTURE_2D);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gpu_get_mipmap_filter(0));
       if (ima) {
         ima->gpuflag |= IMA_GPU_MIPMAP_COMPLETE;
       }
-    }
-    else {
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     }
   }
   else if (textarget == GL_TEXTURE_CUBE_MAP) {
@@ -1132,32 +1123,19 @@ void GPU_create_gl_tex(uint *bind,
         }
       }
 
-      glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, gpu_get_mipmap_filter(1));
-
       if (GPU_get_mipmap() && mipmap) {
         glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
-        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, gpu_get_mipmap_filter(0));
 
         if (ima) {
           ima->gpuflag |= IMA_GPU_MIPMAP_COMPLETE;
         }
       }
-      else {
-        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-      }
-      glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-      glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-      glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 
       gpu_del_cube_map(cube_map);
     }
     else {
       printf("Incorrect envmap size\n");
     }
-  }
-
-  if (GLEW_EXT_texture_filter_anisotropic) {
-    glTexParameterf(textarget, GL_TEXTURE_MAX_ANISOTROPY_EXT, GPU_get_anisotropic());
   }
 
   glBindTexture(textarget, 0);
@@ -1210,10 +1188,6 @@ bool GPU_upload_dxt_texture(ImBuf *ibuf, bool use_srgb)
 
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gpu_get_mipmap_filter(0));
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gpu_get_mipmap_filter(1));
-
-  if (GLEW_EXT_texture_filter_anisotropic) {
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, GPU_get_anisotropic());
-  }
 
   blocksize = (ibuf->dds_data.fourcc == FOURCC_DXT1) ? 8 : 16;
   for (i = 0; i < ibuf->dds_data.nummipmaps && (width || height); i++) {
@@ -1410,7 +1384,7 @@ static void gpu_free_image_immediate(Image *ima)
     }
   }
 
-  ima->gpuflag &= ~(IMA_GPU_MIPMAP_COMPLETE);
+  ima->gpuflag &= ~IMA_GPU_MIPMAP_COMPLETE;
 }
 
 void GPU_free_image(Image *ima)

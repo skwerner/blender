@@ -1193,12 +1193,8 @@ static void vertex_paint_init_session_data(const ToolSettings *ts, Object *ob)
 /** \name Enter Vertex/Weight Paint Mode
  * \{ */
 
-static void ed_vwpaintmode_enter_generic(Main *bmain,
-                                         Depsgraph *depsgraph,
-                                         wmWindowManager *wm,
-                                         Scene *scene,
-                                         Object *ob,
-                                         const eObjectMode mode_flag)
+static void ed_vwpaintmode_enter_generic(
+    Main *bmain, Depsgraph *depsgraph, Scene *scene, Object *ob, const eObjectMode mode_flag)
 {
   ob->mode |= mode_flag;
   Mesh *me = BKE_mesh_from_object(ob);
@@ -1214,7 +1210,7 @@ static void ed_vwpaintmode_enter_generic(Main *bmain,
 
     BKE_paint_ensure(scene->toolsettings, (Paint **)&scene->toolsettings->vpaint);
     Paint *paint = BKE_paint_get_active_from_paintmode(scene, paint_mode);
-    paint_cursor_start_explicit(paint, wm, vertex_paint_poll);
+    paint_cursor_start(paint, vertex_paint_poll);
     BKE_paint_init(bmain, scene, paint_mode, PAINT_CURSOR_VERTEX_PAINT);
   }
   else if (mode_flag == OB_MODE_WEIGHT_PAINT) {
@@ -1222,7 +1218,7 @@ static void ed_vwpaintmode_enter_generic(Main *bmain,
 
     BKE_paint_ensure(scene->toolsettings, (Paint **)&scene->toolsettings->wpaint);
     Paint *paint = BKE_paint_get_active_from_paintmode(scene, paint_mode);
-    paint_cursor_start_explicit(paint, wm, weight_paint_poll);
+    paint_cursor_start(paint, weight_paint_poll);
     BKE_paint_init(bmain, scene, paint_mode, PAINT_CURSOR_WEIGHT_PAINT);
 
     /* weight paint specific */
@@ -1248,32 +1244,28 @@ static void ed_vwpaintmode_enter_generic(Main *bmain,
   DEG_id_tag_update(&ob->id, ID_RECALC_COPY_ON_WRITE);
 }
 
-void ED_object_vpaintmode_enter_ex(
-    Main *bmain, Depsgraph *depsgraph, wmWindowManager *wm, Scene *scene, Object *ob)
+void ED_object_vpaintmode_enter_ex(Main *bmain, Depsgraph *depsgraph, Scene *scene, Object *ob)
 {
-  ed_vwpaintmode_enter_generic(bmain, depsgraph, wm, scene, ob, OB_MODE_VERTEX_PAINT);
+  ed_vwpaintmode_enter_generic(bmain, depsgraph, scene, ob, OB_MODE_VERTEX_PAINT);
 }
 void ED_object_vpaintmode_enter(struct bContext *C, Depsgraph *depsgraph)
 {
   Main *bmain = CTX_data_main(C);
-  wmWindowManager *wm = CTX_wm_manager(C);
   Scene *scene = CTX_data_scene(C);
   Object *ob = CTX_data_active_object(C);
-  ED_object_vpaintmode_enter_ex(bmain, depsgraph, wm, scene, ob);
+  ED_object_vpaintmode_enter_ex(bmain, depsgraph, scene, ob);
 }
 
-void ED_object_wpaintmode_enter_ex(
-    Main *bmain, Depsgraph *depsgraph, wmWindowManager *wm, Scene *scene, Object *ob)
+void ED_object_wpaintmode_enter_ex(Main *bmain, Depsgraph *depsgraph, Scene *scene, Object *ob)
 {
-  ed_vwpaintmode_enter_generic(bmain, depsgraph, wm, scene, ob, OB_MODE_WEIGHT_PAINT);
+  ed_vwpaintmode_enter_generic(bmain, depsgraph, scene, ob, OB_MODE_WEIGHT_PAINT);
 }
 void ED_object_wpaintmode_enter(struct bContext *C, Depsgraph *depsgraph)
 {
   Main *bmain = CTX_data_main(C);
-  wmWindowManager *wm = CTX_wm_manager(C);
   Scene *scene = CTX_data_scene(C);
   Object *ob = CTX_data_active_object(C);
-  ED_object_wpaintmode_enter_ex(bmain, depsgraph, wm, scene, ob);
+  ED_object_wpaintmode_enter_ex(bmain, depsgraph, scene, ob);
 }
 
 /** \} */
@@ -1384,8 +1376,7 @@ static int wpaint_mode_toggle_exec(bContext *C, wmOperator *op)
     if (depsgraph) {
       depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
     }
-    wmWindowManager *wm = CTX_wm_manager(C);
-    ED_object_wpaintmode_enter_ex(bmain, depsgraph, wm, scene, ob);
+    ED_object_wpaintmode_enter_ex(bmain, depsgraph, scene, ob);
     BKE_paint_toolslots_brush_validate(bmain, &ts->wpaint->paint);
   }
 
@@ -2651,8 +2642,7 @@ static int vpaint_mode_toggle_exec(bContext *C, wmOperator *op)
     if (depsgraph) {
       depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
     }
-    wmWindowManager *wm = CTX_wm_manager(C);
-    ED_object_vpaintmode_enter_ex(bmain, depsgraph, wm, scene, ob);
+    ED_object_vpaintmode_enter_ex(bmain, depsgraph, scene, ob);
     BKE_paint_toolslots_brush_validate(bmain, &ts->vpaint->paint);
   }
 
@@ -2694,19 +2684,19 @@ void PAINT_OT_vertex_paint_toggle(wmOperatorType *ot)
 /* Implementation notes:
  *
  * Operator->invoke()
- * - validate context (add mcol)
- * - create customdata storage
- * - call paint once (mouse click)
- * - add modal handler
+ * - Validate context (add #Mesh.mloopcol).
+ * - Create custom-data storage.
+ * - Call paint once (mouse click).
+ * - Add modal handler.
  *
  * Operator->modal()
- * - for every mousemove, apply vertex paint
- * - exit on mouse release, free customdata
+ * - For every mouse-move, apply vertex paint.
+ * - Exit on mouse release, free custom-data.
  *   (return OPERATOR_FINISHED also removes handler and operator)
  *
  * For future:
- * - implement a stroke event (or mousemove with past positions)
- * - revise whether op->customdata should be added in object, in set_vpaint
+ * - implement a stroke event (or mouse-move with past positions).
+ * - revise whether op->customdata should be added in object, in set_vpaint.
  */
 
 struct VPaintData {
@@ -2718,8 +2708,10 @@ struct VPaintData {
   struct VertProjHandle *vp_handle;
   struct CoNo *vertexcosnos;
 
-  /* modify 'me->mcol' directly, since the derived mesh is drawing from this
-   * array, otherwise we need to refresh the modifier stack */
+  /**
+   * Modify #Mesh.mloopcol directly, since the derived mesh is drawing from this
+   * array, otherwise we need to refresh the modifier stack.
+   */
   bool use_fast_update;
 
   /* loops tagged as having been painted, to apply shared vertex color

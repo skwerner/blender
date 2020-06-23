@@ -736,7 +736,12 @@ class VIEW3D_HT_header(Header):
                 row.prop(tool_settings, "use_gpencil_vertex_select_mask_stroke", text="")
                 row.prop(tool_settings, "use_gpencil_vertex_select_mask_segment", text="")
 
-            if gpd.use_stroke_edit_mode or gpd.is_stroke_sculpt_mode or gpd.is_stroke_weight_mode or gpd.is_stroke_vertex_mode:
+            if (
+                    gpd.use_stroke_edit_mode or
+                    gpd.is_stroke_sculpt_mode or
+                    gpd.is_stroke_weight_mode or
+                    gpd.is_stroke_vertex_mode
+            ):
                 row = layout.row(align=True)
                 row.prop(gpd, "use_multiedit", text="", icon='GP_MULTIFRAME_EDITING')
 
@@ -1219,6 +1224,7 @@ class VIEW3D_MT_view_cameras(Menu):
 
         layout.operator("view3d.object_as_camera")
         layout.operator("view3d.view_camera", text="Active Camera")
+        layout.operator("view3d.view_center_camera")
 
 
 class VIEW3D_MT_view_viewpoint(Menu):
@@ -2342,6 +2348,7 @@ class VIEW3D_MT_object_animation(Menu):
         layout.separator()
 
         layout.operator("nla.bake", text="Bake Action...")
+        layout.operator("gpencil.mesh_bake", text="Bake Mesh to Grease Pencil...")
 
 
 class VIEW3D_MT_object_rigid_body(Menu):
@@ -3117,6 +3124,14 @@ class VIEW3D_MT_face_sets(Menu):
         layout.separator()
 
         layout.menu("VIEW3D_MT_face_sets_init", text="Init Face Sets")
+
+        layout.separator()
+
+        op = layout.operator("sculpt.face_set_edit", text='Grow Face Set')
+        op.mode = 'GROW'
+
+        op = layout.operator("sculpt.face_set_edit", text='Shrink Face Set')
+        op.mode = 'SHRINK'
 
         layout.separator()
 
@@ -6772,7 +6787,10 @@ class VIEW3D_PT_overlay_gpencil_options(Panel):
 
         if context.object.mode in {'PAINT_GPENCIL', 'VERTEX_GPENCIL'}:
             layout.label(text="Vertex Paint")
-            layout.prop(overlay, "gpencil_vertex_paint_opacity", text="Opacity", slider=True)
+            row = layout.row()
+            shading = VIEW3D_PT_shading.get_shading(context)
+            row.enabled = shading.type not in {'WIREFRAME', 'RENDERED'}
+            row.prop(overlay, "gpencil_vertex_paint_opacity", text="Opacity", slider=True)
 
 
 class VIEW3D_PT_quad_view(Panel):

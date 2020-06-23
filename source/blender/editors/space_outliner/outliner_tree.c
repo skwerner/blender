@@ -235,6 +235,17 @@ static TreeElement *outliner_add_element(
 
 /* -------------------------------------------------------- */
 
+/**
+ * Check if an element type needs a full rebuild if the open/collapsed state changes.
+ * These element types don't add children if collapsed.
+ *
+ * This current check isn't great really. A per element-type flag would be preferable.
+ */
+bool outliner_element_needs_rebuild_on_open_change(const TreeStoreElem *tselem)
+{
+  return ELEM(tselem->type, TSE_RNA_STRUCT, TSE_RNA_PROPERTY, TSE_KEYMAP);
+}
+
 /* special handling of hierarchical non-lib data */
 static void outliner_add_bone(
     SpaceOutliner *soops, ListBase *lb, ID *id, Bone *curBone, TreeElement *parent, int *a)
@@ -786,8 +797,13 @@ static void outliner_add_id_contents(SpaceOutliner *soops,
   }
 }
 
-// TODO: this function needs to be split up! It's getting a bit too large...
-// Note: "ID" is not always a real ID
+/**
+ * TODO: this function needs to be split up! It's getting a bit too large...
+ *
+ * \note: "ID" is not always a real ID
+ * \note: If child items are only added to the tree if the item is open, the TSE_ type _must_ be
+ *        added to #outliner_element_needs_rebuild_on_open_change().
+ */
 static TreeElement *outliner_add_element(
     SpaceOutliner *soops, ListBase *lb, void *idv, TreeElement *parent, short type, short index)
 {
@@ -1427,9 +1443,9 @@ static void outliner_add_layer_collections_recursive(SpaceOutliner *soops,
       ten->name = id->name + 2;
       ten->directdata = lc;
 
-      /* Open by default. */
+      /* Open by default, except linked collections, which may contain many elements. */
       TreeStoreElem *tselem = TREESTORE(ten);
-      if (!tselem->used) {
+      if (!(tselem->used || ID_IS_LINKED(id) || ID_IS_OVERRIDE_LIBRARY(id))) {
         tselem->flag &= ~TSE_CLOSED;
       }
 

@@ -376,8 +376,9 @@ USE_CXX11=true
 
 CLANG_FORMAT_VERSION_MIN="6.0"
 
-PYTHON_VERSION="3.7.4"
+PYTHON_VERSION="3.7.7"
 PYTHON_VERSION_MIN="3.7"
+PYTHON_VERSION_INSTALLED=$PYTHON_VERSION_MIN
 PYTHON_FORCE_BUILD=false
 PYTHON_FORCE_REBUILD=false
 PYTHON_SKIP=false
@@ -458,7 +459,7 @@ ALEMBIC_FORCE_BUILD=false
 ALEMBIC_FORCE_REBUILD=false
 ALEMBIC_SKIP=false
 
-USD_VERSION="19.11"
+USD_VERSION="20.05"
 USD_FORCE_BUILD=false
 USD_FORCE_REBUILD=false
 USD_SKIP=false
@@ -478,7 +479,7 @@ OIDN_FORCE_BUILD=false
 OIDN_FORCE_REBUILD=false
 OIDN_SKIP=false
 
-FFMPEG_VERSION="4.3.2"
+FFMPEG_VERSION="4.2.3"
 FFMPEG_VERSION_MIN="2.8.4"
 FFMPEG_FORCE_BUILD=false
 FFMPEG_FORCE_REBUILD=false
@@ -1535,11 +1536,13 @@ _update_deps_tbb() {
   OSD_FORCE_REBUILD=true
   OPENVDB_FORCE_REBUILD=true
   USD_FORCE_REBUILD=true
+  EMBREE_FORCE_REBUILD=true
   OIDN_FORCE_REBUILD=true
   if [ "$_is_building" = true ]; then
     OSD_FORCE_BUILD=true
     OPENVDB_FORCE_BUILD=true
     USD_FORCE_BUILD=true
+    EMBREE_FORCE_BUILD=true
     OIDN_FORCE_BUILD=true
   fi
 }
@@ -1571,7 +1574,7 @@ compile_TBB() {
   if [ ! -d $_inst ]; then
     INFO "Building TBB-$TBB_VERSION$TBB_VERSION_UPDATE"
     _is_building=true
-    
+
     # Rebuild dependencies as well!
     _update_deps_tbb
 
@@ -1688,7 +1691,7 @@ compile_OCIO() {
   if [ ! -d $_inst ]; then
     INFO "Building OpenColorIO-$OCIO_VERSION"
     _is_building=true
-    
+
     # Rebuild dependencies as well!
     _update_deps_ocio
 
@@ -2985,7 +2988,7 @@ compile_Embree() {
   fi
 
   # To be changed each time we make edits that would modify the compiled results!
-  embree_magic=9
+  embree_magic=10
   _init_embree
 
   # Clean install if needed!
@@ -3039,8 +3042,12 @@ compile_Embree() {
     cmake_d="$cmake_d -D EMBREE_RAY_MASK=ON"
     cmake_d="$cmake_d -D EMBREE_FILTER_FUNCTION=ON"
     cmake_d="$cmake_d -D EMBREE_BACKFACE_CULLING=OFF"
-    cmake_d="$cmake_d -D EMBREE_TASKING_SYSTEM=INTERNAL"
     cmake_d="$cmake_d -D EMBREE_MAX_ISA=AVX2"
+
+    cmake_d="$cmake_d -D EMBREE_TASKING_SYSTEM=TBB"
+    if [ -d $INST/tbb ]; then
+      make_d="$make_d EMBREE_TBB_ROOT=$INST/tbb"
+    fi
 
     cmake $cmake_d ../
 
@@ -3668,9 +3675,11 @@ install_DEB() {
     INFO "Forced Python/NumPy building, as requested..."
     _do_compile_python=true
   else
-    check_package_DEB python$PYTHON_VERSION_MIN-dev
+    check_package_version_ge_DEB python3-dev $PYTHON_VERSION_MIN
     if [ $? -eq 0 ]; then
-      install_packages_DEB python$PYTHON_VERSION_MIN-dev
+      PYTHON_VERSION_INSTALLED=$(echo `get_package_version_DEB python3-dev` | sed -r 's/^([0-9]+\.[0-9]+).*/\1/')
+
+      install_packages_DEB python3-dev
       clean_Python
       PRINT ""
       if [ "$NUMPY_SKIP" = true ]; then
@@ -3883,7 +3892,6 @@ install_DEB() {
     INFO "Forced Alembic building, as requested..."
     compile_ALEMBIC
   else
-    # No package currently, only HDF5!
     compile_ALEMBIC
   fi
 
@@ -4290,8 +4298,10 @@ install_RPM() {
     INFO "Forced Python/NumPy building, as requested..."
     _do_compile_python=true
   else
-    check_package_version_match_RPM python3-devel $PYTHON_VERSION_MIN
+    check_package_version_ge_RPM python3-devel $PYTHON_VERSION_MIN
     if [ $? -eq 0 ]; then
+      PYTHON_VERSION_INSTALLED=$(echo `get_package_version_RPM python3-devel` | sed -r 's/^([0-9]+\.[0-9]+).*/\1/')
+
       install_packages_RPM python3-devel
       clean_Python
       PRINT ""
@@ -4815,6 +4825,8 @@ install_ARCH() {
   else
     check_package_version_ge_ARCH python $PYTHON_VERSION_MIN
     if [ $? -eq 0 ]; then
+      PYTHON_VERSION_INSTALLED=$(echo `get_package_version_ARCH python` | sed -r 's/^([0-9]+\.[0-9]+).*/\1/')
+
       install_packages_ARCH python
       clean_Python
       PRINT ""
@@ -5405,11 +5417,11 @@ print_info() {
   PRINT "  $_1"
   _buildargs="$_buildargs $_1"
 
-  _1="-D PYTHON_VERSION=$PYTHON_VERSION_MIN"
+  _1="-D PYTHON_VERSION=$PYTHON_VERSION_INSTALLED"
   PRINT "  $_1"
   _buildargs="$_buildargs $_1"
-  if [ -d "$INST/python-$PYTHON_VERSION_MIN" ]; then
-    _1="-D PYTHON_ROOT_DIR=$INST/python-$PYTHON_VERSION_MIN"
+  if [ -d "$INST/python-$PYTHON_VERSION_INSTALLED" ]; then
+    _1="-D PYTHON_ROOT_DIR=$INST/python-$PYTHON_VERSION_INSTALLED"
     PRINT "  $_1"
     _buildargs="$_buildargs $_1"
   fi

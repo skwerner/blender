@@ -484,6 +484,7 @@ void BKE_mesh_poly_edgebitmap_insert(unsigned int *edge_bitmap,
                                      const struct MLoop *mloop);
 
 bool BKE_mesh_center_median(const struct Mesh *me, float r_cent[3]);
+bool BKE_mesh_center_median_from_polys(const struct Mesh *me, float r_cent[3]);
 bool BKE_mesh_center_bounds(const struct Mesh *me, float r_cent[3]);
 bool BKE_mesh_center_of_surface(const struct Mesh *me, float r_cent[3]);
 bool BKE_mesh_center_of_volume(const struct Mesh *me, float r_cent[3]);
@@ -666,19 +667,6 @@ void BKE_mesh_calc_edges_legacy(struct Mesh *me, const bool use_old);
 void BKE_mesh_calc_edges_loose(struct Mesh *mesh);
 void BKE_mesh_calc_edges(struct Mesh *mesh, bool update, const bool select);
 void BKE_mesh_calc_edges_tessface(struct Mesh *mesh);
-
-/* *** mesh_geomtype.c *** */
-struct Mesh *BKE_mesh_wrapper_from_editmesh_with_coords(
-    struct BMEditMesh *em,
-    const struct CustomData_MeshMasks *cd_mask_extra,
-    float (*vertexCos)[3],
-    const struct Mesh *me_settings);
-struct Mesh *BKE_mesh_wrapper_from_editmesh(struct BMEditMesh *em,
-                                            const struct CustomData_MeshMasks *cd_mask_extra,
-                                            const struct Mesh *me_settings);
-void BKE_mesh_wrapper_ensure_mdata(struct Mesh *me);
-bool BKE_mesh_wrapper_minmax(const struct Mesh *me, float min[3], float max[3]);
-void BKE_mesh_wrapper_normals_update(struct Mesh *me);
 
 /* In DerivedMesh.c */
 void BKE_mesh_wrapper_deferred_finalize(struct Mesh *me_eval,

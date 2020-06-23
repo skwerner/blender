@@ -3001,16 +3001,13 @@ static bool do_meta_box_select(ViewContext *vc, const rcti *rect, const eSelectO
       if (hitresult == -1) {
         continue;
       }
-      else if (hitresult & MBALL_NOSEL) {
-        continue;
-      }
 
       const uint hit_object = hitresult & 0xFFFF;
       if (vc->obedit->runtime.select_id != hit_object) {
         continue;
       }
 
-      if (metaelem_id != (hitresult & 0xFFFF0000 & ~(MBALLSEL_ANY))) {
+      if (metaelem_id != (hitresult & 0xFFFF0000 & ~MBALLSEL_ANY)) {
         continue;
       }
 

@@ -118,7 +118,14 @@ typedef struct BlenderDefRNA {
   ListBase structs;
   ListBase allocs;
   struct StructRNA *laststruct;
-  int error, silent, preprocess, verify, animate;
+  bool error;
+  bool silent;
+  bool preprocess;
+  bool verify;
+  bool animate;
+  /** Whether RNA properties defined should be overridable or not by default. */
+  bool make_overridable;
+
   /* Keep last. */
 #ifndef RNA_RUNTIME
   struct {
@@ -491,6 +498,7 @@ int rna_property_override_diff_default(struct Main *bmain,
                                        const int mode,
                                        struct IDOverrideLibrary *override,
                                        const char *rna_path,
+                                       const size_t rna_path_len,
                                        const int flags,
                                        bool *r_override_changed);
 

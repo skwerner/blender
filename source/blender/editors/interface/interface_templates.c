@@ -361,11 +361,13 @@ static bool id_search_add(const bContext *C,
        * followed by ID_NAME-2 characters from id->name
        */
       char name_ui[MAX_ID_FULL_NAME_UI];
-      BKE_id_full_name_ui_prefix_get(name_ui, id);
+      BKE_id_full_name_ui_prefix_get(name_ui, id, UI_SEP_CHAR);
 
       int iconid = ui_id_icon_get(C, id, template_ui->preview);
+      bool has_sep_char = (id->lib != NULL);
 
-      if (!UI_search_item_add(items, name_ui, id, iconid, 0)) {
+      if (!UI_search_item_add(
+              items, name_ui, id, iconid, has_sep_char ? UI_BUT_HAS_SEP_CHAR : 0)) {
         return false;
       }
     }
@@ -799,7 +801,7 @@ static uiBut *template_id_def_new_but(uiBlock *block,
   return but;
 }
 
-static void template_ID(bContext *C,
+static void template_ID(const bContext *C,
                         uiLayout *layout,
                         TemplateID *template_ui,
                         StructRNA *type,
@@ -1140,7 +1142,7 @@ ID *UI_context_active_but_get_tab_ID(bContext *C)
   }
 }
 
-static void template_ID_tabs(bContext *C,
+static void template_ID_tabs(const bContext *C,
                              uiLayout *layout,
                              TemplateID *template,
                              StructRNA *type,
@@ -1214,7 +1216,7 @@ static void template_ID_tabs(bContext *C,
 }
 
 static void ui_template_id(uiLayout *layout,
-                           bContext *C,
+                           const bContext *C,
                            PointerRNA *ptr,
                            const char *propname,
                            const char *newop,
@@ -1298,7 +1300,7 @@ static void ui_template_id(uiLayout *layout,
 }
 
 void uiTemplateID(uiLayout *layout,
-                  bContext *C,
+                  const bContext *C,
                   PointerRNA *ptr,
                   const char *propname,
                   const char *newop,
@@ -1816,361 +1818,221 @@ void uiTemplatePathBuilder(uiLayout *layout,
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name Modifier Template
+/** \name Modifiers Template
+ *
+ *  Template for building the panel layout for the active object's modifiers.
  * \{ */
 
-#define ERROR_LIBDATA_MESSAGE TIP_("Can't edit external library data")
-
-static void modifiers_convertToReal(bContext *C, void *ob_v, void *md_v)
+/**
+ * Get the active object or the property region's pinned object.
+ */
+static Object *get_context_object(const bContext *C)
 {
-  Object *ob = ob_v;
-  ModifierData *md = md_v;
-  ModifierData *nmd = BKE_modifier_new(md->type);
-
-  BKE_modifier_copydata(md, nmd);
-  nmd->mode &= ~eModifierMode_Virtual;
-
-  BLI_addhead(&ob->modifiers, nmd);
-
-  BKE_modifier_unique_name(&ob->modifiers, nmd);
-
-  ob->partype = PAROBJECT;
-
-  WM_event_add_notifier(C, NC_OBJECT | ND_MODIFIER, ob);
-  DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
-
-  ED_undo_push(C, "Modifier convert to real");
-}
-
-static bool modifier_can_delete(ModifierData *md)
-{
-  /* fluid particle modifier can't be deleted here */
-  if (md->type == eModifierType_ParticleSystem) {
-    short particle_type = ((ParticleSystemModifierData *)md)->psys->part->type;
-    if (ELEM(particle_type,
-             PART_FLUID,
-             PART_FLUID_FLIP,
-             PART_FLUID_FOAM,
-             PART_FLUID_SPRAY,
-             PART_FLUID_BUBBLE,
-             PART_FLUID_TRACER,
-             PART_FLUID_SPRAYFOAM,
-             PART_FLUID_SPRAYBUBBLE,
-             PART_FLUID_FOAMBUBBLE,
-             PART_FLUID_SPRAYFOAMBUBBLE)) {
-      return false;
-    }
-  }
-  return true;
-}
-
-/* Check whether Modifier is a simulation or not,
- * this is used for switching to the physics/particles context tab */
-static int modifier_is_simulation(ModifierData *md)
-{
-  /* Physic Tab */
-  if (ELEM(md->type,
-           eModifierType_Cloth,
-           eModifierType_Collision,
-           eModifierType_Fluidsim,
-           eModifierType_Fluid,
-           eModifierType_Softbody,
-           eModifierType_Surface,
-           eModifierType_DynamicPaint)) {
-    return 1;
-  }
-  /* Particle Tab */
-  else if (md->type == eModifierType_ParticleSystem) {
-    return 2;
+  SpaceProperties *sbuts = CTX_wm_space_properties(C);
+  if (sbuts != NULL && (sbuts->pinid != NULL) && GS(sbuts->pinid->name) == ID_OB) {
+    return (Object *)sbuts->pinid;
   }
   else {
-    return 0;
+    return CTX_data_active_object(C);
   }
 }
 
-static uiLayout *draw_modifier(uiLayout *layout,
-                               Scene *scene,
-                               Object *ob,
-                               ModifierData *md,
-                               int index,
-                               int cageIndex,
-                               int lastCageIndex)
+static void modifier_panel_id(void *md_link, char *r_name)
 {
-  const ModifierTypeInfo *mti = BKE_modifier_get_info(md->type);
-  PointerRNA ptr;
-  uiBut *but;
-  uiBlock *block;
-  uiLayout *box, *column, *row, *sub;
-  uiLayout *result = NULL;
-  int isVirtual = (md->mode & eModifierMode_Virtual);
-  char str[128];
+  ModifierData *md = (ModifierData *)md_link;
+  BKE_modifier_type_panel_id(md->type, r_name);
+}
 
-  /* create RNA pointer */
-  RNA_pointer_create(&ob->id, &RNA_Modifier, md, &ptr);
+void uiTemplateModifiers(uiLayout *UNUSED(layout), bContext *C)
+{
+  ScrArea *sa = CTX_wm_area(C);
+  ARegion *region = CTX_wm_region(C);
 
-  column = uiLayoutColumn(layout, true);
-  uiLayoutSetContextPointer(column, "modifier", &ptr);
+  Object *ob = get_context_object(C);
+  ListBase *modifiers = &ob->modifiers;
 
-  /* rounded header ------------------------------------------------------------------- */
-  box = uiLayoutBox(column);
+  bool panels_match = UI_panel_list_matches_data(region, modifiers, modifier_panel_id);
 
-  if (isVirtual) {
-    row = uiLayoutRow(box, false);
-    uiLayoutSetAlignment(row, UI_LAYOUT_ALIGN_EXPAND);
-    block = uiLayoutGetBlock(row);
-    /* VIRTUAL MODIFIER */
-    /* XXX this is not used now, since these cannot be accessed via RNA */
-    BLI_snprintf(str, sizeof(str), IFACE_("%s parent deform"), md->name);
-    uiDefBut(block,
-             UI_BTYPE_LABEL,
-             0,
-             str,
-             0,
-             0,
-             185,
-             UI_UNIT_Y,
-             NULL,
-             0.0,
-             0.0,
-             0.0,
-             0.0,
-             TIP_("Modifier name"));
+  if (!panels_match) {
+    UI_panels_free_instanced(C, region);
+    ModifierData *md = modifiers->first;
+    for (int i = 0; md; i++, md = md->next) {
+      const ModifierTypeInfo *mti = BKE_modifier_get_info(md->type);
+      if (mti->panelRegister) {
+        char panel_idname[MAX_NAME];
+        modifier_panel_id(md, panel_idname);
 
-    but = uiDefBut(block,
-                   UI_BTYPE_BUT,
-                   0,
-                   IFACE_("Make Real"),
-                   0,
-                   0,
-                   80,
-                   16,
-                   NULL,
-                   0.0,
-                   0.0,
-                   0.0,
-                   0.0,
-                   TIP_("Convert virtual modifier to a real modifier"));
-    UI_but_func_set(but, modifiers_convertToReal, ob, md);
+        Panel *new_panel = UI_panel_add_instanced(sa, region, &region->panels, panel_idname, i);
+        if (new_panel != NULL) {
+          UI_panel_set_expand_from_list_data(C, new_panel);
+        }
+      }
+    }
   }
   else {
-    /* REAL MODIFIER */
-    row = uiLayoutRow(box, false);
-    block = uiLayoutGetBlock(row);
-
-    UI_block_emboss_set(block, UI_EMBOSS_NONE);
-    /* Open/Close .................................  */
-    uiItemR(row, &ptr, "show_expanded", 0, "", ICON_NONE);
-
-    /* modifier-type icon */
-    uiItemL(row, "", RNA_struct_ui_icon(ptr.type));
-    UI_block_emboss_set(block, UI_EMBOSS);
-
-    /* modifier name */
-    if (mti->isDisabled && mti->isDisabled(scene, md, 0)) {
-      uiLayoutSetRedAlert(row, true);
+    /* The expansion might have been changed elsewhere, so we still need to set it. */
+    LISTBASE_FOREACH (Panel *, panel, &region->panels) {
+      if ((panel->type != NULL) && (panel->type->flag & PNL_INSTANCED))
+        UI_panel_set_expand_from_list_data(C, panel);
     }
-    uiItemR(row, &ptr, "name", 0, "", ICON_NONE);
-    uiLayoutSetRedAlert(row, false);
-
-    /* mode enabling buttons */
-    UI_block_align_begin(block);
-    /* Collision and Surface are always enabled, hide buttons! */
-    if (((md->type != eModifierType_Collision) || !(ob->pd && ob->pd->deflect)) &&
-        (md->type != eModifierType_Surface)) {
-      uiItemR(row, &ptr, "show_render", 0, "", ICON_NONE);
-      uiItemR(row, &ptr, "show_viewport", 0, "", ICON_NONE);
-
-      if (mti->flags & eModifierTypeFlag_SupportsEditmode) {
-        sub = uiLayoutRow(row, true);
-        if (!(md->mode & eModifierMode_Realtime)) {
-          uiLayoutSetActive(sub, false);
-        }
-        uiItemR(sub, &ptr, "show_in_editmode", 0, "", ICON_NONE);
-      }
-    }
-
-    if (ob->type == OB_MESH) {
-      if (BKE_modifier_supports_cage(scene, md) && (index <= lastCageIndex)) {
-        sub = uiLayoutRow(row, true);
-        if (index < cageIndex || !BKE_modifier_couldbe_cage(scene, md)) {
-          uiLayoutSetActive(sub, false);
-        }
-        uiItemR(sub, &ptr, "show_on_cage", 0, "", ICON_NONE);
-      }
-    } /* tessellation point for curve-typed objects */
-    else if (ELEM(ob->type, OB_CURVE, OB_SURF, OB_FONT)) {
-      /* some modifiers could work with pre-tessellated curves only */
-      if (ELEM(md->type, eModifierType_Hook, eModifierType_Softbody, eModifierType_MeshDeform)) {
-        /* add disabled pre-tessellated button, so users could have
-         * message for this modifiers */
-        but = uiDefIconButBitI(block,
-                               UI_BTYPE_TOGGLE,
-                               eModifierMode_ApplyOnSpline,
-                               0,
-                               ICON_SURFACE_DATA,
-                               0,
-                               0,
-                               UI_UNIT_X - 2,
-                               UI_UNIT_Y,
-                               &md->mode,
-                               0.0,
-                               0.0,
-                               0.0,
-                               0.0,
-                               TIP_("This modifier can only be applied on splines' points"));
-        UI_but_flag_enable(but, UI_BUT_DISABLED);
-      }
-      else if (mti->type != eModifierTypeType_Constructive) {
-        /* constructive modifiers tessellates curve before applying */
-        uiItemR(row, &ptr, "use_apply_on_spline", 0, "", ICON_NONE);
-      }
-    }
-
-    UI_block_align_end(block);
-
-    /* Up/Down + Delete ........................... */
-    UI_block_align_begin(block);
-    uiItemO(row, "", ICON_TRIA_UP, "OBJECT_OT_modifier_move_up");
-    uiItemO(row, "", ICON_TRIA_DOWN, "OBJECT_OT_modifier_move_down");
-    UI_block_align_end(block);
-
-    UI_block_emboss_set(block, UI_EMBOSS_NONE);
-    /* When Modifier is a simulation,
-     * show button to switch to context rather than the delete button. */
-    if (modifier_can_delete(md) && !modifier_is_simulation(md)) {
-      uiItemO(row, "", ICON_X, "OBJECT_OT_modifier_remove");
-    }
-    else if (modifier_is_simulation(md) == 1) {
-      uiItemStringO(
-          row, "", ICON_PROPERTIES, "WM_OT_properties_context_change", "context", "PHYSICS");
-    }
-    else if (modifier_is_simulation(md) == 2) {
-      uiItemStringO(
-          row, "", ICON_PROPERTIES, "WM_OT_properties_context_change", "context", "PARTICLES");
-    }
-    UI_block_emboss_set(block, UI_EMBOSS);
   }
-
-  /* modifier settings (under the header) --------------------------------------------------- */
-  if (!isVirtual && (md->mode & eModifierMode_Expanded)) {
-    /* apply/convert/copy */
-    box = uiLayoutBox(column);
-    row = uiLayoutRow(box, false);
-
-    if (!ELEM(md->type, eModifierType_Collision, eModifierType_Surface)) {
-      /* only here obdata, the rest of modifiers is ob level */
-      UI_block_lock_set(block, BKE_object_obdata_is_libdata(ob), ERROR_LIBDATA_MESSAGE);
-
-      if (md->type == eModifierType_ParticleSystem) {
-        ParticleSystem *psys = ((ParticleSystemModifierData *)md)->psys;
-
-        if (!(ob->mode & OB_MODE_PARTICLE_EDIT)) {
-          if (ELEM(psys->part->ren_as, PART_DRAW_GR, PART_DRAW_OB)) {
-            uiItemO(row,
-                    CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Convert"),
-                    ICON_NONE,
-                    "OBJECT_OT_duplicates_make_real");
-          }
-          else if (psys->part->ren_as == PART_DRAW_PATH) {
-            uiItemO(row,
-                    CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Convert"),
-                    ICON_NONE,
-                    "OBJECT_OT_modifier_convert");
-          }
-        }
-      }
-      else {
-        uiLayoutSetOperatorContext(row, WM_OP_INVOKE_DEFAULT);
-        uiItemEnumO(row,
-                    "OBJECT_OT_modifier_apply",
-                    CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Apply"),
-                    0,
-                    "apply_as",
-                    MODIFIER_APPLY_DATA);
-
-        if (BKE_modifier_is_same_topology(md) && !BKE_modifier_is_non_geometrical(md)) {
-          uiItemEnumO(row,
-                      "OBJECT_OT_modifier_apply",
-                      CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Apply as Shape Key"),
-                      0,
-                      "apply_as",
-                      MODIFIER_APPLY_SHAPE);
-        }
-      }
-
-      UI_block_lock_clear(block);
-      UI_block_lock_set(block, ob && ID_IS_LINKED(ob), ERROR_LIBDATA_MESSAGE);
-
-      if (!ELEM(md->type,
-                eModifierType_Fluidsim,
-                eModifierType_Softbody,
-                eModifierType_ParticleSystem,
-                eModifierType_Cloth,
-                eModifierType_Fluid)) {
-        uiItemO(row,
-                CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Copy"),
-                ICON_NONE,
-                "OBJECT_OT_modifier_copy");
-      }
-    }
-
-    /* result is the layout block inside the box,
-     * that we return so that modifier settings can be drawn */
-    result = uiLayoutColumn(box, false);
-    block = uiLayoutAbsoluteBlock(box);
-  }
-
-  /* error messages */
-  if (md->error) {
-    box = uiLayoutBox(column);
-    row = uiLayoutRow(box, false);
-    uiItemL(row, md->error, ICON_ERROR);
-  }
-
-  return result;
 }
 
-uiLayout *uiTemplateModifier(uiLayout *layout, bContext *C, PointerRNA *ptr)
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Constraints Template
+ *
+ *  Template for building the panel layout for the active object or bone's constraints.
+ * \{ */
+
+/** For building the panel UI for constraints. */
+#define CONSTRAINT_TYPE_PANEL_PREFIX "OBJECT_PT_"
+#define CONSTRAINT_BONE_TYPE_PANEL_PREFIX "BONE_PT_"
+
+/**
+ * Check if the panel's ID starts with 'BONE', meaning it is a bone constraint.
+ */
+static bool constraint_panel_is_bone(Panel *panel)
 {
-  Scene *scene = CTX_data_scene(C);
-  Object *ob;
-  ModifierData *md, *vmd;
-  VirtualModifierData virtualModifierData;
-  int i, lastCageIndex, cageIndex;
-
-  /* verify we have valid data */
-  if (!RNA_struct_is_a(ptr->type, &RNA_Modifier)) {
-    RNA_warning("Expected modifier on object");
-    return NULL;
-  }
-
-  ob = (Object *)ptr->owner_id;
-  md = ptr->data;
-
-  if (!ob || !(GS(ob->id.name) == ID_OB)) {
-    RNA_warning("Expected modifier on object");
-    return NULL;
-  }
-
-  UI_block_lock_set(uiLayoutGetBlock(layout), (ob && ID_IS_LINKED(ob)), ERROR_LIBDATA_MESSAGE);
-
-  /* find modifier and draw it */
-  cageIndex = BKE_modifiers_get_cage_index(scene, ob, &lastCageIndex, 0);
-
-  /* XXX virtual modifiers are not accessible for python */
-  vmd = BKE_modifiers_get_virtual_modifierlist(ob, &virtualModifierData);
-
-  for (i = 0; vmd; i++, vmd = vmd->next) {
-    if (md == vmd) {
-      return draw_modifier(layout, scene, ob, md, i, cageIndex, lastCageIndex);
-    }
-    else if (vmd->mode & eModifierMode_Virtual) {
-      i--;
-    }
-  }
-
-  return NULL;
+  return (panel->panelname[0] == 'B') && (panel->panelname[1] == 'O') &&
+         (panel->panelname[2] == 'N') && (panel->panelname[3] == 'E');
 }
+
+/**
+ * Get the constraints for the active pose bone or the active / pinned object.
+ */
+static ListBase *get_constraints(const bContext *C, bool use_bone_constraints)
+{
+  ListBase *constraints = {NULL};
+  if (use_bone_constraints) {
+    bPoseChannel *pose_bone = CTX_data_pointer_get(C, "pose_bone").data;
+    if (pose_bone != NULL) {
+      constraints = &pose_bone->constraints;
+    }
+  }
+  else {
+    Object *ob = get_context_object(C);
+    if (ob != NULL) {
+      constraints = &ob->constraints;
+    }
+  }
+  return constraints;
+}
+
+/**
+ * Move a constraint to the index it's moved to after a drag and drop.
+ */
+static void constraint_reorder(bContext *C, Panel *panel, int new_index)
+{
+  bool constraint_from_bone = constraint_panel_is_bone(panel);
+  ListBase *lb = get_constraints(C, constraint_from_bone);
+
+  bConstraint *con = BLI_findlink(lb, panel->runtime.list_index);
+  PointerRNA props_ptr;
+  wmOperatorType *ot = WM_operatortype_find("CONSTRAINT_OT_move_to_index", false);
+  WM_operator_properties_create_ptr(&props_ptr, ot);
+  RNA_string_set(&props_ptr, "constraint", con->name);
+  RNA_int_set(&props_ptr, "index", new_index);
+  /* Set owner to #EDIT_CONSTRAINT_OWNER_OBJECT or #EDIT_CONSTRAINT_OWNER_BONE. */
+  RNA_enum_set(&props_ptr, "owner", constraint_from_bone ? 1 : 0);
+  WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &props_ptr);
+  WM_operator_properties_free(&props_ptr);
+}
+
+/**
+ * Get the expand flag from the active constraint to use for the panel.
+ */
+static short get_constraint_expand_flag(const bContext *C, Panel *panel)
+{
+  bool constraint_from_bone = constraint_panel_is_bone(panel);
+  ListBase *lb = get_constraints(C, constraint_from_bone);
+
+  bConstraint *con = BLI_findlink(lb, panel->runtime.list_index);
+  return con->ui_expand_flag;
+}
+
+/**
+ * Save the expand flag for the panel and subpanels to the constraint.
+ */
+static void set_constraint_expand_flag(const bContext *C, Panel *panel, short expand_flag)
+{
+  bool constraint_from_bone = constraint_panel_is_bone(panel);
+  ListBase *lb = get_constraints(C, constraint_from_bone);
+
+  bConstraint *con = BLI_findlink(lb, panel->runtime.list_index);
+  con->ui_expand_flag = expand_flag;
+}
+
+/**
+ * Function with void * argument for #uiListPanelIDFromDataFunc.
+ *
+ * \note: Constraint panel types are assumed to be named with the struct name field
+ * concatenated to the defined prefix.
+ */
+static void object_constraint_panel_id(void *md_link, char *r_name)
+{
+  bConstraint *con = (bConstraint *)md_link;
+  const bConstraintTypeInfo *cti = BKE_constraint_typeinfo_from_type(con->type);
+
+  strcpy(r_name, CONSTRAINT_TYPE_PANEL_PREFIX);
+  strcat(r_name, cti->structName);
+}
+
+static void bone_constraint_panel_id(void *md_link, char *r_name)
+{
+  bConstraint *con = (bConstraint *)md_link;
+  const bConstraintTypeInfo *cti = BKE_constraint_typeinfo_from_type(con->type);
+
+  strcpy(r_name, CONSTRAINT_BONE_TYPE_PANEL_PREFIX);
+  strcat(r_name, cti->structName);
+}
+
+/**
+ * Check if the constraint panels don't match the data and rebuild the panels if so.
+ */
+void uiTemplateConstraints(uiLayout *UNUSED(layout), bContext *C, bool use_bone_constraints)
+{
+  ScrArea *sa = CTX_wm_area(C);
+  ARegion *region = CTX_wm_region(C);
+
+  ListBase *constraints = get_constraints(C, use_bone_constraints);
+
+  /* Switch between the bone panel ID function and the object panel ID function. */
+  uiListPanelIDFromDataFunc panel_id_func = use_bone_constraints ? bone_constraint_panel_id :
+                                                                   object_constraint_panel_id;
+
+  bool panels_match = UI_panel_list_matches_data(region, constraints, panel_id_func);
+
+  if (!panels_match) {
+    UI_panels_free_instanced(C, region);
+    bConstraint *con = (constraints == NULL) ? NULL : constraints->first;
+    for (int i = 0; con; i++, con = con->next) {
+      char panel_idname[MAX_NAME];
+      panel_id_func(con, panel_idname);
+
+      Panel *new_panel = UI_panel_add_instanced(sa, region, &region->panels, panel_idname, i);
+      if (new_panel) {
+        /* Set the list panel functionality function pointers since we don't do it with python. */
+        new_panel->type->set_list_data_expand_flag = set_constraint_expand_flag;
+        new_panel->type->get_list_data_expand_flag = get_constraint_expand_flag;
+        new_panel->type->reorder = constraint_reorder;
+
+        UI_panel_set_expand_from_list_data(C, new_panel);
+      }
+    }
+  }
+  else {
+    /* The expansion might have been changed elsewhere, so we still need to set it. */
+    LISTBASE_FOREACH (Panel *, panel, &region->panels) {
+      if ((panel->type != NULL) && (panel->type->flag & PNL_INSTANCED))
+        UI_panel_set_expand_from_list_data(C, panel);
+    }
+  }
+}
+
+#undef CONSTRAINT_TYPE_PANEL_PREFIX
+#undef CONSTRAINT_BONE_TYPE_PANEL_PREFIX
 
 /** \} */
 
@@ -2178,263 +2040,102 @@ uiLayout *uiTemplateModifier(uiLayout *layout, bContext *C, PointerRNA *ptr)
 /** \name Grease Pencil Modifier Template
  * \{ */
 
-static uiLayout *gpencil_draw_modifier(uiLayout *layout, Object *ob, GpencilModifierData *md)
+/**
+ * Function with void * argument for #uiListPanelIDFromDataFunc.
+ */
+static void gpencil_modifier_panel_id(void *md_link, char *r_name)
 {
-  const GpencilModifierTypeInfo *mti = BKE_gpencil_modifier_get_info(md->type);
-  PointerRNA ptr;
-  uiBlock *block;
-  uiLayout *box, *column, *row, *sub;
-  uiLayout *result = NULL;
-
-  /* create RNA pointer */
-  RNA_pointer_create(&ob->id, &RNA_GpencilModifier, md, &ptr);
-
-  column = uiLayoutColumn(layout, true);
-  uiLayoutSetContextPointer(column, "modifier", &ptr);
-
-  /* rounded header ------------------------------------------------------------------- */
-  box = uiLayoutBox(column);
-
-  row = uiLayoutRow(box, false);
-  block = uiLayoutGetBlock(row);
-
-  UI_block_emboss_set(block, UI_EMBOSS_NONE);
-  /* Open/Close .................................  */
-  uiItemR(row, &ptr, "show_expanded", 0, "", ICON_NONE);
-
-  /* modifier-type icon */
-  uiItemL(row, "", RNA_struct_ui_icon(ptr.type));
-  UI_block_emboss_set(block, UI_EMBOSS);
-
-  /* modifier name */
-  if (mti->isDisabled && mti->isDisabled(md, 0)) {
-    uiLayoutSetRedAlert(row, true);
-  }
-  uiItemR(row, &ptr, "name", 0, "", ICON_NONE);
-  uiLayoutSetRedAlert(row, false);
-
-  /* mode enabling buttons */
-  UI_block_align_begin(block);
-  uiItemR(row, &ptr, "show_render", 0, "", ICON_NONE);
-  uiItemR(row, &ptr, "show_viewport", 0, "", ICON_NONE);
-
-  if (mti->flags & eGpencilModifierTypeFlag_SupportsEditmode) {
-    sub = uiLayoutRow(row, true);
-    uiLayoutSetActive(sub, false);
-    uiItemR(sub, &ptr, "show_in_editmode", 0, "", ICON_NONE);
-  }
-
-  UI_block_align_end(block);
-
-  /* Up/Down + Delete ........................... */
-  UI_block_align_begin(block);
-  uiItemO(row, "", ICON_TRIA_UP, "OBJECT_OT_gpencil_modifier_move_up");
-  uiItemO(row, "", ICON_TRIA_DOWN, "OBJECT_OT_gpencil_modifier_move_down");
-  UI_block_align_end(block);
-
-  UI_block_emboss_set(block, UI_EMBOSS_NONE);
-  uiItemO(row, "", ICON_X, "OBJECT_OT_gpencil_modifier_remove");
-  UI_block_emboss_set(block, UI_EMBOSS);
-
-  /* modifier settings (under the header) --------------------------------------------------- */
-  if (md->mode & eGpencilModifierMode_Expanded) {
-    /* apply/convert/copy */
-    box = uiLayoutBox(column);
-    row = uiLayoutRow(box, false);
-
-    /* only here obdata, the rest of modifiers is ob level */
-    UI_block_lock_set(block, BKE_object_obdata_is_libdata(ob), ERROR_LIBDATA_MESSAGE);
-
-    uiLayoutSetOperatorContext(row, WM_OP_INVOKE_DEFAULT);
-
-    sub = uiLayoutRow(row, false);
-    if (mti->flags & eGpencilModifierTypeFlag_NoApply) {
-      uiLayoutSetEnabled(sub, false);
-    }
-    uiItemEnumO(sub,
-                "OBJECT_OT_gpencil_modifier_apply",
-                CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Apply"),
-                0,
-                "apply_as",
-                MODIFIER_APPLY_DATA);
-
-    UI_block_lock_clear(block);
-    UI_block_lock_set(block, ob && ID_IS_LINKED(ob), ERROR_LIBDATA_MESSAGE);
-
-    uiItemO(row,
-            CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Copy"),
-            ICON_NONE,
-            "OBJECT_OT_gpencil_modifier_copy");
-
-    /* result is the layout block inside the box,
-     * that we return so that modifier settings can be drawn */
-    result = uiLayoutColumn(box, false);
-    block = uiLayoutAbsoluteBlock(box);
-  }
-
-  /* error messages */
-  if (md->error) {
-    box = uiLayoutBox(column);
-    row = uiLayoutRow(box, false);
-    uiItemL(row, md->error, ICON_ERROR);
-  }
-
-  return result;
+  ModifierData *md = (ModifierData *)md_link;
+  BKE_gpencil_modifierType_panel_id(md->type, r_name);
 }
 
-uiLayout *uiTemplateGpencilModifier(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
+void uiTemplateGpencilModifiers(uiLayout *UNUSED(layout), bContext *C)
 {
-  Object *ob;
-  GpencilModifierData *md, *vmd;
-  int i;
+  ScrArea *sa = CTX_wm_area(C);
+  ARegion *region = CTX_wm_region(C);
+  Object *ob = get_context_object(C);
+  ListBase *modifiers = &ob->greasepencil_modifiers;
 
-  /* verify we have valid data */
-  if (!RNA_struct_is_a(ptr->type, &RNA_GpencilModifier)) {
-    RNA_warning("Expected modifier on object");
-    return NULL;
-  }
+  bool panels_match = UI_panel_list_matches_data(region, modifiers, gpencil_modifier_panel_id);
 
-  ob = (Object *)ptr->owner_id;
-  md = ptr->data;
+  if (!panels_match) {
+    UI_panels_free_instanced(C, region);
+    GpencilModifierData *md = modifiers->first;
+    for (int i = 0; md; i++, md = md->next) {
+      const GpencilModifierTypeInfo *mti = BKE_gpencil_modifier_get_info(md->type);
+      if (mti->panelRegister) {
+        char panel_idname[MAX_NAME];
+        gpencil_modifier_panel_id(md, panel_idname);
 
-  if (!ob || !(GS(ob->id.name) == ID_OB)) {
-    RNA_warning("Expected modifier on object");
-    return NULL;
-  }
-
-  UI_block_lock_set(uiLayoutGetBlock(layout), (ob && ID_IS_LINKED(ob)), ERROR_LIBDATA_MESSAGE);
-
-  /* find modifier and draw it */
-  vmd = ob->greasepencil_modifiers.first;
-  for (i = 0; vmd; i++, vmd = vmd->next) {
-    if (md == vmd) {
-      return gpencil_draw_modifier(layout, ob, md);
+        Panel *new_panel = UI_panel_add_instanced(sa, region, &region->panels, panel_idname, i);
+        if (new_panel != NULL) {
+          UI_panel_set_expand_from_list_data(C, new_panel);
+        }
+      }
     }
   }
-
-  return NULL;
+  else {
+    /* The expansion might have been changed elsewhere, so we still need to set it. */
+    LISTBASE_FOREACH (Panel *, panel, &region->panels) {
+      if ((panel->type != NULL) && (panel->type->flag & PNL_INSTANCED))
+        UI_panel_set_expand_from_list_data(C, panel);
+    }
+  }
 }
 
 /** \} */
 
+/** \} */
+
+#define ERROR_LIBDATA_MESSAGE TIP_("Can't edit external library data")
+
 /* -------------------------------------------------------------------- */
-/** \name Grease Pencil Shader FX Template
+/** \name ShaderFx Template
+ *
+ *  Template for building the panel layout for the active object's grease pencil shader effects.
  * \{ */
 
-static uiLayout *gpencil_draw_shaderfx(uiLayout *layout, Object *ob, ShaderFxData *md)
+/**
+ * Function with void * argument for #uiListPanelIDFromDataFunc.
+ */
+static void shaderfx_panel_id(void *fx_v, char *r_idname)
 {
-  const ShaderFxTypeInfo *mti = BKE_shaderfx_get_info(md->type);
-  PointerRNA ptr;
-  uiBlock *block;
-  uiLayout *box, *column, *row, *sub;
-  uiLayout *result = NULL;
-
-  /* create RNA pointer */
-  RNA_pointer_create(&ob->id, &RNA_ShaderFx, md, &ptr);
-
-  column = uiLayoutColumn(layout, true);
-  uiLayoutSetContextPointer(column, "shaderfx", &ptr);
-
-  /* rounded header ------------------------------------------------------------------- */
-  box = uiLayoutBox(column);
-
-  row = uiLayoutRow(box, false);
-  block = uiLayoutGetBlock(row);
-
-  UI_block_emboss_set(block, UI_EMBOSS_NONE);
-  /* Open/Close .................................  */
-  uiItemR(row, &ptr, "show_expanded", 0, "", ICON_NONE);
-
-  /* shader-type icon */
-  uiItemL(row, "", RNA_struct_ui_icon(ptr.type));
-  UI_block_emboss_set(block, UI_EMBOSS);
-
-  /* effect name */
-  if (mti->isDisabled && mti->isDisabled(md, 0)) {
-    uiLayoutSetRedAlert(row, true);
-  }
-  uiItemR(row, &ptr, "name", 0, "", ICON_NONE);
-  uiLayoutSetRedAlert(row, false);
-
-  /* mode enabling buttons */
-  UI_block_align_begin(block);
-  uiItemR(row, &ptr, "show_render", 0, "", ICON_NONE);
-  uiItemR(row, &ptr, "show_viewport", 0, "", ICON_NONE);
-
-  if (mti->flags & eShaderFxTypeFlag_SupportsEditmode) {
-    sub = uiLayoutRow(row, true);
-    uiLayoutSetActive(sub, false);
-    uiItemR(sub, &ptr, "show_in_editmode", 0, "", ICON_NONE);
-  }
-
-  UI_block_align_end(block);
-
-  /* Up/Down + Delete ........................... */
-  UI_block_align_begin(block);
-  uiItemO(row, "", ICON_TRIA_UP, "OBJECT_OT_shaderfx_move_up");
-  uiItemO(row, "", ICON_TRIA_DOWN, "OBJECT_OT_shaderfx_move_down");
-  UI_block_align_end(block);
-
-  UI_block_emboss_set(block, UI_EMBOSS_NONE);
-  uiItemO(row, "", ICON_X, "OBJECT_OT_shaderfx_remove");
-  UI_block_emboss_set(block, UI_EMBOSS);
-
-  /* effect settings (under the header) --------------------------------------------------- */
-  if (md->mode & eShaderFxMode_Expanded) {
-    /* apply/convert/copy */
-    box = uiLayoutBox(column);
-    row = uiLayoutRow(box, false);
-
-    /* only here obdata, the rest of effect is ob level */
-    UI_block_lock_set(block, BKE_object_obdata_is_libdata(ob), ERROR_LIBDATA_MESSAGE);
-
-    /* result is the layout block inside the box,
-     * that we return so that effect settings can be drawn */
-    result = uiLayoutColumn(box, false);
-    block = uiLayoutAbsoluteBlock(box);
-  }
-
-  /* error messages */
-  if (md->error) {
-    box = uiLayoutBox(column);
-    row = uiLayoutRow(box, false);
-    uiItemL(row, md->error, ICON_ERROR);
-  }
-
-  return result;
+  ShaderFxData *fx = (ShaderFxData *)fx_v;
+  BKE_shaderfxType_panel_id(fx->type, r_idname);
 }
 
-uiLayout *uiTemplateShaderFx(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
+/**
+ * Check if the shader effect panels don't match the data and rebuild the panels if so.
+ */
+void uiTemplateShaderFx(uiLayout *UNUSED(layout), bContext *C)
 {
-  Object *ob;
-  ShaderFxData *fx, *vfx;
-  int i;
+  ScrArea *sa = CTX_wm_area(C);
+  ARegion *region = CTX_wm_region(C);
+  Object *ob = get_context_object(C);
+  ListBase *shaderfx = &ob->shader_fx;
 
-  /* verify we have valid data */
-  if (!RNA_struct_is_a(ptr->type, &RNA_ShaderFx)) {
-    RNA_warning("Expected shader fx on object");
-    return NULL;
-  }
+  bool panels_match = UI_panel_list_matches_data(region, shaderfx, shaderfx_panel_id);
 
-  ob = (Object *)ptr->owner_id;
-  fx = ptr->data;
+  if (!panels_match) {
+    UI_panels_free_instanced(C, region);
+    ShaderFxData *fx = shaderfx->first;
+    for (int i = 0; fx; i++, fx = fx->next) {
+      char panel_idname[MAX_NAME];
+      shaderfx_panel_id(fx, panel_idname);
 
-  if (!ob || !(GS(ob->id.name) == ID_OB)) {
-    RNA_warning("Expected shader fx on object");
-    return NULL;
-  }
-
-  UI_block_lock_set(uiLayoutGetBlock(layout), (ob && ID_IS_LINKED(ob)), ERROR_LIBDATA_MESSAGE);
-
-  /* find modifier and draw it */
-  vfx = ob->shader_fx.first;
-  for (i = 0; vfx; i++, vfx = vfx->next) {
-    if (fx == vfx) {
-      return gpencil_draw_shaderfx(layout, ob, fx);
+      Panel *new_panel = UI_panel_add_instanced(sa, region, &region->panels, panel_idname, i);
+      if (new_panel != NULL) {
+        UI_panel_set_expand_from_list_data(C, new_panel);
+      }
     }
   }
-
-  return NULL;
+  else {
+    /* The expansion might have been changed elsewhere, so we still need to set it. */
+    LISTBASE_FOREACH (Panel *, panel, &region->panels) {
+      if ((panel->type != NULL) && (panel->type->flag & PNL_INSTANCED))
+        UI_panel_set_expand_from_list_data(C, panel);
+    }
+  }
 }
 
 /** \} */
@@ -2740,37 +2441,24 @@ void uiTemplateOperatorRedoProperties(uiLayout *layout, const bContext *C)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name Constraint Template
+/** \name Constraint Header Template
  * \{ */
+
+#define ERROR_LIBDATA_MESSAGE TIP_("Can't edit external library data")
 
 static void constraint_active_func(bContext *UNUSED(C), void *ob_v, void *con_v)
 {
-  ED_object_constraint_set_active(ob_v, con_v);
+  ED_object_constraint_active_set(ob_v, con_v);
 }
 
-/* draw panel showing settings for a constraint */
-static uiLayout *draw_constraint(uiLayout *layout, Object *ob, bConstraint *con)
+static void draw_constraint_header(uiLayout *layout, Object *ob, bConstraint *con)
 {
   bPoseChannel *pchan = BKE_pose_channel_active(ob);
-  const bConstraintTypeInfo *cti;
   uiBlock *block;
-  uiLayout *result = NULL, *col, *box, *row;
+  uiLayout *sub;
   PointerRNA ptr;
-  char typestr[32];
   short proxy_protected, xco = 0, yco = 0;
   // int rb_col; // UNUSED
-
-  /* get constraint typeinfo */
-  cti = BKE_constraint_typeinfo_get(con);
-  if (cti == NULL) {
-    /* exception for 'Null' constraint - it doesn't have constraint typeinfo! */
-    BLI_strncpy(typestr,
-                (con->type == CONSTRAINT_TYPE_NULL) ? IFACE_("Null") : IFACE_("Unknown"),
-                sizeof(typestr));
-  }
-  else {
-    BLI_strncpy(typestr, IFACE_(cti->name), sizeof(typestr));
-  }
 
   /* determine whether constraint is proxy protected or not */
   if (BKE_constraints_proxylocked_owner(ob, pchan)) {
@@ -2786,35 +2474,22 @@ static uiLayout *draw_constraint(uiLayout *layout, Object *ob, bConstraint *con)
 
   RNA_pointer_create(&ob->id, &RNA_Constraint, con, &ptr);
 
-  col = uiLayoutColumn(layout, true);
-  uiLayoutSetContextPointer(col, "constraint", &ptr);
+  uiLayoutSetContextPointer(layout, "constraint", &ptr);
 
-  box = uiLayoutBox(col);
-  row = uiLayoutRow(box, false);
-  block = uiLayoutGetBlock(box);
+  /* Constraint type icon. */
+  sub = uiLayoutRow(layout, false);
+  uiLayoutSetEmboss(sub, false);
+  uiLayoutSetRedAlert(sub, (con->flag & CONSTRAINT_DISABLE));
+  uiItemL(sub, "", RNA_struct_ui_icon(ptr.type));
 
-  /* Draw constraint header */
-
-  /* open/close */
-  UI_block_emboss_set(block, UI_EMBOSS_NONE);
-  uiItemR(row, &ptr, "show_expanded", 0, "", ICON_NONE);
-
-  /* constraint-type icon */
-  uiItemL(row, "", RNA_struct_ui_icon(ptr.type));
   UI_block_emboss_set(block, UI_EMBOSS);
 
-  if (con->flag & CONSTRAINT_DISABLE) {
-    uiLayoutSetRedAlert(row, true);
-  }
-
   if (proxy_protected == 0) {
-    uiItemR(row, &ptr, "name", 0, "", ICON_NONE);
+    uiItemR(layout, &ptr, "name", 0, "", ICON_NONE);
   }
   else {
-    uiItemL(row, con->name, ICON_NONE);
+    uiItemL(layout, con->name, ICON_NONE);
   }
-
-  uiLayoutSetRedAlert(row, false);
 
   /* proxy-protected constraints cannot be edited, so hide up/down + close buttons */
   if (proxy_protected) {
@@ -2854,54 +2529,20 @@ static uiLayout *draw_constraint(uiLayout *layout, Object *ob, bConstraint *con)
     UI_block_emboss_set(block, UI_EMBOSS);
   }
   else {
-    short prev_proxylock, show_upbut, show_downbut;
-
-    /* Up/Down buttons:
-     * Proxy-constraints are not allowed to occur after local (non-proxy) constraints
-     * as that poses problems when restoring them, so disable the "up" button where
-     * it may cause this situation.
-     *
-     * Up/Down buttons should only be shown (or not grayed - todo) if they serve some purpose.
-     */
-    if (BKE_constraints_proxylocked_owner(ob, pchan)) {
-      if (con->prev) {
-        prev_proxylock = (con->prev->flag & CONSTRAINT_PROXY_LOCAL) ? 0 : 1;
-      }
-      else {
-        prev_proxylock = 0;
-      }
-    }
-    else {
-      prev_proxylock = 0;
-    }
-
-    show_upbut = ((prev_proxylock == 0) && (con->prev));
-    show_downbut = (con->next) ? 1 : 0;
-
     /* enabled */
     UI_block_emboss_set(block, UI_EMBOSS_NONE);
-    uiItemR(row, &ptr, "mute", 0, "", 0);
+    uiItemR(layout, &ptr, "mute", 0, "", 0);
     UI_block_emboss_set(block, UI_EMBOSS);
 
-    uiLayoutSetOperatorContext(row, WM_OP_INVOKE_DEFAULT);
-
-    /* up/down */
-    if (show_upbut || show_downbut) {
-      UI_block_align_begin(block);
-      if (show_upbut) {
-        uiItemO(row, "", ICON_TRIA_UP, "CONSTRAINT_OT_move_up");
-      }
-
-      if (show_downbut) {
-        uiItemO(row, "", ICON_TRIA_DOWN, "CONSTRAINT_OT_move_down");
-      }
-      UI_block_align_end(block);
-    }
+    uiLayoutSetOperatorContext(layout, WM_OP_INVOKE_DEFAULT);
 
     /* Close 'button' - emboss calls here disable drawing of 'button' behind X */
     UI_block_emboss_set(block, UI_EMBOSS_NONE);
-    uiItemO(row, "", ICON_X, "CONSTRAINT_OT_delete");
+    uiItemO(layout, "", ICON_X, "CONSTRAINT_OT_delete");
     UI_block_emboss_set(block, UI_EMBOSS);
+
+    /* Some extra padding at the end, so the 'x' icon isn't too close to drag button. */
+    uiItemS(layout);
   }
 
   /* Set but-locks for protected settings (magic numbers are used here!) */
@@ -2909,23 +2550,11 @@ static uiLayout *draw_constraint(uiLayout *layout, Object *ob, bConstraint *con)
     UI_block_lock_set(block, true, TIP_("Cannot edit Proxy-Protected Constraint"));
   }
 
-  /* Draw constraint data */
-  if ((con->flag & CONSTRAINT_EXPAND) == 0) {
-    (yco) -= 10.5f * UI_UNIT_Y;
-  }
-  else {
-    box = uiLayoutBox(col);
-    block = uiLayoutAbsoluteBlock(box);
-    result = box;
-  }
-
   /* clear any locks set up for proxies/lib-linking */
   UI_block_lock_clear(block);
-
-  return result;
 }
 
-uiLayout *uiTemplateConstraint(uiLayout *layout, PointerRNA *ptr)
+void uiTemplateConstraintHeader(uiLayout *layout, PointerRNA *ptr)
 {
   Object *ob;
   bConstraint *con;
@@ -2933,7 +2562,7 @@ uiLayout *uiTemplateConstraint(uiLayout *layout, PointerRNA *ptr)
   /* verify we have valid data */
   if (!RNA_struct_is_a(ptr->type, &RNA_Constraint)) {
     RNA_warning("Expected constraint on object");
-    return NULL;
+    return;
   }
 
   ob = (Object *)ptr->owner_id;
@@ -2941,7 +2570,7 @@ uiLayout *uiTemplateConstraint(uiLayout *layout, PointerRNA *ptr)
 
   if (!ob || !(GS(ob->id.name) == ID_OB)) {
     RNA_warning("Expected constraint on object");
-    return NULL;
+    return;
   }
 
   UI_block_lock_set(uiLayoutGetBlock(layout), (ob && ID_IS_LINKED(ob)), ERROR_LIBDATA_MESSAGE);
@@ -2950,11 +2579,11 @@ uiLayout *uiTemplateConstraint(uiLayout *layout, PointerRNA *ptr)
   if (con->type == CONSTRAINT_TYPE_KINEMATIC) {
     bKinematicConstraint *data = con->data;
     if (data->flag & CONSTRAINT_IK_TEMP) {
-      return NULL;
+      return;
     }
   }
 
-  return draw_constraint(layout, ob, con);
+  draw_constraint_header(layout, ob, con);
 }
 
 /** \} */
@@ -7523,7 +7152,10 @@ void uiTemplateNodeSocket(uiLayout *layout, bContext *UNUSED(C), float *color)
 /** \name Cache File Template
  * \{ */
 
-void uiTemplateCacheFile(uiLayout *layout, bContext *C, PointerRNA *ptr, const char *propname)
+void uiTemplateCacheFile(uiLayout *layout,
+                         const bContext *C,
+                         PointerRNA *ptr,
+                         const char *propname)
 {
   if (!ptr->data) {
     return;

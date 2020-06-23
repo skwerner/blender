@@ -71,6 +71,7 @@ extern StructRNA RNA_BackgroundImage;
 extern StructRNA RNA_BevelModifier;
 extern StructRNA RNA_BezierSplinePoint;
 extern StructRNA RNA_BlendData;
+extern StructRNA RNA_BlendDataLibraries;
 extern StructRNA RNA_BlendTexture;
 extern StructRNA RNA_BlenderRNA;
 extern StructRNA RNA_BoidRule;
@@ -818,12 +819,12 @@ int RNA_property_array_item_index(PropertyRNA *prop, char name);
 
 int RNA_property_string_maxlength(PropertyRNA *prop);
 
-const char *RNA_property_ui_name(PropertyRNA *prop);
-const char *RNA_property_ui_name_raw(PropertyRNA *prop);
-const char *RNA_property_ui_description(PropertyRNA *prop);
-const char *RNA_property_ui_description_raw(PropertyRNA *prop);
-const char *RNA_property_translation_context(PropertyRNA *prop);
-int RNA_property_ui_icon(PropertyRNA *prop);
+const char *RNA_property_ui_name(const PropertyRNA *prop);
+const char *RNA_property_ui_name_raw(const PropertyRNA *prop);
+const char *RNA_property_ui_description(const PropertyRNA *prop);
+const char *RNA_property_ui_description_raw(const PropertyRNA *prop);
+const char *RNA_property_translation_context(const PropertyRNA *prop);
+int RNA_property_ui_icon(const PropertyRNA *prop);
 
 /* Dynamic Property Information */
 
@@ -1464,6 +1465,7 @@ bool RNA_struct_override_matches(struct Main *bmain,
                                  struct PointerRNA *ptr_local,
                                  struct PointerRNA *ptr_reference,
                                  const char *root_path,
+                                 const size_t root_path_len,
                                  struct IDOverrideLibrary *override,
                                  const eRNAOverrideMatch flags,
                                  eRNAOverrideMatchResult *r_report_flags);

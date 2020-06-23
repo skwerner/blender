@@ -61,6 +61,8 @@ class BlenderSync {
               Progress &progress);
   ~BlenderSync();
 
+  void reset(BL::BlendData &b_data, BL::Scene &b_scene);
+
   /* sync */
   void sync_recalc(BL::Depsgraph &b_depsgraph, BL::SpaceView3D &b_v3d);
   void sync_data(BL::RenderSettings &b_render,
@@ -151,16 +153,12 @@ class BlenderSync {
   /* Hair */
   void sync_hair(BL::Depsgraph b_depsgraph,
                  BL::Object b_ob,
-                 Geometry *geom,
+                 Hair *hair,
                  const vector<Shader *> &used_shaders);
-  void sync_hair_motion(BL::Depsgraph b_depsgraph,
-                        BL::Object b_ob,
-                        Geometry *geom,
-                        int motion_step);
+  void sync_hair_motion(BL::Depsgraph b_depsgraph, BL::Object b_ob, Hair *hair, int motion_step);
   void sync_hair(Hair *hair, BL::Object &b_ob, bool motion, int motion_step = 0);
   void sync_particle_hair(
-      Geometry *geom, BL::Mesh &b_mesh, BL::Object &b_ob, bool motion, int motion_step = 0);
-  void sync_curve_settings();
+      Hair *hair, BL::Mesh &b_mesh, BL::Object &b_ob, bool motion, int motion_step = 0);
   bool object_has_particle_hair(BL::Object b_ob);
 
   /* Camera */

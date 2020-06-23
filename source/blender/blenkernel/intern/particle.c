@@ -410,7 +410,7 @@ struct LatticeDeformData *psys_create_lattice_deform_data(ParticleSimulationData
       }
     }
     if (lattice) {
-      lattice_deform_data = init_latt_deform(lattice, NULL);
+      lattice_deform_data = BKE_lattice_deform_data_create(lattice, NULL);
     }
   }
 
@@ -2262,6 +2262,7 @@ static void do_path_effectors(ParticleSimulationData *sim,
                       sim->psys->part->effector_weights,
                       &epoint,
                       force,
+                      NULL,
                       NULL);
 
   mul_v3_fl(force,
@@ -3150,7 +3151,8 @@ void psys_cache_paths(ParticleSimulationData *sim, float cfra, const bool use_re
       /* lattices have to be calculated separately to avoid mixups between effector calculations */
       if (psys->lattice_deform_data) {
         for (k = 0, ca = cache[p]; k <= segments; k++, ca++) {
-          calc_latt_deform(psys->lattice_deform_data, ca->co, psys->lattice_strength);
+          BKE_lattice_deform_data_eval_co(
+              psys->lattice_deform_data, ca->co, psys->lattice_strength);
         }
       }
     }
@@ -3185,7 +3187,7 @@ void psys_cache_paths(ParticleSimulationData *sim, float cfra, const bool use_re
   psys->totcached = totpart;
 
   if (psys->lattice_deform_data) {
-    end_latt_deform(psys->lattice_deform_data);
+    BKE_lattice_deform_data_destroy(psys->lattice_deform_data);
     psys->lattice_deform_data = NULL;
   }
 
@@ -4413,7 +4415,8 @@ void psys_get_particle_on_path(ParticleSimulationData *sim,
           }
 
           if (psys->lattice_deform_data && edit == 0) {
-            calc_latt_deform(psys->lattice_deform_data, state->co, psys->lattice_strength);
+            BKE_lattice_deform_data_eval_co(
+                psys->lattice_deform_data, state->co, psys->lattice_strength);
           }
         }
       }
@@ -4696,7 +4699,8 @@ int psys_get_particle_state(ParticleSimulationData *sim, int p, ParticleKey *sta
       do_child_modifiers(&modifier_ctx, mat, state, t);
 
       if (psys->lattice_deform_data) {
-        calc_latt_deform(psys->lattice_deform_data, state->co, psys->lattice_strength);
+        BKE_lattice_deform_data_eval_co(
+            psys->lattice_deform_data, state->co, psys->lattice_strength);
       }
     }
     else {
@@ -4760,7 +4764,8 @@ int psys_get_particle_state(ParticleSimulationData *sim, int p, ParticleKey *sta
       }
 
       if (sim->psys->lattice_deform_data) {
-        calc_latt_deform(sim->psys->lattice_deform_data, state->co, psys->lattice_strength);
+        BKE_lattice_deform_data_eval_co(
+            sim->psys->lattice_deform_data, state->co, psys->lattice_strength);
       }
     }
 
@@ -4783,11 +4788,11 @@ void psys_get_dupli_texture(ParticleSystem *psys,
 
   /* XXX: on checking '(psmd->dm != NULL)'
    * This is incorrect but needed for metaball evaluation.
-   * Ideally this would be calculated via the depsgraph, however with metaballs,
+   * Ideally this would be calculated via the depsgraph, however with meta-balls,
    * the entire scenes dupli's are scanned, which also looks into uncalculated data.
    *
    * For now just include this workaround as an alternative to crashing,
-   * but longer term metaballs should behave in a more manageable way, see: T46622. */
+   * but longer term meta-balls should behave in a more manageable way, see: T46622. */
 
   uv[0] = uv[1] = 0.f;
 
@@ -4970,12 +4975,13 @@ void psys_apply_hair_lattice(Depsgraph *depsgraph, Scene *scene, Object *ob, Par
       hkey = pa->hair;
       for (h = 0; h < pa->totkey; h++, hkey++) {
         mul_m4_v3(hairmat, hkey->co);
-        calc_latt_deform(psys->lattice_deform_data, hkey->co, psys->lattice_strength);
+        BKE_lattice_deform_data_eval_co(
+            psys->lattice_deform_data, hkey->co, psys->lattice_strength);
         mul_m4_v3(imat, hkey->co);
       }
     }
 
-    end_latt_deform(psys->lattice_deform_data);
+    BKE_lattice_deform_data_destroy(psys->lattice_deform_data);
     psys->lattice_deform_data = NULL;
 
     /* protect the applied shape */

@@ -536,7 +536,7 @@ void psys_thread_context_free(ParticleThreadContext *ctx)
   }
 
   if (ctx->sim.psys->lattice_deform_data) {
-    end_latt_deform(ctx->sim.psys->lattice_deform_data);
+    BKE_lattice_deform_data_destroy(ctx->sim.psys->lattice_deform_data);
     ctx->sim.psys->lattice_deform_data = NULL;
   }
 
@@ -2163,7 +2163,7 @@ static void psys_sph_flush_springs(SPHData *sphdata)
   BLI_buffer_field_free(&sphdata->new_springs);
 }
 
-void psys_sph_finalise(SPHData *sphdata)
+void psys_sph_finalize(SPHData *sphdata)
 {
   psys_sph_flush_springs(sphdata);
 
@@ -2243,8 +2243,13 @@ static void basic_force_cb(void *efdata_v, ParticleKey *state, float *force, flo
   /* add effectors */
   pd_point_from_particle(efdata->sim, efdata->pa, state, &epoint);
   if (part->type != PART_HAIR || part->effector_weights->flag & EFF_WEIGHT_DO_HAIR) {
-    BKE_effectors_apply(
-        sim->psys->effectors, sim->colliders, part->effector_weights, &epoint, force, impulse);
+    BKE_effectors_apply(sim->psys->effectors,
+                        sim->colliders,
+                        part->effector_weights,
+                        &epoint,
+                        force,
+                        NULL,
+                        impulse);
   }
 
   mul_v3_fl(force, efdata->ptex.field);
@@ -4046,7 +4051,7 @@ static void dynamics_step(ParticleSimulationData *sim, float cfra)
 
       BLI_spin_end(&task_data.spin);
 
-      psys_sph_finalise(&sphdata);
+      psys_sph_finalize(&sphdata);
       break;
     }
   }
@@ -4126,7 +4131,7 @@ static void cached_step(ParticleSimulationData *sim, float cfra, const bool use_
     }
 
     if (psys->lattice_deform_data) {
-      end_latt_deform(psys->lattice_deform_data);
+      BKE_lattice_deform_data_destroy(psys->lattice_deform_data);
       psys->lattice_deform_data = NULL;
     }
 
@@ -4616,7 +4621,7 @@ static void system_step(ParticleSimulationData *sim, float cfra, const bool use_
 
   /* cleanup */
   if (psys->lattice_deform_data) {
-    end_latt_deform(psys->lattice_deform_data);
+    BKE_lattice_deform_data_destroy(psys->lattice_deform_data);
     psys->lattice_deform_data = NULL;
   }
 }

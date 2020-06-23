@@ -849,11 +849,34 @@ static void node_shader_buts_tex_environment_ex(uiLayout *layout, bContext *C, P
 static void node_shader_buts_tex_sky(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 {
   uiItemR(layout, ptr, "sky_type", DEFAULT_FLAGS, "", ICON_NONE);
-  uiItemR(layout, ptr, "sun_direction", DEFAULT_FLAGS, "", ICON_NONE);
-  uiItemR(layout, ptr, "turbidity", DEFAULT_FLAGS, NULL, ICON_NONE);
 
-  if (RNA_enum_get(ptr, "sky_type") == SHD_SKY_NEW) {
+  if (RNA_enum_get(ptr, "sky_type") == SHD_SKY_PREETHAM) {
+    uiItemR(layout, ptr, "sun_direction", DEFAULT_FLAGS, "", ICON_NONE);
+    uiItemR(layout, ptr, "turbidity", DEFAULT_FLAGS, NULL, ICON_NONE);
+  }
+  if (RNA_enum_get(ptr, "sky_type") == SHD_SKY_HOSEK) {
+    uiItemR(layout, ptr, "sun_direction", DEFAULT_FLAGS, "", ICON_NONE);
+    uiItemR(layout, ptr, "turbidity", DEFAULT_FLAGS, NULL, ICON_NONE);
     uiItemR(layout, ptr, "ground_albedo", DEFAULT_FLAGS, NULL, ICON_NONE);
+  }
+  if (RNA_enum_get(ptr, "sky_type") == SHD_SKY_NISHITA) {
+    uiItemR(layout, ptr, "sun_disc", DEFAULT_FLAGS, NULL, 0);
+
+    if (RNA_boolean_get(ptr, "sun_disc")) {
+      uiItemR(layout, ptr, "sun_size", DEFAULT_FLAGS, NULL, ICON_NONE);
+    }
+
+    uiLayout *col;
+    col = uiLayoutColumn(layout, true);
+    uiItemR(col, ptr, "sun_elevation", DEFAULT_FLAGS, NULL, ICON_NONE);
+    uiItemR(col, ptr, "sun_rotation", DEFAULT_FLAGS, NULL, ICON_NONE);
+
+    uiItemR(layout, ptr, "altitude", DEFAULT_FLAGS, NULL, ICON_NONE);
+
+    col = uiLayoutColumn(layout, true);
+    uiItemR(col, ptr, "air_density", DEFAULT_FLAGS, NULL, ICON_NONE);
+    uiItemR(col, ptr, "dust_density", DEFAULT_FLAGS, NULL, ICON_NONE);
+    uiItemR(col, ptr, "ozone_density", DEFAULT_FLAGS, NULL, ICON_NONE);
   }
 }
 
@@ -3638,7 +3661,7 @@ void draw_nodespace_back_pix(const bContext *C,
 
         IMMDrawPixelsTexState state = immDrawPixelsTexSetup(GPU_SHADER_2D_IMAGE_SHUFFLE_COLOR);
         GPU_shader_uniform_vector(
-            state.shader, GPU_shader_get_uniform_ensure(state.shader, "shuffle"), 4, 1, shuffle);
+            state.shader, GPU_shader_get_uniform(state.shader, "shuffle"), 4, 1, shuffle);
 
         immDrawPixelsTex(&state,
                          x,

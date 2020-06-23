@@ -101,12 +101,11 @@ typedef struct GPUVertFormat {
   char names[GPU_VERT_ATTR_NAMES_BUF_LEN];
 } GPUVertFormat;
 
-struct GPUShaderInterface;
+struct GPUShader;
 
 void GPU_vertformat_clear(GPUVertFormat *);
 void GPU_vertformat_copy(GPUVertFormat *dest, const GPUVertFormat *src);
-void GPU_vertformat_from_interface(GPUVertFormat *format,
-                                   const struct GPUShaderInterface *shaderface);
+void GPU_vertformat_from_shader(GPUVertFormat *format, const struct GPUShader *shader);
 
 uint GPU_vertformat_attr_add(
     GPUVertFormat *, const char *name, GPUVertCompType, uint comp_len, GPUVertFetchMode);
@@ -124,6 +123,10 @@ BLI_INLINE const char *GPU_vertformat_attr_name_get(const GPUVertFormat *format,
 {
   return format->names + attr->names[n_idx];
 }
+
+/* WARNING: Can only rename using a string with same character count.
+ * WARNING: This removes all other aliases of this attrib */
+void GPU_vertformat_attr_rename(GPUVertFormat *format, int attr, const char *new_name);
 
 void GPU_vertformat_safe_attr_name(const char *attr_name, char *r_safe_name, uint max_len);
 

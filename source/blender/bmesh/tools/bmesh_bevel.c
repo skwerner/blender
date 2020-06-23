@@ -2220,14 +2220,15 @@ static void bevel_set_weighted_normal_face_strength(BMesh *bm, BevelParams *bp)
   int mode = bp->face_strength_mode;
   bool do_set_strength;
   const char *wn_layer_id = MOD_WEIGHTEDNORMALS_FACEWEIGHT_CDLAYER_ID;
-  int cd_prop_int_idx = CustomData_get_named_layer_index(&bm->pdata, CD_PROP_INT, wn_layer_id);
+  int cd_prop_int_idx = CustomData_get_named_layer_index(&bm->pdata, CD_PROP_INT32, wn_layer_id);
 
   if (cd_prop_int_idx == -1) {
-    BM_data_layer_add_named(bm, &bm->pdata, CD_PROP_INT, wn_layer_id);
-    cd_prop_int_idx = CustomData_get_named_layer_index(&bm->pdata, CD_PROP_INT, wn_layer_id);
+    BM_data_layer_add_named(bm, &bm->pdata, CD_PROP_INT32, wn_layer_id);
+    cd_prop_int_idx = CustomData_get_named_layer_index(&bm->pdata, CD_PROP_INT32, wn_layer_id);
   }
-  cd_prop_int_idx -= CustomData_get_layer_index(&bm->pdata, CD_PROP_INT);
-  const int cd_prop_int_offset = CustomData_get_n_offset(&bm->pdata, CD_PROP_INT, cd_prop_int_idx);
+  cd_prop_int_idx -= CustomData_get_layer_index(&bm->pdata, CD_PROP_INT32);
+  const int cd_prop_int_offset = CustomData_get_n_offset(
+      &bm->pdata, CD_PROP_INT32, cd_prop_int_idx);
 
   BM_ITER_MESH (f, &fiter, bm, BM_FACES_OF_MESH) {
     fkind = get_face_kind(bp, f);
@@ -5948,12 +5949,23 @@ static BevVert *bevel_vert_construct(BMesh *bm, BevelParams *bp, BMVert *v)
           z = sinf(angle_v3v3v3(v1->co, v->co, v2->co));
           e->offset_r_spec = BM_edge_calc_length(e->next->e) * bp->offset * z / 100.0f;
           break;
+        case BEVEL_AMT_ABSOLUTE:
+          /* Like Percent, but the amount gives the absolute distance along adjacent edges. */
+          v1 = BM_edge_other_vert(e->prev->e, v);
+          v2 = BM_edge_other_vert(e->e, v);
+          z = sinf(angle_v3v3v3(v1->co, v->co, v2->co));
+          e->offset_l_spec = bp->offset * z;
+          v1 = BM_edge_other_vert(e->e, v);
+          v2 = BM_edge_other_vert(e->next->e, v);
+          z = sinf(angle_v3v3v3(v1->co, v->co, v2->co));
+          e->offset_r_spec = bp->offset * z;
+          break;
         default:
           BLI_assert(!"bad bevel offset kind");
           e->offset_l_spec = bp->offset;
           break;
       }
-      if (bp->offset_type != BEVEL_AMT_PERCENT) {
+      if (bp->offset_type != BEVEL_AMT_PERCENT && bp->offset_type != BEVEL_AMT_ABSOLUTE) {
         e->offset_r_spec = e->offset_l_spec;
       }
       if (bp->use_weights) {
@@ -5997,6 +6009,10 @@ static BevVert *bevel_vert_construct(BMesh *bm, BevelParams *bp, BMVert *v)
         }
         case BEVEL_AMT_PERCENT: {
           e->offset_l_spec = BM_edge_calc_length(e->e) * bv->offset / 100.0f;
+          break;
+        }
+        case BEVEL_AMT_ABSOLUTE: {
+          e->offset_l_spec = bv->offset;
           break;
         }
       }
@@ -7281,7 +7297,8 @@ void BM_mesh_bevel(BMesh *bm,
     }
 
     /* Perhaps do a pass to try to even out widths. */
-    if (!bp.vertex_only && bp.offset_adjust && bp.offset_type != BEVEL_AMT_PERCENT) {
+    if (!bp.vertex_only && bp.offset_adjust && bp.offset_type != BEVEL_AMT_PERCENT &&
+        bp.offset_type != BEVEL_AMT_ABSOLUTE) {
       adjust_offsets(&bp, bm);
     }
 

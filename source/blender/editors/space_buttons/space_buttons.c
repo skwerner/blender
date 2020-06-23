@@ -30,7 +30,10 @@
 #include "BLI_utildefines.h"
 
 #include "BKE_context.h"
+#include "BKE_gpencil_modifier.h" /* Types for registering panels. */
+#include "BKE_modifier.h"
 #include "BKE_screen.h"
+#include "BKE_shader_fx.h"
 
 #include "ED_screen.h"
 #include "ED_space_api.h"
@@ -631,6 +634,30 @@ void ED_spacetype_buttons(void)
   buttons_context_register(art);
 #endif
   BLI_addhead(&st->regiontypes, art);
+
+  /* Register the panel types from modifiers. The actual panels are built per modifier rather than
+   * per modifier type. */
+  for (ModifierType i = 0; i < NUM_MODIFIER_TYPES; i++) {
+    const ModifierTypeInfo *mti = BKE_modifier_get_info(i);
+    if (mti != NULL && mti->panelRegister != NULL) {
+      mti->panelRegister(art);
+    }
+  }
+  for (int i = 0; i < NUM_GREASEPENCIL_MODIFIER_TYPES; i++) {
+    const GpencilModifierTypeInfo *mti = BKE_gpencil_modifier_get_info(i);
+    if (mti != NULL && mti->panelRegister != NULL) {
+      mti->panelRegister(art);
+    }
+  }
+  for (int i = 0; i < NUM_SHADER_FX_TYPES; i++) {
+    if (i == eShaderFxType_Light_deprecated) {
+      continue;
+    }
+    const ShaderFxTypeInfo *fxti = BKE_shaderfx_get_info(i);
+    if (fxti != NULL && fxti->panelRegister != NULL) {
+      fxti->panelRegister(art);
+    }
+  }
 
   /* regions: header */
   art = MEM_callocN(sizeof(ARegionType), "spacetype buttons region");

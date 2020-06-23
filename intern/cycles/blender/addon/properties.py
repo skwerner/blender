@@ -55,8 +55,7 @@ enum_displacement_methods = (
 
 enum_bvh_layouts = (
     ('BVH2', "BVH2", "", 1),
-    ('BVH4', "BVH4", "", 2),
-    ('BVH8', "BVH8", "", 4),
+    ('EMBREE', "Embree", "", 4),
 )
 
 enum_bvh_types = (
@@ -86,20 +85,9 @@ enum_panorama_types = (
     ('MIRRORBALL', "Mirror Ball", "Uses the mirror ball mapping"),
 )
 
-enum_curve_primitives = (
-    ('TRIANGLES', "Triangles", "Create triangle geometry around strands"),
-    ('LINE_SEGMENTS', "Line Segments", "Use line segment primitives"),
-    ('CURVE_SEGMENTS', "Curve Segments", "Use segmented cardinal curve primitives"),
-)
-
-enum_triangle_curves = (
-    ('CAMERA_TRIANGLES', "Planes", "Create individual triangles forming planes that face camera"),
-    ('TESSELLATED_TRIANGLES', "Tessellated", "Create mesh surrounding each strand"),
-)
-
 enum_curve_shape = (
-    ('RIBBONS', "Ribbons", "Ignore thickness of each strand"),
-    ('THICK', "Thick", "Use thickness of strand when rendering"),
+    ('RIBBONS', "Rounded Ribbons", "Render hair as flat ribbon with rounded normals, for fast rendering"),
+    ('THICK', "3D Curves", "Render hair as 3D curve, for accurate results when viewing hair close up"),
 )
 
 enum_tile_order = (
@@ -651,11 +639,6 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         items=enum_bvh_types,
         default='DYNAMIC_BVH',
     )
-    use_bvh_embree: BoolProperty(
-        name="Use Embree",
-        description="Use Embree as ray accelerator",
-        default=False,
-    )
     debug_use_spatial_splits: BoolProperty(
         name="Use Spatial Splits",
         description="Use BVH spatial splits: longer builder time, faster render",
@@ -808,7 +791,7 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
     debug_bvh_layout: EnumProperty(
         name="BVH Layout",
         items=enum_bvh_layouts,
-        default='BVH8',
+        default='EMBREE',
     )
     debug_use_cpu_split_kernel: BoolProperty(name="Split Kernel", default=False)
 
@@ -1227,6 +1210,13 @@ class CyclesObjectSettings(bpy.types.PropertyGroup):
         default=1.0,
     )
 
+    shadow_terminator_offset: FloatProperty(
+        name="Shadow Terminator Offset",
+        description="Push the shadow terminator towards the light to hide artifacts on low poly geometry",
+        min=0.0, max=1.0,
+        default=0.0,
+    )
+
     is_shadow_catcher: BoolProperty(
         name="Shadow Catcher",
         description="Only render shadows on this object, for compositing renders into real footage",
@@ -1256,39 +1246,17 @@ class CyclesObjectSettings(bpy.types.PropertyGroup):
 
 class CyclesCurveRenderSettings(bpy.types.PropertyGroup):
 
-    primitive: EnumProperty(
-        name="Primitive",
-        description="Type of primitive used for hair rendering",
-        items=enum_curve_primitives,
-        default='LINE_SEGMENTS',
-    )
     shape: EnumProperty(
         name="Shape",
         description="Form of hair",
         items=enum_curve_shape,
-        default='THICK',
-    )
-    cull_backfacing: BoolProperty(
-        name="Cull Back-faces",
-        description="Do not test the back-face of each strand",
-        default=True,
-    )
-    use_curves: BoolProperty(
-        name="Use Cycles Hair Rendering",
-        description="Activate Cycles hair rendering for particle system",
-        default=True,
-    )
-    resolution: IntProperty(
-        name="Resolution",
-        description="Resolution of generated mesh",
-        min=3, max=64,
-        default=3,
+        default='RIBBONS',
     )
     subdivisions: IntProperty(
         name="Subdivisions",
         description="Number of subdivisions used in Cardinal curve intersection (power of 2)",
         min=0, max=24,
-        default=4,
+        default=2,
     )
 
     @classmethod
@@ -1550,6 +1518,12 @@ class CyclesPreferences(bpy.types.AddonPreferences):
 
     devices: bpy.props.CollectionProperty(type=CyclesDeviceSettings)
 
+    peer_memory: BoolProperty(
+        name="Distribute memory across devices",
+        description="Make more room for large scenes to fit by distributing memory across interconnected devices (e.g. via NVLink) rather than duplicating it",
+        default=False,
+    )
+
     def find_existing_device_entry(self, device):
         for device_entry in self.devices:
             if device_entry.id == device[2] and device_entry.type == device[1]:
@@ -1647,14 +1621,21 @@ class CyclesPreferences(bpy.types.AddonPreferences):
         row = layout.row()
         row.prop(self, "compute_device_type", expand=True)
 
-        devices = self.get_devices_for_type(self.compute_device_type)
+        if self.compute_device_type == 'NONE':
+            return
         row = layout.row()
-        if self.compute_device_type == 'CUDA':
-            self._draw_devices(row, 'CUDA', devices)
-        elif self.compute_device_type == 'OPTIX':
-            self._draw_devices(row, 'OPTIX', devices)
-        elif self.compute_device_type == 'OPENCL':
-            self._draw_devices(row, 'OPENCL', devices)
+        devices = self.get_devices_for_type(self.compute_device_type)
+        self._draw_devices(row, self.compute_device_type, devices)
+
+        import _cycles
+        has_peer_memory = 0
+        for device in _cycles.available_devices(self.compute_device_type):
+            if device[3] and self.find_existing_device_entry(device).use:
+                has_peer_memory += 1
+        if has_peer_memory > 1:
+            row = layout.row()
+            row.use_property_split = True
+            row.prop(self, "peer_memory")
 
     def draw(self, context):
         self.draw_impl(self.layout, context)

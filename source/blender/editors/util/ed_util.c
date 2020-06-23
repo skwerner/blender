@@ -153,10 +153,10 @@ void ED_editors_init(bContext *C)
             ED_object_sculptmode_enter_ex(bmain, depsgraph, scene, ob, true, reports);
           }
           else if (mode == OB_MODE_VERTEX_PAINT) {
-            ED_object_vpaintmode_enter_ex(bmain, depsgraph, wm, scene, ob);
+            ED_object_vpaintmode_enter_ex(bmain, depsgraph, scene, ob);
           }
           else if (mode == OB_MODE_WEIGHT_PAINT) {
-            ED_object_wpaintmode_enter_ex(bmain, depsgraph, wm, scene, ob);
+            ED_object_wpaintmode_enter_ex(bmain, depsgraph, scene, ob);
           }
           else {
             BLI_assert(0);
@@ -174,7 +174,7 @@ void ED_editors_init(bContext *C)
       else {
         /* TODO(campbell): avoid operator calls. */
         if (obact == ob) {
-          ED_object_mode_toggle(C, mode);
+          ED_object_mode_set(C, mode);
         }
       }
     }

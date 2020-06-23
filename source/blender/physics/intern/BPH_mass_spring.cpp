@@ -72,12 +72,50 @@ static int cloth_count_nondiag_blocks(Cloth *cloth)
   return nondiag;
 }
 
+static bool cloth_get_pressure_weights(ClothModifierData *clmd,
+                                       const MVertTri *vt,
+                                       float *r_weights)
+{
+  /* We have custom vertex weights for pressure. */
+  if (clmd->sim_parms->vgroup_pressure > 0) {
+    Cloth *cloth = clmd->clothObject;
+    ClothVertex *verts = cloth->verts;
+
+    for (unsigned int j = 0; j < 3; j++) {
+      r_weights[j] = verts[vt->tri[j]].pressure_factor;
+
+      /* Skip the entire triangle if it has a zero weight. */
+      if (r_weights[j] == 0.0f) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+static void cloth_calc_pressure_gradient(ClothModifierData *clmd,
+                                         const float gradient_vector[3],
+                                         float *r_vertex_pressure)
+{
+  Cloth *cloth = clmd->clothObject;
+  Implicit_Data *data = cloth->implicit;
+  unsigned int mvert_num = cloth->mvert_num;
+  float pt[3];
+
+  for (unsigned int i = 0; i < mvert_num; i++) {
+    BPH_mass_spring_get_position(data, i, pt);
+    r_vertex_pressure[i] = dot_v3v3(pt, gradient_vector);
+  }
+}
+
 static float cloth_calc_volume(ClothModifierData *clmd)
 {
   /* Calculate the (closed) cloth volume. */
   Cloth *cloth = clmd->clothObject;
   const MVertTri *tri = cloth->tri;
   Implicit_Data *data = cloth->implicit;
+  float weights[3] = {1.0f, 1.0f, 1.0f};
   float vol = 0;
 
   /* Early exit for hair, as it never has volume. */
@@ -85,36 +123,43 @@ static float cloth_calc_volume(ClothModifierData *clmd)
     return 0.0f;
   }
 
-  if (clmd->sim_parms->vgroup_pressure > 0) {
-    for (unsigned int i = 0; i < cloth->primitive_num; i++) {
-      bool skip_face = false;
-      /* We have custom vertex weights for pressure. */
-      const MVertTri *vt = &tri[i];
-      for (unsigned int j = 0; j < 3; j++) {
-        /* If any weight is zero, don't take this face into account for volume calculation. */
-        ClothVertex *verts = clmd->clothObject->verts;
+  for (unsigned int i = 0; i < cloth->primitive_num; i++) {
+    const MVertTri *vt = &tri[i];
 
-        if (verts[vt->tri[j]].pressure_factor == 0.0f) {
-          skip_face = true;
-        }
-      }
-      if (skip_face) {
-        continue;
-      }
-
+    if (cloth_get_pressure_weights(clmd, vt, weights)) {
       vol += BPH_tri_tetra_volume_signed_6x(data, vt->tri[0], vt->tri[1], vt->tri[2]);
     }
   }
-  else {
-    for (unsigned int i = 0; i < cloth->primitive_num; i++) {
-      const MVertTri *vt = &tri[i];
-      vol += BPH_tri_tetra_volume_signed_6x(data, vt->tri[0], vt->tri[1], vt->tri[2]);
-    }
-  }
+
   /* We need to divide by 6 to get the actual volume. */
   vol = vol / 6.0f;
 
   return vol;
+}
+
+static float cloth_calc_average_pressure(ClothModifierData *clmd, const float *vertex_pressure)
+{
+  Cloth *cloth = clmd->clothObject;
+  const MVertTri *tri = cloth->tri;
+  Implicit_Data *data = cloth->implicit;
+  float weights[3] = {1.0f, 1.0f, 1.0f};
+  float total_force = 0;
+  float total_area = 0;
+
+  for (unsigned int i = 0; i < cloth->primitive_num; i++) {
+    const MVertTri *vt = &tri[i];
+
+    if (cloth_get_pressure_weights(clmd, vt, weights)) {
+      float area = BPH_tri_area(data, vt->tri[0], vt->tri[1], vt->tri[2]);
+
+      total_force += (vertex_pressure[vt->tri[0]] + vertex_pressure[vt->tri[1]] +
+                      vertex_pressure[vt->tri[2]]) *
+                     area / 3.0f;
+      total_area += area;
+    }
+  }
+
+  return total_force / total_area;
 }
 
 int BPH_cloth_solver_init(Object *UNUSED(ob), ClothModifierData *clmd)
@@ -554,6 +599,7 @@ static void cloth_calc_force(
   if ((parms->flags & CLOTH_SIMSETTINGS_FLAG_PRESSURE) && (clmd->hairdata == NULL)) {
     /* The difference in pressure between the inside and outside of the mesh.*/
     float pressure_difference = 0.0f;
+    float volume_factor = 1.0f;
 
     float init_vol;
     if (parms->flags & CLOTH_SIMSETTINGS_FLAG_PRESSURE_VOL) {
@@ -568,80 +614,111 @@ static void cloth_calc_force(
       float f;
       float vol = cloth_calc_volume(clmd);
 
+      /* If the volume is the same don't apply any pressure. */
+      volume_factor = init_vol / vol;
+      pressure_difference = volume_factor - 1;
+
       /* Calculate an artificial maximum value for cloth pressure. */
       f = fabs(clmd->sim_parms->uniform_pressure_force) + 200.0f;
 
       /* Clamp the cloth pressure to the calculated maximum value. */
-      if (vol * f < init_vol) {
-        pressure_difference = f;
-      }
-      else {
-        /* If the volume is the same don't apply any pressure. */
-        pressure_difference = (init_vol / vol) - 1;
-      }
+      CLAMP_MAX(pressure_difference, f);
     }
-    pressure_difference += clmd->sim_parms->uniform_pressure_force;
 
+    pressure_difference += clmd->sim_parms->uniform_pressure_force;
     pressure_difference *= clmd->sim_parms->pressure_factor;
 
-    for (i = 0; i < cloth->primitive_num; i++) {
-      const MVertTri *vt = &tri[i];
-      if (fabs(pressure_difference) > 1E-6f) {
-        if (clmd->sim_parms->vgroup_pressure > 0) {
-          /* We have custom vertex weights for pressure. */
-          ClothVertex *verts = clmd->clothObject->verts;
-          int v1, v2, v3;
-          v1 = vt->tri[0];
-          v2 = vt->tri[1];
-          v3 = vt->tri[2];
+    /* Compute the hydrostatic pressure gradient if enabled. */
+    float fluid_density = clmd->sim_parms->fluid_density * 1000; /* kg/l -> kg/m3 */
+    float *hydrostatic_pressure = NULL;
 
-          float weights[3];
-          bool skip_face = false;
+    if (fabs(fluid_density) > 1e-6f) {
+      float hydrostatic_vector[3];
+      copy_v3_v3(hydrostatic_vector, gravity);
 
-          weights[0] = verts[v1].pressure_factor;
-          weights[1] = verts[v2].pressure_factor;
-          weights[2] = verts[v3].pressure_factor;
-          for (unsigned int j = 0; j < 3; j++) {
-            if (weights[j] == 0.0f) {
-              /* Exclude faces which has a zero weight vert. */
-              skip_face = true;
-              break;
-            }
-          }
-          if (skip_face) {
-            continue;
-          }
+      /* When the fluid is inside the object, factor in the acceleration of
+       * the object into the pressure field, as gravity is indistinguishable
+       * from acceleration from the inside. */
+      if (fluid_density > 0) {
+        sub_v3_v3(hydrostatic_vector, cloth->average_acceleration);
 
-          BPH_mass_spring_force_pressure(data, v1, v2, v3, pressure_difference, weights);
-        }
-        else {
-          float weights[3] = {1.0f, 1.0f, 1.0f};
-          BPH_mass_spring_force_pressure(
-              data, vt->tri[0], vt->tri[1], vt->tri[2], pressure_difference, weights);
+        /* Preserve the total mass by scaling density to match the change in volume. */
+        fluid_density *= volume_factor;
+      }
+
+      mul_v3_fl(hydrostatic_vector, fluid_density);
+
+      /* Compute an array of per-vertex hydrostatic pressure, and subtract the average. */
+      hydrostatic_pressure = (float *)MEM_mallocN(sizeof(float) * mvert_num,
+                                                  "hydrostatic pressure gradient");
+
+      cloth_calc_pressure_gradient(clmd, hydrostatic_vector, hydrostatic_pressure);
+
+      pressure_difference -= cloth_calc_average_pressure(clmd, hydrostatic_pressure);
+    }
+
+    /* Apply pressure. */
+    if (hydrostatic_pressure || fabs(pressure_difference) > 1E-6f) {
+      float weights[3] = {1.0f, 1.0f, 1.0f};
+
+      for (i = 0; i < cloth->primitive_num; i++) {
+        const MVertTri *vt = &tri[i];
+
+        if (cloth_get_pressure_weights(clmd, vt, weights)) {
+          BPH_mass_spring_force_pressure(data,
+                                         vt->tri[0],
+                                         vt->tri[1],
+                                         vt->tri[2],
+                                         pressure_difference,
+                                         hydrostatic_pressure,
+                                         weights);
         }
       }
+    }
+
+    if (hydrostatic_pressure) {
+      MEM_freeN(hydrostatic_pressure);
     }
   }
 
   /* handle external forces like wind */
   if (effectors) {
+    bool is_not_hair = (clmd->hairdata == NULL) && (cloth->primitive_num > 0);
+    bool has_wind = false, has_force = false;
+
     /* cache per-vertex forces to avoid redundant calculation */
-    float(*winvec)[3] = (float(*)[3])MEM_callocN(sizeof(float[3]) * mvert_num, "effector forces");
+    float(*winvec)[3] = (float(*)[3])MEM_callocN(sizeof(float[3]) * mvert_num * 2,
+                                                 "effector forces");
+    float(*forcevec)[3] = is_not_hair ? winvec + mvert_num : winvec;
+
     for (i = 0; i < cloth->mvert_num; i++) {
       float x[3], v[3];
       EffectedPoint epoint;
 
       BPH_mass_spring_get_motion_state(data, i, x, v);
       pd_point_from_loc(scene, x, v, i, &epoint);
-      BKE_effectors_apply(
-          effectors, NULL, clmd->sim_parms->effector_weights, &epoint, winvec[i], NULL);
+      BKE_effectors_apply(effectors,
+                          NULL,
+                          clmd->sim_parms->effector_weights,
+                          &epoint,
+                          forcevec[i],
+                          winvec[i],
+                          NULL);
+
+      has_wind = has_wind || !is_zero_v3(winvec[i]);
+      has_force = has_force || !is_zero_v3(forcevec[i]);
     }
 
     /* Hair has only edges. */
-    if ((clmd->hairdata == NULL) && (cloth->primitive_num > 0)) {
+    if (is_not_hair) {
       for (i = 0; i < cloth->primitive_num; i++) {
         const MVertTri *vt = &tri[i];
-        BPH_mass_spring_force_face_wind(data, vt->tri[0], vt->tri[1], vt->tri[2], winvec);
+        if (has_wind) {
+          BPH_mass_spring_force_face_wind(data, vt->tri[0], vt->tri[1], vt->tri[2], winvec);
+        }
+        if (has_force) {
+          BPH_mass_spring_force_face_extern(data, vt->tri[0], vt->tri[1], vt->tri[2], forcevec);
+        }
       }
     }
     else {
@@ -1032,6 +1109,30 @@ static void cloth_calc_volume_force(ClothModifierData *clmd)
 }
 #endif
 
+static void cloth_calc_average_acceleration(ClothModifierData *clmd, float dt)
+{
+  Cloth *cloth = clmd->clothObject;
+  Implicit_Data *data = cloth->implicit;
+  int i, mvert_num = cloth->mvert_num;
+  float total[3] = {0.0f, 0.0f, 0.0f};
+
+  for (i = 0; i < mvert_num; i++) {
+    float v[3], nv[3];
+
+    BPH_mass_spring_get_velocity(data, i, v);
+    BPH_mass_spring_get_new_velocity(data, i, nv);
+
+    sub_v3_v3(nv, v);
+    add_v3_v3(total, nv);
+  }
+
+  mul_v3_fl(total, 1.0f / dt / mvert_num);
+
+  /* Smooth the data using a running average to prevent instability.
+   * This is effectively an abstraction of the wave propagation speed in fluid. */
+  interp_v3_v3v3(cloth->average_acceleration, total, cloth->average_acceleration, powf(0.25f, dt));
+}
+
 static void cloth_solve_collisions(
     Depsgraph *depsgraph, Object *ob, ClothModifierData *clmd, float step, float dt)
 {
@@ -1136,6 +1237,10 @@ int BPH_cloth_solve(
   float dt = clmd->sim_parms->dt * clmd->sim_parms->timescale;
   Implicit_Data *id = cloth->implicit;
 
+  /* Hydrostatic pressure gradient of the fluid inside the object is affected by acceleration. */
+  bool use_acceleration = (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_PRESSURE) &&
+                          (clmd->sim_parms->fluid_density > 0);
+
   BKE_sim_debug_data_clear_category("collision");
 
   if (!clmd->solver_result) {
@@ -1156,6 +1261,10 @@ int BPH_cloth_solve(
         BPH_mass_spring_set_velocity(id, i, v);
       }
     }
+  }
+
+  if (!use_acceleration) {
+    zero_v3(cloth->average_acceleration);
   }
 
   while (step < tf) {
@@ -1179,6 +1288,10 @@ int BPH_cloth_solve(
 
     if (is_hair) {
       cloth_continuum_step(clmd, dt);
+    }
+
+    if (use_acceleration) {
+      cloth_calc_average_acceleration(clmd, dt);
     }
 
     BPH_mass_spring_solve_positions(id, dt);

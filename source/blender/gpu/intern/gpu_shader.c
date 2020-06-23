@@ -331,6 +331,8 @@ GPUShader *GPU_shader_load_from_binary(const char *binary,
   glGetProgramiv(program, GL_LINK_STATUS, &success);
 
   if (success) {
+    glUseProgram(program);
+
     GPUShader *shader = MEM_callocN(sizeof(*shader), __func__);
     shader->interface = GPU_shaderinterface_create(program);
     shader->program = program;
@@ -572,6 +574,7 @@ GPUShader *GPU_shader_create_ex(const char *vertexcode,
     return NULL;
   }
 
+  glUseProgram(shader->program);
   shader->interface = GPU_shaderinterface_create(shader->program);
 
   return shader;
@@ -726,21 +729,19 @@ int GPU_shader_get_uniform(GPUShader *shader, const char *name)
 {
   BLI_assert(shader && shader->program);
   const GPUShaderInput *uniform = GPU_shaderinterface_uniform(shader->interface, name);
-  return uniform ? uniform->location : -2;
-}
-
-int GPU_shader_get_uniform_ensure(GPUShader *shader, const char *name)
-{
-  BLI_assert(shader && shader->program);
-  const GPUShaderInput *uniform = GPU_shaderinterface_uniform_ensure(shader->interface, name);
   return uniform ? uniform->location : -1;
 }
 
 int GPU_shader_get_builtin_uniform(GPUShader *shader, int builtin)
 {
   BLI_assert(shader && shader->program);
-  const GPUShaderInput *uniform = GPU_shaderinterface_uniform_builtin(shader->interface, builtin);
-  return uniform ? uniform->location : -1;
+  return GPU_shaderinterface_uniform_builtin(shader->interface, builtin);
+}
+
+int GPU_shader_get_builtin_block(GPUShader *shader, int builtin)
+{
+  BLI_assert(shader && shader->program);
+  return GPU_shaderinterface_block_builtin(shader->interface, builtin);
 }
 
 int GPU_shader_get_uniform_block(GPUShader *shader, const char *name)
@@ -748,6 +749,20 @@ int GPU_shader_get_uniform_block(GPUShader *shader, const char *name)
   BLI_assert(shader && shader->program);
   const GPUShaderInput *ubo = GPU_shaderinterface_ubo(shader->interface, name);
   return ubo ? ubo->location : -1;
+}
+
+int GPU_shader_get_uniform_block_binding(GPUShader *shader, const char *name)
+{
+  BLI_assert(shader && shader->program);
+  const GPUShaderInput *ubo = GPU_shaderinterface_ubo(shader->interface, name);
+  return ubo ? ubo->binding : -1;
+}
+
+int GPU_shader_get_texture_binding(GPUShader *shader, const char *name)
+{
+  BLI_assert(shader && shader->program);
+  const GPUShaderInput *tex = GPU_shaderinterface_uniform(shader->interface, name);
+  return tex ? tex->binding : -1;
 }
 
 void *GPU_shader_get_interface(GPUShader *shader)
@@ -837,40 +852,11 @@ void GPU_shader_uniform_int(GPUShader *UNUSED(shader), int location, int value)
   glUniform1i(location, value);
 }
 
-void GPU_shader_uniform_buffer(GPUShader *shader, int location, GPUUniformBuffer *ubo)
-{
-  int bindpoint = GPU_uniformbuffer_bindpoint(ubo);
-
-  if (location == -1) {
-    return;
-  }
-
-  glUniformBlockBinding(shader->program, location, bindpoint);
-}
-
-void GPU_shader_uniform_texture(GPUShader *UNUSED(shader), int location, GPUTexture *tex)
-{
-  int number = GPU_texture_bound_number(tex);
-
-  if (number == -1) {
-    fprintf(stderr, "Texture is not bound.\n");
-    BLI_assert(0);
-    return;
-  }
-
-  if (location == -1) {
-    return;
-  }
-
-  glUniform1i(location, number);
-}
-
 void GPU_shader_set_srgb_uniform(const GPUShaderInterface *interface)
 {
-  const GPUShaderInput *srgb_uniform = GPU_shaderinterface_uniform_builtin(
-      interface, GPU_UNIFORM_SRGB_TRANSFORM);
-  if (srgb_uniform) {
-    glUniform1i(srgb_uniform->location, g_shader_builtin_srgb_transform);
+  int32_t loc = GPU_shaderinterface_uniform_builtin(interface, GPU_UNIFORM_SRGB_TRANSFORM);
+  if (loc != -1) {
+    glUniform1i(loc, g_shader_builtin_srgb_transform);
   }
 }
 

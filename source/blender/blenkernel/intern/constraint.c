@@ -4695,7 +4695,7 @@ static void followtrack_evaluate_using_3d_position_object(FollowTrackContext *co
   MovieTrackingTrack *track = context->track;
   MovieTrackingObject *tracking_object = context->tracking_object;
 
-  /* Matrix of the object which is being solved prior to this contraint. */
+  /* Matrix of the object which is being solved prior to this constraint. */
   float obmat[4][4];
   copy_m4_m4(obmat, cob->matrix);
 
@@ -4720,7 +4720,7 @@ static void followtrack_evaluate_using_3d_position_camera(FollowTrackContext *co
   Object *camera_object = context->camera_object;
   MovieTrackingTrack *track = context->track;
 
-  /* Matrix of the object which is being solved prior to this contraint. */
+  /* Matrix of the object which is being solved prior to this constraint. */
   float obmat[4][4];
   copy_m4_m4(obmat, cob->matrix);
 
@@ -5412,8 +5412,15 @@ static bConstraint *add_new_constraint_internal(const char *name, short type)
 
   /* Set up a generic constraint data-block. */
   con->type = type;
-  con->flag |= CONSTRAINT_EXPAND | CONSTRAINT_OVERRIDE_LIBRARY_LOCAL;
+  con->flag |= CONSTRAINT_OVERRIDE_LIBRARY_LOCAL;
   con->enforce = 1.0f;
+
+  /* Only open the main panel when constraints are created, not the subpanels. */
+  con->ui_expand_flag = (1 << 0);
+  if (ELEM(type, CONSTRAINT_TYPE_ACTION, CONSTRAINT_TYPE_SPLINEIK)) {
+    /* Expand the two subpanels in the cases where the main panel barely has any properties. */
+    con->ui_expand_flag |= (1 << 1) | (1 << 2);
+  }
 
   /* Determine a basic name, and info */
   if (cti) {

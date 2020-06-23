@@ -31,6 +31,7 @@ struct ListBase;
 struct ModifierData;
 struct PTCacheEdit;
 struct ParticleSystem;
+struct TaskGraph;
 
 struct Curve;
 struct Hair;
@@ -150,7 +151,8 @@ int DRW_volume_material_count_get(struct Volume *volume);
 struct GPUBatch *DRW_volume_batch_cache_get_wireframes_face(struct Volume *volume);
 
 /* Mesh */
-void DRW_mesh_batch_cache_create_requested(struct Object *ob,
+void DRW_mesh_batch_cache_create_requested(struct TaskGraph *task_graph,
+                                           struct Object *ob,
                                            struct Mesh *me,
                                            const struct Scene *scene,
                                            const bool is_paint_mode,
@@ -197,20 +199,26 @@ struct GPUBatch *DRW_mesh_batch_cache_get_edituv_facedots(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_uv_edges(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_edit_mesh_analysis(struct Mesh *me);
 
+/* For direct data access. */
+struct GPUVertBuf *DRW_mesh_batch_cache_pos_vertbuf_get(struct Mesh *me);
+struct GPUVertBuf *DRW_curve_batch_cache_pos_vertbuf_get(struct Curve *cu);
+struct GPUVertBuf *DRW_mball_batch_cache_pos_vertbuf_get(struct Object *ob);
+
 int DRW_mesh_material_count_get(struct Mesh *me);
+
+/* See 'common_globals_lib.glsl' for duplicate defines. */
 
 /* Edit mesh bitflags (is this the right place?) */
 enum {
   VFLAG_VERT_ACTIVE = 1 << 0,
   VFLAG_VERT_SELECTED = 1 << 1,
-  VFLAG_EDGE_ACTIVE = 1 << 2,
-  VFLAG_EDGE_SELECTED = 1 << 3,
-  VFLAG_EDGE_SEAM = 1 << 4,
-  VFLAG_EDGE_SHARP = 1 << 5,
-  VFLAG_EDGE_FREESTYLE = 1 << 6,
-  VFLAG_HANDLE_SELECTED = 1 << 7,
-  /* Beware to not go over 1 << 7 (it's a byte flag)
-   * (see gpu_shader_edit_mesh_overlay_geom.glsl) */
+  VFLAG_VERT_SELECTED_BEZT_HANDLE = 1 << 2,
+  VFLAG_EDGE_ACTIVE = 1 << 3,
+  VFLAG_EDGE_SELECTED = 1 << 4,
+  VFLAG_EDGE_SEAM = 1 << 5,
+  VFLAG_EDGE_SHARP = 1 << 6,
+  VFLAG_EDGE_FREESTYLE = 1 << 7,
+  /* Beware to not go over 1 << 7 (it's a byte flag). */
 };
 
 enum {
@@ -222,8 +230,7 @@ enum {
   VFLAG_EDGE_UV_SELECT = 1 << 5,
   VFLAG_FACE_UV_ACTIVE = 1 << 6,
   VFLAG_FACE_UV_SELECT = 1 << 7,
-  /* Beware to not go over 1 << 7 (it's a byte flag)
-   * (see gpu_shader_edit_mesh_overlay_geom.glsl) */
+  /* Beware to not go over 1 << 7 (it's a byte flag). */
 };
 
 /* Particles */

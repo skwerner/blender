@@ -1771,7 +1771,10 @@ static Collection *single_object_users_collection(Main *bmain,
   /* Generate new copies for objects in given collection and all its children,
    * and optionally also copy collections themselves. */
   if (copy_collections && !is_master_collection) {
-    collection = ID_NEW_SET(collection, BKE_collection_copy(bmain, NULL, collection));
+    Collection *collection_new;
+    BKE_id_copy(bmain, &collection->id, (ID **)&collection_new);
+    id_us_min(&collection_new->id);
+    collection = ID_NEW_SET(collection, collection_new);
   }
 
   /* We do not remap to new objects here, this is done in separate step. */
@@ -1851,27 +1854,6 @@ void ED_object_single_user(Main *bmain, Scene *scene, Object *ob)
 
   single_object_users(bmain, scene, NULL, OB_DONE, false);
   BKE_main_id_clear_newpoins(bmain);
-}
-
-static void new_id_matar(Main *bmain, Material **matar, const int totcol)
-{
-  ID *id;
-  int a;
-
-  for (a = 0; a < totcol; a++) {
-    id = (ID *)matar[a];
-    if (id && !ID_IS_LINKED(id)) {
-      if (id->newid) {
-        matar[a] = (Material *)id->newid;
-        id_us_plus(id->newid);
-        id_us_min(id);
-      }
-      else if (id->us > 1) {
-        matar[a] = ID_NEW_SET(id, BKE_material_copy(bmain, matar[a]));
-        id_us_min(id);
-      }
-    }
-  }
 }
 
 static void single_obdata_users(
@@ -2015,115 +1997,6 @@ static void single_mat_users(
     }
   }
   FOREACH_OBJECT_FLAG_END;
-}
-
-static void single_mat_users_expand(Main *bmain)
-{
-  /* only when 'parent' blocks are LIB_TAG_NEW */
-  Object *ob;
-  Mesh *me;
-  Curve *cu;
-  MetaBall *mb;
-  bGPdata *gpd;
-
-  for (ob = bmain->objects.first; ob; ob = ob->id.next) {
-    if (ob->id.tag & LIB_TAG_NEW) {
-      new_id_matar(bmain, ob->mat, ob->totcol);
-    }
-  }
-
-  for (me = bmain->meshes.first; me; me = me->id.next) {
-    if (me->id.tag & LIB_TAG_NEW) {
-      new_id_matar(bmain, me->mat, me->totcol);
-    }
-  }
-
-  for (cu = bmain->curves.first; cu; cu = cu->id.next) {
-    if (cu->id.tag & LIB_TAG_NEW) {
-      new_id_matar(bmain, cu->mat, cu->totcol);
-    }
-  }
-
-  for (mb = bmain->metaballs.first; mb; mb = mb->id.next) {
-    if (mb->id.tag & LIB_TAG_NEW) {
-      new_id_matar(bmain, mb->mat, mb->totcol);
-    }
-  }
-
-  for (gpd = bmain->gpencils.first; gpd; gpd = gpd->id.next) {
-    if (gpd->id.tag & LIB_TAG_NEW) {
-      new_id_matar(bmain, gpd->mat, gpd->totcol);
-    }
-  }
-}
-
-/* used for copying scenes */
-void ED_object_single_users(Main *bmain,
-                            Scene *scene,
-                            const bool full,
-                            const bool copy_collections)
-{
-  single_object_users(bmain, scene, NULL, 0, copy_collections);
-
-  if (full) {
-    single_obdata_users(bmain, scene, NULL, NULL, 0);
-    single_object_action_users(bmain, scene, NULL, NULL, 0);
-    single_mat_users_expand(bmain);
-
-    /* Duplicating obdata and other IDs may require another update of the collections and objects
-     * pointers, especially regarding drivers and custom props, see T66641.
-     * Note that this whole scene duplication code and 'make single user' functions have te be
-     * rewritten at some point to make use of proper modern ID management code,
-     * but that is no small task.
-     * For now we are doomed to that kind of band-aid to try to cover most of remapping cases. */
-
-    /* Will also handle the master collection. */
-    BKE_libblock_relink_to_newid(&scene->id);
-
-    /* Collection and object pointers in collections */
-    libblock_relink_collection(scene->master_collection, false);
-  }
-
-  /* Relink nodetrees' pointers that have been duplicated. */
-  FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
-    /* This is a bit convoluted, we want to root ntree of copied IDs and only those,
-     * so we first check that old ID has been copied and that ntree is root tree of old ID,
-     * then get root tree of new ID and remap its pointers to new ID... */
-    if (id->newid && (&ntree->id != id)) {
-      ntree = ntreeFromID(id->newid);
-      BKE_libblock_relink_to_newid(&ntree->id);
-    }
-  }
-  FOREACH_NODETREE_END;
-
-  /* Relink datablock pointer properties */
-  {
-    IDP_RelinkProperty(scene->id.properties);
-
-    FOREACH_SCENE_OBJECT_BEGIN (scene, ob) {
-      if (!ID_IS_LINKED(ob)) {
-        IDP_RelinkProperty(ob->id.properties);
-      }
-    }
-    FOREACH_SCENE_OBJECT_END;
-
-    if (scene->nodetree) {
-      IDP_RelinkProperty(scene->nodetree->id.properties);
-      LISTBASE_FOREACH (bNode *, node, &scene->nodetree->nodes) {
-        IDP_RelinkProperty(node->prop);
-      }
-    }
-
-    if (scene->world) {
-      IDP_RelinkProperty(scene->world->id.properties);
-    }
-
-    if (scene->clip) {
-      IDP_RelinkProperty(scene->clip->id.properties);
-    }
-  }
-  BKE_main_id_clear_newpoins(bmain);
-  DEG_relations_tag_update(bmain);
 }
 
 /** \} */
@@ -2516,7 +2389,8 @@ static int make_override_library_exec(bContext *C, wmOperator *op)
     ViewLayer *view_layer = CTX_data_view_layer(C);
     Collection *new_collection = (Collection *)collection->id.newid;
 
-    BKE_collection_child_add(bmain, scene->master_collection, new_collection);
+    BKE_collection_add_from_object(bmain, scene, obcollection, new_collection);
+
     FOREACH_COLLECTION_OBJECT_RECURSIVE_BEGIN (new_collection, new_ob) {
       if (new_ob != NULL && new_ob->id.override_library != NULL) {
         if ((base = BKE_view_layer_base_find(view_layer, new_ob)) == NULL) {
@@ -2524,31 +2398,20 @@ static int make_override_library_exec(bContext *C, wmOperator *op)
           base = BKE_view_layer_base_find(view_layer, new_ob);
           DEG_id_tag_update_ex(bmain, &new_ob->id, ID_RECALC_TRANSFORM | ID_RECALC_BASE_FLAGS);
         }
-        /* parent to 'collection' empty */
-        /* Disabled for now, according to some artist this is probably not really useful anyway.
-         * And it breaks things like objects parented to bones
-         * (most likely due to missing proper setting of inverse parent matrix?)... */
-        /* Note: we might even actually want to get rid of that instantiating empty... */
-        if (0 && new_ob->parent == NULL) {
-          new_ob->parent = obcollection;
-        }
+
         if (new_ob == (Object *)obact->id.newid) {
           /* TODO: is setting active needed? */
           BKE_view_layer_base_select_and_set_active(view_layer, base);
         }
-        else {
-          /* Disable auto-override tags for non-active objects, will help with performaces... */
-          new_ob->id.override_library->flag &= ~OVERRIDE_LIBRARY_AUTO;
-        }
         /* We still want to store all objects' current override status (i.e. change of parent). */
-        BKE_lib_override_library_operations_create(bmain, &new_ob->id, true);
+        BKE_lib_override_library_operations_create(bmain, &new_ob->id);
       }
     }
     FOREACH_COLLECTION_OBJECT_RECURSIVE_END;
 
-    /* obcollection is no more duplicollection-ing,
-     * it merely parents whole collection of overriding instantiated objects. */
-    obcollection->instance_collection = NULL;
+    /* Remove the instance empty from this scene, the items now have an overridden collection
+     * instead. */
+    ED_object_base_free_and_unlink(bmain, scene, obcollection);
 
     /* Also, we'd likely want to lock by default things like
      * transformations of implicitly overridden objects? */

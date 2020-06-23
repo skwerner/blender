@@ -79,6 +79,7 @@ void BPH_mass_spring_get_motion_state(struct Implicit_Data *data,
                                       float x[3],
                                       float v[3]);
 void BPH_mass_spring_get_position(struct Implicit_Data *data, int index, float x[3]);
+void BPH_mass_spring_get_velocity(struct Implicit_Data *data, int index, float v[3]);
 
 /* access to modified motion state during solver step */
 void BPH_mass_spring_get_new_position(struct Implicit_Data *data, int index, float x[3]);
@@ -125,9 +126,12 @@ void BPH_mass_spring_force_drag(struct Implicit_Data *data, float drag);
 /* Custom external force */
 void BPH_mass_spring_force_extern(
     struct Implicit_Data *data, int i, const float f[3], float dfdx[3][3], float dfdv[3][3]);
-/* Wind force, acting on a face */
+/* Wind force, acting on a face (only generates pressure from the normal component) */
 void BPH_mass_spring_force_face_wind(
     struct Implicit_Data *data, int v1, int v2, int v3, const float (*winvec)[3]);
+/* Arbitrary per-unit-area vector force field acting on a face. */
+void BPH_mass_spring_force_face_extern(
+    struct Implicit_Data *data, int v1, int v2, int v3, const float (*forcevec)[3]);
 /* Wind force, acting on an edge */
 void BPH_mass_spring_force_edge_wind(struct Implicit_Data *data,
                                      int v1,
@@ -183,13 +187,15 @@ bool BPH_mass_spring_force_spring_goal(struct Implicit_Data *data,
                                        float damping);
 
 float BPH_tri_tetra_volume_signed_6x(struct Implicit_Data *data, int v1, int v2, int v3);
+float BPH_tri_area(struct Implicit_Data *data, int v1, int v2, int v3);
 
 void BPH_mass_spring_force_pressure(struct Implicit_Data *data,
                                     int v1,
                                     int v2,
                                     int v3,
-                                    float pressure_difference,
-                                    float weights[3]);
+                                    float common_pressure,
+                                    const float *vertex_pressure,
+                                    const float weights[3]);
 
 /* ======== Hair Volumetric Forces ======== */
 

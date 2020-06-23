@@ -472,15 +472,16 @@ static void set_pixel(ImBuf *ibuf, int idx, const float col[4])
   }
 }
 
-/* check if the size of the leak is narrow to determine if the stroke is closed
+/**
+ * Check if the size of the leak is narrow to determine if the stroke is closed
  * this is used for strokes with small gaps between them to get a full fill
  * and do not get a full screen fill.
  *
- * \param ibuf: Image pixel data
- * \param maxpixel: Maximum index
- * \param limit: Limit of pixels to analyze
- * \param index: Index of current pixel
- * \param type: 0-Horizontal 1-Vertical
+ * \param ibuf: Image pixel data.
+ * \param maxpixel: Maximum index.
+ * \param limit: Limit of pixels to analyze.
+ * \param index: Index of current pixel.
+ * \param type: 0-Horizontal 1-Vertical.
  */
 static bool is_leak_narrow(ImBuf *ibuf, const int maxpixel, int limit, int index, int type)
 {
@@ -576,11 +577,12 @@ static bool is_leak_narrow(ImBuf *ibuf, const int maxpixel, int limit, int index
   return (bool)(t_a && t_b);
 }
 
-/* Boundary fill inside strokes
+/**
+ * Boundary fill inside strokes
  * Fills the space created by a set of strokes using the stroke color as the boundary
  * of the shape to fill.
  *
- * \param tgpf: Temporary fill data
+ * \param tgpf: Temporary fill data.
  */
 static void gpencil_boundaryfill_area(tGPDfill *tgpf)
 {
@@ -1274,11 +1276,12 @@ static tGPDfill *gp_session_init_fill(bContext *C, wmOperator *UNUSED(op))
   ToolSettings *ts = CTX_data_tool_settings(C);
   bGPdata *gpd = CTX_data_gpencil_data(C);
   Main *bmain = CTX_data_main(C);
+  Scene *scene = CTX_data_scene(C);
 
   /* set current scene and window info */
   tgpf->C = C;
   tgpf->bmain = CTX_data_main(C);
-  tgpf->scene = CTX_data_scene(C);
+  tgpf->scene = scene;
   tgpf->ob = CTX_data_active_object(C);
   tgpf->area = CTX_wm_area(C);
   tgpf->region = CTX_wm_region(C);
@@ -1286,6 +1289,7 @@ static tGPDfill *gp_session_init_fill(bContext *C, wmOperator *UNUSED(op))
   tgpf->v3d = tgpf->area->spacedata.first;
   tgpf->depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   tgpf->win = CTX_wm_window(C);
+  tgpf->active_cfra = CFRA;
 
   /* set GP datablock */
   tgpf->gpd = gpd;

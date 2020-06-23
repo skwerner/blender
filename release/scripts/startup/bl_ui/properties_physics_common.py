@@ -46,8 +46,8 @@ def physics_add(layout, md, name, type, typeicon, toggles):
             icon='X',
         )
         if toggles:
-            row.prop(md, "show_render", text="")
             row.prop(md, "show_viewport", text="")
+            row.prop(md, "show_render", text="")
     else:
         row.operator(
             "object.modifier_add",
@@ -330,6 +330,7 @@ def basic_force_field_settings_ui(self, field):
         col.prop(field, "use_gravity_falloff", text="Gravitation")
 
     col.prop(field, "use_absorption")
+    col.prop(field, "wind_factor")
 
 
 def basic_force_field_falloff_ui(self, field):

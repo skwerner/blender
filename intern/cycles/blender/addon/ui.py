@@ -387,13 +387,6 @@ class CYCLES_RENDER_PT_hair(CyclesButtonsPanel, Panel):
     bl_label = "Hair"
     bl_options = {'DEFAULT_CLOSED'}
 
-    def draw_header(self, context):
-        layout = self.layout
-        scene = context.scene
-        ccscene = scene.cycles_curves
-
-        layout.prop(ccscene, "use_curves", text="")
-
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
@@ -402,17 +395,9 @@ class CYCLES_RENDER_PT_hair(CyclesButtonsPanel, Panel):
         scene = context.scene
         ccscene = scene.cycles_curves
 
-        layout.active = ccscene.use_curves
-
         col = layout.column()
         col.prop(ccscene, "shape", text="Shape")
-        if not (ccscene.primitive in {'CURVE_SEGMENTS', 'LINE_SEGMENTS'} and ccscene.shape == 'RIBBONS'):
-            col.prop(ccscene, "cull_backfacing", text="Cull back-faces")
-        col.prop(ccscene, "primitive", text="Primitive")
-
-        if ccscene.primitive == 'TRIANGLES' and ccscene.shape == 'THICK':
-            col.prop(ccscene, "resolution", text="Resolution")
-        elif ccscene.primitive == 'CURVE_SEGMENTS':
+        if ccscene.shape == 'RIBBONS':
             col.prop(ccscene, "subdivisions", text="Curve subdivisions")
 
 
@@ -697,16 +682,20 @@ class CYCLES_RENDER_PT_performance_acceleration_structure(CyclesButtonsPanel, Pa
 
         col = layout.column()
 
-        if _cycles.with_embree:
-            row = col.row()
-            row.active = use_cpu(context)
-            row.prop(cscene, "use_bvh_embree")
+        use_embree = False
+        if use_cpu(context):
+            use_embree = _cycles.with_embree
+            if not use_embree:
+              sub = col.column(align=True)
+              sub.label(text="Cycles built without Embree support")
+              sub.label(text="CPU raytracing performance will be poor")
+
         col.prop(cscene, "debug_use_spatial_splits")
         sub = col.column()
-        sub.active = not cscene.use_bvh_embree or not _cycles.with_embree
+        sub.active = not use_embree
         sub.prop(cscene, "debug_use_hair_bvh")
         sub = col.column()
-        sub.active = not cscene.debug_use_spatial_splits and not cscene.use_bvh_embree
+        sub.active = not cscene.debug_use_spatial_splits and not use_embree
         sub.prop(cscene, "debug_bvh_time_steps")
 
 
@@ -1213,6 +1202,27 @@ def has_geometry_visibility(ob):
     return ob and ((ob.type in {'MESH', 'CURVE', 'SURFACE', 'FONT', 'META', 'LIGHT'}) or
                     (ob.instance_type == 'COLLECTION' and ob.instance_collection))
 
+class CYCLES_OBJECT_PT_shading(CyclesButtonsPanel, Panel):
+    bl_label = "Shading"
+    bl_context = "object"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        return  CyclesButtonsPanel.poll(context) and (context.object)
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+        layout = self.layout
+        ob = context.object
+        cob = ob.cycles
+
+        if has_geometry_visibility(ob):
+            col = flow.column()
+            col.prop(cob, "shadow_terminator_offset")
 
 class CYCLES_OBJECT_PT_visibility(CyclesButtonsPanel, Panel):
     bl_label = "Visibility"
@@ -1371,7 +1381,7 @@ class CYCLES_LIGHT_PT_light(CyclesButtonsPanel, Panel):
         col.separator()
 
         if light.type in {'POINT', 'SPOT'}:
-            col.prop(light, "shadow_soft_size", text="Size")
+            col.prop(light, "shadow_soft_size", text="Radius")
         elif light.type == 'SUN':
             col.prop(light, "angle")
         elif light.type == 'AREA':
@@ -2272,6 +2282,7 @@ classes = (
     CYCLES_CAMERA_PT_dof_aperture,
     CYCLES_PT_context_material,
     CYCLES_OBJECT_PT_motion_blur,
+    CYCLES_OBJECT_PT_shading,
     CYCLES_OBJECT_PT_visibility,
     CYCLES_OBJECT_PT_visibility_ray_visibility,
     CYCLES_OBJECT_PT_visibility_culling,

@@ -241,7 +241,6 @@ int EEVEE_temporal_sampling_init(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data
 
     DRW_view_persmat_get(NULL, persmat, false);
     view_is_valid = view_is_valid && compare_m4m4(persmat, effects->prev_drw_persmat, FLT_MIN);
-    copy_m4_m4(effects->prev_drw_persmat, persmat);
 
     /* Prevent ghosting from probe data. */
     view_is_valid = view_is_valid && (effects->prev_drw_support == DRW_state_draw_support()) &&
@@ -283,7 +282,7 @@ void EEVEE_temporal_sampling_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data 
   EEVEE_TextureList *txl = vedata->txl;
   EEVEE_EffectsInfo *effects = stl->effects;
 
-  if ((effects->enabled_effects & (EFFECT_TAA | EFFECT_TAA_REPROJECT)) != 0) {
+  if (effects->enabled_effects & EFFECT_TAA) {
     struct GPUShader *sh = EEVEE_shaders_taa_resolve_sh_get(effects->enabled_effects);
 
     DRW_PASS_CREATE(psl->taa_resolve, DRW_STATE_WRITE_COLOR);
@@ -292,12 +291,12 @@ void EEVEE_temporal_sampling_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data 
     DRW_shgroup_uniform_texture_ref(grp, "colorHistoryBuffer", &txl->taa_history);
     DRW_shgroup_uniform_texture_ref(grp, "colorBuffer", &effects->source_buffer);
     DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
-    DRW_shgroup_uniform_block(
-        grp, "renderpass_block", EEVEE_material_default_render_pass_ubo_get(sldata));
+    DRW_shgroup_uniform_block(grp, "renderpass_block", sldata->renderpass_ubo.combined);
 
     if (effects->enabled_effects & EFFECT_TAA_REPROJECT) {
-      // DefaultTextureList *dtxl = DRW_viewport_texture_list_get();
-      DRW_shgroup_uniform_texture_ref(grp, "velocityBuffer", &effects->velocity_tx);
+      DefaultTextureList *dtxl = DRW_viewport_texture_list_get();
+      DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &dtxl->depth);
+      DRW_shgroup_uniform_mat4(grp, "prevViewProjectionMatrix", effects->prev_drw_persmat);
     }
     else {
       DRW_shgroup_uniform_float(grp, "alpha", &effects->taa_alpha, 1);
@@ -365,5 +364,7 @@ void EEVEE_temporal_sampling_draw(EEVEE_Data *vedata)
         DRW_viewport_request_redraw();
       }
     }
+
+    DRW_view_persmat_get(NULL, effects->prev_drw_persmat, false);
   }
 }

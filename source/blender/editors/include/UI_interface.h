@@ -764,6 +764,7 @@ bool UI_but_online_manual_id(const uiBut *but,
 bool UI_but_online_manual_id_from_active(const struct bContext *C,
                                          char *r_str,
                                          size_t maxlength) ATTR_WARN_UNUSED_RESULT;
+bool UI_but_is_userdef(const uiBut *but);
 
 /* Buttons
  *
@@ -1938,7 +1939,7 @@ uiLayout *uiLayoutRadial(uiLayout *layout);
 /* templates */
 void uiTemplateHeader(uiLayout *layout, struct bContext *C);
 void uiTemplateID(uiLayout *layout,
-                  struct bContext *C,
+                  const struct bContext *C,
                   struct PointerRNA *ptr,
                   const char *propname,
                   const char *newop,
@@ -2002,7 +2003,11 @@ void uiTemplatePathBuilder(uiLayout *layout,
                            const char *propname,
                            struct PointerRNA *root_ptr,
                            const char *text);
-uiLayout *uiTemplateModifier(uiLayout *layout, struct bContext *C, struct PointerRNA *ptr);
+void uiTemplateModifiers(uiLayout *layout, struct bContext *C);
+void uiTemplateGpencilModifiers(uiLayout *layout, struct bContext *C);
+void uiTemplateShaderFx(uiLayout *layout, struct bContext *C);
+void uiTemplateConstraints(uiLayout *layout, struct bContext *C, bool use_bone_constraints);
+
 uiLayout *uiTemplateGpencilModifier(uiLayout *layout, struct bContext *C, struct PointerRNA *ptr);
 void uiTemplateGpencilColorPreview(uiLayout *layout,
                                    struct bContext *C,
@@ -2013,11 +2018,9 @@ void uiTemplateGpencilColorPreview(uiLayout *layout,
                                    float scale,
                                    int filter);
 
-uiLayout *uiTemplateShaderFx(uiLayout *layout, struct bContext *C, struct PointerRNA *ptr);
-
 void uiTemplateOperatorRedoProperties(uiLayout *layout, const struct bContext *C);
 
-uiLayout *uiTemplateConstraint(uiLayout *layout, struct PointerRNA *ptr);
+void uiTemplateConstraintHeader(uiLayout *layout, struct PointerRNA *ptr);
 void uiTemplatePreview(uiLayout *layout,
                        struct bContext *C,
                        struct ID *id,
@@ -2111,7 +2114,7 @@ void uiTemplateComponentMenu(uiLayout *layout,
                              const char *name);
 void uiTemplateNodeSocket(uiLayout *layout, struct bContext *C, float *color);
 void uiTemplateCacheFile(uiLayout *layout,
-                         struct bContext *C,
+                         const struct bContext *C,
                          struct PointerRNA *ptr,
                          const char *propname);
 
@@ -2144,7 +2147,7 @@ void uiTemplateNodeView(uiLayout *layout,
                         struct bNodeSocket *input);
 void uiTemplateTextureUser(uiLayout *layout, struct bContext *C);
 void uiTemplateTextureShow(uiLayout *layout,
-                           struct bContext *C,
+                           const struct bContext *C,
                            struct PointerRNA *ptr,
                            struct PropertyRNA *prop);
 
@@ -2445,7 +2448,8 @@ void UI_context_update_anim_flag(const struct bContext *C);
 void UI_context_active_but_prop_get_filebrowser(const struct bContext *C,
                                                 struct PointerRNA *r_ptr,
                                                 struct PropertyRNA **r_prop,
-                                                bool *r_is_undo);
+                                                bool *r_is_undo,
+                                                bool *r_is_userdef);
 void UI_context_active_but_prop_get_templateID(struct bContext *C,
                                                struct PointerRNA *r_ptr,
                                                struct PropertyRNA **r_prop);

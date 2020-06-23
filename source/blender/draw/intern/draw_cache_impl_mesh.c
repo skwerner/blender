@@ -33,6 +33,7 @@
 #include "BLI_math_bits.h"
 #include "BLI_math_vector.h"
 #include "BLI_string.h"
+#include "BLI_task.h"
 #include "BLI_utildefines.h"
 
 #include "DNA_mesh_types.h"
@@ -314,7 +315,7 @@ static void drw_mesh_weight_state_extract(Object *ob,
   wstate->alert_mode = ts->weightuser;
 
   if (paint_mode && ts->multipaint) {
-    /* Multipaint needs to know all selected bones, not just the active group.
+    /* Multi-paint needs to know all selected bones, not just the active group.
      * This is actually a relatively expensive operation, but caching would be difficult. */
     wstate->defgroup_sel = BKE_object_defgroup_selected_get(
         ob, wstate->defgroup_len, &wstate->defgroup_sel_count);
@@ -809,6 +810,23 @@ int DRW_mesh_material_count_get(Mesh *me)
 /** \name Edit Mode API
  * \{ */
 
+GPUVertBuf *DRW_mesh_batch_cache_pos_vertbuf_get(Mesh *me)
+{
+  MeshBatchCache *cache = mesh_batch_cache_get(me);
+  /* Request surface to trigger the vbo filling. Otherwise it may do nothing. */
+  mesh_batch_cache_add_request(cache, MBC_SURFACE);
+  DRW_batch_request(&cache->batch.surface);
+
+  DRW_vbo_request(NULL, &cache->final.vbo.pos_nor);
+  return cache->final.vbo.pos_nor;
+}
+
+/** \} */
+
+/* ---------------------------------------------------------------------- */
+/** \name Edit Mode API
+ * \{ */
+
 GPUBatch *DRW_mesh_batch_cache_get_edit_triangles(Mesh *me)
 {
   MeshBatchCache *cache = mesh_batch_cache_get(me);
@@ -1019,9 +1037,14 @@ void DRW_mesh_batch_cache_free_old(Mesh *me, int ctime)
 }
 
 /* Can be called for any surface type. Mesh *me is the final mesh. */
-void DRW_mesh_batch_cache_create_requested(
-    Object *ob, Mesh *me, const Scene *scene, const bool is_paint_mode, const bool use_hide)
+void DRW_mesh_batch_cache_create_requested(struct TaskGraph *task_graph,
+                                           Object *ob,
+                                           Mesh *me,
+                                           const Scene *scene,
+                                           const bool is_paint_mode,
+                                           const bool use_hide)
 {
+  BLI_assert(task_graph);
   GPUIndexBuf **saved_elem_ranges = NULL;
   const ToolSettings *ts = NULL;
   if (scene) {
@@ -1378,7 +1401,8 @@ void DRW_mesh_batch_cache_create_requested(
                                          false;
 
   if (do_uvcage) {
-    mesh_buffer_cache_create_requested(cache,
+    mesh_buffer_cache_create_requested(task_graph,
+                                       cache,
                                        cache->uv_cage,
                                        me,
                                        is_editmode,
@@ -1394,7 +1418,8 @@ void DRW_mesh_batch_cache_create_requested(
   }
 
   if (do_cage) {
-    mesh_buffer_cache_create_requested(cache,
+    mesh_buffer_cache_create_requested(task_graph,
+                                       cache,
                                        cache->cage,
                                        me,
                                        is_editmode,
@@ -1409,7 +1434,8 @@ void DRW_mesh_batch_cache_create_requested(
                                        true);
   }
 
-  mesh_buffer_cache_create_requested(cache,
+  mesh_buffer_cache_create_requested(task_graph,
+                                     cache,
                                      cache->final,
                                      me,
                                      is_editmode,
@@ -1422,10 +1448,12 @@ void DRW_mesh_batch_cache_create_requested(
                                      scene,
                                      ts,
                                      use_hide);
-
 #ifdef DEBUG
 check:
   /* Make sure all requested batches have been setup. */
+  /* TODO(jbakker): we should move this to the draw_manager but that needs refactoring and
+   * additional looping.*/
+  BLI_task_graph_work_and_wait(task_graph);
   for (int i = 0; i < sizeof(cache->batch) / sizeof(void *); i++) {
     BLI_assert(!DRW_batch_requested(((GPUBatch **)&cache->batch)[i], 0));
   }

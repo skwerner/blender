@@ -261,8 +261,15 @@ bool SCULPT_vertex_visible_get(SculptSession *ss, int index)
       return !(ss->mvert[index].flag & ME_HIDE);
     case PBVH_BMESH:
       return !BM_elem_flag_test(BM_vert_at_index(ss->bm, index), BM_ELEM_HIDDEN);
-    case PBVH_GRIDS:
-      return true;
+    case PBVH_GRIDS: {
+      const CCGKey *key = BKE_pbvh_get_grid_key(ss->pbvh);
+      const int grid_index = index / key->grid_area;
+      const int vertex_index = index - grid_index * key->grid_area;
+      BLI_bitmap **grid_hidden = BKE_pbvh_get_grid_visibility(ss->pbvh);
+      if (grid_hidden && grid_hidden[grid_index]) {
+        return !BLI_BITMAP_TEST(grid_hidden[grid_index], vertex_index);
+      }
+    }
   }
   return true;
 }
@@ -5315,7 +5322,14 @@ static void do_brush_action(Sculpt *sd, Object *ob, Brush *brush, UnifiedPaintSe
    * and the number of nodes under the brush influence. */
   if (brush->sculpt_tool == SCULPT_TOOL_DRAW_FACE_SETS && ss->cache->first_time &&
       ss->cache->mirror_symmetry_pass == 0 && !ss->cache->alt_smooth) {
-    SCULPT_undo_push_node(ob, NULL, SCULPT_UNDO_FACE_SETS);
+
+    /* Dyntopo does not support Face Sets data, so it can't store/restore it from undo. */
+    /* TODO (pablodp606): This check should be done in the undo code and not here, but the rest of
+     * the sculpt code is not checking for unsupported undo types that may return a null node. */
+    if (BKE_pbvh_type(ss->pbvh) != PBVH_BMESH) {
+      SCULPT_undo_push_node(ob, NULL, SCULPT_UNDO_FACE_SETS);
+    }
+
     if (ss->cache->invert) {
       /* When inverting the brush, pick the paint face mask ID from the mesh. */
       ss->cache->paint_face_set = SCULPT_active_face_set_get(ss);
@@ -5479,7 +5493,8 @@ static void do_brush_action(Sculpt *sd, Object *ob, Brush *brush, UnifiedPaintSe
     }
 
     /* The cloth brush adds the gravity as a regular force and it is processed in the solver. */
-    if (ss->cache->supports_gravity && brush->sculpt_tool != SCULPT_TOOL_CLOTH) {
+    if (ss->cache->supports_gravity &&
+        !ELEM(brush->sculpt_tool, SCULPT_TOOL_CLOTH, SCULPT_TOOL_DRAW_FACE_SETS)) {
       do_gravity(sd, ob, nodes, totnode, sd->gravity_factor);
     }
 
@@ -7525,7 +7540,7 @@ static void SCULPT_OT_symmetrize(wmOperatorType *ot)
                 0.001f,
                 0.0f,
                 FLT_MAX,
-                "Merge Limit",
+                "Merge Distance",
                 "Distance within which symmetrical vertices are merged",
                 0.0f,
                 1.0f);
@@ -7628,7 +7643,7 @@ void ED_object_sculptmode_enter_ex(Main *bmain,
   Paint *paint = BKE_paint_get_active_from_paintmode(scene, PAINT_MODE_SCULPT);
   BKE_paint_init(bmain, scene, PAINT_MODE_SCULPT, PAINT_CURSOR_SCULPT);
 
-  paint_cursor_start_explicit(paint, bmain->wm.first, SCULPT_poll_view3d);
+  paint_cursor_start(paint, SCULPT_poll_view3d);
 
   /* Check dynamic-topology flag; re-enter dynamic-topology mode when changing modes,
    * As long as no data was added that is not supported. */
@@ -7898,4 +7913,6 @@ void ED_operatortypes_sculpt(void)
   WM_operatortype_append(SCULPT_OT_face_sets_change_visibility);
   WM_operatortype_append(SCULPT_OT_face_sets_randomize_colors);
   WM_operatortype_append(SCULPT_OT_face_sets_init);
+  WM_operatortype_append(SCULPT_OT_cloth_filter);
+  WM_operatortype_append(SCULPT_OT_face_sets_edit);
 }

@@ -56,7 +56,9 @@ bool BKE_lib_override_library_is_enabled(void);
 
 struct IDOverrideLibrary *BKE_lib_override_library_init(struct ID *local_id,
                                                         struct ID *reference_id);
-void BKE_lib_override_library_copy(struct ID *dst_id, const struct ID *src_id);
+void BKE_lib_override_library_copy(struct ID *dst_id,
+                                   const struct ID *src_id,
+                                   const bool do_full_copy);
 void BKE_lib_override_library_clear(struct IDOverrideLibrary *override, const bool do_id_user);
 void BKE_lib_override_library_free(struct IDOverrideLibrary **override, const bool do_id_user);
 
@@ -106,9 +108,7 @@ bool BKE_lib_override_library_property_operation_operands_validate(
 bool BKE_lib_override_library_status_check_local(struct Main *bmain, struct ID *local);
 bool BKE_lib_override_library_status_check_reference(struct Main *bmain, struct ID *local);
 
-bool BKE_lib_override_library_operations_create(struct Main *bmain,
-                                                struct ID *local,
-                                                const bool force_auto);
+bool BKE_lib_override_library_operations_create(struct Main *bmain, struct ID *local);
 void BKE_lib_override_library_main_operations_create(struct Main *bmain, const bool force_auto);
 
 void BKE_lib_override_library_operations_tag(struct IDOverrideLibraryProperty *override_property,

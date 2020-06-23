@@ -519,7 +519,7 @@ static void calcEdgeSlide_even(TransInfo *t,
   }
 }
 
-static bool createEdgeSlideVerts_double_side(TransInfo *t, TransDataContainer *tc)
+static EdgeSlideData *createEdgeSlideVerts_double_side(TransInfo *t, TransDataContainer *tc)
 {
   BMEditMesh *em = BKE_editmesh_from_object(tc->obedit);
   BMesh *bm = em->bm;
@@ -554,8 +554,9 @@ static bool createEdgeSlideVerts_double_side(TransInfo *t, TransDataContainer *t
       }
 
       if (numsel == 0 || numsel > 2) {
+        /* Invalid edge selection. */
         MEM_freeN(sld);
-        return false; /* invalid edge selection */
+        return NULL;
       }
     }
   }
@@ -566,7 +567,7 @@ static bool createEdgeSlideVerts_double_side(TransInfo *t, TransDataContainer *t
       if (!BM_edge_is_manifold(e) && !BM_edge_is_boundary(e)) {
         /* can edges with at least once face user */
         MEM_freeN(sld);
-        return false;
+        return NULL;
       }
     }
   }
@@ -595,7 +596,7 @@ static bool createEdgeSlideVerts_double_side(TransInfo *t, TransDataContainer *t
     if (!j) {
       MEM_freeN(sld);
       MEM_freeN(sv_table);
-      return false;
+      return NULL;
     }
     sv_tot = j;
   }
@@ -851,7 +852,7 @@ static bool createEdgeSlideVerts_double_side(TransInfo *t, TransDataContainer *t
 
   /* EDBM_flag_disable_all(em, BM_ELEM_SELECT); */
 
-  BLI_assert(STACK_SIZE(sv_array) == sv_tot);
+  BLI_assert(STACK_SIZE(sv_array) == (uint)sv_tot);
 
   sld->sv = sv_array;
   sld->totsv = sv_tot;
@@ -870,18 +871,16 @@ static bool createEdgeSlideVerts_double_side(TransInfo *t, TransDataContainer *t
     calcEdgeSlide_even(t, tc, sld, mval);
   }
 
-  tc->custom.mode.data = sld;
-
   MEM_freeN(sv_table);
 
-  return true;
+  return sld;
 }
 
 /**
  * A simple version of #createEdgeSlideVerts_double_side
  * Which assumes the longest unselected.
  */
-static bool createEdgeSlideVerts_single_side(TransInfo *t, TransDataContainer *tc)
+static EdgeSlideData *createEdgeSlideVerts_single_side(TransInfo *t, TransDataContainer *tc)
 {
   BMEditMesh *em = BKE_editmesh_from_object(tc->obedit);
   BMesh *bm = em->bm;
@@ -933,7 +932,7 @@ static bool createEdgeSlideVerts_single_side(TransInfo *t, TransDataContainer *t
 
     if (!j) {
       MEM_freeN(sld);
-      return false;
+      return NULL;
     }
 
     sv_tot = j;
@@ -1055,24 +1054,9 @@ static bool createEdgeSlideVerts_single_side(TransInfo *t, TransDataContainer *t
     calcEdgeSlide_even(t, tc, sld, mval);
   }
 
-  tc->custom.mode.data = sld;
-
   MEM_freeN(sv_table);
 
-  return true;
-}
-
-void projectEdgeSlideData(TransInfo *t, bool is_final)
-{
-  FOREACH_TRANS_DATA_CONTAINER (t, tc) {
-    EdgeSlideData *sld = tc->custom.mode.data;
-
-    if (sld == NULL) {
-      continue;
-    }
-
-    trans_mesh_customdata_correction_apply(tc, is_final);
-  }
+  return sld;
 }
 
 static void freeEdgeSlideVerts(TransInfo *UNUSED(t),
@@ -1448,14 +1432,14 @@ void initEdgeSlide_ex(
     t->custom.mode.use_free = true;
   }
 
-  if (use_double_side) {
-    FOREACH_TRANS_DATA_CONTAINER (t, tc) {
-      ok |= createEdgeSlideVerts_double_side(t, tc);
-    }
-  }
-  else {
-    FOREACH_TRANS_DATA_CONTAINER (t, tc) {
-      ok |= createEdgeSlideVerts_single_side(t, tc);
+  FOREACH_TRANS_DATA_CONTAINER (t, tc) {
+    sld = use_double_side ? createEdgeSlideVerts_double_side(t, tc) :
+                            createEdgeSlideVerts_single_side(t, tc);
+    if (sld) {
+      tc->custom.mode.data = sld;
+      tc->custom.mode.free_cb = freeEdgeSlideVerts;
+      trans_mesh_customdata_correction_init(t, tc);
+      ok = true;
     }
   }
 
@@ -1463,16 +1447,6 @@ void initEdgeSlide_ex(
     t->state = TRANS_CANCEL;
     return;
   }
-
-  FOREACH_TRANS_DATA_CONTAINER (t, tc) {
-    sld = tc->custom.mode.data;
-    if (!sld) {
-      continue;
-    }
-    tc->custom.mode.free_cb = freeEdgeSlideVerts;
-  }
-
-  trans_mesh_customdata_correction_init(t);
 
   /* set custom point first if you want value to be initialized by init */
   calcEdgeSlideCustomPoints(t);

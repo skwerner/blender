@@ -164,6 +164,7 @@ class SequencerFadesClear(Operator):
             if curve:
                 fcurves.remove(curve)
             setattr(sequence, animated_property, 1.0)
+            sequence.invalidate('COMPOSITE')
 
         return {'FINISHED'}
 
@@ -188,7 +189,7 @@ class SequencerFadesAdd(Operator):
             ('CURSOR_TO', 'To Playhead', 'Fade from the start of sequences under the time cursor to the current frame'),
         ),
         name="Fade type",
-        description="Fade in, out, both in and out, to, or from the playhead. Default is both in and out",
+        description="Fade in, out, both in and out, to, or from the current frame. Default is both in and out",
         default='IN_OUT')
 
     @classmethod
@@ -230,6 +231,7 @@ class SequencerFadesAdd(Operator):
             self.fade_animation_clear(fade_fcurve, fades)
             self.fade_animation_create(fade_fcurve, fades)
             faded_sequences.append(sequence)
+            sequence.invalidate('COMPOSITE')
 
         sequence_string = "sequence" if len(faded_sequences) == 1 else "sequences"
         self.report({'INFO'}, "Added fade animation to {} {}.".format(len(faded_sequences), sequence_string))

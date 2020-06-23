@@ -52,7 +52,7 @@
 /* Set Up Drivers Editor */
 
 /* Set up UI configuration for Drivers Editor */
-/* NOTE: Currently called from windowmanager
+/* NOTE: Currently called from window-manager
  * (new drivers editor window) and RNA (mode switching) */
 void ED_drivers_editor_init(bContext *C, ScrArea *area)
 {
@@ -171,7 +171,7 @@ bool graphop_visible_keyframes_poll(bContext *C)
     if (fcu->bezt == NULL) {
       continue;
     }
-    if (fcurve_are_keyframes_usable(fcu)) {
+    if (BKE_fcurve_are_keyframes_usable(fcu)) {
       found = 1;
       break;
     }
@@ -225,7 +225,7 @@ bool graphop_editable_keyframes_poll(bContext *C)
     if (fcu->bezt == NULL) {
       continue;
     }
-    if (fcurve_is_keyframable(fcu)) {
+    if (BKE_fcurve_is_keyframable(fcu)) {
       found = 1;
       break;
     }

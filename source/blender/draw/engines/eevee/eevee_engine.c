@@ -88,7 +88,7 @@ static void eevee_engine_init(void *ved)
    * `EEVEE_effects_init` needs to go second for TAA. */
   EEVEE_renderpasses_init(vedata);
   EEVEE_effects_init(sldata, vedata, camera, false);
-  EEVEE_materials_init(sldata, stl, fbl);
+  EEVEE_materials_init(sldata, vedata, stl, fbl);
   EEVEE_shadows_init(sldata);
   EEVEE_lightprobes_init(sldata, vedata);
 }
@@ -230,7 +230,7 @@ static void eevee_draw_scene(void *vedata)
       BLI_halton_3d(primes, offset, samp, r);
       EEVEE_update_noise(psl, fbl, r);
       EEVEE_volumes_set_jitter(sldata, samp - 1);
-      EEVEE_materials_init(sldata, stl, fbl);
+      EEVEE_materials_init(sldata, vedata, stl, fbl);
     }
     /* Copy previous persmat to UBO data */
     copy_m4_m4(sldata->common_data.prev_persmat, stl->effects->prev_persmat);
@@ -274,8 +274,7 @@ static void eevee_draw_scene(void *vedata)
 
     /* Depth prepass */
     DRW_stats_group_start("Prepass");
-    DRW_draw_pass(psl->depth_pass);
-    DRW_draw_pass(psl->depth_pass_cull);
+    DRW_draw_pass(psl->depth_ps);
     DRW_stats_group_end();
 
     /* Create minmax texture */
@@ -289,9 +288,9 @@ static void eevee_draw_scene(void *vedata)
     /* Shading pass */
     DRW_stats_group_start("Shading");
     if (DRW_state_draw_background()) {
-      DRW_draw_pass(psl->background_pass);
+      DRW_draw_pass(psl->background_ps);
     }
-    EEVEE_materials_draw_opaque(sldata, psl);
+    DRW_draw_pass(psl->material_ps);
     EEVEE_subsurface_data_render(sldata, vedata);
     DRW_stats_group_end();
 
@@ -306,9 +305,8 @@ static void eevee_draw_scene(void *vedata)
 
     /* Opaque refraction */
     DRW_stats_group_start("Opaque Refraction");
-    DRW_draw_pass(psl->refract_depth_pass);
-    DRW_draw_pass(psl->refract_depth_pass_cull);
-    DRW_draw_pass(psl->refract_pass);
+    DRW_draw_pass(psl->depth_refract_ps);
+    DRW_draw_pass(psl->material_refract_ps);
     DRW_stats_group_end();
 
     /* Volumetrics Resolve Opaque */
@@ -372,7 +370,7 @@ static void eevee_id_object_update(void *UNUSED(vedata), Object *object)
 {
   EEVEE_LightProbeEngineData *ped = EEVEE_lightprobe_data_get(object);
   if (ped != NULL && ped->dd.recalc != 0) {
-    ped->need_update = (ped->dd.recalc & (ID_RECALC_TRANSFORM)) != 0;
+    ped->need_update = (ped->dd.recalc & ID_RECALC_TRANSFORM) != 0;
     ped->dd.recalc = 0;
   }
   EEVEE_LightEngineData *led = EEVEE_light_data_get(object);
@@ -423,18 +421,76 @@ static void eevee_render_to_image(void *vedata,
                                   struct RenderLayer *render_layer,
                                   const rcti *rect)
 {
+  EEVEE_Data *ved = (EEVEE_Data *)vedata;
   const DRWContextState *draw_ctx = DRW_context_state_get();
+
+  if (EEVEE_render_do_motion_blur(draw_ctx->depsgraph)) {
+    Scene *scene = DEG_get_evaluated_scene(draw_ctx->depsgraph);
+
+    float shutter = scene->eevee.motion_blur_shutter * 0.5f;
+    float time = CFRA;
+    /* Centered on frame for now. */
+    float start_time = time - shutter;
+    float end_time = time + shutter;
+
+    {
+      EEVEE_motion_blur_step_set(ved, MB_PREV);
+      RE_engine_frame_set(engine, floorf(start_time), fractf(start_time));
+
+      if (!EEVEE_render_init(vedata, engine, draw_ctx->depsgraph)) {
+        return;
+      }
+
+      if (RE_engine_test_break(engine)) {
+        return;
+      }
+
+      DRW_render_object_iter(vedata, engine, draw_ctx->depsgraph, EEVEE_render_cache);
+      EEVEE_motion_blur_cache_finish(vedata);
+      /* Reset passlist. This is safe as they are stored into managed memory chunks. */
+      memset(ved->psl, 0, sizeof(*ved->psl));
+      /* Fix memleak */
+      BLI_ghash_free(ved->stl->g_data->material_hash, NULL, NULL);
+      ved->stl->g_data->material_hash = NULL;
+    }
+
+    {
+      EEVEE_motion_blur_step_set(ved, MB_NEXT);
+      RE_engine_frame_set(engine, floorf(end_time), fractf(end_time));
+
+      EEVEE_render_init(vedata, engine, draw_ctx->depsgraph);
+
+      DRW_render_object_iter(vedata, engine, draw_ctx->depsgraph, EEVEE_render_cache);
+      EEVEE_motion_blur_cache_finish(vedata);
+      /* Reset passlist. This is safe as they are stored into managed memory chunks. */
+      memset(ved->psl, 0, sizeof(*ved->psl));
+      /* Fix memleak */
+      BLI_ghash_free(ved->stl->g_data->material_hash, NULL, NULL);
+      ved->stl->g_data->material_hash = NULL;
+    }
+
+    /* Current frame. */
+    EEVEE_motion_blur_step_set(ved, MB_CURR);
+    RE_engine_frame_set(engine, time, 0.0f);
+  }
 
   if (!EEVEE_render_init(vedata, engine, draw_ctx->depsgraph)) {
     return;
   }
 
+  if (RE_engine_test_break(engine)) {
+    return;
+  }
+
   DRW_render_object_iter(vedata, engine, draw_ctx->depsgraph, EEVEE_render_cache);
+
+  EEVEE_motion_blur_cache_finish(vedata);
 
   /* Actually do the rendering. */
   EEVEE_render_draw(vedata, engine, render_layer, rect);
 
   EEVEE_volumes_free_smoke_textures();
+  EEVEE_motion_blur_data_free(&ved->stl->effects->motion_blur);
 }
 
 static void eevee_engine_free(void)

@@ -61,18 +61,31 @@
 #include "BLI_math_geom.h"
 #include "BLI_stack.h"
 
+#include "BLT_translation.h"
+
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
+#include "DNA_screen_types.h"
 
+#include "BKE_context.h"
 #include "BKE_deform.h"
 #include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_mapping.h"
 #include "BKE_modifier.h"
+#include "BKE_screen.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
+
+#include "WM_types.h" /* For skin mark clear operator UI. */
 
 #include "MOD_modifiertypes.h"
+#include "MOD_ui_common.h"
 
 #include "bmesh.h"
 
@@ -922,7 +935,13 @@ static Mesh *subdivide_base(Mesh *orig)
 
     u = e->v1;
     radrat = (half_v2(outnode[e->v2].radius) / half_v2(outnode[e->v1].radius));
-    radrat = (radrat + 1) / 2;
+    if (isfinite(radrat)) {
+      radrat = (radrat + 1) / 2;
+    }
+    else {
+      /* Happens when skin is scaled to zero. */
+      radrat = 1.0f;
+    }
 
     /* Add vertices and edge segments */
     for (j = 0; j < edge_subd[i]; j++, v++, outedge++) {
@@ -1928,6 +1947,64 @@ static void requiredDataMask(Object *UNUSED(ob),
   r_cddata_masks->vmask |= CD_MASK_MVERT_SKIN | CD_MASK_MDEFORMVERT;
 }
 
+static void panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *row;
+  uiLayout *layout = panel->layout;
+  int toggles_flag = UI_ITEM_R_TOGGLE | UI_ITEM_R_FORCE_BLANK_DECORATE;
+
+  PointerRNA ptr;
+  PointerRNA ob_ptr;
+  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+
+  PointerRNA op_ptr;
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, &ptr, "branch_smoothing", 0, NULL, ICON_NONE);
+
+  row = uiLayoutRowWithHeading(layout, true, IFACE_("Symmetry"));
+  uiItemR(row, &ptr, "use_x_symmetry", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, &ptr, "use_y_symmetry", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, &ptr, "use_z_symmetry", toggles_flag, NULL, ICON_NONE);
+
+  uiItemR(layout, &ptr, "use_smooth_shade", 0, NULL, ICON_NONE);
+
+  row = uiLayoutRow(layout, false);
+  uiItemO(row, IFACE_("Create Armature"), ICON_NONE, "OBJECT_OT_skin_armature_create");
+  uiItemO(row, NULL, ICON_NONE, "MESH_OT_customdata_skin_add");
+
+  row = uiLayoutRow(layout, true);
+  uiItemFullO(row,
+              "OBJECT_OT_skin_loose_mark_clear",
+              IFACE_("Mark Loose"),
+              ICON_NONE,
+              NULL,
+              WM_OP_EXEC_DEFAULT,
+              0,
+              &op_ptr);
+  RNA_enum_set(&op_ptr, "action", 0); /* SKIN_LOOSE_MARK */
+  uiItemFullO(row,
+              "OBJECT_OT_skin_loose_mark_clear",
+              IFACE_("Clear Loose"),
+              ICON_NONE,
+              NULL,
+              WM_OP_EXEC_DEFAULT,
+              0,
+              &op_ptr);
+  RNA_enum_set(&op_ptr, "action", 1); /* SKIN_LOOSE_CLEAR */
+
+  uiItemO(layout, IFACE_("Mark Root"), ICON_NONE, "OBJECT_OT_skin_root_mark");
+  uiItemO(layout, IFACE_("Equalize Radii"), ICON_NONE, "OBJECT_OT_skin_radii_equalize");
+
+  modifier_panel_end(layout, &ptr);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  modifier_panel_register(region_type, eModifierType_Skin, panel_draw);
+}
+
 ModifierTypeInfo modifierType_Skin = {
     /* name */ "Skin",
     /* structName */ "SkinModifierData",
@@ -1955,5 +2032,9 @@ ModifierTypeInfo modifierType_Skin = {
     /* dependsOnNormals */ NULL,
     /* foreachObjectLink */ NULL,
     /* foreachIDLink */ NULL,
+    /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

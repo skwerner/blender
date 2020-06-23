@@ -25,19 +25,31 @@
 
 #include "BLI_utildefines.h"
 
-#include "DNA_object_types.h"
+#include "BLT_translation.h"
 
+#include "DNA_object_types.h"
+#include "DNA_screen_types.h"
+
+#include "BKE_context.h"
 #include "BKE_editmesh.h"
 #include "BKE_lattice.h"
 #include "BKE_lib_id.h"
 #include "BKE_lib_query.h"
 #include "BKE_mesh.h"
+#include "BKE_mesh_wrapper.h"
 #include "BKE_modifier.h"
+#include "BKE_screen.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
 
 #include "DEG_depsgraph_query.h"
 
 #include "MEM_guardedalloc.h"
 
+#include "MOD_ui_common.h"
 #include "MOD_util.h"
 
 static void initData(ModifierData *md)
@@ -101,14 +113,14 @@ static void deformVerts(ModifierData *md,
 
   MOD_previous_vcos_store(md, vertexCos); /* if next modifier needs original vertices */
 
-  lattice_deform_verts(lmd->object,
-                       ctx->object,
-                       mesh_src,
-                       vertexCos,
-                       numVerts,
-                       lmd->flag,
-                       lmd->name,
-                       lmd->strength);
+  BKE_lattice_deform_coords_with_mesh(lmd->object,
+                                      ctx->object,
+                                      vertexCos,
+                                      numVerts,
+                                      lmd->flag,
+                                      lmd->name,
+                                      lmd->strength,
+                                      mesh_src);
 
   if (!ELEM(mesh_src, NULL, mesh)) {
     BKE_id_free(NULL, mesh_src);
@@ -118,23 +130,40 @@ static void deformVerts(ModifierData *md,
 static void deformVertsEM(ModifierData *md,
                           const ModifierEvalContext *ctx,
                           struct BMEditMesh *em,
-                          struct Mesh *mesh,
+                          struct Mesh *UNUSED(mesh),
                           float (*vertexCos)[3],
                           int numVerts)
 {
-  struct Mesh *mesh_src = MOD_deform_mesh_eval_get(
-      ctx->object, em, mesh, NULL, numVerts, false, false);
+  LatticeModifierData *lmd = (LatticeModifierData *)md;
 
-  /* TODO(Campbell): use edit-mode data only (remove this line). */
-  if (mesh_src != NULL) {
-    BKE_mesh_wrapper_ensure_mdata(mesh_src);
-  }
+  MOD_previous_vcos_store(md, vertexCos); /* if next modifier needs original vertices */
 
-  deformVerts(md, ctx, mesh_src, vertexCos, numVerts);
+  BKE_lattice_deform_coords_with_editmesh(
+      lmd->object, ctx->object, vertexCos, numVerts, lmd->flag, lmd->name, lmd->strength, em);
+}
 
-  if (!ELEM(mesh_src, NULL, mesh)) {
-    BKE_id_free(NULL, mesh_src);
-  }
+static void panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  PointerRNA ob_ptr;
+  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, &ptr, "object", 0, NULL, ICON_NONE);
+
+  modifier_vgroup_ui(layout, &ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
+
+  uiItemR(layout, &ptr, "strength", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
+
+  modifier_panel_end(layout, &ptr);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  modifier_panel_register(region_type, eModifierType_Lattice, panel_draw);
 }
 
 ModifierTypeInfo modifierType_Lattice = {
@@ -167,4 +196,7 @@ ModifierTypeInfo modifierType_Lattice = {
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

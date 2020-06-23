@@ -173,8 +173,9 @@ class RENDER_PT_eevee_motion_blur(RenderButtonsPanel, Panel):
 
         layout.active = props.use_motion_blur
         col = layout.column()
-        col.prop(props, "motion_blur_samples")
         col.prop(props, "motion_blur_shutter")
+        col.prop(props, "motion_blur_depth_scale")
+        col.prop(props, "motion_blur_max")
 
 
 class RENDER_PT_eevee_depth_of_field(RenderButtonsPanel, Panel):
@@ -534,6 +535,7 @@ class RENDER_PT_eevee_performance(RenderButtonsPanel, Panel):
 class RENDER_PT_gpencil(RenderButtonsPanel, Panel):
     bl_label = "Grease Pencil"
     bl_options = {'DEFAULT_CLOSED'}
+    bl_order = 10
 
     @classmethod
     def poll(cls, context):

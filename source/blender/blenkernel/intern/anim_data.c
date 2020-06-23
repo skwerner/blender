@@ -256,7 +256,7 @@ void BKE_animdata_free(ID *id, const bool do_id_user)
       BKE_nla_tracks_free(&adt->nla_tracks, do_id_user);
 
       /* free drivers - stored as a list of F-Curves */
-      free_fcurves(&adt->drivers);
+      BKE_fcurves_free(&adt->drivers);
 
       /* free driver array cache */
       MEM_SAFE_FREE(adt->driver_array);
@@ -345,7 +345,7 @@ AnimData *BKE_animdata_copy(Main *bmain, AnimData *adt, const int flag)
   BKE_nla_tracks_copy(bmain, &dadt->nla_tracks, &adt->nla_tracks, flag);
 
   /* duplicate drivers (F-Curves) */
-  copy_fcurves(&dadt->drivers, &adt->drivers);
+  BKE_fcurves_copy(&dadt->drivers, &adt->drivers);
   dadt->driver_array = NULL;
 
   /* don't copy overrides */
@@ -381,14 +381,15 @@ bool BKE_animdata_copy_id(Main *bmain, ID *id_to, ID *id_from, const int flag)
 
 void BKE_animdata_copy_id_action(Main *bmain, ID *id, const bool set_newid)
 {
+  const bool is_id_liboverride = ID_IS_OVERRIDE_LIBRARY(id);
   AnimData *adt = BKE_animdata_from_id(id);
   if (adt) {
-    if (adt->action) {
+    if (adt->action && (!is_id_liboverride || !ID_IS_LINKED(adt->action))) {
       id_us_min((ID *)adt->action);
       adt->action = set_newid ? ID_NEW_SET(adt->action, BKE_action_copy(bmain, adt->action)) :
                                 BKE_action_copy(bmain, adt->action);
     }
-    if (adt->tmpact) {
+    if (adt->tmpact && (!is_id_liboverride || !ID_IS_LINKED(adt->tmpact))) {
       id_us_min((ID *)adt->tmpact);
       adt->tmpact = set_newid ? ID_NEW_SET(adt->tmpact, BKE_action_copy(bmain, adt->tmpact)) :
                                 BKE_action_copy(bmain, adt->tmpact);
@@ -398,6 +399,8 @@ void BKE_animdata_copy_id_action(Main *bmain, ID *id, const bool set_newid)
   if (ntree) {
     BKE_animdata_copy_id_action(bmain, &ntree->id, set_newid);
   }
+  /* Note that collections are not animatable currently, so no need to handle scenes' master
+   * collection here. */
 }
 
 /* Merge copies of the data from the src AnimData into the destination AnimData */
@@ -447,7 +450,7 @@ void BKE_animdata_merge_copy(
   if (src->drivers.first) {
     ListBase drivers = {NULL, NULL};
 
-    copy_fcurves(&drivers, &src->drivers);
+    BKE_fcurves_copy(&drivers, &src->drivers);
 
     /* Fix up all driver targets using the old target id
      * - This assumes that the src ID is being merged into the dst ID
@@ -1101,7 +1104,7 @@ static bool fcurves_path_remove_fix(const char *prefix, ListBase *curves)
     if (fcu->rna_path) {
       if (STRPREFIX(fcu->rna_path, prefix)) {
         BLI_remlink(curves, fcu);
-        free_fcurve(fcu);
+        BKE_fcurve_free(fcu);
         any_removed = true;
       }
     }

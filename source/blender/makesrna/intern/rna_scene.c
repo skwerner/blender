@@ -2198,12 +2198,12 @@ static void rna_Scene_update_active_object_data(bContext *C, PointerRNA *UNUSED(
   }
 }
 
-static void rna_SceneCamera_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
+static void rna_SceneCamera_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
 {
   Scene *scene = (Scene *)ptr->owner_id;
   Object *camera = scene->camera;
 
-  BKE_sequence_invalidate_scene_strips(bmain, scene);
+  BKE_sequencer_cache_cleanup(scene);
 
   if (camera && (camera->type == OB_CAMERA)) {
     DEG_id_tag_update(&camera->id, ID_RECALC_GEOMETRY);
@@ -7150,16 +7150,27 @@ static void rna_def_scene_eevee(BlenderRNA *brna)
   RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, NULL);
 
-  prop = RNA_def_property(srna, "motion_blur_samples", PROP_INT, PROP_UNSIGNED);
-  RNA_def_property_ui_text(prop, "Samples", "Number of samples to take with motion blur");
-  RNA_def_property_range(prop, 1, 64);
-  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
-  RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, NULL);
-
   prop = RNA_def_property(srna, "motion_blur_shutter", PROP_FLOAT, PROP_FACTOR);
   RNA_def_property_ui_text(prop, "Shutter", "Time taken in frames between shutter open and close");
   RNA_def_property_range(prop, 0.0f, FLT_MAX);
   RNA_def_property_ui_range(prop, 0.01f, 1.0f, 1, 2);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
+  RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, NULL);
+
+  prop = RNA_def_property(srna, "motion_blur_depth_scale", PROP_FLOAT, PROP_NONE);
+  RNA_def_property_ui_text(prop,
+                           "Background Separation",
+                           "Lower values will reduce background"
+                           " bleeding onto foreground elements");
+  RNA_def_property_range(prop, 0.0f, FLT_MAX);
+  RNA_def_property_ui_range(prop, 0.01f, 1000.0f, 1, 2);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
+  RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, NULL);
+
+  prop = RNA_def_property(srna, "motion_blur_max", PROP_INT, PROP_PIXEL);
+  RNA_def_property_ui_text(prop, "Max Blur", "Maximum blur distance a pixel can spread over");
+  RNA_def_property_range(prop, 1, 2048);
+  RNA_def_property_ui_range(prop, 1, 512, 1, -1);
   RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, NULL);
 
@@ -7236,7 +7247,7 @@ static void rna_def_scene_gpencil(BlenderRNA *brna)
   RNA_def_property_ui_range(prop, 0.0f, 2.0f, 1, 3);
   RNA_def_property_ui_text(prop,
                            "Anti-Aliasing Threshold",
-                           "Threshold for edge detection algorithm (higher values might overblur "
+                           "Threshold for edge detection algorithm (higher values might over-blur "
                            "some part of the image)");
   RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, NULL);

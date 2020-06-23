@@ -81,18 +81,6 @@ set(SRC_BVH_HEADERS
   bvh/bvh_types.h
   bvh/bvh_volume.h
   bvh/bvh_volume_all.h
-  bvh/qbvh_nodes.h
-  bvh/qbvh_shadow_all.h
-  bvh/qbvh_local.h
-  bvh/qbvh_traversal.h
-  bvh/qbvh_volume.h
-  bvh/qbvh_volume_all.h
-  bvh/obvh_nodes.h
-  bvh/obvh_shadow_all.h
-  bvh/obvh_local.h
-  bvh/obvh_traversal.h
-  bvh/obvh_volume.h
-  bvh/obvh_volume_all.h
   bvh/bvh_embree.h
 )
 
@@ -113,6 +101,8 @@ set(SRC_HEADERS
   kernel_id_passes.h
   kernel_jitter.h
   kernel_light.h
+  kernel_light_background.h
+  kernel_light_common.h
   kernel_math.h
   kernel_montecarlo.h
   kernel_passes.h

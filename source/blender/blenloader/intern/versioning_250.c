@@ -308,7 +308,7 @@ static void area_add_window_regions(ScrArea *area, SpaceLink *sl, ListBase *lb)
         region->v2d.tot.ymax = 0.0f;
 
         region->v2d.scroll |= (V2D_SCROLL_BOTTOM | V2D_SCROLL_HORIZONTAL_HANDLES);
-        region->v2d.scroll |= (V2D_SCROLL_RIGHT);
+        region->v2d.scroll |= V2D_SCROLL_RIGHT;
         region->v2d.align = V2D_ALIGN_NO_POS_Y;
         region->v2d.flag |= V2D_VIEWSYNC_AREA_VERTICAL;
         break;
@@ -334,7 +334,7 @@ static void area_add_window_regions(ScrArea *area, SpaceLink *sl, ListBase *lb)
         region->v2d.minzoom = 0.01f;
         region->v2d.maxzoom = 50;
         region->v2d.scroll = (V2D_SCROLL_BOTTOM | V2D_SCROLL_HORIZONTAL_HANDLES);
-        region->v2d.scroll |= (V2D_SCROLL_RIGHT);
+        region->v2d.scroll |= V2D_SCROLL_RIGHT;
         region->v2d.keepzoom = V2D_LOCKZOOM_Y;
         region->v2d.align = V2D_ALIGN_NO_POS_Y;
         region->v2d.flag = V2D_VIEWSYNC_AREA_VERTICAL;
@@ -2355,7 +2355,7 @@ void do_versions_after_linking_250(Main *bmain)
   }
 
   if (!MAIN_VERSION_ATLEAST(bmain, 258, 0)) {
-    /* Some very old (original comments claim pre-2.57) versionning that was wrongly done in
+    /* Some very old (original comments claim pre-2.57) versioning that was wrongly done in
      * lib-linking code... Putting it here just to be sure (this is also checked at runtime anyway
      * by `action_idcode_patch_check`). */
     ID *id;

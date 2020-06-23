@@ -40,28 +40,10 @@
 
 #include "draw_hair_private.h"
 
-#ifndef __APPLE__
-#  define USE_TRANSFORM_FEEDBACK
-#endif
-
 typedef enum ParticleRefineShader {
   PART_REFINE_CATMULL_ROM = 0,
   PART_REFINE_MAX_SHADER,
 } ParticleRefineShader;
-
-#ifndef USE_TRANSFORM_FEEDBACK
-typedef struct ParticleRefineCall {
-  struct ParticleRefineCall *next;
-  GPUVertBuf *vbo;
-  DRWShadingGroup *shgrp;
-  uint vert_len;
-} ParticleRefineCall;
-
-static ParticleRefineCall *g_tf_calls = NULL;
-static int g_tf_id_offset;
-static int g_tf_target_width;
-static int g_tf_target_height;
-#endif
 
 static GPUVertBuf *g_dummy_vbo = NULL;
 static GPUTexture *g_dummy_texture = NULL;
@@ -81,18 +63,9 @@ static GPUShader *hair_refine_shader_get(ParticleRefineShader sh)
   char *vert_with_lib = BLI_string_joinN(datatoc_common_hair_lib_glsl,
                                          datatoc_common_hair_refine_vert_glsl);
 
-#ifdef USE_TRANSFORM_FEEDBACK
   const char *var_names[1] = {"finalColor"};
   g_refine_shaders[sh] = DRW_shader_create_with_transform_feedback(
       vert_with_lib, NULL, "#define HAIR_PHASE_SUBDIV\n", GPU_SHADER_TFB_POINTS, var_names, 1);
-#else
-  g_refine_shaders[sh] = DRW_shader_create(vert_with_lib,
-                                           NULL,
-                                           datatoc_gpu_shader_3D_smooth_color_frag_glsl,
-                                           "#define blender_srgb_to_framebuffer_space(a) a\n"
-                                           "#define HAIR_PHASE_SUBDIV\n"
-                                           "#define TF_WORKAROUND\n");
-#endif
 
   MEM_freeN(vert_with_lib);
 
@@ -101,11 +74,7 @@ static GPUShader *hair_refine_shader_get(ParticleRefineShader sh)
 
 void DRW_hair_init(void)
 {
-#ifdef USE_TRANSFORM_FEEDBACK
   g_tf_pass = DRW_pass_create("Update Hair Pass", 0);
-#else
-  g_tf_pass = DRW_pass_create("Update Hair Pass", DRW_STATE_WRITE_COLOR);
-#endif
 
   if (g_dummy_vbo == NULL) {
     /* initialize vertex format */
@@ -235,22 +204,8 @@ DRWShadingGroup *DRW_shgroup_hair_create_sub(Object *object,
     if (final_points_len) {
       GPUShader *tf_shader = hair_refine_shader_get(PART_REFINE_CATMULL_ROM);
 
-#ifdef USE_TRANSFORM_FEEDBACK
       DRWShadingGroup *tf_shgrp = DRW_shgroup_transform_feedback_create(
           tf_shader, g_tf_pass, hair_cache->final[subdiv].proc_buf);
-#else
-      DRWShadingGroup *tf_shgrp = DRW_shgroup_create(tf_shader, g_tf_pass);
-
-      ParticleRefineCall *pr_call = MEM_mallocN(sizeof(*pr_call), __func__);
-      pr_call->next = g_tf_calls;
-      pr_call->vbo = hair_cache->final[subdiv].proc_buf;
-      pr_call->shgrp = tf_shgrp;
-      pr_call->vert_len = final_points_len;
-      g_tf_calls = pr_call;
-      DRW_shgroup_uniform_int(tf_shgrp, "targetHeight", &g_tf_target_height, 1);
-      DRW_shgroup_uniform_int(tf_shgrp, "targetWidth", &g_tf_target_width, 1);
-      DRW_shgroup_uniform_int(tf_shgrp, "idOffset", &g_tf_id_offset, 1);
-#endif
 
       DRW_shgroup_uniform_texture(tf_shgrp, "hairPointBuffer", hair_cache->point_tex);
       DRW_shgroup_uniform_texture(tf_shgrp, "hairStrandBuffer", hair_cache->strand_tex);
@@ -266,78 +221,9 @@ DRWShadingGroup *DRW_shgroup_hair_create_sub(Object *object,
 
 void DRW_hair_update(void)
 {
-#ifndef USE_TRANSFORM_FEEDBACK
-  /**
-   * Workaround to transform feedback not working on mac.
-   * On some system it crashes (see T58489) and on some other it renders garbage (see T60171).
-   *
-   * So instead of using transform feedback we render to a texture,
-   * read back the result to system memory and re-upload as VBO data.
-   * It is really not ideal performance wise, but it is the simplest
-   * and the most local workaround that still uses the power of the GPU.
-   */
-
-  if (g_tf_calls == NULL) {
-    return;
-  }
-
-  /* Search ideal buffer size. */
-  uint max_size = 0;
-  for (ParticleRefineCall *pr_call = g_tf_calls; pr_call; pr_call = pr_call->next) {
-    max_size = max_ii(max_size, pr_call->vert_len);
-  }
-
-  /* Create target Texture / Framebuffer */
-  /* Don't use max size as it can be really heavy and fail.
-   * Do chunks of maximum 2048 * 2048 hair points. */
-  int width = 2048;
-  int height = min_ii(width, 1 + max_size / width);
-  GPUTexture *tex = DRW_texture_pool_query_2d(width, height, GPU_RGBA32F, (void *)DRW_hair_update);
-  g_tf_target_height = height;
-  g_tf_target_width = width;
-
-  GPUFrameBuffer *fb = NULL;
-  GPU_framebuffer_ensure_config(&fb,
-                                {
-                                    GPU_ATTACHMENT_NONE,
-                                    GPU_ATTACHMENT_TEXTURE(tex),
-                                });
-
-  float *data = MEM_mallocN(sizeof(float) * 4 * width * height, "tf fallback buffer");
-
-  GPU_framebuffer_bind(fb);
-  while (g_tf_calls != NULL) {
-    ParticleRefineCall *pr_call = g_tf_calls;
-    g_tf_calls = g_tf_calls->next;
-
-    g_tf_id_offset = 0;
-    while (pr_call->vert_len > 0) {
-      int max_read_px_len = min_ii(width * height, pr_call->vert_len);
-
-      DRW_draw_pass_subset(g_tf_pass, pr_call->shgrp, pr_call->shgrp);
-      /* Readback result to main memory. */
-      GPU_framebuffer_read_color(fb, 0, 0, width, height, 4, 0, data);
-      /* Upload back to VBO. */
-      GPU_vertbuf_use(pr_call->vbo);
-      glBufferSubData(GL_ARRAY_BUFFER,
-                      sizeof(float) * 4 * g_tf_id_offset,
-                      sizeof(float) * 4 * max_read_px_len,
-                      data);
-
-      g_tf_id_offset += max_read_px_len;
-      pr_call->vert_len -= max_read_px_len;
-    }
-
-    MEM_freeN(pr_call);
-  }
-
-  MEM_freeN(data);
-  GPU_framebuffer_free(fb);
-#else
   /* TODO(fclem): replace by compute shader. */
   /* Just render using transform feedback. */
   DRW_draw_pass(g_tf_pass);
-#endif
 }
 
 void DRW_hair_free(void)

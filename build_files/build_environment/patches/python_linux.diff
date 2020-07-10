@@ -1,8 +1,42 @@
-diff --git a/setup.py.orig b/setup.py
-index a97a755..07ce853 100644
---- a/setup.py.orig
-+++ b/setup.py
-@@ -1422,13 +1422,13 @@ class PyBuildExt(build_ext):
+diff -ru external_python_orig/configure external_python/configure
+--- external_python_orig/configure	2020-03-10 07:11:12.000000000 +0100
++++ external_python/configure	2020-07-10 00:31:38.000000000 +0200
+@@ -3374,7 +3374,7 @@
+   # has no effect, don't bother defining them
+   Darwin/[6789].*)
+     define_xopen_source=no;;
+-  Darwin/1[0-9].*)
++  Darwin/[12][0-9].*)
+     define_xopen_source=no;;
+   # On AIX 4 and 5.1, mbstate_t is defined only when _XOPEN_SOURCE == 500 but
+   # used in wcsnrtombs() and mbsnrtowcs() even if _XOPEN_SOURCE is not defined
+@@ -9251,6 +9251,9 @@
+     	ppc)
+     		MACOSX_DEFAULT_ARCH="ppc64"
+     		;;
++        arm64)
++            MACOSX_DEFAULT_ARCH="arm64"
++            ;;
+     	*)
+     		as_fn_error $? "Unexpected output of 'arch' on OSX" "$LINENO" 5
+     		;;
+diff -ru external_python_orig/configure.ac external_python/configure.ac
+--- external_python_orig/configure.ac	2020-03-10 07:11:12.000000000 +0100
++++ external_python/configure.ac	2020-07-10 00:33:49.000000000 +0200
+@@ -2456,6 +2456,9 @@
+     	ppc)
+     		MACOSX_DEFAULT_ARCH="ppc64"
+     		;;
++        arm64)
++            MACOSX_DEFAULT_ARCH="arm64"
++            ;;
+     	*)
+     		AC_MSG_ERROR([Unexpected output of 'arch' on OSX])
+     		;;
+diff -ru external_python_orig/setup.py external_python/setup.py
+--- external_python_orig/setup.py	2020-03-10 07:11:12.000000000 +0100
++++ external_python/setup.py	2020-07-10 00:29:49.000000000 +0200
+@@ -1466,13 +1466,13 @@
                          version = line.split()[2]
                          break
              if version >= version_req:
@@ -18,7 +52,7 @@ index a97a755..07ce853 100644
                                             extra_link_args = zlib_extra_link_args))
                      have_zlib = True
                  else:
-@@ -1442,7 +1442,7 @@ class PyBuildExt(build_ext):
+@@ -1486,7 +1486,7 @@
          # crc32 if we have it.  Otherwise binascii uses its own.
          if have_zlib:
              extra_compile_args = ['-DUSE_ZLIB_CRC32']
@@ -27,7 +61,7 @@ index a97a755..07ce853 100644
              extra_link_args = zlib_extra_link_args
          else:
              extra_compile_args = []
-@@ -1991,7 +1991,7 @@ class PyBuildExt(build_ext):
+@@ -2035,7 +2035,7 @@
                  print('Header file {} does not exist'.format(ffi_h))
          ffi_lib = None
          if ffi_inc is not None:

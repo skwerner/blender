@@ -20,7 +20,11 @@
 
 # Libraries configuration for Apple.
 
-set(MACOSX_DEPLOYMENT_TARGET "10.13")
+if("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64")
+  set(MACOSX_DEPLOYMENT_TARGET 11.00)
+else()
+  set(MACOSX_DEPLOYMENT_TARGET 10.13)
+endif()
 
 macro(find_package_wrapper)
 # do nothing, just satisfy the macro
@@ -376,6 +380,13 @@ if(WITH_CYCLES_OSL)
     message(STATUS "OSL not found")
     set(WITH_CYCLES_OSL OFF)
   endif()
+endif()
+
+if("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64")
+  set(WITH_CYCLES_EMBREE OFF)
+  set(WITH_OPENIMAGEDENOISE OFF)
+  set(WITH_AUDASPACE OFF)
+  set(WITH_CPU_SSE OFF)
 endif()
 
 if(WITH_CYCLES_EMBREE)

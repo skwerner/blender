@@ -22,7 +22,7 @@ endif()
 
 
 if(APPLE)
-  if("${OSX_ARCHITECTURES}" STREQUAL "arm64")
+  if("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64")
     set(X264_EXTRA_ARGS ${X264_EXTRA_ARGS} "--disable-asm")
     set(X264_CONFIGURE_ENV echo .)
   else()

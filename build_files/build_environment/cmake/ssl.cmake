@@ -20,7 +20,7 @@ set(SSL_CONFIGURE_COMMAND ./Configure)
 set(SSL_PATCH_CMD echo .)
 
 if(APPLE)
-  if("${OSX_ARCHITECTURES}" STREQUAL "arm64")
+  if("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64")
     set(SSL_OS_COMPILER "blender-darwin-arm64")
   else()
     set(SSL_OS_COMPILER "blender-darwin-x86_64")

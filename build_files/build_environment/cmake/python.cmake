@@ -69,7 +69,7 @@ else()
       export ac_cv_header_libintl_h=no &&
       export ac_cv_lib_intl_textdomain=no
     )
-    if("${OSX_ARCHITECTURES}" STREQUAL "arm64")
+    if("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64")
       set(PYTHON_FUNC_CONFIGS ${PYTHON_FUNC_CONFIGS} && export PYTHON_DECIMAL_WITH_MACHINE=ansi64)
     endif()
     set(PYTHON_CONFIGURE_ENV ${CONFIGURE_ENV} && ${PYTHON_FUNC_CONFIGS})

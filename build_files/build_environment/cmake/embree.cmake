@@ -19,6 +19,12 @@
 # Note the utility apps may use png/tiff/gif system libraries, but the
 # library itself does not depend on them, so should give no problems.
 
+if(APPLE AND "${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64")
+  set(MAX_ISA SSE2)
+else()
+  set(MAX_ISA AV2)
+endif()
+
 set(EMBREE_EXTRA_ARGS
   -DEMBREE_ISPC_SUPPORT=OFF
   -DEMBREE_TUTORIALS=OFF
@@ -26,7 +32,7 @@ set(EMBREE_EXTRA_ARGS
   -DEMBREE_RAY_MASK=ON
   -DEMBREE_FILTER_FUNCTION=ON
   -DEMBREE_BACKFACE_CULLING=OFF
-  -DEMBREE_MAX_ISA=AVX2
+  -DEMBREE_MAX_ISA=${MAX_ISA}
   -DEMBREE_TASKING_SYSTEM=TBB
   -DEMBREE_TBB_ROOT=${LIBDIR}/tbb
   -DTBB_STATIC_LIB=${TBB_STATIC_LIBRARY}

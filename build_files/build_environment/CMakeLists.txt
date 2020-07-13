@@ -100,11 +100,12 @@ endif()
 if((NOT APPLE) OR ("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "x86_64"))
   include(cmake/ispc.cmake)
   include(cmake/openimagedenoise.cmake)
-  include(cmake/embree.cmake)
 endif()
 if(NOT APPLE)
   include(cmake/xr_openxr.cmake)
 endif()
+
+include(cmake/embree.cmake)
 
 if(WITH_WEBP)
   include(cmake/webp.cmake)

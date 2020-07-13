@@ -31,8 +31,10 @@
 #ifdef WITH_EMBREE
 
 #  include <embree3/rtcore_geometry.h>
-#  include <pmmintrin.h>
-#  include <xmmintrin.h>
+#  if defined(__x86_64__)
+#    include <pmmintrin.h>
+#    include <xmmintrin.h>
+#  endif
 
 #  include "bvh/bvh_embree.h"
 
@@ -326,8 +328,10 @@ BVHEmbree::BVHEmbree(const BVHParams &params_,
       build_quality(RTC_BUILD_QUALITY_REFIT),
       dynamic_scene(true)
 {
+#  if defined(__x86_64__)
   _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
   _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
+#  endif
   thread_scoped_lock lock(rtc_shared_mutex);
   if (rtc_shared_users == 0) {
     rtc_shared_device = rtcNewDevice("verbose=0");

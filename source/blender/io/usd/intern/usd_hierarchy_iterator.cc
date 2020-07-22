@@ -34,6 +34,7 @@
 #include "BKE_duplilist.h"
 
 #include "BLI_assert.h"
+#include "BLI_utildefines.h"
 
 #include "DEG_depsgraph_query.h"
 
@@ -41,7 +42,9 @@
 #include "DNA_layer_types.h"
 #include "DNA_object_types.h"
 
-namespace USD {
+namespace blender {
+namespace io {
+namespace usd {
 
 USDHierarchyIterator::USDHierarchyIterator(Depsgraph *depsgraph,
                                            pxr::UsdStageRefPtr stage,
@@ -70,7 +73,7 @@ std::string USDHierarchyIterator::make_valid_name(const std::string &name) const
 
 void USDHierarchyIterator::set_export_frame(float frame_nr)
 {
-  // The USD stage is already set up to have FPS timecodes per frame.
+  /* The USD stage is already set up to have FPS time-codes per frame. */
   export_time_ = pxr::UsdTimeCode(frame_nr);
 }
 
@@ -140,9 +143,12 @@ AbstractHierarchyWriter *USDHierarchyIterator::create_hair_writer(const Hierarch
   return new USDHairWriter(create_usd_export_context(context));
 }
 
-AbstractHierarchyWriter *USDHierarchyIterator::create_particle_writer(const HierarchyContext *)
+AbstractHierarchyWriter *USDHierarchyIterator::create_particle_writer(
+    const HierarchyContext *UNUSED(context))
 {
   return nullptr;
 }
 
-}  // namespace USD
+}  // namespace usd
+}  // namespace io
+}  // namespace blender

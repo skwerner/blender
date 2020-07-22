@@ -27,7 +27,8 @@
 
 struct ID;
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 class BuilderMap {
  public:
@@ -75,8 +76,8 @@ class BuilderMap {
  protected:
   int getIDTag(ID *id) const;
 
-  typedef map<ID *, int> IDTagMap;
-  IDTagMap id_tags_;
+  Map<ID *, int> id_tags_;
 };
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

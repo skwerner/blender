@@ -71,6 +71,7 @@ typedef struct OVERLAY_PassList {
   DRWPass *edit_mesh_normals_ps;
   DRWPass *edit_particle_ps;
   DRWPass *edit_text_overlay_ps;
+  DRWPass *edit_text_darken_ps;
   DRWPass *edit_text_wire_ps[2];
   DRWPass *extra_ps[2];
   DRWPass *extra_blend_ps;
@@ -148,6 +149,7 @@ typedef struct OVERLAY_ExtraCallBuffers {
 
   DRWCallBuffer *extra_dashed_lines;
   DRWCallBuffer *extra_lines;
+  DRWCallBuffer *extra_points;
 
   DRWCallBuffer *field_curve;
   DRWCallBuffer *field_force;
@@ -242,6 +244,7 @@ typedef struct OVERLAY_PrivateData {
   DRWShadingGroup *motion_path_lines_grp;
   DRWShadingGroup *motion_path_points_grp;
   DRWShadingGroup *outlines_grp;
+  DRWShadingGroup *outlines_ptcloud_grp;
   DRWShadingGroup *outlines_gpencil_grp;
   DRWShadingGroup *paint_depth_grp;
   DRWShadingGroup *paint_surf_grp;
@@ -264,6 +267,7 @@ typedef struct OVERLAY_PrivateData {
   DRWView *view_edit_faces_cage;
   DRWView *view_edit_edges;
   DRWView *view_edit_verts;
+  DRWView *view_edit_text;
   DRWView *view_reference_images;
 
   /** TODO get rid of this. */
@@ -299,6 +303,9 @@ typedef struct OVERLAY_PrivateData {
     bool show_handles;
     int handle_display;
   } edit_curve;
+  struct {
+    float overlay_color[4];
+  } edit_text;
   struct {
     int ghost_ob;
     int edit_ob;
@@ -382,6 +389,7 @@ typedef struct OVERLAY_InstanceFormats {
   struct GPUVertFormat *pos;
   struct GPUVertFormat *pos_color;
   struct GPUVertFormat *wire_extra;
+  struct GPUVertFormat *point_extra;
 } OVERLAY_InstanceFormats;
 
 /* Pack data into the last row of the 4x4 matrix. It will be decoded by the vertex shader. */
@@ -475,6 +483,7 @@ void OVERLAY_lightprobe_cache_populate(OVERLAY_Data *vedata, Object *ob);
 void OVERLAY_speaker_cache_populate(OVERLAY_Data *vedata, Object *ob);
 
 OVERLAY_ExtraCallBuffers *OVERLAY_extra_call_buffer_get(OVERLAY_Data *vedata, Object *ob);
+void OVERLAY_extra_point(OVERLAY_ExtraCallBuffers *cb, const float point[3], const float color[4]);
 void OVERLAY_extra_line_dashed(OVERLAY_ExtraCallBuffers *cb,
                                const float start[3],
                                const float end[3],
@@ -545,10 +554,6 @@ void OVERLAY_particle_cache_init(OVERLAY_Data *vedata);
 void OVERLAY_particle_cache_populate(OVERLAY_Data *vedata, Object *ob);
 void OVERLAY_particle_draw(OVERLAY_Data *vedata);
 
-void OVERLAY_pointcloud_cache_init(OVERLAY_Data *vedata);
-void OVERLAY_pointcloud_cache_populate(OVERLAY_Data *vedata, Object *ob);
-void OVERLAY_pointcloud_draw(OVERLAY_Data *vedata);
-
 void OVERLAY_sculpt_cache_init(OVERLAY_Data *vedata);
 void OVERLAY_sculpt_cache_populate(OVERLAY_Data *vedata, Object *ob);
 void OVERLAY_sculpt_draw(OVERLAY_Data *vedata);
@@ -563,7 +568,8 @@ void OVERLAY_wireframe_draw(OVERLAY_Data *vedata);
 void OVERLAY_wireframe_in_front_draw(OVERLAY_Data *vedata);
 
 GPUShader *OVERLAY_shader_antialiasing(void);
-GPUShader *OVERLAY_shader_armature_degrees_of_freedom(void);
+GPUShader *OVERLAY_shader_armature_degrees_of_freedom_wire(void);
+GPUShader *OVERLAY_shader_armature_degrees_of_freedom_solid(void);
 GPUShader *OVERLAY_shader_armature_envelope(bool use_outline);
 GPUShader *OVERLAY_shader_armature_shape(bool use_outline);
 GPUShader *OVERLAY_shader_armature_shape_wire(void);
@@ -604,6 +610,7 @@ GPUShader *OVERLAY_shader_motion_path_vert(void);
 GPUShader *OVERLAY_shader_uniform_color(void);
 GPUShader *OVERLAY_shader_outline_prepass(bool use_wire);
 GPUShader *OVERLAY_shader_outline_prepass_gpencil(void);
+GPUShader *OVERLAY_shader_outline_prepass_pointcloud(void);
 GPUShader *OVERLAY_shader_extra_grid(void);
 GPUShader *OVERLAY_shader_outline_detect(void);
 GPUShader *OVERLAY_shader_paint_face(void);
@@ -614,7 +621,6 @@ GPUShader *OVERLAY_shader_paint_weight(void);
 GPUShader *OVERLAY_shader_paint_wire(void);
 GPUShader *OVERLAY_shader_particle_dot(void);
 GPUShader *OVERLAY_shader_particle_shape(void);
-GPUShader *OVERLAY_shader_pointcloud_dot(void);
 GPUShader *OVERLAY_shader_sculpt_mask(void);
 GPUShader *OVERLAY_shader_volume_velocity(bool use_needle);
 GPUShader *OVERLAY_shader_wireframe(bool custom_bias);

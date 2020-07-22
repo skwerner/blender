@@ -182,7 +182,6 @@ static void OVERLAY_cache_init(void *vedata)
   OVERLAY_motion_path_cache_init(vedata);
   OVERLAY_outline_cache_init(vedata);
   OVERLAY_particle_cache_init(vedata);
-  OVERLAY_pointcloud_cache_init(vedata);
   OVERLAY_wireframe_cache_init(vedata);
 }
 
@@ -403,12 +402,6 @@ static void OVERLAY_cache_populate(void *vedata, Object *ob)
     OVERLAY_particle_cache_populate(vedata, ob);
   }
 
-  /* TODO: these should not be overlays, just here for testing since it's
-   * easier to implement than integrating it into eevee/workbench. */
-  if (ob->type == OB_POINTCLOUD) {
-    OVERLAY_pointcloud_cache_populate(vedata, ob);
-  }
-
   /* Relationship, object center, bounbox ... */
   if (!pd->hide_overlays) {
     OVERLAY_extra_cache_populate(vedata, ob);
@@ -423,7 +416,7 @@ static void OVERLAY_cache_finish(void *vedata)
 {
   /* TODO(fclem) Only do this when really needed. */
   {
-    /* HACK we allocate the infront depth here to avoid the overhead when if is not needed. */
+    /* HACK we allocate the in front depth here to avoid the overhead when if is not needed. */
     DefaultFramebufferList *dfbl = DRW_viewport_framebuffer_list_get();
     DefaultTextureList *dtxl = DRW_viewport_texture_list_get();
 
@@ -482,7 +475,6 @@ static void OVERLAY_draw_scene(void *vedata)
   OVERLAY_armature_draw(vedata);
   OVERLAY_particle_draw(vedata);
   OVERLAY_metaball_draw(vedata);
-  OVERLAY_pointcloud_draw(vedata);
   OVERLAY_gpencil_draw(vedata);
   OVERLAY_extra_draw(vedata);
 

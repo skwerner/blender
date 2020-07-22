@@ -42,7 +42,8 @@ static PyObject *Matrix_copy_notest(MatrixObject *self, const float *matrix);
 static PyObject *Matrix_copy(MatrixObject *self);
 static PyObject *Matrix_deepcopy(MatrixObject *self, PyObject *args);
 static int Matrix_ass_slice(MatrixObject *self, int begin, int end, PyObject *value);
-static PyObject *matrix__apply_to_copy(PyNoArgsFunction matrix_func, MatrixObject *self);
+static PyObject *matrix__apply_to_copy(PyObject *(*matrix_func)(MatrixObject *),
+                                       MatrixObject *self);
 static PyObject *MatrixAccess_CreatePyObject(MatrixObject *matrix, const eMatrixAccess_t type);
 
 static int matrix_row_vector_check(MatrixObject *mat, VectorObject *vec, int row)
@@ -395,14 +396,15 @@ static PyObject *Matrix_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
   return NULL;
 }
 
-static PyObject *matrix__apply_to_copy(PyNoArgsFunction matrix_func, MatrixObject *self)
+static PyObject *matrix__apply_to_copy(PyObject *(*matrix_func)(MatrixObject *),
+                                       MatrixObject *self)
 {
   PyObject *ret = Matrix_copy(self);
   if (ret) {
-    PyObject *ret_dummy = matrix_func(ret);
+    PyObject *ret_dummy = matrix_func((MatrixObject *)ret);
     if (ret_dummy) {
       Py_DECREF(ret_dummy);
-      return (PyObject *)ret;
+      return ret;
     }
     else { /* error */
       Py_DECREF(ret);
@@ -1634,16 +1636,17 @@ static PyObject *Matrix_inverted_noargs(MatrixObject *self)
   Py_RETURN_NONE;
 }
 
-PyDoc_STRVAR(Matrix_invert_safe_doc,
-             ".. method:: invert_safe()\n"
-             "\n"
-             "   Set the matrix to its inverse, will never error.\n"
-             "   If degenerated (e.g. zero scale on an axis), add some epsilon to its diagonal, "
-             "to get an invertible one.\n"
-             "   If tweaked matrix is still degenerated, set to the identity matrix instead.\n"
-             "\n"
-             "   .. seealso:: `Inverse Matrix <https://en.wikipedia.org/wiki/Inverse_matrix>`__ on "
-             "Wikipedia.\n");
+PyDoc_STRVAR(
+    Matrix_invert_safe_doc,
+    ".. method:: invert_safe()\n"
+    "\n"
+    "   Set the matrix to its inverse, will never error.\n"
+    "   If degenerated (e.g. zero scale on an axis), add some epsilon to its diagonal, "
+    "to get an invertible one.\n"
+    "   If tweaked matrix is still degenerated, set to the identity matrix instead.\n"
+    "\n"
+    "   .. seealso:: `Inverse Matrix <https://en.wikipedia.org/wiki/Inverse_matrix>`__ on "
+    "Wikipedia.\n");
 static PyObject *Matrix_invert_safe(MatrixObject *self)
 {
   if (BaseMath_ReadCallback_ForWrite(self) == -1) {
@@ -1737,7 +1740,7 @@ PyDoc_STRVAR(
     "   .. note:: When the matrix cant be adjugated a :exc:`ValueError` exception is raised.\n");
 static PyObject *Matrix_adjugated(MatrixObject *self)
 {
-  return matrix__apply_to_copy((PyNoArgsFunction)Matrix_adjugate, self);
+  return matrix__apply_to_copy(Matrix_adjugate, self);
 }
 
 PyDoc_STRVAR(
@@ -1945,7 +1948,7 @@ PyDoc_STRVAR(Matrix_transposed_doc,
              "   :rtype: :class:`Matrix`\n");
 static PyObject *Matrix_transposed(MatrixObject *self)
 {
-  return matrix__apply_to_copy((PyNoArgsFunction)Matrix_transpose, self);
+  return matrix__apply_to_copy(Matrix_transpose, self);
 }
 
 /*---------------------------matrix.normalize() ------------------*/
@@ -1991,7 +1994,7 @@ PyDoc_STRVAR(Matrix_normalized_doc,
              "   :rtype: :class:`Matrix`\n");
 static PyObject *Matrix_normalized(MatrixObject *self)
 {
-  return matrix__apply_to_copy((PyNoArgsFunction)Matrix_normalize, self);
+  return matrix__apply_to_copy(Matrix_normalize, self);
 }
 
 /*---------------------------matrix.zero() -----------------------*/
@@ -2523,7 +2526,6 @@ static PyObject *Matrix_mul(PyObject *m1, PyObject *m2)
   }
 
   if (mat1 && mat2) {
-#ifdef USE_MATHUTILS_ELEM_MUL
     /* MATRIX * MATRIX */
     float mat[MATRIX_MAX_DIM * MATRIX_MAX_DIM];
 
@@ -2537,7 +2539,6 @@ static PyObject *Matrix_mul(PyObject *m1, PyObject *m2)
     mul_vn_vnvn(mat, mat1->matrix, mat2->matrix, mat1->num_col * mat1->num_row);
 
     return Matrix_CreatePyObject(mat, mat2->num_col, mat1->num_row, Py_TYPE(mat1));
-#endif
   }
   else if (mat2) {
     /*FLOAT/INT * MATRIX */
@@ -2581,7 +2582,6 @@ static PyObject *Matrix_imul(PyObject *m1, PyObject *m2)
   }
 
   if (mat1 && mat2) {
-#ifdef USE_MATHUTILS_ELEM_MUL
     /* MATRIX *= MATRIX */
     if ((mat1->num_row != mat2->num_row) || (mat1->num_col != mat2->num_col)) {
       PyErr_SetString(PyExc_ValueError,
@@ -2591,14 +2591,6 @@ static PyObject *Matrix_imul(PyObject *m1, PyObject *m2)
     }
 
     mul_vn_vn(mat1->matrix, mat2->matrix, mat1->num_col * mat1->num_row);
-#else
-    PyErr_Format(PyExc_TypeError,
-                 "In place element-wise multiplication: "
-                 "not supported between '%.200s' and '%.200s' types",
-                 Py_TYPE(m1)->tp_name,
-                 Py_TYPE(m2)->tp_name);
-    return NULL;
-#endif
   }
   else if (mat1 && (((scalar = PyFloat_AsDouble(m2)) == -1.0f && PyErr_Occurred()) == 0)) {
     /* MATRIX *= FLOAT/INT */

@@ -51,7 +51,6 @@
 #  include "BKE_global.h"
 #  include "BKE_image.h"
 #  include "BKE_lib_id.h"
-#  include "BKE_lib_override.h"
 #  include "BKE_main.h"
 #  include "BKE_report.h"
 #  include "BKE_scene.h"
@@ -619,7 +618,6 @@ static int arg_handle_print_help(int UNUSED(argc), const char **UNUSED(argv), vo
   printf("Misc Options:\n");
   BLI_argsPrintArgDoc(ba, "--app-template");
   BLI_argsPrintArgDoc(ba, "--factory-startup");
-  BLI_argsPrintArgDoc(ba, "--disable-library-override");
   BLI_argsPrintArgDoc(ba, "--enable-event-simulate");
   printf("\n");
   BLI_argsPrintArgDoc(ba, "--env-system-datafiles");
@@ -683,7 +681,6 @@ static int arg_handle_print_help(int UNUSED(argc), const char **UNUSED(argv), vo
 #  ifdef WITH_SDL
   printf("  $SDL_AUDIODRIVER          LibSDL audio driver - alsa, esd, dma.\n");
 #  endif
-  printf("  $PYTHONHOME               Path to the Python directory, eg. /usr/lib/python.\n\n");
 
   exit(0);
 
@@ -1122,17 +1119,6 @@ static int arg_handle_factory_startup_set(int UNUSED(argc),
   return 0;
 }
 
-static const char arg_handle_disable_override_library_doc[] =
-    "\n\t"
-    "Disable Library Override features in the UI.";
-static int arg_handle_disable_override_library(int UNUSED(argc),
-                                               const char **UNUSED(argv),
-                                               void *UNUSED(data))
-{
-  BKE_lib_override_library_enable(false);
-  return 0;
-}
-
 static const char arg_handle_enable_event_simulate_doc[] =
     "\n\t"
     "Enable event simulation testing feature 'bpy.types.Window.event_simulate'.";
@@ -1460,7 +1446,7 @@ static int arg_handle_image_type_set(int argc, const char **argv, void *data)
     return 1;
   }
   else {
-    printf("\nError: you must specify a format after '-F  / --render-foramt'.\n");
+    printf("\nError: you must specify a format after '-F  / --render-format'.\n");
     return 0;
   }
 }
@@ -2226,8 +2212,6 @@ void main_args_setup(bContext *C, bArgs *ba)
 
   BLI_argsAdd(ba, 1, NULL, "--app-template", CB(arg_handle_app_template), NULL);
   BLI_argsAdd(ba, 1, NULL, "--factory-startup", CB(arg_handle_factory_startup_set), NULL);
-  BLI_argsAdd(
-      ba, 1, NULL, "--disable-library-override", CB(arg_handle_disable_override_library), NULL);
   BLI_argsAdd(ba, 1, NULL, "--enable-event-simulate", CB(arg_handle_enable_event_simulate), NULL);
 
   /* TODO, add user env vars? */

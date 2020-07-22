@@ -188,7 +188,7 @@ static void *ed_armature_pick_bone_from_selectbuffer_impl(const bool is_editmode
       Base *base = NULL;
       bool sel;
 
-      hitresult &= ~(BONESEL_ANY);
+      hitresult &= ~BONESEL_ANY;
       /* Determine what the current bone is */
       if (is_editmode == false) {
         base = ED_armature_base_and_pchan_from_select_buffer(bases, bases_len, hitresult, &pchan);
@@ -263,10 +263,8 @@ static void *ed_armature_pick_bone_from_selectbuffer_impl(const bool is_editmode
     *r_base = firstunSel_base;
     return firstunSel;
   }
-  else {
-    *r_base = firstSel_base;
-    return firstSel;
-  }
+  *r_base = firstSel_base;
+  return firstSel;
 }
 
 EditBone *ED_armature_pick_ebone_from_selectbuffer(Base **bases,
@@ -1302,7 +1300,7 @@ static int armature_de_select_all_exec(bContext *C, wmOperator *op)
         if ((ebone->flag & BONE_UNSELECTABLE) == 0) {
           ebone->flag |= (BONE_SELECTED | BONE_TIPSEL | BONE_ROOTSEL);
           if (ebone->parent) {
-            ebone->parent->flag |= (BONE_TIPSEL);
+            ebone->parent->flag |= BONE_TIPSEL;
           }
         }
         break;
@@ -1317,7 +1315,7 @@ static int armature_de_select_all_exec(bContext *C, wmOperator *op)
           if ((ebone->flag & BONE_UNSELECTABLE) == 0) {
             ebone->flag |= (BONE_SELECTED | BONE_TIPSEL | BONE_ROOTSEL);
             if (ebone->parent) {
-              ebone->parent->flag |= (BONE_TIPSEL);
+              ebone->parent->flag |= BONE_TIPSEL;
             }
           }
         }
@@ -2253,10 +2251,9 @@ static int armature_shortest_path_pick_invoke(bContext *C, wmOperator *op, const
 
     return OPERATOR_FINISHED;
   }
-  else {
-    BKE_report(op->reports, RPT_WARNING, "Unselectable bone in chain");
-    return OPERATOR_CANCELLED;
-  }
+
+  BKE_report(op->reports, RPT_WARNING, "Unselectable bone in chain");
+  return OPERATOR_CANCELLED;
 }
 
 void ARMATURE_OT_shortest_path_pick(wmOperatorType *ot)

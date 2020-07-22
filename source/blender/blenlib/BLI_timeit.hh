@@ -23,8 +23,7 @@
 
 #include "BLI_sys_types.h"
 
-namespace blender {
-namespace Timeit {
+namespace blender::timeit {
 
 using Clock = std::chrono::steady_clock;
 using TimePoint = Clock::time_point;
@@ -34,29 +33,28 @@ void print_duration(Nanoseconds duration);
 
 class ScopedTimer {
  private:
-  std::string m_name;
-  TimePoint m_start;
+  std::string name_;
+  TimePoint start_;
 
  public:
-  ScopedTimer(std::string name) : m_name(std::move(name))
+  ScopedTimer(std::string name) : name_(std::move(name))
   {
-    m_start = Clock::now();
+    start_ = Clock::now();
   }
 
   ~ScopedTimer()
   {
-    TimePoint end = Clock::now();
-    Nanoseconds duration = end - m_start;
+    const TimePoint end = Clock::now();
+    const Nanoseconds duration = end - start_;
 
-    std::cout << "Timer '" << m_name << "' took ";
+    std::cout << "Timer '" << name_ << "' took ";
     print_duration(duration);
     std::cout << '\n';
   }
 };
 
-}  // namespace Timeit
-}  // namespace blender
+}  // namespace blender::timeit
 
-#define SCOPED_TIMER(name) blender::Timeit::ScopedTimer scoped_timer(name)
+#define SCOPED_TIMER(name) blender::timeit::ScopedTimer scoped_timer(name)
 
 #endif /* __BLI_TIMEIT_HH__ */

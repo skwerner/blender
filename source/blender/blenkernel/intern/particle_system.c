@@ -1939,7 +1939,7 @@ static void sphclassical_density_accum_cb(void *userdata,
     return;
   }
 
-  /* Smoothing factor. Utilise the Wendland kernel. gnuplot:
+  /* Smoothing factor. Utilize the Wendland kernel. gnuplot:
    *     q1(x) = (2.0 - x)**4 * ( 1.0 + 2.0 * x)
    *     plot [0:2] q1(x) */
   q = qfac / pow3f(pfr->h) * pow4f(2.0f - rij_h) * (1.0f + 2.0f * rij_h);
@@ -2054,7 +2054,7 @@ static void sphclassical_force_cb(void *sphdata_v,
 
     npressure = stiffness * (pow7f(npa->sphdensity / rest_density) - 1.0f);
 
-    /* First derivative of smoothing factor. Utilise the Wendland kernel.
+    /* First derivative of smoothing factor. Utilize the Wendland kernel.
      * gnuplot:
      *     q2(x) = 2.0 * (2.0 - x)**4 - 4.0 * (2.0 - x)**3 * (1.0 + 2.0 * x)
      *     plot [0:2] q2(x)
@@ -2243,8 +2243,13 @@ static void basic_force_cb(void *efdata_v, ParticleKey *state, float *force, flo
   /* add effectors */
   pd_point_from_particle(efdata->sim, efdata->pa, state, &epoint);
   if (part->type != PART_HAIR || part->effector_weights->flag & EFF_WEIGHT_DO_HAIR) {
-    BKE_effectors_apply(
-        sim->psys->effectors, sim->colliders, part->effector_weights, &epoint, force, impulse);
+    BKE_effectors_apply(sim->psys->effectors,
+                        sim->colliders,
+                        part->effector_weights,
+                        &epoint,
+                        force,
+                        NULL,
+                        impulse);
   }
 
   mul_v3_fl(force, efdata->ptex.field);
@@ -2942,7 +2947,7 @@ static int collision_response(ParticleSimulationData *sim,
     /* get exact velocity right before collision */
     madd_v3_v3v3fl(v0, col->ve1, col->acc, dt1);
 
-    /* Convert collider velocity from 1/framestep to 1/s TODO:
+    /* Convert collider velocity from `1/frame_step` to `1/s` TODO:
      * here we assume 1 frame step for collision modifier. */
     mul_v3_fl(pce->vel, col->inv_timestep);
 
@@ -4183,11 +4188,11 @@ static void particles_fluid_step(ParticleSimulationData *sim,
 #else
   {
     Object *ob = sim->ob;
-    FluidModifierData *mmd = (FluidModifierData *)BKE_modifiers_findby_type(ob,
+    FluidModifierData *fmd = (FluidModifierData *)BKE_modifiers_findby_type(ob,
                                                                             eModifierType_Fluid);
 
-    if (mmd && mmd->domain && mmd->domain->fluid) {
-      FluidDomainSettings *mds = mmd->domain;
+    if (fmd && fmd->domain && fmd->domain->fluid) {
+      FluidDomainSettings *fds = fmd->domain;
 
       ParticleSettings *part = psys->part;
       ParticleData *pa = NULL;
@@ -4205,15 +4210,15 @@ static void particles_fluid_step(ParticleSimulationData *sim,
 
       /* Sanity check: parts also enabled in fluid domain? */
       if ((particles_has_flip(part->type) &&
-           (mds->particle_type & FLUID_DOMAIN_PARTICLE_FLIP) == 0) ||
+           (fds->particle_type & FLUID_DOMAIN_PARTICLE_FLIP) == 0) ||
           (particles_has_spray(part->type) &&
-           (mds->particle_type & FLUID_DOMAIN_PARTICLE_SPRAY) == 0) ||
+           (fds->particle_type & FLUID_DOMAIN_PARTICLE_SPRAY) == 0) ||
           (particles_has_bubble(part->type) &&
-           (mds->particle_type & FLUID_DOMAIN_PARTICLE_BUBBLE) == 0) ||
+           (fds->particle_type & FLUID_DOMAIN_PARTICLE_BUBBLE) == 0) ||
           (particles_has_foam(part->type) &&
-           (mds->particle_type & FLUID_DOMAIN_PARTICLE_FOAM) == 0) ||
+           (fds->particle_type & FLUID_DOMAIN_PARTICLE_FOAM) == 0) ||
           (particles_has_tracer(part->type) &&
-           (mds->particle_type & FLUID_DOMAIN_PARTICLE_TRACER) == 0)) {
+           (fds->particle_type & FLUID_DOMAIN_PARTICLE_TRACER) == 0)) {
         BLI_snprintf(debugStrBuffer,
                      sizeof(debugStrBuffer),
                      "particles_fluid_step::error - found particle system that is not enabled in "
@@ -4223,15 +4228,15 @@ static void particles_fluid_step(ParticleSimulationData *sim,
 
       /* Count particle amount. tottypepart is only important for snd particles. */
       if (part->type == PART_FLUID_FLIP) {
-        tottypepart = totpart = manta_liquid_get_num_flip_particles(mds->fluid);
+        tottypepart = totpart = manta_liquid_get_num_flip_particles(fds->fluid);
       }
       if (particles_has_spray(part->type) || particles_has_bubble(part->type) ||
           particles_has_foam(part->type) || particles_has_tracer(part->type)) {
-        totpart = manta_liquid_get_num_snd_particles(mds->fluid);
+        totpart = manta_liquid_get_num_snd_particles(fds->fluid);
 
         /* tottypepart is the amount of particles of a snd particle type. */
         for (p = 0; p < totpart; p++) {
-          flagActivePart = manta_liquid_get_snd_particle_flag_at(mds->fluid, p);
+          flagActivePart = manta_liquid_get_snd_particle_flag_at(fds->fluid, p);
           if (particles_has_spray(part->type) && (flagActivePart & PARTICLE_TYPE_SPRAY)) {
             tottypepart++;
           }
@@ -4276,39 +4281,39 @@ static void particles_fluid_step(ParticleSimulationData *sim,
 
         /* flag, res, upres, pos, vel for FLIP and snd particles have different getters. */
         if (part->type == PART_FLUID_FLIP) {
-          flagActivePart = manta_liquid_get_flip_particle_flag_at(mds->fluid, p);
+          flagActivePart = manta_liquid_get_flip_particle_flag_at(fds->fluid, p);
 
-          resX = (float)manta_get_res_x(mds->fluid);
-          resY = (float)manta_get_res_y(mds->fluid);
-          resZ = (float)manta_get_res_z(mds->fluid);
+          resX = (float)manta_get_res_x(fds->fluid);
+          resY = (float)manta_get_res_y(fds->fluid);
+          resZ = (float)manta_get_res_z(fds->fluid);
 
           upres = 1;
 
-          posX = manta_liquid_get_flip_particle_position_x_at(mds->fluid, p);
-          posY = manta_liquid_get_flip_particle_position_y_at(mds->fluid, p);
-          posZ = manta_liquid_get_flip_particle_position_z_at(mds->fluid, p);
+          posX = manta_liquid_get_flip_particle_position_x_at(fds->fluid, p);
+          posY = manta_liquid_get_flip_particle_position_y_at(fds->fluid, p);
+          posZ = manta_liquid_get_flip_particle_position_z_at(fds->fluid, p);
 
-          velX = manta_liquid_get_flip_particle_velocity_x_at(mds->fluid, p);
-          velY = manta_liquid_get_flip_particle_velocity_y_at(mds->fluid, p);
-          velZ = manta_liquid_get_flip_particle_velocity_z_at(mds->fluid, p);
+          velX = manta_liquid_get_flip_particle_velocity_x_at(fds->fluid, p);
+          velY = manta_liquid_get_flip_particle_velocity_y_at(fds->fluid, p);
+          velZ = manta_liquid_get_flip_particle_velocity_z_at(fds->fluid, p);
         }
         else if (particles_has_spray(part->type) || particles_has_bubble(part->type) ||
                  particles_has_foam(part->type) || particles_has_tracer(part->type)) {
-          flagActivePart = manta_liquid_get_snd_particle_flag_at(mds->fluid, p);
+          flagActivePart = manta_liquid_get_snd_particle_flag_at(fds->fluid, p);
 
-          resX = (float)manta_liquid_get_particle_res_x(mds->fluid);
-          resY = (float)manta_liquid_get_particle_res_y(mds->fluid);
-          resZ = (float)manta_liquid_get_particle_res_z(mds->fluid);
+          resX = (float)manta_liquid_get_particle_res_x(fds->fluid);
+          resY = (float)manta_liquid_get_particle_res_y(fds->fluid);
+          resZ = (float)manta_liquid_get_particle_res_z(fds->fluid);
 
-          upres = manta_liquid_get_particle_upres(mds->fluid);
+          upres = manta_liquid_get_particle_upres(fds->fluid);
 
-          posX = manta_liquid_get_snd_particle_position_x_at(mds->fluid, p);
-          posY = manta_liquid_get_snd_particle_position_y_at(mds->fluid, p);
-          posZ = manta_liquid_get_snd_particle_position_z_at(mds->fluid, p);
+          posX = manta_liquid_get_snd_particle_position_x_at(fds->fluid, p);
+          posY = manta_liquid_get_snd_particle_position_y_at(fds->fluid, p);
+          posZ = manta_liquid_get_snd_particle_position_z_at(fds->fluid, p);
 
-          velX = manta_liquid_get_snd_particle_velocity_x_at(mds->fluid, p);
-          velY = manta_liquid_get_snd_particle_velocity_y_at(mds->fluid, p);
-          velZ = manta_liquid_get_snd_particle_velocity_z_at(mds->fluid, p);
+          velX = manta_liquid_get_snd_particle_velocity_x_at(fds->fluid, p);
+          velY = manta_liquid_get_snd_particle_velocity_y_at(fds->fluid, p);
+          velZ = manta_liquid_get_snd_particle_velocity_z_at(fds->fluid, p);
         }
         else {
           BLI_snprintf(debugStrBuffer,
@@ -4357,10 +4362,10 @@ static void particles_fluid_step(ParticleSimulationData *sim,
           }
 
           /* Get size (dimension) but considering scaling */
-          copy_v3_v3(cell_size_scaled, mds->cell_size);
+          copy_v3_v3(cell_size_scaled, fds->cell_size);
           mul_v3_v3(cell_size_scaled, ob->scale);
-          madd_v3fl_v3fl_v3fl_v3i(min, mds->p0, cell_size_scaled, mds->res_min);
-          madd_v3fl_v3fl_v3fl_v3i(max, mds->p0, cell_size_scaled, mds->res_max);
+          madd_v3fl_v3fl_v3fl_v3i(min, fds->p0, cell_size_scaled, fds->res_min);
+          madd_v3fl_v3fl_v3fl_v3i(max, fds->p0, cell_size_scaled, fds->res_max);
           sub_v3_v3v3(size, max, min);
 
           /* Biggest dimension will be used for up-scaling. */
@@ -4374,7 +4379,7 @@ static void particles_fluid_step(ParticleSimulationData *sim,
           float resDomain[3] = {resX, resY, resZ};
           mul_v3_fl(resDomain, 0.5f);
           sub_v3_v3(pa->state.co, resDomain);
-          mul_v3_fl(pa->state.co, mds->dx);
+          mul_v3_fl(pa->state.co, fds->dx);
 
           /* Match domain dimension / size. */
           float scaleAbs[3] = {
@@ -4388,9 +4393,9 @@ static void particles_fluid_step(ParticleSimulationData *sim,
           /* Add origin offset to particle position. */
           zero_v3(tmp);
           zero_v3(tmp2);
-          sub_v3_v3v3(tmp2, mds->p1, mds->p0);
+          sub_v3_v3v3(tmp2, fds->p1, fds->p0);
           mul_v3_fl(tmp2, 0.5f);
-          add_v3_v3v3(tmp, tmp, mds->p1);
+          add_v3_v3v3(tmp, tmp, fds->p1);
           sub_v3_v3(tmp, tmp2);
           mul_v3_v3(tmp, ob->scale);
           add_v3_v3(pa->state.co, tmp);
@@ -4402,7 +4407,7 @@ static void particles_fluid_step(ParticleSimulationData *sim,
           /* Set particle velocity. */
           float velParticle[3] = {velX, velY, velZ};
           copy_v3_v3(pa->state.vel, velParticle);
-          mul_v3_fl(pa->state.vel, mds->dx);
+          mul_v3_fl(pa->state.vel, fds->dx);
 #  if 0
           /* Debugging: Print particle velocity. */
           printf("pa->state.vel[0]: %f, pa->state.vel[1]: %f, pa->state.vel[2]: %f\n",
@@ -4849,8 +4854,10 @@ void particle_system_update(struct Depsgraph *depsgraph,
       for (i = 0; i <= part->hair_step; i++) {
         hcfra = 100.0f * (float)i / (float)psys->part->hair_step;
         if ((part->flag & PART_HAIR_REGROW) == 0) {
+          const AnimationEvalContext anim_eval_context = BKE_animsys_eval_context_construct(
+              depsgraph, hcfra);
           BKE_animsys_evaluate_animdata(
-              &part_local->id, part_local->adt, hcfra, ADT_RECALC_ANIM, false);
+              &part_local->id, part_local->adt, &anim_eval_context, ADT_RECALC_ANIM, false);
         }
         system_step(&sim, hcfra, use_render_params);
         psys->cfra = hcfra;
@@ -4961,6 +4968,7 @@ void particle_system_update(struct Depsgraph *depsgraph,
       psys_orig->flag = (psys->flag & ~PSYS_SHARED_CACHES);
       psys_orig->cfra = psys->cfra;
       psys_orig->recalc = psys->recalc;
+      psys_orig->part->totpart = part->totpart;
     }
   }
 

@@ -136,7 +136,7 @@ void bpy_context_set(bContext *C, PyGILState_STATE *gilstate)
 }
 
 /* context should be used but not now because it causes some bugs */
-void bpy_context_clear(bContext *UNUSED(C), PyGILState_STATE *gilstate)
+void bpy_context_clear(bContext *UNUSED(C), const PyGILState_STATE *gilstate)
 {
   py_call_level--;
 
@@ -268,11 +268,11 @@ void BPY_python_start(int argc, const char **argv)
   /* allow to use our own included python */
   PyC_SetHomePath(py_path_bundle);
 
-  /* without this the sys.stdout may be set to 'ascii'
+  /* Without this the `sys.stdout` may be set to 'ascii'
    * (it is on my system at least), where printing unicode values will raise
-   * an error, this is highly annoying, another stumbling block for devs,
+   * an error, this is highly annoying, another stumbling block for developers,
    * so use a more relaxed error handler and enforce utf-8 since the rest of
-   * blender is utf-8 too - campbell */
+   * Blender is utf-8 too - campbell */
   Py_SetStandardStreamEncoding("utf-8", "surrogateescape");
 
   /* Suppress error messages when calculating the module search path.

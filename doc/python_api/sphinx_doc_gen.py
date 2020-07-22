@@ -83,6 +83,8 @@ import inspect
 import shutil
 import logging
 
+from textwrap import indent
+
 from platform import platform
 PLATFORM = platform().split('-')[0].lower()  # 'linux', 'darwin', 'windows'
 
@@ -357,7 +359,7 @@ INFO_DOCS = (
     ("info_tips_and_tricks.rst",
      "Tips and Tricks: Hints to help you while writing scripts for Blender"),
     ("info_gotcha.rst",
-     "Gotcha's: some of the problems you may come up against when writing scripts"),
+     "Gotcha's: some of the problems you may encounter when writing scripts"),
     ("change_log.rst", "List of changes since last Blender release"),
 )
 
@@ -438,25 +440,30 @@ if ARGS.sphinx_build:
 
     if ARGS.log:
         SPHINX_BUILD_LOG = os.path.join(ARGS.output_dir, ".sphinx-build.log")
-        SPHINX_BUILD = ["sphinx-build",
-                        "-w", SPHINX_BUILD_LOG,
-                        SPHINX_IN, SPHINX_OUT]
+        SPHINX_BUILD = [
+            "sphinx-build",
+            "-w", SPHINX_BUILD_LOG,
+            SPHINX_IN, SPHINX_OUT,
+        ]
 
 # pdf build
 if ARGS.sphinx_build_pdf:
     SPHINX_OUT_PDF = os.path.join(ARGS.output_dir, "sphinx-out_pdf")
-    SPHINX_BUILD_PDF = ["sphinx-build",
-                        "-b", "latex",
-                        SPHINX_IN, SPHINX_OUT_PDF]
+    SPHINX_BUILD_PDF = [
+        "sphinx-build",
+        "-b", "latex",
+        SPHINX_IN, SPHINX_OUT_PDF,
+    ]
     SPHINX_MAKE_PDF = ["make", "-C", SPHINX_OUT_PDF]
     SPHINX_MAKE_PDF_STDOUT = None
 
     if ARGS.log:
         SPHINX_BUILD_PDF_LOG = os.path.join(ARGS.output_dir, ".sphinx-build_pdf.log")
-        SPHINX_BUILD_PDF = ["sphinx-build", "-b", "latex",
-                            "-w", SPHINX_BUILD_PDF_LOG,
-                            SPHINX_IN, SPHINX_OUT_PDF]
-
+        SPHINX_BUILD_PDF = [
+            "sphinx-build", "-b", "latex",
+            "-w", SPHINX_BUILD_PDF_LOG,
+            SPHINX_IN, SPHINX_OUT_PDF,
+        ]
         sphinx_make_pdf_log = os.path.join(ARGS.output_dir, ".latex_make.log")
         SPHINX_MAKE_PDF_STDOUT = open(sphinx_make_pdf_log, "w", encoding="utf-8")
 
@@ -1026,6 +1033,7 @@ context_type_map = {
     "gpencil": ("GreasePencil", False),
     "gpencil_data": ("GreasePencil", False),
     "gpencil_data_owner": ("ID", False),
+    "hair": ("Hair", False),
     "image_paint_object": ("Object", False),
     "lattice": ("Lattice", False),
     "light": ("Light", False),
@@ -1042,6 +1050,7 @@ context_type_map = {
     "particle_settings": ("ParticleSettings", False),
     "particle_system": ("ParticleSystem", False),
     "particle_system_editable": ("ParticleSystem", False),
+    "pointcloud": ("PointCloud", False),
     "pose_bone": ("PoseBone", False),
     "pose_object": ("Object", False),
     "scene": ("Scene", False),
@@ -1196,12 +1205,15 @@ def pyrna_enum2sphinx(prop, use_empty_descriptions=False):
                 break
 
     if ok:
-        return "".join(["* ``%s`` %s.\n" %
-                        (identifier,
-                         ", ".join(escape_rst(val) for val in (name, description) if val),
-                         )
-                        for identifier, name, description in prop.enum_items
-                        ])
+        return "".join([
+            "* ``%s``\n"
+            "%s.\n" % (
+                identifier,
+                # Account for multi-line enum descriptions, allowing this to be a block of text.
+                indent(", ".join(escape_rst(val) for val in (name, description) if val) or "Undocumented", "  "),
+             )
+            for identifier, name, description in prop.enum_items
+        ])
     else:
         return ""
 
@@ -1268,7 +1280,7 @@ def pyrna2sphinx(basepath):
             fw(ident + ":%s%s:\n\n" % (id_name, identifier))
 
             if prop.name or prop.description:
-                fw(ident + "   " + ", ".join(val for val in (prop.name, prop.description) if val) + "\n\n")
+                fw(indent(", ".join(val for val in (prop.name, prop.description) if val), ident + "   ") + "\n\n")
 
             # special exception, can't use generic code here for enums
             if enum_text:
@@ -1714,7 +1726,7 @@ class PatchedPythonDomain(PythonDomain):
     # end workaround
 
     fw("def setup(app):\n")
-    fw("    app.add_stylesheet('css/theme_overrides.css')\n")
+    fw("    app.add_css_file('css/theme_overrides.css')\n")
     fw("    app.add_domain(PatchedPythonDomain, override=True)\n\n")
 
     file.close()

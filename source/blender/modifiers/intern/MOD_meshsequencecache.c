@@ -44,6 +44,8 @@
 
 #include "RNA_access.h"
 
+#include "BLO_read_write.h"
+
 #include "DEG_depsgraph_build.h"
 #include "DEG_depsgraph_query.h"
 
@@ -198,7 +200,6 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
 
 static void panel_draw(const bContext *C, Panel *panel)
 {
-  uiLayout *box;
   uiLayout *layout = panel->layout;
 
   PointerRNA ptr;
@@ -208,10 +209,9 @@ static void panel_draw(const bContext *C, Panel *panel)
   PointerRNA cache_file_ptr = RNA_pointer_get(&ptr, "cache_file");
   bool has_cache_file = !RNA_pointer_is_null(&cache_file_ptr);
 
-  box = uiLayoutBox(layout);
-  uiTemplateCacheFile(box, C, &ptr, "cache_file");
-
   uiLayoutSetPropSep(layout, true);
+
+  uiTemplateCacheFile(layout, C, &ptr, "cache_file");
 
   if (has_cache_file) {
     uiItemPointerR(layout, &ptr, "object_path", &cache_file_ptr, "object_paths", NULL, ICON_NONE);
@@ -227,6 +227,13 @@ static void panel_draw(const bContext *C, Panel *panel)
 static void panelRegister(ARegionType *region_type)
 {
   modifier_panel_register(region_type, eModifierType_MeshSequenceCache, panel_draw);
+}
+
+static void blendRead(BlendDataReader *UNUSED(reader), ModifierData *md)
+{
+  MeshSeqCacheModifierData *msmcd = (MeshSeqCacheModifierData *)md;
+  msmcd->reader = NULL;
+  msmcd->reader_object_path[0] = '\0';
 }
 
 ModifierTypeInfo modifierType_MeshSequenceCache = {
@@ -259,4 +266,6 @@ ModifierTypeInfo modifierType_MeshSequenceCache = {
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
     /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ blendRead,
 };

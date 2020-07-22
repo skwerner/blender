@@ -1228,17 +1228,17 @@ static void rna_def_constraint_kinematic(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "lock_rotation_x", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_negative_sdna(prop, NULL, "flag", CONSTRAINT_IK_NO_ROT_X);
-  RNA_def_property_ui_text(prop, "Lock X Rot", "Constraint rotation along X axis");
+  RNA_def_property_ui_text(prop, "Lock X Rotation", "Constraint rotation along X axis");
   RNA_def_property_update(prop, NC_OBJECT | ND_POSE, "rna_Constraint_dependency_update");
 
   prop = RNA_def_property(srna, "lock_rotation_y", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_negative_sdna(prop, NULL, "flag", CONSTRAINT_IK_NO_ROT_Y);
-  RNA_def_property_ui_text(prop, "Lock Y Rot", "Constraint rotation along Y axis");
+  RNA_def_property_ui_text(prop, "Lock Y Rotation", "Constraint rotation along Y axis");
   RNA_def_property_update(prop, NC_OBJECT | ND_POSE, "rna_Constraint_dependency_update");
 
   prop = RNA_def_property(srna, "lock_rotation_z", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_negative_sdna(prop, NULL, "flag", CONSTRAINT_IK_NO_ROT_Z);
-  RNA_def_property_ui_text(prop, "Lock Z Rot", "Constraint rotation along Z axis");
+  RNA_def_property_ui_text(prop, "Lock Z Rotation", "Constraint rotation along Z axis");
   RNA_def_property_update(prop, NC_OBJECT | ND_POSE, "rna_Constraint_dependency_update");
 
   prop = RNA_def_property(srna, "use_stretch", PROP_BOOLEAN, PROP_NONE);
@@ -2063,8 +2063,8 @@ static void rna_def_constraint_transform(BlenderRNA *brna)
   PropertyRNA *prop;
 
   static const EnumPropertyItem transform_items[] = {
-      {TRANS_LOCATION, "LOCATION", 0, "Loc", ""},
-      {TRANS_ROTATION, "ROTATION", 0, "Rot", ""},
+      {TRANS_LOCATION, "LOCATION", 0, "Location", ""},
+      {TRANS_ROTATION, "ROTATION", 0, "Rotation", ""},
       {TRANS_SCALE, "SCALE", 0, "Scale", ""},
       {0, NULL, 0, NULL, NULL},
   };
@@ -2483,7 +2483,7 @@ static void rna_def_constraint_location_limit(BlenderRNA *brna)
   prop = RNA_def_property(srna, "use_transform_limit", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag2", LIMIT_TRANSFORM);
   RNA_def_property_ui_text(
-      prop, "For Transform", "Transforms are affected by this constraint as well");
+      prop, "Affect Transform", "Transforms are affected by this constraint as well");
   RNA_def_property_update(prop, NC_OBJECT | ND_CONSTRAINT, "rna_Constraint_update");
 
   RNA_define_lib_overridable(false);
@@ -2556,7 +2556,7 @@ static void rna_def_constraint_rotation_limit(BlenderRNA *brna)
   prop = RNA_def_property(srna, "use_transform_limit", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag2", LIMIT_TRANSFORM);
   RNA_def_property_ui_text(
-      prop, "For Transform", "Transforms are affected by this constraint as well");
+      prop, "Affect Transform", "Transforms are affected by this constraint as well");
   RNA_def_property_update(prop, NC_OBJECT | ND_CONSTRAINT, "rna_Constraint_update");
 
   RNA_define_lib_overridable(false);
@@ -2644,7 +2644,7 @@ static void rna_def_constraint_size_limit(BlenderRNA *brna)
   prop = RNA_def_property(srna, "use_transform_limit", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag2", LIMIT_TRANSFORM);
   RNA_def_property_ui_text(
-      prop, "For Transform", "Transforms are affected by this constraint as well");
+      prop, "Affect Transform", "Transforms are affected by this constraint as well");
   RNA_def_property_update(prop, NC_OBJECT | ND_CONSTRAINT, "rna_Constraint_update");
 
   RNA_define_lib_overridable(false);
@@ -2684,7 +2684,7 @@ static void rna_def_constraint_distance_limit(BlenderRNA *brna)
   prop = RNA_def_property(srna, "use_transform_limit", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", LIMITDIST_TRANSFORM);
   RNA_def_property_ui_text(
-      prop, "For Transform", "Transforms are affected by this constraint as well");
+      prop, "Affect Transform", "Transforms are affected by this constraint as well");
   RNA_def_property_update(prop, NC_OBJECT | ND_CONSTRAINT, "rna_Constraint_update");
 
   RNA_define_lib_overridable(false);
@@ -3036,32 +3036,32 @@ static void rna_def_constraint_pivot(BlenderRNA *brna)
       {PIVOTCON_AXIS_X_NEG,
        "NX",
        0,
-       "-X Rot",
+       "-X Rotation",
        "Use the pivot point in the negative rotation range around the X-axis"},
       {PIVOTCON_AXIS_Y_NEG,
        "NY",
        0,
-       "-Y Rot",
+       "-Y Rotation",
        "Use the pivot point in the negative rotation range around the Y-axis"},
       {PIVOTCON_AXIS_Z_NEG,
        "NZ",
        0,
-       "-Z Rot",
+       "-Z Rotation",
        "Use the pivot point in the negative rotation range around the Z-axis"},
       {PIVOTCON_AXIS_X,
        "X",
        0,
-       "X Rot",
+       "X Rotation",
        "Use the pivot point in the positive rotation range around the X-axis"},
       {PIVOTCON_AXIS_Y,
        "Y",
        0,
-       "Y Rot",
+       "Y Rotation",
        "Use the pivot point in the positive rotation range around the Y-axis"},
       {PIVOTCON_AXIS_Z,
        "Z",
        0,
-       "Z Rot",
+       "Z Rotation",
        "Use the pivot point in the positive rotation range around the Z-axis"},
       {0, NULL, 0, NULL, NULL},
   };
@@ -3380,7 +3380,7 @@ void RNA_def_constraint(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "show_expanded", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_flag(prop, PROP_NO_DEG_UPDATE);
-  RNA_def_property_boolean_sdna(prop, NULL, "flag", CONSTRAINT_EXPAND);
+  RNA_def_property_boolean_sdna(prop, NULL, "ui_expand_flag", 0);
   RNA_def_property_ui_text(prop, "Expanded", "Constraint's panel is expanded in UI");
   RNA_def_property_ui_icon(prop, ICON_DISCLOSURE_TRI_RIGHT, 1);
 

@@ -187,20 +187,19 @@ bool EDBM_op_finish(BMEditMesh *em, BMOperator *bmop, wmOperator *op, const bool
 
     return false;
   }
-  else {
-    em->emcopyusers--;
-    if (em->emcopyusers < 0) {
-      printf("warning: em->emcopyusers was less than zero.\n");
-    }
 
-    if (em->emcopyusers <= 0) {
-      BKE_editmesh_free(em->emcopy);
-      MEM_freeN(em->emcopy);
-      em->emcopy = NULL;
-    }
-
-    return true;
+  em->emcopyusers--;
+  if (em->emcopyusers < 0) {
+    printf("warning: em->emcopyusers was less than zero.\n");
   }
+
+  if (em->emcopyusers <= 0) {
+    BKE_editmesh_free(em->emcopy);
+    MEM_freeN(em->emcopy);
+    em->emcopy = NULL;
+  }
+
+  return true;
 }
 
 bool EDBM_op_callf(BMEditMesh *em, wmOperator *op, const char *fmt, ...)
@@ -779,6 +778,7 @@ UvElementMap *BM_uv_element_map_create(BMesh *bm,
     UvElement *newvlist = NULL, *vlist = element_map->vert[i];
     UvElement *iterv, *v, *lastv, *next;
     float *uv, *uv2, uvdiff[2];
+    bool uv_vert_sel, uv2_vert_sel;
 
     while (vlist) {
       v = vlist;
@@ -789,6 +789,7 @@ UvElementMap *BM_uv_element_map_create(BMesh *bm,
       l = v->l;
       luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
       uv = luv->uv;
+      uv_vert_sel = luv->flag & MLOOPUV_VERTSEL;
 
       lastv = NULL;
       iterv = vlist;
@@ -799,12 +800,17 @@ UvElementMap *BM_uv_element_map_create(BMesh *bm,
         l = iterv->l;
         luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
         uv2 = luv->uv;
+        uv2_vert_sel = luv->flag & MLOOPUV_VERTSEL;
 
         sub_v2_v2v2(uvdiff, uv2, uv);
 
-        if (fabsf(uvdiff[0]) < STD_UV_CONNECT_LIMIT && fabsf(uvdiff[1]) < STD_UV_CONNECT_LIMIT &&
-            (!use_winding ||
-             winding[BM_elem_index_get(iterv->l->f)] == winding[BM_elem_index_get(v->l->f)])) {
+        /* Check if the uv loops share the same selection state (if not, they are not connected as
+         * they have been ripped or other edit commands have separated them). */
+        bool connected = uv_vert_sel == uv2_vert_sel && fabsf(uvdiff[0]) < STD_UV_CONNECT_LIMIT &&
+                         fabsf(uvdiff[1]) < STD_UV_CONNECT_LIMIT;
+
+        if (connected && (!use_winding || winding[BM_elem_index_get(iterv->l->f)] ==
+                                              winding[BM_elem_index_get(v->l->f)])) {
           if (lastv) {
             lastv->next = next;
           }
@@ -1030,7 +1036,7 @@ bool EDBM_vert_color_check(BMEditMesh *em)
 /** \name Mirror Cache API
  * \{ */
 
-static BMVert *cache_mirr_intptr_as_bmvert(intptr_t *index_lookup, int index)
+static BMVert *cache_mirr_intptr_as_bmvert(const intptr_t *index_lookup, int index)
 {
   intptr_t eve_i = index_lookup[index];
   return (eve_i == -1) ? NULL : (BMVert *)eve_i;
@@ -1628,10 +1634,10 @@ bool BMBVH_EdgeVisible(struct BMBVHTree *tree,
   if (f && !edge_ray_cast(tree, co2, dir2, NULL, e)) {
     return true;
   }
-  else if (f && !edge_ray_cast(tree, co3, dir3, NULL, e)) {
+  if (f && !edge_ray_cast(tree, co3, dir3, NULL, e)) {
     return true;
   }
-  else if (!f) {
+  if (!f) {
     return true;
   }
 

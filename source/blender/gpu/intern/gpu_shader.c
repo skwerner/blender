@@ -81,10 +81,7 @@ extern char datatoc_gpu_shader_image_overlays_stereo_merge_frag_glsl[];
 extern char datatoc_gpu_shader_image_color_frag_glsl[];
 extern char datatoc_gpu_shader_image_desaturate_frag_glsl[];
 extern char datatoc_gpu_shader_image_varying_color_frag_glsl[];
-extern char datatoc_gpu_shader_image_alpha_color_frag_glsl[];
 extern char datatoc_gpu_shader_image_shuffle_color_frag_glsl[];
-extern char datatoc_gpu_shader_image_mask_uniform_color_frag_glsl[];
-extern char datatoc_gpu_shader_image_modulate_alpha_frag_glsl[];
 extern char datatoc_gpu_shader_3D_vert_glsl[];
 extern char datatoc_gpu_shader_3D_normal_vert_glsl[];
 extern char datatoc_gpu_shader_3D_flat_color_vert_glsl[];
@@ -117,6 +114,7 @@ extern char datatoc_gpu_shader_2D_point_uniform_size_varying_color_outline_aa_ve
 extern char datatoc_gpu_shader_2D_edituvs_points_vert_glsl[];
 extern char datatoc_gpu_shader_2D_edituvs_facedots_vert_glsl[];
 extern char datatoc_gpu_shader_2D_edituvs_edges_vert_glsl[];
+extern char datatoc_gpu_shader_2D_edituvs_edges_frag_glsl[];
 extern char datatoc_gpu_shader_2D_edituvs_faces_vert_glsl[];
 extern char datatoc_gpu_shader_2D_edituvs_stretch_vert_glsl[];
 
@@ -281,8 +279,6 @@ static void gpu_shader_standard_defines(char defines[MAX_DEFINE_LENGTH])
   else {
     strcat(defines, "#define DFDY_SIGN -1.0\n");
   }
-
-  return;
 }
 
 GPUShader *GPU_shader_create(const char *vertexcode,
@@ -454,7 +450,9 @@ GPUShader *GPU_shader_create_ex(const char *vertexcode,
     int num_source = 0;
 
     source[num_source++] = gpu_shader_version();
-    source[num_source++] = "#define GPU_VERTEX_SHADER\n";
+    source[num_source++] =
+        "#define GPU_VERTEX_SHADER\n"
+        "#define IN_OUT out\n";
     source[num_source++] = standard_extensions;
     source[num_source++] = standard_defines;
 
@@ -485,7 +483,9 @@ GPUShader *GPU_shader_create_ex(const char *vertexcode,
     int num_source = 0;
 
     source[num_source++] = gpu_shader_version();
-    source[num_source++] = "#define GPU_FRAGMENT_SHADER\n";
+    source[num_source++] =
+        "#define GPU_FRAGMENT_SHADER\n"
+        "#define IN_OUT in\n";
     source[num_source++] = standard_extensions;
     source[num_source++] = standard_defines;
 
@@ -906,16 +906,6 @@ static const GPUShaderStages builtin_shader_stages[GPU_SHADER_BUILTIN_LEN] = {
             .frag = datatoc_gpu_shader_simple_lighting_frag_glsl,
         },
 
-    [GPU_SHADER_2D_IMAGE_MASK_UNIFORM_COLOR] =
-        {
-            .vert = datatoc_gpu_shader_3D_image_vert_glsl,
-            .frag = datatoc_gpu_shader_image_mask_uniform_color_frag_glsl,
-        },
-    [GPU_SHADER_3D_IMAGE_MODULATE_ALPHA] =
-        {
-            .vert = datatoc_gpu_shader_3D_image_vert_glsl,
-            .frag = datatoc_gpu_shader_image_modulate_alpha_frag_glsl,
-        },
     [GPU_SHADER_2D_CHECKER] =
         {
             .vert = datatoc_gpu_shader_2D_vert_glsl,
@@ -967,11 +957,6 @@ static const GPUShaderStages builtin_shader_stages[GPU_SHADER_BUILTIN_LEN] = {
         {
             .vert = datatoc_gpu_shader_2D_image_vert_glsl,
             .frag = datatoc_gpu_shader_image_desaturate_frag_glsl,
-        },
-    [GPU_SHADER_2D_IMAGE_ALPHA_COLOR] =
-        {
-            .vert = datatoc_gpu_shader_2D_image_vert_glsl,
-            .frag = datatoc_gpu_shader_image_alpha_color_frag_glsl,
         },
     [GPU_SHADER_2D_IMAGE_SHUFFLE_COLOR] =
         {
@@ -1171,12 +1156,12 @@ static const GPUShaderStages builtin_shader_stages[GPU_SHADER_BUILTIN_LEN] = {
     [GPU_SHADER_2D_UV_EDGES] =
         {
             .vert = datatoc_gpu_shader_2D_edituvs_edges_vert_glsl,
-            .frag = datatoc_gpu_shader_flat_color_frag_glsl,
+            .frag = datatoc_gpu_shader_2D_edituvs_edges_frag_glsl,
         },
     [GPU_SHADER_2D_UV_EDGES_SMOOTH] =
         {
             .vert = datatoc_gpu_shader_2D_edituvs_edges_vert_glsl,
-            .frag = datatoc_gpu_shader_2D_smooth_color_frag_glsl,
+            .frag = datatoc_gpu_shader_2D_edituvs_edges_frag_glsl,
             .defs = "#define SMOOTH_COLOR\n",
         },
     [GPU_SHADER_2D_UV_FACES] =

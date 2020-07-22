@@ -76,7 +76,7 @@ static void draw_call_sort(DRWCommand *array, DRWCommand *array_tmp, int array_l
   for (int i = 1; i < ARRAY_SIZE(idx); i++) {
     idx[i] += idx[i - 1];
   }
-  /* Traverse in reverse to not change the order of the resource ids. */
+  /* Traverse in reverse to not change the order of the resource ID's. */
   for (int src = array_len - 1; src >= 0; src--) {
     array_tmp[--idx[KEY(array[src])]] = array[src];
   }
@@ -116,7 +116,7 @@ void drw_resource_buffer_finish(ViewportMemoryPool *vmempool)
     vmempool->ubo_len = ubo_len;
   }
 
-  /* Remove unecessary buffers */
+  /* Remove unnecessary buffers */
   for (int i = ubo_len; i < vmempool->ubo_len; i++) {
     GPU_uniformbuffer_free(vmempool->matrices_ubo[i]);
     GPU_uniformbuffer_free(vmempool->obinfos_ubo[i]);
@@ -151,7 +151,7 @@ void drw_resource_buffer_finish(ViewportMemoryPool *vmempool)
   BLI_memblock_iternew(vmempool->commands, &iter);
   while ((chunk = BLI_memblock_iterstep(&iter))) {
     bool sortable = true;
-    /* We can only sort chunks that contain DRWCommandDraw only. */
+    /* We can only sort chunks that contain #DRWCommandDraw only. */
     for (int i = 0; i < ARRAY_SIZE(chunk->command_type) && sortable; i++) {
       if (chunk->command_type[i] != 0) {
         sortable = false;
@@ -179,7 +179,7 @@ static void drw_shgroup_uniform_create_ex(DRWShadingGroup *shgroup,
                                           int arraysize)
 {
   if (loc == -1) {
-    /* Nice to enable eventually, for now eevee uses uniforms that might not exist. */
+    /* Nice to enable eventually, for now EEVEE uses uniforms that might not exist. */
     // BLI_assert(0);
     return;
   }
@@ -262,11 +262,19 @@ void DRW_shgroup_uniform_texture(DRWShadingGroup *shgroup, const char *name, con
   DRW_shgroup_uniform_texture_ex(shgroup, name, tex, GPU_SAMPLER_MAX);
 }
 
-void DRW_shgroup_uniform_texture_ref(DRWShadingGroup *shgroup, const char *name, GPUTexture **tex)
+void DRW_shgroup_uniform_texture_ref_ex(DRWShadingGroup *shgroup,
+                                        const char *name,
+                                        GPUTexture **tex,
+                                        eGPUSamplerState sampler_state)
 {
   BLI_assert(tex != NULL);
   int loc = GPU_shader_get_texture_binding(shgroup->shader, name);
-  drw_shgroup_uniform_create_ex(shgroup, loc, DRW_UNIFORM_TEXTURE_REF, tex, GPU_SAMPLER_MAX, 0, 1);
+  drw_shgroup_uniform_create_ex(shgroup, loc, DRW_UNIFORM_TEXTURE_REF, tex, sampler_state, 0, 1);
+}
+
+void DRW_shgroup_uniform_texture_ref(DRWShadingGroup *shgroup, const char *name, GPUTexture **tex)
+{
+  DRW_shgroup_uniform_texture_ref_ex(shgroup, name, tex, GPU_SAMPLER_MAX);
 }
 
 void DRW_shgroup_uniform_block(DRWShadingGroup *shgroup,
@@ -424,7 +432,7 @@ void DRW_shgroup_uniform_vec4_array_copy(DRWShadingGroup *shgroup,
   int location = GPU_shader_get_uniform(shgroup->shader, name);
 
   if (location == -1) {
-    /* Nice to enable eventually, for now eevee uses uniforms that might not exist. */
+    /* Nice to enable eventually, for now EEVEE uses uniforms that might not exist. */
     // BLI_assert(0);
     return;
   }
@@ -530,6 +538,11 @@ static void drw_call_culling_init(DRWCullingState *cull, Object *ob)
     mul_v3_m4v3(corner, ob->obmat, bbox->vec[0]);
     mul_m4_v3(ob->obmat, cull->bsphere.center);
     cull->bsphere.radius = len_v3v3(cull->bsphere.center, corner);
+
+    /* Bypass test for very large objects (see T67319). */
+    if (UNLIKELY(cull->bsphere.radius > 1e12)) {
+      cull->bsphere.radius = -1.0f;
+    }
   }
   else {
     /* Bypass test. */
@@ -569,7 +582,7 @@ uint32_t DRW_object_resource_id_get(Object *UNUSED(ob))
     /* Handle not yet allocated. Return next handle. */
     handle = DST.resource_handle;
   }
-  return handle;
+  return handle & ~(1 << 31);
 }
 
 static DRWResourceHandle drw_resource_handle(DRWShadingGroup *shgroup,
@@ -610,7 +623,7 @@ static void command_type_set(uint64_t *command_type_bits, int index, eDRWCommand
   command_type_bits[index / 16] |= ((uint64_t)type) << ((index % 16) * 4);
 }
 
-eDRWCommandType command_type_get(uint64_t *command_type_bits, int index)
+eDRWCommandType command_type_get(const uint64_t *command_type_bits, int index)
 {
   return ((command_type_bits[index / 16] >> ((index % 16) * 4)) & 0xF);
 }
@@ -780,10 +793,10 @@ void DRW_shgroup_call_range(
   drw_command_draw_range(shgroup, geom, handle, v_sta, v_ct);
 }
 
+/* A count of 0 instance will use the default number of instance in the batch. */
 void DRW_shgroup_call_instance_range(
     DRWShadingGroup *shgroup, Object *ob, struct GPUBatch *geom, uint i_sta, uint i_ct)
 {
-  BLI_assert(i_ct > 0);
   BLI_assert(geom != NULL);
   if (G.f & G_FLAG_PICKSEL) {
     drw_command_set_select_id(shgroup, NULL, DST.select_id);
@@ -1643,6 +1656,52 @@ static void draw_view_matrix_state_update(DRWViewUboStorage *storage,
 
   mul_m4_m4m4(storage->persmat, winmat, viewmat);
   invert_m4_m4(storage->persinv, storage->persmat);
+
+  const bool is_persp = (winmat[3][3] == 0.0f);
+
+  /* Near clip distance. */
+  storage->viewvecs[0][3] = (is_persp) ? -winmat[3][2] / (winmat[2][2] - 1.0f) :
+                                         -(winmat[3][2] + 1.0f) / winmat[2][2];
+
+  /* Far clip distance. */
+  storage->viewvecs[1][3] = (is_persp) ? -winmat[3][2] / (winmat[2][2] + 1.0f) :
+                                         -(winmat[3][2] - 1.0f) / winmat[2][2];
+
+  /* view vectors for the corners of the view frustum.
+   * Can be used to recreate the world space position easily */
+  float view_vecs[4][3] = {
+      {-1.0f, -1.0f, -1.0f},
+      {1.0f, -1.0f, -1.0f},
+      {-1.0f, 1.0f, -1.0f},
+      {-1.0f, -1.0f, 1.0f},
+  };
+
+  /* convert the view vectors to view space */
+  for (int i = 0; i < 4; i++) {
+    mul_project_m4_v3(storage->wininv, view_vecs[i]);
+    /* normalized trick see:
+     * http://www.derschmale.com/2014/01/26/reconstructing-positions-from-the-depth-buffer */
+    if (is_persp) {
+      /* Divide XY by Z. */
+      mul_v2_fl(view_vecs[i], 1.0f / view_vecs[i][2]);
+    }
+  }
+
+  /**
+   * If ortho : view_vecs[0] is the near-bottom-left corner of the frustum and
+   *            view_vecs[1] is the vector going from the near-bottom-left corner to
+   *            the far-top-right corner.
+   * If Persp : view_vecs[0].xy and view_vecs[1].xy are respectively the bottom-left corner
+   *            when Z = 1, and top-left corner if Z = 1.
+   *            view_vecs[0].z the near clip distance and view_vecs[1].z is the (signed)
+   *            distance from the near plane to the far clip plane.
+   */
+  copy_v3_v3(storage->viewvecs[0], view_vecs[0]);
+
+  /* we need to store the differences */
+  storage->viewvecs[1][0] = view_vecs[1][0] - view_vecs[0][0];
+  storage->viewvecs[1][1] = view_vecs[2][1] - view_vecs[0][1];
+  storage->viewvecs[1][2] = view_vecs[3][2] - view_vecs[0][2];
 }
 
 /* Create a view with culling. */
@@ -1784,6 +1843,14 @@ void DRW_view_update(DRWView *view,
 const DRWView *DRW_view_default_get(void)
 {
   return DST.view_default;
+}
+
+/* WARNING: Only use in render AND only if you are going to set view_default again. */
+void DRW_view_reset(void)
+{
+  DST.view_default = NULL;
+  DST.view_active = NULL;
+  DST.view_previous = NULL;
 }
 
 /* MUST only be called once per render and only in render mode. Sets default view. */

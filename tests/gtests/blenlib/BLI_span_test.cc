@@ -1,9 +1,11 @@
+/* Apache License, Version 2.0 */
+
 #include "BLI_span.hh"
 #include "BLI_strict_flags.h"
 #include "BLI_vector.hh"
 #include "testing/testing.h"
 
-using namespace blender;
+namespace blender {
 
 TEST(span, FromSmallVector)
 {
@@ -195,7 +197,7 @@ TEST(span, SizeInBytes)
 {
   std::array<int, 10> a;
   Span<int> a_span(a);
-  EXPECT_EQ(a_span.size_in_bytes(), sizeof(a));
+  EXPECT_EQ(a_span.size_in_bytes(), (int64_t)sizeof(a));
   EXPECT_EQ(a_span.size_in_bytes(), 40);
 }
 
@@ -282,3 +284,15 @@ TEST(span, CastLargerSize)
   EXPECT_EQ(a_span.size(), 4);
   EXPECT_EQ(new_a_span.size(), 2);
 }
+
+TEST(span, VoidPointerSpan)
+{
+  int a;
+  float b;
+  double c;
+
+  auto func1 = [](Span<void *> span) { EXPECT_EQ(span.size(), 3); };
+  func1({&a, &b, &c});
+}
+
+}  // namespace blender

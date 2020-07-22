@@ -474,7 +474,7 @@ class SEQUENCER_MT_navigation(Menu):
 
         layout.separator()
 
-        layout.operator("sequencer.view_frame", text="Go to Playhead")
+        layout.operator("sequencer.view_frame")
 
         layout.separator()
 
@@ -635,7 +635,7 @@ class SEQUENCER_MT_strip_transform(Menu):
         layout = self.layout
 
         layout.operator("transform.seq_slide", text="Move")
-        layout.operator("transform.transform", text="Move/Extend from Playhead").mode = 'TIME_EXTEND'
+        layout.operator("transform.transform", text="Move/Extend from Current Frame").mode = 'TIME_EXTEND'
         layout.operator("sequencer.slip", text="Slip Strip Contents")
 
         layout.separator()
@@ -731,7 +731,7 @@ class SEQUENCER_MT_strip(Menu):
         layout.operator("sequencer.copy", text="Copy")
         layout.operator("sequencer.paste", text="Paste")
         layout.operator("sequencer.duplicate_move")
-        layout.operator("sequencer.delete", text="Delete...")
+        layout.operator("sequencer.delete", text="Delete")
 
         strip = act_strip(context)
 
@@ -1528,7 +1528,7 @@ class SEQUENCER_PT_time(SequencerButtonsPanel, Panel):
         split.alignment = 'RIGHT'
         split.label(text="End")
         split = split.split(factor=0.8 + max_factor, align=True)
-        split.label(text="{:>14}".format(smpte_from_frame(frame_final_end)))
+        split.label(text="%14s" % smpte_from_frame(frame_final_end))
         split.alignment = 'RIGHT'
         split.label(text=str(frame_final_end) + " ")
 
@@ -1569,10 +1569,10 @@ class SEQUENCER_PT_time(SequencerButtonsPanel, Panel):
 
         split = col.split(factor=0.5 + max_factor, align=True)
         split.alignment = 'RIGHT'
-        split.label(text="Playhead")
+        split.label(text="Current Frame")
         split = split.split(factor=0.8 + max_factor, align=True)
         frame_display = frame_current - frame_final_start
-        split.label(text="{:>14}".format(smpte_from_frame(frame_display)))
+        split.label(text="%14s" % smpte_from_frame(frame_display))
         split.alignment = 'RIGHT'
         split.label(text=str(frame_display) + " ")
 

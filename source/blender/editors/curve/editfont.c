@@ -373,9 +373,7 @@ static wchar_t findaccent(wchar_t char1, uint code)
   if (new) {
     return new;
   }
-  else {
-    return char1;
-  }
+  return char1;
 }
 
 static int insert_into_textbuf(Object *obedit, uintptr_t c)
@@ -403,9 +401,7 @@ static int insert_into_textbuf(Object *obedit, uintptr_t c)
 
     return 1;
   }
-  else {
-    return 0;
-  }
+  return 0;
 }
 
 static void text_update_edited(bContext *C, Object *obedit, int mode)
@@ -887,9 +883,7 @@ static int font_select_all_exec(bContext *C, wmOperator *UNUSED(op))
 
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void FONT_OT_select_all(wmOperatorType *ot)
@@ -1015,10 +1009,9 @@ static bool paste_selection(Object *obedit, ReportList *reports)
   if (font_paste_wchar(obedit, text_buf, len, info_buf)) {
     return true;
   }
-  else {
-    BKE_report(reports, RPT_WARNING, "Text too long");
-    return false;
-  }
+
+  BKE_report(reports, RPT_WARNING, "Text too long");
+  return false;
 }
 
 static int paste_text_exec(bContext *C, wmOperator *op)
@@ -1347,9 +1340,7 @@ static int change_spacing_exec(bContext *C, wmOperator *op)
 
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void FONT_OT_change_spacing(wmOperatorType *ot)
@@ -1635,7 +1626,7 @@ static int insert_text_exec(bContext *C, wmOperator *op)
 {
   Object *obedit = CTX_data_edit_object(C);
   char *inserted_utf8;
-  wchar_t *inserted_text;
+  char32_t *inserted_text;
   int a, len;
 
   if (!RNA_struct_property_is_set(op->ptr, "text")) {
@@ -1645,8 +1636,8 @@ static int insert_text_exec(bContext *C, wmOperator *op)
   inserted_utf8 = RNA_string_get_alloc(op->ptr, "text", NULL, 0);
   len = BLI_strlen_utf8(inserted_utf8);
 
-  inserted_text = MEM_callocN(sizeof(wchar_t) * (len + 1), "FONT_insert_text");
-  BLI_strncpy_wchar_from_utf8(inserted_text, inserted_utf8, len + 1);
+  inserted_text = MEM_callocN(sizeof(char32_t) * (len + 1), "FONT_insert_text");
+  len = BLI_str_utf8_as_utf32(inserted_text, inserted_utf8, MAXTEXT);
 
   for (a = 0; a < len; a++) {
     insert_into_textbuf(obedit, inserted_text[a]);
@@ -1688,9 +1679,8 @@ static int insert_text_invoke(bContext *C, wmOperator *op, const wmEvent *event)
     if ((alt || ctrl || shift) == 0) {
       return OPERATOR_PASS_THROUGH;
     }
-    else {
-      ascii = 9;
-    }
+
+    ascii = 9;
   }
 
   if (event_type == EVT_BACKSPACEKEY) {
@@ -2133,7 +2123,7 @@ static int open_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event)
     vfont = (VFont *)idptr.owner_id;
   }
 
-  path = (vfont && !BKE_vfont_is_builtin(vfont)) ? vfont->name : U.fontdir;
+  path = (vfont && !BKE_vfont_is_builtin(vfont)) ? vfont->filepath : U.fontdir;
 
   if (RNA_struct_property_is_set(op->ptr, "filepath")) {
     return font_open_exec(C, op);
@@ -2290,9 +2280,7 @@ bool ED_curve_editfont_select_pick(
     }
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 /** \} */

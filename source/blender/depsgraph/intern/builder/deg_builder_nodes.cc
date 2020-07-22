@@ -119,7 +119,8 @@
 #include "intern/node/deg_node_id.h"
 #include "intern/node/deg_node_operation.h"
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 /* ************ */
 /* Node Builder */
@@ -594,7 +595,7 @@ void DepsgraphNodeBuilder::build_object(int base_index,
   }
   id_node->has_base |= (base_index != -1);
   /* Various flags, flushing from bases/collections. */
-  build_object_flags(base_index, object, linked_state);
+  build_object_from_layer(base_index, object, linked_state);
   /* Transform. */
   build_object_transform(object);
   /* Parent. */
@@ -660,6 +661,21 @@ void DepsgraphNodeBuilder::build_object(int base_index,
                      NodeType::SYNCHRONIZATION,
                      OperationCode::SYNCHRONIZE_TO_ORIGINAL,
                      function_bind(BKE_object_sync_to_original, _1, object_cow));
+}
+
+void DepsgraphNodeBuilder::build_object_from_layer(int base_index,
+                                                   Object *object,
+                                                   eDepsNode_LinkedState_Type linked_state)
+{
+
+  OperationNode *entry_node = add_operation_node(
+      &object->id, NodeType::OBJECT_FROM_LAYER, OperationCode::OBJECT_FROM_LAYER_ENTRY);
+  entry_node->set_as_entry();
+  OperationNode *exit_node = add_operation_node(
+      &object->id, NodeType::OBJECT_FROM_LAYER, OperationCode::OBJECT_FROM_LAYER_EXIT);
+  exit_node->set_as_exit();
+
+  build_object_flags(base_index, object, linked_state);
 }
 
 void DepsgraphNodeBuilder::build_object_flags(int base_index,
@@ -733,7 +749,7 @@ void DepsgraphNodeBuilder::build_object_data(Object *object, bool is_object_visi
       break;
     case OB_ARMATURE:
       if (ID_IS_LINKED(object) && object->proxy_from != nullptr) {
-        build_proxy_rig(object);
+        build_proxy_rig(object, is_object_visible);
       }
       else {
         build_rig(object, is_object_visible);
@@ -1815,6 +1831,10 @@ void DepsgraphNodeBuilder::build_scene_audio(Scene *scene)
     return;
   }
 
+  OperationNode *audio_entry_node = add_operation_node(
+      &scene->id, NodeType::AUDIO, OperationCode::AUDIO_ENTRY);
+  audio_entry_node->set_as_entry();
+
   add_operation_node(&scene->id, NodeType::AUDIO, OperationCode::SOUND_EVAL);
 
   Scene *scene_cow = get_cow_datablock(scene);
@@ -1884,4 +1904,5 @@ void DepsgraphNodeBuilder::constraint_walk(bConstraint * /*con*/,
   }
 }
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

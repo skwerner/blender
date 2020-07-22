@@ -30,7 +30,7 @@
 #   build_deps 2015 x64 / build_deps 2015 x86
 #
 # MAC OS X USAGE:
-#   Install with homebrew: brew install cmake autoconf automake libtool yasm nasm
+#   Install with homebrew: brew install cmake autoconf automake libtool yasm nasm bison
 #   Run "make deps" from main Blender directory
 #
 # LINUX USAGE:
@@ -48,11 +48,7 @@ include(cmake/options.cmake)
 include(cmake/versions.cmake)
 
 if(ENABLE_MINGW64)
-  if("${CMAKE_SIZEOF_VOID_P}" EQUAL "8")
-    include(cmake/setup_mingw64.cmake)
-  else()
-    include(cmake/setup_mingw32.cmake)
-  endif()
+  include(cmake/setup_mingw64.cmake)
 else()
   set(mingw_LIBDIR ${LIBDIR})
 endif()
@@ -80,6 +76,7 @@ include(cmake/llvm.cmake)
 include(cmake/clang.cmake)
 if(APPLE)
   include(cmake/openmp.cmake)
+  include(cmake/nasm.cmake)
 endif()
 include(cmake/openimageio.cmake)
 include(cmake/tiff.cmake)
@@ -97,17 +94,20 @@ if(UNIX)
 else()
   include(cmake/pugixml.cmake)
 endif()
-include(cmake/openimagedenoise.cmake)
-include(cmake/embree.cmake)
-include(cmake/xr_openxr.cmake)
+if((NOT APPLE) OR ("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "x86_64"))
+  include(cmake/ispc.cmake)
+  include(cmake/openimagedenoise.cmake)
+  include(cmake/embree.cmake)
+endif()
+if(NOT APPLE)
+  include(cmake/xr_openxr.cmake)
+endif()
 
 if(WITH_WEBP)
   include(cmake/webp.cmake)
 endif()
 
 if(WIN32)
-  # HMD branch deps
-  include(cmake/hidapi.cmake)
   # OCIO deps
   include(cmake/tinyxml.cmake)
   include(cmake/yamlcpp.cmake)

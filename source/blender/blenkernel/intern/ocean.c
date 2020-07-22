@@ -147,19 +147,19 @@ static void init_complex(fftw_complex cmpl, float real, float image)
   cmpl[1] = image;
 }
 
-static void add_comlex_c(fftw_complex res, fftw_complex cmpl1, fftw_complex cmpl2)
+static void add_comlex_c(fftw_complex res, const fftw_complex cmpl1, const fftw_complex cmpl2)
 {
   res[0] = cmpl1[0] + cmpl2[0];
   res[1] = cmpl1[1] + cmpl2[1];
 }
 
-static void mul_complex_f(fftw_complex res, fftw_complex cmpl, float f)
+static void mul_complex_f(fftw_complex res, const fftw_complex cmpl, float f)
 {
   res[0] = cmpl[0] * (double)f;
   res[1] = cmpl[1] * (double)f;
 }
 
-static void mul_complex_c(fftw_complex res, fftw_complex cmpl1, fftw_complex cmpl2)
+static void mul_complex_c(fftw_complex res, const fftw_complex cmpl1, const fftw_complex cmpl2)
 {
   fftwf_complex temp;
   temp[0] = cmpl1[0] * cmpl2[0] - cmpl1[1] * cmpl2[1];
@@ -178,7 +178,7 @@ static float image_c(fftw_complex cmpl)
   return cmpl[1];
 }
 
-static void conj_complex(fftw_complex res, fftw_complex cmpl1)
+static void conj_complex(fftw_complex res, const fftw_complex cmpl1)
 {
   res[0] = cmpl1[0];
   res[1] = -cmpl1[1];
@@ -831,7 +831,7 @@ void BKE_ocean_init(struct Ocean *o,
   o->_A = A;
   o->_w = w;
   o->_damp_reflections = 1.0f - damp;
-  o->_wind_alignment = alignment;
+  o->_wind_alignment = alignment * 10.0f;
   o->_depth = depth;
   o->_Lx = Lx;
   o->_Lz = Lz;
@@ -845,7 +845,7 @@ void BKE_ocean_init(struct Ocean *o,
 
   /* Common JONSWAP parameters. */
   o->_fetch_jonswap = fetch_jonswap;
-  o->_sharpen_peak_jonswap = sharpen_peak_jonswap;
+  o->_sharpen_peak_jonswap = sharpen_peak_jonswap * 10.0f;
 
   o->_do_disp_y = do_height_field;
   o->_do_normals = do_normals;

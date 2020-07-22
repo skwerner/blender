@@ -23,7 +23,8 @@
 
 #include "intern/eval/deg_eval_runtime_backup_modifier.h"
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 ModifierDataBackupID::ModifierDataBackupID(const Depsgraph * /*depsgraph*/)
     : ModifierDataBackupID(nullptr, eModifierType_None)
@@ -35,15 +36,16 @@ ModifierDataBackupID::ModifierDataBackupID(ModifierData *modifier_data, Modifier
 {
 }
 
-bool ModifierDataBackupID::operator<(const ModifierDataBackupID &other) const
+bool operator==(const ModifierDataBackupID &a, const ModifierDataBackupID &b)
 {
-  if (modifier_data < other.modifier_data) {
-    return true;
-  }
-  if (modifier_data == other.modifier_data) {
-    return static_cast<int>(type) < static_cast<int>(other.type);
-  }
-  return false;
+  return a.modifier_data == b.modifier_data && a.type == b.type;
 }
 
-}  // namespace DEG
+uint64_t ModifierDataBackupID::hash() const
+{
+  uintptr_t ptr = (uintptr_t)modifier_data;
+  return (ptr >> 4) ^ (uintptr_t)type;
+}
+
+}  // namespace deg
+}  // namespace blender

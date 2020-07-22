@@ -204,6 +204,11 @@ struct GPUShader *DRW_shader_create(const char *vert,
                                     const char *defines);
 struct GPUShader *DRW_shader_create_with_lib(
     const char *vert, const char *geom, const char *frag, const char *lib, const char *defines);
+struct GPUShader *DRW_shader_create_with_shaderlib(const char *vert,
+                                                   const char *geom,
+                                                   const char *frag,
+                                                   const DRWShaderLibrary *lib,
+                                                   const char *defines);
 struct GPUShader *DRW_shader_create_with_transform_feedback(const char *vert,
                                                             const char *geom,
                                                             const char *defines,
@@ -211,6 +216,9 @@ struct GPUShader *DRW_shader_create_with_transform_feedback(const char *vert,
                                                             const char **varying_names,
                                                             const int varying_count);
 struct GPUShader *DRW_shader_create_fullscreen(const char *frag, const char *defines);
+struct GPUShader *DRW_shader_create_fullscreen_with_shaderlib(const char *frag,
+                                                              const DRWShaderLibrary *lib,
+                                                              const char *defines);
 struct GPUMaterial *DRW_shader_find_from_world(struct World *wo,
                                                const void *engine_type,
                                                const int options,
@@ -257,7 +265,8 @@ void DRW_shader_library_add_file(DRWShaderLibrary *lib, char *lib_code, const ch
 #define DRW_SHADER_LIB_ADD(lib, lib_name) \
   DRW_shader_library_add_file(lib, datatoc_##lib_name##_glsl, STRINGIFY(lib_name) ".glsl")
 
-char *DRW_shader_library_create_shader_string(DRWShaderLibrary *lib, char *shader_code);
+char *DRW_shader_library_create_shader_string(const DRWShaderLibrary *lib,
+                                              const char *shader_code);
 
 void DRW_shader_library_free(DRWShaderLibrary *lib);
 #define DRW_SHADER_LIB_FREE_SAFE(lib) \
@@ -462,6 +471,10 @@ void DRW_shgroup_uniform_texture_ex(DRWShadingGroup *shgroup,
                                     const char *name,
                                     const struct GPUTexture *tex,
                                     eGPUSamplerState sampler_state);
+void DRW_shgroup_uniform_texture_ref_ex(DRWShadingGroup *shgroup,
+                                        const char *name,
+                                        GPUTexture **tex,
+                                        eGPUSamplerState sampler_state);
 void DRW_shgroup_uniform_texture(DRWShadingGroup *shgroup,
                                  const char *name,
                                  const struct GPUTexture *tex);
@@ -569,7 +582,7 @@ void DRW_view_update_sub(DRWView *view, const float viewmat[4][4], const float w
 
 const DRWView *DRW_view_default_get(void);
 void DRW_view_default_set(DRWView *view);
-
+void DRW_view_reset(void);
 void DRW_view_set_active(DRWView *view);
 
 void DRW_view_clip_planes_set(DRWView *view, float (*planes)[4], int plane_len);
@@ -619,12 +632,14 @@ void DRW_render_object_iter(void *vedata,
                                              struct RenderEngine *engine,
                                              struct Depsgraph *depsgraph));
 void DRW_render_instance_buffer_finish(void);
-void DRW_render_viewport_size_set(int size[2]);
+void DRW_render_viewport_size_set(const int size[2]);
 
 void DRW_custom_pipeline(DrawEngineType *draw_engine_type,
                          struct Depsgraph *depsgraph,
                          void (*callback)(void *vedata, void *user_data),
                          void *user_data);
+
+void DRW_cache_restart(void);
 
 /* ViewLayers */
 void *DRW_view_layer_engine_data_get(DrawEngineType *engine_type);

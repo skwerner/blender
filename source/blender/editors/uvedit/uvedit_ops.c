@@ -998,9 +998,7 @@ static int uv_remove_doubles_exec(bContext *C, wmOperator *op)
   if (RNA_boolean_get(op->ptr, "use_unselected")) {
     return uv_remove_doubles_to_unselected(C, op);
   }
-  else {
-    return uv_remove_doubles_to_selected(C, op);
-  }
+  return uv_remove_doubles_to_selected(C, op);
 }
 
 static void UV_OT_remove_doubles(wmOperatorType *ot)
@@ -2073,6 +2071,7 @@ void ED_operatortypes_uvedit(void)
   WM_operatortype_append(UV_OT_select_all);
   WM_operatortype_append(UV_OT_select);
   WM_operatortype_append(UV_OT_select_loop);
+  WM_operatortype_append(UV_OT_select_edge_ring);
   WM_operatortype_append(UV_OT_select_linked);
   WM_operatortype_append(UV_OT_select_linked_pick);
   WM_operatortype_append(UV_OT_select_split);
@@ -2089,7 +2088,10 @@ void ED_operatortypes_uvedit(void)
 
   WM_operatortype_append(UV_OT_align);
 
+  WM_operatortype_append(UV_OT_rip);
   WM_operatortype_append(UV_OT_stitch);
+  WM_operatortype_append(UV_OT_shortest_path_pick);
+  WM_operatortype_append(UV_OT_shortest_path_select);
 
   WM_operatortype_append(UV_OT_seams_from_islands);
   WM_operatortype_append(UV_OT_mark_seam);
@@ -2111,6 +2113,21 @@ void ED_operatortypes_uvedit(void)
   WM_operatortype_append(UV_OT_hide);
 
   WM_operatortype_append(UV_OT_cursor_set);
+}
+
+void ED_operatormacros_uvedit(void)
+{
+  wmOperatorType *ot;
+  wmOperatorTypeMacro *otmacro;
+
+  ot = WM_operatortype_append_macro("UV_OT_rip_move",
+                                    "UV Rip Move",
+                                    "unstitch UV's and move the result",
+                                    OPTYPE_UNDO | OPTYPE_REGISTER);
+  WM_operatortype_macro_define(ot, "UV_OT_rip");
+  otmacro = WM_operatortype_macro_define(ot, "TRANSFORM_OT_translate");
+  RNA_boolean_set(otmacro->ptr, "use_proportional_edit", false);
+  RNA_boolean_set(otmacro->ptr, "mirror", false);
 }
 
 void ED_keymap_uvedit(wmKeyConfig *keyconf)

@@ -449,9 +449,7 @@ static bool bm_face_split_edgenet_find_loop(BMVert *v_init,
     *r_face_verts_len = i;
     return (i > 2) ? true : false;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 /**
@@ -1217,9 +1215,7 @@ static bool bm_vert_partial_connect_check_overlap(const int *remap,
   if (UNLIKELY((remap[v_a_index] == v_b_index) || (remap[v_b_index] == v_a_index))) {
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 #endif /* USE_PARTIAL_CONNECT */
@@ -1242,7 +1238,8 @@ bool BM_face_split_edgenet_connect_islands(BMesh *bm,
                                            uint *r_edge_net_new_len)
 {
   /* -------------------------------------------------------------------- */
-  /* This function has 2 main parts.
+  /**
+   * This function has 2 main parts.
    *
    * - Check if there are any holes.
    * - Connect the holes with edges (if any are found).

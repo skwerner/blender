@@ -829,7 +829,7 @@ GPUBatch *DRW_cache_object_face_wireframe_get(Object *ob)
     case OB_HAIR:
       return NULL;
     case OB_POINTCLOUD:
-      return NULL;
+      return DRW_pointcloud_batch_cache_get_dots(ob);
     case OB_VOLUME:
       return DRW_cache_volume_face_wireframe_get(ob);
     case OB_GPENCIL: {
@@ -877,6 +877,32 @@ GPUBatch *DRW_cache_object_surface_get(Object *ob)
       return DRW_cache_text_surface_get(ob);
     case OB_MBALL:
       return DRW_cache_mball_surface_get(ob);
+    case OB_HAIR:
+      return NULL;
+    case OB_POINTCLOUD:
+      return DRW_cache_pointcloud_surface_get(ob);
+    case OB_VOLUME:
+      return NULL;
+    default:
+      return NULL;
+  }
+}
+
+/* Returns the vertbuf used by shaded surface batch. */
+GPUVertBuf *DRW_cache_object_pos_vertbuf_get(Object *ob)
+{
+  Mesh *me = BKE_object_get_evaluated_mesh(ob);
+  short type = (me != NULL) ? OB_MESH : ob->type;
+
+  switch (type) {
+    case OB_MESH:
+      return DRW_mesh_batch_cache_pos_vertbuf_get((me != NULL) ? me : ob->data);
+    case OB_CURVE:
+    case OB_SURF:
+    case OB_FONT:
+      return DRW_curve_batch_cache_pos_vertbuf_get(ob->data);
+    case OB_MBALL:
+      return DRW_mball_batch_cache_pos_vertbuf_get(ob);
     case OB_HAIR:
       return NULL;
     case OB_POINTCLOUD:
@@ -932,7 +958,7 @@ GPUBatch **DRW_cache_object_surface_material_get(struct Object *ob,
     case OB_HAIR:
       return NULL;
     case OB_POINTCLOUD:
-      return NULL;
+      return DRW_cache_pointcloud_surface_shaded_get(ob, gpumat_array, gpumat_array_len);
     case OB_VOLUME:
       return NULL;
     default:
@@ -2844,6 +2870,12 @@ GPUBatch *DRW_cache_mesh_surface_vertpaint_get(Object *ob)
   return DRW_mesh_batch_cache_get_surface_vertpaint(ob->data);
 }
 
+GPUBatch *DRW_cache_mesh_surface_sculptcolors_get(Object *ob)
+{
+  BLI_assert(ob->type == OB_MESH);
+  return DRW_mesh_batch_cache_get_surface_sculpt(ob->data);
+}
+
 GPUBatch *DRW_cache_mesh_surface_weights_get(Object *ob)
 {
   BLI_assert(ob->type == OB_MESH);
@@ -3257,7 +3289,14 @@ GPUBatch *DRW_cache_lattice_vert_overlay_get(Object *ob)
 
 GPUBatch *DRW_cache_pointcloud_get_dots(Object *object)
 {
+  BLI_assert(object->type == OB_POINTCLOUD);
   return DRW_pointcloud_batch_cache_get_dots(object);
+}
+
+GPUBatch *DRW_cache_pointcloud_surface_get(Object *object)
+{
+  BLI_assert(object->type == OB_POINTCLOUD);
+  return DRW_pointcloud_batch_cache_get_surface(object);
 }
 
 /* -------------------------------------------------------------------- */
@@ -3550,6 +3589,11 @@ void drw_batch_cache_generate_requested(Object *ob)
     default:
       break;
   }
+}
+
+void drw_batch_cache_generate_requested_delayed(Object *ob)
+{
+  BLI_gset_add(DST.delayed_extraction, ob);
 }
 
 void DRW_batch_cache_free_old(Object *ob, int ctime)

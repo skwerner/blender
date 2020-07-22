@@ -33,6 +33,7 @@
 
 #include "util/util_foreach.h"
 #include "util/util_murmurhash.h"
+#include "util/util_task.h"
 
 #include "kernel/kernel_oiio_globals.h"
 #include <OpenImageIO/texture.h>

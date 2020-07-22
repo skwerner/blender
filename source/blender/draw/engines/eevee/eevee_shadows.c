@@ -260,10 +260,8 @@ void EEVEE_shadows_update(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
   }
 
   if (!sldata->shadow_cube_pool) {
-    /* TODO shadowcube array. */
-    int cube_size = linfo->shadow_cube_size + ((true) ? 2 : 0);
-    sldata->shadow_cube_pool = DRW_texture_create_2d_array(cube_size,
-                                                           cube_size,
+    sldata->shadow_cube_pool = DRW_texture_create_2d_array(linfo->shadow_cube_size,
+                                                           linfo->shadow_cube_size,
                                                            max_ii(1, linfo->num_cube_layer * 6),
                                                            shadow_pool_format,
                                                            DRW_TEX_FILTER | DRW_TEX_COMPARE,
@@ -412,7 +410,7 @@ void EEVEE_shadow_output_init(EEVEE_ViewLayerData *sldata,
                                 {GPU_ATTACHMENT_NONE, GPU_ATTACHMENT_TEXTURE(txl->shadow_accum)});
 
   /* Clear texture. */
-  if (DRW_state_is_image_render() || effects->taa_current_sample == 1) {
+  if (effects->taa_current_sample == 1) {
     GPU_framebuffer_bind(fbl->shadow_accum_fb);
     GPU_framebuffer_clear_color(fbl->shadow_accum_fb, clear);
   }

@@ -63,6 +63,8 @@ struct GPUBatch **DRW_cache_object_surface_material_get(struct Object *ob,
 struct GPUBatch *DRW_cache_object_face_wireframe_get(struct Object *ob);
 int DRW_cache_object_material_count_get(struct Object *ob);
 
+struct GPUVertBuf *DRW_cache_object_pos_vertbuf_get(struct Object *ob);
+
 /* Empties */
 struct GPUBatch *DRW_cache_plain_axes_get(void);
 struct GPUBatch *DRW_cache_single_arrow_get(void);
@@ -134,6 +136,7 @@ struct GPUBatch **DRW_cache_mesh_surface_shaded_get(struct Object *ob,
 struct GPUBatch **DRW_cache_mesh_surface_texpaint_get(struct Object *ob);
 struct GPUBatch *DRW_cache_mesh_surface_texpaint_single_get(struct Object *ob);
 struct GPUBatch *DRW_cache_mesh_surface_vertpaint_get(struct Object *ob);
+struct GPUBatch *DRW_cache_mesh_surface_sculptcolors_get(struct Object *ob);
 struct GPUBatch *DRW_cache_mesh_surface_weights_get(struct Object *ob);
 struct GPUBatch *DRW_cache_mesh_surface_mesh_analysis_get(struct Object *ob);
 struct GPUBatch *DRW_cache_mesh_face_wireframe_get(struct Object *ob);
@@ -212,6 +215,7 @@ struct GPUBatch *DRW_cache_hair_edge_detection_get(struct Object *ob, bool *r_is
 
 /* PointCloud */
 struct GPUBatch *DRW_cache_pointcloud_get_dots(struct Object *obj);
+struct GPUBatch *DRW_cache_pointcloud_surface_get(struct Object *obj);
 
 /* Volume */
 typedef struct DRWVolumeGrid {

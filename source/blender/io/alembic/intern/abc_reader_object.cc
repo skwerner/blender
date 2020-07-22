@@ -41,6 +41,10 @@ using Alembic::AbcGeom::IObject;
 using Alembic::AbcGeom::IXform;
 using Alembic::AbcGeom::IXformSchema;
 
+namespace blender {
+namespace io {
+namespace alembic {
+
 AbcObjectReader::AbcObjectReader(const IObject &object, ImportSettings &settings)
     : m_name(""),
       m_object_name(""),
@@ -232,7 +236,7 @@ Alembic::AbcGeom::IXform AbcObjectReader::xform()
    * parent Alembic object should contain the transform. */
   IObject abc_parent = m_iobject.getParent();
 
-  /* The archive's top object can be recognised by not having a parent. */
+  /* The archive's top object can be recognized by not having a parent. */
   if (abc_parent.getParent() && IXform::matches(abc_parent.getMetaData())) {
     try {
       return IXform(abc_parent, Alembic::AbcGeom::kWrapExisting);
@@ -330,3 +334,7 @@ void AbcObjectReader::decref()
   m_refcount--;
   BLI_assert(m_refcount >= 0);
 }
+
+}  // namespace alembic
+}  // namespace io
+}  // namespace blender

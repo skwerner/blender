@@ -101,6 +101,30 @@ typedef struct bNodeSocketTemplate {
   char identifier[64];      /* generated from name */
 } bNodeSocketTemplate;
 
+/* Use `void *` for callbacks that require C++. This is rather ugly, but works well for now. This
+ * would not be necessary if we would use bNodeSocketType and bNodeType only in C++ code.
+ * However, achieving this requires quite a few changes currently. */
+#ifdef __cplusplus
+namespace blender {
+namespace nodes {
+class SocketMFNetworkBuilder;
+class NodeMFNetworkBuilder;
+}  // namespace nodes
+namespace fn {
+class MFDataType;
+}
+}  // namespace blender
+
+using NodeExpandInMFNetworkFunction = void (*)(blender::nodes::NodeMFNetworkBuilder &builder);
+using SocketGetMFDataTypeFunction = blender::fn::MFDataType (*)();
+using SocketExpandInMFNetworkFunction = void (*)(blender::nodes::SocketMFNetworkBuilder &builder);
+
+#else
+typedef void *NodeExpandInMFNetworkFunction;
+typedef void *SocketGetMFDataTypeFunction;
+typedef void *SocketExpandInMFNetworkFunction;
+#endif
+
 /**
  * \brief Defines a socket type.
  *
@@ -153,6 +177,11 @@ typedef struct bNodeSocketType {
 
   /* Callback to free the socket type. */
   void (*free_self)(struct bNodeSocketType *stype);
+
+  /* Returns the multi-function data type of this socket type. */
+  SocketGetMFDataTypeFunction get_mf_data_type;
+  /* Expands the socket into a multi-function node that outputs the socket value. */
+  SocketExpandInMFNetworkFunction expand_in_mf_network;
 } bNodeSocketType;
 
 typedef void *(*NodeInitExecFunction)(struct bNodeExecContext *context,
@@ -266,6 +295,9 @@ typedef struct bNodeType {
   NodeExecFunction execfunc;
   /* gpu */
   NodeGPUExecFunction gpufunc;
+
+  /* Expands the bNode into nodes in a multi-function network, which will be evaluated later on. */
+  NodeExpandInMFNetworkFunction expand_in_mf_network;
 
   /* RNA integration */
   ExtensionRNA rna_ext;
@@ -500,7 +532,7 @@ const char *nodeStaticSocketInterfaceType(int type, int subtype);
   } \
   ((void)0)
 
-struct bNodeSocket *nodeFindSocket(struct bNode *node, int in_out, const char *identifier);
+struct bNodeSocket *nodeFindSocket(const struct bNode *node, int in_out, const char *identifier);
 struct bNodeSocket *nodeAddSocket(struct bNodeTree *ntree,
                                   struct bNode *node,
                                   int in_out,

@@ -192,6 +192,10 @@ class ColorPalettePanel(BrushPanel):
         elif context.vertex_paint_object:
             capabilities = brush.vertex_paint_capabilities
             return capabilities.has_color
+
+        elif context.sculpt_object:
+            capabilities = brush.sculpt_capabilities
+            return capabilities.has_color
         return False
 
     def draw(self, context):
@@ -607,6 +611,16 @@ def brush_settings(layout, context, brush, popover=False):
             layout.operator("sculpt.set_persistent_base")
             layout.separator()
 
+        if capabilities.has_color:
+            ups = context.scene.tool_settings.unified_paint_settings
+            row = layout.row(align=True)
+            UnifiedPaintPanel.prop_unified_color(row, context, brush, "color", text="")
+            UnifiedPaintPanel.prop_unified_color(row, context, brush, "secondary_color", text="")
+            row.separator()
+            row.operator("paint.brush_colors_flip", icon='FILE_REFRESH', text="", emboss=False)
+            row.prop(ups, "use_unified_color", text="", icon='BRUSHES_ALL')
+            layout.prop(brush, "blend", text="Blend Mode")
+
         if brush.sculpt_tool == 'CLAY_STRIPS':
             row = layout.row()
             row.prop(brush, "tip_roundness")
@@ -623,9 +637,13 @@ def brush_settings(layout, context, brush, popover=False):
             layout.prop(brush, "pose_origin_type")
             layout.prop(brush, "pose_offset")
             layout.prop(brush, "pose_smooth_iterations")
-            if brush.pose_deform_type == 'ROTATE_TWIST' and brush.pose_origin_type in ('TOPOLOGY','FACE_SETS'):
+            if brush.pose_deform_type == 'ROTATE_TWIST' and brush.pose_origin_type in {'TOPOLOGY', 'FACE_SETS'}:
               layout.prop(brush, "pose_ik_segments")
             layout.prop(brush, "use_pose_ik_anchored")
+            layout.prop(brush, "use_connected_only")
+            layout.prop(brush, "disconnected_distance_max")
+
+
             layout.separator()
 
         if brush.sculpt_tool == 'CLOTH':
@@ -654,6 +672,19 @@ def brush_settings(layout, context, brush, popover=False):
 
         if brush.sculpt_tool == 'GRAB':
             layout.prop(brush, "use_grab_active_vertex")
+
+        if brush.sculpt_tool == 'PAINT':
+            col = layout.column()
+            col.prop(brush, "flow")
+            col.prop(brush, "wet_mix")
+            col.prop(brush, "wet_persistence")
+            col.prop(brush, "density")
+            col.prop(brush, "tip_roundness")
+            col.prop(brush, "tip_scale_x")
+
+        if brush.sculpt_tool == 'SMEAR':
+            col = layout.column()
+            col.prop(brush, "smear_deform_type")
 
         if brush.sculpt_tool == 'MULTIPLANE_SCRAPE':
             col = layout.column()

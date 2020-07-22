@@ -902,7 +902,7 @@ static void do_2d_mapping(
   float fx, fy, fac1, area[8];
   int ok, proj, areaflag = 0, wrap;
 
-  /* mtex variables localized, only cubemap doesn't cooperate yet... */
+  /* #MTex variables localized, only cube-map doesn't cooperate yet. */
   wrap = mtex->mapping;
   tex = mtex->tex;
 
@@ -1322,7 +1322,7 @@ static int multitex_nodes_intern(Tex *tex,
                         texnode_preview,
                         use_nodes);
 
-      if (mtex->mapto & (MAP_COL)) {
+      if (mtex->mapto & MAP_COL) {
         ImBuf *ibuf = BKE_image_pool_acquire_ibuf(tex->ima, &tex->iuser, pool);
 
         /* don't linearize float buffers, assumed to be linear */

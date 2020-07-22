@@ -144,6 +144,10 @@ int DRW_hair_material_count_get(struct Hair *hair);
 int DRW_pointcloud_material_count_get(struct PointCloud *pointcloud);
 
 struct GPUBatch *DRW_pointcloud_batch_cache_get_dots(struct Object *ob);
+struct GPUBatch *DRW_pointcloud_batch_cache_get_surface(struct Object *ob);
+struct GPUBatch **DRW_cache_pointcloud_surface_shaded_get(struct Object *ob,
+                                                          struct GPUMaterial **gpumat_array,
+                                                          uint gpumat_array_len);
 
 /* Volume */
 int DRW_volume_material_count_get(struct Volume *volume);
@@ -170,6 +174,7 @@ struct GPUBatch **DRW_mesh_batch_cache_get_surface_shaded(struct Mesh *me,
 struct GPUBatch **DRW_mesh_batch_cache_get_surface_texpaint(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_surface_texpaint_single(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_surface_vertpaint(struct Mesh *me);
+struct GPUBatch *DRW_mesh_batch_cache_get_surface_sculpt(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_surface_weights(struct Mesh *me);
 /* edit-mesh drawing */
 struct GPUBatch *DRW_mesh_batch_cache_get_edit_triangles(struct Mesh *me);
@@ -198,6 +203,11 @@ struct GPUBatch *DRW_mesh_batch_cache_get_edituv_facedots(struct Mesh *me);
 /* For Image UV editor. */
 struct GPUBatch *DRW_mesh_batch_cache_get_uv_edges(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_edit_mesh_analysis(struct Mesh *me);
+
+/* For direct data access. */
+struct GPUVertBuf *DRW_mesh_batch_cache_pos_vertbuf_get(struct Mesh *me);
+struct GPUVertBuf *DRW_curve_batch_cache_pos_vertbuf_get(struct Curve *cu);
+struct GPUVertBuf *DRW_mball_batch_cache_pos_vertbuf_get(struct Object *ob);
 
 int DRW_mesh_material_count_get(struct Mesh *me);
 

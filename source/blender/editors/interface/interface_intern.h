@@ -32,6 +32,7 @@
 #include "UI_interface.h"
 #include "UI_resources.h"
 
+struct AnimationEvalContext;
 struct ARegion;
 struct ID;
 struct ImBuf;
@@ -548,7 +549,7 @@ extern bool ui_but_supports_cycling(const uiBut *but) ATTR_WARN_UNUSED_RESULT;
 extern int ui_but_is_pushed_ex(uiBut *but, double *value) ATTR_WARN_UNUSED_RESULT;
 extern int ui_but_is_pushed(uiBut *but) ATTR_WARN_UNUSED_RESULT;
 
-void ui_but_override_flag(uiBut *but);
+void ui_but_override_flag(struct Main *bmain, uiBut *but);
 
 extern void ui_block_bounds_calc(uiBlock *block);
 
@@ -848,6 +849,8 @@ typedef struct uiWidgetBaseParameters {
    * The absolute value itself is the discard factor.
    * Initialize value to 1.0.f if you don't want discard */
   float alpha_discard;
+  float tria_type;
+  float _pad[3];
 } uiWidgetBaseParameters;
 
 enum {
@@ -861,8 +864,7 @@ enum {
   ROUNDBOX_TRIA_MAX, /* don't use */
 };
 
-struct GPUBatch *ui_batch_roundbox_get(bool filled, bool antialiased);
-struct GPUBatch *ui_batch_roundbox_widget_get(int tria);
+struct GPUBatch *ui_batch_roundbox_widget_get(void);
 struct GPUBatch *ui_batch_roundbox_shadow_get(void);
 
 void ui_draw_anti_tria_rect(const rctf *rect, char dir, const float color[4]);
@@ -937,7 +939,7 @@ int ui_but_align_opposite_to_area_align_get(const struct ARegion *region) ATTR_W
 void ui_block_align_calc(uiBlock *block, const struct ARegion *region);
 
 /* interface_anim.c */
-void ui_but_anim_flag(uiBut *but, float cfra);
+void ui_but_anim_flag(uiBut *but, const struct AnimationEvalContext *anim_eval_context);
 void ui_but_anim_copy_driver(struct bContext *C);
 void ui_but_anim_paste_driver(struct bContext *C);
 bool ui_but_anim_expression_get(uiBut *but, char *str, size_t maxlen);

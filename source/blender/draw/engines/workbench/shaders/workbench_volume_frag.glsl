@@ -107,7 +107,6 @@ void volume_properties(vec3 ls_pos, out vec3 scattering, out float extinction)
 #ifdef USE_COBA
   float val = sample_volume_texture(densityTexture, co).r;
   vec4 tval = texture(transferTexture, val) * densityScale;
-  tval.rgb = pow(tval.rgb, vec3(2.2));
   scattering = tval.rgb * 1500.0;
   extinction = max(1e-4, tval.a * 50.0);
 #else
@@ -127,7 +126,7 @@ void volume_properties(vec3 ls_pos, out vec3 scattering, out float extinction)
 
 #  ifdef VOLUME_SMOKE
   /* 800 is arbitrary and here to mimic old viewport. TODO make it a parameter */
-  scattering += pow(emission.rgb, vec3(2.2)) * emission.a * 800.0;
+  scattering += emission.rgb * emission.a * 800.0;
 #  endif
 #endif
 }
@@ -195,10 +194,8 @@ void main()
 
   float depth = texelFetch(depthBuffer, ivec2(gl_FragCoord.xy), 0).r;
   float depth_end = min(depth, gl_FragCoord.z);
-  vec3 vs_ray_end = view_position_from_depth(
-      screen_uv, depth_end, world_data.viewvecs, ProjectionMatrix);
-  vec3 vs_ray_ori = view_position_from_depth(
-      screen_uv, 0.0, world_data.viewvecs, ProjectionMatrix);
+  vec3 vs_ray_end = view_position_from_depth(screen_uv, depth_end, ViewVecs, ProjectionMatrix);
+  vec3 vs_ray_ori = view_position_from_depth(screen_uv, 0.0, ViewVecs, ProjectionMatrix);
   vec3 vs_ray_dir = (is_persp) ? (vs_ray_end - vs_ray_ori) : vec3(0.0, 0.0, -1.0);
   vs_ray_dir /= abs(vs_ray_dir.z);
 

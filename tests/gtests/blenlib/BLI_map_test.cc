@@ -1,3 +1,5 @@
+/* Apache License, Version 2.0 */
+
 #include "BLI_map.hh"
 #include "BLI_rand.h"
 #include "BLI_set.hh"
@@ -6,7 +8,7 @@
 #include "BLI_vector.hh"
 #include "testing/testing.h"
 
-using namespace blender;
+namespace blender {
 
 TEST(map, DefaultConstructor)
 {
@@ -88,13 +90,13 @@ TEST(map, PopTry)
   map.add(1, 5);
   map.add(2, 7);
   EXPECT_EQ(map.size(), 2);
-  Optional<int> value = map.pop_try(4);
+  std::optional<int> value = map.pop_try(4);
   EXPECT_EQ(map.size(), 2);
   EXPECT_FALSE(value.has_value());
   value = map.pop_try(2);
   EXPECT_EQ(map.size(), 1);
   EXPECT_TRUE(value.has_value());
-  EXPECT_EQ(value.value(), 7);
+  EXPECT_EQ(*value, 7);
   EXPECT_EQ(*map.pop_try(1), 5);
   EXPECT_EQ(map.size(), 0);
 }
@@ -141,7 +143,7 @@ TEST(map, ValueIterator)
 
   blender::Set<float> values;
 
-  uint iterations = 0;
+  int iterations = 0;
   for (float value : map.values()) {
     values.add(value);
     iterations++;
@@ -162,7 +164,7 @@ TEST(map, KeyIterator)
 
   blender::Set<int> keys;
 
-  uint iterations = 0;
+  int iterations = 0;
   for (int key : map.keys()) {
     keys.add(key);
     iterations++;
@@ -184,7 +186,7 @@ TEST(map, ItemIterator)
   blender::Set<int> keys;
   blender::Set<float> values;
 
-  uint iterations = 0;
+  int iterations = 0;
   const Map<int, float> &const_map = map;
   for (auto item : const_map.items()) {
     keys.add(item.key);
@@ -458,16 +460,35 @@ TEST(map, ConstKeysAndValues)
   EXPECT_FALSE(map.contains("54"));
 }
 
+TEST(map, ForeachItem)
+{
+  Map<int, int> map;
+  map.add(3, 4);
+  map.add(1, 8);
+
+  Vector<int> keys;
+  Vector<int> values;
+  map.foreach_item([&](int key, int value) {
+    keys.append(key);
+    values.append(value);
+  });
+
+  EXPECT_EQ(keys.size(), 2);
+  EXPECT_EQ(values.size(), 2);
+  EXPECT_EQ(keys.first_index_of(3), values.first_index_of(4));
+  EXPECT_EQ(keys.first_index_of(1), values.first_index_of(8));
+}
+
 /**
  * Set this to 1 to activate the benchmark. It is disabled by default, because it prints a lot.
  */
 #if 0
 template<typename MapT>
-BLI_NOINLINE void benchmark_random_ints(StringRef name, uint amount, uint factor)
+BLI_NOINLINE void benchmark_random_ints(StringRef name, int amount, int factor)
 {
   RNG *rng = BLI_rng_new(0);
   Vector<int> values;
-  for (uint i = 0; i < amount; i++) {
+  for (int i = 0; i < amount; i++) {
     values.append(BLI_rng_get_int(rng) * factor);
   }
   BLI_rng_free(rng);
@@ -499,12 +520,12 @@ BLI_NOINLINE void benchmark_random_ints(StringRef name, uint amount, uint factor
 
 TEST(map, Benchmark)
 {
-  for (uint i = 0; i < 3; i++) {
+  for (int i = 0; i < 3; i++) {
     benchmark_random_ints<blender::Map<int, int>>("blender::Map          ", 1000000, 1);
     benchmark_random_ints<blender::StdUnorderedMapWrapper<int, int>>("std::unordered_map", 1000000, 1);
   }
   std::cout << "\n";
-  for (uint i = 0; i < 3; i++) {
+  for (int i = 0; i < 3; i++) {
     uint32_t factor = (3 << 10);
     benchmark_random_ints<blender::Map<int, int>>("blender::Map          ", 1000000, factor);
     benchmark_random_ints<blender::StdUnorderedMapWrapper<int, int>>(
@@ -565,3 +586,5 @@ TEST(map, Benchmark)
  */
 
 #endif /* Benchmark */
+
+}  // namespace blender

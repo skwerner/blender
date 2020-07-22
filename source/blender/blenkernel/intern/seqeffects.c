@@ -2668,7 +2668,7 @@ static void RVAddBitmaps_float(float *a, float *b, float *c, int width, int heig
 }
 
 static void RVIsolateHighlights_float(
-    float *in, float *out, int width, int height, float threshold, float boost, float clamp)
+    const float *in, float *out, int width, int height, float threshold, float boost, float clamp)
 {
   int x, y, index;
   float intensity;
@@ -2810,7 +2810,7 @@ static ImBuf *do_glow_effect(const SeqRenderData *context,
                          context->rectx,
                          context->recty,
                          ibuf1->rect_float,
-                         ibuf2->rect_float,
+                         NULL,
                          out->rect_float);
   }
   else {
@@ -2821,7 +2821,7 @@ static ImBuf *do_glow_effect(const SeqRenderData *context,
                         context->rectx,
                         context->recty,
                         (unsigned char *)ibuf1->rect,
-                        (unsigned char *)ibuf2->rect,
+                        NULL,
                         (unsigned char *)out->rect);
   }
 
@@ -3423,7 +3423,7 @@ static void do_gaussian_blur_effect_byte_x(Sequence *seq,
                                            int y,
                                            int frame_width,
                                            int UNUSED(frame_height),
-                                           unsigned char *rect,
+                                           const unsigned char *rect,
                                            unsigned char *out)
 {
 #define INDEX(_x, _y) (((_y) * (x) + (_x)) * 4)
@@ -3473,7 +3473,7 @@ static void do_gaussian_blur_effect_byte_y(Sequence *seq,
                                            int y,
                                            int UNUSED(frame_width),
                                            int frame_height,
-                                           unsigned char *rect,
+                                           const unsigned char *rect,
                                            unsigned char *out)
 {
 #define INDEX(_x, _y) (((_y) * (x) + (_x)) * 4)
@@ -3821,7 +3821,7 @@ void BKE_sequencer_text_font_load(TextVars *data, const bool do_id_user)
     }
 
     char path[FILE_MAX];
-    STRNCPY(path, data->text_font->name);
+    STRNCPY(path, data->text_font->filepath);
     BLI_assert(BLI_thread_is_main());
     BLI_path_abs(path, ID_BLEND_PATH_FROM_GLOBAL(&data->text_font->id));
 
@@ -3895,7 +3895,7 @@ static ImBuf *do_text_effect(const SeqRenderData *context,
     data->text_blf_id = -1;
 
     if (data->text_font) {
-      data->text_blf_id = BLF_load(data->text_font->name);
+      data->text_blf_id = BLF_load(data->text_font->filepath);
     }
   }
 

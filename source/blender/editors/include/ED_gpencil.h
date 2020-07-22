@@ -87,15 +87,24 @@ typedef enum eGP_ReprojectModes {
  * Used as part of the 'stroke cache' used during drawing of new strokes
  */
 typedef struct tGPspoint {
-  float x, y;          /* x and y coordinates of cursor (in relative to area) */
-  float pressure;      /* pressure of tablet at this point */
-  float strength;      /* pressure of tablet at this point for alpha factor */
-  float time;          /* Time relative to stroke start (used when converting to path) */
-  float uv_fac;        /* factor of uv along the stroke */
-  float uv_rot;        /* uv rotation for dor mode */
-  float rnd[3];        /* rnd value */
-  bool rnd_dirty;      /* rnd flag */
-  float vert_color[4]; /* Point vertex color. */
+  /** Coordinates x and y of cursor (in relative to area). */
+  float x, y;
+  /** Pressure of tablet at this point. */
+  float pressure;
+  /** Pressure of tablet at this point for alpha factor. */
+  float strength;
+  /** Time relative to stroke start (used when converting to path). */
+  float time;
+  /** Factor of uv along the stroke. */
+  float uv_fac;
+  /** UV rotation for dot mode. */
+  float uv_rot;
+  /** Random value. */
+  float rnd[3];
+  /** Random flag. */
+  bool rnd_dirty;
+  /** Point vertex color. */
+  float vert_color[4];
 } tGPspoint;
 
 /* ----------- Grease Pencil Tools/Context ------------- */
@@ -166,28 +175,31 @@ void ED_annotation_draw_ex(struct Scene *scene,
                            const char spacetype);
 
 /* ----------- Grease-Pencil AnimEdit API ------------------ */
-bool ED_gplayer_frames_looper(struct bGPDlayer *gpl,
-                              struct Scene *scene,
-                              short (*gpf_cb)(struct bGPDframe *, struct Scene *));
-void ED_gplayer_make_cfra_list(struct bGPDlayer *gpl, ListBase *elems, bool onlysel);
+bool ED_gpencil_layer_frames_looper(struct bGPDlayer *gpl,
+                                    struct Scene *scene,
+                                    short (*gpf_cb)(struct bGPDframe *, struct Scene *));
+void ED_gpencil_layer_make_cfra_list(struct bGPDlayer *gpl, ListBase *elems, bool onlysel);
 
-bool ED_gplayer_frame_select_check(struct bGPDlayer *gpl);
-void ED_gplayer_frame_select_set(struct bGPDlayer *gpl, short mode);
-void ED_gplayer_frames_select_box(struct bGPDlayer *gpl, float min, float max, short select_mode);
-void ED_gplayer_frames_select_region(struct KeyframeEditData *ked,
-                                     struct bGPDlayer *gpl,
-                                     short tool,
-                                     short select_mode);
+bool ED_gpencil_layer_frame_select_check(struct bGPDlayer *gpl);
+void ED_gpencil_layer_frame_select_set(struct bGPDlayer *gpl, short mode);
+void ED_gpencil_layer_frames_select_box(struct bGPDlayer *gpl,
+                                        float min,
+                                        float max,
+                                        short select_mode);
+void ED_gpencil_layer_frames_select_region(struct KeyframeEditData *ked,
+                                           struct bGPDlayer *gpl,
+                                           short tool,
+                                           short select_mode);
 void ED_gpencil_select_frames(struct bGPDlayer *gpl, short select_mode);
 void ED_gpencil_select_frame(struct bGPDlayer *gpl, int selx, short select_mode);
 
-bool ED_gplayer_frames_delete(struct bGPDlayer *gpl);
-void ED_gplayer_frames_duplicate(struct bGPDlayer *gpl);
+bool ED_gpencil_layer_frames_delete(struct bGPDlayer *gpl);
+void ED_gpencil_layer_frames_duplicate(struct bGPDlayer *gpl);
 
-void ED_gplayer_frames_keytype_set(struct bGPDlayer *gpl, short type);
+void ED_gpencil_layer_frames_keytype_set(struct bGPDlayer *gpl, short type);
 
-void ED_gplayer_snap_frames(struct bGPDlayer *gpl, struct Scene *scene, short mode);
-void ED_gplayer_mirror_frames(struct bGPDlayer *gpl, struct Scene *scene, short mode);
+void ED_gpencil_layer_snap_frames(struct bGPDlayer *gpl, struct Scene *scene, short mode);
+void ED_gpencil_layer_mirror_frames(struct bGPDlayer *gpl, struct Scene *scene, short mode);
 
 void ED_gpencil_anim_copybuf_free(void);
 bool ED_gpencil_anim_copybuf_copy(struct bAnimContext *ac);
@@ -242,18 +254,18 @@ void ED_gpencil_add_defaults(struct bContext *C, struct Object *ob);
 void ED_gpencil_setup_modes(struct bContext *C, struct bGPdata *gpd, int newmode);
 bool ED_object_gpencil_exit(struct Main *bmain, struct Object *ob);
 
-void ED_gp_project_stroke_to_plane(const struct Scene *scene,
-                                   const struct Object *ob,
-                                   const struct RegionView3D *rv3d,
-                                   struct bGPDstroke *gps,
-                                   const float origin[3],
-                                   const int axis);
-void ED_gp_project_point_to_plane(const struct Scene *scene,
-                                  const struct Object *ob,
-                                  const struct RegionView3D *rv3d,
-                                  const float origin[3],
-                                  const int axis,
-                                  struct bGPDspoint *pt);
+void ED_gpencil_project_stroke_to_plane(const struct Scene *scene,
+                                        const struct Object *ob,
+                                        const struct RegionView3D *rv3d,
+                                        struct bGPDstroke *gps,
+                                        const float origin[3],
+                                        const int axis);
+void ED_gpencil_project_point_to_plane(const struct Scene *scene,
+                                       const struct Object *ob,
+                                       const struct RegionView3D *rv3d,
+                                       const float origin[3],
+                                       const int axis,
+                                       struct bGPDspoint *pt);
 void ED_gpencil_drawing_reference_get(const struct Scene *scene,
                                       const struct Object *ob,
                                       char align_flag,
@@ -339,7 +351,7 @@ void ED_gpencil_init_random_settings(struct Brush *brush,
 
 bool ED_gpencil_stroke_check_collision(struct GP_SpaceConversion *gsc,
                                        struct bGPDstroke *gps,
-                                       float mouse[2],
+                                       const float mouse[2],
                                        const int radius,
                                        const float diff_mat[4][4]);
 bool ED_gpencil_stroke_point_is_inside(struct bGPDstroke *gps,

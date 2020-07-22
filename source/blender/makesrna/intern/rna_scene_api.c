@@ -41,13 +41,6 @@
 #  include "ABC_alembic.h"
 #endif
 
-const EnumPropertyItem rna_enum_abc_compression_items[] = {
-#ifdef WITH_ALEMBIC
-    {ABC_ARCHIVE_OGAWA, "OGAWA", 0, "Ogawa", ""},
-    {ABC_ARCHIVE_HDF5, "HDF5", 0, "HDF5", ""},
-#endif
-    {0, NULL, 0, NULL, NULL}};
-
 #ifdef RNA_RUNTIME
 
 #  include "BKE_editmesh.h"
@@ -105,13 +98,13 @@ static void rna_Scene_frame_set(Scene *scene, Main *bmain, int frame, float subf
   }
 }
 
-static void rna_Scene_uvedit_aspect(Scene *scene, Object *ob, float *aspect)
+static void rna_Scene_uvedit_aspect(Scene *UNUSED(scene), Object *ob, float *aspect)
 {
   if ((ob->type == OB_MESH) && (ob->mode == OB_MODE_EDIT)) {
     BMEditMesh *em;
     em = BKE_editmesh_from_object(ob);
     if (EDBM_uv_check(em)) {
-      ED_uvedit_get_aspect(scene, ob, em->bm, aspect, aspect + 1);
+      ED_uvedit_get_aspect(ob, aspect, aspect + 1);
       return;
     }
   }
@@ -222,7 +215,6 @@ static void rna_Scene_alembic_export(Scene *scene,
                                      bool use_subdiv_schema,
                                      bool export_hair,
                                      bool export_particles,
-                                     int compression_type,
                                      bool packuv,
                                      float scale,
                                      bool triangulate,
@@ -257,7 +249,6 @@ static void rna_Scene_alembic_export(Scene *scene,
       .use_subdiv_schema = use_subdiv_schema,
       .export_hair = export_hair,
       .export_particles = export_particles,
-      .compression_type = compression_type,
       .packuv = packuv,
       .triangulate = triangulate,
       .quad_method = quad_method,
@@ -410,7 +401,6 @@ void RNA_api_scene(StructRNA *srna)
       func, "export_hair", 1, "Export Hair", "Exports hair particle systems as animated curves");
   RNA_def_boolean(
       func, "export_particles", 1, "Export Particles", "Exports non-hair particle systems");
-  RNA_def_enum(func, "compression_type", rna_enum_abc_compression_items, 0, "Compression", "");
   RNA_def_boolean(
       func, "packuv", 0, "Export with packed UV islands", "Export with packed UV islands");
   RNA_def_float(

@@ -34,7 +34,8 @@
 
 #define QUAT_SIZE 4
 
-static PyObject *quat__apply_to_copy(PyNoArgsFunction quat_func, QuaternionObject *self);
+static PyObject *quat__apply_to_copy(PyObject *(*quat_func)(QuaternionObject *),
+                                     QuaternionObject *self);
 static void quat__axis_angle_sanitize(float axis[3], float *angle);
 static PyObject *Quaternion_copy(QuaternionObject *self);
 static PyObject *Quaternion_deepcopy(QuaternionObject *self, PyObject *args);
@@ -463,7 +464,7 @@ PyDoc_STRVAR(Quaternion_normalized_doc,
              "   :rtype: :class:`Quaternion`\n");
 static PyObject *Quaternion_normalized(QuaternionObject *self)
 {
-  return quat__apply_to_copy((PyNoArgsFunction)Quaternion_normalize, self);
+  return quat__apply_to_copy(Quaternion_normalize, self);
 }
 
 PyDoc_STRVAR(Quaternion_invert_doc,
@@ -490,7 +491,7 @@ PyDoc_STRVAR(Quaternion_inverted_doc,
              "   :rtype: :class:`Quaternion`\n");
 static PyObject *Quaternion_inverted(QuaternionObject *self)
 {
-  return quat__apply_to_copy((PyNoArgsFunction)Quaternion_invert, self);
+  return quat__apply_to_copy(Quaternion_invert, self);
 }
 
 PyDoc_STRVAR(Quaternion_identity_doc,
@@ -553,7 +554,7 @@ PyDoc_STRVAR(Quaternion_conjugated_doc,
              "   :rtype: :class:`Quaternion`\n");
 static PyObject *Quaternion_conjugated(QuaternionObject *self)
 {
-  return quat__apply_to_copy((PyNoArgsFunction)Quaternion_conjugate, self);
+  return quat__apply_to_copy(Quaternion_conjugate, self);
 }
 
 PyDoc_STRVAR(Quaternion_copy_doc,
@@ -961,11 +962,9 @@ static PyObject *Quaternion_mul(PyObject *q1, PyObject *q2)
   }
 
   if (quat1 && quat2) { /* QUAT * QUAT (element-wise product) */
-#ifdef USE_MATHUTILS_ELEM_MUL
     float quat[QUAT_SIZE];
     mul_vn_vnvn(quat, quat1->quat, quat2->quat, QUAT_SIZE);
     return Quaternion_CreatePyObject(quat, Py_TYPE(q1));
-#endif
   }
   /* the only case this can happen (for a supported type is "FLOAT * QUAT") */
   else if (quat2) { /* FLOAT * QUAT */
@@ -1006,17 +1005,8 @@ static PyObject *Quaternion_imul(PyObject *q1, PyObject *q2)
     }
   }
 
-  if (quat1 && quat2) { /* QUAT *= QUAT (inplace element-wise product) */
-#ifdef USE_MATHUTILS_ELEM_MUL
+  if (quat1 && quat2) { /* QUAT *= QUAT (in-place element-wise product). */
     mul_vn_vn(quat1->quat, quat2->quat, QUAT_SIZE);
-#else
-    PyErr_Format(PyExc_TypeError,
-                 "In place element-wise multiplication: "
-                 "not supported between '%.200s' and '%.200s' types",
-                 Py_TYPE(q1)->tp_name,
-                 Py_TYPE(q2)->tp_name);
-    return NULL;
-#endif
   }
   else if (quat1 && (((scalar = PyFloat_AsDouble(q2)) == -1.0f && PyErr_Occurred()) == 0)) {
     /* QUAT *= FLOAT */
@@ -1385,10 +1375,11 @@ static PyObject *Quaternion_new(PyTypeObject *type, PyObject *args, PyObject *kw
   return Quaternion_CreatePyObject(quat, type);
 }
 
-static PyObject *quat__apply_to_copy(PyNoArgsFunction quat_func, QuaternionObject *self)
+static PyObject *quat__apply_to_copy(PyObject *(*quat_func)(QuaternionObject *),
+                                     QuaternionObject *self)
 {
   PyObject *ret = Quaternion_copy(self);
-  PyObject *ret_dummy = quat_func(ret);
+  PyObject *ret_dummy = quat_func((QuaternionObject *)ret);
   if (ret_dummy) {
     Py_DECREF(ret_dummy);
     return ret;

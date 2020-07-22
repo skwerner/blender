@@ -570,6 +570,24 @@ static void scene_foreach_id(ID *id, LibraryForeachIDData *data)
   }
 }
 
+static void scene_foreach_cache(ID *id,
+                                IDTypeForeachCacheFunctionCallback function_callback,
+                                void *user_data)
+{
+  Scene *scene = (Scene *)id;
+  IDCacheKey key = {
+      .id_session_uuid = id->session_uuid,
+      .offset_in_ID = offsetof(Scene, eevee.light_cache_data),
+      .cache_v = scene->eevee.light_cache_data,
+  };
+
+  function_callback(id,
+                    &key,
+                    (void **)&scene->eevee.light_cache_data,
+                    IDTYPE_CACHE_CB_FLAGS_PERSISTENT,
+                    user_data);
+}
+
 IDTypeInfo IDType_ID_SCE = {
     .id_code = ID_SCE,
     .id_filter = FILTER_ID_SCE,
@@ -587,6 +605,7 @@ IDTypeInfo IDType_ID_SCE = {
      * support all possible corner cases. */
     .make_local = NULL,
     .foreach_id = scene_foreach_id,
+    .foreach_cache = scene_foreach_cache,
 };
 
 const char *RE_engine_id_BLENDER_EEVEE = "BLENDER_EEVEE";
@@ -751,7 +770,6 @@ void BKE_scene_copy_data_eevee(Scene *sce_dst, const Scene *sce_src)
 
 Scene *BKE_scene_duplicate(Main *bmain, Scene *sce, eSceneCopyMethod type)
 {
-  const bool is_scene_liboverride = ID_IS_OVERRIDE_LIBRARY(sce);
   Scene *sce_copy;
 
   /* TODO this should/could most likely be replaced by call to more generic code at some point...
@@ -822,48 +840,72 @@ Scene *BKE_scene_duplicate(Main *bmain, Scene *sce, eSceneCopyMethod type)
     return sce_copy;
   }
   else {
-    BKE_id_copy_ex(bmain, (ID *)sce, (ID **)&sce_copy, LIB_ID_COPY_ACTIONS);
+    eDupli_ID_Flags duplicate_flags = U.dupflag | USER_DUP_OBJECT;
+
+    BKE_id_copy(bmain, (ID *)sce, (ID **)&sce_copy);
     id_us_min(&sce_copy->id);
     id_us_ensure_real(&sce_copy->id);
+
+    BKE_animdata_duplicate_id_action(bmain, &sce_copy->id, duplicate_flags);
 
     /* Extra actions, most notably SCE_FULL_COPY also duplicates several 'children' datablocks. */
 
     if (type == SCE_COPY_FULL) {
+      /* Scene duplication is always root of duplication currently. */
+      const bool is_subprocess = false;
+
+      if (!is_subprocess) {
+        BKE_main_id_tag_all(bmain, LIB_TAG_NEW, false);
+        BKE_main_id_clear_newpoins(bmain);
+        /* In case root duplicated ID is linked, assume we want to get a local copy of it and
+         * duplicate all expected linked data. */
+        if (ID_IS_LINKED(sce)) {
+          duplicate_flags |= USER_DUP_LINKED_ID;
+        }
+      }
+
       /* Copy Freestyle LineStyle datablocks. */
       LISTBASE_FOREACH (ViewLayer *, view_layer_dst, &sce_copy->view_layers) {
         LISTBASE_FOREACH (
             FreestyleLineSet *, lineset, &view_layer_dst->freestyle_config.linesets) {
-          if (lineset->linestyle) {
-            if (is_scene_liboverride && ID_IS_LINKED(lineset->linestyle)) {
-              continue;
-            }
-            id_us_min(&lineset->linestyle->id);
-            BKE_id_copy_ex(
-                bmain, (ID *)lineset->linestyle, (ID **)&lineset->linestyle, LIB_ID_COPY_ACTIONS);
-          }
+          BKE_id_copy_for_duplicate(bmain, (ID *)lineset->linestyle, duplicate_flags);
         }
       }
 
       /* Full copy of world (included animations) */
-      if (sce_copy->world) {
-        if (!is_scene_liboverride || !ID_IS_LINKED(sce_copy->world)) {
-          id_us_min(&sce_copy->world->id);
-          BKE_id_copy_ex(
-              bmain, (ID *)sce_copy->world, (ID **)&sce_copy->world, LIB_ID_COPY_ACTIONS);
-        }
-      }
+      BKE_id_copy_for_duplicate(bmain, (ID *)sce->world, duplicate_flags);
 
       /* Full copy of GreasePencil. */
-      if (sce_copy->gpd) {
-        if (!is_scene_liboverride || !ID_IS_LINKED(sce_copy->gpd)) {
-          id_us_min(&sce_copy->gpd->id);
-          BKE_id_copy_ex(bmain, (ID *)sce_copy->gpd, (ID **)&sce_copy->gpd, LIB_ID_COPY_ACTIONS);
-        }
-      }
+      BKE_id_copy_for_duplicate(bmain, (ID *)sce->gpd, duplicate_flags);
 
       /* Deep-duplicate collections and objects (using preferences' settings for which sub-data to
        * duplicate along the object itself). */
-      BKE_collection_duplicate(bmain, NULL, sce_copy->master_collection, true, true, true);
+      BKE_collection_duplicate(bmain,
+                               NULL,
+                               sce_copy->master_collection,
+                               duplicate_flags,
+                               LIB_ID_DUPLICATE_IS_SUBPROCESS);
+
+      if (!is_subprocess) {
+        /* This code will follow into all ID links using an ID tagged with LIB_TAG_NEW.*/
+        BKE_libblock_relink_to_newid(&sce_copy->id);
+
+#ifndef NDEBUG
+        /* Call to `BKE_libblock_relink_to_newid` above is supposed to have cleared all those
+         * flags. */
+        ID *id_iter;
+        FOREACH_MAIN_ID_BEGIN (bmain, id_iter) {
+          BLI_assert((id_iter->tag & LIB_TAG_NEW) == 0);
+        }
+        FOREACH_MAIN_ID_END;
+#endif
+
+        /* Cleanup. */
+        BKE_main_id_tag_all(bmain, LIB_TAG_NEW, false);
+        BKE_main_id_clear_newpoins(bmain);
+
+        BKE_main_collection_sync(bmain);
+      }
     }
     else {
       /* Remove sequencer if not full copy */
@@ -2271,7 +2313,8 @@ static char *scene_undo_depsgraph_gen_key(Scene *scene, ViewLayer *view_layer, c
 
   size_t key_full_offset = BLI_strncpy_rlen(key_full, scene->id.name, MAX_ID_NAME);
   if (scene->id.lib != NULL) {
-    key_full_offset += BLI_strncpy_rlen(key_full + key_full_offset, scene->id.lib->name, FILE_MAX);
+    key_full_offset += BLI_strncpy_rlen(
+        key_full + key_full_offset, scene->id.lib->filepath, FILE_MAX);
   }
   key_full_offset += BLI_strncpy_rlen(key_full + key_full_offset, view_layer->name, MAX_NAME);
   BLI_assert(key_full_offset < MAX_ID_NAME + FILE_MAX + MAX_NAME);

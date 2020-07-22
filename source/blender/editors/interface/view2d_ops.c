@@ -68,7 +68,7 @@ static bool view2d_poll(bContext *C)
 /**
  * This group of operators come in several forms:
  * -# Modal 'dragging' with MMB - where movement of mouse dictates amount to pan view by
- * -# Scrollwheel 'steps' - rolling mousewheel by one step moves view by predefined amount
+ * -# Scroll-wheel 'steps' - rolling mouse-wheel by one step moves view by predefined amount
  *
  * In order to make sure this works, each operator must define the following RNA-Operator Props:
  * - `deltax, deltay` - define how much to move view by (relative to zoom-correction factor)
@@ -738,8 +738,8 @@ static void VIEW2D_OT_scroll_up(wmOperatorType *ot)
 
 /**
  * This group of operators come in several forms:
- * -# Scrollwheel 'steps' - rolling mousewheel by one step zooms view by predefined amount.
- * -# Scrollwheel 'steps' + alt + ctrl/shift - zooms view on one axis only (ctrl=x, shift=y).
+ * -# Scroll-wheel 'steps' - rolling mouse-wheel by one step zooms view by predefined amount.
+ * -# Scroll-wheel 'steps' + alt + ctrl/shift - zooms view on one axis only (ctrl=x, shift=y).
  *    XXX this could be implemented...
  * -# Pad +/- Keys - pressing each key moves the zooms the view by a predefined amount.
  *
@@ -1608,57 +1608,56 @@ static int view2d_ndof_invoke(bContext *C, wmOperator *op, const wmEvent *event)
   if (event->type != NDOF_MOTION) {
     return OPERATOR_CANCELLED;
   }
-  else {
-    const wmNDOFMotionData *ndof = event->customdata;
 
-    /* tune these until it feels right */
-    const float zoom_sensitivity = 0.5f;
-    const float speed = 10.0f; /* match view3d ortho */
-    const bool has_translate = (ndof->tvec[0] && ndof->tvec[1]) && view_pan_poll(C);
-    const bool has_zoom = (ndof->tvec[2] != 0.0f) && view_zoom_poll(C);
+  const wmNDOFMotionData *ndof = event->customdata;
 
-    if (has_translate) {
-      if (view_pan_init(C, op)) {
-        v2dViewPanData *vpd;
-        float pan_vec[3];
+  /* tune these until it feels right */
+  const float zoom_sensitivity = 0.5f;
+  const float speed = 10.0f; /* match view3d ortho */
+  const bool has_translate = (ndof->tvec[0] && ndof->tvec[1]) && view_pan_poll(C);
+  const bool has_zoom = (ndof->tvec[2] != 0.0f) && view_zoom_poll(C);
 
-        WM_event_ndof_pan_get(ndof, pan_vec, false);
+  if (has_translate) {
+    if (view_pan_init(C, op)) {
+      v2dViewPanData *vpd;
+      float pan_vec[3];
 
-        pan_vec[0] *= speed;
-        pan_vec[1] *= speed;
+      WM_event_ndof_pan_get(ndof, pan_vec, false);
 
-        vpd = op->customdata;
+      pan_vec[0] *= speed;
+      pan_vec[1] *= speed;
 
-        view_pan_apply_ex(C, vpd, pan_vec[0], pan_vec[1]);
+      vpd = op->customdata;
 
-        view_pan_exit(op);
-      }
+      view_pan_apply_ex(C, vpd, pan_vec[0], pan_vec[1]);
+
+      view_pan_exit(op);
     }
-
-    if (has_zoom) {
-      if (view_zoomdrag_init(C, op)) {
-        v2dViewZoomData *vzd;
-        float zoom_factor = zoom_sensitivity * ndof->dt * -ndof->tvec[2];
-
-        bool do_zoom_xy[2];
-
-        if (U.ndof_flag & NDOF_ZOOM_INVERT) {
-          zoom_factor = -zoom_factor;
-        }
-
-        view_zoom_axis_lock_defaults(C, do_zoom_xy);
-
-        vzd = op->customdata;
-
-        view_zoomstep_apply_ex(
-            C, vzd, false, do_zoom_xy[0] ? zoom_factor : 0.0f, do_zoom_xy[1] ? zoom_factor : 0.0f);
-
-        view_zoomstep_exit(op);
-      }
-    }
-
-    return OPERATOR_FINISHED;
   }
+
+  if (has_zoom) {
+    if (view_zoomdrag_init(C, op)) {
+      v2dViewZoomData *vzd;
+      float zoom_factor = zoom_sensitivity * ndof->dt * -ndof->tvec[2];
+
+      bool do_zoom_xy[2];
+
+      if (U.ndof_flag & NDOF_ZOOM_INVERT) {
+        zoom_factor = -zoom_factor;
+      }
+
+      view_zoom_axis_lock_defaults(C, do_zoom_xy);
+
+      vzd = op->customdata;
+
+      view_zoomstep_apply_ex(
+          C, vzd, false, do_zoom_xy[0] ? zoom_factor : 0.0f, do_zoom_xy[1] ? zoom_factor : 0.0f);
+
+      view_zoomstep_exit(op);
+    }
+  }
+
+  return OPERATOR_FINISHED;
 }
 
 static void VIEW2D_OT_ndof(wmOperatorType *ot)
@@ -1922,6 +1921,9 @@ struct View2DScrollers {
   /* focus bubbles */
   int vert_min, vert_max; /* vertical scrollbar */
   int hor_min, hor_max;   /* horizontal scrollbar */
+
+  /* These values are written into, even if we don't use them. */
+  rcti _hor, _vert;
 };
 
 /* quick enum for vsm->zone (scroller handles) */
@@ -1972,16 +1974,16 @@ static short mouse_in_scroller_handle(int mouse, int sc_min, int sc_max, int sh_
   if (in_bar) {
     return SCROLLHANDLE_BAR;
   }
-  else if (in_max) {
+  if (in_max) {
     return SCROLLHANDLE_MAX;
   }
-  else if (in_min) {
+  if (in_min) {
     return SCROLLHANDLE_MIN;
   }
-  else if (out_min) {
+  if (out_min) {
     return SCROLLHANDLE_MIN_OUTSIDE;
   }
-  else if (out_max) {
+  if (out_max) {
     return SCROLLHANDLE_MAX_OUTSIDE;
   }
 
@@ -2011,7 +2013,7 @@ static void scroller_activate_init(bContext *C,
                                    const char in_scroller)
 {
   v2dScrollerMove *vsm;
-  View2DScrollers *scrollers;
+  View2DScrollers scrollers;
   ARegion *region = CTX_wm_region(C);
   View2D *v2d = &region->v2d;
   rctf tot_cur_union;
@@ -2032,7 +2034,7 @@ static void scroller_activate_init(bContext *C,
   /* 'zone' depends on where mouse is relative to bubble
    * - zooming must be allowed on this axis, otherwise, default to pan
    */
-  scrollers = UI_view2d_scrollers_calc(v2d, NULL);
+  UI_view2d_scrollers_calc(v2d, NULL, &scrollers);
 
   /* Use a union of 'cur' & 'tot' in case the current view is far outside 'tot'. In this cases
    * moving the scroll bars has far too little effect and the view can get stuck T31476. */
@@ -2049,15 +2051,15 @@ static void scroller_activate_init(bContext *C,
 
     /* get 'zone' (i.e. which part of scroller is activated) */
     vsm->zone = mouse_in_scroller_handle(
-        event->mval[0], v2d->hor.xmin, v2d->hor.xmax, scrollers->hor_min, scrollers->hor_max);
+        event->mval[0], v2d->hor.xmin, v2d->hor.xmax, scrollers.hor_min, scrollers.hor_max);
 
     if ((v2d->keepzoom & V2D_LOCKZOOM_X) && ELEM(vsm->zone, SCROLLHANDLE_MIN, SCROLLHANDLE_MAX)) {
       /* default to scroll, as handles not usable */
       vsm->zone = SCROLLHANDLE_BAR;
     }
 
-    vsm->scrollbarwidth = scrollers->hor_max - scrollers->hor_min;
-    vsm->scrollbar_orig = ((scrollers->hor_max + scrollers->hor_min) / 2) + region->winrct.xmin;
+    vsm->scrollbarwidth = scrollers.hor_max - scrollers.hor_min;
+    vsm->scrollbar_orig = ((scrollers.hor_max + scrollers.hor_min) / 2) + region->winrct.xmin;
   }
   else {
     /* vertical scroller - calculate adjustment factor first */
@@ -2069,18 +2071,17 @@ static void scroller_activate_init(bContext *C,
 
     /* get 'zone' (i.e. which part of scroller is activated) */
     vsm->zone = mouse_in_scroller_handle(
-        event->mval[1], v2d->vert.ymin, v2d->vert.ymax, scrollers->vert_min, scrollers->vert_max);
+        event->mval[1], v2d->vert.ymin, v2d->vert.ymax, scrollers.vert_min, scrollers.vert_max);
 
     if ((v2d->keepzoom & V2D_LOCKZOOM_Y) && ELEM(vsm->zone, SCROLLHANDLE_MIN, SCROLLHANDLE_MAX)) {
       /* default to scroll, as handles not usable */
       vsm->zone = SCROLLHANDLE_BAR;
     }
 
-    vsm->scrollbarwidth = scrollers->vert_max - scrollers->vert_min;
-    vsm->scrollbar_orig = ((scrollers->vert_max + scrollers->vert_min) / 2) + region->winrct.ymin;
+    vsm->scrollbarwidth = scrollers.vert_max - scrollers.vert_min;
+    vsm->scrollbar_orig = ((scrollers.vert_max + scrollers.vert_min) / 2) + region->winrct.ymin;
   }
 
-  UI_view2d_scrollers_free(scrollers);
   ED_region_tag_redraw_no_rebuild(region);
 }
 
@@ -2299,8 +2300,8 @@ static int scroller_activate_invoke(bContext *C, wmOperator *op, const wmEvent *
     }
 
     /* zone is also inappropriate if scroller is not visible... */
-    if (((vsm->scroller == 'h') && (v2d->scroll & (V2D_SCROLL_HORIZONTAL_FULLR))) ||
-        ((vsm->scroller == 'v') && (v2d->scroll & (V2D_SCROLL_VERTICAL_FULLR)))) {
+    if (((vsm->scroller == 'h') && (v2d->scroll & V2D_SCROLL_HORIZONTAL_FULLR)) ||
+        ((vsm->scroller == 'v') && (v2d->scroll & V2D_SCROLL_VERTICAL_FULLR))) {
       /* free customdata initialized */
       scroller_activate_exit(C, op);
 
@@ -2321,11 +2322,10 @@ static int scroller_activate_invoke(bContext *C, wmOperator *op, const wmEvent *
     WM_event_add_modal_handler(C, op);
     return OPERATOR_RUNNING_MODAL;
   }
-  else {
-    /* not in scroller, so nothing happened...
-     * (pass through let's something else catch event) */
-    return OPERATOR_PASS_THROUGH;
-  }
+
+  /* not in scroller, so nothing happened...
+   * (pass through let's something else catch event) */
+  return OPERATOR_PASS_THROUGH;
 }
 
 /* LMB-Drag in Scrollers - not repeatable operator! */

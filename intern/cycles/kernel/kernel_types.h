@@ -84,9 +84,7 @@ CCL_NAMESPACE_BEGIN
 
 /* Kernel features */
 #define __SOBOL__
-#define __INSTANCING__
 #define __DPDU__
-#define __UV__
 #define __BACKGROUND__
 #define __CAUSTICS_TRICKS__
 #define __VISIBILITY_FLAG__
@@ -125,9 +123,6 @@ CCL_NAMESPACE_BEGIN
 
 /* Device specific features */
 #ifdef __KERNEL_CPU__
-#  ifdef __KERNEL_SSE2__
-#    define __QBVH__
-#  endif
 #  ifdef WITH_OSL
 #    define __OSL__
 #  endif
@@ -698,26 +693,37 @@ typedef enum PrimitiveType {
   PRIMITIVE_NONE = 0,
   PRIMITIVE_TRIANGLE = (1 << 0),
   PRIMITIVE_MOTION_TRIANGLE = (1 << 1),
-  PRIMITIVE_CURVE = (1 << 2),
-  PRIMITIVE_MOTION_CURVE = (1 << 3),
+  PRIMITIVE_CURVE_THICK = (1 << 2),
+  PRIMITIVE_MOTION_CURVE_THICK = (1 << 3),
+  PRIMITIVE_CURVE_RIBBON = (1 << 4),
+  PRIMITIVE_MOTION_CURVE_RIBBON = (1 << 5),
   /* Lamp primitive is not included below on purpose,
    * since it is no real traceable primitive.
    */
-  PRIMITIVE_LAMP = (1 << 4),
+  PRIMITIVE_LAMP = (1 << 6),
 
   PRIMITIVE_ALL_TRIANGLE = (PRIMITIVE_TRIANGLE | PRIMITIVE_MOTION_TRIANGLE),
-  PRIMITIVE_ALL_CURVE = (PRIMITIVE_CURVE | PRIMITIVE_MOTION_CURVE),
-  PRIMITIVE_ALL_MOTION = (PRIMITIVE_MOTION_TRIANGLE | PRIMITIVE_MOTION_CURVE),
+  PRIMITIVE_ALL_CURVE = (PRIMITIVE_CURVE_THICK | PRIMITIVE_MOTION_CURVE_THICK |
+                         PRIMITIVE_CURVE_RIBBON | PRIMITIVE_MOTION_CURVE_RIBBON),
+  PRIMITIVE_ALL_MOTION = (PRIMITIVE_MOTION_TRIANGLE | PRIMITIVE_MOTION_CURVE_THICK |
+                          PRIMITIVE_MOTION_CURVE_RIBBON),
   PRIMITIVE_ALL = (PRIMITIVE_ALL_TRIANGLE | PRIMITIVE_ALL_CURVE),
 
   /* Total number of different traceable primitives.
    * NOTE: This is an actual value, not a bitflag.
    */
-  PRIMITIVE_NUM_TOTAL = 4,
+  PRIMITIVE_NUM_TOTAL = 6,
 } PrimitiveType;
 
 #define PRIMITIVE_PACK_SEGMENT(type, segment) ((segment << PRIMITIVE_NUM_TOTAL) | (type))
 #define PRIMITIVE_UNPACK_SEGMENT(type) (type >> PRIMITIVE_NUM_TOTAL)
+
+typedef enum CurveShapeType {
+  CURVE_RIBBON = 0,
+  CURVE_THICK = 1,
+
+  CURVE_NUM_SHAPE_TYPES,
+} CurveShapeType;
 
 /* Attributes */
 
@@ -1298,6 +1304,24 @@ typedef struct KernelBackground {
   float ao_factor;
   float ao_distance;
   float ao_bounces_factor;
+
+  /* portal sampling */
+  float portal_weight;
+  int num_portals;
+  int portal_offset;
+
+  /* sun sampling */
+  float sun_weight;
+  /* xyz store direction, w the angle. float4 instead of float3 is used
+   * to ensure consistent padding/alignment across devices. */
+  float4 sun;
+
+  /* map sampling */
+  float map_weight;
+  int map_res_x;
+  int map_res_y;
+
+  int use_mis;
 } KernelBackground;
 static_assert_align(KernelBackground, 16);
 
@@ -1309,14 +1333,7 @@ typedef struct KernelIntegrator {
   int num_all_lights;
   float pdf_triangles;
   float pdf_lights;
-  int pdf_background_res_x;
-  int pdf_background_res_y;
   float light_inv_rr_threshold;
-
-  /* light portals */
-  float portal_pdf;
-  int num_portals;
-  int portal_offset;
 
   /* bounces */
   int min_bounce;
@@ -1379,7 +1396,7 @@ typedef struct KernelIntegrator {
 
   int max_closures;
 
-  int pad1;
+  int pad1, pad2;
 } KernelIntegrator;
 static_assert_align(KernelIntegrator, 16);
 
@@ -1387,13 +1404,11 @@ typedef enum KernelBVHLayout {
   BVH_LAYOUT_NONE = 0,
 
   BVH_LAYOUT_BVH2 = (1 << 0),
-  BVH_LAYOUT_BVH4 = (1 << 1),
-  BVH_LAYOUT_BVH8 = (1 << 2),
+  BVH_LAYOUT_EMBREE = (1 << 1),
+  BVH_LAYOUT_OPTIX = (1 << 2),
 
-  BVH_LAYOUT_EMBREE = (1 << 3),
-  BVH_LAYOUT_OPTIX = (1 << 4),
-
-  BVH_LAYOUT_DEFAULT = BVH_LAYOUT_BVH8,
+  /* Default BVH layout to use for CPU. */
+  BVH_LAYOUT_AUTO = BVH_LAYOUT_EMBREE,
   BVH_LAYOUT_ALL = (unsigned int)(~0u),
 } KernelBVHLayout;
 
@@ -1402,9 +1417,9 @@ typedef struct KernelBVH {
   int root;
   int have_motion;
   int have_curves;
-  int have_instancing;
   int bvh_layout;
   int use_bvh_steps;
+  int curve_subdivisions;
 
   /* Custom BVH */
 #ifdef __KERNEL_OPTIX__
@@ -1421,25 +1436,6 @@ typedef struct KernelBVH {
 #endif
 } KernelBVH;
 static_assert_align(KernelBVH, 16);
-
-typedef enum CurveFlag {
-  /* runtime flags */
-  CURVE_KN_BACKFACING = 1,           /* backside of cylinder? */
-  CURVE_KN_ENCLOSEFILTER = 2,        /* don't consider strands surrounding start point? */
-  CURVE_KN_INTERPOLATE = 4,          /* render as a curve? */
-  CURVE_KN_ACCURATE = 8,             /* use accurate intersections test? */
-  CURVE_KN_INTERSECTCORRECTION = 16, /* correct for width after determing closest midpoint? */
-  CURVE_KN_TRUETANGENTGNORMAL = 32,  /* use tangent normal for geometry? */
-  CURVE_KN_RIBBONS = 64,             /* use flat curve ribbons */
-} CurveFlag;
-
-typedef struct KernelCurves {
-  int curveflags;
-  int subdivisions;
-
-  int pad1, pad2;
-} KernelCurves;
-static_assert_align(KernelCurves, 16);
 
 typedef struct KernelTables {
   int beckmann_offset;
@@ -1461,7 +1457,6 @@ typedef struct KernelData {
   KernelBackground background;
   KernelIntegrator integrator;
   KernelBVH bvh;
-  KernelCurves curve;
   KernelTables tables;
   KernelBake bake;
 } KernelData;

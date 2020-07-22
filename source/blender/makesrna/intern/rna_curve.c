@@ -687,7 +687,8 @@ static Nurb *rna_Curve_spline_new(Curve *cu, int type)
   nu->pntsv = 1;
 
   nu->orderu = nu->orderv = 4;
-  nu->resolu = nu->resolv = 12;
+  nu->resolu = cu->resolu;
+  nu->resolv = cu->resolv;
   nu->flag = CU_SMOOTH;
 
   if ((cu->flag & CU_3D) == 0) {
@@ -1533,6 +1534,8 @@ static void rna_def_curve(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "shape_keys", PROP_POINTER, PROP_NONE);
   RNA_def_property_pointer_sdna(prop, NULL, "key");
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
+  RNA_def_property_clear_flag(prop, PROP_PTR_NO_OWNERSHIP);
   RNA_def_property_ui_text(prop, "Shape Keys", "");
 
   prop = RNA_def_property(srna, "splines", PROP_COLLECTION, PROP_NONE);

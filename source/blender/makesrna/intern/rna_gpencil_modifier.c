@@ -128,12 +128,12 @@ const EnumPropertyItem rna_enum_object_greasepencil_modifier_type_items[] = {
      ICON_MOD_OPACITY,
      "Opacity",
      "Opacity of the strokes"},
-    {eGpencilModifierType_Tint, "GP_TINT", ICON_MOD_TINT, "Tint", "Tint strokes with new color"},
     {eGpencilModifierType_Texture,
      "GP_TEXTURE",
      ICON_TEXTURE,
      "Texture Mapping",
      "Change stroke uv texture values"},
+    {eGpencilModifierType_Tint, "GP_TINT", ICON_MOD_TINT, "Tint", "Tint strokes with new color"},
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -1490,7 +1490,7 @@ static void rna_def_modifier_gpencilarray(BlenderRNA *brna)
   RNA_def_property_ui_range(prop, -FLT_MAX, FLT_MAX, 1, RNA_TRANSLATION_PREC_DEFAULT);
   RNA_def_property_update(prop, 0, "rna_GpencilModifier_update");
 
-  prop = RNA_def_property(srna, "relative_offset", PROP_FLOAT, PROP_NONE);
+  prop = RNA_def_property(srna, "relative_offset", PROP_FLOAT, PROP_XYZ);
   RNA_def_property_float_sdna(prop, NULL, "shift");
   RNA_def_property_ui_text(
       prop,
@@ -1817,8 +1817,7 @@ static void rna_def_modifier_gpencilmirror(BlenderRNA *brna)
   PropertyRNA *prop;
 
   srna = RNA_def_struct(brna, "MirrorGpencilModifier", "GpencilModifier");
-  RNA_def_struct_ui_text(
-      srna, "Mirror Modifier", "Change stroke using lattice to deform modifier");
+  RNA_def_struct_ui_text(srna, "Mirror Modifier", "Create mirroring strokes");
   RNA_def_struct_sdna(srna, "MirrorGpencilModifierData");
   RNA_def_struct_ui_icon(srna, ICON_MOD_MIRROR);
 
@@ -2127,8 +2126,7 @@ static void rna_def_modifier_gpencilmultiply(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "use_fade", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flags", GP_MULTIPLY_ENABLE_FADING);
-  RNA_def_property_ui_text(
-      prop, "Enable Fade", "Fade the stroke thickness for each generated stroke");
+  RNA_def_property_ui_text(prop, "Fade", "Fade the stroke thickness for each generated stroke");
   RNA_def_property_update(prop, 0, "rna_GpencilModifier_update");
 
   prop = RNA_def_property(srna, "split_angle", PROP_FLOAT, PROP_ANGLE);
@@ -2183,12 +2181,12 @@ static void rna_def_modifier_gpenciltexture(BlenderRNA *brna)
       {GP_TEX_CONSTANT_LENGTH,
        "CONSTANT_LENGTH",
        0,
-       "Keep Texture at Constant Length",
+       "Constant Length",
        "Keep the texture at a constant length regardless of the length of each stroke"},
       {GP_TEX_FIT_STROKE,
        "FIT_STROKE",
        0,
-       "Fit Texture to Stroke Length",
+       "Stroke Length",
        "Scale the texture to fit the length of each stroke"},
       {0, NULL, 0, NULL, NULL},
   };
@@ -2269,7 +2267,7 @@ static void rna_def_modifier_gpenciltexture(BlenderRNA *brna)
   RNA_def_property_range(prop, -FLT_MAX, FLT_MAX);
   RNA_def_property_ui_range(prop, -100.0, 100.0, 0.1, 3);
   RNA_def_property_float_default(prop, 0.0f);
-  RNA_def_property_ui_text(prop, "Offset UVs", "Offset value to add to stroke UVs");
+  RNA_def_property_ui_text(prop, "UV Offset", "Offset value to add to stroke UVs");
   RNA_def_property_update(prop, 0, "rna_GpencilModifier_update");
 
   prop = RNA_def_property(srna, "uv_scale", PROP_FLOAT, PROP_NONE);
@@ -2360,7 +2358,7 @@ void RNA_def_greasepencil_modifier(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "show_expanded", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_flag(prop, PROP_NO_DEG_UPDATE);
-  RNA_def_property_boolean_sdna(prop, NULL, "mode", eGpencilModifierMode_Expanded);
+  RNA_def_property_boolean_sdna(prop, NULL, "ui_expand_flag", 0);
   RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_ui_text(prop, "Expanded", "Set modifier expanded in the user interface");
   RNA_def_property_ui_icon(prop, ICON_DISCLOSURE_TRI_RIGHT, 1);

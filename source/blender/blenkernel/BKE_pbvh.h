@@ -58,6 +58,10 @@ typedef struct {
   float (*co)[3];
 } PBVHProxyNode;
 
+typedef struct {
+  float (*color)[4];
+} PBVHColorBufferNode;
+
 typedef enum {
   PBVH_Leaf = 1 << 0,
 
@@ -75,6 +79,7 @@ typedef enum {
   PBVH_FullyUnmasked = 1 << 12,
 
   PBVH_UpdateTopology = 1 << 13,
+  PBVH_UpdateColor = 1 << 14,
 } PBVHNodeFlags;
 
 typedef struct PBVHFrustumPlanes {
@@ -219,7 +224,7 @@ void BKE_pbvh_bounding_box(const PBVH *pbvh, float min[3], float max[3]);
 unsigned int **BKE_pbvh_grid_hidden(const PBVH *pbvh);
 
 int BKE_pbvh_count_grid_quads(BLI_bitmap **grid_hidden,
-                              int *grid_indices,
+                              const int *grid_indices,
                               int totgrid,
                               int gridsize);
 
@@ -252,12 +257,14 @@ bool BKE_pbvh_bmesh_update_topology(PBVH *pbvh,
 
 void BKE_pbvh_node_mark_update(PBVHNode *node);
 void BKE_pbvh_node_mark_update_mask(PBVHNode *node);
+void BKE_pbvh_node_mark_update_color(PBVHNode *node);
 void BKE_pbvh_node_mark_update_visibility(PBVHNode *node);
 void BKE_pbvh_node_mark_rebuild_draw(PBVHNode *node);
 void BKE_pbvh_node_mark_redraw(PBVHNode *node);
 void BKE_pbvh_node_mark_normals_update(PBVHNode *node);
 void BKE_pbvh_node_mark_topology_update(PBVHNode *node);
 void BKE_pbvh_node_fully_hidden_set(PBVHNode *node, int fully_hidden);
+bool BKE_pbvh_node_fully_hidden_get(PBVHNode *node);
 void BKE_pbvh_node_fully_masked_set(PBVHNode *node, int fully_masked);
 bool BKE_pbvh_node_fully_masked_get(PBVHNode *node);
 void BKE_pbvh_node_fully_unmasked_set(PBVHNode *node, int fully_masked);
@@ -352,6 +359,7 @@ typedef struct PBVHVertexIter {
   struct MVert *mverts;
   int totvert;
   const int *vert_indices;
+  struct MPropCol *vcol;
   float *vmask;
 
   /* bmesh */
@@ -368,6 +376,7 @@ typedef struct PBVHVertexIter {
   short *no;
   float *fno;
   float *mask;
+  float *col;
   bool visible;
 } PBVHVertexIter;
 
@@ -419,7 +428,9 @@ void pbvh_vertex_iter_init(PBVH *pbvh, PBVHNode *node, PBVHVertexIter *vi, int m
           vi.no = vi.mvert->no; \
           vi.index = vi.vert_indices[vi.i]; \
           if (vi.vmask) \
-            vi.mask = &vi.vmask[vi.vert_indices[vi.gx]]; \
+            vi.mask = &vi.vmask[vi.index]; \
+          if (vi.vcol) \
+            vi.col = vi.vcol[vi.index].color; \
         } \
         else { \
           if (!BLI_gsetIterator_done(&vi.bm_unique_verts)) { \
@@ -471,6 +482,9 @@ void BKE_pbvh_parallel_range_settings(struct TaskParallelSettings *settings,
                                       int totnode);
 
 struct MVert *BKE_pbvh_get_verts(const PBVH *pbvh);
+
+PBVHColorBufferNode *BKE_pbvh_node_color_buffer_get(PBVHNode *node);
+void BKE_pbvh_node_color_buffer_free(PBVH *pbvh);
 
 #ifdef __cplusplus
 }

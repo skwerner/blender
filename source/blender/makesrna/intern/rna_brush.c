@@ -99,6 +99,8 @@ const EnumPropertyItem rna_enum_brush_sculpt_tool_items[] = {
     {SCULPT_TOOL_CLOTH, "CLOTH", ICON_BRUSH_SCULPT_DRAW, "Cloth", ""},
     {SCULPT_TOOL_SIMPLIFY, "SIMPLIFY", ICON_BRUSH_DATA, "Simplify", ""},
     {SCULPT_TOOL_MASK, "MASK", ICON_BRUSH_MASK, "Mask", ""},
+    {SCULPT_TOOL_PAINT, "PAINT", ICON_BRUSH_SCULPT_DRAW, "Paint", ""},
+    {SCULPT_TOOL_SMEAR, "SMEAR", ICON_BRUSH_SCULPT_DRAW, "Smear", ""},
     {SCULPT_TOOL_DRAW_FACE_SETS, "DRAW_FACE_SETS", ICON_BRUSH_MASK, "Draw Face Sets", ""},
     {0, NULL, 0, NULL, NULL},
 };
@@ -314,7 +316,8 @@ static bool rna_BrushCapabilitiesSculpt_has_topology_rake_get(PointerRNA *ptr)
 static bool rna_BrushCapabilitiesSculpt_has_auto_smooth_get(PointerRNA *ptr)
 {
   Brush *br = (Brush *)ptr->data;
-  return !ELEM(br->sculpt_tool, SCULPT_TOOL_MASK, SCULPT_TOOL_SMOOTH);
+  return !ELEM(
+      br->sculpt_tool, SCULPT_TOOL_MASK, SCULPT_TOOL_SMOOTH, SCULPT_TOOL_PAINT, SCULPT_TOOL_SMEAR);
 }
 
 static bool rna_BrushCapabilitiesSculpt_has_height_get(PointerRNA *ptr)
@@ -407,6 +410,12 @@ static bool rna_BrushCapabilitiesSculpt_has_sculpt_plane_get(PointerRNA *ptr)
                SCULPT_TOOL_MASK,
                SCULPT_TOOL_PINCH,
                SCULPT_TOOL_SMOOTH);
+}
+
+static bool rna_BrushCapabilitiesSculpt_has_color_get(PointerRNA *ptr)
+{
+  Brush *br = (Brush *)ptr->data;
+  return ELEM(br->sculpt_tool, SCULPT_TOOL_PAINT);
 }
 
 static bool rna_BrushCapabilitiesSculpt_has_secondary_color_get(PointerRNA *ptr)
@@ -1053,6 +1062,7 @@ static void rna_def_sculpt_capabilities(BlenderRNA *brna)
   SCULPT_TOOL_CAPABILITY(has_plane_offset, "Has Plane Offset");
   SCULPT_TOOL_CAPABILITY(has_random_texture_angle, "Has Random Texture Angle");
   SCULPT_TOOL_CAPABILITY(has_sculpt_plane, "Has Sculpt Plane");
+  SCULPT_TOOL_CAPABILITY(has_color, "Has Color");
   SCULPT_TOOL_CAPABILITY(has_secondary_color, "Has Secondary Color");
   SCULPT_TOOL_CAPABILITY(has_smooth_stroke, "Has Smooth Stroke");
   SCULPT_TOOL_CAPABILITY(has_space_attenuation, "Has Space Attenuation");
@@ -1987,6 +1997,13 @@ static void rna_def_brush(BlenderRNA *brna)
       {0, NULL, 0, NULL, NULL},
   };
 
+  static const EnumPropertyItem brush_smear_deform_type_items[] = {
+      {BRUSH_SMEAR_DEFORM_DRAG, "DRAG", 0, "Drag", ""},
+      {BRUSH_SMEAR_DEFORM_PINCH, "PINCH", 0, "Pinch", ""},
+      {BRUSH_SMEAR_DEFORM_EXPAND, "EXPAND", 0, "Expand", ""},
+      {0, NULL, 0, NULL, NULL},
+  };
+
   srna = RNA_def_struct(brna, "Brush", "ID");
   RNA_def_struct_ui_text(
       srna, "Brush", "Brush data-block for storing brush settings for painting and sculpting");
@@ -2107,6 +2124,11 @@ static void rna_def_brush(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Deformation", "Deformation type that is used in the brush");
   RNA_def_property_update(prop, 0, "rna_Brush_update");
 
+  prop = RNA_def_property(srna, "smear_deform_type", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_items(prop, brush_smear_deform_type_items);
+  RNA_def_property_ui_text(prop, "Deformation", "Deformation type that is used in the brush");
+  RNA_def_property_update(prop, 0, "rna_Brush_update");
+
   prop = RNA_def_property(srna, "pose_deform_type", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_items(prop, brush_pose_deform_type_items);
   RNA_def_property_ui_text(prop, "Deformation", "Deformation type that is used in the brush");
@@ -2221,6 +2243,46 @@ static void rna_def_brush(BlenderRNA *brna)
       prop, "Strength", "How powerful the effect of the brush is when applied");
   RNA_def_property_update(prop, 0, "rna_Brush_update");
 
+  prop = RNA_def_property(srna, "flow", PROP_FLOAT, PROP_FACTOR);
+  RNA_def_property_float_sdna(prop, NULL, "flow");
+  RNA_def_property_range(prop, 0.0f, 1.0f);
+  RNA_def_property_ui_range(prop, 0.0f, 1.0f, 0.001, 3);
+  RNA_def_property_ui_text(prop, "Flow", "Amount of paint that is applied per stroke sample");
+  RNA_def_property_update(prop, 0, "rna_Brush_update");
+
+  prop = RNA_def_property(srna, "wet_mix", PROP_FLOAT, PROP_FACTOR);
+  RNA_def_property_float_sdna(prop, NULL, "wet_mix");
+  RNA_def_property_range(prop, 0.0f, 1.0f);
+  RNA_def_property_ui_range(prop, 0.0f, 1.0f, 0.001, 3);
+  RNA_def_property_ui_text(
+      prop, "Wet Mix", "Amount of paint that is picked from the surface into the brush color");
+  RNA_def_property_update(prop, 0, "rna_Brush_update");
+
+  prop = RNA_def_property(srna, "wet_persistence", PROP_FLOAT, PROP_FACTOR);
+  RNA_def_property_float_sdna(prop, NULL, "wet_persistence");
+  RNA_def_property_range(prop, 0.0f, 1.0f);
+  RNA_def_property_ui_range(prop, 0.0f, 1.0f, 0.001, 3);
+  RNA_def_property_ui_text(
+      prop,
+      "Wet Persistence",
+      "Amount of wet paint that stays in the brush after applyig paint to the surface");
+  RNA_def_property_update(prop, 0, "rna_Brush_update");
+
+  prop = RNA_def_property(srna, "density", PROP_FLOAT, PROP_FACTOR);
+  RNA_def_property_float_sdna(prop, NULL, "density");
+  RNA_def_property_range(prop, 0.0f, 1.0f);
+  RNA_def_property_ui_range(prop, 0.0f, 1.0f, 0.001, 3);
+  RNA_def_property_ui_text(
+      prop, "Density", "Amount of random elements that are going to be affected by the brush");
+  RNA_def_property_update(prop, 0, "rna_Brush_update");
+
+  prop = RNA_def_property(srna, "tip_scale_x", PROP_FLOAT, PROP_FACTOR);
+  RNA_def_property_float_sdna(prop, NULL, "tip_scale_x");
+  RNA_def_property_range(prop, 0.0f, 1.0f);
+  RNA_def_property_ui_range(prop, 0.0f, 1.0f, 0.001, 3);
+  RNA_def_property_ui_text(prop, "Tip Scale X", "Scale of the brush tip in the X axis");
+  RNA_def_property_update(prop, 0, "rna_Brush_update");
+
   prop = RNA_def_property(srna, "dash_ratio", PROP_FLOAT, PROP_FACTOR);
   RNA_def_property_float_sdna(prop, NULL, "dash_ratio");
   RNA_def_property_range(prop, 0.0f, 1.0f);
@@ -2310,6 +2372,14 @@ static void rna_def_brush(BlenderRNA *brna)
   RNA_def_property_range(prop, 0.0f, 2.0f);
   RNA_def_property_ui_text(
       prop, "Pose Origin Offset", "Offset of the pose origin in relation to the brush radius");
+  RNA_def_property_update(prop, 0, "rna_Brush_update");
+
+  prop = RNA_def_property(srna, "disconnected_distance_max", PROP_FLOAT, PROP_DISTANCE);
+  RNA_def_property_float_sdna(prop, NULL, "disconnected_distance_max");
+  RNA_def_property_range(prop, 0.0f, 10.0f);
+  RNA_def_property_ui_text(prop,
+                           "Max Element Distance",
+                           "Maximum distance to search for disconnected loose parts in the mesh");
   RNA_def_property_update(prop, 0, "rna_Brush_update");
 
   prop = RNA_def_property(srna, "surface_smooth_shape_preservation", PROP_FLOAT, PROP_FACTOR);
@@ -2605,6 +2675,11 @@ static void rna_def_brush(BlenderRNA *brna)
   RNA_def_property_boolean_sdna(prop, NULL, "flag2", BRUSH_POSE_IK_ANCHORED);
   RNA_def_property_ui_text(
       prop, "Keep Anchor Point", "Keep the position of the last segment in the IK chain fixed");
+  RNA_def_property_update(prop, 0, "rna_Brush_update");
+
+  prop = RNA_def_property(srna, "use_connected_only", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flag2", BRUSH_USE_CONNECTED_ONLY);
+  RNA_def_property_ui_text(prop, "Connected Only", "Affect only topologically connected elements");
   RNA_def_property_update(prop, 0, "rna_Brush_update");
 
   prop = RNA_def_property(srna, "invert_to_scrape_fill", PROP_BOOLEAN, PROP_NONE);

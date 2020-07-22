@@ -50,14 +50,14 @@ static void rgb_to_yuv_normalized(const float rgb[3], float yuv[3])
   yuv[2] += 0.5f;
 }
 
-static void scope_put_pixel(uchar *table, uchar *pos)
+static void scope_put_pixel(const uchar *table, uchar *pos)
 {
   uchar newval = table[*pos];
   pos[0] = pos[1] = pos[2] = newval;
   pos[3] = 255;
 }
 
-static void scope_put_pixel_single(uchar *table, uchar *pos, int col)
+static void scope_put_pixel_single(const uchar *table, uchar *pos, int col)
 {
   char newval = table[pos[col]];
   pos[col] = newval;
@@ -232,9 +232,7 @@ ImBuf *make_waveform_view_from_ibuf(ImBuf *ibuf)
   if (ibuf->rect_float) {
     return make_waveform_view_from_ibuf_float(ibuf);
   }
-  else {
-    return make_waveform_view_from_ibuf_byte(ibuf);
-  }
+  return make_waveform_view_from_ibuf_byte(ibuf);
 }
 
 static ImBuf *make_sep_waveform_view_from_ibuf_byte(ImBuf *ibuf)
@@ -336,9 +334,7 @@ ImBuf *make_sep_waveform_view_from_ibuf(ImBuf *ibuf)
   if (ibuf->rect_float) {
     return make_sep_waveform_view_from_ibuf_float(ibuf);
   }
-  else {
-    return make_sep_waveform_view_from_ibuf_byte(ibuf);
-  }
+  return make_sep_waveform_view_from_ibuf_byte(ibuf);
 }
 
 static void draw_zebra_byte(ImBuf *src, ImBuf *ibuf, float perc)
@@ -541,7 +537,7 @@ BLI_INLINE int get_bin_float(float f)
   if (f < -0.25f) {
     return 0;
   }
-  else if (f >= 1.25f) {
+  if (f >= 1.25f) {
     return 511;
   }
 
@@ -627,9 +623,7 @@ ImBuf *make_histogram_view_from_ibuf(ImBuf *ibuf)
   if (ibuf->rect_float) {
     return make_histogram_view_from_ibuf_float(ibuf);
   }
-  else {
-    return make_histogram_view_from_ibuf_byte(ibuf);
-  }
+  return make_histogram_view_from_ibuf_byte(ibuf);
 }
 
 static void vectorscope_put_cross(uchar r, uchar g, uchar b, char *tgt, int w, int h, int size)
@@ -757,7 +751,5 @@ ImBuf *make_vectorscope_view_from_ibuf(ImBuf *ibuf)
   if (ibuf->rect_float) {
     return make_vectorscope_view_from_ibuf_float(ibuf);
   }
-  else {
-    return make_vectorscope_view_from_ibuf_byte(ibuf);
-  }
+  return make_vectorscope_view_from_ibuf_byte(ibuf);
 }

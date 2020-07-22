@@ -424,15 +424,14 @@ int DM_release(DerivedMesh *dm)
 
     return 1;
   }
-  else {
-    CustomData_free_temporary(&dm->vertData, dm->numVertData);
-    CustomData_free_temporary(&dm->edgeData, dm->numEdgeData);
-    CustomData_free_temporary(&dm->faceData, dm->numTessFaceData);
-    CustomData_free_temporary(&dm->loopData, dm->numLoopData);
-    CustomData_free_temporary(&dm->polyData, dm->numPolyData);
 
-    return 0;
-  }
+  CustomData_free_temporary(&dm->vertData, dm->numVertData);
+  CustomData_free_temporary(&dm->edgeData, dm->numEdgeData);
+  CustomData_free_temporary(&dm->faceData, dm->numTessFaceData);
+  CustomData_free_temporary(&dm->loopData, dm->numLoopData);
+  CustomData_free_temporary(&dm->polyData, dm->numPolyData);
+
+  return 0;
 }
 
 void DM_DupPolys(DerivedMesh *source, DerivedMesh *target)
@@ -693,11 +692,9 @@ static float (*get_orco_coords(Object *ob, BMEditMesh *em, int layer, int *free)
     if (em) {
       return get_editbmesh_orco_verts(em);
     }
-    else {
-      return BKE_mesh_orco_verts_get(ob);
-    }
+    return BKE_mesh_orco_verts_get(ob);
   }
-  else if (layer == CD_CLOTH_ORCO) {
+  if (layer == CD_CLOTH_ORCO) {
     /* apply shape key for cloth, this should really be solved
      * by a more flexible customdata system, but not simple */
     if (!em) {
@@ -1060,9 +1057,7 @@ static void mesh_calc_modifiers(struct Depsgraph *depsgraph,
         }
         continue;
       }
-      else {
-        BKE_modifier_set_error(md, "Sculpt: Hide, Mask and optimized display disabled");
-      }
+      BKE_modifier_set_error(md, "Sculpt: Hide, Mask and optimized display disabled");
     }
 
     if (need_mapping && !BKE_modifier_supports_mapping(md)) {
@@ -1669,7 +1664,9 @@ static void editbmesh_calc_modifiers(struct Depsgraph *depsgraph,
       else {
         Mesh *me_orig = mesh_input;
         if (me_orig->id.tag & LIB_TAG_COPIED_ON_WRITE) {
-          BKE_mesh_runtime_ensure_edit_data(me_orig);
+          if (!BKE_mesh_runtime_ensure_edit_data(me_orig)) {
+            BKE_mesh_runtime_reset_edit_data(me_orig);
+          }
           me_orig->runtime.edit_data->vertexCos = MEM_dupallocN(deformed_verts);
         }
         mesh_cage = BKE_mesh_wrapper_from_editmesh_with_coords(

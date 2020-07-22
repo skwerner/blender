@@ -392,7 +392,7 @@ void armature_tag_unselect(bArmature *arm)
 void ED_armature_ebone_transform_mirror_update(bArmature *arm, EditBone *ebo, bool check_select)
 {
   /* TODO When this function is called by property updates,
-   * cancelling the value change will not restore mirrored bone correctly. */
+   * canceling the value change will not restore mirrored bone correctly. */
 
   /* Currently check_select==true when this function is called from a transform operator,
    * eg. from 3d viewport. */
@@ -915,9 +915,7 @@ int ED_armature_ebone_selectflag_get(const EditBone *ebone)
     return ((ebone->flag & (BONE_SELECTED | BONE_TIPSEL)) |
             ((ebone->parent->flag & BONE_TIPSEL) ? BONE_ROOTSEL : 0));
   }
-  else {
-    return (ebone->flag & (BONE_SELECTED | BONE_ROOTSEL | BONE_TIPSEL));
-  }
+  return (ebone->flag & (BONE_SELECTED | BONE_ROOTSEL | BONE_TIPSEL));
 }
 
 void ED_armature_ebone_selectflag_set(EditBone *ebone, int flag)

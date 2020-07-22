@@ -114,13 +114,23 @@ IDTypeInfo IDType_ID_LINK_PLACEHOLDER = {
  * Also note that the id _must_ have a library - campbell */
 static void lib_id_library_local_paths(Main *bmain, Library *lib, ID *id)
 {
-  const char *bpath_user_data[2] = {BKE_main_blendfile_path(bmain), lib->filepath};
+  const char *bpath_user_data[2] = {BKE_main_blendfile_path(bmain), lib->filepath_abs};
 
   BKE_bpath_traverse_id(bmain,
                         id,
                         BKE_bpath_relocate_visitor,
                         BKE_BPATH_TRAVERSE_SKIP_MULTIFILE,
                         (void *)bpath_user_data);
+}
+
+static int lib_id_clear_library_data_users_update_cb(LibraryIDLinkCallbackData *cb_data)
+{
+  ID *id = cb_data->user_data;
+  if (*cb_data->id_pointer == id) {
+    DEG_id_tag_update_ex(cb_data->bmain, cb_data->id_owner, ID_RECALC_TAG_FOR_UNDO);
+    return IDWALK_RET_STOP_ITER;
+  }
+  return IDWALK_RET_NOP;
 }
 
 /**
@@ -144,6 +154,21 @@ static void lib_id_clear_library_data_ex(Main *bmain, ID *id)
       bmain->is_memfile_undo_written = false;
     }
   }
+
+  /* Conceptually, an ID made local is not the same as the linked one anymore. Reflect that by
+   * regenerating its session UUID. */
+  BKE_lib_libblock_session_uuid_renew(id);
+
+  /* We need to tag this IDs and all of its users, conceptually new local ID and original linked
+   * ones are two completely different data-blocks that were virtually remapped, even though in
+   * reality they remain the same data. For undo this info is critical now. */
+  DEG_id_tag_update_ex(bmain, id, ID_RECALC_COPY_ON_WRITE);
+  ID *id_iter;
+  FOREACH_MAIN_ID_BEGIN (bmain, id_iter) {
+    BKE_library_foreach_ID_link(
+        bmain, id_iter, lib_id_clear_library_data_users_update_cb, id, IDWALK_READONLY);
+  }
+  FOREACH_MAIN_ID_END;
 
   /* Internal shape key blocks inside data-blocks also stores id->lib,
    * make sure this stays in sync (note that we do not need any explicit handling for real EMBEDDED
@@ -200,7 +225,7 @@ void id_us_ensure_real(ID *id)
         CLOG_ERROR(&LOG,
                    "ID user count error: %s (from '%s')",
                    id->name,
-                   id->lib ? id->lib->filepath : "[Main]");
+                   id->lib ? id->lib->filepath_abs : "[Main]");
         BLI_assert(0);
       }
       id->us = limit + 1;
@@ -258,7 +283,7 @@ void id_us_min(ID *id)
       CLOG_ERROR(&LOG,
                  "ID user decrement error: %s (from '%s'): %d <= %d",
                  id->name,
-                 id->lib ? id->lib->filepath : "[Main]",
+                 id->lib ? id->lib->filepath_abs : "[Main]",
                  id->us,
                  limit);
       if (GS(id->name) != ID_IP) {
@@ -421,9 +446,9 @@ void BKE_lib_id_make_local_generic(Main *bmain, ID *id, const int flags)
 /**
  * Calls the appropriate make_local method for the block, unless test is set.
  *
- * \note Always set ID->newid pointer in case it gets duplicated...
+ * \note Always set #ID.newid pointer in case it gets duplicated.
  *
- * \param lib_local: Special flag used when making a whole library's content local,
+ * \param flags: Special flag used when making a whole library's content local,
  * it needs specific handling.
  *
  * \return true if the block can be made local.
@@ -583,6 +608,47 @@ bool BKE_id_copy(Main *bmain, const ID *id, ID **newid)
 }
 
 /**
+ * Invokes the appropriate copy method for the block and returns the result in
+ * newid, unless test. Returns true if the block can be copied.
+ */
+ID *BKE_id_copy_for_duplicate(Main *bmain, ID *id, const eDupli_ID_Flags duplicate_flags)
+{
+  if (id == NULL) {
+    return id;
+  }
+  if (id->newid == NULL) {
+    const bool do_linked_id = (duplicate_flags & USER_DUP_LINKED_ID) != 0;
+    if (!(do_linked_id || !ID_IS_LINKED(id))) {
+      return id;
+    }
+
+    ID *id_new;
+    BKE_id_copy(bmain, id, &id_new);
+    /* Copying add one user by default, need to get rid of that one. */
+    id_us_min(id_new);
+    ID_NEW_SET(id, id_new);
+
+    /* Shape keys are always copied with their owner ID, by default. */
+    ID *key_new = (ID *)BKE_key_from_id(id_new);
+    ID *key = (ID *)BKE_key_from_id(id);
+    if (key != NULL) {
+      ID_NEW_SET(key, key_new);
+    }
+
+    /* Note: embedded data (root nodetrees and master collections) should never be referenced by
+     * anything else, so we do not need to set their newid pointer and flag. */
+
+    BKE_animdata_duplicate_id_action(bmain, id_new, duplicate_flags);
+    if (key_new != NULL) {
+      BKE_animdata_duplicate_id_action(bmain, id_new, duplicate_flags);
+    }
+    /* Note that actions of embedded data (root nodetrees and master collections) are handled
+     * by `BKE_animdata_duplicate_id_action` as well. */
+  }
+  return id->newid;
+}
+
+/**
  * Does a mere memory swap over the whole IDs data (including type-specific memory).
  * \note Most internal ID data itself is not swapped (only IDProperties are).
  */
@@ -611,6 +677,9 @@ static void id_swap(Main *bmain, ID *id_a, ID *id_b, const bool do_full_id)
     /* Exception: IDProperties. */
     id_a->properties = id_b_back.properties;
     id_b->properties = id_a_back.properties;
+    /* Exception: recalc flags. */
+    id_a->recalc = id_b_back.recalc;
+    id_b->recalc = id_a_back.recalc;
   }
 
   if (bmain != NULL) {
@@ -1047,8 +1116,10 @@ void BKE_lib_libblock_session_uuid_ensure(ID *id)
 /**
  * Re-generate a new session-wise uuid for the given \a id.
  *
- * \warning This has a very specific use-case (to handle UI-related data-blocks that are kept
- * across new file reading, when we do keep existing UI). No other usage is expected currently.
+ * \warning This has a few very specific use-cases, no other usage is expected currently:
+ *   - To handle UI-related data-blocks that are kept across new file reading, when we do keep
+ * existing UI.
+ *   - For IDs that are made local without needing any copying.
  */
 void BKE_lib_libblock_session_uuid_renew(ID *id)
 {
@@ -1156,7 +1227,7 @@ void BKE_libblock_copy_ex(Main *bmain, const ID *id, ID **r_newid, const int ori
 
   /* We may need our own flag to control that at some point, but for now 'no main' one should be
    * good enough. */
-  if ((orig_flag & LIB_ID_CREATE_NO_MAIN) == 0 && id->override_library != NULL) {
+  if ((orig_flag & LIB_ID_CREATE_NO_MAIN) == 0 && ID_IS_OVERRIDE_LIBRARY(id)) {
     /* We do not want to copy existing override rules here, as they would break the proper
      * remapping between IDs. Proper overrides rules will be re-generated anyway. */
     BKE_lib_override_library_copy(new_id, id, false);
@@ -2102,13 +2173,18 @@ void BKE_id_full_name_get(char name[MAX_ID_FULL_NAME], const ID *id, char separa
  */
 void BKE_id_full_name_ui_prefix_get(char name[MAX_ID_FULL_NAME_UI],
                                     const ID *id,
+                                    const bool add_lib_hint,
                                     char separator_char)
 {
-  name[0] = id->lib ? (ID_MISSING(id) ? 'M' : 'L') : ID_IS_OVERRIDE_LIBRARY(id) ? 'O' : ' ';
-  name[1] = (id->flag & LIB_FAKEUSER) ? 'F' : ((id->us == 0) ? '0' : ' ');
-  name[2] = ' ';
+  int i = 0;
 
-  BKE_id_full_name_get(name + 3, id, separator_char);
+  if (add_lib_hint) {
+    name[i++] = id->lib ? (ID_MISSING(id) ? 'M' : 'L') : ID_IS_OVERRIDE_LIBRARY(id) ? 'O' : ' ';
+  }
+  name[i++] = (id->flag & LIB_FAKEUSER) ? 'F' : ((id->us == 0) ? '0' : ' ');
+  name[i++] = ' ';
+
+  BKE_id_full_name_get(name + i, id, separator_char);
 }
 
 /**

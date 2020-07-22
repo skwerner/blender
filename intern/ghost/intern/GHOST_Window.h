@@ -34,7 +34,7 @@ class GHOST_Context;
  * Dimensions are given in screen coordinates that are relative to the
  * upper-left corner of the screen.
  * Implements part of the GHOST_IWindow interface and adds some methods to
- * be implemented by childs of this class.
+ * be implemented by sub-classes of this class.
  */
 class GHOST_Window : public GHOST_IWindow {
  public:
@@ -124,8 +124,8 @@ class GHOST_Window : public GHOST_IWindow {
    * Set the shape of the cursor to a custom cursor.
    * \param   bitmap  The bitmap data for the cursor.
    * \param   mask    The mask data for the cursor.
-   * \param   hotX    The X coordinate of the cursor hotspot.
-   * \param   hotY    The Y coordinate of the cursor hotspot.
+   * \param   hotX    The X coordinate of the cursor hot-spot.
+   * \param   hotY    The Y coordinate of the cursor hot-spot.
    * \return  Indication of success.
    */
   GHOST_TSuccess setCustomCursorShape(GHOST_TUns8 *bitmap,

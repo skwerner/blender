@@ -76,7 +76,8 @@ void OVERLAY_wireframe_cache_init(OVERLAY_Data *vedata)
     DRWState state = DRW_STATE_FIRST_VERTEX_CONVENTION | DRW_STATE_WRITE_COLOR |
                      DRW_STATE_WRITE_DEPTH | DRW_STATE_DEPTH_LESS_EQUAL;
     DRWPass *pass;
-    GPUTexture **depth_tx = ((pd->xray_enabled || pd->xray_opacity > 0.0f) && DRW_state_is_fbo()) ?
+    GPUTexture **depth_tx = ((!pd->xray_enabled || pd->xray_opacity > 0.0f) &&
+                             DRW_state_is_fbo()) ?
                                 &txl->temp_depth_tx :
                                 &txl->dummy_depth_tx;
 
@@ -101,12 +102,9 @@ void OVERLAY_wireframe_cache_init(OVERLAY_Data *vedata)
       DRW_shgroup_uniform_bool_copy(grp, "isHair", false);
 
       pd->wires_all_grp[xray][use_coloring] = grp = DRW_shgroup_create(wires_sh, pass);
-      DRW_shgroup_uniform_texture_ref(grp, "depthTex", depth_tx);
       DRW_shgroup_uniform_float_copy(grp, "wireStepParam", 1.0f);
 
       pd->wires_hair_grp[xray][use_coloring] = grp = DRW_shgroup_create(wires_sh, pass);
-      /* TODO(fclem) texture ref persist */
-      DRW_shgroup_uniform_texture_ref(grp, "depthTex", depth_tx);
       DRW_shgroup_uniform_bool_copy(grp, "isHair", true);
       DRW_shgroup_uniform_float_copy(grp, "wireStepParam", 10.0f);
     }
@@ -234,10 +232,15 @@ void OVERLAY_wireframe_cache_populate(OVERLAY_Data *vedata,
     }
   }
 
-  if (use_wire && ob->type == OB_VOLUME) {
-    /* Volume object as points exception. */
-    Volume *volume = ob->data;
-    if (volume->display.wireframe_type == VOLUME_WIREFRAME_POINTS) {
+  if (use_wire && ELEM(ob->type, OB_VOLUME, OB_POINTCLOUD)) {
+    bool draw_as_points = true;
+    if (ob->type == OB_VOLUME) {
+      /* Volume object as points exception. */
+      Volume *volume = ob->data;
+      draw_as_points = volume->display.wireframe_type == VOLUME_WIREFRAME_POINTS;
+    }
+
+    if (draw_as_points) {
       float *color;
       OVERLAY_ExtraCallBuffers *cb = OVERLAY_extra_call_buffer_get(vedata, ob);
       DRW_object_wire_theme_get(ob, draw_ctx->view_layer, &color);

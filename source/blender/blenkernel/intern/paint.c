@@ -1310,7 +1310,7 @@ static void sculptsession_free_pbvh(Object *object)
   MEM_SAFE_FREE(ss->pmap);
   MEM_SAFE_FREE(ss->pmap_mem);
 
-  MEM_SAFE_FREE(ss->layer_base);
+  MEM_SAFE_FREE(ss->persistent_base);
 
   MEM_SAFE_FREE(ss->preview_vert_index_list);
   ss->preview_vert_index_count = 0;
@@ -1367,6 +1367,11 @@ void BKE_sculptsession_free(Object *ob)
     MEM_SAFE_FREE(ss->deform_imats);
 
     MEM_SAFE_FREE(ss->preview_vert_index_list);
+
+    MEM_SAFE_FREE(ss->vertex_info.connected_component);
+    MEM_SAFE_FREE(ss->vertex_info.boundary);
+
+    MEM_SAFE_FREE(ss->fake_neighbors.fake_neighbor_index);
 
     if (ss->pose_ik_chain_preview) {
       for (int i = 0; i < ss->pose_ik_chain_preview->tot_segments; i++) {
@@ -1474,8 +1479,12 @@ static bool sculpt_modifiers_active(Scene *scene, Sculpt *sd, Object *ob)
 /**
  * \param need_mask: So that the evaluated mesh that is returned has mask data.
  */
-static void sculpt_update_object(
-    Depsgraph *depsgraph, Object *ob, Mesh *me_eval, bool need_pmap, bool need_mask)
+static void sculpt_update_object(Depsgraph *depsgraph,
+                                 Object *ob,
+                                 Mesh *me_eval,
+                                 bool need_pmap,
+                                 bool need_mask,
+                                 bool need_colors)
 {
   Scene *scene = DEG_get_input_scene(depsgraph);
   Sculpt *sd = scene->toolsettings->sculpt;
@@ -1490,6 +1499,8 @@ static void sculpt_update_object(
 
   ss->building_vp_handle = false;
 
+  ss->scene = scene;
+
   if (need_mask) {
     if (mmd == NULL) {
       if (!CustomData_has_layer(&me->vdata, CD_PAINT_MASK)) {
@@ -1500,6 +1511,16 @@ static void sculpt_update_object(
       if (!CustomData_has_layer(&me->ldata, CD_GRID_PAINT_MASK)) {
         BKE_sculpt_mask_layers_ensure(ob, mmd);
       }
+    }
+  }
+
+  /* Add a color layer if a color tool is used. */
+  Mesh *orig_me = BKE_object_get_original_mesh(ob);
+  if (need_colors && U.experimental.use_sculpt_vertex_colors) {
+    if (!CustomData_has_layer(&orig_me->vdata, CD_PROP_COLOR)) {
+      CustomData_add_layer(&orig_me->vdata, CD_PROP_COLOR, CD_DEFAULT, NULL, orig_me->totvert);
+      BKE_mesh_update_customdata_pointers(orig_me, true);
+      DEG_id_tag_update(&orig_me->id, ID_RECALC_GEOMETRY);
     }
   }
 
@@ -1535,6 +1556,7 @@ static void sculpt_update_object(
     ss->multires.modifier = NULL;
     ss->multires.level = 0;
     ss->vmask = CustomData_get_layer(&me->vdata, CD_PAINT_MASK);
+    ss->vcol = CustomData_get_layer(&me->vdata, CD_PROP_COLOR);
   }
 
   /* Sculpt Face Sets. */
@@ -1663,13 +1685,11 @@ void BKE_sculpt_update_object_after_eval(Depsgraph *depsgraph, Object *ob_eval)
 
   BLI_assert(me_eval != NULL);
 
-  sculpt_update_object(depsgraph, ob_orig, me_eval, false, false);
+  sculpt_update_object(depsgraph, ob_orig, me_eval, false, false, false);
 }
 
-void BKE_sculpt_update_object_for_edit(Depsgraph *depsgraph,
-                                       Object *ob_orig,
-                                       bool need_pmap,
-                                       bool need_mask)
+void BKE_sculpt_update_object_for_edit(
+    Depsgraph *depsgraph, Object *ob_orig, bool need_pmap, bool need_mask, bool need_colors)
 {
   /* Update from sculpt operators and undo, to update sculpt session
    * and PBVH after edits. */
@@ -1679,7 +1699,7 @@ void BKE_sculpt_update_object_for_edit(Depsgraph *depsgraph,
 
   BLI_assert(ob_orig == DEG_get_original_object(ob_orig));
 
-  sculpt_update_object(depsgraph, ob_orig, me_eval, need_pmap, need_mask);
+  sculpt_update_object(depsgraph, ob_orig, me_eval, need_pmap, need_mask, need_colors);
 }
 
 int BKE_sculpt_mask_layers_ensure(Object *ob, MultiresModifierData *mmd)

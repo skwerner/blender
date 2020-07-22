@@ -57,6 +57,8 @@
 #include "MOD_modifiertypes.h"
 #include "MOD_ui_common.h"
 
+#include "BLO_read_write.h"
+
 #include "intern/CCGSubSurf.h"
 
 typedef struct SubsurfRuntimeData {
@@ -348,9 +350,9 @@ static void panel_draw(const bContext *C, Panel *panel)
   }
 #endif
 
-  uiLayoutSetPropSep(layout, true);
+  uiItemR(layout, &ptr, "subdivision_type", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
 
-  uiItemR(layout, &ptr, "subdivision_type", 0, IFACE_("Type"), ICON_NONE);
+  uiLayoutSetPropSep(layout, true);
 
   if (show_adaptive_options) {
     uiItemR(layout,
@@ -414,8 +416,6 @@ static void advanced_panel_draw(const bContext *C, Panel *panel)
   uiItemR(layout, &ptr, "quality", 0, NULL, ICON_NONE);
   uiItemR(layout, &ptr, "uv_smooth", 0, NULL, ICON_NONE);
   uiItemR(layout, &ptr, "use_creases", 0, NULL, ICON_NONE);
-
-  modifier_panel_end(layout, &ptr);
 }
 
 static void panelRegister(ARegionType *region_type)
@@ -423,6 +423,13 @@ static void panelRegister(ARegionType *region_type)
   PanelType *panel_type = modifier_panel_register(region_type, eModifierType_Subsurf, panel_draw);
   modifier_subpanel_register(
       region_type, "advanced", "Advanced", NULL, advanced_panel_draw, panel_type);
+}
+
+static void blendRead(BlendDataReader *UNUSED(reader), ModifierData *md)
+{
+  SubsurfModifierData *smd = (SubsurfModifierData *)md;
+
+  smd->emCache = smd->mCache = NULL;
 }
 
 ModifierTypeInfo modifierType_Subsurf = {
@@ -457,4 +464,6 @@ ModifierTypeInfo modifierType_Subsurf = {
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ freeRuntimeData,
     /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ blendRead,
 };

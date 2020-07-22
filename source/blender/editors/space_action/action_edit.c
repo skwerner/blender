@@ -272,9 +272,8 @@ static int actkeys_previewrange_exec(bContext *C, wmOperator *UNUSED(op))
   if (ac.scene == NULL) {
     return OPERATOR_CANCELLED;
   }
-  else {
-    scene = ac.scene;
-  }
+
+  scene = ac.scene;
 
   /* set the range directly */
   get_keyframe_extents(&ac, &min, &max, false);
@@ -725,9 +724,10 @@ static void insert_action_keys(bAnimContext *ac, short mode)
   flag = ANIM_get_keyframing_flags(scene, true);
 
   /* insert keyframes */
+  const AnimationEvalContext anim_eval_context = BKE_animsys_eval_context_construct(ac->depsgraph,
+                                                                                    (float)CFRA);
   for (ale = anim_data.first; ale; ale = ale->next) {
     FCurve *fcu = (FCurve *)ale->key_data;
-    float cfra = (float)CFRA;
 
     /* Read value from property the F-Curve represents, or from the curve only?
      * - ale->id != NULL:
@@ -746,7 +746,7 @@ static void insert_action_keys(bAnimContext *ac, short mode)
                       ((fcu->grp) ? (fcu->grp->name) : (NULL)),
                       fcu->rna_path,
                       fcu->array_index,
-                      cfra,
+                      &anim_eval_context,
                       ts->keyframe_type,
                       &nla_cache,
                       flag);
@@ -755,8 +755,9 @@ static void insert_action_keys(bAnimContext *ac, short mode)
       AnimData *adt = ANIM_nla_mapping_get(ac, ale);
 
       /* adjust current frame for NLA-scaling */
+      float cfra = anim_eval_context.eval_time;
       if (adt) {
-        cfra = BKE_nla_tweakedit_remap(adt, (float)CFRA, NLATIME_CONVERT_UNMAP);
+        cfra = BKE_nla_tweakedit_remap(adt, cfra, NLATIME_CONVERT_UNMAP);
       }
 
       const float curval = evaluate_fcurve(fcu, cfra);
@@ -800,10 +801,17 @@ static void insert_gpencil_keys(bAnimContext *ac, short mode)
     add_frame_mode = GP_GETFRAME_ADD_NEW;
   }
 
-  /* insert gp frames */
+  /* Insert gp frames. */
+  bGPdata *gpd_old = NULL;
   for (ale = anim_data.first; ale; ale = ale->next) {
+    bGPdata *gpd = (bGPdata *)ale->id;
     bGPDlayer *gpl = (bGPDlayer *)ale->data;
     BKE_gpencil_layer_frame_get(gpl, CFRA, add_frame_mode);
+    /* Check if the gpd changes to tag only once. */
+    if (gpd != gpd_old) {
+      BKE_gpencil_tag(gpd);
+      gpd_old = gpd;
+    }
   }
 
   ANIM_animdata_update(ac, &anim_data);
@@ -839,6 +847,9 @@ static int actkeys_insertkey_exec(bContext *C, wmOperator *op)
   }
 
   /* set notifier that keyframes have changed */
+  if (ac.datatype == ANIMCONT_GPENCIL) {
+    WM_event_add_notifier(C, NC_GPENCIL | ND_DATA | NA_EDITED, NULL);
+  }
   WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME | NA_ADDED, NULL);
 
   return OPERATOR_FINISHED;
@@ -888,7 +899,7 @@ static void duplicate_action_keys(bAnimContext *ac)
       duplicate_fcurve_keys((FCurve *)ale->key_data);
     }
     else if (ale->type == ANIMTYPE_GPLAYER) {
-      ED_gplayer_frames_duplicate((bGPDlayer *)ale->data);
+      ED_gpencil_layer_frames_duplicate((bGPDlayer *)ale->data);
     }
     else if (ale->type == ANIMTYPE_MASKLAYER) {
       ED_masklayer_frames_duplicate((MaskLayer *)ale->data);
@@ -964,7 +975,7 @@ static bool delete_action_keys(bAnimContext *ac)
     bool changed = false;
 
     if (ale->type == ANIMTYPE_GPLAYER) {
-      changed = ED_gplayer_frames_delete((bGPDlayer *)ale->data);
+      changed = ED_gpencil_layer_frames_delete((bGPDlayer *)ale->data);
     }
     else if (ale->type == ANIMTYPE_MASKLAYER) {
       changed = ED_masklayer_frames_delete((MaskLayer *)ale->data);
@@ -1539,7 +1550,7 @@ static void setkeytype_gpencil_keys(bAnimContext *ac, short mode)
   /* loop through each layer */
   for (ale = anim_data.first; ale; ale = ale->next) {
     if (ale->type == ANIMTYPE_GPLAYER) {
-      ED_gplayer_frames_keytype_set(ale->data, mode);
+      ED_gpencil_layer_frames_keytype_set(ale->data, mode);
       ale->update |= ANIM_UPDATE_DEPS;
     }
   }
@@ -1740,7 +1751,7 @@ static void snap_action_keys(bAnimContext *ac, short mode)
     AnimData *adt = ANIM_nla_mapping_get(ac, ale);
 
     if (ale->type == ANIMTYPE_GPLAYER) {
-      ED_gplayer_snap_frames(ale->data, ac->scene, mode);
+      ED_gpencil_layer_snap_frames(ale->data, ac->scene, mode);
     }
     else if (ale->type == ANIMTYPE_MASKLAYER) {
       ED_masklayer_snap_frames(ale->data, ac->scene, mode);
@@ -1870,7 +1881,7 @@ static void mirror_action_keys(bAnimContext *ac, short mode)
     AnimData *adt = ANIM_nla_mapping_get(ac, ale);
 
     if (ale->type == ANIMTYPE_GPLAYER) {
-      ED_gplayer_mirror_frames(ale->data, ac->scene, mode);
+      ED_gpencil_layer_mirror_frames(ale->data, ac->scene, mode);
     }
     else if (ale->type == ANIMTYPE_MASKLAYER) {
       /* TODO */

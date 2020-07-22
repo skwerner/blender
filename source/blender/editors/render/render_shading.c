@@ -162,7 +162,7 @@ void OBJECT_OT_material_slot_add(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = material_slot_add_exec;
-  ot->poll = ED_operator_object_active_editable;
+  ot->poll = ED_operator_object_active_local_editable;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
@@ -207,7 +207,7 @@ void OBJECT_OT_material_slot_remove(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = material_slot_remove_exec;
-  ot->poll = ED_operator_object_active_editable;
+  ot->poll = ED_operator_object_active_local_editable;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
@@ -238,7 +238,7 @@ static int material_slot_assign_exec(bContext *C, wmOperator *UNUSED(op))
     else {
       /* Find the first matching material.
        * Note: there may be multiple but that's not a common use case. */
-      for (short i = 0; i < ob->totcol; i++) {
+      for (int i = 0; i < ob->totcol; i++) {
         const Material *mat = BKE_object_material_get(ob, i + 1);
         if (mat_active == mat) {
           mat_nr_active = i;
@@ -310,7 +310,7 @@ void OBJECT_OT_material_slot_assign(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = material_slot_assign_exec;
-  ot->poll = ED_operator_object_active_editable;
+  ot->poll = ED_operator_object_active_local_editable;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
@@ -339,7 +339,7 @@ static int material_slot_de_select(bContext *C, bool select)
     else {
       /* Find the first matching material.
        * Note: there may be multiple but that's not a common use case. */
-      for (short i = 0; i < ob->totcol; i++) {
+      for (int i = 0; i < ob->totcol; i++) {
         const Material *mat = BKE_object_material_get(ob, i + 1);
         if (mat_active == mat) {
           mat_nr_active = i;
@@ -564,6 +564,7 @@ void OBJECT_OT_material_slot_move(wmOperatorType *ot)
   ot->description = "Move the active material up/down in the list";
 
   /* api callbacks */
+  ot->poll = ED_operator_object_active_local_editable;
   ot->exec = material_slot_move_exec;
 
   /* flags */
@@ -638,7 +639,7 @@ void OBJECT_OT_material_slot_remove_unused(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = material_slot_remove_unused_exec;
-  ot->poll = ED_operator_object_active_editable;
+  ot->poll = ED_operator_object_active_local_editable;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -707,6 +708,7 @@ void MATERIAL_OT_new(wmOperatorType *ot)
   ot->description = "Add a new material";
 
   /* api callbacks */
+  ot->poll = ED_operator_object_active_local_editable;
   ot->exec = new_material_exec;
 
   /* flags */
@@ -1666,13 +1668,13 @@ static int freestyle_get_modifier_type(PointerRNA *ptr)
   if (RNA_struct_is_a(ptr->type, &RNA_LineStyleColorModifier)) {
     return LS_MODIFIER_TYPE_COLOR;
   }
-  else if (RNA_struct_is_a(ptr->type, &RNA_LineStyleAlphaModifier)) {
+  if (RNA_struct_is_a(ptr->type, &RNA_LineStyleAlphaModifier)) {
     return LS_MODIFIER_TYPE_ALPHA;
   }
-  else if (RNA_struct_is_a(ptr->type, &RNA_LineStyleThicknessModifier)) {
+  if (RNA_struct_is_a(ptr->type, &RNA_LineStyleThicknessModifier)) {
     return LS_MODIFIER_TYPE_THICKNESS;
   }
-  else if (RNA_struct_is_a(ptr->type, &RNA_LineStyleGeometryModifier)) {
+  if (RNA_struct_is_a(ptr->type, &RNA_LineStyleGeometryModifier)) {
     return LS_MODIFIER_TYPE_GEOMETRY;
   }
   return -1;

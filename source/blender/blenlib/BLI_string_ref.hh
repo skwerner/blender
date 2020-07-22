@@ -59,10 +59,10 @@ class StringRef;
  */
 class StringRefBase {
  protected:
-  const char *m_data;
-  uint m_size;
+  const char *data_;
+  int64_t size_;
 
-  StringRefBase(const char *data, uint size) : m_data(data), m_size(size)
+  StringRefBase(const char *data, const int64_t size) : data_(data), size_(size)
   {
   }
 
@@ -70,9 +70,9 @@ class StringRefBase {
   /**
    * Return the (byte-)length of the referenced string, without any null-terminator.
    */
-  uint size() const
+  int64_t size() const
   {
-    return m_size;
+    return size_;
   }
 
   /**
@@ -80,31 +80,31 @@ class StringRefBase {
    */
   const char *data() const
   {
-    return m_data;
+    return data_;
   }
 
   operator Span<char>() const
   {
-    return Span<char>(m_data, m_size);
+    return Span<char>(data_, size_);
   }
 
   /**
-   * Implicitely convert to std::string. This is convenient in most cases, but you have to be a bit
+   * Implicitly convert to std::string. This is convenient in most cases, but you have to be a bit
    * careful not to convert to std::string accidentally.
    */
   operator std::string() const
   {
-    return std::string(m_data, m_size);
+    return std::string(data_, (size_t)size_);
   }
 
   const char *begin() const
   {
-    return m_data;
+    return data_;
   }
 
   const char *end() const
   {
-    return m_data + m_size;
+    return data_ + size_;
   }
 
   /**
@@ -114,17 +114,17 @@ class StringRefBase {
    */
   void unsafe_copy(char *dst) const
   {
-    memcpy(dst, m_data, m_size);
-    dst[m_size] = '\0';
+    memcpy(dst, data_, (size_t)size_);
+    dst[size_] = '\0';
   }
 
   /**
    * Copy the string into a buffer. The copied string will be null-terminated. This invokes
    * undefined behavior when dst_size is too small. (Should we define the behavior?)
    */
-  void copy(char *dst, uint dst_size) const
+  void copy(char *dst, const int64_t dst_size) const
   {
-    if (m_size < dst_size) {
+    if (size_ < dst_size) {
       this->unsafe_copy(dst);
     }
     else {
@@ -137,7 +137,7 @@ class StringRefBase {
    * Copy the string into a char array. The copied string will be null-terminated. This invokes
    * undefined behavior when dst is too small.
    */
-  template<uint N> void copy(char (&dst)[N])
+  template<size_t N> void copy(char (&dst)[N])
   {
     this->copy(dst, N);
   }
@@ -152,7 +152,7 @@ class StringRefBase {
    */
   bool endswith(StringRef suffix) const;
 
-  StringRef substr(uint start, uint size) const;
+  StringRef substr(int64_t start, const int64_t size) const;
 };
 
 /**
@@ -168,37 +168,48 @@ class StringRefNull : public StringRefBase {
   /**
    * Construct a StringRefNull from a null terminated c-string. The pointer must not point to NULL.
    */
-  StringRefNull(const char *str) : StringRefBase(str, (uint)strlen(str))
+  StringRefNull(const char *str) : StringRefBase(str, (int64_t)strlen(str))
   {
     BLI_assert(str != NULL);
-    BLI_assert(m_data[m_size] == '\0');
+    BLI_assert(data_[size_] == '\0');
   }
 
   /**
    * Construct a StringRefNull from a null terminated c-string. This invokes undefined behavior
    * when the given size is not the correct size of the string.
    */
-  StringRefNull(const char *str, uint size) : StringRefBase(str, size)
+  StringRefNull(const char *str, const int64_t size) : StringRefBase(str, size)
   {
-    BLI_assert((uint)strlen(str) == size);
+    BLI_assert((int64_t)strlen(str) == size);
   }
 
   /**
    * Reference a std::string. Remember that when the std::string is destructed, the StringRefNull
    * will point to uninitialized memory.
    */
-  StringRefNull(const std::string &str) : StringRefNull(str.data())
+  StringRefNull(const std::string &str) : StringRefNull(str.c_str())
   {
   }
 
   /**
    * Get the char at the given index.
    */
-  char operator[](uint index) const
+  char operator[](const int64_t index) const
   {
+    BLI_assert(index >= 0);
     /* Use '<=' instead of just '<', so that the null character can be accessed as well. */
-    BLI_assert(index <= m_size);
-    return m_data[index];
+    BLI_assert(index <= size_);
+    return data_[index];
+  }
+
+  /**
+   * Returns the beginning of a null-terminated char array.
+   *
+   * This is like ->data(), but can only be called on a StringRefNull.
+   */
+  const char *c_str() const
+  {
+    return data_;
   }
 };
 
@@ -221,11 +232,11 @@ class StringRef : public StringRefBase {
   /**
    * Create a StringRef from a null-terminated c-string.
    */
-  StringRef(const char *str) : StringRefBase(str, str ? (uint)strlen(str) : 0)
+  StringRef(const char *str) : StringRefBase(str, str ? (int64_t)strlen(str) : 0)
   {
   }
 
-  StringRef(const char *str, uint length) : StringRefBase(str, length)
+  StringRef(const char *str, const int64_t length) : StringRefBase(str, length)
   {
   }
 
@@ -234,7 +245,7 @@ class StringRef : public StringRefBase {
    * second point points to a smaller address than the first one.
    */
   StringRef(const char *begin, const char *one_after_end)
-      : StringRefBase(begin, (uint)(one_after_end - begin))
+      : StringRefBase(begin, (int64_t)(one_after_end - begin))
   {
     BLI_assert(begin <= one_after_end);
   }
@@ -243,17 +254,18 @@ class StringRef : public StringRefBase {
    * Reference a std::string. Remember that when the std::string is destructed, the StringRef
    * will point to uninitialized memory.
    */
-  StringRef(const std::string &str) : StringRefBase(str.data(), (uint)str.size())
+  StringRef(const std::string &str) : StringRefBase(str.data(), (int64_t)str.size())
   {
   }
 
   /**
    * Return a new StringRef that does not contain the first n chars.
    */
-  StringRef drop_prefix(uint n) const
+  StringRef drop_prefix(const int64_t n) const
   {
-    BLI_assert(n <= m_size);
-    return StringRef(m_data + n, m_size - n);
+    BLI_assert(n >= 0);
+    BLI_assert(n <= size_);
+    return StringRef(data_ + n, size_ - n);
   }
 
   /**
@@ -269,10 +281,11 @@ class StringRef : public StringRefBase {
   /**
    * Get the char at the given index.
    */
-  char operator[](uint index) const
+  char operator[](int64_t index) const
   {
-    BLI_assert(index < m_size);
-    return m_data[index];
+    BLI_assert(index >= 0);
+    BLI_assert(index < size_);
+    return data_[index];
   }
 };
 
@@ -287,7 +300,7 @@ inline std::ostream &operator<<(std::ostream &stream, StringRef ref)
 
 inline std::ostream &operator<<(std::ostream &stream, StringRefNull ref)
 {
-  stream << std::string(ref.data(), ref.size());
+  stream << std::string(ref.data(), (size_t)ref.size());
   return stream;
 }
 
@@ -305,7 +318,7 @@ inline bool operator==(StringRef a, StringRef b)
   if (a.size() != b.size()) {
     return false;
   }
-  return STREQLEN(a.data(), b.data(), a.size());
+  return STREQLEN(a.data(), b.data(), (size_t)a.size());
 }
 
 inline bool operator!=(StringRef a, StringRef b)
@@ -318,11 +331,11 @@ inline bool operator!=(StringRef a, StringRef b)
  */
 inline bool StringRefBase::startswith(StringRef prefix) const
 {
-  if (m_size < prefix.m_size) {
+  if (size_ < prefix.size_) {
     return false;
   }
-  for (uint i = 0; i < prefix.m_size; i++) {
-    if (m_data[i] != prefix.m_data[i]) {
+  for (int64_t i = 0; i < prefix.size_; i++) {
+    if (data_[i] != prefix.data_[i]) {
       return false;
     }
   }
@@ -334,12 +347,12 @@ inline bool StringRefBase::startswith(StringRef prefix) const
  */
 inline bool StringRefBase::endswith(StringRef suffix) const
 {
-  if (m_size < suffix.m_size) {
+  if (size_ < suffix.size_) {
     return false;
   }
-  uint offset = m_size - suffix.m_size;
-  for (uint i = 0; i < suffix.m_size; i++) {
-    if (m_data[offset + i] != suffix.m_data[i]) {
+  const int64_t offset = size_ - suffix.size_;
+  for (int64_t i = 0; i < suffix.size_; i++) {
+    if (data_[offset + i] != suffix.data_[i]) {
       return false;
     }
   }
@@ -349,10 +362,12 @@ inline bool StringRefBase::endswith(StringRef suffix) const
 /**
  * Return a new #StringRef containing only a sub-string of the original string.
  */
-inline StringRef StringRefBase::substr(uint start, uint size) const
+inline StringRef StringRefBase::substr(const int64_t start, const int64_t size) const
 {
-  BLI_assert(start + size <= m_size);
-  return StringRef(m_data + start, size);
+  BLI_assert(size >= 0);
+  BLI_assert(start >= 0);
+  BLI_assert(start + size <= size_);
+  return StringRef(data_ + start, size);
 }
 
 }  // namespace blender

@@ -210,10 +210,10 @@ class PHYSICS_PT_settings(PhysicButtonsPanel, Panel):
                     note.label(icon='INFO', text="Unbaked Guides: Bake Guides or disable them")
 
                 split = layout.split()
-                split.enabled = note_flag
+                split.enabled = note_flag and ob.mode == 'OBJECT'
 
                 bake_incomplete = (domain.cache_frame_pause_data < domain.cache_frame_end)
-                if domain.has_cache_baked_data and not domain.is_cache_baking_data and bake_incomplete:
+                if domain.cache_resumable and domain.has_cache_baked_data and not domain.is_cache_baking_data and bake_incomplete:
                     col = split.column()
                     col.operator("fluid.bake_data", text="Resume")
                     col = split.column()
@@ -705,6 +705,7 @@ class PHYSICS_PT_noise(PhysicButtonsPanel, Panel):
         layout = self.layout
         layout.use_property_split = True
 
+        ob = context.object
         domain = context.fluid.domain_settings
         layout.active = domain.use_noise
 
@@ -736,7 +737,7 @@ class PHYSICS_PT_noise(PhysicButtonsPanel, Panel):
                 note.label(icon='INFO', text="Unbaked Data: Bake Data first")
 
             split = layout.split()
-            split.enabled = domain.has_cache_baked_data and note_flag
+            split.enabled = domain.has_cache_baked_data and note_flag and ob.mode == 'OBJECT'
 
             bake_incomplete = (domain.cache_frame_pause_noise < domain.cache_frame_end)
             if domain.has_cache_baked_noise and not domain.is_cache_baking_noise and bake_incomplete:
@@ -777,6 +778,7 @@ class PHYSICS_PT_mesh(PhysicButtonsPanel, Panel):
         layout = self.layout
         layout.use_property_split = True
 
+        ob = context.object
         domain = context.fluid.domain_settings
         layout.active = domain.use_mesh
 
@@ -821,7 +823,7 @@ class PHYSICS_PT_mesh(PhysicButtonsPanel, Panel):
                 note.label(icon='INFO', text="Unbaked Data: Bake Data first")
 
             split = layout.split()
-            split.enabled = domain.has_cache_baked_data and note_flag
+            split.enabled = domain.has_cache_baked_data and note_flag and ob.mode == 'OBJECT'
 
             bake_incomplete = (domain.cache_frame_pause_mesh < domain.cache_frame_end)
             if domain.has_cache_baked_mesh and not domain.is_cache_baking_mesh and bake_incomplete:
@@ -855,6 +857,7 @@ class PHYSICS_PT_particles(PhysicButtonsPanel, Panel):
         layout = self.layout
         layout.use_property_split = True
 
+        ob = context.object
         domain = context.fluid.domain_settings
 
         is_baking_any = domain.is_cache_baking_any
@@ -936,6 +939,7 @@ class PHYSICS_PT_particles(PhysicButtonsPanel, Panel):
             split = layout.split()
             split.enabled = (
                 note_flag and
+                ob.mode == 'OBJECT' and
                 domain.has_cache_baked_data and
                 (domain.use_spray_particles or
                  domain.use_bubble_particles or
@@ -1114,14 +1118,13 @@ class PHYSICS_PT_cache(PhysicButtonsPanel, Panel):
     def draw(self, context):
         layout = self.layout
 
+        ob = context.object
         md = context.fluid
         domain = context.fluid.domain_settings
 
         is_baking_any = domain.is_cache_baking_any
         has_baked_data = domain.has_cache_baked_data
-        has_baked_noise = domain.has_cache_baked_noise
         has_baked_mesh = domain.has_cache_baked_mesh
-        has_baked_particles = domain.has_cache_baked_particles
 
         col = layout.column()
         col.prop(domain, "cache_directory", text="")
@@ -1132,49 +1135,47 @@ class PHYSICS_PT_cache(PhysicButtonsPanel, Panel):
         flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=False)
 
         col = flow.column()
-        col.prop(domain, "cache_type", expand=False)
-        col.enabled = not is_baking_any
-
-        col.separator()
-
         row = col.row()
-        col = row.column(align=True)
-        col.prop(domain, "cache_frame_start", text="Frame Start")
-        col.prop(domain, "cache_frame_end", text="End")
-        row.enabled = not is_baking_any
+        row = row.column(align=True)
+        row.prop(domain, "cache_frame_start", text="Frame Start")
+        row.prop(domain, "cache_frame_end", text="End")
+        row = col.row()
+        row.enabled = domain.cache_type in {'MODULAR', 'ALL'}
+        row.prop(domain, "cache_frame_offset", text="Offset")
 
         col.separator()
 
         col = flow.column()
+        col.prop(domain, "cache_type", expand=False)
+
         row = col.row()
         row.enabled = not is_baking_any and not has_baked_data
-        row.prop(domain, "cache_data_format", text="Data File Format")
+        row.prop(domain, "cache_resumable", text="Is Resumable")
 
-        if md.domain_settings.domain_type in {'GAS'}:
-            if domain.use_noise:
-                row = col.row()
-                row.enabled = not is_baking_any and not has_baked_noise
-                row.prop(domain, "cache_noise_format", text="Noise File Format")
+        row = col.row()
+        row.enabled = not is_baking_any and not has_baked_data
+        row.prop(domain, "cache_data_format", text="Format Volumes")
 
-        if md.domain_settings.domain_type in {'LIQUID'}:
-            # File format for all particle systemes (FLIP and secondary)
+        if md.domain_settings.domain_type in {'LIQUID'} and domain.use_mesh:
             row = col.row()
-            row.enabled = not is_baking_any and not has_baked_particles and not has_baked_data
-            row.prop(domain, "cache_particle_format", text="Particle File Format")
+            row.enabled = not is_baking_any and not has_baked_mesh
+            row.prop(domain, "cache_mesh_format", text="Meshes")
 
-            if domain.use_mesh:
-                row = col.row()
-                row.enabled = not is_baking_any and not has_baked_mesh
-                row.prop(domain, "cache_mesh_format", text="Mesh File Format")
-
-        if domain.cache_type == 'FINAL':
+        if domain.cache_type == 'ALL':
 
             col.separator()
             split = layout.split()
+            split.enabled = ob.mode == 'OBJECT'
 
-            if domain.is_cache_baking_data and not domain.has_cache_baked_data:
+            bake_incomplete = (domain.cache_frame_pause_data < domain.cache_frame_end)
+            if domain.cache_resumable and domain.has_cache_baked_data and not domain.is_cache_baking_data and bake_incomplete:
+                col = split.column()
+                col.operator("fluid.bake_all", text="Resume")
+                col = split.column()
+                col.operator("fluid.free_all", text="Free")
+            elif domain.is_cache_baking_data and not domain.has_cache_baked_data:
                 split.enabled = False
-                split.operator("fluid.pause_bake", text="Baking All - ESC to cancel")
+                split.operator("fluid.pause_bake", text="Baking All - ESC to pause")
             elif not domain.has_cache_baked_data and not domain.is_cache_baking_data:
                 split.operator("fluid.bake_all", text="Bake All")
             else:
@@ -1189,8 +1190,8 @@ class PHYSICS_PT_export(PhysicButtonsPanel, Panel):
 
     @classmethod
     def poll(cls, context):
-        # Only show the advanced panel to advanced users who know Mantaflow's birthday :)
-        if not PhysicButtonsPanel.poll_fluid_domain(context) or bpy.app.debug_value != 3001:
+        domain = context.fluid.domain_settings
+        if not PhysicButtonsPanel.poll_fluid_domain(context) or (domain.cache_data_format != 'OPENVDB' and bpy.app.debug_value != 3001):
             return False
 
         return (context.engine in cls.COMPAT_ENGINES)
@@ -1203,12 +1204,24 @@ class PHYSICS_PT_export(PhysicButtonsPanel, Panel):
 
         is_baking_any = domain.is_cache_baking_any
         has_baked_any = domain.has_cache_baked_any
+        has_baked_data = domain.has_cache_baked_data
 
         flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=False)
         flow.enabled = not is_baking_any and not has_baked_any
 
         col = flow.column()
-        col.prop(domain, "export_manta_script", text="Export Mantaflow Script")
+
+        if domain.cache_data_format == 'OPENVDB':
+            col.enabled = not is_baking_any and not has_baked_data
+            col.prop(domain, "openvdb_cache_compress_type", text="Compression Volumes")
+
+            col = flow.column()
+            col.prop(domain, "openvdb_data_depth", text="Precision Volumes")
+
+        # Only show the advanced panel to advanced users who know Mantaflow's birthday :)
+        if bpy.app.debug_value == 3001:
+            col = flow.column()
+            col.prop(domain, "export_manta_script", text="Export Mantaflow Script")
 
 
 class PHYSICS_PT_field_weights(PhysicButtonsPanel, Panel):

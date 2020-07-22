@@ -95,6 +95,8 @@ typedef struct bAnimContext {
   struct Scene *scene;
   /** active scene layer */
   struct ViewLayer *view_layer;
+  /** active dependency graph */
+  struct Depsgraph *depsgraph;
   /** active object */
   struct Object *obact;
   /** active set of markers */
@@ -281,10 +283,13 @@ typedef enum eAnim_Update_Flags {
 
 /* filtering flags  - under what circumstances should a channel be returned */
 typedef enum eAnimFilter_Flags {
-  /** data which channel represents is fits the dopesheet filters
-   * (i.e. scene visibility criteria) */
-  /* XXX: it's hard to think of any examples where this *ISN'T* the case...
-   * perhaps becomes implicit?. */
+  /**
+   * Data which channel represents is fits the dope-sheet filters
+   * (i.e. scene visibility criteria).
+   *
+   * XXX: it's hard to think of any examples where this *ISN'T* the case...
+   * perhaps becomes implicit?.
+   */
   ANIMFILTER_DATA_VISIBLE = (1 << 0),
   /** channel is visible within the channel-list hierarchy
    * (i.e. F-Curves within Groups in ActEdit) */
@@ -297,7 +302,7 @@ typedef enum eAnimFilter_Flags {
 
   /** for its type, channel should be "active" one */
   ANIMFILTER_ACTIVE = (1 << 4),
-  /** channel is a child of the active group (* Actions speciality) */
+  /** channel is a child of the active group (* Actions specialty) */
   ANIMFILTER_ACTGROUPED = (1 << 5),
 
   /** channel must be selected/not-selected, but both must not be set together */
@@ -310,8 +315,10 @@ typedef enum eAnimFilter_Flags {
    * for Graph Editor's option for keys on select curves only */
   ANIMFILTER_SELEDIT = (1 << 9),
 
-  /** flags used to enforce certain data types
-   * \node the ones for curves and NLA tracks were redundant and have been removed for now...
+  /**
+   * Flags used to enforce certain data types.
+   *
+   * \note The ones for curves and NLA tracks were redundant and have been removed for now.
    */
   ANIMFILTER_ANIMDATA = (1 << 10),
 
@@ -321,7 +328,7 @@ typedef enum eAnimFilter_Flags {
   /** for checking if we should keep some collapsed channel around (internal use only!) */
   ANIMFILTER_TMP_PEEK = (1 << 30),
 
-  /** ignore ONLYSEL flag from filterflag, (internal use only!) */
+  /** Ignore ONLYSEL flag from #bDopeSheet.filterflag (internal use only!) */
   ANIMFILTER_TMP_IGNORE_ONLYSEL = (1u << 31),
 } eAnimFilter_Flags;
 
@@ -640,14 +647,14 @@ bool ANIM_remove_empty_action_from_animdata(struct AnimData *adt);
 /* ---------- Current Frame Drawing ---------------- */
 
 /* flags for Current Frame Drawing */
-enum eAnimEditDraw_CurrentFrame {
+typedef enum eAnimEditDraw_CurrentFrame {
   /* plain time indicator with no special indicators */
   /* DRAWCFRA_PLAIN = 0, */ /* UNUSED */
   /* time indication in seconds or frames */
   DRAWCFRA_UNIT_SECONDS = (1 << 0),
   /* draw indicator extra wide (for timeline) */
   DRAWCFRA_WIDE = (1 << 1),
-};
+} eAnimEditDraw_CurrentFrame;
 
 /* main call to draw current-frame indicator in an Animation Editor */
 void ANIM_draw_cfra(const struct bContext *C, struct View2D *v2d, short flag);
@@ -703,7 +710,7 @@ void getcolor_fcurve_rainbow(int cur, int tot, float out[3]);
 
 /* ----------------- NLA Drawing ----------------------- */
 /* NOTE: Technically, this is not in the animation module (it's in space_nla)
- * but these are sometimes needed by various animation apis.
+ * but these are sometimes needed by various animation API's.
  */
 
 /* Get color to use for NLA Action channel's background */

@@ -655,6 +655,7 @@ void BKE_subdiv_ccg_destroy(SubdivCCG *subdiv_ccg)
     MEM_SAFE_FREE(adjacent_vertex->corner_coords);
   }
   MEM_SAFE_FREE(subdiv_ccg->adjacent_vertices);
+  MEM_SAFE_FREE(subdiv_ccg->cache_.start_face_grid_index);
   MEM_freeN(subdiv_ccg);
 }
 
@@ -1797,13 +1798,95 @@ void BKE_subdiv_ccg_neighbor_coords_get(const SubdivCCG *subdiv_ccg,
 
 int BKE_subdiv_ccg_grid_to_face_index(const SubdivCCG *subdiv_ccg, const int grid_index)
 {
-  // Subdiv *subdiv = subdiv_ccg->subdiv; /* UNUSED */
-  // OpenSubdiv_TopologyRefiner *topology_refiner = subdiv->topology_refiner; /* UNUSED */
-  SubdivCCGFace *face = subdiv_ccg->grid_faces[grid_index];
-
-  // const int face_grid_index = grid_index - face->start_grid_index; /* UNUSED */
+  const SubdivCCGFace *face = subdiv_ccg->grid_faces[grid_index];
   const int face_index = face - subdiv_ccg->faces;
   return face_index;
+}
+
+const int *BKE_subdiv_ccg_start_face_grid_index_ensure(SubdivCCG *subdiv_ccg)
+{
+  if (subdiv_ccg->cache_.start_face_grid_index == NULL) {
+    const Subdiv *subdiv = subdiv_ccg->subdiv;
+    OpenSubdiv_TopologyRefiner *topology_refiner = subdiv->topology_refiner;
+    if (topology_refiner == NULL) {
+      return NULL;
+    }
+
+    const int num_coarse_faces = topology_refiner->getNumFaces(topology_refiner);
+
+    subdiv_ccg->cache_.start_face_grid_index = MEM_malloc_arrayN(
+        sizeof(int), num_coarse_faces, "start_face_grid_index");
+
+    int start_grid_index = 0;
+    for (int face_index = 0; face_index < num_coarse_faces; face_index++) {
+      const int num_face_grids = topology_refiner->getNumFaceVertices(topology_refiner,
+                                                                      face_index);
+      subdiv_ccg->cache_.start_face_grid_index[face_index] = start_grid_index;
+      start_grid_index += num_face_grids;
+    }
+  }
+
+  return subdiv_ccg->cache_.start_face_grid_index;
+}
+
+const int *BKE_subdiv_ccg_start_face_grid_index_get(const SubdivCCG *subdiv_ccg)
+{
+  return subdiv_ccg->cache_.start_face_grid_index;
+}
+
+static void adjacet_vertices_index_from_adjacent_edge(const SubdivCCG *subdiv_ccg,
+                                                      const SubdivCCGCoord *coord,
+                                                      const MLoop *mloop,
+                                                      const MPoly *mpoly,
+                                                      int *r_v1,
+                                                      int *r_v2)
+{
+  const int grid_size_1 = subdiv_ccg->grid_size - 1;
+  const int poly_index = BKE_subdiv_ccg_grid_to_face_index(subdiv_ccg, coord->grid_index);
+  const MPoly *p = &mpoly[poly_index];
+  *r_v1 = mloop[coord->grid_index].v;
+  if (coord->x == grid_size_1) {
+    const MLoop *next = ME_POLY_LOOP_NEXT(mloop, p, coord->grid_index);
+    *r_v2 = next->v;
+  }
+  if (coord->y == grid_size_1) {
+    const MLoop *prev = ME_POLY_LOOP_PREV(mloop, p, coord->grid_index);
+    *r_v2 = prev->v;
+  }
+}
+
+SubdivCCGAdjacencyType BKE_subdiv_ccg_coarse_mesh_adjacency_info_get(const SubdivCCG *subdiv_ccg,
+                                                                     const SubdivCCGCoord *coord,
+                                                                     const MLoop *mloop,
+                                                                     const MPoly *mpoly,
+                                                                     int *r_v1,
+                                                                     int *r_v2)
+{
+
+  const int grid_size_1 = subdiv_ccg->grid_size - 1;
+  if (is_corner_grid_coord(subdiv_ccg, coord)) {
+    if (coord->x == 0 && coord->y == 0) {
+      /* Grid corner in the center of a poly. */
+      return SUBDIV_CCG_ADJACENT_NONE;
+    }
+    if (coord->x == grid_size_1 && coord->y == grid_size_1) {
+      /* Grid corner adjacent to a coarse mesh vertex. */
+      *r_v1 = *r_v2 = mloop[coord->grid_index].v;
+      return SUBDIV_CCG_ADJACENT_VERTEX;
+    }
+    /* Grid corner adjacent to the middle of a coarse mesh edge. */
+    adjacet_vertices_index_from_adjacent_edge(subdiv_ccg, coord, mloop, mpoly, r_v1, r_v2);
+    return SUBDIV_CCG_ADJACENT_EDGE;
+  }
+
+  if (is_boundary_grid_coord(subdiv_ccg, coord)) {
+    if (!is_inner_edge_grid_coordinate(subdiv_ccg, coord)) {
+      /* Grid boundary adjacent to a coarse mesh edge. */
+      adjacet_vertices_index_from_adjacent_edge(subdiv_ccg, coord, mloop, mpoly, r_v1, r_v2);
+      return SUBDIV_CCG_ADJACENT_EDGE;
+    }
+  }
+  return SUBDIV_CCG_ADJACENT_NONE;
 }
 
 /** \} */

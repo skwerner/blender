@@ -114,8 +114,8 @@ void EEVEE_material_bind_resources(DRWShadingGroup *shgrp,
                                    GPUMaterial *gpumat,
                                    EEVEE_ViewLayerData *sldata,
                                    EEVEE_Data *vedata,
-                                   int *ssr_id,
-                                   float *refract_depth,
+                                   const int *ssr_id,
+                                   const float *refract_depth,
                                    bool use_ssrefraction,
                                    bool use_alpha_blend)
 {
@@ -325,27 +325,31 @@ void EEVEE_materials_init(EEVEE_ViewLayerData *sldata,
     if (sldata->renderpass_ubo.combined == NULL) {
       sldata->renderpass_ubo.combined = DRW_uniformbuffer_create(
           sizeof(EEVEE_RenderPassData),
-          &(const EEVEE_RenderPassData){true, true, true, true, true, false});
+          &(const EEVEE_RenderPassData){true, true, true, true, true, false, false});
 
       sldata->renderpass_ubo.diff_color = DRW_uniformbuffer_create(
           sizeof(EEVEE_RenderPassData),
-          &(const EEVEE_RenderPassData){true, false, false, false, false, true});
+          &(const EEVEE_RenderPassData){true, false, false, false, false, true, false});
 
       sldata->renderpass_ubo.diff_light = DRW_uniformbuffer_create(
           sizeof(EEVEE_RenderPassData),
-          &(const EEVEE_RenderPassData){true, true, false, false, false, false});
+          &(const EEVEE_RenderPassData){true, true, false, false, false, false, false});
 
       sldata->renderpass_ubo.spec_color = DRW_uniformbuffer_create(
           sizeof(EEVEE_RenderPassData),
-          &(const EEVEE_RenderPassData){false, false, true, false, false, false});
+          &(const EEVEE_RenderPassData){false, false, true, false, false, false, false});
 
       sldata->renderpass_ubo.spec_light = DRW_uniformbuffer_create(
           sizeof(EEVEE_RenderPassData),
-          &(const EEVEE_RenderPassData){false, false, true, true, false, false});
+          &(const EEVEE_RenderPassData){false, false, true, true, false, false, false});
 
       sldata->renderpass_ubo.emit = DRW_uniformbuffer_create(
           sizeof(EEVEE_RenderPassData),
-          &(const EEVEE_RenderPassData){false, false, false, false, true, false});
+          &(const EEVEE_RenderPassData){false, false, false, false, true, false, false});
+
+      sldata->renderpass_ubo.environment = DRW_uniformbuffer_create(
+          sizeof(EEVEE_RenderPassData),
+          &(const EEVEE_RenderPassData){true, true, true, true, true, false, true});
     }
 
     /* Used combined pass by default. */
@@ -408,7 +412,7 @@ void EEVEE_materials_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
       DRW_shgroup_uniform_block(grp, "planar_block", sldata->planar_ubo);
       DRW_shgroup_uniform_block(grp, "light_block", sldata->light_ubo);
       DRW_shgroup_uniform_block(grp, "shadow_block", sldata->shadow_ubo);
-      DRW_shgroup_uniform_block(grp, "renderpass_block", sldata->renderpass_ubo.combined);
+      DRW_shgroup_uniform_block_ref(grp, "renderpass_block", &stl->g_data->renderpass_ubo);
       DRW_shgroup_call(grp, geom, NULL);
     }
 
@@ -801,6 +805,8 @@ static void eevee_hair_cache_populate(EEVEE_Data *vedata,
     *matcache.shadow_grp_p = DRW_shgroup_hair_create_sub(ob, psys, md, matcache.shadow_grp);
     *cast_shadow = true;
   }
+
+  EEVEE_motion_blur_hair_cache_populate(sldata, vedata, ob, psys, md);
 }
 
 #define ADD_SHGROUP_CALL(shgrp, ob, geom, oedata) \
@@ -851,8 +857,7 @@ void EEVEE_materials_cache_populate(EEVEE_Data *vedata,
      */
     bool use_volume_material = (matcache[0].shading_gpumat &&
                                 GPU_material_has_volume_output(matcache[0].shading_gpumat));
-
-    if ((ob->dt >= OB_SOLID) || DRW_state_is_image_render()) {
+    if ((ob->dt >= OB_SOLID) || DRW_state_is_scene_render()) {
       if (use_sculpt_pbvh) {
         struct DRWShadingGroup **shgrps_array = BLI_array_alloca(shgrps_array, materials_len);
 
@@ -901,6 +906,9 @@ void EEVEE_materials_cache_populate(EEVEE_Data *vedata,
           }
         }
       }
+
+      /* Motion Blur Vectors. */
+      EEVEE_motion_blur_cache_populate(sldata, vedata, ob);
     }
 
     /* Volumetrics */
@@ -946,17 +954,15 @@ void EEVEE_object_hair_cache_populate(EEVEE_Data *vedata,
   eevee_hair_cache_populate(vedata, sldata, ob, NULL, NULL, HAIR_MATERIAL_NR, cast_shadow);
 }
 
-void EEVEE_materials_cache_finish(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
+void EEVEE_materials_cache_finish(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *vedata)
 {
   EEVEE_PrivateData *pd = vedata->stl->g_data;
   EEVEE_EffectsInfo *effects = vedata->stl->effects;
 
   BLI_ghash_free(pd->material_hash, NULL, NULL);
+  pd->material_hash = NULL;
 
   SET_FLAG_FROM_TEST(effects->enabled_effects, effects->sss_surface_count > 0, EFFECT_SSS);
-
-  /* TODO(fclem) this is not really clean. Init should not be done in cache finish. */
-  EEVEE_subsurface_draw_init(sldata, vedata);
 }
 
 void EEVEE_materials_free(void)
@@ -1015,7 +1021,7 @@ void EEVEE_material_output_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata,
   /* Should be enough precision for many samples. */
   const eGPUTextureFormat texture_format = (tot_samples > 128) ? GPU_RGBA32F : GPU_RGBA16F;
 
-  const bool do_clear = DRW_state_is_image_render() || (effects->taa_current_sample == 1);
+  const bool do_clear = (effects->taa_current_sample == 1);
   /* Create FrameBuffer. */
   GPU_framebuffer_ensure_config(&fbl->material_accum_fb,
                                 {GPU_ATTACHMENT_TEXTURE(dtxl->depth), GPU_ATTACHMENT_LEAVE});
@@ -1071,7 +1077,7 @@ void EEVEE_material_output_accumulate(EEVEE_ViewLayerData *sldata, EEVEE_Data *v
     DRWPass *material_accum_ps = psl->material_accum_ps;
     if (pd->render_passes & EEVEE_RENDER_PASS_ENVIRONMENT) {
       material_renderpass_accumulate(
-          fbl, psl->background_accum_ps, pd, txl->env_accum, sldata->renderpass_ubo.combined);
+          fbl, psl->background_accum_ps, pd, txl->env_accum, sldata->renderpass_ubo.environment);
     }
     if (pd->render_passes & EEVEE_RENDER_PASS_EMIT) {
       material_renderpass_accumulate(

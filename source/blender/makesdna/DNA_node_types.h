@@ -844,6 +844,16 @@ typedef struct NodeTexSky {
   float sun_direction[3];
   float turbidity;
   float ground_albedo;
+  float sun_size;
+  float sun_intensity;
+  float sun_elevation;
+  float sun_rotation;
+  float altitude;
+  float air_density;
+  float dust_density;
+  float ozone_density;
+  char sun_disc;
+  char _pad[7];
 } NodeTexSky;
 
 typedef struct NodeTexImage {
@@ -1171,8 +1181,9 @@ enum {
 };
 
 /* sky texture */
-#define SHD_SKY_OLD 0
-#define SHD_SKY_NEW 1
+#define SHD_SKY_PREETHAM 0
+#define SHD_SKY_HOSEK 1
+#define SHD_SKY_NISHITA 2
 
 /* environment texture */
 #define SHD_PROJ_EQUIRECTANGULAR 0

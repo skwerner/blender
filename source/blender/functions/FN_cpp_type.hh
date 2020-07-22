@@ -18,12 +18,12 @@
 #define __FN_CPP_TYPE_HH__
 
 /** \file
- * \ingroup functions
+ * \ingroup fn
  *
- * The CPPType class is the core of the runtime-type-system used by the functions system. An
- * instance of this class can represent any C++ type, that is default-constructable, destructable,
- * movable and copyable. Therefore it also works for all C types. This restrictions might need to
- * be removed in the future, but for now every required type has these properties.
+ * The CPPType class is the core of the runtime-type-system used by the functions system. It can
+ * represent C++ types that are default-constructible, destructible, movable, copyable,
+ * equality comparable and hashable. In the future we might want to make some of these properties
+ * optional.
  *
  * Every type has a size and an alignment. Every function dealing with C++ types in a generic way,
  * has to make sure that alignment rules are followed. The methods provided by a CPPType instance
@@ -38,11 +38,11 @@
  * methods come in three variants. Using the construct-default methods as example:
  *  - construct_default(void *ptr):
  *      Constructs a single instance of that type at the given pointer.
- *  - construct_default_n(void *ptr, uint n):
+ *  - construct_default_n(void *ptr, int64_t n):
  *      Constructs n instances of that type in an array that starts at the given pointer.
- *  - construct_default_indices(void *ptr, IndexMask index_mask):
+ *  - construct_default_indices(void *ptr, IndexMask mask):
  *      Constructs multiple instances of that type in an array that starts at the given pointer.
- *      Only the indices referenced by `index_mask` will by constructed.
+ *      Only the indices referenced by `mask` will by constructed.
  *
  * In some cases default-construction does nothing (e.g. for trivial types like int). The
  * `default_value` method provides some default value anyway that can be copied instead. What the
@@ -66,52 +66,97 @@
  *    pointers to virtual member functions.
  */
 
+#include "BLI_hash.hh"
 #include "BLI_index_mask.hh"
 #include "BLI_math_base.h"
 #include "BLI_string_ref.hh"
+#include "BLI_utility_mixins.hh"
 
-namespace blender {
-namespace FN {
+namespace blender::fn {
 
-using blender::IndexMask;
-using blender::StringRef;
-using blender::StringRefNull;
-
-class CPPType {
+class CPPType : NonCopyable, NonMovable {
  public:
   using ConstructDefaultF = void (*)(void *ptr);
-  using ConstructDefaultNF = void (*)(void *ptr, uint n);
-  using ConstructDefaultIndicesF = void (*)(void *ptr, IndexMask index_mask);
+  using ConstructDefaultNF = void (*)(void *ptr, int64_t n);
+  using ConstructDefaultIndicesF = void (*)(void *ptr, IndexMask mask);
 
   using DestructF = void (*)(void *ptr);
-  using DestructNF = void (*)(void *ptr, uint n);
-  using DestructIndicesF = void (*)(void *ptr, IndexMask index_mask);
+  using DestructNF = void (*)(void *ptr, int64_t n);
+  using DestructIndicesF = void (*)(void *ptr, IndexMask mask);
 
   using CopyToInitializedF = void (*)(const void *src, void *dst);
-  using CopyToInitializedNF = void (*)(const void *src, void *dst, uint n);
-  using CopyToInitializedIndicesF = void (*)(const void *src, void *dst, IndexMask index_mask);
+  using CopyToInitializedNF = void (*)(const void *src, void *dst, int64_t n);
+  using CopyToInitializedIndicesF = void (*)(const void *src, void *dst, IndexMask mask);
 
   using CopyToUninitializedF = void (*)(const void *src, void *dst);
-  using CopyToUninitializedNF = void (*)(const void *src, void *dst, uint n);
-  using CopyToUninitializedIndicesF = void (*)(const void *src, void *dst, IndexMask index_mask);
+  using CopyToUninitializedNF = void (*)(const void *src, void *dst, int64_t n);
+  using CopyToUninitializedIndicesF = void (*)(const void *src, void *dst, IndexMask mask);
 
   using RelocateToInitializedF = void (*)(void *src, void *dst);
-  using RelocateToInitializedNF = void (*)(void *src, void *dst, uint n);
-  using RelocateToInitializedIndicesF = void (*)(void *src, void *dst, IndexMask index_mask);
+  using RelocateToInitializedNF = void (*)(void *src, void *dst, int64_t n);
+  using RelocateToInitializedIndicesF = void (*)(void *src, void *dst, IndexMask mask);
 
   using RelocateToUninitializedF = void (*)(void *src, void *dst);
-  using RelocateToUninitializedNF = void (*)(void *src, void *dst, uint n);
-  using RelocateToUninitializedIndicesF = void (*)(void *src, void *dst, IndexMask index_mask);
+  using RelocateToUninitializedNF = void (*)(void *src, void *dst, int64_t n);
+  using RelocateToUninitializedIndicesF = void (*)(void *src, void *dst, IndexMask mask);
 
-  using FillInitializedF = void (*)(const void *value, void *dst, uint n);
-  using FillInitializedIndicesF = void (*)(const void *value, void *dst, IndexMask index_mask);
+  using FillInitializedF = void (*)(const void *value, void *dst, int64_t n);
+  using FillInitializedIndicesF = void (*)(const void *value, void *dst, IndexMask mask);
 
-  using FillUninitializedF = void (*)(const void *value, void *dst, uint n);
-  using FillUninitializedIndicesF = void (*)(const void *value, void *dst, IndexMask index_mask);
+  using FillUninitializedF = void (*)(const void *value, void *dst, int64_t n);
+  using FillUninitializedIndicesF = void (*)(const void *value, void *dst, IndexMask mask);
 
+  using DebugPrintF = void (*)(const void *value, std::stringstream &ss);
+  using IsEqualF = bool (*)(const void *a, const void *b);
+  using HashF = uint64_t (*)(const void *value);
+
+ private:
+  int64_t size_;
+  int64_t alignment_;
+  uintptr_t alignment_mask_;
+  bool is_trivially_destructible_;
+
+  ConstructDefaultF construct_default_;
+  ConstructDefaultNF construct_default_n_;
+  ConstructDefaultIndicesF construct_default_indices_;
+
+  DestructF destruct_;
+  DestructNF destruct_n_;
+  DestructIndicesF destruct_indices_;
+
+  CopyToInitializedF copy_to_initialized_;
+  CopyToInitializedNF copy_to_initialized_n_;
+  CopyToInitializedIndicesF copy_to_initialized_indices_;
+
+  CopyToUninitializedF copy_to_uninitialized_;
+  CopyToUninitializedNF copy_to_uninitialized_n_;
+  CopyToUninitializedIndicesF copy_to_uninitialized_indices_;
+
+  RelocateToInitializedF relocate_to_initialized_;
+  RelocateToInitializedNF relocate_to_initialized_n_;
+  RelocateToInitializedIndicesF relocate_to_initialized_indices_;
+
+  RelocateToUninitializedF relocate_to_uninitialized_;
+  RelocateToUninitializedNF relocate_to_uninitialized_n_;
+  RelocateToUninitializedIndicesF relocate_to_uninitialized_indices_;
+
+  FillInitializedF fill_initialized_;
+  FillInitializedIndicesF fill_initialized_indices_;
+
+  FillUninitializedF fill_uninitialized_;
+  FillUninitializedIndicesF fill_uninitialized_indices_;
+
+  DebugPrintF debug_print_;
+  IsEqualF is_equal_;
+  HashF hash_;
+
+  const void *default_value_;
+  std::string name_;
+
+ public:
   CPPType(std::string name,
-          uint size,
-          uint alignment,
+          int64_t size,
+          int64_t alignment,
           bool is_trivially_destructible,
           ConstructDefaultF construct_default,
           ConstructDefaultNF construct_default_n,
@@ -135,38 +180,60 @@ class CPPType {
           FillInitializedIndicesF fill_initialized_indices,
           FillUninitializedF fill_uninitialized,
           FillUninitializedIndicesF fill_uninitialized_indices,
+          DebugPrintF debug_print,
+          IsEqualF is_equal,
+          HashF hash,
           const void *default_value)
-      : m_size(size),
-        m_alignment(alignment),
-        m_is_trivially_destructible(is_trivially_destructible),
-        m_construct_default(construct_default),
-        m_construct_default_n(construct_default_n),
-        m_construct_default_indices(construct_default_indices),
-        m_destruct(destruct),
-        m_destruct_n(destruct_n),
-        m_destruct_indices(destruct_indices),
-        m_copy_to_initialized(copy_to_initialized),
-        m_copy_to_initialized_n(copy_to_initialized_n),
-        m_copy_to_initialized_indices(copy_to_initialized_indices),
-        m_copy_to_uninitialized(copy_to_uninitialized),
-        m_copy_to_uninitialized_n(copy_to_uninitialized_n),
-        m_copy_to_uninitialized_indices(copy_to_uninitialized_indices),
-        m_relocate_to_initialized(relocate_to_initialized),
-        m_relocate_to_initialized_n(relocate_to_initialized_n),
-        m_relocate_to_initialized_indices(relocate_to_initialized_indices),
-        m_relocate_to_uninitialized(relocate_to_uninitialized),
-        m_relocate_to_uninitialized_n(relocate_to_uninitialized_n),
-        m_relocate_to_uninitialized_indices(relocate_to_uninitialized_indices),
-        m_fill_initialized(fill_initialized),
-        m_fill_initialized_indices(fill_initialized_indices),
-        m_fill_uninitialized(fill_uninitialized),
-        m_fill_uninitialized_indices(fill_uninitialized_indices),
-        m_default_value(default_value),
-        m_name(name)
+      : size_(size),
+        alignment_(alignment),
+        is_trivially_destructible_(is_trivially_destructible),
+        construct_default_(construct_default),
+        construct_default_n_(construct_default_n),
+        construct_default_indices_(construct_default_indices),
+        destruct_(destruct),
+        destruct_n_(destruct_n),
+        destruct_indices_(destruct_indices),
+        copy_to_initialized_(copy_to_initialized),
+        copy_to_initialized_n_(copy_to_initialized_n),
+        copy_to_initialized_indices_(copy_to_initialized_indices),
+        copy_to_uninitialized_(copy_to_uninitialized),
+        copy_to_uninitialized_n_(copy_to_uninitialized_n),
+        copy_to_uninitialized_indices_(copy_to_uninitialized_indices),
+        relocate_to_initialized_(relocate_to_initialized),
+        relocate_to_initialized_n_(relocate_to_initialized_n),
+        relocate_to_initialized_indices_(relocate_to_initialized_indices),
+        relocate_to_uninitialized_(relocate_to_uninitialized),
+        relocate_to_uninitialized_n_(relocate_to_uninitialized_n),
+        relocate_to_uninitialized_indices_(relocate_to_uninitialized_indices),
+        fill_initialized_(fill_initialized),
+        fill_initialized_indices_(fill_initialized_indices),
+        fill_uninitialized_(fill_uninitialized),
+        fill_uninitialized_indices_(fill_uninitialized_indices),
+        debug_print_(debug_print),
+        is_equal_(is_equal),
+        hash_(hash),
+        default_value_(default_value),
+        name_(name)
   {
-    BLI_assert(is_power_of_2_i(m_alignment));
-    m_alignment_mask = (uintptr_t)m_alignment - (uintptr_t)1;
+    BLI_assert(is_power_of_2_i(alignment_));
+    alignment_mask_ = (uintptr_t)alignment_ - (uintptr_t)1;
   }
+
+  /**
+   * Two types only compare equal when their pointer is equal. No two instances of CPPType for the
+   * same C++ type should be created.
+   */
+  friend bool operator==(const CPPType &a, const CPPType &b)
+  {
+    return &a == &b;
+  }
+
+  friend bool operator!=(const CPPType &a, const CPPType &b)
+  {
+    return !(&a == &b);
+  }
+
+  template<typename T> static const CPPType &get();
 
   /**
    * Returns the name of the type for debugging purposes. This name should not be used as
@@ -174,7 +241,7 @@ class CPPType {
    */
   StringRefNull name() const
   {
-    return m_name;
+    return name_;
   }
 
   /**
@@ -183,9 +250,9 @@ class CPPType {
    * C++ equivalent:
    *   sizeof(T);
    */
-  uint size() const
+  int64_t size() const
   {
-    return m_size;
+    return size_;
   }
 
   /**
@@ -194,9 +261,9 @@ class CPPType {
    * C++ equivalent:
    *   alignof(T);
    */
-  uint alignment() const
+  int64_t alignment() const
   {
-    return m_alignment;
+    return alignment_;
   }
 
   /**
@@ -204,11 +271,11 @@ class CPPType {
    * for optimization purposes.
    *
    * C++ equivalent:
-   *   std::is_trivially_destructible<T>::value;
+   *   std::is_trivially_destructible_v<T>;
    */
   bool is_trivially_destructible() const
   {
-    return m_is_trivially_destructible;
+    return is_trivially_destructible_;
   }
 
   /**
@@ -216,7 +283,7 @@ class CPPType {
    */
   bool pointer_has_valid_alignment(const void *ptr) const
   {
-    return ((uintptr_t)ptr & m_alignment_mask) == 0;
+    return ((uintptr_t)ptr & alignment_mask_) == 0;
   }
 
   bool pointer_can_point_to_instance(const void *ptr) const
@@ -236,21 +303,21 @@ class CPPType {
   {
     BLI_assert(this->pointer_can_point_to_instance(ptr));
 
-    m_construct_default(ptr);
+    construct_default_(ptr);
   }
 
-  void construct_default_n(void *ptr, uint n) const
+  void construct_default_n(void *ptr, int64_t n) const
   {
-    BLI_assert(this->pointer_can_point_to_instance(ptr));
+    BLI_assert(n == 0 || this->pointer_can_point_to_instance(ptr));
 
-    m_construct_default_n(ptr, n);
+    construct_default_n_(ptr, n);
   }
 
-  void construct_default_indices(void *ptr, IndexMask index_mask) const
+  void construct_default_indices(void *ptr, IndexMask mask) const
   {
-    BLI_assert(this->pointer_can_point_to_instance(ptr));
+    BLI_assert(mask.size() == 0 || this->pointer_can_point_to_instance(ptr));
 
-    m_construct_default_indices(ptr, index_mask);
+    construct_default_indices_(ptr, mask);
   }
 
   /**
@@ -265,21 +332,26 @@ class CPPType {
   {
     BLI_assert(this->pointer_can_point_to_instance(ptr));
 
-    m_destruct(ptr);
+    destruct_(ptr);
   }
 
-  void destruct_n(void *ptr, uint n) const
+  void destruct_n(void *ptr, int64_t n) const
   {
-    BLI_assert(this->pointer_can_point_to_instance(ptr));
+    BLI_assert(n == 0 || this->pointer_can_point_to_instance(ptr));
 
-    m_destruct_n(ptr, n);
+    destruct_n_(ptr, n);
   }
 
-  void destruct_indices(void *ptr, IndexMask index_mask) const
+  void destruct_indices(void *ptr, IndexMask mask) const
   {
-    BLI_assert(this->pointer_can_point_to_instance(ptr));
+    BLI_assert(mask.size() == 0 || this->pointer_can_point_to_instance(ptr));
 
-    m_destruct_indices(ptr, index_mask);
+    destruct_indices_(ptr, mask);
+  }
+
+  DestructF destruct_cb() const
+  {
+    return destruct_;
   }
 
   /**
@@ -294,25 +366,25 @@ class CPPType {
     BLI_assert(this->pointer_can_point_to_instance(src));
     BLI_assert(this->pointer_can_point_to_instance(dst));
 
-    m_copy_to_initialized(src, dst);
+    copy_to_initialized_(src, dst);
   }
 
-  void copy_to_initialized_n(const void *src, void *dst, uint n) const
+  void copy_to_initialized_n(const void *src, void *dst, int64_t n) const
   {
     BLI_assert(src != dst);
-    BLI_assert(this->pointer_can_point_to_instance(src));
-    BLI_assert(this->pointer_can_point_to_instance(dst));
+    BLI_assert(n == 0 || this->pointer_can_point_to_instance(src));
+    BLI_assert(n == 0 || this->pointer_can_point_to_instance(dst));
 
-    m_copy_to_initialized_n(src, dst, n);
+    copy_to_initialized_n_(src, dst, n);
   }
 
-  void copy_to_initialized_indices(const void *src, void *dst, IndexMask index_mask) const
+  void copy_to_initialized_indices(const void *src, void *dst, IndexMask mask) const
   {
     BLI_assert(src != dst);
-    BLI_assert(this->pointer_can_point_to_instance(src));
-    BLI_assert(this->pointer_can_point_to_instance(dst));
+    BLI_assert(mask.size() == 0 || this->pointer_can_point_to_instance(src));
+    BLI_assert(mask.size() == 0 || this->pointer_can_point_to_instance(dst));
 
-    m_copy_to_initialized_indices(src, dst, index_mask);
+    copy_to_initialized_indices_(src, dst, mask);
   }
 
   /**
@@ -329,25 +401,25 @@ class CPPType {
     BLI_assert(this->pointer_can_point_to_instance(src));
     BLI_assert(this->pointer_can_point_to_instance(dst));
 
-    m_copy_to_uninitialized(src, dst);
+    copy_to_uninitialized_(src, dst);
   }
 
-  void copy_to_uninitialized_n(const void *src, void *dst, uint n) const
+  void copy_to_uninitialized_n(const void *src, void *dst, int64_t n) const
   {
     BLI_assert(src != dst);
-    BLI_assert(this->pointer_can_point_to_instance(src));
-    BLI_assert(this->pointer_can_point_to_instance(dst));
+    BLI_assert(n == 0 || this->pointer_can_point_to_instance(src));
+    BLI_assert(n == 0 || this->pointer_can_point_to_instance(dst));
 
-    m_copy_to_uninitialized_n(src, dst, n);
+    copy_to_uninitialized_n_(src, dst, n);
   }
 
-  void copy_to_uninitialized_indices(const void *src, void *dst, IndexMask index_mask) const
+  void copy_to_uninitialized_indices(const void *src, void *dst, IndexMask mask) const
   {
     BLI_assert(src != dst);
-    BLI_assert(this->pointer_can_point_to_instance(src));
-    BLI_assert(this->pointer_can_point_to_instance(dst));
+    BLI_assert(mask.size() == 0 || this->pointer_can_point_to_instance(src));
+    BLI_assert(mask.size() == 0 || this->pointer_can_point_to_instance(dst));
 
-    m_copy_to_uninitialized_indices(src, dst, index_mask);
+    copy_to_uninitialized_indices_(src, dst, mask);
   }
 
   /**
@@ -364,25 +436,25 @@ class CPPType {
     BLI_assert(this->pointer_can_point_to_instance(src));
     BLI_assert(this->pointer_can_point_to_instance(dst));
 
-    m_relocate_to_initialized(src, dst);
+    relocate_to_initialized_(src, dst);
   }
 
-  void relocate_to_initialized_n(void *src, void *dst, uint n) const
+  void relocate_to_initialized_n(void *src, void *dst, int64_t n) const
   {
     BLI_assert(src != dst);
-    BLI_assert(this->pointer_can_point_to_instance(src));
-    BLI_assert(this->pointer_can_point_to_instance(dst));
+    BLI_assert(n == 0 || this->pointer_can_point_to_instance(src));
+    BLI_assert(n == 0 || this->pointer_can_point_to_instance(dst));
 
-    m_relocate_to_initialized_n(src, dst, n);
+    relocate_to_initialized_n_(src, dst, n);
   }
 
-  void relocate_to_initialized_indices(void *src, void *dst, IndexMask index_mask) const
+  void relocate_to_initialized_indices(void *src, void *dst, IndexMask mask) const
   {
     BLI_assert(src != dst);
-    BLI_assert(this->pointer_can_point_to_instance(src));
-    BLI_assert(this->pointer_can_point_to_instance(dst));
+    BLI_assert(mask.size() == 0 || this->pointer_can_point_to_instance(src));
+    BLI_assert(mask.size() == 0 || this->pointer_can_point_to_instance(dst));
 
-    m_relocate_to_initialized_indices(src, dst, index_mask);
+    relocate_to_initialized_indices_(src, dst, mask);
   }
 
   /**
@@ -399,25 +471,25 @@ class CPPType {
     BLI_assert(this->pointer_can_point_to_instance(src));
     BLI_assert(this->pointer_can_point_to_instance(dst));
 
-    m_relocate_to_uninitialized(src, dst);
+    relocate_to_uninitialized_(src, dst);
   }
 
-  void relocate_to_uninitialized_n(void *src, void *dst, uint n) const
+  void relocate_to_uninitialized_n(void *src, void *dst, int64_t n) const
   {
     BLI_assert(src != dst);
-    BLI_assert(this->pointer_can_point_to_instance(src));
-    BLI_assert(this->pointer_can_point_to_instance(dst));
+    BLI_assert(n == 0 || this->pointer_can_point_to_instance(src));
+    BLI_assert(n == 0 || this->pointer_can_point_to_instance(dst));
 
-    m_relocate_to_uninitialized_n(src, dst, n);
+    relocate_to_uninitialized_n_(src, dst, n);
   }
 
-  void relocate_to_uninitialized_indices(void *src, void *dst, IndexMask index_mask) const
+  void relocate_to_uninitialized_indices(void *src, void *dst, IndexMask mask) const
   {
     BLI_assert(src != dst);
-    BLI_assert(this->pointer_can_point_to_instance(src));
-    BLI_assert(this->pointer_can_point_to_instance(dst));
+    BLI_assert(mask.size() == 0 || this->pointer_can_point_to_instance(src));
+    BLI_assert(mask.size() == 0 || this->pointer_can_point_to_instance(dst));
 
-    m_relocate_to_uninitialized_indices(src, dst, index_mask);
+    relocate_to_uninitialized_indices_(src, dst, mask);
   }
 
   /**
@@ -425,20 +497,20 @@ class CPPType {
    *
    * Other instances of the same type should live in the array before this method is called.
    */
-  void fill_initialized(const void *value, void *dst, uint n) const
+  void fill_initialized(const void *value, void *dst, int64_t n) const
   {
-    BLI_assert(this->pointer_can_point_to_instance(value));
-    BLI_assert(this->pointer_can_point_to_instance(dst));
+    BLI_assert(n == 0 || this->pointer_can_point_to_instance(value));
+    BLI_assert(n == 0 || this->pointer_can_point_to_instance(dst));
 
-    m_fill_initialized(value, dst, n);
+    fill_initialized_(value, dst, n);
   }
 
-  void fill_initialized_indices(const void *value, void *dst, IndexMask index_mask) const
+  void fill_initialized_indices(const void *value, void *dst, IndexMask mask) const
   {
-    BLI_assert(this->pointer_can_point_to_instance(value));
-    BLI_assert(this->pointer_can_point_to_instance(dst));
+    BLI_assert(mask.size() == 0 || this->pointer_can_point_to_instance(value));
+    BLI_assert(mask.size() == 0 || this->pointer_can_point_to_instance(dst));
 
-    m_fill_initialized_indices(value, dst, index_mask);
+    fill_initialized_indices_(value, dst, mask);
   }
 
   /**
@@ -446,20 +518,39 @@ class CPPType {
    *
    * The array should be uninitialized before this method is called.
    */
-  void fill_uninitialized(const void *value, void *dst, uint n) const
+  void fill_uninitialized(const void *value, void *dst, int64_t n) const
   {
-    BLI_assert(this->pointer_can_point_to_instance(value));
-    BLI_assert(this->pointer_can_point_to_instance(dst));
+    BLI_assert(n == 0 || this->pointer_can_point_to_instance(value));
+    BLI_assert(n == 0 || this->pointer_can_point_to_instance(dst));
 
-    m_fill_uninitialized(value, dst, n);
+    fill_uninitialized_(value, dst, n);
   }
 
-  void fill_uninitialized_indices(const void *value, void *dst, IndexMask index_mask) const
+  void fill_uninitialized_indices(const void *value, void *dst, IndexMask mask) const
+  {
+    BLI_assert(mask.size() == 0 || this->pointer_can_point_to_instance(value));
+    BLI_assert(mask.size() == 0 || this->pointer_can_point_to_instance(dst));
+
+    fill_uninitialized_indices_(value, dst, mask);
+  }
+
+  void debug_print(const void *value, std::stringstream &ss) const
   {
     BLI_assert(this->pointer_can_point_to_instance(value));
-    BLI_assert(this->pointer_can_point_to_instance(dst));
+    debug_print_(value, ss);
+  }
 
-    m_fill_uninitialized_indices(value, dst, index_mask);
+  bool is_equal(const void *a, const void *b) const
+  {
+    BLI_assert(this->pointer_can_point_to_instance(a));
+    BLI_assert(this->pointer_can_point_to_instance(b));
+    return is_equal_(a, b);
+  }
+
+  uint64_t hash(const void *value) const
+  {
+    BLI_assert(this->pointer_can_point_to_instance(value));
+    return hash_(value);
   }
 
   /**
@@ -468,135 +559,90 @@ class CPPType {
    */
   const void *default_value() const
   {
-    return m_default_value;
+    return default_value_;
   }
 
-  /**
-   * Two types only compare equal when their pointer is equal. No two instances of CPPType for the
-   * same C++ type should be created.
-   */
-  friend bool operator==(const CPPType &a, const CPPType &b)
+  uint64_t hash() const
   {
-    return &a == &b;
+    return DefaultHash<const CPPType *>{}(this);
   }
 
-  friend bool operator!=(const CPPType &a, const CPPType &b)
+  template<typename T> bool is() const
   {
-    return !(&a == &b);
+    return this == &CPPType::get<T>();
   }
-
-  template<typename T> static const CPPType &get();
-
- private:
-  uint m_size;
-  uint m_alignment;
-  uintptr_t m_alignment_mask;
-  bool m_is_trivially_destructible;
-
-  ConstructDefaultF m_construct_default;
-  ConstructDefaultNF m_construct_default_n;
-  ConstructDefaultIndicesF m_construct_default_indices;
-
-  DestructF m_destruct;
-  DestructNF m_destruct_n;
-  DestructIndicesF m_destruct_indices;
-
-  CopyToInitializedF m_copy_to_initialized;
-  CopyToInitializedNF m_copy_to_initialized_n;
-  CopyToInitializedIndicesF m_copy_to_initialized_indices;
-
-  CopyToUninitializedF m_copy_to_uninitialized;
-  CopyToUninitializedNF m_copy_to_uninitialized_n;
-  CopyToUninitializedIndicesF m_copy_to_uninitialized_indices;
-
-  RelocateToInitializedF m_relocate_to_initialized;
-  RelocateToInitializedNF m_relocate_to_initialized_n;
-  RelocateToInitializedIndicesF m_relocate_to_initialized_indices;
-
-  RelocateToUninitializedF m_relocate_to_uninitialized;
-  RelocateToUninitializedNF m_relocate_to_uninitialized_n;
-  RelocateToUninitializedIndicesF m_relocate_to_uninitialized_indices;
-
-  FillInitializedF m_fill_initialized;
-  FillInitializedIndicesF m_fill_initialized_indices;
-
-  FillUninitializedF m_fill_uninitialized;
-  FillUninitializedIndicesF m_fill_uninitialized_indices;
-
-  const void *m_default_value;
-  std::string m_name;
 };
 
 /* --------------------------------------------------------------------
  * Utility for creating CPPType instances for C++ types.
  */
 
-namespace CPPTypeUtil {
+namespace cpp_type_util {
 
 template<typename T> void construct_default_cb(void *ptr)
 {
   new (ptr) T;
 }
-template<typename T> void construct_default_n_cb(void *ptr, uint n)
+template<typename T> void construct_default_n_cb(void *ptr, int64_t n)
 {
   blender::default_construct_n((T *)ptr, n);
 }
-template<typename T> void construct_default_indices_cb(void *ptr, IndexMask index_mask)
+template<typename T> void construct_default_indices_cb(void *ptr, IndexMask mask)
 {
-  index_mask.foreach_index([&](uint i) { new ((T *)ptr + i) T; });
+  mask.foreach_index([&](int64_t i) { new ((T *)ptr + i) T; });
 }
 
 template<typename T> void destruct_cb(void *ptr)
 {
   ((T *)ptr)->~T();
 }
-template<typename T> void destruct_n_cb(void *ptr, uint n)
+template<typename T> void destruct_n_cb(void *ptr, int64_t n)
 {
   blender::destruct_n((T *)ptr, n);
 }
-template<typename T> void destruct_indices_cb(void *ptr, IndexMask index_mask)
+template<typename T> void destruct_indices_cb(void *ptr, IndexMask mask)
 {
   T *ptr_ = (T *)ptr;
-  index_mask.foreach_index([&](uint i) { ptr_[i].~T(); });
+  mask.foreach_index([&](int64_t i) { ptr_[i].~T(); });
 }
 
 template<typename T> void copy_to_initialized_cb(const void *src, void *dst)
 {
   *(T *)dst = *(T *)src;
 }
-template<typename T> void copy_to_initialized_n_cb(const void *src, void *dst, uint n)
+template<typename T> void copy_to_initialized_n_cb(const void *src, void *dst, int64_t n)
 {
   const T *src_ = (const T *)src;
   T *dst_ = (T *)dst;
 
-  for (uint i = 0; i < n; i++) {
+  for (int64_t i = 0; i < n; i++) {
     dst_[i] = src_[i];
   }
 }
 template<typename T>
-void copy_to_initialized_indices_cb(const void *src, void *dst, IndexMask index_mask)
+void copy_to_initialized_indices_cb(const void *src, void *dst, IndexMask mask)
 {
   const T *src_ = (const T *)src;
   T *dst_ = (T *)dst;
 
-  index_mask.foreach_index([&](uint i) { dst_[i] = src_[i]; });
+  mask.foreach_index([&](int64_t i) { dst_[i] = src_[i]; });
 }
 
 template<typename T> void copy_to_uninitialized_cb(const void *src, void *dst)
 {
   blender::uninitialized_copy_n((T *)src, 1, (T *)dst);
 }
-template<typename T> void copy_to_uninitialized_n_cb(const void *src, void *dst, uint n)
+template<typename T> void copy_to_uninitialized_n_cb(const void *src, void *dst, int64_t n)
 {
   blender::uninitialized_copy_n((T *)src, n, (T *)dst);
 }
 template<typename T>
-void copy_to_uninitialized_indices_cb(const void *src, void *dst, IndexMask index_mask)
+void copy_to_uninitialized_indices_cb(const void *src, void *dst, IndexMask mask)
 {
   const T *src_ = (const T *)src;
   T *dst_ = (T *)dst;
 
-  index_mask.foreach_index([&](uint i) { new (dst_ + i) T(src_[i]); });
+  mask.foreach_index([&](int64_t i) { new (dst_ + i) T(src_[i]); });
 }
 
 template<typename T> void relocate_to_initialized_cb(void *src, void *dst)
@@ -607,17 +653,16 @@ template<typename T> void relocate_to_initialized_cb(void *src, void *dst)
   *dst_ = std::move(*src_);
   src_->~T();
 }
-template<typename T> void relocate_to_initialized_n_cb(void *src, void *dst, uint n)
+template<typename T> void relocate_to_initialized_n_cb(void *src, void *dst, int64_t n)
 {
   blender::initialized_relocate_n((T *)src, n, (T *)dst);
 }
-template<typename T>
-void relocate_to_initialized_indices_cb(void *src, void *dst, IndexMask index_mask)
+template<typename T> void relocate_to_initialized_indices_cb(void *src, void *dst, IndexMask mask)
 {
   T *src_ = (T *)src;
   T *dst_ = (T *)dst;
 
-  index_mask.foreach_index([&](uint i) {
+  mask.foreach_index([&](int64_t i) {
     dst_[i] = std::move(src_[i]);
     src_[i].~T();
   });
@@ -631,68 +676,86 @@ template<typename T> void relocate_to_uninitialized_cb(void *src, void *dst)
   new (dst_) T(std::move(*src_));
   src_->~T();
 }
-template<typename T> void relocate_to_uninitialized_n_cb(void *src, void *dst, uint n)
+template<typename T> void relocate_to_uninitialized_n_cb(void *src, void *dst, int64_t n)
 {
   blender::uninitialized_relocate_n((T *)src, n, (T *)dst);
 }
 template<typename T>
-void relocate_to_uninitialized_indices_cb(void *src, void *dst, IndexMask index_mask)
+void relocate_to_uninitialized_indices_cb(void *src, void *dst, IndexMask mask)
 {
   T *src_ = (T *)src;
   T *dst_ = (T *)dst;
 
-  index_mask.foreach_index([&](uint i) {
+  mask.foreach_index([&](int64_t i) {
     new (dst_ + i) T(std::move(src_[i]));
     src_[i].~T();
   });
 }
 
-template<typename T> void fill_initialized_cb(const void *value, void *dst, uint n)
+template<typename T> void fill_initialized_cb(const void *value, void *dst, int64_t n)
 {
   const T &value_ = *(const T *)value;
   T *dst_ = (T *)dst;
 
-  for (uint i = 0; i < n; i++) {
+  for (int64_t i = 0; i < n; i++) {
     dst_[i] = value_;
   }
 }
-template<typename T>
-void fill_initialized_indices_cb(const void *value, void *dst, IndexMask index_mask)
+template<typename T> void fill_initialized_indices_cb(const void *value, void *dst, IndexMask mask)
 {
   const T &value_ = *(const T *)value;
   T *dst_ = (T *)dst;
 
-  index_mask.foreach_index([&](uint i) { dst_[i] = value_; });
+  mask.foreach_index([&](int64_t i) { dst_[i] = value_; });
 }
 
-template<typename T> void fill_uninitialized_cb(const void *value, void *dst, uint n)
+template<typename T> void fill_uninitialized_cb(const void *value, void *dst, int64_t n)
 {
   const T &value_ = *(const T *)value;
   T *dst_ = (T *)dst;
 
-  for (uint i = 0; i < n; i++) {
+  for (int64_t i = 0; i < n; i++) {
     new (dst_ + i) T(value_);
   }
 }
 template<typename T>
-void fill_uninitialized_indices_cb(const void *value, void *dst, IndexMask index_mask)
+void fill_uninitialized_indices_cb(const void *value, void *dst, IndexMask mask)
 {
   const T &value_ = *(const T *)value;
   T *dst_ = (T *)dst;
 
-  index_mask.foreach_index([&](uint i) { new (dst_ + i) T(value_); });
+  mask.foreach_index([&](int64_t i) { new (dst_ + i) T(value_); });
 }
 
-}  // namespace CPPTypeUtil
+template<typename T> void debug_print_cb(const void *value, std::stringstream &ss)
+{
+  const T &value_ = *(const T *)value;
+  ss << value_;
+}
+
+template<typename T> bool is_equal_cb(const void *a, const void *b)
+{
+  const T &a_ = *(T *)a;
+  const T &b_ = *(T *)b;
+  return a_ == b_;
+}
+
+template<typename T> uint64_t hash_cb(const void *value)
+{
+  const T &value_ = *(const T *)value;
+  return DefaultHash<T>{}(value_);
+}
+
+}  // namespace cpp_type_util
 
 template<typename T>
-static std::unique_ptr<const CPPType> create_cpp_type(StringRef name, const T &default_value)
+inline std::unique_ptr<const CPPType> create_cpp_type(StringRef name, const T &default_value)
 {
-  using namespace CPPTypeUtil;
+  using namespace cpp_type_util;
   const CPPType *type = new CPPType(name,
                                     sizeof(T),
                                     alignof(T),
-                                    std::is_trivially_destructible<T>::value,
+                                    std::is_trivially_destructible_v<T>,
                                     construct_default_cb<T>,
                                     construct_default_n_cb<T>,
                                     construct_default_indices_cb<T>,
@@ -715,21 +778,22 @@ static std::unique_ptr<const CPPType> create_cpp_type(StringRef name, const T &d
                                     fill_initialized_indices_cb<T>,
                                     fill_uninitialized_cb<T>,
                                     fill_uninitialized_indices_cb<T>,
+                                    debug_print_cb<T>,
+                                    is_equal_cb<T>,
+                                    hash_cb<T>,
                                     (const void *)&default_value);
   return std::unique_ptr<const CPPType>(type);
 }
 
-}  // namespace FN
-}  // namespace blender
+}  // namespace blender::fn
 
 #define MAKE_CPP_TYPE(IDENTIFIER, TYPE_NAME) \
-  static TYPE_NAME default_value_##IDENTIFIER; \
-  static std::unique_ptr<const blender::FN::CPPType> CPPTYPE_##IDENTIFIER##_owner = \
-      blender::FN::create_cpp_type<TYPE_NAME>(STRINGIFY(IDENTIFIER), default_value_##IDENTIFIER); \
-  const blender::FN::CPPType &CPPType_##IDENTIFIER = *CPPTYPE_##IDENTIFIER##_owner; \
-  template<> const blender::FN::CPPType &blender::FN::CPPType::get<TYPE_NAME>() \
+  template<> const blender::fn::CPPType &blender::fn::CPPType::get<TYPE_NAME>() \
   { \
-    return CPPType_##IDENTIFIER; \
+    static TYPE_NAME default_value; \
+    static std::unique_ptr<const CPPType> cpp_type = blender::fn::create_cpp_type<TYPE_NAME>( \
+        STRINGIFY(IDENTIFIER), default_value); \
+    return *cpp_type; \
   }
 
 #endif /* __FN_CPP_TYPE_HH__ */

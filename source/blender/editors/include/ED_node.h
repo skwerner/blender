@@ -31,7 +31,6 @@ extern "C" {
 struct ID;
 struct Main;
 struct Scene;
-struct Scene;
 struct ScrArea;
 struct Tex;
 struct View2D;
@@ -39,7 +38,6 @@ struct bContext;
 struct bNode;
 struct bNodeSocket;
 struct bNodeSocketType;
-struct bNodeTree;
 struct bNodeTree;
 struct bNodeTreeType;
 struct bNodeType;
@@ -123,7 +121,7 @@ void ED_operatormacros_node(void);
 bool ED_space_node_color_sample(struct Main *bmain,
                                 struct SpaceNode *snode,
                                 struct ARegion *region,
-                                int mval[2],
+                                const int mval[2],
                                 float r_col[3]);
 
 #ifdef __cplusplus

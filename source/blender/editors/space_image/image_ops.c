@@ -198,11 +198,10 @@ static Image *image_from_context(const bContext *C)
   if (ima) {
     return ima;
   }
-  else {
-    /* Image editor. */
-    SpaceImage *sima = CTX_wm_space_image(C);
-    return (sima) ? sima->image : NULL;
-  }
+
+  /* Image editor. */
+  SpaceImage *sima = CTX_wm_space_image(C);
+  return (sima) ? sima->image : NULL;
 }
 
 static ImageUser *image_user_from_context(const bContext *C)
@@ -214,11 +213,10 @@ static ImageUser *image_user_from_context(const bContext *C)
   if (iuser) {
     return iuser;
   }
-  else {
-    /* Image editor. */
-    SpaceImage *sima = CTX_wm_space_image(C);
-    return (sima) ? &sima->iuser : NULL;
-  }
+
+  /* Image editor. */
+  SpaceImage *sima = CTX_wm_space_image(C);
+  return (sima) ? &sima->iuser : NULL;
 }
 
 static bool image_from_context_has_data_poll(bContext *C)
@@ -359,10 +357,9 @@ static int image_view_pan_invoke(bContext *C, wmOperator *op, const wmEvent *eve
     image_view_pan_exec(C, op);
     return OPERATOR_FINISHED;
   }
-  else {
-    image_view_pan_init(C, op, event);
-    return OPERATOR_RUNNING_MODAL;
-  }
+
+  image_view_pan_init(C, op, event);
+  return OPERATOR_RUNNING_MODAL;
 }
 
 static int image_view_pan_modal(bContext *C, wmOperator *op, const wmEvent *event)
@@ -549,10 +546,9 @@ static int image_view_zoom_invoke(bContext *C, wmOperator *op, const wmEvent *ev
 
     return OPERATOR_FINISHED;
   }
-  else {
-    image_view_zoom_init(C, op, event);
-    return OPERATOR_RUNNING_MODAL;
-  }
+
+  image_view_zoom_init(C, op, event);
+  return OPERATOR_RUNNING_MODAL;
 }
 
 static void image_zoom_apply(ViewZoomData *vpd,
@@ -697,27 +693,26 @@ static int image_view_ndof_invoke(bContext *C, wmOperator *UNUSED(op), const wmE
   if (event->type != NDOF_MOTION) {
     return OPERATOR_CANCELLED;
   }
-  else {
-    SpaceImage *sima = CTX_wm_space_image(C);
-    ARegion *region = CTX_wm_region(C);
-    float pan_vec[3];
 
-    const wmNDOFMotionData *ndof = event->customdata;
-    const float speed = NDOF_PIXELS_PER_SECOND;
+  SpaceImage *sima = CTX_wm_space_image(C);
+  ARegion *region = CTX_wm_region(C);
+  float pan_vec[3];
 
-    WM_event_ndof_pan_get(ndof, pan_vec, true);
+  const wmNDOFMotionData *ndof = event->customdata;
+  const float speed = NDOF_PIXELS_PER_SECOND;
 
-    mul_v2_fl(pan_vec, (speed * ndof->dt) / sima->zoom);
-    pan_vec[2] *= -ndof->dt;
+  WM_event_ndof_pan_get(ndof, pan_vec, true);
 
-    sima_zoom_set_factor(sima, region, 1.0f + pan_vec[2], NULL, false);
-    sima->xof += pan_vec[0];
-    sima->yof += pan_vec[1];
+  mul_v2_fl(pan_vec, (speed * ndof->dt) / sima->zoom);
+  pan_vec[2] *= -ndof->dt;
 
-    ED_region_tag_redraw(region);
+  sima_zoom_set_factor(sima, region, 1.0f + pan_vec[2], NULL, false);
+  sima->xof += pan_vec[0];
+  sima->yof += pan_vec[1];
 
-    return OPERATOR_FINISHED;
-  }
+  ED_region_tag_redraw(region);
+
+  return OPERATOR_FINISHED;
 }
 
 void IMAGE_OT_view_ndof(wmOperatorType *ot)
@@ -1237,7 +1232,7 @@ static Image *image_open_single(Main *bmain,
   if (!exists) {
     /* only image path after save, never ibuf */
     if (is_relative_path) {
-      BLI_path_rel(ima->name, relbase);
+      BLI_path_rel(ima->filepath, relbase);
     }
 
     /* handle multiview images */
@@ -1417,7 +1412,7 @@ static int image_open_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(
   }
 
   if (ima) {
-    path = ima->name;
+    path = ima->filepath;
   }
 
   if (RNA_struct_property_is_set(op->ptr, "filepath")) {
@@ -1577,7 +1572,7 @@ static int image_replace_exec(bContext *C, wmOperator *op)
   RNA_string_get(op->ptr, "filepath", str);
 
   /* we cant do much if the str is longer then FILE_MAX :/ */
-  BLI_strncpy(sima->image->name, str, sizeof(sima->image->name));
+  BLI_strncpy(sima->image->filepath, str, sizeof(sima->image->filepath));
 
   if (sima->image->source == IMA_SRC_GENERATED) {
     sima->image->source = IMA_SRC_FILE;
@@ -1614,10 +1609,10 @@ static int image_replace_invoke(bContext *C, wmOperator *op, const wmEvent *UNUS
   }
 
   if (!RNA_struct_property_is_set(op->ptr, "relative_path")) {
-    RNA_boolean_set(op->ptr, "relative_path", BLI_path_is_rel(sima->image->name));
+    RNA_boolean_set(op->ptr, "relative_path", BLI_path_is_rel(sima->image->filepath));
   }
 
-  image_filesel(C, op, sima->image->name);
+  image_filesel(C, op, sima->image->filepath);
 
   return OPERATOR_RUNNING_MODAL;
 }
@@ -1678,24 +1673,23 @@ static char imtype_best_depth(ImBuf *ibuf, const char imtype)
     }
     return R_IMF_CHAN_DEPTH_8;
   }
-  else {
-    if (depth_ok & R_IMF_CHAN_DEPTH_8) {
-      return R_IMF_CHAN_DEPTH_8;
-    }
-    if (depth_ok & R_IMF_CHAN_DEPTH_12) {
-      return R_IMF_CHAN_DEPTH_12;
-    }
-    if (depth_ok & R_IMF_CHAN_DEPTH_16) {
-      return R_IMF_CHAN_DEPTH_16;
-    }
-    if (depth_ok & R_IMF_CHAN_DEPTH_24) {
-      return R_IMF_CHAN_DEPTH_24;
-    }
-    if (depth_ok & R_IMF_CHAN_DEPTH_32) {
-      return R_IMF_CHAN_DEPTH_32;
-    }
-    return R_IMF_CHAN_DEPTH_8; /* fallback, should not get here */
+
+  if (depth_ok & R_IMF_CHAN_DEPTH_8) {
+    return R_IMF_CHAN_DEPTH_8;
   }
+  if (depth_ok & R_IMF_CHAN_DEPTH_12) {
+    return R_IMF_CHAN_DEPTH_12;
+  }
+  if (depth_ok & R_IMF_CHAN_DEPTH_16) {
+    return R_IMF_CHAN_DEPTH_16;
+  }
+  if (depth_ok & R_IMF_CHAN_DEPTH_24) {
+    return R_IMF_CHAN_DEPTH_24;
+  }
+  if (depth_ok & R_IMF_CHAN_DEPTH_32) {
+    return R_IMF_CHAN_DEPTH_32;
+  }
+  return R_IMF_CHAN_DEPTH_8; /* fallback, should not get here */
 }
 
 static int image_save_options_init(Main *bmain,
@@ -1777,7 +1771,7 @@ static int image_save_options_init(Main *bmain,
 
       /* append UDIM numbering if not present */
       if (ima->source == IMA_SRC_TILED &&
-          (BLI_path_sequence_decode(ima->name, NULL, NULL, NULL) != 1001)) {
+          (BLI_path_sequence_decode(ima->filepath, NULL, NULL, NULL) != 1001)) {
         int len = strlen(opts->filepath);
         STR_CONCAT(opts->filepath, len, ".1001");
       }
@@ -2147,9 +2141,8 @@ static int image_save_exec(bContext *C, wmOperator *op)
   if (ok) {
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+
+  return OPERATOR_CANCELLED;
 }
 
 static int image_save_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
@@ -2160,9 +2153,7 @@ static int image_save_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(
     WM_operator_name_call(C, "IMAGE_OT_save_as", WM_OP_INVOKE_DEFAULT, NULL);
     return OPERATOR_CANCELLED;
   }
-  else {
-    return image_save_exec(C, op);
-  }
+  return image_save_exec(C, op);
 }
 
 void IMAGE_OT_save(wmOperatorType *ot)
@@ -2294,14 +2285,12 @@ static bool image_should_be_saved(Image *ima, bool *is_format_writable)
       ELEM(ima->source, IMA_SRC_FILE, IMA_SRC_GENERATED, IMA_SRC_TILED)) {
     return image_should_be_saved_when_modified(ima);
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 static bool image_has_valid_path(Image *ima)
 {
-  return strchr(ima->name, '\\') || strchr(ima->name, '/');
+  return strchr(ima->filepath, '\\') || strchr(ima->filepath, '/');
 }
 
 bool ED_image_should_save_modified(const Main *bmain)
@@ -2336,7 +2325,7 @@ int ED_image_save_all_modified_info(const Main *bmain, ReportList *reports)
                       RPT_WARNING,
                       "Packed library image can't be saved: \"%s\" from \"%s\"",
                       ima->id.name + 2,
-                      ima->id.lib->name);
+                      ima->id.lib->filepath);
         }
       }
       else if (!is_format_writable) {
@@ -2348,19 +2337,21 @@ int ED_image_save_all_modified_info(const Main *bmain, ReportList *reports)
       else {
         if (image_has_valid_path(ima)) {
           num_saveable_images++;
-          if (BLI_gset_haskey(unique_paths, ima->name)) {
+          if (BLI_gset_haskey(unique_paths, ima->filepath)) {
             BKE_reportf(reports,
                         RPT_WARNING,
                         "Multiple images can't be saved to an identical path: \"%s\"",
-                        ima->name);
+                        ima->filepath);
           }
           else {
-            BLI_gset_insert(unique_paths, BLI_strdup(ima->name));
+            BLI_gset_insert(unique_paths, BLI_strdup(ima->filepath));
           }
         }
         else {
-          BKE_reportf(
-              reports, RPT_WARNING, "Image can't be saved, no valid file path: \"%s\"", ima->name);
+          BKE_reportf(reports,
+                      RPT_WARNING,
+                      "Image can't be saved, no valid file path: \"%s\"",
+                      ima->filepath);
         }
       }
     }
@@ -3044,7 +3035,7 @@ static int image_unpack_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSE
   unpack_menu(C,
               "IMAGE_OT_unpack",
               ima->id.name + 2,
-              ima->name,
+              ima->filepath,
               "textures",
               BKE_image_has_packedfile(ima) ?
                   ((ImagePackedFile *)ima->packedfiles.first)->packedfile :

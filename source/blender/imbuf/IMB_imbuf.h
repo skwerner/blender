@@ -291,7 +291,7 @@ void IMB_rectblend_threaded(struct ImBuf *dbuf,
  */
 
 typedef enum IMB_Timecode_Type {
-  /** Don't use timecode files at all. */
+  /** Don't use time-code files at all. */
   IMB_TC_NONE = 0,
   /** use images in the order as they are recorded
    * (currently, this is the only one implemented
@@ -318,7 +318,7 @@ typedef enum IMB_Proxy_Size {
   IMB_PROXY_MAX_SLOT = 4,
 } IMB_Proxy_Size;
 
-/* defaults to BL_proxy within the directory of the animation */
+/* Defaults to BL_proxy within the directory of the animation. */
 void IMB_anim_set_index_dir(struct anim *anim, const char *dir);
 void IMB_anim_get_fname(struct anim *anim, char *file, int size);
 
@@ -328,7 +328,7 @@ IMB_Proxy_Size IMB_anim_proxy_get_existing(struct anim *anim);
 
 struct IndexBuildContext;
 
-/* prepare context for proxies/imecodes builder */
+/* Prepare context for proxies/time-codes builder. */
 struct IndexBuildContext *IMB_anim_index_rebuild_context(struct anim *anim,
                                                          IMB_Timecode_Type tcs_in_use,
                                                          IMB_Proxy_Size proxy_sizes_in_use,
@@ -336,13 +336,13 @@ struct IndexBuildContext *IMB_anim_index_rebuild_context(struct anim *anim,
                                                          const bool overwrite,
                                                          struct GSet *file_list);
 
-/* will rebuild all used indices and proxies at once */
+/* Will rebuild all used indices and proxies at once. */
 void IMB_anim_index_rebuild(struct IndexBuildContext *context,
                             short *stop,
                             short *do_update,
                             float *progress);
 
-/* finish rebuilding proxises/timecodes and free temporary contexts used */
+/* Finish rebuilding proxies/time-codes and free temporary contexts used. */
 void IMB_anim_index_rebuild_finish(struct IndexBuildContext *context, short stop);
 
 /**
@@ -367,6 +367,7 @@ struct anim *IMB_open_anim(const char *name,
 void IMB_suffix_anim(struct anim *anim, const char *suffix);
 void IMB_close_anim(struct anim *anim);
 void IMB_close_anim_proxies(struct anim *anim);
+bool IMB_anim_can_produce_frames(const struct anim *anim);
 
 /**
  *
@@ -390,7 +391,7 @@ struct ImBuf *IMB_anim_absolute(struct anim *anim,
 /**
  *
  * \attention Defined in anim_movie.c
- * fetches a define previewframe, usually half way into the movie
+ * fetches a define preview-frame, usually half way into the movie.
  */
 struct ImBuf *IMB_anim_previewframe(struct anim *anim);
 
@@ -411,7 +412,7 @@ void IMB_free_anim(struct anim *anim);
 
 void IMB_filter(struct ImBuf *ibuf);
 void IMB_mask_filter_extend(char *mask, int width, int height);
-void IMB_mask_clear(struct ImBuf *ibuf, char *mask, int val);
+void IMB_mask_clear(struct ImBuf *ibuf, const char *mask, int val);
 void IMB_filter_extend(struct ImBuf *ibuf, char *mask, int filter);
 void IMB_makemipmap(struct ImBuf *ibuf, int use_filter);
 void IMB_remakemipmap(struct ImBuf *ibuf, int use_filter);
@@ -599,7 +600,7 @@ void bilinear_interpolation_color_wrap(
     struct ImBuf *in, unsigned char col[4], float col_float[4], float u, float v);
 
 void IMB_alpha_under_color_float(float *rect_float, int x, int y, float backcol[3]);
-void IMB_alpha_under_color_byte(unsigned char *rect, int x, int y, float backcol[3]);
+void IMB_alpha_under_color_byte(unsigned char *rect, int x, int y, const float backcol[3]);
 
 void IMB_sampleImageAtLocation(
     struct ImBuf *ibuf, float x, float y, bool make_linear_rgb, float color[4]);

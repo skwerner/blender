@@ -1724,6 +1724,13 @@ static BMO_FlagSet bmo_enum_bevel_offset_type[] = {
   {BEVEL_AMT_WIDTH, "WIDTH"},
   {BEVEL_AMT_DEPTH, "DEPTH"},
   {BEVEL_AMT_PERCENT, "PERCENT"},
+  {BEVEL_AMT_ABSOLUTE, "ABSOLUTE"},
+  {0, NULL},
+};
+
+static BMO_FlagSet bmo_enum_bevel_profile_type[] = {
+  {BEVEL_PROFILE_SUPERELLIPSE, "SUPERELLIPSE"},
+  {BEVEL_PROFILE_CUSTOM, "CUSTOM"},
   {0, NULL},
 };
 
@@ -1759,7 +1766,9 @@ static BMOpDefine bmo_bevel_def = {
   {{"geom", BMO_OP_SLOT_ELEMENT_BUF, {BM_VERT | BM_EDGE | BM_FACE}},     /* input edges and vertices */
    {"offset", BMO_OP_SLOT_FLT},           /* amount to offset beveled edge */
    {"offset_type", BMO_OP_SLOT_INT, {(int)BMO_OP_SLOT_SUBTYPE_INT_ENUM},
-    bmo_enum_bevel_offset_type}, /* how to measure the offset */
+    bmo_enum_bevel_offset_type},          /* how to measure the offset */
+   {"profile_type", BMO_OP_SLOT_INT, {(int)BMO_OP_SLOT_SUBTYPE_INT_ENUM},
+    bmo_enum_bevel_profile_type},      /* The profile type to use for bevel. */
    {"segments", BMO_OP_SLOT_INT},         /* number of segments in bevel */
    {"profile", BMO_OP_SLOT_FLT},          /* profile shape, 0->1 (.5=>round) */
    {"vertex_only", BMO_OP_SLOT_BOOL},     /* only bevel vertices, not edges */
@@ -1777,9 +1786,7 @@ static BMOpDefine bmo_bevel_def = {
     bmo_enum_bevel_miter_type},           /* outer miter kind */
    {"spread", BMO_OP_SLOT_FLT},           /* amount to offset beveled edge */
    {"smoothresh", BMO_OP_SLOT_FLT},       /* for passing mesh's smoothresh, used in hardening */
-   {"use_custom_profile", BMO_OP_SLOT_BOOL}, /* Whether to use custom profile feature */
-   /* the ProfileWiget struct for the custom profile shape */
-   {"custom_profile", BMO_OP_SLOT_PTR, {(int)BMO_OP_SLOT_SUBTYPE_PTR_STRUCT}},
+   {"custom_profile", BMO_OP_SLOT_PTR, {(int)BMO_OP_SLOT_SUBTYPE_PTR_STRUCT}}, /* CurveProfile */
    {"vmesh_method", BMO_OP_SLOT_INT, {(int)BMO_OP_SLOT_SUBTYPE_INT_ENUM},
     bmo_enum_bevel_vmesh_method},
    {{'\0'}},

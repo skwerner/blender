@@ -135,7 +135,7 @@ static void region_draw_emboss(const ARegion *region, const rcti *scirct, int si
   immUnbindProgram();
 
   GPU_blend(false);
-  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  GPU_blend_set_func(GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA);
 }
 
 void ED_region_pixelspace(ARegion *region)
@@ -357,12 +357,12 @@ static void region_draw_status_text(ScrArea *area, ARegion *region)
   bool overlap = ED_region_is_overlap(area->spacetype, region->regiontype);
 
   if (overlap) {
-    GPU_clear_color(0.0, 0.0, 0.0, 0.0);
-    glClear(GL_COLOR_BUFFER_BIT);
+    GPU_clear_color(0.0f, 0.0f, 0.0f, 0.0f);
+    GPU_clear(GPU_COLOR_BIT);
   }
   else {
     UI_ThemeClearColor(TH_HEADER);
-    glClear(GL_COLOR_BUFFER_BIT);
+    GPU_clear(GPU_COLOR_BIT);
   }
 
   int fontid = BLF_set_default();
@@ -527,11 +527,11 @@ void ED_region_do_draw(bContext *C, ARegion *region)
 
   if (area && area_is_pseudo_minimized(area)) {
     UI_ThemeClearColor(TH_EDITOR_OUTLINE);
-    glClear(GL_COLOR_BUFFER_BIT);
+    GPU_clear(GPU_COLOR_BIT);
     return;
   }
   /* optional header info instead? */
-  else if (region->headerstr) {
+  if (region->headerstr) {
     region_draw_status_text(area, region);
   }
   else if (at->draw) {
@@ -646,7 +646,7 @@ void ED_region_tag_redraw(ARegion *region)
 void ED_region_tag_redraw_cursor(ARegion *region)
 {
   if (region) {
-    region->do_draw_overlay = RGN_DRAW;
+    region->do_draw_paintcursor = RGN_DRAW;
   }
 }
 
@@ -1128,9 +1128,8 @@ static int rct_fits(const rcti *rect, char dir, int size)
   if (dir == 'h') {
     return BLI_rcti_size_x(rect) + 1 - size;
   }
-  else { /* 'v' */
-    return BLI_rcti_size_y(rect) + 1 - size;
-  }
+  /* 'v' */
+  return BLI_rcti_size_y(rect) + 1 - size;
 }
 
 /* *************************************************************** */
@@ -1145,7 +1144,7 @@ static void region_overlap_fix(ScrArea *area, ARegion *region)
 
   /* find overlapping previous region on same place */
   for (ar1 = region->prev; ar1; ar1 = ar1->prev) {
-    if (ar1->flag & (RGN_FLAG_HIDDEN)) {
+    if (ar1->flag & RGN_FLAG_HIDDEN) {
       continue;
     }
 
@@ -1176,25 +1175,21 @@ static void region_overlap_fix(ScrArea *area, ARegion *region)
         region->flag |= RGN_FLAG_TOO_SMALL;
         return;
       }
-      else {
-        BLI_rcti_translate(&region->winrct, ar1->winx, 0);
-      }
+      BLI_rcti_translate(&region->winrct, ar1->winx, 0);
     }
     else if (align1 == RGN_ALIGN_RIGHT) {
       if (region->winrct.xmin - ar1->winx < U.widget_unit) {
         region->flag |= RGN_FLAG_TOO_SMALL;
         return;
       }
-      else {
-        BLI_rcti_translate(&region->winrct, -ar1->winx, 0);
-      }
+      BLI_rcti_translate(&region->winrct, -ar1->winx, 0);
     }
   }
 
   /* At this point, 'region' is in its final position and still open.
    * Make a final check it does not overlap any previous 'other side' region. */
   for (ar1 = region->prev; ar1; ar1 = ar1->prev) {
-    if (ar1->flag & (RGN_FLAG_HIDDEN)) {
+    if (ar1->flag & RGN_FLAG_HIDDEN) {
       continue;
     }
     if (ELEM(ar1->alignment, RGN_ALIGN_FLOAT)) {
@@ -1556,7 +1551,14 @@ static void region_rect_recursive(
 
   /* Tag for redraw if size changes. */
   if (region->winx != prev_winx || region->winy != prev_winy) {
-    ED_region_tag_redraw(region);
+    /* 3D View needs a full rebuild in case a progressive render runs. Rest can live with
+     * no-rebuild (e.g. Outliner) */
+    if (area->spacetype == SPACE_VIEW3D) {
+      ED_region_tag_redraw(region);
+    }
+    else {
+      ED_region_tag_redraw_no_rebuild(region);
+    }
   }
 
   /* Clear, initialize on demand. */
@@ -2348,9 +2350,9 @@ BLI_INLINE bool streq_array_any(const char *s, const char *arr[])
 /**
  * Builds the panel layout for the input \a panel or type \a pt.
  *
- * \param panel The panel to draw. Can be null, in which case a panel with the type of \a pt will
- * be created.
- * \param unique_panel_str A unique identifier for the name of the \a uiBlock associated with the
+ * \param panel: The panel to draw. Can be null,
+ * in which case a panel with the type of \a pt will be created.
+ * \param unique_panel_str: A unique identifier for the name of the \a uiBlock associated with the
  * panel. Used when the panel is an instanced panel so a unique identifier is needed to find the
  * correct old \a uiBlock, and NULL otherwise.
  */
@@ -2566,16 +2568,16 @@ void ED_region_panels_layout_ex(const bContext *C,
     /* only allow scrolling in vertical direction */
     v2d->keepofs |= V2D_LOCKOFS_X | V2D_KEEPOFS_Y;
     v2d->keepofs &= ~(V2D_LOCKOFS_Y | V2D_KEEPOFS_X);
-    v2d->scroll &= ~(V2D_SCROLL_BOTTOM);
-    v2d->scroll |= (V2D_SCROLL_RIGHT);
+    v2d->scroll &= ~V2D_SCROLL_BOTTOM;
+    v2d->scroll |= V2D_SCROLL_RIGHT;
   }
   else {
     /* for now, allow scrolling in both directions (since layouts are optimized for vertical,
      * they often don't fit in horizontal layout)
      */
     v2d->keepofs &= ~(V2D_LOCKOFS_X | V2D_LOCKOFS_Y | V2D_KEEPOFS_X | V2D_KEEPOFS_Y);
-    v2d->scroll |= (V2D_SCROLL_BOTTOM);
-    v2d->scroll &= ~(V2D_SCROLL_RIGHT);
+    v2d->scroll |= V2D_SCROLL_BOTTOM;
+    v2d->scroll &= ~V2D_SCROLL_RIGHT;
   }
 
   /* collect categories */
@@ -2788,9 +2790,7 @@ void ED_region_panels_draw(const bContext *C, ARegion *region)
     mask_buf.xmax -= UI_PANEL_CATEGORY_MARGIN_WIDTH;
     mask = &mask_buf;
   }
-  View2DScrollers *scrollers = UI_view2d_scrollers_calc(v2d, mask);
-  UI_view2d_scrollers_draw(v2d, scrollers);
-  UI_view2d_scrollers_free(scrollers);
+  UI_view2d_scrollers_draw(v2d, mask);
 }
 
 void ED_region_panels_ex(
@@ -3009,7 +3009,7 @@ ScrArea *ED_screen_areas_iter_first(const wmWindow *win, const bScreen *screen)
   if (!global_area) {
     return screen->areabase.first;
   }
-  else if ((global_area->global->flag & GLOBAL_AREA_IS_HIDDEN) == 0) {
+  if ((global_area->global->flag & GLOBAL_AREA_IS_HIDDEN) == 0) {
     return global_area;
   }
   /* Find next visible area. */

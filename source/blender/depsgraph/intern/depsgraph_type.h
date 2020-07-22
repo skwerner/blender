@@ -50,20 +50,13 @@ struct Depsgraph;
 
 struct CustomData_MeshMasks;
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 /* Commonly used types. */
-using blender::Map;
-using blender::Set;
-using blender::Span;
-using blender::StringRef;
-using blender::StringRefNull;
-using blender::Vector;
-using blender::VectorSet;
 using std::deque;
-using std::map;
+using std::optional;
 using std::pair;
-using std::set;
 using std::string;
 using std::unique_ptr;
 
@@ -176,4 +169,5 @@ struct DEGCustomDataMeshMasks {
   }
 };
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

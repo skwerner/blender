@@ -191,7 +191,14 @@ static int outliner_item_openclose_modal(bContext *C, wmOperator *op, const wmEv
       /* Only toggle openclose on the same level as the first clicked element */
       if (te->xs == data->x_location) {
         outliner_item_openclose(te, data->open, false);
-        ED_region_tag_redraw(region);
+
+        /* Avoid rebuild if possible. */
+        if (outliner_element_needs_rebuild_on_open_change(TREESTORE(te))) {
+          ED_region_tag_redraw(region);
+        }
+        else {
+          ED_region_tag_redraw_no_rebuild(region);
+        }
       }
     }
 
@@ -231,7 +238,13 @@ static int outliner_item_openclose_invoke(bContext *C, wmOperator *op, const wmE
                       (toggle_all && (outliner_flag_is_any_test(&te->subtree, TSE_CLOSED, 1)));
 
     outliner_item_openclose(te, open, toggle_all);
-    ED_region_tag_redraw(region);
+    /* Avoid rebuild if possible. */
+    if (outliner_element_needs_rebuild_on_open_change(TREESTORE(te))) {
+      ED_region_tag_redraw(region);
+    }
+    else {
+      ED_region_tag_redraw_no_rebuild(region);
+    }
 
     /* Only toggle once for single click toggling */
     if (event->type == LEFTMOUSE) {
@@ -487,14 +500,14 @@ static void id_delete(bContext *C, ReportList *reports, TreeElement *te, TreeSto
     BKE_reportf(reports, RPT_WARNING, "Cannot delete indirectly linked id '%s'", id->name);
     return;
   }
-  else if (BKE_library_ID_is_indirectly_used(bmain, id) && ID_REAL_USERS(id) <= 1) {
+  if (BKE_library_ID_is_indirectly_used(bmain, id) && ID_REAL_USERS(id) <= 1) {
     BKE_reportf(reports,
                 RPT_WARNING,
                 "Cannot delete id '%s', indirectly used data-blocks need at least one user",
                 id->name);
     return;
   }
-  else if (te->idcode == ID_WS) {
+  if (te->idcode == ID_WS) {
     BKE_workspace_id_tag_all_visible(bmain, LIB_TAG_DOIT);
     if (id->tag & LIB_TAG_DOIT) {
       BKE_reportf(
@@ -532,7 +545,7 @@ static int outliner_id_delete_invoke_do(bContext *C,
         BKE_reportf(reports,
                     RPT_ERROR_INVALID_INPUT,
                     "Cannot delete indirectly linked library '%s'",
-                    ((Library *)tselem->id)->filepath);
+                    ((Library *)tselem->id)->filepath_abs);
         return OPERATOR_CANCELLED;
       }
       id_delete(C, reports, te, tselem);
@@ -898,12 +911,13 @@ static int lib_relocate(
     Library *lib = (Library *)tselem->id;
     char dir[FILE_MAXDIR], filename[FILE_MAX];
 
-    BLI_split_dirfile(lib->filepath, dir, filename, sizeof(dir), sizeof(filename));
+    BLI_split_dirfile(lib->filepath_abs, dir, filename, sizeof(dir), sizeof(filename));
 
-    printf("%s, %s\n", tselem->id->name, lib->filepath);
+    printf("%s, %s\n", tselem->id->name, lib->filepath_abs);
 
-    /* We assume if both paths in lib are not the same then lib->name was relative... */
-    RNA_boolean_set(&op_props, "relative_path", BLI_path_cmp(lib->filepath, lib->name) != 0);
+    /* We assume if both paths in lib are not the same then `lib->filepath` was relative. */
+    RNA_boolean_set(
+        &op_props, "relative_path", BLI_path_cmp(lib->filepath_abs, lib->filepath) != 0);
 
     RNA_string_set(&op_props, "directory", dir);
     RNA_string_set(&op_props, "filename", filename);
@@ -930,15 +944,13 @@ static int outliner_lib_relocate_invoke_do(
         BKE_reportf(reports,
                     RPT_ERROR_INVALID_INPUT,
                     "Cannot relocate indirectly linked library '%s'",
-                    ((Library *)tselem->id)->filepath);
+                    ((Library *)tselem->id)->filepath_abs);
         return OPERATOR_CANCELLED;
       }
-      else {
-        wmOperatorType *ot = WM_operatortype_find(
-            reload ? "WM_OT_lib_reload" : "WM_OT_lib_relocate", false);
 
-        return lib_relocate(C, te, tselem, ot, reload);
-      }
+      wmOperatorType *ot = WM_operatortype_find(reload ? "WM_OT_lib_reload" : "WM_OT_lib_relocate",
+                                                false);
+      return lib_relocate(C, te, tselem, ot, reload);
     }
   }
   else {
@@ -1463,7 +1475,7 @@ void OUTLINER_OT_scroll_page(wmOperatorType *ot)
 
 /** \} */
 
-#if 0  // TODO: probably obsolete now with filtering?
+#if 0 /* TODO: probably obsolete now with filtering? */
 
 /* -------------------------------------------------------------------- */
 /** \name Search
@@ -1507,7 +1519,7 @@ static TreeElement *outliner_find_name(
 static void outliner_find_panel(
     Scene *UNUSED(scene), ARegion *region, SpaceOutliner *soops, int again, int flags)
 {
-  ReportList *reports = NULL;  // CTX_wm_reports(C);
+  ReportList *reports = NULL;  /* CTX_wm_reports(C); */
   TreeElement *te = NULL;
   TreeElement *last_find;
   TreeStoreElem *tselem;
@@ -1534,10 +1546,10 @@ static void outliner_find_panel(
   else {
     /* pop up panel - no previous, or user didn't want search after previous */
     name[0] = '\0';
-    // XXX      if (sbutton(name, 0, sizeof(name) - 1, "Find: ") && name[0]) {
-    //          te = outliner_find_name(soops, &soops->tree, name, flags, NULL, &prevFound);
-    //      }
-    //      else return; /* XXX RETURN! XXX */
+    /* XXX      if (sbutton(name, 0, sizeof(name) - 1, "Find: ") && name[0]) { */
+    /*          te = outliner_find_name(soops, &soops->tree, name, flags, NULL, &prevFound); */
+    /*      } */
+    /*      else return; XXX RETURN! XXX */
   }
 
   /* do selection and reveal */
@@ -1752,7 +1764,7 @@ void OUTLINER_OT_show_hierarchy(wmOperatorType *ot)
 
   /* callbacks */
   ot->exec = outliner_show_hierarchy_exec;
-  ot->poll = ED_operator_outliner_active;  //  TODO: shouldn't be allowed in RNA views...
+  ot->poll = ED_operator_outliner_active; /* TODO: shouldn't be allowed in RNA views... */
 
   /* no undo or registry, UI option */
 }
@@ -2038,7 +2050,7 @@ static int outliner_drivers_addsel_exec(bContext *C, wmOperator *op)
   do_outliner_drivers_editop(soutliner, &soutliner->tree, op->reports, DRIVERS_EDITMODE_ADD);
 
   /* send notifiers */
-  WM_event_add_notifier(C, NC_ANIMATION | ND_FCURVES_ORDER, NULL);  // XXX
+  WM_event_add_notifier(C, NC_ANIMATION | ND_FCURVES_ORDER, NULL); /* XXX */
 
   return OPERATOR_FINISHED;
 }
@@ -2077,7 +2089,7 @@ static int outliner_drivers_deletesel_exec(bContext *C, wmOperator *op)
   do_outliner_drivers_editop(soutliner, &soutliner->tree, op->reports, DRIVERS_EDITMODE_REMOVE);
 
   /* send notifiers */
-  WM_event_add_notifier(C, ND_KEYS, NULL);  // XXX
+  WM_event_add_notifier(C, ND_KEYS, NULL); /* XXX */
 
   return OPERATOR_FINISHED;
 }
@@ -2114,8 +2126,8 @@ enum {
   KEYINGSET_EDITMODE_REMOVE,
 } /*eKeyingSet_EditModes*/;
 
-/* find the 'active' KeyingSet, and add if not found (if adding is allowed) */
-// TODO: should this be an API func?
+/* Find the 'active' KeyingSet, and add if not found (if adding is allowed). */
+/* TODO: should this be an API func? */
 static KeyingSet *verify_active_keyingset(Scene *scene, short add)
 {
   KeyingSet *ks = NULL;
@@ -2130,8 +2142,8 @@ static KeyingSet *verify_active_keyingset(Scene *scene, short add)
     ks = BLI_findlink(&scene->keyingsets, scene->active_keyingset - 1);
   }
 
-  /* add if none found */
-  // XXX the default settings have yet to evolve
+  /* Add if none found */
+  /* XXX the default settings have yet to evolve. */
   if ((add) && (ks == NULL)) {
     ks = BKE_keyingset_add(&scene->keyingsets, NULL, NULL, KEYINGSET_ABSOLUTE, 0);
     scene->active_keyingset = BLI_listbase_count(&scene->keyingsets);

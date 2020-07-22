@@ -697,7 +697,8 @@ static void draw_seq_text(View2D *v2d,
       str_len = 0;
     }
     else if (seq->sound) {
-      str_len = BLI_snprintf(str, sizeof(str), "%s: %s | %d", name, seq->sound->name, seq->len);
+      str_len = BLI_snprintf(
+          str, sizeof(str), "%s: %s | %d", name, seq->sound->filepath, seq->len);
     }
     else {
       str_len = BLI_snprintf(str, sizeof(str), "%s | %d", name, seq->len);
@@ -1449,8 +1450,11 @@ static void seq_prefetch_wm_notify(const bContext *C, Scene *scene)
   }
 }
 
-static void *sequencer_OCIO_transform_ibuf(
-    const bContext *C, ImBuf *ibuf, bool *r_glsl_used, int *r_format, int *r_type)
+static void *sequencer_OCIO_transform_ibuf(const bContext *C,
+                                           ImBuf *ibuf,
+                                           bool *r_glsl_used,
+                                           eGPUTextureFormat *r_format,
+                                           eGPUDataFormat *r_data)
 {
   void *display_buffer;
   void *cache_handle = NULL;
@@ -1459,29 +1463,31 @@ static void *sequencer_OCIO_transform_ibuf(
   force_fallback |= (ED_draw_imbuf_method(ibuf) != IMAGE_DRAW_METHOD_GLSL);
   force_fallback |= (ibuf->dither != 0.0f);
 
+  /* Default */
+  *r_format = GPU_RGBA8;
+  *r_data = GPU_DATA_UNSIGNED_BYTE;
+
   /* Fallback to CPU based color space conversion. */
   if (force_fallback) {
     *r_glsl_used = false;
-    *r_format = GL_RGBA;
-    *r_type = GL_UNSIGNED_BYTE;
     display_buffer = NULL;
   }
   else if (ibuf->rect_float) {
     display_buffer = ibuf->rect_float;
 
+    *r_data = GPU_DATA_FLOAT;
     if (ibuf->channels == 4) {
-      *r_format = GL_RGBA;
+      *r_format = GPU_RGBA16F;
     }
     else if (ibuf->channels == 3) {
-      *r_format = GL_RGB;
+      /* Alpha is implicitly 1. */
+      *r_format = GPU_RGB16F;
     }
     else {
       BLI_assert(!"Incompatible number of channels for float buffer in sequencer");
-      *r_format = GL_RGBA;
+      *r_format = GPU_RGBA16F;
       display_buffer = NULL;
     }
-
-    *r_type = GL_FLOAT;
 
     if (ibuf->float_colorspace) {
       *r_glsl_used = IMB_colormanagement_setup_glsl_draw_from_space_ctx(
@@ -1493,15 +1499,11 @@ static void *sequencer_OCIO_transform_ibuf(
   }
   else if (ibuf->rect) {
     display_buffer = ibuf->rect;
-    *r_format = GL_RGBA;
-    *r_type = GL_UNSIGNED_BYTE;
 
     *r_glsl_used = IMB_colormanagement_setup_glsl_draw_from_space_ctx(
         C, ibuf->rect_colorspace, ibuf->dither, false);
   }
   else {
-    *r_format = GL_RGBA;
-    *r_type = GL_UNSIGNED_BYTE;
     display_buffer = NULL;
   }
 
@@ -1509,8 +1511,6 @@ static void *sequencer_OCIO_transform_ibuf(
    * properly, in this case we fallback to CPU-based display transform. */
   if ((ibuf->rect || ibuf->rect_float) && !*r_glsl_used) {
     display_buffer = IMB_display_buffer_acquire_ctx(C, ibuf, &cache_handle);
-    *r_format = GL_RGBA;
-    *r_type = GL_UNSIGNED_BYTE;
   }
   if (cache_handle) {
     IMB_display_buffer_release(cache_handle);
@@ -1601,9 +1601,9 @@ static void sequencer_draw_display_buffer(const bContext *C,
 
   /* Format needs to be created prior to any immBindProgram call.
    * Do it here because OCIO binds it's own shader. */
-  int format, type;
+  eGPUTextureFormat format;
+  eGPUDataFormat data;
   bool glsl_used = false;
-  GLuint texid;
   GPUVertFormat *imm_format = immVertexFormat();
   uint pos = GPU_vertformat_attr_add(imm_format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
   uint texCoord = GPU_vertformat_attr_add(
@@ -1617,11 +1617,11 @@ static void sequencer_draw_display_buffer(const bContext *C,
     }
 
     display_buffer = (uchar *)ibuf->rect;
-    format = GL_RGBA;
-    type = GL_UNSIGNED_BYTE;
+    format = GPU_RGBA8;
+    data = GPU_DATA_UNSIGNED_BYTE;
   }
   else {
-    display_buffer = sequencer_OCIO_transform_ibuf(C, ibuf, &glsl_used, &format, &type);
+    display_buffer = sequencer_OCIO_transform_ibuf(C, ibuf, &glsl_used, &format, &data);
   }
 
   if (draw_backdrop) {
@@ -1631,18 +1631,11 @@ static void sequencer_draw_display_buffer(const bContext *C,
     GPU_matrix_identity_projection_set();
   }
 
-  glGenTextures(1, (GLuint *)&texid);
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, texid);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  GPUTexture *texture = GPU_texture_create_nD(
+      ibuf->x, ibuf->y, 0, 2, display_buffer, format, data, 0, false, NULL);
+  GPU_texture_filter_mode(texture, false);
 
-  if (type == GL_FLOAT) {
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, ibuf->x, ibuf->y, 0, format, type, display_buffer);
-  }
-  else {
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, ibuf->x, ibuf->y, 0, format, type, display_buffer);
-  }
+  GPU_texture_bind(texture, 0);
 
   if (!glsl_used) {
     immBindBuiltinProgram(GPU_SHADER_2D_IMAGE_COLOR);
@@ -1676,8 +1669,9 @@ static void sequencer_draw_display_buffer(const bContext *C,
   immVertex2f(pos, preview.xmax, preview.ymin);
 
   immEnd();
-  glBindTexture(GL_TEXTURE_2D, 0);
-  glDeleteTextures(1, &texid);
+
+  GPU_texture_unbind(texture);
+  GPU_texture_free(texture);
 
   if (!glsl_used) {
     immUnbindProgram();
@@ -1897,19 +1891,19 @@ static void draw_seq_strips(const bContext *C, Editing *ed, ARegion *region)
       if ((seq->flag & SELECT) != sel) {
         continue;
       }
-      else if (seq == last_seq && (last_seq->flag & SELECT)) {
+      if (seq == last_seq && (last_seq->flag & SELECT)) {
         continue;
       }
-      else if (min_ii(seq->startdisp, seq->start) > v2d->cur.xmax) {
+      if (min_ii(seq->startdisp, seq->start) > v2d->cur.xmax) {
         continue;
       }
-      else if (max_ii(seq->enddisp, seq->start + seq->len) < v2d->cur.xmin) {
+      if (max_ii(seq->enddisp, seq->start + seq->len) < v2d->cur.xmin) {
         continue;
       }
-      else if (seq->machine + 1.0f < v2d->cur.ymin) {
+      if (seq->machine + 1.0f < v2d->cur.ymin) {
         continue;
       }
-      else if (seq->machine > v2d->cur.ymax) {
+      if (seq->machine > v2d->cur.ymax) {
         continue;
       }
 
@@ -2257,7 +2251,6 @@ void draw_timeline_seq(const bContext *C, ARegion *region)
   Editing *ed = BKE_sequencer_editing_get(scene, false);
   SpaceSeq *sseq = CTX_wm_space_seq(C);
   View2D *v2d = &region->v2d;
-  View2DScrollers *scrollers;
   short cfra_flag = 0;
   float col[3];
 
@@ -2298,9 +2291,6 @@ void draw_timeline_seq(const bContext *C, ARegion *region)
   if ((sseq->flag & SEQ_DRAWFRAMES) == 0) {
     cfra_flag |= DRAWCFRA_UNIT_SECONDS;
   }
-
-  /* Draw the current frame indicator. */
-  ANIM_draw_cfra(C, v2d, cfra_flag);
 
   /* Draw overlap frame frame indicator. */
   if (scene->ed && scene->ed->over_flag & SEQ_EDIT_OVERLAY_SHOW) {
@@ -2345,9 +2335,6 @@ void draw_timeline_seq(const bContext *C, ARegion *region)
   ED_region_draw_cb_draw(C, region, REGION_DRAW_POST_VIEW);
   UI_view2d_view_restore(C);
   ED_time_scrub_draw(region, scene, !(sseq->flag & SEQ_DRAWFRAMES), true);
-  scrollers = UI_view2d_scrollers_calc(v2d, NULL);
-  UI_view2d_scrollers_draw(v2d, scrollers);
-  UI_view2d_scrollers_free(scrollers);
 
   /* Draw channel numbers. */
   {
@@ -2356,4 +2343,14 @@ void draw_timeline_seq(const bContext *C, ARegion *region)
         &rect, 0, 15 * UI_DPI_FAC, 15 * UI_DPI_FAC, region->winy - UI_TIME_SCRUB_MARGIN_Y);
     UI_view2d_draw_scale_y__block(region, v2d, &rect, TH_SCROLL_TEXT);
   }
+}
+
+void draw_timeline_seq_display(const bContext *C, ARegion *region)
+{
+  const Scene *scene = CTX_data_scene(C);
+  const SpaceSeq *sseq = CTX_wm_space_seq(C);
+  View2D *v2d = &region->v2d;
+
+  ED_time_scrub_draw_current_frame(region, scene, !(sseq->flag & SEQ_DRAWFRAMES), true);
+  UI_view2d_scrollers_draw(v2d, NULL);
 }

@@ -844,15 +844,8 @@ void ED_view3d_draw_depth(Depsgraph *depsgraph, ARegion *region, View3D *v3d, bo
   ED_view3d_draw_setup_view(
       G_MAIN->wm.first, NULL, depsgraph, scene, region, v3d, NULL, NULL, NULL);
 
-  GPU_clear(GPU_DEPTH_BIT);
-
-  if (RV3D_CLIPPING_ENABLED(v3d, rv3d)) {
-    ED_view3d_clipping_set(rv3d);
-  }
   /* get surface depth without bias */
   rv3d->rflag |= RV3D_ZOFFSET_DISABLED;
-
-  GPU_depth_test(true);
 
   /* Needed in cases the view-port isn't already setup. */
   WM_draw_region_viewport_ensure(region, SPACE_VIEW3D);
@@ -867,13 +860,7 @@ void ED_view3d_draw_depth(Depsgraph *depsgraph, ARegion *region, View3D *v3d, bo
 
   WM_draw_region_viewport_unbind(region);
 
-  if (RV3D_CLIPPING_ENABLED(v3d, rv3d)) {
-    ED_view3d_clipping_disable();
-  }
   rv3d->rflag &= ~RV3D_ZOFFSET_DISABLED;
-
-  /* Reset default for UI */
-  GPU_depth_test(false);
 
   U.glalphaclip = glalphaclip;
   v3d->flag = flag;
@@ -1085,7 +1072,7 @@ static void draw_rotation_guide(const RegionView3D *rv3d)
   GPU_blend(true);
   GPU_blend_set_func_separate(
       GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
-  glDepthMask(GL_FALSE); /* don't overwrite zbuf */
+  GPU_depth_mask(false); /* don't overwrite zbuf */
 
   GPUVertFormat *format = immVertexFormat();
   uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
@@ -1175,7 +1162,7 @@ static void draw_rotation_guide(const RegionView3D *rv3d)
   immUnbindProgram();
 
   GPU_blend(false);
-  glDepthMask(GL_TRUE);
+  GPU_depth_mask(true);
 }
 #endif /* WITH_INPUT_NDOF */
 
@@ -1619,9 +1606,7 @@ RenderEngineType *ED_view3d_engine_type(const Scene *scene, int drawtype)
   if (drawtype == OB_MATERIAL && (type->flag & RE_USE_EEVEE_VIEWPORT)) {
     return RE_engines_find(RE_engine_id_BLENDER_EEVEE);
   }
-  else {
-    return type;
-  }
+  return type;
 }
 
 void view3d_main_region_draw(const bContext *C, ARegion *region)
@@ -1714,6 +1699,11 @@ void ED_view3d_draw_offscreen(Depsgraph *depsgraph,
   /* set flags */
   G.f |= G_FLAG_RENDER_VIEWPORT;
 
+  /* There are too many functions inside the draw manager that check the shading type,
+   * so use a temporary override instead. */
+  const eDrawType drawtype_orig = v3d->shading.type;
+  v3d->shading.type = drawtype;
+
   {
     /* free images which can have changed on frame-change
      * warning! can be slow so only free animated images - campbell */
@@ -1754,6 +1744,7 @@ void ED_view3d_draw_offscreen(Depsgraph *depsgraph,
 
   UI_Theme_Restore(&theme_state);
 
+  v3d->shading.type = drawtype_orig;
   G.f &= ~G_FLAG_RENDER_VIEWPORT;
 }
 
@@ -1888,7 +1879,7 @@ ImBuf *ED_view3d_draw_offscreen_imbuf(Depsgraph *depsgraph,
 
   if (own_ofs) {
     /* bind */
-    ofs = GPU_offscreen_create(sizex, sizey, 0, true, false, err_out);
+    ofs = GPU_offscreen_create(sizex, sizey, true, false, err_out);
     if (ofs == NULL) {
       DRW_opengl_context_disable();
       return NULL;
@@ -2116,27 +2107,6 @@ bool ED_view3d_clipping_test(const RegionView3D *rv3d, const float co[3], const 
   return view3d_clipping_test(co, is_local ? rv3d->clip_local : rv3d->clip);
 }
 
-void ED_view3d_clipping_set(RegionView3D *UNUSED(rv3d))
-{
-  for (uint a = 0; a < 6; a++) {
-    glEnable(GL_CLIP_DISTANCE0 + a);
-  }
-}
-
-/* Use these to temp disable/enable clipping when 'rv3d->rflag & RV3D_CLIPPING' is set. */
-void ED_view3d_clipping_disable(void)
-{
-  for (uint a = 0; a < 6; a++) {
-    glDisable(GL_CLIP_DISTANCE0 + a);
-  }
-}
-void ED_view3d_clipping_enable(void)
-{
-  for (uint a = 0; a < 6; a++) {
-    glEnable(GL_CLIP_DISTANCE0 + a);
-  }
-}
-
 /* *********************** backdraw for selection *************** */
 
 /**
@@ -2194,13 +2164,8 @@ static void view3d_opengl_read_Z_pixels(GPUViewport *viewport, rcti *rect, void 
   GPU_framebuffer_texture_attach(tmp_fb, dtxl->depth, 0, 0);
   GPU_framebuffer_bind(tmp_fb);
 
-  glReadPixels(rect->xmin,
-               rect->ymin,
-               BLI_rcti_size_x(rect),
-               BLI_rcti_size_y(rect),
-               GL_DEPTH_COMPONENT,
-               GL_FLOAT,
-               data);
+  GPU_framebuffer_read_depth(
+      tmp_fb, rect->xmin, rect->ymin, BLI_rcti_size_x(rect), BLI_rcti_size_y(rect), data);
 
   GPU_framebuffer_restore();
   GPU_framebuffer_free(tmp_fb);
@@ -2287,7 +2252,9 @@ void view3d_update_depths_rect(ARegion *region, ViewDepths *d, rcti *rect)
   if (d->damaged) {
     GPUViewport *viewport = WM_draw_region_get_viewport(region);
     view3d_opengl_read_Z_pixels(viewport, rect, d->depths);
-    glGetDoublev(GL_DEPTH_RANGE, d->depth_range);
+    /* Range is assumed to be this as they are never changed. */
+    d->depth_range[0] = 0.0;
+    d->depth_range[1] = 1.0;
     d->damaged = false;
   }
 }
@@ -2322,7 +2289,9 @@ void ED_view3d_depth_update(ARegion *region)
           .ymax = d->h,
       };
       view3d_opengl_read_Z_pixels(viewport, &r, d->depths);
-      glGetDoublev(GL_DEPTH_RANGE, d->depth_range);
+      /* Assumed to be this as they are never changed. */
+      d->depth_range[0] = 0.0;
+      d->depth_range[1] = 1.0;
       d->damaged = false;
     }
   }
@@ -2376,7 +2345,7 @@ void ED_view3d_datamask(const bContext *C,
 {
   if (ELEM(v3d->shading.type, OB_TEXTURE, OB_MATERIAL, OB_RENDER)) {
     r_cddata_masks->lmask |= CD_MASK_MLOOPUV | CD_MASK_MLOOPCOL;
-    r_cddata_masks->vmask |= CD_MASK_ORCO;
+    r_cddata_masks->vmask |= CD_MASK_ORCO | CD_MASK_PROP_COLOR;
   }
   else if (v3d->shading.type == OB_SOLID) {
     if (v3d->shading.color_type == V3D_SHADING_TEXTURE_COLOR) {
@@ -2384,6 +2353,7 @@ void ED_view3d_datamask(const bContext *C,
     }
     if (v3d->shading.color_type == V3D_SHADING_VERTEX_COLOR) {
       r_cddata_masks->lmask |= CD_MASK_MLOOPCOL;
+      r_cddata_masks->vmask |= CD_MASK_ORCO | CD_MASK_PROP_COLOR;
     }
   }
 

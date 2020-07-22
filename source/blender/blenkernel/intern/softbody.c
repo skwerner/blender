@@ -165,24 +165,28 @@ static void free_softbody_intern(SoftBody *sb);
 
 /*physical unit of force is [kg * m / sec^2]*/
 
-static float sb_grav_force_scale(Object *UNUSED(ob))
-/* since unit of g is [m/sec^2] and F = mass * g we rescale unit mass of node to 1 gramm
- * put it to a function here, so we can add user options later without touching simulation code
+/**
+ * Since unit of g is [m/sec^2] and F = mass * g we re-scale unit mass of node to 1 gram
+ * put it to a function here, so we can add user options later without touching simulation code.
  */
+static float sb_grav_force_scale(Object *UNUSED(ob))
 {
   return (0.001f);
 }
 
-static float sb_fric_force_scale(Object *UNUSED(ob))
-/* rescaling unit of drag [1 / sec] to somehow reasonable
- * put it to a function here, so we can add user options later without touching simulation code
+/**
+ * Re-scaling unit of drag [1 / sec] to somehow reasonable
+ * put it to a function here, so we can add user options later without touching simulation code.
  */
+static float sb_fric_force_scale(Object *UNUSED(ob))
 {
   return (0.01f);
 }
 
+/**
+ * Defining the frames to *real* time relation.
+ */
 static float sb_time_scale(Object *ob)
-/* defining the frames to *real* time relation */
 {
   SoftBody *sb = ob->soft; /* is supposed to be there */
   if (sb) {
@@ -481,7 +485,6 @@ static void ccd_mesh_update(Object *ob, ccd_Mesh *pccd_M)
     mima->maxy = max_ff(mima->maxy, v[1] + hull);
     mima->maxz = max_ff(mima->maxz, v[2] + hull);
   }
-  return;
 }
 
 static void ccd_mesh_free(ccd_Mesh *ccdm)
@@ -1479,7 +1482,8 @@ static void _scan_for_ext_spring_forces(
             mid_v3_v3v3(pos, sb->bpoint[bs->v1].pos, sb->bpoint[bs->v2].pos);
             mid_v3_v3v3(vel, sb->bpoint[bs->v1].vec, sb->bpoint[bs->v2].vec);
             pd_point_from_soft(scene, pos, vel, -1, &epoint);
-            BKE_effectors_apply(effectors, NULL, sb->effector_weights, &epoint, force, speed);
+            BKE_effectors_apply(
+                effectors, NULL, sb->effector_weights, &epoint, force, NULL, speed);
 
             mul_v3_fl(speed, windfactor);
             add_v3_v3(vel, speed);
@@ -2107,7 +2111,7 @@ static int _softbody_calc_forces_slice_in_a_thread(Scene *scene,
         float eval_sb_fric_force_scale = sb_fric_force_scale(ob);
 
         pd_point_from_soft(scene, bp->pos, bp->vec, sb->bpoint - bp, &epoint);
-        BKE_effectors_apply(effectors, NULL, sb->effector_weights, &epoint, force, speed);
+        BKE_effectors_apply(effectors, NULL, sb->effector_weights, &epoint, force, NULL, speed);
 
         /* apply forcefield*/
         mul_v3_fl(force, fieldfactor * eval_sb_fric_force_scale);

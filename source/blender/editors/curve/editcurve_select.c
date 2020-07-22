@@ -66,12 +66,11 @@ bool select_beztriple(BezTriple *bezt, bool selstatus, short flag, eVisible_Type
       bezt->f3 |= flag;
       return true;
     }
-    else { /* deselects */
-      bezt->f1 &= ~flag;
-      bezt->f2 &= ~flag;
-      bezt->f3 &= ~flag;
-      return true;
-    }
+    /* deselects */
+    bezt->f1 &= ~flag;
+    bezt->f2 &= ~flag;
+    bezt->f3 &= ~flag;
+    return true;
   }
 
   return false;
@@ -85,10 +84,8 @@ bool select_bpoint(BPoint *bp, bool selstatus, short flag, bool hidden)
       bp->f1 |= flag;
       return true;
     }
-    else {
-      bp->f1 &= ~flag;
-      return true;
-    }
+    bp->f1 &= ~flag;
+    return true;
   }
 
   return false;
@@ -99,9 +96,7 @@ static bool swap_selection_beztriple(BezTriple *bezt)
   if (bezt->f2 & SELECT) {
     return select_beztriple(bezt, DESELECT, SELECT, VISIBLE);
   }
-  else {
-    return select_beztriple(bezt, SELECT, SELECT, VISIBLE);
-  }
+  return select_beztriple(bezt, SELECT, SELECT, VISIBLE);
 }
 
 static bool swap_selection_bpoint(BPoint *bp)
@@ -109,9 +104,7 @@ static bool swap_selection_bpoint(BPoint *bp)
   if (bp->f1 & SELECT) {
     return select_bpoint(bp, DESELECT, SELECT, VISIBLE);
   }
-  else {
-    return select_bpoint(bp, SELECT, SELECT, VISIBLE);
-  }
+  return select_bpoint(bp, SELECT, SELECT, VISIBLE);
 }
 
 bool ED_curve_nurb_select_check(View3D *v3d, Nurb *nu)
@@ -988,7 +981,7 @@ void CURVE_OT_select_more(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Select More";
   ot->idname = "CURVE_OT_select_more";
-  ot->description = "Select control points directly linked to already selected ones";
+  ot->description = "Select control points at the boundary of each selection region";
 
   /* api callbacks */
   ot->exec = curve_select_more_exec;
@@ -1203,7 +1196,7 @@ void CURVE_OT_select_less(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Select Less";
   ot->idname = "CURVE_OT_select_less";
-  ot->description = "Reduce current selection by deselecting boundary elements";
+  ot->description = "Deselect control points at the boundary of each selection region";
 
   /* api callbacks */
   ot->exec = curve_select_less_exec;

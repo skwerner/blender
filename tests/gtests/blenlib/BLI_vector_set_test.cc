@@ -1,8 +1,10 @@
+/* Apache License, Version 2.0 */
+
 #include "BLI_strict_flags.h"
 #include "BLI_vector_set.hh"
 #include "testing/testing.h"
 
-using blender::VectorSet;
+namespace blender {
 
 TEST(vector_set, DefaultConstructor)
 {
@@ -158,3 +160,5 @@ TEST(vector_set, Remove)
   EXPECT_FALSE(set.remove(5));
   EXPECT_FALSE(set.contains(5));
 }
+
+}  // namespace blender

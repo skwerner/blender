@@ -2498,7 +2498,7 @@ static int pyrna_prop_collection_subscript_str_lib_pair_ptr(BPy_PropertyRNA *sel
     else if (PyUnicode_Check(keylib)) {
       Main *bmain = self->ptr.data;
       const char *keylib_str = _PyUnicode_AsString(keylib);
-      lib = BLI_findstring(&bmain->libraries, keylib_str, offsetof(Library, name));
+      lib = BLI_findstring(&bmain->libraries, keylib_str, offsetof(Library, filepath));
       if (lib == NULL) {
         if (err_not_found) {
           PyErr_Format(PyExc_KeyError,
@@ -7660,8 +7660,8 @@ void BPY_update_rna_module(void)
 }
 
 #if 0
-/* This is a way we can access docstrings for RNA types
- * without having the datatypes in blender */
+/* This is a way we can access doc-strings for RNA types
+ * without having the data-types in Blender. */
 PyObject *BPY_rna_doc(void)
 {
   PointerRNA ptr;

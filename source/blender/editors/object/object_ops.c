@@ -109,10 +109,8 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(OBJECT_OT_light_add);
   WM_operatortype_append(OBJECT_OT_camera_add);
   WM_operatortype_append(OBJECT_OT_speaker_add);
-#ifdef WITH_NEW_OBJECT_TYPES
   WM_operatortype_append(OBJECT_OT_hair_add);
   WM_operatortype_append(OBJECT_OT_pointcloud_add);
-#endif
   WM_operatortype_append(OBJECT_OT_volume_add);
   WM_operatortype_append(OBJECT_OT_volume_import);
   WM_operatortype_append(OBJECT_OT_add);
@@ -132,6 +130,7 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(OBJECT_OT_modifier_move_down);
   WM_operatortype_append(OBJECT_OT_modifier_move_to_index);
   WM_operatortype_append(OBJECT_OT_modifier_apply);
+  WM_operatortype_append(OBJECT_OT_modifier_apply_as_shapekey);
   WM_operatortype_append(OBJECT_OT_modifier_convert);
   WM_operatortype_append(OBJECT_OT_modifier_copy);
   WM_operatortype_append(OBJECT_OT_multires_subdivide);
@@ -152,6 +151,7 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(OBJECT_OT_gpencil_modifier_remove);
   WM_operatortype_append(OBJECT_OT_gpencil_modifier_move_up);
   WM_operatortype_append(OBJECT_OT_gpencil_modifier_move_down);
+  WM_operatortype_append(OBJECT_OT_gpencil_modifier_move_to_index);
   WM_operatortype_append(OBJECT_OT_gpencil_modifier_apply);
   WM_operatortype_append(OBJECT_OT_gpencil_modifier_copy);
 
@@ -160,6 +160,7 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(OBJECT_OT_shaderfx_remove);
   WM_operatortype_append(OBJECT_OT_shaderfx_move_up);
   WM_operatortype_append(OBJECT_OT_shaderfx_move_down);
+  WM_operatortype_append(OBJECT_OT_shaderfx_move_to_index);
 
   WM_operatortype_append(OBJECT_OT_correctivesmooth_bind);
   WM_operatortype_append(OBJECT_OT_meshdeform_bind);
@@ -179,6 +180,7 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(CONSTRAINT_OT_delete);
   WM_operatortype_append(CONSTRAINT_OT_move_up);
   WM_operatortype_append(CONSTRAINT_OT_move_down);
+  WM_operatortype_append(CONSTRAINT_OT_move_to_index);
   WM_operatortype_append(CONSTRAINT_OT_stretchto_reset);
   WM_operatortype_append(CONSTRAINT_OT_limitdistance_reset);
   WM_operatortype_append(CONSTRAINT_OT_childof_set_inverse);

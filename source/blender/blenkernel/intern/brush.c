@@ -248,6 +248,7 @@ static void brush_defaults(Brush *brush)
   FROM_DEFAULT(crease_pinch_factor);
   FROM_DEFAULT(normal_radius_factor);
   FROM_DEFAULT(area_radius_factor);
+  FROM_DEFAULT(disconnected_distance_max);
   FROM_DEFAULT(sculpt_plane);
   FROM_DEFAULT(plane_offset);
   FROM_DEFAULT(clone.alpha);
@@ -371,8 +372,8 @@ bool BKE_brush_delete(Main *bmain, Brush *brush)
   if (brush->id.tag & LIB_TAG_INDIRECT) {
     return false;
   }
-  else if (BKE_library_ID_is_indirectly_used(bmain, brush) && ID_REAL_USERS(brush) <= 1 &&
-           ID_EXTRA_USERS(brush) == 0) {
+  if (BKE_library_ID_is_indirectly_used(bmain, brush) && ID_REAL_USERS(brush) <= 1 &&
+      ID_EXTRA_USERS(brush) == 0) {
     return false;
   }
 
@@ -493,7 +494,7 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
   brush->gpencil_settings->preset_type = type;
 
   /* Set vertex mix factor. */
-  brush->gpencil_settings->vertex_mode = GPPAINT_MODE_STROKE;
+  brush->gpencil_settings->vertex_mode = GPPAINT_MODE_BOTH;
   brush->gpencil_settings->vertex_factor = 1.0f;
 
   switch (type) {
@@ -1185,6 +1186,11 @@ void BKE_brush_gpencil_paint_presets(Main *bmain, ToolSettings *ts, const bool r
   if (reset || brush_prev == NULL) {
     BKE_paint_brush_set(paint, deft_draw);
   }
+  else {
+    if (brush_prev != NULL) {
+      BKE_paint_brush_set(paint, brush_prev);
+    }
+  }
 }
 
 /* Create a set of grease pencil Vertex Paint presets. */
@@ -1226,6 +1232,11 @@ void BKE_brush_gpencil_vertex_presets(Main *bmain, ToolSettings *ts, const bool 
   /* Set default Vertex brush. */
   if (reset || brush_prev == NULL) {
     BKE_paint_brush_set(vertexpaint, deft_vertex);
+  }
+  else {
+    if (brush_prev != NULL) {
+      BKE_paint_brush_set(vertexpaint, brush_prev);
+    }
   }
 }
 
@@ -1297,6 +1308,11 @@ void BKE_brush_gpencil_sculpt_presets(Main *bmain, ToolSettings *ts, const bool 
   if (reset || brush_prev == NULL) {
     BKE_paint_brush_set(sculptpaint, deft_sculpt);
   }
+  else {
+    if (brush_prev != NULL) {
+      BKE_paint_brush_set(sculptpaint, brush_prev);
+    }
+  }
 }
 
 /* Create a set of grease pencil Weight Paint presets. */
@@ -1317,6 +1333,11 @@ void BKE_brush_gpencil_weight_presets(Main *bmain, ToolSettings *ts, const bool 
   /* Set default brush. */
   if (reset || brush_prev == NULL) {
     BKE_paint_brush_set(weightpaint, deft_weight);
+  }
+  else {
+    if (brush_prev != NULL) {
+      BKE_paint_brush_set(weightpaint, brush_prev);
+    }
   }
 }
 
@@ -1512,6 +1533,7 @@ void BKE_brush_sculpt_reset(Brush *br)
       break;
     case SCULPT_TOOL_SMOOTH:
       br->flag &= ~BRUSH_SPACE_ATTEN;
+      br->automasking_flags |= BRUSH_AUTOMASKING_BOUNDARY_EDGES;
       br->spacing = 5;
       br->alpha = 0.7f;
       br->surface_smooth_shape_preservation = 0.5f;
@@ -1538,7 +1560,7 @@ void BKE_brush_sculpt_reset(Brush *br)
     case SCULPT_TOOL_POSE:
       br->pose_smooth_iterations = 4;
       br->pose_ik_segments = 1;
-      br->flag2 |= BRUSH_POSE_IK_ANCHORED;
+      br->flag2 |= BRUSH_POSE_IK_ANCHORED | BRUSH_USE_CONNECTED_ONLY;
       br->flag &= ~BRUSH_ALPHA_PRESSURE;
       br->flag &= ~BRUSH_SPACE;
       br->flag &= ~BRUSH_SPACE_ATTEN;
@@ -1569,6 +1591,24 @@ void BKE_brush_sculpt_reset(Brush *br)
       br->hardness = 0.35f;
       br->alpha = 1.0f;
       br->height = 0.05f;
+      break;
+    case SCULPT_TOOL_PAINT:
+      br->hardness = 0.4f;
+      br->spacing = 10;
+      br->alpha = 0.6f;
+      br->flow = 1.0f;
+      br->tip_scale_x = 1.0f;
+      br->tip_roundness = 1.0f;
+      br->density = 1.0f;
+      br->flag &= ~BRUSH_SPACE_ATTEN;
+      zero_v3(br->rgb);
+      break;
+    case SCULPT_TOOL_SMEAR:
+      br->alpha = 1.0f;
+      br->spacing = 5;
+      br->flag &= ~BRUSH_ALPHA_PRESSURE;
+      br->flag &= ~BRUSH_SPACE_ATTEN;
+      br->curve_preset = BRUSH_CURVE_SPHERE;
       break;
     default:
       break;
@@ -1629,14 +1669,15 @@ void BKE_brush_sculpt_reset(Brush *br)
       break;
 
     case SCULPT_TOOL_SIMPLIFY:
+    case SCULPT_TOOL_PAINT:
     case SCULPT_TOOL_MASK:
     case SCULPT_TOOL_DRAW_FACE_SETS:
-      br->add_col[0] = 0.750000;
-      br->add_col[1] = 0.750000;
-      br->add_col[2] = 0.750000;
-      br->sub_col[0] = 0.750000;
-      br->sub_col[1] = 0.750000;
-      br->sub_col[2] = 0.750000;
+      br->add_col[0] = 0.75f;
+      br->add_col[1] = 0.75f;
+      br->add_col[2] = 0.75f;
+      br->sub_col[0] = 0.75f;
+      br->sub_col[1] = 0.75f;
+      br->sub_col[2] = 0.75f;
       break;
 
     case SCULPT_TOOL_CLOTH:
@@ -2140,10 +2181,9 @@ float BKE_brush_curve_strength(const Brush *br, float p, const float len)
   if (p >= len) {
     return 0;
   }
-  else {
-    p = p / len;
-    p = 1.0f - p;
-  }
+
+  p = p / len;
+  p = 1.0f - p;
 
   switch (br->curve_preset) {
     case BRUSH_CURVE_CUSTOM:

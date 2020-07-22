@@ -24,6 +24,7 @@
 
 /* all types are needed here, in order to do memory operations */
 #include "DNA_ID.h"
+#include "DNA_key_types.h"
 
 #include "BLI_utildefines.h"
 
@@ -32,6 +33,7 @@
 #include "BKE_anim_data.h"
 #include "BKE_idprop.h"
 #include "BKE_idtype.h"
+#include "BKE_key.h"
 #include "BKE_lib_id.h"
 #include "BKE_lib_override.h"
 #include "BKE_lib_remap.h"
@@ -142,8 +144,14 @@ void BKE_id_free_ex(Main *bmain, void *idv, int flag, const bool use_flag_from_i
   }
 #endif
 
+  Key *key = ((flag & LIB_ID_FREE_NO_MAIN) == 0) ? BKE_key_from_id(id) : NULL;
+
   if ((flag & LIB_ID_FREE_NO_USER_REFCOUNT) == 0) {
     BKE_libblock_relink_ex(bmain, id, NULL, NULL, 0);
+  }
+
+  if ((flag & LIB_ID_FREE_NO_MAIN) == 0 && key != NULL) {
+    BKE_id_free_ex(bmain, &key->id, flag, use_flag_from_idtag);
   }
 
   BKE_libblock_free_datablock(id, flag);

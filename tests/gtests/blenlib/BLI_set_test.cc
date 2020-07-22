@@ -1,3 +1,5 @@
+/* Apache License, Version 2.0 */
+
 #include <set>
 #include <unordered_set>
 
@@ -361,7 +363,7 @@ template<uint N> struct EqualityIntModN {
 };
 
 template<uint N> struct HashIntModN {
-  uint32_t operator()(uint value) const
+  uint64_t operator()(uint value) const
   {
     return value % N;
   }
@@ -403,16 +405,61 @@ TEST(set, IntrusiveIntKey)
   EXPECT_TRUE(set.remove(4));
 }
 
+struct MyKeyType {
+  uint32_t key;
+  int32_t attached_data;
+
+  uint64_t hash() const
+  {
+    return key;
+  }
+
+  friend bool operator==(const MyKeyType &a, const MyKeyType &b)
+  {
+    return a.key == b.key;
+  }
+};
+
+TEST(set, LookupKey)
+{
+  Set<MyKeyType> set;
+  set.add({1, 10});
+  set.add({2, 20});
+  EXPECT_EQ(set.lookup_key({1, 30}).attached_data, 10);
+  EXPECT_EQ(set.lookup_key({2, 0}).attached_data, 20);
+}
+
+TEST(set, LookupKeyDefault)
+{
+  Set<MyKeyType> set;
+  set.add({1, 10});
+  set.add({2, 20});
+
+  MyKeyType fallback{5, 50};
+  EXPECT_EQ(set.lookup_key_default({1, 66}, fallback).attached_data, 10);
+  EXPECT_EQ(set.lookup_key_default({4, 40}, fallback).attached_data, 50);
+}
+
+TEST(set, LookupKeyPtr)
+{
+  Set<MyKeyType> set;
+  set.add({1, 10});
+  set.add({2, 20});
+  EXPECT_EQ(set.lookup_key_ptr({1, 50})->attached_data, 10);
+  EXPECT_EQ(set.lookup_key_ptr({2, 50})->attached_data, 20);
+  EXPECT_EQ(set.lookup_key_ptr({3, 50}), nullptr);
+}
+
 /**
  * Set this to 1 to activate the benchmark. It is disabled by default, because it prints a lot.
  */
 #if 0
 template<typename SetT>
-BLI_NOINLINE void benchmark_random_ints(StringRef name, uint amount, uint factor)
+BLI_NOINLINE void benchmark_random_ints(StringRef name, int amount, int factor)
 {
   RNG *rng = BLI_rng_new(0);
   Vector<int> values;
-  for (uint i = 0; i < amount; i++) {
+  for (int i = 0; i < amount; i++) {
     values.append(BLI_rng_get_int(rng) * factor);
   }
   BLI_rng_free(rng);
@@ -444,12 +491,12 @@ BLI_NOINLINE void benchmark_random_ints(StringRef name, uint amount, uint factor
 
 TEST(set, Benchmark)
 {
-  for (uint i = 0; i < 3; i++) {
+  for (int i = 0; i < 3; i++) {
     benchmark_random_ints<blender::Set<int>>("blender::Set      ", 100000, 1);
     benchmark_random_ints<blender::StdUnorderedSetWrapper<int>>("std::unordered_set", 100000, 1);
   }
   std::cout << "\n";
-  for (uint i = 0; i < 3; i++) {
+  for (int i = 0; i < 3; i++) {
     uint32_t factor = (3 << 10);
     benchmark_random_ints<blender::Set<int>>("blender::Set      ", 100000, factor);
     benchmark_random_ints<blender::StdUnorderedSetWrapper<int>>("std::unordered_set", 100000, factor);

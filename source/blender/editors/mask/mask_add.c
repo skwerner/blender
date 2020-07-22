@@ -210,7 +210,7 @@ static void finSelectedSplinePoint(MaskLayer *mask_layer,
           *point = NULL;
           return;
         }
-        else if (*point) {
+        if (*point) {
           *point = NULL;
         }
         else {
@@ -319,9 +319,7 @@ static bool add_vertex_extrude(const bContext *C,
   if (!mask_layer) {
     return false;
   }
-  else {
-    finSelectedSplinePoint(mask_layer, &spline, &point, true);
-  }
+  finSelectedSplinePoint(mask_layer, &spline, &point, true);
 
   ED_mask_select_toggle_all(mask, SEL_DESELECT);
 
@@ -441,7 +439,7 @@ static bool add_vertex_new(const bContext *C, Mask *mask, MaskLayer *mask_layer,
 /* Convert coordinate from normalized space to pixel one.
  * TODO(sergey): Make the function more generally available. */
 static void mask_point_make_pixel_space(bContext *C,
-                                        float point_normalized[2],
+                                        const float point_normalized[2],
                                         float point_pixel[2])
 {
   ScrArea *area = CTX_wm_area(C);
@@ -502,7 +500,7 @@ static int add_vertex_handle_cyclic(
   if (is_last_point_active) {
     return add_vertex_handle_cyclic_at_point(C, mask, spline, active_point, first_point, co);
   }
-  else if (is_first_point_active) {
+  if (is_first_point_active) {
     return add_vertex_handle_cyclic_at_point(C, mask, spline, active_point, last_point, co);
   }
   return OPERATOR_PASS_THROUGH;

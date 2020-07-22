@@ -84,7 +84,6 @@ static void outliner_main_region_init(wmWindowManager *wm, ARegion *region)
 static void outliner_main_region_draw(const bContext *C, ARegion *region)
 {
   View2D *v2d = &region->v2d;
-  View2DScrollers *scrollers;
 
   /* clear */
   UI_ThemeClearColor(TH_BACK);
@@ -96,9 +95,7 @@ static void outliner_main_region_draw(const bContext *C, ARegion *region)
   UI_view2d_view_restore(C);
 
   /* scrollers */
-  scrollers = UI_view2d_scrollers_calc(v2d, NULL);
-  UI_view2d_scrollers_draw(v2d, scrollers);
-  UI_view2d_scrollers_free(scrollers);
+  UI_view2d_scrollers_draw(v2d, NULL);
 }
 
 static void outliner_main_region_free(ARegion *UNUSED(region))
@@ -215,7 +212,7 @@ static void outliner_main_region_listener(wmWindow *UNUSED(win),
       }
       break;
     case NC_SCREEN:
-      if (ELEM(wmn->data, ND_LAYER)) {
+      if (ELEM(wmn->data, ND_LAYOUTDELETE, ND_LAYER)) {
         ED_region_tag_redraw(region);
       }
       break;
@@ -398,7 +395,7 @@ static void outliner_deactivate(struct ScrArea *area)
   /* Remove hover highlights */
   SpaceOutliner *soops = area->spacedata.first;
   outliner_flag_set(&soops->tree, TSE_HIGHLIGHTED, false);
-  ED_region_tag_redraw(BKE_area_find_region_type(area, RGN_TYPE_WINDOW));
+  ED_region_tag_redraw_no_rebuild(BKE_area_find_region_type(area, RGN_TYPE_WINDOW));
 }
 
 /* only called once, from space_api/spacetypes.c */

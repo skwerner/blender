@@ -1749,6 +1749,24 @@ void do_versions_after_linking_280(Main *bmain, ReportList *UNUSED(reports))
    */
   {
     /* Keep this block, even when empty. */
+    /* Paint Brush. This ensure that the brush paints by default. Used during the development and
+     * patch review of the initial Sculpt Vertex Colors implementation (D5975) */
+    LISTBASE_FOREACH (Brush *, brush, &bmain->brushes) {
+      if (brush->ob_mode & OB_MODE_SCULPT && brush->sculpt_tool == SCULPT_TOOL_PAINT) {
+        brush->tip_roundness = 1.0f;
+        brush->flow = 1.0f;
+        brush->density = 1.0f;
+        brush->tip_scale_x = 1.0f;
+      }
+    }
+
+    /* Pose Brush with support for loose parts. */
+    LISTBASE_FOREACH (Brush *, brush, &bmain->brushes) {
+      if (brush->sculpt_tool == SCULPT_TOOL_POSE && brush->disconnected_distance_max == 0.0f) {
+        brush->flag2 |= BRUSH_USE_CONNECTED_ONLY;
+        brush->disconnected_distance_max = 0.1f;
+      }
+    }
   }
 }
 
@@ -3474,7 +3492,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
 
     for (Mesh *me = bmain->meshes.first; me; me = me->id.next) {
       me->flag &= ~(ME_FLAG_UNUSED_0 | ME_FLAG_UNUSED_1 | ME_FLAG_UNUSED_3 | ME_FLAG_UNUSED_4 |
-                    ME_FLAG_UNUSED_6 | ME_FLAG_UNUSED_7 | ME_FLAG_UNUSED_8);
+                    ME_FLAG_UNUSED_6 | ME_FLAG_UNUSED_7 | ME_REMESH_REPROJECT_VERTEX_COLORS);
     }
 
     for (Material *mat = bmain->materials.first; mat; mat = mat->id.next) {
@@ -5075,6 +5093,23 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
    * \note Keep this message at the bottom of the function.
    */
   {
+    /* Set the cloth wind factor to 1 for old forces. */
+    if (!DNA_struct_elem_find(fd->filesdna, "PartDeflect", "float", "f_wind_factor")) {
+      LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
+        if (ob->pd) {
+          ob->pd->f_wind_factor = 1.0f;
+        }
+      }
+      LISTBASE_FOREACH (ParticleSettings *, part, &bmain->particles) {
+        if (part->pd) {
+          part->pd->f_wind_factor = 1.0f;
+        }
+        if (part->pd2) {
+          part->pd2->f_wind_factor = 1.0f;
+        }
+      }
+    }
+
     /* Keep this block, even when empty. */
   }
 }

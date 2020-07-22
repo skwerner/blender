@@ -1,11 +1,11 @@
+/* Apache License, Version 2.0 */
+
 #include "BLI_strict_flags.h"
 #include "BLI_string_ref.hh"
 #include "BLI_vector.hh"
 #include "testing/testing.h"
 
-using blender::StringRef;
-using blender::StringRefNull;
-using blender::Vector;
+namespace blender {
 
 TEST(string_ref_null, DefaultConstructor)
 {
@@ -273,3 +273,5 @@ TEST(string_ref, Copy)
   EXPECT_EQ(dst[6], 0xFF);
   EXPECT_EQ(ref, dst);
 }
+
+}  // namespace blender

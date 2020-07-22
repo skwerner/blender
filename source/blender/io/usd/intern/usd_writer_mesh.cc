@@ -42,7 +42,9 @@
 #include "DNA_object_fluidsim_types.h"
 #include "DNA_particle_types.h"
 
-namespace USD {
+namespace blender {
+namespace io {
+namespace usd {
 
 USDGenericMeshWriter::USDGenericMeshWriter(const USDExporterContext &ctx) : USDAbstractWriter(ctx)
 {
@@ -336,7 +338,7 @@ void USDGenericMeshWriter::assign_materials(const HierarchyContext &context,
    * https://github.com/PixarAnimationStudios/USD/issues/542 for more info. */
   bool mesh_material_bound = false;
   pxr::UsdShadeMaterialBindingAPI material_binding_api(usd_mesh.GetPrim());
-  for (short mat_num = 0; mat_num < context.object->totcol; mat_num++) {
+  for (int mat_num = 0; mat_num < context.object->totcol; mat_num++) {
     Material *material = BKE_object_material_get(context.object, mat_num + 1);
     if (material == nullptr) {
       continue;
@@ -484,4 +486,6 @@ Mesh *USDMeshWriter::get_export_mesh(Object *object_eval, bool & /*r_needsfree*/
   return BKE_object_get_evaluated_mesh(object_eval);
 }
 
-}  // namespace USD
+}  // namespace usd
+}  // namespace io
+}  // namespace blender

@@ -119,13 +119,16 @@ ccl_device_inline int bsdf_sample(KernelGlobals *kg,
                                   differential3 *domega_in,
                                   float *pdf)
 {
+  /* For curves use the smooth normal, particularly for ribbons the geometric
+   * normal gives too much darkening otherwise. */
   int label;
+  const float3 Ng = (sd->type & PRIMITIVE_ALL_CURVE) ? sc->N : sd->Ng;
 
   switch (sc->type) {
     case CLOSURE_BSDF_DIFFUSE_ID:
     case CLOSURE_BSDF_BSSRDF_ID:
       label = bsdf_diffuse_sample(sc,
-                                  sd->Ng,
+                                  Ng,
                                   sd->I,
                                   sd->dI.dx,
                                   sd->dI.dy,
@@ -140,7 +143,7 @@ ccl_device_inline int bsdf_sample(KernelGlobals *kg,
 #ifdef __SVM__
     case CLOSURE_BSDF_OREN_NAYAR_ID:
       label = bsdf_oren_nayar_sample(sc,
-                                     sd->Ng,
+                                     Ng,
                                      sd->I,
                                      sd->dI.dx,
                                      sd->dI.dy,
@@ -155,7 +158,7 @@ ccl_device_inline int bsdf_sample(KernelGlobals *kg,
 #  ifdef __OSL__
     case CLOSURE_BSDF_PHONG_RAMP_ID:
       label = bsdf_phong_ramp_sample(sc,
-                                     sd->Ng,
+                                     Ng,
                                      sd->I,
                                      sd->dI.dx,
                                      sd->dI.dy,
@@ -169,7 +172,7 @@ ccl_device_inline int bsdf_sample(KernelGlobals *kg,
       break;
     case CLOSURE_BSDF_DIFFUSE_RAMP_ID:
       label = bsdf_diffuse_ramp_sample(sc,
-                                       sd->Ng,
+                                       Ng,
                                        sd->I,
                                        sd->dI.dx,
                                        sd->dI.dy,
@@ -184,7 +187,7 @@ ccl_device_inline int bsdf_sample(KernelGlobals *kg,
 #  endif
     case CLOSURE_BSDF_TRANSLUCENT_ID:
       label = bsdf_translucent_sample(sc,
-                                      sd->Ng,
+                                      Ng,
                                       sd->I,
                                       sd->dI.dx,
                                       sd->dI.dy,
@@ -198,7 +201,7 @@ ccl_device_inline int bsdf_sample(KernelGlobals *kg,
       break;
     case CLOSURE_BSDF_REFLECTION_ID:
       label = bsdf_reflection_sample(sc,
-                                     sd->Ng,
+                                     Ng,
                                      sd->I,
                                      sd->dI.dx,
                                      sd->dI.dy,
@@ -213,7 +216,7 @@ ccl_device_inline int bsdf_sample(KernelGlobals *kg,
       break;
     case CLOSURE_BSDF_REFRACTION_ID:
       label = bsdf_refraction_sample(sc,
-                                     sd->Ng,
+                                     Ng,
                                      sd->I,
                                      sd->dI.dx,
                                      sd->dI.dy,
@@ -228,7 +231,7 @@ ccl_device_inline int bsdf_sample(KernelGlobals *kg,
       break;
     case CLOSURE_BSDF_TRANSPARENT_ID:
       label = bsdf_transparent_sample(sc,
-                                      sd->Ng,
+                                      Ng,
                                       sd->I,
                                       sd->dI.dx,
                                       sd->dI.dy,
@@ -246,7 +249,7 @@ ccl_device_inline int bsdf_sample(KernelGlobals *kg,
     case CLOSURE_BSDF_MICROFACET_GGX_REFRACTION_ID:
       label = bsdf_microfacet_ggx_sample(kg,
                                          sc,
-                                         sd->Ng,
+                                         Ng,
                                          sd->I,
                                          sd->dI.dx,
                                          sd->dI.dy,
@@ -263,7 +266,7 @@ ccl_device_inline int bsdf_sample(KernelGlobals *kg,
     case CLOSURE_BSDF_MICROFACET_MULTI_GGX_FRESNEL_ID:
       label = bsdf_microfacet_multi_ggx_sample(kg,
                                                sc,
-                                               sd->Ng,
+                                               Ng,
                                                sd->I,
                                                sd->dI.dx,
                                                sd->dI.dy,
@@ -280,7 +283,7 @@ ccl_device_inline int bsdf_sample(KernelGlobals *kg,
     case CLOSURE_BSDF_MICROFACET_MULTI_GGX_GLASS_FRESNEL_ID:
       label = bsdf_microfacet_multi_ggx_glass_sample(kg,
                                                      sc,
-                                                     sd->Ng,
+                                                     Ng,
                                                      sd->I,
                                                      sd->dI.dx,
                                                      sd->dI.dy,
@@ -298,7 +301,7 @@ ccl_device_inline int bsdf_sample(KernelGlobals *kg,
     case CLOSURE_BSDF_MICROFACET_BECKMANN_REFRACTION_ID:
       label = bsdf_microfacet_beckmann_sample(kg,
                                               sc,
-                                              sd->Ng,
+                                              Ng,
                                               sd->I,
                                               sd->dI.dx,
                                               sd->dI.dy,
@@ -313,7 +316,7 @@ ccl_device_inline int bsdf_sample(KernelGlobals *kg,
       break;
     case CLOSURE_BSDF_ASHIKHMIN_SHIRLEY_ID:
       label = bsdf_ashikhmin_shirley_sample(sc,
-                                            sd->Ng,
+                                            Ng,
                                             sd->I,
                                             sd->dI.dx,
                                             sd->dI.dy,
@@ -327,7 +330,7 @@ ccl_device_inline int bsdf_sample(KernelGlobals *kg,
       break;
     case CLOSURE_BSDF_ASHIKHMIN_VELVET_ID:
       label = bsdf_ashikhmin_velvet_sample(sc,
-                                           sd->Ng,
+                                           Ng,
                                            sd->I,
                                            sd->dI.dx,
                                            sd->dI.dy,
@@ -341,7 +344,7 @@ ccl_device_inline int bsdf_sample(KernelGlobals *kg,
       break;
     case CLOSURE_BSDF_DIFFUSE_TOON_ID:
       label = bsdf_diffuse_toon_sample(sc,
-                                       sd->Ng,
+                                       Ng,
                                        sd->I,
                                        sd->dI.dx,
                                        sd->dI.dy,
@@ -355,7 +358,7 @@ ccl_device_inline int bsdf_sample(KernelGlobals *kg,
       break;
     case CLOSURE_BSDF_GLOSSY_TOON_ID:
       label = bsdf_glossy_toon_sample(sc,
-                                      sd->Ng,
+                                      Ng,
                                       sd->I,
                                       sd->dI.dx,
                                       sd->dI.dy,
@@ -369,7 +372,7 @@ ccl_device_inline int bsdf_sample(KernelGlobals *kg,
       break;
     case CLOSURE_BSDF_HAIR_REFLECTION_ID:
       label = bsdf_hair_reflection_sample(sc,
-                                          sd->Ng,
+                                          Ng,
                                           sd->I,
                                           sd->dI.dx,
                                           sd->dI.dy,
@@ -383,7 +386,7 @@ ccl_device_inline int bsdf_sample(KernelGlobals *kg,
       break;
     case CLOSURE_BSDF_HAIR_TRANSMISSION_ID:
       label = bsdf_hair_transmission_sample(sc,
-                                            sd->Ng,
+                                            Ng,
                                             sd->I,
                                             sd->dI.dx,
                                             sd->dI.dy,
@@ -403,7 +406,7 @@ ccl_device_inline int bsdf_sample(KernelGlobals *kg,
     case CLOSURE_BSDF_PRINCIPLED_DIFFUSE_ID:
     case CLOSURE_BSDF_BSSRDF_PRINCIPLED_ID:
       label = bsdf_principled_diffuse_sample(sc,
-                                             sd->Ng,
+                                             Ng,
                                              sd->I,
                                              sd->dI.dx,
                                              sd->dI.dy,
@@ -417,7 +420,7 @@ ccl_device_inline int bsdf_sample(KernelGlobals *kg,
       break;
     case CLOSURE_BSDF_PRINCIPLED_SHEEN_ID:
       label = bsdf_principled_sheen_sample(sc,
-                                           sd->Ng,
+                                           Ng,
                                            sd->I,
                                            sd->dI.dx,
                                            sd->dI.dy,
@@ -490,9 +493,12 @@ ccl_device_inline
               const float3 omega_in,
               float *pdf)
 {
+  /* For curves use the smooth normal, particularly for ribbons the geometric
+   * normal gives too much darkening otherwise. */
+  const float3 Ng = (sd->type & PRIMITIVE_ALL_CURVE) ? sd->N : sd->Ng;
   float3 eval;
 
-  if (dot(sd->Ng, omega_in) >= 0.0f) {
+  if (dot(Ng, omega_in) >= 0.0f) {
     switch (sc->type) {
       case CLOSURE_BSDF_DIFFUSE_ID:
       case CLOSURE_BSDF_BSSRDF_ID:

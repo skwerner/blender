@@ -194,7 +194,7 @@ class HierarchicalAndFlatExportTest(AbstractAlembicTest):
 
         # Now check the resulting Alembic file.
         xform = self.abcprop(abc, '/Cube_012/.xform')
-        self.assertEqual(0, xform['.inherits'])
+        self.assertEqual(1, xform['.inherits'], "Blender transforms always inherit")
 
         self.assertAlmostEqualFloatArray(
             xform['.vals'],
@@ -214,7 +214,7 @@ class DupliGroupExportTest(AbstractAlembicTest):
         self.run_blender('dupligroup-scene.blend', script)
 
         # Now check the resulting Alembic file.
-        xform = self.abcprop(abc, '/Real_Cube/Linked_Suzanne/Cylinder/Suzanne/.xform')
+        xform = self.abcprop(abc, '/Real_Cube/Linked_Suzanne/Cylinder-0/Suzanne-1/.xform')
         self.assertEqual(1, xform['.inherits'])
         self.assertAlmostEqualFloatArray(
             xform['.vals'],
@@ -232,8 +232,8 @@ class DupliGroupExportTest(AbstractAlembicTest):
         self.run_blender('dupligroup-scene.blend', script)
 
         # Now check the resulting Alembic file.
-        xform = self.abcprop(abc, '/Suzanne/.xform')
-        self.assertEqual(0, xform['.inherits'])
+        xform = self.abcprop(abc, '/Suzanne-1/.xform')
+        self.assertEqual(1, xform['.inherits'])
 
         self.assertAlmostEqualFloatArray(
             xform['.vals'],
@@ -242,6 +242,63 @@ class DupliGroupExportTest(AbstractAlembicTest):
              0.0, 0.0, 1.5, 0.0,
              2.0, 3.0, 0.0, 1.0]
         )
+
+    @with_tempdir
+    def test_multiple_duplicated_hierarchies(self, tempdir: pathlib.Path):
+        abc = tempdir / "multiple-duplicated-hierarchies.abc"
+        script = "import bpy; bpy.ops.wm.alembic_export(filepath='%s', start=1, end=1)" % abc.as_posix()
+        self.run_blender('multiple-duplicated-hierarchies.blend', script)
+
+        # This is the expected hierarchy:
+        # ABC
+        #  `--Triangle
+        #      |--Triangle
+        #      |--Empty-1
+        #      |    `--Pole-1-0
+        #      |        |--Pole
+        #      |        `--Block-1-1
+        #      |            `--Block
+        #      |--Empty
+        #      |    `--Pole-0
+        #      |        |--Pole
+        #      |        `--Block-1
+        #      |            `--Block
+        #      |--Empty-2
+        #      |    `--Pole-2-0
+        #      |        |--Pole
+        #      |        `--Block-2-1
+        #      |            `--Block
+        #      `--Empty-0
+        #          `--Pole-0-0
+        #              |--Pole
+        #              `--Block-0-1
+        #                  `--Block
+
+        # Now check the resulting Alembic file.
+        xform = self.abcprop(abc, '/Triangle/Empty-1/Pole-1-0/Block-1-1/.xform')
+        self.assertEqual(1, xform['.inherits'])
+        self.assertAlmostEqualFloatArray(
+            xform['.vals'],
+            [1.0, 0.0, 0.0, 0.0,
+             0.0, 1.0, 0.0, 0.0,
+             0.0, 0.0, 1.0, 0.0,
+             0.0, 2.0, 0.0, 1.0]
+        )
+
+        # If the property can be gotten, the hierarchy is okay. No need to actually check each xform.
+        self.abcprop(abc, '/Triangle/.xform')
+        self.abcprop(abc, '/Triangle/Empty-1/.xform')
+        self.abcprop(abc, '/Triangle/Empty-1/Pole-1-0/.xform')
+        self.abcprop(abc, '/Triangle/Empty-1/Pole-1-0/Block-1-1/.xform')
+        self.abcprop(abc, '/Triangle/Empty/.xform')
+        self.abcprop(abc, '/Triangle/Empty/Pole-0/.xform')
+        self.abcprop(abc, '/Triangle/Empty/Pole-0/Block-1/.xform')
+        self.abcprop(abc, '/Triangle/Empty-2/.xform')
+        self.abcprop(abc, '/Triangle/Empty-2/Pole-2-0/.xform')
+        self.abcprop(abc, '/Triangle/Empty-2/Pole-2-0/Block-2-1/.xform')
+        self.abcprop(abc, '/Triangle/Empty-0/.xform')
+        self.abcprop(abc, '/Triangle/Empty-0/Pole-0-0/.xform')
+        self.abcprop(abc, '/Triangle/Empty-0/Pole-0-0/Block-0-1/.xform')
 
 
 class CurveExportTest(AbstractAlembicTest):
@@ -253,10 +310,10 @@ class CurveExportTest(AbstractAlembicTest):
         self.run_blender('single-curve.blend', script)
 
         # Now check the resulting Alembic file.
-        abcprop = self.abcprop(abc, '/NurbsCurve/NurbsCurveShape/.geom')
+        abcprop = self.abcprop(abc, '/NurbsCurve/CurveData/.geom')
         self.assertEqual(abcprop['.orders'], [4])
 
-        abcprop = self.abcprop(abc, '/NurbsCurve/NurbsCurveShape/.geom/.userProperties')
+        abcprop = self.abcprop(abc, '/NurbsCurve/CurveData/.geom/.userProperties')
         self.assertEqual(abcprop['blender:resolution'], 10)
 
 
@@ -280,49 +337,49 @@ class HairParticlesExportTest(AbstractAlembicTest):
     def test_with_both(self, tempdir: pathlib.Path):
         abc = self._do_test(tempdir, True, True)
 
-        abcprop = self.abcprop(abc, '/Suzanne/Hair system/.geom')
+        abcprop = self.abcprop(abc, '/Suzanne/Hair_system/.geom')
         self.assertIn('nVertices', abcprop)
 
-        abcprop = self.abcprop(abc, '/Suzanne/Non-hair particle system/.geom')
+        abcprop = self.abcprop(abc, '/Suzanne/Non-hair_particle_system/.geom')
         self.assertIn('.velocities', abcprop)
 
-        abcprop = self.abcprop(abc, '/Suzanne/SuzanneShape/.geom')
+        abcprop = self.abcprop(abc, '/Suzanne/MonkeyMesh/.geom')
         self.assertIn('.faceIndices', abcprop)
 
     @with_tempdir
     def test_with_hair_only(self, tempdir: pathlib.Path):
         abc = self._do_test(tempdir, True, False)
 
-        abcprop = self.abcprop(abc, '/Suzanne/Hair system/.geom')
+        abcprop = self.abcprop(abc, '/Suzanne/Hair_system/.geom')
         self.assertIn('nVertices', abcprop)
 
         self.assertRaises(AbcPropError, self.abcprop, abc,
-                          '/Suzanne/Non-hair particle system/.geom')
+                          '/Suzanne/Non-hair_particle_system/.geom')
 
-        abcprop = self.abcprop(abc, '/Suzanne/SuzanneShape/.geom')
+        abcprop = self.abcprop(abc, '/Suzanne/MonkeyMesh/.geom')
         self.assertIn('.faceIndices', abcprop)
 
     @with_tempdir
     def test_with_particles_only(self, tempdir: pathlib.Path):
         abc = self._do_test(tempdir, False, True)
 
-        self.assertRaises(AbcPropError, self.abcprop, abc, '/Suzanne/Hair system/.geom')
+        self.assertRaises(AbcPropError, self.abcprop, abc, '/Suzanne/Hair_system/.geom')
 
-        abcprop = self.abcprop(abc, '/Suzanne/Non-hair particle system/.geom')
+        abcprop = self.abcprop(abc, '/Suzanne/Non-hair_particle_system/.geom')
         self.assertIn('.velocities', abcprop)
 
-        abcprop = self.abcprop(abc, '/Suzanne/SuzanneShape/.geom')
+        abcprop = self.abcprop(abc, '/Suzanne/MonkeyMesh/.geom')
         self.assertIn('.faceIndices', abcprop)
 
     @with_tempdir
     def test_with_neither(self, tempdir: pathlib.Path):
         abc = self._do_test(tempdir, False, False)
 
-        self.assertRaises(AbcPropError, self.abcprop, abc, '/Suzanne/Hair system/.geom')
+        self.assertRaises(AbcPropError, self.abcprop, abc, '/Suzanne/Hair_system/.geom')
         self.assertRaises(AbcPropError, self.abcprop, abc,
-                          '/Suzanne/Non-hair particle system/.geom')
+                          '/Suzanne/Non-hair_particle_system/.geom')
 
-        abcprop = self.abcprop(abc, '/Suzanne/SuzanneShape/.geom')
+        abcprop = self.abcprop(abc, '/Suzanne/MonkeyMesh/.geom')
         self.assertIn('.faceIndices', abcprop)
 
 
@@ -342,7 +399,7 @@ class UVMapExportTest(AbstractAlembicTest):
         self.maxDiff = 1000
 
         # The main UV map should be written to .geom
-        abcprop = self.abcprop(abc, '/Cube/CubeShape/.geom/uv')
+        abcprop = self.abcprop(abc, '/Cube/Cube/.geom/uv')
         self.assertEqual(abcprop['.vals'], [
             [0.625, 0.75],
             [0.875, 0.75],
@@ -361,7 +418,7 @@ class UVMapExportTest(AbstractAlembicTest):
         ])
 
         # The second UV map should be written to .arbGeomParams
-        abcprop = self.abcprop(abc, '/Cube/CubeShape/.geom/.arbGeomParams/Secondary')
+        abcprop = self.abcprop(abc, '/Cube/Cube/.geom/.arbGeomParams/Secondary')
         self.assertEqual(abcprop['.vals'], [
             [0.75, 0.375],
             [0.75, 0.125],
@@ -465,7 +522,7 @@ class LongNamesExportTest(AbstractAlembicTest):
             0.0, 3.0, 0.0, 1.0,
         ])
 
-        abcprop = self.abcprop(abc, '%s/CubeShape/.geom' % name)
+        abcprop = self.abcprop(abc, '%s/Cube/.geom' % name)
         self.assertIn('.faceCounts', abcprop)
 
 

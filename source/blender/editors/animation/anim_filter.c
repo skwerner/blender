@@ -419,6 +419,7 @@ bool ANIM_animdata_get_context(const bContext *C, bAnimContext *ac)
     ac->markers = ED_context_get_markers(C);
   }
   ac->view_layer = CTX_data_view_layer(C);
+  ac->depsgraph = CTX_data_depsgraph_pointer(C);
   ac->obact = (ac->view_layer->basact) ? ac->view_layer->basact->object : NULL;
   ac->area = area;
   ac->region = region;
@@ -571,7 +572,7 @@ bool ANIM_animdata_get_context(const bContext *C, bAnimContext *ac)
     channel_data, channel_type, owner_id, fcurve_owner_id, ale_statement) \
   if (filter_mode & ANIMFILTER_TMP_PEEK) \
     return 1; \
-  else { \
+  { \
     bAnimListElem *ale = make_new_animlistelem( \
         channel_data, channel_type, (ID *)owner_id, fcurve_owner_id); \
     if (ale) { \
@@ -1169,10 +1170,8 @@ static bool name_matches_dopesheet_filter(bDopeSheet *ads, char *name)
     /* if we have a match somewhere, this returns true */
     return found;
   }
-  else {
-    /* fallback/default - just case insensitive, but starts from start of word */
-    return BLI_strcasestr(name, ads->searchstr) != NULL;
-  }
+  /* fallback/default - just case insensitive, but starts from start of word */
+  return BLI_strcasestr(name, ads->searchstr) != NULL;
 }
 
 /* (Display-)Name-based F-Curve filtering
@@ -2603,8 +2602,9 @@ static size_t animdata_filter_ds_obdata(
     {
       Hair *hair = (Hair *)ob->data;
 
-      if (ads->filterflag2 & ADS_FILTER_NOHAIR)
+      if (ads->filterflag2 & ADS_FILTER_NOHAIR) {
         return 0;
+      }
 
       type = ANIMTYPE_DSHAIR;
       expanded = FILTER_HAIR_OBJD(hair);
@@ -2614,8 +2614,9 @@ static size_t animdata_filter_ds_obdata(
     {
       PointCloud *pointcloud = (PointCloud *)ob->data;
 
-      if (ads->filterflag2 & ADS_FILTER_NOPOINTCLOUD)
+      if (ads->filterflag2 & ADS_FILTER_NOPOINTCLOUD) {
         return 0;
+      }
 
       type = ANIMTYPE_DSPOINTCLOUD;
       expanded = FILTER_POINTS_OBJD(pointcloud);
@@ -2625,8 +2626,9 @@ static size_t animdata_filter_ds_obdata(
     {
       Volume *volume = (Volume *)ob->data;
 
-      if (ads->filterflag2 & ADS_FILTER_NOVOLUME)
+      if (ads->filterflag2 & ADS_FILTER_NOVOLUME) {
         return 0;
+      }
 
       type = ANIMTYPE_DSVOLUME;
       expanded = FILTER_VOLUME_OBJD(volume);
@@ -3414,12 +3416,13 @@ static size_t animdata_filter_remove_duplis(ListBase *anim_data)
 
 /* ----------- Public API --------------- */
 
-/* This function filters the active data source to leave only animation channels suitable for
+/**
+ * This function filters the active data source to leave only animation channels suitable for
  * usage by the caller. It will return the length of the list
  *
- * *anim_data: is a pointer to a ListBase, to which the filtered animation channels
- * will be placed for use.
- * filter_mode: how should the data be filtered - bitmapping accessed flags
+ * \param anim_data: Is a pointer to a #ListBase,
+ * to which the filtered animation channels will be placed for use.
+ * \param filter_mode: how should the data be filtered - bit-mapping accessed flags.
  */
 size_t ANIM_animdata_filter(bAnimContext *ac,
                             ListBase *anim_data,

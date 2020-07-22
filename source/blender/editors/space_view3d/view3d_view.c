@@ -568,9 +568,7 @@ static int view3d_camera_to_view_selected_exec(bContext *C, wmOperator *op)
     WM_event_add_notifier(C, NC_OBJECT | ND_TRANSFORM, camera_ob);
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void VIEW3D_OT_camera_to_view_selected(wmOperatorType *ot)
@@ -1106,10 +1104,6 @@ int view3d_opengl_select(ViewContext *vc,
     GPU_depth_test(true);
   }
 
-  if (RV3D_CLIPPING_ENABLED(vc->v3d, vc->rv3d)) {
-    ED_view3d_clipping_set(vc->rv3d);
-  }
-
   /* If in xray mode, we select the wires in priority. */
   if (XRAY_ACTIVE(v3d) && use_nearest) {
     /* We need to call "GPU_select_*" API's inside DRW_draw_select_loop
@@ -1173,10 +1167,6 @@ int view3d_opengl_select(ViewContext *vc,
 
   if (!XRAY_ACTIVE(v3d)) {
     GPU_depth_test(false);
-  }
-
-  if (RV3D_CLIPPING_ENABLED(v3d, vc->rv3d)) {
-    ED_view3d_clipping_disable();
   }
 
   DRW_opengl_context_disable();
@@ -1486,9 +1476,7 @@ static int localview_exec(bContext *C, wmOperator *op)
 
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void VIEW3D_OT_localview(wmOperatorType *ot)
@@ -1538,10 +1526,9 @@ static int localview_remove_from_exec(bContext *C, wmOperator *op)
     WM_event_add_notifier(C, NC_SCENE | ND_OB_ACTIVE, scene);
     return OPERATOR_FINISHED;
   }
-  else {
-    BKE_report(op->reports, RPT_ERROR, "No object selected");
-    return OPERATOR_CANCELLED;
-  }
+
+  BKE_report(op->reports, RPT_ERROR, "No object selected");
+  return OPERATOR_CANCELLED;
 }
 
 static bool localview_remove_from_poll(bContext *C)

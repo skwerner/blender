@@ -96,7 +96,7 @@ static void init_preview_region(const Scene *scene,
     region->v2d.minzoom = 0.01f;
     region->v2d.maxzoom = 50;
     region->v2d.scroll = (V2D_SCROLL_BOTTOM | V2D_SCROLL_HORIZONTAL_HANDLES);
-    region->v2d.scroll |= (V2D_SCROLL_RIGHT);
+    region->v2d.scroll |= V2D_SCROLL_RIGHT;
     region->v2d.keepzoom = V2D_LOCKZOOM_Y;
     region->v2d.keepofs = V2D_KEEPOFS_Y;
     region->v2d.align = V2D_ALIGN_NO_POS_Y;
@@ -585,13 +585,13 @@ static int clip_context(const bContext *C, const char *member, bContextDataResul
 
     return true;
   }
-  else if (CTX_data_equals(member, "edit_movieclip")) {
+  if (CTX_data_equals(member, "edit_movieclip")) {
     if (sc->clip) {
       CTX_data_id_pointer_set(result, &sc->clip->id);
     }
     return true;
   }
-  else if (CTX_data_equals(member, "edit_mask")) {
+  if (CTX_data_equals(member, "edit_mask")) {
     if (sc->mask_info.mask) {
       CTX_data_id_pointer_set(result, &sc->mask_info.mask->id);
     }
@@ -1045,7 +1045,6 @@ static void clip_preview_region_init(wmWindowManager *wm, ARegion *region)
 static void graph_region_draw(const bContext *C, ARegion *region)
 {
   View2D *v2d = &region->v2d;
-  View2DScrollers *scrollers;
   SpaceClip *sc = CTX_wm_space_clip(C);
   Scene *scene = CTX_data_scene(C);
   short cfra_flag = 0;
@@ -1076,9 +1075,7 @@ static void graph_region_draw(const bContext *C, ARegion *region)
   ED_time_scrub_draw(region, scene, sc->flag & SC_SHOW_SECONDS, true);
 
   /* scrollers */
-  scrollers = UI_view2d_scrollers_calc(v2d, NULL);
-  UI_view2d_scrollers_draw(v2d, scrollers);
-  UI_view2d_scrollers_free(scrollers);
+  UI_view2d_scrollers_draw(v2d, NULL);
 
   /* scale indicators */
   {
@@ -1095,7 +1092,6 @@ static void dopesheet_region_draw(const bContext *C, ARegion *region)
   SpaceClip *sc = CTX_wm_space_clip(C);
   MovieClip *clip = ED_space_clip_get_clip(sc);
   View2D *v2d = &region->v2d;
-  View2DScrollers *scrollers;
   short cfra_flag = 0;
 
   if (clip) {
@@ -1127,9 +1123,7 @@ static void dopesheet_region_draw(const bContext *C, ARegion *region)
   ED_time_scrub_draw(region, scene, sc->flag & SC_SHOW_SECONDS, true);
 
   /* scrollers */
-  scrollers = UI_view2d_scrollers_calc(v2d, NULL);
-  UI_view2d_scrollers_draw(v2d, scrollers);
-  UI_view2d_scrollers_free(scrollers);
+  UI_view2d_scrollers_draw(v2d, NULL);
 }
 
 static void clip_preview_region_draw(const bContext *C, ARegion *region)

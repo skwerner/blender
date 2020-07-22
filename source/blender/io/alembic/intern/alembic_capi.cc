@@ -30,13 +30,6 @@
 #include "abc_reader_points.h"
 #include "abc_reader_transform.h"
 #include "abc_util.h"
-#include "abc_writer_camera.h"
-#include "abc_writer_curves.h"
-#include "abc_writer_hair.h"
-#include "abc_writer_mesh.h"
-#include "abc_writer_nurbs.h"
-#include "abc_writer_points.h"
-#include "abc_writer_transform.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -58,12 +51,15 @@
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
 
+#include "ED_undo.h"
+
 /* SpaceType struct has a member called 'new' which obviously conflicts with C++
  * so temporarily redefining the new keyword to make it compile. */
 #define new extern_new
 #include "BKE_screen.h"
 #undef new
 
+#include "BLI_compiler_compat.h"
 #include "BLI_fileops.h"
 #include "BLI_ghash.h"
 #include "BLI_listbase.h"
@@ -74,48 +70,33 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
-using Alembic::Abc::Int32ArraySamplePtr;
 using Alembic::Abc::ObjectHeader;
-
-using Alembic::AbcGeom::kWrapExisting;
-using Alembic::AbcGeom::MetaData;
-using Alembic::AbcGeom::P3fArraySamplePtr;
-
 using Alembic::AbcGeom::ICamera;
-using Alembic::AbcGeom::ICompoundProperty;
 using Alembic::AbcGeom::ICurves;
-using Alembic::AbcGeom::ICurvesSchema;
 using Alembic::AbcGeom::IFaceSet;
 using Alembic::AbcGeom::ILight;
-using Alembic::AbcGeom::IN3fArrayProperty;
-using Alembic::AbcGeom::IN3fGeomParam;
 using Alembic::AbcGeom::INuPatch;
 using Alembic::AbcGeom::IObject;
 using Alembic::AbcGeom::IPoints;
-using Alembic::AbcGeom::IPointsSchema;
 using Alembic::AbcGeom::IPolyMesh;
-using Alembic::AbcGeom::IPolyMeshSchema;
 using Alembic::AbcGeom::ISampleSelector;
 using Alembic::AbcGeom::ISubD;
-using Alembic::AbcGeom::IV2fGeomParam;
 using Alembic::AbcGeom::IXform;
-using Alembic::AbcGeom::IXformSchema;
-using Alembic::AbcGeom::N3fArraySamplePtr;
-using Alembic::AbcGeom::V3fArraySamplePtr;
-using Alembic::AbcGeom::XformSample;
-
+using Alembic::AbcGeom::MetaData;
 using Alembic::AbcMaterial::IMaterial;
+
+using namespace blender::io::alembic;
 
 struct AbcArchiveHandle {
   int unused;
 };
 
-ABC_INLINE ArchiveReader *archive_from_handle(AbcArchiveHandle *handle)
+BLI_INLINE ArchiveReader *archive_from_handle(AbcArchiveHandle *handle)
 {
   return reinterpret_cast<ArchiveReader *>(handle);
 }
 
-ABC_INLINE AbcArchiveHandle *handle_from_archive(ArchiveReader *archive)
+BLI_INLINE AbcArchiveHandle *handle_from_archive(ArchiveReader *archive)
 {
   return reinterpret_cast<AbcArchiveHandle *>(archive);
 }
@@ -223,196 +204,6 @@ static void find_iobject(const IObject &object, IObject &ret, const std::string 
   }
 
   ret = tmp;
-}
-
-struct ExportJobData {
-  ViewLayer *view_layer;
-  Main *bmain;
-  wmWindowManager *wm;
-
-  char filename[1024];
-  ExportSettings settings;
-
-  short *stop;
-  short *do_update;
-  float *progress;
-
-  bool was_canceled;
-  bool export_ok;
-};
-
-static void export_startjob(void *customdata, short *stop, short *do_update, float *progress)
-{
-  ExportJobData *data = static_cast<ExportJobData *>(customdata);
-
-  data->stop = stop;
-  data->do_update = do_update;
-  data->progress = progress;
-
-  /* XXX annoying hack: needed to prevent data corruption when changing
-   * scene frame in separate threads
-   */
-  G.is_rendering = true;
-  WM_set_locked_interface(data->wm, true);
-  G.is_break = false;
-
-  DEG_graph_build_from_view_layer(
-      data->settings.depsgraph, data->bmain, data->settings.scene, data->view_layer);
-  BKE_scene_graph_update_tagged(data->settings.depsgraph, data->bmain);
-
-  try {
-    AbcExporter exporter(data->bmain, data->filename, data->settings);
-
-    Scene *scene = data->settings.scene; /* for the CFRA macro */
-    const int orig_frame = CFRA;
-
-    data->was_canceled = false;
-    exporter(do_update, progress, &data->was_canceled);
-
-    if (CFRA != orig_frame) {
-      CFRA = orig_frame;
-
-      BKE_scene_graph_update_for_newframe(data->settings.depsgraph, data->bmain);
-    }
-
-    data->export_ok = !data->was_canceled;
-  }
-  catch (const std::exception &e) {
-    ABC_LOG(data->settings.logger) << "Abc Export error: " << e.what() << '\n';
-  }
-  catch (...) {
-    ABC_LOG(data->settings.logger) << "Abc Export: unknown error...\n";
-  }
-}
-
-static void export_endjob(void *customdata)
-{
-  ExportJobData *data = static_cast<ExportJobData *>(customdata);
-
-  DEG_graph_free(data->settings.depsgraph);
-
-  if (data->was_canceled && BLI_exists(data->filename)) {
-    BLI_delete(data->filename, false, false);
-  }
-
-  std::string log = data->settings.logger.str();
-  if (!log.empty()) {
-    std::cerr << log;
-    WM_report(RPT_ERROR, "Errors occurred during the export, look in the console to know more...");
-  }
-
-  G.is_rendering = false;
-  WM_set_locked_interface(data->wm, false);
-}
-
-bool ABC_export(Scene *scene,
-                bContext *C,
-                const char *filepath,
-                const struct AlembicExportParams *params,
-                bool as_background_job)
-{
-  ExportJobData *job = static_cast<ExportJobData *>(
-      MEM_mallocN(sizeof(ExportJobData), "ExportJobData"));
-
-  job->view_layer = CTX_data_view_layer(C);
-  job->bmain = CTX_data_main(C);
-  job->wm = CTX_wm_manager(C);
-  job->export_ok = false;
-  BLI_strncpy(job->filename, filepath, 1024);
-
-  /* Alright, alright, alright....
-   *
-   * ExportJobData contains an ExportSettings containing a SimpleLogger.
-   *
-   * Since ExportJobData is a C-style struct dynamically allocated with
-   * MEM_mallocN (see above), its constructor is never called, therefore the
-   * ExportSettings constructor is not called which implies that the
-   * SimpleLogger one is not called either. SimpleLogger in turn does not call
-   * the constructor of its data members which ultimately means that its
-   * std::ostringstream member has a NULL pointer. To be able to properly use
-   * the stream's operator<<, the pointer needs to be set, therefore we have
-   * to properly construct everything. And this is done using the placement
-   * new operator as here below. It seems hackish, but I'm too lazy to
-   * do bigger refactor and maybe there is a better way which does not involve
-   * hardcore refactoring. */
-  new (&job->settings) ExportSettings();
-  job->settings.scene = scene;
-  job->settings.depsgraph = DEG_graph_new(job->bmain, scene, job->view_layer, DAG_EVAL_RENDER);
-
-  /* TODO(Sybren): for now we only export the active scene layer.
-   * Later in the 2.8 development process this may be replaced by using
-   * a specific collection for Alembic I/O, which can then be toggled
-   * between "real" objects and cached Alembic files. */
-  job->settings.view_layer = job->view_layer;
-
-  job->settings.frame_start = params->frame_start;
-  job->settings.frame_end = params->frame_end;
-  job->settings.frame_samples_xform = params->frame_samples_xform;
-  job->settings.frame_samples_shape = params->frame_samples_shape;
-  job->settings.shutter_open = params->shutter_open;
-  job->settings.shutter_close = params->shutter_close;
-
-  /* TODO(Sybren): For now this is ignored, until we can get selection
-   * detection working through Base pointers (instead of ob->flags). */
-  job->settings.selected_only = params->selected_only;
-
-  job->settings.export_face_sets = params->face_sets;
-  job->settings.export_normals = params->normals;
-  job->settings.export_uvs = params->uvs;
-  job->settings.export_vcols = params->vcolors;
-  job->settings.export_hair = params->export_hair;
-  job->settings.export_particles = params->export_particles;
-  job->settings.apply_subdiv = params->apply_subdiv;
-  job->settings.curves_as_mesh = params->curves_as_mesh;
-  job->settings.flatten_hierarchy = params->flatten_hierarchy;
-
-  /* TODO(Sybren): visible_layer & renderable only is ignored for now,
-   * to be replaced with collections later in the 2.8 dev process
-   * (also see note above). */
-  job->settings.visible_objects_only = params->visible_objects_only;
-  job->settings.renderable_only = params->renderable_only;
-
-  job->settings.use_subdiv_schema = params->use_subdiv_schema;
-  job->settings.export_ogawa = (params->compression_type == ABC_ARCHIVE_OGAWA);
-  job->settings.pack_uv = params->packuv;
-  job->settings.global_scale = params->global_scale;
-  job->settings.triangulate = params->triangulate;
-  job->settings.quad_method = params->quad_method;
-  job->settings.ngon_method = params->ngon_method;
-
-  if (job->settings.frame_start > job->settings.frame_end) {
-    std::swap(job->settings.frame_start, job->settings.frame_end);
-  }
-
-  bool export_ok = false;
-  if (as_background_job) {
-    wmJob *wm_job = WM_jobs_get(CTX_wm_manager(C),
-                                CTX_wm_window(C),
-                                job->settings.scene,
-                                "Alembic Export",
-                                WM_JOB_PROGRESS,
-                                WM_JOB_TYPE_ALEMBIC);
-
-    /* setup job */
-    WM_jobs_customdata_set(wm_job, job, MEM_freeN);
-    WM_jobs_timer(wm_job, 0.1, NC_SCENE | ND_FRAME, NC_SCENE | ND_FRAME);
-    WM_jobs_callbacks(wm_job, export_startjob, NULL, NULL, export_endjob);
-
-    WM_jobs_start(CTX_wm_manager(C), wm_job);
-  }
-  else {
-    /* Fake a job context, so that we don't need NULL pointer checks while exporting. */
-    short stop = 0, do_update = 0;
-    float progress = 0.f;
-
-    export_startjob(job, &stop, &do_update, &progress);
-    export_endjob(job);
-    export_ok = job->export_ok;
-
-    MEM_freeN(job);
-  }
-
-  return export_ok;
 }
 
 /* ********************** Import file ********************** */
@@ -582,7 +373,7 @@ static std::pair<bool, AbcObjectReader *> visit_object(
     }
   }
   else if (object.getParent()) {
-    if (claiming_child_readers.size() > 0) {
+    if (!claiming_child_readers.empty()) {
       /* The first claiming child will serve just fine as parent to
        * our non-claiming children. Since all claiming children share
        * the same XForm, it doesn't really matter which one we pick. */
@@ -620,10 +411,10 @@ static std::pair<bool, AbcObjectReader *> visit_object(
 enum {
   ABC_NO_ERROR = 0,
   ABC_ARCHIVE_FAIL,
-  ABC_UNSUPPORTED_HDF5,
 };
 
 struct ImportJobData {
+  bContext *C;
   Main *bmain;
   Scene *scene;
   ViewLayer *view_layer;
@@ -642,6 +433,7 @@ struct ImportJobData {
   char error_code;
   bool was_cancelled;
   bool import_ok;
+  bool is_background_job;
 };
 
 static void import_startjob(void *user_data, short *stop, short *do_update, float *progress)
@@ -659,11 +451,7 @@ static void import_startjob(void *user_data, short *stop, short *do_update, floa
   ArchiveReader *archive = new ArchiveReader(data->bmain, data->filename);
 
   if (!archive->valid()) {
-#ifndef WITH_ALEMBIC_HDF5
-    data->error_code = archive->is_hdf5() ? ABC_UNSUPPORTED_HDF5 : ABC_ARCHIVE_FAIL;
-#else
     data->error_code = ABC_ARCHIVE_FAIL;
-#endif
     delete archive;
     return;
   }
@@ -691,7 +479,7 @@ static void import_startjob(void *user_data, short *stop, short *do_update, floa
   visit_object(archive->getTop(), data->readers, data->settings, assign_as_parent);
 
   /* There shouldn't be any orphans. */
-  BLI_assert(assign_as_parent.size() == 0);
+  BLI_assert(assign_as_parent.empty());
 
   if (G.is_break) {
     data->was_cancelled = true;
@@ -829,6 +617,12 @@ static void import_endjob(void *user_data)
 
     DEG_id_tag_update(&data->scene->id, ID_RECALC_BASE_FLAGS);
     DEG_relations_tag_update(data->bmain);
+
+    if (data->is_background_job) {
+      /* Blender already returned from the import operator, so we need to store our own extra undo
+       * step. */
+      ED_undo_push(data->C, "Alembic Import Finished");
+    }
   }
 
   for (iter = data->readers.begin(); iter != data->readers.end(); ++iter) {
@@ -849,9 +643,6 @@ static void import_endjob(void *user_data)
       break;
     case ABC_ARCHIVE_FAIL:
       WM_report(RPT_ERROR, "Could not open Alembic archive for reading! See console for detail.");
-      break;
-    case ABC_UNSUPPORTED_HDF5:
-      WM_report(RPT_ERROR, "Alembic archive in obsolete HDF5 format is not supported.");
       break;
   }
 
@@ -877,6 +668,7 @@ bool ABC_import(bContext *C,
 {
   /* Using new here since MEM_* functions do not call constructor to properly initialize data. */
   ImportJobData *job = new ImportJobData();
+  job->C = C;
   job->bmain = CTX_data_main(C);
   job->scene = CTX_data_scene(C);
   job->view_layer = CTX_data_view_layer(C);
@@ -893,6 +685,7 @@ bool ABC_import(bContext *C,
   job->error_code = ABC_NO_ERROR;
   job->was_cancelled = false;
   job->archive = NULL;
+  job->is_background_job = as_background_job;
 
   G.is_break = false;
 

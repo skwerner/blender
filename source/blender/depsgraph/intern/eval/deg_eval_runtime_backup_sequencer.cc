@@ -29,7 +29,8 @@
 #include "BKE_sequencer.h"
 #include "BKE_sound.h"
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 SequencerBackup::SequencerBackup(const Depsgraph *depsgraph) : depsgraph(depsgraph)
 {
@@ -42,7 +43,7 @@ void SequencerBackup::init_from_scene(Scene *scene)
     SequenceBackup sequence_backup(depsgraph);
     sequence_backup.init_from_sequence(sequence);
     if (!sequence_backup.isEmpty()) {
-      sequences_backup.insert(make_pair(sequence->orig_sequence, sequence_backup));
+      sequences_backup.add(sequence->orig_sequence, sequence_backup);
     }
   }
   SEQ_END;
@@ -52,21 +53,19 @@ void SequencerBackup::restore_to_scene(Scene *scene)
 {
   Sequence *sequence;
   SEQ_BEGIN (scene->ed, sequence) {
-    SequencesBackupMap::iterator it = sequences_backup.find(sequence->orig_sequence);
-    if (it == sequences_backup.end()) {
-      continue;
+    SequenceBackup *sequence_backup = sequences_backup.lookup_ptr(sequence->orig_sequence);
+    if (sequence_backup != nullptr) {
+      sequence_backup->restore_to_sequence(sequence);
     }
-    SequenceBackup &sequence_backup = it->second;
-    sequence_backup.restore_to_sequence(sequence);
   }
   SEQ_END;
   /* Cleanup audio while the scene is still known. */
-  for (SequencesBackupMap::value_type &it : sequences_backup) {
-    SequenceBackup &sequence_backup = it.second;
+  for (SequenceBackup &sequence_backup : sequences_backup.values()) {
     if (sequence_backup.scene_sound != nullptr) {
       BKE_sound_remove_scene_sound(scene, sequence_backup.scene_sound);
     }
   }
 }
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

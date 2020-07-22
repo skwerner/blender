@@ -30,6 +30,7 @@
 #include "DNA_windowmanager_types.h" /* for ReportType */
 #include "zlib.h"
 
+struct BLOCacheStorage;
 struct GSet;
 struct IDNameLib_Map;
 struct Key;
@@ -115,12 +116,8 @@ typedef struct FileData {
   struct OldNewMap *datamap;
   struct OldNewMap *globmap;
   struct OldNewMap *libmap;
-  struct OldNewMap *imamap;
-  struct OldNewMap *movieclipmap;
-  struct OldNewMap *scenemap;
-  struct OldNewMap *soundmap;
-  struct OldNewMap *volumemap;
   struct OldNewMap *packedmap;
+  struct BLOCacheStorage *cache_storage;
 
   struct BHeadSort *bheadmap;
   int tot_bheadmap;
@@ -152,20 +149,14 @@ FileData *blo_filedata_from_memfile(struct MemFile *memfile,
                                     struct ReportList *reports);
 
 void blo_clear_proxy_pointers_from_lib(struct Main *oldmain);
-void blo_make_image_pointer_map(FileData *fd, struct Main *oldmain);
-void blo_end_image_pointer_map(FileData *fd, struct Main *oldmain);
-void blo_make_scene_pointer_map(FileData *fd, struct Main *oldmain);
-void blo_end_scene_pointer_map(FileData *fd, struct Main *oldmain);
-void blo_make_movieclip_pointer_map(FileData *fd, struct Main *oldmain);
-void blo_end_movieclip_pointer_map(FileData *fd, struct Main *oldmain);
-void blo_make_sound_pointer_map(FileData *fd, struct Main *oldmain);
-void blo_end_sound_pointer_map(FileData *fd, struct Main *oldmain);
-void blo_make_volume_pointer_map(FileData *fd, struct Main *oldmain);
-void blo_end_volume_pointer_map(FileData *fd, struct Main *oldmain);
 void blo_make_packed_pointer_map(FileData *fd, struct Main *oldmain);
 void blo_end_packed_pointer_map(FileData *fd, struct Main *oldmain);
 void blo_add_library_pointer_map(ListBase *old_mainlist, FileData *fd);
 void blo_make_old_idmap_from_main(FileData *fd, struct Main *bmain);
+
+void blo_cache_storage_init(FileData *fd, struct Main *bmain);
+void blo_cache_storage_old_bmain_clear(FileData *fd, struct Main *bmain_old);
+void blo_cache_storage_end(FileData *fd);
 
 void blo_filedata_free(FileData *fd);
 

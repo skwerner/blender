@@ -380,6 +380,7 @@ typedef struct DRWViewUboStorage {
   float wininv[4][4];
 
   float clipplanes[6][4];
+  float viewvecs[2][4];
   /* Should not be here. Not view dependent (only main view). */
   float viewcamtexcofac[4];
 } DRWViewUboStorage;
@@ -548,6 +549,8 @@ typedef struct DRWManager {
 #endif
 
   struct TaskGraph *task_graph;
+  /* Contains list of objects that needs to be extracted from other objects. */
+  struct GSet *delayed_extraction;
 
   /* ---------- Nothing after this point is cleared after use ----------- */
 
@@ -581,10 +584,11 @@ void drw_state_set(DRWState state);
 void drw_debug_draw(void);
 void drw_debug_init(void);
 
-eDRWCommandType command_type_get(uint64_t *command_type_bits, int index);
+eDRWCommandType command_type_get(const uint64_t *command_type_bits, int index);
 
 void drw_batch_cache_validate(Object *ob);
 void drw_batch_cache_generate_requested(struct Object *ob);
+void drw_batch_cache_generate_requested_delayed(Object *ob);
 
 void drw_resource_buffer_finish(ViewportMemoryPool *vmempool);
 

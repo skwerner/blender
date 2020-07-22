@@ -290,13 +290,11 @@ const EnumPropertyItem rna_enum_object_modifier_type_items[] = {
      "Spawn particles from the shape"},
     {eModifierType_Softbody, "SOFT_BODY", ICON_MOD_SOFT, "Soft Body", ""},
     {eModifierType_Surface, "SURFACE", ICON_MODIFIER, "Surface", ""},
-#ifdef WITH_NEW_SIMULATION_TYPE
     {eModifierType_Simulation,
      "SIMULATION",
      ICON_PHYSICS,
      "Simulation",
      ""}, /* TODO: Use correct icon. */
-#endif
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -1042,20 +1040,20 @@ static void rna_UVProjector_object_set(PointerRNA *ptr,
 
 static void rna_fluid_set_type(Main *bmain, Scene *scene, PointerRNA *ptr)
 {
-  FluidModifierData *mmd = (FluidModifierData *)ptr->data;
+  FluidModifierData *fmd = (FluidModifierData *)ptr->data;
   Object *ob = (Object *)ptr->owner_id;
 
   /* nothing changed */
-  if ((mmd->type & MOD_FLUID_TYPE_DOMAIN) && mmd->domain) {
+  if ((fmd->type & MOD_FLUID_TYPE_DOMAIN) && fmd->domain) {
     return;
   }
 
 #  ifdef WITH_FLUID
-  BKE_fluid_modifier_free(mmd);             /* XXX TODO: completely free all 3 pointers */
-  BKE_fluid_modifier_create_type_data(mmd); /* create regarding of selected type */
+  BKE_fluid_modifier_free(fmd);             /* XXX TODO: completely free all 3 pointers */
+  BKE_fluid_modifier_create_type_data(fmd); /* create regarding of selected type */
 #  endif
 
-  switch (mmd->type) {
+  switch (fmd->type) {
     case MOD_FLUID_TYPE_DOMAIN:
       ob->dt = OB_WIRE;
       break;
@@ -1163,7 +1161,7 @@ static PointerRNA rna_CollisionModifier_settings_get(PointerRNA *ptr)
 static void rna_BevelModifier_update_segments(Main *bmain, Scene *scene, PointerRNA *ptr)
 {
   BevelModifierData *bmd = (BevelModifierData *)ptr->data;
-  if (RNA_boolean_get(ptr, "use_custom_profile")) {
+  if (RNA_enum_get(ptr, "profile_type") == MOD_BEVEL_PROFILE_CUSTOM) {
     short segments = (short)RNA_int_get(ptr, "segments");
     BKE_curveprofile_initialize(bmd->custom_profile, segments);
   }
@@ -1632,7 +1630,6 @@ static void rna_ParticleInstanceModifier_particle_system_set(PointerRNA *ptr,
   CLAMP_MIN(psmd->psys, 1);
 }
 
-#  ifdef WITH_NEW_SIMULATION_TYPE
 static void rna_SimulationModifier_simulation_update(Main *bmain, Scene *scene, PointerRNA *ptr)
 {
   SimulationModifierData *smd = ptr->data;
@@ -1641,11 +1638,44 @@ static void rna_SimulationModifier_simulation_update(Main *bmain, Scene *scene, 
   }
   rna_Modifier_dependency_update(bmain, scene, ptr);
 }
-#  endif
+
+static void rna_SimulationModifier_data_path_get(PointerRNA *ptr, char *value)
+{
+  SimulationModifierData *smd = ptr->data;
+
+  if (smd->data_path) {
+    strcpy(value, smd->data_path);
+  }
+  else {
+    value[0] = '\0';
+  }
+}
+
+static int rna_SimulationModifier_data_path_length(PointerRNA *ptr)
+{
+  SimulationModifierData *smd = ptr->data;
+  return smd->data_path ? strlen(smd->data_path) : 0;
+}
+
+static void rna_SimulationModifier_data_path_set(PointerRNA *ptr, const char *value)
+{
+  SimulationModifierData *smd = ptr->data;
+
+  if (smd->data_path) {
+    MEM_freeN(smd->data_path);
+  }
+
+  if (value[0]) {
+    smd->data_path = BLI_strdup(value);
+  }
+  else {
+    smd->data_path = NULL;
+  }
+}
 
 /**
  * Special set callback that just changes the first bit of the expansion flag.
- * This way the expansion state of all the subpanels is not changed by RNA.
+ * This way the expansion state of all the sub-panels is not changed by RNA.
  */
 static void rna_Modifier_show_expanded_set(PointerRNA *ptr, bool value)
 {
@@ -1656,6 +1686,17 @@ static void rna_Modifier_show_expanded_set(PointerRNA *ptr, bool value)
   else {
     md->ui_expand_flag &= ~(1 << 0);
   }
+}
+
+/**
+ * Only check the first bit of the expansion flag for the main panel's expansion,
+ * maintaining compatibility with older versions where there was only one expansion
+ * value.
+ */
+static bool rna_Modifier_show_expanded_get(PointerRNA *ptr)
+{
+  ModifierData *md = ptr->data;
+  return md->ui_expand_flag & (1 << 0);
 }
 
 #else
@@ -2090,7 +2131,7 @@ static void rna_def_modifier_build(BlenderRNA *brna)
   prop = RNA_def_property(srna, "frame_start", PROP_FLOAT, PROP_TIME);
   RNA_def_property_float_sdna(prop, NULL, "start");
   RNA_def_property_range(prop, MINAFRAMEF, MAXFRAMEF);
-  RNA_def_property_ui_text(prop, "Start", "Start frame of the effect");
+  RNA_def_property_ui_text(prop, "Start Frame", "Start frame of the effect");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
   prop = RNA_def_property(srna, "frame_duration", PROP_FLOAT, PROP_TIME);
@@ -3419,7 +3460,7 @@ static void rna_def_modifier_cast(BlenderRNA *brna)
   prop = RNA_def_property(srna, "use_radius_as_size", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", MOD_CAST_SIZE_FROM_RADIUS);
   RNA_def_property_ui_text(
-      prop, "From Radius", "Use radius as size of projection shape (0 = auto)");
+      prop, "Size from Radius", "Use radius as size of projection shape (0 = auto)");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
   prop = RNA_def_property(srna, "use_transform", PROP_BOOLEAN, PROP_NONE);
@@ -3948,6 +3989,25 @@ static void rna_def_modifier_bevel(BlenderRNA *brna)
        0,
        "Percent",
        "Amount is percent of adjacent edge length"},
+      {MOD_BEVEL_AMT_ABSOLUTE,
+       "ABSOLUTE",
+       0,
+       "Absolute",
+       "Amount is absolute distance along adjacent edge"},
+      {0, NULL, 0, NULL, NULL},
+  };
+
+  static const EnumPropertyItem prop_profile_type_items[] = {
+      {MOD_BEVEL_PROFILE_SUPERELLIPSE,
+       "SUPERELLIPSE",
+       0,
+       "Superellipse",
+       "The profile can be a concave or convex curve"},
+      {MOD_BEVEL_PROFILE_CUSTOM,
+       "CUSTOM",
+       0,
+       "Custom",
+       "The profile can be any arbitrary path between its endpoints"},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -4061,6 +4121,13 @@ static void rna_def_modifier_bevel(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Width Type", "What distance Width measures");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
+  prop = RNA_def_property(srna, "profile_type", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_sdna(prop, NULL, "profile_type");
+  RNA_def_property_enum_items(prop, prop_profile_type_items);
+  RNA_def_property_ui_text(
+      prop, "Profile Type", "The type of shape used to rebuild a beveled section");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
   prop = RNA_def_property(srna, "profile", PROP_FLOAT, PROP_FACTOR);
   RNA_def_property_range(prop, 0.0f, 1.0f);
   RNA_def_property_ui_range(prop, 0.0f, 1.0f, 0.05, 2);
@@ -4118,12 +4185,6 @@ static void rna_def_modifier_bevel(BlenderRNA *brna)
   RNA_def_property_range(prop, 0, FLT_MAX);
   RNA_def_property_ui_range(prop, 0.0f, 100.0f, 0.1, 4);
   RNA_def_property_ui_text(prop, "Spread", "Spread distance for inner miter arcs");
-  RNA_def_property_update(prop, 0, "rna_Modifier_update");
-
-  prop = RNA_def_property(srna, "use_custom_profile", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_BEVEL_CUSTOM_PROFILE);
-  RNA_def_property_ui_text(
-      prop, "Custom Profile", "Whether to use a user inputted curve for the bevel's profile");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
   prop = RNA_def_property(srna, "custom_profile", PROP_POINTER, PROP_NONE);
@@ -4784,7 +4845,7 @@ static void rna_def_modifier_screw(BlenderRNA *brna)
   prop = RNA_def_property(srna, "use_normal_calculate", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", MOD_SCREW_NORMAL_CALC);
   RNA_def_property_ui_text(
-      prop, "Calc Order", "Calculate the order of edges (needed for meshes, but not curves)");
+      prop, "Calculate Order", "Calculate the order of edges (needed for meshes, but not curves)");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
   prop = RNA_def_property(srna, "use_object_screw_offset", PROP_BOOLEAN, PROP_NONE);
@@ -5021,7 +5082,7 @@ static void rna_def_modifier_weightvgedit(BlenderRNA *brna)
       {MOD_WVG_MAPPING_RANDOM, "RANDOM", ICON_RNDCURVE, "Random", ""},
       {MOD_WVG_MAPPING_STEP,
        "STEP",
-       ICON_NOCURVE /* Would need a better icon... */,
+       ICON_IPO_CONSTANT,
        "Median Step",
        "Map all values below 0.5 to 0.0, and all others to 1.0"},
       {0, NULL, 0, NULL, NULL},
@@ -5272,7 +5333,7 @@ static void rna_def_modifier_weightvgproximity(BlenderRNA *brna)
       {MOD_WVG_MAPPING_RANDOM, "RANDOM", ICON_RNDCURVE, "Random", ""},
       {MOD_WVG_MAPPING_STEP,
        "STEP",
-       ICON_NOCURVE /* Would need a better icon... */,
+       ICON_IPO_CONSTANT,
        "Median Step",
        "Map all values below 0.5 to 0.0, and all others to 1.0"},
       {0, NULL, 0, NULL, NULL},
@@ -5438,6 +5499,7 @@ static void rna_def_modifier_remesh(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "voxel_size", PROP_FLOAT, PROP_DISTANCE);
   RNA_def_property_float_sdna(prop, NULL, "voxel_size");
+  RNA_def_property_range(prop, 0.0001f, FLT_MAX);
   RNA_def_property_ui_range(prop, 0.0001, 2, 0.1, 3);
   RNA_def_property_ui_text(prop,
                            "Voxel Size",
@@ -5570,6 +5632,24 @@ static void rna_def_modifier_ocean(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Generate Foam", "Generate foam mask as a vertex color channel");
   RNA_def_property_update(prop, 0, "rna_OceanModifier_init_update");
 
+  prop = RNA_def_property(srna, "use_spray", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flag", MOD_OCEAN_GENERATE_SPRAY);
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+  RNA_def_property_ui_text(
+      prop, "Generate Spray Map", "Generate map of spray direction as a vertex color channel");
+  RNA_def_property_update(prop, 0, "rna_OceanModifier_init_update");
+
+  prop = RNA_def_property(srna, "invert_spray", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flag", MOD_OCEAN_INVERT_SPRAY);
+  RNA_def_property_ui_text(prop, "Invert Spray", "Invert the spray direction map");
+  RNA_def_property_update(prop, 0, "rna_OceanModifier_init_update");
+
+  prop = RNA_def_property(srna, "spray_layer_name", PROP_STRING, PROP_NONE);
+  RNA_def_property_string_sdna(prop, NULL, "spraylayername");
+  RNA_def_property_ui_text(
+      prop, "Spray Map", "Name of the vertex color layer used for the spray direction map");
+  RNA_def_property_update(prop, 0, "rna_OceanModifier_init_update");
+
   prop = RNA_def_property(srna, "resolution", PROP_INT, PROP_UNSIGNED);
   RNA_def_property_int_sdna(prop, NULL, "resolution");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
@@ -5609,7 +5689,7 @@ static void rna_def_modifier_ocean(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "wave_alignment", PROP_FLOAT, PROP_UNSIGNED);
   RNA_def_property_float_sdna(prop, NULL, "wave_alignment");
-  RNA_def_property_range(prop, 0.0, 10.0);
+  RNA_def_property_range(prop, 0.0, 1.0);
   RNA_def_property_ui_text(prop, "Wave Alignment", "How much the waves are aligned to each other");
   RNA_def_property_update(prop, 0, "rna_OceanModifier_init_update");
 
@@ -5686,7 +5766,7 @@ static void rna_def_modifier_ocean(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "sharpen_peak_jonswap", PROP_FLOAT, PROP_UNSIGNED);
   RNA_def_property_float_sdna(prop, NULL, "sharpen_peak_jonswap");
-  RNA_def_property_range(prop, 0.0, 10.0);
+  RNA_def_property_range(prop, 0.0, 1.0);
   RNA_def_property_ui_text(prop, "Sharpen peak", "Peak sharpening for 'JONSWAP' and 'TMA' models");
   RNA_def_property_update(prop, 0, "rna_OceanModifier_init_update");
 
@@ -6818,14 +6898,16 @@ static void rna_def_modifier_simulation(BlenderRNA *brna)
 
   RNA_define_lib_overridable(true);
 
-#  ifdef WITH_NEW_SIMULATION_TYPE
   prop = RNA_def_property(srna, "simulation", PROP_POINTER, PROP_NONE);
   RNA_def_property_ui_text(prop, "Simulation", "Simulation to access");
   RNA_def_property_flag(prop, PROP_EDITABLE);
   RNA_def_property_update(prop, 0, "rna_SimulationModifier_simulation_update");
-#  endif
 
   prop = RNA_def_property(srna, "data_path", PROP_STRING, PROP_NONE);
+  RNA_def_property_string_funcs(prop,
+                                "rna_SimulationModifier_data_path_get",
+                                "rna_SimulationModifier_data_path_length",
+                                "rna_SimulationModifier_data_path_set");
   RNA_def_property_ui_text(
       prop, "Data Path", "Identifier of the simulation component that should be accessed");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
@@ -6888,7 +6970,8 @@ void RNA_def_modifier(BlenderRNA *brna)
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
   prop = RNA_def_property(srna, "show_expanded", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_funcs(prop, NULL, "rna_Modifier_show_expanded_set");
+  RNA_def_property_boolean_funcs(
+      prop, "rna_Modifier_show_expanded_get", "rna_Modifier_show_expanded_set");
   RNA_def_property_flag(prop, PROP_NO_DEG_UPDATE);
   RNA_def_property_boolean_sdna(prop, NULL, "ui_expand_flag", 0);
   RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);

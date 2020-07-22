@@ -696,9 +696,7 @@ static float paint_space_stroke_spacing(bContext *C,
   if (paint_stroke_use_scene_spacing(brush, mode)) {
     return max_ff(0.001f, size_clamp * spacing / 50.f);
   }
-  else {
-    return max_ff(stroke->zoom_2d, size_clamp * spacing / 50.0f);
-  }
+  return max_ff(stroke->zoom_2d, size_clamp * spacing / 50.0f);
 }
 
 static float paint_stroke_overlapped_curve(Brush *br, float x, float spacing)
@@ -751,9 +749,7 @@ static float paint_stroke_integrate_overlap(Brush *br, float factor)
   if (max == 0.0f) {
     return 1.0f;
   }
-  else {
-    return 1.0f / max;
-  }
+  return 1.0f / max;
 }
 
 static float paint_space_stroke_spacing_variable(bContext *C,
@@ -781,10 +777,9 @@ static float paint_space_stroke_spacing_variable(bContext *C,
 
     return 0.5f * (last_spacing + new_spacing);
   }
-  else {
-    /* no size pressure */
-    return paint_space_stroke_spacing(C, scene, stroke, 1.0f, pressure);
-  }
+
+  /* no size pressure */
+  return paint_space_stroke_spacing(C, scene, stroke, 1.0f, pressure);
 }
 
 /* For brushes with stroke spacing enabled, moves mouse in steps
@@ -909,7 +904,7 @@ PaintStroke *paint_stroke_new(bContext *C,
   stroke->zoom_2d = max_ff(zoomx, zoomy);
 
   if (stroke->stroke_mode == BRUSH_STROKE_INVERT) {
-    if (br->flag & (BRUSH_CURVE)) {
+    if (br->flag & BRUSH_CURVE) {
       RNA_enum_set(op->ptr, "mode", BRUSH_STROKE_NORMAL);
     }
   }
@@ -1467,8 +1462,7 @@ int paint_stroke_modal(bContext *C, wmOperator *op, const wmEvent *event)
   }
   else if (first_modal ||
            /* regular dabs */
-           (!(br->flag & (BRUSH_AIRBRUSH)) &&
-            (ELEM(event->type, MOUSEMOVE, INBETWEEN_MOUSEMOVE))) ||
+           (!(br->flag & BRUSH_AIRBRUSH) && (ELEM(event->type, MOUSEMOVE, INBETWEEN_MOUSEMOVE))) ||
            /* airbrush */
            ((br->flag & BRUSH_AIRBRUSH) && event->type == TIMER &&
             event->customdata == stroke->timer)) {

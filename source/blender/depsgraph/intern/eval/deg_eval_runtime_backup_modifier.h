@@ -29,7 +29,8 @@
 
 struct ModifierData;
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 struct Depsgraph;
 
@@ -46,13 +47,16 @@ class ModifierDataBackupID {
   ModifierDataBackupID(const Depsgraph *depsgraph);
   ModifierDataBackupID(ModifierData *modifier_data, ModifierType type);
 
-  bool operator<(const ModifierDataBackupID &other) const;
+  friend bool operator==(const ModifierDataBackupID &a, const ModifierDataBackupID &b);
+
+  uint64_t hash() const;
 
   ModifierData *modifier_data;
   ModifierType type;
 };
 
 /* Storage for backed up runtime modifier data. */
-typedef map<ModifierDataBackupID, void *> ModifierRuntimeDataBackup;
+typedef Map<ModifierDataBackupID, void *> ModifierRuntimeDataBackup;
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

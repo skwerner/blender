@@ -19,7 +19,7 @@
 #ifndef __USD_WRITER_ABSTRACT_H__
 #define __USD_WRITER_ABSTRACT_H__
 
-#include "abstract_hierarchy_iterator.h"
+#include "IO_abstract_hierarchy_iterator.h"
 #include "usd_exporter_context.h"
 
 #include <pxr/usd/sdf/path.h>
@@ -36,7 +36,12 @@
 struct Material;
 struct Object;
 
-namespace USD {
+namespace blender {
+namespace io {
+namespace usd {
+
+using blender::io::AbstractHierarchyWriter;
+using blender::io::HierarchyContext;
 
 class USDAbstractWriter : public AbstractHierarchyWriter {
  protected:
@@ -70,6 +75,8 @@ class USDAbstractWriter : public AbstractHierarchyWriter {
   pxr::UsdShadeMaterial ensure_usd_material(Material *material);
 };
 
-}  // namespace USD
+}  // namespace usd
+}  // namespace io
+}  // namespace blender
 
 #endif /* __USD_WRITER_ABSTRACT_H__ */

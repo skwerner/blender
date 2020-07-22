@@ -1,9 +1,11 @@
+/* Apache License, Version 2.0 */
+
 #include "BLI_strict_flags.h"
 #include "BLI_vector.hh"
 #include "testing/testing.h"
 #include <forward_list>
 
-using namespace blender;
+namespace blender {
 
 TEST(vector, DefaultConstructor)
 {
@@ -55,6 +57,18 @@ TEST(vector, InitializerListConstructor)
   EXPECT_EQ(vec[1], 3);
   EXPECT_EQ(vec[2], 4);
   EXPECT_EQ(vec[3], 6);
+}
+
+TEST(vector, ConvertingConstructor)
+{
+  std::array<float, 5> values = {5.4f, 7.3f, -8.1f, 5.0f, 0.0f};
+  Vector<int> vec = values;
+  EXPECT_EQ(vec.size(), 5);
+  EXPECT_EQ(vec[0], 5);
+  EXPECT_EQ(vec[1], 7);
+  EXPECT_EQ(vec[2], -8);
+  EXPECT_EQ(vec[3], 5);
+  EXPECT_EQ(vec[4], 0);
 }
 
 struct TestListValue {
@@ -265,29 +279,6 @@ TEST(vector, ExtendNonDuplicates)
   EXPECT_EQ(vec.size(), 5);
 }
 
-TEST(vector, Fill)
-{
-  Vector<int> vec(5);
-  vec.fill(3);
-  EXPECT_EQ(vec.size(), 5);
-  EXPECT_EQ(vec[0], 3);
-  EXPECT_EQ(vec[1], 3);
-  EXPECT_EQ(vec[2], 3);
-  EXPECT_EQ(vec[3], 3);
-  EXPECT_EQ(vec[4], 3);
-}
-
-TEST(vector, FillIndices)
-{
-  Vector<int> vec(5, 0);
-  vec.fill_indices({1, 2}, 4);
-  EXPECT_EQ(vec[0], 0);
-  EXPECT_EQ(vec[1], 4);
-  EXPECT_EQ(vec[2], 4);
-  EXPECT_EQ(vec[3], 0);
-  EXPECT_EQ(vec[4], 0);
-}
-
 TEST(vector, Iterator)
 {
   Vector<int> vec({1, 4, 9, 16});
@@ -305,8 +296,8 @@ TEST(vector, BecomeLarge)
     vec.append(i * 5);
   }
   EXPECT_EQ(vec.size(), 100);
-  for (uint i = 0; i < 100; i++) {
-    EXPECT_EQ(vec[i], i * 5);
+  for (int i = 0; i < 100; i++) {
+    EXPECT_EQ(vec[i], static_cast<int>(i * 5));
   }
 }
 
@@ -337,19 +328,6 @@ TEST(vector, VectorOfVectors_Append)
   EXPECT_EQ(vec[0][1], 2);
   EXPECT_EQ(vec[1][0], 7);
   EXPECT_EQ(vec[1][1], 8);
-}
-
-TEST(vector, VectorOfVectors_Fill)
-{
-  Vector<Vector<int>> vec(3);
-  vec.fill({4, 5});
-
-  EXPECT_EQ(vec[0][0], 4);
-  EXPECT_EQ(vec[0][1], 5);
-  EXPECT_EQ(vec[1][0], 4);
-  EXPECT_EQ(vec[1][1], 5);
-  EXPECT_EQ(vec[2][0], 4);
-  EXPECT_EQ(vec[2][1], 5);
 }
 
 TEST(vector, RemoveLast)
@@ -499,7 +477,7 @@ class TypeConstructMock {
   {
   }
 
-  TypeConstructMock(TypeConstructMock &&other) : move_constructed(true)
+  TypeConstructMock(TypeConstructMock &&other) noexcept : move_constructed(true)
   {
   }
 
@@ -513,7 +491,7 @@ class TypeConstructMock {
     return *this;
   }
 
-  TypeConstructMock &operator=(TypeConstructMock &&other)
+  TypeConstructMock &operator=(TypeConstructMock &&other) noexcept
   {
     if (this == &other) {
       return *this;
@@ -636,3 +614,26 @@ TEST(vector, OveralignedValues)
     EXPECT_EQ((uintptr_t)&vec.last() % 512, 0);
   }
 }
+
+TEST(vector, ConstructVoidPointerVector)
+{
+  int a;
+  float b;
+  double c;
+  Vector<void *> vec = {&a, &b, &c};
+  EXPECT_EQ(vec.size(), 3);
+}
+
+TEST(vector, Fill)
+{
+  Vector<int> vec(5);
+  vec.fill(3);
+  EXPECT_EQ(vec.size(), 5u);
+  EXPECT_EQ(vec[0], 3);
+  EXPECT_EQ(vec[1], 3);
+  EXPECT_EQ(vec[2], 3);
+  EXPECT_EQ(vec[3], 3);
+  EXPECT_EQ(vec[4], 3);
+}
+
+}  // namespace blender

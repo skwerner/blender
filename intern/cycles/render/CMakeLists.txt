@@ -2,6 +2,7 @@
 set(INC
   ..
   ../../glew-mx
+  ../../sky/include
 )
 
 set(INC_SYS
@@ -24,6 +25,7 @@ set(SRC
   hair.cpp
   image.cpp
   image_oiio.cpp
+  image_sky.cpp
   image_vdb.cpp
   integrator.cpp
   jitter.cpp
@@ -64,6 +66,7 @@ set(SRC_HEADERS
   hair.h
   image.h
   image_oiio.h
+  image_sky.h
   image_vdb.h
   integrator.h
   light.h
@@ -90,6 +93,7 @@ set(LIB
   cycles_device
   cycles_subd
   cycles_util
+  bf_intern_sky
 )
 
 if(WITH_CYCLES_OSL)

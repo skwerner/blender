@@ -46,7 +46,20 @@ enum {
   IDTYPE_FLAGS_NO_MAKELOCAL = 1 << 2,
 };
 
-/* ********** Prototypes for IDTypeInfo callbacks. ********** */
+typedef struct IDCacheKey {
+  /* The session UUID of the ID owning the cached data. */
+  unsigned int id_session_uuid;
+  /* Value uniquely identifying the cache within its ID.
+   * Typically the offset of its member in the data-block struct, but can be anything. */
+  size_t offset_in_ID;
+  /* Actual address of the cached data to save and restore. */
+  void *cache_v;
+} IDCacheKey;
+
+uint BKE_idtype_cache_key_hash(const void *key_v);
+bool BKE_idtype_cache_key_cmp(const void *key_a_v, const void *key_b_v);
+
+/* ********** Prototypes for #IDTypeInfo callbacks. ********** */
 
 typedef void (*IDTypeInitDataFunction)(struct ID *id);
 
@@ -62,6 +75,20 @@ typedef void (*IDTypeFreeDataFunction)(struct ID *id);
 typedef void (*IDTypeMakeLocalFunction)(struct Main *bmain, struct ID *id, const int flags);
 
 typedef void (*IDTypeForeachIDFunction)(struct ID *id, struct LibraryForeachIDData *data);
+
+typedef enum eIDTypeInfoCacheCallbackFlags {
+  /** Indicates to the callback that that cache may be stored in the .blend file, so its pointer
+   * should not be cleared at read-time. */
+  IDTYPE_CACHE_CB_FLAGS_PERSISTENT = 1 << 0,
+} eIDTypeInfoCacheCallbackFlags;
+typedef void (*IDTypeForeachCacheFunctionCallback)(struct ID *id,
+                                                   const struct IDCacheKey *cache_key,
+                                                   void **cache_p,
+                                                   uint flags,
+                                                   void *user_data);
+typedef void (*IDTypeForeachCacheFunction)(struct ID *id,
+                                           IDTypeForeachCacheFunctionCallback function_callback,
+                                           void *user_data);
 
 typedef struct IDTypeInfo {
   /* ********** General IDType data. ********** */
@@ -130,6 +157,11 @@ typedef struct IDTypeInfo {
    * pointers) of given data-block.
    */
   IDTypeForeachIDFunction foreach_id;
+
+  /**
+   * Iterator over all cache pointers of given ID.
+   */
+  IDTypeForeachCacheFunction foreach_cache;
 } IDTypeInfo;
 
 /* ********** Declaration of each IDTypeInfo. ********** */
@@ -202,6 +234,14 @@ int BKE_idtype_idcode_to_index(const short idcode);
 short BKE_idtype_idcode_from_index(const int index);
 
 short BKE_idtype_idcode_iter_step(int *index);
+
+/* Some helpers/wrappers around callbacks defined in #IDTypeInfo, dealing e.g. with embedded IDs.
+ * XXX Ideally those would rather belong to #BKE_lib_id, but using callback function pointers makes
+ * this hard to do properly if we want to avoid headers includes in headers. */
+
+void BKE_idtype_id_foreach_cache(struct ID *id,
+                                 IDTypeForeachCacheFunctionCallback function_callback,
+                                 void *user_data);
 
 #ifdef __cplusplus
 }

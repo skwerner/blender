@@ -1,17 +1,19 @@
+/* Apache License, Version 2.0 */
+
 #include "BLI_index_range.hh"
 #include "BLI_strict_flags.h"
 #include "BLI_vector.hh"
 #include "testing/testing.h"
 
-using namespace blender;
+namespace blender {
 
 TEST(index_range, DefaultConstructor)
 {
   IndexRange range;
   EXPECT_EQ(range.size(), 0);
 
-  Vector<uint> vector;
-  for (uint value : range) {
+  Vector<int64_t> vector;
+  for (int64_t value : range) {
     vector.append(value);
   }
   EXPECT_EQ(vector.size(), 0);
@@ -23,8 +25,8 @@ TEST(index_range, SingleElementRange)
   EXPECT_EQ(range.size(), 1);
   EXPECT_EQ(*range.begin(), 4);
 
-  Vector<uint> vector;
-  for (uint value : range) {
+  Vector<int64_t> vector;
+  for (int64_t value : range) {
     vector.append(value);
   }
 
@@ -37,13 +39,13 @@ TEST(index_range, MultipleElementRange)
   IndexRange range(6, 4);
   EXPECT_EQ(range.size(), 4);
 
-  Vector<uint> vector;
-  for (uint value : range) {
+  Vector<int64_t> vector;
+  for (int64_t value : range) {
     vector.append(value);
   }
 
   EXPECT_EQ(vector.size(), 4);
-  for (uint i = 0; i < 4; i++) {
+  for (int i = 0; i < 4; i++) {
     EXPECT_EQ(vector[i], i + 6);
   }
 }
@@ -130,10 +132,12 @@ TEST(index_range, SliceRange)
 TEST(index_range, AsSpan)
 {
   IndexRange range = IndexRange(4, 6);
-  Span<uint> span = range.as_span();
+  Span<int64_t> span = range.as_span();
   EXPECT_EQ(span.size(), 6);
   EXPECT_EQ(span[0], 4);
   EXPECT_EQ(span[1], 5);
   EXPECT_EQ(span[2], 6);
   EXPECT_EQ(span[3], 7);
 }
+
+}  // namespace blender

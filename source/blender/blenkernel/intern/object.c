@@ -1532,12 +1532,12 @@ void BKE_object_copy_particlesystems(Object *ob_dst, const Object *ob_src, const
         }
       }
       else if (md->type == eModifierType_Fluid) {
-        FluidModifierData *mmd = (FluidModifierData *)md;
+        FluidModifierData *fmd = (FluidModifierData *)md;
 
-        if (mmd->type == MOD_FLUID_TYPE_FLOW) {
-          if (mmd->flow) {
-            if (mmd->flow->psys == psys) {
-              mmd->flow->psys = npsys;
+        if (fmd->type == MOD_FLUID_TYPE_FLOW) {
+          if (fmd->flow) {
+            if (fmd->flow->psys == psys) {
+              fmd->flow->psys = npsys;
             }
           }
         }
@@ -1758,300 +1758,172 @@ Object *BKE_object_copy(Main *bmain, const Object *ob)
  * \note Caller MUST free \a newid pointers itself (#BKE_main_id_clear_newpoins()) and call updates
  * of DEG too (#DAG_relations_tag_update()).
  */
-Object *BKE_object_duplicate(Main *bmain, const Object *ob, const int dupflag)
+Object *BKE_object_duplicate(Main *bmain,
+                             Object *ob,
+                             eDupli_ID_Flags dupflag,
+                             const eLibIDDuplicateFlags duplicate_options)
 {
-  Material ***matarar;
-  ID *id;
-  int a, didit;
-  const bool is_object_liboverride = ID_IS_OVERRIDE_LIBRARY(ob);
+  const bool is_subprocess = (duplicate_options & LIB_ID_DUPLICATE_IS_SUBPROCESS) != 0;
 
-  Object *obn = BKE_object_copy(bmain, ob);
+  if (!is_subprocess) {
+    BKE_main_id_tag_all(bmain, LIB_TAG_NEW, false);
+    BKE_main_id_clear_newpoins(bmain);
+    /* In case root duplicated ID is linked, assume we want to get a local copy of it and duplicate
+     * all expected linked data. */
+    if (ID_IS_LINKED(ob)) {
+      dupflag |= USER_DUP_LINKED_ID;
+    }
+  }
+
+  Material ***matarar;
+
+  Object *obn;
+  BKE_id_copy(bmain, &ob->id, (ID **)&obn);
+  id_us_min(&obn->id);
+  if (is_subprocess) {
+    ID_NEW_SET(ob, obn);
+  }
 
   /* 0 == full linked. */
   if (dupflag == 0) {
     return obn;
   }
 
-#define ID_NEW_REMAP_US(a) \
-  if ((a)->id.newid) { \
-    (a) = (void *)(a)->id.newid; \
-    (a)->id.us++; \
-  }
-#define ID_NEW_REMAP_US2(a) \
-  if (((ID *)a)->newid) { \
-    (a) = ((ID *)a)->newid; \
-    ((ID *)a)->us++; \
-  }
-
-  /* duplicates using userflags */
-  if (dupflag & USER_DUP_ACT) {
-    BKE_animdata_copy_id_action(bmain, &obn->id, true);
-  }
+  BKE_animdata_duplicate_id_action(bmain, &obn->id, dupflag);
 
   if (dupflag & USER_DUP_MAT) {
-    for (a = 0; a < obn->totcol; a++) {
-      id = (ID *)obn->mat[a];
-      if (id) {
-        if (is_object_liboverride && ID_IS_LINKED(id)) {
-          continue;
-        }
-        ID_NEW_REMAP_US(obn->mat[a])
-        else
-        {
-          obn->mat[a] = ID_NEW_SET(obn->mat[a], BKE_material_copy(bmain, obn->mat[a]));
-          if (dupflag & USER_DUP_ACT) {
-            BKE_animdata_copy_id_action(bmain, &obn->mat[a]->id, true);
-          }
-        }
-        id_us_min(id);
-      }
+    for (int i = 0; i < obn->totcol; i++) {
+      BKE_id_copy_for_duplicate(bmain, (ID *)obn->mat[i], dupflag);
     }
   }
   if (dupflag & USER_DUP_PSYS) {
     ParticleSystem *psys;
     for (psys = obn->particlesystem.first; psys; psys = psys->next) {
-      id = (ID *)psys->part;
-      if (id) {
-        if (is_object_liboverride && ID_IS_LINKED(id)) {
-          continue;
-        }
-        ID_NEW_REMAP_US(psys->part)
-        else
-        {
-          psys->part = ID_NEW_SET(psys->part, BKE_particlesettings_copy(bmain, psys->part));
-          if (dupflag & USER_DUP_ACT) {
-            BKE_animdata_copy_id_action(bmain, &psys->part->id, true);
-          }
-        }
-        id_us_min(id);
-      }
+      BKE_id_copy_for_duplicate(bmain, (ID *)psys->part, dupflag);
     }
   }
 
-  id = obn->data;
-  didit = 0;
+  ID *id_old = obn->data;
+  ID *id_new = NULL;
+  const bool need_to_duplicate_obdata = (id_old != NULL) && (id_old->newid == NULL);
 
-  if (!is_object_liboverride || !ID_IS_LINKED(id)) {
-    switch (obn->type) {
-      case OB_MESH:
-        if (dupflag & USER_DUP_MESH) {
-          ID_NEW_REMAP_US2(obn->data)
-          else
-          {
-            obn->data = ID_NEW_SET(obn->data, BKE_mesh_copy(bmain, obn->data));
-            didit = 1;
-          }
-          id_us_min(id);
-        }
-        break;
-      case OB_CURVE:
-        if (dupflag & USER_DUP_CURVE) {
-          ID_NEW_REMAP_US2(obn->data)
-          else
-          {
-            obn->data = ID_NEW_SET(obn->data, BKE_curve_copy(bmain, obn->data));
-            didit = 1;
-          }
-          id_us_min(id);
-        }
-        break;
-      case OB_SURF:
-        if (dupflag & USER_DUP_SURF) {
-          ID_NEW_REMAP_US2(obn->data)
-          else
-          {
-            obn->data = ID_NEW_SET(obn->data, BKE_curve_copy(bmain, obn->data));
-            didit = 1;
-          }
-          id_us_min(id);
-        }
-        break;
-      case OB_FONT:
-        if (dupflag & USER_DUP_FONT) {
-          ID_NEW_REMAP_US2(obn->data)
-          else
-          {
-            obn->data = ID_NEW_SET(obn->data, BKE_curve_copy(bmain, obn->data));
-            didit = 1;
-          }
-          id_us_min(id);
-        }
-        break;
-      case OB_MBALL:
-        if (dupflag & USER_DUP_MBALL) {
-          ID_NEW_REMAP_US2(obn->data)
-          else
-          {
-            obn->data = ID_NEW_SET(obn->data, BKE_mball_copy(bmain, obn->data));
-            didit = 1;
-          }
-          id_us_min(id);
-        }
-        break;
-      case OB_LAMP:
-        if (dupflag & USER_DUP_LAMP) {
-          ID_NEW_REMAP_US2(obn->data)
-          else
-          {
-            obn->data = ID_NEW_SET(obn->data, BKE_light_copy(bmain, obn->data));
-            didit = 1;
-          }
-          id_us_min(id);
-        }
-        break;
-      case OB_ARMATURE:
-        if (dupflag != 0) {
-          DEG_id_tag_update(&obn->id, ID_RECALC_GEOMETRY);
-          if (obn->pose) {
-            BKE_pose_tag_recalc(bmain, obn->pose);
-          }
-          if (dupflag & USER_DUP_ARM) {
-            ID_NEW_REMAP_US2(obn->data)
-            else
-            {
-              obn->data = ID_NEW_SET(obn->data, BKE_armature_copy(bmain, obn->data));
-              BKE_pose_rebuild(bmain, obn, obn->data, true);
-              didit = 1;
-            }
-            id_us_min(id);
-          }
-        }
-        break;
-      case OB_LATTICE:
-        if (dupflag != 0) {
-          ID_NEW_REMAP_US2(obn->data)
-          else
-          {
-            obn->data = ID_NEW_SET(obn->data, BKE_lattice_copy(bmain, obn->data));
-            didit = 1;
-          }
-          id_us_min(id);
-        }
-        break;
-      case OB_CAMERA:
-        if (dupflag != 0) {
-          ID_NEW_REMAP_US2(obn->data)
-          else
-          {
-            obn->data = ID_NEW_SET(obn->data, BKE_camera_copy(bmain, obn->data));
-            didit = 1;
-          }
-          id_us_min(id);
-        }
-        break;
-      case OB_LIGHTPROBE:
-        if (dupflag & USER_DUP_LIGHTPROBE) {
-          ID_NEW_REMAP_US2(obn->data)
-          else
-          {
-            obn->data = ID_NEW_SET(obn->data, BKE_lightprobe_copy(bmain, obn->data));
-            didit = 1;
-          }
-          id_us_min(id);
-        }
-        break;
-      case OB_SPEAKER:
-        if (dupflag != 0) {
-          ID_NEW_REMAP_US2(obn->data)
-          else
-          {
-            obn->data = ID_NEW_SET(obn->data, BKE_speaker_copy(bmain, obn->data));
-            didit = 1;
-          }
-          id_us_min(id);
-        }
-        break;
-      case OB_GPENCIL:
-        if (dupflag & USER_DUP_GPENCIL) {
-          ID_NEW_REMAP_US2(obn->data)
-          else
-          {
-            obn->data = ID_NEW_SET(obn->data, BKE_gpencil_copy(bmain, obn->data));
-            didit = 1;
-          }
-          id_us_min(id);
-        }
-        break;
-      case OB_HAIR:
-        if (dupflag & USER_DUP_HAIR) {
-          ID_NEW_REMAP_US2(obn->data)
-          else
-          {
-            obn->data = ID_NEW_SET(obn->data, BKE_hair_copy(bmain, obn->data));
-            didit = 1;
-          }
-          id_us_min(id);
-        }
-        break;
-      case OB_POINTCLOUD:
-        if (dupflag & USER_DUP_POINTCLOUD) {
-          ID_NEW_REMAP_US2(obn->data)
-          else
-          {
-            obn->data = ID_NEW_SET(obn->data, BKE_pointcloud_copy(bmain, obn->data));
-            didit = 1;
-          }
-          id_us_min(id);
-        }
-        break;
-      case OB_VOLUME:
-        if (dupflag & USER_DUP_VOLUME) {
-          ID_NEW_REMAP_US2(obn->data)
-          else
-          {
-            obn->data = ID_NEW_SET(obn->data, BKE_volume_copy(bmain, obn->data));
-            didit = 1;
-          }
-          id_us_min(id);
-        }
-        break;
-    }
+  switch (obn->type) {
+    case OB_MESH:
+      if (dupflag & USER_DUP_MESH) {
+        id_new = BKE_id_copy_for_duplicate(bmain, id_old, dupflag);
+      }
+      break;
+    case OB_CURVE:
+      if (dupflag & USER_DUP_CURVE) {
+        id_new = BKE_id_copy_for_duplicate(bmain, id_old, dupflag);
+      }
+      break;
+    case OB_SURF:
+      if (dupflag & USER_DUP_SURF) {
+        id_new = BKE_id_copy_for_duplicate(bmain, id_old, dupflag);
+      }
+      break;
+    case OB_FONT:
+      if (dupflag & USER_DUP_FONT) {
+        id_new = BKE_id_copy_for_duplicate(bmain, id_old, dupflag);
+      }
+      break;
+    case OB_MBALL:
+      if (dupflag & USER_DUP_MBALL) {
+        id_new = BKE_id_copy_for_duplicate(bmain, id_old, dupflag);
+      }
+      break;
+    case OB_LAMP:
+      if (dupflag & USER_DUP_LAMP) {
+        id_new = BKE_id_copy_for_duplicate(bmain, id_old, dupflag);
+      }
+      break;
+    case OB_ARMATURE:
+      if (dupflag & USER_DUP_ARM) {
+        id_new = BKE_id_copy_for_duplicate(bmain, id_old, dupflag);
+      }
+      break;
+    case OB_LATTICE:
+      if (dupflag != 0) {
+        id_new = BKE_id_copy_for_duplicate(bmain, id_old, dupflag);
+      }
+      break;
+    case OB_CAMERA:
+      if (dupflag != 0) {
+        id_new = BKE_id_copy_for_duplicate(bmain, id_old, dupflag);
+      }
+      break;
+    case OB_LIGHTPROBE:
+      if (dupflag & USER_DUP_LIGHTPROBE) {
+        id_new = BKE_id_copy_for_duplicate(bmain, id_old, dupflag);
+      }
+      break;
+    case OB_SPEAKER:
+      if (dupflag != 0) {
+        id_new = BKE_id_copy_for_duplicate(bmain, id_old, dupflag);
+      }
+      break;
+    case OB_GPENCIL:
+      if (dupflag & USER_DUP_GPENCIL) {
+        id_new = BKE_id_copy_for_duplicate(bmain, id_old, dupflag);
+      }
+      break;
+    case OB_HAIR:
+      if (dupflag & USER_DUP_HAIR) {
+        id_new = BKE_id_copy_for_duplicate(bmain, id_old, dupflag);
+      }
+      break;
+    case OB_POINTCLOUD:
+      if (dupflag & USER_DUP_POINTCLOUD) {
+        id_new = BKE_id_copy_for_duplicate(bmain, id_old, dupflag);
+      }
+      break;
+    case OB_VOLUME:
+      if (dupflag & USER_DUP_VOLUME) {
+        id_new = BKE_id_copy_for_duplicate(bmain, id_old, dupflag);
+      }
+      break;
   }
 
-  /* Check if obdata is copied. */
-  if (didit) {
-    Key *key = BKE_key_from_object(obn);
-
-    Key *oldkey = BKE_key_from_object(ob);
-    if (oldkey != NULL) {
-      ID_NEW_SET(oldkey, key);
-    }
-
-    if (dupflag & USER_DUP_ACT) {
-      BKE_animdata_copy_id_action(bmain, (ID *)obn->data, true);
-      if (key) {
-        BKE_animdata_copy_id_action(bmain, (ID *)key, true);
-      }
-    }
-
+  /* If obdata has been copied, we may also have to duplicate the materials assigned to it. */
+  if (need_to_duplicate_obdata && !ELEM(id_new, NULL, id_old)) {
     if (dupflag & USER_DUP_MAT) {
       matarar = BKE_object_material_array_p(obn);
       if (matarar) {
-        for (a = 0; a < obn->totcol; a++) {
-          id = (ID *)(*matarar)[a];
-          if (id) {
-            if (is_object_liboverride && ID_IS_LINKED(id)) {
-              continue;
-            }
-            ID_NEW_REMAP_US((*matarar)[a])
-            else
-            {
-              (*matarar)[a] = ID_NEW_SET((*matarar)[a], BKE_material_copy(bmain, (*matarar)[a]));
-              if (dupflag & USER_DUP_ACT) {
-                BKE_animdata_copy_id_action(bmain, &(*matarar)[a]->id, true);
-              }
-            }
-            id_us_min(id);
-          }
+        for (int i = 0; i < obn->totcol; i++) {
+          BKE_id_copy_for_duplicate(bmain, (ID *)(*matarar)[i], dupflag);
         }
       }
     }
   }
 
-#undef ID_NEW_REMAP_US
-#undef ID_NEW_REMAP_US2
+  if (!is_subprocess) {
+    /* This code will follow into all ID links using an ID tagged with LIB_TAG_NEW.*/
+    BKE_libblock_relink_to_newid(&obn->id);
 
-  if (ob->data != NULL) {
+#ifndef NDEBUG
+    /* Call to `BKE_libblock_relink_to_newid` above is supposed to have cleared all those flags. */
+    ID *id_iter;
+    FOREACH_MAIN_ID_BEGIN (bmain, id_iter) {
+      BLI_assert((id_iter->tag & LIB_TAG_NEW) == 0);
+    }
+    FOREACH_MAIN_ID_END;
+#endif
+
+    /* Cleanup. */
+    BKE_main_id_tag_all(bmain, LIB_TAG_NEW, false);
+    BKE_main_id_clear_newpoins(bmain);
+  }
+
+  if (obn->type == OB_ARMATURE) {
+    DEG_id_tag_update(&obn->id, ID_RECALC_GEOMETRY);
+    if (obn->pose) {
+      BKE_pose_tag_recalc(bmain, obn->pose);
+    }
+    //    BKE_pose_rebuild(bmain, obn, obn->data, true);
+  }
+
+  if (obn->data != NULL) {
     DEG_id_tag_update_ex(bmain, (ID *)obn->data, ID_RECALC_EDITORS);
   }
 
@@ -2512,7 +2384,6 @@ void BKE_object_matrix_local_get(struct Object *ob, float mat[4][4])
 }
 
 /**
- * \param depsgraph: Used for dupli-frame time.
  * \return success if \a mat is set.
  */
 static bool ob_parcurve(Object *ob, Object *par, float mat[4][4])
@@ -2616,9 +2487,10 @@ static void give_parvert(Object *par, int nr, float vec[3])
 
     if (me_eval) {
       int count = 0;
-      const int numVerts = me_eval->totvert;
+      int numVerts = me_eval->totvert;
 
-      if (em && me_eval->runtime.is_original) {
+      if (em && me_eval->runtime.wrapper_type == ME_WRAPPER_TYPE_BMESH) {
+        numVerts = em->bm->totvert;
         if (em->bm->elem_table_dirty & BM_VERT) {
 #ifdef VPARENT_THREADING_HACK
           BLI_mutex_lock(&vparent_lock);
@@ -2631,10 +2503,18 @@ static void give_parvert(Object *par, int nr, float vec[3])
           BM_mesh_elem_table_ensure(em->bm, BM_VERT);
 #endif
         }
+        if (nr < numVerts) {
+          if (me_eval && me_eval->runtime.edit_data && me_eval->runtime.edit_data->vertexCos) {
+            add_v3_v3(vec, me_eval->runtime.edit_data->vertexCos[nr]);
+          }
+          else {
+            const BMVert *v = BM_vert_at_index(em->bm, nr);
+            add_v3_v3(vec, v->co);
+          }
+          count++;
+        }
       }
-
-      if (CustomData_has_layer(&me_eval->vdata, CD_ORIGINDEX) &&
-          !(em && me_eval->runtime.is_original)) {
+      else if (CustomData_has_layer(&me_eval->vdata, CD_ORIGINDEX)) {
         const int *index = CustomData_get_layer(&me_eval->vdata, CD_ORIGINDEX);
         /* Get the average of all verts with (original index == nr). */
         for (int i = 0; i < numVerts; i++) {
@@ -2866,7 +2746,10 @@ void BKE_object_where_is_calc_time(Depsgraph *depsgraph, Scene *scene, Object *o
 {
   /* Execute drivers and animation. */
   const bool flush_to_original = DEG_is_active(depsgraph);
-  BKE_animsys_evaluate_animdata(&ob->id, ob->adt, ctime, ADT_RECALC_ALL, flush_to_original);
+  const AnimationEvalContext anim_eval_context = BKE_animsys_eval_context_construct(depsgraph,
+                                                                                    ctime);
+  BKE_animsys_evaluate_animdata(
+      &ob->id, ob->adt, &anim_eval_context, ADT_RECALC_ALL, flush_to_original);
   object_where_is_calc_ex(depsgraph, scene, ob, ctime, NULL, NULL);
 }
 
@@ -4713,9 +4596,9 @@ bool BKE_object_modifier_update_subframe(Depsgraph *depsgraph,
     }
   }
   else if (type == eModifierType_Fluid) {
-    FluidModifierData *mmd = (FluidModifierData *)md;
+    FluidModifierData *fmd = (FluidModifierData *)md;
 
-    if (mmd && (mmd->type & MOD_FLUID_TYPE_DOMAIN) != 0) {
+    if (fmd && (fmd->type & MOD_FLUID_TYPE_DOMAIN) != 0) {
       return true;
     }
   }
@@ -4763,9 +4646,13 @@ bool BKE_object_modifier_update_subframe(Depsgraph *depsgraph,
 
   /* was originally ID_RECALC_ALL - TODO - which flags are really needed??? */
   /* TODO(sergey): What about animation? */
+  const AnimationEvalContext anim_eval_context = BKE_animsys_eval_context_construct(depsgraph,
+                                                                                    frame);
+
   ob->id.recalc |= ID_RECALC_ALL;
   if (update_mesh) {
-    BKE_animsys_evaluate_animdata(&ob->id, ob->adt, frame, ADT_RECALC_ANIM, flush_to_original);
+    BKE_animsys_evaluate_animdata(
+        &ob->id, ob->adt, &anim_eval_context, ADT_RECALC_ANIM, flush_to_original);
     /* ignore cache clear during subframe updates
      * to not mess up cache validity */
     object_cacheIgnoreClear(ob, 1);
@@ -4779,12 +4666,14 @@ bool BKE_object_modifier_update_subframe(Depsgraph *depsgraph,
   /* for curve following objects, parented curve has to be updated too */
   if (ob->type == OB_CURVE) {
     Curve *cu = ob->data;
-    BKE_animsys_evaluate_animdata(&cu->id, cu->adt, frame, ADT_RECALC_ANIM, flush_to_original);
+    BKE_animsys_evaluate_animdata(
+        &cu->id, cu->adt, &anim_eval_context, ADT_RECALC_ANIM, flush_to_original);
   }
   /* and armatures... */
   if (ob->type == OB_ARMATURE) {
     bArmature *arm = ob->data;
-    BKE_animsys_evaluate_animdata(&arm->id, arm->adt, frame, ADT_RECALC_ANIM, flush_to_original);
+    BKE_animsys_evaluate_animdata(
+        &arm->id, arm->adt, &anim_eval_context, ADT_RECALC_ANIM, flush_to_original);
     BKE_pose_where_is(depsgraph, scene, ob);
   }
 

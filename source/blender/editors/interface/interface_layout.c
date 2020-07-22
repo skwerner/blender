@@ -250,28 +250,23 @@ static int ui_item_fit(
     if (is_last) {
       return available - pos;
     }
-    else {
-      float width = *extra_pixel + (item * available) / (float)all;
-      *extra_pixel = width - (int)width;
-      return (int)width;
-    }
+
+    float width = *extra_pixel + (item * available) / (float)all;
+    *extra_pixel = width - (int)width;
+    return (int)width;
   }
-  else {
-    /* contents is smaller or equal to available space */
-    if (alignment == UI_LAYOUT_ALIGN_EXPAND) {
-      if (is_last) {
-        return available - pos;
-      }
-      else {
-        float width = *extra_pixel + (item * available) / (float)all;
-        *extra_pixel = width - (int)width;
-        return (int)width;
-      }
+
+  /* contents is smaller or equal to available space */
+  if (alignment == UI_LAYOUT_ALIGN_EXPAND) {
+    if (is_last) {
+      return available - pos;
     }
-    else {
-      return item;
-    }
+
+    float width = *extra_pixel + (item * available) / (float)all;
+    *extra_pixel = width - (int)width;
+    return (int)width;
   }
+  return item;
 }
 
 /* variable button size in which direction? */
@@ -323,9 +318,7 @@ static int ui_text_icon_width(uiLayout *layout, const char *name, int icon, bool
     }
     return UI_fontstyle_string_width(fstyle, name) + (unit_x * margin);
   }
-  else {
-    return unit_x * 10;
-  }
+  return unit_x * 10;
 }
 
 static void ui_item_size(uiItem *item, int *r_w, int *r_h)
@@ -954,8 +947,11 @@ static uiBut *ui_item_with_label(uiLayout *layout,
   const bool use_prop_sep = ((layout->item.flag & UI_ITEM_PROP_SEP) != 0);
 #endif
 
-  /* Always align item with label since text is already given enough space not to overlap. */
-  sub = uiLayoutRow(layout, true);
+  /* Previously 'align' was enabled to make sure the label is spaced closely to the button.
+   * Set the space to zero instead as aligning a large number of labels can end up aligning
+   * thousands of buttons when displaying key-map search (a heavy operation), see: T78636. */
+  sub = uiLayoutRow(layout, false);
+  sub->space = 0;
   UI_block_layout_set_current(block, sub);
 
 #ifdef UI_PROP_DECORATE
@@ -1458,9 +1454,7 @@ void uiItemsFullEnumO_items(uiLayout *layout,
           /* break since rest of items is handled in new pie level */
           break;
         }
-        else {
-          last_iter = true;
-        }
+        last_iter = true;
       }
       else {
         continue;
@@ -2579,43 +2573,42 @@ void uiItemsEnumR(uiLayout *layout, struct PointerRNA *ptr, const char *propname
     RNA_warning("not an enum property: %s.%s", RNA_struct_identifier(ptr->type), propname);
     return;
   }
-  else {
-    const EnumPropertyItem *item;
-    int totitem, i;
-    bool free;
-    uiLayout *split = uiLayoutSplit(layout, 0.0f, false);
-    uiLayout *column = uiLayoutColumn(split, false);
 
-    RNA_property_enum_items_gettexted(block->evil_C, ptr, prop, &item, &totitem, &free);
+  const EnumPropertyItem *item;
+  int totitem, i;
+  bool free;
+  uiLayout *split = uiLayoutSplit(layout, 0.0f, false);
+  uiLayout *column = uiLayoutColumn(split, false);
 
-    for (i = 0; i < totitem; i++) {
-      if (item[i].identifier[0]) {
-        uiItemEnumR_prop(column, item[i].name, item[i].icon, ptr, prop, item[i].value);
-        ui_but_tip_from_enum_item(block->buttons.last, &item[i]);
+  RNA_property_enum_items_gettexted(block->evil_C, ptr, prop, &item, &totitem, &free);
+
+  for (i = 0; i < totitem; i++) {
+    if (item[i].identifier[0]) {
+      uiItemEnumR_prop(column, item[i].name, item[i].icon, ptr, prop, item[i].value);
+      ui_but_tip_from_enum_item(block->buttons.last, &item[i]);
+    }
+    else {
+      if (item[i].name) {
+        if (i != 0) {
+          column = uiLayoutColumn(split, false);
+          /* inconsistent, but menus with labels do not look good flipped */
+          block->flag |= UI_BLOCK_NO_FLIP;
+        }
+
+        uiItemL(column, item[i].name, ICON_NONE);
+        bt = block->buttons.last;
+        bt->drawflag = UI_BUT_TEXT_LEFT;
+
+        ui_but_tip_from_enum_item(bt, &item[i]);
       }
       else {
-        if (item[i].name) {
-          if (i != 0) {
-            column = uiLayoutColumn(split, false);
-            /* inconsistent, but menus with labels do not look good flipped */
-            block->flag |= UI_BLOCK_NO_FLIP;
-          }
-
-          uiItemL(column, item[i].name, ICON_NONE);
-          bt = block->buttons.last;
-          bt->drawflag = UI_BUT_TEXT_LEFT;
-
-          ui_but_tip_from_enum_item(bt, &item[i]);
-        }
-        else {
-          uiItemS(column);
-        }
+        uiItemS(column);
       }
     }
+  }
 
-    if (free) {
-      MEM_freeN((void *)item);
-    }
+  if (free) {
+    MEM_freeN((void *)item);
   }
 
   /* intentionally don't touch UI_BLOCK_IS_FLIP here,
@@ -3199,15 +3192,14 @@ uiLayout *uiItemL_respect_property_split(uiLayout *layout, const char *text, int
 
     return split_wrapper.decorate_column;
   }
-  else {
-    char namestr[UI_MAX_NAME_STR];
-    if (text) {
-      text = ui_item_name_add_colon(text, namestr);
-    }
-    uiItemL_(layout, text, icon);
 
-    return layout;
+  char namestr[UI_MAX_NAME_STR];
+  if (text) {
+    text = ui_item_name_add_colon(text, namestr);
   }
+  uiItemL_(layout, text, icon);
+
+  return layout;
 }
 
 void uiItemLDrag(uiLayout *layout, PointerRNA *ptr, const char *name, int icon)
@@ -5046,9 +5038,7 @@ int uiLayoutGetEmboss(uiLayout *layout)
   if (layout->emboss == UI_EMBOSS_UNDEFINED) {
     return layout->root->block->dt;
   }
-  else {
-    return layout->emboss;
-  }
+  return layout->emboss;
 }
 
 /** \} */
@@ -5516,9 +5506,7 @@ MenuType *UI_but_menutype_get(uiBut *but)
   if (but->menu_create_func == ui_item_menutype_func) {
     return (MenuType *)but->poin;
   }
-  else {
-    return NULL;
-  }
+  return NULL;
 }
 
 /* this is a bit of a hack but best keep it in one place at least */
@@ -5527,9 +5515,7 @@ PanelType *UI_but_paneltype_get(uiBut *but)
   if (but->menu_create_func == ui_item_paneltype_func) {
     return (PanelType *)but->poin;
   }
-  else {
-    return NULL;
-  }
+  return NULL;
 }
 
 void UI_menutype_draw(bContext *C, MenuType *mt, struct uiLayout *layout)
@@ -5554,6 +5540,26 @@ void UI_menutype_draw(bContext *C, MenuType *mt, struct uiLayout *layout)
   }
 }
 
+static bool ui_layout_has_panel_label(const uiLayout *layout, const PanelType *pt)
+{
+  LISTBASE_FOREACH (uiItem *, subitem, &layout->items) {
+    if (subitem->type == ITEM_BUTTON) {
+      uiButtonItem *bitem = (uiButtonItem *)subitem;
+      if (!(bitem->but->flag & UI_HIDDEN) && STREQ(bitem->but->str, pt->label)) {
+        return true;
+      }
+    }
+    else {
+      uiLayout *litem = (uiLayout *)subitem;
+      if (ui_layout_has_panel_label(litem, pt)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 static void ui_paneltype_draw_impl(bContext *C, PanelType *pt, uiLayout *layout, bool show_header)
 {
   Panel *panel = MEM_callocN(sizeof(Panel), "popover panel");
@@ -5570,12 +5576,19 @@ static void ui_paneltype_draw_impl(bContext *C, PanelType *pt, uiLayout *layout,
       pt->draw_header(C, panel);
       panel->layout = NULL;
     }
-    uiItemL(row, CTX_IFACE_(pt->translation_context, pt->label), ICON_NONE);
+
+    /* draw_header() is often used to add a checkbox to the header. If we add the label like below
+     * the label is disconnected from the checkbox, adding a weird looking gap. As workaround, let
+     * the checkbox add the label instead. */
+    if (!ui_layout_has_panel_label(row, pt)) {
+      uiItemL(row, CTX_IFACE_(pt->translation_context, pt->label), ICON_NONE);
+    }
   }
 
   panel->layout = layout;
   pt->draw(C, panel);
   panel->layout = NULL;
+  BLI_assert(panel->runtime.custom_data_ptr == NULL);
 
   MEM_freeN(panel);
 

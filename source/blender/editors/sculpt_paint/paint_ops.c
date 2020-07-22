@@ -246,7 +246,11 @@ static int palette_color_add_exec(bContext *C, wmOperator *UNUSED(op))
   color = BKE_palette_color_add(palette);
   palette->active_color = BLI_listbase_count(&palette->colors) - 1;
 
-  if (ELEM(mode, PAINT_MODE_TEXTURE_3D, PAINT_MODE_TEXTURE_2D, PAINT_MODE_VERTEX)) {
+  if (ELEM(mode,
+           PAINT_MODE_TEXTURE_3D,
+           PAINT_MODE_TEXTURE_2D,
+           PAINT_MODE_VERTEX,
+           PAINT_MODE_SCULPT)) {
     copy_v3_v3(color->rgb, BKE_brush_color_get(scene, brush));
     color->value = 0.0;
   }
@@ -304,7 +308,10 @@ static bool palette_extract_img_poll(bContext *C)
 {
   SpaceLink *sl = CTX_wm_space_data(C);
   if ((sl != NULL) && (sl->spacetype == SPACE_IMAGE)) {
-    return true;
+    SpaceImage *sima = CTX_wm_space_image(C);
+    Image *image = sima->image;
+    ImageUser iuser = sima->iuser;
+    return BKE_image_has_ibuf(image, &iuser);
   }
 
   return false;
@@ -326,16 +333,16 @@ static int palette_extract_img_exec(bContext *C, wmOperator *op)
 
   ibuf = BKE_image_acquire_ibuf(image, &iuser, &lock);
 
-  if (ibuf->rect) {
+  if (ibuf && ibuf->rect) {
     /* Extract all colors. */
+    const int range = (int)pow(10.0f, threshold);
     for (int row = 0; row < ibuf->y; row++) {
       for (int col = 0; col < ibuf->x; col++) {
         float color[4];
         IMB_sampleImageAtLocation(ibuf, (float)col, (float)row, false, color);
-        const float range = pow(10.0f, threshold);
-        color[0] = truncf(color[0] * range) / range;
-        color[1] = truncf(color[1] * range) / range;
-        color[2] = truncf(color[2] * range) / range;
+        for (int i = 0; i < 3; i++) {
+          color[i] = truncf(color[i] * range) / range;
+        }
 
         uint key = rgb_to_cpack(color[0], color[1], color[2]);
         if (!BLI_ghash_haskey(color_table, POINTER_FROM_INT(key))) {
@@ -360,6 +367,8 @@ static int palette_extract_img_exec(bContext *C, wmOperator *op)
 
 static void PALETTE_OT_extract_from_image(wmOperatorType *ot)
 {
+  PropertyRNA *prop;
+
   /* identifiers */
   ot->name = "Extract Palette from Image";
   ot->idname = "PALETTE_OT_extract_from_image";
@@ -373,7 +382,8 @@ static void PALETTE_OT_extract_from_image(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   /* properties */
-  RNA_def_int(ot->srna, "threshold", 1, 1, 4, "Threshold", "", 1, 4);
+  prop = RNA_def_int(ot->srna, "threshold", 1, 1, 1, "Threshold", "", 1, 1);
+  RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
 }
 
 /* Sort Palette color by Hue and Saturation. */
@@ -689,14 +699,12 @@ static Brush *brush_tool_toggle(Main *bmain, Paint *paint, Brush *brush_orig, co
 
     return br;
   }
-  else if (brush_orig->toggle_brush) {
+  if (brush_orig->toggle_brush) {
     /* if current brush is using the desired tool, try to toggle
      * back to the previously selected brush. */
     return brush_orig->toggle_brush;
   }
-  else {
-    return NULL;
-  }
+  return NULL;
 }
 
 static bool brush_generic_tool_set(bContext *C,
@@ -745,9 +753,7 @@ static bool brush_generic_tool_set(bContext *C,
 
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 static const ePaintMode brush_select_paint_modes[] = {

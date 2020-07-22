@@ -19,62 +19,86 @@
 
 /** \file
  * \ingroup bli
+ * Some of the functions below have very similar alternatives in the standard library. However, it
+ * is rather annoying to use those when debugging. Therefore, some more specialized and easier to
+ * debug functions are provided here.
  */
 
 #include <memory>
 #include <new>
+#include <type_traits>
 
 #include "BLI_utildefines.h"
 
 namespace blender {
 
 /**
- * Call the default constructor on n consecutive elements. For trivially constructible types, this
- * does nothing.
+ * Call the destructor on n consecutive values. For trivially destructible types, this does
+ * nothing.
+ *
+ * Exception Safety: Destructors shouldn't throw exceptions.
  *
  * Before:
- *  ptr: uninitialized
- * After:
  *  ptr: initialized
+ * After:
+ *  ptr: uninitialized
  */
-template<typename T> void default_construct_n(T *ptr, uint n)
+template<typename T> void destruct_n(T *ptr, int64_t n)
 {
+  BLI_assert(n >= 0);
+
+  static_assert(std::is_nothrow_destructible_v<T>,
+                "This should be true for all types. Destructors are noexcept by default.");
+
   /* This is not strictly necessary, because the loop below will be optimized away anyway. It is
    * nice to make behavior this explicitly, though. */
-  if (std::is_trivially_constructible<T>::value) {
+  if (std::is_trivially_destructible_v<T>) {
     return;
   }
 
-  for (uint i = 0; i < n; i++) {
-    new ((void *)(ptr + i)) T;
+  for (int64_t i = 0; i < n; i++) {
+    ptr[i].~T();
   }
 }
 
 /**
- * Call the destructor on n consecutive values. For trivially destructible types, this does
- * nothing.
+ * Call the default constructor on n consecutive elements. For trivially constructible types, this
+ * does nothing.
+ *
+ * Exception Safety: Strong.
  *
  * Before:
- *  ptr: initialized
- * After:
  *  ptr: uninitialized
+ * After:
+ *  ptr: initialized
  */
-template<typename T> void destruct_n(T *ptr, uint n)
+template<typename T> void default_construct_n(T *ptr, int64_t n)
 {
+  BLI_assert(n >= 0);
+
   /* This is not strictly necessary, because the loop below will be optimized away anyway. It is
    * nice to make behavior this explicitly, though. */
-  if (std::is_trivially_destructible<T>::value) {
+  if (std::is_trivially_constructible_v<T>) {
     return;
   }
 
-  for (uint i = 0; i < n; i++) {
-    ptr[i].~T();
+  int64_t current = 0;
+  try {
+    for (; current < n; current++) {
+      new ((void *)(ptr + current)) T;
+    }
+  }
+  catch (...) {
+    destruct_n(ptr, current);
+    throw;
   }
 }
 
 /**
  * Copy n values from src to dst.
  *
+ * Exception Safety: Basic.
+ *
  * Before:
  *  src: initialized
  *  dst: initialized
@@ -82,9 +106,11 @@ template<typename T> void destruct_n(T *ptr, uint n)
  *  src: initialized
  *  dst: initialized
  */
-template<typename T> void initialized_copy_n(const T *src, uint n, T *dst)
+template<typename T> void initialized_copy_n(const T *src, int64_t n, T *dst)
 {
-  for (uint i = 0; i < n; i++) {
+  BLI_assert(n >= 0);
+
+  for (int64_t i = 0; i < n; i++) {
     dst[i] = src[i];
   }
 }
@@ -92,6 +118,8 @@ template<typename T> void initialized_copy_n(const T *src, uint n, T *dst)
 /**
  * Copy n values from src to dst.
  *
+ * Exception Safety: Strong.
+ *
  * Before:
  *  src: initialized
  *  dst: uninitialized
@@ -99,15 +127,55 @@ template<typename T> void initialized_copy_n(const T *src, uint n, T *dst)
  *  src: initialized
  *  dst: initialized
  */
-template<typename T> void uninitialized_copy_n(const T *src, uint n, T *dst)
+template<typename T> void uninitialized_copy_n(const T *src, int64_t n, T *dst)
 {
-  for (uint i = 0; i < n; i++) {
-    new ((void *)(dst + i)) T(src[i]);
+  BLI_assert(n >= 0);
+
+  int64_t current = 0;
+  try {
+    for (; current < n; current++) {
+      new ((void *)(dst + current)) T(src[current]);
+    }
+  }
+  catch (...) {
+    destruct_n(dst, current);
+    throw;
+  }
+}
+
+/**
+ * Convert n values from type `From` to type `To`.
+ *
+ * Exception Safety: Strong.
+ *
+ * Before:
+ *  src: initialized
+ *  dst: uninitialized
+ * After:
+ *  src: initialized
+ *  dst: initialized
+ */
+template<typename From, typename To>
+void uninitialized_convert_n(const From *src, int64_t n, To *dst)
+{
+  BLI_assert(n >= 0);
+
+  int64_t current = 0;
+  try {
+    for (; current < n; current++) {
+      new ((void *)(dst + current)) To((To)src[current]);
+    }
+  }
+  catch (...) {
+    destruct_n(dst, current);
+    throw;
   }
 }
 
 /**
  * Move n values from src to dst.
+ *
+ * Exception Safety: Basic.
  *
  * Before:
  *  src: initialized
@@ -116,9 +184,11 @@ template<typename T> void uninitialized_copy_n(const T *src, uint n, T *dst)
  *  src: initialized, moved-from
  *  dst: initialized
  */
-template<typename T> void initialized_move_n(T *src, uint n, T *dst)
+template<typename T> void initialized_move_n(T *src, int64_t n, T *dst)
 {
-  for (uint i = 0; i < n; i++) {
+  BLI_assert(n >= 0);
+
+  for (int64_t i = 0; i < n; i++) {
     dst[i] = std::move(src[i]);
   }
 }
@@ -126,6 +196,8 @@ template<typename T> void initialized_move_n(T *src, uint n, T *dst)
 /**
  * Move n values from src to dst.
  *
+ * Exception Safety: Basic.
+ *
  * Before:
  *  src: initialized
  *  dst: uninitialized
@@ -133,16 +205,27 @@ template<typename T> void initialized_move_n(T *src, uint n, T *dst)
  *  src: initialized, moved-from
  *  dst: initialized
  */
-template<typename T> void uninitialized_move_n(T *src, uint n, T *dst)
+template<typename T> void uninitialized_move_n(T *src, int64_t n, T *dst)
 {
-  for (uint i = 0; i < n; i++) {
-    new ((void *)(dst + i)) T(std::move(src[i]));
+  BLI_assert(n >= 0);
+
+  int64_t current = 0;
+  try {
+    for (; current < n; current++) {
+      new ((void *)(dst + current)) T(std::move(src[current]));
+    }
+  }
+  catch (...) {
+    destruct_n(dst, current);
+    throw;
   }
 }
 
 /**
  * Relocate n values from src to dst. Relocation is a move followed by destruction of the src
  * value.
+ *
+ * Exception Safety: Basic.
  *
  * Before:
  *  src: initialized
@@ -151,8 +234,10 @@ template<typename T> void uninitialized_move_n(T *src, uint n, T *dst)
  *  src: uninitialized
  *  dst: initialized
  */
-template<typename T> void initialized_relocate_n(T *src, uint n, T *dst)
+template<typename T> void initialized_relocate_n(T *src, int64_t n, T *dst)
 {
+  BLI_assert(n >= 0);
+
   initialized_move_n(src, n, dst);
   destruct_n(src, n);
 }
@@ -161,6 +246,8 @@ template<typename T> void initialized_relocate_n(T *src, uint n, T *dst)
  * Relocate n values from src to dst. Relocation is a move followed by destruction of the src
  * value.
  *
+ * Exception Safety: Basic.
+ *
  * Before:
  *  src: initialized
  *  dst: uninitialized
@@ -168,8 +255,10 @@ template<typename T> void initialized_relocate_n(T *src, uint n, T *dst)
  *  src: uninitialized
  *  dst: initialized
  */
-template<typename T> void uninitialized_relocate_n(T *src, uint n, T *dst)
+template<typename T> void uninitialized_relocate_n(T *src, int64_t n, T *dst)
 {
+  BLI_assert(n >= 0);
+
   uninitialized_move_n(src, n, dst);
   destruct_n(src, n);
 }
@@ -177,14 +266,18 @@ template<typename T> void uninitialized_relocate_n(T *src, uint n, T *dst)
 /**
  * Copy the value to n consecutive elements.
  *
+ * Exception Safety: Basic.
+ *
  * Before:
  *  dst: initialized
  * After:
  *  dst: initialized
  */
-template<typename T> void initialized_fill_n(T *dst, uint n, const T &value)
+template<typename T> void initialized_fill_n(T *dst, int64_t n, const T &value)
 {
-  for (uint i = 0; i < n; i++) {
+  BLI_assert(n >= 0);
+
+  for (int64_t i = 0; i < n; i++) {
     dst[i] = value;
   }
 }
@@ -192,24 +285,27 @@ template<typename T> void initialized_fill_n(T *dst, uint n, const T &value)
 /**
  * Copy the value to n consecutive elements.
  *
+ *  Exception Safety: Strong.
+ *
  * Before:
  *  dst: uninitialized
  * After:
  *  dst: initialized
  */
-template<typename T> void uninitialized_fill_n(T *dst, uint n, const T &value)
+template<typename T> void uninitialized_fill_n(T *dst, int64_t n, const T &value)
 {
-  for (uint i = 0; i < n; i++) {
-    new ((void *)(dst + i)) T(value);
-  }
-}
+  BLI_assert(n >= 0);
 
-/**
- * The same as std::unique_ptr. This can be removed when we start using C++14.
- */
-template<typename T, typename... Args> std::unique_ptr<T> make_unique(Args &&... args)
-{
-  return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+  int64_t current = 0;
+  try {
+    for (; current < n; current++) {
+      new ((void *)(dst + current)) T(value);
+    }
+  }
+  catch (...) {
+    destruct_n(dst, current);
+    throw;
+  }
 }
 
 template<typename T> struct DestructValueAtAddress {
@@ -226,29 +322,111 @@ template<typename T> struct DestructValueAtAddress {
 template<typename T> using destruct_ptr = std::unique_ptr<T, DestructValueAtAddress<T>>;
 
 /**
- * An `AlignedBuffer` is simply a byte array with the given size and alignment. The buffer will
+ * An `AlignedBuffer` is a byte array with at least the given size and alignment. The buffer will
  * not be initialized by the default constructor.
- *
- * This can be used to reserve memory for C++ objects whose lifetime is different from the
- * lifetime of the object they are embedded in. It's used by containers with small buffer
- * optimization and hash table implementations.
  */
 template<size_t Size, size_t Alignment> class alignas(Alignment) AlignedBuffer {
  private:
   /* Don't create an empty array. This causes problems with some compilers. */
-  char m_buffer[(Size > 0) ? Size : 1];
+  char buffer_[(Size > 0) ? Size : 1];
 
  public:
+  operator void *()
+  {
+    return (void *)buffer_;
+  }
+
+  operator const void *() const
+  {
+    return (void *)buffer_;
+  }
+
   void *ptr()
   {
-    return (void *)m_buffer;
+    return (void *)buffer_;
   }
 
   const void *ptr() const
   {
-    return (const void *)m_buffer;
+    return (const void *)buffer_;
   }
 };
+
+/**
+ * This can be used to reserve memory for C++ objects whose lifetime is different from the
+ * lifetime of the object they are embedded in. It's used by containers with small buffer
+ * optimization and hash table implementations.
+ */
+template<typename T, int64_t Size = 1> class TypedBuffer {
+ private:
+  AlignedBuffer<sizeof(T) * (size_t)Size, alignof(T)> buffer_;
+
+ public:
+  operator T *()
+  {
+    return (T *)&buffer_;
+  }
+
+  operator const T *() const
+  {
+    return (const T *)&buffer_;
+  }
+
+  T &operator*()
+  {
+    return *(T *)&buffer_;
+  }
+
+  const T &operator*() const
+  {
+    return *(const T *)&buffer_;
+  }
+
+  T *ptr()
+  {
+    return (T *)&buffer_;
+  }
+
+  const T *ptr() const
+  {
+    return (const T *)&buffer_;
+  }
+
+  T &ref()
+  {
+    return *(T *)&buffer_;
+  }
+
+  const T &ref() const
+  {
+    return *(const T *)&buffer_;
+  }
+};
+
+/**
+ * This can be used by container constructors. A parameter of this type should be used to indicate
+ * that the constructor does not construct the elements.
+ */
+class NoInitialization {
+};
+
+/**
+ * Helper variable that checks if a pointer type can be converted into another pointer type without
+ * issues. Possible issues are casting away const and casting a pointer to a child class.
+ * Adding const or casting to a parent class is fine.
+ */
+template<typename From, typename To>
+inline constexpr bool is_convertible_pointer_v =
+    std::is_convertible_v<From, To> &&std::is_pointer_v<From> &&std::is_pointer_v<To>;
+
+/**
+ * Inline buffers for small-object-optimization should be disable by default. Otherwise we might
+ * get large unexpected allocations on the stack.
+ */
+inline constexpr int64_t default_inline_buffer_capacity(size_t element_size)
+{
+  return ((int64_t)element_size < 100) ? 4 : 0;
+}
 
 }  // namespace blender
 

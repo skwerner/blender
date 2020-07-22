@@ -1157,7 +1157,7 @@ void BKE_nurb_knot_calc_v(Nurb *nu)
 }
 
 static void basisNurb(
-    float t, short order, int pnts, float *knots, float *basis, int *start, int *end)
+    float t, short order, int pnts, const float *knots, float *basis, int *start, int *end)
 {
   float d, e;
   int i, i1 = 0, i2 = 0, j, orderpluspnts, opp2, o2;
@@ -1190,9 +1190,8 @@ static void basisNurb(
       }
       break;
     }
-    else {
-      basis[i] = 0.0;
-    }
+
+    basis[i] = 0.0;
   }
   basis[i] = 0.0;
 
@@ -2040,7 +2039,7 @@ static int vergxcobev(const void *a1, const void *a2)
   if (x1->left > x2->left) {
     return 1;
   }
-  else if (x1->left < x2->left) {
+  if (x1->left < x2->left) {
     return -1;
   }
   return 0;
@@ -3561,8 +3560,13 @@ static void free_arrays(void *buffer)
 }
 
 /* computes in which direction to change h[i] to satisfy conditions better */
-static float bezier_relax_direction(
-    float *a, float *b, float *c, float *d, float *h, int i, int count)
+static float bezier_relax_direction(const float *a,
+                                    const float *b,
+                                    const float *c,
+                                    const float *d,
+                                    const float *h,
+                                    int i,
+                                    int count)
 {
   /* current deviation between sides of the equation */
   float state = a[i] * h[(i + count - 1) % count] + b[i] * h[i] + c[i] * h[(i + 1) % count] - d[i];
@@ -3578,8 +3582,15 @@ static void bezier_lock_unknown(float *a, float *b, float *c, float *d, int i, f
   d[i] = value;
 }
 
-static void bezier_restore_equation(
-    float *a, float *b, float *c, float *d, float *a0, float *b0, float *c0, float *d0, int i)
+static void bezier_restore_equation(float *a,
+                                    float *b,
+                                    float *c,
+                                    float *d,
+                                    const float *a0,
+                                    const float *b0,
+                                    const float *c0,
+                                    const float *d0,
+                                    int i)
 {
   a[i] = a0[i];
   b[i] = b0[i];
@@ -3587,8 +3598,14 @@ static void bezier_restore_equation(
   d[i] = d0[i];
 }
 
-static bool tridiagonal_solve_with_limits(
-    float *a, float *b, float *c, float *d, float *h, float *hmin, float *hmax, int solve_count)
+static bool tridiagonal_solve_with_limits(float *a,
+                                          float *b,
+                                          float *c,
+                                          float *d,
+                                          float *h,
+                                          const float *hmin,
+                                          const float *hmax,
+                                          int solve_count)
 {
   float *a0, *b0, *c0, *d0;
   float **arrays[] = {&a0, &b0, &c0, &d0, NULL};
@@ -3727,7 +3744,7 @@ static bool tridiagonal_solve_with_limits(
 /* clang-format on */
 
 static void bezier_eq_continuous(
-    float *a, float *b, float *c, float *d, float *dy, float *l, int i)
+    float *a, float *b, float *c, float *d, const float *dy, const float *l, int i)
 {
   a[i] = l[i] * l[i];
   b[i] = 2.0f * (l[i] + 1);
@@ -3736,7 +3753,7 @@ static void bezier_eq_continuous(
 }
 
 static void bezier_eq_noaccel_right(
-    float *a, float *b, float *c, float *d, float *dy, float *l, int i)
+    float *a, float *b, float *c, float *d, const float *dy, const float *l, int i)
 {
   a[i] = 0.0f;
   b[i] = 2.0f;
@@ -3745,7 +3762,7 @@ static void bezier_eq_noaccel_right(
 }
 
 static void bezier_eq_noaccel_left(
-    float *a, float *b, float *c, float *d, float *dy, float *l, int i)
+    float *a, float *b, float *c, float *d, const float *dy, const float *l, int i)
 {
   a[i] = l[i] * l[i];
   b[i] = 2.0f * l[i];
@@ -4081,9 +4098,9 @@ void BKE_nurb_handle_calc(
 /**
  * Variant of #BKE_nurb_handle_calc() that allows calculating based on a different select flag.
  *
- * \param sel_flag: The flag (bezt.f1/2/3) value to use to determine selection. Usually `SELECT`,
- *                  but may want to use a different one at times (if caller does not operate on
- *                  selection).
+ * \param handle_sel_flag: The flag (bezt.f1/2/3) value to use to determine selection.
+ * Usually #SELECT, but may want to use a different one at times
+ * (if caller does not operate on selection).
  */
 void BKE_nurb_handle_calc_ex(BezTriple *bezt,
                              BezTriple *prev,
@@ -4824,7 +4841,7 @@ float (*BKE_curve_nurbs_key_vert_coords_alloc(ListBase *lb, float *key, int *r_v
   return cos;
 }
 
-void BKE_curve_nurbs_key_vert_tilts_apply(ListBase *lb, float *key)
+void BKE_curve_nurbs_key_vert_tilts_apply(ListBase *lb, const float *key)
 {
   Nurb *nu;
   int i;
@@ -5064,32 +5081,31 @@ bool BKE_nurb_type_convert(Nurb *nu,
         }
         return false; /* conversion impossible */
       }
-      else {
-        bezt = MEM_calloc_arrayN(nr, sizeof(BezTriple), "setsplinetype2");
-        nu->bezt = bezt;
-        a = nr;
-        bp = nu->bp;
-        while (a--) {
-          copy_v3_v3(bezt->vec[0], bp->vec);
-          bezt->f1 = bp->f1;
-          bp++;
-          copy_v3_v3(bezt->vec[1], bp->vec);
-          bezt->f2 = bp->f1;
-          bp++;
-          copy_v3_v3(bezt->vec[2], bp->vec);
-          bezt->f3 = bp->f1;
-          bezt->radius = bp->radius;
-          bezt->weight = bp->weight;
-          bp++;
-          bezt++;
-        }
-        MEM_freeN(nu->bp);
-        nu->bp = NULL;
-        MEM_freeN(nu->knotsu);
-        nu->knotsu = NULL;
-        nu->pntsu = nr;
-        nu->type = CU_BEZIER;
+
+      bezt = MEM_calloc_arrayN(nr, sizeof(BezTriple), "setsplinetype2");
+      nu->bezt = bezt;
+      a = nr;
+      bp = nu->bp;
+      while (a--) {
+        copy_v3_v3(bezt->vec[0], bp->vec);
+        bezt->f1 = bp->f1;
+        bp++;
+        copy_v3_v3(bezt->vec[1], bp->vec);
+        bezt->f2 = bp->f1;
+        bp++;
+        copy_v3_v3(bezt->vec[2], bp->vec);
+        bezt->f3 = bp->f1;
+        bezt->radius = bp->radius;
+        bezt->weight = bp->weight;
+        bp++;
+        bezt++;
       }
+      MEM_freeN(nu->bp);
+      nu->bp = NULL;
+      MEM_freeN(nu->knotsu);
+      nu->knotsu = NULL;
+      nu->pntsu = nr;
+      nu->type = CU_BEZIER;
     }
   }
 
@@ -5140,10 +5156,9 @@ int BKE_curve_nurb_vert_index_get(const Nurb *nu, const void *vert)
     BLI_assert(ARRAY_HAS_ITEM((BezTriple *)vert, nu->bezt, nu->pntsu));
     return (BezTriple *)vert - nu->bezt;
   }
-  else {
-    BLI_assert(ARRAY_HAS_ITEM((BPoint *)vert, nu->bp, nu->pntsu * nu->pntsv));
-    return (BPoint *)vert - nu->bp;
-  }
+
+  BLI_assert(ARRAY_HAS_ITEM((BPoint *)vert, nu->bp, nu->pntsu * nu->pntsv));
+  return (BPoint *)vert - nu->bp;
 }
 
 /* Set active nurb and active vert for curve */
@@ -5516,9 +5531,7 @@ bool BKE_curve_material_index_validate(Curve *cu)
     DEG_id_tag_update(&cu->id, ID_RECALC_GEOMETRY);
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 void BKE_curve_material_remap(Curve *cu, const unsigned int *remap, unsigned int remap_len)

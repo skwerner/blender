@@ -302,16 +302,17 @@ typedef struct Library {
   ID id;
   struct FileData *filedata;
   /** Path name used for reading, can be relative and edited in the outliner. */
-  char name[1024];
+  char filepath[1024];
 
   /**
-   * Absolute filepath, this is only for convenience,
-   * 'name' is the real path used on file read but in
-   * some cases its useful to access the absolute one.
-   * This is set on file read.
-   * Use BKE_library_filepath_set() rather than setting 'name'
-   * directly and it will be kept in sync - campbell */
-  char filepath[1024];
+   * Run-time only, absolute file-path (set on read).
+   * This is only for convenience, `filepath` is the real path
+   * used on file read but in some cases its useful to access the absolute one.
+   *
+   * Use #BKE_library_filepath_set() rather than setting `filepath`
+   * directly and it will be kept in sync - campbell
+   */
+  char filepath_abs[1024];
 
   /** Set for indirectly linked libs, used in the outliner and while reading. */
   struct Library *parent;
@@ -448,29 +449,36 @@ typedef enum ID_Type {
 /* fluidsim Ipo */
 #define ID_FLUIDSIM MAKE_ID2('F', 'S')
 
-#define ID_FAKE_USERS(id) ((((ID *)id)->flag & LIB_FAKEUSER) ? 1 : 0)
-#define ID_REAL_USERS(id) (((ID *)id)->us - ID_FAKE_USERS(id))
-#define ID_EXTRA_USERS(id) (((ID *)id)->tag & LIB_TAG_EXTRAUSER ? 1 : 0)
+#define ID_FAKE_USERS(id) ((((const ID *)id)->flag & LIB_FAKEUSER) ? 1 : 0)
+#define ID_REAL_USERS(id) (((const ID *)id)->us - ID_FAKE_USERS(id))
+#define ID_EXTRA_USERS(id) (((const ID *)id)->tag & LIB_TAG_EXTRAUSER ? 1 : 0)
 
 #define ID_CHECK_UNDO(id) \
   ((GS((id)->name) != ID_SCR) && (GS((id)->name) != ID_WM) && (GS((id)->name) != ID_WS))
 
 #define ID_BLEND_PATH(_bmain, _id) \
-  ((_id)->lib ? (_id)->lib->filepath : BKE_main_blendfile_path((_bmain)))
+  ((_id)->lib ? (_id)->lib->filepath_abs : BKE_main_blendfile_path((_bmain)))
 #define ID_BLEND_PATH_FROM_GLOBAL(_id) \
-  ((_id)->lib ? (_id)->lib->filepath : BKE_main_blendfile_path_from_global())
+  ((_id)->lib ? (_id)->lib->filepath_abs : BKE_main_blendfile_path_from_global())
 
-#define ID_MISSING(_id) ((((ID *)(_id))->tag & LIB_TAG_MISSING) != 0)
+#define ID_MISSING(_id) ((((const ID *)(_id))->tag & LIB_TAG_MISSING) != 0)
 
-#define ID_IS_LINKED(_id) (((ID *)(_id))->lib != NULL)
+#define ID_IS_LINKED(_id) (((const ID *)(_id))->lib != NULL)
 
 /* Note that this is a fairly high-level check, should be used at user interaction level, not in
  * BKE_library_override typically (especially due to the check on LIB_TAG_EXTERN). */
 #define ID_IS_OVERRIDABLE_LIBRARY(_id) \
-  (ID_IS_LINKED(_id) && !ID_MISSING(_id) && (((ID *)(_id))->tag & LIB_TAG_EXTERN) != 0)
+  (ID_IS_LINKED(_id) && !ID_MISSING(_id) && (((const ID *)(_id))->tag & LIB_TAG_EXTERN) != 0)
+
+#define ID_IS_OVERRIDE_LIBRARY_REAL(_id) \
+  (((const ID *)(_id))->override_library != NULL && \
+   ((const ID *)(_id))->override_library->reference != NULL)
+
+#define ID_IS_OVERRIDE_LIBRARY_VIRTUAL(_id) \
+  ((((const ID *)(_id))->flag & LIB_EMBEDDED_DATA_LIB_OVERRIDE) != 0)
 
 #define ID_IS_OVERRIDE_LIBRARY(_id) \
-  (((ID *)(_id))->override_library != NULL && ((ID *)(_id))->override_library->reference != NULL)
+  (ID_IS_OVERRIDE_LIBRARY_REAL(_id) || ID_IS_OVERRIDE_LIBRARY_VIRTUAL(_id))
 
 #define ID_IS_OVERRIDE_LIBRARY_TEMPLATE(_id) \
   (((ID *)(_id))->override_library != NULL && ((ID *)(_id))->override_library->reference == NULL)
@@ -508,6 +516,11 @@ enum {
    * we want to restore if possible, and silently drop if it's missing.
    */
   LIB_INDIRECT_WEAK_LINK = 1 << 11,
+  /**
+   * The data-block is a sub-data of another one, which is an override.
+   * Note that this also applies to shapekeys, even though they are not 100% embedded data...
+   */
+  LIB_EMBEDDED_DATA_LIB_OVERRIDE = 1 << 12,
 };
 
 /**
@@ -668,6 +681,15 @@ typedef enum IDRecalcFlag {
    * Applies to movie clips to inform that copy-on-written version is to be refreshed for the new
    * input file or for color space changes. */
   ID_RECALC_SOURCE = (1 << 23),
+
+  /* Virtual recalc tag/marker required for undo in some cases, where actual data does not change
+   * and hence do not require an update, but conceptually we are dealing with something new.
+   *
+   * Current known case: linked IDs made local without requiring any copy. While their users do not
+   * require any update, they have actually been 'virtually' remapped from the linked ID to the
+   * local one.
+   */
+  ID_RECALC_TAG_FOR_UNDO = (1 << 24),
 
   /***************************************************************************
    * Pseudonyms, to have more semantic meaning in the actual code without

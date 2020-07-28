@@ -42,6 +42,7 @@ if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
 endif()
 
 cmake_minimum_required(VERSION 3.5)
+include(CheckCXXSourceCompiles)
 
 # Prever LEGACY OpenGL to eb compatible with all the existing releases and
 # platforms which don't hare GLVND yet. Only do it if preference was not set
@@ -354,8 +355,10 @@ if(WITH_PYTHON_INSTALL)
   endif()
 endif()
 
-option(WITH_CPU_SSE              "Enable SIMD instruction if they're detected on the host machine" ON)
+option(WITH_CPU_SSE              "Enable Intel SIMD instruction if they're detected on the host machine" ON)
 mark_as_advanced(WITH_CPU_SSE)
+option(WITH_CPU_NEON              "Enable ARM SIMD instruction if they're detected on the host machine" ON)
+mark_as_advanced(WITH_CPU_NEON)
 
 # Cycles
 option(WITH_CYCLES                  "Enable Cycles Render Engine" ON)
@@ -708,6 +711,21 @@ else()
   set(COMPILER_SSE2_FLAG)
 endif()
 
+
+check_cxx_source_compiles(
+	"#include <arm_neon.h>
+          int main() {return vaddvq_s32(vdupq_n_s32(1));}" 
+
+        COMPILER_HAS_NEON_SUPPORT)
+
+if((NOT WITH_CPU_NEON) AND COMPILER_HAS_NEON_SUPPORT)
+  message(STATUS "Neon optimizations are DISABLED!, but compiler supports neon")
+elseif(COMPILER_HAS_NEON_SUPPORT AND WITH_CPU_NEON)
+  message(STATUS "Using NEON instructions")
+elseif(NOT COMPILER_HAS_NEON_SUPPORT)
+  set(WITH_CPU_NEON OFF)
+endif()
+
 if(WITH_BUILDINFO)
   find_package(Git)
   if(NOT GIT_FOUND)
@@ -878,18 +896,19 @@ endif()
 
 # Do it globally, SSE2 is required for quite some time now.
 # Doing it now allows to use SSE/SSE2 in inline headers.
-if(SUPPORT_SSE_BUILD)
-  set(PLATFORM_CFLAGS " ${COMPILER_SSE_FLAG} ${PLATFORM_CFLAGS}")
-  add_definitions(-D__SSE__ -D__MMX__)
-endif()
-if(SUPPORT_SSE2_BUILD)
-  set(PLATFORM_CFLAGS " ${PLATFORM_CFLAGS} ${COMPILER_SSE2_FLAG}")
-  add_definitions(-D__SSE2__)
-  if(NOT SUPPORT_SSE_BUILD) # don't double up
-    add_definitions(-D__MMX__)
+if(WITH_CPU_SSE)
+  if(SUPPORT_SSE_BUILD)
+    set(PLATFORM_CFLAGS " ${COMPILER_SSE_FLAG} ${PLATFORM_CFLAGS}")
+    add_definitions(-D__SSE__ -D__MMX__)
+  endif()
+  if(SUPPORT_SSE2_BUILD)
+    set(PLATFORM_CFLAGS " ${PLATFORM_CFLAGS} ${COMPILER_SSE2_FLAG}")
+    add_definitions(-D__SSE2__)
+    if(NOT SUPPORT_SSE_BUILD) # don't double up
+      add_definitions(-D__MMX__)
+    endif()
   endif()
 endif()
-
 
 # set the endian define
 if(MSVC)

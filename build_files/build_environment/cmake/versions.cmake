@@ -315,3 +315,5 @@ set(XR_OPENXR_SDK_HASH c6de63d2e0f9029aa58dfa97cad8ce07)
 set(ISPC_VERSION v1.13.0)
 set(ISPC_URI https://github.com/ispc/ispc/archive/${ISPC_VERSION}.tar.gz)
 set(ISPC_HASH 4bf5e8d0020c4b9980faa702c1a6f25f)
+
+set(SSE2NEON_GIT https://github.com/DLTcollab/sse2neon.git)

@@ -103,6 +103,10 @@ if(NOT APPLE)
   include(cmake/xr_openxr.cmake)
 endif()
 
+if(APPLE AND ("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64"))
+  include(cmake/sse2neon.cmake)
+endif()
+
 if(WITH_WEBP)
   include(cmake/webp.cmake)
 endif()

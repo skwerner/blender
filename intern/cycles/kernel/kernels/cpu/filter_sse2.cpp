@@ -26,8 +26,11 @@
 /* SSE optimization disabled for now on 32 bit, see bug #36316 */
 #  if !(defined(__GNUC__) && (defined(i386) || defined(_M_IX86)))
 #    define __KERNEL_SSE2__
+#    include "util/util_kernel_isa.h"
 #  endif
 #endif /* WITH_CYCLES_OPTIMIZED_KERNEL_SSE2 */
+
+
 
 #include "kernel/filter/filter.h"
 #define KERNEL_ARCH cpu_sse2

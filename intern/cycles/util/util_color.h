@@ -20,7 +20,7 @@
 #include "util/util_math.h"
 #include "util/util_types.h"
 
-#ifdef __KERNEL_SSE2__
+#ifdef __KERNEL_SSE2_OR_NEON__
 #  include "util/util_simd.h"
 #endif
 
@@ -182,7 +182,7 @@ ccl_device float3 xyY_to_xyz(float x, float y, float Y)
   return make_float3(X, Y, Z);
 }
 
-#ifdef __KERNEL_SSE2__
+#ifdef __KERNEL_SSE2_OR_NEON__
 /*
  * Calculate initial guess for arg^exp based on float representation
  * This method gives a constant bias,
@@ -240,7 +240,7 @@ ccl_device ssef color_srgb_to_linear(const ssef &c)
   ssef gte = fastpow24(gtebase);
   return select(cmp, lt, gte);
 }
-#endif /* __KERNEL_SSE2__ */
+#endif /* __KERNEL_SSE2_OR_NEON__ */
 
 ccl_device float3 color_srgb_to_linear_v3(float3 c)
 {
@@ -262,7 +262,7 @@ ccl_device float4 color_linear_to_srgb_v4(float4 c)
 
 ccl_device float4 color_srgb_to_linear_v4(float4 c)
 {
-#ifdef __KERNEL_SSE2__
+#ifdef __KERNEL_SSE2_OR_NEON__
   ssef r_ssef;
   float4 &r = (float4 &)r_ssef;
   r = c;

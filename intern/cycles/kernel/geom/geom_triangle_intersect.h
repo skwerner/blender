@@ -31,7 +31,7 @@ ccl_device_inline bool triangle_intersect(KernelGlobals *kg,
                                           int prim_addr)
 {
   const uint tri_vindex = kernel_tex_fetch(__prim_tri_index, prim_addr);
-#if defined(__KERNEL_SSE2__) && defined(__KERNEL_SSE__)
+#if defined(__KERNEL_SSE2_OR_NEON__) && defined(__KERNEL_SSE_OR_NEON__)
   const ssef *ssef_verts = (ssef *)&kg->__prim_tri_verts.data[tri_vindex];
 #else
   const float4 tri_a = kernel_tex_fetch(__prim_tri_verts, tri_vindex + 0),
@@ -42,7 +42,7 @@ ccl_device_inline bool triangle_intersect(KernelGlobals *kg,
   if (ray_triangle_intersect(P,
                              dir,
                              isect->t,
-#if defined(__KERNEL_SSE2__) && defined(__KERNEL_SSE__)
+#if defined(__KERNEL_SSE2_OR_NEON__) && defined(__KERNEL_SSE_OR_NEON__)
                              ssef_verts,
 #else
                              float4_to_float3(tri_a),
@@ -98,7 +98,7 @@ ccl_device_inline bool triangle_intersect_local(KernelGlobals *kg,
   }
 
   const uint tri_vindex = kernel_tex_fetch(__prim_tri_index, prim_addr);
-#  if defined(__KERNEL_SSE2__) && defined(__KERNEL_SSE__)
+#  if defined(__KERNEL_SSE2_OR_NEON__) && defined(__KERNEL_SSE_OR_NEON__)
   const ssef *ssef_verts = (ssef *)&kg->__prim_tri_verts.data[tri_vindex];
 #  else
   const float3 tri_a = float4_to_float3(kernel_tex_fetch(__prim_tri_verts, tri_vindex + 0)),
@@ -109,7 +109,7 @@ ccl_device_inline bool triangle_intersect_local(KernelGlobals *kg,
   if (!ray_triangle_intersect(P,
                               dir,
                               tmax,
-#  if defined(__KERNEL_SSE2__) && defined(__KERNEL_SSE__)
+#  if defined(__KERNEL_SSE2_OR_NEON__) && defined(__KERNEL_SSE_OR_NEON__)
                               ssef_verts,
 #  else
                               tri_a,
@@ -170,7 +170,7 @@ ccl_device_inline bool triangle_intersect_local(KernelGlobals *kg,
   isect->t = t;
 
   /* Record geometric normal. */
-#  if defined(__KERNEL_SSE2__) && defined(__KERNEL_SSE__)
+#  if defined(__KERNEL_SSE2_OR_NEON__) && defined(__KERNEL_SSE_OR_NEON__)
   const float3 tri_a = float4_to_float3(kernel_tex_fetch(__prim_tri_verts, tri_vindex + 0)),
                tri_b = float4_to_float3(kernel_tex_fetch(__prim_tri_verts, tri_vindex + 1)),
                tri_c = float4_to_float3(kernel_tex_fetch(__prim_tri_verts, tri_vindex + 2));

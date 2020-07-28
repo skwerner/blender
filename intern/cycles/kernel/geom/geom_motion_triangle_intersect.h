@@ -180,7 +180,7 @@ ccl_device_inline bool motion_triangle_intersect(KernelGlobals *kg,
   if (ray_triangle_intersect(P,
                              dir,
                              isect->t,
-#if defined(__KERNEL_SSE2__) && defined(__KERNEL_SSE__)
+#if defined(__KERNEL_SSE2_OR_NEON__) && defined(__KERNEL_SSE_OR_NEON__)
                              (ssef *)verts,
 #else
                              verts[0],
@@ -245,7 +245,7 @@ ccl_device_inline bool motion_triangle_intersect_local(KernelGlobals *kg,
   if (!ray_triangle_intersect(P,
                               dir,
                               tmax,
-#  if defined(__KERNEL_SSE2__) && defined(__KERNEL_SSE__)
+#  if defined(__KERNEL_SSE2_OR_NEON__) && defined(__KERNEL_SSE_OR_NEON__)
                               (ssef *)verts,
 #  else
                               verts[0],

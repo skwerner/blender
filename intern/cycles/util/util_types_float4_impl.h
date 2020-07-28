@@ -28,7 +28,7 @@
 CCL_NAMESPACE_BEGIN
 
 #ifndef __KERNEL_GPU__
-#  ifdef __KERNEL_SSE__
+#  ifdef __KERNEL_SSE_OR_NEON__
 __forceinline float4::float4()
 {
 }
@@ -70,7 +70,7 @@ __forceinline float &float4::operator[](int i)
 
 ccl_device_inline float4 make_float4(float f)
 {
-#  ifdef __KERNEL_SSE__
+#  ifdef __KERNEL_SSE_OR_NEON__
   float4 a(_mm_set1_ps(f));
 #  else
   float4 a = {f, f, f, f};
@@ -80,7 +80,7 @@ ccl_device_inline float4 make_float4(float f)
 
 ccl_device_inline float4 make_float4(float x, float y, float z, float w)
 {
-#  ifdef __KERNEL_SSE__
+#  ifdef __KERNEL_SSE_OR_NEON__
   float4 a(_mm_set_ps(w, z, y, x));
 #  else
   float4 a = {x, y, z, w};
@@ -90,7 +90,7 @@ ccl_device_inline float4 make_float4(float x, float y, float z, float w)
 
 ccl_device_inline float4 make_float4(const int4 &i)
 {
-#  ifdef __KERNEL_SSE__
+#  ifdef __KERNEL_SSE_OR_NEON__
   float4 a(_mm_cvtepi32_ps(i.m128));
 #  else
   float4 a = {(float)i.x, (float)i.y, (float)i.z, (float)i.w};

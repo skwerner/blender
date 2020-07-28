@@ -101,8 +101,9 @@ template<typename F> class KernelFunctions {
     else
 #endif
 #ifdef WITH_CYCLES_OPTIMIZED_KERNEL_SSE41
+
         if (DebugFlags().cpu.has_sse41() && system_cpu_support_sse41()) {
-      architecture_name = "SSE4.1";
+            architecture_name = "SSE4.1";
       kernel = kernel_sse41;
     }
     else

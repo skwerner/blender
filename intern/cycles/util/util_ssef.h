@@ -22,7 +22,7 @@
 
 CCL_NAMESPACE_BEGIN
 
-#ifdef __KERNEL_SSE2__
+#ifdef __KERNEL_SSE2_OR_NEON__
 
 struct sseb;
 struct ssef;
@@ -132,12 +132,13 @@ __forceinline const ssef abs(const ssef &a)
 {
   return _mm_and_ps(a.m128, _mm_castsi128_ps(_mm_set1_epi32(0x7fffffff)));
 }
-#  if defined(__KERNEL_SSE41__)
+#  if defined(__KERNEL_SSE41_OR_NEON__)
 __forceinline const ssef sign(const ssef &a)
 {
   return _mm_blendv_ps(ssef(1.0f), -ssef(1.0f), _mm_cmplt_ps(a, ssef(0.0f)));
 }
 #  endif
+
 __forceinline const ssef signmsk(const ssef &a)
 {
   return _mm_and_ps(a.m128, _mm_castsi128_ps(_mm_set1_epi32(0x80000000)));
@@ -279,7 +280,7 @@ __forceinline const ssef max(const float &a, const ssef &b)
   return _mm_max_ps(ssef(a), b.m128);
 }
 
-#  if defined(__KERNEL_SSE41__)
+#  if defined(__KERNEL_SSE41_OR_NEON__)
 __forceinline ssef mini(const ssef &a, const ssef &b)
 {
   const ssei ai = _mm_castps_si128(a);
@@ -289,7 +290,7 @@ __forceinline ssef mini(const ssef &a, const ssef &b)
 }
 #  endif
 
-#  if defined(__KERNEL_SSE41__)
+#  if defined(__KERNEL_SSE41_OR_NEON__)
 __forceinline ssef maxi(const ssef &a, const ssef &b)
 {
   const ssei ai = _mm_castps_si128(a);
@@ -303,7 +304,7 @@ __forceinline ssef maxi(const ssef &a, const ssef &b)
 /// Ternary Operators
 ////////////////////////////////////////////////////////////////////////////////
 
-#  if defined(__KERNEL_AVX2__)
+#  if defined(__KERNEL_FMA_X4__)
 __forceinline const ssef madd(const ssef &a, const ssef &b, const ssef &c)
 {
   return _mm_fmadd_ps(a, b, c);
@@ -463,7 +464,7 @@ __forceinline const sseb operator<=(const float &a, const ssef &b)
 
 __forceinline const ssef select(const sseb &m, const ssef &t, const ssef &f)
 {
-#  ifdef __KERNEL_SSE41__
+#  ifdef __KERNEL_SSE41_OR_NEON__
   return _mm_blendv_ps(f, t, m);
 #  else
   return _mm_or_ps(_mm_and_ps(m, t), _mm_andnot_ps(m, f));
@@ -472,7 +473,7 @@ __forceinline const ssef select(const sseb &m, const ssef &t, const ssef &f)
 
 __forceinline const ssef select(const ssef &m, const ssef &t, const ssef &f)
 {
-#  ifdef __KERNEL_SSE41__
+#  ifdef __KERNEL_SSE41_OR_NEON__
   return _mm_blendv_ps(f, t, m);
 #  else
   return _mm_or_ps(_mm_and_ps(m, t), _mm_andnot_ps(m, f));
@@ -481,7 +482,7 @@ __forceinline const ssef select(const ssef &m, const ssef &t, const ssef &f)
 
 __forceinline const ssef select(const int mask, const ssef &t, const ssef &f)
 {
-#  if defined(__KERNEL_SSE41__) && \
+#  if defined(__KERNEL_SSE41_OR_NEON__) && \
       ((!defined(__clang__) && !defined(_MSC_VER)) || defined(__INTEL_COMPILER))
   return _mm_blend_ps(f, t, mask);
 #  else
@@ -518,6 +519,33 @@ __forceinline const ssef ceil(const ssef &a)
 {
   return _mm_round_ps(a, _MM_FROUND_TO_POS_INF);
 }
+#elif defined(__KERNEL_NEON__)
+__forceinline const ssef round_even(const ssef &a)
+{
+    return vrndnq_f32(a);
+}
+__forceinline const ssef round_down(const ssef &a)
+{
+    return vrndmq_f32(a);
+}
+__forceinline const ssef round_up(const ssef &a)
+{
+    return vrndpq_f32(a);
+}
+__forceinline const ssef round_zero(const ssef &a)
+{
+    return vrndq_f32(a);
+}
+__forceinline const ssef floor(const ssef &a)
+{
+    return vrndnq_f32(a);
+}
+__forceinline const ssef ceil(const ssef &a)
+{
+    return vrndpq_f32(a);
+}
+
+
 #  endif
 
 __forceinline ssei truncatei(const ssef &a)
@@ -566,7 +594,13 @@ __forceinline ssef unpackhi(const ssef &a, const ssef &b)
 template<size_t i0, size_t i1, size_t i2, size_t i3>
 __forceinline const ssef shuffle(const ssef &b)
 {
+#ifdef __KERNEL_NEON__
+    return shuffle_neon<ssef,i0,i1,i2,i3>(b.m128);
+    
+#else
   return _mm_castsi128_ps(_mm_shuffle_epi32(_mm_castps_si128(b), _MM_SHUFFLE(i3, i2, i1, i0)));
+#endif
+    
 }
 
 template<> __forceinline const ssef shuffle<0, 1, 0, 1>(const ssef &a)
@@ -582,14 +616,27 @@ template<> __forceinline const ssef shuffle<2, 3, 2, 3>(const ssef &a)
 template<size_t i0, size_t i1, size_t i2, size_t i3>
 __forceinline const ssef shuffle(const ssef &a, const ssef &b)
 {
+#ifdef __KERNEL_NEON__
+    return shuffle_neon<float32x4_t,i0,i1,i2,i3>(a,b);
+    
+#else
   return _mm_shuffle_ps(a, b, _MM_SHUFFLE(i3, i2, i1, i0));
+#endif
+    
 }
 
 template<size_t i0> __forceinline const ssef shuffle(const ssef &a, const ssef &b)
 {
+#ifdef __KERNEL_NEON__
+    return shuffle<float32x4_t,i0,i0,i0,i0>(a,b);
+    
+#else
   return _mm_shuffle_ps(a, b, _MM_SHUFFLE(i0, i0, i0, i0));
+#endif
+    
 }
 
+#ifndef __KERNEL_NEON__
 template<> __forceinline const ssef shuffle<0, 1, 0, 1>(const ssef &a, const ssef &b)
 {
   return _mm_movelh_ps(a, b);
@@ -599,8 +646,10 @@ template<> __forceinline const ssef shuffle<2, 3, 2, 3>(const ssef &a, const sse
 {
   return _mm_movehl_ps(b, a);
 }
+#endif
 
-#  if defined(__KERNEL_SSSE3__)
+
+#  if defined(__KERNEL_SSSE3_OR_NEON__)
 __forceinline const ssef shuffle8(const ssef &a, const ssei &shuf)
 {
   return _mm_castsi128_ps(_mm_shuffle_epi8(_mm_castps_si128(a), shuf));
@@ -701,6 +750,7 @@ __forceinline void transpose(
 /// Reductions
 ////////////////////////////////////////////////////////////////////////////////
 
+#ifndef __KERNEL_NEON__
 __forceinline const ssef vreduce_min(const ssef &v)
 {
   ssef h = min(shuffle<1, 0, 3, 2>(v), v);
@@ -729,6 +779,37 @@ __forceinline float reduce_add(const ssef &v)
 {
   return _mm_cvtss_f32(vreduce_add(v));
 }
+
+#else
+
+__forceinline float reduce_min(const ssef &v)
+{
+  return vminvq_f32(v);
+}
+__forceinline float reduce_max(const ssef &v)
+{
+  return vmaxvq_f32(v);
+}
+__forceinline float reduce_add(const ssef &v)
+{
+  return vaddvq_f32(v);
+}
+
+__forceinline const ssef vreduce_min(const ssef &v)
+{
+  return vdupq_n_f32(reduce_min(v));
+}
+__forceinline const ssef vreduce_max(const ssef &v)
+{
+    return vdupq_n_f32(reduce_max(v));
+}
+__forceinline const ssef vreduce_add(const ssef &v)
+{
+    return vdupq_n_f32(reduce_add(v));
+}
+
+
+#endif
 
 __forceinline size_t select_min(const ssef &v)
 {
@@ -822,7 +903,7 @@ __forceinline ssef load4f_nt(void *ptr)
 
 __forceinline void store4f_nt(void *ptr, const ssef &v)
 {
-#  if defined(__KERNEL_SSE41__)
+#  if defined(__KERNEL_SSE41_OR_NEON__)
   _mm_stream_ps((float *)ptr, v);
 #  else
   _mm_store_ps((float *)ptr, v);
@@ -855,7 +936,7 @@ __forceinline ssef cross(const ssef &a, const ssef &b)
 
 ccl_device_inline const ssef dot3_splat(const ssef &a, const ssef &b)
 {
-#  ifdef __KERNEL_SSE41__
+#  if defined(__KERNEL_SSE41__)
   return _mm_dp_ps(a.m128, b.m128, 0x7f);
 #  else
   ssef t = a * b;
@@ -866,7 +947,7 @@ ccl_device_inline const ssef dot3_splat(const ssef &a, const ssef &b)
 /* squared length taking only specified axes into account */
 template<size_t X, size_t Y, size_t Z, size_t W> ccl_device_inline float len_squared(const ssef &a)
 {
-#  ifndef __KERNEL_SSE41__
+#  if !defined(__KERNEL_SSE41_OR_NEON__)
   float4 &t = (float4 &)a;
   return (X ? t.x * t.x : 0.0f) + (Y ? t.y * t.y : 0.0f) + (Z ? t.z * t.z : 0.0f) +
          (W ? t.w * t.w : 0.0f);
@@ -878,7 +959,7 @@ template<size_t X, size_t Y, size_t Z, size_t W> ccl_device_inline float len_squ
 
 ccl_device_inline float dot3(const ssef &a, const ssef &b)
 {
-#  ifdef __KERNEL_SSE41__
+#  ifdef __KERNEL_SSE41_OR_NEON__
   return extract<0>(ssef(_mm_dp_ps(a.m128, b.m128, 0x7f)));
 #  else
   ssef t = a * b;
@@ -940,16 +1021,15 @@ ccl_device_inline shuffle_swap_t shuffle_swap_swap()
 
 ccl_device_inline const ssef shuffle_swap(const ssef &a, shuffle_swap_t shuf)
 {
-  /* shuffle value must be a constant, so we need to branch */
-  if (shuf)
-    return ssef(_mm_shuffle_ps(a.m128, a.m128, _MM_SHUFFLE(1, 0, 3, 2)));
-  else
-    return ssef(_mm_shuffle_ps(a.m128, a.m128, _MM_SHUFFLE(3, 2, 1, 0)));
-}
+    if (shuf)
+            return shuffle<1, 0, 3, 2>(a);
+    else
+            return shuffle< 3, 2, 1, 0>(a);
 
+}
 #  endif
 
-#  ifdef __KERNEL_SSE41__
+#  if defined(__KERNEL_SSE41__)
 
 ccl_device_inline void gen_idirsplat_swap(const ssef &pn,
                                           const shuffle_swap_t &shuf_identity,

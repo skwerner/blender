@@ -26,7 +26,7 @@ CCL_NAMESPACE_BEGIN
 #ifndef __KERNEL_GPU__
 struct ccl_try_align(16) float3
 {
-#  ifdef __KERNEL_SSE__
+#  ifdef __KERNEL_SSE_OR_NEON__
   union {
     __m128 m128;
     struct {
@@ -42,9 +42,9 @@ struct ccl_try_align(16) float3
   __forceinline operator __m128 &();
 
   __forceinline float3 &operator=(const float3 &a);
-#  else  /* __KERNEL_SSE__ */
+#  else  /* __KERNEL_SSE_OR_NEON__ */
   float x, y, z, w;
-#  endif /* __KERNEL_SSE__ */
+#  endif /* __KERNEL_SSE_OR_NEON__ */
 
   __forceinline float operator[](int i) const;
   __forceinline float &operator[](int i);

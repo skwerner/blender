@@ -20,7 +20,7 @@
 
 CCL_NAMESPACE_BEGIN
 
-#ifdef __KERNEL_SSE2__
+#ifdef __KERNEL_SSE2_OR_NEON__
 
 struct sseb;
 struct ssef;
@@ -146,7 +146,7 @@ __forceinline const ssei operator-(const int32_t &a, const ssei &b)
   return ssei(a) - b;
 }
 
-#  if defined(__KERNEL_SSE41__)
+#  if defined(__KERNEL_SSE41_OR_NEON__)
 __forceinline const ssei operator*(const ssei &a, const ssei &b)
 {
   return _mm_mullo_epi32(a.m128, b.m128);
@@ -231,7 +231,7 @@ __forceinline const ssei srl(const ssei &a, const int32_t &b)
   return _mm_srli_epi32(a.m128, b);
 }
 
-#  if defined(__KERNEL_SSE41__)
+#  if defined(__KERNEL_SSE41_OR_NEON__)
 __forceinline const ssei min(const ssei &a, const ssei &b)
 {
   return _mm_min_epi32(a.m128, b.m128);
@@ -281,7 +281,7 @@ __forceinline ssei &operator-=(ssei &a, const int32_t &b)
   return a = a - b;
 }
 
-#  if defined(__KERNEL_SSE41__)
+#  if defined(__KERNEL_SSE41_OR_NEON__)
 __forceinline ssei &operator*=(ssei &a, const ssei &b)
 {
   return a = a * b;
@@ -412,7 +412,7 @@ __forceinline const sseb operator<=(const int32_t &a, const ssei &b)
 
 __forceinline const ssei select(const sseb &m, const ssei &t, const ssei &f)
 {
-#  ifdef __KERNEL_SSE41__
+#  ifdef __KERNEL_SSE41_OR_NEON__
   return _mm_castps_si128(_mm_blendv_ps(_mm_castsi128_ps(f), _mm_castsi128_ps(t), m));
 #  else
   return _mm_or_si128(_mm_and_si128(m, t), _mm_andnot_si128(m, f));
@@ -421,7 +421,7 @@ __forceinline const ssei select(const sseb &m, const ssei &t, const ssei &f)
 
 __forceinline const ssei select(const int mask, const ssei &t, const ssei &f)
 {
-#  if defined(__KERNEL_SSE41__) && \
+#  if defined(__KERNEL_SSE41_OR_NEON__) && \
       ((!defined(__clang__) && !defined(_MSC_VER)) || defined(__INTEL_COMPILER))
   return _mm_castps_si128(_mm_blend_ps(_mm_castsi128_ps(f), _mm_castsi128_ps(t), mask));
 #  else
@@ -442,17 +442,27 @@ __forceinline ssei unpackhi(const ssei &a, const ssei &b)
   return _mm_unpackhi_epi32(a, b);
 }
 
+
 template<size_t i0, size_t i1, size_t i2, size_t i3>
 __forceinline const ssei shuffle(const ssei &a)
 {
-  return _mm_shuffle_epi32(a, _MM_SHUFFLE(i3, i2, i1, i0));
+#ifdef __KERNEL_NEON__
+    return shuffle_neon<ssei,i0,i1,i2,i3>(a);
+#else
+    return _mm_shuffle_epi32(a, _MM_SHUFFLE(i3, i2, i1, i0));
+#endif
 }
 
 template<size_t i0, size_t i1, size_t i2, size_t i3>
 __forceinline const ssei shuffle(const ssei &a, const ssei &b)
 {
+#ifdef __KERNEL_NEON__
+    return shuffle_neon<ssei,i0,i1,i2,i3>(a,b);
+#else
   return _mm_castps_si128(
       _mm_shuffle_ps(_mm_castsi128_ps(a), _mm_castsi128_ps(b), _MM_SHUFFLE(i3, i2, i1, i0)));
+#endif
+    
 }
 
 template<size_t i0> __forceinline const ssei shuffle(const ssei &b)
@@ -536,6 +546,21 @@ __forceinline size_t select_max(const sseb &valid, const ssei &v)
   return __bsf(movemask(valid & (a == vreduce_max(a))));
 }
 
+#  elif defined(__KERNEL_NEON__)
+
+__forceinline int reduce_min(const ssei &v)
+{
+  return vminvq_s32(v);
+}
+__forceinline int reduce_max(const ssei &v)
+{
+  return vmaxvq_s32(v);
+}
+__forceinline int reduce_add(const ssei &v)
+{
+  return vaddvq_s32(v);
+}
+
 #  else
 
 __forceinline int ssei_min(int a, int b)
@@ -600,7 +625,7 @@ __forceinline ssei load4i_nt(void *ptr)
 
 __forceinline void store4i_nt(void *ptr, const ssei &v)
 {
-#  if defined(__KERNEL_SSE41__)
+#  if defined(__KERNEL_SSE41_OR_NEON__)
   _mm_stream_ps((float *)ptr, _mm_castsi128_ps(v));
 #  else
   _mm_store_si128((__m128i *)ptr, v);

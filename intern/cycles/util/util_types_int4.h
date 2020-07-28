@@ -30,7 +30,7 @@ struct float4;
 
 struct ccl_try_align(16) int4
 {
-#  ifdef __KERNEL_SSE__
+#  ifdef __KERNEL_SSE_OR_NEON__
   union {
     __m128i m128;
     struct {
@@ -46,9 +46,9 @@ struct ccl_try_align(16) int4
   __forceinline operator __m128i &();
 
   __forceinline int4 &operator=(const int4 &a);
-#  else  /* __KERNEL_SSE__ */
+#  else  /* __KERNEL_SSE_OR_NEON__ */
   int x, y, z, w;
-#  endif /* __KERNEL_SSE__ */
+#  endif /* __KERNEL_SSE_OR_NEON__ */
 
   __forceinline int operator[](int i) const;
   __forceinline int &operator[](int i);

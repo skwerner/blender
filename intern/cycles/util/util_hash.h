@@ -217,7 +217,7 @@ ccl_device_inline float3 hash_float4_to_float3(float4 k)
 
 /* SSE Versions Of Jenkins Lookup3 Hash Functions */
 
-#ifdef __KERNEL_SSE2__
+#ifdef __KERNEL_SSE2_OR_NEON__
 #  define rot(x, k) (((x) << (k)) | (srl(x, 32 - (k))))
 
 #  define mix(a, b, c) \

@@ -28,7 +28,7 @@
 CCL_NAMESPACE_BEGIN
 
 #ifndef __KERNEL_GPU__
-#  ifdef __KERNEL_SSE__
+#  ifdef __KERNEL_SSE_OR_NEON__
 __forceinline int4::int4()
 {
 }
@@ -74,7 +74,7 @@ __forceinline int &int4::operator[](int i)
 
 ccl_device_inline int4 make_int4(int i)
 {
-#  ifdef __KERNEL_SSE__
+#  ifdef __KERNEL_SSE_OR_NEON__
   int4 a(_mm_set1_epi32(i));
 #  else
   int4 a = {i, i, i, i};
@@ -84,7 +84,7 @@ ccl_device_inline int4 make_int4(int i)
 
 ccl_device_inline int4 make_int4(int x, int y, int z, int w)
 {
-#  ifdef __KERNEL_SSE__
+#  ifdef __KERNEL_SSE_OR_NEON__
   int4 a(_mm_set_epi32(w, z, y, x));
 #  else
   int4 a = {x, y, z, w};
@@ -94,7 +94,7 @@ ccl_device_inline int4 make_int4(int x, int y, int z, int w)
 
 ccl_device_inline int4 make_int4(const float3 &f)
 {
-#  ifdef __KERNEL_SSE__
+#  ifdef __KERNEL_SSE_OR_NEON__
   int4 a(_mm_cvtps_epi32(f.m128));
 #  else
   int4 a = {(int)f.x, (int)f.y, (int)f.z, (int)f.w};
@@ -104,7 +104,7 @@ ccl_device_inline int4 make_int4(const float3 &f)
 
 ccl_device_inline int4 make_int4(const float4 &f)
 {
-#  ifdef __KERNEL_SSE__
+#  ifdef __KERNEL_SSE_OR_NEON__
   int4 a(_mm_cvtps_epi32(f.m128));
 #  else
   int4 a = {(int)f.x, (int)f.y, (int)f.z, (int)f.w};

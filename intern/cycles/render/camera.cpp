@@ -727,7 +727,13 @@ float Camera::world_to_raster_size(float3 P)
     float3 D = transform_point(&worldtocamera, P);
     float dist = len(D);
 
-    Ray ray = {{0}};
+    Ray ray;
+#ifdef __KERNEL_SSE_OR_NEON__
+      ray.t = 0;
+#else
+      ray = {{0,0,0}};
+#endif
+
 
     /* Distortion can become so great that the results become meaningless, there
      * may be a better way to do this, but calculating differentials from the

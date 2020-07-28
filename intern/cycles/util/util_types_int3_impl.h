@@ -28,7 +28,7 @@
 CCL_NAMESPACE_BEGIN
 
 #ifndef __KERNEL_GPU__
-#  ifdef __KERNEL_SSE__
+#  ifdef __KERNEL_SSE_OR_NEON__
 __forceinline int3::int3()
 {
 }
@@ -56,7 +56,7 @@ __forceinline int3 &int3::operator=(const int3 &a)
   m128 = a.m128;
   return *this;
 }
-#  endif /* __KERNEL_SSE__ */
+#  endif /* __KERNEL_SSE_OR_NEON__ */
 
 __forceinline int int3::operator[](int i) const
 {
@@ -74,7 +74,7 @@ __forceinline int &int3::operator[](int i)
 
 ccl_device_inline int3 make_int3(int i)
 {
-#  ifdef __KERNEL_SSE__
+#  ifdef __KERNEL_SSE_OR_NEON__
   int3 a(_mm_set1_epi32(i));
 #  else
   int3 a = {i, i, i, i};
@@ -84,7 +84,7 @@ ccl_device_inline int3 make_int3(int i)
 
 ccl_device_inline int3 make_int3(int x, int y, int z)
 {
-#  ifdef __KERNEL_SSE__
+#  ifdef __KERNEL_SSE_OR_NEON__
   int3 a(_mm_set_epi32(0, z, y, x));
 #  else
   int3 a = {x, y, z, 0};

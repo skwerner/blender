@@ -374,16 +374,16 @@ void LightManager::device_update_distribution(Device *device,
   bool background_mis = false;
 
   /* The emissive_prims vector contains all emissive primitives in the scene,
-  * i.e., all mesh light triangles and all lamps. The order of the primitives
-  * in the vector is important since it has the same order as the
-  * light_distribution array.
-  *
-  * If using the light tree then the order is important since the light tree
-  * reordered the lights so lights in the same node are next to each other
-  * in memory.
-  *
-  * If NOT using the light tree then the order is important since during
-  * sampling we assume all triangles are first in the array. */
+   * i.e., all mesh light triangles and all lamps. The order of the primitives
+   * in the vector is important since it has the same order as the
+   * light_distribution array.
+   *
+   * If using the light tree then the order is important since the light tree
+   * reordered the lights so lights in the same node are next to each other
+   * in memory.
+   *
+   * If NOT using the light tree then the order is important since during
+   * sampling we assume all triangles are first in the array. */
   vector<Primitive> emissive_prims;
   emissive_prims.reserve(scene->lights.size());
 
@@ -406,7 +406,7 @@ void LightManager::device_update_distribution(Device *device,
                            scene->default_surface;
 
       if (shader->use_mis && shader->has_surface_emission) {
-        emissive_prims.push_back(Primitive(i + mesh->tri_offset, object_id));
+        emissive_prims.push_back(Primitive(i + mesh->prim_offset, object_id));
         num_triangles++;
       }
     }
@@ -691,7 +691,7 @@ void LightManager::device_update_distribution(Device *device,
       use_light_visibility = true;
     }
 
-    int triangle_id = prim.prim_id - mesh->tri_offset;
+    int triangle_id = prim.prim_id - mesh->prim_offset;
     const float area = mesh->compute_triangle_area(triangle_id, object->tfm);
     distribution[offset].area = area;
     distribution[offset].totarea = totarea;
@@ -730,7 +730,7 @@ void LightManager::device_update_distribution(Device *device,
     totarea += lightarea;
 
     if (light->type == LIGHT_DISTANT) {
-    num_distant_lights++;
+      num_distant_lights++;
       use_lamp_mis |= (light->angle > 0.0f && light->use_mis);
     }
     else if (light->type == LIGHT_POINT || light->type == LIGHT_SPOT) {
@@ -1013,6 +1013,7 @@ void LightManager::device_update_background(Device *device,
   /* If the resolution isn't set manually, try to find an environment texture. */
   if (res.x == 0) {
     res = environment_res;
+  }
   kbackground->map_res_x = res.x;
   kbackground->map_res_y = res.y;
 
@@ -1491,11 +1492,9 @@ int2 LightManager::get_background_map_resolution(const Light *background_light, 
     foreach (ShaderNode *node, shader->graph->nodes) {
       if (node->type == EnvironmentTextureNode::node_type) {
         EnvironmentTextureNode *env = (EnvironmentTextureNode *)node;
-        ImageMetaData metadata;
-        if (env->image_manager && env->image_manager->get_image_metadata(env->slot, metadata)) {
-          res.x = max(res.x, metadata.width);
-          res.y = max(res.y, metadata.height);
-        }
+        ImageMetaData metadata = env->handle.metadata();;
+        res.x = max(res.x, metadata.width);
+        res.y = max(res.y, metadata.height);
       }
     }
     if (res.x > 0 && res.y > 0) {

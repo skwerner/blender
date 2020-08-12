@@ -207,13 +207,13 @@ ccl_device_noinline_cpu bool direct_emission(KernelGlobals *kg,
 /* Indirect Primitive Emission */
 
 ccl_device_noinline_cpu float3 indirect_primitive_emission(KernelGlobals *kg,
-                                                       ShaderData *sd,
-                                                       float t,
-                                                       float3 P,
-                                                       float3 N,
-                                                       int path_flag,
-                                                       float bsdf_pdf,
-                                                       bool has_volume)
+                                                           ShaderData *sd,
+                                                           float t,
+                                                           float3 P,
+                                                           float3 N,
+                                                           int path_flag,
+                                                           float bsdf_pdf,
+                                                           bool has_volume)
 {
   /* evaluate emissive closure */
   float3 L = shader_emissive_eval(sd);
@@ -228,7 +228,12 @@ ccl_device_noinline_cpu float3 indirect_primitive_emission(KernelGlobals *kg,
     /* multiple importance sampling, get triangle light pdf,
      * and compute weight with respect to BSDF pdf */
     float pdf = triangle_light_pdf(kg, sd, t);
-    pdf *= light_distribution_pdf(kg, P, N, sd->prim, sd->object, has_volume);
+    if ((path_flag & PATH_RAY_VOLUME_SCATTER) && sd->t_pick > 0.0f) {
+      pdf *= light_distribution_pdf(kg, sd->P_pick, sd->N_pick, sd->t_pick, sd->prim, sd->object);
+    }
+    else {
+      pdf *= light_distribution_pdf(kg, P, N, -1.0f, sd->prim, sd->object);
+    }
     float mis_weight = power_heuristic(bsdf_pdf, pdf);
 
     return L * mis_weight;
@@ -242,7 +247,7 @@ ccl_device_noinline_cpu float3 indirect_primitive_emission(KernelGlobals *kg,
 ccl_device_noinline_cpu void indirect_lamp_emission(KernelGlobals *kg,
                                                     ShaderData *emission_sd,
                                                     ccl_addr_space PathState *state,
-                                                float3 N,
+                                                    float3 N,
                                                     PathRadiance *L,
                                                     Ray *ray,
                                                     float3 throughput)
@@ -269,7 +274,6 @@ ccl_device_noinline_cpu void indirect_lamp_emission(KernelGlobals *kg,
     float3 lamp_L = direct_emissive_eval(
         kg, emission_sd, &ls, state, -ray->D, ray->dD, ls.t, ray->time);
 
-    bool has_volume = false;
 #ifdef __VOLUME__
     if (state->volume_stack[0].shader != SHADER_NONE) {
       /* shadow attenuation */
@@ -280,7 +284,6 @@ ccl_device_noinline_cpu void indirect_lamp_emission(KernelGlobals *kg,
       lamp_L *= volume_tp;
     }
 
-    has_volume = ((emission_sd->flag & SD_HAS_VOLUME) != 0);
 #endif
 
     if (!(state->flag & PATH_RAY_MIS_SKIP)) {
@@ -288,7 +291,13 @@ ccl_device_noinline_cpu void indirect_lamp_emission(KernelGlobals *kg,
        * and compute weight with respect to BSDF pdf */
 
       /* multiply with light picking probablity to pdf */
-      ls.pdf *= light_distribution_pdf(kg, ray->P, N, ~ls.lamp, -1, has_volume);
+      if ((state->flag & PATH_RAY_VOLUME_SCATTER) && emission_sd->t_pick > 0.0f) {
+        ls.pdf *= light_distribution_pdf(
+            kg, emission_sd->P_pick, emission_sd->N_pick, emission_sd->t_pick, ~ls.lamp, -1);
+      }
+      else {
+        ls.pdf *= light_distribution_pdf(kg, ray->P, N, -1.0f, ~ls.lamp, -1);
+      }
       float mis_weight = power_heuristic(state->ray_pdf, ls.pdf);
       lamp_L *= mis_weight;
     }
@@ -301,7 +310,7 @@ ccl_device_noinline_cpu void indirect_lamp_emission(KernelGlobals *kg,
 
 ccl_device_noinline_cpu float3 indirect_background(KernelGlobals *kg,
                                                    ShaderData *emission_sd,
-                                               float3 N,
+                                                   float3 N,
                                                    ccl_addr_space PathState *state,
                                                    ccl_global float *buffer,
                                                    ccl_addr_space Ray *ray)
@@ -321,11 +330,6 @@ ccl_device_noinline_cpu float3 indirect_background(KernelGlobals *kg,
       return make_float3(0.0f, 0.0f, 0.0f);
   }
 
-  bool has_volume = false;
-#  if defined(__BACKGROUND_MIS__) && defined(__VOLUME__)
-  /* This has to be done before shader_setup_* below. */
-  has_volume = ((emission_sd->flag & SD_HAS_VOLUME) != 0);
-#  endif
   /* Evaluate background shader. */
   float3 L = make_float3(0.0f, 0.0f, 0.0f);
   if (!shader_constant_emission_eval(kg, shader, &L)) {
@@ -349,24 +353,18 @@ ccl_device_noinline_cpu float3 indirect_background(KernelGlobals *kg,
   /* consider shading point at previous non-transparent bounce */
   float3 P_pick;
   float3 N_pick;
-  if (state->ray_t == 0.0f) {  // Non-transparent bounce
-    P_pick = emission_sd->P_pick;
-    N_pick = emission_sd->N_pick;
-  }
-  else {  // Transparent bounce
-    P_pick = ray->P - state->ray_t * ray->D;
-    N_pick = state->ray_N;
-  }
+
+  P_pick = ray->P - state->ray_t * ray->D;
+  N_pick = state->ray_N;
 
   /* check if background light exists or if we should skip pdf */
-  int res_x = kernel_data.integrator.pdf_background_res_x;
 
   if (!(state->flag & PATH_RAY_MIS_SKIP) && kernel_data.background.use_mis) {
     /* multiple importance sampling, get background light pdf for ray
      * direction, and compute weight with respect to BSDF pdf */
     float pdf = background_light_pdf(kg, P_pick, ray->D);
     int background_index = kernel_data.integrator.background_light_index;
-    pdf *= light_distribution_pdf(kg, P_pick, N_pick, ~background_index, -1, has_volume);
+    pdf *= light_distribution_pdf(kg, P_pick, N_pick, 1.0f, ~background_index, -1);
     float mis_weight = power_heuristic(state->ray_pdf, pdf);
 
     return L * mis_weight;

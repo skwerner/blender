@@ -86,8 +86,7 @@ ccl_device_noinline void compute_light_pass(
           kernel_path_indirect(kg, &indirect_sd, emission_sd, &ray, throughput, &state, L);
           indirect_sd.P_pick = sd->P_pick;
           indirect_sd.N_pick = sd->N_pick;
-          kernel_path_indirect(
-              kg, &indirect_sd, emission_sd, &ray, throughput, &state, L);
+          kernel_path_indirect(kg, &indirect_sd, emission_sd, &ray, throughput, &state, L);
         }
         is_sss_sample = true;
       }

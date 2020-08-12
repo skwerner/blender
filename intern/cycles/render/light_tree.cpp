@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#include "render/light.h"
 #include "render/light_tree.h"
+#include "render/light.h"
 #include "render/mesh.h"
 #include "render/object.h"
 
@@ -141,8 +141,8 @@ BoundBox LightTree::compute_bbox(const Primitive &prim)
   if (prim.prim_id >= 0) {
     /* extract bounding box from emissive triangle */
     const Object *object = scene->objects[prim.object_id];
-    const Mesh *mesh = object->mesh;
-    const int triangle_id = prim.prim_id - mesh->tri_offset;
+    const Mesh *mesh = (Mesh *)object->geometry;
+    const int triangle_id = prim.prim_id - mesh->prim_offset;
     const Mesh::Triangle triangle = mesh->get_triangle(triangle_id);
 
     float3 p0 = mesh->verts[triangle.v[0]];
@@ -200,8 +200,8 @@ Orientation LightTree::compute_bcone(const Primitive &prim)
   if (prim.prim_id >= 0) {
     /* extract bounding cone from emissive triangle */
     const Object *object = scene->objects[prim.object_id];
-    const Mesh *mesh = object->mesh;
-    const int triangle_id = prim.prim_id - mesh->tri_offset;
+    const Mesh *mesh = (Mesh *)object->geometry;
+    const int triangle_id = prim.prim_id - mesh->prim_offset;
     const Mesh::Triangle triangle = mesh->get_triangle(triangle_id);
 
     float3 p0 = mesh->verts[triangle.v[0]];
@@ -254,8 +254,8 @@ float LightTree::compute_energy(const Primitive &prim)
   if (prim.prim_id >= 0) {
     /* extract shader from emissive triangle */
     const Object *object = scene->objects[prim.object_id];
-    const Mesh *mesh = object->mesh;
-    const int triangle_id = prim.prim_id - mesh->tri_offset;
+    const Mesh *mesh = (Mesh *)object->geometry;
+    const int triangle_id = prim.prim_id - mesh->prim_offset;
 
     int shader_index = mesh->shader[triangle_id];
     shader = mesh->used_shaders.at(shader_index);
@@ -269,37 +269,21 @@ float LightTree::compute_energy(const Primitive &prim)
     const Transform &tfm = scene->objects[prim.object_id]->tfm;
     float area = mesh->compute_triangle_area(triangle_id, tfm);
 
-    emission *= area * M_PI_F;
+    emission *= area * 4;
   }
   else {
     const Light *light = scene->lights[prim.lamp_id];
 
-    /* get emission from shader */
-    shader = light->shader;
-    bool is_constant_emission = shader->is_constant_emission(&emission);
-    if (!is_constant_emission) {
-      emission = make_float3(1.0f);
-    }
+    emission = light->strength;
 
-    /* calculate the total emission by integrating the emission over the
-     * the entire sphere of directions. */
+    /* calculate the max emission in a single direction. */
     if (light->type == LIGHT_POINT) {
-      emission *= M_4PI_F;
+      emission /= M_PI_F;
     }
     else if (light->type == LIGHT_SPOT) {
-      /* The emission is only non-zero within the cone and if spot_smooth
-       * is non-zero there will be a falloff. In this case, approximate
-       * the integral by considering a smaller cone without falloff. */
-      float spot_angle = light->spot_angle * 0.5f;
-      float spot_falloff_angle = spot_angle * (1.0f - light->spot_smooth);
-      float spot_middle_angle = (spot_angle + spot_falloff_angle) * 0.5f;
-      emission *= M_2PI_F * (1.0f - cosf(spot_middle_angle));
+      emission /= M_PI_F;
     }
     else if (light->type == LIGHT_AREA) {
-      float3 axisu = light->axisu * (light->sizeu * light->size);
-      float3 axisv = light->axisv * (light->sizev * light->size);
-      float area = len(axisu) * len(axisv);
-      emission *= area * M_PI_F;
     }
     else {
       /* LIGHT_DISTANT and LIGHT_BACKGROUND are handled separately */
@@ -395,8 +379,8 @@ void LightTree::split_saoh(const BoundBox &centroid_bbox,
   const float extent_max = max3(centroid_bbox.size());
   for (int dim = 0; dim < 3; ++dim) {
 
-    BucketInfo buckets[num_buckets];
-    vector<Orientation> bucket_bcones[num_buckets];
+    vector<BucketInfo> buckets(num_buckets);
+    vector<vector<Orientation>> bucket_bcones(num_buckets);
 
     /* calculate total energy in each bucket and a bbox of it */
     const float extent = centroid_bbox.max[dim] - centroid_bbox.min[dim];
@@ -423,7 +407,7 @@ void LightTree::split_saoh(const BoundBox &centroid_bbox,
     }
 
     /* compute costs for splitting at bucket boundaries */
-    float cost[num_buckets - 1];
+    vector<float> cost(num_buckets - 1);
     BoundBox bbox_L, bbox_R;
     float energy_L, energy_R;
     vector<Orientation> bcones_L, bcones_R;

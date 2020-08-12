@@ -98,26 +98,18 @@ ccl_device_forceinline void kernel_path_lamp_emission(KernelGlobals *kg,
     /* ray starting from previous non-transparent bounce */
     Ray light_ray ccl_optional_struct_init;
     float3 N_pick;
-    if (state->ray_t == 0.0f) {
-      light_ray.P = emission_sd->P_pick;
-      N_pick = emission_sd->N_pick;
-    }
-    else {
-      /* Current bounce was on a transparent surface */
-      light_ray.P = ray->P - state->ray_t * ray->D;
-      N_pick = state->ray_N;
-    }
+    light_ray.P = ray->P - state->ray_t * ray->D;
+    N_pick = state->ray_N;
 
+    state->ray_t += isect->t;
     light_ray.D = ray->D;
-    light_ray.t = state->ray_t + isect->t;
+    light_ray.t = state->ray_t;
     light_ray.time = ray->time;
     light_ray.dD = ray->dD;
     light_ray.dP = ray->dP;
 
     /* intersect with lamp */
-    float3 emission;
-    if (indirect_lamp_emission(kg, emission_sd, state, N_pick, &light_ray, &emission))
-      path_radiance_accum_emission(L, state, throughput, emission);
+    indirect_lamp_emission(kg, emission_sd, state, N_pick, L, &light_ray, throughput);
   }
 #endif /* __LAMP_MIS__ */
 }
@@ -195,7 +187,7 @@ ccl_device_forceinline VolumeIntegrateResult kernel_path_volume(KernelGlobals *k
     shader_setup_from_volume(kg, sd, &volume_ray);
     kernel_volume_decoupled_record(kg, state, &volume_ray, sd, &volume_segment, step_size);
 
-    kernel_update_light_picking(sd, state);
+    kernel_update_light_picking(kg, sd, state, &volume_ray);
 
     volume_segment.sampling_method = sampling_method;
 
@@ -243,7 +235,7 @@ ccl_device_forceinline VolumeIntegrateResult kernel_path_volume(KernelGlobals *k
     VolumeIntegrateResult result = kernel_volume_integrate(
         kg, state, sd, &volume_ray, L, throughput, step_size);
 
-    kernel_update_light_picking(sd, state);
+    kernel_update_light_picking(kg, sd, state, NULL);
 
 #    ifdef __VOLUME_SCATTER__
     if (result == VOLUME_PATH_SCATTERED) {
@@ -330,14 +322,8 @@ ccl_device_forceinline bool kernel_path_shader_apply(KernelGlobals *kg,
     /* ray starting from previous non-transparent bounce */
     float3 P_pick;
     float3 N_pick;
-    if (state->ray_t == 0.0f) {  // Non-transparent bounce
-      P_pick = sd->P_pick;
-      N_pick = sd->N_pick;
-    }
-    else {  // Transparent bounce
-      P_pick = ray->P - state->ray_t * ray->D;
-      N_pick = state->ray_N;
-    }
+    P_pick = ray->P - state->ray_t * ray->D;
+    N_pick = state->ray_N;
 
     float ray_length = state->ray_t + sd->ray_length;
 
@@ -491,7 +477,7 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
           throughput /= probability;
         }
 
-        kernel_update_light_picking(sd, state);
+        kernel_update_light_picking(kg, sd, state, NULL);
 
 #    ifdef __DENOISING_FEATURES__
         kernel_update_denoising_features(kg, sd, state, L);
@@ -632,7 +618,7 @@ ccl_device_forceinline void kernel_path_integrate(KernelGlobals *kg,
           throughput /= probability;
         }
 
-        kernel_update_light_picking(&sd, state);
+        kernel_update_light_picking(kg, &sd, state, NULL);
 
 #  ifdef __DENOISING_FEATURES__
         kernel_update_denoising_features(kg, &sd, state, L);

@@ -37,7 +37,8 @@ ccl_device void accum_light_contribution(KernelGlobals *kg,
 
     if (!shadow_blocked(kg, sd, emission_sd, state, light_ray, &shadow)) {
       /* accumulate */
-      path_radiance_accum_light(L, state, throughput * scale, L_light, shadow, scale, *is_lamp);
+      path_radiance_accum_light(
+          kg, L, state, throughput * scale, L_light, shadow, scale, *is_lamp);
     }
     else {
       path_radiance_accum_total_light(L, state, throughput * scale, L_light);
@@ -65,159 +66,168 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg,
 {
   float3 P = sd->P_pick;
   float3 N = sd->N_pick;
+  float t = sd->t_pick;
 
   float time = sd->time;
   int bounce = state->bounce;
 
-  /* read in first part of node of light tree */
-  int right_child_offset, distribution_id, num_emitters;
-  update_node(kg, offset, &right_child_offset, &distribution_id, &num_emitters);
+  float randu_stack[64];
+  float randv_stack[64];
+  int offset_stack[64];
+  float pdf_stack[64];
 
-  /* found a leaf */
-  if (right_child_offset == -1) {
+  randu_stack[0] = randu;
+  randv_stack[0] = randv;
+  offset_stack[0] = offset;
+  pdf_stack[0] = pdf_factor;
 
-    /* if there are several emitters in this leaf then pick one of them */
-    if (num_emitters > 1) {
+  int stack_idx = 0;
 
-      /* create and sample CDF without dynamic allocation.
-       * see comment in light_tree_sample() for this piece of code */
-      float sum = 0.0f;
-      for (int i = 0; i < num_emitters; ++i) {
-        sum += calc_light_importance(kg, P, N, offset, i);
-      }
+  while (stack_idx > -1) {
+    randu = randu_stack[stack_idx];
+    randv = randv_stack[stack_idx];
+    offset = offset_stack[stack_idx];
+    pdf_factor = pdf_stack[stack_idx];
+    /* read in first part of node of light tree */
+    int right_child_offset, distribution_id, num_emitters;
+    update_node(kg, offset, &right_child_offset, &distribution_id, &num_emitters);
 
-      if (sum == 0.0f) {
-        return;
-      }
+    /* found a leaf */
+    if (right_child_offset == -1) {
 
-      float sum_inv = 1.0f / sum;
-      float cdf_L = 0.0f;
-      float cdf_R = 0.0f;
-      float prob = 0.0f;
-      int light;
-      for (int i = 1; i < num_emitters + 1; ++i) {
-        prob = calc_light_importance(kg, P, N, offset, i - 1) * sum_inv;
-        cdf_R = cdf_L + prob;
-        if (randu < cdf_R) {
-          light = i - 1;
-          break;
+      /* if there are several emitters in this leaf then pick one of them */
+      if (num_emitters > 1) {
+
+        /* create and sample CDF without dynamic allocation.
+         * see comment in light_tree_sample() for this piece of code */
+        float sum = 0.0f;
+        for (int i = 0; i < num_emitters; ++i) {
+          sum += calc_light_importance(kg, t, P, N, offset, i);
         }
 
-        cdf_L = cdf_R;
-      }
-      distribution_id += light;
-      pdf_factor *= prob;
+        if (sum == 0.0f) {
+          --stack_idx;
+          continue;
+        }
 
-      /* rescale random number */
-      randu = (randu - cdf_L) / (cdf_R - cdf_L);
-    }
+        float sum_inv = 1.0f / sum;
+        float cdf_L = 0.0f;
+        float cdf_R = 0.0f;
+        float prob = 0.0f;
+        int light = num_emitters - 1;
+        for (int i = 1; i < num_emitters + 1; ++i) {
+          prob = calc_light_importance(kg, t, P, N, offset, i - 1) * sum_inv;
+          cdf_R = cdf_L + prob;
+          if (randu < cdf_R) {
+            light = i - 1;
+            break;
+          }
 
-    /* pick a point on the chosen light(distribution_id) and calculate the
-     * probability of picking this point */
-    LightSample ls;
-    light_point_sample(kg, randu, randv, time, P, bounce, distribution_id, &ls);
+          cdf_L = cdf_R;
+        }
+        distribution_id += light;
+        pdf_factor *= prob;
 
-    /* combine pdfs */
-    ls.pdf *= pdf_factor;
-
-    if (ls.pdf <= 0.0f)
-      return;
-
-    /* compute and accumulate the total contribution of this light */
-    Ray light_ray;
-    BsdfEval L_light;
-    bool is_lamp;
-    float terminate = path_state_rng_light_termination(kg, state);
-    accum_light_contribution(kg,
-                             sd,
-                             emission_sd,
-                             &ls,
-                             state,
-                             &light_ray,
-                             &L_light,
-                             L,
-                             &is_lamp,
-                             terminate,
-                             throughput,
-                             scale_factor);
-
-    return;
-  }
-  else {  // Interior node, choose which child(ren) to go down
-
-    int child_offsetL = offset + 4;
-    int child_offsetR = 4 * right_child_offset;
-
-    /* choose whether to go down both(split) or only one of the children */
-    if (can_split && split(kg, P, offset)) {
-      /* go down both child nodes */
-      accum_light_tree_contribution(kg,
-                                    randu,
-                                    randv,
-                                    child_offsetL,
-                                    pdf_factor,
-                                    true,
-                                    throughput,
-                                    scale_factor,
-                                    L,
-                                    state,
-                                    sd,
-                                    emission_sd);
-      accum_light_tree_contribution(kg,
-                                    randu,
-                                    randv,
-                                    child_offsetR,
-                                    pdf_factor,
-                                    true,
-                                    throughput,
-                                    scale_factor,
-                                    L,
-                                    state,
-                                    sd,
-                                    emission_sd);
-    }
-    else {
-      /* go down one of the child nodes */
-
-      /* evaluate the importance of each of the child nodes */
-      float I_L = calc_node_importance(kg, P, N, child_offsetL);
-      float I_R = calc_node_importance(kg, P, N, child_offsetR);
-
-      if ((I_L == 0.0f) && (I_R == 0.0f)) {
-        return;
-      }
-
-      /* calculate the probability of going down the left node */
-      float P_L = I_L / (I_L + I_R);
-
-      /* choose which node to go down */
-      if (randu <= P_L) {  // Going down left node
         /* rescale random number */
-        randu = randu / P_L;
-
-        offset = child_offsetL;
-        pdf_factor *= P_L;
-      }
-      else {  // Going down right node
-        /* rescale random number */
-        randu = (randu * (I_L + I_R) - I_L) / I_R;
-
-        offset = child_offsetR;
-        pdf_factor *= 1.0f - P_L;
+        randu = (randu - cdf_L) / (cdf_R - cdf_L);
       }
 
-      accum_light_tree_contribution(kg,
-                                    randu,
-                                    randv,
-                                    offset,
-                                    pdf_factor,
-                                    false,
-                                    throughput,
-                                    scale_factor,
-                                    L,
-                                    state,
-                                    sd,
-                                    emission_sd);
+      /* pick a point on the chosen light(distribution_id) and calculate the
+       * probability of picking this point */
+      LightSample ls;
+      light_point_sample(kg, -1, randu, randv, time, P, bounce, distribution_id, &ls);
+
+      /* combine pdfs */
+      ls.pdf *= pdf_factor;
+
+      if (ls.pdf <= 0.0f) {
+        --stack_idx;
+        continue;
+      }
+
+      /* compute and accumulate the total contribution of this light */
+      Ray light_ray;
+      light_ray.t = 0.0f;
+#ifdef __OBJECT_MOTION__
+      light_ray.time = sd->time;
+#endif
+      BsdfEval L_light;
+      bool is_lamp;
+      float terminate = path_state_rng_light_termination(kg, state);
+      accum_light_contribution(kg,
+                               sd,
+                               emission_sd,
+                               &ls,
+                               state,
+                               &light_ray,
+                               &L_light,
+                               L,
+                               &is_lamp,
+                               terminate,
+                               throughput,
+                               scale_factor);
+
+      --stack_idx;
+      can_split = true;
+      continue;
+    }
+    else {  // Interior node, choose which child(ren) to go down
+
+      int child_offsetL = offset + 4;
+      int child_offsetR = 4 * right_child_offset;
+
+      /* choose whether to go down both(split) or only one of the children */
+      if (can_split && split(kg, P, offset)) {
+        /* go down both child nodes */
+        //++stack_idx;
+        randu_stack[stack_idx] = randu;
+        randv_stack[stack_idx] = randv;
+        offset_stack[stack_idx] = child_offsetL;
+        pdf_stack[stack_idx] = pdf_factor;
+
+        ++stack_idx;
+        randu_stack[stack_idx] = randu;
+        randv_stack[stack_idx] = randv;
+        offset_stack[stack_idx] = child_offsetR;
+        pdf_stack[stack_idx] = pdf_factor;
+      }
+      else {
+        /* go down one of the child nodes */
+
+        /* evaluate the importance of each of the child nodes */
+        float I_L = calc_node_importance(kg, t, P, N, child_offsetL);
+        float I_R = calc_node_importance(kg, t, P, N, child_offsetR);
+
+        if ((I_L == 0.0f) && (I_R == 0.0f)) {
+          return;
+        }
+
+        /* calculate the probability of going down the left node */
+        float P_L = I_L / (I_L + I_R);
+
+        /* choose which node to go down */
+        if (randu <= P_L) {  // Going down left node
+          /* rescale random number */
+          randu = randu / P_L;
+
+          offset = child_offsetL;
+          pdf_factor *= P_L;
+        }
+        else {  // Going down right node
+          /* rescale random number */
+          randu = (randu * (I_L + I_R) - I_L) / I_R;
+
+          offset = child_offsetR;
+          pdf_factor *= 1.0f - P_L;
+        }
+
+        //++stack_idx;
+        can_split = false;
+        randu_stack[stack_idx] = randu;
+        randv_stack[stack_idx] = randv;
+        offset_stack[stack_idx] = offset;
+        pdf_stack[stack_idx] = pdf_factor;
+      }
     }
   }
 }
@@ -238,20 +248,17 @@ ccl_device_noinline_cpu void kernel_branched_path_surface_connect_light(
 {
 #  ifdef __EMISSION__
   /* sample illumination from lights to find path contribution */
-  if (!(sd->flag & SD_BSDF_HAS_EVAL))
-    return;
-
-  Ray light_ray;
-  BsdfEval L_light;
-  bool is_lamp;
-
-#    ifdef __OBJECT_MOTION__
-  light_ray.time = sd->time;
-#    endif
+  BsdfEval L_light ccl_optional_struct_init;
 
   bool use_light_tree = kernel_data.integrator.use_light_tree;
-  bool use_splitting = kernel_data.integrator.splitting_threshold != 0.0f;
-  if (use_light_tree && use_splitting) {
+  if (use_light_tree) {
+    Ray light_ray;
+    bool is_lamp;
+
+    light_ray.t = 0.0f;
+#    ifdef __OBJECT_MOTION__
+    light_ray.time = sd->time;
+#    endif
 
     int index;
     float randu, randv;
@@ -294,7 +301,7 @@ ccl_device_noinline_cpu void kernel_branched_path_surface_connect_light(
 
     /* sample a point on the given distant/background light */
     LightSample ls;
-    light_point_sample(kg, randu, randv, sd->time, sd->P, state->bounce, index, &ls);
+    light_point_sample(kg, -1, randu, randv, sd->time, sd->P, state->bounce, index, &ls);
 
     /* combine pdfs */
     ls.pdf *= group_prob;
@@ -317,109 +324,103 @@ ccl_device_noinline_cpu void kernel_branched_path_surface_connect_light(
                              throughput,
                              num_samples_adjust);
   }
-  else if (sample_all_lights && !use_light_tree) {
-    /* lamp sampling */
-    for (int i = 0; i < kernel_data.integrator.num_all_lights; i++) {
-      if (UNLIKELY(light_select_reached_max_bounces(kg, i, state->bounce)))
-        continue;
-
-      int num_samples = ceil_to_int(num_samples_adjust * light_select_num_samples(kg, i));
-      float num_samples_inv = num_samples_adjust / num_samples;
-      uint lamp_rng_hash = cmj_hash(state->rng_hash, i);
-
-      for (int j = 0; j < num_samples; j++) {
-        float light_u, light_v;
-        path_branched_rng_2D(
-            kg, lamp_rng_hash, state, j, num_samples, PRNG_LIGHT_U, &light_u, &light_v);
-        float terminate = path_branched_rng_light_termination(
-            kg, lamp_rng_hash, state, j, num_samples);
-
-        LightSample ls;
-        if (lamp_light_sample(kg, i, light_u, light_v, sd->P_pick, &ls)) {
-          accum_light_contribution(kg,
-                                   sd,
-                                   emission_sd,
-                                   &ls,
-                                   state,
-                                   &light_ray,
-                                   &L_light,
-                                   L,
-                                   &is_lamp,
-                                   terminate,
-                                   throughput,
-                                   num_samples_inv);
-        }
-      }
-    }
-
-    /* mesh light sampling */
-    if (kernel_data.integrator.pdf_triangles != 0.0f) {
-      int num_samples = ceil_to_int(num_samples_adjust *
-                                    kernel_data.integrator.mesh_light_samples);
-      float num_samples_inv = num_samples_adjust / num_samples;
-
-      for (int j = 0; j < num_samples; j++) {
-        float light_u, light_v;
-        path_branched_rng_2D(
-            kg, state->rng_hash, state, j, num_samples, PRNG_LIGHT_U, &light_u, &light_v);
-        float terminate = path_branched_rng_light_termination(
-            kg, state->rng_hash, state, j, num_samples);
-
-        /* only sample triangle lights */
-        if (kernel_data.integrator.num_all_lights)
-          light_u = 0.5f * light_u;
-
-        LightSample ls;
-        if (light_sample(kg,
-                         light_u,
-                         light_v,
-                         sd->time,
-                         sd->P_pick,
-                         sd->N_pick,
-                         state->bounce,
-                         &ls,
-                         false)) {
-          /* Same as above, probability needs to be corrected since the sampling was forced to select a mesh light. */
-          if (kernel_data.integrator.num_all_lights)
-            ls.pdf *= 2.0f;
-
-          accum_light_contribution(kg,
-                                   sd,
-                                   emission_sd,
-                                   &ls,
-                                   state,
-                                   &light_ray,
-                                   &L_light,
-                                   L,
-                                   &is_lamp,
-                                   terminate,
-                                   throughput,
-                                   num_samples_inv);
-        }
-      }
-    }
-  }
   else {
-    /* sample one light at random */
-    float light_u, light_v;
-    path_state_rng_2D(kg, state, PRNG_LIGHT_U, &light_u, &light_v);
-    float terminate = path_state_rng_light_termination(kg, state);
+    int num_lights = 0;
+    if (kernel_data.integrator.use_direct_light) {
+      if (sample_all_lights && !use_light_tree) {
+        num_lights = kernel_data.integrator.num_all_lights;
+        if (kernel_data.integrator.pdf_triangles != 0.0f) {
+          num_lights += 1;
+        }
+      }
+      else {
+        num_lights = 1;
+      }
+    }
 
-    LightSample ls;
-    if (light_sample(
-            kg, light_u, light_v, sd->time, sd->P_pick, sd->N_pick, state->bounce, &ls, false)) {
-      accum_light_contribution(kg,
-                               sd,
-                               emission_sd,
-                               &ls,
-                               state,
-                               &light_ray,
-                               &L_light,
-                               L,
-                               &is_lamp,
-                               terminate,
-                               throughput,
-                               num_samples_adjust);
+    for (int i = 0; i < num_lights; i++) {
+      /* sample one light at random */
+      int num_samples = 1;
+      uint lamp_rng_hash = state->rng_hash;
+      bool double_pdf = false;
+      bool is_mesh_light = false;
+      bool is_lamp = false;
+
+      if (sample_all_lights && !use_light_tree) {
+        /* lamp sampling */
+        is_lamp = i < kernel_data.integrator.num_all_lights;
+        if (is_lamp) {
+          if (UNLIKELY(light_select_reached_max_bounces(kg, i, state->bounce))) {
+            continue;
+          }
+          num_samples = ceil_to_int(num_samples_adjust * light_select_num_samples(kg, i));
+          lamp_rng_hash = cmj_hash(state->rng_hash, i);
+          double_pdf = kernel_data.integrator.pdf_triangles != 0.0f;
+        }
+        /* mesh light sampling */
+        else {
+          num_samples = ceil_to_int(num_samples_adjust *
+                                    kernel_data.integrator.mesh_light_samples);
+          double_pdf = kernel_data.integrator.num_all_lights != 0;
+          is_mesh_light = true;
+        }
+      }
+
+      float num_samples_inv = num_samples_adjust / num_samples;
+
+      for (int j = 0; j < num_samples; j++) {
+        Ray light_ray ccl_optional_struct_init;
+        light_ray.t = 0.0f; /* reset ray */
+#    ifdef __OBJECT_MOTION__
+        light_ray.time = sd->time;
+#    endif
+        float light_u, light_v;
+        float terminate;
+
+        if (kernel_data.integrator.use_direct_light && (sd->flag & SD_BSDF_HAS_EVAL)) {
+          path_branched_rng_2D(
+              kg, lamp_rng_hash, state, j, num_samples, PRNG_LIGHT_U, &light_u, &light_v);
+          terminate = path_branched_rng_light_termination(
+              kg, lamp_rng_hash, state, j, num_samples);
+
+          /* only sample triangle lights */
+          if (is_mesh_light && double_pdf) {
+            light_u = 0.5f * light_u;
+          }
+
+          LightSample ls ccl_optional_struct_init;
+          const int lamp = is_lamp ? i : -1;
+          if (light_sample(kg,
+                           lamp,
+                           light_u,
+                           light_v,
+                           sd->time,
+                           sd->P_pick,
+                           sd->N_pick,
+                           -1.0f,
+                           state->bounce,
+                           &ls)) {
+            /* The sampling probability returned by lamp_light_sample assumes that all lights were
+             * sampled. However, this code only samples lamps, so if the scene also had mesh
+             * lights, the real probability is twice as high. */
+            if (double_pdf) {
+              ls.pdf *= 2.0f;
+            }
+            accum_light_contribution(kg,
+                                     sd,
+                                     emission_sd,
+                                     &ls,
+                                     state,
+                                     &light_ray,
+                                     &L_light,
+                                     L,
+                                     &is_lamp,
+                                     terminate,
+                                     throughput,
+                                     num_samples_inv);
+          }
+        }
+      }
     }
   }
 #  endif
@@ -507,53 +508,54 @@ ccl_device_inline void kernel_path_surface_connect_light(KernelGlobals *kg,
   PROFILING_INIT(kg, PROFILING_CONNECT_LIGHT);
 
 #ifdef __EMISSION__
-  if (!(kernel_data.integrator.use_direct_light && (sd->flag & SD_BSDF_HAS_EVAL)))
-    return;
-
 #  ifdef __SHADOW_TRICKS__
-  if (state->flag & PATH_RAY_SHADOW_CATCHER) {
-    kernel_branched_path_surface_connect_light(kg, sd, emission_sd, state, throughput, 1.0f, L, 1);
-    return;
-  }
-#  endif
+  int all = (state->flag & PATH_RAY_SHADOW_CATCHER);
+  kernel_branched_path_surface_connect_light(kg, sd, emission_sd, state, throughput, 1.0f, L, all);
+#  else
 
   /* sample illumination from lights to find path contribution */
-  float light_u, light_v;
-  path_state_rng_2D(kg, state, PRNG_LIGHT_U, &light_u, &light_v);
+  Ray light_ray ccl_optional_struct_init;
+  BsdfEval L_light ccl_optional_struct_init;
+  bool is_lamp = false;
 
-  Ray light_ray;
-  BsdfEval L_light;
-  bool is_lamp;
-
-#  ifdef __OBJECT_MOTION__
+  light_ray.t = 0.0f;
+#    ifdef __OBJECT_MOTION__
   light_ray.time = sd->time;
-#  endif
+#    endif
 
-  bool has_volume = ((sd->flag & SD_HAS_VOLUME) != 0);
-  LightSample ls;
-  if (light_sample(kg,
-                   light_u,
-                   light_v,
-                   sd->time,
-                   sd->P_pick,
-                   sd->N_pick,
-                   state->bounce,
-                   &ls,
-                   has_volume)) {
-    float terminate = path_state_rng_light_termination(kg, state);
-    accum_light_contribution(kg,
-                             sd,
-                             emission_sd,
-                             &ls,
-                             state,
-                             &light_ray,
-                             &L_light,
-                             L,
-                             &is_lamp,
-                             terminate,
-                             throughput,
-                             1.0f);
+  if (kernel_data.integrator.use_direct_light && (sd->flag & SD_BSDF_HAS_EVAL)) {
+    bool has_volume = ((sd->flag & SD_HAS_VOLUME) != 0);
+    float light_u, light_v;
+    path_state_rng_2D(kg, state, PRNG_LIGHT_U, &light_u, &light_v);
+
+    LightSample ls ccl_optional_struct_init;
+    if (light_sample(kg,
+                     -1,
+                     light_u,
+                     light_v,
+                     sd->time,
+                     sd->P_pick,
+                     sd->N_pick,
+                     -1.0f,
+                     state->bounce,
+                     &ls)) {
+      float terminate = path_state_rng_light_termination(kg, state);
+      accum_light_contribution(kg,
+                               sd,
+                               emission_sd,
+                               &ls,
+                               state,
+                               &light_ray,
+                               &L_light,
+                               L,
+                               &is_lamp,
+                               terminate,
+                               throughput,
+                               1.0f);
+    }
   }
+
+#  endif
 #endif
 }
 
@@ -601,7 +603,7 @@ ccl_device bool kernel_path_surface_bounce(KernelGlobals *kg,
 
     /* setup ray */
     ray->P = ray_offset(sd->P, (label & LABEL_TRANSMIT) ? -sd->Ng : sd->Ng);
-    kernel_update_light_picking(sd, state);
+    kernel_update_light_picking(kg, sd, state, NULL);
     ray->D = normalize(bsdf_omega_in);
 
     if (state->bounce == 0)
@@ -634,7 +636,7 @@ ccl_device bool kernel_path_surface_bounce(KernelGlobals *kg,
 
     /* setup ray position, direction stays unchanged */
     ray->P = ray_offset(sd->P, -sd->Ng);
-    kernel_update_light_picking(sd, state);
+    kernel_update_light_picking(kg, sd, state, NULL);
 
 #  ifdef __RAY_DIFFERENTIALS__
     ray->dP = sd->dP;

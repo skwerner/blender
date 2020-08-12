@@ -21,8 +21,8 @@
  * \ingroup spview3d
  */
 
-#include <stdlib.h>
 #include <math.h>
+#include <stdlib.h>
 
 #include "DNA_collection_types.h"
 #include "DNA_object_types.h"
@@ -47,6 +47,7 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
+#include "ED_outliner.h"
 #include "ED_screen.h"
 #include "ED_select_utils.h"
 #include "ED_transform.h"
@@ -76,10 +77,10 @@ static int view3d_copybuffer_exec(bContext *C, wmOperator *op)
   }
   CTX_DATA_END;
 
-  BLI_make_file_string("/", str, BKE_tempdir_base(), "copybuffer.blend");
+  BLI_join_dirfile(str, sizeof(str), BKE_tempdir_base(), "copybuffer.blend");
   BKE_copybuffer_save(bmain, str, op->reports);
 
-  BKE_reportf(op->reports, RPT_INFO, "Copied %d selected objects", num_copied);
+  BKE_reportf(op->reports, RPT_INFO, "Copied %d selected object(s)", num_copied);
 
   return OPERATOR_FINISHED;
 }
@@ -108,7 +109,7 @@ static int view3d_pastebuffer_exec(bContext *C, wmOperator *op)
     flag |= FILE_ACTIVE_COLLECTION;
   }
 
-  BLI_make_file_string("/", str, BKE_tempdir_base(), "copybuffer.blend");
+  BLI_join_dirfile(str, sizeof(str), BKE_tempdir_base(), "copybuffer.blend");
 
   const int num_pasted = BKE_copybuffer_paste(C, str, flag, op->reports, FILTER_ID_OB);
   if (num_pasted == 0) {
@@ -117,8 +118,9 @@ static int view3d_pastebuffer_exec(bContext *C, wmOperator *op)
   }
 
   WM_event_add_notifier(C, NC_WINDOW, NULL);
+  ED_outliner_select_sync_from_object_tag(C);
 
-  BKE_reportf(op->reports, RPT_INFO, "%d objects pasted", num_pasted);
+  BKE_reportf(op->reports, RPT_INFO, "%d object(s) pasted", num_pasted);
 
   return OPERATOR_FINISHED;
 }
@@ -199,9 +201,7 @@ void view3d_operatortypes(void)
   WM_operatortype_append(VIEW3D_OT_copybuffer);
   WM_operatortype_append(VIEW3D_OT_pastebuffer);
 
-  WM_operatortype_append(VIEW3D_OT_properties);
   WM_operatortype_append(VIEW3D_OT_object_mode_pie_or_toggle);
-  WM_operatortype_append(VIEW3D_OT_toolshelf);
 
   WM_operatortype_append(VIEW3D_OT_snap_selected_to_grid);
   WM_operatortype_append(VIEW3D_OT_snap_selected_to_cursor);
@@ -210,6 +210,8 @@ void view3d_operatortypes(void)
   WM_operatortype_append(VIEW3D_OT_snap_cursor_to_center);
   WM_operatortype_append(VIEW3D_OT_snap_cursor_to_selected);
   WM_operatortype_append(VIEW3D_OT_snap_cursor_to_active);
+
+  WM_operatortype_append(VIEW3D_OT_interactive_add);
 
   WM_operatortype_append(VIEW3D_OT_toggle_shading);
   WM_operatortype_append(VIEW3D_OT_toggle_xray);
@@ -234,4 +236,5 @@ void view3d_keymap(wmKeyConfig *keyconf)
   viewmove_modal_keymap(keyconf);
   viewzoom_modal_keymap(keyconf);
   viewdolly_modal_keymap(keyconf);
+  viewplace_modal_keymap(keyconf);
 }

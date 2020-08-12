@@ -25,14 +25,15 @@ namespace Freestyle {
 
 NodeGroup *ViewMapTesselator::Tesselate(ViewMap *iViewMap)
 {
-  if (0 == iViewMap->ViewEdges().size())
+  if (iViewMap->ViewEdges().empty()) {
     return NULL;
+  }
 
   const vector<ViewEdge *> &viewedges = iViewMap->ViewEdges();
   return Tesselate(viewedges.begin(), viewedges.end());
 }
 
-NodeGroup *ViewMapTesselator::Tesselate(WShape *)
+NodeGroup *ViewMapTesselator::Tesselate(WShape *UNUSED(shape))
 {
   return NULL;
 }

@@ -27,13 +27,13 @@
 
 #include "GHOST_ISystem.h"
 
-#include "GHOST_Debug.h"
 #include "GHOST_Buttons.h"
-#include "GHOST_ModifierKeys.h"
+#include "GHOST_Debug.h"
 #include "GHOST_EventManager.h"
-#ifdef GHOST_DEBUG
+#include "GHOST_ModifierKeys.h"
+#ifdef WITH_GHOST_DEBUG
 #  include "GHOST_EventPrinter.h"
-#endif  // GHOST_DEBUG
+#endif  // WITH_GHOST_DEBUG
 
 class GHOST_DisplayManager;
 class GHOST_Event;
@@ -105,19 +105,18 @@ class GHOST_System : public GHOST_ISystem {
    ***************************************************************************************/
 
   /**
-   * Inherited from GHOST_ISystem but left pure virtual
-   *
-   * virtual  GHOST_TUns8 getNumDisplays() const = 0;
-   * virtual void getMainDisplayDimensions(...) const = 0;
-   * virtual GHOST_IWindow* createWindow(..)
-   */
-
-  /**
    * Dispose a window.
    * \param   window Pointer to the window to be disposed.
    * \return  Indication of success.
    */
   GHOST_TSuccess disposeWindow(GHOST_IWindow *window);
+
+  /**
+   * Create a new offscreen context.
+   * Never explicitly delete the context, use disposeContext() instead.
+   * \return  The new context (or 0 if creation failed).
+   */
+  virtual GHOST_IContext *createOffscreenContext() = 0;
 
   /**
    * Returns whether a window is valid.
@@ -137,8 +136,7 @@ class GHOST_System : public GHOST_ISystem {
   GHOST_TSuccess beginFullScreen(const GHOST_DisplaySetting &setting,
                                  GHOST_IWindow **window,
                                  const bool stereoVisual,
-                                 const bool alphaBackground,
-                                 const GHOST_TUns16 numOfAASamples = 0);
+                                 const bool alphaBackground);
 
   /**
    * Updates the resolution while in fullscreen mode.
@@ -221,7 +219,7 @@ class GHOST_System : public GHOST_ISystem {
    ***************************************************************************************/
 
   /**
-   * Returns the state of a modifier key (ouside the message queue).
+   * Returns the state of a modifier key (outside the message queue).
    * \param mask      The modifier key state to retrieve.
    * \param isDown    The state of a modifier key (true == pressed).
    * \return          Indication of success.
@@ -229,7 +227,7 @@ class GHOST_System : public GHOST_ISystem {
   GHOST_TSuccess getModifierKeyState(GHOST_TModifierKeyMask mask, bool &isDown) const;
 
   /**
-   * Returns the state of a mouse button (ouside the message queue).
+   * Returns the state of a mouse button (outside the message queue).
    * \param mask      The button state to retrieve.
    * \param isDown    Button state.
    * \return          Indication of success.
@@ -249,8 +247,8 @@ class GHOST_System : public GHOST_ISystem {
    ***************************************************************************************/
 
   /**
-   * Sets 3D mouse deadzone
-   * \param deadzone: Deadzone of the 3D mouse (both for rotation and pan) relative to full range
+   * Sets 3D mouse dead-zone
+   * \param deadzone: Dead-zone of the 3D mouse (both for rotation and pan) relative to full range.
    */
   void setNDOFDeadZone(float deadzone);
 #endif
@@ -297,7 +295,7 @@ class GHOST_System : public GHOST_ISystem {
   virtual GHOST_TSuccess getModifierKeys(GHOST_ModifierKeys &keys) const = 0;
 
   /**
-   * Returns the state of the mouse buttons (ouside the message queue).
+   * Returns the state of the mouse buttons (outside the message queue).
    * \param buttons   The state of the buttons.
    * \return          Indication of success.
    */
@@ -319,15 +317,37 @@ class GHOST_System : public GHOST_ISystem {
   virtual void putClipboard(GHOST_TInt8 *buffer, bool selection) const = 0;
 
   /**
-   * Confirms quitting he program when there is just one window left open
-   * in the application
+   * Show a system message box
+   * \param title                   The title of the message box
+   * \param message                 The message to display
+   * \param help_label              Help button label
+   * \param continue_label          Continue button label
+   * \param link                    An optional hyperlink
+   * \param dialog_options Options  how to display the message
    */
-  virtual int confirmQuit(GHOST_IWindow *window) const;
+  virtual GHOST_TSuccess showMessageBox(const char * /*title*/,
+                                        const char * /*message*/,
+                                        const char * /*help_label */,
+                                        const char * /*continue_label */,
+                                        const char * /*link*/,
+                                        GHOST_DialogOptions /*dialog_options*/) const
+  {
+    return GHOST_kFailure;
+  };
+
+  /***************************************************************************************
+   * Debugging
+   ***************************************************************************************/
 
   /**
-   * Informs if the system provides native dialogs (eg. confirm quit)
+   * Specify whether debug messages are to be shown.
    */
-  virtual bool supportsNativeDialogs(void);
+  virtual void initDebug(bool is_debug_enabled);
+
+  /**
+   * Check whether debug messages are to be shown.
+   */
+  virtual bool isDebugEnabled();
 
  protected:
   /**
@@ -350,8 +370,7 @@ class GHOST_System : public GHOST_ISystem {
   GHOST_TSuccess createFullScreenWindow(GHOST_Window **window,
                                         const GHOST_DisplaySetting &settings,
                                         const bool stereoVisual,
-                                        const bool alphaBackground = 0,
-                                        const GHOST_TUns16 numOfAASamples = 0);
+                                        const bool alphaBackground = 0);
 
   /** The display manager (platform dependent). */
   GHOST_DisplayManager *m_displayManager;
@@ -371,15 +390,17 @@ class GHOST_System : public GHOST_ISystem {
 #endif
 
   /** Prints all the events. */
-#ifdef GHOST_DEBUG
+#ifdef WITH_GHOST_DEBUG
   GHOST_EventPrinter *m_eventPrinter;
-#endif  // GHOST_DEBUG
+#endif  // WITH_GHOST_DEBUG
 
   /** Settings of the display before the display went fullscreen. */
   GHOST_DisplaySetting m_preFullScreenSetting;
 
   /** Which tablet API to use. */
   GHOST_TTabletAPI m_tabletAPI;
+
+  bool m_is_debug_enabled;
 };
 
 inline GHOST_TimerManager *GHOST_System::getTimerManager() const

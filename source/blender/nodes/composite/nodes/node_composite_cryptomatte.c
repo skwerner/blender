@@ -21,11 +21,11 @@
  * \ingroup cmpnodes
  */
 
-#include "node_composite_util.h"
 #include "BLI_assert.h"
 #include "BLI_dynstr.h"
 #include "BLI_hash_mm3.h"
 #include "BLI_utildefines.h"
+#include "node_composite_util.h"
 
 /* this is taken from the cryptomatte specification 1.0 */
 
@@ -60,10 +60,10 @@ static void cryptomatte_add(NodeCryptomatte *n, float f)
     while (start < end) {
       /* Ignore leading whitespace. */
       while (start < end && n->matte_id[start] == ' ') {
-        ++start;
+        start++;
       }
 
-      /* Find the next seprator. */
+      /* Find the next separator. */
       char *token_end = strchr(n->matte_id + start, ',');
       if (token_end == NULL || token_end == n->matte_id + start) {
         token_end = n->matte_id + end;
@@ -71,7 +71,8 @@ static void cryptomatte_add(NodeCryptomatte *n, float f)
       /* Be aware that token_len still contains any trailing white space. */
       token_len = token_end - (n->matte_id + start);
 
-      /* If this has a leading bracket, assume a raw floating point number and look for the closing bracket. */
+      /* If this has a leading bracket,
+       * assume a raw floating point number and look for the closing bracket. */
       if (n->matte_id[start] == '<') {
         if (strncmp(n->matte_id + start, number, strlen(number)) == 0) {
           /* This number is already there, so continue. */
@@ -138,10 +139,10 @@ static void cryptomatte_remove(NodeCryptomatte *n, float f)
     bool skip = false;
     /* Ignore leading whitespace or commas. */
     while (start < end && ((n->matte_id[start] == ' ') || (n->matte_id[start] == ','))) {
-      ++start;
+      start++;
     }
 
-    /* Find the next seprator. */
+    /* Find the next separator. */
     char *token_end = strchr(n->matte_id + start + 1, ',');
     if (token_end == NULL || token_end == n->matte_id + start) {
       token_end = n->matte_id + end;
@@ -152,7 +153,8 @@ static void cryptomatte_remove(NodeCryptomatte *n, float f)
     if (token_len == 1) {
       skip = true;
     }
-    /* If this has a leading bracket, assume a raw floating point number and look for the closing bracket. */
+    /* If this has a leading bracket,
+     * assume a raw floating point number and look for the closing bracket. */
     else if (n->matte_id[start] == '<') {
       if (strncmp(n->matte_id + start, number, strlen(number)) == 0) {
         /* This number is already there, so skip it. */
@@ -194,10 +196,10 @@ static void cryptomatte_remove(NodeCryptomatte *n, float f)
 }
 
 static bNodeSocketTemplate outputs[] = {
-    {SOCK_RGBA, 0, N_("Image")},
-    {SOCK_FLOAT, 0, N_("Matte")},
-    {SOCK_RGBA, 0, N_("Pick")},
-    {-1, 0, ""},
+    {SOCK_RGBA, N_("Image")},
+    {SOCK_FLOAT, N_("Matte")},
+    {SOCK_RGBA, N_("Pick")},
+    {-1, ""},
 };
 
 void ntreeCompositCryptomatteSyncFromAdd(bNodeTree *UNUSED(ntree), bNode *node)
@@ -271,13 +273,16 @@ static void node_free_cryptomatte(bNode *node)
   }
 }
 
-static void node_copy_cryptomatte(bNodeTree *UNUSED(dest_ntree), bNode *dest_node, bNode *src_node)
+static void node_copy_cryptomatte(bNodeTree *UNUSED(dest_ntree),
+                                  bNode *dest_node,
+                                  const bNode *src_node)
 {
   NodeCryptomatte *src_nc = src_node->storage;
   NodeCryptomatte *dest_nc = MEM_dupallocN(src_nc);
 
-  if (src_nc->matte_id)
+  if (src_nc->matte_id) {
     dest_nc->matte_id = MEM_dupallocN(src_nc->matte_id);
+  }
 
   dest_node->storage = dest_nc;
 }

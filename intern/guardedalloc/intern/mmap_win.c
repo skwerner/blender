@@ -23,16 +23,16 @@
 
 #ifdef WIN32
 
-#  include <windows.h>
 #  include <errno.h>
 #  include <io.h>
-#  include <sys/types.h>
 #  include <stdio.h>
+#  include <sys/types.h>
+#  include <windows.h>
 
 #  include "mmap_win.h"
 
 #  ifndef FILE_MAP_EXECUTE
-//not defined in earlier versions of the Platform  SDK (before February 2003)
+// not defined in earlier versions of the Platform  SDK (before February 2003)
 #    define FILE_MAP_EXECUTE 0x0020
 #  endif
 
@@ -98,8 +98,8 @@ void *mmap(void *UNUSED(start), size_t len, int prot, int flags, int fd, off_t o
   }
 
 #  if 0
-  if ( fd == -1 ) {
-    _set_errno( EBADF );
+  if (fd == -1) {
+    _set_errno(EBADF);
     return MAP_FAILED;
   }
 #  endif
@@ -125,8 +125,11 @@ void *mmap(void *UNUSED(start), size_t len, int prot, int flags, int fd, off_t o
     }
   }
 
-  /* note len is passed to a 32 bit DWORD, so can't be > 4 GB */
-  maphandle = CreateFileMapping(fhandle, NULL, prot_flags, 0, len, NULL);
+  /* Split 64 bit size into low and high bits. */
+  DWORD len_bits_high = len >> 32;
+  DWORD len_bits_low = len & 0xFFFFFFFF;
+
+  maphandle = CreateFileMapping(fhandle, NULL, prot_flags, len_bits_high, len_bits_low, NULL);
   if (maphandle == 0) {
     errno = EBADF;
     return MAP_FAILED;

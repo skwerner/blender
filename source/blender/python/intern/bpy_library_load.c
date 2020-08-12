@@ -19,24 +19,24 @@
  *
  * This file exposed blend file library appending/linking to python, typically
  * this would be done via RNA api but in this case a hand written python api
- * allows us to use pythons context manager (__enter__ and __exit__).
+ * allows us to use Python's context manager (`__enter__` and `__exit__`).
  *
- * Everything here is exposed via bpy.data.libraries.load(...) which returns
+ * Everything here is exposed via `bpy.data.libraries.load(...)` which returns
  * a context manager.
  */
 
 #include <Python.h>
 #include <stddef.h>
 
-#include "BLI_utildefines.h"
 #include "BLI_ghash.h"
-#include "BLI_string.h"
 #include "BLI_linklist.h"
 #include "BLI_path_util.h"
+#include "BLI_string.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_context.h"
-#include "BKE_idcode.h"
-#include "BKE_library.h"
+#include "BKE_idtype.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
 
@@ -54,8 +54,8 @@
 #define USE_RNA_DATABLOCKS
 
 #ifdef USE_RNA_DATABLOCKS
-#  include "bpy_rna.h"
 #  include "RNA_access.h"
+#  include "bpy_rna.h"
 #endif
 
 typedef struct {
@@ -92,7 +92,7 @@ static PyTypeObject bpy_lib_Type = {
     0,                                        /* tp_itemsize */
     /* methods */
     (destructor)bpy_lib_dealloc, /* tp_dealloc */
-    NULL,                        /* printfunc tp_print; */
+    (printfunc)NULL,             /* printfunc tp_print; */
     NULL,                        /* getattrfunc tp_getattr; */
     NULL,                        /* setattrfunc tp_setattr; */
     NULL,
@@ -246,9 +246,9 @@ static PyObject *bpy_lib_enter(BPy_Library *self)
   }
   else {
     int i = 0, code;
-    while ((code = BKE_idcode_iter_step(&i))) {
-      if (BKE_idcode_is_linkable(code)) {
-        const char *name_plural = BKE_idcode_to_name_plural(code);
+    while ((code = BKE_idtype_idcode_iter_step(&i))) {
+      if (BKE_idtype_idcode_is_linkable(code)) {
+        const char *name_plural = BKE_idtype_idcode_to_name_plural(code);
         PyObject *str = PyUnicode_FromString(name_plural);
         PyObject *item;
 
@@ -332,9 +332,9 @@ static PyObject *bpy_lib_exit(BPy_Library *self, PyObject *UNUSED(args))
 
   {
     int idcode_step = 0, idcode;
-    while ((idcode = BKE_idcode_iter_step(&idcode_step))) {
-      if (BKE_idcode_is_linkable(idcode) && (idcode != ID_WS || do_append)) {
-        const char *name_plural = BKE_idcode_to_name_plural(idcode);
+    while ((idcode = BKE_idtype_idcode_iter_step(&idcode_step))) {
+      if (BKE_idtype_idcode_is_linkable(idcode) && (idcode != ID_WS || do_append)) {
+        const char *name_plural = BKE_idtype_idcode_to_name_plural(idcode);
         PyObject *ls = PyDict_GetItemString(self->dict, name_plural);
         // printf("lib: %s\n", name_plural);
         if (ls && PyList_Check(ls)) {
@@ -419,9 +419,9 @@ static PyObject *bpy_lib_exit(BPy_Library *self, PyObject *UNUSED(args))
 #ifdef USE_RNA_DATABLOCKS
     {
       int idcode_step = 0, idcode;
-      while ((idcode = BKE_idcode_iter_step(&idcode_step))) {
-        if (BKE_idcode_is_linkable(idcode) && (idcode != ID_WS || do_append)) {
-          const char *name_plural = BKE_idcode_to_name_plural(idcode);
+      while ((idcode = BKE_idtype_idcode_iter_step(&idcode_step))) {
+        if (BKE_idtype_idcode_is_linkable(idcode) && (idcode != ID_WS || do_append)) {
+          const char *name_plural = BKE_idtype_idcode_to_name_plural(idcode);
           PyObject *ls = PyDict_GetItemString(self->dict, name_plural);
           if (ls && PyList_Check(ls)) {
             Py_ssize_t size = PyList_GET_SIZE(ls);
@@ -459,15 +459,15 @@ static PyObject *bpy_lib_dir(BPy_Library *self)
   return PyDict_Keys(self->dict);
 }
 
-int BPY_library_load_module(PyObject *mod_par)
+PyMethodDef BPY_library_load_method_def = {
+    "load",
+    (PyCFunction)bpy_lib_load,
+    METH_STATIC | METH_VARARGS | METH_KEYWORDS,
+    bpy_lib_load_doc,
+};
+
+int BPY_library_load_type_ready(void)
 {
-  static PyMethodDef load_meth = {
-      "load",
-      (PyCFunction)bpy_lib_load,
-      METH_STATIC | METH_VARARGS | METH_KEYWORDS,
-      bpy_lib_load_doc,
-  };
-  PyModule_AddObject(mod_par, "_library_load", PyCFunction_New(&load_meth, NULL));
 
   /* some compilers don't like accessing this directly, delay assignment */
   bpy_lib_Type.tp_getattro = PyObject_GenericGetAttr;

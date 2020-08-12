@@ -54,7 +54,6 @@ typedef enum eBoidRuleType {
   /** move next to a deflector object's in direction of it's tangent */
   eBoidRuleType_FollowWall = 12,
 #endif
-  NUM_BOID_RULE_TYPES,
 } eBoidRuleType;
 
 /* boidrule->flag */
@@ -108,7 +107,6 @@ typedef enum eBoidMode {
   eBoidMode_Climbing = 2,
   eBoidMode_Falling = 3,
   eBoidMode_Liftoff = 4,
-  NUM_BOID_MODES,
 } eBoidMode;
 
 typedef struct BoidData {
@@ -117,13 +115,13 @@ typedef struct BoidData {
 } BoidData;
 
 // planned for near future
-//typedef enum BoidConditionMode {
+// typedef enum BoidConditionMode {
 //  eBoidConditionType_Then = 0,
 //  eBoidConditionType_And = 1,
 //  eBoidConditionType_Or = 2,
 //  NUM_BOID_CONDITION_MODES
 //} BoidConditionMode;
-//typedef enum BoidConditionType {
+// typedef enum BoidConditionType {
 //  eBoidConditionType_None = 0,
 //  eBoidConditionType_Signal = 1,
 //  eBoidConditionType_NoSignal = 2,
@@ -135,7 +133,7 @@ typedef struct BoidData {
 //  eBoidConditionType_Touching = 8,
 //  NUM_BOID_CONDITION_TYPES
 //} BoidConditionType;
-//typedef struct BoidCondition {
+// typedef struct BoidCondition {
 //  struct BoidCondition *next, *prev;
 //  int state_id;
 //  short type, mode;
@@ -149,7 +147,6 @@ typedef enum eBoidRulesetType {
   eBoidRulesetType_Fuzzy = 0,
   eBoidRulesetType_Random = 1,
   eBoidRulesetType_Average = 2,
-  NUM_BOID_RULESET_TYPES,
 } eBoidRulesetType;
 #define BOIDSTATE_CURRENT 1
 typedef struct BoidState {
@@ -170,19 +167,19 @@ typedef struct BoidState {
 } BoidState;
 
 // planned for near future
-//typedef struct BoidSignal {
+// typedef struct BoidSignal {
 //  struct BoidSignal *next, *prev;
 //  float loc[3];
 //  float volume, falloff;
 //  int id;
 //} BoidSignal;
-//typedef struct BoidSignalDefine {
+// typedef struct BoidSignalDefine {
 //  struct BoidSignalDefine *next, *prev;
 //  int id, rt;
 //  char name[32];
 //} BoidSignalDefine;
 
-//typedef struct BoidSimulationData {
+// typedef struct BoidSimulationData {
 //  ListBase signal_defines;/* list of defined signals */
 //  ListBase signals[20];   /* gathers signals from all channels */
 //  struct KDTree_3d *signaltrees[20];

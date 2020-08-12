@@ -76,8 +76,14 @@ struct BMElem *EDBM_elem_from_selectmode(struct BMEditMesh *em,
                                          struct BMVert *eve,
                                          struct BMEdge *eed,
                                          struct BMFace *efa);
+
 int EDBM_elem_to_index_any(struct BMEditMesh *em, struct BMElem *ele);
 struct BMElem *EDBM_elem_from_index_any(struct BMEditMesh *em, int index);
+
+bool edbm_extrude_edges_indiv(struct BMEditMesh *em,
+                              struct wmOperator *op,
+                              const char hflag,
+                              const bool use_normal_flip);
 
 /* *** editmesh_add.c *** */
 void MESH_OT_primitive_plane_add(struct wmOperatorType *ot);
@@ -122,6 +128,8 @@ void MESH_GGT_spin_redo(struct wmGizmoGroupType *gzgt);
 void MESH_OT_polybuild_face_at_cursor(struct wmOperatorType *ot);
 void MESH_OT_polybuild_split_at_cursor(struct wmOperatorType *ot);
 void MESH_OT_polybuild_dissolve_at_cursor(struct wmOperatorType *ot);
+void MESH_OT_polybuild_transform_at_cursor(struct wmOperatorType *ot);
+void MESH_OT_polybuild_delete_at_cursor(struct wmOperatorType *ot);
 
 /* *** editmesh_inset.c *** */
 void MESH_OT_inset(struct wmOperatorType *ot);
@@ -241,8 +249,12 @@ void MESH_OT_split_normals(struct wmOperatorType *ot);
 void MESH_OT_normals_tools(struct wmOperatorType *ot);
 void MESH_OT_set_normals_from_faces(struct wmOperatorType *ot);
 void MESH_OT_average_normals(struct wmOperatorType *ot);
-void MESH_OT_smoothen_normals(struct wmOperatorType *ot);
+void MESH_OT_smooth_normals(struct wmOperatorType *ot);
 void MESH_OT_mod_weighted_strength(struct wmOperatorType *ot);
+
+/* *** editmesh_mask_extract.c *** */
+void MESH_OT_paint_mask_extract(struct wmOperatorType *ot);
+void MESH_OT_paint_mask_slice(struct wmOperatorType *ot);
 
 struct wmKeyMap *point_normals_modal_keymap(wmKeyConfig *keyconf);
 
@@ -256,6 +268,8 @@ void MESH_OT_uv_texture_add(struct wmOperatorType *ot);
 void MESH_OT_uv_texture_remove(struct wmOperatorType *ot);
 void MESH_OT_vertex_color_add(struct wmOperatorType *ot);
 void MESH_OT_vertex_color_remove(struct wmOperatorType *ot);
+void MESH_OT_sculpt_vertex_color_add(struct wmOperatorType *ot);
+void MESH_OT_sculpt_vertex_color_remove(struct wmOperatorType *ot);
 /* no create_mask yet */
 void MESH_OT_customdata_mask_clear(struct wmOperatorType *ot);
 void MESH_OT_customdata_skin_add(struct wmOperatorType *ot);

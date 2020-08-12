@@ -26,9 +26,7 @@
 
 struct ARegion;
 struct ARegionType;
-struct ScrArea;
 struct SpaceGraph;
-struct View2DGrid;
 struct bAnimContext;
 struct bAnimListElem;
 struct bContext;
@@ -36,19 +34,16 @@ struct bContext;
 /* internal exports only */
 
 /* ***************************************** */
-/* space_graph.c */
-struct ARegion *graph_has_buttons_region(struct ScrArea *sa);
-
-/* ***************************************** */
 /* graph_draw.c */
-void graph_draw_channel_names(struct bContext *C, struct bAnimContext *ac, struct ARegion *ar);
+void graph_draw_channel_names(struct bContext *C, struct bAnimContext *ac, struct ARegion *region);
 
 void graph_draw_curves(struct bAnimContext *ac,
                        struct SpaceGraph *sipo,
-                       struct ARegion *ar,
-                       struct View2DGrid *grid,
+                       struct ARegion *region,
                        short sel);
-void graph_draw_ghost_curves(struct bAnimContext *ac, struct SpaceGraph *sipo, struct ARegion *ar);
+void graph_draw_ghost_curves(struct bAnimContext *ac,
+                             struct SpaceGraph *sipo,
+                             struct ARegion *region);
 
 /* ***************************************** */
 /* graph_select.c */
@@ -106,6 +101,7 @@ void GRAPH_OT_paste(struct wmOperatorType *ot);
 void GRAPH_OT_duplicate(struct wmOperatorType *ot);
 void GRAPH_OT_delete(struct wmOperatorType *ot);
 void GRAPH_OT_clean(struct wmOperatorType *ot);
+void GRAPH_OT_decimate(struct wmOperatorType *ot);
 void GRAPH_OT_sample(struct wmOperatorType *ot);
 void GRAPH_OT_bake(struct wmOperatorType *ot);
 void GRAPH_OT_sound_bake(struct wmOperatorType *ot);
@@ -164,7 +160,6 @@ void GRAPH_OT_ghost_curves_clear(struct wmOperatorType *ot);
 /* ***************************************** */
 /* graph_buttons.c */
 
-void GRAPH_OT_properties(struct wmOperatorType *ot);
 void graph_buttons_register(struct ARegionType *art);
 
 /* ***************************************** */
@@ -175,6 +170,7 @@ struct bAnimListElem *get_active_fcurve_channel(struct bAnimContext *ac);
 bool graphop_visible_keyframes_poll(struct bContext *C);
 bool graphop_editable_keyframes_poll(struct bContext *C);
 bool graphop_active_fcurve_poll(struct bContext *C);
+bool graphop_active_editable_fcurve_ctx_poll(struct bContext *C);
 bool graphop_selected_fcurve_poll(struct bContext *C);
 
 /* ***************************************** */

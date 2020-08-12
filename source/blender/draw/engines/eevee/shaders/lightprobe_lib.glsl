@@ -1,7 +1,7 @@
 /* ----------- Uniforms --------- */
 
 uniform sampler2DArray probePlanars;
-uniform sampler2DArray probeCubes;
+uniform samplerCubeArray probeCubes;
 
 /* ----------- Structures --------- */
 
@@ -161,7 +161,8 @@ vec3 probe_evaluate_cube(int pd_id, vec3 W, vec3 R, float roughness)
 
   /* From Frostbite PBR Course
    * Distance based roughness
-   * http://www.frostbite.com/wp-content/uploads/2014/11/course_notes_moving_frostbite_to_pbr.pdf */
+   * http://www.frostbite.com/wp-content/uploads/2014/11/course_notes_moving_frostbite_to_pbr.pdf
+   */
   float original_roughness = roughness;
   float linear_roughness = sqrt(roughness);
   float distance_roughness = saturate(dist * linear_roughness / length(intersection));
@@ -171,15 +172,12 @@ vec3 probe_evaluate_cube(int pd_id, vec3 W, vec3 R, float roughness)
   float fac = saturate(original_roughness * 2.0 - 1.0);
   R = mix(intersection, R, fac * fac);
 
-  return textureLod_octahedron(
-             probeCubes, vec4(R, float(pd_id)), roughness * prbLodCubeMax, prbLodCubeMax)
-      .rgb;
+  return textureLod_cubemapArray(probeCubes, vec4(R, float(pd_id)), roughness * prbLodCubeMax).rgb;
 }
 
 vec3 probe_evaluate_world_spec(vec3 R, float roughness)
 {
-  return textureLod_octahedron(probeCubes, vec4(R, 0.0), roughness * prbLodCubeMax, prbLodCubeMax)
-      .rgb;
+  return textureLod_cubemapArray(probeCubes, vec4(R, 0.0), roughness * prbLodCubeMax).rgb;
 }
 
 vec3 probe_evaluate_planar(
@@ -232,7 +230,7 @@ void fallback_cubemap(vec3 N,
 #endif
 
   /* Starts at 1 because 0 is world probe */
-  for (int i = 1; i < MAX_PROBE && i < prbNumRenderCube && spec_accum.a < 0.999; ++i) {
+  for (int i = 1; i < MAX_PROBE && i < prbNumRenderCube && spec_accum.a < 0.999; i++) {
     float fade = probe_attenuation_cube(i, W);
 
     if (fade > 0.0) {
@@ -260,8 +258,8 @@ vec3 probe_evaluate_grid(GridData gd, vec3 W, vec3 N, vec3 localpos)
   float weight_accum = 0.0;
   vec3 irradiance_accum = vec3(0.0);
 
-  /* For each neighboor cells */
-  for (int i = 0; i < 8; ++i) {
+  /* For each neighbor cells */
+  for (int i = 0; i < 8; i++) {
     ivec3 offset = ivec3(i, i >> 1, i >> 2) & ivec3(1);
     vec3 cell_cos = clamp(localpos_floored + vec3(offset), vec3(0.0), vec3(gd.g_resolution) - 1.0);
 

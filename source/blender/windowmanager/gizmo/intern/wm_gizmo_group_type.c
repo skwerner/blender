@@ -18,8 +18,8 @@
  * \ingroup wm
  */
 
-#include "BLI_utildefines.h"
 #include "BLI_ghash.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_context.h"
 
@@ -35,8 +35,8 @@
 #include "wm.h"
 
 /* own includes */
-#include "wm_gizmo_wmapi.h"
 #include "wm_gizmo_intern.h"
+#include "wm_gizmo_wmapi.h"
 
 /** \name GizmoGroup Type Append
  *
@@ -97,10 +97,10 @@ static void wm_gizmogrouptype_append__end(wmGizmoGroupType *gzgt)
   /* if not set, use default */
   if (gzgt->setup_keymap == NULL) {
     if (gzgt->flag & WM_GIZMOGROUPTYPE_SELECT) {
-      gzgt->setup_keymap = WM_gizmogroup_keymap_common_select;
+      gzgt->setup_keymap = WM_gizmogroup_setup_keymap_generic_select;
     }
     else {
-      gzgt->setup_keymap = WM_gizmogroup_keymap_common;
+      gzgt->setup_keymap = WM_gizmogroup_setup_keymap_generic;
     }
   }
 
@@ -144,7 +144,7 @@ wmGizmoGroupTypeRef *WM_gizmogrouptype_append_and_link(wmGizmoMapType *gzmap_typ
  */
 static void gizmogrouptype_free(wmGizmoGroupType *gzgt)
 {
-  if (gzgt->ext.srna) { /* python gizmo group, allocs own string */
+  if (gzgt->rna_ext.srna) { /* python gizmo group, allocs own string */
     MEM_freeN((void *)gzgt->idname);
   }
 

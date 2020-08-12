@@ -60,14 +60,15 @@ static int GetViewMapGradientNormF0D___init__(BPy_GetViewMapGradientNormF0D *sel
   static const char *kwlist[] = {"level", NULL};
   int i;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "i", (char **)kwlist, &i))
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "i", (char **)kwlist, &i)) {
     return -1;
+  }
   self->py_uf0D_float.uf0D_float = new Functions0D::GetViewMapGradientNormF0D(i);
   self->py_uf0D_float.uf0D_float->py_uf0D = (PyObject *)self;
   return 0;
 }
 
-/*-----------------------BPy_GetViewMapGradientNormF0D type definition ------------------------------*/
+/*-----------------------BPy_GetViewMapGradientNormF0D type definition --------------------------*/
 
 PyTypeObject GetViewMapGradientNormF0D_Type = {
     PyVarObject_HEAD_INIT(NULL, 0) "GetViewMapGradientNormF0D", /* tp_name */

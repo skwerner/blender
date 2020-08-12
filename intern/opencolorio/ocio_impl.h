@@ -44,6 +44,10 @@ class IOCIOImpl {
 
   virtual int colorSpaceIsInvertible(OCIO_ConstColorSpaceRcPtr *cs) = 0;
   virtual int colorSpaceIsData(OCIO_ConstColorSpaceRcPtr *cs) = 0;
+  virtual void colorSpaceIsBuiltin(OCIO_ConstConfigRcPtr *config,
+                                   OCIO_ConstColorSpaceRcPtr *cs,
+                                   bool &is_scene_linear,
+                                   bool &is_srgb) = 0;
 
   virtual void colorSpaceRelease(OCIO_ConstColorSpaceRcPtr *cs) = 0;
 
@@ -113,6 +117,16 @@ class IOCIOImpl {
 
   virtual void OCIO_PackedImageDescRelease(OCIO_PackedImageDesc *p) = 0;
 
+  virtual OCIO_GroupTransformRcPtr *createGroupTransform(void) = 0;
+  virtual void groupTransformSetDirection(OCIO_GroupTransformRcPtr *gt, const bool forward) = 0;
+  virtual void groupTransformPushBack(OCIO_GroupTransformRcPtr *gt,
+                                      OCIO_ConstTransformRcPtr *transform) = 0;
+  virtual void groupTransformRelease(OCIO_GroupTransformRcPtr *gt) = 0;
+
+  virtual OCIO_ColorSpaceTransformRcPtr *createColorSpaceTransform(void) = 0;
+  virtual void colorSpaceTransformSetSrc(OCIO_ColorSpaceTransformRcPtr *ct, const char *name) = 0;
+  virtual void colorSpaceTransformRelease(OCIO_ColorSpaceTransformRcPtr *ct) = 0;
+
   virtual OCIO_ExponentTransformRcPtr *createExponentTransform(void) = 0;
   virtual void exponentTransformSetValue(OCIO_ExponentTransformRcPtr *et,
                                          const float *exponent) = 0;
@@ -128,10 +142,12 @@ class IOCIOImpl {
 
   virtual bool supportGLSLDraw(void) = 0;
   virtual bool setupGLSLDraw(struct OCIO_GLSLDrawState **state_r,
-                             OCIO_ConstProcessorRcPtr *processor,
+                             OCIO_ConstProcessorRcPtr *ocio_processor_scene_to_ui,
+                             OCIO_ConstProcessorRcPtr *ocio_processor_ui_to_display,
                              OCIO_CurveMappingSettings *curve_mapping_settings,
                              float dither,
-                             bool predivide) = 0;
+                             bool predivide,
+                             bool overlay) = 0;
   virtual void finishGLSLDraw(struct OCIO_GLSLDrawState *state) = 0;
   virtual void freeGLState(struct OCIO_GLSLDrawState *state_r) = 0;
 
@@ -160,6 +176,10 @@ class FallbackImpl : public IOCIOImpl {
 
   int colorSpaceIsInvertible(OCIO_ConstColorSpaceRcPtr *cs);
   int colorSpaceIsData(OCIO_ConstColorSpaceRcPtr *cs);
+  void colorSpaceIsBuiltin(OCIO_ConstConfigRcPtr *config,
+                           OCIO_ConstColorSpaceRcPtr *cs,
+                           bool &is_scene_linear,
+                           bool &is_srgb);
 
   void colorSpaceRelease(OCIO_ConstColorSpaceRcPtr *cs);
 
@@ -221,6 +241,15 @@ class FallbackImpl : public IOCIOImpl {
 
   void OCIO_PackedImageDescRelease(OCIO_PackedImageDesc *p);
 
+  OCIO_GroupTransformRcPtr *createGroupTransform(void);
+  void groupTransformSetDirection(OCIO_GroupTransformRcPtr *gt, const bool forward);
+  void groupTransformPushBack(OCIO_GroupTransformRcPtr *gt, OCIO_ConstTransformRcPtr *transform);
+  void groupTransformRelease(OCIO_GroupTransformRcPtr *gt);
+
+  OCIO_ColorSpaceTransformRcPtr *createColorSpaceTransform(void);
+  void colorSpaceTransformSetSrc(OCIO_ColorSpaceTransformRcPtr *ct, const char *name);
+  void colorSpaceTransformRelease(OCIO_ColorSpaceTransformRcPtr *ct);
+
   OCIO_ExponentTransformRcPtr *createExponentTransform(void);
   void exponentTransformSetValue(OCIO_ExponentTransformRcPtr *et, const float *exponent);
   void exponentTransformRelease(OCIO_ExponentTransformRcPtr *et);
@@ -235,10 +264,12 @@ class FallbackImpl : public IOCIOImpl {
 
   bool supportGLSLDraw(void);
   bool setupGLSLDraw(struct OCIO_GLSLDrawState **state_r,
-                     OCIO_ConstProcessorRcPtr *processor,
+                     OCIO_ConstProcessorRcPtr *ocio_processor_scene_to_ui,
+                     OCIO_ConstProcessorRcPtr *ocio_processor_ui_to_display,
                      OCIO_CurveMappingSettings *curve_mapping_settings,
                      float dither,
-                     bool predivide);
+                     bool predivide,
+                     bool overlay);
   void finishGLSLDraw(struct OCIO_GLSLDrawState *state);
   void freeGLState(struct OCIO_GLSLDrawState *state_r);
 
@@ -266,6 +297,10 @@ class OCIOImpl : public IOCIOImpl {
 
   int colorSpaceIsInvertible(OCIO_ConstColorSpaceRcPtr *cs);
   int colorSpaceIsData(OCIO_ConstColorSpaceRcPtr *cs);
+  void colorSpaceIsBuiltin(OCIO_ConstConfigRcPtr *config,
+                           OCIO_ConstColorSpaceRcPtr *cs,
+                           bool &is_scene_linear,
+                           bool &is_srgb);
 
   void colorSpaceRelease(OCIO_ConstColorSpaceRcPtr *cs);
 
@@ -327,6 +362,15 @@ class OCIOImpl : public IOCIOImpl {
 
   void OCIO_PackedImageDescRelease(OCIO_PackedImageDesc *p);
 
+  OCIO_GroupTransformRcPtr *createGroupTransform(void);
+  void groupTransformSetDirection(OCIO_GroupTransformRcPtr *gt, const bool forward);
+  void groupTransformPushBack(OCIO_GroupTransformRcPtr *gt, OCIO_ConstTransformRcPtr *transform);
+  void groupTransformRelease(OCIO_GroupTransformRcPtr *gt);
+
+  OCIO_ColorSpaceTransformRcPtr *createColorSpaceTransform(void);
+  void colorSpaceTransformSetSrc(OCIO_ColorSpaceTransformRcPtr *ct, const char *name);
+  void colorSpaceTransformRelease(OCIO_ColorSpaceTransformRcPtr *ct);
+
   OCIO_ExponentTransformRcPtr *createExponentTransform(void);
   void exponentTransformSetValue(OCIO_ExponentTransformRcPtr *et, const float *exponent);
   void exponentTransformRelease(OCIO_ExponentTransformRcPtr *et);
@@ -341,10 +385,12 @@ class OCIOImpl : public IOCIOImpl {
 
   bool supportGLSLDraw(void);
   bool setupGLSLDraw(struct OCIO_GLSLDrawState **state_r,
-                     OCIO_ConstProcessorRcPtr *processor,
+                     OCIO_ConstProcessorRcPtr *ocio_processor_scene_to_ui,
+                     OCIO_ConstProcessorRcPtr *ocio_processor_ui_to_display,
                      OCIO_CurveMappingSettings *curve_mapping_settings,
                      float dither,
-                     bool predivide);
+                     bool predivide,
+                     bool overlay);
   void finishGLSLDraw(struct OCIO_GLSLDrawState *state);
   void freeGLState(struct OCIO_GLSLDrawState *state_r);
 

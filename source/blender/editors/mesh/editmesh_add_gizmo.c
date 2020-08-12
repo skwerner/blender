@@ -29,6 +29,7 @@
 
 #include "BKE_context.h"
 #include "BKE_editmesh.h"
+#include "BKE_scene.h"
 
 #include "ED_gizmo_library.h"
 #include "ED_gizmo_utils.h"
@@ -58,7 +59,8 @@
  * When we place a shape, pick a plane.
  *
  * We may base this choice on context,
- * for now pick the "ground" based on the 3D cursor's dominant plane pointing down relative to the view.
+ * for now pick the "ground" based on the 3D cursor's dominant plane
+ * pointing down relative to the view.
  */
 static void calc_initial_placement_point_from_view(bContext *C,
                                                    const float mval[2],
@@ -67,16 +69,16 @@ static void calc_initial_placement_point_from_view(bContext *C,
 {
 
   Scene *scene = CTX_data_scene(C);
-  ARegion *ar = CTX_wm_region(C);
-  RegionView3D *rv3d = ar->regiondata;
+  ARegion *region = CTX_wm_region(C);
+  RegionView3D *rv3d = region->regiondata;
 
   bool use_mouse_project = true; /* TODO: make optional */
 
   float cursor_matrix[4][4];
   float orient_matrix[3][3];
-  ED_view3d_cursor3d_calc_mat4(scene, cursor_matrix);
+  BKE_scene_cursor_to_mat4(&scene->cursor, cursor_matrix);
 
-  float dots[3] = {
+  const float dots[3] = {
       dot_v3v3(rv3d->viewinv[2], cursor_matrix[0]),
       dot_v3v3(rv3d->viewinv[2], cursor_matrix[1]),
       dot_v3v3(rv3d->viewinv[2], cursor_matrix[2]),
@@ -97,7 +99,7 @@ static void calc_initial_placement_point_from_view(bContext *C,
   if (use_mouse_project) {
     float plane[4];
     plane_from_point_normal_v3(plane, cursor_matrix[3], orient_matrix[2]);
-    if (ED_view3d_win_to_3d_on_plane(ar, plane, mval, true, r_location)) {
+    if (ED_view3d_win_to_3d_on_plane(region, plane, mval, true, r_location)) {
       copy_m3_m3(r_rotation, orient_matrix);
       return;
     }
@@ -210,7 +212,7 @@ static void gizmo_mesh_placement_modal_from_setup(const bContext *C, wmGizmoGrou
   /* Start off dragging. */
   {
     wmWindow *win = CTX_wm_window(C);
-    ARegion *ar = CTX_wm_region(C);
+    ARegion *region = CTX_wm_region(C);
     wmGizmo *gz = ggd->cage;
 
     {
@@ -218,8 +220,8 @@ static void gizmo_mesh_placement_modal_from_setup(const bContext *C, wmGizmoGrou
       float location[3];
       calc_initial_placement_point_from_view((bContext *)C,
                                              (float[2]){
-                                                 win->eventstate->x - ar->winrct.xmin,
-                                                 win->eventstate->y - ar->winrct.ymin,
+                                                 win->eventstate->x - region->winrct.xmin,
+                                                 win->eventstate->y - region->winrct.ymin,
                                              },
                                              location,
                                              mat3);
@@ -355,7 +357,7 @@ static int add_primitive_cube_gizmo_exec(bContext *C, wmOperator *op)
   }
 
   EDBM_selectmode_flush_ex(em, SCE_SELECT_VERTEX);
-  EDBM_update_generic(em, true, true);
+  EDBM_update_generic(obedit->data, true, true);
 
   return OPERATOR_FINISHED;
 }

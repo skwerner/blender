@@ -21,8 +21,8 @@
 #include "BPy_UnaryFunction1DFloat.h"
 
 #include "../BPy_Convert.h"
-#include "../BPy_Interface1D.h"
 #include "../BPy_IntegrationType.h"
+#include "../BPy_Interface1D.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -34,11 +34,13 @@ extern "C" {
 
 int UnaryFunction1DFloat_Init(PyObject *module)
 {
-  if (module == NULL)
+  if (module == NULL) {
     return -1;
+  }
 
-  if (PyType_Ready(&UnaryFunction1DFloat_Type) < 0)
+  if (PyType_Ready(&UnaryFunction1DFloat_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&UnaryFunction1DFloat_Type);
   PyModule_AddObject(module, "UnaryFunction1DFloat", (PyObject *)&UnaryFunction1DFloat_Type);
 
@@ -73,11 +75,13 @@ static int UnaryFunction1DFloat___init__(BPy_UnaryFunction1DFloat *self,
   PyObject *obj = 0;
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwds, "|O!", (char **)kwlist, &IntegrationType_Type, &obj))
+          args, kwds, "|O!", (char **)kwlist, &IntegrationType_Type, &obj)) {
     return -1;
+  }
 
-  if (!obj)
+  if (!obj) {
     self->uf1D_float = new UnaryFunction1D<float>();
+  }
   else {
     self->uf1D_float = new UnaryFunction1D<float>(IntegrationType_from_BPy_IntegrationType(obj));
   }
@@ -89,8 +93,7 @@ static int UnaryFunction1DFloat___init__(BPy_UnaryFunction1DFloat *self,
 
 static void UnaryFunction1DFloat___dealloc__(BPy_UnaryFunction1DFloat *self)
 {
-  if (self->uf1D_float)
-    delete self->uf1D_float;
+  delete self->uf1D_float;
   UnaryFunction1D_Type.tp_dealloc((PyObject *)self);
 }
 
@@ -106,8 +109,9 @@ static PyObject *UnaryFunction1DFloat___call__(BPy_UnaryFunction1DFloat *self,
   static const char *kwlist[] = {"inter", NULL};
   PyObject *obj = 0;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "O!", (char **)kwlist, &Interface1D_Type, &obj))
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "O!", (char **)kwlist, &Interface1D_Type, &obj)) {
     return NULL;
+  }
 
   if (typeid(*(self->uf1D_float)) == typeid(UnaryFunction1D<float>)) {
     PyErr_SetString(PyExc_TypeError, "__call__ method not properly overridden");
@@ -148,10 +152,10 @@ static int integration_type_set(BPy_UnaryFunction1DFloat *self,
 }
 
 static PyGetSetDef BPy_UnaryFunction1DFloat_getseters[] = {
-    {(char *)"integration_type",
+    {"integration_type",
      (getter)integration_type_get,
      (setter)integration_type_set,
-     (char *)integration_type_doc,
+     integration_type_doc,
      NULL},
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };

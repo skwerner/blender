@@ -25,6 +25,7 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_math_base.h"
 #include "BLI_utildefines.h"
 
 #include "DNA_meta_types.h"
@@ -98,12 +99,16 @@ static void metaball_batch_cache_init(MetaBall *mb)
   cache->is_manifold = false;
 }
 
-static MetaBallBatchCache *metaball_batch_cache_get(MetaBall *mb)
+void DRW_mball_batch_cache_validate(MetaBall *mb)
 {
   if (!metaball_batch_cache_valid(mb)) {
     metaball_batch_cache_clear(mb);
     metaball_batch_cache_init(mb);
   }
+}
+
+static MetaBallBatchCache *metaball_batch_cache_get(MetaBall *mb)
+{
   return mb->batch_cache;
 }
 
@@ -202,13 +207,15 @@ GPUBatch **DRW_metaball_batch_cache_get_surface_shaded(Object *ob,
     return NULL;
   }
 
+  BLI_assert(gpumat_array_len == DRW_metaball_material_count_get(mb));
+
   MetaBallBatchCache *cache = metaball_batch_cache_get(mb);
   if (cache->shaded_triangles == NULL) {
     cache->mat_len = gpumat_array_len;
     cache->shaded_triangles = MEM_callocN(sizeof(*cache->shaded_triangles) * cache->mat_len,
                                           __func__);
     cache->shaded_triangles[0] = DRW_metaball_batch_cache_get_triangles_with_normals(ob);
-    for (int i = 1; i < cache->mat_len; ++i) {
+    for (int i = 1; i < cache->mat_len; i++) {
       cache->shaded_triangles[i] = NULL;
     }
   }
@@ -265,4 +272,21 @@ struct GPUBatch *DRW_metaball_batch_cache_get_edge_detection(struct Object *ob,
   }
 
   return cache->edge_detection;
+}
+
+struct GPUVertBuf *DRW_mball_batch_cache_pos_vertbuf_get(Object *ob)
+{
+  if (!BKE_mball_is_basis(ob)) {
+    return NULL;
+  }
+
+  MetaBall *mb = ob->data;
+  MetaBallBatchCache *cache = metaball_batch_cache_get(mb);
+
+  return mball_batch_cache_get_pos_and_normals(ob, cache);
+}
+
+int DRW_metaball_material_count_get(MetaBall *mb)
+{
+  return max_ii(1, mb->totcol);
 }

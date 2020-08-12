@@ -26,9 +26,9 @@
 #include "MEM_guardedalloc.h"
 
 #include "DNA_armature_types.h"
-#include "DNA_screen_types.h"
-#include "DNA_text_types.h"   /* for UI_OT_reports_to_text */
 #include "DNA_object_types.h" /* for OB_DATA_SUPPORT_ID */
+#include "DNA_screen_types.h"
+#include "DNA_text_types.h"
 
 #include "BLI_blenlib.h"
 #include "BLI_math_color.h"
@@ -40,12 +40,12 @@
 #include "BKE_global.h"
 #include "BKE_idprop.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
-#include "BKE_library_override.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_override.h"
 #include "BKE_node.h"
 #include "BKE_report.h"
 #include "BKE_screen.h"
-#include "BKE_text.h" /* for UI_OT_reports_to_text */
+#include "BKE_text.h"
 
 #include "IMB_colormanagement.h"
 
@@ -65,10 +65,13 @@
 #include "ED_object.h"
 #include "ED_paint.h"
 
+/* for Copy As Driver */
+#include "ED_keyframing.h"
+
 /* only for UI_OT_editsource */
-#include "ED_screen.h"
 #include "BKE_main.h"
 #include "BLI_ghash.h"
+#include "ED_screen.h"
 
 /* -------------------------------------------------------------------- */
 /** \name Copy Data Path Operator
@@ -83,7 +86,7 @@ static bool copy_data_path_button_poll(bContext *C)
 
   UI_context_active_but_prop_get(C, &ptr, &prop, &index);
 
-  if (ptr.id.data && ptr.data && prop) {
+  if (ptr.owner_id && ptr.data && prop) {
     path = RNA_path_from_ID_to_property(&ptr, prop);
 
     if (path) {
@@ -97,29 +100,33 @@ static bool copy_data_path_button_poll(bContext *C)
 
 static int copy_data_path_button_exec(bContext *C, wmOperator *op)
 {
+  Main *bmain = CTX_data_main(C);
   PointerRNA ptr;
   PropertyRNA *prop;
   char *path;
   int index;
+  ID *id;
 
   const bool full_path = RNA_boolean_get(op->ptr, "full_path");
 
   /* try to create driver using property retrieved from UI */
   UI_context_active_but_prop_get(C, &ptr, &prop, &index);
 
-  if (ptr.id.data != NULL) {
-
+  if (ptr.owner_id != NULL) {
     if (full_path) {
-
       if (prop) {
-        path = RNA_path_full_property_py_ex(&ptr, prop, index, true);
+        path = RNA_path_full_property_py_ex(bmain, &ptr, prop, index, true);
       }
       else {
-        path = RNA_path_full_struct_py(&ptr);
+        path = RNA_path_full_struct_py(bmain, &ptr);
       }
     }
     else {
-      path = RNA_path_from_ID_to_property(&ptr, prop);
+      path = RNA_path_from_real_ID_to_property_index(bmain, &ptr, prop, 0, -1, &id);
+
+      if (!path) {
+        path = RNA_path_from_ID_to_property(&ptr, prop);
+      }
     }
 
     if (path) {
@@ -153,6 +160,87 @@ static void UI_OT_copy_data_path_button(wmOperatorType *ot)
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Copy As Driver Operator
+ * \{ */
+
+static bool copy_as_driver_button_poll(bContext *C)
+{
+  PointerRNA ptr;
+  PropertyRNA *prop;
+  char *path;
+  int index;
+
+  UI_context_active_but_prop_get(C, &ptr, &prop, &index);
+
+  if (ptr.owner_id && ptr.data && prop &&
+      ELEM(RNA_property_type(prop), PROP_BOOLEAN, PROP_INT, PROP_FLOAT, PROP_ENUM) &&
+      (index >= 0 || !RNA_property_array_check(prop))) {
+    path = RNA_path_from_ID_to_property(&ptr, prop);
+
+    if (path) {
+      MEM_freeN(path);
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
+static int copy_as_driver_button_exec(bContext *C, wmOperator *op)
+{
+  Main *bmain = CTX_data_main(C);
+  PointerRNA ptr;
+  PropertyRNA *prop;
+  int index;
+
+  /* try to create driver using property retrieved from UI */
+  UI_context_active_but_prop_get(C, &ptr, &prop, &index);
+
+  if (ptr.owner_id && ptr.data && prop) {
+    ID *id;
+    int dim = RNA_property_array_dimension(&ptr, prop, NULL);
+    char *path = RNA_path_from_real_ID_to_property_index(bmain, &ptr, prop, dim, index, &id);
+
+    if (path) {
+      ANIM_copy_as_driver(id, path, RNA_property_identifier(prop));
+      MEM_freeN(path);
+      return OPERATOR_FINISHED;
+    }
+
+    BKE_reportf(op->reports, RPT_ERROR, "Could not compute a valid data path");
+    return OPERATOR_CANCELLED;
+  }
+
+  return OPERATOR_CANCELLED;
+}
+
+static void UI_OT_copy_as_driver_button(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Copy as New Driver";
+  ot->idname = "UI_OT_copy_as_driver_button";
+  ot->description =
+      "Create a new driver with this property as input, and copy it to the "
+      "clipboard. Use Paste Driver to add it to the target property, or Paste "
+      "Driver Variables to extend an existing driver";
+
+  /* callbacks */
+  ot->exec = copy_as_driver_button_exec;
+  ot->poll = copy_as_driver_button_poll;
+
+  /* flags */
+  ot->flag = OPTYPE_REGISTER;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Copy Python Command Operator
+ * \{ */
+
 static bool copy_python_command_button_poll(bContext *C)
 {
   uiBut *but = UI_context_active_but_get(C);
@@ -163,12 +251,6 @@ static bool copy_python_command_button_poll(bContext *C)
 
   return 0;
 }
-
-/** \} */
-
-/* -------------------------------------------------------------------- */
-/** \name Copy Python Command Operator
- * \{ */
 
 static int copy_python_command_button_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -214,7 +296,7 @@ static void UI_OT_copy_python_command_button(wmOperatorType *ot)
 
 static int operator_button_property_finish(bContext *C, PointerRNA *ptr, PropertyRNA *prop)
 {
-  ID *id = ptr->id.data;
+  ID *id = ptr->owner_id;
 
   /* perform updates required for this property */
   RNA_property_update(C, ptr, prop);
@@ -229,9 +311,7 @@ static int operator_button_property_finish(bContext *C, PointerRNA *ptr, Propert
     /* do nothing, go ahead with undo */
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 static bool reset_default_button_poll(bContext *C)
@@ -370,7 +450,7 @@ static int unset_property_button_exec(bContext *C, wmOperator *UNUSED(op))
 static void UI_OT_unset_property_button(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Unset property";
+  ot->name = "Unset Property";
   ot->idname = "UI_OT_unset_property_button";
   ot->description = "Clear the property and use default or generated value in operators";
 
@@ -430,7 +510,8 @@ static bool override_type_set_button_poll(bContext *C)
 
   UI_context_active_but_prop_get(C, &ptr, &prop, &index);
 
-  const int override_status = RNA_property_static_override_status(&ptr, prop, index);
+  const uint override_status = RNA_property_override_library_status(
+      CTX_data_main(C), &ptr, prop, index);
 
   return (ptr.data && prop && (override_status & RNA_OVERRIDE_STATUS_OVERRIDABLE));
 }
@@ -448,20 +529,20 @@ static int override_type_set_button_exec(bContext *C, wmOperator *op)
 
   switch (op_type) {
     case UIOverride_Type_NOOP:
-      operation = IDOVERRIDESTATIC_OP_NOOP;
+      operation = IDOVERRIDE_LIBRARY_OP_NOOP;
       break;
     case UIOverride_Type_Replace:
-      operation = IDOVERRIDESTATIC_OP_REPLACE;
+      operation = IDOVERRIDE_LIBRARY_OP_REPLACE;
       break;
     case UIOverride_Type_Difference:
       /* override code will automatically switch to subtract if needed. */
-      operation = IDOVERRIDESTATIC_OP_ADD;
+      operation = IDOVERRIDE_LIBRARY_OP_ADD;
       break;
     case UIOverride_Type_Factor:
-      operation = IDOVERRIDESTATIC_OP_MULTIPLY;
+      operation = IDOVERRIDE_LIBRARY_OP_MULTIPLY;
       break;
     default:
-      operation = IDOVERRIDESTATIC_OP_REPLACE;
+      operation = IDOVERRIDE_LIBRARY_OP_REPLACE;
       BLI_assert(0);
       break;
   }
@@ -469,14 +550,14 @@ static int override_type_set_button_exec(bContext *C, wmOperator *op)
   /* try to reset the nominated setting to its default value */
   UI_context_active_but_prop_get(C, &ptr, &prop, &index);
 
-  BLI_assert(ptr.id.data != NULL);
+  BLI_assert(ptr.owner_id != NULL);
 
   if (all) {
     index = -1;
   }
 
-  IDOverrideStaticPropertyOperation *opop = RNA_property_override_property_operation_get(
-      &ptr, prop, operation, index, true, NULL, &created);
+  IDOverrideLibraryPropertyOperation *opop = RNA_property_override_property_operation_get(
+      CTX_data_main(C), &ptr, prop, operation, index, true, NULL, &created);
   if (!created) {
     opop->operation = operation;
   }
@@ -491,7 +572,7 @@ static int override_type_set_button_invoke(bContext *C,
 #if 0 /* Disabled for now */
   return WM_menu_invoke_ex(C, op, WM_OP_INVOKE_DEFAULT);
 #else
-  RNA_enum_set(op->ptr, "type", IDOVERRIDESTATIC_OP_REPLACE);
+  RNA_enum_set(op->ptr, "type", IDOVERRIDE_LIBRARY_OP_REPLACE);
   return override_type_set_button_exec(C, op);
 #endif
 }
@@ -530,9 +611,10 @@ static bool override_remove_button_poll(bContext *C)
 
   UI_context_active_but_prop_get(C, &ptr, &prop, &index);
 
-  const int override_status = RNA_property_static_override_status(&ptr, prop, index);
+  const uint override_status = RNA_property_override_library_status(
+      CTX_data_main(C), &ptr, prop, index);
 
-  return (ptr.data && ptr.id.data && prop && (override_status & RNA_OVERRIDE_STATUS_OVERRIDDEN));
+  return (ptr.data && ptr.owner_id && prop && (override_status & RNA_OVERRIDE_STATUS_OVERRIDDEN));
 }
 
 static int override_remove_button_exec(bContext *C, wmOperator *op)
@@ -546,18 +628,19 @@ static int override_remove_button_exec(bContext *C, wmOperator *op)
   /* try to reset the nominated setting to its default value */
   UI_context_active_but_prop_get(C, &ptr, &prop, &index);
 
-  ID *id = ptr.id.data;
-  IDOverrideStaticProperty *oprop = RNA_property_override_property_find(&ptr, prop);
+  ID *id = ptr.owner_id;
+  IDOverrideLibraryProperty *oprop = RNA_property_override_property_find(bmain, &ptr, prop, &id);
   BLI_assert(oprop != NULL);
-  BLI_assert(id != NULL && id->override_static != NULL);
+  BLI_assert(id != NULL && id->override_library != NULL);
 
-  const bool is_template = (id->override_static->reference == NULL);
+  const bool is_template = ID_IS_OVERRIDE_LIBRARY_TEMPLATE(id);
 
   /* We need source (i.e. linked data) to restore values of deleted overrides...
    * If this is an override template, we obviously do not need to restore anything. */
   if (!is_template) {
-    RNA_id_pointer_create(id->override_static->reference, &id_refptr);
-    if (!RNA_path_resolve(&id_refptr, oprop->rna_path, &src, NULL)) {
+    PropertyRNA *src_prop;
+    RNA_id_pointer_create(id->override_library->reference, &id_refptr);
+    if (!RNA_path_resolve_property(&id_refptr, oprop->rna_path, &src, &src_prop)) {
       BLI_assert(0 && "Failed to create matching source (linked data) RNA pointer");
     }
   }
@@ -566,7 +649,7 @@ static int override_remove_button_exec(bContext *C, wmOperator *op)
     bool is_strict_find;
     /* Remove override operation for given item,
      * add singular operations for the other items as needed. */
-    IDOverrideStaticPropertyOperation *opop = BKE_override_static_property_operation_find(
+    IDOverrideLibraryPropertyOperation *opop = BKE_lib_override_library_property_operation_find(
         oprop, NULL, NULL, index, index, false, &is_strict_find);
     BLI_assert(opop != NULL);
     if (!is_strict_find) {
@@ -575,22 +658,22 @@ static int override_remove_button_exec(bContext *C, wmOperator *op)
        * before removing generic one. */
       for (int idx = RNA_property_array_length(&ptr, prop); idx--;) {
         if (idx != index) {
-          BKE_override_static_property_operation_get(
+          BKE_lib_override_library_property_operation_get(
               oprop, opop->operation, NULL, NULL, idx, idx, true, NULL, NULL);
         }
       }
     }
-    BKE_override_static_property_operation_delete(oprop, opop);
+    BKE_lib_override_library_property_operation_delete(oprop, opop);
     if (!is_template) {
       RNA_property_copy(bmain, &ptr, &src, prop, index);
     }
     if (BLI_listbase_is_empty(&oprop->operations)) {
-      BKE_override_static_property_delete(id->override_static, oprop);
+      BKE_lib_override_library_property_delete(id->override_library, oprop);
     }
   }
   else {
     /* Just remove whole generic override operation of this property. */
-    BKE_override_static_property_delete(id->override_static, oprop);
+    BKE_lib_override_library_property_delete(id->override_library, oprop);
     if (!is_template) {
       RNA_property_copy(bmain, &ptr, &src, prop, -1);
     }
@@ -623,6 +706,25 @@ static void UI_OT_override_remove_button(wmOperatorType *ot)
 /** \name Copy To Selected Operator
  * \{ */
 
+#define NOT_NULL(assignment) ((assignment) != NULL)
+#define NOT_RNA_NULL(assignment) ((assignment).data != NULL)
+
+static void ui_context_selected_bones_via_pose(bContext *C, ListBase *r_lb)
+{
+  ListBase lb;
+  lb = CTX_data_collection_get(C, "selected_pose_bones");
+
+  if (!BLI_listbase_is_empty(&lb)) {
+    CollectionPointerLink *link;
+    for (link = lb.first; link; link = link->next) {
+      bPoseChannel *pchan = link->ptr.data;
+      RNA_pointer_create(link->ptr.owner_id, &RNA_Bone, pchan->bone, &link->ptr);
+    }
+  }
+
+  *r_lb = lb;
+}
+
 bool UI_context_copy_to_selected_list(bContext *C,
                                       PointerRNA *ptr,
                                       PropertyRNA *prop,
@@ -632,6 +734,56 @@ bool UI_context_copy_to_selected_list(bContext *C,
 {
   *r_use_path_from_id = false;
   *r_path = NULL;
+  /* special case for bone constraints */
+  char *path_from_bone = NULL;
+  /* Remove links from the collection list which don't contain 'prop'. */
+  bool ensure_list_items_contain_prop = false;
+
+  /* PropertyGroup objects don't have a reference to the struct that actually owns
+   * them, so it is normally necessary to do a brute force search to find it. This
+   * handles the search for non-ID owners by using the 'active' reference as a hint
+   * to preserve efficiency. Only properties defined through RNA are handled, as
+   * custom properties cannot be assumed to be valid for all instances.
+   *
+   * Properties owned by the ID are handled by the 'if (ptr->owner_id)' case below.
+   */
+  if (!RNA_property_is_idprop(prop) && RNA_struct_is_a(ptr->type, &RNA_PropertyGroup)) {
+    PointerRNA owner_ptr;
+    char *idpath = NULL;
+
+    /* First, check the active PoseBone and PoseBone->Bone. */
+    if (NOT_RNA_NULL(
+            owner_ptr = CTX_data_pointer_get_type(C, "active_pose_bone", &RNA_PoseBone))) {
+      if (NOT_NULL(idpath = RNA_path_from_struct_to_idproperty(&owner_ptr, ptr->data))) {
+        *r_lb = CTX_data_collection_get(C, "selected_pose_bones");
+      }
+      else {
+        bPoseChannel *pchan = owner_ptr.data;
+        RNA_pointer_create(owner_ptr.owner_id, &RNA_Bone, pchan->bone, &owner_ptr);
+
+        if (NOT_NULL(idpath = RNA_path_from_struct_to_idproperty(&owner_ptr, ptr->data))) {
+          ui_context_selected_bones_via_pose(C, r_lb);
+        }
+      }
+    }
+
+    if (idpath == NULL) {
+      /* Check the active EditBone if in edit mode. */
+      if (NOT_RNA_NULL(
+              owner_ptr = CTX_data_pointer_get_type_silent(C, "active_bone", &RNA_EditBone)) &&
+          NOT_NULL(idpath = RNA_path_from_struct_to_idproperty(&owner_ptr, ptr->data))) {
+        *r_lb = CTX_data_collection_get(C, "selected_editable_bones");
+      }
+
+      /* Add other simple cases here (Node, NodeSocket, Sequence, ViewLayer etc). */
+    }
+
+    if (idpath) {
+      *r_path = BLI_sprintfN("%s.%s", idpath, RNA_property_identifier(prop));
+      MEM_freeN(idpath);
+      return true;
+    }
+  }
 
   if (RNA_struct_is_a(ptr->type, &RNA_EditBone)) {
     *r_lb = CTX_data_collection_get(C, "selected_editable_bones");
@@ -640,24 +792,32 @@ bool UI_context_copy_to_selected_list(bContext *C,
     *r_lb = CTX_data_collection_get(C, "selected_pose_bones");
   }
   else if (RNA_struct_is_a(ptr->type, &RNA_Bone)) {
-    ListBase lb;
-    lb = CTX_data_collection_get(C, "selected_pose_bones");
-
-    if (!BLI_listbase_is_empty(&lb)) {
-      CollectionPointerLink *link;
-      for (link = lb.first; link; link = link->next) {
-        bPoseChannel *pchan = link->ptr.data;
-        RNA_pointer_create(link->ptr.id.data, &RNA_Bone, pchan->bone, &link->ptr);
-      }
-    }
-
-    *r_lb = lb;
+    ui_context_selected_bones_via_pose(C, r_lb);
   }
   else if (RNA_struct_is_a(ptr->type, &RNA_Sequence)) {
-    *r_lb = CTX_data_collection_get(C, "selected_editable_sequences");
+    /* Special case when we do this for 'Sequence.lock'.
+     * (if the sequence is locked, it wont be in "selected_editable_sequences"). */
+    const char *prop_id = RNA_property_identifier(prop);
+    if (STREQ(prop_id, "lock")) {
+      *r_lb = CTX_data_collection_get(C, "selected_sequences");
+    }
+    else {
+      *r_lb = CTX_data_collection_get(C, "selected_editable_sequences");
+    }
+    /* Account for properties only being available for some sequence types. */
+    ensure_list_items_contain_prop = true;
   }
   else if (RNA_struct_is_a(ptr->type, &RNA_FCurve)) {
     *r_lb = CTX_data_collection_get(C, "selected_editable_fcurves");
+  }
+  else if (RNA_struct_is_a(ptr->type, &RNA_NlaStrip)) {
+    *r_lb = CTX_data_collection_get(C, "selected_nla_strips");
+  }
+  else if (RNA_struct_is_a(ptr->type, &RNA_Constraint) &&
+           (path_from_bone = RNA_path_resolve_from_type_to_property(ptr, prop, &RNA_PoseBone)) !=
+               NULL) {
+    *r_lb = CTX_data_collection_get(C, "selected_pose_bones");
+    *r_path = path_from_bone;
   }
   else if (RNA_struct_is_a(ptr->type, &RNA_Node) || RNA_struct_is_a(ptr->type, &RNA_NodeSocket)) {
     ListBase lb = {NULL, NULL};
@@ -666,7 +826,7 @@ bool UI_context_copy_to_selected_list(bContext *C,
 
     /* Get the node we're editing */
     if (RNA_struct_is_a(ptr->type, &RNA_NodeSocket)) {
-      bNodeTree *ntree = ptr->id.data;
+      bNodeTree *ntree = (bNodeTree *)ptr->owner_id;
       bNodeSocket *sock = ptr->data;
       if (nodeFindNode(ntree, sock, &node, NULL)) {
         if ((path = RNA_path_resolve_from_type_to_property(ptr, prop, &RNA_Node)) != NULL) {
@@ -700,8 +860,8 @@ bool UI_context_copy_to_selected_list(bContext *C,
     *r_lb = lb;
     *r_path = path;
   }
-  else if (ptr->id.data) {
-    ID *id = ptr->id.data;
+  else if (ptr->owner_id) {
+    ID *id = ptr->owner_id;
 
     if (GS(id->name) == ID_OB) {
       *r_lb = CTX_data_collection_get(C, "selected_editable_objects");
@@ -719,7 +879,7 @@ bool UI_context_copy_to_selected_list(bContext *C,
         CollectionPointerLink *link, *link_next;
 
         for (link = lb.first; link; link = link->next) {
-          Object *ob = link->ptr.id.data;
+          Object *ob = (Object *)link->ptr.owner_id;
           if (ob->data) {
             ID *id_data = ob->data;
             id_data->tag |= LIB_TAG_DOIT;
@@ -727,7 +887,7 @@ bool UI_context_copy_to_selected_list(bContext *C,
         }
 
         for (link = lb.first; link; link = link_next) {
-          Object *ob = link->ptr.id.data;
+          Object *ob = (Object *)link->ptr.owner_id;
           ID *id_data = ob->data;
           link_next = link->next;
 
@@ -755,7 +915,17 @@ bool UI_context_copy_to_selected_list(bContext *C,
       /* Try to recursively find an RNA_Sequence ancestor,
        * to handle situations like T41062... */
       if ((*r_path = RNA_path_resolve_from_type_to_property(ptr, prop, &RNA_Sequence)) != NULL) {
-        *r_lb = CTX_data_collection_get(C, "selected_editable_sequences");
+        /* Special case when we do this for 'Sequence.lock'.
+         * (if the sequence is locked, it wont be in "selected_editable_sequences"). */
+        const char *prop_id = RNA_property_identifier(prop);
+        if (STREQ(prop_id, "lock")) {
+          *r_lb = CTX_data_collection_get(C, "selected_sequences");
+        }
+        else {
+          *r_lb = CTX_data_collection_get(C, "selected_editable_sequences");
+        }
+        /* Account for properties only being available for some sequence types. */
+        ensure_list_items_contain_prop = true;
       }
     }
     return (*r_path != NULL);
@@ -764,14 +934,25 @@ bool UI_context_copy_to_selected_list(bContext *C,
     return false;
   }
 
+  if (ensure_list_items_contain_prop) {
+    const char *prop_id = RNA_property_identifier(prop);
+    LISTBASE_FOREACH_MUTABLE (CollectionPointerLink *, link, r_lb) {
+      if ((ptr->type != link->ptr.type) &&
+          (RNA_struct_type_find_property(link->ptr.type, prop_id) != prop)) {
+        BLI_remlink(r_lb, link);
+        MEM_freeN(link);
+      }
+    }
+  }
+
   return true;
 }
 
 /**
- * called from both exec & poll
+ * Called from both exec & poll.
  *
- * \note: normally we wouldn't call a loop from within a poll function,
- * However this is a special case, and for regular poll calls, getting
+ * \note Normally we wouldn't call a loop from within a poll function,
+ * however this is a special case, and for regular poll calls, getting
  * the context from the button will fail early.
  */
 static bool copy_to_selected_button(bContext *C, bool all, bool poll)
@@ -799,7 +980,7 @@ static bool copy_to_selected_button(bContext *C, bool all, bool poll)
           if (use_path_from_id) {
             /* Path relative to ID. */
             lprop = NULL;
-            RNA_id_pointer_create(link->ptr.id.data, &idptr);
+            RNA_id_pointer_create(link->ptr.owner_id, &idptr);
             RNA_path_resolve_property(&idptr, path, &lptr, &lprop);
           }
           else if (path) {
@@ -823,11 +1004,9 @@ static bool copy_to_selected_button(bContext *C, bool all, bool poll)
                 success = true;
                 break;
               }
-              else {
-                if (RNA_property_copy(bmain, &lptr, &ptr, prop, (all) ? -1 : index)) {
-                  RNA_property_update(C, &lptr, prop);
-                  success = true;
-                }
+              if (RNA_property_copy(bmain, &lptr, &ptr, prop, (all) ? -1 : index)) {
+                RNA_property_update(C, &lptr, prop);
+                success = true;
               }
             }
           }
@@ -860,7 +1039,7 @@ static int copy_to_selected_button_exec(bContext *C, wmOperator *op)
 static void UI_OT_copy_to_selected_button(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Copy To Selected";
+  ot->name = "Copy to Selected";
   ot->idname = "UI_OT_copy_to_selected_button";
   ot->description = "Copy property from this object to selected objects or bones";
 
@@ -909,12 +1088,12 @@ static bool jump_to_target_ptr(bContext *C, PointerRNA ptr, const bool poll)
   /* Find the containing Object. */
   ViewLayer *view_layer = CTX_data_view_layer(C);
   Base *base = NULL;
-  const short id_type = GS(((ID *)ptr.id.data)->name);
+  const short id_type = GS(ptr.owner_id->name);
   if (id_type == ID_OB) {
-    base = BKE_view_layer_base_find(view_layer, ptr.id.data);
+    base = BKE_view_layer_base_find(view_layer, (Object *)ptr.owner_id);
   }
   else if (OB_DATA_SUPPORT_ID(id_type)) {
-    base = ED_object_find_first_by_data_id(view_layer, ptr.id.data);
+    base = ED_object_find_first_by_data_id(view_layer, ptr.owner_id);
   }
 
   bool ok = false;
@@ -967,11 +1146,12 @@ static bool jump_to_target_button(bContext *C, bool poll)
       return jump_to_target_ptr(C, target_ptr, poll);
     }
     /* For string properties with prop_search, look up the search collection item. */
-    else if (type == PROP_STRING) {
+    if (type == PROP_STRING) {
       const uiBut *but = UI_context_active_but_get(C);
 
-      if (but->type == UI_BTYPE_SEARCH_MENU && but->search_func == ui_rna_collection_search_cb) {
-        uiRNACollectionSearch *coll_search = but->search_arg;
+      if (but->type == UI_BTYPE_SEARCH_MENU && but->search &&
+          but->search->update_fn == ui_rna_collection_search_update_fn) {
+        uiRNACollectionSearch *coll_search = but->search->arg;
 
         char str_buf[MAXBONENAME];
         char *str_ptr = RNA_property_string_get_alloc(&ptr, prop, str_buf, sizeof(str_buf), NULL);
@@ -1008,7 +1188,7 @@ static int jump_to_target_button_exec(bContext *C, wmOperator *UNUSED(op))
 static void UI_OT_jump_to_target_button(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Jump To Target";
+  ot->name = "Jump to Target";
   ot->idname = "UI_OT_jump_to_target_button";
   ot->description = "Switch to the target object or bone";
 
@@ -1018,61 +1198,6 @@ static void UI_OT_jump_to_target_button(wmOperatorType *ot)
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
-}
-
-/** \} */
-
-/* -------------------------------------------------------------------- */
-/** \name Reports to Textblock Operator
- * \{ */
-
-/* FIXME: this is just a temporary operator so that we can see all the reports somewhere
- * when there are too many to display...
- */
-
-static bool reports_to_text_poll(bContext *C)
-{
-  return CTX_wm_reports(C) != NULL;
-}
-
-static int reports_to_text_exec(bContext *C, wmOperator *UNUSED(op))
-{
-  ReportList *reports = CTX_wm_reports(C);
-  Main *bmain = CTX_data_main(C);
-  Text *txt;
-  char *str;
-
-  /* create new text-block to write to */
-  txt = BKE_text_add(bmain, "Recent Reports");
-
-  /* convert entire list to a display string, and add this to the text-block
-   * - if commandline debug option enabled, show debug reports too
-   * - otherwise, up to info (which is what users normally see)
-   */
-  str = BKE_reports_string(reports, (G.debug & G_DEBUG) ? RPT_DEBUG : RPT_INFO);
-
-  if (str) {
-    TextUndoBuf *utxt = NULL;  // FIXME
-    BKE_text_write(txt, utxt, str);
-    MEM_freeN(str);
-
-    return OPERATOR_FINISHED;
-  }
-  else {
-    return OPERATOR_CANCELLED;
-  }
-}
-
-static void UI_OT_reports_to_textblock(wmOperatorType *ot)
-{
-  /* identifiers */
-  ot->name = "Reports to Text Block";
-  ot->idname = "UI_OT_reports_to_textblock";
-  ot->description = "Write the reports ";
-
-  /* callbacks */
-  ot->poll = reports_to_text_poll;
-  ot->exec = reports_to_text_exec;
 }
 
 /** \} */
@@ -1125,8 +1250,7 @@ static void ui_editsource_active_but_clear(void)
 static bool ui_editsource_uibut_match(uiBut *but_a, uiBut *but_b)
 {
 #  if 0
-  printf("matching buttons: '%s' == '%s'\n",
-         but_a->drawstr, but_b->drawstr);
+  printf("matching buttons: '%s' == '%s'\n", but_a->drawstr, but_b->drawstr);
 #  endif
 
   /* this just needs to be a 'good-enough' comparison so we can know beyond
@@ -1138,14 +1262,12 @@ static bool ui_editsource_uibut_match(uiBut *but_a, uiBut *but_b)
       STREQLEN(but_a->drawstr, but_b->drawstr, UI_MAX_DRAW_STR)) {
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 void UI_editsource_active_but_test(uiBut *but)
 {
-  extern void PyC_FileAndNum_Safe(const char **filename, int *lineno);
+  extern void PyC_FileAndNum_Safe(const char **r_filename, int *r_lineno);
 
   struct uiEditSourceButStore *but_store = MEM_callocN(sizeof(uiEditSourceButStore), __func__);
 
@@ -1153,8 +1275,7 @@ void UI_editsource_active_but_test(uiBut *but)
   int lineno = -1;
 
 #  if 0
-  printf("comparing buttons: '%s' == '%s'\n",
-         but->drawstr, ui_editsource_info->but_orig.drawstr);
+  printf("comparing buttons: '%s' == '%s'\n", but->drawstr, ui_editsource_info->but_orig.drawstr);
 #  endif
 
   PyC_FileAndNum_Safe(&fn, &lineno);
@@ -1183,7 +1304,7 @@ static int editsource_text_edit(bContext *C,
   printf("%s:%d\n", filepath, line);
 
   for (text = bmain->texts.first; text; text = text->id.next) {
-    if (text->name && BLI_path_cmp(text->name, filepath) == 0) {
+    if (text->filepath && BLI_path_cmp(text->filepath, filepath) == 0) {
       break;
     }
   }
@@ -1197,21 +1318,20 @@ static int editsource_text_edit(bContext *C,
     BKE_reportf(op->reports, RPT_WARNING, "File '%s' cannot be opened", filepath);
     return OPERATOR_CANCELLED;
   }
-  else {
-    /* naughty!, find text area to set, not good behavior
-     * but since this is a dev tool lets allow it - campbell */
-    ScrArea *sa = BKE_screen_find_big_area(CTX_wm_screen(C), SPACE_TEXT, 0);
-    if (sa) {
-      SpaceText *st = sa->spacedata.first;
-      st->text = text;
-    }
-    else {
-      BKE_reportf(op->reports, RPT_INFO, "See '%s' in the text editor", text->id.name + 2);
-    }
 
-    txt_move_toline(text, line - 1, false);
-    WM_event_add_notifier(C, NC_TEXT | ND_CURSOR, text);
+  /* naughty!, find text area to set, not good behavior
+   * but since this is a dev tool lets allow it - campbell */
+  ScrArea *area = BKE_screen_find_big_area(CTX_wm_screen(C), SPACE_TEXT, 0);
+  if (area) {
+    SpaceText *st = area->spacedata.first;
+    st->text = text;
   }
+  else {
+    BKE_reportf(op->reports, RPT_INFO, "See '%s' in the text editor", text->id.name + 2);
+  }
+
+  txt_move_toline(text, line - 1, false);
+  WM_event_add_notifier(C, NC_TEXT | ND_CURSOR, text);
 
   return OPERATOR_FINISHED;
 }
@@ -1224,7 +1344,7 @@ static int editsource_exec(bContext *C, wmOperator *op)
     GHashIterator ghi;
     struct uiEditSourceButStore *but_store = NULL;
 
-    ARegion *ar = CTX_wm_region(C);
+    ARegion *region = CTX_wm_region(C);
     int ret;
 
     /* needed else the active button does not get tested */
@@ -1236,9 +1356,9 @@ static int editsource_exec(bContext *C, wmOperator *op)
     ui_editsource_active_but_set(but);
 
     /* redraw and get active button python info */
-    ED_region_do_layout(C, ar);
-    ED_region_do_draw(C, ar);
-    ar->do_draw = false;
+    ED_region_do_layout(C, region);
+    ED_region_do_draw(C, region);
+    region->do_draw = false;
 
     for (BLI_ghashIterator_init(&ghi, ui_editsource_info->hash);
          BLI_ghashIterator_done(&ghi) == false;
@@ -1271,10 +1391,9 @@ static int editsource_exec(bContext *C, wmOperator *op)
 
     return ret;
   }
-  else {
-    BKE_report(op->reports, RPT_ERROR, "Active button not found");
-    return OPERATOR_CANCELLED;
-  }
+
+  BKE_report(op->reports, RPT_ERROR, "Active button not found");
+  return OPERATOR_CANCELLED;
 }
 
 static void UI_OT_editsource(wmOperatorType *ot)
@@ -1296,8 +1415,9 @@ static void UI_OT_editsource(wmOperatorType *ot)
 
 /**
  * EditTranslation utility funcs and operator,
- * \note: this includes utility functions and button matching checks.
- * this only works in conjunction with a py operator!
+ *
+ * \note this includes utility functions and button matching checks.
+ * this only works in conjunction with a Python operator!
  */
 static void edittranslation_find_po_file(const char *root,
                                          const char *uilng,
@@ -1458,10 +1578,9 @@ static int edittranslation_exec(bContext *C, wmOperator *op)
 
     return ret;
   }
-  else {
-    BKE_report(op->reports, RPT_ERROR, "Active button not found");
-    return OPERATOR_CANCELLED;
-  }
+
+  BKE_report(op->reports, RPT_ERROR, "Active button not found");
+  return OPERATOR_CANCELLED;
 }
 
 static void UI_OT_edittranslation_init(wmOperatorType *ot)
@@ -1506,35 +1625,28 @@ static void UI_OT_reloadtranslation(wmOperatorType *ot)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name Prese Button Operator
+/** \name Press Button Operator
  * \{ */
-
-static ARegion *region_event_inside_for_screen(bContext *C, const int xy[2])
-{
-  bScreen *sc = CTX_wm_screen(C);
-  if (sc) {
-    for (ARegion *ar = sc->regionbase.first; ar; ar = ar->next) {
-      if (BLI_rcti_isect_pt_v(&ar->winrct, xy)) {
-        return ar;
-      }
-    }
-  }
-  return NULL;
-}
 
 static int ui_button_press_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
+  bScreen *screen = CTX_wm_screen(C);
   const bool skip_depressed = RNA_boolean_get(op->ptr, "skip_depressed");
-  ARegion *ar_prev = CTX_wm_region(C);
-  ARegion *ar = region_event_inside_for_screen(C, &event->x);
+  ARegion *region_prev = CTX_wm_region(C);
+  ARegion *region = screen ? BKE_screen_find_region_xy(screen, RGN_TYPE_ANY, event->x, event->y) :
+                             NULL;
 
-  if (ar == NULL) {
-    ar = ar_prev;
+  if (region == NULL) {
+    region = region_prev;
   }
 
-  CTX_wm_region_set(C, ar);
+  if (region == NULL) {
+    return OPERATOR_PASS_THROUGH;
+  }
+
+  CTX_wm_region_set(C, region);
   uiBut *but = UI_context_active_but_get(C);
-  CTX_wm_region_set(C, ar_prev);
+  CTX_wm_region_set(C, region_prev);
 
   if (but == NULL) {
     return OPERATOR_PASS_THROUGH;
@@ -1547,11 +1659,11 @@ static int ui_button_press_invoke(bContext *C, wmOperator *op, const wmEvent *ev
    * having this avoids a minor drawing glitch. */
   void *but_optype = but->optype;
 
-  UI_but_execute(C, but);
+  UI_but_execute(C, region, but);
 
   but->optype = but_optype;
 
-  WM_event_add_mousemove(C);
+  WM_event_add_mousemove(CTX_wm_window(C));
 
   return OPERATOR_FINISHED;
 }
@@ -1571,26 +1683,54 @@ static void UI_OT_button_execute(wmOperatorType *ot)
 /** \} */
 
 /* -------------------------------------------------------------------- */
+/** \name Text Button Clear Operator
+ * \{ */
+
+static int button_string_clear_exec(bContext *C, wmOperator *UNUSED(op))
+{
+  uiBut *but = UI_context_active_but_get_respect_menu(C);
+
+  if (but) {
+    ui_but_active_string_clear_and_exit(C, but);
+  }
+
+  return OPERATOR_FINISHED;
+}
+
+static void UI_OT_button_string_clear(wmOperatorType *ot)
+{
+  ot->name = "Clear Button String";
+  ot->idname = "UI_OT_button_string_clear";
+  ot->description = "Unsets the text of the active button";
+
+  ot->poll = ED_operator_regionactive;
+  ot->exec = button_string_clear_exec;
+  ot->flag = OPTYPE_UNDO | OPTYPE_INTERNAL;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
 /** \name Drop Color Operator
  * \{ */
 
 bool UI_drop_color_poll(struct bContext *C,
                         wmDrag *drag,
                         const wmEvent *UNUSED(event),
-                        const char **UNUSED(tooltip))
+                        const char **UNUSED(r_tooltip))
 {
   /* should only return true for regions that include buttons, for now
    * return true always */
   if (drag->type == WM_DRAG_COLOR) {
     SpaceImage *sima = CTX_wm_space_image(C);
-    ARegion *ar = CTX_wm_region(C);
+    ARegion *region = CTX_wm_region(C);
 
     if (UI_but_active_drop_color(C)) {
       return 1;
     }
 
     if (sima && (sima->mode == SI_MODE_PAINT) && sima->image &&
-        (ar && ar->regiontype == RGN_TYPE_WINDOW)) {
+        (region && region->regiontype == RGN_TYPE_WINDOW)) {
       return 1;
     }
   }
@@ -1606,9 +1746,9 @@ void UI_drop_color_copy(wmDrag *drag, wmDropBox *drop)
   RNA_boolean_set(drop->ptr, "gamma", drag_info->gamma_corrected);
 }
 
-static int drop_color_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
+static int drop_color_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   uiBut *but = NULL;
   float color[4];
   bool gamma;
@@ -1618,7 +1758,7 @@ static int drop_color_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(
 
   /* find button under mouse, check if it has RNA color property and
    * if it does copy the data */
-  but = ui_region_find_active_but(ar);
+  but = ui_region_find_active_but(region);
 
   if (but && but->type == UI_BTYPE_COLOR && but->rnaprop) {
     const int color_len = RNA_property_array_length(&but->rnapoin, but->rnaprop);
@@ -1649,10 +1789,10 @@ static int drop_color_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(
       srgb_to_linearrgb_v3_v3(color, color);
     }
 
-    ED_imapaint_bucket_fill(C, color, op);
+    ED_imapaint_bucket_fill(C, color, op, event->mval);
   }
 
-  ED_region_tag_redraw(ar);
+  ED_region_tag_redraw(region);
 
   return OPERATOR_FINISHED;
 }
@@ -1679,6 +1819,7 @@ static void UI_OT_drop_color(wmOperatorType *ot)
 void ED_operatortypes_ui(void)
 {
   WM_operatortype_append(UI_OT_copy_data_path_button);
+  WM_operatortype_append(UI_OT_copy_as_driver_button);
   WM_operatortype_append(UI_OT_copy_python_command_button);
   WM_operatortype_append(UI_OT_reset_default_button);
   WM_operatortype_append(UI_OT_assign_default_button);
@@ -1687,7 +1828,6 @@ void ED_operatortypes_ui(void)
   WM_operatortype_append(UI_OT_override_remove_button);
   WM_operatortype_append(UI_OT_copy_to_selected_button);
   WM_operatortype_append(UI_OT_jump_to_target_button);
-  WM_operatortype_append(UI_OT_reports_to_textblock); /* XXX: temp? */
   WM_operatortype_append(UI_OT_drop_color);
 #ifdef WITH_PYTHON
   WM_operatortype_append(UI_OT_editsource);
@@ -1695,6 +1835,7 @@ void ED_operatortypes_ui(void)
 #endif
   WM_operatortype_append(UI_OT_reloadtranslation);
   WM_operatortype_append(UI_OT_button_execute);
+  WM_operatortype_append(UI_OT_button_string_clear);
 
   /* external */
   WM_operatortype_append(UI_OT_eyedropper_color);
@@ -1703,6 +1844,7 @@ void ED_operatortypes_ui(void)
   WM_operatortype_append(UI_OT_eyedropper_id);
   WM_operatortype_append(UI_OT_eyedropper_depth);
   WM_operatortype_append(UI_OT_eyedropper_driver);
+  WM_operatortype_append(UI_OT_eyedropper_gpencil_color);
 }
 
 /**

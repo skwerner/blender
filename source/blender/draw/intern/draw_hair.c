@@ -25,17 +25,18 @@
 
 #include "DRW_render.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_string_utils.h"
+#include "BLI_utildefines.h"
 
+#include "DNA_customdata_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_particle_types.h"
-#include "DNA_customdata_types.h"
 
-#include "BKE_anim.h"
+#include "BKE_duplilist.h"
 
 #include "GPU_batch.h"
 #include "GPU_shader.h"
+#include "GPU_vertex_buffer.h"
 
 #include "draw_hair_private.h"
 
@@ -62,6 +63,8 @@ static int g_tf_target_width;
 static int g_tf_target_height;
 #endif
 
+static GPUVertBuf *g_dummy_vbo = NULL;
+static GPUTexture *g_dummy_texture = NULL;
 static GPUShader *g_refine_shaders[PART_REFINE_MAX_SHADER] = {NULL};
 static DRWPass *g_tf_pass; /* XXX can be a problem with multiple DRWManager in the future */
 
@@ -86,6 +89,7 @@ static GPUShader *hair_refine_shader_get(ParticleRefineShader sh)
   g_refine_shaders[sh] = DRW_shader_create(vert_with_lib,
                                            NULL,
                                            datatoc_gpu_shader_3D_smooth_color_frag_glsl,
+                                           "#define blender_srgb_to_framebuffer_space(a) a\n"
                                            "#define HAIR_PHASE_SUBDIV\n"
                                            "#define TF_WORKAROUND\n");
 #endif
@@ -98,161 +102,204 @@ static GPUShader *hair_refine_shader_get(ParticleRefineShader sh)
 void DRW_hair_init(void)
 {
 #ifdef USE_TRANSFORM_FEEDBACK
-  g_tf_pass = DRW_pass_create("Update Hair Pass", DRW_STATE_TRANS_FEEDBACK);
+  g_tf_pass = DRW_pass_create("Update Hair Pass", 0);
 #else
-  g_tf_pass = DRW_pass_create("Update Hair Pass", DRW_STATE_WRITE_COLOR | DRW_STATE_POINT);
+  g_tf_pass = DRW_pass_create("Update Hair Pass", DRW_STATE_WRITE_COLOR);
 #endif
+
+  if (g_dummy_vbo == NULL) {
+    /* initialize vertex format */
+    GPUVertFormat format = {0};
+    uint dummy_id = GPU_vertformat_attr_add(&format, "dummy", GPU_COMP_F32, 4, GPU_FETCH_FLOAT);
+
+    g_dummy_vbo = GPU_vertbuf_create_with_format(&format);
+
+    float vert[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    GPU_vertbuf_data_alloc(g_dummy_vbo, 1);
+    GPU_vertbuf_attr_fill(g_dummy_vbo, dummy_id, vert);
+    /* Create vbo immediately to bind to texture buffer. */
+    GPU_vertbuf_use(g_dummy_vbo);
+
+    g_dummy_texture = GPU_texture_create_from_vertbuf(g_dummy_vbo);
+  }
 }
 
-typedef struct DRWHairInstanceData {
-  DrawData dd;
-
-  float mat[4][4];
-} DRWHairInstanceData;
-
-static DRWShadingGroup *drw_shgroup_create_hair_procedural_ex(Object *object,
-                                                              ParticleSystem *psys,
-                                                              ModifierData *md,
-                                                              DRWPass *hair_pass,
-                                                              struct GPUMaterial *gpu_mat,
-                                                              GPUShader *gpu_shader)
+static ParticleHairCache *drw_hair_particle_cache_get(
+    Object *object, ParticleSystem *psys, ModifierData *md, int subdiv, int thickness_res)
 {
-  /* TODO(fclem): Pass the scene as parameter */
+  bool update;
+  ParticleHairCache *cache;
+  if (psys) {
+    /* Old particle hair. */
+    update = particles_ensure_procedural_data(object, psys, md, &cache, subdiv, thickness_res);
+  }
+  else {
+    /* New hair object. */
+    update = hair_ensure_procedural_data(object, &cache, subdiv, thickness_res);
+  }
+
+  if (update) {
+    int final_points_len = cache->final[subdiv].strands_res * cache->strands_len;
+    if (final_points_len > 0) {
+      GPUShader *tf_shader = hair_refine_shader_get(PART_REFINE_CATMULL_ROM);
+
+#ifdef USE_TRANSFORM_FEEDBACK
+      DRWShadingGroup *tf_shgrp = DRW_shgroup_transform_feedback_create(
+          tf_shader, g_tf_pass, cache->final[subdiv].proc_buf);
+#else
+      DRWShadingGroup *tf_shgrp = DRW_shgroup_create(tf_shader, g_tf_pass);
+
+      ParticleRefineCall *pr_call = MEM_mallocN(sizeof(*pr_call), __func__);
+      pr_call->next = g_tf_calls;
+      pr_call->vbo = cache->final[subdiv].proc_buf;
+      pr_call->shgrp = tf_shgrp;
+      pr_call->vert_len = final_points_len;
+      g_tf_calls = pr_call;
+      DRW_shgroup_uniform_int(tf_shgrp, "targetHeight", &g_tf_target_height, 1);
+      DRW_shgroup_uniform_int(tf_shgrp, "targetWidth", &g_tf_target_width, 1);
+      DRW_shgroup_uniform_int(tf_shgrp, "idOffset", &g_tf_id_offset, 1);
+#endif
+
+      DRW_shgroup_uniform_texture(tf_shgrp, "hairPointBuffer", cache->point_tex);
+      DRW_shgroup_uniform_texture(tf_shgrp, "hairStrandBuffer", cache->strand_tex);
+      DRW_shgroup_uniform_texture(tf_shgrp, "hairStrandSegBuffer", cache->strand_seg_tex);
+      DRW_shgroup_uniform_int(tf_shgrp, "hairStrandsRes", &cache->final[subdiv].strands_res, 1);
+      DRW_shgroup_call_procedural_points(tf_shgrp, NULL, final_points_len);
+    }
+  }
+  return cache;
+}
+
+/* Note: Only valid after DRW_hair_update(). */
+GPUVertBuf *DRW_hair_pos_buffer_get(Object *object, ParticleSystem *psys, ModifierData *md)
+{
   const DRWContextState *draw_ctx = DRW_context_state_get();
   Scene *scene = draw_ctx->scene;
-  static float unit_mat[4][4] = {
-      {1, 0, 0, 0},
-      {0, 1, 0, 0},
-      {0, 0, 1, 0},
-      {0, 0, 0, 1},
-  };
-  float(*dupli_mat)[4];
-  Object *dupli_parent = DRW_object_get_dupli_parent(object);
-  DupliObject *dupli_object = DRW_object_get_dupli(object);
 
   int subdiv = scene->r.hair_subdiv;
   int thickness_res = (scene->r.hair_type == SCE_HAIR_SHAPE_STRAND) ? 1 : 2;
 
-  ParticleHairCache *hair_cache;
-  ParticleSettings *part = psys->part;
-  bool need_ft_update = particles_ensure_procedural_data(
-      object, psys, md, &hair_cache, subdiv, thickness_res);
+  ParticleHairCache *cache = drw_hair_particle_cache_get(object, psys, md, subdiv, thickness_res);
 
-  DRWShadingGroup *shgrp;
-  if (gpu_mat) {
-    shgrp = DRW_shgroup_material_create(gpu_mat, hair_pass);
-  }
-  else if (gpu_shader) {
-    shgrp = DRW_shgroup_create(gpu_shader, hair_pass);
+  return cache->final[subdiv].proc_buf;
+}
+
+void DRW_hair_duplimat_get(Object *object,
+                           ParticleSystem *psys,
+                           ModifierData *UNUSED(md),
+                           float (*dupli_mat)[4])
+{
+  Object *dupli_parent = DRW_object_get_dupli_parent(object);
+  DupliObject *dupli_object = DRW_object_get_dupli(object);
+
+  if (psys) {
+    if ((dupli_parent != NULL) && (dupli_object != NULL)) {
+      if (dupli_object->type & OB_DUPLICOLLECTION) {
+        copy_m4_m4(dupli_mat, dupli_parent->obmat);
+      }
+      else {
+        copy_m4_m4(dupli_mat, dupli_object->ob->obmat);
+        invert_m4(dupli_mat);
+        mul_m4_m4m4(dupli_mat, object->obmat, dupli_mat);
+      }
+    }
+    else {
+      unit_m4(dupli_mat);
+    }
   }
   else {
-    shgrp = NULL;
-    BLI_assert(0);
+    /* New hair object. */
+    copy_m4_m4(dupli_mat, object->obmat);
   }
+}
+
+DRWShadingGroup *DRW_shgroup_hair_create_sub(Object *object,
+                                             ParticleSystem *psys,
+                                             ModifierData *md,
+                                             DRWShadingGroup *shgrp_parent)
+{
+  const DRWContextState *draw_ctx = DRW_context_state_get();
+  Scene *scene = draw_ctx->scene;
+  float dupli_mat[4][4];
+
+  int subdiv = scene->r.hair_subdiv;
+  int thickness_res = (scene->r.hair_type == SCE_HAIR_SHAPE_STRAND) ? 1 : 2;
+
+  ParticleHairCache *hair_cache = drw_hair_particle_cache_get(
+      object, psys, md, subdiv, thickness_res);
+
+  DRWShadingGroup *shgrp = DRW_shgroup_create_sub(shgrp_parent);
 
   /* TODO optimize this. Only bind the ones GPUMaterial needs. */
-  for (int i = 0; i < hair_cache->num_uv_layers; ++i) {
-    for (int n = 0; n < MAX_LAYER_NAME_CT && hair_cache->uv_layer_names[i][n][0] != '\0'; ++n) {
+  for (int i = 0; i < hair_cache->num_uv_layers; i++) {
+    for (int n = 0; n < MAX_LAYER_NAME_CT && hair_cache->uv_layer_names[i][n][0] != '\0'; n++) {
       DRW_shgroup_uniform_texture(shgrp, hair_cache->uv_layer_names[i][n], hair_cache->uv_tex[i]);
     }
   }
-  for (int i = 0; i < hair_cache->num_col_layers; ++i) {
-    for (int n = 0; n < MAX_LAYER_NAME_CT && hair_cache->col_layer_names[i][n][0] != '\0'; ++n) {
+  for (int i = 0; i < hair_cache->num_col_layers; i++) {
+    for (int n = 0; n < MAX_LAYER_NAME_CT && hair_cache->col_layer_names[i][n][0] != '\0'; n++) {
       DRW_shgroup_uniform_texture(
           shgrp, hair_cache->col_layer_names[i][n], hair_cache->col_tex[i]);
     }
   }
 
-  if ((dupli_parent != NULL) && (dupli_object != NULL)) {
-    DRWHairInstanceData *hair_inst_data = (DRWHairInstanceData *)DRW_drawdata_ensure(
-        &object->id,
-        (DrawEngineType *)&drw_shgroup_create_hair_procedural_ex,
-        sizeof(DRWHairInstanceData),
-        NULL,
-        NULL);
-    dupli_mat = hair_inst_data->mat;
-    if (dupli_object->type & OB_DUPLICOLLECTION) {
-      copy_m4_m4(dupli_mat, dupli_parent->obmat);
-    }
-    else {
-      copy_m4_m4(dupli_mat, dupli_object->ob->obmat);
-      invert_m4(dupli_mat);
-      mul_m4_m4m4(dupli_mat, object->obmat, dupli_mat);
-    }
+  /* Fix issue with certain driver not drawing anything if there is no texture bound to
+   * "ac", "au", "u" or "c". */
+  if (hair_cache->num_uv_layers == 0) {
+    DRW_shgroup_uniform_texture(shgrp, "u", g_dummy_texture);
+    DRW_shgroup_uniform_texture(shgrp, "au", g_dummy_texture);
+  }
+  if (hair_cache->num_col_layers == 0) {
+    DRW_shgroup_uniform_texture(shgrp, "c", g_dummy_texture);
+    DRW_shgroup_uniform_texture(shgrp, "ac", g_dummy_texture);
+  }
+
+  DRW_hair_duplimat_get(object, psys, md, dupli_mat);
+
+  /* Get hair shape parameters. */
+  float hair_rad_shape, hair_rad_root, hair_rad_tip;
+  bool hair_close_tip;
+  if (psys) {
+    /* Old particle hair. */
+    ParticleSettings *part = psys->part;
+    hair_rad_shape = part->shape;
+    hair_rad_root = part->rad_root * part->rad_scale * 0.5f;
+    hair_rad_tip = part->rad_tip * part->rad_scale * 0.5f;
+    hair_close_tip = (part->shape_flag & PART_SHAPE_CLOSE_TIP) != 0;
   }
   else {
-    dupli_mat = unit_mat;
+    /* TODO: implement for new hair object. */
+    hair_rad_shape = 1.0f;
+    hair_rad_root = 0.005f;
+    hair_rad_tip = 0.0f;
+    hair_close_tip = true;
   }
 
   DRW_shgroup_uniform_texture(shgrp, "hairPointBuffer", hair_cache->final[subdiv].proc_tex);
   DRW_shgroup_uniform_int(shgrp, "hairStrandsRes", &hair_cache->final[subdiv].strands_res, 1);
   DRW_shgroup_uniform_int_copy(shgrp, "hairThicknessRes", thickness_res);
-  DRW_shgroup_uniform_float(shgrp, "hairRadShape", &part->shape, 1);
-  DRW_shgroup_uniform_mat4(shgrp, "hairDupliMatrix", dupli_mat);
-  DRW_shgroup_uniform_float_copy(shgrp, "hairRadRoot", part->rad_root * part->rad_scale * 0.5f);
-  DRW_shgroup_uniform_float_copy(shgrp, "hairRadTip", part->rad_tip * part->rad_scale * 0.5f);
-  DRW_shgroup_uniform_bool_copy(
-      shgrp, "hairCloseTip", (part->shape_flag & PART_SHAPE_CLOSE_TIP) != 0);
-  /* TODO(fclem): Until we have a better way to cull the hair and render with orco, bypass culling test. */
-  DRW_shgroup_call_object_add_no_cull(
-      shgrp, hair_cache->final[subdiv].proc_hairs[thickness_res - 1], object);
-
-  /* Transform Feedback subdiv. */
-  if (need_ft_update) {
-    int final_points_len = hair_cache->final[subdiv].strands_res * hair_cache->strands_len;
-    GPUShader *tf_shader = hair_refine_shader_get(PART_REFINE_CATMULL_ROM);
-
-#ifdef USE_TRANSFORM_FEEDBACK
-    DRWShadingGroup *tf_shgrp = DRW_shgroup_transform_feedback_create(
-        tf_shader, g_tf_pass, hair_cache->final[subdiv].proc_buf);
-#else
-    DRWShadingGroup *tf_shgrp = DRW_shgroup_create(tf_shader, g_tf_pass);
-
-    ParticleRefineCall *pr_call = MEM_mallocN(sizeof(*pr_call), __func__);
-    pr_call->next = g_tf_calls;
-    pr_call->vbo = hair_cache->final[subdiv].proc_buf;
-    pr_call->shgrp = tf_shgrp;
-    pr_call->vert_len = final_points_len;
-    g_tf_calls = pr_call;
-    DRW_shgroup_uniform_int(tf_shgrp, "targetHeight", &g_tf_target_height, 1);
-    DRW_shgroup_uniform_int(tf_shgrp, "targetWidth", &g_tf_target_width, 1);
-    DRW_shgroup_uniform_int(tf_shgrp, "idOffset", &g_tf_id_offset, 1);
-#endif
-
-    DRW_shgroup_uniform_texture(tf_shgrp, "hairPointBuffer", hair_cache->point_tex);
-    DRW_shgroup_uniform_texture(tf_shgrp, "hairStrandBuffer", hair_cache->strand_tex);
-    DRW_shgroup_uniform_texture(tf_shgrp, "hairStrandSegBuffer", hair_cache->strand_seg_tex);
-    DRW_shgroup_uniform_int(tf_shgrp, "hairStrandsRes", &hair_cache->final[subdiv].strands_res, 1);
-    DRW_shgroup_call_procedural_points_add(tf_shgrp, final_points_len, NULL);
-  }
+  DRW_shgroup_uniform_float_copy(shgrp, "hairRadShape", hair_rad_shape);
+  DRW_shgroup_uniform_vec4_array_copy(shgrp, "hairDupliMatrix", dupli_mat, 4);
+  DRW_shgroup_uniform_float_copy(shgrp, "hairRadRoot", hair_rad_root);
+  DRW_shgroup_uniform_float_copy(shgrp, "hairRadTip", hair_rad_tip);
+  DRW_shgroup_uniform_bool_copy(shgrp, "hairCloseTip", hair_close_tip);
+  /* TODO(fclem): Until we have a better way to cull the hair and render with orco, bypass
+   * culling test. */
+  GPUBatch *geom = hair_cache->final[subdiv].proc_hairs[thickness_res - 1];
+  DRW_shgroup_call_no_cull(shgrp, geom, object);
 
   return shgrp;
-}
-
-DRWShadingGroup *DRW_shgroup_hair_create(
-    Object *object, ParticleSystem *psys, ModifierData *md, DRWPass *hair_pass, GPUShader *shader)
-{
-  return drw_shgroup_create_hair_procedural_ex(object, psys, md, hair_pass, NULL, shader);
-}
-
-DRWShadingGroup *DRW_shgroup_material_hair_create(Object *object,
-                                                  ParticleSystem *psys,
-                                                  ModifierData *md,
-                                                  DRWPass *hair_pass,
-                                                  struct GPUMaterial *material)
-{
-  return drw_shgroup_create_hair_procedural_ex(object, psys, md, hair_pass, material, NULL);
 }
 
 void DRW_hair_update(void)
 {
 #ifndef USE_TRANSFORM_FEEDBACK
   /**
-   * Workaround to tranform feedback not working on mac.
+   * Workaround to transform feedback not working on mac.
    * On some system it crashes (see T58489) and on some other it renders garbage (see T60171).
    *
    * So instead of using transform feedback we render to a texture,
-   * readback the result to system memory and reupload as VBO data.
+   * read back the result to system memory and re-upload as VBO data.
    * It is really not ideal performance wise, but it is the simplest
    * and the most local workaround that still uses the power of the GPU.
    */
@@ -296,7 +343,7 @@ void DRW_hair_update(void)
 
       DRW_draw_pass_subset(g_tf_pass, pr_call->shgrp, pr_call->shgrp);
       /* Readback result to main memory. */
-      GPU_framebuffer_read_color(fb, 0, 0, width, height, 4, 0, data);
+      GPU_framebuffer_read_color(fb, 0, 0, width, height, 4, 0, GPU_DATA_FLOAT, data);
       /* Upload back to VBO. */
       GPU_vertbuf_use(pr_call->vbo);
       glBufferSubData(GL_ARRAY_BUFFER,
@@ -322,7 +369,10 @@ void DRW_hair_update(void)
 
 void DRW_hair_free(void)
 {
-  for (int i = 0; i < PART_REFINE_MAX_SHADER; ++i) {
+  for (int i = 0; i < PART_REFINE_MAX_SHADER; i++) {
     DRW_SHADER_FREE_SAFE(g_refine_shaders[i]);
   }
+
+  GPU_VERTBUF_DISCARD_SAFE(g_dummy_vbo);
+  DRW_TEXTURE_FREE_SAFE(g_dummy_texture);
 }

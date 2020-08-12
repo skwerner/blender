@@ -31,6 +31,7 @@ struct OCIO_GLSLDrawState;
     int unused; \
   } * name
 
+#define OCIO_ROLE_DATA "data"
 #define OCIO_ROLE_SCENE_LINEAR "scene_linear"
 #define OCIO_ROLE_COLOR_PICKING "color_picking"
 #define OCIO_ROLE_TEXTURE_PAINT "texture_paint"
@@ -45,8 +46,10 @@ OCIO_DECLARE_HANDLE(OCIO_ConstContextRcPtr);
 OCIO_DECLARE_HANDLE(OCIO_PackedImageDesc);
 OCIO_DECLARE_HANDLE(OCIO_DisplayTransformRcPtr);
 OCIO_DECLARE_HANDLE(OCIO_ConstTransformRcPtr);
+OCIO_DECLARE_HANDLE(OCIO_ColorSpaceTransformRcPtr);
 OCIO_DECLARE_HANDLE(OCIO_ExponentTransformRcPtr);
 OCIO_DECLARE_HANDLE(OCIO_MatrixTransformRcPtr);
+OCIO_DECLARE_HANDLE(OCIO_GroupTransformRcPtr);
 OCIO_DECLARE_HANDLE(OCIO_ConstLookRcPtr);
 
 /* Standard XYZ to linear sRGB transform, for fallback. */
@@ -72,10 +75,10 @@ typedef struct OCIO_CurveMappingSettings {
   int lut_size;
 
   /* Extend extrapolation flags for all the tables.
-   * if use_extend_extrapolate[T] != 0 means extrapolation for
-   * table T is needed.
+   * if use_extend_extrapolate != 0 means extrapolation for
+   * curve.
    */
-  int use_extend_extrapolate[4];
+  int use_extend_extrapolate;
 
   /* Minimal X value of the curve mapping tables. */
   float mintable[4];
@@ -130,6 +133,10 @@ int OCIO_configGetIndexForColorSpace(OCIO_ConstConfigRcPtr *config, const char *
 
 int OCIO_colorSpaceIsInvertible(OCIO_ConstColorSpaceRcPtr *cs);
 int OCIO_colorSpaceIsData(OCIO_ConstColorSpaceRcPtr *cs);
+void OCIO_colorSpaceIsBuiltin(OCIO_ConstConfigRcPtr *config,
+                              OCIO_ConstColorSpaceRcPtr *cs,
+                              bool *is_scene_linear,
+                              bool *is_srgb);
 
 void OCIO_colorSpaceRelease(OCIO_ConstColorSpaceRcPtr *cs);
 
@@ -193,6 +200,15 @@ OCIO_PackedImageDesc *OCIO_createOCIO_PackedImageDesc(float *data,
 
 void OCIO_PackedImageDescRelease(OCIO_PackedImageDesc *p);
 
+OCIO_GroupTransformRcPtr *OCIO_createGroupTransform(void);
+void OCIO_groupTransformSetDirection(OCIO_GroupTransformRcPtr *gt, const bool forward);
+void OCIO_groupTransformPushBack(OCIO_GroupTransformRcPtr *gt, OCIO_ConstTransformRcPtr *tr);
+void OCIO_groupTransformRelease(OCIO_GroupTransformRcPtr *gt);
+
+OCIO_ColorSpaceTransformRcPtr *OCIO_createColorSpaceTransform(void);
+void OCIO_colorSpaceTransformSetSrc(OCIO_ColorSpaceTransformRcPtr *ct, const char *name);
+void OCIO_colorSpaceTransformRelease(OCIO_ColorSpaceTransformRcPtr *ct);
+
 OCIO_ExponentTransformRcPtr *OCIO_createExponentTransform(void);
 void OCIO_exponentTransformSetValue(OCIO_ExponentTransformRcPtr *et, const float *exponent);
 void OCIO_exponentTransformRelease(OCIO_ExponentTransformRcPtr *et);
@@ -207,10 +223,12 @@ void OCIO_matrixTransformScale(float *m44, float *offset4, const float *scale4);
 
 int OCIO_supportGLSLDraw(void);
 int OCIO_setupGLSLDraw(struct OCIO_GLSLDrawState **state_r,
-                       OCIO_ConstProcessorRcPtr *processor,
+                       OCIO_ConstProcessorRcPtr *ocio_processor_scene_to_ui,
+                       OCIO_ConstProcessorRcPtr *ocio_processor_ui_to_display,
                        OCIO_CurveMappingSettings *curve_mapping_settings,
                        float dither,
-                       bool predivide);
+                       bool predivide,
+                       bool overlay);
 void OCIO_finishGLSLDraw(struct OCIO_GLSLDrawState *state);
 void OCIO_freeOGLState(struct OCIO_GLSLDrawState *state);
 

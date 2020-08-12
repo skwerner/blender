@@ -17,18 +17,18 @@
 #ifndef __OCTREE_H__
 #define __OCTREE_H__
 
+#include "GeoCommon.h"
+#include "MemoryAllocator.h"
+#include "ModelReader.h"
+#include "Projections.h"
+#include "Queue.h"
+#include "cubes.h"
+#include "dualcon.h"
+#include "manifold_table.h"
 #include <cassert>
 #include <cstring>
-#include <stdio.h>
 #include <math.h>
-#include "GeoCommon.h"
-#include "Projections.h"
-#include "ModelReader.h"
-#include "MemoryAllocator.h"
-#include "cubes.h"
-#include "Queue.h"
-#include "manifold_table.h"
-#include "dualcon.h"
+#include <stdio.h>
 
 /**
  * Main class and structures for scan-convertion, sign-generation,
@@ -987,12 +987,14 @@ class Octree {
         const LeafNode *node = locateLeaf(nst);
 
         if (e1) {
-          // getEdgeIntersectionByIndex(node, femask[i][0], nstt, 1, pts[fmask[i][0]], norms[fmask[i][0]]);
+          // getEdgeIntersectionByIndex(node, femask[i][0], nstt, 1, pts[fmask[i][0]],
+          // norms[fmask[i][0]]);
           getEdgeIntersectionByIndex(
               node, femask[i][0], nst, len, pts[fmask[i][0]], norms[fmask[i][0]]);
         }
         if (e2) {
-          // getEdgeIntersectionByIndex(node, femask[i][1], nstt, 1, pts[fmask[i][1]], norms[fmask[i][1]]);
+          // getEdgeIntersectionByIndex(node, femask[i][1], nstt, 1, pts[fmask[i][1]],
+          // norms[fmask[i][1]]);
           getEdgeIntersectionByIndex(
               node, femask[i][1], nst, len, pts[fmask[i][1]], norms[fmask[i][1]]);
         }
@@ -1057,13 +1059,15 @@ class Octree {
         int e2 = getStoredEdgesParity(node, femask[i][1]);
 
         if (e1) {
-          // getEdgeIntersectionByIndex(node, femask[i][0], nstt, 1, pts[fmask[i][0]], norms[fmask[i][0]]);
+          // getEdgeIntersectionByIndex(node, femask[i][0], nstt, 1, pts[fmask[i][0]],
+          // norms[fmask[i][0]]);
           getEdgeIntersectionByIndex(
               node, femask[i][0], nst, len, pts[fmask[i][0]], norms[fmask[i][0]]);
           parity[fmask[i][0]] = 1;
         }
         if (e2) {
-          // getEdgeIntersectionByIndex(node, femask[i][1], nstt, 1, pts[fmask[i][1]], norms[fmask[i][1]]);
+          // getEdgeIntersectionByIndex(node, femask[i][1], nstt, 1, pts[fmask[i][1]],
+          // norms[fmask[i][1]]);
           getEdgeIntersectionByIndex(
               node, femask[i][1], nst, len, pts[fmask[i][1]], norms[fmask[i][1]]);
           parity[fmask[i][1]] = 1;

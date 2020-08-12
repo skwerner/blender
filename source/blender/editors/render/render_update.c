@@ -32,9 +32,9 @@
 #include "DNA_screen_types.h"
 #include "DNA_space_types.h"
 #include "DNA_view3d_types.h"
+#include "DNA_windowmanager_types.h"
 #include "DNA_workspace_types.h"
 #include "DNA_world_types.h"
-#include "DNA_windowmanager_types.h"
 
 #include "DRW_engine.h"
 
@@ -81,16 +81,19 @@ void ED_render_scene_update(const DEGEditorUpdateContext *update_ctx, int update
 
   /* don't do this render engine update if we're updating the scene from
    * other threads doing e.g. rendering or baking jobs */
-  if (!BLI_thread_is_main())
+  if (!BLI_thread_is_main()) {
     return;
+  }
 
   /* don't call this recursively for frame updates */
-  if (recursive_check)
+  if (recursive_check) {
     return;
+  }
 
   /* Do not call if no WM available, see T42688. */
-  if (BLI_listbase_is_empty(&bmain->wm))
+  if (BLI_listbase_is_empty(&bmain->wm)) {
     return;
+  }
 
   recursive_check = true;
 
@@ -102,34 +105,37 @@ void ED_render_scene_update(const DEGEditorUpdateContext *update_ctx, int update
   wm = bmain->wm.first;
 
   for (win = wm->windows.first; win; win = win->next) {
-    bScreen *sc = WM_window_get_active_screen(win);
-    ScrArea *sa;
-    ARegion *ar;
+    bScreen *screen = WM_window_get_active_screen(win);
+    ScrArea *area;
+    ARegion *region;
 
     CTX_wm_window_set(C, win);
 
-    for (sa = sc->areabase.first; sa; sa = sa->next) {
-      if (sa->spacetype != SPACE_VIEW3D) {
+    for (area = screen->areabase.first; area; area = area->next) {
+      if (area->spacetype != SPACE_VIEW3D) {
         continue;
       }
-      View3D *v3d = sa->spacedata.first;
-      for (ar = sa->regionbase.first; ar; ar = ar->next) {
-        if (ar->regiontype != RGN_TYPE_WINDOW) {
+      View3D *v3d = area->spacedata.first;
+      for (region = area->regionbase.first; region; region = region->next) {
+        if (region->regiontype != RGN_TYPE_WINDOW) {
           continue;
         }
-        RegionView3D *rv3d = ar->regiondata;
+        RegionView3D *rv3d = region->regiondata;
         RenderEngine *engine = rv3d->render_engine;
         /* call update if the scene changed, or if the render engine
          * tagged itself for update (e.g. because it was busy at the
          * time of the last update) */
         if (engine && (updated || (engine->flag & RE_ENGINE_DO_UPDATE))) {
 
-          CTX_wm_screen_set(C, sc);
-          CTX_wm_area_set(C, sa);
-          CTX_wm_region_set(C, ar);
+          CTX_wm_screen_set(C, screen);
+          CTX_wm_area_set(C, area);
+          CTX_wm_region_set(C, region);
 
           engine->flag &= ~RE_ENGINE_DO_UPDATE;
-          engine->type->view_update(engine, C);
+          /* NOTE: Important to pass non-updated depsgraph, This is because this function is called
+           * from inside dependency graph evaluation. Additionally, if we pass fully evaluated one
+           * we will loose updates stored in the graph. */
+          engine->type->view_update(engine, C, CTX_data_depsgraph_pointer(C));
         }
         else {
           RenderEngineType *engine_type = ED_view3d_engine_type(scene, v3d->shading.type);
@@ -139,8 +145,8 @@ void ED_render_scene_update(const DEGEditorUpdateContext *update_ctx, int update
                 .depsgraph = update_ctx->depsgraph,
                 .scene = scene,
                 .view_layer = view_layer,
-                .ar = ar,
-                .v3d = (View3D *)sa->spacedata.first,
+                .region = region,
+                .v3d = (View3D *)area->spacedata.first,
                 .engine_type = engine_type,
             }));
           }
@@ -154,28 +160,30 @@ void ED_render_scene_update(const DEGEditorUpdateContext *update_ctx, int update
   recursive_check = false;
 }
 
-void ED_render_engine_area_exit(Main *bmain, ScrArea *sa)
+void ED_render_engine_area_exit(Main *bmain, ScrArea *area)
 {
   /* clear all render engines in this area */
-  ARegion *ar;
+  ARegion *region;
   wmWindowManager *wm = bmain->wm.first;
 
-  if (sa->spacetype != SPACE_VIEW3D)
+  if (area->spacetype != SPACE_VIEW3D) {
     return;
+  }
 
-  for (ar = sa->regionbase.first; ar; ar = ar->next) {
-    if (ar->regiontype != RGN_TYPE_WINDOW || !(ar->regiondata))
+  for (region = area->regionbase.first; region; region = region->next) {
+    if (region->regiontype != RGN_TYPE_WINDOW || !(region->regiondata)) {
       continue;
-    ED_view3d_stop_render_preview(wm, ar);
+    }
+    ED_view3d_stop_render_preview(wm, region);
   }
 }
 
-void ED_render_engine_changed(Main *bmain)
+void ED_render_engine_changed(Main *bmain, const bool update_scene_data)
 {
   /* on changing the render engine type, clear all running render engines */
-  for (bScreen *sc = bmain->screens.first; sc; sc = sc->id.next) {
-    for (ScrArea *sa = sc->areabase.first; sa; sa = sa->next) {
-      ED_render_engine_area_exit(bmain, sa);
+  for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+    LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+      ED_render_engine_area_exit(bmain, area);
     }
   }
   RE_FreePersistentData();
@@ -186,20 +194,20 @@ void ED_render_engine_changed(Main *bmain)
     update_ctx.scene = scene;
     LISTBASE_FOREACH (ViewLayer *, view_layer, &scene->view_layers) {
       /* TDODO(sergey): Iterate over depsgraphs instead? */
-      update_ctx.depsgraph = BKE_scene_get_depsgraph(scene, view_layer, true);
+      update_ctx.depsgraph = BKE_scene_get_depsgraph(bmain, scene, view_layer, true);
       update_ctx.view_layer = view_layer;
       ED_render_id_flush_update(&update_ctx, &scene->id);
     }
-    if (scene->nodetree) {
+    if (scene->nodetree && update_scene_data) {
       ntreeCompositUpdateRLayers(scene->nodetree);
     }
   }
 }
 
-void ED_render_view_layer_changed(Main *bmain, bScreen *sc)
+void ED_render_view_layer_changed(Main *bmain, bScreen *screen)
 {
-  for (ScrArea *sa = sc->areabase.first; sa; sa = sa->next) {
-    ED_render_engine_area_exit(bmain, sa);
+  LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+    ED_render_engine_area_exit(bmain, area);
   }
 }
 
@@ -237,8 +245,9 @@ static void texture_changed(Main *bmain, Tex *tex)
     /* find compositing nodes */
     if (scene->use_nodes && scene->nodetree) {
       for (node = scene->nodetree->nodes.first; node; node = node->next) {
-        if (node->id == &tex->id)
+        if (node->id == &tex->id) {
           ED_node_tag_update_id(&scene->id);
+        }
       }
     }
   }
@@ -258,9 +267,11 @@ static void image_changed(Main *bmain, Image *ima)
   BKE_icon_changed(BKE_icon_id_ensure(&ima->id));
 
   /* textures */
-  for (tex = bmain->textures.first; tex; tex = tex->id.next)
-    if (tex->ima == ima)
+  for (tex = bmain->textures.first; tex; tex = tex->id.next) {
+    if (tex->type == TEX_IMAGE && tex->ima == ima) {
       texture_changed(bmain, tex);
+    }
+  }
 }
 
 static void scene_changed(Main *bmain, Scene *scene)

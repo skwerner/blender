@@ -55,12 +55,15 @@ static int NonTVertex_init(BPy_NonTVertex *self, PyObject *args, PyObject *kwds)
   static const char *kwlist[] = {"svertex", NULL};
   PyObject *obj = 0;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "|O!", (char **)kwlist, &SVertex_Type, &obj))
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "|O!", (char **)kwlist, &SVertex_Type, &obj)) {
     return -1;
-  if (!obj)
+  }
+  if (!obj) {
     self->ntv = new NonTVertex();
-  else
+  }
+  else {
     self->ntv = new NonTVertex(((BPy_SVertex *)obj)->sv);
+  }
   self->py_vv.vv = self->ntv;
   self->py_vv.py_if0D.if0D = self->ntv;
   self->py_vv.py_if0D.borrowed = false;
@@ -77,8 +80,9 @@ PyDoc_STRVAR(NonTVertex_svertex_doc,
 static PyObject *NonTVertex_svertex_get(BPy_NonTVertex *self, void *UNUSED(closure))
 {
   SVertex *v = self->ntv->svertex();
-  if (v)
+  if (v) {
     return BPy_SVertex_from_SVertex(*v);
+  }
   Py_RETURN_NONE;
 }
 
@@ -93,10 +97,10 @@ static int NonTVertex_svertex_set(BPy_NonTVertex *self, PyObject *value, void *U
 }
 
 static PyGetSetDef BPy_NonTVertex_getseters[] = {
-    {(char *)"svertex",
+    {"svertex",
      (getter)NonTVertex_svertex_get,
      (setter)NonTVertex_svertex_set,
-     (char *)NonTVertex_svertex_doc,
+     NonTVertex_svertex_doc,
      NULL},
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };

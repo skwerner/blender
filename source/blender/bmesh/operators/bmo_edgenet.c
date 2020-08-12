@@ -22,8 +22,8 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_math.h"
 #include "BLI_array.h"
+#include "BLI_math.h"
 
 #include "bmesh.h"
 #include "bmesh_tools.h"
@@ -132,7 +132,7 @@ void bmo_edgenet_prepare_exec(BMesh *bm, BMOperator *op)
     }
   }
 
-  /* we don't have valid edge layouts, retur */
+  /* we don't have valid edge layouts, return */
   if (!ok) {
     return;
   }
@@ -194,10 +194,8 @@ void bmo_edgenet_prepare_exec(BMesh *bm, BMOperator *op)
       BLI_array_free(edges2);
       return;
     }
-    else {
-      edges1 = edges2;
-      edges2 = NULL;
-    }
+    edges1 = edges2;
+    edges2 = NULL;
   }
 
   if (edges2 && BLI_array_len(edges2) > 2 &&

@@ -29,7 +29,7 @@ import addon_utils
 
 import os
 import sys
-import imp
+import importlib
 
 BLACKLIST_DIRS = (
     os.path.join(bpy.utils.resource_path('USER'), "scripts"),
@@ -49,6 +49,13 @@ def _init_addon_blacklist():
 
     # netrender has known problems re-registering
     BLACKLIST_ADDONS.add("netrender")
+
+    if not bpy.app.build_options.xr_openxr:
+        BLACKLIST_ADDONS.add("viewport_vr_preview")
+
+    for mod in addon_utils.modules():
+        if addon_utils.module_bl_info(mod)['blender'] < (2, 80, 0):
+            BLACKLIST_ADDONS.add(mod.__name__)
 
 
 def addon_modules_sorted():
@@ -117,7 +124,7 @@ def reload_addons(do_reload=True, do_reverse=True):
 
             # now test reloading
             if do_reload:
-                imp.reload(sys.modules[mod_name])
+                sys.modules[mod_name] = importlib.reload(sys.modules[mod_name])
 
         if do_reverse:
             # in case order matters when it shouldn't
@@ -137,11 +144,4 @@ def main():
 
 
 if __name__ == "__main__":
-
-    # So a python error exits(1)
-    try:
-        main()
-    except:
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+    main()

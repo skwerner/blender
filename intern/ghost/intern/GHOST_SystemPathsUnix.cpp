@@ -30,8 +30,8 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-#include <stdio.h> /* for fprintf only */
 #include <cstdlib> /* for exit */
+#include <stdio.h> /* for fprintf only */
 
 #include <pwd.h> /* for get home without use getenv() */
 #include <string>
@@ -115,5 +115,5 @@ const GHOST_TUns8 *GHOST_SystemPathsUnix::getBinaryDir() const
 
 void GHOST_SystemPathsUnix::addToSystemRecentFiles(const char * /*filename*/) const
 {
-  /* XXXXX TODO: Implementation for X11 if possible */
+  /* TODO: implement for X11 */
 }

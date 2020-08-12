@@ -39,6 +39,17 @@ def CLIP_spaces_walk(context, all_screens, tarea, tspace, callback, *args):
 
 
 def CLIP_set_viewport_background(context, clip, clip_user):
+
+    def check_camera_has_distortion(tracking_camera):
+        if tracking_camera.distortion_model == 'POLYNOMIAL':
+            return not all(k == 0 for k in (tracking_camera.k1,
+                                            tracking_camera.k2,
+                                            tracking_camera.k3))
+        elif tracking_camera.distortion_model == 'DIVISION':
+            return not all(k == 0 for k in (tracking_camera.division_k1,
+                                            tracking_camera.division_k2))
+        return False
+
     def set_background(cam, clip, user):
         bgpic = None
 
@@ -53,7 +64,8 @@ def CLIP_set_viewport_background(context, clip, clip_user):
         bgpic.source = 'MOVIE_CLIP'
         bgpic.clip = clip
         bgpic.clip_user.proxy_render_size = user.proxy_render_size
-        bgpic.clip_user.use_render_undistorted = True
+        if check_camera_has_distortion(clip.tracking.camera):
+            bgpic.clip_user.use_render_undistorted = True
         bgpic.use_camera_clip = False
 
         cam.show_background_images = True
@@ -375,9 +387,12 @@ class CLIP_OT_delete_proxy(Operator):
             self._rmproxy(d + "_undistorted")
             self._rmproxy(os.path.join(absproxy, "proxy_%d.avi" % x))
 
-        tc = ("free_run.blen_tc",
-              "interp_free_run.blen_tc",
-              "record_run.blen_tc")
+        tc = (
+            "free_run.blen_tc",
+            "interp_free_run.blen_tc",
+            "record_run.blen_tc",
+            "record_run_no_gaps.blen_tc",
+        )
 
         for x in tc:
             self._rmproxy(os.path.join(absproxy, x))
@@ -471,7 +486,21 @@ class CLIP_OT_constraint_to_fcurve(Operator):
             return {'FINISHED'}
 
         # Find start and end frames.
-        for track in clip.tracking.tracks:
+        if con.type == 'CAMERA_SOLVER':
+            # Camera solver constraint is always referring to camera.
+            tracks = clip.tracking.tracks
+        elif con.object:
+            tracking_object = clip.tracking.objects.get(con.object, None)
+            if not tracking_object:
+                self.report({'ERROR'}, "Motion Tracking object not found")
+
+                return {'CANCELLED'}
+
+            tracks = tracking_object.tracks
+        else:
+            tracks = clip.tracking.tracks
+
+        for track in tracks:
             if sfra is None:
                 sfra = track.markers[0].frame
             else:
@@ -850,9 +879,6 @@ class CLIP_OT_setup_tracking_scene(Operator):
         # Ensure no nodes were created on the position of existing node.
         self._offsetNodes(tree)
 
-        if hasattr(scene, "cycles"):
-            scene.cycles.film_transparent = True
-
     @staticmethod
     def _createMesh(collection, name, vertices, faces):
         from bpy_extras.io_utils import unpack_list
@@ -906,7 +932,7 @@ class CLIP_OT_setup_tracking_scene(Operator):
         return None
 
     @staticmethod
-    def _createLight(scene):
+    def _createLight():
         light = bpy.data.lights.new(name="Light", type='POINT')
         lightob = bpy.data.objects.new(name="Light", object_data=light)
 
@@ -951,7 +977,7 @@ class CLIP_OT_setup_tracking_scene(Operator):
 
         # Create sample light if there is no lights in the scene.
         if not has_light:
-            light = self._createLight(scene)
+            light = self._createLight()
             fg_coll.objects.link(light)
             bg_coll.objects.link(light)
 

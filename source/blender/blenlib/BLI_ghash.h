@@ -28,8 +28,9 @@
  * This is also used to implement a 'set' (see #GSet below).
  */
 
-#include "BLI_sys_types.h" /* for bool */
 #include "BLI_compiler_attrs.h"
+#include "BLI_compiler_compat.h"
+#include "BLI_sys_types.h" /* for bool */
 
 #ifdef __cplusplus
 extern "C" {
@@ -406,6 +407,9 @@ GSet *BLI_gset_str_new(const char *info);
 GSet *BLI_gset_pair_new_ex(const char *info, const unsigned int nentries_reserve)
     ATTR_MALLOC ATTR_WARN_UNUSED_RESULT;
 GSet *BLI_gset_pair_new(const char *info) ATTR_MALLOC ATTR_WARN_UNUSED_RESULT;
+GSet *BLI_gset_int_new_ex(const char *info,
+                          const unsigned int nentries_reserve) ATTR_MALLOC ATTR_WARN_UNUSED_RESULT;
+GSet *BLI_gset_int_new(const char *info) ATTR_MALLOC ATTR_WARN_UNUSED_RESULT;
 
 /** \} */
 

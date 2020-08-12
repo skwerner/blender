@@ -29,8 +29,8 @@
 
 #include "DEG_depsgraph_query.h"
 
-#include "eevee_private.h"
 #include "GPU_texture.h"
+#include "eevee_private.h"
 
 /* SSR shader variations */
 enum {
@@ -44,9 +44,8 @@ static struct {
   /* Screen Space Reflection */
   struct GPUShader *ssr_sh[SSR_MAX_SHADER];
 
-  /* Theses are just references, not actually allocated */
+  /* These are just references, not actually allocated */
   struct GPUTexture *depth_src;
-  struct GPUTexture *color_src;
 } e_data = {{NULL}}; /* Engine data */
 
 extern char datatoc_ambient_occlusion_lib_glsl[];
@@ -55,6 +54,7 @@ extern char datatoc_common_uniforms_lib_glsl[];
 extern char datatoc_bsdf_common_lib_glsl[];
 extern char datatoc_bsdf_sampling_lib_glsl[];
 extern char datatoc_octahedron_lib_glsl[];
+extern char datatoc_cubemap_lib_glsl[];
 extern char datatoc_effect_ssr_frag_glsl[];
 extern char datatoc_lightprobe_lib_glsl[];
 extern char datatoc_raytrace_lib_glsl[];
@@ -68,6 +68,7 @@ static struct GPUShader *eevee_effects_screen_raytrace_shader_get(int options)
                                             datatoc_bsdf_sampling_lib_glsl,
                                             datatoc_ambient_occlusion_lib_glsl,
                                             datatoc_octahedron_lib_glsl,
+                                            datatoc_cubemap_lib_glsl,
                                             datatoc_lightprobe_lib_glsl,
                                             datatoc_raytrace_lib_glsl,
                                             datatoc_effect_ssr_frag_glsl);
@@ -127,13 +128,19 @@ int EEVEE_screen_raytrace_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
           &fbl->refract_fb, {GPU_ATTACHMENT_NONE, GPU_ATTACHMENT_TEXTURE(txl->refract_color)});
     }
 
-    const bool is_persp = DRW_viewport_is_persp_get();
+    const bool is_persp = DRW_view_is_persp_get(NULL);
     if (effects->ssr_was_persp != is_persp) {
       effects->ssr_was_persp = is_persp;
       DRW_viewport_request_redraw();
       EEVEE_temporal_sampling_reset(vedata);
       stl->g_data->valid_double_buffer = false;
     }
+
+    if (!effects->ssr_was_valid_double_buffer) {
+      DRW_viewport_request_redraw();
+      EEVEE_temporal_sampling_reset(vedata);
+    }
+    effects->ssr_was_valid_double_buffer = stl->g_data->valid_double_buffer;
 
     effects->reflection_trace_full = (scene_eval->eevee.flag & SCE_EEVEE_SSR_HALF_RESOLUTION) == 0;
     common_data->ssr_thickness = scene_eval->eevee.ssr_thickness;
@@ -152,6 +159,9 @@ int EEVEE_screen_raytrace_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
     int size_fs[2] = {(int)viewport_size[0], (int)viewport_size[1]};
     const bool high_qual_input = true; /* TODO dither low quality input */
     const eGPUTextureFormat format = (high_qual_input) ? GPU_RGBA16F : GPU_RGBA8;
+
+    tracing_res[0] = max_ii(1, tracing_res[0]);
+    tracing_res[1] = max_ii(1, tracing_res[1]);
 
     /* MRT for the shading pass in order to output needed data for the SSR pass. */
     effects->ssr_specrough_input = DRW_texture_pool_query_2d(
@@ -209,13 +219,13 @@ void EEVEE_screen_raytrace_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *v
      * - First pass Trace rays across the depth buffer. The hit position and pdf are
      *   recorded in a RGBA16F render target for each ray (sample).
      *
-     * - We downsample the previous frame color buffer.
+     * - We down-sample the previous frame color buffer.
      *
      * - For each final pixel, we gather neighbors rays and choose a color buffer
      *   mipmap for each ray using its pdf. (filtered importance sampling)
      *   We then evaluate the lighting from the probes and mix the results together.
      */
-    psl->ssr_raytrace = DRW_pass_create("SSR Raytrace", DRW_STATE_WRITE_COLOR);
+    DRW_PASS_CREATE(psl->ssr_raytrace, DRW_STATE_WRITE_COLOR);
     DRWShadingGroup *grp = DRW_shgroup_create(trace_shader, psl->ssr_raytrace);
     DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &e_data.depth_src);
     DRW_shgroup_uniform_texture_ref(grp, "normalBuffer", &effects->ssr_normal_input);
@@ -227,12 +237,13 @@ void EEVEE_screen_raytrace_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *v
     DRW_shgroup_uniform_block(grp, "probe_block", sldata->probe_ubo);
     DRW_shgroup_uniform_block(grp, "planar_block", sldata->planar_ubo);
     DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
+    DRW_shgroup_uniform_block(grp, "renderpass_block", sldata->renderpass_ubo.combined);
     if (!effects->reflection_trace_full) {
       DRW_shgroup_uniform_ivec2(grp, "halfresOffset", effects->ssr_halfres_ofs, 1);
     }
-    DRW_shgroup_call_add(grp, quad, NULL);
+    DRW_shgroup_call(grp, quad, NULL);
 
-    psl->ssr_resolve = DRW_pass_create("SSR Resolve", DRW_STATE_WRITE_COLOR | DRW_STATE_ADDITIVE);
+    DRW_PASS_CREATE(psl->ssr_resolve, DRW_STATE_WRITE_COLOR | DRW_STATE_BLEND_ADD);
     grp = DRW_shgroup_create(resolve_shader, psl->ssr_resolve);
     DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &e_data.depth_src);
     DRW_shgroup_uniform_texture_ref(grp, "normalBuffer", &effects->ssr_normal_input);
@@ -247,13 +258,14 @@ void EEVEE_screen_raytrace_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *v
     DRW_shgroup_uniform_block(grp, "probe_block", sldata->probe_ubo);
     DRW_shgroup_uniform_block(grp, "planar_block", sldata->planar_ubo);
     DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
+    DRW_shgroup_uniform_block(grp, "renderpass_block", sldata->renderpass_ubo.combined);
     DRW_shgroup_uniform_int(grp, "neighborOffset", &effects->ssr_neighbor_ofs, 1);
     if ((effects->enabled_effects & EFFECT_GTAO) != 0) {
       DRW_shgroup_uniform_texture(grp, "utilTex", EEVEE_materials_get_util_tex());
       DRW_shgroup_uniform_texture_ref(grp, "horizonBuffer", &effects->gtao_horizons);
     }
 
-    DRW_shgroup_call_add(grp, quad, NULL);
+    DRW_shgroup_call(grp, quad, NULL);
   }
 }
 
@@ -296,8 +308,9 @@ void EEVEE_reflection_compute(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *v
     /* Resolve at fullres */
     int sample = (DRW_state_is_image_render()) ? effects->taa_render_sample :
                                                  effects->taa_current_sample;
-    /* Doing a neighbor shift only after a few iteration. We wait for a prime number of cycles to avoid
-     * noise correlation. This reduces variance faster. */
+    /* Doing a neighbor shift only after a few iteration.
+     * We wait for a prime number of cycles to avoid noise correlation.
+     * This reduces variance faster. */
     effects->ssr_neighbor_ofs = ((sample / 5) % 8) * 4;
     switch ((sample / 11) % 4) {
       case 0:
@@ -326,9 +339,46 @@ void EEVEE_reflection_compute(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *v
   }
 }
 
+void EEVEE_reflection_output_init(EEVEE_ViewLayerData *UNUSED(sldata),
+                                  EEVEE_Data *vedata,
+                                  uint tot_samples)
+{
+  EEVEE_FramebufferList *fbl = vedata->fbl;
+  EEVEE_TextureList *txl = vedata->txl;
+  EEVEE_StorageList *stl = vedata->stl;
+  EEVEE_EffectsInfo *effects = stl->effects;
+
+  float clear[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+
+  /* Create FrameBuffer. */
+  const eGPUTextureFormat texture_format = (tot_samples > 256) ? GPU_RGBA32F : GPU_RGBA16F;
+  DRW_texture_ensure_fullscreen_2d(&txl->ssr_accum, texture_format, 0);
+
+  GPU_framebuffer_ensure_config(&fbl->ssr_accum_fb,
+                                {GPU_ATTACHMENT_NONE, GPU_ATTACHMENT_TEXTURE(txl->ssr_accum)});
+
+  /* Clear texture. */
+  if (effects->taa_current_sample == 1) {
+    GPU_framebuffer_bind(fbl->ssr_accum_fb);
+    GPU_framebuffer_clear_color(fbl->ssr_accum_fb, clear);
+  }
+}
+
+void EEVEE_reflection_output_accumulate(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *vedata)
+{
+  EEVEE_FramebufferList *fbl = vedata->fbl;
+  EEVEE_PassList *psl = vedata->psl;
+  EEVEE_StorageList *stl = vedata->stl;
+
+  if (stl->g_data->valid_double_buffer) {
+    GPU_framebuffer_bind(fbl->ssr_accum_fb);
+    DRW_draw_pass(psl->ssr_resolve);
+  }
+}
+
 void EEVEE_screen_raytrace_free(void)
 {
-  for (int i = 0; i < SSR_MAX_SHADER; ++i) {
+  for (int i = 0; i < SSR_MAX_SHADER; i++) {
     DRW_SHADER_FREE_SAFE(e_data.ssr_sh[i]);
   }
 }

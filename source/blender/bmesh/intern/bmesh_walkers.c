@@ -23,8 +23,8 @@
 #include <stdlib.h>
 #include <string.h> /* for memcpy */
 
-#include "BLI_utildefines.h"
 #include "BLI_listbase.h"
+#include "BLI_utildefines.h"
 
 #include "bmesh.h"
 
@@ -64,9 +64,8 @@ void *BMW_begin(BMWalker *walker, void *start)
 /**
  * \brief Init Walker
  *
- * Allocates and returns a new mesh walker of
- * a given type. The elements visited are filtered
- * by the bitmask 'searchmask'.
+ * Allocates and returns a new mesh walker of a given type.
+ * The elements visited are filtered by the bitmask 'searchmask'.
  */
 void BMW_init(BMWalker *walker,
               BMesh *bm,

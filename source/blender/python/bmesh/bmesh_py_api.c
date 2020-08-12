@@ -30,13 +30,13 @@
 #include "bmesh.h"
 
 #include "bmesh_py_types.h"
-#include "bmesh_py_types_select.h"
 #include "bmesh_py_types_customdata.h"
 #include "bmesh_py_types_meshdata.h"
+#include "bmesh_py_types_select.h"
 
+#include "bmesh_py_geometry.h"
 #include "bmesh_py_ops.h"
 #include "bmesh_py_utils.h"
-#include "bmesh_py_geometry.h"
 
 #include "BKE_editmesh.h"
 
@@ -148,9 +148,9 @@ static PyObject *bpy_bm_update_edit_mesh(PyObject *UNUSED(self), PyObject *args,
 
   {
     extern void EDBM_update_generic(
-        BMEditMesh * em, const bool do_tessface, const bool is_destructive);
+        struct Mesh * me, const bool do_tessface, const bool is_destructive);
 
-    EDBM_update_generic(me->edit_mesh, do_loop_triangles, is_destructive);
+    EDBM_update_generic(me, do_loop_triangles, is_destructive);
   }
 
   Py_RETURN_NONE;

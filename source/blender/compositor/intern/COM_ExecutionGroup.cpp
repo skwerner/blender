@@ -23,20 +23,20 @@
 
 #include "atomic_ops.h"
 
-#include "COM_ExecutionGroup.h"
-#include "COM_defines.h"
-#include "COM_ExecutionSystem.h"
-#include "COM_ReadBufferOperation.h"
-#include "COM_WriteBufferOperation.h"
-#include "COM_WorkScheduler.h"
-#include "COM_ViewerOperation.h"
 #include "COM_ChunkOrder.h"
 #include "COM_Debug.h"
+#include "COM_ExecutionGroup.h"
+#include "COM_ExecutionSystem.h"
+#include "COM_ReadBufferOperation.h"
+#include "COM_ViewerOperation.h"
+#include "COM_WorkScheduler.h"
+#include "COM_WriteBufferOperation.h"
+#include "COM_defines.h"
 
-#include "MEM_guardedalloc.h"
 #include "BLI_math.h"
 #include "BLI_string.h"
 #include "BLT_translation.h"
+#include "MEM_guardedalloc.h"
 #include "PIL_time.h"
 #include "WM_api.h"
 #include "WM_types.h"
@@ -86,7 +86,8 @@ bool ExecutionGroup::canContainOperation(NodeOperation *operation)
   if (m_complex) {
     return false;
   }
-  /* complex ops can't be added to other groups (except their own, which they initialize, see above) */
+  /* complex ops can't be added to other groups (except their own, which they initialize, see
+   * above) */
   if (operation->isComplex()) {
     return false;
   }
@@ -96,8 +97,9 @@ bool ExecutionGroup::canContainOperation(NodeOperation *operation)
 
 bool ExecutionGroup::addOperation(NodeOperation *operation)
 {
-  if (!canContainOperation(operation))
+  if (!canContainOperation(operation)) {
     return false;
+  }
 
   if (!operation->isReadBufferOperation() && !operation->isWriteBufferOperation()) {
     m_complex = operation->isComplex();
@@ -187,7 +189,8 @@ void ExecutionGroup::determineNumberOfChunks()
 }
 
 /**
- * this method is called for the top execution groups. containing the compositor node or the preview node or the viewer node)
+ * this method is called for the top execution groups. containing the compositor node or the
+ * preview node or the viewer node)
  */
 void ExecutionGroup::execute(ExecutionSystem *graph)
 {
@@ -195,13 +198,13 @@ void ExecutionGroup::execute(ExecutionSystem *graph)
   const bNodeTree *bTree = context.getbNodeTree();
   if (this->m_width == 0 || this->m_height == 0) {
     return;
-  }  /// \note: break out... no pixels to calculate.
+  }  /// \note Break out... no pixels to calculate.
   if (bTree->test_break && bTree->test_break(bTree->tbh)) {
     return;
-  }  /// \note: early break out for blur and preview nodes
+  }  /// \note Early break out for blur and preview nodes.
   if (this->m_numberOfChunks == 0) {
     return;
-  }  /// \note: early break out
+  }  /// \note Early break out.
   unsigned int chunkNumber;
 
   this->m_executionStartTime = PIL_check_seconds_timer();
@@ -342,8 +345,9 @@ void ExecutionGroup::execute(ExecutionSystem *graph)
         startEvaluated = true;
         numberEvaluated++;
 
-        if (bTree->update_draw)
+        if (bTree->update_draw) {
           bTree->update_draw(bTree->udh);
+        }
       }
       else if (state == COM_ES_SCHEDULED) {
         finished = false;
@@ -401,8 +405,9 @@ MemoryBuffer *ExecutionGroup::constructConsolidatedMemoryBuffer(MemoryProxy *mem
 
 void ExecutionGroup::finalizeChunkExecution(int chunkNumber, MemoryBuffer **memoryBuffers)
 {
-  if (this->m_chunkExecutionStates[chunkNumber] == COM_ES_SCHEDULED)
+  if (this->m_chunkExecutionStates[chunkNumber] == COM_ES_SCHEDULED) {
     this->m_chunkExecutionStates[chunkNumber] = COM_ES_EXECUTED;
+  }
 
   atomic_add_and_fetch_u(&this->m_chunksFinished, 1);
   if (memoryBuffers) {
@@ -426,7 +431,7 @@ void ExecutionGroup::finalizeChunkExecution(int chunkNumber, MemoryBuffer **memo
     char buf[128];
     BLI_snprintf(buf,
                  sizeof(buf),
-                 IFACE_("Compositing | Tile %u-%u"),
+                 TIP_("Compositing | Tile %u-%u"),
                  this->m_chunksFinished,
                  this->m_numberOfChunks);
     this->m_bTree->stats_draw(this->m_bTree->sdh, buf);

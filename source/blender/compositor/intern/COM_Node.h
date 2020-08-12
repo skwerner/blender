@@ -20,9 +20,9 @@
 #define __COM_NODE_H__
 
 #include "DNA_node_types.h"
-#include <vector>
-#include <string>
 #include <algorithm>
+#include <string>
+#include <vector>
 
 /* common node includes
  * added here so node files don't have to include themselves
@@ -112,7 +112,8 @@ class Node {
 
   /**
    * \brief set the reference to the bNode
-   * \note used in Node instances to receive the storage/settings and complex node for highlight during execution
+   * \note used in Node instances to receive the storage/settings and complex
+   * node for highlight during execution.
    * \param bNode:
    */
   void setbNode(bNode *node)

@@ -39,12 +39,13 @@
 #include "../../draw/intern/draw_cache_impl.h"
 
 #include "BLI_math.h"
+#include "BLI_task.h"
 #include "BLI_utildefines.h"
 
 #include "BKE_deform.h"
 #include "BKE_editmesh.h"
-#include "BKE_material.h"
 #include "BKE_layer.h"
+#include "BKE_material.h"
 
 #include "BKE_scene.h"
 
@@ -52,44 +53,54 @@
 #include "DEG_depsgraph_query.h"
 
 #include "GPU_batch.h"
+#include "GPU_framebuffer.h"
 #include "GPU_immediate.h"
-#include "GPU_immediate_util.h"
 #include "GPU_matrix.h"
 #include "GPU_state.h"
-#include "GPU_draw.h"
 
 #include "ED_image.h"
 #include "ED_mesh.h"
 #include "ED_uvedit.h"
 
-#include "UI_resources.h"
 #include "UI_interface.h"
+#include "UI_resources.h"
 #include "UI_view2d.h"
 
 #include "uvedit_intern.h"
+
+/* Struct containing the needed batches per object.
+ * this optimizes the way how data is requested from
+ * the draw manager. */
+typedef struct UVEditGPUBatches {
+  Object *ob_eval;
+  GPUBatch *faces;
+  GPUBatch *edges;
+  GPUBatch *verts;
+  GPUBatch *facedots;
+} UVEditGPUBatches;
 
 static int draw_uvs_face_check(const ToolSettings *ts)
 {
   /* checks if we are selecting only faces */
   if (ts->uv_flag & UV_SYNC_SELECTION) {
-    if (ts->selectmode == SCE_SELECT_FACE)
+    if (ts->selectmode == SCE_SELECT_FACE) {
       return 2;
-    else if (ts->selectmode & SCE_SELECT_FACE)
+    }
+    if (ts->selectmode & SCE_SELECT_FACE) {
       return 1;
-    else
-      return 0;
+    }
+    return 0;
   }
-  else
-    return (ts->uv_selectmode == UV_SELECT_FACE);
+  return (ts->uv_selectmode == UV_SELECT_FACE);
 }
 
 /* ------------------------- */
 
-void ED_image_draw_cursor(ARegion *ar, const float cursor[2])
+void ED_image_draw_cursor(ARegion *region, const float cursor[2])
 {
   float zoom[2], x_fac, y_fac;
 
-  UI_view2d_scale_get_inverse(&ar->v2d, &zoom[0], &zoom[1]);
+  UI_view2d_scale_get_inverse(&region->v2d, &zoom[0], &zoom[1]);
 
   mul_v2_fl(zoom, 256.0f * UI_DPI_FAC);
   x_fac = zoom[0];
@@ -112,6 +123,7 @@ void ED_image_draw_cursor(ARegion *ar, const float cursor[2])
   immUniformArray4fv(
       "colors", (float *)(float[][4]){{1.0f, 0.0f, 0.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, 2);
   immUniform1f("dash_width", 8.0f);
+  immUniform1f("dash_factor", 0.5f);
 
   immBegin(GPU_PRIM_LINES, 8);
 
@@ -132,6 +144,7 @@ void ED_image_draw_cursor(ARegion *ar, const float cursor[2])
   immUniformArray4fv(
       "colors", (float *)(float[][4]){{1.0f, 1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f, 1.0f}}, 2);
   immUniform1f("dash_width", 2.0f);
+  immUniform1f("dash_factor", 0.5f);
 
   immBegin(GPU_PRIM_LINES, 8);
 
@@ -156,67 +169,100 @@ void ED_image_draw_cursor(ARegion *ar, const float cursor[2])
 
 static void uvedit_get_batches(Object *ob,
                                SpaceImage *sima,
-                               const ToolSettings *ts,
-                               GPUBatch **faces,
-                               GPUBatch **edges,
-                               GPUBatch **verts,
-                               GPUBatch **facedots)
+                               const Scene *scene,
+                               UVEditGPUBatches *batches,
+                               float *tot_area,
+                               float *tot_area_uv)
 {
-  int drawfaces = draw_uvs_face_check(ts);
+  float *tmp_tot_area, *tmp_tot_area_uv;
+  int drawfaces = draw_uvs_face_check(scene->toolsettings);
   const bool draw_stretch = (sima->flag & SI_DRAW_STRETCH) != 0;
   const bool draw_faces = (sima->flag & SI_NO_DRAWFACES) == 0;
 
-  *edges = DRW_mesh_batch_cache_get_edituv_edges(ob->data);
-  *verts = DRW_mesh_batch_cache_get_edituv_verts(ob->data);
+  DRW_mesh_batch_cache_validate(ob->data);
+  batches->edges = DRW_mesh_batch_cache_get_edituv_edges(ob->data);
+  batches->verts = DRW_mesh_batch_cache_get_edituv_verts(ob->data);
 
   if (drawfaces) {
-    *facedots = DRW_mesh_batch_cache_get_edituv_facedots(ob->data);
+    batches->facedots = DRW_mesh_batch_cache_get_edituv_facedots(ob->data);
   }
   else {
-    *facedots = NULL;
+    batches->facedots = NULL;
   }
 
   if (draw_stretch && (sima->dt_uvstretch == SI_UVDT_STRETCH_AREA)) {
-    *faces = DRW_mesh_batch_cache_get_edituv_faces_strech_area(ob->data);
+    batches->faces = DRW_mesh_batch_cache_get_edituv_faces_stretch_area(
+        ob->data, &tmp_tot_area, &tmp_tot_area_uv);
   }
   else if (draw_stretch) {
-    *faces = DRW_mesh_batch_cache_get_edituv_faces_strech_angle(ob->data);
+    batches->faces = DRW_mesh_batch_cache_get_edituv_faces_stretch_angle(ob->data);
   }
   else if (draw_faces) {
-    *faces = DRW_mesh_batch_cache_get_edituv_faces(ob->data);
+    batches->faces = DRW_mesh_batch_cache_get_edituv_faces(ob->data);
   }
   else {
-    *faces = NULL;
+    batches->faces = NULL;
   }
+  struct TaskGraph *task_graph = BLI_task_graph_create();
+  DRW_mesh_batch_cache_create_requested(task_graph, ob, ob->data, scene, false, false);
+  BLI_task_graph_work_and_wait(task_graph);
+  BLI_task_graph_free(task_graph);
 
-  DRW_mesh_batch_cache_create_requested(ob, ob->data, ts, false, false);
+  if (draw_stretch && (sima->dt_uvstretch == SI_UVDT_STRETCH_AREA)) {
+    /* after create_requested we can load the actual areas */
+    *tot_area += *tmp_tot_area;
+    *tot_area_uv += *tmp_tot_area_uv;
+  }
 }
 
-static void draw_uvs_shadow(SpaceImage *UNUSED(sima),
-                            Scene *scene,
+static void draw_uvs_shadow(SpaceImage *sima,
+                            const Scene *scene,
                             Object *obedit,
                             Depsgraph *depsgraph)
 {
-  Object *eval_ob = DEG_get_evaluated_object(depsgraph, obedit);
-  Mesh *me = eval_ob->data;
+  Object *ob_eval = DEG_get_evaluated_object(depsgraph, obedit);
+  Mesh *me = ob_eval->data;
+  const float overlay_alpha = sima->uv_opacity;
   float col[4];
   UI_GetThemeColor4fv(TH_UV_SHADOW, col);
 
+  DRW_mesh_batch_cache_validate(me);
   GPUBatch *edges = DRW_mesh_batch_cache_get_uv_edges(me);
-  DRW_mesh_batch_cache_create_requested(eval_ob, me, scene->toolsettings, false, false);
+
+  struct TaskGraph *task_graph = BLI_task_graph_create();
+  DRW_mesh_batch_cache_create_requested(task_graph, ob_eval, me, scene, false, false);
+  BLI_task_graph_work_and_wait(task_graph);
+  BLI_task_graph_free(task_graph);
 
   if (edges) {
+    if (sima->flag & SI_SMOOTH_UV) {
+      GPU_line_smooth(true);
+      GPU_blend(true);
+    }
+    else if (overlay_alpha < 1.0f) {
+      GPU_blend(true);
+    }
+
+    col[3] = overlay_alpha;
     GPU_batch_program_set_builtin(edges, GPU_SHADER_2D_UV_UNIFORM_COLOR);
     GPU_batch_uniform_4fv(edges, "color", col);
     GPU_batch_draw(edges);
+
+    if (sima->flag & SI_SMOOTH_UV) {
+      GPU_line_smooth(false);
+      GPU_blend(false);
+    }
+    else if (overlay_alpha < 1.0f) {
+      GPU_blend(false);
+    }
   }
 }
 
-static void draw_uvs_texpaint(Scene *scene, Object *ob, Depsgraph *depsgraph)
+static void draw_uvs_texpaint(const Scene *scene, Object *ob, Depsgraph *depsgraph)
 {
-  Object *eval_ob = DEG_get_evaluated_object(depsgraph, ob);
-  Mesh *me = eval_ob->data;
-  ToolSettings *ts = scene->toolsettings;
+  Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
+  Mesh *me = ob_eval->data;
+  const ToolSettings *ts = scene->toolsettings;
   float col[4];
   UI_GetThemeColor4fv(TH_UV_SHADOW, col);
 
@@ -224,8 +270,12 @@ static void draw_uvs_texpaint(Scene *scene, Object *ob, Depsgraph *depsgraph)
     return;
   }
 
+  DRW_mesh_batch_cache_validate(me);
   GPUBatch *geom = DRW_mesh_batch_cache_get_uv_edges(me);
-  DRW_mesh_batch_cache_create_requested(eval_ob, me, scene->toolsettings, false, false);
+  struct TaskGraph *task_graph = BLI_task_graph_create();
+  DRW_mesh_batch_cache_create_requested(task_graph, ob_eval, me, scene, false, false);
+  BLI_task_graph_work_and_wait(task_graph);
+  BLI_task_graph_free(task_graph);
 
   GPU_batch_program_set_builtin(geom, GPU_SHADER_2D_UV_UNIFORM_COLOR);
   GPU_batch_uniform_4fv(geom, "color", col);
@@ -236,18 +286,20 @@ static void draw_uvs_texpaint(Scene *scene, Object *ob, Depsgraph *depsgraph)
     MPoly *mpoly = me->mpoly;
     uint draw_start = 0;
     uint idx = 0;
-    bool prev_ma_match = (mpoly->mat_nr == (eval_ob->actcol - 1));
+    bool prev_ma_match = (mpoly->mat_nr == (ob_eval->actcol - 1));
 
     GPU_matrix_bind(geom->interface);
+    GPU_shader_set_srgb_uniform(geom->interface);
+    GPU_batch_bind(geom);
 
     /* TODO(fclem): If drawcall count becomes a problem in the future
      * we can use multi draw indirect drawcalls for this.
      * (not implemented in GPU module at the time of writing). */
     for (int a = 0; a < me->totpoly; a++, mpoly++) {
-      bool ma_match = (mpoly->mat_nr == (eval_ob->actcol - 1));
+      bool ma_match = (mpoly->mat_nr == (ob_eval->actcol - 1));
       if (ma_match != prev_ma_match) {
         if (ma_match == false) {
-          GPU_batch_draw_range_ex(geom, draw_start, idx - draw_start, false);
+          GPU_batch_draw_advanced(geom, draw_start, idx - draw_start, 0, 0);
         }
         else {
           draw_start = idx;
@@ -257,7 +309,7 @@ static void draw_uvs_texpaint(Scene *scene, Object *ob, Depsgraph *depsgraph)
       prev_ma_match = ma_match;
     }
     if (prev_ma_match == true) {
-      GPU_batch_draw_range_ex(geom, draw_start, idx - draw_start, false);
+      GPU_batch_draw_advanced(geom, draw_start, idx - draw_start, 0, 0);
     }
 
     GPU_batch_program_use_end(geom);
@@ -268,16 +320,21 @@ static void draw_uvs_texpaint(Scene *scene, Object *ob, Depsgraph *depsgraph)
 }
 
 /* draws uv's in the image space */
-static void draw_uvs(SpaceImage *sima, Scene *scene, Object *obedit, Depsgraph *depsgraph)
+static void draw_uvs(SpaceImage *sima,
+                     const Scene *scene,
+                     Depsgraph *depsgraph,
+                     UVEditGPUBatches *batch,
+                     float tot_area_ratio,
+                     float tot_area_ratio_inv)
 {
-  GPUBatch *faces, *edges, *verts, *facedots;
-  Object *eval_ob = DEG_get_evaluated_object(depsgraph, obedit);
+  Object *ob_eval = batch->ob_eval;
   const ToolSettings *ts = scene->toolsettings;
   float col1[4], col2[4], col3[4], transparent[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+  const float overlay_alpha = sima->uv_opacity;
 
   if (sima->flag & SI_DRAWSHADOW) {
     bool is_cage_like_final_meshes = false;
-    Mesh *me = (Mesh *)eval_ob->data;
+    Mesh *me = (Mesh *)ob_eval->data;
     BMEditMesh *embm = me->edit_mesh;
     is_cage_like_final_meshes = embm && embm->mesh_eval_final &&
                                 embm->mesh_eval_final->runtime.is_original;
@@ -285,15 +342,11 @@ static void draw_uvs(SpaceImage *sima, Scene *scene, Object *obedit, Depsgraph *
     /* When sync selection is enabled, all faces are drawn (except for hidden)
      * so if cage is the same as the final, there is no point in drawing this. */
     if (!((ts->uv_flag & UV_SYNC_SELECTION) && is_cage_like_final_meshes)) {
-      draw_uvs_shadow(sima, scene, obedit, depsgraph);
+      draw_uvs_shadow(sima, scene, ob_eval, depsgraph);
     }
   }
 
-  uvedit_get_batches(eval_ob, sima, ts, &faces, &edges, &verts, &facedots);
-
   bool interpedges;
-  bool do_elem_order_fix = (ts->uv_flag & UV_SYNC_SELECTION) && (ts->selectmode & SCE_SELECT_FACE);
-  bool do_selected_edges = ((sima->flag & SI_NO_DRAWEDGES) == 0);
   bool draw_stretch = (sima->flag & SI_DRAW_STRETCH) != 0;
   if (ts->uv_flag & UV_SYNC_SELECTION) {
     interpedges = (ts->selectmode & SCE_SELECT_VERTEX) != 0;
@@ -305,8 +358,8 @@ static void draw_uvs(SpaceImage *sima, Scene *scene, Object *obedit, Depsgraph *
   GPU_blend_set_func_separate(
       GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
 
-  if (faces) {
-    GPU_batch_program_set_builtin(faces,
+  if (batch->faces) {
+    GPU_batch_program_set_builtin(batch->faces,
                                   (draw_stretch) ? (sima->dt_uvstretch == SI_UVDT_STRETCH_AREA) ?
                                                    GPU_SHADER_2D_UV_FACES_STRETCH_AREA :
                                                    GPU_SHADER_2D_UV_FACES_STRETCH_ANGLE :
@@ -318,170 +371,178 @@ static void draw_uvs(SpaceImage *sima, Scene *scene, Object *obedit, Depsgraph *
       UI_GetThemeColor4fv(TH_FACE, col1);
       UI_GetThemeColor4fv(TH_FACE_SELECT, col2);
       UI_GetThemeColor4fv(TH_EDITMESH_ACTIVE, col3);
-      col3[3] *= 0.2; /* Simulate dithering */
-      GPU_batch_uniform_4fv(faces, "faceColor", col1);
-      GPU_batch_uniform_4fv(faces, "selectColor", col2);
-      GPU_batch_uniform_4fv(faces, "activeColor", col3);
+
+      col1[3] *= overlay_alpha;
+      col2[3] *= overlay_alpha;
+      col3[3] *= overlay_alpha;
+
+      GPU_batch_uniform_4fv(batch->faces, "faceColor", col1);
+      GPU_batch_uniform_4fv(batch->faces, "selectColor", col2);
+      GPU_batch_uniform_4fv(batch->faces, "activeColor", col3);
     }
     else if (sima->dt_uvstretch == SI_UVDT_STRETCH_ANGLE) {
       float asp[2];
       ED_space_image_get_uv_aspect(sima, &asp[0], &asp[1]);
-      GPU_batch_uniform_2fv(faces, "aspect", asp);
+      GPU_batch_uniform_2fv(batch->faces, "aspect", asp);
+    }
+    else if (sima->dt_uvstretch == SI_UVDT_STRETCH_AREA) {
+      GPU_batch_uniform_1f(batch->faces, "totalAreaRatio", tot_area_ratio);
+      GPU_batch_uniform_1f(batch->faces, "totalAreaRatioInv", tot_area_ratio_inv);
     }
 
-    GPU_batch_draw(faces);
+    GPU_batch_draw(batch->faces);
 
     if (!draw_stretch) {
       GPU_blend(false);
     }
   }
-  if (edges) {
+  if (batch->edges) {
     if (sima->flag & SI_SMOOTH_UV) {
       GPU_line_smooth(true);
       GPU_blend(true);
     }
-    switch (sima->dt_uv) {
-      case SI_UVDT_DASH: {
-        float dash_colors[2][4] = {{0.56f, 0.56f, 0.56f, 1.0f}, {0.07f, 0.07f, 0.07f, 1.0f}};
-        float viewport_size[4];
-        GPU_viewport_size_get_f(viewport_size);
-
-        GPU_line_width(1.0f);
-        GPU_batch_program_set_builtin(edges, GPU_SHADER_2D_LINE_DASHED_UNIFORM_COLOR);
-        GPU_batch_uniform_4fv_array(edges, "colors", 2, (float *)dash_colors);
-        GPU_batch_uniform_2f(
-            edges, "viewport_size", viewport_size[2] / UI_DPI_FAC, viewport_size[3] / UI_DPI_FAC);
-        GPU_batch_uniform_1i(edges, "colors_len", 2); /* "advanced" mode */
-        GPU_batch_uniform_1f(edges, "dash_width", 4.0f);
-        GPU_batch_draw(edges);
-        break;
-      }
-      case SI_UVDT_BLACK:
-      case SI_UVDT_WHITE: {
-        GPU_line_width(1.0f);
-        GPU_batch_program_set_builtin(edges, GPU_SHADER_2D_UNIFORM_COLOR);
-        if (sima->dt_uv == SI_UVDT_WHITE) {
-          GPU_batch_uniform_4f(edges, "color", 1.0f, 1.0f, 1.0f, 1.0f);
-        }
-        else {
-          GPU_batch_uniform_4f(edges, "color", 0.0f, 0.0f, 0.0f, 1.0f);
-        }
-        GPU_batch_draw(edges);
-        break;
-      }
-      case SI_UVDT_OUTLINE: {
-        GPU_line_width(3.0f);
-        GPU_batch_program_set_builtin(edges, GPU_SHADER_2D_UNIFORM_COLOR);
-        GPU_batch_uniform_4f(edges, "color", 0.0f, 0.0f, 0.0f, 1.0f);
-        GPU_batch_draw(edges);
-
-        UI_GetThemeColor4fv(TH_WIRE_EDIT, col1);
-        UI_GetThemeColor4fv(TH_EDGE_SELECT, col2);
-
-        /* We could modify the vbo's data filling
-         * instead of modifying the provoking vert. */
-        glProvokingVertex(GL_FIRST_VERTEX_CONVENTION);
-
-        GPU_line_width(1.0f);
-        GPU_batch_program_set_builtin(
-            edges, (interpedges) ? GPU_SHADER_2D_UV_EDGES_SMOOTH : GPU_SHADER_2D_UV_EDGES);
-        GPU_batch_uniform_4fv(edges, "edgeColor", col1);
-        GPU_batch_uniform_4fv(edges, "selectColor", do_selected_edges ? col2 : col1);
-        GPU_batch_draw(edges);
-
-        if (do_elem_order_fix && do_selected_edges) {
-          /* We have problem in this mode when face order make some edges
-           * appear unselected because an adjacent face is not selected and
-           * render after the selected face.
-           * So, to avoid sorting edges by state we just render selected edges
-           * on top. A bit overkill but it's simple. */
-          GPU_blend(true);
-          GPU_batch_uniform_4fv(edges, "edgeColor", transparent);
-          GPU_batch_uniform_4fv(edges, "selectColor", col2);
-          GPU_batch_draw(edges);
-          GPU_blend(false);
-        }
-        glProvokingVertex(GL_LAST_VERTEX_CONVENTION);
-        break;
-      }
+    else if (overlay_alpha < 1.0f) {
+      GPU_blend(true);
     }
+
+    {
+      /* We could modify the vbo's data filling
+       * instead of modifying the provoking vert. */
+      GPU_provoking_vertex(GPU_VERTEX_FIRST);
+
+      UI_GetThemeColor3fv(TH_EDGE_SELECT, col2);
+      col2[3] = overlay_alpha;
+
+      const float dash_width = (sima->dt_uv == SI_UVDT_DASH) ? (4.0f * UI_DPI_FAC) : 9999.0f;
+      eGPUBuiltinShader shader = (interpedges) ? GPU_SHADER_2D_UV_EDGES_SMOOTH :
+                                                 GPU_SHADER_2D_UV_EDGES;
+#ifdef __APPLE__
+      if (sima->dt_uv == SI_UVDT_OUTLINE) {
+        /* Apple drivers do not support wide line. This is a workaround awaiting the 2D view
+         * refactor. Limiting to OSX since this will slow down the drawing. (see T76806) */
+        GPU_batch_program_set_builtin(batch->edges, GPU_SHADER_3D_POLYLINE_UNIFORM_COLOR);
+
+        float viewport[4];
+        GPU_viewport_size_get_f(viewport);
+
+        /* No U.pixelsize scaling for now since the inner line is not scalled. */
+        GPU_batch_uniform_1f(batch->edges, "lineWidth", 2.0f);
+        GPU_batch_uniform_4f(batch->edges, "color", 0.0f, 0.0f, 0.0f, 1.0f);
+        GPU_batch_uniform_2fv(batch->edges, "viewportSize", &viewport[2]);
+
+        GPU_batch_draw(batch->edges);
+      }
+#endif
+
+      GPU_batch_program_set_builtin(batch->edges, shader);
+
+      if (sima->dt_uv == SI_UVDT_OUTLINE) {
+#ifndef __APPLE__
+        /* Black Outline. */
+        GPU_line_width(3.0f);
+        GPU_batch_uniform_4f(batch->edges, "edgeColor", 0.0f, 0.0f, 0.0f, overlay_alpha);
+        GPU_batch_uniform_4f(batch->edges, "selectColor", 0.0f, 0.0f, 0.0f, overlay_alpha);
+        GPU_batch_uniform_1f(batch->edges, "dashWidth", dash_width);
+        GPU_batch_draw(batch->edges);
+#endif
+        UI_GetThemeColor3fv(TH_WIRE_EDIT, col1);
+      }
+      else if (sima->dt_uv == SI_UVDT_BLACK) {
+        copy_v3_fl3(col1, 0.0f, 0.0f, 0.0f);
+      }
+      else {
+        copy_v3_fl3(col1, 1.0f, 1.0f, 1.0f);
+      }
+      col1[3] = overlay_alpha;
+
+      /* Inner Line. Use depth test to insure selection is drawn on top. */
+      GPU_depth_test(true);
+      GPU_line_width(1.0f);
+      GPU_batch_uniform_4fv(batch->edges, "edgeColor", col1);
+      GPU_batch_uniform_4fv(batch->edges, "selectColor", col2);
+      GPU_batch_uniform_1f(batch->edges, "dashWidth", dash_width);
+      GPU_batch_draw(batch->edges);
+      GPU_depth_test(false);
+
+      GPU_provoking_vertex(GPU_VERTEX_LAST);
+    }
+
     if (sima->flag & SI_SMOOTH_UV) {
       GPU_line_smooth(false);
       GPU_blend(false);
     }
+    else if (overlay_alpha < 1.0f) {
+      GPU_blend(false);
+    }
   }
-  if (verts || facedots) {
-    float pointsize = UI_GetThemeValuef(TH_VERTEX_SIZE);
+
+  if (batch->verts || batch->facedots) {
     UI_GetThemeColor4fv(TH_VERTEX_SELECT, col2);
-    if (verts) {
-      float pinned_col[4] = {1.0f, 0.0f, 0.0f, 1.0f}; /* TODO Theme? */
+    if (batch->verts) {
+      const float point_size = UI_GetThemeValuef(TH_VERTEX_SIZE);
+      const float pinned_col[4] = {1.0f, 0.0f, 0.0f, 1.0f}; /* TODO Theme? */
       UI_GetThemeColor4fv(TH_VERTEX, col1);
       GPU_blend(true);
-      GPU_enable_program_point_size();
+      GPU_program_point_size(true);
 
-      GPU_batch_program_set_builtin(verts, GPU_SHADER_2D_UV_VERTS);
-      GPU_batch_uniform_4f(verts, "vertColor", col1[0], col1[1], col1[2], 1.0f);
-      GPU_batch_uniform_4fv(verts, "selectColor", (do_elem_order_fix) ? transparent : col2);
-      GPU_batch_uniform_4fv(verts, "pinnedColor", pinned_col);
-      GPU_batch_uniform_1f(verts, "pointSize", (pointsize + 1.5f) * M_SQRT2);
-      GPU_batch_uniform_1f(verts, "outlineWidth", 0.75f);
-      GPU_batch_draw(verts);
+      GPU_batch_program_set_builtin(batch->verts, GPU_SHADER_2D_UV_VERTS);
+      GPU_batch_uniform_4f(batch->verts, "vertColor", col1[0], col1[1], col1[2], 1.0f);
+      GPU_batch_uniform_4fv(batch->verts, "selectColor", transparent);
+      GPU_batch_uniform_4fv(batch->verts, "pinnedColor", pinned_col);
+      GPU_batch_uniform_1f(batch->verts, "pointSize", (point_size + 1.5f) * M_SQRT2);
+      GPU_batch_uniform_1f(batch->verts, "outlineWidth", 0.75f);
+      GPU_batch_draw(batch->verts);
 
-      if (do_elem_order_fix) {
-        /* We have problem in this mode when face order make some verts
-         * appear unselected because an adjacent face is not selected and
-         * render after the selected face.
-         * So, to avoid sorting verts by state we just render selected verts
-         * on top. A bit overkill but it's simple. */
-        GPU_batch_uniform_4fv(verts, "vertColor", transparent);
-        GPU_batch_uniform_4fv(verts, "selectColor", col2);
-        GPU_batch_uniform_4fv(verts, "pinnedColor", pinned_col);
-        GPU_batch_uniform_1f(verts, "pointSize", (pointsize + 1.5f) * M_SQRT2);
-        GPU_batch_uniform_1f(verts, "outlineWidth", 0.75f);
-        GPU_batch_draw(verts);
-      }
+      /* We have problem in this mode when face order make some verts
+       * appear unselected because an adjacent face is not selected and
+       * render after the selected face.
+       * So, to avoid sorting verts by state we just render selected verts
+       * on top. A bit overkill but it's simple. */
+      GPU_batch_uniform_4fv(batch->verts, "vertColor", transparent);
+      GPU_batch_uniform_4fv(batch->verts, "selectColor", col2);
+      GPU_batch_draw(batch->verts);
 
       GPU_blend(false);
-      GPU_disable_program_point_size();
+      GPU_program_point_size(false);
     }
-    if (facedots) {
-      GPU_point_size(pointsize);
+    if (batch->facedots) {
+      const float point_size = UI_GetThemeValuef(TH_FACEDOT_SIZE);
+      GPU_point_size(point_size);
 
       UI_GetThemeColor4fv(TH_WIRE, col1);
-      GPU_batch_program_set_builtin(facedots, GPU_SHADER_2D_UV_FACEDOTS);
-      GPU_batch_uniform_4fv(facedots, "vertColor", col1);
-      GPU_batch_uniform_4fv(facedots, "selectColor", col2);
-      GPU_batch_draw(facedots);
+      GPU_batch_program_set_builtin(batch->facedots, GPU_SHADER_2D_UV_FACEDOTS);
+      GPU_batch_uniform_4fv(batch->facedots, "vertColor", col1);
+      GPU_batch_uniform_4fv(batch->facedots, "selectColor", col2);
+      GPU_batch_draw(batch->facedots);
     }
   }
 }
 
 static void draw_uv_shadows_get(
-    SpaceImage *sima, Object *ob, Object *obedit, bool *show_shadow, bool *show_texpaint)
+    SpaceImage *sima, Object *ob, Object *obedit, bool *r_show_shadow, bool *r_show_texpaint)
 {
-  *show_shadow = *show_texpaint = false;
+  *r_show_shadow = *r_show_texpaint = false;
 
-  if (ED_space_image_show_render(sima) || (sima->flag & SI_NO_DRAW_TEXPAINT))
+  if (ED_space_image_show_render(sima) || (sima->flag & SI_NO_DRAW_TEXPAINT)) {
     return;
+  }
 
   if ((sima->mode == SI_MODE_PAINT) && obedit && obedit->type == OB_MESH) {
     struct BMEditMesh *em = BKE_editmesh_from_object(obedit);
 
-    *show_shadow = EDBM_uv_check(em);
+    *r_show_shadow = EDBM_uv_check(em);
   }
 
-  *show_texpaint = (ob && ob->type == OB_MESH && ob->mode == OB_MODE_TEXTURE_PAINT);
+  *r_show_texpaint = (ob && ob->type == OB_MESH && ob->mode == OB_MODE_TEXTURE_PAINT);
 }
 
 void ED_uvedit_draw_main(SpaceImage *sima,
-                         ARegion *ar,
-                         Scene *scene,
+                         const Scene *scene,
                          ViewLayer *view_layer,
                          Object *obedit,
                          Object *obact,
                          Depsgraph *depsgraph)
 {
-  ToolSettings *toolsettings = scene->toolsettings;
   bool show_uvedit, show_uvshadow, show_texpaint_uvshadow;
 
   show_uvedit = ED_space_image_show_uvedit(sima, obedit);
@@ -495,17 +556,40 @@ void ED_uvedit_draw_main(SpaceImage *sima,
       uint objects_len = 0;
       Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data_with_uvs(
           view_layer, ((View3D *)NULL), &objects_len);
+      if (objects_len > 0) {
+        GPU_clear_depth(1.0f);
+        GPU_clear(GPU_DEPTH_BIT);
+      }
+
+      /* go over all objects and create the batches + add their areas to the total */
+      UVEditGPUBatches *batches = MEM_mallocN(sizeof(UVEditGPUBatches) * objects_len, __func__);
+      float tot_area = 0.0f;
+      float tot_area_uv = 0.0f;
+      float tot_area_ratio = 0.0f;
+      float tot_area_ratio_inv = 0.0f;
+
       for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
         Object *ob_iter = objects[ob_index];
-        draw_uvs(sima, scene, ob_iter, depsgraph);
+        Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob_iter);
+        batches[ob_index].ob_eval = ob_eval;
+        uvedit_get_batches(ob_eval, sima, scene, &batches[ob_index], &tot_area, &tot_area_uv);
       }
+
+      if (tot_area > FLT_EPSILON && tot_area_uv > FLT_EPSILON) {
+        tot_area_ratio = tot_area / tot_area_uv;
+        tot_area_ratio_inv = tot_area_uv / tot_area;
+      }
+
+      /* go over all batches created in the previous loop and draw them */
+      for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
+        UVEditGPUBatches *batch = &batches[ob_index];
+        draw_uvs(sima, scene, depsgraph, batch, tot_area_ratio, tot_area_ratio_inv);
+      }
+      MEM_freeN(batches);
       MEM_freeN(objects);
     }
     else {
       draw_uvs_texpaint(scene, obact, depsgraph);
     }
-
-    if (show_uvedit && !(toolsettings->use_uv_sculpt))
-      ED_image_draw_cursor(ar, sima->cursor);
   }
 }

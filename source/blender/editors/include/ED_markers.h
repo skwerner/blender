@@ -24,12 +24,15 @@
 #ifndef __ED_MARKERS_H__
 #define __ED_MARKERS_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct Scene;
 struct TimeMarker;
 struct bAnimContext;
 struct bContext;
 struct wmKeyConfig;
-struct wmKeyMap;
 
 /* Drawing API ------------------------------ */
 
@@ -70,5 +73,9 @@ void ED_keymap_marker(struct wmKeyConfig *keyconf);
 
 /* debugging only */
 void debug_markers_print_list(struct ListBase *markers);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __ED_MARKERS_H__ */

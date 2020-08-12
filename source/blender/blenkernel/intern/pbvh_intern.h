@@ -105,6 +105,9 @@ struct PBVHNode {
   float (*bm_orco)[3];
   int (*bm_ortri)[3];
   int bm_tot_ortri;
+
+  /* Used to store the brush color during a stroke and composite it over the original color */
+  PBVHColorBufferNode color_buffer;
 };
 
 typedef enum {
@@ -127,11 +130,18 @@ struct PBVH {
   int leaf_limit;
 
   /* Mesh data */
+  const struct Mesh *mesh;
   MVert *verts;
   const MPoly *mpoly;
   const MLoop *mloop;
   const MLoopTri *looptri;
   CustomData *vdata;
+  CustomData *ldata;
+  CustomData *pdata;
+
+  int face_sets_color_seed;
+  int face_sets_color_default;
+  int *face_sets;
 
   /* Grid Data */
   CCGKey gridkey;
@@ -151,9 +161,9 @@ struct PBVH {
 
   /* flag are verts/faces deformed */
   bool deformed;
-
-  bool show_diffuse_color;
   bool show_mask;
+  bool show_face_sets;
+  bool respect_hide;
 
   /* Dynamic topology */
   BMesh *bm;
@@ -162,7 +172,11 @@ struct PBVH {
   int cd_vert_node_offset;
   int cd_face_node_offset;
 
+  float planes[6][4];
+  int num_planes;
+
   struct BMLog *bm_log;
+  struct SubdivCCG *subdiv_ccg;
 };
 
 /* pbvh.c */
@@ -173,14 +187,14 @@ void BBC_update_centroid(BBC *bbc);
 int BB_widest_axis(const BB *bb);
 void pbvh_grow_nodes(PBVH *bvh, int totnode);
 bool ray_face_intersection_quad(const float ray_start[3],
-                                const float ray_normal[3],
+                                struct IsectRayPrecalc *isect_precalc,
                                 const float *t0,
                                 const float *t1,
                                 const float *t2,
                                 const float *t3,
                                 float *depth);
 bool ray_face_intersection_tri(const float ray_start[3],
-                               const float ray_normal[3],
+                               struct IsectRayPrecalc *isect_precalc,
                                const float *t0,
                                const float *t1,
                                const float *t2,
@@ -208,8 +222,11 @@ void pbvh_update_BB_redraw(PBVH *bvh, PBVHNode **nodes, int totnode, int flag);
 bool pbvh_bmesh_node_raycast(PBVHNode *node,
                              const float ray_start[3],
                              const float ray_normal[3],
+                             struct IsectRayPrecalc *isect_precalc,
                              float *dist,
-                             bool use_original);
+                             bool use_original,
+                             int *r_active_vertex_index,
+                             float *r_face_normal);
 bool pbvh_bmesh_node_nearest_to_ray(PBVHNode *node,
                                     const float ray_start[3],
                                     const float ray_normal[3],

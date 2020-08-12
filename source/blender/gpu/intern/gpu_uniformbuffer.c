@@ -21,13 +21,13 @@
  * \ingroup gpu
  */
 
-#include <string.h>
 #include "MEM_guardedalloc.h"
+#include <string.h>
 
 #include "BLI_blenlib.h"
 
-#include "gpu_codegen.h"
 #include "gpu_context_private.h"
+#include "gpu_node_graph.h"
 
 #include "GPU_extensions.h"
 #include "GPU_glew.h"
@@ -65,7 +65,7 @@ static void gpu_uniformbuffer_inputs_sort(struct ListBase *inputs);
 
 /* Only support up to this type, if you want to extend it, make sure the
  * padding logic is correct for the new types. */
-#define MAX_UBO_GPU_TYPE GPU_VEC4
+#define MAX_UBO_GPU_TYPE GPU_MAT4
 
 static void gpu_uniformbuffer_initialize(GPUUniformBuffer *ubo, const void *data)
 {
@@ -76,6 +76,9 @@ static void gpu_uniformbuffer_initialize(GPUUniformBuffer *ubo, const void *data
 
 GPUUniformBuffer *GPU_uniformbuffer_create(int size, const void *data, char err_out[256])
 {
+  /* Make sure that UBO is padded to size of vec4 */
+  BLI_assert((size % 16) == 0);
+
   GPUUniformBuffer *ubo = MEM_callocN(sizeof(GPUUniformBufferStatic), "GPUUniformBufferStatic");
   ubo->size = size;
   ubo->bindpoint = -1;
@@ -144,17 +147,20 @@ GPUUniformBuffer *GPU_uniformbuffer_dynamic_create(ListBase *inputs, char err_ou
   /* Make sure we comply to the ubo alignment requirements. */
   gpu_uniformbuffer_inputs_sort(inputs);
 
-  for (LinkData *link = inputs->first; link; link = link->next) {
+  LISTBASE_FOREACH (LinkData *, link, inputs) {
     const eGPUType gputype = get_padded_gpu_type(link);
     ubo->buffer.size += gputype * sizeof(float);
   }
+
+  /* Round up to size of vec4 */
+  ubo->buffer.size = ((ubo->buffer.size + 15) / 16) * 16;
 
   /* Allocate the data. */
   ubo->data = MEM_mallocN(ubo->buffer.size, __func__);
 
   /* Now that we know the total ubo size we can start populating it. */
   float *offset = ubo->data;
-  for (LinkData *link = inputs->first; link; link = link->next) {
+  LISTBASE_FOREACH (LinkData *, link, inputs) {
     GPUInput *input = link->data;
     memcpy(offset, input->vec, input->type * sizeof(float));
     offset += get_padded_gpu_type(link);
@@ -243,7 +249,7 @@ static eGPUType get_padded_gpu_type(LinkData *link)
 }
 
 /**
- * Returns 1 if the first item shold be after second item.
+ * Returns 1 if the first item should be after second item.
  * We make sure the vec4 uniforms come first.
  */
 static int inputs_cmp(const void *a, const void *b)
@@ -255,19 +261,30 @@ static int inputs_cmp(const void *a, const void *b)
 
 /**
  * Make sure we respect the expected alignment of UBOs.
- * vec4, pad vec3 as vec4, then vec2, then floats.
+ * mat4, vec4, pad vec3 as vec4, then vec2, then floats.
  */
 static void gpu_uniformbuffer_inputs_sort(ListBase *inputs)
 {
-  /* Order them as vec4, vec3, vec2, float. */
+  /* Order them as mat4, vec4, vec3, vec2, float. */
   BLI_listbase_sort(inputs, inputs_cmp);
 
   /* Creates a lookup table for the different types; */
   LinkData *inputs_lookup[MAX_UBO_GPU_TYPE + 1] = {NULL};
   eGPUType cur_type = MAX_UBO_GPU_TYPE + 1;
 
-  for (LinkData *link = inputs->first; link; link = link->next) {
+  LISTBASE_FOREACH (LinkData *, link, inputs) {
     GPUInput *input = link->data;
+
+    if (input->type == GPU_MAT3) {
+      /* Alignment for mat3 is not handled currently, so not supported */
+      BLI_assert(!"mat3 not supported in UBO");
+      continue;
+    }
+    else if (input->type > MAX_UBO_GPU_TYPE) {
+      BLI_assert(!"GPU type not supported in UBO");
+      continue;
+    }
+
     if (input->type == cur_type) {
       continue;
     }

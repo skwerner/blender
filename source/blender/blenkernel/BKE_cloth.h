@@ -23,13 +23,17 @@
  * \ingroup bke
  */
 
-#include <float.h>
 #include "BLI_math_inline.h"
+#include <float.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct ClothModifierData;
 struct CollisionModifierData;
 struct Depsgraph;
-struct MFace;
+struct GHash;
 struct Mesh;
 struct Object;
 struct Scene;
@@ -45,8 +49,8 @@ struct Scene;
 
 /* Bits to or into the ClothVertex.flags. */
 typedef enum eClothVertexFlag {
-  CLOTH_VERT_FLAG_PINNED = 1,
-  CLOTH_VERT_FLAG_NOSELFCOLL = 2, /* vertex NOT used for self collisions */
+  CLOTH_VERT_FLAG_PINNED = (1 << 0),
+  CLOTH_VERT_FLAG_NOSELFCOLL = (1 << 1), /* vertex NOT used for self collisions */
 } eClothVertexFlag;
 
 typedef struct ClothHairData {
@@ -75,11 +79,11 @@ typedef struct ClothSolverResult {
  * own connectivity of the mesh based on the actual edges in the mesh.
  */
 typedef struct Cloth {
-  struct ClothVertex *verts; /* The vertices that represent this cloth. */
-  struct LinkNode *springs;  /* The springs connecting the mesh. */
-  unsigned int numsprings;   /* The count of springs. */
-  unsigned int mvert_num;    /* The number of verts == m * n. */
-  unsigned int tri_num;
+  struct ClothVertex *verts;     /* The vertices that represent this cloth. */
+  struct LinkNode *springs;      /* The springs connecting the mesh. */
+  unsigned int numsprings;       /* The count of springs. */
+  unsigned int mvert_num;        /* The number of verts == m * n. */
+  unsigned int primitive_num;    /* Number of triangles for cloth and edges for hair. */
   unsigned char old_solver_type; /* unused, only 1 solver here */
   unsigned char pad2;
   short pad3;
@@ -88,7 +92,11 @@ typedef struct Cloth {
   struct MVertTri *tri;
   struct Implicit_Data *implicit; /* our implicit solver connects to this pointer */
   struct EdgeSet *edgeset;        /* used for selfcollisions */
-  int last_frame, pad4;
+  int last_frame;
+  float initial_mesh_volume;      /* Initial volume of the mesh. Used for pressure */
+  float average_acceleration[3];  /* Moving average of overall acceleration. */
+  struct MEdge *edges;            /* Used for hair collisions. */
+  struct EdgeSet *sew_edge_graph; /* Sewing edges represented using a GHash */
 } Cloth;
 
 /**
@@ -113,8 +121,10 @@ typedef struct ClothVertex {
   float struct_stiff;
   float bend_stiff;
   float shear_stiff;
-  int spring_count;    /* how many springs attached? */
-  float shrink_factor; /* how much to shrink this cloth */
+  int spring_count;      /* how many springs attached? */
+  float shrink_factor;   /* how much to shrink this cloth */
+  float internal_stiff;  /* internal spring stiffness scaling */
+  float pressure_factor; /* how much pressure should affect this vertex */
 } ClothVertex;
 
 /**
@@ -187,16 +197,30 @@ typedef struct ClothSpring {
 /* SIMULATION FLAGS: goal flags,.. */
 /* These are the bits used in SimSettings.flags. */
 typedef enum {
-  CLOTH_SIMSETTINGS_FLAG_COLLOBJ =
-      (1 << 2),  // object is only collision object, no cloth simulation is done
-  CLOTH_SIMSETTINGS_FLAG_GOAL = (1 << 3),                    /* DEPRECATED, for versioning only. */
-  CLOTH_SIMSETTINGS_FLAG_TEARING = (1 << 4),                 // true if tearing is enabled
-  CLOTH_SIMSETTINGS_FLAG_SCALING = (1 << 8),                 /* DEPRECATED, for versioning only. */
-  CLOTH_SIMSETTINGS_FLAG_CCACHE_EDIT = (1 << 12),            /* edit cache in editmode */
-  CLOTH_SIMSETTINGS_FLAG_RESIST_SPRING_COMPRESS = (1 << 13), /* don't allow spring compression */
-  CLOTH_SIMSETTINGS_FLAG_SEW = (1 << 14), /* pull ends of loose edges together */
-  CLOTH_SIMSETTINGS_FLAG_DYNAMIC_BASEMESH =
-      (1 << 15), /* make simulation respect deformations in the base object */
+  /** Object is only collision object, no cloth simulation is done. */
+  CLOTH_SIMSETTINGS_FLAG_COLLOBJ = (1 << 2),
+  /** DEPRECATED, for versioning only. */
+  CLOTH_SIMSETTINGS_FLAG_GOAL = (1 << 3),
+  /** True if tearing is enabled. */
+  CLOTH_SIMSETTINGS_FLAG_TEARING = (1 << 4),
+  /** True if pressure sim is enabled. */
+  CLOTH_SIMSETTINGS_FLAG_PRESSURE = (1 << 5),
+  /** Use the user defined target volume. */
+  CLOTH_SIMSETTINGS_FLAG_PRESSURE_VOL = (1 << 6),
+  /** True if internal spring generation is enabled. */
+  CLOTH_SIMSETTINGS_FLAG_INTERNAL_SPRINGS = (1 << 7),
+  /** DEPRECATED, for versioning only. */
+  CLOTH_SIMSETTINGS_FLAG_SCALING = (1 << 8),
+  /** Require internal springs to be created between points with opposite normals. */
+  CLOTH_SIMSETTINGS_FLAG_INTERNAL_SPRINGS_NORMAL = (1 << 9),
+  /** Edit cache in edit-mode. */
+  /* CLOTH_SIMSETTINGS_FLAG_CCACHE_EDIT = (1 << 12), */ /* UNUSED */
+  /** Don't allow spring compression. */
+  CLOTH_SIMSETTINGS_FLAG_RESIST_SPRING_COMPRESS = (1 << 13),
+  /** Pull ends of loose edges together. */
+  CLOTH_SIMSETTINGS_FLAG_SEW = (1 << 14),
+  /** Make simulation respect deformations in the base object. */
+  CLOTH_SIMSETTINGS_FLAG_DYNAMIC_BASEMESH = (1 << 15),
 } CLOTH_SIMSETTINGS_FLAGS;
 
 /* ClothSimSettings.bending_model. */
@@ -219,6 +243,7 @@ typedef enum {
   CLOTH_SPRING_TYPE_GOAL = (1 << 4),
   CLOTH_SPRING_TYPE_SEWING = (1 << 5),
   CLOTH_SPRING_TYPE_BENDING_HAIR = (1 << 6),
+  CLOTH_SPRING_TYPE_INTERNAL = (1 << 7),
 } CLOTH_SPRING_TYPES;
 
 /* SPRING FLAGS */
@@ -247,15 +272,6 @@ int cloth_bvh_collision(struct Depsgraph *depsgraph,
                         struct ClothModifierData *clmd,
                         float step,
                         float dt);
-
-void cloth_find_point_contacts(struct Depsgraph *depsgraph,
-                               struct Object *ob,
-                               struct ClothModifierData *clmd,
-                               float step,
-                               float dt,
-                               ColliderContacts **r_collider_contacts,
-                               int *r_totcolliders);
-void cloth_free_contacts(ColliderContacts *collider_contacts, int totcolliders);
 
 ////////////////////////////////////////////////
 
@@ -287,5 +303,9 @@ void cloth_parallel_transport_hair_frame(float mat[3][3],
                                          const float dir_new[3]);
 
 ////////////////////////////////////////////////
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

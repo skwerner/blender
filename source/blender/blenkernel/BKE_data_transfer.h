@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2014 Blender Foundation.
@@ -24,11 +24,11 @@
 #ifndef __BKE_DATA_TRANSFER_H__
 #define __BKE_DATA_TRANSFER_H__
 
+#include "BKE_customdata.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "BKE_customdata.h"
 
 struct Depsgraph;
 struct Object;
@@ -119,7 +119,7 @@ enum {
   DT_LAYERS_NAME_DST = -2,
   DT_LAYERS_INDEX_DST = -3,
 #if 0 /* TODO */
-  DT_LAYERS_CREATE_DST                 = -4,  /* Never replace existing data in dst, always create new layers. */
+  DT_LAYERS_CREATE_DST = -4, /* Never replace existing data in dst, always create new layers. */
 #endif
 };
 

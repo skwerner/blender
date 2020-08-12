@@ -17,9 +17,9 @@
  */
 
 #include "COM_OutputFileNode.h"
-#include "COM_OutputFileOperation.h"
-#include "COM_OutputFileMultiViewOperation.h"
 #include "COM_ExecutionSystem.h"
+#include "COM_OutputFileMultiViewOperation.h"
+#include "COM_OutputFileOperation.h"
 
 #include "BKE_scene.h"
 
@@ -69,7 +69,7 @@ void OutputFileNode::convertToOperations(NodeConverter &converter,
 
     int num_inputs = getNumberOfInputSockets();
     bool previewAdded = false;
-    for (int i = 0; i < num_inputs; ++i) {
+    for (int i = 0; i < num_inputs; i++) {
       NodeInput *input = getInputSocket(i);
       NodeImageMultiFileSocket *sockdata =
           (NodeImageMultiFileSocket *)input->getbNodeSocket()->storage;
@@ -88,7 +88,7 @@ void OutputFileNode::convertToOperations(NodeConverter &converter,
   else { /* single layer format */
     int num_inputs = getNumberOfInputSockets();
     bool previewAdded = false;
-    for (int i = 0; i < num_inputs; ++i) {
+    for (int i = 0; i < num_inputs; i++) {
       NodeInput *input = getInputSocket(i);
       if (input->isLinked()) {
         NodeImageMultiFileSocket *sockdata =

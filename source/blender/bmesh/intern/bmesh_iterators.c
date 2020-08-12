@@ -24,8 +24,8 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_bitmap.h"
+#include "BLI_utildefines.h"
 
 #include "bmesh.h"
 #include "intern/bmesh_private.h"
@@ -206,10 +206,9 @@ void *BM_iter_as_arrayN(BMesh *bm,
     }
     return array;
   }
-  else {
-    *r_len = 0;
-    return NULL;
-  }
+
+  *r_len = 0;
+  return NULL;
 }
 
 void *BMO_iter_as_arrayN(BMOpSlot slot_args[BMO_OP_MAX_SLOTS],
@@ -244,10 +243,9 @@ void *BMO_iter_as_arrayN(BMOpSlot slot_args[BMO_OP_MAX_SLOTS],
     *r_len = i;
     return array;
   }
-  else {
-    *r_len = 0;
-    return NULL;
-  }
+
+  *r_len = 0;
+  return NULL;
 }
 
 int BM_iter_mesh_bitmap_from_filter(const char itype,

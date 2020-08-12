@@ -65,10 +65,12 @@ static int SVertex_init(BPy_SVertex *self, PyObject *args, PyObject *kwds)
   float v[3];
 
   if (PyArg_ParseTupleAndKeywords(args, kwds, "|O!", (char **)kwlist_1, &SVertex_Type, &obj)) {
-    if (!obj)
+    if (!obj) {
       self->sv = new SVertex();
-    else
+    }
+    else {
       self->sv = new SVertex(*(((BPy_SVertex *)obj)->sv));
+    }
   }
   else if (PyErr_Clear(),
            PyArg_ParseTupleAndKeywords(
@@ -100,8 +102,9 @@ static PyObject *SVertex_add_normal(BPy_SVertex *self, PyObject *args, PyObject 
   PyObject *py_normal;
   Vec3r n;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "O", (char **)kwlist, &py_normal))
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "O", (char **)kwlist, &py_normal)) {
     return NULL;
+  }
   if (!Vec3r_ptr_from_PyObject(py_normal, n)) {
     PyErr_SetString(PyExc_TypeError,
                     "argument 1 must be a 3D vector (either a list of 3 elements or Vector)");
@@ -124,8 +127,9 @@ static PyObject *SVertex_add_fedge(BPy_SVertex *self, PyObject *args, PyObject *
   static const char *kwlist[] = {"fedge", NULL};
   PyObject *py_fe;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "O!", (char **)kwlist, &FEdge_Type, &py_fe))
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "O!", (char **)kwlist, &FEdge_Type, &py_fe)) {
     return NULL;
+  }
   self->sv->AddFEdge(((BPy_FEdge *)py_fe)->fe);
   Py_RETURN_NONE;
 }
@@ -152,8 +156,9 @@ static PyMethodDef BPy_SVertex_methods[] = {
 
 static int SVertex_mathutils_check(BaseMathObject *bmo)
 {
-  if (!BPy_SVertex_Check(bmo->cb_user))
+  if (!BPy_SVertex_Check(bmo->cb_user)) {
     return -1;
+  }
   return 0;
 }
 
@@ -378,8 +383,9 @@ PyDoc_STRVAR(SVertex_viewvertex_doc,
 static PyObject *SVertex_viewvertex_get(BPy_SVertex *self, void *UNUSED(closure))
 {
   ViewVertex *vv = self->sv->viewvertex();
-  if (vv)
+  if (vv) {
     return Any_BPy_ViewVertex_from_ViewVertex(*vv);
+  }
   Py_RETURN_NONE;
 }
 
@@ -399,8 +405,9 @@ PyDoc_STRVAR(SVertex_curvatures_doc,
 static PyObject *SVertex_curvatures_get(BPy_SVertex *self, void *UNUSED(closure))
 {
   const CurvatureInfo *info = self->sv->getCurvatureInfo();
-  if (!info)
+  if (!info) {
     Py_RETURN_NONE;
+  }
   Vec3r e1(info->e1.x(), info->e1.y(), info->e1.z());
   Vec3r e2(info->e2.x(), info->e2.y(), info->e2.z());
   Vec3r er(info->er.x(), info->er.y(), info->er.z());
@@ -417,37 +424,25 @@ static PyObject *SVertex_curvatures_get(BPy_SVertex *self, void *UNUSED(closure)
 }
 
 static PyGetSetDef BPy_SVertex_getseters[] = {
-    {(char *)"point_3d",
+    {"point_3d",
      (getter)SVertex_point_3d_get,
      (setter)SVertex_point_3d_set,
-     (char *)SVertex_point_3d_doc,
+     SVertex_point_3d_doc,
      NULL},
-    {(char *)"point_2d",
+    {"point_2d",
      (getter)SVertex_point_2d_get,
      (setter)SVertex_point_2d_set,
-     (char *)SVertex_point_2d_doc,
+     SVertex_point_2d_doc,
      NULL},
-    {(char *)"id", (getter)SVertex_id_get, (setter)SVertex_id_set, (char *)SVertex_id_doc, NULL},
-    {(char *)"normals",
-     (getter)SVertex_normals_get,
-     (setter)NULL,
-     (char *)SVertex_normals_doc,
-     NULL},
-    {(char *)"normals_size",
+    {"id", (getter)SVertex_id_get, (setter)SVertex_id_set, SVertex_id_doc, NULL},
+    {"normals", (getter)SVertex_normals_get, (setter)NULL, SVertex_normals_doc, NULL},
+    {"normals_size",
      (getter)SVertex_normals_size_get,
      (setter)NULL,
-     (char *)SVertex_normals_size_doc,
+     SVertex_normals_size_doc,
      NULL},
-    {(char *)"viewvertex",
-     (getter)SVertex_viewvertex_get,
-     (setter)NULL,
-     (char *)SVertex_viewvertex_doc,
-     NULL},
-    {(char *)"curvatures",
-     (getter)SVertex_curvatures_get,
-     (setter)NULL,
-     (char *)SVertex_curvatures_doc,
-     NULL},
+    {"viewvertex", (getter)SVertex_viewvertex_get, (setter)NULL, SVertex_viewvertex_doc, NULL},
+    {"curvatures", (getter)SVertex_curvatures_get, (setter)NULL, SVertex_curvatures_doc, NULL},
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };
 

@@ -56,8 +56,8 @@ DenoisingTask::DenoisingTask(Device *device, const DeviceTask &task)
     tile_info->frames[i] = task.denoising_frames[i - 1];
   }
 
-  write_passes = task.denoising_write_passes;
-  do_filter = task.denoising_do_filter;
+  do_prefilter = task.denoising.store_passes && task.denoising.type == DENOISER_NLM;
+  do_filter = task.denoising.use && task.denoising.type == DENOISER_NLM;
 }
 
 DenoisingTask::~DenoisingTask()
@@ -71,29 +71,30 @@ DenoisingTask::~DenoisingTask()
   tile_info_mem.free();
 }
 
-void DenoisingTask::set_render_buffer(RenderTile *rtiles)
+void DenoisingTask::set_render_buffer(RenderTileNeighbors &neighbors)
 {
-  for (int i = 0; i < 9; i++) {
-    tile_info->offsets[i] = rtiles[i].offset;
-    tile_info->strides[i] = rtiles[i].stride;
-    tile_info->buffers[i] = rtiles[i].buffer;
+  for (int i = 0; i < RenderTileNeighbors::SIZE; i++) {
+    RenderTile &rtile = neighbors.tiles[i];
+    tile_info->offsets[i] = rtile.offset;
+    tile_info->strides[i] = rtile.stride;
+    tile_info->buffers[i] = rtile.buffer;
   }
-  tile_info->x[0] = rtiles[3].x;
-  tile_info->x[1] = rtiles[4].x;
-  tile_info->x[2] = rtiles[5].x;
-  tile_info->x[3] = rtiles[5].x + rtiles[5].w;
-  tile_info->y[0] = rtiles[1].y;
-  tile_info->y[1] = rtiles[4].y;
-  tile_info->y[2] = rtiles[7].y;
-  tile_info->y[3] = rtiles[7].y + rtiles[7].h;
+  tile_info->x[0] = neighbors.tiles[3].x;
+  tile_info->x[1] = neighbors.tiles[4].x;
+  tile_info->x[2] = neighbors.tiles[5].x;
+  tile_info->x[3] = neighbors.tiles[5].x + neighbors.tiles[5].w;
+  tile_info->y[0] = neighbors.tiles[1].y;
+  tile_info->y[1] = neighbors.tiles[4].y;
+  tile_info->y[2] = neighbors.tiles[7].y;
+  tile_info->y[3] = neighbors.tiles[7].y + neighbors.tiles[7].h;
 
-  target_buffer.offset = rtiles[9].offset;
-  target_buffer.stride = rtiles[9].stride;
-  target_buffer.ptr = rtiles[9].buffer;
+  target_buffer.offset = neighbors.target.offset;
+  target_buffer.stride = neighbors.target.stride;
+  target_buffer.ptr = neighbors.target.buffer;
 
-  if (write_passes && rtiles[9].buffers) {
+  if (do_prefilter && neighbors.target.buffers) {
     target_buffer.denoising_output_offset =
-        rtiles[9].buffers->params.get_denoising_prefiltered_offset();
+        neighbors.target.buffers->params.get_denoising_prefiltered_offset();
   }
   else {
     target_buffer.denoising_output_offset = 0;
@@ -104,13 +105,14 @@ void DenoisingTask::set_render_buffer(RenderTile *rtiles)
 
 void DenoisingTask::setup_denoising_buffer()
 {
-  /* Expand filter_area by radius pixels and clamp the result to the extent of the neighboring tiles */
+  /* Expand filter_area by radius pixels and clamp the result to the extent of the neighboring
+   * tiles */
   rect = rect_from_shape(filter_area.x, filter_area.y, filter_area.z, filter_area.w);
   rect = rect_expand(rect, radius);
   rect = rect_clip(rect,
                    make_int4(tile_info->x[0], tile_info->y[0], tile_info->x[3], tile_info->y[3]));
 
-  buffer.use_intensity = write_passes || (tile_info->num_frames > 1);
+  buffer.use_intensity = do_prefilter || (tile_info->num_frames > 1);
   buffer.passes = buffer.use_intensity ? 15 : 14;
   buffer.width = rect.z - rect.x;
   buffer.stride = align_up(buffer.width, 4);
@@ -149,16 +151,19 @@ void DenoisingTask::prefilter_shadowing()
   device_sub_ptr buffer_var(buffer.mem, 5 * buffer.pass_stride, buffer.pass_stride);
   device_sub_ptr filtered_var(buffer.mem, 6 * buffer.pass_stride, buffer.pass_stride);
 
-  /* Get the A/B unfiltered passes, the combined sample variance, the estimated variance of the sample variance and the buffer variance. */
+  /* Get the A/B unfiltered passes, the combined sample variance, the estimated variance of the
+   * sample variance and the buffer variance. */
   functions.divide_shadow(*unfiltered_a, *unfiltered_b, *sample_var, *sample_var_var, *buffer_var);
 
-  /* Smooth the (generally pretty noisy) buffer variance using the spatial information from the sample variance. */
+  /* Smooth the (generally pretty noisy) buffer variance using the spatial information from the
+   * sample variance. */
   nlm_state.set_parameters(6, 3, 4.0f, 1.0f, false);
   functions.non_local_means(*buffer_var, *sample_var, *sample_var_var, *filtered_var);
 
   /* Reuse memory, the previous data isn't needed anymore. */
   device_ptr filtered_a = *buffer_var, filtered_b = *sample_var;
-  /* Use the smoothed variance to filter the two shadow half images using each other for weight calculation. */
+  /* Use the smoothed variance to filter the two shadow half images using each other for weight
+   * calculation. */
   nlm_state.set_parameters(5, 3, 1.0f, 0.25f, false);
   functions.non_local_means(*unfiltered_a, *unfiltered_b, *filtered_var, filtered_a);
   functions.non_local_means(*unfiltered_b, *unfiltered_a, *filtered_var, filtered_b);
@@ -210,12 +215,12 @@ void DenoisingTask::prefilter_color()
   int num_color_passes = 3;
 
   device_only_memory<float> temporary_color(device, "denoising temporary color");
-  temporary_color.alloc_to_device(3 * buffer.pass_stride, false);
+  temporary_color.alloc_to_device(6 * buffer.pass_stride, false);
 
   for (int pass = 0; pass < num_color_passes; pass++) {
     device_sub_ptr color_pass(temporary_color, pass * buffer.pass_stride, buffer.pass_stride);
     device_sub_ptr color_var_pass(
-        buffer.mem, variance_to[pass] * buffer.pass_stride, buffer.pass_stride);
+        temporary_color, (pass + 3) * buffer.pass_stride, buffer.pass_stride);
     functions.get_feature(mean_from[pass],
                           variance_from[pass],
                           *color_pass,
@@ -316,12 +321,11 @@ void DenoisingTask::reconstruct()
   functions.solve(target_buffer.ptr);
 }
 
-void DenoisingTask::run_denoising(RenderTile *tile)
+void DenoisingTask::run_denoising(RenderTile &tile)
 {
-  RenderTile rtiles[10];
-  rtiles[4] = *tile;
-  functions.map_neighbor_tiles(rtiles);
-  set_render_buffer(rtiles);
+  RenderTileNeighbors neighbors(tile);
+  functions.map_neighbor_tiles(neighbors);
+  set_render_buffer(neighbors);
 
   setup_denoising_buffer();
 
@@ -339,11 +343,11 @@ void DenoisingTask::run_denoising(RenderTile *tile)
     reconstruct();
   }
 
-  if (write_passes) {
+  if (do_prefilter) {
     write_buffer();
   }
 
-  functions.unmap_neighbor_tiles(rtiles);
+  functions.unmap_neighbor_tiles(neighbors);
 }
 
 CCL_NAMESPACE_END

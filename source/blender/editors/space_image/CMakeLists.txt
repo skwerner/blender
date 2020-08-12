@@ -23,14 +23,15 @@ set(INC
   ../../blentranslation
   ../../bmesh
   ../../depsgraph
-  ../../imbuf
   ../../gpu
+  ../../imbuf
   ../../makesdna
   ../../makesrna
   ../../render/extern/include
   ../../windowmanager
-  ../../../../intern/guardedalloc
+  ../../../../intern/clog
   ../../../../intern/glew-mx
+  ../../../../intern/guardedalloc
 )
 
 set(INC_SYS
@@ -42,6 +43,8 @@ set(SRC
   image_draw.c
   image_edit.c
   image_ops.c
+  image_sequence.c
+  image_undo.c
   space_image.c
 
   image_intern.h

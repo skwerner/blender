@@ -31,6 +31,8 @@
 
 #include "interface_intern.h"
 
+#include "MEM_guardedalloc.h"
+
 #ifdef USE_UIBUT_SPATIAL_ALIGN
 
 /**
@@ -122,27 +124,12 @@ bool ui_but_can_align(const uiBut *but)
           (BLI_rctf_size_y(&but->rect) > 0.0f));
 }
 
-int ui_but_align_opposite_to_area_align_get(const ARegion *ar)
-{
-  switch (ar->alignment) {
-    case RGN_ALIGN_TOP:
-      return UI_BUT_ALIGN_DOWN;
-    case RGN_ALIGN_BOTTOM:
-      return UI_BUT_ALIGN_TOP;
-    case RGN_ALIGN_LEFT:
-      return UI_BUT_ALIGN_RIGHT;
-    case RGN_ALIGN_RIGHT:
-      return UI_BUT_ALIGN_LEFT;
-  }
-
-  return 0;
-}
-
 /**
- * This function checks a pair of buttons (assumed in a same align group), and if they are neighbors,
- * set needed data accordingly.
+ * This function checks a pair of buttons (assumed in a same align group),
+ * and if they are neighbors, set needed data accordingly.
  *
- * \note It is designed to be called in total random order of buttons. Order-based optimizations are done by caller.
+ * \note It is designed to be called in total random order of buttons.
+ * Order-based optimizations are done by caller.
  */
 static void block_align_proximity_compute(ButAlign *butal, ButAlign *butal_other)
 {
@@ -250,7 +237,7 @@ static void block_align_proximity_compute(ButAlign *butal, ButAlign *butal_other
           }
         }
         /* We assume two buttons can only share one side at most - for until
-         * we have sperical UI... */
+         * we have spherical UI. */
         return;
       }
     }
@@ -268,13 +255,15 @@ static void block_align_proximity_compute(ButAlign *butal, ButAlign *butal_other
  * +-----------+
  * </pre>
  *
- * Here, BUT 3 RIGHT side would not get 'dragged' to align with BUT 1 RIGHT side, since BUT 3 has not RIGHT neighbor.
- * So, this function, when called with BUT 1, will 'walk' the whole column in \a side_s1 direction (TOP or DOWN when
- * called for RIGHT side), and force buttons like BUT 3 to align as needed, if BUT 1 and BUT 3 were detected as needing
- * top-right corner stitching in #block_align_proximity_compute() step.
+ * Here, BUT 3 RIGHT side would not get 'dragged' to align with BUT 1 RIGHT side,
+ * since BUT 3 has not RIGHT neighbor.
+ * So, this function, when called with BUT 1, will 'walk' the whole column in \a side_s1 direction
+ * (TOP or DOWN when called for RIGHT side), and force buttons like BUT 3 to align as needed,
+ * if BUT 1 and BUT 3 were detected as needing top-right corner stitching in
+ * #block_align_proximity_compute() step.
  *
- * \note To avoid doing this twice, some stitching flags are cleared to break the 'stitching connection'
- *       between neighbors.
+ * \note To avoid doing this twice, some stitching flags are cleared to break the
+ * 'stitching connection' between neighbors.
  */
 static void block_align_stitch_neighbors(ButAlign *butal,
                                          const int side,
@@ -290,16 +279,17 @@ static void block_align_stitch_neighbors(ButAlign *butal,
   const int stitch_s1 = STITCH(side_s1);
   const int stitch_s2 = STITCH(side_s2);
 
-  /* We have to check stitching flags on both sides of the stitching, since we only clear one of them flags to break
-   * any future loop on same 'columns/side' case.
-   * Also, if butal is spanning over several rows or columns of neighbors, it may have both of its stitching flags
+  /* We have to check stitching flags on both sides of the stitching,
+   * since we only clear one of them flags to break any future loop on same 'columns/side' case.
+   * Also, if butal is spanning over several rows or columns of neighbors,
+   * it may have both of its stitching flags
    * set, but would not be the case of its immediate neighbor! */
   while ((butal->flags[side] & stitch_s1) && (butal = butal->neighbors[side_s1]) &&
          (butal->flags[side] & stitch_s2)) {
     butal_neighbor = butal->neighbors[side];
 
-    /* If we actually do have a neighbor, we directly set its values accordingly, and clear its matching 'dist'
-     * to prevent it being set again later... */
+    /* If we actually do have a neighbor, we directly set its values accordingly,
+     * and clear its matching 'dist' to prevent it being set again later... */
     if (butal_neighbor) {
       butal->but->drawflag |= align;
       butal_neighbor->but->drawflag |= align_opp;
@@ -389,7 +379,8 @@ static void ui_block_align_but_to_region(uiBut *but, const ARegion *region)
 /**
  * Compute the alignment of all 'align groups' of buttons in given block.
  *
- * This is using an order-independent algorithm, i.e. alignment of buttons should be OK regardless of order in which
+ * This is using an order-independent algorithm,
+ * i.e. alignment of buttons should be OK regardless of order in which
  * they are added to the block.
  */
 void ui_block_align_calc(uiBlock *block, const ARegion *region)
@@ -404,7 +395,8 @@ void ui_block_align_calc(uiBlock *block, const ARegion *region)
   int side;
   int i, j;
 
-  /* First loop: we count number of buttons belonging to an align group, and clear their align flag.
+  /* First loop: we count number of buttons belonging to an align group,
+   * and clear their align flag.
    * Tabs get some special treatment here, they get aligned to region border. */
   for (but = block->buttons.first; but; but = but->next) {
     /* special case: tabs need to be aligned to a region border, drawflag tells which one */
@@ -426,7 +418,16 @@ void ui_block_align_calc(uiBlock *block, const ARegion *region)
     return;
   }
 
-  butal_array = alloca(sizeof(*butal_array) * (size_t)num_buttons);
+  /* Note that this is typically less than ~20, and almost always under ~100.
+   * Even so, we can't ensure this value won't exceed available stack memory.
+   * Fallback to allocation instead of using #alloca, see: T78636. */
+  ButAlign butal_array_buf[256];
+  if (num_buttons <= ARRAY_SIZE(butal_array_buf)) {
+    butal_array = butal_array_buf;
+  }
+  else {
+    butal_array = MEM_mallocN(sizeof(*butal_array) * num_buttons, __func__);
+  }
   memset(butal_array, 0, sizeof(*butal_array) * (size_t)num_buttons);
 
   /* Second loop: we initialize our ButAlign data for each button. */
@@ -496,7 +497,7 @@ void ui_block_align_calc(uiBlock *block, const ARegion *region)
 
         butal->but->drawflag |= align;
         butal_other->but->drawflag |= align_opp;
-        if (butal->dists[side]) {
+        if (!IS_EQF(butal->dists[side], 0.0f)) {
           float *delta = &butal->dists[side];
 
           if (*butal->borders[side] < *butal_other->borders[side_opp]) {
@@ -507,7 +508,7 @@ void ui_block_align_calc(uiBlock *block, const ARegion *region)
           }
           co = (*butal->borders[side] += *delta);
 
-          if (butal_other->dists[side_opp]) {
+          if (!IS_EQF(butal_other->dists[side_opp], 0.0f)) {
             BLI_assert(butal_other->dists[side_opp] * 0.5f == fabsf(*delta));
             *butal_other->borders[side_opp] = co;
             butal_other->dists[side_opp] = 0.0f;
@@ -525,6 +526,9 @@ void ui_block_align_calc(uiBlock *block, const ARegion *region)
       }
     }
   }
+  if (butal_array_buf != butal_array) {
+    MEM_freeN(butal_array);
+  }
 }
 
 #  undef SIDE_TO_UI_BUT_ALIGN
@@ -535,9 +539,9 @@ void ui_block_align_calc(uiBlock *block, const ARegion *region)
 #  undef STITCH
 #  undef MAX_DELTA
 
-#else
+#else /* !USE_UIBUT_SPATIAL_ALIGN */
 
-bool ui_but_can_align(uiBut *but)
+bool ui_but_can_align(const uiBut *but)
 {
   return !ELEM(but->type,
                UI_BTYPE_LABEL,
@@ -720,7 +724,7 @@ static void ui_block_align_calc_but(uiBut *first, short nr)
   }
 }
 
-void ui_block_align_calc(uiBlock *block)
+void ui_block_align_calc(uiBlock *block, const struct ARegion *UNUSED(region))
 {
   uiBut *but;
   short nr;
@@ -745,4 +749,25 @@ void ui_block_align_calc(uiBlock *block)
     }
   }
 }
-#endif
+
+#endif /* !USE_UIBUT_SPATIAL_ALIGN */
+
+int ui_but_align_opposite_to_area_align_get(const ARegion *region)
+{
+  const ARegion *align_region = (region->alignment & RGN_SPLIT_PREV && region->prev) ?
+                                    region->prev :
+                                    region;
+
+  switch (RGN_ALIGN_ENUM_FROM_MASK(align_region->alignment)) {
+    case RGN_ALIGN_TOP:
+      return UI_BUT_ALIGN_DOWN;
+    case RGN_ALIGN_BOTTOM:
+      return UI_BUT_ALIGN_TOP;
+    case RGN_ALIGN_LEFT:
+      return UI_BUT_ALIGN_RIGHT;
+    case RGN_ALIGN_RIGHT:
+      return UI_BUT_ALIGN_LEFT;
+  }
+
+  return 0;
+}

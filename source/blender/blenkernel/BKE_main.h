@@ -22,13 +22,20 @@
 /** \file
  * \ingroup bke
  * \section aboutmain Main struct
- * Main is the root of the 'database' of a Blender context. All data
- * is stuffed into lists, and all these lists are knotted to here. A
- * Blender file is not much more but a binary dump of these
- * lists. This list of lists is not serialized itself.
+ * Main is the root of the 'data-base' of a Blender context. All data is put into lists, and all
+ * these lists are stored here.
  *
- * Oops... this should be a _types.h file.
+ * \note A Blender file is not much more than a binary dump of these lists. This list of lists is
+ * not serialized itself.
+ *
+ * \note `BKE_main` files are for operations over the Main database itself, or generating extra
+ * temp data to help working with it. Those should typically not affect the data-blocks themselves.
+ *
+ * \section Function Names
+ *
+ * - `BKE_main_` should be used for functions in that file.
  */
+
 #include "DNA_listBase.h"
 
 #include "BLI_compiler_attrs.h"
@@ -40,7 +47,6 @@ extern "C" {
 
 struct BLI_mempool;
 struct BlendThumbnail;
-struct Depsgraph;
 struct GHash;
 struct GSet;
 struct ImBuf;
@@ -57,29 +63,53 @@ typedef struct BlendThumbnail {
 /* Structs caching relations between data-blocks in a given Main. */
 typedef struct MainIDRelationsEntry {
   struct MainIDRelationsEntry *next;
-  /* WARNING! for user_to_used, that pointer is really an ID** one, but for used_to_user, it’s only an ID* one! */
+  /* WARNING! for user_to_used,
+   * that pointer is really an ID** one, but for used_to_user, it’s only an ID* one! */
   struct ID **id_pointer;
-  int usage_flag; /* Using IDWALK_ enums, in BKE_library_query.h */
+  int usage_flag; /* Using IDWALK_ enums, in BKE_lib_query.h */
 } MainIDRelationsEntry;
 
 typedef struct MainIDRelations {
   struct GHash *id_user_to_used;
   struct GHash *id_used_to_user;
 
+  short flag;
+
   /* Private... */
   struct BLI_mempool *entry_pool;
 } MainIDRelations;
 
+enum {
+  /* Those bmain relations include pointers/usages from editors. */
+  MAINIDRELATIONS_INCLUDE_UI = 1 << 0,
+};
+
 typedef struct Main {
   struct Main *next, *prev;
   char name[1024];                   /* 1024 = FILE_MAX */
-  short versionfile, subversionfile; /* see BLENDER_VERSION, BLENDER_SUBVERSION */
+  short versionfile, subversionfile; /* see BLENDER_FILE_VERSION, BLENDER_FILE_SUBVERSION */
   short minversionfile, minsubversionfile;
   uint64_t build_commit_timestamp; /* commit's timestamp from buildinfo */
   char build_hash[16];             /* hash from buildinfo */
   char recovered;                  /* indicate the main->name (file) is the recovered one */
   /** All current ID's exist in the last memfile undo step. */
   char is_memfile_undo_written;
+  /**
+   * An ID needs it's data to be flushed back.
+   * use "needs_flush_to_id" in edit data to flag data which needs updating.
+   */
+  char is_memfile_undo_flush_needed;
+  /**
+   * Indicates that next memfile undo step should not allow to re-use old bmain when re-read, but
+   * instead do a complete full re-read/update from stored memfile.
+   */
+  char use_memfile_full_barrier;
+
+  /**
+   * When linking, disallow creation of new data-blocks.
+   * Make sure we don't do this by accident, see T76738.
+   */
+  char is_locked_for_linking;
 
   BlendThumbnail *blen_thumb;
 
@@ -120,10 +150,16 @@ typedef struct Main {
   ListBase linestyles;
   ListBase cachefiles;
   ListBase workspaces;
+  ListBase hairs;
+  ListBase pointclouds;
+  ListBase volumes;
+  ListBase simulations;
 
-  /* Must be generated, used and freed by same code - never assume this is valid data unless you know
-   * when, who and how it was created.
-   * Used by code doing a lot of remapping etc. at once to speed things up. */
+  /**
+   * Must be generated, used and freed by same code - never assume this is valid data unless you
+   * know when, who and how it was created.
+   * Used by code doing a lot of remapping etc. at once to speed things up.
+   */
   struct MainIDRelations *relations;
 
   struct MainLock *lock;
@@ -135,8 +171,9 @@ void BKE_main_free(struct Main *mainvar);
 void BKE_main_lock(struct Main *bmain);
 void BKE_main_unlock(struct Main *bmain);
 
-void BKE_main_relations_create(struct Main *bmain);
+void BKE_main_relations_create(struct Main *bmain, const short flag);
 void BKE_main_relations_free(struct Main *bmain);
+void BKE_main_relations_ID_remove(struct Main *bmain, struct ID *id);
 
 struct GSet *BKE_main_gset_create(struct Main *bmain, struct GSet *gset);
 
@@ -144,9 +181,9 @@ struct GSet *BKE_main_gset_create(struct Main *bmain, struct GSet *gset);
 
 #define FOREACH_MAIN_LISTBASE_ID_BEGIN(_lb, _id) \
   { \
-    ID *_id_next = _lb->first; \
-    for (_id = _id_next; _id != NULL; _id = _id_next) { \
-      _id_next = _id->next;
+    ID *_id_next = (_lb)->first; \
+    for ((_id) = _id_next; (_id) != NULL; (_id) = _id_next) { \
+      _id_next = (_id)->next;
 
 #define FOREACH_MAIN_LISTBASE_ID_END \
   } \
@@ -156,23 +193,24 @@ struct GSet *BKE_main_gset_create(struct Main *bmain, struct GSet *gset);
 #define FOREACH_MAIN_LISTBASE_BEGIN(_bmain, _lb) \
   { \
     ListBase *_lbarray[MAX_LIBARRAY]; \
-    int _i = set_listbasepointers(_bmain, _lbarray); \
+    int _i = set_listbasepointers((_bmain), _lbarray); \
     while (_i--) { \
-      _lb = _lbarray[_i];
+      (_lb) = _lbarray[_i];
 
 #define FOREACH_MAIN_LISTBASE_END \
   } \
   } \
   ((void)0)
 
-/* DO NOT use break statement with that macro, use FOREACH_MAIN_LISTBASE and FOREACH_MAIN_LISTBASE_ID instead
+/**
+ * DO NOT use break statement with that macro,
+ * use #FOREACH_MAIN_LISTBASE and #FOREACH_MAIN_LISTBASE_ID instead
  * if you need that kind of control flow. */
 #define FOREACH_MAIN_ID_BEGIN(_bmain, _id) \
   { \
     ListBase *_lb; \
-    FOREACH_MAIN_LISTBASE_BEGIN(_bmain, _lb) \
-    { \
-      FOREACH_MAIN_LISTBASE_ID_BEGIN(_lb, _id)
+    FOREACH_MAIN_LISTBASE_BEGIN ((_bmain), _lb) { \
+      FOREACH_MAIN_LISTBASE_ID_BEGIN (_lb, (_id))
 
 #define FOREACH_MAIN_ID_END \
   FOREACH_MAIN_LISTBASE_ID_END; \
@@ -190,16 +228,16 @@ const char *BKE_main_blendfile_path_from_global(void);
 
 struct ListBase *which_libbase(struct Main *mainlib, short type);
 
-#define MAX_LIBARRAY 37
+#define MAX_LIBARRAY 41
 int set_listbasepointers(struct Main *main, struct ListBase *lb[MAX_LIBARRAY]);
 
 #define MAIN_VERSION_ATLEAST(main, ver, subver) \
   ((main)->versionfile > (ver) || \
-   (main->versionfile == (ver) && (main)->subversionfile >= (subver)))
+   ((main)->versionfile == (ver) && (main)->subversionfile >= (subver)))
 
 #define MAIN_VERSION_OLDER(main, ver, subver) \
   ((main)->versionfile < (ver) || \
-   (main->versionfile == (ver) && (main)->subversionfile < (subver)))
+   ((main)->versionfile == (ver) && (main)->subversionfile < (subver)))
 
 #define BLEN_THUMB_SIZE 128
 

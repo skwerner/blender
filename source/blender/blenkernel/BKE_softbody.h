@@ -23,6 +23,10 @@
  * \ingroup bke
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct Depsgraph;
 struct Object;
 struct Scene;
@@ -37,8 +41,8 @@ typedef struct BodyPoint {
   int *springs;
   float choke, choke2, frozen;
   float colball;
-  short loc_flag;  //reserved by locale module specific states
-  //char octantflag;
+  short loc_flag;  // reserved by locale module specific states
+  // char octantflag;
   float mass;
   float springweight;
 } BodyPoint;
@@ -68,5 +72,9 @@ extern void sbObjectToSoftbody(struct Object *ob);
 extern void sbSetInterruptCallBack(int (*f)(void));
 
 extern void SB_estimate_transform(Object *ob, float lloc[3], float lrot[3][3], float lscale[3][3]);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

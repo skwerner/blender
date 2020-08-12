@@ -28,17 +28,18 @@
 #include "DNA_screen_types.h"
 #include "DNA_space_types.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_math.h"
+#include "BLI_utildefines.h"
 
-#include "BKE_context.h"
 #include "BKE_constraint.h"
-#include "BKE_tracking.h"
+#include "BKE_context.h"
 #include "BKE_layer.h"
 #include "BKE_object.h"
 #include "BKE_report.h"
+#include "BKE_tracking.h"
 
 #include "DEG_depsgraph.h"
+#include "DEG_depsgraph_query.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -109,9 +110,7 @@ static bool set_orientation_poll(bContext *C)
       if (tracking_object->flag & TRACKING_OBJECT_CAMERA) {
         return true;
       }
-      else {
-        return OBACT(view_layer) != NULL;
-      }
+      return OBACT(view_layer) != NULL;
     }
   }
   return false;
@@ -209,7 +208,7 @@ static int set_origin_exec(bContext *C, wmOperator *op)
   mul_v3_fl(median, 1.0f / selected_count);
 
   float mat[4][4], vec[3];
-  BKE_tracking_get_camera_object_matrix(scene, camera, mat);
+  BKE_tracking_get_camera_object_matrix(camera, mat);
   mul_v3_m4v3(vec, mat, median);
 
   if (tracking_object->flag & TRACKING_OBJECT_CAMERA) {
@@ -266,7 +265,7 @@ static void set_axis(Scene *scene,
 
   BKE_object_to_mat4(ob, obmat);
 
-  BKE_tracking_get_camera_object_matrix(scene, camera, mat);
+  BKE_tracking_get_camera_object_matrix(camera, mat);
   mul_v3_m4v3(vec, mat, track->bundle_pos);
   copy_v3_v3(dvec, vec);
 
@@ -395,14 +394,15 @@ static int set_plane_exec(bContext *C, wmOperator *op)
   ListBase *tracksbase;
   Object *object;
   Object *camera = get_camera_with_movieclip(scene, clip);
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
   int tot = 0;
   float vec[3][3], mat[4][4], obmat[4][4], newmat[4][4], orig[3] = {0.0f, 0.0f, 0.0f};
   int plane = RNA_enum_get(op->ptr, "plane");
-  float rot[4][4] = {{0.0f, 0.0f, -1.0f, 0.0f},
-                     {0.0f, 1.0f, 0.0f, 0.0f},
-                     {1.0f, 0.0f, 0.0f, 0.0f},
-                     {0.0f, 0.0f, 0.0f, 1.0f}}; /* 90 degrees Y-axis rotation matrix */
+  float rot[4][4] = {
+      {0.0f, 0.0f, -1.0f, 0.0f},
+      {0.0f, 1.0f, 0.0f, 0.0f},
+      {1.0f, 0.0f, 0.0f, 0.0f},
+      {0.0f, 0.0f, 0.0f, 1.0f},
+  }; /* 90 degrees Y-axis rotation matrix */
 
   if (count_selected_bundles(C) != 3) {
     BKE_report(op->reports, RPT_ERROR, "Three tracks with bundles are needed to orient the floor");
@@ -420,7 +420,7 @@ static int set_plane_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
-  BKE_tracking_get_camera_object_matrix(scene, camera, mat);
+  BKE_tracking_get_camera_object_matrix(camera, mat);
 
   /* Get 3 bundles to use as reference. */
   track = tracksbase->first;
@@ -482,7 +482,13 @@ static int set_plane_exec(bContext *C, wmOperator *op)
     BKE_object_apply_mat4(object, mat, 0, 0);
   }
 
-  BKE_object_where_is_calc(depsgraph, scene, object);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
+  Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
+  Object *object_eval = DEG_get_evaluated_object(depsgraph, object);
+  BKE_object_transform_copy(object_eval, object);
+  BKE_object_where_is_calc(depsgraph, scene_eval, object_eval);
+  BKE_object_transform_copy(object, object_eval);
+
   set_axis(scene, object, clip, tracking_object, axis_track, 'X');
 
   DEG_id_tag_update(&clip->id, 0);
@@ -621,7 +627,7 @@ static int do_set_scale(bContext *C, wmOperator *op, bool scale_solution, bool a
     }
   }
 
-  BKE_tracking_get_camera_object_matrix(scene, camera, mat);
+  BKE_tracking_get_camera_object_matrix(camera, mat);
 
   track = tracksbase->first;
   while (track) {
@@ -677,8 +683,9 @@ static int do_set_scale(bContext *C, wmOperator *op, bool scale_solution, bool a
 
       DEG_id_tag_update(&clip->id, 0);
 
-      if (object)
+      if (object) {
         DEG_id_tag_update(&object->id, ID_RECALC_TRANSFORM);
+      }
 
       WM_event_add_notifier(C, NC_MOVIECLIP | NA_EVALUATED, clip);
       WM_event_add_notifier(C, NC_OBJECT | ND_TRANSFORM, NULL);
@@ -698,8 +705,9 @@ static int set_scale_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(e
   SpaceClip *sc = CTX_wm_space_clip(C);
   MovieClip *clip = ED_space_clip_get_clip(sc);
 
-  if (!RNA_struct_property_is_set(op->ptr, "distance"))
+  if (!RNA_struct_property_is_set(op->ptr, "distance")) {
     RNA_float_set(op->ptr, "distance", clip->tracking.settings.dist);
+  }
 
   return set_scale_exec(C, op);
 }

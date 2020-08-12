@@ -22,16 +22,16 @@
  * and only included for the cases where the performance is acceptable.
  * Use with care.
  */
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
 #include "BLI_array_utils.h"
 
+#include "BLI_alloca.h"
 #include "BLI_sys_types.h"
 #include "BLI_utildefines.h"
-#include "BLI_alloca.h"
 
 #include "BLI_strict_flags.h"
 
@@ -185,7 +185,8 @@ void _bli_array_binary_or(
  * \param use_wrap: Detect contiguous ranges across the first/last points.
  * In this case the second index of \a span_step may be lower than the first,
  * which indicates the values are wrapped.
- * \param use_delimit_bounds: When false, ranges that defined by the start/end indices are excluded.
+ * \param use_delimit_bounds: When false,
+ * ranges that defined by the start/end indices are excluded.
  * This option has no effect when \a use_wrap is enabled.
  * \param test_fn: Function to test if the item should be included in the range.
  * \param user_data: User data for \a test_fn.

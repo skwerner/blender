@@ -37,10 +37,8 @@ class GHOST_Context : public GHOST_IContext {
   /**
    * Constructor.
    * \param stereoVisual      Stereo visual for quad buffered stereo.
-   * \param numOfAASamples    Number of samples used for AA (zero if no AA)
    */
-  GHOST_Context(bool stereoVisual, GHOST_TUns16 numOfAASamples)
-      : m_stereoVisual(stereoVisual), m_numOfAASamples(numOfAASamples)
+  GHOST_Context(bool stereoVisual) : m_stereoVisual(stereoVisual)
   {
   }
 
@@ -121,18 +119,27 @@ class GHOST_Context : public GHOST_IContext {
     return m_stereoVisual;
   }
 
-  /** Number of samples used in anti-aliasing, set to 0 if no AA */
-  inline GHOST_TUns16 getNumOfAASamples() const
+  /**
+   * Returns if the context is rendered upside down compared to OpenGL.
+   */
+  virtual inline bool isUpsideDown() const
   {
-    return m_numOfAASamples;
+    return false;
+  }
+
+  /**
+   * Gets the OpenGL framebuffer associated with the OpenGL context
+   * \return The ID of an OpenGL framebuffer object.
+   */
+  virtual unsigned int getDefaultFramebuffer()
+  {
+    return 0;
   }
 
  protected:
   void initContextGLEW();
 
   bool m_stereoVisual;
-
-  GHOST_TUns16 m_numOfAASamples;
 
   static void initClearGL();
 

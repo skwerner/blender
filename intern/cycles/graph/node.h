@@ -33,7 +33,7 @@ struct Transform;
 
 struct Node {
   explicit Node(const NodeType *type, ustring name = ustring());
-  virtual ~Node();
+  virtual ~Node() = 0;
 
   /* set values */
   void set(const SocketType &input, bool value);
@@ -93,6 +93,9 @@ struct Node {
 
   /* Get total size of this node. */
   size_t get_total_size_in_bytes() const;
+
+  /* Type testing, taking into account base classes. */
+  bool is_a(const NodeType *type);
 
   ustring name;
   const NodeType *type;

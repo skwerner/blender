@@ -27,6 +27,9 @@
  * \ingroup bli
  */
 
+#include "BLI_utildefines.h"
+#include "DNA_vec_types.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -93,6 +96,8 @@ void vec_to_quat(float q[4], const float vec[3], short axis, const short upflag)
 void rotation_between_vecs_to_mat3(float m[3][3], const float v1[3], const float v2[3]);
 void rotation_between_vecs_to_quat(float q[4], const float v1[3], const float v2[3]);
 void rotation_between_quats_to_quat(float q[4], const float q1[4], const float q2[4]);
+
+float quat_split_swing_and_twist(const float q[4], int axis, float r_swing[4], float r_twist[4]);
 
 float angle_normalized_qt(const float q[4]);
 float angle_normalized_qtqt(const float q1[4], const float q2[4]);
@@ -214,14 +219,6 @@ void quat_to_compatible_eulO(float eul[3],
 void rotate_eulO(float eul[3], const short order, char axis, float angle);
 
 /******************************* Dual Quaternions ****************************/
-
-typedef struct DualQuat {
-  float quat[4];
-  float trans[4];
-
-  float scale[4][4];
-  float scale_weight;
-} DualQuat;
 
 void copy_dq_dq(DualQuat *r, const DualQuat *dq);
 void normalize_dq(DualQuat *dq, float totw);

@@ -15,7 +15,7 @@
  */
 
 /** \file
- * \ingroup rna
+ * \ingroup RNA
  * \brief RNA property definitions for Rigid Body datatypes
  */
 
@@ -32,8 +32,8 @@
 #include "DNA_rigidbody_types.h"
 #include "DNA_scene_types.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_math.h"
+#include "BLI_utildefines.h"
 
 #include "WM_types.h"
 
@@ -146,14 +146,6 @@ static const EnumPropertyItem rigidbody_mesh_source_items[] = {
 
 #  include "WM_api.h"
 
-#  define RB_FLAG_SET(dest, value, flag) \
-    { \
-      if (value) \
-        dest |= flag; \
-      else \
-        dest &= ~flag; \
-    }
-
 /* ******************************** */
 
 static void rna_RigidBodyWorld_reset(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
@@ -185,7 +177,7 @@ static void rna_RigidBodyWorld_split_impulse_set(PointerRNA *ptr, bool value)
 {
   RigidBodyWorld *rbw = (RigidBodyWorld *)ptr->data;
 
-  RB_FLAG_SET(rbw->flag, value, RBW_FLAG_USE_SPLIT_IMPULSE);
+  SET_FLAG_FROM_TEST(rbw->flag, value, RBW_FLAG_USE_SPLIT_IMPULSE);
 
 #  ifdef WITH_BULLET
   if (rbw->shared->physics_world) {
@@ -223,7 +215,7 @@ static void rna_RigidBodyOb_reset(Main *UNUSED(bmain), Scene *scene, PointerRNA 
 
 static void rna_RigidBodyOb_shape_update(Main *bmain, Scene *scene, PointerRNA *ptr)
 {
-  Object *ob = ptr->id.data;
+  Object *ob = (Object *)ptr->owner_id;
 
   rna_RigidBodyOb_reset(bmain, scene, ptr);
 
@@ -236,8 +228,9 @@ static void rna_RigidBodyOb_shape_reset(Main *UNUSED(bmain), Scene *scene, Point
   RigidBodyOb *rbo = (RigidBodyOb *)ptr->data;
 
   BKE_rigidbody_cache_reset(rbw);
-  if (rbo->shared->physics_shape)
+  if (rbo->shared->physics_shape) {
     rbo->flag |= RBO_FLAG_NEEDS_RESHAPE;
+  }
 }
 
 static char *rna_RigidBodyOb_path(PointerRNA *UNUSED(ptr))
@@ -266,7 +259,7 @@ static void rna_RigidBodyOb_disabled_set(PointerRNA *ptr, bool value)
 {
   RigidBodyOb *rbo = (RigidBodyOb *)ptr->data;
 
-  RB_FLAG_SET(rbo->flag, !value, RBO_FLAG_DISABLED);
+  SET_FLAG_FROM_TEST(rbo->flag, !value, RBO_FLAG_DISABLED);
 
 #  ifdef WITH_BULLET
   /* update kinematic state if necessary - only needed for active bodies */
@@ -336,10 +329,12 @@ static void rna_RigidBodyOb_collision_collections_set(PointerRNA *ptr, const boo
   int i;
 
   for (i = 0; i < 20; i++) {
-    if (values[i])
+    if (values[i]) {
       rbo->col_groups |= (1 << i);
-    else
+    }
+    else {
       rbo->col_groups &= ~(1 << i);
+    }
   }
   rbo->flag |= RBO_FLAG_NEEDS_VALIDATE;
 }
@@ -348,7 +343,7 @@ static void rna_RigidBodyOb_kinematic_state_set(PointerRNA *ptr, bool value)
 {
   RigidBodyOb *rbo = (RigidBodyOb *)ptr->data;
 
-  RB_FLAG_SET(rbo->flag, value, RBO_FLAG_KINEMATIC);
+  SET_FLAG_FROM_TEST(rbo->flag, value, RBO_FLAG_KINEMATIC);
 
 #  ifdef WITH_BULLET
   /* update kinematic state if necessary */
@@ -364,7 +359,7 @@ static void rna_RigidBodyOb_activation_state_set(PointerRNA *ptr, bool value)
 {
   RigidBodyOb *rbo = (RigidBodyOb *)ptr->data;
 
-  RB_FLAG_SET(rbo->flag, value, RBO_FLAG_USE_DEACTIVATION);
+  SET_FLAG_FROM_TEST(rbo->flag, value, RBO_FLAG_USE_DEACTIVATION);
 
 #  ifdef WITH_BULLET
   /* update activation state if necessary - only active bodies can be deactivated */
@@ -456,7 +451,7 @@ static void rna_RigidBodyCon_enabled_set(PointerRNA *ptr, bool value)
 {
   RigidBodyCon *rbc = (RigidBodyCon *)ptr->data;
 
-  RB_FLAG_SET(rbc->flag, value, RBC_FLAG_ENABLED);
+  SET_FLAG_FROM_TEST(rbc->flag, value, RBC_FLAG_ENABLED);
 
 #  ifdef WITH_BULLET
   if (rbc->physics_constraint) {
@@ -469,7 +464,7 @@ static void rna_RigidBodyCon_disable_collisions_set(PointerRNA *ptr, bool value)
 {
   RigidBodyCon *rbc = (RigidBodyCon *)ptr->data;
 
-  RB_FLAG_SET(rbc->flag, value, RBC_FLAG_DISABLE_COLLISIONS);
+  SET_FLAG_FROM_TEST(rbc->flag, value, RBC_FLAG_DISABLE_COLLISIONS);
 
   rbc->flag |= RBC_FLAG_NEEDS_VALIDATE;
 }
@@ -728,7 +723,7 @@ static void rna_RigidBodyCon_use_motor_lin_set(PointerRNA *ptr, bool value)
 {
   RigidBodyCon *rbc = (RigidBodyCon *)ptr->data;
 
-  RB_FLAG_SET(rbc->flag, value, RBC_FLAG_USE_MOTOR_LIN);
+  SET_FLAG_FROM_TEST(rbc->flag, value, RBC_FLAG_USE_MOTOR_LIN);
 
 #  ifdef WITH_BULLET
   if (rbc->physics_constraint) {
@@ -743,7 +738,7 @@ static void rna_RigidBodyCon_use_motor_ang_set(PointerRNA *ptr, bool value)
 {
   RigidBodyCon *rbc = (RigidBodyCon *)ptr->data;
 
-  RB_FLAG_SET(rbc->flag, value, RBC_FLAG_USE_MOTOR_ANG);
+  SET_FLAG_FROM_TEST(rbc->flag, value, RBC_FLAG_USE_MOTOR_ANG);
 
 #  ifdef WITH_BULLET
   if (rbc->physics_constraint) {
@@ -864,6 +859,7 @@ static void rna_def_rigidbody_world(BlenderRNA *brna)
   RNA_def_property_struct_type(prop, "Collection");
   RNA_def_property_pointer_sdna(prop, NULL, "group");
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_ui_text(
       prop, "Collection", "Collection containing objects participating in this simulation");
   RNA_def_property_update(prop, NC_SCENE, "rna_RigidBodyWorld_objects_collection_update");
@@ -871,6 +867,7 @@ static void rna_def_rigidbody_world(BlenderRNA *brna)
   prop = RNA_def_property(srna, "constraints", PROP_POINTER, PROP_NONE);
   RNA_def_property_struct_type(prop, "Collection");
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_ui_text(
       prop, "Constraints", "Collection containing rigid body constraint objects");
   RNA_def_property_update(prop, NC_SCENE, "rna_RigidBodyWorld_constraints_collection_update");
@@ -1229,15 +1226,15 @@ static void rna_def_rigidbody_constraint(BlenderRNA *brna)
   prop = RNA_def_property(srna, "object1", PROP_POINTER, PROP_NONE);
   RNA_def_property_pointer_sdna(prop, NULL, "ob1");
   RNA_def_property_flag(prop, PROP_EDITABLE);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_ui_text(prop, "Object 1", "First Rigid Body Object to be constrained");
-  RNA_def_property_flag(prop, PROP_EDITABLE);
   RNA_def_property_update(prop, NC_OBJECT | ND_POINTCACHE, "rna_RigidBodyOb_reset");
 
   prop = RNA_def_property(srna, "object2", PROP_POINTER, PROP_NONE);
   RNA_def_property_pointer_sdna(prop, NULL, "ob2");
   RNA_def_property_flag(prop, PROP_EDITABLE);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_ui_text(prop, "Object 2", "Second Rigid Body Object to be constrained");
-  RNA_def_property_flag(prop, PROP_EDITABLE);
   RNA_def_property_update(prop, NC_OBJECT | ND_POINTCACHE, "rna_RigidBodyOb_reset");
 
   /* Breaking Threshold */

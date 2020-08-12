@@ -175,12 +175,12 @@ static void pauseSound(AUD_Handle* handle)
 	(*handle)->pause();
 }
 
-AUD_API AUD_Handle* AUD_pauseAfter(AUD_Handle* handle, float seconds)
+AUD_API AUD_Handle* AUD_pauseAfter(AUD_Handle* handle, double seconds)
 {
-	std::shared_ptr<ISound> silence = std::shared_ptr<ISound>(new Silence);
-	std::shared_ptr<ISound> limiter = std::shared_ptr<ISound>(new Limiter(silence, 0, seconds));
-
 	auto device = DeviceManager::getDevice();
+
+	std::shared_ptr<ISound> silence = std::shared_ptr<ISound>(new Silence(device->getSpecs().rate));
+	std::shared_ptr<ISound> limiter = std::shared_ptr<ISound>(new Limiter(silence, 0, seconds));
 
 	std::lock_guard<ILockable> lock(*device);
 
@@ -336,7 +336,7 @@ AUD_API const char* AUD_mixdown_per_channel(AUD_Sound* sound, unsigned int start
 	}
 }
 
-AUD_API AUD_Device* AUD_openMixdownDevice(AUD_DeviceSpecs specs, AUD_Sound* sequencer, float volume, float start)
+AUD_API AUD_Device* AUD_openMixdownDevice(AUD_DeviceSpecs specs, AUD_Sound* sequencer, float volume, double start)
 {
 	try
 	{

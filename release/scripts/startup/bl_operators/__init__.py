@@ -32,7 +32,6 @@ _modules = [
     "constraint",
     "file",
     "image",
-    "mask",
     "mesh",
     "node",
     "object",
@@ -43,12 +42,14 @@ _modules = [
     "rigidbody",
     "screen_play_rendered_anim",
     "sequencer",
+    "simulation",
     "userpref",
     "uvcalc_follow_active",
     "uvcalc_lightmap",
     "uvcalc_smart_project",
     "vertexpaint_dirt",
     "view3d",
+    "gpencil_mesh_bake",
     "wm",
 ]
 

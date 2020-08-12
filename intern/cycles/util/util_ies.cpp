@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <algorithm>
+
 #include "util/util_foreach.h"
 #include "util/util_ies.h"
 #include "util/util_math.h"
@@ -28,7 +30,7 @@ CCL_NAMESPACE_BEGIN
 // issue.
 template class GuardedAllocator<char>;
 
-bool IESFile::load(ustring ies)
+bool IESFile::load(const string &ies)
 {
   clear();
   if (!parse(ies) || !process()) {
@@ -76,7 +78,7 @@ class IESTextParser {
   vector<char> text;
   char *data;
 
-  IESTextParser(ustring str) : text(str.begin(), str.end())
+  IESTextParser(const string &str) : text(str.begin(), str.end())
   {
     std::replace(text.begin(), text.end(), ',', ' ');
     data = strstr(&text[0], "\nTILT=");
@@ -116,7 +118,7 @@ class IESTextParser {
   }
 };
 
-bool IESFile::parse(ustring ies)
+bool IESFile::parse(const string &ies)
 {
   if (ies.empty()) {
     return false;
@@ -155,7 +157,8 @@ bool IESFile::parse(ustring ies)
   type = (IESType)parser.get_long();    /* Photometric type */
 
   /* TODO(lukas): Test whether the current type B processing can also deal with type A files.
-   * In theory the only difference should be orientation which we ignore anyways, but with IES you never know...
+   * In theory the only difference should be orientation which we ignore anyways, but with IES you
+   * never know...
    */
   if (type != TYPE_B && type != TYPE_C) {
     return false;
@@ -173,12 +176,13 @@ bool IESFile::parse(ustring ies)
    * Cycles expects radiometric quantities, though, which requires a conversion.
    * However, the Luminous efficacy (ratio of lumens per Watt) depends on the spectral distribution
    * of the light source since lumens take human perception into account.
-   * Since this spectral distribution is not known from the IES file, a typical one must be assumed.
-   * The D65 standard illuminant has a Luminous efficacy of 177.83, which is used here to convert to Watt/sr.
-   * A more advanced approach would be to add a Blackbody Temperature input to the node and numerically
-   * integrate the Luminous efficacy from the resulting spectral distribution.
-   * Also, the Watt/sr value must be multiplied by 4*pi to get the Watt value that Cycles expects
-   * for lamp strength. Therefore, the conversion here uses 4*pi/177.83 as a Candela to Watt factor.
+   * Since this spectral distribution is not known from the IES file, a typical one must be
+   * assumed. The D65 standard illuminant has a Luminous efficacy of 177.83, which is used here to
+   * convert to Watt/sr. A more advanced approach would be to add a Blackbody Temperature input to
+   * the node and numerically integrate the Luminous efficacy from the resulting spectral
+   * distribution. Also, the Watt/sr value must be multiplied by 4*pi to get the Watt value that
+   * Cycles expects for lamp strength. Therefore, the conversion here uses 4*pi/177.83 as a Candela
+   * to Watt factor.
    */
   factor *= 0.0706650768394;
 
@@ -294,7 +298,8 @@ bool IESFile::process_type_b()
 bool IESFile::process_type_c()
 {
   if (h_angles[0] == 90.0f) {
-    /* Some files are stored from 90° to 270°, so we just rotate them to the regular 0°-180° range here. */
+    /* Some files are stored from 90° to 270°, so we just rotate them to the regular 0°-180° range
+     * here. */
     for (int i = 0; i < h_angles.size(); i++) {
       h_angles[i] -= 90.0f;
     }
@@ -311,8 +316,9 @@ bool IESFile::process_type_c()
 
   if (h_angles[h_angles.size() - 1] == 90.0f) {
     /* Only one quadrant is defined, so we need to mirror twice (from one to two, then to four).
-     * Since the two->four mirroring step might also be required if we get an input of two quadrants,
-     * we only do the first mirror here and later do the second mirror in either case. */
+     * Since the two->four mirroring step might also be required if we get an input of two
+     * quadrants, we only do the first mirror here and later do the second mirror in either case.
+     */
     int hnum = h_angles.size();
     for (int i = hnum - 2; i >= 0; i--) {
       h_angles.push_back(180.0f - h_angles[i]);
@@ -329,8 +335,8 @@ bool IESFile::process_type_c()
     }
   }
 
-  /* Some files skip the 360° entry (contrary to standard) because it's supposed to be identical to the 0° entry.
-   * If the file has a discernible order in its spacing, just fix this. */
+  /* Some files skip the 360° entry (contrary to standard) because it's supposed to be identical to
+   * the 0° entry. If the file has a discernible order in its spacing, just fix this. */
   if (h_angles[h_angles.size() - 1] != 360.0f) {
     int hnum = h_angles.size();
     float last_step = h_angles[hnum - 1] - h_angles[hnum - 2];

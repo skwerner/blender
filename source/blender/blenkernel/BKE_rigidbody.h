@@ -25,6 +25,10 @@
 #ifndef __BKE_RIGIDBODY_H__
 #define __BKE_RIGIDBODY_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct RigidBodyOb;
 struct RigidBodyWorld;
 
@@ -32,6 +36,7 @@ struct Collection;
 struct Depsgraph;
 struct Main;
 struct Object;
+struct ReportList;
 struct Scene;
 
 /* -------------- */
@@ -43,8 +48,10 @@ void BKE_rigidbody_free_constraint(struct Object *ob);
 
 /* ...... */
 
-struct RigidBodyOb *BKE_rigidbody_copy_object(const struct Object *ob, const int flag);
-struct RigidBodyCon *BKE_rigidbody_copy_constraint(const struct Object *ob, const int flag);
+void BKE_rigidbody_object_copy(struct Main *bmain,
+                               struct Object *ob_dst,
+                               const struct Object *ob_src,
+                               const int flag);
 
 /* Callback format for performing operations on ID-pointers for rigidbody world. */
 typedef void (*RigidbodyWorldIDFunc)(struct RigidBodyWorld *rbw,
@@ -94,23 +101,36 @@ void BKE_rigidbody_calc_center_of_mass(struct Object *ob, float r_center[3]);
 /* Utilities */
 
 struct RigidBodyWorld *BKE_rigidbody_get_world(struct Scene *scene);
-void BKE_rigidbody_remove_object(struct Main *bmain, struct Scene *scene, struct Object *ob);
-void BKE_rigidbody_remove_constraint(struct Scene *scene, struct Object *ob);
+bool BKE_rigidbody_add_object(struct Main *bmain,
+                              struct Scene *scene,
+                              struct Object *ob,
+                              int type,
+                              struct ReportList *reports);
+void BKE_rigidbody_ensure_local_object(struct Main *bmain, struct Object *ob);
+void BKE_rigidbody_remove_object(struct Main *bmain,
+                                 struct Scene *scene,
+                                 struct Object *ob,
+                                 const bool free_us);
+void BKE_rigidbody_remove_constraint(struct Main *bmain,
+                                     struct Scene *scene,
+                                     struct Object *ob,
+                                     const bool free_us);
 
 /* -------------- */
 /* Utility Macros */
 
 /* get mass of Rigid Body Object to supply to RigidBody simulators */
 #define RBO_GET_MASS(rbo) \
-  ((rbo && ((rbo->type == RBO_TYPE_PASSIVE) || (rbo->flag & RBO_FLAG_KINEMATIC) || \
-            (rbo->flag & RBO_FLAG_DISABLED))) ? \
+  (((rbo) && (((rbo)->type == RBO_TYPE_PASSIVE) || ((rbo)->flag & RBO_FLAG_KINEMATIC) || \
+              ((rbo)->flag & RBO_FLAG_DISABLED))) ? \
        (0.0f) : \
-       (rbo->mass))
-/* get collision margin for Rigid Body Object, triangle mesh and cone shapes cannot embed margin, convex hull always uses custom margin */
+       ((rbo)->mass))
+/* Get collision margin for Rigid Body Object, triangle mesh and cone shapes cannot embed margin,
+ * convex hull always uses custom margin. */
 #define RBO_GET_MARGIN(rbo) \
-  ((rbo->flag & RBO_FLAG_USE_MARGIN || rbo->shape == RB_SHAPE_CONVEXH || \
-    rbo->shape == RB_SHAPE_TRIMESH || rbo->shape == RB_SHAPE_CONE) ? \
-       (rbo->margin) : \
+  (((rbo)->flag & RBO_FLAG_USE_MARGIN || (rbo)->shape == RB_SHAPE_CONVEXH || \
+    (rbo)->shape == RB_SHAPE_TRIMESH || (rbo)->shape == RB_SHAPE_CONE) ? \
+       ((rbo)->margin) : \
        (0.04f))
 
 /* -------------- */
@@ -138,5 +158,9 @@ void BKE_rigidbody_eval_simulation(struct Depsgraph *depsgraph, struct Scene *sc
 void BKE_rigidbody_object_sync_transforms(struct Depsgraph *depsgraph,
                                           struct Scene *scene,
                                           struct Object *ob);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __BKE_RIGIDBODY_H__ */

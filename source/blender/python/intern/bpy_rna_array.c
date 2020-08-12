@@ -86,7 +86,8 @@ typedef struct ItemConvert_FuncArg {
  */
 
 /* arr[3] = x, self->arraydim is 0, lvalue_dim is 1 */
-/* Ensures that a python sequence has expected number of items/sub-items and items are of desired type. */
+/* Ensures that a python sequence has expected number of
+ * items/sub-items and items are of desired type. */
 static int validate_array_type(PyObject *seq,
                                int dim,
                                int totdim,
@@ -203,7 +204,10 @@ static int validate_array_type(PyObject *seq,
       else if (!check_item_type(item)) {
         Py_DECREF(item);
 
-        /* BLI_snprintf(error_str, error_str_size, "sequence items should be of type %s", item_type_str); */
+#if 0
+        BLI_snprintf(
+            error_str, error_str_size, "sequence items should be of type %s", item_type_str);
+#endif
         PyErr_Format(PyExc_TypeError,
                      "%s expected sequence items of type %s, not %s",
                      error_prefix,
@@ -258,7 +262,7 @@ static int validate_array_length(PyObject *rvalue,
                                  PointerRNA *ptr,
                                  PropertyRNA *prop,
                                  int lvalue_dim,
-                                 int *totitem,
+                                 int *r_totitem,
                                  const char *error_prefix)
 {
   int dimsize[MAX_ARRAY_DIMENSION];
@@ -283,12 +287,16 @@ static int validate_array_length(PyObject *rvalue,
         /* BLI_snprintf(error_str, error_str_size,
          *              "%s.%s: array length cannot be changed to %d",
          *              RNA_struct_identifier(ptr->type), RNA_property_identifier(prop), tot); */
-        PyErr_Format(PyExc_ValueError, "%s %s.%s: array length cannot be changed to %d",
-                     error_prefix, RNA_struct_identifier(ptr->type), RNA_property_identifier(prop), tot);
+        PyErr_Format(PyExc_ValueError,
+                     "%s %s.%s: array length cannot be changed to %d",
+                     error_prefix,
+                     RNA_struct_identifier(ptr->type),
+                     RNA_property_identifier(prop),
+                     tot);
         return -1;
       }
 #else
-      *totitem = tot;
+      *r_totitem = tot;
       return 0;
 
 #endif
@@ -338,7 +346,7 @@ static int validate_array_length(PyObject *rvalue,
     }
   }
 
-  *totitem = len;
+  *r_totitem = len;
 
   return 0;
 }
@@ -349,7 +357,7 @@ static int validate_array(PyObject *rvalue,
                           int lvalue_dim,
                           ItemTypeCheckFunc check_item_type,
                           const char *item_type_str,
-                          int *totitem,
+                          int *r_totitem,
                           const char *error_prefix)
 {
   int dimsize[MAX_ARRAY_DIMENSION];
@@ -397,7 +405,7 @@ static int validate_array(PyObject *rvalue,
         return -1;
       }
       else {
-        *totitem = dimsize[0] * dimsize[1];
+        *r_totitem = dimsize[0] * dimsize[1];
         return 0;
       }
     }
@@ -417,7 +425,7 @@ static int validate_array(PyObject *rvalue,
       return -1;
     }
 
-    return validate_array_length(rvalue, ptr, prop, lvalue_dim, totitem, error_prefix);
+    return validate_array_length(rvalue, ptr, prop, lvalue_dim, r_totitem, error_prefix);
   }
 }
 
@@ -425,7 +433,7 @@ static char *copy_value_single(PyObject *item,
                                PointerRNA *ptr,
                                PropertyRNA *prop,
                                char *data,
-                               unsigned int item_size,
+                               uint item_size,
                                int *index,
                                const ItemConvert_FuncArg *convert_item,
                                RNA_SetIndexFunc rna_set_index)
@@ -454,7 +462,7 @@ static char *copy_values(PyObject *seq,
                          PropertyRNA *prop,
                          int dim,
                          char *data,
-                         unsigned int item_size,
+                         uint item_size,
                          int *index,
                          const ItemConvert_FuncArg *convert_item,
                          RNA_SetIndexFunc rna_set_index)
@@ -546,8 +554,9 @@ static int py_to_array(PyObject *seq,
       /* not freeing allocated mem, RNA_parameter_list_free() will do this */
       ParameterDynAlloc *param_alloc = (ParameterDynAlloc *)param_data;
       param_alloc->array_tot = (int)totitem;
-      param_alloc->array = MEM_callocN(item_size * totitem,
-                                       "py_to_array dyn"); /* freeing param list will free */
+
+      /* freeing param list will free */
+      param_alloc->array = MEM_callocN(item_size * totitem, "py_to_array dyn");
 
       data = param_alloc->array;
     }
@@ -883,7 +892,10 @@ PyObject *pyrna_array_index(PointerRNA *ptr, PropertyRNA *prop, int index)
 #if 0
 /* XXX this is not used (and never will?) */
 /* Given an array property, creates an N-dimensional tuple of values. */
-static PyObject *pyrna_py_from_array_internal(PointerRNA *ptr, PropertyRNA *prop, int dim, int *index)
+static PyObject *pyrna_py_from_array_internal(PointerRNA *ptr,
+                                              PropertyRNA *prop,
+                                              int dim,
+                                              int *index)
 {
   PyObject *tuple;
   int i, len;

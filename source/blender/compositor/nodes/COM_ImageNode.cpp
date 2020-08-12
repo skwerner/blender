@@ -17,17 +17,17 @@
  */
 
 #include "COM_ImageNode.h"
+#include "BKE_node.h"
+#include "BLI_utildefines.h"
+#include "COM_ConvertOperation.h"
 #include "COM_ExecutionSystem.h"
 #include "COM_ImageOperation.h"
 #include "COM_MultilayerImageOperation.h"
-#include "COM_ConvertOperation.h"
-#include "BKE_node.h"
-#include "BLI_utildefines.h"
 
+#include "COM_SeparateColorNode.h"
+#include "COM_SetColorOperation.h"
 #include "COM_SetValueOperation.h"
 #include "COM_SetVectorOperation.h"
-#include "COM_SetColorOperation.h"
-#include "COM_SeparateColorNode.h"
 
 ImageNode::ImageNode(bNode *editorNode) : Node(editorNode)
 {
@@ -80,7 +80,7 @@ void ImageNode::convertToOperations(NodeConverter &converter,
   int framenumber = context.getFramenumber();
   int numberOfOutputs = this->getNumberOfOutputSockets();
   bool outputStraightAlpha = (editorNode->custom1 & CMP_NODE_IMAGE_USE_STRAIGHT_OUTPUT) != 0;
-  BKE_image_user_frame_calc(imageuser, context.getFramenumber());
+  BKE_image_user_frame_calc(image, imageuser, context.getFramenumber());
   /* force a load, we assume iuser index will be set OK anyway */
   if (image && image->type == IMA_TYPE_MULTILAYER) {
     bool is_multilayer_ok = false;
@@ -118,8 +118,9 @@ void ImageNode::convertToOperations(NodeConverter &converter,
                * check if the view name exists in the image */
               view = BLI_findstringindex(
                   &image->rr->views, context.getViewName(), offsetof(RenderView, name));
-              if (view == -1)
+              if (view == -1) {
                 view = 0;
+              }
             }
             else {
               view = view_image - 1;
@@ -194,9 +195,10 @@ void ImageNode::convertToOperations(NodeConverter &converter,
             }
           }
 
-          /* incase we can't load the layer */
-          if (operation == NULL)
+          /* In case we can't load the layer. */
+          if (operation == NULL) {
             converter.setInvalidOutput(getOutputSocket(index));
+          }
         }
       }
     }
@@ -204,8 +206,9 @@ void ImageNode::convertToOperations(NodeConverter &converter,
 
     /* without this, multilayer that fail to load will crash blender [#32490] */
     if (is_multilayer_ok == false) {
-      for (int i = 0; i < getNumberOfOutputSockets(); ++i)
+      for (int i = 0; i < getNumberOfOutputSockets(); i++) {
         converter.setInvalidOutput(getOutputSocket(i));
+      }
     }
   }
   else {

@@ -64,6 +64,7 @@ class Film : public Node {
   int denoising_flags;
   float pass_alpha_threshold;
 
+  PassType display_pass;
   int pass_stride;
   int denoising_data_offset;
   int denoising_clean_offset;
@@ -77,9 +78,10 @@ class Film : public Node {
   float mist_falloff;
 
   bool use_light_visibility;
-  bool use_sample_clamp;
   CryptomatteType cryptomatte_passes;
   int cryptomatte_depth;
+
+  bool use_adaptive_sampling;
 
   bool need_update;
 
@@ -90,8 +92,10 @@ class Film : public Node {
   void device_free(Device *device, DeviceScene *dscene, Scene *scene);
 
   bool modified(const Film &film);
-  void tag_passes_update(Scene *scene, const vector<Pass> &passes_);
+  void tag_passes_update(Scene *scene, const vector<Pass> &passes_, bool update_passes = true);
   void tag_update(Scene *scene);
+
+  int get_aov_offset(string name, bool &is_color);
 };
 
 CCL_NAMESPACE_END

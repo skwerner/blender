@@ -19,18 +19,16 @@
 #include "COM_TextureOperation.h"
 #include "COM_WorkScheduler.h"
 
+#include "BKE_image.h"
+#include "BKE_node.h"
+
 #include "BLI_listbase.h"
 #include "BLI_threads.h"
-#include "BKE_image.h"
-
-extern "C" {
-#include "BKE_node.h"
-}
 
 TextureBaseOperation::TextureBaseOperation() : NodeOperation()
 {
-  this->addInputSocket(COM_DT_VECTOR);  //offset
-  this->addInputSocket(COM_DT_VECTOR);  //size
+  this->addInputSocket(COM_DT_VECTOR);  // offset
+  this->addInputSocket(COM_DT_VECTOR);  // size
   this->m_texture = NULL;
   this->m_inputSize = NULL;
   this->m_inputOffset = NULL;
@@ -111,9 +109,9 @@ void TextureBaseOperation::executePixelSampled(float output[4],
   float u = (x - cx) / this->getWidth() * 2;
   float v = (y - cy) / this->getHeight() * 2;
 
-  /* When no interpolation/filtering happens in multitex() foce nearest interpolation.
+  /* When no interpolation/filtering happens in multitex() force nearest interpolation.
    * We do it here because (a) we can't easily say multitex() that we want nearest
-   * interpolation and (b) in such configuration multitex() sinply floor's the value
+   * interpolation and (b) in such configuration multitex() simply floor's the value
    * which often produces artifacts.
    */
   if (m_texture != NULL && (m_texture->imaflag & TEX_INTERPOL) == 0) {
@@ -132,10 +130,12 @@ void TextureBaseOperation::executePixelSampled(float output[4],
   retval = multitex_ext(
       this->m_texture, vec, NULL, NULL, 0, &texres, thread_id, m_pool, m_sceneColorManage, false);
 
-  if (texres.talpha)
+  if (texres.talpha) {
     output[3] = texres.ta;
-  else
+  }
+  else {
     output[3] = texres.tin;
+  }
 
   if ((retval & TEX_RGB)) {
     output[0] = texres.tr;

@@ -26,6 +26,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "DNA_anim_types.h"
+#include "DNA_defaults.h"
 #include "DNA_light_types.h"
 #include "DNA_material_types.h"
 #include "DNA_node_types.h"
@@ -36,81 +37,51 @@
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
 
-#include "BKE_animsys.h"
 #include "BKE_colortools.h"
 #include "BKE_icons.h"
+#include "BKE_idtype.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_light.h"
-#include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_node.h"
 
-void BKE_light_init(Light *la)
+#include "BLT_translation.h"
+
+#include "DEG_depsgraph.h"
+
+static void light_init_data(ID *id)
 {
+  Light *la = (Light *)id;
   BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(la, id));
 
-  la->r = la->g = la->b = la->k = 1.0f;
-  la->energy = 10.0f;
-  la->dist = 25.0f;
-  la->spotsize = DEG2RADF(45.0f);
-  la->spotblend = 0.15f;
-  la->att2 = 1.0f;
-  la->mode = LA_SHADOW;
-  la->bufsize = 512;
-  la->clipsta = 0.5f;
-  la->clipend = 40.0f;
-  la->bleedexp = 2.5f;
-  la->samp = 3;
-  la->bias = 1.0f;
-  la->soft = 3.0f;
-  la->area_size = la->area_sizey = la->area_sizez = 0.25f;
-  la->buffers = 1;
-  la->preview = NULL;
-  la->falloff_type = LA_FALLOFF_INVSQUARE;
-  la->coeff_const = 1.0f;
-  la->coeff_lin = 0.0f;
-  la->coeff_quad = 0.0f;
-  la->curfalloff = curvemapping_add(1, 0.0f, 1.0f, 1.0f, 0.0f);
-  la->cascade_max_dist = 200.0f;
-  la->cascade_count = 4;
-  la->cascade_exponent = 0.8f;
-  la->cascade_fade = 0.1f;
-  la->contact_dist = 0.2f;
-  la->contact_bias = 0.03f;
-  la->contact_spread = 0.2f;
-  la->contact_thickness = 0.2f;
-  la->spec_fac = 1.0f;
-  la->att_dist = 40.0f;
+  MEMCPY_STRUCT_AFTER(la, DNA_struct_default_get(Light), id);
 
-  curvemapping_initialize(la->curfalloff);
-}
-
-Light *BKE_light_add(Main *bmain, const char *name)
-{
-  Light *la;
-
-  la = BKE_libblock_alloc(bmain, ID_LA, name, 0);
-
-  BKE_light_init(la);
-
-  return la;
+  la->curfalloff = BKE_curvemapping_add(1, 0.0f, 1.0f, 1.0f, 0.0f);
+  BKE_curvemapping_initialize(la->curfalloff);
 }
 
 /**
- * Only copy internal data of Light ID from source to already allocated/initialized destination.
- * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
+ * Only copy internal data of Light ID from source
+ * to already allocated/initialized destination.
+ * You probably never want to use that directly,
+ * use #BKE_id_copy or #BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
- * \param flag: Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
+ * \param flag: Copying options (see BKE_lib_id.h's LIB_ID_COPY_... flags for more).
  */
-void BKE_light_copy_data(Main *bmain, Light *la_dst, const Light *la_src, const int flag)
+static void light_copy_data(Main *bmain, ID *id_dst, const ID *id_src, const int flag)
 {
-  la_dst->curfalloff = curvemapping_copy(la_src->curfalloff);
+  Light *la_dst = (Light *)id_dst;
+  const Light *la_src = (const Light *)id_src;
+  /* We always need allocation of our private ID data. */
+  const int flag_private_id_data = flag & ~LIB_ID_CREATE_NO_ALLOCATE;
+
+  la_dst->curfalloff = BKE_curvemapping_copy(la_src->curfalloff);
 
   if (la_src->nodetree) {
-    /* Note: nodetree is *not* in bmain, however this specific case is handled at lower level
-     *       (see BKE_libblock_copy_ex()). */
-    BKE_id_copy_ex(bmain, (ID *)la_src->nodetree, (ID **)&la_dst->nodetree, flag);
+    BKE_id_copy_ex(bmain, (ID *)la_src->nodetree, (ID **)&la_dst->nodetree, flag_private_id_data);
   }
 
   if ((flag & LIB_ID_COPY_NO_PREVIEW) == 0) {
@@ -119,6 +90,61 @@ void BKE_light_copy_data(Main *bmain, Light *la_dst, const Light *la_src, const 
   else {
     la_dst->preview = NULL;
   }
+}
+
+static void light_free_data(ID *id)
+{
+  Light *la = (Light *)id;
+
+  BKE_curvemapping_free(la->curfalloff);
+
+  /* is no lib link block, but light extension */
+  if (la->nodetree) {
+    ntreeFreeEmbeddedTree(la->nodetree);
+    MEM_freeN(la->nodetree);
+    la->nodetree = NULL;
+  }
+
+  BKE_previewimg_free(&la->preview);
+  BKE_icon_id_delete(&la->id);
+  la->id.icon_id = 0;
+}
+
+static void light_foreach_id(ID *id, LibraryForeachIDData *data)
+{
+  Light *lamp = (Light *)id;
+  if (lamp->nodetree) {
+    /* nodetree **are owned by IDs**, treat them as mere sub-data and not real ID! */
+    BKE_library_foreach_ID_embedded(data, (ID **)&lamp->nodetree);
+  }
+}
+
+IDTypeInfo IDType_ID_LA = {
+    .id_code = ID_LA,
+    .id_filter = FILTER_ID_LA,
+    .main_listbase_index = INDEX_ID_LA,
+    .struct_size = sizeof(Light),
+    .name = "Light",
+    .name_plural = "lights",
+    .translation_context = BLT_I18NCONTEXT_ID_LIGHT,
+    .flags = 0,
+
+    .init_data = light_init_data,
+    .copy_data = light_copy_data,
+    .free_data = light_free_data,
+    .make_local = NULL,
+    .foreach_id = light_foreach_id,
+};
+
+Light *BKE_light_add(Main *bmain, const char *name)
+{
+  Light *la;
+
+  la = BKE_libblock_alloc(bmain, ID_LA, name, 0);
+
+  light_init_data(&la->id);
+
+  return la;
 }
 
 Light *BKE_light_copy(Main *bmain, const Light *la)
@@ -142,10 +168,11 @@ Light *BKE_light_localize(Light *la)
 
   Light *lan = BKE_libblock_copy_for_localize(&la->id);
 
-  lan->curfalloff = curvemapping_copy(la->curfalloff);
+  lan->curfalloff = BKE_curvemapping_copy(la->curfalloff);
 
-  if (la->nodetree)
+  if (la->nodetree) {
     lan->nodetree = ntreeLocalize(la->nodetree);
+  }
 
   lan->preview = NULL;
 
@@ -154,25 +181,7 @@ Light *BKE_light_localize(Light *la)
   return lan;
 }
 
-void BKE_light_make_local(Main *bmain, Light *la, const bool lib_local)
+void BKE_light_eval(struct Depsgraph *depsgraph, Light *la)
 {
-  BKE_id_make_local_generic(bmain, &la->id, true, lib_local);
-}
-
-void BKE_light_free(Light *la)
-{
-  BKE_animdata_free((ID *)la, false);
-
-  curvemapping_free(la->curfalloff);
-
-  /* is no lib link block, but light extension */
-  if (la->nodetree) {
-    ntreeFreeNestedTree(la->nodetree);
-    MEM_freeN(la->nodetree);
-    la->nodetree = NULL;
-  }
-
-  BKE_previewimg_free(&la->preview);
-  BKE_icon_id_delete(&la->id);
-  la->id.icon_id = 0;
+  DEG_debug_print_eval(depsgraph, __func__, la->id.name, la);
 }

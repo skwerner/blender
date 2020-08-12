@@ -24,14 +24,14 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_alloca.h"
+#include "BLI_array.h"
+#include "BLI_kdopbvh.h"
+#include "BLI_linklist_stack.h"
 #include "BLI_math.h"
 #include "BLI_memarena.h"
-#include "BLI_array.h"
-#include "BLI_alloca.h"
-#include "BLI_utildefines_stack.h"
-#include "BLI_linklist_stack.h"
 #include "BLI_sort_utils.h"
-#include "BLI_kdopbvh.h"
+#include "BLI_utildefines_stack.h"
 
 #include "BKE_customdata.h"
 
@@ -94,7 +94,7 @@ static BMLoop *bm_edge_flagged_radial_first(BMEdge *e)
 }
 
 static void normalize_v2_m3_v3v3(float out[2],
-                                 float axis_mat[3][3],
+                                 const float axis_mat[3][3],
                                  const float v1[3],
                                  const float v2[3])
 {
@@ -110,7 +110,7 @@ static void normalize_v2_m3_v3v3(float out[2],
  */
 static bool bm_face_split_edgenet_find_loop_pair(BMVert *v_init,
                                                  const float face_normal[3],
-                                                 float face_normal_matrix[3][3],
+                                                 const float face_normal_matrix[3][3],
                                                  BMEdge *e_pair[2])
 {
   /* Always find one boundary edge (to determine winding)
@@ -420,7 +420,7 @@ finally:
 
 static bool bm_face_split_edgenet_find_loop(BMVert *v_init,
                                             const float face_normal[3],
-                                            float face_normal_matrix[3][3],
+                                            const float face_normal_matrix[3][3],
                                             /* cache to avoid realloc every time */
                                             struct VertOrder *edge_order,
                                             const uint edge_order_len,
@@ -449,9 +449,7 @@ static bool bm_face_split_edgenet_find_loop(BMVert *v_init,
     *r_face_verts_len = i;
     return (i > 2) ? true : false;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 /**
@@ -495,13 +493,16 @@ bool BM_face_split_edgenet(BMesh *bm,
     return false;
   }
 
+  /* These arrays used to be stack memory, however they can be
+   * large for single faces with complex edgenets, see: T65980. */
+
   /* over-alloc (probably 2-4 is only used in most cases), for the biggest-fan */
-  edge_order = BLI_array_alloca(edge_order, edge_order_len);
+  edge_order = MEM_mallocN(sizeof(*edge_order) * edge_order_len, __func__);
 
   /* use later */
-  face_verts = BLI_array_alloca(face_verts, edge_net_len + f->len);
+  face_verts = MEM_mallocN(sizeof(*face_verts) * (edge_net_len + f->len), __func__);
 
-  vert_queue = BLI_array_alloca(vert_queue, edge_net_len + f->len);
+  vert_queue = MEM_mallocN(sizeof(vert_queue) * (edge_net_len + f->len), __func__);
   STACK_INIT(vert_queue, f->len + edge_net_len);
 
   BLI_assert(BM_ELEM_API_FLAG_TEST(f, FACE_NET) == 0);
@@ -687,6 +688,10 @@ bool BM_face_split_edgenet(BMesh *bm,
     }
   }
 
+  MEM_freeN(edge_order);
+  MEM_freeN(face_verts);
+  MEM_freeN(vert_queue);
+
   return true;
 }
 
@@ -758,8 +763,8 @@ struct EdgeGroupIsland {
 
   /* Set the following vars once we have >1 groups */
 
-  /* when when an edge in a previous group connects to this one,
-   * so theres no need to create one pointing back. */
+  /* when an edge in a previous group connects to this one,
+   * so there's no need to create one pointing back. */
   uint has_prev_edge : 1;
 
   /* verts in the group which has the lowest & highest values,
@@ -987,11 +992,13 @@ static int bm_face_split_edgenet_find_connection(const struct EdgeGroup_FindConn
    * Method for finding connection is as follows:
    *
    * - Cast a ray along either the positive or negative directions.
-   * - Take the hit-edge, and cast rays to their vertices checking those rays don't intersect a closer edge.
-   * - Keep taking the hit-edge and testing its verts until a vertex is found which isn't blocked by an edge.
+   * - Take the hit-edge, and cast rays to their vertices
+   *   checking those rays don't intersect a closer edge.
+   * - Keep taking the hit-edge and testing its verts
+   *   until a vertex is found which isn't blocked by an edge.
    *
    * \note It's possible none of the verts can be accessed (with self-intersecting lines).
-   * In that case theres no right answer (without subdividing edges),
+   * In that case there's no right answer (without subdividing edges),
    * so return a fall-back vertex in that case.
    */
 
@@ -1146,7 +1153,8 @@ static BMVert *bm_face_split_edgenet_partial_connect(BMesh *bm, BMVert *v_delimi
     }
   }
 
-  /* Detect if this is a delimiter by checking if we didn't walk any of edges connected to 'v_delimit' */
+  /* Detect if this is a delimiter
+   * by checking if we didn't walk any of edges connected to 'v_delimit'. */
   bool is_delimit = false;
   FOREACH_VERT_EDGE(v_delimit, e_iter, {
     BMVert *v_step = BM_edge_other_vert(e_iter, v_delimit);
@@ -1207,9 +1215,7 @@ static bool bm_vert_partial_connect_check_overlap(const int *remap,
   if (UNLIKELY((remap[v_a_index] == v_b_index) || (remap[v_b_index] == v_a_index))) {
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 #endif /* USE_PARTIAL_CONNECT */
@@ -1232,7 +1238,8 @@ bool BM_face_split_edgenet_connect_islands(BMesh *bm,
                                            uint *r_edge_net_new_len)
 {
   /* -------------------------------------------------------------------- */
-  /* This function has 2 main parts.
+  /**
+   * This function has 2 main parts.
    *
    * - Check if there are any holes.
    * - Connect the holes with edges (if any are found).
@@ -1244,7 +1251,7 @@ bool BM_face_split_edgenet_connect_islands(BMesh *bm,
    */
 
   const uint edge_arr_len = (uint)edge_net_init_len + (uint)f->len;
-  BMEdge **edge_arr = BLI_array_alloca(edge_arr, edge_arr_len);
+  BMEdge **edge_arr = BLI_memarena_alloc(mem_arena, sizeof(*edge_arr) * edge_arr_len);
   bool ok = false;
   uint edge_net_new_len = (uint)edge_net_init_len;
 
@@ -1288,7 +1295,7 @@ bool BM_face_split_edgenet_connect_islands(BMesh *bm,
 
   if (use_partial_connect) {
     for (uint i = 0; i < edge_net_init_len; i++) {
-      for (unsigned j = 0; j < 2; j++) {
+      for (uint j = 0; j < 2; j++) {
         BMVert *v_delimit = (&edge_arr[i]->v1)[j];
         BMVert *v_other;
 
@@ -1339,7 +1346,7 @@ bool BM_face_split_edgenet_connect_islands(BMesh *bm,
             BM_elem_flag_disable(e_iter, EDGE_NOT_IN_STACK);
             unique_edges_in_group++;
 
-            BLI_linklist_prepend_alloca(&edge_links, e_iter);
+            BLI_linklist_prepend_arena(&edge_links, e_iter, mem_arena);
 
             BMVert *v_other = BM_edge_other_vert(e_iter, v_iter);
             if (BM_elem_flag_test(v_other, VERT_NOT_IN_STACK)) {
@@ -1350,7 +1357,7 @@ bool BM_face_split_edgenet_connect_islands(BMesh *bm,
         } while ((e_iter = BM_DISK_EDGE_NEXT(e_iter, v_iter)) != v_iter->e);
       }
 
-      struct EdgeGroupIsland *g = alloca(sizeof(*g));
+      struct EdgeGroupIsland *g = BLI_memarena_alloc(mem_arena, sizeof(*g));
       g->vert_len = unique_verts_in_group;
       g->edge_len = unique_edges_in_group;
       edge_in_group_tot += unique_edges_in_group;
@@ -1471,7 +1478,7 @@ bool BM_face_split_edgenet_connect_islands(BMesh *bm,
           if (!BM_elem_flag_test(v_iter, VERT_IN_ARRAY)) {
             BM_elem_flag_enable(v_iter, VERT_IN_ARRAY);
 
-            /* not nice, but alternatives arent much better :S */
+            /* not nice, but alternatives aren't much better :S */
             {
               copy_v3_v3(vert_coords_backup[v_index], v_iter->co);
 
@@ -1500,7 +1507,8 @@ bool BM_face_split_edgenet_connect_islands(BMesh *bm,
 
   /* Now create bvh tree
    *
-   * Note that a large epsilon is used because meshes with dimensions of around 100+ need it. see T52329. */
+   * Note that a large epsilon is used because meshes with dimensions of around 100+ need it.
+   * see T52329. */
   BVHTree *bvhtree = BLI_bvhtree_new(edge_arr_len, 1e-4f, 8, 8);
   for (uint i = 0; i < edge_arr_len; i++) {
     const float e_cos[2][3] = {

@@ -25,8 +25,8 @@
 
 #include "util/util_function.h"
 #include "util/util_string.h"
-#include "util/util_time.h"
 #include "util/util_thread.h"
+#include "util/util_time.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -204,6 +204,8 @@ class Progress {
 
   float get_progress()
   {
+    thread_scoped_lock lock(progress_mutex);
+
     if (total_pixel_samples > 0) {
       return ((float)pixel_samples) / total_pixel_samples;
     }
@@ -362,7 +364,8 @@ class Progress {
    * It's used to display the sample count if only one tile is active. */
   int current_tile_sample;
   /* Stores the number of tiles that's already finished.
-   * Used to determine whether all but the last tile are finished rendering, in which case the current_tile_sample is displayed. */
+   * Used to determine whether all but the last tile are finished rendering,
+   * in which case the current_tile_sample is displayed. */
   int rendered_tiles, denoised_tiles;
 
   double start_time, render_start_time;

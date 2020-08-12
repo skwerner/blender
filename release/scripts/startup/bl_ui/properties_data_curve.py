@@ -144,7 +144,6 @@ class DATA_PT_curve_texture_space(CurveButtonsPanel, Panel):
         curve = context.curve
 
         col = layout.column()
-        col.prop(curve, "use_uv_as_generated")
         col.prop(curve, "use_auto_texspace")
 
         col = layout.column()
@@ -177,9 +176,11 @@ class DATA_PT_geometry_curve(CurveButtonsPanelCurve, Panel):
 
         col.prop(curve, "taper_object")
 
-        sub = col.column()
-        sub.active = curve.taper_object is not None
-        sub.prop(curve, "use_map_taper")
+        if type(curve) is not TextCurve:
+            # This setting makes no sense for texts, since we have no control over start/end of the bevel object curve.
+            sub = col.column()
+            sub.active = curve.taper_object is not None
+            sub.prop(curve, "use_map_taper")
 
 
 class DATA_PT_geometry_curve_bevel(CurveButtonsPanelCurve, Panel):
@@ -275,23 +276,23 @@ class DATA_PT_active_spline(CurveButtonsPanelActive, Panel):
             col.prop(act_spline, "use_smooth")
         else:
 
-            sub = col.column(align=True)
-            sub.prop(act_spline, "use_cyclic_u")
+            sub = col.column(heading="Cyclic", align=True)
+            sub.prop(act_spline, "use_cyclic_u", text="U")
             if is_surf:
                 sub.prop(act_spline, "use_cyclic_v", text="V")
 
             if act_spline.type == 'NURBS':
-                sub = col.column(align=True)
+                sub = col.column(heading="Bezier", align=True)
                 # sub.active = (not act_spline.use_cyclic_u)
-                sub.prop(act_spline, "use_bezier_u", text="Bezier U")
+                sub.prop(act_spline, "use_bezier_u", text="U")
 
                 if is_surf:
                     subsub = sub.column()
                     subsub.active = (not act_spline.use_cyclic_v)
                     subsub.prop(act_spline, "use_bezier_v", text="V")
 
-                sub = col.column(align=True)
-                sub.prop(act_spline, "use_endpoint_u", text="Endpoint U")
+                sub = col.column(heading="Endpoint", align=True)
+                sub.prop(act_spline, "use_endpoint_u", text="U")
 
                 if is_surf:
                     subsub = sub.column()
@@ -330,7 +331,8 @@ class DATA_PT_font(CurveButtonsPanelText, Panel):
         layout = self.layout
 
         text = context.curve
-        char = context.curve.edit_format
+        char = text.edit_format
+        mode = context.mode
 
         row = layout.split(factor=0.25)
         row.label(text="Regular")
@@ -345,13 +347,14 @@ class DATA_PT_font(CurveButtonsPanelText, Panel):
         row.label(text="Bold & Italic")
         row.template_ID(text, "font_bold_italic", open="font.open", unlink="font.unlink")
 
-        layout.separator()
+        if mode == 'EDIT_TEXT':
+            layout.separator()
 
-        row = layout.row(align=True)
-        row.prop(char, "use_bold", toggle=True)
-        row.prop(char, "use_italic", toggle=True)
-        row.prop(char, "use_underline", toggle=True)
-        row.prop(char, "use_small_caps", toggle=True)
+            row = layout.row(align=True)
+            row.prop(char, "use_bold", toggle=True)
+            row.prop(char, "use_italic", toggle=True)
+            row.prop(char, "use_underline", toggle=True)
+            row.prop(char, "use_small_caps", toggle=True)
 
 
 class DATA_PT_font_transform(CurveButtonsPanelText, Panel):

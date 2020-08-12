@@ -27,9 +27,9 @@
  * aren't intended to be shared between multiple data blocks as with other ID types.
  */
 
+#include "DNA_ID.h"
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
-#include "DNA_ID.h"
 
 struct AnimData;
 struct Ipo;
@@ -113,7 +113,7 @@ typedef struct Key {
 
   /**
    * Can never be 0, this is used for detecting old data.
-   * current free uid for keyblocks
+   * current free UID for key-blocks.
    */
   int uidgen;
 } Key;

@@ -23,26 +23,28 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_math.h"
+#include "BLI_utildefines.h"
 
-#include "BKE_main.h"
 #include "BKE_context.h"
-#include "BKE_movieclip.h"
-#include "BKE_tracking.h"
 #include "BKE_global.h"
+#include "BKE_main.h"
+#include "BKE_movieclip.h"
 #include "BKE_report.h"
+#include "BKE_tracking.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
 
-#include "ED_screen.h"
 #include "ED_clip.h"
+#include "ED_screen.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
 
 #include "PIL_time.h"
+
+#include "DEG_depsgraph.h"
 
 #include "clip_intern.h"  // own include
 #include "tracking_ops_intern.h"
@@ -55,8 +57,9 @@ typedef struct TrackMarkersJob {
   int backwards;                    /* Backwards tracking flag */
   MovieClip *clip;                  /* Clip which is tracking */
   float delay;                      /* Delay in milliseconds to allow
-                               * tracking at fixed FPS */
+                                     * tracking at fixed FPS */
 
+  struct wmWindowManager *wm;
   struct Main *main;
   struct Scene *scene;
   struct bScreen *screen;
@@ -83,7 +86,7 @@ static int track_count_markers(SpaceClip *sc, MovieClip *clip, int framenr)
   return tot;
 }
 
-static void track_init_markers(SpaceClip *sc, MovieClip *clip, int framenr, int *frames_limit_r)
+static void track_init_markers(SpaceClip *sc, MovieClip *clip, int framenr, int *r_frames_limit)
 {
   ListBase *tracksbase = BKE_tracking_get_active_tracks(&clip->tracking);
   int frames_limit = 0;
@@ -106,7 +109,7 @@ static void track_init_markers(SpaceClip *sc, MovieClip *clip, int framenr, int 
       }
     }
   }
-  *frames_limit_r = frames_limit;
+  *r_frames_limit = frames_limit;
 }
 
 static bool track_markers_check_direction(int backwards, int curfra, int efra)
@@ -125,7 +128,7 @@ static bool track_markers_check_direction(int backwards, int curfra, int efra)
   return true;
 }
 
-static int track_markers_initjob(bContext *C, TrackMarkersJob *tmj, bool backwards, bool sequence)
+static bool track_markers_initjob(bContext *C, TrackMarkersJob *tmj, bool backwards, bool sequence)
 {
   SpaceClip *sc = CTX_wm_space_clip(C);
   MovieClip *clip = ED_space_clip_get_clip(sc);
@@ -200,10 +203,24 @@ static int track_markers_initjob(bContext *C, TrackMarkersJob *tmj, bool backwar
   tmj->main = CTX_data_main(C);
   tmj->screen = CTX_wm_screen(C);
 
-  return track_markers_check_direction(backwards, tmj->sfra, tmj->efra);
+  tmj->wm = CTX_wm_manager(C);
+
+  if (!track_markers_check_direction(backwards, tmj->sfra, tmj->efra)) {
+    return false;
+  }
+
+  WM_set_locked_interface(tmj->wm, true);
+
+  return true;
 }
 
-static void track_markers_startjob(void *tmv, short *stop, short *do_update, float *progress)
+static void track_markers_startjob(
+    void *tmv,
+    /* Cannot be const, this function implements wm_jobs_start_callback.
+     * NOLINTNEXTLINE: readability-non-const-parameter. */
+    short *stop,
+    short *do_update,
+    float *progress)
 {
   TrackMarkersJob *tmj = (TrackMarkersJob *)tmv;
   int framenr = tmj->sfra;
@@ -271,6 +288,7 @@ static void track_markers_endjob(void *tmv)
   BKE_autotrack_context_sync(tmj->context);
   BKE_autotrack_context_finish(tmj->context);
 
+  DEG_id_tag_update(&tmj->clip->id, ID_RECALC_COPY_ON_WRITE);
   WM_main_add_notifier(NC_SCENE | ND_FRAME, tmj->scene);
 }
 
@@ -278,6 +296,7 @@ static void track_markers_freejob(void *tmv)
 {
   TrackMarkersJob *tmj = (TrackMarkersJob *)tmv;
   tmj->clip->tracking_context = NULL;
+  WM_set_locked_interface(tmj->wm, false);
   BKE_autotrack_context_free(tmj->context);
   MEM_freeN(tmj);
 }
@@ -285,7 +304,6 @@ static void track_markers_freejob(void *tmv)
 static int track_markers(bContext *C, wmOperator *op, bool use_job)
 {
   TrackMarkersJob *tmj;
-  ScrArea *sa = CTX_wm_area(C);
   SpaceClip *sc = CTX_wm_space_clip(C);
   MovieClip *clip = ED_space_clip_get_clip(sc);
   wmJob *wm_job;
@@ -293,7 +311,7 @@ static int track_markers(bContext *C, wmOperator *op, bool use_job)
   bool sequence = RNA_boolean_get(op->ptr, "sequence");
   int framenr = ED_space_clip_get_clip_frame_number(sc);
 
-  if (WM_jobs_test(CTX_wm_manager(C), sa, WM_JOB_TYPE_ANY)) {
+  if (WM_jobs_test(CTX_wm_manager(C), CTX_data_scene(C), WM_JOB_TYPE_ANY)) {
     /* Only one tracking is allowed at a time. */
     return OPERATOR_CANCELLED;
   }
@@ -316,7 +334,7 @@ static int track_markers(bContext *C, wmOperator *op, bool use_job)
   if (use_job && sequence) {
     wm_job = WM_jobs_get(CTX_wm_manager(C),
                          CTX_wm_window(C),
-                         sa,
+                         CTX_data_scene(C),
                          "Track Markers",
                          WM_JOB_PROGRESS,
                          WM_JOB_TYPE_CLIP_TRACK_MARKERS);
@@ -346,14 +364,13 @@ static int track_markers(bContext *C, wmOperator *op, bool use_job)
 
     return OPERATOR_RUNNING_MODAL;
   }
-  else {
-    short stop = 0, do_update = 0;
-    float progress = 0.0f;
-    track_markers_startjob(tmj, &stop, &do_update, &progress);
-    track_markers_endjob(tmj);
-    track_markers_freejob(tmj);
-    return OPERATOR_FINISHED;
-  }
+
+  short stop = 0, do_update = 0;
+  float progress = 0.0f;
+  track_markers_startjob(tmj, &stop, &do_update, &progress);
+  track_markers_endjob(tmj);
+  track_markers_freejob(tmj);
+  return OPERATOR_FINISHED;
 }
 
 static int track_markers_exec(bContext *C, wmOperator *op)
@@ -369,13 +386,13 @@ static int track_markers_invoke(bContext *C, wmOperator *op, const wmEvent *UNUS
 static int track_markers_modal(bContext *C, wmOperator *UNUSED(op), const wmEvent *event)
 {
   /* No running tracking, remove handler and pass through. */
-  if (0 == WM_jobs_test(CTX_wm_manager(C), CTX_wm_area(C), WM_JOB_TYPE_ANY)) {
+  if (0 == WM_jobs_test(CTX_wm_manager(C), CTX_data_scene(C), WM_JOB_TYPE_ANY)) {
     return OPERATOR_FINISHED | OPERATOR_PASS_THROUGH;
   }
 
   /* Running tracking. */
   switch (event->type) {
-    case ESCKEY:
+    case EVT_ESCKEY:
       return OPERATOR_RUNNING_MODAL;
   }
 
@@ -426,6 +443,7 @@ static int refine_marker_exec(bContext *C, wmOperator *op)
     }
   }
 
+  DEG_id_tag_update(&clip->id, ID_RECALC_COPY_ON_WRITE);
   WM_event_add_notifier(C, NC_MOVIECLIP | NA_EVALUATED, clip);
 
   return OPERATOR_FINISHED;

@@ -53,6 +53,8 @@ set(SRC
   intern/versioning_260.c
   intern/versioning_270.c
   intern/versioning_280.c
+  intern/versioning_290.c
+  intern/versioning_cycles.c
   intern/versioning_defaults.c
   intern/versioning_dna.c
   intern/versioning_legacy.c
@@ -61,6 +63,7 @@ set(SRC
 
   BLO_blend_defs.h
   BLO_blend_validate.h
+  BLO_read_write.h
   BLO_readfile.h
   BLO_undofile.h
   BLO_writefile.h
@@ -76,12 +79,6 @@ if(WITH_BUILDINFO)
   add_definitions(-DWITH_BUILDINFO)
 endif()
 
-if(WITH_PYTHON)
-  if(WITH_PYTHON_SECURITY)
-    add_definitions(-DWITH_PYTHON_SECURITY)
-  endif()
-endif()
-
 if(WITH_INTERNATIONAL)
   add_definitions(-DWITH_INTERNATIONAL)
 endif()
@@ -92,7 +89,7 @@ endif()
 
 if(WITH_ALEMBIC)
   list(APPEND INC
-    ../alembic
+    ../io/alembic
   )
   add_definitions(-DWITH_ALEMBIC)
 endif()

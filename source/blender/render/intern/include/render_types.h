@@ -28,8 +28,8 @@
 /* exposed internal in render module only! */
 /* ------------------------------------------------------------------------- */
 
-#include "DNA_scene_types.h"
 #include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "BLI_threads.h"
 
@@ -37,6 +37,7 @@
 
 #include "RE_pipeline.h"
 
+struct GHash;
 struct Main;
 struct Object;
 struct RenderEngine;
@@ -56,7 +57,7 @@ typedef struct RenderPart {
 } RenderPart;
 
 enum {
-  PART_STATUS_NONE = 0,
+  /* PART_STATUS_NONE = 0, */ /* UNUSED */
   PART_STATUS_IN_PROGRESS = 1,
   PART_STATUS_RENDERED = 2,
   PART_STATUS_MERGED = 3,
@@ -82,9 +83,10 @@ struct Render {
    * to not conflict with writes, so no lock used for that */
   ThreadRWMutex resultmutex;
 
-  /* window size, display rect, viewplane */
-  int winx, winy; /* buffer width and height with percentage applied
-               * without border & crop. convert to long before multiplying together to avoid overflow. */
+  /** Window size, display rect, viewplane.
+   * \note Buffer width and height with percentage applied
+   * without border & crop. convert to long before multiplying together to avoid overflow. */
+  int winx, winy;
   rcti disprect;  /* part within winx winy */
   rctf viewplane; /* mapped on winx winy */
 
@@ -111,15 +113,15 @@ struct Render {
   struct Object *camera_override;
 
   ThreadRWMutex partsmutex;
-  ListBase parts;
+  struct GHash *parts;
 
   /* render engine */
   struct RenderEngine *engine;
 
-#ifdef WITH_FREESTYLE
-  struct Main *freestyle_bmain;
-  ListBase freestyle_renders;
-#endif
+  /* NOTE: This is a minimal dependency graph and evaluated scene which is enough to access view
+   * layer visibility and use for post-precessing (compositor and sequencer). */
+  Depsgraph *pipeline_depsgraph;
+  Scene *pipeline_scene_eval;
 
   /* callbacks */
   void (*display_init)(void *handle, RenderResult *rr);

@@ -23,23 +23,23 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "DNA_object_types.h"
-#include "DNA_mesh_types.h"
 #include "DNA_material_types.h"
+#include "DNA_mesh_types.h"
+#include "DNA_object_types.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
 
-#include "BLI_listbase.h"
 #include "BLI_fileops.h"
+#include "BLI_listbase.h"
 #include "BLI_path_util.h"
 
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_image.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_mesh.h"
@@ -57,9 +57,9 @@
 #include "RE_engine.h"
 #include "RE_pipeline.h"
 
-#include "IMB_imbuf_types.h"
-#include "IMB_imbuf.h"
 #include "IMB_colormanagement.h"
+#include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -96,6 +96,7 @@ typedef struct BakeAPIRender {
   bool is_cage;
 
   float cage_extrusion;
+  float max_ray_distance;
   int normal_space;
   eBakeNormalSwizzle normal_swizzle[3];
 
@@ -116,7 +117,7 @@ typedef struct BakeAPIRender {
   short *do_update;
 
   /* for redrawing */
-  ScrArea *sa;
+  ScrArea *area;
 } BakeAPIRender;
 
 /* callbacks */
@@ -137,12 +138,13 @@ static void bake_progress_update(void *bjv, float progress)
 static int bake_modal(bContext *C, wmOperator *UNUSED(op), const wmEvent *event)
 {
   /* no running blender, remove handler and pass through */
-  if (0 == WM_jobs_test(CTX_wm_manager(C), CTX_data_scene(C), WM_JOB_TYPE_OBJECT_BAKE))
+  if (0 == WM_jobs_test(CTX_wm_manager(C), CTX_data_scene(C), WM_JOB_TYPE_OBJECT_BAKE)) {
     return OPERATOR_FINISHED | OPERATOR_PASS_THROUGH;
+  }
 
   /* running render */
   switch (event->type) {
-    case ESCKEY: {
+    case EVT_ESCKEY: {
       G.is_break = true;
       return OPERATOR_RUNNING_MODAL;
     }
@@ -154,17 +156,19 @@ static int bake_modal(bContext *C, wmOperator *UNUSED(op), const wmEvent *event)
  * note: this wont check for the escape key being pressed, but doing so isnt threadsafe */
 static int bake_break(void *UNUSED(rjv))
 {
-  if (G.is_break)
+  if (G.is_break) {
     return 1;
+  }
   return 0;
 }
 
-static void bake_update_image(ScrArea *sa, Image *image)
+static void bake_update_image(ScrArea *area, Image *image)
 {
-  if (sa && sa->spacetype == SPACE_IMAGE) { /* in case the user changed while baking */
-    SpaceImage *sima = sa->spacedata.first;
-    if (sima)
+  if (area && area->spacetype == SPACE_IMAGE) { /* in case the user changed while baking */
+    SpaceImage *sima = area->spacedata.first;
+    if (sima) {
       sima->image = image;
+    }
   }
 }
 
@@ -185,8 +189,9 @@ static bool write_internal_bake_pixels(Image *image,
 
   ibuf = BKE_image_acquire_ibuf(image, NULL, &lock);
 
-  if (!ibuf)
+  if (!ibuf) {
     return false;
+  }
 
   if (margin > 0 || !is_clear) {
     mask_buffer = MEM_callocN(sizeof(char) * num_pixels, "Bake Mask");
@@ -202,14 +207,17 @@ static bool write_internal_bake_pixels(Image *image,
 
     from_colorspace = IMB_colormanagement_role_colorspace_name_get(COLOR_ROLE_SCENE_LINEAR);
 
-    if (is_float)
+    if (is_float) {
       to_colorspace = IMB_colormanagement_get_float_colorspace(ibuf);
-    else
+    }
+    else {
       to_colorspace = IMB_colormanagement_get_rect_colorspace(ibuf);
+    }
 
-    if (from_colorspace != to_colorspace)
+    if (from_colorspace != to_colorspace) {
       IMB_colormanagement_transform(
           buffer, ibuf->x, ibuf->y, ibuf->channels, from_colorspace, to_colorspace, false);
+    }
   }
 
   /* populates the ImBuf */
@@ -227,7 +235,7 @@ static bool write_internal_bake_pixels(Image *image,
                                   ibuf->x);
     }
     else {
-      IMB_buffer_byte_from_float((unsigned char *)ibuf->rect,
+      IMB_buffer_byte_from_float((uchar *)ibuf->rect,
                                  buffer,
                                  ibuf->channels,
                                  ibuf->dither,
@@ -252,7 +260,7 @@ static bool write_internal_bake_pixels(Image *image,
                                        mask_buffer);
     }
     else {
-      IMB_buffer_byte_from_float_mask((unsigned char *)ibuf->rect,
+      IMB_buffer_byte_from_float_mask((uchar *)ibuf->rect,
                                       buffer,
                                       ibuf->channels,
                                       ibuf->dither,
@@ -266,13 +274,16 @@ static bool write_internal_bake_pixels(Image *image,
   }
 
   /* margins */
-  if (margin > 0)
+  if (margin > 0) {
     RE_bake_margin(ibuf, mask_buffer, margin);
+  }
 
-  ibuf->userflags |= IB_DISPLAY_BUFFER_INVALID | IB_BITMAPDIRTY;
+  ibuf->userflags |= IB_DISPLAY_BUFFER_INVALID;
+  BKE_image_mark_dirty(image, ibuf);
 
-  if (ibuf->rect_float)
+  if (ibuf->rect_float) {
     ibuf->userflags |= IB_RECT_INVALID;
+  }
 
   /* force mipmap recalc */
   if (ibuf->mipmap[0]) {
@@ -282,8 +293,9 @@ static bool write_internal_bake_pixels(Image *image,
 
   BKE_image_release_ibuf(image, ibuf, NULL);
 
-  if (mask_buffer)
+  if (mask_buffer) {
     MEM_freeN(mask_buffer);
+  }
 
   return true;
 }
@@ -294,9 +306,12 @@ static void refresh_images(BakeImages *bake_images)
   int i;
   for (i = 0; i < bake_images->size; i++) {
     Image *ima = bake_images->data[i].image;
-    if (ima->ok == IMA_OK_LOADED) {
-      GPU_free_image(ima);
-      DEG_id_tag_update(&ima->id, 0);
+    LISTBASE_FOREACH (ImageTile *, tile, &ima->tiles) {
+      if (tile->ok == IMA_OK_LOADED) {
+        GPU_free_image(ima);
+        DEG_id_tag_update(&ima->id, 0);
+        break;
+      }
     }
   }
 }
@@ -319,8 +334,9 @@ static bool write_external_bake_pixels(const char *filepath,
   /* create a new ImBuf */
   ibuf = IMB_allocImBuf(width, height, im_format->planes, (is_float ? IB_rectfloat : IB_rect));
 
-  if (!ibuf)
+  if (!ibuf) {
     return false;
+  }
 
   /* populates the ImBuf */
   if (is_float) {
@@ -344,7 +360,7 @@ static bool write_external_bake_pixels(const char *filepath,
           buffer, ibuf->x, ibuf->y, ibuf->channels, from_colorspace, to_colorspace, false);
     }
 
-    IMB_buffer_byte_from_float((unsigned char *)ibuf->rect,
+    IMB_buffer_byte_from_float((uchar *)ibuf->rect,
                                buffer,
                                ibuf->channels,
                                ibuf->dither,
@@ -366,15 +382,16 @@ static bool write_external_bake_pixels(const char *filepath,
     RE_bake_mask_fill(pixel_array, num_pixels, mask_buffer);
     RE_bake_margin(ibuf, mask_buffer, margin);
 
-    if (mask_buffer)
+    if (mask_buffer) {
       MEM_freeN(mask_buffer);
+    }
   }
 
   if ((ok = BKE_imbuf_write(ibuf, filepath, im_format))) {
 #ifndef WIN32
     chmod(filepath, S_IRUSR | S_IWUSR);
 #endif
-    //printf("%s saving bake map: '%s'\n", __func__, filepath);
+    // printf("%s saving bake map: '%s'\n", __func__, filepath);
   }
 
   /* garbage collection */
@@ -417,20 +434,19 @@ static bool bake_object_check(ViewLayer *view_layer, Object *ob, ReportList *rep
     BKE_reportf(reports, RPT_ERROR, "Object \"%s\" is not a mesh", ob->id.name + 2);
     return false;
   }
-  else {
-    Mesh *me = (Mesh *)ob->data;
 
-    if (CustomData_get_active_layer_index(&me->ldata, CD_MLOOPUV) == -1) {
-      BKE_reportf(
-          reports, RPT_ERROR, "No active UV layer found in the object \"%s\"", ob->id.name + 2);
-      return false;
-    }
+  Mesh *me = (Mesh *)ob->data;
+  if (CustomData_get_active_layer_index(&me->ldata, CD_MLOOPUV) == -1) {
+    BKE_reportf(
+        reports, RPT_ERROR, "No active UV layer found in the object \"%s\"", ob->id.name + 2);
+    return false;
   }
 
   for (i = 0; i < ob->totcol; i++) {
     bNodeTree *ntree = NULL;
     bNode *node = NULL;
-    ED_object_get_active_image(ob, i + 1, &image, NULL, &node, &ntree);
+    const int mat_nr = i + 1;
+    ED_object_get_active_image(ob, mat_nr, &image, NULL, &node, &ntree);
 
     if (image) {
       ImBuf *ibuf;
@@ -465,7 +481,7 @@ static bool bake_object_check(ViewLayer *view_layer, Object *ob, ReportList *rep
       }
     }
     else {
-      Material *mat = give_current_material(ob, i);
+      Material *mat = BKE_object_material_get(ob, mat_nr);
       if (mat != NULL) {
         BKE_reportf(reports,
                     RPT_INFO,
@@ -524,14 +540,11 @@ static bool bake_pass_filter_check(eScenePassType pass_type,
 
         return false;
       }
-      else {
-        BKE_report(reports,
-                   RPT_ERROR,
-                   "Combined bake pass requires Emit, or a light pass with "
-                   "Direct or Indirect contributions enabled");
-        return false;
-      }
-      break;
+      BKE_report(reports,
+                 RPT_ERROR,
+                 "Combined bake pass requires Emit, or a light pass with "
+                 "Direct or Indirect contributions enabled");
+      return false;
     case SCE_PASS_DIFFUSE_COLOR:
     case SCE_PASS_GLOSSY_COLOR:
     case SCE_PASS_TRANSM_COLOR:
@@ -570,14 +583,16 @@ static bool bake_objects_check(Main *bmain,
   if (is_selected_to_active) {
     int tot_objects = 0;
 
-    if (!bake_object_check(view_layer, ob, reports))
+    if (!bake_object_check(view_layer, ob, reports)) {
       return false;
+    }
 
     for (link = selected_objects->first; link; link = link->next) {
       Object *ob_iter = (Object *)link->ptr.data;
 
-      if (ob_iter == ob)
+      if (ob_iter == ob) {
         continue;
+      }
 
       if (ELEM(ob_iter->type, OB_MESH, OB_FONT, OB_CURVE, OB_SURF, OB_MBALL) == false) {
         BKE_reportf(reports,
@@ -602,8 +617,9 @@ static bool bake_objects_check(Main *bmain,
     }
 
     for (link = selected_objects->first; link; link = link->next) {
-      if (!bake_object_check(view_layer, link->ptr.data, reports))
+      if (!bake_object_check(view_layer, link->ptr.data, reports)) {
         return false;
+      }
     }
   }
   return true;
@@ -689,10 +705,9 @@ static size_t initialize_internal_images(BakeImages *bake_images, ReportList *re
 }
 
 /* create new mesh with edit mode changes and modifiers applied */
-static Mesh *bake_mesh_new_from_object(Depsgraph *depsgraph, Main *bmain, Scene *scene, Object *ob)
+static Mesh *bake_mesh_new_from_object(Object *object)
 {
-  bool apply_modifiers = (ob->type != OB_MESH);
-  Mesh *me = BKE_mesh_new_from_object(depsgraph, bmain, scene, ob, apply_modifiers, false);
+  Mesh *me = BKE_mesh_new_from_object(NULL, object, false);
 
   if (me->flag & ME_AUTOSMOOTH) {
     BKE_mesh_split_faces(me, true);
@@ -718,6 +733,7 @@ static int bake(Render *re,
                 const bool is_selected_to_active,
                 const bool is_cage,
                 const float cage_extrusion,
+                const float max_ray_distance,
                 const int normal_space,
                 const eBakeNormalSwizzle normal_swizzle[],
                 const char *custom_cage,
@@ -725,12 +741,12 @@ static int bake(Render *re,
                 const int width,
                 const int height,
                 const char *identifier,
-                ScrArea *sa,
+                ScrArea *area,
                 const char *uv_layer)
 {
   /* We build a depsgraph for the baking,
    * so we don't need to change the original data to adjust visibility and modifiers. */
-  Depsgraph *depsgraph = DEG_graph_new(scene, view_layer, DAG_EVAL_RENDER);
+  Depsgraph *depsgraph = DEG_graph_new(bmain, scene, view_layer, DAG_EVAL_RENDER);
   DEG_graph_build_from_view_layer(depsgraph, bmain, scene, view_layer);
 
   int op_result = OPERATOR_CANCELLED;
@@ -847,8 +863,9 @@ static int bake(Render *re,
     for (link = selected_objects->first; link; link = link->next) {
       Object *ob_iter = link->ptr.data;
 
-      if (ob_iter == ob_low)
+      if (ob_iter == ob_low) {
         continue;
+      }
 
       tot_highpoly++;
     }
@@ -863,7 +880,7 @@ static int bake(Render *re,
       else {
         ob_cage_eval = DEG_get_evaluated_object(depsgraph, ob_cage);
         ob_cage_eval->restrictflag |= OB_RESTRICT_RENDER;
-        ob_cage_eval->base_flag &= ~(BASE_VISIBLE | BASE_ENABLED_RENDER);
+        ob_cage_eval->base_flag &= ~(BASE_VISIBLE_DEPSGRAPH | BASE_ENABLED_RENDER);
       }
     }
   }
@@ -875,7 +892,7 @@ static int bake(Render *re,
   /* for multires bake, use linear UV subdivision to match low res UVs */
   if (pass_type == SCE_PASS_NORMAL && normal_space == R_BAKE_SPACE_TANGENT &&
       !is_selected_to_active) {
-    mmd_low = (MultiresModifierData *)modifiers_findByType(ob_low, eModifierType_Multires);
+    mmd_low = (MultiresModifierData *)BKE_modifiers_findby_type(ob_low, eModifierType_Multires);
     if (mmd_low) {
       mmd_flags_low = mmd_low->flags;
       mmd_low->uv_smooth = SUBSURF_UV_SMOOTH_NONE;
@@ -887,11 +904,12 @@ static int bake(Render *re,
   ob_low_eval = DEG_get_evaluated_object(depsgraph, ob_low);
 
   /* get the mesh as it arrives in the renderer */
-  me_low = bake_mesh_new_from_object(depsgraph, bmain, scene, ob_low_eval);
+  me_low = bake_mesh_new_from_object(ob_low_eval);
 
   /* populate the pixel array with the face data */
-  if ((is_selected_to_active && (ob_cage == NULL) && is_cage) == false)
+  if ((is_selected_to_active && (ob_cage == NULL) && is_cage) == false) {
     RE_bake_pixels_populate(me_low, pixel_array_low, num_pixels, &bake_images, uv_layer);
+  }
   /* else populate the pixel array with the 'cage' mesh (the smooth version of the mesh)  */
 
   if (is_selected_to_active) {
@@ -900,7 +918,7 @@ static int bake(Render *re,
 
     /* prepare cage mesh */
     if (ob_cage) {
-      me_cage = bake_mesh_new_from_object(depsgraph, bmain, scene, ob_cage_eval);
+      me_cage = bake_mesh_new_from_object(ob_cage_eval);
       if ((me_low->totpoly != me_cage->totpoly) || (me_low->totloop != me_cage->totloop)) {
         BKE_report(reports,
                    RPT_ERROR,
@@ -910,7 +928,7 @@ static int bake(Render *re,
       }
     }
     else if (is_cage) {
-      BKE_object_eval_reset(ob_low_eval);
+      bool is_changed = false;
 
       ModifierData *md = ob_low_eval->modifiers.first;
       while (md) {
@@ -924,12 +942,24 @@ static int bake(Render *re,
 
         if (md->type == eModifierType_EdgeSplit) {
           BLI_remlink(&ob_low_eval->modifiers, md);
-          modifier_free(md);
+          BKE_modifier_free(md);
+          is_changed = true;
         }
         md = md_next;
       }
 
-      me_cage = bake_mesh_new_from_object(depsgraph, bmain, scene, ob_low_eval);
+      if (is_changed) {
+        /* Make sure object is evaluated with the new modifier settings.
+         *
+         * NOTE: Since the dependency graph was fully evaluated prior to bake, and we only made
+         * single modification to this object all the possible dependencies for evaluation are
+         * already up to date. This means we can do a cheap single object update
+         * (as an opposite of full depsgraph update). */
+        BKE_object_eval_reset(ob_low_eval);
+        BKE_object_handle_data_update(depsgraph, scene, ob_low_eval);
+      }
+
+      me_cage = BKE_mesh_new_from_object(NULL, ob_low_eval, false);
       RE_bake_pixels_populate(me_cage, pixel_array_low, num_pixels, &bake_images, uv_layer);
     }
 
@@ -939,15 +969,16 @@ static int bake(Render *re,
     for (link = selected_objects->first; link; link = link->next) {
       Object *ob_iter = link->ptr.data;
 
-      if (ob_iter == ob_low)
+      if (ob_iter == ob_low) {
         continue;
+      }
 
       /* initialize highpoly_data */
       highpoly[i].ob = ob_iter;
       highpoly[i].ob_eval = DEG_get_evaluated_object(depsgraph, ob_iter);
       highpoly[i].ob_eval->restrictflag &= ~OB_RESTRICT_RENDER;
-      highpoly[i].ob_eval->base_flag |= (BASE_VISIBLE | BASE_ENABLED_RENDER);
-      highpoly[i].me = bake_mesh_new_from_object(depsgraph, bmain, scene, highpoly[i].ob_eval);
+      highpoly[i].ob_eval->base_flag |= (BASE_VISIBLE_DEPSGRAPH | BASE_ENABLED_RENDER);
+      highpoly[i].me = BKE_mesh_new_from_object(NULL, highpoly[i].ob_eval, false);
 
       /* lowpoly to highpoly transformation matrix */
       copy_m4_m4(highpoly[i].obmat, highpoly[i].ob->obmat);
@@ -962,10 +993,10 @@ static int bake(Render *re,
 
     if (ob_cage != NULL) {
       ob_cage_eval->restrictflag |= OB_RESTRICT_RENDER;
-      ob_cage_eval->base_flag &= ~(BASE_VISIBLE | BASE_ENABLED_RENDER);
+      ob_cage_eval->base_flag &= ~(BASE_VISIBLE_DEPSGRAPH | BASE_ENABLED_RENDER);
     }
     ob_low_eval->restrictflag |= OB_RESTRICT_RENDER;
-    ob_low_eval->base_flag &= ~(BASE_VISIBLE | BASE_ENABLED_RENDER);
+    ob_low_eval->base_flag &= ~(BASE_VISIBLE_DEPSGRAPH | BASE_ENABLED_RENDER);
 
     /* populate the pixel arrays with the corresponding face data for each high poly object */
     if (!RE_bake_pixels_populate_from_objects(me_low,
@@ -976,6 +1007,7 @@ static int bake(Render *re,
                                               num_pixels,
                                               ob_cage != NULL,
                                               cage_extrusion,
+                                              max_ray_distance,
                                               ob_low_eval->obmat,
                                               (ob_cage ? ob_cage->obmat : ob_low_eval->obmat),
                                               me_cage)) {
@@ -990,7 +1022,7 @@ static int bake(Render *re,
                           highpoly[i].ob,
                           i,
                           pixel_array_high,
-                          num_pixels,
+                          &bake_images,
                           depth,
                           pass_type,
                           pass_filter,
@@ -1012,7 +1044,7 @@ static int bake(Render *re,
                           ob_low_eval,
                           0,
                           pixel_array_low,
-                          num_pixels,
+                          &bake_images,
                           depth,
                           pass_type,
                           pass_filter,
@@ -1034,10 +1066,7 @@ static int bake(Render *re,
             (normal_swizzle[2] == R_BAKE_POSZ)) {
           break;
         }
-        else {
-          RE_bake_normal_world_to_world(
-              pixel_array_low, num_pixels, depth, result, normal_swizzle);
-        }
+        RE_bake_normal_world_to_world(pixel_array_low, num_pixels, depth, result, normal_swizzle);
         break;
       }
       case R_BAKE_SPACE_OBJECT: {
@@ -1062,7 +1091,7 @@ static int bake(Render *re,
           int mode;
 
           BKE_object_eval_reset(ob_low_eval);
-          md = modifiers_findByType(ob_low_eval, eModifierType_Multires);
+          md = BKE_modifiers_findby_type(ob_low_eval, eModifierType_Multires);
 
           if (md) {
             mode = md->mode;
@@ -1070,7 +1099,7 @@ static int bake(Render *re,
           }
 
           /* Evaluate modifiers again. */
-          me_nores = BKE_mesh_new_from_object(depsgraph, bmain, scene, ob_low_eval, true, false);
+          me_nores = BKE_mesh_new_from_object(NULL, ob_low_eval, false);
           RE_bake_pixels_populate(me_nores, pixel_array_low, num_pixels, &bake_images, uv_layer);
 
           RE_bake_normal_world_to_tangent(pixel_array_low,
@@ -1080,10 +1109,11 @@ static int bake(Render *re,
                                           me_nores,
                                           normal_swizzle,
                                           ob_low_eval->obmat);
-          BKE_id_free(bmain, me_nores);
+          BKE_id_free(NULL, &me_nores->id);
 
-          if (md)
+          if (md) {
             md->mode = mode;
+          }
         }
         break;
       }
@@ -1112,7 +1142,7 @@ static int bake(Render *re,
                                         is_noncolor);
 
         /* might be read by UI to set active image for display */
-        bake_update_image(sa, bk_image->image);
+        bake_update_image(area, bk_image->image);
 
         if (!ok) {
           BKE_reportf(reports,
@@ -1193,43 +1223,53 @@ static int bake(Render *re,
     }
   }
 
-  if (is_save_internal)
+  if (is_save_internal) {
     refresh_images(&bake_images);
+  }
 
 cleanup:
 
   if (highpoly) {
     int i;
     for (i = 0; i < tot_highpoly; i++) {
-      if (highpoly[i].me)
-        BKE_id_free(bmain, highpoly[i].me);
+      if (highpoly[i].me != NULL) {
+        BKE_id_free(NULL, &highpoly[i].me->id);
+      }
     }
     MEM_freeN(highpoly);
   }
 
-  if (mmd_low)
+  if (mmd_low) {
     mmd_low->flags = mmd_flags_low;
+  }
 
-  if (pixel_array_low)
+  if (pixel_array_low) {
     MEM_freeN(pixel_array_low);
+  }
 
-  if (pixel_array_high)
+  if (pixel_array_high) {
     MEM_freeN(pixel_array_high);
+  }
 
-  if (bake_images.data)
+  if (bake_images.data) {
     MEM_freeN(bake_images.data);
+  }
 
-  if (bake_images.lookup)
+  if (bake_images.lookup) {
     MEM_freeN(bake_images.lookup);
+  }
 
-  if (result)
+  if (result) {
     MEM_freeN(result);
+  }
 
-  if (me_low)
-    BKE_id_free(bmain, me_low);
+  if (me_low != NULL) {
+    BKE_id_free(NULL, &me_low->id);
+  }
 
-  if (me_cage)
-    BKE_id_free(bmain, me_cage);
+  if (me_cage != NULL) {
+    BKE_id_free(NULL, &me_cage->id);
+  }
 
   DEG_graph_free(depsgraph);
 
@@ -1239,13 +1279,13 @@ cleanup:
 static void bake_init_api_data(wmOperator *op, bContext *C, BakeAPIRender *bkr)
 {
   bool is_save_internal;
-  bScreen *sc = CTX_wm_screen(C);
+  bScreen *screen = CTX_wm_screen(C);
 
   bkr->ob = CTX_data_active_object(C);
   bkr->main = CTX_data_main(C);
   bkr->view_layer = CTX_data_view_layer(C);
   bkr->scene = CTX_data_scene(C);
-  bkr->sa = sc ? BKE_screen_find_big_area(sc, SPACE_IMAGE, 10) : NULL;
+  bkr->area = screen ? BKE_screen_find_big_area(screen, SPACE_IMAGE, 10) : NULL;
 
   bkr->pass_type = RNA_enum_get(op->ptr, "type");
   bkr->pass_filter = RNA_enum_get(op->ptr, "pass_filter");
@@ -1260,6 +1300,7 @@ static void bake_init_api_data(wmOperator *op, bContext *C, BakeAPIRender *bkr)
   bkr->is_selected_to_active = RNA_boolean_get(op->ptr, "use_selected_to_active");
   bkr->is_cage = RNA_boolean_get(op->ptr, "use_cage");
   bkr->cage_extrusion = RNA_float_get(op->ptr, "cage_extrusion");
+  bkr->max_ray_distance = RNA_float_get(op->ptr, "max_ray_distance");
 
   bkr->normal_space = RNA_enum_get(op->ptr, "normal_space");
   bkr->normal_swizzle[0] = RNA_enum_get(op->ptr, "normal_r");
@@ -1349,6 +1390,7 @@ static int bake_exec(bContext *C, wmOperator *op)
                   true,
                   bkr.is_cage,
                   bkr.cage_extrusion,
+                  bkr.max_ray_distance,
                   bkr.normal_space,
                   bkr.normal_swizzle,
                   bkr.custom_cage,
@@ -1356,7 +1398,7 @@ static int bake_exec(bContext *C, wmOperator *op)
                   bkr.width,
                   bkr.height,
                   bkr.identifier,
-                  bkr.sa,
+                  bkr.area,
                   bkr.uv_layer);
   }
   else {
@@ -1381,6 +1423,7 @@ static int bake_exec(bContext *C, wmOperator *op)
                     false,
                     bkr.is_cage,
                     bkr.cage_extrusion,
+                    bkr.max_ray_distance,
                     bkr.normal_space,
                     bkr.normal_swizzle,
                     bkr.custom_cage,
@@ -1388,7 +1431,7 @@ static int bake_exec(bContext *C, wmOperator *op)
                     bkr.width,
                     bkr.height,
                     bkr.identifier,
-                    bkr.sa,
+                    bkr.area,
                     bkr.uv_layer);
     }
   }
@@ -1450,6 +1493,7 @@ static void bake_startjob(void *bkv, short *UNUSED(stop), short *do_update, floa
                        true,
                        bkr->is_cage,
                        bkr->cage_extrusion,
+                       bkr->max_ray_distance,
                        bkr->normal_space,
                        bkr->normal_swizzle,
                        bkr->custom_cage,
@@ -1457,7 +1501,7 @@ static void bake_startjob(void *bkv, short *UNUSED(stop), short *do_update, floa
                        bkr->width,
                        bkr->height,
                        bkr->identifier,
-                       bkr->sa,
+                       bkr->area,
                        bkr->uv_layer);
   }
   else {
@@ -1482,6 +1526,7 @@ static void bake_startjob(void *bkv, short *UNUSED(stop), short *do_update, floa
                          false,
                          bkr->is_cage,
                          bkr->cage_extrusion,
+                         bkr->max_ray_distance,
                          bkr->normal_space,
                          bkr->normal_swizzle,
                          bkr->custom_cage,
@@ -1489,11 +1534,12 @@ static void bake_startjob(void *bkv, short *UNUSED(stop), short *do_update, floa
                          bkr->width,
                          bkr->height,
                          bkr->identifier,
-                         bkr->sa,
+                         bkr->area,
                          bkr->uv_layer);
 
-      if (bkr->result == OPERATOR_CANCELLED)
+      if (bkr->result == OPERATOR_CANCELLED) {
         return;
+      }
     }
   }
 
@@ -1538,6 +1584,11 @@ static void bake_set_props(wmOperator *op, Scene *scene)
   prop = RNA_struct_find_property(op->ptr, "use_selected_to_active");
   if (!RNA_property_is_set(op->ptr, prop)) {
     RNA_property_boolean_set(op->ptr, prop, (bake->flag & R_BAKE_TO_ACTIVE) != 0);
+  }
+
+  prop = RNA_struct_find_property(op->ptr, "max_ray_distance");
+  if (!RNA_property_is_set(op->ptr, prop)) {
+    RNA_property_float_set(op->ptr, prop, bake->max_ray_distance);
   }
 
   prop = RNA_struct_find_property(op->ptr, "cage_extrusion");
@@ -1613,8 +1664,9 @@ static int bake_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event)
   bake_set_props(op, scene);
 
   /* only one render job at a time */
-  if (WM_jobs_test(CTX_wm_manager(C), scene, WM_JOB_TYPE_OBJECT_BAKE))
+  if (WM_jobs_test(CTX_wm_manager(C), scene, WM_JOB_TYPE_OBJECT_BAKE)) {
     return OPERATOR_CANCELLED;
+  }
 
   bkr = MEM_mallocN(sizeof(BakeAPIRender), "render bake");
 
@@ -1719,12 +1771,23 @@ void OBJECT_OT_bake(wmOperatorType *ot)
                   "Selected to Active",
                   "Bake shading on the surface of selected objects to the active object");
   RNA_def_float(ot->srna,
+                "max_ray_distance",
+                0.0f,
+                0.0f,
+                FLT_MAX,
+                "Max Ray Distance",
+                "The maximum ray distance for matching points between the active and selected "
+                "objects. If zero, there is no limit",
+                0.0f,
+                1.0f);
+  RNA_def_float(ot->srna,
                 "cage_extrusion",
                 0.0f,
                 0.0f,
                 FLT_MAX,
                 "Cage Extrusion",
-                "Distance to use for the inward ray cast when using selected to active",
+                "Inflate the active object by the specified distance for baking. This helps "
+                "matching to points nearer to the outside of the selected object meshes",
                 0.0f,
                 1.0f);
   RNA_def_string(ot->srna,

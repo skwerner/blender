@@ -43,6 +43,10 @@ typedef enum {
 /* use to denote intentionally unset theme color */
 #define TH_UNDEFINED -1
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum ThemeColorID {
   TH_REDALERT,
 
@@ -92,18 +96,24 @@ typedef enum ThemeColorID {
   TH_VERTEX_UNREFERENCED,
   TH_VERTEX_SIZE,
   TH_OUTLINE_WIDTH,
+  TH_OBCENTER_DIA,
   TH_EDGE,
   TH_EDGE_SELECT,
   TH_EDGE_SEAM,
   TH_EDGE_FACESEL,
   TH_FACE,
   TH_FACE_SELECT,
+  TH_FACE_BACK,
+  TH_FACE_FRONT,
   TH_NORMAL,
   TH_VNORMAL,
   TH_LNORMAL,
   TH_FACE_DOT,
   TH_FACEDOT_SIZE,
   TH_CFRAME,
+  TH_TIME_SCRUB_BACKGROUND,
+  TH_TIME_MARKER_LINE,
+  TH_TIME_MARKER_LINE_SELECTED,
   TH_TIME_KEYFRAME,
   TH_TIME_GP_KEYFRAME,
   TH_NURB_ULINE,
@@ -134,10 +144,12 @@ typedef enum ThemeColorID {
   TH_SYNTAX_D,
   TH_SYNTAX_N,
   TH_SYNTAX_S,
+  TH_LINENUMBERS,
 
   TH_BONE_SOLID,
   TH_BONE_POSE,
   TH_BONE_POSE_ACTIVE,
+  TH_BONE_LOCKED_WEIGHT,
 
   TH_STRIP,
   TH_STRIP_SELECT,
@@ -193,10 +205,12 @@ typedef enum ThemeColorID {
   TH_SEQ_SCENE,
   TH_SEQ_AUDIO,
   TH_SEQ_EFFECT,
-  TH_SEQ_TRANSITION,
   TH_SEQ_META,
   TH_SEQ_TEXT,
   TH_SEQ_PREVIEW,
+  TH_SEQ_COLOR,
+  TH_SEQ_ACTIVE,
+  TH_SEQ_SELECTED,
 
   TH_EDGE_SHARP,
   TH_EDITMESH_ACTIVE,
@@ -223,6 +237,7 @@ typedef enum ThemeColorID {
   TH_DRAWEXTRA_FACEANG,
 
   TH_NODE_CURVING,
+  TH_NODE_GRID_LEVELS,
 
   TH_MARKER_OUTLINE,
   TH_MARKER,
@@ -232,6 +247,8 @@ typedef enum ThemeColorID {
   TH_DIS_MARKER,
   TH_PATH_BEFORE,
   TH_PATH_AFTER,
+  TH_PATH_KEYFRAME_BEFORE,
+  TH_PATH_KEYFRAME_AFTER,
   TH_CAMERA_PATH,
   TH_LOCK_MARKER,
 
@@ -253,6 +270,11 @@ typedef enum ThemeColorID {
 
   TH_MATCH,            /* highlight color for search matches */
   TH_SELECT_HIGHLIGHT, /* highlight color for selected outliner item */
+  TH_SELECT_ACTIVE,    /* highlight color for active outliner item */
+  TH_SELECTED_OBJECT,  /* selected object color for outliner */
+  TH_ACTIVE_OBJECT,    /* active object color for outliner */
+  TH_EDITED_OBJECT,    /* edited object color for outliner */
+  TH_ROW_ALTERNATE,    /* overlay on every other row */
 
   TH_SKIN_ROOT,
 
@@ -260,15 +282,21 @@ typedef enum ThemeColorID {
   TH_ANIM_INACTIVE,      /* no active action */
   TH_ANIM_PREVIEW_RANGE, /* preview range overlay */
 
+  TH_ICON_SCENE,
   TH_ICON_COLLECTION,
   TH_ICON_OBJECT,
   TH_ICON_OBJECT_DATA,
   TH_ICON_MODIFIER,
   TH_ICON_SHADING,
+  TH_ICON_FOLDER,
+  TH_ICON_FUND,
+
+  TH_SCROLL_TEXT,
 
   TH_NLA_TWEAK,       /* 'tweaking' track in NLA */
   TH_NLA_TWEAK_DUPLI, /* error/warning flag for other strips referencing dupli strip */
 
+  TH_NLA_TRACK,
   TH_NLA_TRANSITION,
   TH_NLA_TRANSITION_SEL,
   TH_NLA_META,
@@ -277,8 +305,12 @@ typedef enum ThemeColorID {
   TH_NLA_SOUND_SEL,
 
   TH_WIDGET_EMBOSS,
-
+  TH_WIDGET_TEXT_CURSOR,
   TH_EDITOR_OUTLINE,
+
+  TH_TRANSPARENT_CHECKER_PRIMARY,
+  TH_TRANSPARENT_CHECKER_SECONDARY,
+  TH_TRANSPARENT_CHECKER_SIZE,
 
   TH_AXIS_X, /* X/Y/Z Axis */
   TH_AXIS_Y,
@@ -287,10 +319,11 @@ typedef enum ThemeColorID {
   TH_GIZMO_HI,
   TH_GIZMO_PRIMARY,
   TH_GIZMO_SECONDARY,
+  TH_GIZMO_VIEW_ALIGN,
   TH_GIZMO_A,
   TH_GIZMO_B,
 
-  TH_SHOW_BACK_GRAD,
+  TH_BACKGROUND_TYPE,
 
   TH_INFO_SELECTED,
   TH_INFO_SELECTED_TEXT,
@@ -302,6 +335,10 @@ typedef enum ThemeColorID {
   TH_INFO_INFO_TEXT,
   TH_INFO_DEBUG,
   TH_INFO_DEBUG_TEXT,
+  TH_INFO_PROPERTY,
+  TH_INFO_PROPERTY_TEXT,
+  TH_INFO_OPERATOR,
+  TH_INFO_OPERATOR_TEXT,
   TH_VIEW_OVERLAY,
 
   TH_V3D_CLIPPING_BORDER,
@@ -341,7 +378,8 @@ void UI_GetThemeColorShade3fv(int colorid, int offset, float col[3]);
 void UI_GetThemeColorShade3ubv(int colorid, int offset, unsigned char col[3]);
 void UI_GetThemeColorShade4ubv(int colorid, int offset, unsigned char col[4]);
 
-// get three color values, range 0-255, complete with shading offset for the RGB components and blending
+// get three color values, range 0-255,
+// complete with shading offset for the RGB components and blending.
 void UI_GetThemeColorBlendShade3ubv(
     int colorid1, int colorid2, float fac, int offset, unsigned char col[3]);
 
@@ -355,13 +393,14 @@ void UI_GetThemeColorType4fv(int colorid, int spacetype, float col[4]);
 void UI_GetThemeColorShade4fv(int colorid, int offset, float col[4]);
 void UI_GetThemeColorShadeAlpha4fv(int colorid, int coloffset, int alphaoffset, float col[4]);
 
-// get four colour values ranged between 0 and 255; includes the alpha channel
+// get four color values ranged between 0 and 255; includes the alpha channel
 void UI_GetThemeColorShadeAlpha4ubv(int colorid,
                                     int coloffset,
                                     int alphaoffset,
                                     unsigned char col[4]);
 
-// get four color values, range 0.0-1.0, complete with shading offset for the RGB components and blending
+// get four color values, range 0.0-1.0,
+// complete with shading offset for the RGB components and blending.
 void UI_GetThemeColorBlendShade3fv(
     int colorid1, int colorid2, float fac, int offset, float col[3]);
 void UI_GetThemeColorBlendShade4fv(
@@ -377,7 +416,7 @@ void UI_GetThemeColorType3ubv(int colorid, int spacetype, unsigned char col[3]);
 void UI_GetThemeColorType4ubv(int colorid, int spacetype, unsigned char col[4]);
 
 // get theme color for coloring monochrome icons
-bool UI_GetIconThemeColor4fv(int colorid, float col[4]);
+bool UI_GetIconThemeColor4ubv(int colorid, unsigned char col[4]);
 
 // shade a 3 byte color (same as UI_GetColorPtrBlendShade3ubv with 0.0 factor)
 void UI_GetColorPtrShade3ubv(const unsigned char cp1[3], unsigned char col[3], int offset);
@@ -415,5 +454,9 @@ int UI_ThemeMenuShadowWidth(void);
 const unsigned char *UI_ThemeGetColorPtr(struct bTheme *btheme, int spacetype, int colorid);
 
 void UI_make_axis_color(const unsigned char *src_col, unsigned char *dst_col, const char axis);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __UI_RESOURCES_H__ */

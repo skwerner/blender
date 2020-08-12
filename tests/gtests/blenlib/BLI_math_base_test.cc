@@ -4,7 +4,8 @@
 
 #include "BLI_math.h"
 
-/* In tests below, when we are using -1.0f as max_diff value, we actually turn the function into a pure-ULP one. */
+/* In tests below, when we are using -1.0f as max_diff value, we actually turn the function into a
+ * pure-ULP one. */
 
 /* Put this here, since we cannot use BLI_assert() in inline math files it seems... */
 TEST(math_base, CompareFFRelativeValid)
@@ -73,11 +74,42 @@ TEST(math_base, CompareFFRelativeZero)
 
   /* Note: in theory, this should return false, since 0.0f  and -0.0f have 0x80000000 diff,
    *       but overflow in subtraction seems to break something here
-   *       (abs(*(int *)&fn0 - *(int *)&f0) == 0x80000000 == fn0), probably because int32 cannot hold this abs value.
-     *       this is yet another illustration of why one shall never use (near-)zero floats in pure-ULP comparison. */
+   *       (abs(*(int *)&fn0 - *(int *)&f0) == 0x80000000 == fn0), probably because int32 cannot
+   * hold this abs value. this is yet another illustration of why one shall never use (near-)zero
+   * floats in pure-ULP comparison. */
   //  EXPECT_FALSE(compare_ff_relative(fn0, f0, -1.0f, 1024));
   //  EXPECT_FALSE(compare_ff_relative(f0, fn0, -1.0f, 1024));
 
   EXPECT_FALSE(compare_ff_relative(fn0, f1, -1.0f, 1024));
   EXPECT_FALSE(compare_ff_relative(f1, fn0, -1.0f, 1024));
+}
+
+TEST(math_base, Log2FloorU)
+{
+  EXPECT_EQ(log2_floor_u(0), 0);
+  EXPECT_EQ(log2_floor_u(1), 0);
+  EXPECT_EQ(log2_floor_u(2), 1);
+  EXPECT_EQ(log2_floor_u(3), 1);
+  EXPECT_EQ(log2_floor_u(4), 2);
+  EXPECT_EQ(log2_floor_u(5), 2);
+  EXPECT_EQ(log2_floor_u(6), 2);
+  EXPECT_EQ(log2_floor_u(7), 2);
+  EXPECT_EQ(log2_floor_u(8), 3);
+  EXPECT_EQ(log2_floor_u(9), 3);
+  EXPECT_EQ(log2_floor_u(123456), 16);
+}
+
+TEST(math_base, Log2CeilU)
+{
+  EXPECT_EQ(log2_ceil_u(0), 0);
+  EXPECT_EQ(log2_ceil_u(1), 0);
+  EXPECT_EQ(log2_ceil_u(2), 1);
+  EXPECT_EQ(log2_ceil_u(3), 2);
+  EXPECT_EQ(log2_ceil_u(4), 2);
+  EXPECT_EQ(log2_ceil_u(5), 3);
+  EXPECT_EQ(log2_ceil_u(6), 3);
+  EXPECT_EQ(log2_ceil_u(7), 3);
+  EXPECT_EQ(log2_ceil_u(8), 3);
+  EXPECT_EQ(log2_ceil_u(9), 4);
+  EXPECT_EQ(log2_ceil_u(123456), 17);
 }

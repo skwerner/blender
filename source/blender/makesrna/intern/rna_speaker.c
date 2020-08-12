@@ -25,8 +25,8 @@
 
 #include "rna_internal.h"
 
-#include "DNA_speaker_types.h"
 #include "DNA_sound_types.h"
+#include "DNA_speaker_types.h"
 
 #include "BLT_translation.h"
 
@@ -61,6 +61,7 @@ static void rna_def_speaker(BlenderRNA *brna)
   RNA_def_property_struct_type(prop, "Sound");
   RNA_def_property_flag(prop, PROP_EDITABLE);
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_ui_text(prop, "Sound", "Sound data-block used by this speaker");
   /* RNA_def_property_float_funcs(prop, NULL, "rna_Speaker_sound_set", NULL); */
   /* RNA_def_property_update(prop, 0, "rna_Speaker_update"); */

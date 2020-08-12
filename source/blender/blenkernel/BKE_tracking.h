@@ -24,8 +24,11 @@
  * \ingroup bke
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct Camera;
-struct Depsgraph;
 struct ImBuf;
 struct ListBase;
 struct MovieClipUser;
@@ -57,9 +60,7 @@ struct MovieTrackingReconstruction *BKE_tracking_get_active_reconstruction(
     struct MovieTracking *tracking);
 
 /* matrices for constraints and drawing */
-void BKE_tracking_get_camera_object_matrix(struct Scene *scene,
-                                           struct Object *ob,
-                                           float mat[4][4]);
+void BKE_tracking_get_camera_object_matrix(struct Object *camera_object, float mat[4][4]);
 void BKE_tracking_get_projection_matrix(struct MovieTracking *tracking,
                                         struct MovieTrackingObject *object,
                                         int framenr,
@@ -260,8 +261,16 @@ void BKE_tracking_distortion_undistort_v2(struct MovieDistortion *distortion,
                                           float r_co[2]);
 void BKE_tracking_distortion_free(struct MovieDistortion *distortion);
 
-void BKE_tracking_distort_v2(struct MovieTracking *tracking, const float co[2], float r_co[2]);
-void BKE_tracking_undistort_v2(struct MovieTracking *tracking, const float co[2], float r_co[2]);
+void BKE_tracking_distort_v2(struct MovieTracking *tracking,
+                             int image_width,
+                             int image_height,
+                             const float co[2],
+                             float r_co[2]);
+void BKE_tracking_undistort_v2(struct MovieTracking *tracking,
+                               int image_width,
+                               int image_height,
+                               const float co[2],
+                               float r_co[2]);
 
 struct ImBuf *BKE_tracking_undistort_frame(struct MovieTracking *tracking,
                                            struct ImBuf *ibuf,
@@ -275,6 +284,8 @@ struct ImBuf *BKE_tracking_distort_frame(struct MovieTracking *tracking,
                                          float overscan);
 
 void BKE_tracking_max_distortion_delta_across_bound(struct MovieTracking *tracking,
+                                                    int image_width,
+                                                    int image_height,
                                                     struct rcti *rect,
                                                     bool undistort,
                                                     float delta[2]);
@@ -354,6 +365,12 @@ void BKE_tracking_reconstruction_solve(struct MovieReconstructContext *context,
                                        int message_size);
 bool BKE_tracking_reconstruction_finish(struct MovieReconstructContext *context,
                                         struct MovieTracking *tracking);
+
+void BKE_tracking_reconstruction_report_error_message(struct MovieReconstructContext *context,
+                                                      const char *error_message);
+
+const char *BKE_tracking_reconstruction_error_message_get(
+    const struct MovieReconstructContext *context);
 
 void BKE_tracking_reconstruction_scale(struct MovieTracking *tracking, float scale[3]);
 
@@ -455,7 +472,7 @@ void BKE_tracking_get_rna_path_prefix_for_plane_track(
 
 #define MARKER_VISIBLE(sc, track, marker) \
   (((marker)->flag & MARKER_DISABLED) == 0 || ((sc)->flag & SC_HIDE_DISABLED) == 0 || \
-   (sc->clip->tracking.act_track == track))
+   ((sc)->clip->tracking.act_track == track))
 
 #define TRACK_CLEAR_UPTO 0
 #define TRACK_CLEAR_REMAINED 1
@@ -472,5 +489,9 @@ void BKE_tracking_get_rna_path_prefix_for_plane_track(
 #define TRACK_AREA_SEARCH 4
 
 #define TRACK_AREA_ALL (TRACK_AREA_POINT | TRACK_AREA_PAT | TRACK_AREA_SEARCH)
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

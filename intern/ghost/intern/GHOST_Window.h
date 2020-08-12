@@ -27,7 +27,6 @@
 
 #include "GHOST_IWindow.h"
 
-class STR_String;
 class GHOST_Context;
 
 /**
@@ -35,7 +34,7 @@ class GHOST_Context;
  * Dimensions are given in screen coordinates that are relative to the
  * upper-left corner of the screen.
  * Implements part of the GHOST_IWindow interface and adds some methods to
- * be implemented by childs of this class.
+ * be implemented by sub-classes of this class.
  */
 class GHOST_Window : public GHOST_IWindow {
  public:
@@ -50,28 +49,28 @@ class GHOST_Window : public GHOST_IWindow {
    * \param stereoVisual      Stereo visual for quad buffered stereo.
    * \param exclusive         Use to show the window ontop and ignore others
    *                          (used fullscreen).
-   * \param numOfAASamples    Number of samples used for AA (zero if no AA)
    */
   GHOST_Window(GHOST_TUns32 width,
                GHOST_TUns32 height,
                GHOST_TWindowState state,
                const bool wantStereoVisual = false,
-               const bool exclusive = false,
-               const GHOST_TUns16 wantNumOfAASamples = 0);
+               const bool exclusive = false);
 
   /**
    * \section Interface inherited from GHOST_IWindow left for derived class
    * implementation.
    * virtual  bool getValid() const = 0;
-   * virtual void setTitle(const STR_String& title) = 0;
-   * virtual void getTitle(STR_String& title) const = 0;
+   * virtual void setTitle(const char * title) = 0;
+   * virtual std::string getTitle() const = 0;
    * virtual  void getWindowBounds(GHOST_Rect& bounds) const = 0;
    * virtual  void getClientBounds(GHOST_Rect& bounds) const = 0;
    * virtual  GHOST_TSuccess setClientWidth(GHOST_TUns32 width) = 0;
    * virtual  GHOST_TSuccess setClientHeight(GHOST_TUns32 height) = 0;
    * virtual  GHOST_TSuccess setClientSize(GHOST_TUns32 width, GHOST_TUns32 height) = 0;
-   * virtual  void screenToClient(GHOST_TInt32 inX, GHOST_TInt32 inY, GHOST_TInt32& outX, GHOST_TInt32& outY) const = 0;
-   * virtual  void clientToScreen(GHOST_TInt32 inX, GHOST_TInt32 inY, GHOST_TInt32& outX, GHOST_TInt32& outY) const = 0;
+   * virtual void screenToClient(
+   *     GHOST_TInt32 inX, GHOST_TInt32 inY, GHOST_TInt32& outX, GHOST_TInt32& outY) const = 0;
+   * virtual void clientToScreen(
+   *     GHOST_TInt32 inX, GHOST_TInt32 inY, GHOST_TInt32& outX, GHOST_TInt32& outY) const = 0;
    * virtual GHOST_TWindowState getState() const = 0;
    * virtual GHOST_TSuccess setState(GHOST_TWindowState state) = 0;
    * virtual GHOST_TSuccess setOrder(GHOST_TWindowOrder order) = 0;
@@ -109,6 +108,11 @@ class GHOST_Window : public GHOST_IWindow {
    */
   inline GHOST_TStandardCursor getCursorShape() const;
 
+  inline bool isDialog() const
+  {
+    return false;
+  }
+
   /**
    * Set the shape of the cursor.
    * \param   cursorShape: The new cursor shape type id.
@@ -120,23 +124,17 @@ class GHOST_Window : public GHOST_IWindow {
    * Set the shape of the cursor to a custom cursor.
    * \param   bitmap  The bitmap data for the cursor.
    * \param   mask    The mask data for the cursor.
-   * \param   hotX    The X coordinate of the cursor hotspot.
-   * \param   hotY    The Y coordinate of the cursor hotspot.
+   * \param   hotX    The X coordinate of the cursor hot-spot.
+   * \param   hotY    The Y coordinate of the cursor hot-spot.
    * \return  Indication of success.
    */
-  GHOST_TSuccess setCustomCursorShape(GHOST_TUns8 bitmap[16][2],
-                                      GHOST_TUns8 mask[16][2],
-                                      int hotX,
-                                      int hotY);
-
   GHOST_TSuccess setCustomCursorShape(GHOST_TUns8 *bitmap,
                                       GHOST_TUns8 *mask,
                                       int sizex,
                                       int sizey,
                                       int hotX,
                                       int hotY,
-                                      int fg_color,
-                                      int bg_color);
+                                      bool canInvertColor);
 
   /**
    * Returns the visibility state of the cursor.
@@ -145,6 +143,7 @@ class GHOST_Window : public GHOST_IWindow {
   inline bool getCursorVisibility() const;
   inline GHOST_TGrabCursorMode getCursorGrabMode() const;
   inline bool getCursorGrabModeIsWarp() const;
+  inline GHOST_TAxisFlag getCursorGrabAxis() const;
   inline void getCursorGrabInitPos(GHOST_TInt32 &x, GHOST_TInt32 &y) const;
   inline void getCursorGrabAccum(GHOST_TInt32 &x, GHOST_TInt32 &y) const;
   inline void setCursorGrabAccum(GHOST_TInt32 x, GHOST_TInt32 y);
@@ -162,6 +161,7 @@ class GHOST_Window : public GHOST_IWindow {
    * \return  Indication of success.
    */
   GHOST_TSuccess setCursorGrab(GHOST_TGrabCursorMode mode,
+                               GHOST_TAxisFlag wrap_axis,
                                GHOST_Rect *bounds,
                                GHOST_TInt32 mouse_ungrab_xy[2]);
 
@@ -200,12 +200,6 @@ class GHOST_Window : public GHOST_IWindow {
    * \return An integer.
    */
   GHOST_TSuccess getSwapInterval(int &intervalOut);
-
-  /**
-   * Gets the current swap interval for swapBuffers.
-   * \return Number of AA Samples (0 if there is no multisample buffer)
-   */
-  GHOST_TUns16 getNumOfAASamples();
 
   /**
    * Tells if the ongoing drag'n'drop object can be accepted upon mouse drop
@@ -264,6 +258,12 @@ class GHOST_Window : public GHOST_IWindow {
    * \return Indication of success.
    */
   GHOST_TSuccess updateDrawingContext();
+
+  /**
+   * Gets the OpenGL framebuffer associated with the window's contents.
+   * \return The ID of an OpenGL framebuffer object.
+   */
+  virtual unsigned int getDefaultFramebuffer();
 
   /**
    * Returns the window user data.
@@ -345,19 +345,13 @@ class GHOST_Window : public GHOST_IWindow {
    * Sets the cursor shape on the window using
    * native window system calls.
    */
-  virtual GHOST_TSuccess setWindowCustomCursorShape(GHOST_TUns8 bitmap[16][2],
-                                                    GHOST_TUns8 mask[16][2],
-                                                    int hotX,
-                                                    int hotY) = 0;
-
   virtual GHOST_TSuccess setWindowCustomCursorShape(GHOST_TUns8 *bitmap,
                                                     GHOST_TUns8 *mask,
                                                     int szx,
                                                     int szy,
                                                     int hotX,
                                                     int hotY,
-                                                    int fg,
-                                                    int bg) = 0;
+                                                    bool canInvertColor) = 0;
 
   GHOST_TSuccess releaseNativeHandles();
 
@@ -372,6 +366,9 @@ class GHOST_Window : public GHOST_IWindow {
 
   /** The current grabbed state of the cursor */
   GHOST_TGrabCursorMode m_cursorGrab;
+
+  /** Grab cursor axis.*/
+  GHOST_TAxisFlag m_cursorGrabAxis;
 
   /** Initial grab location. */
   GHOST_TInt32 m_cursorGrabInitPos[2];
@@ -399,9 +396,6 @@ class GHOST_Window : public GHOST_IWindow {
 
   /** Whether to attempt to initialize a context with a stereo framebuffer. */
   bool m_wantStereoVisual;
-
-  /** Attempt to initialize a context with this many samples. */
-  GHOST_TUns16 m_wantNumOfAASamples;
 
   /** Full-screen width */
   GHOST_TUns32 m_fullScreenWidth;
@@ -433,6 +427,11 @@ inline GHOST_TGrabCursorMode GHOST_Window::getCursorGrabMode() const
 inline bool GHOST_Window::getCursorGrabModeIsWarp() const
 {
   return (m_cursorGrab == GHOST_kGrabWrap) || (m_cursorGrab == GHOST_kGrabHide);
+}
+
+inline GHOST_TAxisFlag GHOST_Window::getCursorGrabAxis() const
+{
+  return m_cursorGrabAxis;
 }
 
 inline void GHOST_Window::getCursorGrabInitPos(GHOST_TInt32 &x, GHOST_TInt32 &y) const

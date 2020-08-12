@@ -23,10 +23,11 @@
  * or other details.
  * Typical view-control usage:
  *
- * - acquire a view-control (#ED_view3d_cameracontrol_acquire).
- * - modify ``rv3d->ofs``, ``rv3d->viewquat``.
- * - update the view data (#ED_view3d_cameracontrol_acquire) - within a loop which draws the viewport.
- * - finish and release the view-control (#ED_view3d_cameracontrol_release),
+ * - Acquire a view-control (#ED_view3d_cameracontrol_acquire).
+ * - Modify ``rv3d->ofs``, ``rv3d->viewquat``.
+ * - Update the view data (#ED_view3d_cameracontrol_acquire) -
+ *   within a loop which draws the viewport.
+ * - Finish and release the view-control (#ED_view3d_cameracontrol_release),
  *   either keeping the current view or restoring the initial view.
  *
  * Notes:
@@ -36,9 +37,9 @@
  * - updating can optionally keyframe the camera object.
  */
 
-#include "DNA_scene_types.h"
-#include "DNA_object_types.h"
 #include "DNA_camera_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -86,10 +87,9 @@ typedef struct View3DCameraControl {
   float ofs_backup[3];
   /* backup the views offset in case the user cancels flying in non camera mode */
 
-  /* backup the views quat in case the user cancels flying in non camera mode.
-   * (quat for view, eul for camera) */
+  /* backup the views quat in case the user cancels flying in non camera mode. */
   float rot_backup[4];
-  /* remember if were ortho or not, only used for restoring the view if it was a ortho view */
+  /* remember if we're ortho or not, only used for restoring the view if it was a ortho view */
   char persp_backup;
 
   /* are we flying an ortho camera in perspective view,
@@ -101,7 +101,7 @@ typedef struct View3DCameraControl {
   void *obtfm;
 } View3DCameraControl;
 
-BLI_INLINE Object *view3d_cameracontrol_object(View3DCameraControl *vctrl)
+BLI_INLINE Object *view3d_cameracontrol_object(const View3DCameraControl *vctrl)
 {
   return vctrl->root_parent ? vctrl->root_parent : vctrl->ctx_v3d->camera;
 }
@@ -116,9 +116,8 @@ Object *ED_view3d_cameracontrol_object_get(View3DCameraControl *vctrl)
   if (rv3d->persp == RV3D_CAMOB) {
     return view3d_cameracontrol_object(vctrl);
   }
-  else {
-    return NULL;
-  }
+
+  return NULL;
 }
 
 /**
@@ -182,7 +181,7 @@ struct View3DCameraControl *ED_view3d_cameracontrol_acquire(Depsgraph *depsgraph
     copy_qt_qt(vctrl->rot_backup, rv3d->viewquat);
     copy_v3_v3(vctrl->ofs_backup, rv3d->ofs);
 
-    /* the dist defines a vector that is infront of the offset
+    /* The dist defines a vector that is in front of the offset
      * to rotate the view about.
      * this is no good for fly mode because we
      * want to rotate about the viewers center.
@@ -208,8 +207,8 @@ void ED_view3d_cameracontrol_update(View3DCameraControl *vctrl,
                                     const bool do_rotate,
                                     const bool do_translate)
 {
-  /* we are in camera view so apply the view ofs and quat to the view matrix and set the camera
-   * to the view */
+  /* We are in camera view so apply the view offset and rotation to the view matrix
+   * and set the camera to the view. */
 
   Scene *scene = vctrl->ctx_scene;
   View3D *v3d = vctrl->ctx_v3d;

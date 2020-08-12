@@ -20,27 +20,34 @@
 /** \file
  * \ingroup bke
  *
- * This module exposes a rasterizer that works as a black box - implementation details are confined to this file,
+ * This module exposes a rasterizer that works as a black box - implementation details
+ * are confined to this file.
  *
  * The basic method to access is:
  * - create & initialize a handle from a #Mask datablock.
  * - execute pixel lookups.
  * - free the handle.
  *
- * This file is admittedly a bit confusticated, in quite few areas speed was chosen over readability,
+ * This file is admittedly a bit confusticated,
+ * in quite few areas speed was chosen over readability,
  * though it is commented - so shouldn't be so hard to see what's going on.
+ *
  * Implementation:
  *
  * To rasterize the mask its converted into geometry that use a ray-cast for each pixel lookup.
  *
  * Initially 'kdopbvh' was used but this ended up being too slow.
  *
- * To gain some extra speed we take advantage of a few shortcuts that can be made rasterizing masks specifically.
- * - all triangles are known to be completely white - so no depth check is done on triangle intersection.
- * - all quads are known to be feather outlines - the 1 and 0 depths are known by the vertex order in the quad,
- * - there is no color - just a value for each mask pixel.
- * - the mask spacial structure always maps to space 0-1 on X and Y axis.
- * - bucketing is used to speed up lookups for geometry.
+ * To gain some extra speed we take advantage of a few shortcuts
+ * that can be made rasterizing masks specifically.
+ *
+ * - All triangles are known to be completely white -
+ *   so no depth check is done on triangle intersection.
+ * - All quads are known to be feather outlines -
+ *   the 1 and 0 depths are known by the vertex order in the quad,
+ * - There is no color - just a value for each mask pixel.
+ * - The mask spacial structure always maps to space 0-1 on X and Y axis.
+ * - Bucketing is used to speed up lookups for geometry.
  *
  * Other Details:
  * - used unsigned values all over for some extra speed on some arch's.
@@ -48,7 +55,8 @@
  * - initializing the spacial structure doesn't need to be as optimized as pixel lookups are.
  * - mask lookups need not be pixel aligned so any sub-pixel values from x/y (0 - 1), can be found.
  *   (perhaps masks can be used as a vector texture in 3D later on)
- * Currently, to build the spacial structure we have to calculate the total number of faces ahead of time.
+ * Currently, to build the spacial structure we have to calculate
+ * the total number of faces ahead of time.
  *
  * This is getting a bit complicated with the addition of unfilled splines and end capping -
  * If large changes are needed here we would be better off using an iterable
@@ -61,19 +69,19 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "DNA_vec_types.h"
 #include "DNA_mask_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_vec_types.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_scanfill.h"
 #include "BLI_memarena.h"
+#include "BLI_scanfill.h"
+#include "BLI_utildefines.h"
 
+#include "BLI_linklist.h"
+#include "BLI_listbase.h"
 #include "BLI_math.h"
 #include "BLI_rect.h"
 #include "BLI_task.h"
-#include "BLI_listbase.h"
-#include "BLI_linklist.h"
 
 #include "BKE_mask.h"
 
@@ -488,28 +496,34 @@ static void layer_bucket_init(MaskRasterLayer *layer, const float pixel_size)
 
           /* this should _almost_ never happen but since it can in extreme cases,
            * we have to clamp the values or we overrun the buffer and crash */
-          if (xi_min >= layer->buckets_x)
+          if (xi_min >= layer->buckets_x) {
             xi_min = layer->buckets_x - 1;
-          if (xi_max >= layer->buckets_x)
+          }
+          if (xi_max >= layer->buckets_x) {
             xi_max = layer->buckets_x - 1;
-          if (yi_min >= layer->buckets_y)
+          }
+          if (yi_min >= layer->buckets_y) {
             yi_min = layer->buckets_y - 1;
-          if (yi_max >= layer->buckets_y)
+          }
+          if (yi_max >= layer->buckets_y) {
             yi_max = layer->buckets_y - 1;
+          }
 
           for (yi = yi_min; yi <= yi_max; yi++) {
             unsigned int bucket_index = (layer->buckets_x * yi) + xi_min;
             for (xi = xi_min; xi <= xi_max; xi++, bucket_index++) {
-              // unsigned int bucket_index = (layer->buckets_x * yi) + xi; /* correct but do in outer loop */
+              /* correct but do in outer loop */
+              // unsigned int bucket_index = (layer->buckets_x * yi) + xi;
 
               BLI_assert(xi < layer->buckets_x);
               BLI_assert(yi < layer->buckets_y);
               BLI_assert(bucket_index < bucket_tot);
 
-              /* check if the bucket intersects with the face */
-              /* note: there is a trade off here since checking box/tri intersections isn't
-               * as optimal as it could be, but checking pixels against faces they will never intersect
-               * with is likely the greater slowdown here - so check if the cell intersects the face */
+              /* Check if the bucket intersects with the face. */
+              /* Note: there is a trade off here since checking box/tri intersections isn't as
+               * optimal as it could be, but checking pixels against faces they will never
+               * intersect with is likely the greater slowdown here -
+               * so check if the cell intersects the face. */
               if (layer_bucket_isect_test(layer,
                                           face_index,
                                           xi,
@@ -575,7 +589,7 @@ void BKE_maskrasterize_handle_init(MaskRasterHandle *mr_handle,
       (do_aspect_correct && width > height) ? (float)height / (float)width : 1.0f,
       (do_aspect_correct && width < height) ? (float)width / (float)height : 1.0f};
 
-  const float zvec[3] = {0.0f, 0.0f, 1.0f};
+  const float zvec[3] = {0.0f, 0.0f, -1.0f};
   MaskLayer *masklay;
   unsigned int masklay_index;
   MemArena *sf_arena;
@@ -707,7 +721,7 @@ void BKE_maskrasterize_handle_init(MaskRasterHandle *mr_handle,
         }
 
         if (is_fill) {
-          /* applt intersections depending on fill settings */
+          /* Apply intersections depending on fill settings. */
           if (spline->flag & MASK_SPLINE_NOINTERSECT) {
             BKE_mask_spline_feather_collapse_inner_loops(
                 spline, diff_feather_points, tot_diff_feather_points);
@@ -716,8 +730,10 @@ void BKE_maskrasterize_handle_init(MaskRasterHandle *mr_handle,
           copy_v2_v2(co, diff_points[0]);
           sf_vert_prev = BLI_scanfill_vert_add(&sf_ctx, co);
           sf_vert_prev->tmp.u = sf_vert_tot;
-          sf_vert_prev->keyindex = sf_vert_tot +
-                                   tot_diff_point; /* absolute index of feather vert */
+
+          /* Absolute index of feather vert. */
+          sf_vert_prev->keyindex = sf_vert_tot + tot_diff_point;
+
           sf_vert_tot++;
 
           /* TODO, an alternate functions so we can avoid double vector copy! */
@@ -753,8 +769,8 @@ void BKE_maskrasterize_handle_init(MaskRasterHandle *mr_handle,
 
             BLI_assert(tot_diff_feather_points == tot_diff_point);
 
-            /* note: only added for convenience, we don't infact use these to scanfill,
-             * only to create feather faces after scanfill */
+            /* Note: only added for convenience, we don't in fact use these to scan-fill,
+             * only to create feather faces after scan-fill. */
             for (j = 0; j < tot_diff_feather_points; j++) {
               copy_v2_v2(co_feather, diff_feather_points[j]);
               sf_vert = BLI_scanfill_vert_add(&sf_ctx, co_feather);
@@ -951,8 +967,8 @@ void BKE_maskrasterize_handle_init(MaskRasterHandle *mr_handle,
       }
 
       /* --- inefficient self-intersect case --- */
-      /* if self intersections are found, its too trickty to attempt to map vertices
-       * so just realloc and add entirely new vertices - the result of the self-intersect check
+      /* if self intersections are found, its too tricky to attempt to map vertices
+       * so just realloc and add entirely new vertices - the result of the self-intersect check.
        */
       if ((masklay->flag & MASK_LAYERFLAG_FILL_OVERLAP) &&
           (is_isect = BLI_scanfill_calc_self_isect(
@@ -979,8 +995,9 @@ void BKE_maskrasterize_handle_init(MaskRasterHandle *mr_handle,
       /* --- end inefficient code --- */
 
       /* main scan-fill */
-      if ((masklay->flag & MASK_LAYERFLAG_FILL_DISCRETE) == 0)
+      if ((masklay->flag & MASK_LAYERFLAG_FILL_DISCRETE) == 0) {
         scanfill_flag |= BLI_SCANFILL_CALC_HOLES;
+      }
 
       sf_tri_tot = (unsigned int)BLI_scanfill_calc_ex(&sf_ctx, scanfill_flag, zvec);
 
@@ -1155,7 +1172,15 @@ void BKE_maskrasterize_handle_init(MaskRasterHandle *mr_handle,
 
       MEM_freeN(open_spline_ranges);
 
-      //          fprintf(stderr, "%u %u (%u %u), %u\n", face_index, sf_tri_tot + tot_feather_quads, sf_tri_tot, tot_feather_quads, tot_boundary_used - tot_boundary_found);
+#if 0
+      fprintf(stderr,
+              "%u %u (%u %u), %u\n",
+              face_index,
+              sf_tri_tot + tot_feather_quads,
+              sf_tri_tot,
+              tot_feather_quads,
+              tot_boundary_used - tot_boundary_found);
+#endif
 
 #ifdef USE_SCANFILL_EDGE_WORKAROUND
       BLI_assert(face_index + (tot_boundary_used - tot_boundary_found) ==
@@ -1212,7 +1237,9 @@ void BKE_maskrasterize_handle_init(MaskRasterHandle *mr_handle,
 /* 2D ray test */
 #if 0
 static float maskrasterize_layer_z_depth_tri(const float pt[2],
-                                             const float v1[3], const float v2[3], const float v3[3])
+                                             const float v1[3],
+                                             const float v2[3],
+                                             const float v3[3])
 {
   float w[3];
   barycentric_weights_v2(v1, v2, v3, pt, w);
@@ -1225,11 +1252,11 @@ static float maskrasterize_layer_z_depth_quad(
 {
   float w[4];
   barycentric_weights_v2_quad(v1, v2, v3, v4, pt, w);
-  //return (v1[2] * w[0]) + (v2[2] * w[1]) + (v3[2] * w[2]) + (v4[2] * w[3]);
+  // return (v1[2] * w[0]) + (v2[2] * w[1]) + (v3[2] * w[2]) + (v4[2] * w[3]);
   return w[2] + w[3]; /* we can make this assumption for small speedup */
 }
 
-static float maskrasterize_layer_isect(unsigned int *face,
+static float maskrasterize_layer_isect(const unsigned int *face,
                                        float (*cos)[3],
                                        const float dist_orig,
                                        const float xy[2])
@@ -1240,10 +1267,7 @@ static float maskrasterize_layer_isect(unsigned int *face,
 
 #if 0
     /* not essential but avoids unneeded extra lookups */
-    if ((cos[0][2] < dist_orig) ||
-        (cos[1][2] < dist_orig) ||
-        (cos[2][2] < dist_orig))
-    {
+    if ((cos[0][2] < dist_orig) || (cos[1][2] < dist_orig) || (cos[2][2] < dist_orig)) {
       if (isect_point_tri_v2_cw(xy, cos[face[0]], cos[face[1]], cos[face[2]])) {
         /* we know all tris are close for now */
         return maskrasterize_layer_z_depth_tri(xy, cos[face[0]], cos[face[1]], cos[face[2]]);
@@ -1266,7 +1290,7 @@ static float maskrasterize_layer_isect(unsigned int *face,
       /* needs work */
 #if 1
       /* quad check fails for bow-tie, so keep using 2 tri checks */
-      //if (isect_point_quad_v2(xy, cos[face[0]], cos[face[1]], cos[face[2]], cos[face[3]]))
+      // if (isect_point_quad_v2(xy, cos[face[0]], cos[face[1]], cos[face[2]], cos[face[3]]))
       if (isect_point_tri_v2(xy, cos[face[0]], cos[face[1]], cos[face[2]]) ||
           isect_point_tri_v2(xy, cos[face[0]], cos[face[2]], cos[face[3]])) {
         return maskrasterize_layer_z_depth_quad(
@@ -1438,7 +1462,7 @@ typedef struct MaskRasterizeBufferData {
 
 static void maskrasterize_buffer_cb(void *__restrict userdata,
                                     const int y,
-                                    const ParallelRangeTLS *__restrict UNUSED(tls))
+                                    const TaskParallelTLS *__restrict UNUSED(tls))
 {
   MaskRasterizeBufferData *data = userdata;
 
@@ -1465,6 +1489,8 @@ static void maskrasterize_buffer_cb(void *__restrict userdata,
 void BKE_maskrasterize_buffer(MaskRasterHandle *mr_handle,
                               const unsigned int width,
                               const unsigned int height,
+                              /* Cannot be const, because it is assigned to non-const variable.
+                               * NOLINTNEXTLINE: readability-non-const-parameter. */
                               float *buffer)
 {
   const float x_inv = 1.0f / (float)width;
@@ -1479,7 +1505,7 @@ void BKE_maskrasterize_buffer(MaskRasterHandle *mr_handle,
       .width = width,
       .buffer = buffer,
   };
-  ParallelRangeSettings settings;
+  TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
   settings.use_threading = ((size_t)height * width > 10000);
   BLI_task_parallel_range(0, (int)height, &data, maskrasterize_buffer_cb, &settings);

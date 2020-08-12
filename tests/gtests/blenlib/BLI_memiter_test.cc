@@ -2,13 +2,14 @@
 
 #include "testing/testing.h"
 
+#include "MEM_guardedalloc.h"
+
 extern "C" {
 #include "BLI_array_utils.h"
 #include "BLI_memiter.h"
-#include "MEM_guardedalloc.h"
 
-#include "BLI_string.h"
 #include "BLI_ressource_strings.h"
+#include "BLI_string.h"
 }
 
 TEST(memiter, Nop)
@@ -17,7 +18,7 @@ TEST(memiter, Nop)
   BLI_memiter_destroy(mi);
 }
 
-void memiter_empty_test(int num_elems, const int chunk_size)
+static void memiter_empty_test(int num_elems, const int chunk_size)
 {
   BLI_memiter *mi = BLI_memiter_create(chunk_size);
   void *data;
@@ -39,7 +40,7 @@ void memiter_empty_test(int num_elems, const int chunk_size)
 }
 
 #define MEMITER_NUMBER_TEST_FN(fn, number_type) \
-  void fn(int num_elems, const int chunk_size) \
+  static void fn(int num_elems, const int chunk_size) \
   { \
     BLI_memiter *mi = BLI_memiter_create(chunk_size); \
     number_type *data; \
@@ -65,7 +66,7 @@ MEMITER_NUMBER_TEST_FN(memiter_short_test, short)
 MEMITER_NUMBER_TEST_FN(memiter_int_test, int)
 MEMITER_NUMBER_TEST_FN(memiter_long_test, int64_t)
 
-void memiter_string_test(const char *strings[], const int chunk_size)
+static void memiter_string_test(const char *strings[], const int chunk_size)
 {
   BLI_memiter *mi = BLI_memiter_create(chunk_size);
   char *data;
@@ -95,7 +96,7 @@ void memiter_string_test(const char *strings[], const int chunk_size)
   BLI_memiter_destroy(mi);
 }
 
-void memiter_words10k_test(const char split_char, const int chunk_size)
+static void memiter_words10k_test(const char split_char, const int chunk_size)
 {
   const int words_len = sizeof(words10k) - 1;
   char *words = BLI_strdupn(words10k, words_len);

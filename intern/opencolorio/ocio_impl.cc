@@ -18,6 +18,7 @@
  */
 
 #include <iostream>
+#include <math.h>
 #include <sstream>
 #include <string.h>
 
@@ -33,6 +34,8 @@
 using namespace OCIO_NAMESPACE;
 
 #include "MEM_guardedalloc.h"
+
+#include "BLI_math_color.h"
 
 #include "ocio_impl.h"
 
@@ -59,9 +62,9 @@ using namespace OCIO_NAMESPACE;
 #  include <algorithm>
 #  include <map>
 #  include <mutex>
-#  include <vector>
-#  include <string>
 #  include <set>
+#  include <string>
+#  include <vector>
 using std::map;
 using std::set;
 using std::string;
@@ -496,9 +499,8 @@ int OCIOImpl::colorSpaceIsInvertible(OCIO_ConstColorSpaceRcPtr *cs_)
   const char *family = (*cs)->getFamily();
 
   if (!strcmp(family, "rrt") || !strcmp(family, "display")) {
-    /* assume display and rrt transformations are not invertible
-     * in fact some of them could be, but it doesn't make much sense to allow use them as invertible
-     */
+    /* assume display and rrt transformations are not invertible in fact some of them could be,
+     * but it doesn't make much sense to allow use them as invertible. */
     return false;
   }
 
@@ -508,7 +510,8 @@ int OCIOImpl::colorSpaceIsInvertible(OCIO_ConstColorSpaceRcPtr *cs_)
   }
 
   if ((*cs)->getTransform(COLORSPACE_DIR_TO_REFERENCE)) {
-    /* if there's defined transform to reference space, color space could be converted to scene linear */
+    /* if there's defined transform to reference space,
+     * color space could be converted to scene linear. */
     return true;
   }
 
@@ -518,6 +521,86 @@ int OCIOImpl::colorSpaceIsInvertible(OCIO_ConstColorSpaceRcPtr *cs_)
 int OCIOImpl::colorSpaceIsData(OCIO_ConstColorSpaceRcPtr *cs)
 {
   return (*(ConstColorSpaceRcPtr *)cs)->isData();
+}
+
+static float compare_floats(float a, float b, float abs_diff, int ulp_diff)
+{
+  /* Returns true if the absolute difference is smaller than abs_diff (for numbers near zero)
+   * or their relative difference is less than ulp_diff ULPs. Based on:
+   * https://randomascii.wordpress.com/2012/02/25/comparing-floating-point-numbers-2012-edition/ */
+  if (fabsf(a - b) < abs_diff) {
+    return true;
+  }
+
+  if ((a < 0.0f) != (b < 0.0f)) {
+    return false;
+  }
+
+  return (abs((*(int *)&a) - (*(int *)&b)) < ulp_diff);
+}
+
+void OCIOImpl::colorSpaceIsBuiltin(OCIO_ConstConfigRcPtr *config_,
+                                   OCIO_ConstColorSpaceRcPtr *cs_,
+                                   bool &is_scene_linear,
+                                   bool &is_srgb)
+{
+  ConstConfigRcPtr *config = (ConstConfigRcPtr *)config_;
+  ConstColorSpaceRcPtr *cs = (ConstColorSpaceRcPtr *)cs_;
+  ConstProcessorRcPtr processor;
+
+  try {
+    processor = (*config)->getProcessor((*cs)->getName(), "scene_linear");
+  }
+  catch (Exception &) {
+    /* Silently ignore if no conversion possible, then it's not scene linear or sRGB. */
+    is_scene_linear = false;
+    is_srgb = false;
+    return;
+  }
+
+  is_scene_linear = true;
+  is_srgb = true;
+  for (int i = 0; i < 256; i++) {
+    float v = i / 255.0f;
+
+    float cR[3] = {v, 0, 0};
+    float cG[3] = {0, v, 0};
+    float cB[3] = {0, 0, v};
+    float cW[3] = {v, v, v};
+    processor->applyRGB(cR);
+    processor->applyRGB(cG);
+    processor->applyRGB(cB);
+    processor->applyRGB(cW);
+
+    /* Make sure that there is no channel crosstalk. */
+    if (fabsf(cR[1]) > 1e-5f || fabsf(cR[2]) > 1e-5f || fabsf(cG[0]) > 1e-5f ||
+        fabsf(cG[2]) > 1e-5f || fabsf(cB[0]) > 1e-5f || fabsf(cB[1]) > 1e-5f) {
+      is_scene_linear = false;
+      is_srgb = false;
+      break;
+    }
+    /* Make sure that the three primaries combine linearly. */
+    if (!compare_floats(cR[0], cW[0], 1e-6f, 64) || !compare_floats(cG[1], cW[1], 1e-6f, 64) ||
+        !compare_floats(cB[2], cW[2], 1e-6f, 64)) {
+      is_scene_linear = false;
+      is_srgb = false;
+      break;
+    }
+    /* Make sure that the three channels behave identically. */
+    if (!compare_floats(cW[0], cW[1], 1e-6f, 64) || !compare_floats(cW[1], cW[2], 1e-6f, 64)) {
+      is_scene_linear = false;
+      is_srgb = false;
+      break;
+    }
+
+    float out_v = (cW[0] + cW[1] + cW[2]) * (1.0f / 3.0f);
+    if (!compare_floats(v, out_v, 1e-6f, 64)) {
+      is_scene_linear = false;
+    }
+    if (!compare_floats(srgb_to_linearrgb(v), out_v, 1e-6f, 64)) {
+      is_srgb = false;
+    }
+  }
 }
 
 void OCIOImpl::colorSpaceRelease(OCIO_ConstColorSpaceRcPtr *cs)
@@ -737,6 +820,51 @@ OCIO_PackedImageDesc *OCIOImpl::createOCIO_PackedImageDesc(float *data,
 void OCIOImpl::OCIO_PackedImageDescRelease(OCIO_PackedImageDesc *id)
 {
   OBJECT_GUARDED_DELETE((PackedImageDesc *)id, PackedImageDesc);
+}
+
+OCIO_GroupTransformRcPtr *OCIOImpl::createGroupTransform(void)
+{
+  GroupTransformRcPtr *gt = OBJECT_GUARDED_NEW(GroupTransformRcPtr);
+
+  *gt = GroupTransform::Create();
+
+  return (OCIO_GroupTransformRcPtr *)gt;
+}
+
+void OCIOImpl::groupTransformSetDirection(OCIO_GroupTransformRcPtr *gt, const bool forward)
+{
+  TransformDirection dir = forward ? TRANSFORM_DIR_FORWARD : TRANSFORM_DIR_INVERSE;
+  (*(GroupTransformRcPtr *)gt)->setDirection(dir);
+}
+
+void OCIOImpl::groupTransformPushBack(OCIO_GroupTransformRcPtr *gt, OCIO_ConstTransformRcPtr *tr)
+{
+  (*(GroupTransformRcPtr *)gt)->push_back(*(ConstTransformRcPtr *)tr);
+}
+
+void OCIOImpl::groupTransformRelease(OCIO_GroupTransformRcPtr *gt)
+{
+  OBJECT_GUARDED_DELETE((GroupTransformRcPtr *)gt, GroupTransformRcPtr);
+}
+
+OCIO_ColorSpaceTransformRcPtr *OCIOImpl::createColorSpaceTransform(void)
+{
+  ColorSpaceTransformRcPtr *ct = OBJECT_GUARDED_NEW(ColorSpaceTransformRcPtr);
+
+  *ct = ColorSpaceTransform::Create();
+  (*ct)->setDirection(TRANSFORM_DIR_FORWARD);
+
+  return (OCIO_ColorSpaceTransformRcPtr *)ct;
+}
+
+void OCIOImpl::colorSpaceTransformSetSrc(OCIO_ColorSpaceTransformRcPtr *ct, const char *name)
+{
+  (*(ColorSpaceTransformRcPtr *)ct)->setSrc(name);
+}
+
+void OCIOImpl::colorSpaceTransformRelease(OCIO_ColorSpaceTransformRcPtr *ct)
+{
+  OBJECT_GUARDED_DELETE((ColorSpaceTransformRcPtr *)ct, ColorSpaceTransformRcPtr);
 }
 
 OCIO_ExponentTransformRcPtr *OCIOImpl::createExponentTransform(void)

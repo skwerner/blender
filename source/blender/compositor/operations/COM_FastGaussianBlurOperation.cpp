@@ -18,9 +18,9 @@
 
 #include <limits.h>
 
+#include "BLI_utildefines.h"
 #include "COM_FastGaussianBlurOperation.h"
 #include "MEM_guardedalloc.h"
-#include "BLI_utildefines.h"
 
 FastGaussianBlurOperation::FastGaussianBlurOperation() : BlurBaseOperation(COM_DT_COLOR)
 {
@@ -89,17 +89,20 @@ void *FastGaussianBlurOperation::initializeTileData(rcti *rect)
     this->m_sy = this->m_data.sizey * this->m_size / 2.0f;
 
     if ((this->m_sx == this->m_sy) && (this->m_sx > 0.0f)) {
-      for (c = 0; c < COM_NUM_CHANNELS_COLOR; ++c)
+      for (c = 0; c < COM_NUM_CHANNELS_COLOR; c++) {
         IIR_gauss(copy, this->m_sx, c, 3);
+      }
     }
     else {
       if (this->m_sx > 0.0f) {
-        for (c = 0; c < COM_NUM_CHANNELS_COLOR; ++c)
+        for (c = 0; c < COM_NUM_CHANNELS_COLOR; c++) {
           IIR_gauss(copy, this->m_sx, c, 1);
+        }
       }
       if (this->m_sy > 0.0f) {
-        for (c = 0; c < COM_NUM_CHANNELS_COLOR; ++c)
+        for (c = 0; c < COM_NUM_CHANNELS_COLOR; c++) {
           IIR_gauss(copy, this->m_sy, c, 2);
+        }
       }
     }
     this->m_iirgaus = copy;
@@ -123,27 +126,35 @@ void FastGaussianBlurOperation::IIR_gauss(MemoryBuffer *src,
   const unsigned int num_channels = src->get_num_channels();
 
   // <0.5 not valid, though can have a possibly useful sort of sharpening effect
-  if (sigma < 0.5f)
+  if (sigma < 0.5f) {
     return;
+  }
 
-  if ((xy < 1) || (xy > 3))
+  if ((xy < 1) || (xy > 3)) {
     xy = 3;
+  }
 
   // XXX The YVV macro defined below explicitly expects sources of at least 3x3 pixels,
   //     so just skipping blur along faulty direction if src's def is below that limit!
-  if (src_width < 3)
+  if (src_width < 3) {
     xy &= ~1;
-  if (src_height < 3)
+  }
+  if (src_height < 3) {
     xy &= ~2;
-  if (xy < 1)
+  }
+  if (xy < 1) {
     return;
+  }
 
   // see "Recursive Gabor Filtering" by Young/VanVliet
-  // all factors here in double.prec. Required, because for single.prec it seems to blow up if sigma > ~200
-  if (sigma >= 3.556f)
+  // all factors here in double.prec.
+  // Required, because for single.prec it seems to blow up if sigma > ~200
+  if (sigma >= 3.556f) {
     q = 0.9804f * (sigma - 3.556f) + 2.5091f;
-  else  // sigma >= 0.5
+  }
+  else {  // sigma >= 0.5
     q = (0.0561f * sigma + 0.5784f) * sigma - 0.2568f;
+  }
   q2 = q * q;
   sc = (1.1668 + q) * (3.203729649 + (2.21566 + q) * q);
   // no gabor filtering here, so no complex multiplies, just the regular coefs.
@@ -205,16 +216,16 @@ void FastGaussianBlurOperation::IIR_gauss(MemoryBuffer *src,
   W = (double *)MEM_callocN(sz * sizeof(double), "IIR_gauss W buf");
   if (xy & 1) {  // H
     int offset;
-    for (y = 0; y < src_height; ++y) {
+    for (y = 0; y < src_height; y++) {
       const int yx = y * src_width;
       offset = yx * num_channels + chan;
-      for (x = 0; x < src_width; ++x) {
+      for (x = 0; x < src_width; x++) {
         X[x] = buffer[offset];
         offset += num_channels;
       }
       YVV(src_width);
       offset = yx * num_channels + chan;
-      for (x = 0; x < src_width; ++x) {
+      for (x = 0; x < src_width; x++) {
         buffer[offset] = Y[x];
         offset += num_channels;
       }
@@ -224,15 +235,15 @@ void FastGaussianBlurOperation::IIR_gauss(MemoryBuffer *src,
     int offset;
     const int add = src_width * num_channels;
 
-    for (x = 0; x < src_width; ++x) {
+    for (x = 0; x < src_width; x++) {
       offset = x * num_channels + chan;
-      for (y = 0; y < src_height; ++y) {
+      for (y = 0; y < src_height; y++) {
         X[y] = buffer[offset];
         offset += add;
       }
       YVV(src_height);
       offset = x * num_channels + chan;
-      for (y = 0; y < src_height; ++y) {
+      for (y = 0; y < src_height; y++) {
         buffer[offset] = Y[y];
         offset += add;
       }

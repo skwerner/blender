@@ -17,12 +17,12 @@
  */
 
 #include "COM_CryptomatteNode.h"
+#include "BLI_assert.h"
+#include "BLI_hash_mm3.h"
+#include "BLI_string.h"
+#include "COM_ConvertOperation.h"
 #include "COM_CryptomatteOperation.h"
 #include "COM_SetAlphaOperation.h"
-#include "COM_ConvertOperation.h"
-#include "BLI_string.h"
-#include "BLI_hash_mm3.h"
-#include "BLI_assert.h"
 #include <iterator>
 
 CryptomatteNode::CryptomatteNode(bNode *editorNode) : Node(editorNode)
@@ -90,7 +90,7 @@ void CryptomatteNode::convertToOperations(NodeConverter &converter,
 
   converter.addOperation(operation);
 
-  for (int i = 0; i < getNumberOfInputSockets() - 1; ++i) {
+  for (int i = 0; i < getNumberOfInputSockets() - 1; i++) {
     converter.mapInputSocket(this->getInputSocket(i + 1), operation->getInputSocket(i));
   }
 

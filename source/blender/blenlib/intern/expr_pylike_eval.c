@@ -38,24 +38,24 @@
  *      sin, cos, tan, asin, acos, atan, atan2,
  *      exp, log, sqrt, pow, fmod
  *
- * The implementation has no global state and can be used multithreaded.
+ * The implementation has no global state and can be used multi-threaded.
  */
 
-#include <math.h>
-#include <stdio.h>
-#include <stddef.h>
-#include <string.h>
-#include <float.h>
 #include <ctype.h>
-#include <stdlib.h>
 #include <fenv.h>
+#include <float.h>
+#include <math.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_expr_pylike_eval.h"
-#include "BLI_utildefines.h"
-#include "BLI_math_base.h"
 #include "BLI_alloca.h"
+#include "BLI_expr_pylike_eval.h"
+#include "BLI_math_base.h"
+#include "BLI_utildefines.h"
 
 #ifdef _MSC_VER
 #  pragma fenv_access(on)
@@ -72,6 +72,8 @@ typedef enum eOpCode {
   OPCODE_FUNC1,
   /* 2 argument function call: (a b -> func2(a,b)) */
   OPCODE_FUNC2,
+  /* 3 argument function call: (a b c -> func3(a,b,c)) */
+  OPCODE_FUNC3,
   /* Parameter access: (-> params[ival]) */
   OPCODE_PARAMETER,
   /* Minimum of multiple inputs: (a b c... -> min); ival = arg count */
@@ -92,6 +94,7 @@ typedef enum eOpCode {
 
 typedef double (*UnaryOpFunc)(double);
 typedef double (*BinaryOpFunc)(double, double);
+typedef double (*TernaryOpFunc)(double, double, double);
 
 typedef struct ExprOp {
   eOpCode opcode;
@@ -104,6 +107,7 @@ typedef struct ExprOp {
     void *ptr;
     UnaryOpFunc func1;
     BinaryOpFunc func2;
+    TernaryOpFunc func3;
   } arg;
 } ExprOp;
 
@@ -140,6 +144,24 @@ bool BLI_expr_pylike_is_constant(ExprPyLike_Parsed *expr)
   return expr != NULL && expr->ops_count == 1 && expr->ops[0].opcode == OPCODE_CONST;
 }
 
+/** Check if the parsed expression uses the parameter with the given index. */
+bool BLI_expr_pylike_is_using_param(ExprPyLike_Parsed *expr, int index)
+{
+  int i;
+
+  if (expr == NULL) {
+    return false;
+  }
+
+  for (i = 0; i < expr->ops_count; i++) {
+    if (expr->ops[i].opcode == OPCODE_PARAMETER && expr->ops[i].arg.ival == index) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
@@ -164,7 +186,8 @@ eExprPyLike_EvalStatus BLI_expr_pylike_eval(ExprPyLike_Parsed *expr,
 #define FAIL_IF(condition) \
   if (condition) { \
     return EXPR_PYLIKE_FATAL_ERROR; \
-  }
+  } \
+  ((void)0)
 
   /* Check the stack requirement is at least remotely sane and allocate on the actual stack. */
   FAIL_IF(expr->max_stack <= 0 || expr->max_stack > 1000);
@@ -196,6 +219,11 @@ eExprPyLike_EvalStatus BLI_expr_pylike_eval(ExprPyLike_Parsed *expr,
         FAIL_IF(sp < 2);
         stack[sp - 2] = ops[pc].arg.func2(stack[sp - 2], stack[sp - 1]);
         sp--;
+        break;
+      case OPCODE_FUNC3:
+        FAIL_IF(sp < 3);
+        stack[sp - 3] = ops[pc].arg.func3(stack[sp - 3], stack[sp - 2], stack[sp - 1]);
+        sp -= 2;
         break;
       case OPCODE_MIN:
         FAIL_IF(sp < ops[pc].arg.ival);
@@ -307,6 +335,35 @@ static double op_degrees(double arg)
   return arg * 180.0 / M_PI;
 }
 
+static double op_log2(double a, double b)
+{
+  return log(a) / log(b);
+}
+
+static double op_lerp(double a, double b, double x)
+{
+  return a * (1.0 - x) + b * x;
+}
+
+static double op_clamp(double arg)
+{
+  CLAMP(arg, 0.0, 1.0);
+  return arg;
+}
+
+static double op_clamp3(double arg, double minv, double maxv)
+{
+  CLAMP(arg, minv, maxv);
+  return arg;
+}
+
+static double op_smoothstep(double a, double b, double x)
+{
+  double t = (x - a) / (b - a);
+  CLAMP(t, 0.0, 1.0);
+  return t * t * (3.0 - 2.0 * t);
+}
+
 static double op_not(double a)
 {
   return a ? 0.0 : 1.0;
@@ -356,27 +413,42 @@ typedef struct BuiltinOpDef {
   void *funcptr;
 } BuiltinOpDef;
 
-static BuiltinOpDef builtin_ops[] = {{"radians", OPCODE_FUNC1, op_radians},
-                                     {"degrees", OPCODE_FUNC1, op_degrees},
-                                     {"abs", OPCODE_FUNC1, fabs},
-                                     {"fabs", OPCODE_FUNC1, fabs},
-                                     {"floor", OPCODE_FUNC1, floor},
-                                     {"ceil", OPCODE_FUNC1, ceil},
-                                     {"trunc", OPCODE_FUNC1, trunc},
-                                     {"int", OPCODE_FUNC1, trunc},
-                                     {"sin", OPCODE_FUNC1, sin},
-                                     {"cos", OPCODE_FUNC1, cos},
-                                     {"tan", OPCODE_FUNC1, tan},
-                                     {"asin", OPCODE_FUNC1, asin},
-                                     {"acos", OPCODE_FUNC1, acos},
-                                     {"atan", OPCODE_FUNC1, atan},
-                                     {"atan2", OPCODE_FUNC2, atan2},
-                                     {"exp", OPCODE_FUNC1, exp},
-                                     {"log", OPCODE_FUNC1, log},
-                                     {"sqrt", OPCODE_FUNC1, sqrt},
-                                     {"pow", OPCODE_FUNC2, pow},
-                                     {"fmod", OPCODE_FUNC2, fmod},
-                                     {NULL, OPCODE_CONST, NULL}};
+#ifdef _MSC_VER
+/* Prevent MSVC from inlining calls to ceil/floor so the table below can get a function pointer to
+ * them. */
+#  pragma function(ceil)
+#  pragma function(floor)
+#endif
+
+static BuiltinOpDef builtin_ops[] = {
+    {"radians", OPCODE_FUNC1, op_radians},
+    {"degrees", OPCODE_FUNC1, op_degrees},
+    {"abs", OPCODE_FUNC1, fabs},
+    {"fabs", OPCODE_FUNC1, fabs},
+    {"floor", OPCODE_FUNC1, floor},
+    {"ceil", OPCODE_FUNC1, ceil},
+    {"trunc", OPCODE_FUNC1, trunc},
+    {"round", OPCODE_FUNC1, round},
+    {"int", OPCODE_FUNC1, trunc},
+    {"sin", OPCODE_FUNC1, sin},
+    {"cos", OPCODE_FUNC1, cos},
+    {"tan", OPCODE_FUNC1, tan},
+    {"asin", OPCODE_FUNC1, asin},
+    {"acos", OPCODE_FUNC1, acos},
+    {"atan", OPCODE_FUNC1, atan},
+    {"atan2", OPCODE_FUNC2, atan2},
+    {"exp", OPCODE_FUNC1, exp},
+    {"log", OPCODE_FUNC1, log},
+    {"log", OPCODE_FUNC2, op_log2},
+    {"sqrt", OPCODE_FUNC1, sqrt},
+    {"pow", OPCODE_FUNC2, pow},
+    {"fmod", OPCODE_FUNC2, fmod},
+    {"lerp", OPCODE_FUNC3, op_lerp},
+    {"clamp", OPCODE_FUNC1, op_clamp},
+    {"clamp", OPCODE_FUNC3, op_clamp3},
+    {"smoothstep", OPCODE_FUNC3, op_smoothstep},
+    {NULL, OPCODE_CONST, NULL},
+};
 
 /** \} */
 
@@ -389,7 +461,8 @@ static BuiltinOpDef builtin_ops[] = {{"radians", OPCODE_FUNC1, op_radians},
 #define CHECK_ERROR(condition) \
   if (!(condition)) { \
     return false; \
-  }
+  } \
+  ((void)0)
 
 /* For simplicity simple token types are represented by their own character;
  * these are special identifiers for multi-character tokens. */
@@ -413,12 +486,14 @@ typedef struct KeywordTokenDef {
   short token;
 } KeywordTokenDef;
 
-static KeywordTokenDef keyword_list[] = {{"and", TOKEN_AND},
-                                         {"or", TOKEN_OR},
-                                         {"not", TOKEN_NOT},
-                                         {"if", TOKEN_IF},
-                                         {"else", TOKEN_ELSE},
-                                         {NULL, TOKEN_ID}};
+static KeywordTokenDef keyword_list[] = {
+    {"and", TOKEN_AND},
+    {"or", TOKEN_OR},
+    {"not", TOKEN_NOT},
+    {"if", TOKEN_IF},
+    {"else", TOKEN_ELSE},
+    {NULL, TOKEN_ID},
+};
 
 typedef struct ExprParseState {
   int param_names_len;
@@ -483,6 +558,22 @@ static void parse_set_jump(ExprParseState *state, int jump)
   state->ops[jump - 1].jmp_offset = state->ops_count - jump;
 }
 
+/* Returns the required argument count of the given function call code. */
+static int opcode_arg_count(eOpCode code)
+{
+  switch (code) {
+    case OPCODE_FUNC1:
+      return 1;
+    case OPCODE_FUNC2:
+      return 2;
+    case OPCODE_FUNC3:
+      return 3;
+    default:
+      BLI_assert(!"unexpected opcode");
+      return -1;
+  }
+}
+
 /* Add a function call operation, applying constant folding when possible. */
 static bool parse_add_func(ExprParseState *state, eOpCode code, int args, void *funcptr)
 {
@@ -498,7 +589,9 @@ static bool parse_add_func(ExprParseState *state, eOpCode code, int args, void *
       if (jmp_gap >= 1 && prev_ops[-1].opcode == OPCODE_CONST) {
         UnaryOpFunc func = funcptr;
 
-        double result = func(prev_ops[-1].arg.dval);
+        /* volatile because some compilers overly aggressive optimize this call out.
+         * see D6012 for details. */
+        volatile double result = func(prev_ops[-1].arg.dval);
 
         if (fetestexcept(FE_DIVBYZERO | FE_INVALID) == 0) {
           prev_ops[-1].arg.dval = result;
@@ -514,12 +607,35 @@ static bool parse_add_func(ExprParseState *state, eOpCode code, int args, void *
           prev_ops[-1].opcode == OPCODE_CONST) {
         BinaryOpFunc func = funcptr;
 
-        double result = func(prev_ops[-2].arg.dval, prev_ops[-1].arg.dval);
+        /* volatile because some compilers overly aggressive optimize this call out.
+         * see D6012 for details. */
+        volatile double result = func(prev_ops[-2].arg.dval, prev_ops[-1].arg.dval);
 
         if (fetestexcept(FE_DIVBYZERO | FE_INVALID) == 0) {
           prev_ops[-2].arg.dval = result;
           state->ops_count--;
           state->stack_ptr--;
+          return true;
+        }
+      }
+      break;
+
+    case OPCODE_FUNC3:
+      CHECK_ERROR(args == 3);
+
+      if (jmp_gap >= 3 && prev_ops[-3].opcode == OPCODE_CONST &&
+          prev_ops[-2].opcode == OPCODE_CONST && prev_ops[-1].opcode == OPCODE_CONST) {
+        TernaryOpFunc func = funcptr;
+
+        /* volatile because some compilers overly aggressive optimize this call out.
+         * see D6012 for details. */
+        volatile double result = func(
+            prev_ops[-3].arg.dval, prev_ops[-2].arg.dval, prev_ops[-1].arg.dval);
+
+        if (fetestexcept(FE_DIVBYZERO | FE_INVALID) == 0) {
+          prev_ops[-3].arg.dval = result;
+          state->ops_count -= 2;
+          state->stack_ptr -= 2;
           return true;
         }
       }
@@ -719,6 +835,17 @@ static bool parse_unary(ExprParseState *state)
       for (i = 0; builtin_ops[i].name; i++) {
         if (STREQ(state->tokenbuf, builtin_ops[i].name)) {
           int args = parse_function_args(state);
+
+          /* Search for other arg count versions if necessary. */
+          if (args != opcode_arg_count(builtin_ops[i].op)) {
+            for (int j = i + 1; builtin_ops[j].name; j++) {
+              if (opcode_arg_count(builtin_ops[j].op) == args &&
+                  STREQ(builtin_ops[j].name, builtin_ops[i].name)) {
+                i = j;
+                break;
+              }
+            }
+          }
 
           return parse_add_func(state, builtin_ops[i].op, args, builtin_ops[i].funcptr);
         }

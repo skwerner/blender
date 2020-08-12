@@ -807,6 +807,7 @@ void BM_mesh_calc_uvs_grid(BMesh *bm,
 
   const float dx = 1.0f / (float)(x_segments - 1);
   const float dy = 1.0f / (float)(y_segments - 1);
+  const float dx_wrap = 1.0 - (dx / 2.0f);
   float x = 0.0f;
   float y = dy;
 
@@ -819,8 +820,7 @@ void BM_mesh_calc_uvs_grid(BMesh *bm,
       continue;
     }
 
-    BM_ITER_ELEM_INDEX(l, &liter, f, BM_LOOPS_OF_FACE, loop_index)
-    {
+    BM_ITER_ELEM_INDEX (l, &liter, f, BM_LOOPS_OF_FACE, loop_index) {
       MLoopUV *luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
 
       switch (loop_index) {
@@ -845,7 +845,7 @@ void BM_mesh_calc_uvs_grid(BMesh *bm,
     }
 
     x += dx;
-    if (x >= 1.0f) {
+    if (x >= dx_wrap) {
       x = 0.0f;
       y += dy;
     }
@@ -942,8 +942,8 @@ void bmo_create_uvsphere_exec(BMesh *bm, BMOperator *op)
     BMLoop *l;
     BMIter fiter, liter;
 
-    /* We cannot tag faces for UVs computing above, so we have to do it now, based on all its vertices
-     * being tagged. */
+    /* We cannot tag faces for UVs computing above,
+     * so we have to do it now, based on all its vertices being tagged. */
     BM_ITER_MESH (f, &fiter, bm, BM_FACES_OF_MESH) {
       bool valid = true;
 
@@ -1022,8 +1022,7 @@ void bmo_create_icosphere_exec(BMesh *bm, BMOperator *op)
      * so it's best to set the UVs right after the face is created. */
     if (calc_uvs) {
       int loop_index;
-      BM_ITER_ELEM_INDEX(l, &liter, f, BM_LOOPS_OF_FACE, loop_index)
-      {
+      BM_ITER_ELEM_INDEX (l, &liter, f, BM_LOOPS_OF_FACE, loop_index) {
         MLoopUV *luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
         luv->uv[0] = icouvs[uvi][0];
         luv->uv[1] = icouvs[uvi][1];
@@ -1077,8 +1076,7 @@ static void bm_mesh_calc_uvs_sphere_face(BMFace *f, const int cd_loop_uv_offset)
   /* If face has 3 vertices, it's a polar face, in which case we need to
    * compute a nearby to determine its latitude. */
   float avgx = 0.0f, avgy = 0.0f;
-  BM_ITER_ELEM_INDEX(l, &iter, f, BM_LOOPS_OF_FACE, loop_index)
-  {
+  BM_ITER_ELEM_INDEX (l, &iter, f, BM_LOOPS_OF_FACE, loop_index) {
     if (f->len == 3) {
       avgx += l->v->co[0];
       avgy += l->v->co[1];
@@ -1087,15 +1085,14 @@ static void bm_mesh_calc_uvs_sphere_face(BMFace *f, const int cd_loop_uv_offset)
   avgx /= 3.0f;
   avgy /= 3.0f;
 
-  BM_ITER_ELEM_INDEX(l, &iter, f, BM_LOOPS_OF_FACE, loop_index)
-  {
+  BM_ITER_ELEM_INDEX (l, &iter, f, BM_LOOPS_OF_FACE, loop_index) {
     MLoopUV *luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
     float x = l->v->co[0];
     float y = l->v->co[1];
     float z = l->v->co[2];
     float len = len_v3(l->v->co);
 
-    /* Use neigboring point to compute angle for poles. */
+    /* Use neighboring point to compute angle for poles. */
     float theta;
     if (f->len == 3 && fabsf(x) < 0.0001f && fabsf(y) < 0.0001f) {
       theta = atan2f(avgy, avgx);
@@ -1164,8 +1161,7 @@ void BM_mesh_calc_uvs_sphere(BMesh *bm, const short oflag, const int cd_loop_uv_
     if (!BMO_face_flag_test(bm, f, oflag)) {
       continue;
     }
-    BM_ITER_ELEM_INDEX(l, &iter2, f, BM_LOOPS_OF_FACE, loop_index)
-    {
+    BM_ITER_ELEM_INDEX (l, &iter2, f, BM_LOOPS_OF_FACE, loop_index) {
       MLoopUV *luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
       if (luv->uv[0] < minx) {
         minx = luv->uv[0];
@@ -1177,8 +1173,7 @@ void BM_mesh_calc_uvs_sphere(BMesh *bm, const short oflag, const int cd_loop_uv_
     if (!BMO_face_flag_test(bm, f, oflag)) {
       continue;
     }
-    BM_ITER_ELEM_INDEX(l, &iter2, f, BM_LOOPS_OF_FACE, loop_index)
-    {
+    BM_ITER_ELEM_INDEX (l, &iter2, f, BM_LOOPS_OF_FACE, loop_index) {
       MLoopUV *luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
       luv->uv[0] -= minx;
     }
@@ -1398,16 +1393,15 @@ void bmo_create_cone_exec(BMesh *bm, BMOperator *op)
   BMVert *v1, *v2, *lastv1 = NULL, *lastv2 = NULL, *cent1, *cent2, *firstv1, *firstv2;
   BMFace *f;
   float vec[3], mat[4][4], phi, phid;
-  float dia1 = BMO_slot_float_get(op->slots_in, "diameter1");
-  float dia2 = BMO_slot_float_get(op->slots_in, "diameter2");
-  float depth = BMO_slot_float_get(op->slots_in, "depth");
+  const float dia1 = BMO_slot_float_get(op->slots_in, "diameter1");
+  const float dia2 = BMO_slot_float_get(op->slots_in, "diameter2");
+  const float depth_half = 0.5f * BMO_slot_float_get(op->slots_in, "depth");
   int segs = BMO_slot_int_get(op->slots_in, "segments");
   const bool cap_ends = BMO_slot_bool_get(op->slots_in, "cap_ends");
   const bool cap_tris = BMO_slot_bool_get(op->slots_in, "cap_tris");
 
   const int cd_loop_uv_offset = CustomData_get_offset(&bm->ldata, CD_MLOOPUV);
   const bool calc_uvs = (cd_loop_uv_offset != -1) && BMO_slot_bool_get(op->slots_in, "calc_uvs");
-  int a;
 
   if (!segs) {
     return;
@@ -1418,16 +1412,15 @@ void bmo_create_cone_exec(BMesh *bm, BMOperator *op)
   phid = 2.0f * (float)M_PI / segs;
   phi = 0;
 
-  depth *= 0.5f;
   if (cap_ends) {
     vec[0] = vec[1] = 0.0f;
-    vec[2] = -depth;
+    vec[2] = -depth_half;
     mul_m4_v3(mat, vec);
 
     cent1 = BM_vert_create(bm, vec, NULL, BM_CREATE_NOP);
 
     vec[0] = vec[1] = 0.0f;
-    vec[2] = depth;
+    vec[2] = depth_half;
     mul_m4_v3(mat, vec);
 
     cent2 = BM_vert_create(bm, vec, NULL, BM_CREATE_NOP);
@@ -1436,23 +1429,26 @@ void bmo_create_cone_exec(BMesh *bm, BMOperator *op)
     BMO_vert_flag_enable(bm, cent2, VERT_MARK);
   }
 
-  for (a = 0; a < segs; a++, phi += phid) {
+  const int side_faces_len = segs - 1;
+  BMFace **side_faces = MEM_mallocN(sizeof(*side_faces) * side_faces_len, __func__);
+
+  for (int i = 0; i < segs; i++, phi += phid) {
     vec[0] = dia1 * sinf(phi);
     vec[1] = dia1 * cosf(phi);
-    vec[2] = -depth;
+    vec[2] = -depth_half;
     mul_m4_v3(mat, vec);
     v1 = BM_vert_create(bm, vec, NULL, BM_CREATE_NOP);
 
     vec[0] = dia2 * sinf(phi);
     vec[1] = dia2 * cosf(phi);
-    vec[2] = depth;
+    vec[2] = depth_half;
     mul_m4_v3(mat, vec);
     v2 = BM_vert_create(bm, vec, NULL, BM_CREATE_NOP);
 
     BMO_vert_flag_enable(bm, v1, VERT_MARK);
     BMO_vert_flag_enable(bm, v2, VERT_MARK);
 
-    if (a) {
+    if (i) {
       if (cap_ends) {
         f = BM_face_create_quad_tri(bm, cent1, lastv1, v1, NULL, NULL, BM_CREATE_NOP);
         if (calc_uvs) {
@@ -1471,6 +1467,7 @@ void bmo_create_cone_exec(BMesh *bm, BMOperator *op)
       if (calc_uvs) {
         BMO_face_flag_enable(bm, f, FACE_MARK);
       }
+      side_faces[i - 1] = f;
     }
     else {
       firstv1 = v1;
@@ -1479,10 +1476,6 @@ void bmo_create_cone_exec(BMesh *bm, BMOperator *op)
 
     lastv1 = v1;
     lastv2 = v2;
-  }
-
-  if (!a) {
-    return;
   }
 
   if (cap_ends) {
@@ -1508,11 +1501,38 @@ void bmo_create_cone_exec(BMesh *bm, BMOperator *op)
     BM_mesh_calc_uvs_cone(bm, mat, dia2, dia1, segs, cap_ends, FACE_MARK, cd_loop_uv_offset);
   }
 
+  /* Collapse vertices at the first end. */
+  if (dia1 == 0.0f) {
+    if (cap_ends) {
+      BM_vert_kill(bm, cent1);
+    }
+    for (int i = 0; i < side_faces_len; i++) {
+      f = side_faces[i];
+      BMLoop *l = BM_FACE_FIRST_LOOP(f);
+      BM_edge_collapse(bm, l->prev->e, l->prev->v, true, true);
+    }
+  }
+
+  /* Collapse vertices at the second end. */
+  if (dia2 == 0.0f) {
+    if (cap_ends) {
+      BM_vert_kill(bm, cent2);
+    }
+    for (int i = 0; i < side_faces_len; i++) {
+      f = side_faces[i];
+      BMLoop *l = BM_FACE_FIRST_LOOP(f);
+      BM_edge_collapse(bm, l->next->e, l->next->v, true, true);
+    }
+  }
+
   if (!cap_tris) {
     BMO_op_callf(bm, op->flag, "dissolve_faces faces=%ff", FACE_NEW);
   }
 
-  BMO_op_callf(bm, op->flag, "remove_doubles verts=%fv dist=%f", VERT_MARK, 0.000001);
+  if (side_faces != NULL) {
+    MEM_freeN(side_faces);
+  }
+
   BMO_slot_buffer_from_enabled_flag(bm, op, op->slots_out, "verts.out", BM_VERT, VERT_MARK);
 }
 
@@ -1543,7 +1563,8 @@ void BM_mesh_calc_uvs_cone(BMesh *bm,
   const float uv_width = 1.0f / (float)segments;
   const float uv_height = cap_ends ? 0.5f : 1.0f;
 
-  /* Note that all this allows us to handle all cases (real cone, truncated cone, with or without ends capped)
+  /* Note that all this allows us to handle all cases
+   * (real cone, truncated cone, with or without ends capped)
    * with a single common code. */
   const float uv_center_y = cap_ends ? 0.25f : 0.5f;
   const float uv_center_x_top = cap_ends ? 0.25f : 0.5f;
@@ -1564,9 +1585,10 @@ void BM_mesh_calc_uvs_cone(BMesh *bm,
   float inv_mat[4][4];
   int loop_index;
 
-  mul_mat3_m4_v3(
-      mat, local_up); /* transform the upvector like we did the cone itself, without location. */
-  normalize_v3(local_up); /* remove global scaling... */
+  /* Transform the upvector like we did the cone itself, without location. */
+  mul_mat3_m4_v3(mat, local_up);
+  /* Remove global scaling... */
+  normalize_v3(local_up);
 
   invert_m4_m4(inv_mat, mat);
 
@@ -1582,8 +1604,7 @@ void BM_mesh_calc_uvs_cone(BMesh *bm,
 
     if (f->len == 4 && radius_top && radius_bottom) {
       /* side face - so unwrap it in a rectangle */
-      BM_ITER_ELEM_INDEX(l, &liter, f, BM_LOOPS_OF_FACE, loop_index)
-      {
+      BM_ITER_ELEM_INDEX (l, &liter, f, BM_LOOPS_OF_FACE, loop_index) {
         MLoopUV *luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
 
         switch (loop_index) {
@@ -1608,7 +1629,8 @@ void BM_mesh_calc_uvs_cone(BMesh *bm,
       }
     }
     else {
-      /* top or bottom face - so unwrap it by transforming back to a circle and using the X/Y coords */
+      /* Top or bottom face - so unwrap it by transforming
+       * back to a circle and using the X/Y coords. */
       BM_face_normal_update(f);
 
       BM_ITER_ELEM (l, &liter, f, BM_LOOPS_OF_FACE) {
@@ -1720,8 +1742,7 @@ void BM_mesh_calc_uvs_cube(BMesh *bm, const short oflag)
       continue;
     }
 
-    BM_ITER_ELEM_INDEX(l, &liter, f, BM_LOOPS_OF_FACE, loop_index)
-    {
+    BM_ITER_ELEM_INDEX (l, &liter, f, BM_LOOPS_OF_FACE, loop_index) {
       MLoopUV *luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
 
       luv->uv[0] = x;

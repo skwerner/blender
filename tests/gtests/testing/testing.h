@@ -3,9 +3,18 @@
 
 #include <vector>
 
-#include "glog/logging.h"
 #include "gflags/gflags.h"
+#include "glog/logging.h"
 #include "gtest/gtest.h"
+
+namespace blender::tests {
+
+/* These strings are passed on the CLI with the --test-asset-dir and --test-release-dir arguments.
+ * The arguments are added automatically when invoking tests via `ctest`. */
+const std::string &flags_test_asset_dir();   /* ../lib/tests in the SVN directory. */
+const std::string &flags_test_release_dir(); /* bin/{blender version} in the build directory. */
+
+}  // namespace blender::tests
 
 #define EXPECT_V3_NEAR(a, b, eps) \
   { \

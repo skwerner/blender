@@ -42,7 +42,6 @@ class GHOST_ContextEGL : public GHOST_Context {
    * Constructor.
    */
   GHOST_ContextEGL(bool stereoVisual,
-                   GHOST_TUns16 numOfAASamples,
                    EGLNativeWindowType nativeWindow,
                    EGLNativeDisplayType nativeDisplay,
                    EGLint contextProfileMask,
@@ -103,7 +102,7 @@ class GHOST_ContextEGL : public GHOST_Context {
   GHOST_TSuccess getSwapInterval(int &intervalOut);
 
  private:
-  void initContextEGLEW();
+  bool initContextEGLEW();
 
   EGLNativeDisplayType m_nativeDisplay;
   EGLNativeWindowType m_nativeWindow;

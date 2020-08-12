@@ -23,41 +23,41 @@
 
 #include "intern/builder/deg_builder_map.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_ghash.h"
-
 #include "DNA_ID.h"
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 BuilderMap::BuilderMap()
 {
-  set = BLI_gset_ptr_new("deg builder gset");
 }
 
 BuilderMap::~BuilderMap()
 {
-  BLI_gset_free(set, NULL);
 }
 
-bool BuilderMap::checkIsBuilt(ID *id)
+bool BuilderMap::checkIsBuilt(ID *id, int tag) const
 {
-  return BLI_gset_haskey(set, id);
+  return (getIDTag(id) & tag) == tag;
 }
 
-void BuilderMap::tagBuild(ID *id)
+void BuilderMap::tagBuild(ID *id, int tag)
 {
-  BLI_gset_insert(set, id);
+  id_tags_.lookup_or_add(id, 0) |= tag;
 }
 
-bool BuilderMap::checkIsBuiltAndTag(ID *id)
+bool BuilderMap::checkIsBuiltAndTag(ID *id, int tag)
 {
-  void **key_p;
-  if (!BLI_gset_ensure_p_ex(set, id, &key_p)) {
-    *key_p = id;
-    return false;
-  }
-  return true;
+  int &id_tag = id_tags_.lookup_or_add(id, 0);
+  const bool result = (id_tag & tag) == tag;
+  id_tag |= tag;
+  return result;
 }
 
-}  // namespace DEG
+int BuilderMap::getIDTag(ID *id) const
+{
+  return id_tags_.lookup_default(id, 0);
+}
+
+}  // namespace deg
+}  // namespace blender

@@ -582,7 +582,7 @@ cube_shell_face = (
 
 
 def make_cube(scene):
-    bpy.ops.mesh.primitive_cube_add(view_align=False,
+    bpy.ops.mesh.primitive_cube_add(align='WORLD',
                                     enter_editmode=False,
                                     location=(0, 0, 0),
                                     rotation=(0, 0, 0),
@@ -652,7 +652,7 @@ def make_cube_shell_extra(scene):
 
 
 def make_monkey(scene):
-    bpy.ops.mesh.primitive_monkey_add(view_align=False,
+    bpy.ops.mesh.primitive_monkey_add(align='WORLD',
                                       enter_editmode=False,
                                       location=(0, 0, 0),
                                       rotation=(0, 0, 0),
@@ -842,17 +842,7 @@ if __name__ == "__main__":
         print("Load Handler:", bpy.data.filepath)
         if load_handler.first is False:
             bpy.app.handlers.scene_update_post.remove(load_handler)
-            try:
-                main()
-                import sys
-                sys.exit(0)
-            except:
-                import traceback
-                traceback.print_exc()
-
-                # import sys
-                # sys.exit(1)  # comment to debug
-
+            main()
         else:
             load_handler.first = False
 

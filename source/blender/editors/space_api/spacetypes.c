@@ -38,10 +38,16 @@
 
 #include "ED_anim_api.h"
 #include "ED_armature.h"
+#include "ED_clip.h"
 #include "ED_curve.h"
 #include "ED_fileselect.h"
+#include "ED_gizmo_library.h"
 #include "ED_gpencil.h"
+#include "ED_lattice.h"
+#include "ED_logic.h"
 #include "ED_markers.h"
+#include "ED_mask.h"
+#include "ED_mball.h"
 #include "ED_mesh.h"
 #include "ED_node.h"
 #include "ED_object.h"
@@ -51,18 +57,12 @@
 #include "ED_scene.h"
 #include "ED_screen.h"
 #include "ED_sculpt.h"
-#include "ED_space_api.h"
-#include "ED_sound.h"
-#include "ED_uvedit.h"
-#include "ED_userpref.h"
-#include "ED_lattice.h"
-#include "ED_mball.h"
-#include "ED_logic.h"
-#include "ED_clip.h"
-#include "ED_mask.h"
 #include "ED_sequencer.h"
-#include "ED_gizmo_library.h"
+#include "ED_sound.h"
+#include "ED_space_api.h"
 #include "ED_transform.h"
+#include "ED_userpref.h"
+#include "ED_uvedit.h"
 
 #include "io_ops.h"
 
@@ -129,17 +129,13 @@ void ED_spacetypes_init(void)
   ED_gizmotypes_button_2d();
   ED_gizmotypes_dial_3d();
   ED_gizmotypes_move_3d();
-  ED_gizmotypes_arrow_2d();
   ED_gizmotypes_arrow_3d();
   ED_gizmotypes_preselect_3d();
   ED_gizmotypes_primitive_3d();
   ED_gizmotypes_blank_3d();
   ED_gizmotypes_cage_2d();
   ED_gizmotypes_cage_3d();
-  ED_gizmotypes_value_2d();
-
-  /* gizmo group types */
-  ED_gizmogrouptypes_value_2d();
+  ED_gizmotypes_snap_3d();
 
   /* register types for operators and gizmos */
   spacetypes = BKE_spacetypes_list();
@@ -163,6 +159,7 @@ void ED_spacemacros_init(void)
    * We need to have them go after python operators too */
   ED_operatormacros_armature();
   ED_operatormacros_mesh();
+  ED_operatormacros_uvedit();
   ED_operatormacros_metaball();
   ED_operatormacros_node();
   ED_operatormacros_object();
@@ -179,8 +176,9 @@ void ED_spacemacros_init(void)
   /* register dropboxes (can use macros) */
   spacetypes = BKE_spacetypes_list();
   for (type = spacetypes->first; type; type = type->next) {
-    if (type->dropboxes)
+    if (type->dropboxes) {
       type->dropboxes();
+    }
   }
 }
 
@@ -216,11 +214,13 @@ void ED_spacetypes_keymap(wmKeyConfig *keyconf)
 
   spacetypes = BKE_spacetypes_list();
   for (stype = spacetypes->first; stype; stype = stype->next) {
-    if (stype->keymap)
+    if (stype->keymap) {
       stype->keymap(keyconf);
+    }
     for (atype = stype->regiontypes.first; atype; atype = atype->next) {
-      if (atype->keymap)
+      if (atype->keymap) {
         atype->keymap(keyconf);
+      }
     }
   }
 }
@@ -265,13 +265,13 @@ void ED_region_draw_cb_exit(ARegionType *art, void *handle)
   }
 }
 
-void ED_region_draw_cb_draw(const bContext *C, ARegion *ar, int type)
+void ED_region_draw_cb_draw(const bContext *C, ARegion *region, int type)
 {
   RegionDrawCB *rdc;
 
-  for (rdc = ar->type->drawcalls.first; rdc; rdc = rdc->next) {
+  for (rdc = region->type->drawcalls.first; rdc; rdc = rdc->next) {
     if (rdc->type == type) {
-      rdc->draw(C, ar, rdc->customdata);
+      rdc->draw(C, region, rdc->customdata);
     }
   }
 }
@@ -281,7 +281,7 @@ void ED_region_draw_cb_draw(const bContext *C, ARegion *ar, int type)
 void ED_spacetype_xxx(void);
 
 /* allocate and init some vars */
-static SpaceLink *xxx_new(const ScrArea *UNUSED(sa), const Scene *UNUSED(scene))
+static SpaceLink *xxx_new(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
 {
   return NULL;
 }
@@ -292,7 +292,7 @@ static void xxx_free(SpaceLink *UNUSED(sl))
 }
 
 /* spacetype; init callback for usage, should be redoable */
-static void xxx_init(wmWindowManager *UNUSED(wm), ScrArea *UNUSED(sa))
+static void xxx_init(wmWindowManager *UNUSED(wm), ScrArea *UNUSED(area))
 {
 
   /* link area to SpaceXXX struct */

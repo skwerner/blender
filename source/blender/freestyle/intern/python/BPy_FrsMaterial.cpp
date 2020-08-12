@@ -33,11 +33,13 @@ extern "C" {
 //-------------------MODULE INITIALIZATION--------------------------------
 int FrsMaterial_Init(PyObject *module)
 {
-  if (module == NULL)
+  if (module == NULL) {
     return -1;
+  }
 
-  if (PyType_Ready(&FrsMaterial_Type) < 0)
+  if (PyType_Ready(&FrsMaterial_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&FrsMaterial_Type);
   PyModule_AddObject(module, "Material", (PyObject *)&FrsMaterial_Type);
 
@@ -154,8 +156,9 @@ static PyObject *FrsMaterial_repr(BPy_FrsMaterial *self)
 
 static int FrsMaterial_mathutils_check(BaseMathObject *bmo)
 {
-  if (!BPy_FrsMaterial_Check(bmo->cb_user))
+  if (!BPy_FrsMaterial_Check(bmo->cb_user)) {
     return -1;
+  }
   return 0;
 }
 
@@ -425,8 +428,8 @@ static PyObject *FrsMaterial_shininess_get(BPy_FrsMaterial *self, void *UNUSED(c
 static int FrsMaterial_shininess_set(BPy_FrsMaterial *self, PyObject *value, void *UNUSED(closure))
 {
   float scalar;
-  if ((scalar = PyFloat_AsDouble(value)) == -1.0f &&
-      PyErr_Occurred()) { /* parsed item not a number */
+  if ((scalar = PyFloat_AsDouble(value)) == -1.0f && PyErr_Occurred()) {
+    /* parsed item not a number */
     PyErr_SetString(PyExc_TypeError, "value must be a number");
     return -1;
   }
@@ -456,40 +459,40 @@ static int FrsMaterial_priority_set(BPy_FrsMaterial *self, PyObject *value, void
 }
 
 static PyGetSetDef BPy_FrsMaterial_getseters[] = {
-    {(char *)"line",
+    {"line",
      (getter)FrsMaterial_line_get,
      (setter)FrsMaterial_line_set,
-     (char *)FrsMaterial_line_doc,
+     FrsMaterial_line_doc,
      NULL},
-    {(char *)"diffuse",
+    {"diffuse",
      (getter)FrsMaterial_diffuse_get,
      (setter)FrsMaterial_diffuse_set,
-     (char *)FrsMaterial_diffuse_doc,
+     FrsMaterial_diffuse_doc,
      NULL},
-    {(char *)"specular",
+    {"specular",
      (getter)FrsMaterial_specular_get,
      (setter)FrsMaterial_specular_set,
-     (char *)FrsMaterial_specular_doc,
+     FrsMaterial_specular_doc,
      NULL},
-    {(char *)"ambient",
+    {"ambient",
      (getter)FrsMaterial_ambient_get,
      (setter)FrsMaterial_ambient_set,
-     (char *)FrsMaterial_ambient_doc,
+     FrsMaterial_ambient_doc,
      NULL},
-    {(char *)"emission",
+    {"emission",
      (getter)FrsMaterial_emission_get,
      (setter)FrsMaterial_emission_set,
-     (char *)FrsMaterial_emission_doc,
+     FrsMaterial_emission_doc,
      NULL},
-    {(char *)"shininess",
+    {"shininess",
      (getter)FrsMaterial_shininess_get,
      (setter)FrsMaterial_shininess_set,
-     (char *)FrsMaterial_shininess_doc,
+     FrsMaterial_shininess_doc,
      NULL},
-    {(char *)"priority",
+    {"priority",
      (getter)FrsMaterial_priority_get,
      (setter)FrsMaterial_priority_set,
-     (char *)FrsMaterial_priority_doc,
+     FrsMaterial_priority_doc,
      NULL},
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };

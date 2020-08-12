@@ -18,8 +18,8 @@
  * \ingroup RNA
  */
 
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "BLI_utildefines.h"
 
@@ -36,8 +36,8 @@
 
 #ifdef RNA_RUNTIME
 
-#  include "UI_interface.h"
 #  include "BKE_context.h"
+#  include "UI_interface.h"
 
 #  include "ED_gizmo_library.h"
 
@@ -90,7 +90,7 @@ static void rna_gizmo_target_set_prop(wmGizmo *gz,
                 RPT_ERROR,
                 "Property '%s.%s' not found",
                 RNA_struct_identifier(ptr->type),
-                target_propname);
+                propname);
     return;
   }
 

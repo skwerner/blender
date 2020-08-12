@@ -17,17 +17,19 @@
 
 set(INC
   ../include
+  ../../blenfont
   ../../blenkernel
   ../../blenlib
   ../../blentranslation
-  ../../imbuf
+  ../../depsgraph
   ../../gpu
+  ../../imbuf
   ../../makesdna
   ../../makesrna
   ../../windowmanager
   ../../../../intern/atomic
-  ../../../../intern/guardedalloc
   ../../../../intern/glew-mx
+  ../../../../intern/guardedalloc
 )
 
 set(INC_SYS
@@ -60,6 +62,10 @@ if(WITH_AUDASPACE)
 
   list(APPEND INC_SYS
     ${AUDASPACE_C_INCLUDE_DIRS}
+  )
+  list(APPEND LIB
+    ${AUDASPACE_C_LIBRARIES}
+    ${AUDASPACE_PY_LIBRARIES}
   )
 endif()
 

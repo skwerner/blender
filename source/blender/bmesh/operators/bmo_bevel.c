@@ -22,6 +22,8 @@
 
 #include "BLI_utildefines.h"
 
+#include "BKE_curveprofile.h"
+#include "DNA_curveprofile_types.h"
 #include "bmesh.h"
 #include "bmesh_tools.h"
 
@@ -31,8 +33,9 @@ void bmo_bevel_exec(BMesh *bm, BMOperator *op)
 {
   const float offset = BMO_slot_float_get(op->slots_in, "offset");
   const int offset_type = BMO_slot_int_get(op->slots_in, "offset_type");
+  const int profile_type = BMO_slot_int_get(op->slots_in, "profile_type");
   const int seg = BMO_slot_int_get(op->slots_in, "segments");
-  const bool vonly = BMO_slot_bool_get(op->slots_in, "vertex_only");
+  const int affect_type = BMO_slot_int_get(op->slots_in, "affect");
   const float profile = BMO_slot_float_get(op->slots_in, "profile");
   const bool clamp_overlap = BMO_slot_bool_get(op->slots_in, "clamp_overlap");
   const int material = BMO_slot_int_get(op->slots_in, "material");
@@ -45,6 +48,8 @@ void bmo_bevel_exec(BMesh *bm, BMOperator *op)
   const int miter_inner = BMO_slot_int_get(op->slots_in, "miter_inner");
   const float spread = BMO_slot_float_get(op->slots_in, "spread");
   const float smoothresh = BMO_slot_float_get(op->slots_in, "smoothresh");
+  const CurveProfile *custom_profile = BMO_slot_ptr_get(op->slots_in, "custom_profile");
+  const int vmesh_method = BMO_slot_int_get(op->slots_in, "vmesh_method");
 
   if (offset > 0) {
     BMOIter siter;
@@ -71,9 +76,10 @@ void bmo_bevel_exec(BMesh *bm, BMOperator *op)
     BM_mesh_bevel(bm,
                   offset,
                   offset_type,
+                  profile_type,
                   seg,
                   profile,
-                  vonly,
+                  affect_type,
                   false,
                   clamp_overlap,
                   NULL,
@@ -87,7 +93,9 @@ void bmo_bevel_exec(BMesh *bm, BMOperator *op)
                   miter_outer,
                   miter_inner,
                   spread,
-                  smoothresh);
+                  smoothresh,
+                  custom_profile,
+                  vmesh_method);
 
     BMO_slot_buffer_from_enabled_hflag(bm, op, op->slots_out, "faces.out", BM_FACE, BM_ELEM_TAG);
     BMO_slot_buffer_from_enabled_hflag(bm, op, op->slots_out, "edges.out", BM_EDGE, BM_ELEM_TAG);

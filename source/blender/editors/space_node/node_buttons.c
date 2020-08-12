@@ -25,8 +25,8 @@
 
 #include "DNA_node_types.h"
 
-#include "BLI_math.h"
 #include "BLI_blenlib.h"
+#include "BLI_math.h"
 
 #include "BLT_translation.h"
 
@@ -66,13 +66,13 @@ static bool node_sockets_poll(const bContext *C, PanelType *UNUSED(pt))
   return (snode && snode->nodetree && G.debug_value == 777);
 }
 
-static void node_sockets_panel(const bContext *C, Panel *pa)
+static void node_sockets_panel(const bContext *C, Panel *panel)
 {
   SpaceNode *snode = CTX_wm_space_node(C);
   bNodeTree *ntree = (snode) ? snode->edittree : NULL;
   bNode *node = (ntree) ? nodeGetActive(ntree) : NULL;
   bNodeSocket *sock;
-  uiLayout *layout = pa->layout, *split;
+  uiLayout *layout = panel->layout, *split;
   char name[UI_MAX_NAME_STR];
 
   if (ELEM(NULL, ntree, node)) {
@@ -84,7 +84,7 @@ static void node_sockets_panel(const bContext *C, Panel *pa)
 
     split = uiLayoutSplit(layout, 0.35f, false);
     uiItemL(split, name, ICON_NONE);
-    uiTemplateNodeLink(split, ntree, node, sock);
+    uiTemplateNodeLink(split, (bContext *)C, ntree, node, sock);
   }
 }
 
@@ -119,13 +119,13 @@ static bool node_tree_find_active_socket(bNodeTree *ntree, bNodeSocket **r_sock,
   return false;
 }
 
-static void node_tree_interface_panel(const bContext *C, Panel *pa)
+static void node_tree_interface_panel(const bContext *C, Panel *panel)
 {
   SpaceNode *snode = CTX_wm_space_node(C);
   bNodeTree *ntree = (snode) ? snode->edittree : NULL;
   bNodeSocket *sock;
   int in_out;
-  uiLayout *layout = pa->layout, *row, *split, *col;
+  uiLayout *layout = panel->layout, *row, *split, *col;
   PointerRNA ptr, sockptr, opptr;
   wmOperatorType *ot;
 
@@ -225,36 +225,4 @@ void node_buttons_register(ARegionType *art)
   pt->draw = node_tree_interface_panel;
   pt->poll = node_tree_interface_poll;
   BLI_addtail(&art->paneltypes, pt);
-}
-
-static int node_properties_toggle_exec(bContext *C, wmOperator *UNUSED(op))
-{
-  ScrArea *sa = CTX_wm_area(C);
-  ARegion *ar = node_has_buttons_region(sa);
-
-  if (ar) {
-    ED_region_toggle_hidden(C, ar);
-  }
-
-  return OPERATOR_FINISHED;
-}
-
-/* non-standard poll operator which doesn't care if there are any nodes */
-static bool node_properties_poll(bContext *C)
-{
-  ScrArea *sa = CTX_wm_area(C);
-  return (sa && (sa->spacetype == SPACE_NODE));
-}
-
-void NODE_OT_properties(wmOperatorType *ot)
-{
-  ot->name = "Toggle Sidebar";
-  ot->description = "Toggle the properties region visibility";
-  ot->idname = "NODE_OT_properties";
-
-  ot->exec = node_properties_toggle_exec;
-  ot->poll = node_properties_poll;
-
-  /* flags */
-  ot->flag = 0;
 }

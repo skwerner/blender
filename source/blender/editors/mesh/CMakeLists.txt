@@ -21,8 +21,9 @@ set(INC
   ../../blenkernel
   ../../blenlib
   ../../blentranslation
-  ../../depsgraph
   ../../bmesh
+  ../../depsgraph
+  ../../draw
   ../../gpu
   ../../imbuf
   ../../makesdna
@@ -30,8 +31,8 @@ set(INC
   ../../render/extern/include
   ../../windowmanager
   ../../../../intern/clog
-  ../../../../intern/guardedalloc
   ../../../../intern/glew-mx
+  ../../../../intern/guardedalloc
 )
 
 set(INC_SYS
@@ -42,6 +43,7 @@ set(SRC
   editface.c
   editmesh_add.c
   editmesh_add_gizmo.c
+  editmesh_automerge.c
   editmesh_bevel.c
   editmesh_bisect.c
   editmesh_extrude.c
@@ -53,6 +55,7 @@ set(SRC
   editmesh_knife.c
   editmesh_knife_project.c
   editmesh_loopcut.c
+  editmesh_mask_extract.c
   editmesh_path.c
   editmesh_polybuild.c
   editmesh_preselect_edgering.c
@@ -75,6 +78,7 @@ set(SRC
 set(LIB
   bf_blenkernel
   bf_blenlib
+  bf_windowmanager
 )
 
 if(WITH_INTERNATIONAL)

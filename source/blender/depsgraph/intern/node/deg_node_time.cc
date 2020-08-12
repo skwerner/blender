@@ -26,8 +26,10 @@
 #include "DNA_scene_types.h"
 
 #include "intern/depsgraph.h"
+#include "intern/depsgraph_relation.h"
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 void TimeSourceNode::tag_update(Depsgraph *graph, eUpdateSource /*source*/)
 {
@@ -37,4 +39,5 @@ void TimeSourceNode::tag_update(Depsgraph *graph, eUpdateSource /*source*/)
   }
 }
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

@@ -23,10 +23,10 @@
  * 3D View checks and manipulation (no operators).
  */
 
-#include <string.h>
-#include <stdio.h>
-#include <math.h>
 #include <float.h>
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
 
 #include "DNA_camera_types.h"
 #include "DNA_curve_types.h"
@@ -44,8 +44,8 @@
 #include "BKE_camera.h"
 #include "BKE_context.h"
 #include "BKE_object.h"
-#include "BKE_screen.h"
 #include "BKE_scene.h"
+#include "BKE_screen.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
@@ -86,19 +86,24 @@ void ED_view3d_background_color_get(const Scene *scene, const View3D *v3d, float
   UI_GetThemeColor3fv(TH_BACK, r_color);
 }
 
-void ED_view3d_cursor3d_calc_mat3(const Scene *scene, float mat[3][3])
+bool ED_view3d_has_workbench_in_texture_color(const Scene *scene,
+                                              const Object *ob,
+                                              const View3D *v3d)
 {
-  const View3DCursor *cursor = &scene->cursor;
-  BKE_scene_cursor_rot_to_mat3(cursor, mat);
-}
-
-void ED_view3d_cursor3d_calc_mat4(const Scene *scene, float mat[4][4])
-{
-  const View3DCursor *cursor = &scene->cursor;
-  float mat3[3][3];
-  BKE_scene_cursor_rot_to_mat3(cursor, mat3);
-  copy_m4_m3(mat, mat3);
-  copy_v3_v3(mat[3], cursor->location);
+  if (v3d->shading.type == OB_SOLID) {
+    if (v3d->shading.color_type == V3D_SHADING_TEXTURE_COLOR) {
+      return true;
+    }
+    if (ob && ob->mode == OB_MODE_TEXTURE_PAINT) {
+      return true;
+    }
+  }
+  else if (v3d->shading.type == OB_RENDER) {
+    if (STREQ(scene->r.engine, RE_engine_id_BLENDER_WORKBENCH)) {
+      return scene->display.shading.color_type == V3D_SHADING_TEXTURE_COLOR;
+    }
+  }
+  return false;
 }
 
 Camera *ED_view3d_camera_data_get(View3D *v3d, RegionView3D *rv3d)
@@ -108,9 +113,7 @@ Camera *ED_view3d_camera_data_get(View3D *v3d, RegionView3D *rv3d)
   if ((rv3d->persp == RV3D_CAMOB) && v3d->camera && (v3d->camera->type == OB_CAMERA)) {
     return v3d->camera->data;
   }
-  else {
-    return NULL;
-  }
+  return NULL;
 }
 
 void ED_view3d_dist_range_get(const View3D *v3d, float r_dist_range[2])
@@ -196,28 +199,28 @@ bool ED_view3d_viewplane_get(Depsgraph *depsgraph,
 void view3d_operator_needs_opengl(const bContext *C)
 {
   wmWindow *win = CTX_wm_window(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
 
-  view3d_region_operator_needs_opengl(win, ar);
+  view3d_region_operator_needs_opengl(win, region);
 }
 
-void view3d_region_operator_needs_opengl(wmWindow *UNUSED(win), ARegion *ar)
+void view3d_region_operator_needs_opengl(wmWindow *UNUSED(win), ARegion *region)
 {
   /* for debugging purpose, context should always be OK */
-  if ((ar == NULL) || (ar->regiontype != RGN_TYPE_WINDOW)) {
+  if ((region == NULL) || (region->regiontype != RGN_TYPE_WINDOW)) {
     printf("view3d_region_operator_needs_opengl error, wrong region\n");
   }
   else {
-    RegionView3D *rv3d = ar->regiondata;
+    RegionView3D *rv3d = region->regiondata;
 
-    wmViewport(&ar->winrct);  // TODO: bad
+    wmViewport(&region->winrct);  // TODO: bad
     GPU_matrix_projection_set(rv3d->winmat);
     GPU_matrix_set(rv3d->viewmat);
   }
 }
 
 /**
- * Use instead of: ``bglPolygonOffset(rv3d->dist, ...)`` see bug [#37727]
+ * Use instead of: ``GPU_polygon_offset(rv3d->dist, ...)`` see bug [#37727]
  */
 void ED_view3d_polygon_offset(const RegionView3D *rv3d, const float dist)
 {
@@ -238,32 +241,32 @@ void ED_view3d_polygon_offset(const RegionView3D *rv3d, const float dist)
     }
   }
 
-  bglPolygonOffset(viewdist, dist);
+  GPU_polygon_offset(viewdist, dist);
 }
 
 bool ED_view3d_context_activate(bContext *C)
 {
-  bScreen *sc = CTX_wm_screen(C);
-  ScrArea *sa = CTX_wm_area(C);
-  ARegion *ar;
+  bScreen *screen = CTX_wm_screen(C);
+  ScrArea *area = CTX_wm_area(C);
+  ARegion *region;
 
-  /* sa can be NULL when called from python */
-  if (sa == NULL || sa->spacetype != SPACE_VIEW3D) {
-    sa = BKE_screen_find_big_area(sc, SPACE_VIEW3D, 0);
+  /* area can be NULL when called from python */
+  if (area == NULL || area->spacetype != SPACE_VIEW3D) {
+    area = BKE_screen_find_big_area(screen, SPACE_VIEW3D, 0);
   }
 
-  if (sa == NULL) {
+  if (area == NULL) {
     return false;
   }
 
-  ar = BKE_area_find_region_active_win(sa);
-  if (ar == NULL) {
+  region = BKE_area_find_region_active_win(area);
+  if (region == NULL) {
     return false;
   }
 
   /* bad context switch .. */
-  CTX_wm_area_set(C, sa);
-  CTX_wm_region_set(C, ar);
+  CTX_wm_area_set(C, area);
+  CTX_wm_region_set(C, region);
 
   return true;
 }
@@ -292,7 +295,7 @@ void ED_view3d_clipping_calc_from_boundbox(float clip[4][4],
 }
 
 void ED_view3d_clipping_calc(
-    BoundBox *bb, float planes[4][4], const ARegion *ar, const Object *ob, const rcti *rect)
+    BoundBox *bb, float planes[4][4], const ARegion *region, const Object *ob, const rcti *rect)
 {
   /* init in case unproject fails */
   memset(bb->vec, 0, sizeof(bb->vec));
@@ -303,8 +306,8 @@ void ED_view3d_clipping_calc(
     float xs = (val == 0 || val == 3) ? rect->xmin : rect->xmax;
     float ys = (val == 0 || val == 1) ? rect->ymin : rect->ymax;
 
-    ED_view3d_unproject(ar, xs, ys, 0.0, bb->vec[val]);
-    ED_view3d_unproject(ar, xs, ys, 1.0, bb->vec[4 + val]);
+    ED_view3d_unproject(region, xs, ys, 0.0, bb->vec[val]);
+    ED_view3d_unproject(region, xs, ys, 1.0, bb->vec[4 + val]);
   }
 
   /* optionally transform to object space */
@@ -413,7 +416,7 @@ bool ED_view3d_boundbox_clip(RegionView3D *rv3d, const BoundBox *bb)
 
 bool ED_view3d_offset_lock_check(const View3D *v3d, const RegionView3D *rv3d)
 {
-  return (rv3d->persp != RV3D_CAMOB) && (v3d->ob_centre_cursor || v3d->ob_centre);
+  return (rv3d->persp != RV3D_CAMOB) && (v3d->ob_center_cursor || v3d->ob_center);
 }
 
 /**
@@ -423,6 +426,7 @@ void ED_view3d_lastview_store(RegionView3D *rv3d)
 {
   copy_qt_qt(rv3d->lviewquat, rv3d->viewquat);
   rv3d->lview = rv3d->view;
+  rv3d->lview_axis_roll = rv3d->view_axis_roll;
   if (rv3d->persp != RV3D_CAMOB) {
     rv3d->lpersp = rv3d->persp;
   }
@@ -430,9 +434,10 @@ void ED_view3d_lastview_store(RegionView3D *rv3d)
 
 void ED_view3d_lock_clear(View3D *v3d)
 {
-  v3d->ob_centre = NULL;
-  v3d->ob_centre_bone[0] = '\0';
-  v3d->ob_centre_cursor = false;
+  v3d->ob_center = NULL;
+  v3d->ob_center_bone[0] = '\0';
+  v3d->ob_center_cursor = false;
+
   v3d->flag2 &= ~V3D_LOCK_CAMERA;
 }
 
@@ -467,12 +472,12 @@ void ED_view3d_persp_switch_from_camera(const Depsgraph *depsgraph,
  *
  * shared with NDOF.
  */
-bool ED_view3d_persp_ensure(const Depsgraph *depsgraph, View3D *v3d, ARegion *ar)
+bool ED_view3d_persp_ensure(const Depsgraph *depsgraph, View3D *v3d, ARegion *region)
 {
-  RegionView3D *rv3d = ar->regiondata;
+  RegionView3D *rv3d = region->regiondata;
   const bool autopersp = (U.uiflag & USER_AUTOPERSP) != 0;
 
-  BLI_assert((rv3d->viewlock & RV3D_LOCKED) == 0);
+  BLI_assert((RV3D_LOCK_FLAGS(rv3d) & RV3D_LOCK_ANY_TRANSFORM) == 0);
 
   if (ED_view3d_camera_lock_check(v3d, rv3d)) {
     return false;
@@ -595,13 +600,14 @@ bool ED_view3d_camera_lock_sync(const Depsgraph *depsgraph, View3D *v3d, RegionV
 
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
-bool ED_view3d_camera_autokey(
-    Scene *scene, ID *id_key, struct bContext *C, const bool do_rotate, const bool do_translate)
+bool ED_view3d_camera_autokey(const Scene *scene,
+                              ID *id_key,
+                              struct bContext *C,
+                              const bool do_rotate,
+                              const bool do_translate)
 {
   if (autokeyframe_cfra_can_key(scene, id_key)) {
     const float cfra = (float)CFRA;
@@ -629,16 +635,14 @@ bool ED_view3d_camera_autokey(
 
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 /**
  * Call after modifying a locked view.
  *
- * \note Not every view edit currently auto-keys (numpad for eg),
- * this is complicated because of smoothview.
+ * \note Not every view edit currently auto-keys (num-pad for eg),
+ * this is complicated because of smooth-view.
  */
 bool ED_view3d_camera_lock_autokey(View3D *v3d,
                                    RegionView3D *rv3d,
@@ -663,9 +667,7 @@ bool ED_view3d_camera_lock_autokey(View3D *v3d,
 
     return ED_view3d_camera_autokey(scene, id_key, C, do_rotate, do_translate);
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 /** \} */
@@ -676,30 +678,30 @@ bool ED_view3d_camera_lock_autokey(View3D *v3d,
  * Use with quad-split so each view is clipped by the bounds of each view axis.
  * \{ */
 
-static void view3d_boxview_clip(ScrArea *sa)
+static void view3d_boxview_clip(ScrArea *area)
 {
-  ARegion *ar;
+  ARegion *region;
   BoundBox *bb = MEM_callocN(sizeof(BoundBox), "clipbb");
   float clip[6][4];
   float x1 = 0.0f, y1 = 0.0f, z1 = 0.0f, ofs[3] = {0.0f, 0.0f, 0.0f};
   int val;
 
   /* create bounding box */
-  for (ar = sa->regionbase.first; ar; ar = ar->next) {
-    if (ar->regiontype == RGN_TYPE_WINDOW) {
-      RegionView3D *rv3d = ar->regiondata;
+  for (region = area->regionbase.first; region; region = region->next) {
+    if (region->regiontype == RGN_TYPE_WINDOW) {
+      RegionView3D *rv3d = region->regiondata;
 
-      if (rv3d->viewlock & RV3D_BOXCLIP) {
+      if (RV3D_LOCK_FLAGS(rv3d) & RV3D_BOXCLIP) {
         if (ELEM(rv3d->view, RV3D_VIEW_TOP, RV3D_VIEW_BOTTOM)) {
-          if (ar->winx > ar->winy) {
+          if (region->winx > region->winy) {
             x1 = rv3d->dist;
           }
           else {
-            x1 = ar->winx * rv3d->dist / ar->winy;
+            x1 = region->winx * rv3d->dist / region->winy;
           }
 
-          if (ar->winx > ar->winy) {
-            y1 = ar->winy * rv3d->dist / ar->winx;
+          if (region->winx > region->winy) {
+            y1 = region->winy * rv3d->dist / region->winx;
           }
           else {
             y1 = rv3d->dist;
@@ -709,8 +711,8 @@ static void view3d_boxview_clip(ScrArea *sa)
         else if (ELEM(rv3d->view, RV3D_VIEW_FRONT, RV3D_VIEW_BACK)) {
           ofs[2] = rv3d->ofs[2];
 
-          if (ar->winx > ar->winy) {
-            z1 = ar->winy * rv3d->dist / ar->winx;
+          if (region->winx > region->winy) {
+            z1 = region->winy * rv3d->dist / region->winx;
           }
           else {
             z1 = rv3d->dist;
@@ -757,11 +759,11 @@ static void view3d_boxview_clip(ScrArea *sa)
   }
 
   /* create bounding box */
-  for (ar = sa->regionbase.first; ar; ar = ar->next) {
-    if (ar->regiontype == RGN_TYPE_WINDOW) {
-      RegionView3D *rv3d = ar->regiondata;
+  for (region = area->regionbase.first; region; region = region->next) {
+    if (region->regiontype == RGN_TYPE_WINDOW) {
+      RegionView3D *rv3d = region->regiondata;
 
-      if (rv3d->viewlock & RV3D_BOXCLIP) {
+      if (RV3D_LOCK_FLAGS(rv3d) & RV3D_BOXCLIP) {
         rv3d->rflag |= RV3D_CLIPPING;
         memcpy(rv3d->clip, clip, sizeof(clip));
         if (rv3d->clipbb) {
@@ -796,14 +798,16 @@ static void view3d_boxview_sync_axis(RegionView3D *rv3d_dst, RegionView3D *rv3d_
   int i;
 
   /* we could use rv3d->viewinv, but better not depend on view matrix being updated */
-  if (UNLIKELY(ED_view3d_quat_from_axis_view(rv3d_src->view, viewinv) == false)) {
+  if (UNLIKELY(ED_view3d_quat_from_axis_view(rv3d_src->view, rv3d_src->view_axis_roll, viewinv) ==
+               false)) {
     return;
   }
   invert_qt_normalized(viewinv);
   mul_qt_v3(viewinv, view_src_x);
   mul_qt_v3(viewinv, view_src_y);
 
-  if (UNLIKELY(ED_view3d_quat_from_axis_view(rv3d_dst->view, viewinv) == false)) {
+  if (UNLIKELY(ED_view3d_quat_from_axis_view(rv3d_dst->view, rv3d_dst->view_axis_roll, viewinv) ==
+               false)) {
     return;
   }
   invert_qt_normalized(viewinv);
@@ -820,20 +824,20 @@ static void view3d_boxview_sync_axis(RegionView3D *rv3d_dst, RegionView3D *rv3d_
 }
 
 /* sync center/zoom view of region to others, for view transforms */
-void view3d_boxview_sync(ScrArea *sa, ARegion *ar)
+void view3d_boxview_sync(ScrArea *area, ARegion *region)
 {
   ARegion *artest;
-  RegionView3D *rv3d = ar->regiondata;
+  RegionView3D *rv3d = region->regiondata;
   short clip = 0;
 
-  for (artest = sa->regionbase.first; artest; artest = artest->next) {
-    if (artest != ar && artest->regiontype == RGN_TYPE_WINDOW) {
+  for (artest = area->regionbase.first; artest; artest = artest->next) {
+    if (artest != region && artest->regiontype == RGN_TYPE_WINDOW) {
       RegionView3D *rv3dtest = artest->regiondata;
 
-      if (rv3dtest->viewlock & RV3D_LOCKED) {
+      if (RV3D_LOCK_FLAGS(rv3dtest) & RV3D_LOCK_ROTATION) {
         rv3dtest->dist = rv3d->dist;
         view3d_boxview_sync_axis(rv3dtest, rv3d);
-        clip |= rv3dtest->viewlock & RV3D_BOXCLIP;
+        clip |= RV3D_LOCK_FLAGS(rv3dtest) & RV3D_BOXCLIP;
 
         ED_region_tag_redraw(artest);
       }
@@ -841,48 +845,48 @@ void view3d_boxview_sync(ScrArea *sa, ARegion *ar)
   }
 
   if (clip) {
-    view3d_boxview_clip(sa);
+    view3d_boxview_clip(area);
   }
 }
 
 /* for home, center etc */
-void view3d_boxview_copy(ScrArea *sa, ARegion *ar)
+void view3d_boxview_copy(ScrArea *area, ARegion *region)
 {
   ARegion *artest;
-  RegionView3D *rv3d = ar->regiondata;
+  RegionView3D *rv3d = region->regiondata;
   bool clip = false;
 
-  for (artest = sa->regionbase.first; artest; artest = artest->next) {
-    if (artest != ar && artest->regiontype == RGN_TYPE_WINDOW) {
+  for (artest = area->regionbase.first; artest; artest = artest->next) {
+    if (artest != region && artest->regiontype == RGN_TYPE_WINDOW) {
       RegionView3D *rv3dtest = artest->regiondata;
 
-      if (rv3dtest->viewlock) {
+      if (RV3D_LOCK_FLAGS(rv3dtest)) {
         rv3dtest->dist = rv3d->dist;
         copy_v3_v3(rv3dtest->ofs, rv3d->ofs);
         ED_region_tag_redraw(artest);
 
-        clip |= ((rv3dtest->viewlock & RV3D_BOXCLIP) != 0);
+        clip |= ((RV3D_LOCK_FLAGS(rv3dtest) & RV3D_BOXCLIP) != 0);
       }
     }
   }
 
   if (clip) {
-    view3d_boxview_clip(sa);
+    view3d_boxview_clip(area);
   }
 }
 
 /* 'clip' is used to know if our clip setting has changed */
-void ED_view3d_quadview_update(ScrArea *sa, ARegion *ar, bool do_clip)
+void ED_view3d_quadview_update(ScrArea *area, ARegion *region, bool do_clip)
 {
-  ARegion *ar_sync = NULL;
-  RegionView3D *rv3d = ar->regiondata;
+  ARegion *region_sync = NULL;
+  RegionView3D *rv3d = region->regiondata;
   short viewlock;
   /* this function copies flags from the first of the 3 other quadview
    * regions to the 2 other, so it assumes this is the region whose
    * properties are always being edited, weak */
   viewlock = rv3d->viewlock;
 
-  if ((viewlock & RV3D_LOCKED) == 0) {
+  if ((viewlock & RV3D_LOCK_ROTATION) == 0) {
     do_clip = (viewlock & RV3D_BOXCLIP) != 0;
     viewlock = 0;
   }
@@ -891,35 +895,36 @@ void ED_view3d_quadview_update(ScrArea *sa, ARegion *ar, bool do_clip)
     viewlock &= ~RV3D_BOXCLIP;
   }
 
-  for (; ar; ar = ar->prev) {
-    if (ar->alignment == RGN_ALIGN_QSPLIT) {
-      rv3d = ar->regiondata;
+  for (; region; region = region->prev) {
+    if (region->alignment == RGN_ALIGN_QSPLIT) {
+      rv3d = region->regiondata;
       rv3d->viewlock = viewlock;
 
       if (do_clip && (viewlock & RV3D_BOXCLIP) == 0) {
         rv3d->rflag &= ~RV3D_BOXCLIP;
       }
 
-      /* use ar_sync so we sync with one of the aligned views below
+      /* use region_sync so we sync with one of the aligned views below
        * else the view jumps on changing view settings like 'clip'
        * since it copies from the perspective view */
-      ar_sync = ar;
+      region_sync = region;
     }
   }
 
-  if (rv3d->viewlock & RV3D_BOXVIEW) {
-    view3d_boxview_sync(sa, ar_sync ? ar_sync : sa->regionbase.last);
+  if (RV3D_LOCK_FLAGS(rv3d) & RV3D_BOXVIEW) {
+    view3d_boxview_sync(area, region_sync ? region_sync : area->regionbase.last);
   }
 
   /* ensure locked regions have an axis, locked user views don't make much sense */
-  if (viewlock & RV3D_LOCKED) {
+  if (viewlock & RV3D_LOCK_ROTATION) {
     int index_qsplit = 0;
-    for (ar = sa->regionbase.first; ar; ar = ar->next) {
-      if (ar->alignment == RGN_ALIGN_QSPLIT) {
-        rv3d = ar->regiondata;
+    for (region = area->regionbase.first; region; region = region->next) {
+      if (region->alignment == RGN_ALIGN_QSPLIT) {
+        rv3d = region->regiondata;
         if (rv3d->viewlock) {
-          if (!RV3D_VIEW_IS_AXIS(rv3d->view)) {
+          if (!RV3D_VIEW_IS_AXIS(rv3d->view) || (rv3d->view_axis_roll != RV3D_VIEW_AXIS_ROLL_0)) {
             rv3d->view = ED_view3d_lock_view_from_index(index_qsplit);
+            rv3d->view_axis_roll = RV3D_VIEW_AXIS_ROLL_0;
             rv3d->persp = RV3D_ORTHO;
             ED_view3d_lock(rv3d);
           }
@@ -929,7 +934,7 @@ void ED_view3d_quadview_update(ScrArea *sa, ARegion *ar, bool do_clip)
     }
   }
 
-  ED_area_tag_redraw(sa);
+  ED_area_tag_redraw(area);
 }
 
 /** \} */
@@ -938,7 +943,7 @@ void ED_view3d_quadview_update(ScrArea *sa, ARegion *ar, bool do_clip)
 /** \name View Auto-Depth Utilities
  * \{ */
 
-static float view_autodist_depth_margin(ARegion *ar, const int mval[2], int margin)
+static float view_autodist_depth_margin(ARegion *region, const int mval[2], int margin)
 {
   ViewDepths depth_temp = {0};
   rcti rect;
@@ -955,7 +960,7 @@ static float view_autodist_depth_margin(ARegion *ar, const int mval[2], int marg
     BLI_rcti_init_pt_radius(&rect, mval, margin);
   }
 
-  view3d_update_depths_rect(ar, &depth_temp, &rect);
+  view3d_update_depths_rect(region, &depth_temp, &rect);
   depth_close = view3d_depth_near(&depth_temp);
   MEM_SAFE_FREE(depth_temp.depths);
   return depth_close;
@@ -969,7 +974,7 @@ static float view_autodist_depth_margin(ARegion *ar, const int mval[2], int marg
  * \param fallback_depth_pt: Use this points depth when no depth can be found.
  */
 bool ED_view3d_autodist(Depsgraph *depsgraph,
-                        ARegion *ar,
+                        ARegion *region,
                         View3D *v3d,
                         const int mval[2],
                         float mouse_worldloc[3],
@@ -982,12 +987,12 @@ bool ED_view3d_autodist(Depsgraph *depsgraph,
   bool depth_ok = false;
 
   /* Get Z Depths, needed for perspective, nice for ortho */
-  ED_view3d_draw_depth(depsgraph, ar, v3d, alphaoverride);
+  ED_view3d_draw_depth(depsgraph, region, v3d, alphaoverride);
 
   /* Attempt with low margin's first */
   i = 0;
   do {
-    depth_close = view_autodist_depth_margin(ar, mval, margin_arr[i++] * U.pixelsize);
+    depth_close = view_autodist_depth_margin(region, mval, margin_arr[i++] * U.pixelsize);
     depth_ok = (depth_close != FLT_MAX);
   } while ((depth_ok == false) && (i < ARRAY_SIZE(margin_arr)));
 
@@ -995,38 +1000,39 @@ bool ED_view3d_autodist(Depsgraph *depsgraph,
     float centx = (float)mval[0] + 0.5f;
     float centy = (float)mval[1] + 0.5f;
 
-    if (ED_view3d_unproject(ar, centx, centy, depth_close, mouse_worldloc)) {
+    if (ED_view3d_unproject(region, centx, centy, depth_close, mouse_worldloc)) {
       return true;
     }
   }
 
   if (fallback_depth_pt) {
-    ED_view3d_win_to_3d_int(v3d, ar, fallback_depth_pt, mval, mouse_worldloc);
+    ED_view3d_win_to_3d_int(v3d, region, fallback_depth_pt, mval, mouse_worldloc);
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
-void ED_view3d_autodist_init(Depsgraph *depsgraph, ARegion *ar, View3D *v3d, int mode)
+void ED_view3d_autodist_init(Depsgraph *depsgraph, ARegion *region, View3D *v3d, int mode)
 {
   /* Get Z Depths, needed for perspective, nice for ortho */
   switch (mode) {
     case 0:
-      ED_view3d_draw_depth(depsgraph, ar, v3d, true);
+      ED_view3d_draw_depth(depsgraph, region, v3d, true);
       break;
     case 1: {
       Scene *scene = DEG_get_evaluated_scene(depsgraph);
-      ED_view3d_draw_depth_gpencil(depsgraph, scene, ar, v3d);
+      ED_view3d_draw_depth_gpencil(depsgraph, scene, region, v3d);
       break;
     }
   }
 }
 
 /* no 4x4 sampling, run #ED_view3d_autodist_init first */
-bool ED_view3d_autodist_simple(
-    ARegion *ar, const int mval[2], float mouse_worldloc[3], int margin, float *force_depth)
+bool ED_view3d_autodist_simple(ARegion *region,
+                               const int mval[2],
+                               float mouse_worldloc[3],
+                               int margin,
+                               const float *force_depth)
 {
   float depth;
 
@@ -1035,7 +1041,7 @@ bool ED_view3d_autodist_simple(
     depth = *force_depth;
   }
   else {
-    depth = view_autodist_depth_margin(ar, mval, margin);
+    depth = view_autodist_depth_margin(region, mval, margin);
   }
 
   if (depth == FLT_MAX) {
@@ -1044,12 +1050,12 @@ bool ED_view3d_autodist_simple(
 
   float centx = (float)mval[0] + 0.5f;
   float centy = (float)mval[1] + 0.5f;
-  return ED_view3d_unproject(ar, centx, centy, depth, mouse_worldloc);
+  return ED_view3d_unproject(region, centx, centy, depth, mouse_worldloc);
 }
 
-bool ED_view3d_autodist_depth(ARegion *ar, const int mval[2], int margin, float *depth)
+bool ED_view3d_autodist_depth(ARegion *region, const int mval[2], int margin, float *depth)
 {
-  *depth = view_autodist_depth_margin(ar, mval, margin);
+  *depth = view_autodist_depth_margin(region, mval, margin);
 
   return (*depth != FLT_MAX);
 }
@@ -1057,7 +1063,7 @@ bool ED_view3d_autodist_depth(ARegion *ar, const int mval[2], int margin, float 
 static bool depth_segment_cb(int x, int y, void *userData)
 {
   struct {
-    ARegion *ar;
+    ARegion *region;
     int margin;
     float depth;
   } *data = userData;
@@ -1067,29 +1073,27 @@ static bool depth_segment_cb(int x, int y, void *userData)
   mval[0] = x;
   mval[1] = y;
 
-  depth = view_autodist_depth_margin(data->ar, mval, data->margin);
+  depth = view_autodist_depth_margin(data->region, mval, data->margin);
 
   if (depth != FLT_MAX) {
     data->depth = depth;
     return 0;
   }
-  else {
-    return 1;
-  }
+  return 1;
 }
 
 bool ED_view3d_autodist_depth_seg(
-    ARegion *ar, const int mval_sta[2], const int mval_end[2], int margin, float *depth)
+    ARegion *region, const int mval_sta[2], const int mval_end[2], int margin, float *depth)
 {
   struct {
-    ARegion *ar;
+    ARegion *region;
     int margin;
     float depth;
   } data = {NULL};
   int p1[2];
   int p2[2];
 
-  data.ar = ar;
+  data.region = region;
   data.margin = margin;
   data.depth = FLT_MAX;
 
@@ -1140,13 +1144,14 @@ float ED_view3d_radius_to_dist_ortho(const float lens, const float radius)
  *           +
  * </pre>
  *
- * \param ar: Can be NULL if \a use_aspect is false.
+ * \param region: Can be NULL if \a use_aspect is false.
  * \param persp: Allow the caller to tell what kind of perspective to use (ortho/view/camera)
  * \param use_aspect: Increase the distance to account for non 1:1 view aspect.
- * \param radius: The radius will be fitted exactly, typically pre-scaled by a margin (#VIEW3D_MARGIN).
+ * \param radius: The radius will be fitted exactly,
+ * typically pre-scaled by a margin (#VIEW3D_MARGIN).
  */
 float ED_view3d_radius_to_dist(const View3D *v3d,
-                               const ARegion *ar,
+                               const ARegion *region,
                                const struct Depsgraph *depsgraph,
                                const char persp,
                                const bool use_aspect,
@@ -1194,18 +1199,18 @@ float ED_view3d_radius_to_dist(const View3D *v3d,
   }
 
   if (use_aspect) {
-    const RegionView3D *rv3d = ar->regiondata;
+    const RegionView3D *rv3d = region->regiondata;
 
     float winx, winy;
 
     if (persp == RV3D_CAMOB) {
       /* camera frame x/y in pixels */
-      winx = ar->winx / rv3d->viewcamtexcofac[0];
-      winy = ar->winy / rv3d->viewcamtexcofac[1];
+      winx = region->winx / rv3d->viewcamtexcofac[0];
+      winy = region->winy / rv3d->viewcamtexcofac[1];
     }
     else {
-      winx = ar->winx;
-      winy = ar->winy;
+      winx = region->winx;
+      winy = region->winy;
     }
 
     if (winx && winy) {
@@ -1226,9 +1231,17 @@ float ED_view3d_radius_to_dist(const View3D *v3d,
 /** \name View Distance Utilities
  * \{ */
 
-/* problem - ofs[3] can be on same location as camera itself.
- * Blender needs proper dist value for zoom.
- * use fallback_dist to override small values
+/**
+ * This function solves the problem of having to switch between camera and non-camera views.
+ *
+ * When viewing from the perspective of \a mat, and having the view center \a ofs,
+ * this calculates a distance from \a ofs to the matrix \a mat.
+ * Using \a fallback_dist when the distance would be too small.
+ *
+ * \param mat: A matrix use for the view-point (typically the camera objects matrix).
+ * \param ofs: Orbit center (negated), matching #RegionView3D.ofs, which is typically passed in.
+ * \param fallback_dist: The distance to use if the object is too near or in front of \a ofs.
+ * \returns A newly calculated distance or the fallback.
  */
 float ED_view3d_offset_distance(float mat[4][4], const float ofs[3], const float fallback_dist)
 {
@@ -1275,44 +1288,124 @@ void ED_view3d_distance_set(RegionView3D *rv3d, const float dist)
   rv3d->dist = dist;
 }
 
+/**
+ * Change the distance & offset to match the depth of \a dist_co along the view axis.
+ *
+ * \param dist_co: A world-space location to use for the new depth.
+ * \param dist_min: Resulting distances below this will be ignored.
+ * \return Success if the distance was set.
+ */
+bool ED_view3d_distance_set_from_location(RegionView3D *rv3d,
+                                          const float dist_co[3],
+                                          const float dist_min)
+{
+  float viewinv[4];
+  invert_qt_qt_normalized(viewinv, rv3d->viewquat);
+
+  float tvec[3] = {0.0f, 0.0f, -1.0f};
+  mul_qt_v3(viewinv, tvec);
+
+  float dist_co_local[3];
+  negate_v3_v3(dist_co_local, rv3d->ofs);
+  sub_v3_v3v3(dist_co_local, dist_co, dist_co_local);
+  const float delta = dot_v3v3(tvec, dist_co_local);
+  const float dist_new = rv3d->dist + delta;
+  if (dist_new >= dist_min) {
+    madd_v3_v3fl(rv3d->ofs, tvec, -delta);
+    rv3d->dist = dist_new;
+    return true;
+  }
+  return false;
+}
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
 /** \name View Axis Utilities
  * \{ */
-static float view3d_quat_axis[6][4] = {
-    {M_SQRT1_2, -M_SQRT1_2, 0.0f, 0.0f},  /* RV3D_VIEW_FRONT */
-    {0.0f, 0.0f, -M_SQRT1_2, -M_SQRT1_2}, /* RV3D_VIEW_BACK */
-    {0.5f, -0.5f, 0.5f, 0.5f},            /* RV3D_VIEW_LEFT */
-    {0.5f, -0.5f, -0.5f, -0.5f},          /* RV3D_VIEW_RIGHT */
-    {1.0f, 0.0f, 0.0f, 0.0f},             /* RV3D_VIEW_TOP */
-    {0.0f, -1.0f, 0.0f, 0.0f},            /* RV3D_VIEW_BOTTOM */
+
+/**
+ * Lookup by axis-view, axis-roll.
+ */
+static float view3d_quat_axis[6][4][4] = {
+    /* RV3D_VIEW_FRONT */
+    {
+        {M_SQRT1_2, -M_SQRT1_2, 0.0f, 0.0f},
+        {0.5f, -0.5f, -0.5f, 0.5f},
+        {0, 0, -M_SQRT1_2, M_SQRT1_2},
+        {-0.5f, 0.5f, -0.5f, 0.5f},
+    },
+    /* RV3D_VIEW_BACK */
+    {
+        {0.0f, 0.0f, -M_SQRT1_2, -M_SQRT1_2},
+        {0.5f, 0.5f, -0.5f, -0.5f},
+        {M_SQRT1_2, M_SQRT1_2, 0, 0},
+        {0.5f, 0.5f, 0.5f, 0.5f},
+    },
+    /* RV3D_VIEW_LEFT */
+    {
+        {0.5f, -0.5f, 0.5f, 0.5f},
+        {0, -M_SQRT1_2, 0.0f, M_SQRT1_2},
+        {-0.5f, -0.5f, -0.5f, 0.5f},
+        {-M_SQRT1_2, 0, -M_SQRT1_2, 0},
+    },
+
+    /* RV3D_VIEW_RIGHT */
+    {
+        {0.5f, -0.5f, -0.5f, -0.5f},
+        {M_SQRT1_2, 0, -M_SQRT1_2, 0},
+        {0.5f, 0.5f, -0.5f, 0.5f},
+        {0, M_SQRT1_2, 0, M_SQRT1_2},
+    },
+    /* RV3D_VIEW_TOP */
+    {
+        {1.0f, 0.0f, 0.0f, 0.0f},
+        {M_SQRT1_2, 0, 0, M_SQRT1_2},
+        {0, 0, 0, 1},
+        {-M_SQRT1_2, 0, 0, M_SQRT1_2},
+    },
+    /* RV3D_VIEW_BOTTOM */
+    {
+        {0.0f, -1.0f, 0.0f, 0.0f},
+        {0, -M_SQRT1_2, -M_SQRT1_2, 0},
+        {0, 0, -1, 0},
+        {0, M_SQRT1_2, -M_SQRT1_2, 0},
+    },
+
 };
 
-bool ED_view3d_quat_from_axis_view(const char view, float quat[4])
+bool ED_view3d_quat_from_axis_view(const char view, const char view_axis_roll, float quat[4])
 {
+  BLI_assert(view_axis_roll <= RV3D_VIEW_AXIS_ROLL_270);
   if (RV3D_VIEW_IS_AXIS(view)) {
-    copy_qt_qt(quat, view3d_quat_axis[view - RV3D_VIEW_FRONT]);
+    copy_qt_qt(quat, view3d_quat_axis[view - RV3D_VIEW_FRONT][view_axis_roll]);
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
-char ED_view3d_quat_to_axis_view(const float quat[4], const float epsilon)
+bool ED_view3d_quat_to_axis_view(const float quat[4],
+                                 const float epsilon,
+                                 char *r_view,
+                                 char *r_view_axis_roll)
 {
+  *r_view = RV3D_VIEW_USER;
+  *r_view_axis_roll = RV3D_VIEW_AXIS_ROLL_0;
+
   /* quat values are all unit length */
-
-  char view;
-
-  for (view = RV3D_VIEW_FRONT; view <= RV3D_VIEW_BOTTOM; view++) {
-    if (fabsf(angle_signed_qtqt(quat, view3d_quat_axis[view - RV3D_VIEW_FRONT])) < epsilon) {
-      return view;
+  for (int view = RV3D_VIEW_FRONT; view <= RV3D_VIEW_BOTTOM; view++) {
+    for (int view_axis_roll = RV3D_VIEW_AXIS_ROLL_0; view_axis_roll <= RV3D_VIEW_AXIS_ROLL_270;
+         view_axis_roll++) {
+      if (fabsf(angle_signed_qtqt(
+              quat, view3d_quat_axis[view - RV3D_VIEW_FRONT][view_axis_roll])) < epsilon) {
+        *r_view = view;
+        *r_view_axis_roll = view_axis_roll;
+        return true;
+      }
     }
   }
 
-  return RV3D_VIEW_USER;
+  return false;
 }
 
 char ED_view3d_lock_view_from_index(int index)
@@ -1351,7 +1444,7 @@ char ED_view3d_axis_view_opposite(char view)
 
 bool ED_view3d_lock(RegionView3D *rv3d)
 {
-  return ED_view3d_quat_from_axis_view(rv3d->view, rv3d->viewquat);
+  return ED_view3d_quat_from_axis_view(rv3d->view, rv3d->view_axis_roll, rv3d->viewquat);
 }
 
 /** \} */
@@ -1368,7 +1461,7 @@ bool ED_view3d_lock(RegionView3D *rv3d)
  * \param quat: The view rotation, quaternion normally from RegionView3D.viewquat.
  * \param dist: The view distance from ofs, normally from RegionView3D.dist.
  */
-void ED_view3d_from_m4(const float mat[4][4], float ofs[3], float quat[4], float *dist)
+void ED_view3d_from_m4(const float mat[4][4], float ofs[3], float quat[4], const float *dist)
 {
   float nmat[3][3];
 
@@ -1435,7 +1528,8 @@ void ED_view3d_from_object(const Object *ob, float ofs[3], float quat[4], float 
 
 /**
  * Set the object transformation from RegionView3D members.
- * \param depsgraph: The depsgraph to get the evaluated object parent for the transformation calculation.
+ * \param depsgraph: The depsgraph to get the evaluated object parent
+ * for the transformation calculation.
  * \param ob: The object which has the transformation assigned.
  * \param ofs: The view offset, normally from RegionView3D.ofs.
  * \param quat: The view rotation, quaternion normally from RegionView3D.viewquat.
@@ -1470,10 +1564,9 @@ float ED_view3d_depth_read_cached(const ViewContext *vc, const int mval[2])
   if (vd && vd->depths && x > 0 && y > 0 && x < vd->w && y < vd->h) {
     return vd->depths[y * vd->w + x];
   }
-  else {
-    BLI_assert(1.0 <= vd->depth_range[1]);
-    return 1.0f;
-  }
+
+  BLI_assert(1.0 <= vd->depth_range[1]);
+  return 1.0f;
 }
 
 bool ED_view3d_depth_read_cached_normal(const ViewContext *vc,
@@ -1487,7 +1580,7 @@ bool ED_view3d_depth_read_cached_normal(const ViewContext *vc,
   bool depths_valid[9] = {false};
   float coords[9][3] = {{0}};
 
-  ARegion *ar = vc->ar;
+  ARegion *region = vc->region;
   const ViewDepths *depths = vc->rv3d->depths;
 
   for (int x = 0, i = 0; x < 2; x++) {
@@ -1496,7 +1589,7 @@ bool ED_view3d_depth_read_cached_normal(const ViewContext *vc,
 
       const double depth = (double)ED_view3d_depth_read_cached(vc, mval_ofs);
       if ((depth > depths->depth_range[0]) && (depth < depths->depth_range[1])) {
-        if (ED_view3d_depth_unproject(ar, mval_ofs, depth, coords[i])) {
+        if (ED_view3d_depth_unproject(region, mval_ofs, depth, coords[i])) {
           depths_valid[i] = true;
         }
       }
@@ -1528,19 +1621,17 @@ bool ED_view3d_depth_read_cached_normal(const ViewContext *vc,
   if (normalize_v3(r_normal) != 0.0f) {
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
-bool ED_view3d_depth_unproject(const ARegion *ar,
+bool ED_view3d_depth_unproject(const ARegion *region,
                                const int mval[2],
                                const double depth,
                                float r_location_world[3])
 {
   float centx = (float)mval[0] + 0.5f;
   float centy = (float)mval[1] + 0.5f;
-  return ED_view3d_unproject(ar, centx, centy, depth, r_location_world);
+  return ED_view3d_unproject(region, centx, centy, depth, r_location_world);
 }
 
 void ED_view3d_depth_tag_update(RegionView3D *rv3d)

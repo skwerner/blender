@@ -24,32 +24,33 @@
  * \ingroup bke
  */
 
-#include <string.h>
 #include <math.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_listbase.h"
 #include "BLI_math.h" /* windows needs for M_PI */
+#include "BLI_path_util.h"
+#include "BLI_rect.h"
+#include "BLI_string.h"
 #include "BLI_threads.h"
 #include "BLI_utildefines.h"
-#include "BLI_rect.h"
-#include "BLI_path_util.h"
-#include "BLI_string.h"
 
+#include "DNA_anim_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_sequence_types.h"
-#include "DNA_anim_types.h"
 #include "DNA_space_types.h"
 
 #include "BKE_fcurve.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_sequencer.h"
 
-#include "IMB_imbuf_types.h"
-#include "IMB_imbuf.h"
 #include "IMB_colormanagement.h"
+#include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
 #include "IMB_metadata.h"
 
 #include "BLI_math_color_blend.h"
@@ -59,6 +60,8 @@
 #include "RE_pipeline.h"
 
 #include "BLF_api.h"
+
+static struct SeqEffectHandle get_sequence_effect_impl(int seq_type);
 
 static void slice_get_byte_buffers(const SeqRenderData *context,
                                    const ImBuf *ibuf1,
@@ -76,11 +79,13 @@ static void slice_get_byte_buffers(const SeqRenderData *context,
   *rect1 = (unsigned char *)ibuf1->rect + offset;
   *rect_out = (unsigned char *)out->rect + offset;
 
-  if (ibuf2)
+  if (ibuf2) {
     *rect2 = (unsigned char *)ibuf2->rect + offset;
+  }
 
-  if (ibuf3)
+  if (ibuf3) {
     *rect3 = (unsigned char *)ibuf3->rect + offset;
+  }
 }
 
 static void slice_get_float_buffers(const SeqRenderData *context,
@@ -99,11 +104,13 @@ static void slice_get_float_buffers(const SeqRenderData *context,
   *rect1 = ibuf1->rect_float + offset;
   *rect_out = out->rect_float + offset;
 
-  if (ibuf2)
+  if (ibuf2) {
     *rect2 = ibuf2->rect_float + offset;
+  }
 
-  if (ibuf3)
+  if (ibuf3) {
     *rect3 = ibuf3->rect_float + offset;
+  }
 }
 
 /*********************** Glow effect *************************/
@@ -219,10 +226,12 @@ static void do_alphaover_effect_byte(float facf0,
       fac = fac2;
       mfac = 1.0f - fac2 * rt1[3];
 
-      if (fac <= 0.0f)
+      if (fac <= 0.0f) {
         *((unsigned int *)rt) = *((unsigned int *)cp2);
-      else if (mfac <= 0.0f)
+      }
+      else if (mfac <= 0.0f) {
         *((unsigned int *)rt) = *((unsigned int *)cp1);
+      }
       else {
         tempc[0] = fac * rt1[0] + mfac * rt2[0];
         tempc[1] = fac * rt1[1] + mfac * rt2[1];
@@ -236,8 +245,9 @@ static void do_alphaover_effect_byte(float facf0,
       rt += 4;
     }
 
-    if (y == 0)
+    if (y == 0) {
       break;
+    }
     y--;
 
     x = xo;
@@ -248,10 +258,12 @@ static void do_alphaover_effect_byte(float facf0,
       fac = fac4;
       mfac = 1.0f - (fac4 * rt1[3]);
 
-      if (fac <= 0.0f)
+      if (fac <= 0.0f) {
         *((unsigned int *)rt) = *((unsigned int *)cp2);
-      else if (mfac <= 0.0f)
+      }
+      else if (mfac <= 0.0f) {
         *((unsigned int *)rt) = *((unsigned int *)cp1);
+      }
       else {
         tempc[0] = fac * rt1[0] + mfac * rt2[0];
         tempc[1] = fac * rt1[1] + mfac * rt2[1];
@@ -307,8 +319,9 @@ static void do_alphaover_effect_float(
       rt += 4;
     }
 
-    if (y == 0)
+    if (y == 0) {
       break;
+    }
     y--;
 
     x = xo;
@@ -398,15 +411,18 @@ static void do_alphaunder_effect_byte(float facf0,
       /* this complex optimization is because the
        * 'skybuf' can be crossed in
        */
-      if (rt2[3] <= 0.0f && fac2 >= 1.0f)
+      if (rt2[3] <= 0.0f && fac2 >= 1.0f) {
         *((unsigned int *)rt) = *((unsigned int *)cp1);
-      else if (rt2[3] >= 1.0f)
+      }
+      else if (rt2[3] >= 1.0f) {
         *((unsigned int *)rt) = *((unsigned int *)cp2);
+      }
       else {
         fac = (fac2 * (1.0f - rt2[3]));
 
-        if (fac <= 0)
+        if (fac <= 0) {
           *((unsigned int *)rt) = *((unsigned int *)cp2);
+        }
         else {
           tempc[0] = (fac * rt1[0] + rt2[0]);
           tempc[1] = (fac * rt1[1] + rt2[1]);
@@ -421,8 +437,9 @@ static void do_alphaunder_effect_byte(float facf0,
       rt += 4;
     }
 
-    if (y == 0)
+    if (y == 0) {
       break;
+    }
     y--;
 
     x = xo;
@@ -430,15 +447,18 @@ static void do_alphaunder_effect_byte(float facf0,
       straight_uchar_to_premul_float(rt1, cp1);
       straight_uchar_to_premul_float(rt2, cp2);
 
-      if (rt2[3] <= 0.0f && fac4 >= 1.0f)
+      if (rt2[3] <= 0.0f && fac4 >= 1.0f) {
         *((unsigned int *)rt) = *((unsigned int *)cp1);
-      else if (rt2[3] >= 1.0f)
+      }
+      else if (rt2[3] >= 1.0f) {
         *((unsigned int *)rt) = *((unsigned int *)cp2);
+      }
       else {
         fac = (fac4 * (1.0f - rt2[3]));
 
-        if (fac <= 0)
+        if (fac <= 0) {
           *((unsigned int *)rt) = *((unsigned int *)cp2);
+        }
         else {
           tempc[0] = (fac * rt1[0] + rt2[0]);
           tempc[1] = (fac * rt1[1] + rt2[1]);
@@ -502,8 +522,9 @@ static void do_alphaunder_effect_float(
       rt += 4;
     }
 
-    if (y == 0)
+    if (y == 0) {
       break;
+    }
     y--;
 
     x = xo;
@@ -601,8 +622,9 @@ static void do_cross_effect_byte(float facf0,
       rt += 4;
     }
 
-    if (y == 0)
+    if (y == 0) {
       break;
+    }
     y--;
 
     x = xo;
@@ -649,8 +671,9 @@ static void do_cross_effect_float(
       rt += 4;
     }
 
-    if (y == 0)
+    if (y == 0) {
       break;
+    }
     y--;
 
     x = xo;
@@ -763,12 +786,15 @@ static float gammaCorrect(float c)
    * may help solve that, by exchanging LUT size for the interpolation.
    * Negative colors are explicitly handled.
    */
-  if (UNLIKELY(i < 0))
+  if (UNLIKELY(i < 0)) {
     res = -powf(-c, valid_gamma);
-  else if (i >= RE_GAMMA_TABLE_SIZE)
+  }
+  else if (i >= RE_GAMMA_TABLE_SIZE) {
     res = powf(c, valid_gamma);
-  else
+  }
+  else {
     res = gamma_range_table[i] + ((c - color_domain_table[i]) * gamfactor_table[i]);
+  }
 
   return res;
 }
@@ -782,12 +808,15 @@ static float invGammaCorrect(float c)
 
   i = floorf(c * inv_color_step);
   /* Negative colors are explicitly handled */
-  if (UNLIKELY(i < 0))
+  if (UNLIKELY(i < 0)) {
     res = -powf(-c, valid_inv_gamma);
-  else if (i >= RE_GAMMA_TABLE_SIZE)
+  }
+  else if (i >= RE_GAMMA_TABLE_SIZE) {
     res = powf(c, valid_inv_gamma);
-  else
+  }
+  else {
     res = inv_gamma_range_table[i] + ((c - color_domain_table[i]) * inv_gamfactor_table[i]);
+  }
 
   return res;
 }
@@ -802,19 +831,23 @@ static void gamtabs(float gamma)
     val = a;
     val /= 65535.0f;
 
-    if (gamma == 2.0f)
+    if (gamma == 2.0f) {
       val = sqrtf(val);
-    else if (gamma != 1.0f)
+    }
+    else if (gamma != 1.0f) {
       val = powf(val, igamma);
+    }
 
     gamtab[a] = (65535.99f * val);
   }
   /* inverse gamtab1 : in byte, out short */
   for (a = 1; a <= 256; a++) {
-    if (gamma == 2.0f)
+    if (gamma == 2.0f) {
       igamtab1[a - 1] = a * a - 1;
-    else if (gamma == 1.0f)
+    }
+    else if (gamma == 1.0f) {
       igamtab1[a - 1] = 256 * a - 1;
+    }
     else {
       val = a / 256.0f;
       igamtab1[a - 1] = (65535.0 * pow(val, gamma)) - 1;
@@ -881,8 +914,9 @@ static void do_gammacross_effect_byte(float facf0,
       rt += 4;
     }
 
-    if (y == 0)
+    if (y == 0) {
       break;
+    }
     y--;
 
     x = xo;
@@ -927,8 +961,9 @@ static void do_gammacross_effect_float(
       rt++;
     }
 
-    if (y == 0)
+    if (y == 0) {
       break;
+    }
     y--;
 
     x = xo * 4;
@@ -1019,8 +1054,9 @@ static void do_add_effect_byte(float facf0,
       rt += 4;
     }
 
-    if (y == 0)
+    if (y == 0) {
       break;
+    }
     y--;
 
     x = xo;
@@ -1067,8 +1103,9 @@ static void do_add_effect_float(
       rt += 4;
     }
 
-    if (y == 0)
+    if (y == 0) {
       break;
+    }
     y--;
 
     x = xo;
@@ -1151,8 +1188,9 @@ static void do_sub_effect_byte(float facf0,
       rt += 4;
     }
 
-    if (y == 0)
+    if (y == 0) {
       break;
+    }
     y--;
 
     x = xo;
@@ -1200,8 +1238,9 @@ static void do_sub_effect_float(
       rt += 4;
     }
 
-    if (y == 0)
+    if (y == 0) {
       break;
+    }
     y--;
 
     x = xo;
@@ -1279,10 +1318,12 @@ static void do_drop_effect_byte(float facf0,
   rt1 = rect1i;
   out = outi;
   for (y = 0; y < height - yoff; y++) {
-    if (field)
+    if (field) {
       fac = fac1;
-    else
+    }
+    else {
       fac = fac2;
+    }
     field = !field;
 
     memcpy(out, rt1, sizeof(*out) * xoff * 4);
@@ -1326,10 +1367,12 @@ static void do_drop_effect_float(
   rt1 = rect1i;
   out = outi;
   for (y = 0; y < height - yoff; y++) {
-    if (field)
+    if (field) {
       fac = fac1;
-    else
+    }
+    else {
       fac = fac2;
+    }
     field = !field;
 
     memcpy(out, rt1, sizeof(*out) * xoff * 4);
@@ -1395,8 +1438,9 @@ static void do_mul_effect_byte(float facf0,
       rt += 4;
     }
 
-    if (y == 0)
+    if (y == 0) {
       break;
+    }
     y--;
 
     x = xo;
@@ -1446,8 +1490,9 @@ static void do_mul_effect_float(
       rt += 4;
     }
 
-    if (y == 0)
+    if (y == 0) {
       break;
+    }
     y--;
 
     x = xo;
@@ -1604,7 +1649,7 @@ static void do_blend_effect_float(
     case SEQ_TYPE_DARKEN:
       apply_blend_function_float(facf0, facf1, x, y, rect1, rect2, out, blend_color_darken_float);
       break;
-    case SEQ_TYPE_BURN:
+    case SEQ_TYPE_COLOR_BURN:
       apply_blend_function_float(facf0, facf1, x, y, rect1, rect2, out, blend_color_burn_float);
       break;
     case SEQ_TYPE_LINEAR_BURN:
@@ -1692,7 +1737,7 @@ static void do_blend_effect_byte(float facf0,
     case SEQ_TYPE_DARKEN:
       apply_blend_function_byte(facf0, facf1, x, y, rect1, rect2, out, blend_color_darken_byte);
       break;
-    case SEQ_TYPE_BURN:
+    case SEQ_TYPE_COLOR_BURN:
       apply_blend_function_byte(facf0, facf1, x, y, rect1, rect2, out, blend_color_burn_byte);
       break;
     case SEQ_TYPE_LINEAR_BURN:
@@ -1853,19 +1898,24 @@ static float in_band(float width, float dist, int side, int dir)
 {
   float alpha;
 
-  if (width == 0)
+  if (width == 0) {
     return (float)side;
+  }
 
-  if (width < dist)
+  if (width < dist) {
     return (float)side;
+  }
 
-  if (side == 1)
+  if (side == 1) {
     alpha = (dist + 0.5f * width) / (width);
-  else
+  }
+  else {
     alpha = (0.5f * width - dist) / (width);
+  }
 
-  if (dir == 0)
+  if (dir == 0) {
     alpha = 1 - alpha;
+  }
 
   return alpha;
 }
@@ -1884,8 +1934,9 @@ static float check_zone(WipeZone *wipezone, int x, int y, Sequence *seq, float f
   WipeVars *wipe = (WipeVars *)seq->effectdata;
   int width;
 
-  if (wipezone->flip)
+  if (wipezone->flip) {
     x = xo - x;
+  }
   angle = wipezone->angle;
 
   if (wipe->forward) {
@@ -1920,22 +1971,27 @@ static float check_zone(WipeZone *wipezone, int x, int y, Sequence *seq, float f
       }
 
       if (wipe->forward) {
-        if (b1 < b2)
+        if (b1 < b2) {
           output = in_band(width, hyp, 1, 1);
-        else
+        }
+        else {
           output = in_band(width, hyp, 0, 1);
+        }
       }
       else {
-        if (b1 < b2)
+        if (b1 < b2) {
           output = in_band(width, hyp, 0, 1);
-        else
+        }
+        else {
           output = in_band(width, hyp, 1, 1);
+        }
       }
       break;
 
     case DO_DOUBLE_WIPE:
-      if (!wipe->forward)
+      if (!wipe->forward) {
         facf0 = 1.0f - facf0; /* Go the other direction */
+      }
 
       width = wipezone->width; /* calculate the blur width */
       hwidth = width * 0.5f;
@@ -1966,15 +2022,19 @@ static float check_zone(WipeZone *wipezone, int x, int y, Sequence *seq, float f
         output = in_band(hwidth, hyp2, 0, 1);
       }
       else {
-        if (hyp < hwidth && hyp2 > hwidth)
+        if (hyp < hwidth && hyp2 > hwidth) {
           output = in_band(hwidth, hyp, 1, 1);
-        else if (hyp > hwidth && hyp2 < hwidth)
+        }
+        else if (hyp > hwidth && hyp2 < hwidth) {
           output = in_band(hwidth, hyp2, 1, 1);
-        else
+        }
+        else {
           output = in_band(hwidth, hyp2, 1, 1) * in_band(hwidth, hyp, 1, 1);
+        }
       }
-      if (!wipe->forward)
+      if (!wipe->forward) {
         output = 1 - output;
+      }
       break;
     case DO_CLOCK_WIPE:
       /*
@@ -1995,12 +2055,15 @@ static float check_zone(WipeZone *wipezone, int x, int y, Sequence *seq, float f
       y = y - halfy;
 
       temp2 = asin(abs(y) / hypot(x, y));
-      if (x <= 0 && y >= 0)
+      if (x <= 0 && y >= 0) {
         temp2 = (float)M_PI - temp2;
-      else if (x <= 0 && y <= 0)
+      }
+      else if (x <= 0 && y <= 0) {
         temp2 += (float)M_PI;
-      else if (x >= 0 && y <= 0)
+      }
+      else if (x >= 0 && y <= 0) {
         temp2 = 2.0f * (float)M_PI - temp2;
+      }
 
       if (wipe->forward) {
         temp3 = temp1 - (widthf * 0.5f) * facf0;
@@ -2010,32 +2073,43 @@ static float check_zone(WipeZone *wipezone, int x, int y, Sequence *seq, float f
         temp3 = temp1 - (widthf * 0.5f) * (1 - facf0);
         temp4 = temp1 + (widthf * 0.5f) * facf0;
       }
-      if (temp3 < 0)
+      if (temp3 < 0) {
         temp3 = 0;
-      if (temp4 > 2.0f * (float)M_PI)
+      }
+      if (temp4 > 2.0f * (float)M_PI) {
         temp4 = 2.0f * (float)M_PI;
+      }
 
-      if (temp2 < temp3)
+      if (temp2 < temp3) {
         output = 0;
-      else if (temp2 > temp4)
+      }
+      else if (temp2 > temp4) {
         output = 1;
-      else
+      }
+      else {
         output = (temp2 - temp3) / (temp4 - temp3);
-      if (x == 0 && y == 0)
+      }
+      if (x == 0 && y == 0) {
         output = 1;
-      if (output != output)
+      }
+      if (output != output) {
         output = 1;
-      if (wipe->forward)
+      }
+      if (wipe->forward) {
         output = 1 - output;
+      }
       break;
     case DO_IRIS_WIPE:
-      if (xo > yo)
+      if (xo > yo) {
         yo = xo;
-      else
+      }
+      else {
         xo = yo;
+      }
 
-      if (!wipe->forward)
+      if (!wipe->forward) {
         facf0 = 1 - facf0;
+      }
 
       width = wipezone->width;
       hwidth = width * 0.5f;
@@ -2044,27 +2118,33 @@ static float check_zone(WipeZone *wipezone, int x, int y, Sequence *seq, float f
       pointdist = hypotf(temp1, temp1);
 
       temp2 = hypotf(halfx - x, halfy - y);
-      if (temp2 > pointdist)
+      if (temp2 > pointdist) {
         output = in_band(hwidth, fabsf(temp2 - pointdist), 0, 1);
-      else
+      }
+      else {
         output = in_band(hwidth, fabsf(temp2 - pointdist), 1, 1);
+      }
 
-      if (!wipe->forward)
+      if (!wipe->forward) {
         output = 1 - output;
+      }
 
       break;
   }
-  if (output < 0)
+  if (output < 0) {
     output = 0;
-  else if (output > 1)
+  }
+  else if (output > 1) {
     output = 1;
+  }
   return output;
 }
 
 static void init_wipe_effect(Sequence *seq)
 {
-  if (seq->effectdata)
+  if (seq->effectdata) {
     MEM_freeN(seq->effectdata);
+  }
 
   seq->effectdata = MEM_callocN(sizeof(WipeVars), "wipevars");
 }
@@ -2076,8 +2156,9 @@ static int num_inputs_wipe(void)
 
 static void free_wipe_effect(Sequence *seq, const bool UNUSED(do_id_user))
 {
-  if (seq->effectdata)
+  if (seq->effectdata) {
     MEM_freeN(seq->effectdata);
+  }
 
   seq->effectdata = NULL;
 }
@@ -2265,8 +2346,9 @@ static void init_transform_effect(Sequence *seq)
 {
   TransformVars *transform;
 
-  if (seq->effectdata)
+  if (seq->effectdata) {
     MEM_freeN(seq->effectdata);
+  }
 
   seq->effectdata = MEM_callocN(sizeof(TransformVars), "transformvars");
 
@@ -2292,8 +2374,9 @@ static int num_inputs_transform(void)
 
 static void free_transform_effect(Sequence *seq, const bool UNUSED(do_id_user))
 {
-  if (seq->effectdata)
+  if (seq->effectdata) {
     MEM_freeN(seq->effectdata);
+  }
   seq->effectdata = NULL;
 }
 
@@ -2419,15 +2502,14 @@ static ImBuf *do_transform_effect(const SeqRenderData *context,
 /*********************** Glow *************************/
 
 static void RVBlurBitmap2_float(float *map, int width, int height, float blur, int quality)
-/*  MUUUCCH better than the previous blur. */
-/*  We do the blurring in two passes which is a whole lot faster. */
-/*  I changed the math around to implement an actual Gaussian */
-/*  distribution. */
-/* */
-/*  Watch out though, it tends to misbehaven with large blur values on */
-/*  a small bitmap.  Avoid avoid avoid. */
-/*=============================== */
 {
+  /* Much better than the previous blur!
+   * We do the blurring in two passes which is a whole lot faster.
+   * I changed the math around to implement an actual Gaussian distribution.
+   *
+   * Watch out though, it tends to misbehave with large blur values on
+   * a small bitmap. Avoid avoid! */
+
   float *temp = NULL, *swap;
   float *filter = NULL;
   int x, y, i, fx, fy;
@@ -2435,13 +2517,15 @@ static void RVBlurBitmap2_float(float *map, int width, int height, float blur, i
   float fval, k, curColor[4], curColor2[4], weight = 0;
 
   /* If we're not really blurring, bail out */
-  if (blur <= 0)
+  if (blur <= 0) {
     return;
+  }
 
   /* Allocate memory for the tempmap and the blur filter matrix */
   temp = MEM_mallocN((width * height * 4 * sizeof(float)), "blurbitmaptemp");
-  if (!temp)
+  if (!temp) {
     return;
+  }
 
   /* Allocate memory for the filter elements */
   halfWidth = ((quality + 1) * blur);
@@ -2467,11 +2551,13 @@ static void RVBlurBitmap2_float(float *map, int width, int height, float blur, i
 
   /* Normalize the array */
   fval = 0;
-  for (ix = 0; ix < halfWidth * 2; ix++)
+  for (ix = 0; ix < halfWidth * 2; ix++) {
     fval += filter[ix];
+  }
 
-  for (ix = 0; ix < halfWidth * 2; ix++)
+  for (ix = 0; ix < halfWidth * 2; ix++) {
     filter[ix] /= fval;
+  }
 
   /* Blur the rows */
   for (y = 0; y < height; y++) {
@@ -2582,7 +2668,7 @@ static void RVAddBitmaps_float(float *a, float *b, float *c, int width, int heig
 }
 
 static void RVIsolateHighlights_float(
-    float *in, float *out, int width, int height, float threshold, float boost, float clamp)
+    const float *in, float *out, int width, int height, float threshold, float boost, float clamp)
 {
   int x, y, index;
   float intensity;
@@ -2613,8 +2699,9 @@ static void init_glow_effect(Sequence *seq)
 {
   GlowVars *glow;
 
-  if (seq->effectdata)
+  if (seq->effectdata) {
     MEM_freeN(seq->effectdata);
+  }
 
   seq->effectdata = MEM_callocN(sizeof(GlowVars), "glowvars");
 
@@ -2634,8 +2721,9 @@ static int num_inputs_glow(void)
 
 static void free_glow_effect(Sequence *seq, const bool UNUSED(do_id_user))
 {
-  if (seq->effectdata)
+  if (seq->effectdata) {
     MEM_freeN(seq->effectdata);
+  }
 
   seq->effectdata = NULL;
 }
@@ -2667,8 +2755,9 @@ static void do_glow_effect_byte(Sequence *seq,
   RVIsolateHighlights_float(
       inbuf, outbuf, x, y, glow->fMini * 3.0f, glow->fBoost * facf0, glow->fClamp);
   RVBlurBitmap2_float(outbuf, x, y, glow->dDist * (render_size / 100.0f), glow->dQuality);
-  if (!glow->bNoComp)
+  if (!glow->bNoComp) {
     RVAddBitmaps_float(inbuf, outbuf, outbuf, x, y);
+  }
 
   IMB_buffer_float_unpremultiply(outbuf, x, y);
   IMB_buffer_byte_from_float(
@@ -2695,8 +2784,9 @@ static void do_glow_effect_float(Sequence *seq,
   RVIsolateHighlights_float(
       inbuf, outbuf, x, y, glow->fMini * 3.0f, glow->fBoost * facf0, glow->fClamp);
   RVBlurBitmap2_float(outbuf, x, y, glow->dDist * (render_size / 100.0f), glow->dQuality);
-  if (!glow->bNoComp)
+  if (!glow->bNoComp) {
     RVAddBitmaps_float(inbuf, outbuf, outbuf, x, y);
+  }
 }
 
 static ImBuf *do_glow_effect(const SeqRenderData *context,
@@ -2720,7 +2810,7 @@ static ImBuf *do_glow_effect(const SeqRenderData *context,
                          context->rectx,
                          context->recty,
                          ibuf1->rect_float,
-                         ibuf2->rect_float,
+                         NULL,
                          out->rect_float);
   }
   else {
@@ -2731,7 +2821,7 @@ static ImBuf *do_glow_effect(const SeqRenderData *context,
                         context->rectx,
                         context->recty,
                         (unsigned char *)ibuf1->rect,
-                        (unsigned char *)ibuf2->rect,
+                        NULL,
                         (unsigned char *)out->rect);
   }
 
@@ -2744,8 +2834,9 @@ static void init_solid_color(Sequence *seq)
 {
   SolidColorVars *cv;
 
-  if (seq->effectdata)
+  if (seq->effectdata) {
     MEM_freeN(seq->effectdata);
+  }
 
   seq->effectdata = MEM_callocN(sizeof(SolidColorVars), "solidcolor");
 
@@ -2760,8 +2851,9 @@ static int num_inputs_color(void)
 
 static void free_solid_color(Sequence *seq, const bool UNUSED(do_id_user))
 {
-  if (seq->effectdata)
+  if (seq->effectdata) {
     MEM_freeN(seq->effectdata);
+  }
 
   seq->effectdata = NULL;
 }
@@ -2883,7 +2975,6 @@ static ImBuf *do_multicam(const SeqRenderData *context,
                           ImBuf *UNUSED(ibuf2),
                           ImBuf *UNUSED(ibuf3))
 {
-  ImBuf *i;
   ImBuf *out;
   Editing *ed;
   ListBase *seqbasep;
@@ -2901,18 +2992,7 @@ static ImBuf *do_multicam(const SeqRenderData *context,
     return NULL;
   }
 
-  i = BKE_sequencer_give_ibuf_seqbase(context, cfra, seq->multicam_source, seqbasep);
-  if (!i) {
-    return NULL;
-  }
-
-  if (BKE_sequencer_input_have_to_preprocess(context, seq, cfra)) {
-    out = IMB_dupImBuf(i);
-    IMB_freeImBuf(i);
-  }
-  else {
-    out = i;
-  }
+  out = BKE_sequencer_give_ibuf_seqbase(context, cfra, seq->multicam_source, seqbasep);
 
   return out;
 }
@@ -2971,7 +3051,6 @@ static ImBuf *do_adjustment(const SeqRenderData *context,
                             ImBuf *UNUSED(ibuf2),
                             ImBuf *UNUSED(ibuf3))
 {
-  ImBuf *i = NULL;
   ImBuf *out;
   Editing *ed;
 
@@ -2981,18 +3060,7 @@ static ImBuf *do_adjustment(const SeqRenderData *context,
     return NULL;
   }
 
-  i = do_adjustment_impl(context, seq, cfra);
-
-  if (BKE_sequencer_input_have_to_preprocess(context, seq, cfra)) {
-    out = IMB_dupImBuf(i);
-    if (out) {
-      IMB_metadata_copy(out, i);
-    }
-    IMB_freeImBuf(i);
-  }
-  else {
-    out = i;
-  }
+  out = do_adjustment_impl(context, seq, cfra);
 
   return out;
 }
@@ -3003,8 +3071,9 @@ static void init_speed_effect(Sequence *seq)
 {
   SpeedControlVars *v;
 
-  if (seq->effectdata)
+  if (seq->effectdata) {
     MEM_freeN(seq->effectdata);
+  }
 
   seq->effectdata = MEM_callocN(sizeof(SpeedControlVars), "speedcontrolvars");
 
@@ -3031,10 +3100,12 @@ static int num_inputs_speed(void)
 static void free_speed_effect(Sequence *seq, const bool UNUSED(do_id_user))
 {
   SpeedControlVars *v = (SpeedControlVars *)seq->effectdata;
-  if (v->frameMap)
+  if (v->frameMap) {
     MEM_freeN(v->frameMap);
-  if (seq->effectdata)
+  }
+  if (seq->effectdata) {
     MEM_freeN(seq->effectdata);
+  }
   seq->effectdata = NULL;
 }
 
@@ -3049,7 +3120,7 @@ static void copy_speed_effect(Sequence *dst, Sequence *src, const int UNUSED(fla
 
 static int early_out_speed(Sequence *UNUSED(seq), float UNUSED(facf0), float UNUSED(facf1))
 {
-  return EARLY_USE_INPUT_1;
+  return EARLY_DO_EFFECT;
 }
 
 static void store_icu_yrange_speed(Sequence *seq, short UNUSED(adrcode), float *ymin, float *ymax)
@@ -3097,10 +3168,10 @@ void BKE_sequence_effect_speed_rebuild_map(Scene *scene, Sequence *seq, bool for
   /* XXX - new in 2.5x. should we use the animation system this way?
    * The fcurve is needed because many frames need evaluating at once - campbell */
   fcu = id_data_find_fcurve(&scene->id, seq, &RNA_Sequence, "speed_factor", 0, NULL);
-
   if (!v->frameMap || v->length != seq->len) {
-    if (v->frameMap)
+    if (v->frameMap) {
       MEM_freeN(v->frameMap);
+    }
 
     v->length = seq->len;
 
@@ -3179,36 +3250,60 @@ void BKE_sequence_effect_speed_rebuild_map(Scene *scene, Sequence *seq, bool for
   }
 }
 
+/* Override cfra when rendering speed effect input. */
+float BKE_sequencer_speed_effect_target_frame_get(const SeqRenderData *context,
+                                                  Sequence *seq,
+                                                  float cfra,
+                                                  int input)
+{
+  int nr = BKE_sequencer_give_stripelem_index(seq, cfra);
+  SpeedControlVars *s = (SpeedControlVars *)seq->effectdata;
+  BKE_sequence_effect_speed_rebuild_map(context->scene, seq, false);
+
+  /* No interpolation. */
+  if ((s->flags & SEQ_SPEED_USE_INTERPOLATION) == 0) {
+    return seq->start + s->frameMap[nr];
+  }
+
+  /* We need to provide current and next image for interpolation. */
+  if (input == 0) { /* Current frame. */
+    return floor(seq->start + s->frameMap[nr]);
+  }
+  else { /* Next frame. */
+    return ceil(seq->start + s->frameMap[nr]);
+  }
+}
+
+static float speed_effect_interpolation_ratio_get(SpeedControlVars *s, Sequence *seq, float cfra)
+{
+  int nr = BKE_sequencer_give_stripelem_index(seq, cfra);
+  return s->frameMap[nr] - floor(s->frameMap[nr]);
+}
+
 static ImBuf *do_speed_effect(const SeqRenderData *context,
-                              Sequence *UNUSED(seq),
-                              float UNUSED(cfra),
+                              Sequence *seq,
+                              float cfra,
                               float facf0,
                               float facf1,
                               ImBuf *ibuf1,
                               ImBuf *ibuf2,
                               ImBuf *ibuf3)
 {
-  ImBuf *out = prepare_effect_imbufs(context, ibuf1, ibuf2, ibuf3);
+  SpeedControlVars *s = (SpeedControlVars *)seq->effectdata;
+  struct SeqEffectHandle cross_effect = get_sequence_effect_impl(SEQ_TYPE_CROSS);
+  ImBuf *out;
 
-  if (out->rect_float) {
-    do_cross_effect_float(facf0,
-                          facf1,
-                          context->rectx,
-                          context->recty,
-                          ibuf1->rect_float,
-                          ibuf2->rect_float,
-                          out->rect_float);
+  if (s->flags & SEQ_SPEED_USE_INTERPOLATION) {
+    out = prepare_effect_imbufs(context, ibuf1, ibuf2, ibuf3);
+    facf0 = facf1 = speed_effect_interpolation_ratio_get(s, seq, cfra);
+    /* Current frame is ibuf1, next frame is ibuf2. */
+    out = BKE_sequencer_effect_execute_threaded(
+        &cross_effect, context, NULL, cfra, facf0, facf1, ibuf1, ibuf2, ibuf3);
+    return out;
   }
-  else {
-    do_cross_effect_byte(facf0,
-                         facf1,
-                         context->rectx,
-                         context->recty,
-                         (unsigned char *)ibuf1->rect,
-                         (unsigned char *)ibuf2->rect,
-                         (unsigned char *)out->rect);
-  }
-  return out;
+
+  /* No interpolation. */
+  return IMB_dupImBuf(ibuf1);
 }
 
 /*********************** overdrop *************************/
@@ -3260,8 +3355,9 @@ static void do_overdrop_effect(const SeqRenderData *context,
 
 static void init_gaussian_blur_effect(Sequence *seq)
 {
-  if (seq->effectdata)
+  if (seq->effectdata) {
     MEM_freeN(seq->effectdata);
+  }
 
   seq->effectdata = MEM_callocN(sizeof(WipeVars), "wipevars");
 }
@@ -3273,8 +3369,9 @@ static int num_inputs_gaussian_blur(void)
 
 static void free_gaussian_blur_effect(Sequence *seq, const bool UNUSED(do_id_user))
 {
-  if (seq->effectdata)
+  if (seq->effectdata) {
     MEM_freeN(seq->effectdata);
+  }
 
   seq->effectdata = NULL;
 }
@@ -3313,8 +3410,9 @@ static float *make_gaussian_blur_kernel(float rad, int size)
   }
 
   sum = 1.0f / sum;
-  for (i = 0; i < n; i++)
+  for (i = 0; i < n; i++) {
     gausstab[i] *= sum;
+  }
 
   return gausstab;
 }
@@ -3325,7 +3423,7 @@ static void do_gaussian_blur_effect_byte_x(Sequence *seq,
                                            int y,
                                            int frame_width,
                                            int UNUSED(frame_height),
-                                           unsigned char *rect,
+                                           const unsigned char *rect,
                                            unsigned char *out)
 {
 #define INDEX(_x, _y) (((_y) * (x) + (_x)) * 4)
@@ -3337,13 +3435,13 @@ static void do_gaussian_blur_effect_byte_x(Sequence *seq,
   float *gausstab_x;
   gausstab_x = make_gaussian_blur_kernel(data->size_x, size_x);
 
-  for (i = 0; i < y; ++i) {
-    for (j = 0; j < x; ++j) {
+  for (i = 0; i < y; i++) {
+    for (j = 0; j < x; j++) {
       int out_index = INDEX(j, i);
       float accum[4] = {0.0f, 0.0f, 0.0f, 0.0f};
       float accum_weight = 0.0f;
 
-      for (int current_x = j - size_x; current_x <= j + size_x; ++current_x) {
+      for (int current_x = j - size_x; current_x <= j + size_x; current_x++) {
         if (current_x < 0 || current_x >= frame_width) {
           /* Out of bounds. */
           continue;
@@ -3375,7 +3473,7 @@ static void do_gaussian_blur_effect_byte_y(Sequence *seq,
                                            int y,
                                            int UNUSED(frame_width),
                                            int frame_height,
-                                           unsigned char *rect,
+                                           const unsigned char *rect,
                                            unsigned char *out)
 {
 #define INDEX(_x, _y) (((_y) * (x) + (_x)) * 4)
@@ -3387,12 +3485,12 @@ static void do_gaussian_blur_effect_byte_y(Sequence *seq,
   float *gausstab_y;
   gausstab_y = make_gaussian_blur_kernel(data->size_y, size_y);
 
-  for (i = 0; i < y; ++i) {
-    for (j = 0; j < x; ++j) {
+  for (i = 0; i < y; i++) {
+    for (j = 0; j < x; j++) {
       int out_index = INDEX(j, i);
       float accum[4] = {0.0f, 0.0f, 0.0f, 0.0f};
       float accum_weight = 0.0f;
-      for (int current_y = i - size_y; current_y <= i + size_y; ++current_y) {
+      for (int current_y = i - size_y; current_y <= i + size_y; current_y++) {
         if (current_y < -start_line || current_y + start_line >= frame_height) {
           /* Out of bounds. */
           continue;
@@ -3435,12 +3533,12 @@ static void do_gaussian_blur_effect_float_x(Sequence *seq,
   float *gausstab_x;
   gausstab_x = make_gaussian_blur_kernel(data->size_x, size_x);
 
-  for (i = 0; i < y; ++i) {
-    for (j = 0; j < x; ++j) {
+  for (i = 0; i < y; i++) {
+    for (j = 0; j < x; j++) {
       int out_index = INDEX(j, i);
       float accum[4] = {0.0f, 0.0f, 0.0f, 0.0f};
       float accum_weight = 0.0f;
-      for (int current_x = j - size_x; current_x <= j + size_x; ++current_x) {
+      for (int current_x = j - size_x; current_x <= j + size_x; current_x++) {
         if (current_x < 0 || current_x >= frame_width) {
           /* Out of bounds. */
           continue;
@@ -3476,12 +3574,12 @@ static void do_gaussian_blur_effect_float_y(Sequence *seq,
   float *gausstab_y;
   gausstab_y = make_gaussian_blur_kernel(data->size_y, size_y);
 
-  for (i = 0; i < y; ++i) {
-    for (j = 0; j < x; ++j) {
+  for (i = 0; i < y; i++) {
+    for (j = 0; j < x; j++) {
       int out_index = INDEX(j, i);
       float accum[4] = {0.0f, 0.0f, 0.0f, 0.0f};
       float accum_weight = 0.0f;
-      for (int current_y = i - size_y; current_y <= i + size_y; ++current_y) {
+      for (int current_y = i - size_y; current_y <= i + size_y; current_y++) {
         if (current_y < -start_line || current_y + start_line >= frame_height) {
           /* Out of bounds. */
           continue;
@@ -3680,8 +3778,9 @@ static void init_text_effect(Sequence *seq)
 {
   TextVars *data;
 
-  if (seq->effectdata)
+  if (seq->effectdata) {
     MEM_freeN(seq->effectdata);
+  }
 
   data = seq->effectdata = MEM_callocN(sizeof(TextVars), "textvars");
   data->text_font = NULL;
@@ -3722,9 +3821,9 @@ void BKE_sequencer_text_font_load(TextVars *data, const bool do_id_user)
     }
 
     char path[FILE_MAX];
-    STRNCPY(path, data->text_font->name);
+    STRNCPY(path, data->text_font->filepath);
     BLI_assert(BLI_thread_is_main());
-    BLI_path_abs(path, BKE_main_blendfile_path_from_global());
+    BLI_path_abs(path, ID_BLEND_PATH_FROM_GLOBAL(&data->text_font->id));
 
     data->text_blf_id = BLF_load(path);
   }
@@ -3790,13 +3889,13 @@ static ImBuf *do_text_effect(const SeqRenderData *context,
   int font = blf_mono_font_render;
   int line_height;
   int y_ofs, x, y;
-  float proxy_size_comp;
+  double proxy_size_comp;
 
   if (data->text_blf_id == SEQ_FONT_NOT_LOADED) {
     data->text_blf_id = -1;
 
     if (data->text_font) {
-      data->text_blf_id = BLF_load(data->text_font->name);
+      data->text_blf_id = BLF_load(data->text_font->filepath);
     }
   }
 
@@ -3808,15 +3907,9 @@ static ImBuf *do_text_effect(const SeqRenderData *context,
   display = IMB_colormanagement_display_get_named(display_device);
 
   /* Compensate text size for preview render size. */
-  if (ELEM(
-          context->preview_render_size, SEQ_PROXY_RENDER_SIZE_SCENE, SEQ_PROXY_RENDER_SIZE_FULL)) {
-    proxy_size_comp = context->scene->r.size / 100.0f;
-  }
-  else if (context->preview_render_size == SEQ_PROXY_RENDER_SIZE_100) {
-    proxy_size_comp = 1.0f;
-  }
-  else {
-    proxy_size_comp = context->preview_render_size / 100.0f;
+  proxy_size_comp = context->scene->r.size / 100.0;
+  if (context->preview_render_size != SEQ_PROXY_RENDER_SIZE_SCENE) {
+    proxy_size_comp *= BKE_sequencer_rendersize_to_scale_factor(context->preview_render_size);
   }
 
   /* set before return */
@@ -3914,8 +4007,9 @@ static void copy_effect_default(Sequence *dst, Sequence *src, const int UNUSED(f
 
 static void free_effect_default(Sequence *seq, const bool UNUSED(do_id_user))
 {
-  if (seq->effectdata)
+  if (seq->effectdata) {
     MEM_freeN(seq->effectdata);
+  }
 
   seq->effectdata = NULL;
 }
@@ -4031,7 +4125,7 @@ static struct SeqEffectHandle get_sequence_effect_impl(int seq_type)
       break;
     case SEQ_TYPE_SCREEN:
     case SEQ_TYPE_OVERLAY:
-    case SEQ_TYPE_BURN:
+    case SEQ_TYPE_COLOR_BURN:
     case SEQ_TYPE_LINEAR_BURN:
     case SEQ_TYPE_DARKEN:
     case SEQ_TYPE_LIGHTEN:

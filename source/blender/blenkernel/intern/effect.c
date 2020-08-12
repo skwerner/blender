@@ -21,8 +21,8 @@
  * \ingroup bke
  */
 
-#include <stddef.h>
 #include <stdarg.h>
+#include <stddef.h>
 
 #include <math.h>
 #include <stdlib.h>
@@ -34,35 +34,35 @@
 #include "DNA_listBase.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
-#include "DNA_object_types.h"
 #include "DNA_object_force_types.h"
+#include "DNA_object_types.h"
 #include "DNA_particle_types.h"
-#include "DNA_texture_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_texture_types.h"
 
-#include "BLI_math.h"
 #include "BLI_blenlib.h"
+#include "BLI_ghash.h"
+#include "BLI_math.h"
 #include "BLI_noise.h"
 #include "BLI_rand.h"
 #include "BLI_utildefines.h"
-#include "BLI_ghash.h"
 
 #include "PIL_time.h"
 
-#include "BKE_anim.h" /* needed for where_on_path */
+#include "BKE_anim_path.h" /* needed for where_on_path */
 #include "BKE_bvhutils.h"
 #include "BKE_collection.h"
 #include "BKE_collision.h"
 #include "BKE_curve.h"
 #include "BKE_displist.h"
 #include "BKE_effect.h"
+#include "BKE_fluid.h"
 #include "BKE_global.h"
 #include "BKE_layer.h"
 #include "BKE_modifier.h"
 #include "BKE_object.h"
 #include "BKE_particle.h"
 #include "BKE_scene.h"
-#include "BKE_smoke.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_physics.h"
@@ -70,13 +70,6 @@
 
 #include "RE_render_ext.h"
 #include "RE_shader_ext.h"
-
-/* fluid sim particle import */
-#ifdef WITH_MOD_FLUID
-#  include "LBM_fluidsim.h"
-#  include <zlib.h>
-#  include <string.h>
-#endif  // WITH_MOD_FLUID
 
 EffectorWeights *BKE_effector_add_weights(Collection *collection)
 {
@@ -115,12 +108,13 @@ PartDeflect *BKE_partdeflect_new(int type)
       break;
     case PFIELD_WIND:
       pd->shape = PFIELD_SHAPE_PLANE;
-      pd->f_flow = 1.0f; /* realistic wind behavior */
+      pd->f_flow = 1.0f;        /* realistic wind behavior */
+      pd->f_wind_factor = 1.0f; /* only act perpendicularly to a surface */
       break;
     case PFIELD_TEXTURE:
       pd->f_size = 1.0f;
       break;
-    case PFIELD_SMOKEFLOW:
+    case PFIELD_FLUIDFLOW:
       pd->f_flow = 1.0f;
       break;
   }
@@ -171,8 +165,9 @@ static void precalculate_effector(struct Depsgraph *depsgraph, EffectorCache *ef
     Curve *cu = eff->ob->data;
     if (cu->flag & CU_PATH) {
       if (eff->ob->runtime.curve_cache == NULL || eff->ob->runtime.curve_cache->path == NULL ||
-          eff->ob->runtime.curve_cache->path->data == NULL)
-        BKE_displist_make_curveTypes(depsgraph, eff->scene, eff->ob, false, false, NULL);
+          eff->ob->runtime.curve_cache->path->data == NULL) {
+        BKE_displist_make_curveTypes(depsgraph, eff->scene, eff->ob, false, false);
+      }
 
       if (eff->ob->runtime.curve_cache->path && eff->ob->runtime.curve_cache->path->data) {
         where_on_path(
@@ -183,12 +178,14 @@ static void precalculate_effector(struct Depsgraph *depsgraph, EffectorCache *ef
     }
   }
   else if (eff->pd->shape == PFIELD_SHAPE_SURFACE) {
-    eff->surmd = (SurfaceModifierData *)modifiers_findByType(eff->ob, eModifierType_Surface);
-    if (eff->ob->type == OB_CURVE)
+    eff->surmd = (SurfaceModifierData *)BKE_modifiers_findby_type(eff->ob, eModifierType_Surface);
+    if (eff->ob->type == OB_CURVE) {
       eff->flag |= PE_USE_NORMAL_DATA;
+    }
   }
-  else if (eff->psys)
+  else if (eff->psys) {
     psys_update_particle_tree(eff->psys, ctime);
+  }
 }
 
 static void add_effector_relation(ListBase *relations,
@@ -251,7 +248,7 @@ ListBase *BKE_effector_relations_create(Depsgraph *depsgraph,
       add_effector_relation(relations, ob, NULL, ob->pd);
     }
 
-    for (ParticleSystem *psys = ob->particlesystem.first; psys; psys = psys->next) {
+    LISTBASE_FOREACH (ParticleSystem *, psys, &ob->particlesystem) {
       ParticleSettings *part = psys->part;
 
       if (psys_check_enabled(ob, psys, for_render)) {
@@ -290,7 +287,7 @@ ListBase *BKE_effectors_create(Depsgraph *depsgraph,
     return NULL;
   }
 
-  for (EffectorRelation *relation = relations->first; relation; relation = relation->next) {
+  LISTBASE_FOREACH (EffectorRelation *, relation, relations) {
     /* Get evaluated object. */
     Object *ob = (Object *)DEG_get_evaluated_id(depsgraph, &relation->ob->id);
 
@@ -319,7 +316,7 @@ ListBase *BKE_effectors_create(Depsgraph *depsgraph,
       else if (weights->weight[ob->pd->forcefield] == 0.0f) {
         continue;
       }
-      else if (ob->pd->shape == PFIELD_SHAPE_POINTS && ob->runtime.mesh_eval == NULL) {
+      else if (ob->pd->shape == PFIELD_SHAPE_POINTS && BKE_object_get_evaluated_mesh(ob) == NULL) {
         continue;
       }
 
@@ -333,7 +330,7 @@ ListBase *BKE_effectors_create(Depsgraph *depsgraph,
 void BKE_effectors_free(ListBase *lb)
 {
   if (lb) {
-    for (EffectorCache *eff = lb->first; eff; eff = eff->next) {
+    LISTBASE_FOREACH (EffectorCache *, eff, lb) {
       if (eff->guide_data) {
         MEM_freeN(eff->guide_data);
       }
@@ -356,11 +353,13 @@ void pd_point_from_particle(ParticleSimulationData *sim,
   point->size = pa->size;
   point->charge = 0.0f;
 
-  if (part->pd && part->pd->forcefield == PFIELD_CHARGE)
+  if (part->pd && part->pd->forcefield == PFIELD_CHARGE) {
     point->charge += part->pd->f_strength;
+  }
 
-  if (part->pd2 && part->pd2->forcefield == PFIELD_CHARGE)
+  if (part->pd2 && part->pd2->forcefield == PFIELD_CHARGE) {
     point->charge += part->pd2->f_strength;
+  }
 
   point->vel_to_sec = 1.0f;
   point->vel_to_frame = psys_get_timestep(sim);
@@ -371,8 +370,9 @@ void pd_point_from_particle(ParticleSimulationData *sim,
     point->ave = state->ave;
     point->rot = state->rot;
   }
-  else
+  else {
     point->ave = point->rot = NULL;
+  }
 
   point->psys = sim->psys;
 }
@@ -429,7 +429,7 @@ static float eff_calc_visibility(ListBase *colliders,
                                  EffectorData *efd,
                                  EffectedPoint *point)
 {
-  const int raycast_flag = BVH_RAYCAST_DEFAULT & ~(BVH_RAYCAST_WATERTIGHT);
+  const int raycast_flag = BVH_RAYCAST_DEFAULT & ~BVH_RAYCAST_WATERTIGHT;
   ListBase *colls = colliders;
   ColliderCache *col;
   float norm[3], len = 0.0;
@@ -482,8 +482,9 @@ static float eff_calc_visibility(ListBase *colliders,
     }
   }
 
-  if (!colliders)
+  if (!colliders) {
     BKE_collider_cache_free(&colls);
+  }
 
   return visibility;
 }
@@ -511,14 +512,17 @@ static float falloff_func(
     float fac, int usemin, float mindist, int usemax, float maxdist, float power)
 {
   /* first quick checks */
-  if (usemax && fac > maxdist)
+  if (usemax && fac > maxdist) {
     return 0.0f;
+  }
 
-  if (usemin && fac < mindist)
+  if (usemin && fac < mindist) {
     return 1.0f;
+  }
 
-  if (!usemin)
+  if (!usemin) {
     mindist = 0.0;
+  }
 
   return pow((double)(1.0f + fac - mindist), (double)(-power));
 }
@@ -554,10 +558,12 @@ float effector_falloff(EffectorCache *eff,
 
   fac = dot_v3v3(efd->nor, efd->vec_to_point2);
 
-  if (eff->pd->zdir == PFIELD_Z_POS && fac < 0.0f)
+  if (eff->pd->zdir == PFIELD_Z_POS && fac < 0.0f) {
     falloff = 0.0f;
-  else if (eff->pd->zdir == PFIELD_Z_NEG && fac > 0.0f)
+  }
+  else if (eff->pd->zdir == PFIELD_Z_NEG && fac > 0.0f) {
     falloff = 0.0f;
+  }
   else {
     switch (eff->pd->falloff) {
       case PFIELD_FALL_SPHERE:
@@ -565,18 +571,20 @@ float effector_falloff(EffectorCache *eff,
         break;
 
       case PFIELD_FALL_TUBE:
-        falloff *= falloff_func_dist(eff->pd, ABS(fac));
-        if (falloff == 0.0f)
+        falloff *= falloff_func_dist(eff->pd, fabsf(fac));
+        if (falloff == 0.0f) {
           break;
+        }
 
         madd_v3_v3v3fl(temp, efd->vec_to_point2, efd->nor, -fac);
         r_fac = len_v3(temp);
         falloff *= falloff_func_rad(eff->pd, r_fac);
         break;
       case PFIELD_FALL_CONE:
-        falloff *= falloff_func_dist(eff->pd, ABS(fac));
-        if (falloff == 0.0f)
+        falloff *= falloff_func_dist(eff->pd, fabsf(fac));
+        if (falloff == 0.0f) {
           break;
+        }
 
         r_fac = RAD2DEGF(saacos(fac / len_v3(efd->vec_to_point2)));
         falloff *= falloff_func_rad(eff->pd, r_fac);
@@ -632,8 +640,8 @@ int get_effector_data(EffectorCache *eff,
   float cfra = DEG_get_ctime(eff->depsgraph);
   int ret = 0;
 
-  /* In case surface object is in Edit mode when loading the .blend, surface modifier is never executed
-   * and bvhtree never built, see T48415. */
+  /* In case surface object is in Edit mode when loading the .blend,
+   * surface modifier is never executed and bvhtree never built, see T48415. */
   if (eff->pd && eff->pd->shape == PFIELD_SHAPE_SURFACE && eff->surmd && eff->surmd->bvhtree) {
     /* closest point in the object surface is an effector */
     float vec[3];
@@ -649,7 +657,8 @@ int get_effector_data(EffectorCache *eff,
     efd->size = 0.0f;
   }
   else if (eff->pd && eff->pd->shape == PFIELD_SHAPE_POINTS) {
-    Mesh *me_eval = eff->ob->runtime.mesh_eval;
+    /* TODO: hair and points object support */
+    Mesh *me_eval = BKE_object_get_evaluated_mesh(eff->ob);
     if (me_eval != NULL) {
       copy_v3_v3(efd->loc, me_eval->mvert[*efd->index].co);
       normal_short_to_float_v3(efd->nor, me_eval->mvert[*efd->index].no);
@@ -684,7 +693,7 @@ int get_effector_data(EffectorCache *eff,
       ret = psys_get_particle_state(&sim, *efd->index, &state, 0);
 
       /* TODO */
-      //if (eff->pd->forcefiled == PFIELD_HARMONIC && ret==0) {
+      // if (eff->pd->forcefiled == PFIELD_HARMONIC && ret==0) {
       //  if (pa->dietime < eff->psys->cfra)
       //      eff->flag |= PE_VELOCITY_TO_IMPULSE;
       //}
@@ -736,9 +745,11 @@ int get_effector_data(EffectorCache *eff,
     sub_v3_v3v3(efd->vec_to_point, point->loc, efd->loc);
     efd->distance = len_v3(efd->vec_to_point);
 
-    /* rest length for harmonic effector, will have to see later if this could be extended to other effectors */
-    if (eff->pd && eff->pd->forcefield == PFIELD_HARMONIC && eff->pd->f_size)
+    /* Rest length for harmonic effector,
+     * will have to see later if this could be extended to other effectors. */
+    if (eff->pd && eff->pd->forcefield == PFIELD_HARMONIC && eff->pd->f_size) {
       mul_v3_fl(efd->vec_to_point, (efd->distance - eff->pd->f_size) / efd->distance);
+    }
 
     if (eff->flag & PE_USE_NORMAL_DATA) {
       copy_v3_v3(efd->vec_to_point2, efd->vec_to_point);
@@ -760,7 +771,8 @@ static void get_effector_tot(
   efd->index = p;
 
   if (eff->pd->shape == PFIELD_SHAPE_POINTS) {
-    Mesh *me_eval = eff->ob->runtime.mesh_eval;
+    /* TODO: hair and points object support */
+    Mesh *me_eval = BKE_object_get_evaluated_mesh(eff->ob);
     *tot = me_eval != NULL ? me_eval->totvert : 1;
 
     if (*tot && eff->pd->forcefield == PFIELD_HARMONIC && point->index >= 0) {
@@ -810,8 +822,9 @@ static void do_texture_effector(EffectorCache *eff,
   short mode = eff->pd->tex_mode;
   bool scene_color_manage;
 
-  if (!eff->pd->tex)
+  if (!eff->pd->tex) {
     return;
+  }
 
   result[0].nor = result[1].nor = result[2].nor = result[3].nor = NULL;
 
@@ -822,8 +835,9 @@ static void do_texture_effector(EffectorCache *eff,
   if (eff->pd->flag & PFIELD_TEX_OBJECT) {
     mul_m4_v3(eff->ob->imat, tex_co);
 
-    if (eff->pd->flag & PFIELD_TEX_2D)
+    if (eff->pd->flag & PFIELD_TEX_2D) {
       tex_co[2] = 0.0f;
+    }
   }
   else if (eff->pd->flag & PFIELD_TEX_2D) {
     float fac = -dot_v3v3(tex_co, efd->nor);
@@ -955,11 +969,13 @@ static void do_physical_effector(EffectorCache *eff,
       }
       break;
     case PFIELD_MAGNET:
-      if (ELEM(eff->pd->shape, PFIELD_SHAPE_POINT, PFIELD_SHAPE_LINE))
+      if (ELEM(eff->pd->shape, PFIELD_SHAPE_POINT, PFIELD_SHAPE_LINE)) {
         /* magnetic field of a moving charge */
         cross_v3_v3v3(temp, efd->nor, efd->vec_to_point);
-      else
+      }
+      else {
         copy_v3_v3(temp, efd->nor);
+      }
 
       normalize_v3(temp);
       mul_v3_fl(temp, strength * efd->falloff);
@@ -1009,11 +1025,12 @@ static void do_physical_effector(EffectorCache *eff,
 
       mul_v3_fl(force, -efd->falloff * fac * (strength * fac + damp));
       break;
-    case PFIELD_SMOKEFLOW:
+    case PFIELD_FLUIDFLOW:
       zero_v3(force);
+#ifdef WITH_FLUID
       if (pd->f_source) {
         float density;
-        if ((density = BKE_smoke_get_velocity_at(pd->f_source, point->loc, force)) >= 0.0f) {
+        if ((density = BKE_fluid_get_velocity_at(pd->f_source, point->loc, force)) >= 0.0f) {
           float influence = strength * efd->falloff;
           if (pd->flag & PFIELD_SMOKE_DENSITY) {
             influence *= density;
@@ -1023,13 +1040,14 @@ static void do_physical_effector(EffectorCache *eff,
           madd_v3_v3fl(total_force, point->vel, -pd->f_flow * influence);
         }
       }
+#endif
       break;
   }
 
   if (pd->flag & PFIELD_DO_LOCATION) {
     madd_v3_v3fl(total_force, force, 1.0f / point->vel_to_sec);
 
-    if (ELEM(pd->forcefield, PFIELD_HARMONIC, PFIELD_DRAG, PFIELD_SMOKEFLOW) == 0 &&
+    if (ELEM(pd->forcefield, PFIELD_HARMONIC, PFIELD_DRAG, PFIELD_FLUIDFLOW) == 0 &&
         pd->f_flow != 0.0f) {
       madd_v3_v3fl(total_force, point->vel, -pd->f_flow * efd->falloff);
     }
@@ -1055,7 +1073,8 @@ static void do_physical_effector(EffectorCache *eff,
  * scene       = scene where it runs in, for time and stuff
  * lb           = listbase with objects that take part in effecting
  * opco     = global coord, as input
- * force        = force accumulator
+ * force        = accumulator for force
+ * wind_force   = accumulator for force only acting perpendicular to a surface
  * speed        = actual current speed which can be altered
  * cur_time = "external" time in frames, is constant for static particles
  * loc_time = "local" time in frames, range <0-1> for the lifetime of particle
@@ -1068,17 +1087,18 @@ void BKE_effectors_apply(ListBase *effectors,
                          EffectorWeights *weights,
                          EffectedPoint *point,
                          float *force,
+                         float *wind_force,
                          float *impulse)
 {
   /*
    * Modifies the force on a particle according to its
    * relation with the effector object
    * Different kind of effectors include:
-   *     Forcefields: Gravity-like attractor
+   *     Force-fields: Gravity-like attractor
    *     (force power is related to the inverse of distance to the power of a falloff value)
    *     Vortex fields: swirling effectors
    *     (particles rotate around Z-axis of the object. otherwise, same relation as)
-   *     (Forcefields, but this is not done through a force/acceleration)
+   *     (Force-fields, but this is not done through a force/acceleration)
    *     Guide: particles on a path
    *     (particles are guided along a curve bezier or old nurbs)
    *     (is independent of other effectors)
@@ -1103,22 +1123,27 @@ void BKE_effectors_apply(ListBase *effectors,
           if (efd.falloff > 0.0f) {
             efd.falloff *= eff_calc_visibility(colliders, eff, &efd, point);
           }
-          if (efd.falloff <= 0.0f) {
-            /* don't do anything */
-          }
-          else if (eff->pd->forcefield == PFIELD_TEXTURE) {
-            do_texture_effector(eff, &efd, point, force);
-          }
-          else {
-            float temp1[3] = {0, 0, 0}, temp2[3];
-            copy_v3_v3(temp1, force);
+          if (efd.falloff > 0.0f) {
+            float out_force[3] = {0, 0, 0};
 
-            do_physical_effector(eff, &efd, point, force);
+            if (eff->pd->forcefield == PFIELD_TEXTURE) {
+              do_texture_effector(eff, &efd, point, out_force);
+            }
+            else {
+              do_physical_effector(eff, &efd, point, out_force);
 
-            /* for softbody backward compatibility */
-            if (point->flag & PE_WIND_AS_SPEED && impulse) {
-              sub_v3_v3v3(temp2, force, temp1);
-              sub_v3_v3v3(impulse, impulse, temp2);
+              /* for softbody backward compatibility */
+              if (point->flag & PE_WIND_AS_SPEED && impulse) {
+                sub_v3_v3v3(impulse, impulse, out_force);
+              }
+            }
+
+            if (wind_force) {
+              madd_v3_v3fl(force, out_force, 1.0f - eff->pd->f_wind_factor);
+              madd_v3_v3fl(wind_force, out_force, eff->pd->f_wind_factor);
+            }
+            else {
+              add_v3_v3(force, out_force);
             }
           }
         }
@@ -1318,8 +1343,9 @@ void BKE_sim_debug_data_clear_category(const char *category)
     BLI_ghashIterator_init(&iter, _sim_debug_data->gh);
     while (!BLI_ghashIterator_done(&iter)) {
       const SimDebugElement *elem = BLI_ghashIterator_getValue(&iter);
-      BLI_ghashIterator_step(
-          &iter); /* removing invalidates the current iterator, so step before removing */
+
+      /* Removing invalidates the current iterator, so step before removing. */
+      BLI_ghashIterator_step(&iter);
 
       if (elem->category_hash == category_hash) {
         BLI_ghash_remove(_sim_debug_data->gh, elem, NULL, debug_element_free);

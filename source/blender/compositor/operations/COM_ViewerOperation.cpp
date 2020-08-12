@@ -17,22 +17,20 @@
  */
 
 #include "COM_ViewerOperation.h"
-#include "BLI_listbase.h"
 #include "BKE_image.h"
 #include "BKE_scene.h"
-#include "WM_api.h"
-#include "WM_types.h"
-#include "PIL_time.h"
-#include "BLI_utildefines.h"
+#include "BLI_listbase.h"
 #include "BLI_math_color.h"
 #include "BLI_math_vector.h"
-
-extern "C" {
+#include "BLI_utildefines.h"
 #include "MEM_guardedalloc.h"
+#include "PIL_time.h"
+#include "WM_api.h"
+#include "WM_types.h"
+
+#include "IMB_colormanagement.h"
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
-#include "IMB_colormanagement.h"
-}
 
 ViewerOperation::ViewerOperation() : NodeOperation()
 {
@@ -82,8 +80,9 @@ void ViewerOperation::executeRegion(rcti *rect, unsigned int /*tileNumber*/)
 {
   float *buffer = this->m_outputBuffer;
   float *depthbuffer = this->m_depthBuffer;
-  if (!buffer)
+  if (!buffer) {
     return;
+  }
   const int x1 = rect->xmin;
   const int y1 = rect->ymin;
   const int x2 = rect->xmax;
@@ -110,7 +109,7 @@ void ViewerOperation::executeRegion(rcti *rect, unsigned int /*tileNumber*/)
       offset++;
       offset4 += 4;
     }
-    if (isBreaked()) {
+    if (isBraked()) {
       breaked = true;
     }
     offset += offsetadd;
@@ -128,7 +127,7 @@ void ViewerOperation::initImage()
 
   /* make sure the image has the correct number of views */
   if (ima && BKE_scene_multiview_is_render_view_first(this->m_rd, this->m_viewName)) {
-    BKE_image_verify_viewer_views(this->m_rd, ima, this->m_imageUser);
+    BKE_image_ensure_viewer_views(this->m_rd, ima, this->m_imageUser);
   }
 
   BLI_thread_lock(LOCK_DRAW_IMAGE);
@@ -149,9 +148,11 @@ void ViewerOperation::initImage()
     ibuf->x = getWidth();
     ibuf->y = getHeight();
     /* zero size can happen if no image buffers exist to define a sensible resolution */
-    if (ibuf->x > 0 && ibuf->y > 0)
+    if (ibuf->x > 0 && ibuf->y > 0) {
       imb_addrectfloatImBuf(ibuf);
-    ima->ok = IMA_OK_LOADED;
+    }
+    ImageTile *tile = BKE_image_get_tile(ima, 0);
+    tile->ok = IMA_OK_LOADED;
 
     ibuf->userflags |= IB_DISPLAY_BUFFER_INVALID;
   }
@@ -188,8 +189,7 @@ void ViewerOperation::updateImage(rcti *rect)
                                     rect->xmin,
                                     rect->ymin,
                                     rect->xmax,
-                                    rect->ymax,
-                                    false);
+                                    rect->ymax);
 
   this->updateDraw();
 }

@@ -20,7 +20,11 @@
 
 # Libraries configuration for Apple.
 
-set(MACOSX_DEPLOYMENT_TARGET "10.9")
+if("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64")
+  set(MACOSX_DEPLOYMENT_TARGET 11.00)
+else()
+  set(MACOSX_DEPLOYMENT_TARGET 10.13)
+endif()
 
 macro(find_package_wrapper)
 # do nothing, just satisfy the macro
@@ -54,6 +58,13 @@ if(WITH_ALEMBIC)
   set(ALEMBIC_LIBPATH ${ALEMBIC}/lib)
   set(ALEMBIC_LIBRARIES Alembic)
   set(ALEMBIC_FOUND ON)
+endif()
+
+if(WITH_USD)
+  find_package(USD)
+  if(NOT USD_FOUND)
+    set(WITH_USD OFF)
+  endif()
 endif()
 
 if(WITH_OPENSUBDIV)
@@ -100,8 +111,8 @@ if(WITH_PYTHON)
     set(PYTHON_INCLUDE_DIR "${_py_framework}/include/python${PYTHON_VERSION}m")
     set(PYTHON_EXECUTABLE "${_py_framework}/bin/python${PYTHON_VERSION}m")
     set(PYTHON_LIBPATH "${_py_framework}/lib/python${PYTHON_VERSION}/config-${PYTHON_VERSION}m")
-    #set(PYTHON_LIBRARY python${PYTHON_VERSION})
-    #set(PYTHON_LINKFLAGS "-u _PyMac_Error -framework Python")  # won't  build with this enabled
+    # set(PYTHON_LIBRARY python${PYTHON_VERSION})
+    # set(PYTHON_LINKFLAGS "-u _PyMac_Error -framework Python")  # won't  build with this enabled
 
     unset(_py_framework)
   endif()
@@ -125,12 +136,12 @@ if(WITH_FFTW3)
   set(FFTW3_LIBPATH ${FFTW3}/lib)
 endif()
 
-set(PNG_LIBRARIES png)
-set(JPEG_LIBRARIES jpeg)
-
 set(ZLIB /usr)
 set(ZLIB_INCLUDE_DIRS "${ZLIB}/include")
 set(ZLIB_LIBRARIES z bz2)
+
+set(PNG_LIBRARIES png ${ZLIB_LIBRARIES})
+set(JPEG_LIBRARIES jpeg)
 
 set(FREETYPE ${LIBDIR}/freetype)
 set(FREETYPE_INCLUDE_DIRS ${FREETYPE}/include ${FREETYPE}/include/freetype2)
@@ -157,7 +168,7 @@ if(WITH_CODEC_FFMPEG)
     avcodec avdevice avformat avutil
     mp3lame swscale x264 xvidcore
     theora theoradec theoraenc
-    vorbis vorbisenc vorbisfile ogg
+    vorbis vorbisenc vorbisfile ogg opus
     vpx swresample)
   set(FFMPEG_LIBPATH ${FFMPEG}/lib)
 endif()
@@ -181,7 +192,7 @@ endif()
 
 set(PLATFORM_CFLAGS "-pipe -funsigned-char")
 set(PLATFORM_LINKFLAGS
-  "-fexceptions -framework CoreServices -framework Foundation -framework IOKit -framework AppKit -framework Cocoa -framework Carbon -framework AudioUnit -framework AudioToolbox -framework CoreAudio"
+  "-fexceptions -framework CoreServices -framework Foundation -framework IOKit -framework AppKit -framework Cocoa -framework Carbon -framework AudioUnit -framework AudioToolbox -framework CoreAudio -framework Metal -framework QuartzCore"
 )
 
 list(APPEND PLATFORM_LINKLIBS c++)
@@ -215,16 +226,10 @@ if(WITH_OPENCOLLADA)
     -lMathMLSolver
     -lGeneratedSaxParser
     -lbuffer -lftoa -lUTF
-    ${OPENCOLLADA_LIBPATH}/libxml2.a
   )
-  # PCRE is bundled with openCollada
-  #set(PCRE ${LIBDIR}/pcre)
-  #set(PCRE_LIBPATH ${PCRE}/lib)
+  # PCRE and XML2 are bundled with OpenCollada.
   set(PCRE_LIBRARIES pcre)
-  # libxml2 is used
-  #set(EXPAT ${LIBDIR}/expat)
-  #set(EXPAT_LIBPATH ${EXPAT}/lib)
-  set(EXPAT_LIB)
+  set(XML2_LIBRARIES xml2)
 endif()
 
 if(WITH_SDL)
@@ -313,16 +318,13 @@ endif()
 if(WITH_OPENVDB)
   set(OPENVDB ${LIBDIR}/openvdb)
   set(OPENVDB_INCLUDE_DIRS ${OPENVDB}/include)
-  set(TBB_INCLUDE_DIRS ${LIBDIR}/tbb/include)
-  set(TBB_LIBRARIES ${LIBDIR}/tbb/lib/libtbb.a)
-  set(OPENVDB_LIBRARIES openvdb blosc ${TBB_LIBRARIES})
+  set(OPENVDB_LIBRARIES openvdb blosc)
   set(OPENVDB_LIBPATH ${LIBDIR}/openvdb/lib)
   set(OPENVDB_DEFINITIONS)
 endif()
 
 if(WITH_LLVM)
   set(LLVM_ROOT_DIR ${LIBDIR}/llvm)
-  set(LLVM_VERSION 3.4)
   if(EXISTS "${LLVM_ROOT_DIR}/bin/llvm-config")
     set(LLVM_CONFIG "${LLVM_ROOT_DIR}/bin/llvm-config")
   else()
@@ -333,6 +335,9 @@ if(WITH_LLVM)
       OUTPUT_STRIP_TRAILING_WHITESPACE)
   execute_process(COMMAND ${LLVM_CONFIG} --prefix
       OUTPUT_VARIABLE LLVM_ROOT_DIR
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+  execute_process(COMMAND ${LLVM_CONFIG} --includedir
+      OUTPUT_VARIABLE LLVM_INCLUDE_DIRS
       OUTPUT_STRIP_TRAILING_WHITESPACE)
   execute_process(COMMAND ${LLVM_CONFIG} --libdir
       OUTPUT_VARIABLE LLVM_LIBPATH
@@ -377,9 +382,28 @@ if(WITH_CYCLES_OSL)
   endif()
 endif()
 
+if("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64")
+  set(WITH_CYCLES_EMBREE OFF)
+  set(WITH_OPENIMAGEDENOISE OFF)
+  set(WITH_CPU_SSE OFF)
+endif()
+
 if(WITH_CYCLES_EMBREE)
-  find_package(Embree 3.2.4 REQUIRED)
+  find_package(Embree 3.8.0 REQUIRED)
   set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -Xlinker -stack_size -Xlinker 0x100000")
+endif()
+
+if(WITH_OPENIMAGEDENOISE)
+  find_package(OpenImageDenoise)
+
+  if(NOT OPENIMAGEDENOISE_FOUND)
+    set(WITH_OPENIMAGEDENOISE OFF)
+    message(STATUS "OpenImageDenoise not found")
+  endif()
+endif()
+
+if(WITH_TBB)
+  find_package(TBB)
 endif()
 
 # CMake FindOpenMP doesn't know about AppleClang before 3.12, so provide custom flags.
@@ -393,16 +417,23 @@ if(WITH_OPENMP)
     set(OpenMP_CXX_FLAGS "-Xclang -fopenmp -I'${LIBDIR}/openmp/include'")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L'${LIBDIR}/openmp/lib' -lomp")
 
-    # Copy libomp.dylib to allow executables like datatoc to work.
-    if(CMAKE_MAKE_PROGRAM MATCHES "xcodebuild")
-      set(OPENMP_DYLIB_AUX_PATH "${CMAKE_BINARY_DIR}/bin")
-    else()
-      set(OPENMP_DYLIB_AUX_PATH "${CMAKE_BINARY_DIR}")
-    endif()
-
+    # Copy libomp.dylib to allow executables like datatoc and tests to work.
     execute_process(
-        COMMAND mkdir -p ${OPENMP_DYLIB_AUX_PATH}/Resources/lib
-        COMMAND cp -p ${LIBDIR}/openmp/lib/libomp.dylib ${OPENMP_DYLIB_AUX_PATH}/Resources/lib/libomp.dylib)
+      COMMAND mkdir -p ${CMAKE_BINARY_DIR}/Resources/lib
+      COMMAND cp -p ${LIBDIR}/openmp/lib/libomp.dylib ${CMAKE_BINARY_DIR}/Resources/lib/libomp.dylib
+    )
+    execute_process(
+      COMMAND mkdir -p ${CMAKE_BINARY_DIR}/bin/Resources/lib
+      COMMAND cp -p ${LIBDIR}/openmp/lib/libomp.dylib ${CMAKE_BINARY_DIR}/bin/Resources/lib/libomp.dylib
+    )
+  endif()
+endif()
+
+if(WITH_XR_OPENXR)
+  find_package(OpenXR-SDK)
+  if(NOT OPENXR_SDK_FOUND)
+    message(WARNING "OpenXR-SDK was not found, disabling WITH_XR_OPENXR")
+    set(WITH_XR_OPENXR OFF)
   endif()
 endif()
 
@@ -418,15 +449,17 @@ if(CMAKE_OSX_ARCHITECTURES MATCHES "x86_64" OR CMAKE_OSX_ARCHITECTURES MATCHES "
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -ftree-vectorize  -fvariable-expansion-in-unroller")
   endif()
 else()
-  set(CMAKE_C_FLAGS_RELEASE "-mdynamic-no-pic -fno-strict-aliasing")
-  set(CMAKE_CXX_FLAGS_RELEASE "-mdynamic-no-pic -fno-strict-aliasing")
+  set(CMAKE_C_FLAGS_RELEASE "-O2 -mdynamic-no-pic -fno-strict-aliasing")
+  set(CMAKE_CXX_FLAGS_RELEASE "-O2 -mdynamic-no-pic -fno-strict-aliasing")
 endif()
 
 if(${XCODE_VERSION} VERSION_EQUAL 5 OR ${XCODE_VERSION} VERSION_GREATER 5)
   # Xcode 5 is always using CLANG, which has too low template depth of 128 for libmv
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ftemplate-depth=1024")
 endif()
-# Get rid of eventually clashes, we export some symbols explicitly as local
+
+# Avoid conflicts with Luxrender, and other plug-ins that may use the same
+# libraries as Blender with a different version or build options.
 set(PLATFORM_LINKFLAGS
   "${PLATFORM_LINKFLAGS} -Xlinker -unexported_symbols_list -Xlinker '${CMAKE_SOURCE_DIR}/source/creator/osx_locals.map'"
 )

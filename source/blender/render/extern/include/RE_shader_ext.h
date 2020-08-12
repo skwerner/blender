@@ -23,6 +23,10 @@
 #ifndef __RE_SHADER_EXT_H__
 #define __RE_SHADER_EXT_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 /* this include is for texture exports                        */
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
@@ -41,10 +45,8 @@ typedef struct BakeImBufuserData {
 } BakeImBufuserData;
 
 /* node shaders... */
-struct ImBuf;
 struct ImagePool;
 struct MTex;
-struct Object;
 struct Tex;
 
 /* this one uses nodes */
@@ -76,5 +78,9 @@ int multitex_nodes(struct Tex *tex,
                    short which_output,
                    struct MTex *mtex,
                    struct ImagePool *pool);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __RE_SHADER_EXT_H__ */

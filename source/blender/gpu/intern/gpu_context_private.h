@@ -26,15 +26,16 @@
 #ifndef __GPU_CONTEXT_PRIVATE_H__
 #define __GPU_CONTEXT_PRIVATE_H__
 
+#include "GPU_context.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include "GPU_context.h"
-
 struct GPUFrameBuffer;
 
 GLuint GPU_vao_default(void);
+GLuint GPU_framebuffer_default(void);
 
 /* These require a gl ctx bound. */
 GLuint GPU_buf_alloc(void);
@@ -57,6 +58,8 @@ void gpu_context_remove_framebuffer(GPUContext *ctx, struct GPUFrameBuffer *fb);
 
 void gpu_context_active_framebuffer_set(GPUContext *ctx, struct GPUFrameBuffer *fb);
 struct GPUFrameBuffer *gpu_context_active_framebuffer_get(GPUContext *ctx);
+
+struct GPUMatrixState *gpu_context_active_matrix_state_get(void);
 
 #ifdef __cplusplus
 }

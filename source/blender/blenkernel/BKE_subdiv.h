@@ -27,14 +27,16 @@
 #include "BLI_compiler_compat.h"
 #include "BLI_sys_types.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct Mesh;
 struct MultiresModifierData;
-struct Object;
 struct OpenSubdiv_Converter;
 struct OpenSubdiv_Evaluator;
 struct OpenSubdiv_TopologyRefiner;
 struct Subdiv;
-struct SubdivToMeshSettings;
 
 typedef enum eSubdivVtxBoundaryInterpolation {
   /* Do not interpolate boundaries. */
@@ -55,10 +57,33 @@ typedef enum eSubdivFVarLinearInterpolation {
 } eSubdivFVarLinearInterpolation;
 
 typedef struct SubdivSettings {
+  /* Simple subdivision corresponds to "Simple" option in the interface. When its enabled the
+   * subdivided mesh is not "smoothed": new vertices are added uniformly on the existing surface.
+   *
+   * On an OpenSubdiv implementation level this translates to a subdivision scheme:
+   * when is_simple is true OSD_SCHEME_BILINEAR is used, otherwise OSD_SCHEME_CATMARK. */
   bool is_simple;
+
+  /* This refers to an adaptive isolation when creating patches for the subdivided surface.
+   *
+   * When is set to false (aka uniform subdivision) fixed depth of isolation is used, which
+   * allows to iteratively add more subdivisions (uniform subdivision level 2 = uniform subdivision
+   * level 1 + uniform subdivision level 1). Uniform subdivisions will progressively go to a limit
+   * surface.
+   *
+   * Adaptive isolation generates patches at a limit surface (aka as if infinite number of uniform
+   * subdivisions have been applied). This setting allows to have matches normal and tangent space
+   * the same independent of number of subdivisions set in modifier settings. */
   bool is_adaptive;
+
+  /* Corresponds to Quality option in modifier settings: higher values means the final surface
+   * will be more accurately represented by patches.
+   *
+   * On an OpenSubdiv implementation level this is an isolation level. */
   int level;
+
   bool use_creases;
+
   eSubdivVtxBoundaryInterpolation vtx_boundary_interpolation;
   eSubdivFVarLinearInterpolation fvar_linear_interpolation;
 } SubdivSettings;
@@ -107,7 +132,7 @@ typedef struct SubdivStats {
   double begin_timestamp_[NUM_SUBDIV_STATS_VALUES];
 } SubdivStats;
 
-/* Functor which evaluates dispalcement at a given (u, v) of given ptex face. */
+/* Functor which evaluates displacement at a given (u, v) of given ptex face. */
 typedef struct SubdivDisplacement {
   /* Initialize displacement evaluator.
    *
@@ -142,7 +167,7 @@ typedef struct SubdivDisplacement {
 
 /* This structure contains everything needed to construct subdivided surface.
  * It does not specify storage, memory layout or anything else.
- * It is possible to create different storages (like, grid based CPU side
+ * It is possible to create different storage's (like, grid based CPU side
  * buffers, GPU subdivision mesh, CPU side fully qualified mesh) from the same
  * Subdiv structure. */
 typedef struct Subdiv {
@@ -168,6 +193,12 @@ typedef struct Subdiv {
     int *face_ptex_offset;
   } cache_;
 } Subdiv;
+
+/* =================----====--===== MODULE ==========================------== */
+
+/* (De)initialize the entire subdivision surface module. */
+void BKE_subdiv_init(void);
+void BKE_subdiv_exit(void);
 
 /* ========================== CONVERSION HELPERS ============================ */
 
@@ -205,7 +236,7 @@ Subdiv *BKE_subdiv_new_from_mesh(const SubdivSettings *settings, const struct Me
  * new one is created from scratch.
  *
  * NOTE: It is allowed to pass NULL as an existing subdivision surface
- * descriptor. This will create enw descriptor without any extra checks.
+ * descriptor. This will create a new descriptor without any extra checks.
  */
 Subdiv *BKE_subdiv_update_from_converter(Subdiv *subdiv,
                                          const SubdivSettings *settings,
@@ -261,6 +292,14 @@ BLI_INLINE int BKE_subdiv_rotate_quad_to_corner(const float quad_u,
  * normalized ptex coordinates. */
 BLI_INLINE void BKE_subdiv_rotate_grid_to_quad(
     const int corner, const float grid_u, const float grid_v, float *r_quad_u, float *r_quad_v);
+
+/* Convert Blender edge crease value to OpenSubdiv sharpness. */
+BLI_INLINE float BKE_subdiv_edge_crease_to_sharpness_f(float edge_crease);
+BLI_INLINE float BKE_subdiv_edge_crease_to_sharpness_char(char edge_crease);
+
+#ifdef __cplusplus
+}
+#endif
 
 #include "intern/subdiv_inline.h"
 

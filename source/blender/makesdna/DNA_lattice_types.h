@@ -24,8 +24,8 @@
 #ifndef __DNA_LATTICE_TYPES_H__
 #define __DNA_LATTICE_TYPES_H__
 
-#include "DNA_defs.h"
 #include "DNA_ID.h"
+#include "DNA_defs.h"
 
 struct AnimData;
 struct BPoint;
@@ -39,6 +39,12 @@ typedef struct EditLatt {
   struct Lattice *latt;
 
   int shapenr;
+
+  /**
+   * ID data is older than edit-mode data.
+   * Set #Main.is_memfile_undo_flush_needed when enabling.
+   */
+  char needs_flush_to_id;
 } EditLatt;
 
 typedef struct Lattice {

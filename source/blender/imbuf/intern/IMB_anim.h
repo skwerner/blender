@@ -26,21 +26,21 @@
 
 #ifdef _WIN32
 #  define INC_OLE2
+#  include <commdlg.h>
+#  include <memory.h>
+#  include <mmsystem.h>
+#  include <vfw.h>
 #  include <windows.h>
 #  include <windowsx.h>
-#  include <mmsystem.h>
-#  include <memory.h>
-#  include <commdlg.h>
-#  include <vfw.h>
 
 #  undef AVIIF_KEYFRAME  // redefined in AVI_avi.h
 #  undef AVIIF_LIST      // redefined in AVI_avi.h
 #endif                   /* _WIN32 */
 
-#include <sys/types.h>
 #include <ctype.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <sys/types.h>
 
 #ifdef _WIN32
 #  include <io.h>
@@ -54,14 +54,14 @@
 #  include "AVI_avi.h"
 #endif
 
-#include "IMB_imbuf_types.h"
 #include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
 
 #include "IMB_allocimbuf.h"
 
 #ifdef WITH_FFMPEG
-#  include <libavformat/avformat.h>
 #  include <libavcodec/avcodec.h>
+#  include <libavformat/avformat.h>
 #  include <libswscale/swscale.h>
 #endif
 
@@ -89,7 +89,7 @@ struct anim {
   int ib_flags;
   int curtype;
   int curposition; /* index  0 = 1e,  1 = 2e, enz. */
-  int duration;
+  int duration_in_frames;
   int frs_sec;
   double frs_sec_base;
   int x, y;

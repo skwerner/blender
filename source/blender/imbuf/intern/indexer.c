@@ -24,15 +24,18 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_endian_switch.h"
-#include "BLI_path_util.h"
-#include "BLI_string.h"
 #include "BLI_fileops.h"
 #include "BLI_ghash.h"
+#include "BLI_path_util.h"
+#include "BLI_string.h"
+#include "BLI_utildefines.h"
+#ifdef _WIN32
+#  include "BLI_winstuff.h"
+#endif
 
-#include "IMB_indexer.h"
 #include "IMB_anim.h"
+#include "IMB_indexer.h"
 #include "imbuf.h"
 
 #include "BKE_global.h"
@@ -52,10 +55,12 @@ static const int proxy_sizes[] = {IMB_PROXY_25, IMB_PROXY_50, IMB_PROXY_75, IMB_
 static const float proxy_fac[] = {0.25, 0.50, 0.75, 1.00};
 
 #ifdef WITH_FFMPEG
-static int tc_types[] = {IMB_TC_RECORD_RUN,
-                         IMB_TC_FREE_RUN,
-                         IMB_TC_INTERPOLATED_REC_DATE_FREE_RUN,
-                         IMB_TC_RECORD_RUN_NO_GAPS};
+static int tc_types[] = {
+    IMB_TC_RECORD_RUN,
+    IMB_TC_FREE_RUN,
+    IMB_TC_INTERPOLATED_REC_DATE_FREE_RUN,
+    IMB_TC_RECORD_RUN_NO_GAPS,
+};
 #endif
 
 #define INDEX_FILE_VERSION 1
@@ -305,8 +310,8 @@ void IMB_indexer_close(struct anim_index *idx)
 int IMB_proxy_size_to_array_index(IMB_Proxy_Size pr_size)
 {
   switch (pr_size) {
-    case IMB_PROXY_NONE: /* if we got here, something is broken anyways,
-                          * so sane defaults... */
+    case IMB_PROXY_NONE:
+      /* if we got here, something is broken anyways, so sane defaults... */
       return 0;
     case IMB_PROXY_25:
       return 0;
@@ -364,7 +369,7 @@ void IMB_anim_get_fname(struct anim *anim, char *file, int size)
   BLI_strncpy(file, fname, size);
 }
 
-static void get_proxy_filename(struct anim *anim,
+static bool get_proxy_filename(struct anim *anim,
                                IMB_Proxy_Size preview_size,
                                char *fname,
                                bool temp)
@@ -391,7 +396,12 @@ static void get_proxy_filename(struct anim *anim,
 
   get_index_dir(anim, index_dir, sizeof(index_dir));
 
+  if (BLI_path_ncmp(anim->name, index_dir, FILE_MAXDIR) == 0) {
+    return false;
+  }
+
   BLI_join_dirfile(fname, FILE_MAXFILE + FILE_MAXDIR, index_dir, proxy_name);
+  return true;
 }
 
 static void get_tc_filename(struct anim *anim, IMB_Timecode_Type tc, char *fname)
@@ -740,7 +750,7 @@ static IndexBuildContext *index_ffmpeg_create_context(struct anim *anim,
 
   /* Find the video stream */
   context->videoStream = -1;
-  for (i = 0; i < context->iFormatCtx->nb_streams; i++)
+  for (i = 0; i < context->iFormatCtx->nb_streams; i++) {
     if (context->iFormatCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO) {
       if (streamcount > 0) {
         streamcount--;
@@ -749,6 +759,7 @@ static IndexBuildContext *index_ffmpeg_create_context(struct anim *anim,
       context->videoStream = i;
       break;
     }
+  }
 
   if (context->videoStream == -1) {
     avformat_close_input(&context->iFormatCtx);
@@ -865,8 +876,9 @@ static void index_rebuild_ffmpeg_proc_decoded_frame(FFmpegIndexBuilderContext *c
     if (context->tcs_in_use & tc_types[i]) {
       int tc_frameno = context->frameno;
 
-      if (tc_types[i] == IMB_TC_RECORD_RUN_NO_GAPS)
+      if (tc_types[i] == IMB_TC_RECORD_RUN_NO_GAPS) {
         tc_frameno = context->frameno_gapless;
+      }
 
       IMB_index_builder_proc_frame(context->indexer[i],
                                    curr_packet->data,
@@ -882,7 +894,7 @@ static void index_rebuild_ffmpeg_proc_decoded_frame(FFmpegIndexBuilderContext *c
 }
 
 static int index_rebuild_ffmpeg(FFmpegIndexBuilderContext *context,
-                                short *stop,
+                                const short *stop,
                                 short *do_update,
                                 float *progress)
 {
@@ -896,7 +908,7 @@ static int index_rebuild_ffmpeg(FFmpegIndexBuilderContext *context,
 
   stream_size = avio_size(context->iFormatCtx->pb);
 
-  context->frame_rate = av_q2d(av_get_r_frame_rate_compat(context->iFormatCtx, context->iStream));
+  context->frame_rate = av_q2d(av_guess_frame_rate(context->iFormatCtx, context->iStream, NULL));
   context->pts_time_base = av_q2d(context->iStream->time_base);
 
   while (av_read_frame(context->iFormatCtx, &next_packet) >= 0) {
@@ -981,8 +993,8 @@ static AviMovie *alloc_proxy_output_avi(
   AviFormat format;
   double framerate;
   AviMovie *avi;
-  short frs_sec = 25; /* it doesn't really matter for proxies,
-                            * but sane defaults help anyways...*/
+  /* it doesn't really matter for proxies, but sane defaults help anyways...*/
+  short frs_sec = 25;
   float frs_sec_base = 1.0;
 
   IMB_anim_get_fps(anim, &frs_sec, &frs_sec_base, false);
@@ -1078,7 +1090,7 @@ static void index_rebuild_fallback_finish(FallbackIndexBuilderContext *context, 
 }
 
 static void index_rebuild_fallback(FallbackIndexBuilderContext *context,
-                                   short *stop,
+                                   const short *stop,
                                    short *do_update,
                                    float *progress)
 {
@@ -1146,12 +1158,13 @@ IndexBuildContext *IMB_anim_index_rebuild_context(struct anim *anim,
 
   /* Don't generate the same file twice! */
   if (file_list) {
-    for (i = 0; i < IMB_PROXY_MAX_SLOT; ++i) {
+    for (i = 0; i < IMB_PROXY_MAX_SLOT; i++) {
       IMB_Proxy_Size proxy_size = proxy_sizes[i];
       if (proxy_size & proxy_sizes_to_build) {
         char filename[FILE_MAX];
-        get_proxy_filename(anim, proxy_size, filename, false);
-
+        if (get_proxy_filename(anim, proxy_size, filename, false) == false) {
+          return NULL;
+        }
         void **filename_key_p;
         if (!BLI_gset_ensure_p_ex(file_list, filename, &filename_key_p)) {
           *filename_key_p = BLI_strdup(filename);
@@ -1168,11 +1181,13 @@ IndexBuildContext *IMB_anim_index_rebuild_context(struct anim *anim,
     IMB_Proxy_Size built_proxies = IMB_anim_proxy_get_existing(anim);
     if (built_proxies != 0) {
 
-      for (i = 0; i < IMB_PROXY_MAX_SLOT; ++i) {
+      for (i = 0; i < IMB_PROXY_MAX_SLOT; i++) {
         IMB_Proxy_Size proxy_size = proxy_sizes[i];
         if (proxy_size & built_proxies) {
           char filename[FILE_MAX];
-          get_proxy_filename(anim, proxy_size, filename, false);
+          if (get_proxy_filename(anim, proxy_size, filename, false) == false) {
+            return NULL;
+          }
           printf("Skipping proxy: %s\n", filename);
         }
       }
@@ -1199,8 +1214,9 @@ IndexBuildContext *IMB_anim_index_rebuild_context(struct anim *anim,
 #endif
   }
 
-  if (context)
+  if (context) {
     context->anim_type = anim->curtype;
+  }
 
   return context;
 
@@ -1340,7 +1356,7 @@ IMB_Proxy_Size IMB_anim_proxy_get_existing(struct anim *anim)
   const int num_proxy_sizes = IMB_PROXY_MAX_SLOT;
   IMB_Proxy_Size existing = 0;
   int i;
-  for (i = 0; i < num_proxy_sizes; ++i) {
+  for (i = 0; i < num_proxy_sizes; i++) {
     IMB_Proxy_Size proxy_size = proxy_sizes[i];
     char filename[FILE_MAX];
     get_proxy_filename(anim, proxy_size, filename, false);

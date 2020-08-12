@@ -26,8 +26,8 @@ set(INC
   ../../makesrna
   ../../windowmanager
   ../../../../intern/clog
-  ../../../../intern/guardedalloc
   ../../../../intern/glew-mx
+  ../../../../intern/guardedalloc
   ../../../../extern/curve_fit_nd
 )
 
@@ -40,6 +40,7 @@ set(SRC
   editcurve.c
   editcurve_add.c
   editcurve_paint.c
+  editcurve_query.c
   editcurve_select.c
   editcurve_undo.c
   editfont.c

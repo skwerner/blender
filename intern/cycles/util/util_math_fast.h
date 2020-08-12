@@ -282,8 +282,10 @@ ccl_device float fast_acosf(float x)
   const float m = (f < 1.0f) ? 1.0f - (1.0f - f) : 1.0f;
   /* Based on http://www.pouet.net/topic.php?which=9132&page=2
    * 85% accurate (ulp 0)
-   * Examined 2130706434 values of acos: 15.2000597 avg ulp diff, 4492 max ulp, 4.51803e-05 max error // without "denormal crush"
-   * Examined 2130706434 values of acos: 15.2007108 avg ulp diff, 4492 max ulp, 4.51803e-05 max error // with "denormal crush"
+   * Examined 2130706434 values of acos:
+   *   15.2000597 avg ulp diff, 4492 max ulp, 4.51803e-05 max error // without "denormal crush"
+   * Examined 2130706434 values of acos:
+   *   15.2007108 avg ulp diff, 4492 max ulp, 4.51803e-05 max error // with "denormal crush"
    */
   const float a = sqrtf(1.0f - m) *
                   (1.5707963267f + m * (-0.213300989f + m * (0.077980478f + m * -0.02164095f)));
@@ -312,8 +314,10 @@ ccl_device float fast_atanf(float x)
   const float s = 1.0f - (1.0f - k); /* Crush denormals. */
   const float t = s * s;
   /* http://mathforum.org/library/drmath/view/62672.html
-   * Examined 4278190080 values of atan: 2.36864877 avg ulp diff, 302 max ulp, 6.55651e-06 max error      // (with  denormals)
-   * Examined 4278190080 values of atan: 171160502 avg ulp diff, 855638016 max ulp, 6.55651e-06 max error // (crush denormals)
+   * Examined 4278190080 values of atan:
+   *   2.36864877 avg ulp diff, 302 max ulp, 6.55651e-06 max error      // (with  denormals)
+   * Examined 4278190080 values of atan:
+   *   171160502 avg ulp diff, 855638016 max ulp, 6.55651e-06 max error // (crush denormals)
    */
   float r = s * madd(0.43157974f, t, 1.0f) / madd(madd(0.05831938f, t, 0.76443945f), t, 1.0f);
   if (a > 1.0f) {
@@ -442,6 +446,11 @@ ccl_device_inline float fast_expf(float x)
 }
 
 #ifndef __KERNEL_GPU__
+/* MSVC seems to have a code-gen bug here in at least SSE41/AVX
+ * see T78047 for details. */
+#  ifdef _MSC_VER
+#    pragma optimize("", off)
+#  endif
 ccl_device float4 fast_exp2f4(float4 x)
 {
   const float4 one = make_float4(1.0f);
@@ -457,6 +466,9 @@ ccl_device float4 fast_exp2f4(float4 x)
   r = madd4(x, r, make_float4(1.0f));
   return __int4_as_float4(__float4_as_int4(r) + (m << 23));
 }
+#  ifdef _MSC_VER
+#    pragma optimize("", on)
+#  endif
 
 ccl_device_inline float4 fast_expf4(float4 x)
 {

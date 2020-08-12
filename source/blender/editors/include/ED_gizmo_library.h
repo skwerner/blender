@@ -25,8 +25,11 @@
 #ifndef __ED_GIZMO_LIBRARY_H__
 #define __ED_GIZMO_LIBRARY_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* initialize gizmos */
-void ED_gizmotypes_arrow_2d(void);
 void ED_gizmotypes_arrow_3d(void);
 void ED_gizmotypes_button_2d(void);
 void ED_gizmotypes_cage_2d(void);
@@ -37,16 +40,16 @@ void ED_gizmotypes_facemap_3d(void);
 void ED_gizmotypes_preselect_3d(void);
 void ED_gizmotypes_primitive_3d(void);
 void ED_gizmotypes_blank_3d(void);
-void ED_gizmotypes_value_2d(void);
+void ED_gizmotypes_snap_3d(void);
 
-/* gizmo group types */
-void ED_gizmogrouptypes_value_2d(void);
-
-struct Object;
-struct Scene;
+struct ARegion;
 struct bContext;
+struct Depsgraph;
+struct Object;
+struct SnapObjectContext;
+struct wmWindowManager;
+struct View3D;
 struct wmGizmo;
-struct wmGizmoGroup;
 
 /* -------------------------------------------------------------------- */
 /* Shape Presets
@@ -96,11 +99,6 @@ enum {
 
 void ED_gizmo_arrow3d_set_ui_range(struct wmGizmo *gz, const float min, const float max);
 void ED_gizmo_arrow3d_set_range_fac(struct wmGizmo *gz, const float range_fac);
-
-/* -------------------------------------------------------------------- */
-/* 2D Arrow Gizmo */
-
-/* none */
 
 /* -------------------------------------------------------------------- */
 /* Cage Gizmo */
@@ -231,8 +229,9 @@ enum {
 };
 
 /* -------------------------------------------------------------------- */
-/* Gizmo Drawing Functions */
+/* Specific gizmos utils */
 
+/* dial3d_gizmo.c */
 struct Dial3dParams {
   int draw_options;
   float angle_ofs;
@@ -248,5 +247,36 @@ void ED_gizmotypes_dial_3d_draw_util(const float matrix_basis[4][4],
                                      const float color[4],
                                      const bool select,
                                      struct Dial3dParams *params);
+
+/* snap3d_gizmo.c */
+#define USE_SNAP_DETECT_FROM_KEYMAP_HACK
+void ED_gizmotypes_snap_3d_draw_util(struct RegionView3D *rv3d,
+                                     const float loc_prev[3],
+                                     const float loc_curr[3],
+                                     const float normal[3],
+                                     const uchar color_line[4],
+                                     const uchar color_point[4],
+                                     const short snap_elem_type);
+struct SnapObjectContext *ED_gizmotypes_snap_3d_context_ensure(struct Scene *scene,
+                                                               const struct ARegion *region,
+                                                               const struct View3D *v3d,
+                                                               struct wmGizmo *gz);
+
+bool ED_gizmotypes_snap_3d_invert_snap_get(struct wmGizmo *gz);
+void ED_gizmotypes_snap_3d_toggle_set(struct wmGizmo *gz, bool enable);
+void ED_gizmotypes_snap_3d_toggle_clear(struct wmGizmo *gz);
+
+short ED_gizmotypes_snap_3d_update(struct wmGizmo *gz,
+                                   struct Depsgraph *depsgraph,
+                                   const struct ARegion *region,
+                                   const struct View3D *v3d,
+                                   const struct wmWindowManager *wm,
+                                   const float mval_fl[2],
+                                   float r_loc[3],
+                                   float r_nor[3]);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __ED_GIZMO_LIBRARY_H__ */

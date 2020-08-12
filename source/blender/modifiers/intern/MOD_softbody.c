@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -25,13 +25,23 @@
 
 #include "BLI_utildefines.h"
 
-#include "DNA_scene_types.h"
+#include "BLT_translation.h"
+
 #include "DNA_mesh_types.h"
 #include "DNA_object_force_types.h"
+#include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
 
+#include "BKE_context.h"
 #include "BKE_layer.h"
 #include "BKE_particle.h"
+#include "BKE_screen.h"
 #include "BKE_softbody.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
@@ -39,6 +49,7 @@
 #include "DEG_depsgraph_query.h"
 
 #include "MOD_modifiertypes.h"
+#include "MOD_ui_common.h"
 
 static void deformVerts(ModifierData *UNUSED(md),
                         const ModifierEvalContext *ctx,
@@ -69,6 +80,25 @@ static void updateDepsgraph(ModifierData *UNUSED(md), const ModifierUpdateDepsgr
     DEG_add_forcefield_relations(
         ctx->node, ctx->object, ctx->object->soft->effector_weights, true, 0, "Softbody Field");
   }
+  /* We need own transformation as well. */
+  DEG_add_modifier_to_transform_relation(ctx->node, "SoftBody Modifier");
+}
+
+static void panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+
+  uiItemL(layout, IFACE_("Settings are inside the Physics tab"), ICON_NONE);
+
+  modifier_panel_end(layout, &ptr);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  modifier_panel_register(region_type, eModifierType_Softbody, panel_draw);
 }
 
 ModifierTypeInfo modifierType_Softbody = {
@@ -76,8 +106,9 @@ ModifierTypeInfo modifierType_Softbody = {
     /* structName */ "SoftbodyModifierData",
     /* structSize */ sizeof(SoftbodyModifierData),
     /* type */ eModifierTypeType_OnlyDeform,
-    /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsLattice |
-        eModifierTypeFlag_RequiresOriginalData | eModifierTypeFlag_Single,
+    /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsVertexCosOnly |
+        eModifierTypeFlag_RequiresOriginalData | eModifierTypeFlag_Single |
+        eModifierTypeFlag_UsesPointCache,
 
     /* copyData */ NULL,
 
@@ -85,7 +116,10 @@ ModifierTypeInfo modifierType_Softbody = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ NULL,
     /* requiredDataMask */ NULL,
@@ -98,4 +132,7 @@ ModifierTypeInfo modifierType_Softbody = {
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

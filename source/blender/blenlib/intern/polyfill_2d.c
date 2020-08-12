@@ -43,11 +43,11 @@
  * No globals - keep threadsafe.
  */
 
-#include "BLI_utildefines.h"
 #include "BLI_math.h"
+#include "BLI_utildefines.h"
 
-#include "BLI_memarena.h"
 #include "BLI_alloca.h"
+#include "BLI_memarena.h"
 
 #include "BLI_polyfill_2d.h" /* own include */
 
@@ -193,7 +193,10 @@ BLI_INLINE eSign signum_enum(float a)
  */
 BLI_INLINE float area_tri_signed_v2_alt_2x(const float v1[2], const float v2[2], const float v3[2])
 {
-  return ((v1[0] * (v2[1] - v3[1])) + (v2[0] * (v3[1] - v1[1])) + (v3[0] * (v1[1] - v2[1])));
+  float d2[2], d3[2];
+  sub_v2_v2v2(d2, v2, v1);
+  sub_v2_v2v2(d3, v3, v1);
+  return (d2[0] * d3[1]) - (d3[0] * d2[1]);
 }
 
 static eSign span_tri_v2_sign(const float v1[2], const float v2[2], const float v3[2])
@@ -780,7 +783,7 @@ static void polyfill_prepare(PolyFill *pf,
     coords_sign = (cross_poly_v2(coords, coords_tot) >= 0.0f) ? 1 : -1;
   }
   else {
-    /* check we're passing in correcty args */
+    /* check we're passing in correct args */
 #ifdef USE_STRICT_ASSERT
 #  ifndef NDEBUG
     if (coords_sign == 1) {

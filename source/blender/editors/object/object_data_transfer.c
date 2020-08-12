@@ -26,8 +26,8 @@
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
-#include "BLI_math.h"
 #include "BLI_blenlib.h"
+#include "BLI_math.h"
 #include "BLI_utildefines.h"
 
 #include "BKE_context.h"
@@ -65,17 +65,18 @@ static const EnumPropertyItem DT_layer_items[] = {
      "Vertex Group(s)",
      "Transfer active or all vertex groups"},
 #if 0 /* XXX For now, would like to finish/merge work from 2014 gsoc first. */
-  {DT_TYPE_SHAPEKEY, "SHAPEKEYS", 0, "Shapekey(s)", "Transfer active or all shape keys"},
+    {DT_TYPE_SHAPEKEY, "SHAPEKEYS", 0, "Shapekey(s)", "Transfer active or all shape keys"},
 #endif
-#if 0 /* XXX When SkinModifier is enabled,
-        * it seems to erase its own CD_MVERT_SKIN layer from final DM :( */
-  {DT_TYPE_SKIN, "SKIN", 0, "Skin Weight", "Transfer skin weights"},
+/* XXX When SkinModifier is enabled,
+ * it seems to erase its own CD_MVERT_SKIN layer from final DM :( */
+#if 0
+    {DT_TYPE_SKIN, "SKIN", 0, "Skin Weight", "Transfer skin weights"},
 #endif
     {DT_TYPE_BWEIGHT_VERT, "BEVEL_WEIGHT_VERT", 0, "Bevel Weight", "Transfer bevel weights"},
     {0, "", 0, "Edge Data", ""},
     {DT_TYPE_SHARP_EDGE, "SHARP_EDGE", 0, "Sharp", "Transfer sharp mark"},
     {DT_TYPE_SEAM, "SEAM", 0, "UV Seam", "Transfer UV seam mark"},
-    {DT_TYPE_CREASE, "CREASE", 0, "Subsurf Crease", "Transfer crease values"},
+    {DT_TYPE_CREASE, "CREASE", 0, "Subdivision Crease", "Transfer crease values"},
     {DT_TYPE_BWEIGHT_EDGE, "BEVEL_WEIGHT_EDGE", 0, "Bevel Weight", "Transfer bevel weights"},
     {DT_TYPE_FREESTYLE_EDGE,
      "FREESTYLE_EDGE",
@@ -109,8 +110,6 @@ static const EnumPropertyItem *dt_layers_select_src_itemf(bContext *C,
   EnumPropertyItem *item = NULL, tmp_item = {0};
   int totitem = 0;
   const int data_type = RNA_enum_get(ptr, "data_type");
-
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
 
   PropertyRNA *prop = RNA_struct_find_property(ptr, "use_reverse_transfer");
   const bool reverse_transfer = prop != NULL && RNA_property_boolean_get(ptr, prop);
@@ -157,6 +156,7 @@ static const EnumPropertyItem *dt_layers_select_src_itemf(bContext *C,
       Mesh *me_eval;
       int num_data, i;
 
+      Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
       Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
       Object *ob_src_eval = DEG_get_evaluated_object(depsgraph, ob_src);
 
@@ -182,6 +182,7 @@ static const EnumPropertyItem *dt_layers_select_src_itemf(bContext *C,
       Mesh *me_eval;
       int num_data, i;
 
+      Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
       Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
       Object *ob_src_eval = DEG_get_evaluated_object(depsgraph, ob_src);
 
@@ -253,16 +254,12 @@ static const EnumPropertyItem *dt_layers_select_itemf(bContext *C,
     if (reverse_transfer) {
       return dt_layers_select_src_itemf(C, ptr, prop, r_free);
     }
-    else {
-      return dt_layers_select_dst_itemf(C, ptr, prop, r_free);
-    }
-  }
-  else if (reverse_transfer) {
     return dt_layers_select_dst_itemf(C, ptr, prop, r_free);
   }
-  else {
-    return dt_layers_select_src_itemf(C, ptr, prop, r_free);
+  if (reverse_transfer) {
+    return dt_layers_select_dst_itemf(C, ptr, prop, r_free);
   }
+  return dt_layers_select_src_itemf(C, ptr, prop, r_free);
 }
 
 /* Note: rna_enum_dt_mix_mode_items enum is from rna_modifier.c */
@@ -380,7 +377,7 @@ static bool data_transfer_exec_is_object_valid(wmOperator *op,
     me->id.tag &= ~LIB_TAG_DOIT;
     return true;
   }
-  else if (!ID_IS_LINKED(me)) {
+  if (!ID_IS_LINKED(me) && !ID_IS_OVERRIDE_LIBRARY(me)) {
     /* Do not apply transfer operation more than once. */
     /* XXX This is not nice regarding vgroups, which are half-Object data... :/ */
     BKE_reportf(
@@ -396,7 +393,7 @@ static bool data_transfer_exec_is_object_valid(wmOperator *op,
 static int data_transfer_exec(bContext *C, wmOperator *op)
 {
   Object *ob_src = ED_object_active_context(C);
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
 
   ListBase ctx_objects;
@@ -445,8 +442,8 @@ static int data_transfer_exec(bContext *C, wmOperator *op)
     return OPERATOR_FINISHED;
   }
 
-  if (reverse_transfer && ID_IS_LINKED(ob_src->data)) {
-    /* Do not transfer to linked data, not supported. */
+  if (reverse_transfer && (ID_IS_LINKED(ob_src->data) || ID_IS_OVERRIDE_LIBRARY(ob_src->data))) {
+    /* Do not transfer to linked or override data, not supported. */
     return OPERATOR_CANCELLED;
   }
 
@@ -494,11 +491,15 @@ static int data_transfer_exec(bContext *C, wmOperator *op)
                                         NULL,
                                         false,
                                         op->reports)) {
+
+        if (data_type == DT_TYPE_LNOR && use_create) {
+          ((Mesh *)ob_dst->data)->flag |= ME_AUTOSMOOTH;
+        }
+
+        DEG_id_tag_update(&ob_dst->id, ID_RECALC_GEOMETRY);
         changed = true;
       }
     }
-
-    DEG_id_tag_update(&ob_dst->id, ID_RECALC_GEOMETRY);
 
     if (reverse_transfer) {
       SWAP(Object *, ob_src, ob_dst);
@@ -519,12 +520,13 @@ static int data_transfer_exec(bContext *C, wmOperator *op)
 }
 
 /* Used by both OBJECT_OT_data_transfer and OBJECT_OT_datalayout_transfer */
-/* Note this context poll is only really partial, it cannot check for all possible invalid cases. */
+/* Note this context poll is only really partial,
+ * it cannot check for all possible invalid cases. */
 static bool data_transfer_poll(bContext *C)
 {
   Object *ob = ED_object_active_context(C);
   ID *data = (ob) ? ob->data : NULL;
-  return (ob && ob->type == OB_MESH && data);
+  return (ob != NULL && ob->type == OB_MESH && data != NULL);
 }
 
 /* Used by both OBJECT_OT_data_transfer and OBJECT_OT_datalayout_transfer */
@@ -611,7 +613,7 @@ void OBJECT_OT_data_transfer(wmOperatorType *ot)
   ot->check = data_transfer_check;
 
   /* Flags.*/
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_USE_EVAL_DATA;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   /* Properties.*/
   prop = RNA_def_boolean(ot->srna,
@@ -758,29 +760,29 @@ void OBJECT_OT_data_transfer(wmOperatorType *ot)
 
 static bool datalayout_transfer_poll(bContext *C)
 {
-  return (edit_modifier_poll_generic(C, &RNA_DataTransferModifier, (1 << OB_MESH)) ||
+  return (edit_modifier_poll_generic(C, &RNA_DataTransferModifier, (1 << OB_MESH), true) ||
           data_transfer_poll(C));
 }
 
 static int datalayout_transfer_exec(bContext *C, wmOperator *op)
 {
   Object *ob_act = ED_object_active_context(C);
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
   DataTransferModifierData *dtmd;
 
   dtmd = (DataTransferModifierData *)edit_modifier_property_get(
       op, ob_act, eModifierType_DataTransfer);
 
-  /* If we have a modifier, we transfer data layout from this modifier's source object to active one.
-   * Else, we transfer data layout from active object to all selected ones. */
+  /* If we have a modifier, we transfer data layout from this modifier's source object to
+   * active one. Else, we transfer data layout from active object to all selected ones. */
   if (dtmd) {
     Object *ob_src = dtmd->ob_source;
     Object *ob_dst = ob_act;
 
     const bool use_delete = false; /* Never when used from modifier, for now. */
 
-    if (!ob_src) {
+    if (!ob_src || ID_IS_LINKED(ob_dst) || ID_IS_OVERRIDE_LIBRARY(ob_dst)) {
       return OPERATOR_CANCELLED;
     }
 
@@ -840,6 +842,7 @@ static int datalayout_transfer_exec(bContext *C, wmOperator *op)
     BLI_freelistN(&ctx_objects);
   }
 
+  DEG_relations_tag_update(CTX_data_main(C));
   WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, NULL);
 
   return OPERATOR_FINISHED;
@@ -847,12 +850,10 @@ static int datalayout_transfer_exec(bContext *C, wmOperator *op)
 
 static int datalayout_transfer_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-  if (edit_modifier_invoke_properties(C, op)) {
+  if (edit_modifier_invoke_properties(C, op, NULL, NULL)) {
     return datalayout_transfer_exec(C, op);
   }
-  else {
-    return WM_menu_invoke(C, op, event);
-  }
+  return WM_menu_invoke(C, op, event);
 }
 
 void OBJECT_OT_datalayout_transfer(wmOperatorType *ot)
@@ -870,7 +871,7 @@ void OBJECT_OT_datalayout_transfer(wmOperatorType *ot)
   ot->check = data_transfer_check;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_USE_EVAL_DATA;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   /* Properties.*/
   edit_modifier_properties(ot);

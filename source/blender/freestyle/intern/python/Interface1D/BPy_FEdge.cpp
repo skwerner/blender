@@ -22,9 +22,9 @@
 
 #include "../BPy_Convert.h"
 #include "../BPy_Id.h"
+#include "../BPy_Nature.h"
 #include "../Interface0D/BPy_SVertex.h"
 #include "../Interface1D/BPy_ViewEdge.h"
-#include "../BPy_Nature.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -74,10 +74,12 @@ static int FEdge_init(BPy_FEdge *self, PyObject *args, PyObject *kwds)
   PyObject *obj1 = 0, *obj2 = 0;
 
   if (PyArg_ParseTupleAndKeywords(args, kwds, "|O!", (char **)kwlist_1, &FEdge_Type, &obj1)) {
-    if (!obj1)
+    if (!obj1) {
       self->fe = new FEdge();
-    else
+    }
+    else {
       self->fe = new FEdge(*(((BPy_FEdge *)obj1)->fe));
+    }
   }
   else if (PyErr_Clear(),
            PyArg_ParseTupleAndKeywords(args,
@@ -108,12 +110,14 @@ static Py_ssize_t FEdge_sq_length(BPy_FEdge * /*self*/)
 
 static PyObject *FEdge_sq_item(BPy_FEdge *self, int keynum)
 {
-  if (keynum < 0)
+  if (keynum < 0) {
     keynum += FEdge_sq_length(self);
+  }
   if (keynum == 0 || keynum == 1) {
     SVertex *v = self->fe->operator[](keynum);
-    if (v)
+    if (v) {
       return BPy_SVertex_from_SVertex(*v);
+    }
     Py_RETURN_NONE;
   }
   PyErr_Format(PyExc_IndexError, "FEdge[index]: index %d out of range", keynum);
@@ -143,8 +147,9 @@ PyDoc_STRVAR(FEdge_first_svertex_doc,
 static PyObject *FEdge_first_svertex_get(BPy_FEdge *self, void *UNUSED(closure))
 {
   SVertex *A = self->fe->vertexA();
-  if (A)
+  if (A) {
     return BPy_SVertex_from_SVertex(*A);
+  }
   Py_RETURN_NONE;
 }
 
@@ -166,8 +171,9 @@ PyDoc_STRVAR(FEdge_second_svertex_doc,
 static PyObject *FEdge_second_svertex_get(BPy_FEdge *self, void *UNUSED(closure))
 {
   SVertex *B = self->fe->vertexB();
-  if (B)
+  if (B) {
     return BPy_SVertex_from_SVertex(*B);
+  }
   Py_RETURN_NONE;
 }
 
@@ -190,8 +196,9 @@ PyDoc_STRVAR(FEdge_next_fedge_doc,
 static PyObject *FEdge_next_fedge_get(BPy_FEdge *self, void *UNUSED(closure))
 {
   FEdge *fe = self->fe->nextEdge();
-  if (fe)
+  if (fe) {
     return Any_BPy_FEdge_from_FEdge(*fe);
+  }
   Py_RETURN_NONE;
 }
 
@@ -214,8 +221,9 @@ PyDoc_STRVAR(FEdge_previous_fedge_doc,
 static PyObject *FEdge_previous_fedge_get(BPy_FEdge *self, void *UNUSED(closure))
 {
   FEdge *fe = self->fe->previousEdge();
-  if (fe)
+  if (fe) {
     return Any_BPy_FEdge_from_FEdge(*fe);
+  }
   Py_RETURN_NONE;
 }
 
@@ -237,8 +245,9 @@ PyDoc_STRVAR(FEdge_viewedge_doc,
 static PyObject *FEdge_viewedge_get(BPy_FEdge *self, void *UNUSED(closure))
 {
   ViewEdge *ve = self->fe->viewedge();
-  if (ve)
+  if (ve) {
     return BPy_ViewEdge_from_ViewEdge(*ve);
+  }
   Py_RETURN_NONE;
 }
 
@@ -314,42 +323,34 @@ static int FEdge_nature_set(BPy_FEdge *self, PyObject *value, void *UNUSED(closu
 }
 
 static PyGetSetDef BPy_FEdge_getseters[] = {
-    {(char *)"first_svertex",
+    {"first_svertex",
      (getter)FEdge_first_svertex_get,
      (setter)FEdge_first_svertex_set,
-     (char *)FEdge_first_svertex_doc,
+     FEdge_first_svertex_doc,
      NULL},
-    {(char *)"second_svertex",
+    {"second_svertex",
      (getter)FEdge_second_svertex_get,
      (setter)FEdge_second_svertex_set,
-     (char *)FEdge_second_svertex_doc,
+     FEdge_second_svertex_doc,
      NULL},
-    {(char *)"next_fedge",
+    {"next_fedge",
      (getter)FEdge_next_fedge_get,
      (setter)FEdge_next_fedge_set,
-     (char *)FEdge_next_fedge_doc,
+     FEdge_next_fedge_doc,
      NULL},
-    {(char *)"previous_fedge",
+    {"previous_fedge",
      (getter)FEdge_previous_fedge_get,
      (setter)FEdge_previous_fedge_set,
-     (char *)FEdge_previous_fedge_doc,
+     FEdge_previous_fedge_doc,
      NULL},
-    {(char *)"viewedge",
-     (getter)FEdge_viewedge_get,
-     (setter)FEdge_viewedge_set,
-     (char *)FEdge_viewedge_doc,
-     NULL},
-    {(char *)"is_smooth",
+    {"viewedge", (getter)FEdge_viewedge_get, (setter)FEdge_viewedge_set, FEdge_viewedge_doc, NULL},
+    {"is_smooth",
      (getter)FEdge_is_smooth_get,
      (setter)FEdge_is_smooth_set,
-     (char *)FEdge_is_smooth_doc,
+     FEdge_is_smooth_doc,
      NULL},
-    {(char *)"id", (getter)FEdge_id_get, (setter)FEdge_id_set, (char *)FEdge_id_doc, NULL},
-    {(char *)"nature",
-     (getter)FEdge_nature_get,
-     (setter)FEdge_nature_set,
-     (char *)FEdge_nature_doc,
-     NULL},
+    {"id", (getter)FEdge_id_get, (setter)FEdge_id_set, FEdge_id_doc, NULL},
+    {"nature", (getter)FEdge_nature_get, (setter)FEdge_nature_set, FEdge_nature_doc, NULL},
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };
 

@@ -35,11 +35,11 @@
 #  define __NODES_FEATURES__ NODE_FEATURE_ALL
 #endif
 
+#include "util/util_half.h"
 #include "util/util_math.h"
 #include "util/util_simd.h"
-#include "util/util_half.h"
-#include "util/util_types.h"
 #include "util/util_texture.h"
+#include "util/util_types.h"
 
 #define ccl_addr_space
 
@@ -79,7 +79,7 @@ template<typename T> struct texture {
   }
 #if defined(__KERNEL_AVX__) || defined(__KERNEL_AVX2__)
   /* Reads 256 bytes but indexes in blocks of 128 bytes to maintain
-   * compatibility with existing indicies and data structures.
+   * compatibility with existing indices and data structures.
    */
   ccl_always_inline avxf fetch_avxf(const int index)
   {

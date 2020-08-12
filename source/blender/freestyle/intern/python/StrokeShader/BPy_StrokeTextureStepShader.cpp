@@ -56,13 +56,14 @@ static int StrokeTextureStepShader___init__(BPy_StrokeTextureStepShader *self,
   static const char *kwlist[] = {"step", NULL};
   float step = 0.1;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "f", (char **)kwlist, &step))
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "f", (char **)kwlist, &step)) {
     return -1;
+  }
   self->py_ss.ss = new StrokeShaders::StrokeTextureStepShader(step);
   return 0;
 }
 
-/*-----------------------BPy_StrokeTextureStepShader type definition ------------------------------*/
+/*-----------------------BPy_StrokeTextureStepShader type definition ----------------------------*/
 
 PyTypeObject StrokeTextureStepShader_Type = {
     PyVarObject_HEAD_INIT(NULL, 0) "StrokeTextureStepShader", /* tp_name */

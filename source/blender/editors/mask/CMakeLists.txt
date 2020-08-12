@@ -26,8 +26,8 @@ set(INC
   ../../makesdna
   ../../makesrna
   ../../windowmanager
-  ../../../../intern/guardedalloc
   ../../../../intern/glew-mx
+  ../../../../intern/guardedalloc
 )
 
 set(INC_SYS
@@ -40,6 +40,7 @@ set(SRC
   mask_edit.c
   mask_editaction.c
   mask_ops.c
+  mask_query.c
   mask_relationships.c
   mask_select.c
   mask_shapekey.c

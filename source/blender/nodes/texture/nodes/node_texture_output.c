@@ -21,14 +21,14 @@
  * \ingroup texnodes
  */
 
-#include "node_texture_util.h"
 #include "NOD_texture.h"
+#include "node_texture_util.h"
 
 /* **************** COMPOSITE ******************** */
 static bNodeSocketTemplate inputs[] = {
-    {SOCK_RGBA, 1, N_("Color"), 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_VECTOR, 1, N_("Normal"), 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, PROP_DIRECTION},
-    {-1, 0, ""},
+    {SOCK_RGBA, N_("Color"), 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_VECTOR, N_("Normal"), 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, PROP_DIRECTION},
+    {-1, ""},
 };
 
 /* applies to render pipeline */
@@ -46,10 +46,12 @@ static void exec(void *data,
     TexParams params;
     params_from_cdata(&params, cdata);
 
-    if (in[1] && in[1]->hasinput && !in[0]->hasinput)
+    if (in[1] && in[1]->hasinput && !in[0]->hasinput) {
       tex_input_rgba(&target->tr, in[1], &params, cdata->thread);
-    else
+    }
+    else {
       tex_input_rgba(&target->tr, in[0], &params, cdata->thread);
+    }
     tex_do_preview(execdata->preview, params.co, &target->tr, cdata->do_manage);
   }
   else {
@@ -64,10 +66,12 @@ static void exec(void *data,
       target->talpha = true;
 
       if (target->nor) {
-        if (in[1] && in[1]->hasinput)
+        if (in[1] && in[1]->hasinput) {
           tex_input_vec(target->nor, in[1], &params, cdata->thread);
-        else
+        }
+        else {
           target->nor = NULL;
+        }
       }
     }
   }
@@ -84,8 +88,9 @@ static void unique_name(bNode *node)
 
   new_name[0] = '\0';
   i = node;
-  while (i->prev)
+  while (i->prev) {
     i = i->prev;
+  }
   for (; i; i = i->next) {
     if (i == node || i->type != TEX_NODE_OUTPUT ||
         !STREQ(name, ((TexNodeOutput *)(i->storage))->name)) {
@@ -100,8 +105,9 @@ static void unique_name(bNode *node)
       else {
         suffix = 0;
         new_len = len + 4;
-        if (new_len > (sizeof(tno->name) - 1))
+        if (new_len > (sizeof(tno->name) - 1)) {
           new_len = (sizeof(tno->name) - 1);
+        }
       }
 
       BLI_strncpy(new_name, name, sizeof(tno->name));
@@ -121,16 +127,19 @@ static void assign_index(struct bNode *node)
   int index = 1;
 
   tnode = node;
-  while (tnode->prev)
+  while (tnode->prev) {
     tnode = tnode->prev;
+  }
 
 check_index:
-  for (; tnode; tnode = tnode->next)
-    if (tnode->type == TEX_NODE_OUTPUT && tnode != node)
+  for (; tnode; tnode = tnode->next) {
+    if (tnode->type == TEX_NODE_OUTPUT && tnode != node) {
       if (tnode->custom1 == index) {
         index++;
         goto check_index;
       }
+    }
+  }
 
   node->custom1 = index;
 }
@@ -145,7 +154,7 @@ static void init(bNodeTree *UNUSED(ntree), bNode *node)
   assign_index(node);
 }
 
-static void copy(bNodeTree *dest_ntree, bNode *dest_node, bNode *src_node)
+static void copy(bNodeTree *dest_ntree, bNode *dest_node, const bNode *src_node)
 {
   node_copy_standard_storage(dest_ntree, dest_node, src_node);
   unique_name(dest_node);

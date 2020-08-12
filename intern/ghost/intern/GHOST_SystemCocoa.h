@@ -87,7 +87,8 @@ class GHOST_SystemCocoa : public GHOST_System {
    * Create a new window.
    * The new window is added to the list of windows managed.
    * Never explicitly delete the window, use disposeWindow() instead.
-   * \param   title           The name of the window (displayed in the title bar of the window if the OS supports it).
+   * \param   title           The name of the window
+   * (displayed in the title bar of the window if the OS supports it).
    * \param   left            The coordinate of the left edge of the window.
    * \param   top             The coordinate of the top edge of the window.
    * \param   width           The width the window.
@@ -99,7 +100,7 @@ class GHOST_SystemCocoa : public GHOST_System {
    * \param   parentWindow    Parent (embedder) window
    * \return  The new window (or 0 if creation failed).
    */
-  GHOST_IWindow *createWindow(const STR_String &title,
+  GHOST_IWindow *createWindow(const char *title,
                               GHOST_TInt32 left,
                               GHOST_TInt32 top,
                               GHOST_TUns32 width,
@@ -108,7 +109,8 @@ class GHOST_SystemCocoa : public GHOST_System {
                               GHOST_TDrawingContextType type,
                               GHOST_GLSettings glSettings,
                               const bool exclusive = false,
-                              const GHOST_TEmbedderWindowID parentWindow = 0);
+                              const bool is_dialog = false,
+                              const GHOST_IWindow *parentWindow = NULL);
 
   /**
    * Create a new offscreen context.
@@ -139,7 +141,7 @@ class GHOST_SystemCocoa : public GHOST_System {
    * Handle User request to quit, from Menu bar Quit, and Cmd+Q
    * Display alert panel if changes performed since last save
    */
-  GHOST_TUns8 handleQuitRequest();
+  void handleQuitRequest();
 
   /**
    * Handle Cocoa openFile event
@@ -150,7 +152,8 @@ class GHOST_SystemCocoa : public GHOST_System {
   /**
    * Handles a drag'n'drop destination event. Called by GHOST_WindowCocoa window subclass
    * \param eventType The type of drag'n'drop event
-   * \param draggedObjectType The type object concerned (currently array of file names, string, TIFF image)
+   * \param draggedObjectType The type object concerned
+   * (currently array of file names, string, TIFF image)
    * \param mouseX x mouse coordinate (in cocoa base window coordinates)
    * \param mouseY y mouse coordinate
    * \param window The window on which the event occurred
@@ -195,7 +198,7 @@ class GHOST_SystemCocoa : public GHOST_System {
   GHOST_TSuccess getModifierKeys(GHOST_ModifierKeys &keys) const;
 
   /**
-   * Returns the state of the mouse buttons (ouside the message queue).
+   * Returns the state of the mouse buttons (outside the message queue).
    * \param buttons   The state of the buttons.
    * \return          Indication of success.
    */
@@ -228,6 +231,11 @@ class GHOST_SystemCocoa : public GHOST_System {
    * \return Indication whether the event was handled.
    */
   GHOST_TSuccess handleApplicationBecomeActiveEvent();
+
+  /**
+   * \return True if any dialog window is open.
+   */
+  bool hasDialogWindow();
 
   /**
    * External objects should call this when they send an event outside processEvents.
@@ -267,11 +275,6 @@ class GHOST_SystemCocoa : public GHOST_System {
    */
   GHOST_TSuccess handleKeyEvent(void *eventPtr);
 
-  /**
-   * Informs if the system provides native dialogs (eg. confirm quit)
-   */
-  virtual bool supportsNativeDialogs(void);
-
  protected:
   /**
    * Initializes the system.
@@ -291,10 +294,12 @@ class GHOST_SystemCocoa : public GHOST_System {
   /** Start time at initialization. */
   GHOST_TUns64 m_start_time;
 
-  /** Event has been processed directly by Cocoa (or NDOF manager) and has sent a ghost event to be dispatched */
+  /** Event has been processed directly by Cocoa (or NDOF manager)
+   * and has sent a ghost event to be dispatched */
   bool m_outsideLoopEventProcessed;
 
-  /** Raised window is not yet known by the window manager, so delay application become active event handling */
+  /** Raised window is not yet known by the window manager,
+   * so delay application become active event handling */
   bool m_needDelayedApplicationBecomeActiveEventProcessing;
 
   /** State of the modifiers. */

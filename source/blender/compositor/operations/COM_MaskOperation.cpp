@@ -23,9 +23,7 @@
 #include "BLI_listbase.h"
 #include "BLI_math.h"
 
-extern "C" {
 #include "BKE_mask.h"
-}
 
 MaskOperation::MaskOperation() : NodeOperation()
 {
@@ -134,8 +132,10 @@ void MaskOperation::executePixelSampled(float output[4],
                                         float y,
                                         PixelSampler /*sampler*/)
 {
-  const float xy[2] = {(x * this->m_maskWidthInv) + this->m_mask_px_ofs[0],
-                       (y * this->m_maskHeightInv) + this->m_mask_px_ofs[1]};
+  const float xy[2] = {
+      (x * this->m_maskWidthInv) + this->m_mask_px_ofs[0],
+      (y * this->m_maskHeightInv) + this->m_mask_px_ofs[1],
+  };
 
   if (this->m_rasterMaskHandleTot == 1) {
     if (this->m_rasterMaskHandles[0]) {
@@ -146,7 +146,7 @@ void MaskOperation::executePixelSampled(float output[4],
     }
   }
   else {
-    /* incase loop below fails */
+    /* In case loop below fails. */
     output[0] = 0.0f;
 
     for (unsigned int i = 0; i < this->m_rasterMaskHandleTot; i++) {

@@ -17,8 +17,8 @@
 #include "util/util_system.h"
 
 #include "util/util_logging.h"
-#include "util/util_types.h"
 #include "util/util_string.h"
+#include "util/util_types.h"
 
 #include <numaapi.h>
 
@@ -35,8 +35,8 @@ OIIO_NAMESPACE_USING
 #  include <sys/sysctl.h>
 #  include <sys/types.h>
 #else
-#  include <unistd.h>
 #  include <sys/ioctl.h>
+#  include <unistd.h>
 #endif
 
 CCL_NAMESPACE_BEGIN
@@ -357,7 +357,7 @@ size_t system_physical_ram()
   MEMORYSTATUSEX ram;
   ram.dwLength = sizeof(ram);
   GlobalMemoryStatusEx(&ram);
-  return ram.ullTotalPhys * 1024;
+  return ram.ullTotalPhys;
 #elif defined(__APPLE__)
   uint64_t ram = 0;
   size_t len = sizeof(ram);

@@ -25,10 +25,10 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_blenlib.h"
 #include "BLI_math.h"
 #include "BLI_stack.h"
+#include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
@@ -39,15 +39,18 @@
 #include "DNA_object_types.h"
 #include "DNA_windowmanager_types.h"
 
-#include "BKE_main.h"
 #include "BKE_brush.h"
-#include "BKE_deform.h"
-#include "BKE_image.h"
-#include "BKE_gpencil.h"
-#include "BKE_material.h"
 #include "BKE_context.h"
-#include "BKE_screen.h"
+#include "BKE_deform.h"
+#include "BKE_gpencil.h"
+#include "BKE_gpencil_geom.h"
+#include "BKE_image.h"
+#include "BKE_lib_id.h"
+#include "BKE_main.h"
+#include "BKE_material.h"
 #include "BKE_paint.h"
+#include "BKE_report.h"
+#include "BKE_screen.h"
 
 #include "ED_gpencil.h"
 #include "ED_screen.h"
@@ -60,10 +63,9 @@
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
 
-#include "GPU_immediate.h"
-#include "GPU_draw.h"
-#include "GPU_matrix.h"
 #include "GPU_framebuffer.h"
+#include "GPU_immediate.h"
+#include "GPU_matrix.h"
 #include "GPU_state.h"
 
 #include "UI_interface.h"
@@ -91,13 +93,13 @@ typedef struct tGPDfill {
   /** current active gp object */
   struct Object *ob;
   /** area where painting originated */
-  struct ScrArea *sa;
+  struct ScrArea *area;
   /** region where painting originated */
   struct RegionView3D *rv3d;
   /** view3 where painting originated */
   struct View3D *v3d;
   /** region where painting originated */
-  struct ARegion *ar;
+  struct ARegion *region;
   /** current GP datablock */
   struct bGPdata *gpd;
   /** current material */
@@ -134,8 +136,11 @@ typedef struct tGPDfill {
   /* scaling factor */
   short fill_factor;
 
+  /* Frame to use. */
+  int active_cfra;
+
   /** number of elements currently in cache */
-  short sbuffer_size;
+  short sbuffer_used;
   /** temporary points */
   void *sbuffer;
   /** depth array for reproject */
@@ -157,13 +162,13 @@ typedef struct tGPDfill {
 } tGPDfill;
 
 /* draw a given stroke using same thickness and color for all points */
-static void gp_draw_basic_stroke(tGPDfill *tgpf,
-                                 bGPDstroke *gps,
-                                 const float diff_mat[4][4],
-                                 const bool cyclic,
-                                 const float ink[4],
-                                 const int flag,
-                                 const float thershold)
+static void gpencil_draw_basic_stroke(tGPDfill *tgpf,
+                                      bGPDstroke *gps,
+                                      const float diff_mat[4][4],
+                                      const bool cyclic,
+                                      const float ink[4],
+                                      const int flag,
+                                      const float thershold)
 {
   bGPDspoint *points = gps->points;
 
@@ -218,7 +223,7 @@ static void gp_draw_basic_stroke(tGPDfill *tgpf,
 }
 
 /* loop all layers */
-static void gp_draw_datablock(tGPDfill *tgpf, const float ink[4])
+static void gpencil_draw_datablock(tGPDfill *tgpf, const float ink[4])
 {
   /* duplicated: etempFlags */
   enum {
@@ -228,7 +233,6 @@ static void gp_draw_datablock(tGPDfill *tgpf, const float ink[4])
 
   Object *ob = tgpf->ob;
   bGPdata *gpd = tgpf->gpd;
-  int cfra_eval = (int)DEG_get_ctime(tgpf->depsgraph);
 
   tGPDdraw tgpw;
   tgpw.rv3d = tgpf->rv3d;
@@ -237,42 +241,44 @@ static void gp_draw_datablock(tGPDfill *tgpf, const float ink[4])
   tgpw.gpd = gpd;
   tgpw.offsx = 0;
   tgpw.offsy = 0;
-  tgpw.winx = tgpf->ar->winx;
-  tgpw.winy = tgpf->ar->winy;
+  tgpw.winx = tgpf->region->winx;
+  tgpw.winy = tgpf->region->winy;
   tgpw.dflag = 0;
   tgpw.disable_fill = 1;
   tgpw.dflag |= (GP_DRAWFILLS_ONLY3D | GP_DRAWFILLS_NOSTATUS);
 
   GPU_blend(true);
 
-  for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
+  LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
     /* calculate parent position */
-    ED_gpencil_parent_location(tgpw.depsgraph, ob, gpd, gpl, tgpw.diff_mat);
+    BKE_gpencil_parent_matrix_get(tgpw.depsgraph, ob, gpl, tgpw.diff_mat);
 
     /* do not draw layer if hidden */
-    if (gpl->flag & GP_LAYER_HIDE)
+    if (gpl->flag & GP_LAYER_HIDE) {
       continue;
+    }
 
     /* if active layer and no keyframe, create a new one */
     if (gpl == tgpf->gpl) {
-      if ((gpl->actframe == NULL) || (gpl->actframe->framenum != cfra_eval)) {
-        BKE_gpencil_layer_getframe(gpl, cfra_eval, GP_GETFRAME_ADD_NEW);
+      if ((gpl->actframe == NULL) || (gpl->actframe->framenum != tgpf->active_cfra)) {
+        BKE_gpencil_layer_frame_get(gpl, tgpf->active_cfra, GP_GETFRAME_ADD_NEW);
       }
     }
 
     /* get frame to draw */
-    bGPDframe *gpf = BKE_gpencil_layer_getframe(gpl, cfra_eval, GP_GETFRAME_USE_PREV);
-    if (gpf == NULL)
+    bGPDframe *gpf = BKE_gpencil_layer_frame_get(gpl, tgpf->active_cfra, GP_GETFRAME_USE_PREV);
+    if (gpf == NULL) {
       continue;
+    }
 
-    for (bGPDstroke *gps = gpf->strokes.first; gps; gps = gps->next) {
+    LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
       /* check if stroke can be drawn */
       if ((gps->points == NULL) || (gps->totpoints < 2)) {
         continue;
       }
       /* check if the color is visible */
-      MaterialGPencilStyle *gp_style = BKE_material_gpencil_settings_get(ob, gps->mat_nr + 1);
-      if ((gp_style == NULL) || (gp_style->flag & GP_STYLE_COLOR_HIDE)) {
+      MaterialGPencilStyle *gp_style = BKE_gpencil_material_settings(ob, gps->mat_nr + 1);
+      if ((gp_style == NULL) || (gp_style->flag & GP_MATERIAL_HIDE)) {
         continue;
       }
 
@@ -289,25 +295,22 @@ static void gp_draw_datablock(tGPDfill *tgpf, const float ink[4])
       tgpw.onion = true;
       tgpw.custonion = true;
 
-      bool textured_stroke = (gp_style->stroke_style == GP_STYLE_STROKE_STYLE_TEXTURE);
-
       /* normal strokes */
-      if (((tgpf->fill_draw_mode == GP_FILL_DMODE_STROKE) ||
-           (tgpf->fill_draw_mode == GP_FILL_DMODE_BOTH)) &&
-          !textured_stroke) {
-        ED_gp_draw_fill(&tgpw);
+      if ((tgpf->fill_draw_mode == GP_FILL_DMODE_STROKE) ||
+          (tgpf->fill_draw_mode == GP_FILL_DMODE_BOTH)) {
+        ED_gpencil_draw_fill(&tgpw);
       }
 
       /* 3D Lines with basic shapes and invisible lines */
       if ((tgpf->fill_draw_mode == GP_FILL_DMODE_CONTROL) ||
-          (tgpf->fill_draw_mode == GP_FILL_DMODE_BOTH) || textured_stroke) {
-        gp_draw_basic_stroke(tgpf,
-                             gps,
-                             tgpw.diff_mat,
-                             gps->flag & GP_STROKE_CYCLIC,
-                             ink,
-                             tgpf->flag,
-                             tgpf->fill_threshold);
+          (tgpf->fill_draw_mode == GP_FILL_DMODE_BOTH)) {
+        gpencil_draw_basic_stroke(tgpf,
+                                  gps,
+                                  tgpw.diff_mat,
+                                  gps->flag & GP_STROKE_CYCLIC,
+                                  ink,
+                                  tgpf->flag,
+                                  tgpf->fill_threshold);
       }
     }
   }
@@ -316,7 +319,7 @@ static void gp_draw_datablock(tGPDfill *tgpf, const float ink[4])
 }
 
 /* draw strokes in offscreen buffer */
-static bool gp_render_offscreen(tGPDfill *tgpf)
+static bool gpencil_render_offscreen(tGPDfill *tgpf)
 {
   bool is_ortho = false;
   float winmat[4][4];
@@ -326,31 +329,30 @@ static bool gp_render_offscreen(tGPDfill *tgpf)
   }
 
   /* set temporary new size */
-  tgpf->bwinx = tgpf->ar->winx;
-  tgpf->bwiny = tgpf->ar->winy;
-  tgpf->brect = tgpf->ar->winrct;
+  tgpf->bwinx = tgpf->region->winx;
+  tgpf->bwiny = tgpf->region->winy;
+  tgpf->brect = tgpf->region->winrct;
 
-  /* resize ar */
-  tgpf->ar->winrct.xmin = 0;
-  tgpf->ar->winrct.ymin = 0;
-  tgpf->ar->winrct.xmax = (int)tgpf->ar->winx * tgpf->fill_factor;
-  tgpf->ar->winrct.ymax = (int)tgpf->ar->winy * tgpf->fill_factor;
-  tgpf->ar->winx = (short)abs(tgpf->ar->winrct.xmax - tgpf->ar->winrct.xmin);
-  tgpf->ar->winy = (short)abs(tgpf->ar->winrct.ymax - tgpf->ar->winrct.ymin);
+  /* resize region */
+  tgpf->region->winrct.xmin = 0;
+  tgpf->region->winrct.ymin = 0;
+  tgpf->region->winrct.xmax = (int)tgpf->region->winx * tgpf->fill_factor;
+  tgpf->region->winrct.ymax = (int)tgpf->region->winy * tgpf->fill_factor;
+  tgpf->region->winx = (short)abs(tgpf->region->winrct.xmax - tgpf->region->winrct.xmin);
+  tgpf->region->winy = (short)abs(tgpf->region->winrct.ymax - tgpf->region->winrct.ymin);
 
   /* save new size */
-  tgpf->sizex = (int)tgpf->ar->winx;
-  tgpf->sizey = (int)tgpf->ar->winy;
+  tgpf->sizex = (int)tgpf->region->winx;
+  tgpf->sizey = (int)tgpf->region->winy;
 
   /* adjust center */
   float center[2];
-  center[0] = (float)tgpf->center[0] * ((float)tgpf->ar->winx / (float)tgpf->bwinx);
-  center[1] = (float)tgpf->center[1] * ((float)tgpf->ar->winy / (float)tgpf->bwiny);
+  center[0] = (float)tgpf->center[0] * ((float)tgpf->region->winx / (float)tgpf->bwinx);
+  center[1] = (float)tgpf->center[1] * ((float)tgpf->region->winy / (float)tgpf->bwiny);
   round_v2i_v2fl(tgpf->center, center);
 
   char err_out[256] = "unknown";
-  GPUOffScreen *offscreen = GPU_offscreen_create(
-      tgpf->sizex, tgpf->sizey, 0, true, false, err_out);
+  GPUOffScreen *offscreen = GPU_offscreen_create(tgpf->sizex, tgpf->sizey, true, false, err_out);
   if (offscreen == NULL) {
     printf("GPencil - Fill - Unable to create fill buffer\n");
     return false;
@@ -396,17 +398,18 @@ static bool gp_render_offscreen(tGPDfill *tgpf)
   GPU_matrix_push();
   GPU_matrix_identity_set();
 
-  glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  GPU_clear_color(0.0f, 0.0f, 0.0f, 0.0f);
+  GPU_clear(GPU_COLOR_BIT | GPU_DEPTH_BIT);
 
-  ED_view3d_update_viewmat(tgpf->depsgraph, tgpf->scene, tgpf->v3d, tgpf->ar, NULL, winmat, NULL);
+  ED_view3d_update_viewmat(
+      tgpf->depsgraph, tgpf->scene, tgpf->v3d, tgpf->region, NULL, winmat, NULL, true);
   /* set for opengl */
   GPU_matrix_projection_set(tgpf->rv3d->winmat);
   GPU_matrix_set(tgpf->rv3d->viewmat);
 
   /* draw strokes */
   float ink[4] = {1.0f, 0.0f, 0.0f, 1.0f};
-  gp_draw_datablock(tgpf, ink);
+  gpencil_draw_datablock(tgpf, ink);
 
   GPU_matrix_pop_projection();
   GPU_matrix_pop();
@@ -443,7 +446,7 @@ static void get_pixel(const ImBuf *ibuf, const int idx, float r_col[4])
   }
   else {
     /* XXX: This case probably doesn't happen, as we only write to the float buffer,
-     * but we get compiler warnings about uninitialised vars otherwise
+     * but we get compiler warnings about uninitialized vars otherwise
      */
     BLI_assert(!"gpencil_fill.c - get_pixel() non-float case is used!");
     zero_v4(r_col);
@@ -453,7 +456,7 @@ static void get_pixel(const ImBuf *ibuf, const int idx, float r_col[4])
 /* set pixel data (rgba) at index */
 static void set_pixel(ImBuf *ibuf, int idx, const float col[4])
 {
-  //BLI_assert(idx <= ibuf->x * ibuf->y);
+  // BLI_assert(idx <= ibuf->x * ibuf->y);
   if (ibuf->rect) {
     uint *rrect = &ibuf->rect[idx];
     uchar ccol[4];
@@ -468,15 +471,16 @@ static void set_pixel(ImBuf *ibuf, int idx, const float col[4])
   }
 }
 
-/* check if the size of the leak is narrow to determine if the stroke is closed
+/**
+ * Check if the size of the leak is narrow to determine if the stroke is closed
  * this is used for strokes with small gaps between them to get a full fill
  * and do not get a full screen fill.
  *
- * \param ibuf: Image pixel data
- * \param maxpixel: Maximum index
- * \param limit: Limit of pixels to analyze
- * \param index: Index of current pixel
- * \param type: 0-Horizontal 1-Vertical
+ * \param ibuf: Image pixel data.
+ * \param maxpixel: Maximum index.
+ * \param limit: Limit of pixels to analyze.
+ * \param index: Index of current pixel.
+ * \param type: 0-Horizontal 1-Vertical.
  */
 static bool is_leak_narrow(ImBuf *ibuf, const int maxpixel, int limit, int index, int type)
 {
@@ -572,11 +576,12 @@ static bool is_leak_narrow(ImBuf *ibuf, const int maxpixel, int limit, int index
   return (bool)(t_a && t_b);
 }
 
-/* Boundary fill inside strokes
+/**
+ * Boundary fill inside strokes
  * Fills the space created by a set of strokes using the stroke color as the boundary
  * of the shape to fill.
  *
- * \param tgpf: Temporary fill data
+ * \param tgpf: Temporary fill data.
  */
 static void gpencil_boundaryfill_area(tGPDfill *tgpf)
 {
@@ -614,40 +619,38 @@ static void gpencil_boundaryfill_area(tGPDfill *tgpf)
 
     get_pixel(ibuf, v, rgba);
 
-    if (true) { /* Was: 'rgba' */
-      /* check if no border(red) or already filled color(green) */
-      if ((rgba[0] != 1.0f) && (rgba[1] != 1.0f)) {
-        /* fill current pixel with green */
-        set_pixel(ibuf, v, fill_col);
+    /* check if no border(red) or already filled color(green) */
+    if ((rgba[0] != 1.0f) && (rgba[1] != 1.0f)) {
+      /* fill current pixel with green */
+      set_pixel(ibuf, v, fill_col);
 
-        /* add contact pixels */
-        /* pixel left */
-        if (v - 1 >= 0) {
-          index = v - 1;
-          if (!is_leak_narrow(ibuf, maxpixel, tgpf->fill_leak, v, LEAK_HORZ)) {
-            BLI_stack_push(stack, &index);
-          }
+      /* add contact pixels */
+      /* pixel left */
+      if (v - 1 >= 0) {
+        index = v - 1;
+        if (!is_leak_narrow(ibuf, maxpixel, tgpf->fill_leak, v, LEAK_HORZ)) {
+          BLI_stack_push(stack, &index);
         }
-        /* pixel right */
-        if (v + 1 <= maxpixel) {
-          index = v + 1;
-          if (!is_leak_narrow(ibuf, maxpixel, tgpf->fill_leak, v, LEAK_HORZ)) {
-            BLI_stack_push(stack, &index);
-          }
+      }
+      /* pixel right */
+      if (v + 1 <= maxpixel) {
+        index = v + 1;
+        if (!is_leak_narrow(ibuf, maxpixel, tgpf->fill_leak, v, LEAK_HORZ)) {
+          BLI_stack_push(stack, &index);
         }
-        /* pixel top */
-        if (v + ibuf->x <= maxpixel) {
-          index = v + ibuf->x;
-          if (!is_leak_narrow(ibuf, maxpixel, tgpf->fill_leak, v, LEAK_VERT)) {
-            BLI_stack_push(stack, &index);
-          }
+      }
+      /* pixel top */
+      if (v + ibuf->x <= maxpixel) {
+        index = v + ibuf->x;
+        if (!is_leak_narrow(ibuf, maxpixel, tgpf->fill_leak, v, LEAK_VERT)) {
+          BLI_stack_push(stack, &index);
         }
-        /* pixel bottom */
-        if (v - ibuf->x >= 0) {
-          index = v - ibuf->x;
-          if (!is_leak_narrow(ibuf, maxpixel, tgpf->fill_leak, v, LEAK_VERT)) {
-            BLI_stack_push(stack, &index);
-          }
+      }
+      /* pixel bottom */
+      if (v - ibuf->x >= 0) {
+        index = v - ibuf->x;
+        if (!is_leak_narrow(ibuf, maxpixel, tgpf->fill_leak, v, LEAK_VERT)) {
+          BLI_stack_push(stack, &index);
         }
       }
     }
@@ -663,31 +666,32 @@ static void gpencil_boundaryfill_area(tGPDfill *tgpf)
   BLI_stack_free(stack);
 }
 
-/* clean external border of image to avoid infinite loops */
-static void gpencil_clean_borders(tGPDfill *tgpf)
+/* Set a border to create image limits. */
+static void gpencil_set_borders(tGPDfill *tgpf, const bool transparent)
 {
   ImBuf *ibuf;
   void *lock;
-  const float fill_col[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+  const float fill_col[2][4] = {{1.0f, 0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 0.0f, 0.0f}};
   ibuf = BKE_image_acquire_ibuf(tgpf->ima, NULL, &lock);
   int idx;
   int pixel = 0;
+  const int coloridx = transparent ? 0 : 1;
 
   /* horizontal lines */
   for (idx = 0; idx < ibuf->x; idx++) {
     /* bottom line */
-    set_pixel(ibuf, idx, fill_col);
+    set_pixel(ibuf, idx, fill_col[coloridx]);
     /* top line */
     pixel = idx + (ibuf->x * (ibuf->y - 1));
-    set_pixel(ibuf, pixel, fill_col);
+    set_pixel(ibuf, pixel, fill_col[coloridx]);
   }
   /* vertical lines */
   for (idx = 0; idx < ibuf->y; idx++) {
     /* left line */
-    set_pixel(ibuf, ibuf->x * idx, fill_col);
+    set_pixel(ibuf, ibuf->x * idx, fill_col[coloridx]);
     /* right line */
     pixel = ibuf->x * idx + (ibuf->x - 1);
-    set_pixel(ibuf, pixel, fill_col);
+    set_pixel(ibuf, pixel, fill_col[coloridx]);
   }
 
   /* release ibuf */
@@ -915,7 +919,7 @@ static void gpencil_get_depth_array(tGPDfill *tgpf)
 {
   tGPspoint *ptc;
   ToolSettings *ts = tgpf->scene->toolsettings;
-  int totpoints = tgpf->sbuffer_size;
+  int totpoints = tgpf->sbuffer_used;
   int i = 0;
 
   if (totpoints == 0) {
@@ -927,10 +931,11 @@ static void gpencil_get_depth_array(tGPDfill *tgpf)
    */
   if (ts->gpencil_v3d_align & GP_PROJECT_DEPTH_VIEW) {
     /* need to restore the original projection settings before packing up */
-    view3d_region_operator_needs_opengl(tgpf->win, tgpf->ar);
-    ED_view3d_autodist_init(tgpf->depsgraph, tgpf->ar, tgpf->v3d, 0);
+    view3d_region_operator_needs_opengl(tgpf->win, tgpf->region);
+    ED_view3d_autodist_init(tgpf->depsgraph, tgpf->region, tgpf->v3d, 0);
 
-    /* since strokes are so fine, when using their depth we need a margin otherwise they might get missed */
+    /* Since strokes are so fine, when using their depth we need a margin
+     * otherwise they might get missed. */
     int depth_margin = 0;
 
     /* get an array of depths, far depths are blended */
@@ -945,9 +950,11 @@ static void gpencil_get_depth_array(tGPDfill *tgpf)
       int mval_i[2];
       round_v2i_v2fl(mval_i, &ptc->x);
 
-      if ((ED_view3d_autodist_depth(tgpf->ar, mval_i, depth_margin, tgpf->depth_arr + i) == 0) &&
-          (i && (ED_view3d_autodist_depth_seg(
-                     tgpf->ar, mval_i, mval_prev, depth_margin + 1, tgpf->depth_arr + i) == 0))) {
+      if ((ED_view3d_autodist_depth(tgpf->region, mval_i, depth_margin, tgpf->depth_arr + i) ==
+           0) &&
+          (i &&
+           (ED_view3d_autodist_depth_seg(
+                tgpf->region, mval_i, mval_prev, depth_margin + 1, tgpf->depth_arr + i) == 0))) {
         interp_depth = true;
       }
       else {
@@ -959,8 +966,9 @@ static void gpencil_get_depth_array(tGPDfill *tgpf)
 
     if (found_depth == false) {
       /* eeh... not much we can do.. :/, ignore depth in this case */
-      for (i = totpoints - 1; i >= 0; i--)
+      for (i = totpoints - 1; i >= 0; i--) {
         tgpf->depth_arr[i] = 0.9999f;
+      }
     }
     else {
       if (interp_depth) {
@@ -979,7 +987,7 @@ static void gpencil_points_from_stack(tGPDfill *tgpf)
     return;
   }
 
-  tgpf->sbuffer_size = (short)totpoints;
+  tgpf->sbuffer_used = (short)totpoints;
   tgpf->sbuffer = MEM_callocN(sizeof(tGPspoint) * totpoints, __func__);
 
   point2D = tgpf->sbuffer;
@@ -999,8 +1007,6 @@ static void gpencil_points_from_stack(tGPDfill *tgpf)
 /* create a grease pencil stroke using points in buffer */
 static void gpencil_stroke_from_buffer(tGPDfill *tgpf)
 {
-  const int cfra_eval = (int)DEG_get_ctime(tgpf->depsgraph);
-
   ToolSettings *ts = tgpf->scene->toolsettings;
   const char *align_flag = &ts->gpencil_v3d_align;
   const bool is_depth = (bool)(*align_flag & (GP_PROJECT_DEPTH_VIEW | GP_PROJECT_DEPTH_STROKE));
@@ -1015,34 +1021,44 @@ static void gpencil_stroke_from_buffer(tGPDfill *tgpf)
   MDeformVert *dvert = NULL;
   tGPspoint *point2D;
 
-  if (tgpf->sbuffer_size == 0) {
+  if (tgpf->sbuffer_used == 0) {
     return;
   }
 
-  /* get frame or create a new one */
-  tgpf->gpf = BKE_gpencil_layer_getframe(tgpf->gpl, cfra_eval, GP_GETFRAME_ADD_NEW);
+  /* Get frame or create a new one. */
+  tgpf->gpf = BKE_gpencil_layer_frame_get(tgpf->gpl, tgpf->active_cfra, GP_GETFRAME_ADD_NEW);
+
+  /* Set frame as selected. */
+  tgpf->gpf->flag |= GP_FRAME_SELECT;
 
   /* create new stroke */
   bGPDstroke *gps = MEM_callocN(sizeof(bGPDstroke), "bGPDstroke");
   gps->thickness = brush->size;
-  gps->gradient_f = brush->gpencil_settings->gradient_f;
-  copy_v2_v2(gps->gradient_s, brush->gpencil_settings->gradient_s);
+  gps->fill_opacity_fac = 1.0f;
+  gps->hardeness = brush->gpencil_settings->hardeness;
+  copy_v2_v2(gps->aspect_ratio, brush->gpencil_settings->aspect_ratio);
   gps->inittime = 0.0f;
+
+  /* Apply the vertex color to fill. */
+  ED_gpencil_fill_vertex_color_set(ts, brush, gps);
 
   /* the polygon must be closed, so enabled cyclic */
   gps->flag |= GP_STROKE_CYCLIC;
   gps->flag |= GP_STROKE_3DSPACE;
 
-  gps->mat_nr = BKE_gpencil_object_material_ensure(tgpf->bmain, tgpf->ob, tgpf->mat);
+  gps->mat_nr = BKE_gpencil_object_material_get_index_from_brush(tgpf->ob, brush);
+  if (gps->mat_nr < 0) {
+    if (tgpf->ob->actcol - 1 < 0) {
+      gps->mat_nr = 0;
+    }
+    else {
+      gps->mat_nr = tgpf->ob->actcol - 1;
+    }
+  }
 
   /* allocate memory for storage points */
-  gps->totpoints = tgpf->sbuffer_size;
-  gps->points = MEM_callocN(sizeof(bGPDspoint) * tgpf->sbuffer_size, "gp_stroke_points");
-
-  /* initialize triangle memory to dummy data */
-  gps->tot_triangles = 0;
-  gps->triangles = NULL;
-  gps->flag |= GP_STROKE_RECALC_GEOMETRY;
+  gps->totpoints = tgpf->sbuffer_used;
+  gps->points = MEM_callocN(sizeof(bGPDspoint) * tgpf->sbuffer_used, "gp_stroke_points");
 
   /* add stroke to frame */
   if ((ts->gpencil_flags & GP_TOOL_FLAG_PAINT_ONBACK) || (tgpf->on_back == true)) {
@@ -1064,22 +1080,24 @@ static void gpencil_stroke_from_buffer(tGPDfill *tgpf)
     dvert = gps->dvert;
   }
 
-  for (int i = 0; i < tgpf->sbuffer_size && point2D; i++, point2D++, pt++) {
+  for (int i = 0; i < tgpf->sbuffer_used && point2D; i++, point2D++, pt++) {
     /* convert screen-coordinates to 3D coordinates */
-    gp_stroke_convertcoords_tpoint(tgpf->scene,
-                                   tgpf->ar,
-                                   tgpf->ob,
-                                   tgpf->gpl,
-                                   point2D,
-                                   tgpf->depth_arr ? tgpf->depth_arr + i : NULL,
-                                   &pt->x);
+    gpencil_stroke_convertcoords_tpoint(tgpf->scene,
+                                        tgpf->region,
+                                        tgpf->ob,
+                                        point2D,
+                                        tgpf->depth_arr ? tgpf->depth_arr + i : NULL,
+                                        &pt->x);
 
     pt->pressure = 1.0f;
     pt->strength = 1.0f;
     pt->time = 0.0f;
 
+    /* Apply the vertex color to point. */
+    ED_gpencil_point_vertex_color_set(ts, brush, pt, NULL);
+
     if ((ts->gpencil_flags & GP_TOOL_FLAG_CREATE_WEIGHTS) && (have_weight)) {
-      MDeformWeight *dw = defvert_verify_index(dvert, def_nr);
+      MDeformWeight *dw = BKE_defvert_ensure_index(dvert, def_nr);
       if (dw) {
         dw->weight = ts->vgroup_weight;
       }
@@ -1100,7 +1118,7 @@ static void gpencil_stroke_from_buffer(tGPDfill *tgpf)
   float smoothfac = 1.0f;
   for (int r = 0; r < 1; r++) {
     for (int i = 0; i < gps->totpoints; i++) {
-      BKE_gpencil_smooth_stroke(gps, i, smoothfac - reduce);
+      BKE_gpencil_stroke_smooth(gps, i, smoothfac - reduce);
     }
     reduce += 0.25f;  // reduce the factor
   }
@@ -1109,15 +1127,15 @@ static void gpencil_stroke_from_buffer(tGPDfill *tgpf)
   if ((tgpf->lock_axis > GP_LOCKAXIS_VIEW) &&
       ((ts->gpencil_v3d_align & GP_PROJECT_DEPTH_VIEW) == 0)) {
     float origin[3];
-    ED_gp_get_drawing_reference(tgpf->scene, tgpf->ob, tgpf->gpl, ts->gpencil_v3d_align, origin);
-    ED_gp_project_stroke_to_plane(
+    ED_gpencil_drawing_reference_get(tgpf->scene, tgpf->ob, ts->gpencil_v3d_align, origin);
+    ED_gpencil_project_stroke_to_plane(
         tgpf->scene, tgpf->ob, tgpf->rv3d, gps, origin, tgpf->lock_axis - 1);
   }
 
   /* if parented change position relative to parent object */
-  for (int a = 0; a < tgpf->sbuffer_size; a++) {
+  for (int a = 0; a < tgpf->sbuffer_used; a++) {
     pt = &gps->points[a];
-    gp_apply_parent_point(tgpf->depsgraph, tgpf->ob, tgpf->gpd, tgpf->gpl, pt);
+    gpencil_apply_parent_point(tgpf->depsgraph, tgpf->ob, tgpf->gpl, pt);
   }
 
   /* if camera view, reproject flat to view to avoid perspective effect */
@@ -1127,16 +1145,19 @@ static void gpencil_stroke_from_buffer(tGPDfill *tgpf)
 
   /* simplify stroke */
   for (int b = 0; b < tgpf->fill_simplylvl; b++) {
-    BKE_gpencil_simplify_fixed(gps);
+    BKE_gpencil_stroke_simplify_fixed(gps);
   }
+
+  /* Calc geometry data. */
+  BKE_gpencil_stroke_geometry_update(gps);
 }
 
 /* ----------------------- */
 /* Drawing                 */
 /* Helper: Draw status message while the user is running the operator */
-static void gpencil_fill_status_indicators(bContext *C, tGPDfill *UNUSED(tgpf))
+static void gpencil_fill_status_indicators(bContext *C)
 {
-  const char *status_str = IFACE_("Fill: ESC/RMB cancel, LMB Fill, Shift Draw on Back");
+  const char *status_str = TIP_("Fill: ESC/RMB cancel, LMB Fill, Shift Draw on Back");
   ED_workspace_status_text(C, status_str);
 }
 
@@ -1147,16 +1168,16 @@ static void gpencil_draw_boundary_lines(const bContext *UNUSED(C), tGPDfill *tgp
     return;
   }
   const float ink[4] = {1.0f, 0.0f, 0.0f, 1.0f};
-  gp_draw_datablock(tgpf, ink);
+  gpencil_draw_datablock(tgpf, ink);
 }
 
 /* Drawing callback for modal operator in 3d mode */
-static void gpencil_fill_draw_3d(const bContext *C, ARegion *UNUSED(ar), void *arg)
+static void gpencil_fill_draw_3d(const bContext *C, ARegion *UNUSED(region), void *arg)
 {
   tGPDfill *tgpf = (tGPDfill *)arg;
   /* draw only in the region that originated operator. This is required for multiwindow */
-  ARegion *ar = CTX_wm_region(C);
-  if (ar != tgpf->ar) {
+  ARegion *region = CTX_wm_region(C);
+  if (region != tgpf->region) {
     return;
   }
 
@@ -1169,8 +1190,8 @@ static bool gpencil_fill_poll(bContext *C)
   Object *obact = CTX_data_active_object(C);
 
   if (ED_operator_regionactive(C)) {
-    ScrArea *sa = CTX_wm_area(C);
-    if (sa->spacetype == SPACE_VIEW3D) {
+    ScrArea *area = CTX_wm_area(C);
+    if (area->spacetype == SPACE_VIEW3D) {
       if ((obact == NULL) || (obact->type != OB_GPENCIL) ||
           (obact->mode != OB_MODE_PAINT_GPENCIL)) {
         return false;
@@ -1178,19 +1199,16 @@ static bool gpencil_fill_poll(bContext *C)
 
       return true;
     }
-    else {
-      CTX_wm_operator_poll_msg_set(C, "Active region not valid for filling operator");
-      return false;
-    }
-  }
-  else {
-    CTX_wm_operator_poll_msg_set(C, "Active region not set");
+    CTX_wm_operator_poll_msg_set(C, "Active region not valid for filling operator");
     return false;
   }
+
+  CTX_wm_operator_poll_msg_set(C, "Active region not set");
+  return false;
 }
 
 /* Allocate memory and initialize values */
-static tGPDfill *gp_session_init_fill(bContext *C, wmOperator *UNUSED(op))
+static tGPDfill *gpencil_session_init_fill(bContext *C, wmOperator *UNUSED(op))
 {
   tGPDfill *tgpf = MEM_callocN(sizeof(tGPDfill), "GPencil Fill Data");
 
@@ -1198,29 +1216,32 @@ static tGPDfill *gp_session_init_fill(bContext *C, wmOperator *UNUSED(op))
   ToolSettings *ts = CTX_data_tool_settings(C);
   bGPdata *gpd = CTX_data_gpencil_data(C);
   Main *bmain = CTX_data_main(C);
+  Scene *scene = CTX_data_scene(C);
 
   /* set current scene and window info */
   tgpf->C = C;
   tgpf->bmain = CTX_data_main(C);
-  tgpf->scene = CTX_data_scene(C);
+  tgpf->scene = scene;
   tgpf->ob = CTX_data_active_object(C);
-  tgpf->sa = CTX_wm_area(C);
-  tgpf->ar = CTX_wm_region(C);
-  tgpf->rv3d = tgpf->ar->regiondata;
-  tgpf->v3d = tgpf->sa->spacedata.first;
-  tgpf->depsgraph = CTX_data_depsgraph(C);
+  tgpf->area = CTX_wm_area(C);
+  tgpf->region = CTX_wm_region(C);
+  tgpf->rv3d = tgpf->region->regiondata;
+  tgpf->v3d = tgpf->area->spacedata.first;
+  tgpf->depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   tgpf->win = CTX_wm_window(C);
+  tgpf->active_cfra = CFRA;
 
   /* set GP datablock */
   tgpf->gpd = gpd;
-  tgpf->gpl = BKE_gpencil_layer_getactive(gpd);
+  tgpf->gpl = BKE_gpencil_layer_active_get(gpd);
   if (tgpf->gpl == NULL) {
     tgpf->gpl = BKE_gpencil_layer_addnew(tgpf->gpd, DATA_("GP_Layer"), true);
   }
+
   tgpf->lock_axis = ts->gp_sculpt.lock_axis;
 
   tgpf->oldkey = -1;
-  tgpf->sbuffer_size = 0;
+  tgpf->sbuffer_used = 0;
   tgpf->sbuffer = NULL;
   tgpf->depth_arr = NULL;
 
@@ -1277,19 +1298,12 @@ static void gpencil_fill_exit(bContext *C, wmOperator *op)
 
     /* remove drawing handler */
     if (tgpf->draw_handle_3d) {
-      ED_region_draw_cb_exit(tgpf->ar->type, tgpf->draw_handle_3d);
+      ED_region_draw_cb_exit(tgpf->region->type, tgpf->draw_handle_3d);
     }
 
-    /* delete temp image */
+    /* Delete temp image. */
     if (tgpf->ima) {
-      for (Image *ima = bmain->images.first; ima; ima = ima->id.next) {
-        if (ima == tgpf->ima) {
-          BLI_remlink(&bmain->images, ima);
-          BKE_image_free(tgpf->ima);
-          MEM_SAFE_FREE(tgpf->ima);
-          break;
-        }
-      }
+      BKE_id_free(bmain, tgpf->ima);
     }
 
     /* finally, free memory used by temp data */
@@ -1321,13 +1335,13 @@ static int gpencil_fill_init(bContext *C, wmOperator *op)
   tGPDfill *tgpf;
   /* cannot paint in locked layer */
   bGPdata *gpd = CTX_data_gpencil_data(C);
-  bGPDlayer *gpl = BKE_gpencil_layer_getactive(gpd);
+  bGPDlayer *gpl = BKE_gpencil_layer_active_get(gpd);
   if ((gpl) && (gpl->flag & GP_LAYER_LOCKED)) {
     return 0;
   }
 
   /* check context */
-  tgpf = op->customdata = gp_session_init_fill(C, op);
+  tgpf = op->customdata = gpencil_session_init_fill(C, op);
   if (tgpf == NULL) {
     /* something wasn't set correctly in context */
     gpencil_fill_exit(C, op);
@@ -1341,28 +1355,48 @@ static int gpencil_fill_init(bContext *C, wmOperator *op)
 /* start of interactive part of operator */
 static int gpencil_fill_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
 {
+  Object *ob = CTX_data_active_object(C);
+  ToolSettings *ts = CTX_data_tool_settings(C);
+  Brush *brush = BKE_paint_brush(&ts->gp_paint->paint);
   tGPDfill *tgpf = NULL;
+
+  /* Fill tool needs a material (cannot use default material) */
+  bool valid = true;
+  if ((brush) && (brush->gpencil_settings->flag & GP_BRUSH_MATERIAL_PINNED)) {
+    if (brush->gpencil_settings->material == NULL) {
+      valid = false;
+    }
+  }
+  else {
+    if (BKE_object_material_get(ob, ob->actcol) == NULL) {
+      valid = false;
+    }
+  }
+  if (!valid) {
+    BKE_report(op->reports, RPT_ERROR, "Fill tool needs active material");
+    return OPERATOR_CANCELLED;
+  }
 
   /* try to initialize context data needed */
   if (!gpencil_fill_init(C, op)) {
     gpencil_fill_exit(C, op);
-    if (op->customdata)
+    if (op->customdata) {
       MEM_freeN(op->customdata);
+    }
     return OPERATOR_CANCELLED;
   }
-  else {
-    tgpf = op->customdata;
-  }
+
+  tgpf = op->customdata;
 
   /* Enable custom drawing handlers to show help lines */
   if (tgpf->flag & GP_BRUSH_FILL_SHOW_HELPLINES) {
     tgpf->draw_handle_3d = ED_region_draw_cb_activate(
-        tgpf->ar->type, gpencil_fill_draw_3d, tgpf, REGION_DRAW_POST_VIEW);
+        tgpf->region->type, gpencil_fill_draw_3d, tgpf, REGION_DRAW_POST_VIEW);
   }
 
-  WM_cursor_modal_set(CTX_wm_window(C), BC_PAINTBRUSHCURSOR);
+  WM_cursor_modal_set(CTX_wm_window(C), WM_CURSOR_PAINT_BRUSH);
 
-  gpencil_fill_status_indicators(C, tgpf);
+  gpencil_fill_status_indicators(C);
 
   DEG_id_tag_update(&tgpf->gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
   WM_event_add_notifier(C, NC_GPENCIL | NA_EDITED, NULL);
@@ -1377,38 +1411,45 @@ static int gpencil_fill_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSE
 static int gpencil_fill_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
   tGPDfill *tgpf = op->customdata;
+  Scene *scene = tgpf->scene;
 
   int estate = OPERATOR_PASS_THROUGH; /* default exit state - pass through */
 
   switch (event->type) {
-    case ESCKEY:
+    case EVT_ESCKEY:
     case RIGHTMOUSE:
       estate = OPERATOR_CANCELLED;
       break;
     case LEFTMOUSE:
       tgpf->on_back = RNA_boolean_get(op->ptr, "on_back");
-      /* first time the event is not enabled to show help lines */
+      /* first time the event is not enabled to show help lines. */
       if ((tgpf->oldkey != -1) || ((tgpf->flag & GP_BRUSH_FILL_SHOW_HELPLINES) == 0)) {
-        ARegion *ar = BKE_area_find_region_xy(CTX_wm_area(C), RGN_TYPE_ANY, event->x, event->y);
-        if (ar) {
+        ARegion *region = BKE_area_find_region_xy(
+            CTX_wm_area(C), RGN_TYPE_ANY, event->x, event->y);
+        if (region) {
           bool in_bounds = false;
 
           /* Perform bounds check */
-          in_bounds = BLI_rcti_isect_pt(&ar->winrct, event->x, event->y);
+          in_bounds = BLI_rcti_isect_pt(&region->winrct, event->x, event->y);
 
-          if ((in_bounds) && (ar->regiontype == RGN_TYPE_WINDOW)) {
-            /* TODO GPXX: Verify the mouse click is right for any window size */
+          if ((in_bounds) && (region->regiontype == RGN_TYPE_WINDOW)) {
             tgpf->center[0] = event->mval[0];
             tgpf->center[1] = event->mval[1];
 
+            /* Set active frame as current for filling. */
+            tgpf->active_cfra = CFRA;
+
             /* render screen to temp image */
-            if (gp_render_offscreen(tgpf)) {
+            if (gpencil_render_offscreen(tgpf)) {
+
+              /* Set red borders to create a external limit. */
+              gpencil_set_borders(tgpf, true);
 
               /* apply boundary fill */
               gpencil_boundaryfill_area(tgpf);
 
-              /* clean borders to avoid infinite loops */
-              gpencil_clean_borders(tgpf);
+              /* Clean borders to avoid infinite loops. */
+              gpencil_set_borders(tgpf, false);
 
               /* analyze outline */
               gpencil_get_outline_points(tgpf);
@@ -1423,15 +1464,19 @@ static int gpencil_fill_modal(bContext *C, wmOperator *op, const wmEvent *event)
               gpencil_stroke_from_buffer(tgpf);
             }
 
-            /* restore size */
-            tgpf->ar->winx = (short)tgpf->bwinx;
-            tgpf->ar->winy = (short)tgpf->bwiny;
-            tgpf->ar->winrct = tgpf->brect;
-
             /* free temp stack data */
             if (tgpf->stack) {
               BLI_stack_free(tgpf->stack);
             }
+
+            /* Free memory. */
+            MEM_SAFE_FREE(tgpf->sbuffer);
+            MEM_SAFE_FREE(tgpf->depth_arr);
+
+            /* restore size */
+            tgpf->region->winx = (short)tgpf->bwinx;
+            tgpf->region->winy = (short)tgpf->bwiny;
+            tgpf->region->winrct = tgpf->brect;
 
             /* push undo data */
             gpencil_undo_push(tgpf->gpd);

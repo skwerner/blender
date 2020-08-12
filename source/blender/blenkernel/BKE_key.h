@@ -31,7 +31,6 @@ struct ListBase;
 struct Main;
 struct Mesh;
 struct Object;
-struct WeightsArrayCache;
 
 /* Kernel prototypes */
 #ifdef __cplusplus
@@ -41,10 +40,6 @@ extern "C" {
 void BKE_key_free(struct Key *sc);
 void BKE_key_free_nolib(struct Key *key);
 struct Key *BKE_key_add(struct Main *bmain, struct ID *id);
-void BKE_key_copy_data(struct Main *bmain,
-                       struct Key *key_dst,
-                       const struct Key *key_src,
-                       const int flag);
 struct Key *BKE_key_copy(struct Main *bmain, const struct Key *key);
 struct Key *BKE_key_copy_nolib(struct Key *key);
 void BKE_key_sort(struct Key *key);
@@ -92,13 +87,17 @@ void BKE_keyblock_mesh_calc_normals(struct KeyBlock *kb,
                                     float (*r_polynors)[3],
                                     float (*r_loopnors)[3]);
 
-void BKE_keyblock_update_from_vertcos(struct Object *ob, struct KeyBlock *kb, float (*vertCos)[3]);
+void BKE_keyblock_update_from_vertcos(struct Object *ob,
+                                      struct KeyBlock *kb,
+                                      const float (*vertCos)[3]);
 void BKE_keyblock_convert_from_vertcos(struct Object *ob,
                                        struct KeyBlock *kb,
-                                       float (*vertCos)[3]);
+                                       const float (*vertCos)[3]);
 float (*BKE_keyblock_convert_to_vertcos(struct Object *ob, struct KeyBlock *kb))[3];
 
-void BKE_keyblock_update_from_offset(struct Object *ob, struct KeyBlock *kb, float (*ofs)[3]);
+void BKE_keyblock_update_from_offset(struct Object *ob,
+                                     struct KeyBlock *kb,
+                                     const float (*ofs)[3]);
 
 /* other management */
 bool BKE_keyblock_move(struct Object *ob, int org_index, int new_index);

@@ -2,17 +2,17 @@
 
 #include "testing/testing.h"
 
+#include "MEM_guardedalloc.h"
+
 extern "C" {
 #include "BLI_array_store.h"
-
-#include "MEM_guardedalloc.h"
-#include "BLI_sys_types.h"
-#include "BLI_utildefines.h"
-#include "BLI_listbase.h"
 #include "BLI_array_utils.h"
-#include "BLI_string.h"
+#include "BLI_listbase.h"
 #include "BLI_rand.h"
 #include "BLI_ressource_strings.h"
+#include "BLI_string.h"
+#include "BLI_sys_types.h"
+#include "BLI_utildefines.h"
 }
 
 /* print memory savings */
@@ -70,9 +70,7 @@ static void testchunk_list_free(ListBase *lb)
 }
 
 #if 0
-static char *testchunk_as_data(
-        ListBase *lb,
-        size_t *r_data_len)
+static char *testchunk_as_data(ListBase *lb, size_t *r_data_len)
 {
   size_t data_len = 0;
   for (TestChunk *tc = (TestChunk *)lb->first; tc; tc = tc->next) {
@@ -838,16 +836,16 @@ void *file_read_binary_as_mem(const char *filepath, size_t pad_bytes, size_t *r_
 
     *r_size = filelen_read;
 
-finally:
+  finally:
     fclose(fp);
   }
 
   return mem;
 }
 
-
 TEST(array_store, PlainTextFiles)
-{   ListBase lb;
+{
+  ListBase lb;
   BLI_listbase_clear(&lb);
   BArrayStore *bs = BLI_array_store_create(1, 128);
 
@@ -881,7 +879,6 @@ TEST(array_store, PlainTextFiles)
 #  ifdef DEBUG_PRINT
   print_mem_saved("source code backwards", bs);
 #  endif
-
 
   testbuffer_list_free(&lb);
   BLI_array_store_destroy(bs);

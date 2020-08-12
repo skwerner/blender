@@ -24,11 +24,13 @@
 #define _USE_MATH_DEFINES
 
 #include "GHOST_WindowWin32.h"
-#include "GHOST_SystemWin32.h"
-#include "GHOST_DropTargetWin32.h"
+#include "GHOST_ContextD3D.h"
 #include "GHOST_ContextNone.h"
-#include "utfconv.h"
+#include "GHOST_DropTargetWin32.h"
+#include "GHOST_SystemWin32.h"
+#include "GHOST_WindowManager.h"
 #include "utf_winfunc.h"
+#include "utfconv.h"
 
 #if defined(WITH_GL_EGL)
 #  include "GHOST_ContextEGL.h"
@@ -39,10 +41,10 @@
 #  include <Dwmapi.h>
 #endif
 
-#include <windowsx.h>
+#include <assert.h>
 #include <math.h>
 #include <string.h>
-#include <assert.h>
+#include <windowsx.h>
 
 #ifndef GET_POINTERID_WPARAM
 #  define GET_POINTERID_WPARAM(wParam) (LOWORD(wParam))
@@ -57,7 +59,7 @@ __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
 }
 
 GHOST_WindowWin32::GHOST_WindowWin32(GHOST_SystemWin32 *system,
-                                     const STR_String &title,
+                                     const char *title,
                                      GHOST_TInt32 left,
                                      GHOST_TInt32 top,
                                      GHOST_TUns32 width,
@@ -66,10 +68,11 @@ GHOST_WindowWin32::GHOST_WindowWin32(GHOST_SystemWin32 *system,
                                      GHOST_TDrawingContextType type,
                                      bool wantStereoVisual,
                                      bool alphaBackground,
-                                     GHOST_TUns16 wantNumOfAASamples,
-                                     GHOST_TEmbedderWindowID parentwindowhwnd,
-                                     bool is_debug)
-    : GHOST_Window(width, height, state, wantStereoVisual, false, wantNumOfAASamples),
+                                     GHOST_WindowWin32 *parentwindow,
+                                     bool is_debug,
+                                     bool dialog)
+    : GHOST_Window(width, height, state, wantStereoVisual, false),
+      m_tabletInRange(false),
       m_inLiveResize(false),
       m_system(system),
       m_hDC(0),
@@ -80,16 +83,15 @@ GHOST_WindowWin32::GHOST_WindowWin32(GHOST_SystemWin32 *system,
       m_wantAlphaBackground(alphaBackground),
       m_normal_state(GHOST_kWindowStateNormal),
       m_user32(NULL),
-      m_fpGetPointerInfo(NULL),
-      m_fpGetPointerPenInfo(NULL),
-      m_fpGetPointerTouchInfo(NULL),
-      m_parentWindowHwnd(parentwindowhwnd),
+      m_fpGetPointerInfoHistory(NULL),
+      m_fpGetPointerPenInfoHistory(NULL),
+      m_fpGetPointerTouchInfoHistory(NULL),
+      m_parentWindowHwnd(parentwindow ? parentwindow->m_hWnd : NULL),
       m_debug_context(is_debug)
 {
   // Initialize tablet variables
   memset(&m_wintab, 0, sizeof(m_wintab));
-  memset(&m_tabletData, 0, sizeof(m_tabletData));
-  m_tabletData.Active = GHOST_kTabletModeNone;
+  m_tabletData = GHOST_TABLET_DATA_NONE;
 
   // Create window
   if (state != GHOST_kWindowStateFullScreen) {
@@ -147,31 +149,31 @@ GHOST_WindowWin32::GHOST_WindowWin32(GHOST_SystemWin32 *system,
       top = monitor.rcWork.top;
 
     int wintype = WS_OVERLAPPEDWINDOW;
-    if (m_parentWindowHwnd != 0) {
+    if ((m_parentWindowHwnd != 0) && !dialog) {
       wintype = WS_CHILD;
-      GetWindowRect((HWND)m_parentWindowHwnd, &rect);
+      GetWindowRect(m_parentWindowHwnd, &rect);
       left = 0;
       top = 0;
       width = rect.right - rect.left;
       height = rect.bottom - rect.top;
     }
 
-    wchar_t *title_16 = alloc_utf16_from_8((char *)(const char *)title, 0);
-    m_hWnd = ::CreateWindowW(s_windowClassName,         // pointer to registered class name
-                             title_16,                  // pointer to window name
-                             wintype,                   // window style
-                             left,                      // horizontal position of window
-                             top,                       // vertical position of window
-                             width,                     // window width
-                             height,                    // window height
-                             (HWND)m_parentWindowHwnd,  // handle to parent or owner window
+    wchar_t *title_16 = alloc_utf16_from_8((char *)title, 0);
+    m_hWnd = ::CreateWindowW(s_windowClassName,                // pointer to registered class name
+                             title_16,                         // pointer to window name
+                             wintype,                          // window style
+                             left,                             // horizontal position of window
+                             top,                              // vertical position of window
+                             width,                            // window width
+                             height,                           // window height
+                             dialog ? 0 : m_parentWindowHwnd,  // handle to parent or owner window
                              0,                     // handle to menu or child-window identifier
                              ::GetModuleHandle(0),  // handle to application instance
                              0);                    // pointer to window-creation data
     free(title_16);
   }
   else {
-    wchar_t *title_16 = alloc_utf16_from_8((char *)(const char *)title, 0);
+    wchar_t *title_16 = alloc_utf16_from_8((char *)title, 0);
     m_hWnd = ::CreateWindowW(s_windowClassName,     // pointer to registered class name
                              title_16,              // pointer to window name
                              WS_MAXIMIZE,           // window style
@@ -262,13 +264,20 @@ GHOST_WindowWin32::GHOST_WindowWin32(GHOST_SystemWin32 *system,
       ::UpdateWindow(m_hWnd);
     }
     else {
-      //invalidate the window
+      // invalidate the window
       ::DestroyWindow(m_hWnd);
       m_hWnd = NULL;
     }
   }
 
-  if (parentwindowhwnd != 0) {
+  if (dialog && parentwindow) {
+    ::SetWindowLongPtr(
+        m_hWnd, GWL_STYLE, WS_VISIBLE | WS_POPUPWINDOW | WS_CAPTION | WS_MAXIMIZEBOX | WS_SIZEBOX);
+    ::SetWindowLongPtr(m_hWnd, GWLP_HWNDPARENT, (LONG_PTR)m_parentWindowHwnd);
+    ::SetWindowPos(
+        m_hWnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+  }
+  else if (parentwindow) {
     RAWINPUTDEVICE device = {0};
     device.usUsagePage = 0x01; /* usUsagePage & usUsage for keyboard*/
     device.usUsage = 0x06;     /* http://msdn.microsoft.com/en-us/windows/hardware/gg487473.aspx */
@@ -280,11 +289,12 @@ GHOST_WindowWin32::GHOST_WindowWin32(GHOST_SystemWin32 *system,
 
   // Initialize Windows Ink
   if (m_user32) {
-    m_fpGetPointerInfo = (GHOST_WIN32_GetPointerInfo)::GetProcAddress(m_user32, "GetPointerInfo");
-    m_fpGetPointerPenInfo = (GHOST_WIN32_GetPointerPenInfo)::GetProcAddress(m_user32,
-                                                                            "GetPointerPenInfo");
-    m_fpGetPointerTouchInfo = (GHOST_WIN32_GetPointerTouchInfo)::GetProcAddress(
-        m_user32, "GetPointerTouchInfo");
+    m_fpGetPointerInfoHistory = (GHOST_WIN32_GetPointerInfoHistory)::GetProcAddress(
+        m_user32, "GetPointerInfoHistory");
+    m_fpGetPointerPenInfoHistory = (GHOST_WIN32_GetPointerPenInfoHistory)::GetProcAddress(
+        m_user32, "GetPointerPenInfoHistory");
+    m_fpGetPointerTouchInfoHistory = (GHOST_WIN32_GetPointerTouchInfoHistory)::GetProcAddress(
+        m_user32, "GetPointerTouchInfoHistory");
   }
 
   // Initialize Wintab
@@ -371,9 +381,9 @@ GHOST_WindowWin32::~GHOST_WindowWin32()
   if (m_user32) {
     FreeLibrary(m_user32);
     m_user32 = NULL;
-    m_fpGetPointerInfo = NULL;
-    m_fpGetPointerPenInfo = NULL;
-    m_fpGetPointerTouchInfo = NULL;
+    m_fpGetPointerInfoHistory = NULL;
+    m_fpGetPointerPenInfoHistory = NULL;
+    m_fpGetPointerTouchInfoHistory = NULL;
   }
 
   if (m_customCursor) {
@@ -387,6 +397,16 @@ GHOST_WindowWin32::~GHOST_WindowWin32()
   }
 
   if (m_hWnd) {
+    /* If this window is referenced by others as parent, clear that relation or windows will free
+     * the handle while we still reference it. */
+    for (GHOST_IWindow *iter_win : m_system->getWindowManager()->getWindows()) {
+      GHOST_WindowWin32 *iter_winwin = (GHOST_WindowWin32 *)iter_win;
+      if (iter_winwin->m_parentWindowHwnd == m_hWnd) {
+        ::SetWindowLongPtr(iter_winwin->m_hWnd, GWLP_HWNDPARENT, NULL);
+        iter_winwin->m_parentWindowHwnd = 0;
+      }
+    }
+
     if (m_dropTarget) {
       // Disable DragDrop
       RevokeDragDrop(m_hWnd);
@@ -410,19 +430,18 @@ HWND GHOST_WindowWin32::getHWND() const
   return m_hWnd;
 }
 
-void GHOST_WindowWin32::setTitle(const STR_String &title)
+void GHOST_WindowWin32::setTitle(const char *title)
 {
-  wchar_t *title_16 = alloc_utf16_from_8((char *)(const char *)title, 0);
+  wchar_t *title_16 = alloc_utf16_from_8((char *)title, 0);
   ::SetWindowTextW(m_hWnd, (wchar_t *)title_16);
   free(title_16);
 }
 
-void GHOST_WindowWin32::getTitle(STR_String &title) const
+std::string GHOST_WindowWin32::getTitle() const
 {
   char buf[s_maxTitleLength]; /*CHANGE + never used yet*/
   ::GetWindowText(m_hWnd, buf, s_maxTitleLength);
-  STR_String temp(buf);
-  title = buf;
+  return std::string(buf);
 }
 
 void GHOST_WindowWin32::getWindowBounds(GHOST_Rect &bounds) const
@@ -529,7 +548,7 @@ GHOST_TWindowState GHOST_WindowWin32::getState() const
   // we need to find a way to combine parented windows + resizing if we simply set the
   // state as GHOST_kWindowStateEmbedded we will need to check for them somewhere else.
   // It's also strange that in Windows is the only platform we need to make this separation.
-  if (m_parentWindowHwnd != 0) {
+  if ((m_parentWindowHwnd != 0) && !isDialog()) {
     state = GHOST_kWindowStateEmbedded;
     return state;
   }
@@ -575,6 +594,7 @@ void GHOST_WindowWin32::clientToScreen(GHOST_TInt32 inX,
 GHOST_TSuccess GHOST_WindowWin32::setState(GHOST_TWindowState state)
 {
   GHOST_TWindowState curstate = getState();
+  LONG_PTR newstyle = -1;
   WINDOWPLACEMENT wp;
   wp.length = sizeof(WINDOWPLACEMENT);
   ::GetWindowPlacement(m_hWnd, &wp);
@@ -588,7 +608,7 @@ GHOST_TSuccess GHOST_WindowWin32::setState(GHOST_TWindowState state)
       break;
     case GHOST_kWindowStateMaximized:
       wp.showCmd = SW_SHOWMAXIMIZED;
-      ::SetWindowLongPtr(m_hWnd, GWL_STYLE, WS_OVERLAPPEDWINDOW);
+      newstyle = WS_OVERLAPPEDWINDOW;
       break;
     case GHOST_kWindowStateFullScreen:
       if (curstate != state && curstate != GHOST_kWindowStateMinimized)
@@ -596,17 +616,21 @@ GHOST_TSuccess GHOST_WindowWin32::setState(GHOST_TWindowState state)
       wp.showCmd = SW_SHOWMAXIMIZED;
       wp.ptMaxPosition.x = 0;
       wp.ptMaxPosition.y = 0;
-      ::SetWindowLongPtr(m_hWnd, GWL_STYLE, WS_MAXIMIZE);
+      newstyle = WS_MAXIMIZE;
       break;
     case GHOST_kWindowStateEmbedded:
-      ::SetWindowLongPtr(m_hWnd, GWL_STYLE, WS_CHILD);
+      newstyle = WS_CHILD;
       break;
     case GHOST_kWindowStateNormal:
     default:
       wp.showCmd = SW_SHOWNORMAL;
-      ::SetWindowLongPtr(m_hWnd, GWL_STYLE, WS_OVERLAPPEDWINDOW);
+      newstyle = WS_OVERLAPPEDWINDOW;
       break;
   }
+  if ((newstyle >= 0) && !isDialog()) {
+    ::SetWindowLongPtr(m_hWnd, GWL_STYLE, newstyle);
+  }
+
   /* Clears window cache for SetWindowLongPtr */
   ::SetWindowPos(m_hWnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
 
@@ -622,6 +646,9 @@ GHOST_TSuccess GHOST_WindowWin32::setOrder(GHOST_TWindowOrder order)
     hWndToRaise = ::GetWindow(m_hWnd, GW_HWNDNEXT); /* the window to raise */
   }
   else {
+    if (getState() == GHOST_kWindowStateMinimized) {
+      setState(GHOST_kWindowStateNormal);
+    }
     hWndInsertAfter = HWND_TOP;
     hWndToRaise = NULL;
   }
@@ -657,11 +684,11 @@ GHOST_Context *GHOST_WindowWin32::newDrawingContext(GHOST_TDrawingContextType ty
 #if defined(WITH_GL_PROFILE_CORE)
     /* - AMD and Intel give us exactly this version
      * - NVIDIA gives at least this version <-- desired behavior
-     * So we ask for 4.5, 4.4 ... 3.3 in descending order to get the best version on the user's system. */
+     * So we ask for 4.5, 4.4 ... 3.3 in descending order
+     * to get the best version on the user's system. */
     for (int minor = 5; minor >= 0; --minor) {
       context = new GHOST_ContextWGL(m_wantStereoVisual,
                                      m_wantAlphaBackground,
-                                     m_wantNumOfAASamples,
                                      m_hWnd,
                                      m_hDC,
                                      WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
@@ -679,7 +706,6 @@ GHOST_Context *GHOST_WindowWin32::newDrawingContext(GHOST_TDrawingContextType ty
     }
     context = new GHOST_ContextWGL(m_wantStereoVisual,
                                    m_wantAlphaBackground,
-                                   m_wantNumOfAASamples,
                                    m_hWnd,
                                    m_hDC,
                                    WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
@@ -703,11 +729,11 @@ GHOST_Context *GHOST_WindowWin32::newDrawingContext(GHOST_TDrawingContextType ty
     }
 
 #elif defined(WITH_GL_PROFILE_COMPAT)
-    // ask for 2.1 context, driver gives any GL version >= 2.1 (hopefully the latest compatibility profile)
+    // ask for 2.1 context, driver gives any GL version >= 2.1
+    // (hopefully the latest compatibility profile)
     // 2.1 ignores the profile bit & is incompatible with core profile
     context = new GHOST_ContextWGL(m_wantStereoVisual,
                                    m_wantAlphaBackground,
-                                   m_wantNumOfAASamples,
                                    m_hWnd,
                                    m_hDC,
                                    0,  // no profile bit
@@ -726,6 +752,19 @@ GHOST_Context *GHOST_WindowWin32::newDrawingContext(GHOST_TDrawingContextType ty
 #  error  // must specify either core or compat at build time
 #endif
   }
+  else if (type == GHOST_kDrawingContextTypeD3D) {
+    GHOST_Context *context;
+
+    context = new GHOST_ContextD3D(false, m_hWnd);
+    if (context->initializeDrawingContext()) {
+      return context;
+    }
+    else {
+      delete context;
+    }
+
+    return context;
+  }
 
   return NULL;
 }
@@ -739,21 +778,28 @@ void GHOST_WindowWin32::lostMouseCapture()
   }
 }
 
-void GHOST_WindowWin32::registerMouseClickEvent(int press)
+bool GHOST_WindowWin32::isDialog() const
 {
+  HWND parent = (HWND)::GetWindowLongPtr(m_hWnd, GWLP_HWNDPARENT);
+  long int style = (long int)::GetWindowLongPtr(m_hWnd, GWL_STYLE);
 
-  switch (press) {
-    case 0:
+  return (parent != 0) && (style & WS_POPUPWINDOW);
+}
+
+void GHOST_WindowWin32::updateMouseCapture(GHOST_MouseCaptureEventWin32 event)
+{
+  switch (event) {
+    case MousePressed:
       m_nPressedButtons++;
       break;
-    case 1:
+    case MouseReleased:
       if (m_nPressedButtons)
         m_nPressedButtons--;
       break;
-    case 2:
+    case OperatorGrab:
       m_hasGrabMouse = true;
       break;
-    case 3:
+    case OperatorUngrab:
       m_hasGrabMouse = false;
       break;
   }
@@ -768,7 +814,138 @@ void GHOST_WindowWin32::registerMouseClickEvent(int press)
   }
 }
 
-void GHOST_WindowWin32::loadCursor(bool visible, GHOST_TStandardCursor cursor) const
+bool GHOST_WindowWin32::getMousePressed() const
+{
+  return m_nPressedButtons;
+}
+
+HCURSOR GHOST_WindowWin32::getStandardCursor(GHOST_TStandardCursor shape) const
+{
+  // Convert GHOST cursor to Windows OEM cursor
+  HANDLE cursor = NULL;
+  HMODULE module = ::GetModuleHandle(0);
+  GHOST_TUns32 flags = LR_SHARED | LR_DEFAULTSIZE;
+  int cx = 0, cy = 0;
+
+  switch (shape) {
+    case GHOST_kStandardCursorCustom:
+      if (m_customCursor) {
+        return m_customCursor;
+      }
+      else {
+        return NULL;
+      }
+    case GHOST_kStandardCursorRightArrow:
+      cursor = ::LoadImage(module, "arrowright_cursor", IMAGE_CURSOR, cx, cy, flags);
+      break;
+    case GHOST_kStandardCursorLeftArrow:
+      cursor = ::LoadImage(module, "arrowleft_cursor", IMAGE_CURSOR, cx, cy, flags);
+      break;
+    case GHOST_kStandardCursorUpArrow:
+      cursor = ::LoadImage(module, "arrowup_cursor", IMAGE_CURSOR, cx, cy, flags);
+      break;
+    case GHOST_kStandardCursorDownArrow:
+      cursor = ::LoadImage(module, "arrowdown_cursor", IMAGE_CURSOR, cx, cy, flags);
+      break;
+    case GHOST_kStandardCursorVerticalSplit:
+      cursor = ::LoadImage(module, "splitv_cursor", IMAGE_CURSOR, cx, cy, flags);
+      break;
+    case GHOST_kStandardCursorHorizontalSplit:
+      cursor = ::LoadImage(module, "splith_cursor", IMAGE_CURSOR, cx, cy, flags);
+      break;
+    case GHOST_kStandardCursorKnife:
+      cursor = ::LoadImage(module, "knife_cursor", IMAGE_CURSOR, cx, cy, flags);
+      break;
+    case GHOST_kStandardCursorEyedropper:
+      cursor = ::LoadImage(module, "eyedropper_cursor", IMAGE_CURSOR, cx, cy, flags);
+      break;
+    case GHOST_kStandardCursorZoomIn:
+      cursor = ::LoadImage(module, "zoomin_cursor", IMAGE_CURSOR, cx, cy, flags);
+      break;
+    case GHOST_kStandardCursorZoomOut:
+      cursor = ::LoadImage(module, "zoomout_cursor", IMAGE_CURSOR, cx, cy, flags);
+      break;
+    case GHOST_kStandardCursorMove:
+      cursor = ::LoadImage(module, "handopen_cursor", IMAGE_CURSOR, cx, cy, flags);
+      break;
+    case GHOST_kStandardCursorNSEWScroll:
+      cursor = ::LoadImage(module, "scrollnsew_cursor", IMAGE_CURSOR, cx, cy, flags);
+      break;
+    case GHOST_kStandardCursorNSScroll:
+      cursor = ::LoadImage(module, "scrollns_cursor", IMAGE_CURSOR, cx, cy, flags);
+      break;
+    case GHOST_kStandardCursorEWScroll:
+      cursor = ::LoadImage(module, "scrollew_cursor", IMAGE_CURSOR, cx, cy, flags);
+      break;
+    case GHOST_kStandardCursorHelp:
+      cursor = ::LoadImage(NULL, IDC_HELP, IMAGE_CURSOR, cx, cy, flags);
+      break;  // Arrow and question mark
+    case GHOST_kStandardCursorWait:
+      cursor = ::LoadImage(NULL, IDC_WAIT, IMAGE_CURSOR, cx, cy, flags);
+      break;  // Hourglass
+    case GHOST_kStandardCursorText:
+      cursor = ::LoadImage(NULL, IDC_IBEAM, IMAGE_CURSOR, cx, cy, flags);
+      break;  // I-beam
+    case GHOST_kStandardCursorCrosshair:
+      cursor = ::LoadImage(module, "cross_cursor", IMAGE_CURSOR, cx, cy, flags);
+      break;  // Standard Cross
+    case GHOST_kStandardCursorCrosshairA:
+      cursor = ::LoadImage(module, "crossA_cursor", IMAGE_CURSOR, cx, cy, flags);
+      break;  // Crosshair A
+    case GHOST_kStandardCursorCrosshairB:
+      cursor = ::LoadImage(module, "crossB_cursor", IMAGE_CURSOR, cx, cy, flags);
+      break;  // Diagonal Crosshair B
+    case GHOST_kStandardCursorCrosshairC:
+      cursor = ::LoadImage(module, "crossC_cursor", IMAGE_CURSOR, cx, cy, flags);
+      break;  // Minimal Crosshair C
+    case GHOST_kStandardCursorBottomSide:
+    case GHOST_kStandardCursorUpDown:
+      cursor = ::LoadImage(module, "movens_cursor", IMAGE_CURSOR, cx, cy, flags);
+      break;  // Double-pointed arrow pointing north and south
+    case GHOST_kStandardCursorLeftSide:
+    case GHOST_kStandardCursorLeftRight:
+      cursor = ::LoadImage(module, "moveew_cursor", IMAGE_CURSOR, cx, cy, flags);
+      break;  // Double-pointed arrow pointing west and east
+    case GHOST_kStandardCursorTopSide:
+      cursor = ::LoadImage(NULL, IDC_UPARROW, IMAGE_CURSOR, cx, cy, flags);
+      break;  // Vertical arrow
+    case GHOST_kStandardCursorTopLeftCorner:
+      cursor = ::LoadImage(NULL, IDC_SIZENWSE, IMAGE_CURSOR, cx, cy, flags);
+      break;
+    case GHOST_kStandardCursorTopRightCorner:
+      cursor = ::LoadImage(NULL, IDC_SIZENESW, IMAGE_CURSOR, cx, cy, flags);
+      break;
+    case GHOST_kStandardCursorBottomRightCorner:
+      cursor = ::LoadImage(NULL, IDC_SIZENWSE, IMAGE_CURSOR, cx, cy, flags);
+      break;
+    case GHOST_kStandardCursorBottomLeftCorner:
+      cursor = ::LoadImage(NULL, IDC_SIZENESW, IMAGE_CURSOR, cx, cy, flags);
+      break;
+    case GHOST_kStandardCursorPencil:
+      cursor = ::LoadImage(module, "pencil_cursor", IMAGE_CURSOR, cx, cy, flags);
+      break;
+    case GHOST_kStandardCursorEraser:
+      cursor = ::LoadImage(module, "eraser_cursor", IMAGE_CURSOR, cx, cy, flags);
+      break;
+    case GHOST_kStandardCursorDestroy:
+    case GHOST_kStandardCursorStop:
+      cursor = ::LoadImage(module, "forbidden_cursor", IMAGE_CURSOR, cx, cy, flags);
+      break;  // Slashed circle
+    case GHOST_kStandardCursorDefault:
+      cursor = NULL;
+      break;
+    default:
+      return NULL;
+  }
+
+  if (cursor == NULL) {
+    cursor = ::LoadImage(NULL, IDC_ARROW, IMAGE_CURSOR, cx, cy, flags);
+  }
+
+  return (HCURSOR)cursor;
+}
+
+void GHOST_WindowWin32::loadCursor(bool visible, GHOST_TStandardCursor shape) const
 {
   if (!visible) {
     while (::ShowCursor(FALSE) >= 0)
@@ -779,88 +956,11 @@ void GHOST_WindowWin32::loadCursor(bool visible, GHOST_TStandardCursor cursor) c
       ;
   }
 
-  if (cursor == GHOST_kStandardCursorCustom && m_customCursor) {
-    ::SetCursor(m_customCursor);
+  HCURSOR cursor = getStandardCursor(shape);
+  if (cursor == NULL) {
+    cursor = getStandardCursor(GHOST_kStandardCursorDefault);
   }
-  else {
-    // Convert GHOST cursor to Windows OEM cursor
-    bool success = true;
-    LPCSTR id;
-    switch (cursor) {
-      case GHOST_kStandardCursorDefault:
-        id = IDC_ARROW;
-        break;
-      case GHOST_kStandardCursorRightArrow:
-        id = IDC_ARROW;
-        break;
-      case GHOST_kStandardCursorLeftArrow:
-        id = IDC_ARROW;
-        break;
-      case GHOST_kStandardCursorInfo:
-        id = IDC_SIZEALL;
-        break;  // Four-pointed arrow pointing north, south, east, and west
-      case GHOST_kStandardCursorDestroy:
-        id = IDC_NO;
-        break;  // Slashed circle
-      case GHOST_kStandardCursorHelp:
-        id = IDC_HELP;
-        break;  // Arrow and question mark
-      case GHOST_kStandardCursorCycle:
-        id = IDC_NO;
-        break;  // Slashed circle
-      case GHOST_kStandardCursorSpray:
-        id = IDC_SIZEALL;
-        break;  // Four-pointed arrow pointing north, south, east, and west
-      case GHOST_kStandardCursorWait:
-        id = IDC_WAIT;
-        break;  // Hourglass
-      case GHOST_kStandardCursorText:
-        id = IDC_IBEAM;
-        break;  // I-beam
-      case GHOST_kStandardCursorCrosshair:
-        id = IDC_CROSS;
-        break;  // Crosshair
-      case GHOST_kStandardCursorUpDown:
-        id = IDC_SIZENS;
-        break;  // Double-pointed arrow pointing north and south
-      case GHOST_kStandardCursorLeftRight:
-        id = IDC_SIZEWE;
-        break;  // Double-pointed arrow pointing west and east
-      case GHOST_kStandardCursorTopSide:
-        id = IDC_UPARROW;
-        break;  // Vertical arrow
-      case GHOST_kStandardCursorBottomSide:
-        id = IDC_SIZENS;
-        break;
-      case GHOST_kStandardCursorLeftSide:
-        id = IDC_SIZEWE;
-        break;
-      case GHOST_kStandardCursorTopLeftCorner:
-        id = IDC_SIZENWSE;
-        break;
-      case GHOST_kStandardCursorTopRightCorner:
-        id = IDC_SIZENESW;
-        break;
-      case GHOST_kStandardCursorBottomRightCorner:
-        id = IDC_SIZENWSE;
-        break;
-      case GHOST_kStandardCursorBottomLeftCorner:
-        id = IDC_SIZENESW;
-        break;
-      case GHOST_kStandardCursorPencil:
-        id = IDC_ARROW;
-        break;
-      case GHOST_kStandardCursorCopy:
-        id = IDC_ARROW;
-        break;
-      default:
-        success = false;
-    }
-
-    if (success) {
-      ::SetCursor(::LoadCursor(0, id));
-    }
-  }
+  ::SetCursor(cursor);
 }
 
 GHOST_TSuccess GHOST_WindowWin32::setWindowCursorVisibility(bool visible)
@@ -882,7 +982,7 @@ GHOST_TSuccess GHOST_WindowWin32::setWindowCursorGrab(GHOST_TGrabCursorMode mode
       if (mode == GHOST_kGrabHide)
         setWindowCursorVisibility(false);
     }
-    registerMouseClickEvent(2);
+    updateMouseCapture(OperatorGrab);
   }
   else {
     if (m_cursorGrab == GHOST_kGrabHide) {
@@ -898,10 +998,11 @@ GHOST_TSuccess GHOST_WindowWin32::setWindowCursorGrab(GHOST_TGrabCursorMode mode
       m_system->setCursorPosition(pos[0], pos[1]);
     }
 
-    /* Almost works without but important otherwise the mouse GHOST location can be incorrect on exit */
+    /* Almost works without but important otherwise the mouse GHOST location
+     * can be incorrect on exit. */
     setCursorGrabAccum(0, 0);
     m_cursorGrabBounds.m_l = m_cursorGrabBounds.m_r = -1; /* disable */
-    registerMouseClickEvent(3);
+    updateMouseCapture(OperatorUngrab);
   }
 
   return GHOST_kSuccess;
@@ -909,11 +1010,6 @@ GHOST_TSuccess GHOST_WindowWin32::setWindowCursorGrab(GHOST_TGrabCursorMode mode
 
 GHOST_TSuccess GHOST_WindowWin32::setWindowCursorShape(GHOST_TStandardCursor cursorShape)
 {
-  if (m_customCursor) {
-    DestroyCursor(m_customCursor);
-    m_customCursor = NULL;
-  }
-
   if (::GetForegroundWindow() == m_hWnd) {
     loadCursor(getCursorVisibility(), cursorShape);
   }
@@ -921,78 +1017,87 @@ GHOST_TSuccess GHOST_WindowWin32::setWindowCursorShape(GHOST_TStandardCursor cur
   return GHOST_kSuccess;
 }
 
-GHOST_TSuccess GHOST_WindowWin32::getPointerInfo(GHOST_PointerInfoWin32 *pointerInfo,
-                                                 WPARAM wParam,
-                                                 LPARAM lParam)
+GHOST_TSuccess GHOST_WindowWin32::hasCursorShape(GHOST_TStandardCursor cursorShape)
 {
-  ZeroMemory(pointerInfo, sizeof(GHOST_PointerInfoWin32));
+  return (getStandardCursor(cursorShape)) ? GHOST_kSuccess : GHOST_kFailure;
+}
 
-  // Obtain the basic information from the event
-  pointerInfo->pointerId = GET_POINTERID_WPARAM(wParam);
-  pointerInfo->isInContact = IS_POINTER_INCONTACT_WPARAM(wParam);
-  pointerInfo->isPrimary = IS_POINTER_PRIMARY_WPARAM(wParam);
-
-  // Obtain more accurate and predicted information from the Pointer API
-  POINTER_INFO pointerApiInfo;
-  if (!(m_fpGetPointerInfo && m_fpGetPointerInfo(pointerInfo->pointerId, &pointerApiInfo))) {
+GHOST_TSuccess GHOST_WindowWin32::getPointerInfo(
+    std::vector<GHOST_PointerInfoWin32> &outPointerInfo, WPARAM wParam, LPARAM lParam)
+{
+  if (!useTabletAPI(GHOST_kTabletNative)) {
     return GHOST_kFailure;
   }
 
-  pointerInfo->hasButtonMask = GHOST_kSuccess;
-  switch (pointerApiInfo.ButtonChangeType) {
-    case POINTER_CHANGE_FIRSTBUTTON_DOWN:
-    case POINTER_CHANGE_FIRSTBUTTON_UP:
-      pointerInfo->buttonMask = GHOST_kButtonMaskLeft;
-      break;
-    case POINTER_CHANGE_SECONDBUTTON_DOWN:
-    case POINTER_CHANGE_SECONDBUTTON_UP:
-      pointerInfo->buttonMask = GHOST_kButtonMaskRight;
-      break;
-    case POINTER_CHANGE_THIRDBUTTON_DOWN:
-    case POINTER_CHANGE_THIRDBUTTON_UP:
-      pointerInfo->buttonMask = GHOST_kButtonMaskMiddle;
-      break;
-    case POINTER_CHANGE_FOURTHBUTTON_DOWN:
-    case POINTER_CHANGE_FOURTHBUTTON_UP:
-      pointerInfo->buttonMask = GHOST_kButtonMaskButton4;
-      break;
-    case POINTER_CHANGE_FIFTHBUTTON_DOWN:
-    case POINTER_CHANGE_FIFTHBUTTON_UP:
-      pointerInfo->buttonMask = GHOST_kButtonMaskButton5;
-      break;
-    default:
-      pointerInfo->hasButtonMask = GHOST_kFailure;
-      break;
-  }
+  GHOST_TInt32 pointerId = GET_POINTERID_WPARAM(wParam);
+  GHOST_TInt32 isPrimary = IS_POINTER_PRIMARY_WPARAM(wParam);
+  GHOST_SystemWin32 *system = (GHOST_SystemWin32 *)GHOST_System::getSystem();
+  GHOST_TUns32 outCount;
 
-  pointerInfo->pixelLocation = pointerApiInfo.ptPixelLocation;
-  pointerInfo->tabletData.Active = GHOST_kTabletModeNone;
-  pointerInfo->tabletData.Pressure = 1.0f;
-  pointerInfo->tabletData.Xtilt = 0.0f;
-  pointerInfo->tabletData.Ytilt = 0.0f;
-
-  if (pointerApiInfo.pointerType != PT_PEN) {
+  if (!(m_fpGetPointerInfoHistory && m_fpGetPointerInfoHistory(pointerId, &outCount, NULL))) {
     return GHOST_kFailure;
   }
 
-  POINTER_PEN_INFO pointerPenInfo;
-  if (m_fpGetPointerPenInfo && m_fpGetPointerPenInfo(pointerInfo->pointerId, &pointerPenInfo)) {
-    pointerInfo->tabletData.Active = GHOST_kTabletModeStylus;
+  auto pointerPenInfo = std::vector<POINTER_PEN_INFO>(outCount);
+  outPointerInfo.resize(outCount);
 
-    if (pointerPenInfo.penMask & PEN_MASK_PRESSURE) {
-      pointerInfo->tabletData.Pressure = pointerPenInfo.pressure / 1024.0f;
+  if (!(m_fpGetPointerPenInfoHistory &&
+        m_fpGetPointerPenInfoHistory(pointerId, &outCount, pointerPenInfo.data()))) {
+    return GHOST_kFailure;
+  }
+
+  for (GHOST_TUns32 i = 0; i < outCount; i++) {
+    POINTER_INFO pointerApiInfo = pointerPenInfo[i].pointerInfo;
+    // Obtain the basic information from the event
+    outPointerInfo[i].pointerId = pointerId;
+    outPointerInfo[i].isPrimary = isPrimary;
+
+    switch (pointerApiInfo.ButtonChangeType) {
+      case POINTER_CHANGE_FIRSTBUTTON_DOWN:
+      case POINTER_CHANGE_FIRSTBUTTON_UP:
+        outPointerInfo[i].buttonMask = GHOST_kButtonMaskLeft;
+        break;
+      case POINTER_CHANGE_SECONDBUTTON_DOWN:
+      case POINTER_CHANGE_SECONDBUTTON_UP:
+        outPointerInfo[i].buttonMask = GHOST_kButtonMaskRight;
+        break;
+      case POINTER_CHANGE_THIRDBUTTON_DOWN:
+      case POINTER_CHANGE_THIRDBUTTON_UP:
+        outPointerInfo[i].buttonMask = GHOST_kButtonMaskMiddle;
+        break;
+      case POINTER_CHANGE_FOURTHBUTTON_DOWN:
+      case POINTER_CHANGE_FOURTHBUTTON_UP:
+        outPointerInfo[i].buttonMask = GHOST_kButtonMaskButton4;
+        break;
+      case POINTER_CHANGE_FIFTHBUTTON_DOWN:
+      case POINTER_CHANGE_FIFTHBUTTON_UP:
+        outPointerInfo[i].buttonMask = GHOST_kButtonMaskButton5;
+        break;
+      default:
+        break;
     }
 
-    if (pointerPenInfo.penFlags & PEN_FLAG_ERASER) {
-      pointerInfo->tabletData.Active = GHOST_kTabletModeEraser;
+    outPointerInfo[i].pixelLocation = pointerApiInfo.ptPixelLocation;
+    outPointerInfo[i].tabletData.Active = GHOST_kTabletModeStylus;
+    outPointerInfo[i].tabletData.Pressure = 1.0f;
+    outPointerInfo[i].tabletData.Xtilt = 0.0f;
+    outPointerInfo[i].tabletData.Ytilt = 0.0f;
+    outPointerInfo[i].time = system->performanceCounterToMillis(pointerApiInfo.PerformanceCount);
+
+    if (pointerPenInfo[i].penMask & PEN_MASK_PRESSURE) {
+      outPointerInfo[i].tabletData.Pressure = pointerPenInfo[i].pressure / 1024.0f;
     }
 
-    if (pointerPenInfo.penFlags & PEN_MASK_TILT_X) {
-      pointerInfo->tabletData.Xtilt = fmin(fabs(pointerPenInfo.tiltX / 90), 1.0f);
+    if (pointerPenInfo[i].penFlags & PEN_FLAG_ERASER) {
+      outPointerInfo[i].tabletData.Active = GHOST_kTabletModeEraser;
     }
 
-    if (pointerPenInfo.penFlags & PEN_MASK_TILT_Y) {
-      pointerInfo->tabletData.Ytilt = fmin(fabs(pointerPenInfo.tiltY / 90), 1.0f);
+    if (pointerPenInfo[i].penMask & PEN_MASK_TILT_X) {
+      outPointerInfo[i].tabletData.Xtilt = fmin(fabs(pointerPenInfo[i].tiltX / 90.0f), 1.0f);
+    }
+
+    if (pointerPenInfo[i].penMask & PEN_MASK_TILT_Y) {
+      outPointerInfo[i].tabletData.Ytilt = fmin(fabs(pointerPenInfo[i].tiltY / 90.0f), 1.0f);
     }
   }
 
@@ -1005,10 +1110,7 @@ void GHOST_WindowWin32::setTabletData(GHOST_TabletData *pTabletData)
     m_tabletData = *pTabletData;
   }
   else {
-    m_tabletData.Active = GHOST_kTabletModeNone;
-    m_tabletData.Pressure = 1.0f;
-    m_tabletData.Xtilt = 0.0f;
-    m_tabletData.Ytilt = 0.0f;
+    m_tabletData = GHOST_TABLET_DATA_NONE;
   }
 }
 
@@ -1070,8 +1172,6 @@ void GHOST_WindowWin32::processWin32TabletInitEvent()
         m_wintab.maxAzimuth = m_wintab.maxAltitude = 0;
       }
     }
-
-    m_tabletData.Active = GHOST_kTabletModeNone;
   }
 
   m_tabletData.Active = GHOST_kTabletModeNone;
@@ -1190,14 +1290,6 @@ static GHOST_TUns16 uns16ReverseBits(GHOST_TUns16 shrt)
   return shrt;
 }
 #endif
-GHOST_TSuccess GHOST_WindowWin32::setWindowCustomCursorShape(GHOST_TUns8 bitmap[16][2],
-                                                             GHOST_TUns8 mask[16][2],
-                                                             int hotX,
-                                                             int hotY)
-{
-  return setWindowCustomCursorShape(
-      (GHOST_TUns8 *)bitmap, (GHOST_TUns8 *)mask, 16, 16, hotX, hotY, 0, 1);
-}
 
 GHOST_TSuccess GHOST_WindowWin32::setWindowCustomCursorShape(GHOST_TUns8 *bitmap,
                                                              GHOST_TUns8 *mask,
@@ -1205,8 +1297,7 @@ GHOST_TSuccess GHOST_WindowWin32::setWindowCustomCursorShape(GHOST_TUns8 *bitmap
                                                              int sizeY,
                                                              int hotX,
                                                              int hotY,
-                                                             int fg_color,
-                                                             int bg_color)
+                                                             bool canInvertColor)
 {
   GHOST_TUns32 andData[32];
   GHOST_TUns32 xorData[32];

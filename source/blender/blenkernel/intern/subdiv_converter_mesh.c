@@ -28,8 +28,8 @@
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_bitmap.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_customdata.h"
 #include "BKE_mesh_mapping.h"
@@ -61,7 +61,7 @@ typedef struct ConverterStorage {
    */
   int *manifold_vertex_index;
   /* Indexed by vertex index from mesh, corresponds to whether this vertex has
-   * infinite sharpness due to non-manifol topology.
+   * infinite sharpness due to non-manifold topology.
    */
   BLI_bitmap *infinite_sharp_vertices_map;
   /* Reverse mapping to above. */
@@ -168,8 +168,7 @@ static float get_edge_sharpness(const OpenSubdiv_Converter *converter, int manif
   }
   const int edge_index = storage->manifold_edge_index_reverse[manifold_edge_index];
   const MEdge *medge = storage->mesh->medge;
-  const float edge_crease = (float)medge[edge_index].crease / 255.0f;
-  return edge_crease * edge_crease * 10.0f;
+  return BKE_subdiv_edge_crease_to_sharpness_char(medge[edge_index].crease);
 }
 
 static bool is_infinite_sharp_vertex(const OpenSubdiv_Converter *converter,
@@ -221,7 +220,7 @@ static void precalc_uv_layer(const OpenSubdiv_Converter *converter, const int la
       mpoly, mloop, mloopuv, num_poly, num_vert, limit, false, true);
   /* NOTE: First UV vertex is supposed to be always marked as separate. */
   storage->num_uv_coordinates = -1;
-  for (int vertex_index = 0; vertex_index < num_vert; ++vertex_index) {
+  for (int vertex_index = 0; vertex_index < num_vert; vertex_index++) {
     const UvMapVert *uv_vert = BKE_mesh_uv_vert_map_get_vert(uv_vert_map, vertex_index);
     while (uv_vert != NULL) {
       if (uv_vert->separate) {

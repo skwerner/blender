@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
@@ -21,9 +21,11 @@
 #ifndef __DNA_LIGHTPROBE_TYPES_H__
 #define __DNA_LIGHTPROBE_TYPES_H__
 
+#include "DNA_ID.h"
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
-#include "DNA_ID.h"
+
+#include "BLI_assert.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -112,8 +114,7 @@ enum {
 };
 
 /* ------- Eevee LightProbes ------- */
-/* Needs to be there because written to file
- * with the lightcache. */
+/* Needs to be there because written to file with the light-cache. */
 
 /* IMPORTANT Padding in these structs is essential. It must match
  * GLSL struct definition in lightprobe_lib.glsl. */
@@ -141,6 +142,10 @@ typedef struct LightGridCache {
   float visibility_bias, visibility_bleed, visibility_range, _pad5;
 } LightGridCache;
 
+/* These are used as ubo data. They need to be aligned to size of vec4. */
+BLI_STATIC_ASSERT_ALIGN(LightProbeCache, 16)
+BLI_STATIC_ASSERT_ALIGN(LightGridCache, 16)
+
 /* ------ Eevee Lightcache ------- */
 
 typedef struct LightCacheTexture {
@@ -155,6 +160,10 @@ typedef struct LightCacheTexture {
 
 typedef struct LightCache {
   int flag;
+  /** Version number to know if the cache data is compatible with this version of blender. */
+  int version;
+  /** Type of data this cache contains. */
+  int type;
   /* only a single cache for now */
   /** Number of probes to use for rendering. */
   int cube_len, grid_len;
@@ -175,6 +184,14 @@ typedef struct LightCache {
   LightProbeCache *cube_data;
   LightGridCache *grid_data;
 } LightCache;
+
+/* Bump the version number for lightcache data structure changes. */
+#define LIGHTCACHE_STATIC_VERSION 1
+
+/* LightCache->type */
+enum {
+  LIGHTCACHE_TYPE_STATIC = 0,
+};
 
 /* LightCache->flag */
 enum {

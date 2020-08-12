@@ -17,9 +17,9 @@
 
 set(INC
   .
-  ../../bmesh
   ../../blenkernel
   ../../blenlib
+  ../../bmesh
   ../../depsgraph
   ../../makesdna
   ../../../../intern/guardedalloc
@@ -55,6 +55,9 @@ set(LIB
   bf_blenkernel
   bf_blenlib
   bf_python_mathutils
+
+  ${PYTHON_LINKFLAGS}
+  ${PYTHON_LIBRARIES}
 )
 
 if(WITH_FREESTYLE)

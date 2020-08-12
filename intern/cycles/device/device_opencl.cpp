@@ -16,8 +16,8 @@
 
 #ifdef WITH_OPENCL
 
-#  include "device/opencl/opencl.h"
-
+#  include "device/opencl/device_opencl.h"
+#  include "device/device.h"
 #  include "device/device_intern.h"
 
 #  include "util/util_foreach.h"
@@ -119,6 +119,8 @@ void device_opencl_info(vector<DeviceInfo> &devices)
     info.display_device = true;
     info.use_split_kernel = true;
     info.has_volume_decoupled = false;
+    info.has_adaptive_stop_per_sample = false;
+    info.denoisers = DENOISER_NLM;
     info.id = id;
 
     /* Check OpenCL extensions */
@@ -136,8 +138,8 @@ string device_opencl_capabilities()
   }
   string result = "";
   string error_msg = ""; /* Only used by opencl_assert(), but in the future
-                           * it could also be nicely reported to the console.
-                           */
+                          * it could also be nicely reported to the console.
+                          */
   cl_uint num_platforms = 0;
   opencl_assert(device_opencl_get_num_platforms_safe(&num_platforms));
   if (num_platforms == 0) {

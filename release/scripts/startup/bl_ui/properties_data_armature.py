@@ -21,7 +21,7 @@ import bpy
 from bpy.types import Panel, Menu
 from rna_prop_ui import PropertyPanel
 
-from .properties_animviz import (
+from bl_ui.properties_animviz import (
     MotionPathButtonsPanel,
     MotionPathButtonsPanel_display,
 )
@@ -84,26 +84,19 @@ class DATA_PT_display(ArmatureButtonsPanel, Panel):
 
         layout.prop(arm, "display_type", text="Display As")
 
-        flow = layout.grid_flow(row_major=False, columns=0, even_columns=False, even_rows=False, align=True)
-        col = flow.column()
+        col = layout.column(heading="Show")
         col.prop(arm, "show_names", text="Names")
-        col = flow.column()
         col.prop(arm, "show_axes", text="Axes")
-        col = flow.column()
         col.prop(arm, "show_bone_custom_shapes", text="Shapes")
-        col = flow.column()
         col.prop(arm, "show_group_colors", text="Group Colors")
         if ob:
-            col = flow.column()
             col.prop(ob, "show_in_front", text="In Front")
-        col = flow.column()
-        col.prop(arm, "use_deform_delay", text="Delay Refresh")
 
 
 class DATA_MT_bone_group_context_menu(Menu):
     bl_label = "Bone Group Specials"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
         layout.operator("pose.group_sort", icon='SORTALPHA')
@@ -129,7 +122,15 @@ class DATA_PT_bone_groups(ArmatureButtonsPanel, Panel):
         rows = 1
         if group:
             rows = 4
-        row.template_list("UI_UL_list", "bone_groups", pose, "bone_groups", pose.bone_groups, "active_index", rows=rows)
+        row.template_list(
+            "UI_UL_list",
+            "bone_groups",
+            pose,
+            "bone_groups",
+            pose.bone_groups,
+            "active_index",
+            rows=rows,
+        )
 
         col = row.column(align=True)
         col.active = (ob.proxy is None)

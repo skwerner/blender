@@ -24,11 +24,9 @@
 #include "BLI_math.h"
 #include "BLI_math_color.h"
 
-extern "C" {
 #include "BKE_movieclip.h"
 #include "BKE_node.h"
 #include "BKE_tracking.h"
-}
 
 TrackPositionOperation::TrackPositionOperation() : NodeOperation()
 {
@@ -52,8 +50,9 @@ void TrackPositionOperation::initExecution()
   zero_v2(this->m_markerPos);
   zero_v2(this->m_relativePos);
 
-  if (!this->m_movieClip)
+  if (!this->m_movieClip) {
     return;
+  }
 
   tracking = &this->m_movieClip->tracking;
 
@@ -121,10 +120,12 @@ void TrackPositionOperation::executePixelSampled(float output[4],
 {
   output[0] = this->m_markerPos[this->m_axis] - this->m_relativePos[this->m_axis];
 
-  if (this->m_axis == 0)
+  if (this->m_axis == 0) {
     output[0] *= this->m_width;
-  else
+  }
+  else {
     output[0] *= this->m_height;
+  }
 }
 
 void TrackPositionOperation::determineResolution(unsigned int resolution[2],

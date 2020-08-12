@@ -31,11 +31,15 @@
 #ifndef __DNA_SEQUENCE_TYPES_H__
 #define __DNA_SEQUENCE_TYPES_H__
 
-#include "DNA_defs.h"
 #include "DNA_color_types.h"
+#include "DNA_defs.h"
 #include "DNA_listBase.h"
 #include "DNA_vec_types.h"
 #include "DNA_vfont_types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct Ipo;
 struct MovieClip;
@@ -134,7 +138,7 @@ typedef struct Sequence {
   /** SEQ_NAME_MAXSTR - name, set by default and needs to be unique, for RNA paths. */
   char name[64];
 
-  /**fLags bitmap (see below) and the type of sequenc.e*/
+  /** Flags bitmap (see below) and the type of sequence. */
   int flag, type;
   /** The length of the contents of this strip - before handles are applied. */
   int len;
@@ -155,7 +159,7 @@ typedef struct Sequence {
   int startstill, endstill;
   /** Machine: the strip channel, depth the depth in the sequence when dealing with metastrips. */
   int machine, depth;
-  /** Starting and ending points of the strip in the sequenc.e*/
+  /** Starting and ending points of the strip in the sequence. */
   int startdisp, enddisp;
   float sat;
   float mul, handsize;
@@ -229,6 +233,12 @@ typedef struct Sequence {
 
   /* modifiers */
   ListBase modifiers;
+
+  int cache_flag;
+  int _pad2[3];
+
+  struct Sequence *orig_sequence;
+  void *_pad3;
 } Sequence;
 
 typedef struct MetaStack {
@@ -258,6 +268,17 @@ typedef struct Editing {
   int over_ofs, over_cfra;
   int over_flag, proxy_storage;
   rctf over_border;
+
+  struct SeqCache *cache;
+
+  /* Cache control */
+  float recycle_max_cost;
+  int cache_flag;
+
+  struct PrefetchJob *prefetch_job;
+
+  /* Must be initialized only by BKE_sequencer_cache_create() */
+  int64_t disk_cache_timestamp;
 } Editing;
 
 /* ************* Effect Variable Structs ********* */
@@ -447,6 +468,7 @@ typedef struct SequencerScopes {
 #define SEQ_SPEED_INTEGRATE (1 << 0)
 #define SEQ_SPEED_UNUSED_1 (1 << 1) /* cleared */
 #define SEQ_SPEED_COMPRESS_IPO_Y (1 << 2)
+#define SEQ_SPEED_USE_INTERPOLATION (1 << 3)
 
 /* ***************** SEQUENCE ****************** */
 #define SEQ_NAME_MAXSTR 64
@@ -572,7 +594,7 @@ enum {
   SEQ_TYPE_LIGHTEN = 44,
   SEQ_TYPE_DODGE = 45,
   SEQ_TYPE_DARKEN = 46,
-  SEQ_TYPE_BURN = 47,
+  SEQ_TYPE_COLOR_BURN = 47,
   SEQ_TYPE_LINEAR_BURN = 48,
   SEQ_TYPE_OVERLAY = 49,
   SEQ_TYPE_HARD_LIGHT = 50,
@@ -613,7 +635,7 @@ enum {
   seqModifierType_Mask = 5,
   seqModifierType_WhiteBalance = 6,
   seqModifierType_Tonemap = 7,
-
+  /* Keep last. */
   NUM_SEQUENCE_MODIFIER_TYPES,
 };
 
@@ -634,5 +656,41 @@ enum {
   /* Global (scene) frame number will be used to access the mask. */
   SEQUENCE_MASK_TIME_ABSOLUTE = 1,
 };
+
+/* Sequence->cache_flag
+ * SEQ_CACHE_STORE_RAW
+ * SEQ_CACHE_STORE_PREPROCESSED
+ * SEQ_CACHE_STORE_COMPOSITE
+ * FINAL_OUT is ignored
+ *
+ * Editing->cache_flag
+ * all entries
+ */
+enum {
+  SEQ_CACHE_STORE_RAW = (1 << 0),
+  SEQ_CACHE_STORE_PREPROCESSED = (1 << 1),
+  SEQ_CACHE_STORE_COMPOSITE = (1 << 2),
+  SEQ_CACHE_STORE_FINAL_OUT = (1 << 3),
+
+  /* For lookup purposes */
+  SEQ_CACHE_ALL_TYPES = SEQ_CACHE_STORE_RAW | SEQ_CACHE_STORE_PREPROCESSED |
+                        SEQ_CACHE_STORE_COMPOSITE | SEQ_CACHE_STORE_FINAL_OUT,
+
+  SEQ_CACHE_OVERRIDE = (1 << 4),
+
+  /* enable cache visualization overlay in timeline UI */
+  SEQ_CACHE_VIEW_ENABLE = (1 << 5),
+  SEQ_CACHE_VIEW_RAW = (1 << 6),
+  SEQ_CACHE_VIEW_PREPROCESSED = (1 << 7),
+  SEQ_CACHE_VIEW_COMPOSITE = (1 << 8),
+  SEQ_CACHE_VIEW_FINAL_OUT = (1 << 9),
+
+  SEQ_CACHE_PREFETCH_ENABLE = (1 << 10),
+  SEQ_CACHE_DISK_CACHE_ENABLE = (1 << 11),
+};
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __DNA_SEQUENCE_TYPES_H__ */

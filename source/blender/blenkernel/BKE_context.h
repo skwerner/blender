@@ -25,6 +25,7 @@
  */
 
 #include "DNA_listBase.h"
+#include "DNA_object_enums.h"
 #include "RNA_types.h"
 
 #ifdef __cplusplus
@@ -33,7 +34,6 @@ extern "C" {
 
 struct ARegion;
 struct Base;
-struct Brush;
 struct CacheFile;
 struct Collection;
 struct Depsgraph;
@@ -59,7 +59,6 @@ struct Text;
 struct ToolSettings;
 struct View3D;
 struct ViewLayer;
-struct ViewRender;
 struct bGPDframe;
 struct bGPDlayer;
 struct bGPdata;
@@ -67,8 +66,6 @@ struct bPoseChannel;
 struct bScreen;
 struct wmWindow;
 struct wmWindowManager;
-
-#include "DNA_object_enums.h"
 
 /* Structs */
 
@@ -98,7 +95,7 @@ typedef struct bContextStore {
 
 /* for the context's rna mode enum
  * keep aligned with data_mode_strings in context.c */
-enum eContextObjectMode {
+typedef enum eContextObjectMode {
   CTX_MODE_EDIT_MESH = 0,
   CTX_MODE_EDIT_CURVE,
   CTX_MODE_EDIT_SURFACE,
@@ -117,8 +114,9 @@ enum eContextObjectMode {
   CTX_MODE_EDIT_GPENCIL,
   CTX_MODE_SCULPT_GPENCIL,
   CTX_MODE_WEIGHT_GPENCIL,
-};
-#define CTX_MODE_NUM (CTX_MODE_WEIGHT_GPENCIL + 1)
+  CTX_MODE_VERTEX_GPENCIL,
+} eContextObjectMode;
+#define CTX_MODE_NUM (CTX_MODE_VERTEX_GPENCIL + 1)
 
 /* Context */
 
@@ -137,8 +135,8 @@ void CTX_store_free(bContextStore *store);
 void CTX_store_free_list(ListBase *contexts);
 
 /* need to store if python is initialized or not */
-int CTX_py_init_get(bContext *C);
-void CTX_py_init_set(bContext *C, int value);
+bool CTX_py_init_get(bContext *C);
+void CTX_py_init_set(bContext *C, bool value);
 
 void *CTX_py_dict_get(const bContext *C);
 void CTX_py_dict_set(bContext *C, void *value);
@@ -179,7 +177,7 @@ struct SpaceTopBar *CTX_wm_space_topbar(const bContext *C);
 void CTX_wm_manager_set(bContext *C, struct wmWindowManager *wm);
 void CTX_wm_window_set(bContext *C, struct wmWindow *win);
 void CTX_wm_screen_set(bContext *C, struct bScreen *screen); /* to be removed */
-void CTX_wm_area_set(bContext *C, struct ScrArea *sa);
+void CTX_wm_area_set(bContext *C, struct ScrArea *area);
 void CTX_wm_region_set(bContext *C, struct ARegion *region);
 void CTX_wm_menu_set(bContext *C, struct ARegion *menu);
 void CTX_wm_gizmo_group_set(bContext *C, struct wmGizmoGroup *gzgroup);
@@ -200,6 +198,9 @@ enum {
 
 PointerRNA CTX_data_pointer_get(const bContext *C, const char *member);
 PointerRNA CTX_data_pointer_get_type(const bContext *C, const char *member, StructRNA *type);
+PointerRNA CTX_data_pointer_get_type_silent(const bContext *C,
+                                            const char *member,
+                                            StructRNA *type);
 ListBase CTX_data_collection_get(const bContext *C, const char *member);
 ListBase CTX_data_dir_get_ex(const bContext *C,
                              const bool use_store,
@@ -239,7 +240,7 @@ bool CTX_data_dir(const char *member);
 
 #define CTX_DATA_BEGIN_WITH_ID(C, Type, instance, member, Type_id, instance_id) \
   CTX_DATA_BEGIN (C, Type, instance, member) \
-    Type_id instance_id = ctx_link->ptr.id.data;
+    Type_id instance_id = (Type_id)ctx_link->ptr.owner_id;
 
 int ctx_data_list_count(const bContext *C, int (*func)(const bContext *, ListBase *));
 
@@ -311,7 +312,31 @@ int CTX_data_visible_gpencil_layers(const bContext *C, ListBase *list);
 int CTX_data_editable_gpencil_layers(const bContext *C, ListBase *list);
 int CTX_data_editable_gpencil_strokes(const bContext *C, ListBase *list);
 
-struct Depsgraph *CTX_data_depsgraph(const bContext *C);
+bool CTX_wm_interface_locked(const bContext *C);
+
+/* Gets pointer to the dependency graph.
+ * If it doesn't exist yet, it will be allocated.
+ *
+ * The result dependency graph is NOT guaranteed to be up-to-date neither from relation nor from
+ * evaluated data points of view.
+ *
+ * NOTE: Can not be used if access to a fully evaluated datablock is needed. */
+struct Depsgraph *CTX_data_depsgraph_pointer(const bContext *C);
+
+/* Get dependency graph which is expected to be fully evaluated.
+ *
+ * In the release builds it is the same as CTX_data_depsgraph_pointer(). In the debug builds extra
+ * sanity checks are done. Additionally, this provides more semantic meaning to what is exactly
+ * expected to happen. */
+struct Depsgraph *CTX_data_expect_evaluated_depsgraph(const bContext *C);
+
+/* Gets fully updated and evaluated dependency graph.
+ *
+ * All the relations and evaluated objects are guaranteed to be up to date.
+ *
+ * NOTE: Will be expensive if there are relations or objects tagged for update.
+ * NOTE: If there are pending updates depsgraph hooks will be invoked. */
+struct Depsgraph *CTX_data_ensure_evaluated_depsgraph(const bContext *C);
 
 /* Will Return NULL if depsgraph is not allocated yet.
  * Only used by handful of operators which are run on file load.

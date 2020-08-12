@@ -38,11 +38,13 @@ extern "C" {
 //-------------------MODULE INITIALIZATION--------------------------------
 int UnaryFunction1D_Init(PyObject *module)
 {
-  if (module == NULL)
+  if (module == NULL) {
     return -1;
+  }
 
-  if (PyType_Ready(&UnaryFunction1D_Type) < 0)
+  if (PyType_Ready(&UnaryFunction1D_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&UnaryFunction1D_Type);
   PyModule_AddObject(module, "UnaryFunction1D", (PyObject *)&UnaryFunction1D_Type);
 
@@ -101,11 +103,7 @@ static PyObject *UnaryFunction1D_name_get(BPy_UnaryFunction1D *self, void *UNUSE
 }
 
 static PyGetSetDef BPy_UnaryFunction1D_getseters[] = {
-    {(char *)"name",
-     (getter)UnaryFunction1D_name_get,
-     (setter)NULL,
-     (char *)UnaryFunction1D_name_doc,
-     NULL},
+    {"name", (getter)UnaryFunction1D_name_get, (setter)NULL, UnaryFunction1D_name_doc, NULL},
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };
 

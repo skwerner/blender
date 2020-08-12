@@ -26,6 +26,11 @@
 
 #include "BLI_compiler_attrs.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+struct BMEditMesh;
 struct BPoint;
 struct Depsgraph;
 struct Lattice;
@@ -37,64 +42,24 @@ struct Scene;
 struct bGPDstroke;
 
 void BKE_lattice_resize(struct Lattice *lt, int u, int v, int w, struct Object *ltOb);
-void BKE_lattice_init(struct Lattice *lt);
 struct Lattice *BKE_lattice_add(struct Main *bmain, const char *name);
-void BKE_lattice_copy_data(struct Main *bmain,
-                           struct Lattice *lt_dst,
-                           const struct Lattice *lt_src,
-                           const int flag);
 struct Lattice *BKE_lattice_copy(struct Main *bmain, const struct Lattice *lt);
-void BKE_lattice_free(struct Lattice *lt);
-void BKE_lattice_make_local(struct Main *bmain, struct Lattice *lt, const bool lib_local);
 void calc_lat_fudu(int flag, int res, float *r_fu, float *r_du);
-
-struct LatticeDeformData *init_latt_deform(struct Object *oblatt,
-                                           struct Object *ob) ATTR_WARN_UNUSED_RESULT;
-void calc_latt_deform(struct LatticeDeformData *lattice_deform_data, float co[3], float weight);
-void end_latt_deform(struct LatticeDeformData *lattice_deform_data);
 
 bool object_deform_mball(struct Object *ob, struct ListBase *dispbase);
 void outside_lattice(struct Lattice *lt);
 
-void curve_deform_verts(struct Object *cuOb,
-                        struct Object *target,
-                        float (*vertexCos)[3],
-                        int numVerts,
-                        struct MDeformVert *dvert,
-                        const int defgrp_index,
-                        short defaxis);
-void curve_deform_vector(struct Object *cuOb,
-                         struct Object *target,
-                         float orco[3],
-                         float vec[3],
-                         float mat[3][3],
-                         int no_rot_axis);
-
-void lattice_deform_verts(struct Object *laOb,
-                          struct Object *target,
-                          struct Mesh *mesh,
-                          float (*vertexCos)[3],
-                          int numVerts,
-                          const char *vgroup,
-                          float influence);
-void armature_deform_verts(struct Object *armOb,
-                           struct Object *target,
-                           const struct Mesh *mesh,
-                           float (*vertexCos)[3],
-                           float (*defMats)[3][3],
-                           int numVerts,
-                           int deformflag,
-                           float (*prevCos)[3],
-                           const char *defgrp_name,
-                           struct bGPDstroke *gps);
-
-float (*BKE_lattice_vertexcos_get(struct Object *ob, int *r_numVerts))[3];
-void BKE_lattice_vertexcos_apply(struct Object *ob, float (*vertexCos)[3]);
+float (*BKE_lattice_vert_coords_alloc(const struct Lattice *lt, int *r_vert_len))[3];
+void BKE_lattice_vert_coords_get(const struct Lattice *lt, float (*vert_coords)[3]);
+void BKE_lattice_vert_coords_apply_with_mat4(struct Lattice *lt,
+                                             const float (*vert_coords)[3],
+                                             const float mat[4][4]);
+void BKE_lattice_vert_coords_apply(struct Lattice *lt, const float (*vert_coords)[3]);
 void BKE_lattice_modifiers_calc(struct Depsgraph *depsgraph,
                                 struct Scene *scene,
                                 struct Object *ob);
 
-struct MDeformVert *BKE_lattice_deform_verts_get(struct Object *lattice);
+struct MDeformVert *BKE_lattice_deform_verts_get(const struct Object *lattice);
 struct BPoint *BKE_lattice_active_point_get(struct Lattice *lt);
 
 struct BoundBox *BKE_lattice_boundbox_get(struct Object *ob);
@@ -133,5 +98,47 @@ void BKE_lattice_batch_cache_free(struct Lattice *lt);
 
 extern void (*BKE_lattice_batch_cache_dirty_tag_cb)(struct Lattice *lt, int mode);
 extern void (*BKE_lattice_batch_cache_free_cb)(struct Lattice *lt);
+
+/* -------------------------------------------------------------------- */
+/** \name Deform 3D Coordinates by Lattice (lattice_deform.c)
+ * \{ */
+
+struct LatticeDeformData *BKE_lattice_deform_data_create(
+    const struct Object *oblatt, const struct Object *ob) ATTR_WARN_UNUSED_RESULT;
+void BKE_lattice_deform_data_eval_co(struct LatticeDeformData *lattice_deform_data,
+                                     float co[3],
+                                     float weight);
+void BKE_lattice_deform_data_destroy(struct LatticeDeformData *lattice_deform_data);
+
+void BKE_lattice_deform_coords(const struct Object *ob_lattice,
+                               const struct Object *ob_target,
+                               float (*vert_coords)[3],
+                               const int vert_coords_len,
+                               const short flag,
+                               const char *defgrp_name,
+                               float influence);
+
+void BKE_lattice_deform_coords_with_mesh(const struct Object *ob_lattice,
+                                         const struct Object *ob_target,
+                                         float (*vert_coords)[3],
+                                         const int vert_coords_len,
+                                         const short flag,
+                                         const char *defgrp_name,
+                                         const float influence,
+                                         const struct Mesh *me_target);
+
+void BKE_lattice_deform_coords_with_editmesh(const struct Object *ob_lattice,
+                                             const struct Object *ob_target,
+                                             float (*vert_coords)[3],
+                                             const int vert_coords_len,
+                                             const short flag,
+                                             const char *defgrp_name,
+                                             const float influence,
+                                             struct BMEditMesh *em_target);
+/** \} */
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __BKE_LATTICE_H__ */

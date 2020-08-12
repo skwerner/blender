@@ -21,31 +21,32 @@
  * \ingroup spview3d
  */
 
-#include <string.h>
-#include <stdio.h>
-#include <math.h>
-#include <float.h>
 #include <assert.h>
+#include <float.h>
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
 
 #include "DNA_action_types.h"
 #include "DNA_armature_types.h"
 #include "DNA_curve_types.h"
-#include "DNA_meta_types.h"
+#include "DNA_gpencil_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
+#include "DNA_meta_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_tracking_types.h"
-#include "DNA_gpencil_types.h"
 
 #include "MEM_guardedalloc.h"
 
 #include "BLI_array.h"
-#include "BLI_math.h"
+#include "BLI_bitmap.h"
 #include "BLI_lasso_2d.h"
-#include "BLI_rect.h"
 #include "BLI_linklist.h"
 #include "BLI_listbase.h"
+#include "BLI_math.h"
+#include "BLI_rect.h"
 #include "BLI_string.h"
 #include "BLI_utildefines.h"
 
@@ -54,19 +55,20 @@
 #endif
 
 /* vertex box select */
-#include "IMB_imbuf_types.h"
-#include "IMB_imbuf.h"
 #include "BKE_global.h"
+#include "BKE_main.h"
+#include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
 
 #include "BKE_armature.h"
 #include "BKE_context.h"
 #include "BKE_curve.h"
+#include "BKE_editmesh.h"
 #include "BKE_layer.h"
 #include "BKE_mball.h"
 #include "BKE_mesh.h"
 #include "BKE_object.h"
 #include "BKE_paint.h"
-#include "BKE_editmesh.h"
 #include "BKE_scene.h"
 #include "BKE_tracking.h"
 #include "BKE_workspace.h"
@@ -82,21 +84,27 @@
 
 #include "ED_armature.h"
 #include "ED_curve.h"
+#include "ED_gpencil.h"
 #include "ED_lattice.h"
-#include "ED_particle.h"
+#include "ED_mball.h"
 #include "ED_mesh.h"
 #include "ED_object.h"
+#include "ED_outliner.h"
+#include "ED_particle.h"
 #include "ED_screen.h"
-#include "ED_select_utils.h"
 #include "ED_sculpt.h"
-#include "ED_mball.h"
-#include "ED_gpencil.h"
+#include "ED_select_utils.h"
 
 #include "UI_interface.h"
 
-#include "GPU_draw.h"
 #include "GPU_glew.h"
 #include "GPU_matrix.h"
+
+#include "DEG_depsgraph.h"
+#include "DEG_depsgraph_query.h"
+
+#include "DRW_engine.h"
+#include "DRW_select_buffer.h"
 
 #include "view3d_intern.h" /* own include */
 
@@ -112,13 +120,13 @@ float ED_view3d_select_dist_px(void)
 }
 
 /* TODO: should return whether there is valid context to continue */
-void ED_view3d_viewcontext_init(bContext *C, ViewContext *vc)
+void ED_view3d_viewcontext_init(bContext *C, ViewContext *vc, Depsgraph *depsgraph)
 {
   memset(vc, 0, sizeof(ViewContext));
   vc->C = C;
-  vc->ar = CTX_wm_region(C);
+  vc->region = CTX_wm_region(C);
   vc->bmain = CTX_data_main(C);
-  vc->depsgraph = CTX_data_depsgraph(C);
+  vc->depsgraph = depsgraph;
   vc->scene = CTX_data_scene(C);
   vc->view_layer = CTX_data_view_layer(C);
   vc->v3d = CTX_wm_view3d(C);
@@ -134,9 +142,6 @@ void ED_view3d_viewcontext_init_object(ViewContext *vc, Object *obact)
   if (vc->obedit) {
     BLI_assert(BKE_object_is_in_editmode(obact));
     vc->obedit = obact;
-    /* previous selections are now invalid. */
-    vc->v3d->flag |= V3D_INVALID_BACKBUF;
-
     if (vc->em) {
       vc->em = BKE_editmesh_from_object(vc->obedit);
     }
@@ -152,7 +157,7 @@ void ED_view3d_viewcontext_init_object(ViewContext *vc, Object *obact)
 static bool object_deselect_all_visible(ViewLayer *view_layer, View3D *v3d)
 {
   bool changed = false;
-  for (Base *base = view_layer->object_bases.first; base; base = base->next) {
+  LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
     if (base->flag & BASE_SELECTED) {
       if (BASE_SELECTABLE(v3d, base)) {
         ED_object_base_select(base, BA_DESELECT);
@@ -167,7 +172,7 @@ static bool object_deselect_all_visible(ViewLayer *view_layer, View3D *v3d)
 static bool object_deselect_all_except(ViewLayer *view_layer, Base *b)
 {
   bool changed = false;
-  for (Base *base = view_layer->object_bases.first; base; base = base->next) {
+  LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
     if (base->flag & BASE_SELECTED) {
       if (b != base) {
         ED_object_base_select(base, BA_DESELECT);
@@ -181,20 +186,88 @@ static bool object_deselect_all_except(ViewLayer *view_layer, Base *b)
 /** \} */
 
 /* -------------------------------------------------------------------- */
+/** \name Internal Edit-Mesh Select Buffer Wrapper
+ *
+ * Avoid duplicate code when using edit-mode selection,
+ * actual logic is handled outside of this function.
+ *
+ * \note Currently this #EDBMSelectID_Context which is mesh specific
+ * however the logic could also be used for non-meshes too.
+ *
+ * \{ */
+
+struct EditSelectBuf_Cache {
+  BLI_bitmap *select_bitmap;
+};
+
+static void editselect_buf_cache_init(ViewContext *vc, short select_mode)
+{
+  if (vc->obedit) {
+    uint bases_len = 0;
+    Base **bases = BKE_view_layer_array_from_bases_in_edit_mode(
+        vc->view_layer, vc->v3d, &bases_len);
+
+    DRW_select_buffer_context_create(bases, bases_len, select_mode);
+    MEM_freeN(bases);
+  }
+  else {
+    /* Use for paint modes, currently only a single object at a time. */
+    if (vc->obact) {
+      Base *base = BKE_view_layer_base_find(vc->view_layer, vc->obact);
+      DRW_select_buffer_context_create(&base, 1, select_mode);
+    }
+  }
+}
+
+static void editselect_buf_cache_free(struct EditSelectBuf_Cache *esel)
+{
+  MEM_SAFE_FREE(esel->select_bitmap);
+}
+
+static void editselect_buf_cache_free_voidp(void *esel_voidp)
+{
+  editselect_buf_cache_free(esel_voidp);
+  MEM_freeN(esel_voidp);
+}
+
+static void editselect_buf_cache_init_with_generic_userdata(wmGenericUserData *wm_userdata,
+                                                            ViewContext *vc,
+                                                            short select_mode)
+{
+  struct EditSelectBuf_Cache *esel = MEM_callocN(sizeof(*esel), __func__);
+  wm_userdata->data = esel;
+  wm_userdata->free_fn = editselect_buf_cache_free_voidp;
+  wm_userdata->use_free = true;
+  editselect_buf_cache_init(vc, select_mode);
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
 /** \name Internal Edit-Mesh Utilities
  * \{ */
 
-static bool edbm_backbuf_check_and_select_verts(BMEditMesh *em, const eSelectOp sel_op)
+static bool edbm_backbuf_check_and_select_verts(struct EditSelectBuf_Cache *esel,
+                                                Depsgraph *depsgraph,
+                                                Object *ob,
+                                                BMEditMesh *em,
+                                                const eSelectOp sel_op)
 {
   BMVert *eve;
   BMIter iter;
-  uint index = bm_wireoffs;
   bool changed = false;
 
+  const BLI_bitmap *select_bitmap = esel->select_bitmap;
+  uint index = DRW_select_buffer_context_offset_for_object_elem(depsgraph, ob, SCE_SELECT_VERTEX);
+  if (index == 0) {
+    return false;
+  }
+
+  index -= 1;
   BM_ITER_MESH (eve, &iter, em->bm, BM_VERTS_OF_MESH) {
     if (!BM_elem_flag_test(eve, BM_ELEM_HIDDEN)) {
       const bool is_select = BM_elem_flag_test(eve, BM_ELEM_SELECT);
-      const bool is_inside = EDBM_backbuf_check(index);
+      const bool is_inside = BLI_BITMAP_TEST_BOOL(select_bitmap, index);
       const int sel_op_result = ED_select_op_action_deselected(sel_op, is_select, is_inside);
       if (sel_op_result != -1) {
         BM_vert_select_set(em->bm, eve, sel_op_result);
@@ -206,17 +279,27 @@ static bool edbm_backbuf_check_and_select_verts(BMEditMesh *em, const eSelectOp 
   return changed;
 }
 
-static bool edbm_backbuf_check_and_select_edges(BMEditMesh *em, const eSelectOp sel_op)
+static bool edbm_backbuf_check_and_select_edges(struct EditSelectBuf_Cache *esel,
+                                                Depsgraph *depsgraph,
+                                                Object *ob,
+                                                BMEditMesh *em,
+                                                const eSelectOp sel_op)
 {
   BMEdge *eed;
   BMIter iter;
-  uint index = bm_solidoffs;
   bool changed = false;
 
+  const BLI_bitmap *select_bitmap = esel->select_bitmap;
+  uint index = DRW_select_buffer_context_offset_for_object_elem(depsgraph, ob, SCE_SELECT_EDGE);
+  if (index == 0) {
+    return false;
+  }
+
+  index -= 1;
   BM_ITER_MESH (eed, &iter, em->bm, BM_EDGES_OF_MESH) {
     if (!BM_elem_flag_test(eed, BM_ELEM_HIDDEN)) {
       const bool is_select = BM_elem_flag_test(eed, BM_ELEM_SELECT);
-      const bool is_inside = EDBM_backbuf_check(index);
+      const bool is_inside = BLI_BITMAP_TEST_BOOL(select_bitmap, index);
       const int sel_op_result = ED_select_op_action_deselected(sel_op, is_select, is_inside);
       if (sel_op_result != -1) {
         BM_edge_select_set(em->bm, eed, sel_op_result);
@@ -228,17 +311,27 @@ static bool edbm_backbuf_check_and_select_edges(BMEditMesh *em, const eSelectOp 
   return changed;
 }
 
-static bool edbm_backbuf_check_and_select_faces(BMEditMesh *em, const eSelectOp sel_op)
+static bool edbm_backbuf_check_and_select_faces(struct EditSelectBuf_Cache *esel,
+                                                Depsgraph *depsgraph,
+                                                Object *ob,
+                                                BMEditMesh *em,
+                                                const eSelectOp sel_op)
 {
   BMFace *efa;
   BMIter iter;
-  uint index = 1;
   bool changed = false;
 
+  const BLI_bitmap *select_bitmap = esel->select_bitmap;
+  uint index = DRW_select_buffer_context_offset_for_object_elem(depsgraph, ob, SCE_SELECT_FACE);
+  if (index == 0) {
+    return false;
+  }
+
+  index -= 1;
   BM_ITER_MESH (efa, &iter, em->bm, BM_FACES_OF_MESH) {
     if (!BM_elem_flag_test(efa, BM_ELEM_HIDDEN)) {
       const bool is_select = BM_elem_flag_test(efa, BM_ELEM_SELECT);
-      const bool is_inside = EDBM_backbuf_check(index);
+      const bool is_inside = BLI_BITMAP_TEST_BOOL(select_bitmap, index);
       const int sel_op_result = ED_select_op_action_deselected(sel_op, is_select, is_inside);
       if (sel_op_result != -1) {
         BM_face_select_set(em->bm, efa, sel_op_result);
@@ -251,17 +344,21 @@ static bool edbm_backbuf_check_and_select_faces(BMEditMesh *em, const eSelectOp 
 }
 
 /* object mode, edbm_ prefix is confusing here, rename? */
-static bool edbm_backbuf_check_and_select_verts_obmode(Mesh *me, const eSelectOp sel_op)
+static bool edbm_backbuf_check_and_select_verts_obmode(Mesh *me,
+                                                       struct EditSelectBuf_Cache *esel,
+                                                       const eSelectOp sel_op)
 {
   MVert *mv = me->mvert;
   uint index;
   bool changed = false;
 
+  const BLI_bitmap *select_bitmap = esel->select_bitmap;
+
   if (mv) {
-    for (index = 1; index <= me->totvert; index++, mv++) {
+    for (index = 0; index < me->totvert; index++, mv++) {
       if (!(mv->flag & ME_HIDE)) {
         const bool is_select = mv->flag & SELECT;
-        const bool is_inside = EDBM_backbuf_check(index);
+        const bool is_inside = BLI_BITMAP_TEST_BOOL(select_bitmap, index);
         const int sel_op_result = ED_select_op_action_deselected(sel_op, is_select, is_inside);
         if (sel_op_result != -1) {
           SET_FLAG_FROM_TEST(mv->flag, sel_op_result, SELECT);
@@ -274,17 +371,21 @@ static bool edbm_backbuf_check_and_select_verts_obmode(Mesh *me, const eSelectOp
 }
 
 /* object mode, edbm_ prefix is confusing here, rename? */
-static bool edbm_backbuf_check_and_select_tfaces(Mesh *me, const eSelectOp sel_op)
+static bool edbm_backbuf_check_and_select_faces_obmode(Mesh *me,
+                                                       struct EditSelectBuf_Cache *esel,
+                                                       const eSelectOp sel_op)
 {
   MPoly *mpoly = me->mpoly;
   uint index;
   bool changed = false;
 
+  const BLI_bitmap *select_bitmap = esel->select_bitmap;
+
   if (mpoly) {
-    for (index = 1; index <= me->totpoly; index++, mpoly++) {
+    for (index = 0; index < me->totpoly; index++, mpoly++) {
       if (!(mpoly->flag & ME_HIDE)) {
         const bool is_select = mpoly->flag & ME_FACE_SEL;
-        const bool is_inside = EDBM_backbuf_check(index);
+        const bool is_inside = BLI_BITMAP_TEST_BOOL(select_bitmap, index);
         const int sel_op_result = ED_select_op_action_deselected(sel_op, is_select, is_inside);
         if (sel_op_result != -1) {
           SET_FLAG_FROM_TEST(mpoly->flag, sel_op_result, ME_FACE_SEL);
@@ -307,9 +408,10 @@ typedef struct LassoSelectUserData {
   const rcti *rect;
   const rctf *rect_fl;
   rctf _rect_fl;
-  const int (*mcords)[2];
-  int moves;
+  const int (*mcoords)[2];
+  int mcoords_len;
   eSelectOp sel_op;
+  eBezTriple_Flag select_flag;
 
   /* runtime */
   int pass;
@@ -320,8 +422,8 @@ typedef struct LassoSelectUserData {
 static void view3d_userdata_lassoselect_init(LassoSelectUserData *r_data,
                                              ViewContext *vc,
                                              const rcti *rect,
-                                             const int (*mcords)[2],
-                                             const int moves,
+                                             const int (*mcoords)[2],
+                                             const int mcoords_len,
                                              const eSelectOp sel_op)
 {
   r_data->vc = vc;
@@ -330,9 +432,11 @@ static void view3d_userdata_lassoselect_init(LassoSelectUserData *r_data,
   r_data->rect_fl = &r_data->_rect_fl;
   BLI_rctf_rcti_copy(&r_data->_rect_fl, rect);
 
-  r_data->mcords = mcords;
-  r_data->moves = moves;
+  r_data->mcoords = mcoords;
+  r_data->mcoords_len = mcoords_len;
   r_data->sel_op = sel_op;
+  /* SELECT by default, but can be changed if needed (only few cases use and respect this). */
+  r_data->select_flag = SELECT;
 
   /* runtime */
   r_data->pass = 0;
@@ -426,7 +530,8 @@ static void do_lasso_select_pose__do_tag(void *userData,
     if (screen_co_a[0] != IS_CLIPPED) {
       points_proj_tot++;
       if (BLI_rcti_isect_pt(data->rect, UNPACK2(screen_co_a)) &&
-          BLI_lasso_is_point_inside(data->mcords, data->moves, UNPACK2(screen_co_a), INT_MAX)) {
+          BLI_lasso_is_point_inside(
+              data->mcoords, data->mcoords_len, UNPACK2(screen_co_a), INT_MAX)) {
         is_point_done = true;
       }
     }
@@ -435,22 +540,28 @@ static void do_lasso_select_pose__do_tag(void *userData,
     if (screen_co_b[0] != IS_CLIPPED) {
       points_proj_tot++;
       if (BLI_rcti_isect_pt(data->rect, UNPACK2(screen_co_b)) &&
-          BLI_lasso_is_point_inside(data->mcords, data->moves, UNPACK2(screen_co_b), INT_MAX)) {
+          BLI_lasso_is_point_inside(
+              data->mcoords, data->mcoords_len, UNPACK2(screen_co_b), INT_MAX)) {
         is_point_done = true;
       }
     }
 
     /* if one of points selected, we skip the bone itself */
-    if ((is_point_done == true) ||
-        ((is_point_done == false) && (points_proj_tot == 2) &&
-         BLI_lasso_is_edge_inside(
-             data->mcords, data->moves, UNPACK2(screen_co_a), UNPACK2(screen_co_b), INT_MAX))) {
+    if ((is_point_done == true) || ((is_point_done == false) && (points_proj_tot == 2) &&
+                                    BLI_lasso_is_edge_inside(data->mcoords,
+                                                             data->mcoords_len,
+                                                             UNPACK2(screen_co_a),
+                                                             UNPACK2(screen_co_b),
+                                                             INT_MAX))) {
       pchan->bone->flag |= BONE_DONE;
     }
     data->is_changed |= is_point_done;
   }
 }
-static void do_lasso_tag_pose(ViewContext *vc, Object *ob, const int mcords[][2], short moves)
+static void do_lasso_tag_pose(ViewContext *vc,
+                              Object *ob,
+                              const int mcoords[][2],
+                              const int mcoords_len)
 {
   ViewContext vc_tmp;
   LassoSelectUserData data;
@@ -463,9 +574,9 @@ static void do_lasso_tag_pose(ViewContext *vc, Object *ob, const int mcords[][2]
   vc_tmp = *vc;
   vc_tmp.obact = ob;
 
-  BLI_lasso_boundbox(&rect, mcords, moves);
+  BLI_lasso_boundbox(&rect, mcoords, mcoords_len);
 
-  view3d_userdata_lassoselect_init(&data, vc, &rect, mcords, moves, 0);
+  view3d_userdata_lassoselect_init(&data, vc, &rect, mcoords, mcoords_len, 0);
 
   ED_view3d_init_mats_rv3d(vc_tmp.obact, vc->rv3d);
 
@@ -473,8 +584,8 @@ static void do_lasso_tag_pose(ViewContext *vc, Object *ob, const int mcords[][2]
 }
 
 static bool do_lasso_select_objects(ViewContext *vc,
-                                    const int mcords[][2],
-                                    const short moves,
+                                    const int mcoords[][2],
+                                    const int mcoords_len,
                                     const eSelectOp sel_op)
 {
   View3D *v3d = vc->v3d;
@@ -488,9 +599,9 @@ static bool do_lasso_select_objects(ViewContext *vc,
   for (base = vc->view_layer->object_bases.first; base; base = base->next) {
     if (BASE_SELECTABLE(v3d, base)) { /* use this to avoid un-needed lasso lookups */
       const bool is_select = base->flag & BASE_SELECTED;
-      const bool is_inside = ((ED_view3d_project_base(vc->ar, base) == V3D_PROJ_RET_OK) &&
+      const bool is_inside = ((ED_view3d_project_base(vc->region, base) == V3D_PROJ_RET_OK) &&
                               BLI_lasso_is_point_inside(
-                                  mcords, moves, base->sx, base->sy, IS_CLIPPED));
+                                  mcoords, mcoords_len, base->sx, base->sy, IS_CLIPPED));
       const int sel_op_result = ED_select_op_action_deselected(sel_op, is_select, is_inside);
       if (sel_op_result != -1) {
         ED_object_base_select(base, sel_op_result ? BA_SELECT : BA_DESELECT);
@@ -516,7 +627,7 @@ static Base **do_pose_tag_select_op_prepare(ViewContext *vc, uint *r_bases_len)
   FOREACH_BASE_IN_MODE_BEGIN (vc->view_layer, vc->v3d, OB_ARMATURE, OB_MODE_POSE, base_iter) {
     Object *ob_iter = base_iter->object;
     bArmature *arm = ob_iter->data;
-    for (bPoseChannel *pchan = ob_iter->pose->chanbase.first; pchan; pchan = pchan->next) {
+    LISTBASE_FOREACH (bPoseChannel *, pchan, &ob_iter->pose->chanbase) {
       Bone *bone = pchan->bone;
       bone->flag &= ~BONE_DONE;
     }
@@ -558,7 +669,7 @@ static bool do_pose_tag_select_op_exec(Base **bases, const uint bases_len, const
     }
 
     bool changed = true;
-    for (bPoseChannel *pchan = ob_iter->pose->chanbase.first; pchan; pchan = pchan->next) {
+    LISTBASE_FOREACH (bPoseChannel *, pchan, &ob_iter->pose->chanbase) {
       Bone *bone = pchan->bone;
       if ((bone->flag & BONE_UNSELECTABLE) == 0) {
         const bool is_select = bone->flag & BONE_SELECTED;
@@ -584,8 +695,8 @@ static bool do_pose_tag_select_op_exec(Base **bases, const uint bases_len, const
 }
 
 static bool do_lasso_select_pose(ViewContext *vc,
-                                 const int mcords[][2],
-                                 const short moves,
+                                 const int mcoords[][2],
+                                 const int mcoords_len,
                                  const eSelectOp sel_op)
 {
   uint bases_len;
@@ -594,7 +705,7 @@ static bool do_lasso_select_pose(ViewContext *vc,
   for (int i = 0; i < bases_len; i++) {
     Base *base_iter = bases[i];
     Object *ob_iter = base_iter->object;
-    do_lasso_tag_pose(vc, ob_iter, mcords, moves);
+    do_lasso_tag_pose(vc, ob_iter, mcoords, mcoords_len);
   }
 
   const bool changed_multi = do_pose_tag_select_op_exec(bases, bases_len, sel_op);
@@ -614,25 +725,42 @@ static void do_lasso_select_mesh__doSelectVert(void *userData,
 {
   LassoSelectUserData *data = userData;
   const bool is_select = BM_elem_flag_test(eve, BM_ELEM_SELECT);
-  const bool is_inside = (BLI_rctf_isect_pt_v(data->rect_fl, screen_co) &&
-                          BLI_lasso_is_point_inside(
-                              data->mcords, data->moves, screen_co[0], screen_co[1], IS_CLIPPED));
+  const bool is_inside =
+      (BLI_rctf_isect_pt_v(data->rect_fl, screen_co) &&
+       BLI_lasso_is_point_inside(
+           data->mcoords, data->mcoords_len, screen_co[0], screen_co[1], IS_CLIPPED));
   const int sel_op_result = ED_select_op_action_deselected(data->sel_op, is_select, is_inside);
   if (sel_op_result != -1) {
     BM_vert_select_set(data->vc->em->bm, eve, sel_op_result);
     data->is_changed = true;
   }
 }
-static void do_lasso_select_mesh__doSelectEdge_pass0(
-    void *userData, BMEdge *eed, const float screen_co_a[2], const float screen_co_b[2], int index)
+struct LassoSelectUserData_ForMeshEdge {
+  LassoSelectUserData *data;
+  struct EditSelectBuf_Cache *esel;
+  uint backbuf_offset;
+};
+static void do_lasso_select_mesh__doSelectEdge_pass0(void *user_data,
+                                                     BMEdge *eed,
+                                                     const float screen_co_a[2],
+                                                     const float screen_co_b[2],
+                                                     int index)
 {
-  LassoSelectUserData *data = userData;
+  struct LassoSelectUserData_ForMeshEdge *data_for_edge = user_data;
+  LassoSelectUserData *data = data_for_edge->data;
+  bool is_visible = true;
+  if (data_for_edge->backbuf_offset) {
+    uint bitmap_inedx = data_for_edge->backbuf_offset + index - 1;
+    is_visible = BLI_BITMAP_TEST_BOOL(data_for_edge->esel->select_bitmap, bitmap_inedx);
+  }
+
   const bool is_select = BM_elem_flag_test(eed, BM_ELEM_SELECT);
   const bool is_inside =
-      (EDBM_backbuf_check(bm_solidoffs + index) &&
-       edge_fully_inside_rect(data->rect_fl, screen_co_a, screen_co_b) &&
-       BLI_lasso_is_point_inside(data->mcords, data->moves, UNPACK2(screen_co_a), IS_CLIPPED) &&
-       BLI_lasso_is_point_inside(data->mcords, data->moves, UNPACK2(screen_co_b), IS_CLIPPED));
+      (is_visible && edge_fully_inside_rect(data->rect_fl, screen_co_a, screen_co_b) &&
+       BLI_lasso_is_point_inside(
+           data->mcoords, data->mcoords_len, UNPACK2(screen_co_a), IS_CLIPPED) &&
+       BLI_lasso_is_point_inside(
+           data->mcoords, data->mcoords_len, UNPACK2(screen_co_b), IS_CLIPPED));
   const int sel_op_result = ED_select_op_action_deselected(data->sel_op, is_select, is_inside);
   if (sel_op_result != -1) {
     BM_edge_select_set(data->vc->em->bm, eed, sel_op_result);
@@ -640,15 +768,26 @@ static void do_lasso_select_mesh__doSelectEdge_pass0(
     data->is_changed = true;
   }
 }
-static void do_lasso_select_mesh__doSelectEdge_pass1(
-    void *userData, BMEdge *eed, const float screen_co_a[2], const float screen_co_b[2], int index)
+static void do_lasso_select_mesh__doSelectEdge_pass1(void *user_data,
+                                                     BMEdge *eed,
+                                                     const float screen_co_a[2],
+                                                     const float screen_co_b[2],
+                                                     int index)
 {
-  LassoSelectUserData *data = userData;
+  struct LassoSelectUserData_ForMeshEdge *data_for_edge = user_data;
+  LassoSelectUserData *data = data_for_edge->data;
+  bool is_visible = true;
+  if (data_for_edge->backbuf_offset) {
+    uint bitmap_inedx = data_for_edge->backbuf_offset + index - 1;
+    is_visible = BLI_BITMAP_TEST_BOOL(data_for_edge->esel->select_bitmap, bitmap_inedx);
+  }
+
   const bool is_select = BM_elem_flag_test(eed, BM_ELEM_SELECT);
-  const bool is_inside =
-      (EDBM_backbuf_check(bm_solidoffs + index) &&
-       BLI_lasso_is_edge_inside(
-           data->mcords, data->moves, UNPACK2(screen_co_a), UNPACK2(screen_co_b), IS_CLIPPED));
+  const bool is_inside = (is_visible && BLI_lasso_is_edge_inside(data->mcoords,
+                                                                 data->mcoords_len,
+                                                                 UNPACK2(screen_co_a),
+                                                                 UNPACK2(screen_co_b),
+                                                                 IS_CLIPPED));
   const int sel_op_result = ED_select_op_action_deselected(data->sel_op, is_select, is_inside);
   if (sel_op_result != -1) {
     BM_edge_select_set(data->vc->em->bm, eed, sel_op_result);
@@ -663,9 +802,10 @@ static void do_lasso_select_mesh__doSelectFace(void *userData,
 {
   LassoSelectUserData *data = userData;
   const bool is_select = BM_elem_flag_test(efa, BM_ELEM_SELECT);
-  const bool is_inside = (BLI_rctf_isect_pt_v(data->rect_fl, screen_co) &&
-                          BLI_lasso_is_point_inside(
-                              data->mcords, data->moves, screen_co[0], screen_co[1], IS_CLIPPED));
+  const bool is_inside =
+      (BLI_rctf_isect_pt_v(data->rect_fl, screen_co) &&
+       BLI_lasso_is_point_inside(
+           data->mcoords, data->mcoords_len, screen_co[0], screen_co[1], IS_CLIPPED));
   const int sel_op_result = ED_select_op_action_deselected(data->sel_op, is_select, is_inside);
   if (sel_op_result != -1) {
     BM_face_select_set(data->vc->em->bm, efa, sel_op_result);
@@ -674,21 +814,21 @@ static void do_lasso_select_mesh__doSelectFace(void *userData,
 }
 
 static bool do_lasso_select_mesh(ViewContext *vc,
-                                 const int mcords[][2],
-                                 short moves,
+                                 wmGenericUserData *wm_userdata,
+                                 const int mcoords[][2],
+                                 const int mcoords_len,
                                  const eSelectOp sel_op)
 {
   LassoSelectUserData data;
   ToolSettings *ts = vc->scene->toolsettings;
   rcti rect;
-  int bbsel;
 
   /* set editmesh */
   vc->em = BKE_editmesh_from_object(vc->obedit);
 
-  BLI_lasso_boundbox(&rect, mcords, moves);
+  BLI_lasso_boundbox(&rect, mcoords, mcoords_len);
 
-  view3d_userdata_lassoselect_init(&data, vc, &rect, mcords, moves, sel_op);
+  view3d_userdata_lassoselect_init(&data, vc, &rect, mcoords, mcoords_len, sel_op);
 
   if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
     if (vc->em->bm->totvertsel) {
@@ -701,12 +841,23 @@ static bool do_lasso_select_mesh(ViewContext *vc,
   ED_view3d_init_mats_rv3d(vc->obedit, vc->rv3d);
 
   GPU_matrix_set(vc->rv3d->viewmat);
-  bbsel = EDBM_backbuf_border_mask_init(
-      vc, mcords, moves, rect.xmin, rect.ymin, rect.xmax, rect.ymax);
+
+  const bool use_zbuf = !XRAY_FLAG_ENABLED(vc->v3d);
+
+  struct EditSelectBuf_Cache *esel = wm_userdata->data;
+  if (use_zbuf) {
+    if (wm_userdata->data == NULL) {
+      editselect_buf_cache_init_with_generic_userdata(wm_userdata, vc, ts->selectmode);
+      esel = wm_userdata->data;
+      esel->select_bitmap = DRW_select_buffer_bitmap_from_poly(
+          vc->depsgraph, vc->region, vc->v3d, mcoords, mcoords_len, &rect, NULL);
+    }
+  }
 
   if (ts->selectmode & SCE_SELECT_VERTEX) {
-    if (bbsel) {
-      data.is_changed |= edbm_backbuf_check_and_select_verts(vc->em, sel_op);
+    if (use_zbuf) {
+      data.is_changed |= edbm_backbuf_check_and_select_verts(
+          esel, vc->depsgraph, vc->obedit, vc->em, sel_op);
     }
     else {
       mesh_foreachScreenVert(
@@ -714,26 +865,35 @@ static bool do_lasso_select_mesh(ViewContext *vc,
     }
   }
   if (ts->selectmode & SCE_SELECT_EDGE) {
-    /* Does both bbsel and non-bbsel versions (need screen cos for both) */
-    mesh_foreachScreenEdge(
-        vc, do_lasso_select_mesh__doSelectEdge_pass0, &data, V3D_PROJ_TEST_CLIP_NEAR);
+    /* Does both use_zbuf and non-use_zbuf versions (need screen cos for both) */
+    struct LassoSelectUserData_ForMeshEdge data_for_edge = {
+        .data = &data,
+        .esel = use_zbuf ? esel : NULL,
+        .backbuf_offset = use_zbuf ? DRW_select_buffer_context_offset_for_object_elem(
+                                         vc->depsgraph, vc->obedit, SCE_SELECT_EDGE) :
+                                     0,
+    };
+
+    const eV3DProjTest clip_flag = V3D_PROJ_TEST_CLIP_NEAR |
+                                   (use_zbuf ? 0 : V3D_PROJ_TEST_CLIP_BB);
+    mesh_foreachScreenEdge_clip_bb_segment(
+        vc, do_lasso_select_mesh__doSelectEdge_pass0, &data_for_edge, clip_flag);
     if (data.is_done == false) {
-      mesh_foreachScreenEdge(
-          vc, do_lasso_select_mesh__doSelectEdge_pass1, &data, V3D_PROJ_TEST_CLIP_NEAR);
+      mesh_foreachScreenEdge_clip_bb_segment(
+          vc, do_lasso_select_mesh__doSelectEdge_pass1, &data_for_edge, clip_flag);
     }
   }
 
   if (ts->selectmode & SCE_SELECT_FACE) {
-    if (bbsel) {
-      data.is_changed |= edbm_backbuf_check_and_select_faces(vc->em, sel_op);
+    if (use_zbuf) {
+      data.is_changed |= edbm_backbuf_check_and_select_faces(
+          esel, vc->depsgraph, vc->obedit, vc->em, sel_op);
     }
     else {
       mesh_foreachScreenFace(
           vc, do_lasso_select_mesh__doSelectFace, &data, V3D_PROJ_TEST_CLIP_DEFAULT);
     }
   }
-
-  EDBM_backbuf_free();
 
   if (data.is_changed) {
     EDBM_selectmode_flush(vc->em);
@@ -746,27 +906,28 @@ static void do_lasso_select_curve__doSelect(void *userData,
                                             BPoint *bp,
                                             BezTriple *bezt,
                                             int beztindex,
+                                            bool handles_visible,
                                             const float screen_co[2])
 {
   LassoSelectUserData *data = userData;
 
   const bool is_inside = BLI_lasso_is_point_inside(
-      data->mcords, data->moves, screen_co[0], screen_co[1], IS_CLIPPED);
+      data->mcoords, data->mcoords_len, screen_co[0], screen_co[1], IS_CLIPPED);
   if (bp) {
     const bool is_select = bp->f1 & SELECT;
     const int sel_op_result = ED_select_op_action_deselected(data->sel_op, is_select, is_inside);
     if (sel_op_result != -1) {
-      SET_FLAG_FROM_TEST(bp->f1, sel_op_result, SELECT);
+      SET_FLAG_FROM_TEST(bp->f1, sel_op_result, data->select_flag);
       data->is_changed = true;
     }
   }
   else {
-    if ((data->vc->v3d->overlay.edit_flag & V3D_OVERLAY_EDIT_CU_HANDLES) == 0) {
-      /* can only be (beztindex == 0) here since handles are hidden */
+    if (!handles_visible) {
+      /* can only be (beztindex == 1) here since handles are hidden */
       const bool is_select = bezt->f2 & SELECT;
       const int sel_op_result = ED_select_op_action_deselected(data->sel_op, is_select, is_inside);
       if (sel_op_result != -1) {
-        SET_FLAG_FROM_TEST(bezt->f2, sel_op_result, SELECT);
+        SET_FLAG_FROM_TEST(bezt->f2, sel_op_result, data->select_flag);
       }
       bezt->f1 = bezt->f3 = bezt->f2;
       data->is_changed = true;
@@ -776,7 +937,7 @@ static void do_lasso_select_curve__doSelect(void *userData,
       const bool is_select = *flag_p & SELECT;
       const int sel_op_result = ED_select_op_action_deselected(data->sel_op, is_select, is_inside);
       if (sel_op_result != -1) {
-        SET_FLAG_FROM_TEST(*flag_p, sel_op_result, SELECT);
+        SET_FLAG_FROM_TEST(*flag_p, sel_op_result, data->select_flag);
         data->is_changed = true;
       }
     }
@@ -784,24 +945,35 @@ static void do_lasso_select_curve__doSelect(void *userData,
 }
 
 static bool do_lasso_select_curve(ViewContext *vc,
-                                  const int mcords[][2],
-                                  short moves,
+                                  const int mcoords[][2],
+                                  const int mcoords_len,
                                   const eSelectOp sel_op)
 {
+  const bool deselect_all = (sel_op == SEL_OP_SET);
   LassoSelectUserData data;
   rcti rect;
 
-  BLI_lasso_boundbox(&rect, mcords, moves);
+  BLI_lasso_boundbox(&rect, mcoords, mcoords_len);
 
-  view3d_userdata_lassoselect_init(&data, vc, &rect, mcords, moves, sel_op);
+  view3d_userdata_lassoselect_init(&data, vc, &rect, mcoords, mcoords_len, sel_op);
 
-  if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
-    Curve *curve = (Curve *)vc->obedit->data;
-    data.is_changed |= ED_curve_deselect_all(curve->editnurb);
+  Curve *curve = (Curve *)vc->obedit->data;
+  ListBase *nurbs = BKE_curve_editNurbs_get(curve);
+
+  /* For deselect all, items to be selected are tagged with temp flag. Clear that first. */
+  if (deselect_all) {
+    BKE_nurbList_flag_set(nurbs, BEZT_FLAG_TEMP_TAG, false);
+    data.select_flag = BEZT_FLAG_TEMP_TAG;
   }
 
   ED_view3d_init_mats_rv3d(vc->obedit, vc->rv3d); /* for foreach's screen/vert projection */
   nurbs_foreachScreenVert(vc, do_lasso_select_curve__doSelect, &data, V3D_PROJ_TEST_CLIP_DEFAULT);
+
+  /* Deselect items that were not added to selection (indicated by temp flag). */
+  if (deselect_all) {
+    BKE_nurbList_flag_set_from_flag(nurbs, BEZT_FLAG_TEMP_TAG, SELECT);
+  }
+
   if (data.is_changed) {
     BKE_curve_nurb_vert_active_validate(vc->obedit->data);
   }
@@ -812,9 +984,10 @@ static void do_lasso_select_lattice__doSelect(void *userData, BPoint *bp, const 
 {
   LassoSelectUserData *data = userData;
   const bool is_select = bp->f1 & SELECT;
-  const bool is_inside = (BLI_rctf_isect_pt_v(data->rect_fl, screen_co) &&
-                          BLI_lasso_is_point_inside(
-                              data->mcords, data->moves, screen_co[0], screen_co[1], IS_CLIPPED));
+  const bool is_inside =
+      (BLI_rctf_isect_pt_v(data->rect_fl, screen_co) &&
+       BLI_lasso_is_point_inside(
+           data->mcoords, data->mcoords_len, screen_co[0], screen_co[1], IS_CLIPPED));
   const int sel_op_result = ED_select_op_action_deselected(data->sel_op, is_select, is_inside);
   if (sel_op_result != -1) {
     SET_FLAG_FROM_TEST(bp->f1, sel_op_result, SELECT);
@@ -822,16 +995,16 @@ static void do_lasso_select_lattice__doSelect(void *userData, BPoint *bp, const 
   }
 }
 static bool do_lasso_select_lattice(ViewContext *vc,
-                                    const int mcords[][2],
-                                    short moves,
+                                    const int mcoords[][2],
+                                    const int mcoords_len,
                                     const eSelectOp sel_op)
 {
   LassoSelectUserData data;
   rcti rect;
 
-  BLI_lasso_boundbox(&rect, mcords, moves);
+  BLI_lasso_boundbox(&rect, mcoords, mcoords_len);
 
-  view3d_userdata_lassoselect_init(&data, vc, &rect, mcords, moves, sel_op);
+  view3d_userdata_lassoselect_init(&data, vc, &rect, mcoords, mcoords_len, sel_op);
 
   if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
     data.is_changed |= ED_lattice_flags_set(vc->obedit, 0);
@@ -856,7 +1029,8 @@ static void do_lasso_select_armature__doSelectBone(void *userData,
 
     if (screen_co_a[0] != IS_CLIPPED) {
       if (BLI_rcti_isect_pt(data->rect, UNPACK2(screen_co_a)) &&
-          BLI_lasso_is_point_inside(data->mcords, data->moves, UNPACK2(screen_co_a), INT_MAX)) {
+          BLI_lasso_is_point_inside(
+              data->mcoords, data->mcoords_len, UNPACK2(screen_co_a), INT_MAX)) {
         is_inside_flag |= BONESEL_ROOT;
       }
     }
@@ -866,7 +1040,8 @@ static void do_lasso_select_armature__doSelectBone(void *userData,
 
     if (screen_co_b[0] != IS_CLIPPED) {
       if (BLI_rcti_isect_pt(data->rect, UNPACK2(screen_co_b)) &&
-          BLI_lasso_is_point_inside(data->mcords, data->moves, UNPACK2(screen_co_b), INT_MAX)) {
+          BLI_lasso_is_point_inside(
+              data->mcoords, data->mcoords_len, UNPACK2(screen_co_b), INT_MAX)) {
         is_inside_flag |= BONESEL_TIP;
       }
     }
@@ -874,10 +1049,15 @@ static void do_lasso_select_armature__doSelectBone(void *userData,
       is_ignore_flag |= BONESEL_TIP;
     }
 
-    if (is_inside_flag == (BONE_ROOTSEL | BONE_TIPSEL) ||
-        BLI_lasso_is_edge_inside(
-            data->mcords, data->moves, UNPACK2(screen_co_a), UNPACK2(screen_co_b), INT_MAX)) {
-      is_inside_flag |= BONESEL_BONE;
+    if (is_ignore_flag == 0) {
+      if (is_inside_flag == (BONE_ROOTSEL | BONE_TIPSEL) ||
+          BLI_lasso_is_edge_inside(data->mcoords,
+                                   data->mcoords_len,
+                                   UNPACK2(screen_co_a),
+                                   UNPACK2(screen_co_b),
+                                   INT_MAX)) {
+        is_inside_flag |= BONESEL_BONE;
+      }
     }
 
     ebone->temp.i = is_inside_flag | (is_ignore_flag >> 16);
@@ -885,16 +1065,16 @@ static void do_lasso_select_armature__doSelectBone(void *userData,
 }
 
 static bool do_lasso_select_armature(ViewContext *vc,
-                                     const int mcords[][2],
-                                     short moves,
+                                     const int mcoords[][2],
+                                     const int mcoords_len,
                                      const eSelectOp sel_op)
 {
   LassoSelectUserData data;
   rcti rect;
 
-  BLI_lasso_boundbox(&rect, mcords, moves);
+  BLI_lasso_boundbox(&rect, mcoords, mcoords_len);
 
-  view3d_userdata_lassoselect_init(&data, vc, &rect, mcords, moves, sel_op);
+  view3d_userdata_lassoselect_init(&data, vc, &rect, mcoords, mcoords_len, sel_op);
 
   if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
     data.is_changed |= ED_armature_edit_deselect_all_visible(vc->obedit);
@@ -923,9 +1103,10 @@ static void do_lasso_select_mball__doSelectElem(void *userData,
 {
   LassoSelectUserData *data = userData;
   const bool is_select = ml->flag & SELECT;
-  const bool is_inside = (BLI_rctf_isect_pt_v(data->rect_fl, screen_co) &&
-                          BLI_lasso_is_point_inside(
-                              data->mcords, data->moves, screen_co[0], screen_co[1], INT_MAX));
+  const bool is_inside =
+      (BLI_rctf_isect_pt_v(data->rect_fl, screen_co) &&
+       BLI_lasso_is_point_inside(
+           data->mcoords, data->mcoords_len, screen_co[0], screen_co[1], INT_MAX));
   const int sel_op_result = ED_select_op_action_deselected(data->sel_op, is_select, is_inside);
   if (sel_op_result != -1) {
     SET_FLAG_FROM_TEST(ml->flag, sel_op_result, SELECT);
@@ -933,8 +1114,8 @@ static void do_lasso_select_mball__doSelectElem(void *userData,
   }
 }
 static bool do_lasso_select_meta(ViewContext *vc,
-                                 const int mcords[][2],
-                                 short moves,
+                                 const int mcoords[][2],
+                                 const int mcoords_len,
                                  const eSelectOp sel_op)
 {
   LassoSelectUserData data;
@@ -942,9 +1123,9 @@ static bool do_lasso_select_meta(ViewContext *vc,
 
   MetaBall *mb = (MetaBall *)vc->obedit->data;
 
-  BLI_lasso_boundbox(&rect, mcords, moves);
+  BLI_lasso_boundbox(&rect, mcoords, mcoords_len);
 
-  view3d_userdata_lassoselect_init(&data, vc, &rect, mcords, moves, sel_op);
+  view3d_userdata_lassoselect_init(&data, vc, &rect, mcoords, mcoords_len, sel_op);
 
   if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
     data.is_changed |= BKE_mball_deselect_all(mb);
@@ -965,9 +1146,10 @@ static void do_lasso_select_meshobject__doSelectVert(void *userData,
 {
   LassoSelectUserData *data = userData;
   const bool is_select = mv->flag & SELECT;
-  const bool is_inside = (BLI_rctf_isect_pt_v(data->rect_fl, screen_co) &&
-                          BLI_lasso_is_point_inside(
-                              data->mcords, data->moves, screen_co[0], screen_co[1], IS_CLIPPED));
+  const bool is_inside =
+      (BLI_rctf_isect_pt_v(data->rect_fl, screen_co) &&
+       BLI_lasso_is_point_inside(
+           data->mcoords, data->mcoords_len, screen_co[0], screen_co[1], IS_CLIPPED));
   const int sel_op_result = ED_select_op_action_deselected(data->sel_op, is_select, is_inside);
   if (sel_op_result != -1) {
     SET_FLAG_FROM_TEST(mv->flag, sel_op_result, SELECT);
@@ -975,8 +1157,9 @@ static void do_lasso_select_meshobject__doSelectVert(void *userData,
   }
 }
 static bool do_lasso_select_paintvert(ViewContext *vc,
-                                      const int mcords[][2],
-                                      short moves,
+                                      wmGenericUserData *wm_userdata,
+                                      const int mcoords[][2],
+                                      const int mcoords_len,
                                       const eSelectOp sel_op)
 {
   const bool use_zbuf = !XRAY_ENABLED(vc->v3d);
@@ -994,21 +1177,27 @@ static bool do_lasso_select_paintvert(ViewContext *vc,
     changed |= paintvert_deselect_all_visible(ob, SEL_DESELECT, false);
   }
 
-  BLI_lasso_boundbox(&rect, mcords, moves);
+  BLI_lasso_boundbox(&rect, mcoords, mcoords_len);
+
+  struct EditSelectBuf_Cache *esel = wm_userdata->data;
+  if (use_zbuf) {
+    if (wm_userdata->data == NULL) {
+      editselect_buf_cache_init_with_generic_userdata(wm_userdata, vc, SCE_SELECT_VERTEX);
+      esel = wm_userdata->data;
+      esel->select_bitmap = DRW_select_buffer_bitmap_from_poly(
+          vc->depsgraph, vc->region, vc->v3d, mcoords, mcoords_len, &rect, NULL);
+    }
+  }
 
   if (use_zbuf) {
-    bm_vertoffs = me->totvert + 1; /* max index array */
-
-    EDBM_backbuf_border_mask_init(vc, mcords, moves, rect.xmin, rect.ymin, rect.xmax, rect.ymax);
-
-    changed |= edbm_backbuf_check_and_select_verts_obmode(me, sel_op);
-
-    EDBM_backbuf_free();
+    if (esel->select_bitmap != NULL) {
+      changed |= edbm_backbuf_check_and_select_verts_obmode(me, esel, sel_op);
+    }
   }
   else {
     LassoSelectUserData data;
 
-    view3d_userdata_lassoselect_init(&data, vc, &rect, mcords, moves, sel_op);
+    view3d_userdata_lassoselect_init(&data, vc, &rect, mcoords, mcoords_len, sel_op);
 
     ED_view3d_init_mats_rv3d(vc->obact, vc->rv3d);
 
@@ -1025,11 +1214,13 @@ static bool do_lasso_select_paintvert(ViewContext *vc,
     paintvert_flush_flags(ob);
     paintvert_tag_select_update(vc->C, ob);
   }
+
   return changed;
 }
 static bool do_lasso_select_paintface(ViewContext *vc,
-                                      const int mcords[][2],
-                                      short moves,
+                                      wmGenericUserData *wm_userdata,
+                                      const int mcoords[][2],
+                                      const int mcoords_len,
                                       const eSelectOp sel_op)
 {
   Object *ob = vc->obact;
@@ -1040,19 +1231,25 @@ static bool do_lasso_select_paintface(ViewContext *vc,
     return false;
   }
 
-  bm_vertoffs = me->totpoly + 1; /* max index array */
-
-  BLI_lasso_boundbox(&rect, mcords, moves);
-  EDBM_backbuf_border_mask_init(vc, mcords, moves, rect.xmin, rect.ymin, rect.xmax, rect.ymax);
-
   bool changed = false;
   if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
     /* flush selection at the end */
     changed |= paintface_deselect_all_visible(vc->C, ob, SEL_DESELECT, false);
   }
-  changed |= edbm_backbuf_check_and_select_tfaces(me, sel_op);
 
-  EDBM_backbuf_free();
+  BLI_lasso_boundbox(&rect, mcoords, mcoords_len);
+
+  struct EditSelectBuf_Cache *esel = wm_userdata->data;
+  if (esel == NULL) {
+    editselect_buf_cache_init_with_generic_userdata(wm_userdata, vc, SCE_SELECT_FACE);
+    esel = wm_userdata->data;
+    esel->select_bitmap = DRW_select_buffer_bitmap_from_poly(
+        vc->depsgraph, vc->region, vc->v3d, mcoords, mcoords_len, &rect, NULL);
+  }
+
+  if (esel->select_bitmap) {
+    changed |= edbm_backbuf_check_and_select_faces_obmode(me, esel, sel_op);
+  }
 
   if (changed) {
     paintface_flush_flags(vc->C, ob, SELECT);
@@ -1061,9 +1258,9 @@ static bool do_lasso_select_paintface(ViewContext *vc,
 }
 
 #if 0
-static void do_lasso_select_node(int mcords[][2], short moves, const eSelectOp sel_op)
+static void do_lasso_select_node(int mcoords[][2], const int mcoords_len, const eSelectOp sel_op)
 {
-  SpaceNode *snode = sa->spacedata.first;
+  SpaceNode *snode = area->spacedata.first;
 
   bNode *node;
   rcti rect;
@@ -1071,7 +1268,7 @@ static void do_lasso_select_node(int mcords[][2], short moves, const eSelectOp s
   float node_centf[2];
   bool changed = false;
 
-  BLI_lasso_boundbox(&rect, mcords, moves);
+  BLI_lasso_boundbox(&rect, mcoords, mcoords_len);
 
   /* store selection in temp test flag */
   for (node = snode->edittree->nodes.first; node; node = node->next) {
@@ -1080,9 +1277,8 @@ static void do_lasso_select_node(int mcords[][2], short moves, const eSelectOp s
 
     ipoco_to_areaco_noclip(G.v2d, node_centf, node_cent);
     const bool is_select = node->flag & SELECT;
-    const bool is_inside = (
-            BLI_rcti_isect_pt_v(&rect, node_cent) &&
-            BLI_lasso_is_point_inside(mcords, moves, node_cent[0], node_cent[1]));
+    const bool is_inside = (BLI_rcti_isect_pt_v(&rect, node_cent) &&
+                            BLI_lasso_is_point_inside(mcoords, mcoords_len, node_cent[0], node_cent[1]));
     const int sel_op_result = ED_select_op_action_deselected(sel_op, is_select, is_inside);
     if (sel_op_result != -1) {
       SET_FLAG_FROM_TEST(node->flag, sel_op_result, SELECT);
@@ -1095,58 +1291,72 @@ static void do_lasso_select_node(int mcords[][2], short moves, const eSelectOp s
 }
 #endif
 
-static bool view3d_lasso_select(
-    bContext *C, ViewContext *vc, const int mcords[][2], short moves, const eSelectOp sel_op)
+static bool view3d_lasso_select(bContext *C,
+                                ViewContext *vc,
+                                const int mcoords[][2],
+                                const int mcoords_len,
+                                const eSelectOp sel_op)
 {
   Object *ob = CTX_data_active_object(C);
   bool changed_multi = false;
 
+  wmGenericUserData wm_userdata_buf = {0};
+  wmGenericUserData *wm_userdata = &wm_userdata_buf;
+
   if (vc->obedit == NULL) { /* Object Mode */
     if (BKE_paint_select_face_test(ob)) {
-      changed_multi |= do_lasso_select_paintface(vc, mcords, moves, sel_op);
+      changed_multi |= do_lasso_select_paintface(vc, wm_userdata, mcoords, mcoords_len, sel_op);
     }
     else if (BKE_paint_select_vert_test(ob)) {
-      changed_multi |= do_lasso_select_paintvert(vc, mcords, moves, sel_op);
+      changed_multi |= do_lasso_select_paintvert(vc, wm_userdata, mcoords, mcoords_len, sel_op);
     }
     else if (ob &&
              (ob->mode & (OB_MODE_VERTEX_PAINT | OB_MODE_WEIGHT_PAINT | OB_MODE_TEXTURE_PAINT))) {
       /* pass */
     }
     else if (ob && (ob->mode & OB_MODE_PARTICLE_EDIT)) {
-      changed_multi |= PE_lasso_select(C, mcords, moves, sel_op);
+      changed_multi |= PE_lasso_select(C, mcoords, mcoords_len, sel_op);
     }
     else if (ob && (ob->mode & OB_MODE_POSE)) {
-      changed_multi |= do_lasso_select_pose(vc, mcords, moves, sel_op);
+      changed_multi |= do_lasso_select_pose(vc, mcoords, mcoords_len, sel_op);
+      if (changed_multi) {
+        ED_outliner_select_sync_from_pose_bone_tag(C);
+      }
     }
     else {
-      changed_multi |= do_lasso_select_objects(vc, mcords, moves, sel_op);
+      changed_multi |= do_lasso_select_objects(vc, mcoords, mcoords_len, sel_op);
+      if (changed_multi) {
+        ED_outliner_select_sync_from_object_tag(C);
+      }
     }
   }
   else { /* Edit Mode */
-
     FOREACH_OBJECT_IN_MODE_BEGIN (vc->view_layer, vc->v3d, ob->type, ob->mode, ob_iter) {
       ED_view3d_viewcontext_init_object(vc, ob_iter);
       bool changed = false;
 
       switch (vc->obedit->type) {
         case OB_MESH:
-          changed = do_lasso_select_mesh(vc, mcords, moves, sel_op);
+          changed = do_lasso_select_mesh(vc, wm_userdata, mcoords, mcoords_len, sel_op);
           break;
         case OB_CURVE:
         case OB_SURF:
-          changed = do_lasso_select_curve(vc, mcords, moves, sel_op);
+          changed = do_lasso_select_curve(vc, mcoords, mcoords_len, sel_op);
           break;
         case OB_LATTICE:
-          changed = do_lasso_select_lattice(vc, mcords, moves, sel_op);
+          changed = do_lasso_select_lattice(vc, mcoords, mcoords_len, sel_op);
           break;
         case OB_ARMATURE:
-          changed = do_lasso_select_armature(vc, mcords, moves, sel_op);
+          changed = do_lasso_select_armature(vc, mcoords, mcoords_len, sel_op);
+          if (changed) {
+            ED_outliner_select_sync_from_edit_bone_tag(C);
+          }
           break;
         case OB_MBALL:
-          changed = do_lasso_select_meta(vc, mcords, moves, sel_op);
+          changed = do_lasso_select_meta(vc, mcoords, mcoords_len, sel_op);
           break;
         default:
-          assert(!"lasso select on incorrect object type");
+          BLI_assert(!"lasso select on incorrect object type");
           break;
       }
 
@@ -1158,6 +1368,9 @@ static bool view3d_lasso_select(
     }
     FOREACH_OBJECT_IN_MODE_END;
   }
+
+  WM_generic_user_data_free(wm_userdata);
+
   return changed_multi;
 }
 
@@ -1166,26 +1379,26 @@ static bool view3d_lasso_select(
 static int view3d_lasso_select_exec(bContext *C, wmOperator *op)
 {
   ViewContext vc;
-  int mcords_tot;
-  const int(*mcords)[2] = WM_gesture_lasso_path_to_array(C, op, &mcords_tot);
+  int mcoords_len;
+  const int(*mcoords)[2] = WM_gesture_lasso_path_to_array(C, op, &mcoords_len);
 
-  if (mcords) {
+  if (mcoords) {
+    Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
     view3d_operator_needs_opengl(C);
+    BKE_object_update_select_id(CTX_data_main(C));
 
     /* setup view context for argument to callbacks */
-    ED_view3d_viewcontext_init(C, &vc);
+    ED_view3d_viewcontext_init(C, &vc, depsgraph);
 
     eSelectOp sel_op = RNA_enum_get(op->ptr, "mode");
-    bool changed_multi = view3d_lasso_select(C, &vc, mcords, mcords_tot, sel_op);
+    bool changed_multi = view3d_lasso_select(C, &vc, mcoords, mcoords_len, sel_op);
 
-    MEM_freeN((void *)mcords);
+    MEM_freeN((void *)mcoords);
 
     if (changed_multi) {
       return OPERATOR_FINISHED;
     }
-    else {
-      return OPERATOR_CANCELLED;
-    }
+    return OPERATOR_CANCELLED;
   }
   return OPERATOR_PASS_THROUGH;
 }
@@ -1257,30 +1470,62 @@ static const EnumPropertyItem *object_select_menu_enum_itemf(bContext *C,
 static int object_select_menu_exec(bContext *C, wmOperator *op)
 {
   const int name_index = RNA_enum_get(op->ptr, "name");
+  const bool extend = RNA_boolean_get(op->ptr, "extend");
+  const bool deselect = RNA_boolean_get(op->ptr, "deselect");
   const bool toggle = RNA_boolean_get(op->ptr, "toggle");
   bool changed = false;
   const char *name = object_mouse_select_menu_data[name_index].idname;
 
-  if (!toggle) {
-    CTX_DATA_BEGIN (C, Base *, base, selectable_bases) {
-      if ((base->flag & BASE_SELECTED) != 0) {
-        ED_object_base_select(base, BA_DESELECT);
-        changed = true;
-      }
-    }
-    CTX_DATA_END;
-  }
+  View3D *v3d = CTX_wm_view3d(C);
+  ViewLayer *view_layer = CTX_data_view_layer(C);
+  const Base *oldbasact = BASACT(view_layer);
 
+  Base *basact = NULL;
   CTX_DATA_BEGIN (C, Base *, base, selectable_bases) {
     /* This is a bit dodgy, there should only be ONE object with this name,
      * but library objects can mess this up. */
     if (STREQ(name, base->object->id.name + 2)) {
-      ED_object_base_activate(C, base);
-      ED_object_base_select(base, BA_SELECT);
-      changed = true;
+      basact = base;
+      break;
     }
   }
   CTX_DATA_END;
+
+  if (basact == NULL) {
+    return OPERATOR_CANCELLED;
+  }
+  UNUSED_VARS_NDEBUG(v3d);
+  BLI_assert(BASE_SELECTABLE(v3d, basact));
+
+  if (extend) {
+    ED_object_base_select(basact, BA_SELECT);
+    changed = true;
+  }
+  else if (deselect) {
+    ED_object_base_select(basact, BA_DESELECT);
+    changed = true;
+  }
+  else if (toggle) {
+    if (basact->flag & BASE_SELECTED) {
+      if (basact == oldbasact) {
+        ED_object_base_select(basact, BA_DESELECT);
+        changed = true;
+      }
+    }
+    else {
+      ED_object_base_select(basact, BA_SELECT);
+      changed = true;
+    }
+  }
+  else {
+    object_deselect_all_except(view_layer, basact);
+    ED_object_base_select(basact, BA_SELECT);
+    changed = true;
+  }
+
+  if ((oldbasact != basact)) {
+    ED_object_base_activate(C, basact);
+  }
 
   /* weak but ensures we activate menu again before using the enum */
   memset(object_mouse_select_menu_data, 0, sizeof(object_mouse_select_menu_data));
@@ -1290,11 +1535,12 @@ static int object_select_menu_exec(bContext *C, wmOperator *op)
     Scene *scene = CTX_data_scene(C);
     DEG_id_tag_update(&scene->id, ID_RECALC_SELECT);
     WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, scene);
+
+    ED_outliner_select_sync_from_object_tag(C);
+
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void VIEW3D_OT_select_menu(wmOperatorType *ot)
@@ -1319,12 +1565,19 @@ void VIEW3D_OT_select_menu(wmOperatorType *ot)
   RNA_def_property_flag(prop, PROP_HIDDEN | PROP_ENUM_NO_TRANSLATE);
   ot->prop = prop;
 
-  RNA_def_boolean(
-      ot->srna, "toggle", 0, "Toggle", "Toggle selection instead of deselecting everything first");
+  RNA_def_boolean(ot->srna, "extend", 0, "Extend", "");
+  RNA_def_boolean(ot->srna, "deselect", 0, "Deselect", "");
+  RNA_def_boolean(ot->srna, "toggle", 0, "Toggle", "");
 }
 
-static Base *object_mouse_select_menu(
-    bContext *C, ViewContext *vc, uint *buffer, int hits, const int mval[2], bool toggle)
+static Base *object_mouse_select_menu(bContext *C,
+                                      ViewContext *vc,
+                                      const uint *buffer,
+                                      int hits,
+                                      const int mval[2],
+                                      bool extend,
+                                      bool deselect,
+                                      bool toggle)
 {
   short baseCount = 0;
   bool ok;
@@ -1338,7 +1591,7 @@ static Base *object_mouse_select_menu(
     if (buffer) {
       for (int a = 0; a < hits; a++) {
         /* index was converted */
-        if (base->object->select_id == (buffer[(4 * a) + 3] & ~0xFFFF0000)) {
+        if (base->object->runtime.select_id == (buffer[(4 * a) + 3] & ~0xFFFF0000)) {
           ok = true;
           break;
         }
@@ -1346,7 +1599,7 @@ static Base *object_mouse_select_menu(
     }
     else {
       const int dist = 15 * U.pixelsize;
-      if (ED_view3d_project_base(vc->ar, base) == V3D_PROJ_RET_OK) {
+      if (ED_view3d_project_base(vc->region, base) == V3D_PROJ_RET_OK) {
         const int delta_px[2] = {base->sx - mval[0], base->sy - mval[1]};
         if (len_manhattan_v2_int(delta_px) < dist) {
           ok = true;
@@ -1373,35 +1626,34 @@ static Base *object_mouse_select_menu(
     BLI_linklist_free(linklist, NULL);
     return base;
   }
-  else {
-    /* UI, full in static array values that we later use in an enum function */
-    LinkNode *node;
-    int i;
 
-    memset(object_mouse_select_menu_data, 0, sizeof(object_mouse_select_menu_data));
+  /* UI, full in static array values that we later use in an enum function */
+  LinkNode *node;
+  int i;
 
-    for (node = linklist, i = 0; node; node = node->next, i++) {
-      Base *base = node->link;
-      Object *ob = base->object;
-      const char *name = ob->id.name + 2;
+  memset(object_mouse_select_menu_data, 0, sizeof(object_mouse_select_menu_data));
 
-      BLI_strncpy(object_mouse_select_menu_data[i].idname, name, MAX_ID_NAME - 2);
-      object_mouse_select_menu_data[i].icon = UI_icon_from_id(&ob->id);
-    }
+  for (node = linklist, i = 0; node; node = node->next, i++) {
+    Base *base = node->link;
+    Object *ob = base->object;
+    const char *name = ob->id.name + 2;
 
-    {
-      wmOperatorType *ot = WM_operatortype_find("VIEW3D_OT_select_menu", false);
-      PointerRNA ptr;
-
-      WM_operator_properties_create_ptr(&ptr, ot);
-      RNA_boolean_set(&ptr, "toggle", toggle);
-      WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &ptr);
-      WM_operator_properties_free(&ptr);
-    }
-
-    BLI_linklist_free(linklist, NULL);
-    return NULL;
+    BLI_strncpy(object_mouse_select_menu_data[i].idname, name, MAX_ID_NAME - 2);
+    object_mouse_select_menu_data[i].icon = UI_icon_from_id(&ob->id);
   }
+
+  wmOperatorType *ot = WM_operatortype_find("VIEW3D_OT_select_menu", false);
+  PointerRNA ptr;
+
+  WM_operator_properties_create_ptr(&ptr, ot);
+  RNA_boolean_set(&ptr, "extend", extend);
+  RNA_boolean_set(&ptr, "deselect", deselect);
+  RNA_boolean_set(&ptr, "toggle", toggle);
+  WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &ptr);
+  WM_operator_properties_free(&ptr);
+
+  BLI_linklist_free(linklist, NULL);
+  return NULL;
 }
 
 static bool selectbuffer_has_bones(const uint *buffer, const uint hits)
@@ -1441,19 +1693,30 @@ static int selectbuffer_ret_hits_5(uint *buffer,
 /**
  * Populate a select buffer with objects and bones, if there are any.
  * Checks three selection levels and compare.
+ *
+ * \param do_nearest_xray_if_supported: When set, read in hits that don't stop
+ * at the nearest surface. The hit's must still be ordered by depth.
+ * Needed so we can step to the next, non-active object when it's already selected, see: T76445.
  */
 static int mixed_bones_object_selectbuffer(ViewContext *vc,
                                            uint *buffer,
                                            const int mval[2],
                                            eV3DSelectObjectFilter select_filter,
-                                           bool do_nearest)
+                                           bool do_nearest,
+                                           bool do_nearest_xray_if_supported)
 {
   rcti rect;
   int hits15, hits9 = 0, hits5 = 0;
   bool has_bones15 = false, has_bones9 = false, has_bones5 = false;
 
-  const int select_mode = (do_nearest ? VIEW3D_SELECT_PICK_NEAREST : VIEW3D_SELECT_PICK_ALL);
+  int select_mode = (do_nearest ? VIEW3D_SELECT_PICK_NEAREST : VIEW3D_SELECT_PICK_ALL);
   int hits = 0;
+
+  if (do_nearest_xray_if_supported) {
+    if ((U.gpu_flag & USER_GPU_FLAG_NO_DEPT_PICK) == 0) {
+      select_mode = VIEW3D_SELECT_PICK_ALL;
+    }
+  }
 
   /* we _must_ end cache before return, use 'goto finally' */
   view3d_opengl_select_cache_begin();
@@ -1558,30 +1821,18 @@ static int mixed_bones_object_selectbuffer_extended(ViewContext *vc,
 
   do_nearest = do_nearest && !enumerate;
 
-  int hits = mixed_bones_object_selectbuffer(vc, buffer, mval, select_filter, do_nearest);
-
-  if (vc->scene->toolsettings->object_flag & SCE_OBJECT_MODE_LOCK) {
-    const bool is_pose_mode = ((vc->obact && vc->obact->mode & OB_MODE_POSE) ||
-                               (select_filter == VIEW3D_SELECT_FILTER_WPAINT_POSE_MODE_LOCK));
-    struct {
-      uint data[4];
-    } *buffer4 = (void *)buffer;
-    uint j = 0;
-    for (uint i = 0; i < hits; i++) {
-      if (((buffer4[i].data[3] & 0xFFFF0000) != 0) == is_pose_mode) {
-        if (i != j) {
-          buffer4[j] = buffer4[i];
-        }
-        j++;
-      }
-    }
-    hits = j;
-  }
+  int hits = mixed_bones_object_selectbuffer(vc, buffer, mval, select_filter, do_nearest, true);
 
   return hits;
 }
 
-/* returns basact */
+/**
+ * \param has_bones: When true, skip non-bone hits, also allow bases to be used
+ * that are visible but not select-able,
+ * since you may be in pose mode with an an unselect-able object.
+ *
+ * \return the active base or NULL.
+ */
 static Base *mouse_select_eval_buffer(ViewContext *vc,
                                       const uint *buffer,
                                       int hits,
@@ -1610,7 +1861,7 @@ static Base *mouse_select_eval_buffer(ViewContext *vc,
     else {
       /* only exclude active object when it is selected... */
       if (BASACT(view_layer) && (BASACT(view_layer)->flag & BASE_SELECTED) && hits > 1) {
-        notcol = BASACT(view_layer)->object->select_id;
+        notcol = BASACT(view_layer)->object->runtime.select_id;
       }
 
       for (a = 0; a < hits; a++) {
@@ -1623,8 +1874,8 @@ static Base *mouse_select_eval_buffer(ViewContext *vc,
 
     base = FIRSTBASE(view_layer);
     while (base) {
-      if (BASE_SELECTABLE(v3d, base)) {
-        if (base->object->select_id == selcol) {
+      if (has_bones ? BASE_VISIBLE(v3d, base) : BASE_SELECTABLE(v3d, base)) {
+        if (base->object->runtime.select_id == selcol) {
           break;
         }
       }
@@ -1640,7 +1891,8 @@ static Base *mouse_select_eval_buffer(ViewContext *vc,
     while (base) {
       /* skip objects with select restriction, to prevent prematurely ending this loop
        * with an un-selectable choice */
-      if ((base->flag & BASE_SELECTABLE) == 0) {
+      if (has_bones ? (base->flag & BASE_VISIBLE_VIEWLAYER) == 0 :
+                      (base->flag & BASE_SELECTABLE) == 0) {
         base = base->next;
         if (base == NULL) {
           base = FIRSTBASE(view_layer);
@@ -1650,18 +1902,18 @@ static Base *mouse_select_eval_buffer(ViewContext *vc,
         }
       }
 
-      if (BASE_SELECTABLE(v3d, base)) {
+      if (has_bones ? BASE_VISIBLE(v3d, base) : BASE_SELECTABLE(v3d, base)) {
         for (a = 0; a < hits; a++) {
           if (has_bones) {
             /* skip non-bone objects */
             if ((buffer[4 * a + 3] & 0xFFFF0000)) {
-              if (base->object->select_id == (buffer[(4 * a) + 3] & 0xFFFF)) {
+              if (base->object->runtime.select_id == (buffer[(4 * a) + 3] & 0xFFFF)) {
                 basact = base;
               }
             }
           }
           else {
-            if (base->object->select_id == (buffer[(4 * a) + 3] & 0xFFFF)) {
+            if (base->object->runtime.select_id == (buffer[(4 * a) + 3] & 0xFFFF)) {
               basact = base;
             }
           }
@@ -1688,18 +1940,20 @@ static Base *mouse_select_eval_buffer(ViewContext *vc,
 /* mval comes from event->mval, only use within region handlers */
 Base *ED_view3d_give_base_under_cursor(bContext *C, const int mval[2])
 {
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewContext vc;
   Base *basact = NULL;
   uint buffer[MAXPICKBUF];
 
   /* setup view context for argument to callbacks */
   view3d_operator_needs_opengl(C);
+  BKE_object_update_select_id(CTX_data_main(C));
 
-  ED_view3d_viewcontext_init(C, &vc);
+  ED_view3d_viewcontext_init(C, &vc, depsgraph);
 
   const bool do_nearest = !XRAY_ACTIVE(vc.v3d);
   const int hits = mixed_bones_object_selectbuffer(
-      &vc, buffer, mval, VIEW3D_SELECT_FILTER_NOP, do_nearest);
+      &vc, buffer, mval, VIEW3D_SELECT_FILTER_NOP, do_nearest, false);
 
   if (hits > 0) {
     const bool has_bones = selectbuffer_has_bones(buffer, hits);
@@ -1753,11 +2007,12 @@ static bool ed_object_select_pick(bContext *C,
                                   bool enumerate,
                                   bool object)
 {
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewContext vc;
   /* setup view context for argument to callbacks */
-  ED_view3d_viewcontext_init(C, &vc);
+  ED_view3d_viewcontext_init(C, &vc, depsgraph);
 
-  ARegion *ar = CTX_wm_region(C);
+  const ARegion *region = CTX_wm_region(C);
   Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
   View3D *v3d = CTX_wm_view3d(C);
@@ -1773,7 +2028,7 @@ static bool ed_object_select_pick(bContext *C,
 
   is_obedit = (vc.obedit != NULL);
   if (object) {
-    /* signal for view3d_opengl_select to skip editmode objects */
+    /* Signal for #view3d_opengl_select to skip edit-mode objects. */
     vc.obedit = NULL;
   }
 
@@ -1789,19 +2044,19 @@ static bool ed_object_select_pick(bContext *C,
   /* This block uses the control key to make the object selected
    * by its center point rather than its contents */
 
-  /* in editmode do not activate */
+  /* In edit-mode do not activate. */
   if (obcenter) {
 
     /* note; shift+alt goes to group-flush-selecting */
     if (enumerate) {
-      basact = object_mouse_select_menu(C, &vc, NULL, 0, mval, toggle);
+      basact = object_mouse_select_menu(C, &vc, NULL, 0, mval, extend, deselect, toggle);
     }
     else {
       base = startbase;
       while (base) {
         if (BASE_SELECTABLE(v3d, base)) {
           float screen_co[2];
-          if (ED_view3d_project_float_global(ar,
+          if (ED_view3d_project_float_global(region,
                                              base->object->obmat[3],
                                              screen_co,
                                              V3D_PROJ_TEST_CLIP_BB | V3D_PROJ_TEST_CLIP_WIN |
@@ -1862,7 +2117,7 @@ static bool ed_object_select_pick(bContext *C,
 
       /* note; shift+alt goes to group-flush-selecting */
       if (enumerate) {
-        basact = object_mouse_select_menu(C, &vc, buffer, hits, mval, toggle);
+        basact = object_mouse_select_menu(C, &vc, buffer, hits, mval, extend, deselect, toggle);
       }
       else {
         basact = mouse_select_eval_buffer(&vc, buffer, hits, startbase, has_bones, do_nearest);
@@ -1870,7 +2125,8 @@ static bool ed_object_select_pick(bContext *C,
 
       if (has_bones && basact) {
         if (basact->object->type == OB_CAMERA) {
-          if (oldbasact == basact) {
+          MovieClip *clip = BKE_object_movieclip_get(scene, basact->object, false);
+          if (clip != NULL && oldbasact == basact) {
             int i, hitresult;
             bool changed = false;
 
@@ -1879,7 +2135,7 @@ static bool ed_object_select_pick(bContext *C,
 
               /* if there's bundles in buffer select bundles first,
                * so non-camera elements should be ignored in buffer */
-              if (basact->object->select_id != (hitresult & 0xFFFF)) {
+              if (basact->object->runtime.select_id != (hitresult & 0xFFFF)) {
                 continue;
               }
 
@@ -1887,7 +2143,6 @@ static bool ed_object_select_pick(bContext *C,
                * in height word, this buffer value belongs to camera. not to bundle
                */
               if (buffer[4 * i + 3] & 0xFFFF0000) {
-                MovieClip *clip = BKE_object_movieclip_get(scene, basact->object, false);
                 MovieTracking *tracking = &clip->tracking;
                 ListBase *tracksbase;
                 MovieTrackingTrack *track;
@@ -1912,8 +2167,7 @@ static bool ed_object_select_pick(bContext *C,
                   }
                 }
 
-                basact->flag |= BASE_SELECTED;
-                BKE_scene_object_base_flag_sync_from_base(basact);
+                ED_object_base_select(basact, BA_SELECT);
 
                 retval = true;
 
@@ -1946,17 +2200,22 @@ static bool ed_object_select_pick(bContext *C,
 
           /* we make the armature selected:
            * not-selected active object in posemode won't work well for tools */
-          basact->flag |= BASE_SELECTED;
-          BKE_scene_object_base_flag_sync_from_base(basact);
+          ED_object_base_select(basact, BA_SELECT);
 
           retval = true;
           WM_event_add_notifier(C, NC_OBJECT | ND_BONE_SELECT, basact->object);
           WM_event_add_notifier(C, NC_OBJECT | ND_BONE_ACTIVE, basact->object);
+          DEG_id_tag_update(&scene->id, ID_RECALC_BASE_FLAGS);
 
-          /* in weightpaint, we use selected bone to select vertexgroup,
-           * so no switch to new active object */
+          /* In weight-paint, we use selected bone to select vertex-group,
+           * so don't switch to new active object. */
           if (oldbasact && (oldbasact->object->mode & OB_MODE_WEIGHT_PAINT)) {
-            /* prevent activating */
+            /* Prevent activating.
+             * Selection causes this to be considered the 'active' pose in weight-paint mode.
+             * Eventually this limitation may be removed.
+             * For now, de-select all other pose objects deforming this mesh. */
+            ED_armature_pose_select_in_wpaint_mode(view_layer, basact);
+
             basact = NULL;
           }
         }
@@ -2027,7 +2286,7 @@ static bool ed_object_select_pick(bContext *C,
       }
       else {
         /* When enabled, this puts other objects out of multi pose-mode. */
-        if (is_pose_mode == false) {
+        if (is_pose_mode == false || (basact->object->mode & OB_MODE_POSE) == 0) {
           object_deselect_all_except(view_layer, basact);
           ED_object_base_select(basact, BA_SELECT);
         }
@@ -2038,8 +2297,8 @@ static bool ed_object_select_pick(bContext *C,
       }
 
       /* Set special modes for grease pencil
-         The grease pencil modes are not real modes, but a hack to make the interface
-         consistent, so need some tricks to keep UI synchronized */
+       * The grease pencil modes are not real modes, but a hack to make the interface
+       * consistent, so need some tricks to keep UI synchronized */
       // XXX: This stuff needs reviewing (Aligorith)
       if (false && (((oldbasact) && oldbasact->object->type == OB_GPENCIL) ||
                     (basact->object->type == OB_GPENCIL))) {
@@ -2047,7 +2306,8 @@ static bool ed_object_select_pick(bContext *C,
         if (ELEM(basact->object->mode,
                  OB_MODE_PAINT_GPENCIL,
                  OB_MODE_SCULPT_GPENCIL,
-                 OB_MODE_WEIGHT_GPENCIL)) {
+                 OB_MODE_WEIGHT_GPENCIL,
+                 OB_MODE_VERTEX_GPENCIL)) {
           ED_gpencil_toggle_brush_cursor(C, true, NULL);
         }
         else {
@@ -2118,11 +2378,11 @@ static int view3d_select_exec(bContext *C, wmOperator *op)
   bool toggle = RNA_boolean_get(op->ptr, "toggle");
   bool center = RNA_boolean_get(op->ptr, "center");
   bool enumerate = RNA_boolean_get(op->ptr, "enumerate");
-  /* only force object select for editmode to support vertex parenting,
-   * or paint-select to allow pose bone select with vert/face select */
+  /* Only force object select for edit-mode to support vertex parenting,
+   * or paint-select to allow pose bone select with vert/face select. */
   bool object = (RNA_boolean_get(op->ptr, "object") &&
                  (obedit || BKE_paint_select_elem_test(obact) ||
-                  /* so its possible to select bones in weightpaint mode (LMB select) */
+                  /* so its possible to select bones in weight-paint mode (LMB select) */
                   (obact && (obact->mode & OB_MODE_WEIGHT_PAINT) &&
                    BKE_object_pose_armature_get(obact))));
 
@@ -2132,14 +2392,15 @@ static int view3d_select_exec(bContext *C, wmOperator *op)
   RNA_int_get_array(op->ptr, "location", location);
 
   view3d_operator_needs_opengl(C);
+  BKE_object_update_select_id(CTX_data_main(C));
 
   if (object) {
     obedit = NULL;
     obact = NULL;
 
     /* ack, this is incorrect but to do this correctly we would need an
-     * alternative editmode/objectmode keymap, this copies the functionality
-     * from 2.4x where Ctrl+Select in editmode does object select only */
+     * alternative edit-mode/object-mode keymap, this copies the functionality
+     * from 2.4x where Ctrl+Select in edit-mode does object select only. */
     center = false;
   }
 
@@ -2154,6 +2415,9 @@ static int view3d_select_exec(bContext *C, wmOperator *op)
       retval = ED_armature_edit_select_pick(C, location, extend, deselect, toggle);
       if (!retval && deselect_all) {
         retval = ED_armature_edit_deselect_all_visible_multi(C);
+      }
+      if (retval) {
+        ED_outliner_select_sync_from_edit_bone_tag(C);
       }
     }
     else if (obedit->type == OB_LATTICE) {
@@ -2179,6 +2443,9 @@ static int view3d_select_exec(bContext *C, wmOperator *op)
       if (!retval && deselect_all) {
         /* pass */
       }
+    }
+    if (retval) {
+      WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
     }
   }
   else if (obact && obact->mode & OB_MODE_PARTICLE_EDIT) {
@@ -2212,18 +2479,25 @@ static int view3d_select_exec(bContext *C, wmOperator *op)
         DEG_id_tag_update(&scene->id, ID_RECALC_SELECT);
       }
     }
+
+    if (retval) {
+      if (obact && obact->mode & OB_MODE_POSE) {
+        ED_outliner_select_sync_from_pose_bone_tag(C);
+      }
+      else {
+        ED_outliner_select_sync_from_object_tag(C);
+      }
+    }
   }
 
-  /* passthrough allows tweaks
+  /* Pass-through allows tweaks
    * FINISHED to signal one operator worked
    * */
   if (retval) {
     WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, scene);
     return OPERATOR_PASS_THROUGH | OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_PASS_THROUGH; /* nothing selected, just passthrough */
-  }
+  return OPERATOR_PASS_THROUGH; /* nothing selected, just passthrough */
 }
 
 static int view3d_select_invoke(bContext *C, wmOperator *op, const wmEvent *event)
@@ -2252,21 +2526,18 @@ void VIEW3D_OT_select(wmOperatorType *ot)
 
   /* properties */
   WM_operator_properties_mouse_select(ot);
-  prop = RNA_def_boolean(
-      ot->srna, "deselect_all", 0, "Deselect", "Deselect all when nothing under the cursor");
-  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 
   prop = RNA_def_boolean(
       ot->srna,
       "center",
       0,
       "Center",
-      "Use the object center when selecting, in editmode used to extend object selection");
+      "Use the object center when selecting, in edit-mode used to extend object selection");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
   prop = RNA_def_boolean(
       ot->srna, "enumerate", 0, "Enumerate", "List objects under the mouse (object mode only)");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
-  prop = RNA_def_boolean(ot->srna, "object", 0, "Object", "Use object selection (editmode only)");
+  prop = RNA_def_boolean(ot->srna, "object", 0, "Object", "Use object selection (edit-mode only)");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 
   prop = RNA_def_int_vector(ot->srna,
@@ -2294,6 +2565,7 @@ typedef struct BoxSelectUserData {
   const rctf *rect_fl;
   rctf _rect_fl;
   eSelectOp sel_op;
+  eBezTriple_Flag select_flag;
 
   /* runtime */
   bool is_done;
@@ -2312,6 +2584,8 @@ static void view3d_userdata_boxselect_init(BoxSelectUserData *r_data,
   BLI_rctf_rcti_copy(&r_data->_rect_fl, rect);
 
   r_data->sel_op = sel_op;
+  /* SELECT by default, but can be changed if needed (only few cases use and respect this). */
+  r_data->select_flag = SELECT;
 
   /* runtime */
   r_data->is_done = false;
@@ -2341,9 +2615,13 @@ static void do_paintvert_box_select__doSelectVert(void *userData,
     data->is_changed = true;
   }
 }
-static bool do_paintvert_box_select(ViewContext *vc, const rcti *rect, const eSelectOp sel_op)
+static bool do_paintvert_box_select(ViewContext *vc,
+                                    wmGenericUserData *wm_userdata,
+                                    const rcti *rect,
+                                    const eSelectOp sel_op)
 {
   const bool use_zbuf = !XRAY_ENABLED(vc->v3d);
+
   Mesh *me;
 
   me = vc->obact->data;
@@ -2360,48 +2638,16 @@ static bool do_paintvert_box_select(ViewContext *vc, const rcti *rect, const eSe
     /* pass */
   }
   else if (use_zbuf) {
-    MVert *mvert;
-    unsigned int *rt;
-    int a, index;
-    char *selar;
-
-    selar = MEM_callocN(me->totvert + 1, "selar");
-
-    uint buf_len;
-    uint *buf = ED_view3d_select_id_read_rect(vc, rect, &buf_len);
-
-    rt = buf;
-
-    a = buf_len;
-    while (a--) {
-      if (*rt) {
-        index = *rt;
-        if (index <= me->totvert) {
-          selar[index] = 1;
-        }
-      }
-      rt++;
+    struct EditSelectBuf_Cache *esel = wm_userdata->data;
+    if (wm_userdata->data == NULL) {
+      editselect_buf_cache_init_with_generic_userdata(wm_userdata, vc, SCE_SELECT_VERTEX);
+      esel = wm_userdata->data;
+      esel->select_bitmap = DRW_select_buffer_bitmap_from_rect(
+          vc->depsgraph, vc->region, vc->v3d, rect, NULL);
     }
-
-    mvert = me->mvert;
-    for (a = 1; a <= me->totvert; a++, mvert++) {
-      if ((mvert->flag & ME_HIDE) == 0) {
-        const bool is_select = mvert->flag & SELECT;
-        const bool is_inside = (selar[a] != 0);
-        const int sel_op_result = ED_select_op_action_deselected(sel_op, is_select, is_inside);
-        if (sel_op_result != -1) {
-          SET_FLAG_FROM_TEST(mvert->flag, sel_op_result, SELECT);
-          changed = true;
-        }
-      }
+    if (esel->select_bitmap != NULL) {
+      changed |= edbm_backbuf_check_and_select_verts_obmode(me, esel, sel_op);
     }
-
-    MEM_freeN(buf);
-    MEM_freeN(selar);
-
-#ifdef __APPLE__
-    glReadBuffer(GL_BACK);
-#endif
   }
   else {
     BoxSelectUserData data;
@@ -2425,11 +2671,52 @@ static bool do_paintvert_box_select(ViewContext *vc, const rcti *rect, const eSe
   return changed;
 }
 
+static bool do_paintface_box_select(ViewContext *vc,
+                                    wmGenericUserData *wm_userdata,
+                                    const rcti *rect,
+                                    int sel_op)
+{
+  Object *ob = vc->obact;
+  Mesh *me;
+
+  me = BKE_mesh_from_object(ob);
+  if ((me == NULL) || (me->totpoly == 0)) {
+    return false;
+  }
+
+  bool changed = false;
+  if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
+    changed |= paintface_deselect_all_visible(vc->C, vc->obact, SEL_DESELECT, false);
+  }
+
+  if (BLI_rcti_is_empty(rect)) {
+    /* pass */
+  }
+  else {
+    struct EditSelectBuf_Cache *esel = wm_userdata->data;
+    if (wm_userdata->data == NULL) {
+      editselect_buf_cache_init_with_generic_userdata(wm_userdata, vc, SCE_SELECT_FACE);
+      esel = wm_userdata->data;
+      esel->select_bitmap = DRW_select_buffer_bitmap_from_rect(
+          vc->depsgraph, vc->region, vc->v3d, rect, NULL);
+    }
+    if (esel->select_bitmap != NULL) {
+      changed |= edbm_backbuf_check_and_select_faces_obmode(me, esel, sel_op);
+    }
+  }
+
+  if (changed) {
+    paintface_flush_flags(vc->C, vc->obact, SELECT);
+  }
+  return changed;
+}
+
 static void do_nurbs_box_select__doSelect(void *userData,
                                           Nurb *UNUSED(nu),
                                           BPoint *bp,
                                           BezTriple *bezt,
                                           int beztindex,
+                                          bool handles_visible,
                                           const float screen_co[2])
 {
   BoxSelectUserData *data = userData;
@@ -2439,17 +2726,17 @@ static void do_nurbs_box_select__doSelect(void *userData,
     const bool is_select = bp->f1 & SELECT;
     const int sel_op_result = ED_select_op_action_deselected(data->sel_op, is_select, is_inside);
     if (sel_op_result != -1) {
-      SET_FLAG_FROM_TEST(bp->f1, sel_op_result, SELECT);
+      SET_FLAG_FROM_TEST(bp->f1, sel_op_result, data->select_flag);
       data->is_changed = true;
     }
   }
   else {
-    if ((data->vc->v3d->overlay.edit_flag & V3D_OVERLAY_EDIT_CU_HANDLES) == 0) {
-      /* can only be (beztindex == 0) here since handles are hidden */
+    if (!handles_visible) {
+      /* can only be (beztindex == 1) here since handles are hidden */
       const bool is_select = bezt->f2 & SELECT;
       const int sel_op_result = ED_select_op_action_deselected(data->sel_op, is_select, is_inside);
       if (sel_op_result != -1) {
-        SET_FLAG_FROM_TEST(bezt->f2, sel_op_result, SELECT);
+        SET_FLAG_FROM_TEST(bezt->f2, sel_op_result, data->select_flag);
         data->is_changed = true;
       }
       bezt->f1 = bezt->f3 = bezt->f2;
@@ -2459,7 +2746,7 @@ static void do_nurbs_box_select__doSelect(void *userData,
       const bool is_select = *flag_p & SELECT;
       const int sel_op_result = ED_select_op_action_deselected(data->sel_op, is_select, is_inside);
       if (sel_op_result != -1) {
-        SET_FLAG_FROM_TEST(*flag_p, sel_op_result, SELECT);
+        SET_FLAG_FROM_TEST(*flag_p, sel_op_result, data->select_flag);
         data->is_changed = true;
       }
     }
@@ -2467,17 +2754,28 @@ static void do_nurbs_box_select__doSelect(void *userData,
 }
 static bool do_nurbs_box_select(ViewContext *vc, rcti *rect, const eSelectOp sel_op)
 {
+  const bool deselect_all = (sel_op == SEL_OP_SET);
   BoxSelectUserData data;
 
   view3d_userdata_boxselect_init(&data, vc, rect, sel_op);
 
-  if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
-    Curve *curve = (Curve *)vc->obedit->data;
-    data.is_changed |= ED_curve_deselect_all(curve->editnurb);
+  Curve *curve = (Curve *)vc->obedit->data;
+  ListBase *nurbs = BKE_curve_editNurbs_get(curve);
+
+  /* For deselect all, items to be selected are tagged with temp flag. Clear that first. */
+  if (deselect_all) {
+    BKE_nurbList_flag_set(nurbs, BEZT_FLAG_TEMP_TAG, false);
+    data.select_flag = BEZT_FLAG_TEMP_TAG;
   }
 
   ED_view3d_init_mats_rv3d(vc->obedit, vc->rv3d); /* for foreach's screen/vert projection */
   nurbs_foreachScreenVert(vc, do_nurbs_box_select__doSelect, &data, V3D_PROJ_TEST_CLIP_DEFAULT);
+
+  /* Deselect items that were not added to selection (indicated by temp flag). */
+  if (deselect_all) {
+    BKE_nurbList_flag_set_from_flag(nurbs, BEZT_FLAG_TEMP_TAG, SELECT);
+  }
+
   BKE_curve_nurb_vert_active_validate(vc->obedit->data);
 
   return data.is_changed;
@@ -2525,12 +2823,24 @@ static void do_mesh_box_select__doSelectVert(void *userData,
     data->is_changed = true;
   }
 }
+struct BoxSelectUserData_ForMeshEdge {
+  BoxSelectUserData *data;
+  struct EditSelectBuf_Cache *esel;
+  uint backbuf_offset;
+};
 static void do_mesh_box_select__doSelectEdge_pass0(
     void *userData, BMEdge *eed, const float screen_co_a[2], const float screen_co_b[2], int index)
 {
-  BoxSelectUserData *data = userData;
+  struct BoxSelectUserData_ForMeshEdge *data_for_edge = userData;
+  BoxSelectUserData *data = data_for_edge->data;
+  bool is_visible = true;
+  if (data_for_edge->backbuf_offset) {
+    uint bitmap_inedx = data_for_edge->backbuf_offset + index - 1;
+    is_visible = BLI_BITMAP_TEST_BOOL(data_for_edge->esel->select_bitmap, bitmap_inedx);
+  }
+
   const bool is_select = BM_elem_flag_test(eed, BM_ELEM_SELECT);
-  const bool is_inside = (EDBM_backbuf_check(bm_solidoffs + index) &&
+  const bool is_inside = (is_visible &&
                           edge_fully_inside_rect(data->rect_fl, screen_co_a, screen_co_b));
   const int sel_op_result = ED_select_op_action_deselected(data->sel_op, is_select, is_inside);
   if (sel_op_result != -1) {
@@ -2542,10 +2852,16 @@ static void do_mesh_box_select__doSelectEdge_pass0(
 static void do_mesh_box_select__doSelectEdge_pass1(
     void *userData, BMEdge *eed, const float screen_co_a[2], const float screen_co_b[2], int index)
 {
-  BoxSelectUserData *data = userData;
+  struct BoxSelectUserData_ForMeshEdge *data_for_edge = userData;
+  BoxSelectUserData *data = data_for_edge->data;
+  bool is_visible = true;
+  if (data_for_edge->backbuf_offset) {
+    uint bitmap_inedx = data_for_edge->backbuf_offset + index - 1;
+    is_visible = BLI_BITMAP_TEST_BOOL(data_for_edge->esel->select_bitmap, bitmap_inedx);
+  }
+
   const bool is_select = BM_elem_flag_test(eed, BM_ELEM_SELECT);
-  const bool is_inside = (EDBM_backbuf_check(bm_solidoffs + index) &&
-                          edge_inside_rect(data->rect_fl, screen_co_a, screen_co_b));
+  const bool is_inside = (is_visible && edge_inside_rect(data->rect_fl, screen_co_a, screen_co_b));
   const int sel_op_result = ED_select_op_action_deselected(data->sel_op, is_select, is_inside);
   if (sel_op_result != -1) {
     BM_edge_select_set(data->vc->em->bm, eed, sel_op_result);
@@ -2566,11 +2882,13 @@ static void do_mesh_box_select__doSelectFace(void *userData,
     data->is_changed = true;
   }
 }
-static bool do_mesh_box_select(ViewContext *vc, rcti *rect, const eSelectOp sel_op)
+static bool do_mesh_box_select(ViewContext *vc,
+                               wmGenericUserData *wm_userdata,
+                               const rcti *rect,
+                               const eSelectOp sel_op)
 {
   BoxSelectUserData data;
   ToolSettings *ts = vc->scene->toolsettings;
-  int bbsel;
 
   view3d_userdata_boxselect_init(&data, vc, rect, sel_op);
 
@@ -2585,11 +2903,23 @@ static bool do_mesh_box_select(ViewContext *vc, rcti *rect, const eSelectOp sel_
   ED_view3d_init_mats_rv3d(vc->obedit, vc->rv3d);
 
   GPU_matrix_set(vc->rv3d->viewmat);
-  bbsel = EDBM_backbuf_border_init(vc, rect->xmin, rect->ymin, rect->xmax, rect->ymax);
+
+  const bool use_zbuf = !XRAY_FLAG_ENABLED(vc->v3d);
+
+  struct EditSelectBuf_Cache *esel = wm_userdata->data;
+  if (use_zbuf) {
+    if (wm_userdata->data == NULL) {
+      editselect_buf_cache_init_with_generic_userdata(wm_userdata, vc, ts->selectmode);
+      esel = wm_userdata->data;
+      esel->select_bitmap = DRW_select_buffer_bitmap_from_rect(
+          vc->depsgraph, vc->region, vc->v3d, rect, NULL);
+    }
+  }
 
   if (ts->selectmode & SCE_SELECT_VERTEX) {
-    if (bbsel) {
-      data.is_changed |= edbm_backbuf_check_and_select_verts(vc->em, sel_op);
+    if (use_zbuf) {
+      data.is_changed |= edbm_backbuf_check_and_select_verts(
+          esel, vc->depsgraph, vc->obedit, vc->em, sel_op);
     }
     else {
       mesh_foreachScreenVert(
@@ -2597,26 +2927,35 @@ static bool do_mesh_box_select(ViewContext *vc, rcti *rect, const eSelectOp sel_
     }
   }
   if (ts->selectmode & SCE_SELECT_EDGE) {
-    /* Does both bbsel and non-bbsel versions (need screen cos for both) */
-    mesh_foreachScreenEdge(
-        vc, do_mesh_box_select__doSelectEdge_pass0, &data, V3D_PROJ_TEST_CLIP_NEAR);
+    /* Does both use_zbuf and non-use_zbuf versions (need screen cos for both) */
+    struct BoxSelectUserData_ForMeshEdge cb_data = {
+        .data = &data,
+        .esel = use_zbuf ? esel : NULL,
+        .backbuf_offset = use_zbuf ? DRW_select_buffer_context_offset_for_object_elem(
+                                         vc->depsgraph, vc->obedit, SCE_SELECT_EDGE) :
+                                     0,
+    };
+
+    const eV3DProjTest clip_flag = V3D_PROJ_TEST_CLIP_NEAR |
+                                   (use_zbuf ? 0 : V3D_PROJ_TEST_CLIP_BB);
+    mesh_foreachScreenEdge_clip_bb_segment(
+        vc, do_mesh_box_select__doSelectEdge_pass0, &cb_data, clip_flag);
     if (data.is_done == false) {
-      mesh_foreachScreenEdge(
-          vc, do_mesh_box_select__doSelectEdge_pass1, &data, V3D_PROJ_TEST_CLIP_NEAR);
+      mesh_foreachScreenEdge_clip_bb_segment(
+          vc, do_mesh_box_select__doSelectEdge_pass1, &cb_data, clip_flag);
     }
   }
 
   if (ts->selectmode & SCE_SELECT_FACE) {
-    if (bbsel) {
-      data.is_changed |= edbm_backbuf_check_and_select_faces(vc->em, sel_op);
+    if (use_zbuf) {
+      data.is_changed |= edbm_backbuf_check_and_select_faces(
+          esel, vc->depsgraph, vc->obedit, vc->em, sel_op);
     }
     else {
       mesh_foreachScreenFace(
           vc, do_mesh_box_select__doSelectFace, &data, V3D_PROJ_TEST_CLIP_DEFAULT);
     }
   }
-
-  EDBM_backbuf_free();
 
   if (data.is_changed) {
     EDBM_selectmode_flush(vc->em);
@@ -2653,16 +2992,13 @@ static bool do_meta_box_select(ViewContext *vc, const rcti *rect, const eSelectO
       if (hitresult == -1) {
         continue;
       }
-      else if (hitresult & MBALL_NOSEL) {
-        continue;
-      }
 
       const uint hit_object = hitresult & 0xFFFF;
-      if (vc->obedit->select_id != hit_object) {
+      if (vc->obedit->runtime.select_id != hit_object) {
         continue;
       }
 
-      if (metaelem_id != (hitresult & 0xFFFF0000 & ~(MBALLSEL_ANY))) {
+      if (metaelem_id != (hitresult & 0xFFFF0000 & ~MBALLSEL_ANY)) {
         continue;
       }
 
@@ -2771,12 +3107,10 @@ static int opengl_bone_select_buffer_cmp(const void *sel_a_p, const void *sel_b_
   if (sel_a < sel_b) {
     return -1;
   }
-  else if (sel_a > sel_b) {
+  if (sel_a > sel_b) {
     return 1;
   }
-  else {
-    return 0;
-  }
+  return 0;
 }
 
 static bool do_object_box_select(bContext *C, ViewContext *vc, rcti *rect, const eSelectOp sel_op)
@@ -2791,7 +3125,7 @@ static bool do_object_box_select(bContext *C, ViewContext *vc, rcti *rect, const
   const int hits = view3d_opengl_select(
       vc, vbuffer, 4 * (totobj + MAXPICKELEMS), rect, VIEW3D_SELECT_ALL, select_filter);
 
-  for (Base *base = vc->view_layer->object_bases.first; base; base = base->next) {
+  LISTBASE_FOREACH (Base *, base, &vc->view_layer->object_bases) {
     base->object->id.tag &= ~LIB_TAG_DOIT;
   }
 
@@ -2807,9 +3141,9 @@ static bool do_object_box_select(bContext *C, ViewContext *vc, rcti *rect, const
     goto finally;
   }
 
-  for (Base *base = vc->view_layer->object_bases.first; base; base = base->next) {
+  LISTBASE_FOREACH (Base *, base, &vc->view_layer->object_bases) {
     if (BASE_SELECTABLE(v3d, base)) {
-      if ((base->object->select_id & 0x0000FFFF) != 0) {
+      if ((base->object->runtime.select_id & 0x0000FFFF) != 0) {
         BLI_array_append(bases, base);
       }
     }
@@ -2819,9 +3153,9 @@ static bool do_object_box_select(bContext *C, ViewContext *vc, rcti *rect, const
   qsort(vbuffer, hits, sizeof(uint[4]), opengl_bone_select_buffer_cmp);
 
   for (const uint *col = vbuffer + 3, *col_end = col + (hits * 4); col < col_end; col += 4) {
-    Bone *bone;
-    Base *base = ED_armature_base_and_bone_from_select_buffer(
-        bases, BLI_array_len(bases), *col, &bone);
+    bPoseChannel *pchan_dummy;
+    Base *base = ED_armature_base_and_pchan_from_select_buffer(
+        bases, BLI_array_len(bases), *col, &pchan_dummy);
     if (base != NULL) {
       base->object->id.tag |= LIB_TAG_DOIT;
     }
@@ -2899,7 +3233,7 @@ static bool do_pose_box_select(bContext *C, ViewContext *vc, rcti *rect, const e
 
         /* Select the next bone if we're not switching bases. */
         if (col + 4 != col_end) {
-          if ((base->object->select_id & 0x0000FFFF) != (col[4] & 0x0000FFFF)) {
+          if ((base->object->runtime.select_id & 0x0000FFFF) != (col[4] & 0x0000FFFF)) {
             break;
           }
           if (base->object->pose != NULL) {
@@ -2931,20 +3265,24 @@ static bool do_pose_box_select(bContext *C, ViewContext *vc, rcti *rect, const e
 
 static int view3d_box_select_exec(bContext *C, wmOperator *op)
 {
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewContext vc;
   rcti rect;
   bool changed_multi = false;
 
+  wmGenericUserData wm_userdata_buf = {0};
+  wmGenericUserData *wm_userdata = &wm_userdata_buf;
+
   view3d_operator_needs_opengl(C);
+  BKE_object_update_select_id(CTX_data_main(C));
 
   /* setup view context for argument to callbacks */
-  ED_view3d_viewcontext_init(C, &vc);
+  ED_view3d_viewcontext_init(C, &vc, depsgraph);
 
   eSelectOp sel_op = RNA_enum_get(op->ptr, "mode");
   WM_operator_properties_border_to_rcti(op, &rect);
 
   if (vc.obedit) {
-
     FOREACH_OBJECT_IN_MODE_BEGIN (
         vc.view_layer, vc.v3d, vc.obedit->type, vc.obedit->mode, ob_iter) {
       ED_view3d_viewcontext_init_object(&vc, ob_iter);
@@ -2953,7 +3291,7 @@ static int view3d_box_select_exec(bContext *C, wmOperator *op)
       switch (vc.obedit->type) {
         case OB_MESH:
           vc.em = BKE_editmesh_from_object(vc.obedit);
-          changed = do_mesh_box_select(&vc, &rect, sel_op);
+          changed = do_mesh_box_select(&vc, wm_userdata, &rect, sel_op);
           if (changed) {
             DEG_id_tag_update(vc.obedit->data, ID_RECALC_SELECT);
             WM_event_add_notifier(C, NC_GEOM | ND_SELECT, vc.obedit->data);
@@ -2979,6 +3317,7 @@ static int view3d_box_select_exec(bContext *C, wmOperator *op)
           if (changed) {
             DEG_id_tag_update(&vc.obedit->id, ID_RECALC_SELECT);
             WM_event_add_notifier(C, NC_OBJECT | ND_BONE_SELECT, vc.obedit);
+            ED_outliner_select_sync_from_edit_bone_tag(C);
           }
           break;
         case OB_LATTICE:
@@ -2989,42 +3328,48 @@ static int view3d_box_select_exec(bContext *C, wmOperator *op)
           }
           break;
         default:
-          assert(!"box select on incorrect object type");
+          BLI_assert(!"box select on incorrect object type");
           break;
       }
       changed_multi |= changed;
     }
     FOREACH_OBJECT_IN_MODE_END;
   }
-  else { /* no editmode, unified for bones and objects */
+  else { /* No edit-mode, unified for bones and objects. */
     if (vc.obact && vc.obact->mode & OB_MODE_SCULPT) {
       /* XXX, this is not selection, could be it's own operator. */
       changed_multi = ED_sculpt_mask_box_select(
           C, &vc, &rect, sel_op == SEL_OP_ADD ? true : false);
     }
     else if (vc.obact && BKE_paint_select_face_test(vc.obact)) {
-      changed_multi = do_paintface_box_select(&vc, &rect, sel_op);
+      changed_multi = do_paintface_box_select(&vc, wm_userdata, &rect, sel_op);
     }
     else if (vc.obact && BKE_paint_select_vert_test(vc.obact)) {
-      changed_multi = do_paintvert_box_select(&vc, &rect, sel_op);
+      changed_multi = do_paintvert_box_select(&vc, wm_userdata, &rect, sel_op);
     }
     else if (vc.obact && vc.obact->mode & OB_MODE_PARTICLE_EDIT) {
       changed_multi = PE_box_select(C, &rect, sel_op);
     }
     else if (vc.obact && vc.obact->mode & OB_MODE_POSE) {
       changed_multi = do_pose_box_select(C, &vc, &rect, sel_op);
+      if (changed_multi) {
+        ED_outliner_select_sync_from_pose_bone_tag(C);
+      }
     }
     else { /* object mode with none active */
       changed_multi = do_object_box_select(C, &vc, &rect, sel_op);
+      if (changed_multi) {
+        ED_outliner_select_sync_from_object_tag(C);
+      }
     }
   }
+
+  WM_generic_user_data_free(wm_userdata);
 
   if (changed_multi) {
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void VIEW3D_OT_select_box(wmOperatorType *ot)
@@ -3062,6 +3407,7 @@ typedef struct CircleSelectUserData {
   float mval_fl[2];
   float radius;
   float radius_squared;
+  eBezTriple_Flag select_flag;
 
   /* runtime */
   bool is_changed;
@@ -3081,6 +3427,9 @@ static void view3d_userdata_circleselect_init(CircleSelectUserData *r_data,
 
   r_data->radius = rad;
   r_data->radius_squared = rad * rad;
+
+  /* SELECT by default, but can be changed if needed (only few cases use and respect this). */
+  r_data->select_flag = SELECT;
 
   /* runtime */
   r_data->is_changed = false;
@@ -3124,10 +3473,13 @@ static void mesh_circle_doSelectFace(void *userData,
   }
 }
 
-static bool mesh_circle_select(ViewContext *vc, eSelectOp sel_op, const int mval[2], float rad)
+static bool mesh_circle_select(ViewContext *vc,
+                               wmGenericUserData *wm_userdata,
+                               eSelectOp sel_op,
+                               const int mval[2],
+                               float rad)
 {
   ToolSettings *ts = vc->scene->toolsettings;
-  int bbsel;
   CircleSelectUserData data;
   vc->em = BKE_editmesh_from_object(vc->obedit);
 
@@ -3140,14 +3492,32 @@ static bool mesh_circle_select(ViewContext *vc, eSelectOp sel_op, const int mval
   }
   const bool select = (sel_op != SEL_OP_SUB);
 
-  bbsel = EDBM_backbuf_circle_init(vc, mval[0], mval[1], (short)(rad + 1.0f));
   ED_view3d_init_mats_rv3d(vc->obedit, vc->rv3d); /* for foreach's screen/vert projection */
 
   view3d_userdata_circleselect_init(&data, vc, select, mval, rad);
 
+  const bool use_zbuf = !XRAY_FLAG_ENABLED(vc->v3d);
+
+  if (use_zbuf) {
+    if (wm_userdata->data == NULL) {
+      editselect_buf_cache_init_with_generic_userdata(wm_userdata, vc, ts->selectmode);
+    }
+  }
+  struct EditSelectBuf_Cache *esel = wm_userdata->data;
+
+  if (use_zbuf) {
+    if (esel->select_bitmap == NULL) {
+      esel->select_bitmap = DRW_select_buffer_bitmap_from_circle(
+          vc->depsgraph, vc->region, vc->v3d, mval, (int)(rad + 1.0f), NULL);
+    }
+  }
+
   if (ts->selectmode & SCE_SELECT_VERTEX) {
-    if (bbsel) {
-      changed |= edbm_backbuf_check_and_select_verts(vc->em, select ? SEL_OP_ADD : SEL_OP_SUB);
+    if (use_zbuf) {
+      if (esel->select_bitmap != NULL) {
+        changed |= edbm_backbuf_check_and_select_verts(
+            esel, vc->depsgraph, vc->obedit, vc->em, select ? SEL_OP_ADD : SEL_OP_SUB);
+      }
     }
     else {
       mesh_foreachScreenVert(vc, mesh_circle_doSelectVert, &data, V3D_PROJ_TEST_CLIP_DEFAULT);
@@ -3155,17 +3525,24 @@ static bool mesh_circle_select(ViewContext *vc, eSelectOp sel_op, const int mval
   }
 
   if (ts->selectmode & SCE_SELECT_EDGE) {
-    if (bbsel) {
-      changed |= edbm_backbuf_check_and_select_edges(vc->em, select ? SEL_OP_ADD : SEL_OP_SUB);
+    if (use_zbuf) {
+      if (esel->select_bitmap != NULL) {
+        changed |= edbm_backbuf_check_and_select_edges(
+            esel, vc->depsgraph, vc->obedit, vc->em, select ? SEL_OP_ADD : SEL_OP_SUB);
+      }
     }
     else {
-      mesh_foreachScreenEdge(vc, mesh_circle_doSelectEdge, &data, V3D_PROJ_TEST_CLIP_NEAR);
+      mesh_foreachScreenEdge_clip_bb_segment(
+          vc, mesh_circle_doSelectEdge, &data, V3D_PROJ_TEST_CLIP_NEAR | V3D_PROJ_TEST_CLIP_BB);
     }
   }
 
   if (ts->selectmode & SCE_SELECT_FACE) {
-    if (bbsel) {
-      changed |= edbm_backbuf_check_and_select_faces(vc->em, select ? SEL_OP_ADD : SEL_OP_SUB);
+    if (use_zbuf) {
+      if (esel->select_bitmap != NULL) {
+        changed |= edbm_backbuf_check_and_select_faces(
+            esel, vc->depsgraph, vc->obedit, vc->em, select ? SEL_OP_ADD : SEL_OP_SUB);
+      }
     }
     else {
       mesh_foreachScreenFace(vc, mesh_circle_doSelectFace, &data, V3D_PROJ_TEST_CLIP_DEFAULT);
@@ -3174,8 +3551,6 @@ static bool mesh_circle_select(ViewContext *vc, eSelectOp sel_op, const int mval
 
   changed |= data.is_changed;
 
-  EDBM_backbuf_free();
-
   if (changed) {
     EDBM_selectmode_flush(vc->em);
   }
@@ -3183,6 +3558,7 @@ static bool mesh_circle_select(ViewContext *vc, eSelectOp sel_op, const int mval
 }
 
 static bool paint_facesel_circle_select(ViewContext *vc,
+                                        wmGenericUserData *wm_userdata,
                                         const eSelectOp sel_op,
                                         const int mval[2],
                                         float rad)
@@ -3190,7 +3566,6 @@ static bool paint_facesel_circle_select(ViewContext *vc,
   BLI_assert(ELEM(sel_op, SEL_OP_SET, SEL_OP_ADD, SEL_OP_SUB));
   Object *ob = vc->obact;
   Mesh *me = ob->data;
-  bool bbsel;
 
   bool changed = false;
   if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
@@ -3198,13 +3573,21 @@ static bool paint_facesel_circle_select(ViewContext *vc,
     changed |= paintface_deselect_all_visible(vc->C, ob, SEL_DESELECT, false);
   }
 
-  bm_vertoffs = me->totpoly + 1; /* max index array */
-
-  bbsel = EDBM_backbuf_circle_init(vc, mval[0], mval[1], (short)(rad + 1.0f));
-  if (bbsel) {
-    changed |= edbm_backbuf_check_and_select_tfaces(me, sel_op);
-    EDBM_backbuf_free();
+  if (wm_userdata->data == NULL) {
+    editselect_buf_cache_init_with_generic_userdata(wm_userdata, vc, SCE_SELECT_FACE);
   }
+
+  {
+    struct EditSelectBuf_Cache *esel = wm_userdata->data;
+    esel->select_bitmap = DRW_select_buffer_bitmap_from_circle(
+        vc->depsgraph, vc->region, vc->v3d, mval, (int)(rad + 1.0f), NULL);
+    if (esel->select_bitmap != NULL) {
+      changed |= edbm_backbuf_check_and_select_faces_obmode(me, esel, sel_op);
+      MEM_freeN(esel->select_bitmap);
+      esel->select_bitmap = NULL;
+    }
+  }
+
   if (changed) {
     paintface_flush_flags(vc->C, ob, SELECT);
   }
@@ -3224,6 +3607,7 @@ static void paint_vertsel_circle_select_doSelectVert(void *userData,
   }
 }
 static bool paint_vertsel_circle_select(ViewContext *vc,
+                                        wmGenericUserData *wm_userdata,
                                         const eSelectOp sel_op,
                                         const int mval[2],
                                         float rad)
@@ -3232,24 +3616,30 @@ static bool paint_vertsel_circle_select(ViewContext *vc,
   const bool use_zbuf = !XRAY_ENABLED(vc->v3d);
   Object *ob = vc->obact;
   Mesh *me = ob->data;
-  bool bbsel;
   /* CircleSelectUserData data = {NULL}; */ /* UNUSED */
 
   bool changed = false;
   if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
-    changed |= paintvert_deselect_all_visible(
-        ob, SEL_DESELECT, false); /* flush selection at the end */
+    /* Flush selection at the end. */
+    changed |= paintvert_deselect_all_visible(ob, SEL_DESELECT, false);
   }
 
   const bool select = (sel_op != SEL_OP_SUB);
 
   if (use_zbuf) {
-    bm_vertoffs = me->totvert + 1; /* max index array */
+    if (wm_userdata->data == NULL) {
+      editselect_buf_cache_init_with_generic_userdata(wm_userdata, vc, SCE_SELECT_VERTEX);
+    }
+  }
 
-    bbsel = EDBM_backbuf_circle_init(vc, mval[0], mval[1], (short)(rad + 1.0f));
-    if (bbsel) {
-      changed |= edbm_backbuf_check_and_select_verts_obmode(me, sel_op);
-      EDBM_backbuf_free();
+  if (use_zbuf) {
+    struct EditSelectBuf_Cache *esel = wm_userdata->data;
+    esel->select_bitmap = DRW_select_buffer_bitmap_from_circle(
+        vc->depsgraph, vc->region, vc->v3d, mval, (int)(rad + 1.0f), NULL);
+    if (esel->select_bitmap != NULL) {
+      changed |= edbm_backbuf_check_and_select_verts_obmode(me, esel, sel_op);
+      MEM_freeN(esel->select_bitmap);
+      esel->select_bitmap = NULL;
     }
   }
   else {
@@ -3278,29 +3668,24 @@ static void nurbscurve_circle_doSelect(void *userData,
                                        BPoint *bp,
                                        BezTriple *bezt,
                                        int beztindex,
+                                       bool UNUSED(handles_visible),
                                        const float screen_co[2])
 {
   CircleSelectUserData *data = userData;
 
   if (len_squared_v2v2(data->mval_fl, screen_co) <= data->radius_squared) {
     if (bp) {
-      bp->f1 = data->select ? (bp->f1 | SELECT) : (bp->f1 & ~SELECT);
+      SET_FLAG_FROM_TEST(bp->f1, data->select, data->select_flag);
     }
     else {
-      if ((data->vc->v3d->overlay.edit_flag & V3D_OVERLAY_EDIT_CU_HANDLES) == 0) {
-        /* can only be (beztindex == 0) here since handles are hidden */
-        bezt->f1 = bezt->f2 = bezt->f3 = data->select ? (bezt->f2 | SELECT) : (bezt->f2 & ~SELECT);
+      if (beztindex == 0) {
+        SET_FLAG_FROM_TEST(bezt->f1, data->select, data->select_flag);
+      }
+      else if (beztindex == 1) {
+        SET_FLAG_FROM_TEST(bezt->f2, data->select, data->select_flag);
       }
       else {
-        if (beztindex == 0) {
-          bezt->f1 = data->select ? (bezt->f1 | SELECT) : (bezt->f1 & ~SELECT);
-        }
-        else if (beztindex == 1) {
-          bezt->f2 = data->select ? (bezt->f2 | SELECT) : (bezt->f2 & ~SELECT);
-        }
-        else {
-          bezt->f3 = data->select ? (bezt->f3 | SELECT) : (bezt->f3 & ~SELECT);
-        }
+        SET_FLAG_FROM_TEST(bezt->f3, data->select, data->select_flag);
       }
     }
     data->is_changed = true;
@@ -3311,18 +3696,30 @@ static bool nurbscurve_circle_select(ViewContext *vc,
                                      const int mval[2],
                                      float rad)
 {
+  const bool select = (sel_op != SEL_OP_SUB);
+  const bool deselect_all = (sel_op == SEL_OP_SET);
   CircleSelectUserData data;
   bool changed = false;
-  if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
-    Curve *curve = vc->obedit->data;
-    changed |= ED_curve_deselect_all(curve->editnurb);
-  }
-  const bool select = (sel_op != SEL_OP_SUB);
 
   view3d_userdata_circleselect_init(&data, vc, select, mval, rad);
 
+  Curve *curve = (Curve *)vc->obedit->data;
+  ListBase *nurbs = BKE_curve_editNurbs_get(curve);
+
+  /* For deselect all, items to be selected are tagged with temp flag. Clear that first. */
+  if (deselect_all) {
+    BKE_nurbList_flag_set(nurbs, BEZT_FLAG_TEMP_TAG, false);
+    data.select_flag = BEZT_FLAG_TEMP_TAG;
+  }
+
   ED_view3d_init_mats_rv3d(vc->obedit, vc->rv3d); /* for foreach's screen/vert projection */
   nurbs_foreachScreenVert(vc, nurbscurve_circle_doSelect, &data, V3D_PROJ_TEST_CLIP_DEFAULT);
+
+  /* Deselect items that were not added to selection (indicated by temp flag). */
+  if (deselect_all) {
+    BKE_nurbList_flag_set_from_flag(nurbs, BEZT_FLAG_TEMP_TAG, SELECT);
+  }
+
   BKE_curve_nurb_vert_active_validate(vc->obedit->data);
 
   return changed || data.is_changed;
@@ -3594,30 +3991,48 @@ static bool mball_circle_select(ViewContext *vc,
   return data.is_changed;
 }
 
-/** Callbacks for circle selection in Editmode */
-
-static bool obedit_circle_select(ViewContext *vc,
+/**
+ * Callbacks for circle selection in Editmode
+ */
+static bool obedit_circle_select(bContext *C,
+                                 ViewContext *vc,
+                                 wmGenericUserData *wm_userdata,
                                  const eSelectOp sel_op,
                                  const int mval[2],
                                  float rad)
 {
+  bool changed = false;
   BLI_assert(ELEM(sel_op, SEL_OP_SET, SEL_OP_ADD, SEL_OP_SUB));
   switch (vc->obedit->type) {
     case OB_MESH:
-      return mesh_circle_select(vc, sel_op, mval, rad);
+      changed = mesh_circle_select(vc, wm_userdata, sel_op, mval, rad);
+      break;
     case OB_CURVE:
     case OB_SURF:
-      return nurbscurve_circle_select(vc, sel_op, mval, rad);
+      changed = nurbscurve_circle_select(vc, sel_op, mval, rad);
+      break;
     case OB_LATTICE:
-      return lattice_circle_select(vc, sel_op, mval, rad);
+      changed = lattice_circle_select(vc, sel_op, mval, rad);
+      break;
     case OB_ARMATURE:
-      return armature_circle_select(vc, sel_op, mval, rad);
+      changed = armature_circle_select(vc, sel_op, mval, rad);
+      if (changed) {
+        ED_outliner_select_sync_from_edit_bone_tag(C);
+      }
+      break;
     case OB_MBALL:
-      return mball_circle_select(vc, sel_op, mval, rad);
+      changed = mball_circle_select(vc, sel_op, mval, rad);
+      break;
     default:
       BLI_assert(0);
-      return false;
+      break;
   }
+
+  if (changed) {
+    DEG_id_tag_update(vc->obact->data, ID_RECALC_SELECT);
+    WM_main_add_notifier(NC_GEOM | ND_SELECT, vc->obact->data);
+  }
+  return changed;
 }
 
 static bool object_circle_select(ViewContext *vc,
@@ -3643,7 +4058,7 @@ static bool object_circle_select(ViewContext *vc,
   for (base = FIRSTBASE(view_layer); base; base = base->next) {
     if (BASE_SELECTABLE(v3d, base) && ((base->flag & BASE_SELECTED) != select_flag)) {
       float screen_co[2];
-      if (ED_view3d_project_float_global(vc->ar,
+      if (ED_view3d_project_float_global(vc->region,
                                          base->object->obmat[3],
                                          screen_co,
                                          V3D_PROJ_TEST_CLIP_BB | V3D_PROJ_TEST_CLIP_WIN |
@@ -3662,20 +4077,29 @@ static bool object_circle_select(ViewContext *vc,
 /* not a real operator, only for circle test */
 static int view3d_circle_select_exec(bContext *C, wmOperator *op)
 {
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewContext vc;
   const int radius = RNA_int_get(op->ptr, "radius");
   const int mval[2] = {RNA_int_get(op->ptr, "x"), RNA_int_get(op->ptr, "y")};
 
-  const eSelectOp sel_op = ED_select_op_modal(RNA_enum_get(op->ptr, "mode"),
-                                              WM_gesture_is_modal_first(op->customdata));
+  /* Allow each selection type to allocate their own data that's used between executions. */
+  wmGesture *gesture = op->customdata; /* NULL when non-modal. */
+  wmGenericUserData wm_userdata_buf = {0};
+  wmGenericUserData *wm_userdata = gesture ? &gesture->user_data : &wm_userdata_buf;
 
-  ED_view3d_viewcontext_init(C, &vc);
+  const eSelectOp sel_op = ED_select_op_modal(RNA_enum_get(op->ptr, "mode"),
+                                              WM_gesture_is_modal_first(gesture));
+
+  ED_view3d_viewcontext_init(C, &vc, depsgraph);
 
   Object *obact = vc.obact;
   Object *obedit = vc.obedit;
 
   if (obedit || BKE_paint_select_elem_test(obact) || (obact && (obact->mode & OB_MODE_POSE))) {
     view3d_operator_needs_opengl(C);
+    if (obedit == NULL) {
+      BKE_object_update_select_id(CTX_data_main(C));
+    }
 
     FOREACH_OBJECT_IN_MODE_BEGIN (vc.view_layer, vc.v3d, obact->type, obact->mode, ob_iter) {
       ED_view3d_viewcontext_init_object(&vc, ob_iter);
@@ -3684,19 +4108,17 @@ static int view3d_circle_select_exec(bContext *C, wmOperator *op)
       obedit = vc.obedit;
 
       if (obedit) {
-        if (obedit_circle_select(&vc, sel_op, mval, (float)radius)) {
-          DEG_id_tag_update(obact->data, ID_RECALC_SELECT);
-          WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obact->data);
-        }
+        obedit_circle_select(C, &vc, wm_userdata, sel_op, mval, (float)radius);
       }
       else if (BKE_paint_select_face_test(obact)) {
-        paint_facesel_circle_select(&vc, sel_op, mval, (float)radius);
+        paint_facesel_circle_select(&vc, wm_userdata, sel_op, mval, (float)radius);
       }
       else if (BKE_paint_select_vert_test(obact)) {
-        paint_vertsel_circle_select(&vc, sel_op, mval, (float)radius);
+        paint_vertsel_circle_select(&vc, wm_userdata, sel_op, mval, (float)radius);
       }
       else if (obact->mode & OB_MODE_POSE) {
         pose_circle_select(&vc, sel_op, mval, (float)radius);
+        ED_outliner_select_sync_from_pose_bone_tag(C);
       }
       else {
         BLI_assert(0);
@@ -3717,6 +4139,20 @@ static int view3d_circle_select_exec(bContext *C, wmOperator *op)
     if (object_circle_select(&vc, sel_op, mval, (float)radius)) {
       DEG_id_tag_update(&vc.scene->id, ID_RECALC_SELECT);
       WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, vc.scene);
+
+      ED_outliner_select_sync_from_object_tag(C);
+    }
+  }
+
+  /* Otherwise this is freed by the gesture. */
+  if (wm_userdata == &wm_userdata_buf) {
+    WM_generic_user_data_free(wm_userdata);
+  }
+  else {
+    struct EditSelectBuf_Cache *esel = wm_userdata->data;
+    if (esel && esel->select_bitmap) {
+      MEM_freeN(esel->select_bitmap);
+      esel->select_bitmap = NULL;
     }
   }
 

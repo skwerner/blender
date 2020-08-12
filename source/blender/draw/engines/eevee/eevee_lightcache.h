@@ -26,7 +26,6 @@
 #include "BLI_sys_types.h" /* for bool */
 
 struct EEVEE_Data;
-struct EEVEE_LightBake;
 struct EEVEE_ViewLayerData;
 struct LightCache;
 struct Scene;
@@ -61,7 +60,7 @@ struct LightCache *EEVEE_lightcache_create(const int grid_len,
                                            const int vis_size,
                                            const int irr_size[3]);
 void EEVEE_lightcache_free(struct LightCache *lcache);
-void EEVEE_lightcache_load(struct LightCache *lcache);
+bool EEVEE_lightcache_load(struct LightCache *lcache);
 void EEVEE_lightcache_info_update(struct SceneEEVEE *eevee);
 
 #endif /* __EEVEE_LIGHTCACHE_H__ */

@@ -31,7 +31,6 @@
 #include "GPU_batch.h"
 #include "GPU_glew.h"
 #include "GPU_immediate.h"
-#include "GPU_state.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -66,8 +65,8 @@ void wm_gizmo_geometryinfo_draw(const GizmoGeomInfo *info,
 
   /* Elements */
   GPU_indexbuf_init(&elb, GPU_PRIM_TRIS, info->ntris, info->nverts);
-  for (int i = 0; i < info->ntris; ++i) {
-    const unsigned short *idx = &info->indices[i * 3];
+  for (int i = 0; i < info->ntris; i++) {
+    const ushort *idx = &info->indices[i * 3];
     GPU_indexbuf_add_tri_verts(&elb, idx[0], idx[1], idx[2]);
   }
   el = GPU_indexbuf_build(&elb);
@@ -85,7 +84,7 @@ void wm_gizmo_geometryinfo_draw(const GizmoGeomInfo *info,
   /* We may want to re-visit this, for now disable
    * since it causes issues leaving the GL state modified. */
 #if 0
-  glEnable(GL_CULL_FACE);
+  GPU_face_culling(GPU_CULL_BACK);
   GPU_depth_test(true);
 #endif
 
@@ -93,7 +92,7 @@ void wm_gizmo_geometryinfo_draw(const GizmoGeomInfo *info,
 
 #if 0
   GPU_depth_test(false);
-  glDisable(GL_CULL_FACE);
+  GPU_face_culling(GPU_CULL_NONE);
 #endif
 
   GPU_batch_discard(batch);

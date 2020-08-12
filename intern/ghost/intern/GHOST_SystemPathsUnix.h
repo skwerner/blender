@@ -24,14 +24,14 @@
 #ifndef __GHOST_SYSTEMPATHSUNIX_H__
 #define __GHOST_SYSTEMPATHSUNIX_H__
 
-#include "GHOST_SystemPaths.h"
 #include "../GHOST_Types.h"
+#include "GHOST_SystemPaths.h"
 
 class GHOST_SystemPathsUnix : public GHOST_SystemPaths {
  public:
   /**
    * Constructor
-   * this class should only be instanciated by GHOST_ISystem.
+   * this class should only be instantiated by GHOST_ISystem.
    */
   GHOST_SystemPathsUnix();
 

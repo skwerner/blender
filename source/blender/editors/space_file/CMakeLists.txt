@@ -22,15 +22,15 @@ set(INC
   ../../blenlib
   ../../blenloader
   ../../blentranslation
-  ../../imbuf
   ../../gpu
+  ../../imbuf
   ../../makesdna
   ../../makesrna
   ../../render/extern/include
   ../../windowmanager
   ../../../../intern/atomic
-  ../../../../intern/guardedalloc
   ../../../../intern/glew-mx
+  ../../../../intern/guardedalloc
 )
 
 set(INC_SYS
@@ -57,6 +57,10 @@ set(LIB
 
 if(WITH_HEADLESS)
   add_definitions(-DWITH_HEADLESS)
+else()
+  list(APPEND LIB
+    bf_editor_datafiles
+  )
 endif()
 
 if(WITH_IMAGE_OPENEXR)

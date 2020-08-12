@@ -25,8 +25,8 @@
  * For single linked lists see 'BLI_linklist.h'
  */
 
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
@@ -224,7 +224,8 @@ void BLI_listbase_swaplinks(ListBase *listbase, void *vlinka, void *vlinkb)
 }
 
 /**
- * Swaps \a vlinka and \a vlinkb from their respective lists. Assumes they are both already in their lista!
+ * Swaps \a vlinka and \a vlinkb from their respective lists.
+ * Assumes they are both already in their lista!
  */
 void BLI_listbases_swaplinks(ListBase *listbasea, ListBase *listbaseb, void *vlinka, void *vlinkb)
 {
@@ -311,7 +312,7 @@ static void listbase_double_from_single(Link *iter, ListBase *listbase)
 #include "list_sort_impl.h"
 #undef SORT_IMPL_FUNC
 
-/* reentrant call */
+/* re-entrant call */
 #define SORT_IMPL_USE_THUNK
 #define SORT_IMPL_FUNC listbase_sort_fn_r
 #include "list_sort_impl.h"
@@ -484,7 +485,8 @@ bool BLI_listbase_link_move(ListBase *listbase, void *vlink, int step)
   BLI_assert(BLI_findindex(listbase, link) != -1);
 
   /* find link to insert before/after */
-  for (int i = 0; i < ABS(step); i++) {
+  const int abs_step = abs(step);
+  for (int i = 0; i < abs_step; i++) {
     hook = is_up ? hook->prev : hook->next;
     if (!hook) {
       return false;
@@ -500,6 +502,27 @@ bool BLI_listbase_link_move(ListBase *listbase, void *vlink, int step)
     BLI_insertlinkafter(listbase, hook, vlink);
   }
   return true;
+}
+
+/**
+ * Move the link at the index \a from to the position at index \a to.
+ *
+ * \return If the move was successful.
+ */
+bool BLI_listbase_move_index(ListBase *listbase, int from, int to)
+{
+  if (from == to) {
+    return false;
+  }
+
+  /* Find the link to move. */
+  void *link = BLI_findlink(listbase, from);
+
+  if (!link) {
+    return false;
+  }
+
+  return BLI_listbase_link_move(listbase, link, to - from);
 }
 
 /**

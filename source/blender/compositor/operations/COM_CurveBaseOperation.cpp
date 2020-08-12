@@ -18,13 +18,7 @@
 
 #include "COM_CurveBaseOperation.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 #include "BKE_colortools.h"
-#ifdef __cplusplus
-}
-#endif
 
 CurveBaseOperation::CurveBaseOperation() : NodeOperation()
 {
@@ -34,19 +28,19 @@ CurveBaseOperation::CurveBaseOperation() : NodeOperation()
 CurveBaseOperation::~CurveBaseOperation()
 {
   if (this->m_curveMapping) {
-    curvemapping_free(this->m_curveMapping);
+    BKE_curvemapping_free(this->m_curveMapping);
     this->m_curveMapping = NULL;
   }
 }
 
 void CurveBaseOperation::initExecution()
 {
-  curvemapping_initialize(this->m_curveMapping);
+  BKE_curvemapping_initialize(this->m_curveMapping);
 }
 void CurveBaseOperation::deinitExecution()
 {
   if (this->m_curveMapping) {
-    curvemapping_free(this->m_curveMapping);
+    BKE_curvemapping_free(this->m_curveMapping);
     this->m_curveMapping = NULL;
   }
 }
@@ -55,7 +49,7 @@ void CurveBaseOperation::setCurveMapping(CurveMapping *mapping)
 {
   /* duplicate the curve to avoid glitches while drawing, see bug [#32374] */
   if (this->m_curveMapping) {
-    curvemapping_free(this->m_curveMapping);
+    BKE_curvemapping_free(this->m_curveMapping);
   }
-  this->m_curveMapping = curvemapping_copy(mapping);
+  this->m_curveMapping = BKE_curvemapping_copy(mapping);
 }

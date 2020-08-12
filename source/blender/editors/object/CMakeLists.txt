@@ -17,24 +17,26 @@
 
 set(INC
   ../include
+  ../../blenfont
   ../../blenkernel
   ../../blenlib
   ../../blentranslation
   ../../bmesh
   ../../depsgraph
+  ../../gpencil_modifiers
   ../../gpu
   ../../ikplugin
   ../../imbuf
   ../../makesdna
   ../../makesrna
   ../../modifiers
-  ../../gpencil_modifiers
-  ../../shader_fx
   ../../python
+  ../../shader_fx
   ../../render/extern/include
   ../../windowmanager
-  ../../../../intern/guardedalloc
+  ../../../../intern/clog
   ../../../../intern/glew-mx
+  ../../../../intern/guardedalloc
 )
 
 set(INC_SYS
@@ -48,6 +50,7 @@ set(SRC
   object_collection.c
   object_constraint.c
   object_data_transfer.c
+  object_data_transform.c
   object_edit.c
   object_facemap_ops.c
   object_gpencil_modifier.c
@@ -57,12 +60,14 @@ set(SRC
   object_ops.c
   object_random.c
   object_relations.c
+  object_remesh.c
   object_select.c
   object_shader_fx.c
   object_shapekey.c
   object_transform.c
   object_utils.c
   object_vgroup.c
+  object_volume.c
   object_warp.c
 
   object_intern.h
@@ -71,7 +76,9 @@ set(SRC
 set(LIB
   bf_blenkernel
   bf_blenlib
+  bf_editor_mesh
   bf_render
+  bf_windowmanager
 )
 
 add_definitions(${GL_DEFINITIONS})

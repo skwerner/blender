@@ -18,23 +18,23 @@
  * \ingroup clog
  */
 
+#include <assert.h>
 #include <stdarg.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdint.h>
-#include <assert.h>
 
 /* Disable for small single threaded programs
  * to avoid having to link with pthreads. */
 #ifdef WITH_CLOG_PTHREADS
-#  include <pthread.h>
 #  include "atomic_ops.h"
+#  include <pthread.h>
 #endif
 
 /* For 'isatty' to check for color. */
 #if defined(__unix__) || defined(__APPLE__) || defined(__HAIKU__)
-#  include <unistd.h>
 #  include <sys/time.h>
+#  include <unistd.h>
 #endif
 
 #if defined(_MSC_VER)
@@ -174,6 +174,7 @@ static void clg_str_append(CLogStringBuf *cstr, const char *str)
   clg_str_append_with_len(cstr, str, strlen(str));
 }
 
+ATTR_PRINTF_FORMAT(2, 0)
 static void clg_str_vappendf(CLogStringBuf *cstr, const char *fmt, va_list args)
 {
   /* Use limit because windows may use '-1' for a formatting error. */
@@ -356,7 +357,8 @@ static void clg_ctx_fatal_action(CLogContext *ctx)
 static void clg_ctx_backtrace(CLogContext *ctx)
 {
   /* Note: we avoid writing fo 'FILE', for backtrace we make an exception,
-   * if necessary we could have a version of the callback that writes to file descriptor all at once. */
+   * if necessary we could have a version of the callback that writes to file
+   * descriptor all at once. */
   ctx->callbacks.backtrace_fn(ctx->output_file);
   fflush(ctx->output_file);
 }

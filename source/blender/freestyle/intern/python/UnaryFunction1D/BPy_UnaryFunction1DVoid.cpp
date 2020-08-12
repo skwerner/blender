@@ -21,8 +21,8 @@
 #include "BPy_UnaryFunction1DVoid.h"
 
 #include "../BPy_Convert.h"
-#include "../BPy_Interface1D.h"
 #include "../BPy_IntegrationType.h"
+#include "../BPy_Interface1D.h"
 
 #include "UnaryFunction1D_void/BPy_ChainingTimeStampF1D.h"
 #include "UnaryFunction1D_void/BPy_IncrementChainingTimeStampF1D.h"
@@ -38,27 +38,32 @@ extern "C" {
 
 int UnaryFunction1DVoid_Init(PyObject *module)
 {
-  if (module == NULL)
+  if (module == NULL) {
     return -1;
+  }
 
-  if (PyType_Ready(&UnaryFunction1DVoid_Type) < 0)
+  if (PyType_Ready(&UnaryFunction1DVoid_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&UnaryFunction1DVoid_Type);
   PyModule_AddObject(module, "UnaryFunction1DVoid", (PyObject *)&UnaryFunction1DVoid_Type);
 
-  if (PyType_Ready(&ChainingTimeStampF1D_Type) < 0)
+  if (PyType_Ready(&ChainingTimeStampF1D_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&ChainingTimeStampF1D_Type);
   PyModule_AddObject(module, "ChainingTimeStampF1D", (PyObject *)&ChainingTimeStampF1D_Type);
 
-  if (PyType_Ready(&IncrementChainingTimeStampF1D_Type) < 0)
+  if (PyType_Ready(&IncrementChainingTimeStampF1D_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&IncrementChainingTimeStampF1D_Type);
   PyModule_AddObject(
       module, "IncrementChainingTimeStampF1D", (PyObject *)&IncrementChainingTimeStampF1D_Type);
 
-  if (PyType_Ready(&TimeStampF1D_Type) < 0)
+  if (PyType_Ready(&TimeStampF1D_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&TimeStampF1D_Type);
   PyModule_AddObject(module, "TimeStampF1D", (PyObject *)&TimeStampF1D_Type);
 
@@ -93,11 +98,13 @@ static int UnaryFunction1DVoid___init__(BPy_UnaryFunction1DVoid *self,
   PyObject *obj = 0;
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwds, "|O!", (char **)kwlist, &IntegrationType_Type, &obj))
+          args, kwds, "|O!", (char **)kwlist, &IntegrationType_Type, &obj)) {
     return -1;
+  }
 
-  if (!obj)
+  if (!obj) {
     self->uf1D_void = new UnaryFunction1D_void();
+  }
   else {
     self->uf1D_void = new UnaryFunction1D_void(IntegrationType_from_BPy_IntegrationType(obj));
   }
@@ -109,8 +116,7 @@ static int UnaryFunction1DVoid___init__(BPy_UnaryFunction1DVoid *self,
 
 static void UnaryFunction1DVoid___dealloc__(BPy_UnaryFunction1DVoid *self)
 {
-  if (self->uf1D_void)
-    delete self->uf1D_void;
+  delete self->uf1D_void;
   UnaryFunction1D_Type.tp_dealloc((PyObject *)self);
 }
 
@@ -126,8 +132,9 @@ static PyObject *UnaryFunction1DVoid___call__(BPy_UnaryFunction1DVoid *self,
   static const char *kwlist[] = {"inter", NULL};
   PyObject *obj = 0;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "O!", (char **)kwlist, &Interface1D_Type, &obj))
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "O!", (char **)kwlist, &Interface1D_Type, &obj)) {
     return NULL;
+  }
 
   if (typeid(*(self->uf1D_void)) == typeid(UnaryFunction1D_void)) {
     PyErr_SetString(PyExc_TypeError, "__call__ method not properly overridden");
@@ -168,10 +175,10 @@ static int integration_type_set(BPy_UnaryFunction1DVoid *self,
 }
 
 static PyGetSetDef BPy_UnaryFunction1DVoid_getseters[] = {
-    {(char *)"integration_type",
+    {"integration_type",
      (getter)integration_type_get,
      (setter)integration_type_set,
-     (char *)integration_type_doc,
+     integration_type_doc,
      NULL},
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };

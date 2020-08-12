@@ -85,17 +85,53 @@ void GPU_vertbuf_init_with_format_ex(GPUVertBuf *verts,
   }
 }
 
-void GPU_vertbuf_discard(GPUVertBuf *verts)
+GPUVertBuf *GPU_vertbuf_duplicate(GPUVertBuf *verts)
+{
+  GPUVertBuf *verts_dst = GPU_vertbuf_create(GPU_USAGE_STATIC);
+  /* Full copy. */
+  *verts_dst = *verts;
+  GPU_vertformat_copy(&verts_dst->format, &verts->format);
+
+  if (verts->vbo_id) {
+    uint buffer_sz = GPU_vertbuf_size_get(verts);
+
+    verts_dst->vbo_id = GPU_buf_alloc();
+
+    glBindBuffer(GL_COPY_READ_BUFFER, verts->vbo_id);
+    glBindBuffer(GL_COPY_WRITE_BUFFER, verts_dst->vbo_id);
+
+    glBufferData(GL_COPY_WRITE_BUFFER, buffer_sz, NULL, convert_usage_type_to_gl(verts->usage));
+
+    glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, 0, 0, buffer_sz);
+#if VRAM_USAGE
+    vbo_memory_usage += GPU_vertbuf_size_get(verts);
+#endif
+  }
+
+  if (verts->data) {
+    verts_dst->data = MEM_dupallocN(verts->data);
+  }
+  return verts_dst;
+}
+
+/** Same as discard but does not free. */
+void GPU_vertbuf_clear(GPUVertBuf *verts)
 {
   if (verts->vbo_id) {
     GPU_buf_free(verts->vbo_id);
+    verts->vbo_id = 0;
 #if VRAM_USAGE
     vbo_memory_usage -= GPU_vertbuf_size_get(verts);
 #endif
   }
   if (verts->data) {
-    MEM_freeN(verts->data);
+    MEM_SAFE_FREE(verts->data);
   }
+}
+
+void GPU_vertbuf_discard(GPUVertBuf *verts)
+{
+  GPU_vertbuf_clear(verts);
   MEM_freeN(verts);
 }
 
@@ -189,6 +225,19 @@ void GPU_vertbuf_attr_fill(GPUVertBuf *verts, uint a_idx, const void *data)
   GPU_vertbuf_attr_fill_stride(verts, a_idx, stride, data);
 }
 
+/** Fills a whole vertex (all attributes). Data must match packed layout.  */
+void GPU_vertbuf_vert_set(GPUVertBuf *verts, uint v_idx, const void *data)
+{
+  const GPUVertFormat *format = &verts->format;
+
+#if TRUST_NO_ONE
+  assert(v_idx < verts->vertex_alloc);
+  assert(verts->data != NULL);
+#endif
+  verts->dirty = true;
+  memcpy((GLubyte *)verts->data + v_idx * format->stride, data, format->stride);
+}
+
 void GPU_vertbuf_attr_fill_stride(GPUVertBuf *verts, uint a_idx, uint stride, const void *data)
 {
   const GPUVertFormat *format = &verts->format;
@@ -207,7 +256,7 @@ void GPU_vertbuf_attr_fill_stride(GPUVertBuf *verts, uint a_idx, uint stride, co
   }
   else {
     /* we must copy it per vertex */
-    for (uint v = 0; v < vertex_len; ++v) {
+    for (uint v = 0; v < vertex_len; v++) {
       memcpy((GLubyte *)verts->data + a->offset + v * format->stride,
              (const GLubyte *)data + v * stride,
              a->sz);

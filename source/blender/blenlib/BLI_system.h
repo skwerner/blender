@@ -19,11 +19,16 @@
 
 #include <stdio.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /** \file
  * \ingroup bli
  */
 
 int BLI_cpu_support_sse2(void);
+int BLI_cpu_support_sse41(void);
 void BLI_system_backtrace(FILE *fp);
 
 /* Get CPU brand, result is to be MEM_freeN()-ed. */
@@ -41,11 +46,23 @@ char *BLI_cpu_brand_string(void);
  */
 void BLI_hostname_get(char *buffer, size_t bufsize);
 
+/* Get maximum addressable memory in megabytes. */
+size_t BLI_system_memory_max_in_megabytes(void);
+int BLI_system_memory_max_in_megabytes_int(void);
+
 /* getpid */
 #ifdef WIN32
 #  define BLI_SYSTEM_PID_H <process.h>
+
+/* void* since we really do not want to drag Windows.h in to get the proper typedef. */
+void BLI_windows_handle_exception(void *exception);
+
 #else
 #  define BLI_SYSTEM_PID_H <unistd.h>
+#endif
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif /* __BLI_SYSTEM_H__ */

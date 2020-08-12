@@ -1,22 +1,27 @@
 /* Apache License, Version 2.0 */
 
-#include "testing/testing.h"
 #include "BLI_ressource_strings.h"
+#include "testing/testing.h"
 
 #define GHASH_INTERNAL_API
 
-extern "C" {
 #include "MEM_guardedalloc.h"
-#include "BLI_utildefines.h"
+
+extern "C" {
 #include "BLI_ghash.h"
 #include "BLI_rand.h"
 #include "BLI_string.h"
+#include "BLI_utildefines.h"
 #include "PIL_time_utildefines.h"
 }
 
 /* Using http://corpora.uni-leipzig.de/downloads/eng_wikipedia_2010_1M-text.tar.gz
- * (1 million of words, about 122MB of text) from http://corpora.informatik.uni-leipzig.de/download.html */
-//#define TEXT_CORPUS_PATH "/path/to/Téléchargements/eng_wikipedia_2010_1M-text/eng_wikipedia_2010_1M-sentences.txt"
+ * (1 million of words, about 122MB of text) from
+ * http://corpora.informatik.uni-leipzig.de/download.html */
+#if 0
+#  define TEXT_CORPUS_PATH \
+    "/path/to/Téléchargements/eng_wikipedia_2010_1M-text/eng_wikipedia_2010_1M-sentences.txt"
+#endif
 
 /* Resizing the hash has a huge cost over global filling operation! */
 //#define GHASH_RESERVE
@@ -272,7 +277,7 @@ static void randint_ghash_tests(GHash *ghash, const char *id, const unsigned int
   unsigned int i;
 
   {
-    RNG *rng = BLI_rng_new(0);
+    RNG *rng = BLI_rng_new(1);
     for (i = nbr, dt = data; i--; dt++) {
       *dt = BLI_rng_get_uint(rng);
     }
@@ -381,7 +386,7 @@ static void int4_ghash_tests(GHash *ghash, const char *id, const unsigned int nb
   unsigned int i, j;
 
   {
-    RNG *rng = BLI_rng_new(0);
+    RNG *rng = BLI_rng_new(1);
     for (i = nbr, dt = data; i--; dt++) {
       for (j = 4; j--;) {
         (*dt)[j] = BLI_rng_get_uint(rng);
@@ -459,7 +464,79 @@ TEST(ghash, Int4Murmur2a20000000)
 }
 #endif
 
-/* MultiSmall: create and manipulate a lot of very small ghashes (90% < 10 items, 9% < 100 items, 1% < 1000 items). */
+/* GHash inthash_v2 tests */
+TEST(ghash, Int2NoHash12000)
+{
+  GHash *ghash = BLI_ghash_new(ghashutil_tests_nohash_p, ghashutil_tests_cmp_p, __func__);
+
+  randint_ghash_tests(ghash, "RandIntGHash - No Hash - 12000", 12000);
+}
+
+#ifdef GHASH_RUN_BIG
+TEST(ghash, Int2NoHash50000000)
+{
+  GHash *ghash = BLI_ghash_new(ghashutil_tests_nohash_p, ghashutil_tests_cmp_p, __func__);
+
+  randint_ghash_tests(ghash, "RandIntGHash - No Hash - 50000000", 50000000);
+}
+#endif
+
+/* Int_v2: 20M of randomly-generated integer vectors. */
+
+static void int2_ghash_tests(GHash *ghash, const char *id, const unsigned int nbr)
+{
+  printf("\n========== STARTING %s ==========\n", id);
+
+  void *data_v = MEM_mallocN(sizeof(unsigned int[2]) * (size_t)nbr, __func__);
+  unsigned int(*data)[2] = (unsigned int(*)[2])data_v;
+  unsigned int(*dt)[2];
+  unsigned int i, j;
+
+  {
+    RNG *rng = BLI_rng_new(1);
+    for (i = nbr, dt = data; i--; dt++) {
+      for (j = 2; j--;) {
+        (*dt)[j] = BLI_rng_get_uint(rng);
+      }
+    }
+    BLI_rng_free(rng);
+  }
+
+  {
+    TIMEIT_START(int_v2_insert);
+
+#ifdef GHASH_RESERVE
+    BLI_ghash_reserve(ghash, nbr);
+#endif
+
+    for (i = nbr, dt = data; i--; dt++) {
+      BLI_ghash_insert(ghash, *dt, POINTER_FROM_UINT(i));
+    }
+
+    TIMEIT_END(int_v2_insert);
+  }
+
+  PRINTF_GHASH_STATS(ghash);
+
+  {
+    TIMEIT_START(int_v2_lookup);
+
+    for (i = nbr, dt = data; i--; dt++) {
+      void *v = BLI_ghash_lookup(ghash, (void *)(*dt));
+      EXPECT_EQ(POINTER_AS_UINT(v), i);
+    }
+
+    TIMEIT_END(int_v2_lookup);
+  }
+
+  BLI_ghash_free(ghash, NULL, NULL);
+  MEM_freeN(data);
+
+  printf("========== ENDED %s ==========\n\n", id);
+}
+
+/* MultiSmall: create and manipulate a lot of very small ghashes
+ * (90% < 10 items, 9% < 100 items, 1% < 1000 items). */
 
 static void multi_small_ghash_tests_one(GHash *ghash, RNG *rng, const unsigned int nbr)
 {
@@ -491,7 +568,7 @@ static void multi_small_ghash_tests(GHash *ghash, const char *id, const unsigned
 {
   printf("\n========== STARTING %s ==========\n", id);
 
-  RNG *rng = BLI_rng_new(0);
+  RNG *rng = BLI_rng_new(1);
 
   TIMEIT_START(multi_small_ghash);
 

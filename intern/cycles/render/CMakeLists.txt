@@ -2,6 +2,7 @@
 set(INC
   ..
   ../../glew-mx
+  ../../sky/include
 )
 
 set(INC_SYS
@@ -14,13 +15,20 @@ set(SRC
   bake.cpp
   buffers.cpp
   camera.cpp
+  colorspace.cpp
   constant_fold.cpp
   coverage.cpp
   denoising.cpp
   film.cpp
+  geometry.cpp
   graph.cpp
+  hair.cpp
   image.cpp
+  image_oiio.cpp
+  image_sky.cpp
+  image_vdb.cpp
   integrator.cpp
+  jitter.cpp
   light.cpp
   light_tree.cpp
   merge.cpp
@@ -49,14 +57,21 @@ set(SRC_HEADERS
   background.h
   buffers.h
   camera.h
+  colorspace.h
   constant_fold.h
   coverage.h
   denoising.h
   film.h
+  geometry.h
   graph.h
+  hair.h
   image.h
+  image_oiio.h
+  image_sky.h
+  image_vdb.h
   integrator.h
   light.h
+  jitter.h
   merge.h
   mesh.h
   nodes.h
@@ -76,15 +91,40 @@ set(SRC_HEADERS
 
 set(LIB
   cycles_bvh
+  cycles_device
+  cycles_subd
+  cycles_util
+  bf_intern_sky
 )
 
 if(WITH_CYCLES_OSL)
   list(APPEND LIB
     cycles_kernel_osl
   )
+
+  SET_PROPERTY(SOURCE osl.cpp PROPERTY COMPILE_FLAGS ${RTTI_DISABLE_FLAGS})
 endif()
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${RTTI_DISABLE_FLAGS}")
+if(WITH_OPENCOLORIO)
+  add_definitions(-DWITH_OCIO)
+  include_directories(
+    SYSTEM
+    ${OPENCOLORIO_INCLUDE_DIRS}
+  )
+  if(WIN32)
+    add_definitions(-DOpenColorIO_STATIC)
+  endif()
+endif()
+
+if(WITH_OPENVDB)
+  add_definitions(-DWITH_OPENVDB ${OPENVDB_DEFINITIONS})
+  list(APPEND INC_SYS
+    ${OPENVDB_INCLUDE_DIRS}
+  )
+  list(APPEND LIB
+    ${OPENVDB_LIBRARIES}
+  )
+endif()
 
 include_directories(${INC})
 include_directories(SYSTEM ${INC_SYS})

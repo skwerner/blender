@@ -35,12 +35,12 @@
 
 #include "BKE_context.h"
 
-#include "WM_types.h"
 #include "WM_api.h"
+#include "WM_types.h"
 
 #include "wm.h"
-#include "wm_event_types.h"
 #include "wm_event_system.h"
+#include "wm_event_types.h"
 
 #include "ED_screen.h"
 #include "ED_select_utils.h"
@@ -61,15 +61,16 @@
 
 static void gesture_modal_end(bContext *C, wmOperator *op)
 {
+  wmWindow *win = CTX_wm_window(C);
   wmGesture *gesture = op->customdata;
 
-  WM_gesture_end(C, gesture); /* frees gesture itself, and unregisters from window */
+  WM_gesture_end(win, gesture); /* frees gesture itself, and unregisters from window */
   op->customdata = NULL;
 
   ED_area_tag_redraw(CTX_wm_area(C));
 
   if (RNA_struct_find_property(op->ptr, "cursor")) {
-    WM_cursor_modal_restore(CTX_wm_window(C));
+    WM_cursor_modal_restore(win);
   }
 }
 
@@ -173,12 +174,15 @@ static bool gesture_box_apply(bContext *C, wmOperator *op)
 
 int WM_gesture_box_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
+  wmWindow *win = CTX_wm_window(C);
+  const ARegion *region = CTX_wm_region(C);
   const bool wait_for_input = !ISTWEAK(event->type) && RNA_boolean_get(op->ptr, "wait_for_input");
+
   if (wait_for_input) {
-    op->customdata = WM_gesture_new(C, event, WM_GESTURE_CROSS_RECT);
+    op->customdata = WM_gesture_new(win, region, event, WM_GESTURE_CROSS_RECT);
   }
   else {
-    op->customdata = WM_gesture_new(C, event, WM_GESTURE_RECT);
+    op->customdata = WM_gesture_new(win, region, event, WM_GESTURE_RECT);
   }
 
   {
@@ -189,13 +193,14 @@ int WM_gesture_box_invoke(bContext *C, wmOperator *op, const wmEvent *event)
   /* add modal handler */
   WM_event_add_modal_handler(C, op);
 
-  wm_gesture_tag_redraw(C);
+  wm_gesture_tag_redraw(win);
 
   return OPERATOR_RUNNING_MODAL;
 }
 
 int WM_gesture_box_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
+  wmWindow *win = CTX_wm_window(C);
   wmGesture *gesture = op->customdata;
   rcti *rect = gesture->customdata;
 
@@ -210,14 +215,14 @@ int WM_gesture_box_modal(bContext *C, wmOperator *op, const wmEvent *event)
     }
     gesture_box_apply_rect(op);
 
-    wm_gesture_tag_redraw(C);
+    wm_gesture_tag_redraw(win);
   }
   else if (event->type == EVT_MODAL_MAP) {
     switch (event->val) {
       case GESTURE_MODAL_BEGIN:
         if (gesture->type == WM_GESTURE_CROSS_RECT && gesture->is_active == false) {
           gesture->is_active = true;
-          wm_gesture_tag_redraw(C);
+          wm_gesture_tag_redraw(win);
         }
         break;
       case GESTURE_MODAL_SELECT:
@@ -267,7 +272,8 @@ void WM_gesture_box_cancel(bContext *C, wmOperator *op)
 /** \name Circle Gesture
  *
  * Currently only used for selection or modal paint stuff,
- * calls ``exec`` while hold mouse, exits on release (with no difference between cancel and confirm).
+ * calls #wmOperatorType.exec while hold mouse, exits on release
+ * (with no difference between cancel and confirm).
  *
  * \{ */
 
@@ -275,9 +281,10 @@ static void gesture_circle_apply(bContext *C, wmOperator *op);
 
 int WM_gesture_circle_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
+  wmWindow *win = CTX_wm_window(C);
   const bool wait_for_input = !ISTWEAK(event->type) && RNA_boolean_get(op->ptr, "wait_for_input");
 
-  op->customdata = WM_gesture_new(C, event, WM_GESTURE_CIRCLE);
+  op->customdata = WM_gesture_new(win, CTX_wm_region(C), event, WM_GESTURE_CIRCLE);
   wmGesture *gesture = op->customdata;
   rcti *rect = gesture->customdata;
 
@@ -286,7 +293,8 @@ int WM_gesture_circle_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
   gesture->wait_for_input = wait_for_input;
 
-  /* Starting with the mode starts immediately, like having 'wait_for_input' disabled (some tools use this). */
+  /* Starting with the mode starts immediately,
+   * like having 'wait_for_input' disabled (some tools use this). */
   if (gesture->wait_for_input == false) {
     gesture->is_active = true;
     gesture_circle_apply(C, op);
@@ -295,7 +303,7 @@ int WM_gesture_circle_invoke(bContext *C, wmOperator *op, const wmEvent *event)
   /* add modal handler */
   WM_event_add_modal_handler(C, op);
 
-  wm_gesture_tag_redraw(C);
+  wm_gesture_tag_redraw(win);
 
   return OPERATOR_RUNNING_MODAL;
 }
@@ -314,8 +322,9 @@ static void gesture_circle_apply(bContext *C, wmOperator *op)
   RNA_int_set(op->ptr, "y", rect->ymin);
   RNA_int_set(op->ptr, "radius", rect->xmax);
 
-  /* When 'wait_for_input' is false, use properties to get the selection state.
-   * typically tool settings. This is done so executing as a mode can select & de-select, see: T58594. */
+  /* When 'wait_for_input' is false,
+   * use properties to get the selection state (typically tool settings).
+   * This is done so executing as a mode can select & de-select, see: T58594. */
   if (gesture->wait_for_input) {
     gesture_modal_state_to_operator(op, gesture->modal_state);
   }
@@ -329,6 +338,7 @@ static void gesture_circle_apply(bContext *C, wmOperator *op)
 
 int WM_gesture_circle_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
+  wmWindow *win = CTX_wm_window(C);
   wmGesture *gesture = op->customdata;
   rcti *rect = gesture->customdata;
 
@@ -337,7 +347,7 @@ int WM_gesture_circle_modal(bContext *C, wmOperator *op, const wmEvent *event)
     rect->xmin = event->x - gesture->winrct.xmin;
     rect->ymin = event->y - gesture->winrct.ymin;
 
-    wm_gesture_tag_redraw(C);
+    wm_gesture_tag_redraw(win);
 
     if (gesture->is_active) {
       gesture_circle_apply(C, op);
@@ -389,7 +399,7 @@ int WM_gesture_circle_modal(bContext *C, wmOperator *op, const wmEvent *event)
           /* apply first click */
           gesture->is_active = true;
           gesture_circle_apply(C, op);
-          wm_gesture_tag_redraw(C);
+          wm_gesture_tag_redraw(win);
         }
         break;
       }
@@ -404,7 +414,7 @@ int WM_gesture_circle_modal(bContext *C, wmOperator *op, const wmEvent *event)
     }
 
     if (is_circle_size) {
-      wm_gesture_tag_redraw(C);
+      wm_gesture_tag_redraw(win);
 
       /* So next use remembers last seen size, even if we didn't apply it. */
       RNA_int_set(op->ptr, "radius", rect->xmax);
@@ -420,7 +430,7 @@ int WM_gesture_circle_modal(bContext *C, wmOperator *op, const wmEvent *event)
   /* Allow view navigation??? */
   /* note, this gives issues:
    * 1) other modal ops run on top (box select),
-   * 2) middlemouse is used now 3) tablet/trackpad? */
+   * 2) middle-mouse is used now 3) tablet/trackpad? */
   else {
     return OPERATOR_PASS_THROUGH;
   }
@@ -449,7 +459,6 @@ void WM_OT_circle_gesture(wmOperatorType *ot)
 
   /* properties */
   WM_operator_properties_gesture_circle(ot);
-
 }
 #endif
 
@@ -464,20 +473,22 @@ static void gesture_tweak_modal(bContext *C, const wmEvent *event)
   wmWindow *window = CTX_wm_window(C);
   wmGesture *gesture = window->tweak;
   rcti *rect = gesture->customdata;
-  int val;
+  bool gesture_end = false;
 
   switch (event->type) {
     case MOUSEMOVE:
-    case INBETWEEN_MOUSEMOVE:
+    case INBETWEEN_MOUSEMOVE: {
 
       rect->xmax = event->x - gesture->winrct.xmin;
       rect->ymax = event->y - gesture->winrct.ymin;
 
-      if ((val = wm_gesture_evaluate(gesture))) {
+      const int val = wm_gesture_evaluate(gesture, event);
+      if (val != 0) {
         wmEvent tevent;
 
         wm_event_init_from_window(window, &tevent);
-        /* We want to get coord from start of drag, not from point where it becomes a tweak event, see T40549 */
+        /* We want to get coord from start of drag,
+         * not from point where it becomes a tweak event, see T40549. */
         tevent.x = rect->xmin + gesture->winrct.xmin;
         tevent.y = rect->ymin + gesture->winrct.ymin;
         if (gesture->event_type == LEFTMOUSE) {
@@ -496,16 +507,17 @@ static void gesture_tweak_modal(bContext *C, const wmEvent *event)
          * (which may be in the queue already), are handled in order, see T44740 */
         wm_event_add_ex(window, &tevent, event);
 
-        WM_gesture_end(C, gesture); /* frees gesture itself, and unregisters from window */
+        gesture_end = true;
       }
 
       break;
+    }
 
     case LEFTMOUSE:
     case RIGHTMOUSE:
     case MIDDLEMOUSE:
       if (gesture->event_type == event->type) {
-        WM_gesture_end(C, gesture);
+        gesture_end = true;
 
         /* when tweak fails we should give the other keymap entries a chance */
 
@@ -515,9 +527,23 @@ static void gesture_tweak_modal(bContext *C, const wmEvent *event)
       break;
     default:
       if (!ISTIMER(event->type) && event->type != EVENT_NONE) {
-        WM_gesture_end(C, gesture);
+        gesture_end = true;
       }
       break;
+  }
+
+  if (gesture_end) {
+    /* Frees gesture itself, and unregisters from window. */
+    WM_gesture_end(window, gesture);
+
+    /* This isn't very nice but needed to redraw gizmos which are hidden while tweaking,
+     * See #WM_GIZMOGROUPTYPE_DELAY_REFRESH_FOR_TWEAK for details. */
+    ARegion *region = CTX_wm_region(C);
+    if ((region != NULL) && (region->gizmo_map != NULL)) {
+      if (WM_gizmomap_tag_delay_refresh_for_tweak_check(region->gizmo_map)) {
+        ED_region_tag_redraw(region);
+      }
+    }
   }
 }
 
@@ -527,10 +553,12 @@ void wm_tweakevent_test(bContext *C, const wmEvent *event, int action)
   wmWindow *win = CTX_wm_window(C);
 
   if (win->tweak == NULL) {
-    if (CTX_wm_region(C)) {
+    const ARegion *region = CTX_wm_region(C);
+
+    if (region) {
       if (event->val == KM_PRESS) {
         if (ELEM(event->type, LEFTMOUSE, MIDDLEMOUSE, RIGHTMOUSE)) {
-          win->tweak = WM_gesture_new(C, event, WM_GESTURE_TWEAK);
+          win->tweak = WM_gesture_new(win, region, event, WM_GESTURE_TWEAK);
         }
       }
     }
@@ -538,7 +566,7 @@ void wm_tweakevent_test(bContext *C, const wmEvent *event, int action)
   else {
     /* no tweaks if event was handled */
     if ((action & WM_HANDLER_BREAK)) {
-      WM_gesture_end(C, win->tweak);
+      WM_gesture_end(win, win->tweak);
     }
     else {
       gesture_tweak_modal(C, event);
@@ -554,17 +582,18 @@ void wm_tweakevent_test(bContext *C, const wmEvent *event, int action)
 
 int WM_gesture_lasso_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
+  wmWindow *win = CTX_wm_window(C);
   PropertyRNA *prop;
 
-  op->customdata = WM_gesture_new(C, event, WM_GESTURE_LASSO);
+  op->customdata = WM_gesture_new(win, CTX_wm_region(C), event, WM_GESTURE_LASSO);
 
   /* add modal handler */
   WM_event_add_modal_handler(C, op);
 
-  wm_gesture_tag_redraw(C);
+  wm_gesture_tag_redraw(win);
 
   if ((prop = RNA_struct_find_property(op->ptr, "cursor"))) {
-    WM_cursor_modal_set(CTX_wm_window(C), RNA_property_int_get(op->ptr, prop));
+    WM_cursor_modal_set(win, RNA_property_int_get(op->ptr, prop));
   }
 
   return OPERATOR_RUNNING_MODAL;
@@ -572,17 +601,18 @@ int WM_gesture_lasso_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
 int WM_gesture_lines_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
+  wmWindow *win = CTX_wm_window(C);
   PropertyRNA *prop;
 
-  op->customdata = WM_gesture_new(C, event, WM_GESTURE_LINES);
+  op->customdata = WM_gesture_new(win, CTX_wm_region(C), event, WM_GESTURE_LINES);
 
   /* add modal handler */
   WM_event_add_modal_handler(C, op);
 
-  wm_gesture_tag_redraw(C);
+  wm_gesture_tag_redraw(win);
 
   if ((prop = RNA_struct_find_property(op->ptr, "cursor"))) {
-    WM_cursor_modal_set(CTX_wm_window(C), RNA_property_int_get(op->ptr, prop));
+    WM_cursor_modal_set(win, RNA_property_int_get(op->ptr, prop));
   }
 
   return OPERATOR_RUNNING_MODAL;
@@ -622,7 +652,7 @@ int WM_gesture_lasso_modal(bContext *C, wmOperator *op, const wmEvent *event)
     case MOUSEMOVE:
     case INBETWEEN_MOUSEMOVE:
 
-      wm_gesture_tag_redraw(C);
+      wm_gesture_tag_redraw(CTX_wm_window(C));
 
       if (gesture->points == gesture->points_alloc) {
         gesture->points_alloc *= 2;
@@ -657,7 +687,7 @@ int WM_gesture_lasso_modal(bContext *C, wmOperator *op, const wmEvent *event)
         return OPERATOR_FINISHED;
       }
       break;
-    case ESCKEY:
+    case EVT_ESCKEY:
       gesture_modal_end(C, op);
       return OPERATOR_CANCELLED;
   }
@@ -688,10 +718,10 @@ void WM_gesture_lines_cancel(bContext *C, wmOperator *op)
  */
 const int (*WM_gesture_lasso_path_to_array(bContext *UNUSED(C),
                                            wmOperator *op,
-                                           int *mcords_tot))[2]
+                                           int *r_mcoords_len))[2]
 {
   PropertyRNA *prop = RNA_struct_find_property(op->ptr, "path");
-  int(*mcords)[2] = NULL;
+  int(*mcoords)[2] = NULL;
   BLI_assert(prop != NULL);
 
   if (prop) {
@@ -699,26 +729,26 @@ const int (*WM_gesture_lasso_path_to_array(bContext *UNUSED(C),
 
     if (len) {
       int i = 0;
-      mcords = MEM_mallocN(sizeof(int) * 2 * len, __func__);
+      mcoords = MEM_mallocN(sizeof(int[2]) * len, __func__);
 
       RNA_PROP_BEGIN (op->ptr, itemptr, prop) {
         float loc[2];
 
         RNA_float_get_array(&itemptr, "loc", loc);
-        mcords[i][0] = (int)loc[0];
-        mcords[i][1] = (int)loc[1];
+        mcoords[i][0] = (int)loc[0];
+        mcoords[i][1] = (int)loc[1];
         i++;
       }
       RNA_PROP_END;
     }
-    *mcords_tot = len;
+    *r_mcoords_len = len;
   }
   else {
-    *mcords_tot = 0;
+    *r_mcoords_len = 0;
   }
 
   /* cast for 'const' */
-  return (const int(*)[2])mcords;
+  return mcoords;
 }
 
 #if 0
@@ -726,8 +756,7 @@ const int (*WM_gesture_lasso_path_to_array(bContext *UNUSED(C),
 
 static int gesture_lasso_exec(bContext *C, wmOperator *op)
 {
-  RNA_BEGIN (op->ptr, itemptr, "path")
-  {
+  RNA_BEGIN (op->ptr, itemptr, "path") {
     float loc[2];
 
     RNA_float_get_array(&itemptr, "loc", loc);
@@ -788,9 +817,10 @@ static bool gesture_straightline_apply(bContext *C, wmOperator *op)
 
 int WM_gesture_straightline_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
+  wmWindow *win = CTX_wm_window(C);
   PropertyRNA *prop;
 
-  op->customdata = WM_gesture_new(C, event, WM_GESTURE_STRAIGHTLINE);
+  op->customdata = WM_gesture_new(win, CTX_wm_region(C), event, WM_GESTURE_STRAIGHTLINE);
 
   if (ISTWEAK(event->type)) {
     wmGesture *gesture = op->customdata;
@@ -800,10 +830,10 @@ int WM_gesture_straightline_invoke(bContext *C, wmOperator *op, const wmEvent *e
   /* add modal handler */
   WM_event_add_modal_handler(C, op);
 
-  wm_gesture_tag_redraw(C);
+  wm_gesture_tag_redraw(win);
 
   if ((prop = RNA_struct_find_property(op->ptr, "cursor"))) {
-    WM_cursor_modal_set(CTX_wm_window(C), RNA_property_int_get(op->ptr, prop));
+    WM_cursor_modal_set(win, RNA_property_int_get(op->ptr, prop));
   }
 
   return OPERATOR_RUNNING_MODAL;
@@ -812,6 +842,7 @@ int WM_gesture_straightline_invoke(bContext *C, wmOperator *op, const wmEvent *e
 int WM_gesture_straightline_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
   wmGesture *gesture = op->customdata;
+  wmWindow *win = CTX_wm_window(C);
   rcti *rect = gesture->customdata;
 
   if (event->type == MOUSEMOVE) {
@@ -825,14 +856,14 @@ int WM_gesture_straightline_modal(bContext *C, wmOperator *op, const wmEvent *ev
       gesture_straightline_apply(C, op);
     }
 
-    wm_gesture_tag_redraw(C);
+    wm_gesture_tag_redraw(win);
   }
   else if (event->type == EVT_MODAL_MAP) {
     switch (event->val) {
       case GESTURE_MODAL_BEGIN:
         if (gesture->is_active == false) {
           gesture->is_active = true;
-          wm_gesture_tag_redraw(C);
+          wm_gesture_tag_redraw(win);
         }
         break;
       case GESTURE_MODAL_SELECT:

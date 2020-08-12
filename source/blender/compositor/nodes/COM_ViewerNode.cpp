@@ -19,11 +19,11 @@
 #include "COM_ViewerNode.h"
 #include "BKE_global.h"
 #include "BKE_image.h"
-#include "BLI_listbase.h"
 #include "BKE_scene.h"
+#include "BLI_listbase.h"
 
-#include "COM_ViewerOperation.h"
 #include "COM_ExecutionSystem.h"
+#include "COM_ViewerOperation.h"
 
 ViewerNode::ViewerNode(bNode *editorNode) : Node(editorNode)
 {
@@ -68,14 +68,17 @@ void ViewerNode::convertToOperations(NodeConverter &converter,
   converter.addOperation(viewerOperation);
   converter.mapInputSocket(imageSocket, viewerOperation->getInputSocket(0));
   /* only use alpha link if "use alpha" is enabled */
-  if (ignore_alpha)
+  if (ignore_alpha) {
     converter.addInputValue(viewerOperation->getInputSocket(1), 1.0f);
-  else
+  }
+  else {
     converter.mapInputSocket(alphaSocket, viewerOperation->getInputSocket(1));
+  }
   converter.mapInputSocket(depthSocket, viewerOperation->getInputSocket(2));
 
   converter.addNodeInputPreview(imageSocket);
 
-  if (do_output)
+  if (do_output) {
     converter.registerViewer(viewerOperation);
+  }
 }

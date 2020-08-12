@@ -19,18 +19,18 @@
 #include <list>
 #include <stdio.h>
 
-#include "COM_compositor.h"
-#include "COM_WorkScheduler.h"
 #include "COM_CPUDevice.h"
 #include "COM_OpenCLDevice.h"
 #include "COM_OpenCLKernels.cl.h"
-#include "clew.h"
+#include "COM_WorkScheduler.h"
 #include "COM_WriteBufferOperation.h"
+#include "COM_compositor.h"
+#include "clew.h"
 
 #include "MEM_guardedalloc.h"
 
-#include "PIL_time.h"
 #include "BLI_threads.h"
+#include "PIL_time.h"
 
 #include "BKE_global.h"
 
@@ -58,7 +58,8 @@ static ThreadQueue *g_gpuqueue;
 #  ifdef COM_OPENCL_ENABLED
 static cl_context g_context;
 static cl_program g_program;
-/// \brief list of all OpenCLDevices. for every OpenCL GPU device an instance of OpenCLDevice is created
+/// \brief list of all OpenCLDevices. for every OpenCL GPU device an instance of OpenCLDevice is
+/// created
 static vector<OpenCLDevice *> g_gpudevices;
 /// \brief list of all thread for every GPUDevice in cpudevices a thread exists
 static ListBase g_gputhreads;
@@ -183,7 +184,7 @@ bool WorkScheduler::hasGPUDevices()
 {
 #if COM_CURRENT_THREADING_MODEL == COM_TM_QUEUE
 #  ifdef COM_OPENCL_ENABLED
-  return g_gpudevices.size() > 0;
+  return !g_gpudevices.empty();
 #  else
   return 0;
 #  endif
@@ -209,7 +210,7 @@ void WorkScheduler::initialize(bool use_opencl, int num_cpu_threads)
   if (g_cpudevices.size() != num_cpu_threads) {
     Device *device;
 
-    while (g_cpudevices.size() > 0) {
+    while (!g_cpudevices.empty()) {
       device = g_cpudevices.back();
       g_cpudevices.pop_back();
       device->deinitialize();
@@ -238,9 +239,10 @@ void WorkScheduler::initialize(bool use_opencl, int num_cpu_threads)
     g_context = NULL;
     g_program = NULL;
 
-    if (clewInit() !=
-        CLEW_SUCCESS) /* this will check for errors and skip if already initialized */
+    /* This will check for errors and skip if already initialized. */
+    if (clewInit() != CLEW_SUCCESS) {
       return;
+    }
 
     if (clCreateContextFromType) {
       cl_uint numberOfPlatforms = 0;
@@ -251,8 +253,9 @@ void WorkScheduler::initialize(bool use_opencl, int num_cpu_threads)
       else if (error != CL_SUCCESS) {
         printf("CLERROR[%d]: %s\n", error, clewErrorString(error));
       }
-      if (G.f & G_DEBUG)
+      if (G.f & G_DEBUG) {
         printf("%u number of platforms\n", numberOfPlatforms);
+      }
       cl_platform_id *platforms = (cl_platform_id *)MEM_mallocN(
           sizeof(cl_platform_id) * numberOfPlatforms, __func__);
       error = clGetPlatformIDs(numberOfPlatforms, platforms, 0);
@@ -261,8 +264,9 @@ void WorkScheduler::initialize(bool use_opencl, int num_cpu_threads)
         cl_platform_id platform = platforms[indexPlatform];
         cl_uint numberOfDevices = 0;
         clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, 0, 0, &numberOfDevices);
-        if (numberOfDevices <= 0)
+        if (numberOfDevices <= 0) {
           continue;
+        }
 
         cl_device_id *cldevices = (cl_device_id *)MEM_mallocN(
             sizeof(cl_device_id) * numberOfDevices, __func__);
@@ -327,7 +331,7 @@ void WorkScheduler::deinitialize()
   /* deinitialize CPU threads */
   if (g_cpuInitialized) {
     Device *device;
-    while (g_cpudevices.size() > 0) {
+    while (!g_cpudevices.empty()) {
       device = g_cpudevices.back();
       g_cpudevices.pop_back();
       device->deinitialize();
@@ -341,7 +345,7 @@ void WorkScheduler::deinitialize()
   /* deinitialize OpenCL GPU's */
   if (g_openclInitialized) {
     Device *device;
-    while (g_gpudevices.size() > 0) {
+    while (!g_gpudevices.empty()) {
       device = g_gpudevices.back();
       g_gpudevices.pop_back();
       device->deinitialize();

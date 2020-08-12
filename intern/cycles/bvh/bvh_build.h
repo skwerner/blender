@@ -35,6 +35,8 @@ class BVHNode;
 class BVHSpatialSplitBuildTask;
 class BVHParams;
 class InnerNode;
+class Geometry;
+class Hair;
 class Mesh;
 class Object;
 class Progress;
@@ -65,16 +67,16 @@ class BVHBuild {
 
   /* Adding references. */
   void add_reference_triangles(BoundBox &root, BoundBox &center, Mesh *mesh, int i);
-  void add_reference_curves(BoundBox &root, BoundBox &center, Mesh *mesh, int i);
-  void add_reference_mesh(BoundBox &root, BoundBox &center, Mesh *mesh, int i);
+  void add_reference_curves(BoundBox &root, BoundBox &center, Hair *hair, int i);
+  void add_reference_geometry(BoundBox &root, BoundBox &center, Geometry *geom, int i);
   void add_reference_object(BoundBox &root, BoundBox &center, Object *ob, int i);
   void add_references(BVHRange &root);
 
   /* Building. */
   BVHNode *build_node(const BVHRange &range,
-                      vector<BVHReference> *references,
+                      vector<BVHReference> &references,
                       int level,
-                      int thread_id);
+                      BVHSpatialStorage *storage);
   BVHNode *build_node(const BVHObjectBinning &range, int level);
   BVHNode *create_leaf_node(const BVHRange &range, const vector<BVHReference> &references);
   BVHNode *create_object_leaf_nodes(const BVHReference *ref, int start, int num);
@@ -84,13 +86,12 @@ class BVHBuild {
 
   /* Threads. */
   enum { THREAD_TASK_SIZE = 4096 };
-  void thread_build_node(InnerNode *node, int child, BVHObjectBinning *range, int level);
+  void thread_build_node(InnerNode *node, int child, const BVHObjectBinning &range, int level);
   void thread_build_spatial_split_node(InnerNode *node,
                                        int child,
-                                       BVHRange *range,
-                                       vector<BVHReference> *references,
-                                       int level,
-                                       int thread_id);
+                                       const BVHRange &range,
+                                       vector<BVHReference> &references,
+                                       int level);
   thread_mutex build_mutex;
 
   /* Progress. */
@@ -125,7 +126,7 @@ class BVHBuild {
 
   /* Spatial splitting. */
   float spatial_min_overlap;
-  vector<BVHSpatialStorage> spatial_storage;
+  enumerable_thread_specific<BVHSpatialStorage> spatial_storage;
   size_t spatial_free_index;
   thread_spin_lock spatial_spin_lock;
 

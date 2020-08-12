@@ -27,9 +27,6 @@
 
 #include "BLT_translation.h"
 
-#include "GPU_immediate.h"
-#include "GPU_state.h"
-
 #include "RNA_access.h"
 
 #include "UI_interface.h"
@@ -50,6 +47,7 @@ void outliner_operatortypes(void)
   WM_operatortype_append(OUTLINER_OT_highlight_update);
   WM_operatortype_append(OUTLINER_OT_item_activate);
   WM_operatortype_append(OUTLINER_OT_select_box);
+  WM_operatortype_append(OUTLINER_OT_select_walk);
   WM_operatortype_append(OUTLINER_OT_item_openclose);
   WM_operatortype_append(OUTLINER_OT_item_rename);
   WM_operatortype_append(OUTLINER_OT_item_drag_drop);
@@ -68,6 +66,7 @@ void outliner_operatortypes(void)
   WM_operatortype_append(OUTLINER_OT_action_set);
   WM_operatortype_append(OUTLINER_OT_constraint_operation);
   WM_operatortype_append(OUTLINER_OT_modifier_operation);
+  WM_operatortype_append(OUTLINER_OT_delete);
 
   WM_operatortype_append(OUTLINER_OT_show_one_level);
   WM_operatortype_append(OUTLINER_OT_show_active);
@@ -95,7 +94,7 @@ void outliner_operatortypes(void)
   WM_operatortype_append(OUTLINER_OT_collection_new);
   WM_operatortype_append(OUTLINER_OT_collection_duplicate_linked);
   WM_operatortype_append(OUTLINER_OT_collection_duplicate);
-  WM_operatortype_append(OUTLINER_OT_collection_delete);
+  WM_operatortype_append(OUTLINER_OT_collection_hierarchy_delete);
   WM_operatortype_append(OUTLINER_OT_collection_objects_select);
   WM_operatortype_append(OUTLINER_OT_collection_objects_deselect);
   WM_operatortype_append(OUTLINER_OT_collection_link);

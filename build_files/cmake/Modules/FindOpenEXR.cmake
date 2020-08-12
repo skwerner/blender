@@ -47,9 +47,6 @@ SET(_openexr_FIND_COMPONENTS
 
 SET(_openexr_SEARCH_DIRS
   ${OPENEXR_ROOT_DIR}
-  /usr/local
-  /sw # Fink
-  /opt/local # DarwinPorts
   /opt/lib/openexr
 )
 
@@ -107,6 +104,7 @@ FOREACH(COMPONENT ${_openexr_FIND_COMPONENTS})
   FIND_LIBRARY(OPENEXR_${UPPERCOMPONENT}_LIBRARY
     NAMES
       ${COMPONENT}-${_openexr_libs_ver} ${COMPONENT}
+    NAMES_PER_DIR
     HINTS
       ${_openexr_SEARCH_DIRS}
     PATH_SUFFIXES

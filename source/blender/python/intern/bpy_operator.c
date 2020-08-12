@@ -29,17 +29,16 @@
 
 #include "RNA_types.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_listbase.h"
+#include "BLI_utildefines.h"
 
+#include "../generic/py_capi_utils.h"
+#include "../generic/python_utildefines.h"
 #include "BPY_extern.h"
+#include "bpy_capi_utils.h"
 #include "bpy_operator.h"
 #include "bpy_operator_wrap.h"
 #include "bpy_rna.h" /* for setting arg props only - pyrna_py_to_prop() */
-#include "bpy_capi_utils.h"
-#include "../generic/bpy_internal_import.h"
-#include "../generic/py_capi_utils.h"
-#include "../generic/python_utildefines.h"
 
 #include "RNA_access.h"
 #include "RNA_enum_types.h"
@@ -51,8 +50,8 @@
 
 #include "BLI_ghash.h"
 
-#include "BKE_report.h"
 #include "BKE_context.h"
+#include "BKE_report.h"
 
 /* so operators called can spawn threads which acquire the GIL */
 #define BPY_RELEASE_GIL
@@ -253,8 +252,9 @@ static PyObject *pyop_call(PyObject *UNUSED(self), PyObject *args)
       ReportList *reports;
 
       reports = MEM_mallocN(sizeof(ReportList), "wmOperatorReportList");
-      BKE_reports_init(reports,
-                       RPT_STORE | RPT_OP_HOLD); /* own so these don't move into global reports */
+
+      /* Own so these don't move into global reports. */
+      BKE_reports_init(reports, RPT_STORE | RPT_OP_HOLD);
 
 #ifdef BPY_RELEASE_GIL
       /* release GIL, since a thread could be started from an operator
@@ -298,9 +298,7 @@ static PyObject *pyop_call(PyObject *UNUSED(self), PyObject *args)
     {
       /* no props */
       if (kw != NULL) {
-        PyErr_Format(PyExc_AttributeError,
-                     "Operator \"%s\" does not take any args",
-                     opname);
+        PyErr_Format(PyExc_AttributeError, "Operator \"%s\" does not take any args", opname);
         return NULL;
       }
 
@@ -317,13 +315,11 @@ static PyObject *pyop_call(PyObject *UNUSED(self), PyObject *args)
     return NULL;
   }
 
-  /* when calling  bpy.ops.wm.read_factory_settings() bpy.data's main pointer is freed by clear_globals(),
-   * further access will crash blender. setting context is not needed in this case, only calling because this
+  /* When calling  bpy.ops.wm.read_factory_settings() bpy.data's main pointer
+   * is freed by clear_globals(), further access will crash blender.
+   * Setting context is not needed in this case, only calling because this
    * function corrects bpy.data (internal Main pointer) */
   BPY_modules_update(C);
-
-  /* needed for when WM_OT_read_factory_settings us called from within a script */
-  bpy_import_main_set(CTX_data_main(C));
 
   /* return operator_ret as a bpy enum */
   return pyrna_enum_bitfield_to_py(rna_enum_operator_return_items, operator_ret);

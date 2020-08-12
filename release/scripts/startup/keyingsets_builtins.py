@@ -85,7 +85,7 @@ class BUILTIN_KSI_Rotation(KeyingSetInfo):
 class BUILTIN_KSI_Scaling(KeyingSetInfo):
     """Insert a keyframe on each of the scale channels"""
     bl_idname = ANIM_KS_SCALING_ID
-    bl_label = "Scaling"
+    bl_label = "Scale"
 
     # poll - use predefined callback for selected bones/objects
     poll = keyingsets_utils.RKS_POLL_selected_items
@@ -102,7 +102,7 @@ class BUILTIN_KSI_Scaling(KeyingSetInfo):
 # LocRot
 class BUILTIN_KSI_LocRot(KeyingSetInfo):
     """Insert a keyframe on each of the location and rotation channels"""
-    bl_label = "LocRot"
+    bl_label = "Location & Rotation"
 
     # poll - use predefined callback for selected bones/objects
     poll = keyingsets_utils.RKS_POLL_selected_items
@@ -121,7 +121,7 @@ class BUILTIN_KSI_LocRot(KeyingSetInfo):
 # LocScale
 class BUILTIN_KSI_LocScale(KeyingSetInfo):
     """Insert a keyframe on each of the location and scale channels"""
-    bl_label = "LocScale"
+    bl_label = "Location & Scale"
 
     # poll - use predefined callback for selected bones/objects
     poll = keyingsets_utils.RKS_POLL_selected_items
@@ -141,7 +141,7 @@ class BUILTIN_KSI_LocScale(KeyingSetInfo):
 class BUILTIN_KSI_LocRotScale(KeyingSetInfo):
     """Insert a keyframe on each of the location, rotation, and scale channels"""
     bl_idname = ANIM_KS_LOC_ROT_SCALE_ID
-    bl_label = "LocRotScale"
+    bl_label = "Location, Rotation & Scale"
 
     # poll - use predefined callback for selected bones/objects
     poll = keyingsets_utils.RKS_POLL_selected_items
@@ -162,7 +162,7 @@ class BUILTIN_KSI_LocRotScale(KeyingSetInfo):
 # RotScale
 class BUILTIN_KSI_RotScale(KeyingSetInfo):
     """Insert a keyframe on each of the rotation and scale channels"""
-    bl_label = "RotScale"
+    bl_label = "Rotation & Scale"
 
     # poll - use predefined callback for selected bones/objects
     poll = keyingsets_utils.RKS_POLL_selected_items
@@ -199,8 +199,8 @@ class BUILTIN_KSI_BendyBones(KeyingSetInfo):
 
 # VisualLocation
 class BUILTIN_KSI_VisualLoc(KeyingSetInfo):
-    """Insert a keyframe on each of the location channels, taking into account effects of constraints """
-    """and relationships"""
+    """Insert a keyframe on each of the location channels, """ \
+    """taking into account effects of constraints and relationships"""
     bl_label = "Visual Location"
 
     bl_options = {'INSERTKEY_VISUAL'}
@@ -217,8 +217,8 @@ class BUILTIN_KSI_VisualLoc(KeyingSetInfo):
 
 # VisualRotation
 class BUILTIN_KSI_VisualRot(KeyingSetInfo):
-    """Insert a keyframe on each of the rotation channels, taking into account effects of constraints """
-    """and relationships"""
+    """Insert a keyframe on each of the rotation channels, """ \
+    """taking into account effects of constraints and relationships"""
     bl_label = "Visual Rotation"
 
     bl_options = {'INSERTKEY_VISUAL'}
@@ -235,9 +235,9 @@ class BUILTIN_KSI_VisualRot(KeyingSetInfo):
 
 # VisualScaling
 class BUILTIN_KSI_VisualScaling(KeyingSetInfo):
-    """Insert a keyframe on each of the scale channels, taking into account effects of constraints """
-    """and relationships"""
-    bl_label = "Visual Scaling"
+    """Insert a keyframe on each of the scale channels, """ \
+    """taking into account effects of constraints and relationships"""
+    bl_label = "Visual Scale"
 
     bl_options = {'INSERTKEY_VISUAL'}
 
@@ -253,9 +253,9 @@ class BUILTIN_KSI_VisualScaling(KeyingSetInfo):
 
 # VisualLocRot
 class BUILTIN_KSI_VisualLocRot(KeyingSetInfo):
-    """Insert a keyframe on each of the location and rotation channels, taking into account effects of constraints """
-    """and relationships"""
-    bl_label = "Visual LocRot"
+    """Insert a keyframe on each of the location and rotation channels, """ \
+    """taking into account effects of constraints and relationships"""
+    bl_label = "Visual Location & Rotation"
 
     bl_options = {'INSERTKEY_VISUAL'}
 
@@ -275,9 +275,9 @@ class BUILTIN_KSI_VisualLocRot(KeyingSetInfo):
 
 # VisualLocScale
 class BUILTIN_KSI_VisualLocScale(KeyingSetInfo):
-    """Insert a keyframe on each of the location and scaling channels, taking into account effects of constraints """
-    """and relationships"""
-    bl_label = "Visual LocScale"
+    """Insert a keyframe on each of the location and scale channels, """ \
+    """taking into account effects of constraints and relationships"""
+    bl_label = "Visual Location & Scale"
 
     bl_options = {'INSERTKEY_VISUAL'}
 
@@ -297,9 +297,9 @@ class BUILTIN_KSI_VisualLocScale(KeyingSetInfo):
 
 # VisualLocRotScale
 class BUILTIN_KSI_VisualLocRotScale(KeyingSetInfo):
-    """Insert a keyframe on each of the location, rotation and scaling channels, taking into account effects """
-    """of constraints and relationships"""
-    bl_label = "Visual LocRotScale"
+    """Insert a keyframe on each of the location, """ \
+    """rotation and scale channels, taking into account effects of constraints and relationships"""
+    bl_label = "Visual Location, Rotation & Scale"
 
     bl_options = {'INSERTKEY_VISUAL'}
 
@@ -321,9 +321,9 @@ class BUILTIN_KSI_VisualLocRotScale(KeyingSetInfo):
 
 # VisualRotScale
 class BUILTIN_KSI_VisualRotScale(KeyingSetInfo):
-    """Insert a keyframe on each of the rotation and scaling channels, taking into account effects of constraints """
-    """and relationships"""
-    bl_label = "Visual RotScale"
+    """Insert a keyframe on each of the rotation and scale channels, """ \
+    """taking into account effects of constraints and relationships"""
+    bl_label = "Visual Rotation & Scale"
 
     bl_options = {'INSERTKEY_VISUAL'}
 
@@ -369,7 +369,7 @@ class BUILTIN_KSI_Available(KeyingSetInfo):
 
 # All properties that are likely to get animated in a character rig
 class BUILTIN_KSI_WholeCharacter(KeyingSetInfo):
-    """Insert a keyframe for all properties that are likely to get animated in a character rig """
+    """Insert a keyframe for all properties that are likely to get animated in a character rig """ \
     """(useful when blocking out a shot)"""
     bl_idname = ANIM_KS_WHOLE_CHARACTER_ID
     bl_label = "Whole Character"
@@ -521,7 +521,13 @@ class BUILTIN_KSI_WholeCharacter(KeyingSetInfo):
             prop_rna = type(bone).bl_rna.properties.get(prop, None)
             if prop_rna is None:
                 prop_path = '["%s"]' % prop
-                if bone.path_resolve(prop_path, False).rna_type in prop_type_compat:
+                try:
+                    rna_property = bone.path_resolve(prop_path, False)
+                except ValueError as ex:
+                    # This happens when a custom property is set to None. In that case it cannot
+                    # be converted to an FCurve-compatible value, so we can't keyframe it anyway.
+                    continue
+                if rna_property.rna_type in prop_type_compat:
                     ksi.addProp(ks, bone, prop_path)
             elif prop_rna.is_animatable:
                 ksi.addProp(ks, bone, prop)
@@ -530,7 +536,7 @@ class BUILTIN_KSI_WholeCharacter(KeyingSetInfo):
 
 
 class BUILTIN_KSI_WholeCharacterSelected(KeyingSetInfo):
-    """Insert a keyframe for all properties that are likely to get animated in a character rig """
+    """Insert a keyframe for all properties that are likely to get animated in a character rig """ \
     """(only selected bones)"""
     bl_idname = ANIM_KS_WHOLE_CHARACTER_SELECTED_ID
     bl_label = "Whole Character (Selected bones only)"
@@ -622,7 +628,7 @@ class BUILTIN_KSI_DeltaRotation(KeyingSetInfo):
 
 # Delta Scale
 class BUILTIN_KSI_DeltaScale(KeyingSetInfo):
-    """Insert keyframes for additional scaling factor"""
+    """Insert keyframes for additional scale factor"""
     bl_label = "Delta Scale"
 
     # poll - selected objects only (and only if active object in object mode)

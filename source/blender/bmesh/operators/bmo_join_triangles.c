@@ -42,7 +42,8 @@ static float quad_calc_error(const float v1[3],
                              const float v3[3],
                              const float v4[3])
 {
-  /* gives a 'weight' to a pair of triangles that join an edge to decide how good a join they would make */
+  /* Gives a 'weight' to a pair of triangles that join an edge
+   * to decide how good a join they would make. */
   /* Note: this is more complicated than it needs to be and should be cleaned up.. */
   float error = 0.0f;
 
@@ -259,7 +260,7 @@ void bmo_join_triangles_exec(BMesh *bm, BMOperator *op)
   BMEdge *e;
   /* data: edge-to-join, sort_value: error weight */
   struct SortPtrByFloat *jedges;
-  unsigned i, totedge;
+  uint i, totedge;
   uint totedge_tag = 0;
 
   struct DelimitData delimit_data = {0};

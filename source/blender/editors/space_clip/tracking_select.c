@@ -26,10 +26,10 @@
 #include "DNA_movieclip_types.h"
 #include "DNA_scene_types.h"
 
-#include "BLI_utildefines.h"
+#include "BLI_lasso_2d.h"
 #include "BLI_math.h"
 #include "BLI_rect.h"
-#include "BLI_lasso_2d.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_context.h"
 #include "BKE_tracking.h"
@@ -37,9 +37,10 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
+#include "ED_clip.h"
+#include "ED_mask.h"
 #include "ED_screen.h"
 #include "ED_select_utils.h"
-#include "ED_clip.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -48,27 +49,33 @@
 
 #include "DEG_depsgraph.h"
 
-#include "tracking_ops_intern.h" /* own include */
 #include "clip_intern.h"         /* own include */
+#include "tracking_ops_intern.h" /* own include */
 
-static float dist_to_crns(float co[2], float pos[2], float crns[4][2]);
+static float dist_to_crns(const float co[2], const float pos[2], const float crns[4][2]);
 
 /********************** mouse select operator *********************/
 
 static int mouse_on_side(
-    float co[2], float x1, float y1, float x2, float y2, float epsx, float epsy)
+    const float co[2], float x1, float y1, float x2, float y2, float epsx, float epsy)
 {
-  if (x1 > x2)
+  if (x1 > x2) {
     SWAP(float, x1, x2);
+  }
 
-  if (y1 > y2)
+  if (y1 > y2) {
     SWAP(float, y1, y2);
+  }
 
   return (co[0] >= x1 - epsx && co[0] <= x2 + epsx) && (co[1] >= y1 - epsy && co[1] <= y2 + epsy);
 }
 
-static int mouse_on_rect(
-    float co[2], float pos[2], float min[2], float max[2], float epsx, float epsy)
+static int mouse_on_rect(const float co[2],
+                         const float pos[2],
+                         const float min[2],
+                         const float max[2],
+                         float epsx,
+                         float epsy)
 {
   return mouse_on_side(
              co, pos[0] + min[0], pos[1] + min[1], pos[0] + max[0], pos[1] + min[1], epsx, epsy) ||
@@ -80,14 +87,15 @@ static int mouse_on_rect(
              co, pos[0] + max[0], pos[1] + min[1], pos[0] + max[0], pos[1] + max[1], epsx, epsy);
 }
 
-static int mouse_on_crns(float co[2], float pos[2], float crns[4][2], float epsx, float epsy)
+static int mouse_on_crns(
+    const float co[2], const float pos[2], const float crns[4][2], float epsx, float epsy)
 {
   float dist = dist_to_crns(co, pos, crns);
 
   return dist < max_ff(epsx, epsy);
 }
 
-static int track_mouse_area(const bContext *C, float co[2], MovieTrackingTrack *track)
+static int track_mouse_area(const bContext *C, const float co[2], MovieTrackingTrack *track)
 {
   SpaceClip *sc = CTX_wm_space_clip(C);
   int framenr = ED_space_clip_get_clip_frame_number(sc);
@@ -115,14 +123,17 @@ static int track_mouse_area(const bContext *C, float co[2], MovieTrackingTrack *
   epsy = max_ff(epsy, 2.0f / height);
 
   if (sc->flag & SC_SHOW_MARKER_SEARCH) {
-    if (mouse_on_rect(co, marker->pos, marker->search_min, marker->search_max, epsx, epsy))
+    if (mouse_on_rect(co, marker->pos, marker->search_min, marker->search_max, epsx, epsy)) {
       return TRACK_AREA_SEARCH;
+    }
   }
 
   if ((marker->flag & MARKER_DISABLED) == 0) {
-    if (sc->flag & SC_SHOW_MARKER_PATTERN)
-      if (mouse_on_crns(co, marker->pos, marker->pattern_corners, epsx, epsy))
+    if (sc->flag & SC_SHOW_MARKER_PATTERN) {
+      if (mouse_on_crns(co, marker->pos, marker->pattern_corners, epsx, epsy)) {
         return TRACK_AREA_PAT;
+      }
+    }
 
     epsx = 12.0f / width;
     epsy = 12.0f / height;
@@ -136,7 +147,10 @@ static int track_mouse_area(const bContext *C, float co[2], MovieTrackingTrack *
   return TRACK_AREA_NONE;
 }
 
-static float dist_to_rect(float co[2], float pos[2], float min[2], float max[2])
+static float dist_to_rect(const float co[2],
+                          const float pos[2],
+                          const float min[2],
+                          const float max[2])
 {
   float d1, d2, d3, d4;
   float p[2] = {co[0] - pos[0], co[1] - pos[1]};
@@ -152,7 +166,7 @@ static float dist_to_rect(float co[2], float pos[2], float min[2], float max[2])
 }
 
 /* Distance to quad defined by it's corners, corners are relative to pos */
-static float dist_to_crns(float co[2], float pos[2], float crns[4][2])
+static float dist_to_crns(const float co[2], const float pos[2], const float crns[4][2])
 {
   float d1, d2, d3, d4;
   float p[2] = {co[0] - pos[0], co[1] - pos[1]};
@@ -168,7 +182,7 @@ static float dist_to_crns(float co[2], float pos[2], float crns[4][2])
 }
 
 /* Same as above, but all the coordinates are absolute */
-static float dist_to_crns_abs(float co[2], float corners[4][2])
+static float dist_to_crns_abs(const float co[2], const float corners[4][2])
 {
   float d1, d2, d3, d4;
   const float *v1 = corners[0], *v2 = corners[1];
@@ -184,8 +198,8 @@ static float dist_to_crns_abs(float co[2], float corners[4][2])
 
 static MovieTrackingTrack *find_nearest_track(SpaceClip *sc,
                                               ListBase *tracksbase,
-                                              float co[2],
-                                              float *distance_r)
+                                              const float co[2],
+                                              float *r_distance)
 {
   MovieTrackingTrack *track = NULL, *cur;
   float mindist = 0.0f;
@@ -204,12 +218,14 @@ static MovieTrackingTrack *find_nearest_track(SpaceClip *sc,
           (co[1] - marker->pos[1] - cur->offset[1]) * (co[1] - marker->pos[1] - cur->offset[1]));
 
       /* distance to pattern boundbox */
-      if (sc->flag & SC_SHOW_MARKER_PATTERN)
+      if (sc->flag & SC_SHOW_MARKER_PATTERN) {
         d2 = dist_to_crns(co, marker->pos, marker->pattern_corners);
+      }
 
       /* distance to search boundbox */
-      if (sc->flag & SC_SHOW_MARKER_SEARCH && TRACK_VIEW_SELECTED(sc, cur))
+      if (sc->flag & SC_SHOW_MARKER_SEARCH && TRACK_VIEW_SELECTED(sc, cur)) {
         d3 = dist_to_rect(co, marker->pos, marker->search_min, marker->search_max);
+      }
 
       /* choose minimal distance. useful for cases of overlapped markers. */
       dist = min_fff(d1, d2, d3);
@@ -223,15 +239,15 @@ static MovieTrackingTrack *find_nearest_track(SpaceClip *sc,
     cur = cur->next;
   }
 
-  *distance_r = mindist;
+  *r_distance = mindist;
 
   return track;
 }
 
 static MovieTrackingPlaneTrack *find_nearest_plane_track(SpaceClip *sc,
                                                          ListBase *plane_tracks_base,
-                                                         float co[2],
-                                                         float *distance_r)
+                                                         const float co[2],
+                                                         float *r_distance)
 {
   MovieTrackingPlaneTrack *plane_track = NULL, *current_plane_track;
   float min_distance = 0.0f;
@@ -251,12 +267,12 @@ static MovieTrackingPlaneTrack *find_nearest_plane_track(SpaceClip *sc,
     }
   }
 
-  *distance_r = min_distance;
+  *r_distance = min_distance;
 
   return plane_track;
 }
 
-void ed_tracking_delect_all_tracks(ListBase *tracks_base)
+void ed_tracking_deselect_all_tracks(ListBase *tracks_base)
 {
   MovieTrackingTrack *track;
   for (track = tracks_base->first; track != NULL; track = track->next) {
@@ -264,7 +280,7 @@ void ed_tracking_delect_all_tracks(ListBase *tracks_base)
   }
 }
 
-void ed_tracking_delect_all_plane_tracks(ListBase *plane_tracks_base)
+void ed_tracking_deselect_all_plane_tracks(ListBase *plane_tracks_base)
 {
   MovieTrackingPlaneTrack *plane_track;
   for (plane_track = plane_tracks_base->first; plane_track != NULL;
@@ -273,7 +289,7 @@ void ed_tracking_delect_all_plane_tracks(ListBase *plane_tracks_base)
   }
 }
 
-static int mouse_select(bContext *C, float co[2], int extend)
+static int mouse_select(bContext *C, const float co[2], const bool extend, const bool deselect_all)
 {
   SpaceClip *sc = CTX_wm_space_clip(C);
   MovieClip *clip = ED_space_clip_get_clip(sc);
@@ -288,6 +304,15 @@ static int mouse_select(bContext *C, float co[2], int extend)
   track = find_nearest_track(sc, tracksbase, co, &distance_to_track);
   plane_track = find_nearest_plane_track(sc, plane_tracks_base, co, &distance_to_plane_track);
 
+  /* Do not select beyond some reasonable distance, that is useless and
+   * prevents the 'deselect on nothing' behavior. */
+  if (distance_to_track > 0.05f) {
+    track = NULL;
+  }
+  if (distance_to_plane_track > 0.05f) {
+    plane_track = NULL;
+  }
+
   /* Between track and plane we choose closest to the mouse for selection here. */
   if (track && plane_track) {
     if (distance_to_track < distance_to_plane_track) {
@@ -298,15 +323,16 @@ static int mouse_select(bContext *C, float co[2], int extend)
     }
   }
 
-  if (!extend) {
-    ed_tracking_delect_all_plane_tracks(plane_tracks_base);
-  }
-
   if (track) {
+    if (!extend) {
+      ed_tracking_deselect_all_plane_tracks(plane_tracks_base);
+    }
+
     int area = track_mouse_area(C, co, track);
 
-    if (!extend || !TRACK_VIEW_SELECTED(sc, track))
+    if (!extend || !TRACK_VIEW_SELECTED(sc, track)) {
       area = TRACK_AREA_ALL;
+    }
 
     if (extend && TRACK_AREA_SELECTED(track, area)) {
       if (track == act_track) {
@@ -318,8 +344,9 @@ static int mouse_select(bContext *C, float co[2], int extend)
       }
     }
     else {
-      if (area == TRACK_AREA_POINT)
+      if (area == TRACK_AREA_POINT) {
         area = TRACK_AREA_ALL;
+      }
 
       BKE_tracking_track_select(tracksbase, track, area, extend);
       clip->tracking.act_track = track;
@@ -328,7 +355,7 @@ static int mouse_select(bContext *C, float co[2], int extend)
   }
   else if (plane_track) {
     if (!extend) {
-      ed_tracking_delect_all_tracks(tracksbase);
+      ed_tracking_deselect_all_tracks(tracksbase);
     }
 
     if (PLANE_TRACK_VIEW_SELECTED(plane_track)) {
@@ -343,6 +370,12 @@ static int mouse_select(bContext *C, float co[2], int extend)
     clip->tracking.act_track = NULL;
     clip->tracking.act_plane_track = plane_track;
   }
+  else if (deselect_all) {
+    ed_tracking_deselect_all_tracks(tracksbase);
+    ed_tracking_deselect_all_plane_tracks(plane_tracks_base);
+    /* Mask as well if we are in combined mask / track view. */
+    ED_mask_deselect_all(C);
+  }
 
   if (!extend) {
     sc->xlockof = 0.0f;
@@ -354,7 +387,8 @@ static int mouse_select(bContext *C, float co[2], int extend)
   WM_event_add_notifier(C, NC_GEOM | ND_SELECT, NULL);
   DEG_id_tag_update(&clip->id, ID_RECALC_SELECT);
 
-  return OPERATOR_FINISHED;
+  /* Pass-through + finished to allow tweak to transform. */
+  return OPERATOR_FINISHED | OPERATOR_PASS_THROUGH;
 }
 
 static bool select_poll(bContext *C)
@@ -371,18 +405,18 @@ static bool select_poll(bContext *C)
 static int select_exec(bContext *C, wmOperator *op)
 {
   float co[2];
-  int extend;
 
   RNA_float_get_array(op->ptr, "location", co);
-  extend = RNA_boolean_get(op->ptr, "extend");
+  const bool extend = RNA_boolean_get(op->ptr, "extend");
+  const bool deselect_all = RNA_boolean_get(op->ptr, "deselect_all");
 
-  return mouse_select(C, co, extend);
+  return mouse_select(C, co, extend, deselect_all);
 }
 
 static int select_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
   SpaceClip *sc = CTX_wm_space_clip(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
 
   float co[2];
   const bool extend = RNA_boolean_get(op->ptr, "extend");
@@ -402,7 +436,7 @@ static int select_invoke(bContext *C, wmOperator *op, const wmEvent *event)
     }
   }
 
-  ED_clip_mouse_pos(sc, ar, event->mval, co);
+  ED_clip_mouse_pos(sc, region, event->mval, co);
   RNA_float_set_array(op->ptr, "location", co);
 
   return select_exec(C, op);
@@ -424,11 +458,19 @@ void CLIP_OT_select(wmOperatorType *ot)
   ot->flag = OPTYPE_UNDO;
 
   /* properties */
+  PropertyRNA *prop;
   RNA_def_boolean(ot->srna,
                   "extend",
                   0,
                   "Extend",
                   "Extend selection rather than clearing the existing selection");
+  prop = RNA_def_boolean(ot->srna,
+                         "deselect_all",
+                         false,
+                         "Deselect On Nothing",
+                         "Deselect all when nothing under the cursor");
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+
   RNA_def_float_vector(
       ot->srna,
       "location",
@@ -442,12 +484,18 @@ void CLIP_OT_select(wmOperatorType *ot)
       100.0f);
 }
 
+bool ED_clip_can_select(bContext *C)
+{
+  /* To avoid conflicts with mask select deselect all in empty space. */
+  return select_poll(C);
+}
+
 /********************** box select operator *********************/
 
 static int box_select_exec(bContext *C, wmOperator *op)
 {
   SpaceClip *sc = CTX_wm_space_clip(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
 
   MovieClip *clip = ED_space_clip_get_clip(sc);
   MovieTracking *tracking = &clip->tracking;
@@ -463,8 +511,8 @@ static int box_select_exec(bContext *C, wmOperator *op)
   /* get rectangle from operator */
   WM_operator_properties_border_to_rcti(op, &rect);
 
-  ED_clip_point_stable_pos(sc, ar, rect.xmin, rect.ymin, &rectf.xmin, &rectf.ymin);
-  ED_clip_point_stable_pos(sc, ar, rect.xmax, rect.ymax, &rectf.xmax, &rectf.ymax);
+  ED_clip_point_stable_pos(sc, region, rect.xmin, rect.ymin, &rectf.xmin, &rectf.ymin);
+  ED_clip_point_stable_pos(sc, region, rect.xmax, rect.ymax, &rectf.xmax, &rectf.ymax);
 
   const eSelectOp sel_op = RNA_enum_get(op->ptr, "mode");
   const bool select = (sel_op != SEL_OP_SUB);
@@ -550,12 +598,12 @@ void CLIP_OT_select_box(wmOperatorType *ot)
 /********************** lasso select operator *********************/
 
 static int do_lasso_select_marker(bContext *C,
-                                  const int mcords[][2],
-                                  const short moves,
+                                  const int mcoords[][2],
+                                  const int mcoords_len,
                                   bool select)
 {
   SpaceClip *sc = CTX_wm_space_clip(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
 
   MovieClip *clip = ED_space_clip_get_clip(sc);
   MovieTracking *tracking = &clip->tracking;
@@ -568,7 +616,7 @@ static int do_lasso_select_marker(bContext *C,
   int framenr = ED_space_clip_get_clip_frame_number(sc);
 
   /* get rectangle from operator */
-  BLI_lasso_boundbox(&rect, mcords, moves);
+  BLI_lasso_boundbox(&rect, mcoords, mcoords_len);
 
   /* do actual selection */
   track = tracksbase->first;
@@ -580,14 +628,17 @@ static int do_lasso_select_marker(bContext *C,
         float screen_co[2];
 
         /* marker in screen coords */
-        ED_clip_point_stable_pos__reverse(sc, ar, marker->pos, screen_co);
+        ED_clip_point_stable_pos__reverse(sc, region, marker->pos, screen_co);
 
         if (BLI_rcti_isect_pt(&rect, screen_co[0], screen_co[1]) &&
-            BLI_lasso_is_point_inside(mcords, moves, screen_co[0], screen_co[1], V2D_IS_CLIPPED)) {
-          if (select)
+            BLI_lasso_is_point_inside(
+                mcoords, mcoords_len, screen_co[0], screen_co[1], V2D_IS_CLIPPED)) {
+          if (select) {
             BKE_tracking_track_flag_set(track, TRACK_AREA_ALL, SELECT);
-          else
+          }
+          else {
             BKE_tracking_track_flag_clear(track, TRACK_AREA_ALL, SELECT);
+          }
         }
 
         changed = true;
@@ -606,10 +657,11 @@ static int do_lasso_select_marker(bContext *C,
         float screen_co[2];
 
         /* marker in screen coords */
-        ED_clip_point_stable_pos__reverse(sc, ar, plane_marker->corners[i], screen_co);
+        ED_clip_point_stable_pos__reverse(sc, region, plane_marker->corners[i], screen_co);
 
         if (BLI_rcti_isect_pt(&rect, screen_co[0], screen_co[1]) &&
-            BLI_lasso_is_point_inside(mcords, moves, screen_co[0], screen_co[1], V2D_IS_CLIPPED)) {
+            BLI_lasso_is_point_inside(
+                mcoords, mcoords_len, screen_co[0], screen_co[1], V2D_IS_CLIPPED)) {
           if (select) {
             plane_track->flag |= SELECT;
           }
@@ -635,10 +687,10 @@ static int do_lasso_select_marker(bContext *C,
 
 static int clip_lasso_select_exec(bContext *C, wmOperator *op)
 {
-  int mcords_tot;
-  const int(*mcords)[2] = WM_gesture_lasso_path_to_array(C, op, &mcords_tot);
+  int mcoords_len;
+  const int(*mcoords)[2] = WM_gesture_lasso_path_to_array(C, op, &mcoords_len);
 
-  if (mcords) {
+  if (mcoords) {
     const eSelectOp sel_op = RNA_enum_get(op->ptr, "mode");
     const bool select = (sel_op != SEL_OP_SUB);
     if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
@@ -646,9 +698,9 @@ static int clip_lasso_select_exec(bContext *C, wmOperator *op)
       ED_clip_select_all(sc, SEL_DESELECT, NULL);
     }
 
-    do_lasso_select_marker(C, mcords, mcords_tot, select);
+    do_lasso_select_marker(C, mcoords, mcoords_len, select);
 
-    MEM_freeN((void *)mcords);
+    MEM_freeN((void *)mcoords);
 
     return OPERATOR_FINISHED;
   }
@@ -679,7 +731,9 @@ void CLIP_OT_select_lasso(wmOperatorType *ot)
 
 /********************** circle select operator *********************/
 
-static int point_inside_ellipse(float point[2], float offset[2], float ellipse[2])
+static int point_inside_ellipse(const float point[2],
+                                const float offset[2],
+                                const float ellipse[2])
 {
   /* normalized ellipse: ell[0] = scaleX, ell[1] = scaleY */
   float x, y;
@@ -698,7 +752,7 @@ static int marker_inside_ellipse(MovieTrackingMarker *marker, float offset[2], f
 static int circle_select_exec(bContext *C, wmOperator *op)
 {
   SpaceClip *sc = CTX_wm_space_clip(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
 
   MovieClip *clip = ED_space_clip_get_clip(sc);
   MovieTracking *tracking = &clip->tracking;
@@ -726,12 +780,12 @@ static int circle_select_exec(bContext *C, wmOperator *op)
 
   /* compute ellipse and position in unified coordinates */
   ED_space_clip_get_size(sc, &width, &height);
-  ED_space_clip_get_zoom(sc, ar, &zoomx, &zoomy);
+  ED_space_clip_get_zoom(sc, region, &zoomx, &zoomy);
 
   ellipse[0] = width * zoomx / radius;
   ellipse[1] = height * zoomy / radius;
 
-  ED_clip_point_stable_pos(sc, ar, x, y, &offset[0], &offset[1]);
+  ED_clip_point_stable_pos(sc, region, x, y, &offset[0], &offset[1]);
 
   /* do selection */
   track = tracksbase->first;
@@ -820,8 +874,9 @@ static int select_all_exec(bContext *C, wmOperator *op)
 
   ED_clip_select_all(sc, action, &has_selection);
 
-  if (!has_selection)
+  if (!has_selection) {
     sc->flag &= ~SC_LOCK_SELECTION;
+  }
 
   BKE_tracking_dopesheet_tag_update(tracking);
 
@@ -888,8 +943,9 @@ static int select_grouped_exec(bContext *C, wmOperator *op)
       if (act_track) {
         ok = (track->flag & TRACK_CUSTOMCOLOR) == (act_track->flag & TRACK_CUSTOMCOLOR);
 
-        if (ok && track->flag & TRACK_CUSTOMCOLOR)
+        if (ok && track->flag & TRACK_CUSTOMCOLOR) {
           ok = equals_v3v3(track->color, act_track->color);
+        }
       }
     }
     else if (group == 6) { /* failed */
@@ -898,10 +954,12 @@ static int select_grouped_exec(bContext *C, wmOperator *op)
 
     if (ok) {
       track->flag |= SELECT;
-      if (sc->flag & SC_SHOW_MARKER_PATTERN)
+      if (sc->flag & SC_SHOW_MARKER_PATTERN) {
         track->pat_flag |= SELECT;
-      if (sc->flag & SC_SHOW_MARKER_SEARCH)
+      }
+      if (sc->flag & SC_SHOW_MARKER_SEARCH) {
         track->search_flag |= SELECT;
+      }
     }
 
     track = track->next;

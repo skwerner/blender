@@ -26,23 +26,34 @@
 
 #include <stdarg.h>
 
+#include "BLI_compiler_attrs.h"
+#include "BLI_utildefines.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "BLI_compiler_attrs.h"
-#include "BLI_utildefines_variadic.h"
 
 struct ListBase;
 
 typedef bool (*UniquenameCheckCallback)(void *arg, const char *name);
 
 size_t BLI_split_name_num(char *left, int *nr, const char *name, const char delim);
+bool BLI_string_is_decimal(const char *string) ATTR_NONNULL();
 
 void BLI_string_split_suffix(const char *string, char *r_body, char *r_suf, const size_t str_len);
 void BLI_string_split_prefix(const char *string, char *r_pre, char *r_body, const size_t str_len);
 
 /* Join strings, return newly allocated string. */
+char *BLI_string_join_array(char *result,
+                            size_t result_len,
+                            const char *strings[],
+                            uint strings_len) ATTR_NONNULL();
+char *BLI_string_join_array_by_sep_char(char *result,
+                                        size_t result_len,
+                                        char sep,
+                                        const char *strings[],
+                                        uint strings_len) ATTR_NONNULL();
+
 char *BLI_string_join_arrayN(const char *strings[], uint strings_len) ATTR_WARN_UNUSED_RESULT
     ATTR_NONNULL();
 char *BLI_string_join_array_by_sep_charN(char sep,
@@ -53,6 +64,9 @@ char *BLI_string_join_array_by_sep_char_with_tableN(char sep,
                                                     const char *strings[],
                                                     uint strings_len) ATTR_NONNULL();
 /* Take multiple arguments, pass as (array, length). */
+#define BLI_string_join(result, result_len, ...) \
+  BLI_string_join_array( \
+      result, result_len, ((const char *[]){__VA_ARGS__}), VA_NARGS_COUNT(__VA_ARGS__))
 #define BLI_string_joinN(...) \
   BLI_string_join_arrayN(((const char *[]){__VA_ARGS__}), VA_NARGS_COUNT(__VA_ARGS__))
 #define BLI_string_join_by_sep_charN(sep, ...) \

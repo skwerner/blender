@@ -27,15 +27,15 @@
 
 /* custom1 = sfra, custom2 = efra */
 static bNodeSocketTemplate cmp_node_time_out[] = {
-    {SOCK_FLOAT, 0, N_("Fac")},
-    {-1, 0, ""},
+    {SOCK_FLOAT, N_("Fac")},
+    {-1, ""},
 };
 
 static void node_composit_init_curves_time(bNodeTree *UNUSED(ntree), bNode *node)
 {
   node->custom1 = 1;
   node->custom2 = 250;
-  node->storage = curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
+  node->storage = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
 }
 
 void register_node_type_cmp_curve_time(void)
@@ -53,18 +53,18 @@ void register_node_type_cmp_curve_time(void)
 
 /* **************** CURVE VEC  ******************** */
 static bNodeSocketTemplate cmp_node_curve_vec_in[] = {
-    {SOCK_VECTOR, 1, N_("Vector"), 0.0f, 0.0f, 0.0f, 1.0f, -1.0f, 1.0f, PROP_NONE},
-    {-1, 0, ""},
+    {SOCK_VECTOR, N_("Vector"), 0.0f, 0.0f, 0.0f, 1.0f, -1.0f, 1.0f, PROP_NONE},
+    {-1, ""},
 };
 
 static bNodeSocketTemplate cmp_node_curve_vec_out[] = {
-    {SOCK_VECTOR, 0, N_("Vector")},
-    {-1, 0, ""},
+    {SOCK_VECTOR, N_("Vector")},
+    {-1, ""},
 };
 
 static void node_composit_init_curve_vec(bNodeTree *UNUSED(ntree), bNode *node)
 {
-  node->storage = curvemapping_add(3, -1.0f, -1.0f, 1.0f, 1.0f);
+  node->storage = BKE_curvemapping_add(3, -1.0f, -1.0f, 1.0f, 1.0f);
 }
 
 void register_node_type_cmp_curve_vec(void)
@@ -82,21 +82,21 @@ void register_node_type_cmp_curve_vec(void)
 
 /* **************** CURVE RGB  ******************** */
 static bNodeSocketTemplate cmp_node_curve_rgb_in[] = {
-    {SOCK_FLOAT, 1, N_("Fac"), 1.0f, 0.0f, 0.0f, 1.0f, -1.0f, 1.0f, PROP_FACTOR},
-    {SOCK_RGBA, 1, N_("Image"), 1.0f, 1.0f, 1.0f, 1.0f},
-    {SOCK_RGBA, 1, N_("Black Level"), 0.0f, 0.0f, 0.0f, 1.0f},
-    {SOCK_RGBA, 1, N_("White Level"), 1.0f, 1.0f, 1.0f, 1.0f},
-    {-1, 0, ""},
+    {SOCK_FLOAT, N_("Fac"), 1.0f, 0.0f, 0.0f, 1.0f, -1.0f, 1.0f, PROP_FACTOR},
+    {SOCK_RGBA, N_("Image"), 1.0f, 1.0f, 1.0f, 1.0f},
+    {SOCK_RGBA, N_("Black Level"), 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_RGBA, N_("White Level"), 1.0f, 1.0f, 1.0f, 1.0f},
+    {-1, ""},
 };
 
 static bNodeSocketTemplate cmp_node_curve_rgb_out[] = {
-    {SOCK_RGBA, 0, N_("Image")},
-    {-1, 0, ""},
+    {SOCK_RGBA, N_("Image")},
+    {-1, ""},
 };
 
 static void node_composit_init_curve_rgb(bNodeTree *UNUSED(ntree), bNode *node)
 {
-  node->storage = curvemapping_add(4, 0.0f, 0.0f, 1.0f, 1.0f);
+  node->storage = BKE_curvemapping_add(4, 0.0f, 0.0f, 1.0f, 1.0f);
 }
 
 void register_node_type_cmp_curve_rgb(void)

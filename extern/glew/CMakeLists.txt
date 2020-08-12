@@ -18,6 +18,23 @@
 # All rights reserved.
 # ***** END GPL LICENSE BLOCK *****
 
+# avoid noisy warnings
+if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang")
+  add_c_flag(
+    "-Wno-strict-prototypes"
+  )
+endif()
+
+# MSVC's inliner is not having a happy time with glewIsSupported
+# causing this to be one of the most expensive things to build
+# in blender. Optimize for size rather than speed sidesteps this
+# problem, more details at
+# https://developercommunity.visualstudio.com/content/problem/732941/slow-compilation-of-glewc-for-visual-studio-2019-x.html
+
+if(MSVC)
+  add_c_flag("/Os")
+endif()
+
 set(INC
   include
 )

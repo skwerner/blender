@@ -14,6 +14,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
+/* clang-format off */
+
+/* #define typeof() triggers a bug in some clang-format versions, disable format
+ * for entire file to keep results consistent. */
+
 #ifndef __BLI_COMPILER_COMPAT_H__
 #define __BLI_COMPILER_COMPAT_H__
 
@@ -34,7 +39,7 @@ template<typename T> static inline T decltype_helper(T x)
 {
   return x;
 }
-#  define typeof(x) decltype(decltype_helper(x))
+#define typeof(x) decltype(decltype_helper(x))
 }
 #endif
 
@@ -43,6 +48,12 @@ template<typename T> static inline T decltype_helper(T x)
 #  define BLI_INLINE static __forceinline
 #else
 #  define BLI_INLINE static inline __attribute__((always_inline)) __attribute__((__unused__))
+#endif
+
+#if defined(__GNUC__)
+#  define BLI_NOINLINE __attribute__((noinline))
+#else
+#  define BLI_NOINLINE
 #endif
 
 #endif /* __BLI_COMPILER_COMPAT_H__ */

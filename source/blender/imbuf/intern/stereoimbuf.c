@@ -27,9 +27,9 @@
 #include "IMB_imbuf_types.h"
 
 #include "IMB_allocimbuf.h"
+#include "IMB_colormanagement_intern.h"
 #include "IMB_filetype.h"
 #include "IMB_metadata.h"
-#include "IMB_colormanagement_intern.h"
 
 #include "imbuf.h"
 
@@ -39,8 +39,8 @@
 
 #include "BLI_math.h"
 
-#include "DNA_userdef_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_userdef_types.h"
 
 /* prototypes */
 struct Stereo3DData;
@@ -68,7 +68,7 @@ static void imb_stereo3d_write_anaglyph(Stereo3DData *s3d, enum eStereo3dAnaglyp
   const int stride_from = width;
   const int stride_to = width;
 
-  int anaglyph_encoding[3][3] = {
+  const int anaglyph_encoding[3][3] = {
       {0, 1, 1},
       {1, 0, 1},
       {0, 0, 1},
@@ -573,11 +573,13 @@ static void imb_stereo3d_squeeze_ImBuf(ImBuf *ibuf,
                                        const size_t x,
                                        const size_t y)
 {
-  if (ELEM(s3d->display_mode, S3D_DISPLAY_SIDEBYSIDE, S3D_DISPLAY_TOPBOTTOM) == false)
+  if (ELEM(s3d->display_mode, S3D_DISPLAY_SIDEBYSIDE, S3D_DISPLAY_TOPBOTTOM) == false) {
     return;
+  }
 
-  if ((s3d->flag & S3D_SQUEEZED_FRAME) == 0)
+  if ((s3d->flag & S3D_SQUEEZED_FRAME) == 0) {
     return;
+  }
 
   IMB_scaleImBuf_threaded(ibuf, x, y);
 }
@@ -587,11 +589,13 @@ static void imb_stereo3d_unsqueeze_ImBuf(ImBuf *ibuf,
                                          const size_t x,
                                          const size_t y)
 {
-  if (ELEM(s3d->display_mode, S3D_DISPLAY_SIDEBYSIDE, S3D_DISPLAY_TOPBOTTOM) == false)
+  if (ELEM(s3d->display_mode, S3D_DISPLAY_SIDEBYSIDE, S3D_DISPLAY_TOPBOTTOM) == false) {
     return;
+  }
 
-  if ((s3d->flag & S3D_SQUEEZED_FRAME) == 0)
+  if ((s3d->flag & S3D_SQUEEZED_FRAME) == 0) {
     return;
+  }
 
   IMB_scaleImBuf_threaded(ibuf, x, y);
 }
@@ -602,11 +606,13 @@ static void imb_stereo3d_squeeze_rectf(
   ImBuf *ibuf;
   size_t width, height;
 
-  if (ELEM(s3d->display_mode, S3D_DISPLAY_SIDEBYSIDE, S3D_DISPLAY_TOPBOTTOM) == false)
+  if (ELEM(s3d->display_mode, S3D_DISPLAY_SIDEBYSIDE, S3D_DISPLAY_TOPBOTTOM) == false) {
     return;
+  }
 
-  if ((s3d->flag & S3D_SQUEEZED_FRAME) == 0)
+  if ((s3d->flag & S3D_SQUEEZED_FRAME) == 0) {
     return;
+  }
 
   /* creates temporary imbuf to store the rectf */
   IMB_stereo3d_write_dimensions(s3d->display_mode, false, x, y, &width, &height);
@@ -634,11 +640,13 @@ static void imb_stereo3d_squeeze_rect(
   ImBuf *ibuf;
   size_t width, height;
 
-  if (ELEM(s3d->display_mode, S3D_DISPLAY_SIDEBYSIDE, S3D_DISPLAY_TOPBOTTOM) == false)
+  if (ELEM(s3d->display_mode, S3D_DISPLAY_SIDEBYSIDE, S3D_DISPLAY_TOPBOTTOM) == false) {
     return;
+  }
 
-  if ((s3d->flag & S3D_SQUEEZED_FRAME) == 0)
+  if ((s3d->flag & S3D_SQUEEZED_FRAME) == 0) {
     return;
+  }
 
   /* creates temporary imbuf to store the rectf */
   IMB_stereo3d_write_dimensions(s3d->display_mode, false, x, y, &width, &height);
@@ -802,7 +810,7 @@ static void imb_stereo3d_read_anaglyph(Stereo3DData *s3d, enum eStereo3dAnaglyph
   const int stride_from = width;
   const int stride_to = width;
 
-  int anaglyph_encoding[3][3] = {
+  const int anaglyph_encoding[3][3] = {
       {0, 1, 1},
       {1, 0, 1},
       {0, 0, 1},

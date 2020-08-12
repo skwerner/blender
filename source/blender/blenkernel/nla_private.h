@@ -24,11 +24,15 @@
 #ifndef __NLA_PRIVATE_H__
 #define __NLA_PRIVATE_H__
 
-struct Depsgraph;
-
-#include "RNA_types.h"
 #include "BLI_bitmap.h"
 #include "BLI_ghash.h"
+#include "RNA_types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+struct AnimationEvalContext;
 
 /* --------------- NLA Evaluation DataTypes ----------------------- */
 
@@ -163,19 +167,28 @@ typedef struct NlaKeyframingContext {
 float nlastrip_get_frame(NlaStrip *strip, float cframe, short mode);
 
 /* --------------- NLA Evaluation (very-private stuff) ----------------------- */
-/* these functions are only defined here to avoid problems with the order in which they get defined... */
+/* these functions are only defined here to avoid problems with the order
+ * in which they get defined. */
 
-NlaEvalStrip *nlastrips_ctime_get_strip(
-    struct Depsgraph *depsgraph, ListBase *list, ListBase *strips, short index, float ctime);
-void nlastrip_evaluate(struct Depsgraph *depsgraph,
-                       PointerRNA *ptr,
+NlaEvalStrip *nlastrips_ctime_get_strip(ListBase *list,
+                                        ListBase *strips,
+                                        short index,
+                                        const struct AnimationEvalContext *anim_eval_context,
+                                        const bool flush_to_original);
+void nlastrip_evaluate(PointerRNA *ptr,
                        NlaEvalData *channels,
                        ListBase *modifiers,
                        NlaEvalStrip *nes,
-                       NlaEvalSnapshot *snapshot);
-void nladata_flush_channels(struct Depsgraph *depsgraph,
-                            PointerRNA *ptr,
+                       NlaEvalSnapshot *snapshot,
+                       const struct AnimationEvalContext *anim_eval_context,
+                       const bool flush_to_original);
+void nladata_flush_channels(PointerRNA *ptr,
                             NlaEvalData *channels,
-                            NlaEvalSnapshot *snapshot);
+                            NlaEvalSnapshot *snapshot,
+                            const bool flush_to_original);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __NLA_PRIVATE_H__ */

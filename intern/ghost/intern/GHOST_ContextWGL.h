@@ -35,13 +35,15 @@
 #endif
 
 class GHOST_ContextWGL : public GHOST_Context {
+  /* XR code needs low level graphics data to send to OpenXR. */
+  friend class GHOST_XrGraphicsBindingOpenGL;
+
  public:
   /**
    * Constructor.
    */
   GHOST_ContextWGL(bool stereoVisual,
                    bool alphaBackground,
-                   GHOST_TUns16 numOfAASamples,
                    HWND hWnd,
                    HDC hDC,
                    int contextProfileMask,
@@ -101,14 +103,9 @@ class GHOST_ContextWGL : public GHOST_Context {
   GHOST_TSuccess getSwapInterval(int &intervalOut);
 
  private:
-  int choose_pixel_format(
-      bool stereoVisual, int numOfAASamples, bool needAlpha, bool needStencil, bool sRGB);
-
-  int choose_pixel_format_arb(
-      bool stereoVisual, int numOfAASamples, bool needAlpha, bool needStencil, bool sRGB);
-
-  int _choose_pixel_format_arb_1(
-      bool stereoVisual, int numOfAASamples, bool needAlpha, bool needStencil, bool sRGB);
+  int choose_pixel_format(bool stereoVisual, bool needAlpha);
+  int choose_pixel_format_arb(bool stereoVisual, bool needAlpha);
+  int _choose_pixel_format_arb_1(bool stereoVisual, bool needAlpha);
 
   void initContextWGLEW(PIXELFORMATDESCRIPTOR &preferredPFD);
 

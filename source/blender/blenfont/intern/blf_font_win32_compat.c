@@ -31,8 +31,8 @@
 
 #  include "MEM_guardedalloc.h"
 
-#  include "BLI_utildefines.h"
 #  include "BLI_fileops.h"
+#  include "BLI_utildefines.h"
 
 #  include "blf_internal.h"
 
@@ -59,13 +59,15 @@ static unsigned long ft_ansi_stream_io(FT_Stream stream,
                                        unsigned long count)
 {
   FILE *file;
-  if (!count && offset > stream->size)
+  if (!count && offset > stream->size) {
     return 1;
+  }
 
   file = STREAM_FILE(stream);
 
-  if (stream->pos != offset)
+  if (stream->pos != offset) {
     fseek(file, offset, SEEK_SET);
+  }
 
   return fread(buffer, 1, count, file);
 }

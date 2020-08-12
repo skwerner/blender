@@ -20,18 +20,16 @@
  * \ingroup bke
  */
 
-struct MEdge;
-struct MLoop;
-struct MLoopTri;
-struct MLoopUV;
-struct MPoly;
-struct MVert;
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct Mesh;
 
 typedef enum MeshForeachFlag {
   MESH_FOREACH_NOP = 0,
-  MESH_FOREACH_USE_NORMAL =
-      (1 << 0), /* foreachMappedVert, foreachMappedLoop, foreachMappedFaceCenter */
+  /* foreachMappedVert, foreachMappedLoop, foreachMappedFaceCenter */
+  MESH_FOREACH_USE_NORMAL = (1 << 0),
 } MeshForeachFlag;
 
 void BKE_mesh_foreach_mapped_vert(struct Mesh *mesh,
@@ -59,9 +57,18 @@ void BKE_mesh_foreach_mapped_face_center(
     void (*func)(void *userData, int index, const float cent[3], const float no[3]),
     void *userData,
     MeshForeachFlag flag);
+void BKE_mesh_foreach_mapped_subdiv_face_center(
+    struct Mesh *mesh,
+    void (*func)(void *userData, int index, const float cent[3], const float no[3]),
+    void *userData,
+    MeshForeachFlag flag);
 
 void BKE_mesh_foreach_mapped_vert_coords_get(struct Mesh *me_eval,
                                              float (*r_cos)[3],
                                              const int totcos);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __BKE_MESH_ITERATORS_H__ */

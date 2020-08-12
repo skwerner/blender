@@ -49,6 +49,7 @@ void EEVEE_mist_output_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
   EEVEE_TextureList *txl = vedata->txl;
   EEVEE_StorageList *stl = vedata->stl;
   EEVEE_PassList *psl = vedata->psl;
+  EEVEE_EffectsInfo *effects = stl->effects;
   EEVEE_PrivateData *g_data = stl->g_data;
   Scene *scene = draw_ctx->scene;
 
@@ -66,15 +67,18 @@ void EEVEE_mist_output_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
   }
 
   /* Create FrameBuffer. */
-  DRW_texture_ensure_fullscreen_2d(
-      &txl->mist_accum, GPU_R32F, 0); /* Should be enough precision for many samples. */
+
+  /* Should be enough precision for many samples. */
+  DRW_texture_ensure_fullscreen_2d(&txl->mist_accum, GPU_R32F, 0);
 
   GPU_framebuffer_ensure_config(&fbl->mist_accum_fb,
                                 {GPU_ATTACHMENT_NONE, GPU_ATTACHMENT_TEXTURE(txl->mist_accum)});
 
   /* Clear texture. */
-  GPU_framebuffer_bind(fbl->mist_accum_fb);
-  GPU_framebuffer_clear_color(fbl->mist_accum_fb, clear);
+  if (effects->taa_current_sample == 1) {
+    GPU_framebuffer_bind(fbl->mist_accum_fb);
+    GPU_framebuffer_clear_color(fbl->mist_accum_fb, clear);
+  }
 
   /* Mist settings. */
   if (scene && scene->world) {
@@ -106,12 +110,13 @@ void EEVEE_mist_output_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
   g_data->mist_falloff *= 0.5f;
 
   /* Create Pass and shgroup. */
-  psl->mist_accum_ps = DRW_pass_create("Mist Accum", DRW_STATE_WRITE_COLOR | DRW_STATE_ADDITIVE);
+  DRW_PASS_CREATE(psl->mist_accum_ps, DRW_STATE_WRITE_COLOR | DRW_STATE_BLEND_ADD);
   DRWShadingGroup *grp = DRW_shgroup_create(e_data.mist_sh, psl->mist_accum_ps);
   DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &dtxl->depth);
   DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
+  DRW_shgroup_uniform_block(grp, "renderpass_block", sldata->renderpass_ubo.combined);
   DRW_shgroup_uniform_vec3(grp, "mistSettings", &g_data->mist_start, 1);
-  DRW_shgroup_call_add(grp, DRW_cache_fullscreen_quad_get(), NULL);
+  DRW_shgroup_call(grp, DRW_cache_fullscreen_quad_get(), NULL);
 }
 
 void EEVEE_mist_output_accumulate(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *vedata)

@@ -25,14 +25,15 @@ set(SRC
   util_thread.cpp
   util_time.cpp
   util_transform.cpp
+  util_windows.cpp
 )
 
 set(LIB
-
+  ${TBB_LIBRARIES}
 )
 
 if(WITH_CYCLES_STANDALONE)
-  if (WITH_CYCLES_STANDALONE_GUI)
+  if(WITH_CYCLES_STANDALONE_GUI)
     list(APPEND SRC
       util_view.cpp
     )
@@ -40,9 +41,13 @@ if(WITH_CYCLES_STANDALONE)
 endif()
 
 if(CYCLES_STANDALONE_REPOSITORY)
-  list(APPEND INC_SYS ../../third_party/numaapi/include)
+  list(APPEND INC_SYS
+    ../../third_party/numaapi/include
+  )
 else()
-  list(APPEND INC_SYS ../../numaapi/include)
+  list(APPEND INC_SYS
+    ../../numaapi/include
+  )
 endif()
 
 set(SRC_HEADERS
@@ -54,6 +59,8 @@ set(SRC_HEADERS
   util_boundbox.h
   util_debug.h
   util_defines.h
+  util_deque.h
+  util_disjoint_set.h
   util_guarded_allocator.cpp
   util_foreach.h
   util_function.h
@@ -79,6 +86,7 @@ set(SRC_HEADERS
   util_math_matrix.h
   util_md5.h
   util_murmurhash.h
+  util_openimagedenoise.h
   util_opengl.h
   util_optimization.h
   util_param.h
@@ -90,11 +98,10 @@ set(SRC_HEADERS
   util_rect.h
   util_set.h
   util_simd.h
-  util_sky_model.cpp
-  util_sky_model.h
-  util_sky_model_data.h
   util_avxf.h
   util_avxb.h
+  util_avxi.h
+  util_semaphore.h
   util_sseb.h
   util_ssef.h
   util_ssei.h
@@ -104,6 +111,7 @@ set(SRC_HEADERS
   util_string.h
   util_system.h
   util_task.h
+  util_tbb.h
   util_texture.h
   util_thread.h
   util_time.h
@@ -117,7 +125,7 @@ set(SRC_HEADERS
   util_types_float4_impl.h
   util_types_float8.h
   util_types_float8_impl.h
-    util_types_int2.h
+  util_types_int2.h
   util_types_int2_impl.h
   util_types_int3.h
   util_types_int3_impl.h
@@ -138,6 +146,7 @@ set(SRC_HEADERS
   util_types_ushort4.h
   util_types_vector3.h
   util_types_vector3_impl.h
+  util_unique_ptr.h
   util_vector.h
   util_version.h
   util_view.h

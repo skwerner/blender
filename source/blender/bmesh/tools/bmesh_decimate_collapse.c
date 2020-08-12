@@ -24,14 +24,14 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_math.h"
-#include "BLI_quadric.h"
+#include "BLI_alloca.h"
 #include "BLI_heap.h"
 #include "BLI_linklist.h"
-#include "BLI_alloca.h"
+#include "BLI_math.h"
 #include "BLI_memarena.h"
 #include "BLI_polyfill_2d.h"
 #include "BLI_polyfill_2d_beautify.h"
+#include "BLI_quadric.h"
 #include "BLI_utildefines_stack.h"
 
 #include "BKE_customdata.h"
@@ -60,8 +60,10 @@
 #endif
 
 #define BOUNDARY_PRESERVE_WEIGHT 100.0f
-/** Uses double precision, impacts behavior on near-flat surfaces,
- * cane give issues with very small faces. 1e-2 is too big, see: T48154. */
+/**
+ * Uses double precision, impacts behavior on near-flat surfaces,
+ * cane give issues with very small faces. 1e-2 is too big, see: T48154.
+ */
 #define OPTIMIZE_EPS 1e-8
 #define COST_INVALID FLT_MAX
 
@@ -146,11 +148,10 @@ static void bm_decim_calc_target_co_db(BMEdge *e, double optimize_co[3], const Q
     /* all is good */
     return;
   }
-  else {
-    optimize_co[0] = 0.5 * ((double)e->v1->co[0] + (double)e->v2->co[0]);
-    optimize_co[1] = 0.5 * ((double)e->v1->co[1] + (double)e->v2->co[1]);
-    optimize_co[2] = 0.5 * ((double)e->v1->co[2] + (double)e->v2->co[2]);
-  }
+
+  optimize_co[0] = 0.5 * ((double)e->v1->co[0] + (double)e->v2->co[0]);
+  optimize_co[1] = 0.5 * ((double)e->v1->co[1] + (double)e->v2->co[1]);
+  optimize_co[2] = 0.5 * ((double)e->v1->co[2] + (double)e->v2->co[2]);
 }
 
 static void bm_decim_calc_target_co_fl(BMEdge *e, float optimize_co[3], const Quadric *vquadrics)
@@ -204,7 +205,7 @@ static bool bm_edge_collapse_is_degenerate_flip(BMEdge *e, const float optimize_
         /* use a small value rather then zero so we don't flip a face in multiple steps
          * (first making it zero area, then flipping again) */
         if (dot_v3v3(cross_exist, cross_optim) <= FLT_EPSILON) {
-          //printf("no flip\n");
+          // printf("no flip\n");
           return true;
         }
 #endif
@@ -363,7 +364,7 @@ static void bm_decim_build_edge_cost(BMesh *bm,
 struct KD_Symmetry_Data {
   /* pre-flipped coords */
   float e_v1_co[3], e_v2_co[3];
-  /* Use to compare the correct endpoints incase v1/v2 are swapped */
+  /* Use to compare the correct endpoints in case v1/v2 are swapped. */
   float e_dir[3];
 
   int e_found_index;
@@ -409,7 +410,7 @@ static int *bm_edge_symmetry_map(BMesh *bm, uint symmetry_axis, float limit)
   BMEdge *e, **etable;
   uint i;
   int *edge_symmetry_map;
-  const float limit_sq = SQUARE(limit);
+  const float limit_sq = square_f(limit);
   KDTree_3d *tree;
 
   tree = BLI_kdtree_3d_new(bm->totedge);
@@ -690,14 +691,15 @@ static void bm_decim_triangulate_end(BMesh *bm, const int edges_tri_tot)
 static void bm_edge_collapse_loop_customdata(
     BMesh *bm, BMLoop *l, BMVert *v_clear, BMVert *v_other, const float customdata_fac)
 {
-  /* disable seam check - the seam check would have to be done per layer, its not really that important */
+  /* Disable seam check - the seam check would have to be done per layer,
+   * its not really that important. */
   //#define USE_SEAM
   /* these don't need to be updated, since they will get removed when the edge collapses */
   BMLoop *l_clear, *l_other;
   const bool is_manifold = BM_edge_is_manifold(l->e);
   int side;
 
-  /* first find the loop of 'v_other' thats attached to the face of 'l' */
+  /* first find the loop of 'v_other' that's attached to the face of 'l' */
   if (l->v == v_clear) {
     l_clear = l;
     l_other = l->next;
@@ -881,7 +883,7 @@ static bool bm_edge_collapse_is_degenerate_topology(BMEdge *e_first)
     bm_edge_tag_enable(e_iter);
   } while ((e_iter = bmesh_disk_edge_next(e_iter, e_first->v1)) != e_first);
 
-  /* ... except for the edge we will collapse, we know thats shared,
+  /* ... except for the edge we will collapse, we know that's shared,
    * disable this to avoid false positive. We could be smart and never enable these
    * face/edge tags in the first place but easier to do this */
   // bm_edge_tag_disable(e_first);
@@ -1056,7 +1058,7 @@ static bool bm_edge_collapse(BMesh *bm,
 
     return true;
   }
-  else if (BM_edge_is_boundary(e_clear)) {
+  if (BM_edge_is_boundary(e_clear)) {
     /* same as above but only one triangle */
     BMLoop *l_a;
     BMEdge *e_a_other[2];
@@ -1112,9 +1114,7 @@ static bool bm_edge_collapse(BMesh *bm,
 
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 /**
@@ -1270,11 +1270,9 @@ static bool bm_decim_edge_collapse(BMesh *bm,
     return true;
 #endif
   }
-  else {
-    /* add back with a high cost */
-    bm_decim_invalid_edge_cost_single(e, eheap, eheap_table);
-    return false;
-  }
+  /* add back with a high cost */
+  bm_decim_invalid_edge_cost_single(e, eheap, eheap_table);
+  return false;
 }
 
 /* Main Decimate Function
@@ -1370,8 +1368,8 @@ void BM_mesh_decimate_collapse(BMesh *bm,
       /* handy to detect corruptions elsewhere */
       BLI_assert(BM_elem_index_get(e) < tot_edge_orig);
 
-      /* under normal conditions wont be accessed again,
-       * but NULL just incase so we don't use freed node */
+      /* Under normal conditions wont be accessed again,
+       * but NULL just in case so we don't use freed node. */
       eheap_table[BM_elem_index_get(e)] = NULL;
 
       bm_decim_edge_collapse(bm,

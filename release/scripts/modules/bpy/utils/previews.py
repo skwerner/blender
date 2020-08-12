@@ -76,8 +76,7 @@ class ImagePreviewCollection(dict):
             return
 
         raise ResourceWarning(
-            f"{self!r}: left open, remove with "
-            "'bpy.utils.previews.remove()'"
+            "%r: left open, remove with 'bpy.utils.previews.remove()'" % self
         )
         self.close()
 
@@ -86,7 +85,7 @@ class ImagePreviewCollection(dict):
 
     def new(self, name):
         if name in self:
-            raise KeyError(f"key {name!r} already exists")
+            raise KeyError("key %r already exists" % name)
         p = self[name] = _utils_previews.new(
             self._gen_key(name))
         return p
@@ -94,7 +93,7 @@ class ImagePreviewCollection(dict):
 
     def load(self, name, path, path_type, force_reload=False):
         if name in self:
-            raise KeyError("key {name!r} already exists")
+            raise KeyError("key %r already exists" % name)
         p = self[name] = _utils_previews.load(
             self._gen_key(name), path, path_type, force_reload)
         return p
@@ -116,7 +115,9 @@ class ImagePreviewCollection(dict):
         super().__delitem__(key)
 
     def __repr__(self):
-        return f"<{self.__class__.__name__:s} id={self._uuid:s}[{len(self):d}], {super()!r}>"
+        return "<%s id=%s[%d], %r>" % (
+            self.__class__.__name__, self._uuid, len(self), super()
+        )
 
 
 def new():

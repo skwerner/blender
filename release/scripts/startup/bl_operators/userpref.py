@@ -49,6 +49,46 @@ def module_filesystem_remove(path_base, module_name):
             else:
                 os.remove(f_full)
 
+# This duplicates shutil.copytree from Python 3.8, with the new dirs_exist_ok
+# argument that we need. Once we upgrade to 3.8 we can remove this.
+def _preferences_copytree(entries, src, dst):
+    import os
+    import shutil
+    from shutil import Error
+
+    os.makedirs(dst, exist_ok=True)
+    errors = []
+
+    for srcentry in entries:
+        srcname = os.path.join(src, srcentry.name)
+        dstname = os.path.join(dst, srcentry.name)
+        srcobj = srcentry
+        try:
+            if srcentry.is_symlink():
+                linkto = os.readlink(srcname)
+                os.symlink(linkto, dstname)
+                shutil.copystat(srcobj, dstname, follow_symlinks=False)
+            elif srcentry.is_dir():
+                preferences_copytree(srcobj, dstname)
+            else:
+                shutil.copy2(srcentry, dstname)
+        except Error as err:
+            errors.extend(err.args[0])
+        except OSError as why:
+            errors.append((srcname, dstname, str(why)))
+    try:
+        shutil.copystat(src, dst)
+    except OSError as why:
+        if getattr(why, 'winerror', None) is None:
+            errors.append((src, dst, str(why)))
+    if errors:
+        raise Error(errors)
+    return dst
+
+def preferences_copytree(src, dst):
+    import os
+    with os.scandir(src) as entries:
+        return _preferences_copytree(entries=entries, src=src, dst=dst)
 
 class PREFERENCES_OT_keyconfig_activate(Operator):
     bl_idname = "preferences.keyconfig_activate"
@@ -58,7 +98,7 @@ class PREFERENCES_OT_keyconfig_activate(Operator):
         subtype='FILE_PATH',
     )
 
-    def execute(self, context):
+    def execute(self, _context):
         if bpy.utils.keyconfig_set(self.filepath, report=self.report):
             return {'FINISHED'}
         else:
@@ -70,30 +110,42 @@ class PREFERENCES_OT_copy_prev(Operator):
     bl_idname = "preferences.copy_prev"
     bl_label = "Copy Previous Settings"
 
-    @staticmethod
-    def previous_version():
-        ver = bpy.app.version
-        ver_old = ((ver[0] * 100) + ver[1]) - 1
-        return ver_old // 100, ver_old % 100
+    @classmethod
+    def _old_version_path(cls, version):
+        return bpy.utils.resource_path('USER', version[0], version[1])
 
-    @staticmethod
-    def _old_path():
-        ver = bpy.app.version
-        ver_old = ((ver[0] * 100) + ver[1]) - 1
-        return bpy.utils.resource_path('USER', ver_old // 100, ver_old % 100)
+    @classmethod
+    def previous_version(cls):
+        # Find config folder from previous version.
+        import os
+        version = bpy.app.version
+        version_old = ((version[0] * 100) + version[1]) - 1
+        while version_old % 10 > 0:
+            version_split = version_old // 100, version_old % 100
+            if os.path.isdir(cls._old_version_path(version_split)):
+                return version_split
+            version_old = version_old - 1
+        return None
 
-    @staticmethod
-    def _new_path():
+    @classmethod
+    def _old_path(cls):
+        version_old = cls.previous_version()
+        return cls._old_version_path(version_old) if version_old else None
+
+    @classmethod
+    def _new_path(cls):
         return bpy.utils.resource_path('USER')
 
     @classmethod
-    def poll(cls, context):
+    def poll(cls, _context):
         import os
 
         old = cls._old_path()
         new = cls._new_path()
+        if not old:
+            return False
 
-        # Disable operator in case config path is overriden with environment
+        # Disable operator in case config path is overridden with environment
         # variable. That case has no automatic per-version configuration.
         userconfig_path = os.path.normpath(bpy.utils.user_resource('CONFIG'))
         new_userconfig_path = os.path.normpath(os.path.join(new, "config"))
@@ -109,12 +161,14 @@ class PREFERENCES_OT_copy_prev(Operator):
         new_userpref = os.path.join(new, "config", "userpref.blend")
         return os.path.isfile(old_userpref) and not os.path.isfile(new_userpref)
 
-    def execute(self, context):
-        import shutil
+    def execute(self, _context):
+        # Use this instead once we upgrade to Python 3.8 with dirs_exist_ok.
+        # import shutil
+        # shutil.copytree(self._old_path(), self._new_path(), dirs_exist_ok=True)
+        preferences_copytree(self._old_path(), self._new_path())
 
-        shutil.copytree(self._old_path(), self._new_path(), symlinks=True)
-
-        # reload recent-files.txt
+        # reload preferences and recent-files.txt
+        bpy.ops.wm.read_userpref()
         bpy.ops.wm.read_history()
 
         # don't loose users work if they open the splash later.
@@ -173,7 +227,7 @@ class PREFERENCES_OT_keyconfig_import(Operator):
         default=True,
     )
 
-    def execute(self, context):
+    def execute(self, _context):
         import os
         from os.path import basename
         import shutil
@@ -202,7 +256,7 @@ class PREFERENCES_OT_keyconfig_import(Operator):
         else:
             return {'CANCELLED'}
 
-    def invoke(self, context, event):
+    def invoke(self, context, _event):
         wm = context.window_manager
         wm.fileselect_add(self)
         return {'RUNNING_MODAL'}
@@ -260,7 +314,7 @@ class PREFERENCES_OT_keyconfig_export(Operator):
 
         return {'FINISHED'}
 
-    def invoke(self, context, event):
+    def invoke(self, context, _event):
         wm = context.window_manager
         wm.fileselect_add(self)
         return {'RUNNING_MODAL'}
@@ -286,6 +340,7 @@ class PREFERENCES_OT_keymap_restore(Operator):
             km = context.keymap
             km.restore_to_default()
 
+        context.preferences.is_dirty = True
         return {'FINISHED'}
 
 
@@ -333,6 +388,7 @@ class PREFERENCES_OT_keyitem_add(Operator):
             km.show_expanded_items = True
             km.show_expanded_children = True
 
+        context.preferences.is_dirty = True
         return {'FINISHED'}
 
 
@@ -354,6 +410,8 @@ class PREFERENCES_OT_keyitem_remove(Operator):
         km = context.keymap
         kmi = km.keymap_items.from_id(self.item_id)
         km.keymap_items.remove(kmi)
+
+        context.preferences.is_dirty = True
         return {'FINISHED'}
 
 
@@ -388,7 +446,7 @@ class PREFERENCES_OT_addon_enable(Operator):
         description="Module name of the add-on to enable",
     )
 
-    def execute(self, context):
+    def execute(self, _context):
         import addon_utils
 
         err_str = ""
@@ -434,7 +492,7 @@ class PREFERENCES_OT_addon_disable(Operator):
         description="Module name of the add-on to disable",
     )
 
-    def execute(self, context):
+    def execute(self, _context):
         import addon_utils
 
         err_str = ""
@@ -476,7 +534,7 @@ class PREFERENCES_OT_theme_install(Operator):
         options={'HIDDEN'},
     )
 
-    def execute(self, context):
+    def execute(self, _context):
         import os
         import shutil
         import traceback
@@ -509,7 +567,7 @@ class PREFERENCES_OT_theme_install(Operator):
 
         return {'FINISHED'}
 
-    def invoke(self, context, event):
+    def invoke(self, context, _event):
         wm = context.window_manager
         wm.fileselect_add(self)
         return {'RUNNING_MODAL'}
@@ -520,7 +578,7 @@ class PREFERENCES_OT_addon_refresh(Operator):
     bl_idname = "preferences.addon_refresh"
     bl_label = "Refresh"
 
-    def execute(self, context):
+    def execute(self, _context):
         import addon_utils
 
         addon_utils.modules_refresh()
@@ -533,7 +591,7 @@ class PREFERENCES_OT_addon_refresh(Operator):
 class PREFERENCES_OT_addon_install(Operator):
     """Install an add-on"""
     bl_idname = "preferences.addon_install"
-    bl_label = "Install Add-on from File..."
+    bl_label = "Install Add-on"
 
     overwrite: BoolProperty(
         name="Overwrite",
@@ -663,6 +721,7 @@ class PREFERENCES_OT_addon_install(Operator):
                 info = addon_utils.module_bl_info(mod)
 
                 # show the newly installed addon.
+                context.preferences.view.show_addons_enabled_only = False
                 context.window_manager.addon_filter = 'All'
                 context.window_manager.addon_search = info["name"]
                 break
@@ -680,7 +739,7 @@ class PREFERENCES_OT_addon_install(Operator):
 
         return {'FINISHED'}
 
-    def invoke(self, context, event):
+    def invoke(self, context, _event):
         wm = context.window_manager
         wm.fileselect_add(self)
         return {'RUNNING_MODAL'}
@@ -735,12 +794,12 @@ class PREFERENCES_OT_addon_remove(Operator):
         return {'FINISHED'}
 
     # lame confirmation check
-    def draw(self, context):
+    def draw(self, _context):
         self.layout.label(text="Remove Add-on: %r?" % self.module)
         path, _isdir = PREFERENCES_OT_addon_remove.path_from_addon(self.module)
         self.layout.label(text="Path: %r" % path)
 
-    def invoke(self, context, event):
+    def invoke(self, context, _event):
         wm = context.window_manager
         return wm.invoke_props_dialog(self, width=600)
 
@@ -756,7 +815,7 @@ class PREFERENCES_OT_addon_expand(Operator):
         description="Module name of the add-on to expand",
     )
 
-    def execute(self, context):
+    def execute(self, _context):
         import addon_utils
 
         module_name = self.module
@@ -792,6 +851,7 @@ class PREFERENCES_OT_addon_show(Operator):
             info["show_expanded"] = True
 
             context.preferences.active_section = 'ADDONS'
+            context.preferences.view.show_addons_enabled_only = False
             context.window_manager.addon_filter = 'All'
             context.window_manager.addon_search = info["name"]
             bpy.ops.screen.userpref_show('INVOKE_DEFAULT')
@@ -825,7 +885,7 @@ class PREFERENCES_OT_app_template_install(Operator):
         options={'HIDDEN'},
     )
 
-    def execute(self, context):
+    def execute(self, _context):
         import traceback
         import zipfile
         import os
@@ -893,7 +953,7 @@ class PREFERENCES_OT_app_template_install(Operator):
 
         return {'FINISHED'}
 
-    def invoke(self, context, event):
+    def invoke(self, context, _event):
         wm = context.window_manager
         wm.fileselect_add(self)
         return {'RUNNING_MODAL'}
@@ -924,6 +984,7 @@ class PREFERENCES_OT_studiolight_install(Operator):
         options={'HIDDEN'},
     )
     type: EnumProperty(
+        name="Type",
         items=(
             ('MATCAP', "MatCap", ""),
             ('WORLD', "World", ""),
@@ -955,7 +1016,7 @@ class PREFERENCES_OT_studiolight_install(Operator):
         self.report({'INFO'}, msg)
         return {'FINISHED'}
 
-    def invoke(self, context, event):
+    def invoke(self, context, _event):
         wm = context.window_manager
 
         if self.type == 'STUDIO':
@@ -968,7 +1029,7 @@ class PREFERENCES_OT_studiolight_install(Operator):
 class PREFERENCES_OT_studiolight_new(Operator):
     """Save custom studio light from the studio light editor settings"""
     bl_idname = "preferences.studiolight_new"
-    bl_label = "Save custom Studio light"
+    bl_label = "Save Custom Studio Light"
 
     filename: StringProperty(
         name="Name",
@@ -992,7 +1053,7 @@ class PREFERENCES_OT_studiolight_new(Operator):
         if os.path.isfile(filepath_final):
             if not self.ask_overide:
                 self.ask_overide = True
-                return wm.invoke_props_dialog(self, width=600)
+                return wm.invoke_props_dialog(self, width=320)
             else:
                 for studio_light in prefs.studio_lights:
                     if studio_light.name == filename:
@@ -1009,23 +1070,23 @@ class PREFERENCES_OT_studiolight_new(Operator):
         self.report({'INFO'}, msg)
         return {'FINISHED'}
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
         if self.ask_overide:
             layout.label(text="Warning, file already exists. Overwrite existing file?")
         else:
             layout.prop(self, "filename")
 
-    def invoke(self, context, event):
+    def invoke(self, context, _event):
         wm = context.window_manager
-        return wm.invoke_props_dialog(self, width=600)
+        return wm.invoke_props_dialog(self, width=320)
 
 
 class PREFERENCES_OT_studiolight_uninstall(Operator):
     """Delete Studio Light"""
     bl_idname = "preferences.studiolight_uninstall"
     bl_label = "Uninstall Studio Light"
-    index: bpy.props.IntProperty()
+    index: IntProperty()
 
     def execute(self, context):
         import os
@@ -1048,7 +1109,7 @@ class PREFERENCES_OT_studiolight_copy_settings(Operator):
     """Copy Studio Light settings to the Studio light editor"""
     bl_idname = "preferences.studiolight_copy_settings"
     bl_label = "Copy Studio Light settings"
-    index: bpy.props.IntProperty()
+    index: IntProperty()
 
     def execute(self, context):
         prefs = context.preferences

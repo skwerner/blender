@@ -23,8 +23,8 @@
 
 /* global includes */
 
-#include <stdlib.h>
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 #ifndef WIN32
@@ -34,35 +34,37 @@
 #endif
 #include "MEM_guardedalloc.h"
 
-#include "BLI_math.h"
 #include "BLI_blenlib.h"
+#include "BLI_math.h"
 #include "BLI_utildefines.h"
+
+#include "PIL_time.h"
 
 #include "BLO_readfile.h"
 
-#include "DNA_world_types.h"
+#include "DNA_brush_types.h"
 #include "DNA_camera_types.h"
 #include "DNA_collection_types.h"
+#include "DNA_light_types.h"
 #include "DNA_material_types.h"
 #include "DNA_node_types.h"
 #include "DNA_object_types.h"
-#include "DNA_light_types.h"
-#include "DNA_space_types.h"
 #include "DNA_scene_types.h"
-#include "DNA_brush_types.h"
 #include "DNA_screen_types.h"
+#include "DNA_space_types.h"
+#include "DNA_world_types.h"
 
 #include "BKE_appdir.h"
 #include "BKE_brush.h"
-#include "BKE_context.h"
 #include "BKE_colortools.h"
+#include "BKE_context.h"
 #include "BKE_global.h"
+#include "BKE_icons.h"
 #include "BKE_idprop.h"
 #include "BKE_image.h"
-#include "BKE_icons.h"
-#include "BKE_library.h"
-#include "BKE_light.h"
 #include "BKE_layer.h"
+#include "BKE_lib_id.h"
+#include "BKE_light.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_node.h"
@@ -71,20 +73,20 @@
 #include "BKE_world.h"
 
 #include "DEG_depsgraph.h"
-#include "DEG_depsgraph_query.h"
 #include "DEG_depsgraph_build.h"
+#include "DEG_depsgraph_query.h"
 
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
 #include "IMB_thumbs.h"
 
-#include "BIF_gl.h"
 #include "BIF_glutil.h"
 
+#include "GPU_glew.h"
 #include "GPU_shader.h"
 
-#include "RE_pipeline.h"
 #include "RE_engine.h"
+#include "RE_pipeline.h"
 #include "RE_shader_ext.h"
 
 #include "WM_api.h"
@@ -113,7 +115,7 @@ ImBuf *get_brush_icon(Brush *brush)
         // first use the path directly to try and load the file
 
         BLI_strncpy(path, brush->icon_filepath, sizeof(brush->icon_filepath));
-        BLI_path_abs(path, BKE_main_blendfile_path_from_global());
+        BLI_path_abs(path, ID_BLEND_PATH_FROM_GLOBAL(&brush->id));
 
         /* use default colorspaces for brushes */
         brush->icon_imbuf = IMB_loadiffname(path, flags, NULL);
@@ -131,14 +133,16 @@ ImBuf *get_brush_icon(Brush *brush)
           }
         }
 
-        if (brush->icon_imbuf)
+        if (brush->icon_imbuf) {
           BKE_icon_changed(BKE_icon_id_ensure(&brush->id));
+        }
       }
     }
   }
 
-  if (!(brush->icon_imbuf))
+  if (!(brush->icon_imbuf)) {
     brush->id.icon_id = 0;
+  }
 
   return brush->icon_imbuf;
 }
@@ -149,7 +153,6 @@ typedef struct ShaderPreview {
   short *stop, *do_update;
 
   Scene *scene;
-  Depsgraph *depsgraph;
   ID *id, *id_copy;
   ID *parent;
   MTex *slot;
@@ -164,7 +167,7 @@ typedef struct ShaderPreview {
   float color[4];
 
   int sizex, sizey;
-  unsigned int *pr_rect;
+  uint *pr_rect;
   int pr_method;
   bool own_id_copy;
 
@@ -175,13 +178,12 @@ typedef struct ShaderPreview {
 typedef struct IconPreviewSize {
   struct IconPreviewSize *next, *prev;
   int sizex, sizey;
-  unsigned int *rect;
+  uint *rect;
 } IconPreviewSize;
 
 typedef struct IconPreview {
   Main *bmain;
   Scene *scene;
-  Depsgraph *depsgraph;
   void *owner;
   ID *id, *id_copy;
   ListBase sizes;
@@ -234,17 +236,20 @@ static bool check_engine_supports_preview(Scene *scene)
 
 void ED_preview_free_dbase(void)
 {
-  if (G_pr_main)
+  if (G_pr_main) {
     BKE_main_free(G_pr_main);
+  }
 
-  if (G_pr_main_grease_pencil)
+  if (G_pr_main_grease_pencil) {
     BKE_main_free(G_pr_main_grease_pencil);
+  }
 }
 
 static Scene *preview_get_scene(Main *pr_main)
 {
-  if (pr_main == NULL)
+  if (pr_main == NULL) {
     return NULL;
+  }
 
   return pr_main->scenes.first;
 }
@@ -265,7 +270,7 @@ static const char *preview_collection_name(const char pr_type)
     case MA_FLUID:
       return "Fluid";
     case MA_SPHERE_A:
-      return "World Shader Ball";
+      return "World Sphere";
     case MA_LAMP:
       return "Lamp";
     case MA_SKY:
@@ -285,7 +290,7 @@ static void set_preview_visibility(Scene *scene,
                                    char pr_type,
                                    int pr_method)
 {
-  /* Set appropriate layer as visibile. */
+  /* Set appropriate layer as visible. */
   LayerCollection *lc = view_layer->layer_collections.first;
   const char *collection_name = preview_collection_name(pr_type);
 
@@ -299,7 +304,7 @@ static void set_preview_visibility(Scene *scene,
   }
 
   /* Hide floor for icon renders. */
-  for (Base *base = view_layer->object_bases.first; base; base = base->next) {
+  LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
     if (STREQ(base->object->id.name + 2, "Floor")) {
       if (pr_method == PR_ICON_RENDER) {
         base->object->restrictflag |= OB_RESTRICT_RENDER;
@@ -326,28 +331,22 @@ static World *preview_get_localized_world(ShaderPreview *sp, World *world)
   return sp->worldcopy;
 }
 
-static ID *duplicate_ids(ID *id, Depsgraph *depsgraph)
+static ID *duplicate_ids(ID *id)
 {
   if (id == NULL) {
     /* Non-ID preview render. */
     return NULL;
   }
 
-  ID *id_eval = id;
-
-  if (depsgraph) {
-    id_eval = DEG_get_evaluated_id(depsgraph, id);
-  }
-
   switch (GS(id->name)) {
     case ID_MA:
-      return (ID *)BKE_material_localize((Material *)id_eval);
+      return (ID *)BKE_material_localize((Material *)id);
     case ID_TE:
-      return (ID *)BKE_texture_localize((Tex *)id_eval);
+      return (ID *)BKE_texture_localize((Tex *)id);
     case ID_LA:
-      return (ID *)BKE_light_localize((Light *)id_eval);
+      return (ID *)BKE_light_localize((Light *)id);
     case ID_WO:
-      return (ID *)BKE_world_localize((World *)id_eval);
+      return (ID *)BKE_world_localize((World *)id);
     case ID_IM:
     case ID_BR:
     case ID_SCR:
@@ -371,6 +370,10 @@ static Scene *preview_prepare_scene(
   sce = preview_get_scene(pr_main);
   if (sce) {
     ViewLayer *view_layer = sce->view_layers.first;
+
+    /* Only enable the combined renderpass */
+    view_layer->passflag = SCE_PASS_COMBINED;
+    view_layer->eevee.render_passes = 0;
 
     /* this flag tells render to not execute depsgraph or ipos etc */
     sce->r.scemode |= R_BUTS_PREVIEW;
@@ -397,10 +400,12 @@ static Scene *preview_prepare_scene(
       sce->r.tiley = sce->r.ysch / 4;
     }
 
-    if ((id && sp->pr_method == PR_ICON_RENDER) && id_type != ID_WO)
+    if ((id && sp->pr_method == PR_ICON_RENDER) && id_type != ID_WO) {
       sce->r.alphamode = R_ALPHAPREMUL;
-    else
+    }
+    else {
       sce->r.alphamode = R_ADDSKY;
+    }
 
     sce->r.cfra = scene->r.cfra;
 
@@ -436,7 +441,14 @@ static Scene *preview_prepare_scene(
           sce->world->horb = 0.05f;
         }
 
-        set_preview_visibility(sce, view_layer, mat->pr_type, sp->pr_method);
+        if (sp->pr_method == PR_ICON_RENDER && sp->pr_main == G_pr_main_grease_pencil) {
+          /* For grease pencil, always use sphere for icon renders. */
+          set_preview_visibility(sce, view_layer, MA_SPHERE_A, sp->pr_method);
+        }
+        else {
+          /* Use specified preview shape for both preview panel and icon previews. */
+          set_preview_visibility(sce, view_layer, mat->pr_type, sp->pr_method);
+        }
 
         if (sp->pr_method != PR_ICON_RENDER) {
           if (mat->nodetree && sp->pr_method == PR_NODE_RENDER) {
@@ -448,24 +460,26 @@ static Scene *preview_prepare_scene(
         }
       }
       else {
-        sce->r.mode &= ~(R_OSA);
+        sce->display.render_aa = SCE_DISPLAY_AA_OFF;
       }
 
-      for (Base *base = view_layer->object_bases.first; base; base = base->next) {
+      LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
         if (base->object->id.name[2] == 'p') {
           /* copy over object color, in case material uses it */
           copy_v4_v4(base->object->color, sp->color);
 
           if (OB_TYPE_SUPPORT_MATERIAL(base->object->type)) {
-            /* don't use assign_material, it changed mat->id.us, which shows in the UI */
-            Material ***matar = give_matarar(base->object);
+            /* don't use BKE_object_material_assign, it changed mat->id.us, which shows in the UI
+             */
+            Material ***matar = BKE_object_material_array_p(base->object);
             int actcol = max_ii(base->object->actcol - 1, 0);
 
-            if (matar && actcol < base->object->totcol)
+            if (matar && actcol < base->object->totcol) {
               (*matar)[actcol] = mat;
+            }
           }
           else if (base->object->type == OB_LAMP) {
-            base->flag |= BASE_VISIBLE;
+            base->flag |= BASE_VISIBLE_DEPSGRAPH;
           }
         }
       }
@@ -508,10 +522,11 @@ static Scene *preview_prepare_scene(
         sce->world->horb = 0.0f;
       }
 
-      for (Base *base = view_layer->object_bases.first; base; base = base->next) {
+      LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
         if (base->object->id.name[2] == 'p') {
-          if (base->object->type == OB_LAMP)
+          if (base->object->type == OB_LAMP) {
             base->object->data = la;
+          }
         }
       }
 
@@ -551,7 +566,7 @@ static Scene *preview_prepare_scene(
 
 /* new UI convention: draw is in pixel space already. */
 /* uses UI_BTYPE_ROUNDBOX button in block to get the rect */
-static bool ed_preview_draw_rect(ScrArea *sa, int split, int first, rcti *rect, rcti *newrect)
+static bool ed_preview_draw_rect(ScrArea *area, int split, int first, rcti *rect, rcti *newrect)
 {
   Render *re;
   RenderView *rv;
@@ -562,10 +577,12 @@ static bool ed_preview_draw_rect(ScrArea *sa, int split, int first, rcti *rect, 
   int newy = BLI_rcti_size_y(rect);
   bool ok = false;
 
-  if (!split || first)
-    sprintf(name, "Preview %p", (void *)sa);
-  else
-    sprintf(name, "SecondPreview %p", (void *)sa);
+  if (!split || first) {
+    sprintf(name, "Preview %p", (void *)area);
+  }
+  else {
+    sprintf(name, "SecondPreview %p", (void *)area);
+  }
 
   if (split) {
     if (first) {
@@ -581,8 +598,9 @@ static bool ed_preview_draw_rect(ScrArea *sa, int split, int first, rcti *rect, 
   /* test if something rendered ok */
   re = RE_GetRender(name);
 
-  if (re == NULL)
+  if (re == NULL) {
     return false;
+  }
 
   RE_AcquireResultImageViews(re, &rres);
 
@@ -597,20 +615,21 @@ static bool ed_preview_draw_rect(ScrArea *sa, int split, int first, rcti *rect, 
 
   if (rv && rv->rectf) {
 
-    if (ABS(rres.rectx - newx) < 2 && ABS(rres.recty - newy) < 2) {
+    if (abs(rres.rectx - newx) < 2 && abs(rres.recty - newy) < 2) {
 
       newrect->xmax = max_ii(newrect->xmax, rect->xmin + rres.rectx + offx);
       newrect->ymax = max_ii(newrect->ymax, rect->ymin + rres.recty);
 
       if (rres.rectx && rres.recty) {
-        unsigned char *rect_byte = MEM_mallocN(rres.rectx * rres.recty * sizeof(int),
-                                               "ed_preview_draw_rect");
+        uchar *rect_byte = MEM_mallocN(rres.rectx * rres.recty * sizeof(int),
+                                       "ed_preview_draw_rect");
         float fx = rect->xmin + offx;
         float fy = rect->ymin;
 
         /* material preview only needs monoscopy (view 0) */
-        if (re)
-          RE_AcquiredResultGet32(re, &rres, (unsigned int *)rect_byte, 0);
+        if (re) {
+          RE_AcquiredResultGet32(re, &rres, (uint *)rect_byte, 0);
+        }
 
         IMMDrawPixelsTexState state = immDrawPixelsTexSetup(GPU_SHADER_2D_IMAGE_COLOR);
         immDrawPixelsTex(&state,
@@ -642,12 +661,12 @@ void ED_preview_draw(const bContext *C, void *idp, void *parentp, void *slotp, r
 {
   if (idp) {
     wmWindowManager *wm = CTX_wm_manager(C);
-    ScrArea *sa = CTX_wm_area(C);
+    ScrArea *area = CTX_wm_area(C);
     ID *id = (ID *)idp;
     ID *parent = (ID *)parentp;
     MTex *slot = (MTex *)slotp;
     SpaceProperties *sbuts = CTX_wm_space_properties(C);
-    ShaderPreview *sp = WM_jobs_customdata(wm, sa);
+    ShaderPreview *sp = WM_jobs_customdata(wm, area);
     rcti newrect;
     int ok;
     int newx = BLI_rcti_size_x(rect);
@@ -659,25 +678,27 @@ void ED_preview_draw(const bContext *C, void *idp, void *parentp, void *slotp, r
     newrect.ymax = rect->ymin;
 
     if (parent) {
-      ok = ed_preview_draw_rect(sa, 1, 1, rect, &newrect);
-      ok &= ed_preview_draw_rect(sa, 1, 0, rect, &newrect);
+      ok = ed_preview_draw_rect(area, 1, 1, rect, &newrect);
+      ok &= ed_preview_draw_rect(area, 1, 0, rect, &newrect);
     }
-    else
-      ok = ed_preview_draw_rect(sa, 0, 0, rect, &newrect);
+    else {
+      ok = ed_preview_draw_rect(area, 0, 0, rect, &newrect);
+    }
 
-    if (ok)
+    if (ok) {
       *rect = newrect;
+    }
 
     /* start a new preview render job if signaled through sbuts->preview,
      * if no render result was found and no preview render job is running,
      * or if the job is running and the size of preview changed */
     if ((sbuts != NULL && sbuts->preview) ||
-        (!ok && !WM_jobs_test(wm, sa, WM_JOB_TYPE_RENDER_PREVIEW)) ||
-        (sp && (ABS(sp->sizex - newx) >= 2 || ABS(sp->sizey - newy) > 2))) {
+        (!ok && !WM_jobs_test(wm, area, WM_JOB_TYPE_RENDER_PREVIEW)) ||
+        (sp && (abs(sp->sizex - newx) >= 2 || abs(sp->sizey - newy) > 2))) {
       if (sbuts != NULL) {
         sbuts->preview = 0;
       }
-      ED_preview_shader_job(C, sa, id, parent, slot, newx, newy, PR_BUTS_RENDER);
+      ED_preview_shader_job(C, area, id, parent, slot, newx, newy, PR_BUTS_RENDER);
     }
   }
 }
@@ -707,31 +728,33 @@ static void shader_preview_updatejob(void *spv)
 {
   ShaderPreview *sp = spv;
 
-  if (sp->id) {
-    if (sp->pr_method == PR_NODE_RENDER) {
-      if (GS(sp->id->name) == ID_MA) {
-        Material *mat = (Material *)sp->id;
+  if (sp->pr_method == PR_NODE_RENDER) {
+    if (GS(sp->id->name) == ID_MA) {
+      Material *mat = (Material *)sp->id;
 
-        if (sp->matcopy && mat->nodetree && sp->matcopy->nodetree)
-          ntreeLocalSync(sp->matcopy->nodetree, mat->nodetree);
+      if (sp->matcopy && mat->nodetree && sp->matcopy->nodetree) {
+        ntreeLocalSync(sp->matcopy->nodetree, mat->nodetree);
       }
-      else if (GS(sp->id->name) == ID_TE) {
-        Tex *tex = (Tex *)sp->id;
+    }
+    else if (GS(sp->id->name) == ID_TE) {
+      Tex *tex = (Tex *)sp->id;
 
-        if (sp->texcopy && tex->nodetree && sp->texcopy->nodetree)
-          ntreeLocalSync(sp->texcopy->nodetree, tex->nodetree);
+      if (sp->texcopy && tex->nodetree && sp->texcopy->nodetree) {
+        ntreeLocalSync(sp->texcopy->nodetree, tex->nodetree);
       }
-      else if (GS(sp->id->name) == ID_WO) {
-        World *wrld = (World *)sp->id;
+    }
+    else if (GS(sp->id->name) == ID_WO) {
+      World *wrld = (World *)sp->id;
 
-        if (sp->worldcopy && wrld->nodetree && sp->worldcopy->nodetree)
-          ntreeLocalSync(sp->worldcopy->nodetree, wrld->nodetree);
+      if (sp->worldcopy && wrld->nodetree && sp->worldcopy->nodetree) {
+        ntreeLocalSync(sp->worldcopy->nodetree, wrld->nodetree);
       }
-      else if (GS(sp->id->name) == ID_LA) {
-        Light *la = (Light *)sp->id;
+    }
+    else if (GS(sp->id->name) == ID_LA) {
+      Light *la = (Light *)sp->id;
 
-        if (sp->lampcopy && la->nodetree && sp->lampcopy->nodetree)
-          ntreeLocalSync(sp->lampcopy->nodetree, la->nodetree);
+      if (sp->lampcopy && la->nodetree && sp->lampcopy->nodetree) {
+        ntreeLocalSync(sp->lampcopy->nodetree, la->nodetree);
       }
     }
   }
@@ -778,7 +801,7 @@ static void shader_preview_texture(ShaderPreview *sp, Tex *tex, Scene *sce, Rend
       rect_float[0] = texres.tr;
       rect_float[1] = texres.tg;
       rect_float[2] = texres.tb;
-      rect_float[3] = 1.0f;
+      rect_float[3] = texres.talpha ? texres.ta : 1.0f;
 
       rect_float += 4;
     }
@@ -801,18 +824,15 @@ static void shader_preview_render(ShaderPreview *sp, ID *id, int split, int firs
   char name[32];
   int sizex;
   Main *pr_main = sp->pr_main;
-  ID *id_eval = id;
-
-  if (sp->depsgraph) {
-    id_eval = DEG_get_evaluated_id(sp->depsgraph, id);
-  }
 
   /* in case of split preview, use border render */
   if (split) {
-    if (first)
+    if (first) {
       sizex = sp->sizex / 2;
-    else
+    }
+    else {
       sizex = sp->sizex - sp->sizex / 2;
+    }
   }
   else {
     sizex = sp->sizex;
@@ -827,19 +847,23 @@ static void shader_preview_render(ShaderPreview *sp, ID *id, int split, int firs
   }
 
   /* get the stuff from the builtin preview dbase */
-  sce = preview_prepare_scene(sp->bmain, sp->scene, id_eval, idtype, sp);
-  if (sce == NULL)
+  sce = preview_prepare_scene(sp->bmain, sp->scene, id, idtype, sp);
+  if (sce == NULL) {
     return;
+  }
 
-  if (!split || first)
+  if (!split || first) {
     sprintf(name, "Preview %p", sp->owner);
-  else
+  }
+  else {
     sprintf(name, "SecondPreview %p", sp->owner);
+  }
   re = RE_GetRender(name);
 
   /* full refreshed render from first tile */
-  if (re == NULL)
+  if (re == NULL) {
     re = RE_NewRender(name);
+  }
 
   /* sce->r gets copied in RE_InitState! */
   sce->r.scemode &= ~(R_MATNODE_PREVIEW | R_TEXNODE_PREVIEW);
@@ -847,17 +871,19 @@ static void shader_preview_render(ShaderPreview *sp, ID *id, int split, int firs
 
   if (sp->pr_method == PR_ICON_RENDER) {
     sce->r.scemode |= R_NO_IMAGE_LOAD;
-    sce->r.mode |= R_OSA;
+    sce->display.render_aa = SCE_DISPLAY_AA_SAMPLES_8;
   }
   else if (sp->pr_method == PR_NODE_RENDER) {
-    if (idtype == ID_MA)
+    if (idtype == ID_MA) {
       sce->r.scemode |= R_MATNODE_PREVIEW;
-    else if (idtype == ID_TE)
+    }
+    else if (idtype == ID_TE) {
       sce->r.scemode |= R_TEXNODE_PREVIEW;
-    sce->r.mode &= ~R_OSA;
+    }
+    sce->display.render_aa = SCE_DISPLAY_AA_OFF;
   }
   else { /* PR_BUTS_RENDER */
-    sce->r.mode |= R_OSA;
+    sce->display.render_aa = SCE_DISPLAY_AA_SAMPLES_8;
   }
 
   /* callbacs are cleared on GetRender() */
@@ -869,8 +895,9 @@ static void shader_preview_render(ShaderPreview *sp, ID *id, int split, int firs
 
   /* lens adjust */
   oldlens = ((Camera *)sce->camera->data)->lens;
-  if (sizex > sp->sizey)
+  if (sizex > sp->sizey) {
     ((Camera *)sce->camera->data)->lens *= (float)sp->sizey / (float)sizex;
+  }
 
   /* entire cycle for render engine */
   if (idtype == ID_TE) {
@@ -887,8 +914,9 @@ static void shader_preview_render(ShaderPreview *sp, ID *id, int split, int firs
   if (sp->pr_method == PR_ICON_RENDER) {
     // char *rct= (char *)(sp->pr_rect + 32*16 + 16);
 
-    if (sp->pr_rect)
+    if (sp->pr_rect) {
       RE_ResultGet32(re, sp->pr_rect);
+    }
   }
 
   /* unassign the pointers, reset vars */
@@ -914,63 +942,71 @@ static void shader_preview_startjob(void *customdata, short *stop, short *do_upd
     shader_preview_render(sp, sp->id, 1, 1);
     shader_preview_render(sp, sp->parent, 1, 0);
   }
-  else
+  else {
     shader_preview_render(sp, sp->id, 0, 0);
+  }
 
   *do_update = true;
+}
+
+static void preview_id_copy_free(ID *id)
+{
+  struct IDProperty *properties;
+  /* get rid of copied ID */
+  properties = IDP_GetProperties(id, false);
+  if (properties) {
+    IDP_FreePropertyContent_ex(properties, false);
+    MEM_freeN(properties);
+  }
+  BKE_libblock_free_datablock(id, 0);
+  MEM_freeN(id);
 }
 
 static void shader_preview_free(void *customdata)
 {
   ShaderPreview *sp = customdata;
   Main *pr_main = sp->pr_main;
+  ID *main_id_copy = NULL;
+  ID *sub_id_copy = NULL;
 
   if (sp->matcopy) {
-    sp->id_copy = (ID *)sp->matcopy;
+    main_id_copy = (ID *)sp->matcopy;
     BLI_remlink(&pr_main->materials, sp->matcopy);
   }
   if (sp->texcopy) {
-    sp->id_copy = (ID *)sp->texcopy;
+    BLI_assert(main_id_copy == NULL);
+    main_id_copy = (ID *)sp->texcopy;
     BLI_remlink(&pr_main->textures, sp->texcopy);
   }
   if (sp->worldcopy) {
-    sp->id_copy = (ID *)sp->worldcopy;
+    /* worldcopy is also created for material with `Preview World` enabled */
+    if (main_id_copy) {
+      sub_id_copy = (ID *)sp->worldcopy;
+    }
+    else {
+      main_id_copy = (ID *)sp->worldcopy;
+    }
     BLI_remlink(&pr_main->worlds, sp->worldcopy);
   }
   if (sp->lampcopy) {
-    sp->id_copy = (ID *)sp->lampcopy;
+    BLI_assert(main_id_copy == NULL);
+    main_id_copy = (ID *)sp->lampcopy;
     BLI_remlink(&pr_main->lights, sp->lampcopy);
   }
-  if (sp->id_copy) {
+  if (main_id_copy || sp->id_copy) {
     /* node previews */
     shader_preview_updatejob(sp);
   }
-  if (sp->id_copy && sp->own_id_copy) {
-    struct IDProperty *properties;
-    /* get rid of copied ID */
-    properties = IDP_GetProperties(sp->id_copy, false);
-    if (properties) {
-      IDP_FreeProperty_ex(properties, false);
-      MEM_freeN(properties);
+  if (sp->own_id_copy) {
+    if (sp->id_copy) {
+      preview_id_copy_free(sp->id_copy);
     }
-    switch (GS(sp->id_copy->name)) {
-      case ID_MA:
-        BKE_material_free((Material *)sp->id_copy);
-        break;
-      case ID_TE:
-        BKE_texture_free((Tex *)sp->id_copy);
-        break;
-      case ID_LA:
-        BKE_light_free((Light *)sp->id_copy);
-        break;
-      case ID_WO:
-        BKE_world_free((World *)sp->id_copy);
-        break;
-      default:
-        BLI_assert(!"ID type preview not supported.");
-        break;
+    if (main_id_copy) {
+      preview_id_copy_free(main_id_copy);
     }
-    MEM_freeN(sp->id_copy);
+    if (sub_id_copy) {
+      preview_id_copy_free(sub_id_copy);
+    }
   }
 
   MEM_freeN(sp);
@@ -978,22 +1014,24 @@ static void shader_preview_free(void *customdata)
 
 /* ************************* icon preview ********************** */
 
-static void icon_copy_rect(ImBuf *ibuf, unsigned int w, unsigned int h, unsigned int *rect)
+static void icon_copy_rect(ImBuf *ibuf, uint w, uint h, uint *rect)
 {
   struct ImBuf *ima;
-  unsigned int *drect, *srect;
+  uint *drect, *srect;
   float scaledx, scaledy;
   short ex, ey, dx, dy;
 
   /* paranoia test */
-  if (ibuf == NULL || (ibuf->rect == NULL && ibuf->rect_float == NULL))
+  if (ibuf == NULL || (ibuf->rect == NULL && ibuf->rect_float == NULL)) {
     return;
+  }
 
   /* waste of cpu cyles... but the imbuf API has no other way to scale fast (ton) */
   ima = IMB_dupImBuf(ibuf);
 
-  if (!ima)
+  if (!ima) {
     return;
+  }
 
   if (ima->x > ima->y) {
     scaledx = (float)w;
@@ -1013,8 +1051,9 @@ static void icon_copy_rect(ImBuf *ibuf, unsigned int w, unsigned int h, unsigned
   IMB_scalefastImBuf(ima, ex, ey);
 
   /* if needed, convert to 32 bits */
-  if (ima->rect == NULL)
+  if (ima->rect == NULL) {
     IMB_rect_from_float(ima);
+  }
 
   srect = ima->rect;
   drect = rect;
@@ -1033,8 +1072,9 @@ static void set_alpha(char *cp, int sizex, int sizey, char alpha)
 {
   int a, size = sizex * sizey;
 
-  for (a = 0; a < size; a++, cp += 4)
+  for (a = 0; a < size; a++, cp += 4) {
     cp[3] = alpha;
+  }
 }
 
 static void icon_preview_startjob(void *customdata, short *stop, short *do_update)
@@ -1067,11 +1107,18 @@ static void icon_preview_startjob(void *customdata, short *stop, short *do_updat
     if (idtype == ID_IM) {
       Image *ima = (Image *)id;
       ImBuf *ibuf = NULL;
-      ImageUser iuser = {NULL};
+      ImageUser iuser;
+      BKE_imageuser_default(&iuser);
 
-      /* ima->ok is zero when Image cannot load */
-      if (ima == NULL || ima->ok == 0)
+      if (ima == NULL) {
         return;
+      }
+
+      ImageTile *tile = BKE_image_get_tile(ima, 0);
+      /* tile->ok is zero when Image cannot load */
+      if (tile->ok == 0) {
+        return;
+      }
 
       /* setup dummy image user */
       iuser.ok = iuser.framenr = 1;
@@ -1097,10 +1144,11 @@ static void icon_preview_startjob(void *customdata, short *stop, short *do_updat
 
       br->icon_imbuf = get_brush_icon(br);
 
-      memset(sp->pr_rect, 0x88, sp->sizex * sp->sizey * sizeof(unsigned int));
+      memset(sp->pr_rect, 0x88, sp->sizex * sp->sizey * sizeof(uint));
 
-      if (!(br->icon_imbuf) || !(br->icon_imbuf->rect))
+      if (!(br->icon_imbuf) || !(br->icon_imbuf->rect)) {
         return;
+      }
 
       icon_copy_rect(br->icon_imbuf, sp->sizex, sp->sizey, sp->pr_rect);
 
@@ -1135,15 +1183,17 @@ static void common_preview_startjob(void *customdata,
 {
   ShaderPreview *sp = customdata;
 
-  if (ELEM(sp->pr_method, PR_ICON_RENDER, PR_ICON_DEFERRED))
+  if (ELEM(sp->pr_method, PR_ICON_RENDER, PR_ICON_DEFERRED)) {
     icon_preview_startjob(customdata, stop, do_update);
-  else
+  }
+  else {
     shader_preview_startjob(customdata, stop, do_update);
+  }
 }
 
 /* exported functions */
 
-static void icon_preview_add_size(IconPreview *ip, unsigned int *rect, int sizex, int sizey)
+static void icon_preview_add_size(IconPreview *ip, uint *rect, int sizex, int sizey)
 {
   IconPreviewSize *cur_size = ip->sizes.first, *new_size;
 
@@ -1175,6 +1225,10 @@ static void icon_preview_startjob_all_sizes(void *customdata,
   for (cur_size = ip->sizes.first; cur_size; cur_size = cur_size->next) {
     PreviewImage *prv = ip->owner;
 
+    if (*stop) {
+      break;
+    }
+
     if (prv->tag & PRV_TAG_DEFFERED_DELETE) {
       /* Non-thread-protected reading is not an issue here. */
       continue;
@@ -1189,7 +1243,6 @@ static void icon_preview_startjob_all_sizes(void *customdata,
 
     /* construct shader preview from image size and previewcustomdata */
     sp->scene = ip->scene;
-    sp->depsgraph = ip->depsgraph;
     sp->owner = ip->owner;
     sp->sizex = cur_size->sizex;
     sp->sizey = cur_size->sizey;
@@ -1228,8 +1281,9 @@ static void icon_preview_endjob(void *customdata)
 
   if (ip->id) {
 
-    if (GS(ip->id->name) == ID_BR)
+    if (GS(ip->id->name) == ID_BR) {
       WM_main_add_notifier(NC_BRUSH | NA_EDITED, ip->id);
+    }
 #if 0
     if (GS(ip->id->name) == ID_MA) {
       Material *ma = (Material *)ip->id;
@@ -1237,11 +1291,11 @@ static void icon_preview_endjob(void *customdata)
       int i;
 
       /* signal to gpu texture */
-      for (i = 0; i < NUM_ICON_SIZES; ++i) {
+      for (i = 0; i < NUM_ICON_SIZES; i++) {
         if (prv_img->gputexture[i]) {
           GPU_texture_free(prv_img->gputexture[i]);
           prv_img->gputexture[i] = NULL;
-          WM_main_add_notifier(NC_MATERIAL|ND_SHADING_DRAW, ip->id);
+          WM_main_add_notifier(NC_MATERIAL | ND_SHADING_DRAW, ip->id);
         }
       }
     }
@@ -1263,20 +1317,14 @@ static void icon_preview_free(void *customdata)
   IconPreview *ip = (IconPreview *)customdata;
 
   if (ip->id_copy) {
-    /* Feels a bit hacky just to reuse shader_preview_free() */
-    ShaderPreview *sp = MEM_callocN(sizeof(ShaderPreview), "Icon ShaderPreview");
-    sp->id_copy = ip->id_copy;
-    sp->own_id_copy = true;
-    shader_preview_free(sp);
-    ip->id_copy = NULL;
+    preview_id_copy_free(ip->id_copy);
   }
 
   BLI_freelistN(&ip->sizes);
   MEM_freeN(ip);
 }
 
-void ED_preview_icon_render(
-    Main *bmain, Scene *scene, ID *id, unsigned int *rect, int sizex, int sizey)
+void ED_preview_icon_render(Main *bmain, Scene *scene, ID *id, uint *rect, int sizex, int sizey)
 {
   IconPreview ip = {NULL};
   short stop = false, update = false;
@@ -1288,7 +1336,7 @@ void ED_preview_icon_render(
   ip.scene = scene;
   ip.owner = BKE_previewimg_id_ensure(id);
   ip.id = id;
-  ip.id_copy = duplicate_ids(id, NULL);
+  ip.id_copy = duplicate_ids(id);
 
   icon_preview_add_size(&ip, rect, sizex, sizey);
 
@@ -1300,7 +1348,7 @@ void ED_preview_icon_render(
 }
 
 void ED_preview_icon_job(
-    const bContext *C, void *owner, ID *id, unsigned int *rect, int sizex, int sizey)
+    const bContext *C, void *owner, ID *id, uint *rect, int sizex, int sizey, const bool delay)
 {
   wmJob *wm_job;
   IconPreview *ip, *old_ip;
@@ -1312,27 +1360,28 @@ void ED_preview_icon_job(
                        CTX_wm_window(C),
                        owner,
                        "Icon Preview",
-                       WM_JOB_EXCL_RENDER | WM_JOB_SUSPEND,
+                       WM_JOB_EXCL_RENDER,
                        WM_JOB_TYPE_RENDER_PREVIEW);
 
   ip = MEM_callocN(sizeof(IconPreview), "icon preview");
 
   /* render all resolutions from suspended job too */
   old_ip = WM_jobs_customdata_get(wm_job);
-  if (old_ip)
+  if (old_ip) {
     BLI_movelisttolist(&ip->sizes, &old_ip->sizes);
+  }
 
   /* customdata for preview thread */
   ip->bmain = CTX_data_main(C);
   ip->scene = CTX_data_scene(C);
-  ip->depsgraph = CTX_data_depsgraph(C);
   ip->owner = owner;
   ip->id = id;
-  ip->id_copy = duplicate_ids(id, ip->depsgraph);
+  ip->id_copy = duplicate_ids(id);
 
   icon_preview_add_size(ip, rect, sizex, sizey);
 
-  /* Special threading hack: warn main code that this preview is being rendered and cannot be freed... */
+  /* Special threading hack:
+   * warn main code that this preview is being rendered and cannot be freed... */
   {
     PreviewImage *prv_img = owner;
     if (prv_img->tag & PRV_TAG_DEFFERED) {
@@ -1343,6 +1392,10 @@ void ED_preview_icon_job(
   /* setup job */
   WM_jobs_customdata_set(wm_job, ip, icon_preview_free);
   WM_jobs_timer(wm_job, 0.1, NC_WINDOW, NC_WINDOW);
+  /* Wait 2s to start rendering icon previews, to not bog down user interaction.
+   * Particularly important for heavy scenes and Eevee using OpenGL that blocks
+   * the user interface drawing. */
+  WM_jobs_delay_start(wm_job, (delay) ? 2.0 : 0.0);
   WM_jobs_callbacks(wm_job, icon_preview_startjob_all_sizes, NULL, NULL, icon_preview_endjob);
 
   WM_jobs_start(CTX_wm_manager(C), wm_job);
@@ -1363,7 +1416,8 @@ void ED_preview_shader_job(const bContext *C,
   Scene *scene = CTX_data_scene(C);
   short id_type = GS(id->name);
 
-  /* Use workspace render only for buttons Window, since the other previews are related to the datablock. */
+  /* Use workspace render only for buttons Window,
+   * since the other previews are related to the datablock. */
 
   if (!check_engine_supports_preview(scene)) {
     return;
@@ -1386,13 +1440,12 @@ void ED_preview_shader_job(const bContext *C,
 
   /* customdata for preview thread */
   sp->scene = scene;
-  sp->depsgraph = CTX_data_depsgraph(C);
   sp->owner = owner;
   sp->sizex = sizex;
   sp->sizey = sizey;
   sp->pr_method = method;
   sp->id = id;
-  sp->id_copy = duplicate_ids(id, sp->depsgraph);
+  sp->id_copy = duplicate_ids(id);
   sp->own_id_copy = true;
   sp->parent = parent;
   sp->slot = slot;
@@ -1431,6 +1484,10 @@ void ED_preview_shader_job(const bContext *C,
 
 void ED_preview_kill_jobs(wmWindowManager *wm, Main *UNUSED(bmain))
 {
-  if (wm)
+  if (wm) {
+    /* This is called to stop all preview jobs before scene data changes, to
+     * avoid invalid memory access. */
     WM_jobs_kill(wm, NULL, common_preview_startjob);
+    WM_jobs_kill(wm, NULL, icon_preview_startjob_all_sizes);
+  }
 }

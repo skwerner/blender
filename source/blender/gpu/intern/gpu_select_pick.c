@@ -23,20 +23,20 @@
  * Custom select code for picking small regions (not efficient for large regions).
  * `gpu_select_pick_*` API.
  */
-#include <string.h>
-#include <stdlib.h>
 #include <float.h>
+#include <stdlib.h>
+#include <string.h>
 
-#include "GPU_immediate.h"
 #include "GPU_draw.h"
-#include "GPU_select.h"
-#include "GPU_extensions.h"
 #include "GPU_glew.h"
+#include "GPU_immediate.h"
+#include "GPU_select.h"
+#include "GPU_state.h"
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_rect.h"
 #include "BLI_listbase.h"
+#include "BLI_rect.h"
 #include "BLI_utildefines.h"
 
 #include "gpu_select_private.h"
@@ -310,23 +310,17 @@ void gpu_select_pick_begin(uint (*buffer)[4], uint bufsize, const rcti *input, c
     gpuPushAttr(GPU_DEPTH_BUFFER_BIT | GPU_VIEWPORT_BIT);
 
     /* disable writing to the framebuffer */
-    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+    GPU_color_mask(false, false, false, false);
 
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
-
-    if (mode == GPU_SELECT_PICK_ALL) {
-      /* Note that other depth settings (such as #GL_LEQUAL) work too,
-       * since the depth is always cleared.
-       * Noting this for cases when depth picking is used where drawing calls change depth settings. */
-      glDepthFunc(GL_ALWAYS);
-    }
-    else {
-      glDepthFunc(GL_LEQUAL);
-    }
+    /* Always use #GL_LEQUAL even though GPU_SELECT_PICK_ALL always clears the buffer. This is
+     * because individual objects themselves might have sections that overlap and we need these
+     * to have the correct distance information. */
+    glDepthFunc(GL_LEQUAL);
 
     float viewport[4];
-    glGetFloatv(GL_VIEWPORT, viewport);
+    GPU_viewport_size_get_f(viewport);
 
     ps->src.clip_rect = *input;
     ps->src.rect_len = rect_len;
@@ -336,7 +330,7 @@ void gpu_select_pick_begin(uint (*buffer)[4], uint bufsize, const rcti *input, c
     ps->gl.clip_readpixels[2] = BLI_rcti_size_x(&ps->src.clip_rect);
     ps->gl.clip_readpixels[3] = BLI_rcti_size_y(&ps->src.clip_rect);
 
-    glViewport(UNPACK4(ps->gl.clip_readpixels));
+    GPU_viewport(UNPACK4(ps->gl.clip_readpixels));
 
     /* It's possible we don't want to clear depth buffer,
      * so existing elements are masked by current z-buffer. */
@@ -348,7 +342,10 @@ void gpu_select_pick_begin(uint (*buffer)[4], uint bufsize, const rcti *input, c
 
     /* set initial 'far' value */
 #if 0
-    glReadPixels(UNPACK4(ps->gl.clip_readpixels), GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, ps->gl.rect_depth->buf);
+    glReadPixels(UNPACK4(ps->gl.clip_readpixels),
+                 GL_DEPTH_COMPONENT,
+                 GL_UNSIGNED_INT,
+                 ps->gl.rect_depth->buf);
 #else
     for (uint i = 0; i < rect_len; i++) {
       ps->gl.rect_depth->buf[i] = DEPTH_MAX;
@@ -472,10 +469,17 @@ static void gpu_select_load_id_pass_nearest(const DepthBufCache *rect_prev,
   }
 }
 
-bool gpu_select_pick_load_id(uint id)
+bool gpu_select_pick_load_id(uint id, bool end)
 {
   GPUPickState *ps = &g_pick_state;
+
   if (ps->gl.is_init) {
+    if (id == ps->gl.prev_id && !end) {
+      /* No need to read if we are still drawing for the same id since
+       * all these depths will be merged / de-duplicated in the end. */
+      return true;
+    }
+
     const uint rect_len = ps->src.rect_len;
     glReadPixels(UNPACK4(ps->gl.clip_readpixels),
                  GL_DEPTH_COMPONENT,
@@ -532,10 +536,10 @@ uint gpu_select_pick_end(void)
   if (ps->is_cached == false) {
     if (ps->gl.is_init) {
       /* force finishing last pass */
-      gpu_select_pick_load_id(ps->gl.prev_id);
+      gpu_select_pick_load_id(ps->gl.prev_id, true);
     }
     gpuPopAttr();
-    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    GPU_color_mask(true, true, true, true);
   }
 
   /* assign but never free directly since it may be in cache */
@@ -720,8 +724,7 @@ void gpu_select_pick_cache_load_id(void)
 #ifdef DEBUG_PRINT
   printf("%s (building depth from cache)\n", __func__);
 #endif
-  for (DepthBufCache *rect_depth = ps->cache.bufs.first; rect_depth;
-       rect_depth = rect_depth->next) {
+  LISTBASE_FOREACH (DepthBufCache *, rect_depth, &ps->cache.bufs) {
     if (rect_depth->next != NULL) {
       /* we know the buffers differ, but this sub-region may not.
        * double check before adding an id-pass */

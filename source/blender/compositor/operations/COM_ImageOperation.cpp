@@ -18,20 +18,18 @@
 
 #include "COM_ImageOperation.h"
 
-#include "BLI_listbase.h"
-#include "DNA_image_types.h"
 #include "BKE_image.h"
 #include "BKE_scene.h"
+#include "BLI_listbase.h"
 #include "BLI_math.h"
+#include "DNA_image_types.h"
 
-extern "C" {
-#include "RE_pipeline.h"
-#include "RE_shader_ext.h"
-#include "RE_render_ext.h"
+#include "IMB_colormanagement.h"
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
-#include "IMB_colormanagement.h"
-}
+#include "RE_pipeline.h"
+#include "RE_render_ext.h"
+#include "RE_shader_ext.h"
 
 BaseImageOperation::BaseImageOperation() : NodeOperation()
 {
@@ -66,12 +64,14 @@ ImBuf *BaseImageOperation::getImBuf()
   ImBuf *ibuf;
   ImageUser iuser = *this->m_imageUser;
 
-  if (this->m_image == NULL)
+  if (this->m_image == NULL) {
     return NULL;
+  }
 
   /* local changes to the original ImageUser */
-  if (BKE_image_is_multilayer(this->m_image) == false)
+  if (BKE_image_is_multilayer(this->m_image) == false) {
     iuser.multi_index = BKE_scene_multiview_view_id_get(this->m_rd, this->m_viewName);
+  }
 
   ibuf = BKE_image_acquire_ibuf(this->m_image, &iuser, NULL);
   if (ibuf == NULL || (ibuf->rect == NULL && ibuf->rect_float == NULL)) {
@@ -194,8 +194,9 @@ void ImageDepthOperation::executePixelSampled(float output[4],
     output[0] = 0.0f;
   }
   else {
-    if (x < 0 || y < 0 || x >= this->getWidth() || y >= this->getHeight())
+    if (x < 0 || y < 0 || x >= this->getWidth() || y >= this->getHeight()) {
       output[0] = 0.0f;
+    }
     else {
       int offset = y * this->m_width + x;
       output[0] = this->m_depthBuffer[offset];

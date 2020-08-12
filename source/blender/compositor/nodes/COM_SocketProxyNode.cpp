@@ -17,13 +17,13 @@
  */
 
 #include "COM_SocketProxyNode.h"
-#include "COM_SocketProxyOperation.h"
 #include "COM_ExecutionSystem.h"
+#include "COM_ReadBufferOperation.h"
+#include "COM_SetColorOperation.h"
 #include "COM_SetValueOperation.h"
 #include "COM_SetVectorOperation.h"
-#include "COM_SetColorOperation.h"
+#include "COM_SocketProxyOperation.h"
 #include "COM_WriteBufferOperation.h"
-#include "COM_ReadBufferOperation.h"
 
 SocketProxyNode::SocketProxyNode(bNode *editorNode,
                                  bNodeSocket *editorInput,
@@ -34,17 +34,21 @@ SocketProxyNode::SocketProxyNode(bNode *editorNode,
   DataType dt;
 
   dt = COM_DT_VALUE;
-  if (editorInput->type == SOCK_RGBA)
+  if (editorInput->type == SOCK_RGBA) {
     dt = COM_DT_COLOR;
-  if (editorInput->type == SOCK_VECTOR)
+  }
+  if (editorInput->type == SOCK_VECTOR) {
     dt = COM_DT_VECTOR;
+  }
   this->addInputSocket(dt, editorInput);
 
   dt = COM_DT_VALUE;
-  if (editorOutput->type == SOCK_RGBA)
+  if (editorOutput->type == SOCK_RGBA) {
     dt = COM_DT_COLOR;
-  if (editorOutput->type == SOCK_VECTOR)
+  }
+  if (editorOutput->type == SOCK_VECTOR) {
     dt = COM_DT_VECTOR;
+  }
   this->addOutputSocket(dt, editorOutput);
 }
 
@@ -63,17 +67,21 @@ SocketBufferNode::SocketBufferNode(bNode *editorNode,
   DataType dt;
 
   dt = COM_DT_VALUE;
-  if (editorInput->type == SOCK_RGBA)
+  if (editorInput->type == SOCK_RGBA) {
     dt = COM_DT_COLOR;
-  if (editorInput->type == SOCK_VECTOR)
+  }
+  if (editorInput->type == SOCK_VECTOR) {
     dt = COM_DT_VECTOR;
+  }
   this->addInputSocket(dt, editorInput);
 
   dt = COM_DT_VALUE;
-  if (editorOutput->type == SOCK_RGBA)
+  if (editorOutput->type == SOCK_RGBA) {
     dt = COM_DT_COLOR;
-  if (editorOutput->type == SOCK_VECTOR)
+  }
+  if (editorOutput->type == SOCK_VECTOR) {
     dt = COM_DT_VECTOR;
+  }
   this->addOutputSocket(dt, editorOutput);
 }
 

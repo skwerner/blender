@@ -40,11 +40,11 @@ extern bool pyrna_id_FromPyObject(PyObject *obj, ID **id);
 extern PyObject *pyrna_id_CreatePyObject(ID *id);
 extern bool pyrna_id_CheckPyObject(PyObject *obj);
 
-/*********************** ID Property Main Wrapper Stuff ***************/
-
-/* ----------------------------------------------------------------------------
- * static conversion functions to avoid duplicate code, no type checking.
- */
+/* -------------------------------------------------------------------- */
+/** \name Python from ID-Property (Internal Conversions)
+ *
+ * Low level conversion to avoid duplicate code, no type checking.
+ * \{ */
 
 static PyObject *idprop_py_from_idp_string(const IDProperty *prop)
 {
@@ -124,7 +124,11 @@ static PyObject *idprop_py_from_idp_idparray(ID *id, IDProperty *prop)
   return seq;
 }
 
-/* -------------------------------------------------------------------------- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name IDProp Group Access
+ * \{ */
 
 /* use for both array and group */
 static Py_hash_t BPy_IDGroup_hash(BPy_IDProperty *self)
@@ -164,12 +168,12 @@ PyObject *BPy_IDGroup_WrapData(ID *id, IDProperty *prop, IDProperty *parent)
   }
 }
 
-#if 0 /* UNUSED, currently assignment overwrites into new properties, rather than setting in-place */
+/* UNUSED, currently assignment overwrites into new properties, rather than setting in-place. */
+#if 0
 static int BPy_IDGroup_SetData(BPy_IDProperty *self, IDProperty *prop, PyObject *value)
 {
   switch (prop->type) {
-    case IDP_STRING:
-    {
+    case IDP_STRING: {
       char *st;
       if (!PyUnicode_Check(value)) {
         PyErr_SetString(PyExc_TypeError, "expected a string!");
@@ -198,8 +202,7 @@ static int BPy_IDGroup_SetData(BPy_IDProperty *self, IDProperty *prop, PyObject 
       return 0;
     }
 
-    case IDP_INT:
-    {
+    case IDP_INT: {
       int ivalue = PyLong_AsSsize_t(value);
       if (ivalue == -1 && PyErr_Occurred()) {
         PyErr_SetString(PyExc_TypeError, "expected an int type");
@@ -208,8 +211,7 @@ static int BPy_IDGroup_SetData(BPy_IDProperty *self, IDProperty *prop, PyObject 
       IDP_Int(prop) = ivalue;
       break;
     }
-    case IDP_FLOAT:
-    {
+    case IDP_FLOAT: {
       float fvalue = (float)PyFloat_AsDouble(value);
       if (fvalue == -1 && PyErr_Occurred()) {
         PyErr_SetString(PyExc_TypeError, "expected a float");
@@ -218,8 +220,7 @@ static int BPy_IDGroup_SetData(BPy_IDProperty *self, IDProperty *prop, PyObject 
       IDP_Float(self->prop) = fvalue;
       break;
     }
-    case IDP_DOUBLE:
-    {
+    case IDP_DOUBLE: {
       double dvalue = PyFloat_AsDouble(value);
       if (dvalue == -1 && PyErr_Occurred()) {
         PyErr_SetString(PyExc_TypeError, "expected a float");
@@ -270,10 +271,10 @@ static PyObject *BPy_IDGroup_GetType(BPy_IDProperty *self)
 #endif
 
 static PyGetSetDef BPy_IDGroup_getseters[] = {
-    {(char *)"name",
+    {"name",
      (getter)BPy_IDGroup_GetName,
      (setter)BPy_IDGroup_SetName,
-     (char *)"The name of this Group.",
+     "The name of this Group.",
      NULL},
     {NULL, NULL, NULL, NULL, NULL},
 };
@@ -377,7 +378,11 @@ static const char *idp_try_read_name(PyObject *name_obj)
   return name;
 }
 
-/* -------------------------------------------------------------------------- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name ID-Property from Python (Internal Conversions)
+ * \{ */
 
 /**
  * The 'idp_from_Py*' functions expect that the input type has been checked before
@@ -604,7 +609,6 @@ static IDProperty *idp_from_PyMapping(const char *name, PyObject *ob)
     pval = PySequence_GetItem(vals, i);
     if (BPy_IDProperty_Map_ValidateAndCreate(key, prop, pval) == false) {
       IDP_FreeProperty(prop);
-      MEM_freeN(prop);
       Py_XDECREF(keys);
       Py_XDECREF(vals);
       Py_XDECREF(key);
@@ -662,7 +666,12 @@ static IDProperty *idp_from_PyObject(PyObject *name_obj, PyObject *ob)
   }
 }
 
-/* -------------------------------------------------------------------------- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Mapping Get/Set (Internal Access)
+ * \{ */
+
 /**
  * \note group can be a pointer array or a group.
  * assume we already checked key is a string.
@@ -692,8 +701,9 @@ bool BPy_IDProperty_Map_ValidateAndCreate(PyObject *name_obj, IDProperty *group,
       /* Preserve prev/next links!!! See T42593. */
       prop->prev = prop_exist->prev;
       prop->next = prop_exist->next;
+      prop->flag = prop_exist->flag;
 
-      IDP_FreeProperty(prop_exist);
+      IDP_FreePropertyContent(prop_exist);
       *prop_exist = *prop;
       MEM_freeN(prop);
     }
@@ -865,6 +875,12 @@ static PyObject *BPy_IDGroup_MapDataToPy(IDProperty *prop)
   return NULL;
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name ID-Property Group Methods
+ * \{ */
+
 PyDoc_STRVAR(
     BPy_IDGroup_pop_doc,
     ".. method:: pop(key, default)\n"
@@ -900,7 +916,7 @@ static PyObject *BPy_IDGroup_pop(BPy_IDProperty *self, PyObject *args)
 
   pyform = BPy_IDGroup_MapDataToPy(idprop);
   if (pyform == NULL) {
-    /* ok something bad happened with the pyobject,
+    /* ok something bad happened with the #PyObject,
      * so don't remove the prop from the group.  if pyform is
      * NULL, then it already should have raised an exception.*/
     return NULL;
@@ -1145,6 +1161,12 @@ static struct PyMethodDef BPy_IDGroup_methods[] = {
     {NULL, NULL, 0, NULL},
 };
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name ID-Property Group Type
+ * \{ */
+
 static PySequenceMethods BPy_IDGroup_Seq = {
     (lenfunc)BPy_IDGroup_Map_Len, /* lenfunc sq_length */
     NULL,                         /* binaryfunc sq_concat */
@@ -1175,7 +1197,7 @@ PyTypeObject BPy_IDGroup_Type = {
     /* Methods to implement standard operations */
 
     NULL,                       /* destructor tp_dealloc; */
-    NULL,                       /* printfunc tp_print; */
+    (printfunc)NULL,            /* printfunc tp_print; */
     NULL,                       /* getattrfunc tp_getattr; */
     NULL,                       /* setattrfunc tp_setattr; */
     NULL,                       /* cmpfunc tp_compare; */
@@ -1226,7 +1248,11 @@ PyTypeObject BPy_IDGroup_Type = {
     BPy_IDGroup_getseters, /* struct PyGetSetDef *tp_getset; */
 };
 
-/********Array Wrapper********/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name ID Array Methods
+ * \{ */
 
 static PyTypeObject *idp_array_py_type(BPy_IDArray *self, bool *r_is_double)
 {
@@ -1272,7 +1298,7 @@ static PyObject *BPy_IDArray_get_typecode(BPy_IDArray *self)
 
 static PyGetSetDef BPy_IDArray_getseters[] = {
     /* matches pythons array.typecode */
-    {(char *)"typecode",
+    {"typecode",
      (getter)BPy_IDArray_get_typecode,
      (setter)NULL,
      BPy_IDArray_get_typecode_doc,
@@ -1432,8 +1458,9 @@ static int BPy_IDArray_ass_slice(BPy_IDArray *self, int begin, int end, PyObject
   size = (end - begin);
   alloc_len = size * elem_size;
 
-  vec = MEM_mallocN(alloc_len,
-                    "array assignment"); /* NOTE: we count on int/float being the same size here */
+  /* NOTE: we count on int/float being the same size here */
+  vec = MEM_mallocN(alloc_len, "array assignment");
+
   if (PyC_AsArray(vec, seq, size, py_type, is_double, "slice assignment: ") == -1) {
     MEM_freeN(vec);
     return -1;
@@ -1569,6 +1596,10 @@ static PyBufferProcs BPy_IDArray_Buffer = {
     (releasebufferproc)BPy_IDArray_releasebuffer,
 };
 
+/* -------------------------------------------------------------------- */
+/** \name ID Array Type
+ * \{ */
+
 PyTypeObject BPy_IDArray_Type = {
     PyVarObject_HEAD_INIT(NULL, 0)
     /*  For printing, in format "<module>.<name>" */
@@ -1579,7 +1610,7 @@ PyTypeObject BPy_IDArray_Type = {
     /* Methods to implement standard operations */
 
     NULL,                       /* destructor tp_dealloc; */
-    NULL,                       /* printfunc tp_print; */
+    (printfunc)NULL,            /* printfunc tp_print; */
     NULL,                       /* getattrfunc tp_getattr; */
     NULL,                       /* setattrfunc tp_setattr; */
     NULL,                       /* cmpfunc tp_compare; */
@@ -1650,7 +1681,11 @@ PyTypeObject BPy_IDArray_Type = {
     NULL,
 };
 
-/*********** ID Property Group iterator ********/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name ID-Property Group Iterator Type
+ * \{ */
 
 static PyObject *IDGroup_Iter_repr(BPy_IDGroup_Iter *self)
 {
@@ -1694,7 +1729,7 @@ PyTypeObject BPy_IDGroup_Iter_Type = {
     /* Methods to implement standard operations */
 
     NULL,                        /* destructor tp_dealloc; */
-    NULL,                        /* printfunc tp_print; */
+    (printfunc)NULL,             /* printfunc tp_print; */
     NULL,                        /* getattrfunc tp_getattr; */
     NULL,                        /* setattrfunc tp_setattr; */
     NULL,                        /* cmpfunc tp_compare; */
@@ -1748,9 +1783,11 @@ void IDProp_Init_Types(void)
   PyType_Ready(&BPy_IDArray_Type);
 }
 
-/*----------------------------MODULE INIT-------------------------*/
+/** \} */
 
-/* --- */
+/* -------------------------------------------------------------------- */
+/** \name Public Module 'idprop.types'
+ * \{ */
 
 static struct PyModuleDef IDProp_types_module_def = {
     PyModuleDef_HEAD_INIT,
@@ -1786,7 +1823,11 @@ static PyObject *BPyInit_idprop_types(void)
   return submodule;
 }
 
-/* --- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Public Module 'idprop'
+ * \{ */
 
 static PyMethodDef IDProp_methods[] = {
     {NULL, NULL, 0, NULL},
@@ -1820,3 +1861,5 @@ PyObject *BPyInit_idprop(void)
 
   return mod;
 }
+
+/** \} */

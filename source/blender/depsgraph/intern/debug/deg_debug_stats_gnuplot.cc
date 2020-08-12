@@ -32,13 +32,14 @@
 #include "intern/depsgraph.h"
 #include "intern/node/deg_node_id.h"
 
-extern "C" {
 #include "DNA_ID.h"
-} /* extern "C" */
 
 #define NL "\r\n"
 
-namespace DEG {
+namespace deg = blender::deg;
+
+namespace blender {
+namespace deg {
 namespace {
 
 struct DebugContext {
@@ -54,9 +55,8 @@ struct StatsEntry {
 };
 
 /* TODO(sergey): De-duplicate with graphviz relation debugger. */
-static void deg_debug_fprintf(const DebugContext &ctx, const char *fmt, ...)
-    ATTR_PRINTF_FORMAT(2, 3);
-static void deg_debug_fprintf(const DebugContext &ctx, const char *fmt, ...)
+void deg_debug_fprintf(const DebugContext &ctx, const char *fmt, ...) ATTR_PRINTF_FORMAT(2, 3);
+void deg_debug_fprintf(const DebugContext &ctx, const char *fmt, ...)
 {
   va_list args;
   va_start(args, fmt);
@@ -64,7 +64,7 @@ static void deg_debug_fprintf(const DebugContext &ctx, const char *fmt, ...)
   va_end(args);
 }
 
-BLI_INLINE double get_node_time(const DebugContext & /*ctx*/, const Node *node)
+inline double get_node_time(const DebugContext & /*ctx*/, const Node *node)
 {
   // TODO(sergey): Figure out a nice way to define which exact time
   // we want to show.
@@ -85,7 +85,7 @@ string gnuplotify_name(const string &name)
 {
   string result = "";
   const int length = name.length();
-  for (int i = 0; i < length; ++i) {
+  for (int i = 0; i < length; i++) {
     const char ch = name[i];
     if (ch == '_') {
       result += "\\\\\\";
@@ -98,7 +98,7 @@ string gnuplotify_name(const string &name)
 void write_stats_data(const DebugContext &ctx)
 {
   // Fill in array of all stats which are to be displayed.
-  vector<StatsEntry> stats;
+  Vector<StatsEntry> stats;
   stats.reserve(ctx.graph->id_nodes.size());
   for (const IDNode *id_node : ctx.graph->id_nodes) {
     const double time = get_node_time(ctx, id_node);
@@ -108,7 +108,7 @@ void write_stats_data(const DebugContext &ctx)
     StatsEntry entry;
     entry.id_node = id_node;
     entry.time = time;
-    stats.push_back(entry);
+    stats.append(entry);
   }
   // Sort the data.
   std::sort(stats.begin(), stats.end(), stat_entry_comparator);
@@ -149,20 +149,21 @@ void deg_debug_stats_gnuplot(const DebugContext &ctx)
 }
 
 }  // namespace
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender
 
 void DEG_debug_stats_gnuplot(const Depsgraph *depsgraph,
                              FILE *f,
                              const char *label,
                              const char *output_filename)
 {
-  if (depsgraph == NULL) {
+  if (depsgraph == nullptr) {
     return;
   }
-  DEG::DebugContext ctx;
+  deg::DebugContext ctx;
   ctx.file = f;
-  ctx.graph = (DEG::Depsgraph *)depsgraph;
+  ctx.graph = (deg::Depsgraph *)depsgraph;
   ctx.label = label;
   ctx.output_filename = output_filename;
-  DEG::deg_debug_stats_gnuplot(ctx);
+  deg::deg_debug_stats_gnuplot(ctx);
 }

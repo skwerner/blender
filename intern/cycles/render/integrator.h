@@ -31,6 +31,7 @@ class Integrator : public Node {
  public:
   NODE_DECLARE
 
+  int min_bounce;
   int max_bounce;
 
   int max_diffuse_bounce;
@@ -38,12 +39,13 @@ class Integrator : public Node {
   int max_transmission_bounce;
   int max_volume_bounce;
 
+  int transparent_min_bounce;
   int transparent_max_bounce;
 
   int ao_bounces;
 
   int volume_max_steps;
-  float volume_step_size;
+  float volume_step_rate;
 
   bool caustics_reflective;
   bool caustics_refractive;
@@ -74,6 +76,9 @@ class Integrator : public Node {
   float light_sampling_threshold;
   bool use_light_tree;
   float splitting_threshold;
+
+  int adaptive_min_samples;
+  float adaptive_threshold;
 
   enum Method {
     BRANCHED_PATH = 0,

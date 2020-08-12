@@ -4,7 +4,6 @@
  * Converted and adapted from HLSL to GLSL by Clément Foucault
  */
 
-uniform mat4 ProjectionMatrix;
 uniform vec2 invertedViewportSize;
 uniform vec2 nearFar;
 uniform vec3 dofParams;
@@ -251,12 +250,12 @@ void main()
   ivec2 texel = ivec2(uv * size);
 
   vec4 color = vec4(0.0);
-  float tot = 1e-4;
+  float tot = 0.0;
 
   float coc = decode_coc(texelFetch(inputCocTex, texel, 0).rg);
   float max_radius = coc;
   vec2 noise = get_random_vector(noiseOffset) * 0.2 * clamp(max_radius * 0.2 - 4.0, 0.0, 1.0);
-  for (int i = 0; i < NUM_SAMPLES; ++i) {
+  for (int i = 0; i < NUM_SAMPLES; i++) {
     vec2 tc = uv + (noise + samples[i].xy) * invertedViewportSize * max_radius;
 
     /* decode_signed_coc return biggest coc. */
@@ -272,7 +271,12 @@ void main()
     tot += weight;
   }
 
-  blurColor = color / tot;
+  if (tot > 0.0) {
+    blurColor = color / tot;
+  }
+  else {
+    blurColor = textureLod(halfResColorTex, uv, 0.0);
+  }
 }
 #endif
 
@@ -359,12 +363,12 @@ void main()
   vec v[9];
 
   /* Add the pixels which make up our window to the pixel array. */
-  for (int dX = -1; dX <= 1; ++dX) {
-    for (int dY = -1; dY <= 1; ++dY) {
+  for (int dX = -1; dX <= 1; dX++) {
+    for (int dY = -1; dY <= 1; dY++) {
       vec2 offset = vec2(float(dX), float(dY));
-      /* If a pixel in the window is located at (x+dX, y+dY), put it at index (dX + R)(2R + 1) + (dY + R) of the
-       * pixel array. This will fill the pixel array, with the top left pixel of the window at pixel[0] and the
-       * bottom right pixel of the window at pixel[N-1]. */
+      /* If a pixel in the window is located at (x+dX, y+dY), put it at index (dX + R)(2R + 1) +
+       * (dY + R) of the pixel array. This will fill the pixel array, with the top left pixel of
+       * the window at pixel[0] and the bottom right pixel of the window at pixel[N-1]. */
       v[(dX + 1) * 3 + (dY + 1)] = toVec(texture(blurTex, uv + offset * pixel_size * rad));
     }
   }
@@ -385,7 +389,9 @@ void main()
  * ----------------- STEP 4 ------------------
  */
 #ifdef RESOLVE
-out vec4 finalColor;
+
+layout(location = 0) out vec4 finalColorAdd;
+layout(location = 1) out vec4 finalColorMul;
 
 void main()
 {
@@ -398,7 +404,8 @@ void main()
   float zdepth = linear_depth(depth);
   float coc = calculate_coc(zdepth);
 
-  finalColor = texture(halfResColorTex, uv);
-  finalColor.a = smoothstep(1.0, 3.0, abs(coc));
+  float blend = smoothstep(1.0, 3.0, abs(coc));
+  finalColorAdd = texture(halfResColorTex, uv) * blend;
+  finalColorMul = vec4(1.0 - blend);
 }
 #endif

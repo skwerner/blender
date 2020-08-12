@@ -24,14 +24,15 @@
 /* Global includes */
 
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_math.h"
 #include "BLI_blenlib.h"
+#include "BLI_ghash.h"
+#include "BLI_math.h"
 #include "BLI_utildefines.h"
 
 #include "DNA_camera_types.h"
@@ -39,8 +40,8 @@
 #include "BKE_camera.h"
 
 /* this module */
-#include "renderpipeline.h"
 #include "render_types.h"
+#include "renderpipeline.h"
 
 /* Own includes */
 #include "initrender.h"
@@ -49,12 +50,15 @@
 
 static float filt_quadratic(float x)
 {
-  if (x < 0.0f)
+  if (x < 0.0f) {
     x = -x;
-  if (x < 0.5f)
+  }
+  if (x < 0.5f) {
     return 0.75f - (x * x);
-  if (x < 1.5f)
+  }
+  if (x < 1.5f) {
     return 0.50f * (x - 1.5f) * (x - 1.5f);
+  }
   return 0.0f;
 }
 
@@ -62,13 +66,16 @@ static float filt_cubic(float x)
 {
   float x2 = x * x;
 
-  if (x < 0.0f)
+  if (x < 0.0f) {
     x = -x;
+  }
 
-  if (x < 1.0f)
+  if (x < 1.0f) {
     return 0.5f * x * x2 - x2 + 2.0f / 3.0f;
-  if (x < 2.0f)
+  }
+  if (x < 2.0f) {
     return (2.0f - x) * (2.0f - x) * (2.0f - x) / 6.0f;
+  }
   return 0.0f;
 }
 
@@ -76,12 +83,15 @@ static float filt_catrom(float x)
 {
   float x2 = x * x;
 
-  if (x < 0.0f)
+  if (x < 0.0f) {
     x = -x;
-  if (x < 1.0f)
+  }
+  if (x < 1.0f) {
     return 1.5f * x2 * x - 2.5f * x2 + 1.0f;
-  if (x < 2.0f)
+  }
+  if (x < 2.0f) {
     return -0.5f * x2 * x + 2.5f * x2 - 4.0f * x + 2.0f;
+  }
   return 0.0f;
 }
 
@@ -96,16 +106,21 @@ static float filt_mitchell(float x) /* Mitchell & Netravali's two-param cubic */
   float q2 = (6.0f * b + 30.0f * c) / 6.0f;
   float q3 = (-b - 6.0f * c) / 6.0f;
 
-  if (x < -2.0f)
+  if (x < -2.0f) {
     return 0.0f;
-  if (x < -1.0f)
+  }
+  if (x < -1.0f) {
     return (q0 - x * (q1 - x * (q2 - x * q3)));
-  if (x < 0.0f)
+  }
+  if (x < 0.0f) {
     return (p0 + x * x * (p2 - x * p3));
-  if (x < 1.0f)
+  }
+  if (x < 1.0f) {
     return (p0 + x * x * (p2 + x * p3));
-  if (x < 2.0f)
+  }
+  if (x < 2.0f) {
     return (q0 + x * (q1 + x * (q2 + x * q3)));
+  }
   return 0.0f;
 }
 
@@ -114,17 +129,19 @@ float RE_filter_value(int type, float x)
 {
   float gaussfac = 1.6f;
 
-  x = ABS(x);
+  x = fabsf(x);
 
   switch (type) {
     case R_FILTER_BOX:
-      if (x > 1.0f)
+      if (x > 1.0f) {
         return 0.0f;
+      }
       return 1.0f;
 
     case R_FILTER_TENT:
-      if (x > 1.0f)
+      if (x > 1.0f) {
         return 0.0f;
+      }
       return 1.0f - x;
 
     case R_FILTER_GAUSS: {
@@ -194,9 +211,8 @@ void RE_SetCamera(Render *re, Object *cam_ob)
   re_camera_params_get(re, &params);
 }
 
-void RE_GetCameraWindow(struct Render *re, struct Object *camera, int frame, float mat[4][4])
+void RE_GetCameraWindow(struct Render *re, struct Object *camera, float mat[4][4])
 {
-  re->r.cfra = frame;
   RE_SetCamera(re, camera);
   copy_m4_m4(mat, re->winmat);
 }
@@ -229,7 +245,10 @@ void RE_GetCameraModelMatrix(Render *re, struct Object *camera, float r_mat[4][4
 
 void RE_parts_free(Render *re)
 {
-  BLI_freelistN(&re->parts);
+  if (re->parts) {
+    BLI_ghash_free(re->parts, NULL, MEM_freeN);
+    re->parts = NULL;
+  }
 }
 
 void RE_parts_clamp(Render *re)
@@ -246,10 +265,11 @@ void RE_parts_init(Render *re)
 
   RE_parts_free(re);
 
+  re->parts = BLI_ghash_new(
+      BLI_ghashutil_inthash_v4_p, BLI_ghashutil_inthash_v4_cmp, "render parts");
+
   /* this is render info for caller, is not reset when parts are freed! */
   re->i.totpart = 0;
-  re->i.curpart = 0;
-  re->i.partsdone = 0;
 
   /* just for readable code.. */
   xminb = re->disprect.xmin;
@@ -278,19 +298,23 @@ void RE_parts_init(Render *re)
     /* ensure we cover the entire picture, so last parts go to end */
     if (xd < xparts - 1) {
       disprect.xmax = disprect.xmin + partx;
-      if (disprect.xmax > xmaxb)
+      if (disprect.xmax > xmaxb) {
         disprect.xmax = xmaxb;
+      }
     }
-    else
+    else {
       disprect.xmax = xmaxb;
+    }
 
     if (yd < yparts - 1) {
       disprect.ymax = disprect.ymin + party;
-      if (disprect.ymax > ymaxb)
+      if (disprect.ymax > ymaxb) {
         disprect.ymax = ymaxb;
+      }
     }
-    else
+    else {
       disprect.ymax = ymaxb;
+    }
 
     rectx = BLI_rcti_size_x(&disprect);
     recty = BLI_rcti_size_y(&disprect);
@@ -303,7 +327,7 @@ void RE_parts_init(Render *re)
       pa->rectx = rectx;
       pa->recty = recty;
 
-      BLI_addtail(&re->parts, pa);
+      BLI_ghash_insert(re->parts, &pa->disprect, pa);
       re->i.totpart++;
     }
   }

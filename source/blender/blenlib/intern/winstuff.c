@@ -24,17 +24,17 @@
 
 #ifdef WIN32
 
-#  include <stdlib.h>
-#  include <stdio.h>
 #  include <conio.h>
+#  include <stdio.h>
+#  include <stdlib.h>
 
 #  include "MEM_guardedalloc.h"
 
 #  define WIN32_SKIP_HKEY_PROTECTION  // need to use HKEY
-#  include "BLI_winstuff.h"
-#  include "BLI_utildefines.h"
 #  include "BLI_path_util.h"
 #  include "BLI_string.h"
+#  include "BLI_utildefines.h"
+#  include "BLI_winstuff.h"
 
 #  include "../blenkernel/BKE_global.h" /* G.background, bad level include (no function calls) */
 
@@ -172,17 +172,7 @@ void RegisterBlendExtension(void)
 
   BLI_getInstallationDir(InstallDir);
   GetSystemDirectory(SysDir, FILE_MAXDIR);
-#  ifdef _WIN64
-  ThumbHandlerDLL = "BlendThumb64.dll";
-#  else
-  IsWow64Process(GetCurrentProcess(), &IsWOW64);
-  if (IsWOW64 == true) {
-    ThumbHandlerDLL = "BlendThumb64.dll";
-  }
-  else {
-    ThumbHandlerDLL = "BlendThumb.dll";
-  }
-#  endif
+  ThumbHandlerDLL = "BlendThumb.dll";
   snprintf(
       RegCmd, MAX_PATH * 2, "%s\\regsvr32 /s \"%s\\%s\"", SysDir, InstallDir, ThumbHandlerDLL);
   system(RegCmd);

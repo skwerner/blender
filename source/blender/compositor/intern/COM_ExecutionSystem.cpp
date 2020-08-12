@@ -18,21 +18,20 @@
 
 #include "COM_ExecutionSystem.h"
 
-#include "PIL_time.h"
 #include "BLI_utildefines.h"
-extern "C" {
+#include "PIL_time.h"
+
 #include "BKE_node.h"
-}
 
 #include "BLT_translation.h"
 
 #include "COM_Converter.h"
-#include "COM_NodeOperationBuilder.h"
-#include "COM_NodeOperation.h"
-#include "COM_ExecutionGroup.h"
-#include "COM_WorkScheduler.h"
-#include "COM_ReadBufferOperation.h"
 #include "COM_Debug.h"
+#include "COM_ExecutionGroup.h"
+#include "COM_NodeOperation.h"
+#include "COM_NodeOperationBuilder.h"
+#include "COM_ReadBufferOperation.h"
+#include "COM_WorkScheduler.h"
 
 #ifdef WITH_CXX_GUARDEDALLOC
 #  include "MEM_guardedalloc.h"
@@ -80,7 +79,7 @@ ExecutionSystem::ExecutionSystem(RenderData *rd,
                            viewer_border->xmin < viewer_border->xmax &&
                            viewer_border->ymin < viewer_border->ymax;
 
-  editingtree->stats_draw(editingtree->sdh, IFACE_("Compositing | Determining resolution"));
+  editingtree->stats_draw(editingtree->sdh, TIP_("Compositing | Determining resolution"));
 
   for (index = 0; index < this->m_groups.size(); index++) {
     resolution[0] = 0;
@@ -131,7 +130,7 @@ void ExecutionSystem::set_operations(const Operations &operations, const Groups 
 void ExecutionSystem::execute()
 {
   const bNodeTree *editingtree = this->m_context.getbNodeTree();
-  editingtree->stats_draw(editingtree->sdh, IFACE_("Compositing | Initializing execution"));
+  editingtree->stats_draw(editingtree->sdh, TIP_("Compositing | Initializing execution"));
 
   DebugInfo::execute_started(this);
 
@@ -189,7 +188,7 @@ void ExecutionSystem::execute()
   WorkScheduler::finish();
   WorkScheduler::stop();
 
-  editingtree->stats_draw(editingtree->sdh, IFACE_("Compositing | De-initializing execution"));
+  editingtree->stats_draw(editingtree->sdh, TIP_("Compositing | De-initializing execution"));
   for (index = 0; index < this->m_operations.size(); index++) {
     NodeOperation *operation = this->m_operations[index];
     operation->deinitExecution();

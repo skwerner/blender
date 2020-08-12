@@ -26,28 +26,26 @@
 
 #include <map>
 
-class STR_String;
 class GHOST_SystemNULL;
 
 class GHOST_WindowNULL : public GHOST_Window {
  public:
-  const GHOST_TabletData *GetTabletData()
+  GHOST_TSuccess hasCursorShape(GHOST_TStandardCursor)
   {
-    return NULL;
+    return GHOST_kSuccess;
   }
 
   GHOST_WindowNULL(GHOST_SystemNULL *system,
-                   const STR_String &title,
+                   const char *title,
                    GHOST_TInt32 left,
                    GHOST_TInt32 top,
                    GHOST_TUns32 width,
                    GHOST_TUns32 height,
                    GHOST_TWindowState state,
-                   const GHOST_TEmbedderWindowID parentWindow,
+                   const GHOST_IWindow *parentWindow,
                    GHOST_TDrawingContextType type,
-                   const bool stereoVisual,
-                   const GHOST_TUns16 numOfAASamples)
-      : GHOST_Window(width, height, state, stereoVisual, false, numOfAASamples), m_system(system)
+                   const bool stereoVisual)
+      : GHOST_Window(width, height, state, stereoVisual, false), m_system(system)
   {
     setTitle(title);
   }
@@ -69,21 +67,13 @@ class GHOST_WindowNULL : public GHOST_Window {
   {
     return GHOST_kSuccess;
   }
-  GHOST_TSuccess setWindowCustomCursorShape(GHOST_TUns8 bitmap[16][2],
-                                            GHOST_TUns8 mask[16][2],
-                                            int hotX,
-                                            int hotY)
-  {
-    return GHOST_kSuccess;
-  }
   GHOST_TSuccess setWindowCustomCursorShape(GHOST_TUns8 *bitmap,
                                             GHOST_TUns8 *mask,
                                             int sizex,
                                             int sizey,
                                             int hotX,
                                             int hotY,
-                                            int fg_color,
-                                            int bg_color)
+                                            bool canInvertColor)
   {
     return GHOST_kSuccess;
   }
@@ -92,12 +82,12 @@ class GHOST_WindowNULL : public GHOST_Window {
   {
     return true;
   }
-  void setTitle(const STR_String &title)
+  void setTitle(const char *title)
   { /* nothing */
   }
-  void getTitle(STR_String &title) const
+  std::string getTitle() const
   {
-    title = "untitled";
+    return "untitled";
   }
   void getWindowBounds(GHOST_Rect &bounds) const
   {

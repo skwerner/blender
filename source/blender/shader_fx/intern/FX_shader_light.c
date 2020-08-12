@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2018, Blender Foundation
@@ -23,17 +23,26 @@
 
 #include <stdio.h>
 
-#include "DNA_scene_types.h"
-#include "DNA_object_types.h"
 #include "DNA_gpencil_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
 
 #include "BLI_utildefines.h"
 
-#include "BKE_library_query.h"
+#include "BKE_context.h"
+#include "BKE_lib_query.h"
 #include "BKE_modifier.h"
+#include "BKE_screen.h"
 #include "BKE_shader_fx.h"
 
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
+
 #include "FX_shader_types.h"
+#include "FX_ui_common.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
@@ -48,7 +57,7 @@ static void initData(ShaderFxData *fx)
 
 static void copyData(const ShaderFxData *md, ShaderFxData *target)
 {
-  BKE_shaderfx_copyData_generic(md, target);
+  BKE_shaderfx_copydata_generic(md, target);
 }
 
 static void updateDepsgraph(ShaderFxData *md, const ModifierUpdateDepsgraphContext *ctx)
@@ -93,4 +102,5 @@ ShaderFxTypeInfo shaderfx_Type_Light = {
     /* dependsOnTime */ NULL,
     /* foreachObjectLink */ foreachObjectLink,
     /* foreachIDLink */ NULL,
+    /* panelRegister */ NULL,
 };

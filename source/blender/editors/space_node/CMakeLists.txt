@@ -22,16 +22,16 @@ set(INC
   ../../blenlib
   ../../blentranslation
   ../../depsgraph
-  ../../imbuf
   ../../gpu
+  ../../imbuf
   ../../makesdna
   ../../makesrna
   ../../nodes
   ../../render/extern/include
-  ../../windowmanager
   ../../compositor
-  ../../../../intern/guardedalloc
+  ../../windowmanager
   ../../../../intern/glew-mx
+  ../../../../intern/guardedalloc
 )
 
 set(INC_SYS
@@ -69,6 +69,10 @@ endif()
 
 if(WITH_COMPOSITOR)
   add_definitions(-DWITH_COMPOSITOR)
+endif()
+
+if(WITH_OPENIMAGEDENOISE)
+  add_definitions(-DWITH_OPENIMAGEDENOISE)
 endif()
 
 add_definitions(${GL_DEFINITIONS})

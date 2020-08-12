@@ -21,19 +21,18 @@
  * \ingroup bli
  */
 
+#include "BLI_compiler_attrs.h"
+#include "BLI_compiler_compat.h"
+#include "BLI_sys_types.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "BLI_sys_types.h"
-#include "BLI_compiler_attrs.h"
-#include "BLI_compiler_compat.h"
 
 /* 512kb, good default for small elems. */
 #define BLI_MEMITER_DEFAULT_SIZE (1 << 19)
 
 struct BLI_memiter;
-struct BLI_memiter_chunk;
 
 typedef struct BLI_memiter BLI_memiter;
 

@@ -83,6 +83,8 @@ void IDP_FreeString(struct IDProperty *prop) ATTR_NONNULL();
 
 typedef void (*IDPWalkFunc)(void *userData, IDProperty *idp);
 
+void IDP_AssignID(IDProperty *prop, ID *id, const int flag);
+
 /*-------- Group Functions -------*/
 
 /** Sync values from one group to another, only where they match */
@@ -108,9 +110,9 @@ bool IDP_InsertToGroup(struct IDProperty *group,
 void IDP_RemoveFromGroup(struct IDProperty *group, struct IDProperty *prop) ATTR_NONNULL();
 void IDP_FreeFromGroup(struct IDProperty *group, struct IDProperty *prop) ATTR_NONNULL();
 
-IDProperty *IDP_GetPropertyFromGroup(struct IDProperty *prop,
+IDProperty *IDP_GetPropertyFromGroup(const struct IDProperty *prop,
                                      const char *name) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
-IDProperty *IDP_GetPropertyTypeFromGroup(struct IDProperty *prop,
+IDProperty *IDP_GetPropertyTypeFromGroup(const struct IDProperty *prop,
                                          const char *name,
                                          const char type) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 
@@ -134,7 +136,9 @@ struct IDProperty *IDP_New(const char type,
                            const IDPropertyTemplate *val,
                            const char *name) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 
-void IDP_FreeProperty_ex(struct IDProperty *prop, const bool do_id_user);
+void IDP_FreePropertyContent_ex(struct IDProperty *prop, const bool do_id_user);
+void IDP_FreePropertyContent(struct IDProperty *prop);
+void IDP_FreeProperty_ex(IDProperty *prop, const bool do_id_user);
 void IDP_FreeProperty(struct IDProperty *prop);
 
 void IDP_ClearProperty(IDProperty *prop);
@@ -174,6 +178,17 @@ void IDP_Reset(IDProperty *prop, const IDProperty *reference);
 #  define IDP_IDPArray(prop) ((IDProperty *)(prop)->data.pointer)
 #  define IDP_Id(prop) ((ID *)(prop)->data.pointer)
 #endif
+
+/**
+ * Call a callback for each idproperty in the hierarchy under given root one (included).
+ *
+ */
+typedef void (*IDPForeachPropertyCallback)(IDProperty *id_property, void *user_data);
+
+void IDP_foreach_property(struct IDProperty *id_property_root,
+                          const int type_filter,
+                          IDPForeachPropertyCallback callback,
+                          void *user_data);
 
 /* Format IDProperty as strings */
 char *IDP_reprN(const struct IDProperty *prop, uint *r_len);

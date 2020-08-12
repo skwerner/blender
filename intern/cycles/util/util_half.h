@@ -17,8 +17,8 @@
 #ifndef __UTIL_HALF_H__
 #define __UTIL_HALF_H__
 
-#include "util/util_types.h"
 #include "util/util_math.h"
+#include "util/util_types.h"
 
 #ifdef __KERNEL_SSE2__
 #  include "util/util_simd.h"
@@ -36,7 +36,8 @@ CCL_NAMESPACE_BEGIN
 
 /* CUDA has its own half data type, no need to define then */
 #  ifndef __KERNEL_CUDA__
-/* Implementing this as a class rather than a typedef so that the compiler can tell it apart from unsigned shorts. */
+/* Implementing this as a class rather than a typedef so that the compiler can tell it apart from
+ * unsigned shorts. */
 class half {
  public:
   half() : v(0)

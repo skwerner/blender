@@ -26,14 +26,14 @@ from bpy.types import (
 
 from rna_prop_ui import PropertyPanel
 
-from .properties_physics_common import (
+from bl_ui.properties_physics_common import (
     point_cache_ui,
     effector_weights_ui,
 )
 
 
 class SCENE_UL_keying_set_paths(UIList):
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+    def draw_item(self, _context, layout, _data, item, icon, _active_data, _active_propname, _index):
         # assert(isinstance(item, bpy.types.KeyingSetPath)
         kspath = item
         icon = layout.enum_item_icon(kspath, "id_type", kspath.id_type)
@@ -63,7 +63,7 @@ class SCENE_PT_scene(SceneButtonsPanel, Panel):
 
         layout.prop(scene, "camera")
         layout.prop(scene, "background_set")
-        layout.prop(scene, "active_clip")
+        layout.prop(scene, "active_clip", text="Active Clip")
 
 
 class SCENE_PT_unit(SceneButtonsPanel, Panel):
@@ -289,8 +289,6 @@ class SCENE_PT_audio(SceneButtonsPanel, Panel):
         layout.use_property_split = True
 
         scene = context.scene
-        rd = context.scene.render
-        ffmpeg = rd.ffmpeg
 
         flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=True)
 
@@ -299,17 +297,8 @@ class SCENE_PT_audio(SceneButtonsPanel, Panel):
 
         col.separator()
 
-        col.prop(scene, "audio_distance_model")
-        col.prop(ffmpeg, "audio_channels")
-
-        col.separator()
-
-        col = flow.column()
-        col.prop(ffmpeg, "audio_mixrate", text="Sample Rate")
-
-        col.separator()
-
         col = col.column(align=True)
+        col.prop(scene, "audio_distance_model")
         col.prop(scene, "audio_doppler_speed", text="Doppler Speed")
         col.prop(scene, "audio_doppler_factor", text="Doppler Factor")
 
@@ -408,7 +397,7 @@ class SCENE_PT_rigid_body_cache(RigidBodySubPanel, Panel):
         scene = context.scene
         rbw = scene.rigidbody_world
 
-        point_cache_ui(self, context, rbw.point_cache, rbw.point_cache.is_baked is False and rbw.enabled, 'RIGID_BODY')
+        point_cache_ui(self, rbw.point_cache, rbw.point_cache.is_baked is False and rbw.enabled, 'RIGID_BODY')
 
 
 class SCENE_PT_rigid_body_field_weights(RigidBodySubPanel, Panel):
@@ -420,7 +409,7 @@ class SCENE_PT_rigid_body_field_weights(RigidBodySubPanel, Panel):
         scene = context.scene
         rbw = scene.rigidbody_world
 
-        effector_weights_ui(self, context, rbw.effector_weights, 'RIGID_BODY')
+        effector_weights_ui(self, rbw.effector_weights, 'RIGID_BODY')
 
 
 class SCENE_PT_custom_props(SceneButtonsPanel, PropertyPanel, Panel):

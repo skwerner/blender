@@ -20,29 +20,27 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <wchar.h>
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_array_utils.h"
+#include "BLI_utildefines.h"
 
 #include "DNA_curve_types.h"
 #include "DNA_object_types.h"
-#include "DNA_scene_types.h"
 
 #include "BKE_context.h"
 #include "BKE_font.h"
+#include "BKE_main.h"
 #include "BKE_undo_system.h"
 
 #include "DEG_depsgraph.h"
 
-#include "ED_object.h"
 #include "ED_curve.h"
-#include "ED_util.h"
+#include "ED_object.h"
 
-#include "WM_types.h"
 #include "WM_api.h"
+#include "WM_types.h"
 
 #define USE_ARRAY_STORE
 
@@ -59,10 +57,10 @@
  * \{ */
 
 typedef struct UndoFont {
-  wchar_t *textbuf;
+  char32_t *textbuf;
   struct CharInfo *textbufinfo;
 
-  int len, pos;
+  int len, pos, selstart, selend;
 
 #ifdef USE_ARRAY_STORE
   struct {
@@ -234,16 +232,16 @@ static void undofont_to_editfont(UndoFont *uf, Curve *cu)
   uf_arraystore_expand(uf);
 #endif
 
-  final_size = sizeof(wchar_t) * (uf->len + 1);
+  final_size = sizeof(*ef->textbuf) * (uf->len + 1);
   memcpy(ef->textbuf, uf->textbuf, final_size);
 
   final_size = sizeof(CharInfo) * (uf->len + 1);
   memcpy(ef->textbufinfo, uf->textbufinfo, final_size);
 
   ef->pos = uf->pos;
+  ef->selstart = uf->selstart;
+  ef->selend = uf->selend;
   ef->len = uf->len;
-
-  ef->selstart = ef->selend = 0;
 
 #ifdef USE_ARRAY_STORE
   uf_arraystore_expand_clear(uf);
@@ -260,7 +258,8 @@ static void *undofont_from_editfont(UndoFont *uf, Curve *cu)
 
   size_t final_size;
 
-  final_size = sizeof(wchar_t) * (ef->len + 1);
+  BLI_assert(sizeof(*uf->textbuf) == sizeof(*ef->textbuf));
+  final_size = sizeof(*uf->textbuf) * (ef->len + 1);
   uf->textbuf = MEM_mallocN(final_size, __func__);
   memcpy(uf->textbuf, ef->textbuf, final_size);
 
@@ -269,6 +268,8 @@ static void *undofont_from_editfont(UndoFont *uf, Curve *cu)
   memcpy(uf->textbufinfo, ef->textbufinfo, final_size);
 
   uf->pos = ef->pos;
+  uf->selstart = ef->selstart;
+  uf->selend = ef->selend;
   uf->len = ef->len;
 
 #ifdef USE_ARRAY_STORE
@@ -341,25 +342,24 @@ static bool font_undosys_poll(bContext *C)
   return editfont_object_from_context(C) != NULL;
 }
 
-static bool font_undosys_step_encode(struct bContext *C,
-                                     struct Main *UNUSED(bmain),
-                                     UndoStep *us_p)
+static bool font_undosys_step_encode(struct bContext *C, struct Main *bmain, UndoStep *us_p)
 {
   FontUndoStep *us = (FontUndoStep *)us_p;
   us->obedit_ref.ptr = editfont_object_from_context(C);
   Curve *cu = us->obedit_ref.ptr->data;
   undofont_from_editfont(&us->data, cu);
   us->step.data_size = us->data.undo_size;
+  cu->editfont->needs_flush_to_id = 1;
+  bmain->is_memfile_undo_flush_needed = true;
+
   return true;
 }
 
-static void font_undosys_step_decode(struct bContext *C,
-                                     struct Main *UNUSED(bmain),
-                                     UndoStep *us_p,
-                                     int UNUSED(dir))
+static void font_undosys_step_decode(
+    struct bContext *C, struct Main *bmain, UndoStep *us_p, int UNUSED(dir), bool UNUSED(is_final))
 {
   /* TODO(campbell): undo_system: use low-level API to set mode. */
-  ED_object_mode_set(C, OB_MODE_EDIT);
+  ED_object_mode_set_ex(C, OB_MODE_EDIT, false, NULL);
   BLI_assert(font_undosys_poll(C));
 
   FontUndoStep *us = (FontUndoStep *)us_p;
@@ -367,6 +367,8 @@ static void font_undosys_step_decode(struct bContext *C,
   Curve *cu = obedit->data;
   undofont_to_editfont(&us->data, cu);
   DEG_id_tag_update(&obedit->id, ID_RECALC_GEOMETRY);
+  cu->editfont->needs_flush_to_id = 1;
+  bmain->is_memfile_undo_flush_needed = true;
   WM_event_add_notifier(C, NC_GEOM | ND_DATA, NULL);
 }
 

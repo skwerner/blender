@@ -16,11 +16,11 @@
 
 #include <stdlib.h>
 
+#include "device/device.h"
 #include "render/background.h"
 #include "render/bake.h"
 #include "render/camera.h"
 #include "render/curves.h"
-#include "device/device.h"
 #include "render/film.h"
 #include "render/integrator.h"
 #include "render/light.h"
@@ -41,38 +41,45 @@
 CCL_NAMESPACE_BEGIN
 
 DeviceScene::DeviceScene(Device *device)
-    : bvh_nodes(device, "__bvh_nodes", MEM_TEXTURE),
-      bvh_leaf_nodes(device, "__bvh_leaf_nodes", MEM_TEXTURE),
-      object_node(device, "__object_node", MEM_TEXTURE),
-      prim_tri_index(device, "__prim_tri_index", MEM_TEXTURE),
-      prim_tri_verts(device, "__prim_tri_verts", MEM_TEXTURE),
-      prim_type(device, "__prim_type", MEM_TEXTURE),
-      prim_visibility(device, "__prim_visibility", MEM_TEXTURE),
-      prim_index(device, "__prim_index", MEM_TEXTURE),
-      prim_object(device, "__prim_object", MEM_TEXTURE),
-      prim_time(device, "__prim_time", MEM_TEXTURE),
-      tri_shader(device, "__tri_shader", MEM_TEXTURE),
-      tri_vnormal(device, "__tri_vnormal", MEM_TEXTURE),
-      tri_vindex(device, "__tri_vindex", MEM_TEXTURE),
-      tri_patch(device, "__tri_patch", MEM_TEXTURE),
-      tri_patch_uv(device, "__tri_patch_uv", MEM_TEXTURE),
-      curves(device, "__curves", MEM_TEXTURE),
-      curve_keys(device, "__curve_keys", MEM_TEXTURE),
-      patches(device, "__patches", MEM_TEXTURE),
-      objects(device, "__objects", MEM_TEXTURE),
-      object_motion_pass(device, "__object_motion_pass", MEM_TEXTURE),
-      object_motion(device, "__object_motion", MEM_TEXTURE),
-      object_flag(device, "__object_flag", MEM_TEXTURE),
-      camera_motion(device, "__camera_motion", MEM_TEXTURE),
-      attributes_map(device, "__attributes_map", MEM_TEXTURE),
-      attributes_float(device, "__attributes_float", MEM_TEXTURE),
-      attributes_float2(device, "__attributes_float2", MEM_TEXTURE),
-      attributes_float3(device, "__attributes_float3", MEM_TEXTURE),
-      attributes_uchar4(device, "__attributes_uchar4", MEM_TEXTURE),
-      light_distribution(device, "__light_distribution", MEM_TEXTURE),
-      lights(device, "__lights", MEM_TEXTURE),
-      light_background_marginal_cdf(device, "__light_background_marginal_cdf", MEM_TEXTURE),
-      light_background_conditional_cdf(device, "__light_background_conditional_cdf", MEM_TEXTURE),
+    : bvh_nodes(device, "__bvh_nodes", MEM_GLOBAL),
+      bvh_leaf_nodes(device, "__bvh_leaf_nodes", MEM_GLOBAL),
+      object_node(device, "__object_node", MEM_GLOBAL),
+      prim_tri_index(device, "__prim_tri_index", MEM_GLOBAL),
+      prim_tri_verts(device, "__prim_tri_verts", MEM_GLOBAL),
+      prim_type(device, "__prim_type", MEM_GLOBAL),
+      prim_visibility(device, "__prim_visibility", MEM_GLOBAL),
+      prim_index(device, "__prim_index", MEM_GLOBAL),
+      prim_object(device, "__prim_object", MEM_GLOBAL),
+      prim_time(device, "__prim_time", MEM_GLOBAL),
+      tri_shader(device, "__tri_shader", MEM_GLOBAL),
+      tri_vnormal(device, "__tri_vnormal", MEM_GLOBAL),
+      tri_vindex(device, "__tri_vindex", MEM_GLOBAL),
+      tri_patch(device, "__tri_patch", MEM_GLOBAL),
+      tri_patch_uv(device, "__tri_patch_uv", MEM_GLOBAL),
+      curves(device, "__curves", MEM_GLOBAL),
+      curve_keys(device, "__curve_keys", MEM_GLOBAL),
+      patches(device, "__patches", MEM_GLOBAL),
+      objects(device, "__objects", MEM_GLOBAL),
+      object_motion_pass(device, "__object_motion_pass", MEM_GLOBAL),
+      object_motion(device, "__object_motion", MEM_GLOBAL),
+      object_flag(device, "__object_flag", MEM_GLOBAL),
+      object_volume_step(device, "__object_volume_step", MEM_GLOBAL),
+      camera_motion(device, "__camera_motion", MEM_GLOBAL),
+      attributes_map(device, "__attributes_map", MEM_GLOBAL),
+      attributes_float(device, "__attributes_float", MEM_GLOBAL),
+      attributes_float2(device, "__attributes_float2", MEM_GLOBAL),
+      attributes_float3(device, "__attributes_float3", MEM_GLOBAL),
+      attributes_uchar4(device, "__attributes_uchar4", MEM_GLOBAL),
+      light_distribution(device, "__light_distribution", MEM_GLOBAL),
+      lights(device, "__lights", MEM_GLOBAL),
+      light_background_marginal_cdf(device, "__light_background_marginal_cdf", MEM_GLOBAL),
+      light_background_conditional_cdf(device, "__light_background_conditional_cdf", MEM_GLOBAL),
+      particles(device, "__particles", MEM_GLOBAL),
+      svm_nodes(device, "__svm_nodes", MEM_GLOBAL),
+      shaders(device, "__shaders", MEM_GLOBAL),
+      lookup_table(device, "__lookup_table", MEM_GLOBAL),
+      sample_pattern_lut(device, "__sample_pattern_lut", MEM_GLOBAL),
+      ies_lights(device, "__ies", MEM_GLOBAL)
       light_tree_nodes(device, "__light_tree_nodes", MEM_TEXTURE),
       light_distribution_to_node(device, "__light_distribution_to_node", MEM_TEXTURE),
       lamp_to_distribution(device, "__lamp_to_distribution", MEM_TEXTURE),
@@ -81,18 +88,20 @@ DeviceScene::DeviceScene(Device *device)
       light_group_sample_prob(device, "__light_group_sample_prob", MEM_TEXTURE),
       leaf_to_first_emitter(device, "__leaf_to_first_emitter", MEM_TEXTURE),
       light_tree_leaf_emitters(device, "__light_tree_leaf_emitters", MEM_TEXTURE),
-      particles(device, "__particles", MEM_TEXTURE),
-      svm_nodes(device, "__svm_nodes", MEM_TEXTURE),
-      shaders(device, "__shaders", MEM_TEXTURE),
-      lookup_table(device, "__lookup_table", MEM_TEXTURE),
-      sobol_directions(device, "__sobol_directions", MEM_TEXTURE),
-      ies_lights(device, "__ies", MEM_TEXTURE)
 {
   memset((void *)&data, 0, sizeof(data));
 }
 
 Scene::Scene(const SceneParams &params_, Device *device)
-    : name("Scene"), device(device), dscene(device), params(params_)
+    : name("Scene"),
+      default_surface(NULL),
+      default_volume(NULL),
+      default_light(NULL),
+      default_background(NULL),
+      default_empty(NULL),
+      device(device),
+      dscene(device),
+      params(params_)
 {
   memset((void *)&dscene.data, 0, sizeof(dscene.data));
 
@@ -102,19 +111,20 @@ Scene::Scene(const SceneParams &params_, Device *device)
   film = new Film();
   background = new Background();
   light_manager = new LightManager();
-  mesh_manager = new MeshManager();
+  geometry_manager = new GeometryManager();
   object_manager = new ObjectManager();
   integrator = new Integrator();
   image_manager = new ImageManager(device->info);
   particle_system_manager = new ParticleSystemManager();
-  curve_system_manager = new CurveSystemManager();
   bake_manager = new BakeManager();
 
   /* OSL only works on the CPU */
   if (device->info.has_osl)
-    shader_manager = ShaderManager::create(this, params.shadingsystem);
+    shader_manager = ShaderManager::create(params.shadingsystem);
   else
-    shader_manager = ShaderManager::create(this, SHADINGSYSTEM_SVM);
+    shader_manager = ShaderManager::create(SHADINGSYSTEM_SVM);
+
+  shader_manager->add_default(this);
 }
 
 Scene::~Scene()
@@ -126,8 +136,8 @@ void Scene::free_memory(bool final)
 {
   foreach (Shader *s, shaders)
     delete s;
-  foreach (Mesh *m, meshes)
-    delete m;
+  foreach (Geometry *g, geometry)
+    delete g;
   foreach (Object *o, objects)
     delete o;
   foreach (Light *l, lights)
@@ -136,7 +146,7 @@ void Scene::free_memory(bool final)
     delete p;
 
   shaders.clear();
-  meshes.clear();
+  geometry.clear();
   objects.clear();
   lights.clear();
   particle_systems.clear();
@@ -148,12 +158,11 @@ void Scene::free_memory(bool final)
     integrator->device_free(device, &dscene);
 
     object_manager->device_free(device, &dscene);
-    mesh_manager->device_free(device, &dscene);
+    geometry_manager->device_free(device, &dscene);
     shader_manager->device_free(device, &dscene, this);
     light_manager->device_free(device, &dscene);
 
     particle_system_manager->device_free(device, &dscene);
-    curve_system_manager->device_free(device, &dscene);
 
     bake_manager->device_free(device, &dscene);
 
@@ -173,11 +182,10 @@ void Scene::free_memory(bool final)
     delete background;
     delete integrator;
     delete object_manager;
-    delete mesh_manager;
+    delete geometry_manager;
     delete shader_manager;
     delete light_manager;
     delete particle_system_manager;
-    delete curve_system_manager;
     delete image_manager;
     delete bake_manager;
   }
@@ -219,19 +227,13 @@ void Scene::device_update(Device *device_, Progress &progress)
   if (progress.get_cancel() || device->have_error())
     return;
 
-  mesh_manager->device_update_preprocess(device, this, progress);
+  geometry_manager->device_update_preprocess(device, this, progress);
 
   if (progress.get_cancel() || device->have_error())
     return;
 
   progress.set_status("Updating Objects");
   object_manager->device_update(device, &dscene, this, progress);
-
-  if (progress.get_cancel() || device->have_error())
-    return;
-
-  progress.set_status("Updating Hair Systems");
-  curve_system_manager->device_update(device, &dscene, this, progress);
 
   if (progress.get_cancel() || device->have_error())
     return;
@@ -243,7 +245,7 @@ void Scene::device_update(Device *device_, Progress &progress)
     return;
 
   progress.set_status("Updating Meshes");
-  mesh_manager->device_update(device, &dscene, this, progress);
+  geometry_manager->device_update(device, &dscene, this, progress);
 
   if (progress.get_cancel() || device->have_error())
     return;
@@ -364,10 +366,9 @@ bool Scene::need_update()
 bool Scene::need_data_update()
 {
   return (background->need_update || image_manager->need_update || object_manager->need_update ||
-          mesh_manager->need_update || light_manager->need_update || lookup_tables->need_update ||
-          integrator->need_update || shader_manager->need_update ||
-          particle_system_manager->need_update || curve_system_manager->need_update ||
-          bake_manager->need_update || film->need_update);
+          geometry_manager->need_update || light_manager->need_update ||
+          lookup_tables->need_update || integrator->need_update || shader_manager->need_update ||
+          particle_system_manager->need_update || bake_manager->need_update || film->need_update);
 }
 
 bool Scene::need_reset()
@@ -387,10 +388,9 @@ void Scene::reset()
   background->tag_update(this);
   integrator->tag_update(this);
   object_manager->tag_update(this);
-  mesh_manager->tag_update(this);
+  geometry_manager->tag_update(this);
   light_manager->tag_update(this);
   particle_system_manager->tag_update(this);
-  curve_system_manager->tag_update(this);
 }
 
 void Scene::device_free()
@@ -400,7 +400,7 @@ void Scene::device_free()
 
 void Scene::collect_statistics(RenderStats *stats)
 {
-  mesh_manager->collect_statistics(this, stats);
+  geometry_manager->collect_statistics(this, stats);
   image_manager->collect_statistics(stats);
 }
 

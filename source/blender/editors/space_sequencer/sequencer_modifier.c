@@ -35,7 +35,7 @@
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
 
-/* own include */
+/* Own include. */
 #include "sequencer_intern.h"
 
 /*********************** Add modifier operator *************************/
@@ -64,7 +64,7 @@ static int strip_modifier_add_exec(bContext *C, wmOperator *op)
 
   BKE_sequence_modifier_new(seq, NULL, type);
 
-  BKE_sequence_invalidate_cache(scene, seq);
+  BKE_sequence_invalidate_cache_preprocessed(scene, seq);
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, scene);
 
   return OPERATOR_FINISHED;
@@ -115,7 +115,7 @@ static int strip_modifier_remove_exec(bContext *C, wmOperator *op)
   BLI_remlink(&seq->modifiers, smd);
   BKE_sequence_modifier_free(smd);
 
-  BKE_sequence_invalidate_cache(scene, seq);
+  BKE_sequence_invalidate_cache_preprocessed(scene, seq);
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, scene);
 
   return OPERATOR_FINISHED;
@@ -123,6 +123,8 @@ static int strip_modifier_remove_exec(bContext *C, wmOperator *op)
 
 void SEQUENCER_OT_strip_modifier_remove(wmOperatorType *ot)
 {
+  PropertyRNA *prop;
+
   /* identifiers */
   ot->name = "Remove Strip Modifier";
   ot->idname = "SEQUENCER_OT_strip_modifier_remove";
@@ -136,7 +138,8 @@ void SEQUENCER_OT_strip_modifier_remove(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   /* properties */
-  RNA_def_string(ot->srna, "name", "Name", MAX_NAME, "Name", "Name of modifier to remove");
+  prop = RNA_def_string(ot->srna, "name", "Name", MAX_NAME, "Name", "Name of modifier to remove");
+  RNA_def_property_flag(prop, PROP_HIDDEN);
 }
 
 /*********************** Move operator *************************/
@@ -175,7 +178,7 @@ static int strip_modifier_move_exec(bContext *C, wmOperator *op)
     }
   }
 
-  BKE_sequence_invalidate_cache(scene, seq);
+  BKE_sequence_invalidate_cache_preprocessed(scene, seq);
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, scene);
 
   return OPERATOR_FINISHED;
@@ -183,6 +186,8 @@ static int strip_modifier_move_exec(bContext *C, wmOperator *op)
 
 void SEQUENCER_OT_strip_modifier_move(wmOperatorType *ot)
 {
+  PropertyRNA *prop;
+
   static const EnumPropertyItem direction_items[] = {
       {SEQ_MODIFIER_MOVE_UP, "UP", 0, "Up", "Move modifier up in the stack"},
       {SEQ_MODIFIER_MOVE_DOWN, "DOWN", 0, "Down", "Move modifier down in the stack"},
@@ -202,8 +207,10 @@ void SEQUENCER_OT_strip_modifier_move(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   /* properties */
-  RNA_def_string(ot->srna, "name", "Name", MAX_NAME, "Name", "Name of modifier to remove");
-  RNA_def_enum(ot->srna, "direction", direction_items, SEQ_MODIFIER_MOVE_UP, "Type", "");
+  prop = RNA_def_string(ot->srna, "name", "Name", MAX_NAME, "Name", "Name of modifier to remove");
+  RNA_def_property_flag(prop, PROP_HIDDEN);
+  prop = RNA_def_enum(ot->srna, "direction", direction_items, SEQ_MODIFIER_MOVE_UP, "Type", "");
+  RNA_def_property_flag(prop, PROP_HIDDEN);
 }
 
 /*********************** Copy to selected operator *************************/
@@ -249,7 +256,7 @@ static int strip_modifier_copy_exec(bContext *C, wmOperator *op)
   }
   SEQ_END;
 
-  BKE_sequence_invalidate_cache(scene, seq);
+  BKE_sequence_invalidate_cache_preprocessed(scene, seq);
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, scene);
 
   return OPERATOR_FINISHED;

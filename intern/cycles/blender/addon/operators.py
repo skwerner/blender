@@ -20,6 +20,8 @@ import bpy
 from bpy.types import Operator
 from bpy.props import StringProperty
 
+from bpy.app.translations import pgettext_tip as tip_
+
 
 class CYCLES_OT_use_shading_nodes(Operator):
     """Enable nodes on a material, world or light"""
@@ -39,6 +41,36 @@ class CYCLES_OT_use_shading_nodes(Operator):
         elif context.light:
             context.light.use_nodes = True
 
+        return {'FINISHED'}
+
+
+class CYCLES_OT_add_aov(bpy.types.Operator):
+    """Add an AOV pass"""
+    bl_idname="cycles.add_aov"
+    bl_label="Add AOV"
+
+    def execute(self, context):
+        view_layer = context.view_layer
+        cycles_view_layer = view_layer.cycles
+
+        cycles_view_layer.aovs.add()
+
+        view_layer.update_render_passes()
+        return {'FINISHED'}
+
+
+class CYCLES_OT_remove_aov(bpy.types.Operator):
+    """Remove an AOV pass"""
+    bl_idname="cycles.remove_aov"
+    bl_label="Remove AOV"
+
+    def execute(self, context):
+        view_layer = context.view_layer
+        cycles_view_layer = view_layer.cycles
+
+        cycles_view_layer.aovs.remove(cycles_view_layer.active_aov)
+
+        view_layer.update_render_passes()
         return {'FINISHED'}
 
 
@@ -98,7 +130,8 @@ class CYCLES_OT_denoise_animation(Operator):
 
                 if not os.path.isfile(filepath):
                     scene.render.filepath = original_filepath
-                    self.report({'ERROR'}, f"Frame '{filepath}' not found, animation must be complete.")
+                    err_msg = tip_("Frame '%s' not found, animation must be complete") % filepath
+                    self.report({'ERROR'}, err_msg)
                     return {'CANCELLED'}
 
                 scene.render.filepath = out_filepath
@@ -120,12 +153,12 @@ class CYCLES_OT_denoise_animation(Operator):
             self.report({'ERROR'}, str(e))
             return {'FINISHED'}
 
-        self.report({'INFO'}, "Denoising completed.")
+        self.report({'INFO'}, "Denoising completed")
         return {'FINISHED'}
 
 
 class CYCLES_OT_merge_images(Operator):
-    "Combine OpenEXR multilayer images rendered with different sample" \
+    "Combine OpenEXR multilayer images rendered with different sample " \
     "ranges into one image with reduced noise"
     bl_idname = "cycles.merge_images"
     bl_label = "Merge Images"
@@ -164,6 +197,8 @@ class CYCLES_OT_merge_images(Operator):
 
 classes = (
     CYCLES_OT_use_shading_nodes,
+    CYCLES_OT_add_aov,
+    CYCLES_OT_remove_aov,
     CYCLES_OT_denoise_animation,
     CYCLES_OT_merge_images
 )

@@ -70,6 +70,9 @@ typedef struct MovieTrackingCamera {
 
   /* Division distortion model coefficients */
   float division_k1, division_k2;
+
+  /* Nuke distortion model coefficients */
+  float nuke_k1, nuke_k2;
 } MovieTrackingCamera;
 
 typedef struct MovieTrackingMarker {
@@ -147,7 +150,7 @@ typedef struct MovieTrackingTrack {
 
   /* ** control how tracking happens */
   /**
-   * Number of frames to be tarcked during single tracking session
+   * Number of frames to be tracked during single tracking session
    * (if TRACKING_FRAMES_LIMIT is set).
    */
   short frames_limit;
@@ -251,7 +254,7 @@ typedef struct MovieTrackingSettings {
   short default_pattern_size;
   /** Size of search area for new tracks. */
   short default_search_size;
-  /** Number of frames to be tarcked during single tracking session
+  /** Number of frames to be tracked during single tracking session
    * (if TRACKING_FRAMES_LIMIT is set). */
   short default_frames_limit;
   /** Margin from frame boundaries. */
@@ -455,6 +458,7 @@ typedef struct MovieTracking {
 enum {
   TRACKING_DISTORTION_MODEL_POLYNOMIAL = 0,
   TRACKING_DISTORTION_MODEL_DIVISION = 1,
+  TRACKING_DISTORTION_MODEL_NUKE = 2,
 };
 
 /* MovieTrackingCamera->units */

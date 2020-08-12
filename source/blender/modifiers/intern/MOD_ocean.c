@@ -27,26 +27,41 @@
 #include "BLI_math_inline.h"
 #include "BLI_task.h"
 
+#include "BLT_translation.h"
+
 #include "DNA_customdata_types.h"
-#include "DNA_object_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
+#include "DNA_object_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
 
-#include "BKE_library.h"
+#include "BKE_context.h"
+#include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
 #include "BKE_ocean.h"
+#include "BKE_screen.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
+
+#include "BLO_read_write.h"
+
+#include "WM_types.h" /* For UI free bake operator. */
 
 #include "DEG_depsgraph_query.h"
 
 #include "MOD_modifiertypes.h"
+#include "MOD_ui_common.h"
 
 #ifdef WITH_OCEANSIM
 static void init_cache_data(Object *ob, struct OceanModifierData *omd)
 {
-  const char *relbase = modifier_path_relbase_from_global(ob);
+  const char *relbase = BKE_modifier_path_relbase_from_global(ob);
 
   omd->oceancache = BKE_ocean_init_cache(omd->cachepath,
                                          relbase,
@@ -92,18 +107,23 @@ static void initData(ModifierData *md)
   omd->seed = 0;
   omd->time = 1.0;
 
+  omd->spectrum = MOD_OCEAN_SPECTRUM_PHILLIPS;
+  omd->sharpen_peak_jonswap = 0.0f;
+  omd->fetch_jonswap = 120.0f;
+
   omd->size = 1.0;
   omd->repeat_x = 1;
   omd->repeat_y = 1;
 
-  modifier_path_init(omd->cachepath, sizeof(omd->cachepath), "cache_ocean");
+  BKE_modifier_path_init(omd->cachepath, sizeof(omd->cachepath), "cache_ocean");
 
   omd->cached = 0;
   omd->bakestart = 1;
   omd->bakeend = 250;
   omd->oceancache = NULL;
   omd->foam_fade = 0.98;
-  omd->foamlayername[0] = '\0'; /* layer name empty by default */
+  omd->foamlayername[0] = '\0';  /* layer name empty by default */
+  omd->spraylayername[0] = '\0'; /* layer name empty by default */
 
   omd->ocean = BKE_ocean_add();
   BKE_ocean_init_from_modifier(omd->ocean, omd);
@@ -120,8 +140,9 @@ static void freeData(ModifierData *md)
   OceanModifierData *omd = (OceanModifierData *)md;
 
   BKE_ocean_free(omd->ocean);
-  if (omd->oceancache)
+  if (omd->oceancache) {
     BKE_ocean_free_cache(omd->oceancache);
+  }
 #else  /* WITH_OCEANSIM */
   /* unused */
   (void)md;
@@ -132,11 +153,11 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
 {
 #ifdef WITH_OCEANSIM
 #  if 0
-  const OceanModifierData *omd = (const OceanModifierData *) md;
+  const OceanModifierData *omd = (const OceanModifierData *)md;
 #  endif
   OceanModifierData *tomd = (OceanModifierData *)target;
 
-  modifier_copyData_generic(md, target, flag);
+  BKE_modifier_copydata_generic(md, target, flag);
 
   /* The oceancache object will be recreated for this copy
    * automatically when cached=true */
@@ -195,7 +216,7 @@ typedef struct GenerateOceanGeometryData {
 
 static void generate_ocean_geometry_vertices(void *__restrict userdata,
                                              const int y,
-                                             const ParallelRangeTLS *__restrict UNUSED(tls))
+                                             const TaskParallelTLS *__restrict UNUSED(tls))
 {
   GenerateOceanGeometryData *gogd = userdata;
   int x;
@@ -211,7 +232,7 @@ static void generate_ocean_geometry_vertices(void *__restrict userdata,
 
 static void generate_ocean_geometry_polygons(void *__restrict userdata,
                                              const int y,
-                                             const ParallelRangeTLS *__restrict UNUSED(tls))
+                                             const TaskParallelTLS *__restrict UNUSED(tls))
 {
   GenerateOceanGeometryData *gogd = userdata;
   int x;
@@ -240,7 +261,7 @@ static void generate_ocean_geometry_polygons(void *__restrict userdata,
 
 static void generate_ocean_geometry_uvs(void *__restrict userdata,
                                         const int y,
-                                        const ParallelRangeTLS *__restrict UNUSED(tls))
+                                        const TaskParallelTLS *__restrict UNUSED(tls))
 {
   GenerateOceanGeometryData *gogd = userdata;
   int x;
@@ -267,7 +288,7 @@ static void generate_ocean_geometry_uvs(void *__restrict userdata,
   }
 }
 
-static Mesh *generate_ocean_geometry(OceanModifierData *omd)
+static Mesh *generate_ocean_geometry(OceanModifierData *omd, Mesh *mesh_orig)
 {
   Mesh *result;
 
@@ -295,12 +316,13 @@ static Mesh *generate_ocean_geometry(OceanModifierData *omd)
   gogd.sy /= gogd.ry;
 
   result = BKE_mesh_new_nomain(num_verts, 0, 0, num_polys * 4, num_polys);
+  BKE_mesh_copy_settings(result, mesh_orig);
 
   gogd.mverts = result->mvert;
   gogd.mpolys = result->mpoly;
   gogd.mloops = result->mloop;
 
-  ParallelRangeSettings settings;
+  TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
   settings.use_threading = use_threading;
 
@@ -376,7 +398,7 @@ static Mesh *doOcean(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mes
   }
 
   if (omd->geometry_mode == MOD_OCEAN_GEOM_GENERATE) {
-    result = generate_ocean_geometry(omd);
+    result = generate_ocean_geometry(omd, mesh);
     BKE_mesh_ensure_normals(result);
   }
   else if (omd->geometry_mode == MOD_OCEAN_GEOM_DISPLACE) {
@@ -399,6 +421,12 @@ static Mesh *doOcean(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mes
       MLoopCol *mloopcols = CustomData_add_layer_named(
           &result->ldata, CD_MLOOPCOL, CD_CALLOC, NULL, num_loops, omd->foamlayername);
 
+      MLoopCol *mloopcols_spray = NULL;
+      if (omd->flag & MOD_OCEAN_GENERATE_SPRAY) {
+        mloopcols_spray = CustomData_add_layer_named(
+            &result->ldata, CD_MLOOPCOL, CD_CALLOC, NULL, num_loops, omd->spraylayername);
+      }
+
       if (mloopcols) { /* unlikely to fail */
         MPoly *mpolys = result->mpoly;
         MPoly *mp;
@@ -406,6 +434,11 @@ static Mesh *doOcean(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mes
         for (i = 0, mp = mpolys; i < num_polys; i++, mp++) {
           MLoop *ml = &mloops[mp->loopstart];
           MLoopCol *mlcol = &mloopcols[mp->loopstart];
+
+          MLoopCol *mlcolspray = NULL;
+          if (omd->flag & MOD_OCEAN_GENERATE_SPRAY) {
+            mlcolspray = &mloopcols_spray[mp->loopstart];
+          }
 
           for (j = mp->totloop; j--; ml++, mlcol++) {
             const float *vco = mverts[ml->v].co;
@@ -426,6 +459,23 @@ static Mesh *doOcean(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mes
             mlcol->r = mlcol->g = mlcol->b = (char)(foam * 255);
             /* This needs to be set (render engine uses) */
             mlcol->a = 255;
+
+            if (omd->flag & MOD_OCEAN_GENERATE_SPRAY) {
+              if (omd->flag & MOD_OCEAN_INVERT_SPRAY) {
+                mlcolspray->r = ocr.Eminus[0] * 255;
+              }
+              else {
+                mlcolspray->r = ocr.Eplus[0] * 255;
+              }
+              mlcolspray->g = 0;
+              if (omd->flag & MOD_OCEAN_INVERT_SPRAY) {
+                mlcolspray->b = ocr.Eminus[2] * 255;
+              }
+              else {
+                mlcolspray->b = ocr.Eplus[2] * 255;
+              }
+              mlcolspray->a = 255;
+            }
           }
         }
       }
@@ -434,7 +484,8 @@ static Mesh *doOcean(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mes
 
   /* displace the geometry */
 
-  /* Note: tried to parallelized that one and previous foam loop, but gives 20% slower results... odd. */
+  /* Note: tried to parallelized that one and previous foam loop,
+   * but gives 20% slower results... odd. */
   {
     const int num_verts = result->totvert;
 
@@ -475,16 +526,231 @@ static Mesh *doOcean(ModifierData *UNUSED(md), const ModifierEvalContext *UNUSED
 }
 #endif /* WITH_OCEANSIM */
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   Mesh *result;
 
   result = doOcean(md, ctx, mesh);
 
-  if (result != mesh)
+  if (result != mesh) {
     result->runtime.cd_dirty_vert |= CD_MASK_NORMAL;
+  }
 
   return result;
+}
+// #define WITH_OCEANSIM
+static void panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+#ifdef WITH_OCEANSIM
+  uiLayout *col, *sub;
+
+  PointerRNA ptr;
+  PointerRNA ob_ptr;
+  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+
+  uiLayoutSetPropSep(layout, true);
+
+  col = uiLayoutColumn(layout, false);
+  uiItemR(col, &ptr, "geometry_mode", 0, NULL, ICON_NONE);
+  if (RNA_enum_get(&ptr, "geometry_mode") == MOD_OCEAN_GEOM_GENERATE) {
+    sub = uiLayoutColumn(col, true);
+    uiItemR(sub, &ptr, "repeat_x", 0, IFACE_("Repeat X"), ICON_NONE);
+    uiItemR(sub, &ptr, "repeat_y", 0, IFACE_("Y"), ICON_NONE);
+  }
+  uiItemR(col, &ptr, "resolution", 0, NULL, ICON_NONE);
+
+  uiItemR(col, &ptr, "time", 0, NULL, ICON_NONE);
+
+  uiItemR(col, &ptr, "depth", 0, NULL, ICON_NONE);
+  uiItemR(col, &ptr, "size", 0, NULL, ICON_NONE);
+  uiItemR(col, &ptr, "spatial_size", 0, NULL, ICON_NONE);
+
+  uiItemR(col, &ptr, "random_seed", 0, NULL, ICON_NONE);
+
+  uiItemR(col, &ptr, "use_normals", 0, NULL, ICON_NONE);
+
+  modifier_panel_end(layout, &ptr);
+
+#else  /* WITH_OCEANSIM */
+  uiItemL(layout, IFACE_("Built without Ocean modifier"), ICON_NONE);
+  UNUSED_VARS(C);
+#endif /* WITH_OCEANSIM */
+}
+
+#ifdef WITH_OCEANSIM
+static void waves_panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *col, *sub;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+
+  uiLayoutSetPropSep(layout, true);
+
+  col = uiLayoutColumn(layout, false);
+  uiItemR(col, &ptr, "wave_scale", 0, IFACE_("Scale"), ICON_NONE);
+  uiItemR(col, &ptr, "wave_scale_min", 0, NULL, ICON_NONE);
+  uiItemR(col, &ptr, "choppiness", 0, NULL, ICON_NONE);
+  uiItemR(col, &ptr, "wind_velocity", 0, NULL, ICON_NONE);
+
+  uiItemS(layout);
+
+  col = uiLayoutColumn(layout, false);
+  uiItemR(col, &ptr, "wave_alignment", UI_ITEM_R_SLIDER, IFACE_("Alignment"), ICON_NONE);
+  sub = uiLayoutColumn(col, false);
+  uiLayoutSetActive(sub, RNA_float_get(&ptr, "wave_alignment") > 0.0f);
+  uiItemR(sub, &ptr, "wave_direction", 0, IFACE_("Direction"), ICON_NONE);
+  uiItemR(sub, &ptr, "damping", 0, NULL, ICON_NONE);
+}
+
+static void foam_panel_draw_header(const bContext *C, Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+
+  uiItemR(layout, &ptr, "use_foam", 0, IFACE_("Foam"), ICON_NONE);
+}
+
+static void foam_panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *col;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+
+  bool use_foam = RNA_boolean_get(&ptr, "use_foam");
+
+  uiLayoutSetPropSep(layout, true);
+
+  col = uiLayoutColumn(layout, false);
+  uiLayoutSetActive(col, use_foam);
+  uiItemR(col, &ptr, "foam_layer_name", 0, IFACE_("Data Layer"), ICON_NONE);
+  uiItemR(col, &ptr, "foam_coverage", 0, IFACE_("Coverage"), ICON_NONE);
+}
+
+static void spray_panel_draw_header(const bContext *C, Panel *panel)
+{
+  uiLayout *row;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+
+  bool use_foam = RNA_boolean_get(&ptr, "use_foam");
+
+  row = uiLayoutRow(layout, false);
+  uiLayoutSetActive(row, use_foam);
+  uiItemR(row, &ptr, "use_spray", 0, IFACE_("Spray"), ICON_NONE);
+}
+
+static void spray_panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *col;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+
+  bool use_foam = RNA_boolean_get(&ptr, "use_foam");
+  bool use_spray = RNA_boolean_get(&ptr, "use_spray");
+
+  uiLayoutSetPropSep(layout, true);
+
+  col = uiLayoutColumn(layout, false);
+  uiLayoutSetActive(col, use_foam && use_spray);
+  uiItemR(col, &ptr, "spray_layer_name", 0, IFACE_("Data Layer"), ICON_NONE);
+  uiItemR(col, &ptr, "invert_spray", 0, IFACE_("Invert"), ICON_NONE);
+}
+
+static void spectrum_panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *col;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+
+  int spectrum = RNA_enum_get(&ptr, "spectrum");
+
+  uiLayoutSetPropSep(layout, true);
+
+  col = uiLayoutColumn(layout, false);
+  uiItemR(col, &ptr, "spectrum", 0, NULL, ICON_NONE);
+  if (ELEM(spectrum, MOD_OCEAN_SPECTRUM_TEXEL_MARSEN_ARSLOE, MOD_OCEAN_SPECTRUM_JONSWAP)) {
+    uiItemR(col, &ptr, "sharpen_peak_jonswap", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
+    uiItemR(col, &ptr, "fetch_jonswap", 0, NULL, ICON_NONE);
+  }
+}
+
+static void bake_panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *col;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+
+  uiLayoutSetPropSep(layout, true);
+
+  bool is_cached = RNA_boolean_get(&ptr, "is_cached");
+  bool use_foam = RNA_boolean_get(&ptr, "use_foam");
+
+  if (is_cached) {
+    PointerRNA op_ptr;
+    uiItemFullO(layout,
+                "OBJECT_OT_ocean_bake",
+                IFACE_("Delete Bake"),
+                ICON_NONE,
+                NULL,
+                WM_OP_EXEC_DEFAULT,
+                0,
+                &op_ptr);
+    RNA_boolean_set(&op_ptr, "free", true);
+  }
+  else {
+    uiItemO(layout, NULL, ICON_NONE, "OBJECT_OT_ocean_bake");
+  }
+
+  uiItemR(layout, &ptr, "filepath", 0, NULL, ICON_NONE);
+
+  col = uiLayoutColumn(layout, true);
+  uiLayoutSetEnabled(col, !is_cached);
+  uiItemR(col, &ptr, "frame_start", 0, IFACE_("Frame Start"), ICON_NONE);
+  uiItemR(col, &ptr, "frame_end", 0, IFACE_("End"), ICON_NONE);
+
+  col = uiLayoutColumn(layout, false);
+  uiLayoutSetActive(col, use_foam);
+  uiItemR(col, &ptr, "bake_foam_fade", 0, NULL, ICON_NONE);
+}
+#endif /* WITH_OCEANSIM */
+
+static void panelRegister(ARegionType *region_type)
+{
+  PanelType *panel_type = modifier_panel_register(region_type, eModifierType_Ocean, panel_draw);
+#ifdef WITH_OCEANSIM
+  modifier_subpanel_register(region_type, "waves", "Waves", NULL, waves_panel_draw, panel_type);
+  PanelType *foam_panel = modifier_subpanel_register(
+      region_type, "foam", "", foam_panel_draw_header, foam_panel_draw, panel_type);
+  modifier_subpanel_register(
+      region_type, "spray", "", spray_panel_draw_header, spray_panel_draw, foam_panel);
+  modifier_subpanel_register(
+      region_type, "spectrum", "Spectrum", NULL, spectrum_panel_draw, panel_type);
+  modifier_subpanel_register(region_type, "bake", "Bake", NULL, bake_panel_draw, panel_type);
+#else
+  UNUSED_VARS(panel_type);
+#endif /* WITH_OCEANSIM */
+}
+
+static void blendRead(BlendDataReader *UNUSED(reader), ModifierData *md)
+{
+  OceanModifierData *omd = (OceanModifierData *)md;
+  omd->oceancache = NULL;
+  omd->ocean = NULL;
 }
 
 ModifierTypeInfo modifierType_Ocean = {
@@ -501,7 +767,10 @@ ModifierTypeInfo modifierType_Ocean = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,
@@ -514,4 +783,7 @@ ModifierTypeInfo modifierType_Ocean = {
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ blendRead,
 };

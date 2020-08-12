@@ -5,15 +5,15 @@ from bpy.props import (
     EnumProperty,
 )
 
-dirname, filename = os.path.split(__file__)
-idname = os.path.splitext(filename)[0]
+DIRNAME, FILENAME = os.path.split(__file__)
+IDNAME = os.path.splitext(FILENAME)[0]
 
 def update_fn(_self, _context):
     load()
 
 
 class Prefs(bpy.types.KeyConfigPreferences):
-    bl_idname = idname
+    bl_idname = IDNAME
 
     select_mouse: EnumProperty(
         name="Select Mouse",
@@ -28,11 +28,10 @@ class Prefs(bpy.types.KeyConfigPreferences):
         description=(
             "Mouse button used for selection"
         ),
-        default='LEFT',
         update=update_fn,
     )
     spacebar_action: EnumProperty(
-        name="Spacebar",
+        name="Spacebar Action",
         items=(
             ('PLAY', "Play",
              "Toggle animation playback "
@@ -55,12 +54,32 @@ class Prefs(bpy.types.KeyConfigPreferences):
         default='PLAY',
         update=update_fn,
     )
+    use_alt_click_leader: BoolProperty(
+        name="Alt Click Tool Prompt",
+        description=(
+            "Tapping Alt (without pressing any other keys) shows a prompt in the status-bar\n"
+            "prompting a second keystroke to activate the tool"
+        ),
+        default=False,
+        update=update_fn,
+    )
     use_select_all_toggle: BoolProperty(
         name="Select All Toggles",
         description=(
             "Causes select-all ('A' key) to de-select in the case a selection exists"
         ),
         default=False,
+        update=update_fn,
+    )
+
+    gizmo_action: EnumProperty(
+        name="Activate Gizmo",
+        items=(
+            ('PRESS', "Press", "Press causes immediate activation, preventing click being passed to the tool"),
+            ('DRAG', "Drag", "Drag allows click events to pass through to the tool, adding a small delay"),
+        ),
+        description="Activation event for gizmos that support drag motion",
+        default='DRAG',
         update=update_fn,
     )
 
@@ -81,6 +100,55 @@ class Prefs(bpy.types.KeyConfigPreferences):
         default=False,
         update=update_fn,
     )
+    v3d_tilde_action: EnumProperty(
+        name="Tilde Action",
+        items=(
+            ('VIEW', "Navigate",
+             "View operations (useful for keyboards without a numpad)",
+             0),
+            ('GIZMO', "Gizmos",
+             "Control transform gizmos",
+             1),
+        ),
+        description=(
+            "Action when 'Tilde' is pressed"
+        ),
+        default='VIEW',
+        update=update_fn,
+    )
+
+    v3d_mmb_action: EnumProperty(
+        name="MMB Action",
+        items=(
+            ('ORBIT', "Orbit",
+             "Orbit",
+             0),
+            ('PAN', "Pan",
+             "Set the view axis where each mouse direction always maps to the same axis",
+             1),
+        ),
+        description=(
+            "The action when Middle-Mouse dragging in the viewport. Shift-Middle-Mouse is used for the other action"
+        ),
+        update=update_fn,
+    )
+
+    v3d_alt_mmb_drag_action: EnumProperty(
+        name="Alt-MMB Drag Action",
+        items=(
+            ('RELATIVE', "Relative",
+             "Set the view axis where each mouse direction maps to an axis relative to the current orientation",
+             0),
+            ('ABSOLUTE', "Absolute",
+             "Set the view axis where each mouse direction always maps to the same axis",
+             1),
+        ),
+        description=(
+            "Action when Alt-MMB dragging in the 3D viewport"
+        ),
+        update=update_fn,
+    )
+
     # Developer note, this is an experemental option.
     use_pie_click_drag: BoolProperty(
         name="Pie Menu on Drag",
@@ -88,56 +156,88 @@ class Prefs(bpy.types.KeyConfigPreferences):
             "Activate some pie menus on drag,\n"
             "allowing the tapping the same key to have a secondary action.\n"
             "\n"
-             "\u2022 Tapping Tab in the 3D view toggles edit-mode, drag for mode menu.\n"
-             "\u2022 Tapping Z in the 3D view toggles wireframe, drag for draw modes.\n"
-             "\u2022 Tapping Tilde in the 3D view for first person navigation, drag for view axes"
+            "\u2022 Tapping Tab in the 3D view toggles edit-mode, drag for mode menu.\n"
+            "\u2022 Tapping Z in the 3D view toggles wireframe, drag for draw modes.\n"
+            "\u2022 Tapping Tilde in the 3D view for first person navigation, drag for view axes"
         ),
         default=False,
         update=update_fn,
     )
 
     def draw(self, layout):
-        split = layout.split()
-        col = split.column(align=True)
-        col.label(text="Select With:")
-        col.row().prop(self, "select_mouse", expand=True)
-        col.prop(self, "use_select_all_toggle")
+        layout.use_property_split = True
 
-        col = split.column(align=True)
-        col.label(text="Spacebar Action:")
-        col.row().prop(self, "spacebar_action", expand=True)
+        is_select_left = (self.select_mouse == 'LEFT')
 
-        layout.label(text="3D View:")
-        split = layout.split()
-        col = split.column()
-        col.prop(self, "use_v3d_tab_menu")
-        col.prop(self, "use_pie_click_drag")
-        col = split.column()
-        col.prop(self, "use_v3d_shade_ex_pie")
+        # General settings.
+        col = layout.column()
+        col.row().prop(self, "select_mouse", text="Select with Mouse Button", expand=True)
+        col.row().prop(self, "spacebar_action", text="Spacebar Action", expand=True)
+
+        if is_select_left:
+            col.row().prop(self, "gizmo_action", text="Activate Gizmo Event", expand=True)
+
+        # Checkboxes sub-layout.
+        col = layout.column()
+        sub = col.column(align=True)
+        row = sub.row()
+        row.prop(self, "use_select_all_toggle")
+        row.prop(self, "use_alt_click_leader")
+
+        # 3DView settings.
+        col = layout.column()
+        col.label(text="3D View")
+        col.row().prop(self, "v3d_tilde_action", text="Grave Accent / Tilde Action", expand=True)
+        col.row().prop(self, "v3d_mmb_action", text="Middle Mouse Action", expand=True)
+        col.row().prop(self, "v3d_alt_mmb_drag_action", text="Alt Middle Mouse Drag Action", expand=True)
+
+        # Checkboxes sub-layout.
+        col = layout.column()
+        sub = col.column(align=True)
+        sub.prop(self, "use_v3d_tab_menu")
+        sub.prop(self, "use_pie_click_drag")
+        sub.prop(self, "use_v3d_shade_ex_pie")
 
 
-blender_default = bpy.utils.execfile(os.path.join(dirname, "keymap_data", "blender_default.py"))
+blender_default = bpy.utils.execfile(os.path.join(DIRNAME, "keymap_data", "blender_default.py"))
 
 
 def load():
+    from sys import platform
     from bpy import context
     from bl_keymap_utils.io import keyconfig_init_from_data
 
     prefs = context.preferences
-    kc = context.window_manager.keyconfigs.new(idname)
+    kc = context.window_manager.keyconfigs.new(IDNAME)
     kc_prefs = kc.preferences
 
     keyconfig_data = blender_default.generate_keymaps(
         blender_default.Params(
             select_mouse=kc_prefs.select_mouse,
-            use_mouse_emulate_3_button=prefs.inputs.use_mouse_emulate_3_button,
+            use_mouse_emulate_3_button=(
+                prefs.inputs.use_mouse_emulate_3_button and
+                prefs.inputs.mouse_emulate_3_button_modifier == 'ALT'
+            ),
             spacebar_action=kc_prefs.spacebar_action,
+            v3d_tilde_action=kc_prefs.v3d_tilde_action,
+            use_v3d_mmb_pan=(kc_prefs.v3d_mmb_action == 'PAN'),
+            v3d_alt_mmb_drag_action=kc_prefs.v3d_alt_mmb_drag_action,
             use_select_all_toggle=kc_prefs.use_select_all_toggle,
             use_v3d_tab_menu=kc_prefs.use_v3d_tab_menu,
             use_v3d_shade_ex_pie=kc_prefs.use_v3d_shade_ex_pie,
+            use_gizmo_drag=(
+                kc_prefs.select_mouse == 'LEFT' and
+                kc_prefs.gizmo_action == 'DRAG'
+            ),
+            use_alt_click_leader=kc_prefs.use_alt_click_leader,
             use_pie_click_drag=kc_prefs.use_pie_click_drag,
         ),
     )
+
+    if platform == 'darwin':
+        from bl_keymap_utils.platform_helpers import keyconfig_data_oskey_from_ctrl_for_macos
+        keyconfig_data = keyconfig_data_oskey_from_ctrl_for_macos(keyconfig_data)
+
     keyconfig_init_from_data(kc, keyconfig_data)
 
 

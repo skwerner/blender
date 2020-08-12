@@ -39,10 +39,7 @@ class MixBaseOperation : public NodeOperation {
   inline void clampIfNeeded(float color[4])
   {
     if (m_useClamp) {
-      CLAMP(color[0], 0.0f, 1.0f);
-      CLAMP(color[1], 0.0f, 1.0f);
-      CLAMP(color[2], 0.0f, 1.0f);
-      CLAMP(color[3], 0.0f, 1.0f);
+      clamp_v4(color, 0.0f, 1.0f);
     }
   }
 
@@ -95,9 +92,9 @@ class MixBlendOperation : public MixBaseOperation {
   void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
 };
 
-class MixBurnOperation : public MixBaseOperation {
+class MixColorBurnOperation : public MixBaseOperation {
  public:
-  MixBurnOperation();
+  MixColorBurnOperation();
   void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
 };
 

@@ -27,11 +27,12 @@ NodeShape::~NodeShape()
 {
   vector<Rep *>::iterator rep;
 
-  if (0 != _Shapes.size()) {
+  if (!_Shapes.empty()) {
     for (rep = _Shapes.begin(); rep != _Shapes.end(); ++rep) {
       int refCount = (*rep)->destroy();
-      if (0 == refCount)
+      if (0 == refCount) {
         delete (*rep);
+      }
     }
 
     _Shapes.clear();
@@ -46,8 +47,9 @@ void NodeShape::accept(SceneVisitor &v)
 
   v.visitNodeShapeBefore(*this);
   vector<Rep *>::iterator rep;
-  for (rep = _Shapes.begin(); rep != _Shapes.end(); ++rep)
+  for (rep = _Shapes.begin(); rep != _Shapes.end(); ++rep) {
     (*rep)->accept(v);
+  }
   v.visitNodeShapeAfter(*this);
 }
 

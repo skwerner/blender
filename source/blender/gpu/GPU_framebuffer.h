@@ -28,7 +28,7 @@
 extern "C" {
 #endif
 
-struct GPUTexture;
+#include "GPU_texture.h"
 
 typedef struct GPUAttachment {
   struct GPUTexture *tex;
@@ -40,6 +40,12 @@ typedef enum eGPUFrameBufferBits {
   GPU_DEPTH_BIT = (1 << 1),
   GPU_STENCIL_BIT = (1 << 2),
 } eGPUFrameBufferBits;
+
+typedef enum eGPUBackBuffer {
+  GPU_BACKBUFFER = 0,
+  GPU_BACKBUFFER_RIGHT,
+  GPU_BACKBUFFER_LEFT,
+} eGPUBackBuffer;
 
 typedef struct GPUFrameBuffer GPUFrameBuffer;
 typedef struct GPUOffScreen GPUOffScreen;
@@ -71,7 +77,7 @@ GPUFrameBuffer *GPU_framebuffer_active_get(void);
     } \
   } while (0)
 
-/* Framebuffer setup : You need to call GPU_framebuffer_bind for theses
+/* Framebuffer setup : You need to call GPU_framebuffer_bind for these
  * to be effective. */
 
 void GPU_framebuffer_texture_attach(GPUFrameBuffer *fb, struct GPUTexture *tex, int slot, int mip);
@@ -173,9 +179,18 @@ void GPU_framebuffer_clear(GPUFrameBuffer *fb,
 #define GPU_framebuffer_clear_color_depth_stencil(fb, col, depth, stencil) \
   GPU_framebuffer_clear(fb, GPU_COLOR_BIT | GPU_DEPTH_BIT | GPU_STENCIL_BIT, col, depth, stencil)
 
+void GPU_framebuffer_multi_clear(GPUFrameBuffer *fb, const float (*clear_cols)[4]);
+
 void GPU_framebuffer_read_depth(GPUFrameBuffer *fb, int x, int y, int w, int h, float *data);
-void GPU_framebuffer_read_color(
-    GPUFrameBuffer *fb, int x, int y, int w, int h, int channels, int slot, float *data);
+void GPU_framebuffer_read_color(GPUFrameBuffer *fb,
+                                int x,
+                                int y,
+                                int w,
+                                int h,
+                                int channels,
+                                int slot,
+                                eGPUDataFormat format,
+                                void *data);
 
 void GPU_framebuffer_blit(GPUFrameBuffer *fb_read,
                           int read_slot,
@@ -193,7 +208,7 @@ void GPU_framebuffer_recursive_downsample(GPUFrameBuffer *fb,
  */
 
 GPUOffScreen *GPU_offscreen_create(
-    int width, int height, int samples, bool depth, bool high_bitdepth, char err_out[256]);
+    int width, int height, bool depth, bool high_bitdepth, char err_out[256]);
 void GPU_offscreen_free(GPUOffScreen *ofs);
 void GPU_offscreen_bind(GPUOffScreen *ofs, bool save);
 void GPU_offscreen_unbind(GPUOffScreen *ofs, bool restore);
@@ -209,7 +224,13 @@ void GPU_offscreen_viewport_data_get(GPUOffScreen *ofs,
                                      struct GPUTexture **r_depth);
 
 void GPU_clear_color(float red, float green, float blue, float alpha);
+void GPU_clear_depth(float depth);
 void GPU_clear(eGPUFrameBufferBits flags);
+
+void GPU_frontbuffer_read_pixels(
+    int x, int y, int w, int h, int channels, eGPUDataFormat format, void *data);
+
+void GPU_backbuffer_bind(eGPUBackBuffer buffer);
 
 #ifdef __cplusplus
 }

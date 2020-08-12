@@ -61,8 +61,9 @@ PyDoc_STRVAR(ViewEdgeIterator_doc,
 
 static int check_begin(PyObject *obj, void *v)
 {
-  if (obj != NULL && obj != Py_None && !BPy_ViewEdge_Check(obj))
+  if (obj != NULL && obj != Py_None && !BPy_ViewEdge_Check(obj)) {
     return 0;
+  }
   *((PyObject **)v) = obj;
   return 1;
 }
@@ -126,8 +127,9 @@ static PyObject *ViewEdgeIterator_object_get(BPy_ViewEdgeIterator *self, void *U
     return NULL;
   }
   ViewEdge *ve = self->ve_it->operator*();
-  if (ve)
+  if (ve) {
     return BPy_ViewEdge_from_ViewEdge(*ve);
+  }
   Py_RETURN_NONE;
 }
 
@@ -140,8 +142,9 @@ static PyObject *ViewEdgeIterator_current_edge_get(BPy_ViewEdgeIterator *self,
                                                    void *UNUSED(closure))
 {
   ViewEdge *ve = self->ve_it->getCurrentEdge();
-  if (ve)
+  if (ve) {
     return BPy_ViewEdge_from_ViewEdge(*ve);
+  }
   Py_RETURN_NONE;
 }
 
@@ -192,8 +195,9 @@ PyDoc_STRVAR(ViewEdgeIterator_begin_doc,
 static PyObject *ViewEdgeIterator_begin_get(BPy_ViewEdgeIterator *self, void *UNUSED(closure))
 {
   ViewEdge *ve = self->ve_it->getBegin();
-  if (ve)
+  if (ve) {
     return BPy_ViewEdge_from_ViewEdge(*ve);
+  }
   Py_RETURN_NONE;
 }
 
@@ -210,25 +214,25 @@ static int ViewEdgeIterator_begin_set(BPy_ViewEdgeIterator *self,
 }
 
 static PyGetSetDef BPy_ViewEdgeIterator_getseters[] = {
-    {(char *)"object",
+    {"object",
      (getter)ViewEdgeIterator_object_get,
      (setter)NULL,
-     (char *)ViewEdgeIterator_object_doc,
+     ViewEdgeIterator_object_doc,
      NULL},
-    {(char *)"current_edge",
+    {"current_edge",
      (getter)ViewEdgeIterator_current_edge_get,
      (setter)ViewEdgeIterator_current_edge_set,
-     (char *)ViewEdgeIterator_current_edge_doc,
+     ViewEdgeIterator_current_edge_doc,
      NULL},
-    {(char *)"orientation",
+    {"orientation",
      (getter)ViewEdgeIterator_orientation_get,
      (setter)ViewEdgeIterator_orientation_set,
-     (char *)ViewEdgeIterator_orientation_doc,
+     ViewEdgeIterator_orientation_doc,
      NULL},
-    {(char *)"begin",
+    {"begin",
      (getter)ViewEdgeIterator_begin_get,
      (setter)ViewEdgeIterator_begin_set,
-     (char *)ViewEdgeIterator_begin_doc,
+     ViewEdgeIterator_begin_doc,
      NULL},
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };

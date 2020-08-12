@@ -18,11 +18,9 @@
 
 #include <string.h>
 
-extern "C" {
 #include "BKE_node.h"
 
 #include "RNA_access.h"
-}
 
 #include "COM_ExecutionSystem.h"
 #include "COM_NodeOperation.h"
@@ -48,10 +46,12 @@ Node::Node(bNode *editorNode, bool create_sockets)
     bNodeSocket *input = (bNodeSocket *)editorNode->inputs.first;
     while (input != NULL) {
       DataType dt = COM_DT_VALUE;
-      if (input->type == SOCK_RGBA)
+      if (input->type == SOCK_RGBA) {
         dt = COM_DT_COLOR;
-      if (input->type == SOCK_VECTOR)
+      }
+      if (input->type == SOCK_VECTOR) {
         dt = COM_DT_VECTOR;
+      }
 
       this->addInputSocket(dt, input);
       input = input->next;
@@ -59,10 +59,12 @@ Node::Node(bNode *editorNode, bool create_sockets)
     bNodeSocket *output = (bNodeSocket *)editorNode->outputs.first;
     while (output != NULL) {
       DataType dt = COM_DT_VALUE;
-      if (output->type == SOCK_RGBA)
+      if (output->type == SOCK_RGBA) {
         dt = COM_DT_COLOR;
-      if (output->type == SOCK_VECTOR)
+      }
+      if (output->type == SOCK_VECTOR) {
         dt = COM_DT_VECTOR;
+      }
 
       this->addOutputSocket(dt, output);
       output = output->next;

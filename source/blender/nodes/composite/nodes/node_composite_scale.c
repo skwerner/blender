@@ -26,11 +26,11 @@
 /* **************** Scale  ******************** */
 
 static bNodeSocketTemplate cmp_node_scale_in[] = {
-    {SOCK_RGBA, 1, N_("Image"), 1.0f, 1.0f, 1.0f, 1.0f},
-    {SOCK_FLOAT, 1, N_("X"), 1.0f, 0.0f, 0.0f, 0.0f, 0.0001f, CMP_SCALE_MAX, PROP_NONE},
-    {SOCK_FLOAT, 1, N_("Y"), 1.0f, 0.0f, 0.0f, 0.0f, 0.0001f, CMP_SCALE_MAX, PROP_NONE},
-    {-1, 0, ""}};
-static bNodeSocketTemplate cmp_node_scale_out[] = {{SOCK_RGBA, 0, N_("Image")}, {-1, 0, ""}};
+    {SOCK_RGBA, N_("Image"), 1.0f, 1.0f, 1.0f, 1.0f},
+    {SOCK_FLOAT, N_("X"), 1.0f, 0.0f, 0.0f, 0.0f, 0.0001f, CMP_SCALE_MAX, PROP_NONE},
+    {SOCK_FLOAT, N_("Y"), 1.0f, 0.0f, 0.0f, 0.0f, 0.0001f, CMP_SCALE_MAX, PROP_NONE},
+    {-1, ""}};
+static bNodeSocketTemplate cmp_node_scale_out[] = {{SOCK_RGBA, N_("Image")}, {-1, ""}};
 
 static void node_composite_update_scale(bNodeTree *UNUSED(ntree), bNode *node)
 {
@@ -56,7 +56,7 @@ void register_node_type_cmp_scale(void)
 
   cmp_node_type_base(&ntype, CMP_NODE_SCALE, "Scale", NODE_CLASS_DISTORT, 0);
   node_type_socket_templates(&ntype, cmp_node_scale_in, cmp_node_scale_out);
-  node_type_update(&ntype, node_composite_update_scale, NULL);
+  node_type_update(&ntype, node_composite_update_scale);
 
   nodeRegisterType(&ntype);
 }

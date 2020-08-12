@@ -38,6 +38,11 @@ set(LIB
 )
 
 if(WITH_LIBMV)
+  setup_libdirs()
+
+  if(WIN32)
+    add_definitions(-D_USE_MATH_DEFINES)
+  endif()
   add_definitions(${GFLAGS_DEFINES})
   add_definitions(${GLOG_DEFINES})
   add_definitions(${CERES_DEFINES})
@@ -59,7 +64,10 @@ if(WITH_LIBMV)
 
   list(APPEND LIB
     extern_ceres
-    extern_glog
+
+    ${GLOG_LIBRARIES}
+    ${GFLAGS_LIBRARIES}
+    ${PNG_LIBRARIES}
   )
 
   add_definitions(
@@ -125,9 +133,11 @@ if(WITH_LIBMV)
     intern/image.h
     intern/logging.h
     intern/reconstruction.h
+    intern/region.h
     intern/track_region.h
     intern/tracks.h
     intern/tracksN.h
+    intern/utildefines.h
     libmv/autotrack/autotrack.h
     libmv/autotrack/callbacks.h
     libmv/autotrack/frame_accessor.h
@@ -140,6 +150,7 @@ if(WITH_LIBMV)
     libmv/autotrack/tracks.h
     libmv/base/aligned_malloc.h
     libmv/base/id_generator.h
+    libmv/base/map.h
     libmv/base/scoped_ptr.h
     libmv/base/vector.h
     libmv/base/vector_utils.h
@@ -201,6 +212,8 @@ if(WITH_LIBMV)
 
 
   if(WITH_GTESTS)
+    include(GTestTesting)
+
     blender_add_lib(libmv_test_dataset "./libmv/multiview/test_data_sets.cc" "" "" "")
 
     BLENDER_SRC_GTEST("libmv_predict_tracks" "./libmv/autotrack/predict_tracks_test.cc" "libmv_test_dataset;bf_intern_libmv;extern_ceres")

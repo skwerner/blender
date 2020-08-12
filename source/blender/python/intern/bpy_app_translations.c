@@ -33,36 +33,48 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLT_translation.h"
 #include "BLT_lang.h"
+#include "BLT_translation.h"
 
 #include "RNA_types.h"
 
 #include "../generic/python_utildefines.h"
 
 #ifdef WITH_INTERNATIONAL
-#  include "BLI_string.h"
 #  include "BLI_ghash.h"
+#  include "BLI_string.h"
 #endif
+
+/* ------------------------------------------------------------------- */
+/** \name Local Struct to Store Translation
+ * \{ */
 
 typedef struct {
   PyObject_HEAD
-      /* The string used to separate context from actual message in PY_TRANSLATE RNA props. */
+      /** The string used to separate context from actual message in PY_TRANSLATE RNA props. */
       const char *context_separator;
-  /* A "named tuple" (StructSequence actually...) containing all C-defined contexts. */
+  /** A "named tuple" (StructSequence actually...) containing all C-defined contexts. */
   PyObject *contexts;
-  /* A readonly mapping {C context id: python id}  (actually, a MappingProxy). */
+  /** A readonly mapping {C context id: python id}  (actually, a MappingProxy). */
   PyObject *contexts_C_to_py;
-  /* A py dict containing all registered py dicts (order is more or less random, first match wins!). */
+  /**
+   * A py dict containing all registered py dicts
+   * (order is more or less random, first match wins!).
+   */
   PyObject *py_messages;
 } BlenderAppTranslations;
 
 /* Our singleton instance pointer */
 static BlenderAppTranslations *_translations = NULL;
 
+/** \} */
+
 #ifdef WITH_INTERNATIONAL
 
-/***** Helpers for ghash *****/
+/* ------------------------------------------------------------------- */
+/** \name Helpers for GHash
+ * \{ */
+
 typedef struct GHashKey {
   const char *msgctxt;
   const char *msgid;
@@ -77,10 +89,10 @@ static GHashKey *_ghashutil_keyalloc(const void *msgctxt, const void *msgid)
   return key;
 }
 
-static unsigned int _ghashutil_keyhash(const void *ptr)
+static uint _ghashutil_keyhash(const void *ptr)
 {
   const GHashKey *key = ptr;
-  unsigned int hash = BLI_ghashutil_strhash(key->msgctxt);
+  uint hash = BLI_ghashutil_strhash(key->msgctxt);
   return hash ^ BLI_ghashutil_strhash(key->msgid);
 }
 
@@ -108,11 +120,15 @@ static void _ghashutil_keyfree(void *ptr)
 
 #  define _ghashutil_valfree MEM_freeN
 
-/***** Python's messages cache *****/
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Python'S Messages Cache
+ * \{ */
 
 /* We cache all messages available for a given locale from all py dicts into a single ghash.
- * Changing of locale is not so common, while looking for a message translation is, so let's try to optimize
- * the later as much as we can!
+ * Changing of locale is not so common, while looking for a message translation is,
+ * so let's try to optimize the later as much as we can!
  * Note changing of locale, as well as (un)registering a message dict, invalidate that cache.
  */
 static GHash *_translations_cache = NULL;
@@ -148,7 +164,8 @@ static void _build_translations_cache(PyObject *py_messages, const char *locale)
     printf("\n");
 #  endif
 
-    /* Try to get first complete locale, then language+country, then language+variant, then only language */
+    /* Try to get first complete locale, then language+country,
+     * then language+variant, then only language. */
     lang_dict = PyDict_GetItemString(uuid_dict, locale);
     if (!lang_dict && language_country) {
       lang_dict = PyDict_GetItemString(uuid_dict, language_country);
@@ -385,7 +402,12 @@ static PyObject *app_translations_py_messages_unregister(BlenderAppTranslations 
   Py_RETURN_NONE;
 }
 
-/***** C-defined contexts *****/
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name C-defined Contexts
+ * \{ */
+
 /* This is always available (even when WITH_INTERNATIONAL is not defined). */
 
 static PyTypeObject BlenderAppTranslationsContextsType;
@@ -393,14 +415,14 @@ static PyTypeObject BlenderAppTranslationsContextsType;
 static BLT_i18n_contexts_descriptor _contexts[] = BLT_I18NCONTEXTS_DESC;
 
 /* These fields are just empty placeholders, actual values get set in app_translations_struct().
- * This allows us to avoid many handwriting, and above all, to keep all context definition stuff in BLT_translation.h!
- */
+ * This allows us to avoid many handwriting, and above all,
+ * to keep all context definition stuff in BLT_translation.h! */
 static PyStructSequence_Field app_translations_contexts_fields[ARRAY_SIZE(_contexts)] = {{NULL}};
 
 static PyStructSequence_Desc app_translations_contexts_desc = {
-    (char *)"bpy.app.translations.contexts",                                  /* name */
-    (char *)"This named tuple contains all pre-defined translation contexts", /* doc */
-    app_translations_contexts_fields,                                         /* fields */
+    "bpy.app.translations.contexts",                                  /* name */
+    "This named tuple contains all pre-defined translation contexts", /* doc */
+    app_translations_contexts_fields,                                 /* fields */
     ARRAY_SIZE(app_translations_contexts_fields) - 1,
 };
 
@@ -435,7 +457,11 @@ static PyObject *app_translations_contexts_make(void)
   return translations_contexts;
 }
 
-/***** Main BlenderAppTranslations Py object definition *****/
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Main #BlenderAppTranslations #PyObject Definition
+ * \{ */
 
 PyDoc_STRVAR(app_translations_contexts_doc,
              "A named tuple containing all pre-defined translation contexts.\n"
@@ -449,12 +475,12 @@ PyDoc_STRVAR(app_translations_contexts_C_to_py_doc,
              "A readonly dict mapping contexts' C-identifiers to their py-identifiers.");
 
 static PyMemberDef app_translations_members[] = {
-    {(char *)"contexts",
+    {"contexts",
      T_OBJECT_EX,
      offsetof(BlenderAppTranslations, contexts),
      READONLY,
      app_translations_contexts_doc},
-    {(char *)"contexts_C_to_py",
+    {"contexts_C_to_py",
      T_OBJECT_EX,
      offsetof(BlenderAppTranslations, contexts_C_to_py),
      READONLY,
@@ -504,16 +530,8 @@ static PyObject *app_translations_locales_get(PyObject *UNUSED(self), void *UNUS
 
 static PyGetSetDef app_translations_getseters[] = {
     /* {name, getter, setter, doc, userdata} */
-    {(char *)"locale",
-     (getter)app_translations_locale_get,
-     NULL,
-     app_translations_locale_doc,
-     NULL},
-    {(char *)"locales",
-     (getter)app_translations_locales_get,
-     NULL,
-     app_translations_locales_doc,
-     NULL},
+    {"locale", (getter)app_translations_locale_get, NULL, app_translations_locale_doc, NULL},
+    {"locales", (getter)app_translations_locales_get, NULL, app_translations_locales_doc, NULL},
     {NULL},
 };
 
@@ -776,10 +794,10 @@ static PyTypeObject BlenderAppTranslationsType = {
     0, /* tp_itemsize */
     /* methods */
     /* No destructor, this is a singleton! */
-    NULL, /* tp_dealloc */
-    NULL, /* printfunc tp_print; */
-    NULL, /* getattrfunc tp_getattr; */
-    NULL, /* setattrfunc tp_setattr; */
+    NULL,            /* tp_dealloc */
+    (printfunc)NULL, /* printfunc tp_print; */
+    NULL,            /* getattrfunc tp_getattr; */
+    NULL,            /* setattrfunc tp_setattr; */
     NULL,
     /* tp_compare */ /* DEPRECATED in python 3.0! */
     NULL,            /* tp_repr */
@@ -861,7 +879,7 @@ PyObject *BPY_app_translations_struct(void)
     /* We really populate the contexts' fields here! */
     for (ctxt = _contexts, desc = app_translations_contexts_desc.fields; ctxt->c_id;
          ctxt++, desc++) {
-      desc->name = (char *)ctxt->py_id;
+      desc->name = ctxt->py_id;
       desc->doc = NULL;
     }
     desc->name = desc->doc = NULL; /* End sentinel! */
@@ -886,8 +904,10 @@ PyObject *BPY_app_translations_struct(void)
 
 void BPY_app_translations_end(void)
 {
-  /* Incase the object remains in a module's namespace, see T44127. */
+  /* In case the object remains in a module's name-space, see T44127. */
 #ifdef WITH_INTERNATIONAL
   _clear_translations_cache();
 #endif
 }
+
+/** \} */

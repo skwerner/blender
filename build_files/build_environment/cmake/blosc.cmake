@@ -29,13 +29,11 @@ set(BLOSC_EXTRA_ARGS
   -DCMAKE_POSITION_INDEPENDENT_CODE=ON
 )
 
-if(WIN32)
-  #prevent blosc from including it's own local copy of zlib in the object file
-  #and cause linker errors with everybody else
-  set(BLOSC_EXTRA_ARGS ${BLOSC_EXTRA_ARGS}
-    -DPREFER_EXTERNAL_ZLIB=ON
-  )
-endif()
+# Prevent blosc from including it's own local copy of zlib in the object file
+# and cause linker errors with everybody else.
+set(BLOSC_EXTRA_ARGS ${BLOSC_EXTRA_ARGS}
+  -DPREFER_EXTERNAL_ZLIB=ON
+)
 
 ExternalProject_Add(external_blosc
   URL ${BLOSC_URI}
@@ -58,7 +56,7 @@ if(WIN32)
   )
 endif()
 
-if (WIN32)
+if(WIN32)
   if(BUILD_MODE STREQUAL Release)
     ExternalProject_Add_Step(external_blosc after_install
       COMMAND ${CMAKE_COMMAND} -E copy ${LIBDIR}/blosc/lib/libblosc.lib ${HARVEST_TARGET}/blosc/lib/libblosc.lib

@@ -18,13 +18,7 @@
 
 #include "COM_VectorCurveOperation.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 #include "BKE_colortools.h"
-#ifdef __cplusplus
-}
-#endif
 
 VectorCurveOperation::VectorCurveOperation() : CurveBaseOperation()
 {
@@ -48,7 +42,7 @@ void VectorCurveOperation::executePixelSampled(float output[4],
 
   this->m_inputProgram->readSampled(input, x, y, sampler);
 
-  curvemapping_evaluate_premulRGBF(this->m_curveMapping, output, input);
+  BKE_curvemapping_evaluate_premulRGBF(this->m_curveMapping, output, input);
 }
 
 void VectorCurveOperation::deinitExecution()

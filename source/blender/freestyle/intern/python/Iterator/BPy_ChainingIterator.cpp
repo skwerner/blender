@@ -73,8 +73,9 @@ PyDoc_STRVAR(
 
 static int check_begin(PyObject *obj, void *v)
 {
-  if (obj != NULL && obj != Py_None && !BPy_ViewEdge_Check(obj))
+  if (obj != NULL && obj != Py_None && !BPy_ViewEdge_Check(obj)) {
     return 0;
+  }
   *((PyObject **)v) = obj;
   return 1;
 }
@@ -166,10 +167,12 @@ static PyObject *ChainingIterator_traverse(BPy_ChainingIterator *self,
     return NULL;
   }
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwds, "O!", (char **)kwlist, &AdjacencyIterator_Type, &py_a_it))
+          args, kwds, "O!", (char **)kwlist, &AdjacencyIterator_Type, &py_a_it)) {
     return NULL;
-  if (((BPy_AdjacencyIterator *)py_a_it)->a_it)
+  }
+  if (((BPy_AdjacencyIterator *)py_a_it)->a_it) {
     self->c_it->traverse(*(((BPy_AdjacencyIterator *)py_a_it)->a_it));
+  }
   Py_RETURN_NONE;
 }
 
@@ -196,8 +199,9 @@ static PyObject *ChainingIterator_object_get(BPy_ChainingIterator *self, void *U
     return NULL;
   }
   ViewEdge *ve = self->c_it->operator*();
-  if (ve)
+  if (ve) {
     return BPy_ViewEdge_from_ViewEdge(*ve);
+  }
 
   Py_RETURN_NONE;
 }
@@ -211,8 +215,9 @@ static PyObject *ChainingIterator_next_vertex_get(BPy_ChainingIterator *self,
                                                   void *UNUSED(closure))
 {
   ViewVertex *v = self->c_it->getVertex();
-  if (v)
+  if (v) {
     return Any_BPy_ViewVertex_from_ViewVertex(*v);
+  }
 
   Py_RETURN_NONE;
 }
@@ -229,20 +234,20 @@ static PyObject *ChainingIterator_is_incrementing_get(BPy_ChainingIterator *self
 }
 
 static PyGetSetDef BPy_ChainingIterator_getseters[] = {
-    {(char *)"object",
+    {"object",
      (getter)ChainingIterator_object_get,
      (setter)NULL,
-     (char *)ChainingIterator_object_doc,
+     ChainingIterator_object_doc,
      NULL},
-    {(char *)"next_vertex",
+    {"next_vertex",
      (getter)ChainingIterator_next_vertex_get,
      (setter)NULL,
-     (char *)ChainingIterator_next_vertex_doc,
+     ChainingIterator_next_vertex_doc,
      NULL},
-    {(char *)"is_incrementing",
+    {"is_incrementing",
      (getter)ChainingIterator_is_incrementing_get,
      (setter)NULL,
-     (char *)ChainingIterator_is_incrementing_doc,
+     ChainingIterator_is_incrementing_doc,
      NULL},
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };

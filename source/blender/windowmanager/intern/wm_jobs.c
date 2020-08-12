@@ -35,11 +35,12 @@
 
 #include "BKE_context.h"
 #include "BKE_global.h"
+#include "BKE_sequencer.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
-#include "wm_event_types.h"
 #include "wm.h"
+#include "wm_event_types.h"
 
 #include "PIL_time.h"
 
@@ -71,27 +72,43 @@
 struct wmJob {
   struct wmJob *next, *prev;
 
-  /* job originating from, keep track of this when deleting windows */
+  /** Job originating from, keep track of this when deleting windows */
   wmWindow *win;
 
-  /* should store entire own context, for start, update, free */
+  /** Should store entire own context, for start, update, free */
   void *customdata;
-  /* to prevent cpu overhead, use this one which only gets called when job really starts, not in thread */
+  /**
+   * To prevent cpu overhead, use this one which only gets called when job really starts.
+   * Executed in main thread.
+   */
   void (*initjob)(void *);
-  /* this runs inside thread, and does full job */
-  void (*startjob)(void *, short *stop, short *do_update, float *progress);
-  /* update gets called if thread defines so, and max once per timerstep */
-  /* it runs outside thread, blocking blender, no drawing! */
+  /**
+   * This performs the actual parallel work.
+   * Executed in worker thread(s).
+   */
+  wm_jobs_start_callback startjob;
+  /**
+   * Called if thread defines so (see `do_update` flag), and max once per timer step.
+   * Executed in main thread.
+   */
   void (*update)(void *);
-  /* free entire customdata, doesn't run in thread */
+  /**
+   * Free callback (typically for customdata).
+   * Executed in main thread.
+   */
   void (*free)(void *);
-  /* gets called when job is stopped, not in thread */
+  /**
+   * Called when job is stopped.
+   * Executed in main thread.
+   */
   void (*endjob)(void *);
 
-  /* running jobs each have own timer */
+  /** Running jobs each have own timer */
   double timestep;
   wmTimer *wt;
-  /* the notifier event timers should send */
+  /** Only start job after specified time delay */
+  double start_delay_time;
+  /** The notifier event timers should send */
   unsigned int note, endnote;
 
   /* internal */
@@ -100,19 +117,19 @@ struct wmJob {
   short suspended, running, ready, do_update, stop, job_type;
   float progress;
 
-  /* for display in header, identification */
+  /** For display in header, identification */
   char name[128];
 
-  /* once running, we store this separately */
+  /** Once running, we store this separately */
   void *run_customdata;
   void (*run_free)(void *);
 
-  /* we use BLI_threads api, but per job only 1 thread runs */
+  /** We use BLI_threads api, but per job only 1 thread runs */
   ListBase threads;
 
   double start_time;
 
-  /* ticket mutex for main thread locking while some job accesses
+  /** Ticket mutex for main thread locking while some job accesses
    * data that the main thread might modify at the same time */
   TicketMutex *main_thread_mutex;
 };
@@ -238,7 +255,7 @@ static void wm_jobs_update_progress_bars(wmWindowManager *wm)
   float total_progress = 0.f;
   float jobs_progress = 0;
 
-  for (wmJob *wm_job = wm->jobs.first; wm_job; wm_job = wm_job->next) {
+  LISTBASE_FOREACH (wmJob *, wm_job, &wm->jobs) {
     if (wm_job->threads.first && !wm_job->ready) {
       if (wm_job->flag & WM_JOB_PROGRESS) {
         /* accumulate global progress for running jobs */
@@ -355,8 +372,13 @@ void WM_jobs_timer(wmJob *wm_job, double timestep, unsigned int note, unsigned i
   wm_job->endnote = endnote;
 }
 
+void WM_jobs_delay_start(wmJob *wm_job, double delay_time)
+{
+  wm_job->start_delay_time = delay_time;
+}
+
 void WM_jobs_callbacks(wmJob *wm_job,
-                       void (*startjob)(void *, short *, short *, float *),
+                       wm_jobs_start_callback startjob,
                        void (*initjob)(void *),
                        void (*update)(void *),
                        void (*endjob)(void *))
@@ -385,9 +407,9 @@ static void wm_jobs_test_suspend_stop(wmWindowManager *wm, wmJob *test)
   bool suspend = false;
 
   /* job added with suspend flag, we wait 1 timer step before activating it */
-  if (test->flag & WM_JOB_SUSPEND) {
+  if (test->start_delay_time > 0.0) {
     suspend = true;
-    test->flag &= ~WM_JOB_SUSPEND;
+    test->start_delay_time = 0.0;
   }
   else {
     /* check other jobs */
@@ -440,6 +462,8 @@ void WM_jobs_start(wmWindowManager *wm, wmJob *wm_job)
   else {
 
     if (wm_job->customdata && wm_job->startjob) {
+      const double timestep = (wm_job->start_delay_time > 0.0) ? wm_job->start_delay_time :
+                                                                 wm_job->timestep;
 
       wm_jobs_test_suspend_stop(wm, wm_job);
 
@@ -466,8 +490,12 @@ void WM_jobs_start(wmWindowManager *wm, wmJob *wm_job)
       }
 
       /* restarted job has timer already */
+      if (wm_job->wt && (wm_job->wt->timestep > timestep)) {
+        WM_event_remove_timer(wm, wm_job->win, wm_job->wt);
+        wm_job->wt = WM_event_add_timer(wm, wm_job->win, TIMERJOBS, timestep);
+      }
       if (wm_job->wt == NULL) {
-        wm_job->wt = WM_event_add_timer(wm, wm_job->win, TIMERJOBS, wm_job->timestep);
+        wm_job->wt = WM_event_add_timer(wm, wm_job->win, TIMERJOBS, timestep);
       }
 
       wm_job->start_time = PIL_check_seconds_timer();
@@ -531,6 +559,9 @@ void WM_jobs_kill_all(wmWindowManager *wm)
   while ((wm_job = wm->jobs.first)) {
     wm_jobs_kill_job(wm, wm_job);
   }
+
+  /* This job will be automatically restarted */
+  BKE_sequencer_prefetch_stop_all();
 }
 
 /* wait until every job ended, except for one owner (used in undo to keep screen job alive) */
@@ -610,7 +641,7 @@ void wm_jobs_timer_ended(wmWindowManager *wm, wmTimer *wt)
 }
 
 /* hardcoded to event TIMERJOBS */
-void wm_jobs_timer(const bContext *C, wmWindowManager *wm, wmTimer *wt)
+void wm_jobs_timer(wmWindowManager *wm, wmTimer *wt)
 {
   wmJob *wm_job, *wm_jobnext;
 
@@ -631,11 +662,11 @@ void wm_jobs_timer(const bContext *C, wmWindowManager *wm, wmTimer *wt)
             wm_job->update(wm_job->run_customdata);
           }
           if (wm_job->note) {
-            WM_event_add_notifier(C, wm_job->note, NULL);
+            WM_event_add_notifier_ex(wm, wm_job->win, wm_job->note, NULL);
           }
 
           if (wm_job->flag & WM_JOB_PROGRESS) {
-            WM_event_add_notifier(C, NC_WM | ND_JOB, NULL);
+            WM_event_add_notifier_ex(wm, wm_job->win, NC_WM | ND_JOB, NULL);
           }
           wm_job->do_update = false;
         }
@@ -666,10 +697,10 @@ void wm_jobs_timer(const bContext *C, wmWindowManager *wm, wmTimer *wt)
           WM_job_main_thread_lock_acquire(wm_job);
 
           if (wm_job->endnote) {
-            WM_event_add_notifier(C, wm_job->endnote, NULL);
+            WM_event_add_notifier_ex(wm, wm_job->win, wm_job->endnote, NULL);
           }
 
-          WM_event_add_notifier(C, NC_WM | ND_JOB, NULL);
+          WM_event_add_notifier_ex(wm, wm_job->win, NC_WM | ND_JOB, NULL);
 
           /* new job added for wm_job? */
           if (wm_job->customdata) {

@@ -23,6 +23,11 @@
 
 #include "BLI_compiler_attrs.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+struct Base;
 struct CLG_LogRef;
 struct Object;
 struct UndoStack;
@@ -54,10 +59,17 @@ bool ED_undo_is_valid(const struct bContext *C, const char *undoname);
 
 bool ED_undo_is_memfile_compatible(const struct bContext *C);
 
+/* Unfortunate workaround for limits mixing undo systems. */
+bool ED_undo_is_legacy_compatible_for_property(struct bContext *C, struct ID *id);
+
 void ED_undo_object_editmode_restore_helper(struct bContext *C,
                                             struct Object **object_array,
                                             uint object_array_len,
                                             uint object_array_stride);
+
+struct Object **ED_undo_editmode_objects_from_view_layer(struct ViewLayer *view_layer,
+                                                         uint *r_len);
+struct Base **ED_undo_editmode_bases_from_view_layer(struct ViewLayer *view_layer, uint *r_len);
 
 struct UndoStack *ED_undo_stack_get(void);
 
@@ -73,5 +85,9 @@ void ED_undosys_type_free(void);
 
 /* memfile_undo.c */
 struct MemFile *ED_undosys_stack_memfile_get_active(struct UndoStack *ustack);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __ED_UNDO_H__ */

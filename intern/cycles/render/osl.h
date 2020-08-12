@@ -93,9 +93,10 @@ class OSLShaderManager : public ShaderManager {
   OSLShaderInfo *shader_loaded_info(const string &hash);
 
   /* create OSL node using OSLQuery */
-  OSLNode *osl_node(const std::string &filepath,
-                    const std::string &bytecode_hash = "",
-                    const std::string &bytecode = "");
+  static OSLNode *osl_node(ShaderManager *manager,
+                           const std::string &filepath,
+                           const std::string &bytecode_hash = "",
+                           const std::string &bytecode = "");
 
  protected:
   void texture_system_init();
@@ -127,11 +128,13 @@ class OSLShaderManager : public ShaderManager {
 
 class OSLCompiler {
  public:
-  OSLCompiler(void *manager,
-              void *shadingsys,
-              ImageManager *image_manager,
-              LightManager *light_manager);
-  void compile(Scene *scene, OSLGlobals *og, Shader *shader);
+#ifdef WITH_OSL
+  OSLCompiler(OSLShaderManager *manager,
+              OSLRenderServices *services,
+              OSL::ShadingSystem *shadingsys,
+              Scene *scene);
+#endif
+  void compile(OSLGlobals *og, Shader *shader);
 
   void add(ShaderNode *node, const char *name, bool isfilepath = false);
 
@@ -152,14 +155,17 @@ class OSLCompiler {
 
   void parameter_attribute(const char *name, ustring s);
 
+  void parameter_texture(const char *name, ustring filename, ustring colorspace);
+  void parameter_texture(const char *name, int svm_slot);
+  void parameter_texture_ies(const char *name, int svm_slot);
+
   ShaderType output_type()
   {
     return current_type;
   }
 
   bool background;
-  ImageManager *image_manager;
-  LightManager *light_manager;
+  Scene *scene;
 
  private:
 #ifdef WITH_OSL
@@ -171,12 +177,16 @@ class OSLCompiler {
 
   void find_dependencies(ShaderNodeSet &dependencies, ShaderInput *input);
   void generate_nodes(const ShaderNodeSet &nodes);
+
+  OSLShaderManager *manager;
+  OSLRenderServices *services;
+  OSL::ShadingSystem *ss;
 #endif
 
-  void *shadingsys;
-  void *manager;
   ShaderType current_type;
   Shader *current_shader;
+
+  static int texture_shared_unique_id;
 };
 
 CCL_NAMESPACE_END

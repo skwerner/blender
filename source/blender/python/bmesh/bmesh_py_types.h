@@ -140,8 +140,8 @@ PyObject *BPy_BMFaceSeq_CreatePyObject(BMesh *bm);
 PyObject *BPy_BMLoopSeq_CreatePyObject(BMesh *bm);
 PyObject *BPy_BMIter_CreatePyObject(BMesh *bm);
 
-PyObject *BPy_BMElem_CreatePyObject(BMesh *bm,
-                                    BMHeader *ele); /* just checks type and creates v/e/f/l */
+/* Just checks type and creates v/e/f/l. */
+PyObject *BPy_BMElem_CreatePyObject(BMesh *bm, BMHeader *ele);
 
 void *BPy_BMElem_PySeq_As_Array_FAST(BMesh **r_bm,
                                      PyObject *seq_fast,
@@ -177,7 +177,7 @@ int bpy_bm_generic_valid_check(BPy_BMGeneric *self);
 int bpy_bm_generic_valid_check_source(BMesh *bm_source,
                                       const char *error_prefix,
                                       void **args,
-                                      unsigned int args_n) ATTR_NONNULL(1, 2);
+                                      uint args_n) ATTR_NONNULL(1, 2);
 
 #define BPY_BM_CHECK_OBJ(obj) \
   if (UNLIKELY(bpy_bm_generic_valid_check((BPy_BMGeneric *)obj) == -1)) { \

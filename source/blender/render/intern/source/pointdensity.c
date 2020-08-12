@@ -22,17 +22,17 @@
  */
 
 #include <math.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_math.h"
 #include "BLI_blenlib.h"
-#include "BLI_noise.h"
 #include "BLI_kdopbvh.h"
-#include "BLI_utildefines.h"
+#include "BLI_math.h"
+#include "BLI_noise.h"
 #include "BLI_task.h"
+#include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
@@ -43,12 +43,12 @@
 #include "DNA_texture_types.h"
 
 #include "BKE_colorband.h"
+#include "BKE_colortools.h"
 #include "BKE_deform.h"
 #include "BKE_lattice.h"
 #include "BKE_object.h"
 #include "BKE_particle.h"
 #include "BKE_scene.h"
-#include "BKE_colortools.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
@@ -99,33 +99,39 @@ static void point_data_pointers(PointDensity *pd,
   int offset = 0;
 
   if (data_used & POINT_DATA_VEL) {
-    if (r_data_velocity)
+    if (r_data_velocity) {
       *r_data_velocity = data + offset;
+    }
     offset += 3 * totpoint;
   }
   else {
-    if (r_data_velocity)
+    if (r_data_velocity) {
       *r_data_velocity = NULL;
+    }
   }
 
   if (data_used & POINT_DATA_LIFE) {
-    if (r_data_life)
+    if (r_data_life) {
       *r_data_life = data + offset;
+    }
     offset += totpoint;
   }
   else {
-    if (r_data_life)
+    if (r_data_life) {
       *r_data_life = NULL;
+    }
   }
 
   if (data_used & POINT_DATA_COLOR) {
-    if (r_data_color)
+    if (r_data_color) {
       *r_data_color = data + offset;
+    }
     offset += 3 * totpoint;
   }
   else {
-    if (r_data_color)
+    if (r_data_color) {
       *r_data_color = NULL;
+    }
   }
 }
 
@@ -195,20 +201,24 @@ static void pointdensity_cache_psys(
   point_data_pointers(pd, &data_vel, &data_life, NULL);
 
 #if 0 /* UNUSED */
-  if (psys->totchild > 0 && !(psys->part->draw & PART_DRAW_PARENT))
+  if (psys->totchild > 0 && !(psys->part->draw & PART_DRAW_PARENT)) {
     childexists = 1;
+  }
 #endif
 
   for (i = 0, pa = psys->particles; i < total_particles; i++, pa++) {
 
     if (psys->part->type == PART_HAIR) {
       /* hair particles */
-      if (i < psys->totpart && psys->pathcache)
+      if (i < psys->totpart && psys->pathcache) {
         cache = psys->pathcache[i];
-      else if (i >= psys->totpart && psys->childcache)
+      }
+      else if (i >= psys->totpart && psys->childcache) {
         cache = psys->childcache[i - psys->totpart];
-      else
+      }
+      else {
         continue;
+      }
 
       cache += cache->segments; /* use endpoint */
 
@@ -220,8 +230,9 @@ static void pointdensity_cache_psys(
       /* emitter particles */
       state.time = cfra;
 
-      if (!psys_get_particle_state(&sim, i, &state, 0))
+      if (!psys_get_particle_state(&sim, i, &state, 0)) {
         continue;
+      }
 
       if (data_used & POINT_DATA_LIFE) {
         if (i < psys->totpart) {
@@ -238,8 +249,9 @@ static void pointdensity_cache_psys(
 
     copy_v3_v3(partco, state.co);
 
-    if (pd->psys_cache_space == TEX_PD_OBJECTSPACE)
+    if (pd->psys_cache_space == TEX_PD_OBJECTSPACE) {
       mul_m4_v3(ob->imat, partco);
+    }
     else if (pd->psys_cache_space == TEX_PD_OBJECTLOC) {
       sub_v3_v3(partco, ob->loc);
     }
@@ -262,7 +274,7 @@ static void pointdensity_cache_psys(
   BLI_bvhtree_balance(pd->point_tree);
 
   if (psys->lattice_deform_data) {
-    end_latt_deform(psys->lattice_deform_data);
+    BKE_lattice_deform_data_destroy(psys->lattice_deform_data);
     psys->lattice_deform_data = NULL;
   }
 }
@@ -280,12 +292,14 @@ static void pointdensity_cache_vertex_color(PointDensity *pd,
 
   BLI_assert(data_color);
 
-  if (!CustomData_has_layer(&mesh->ldata, CD_MLOOPCOL))
+  if (!CustomData_has_layer(&mesh->ldata, CD_MLOOPCOL)) {
     return;
+  }
   CustomData_validate_layer_name(&mesh->ldata, CD_MLOOPCOL, pd->vertex_attribute_name, layername);
   mcol = CustomData_get_layer_named(&mesh->ldata, CD_MLOOPCOL, layername);
-  if (!mcol)
+  if (!mcol) {
     return;
+  }
 
   /* Stores the number of MLoops using the same vertex, so we can normalize colors. */
   int *mcorners = MEM_callocN(sizeof(int) * pd->totpoints, "point density corner count");
@@ -309,8 +323,9 @@ static void pointdensity_cache_vertex_color(PointDensity *pd,
    * All the corners share the same vertex, ie. occupy the same point in space.
    */
   for (i = 0; i < pd->totpoints; i++) {
-    if (mcorners[i] > 0)
+    if (mcorners[i] > 0) {
       mul_v3_fl(&data_color[i * 3], 1.0f / mcorners[i]);
+    }
   }
 
   MEM_freeN(mcorners);
@@ -329,19 +344,22 @@ static void pointdensity_cache_vertex_weight(PointDensity *pd,
   BLI_assert(data_color);
 
   mdef = CustomData_get_layer(&mesh->vdata, CD_MDEFORMVERT);
-  if (!mdef)
+  if (!mdef) {
     return;
-  mdef_index = defgroup_name_index(ob, pd->vertex_attribute_name);
-  if (mdef_index < 0)
+  }
+  mdef_index = BKE_object_defgroup_name_index(ob, pd->vertex_attribute_name);
+  if (mdef_index < 0) {
     mdef_index = ob->actdef - 1;
-  if (mdef_index < 0)
+  }
+  if (mdef_index < 0) {
     return;
+  }
 
-  for (i = 0, dv = mdef; i < totvert; ++i, ++dv, data_color += 3) {
+  for (i = 0, dv = mdef; i < totvert; i++, dv++, data_color += 3) {
     MDeformWeight *dw;
     int j;
 
-    for (j = 0, dw = dv->dw; j < dv->totweight; ++j, ++dw) {
+    for (j = 0, dw = dv->dw; j < dv->totweight; j++, dw++) {
       if (dw->def_nr == mdef_index) {
         copy_v3_fl(data_color, dw->weight);
         break;
@@ -459,8 +477,9 @@ static void cache_pointdensity(Depsgraph *depsgraph, Scene *scene, PointDensity 
   }
   else if (pd->source == TEX_PD_OBJECT) {
     Object *ob = pd->object;
-    if (ob && ob->type == OB_MESH)
+    if (ob && ob->type == OB_MESH) {
       pointdensity_cache_object(pd, ob);
+    }
   }
 }
 
@@ -520,22 +539,26 @@ static float density_falloff(PointDensityRangeData *pdr, int index, float square
       density = sqrtf(dist);
       break;
     case TEX_PD_FALLOFF_PARTICLE_AGE:
-      if (pdr->point_data_life)
+      if (pdr->point_data_life) {
         density = dist * MIN2(pdr->point_data_life[index], 1.0f);
-      else
+      }
+      else {
         density = dist;
+      }
       break;
     case TEX_PD_FALLOFF_PARTICLE_VEL:
-      if (pdr->point_data_velocity)
+      if (pdr->point_data_velocity) {
         density = dist * len_v3(&pdr->point_data_velocity[index * 3]) * pdr->velscale;
-      else
+      }
+      else {
         density = dist;
+      }
       break;
   }
 
   if (pdr->density_curve && dist != 0.0f) {
-    curvemapping_initialize(pdr->density_curve);
-    density = curvemapping_evaluateF(pdr->density_curve, 0, density / dist) * dist;
+    BKE_curvemapping_initialize(pdr->density_curve);
+    density = BKE_curvemapping_evaluateF(pdr->density_curve, 0, density / dist) * dist;
   }
 
   return density;
@@ -769,7 +792,7 @@ static void particle_system_minmax(Depsgraph *depsgraph,
 
   INIT_MINMAX(min, max);
   if (part->type == PART_HAIR) {
-    /* TOOD(sergey): Not supported currently. */
+    /* TODO(sergey): Not supported currently. */
     return;
   }
 
@@ -800,7 +823,7 @@ static void particle_system_minmax(Depsgraph *depsgraph,
   }
 
   if (psys->lattice_deform_data) {
-    end_latt_deform(psys->lattice_deform_data);
+    BKE_lattice_deform_data_destroy(psys->lattice_deform_data);
     psys->lattice_deform_data = NULL;
   }
 }
@@ -809,7 +832,7 @@ void RE_point_density_cache(struct Depsgraph *depsgraph, PointDensity *pd)
 {
   Scene *scene = DEG_get_evaluated_scene(depsgraph);
 
-  /* Same matricies/resolution as dupli_render_particle_set(). */
+  /* Same matrices/resolution as dupli_render_particle_set(). */
   BLI_mutex_lock(&sample_mutex);
   cache_pointdensity(depsgraph, scene, pd);
   BLI_mutex_unlock(&sample_mutex);
@@ -872,7 +895,7 @@ typedef struct SampleCallbackData {
 
 static void point_density_sample_func(void *__restrict data_v,
                                       const int iter,
-                                      const ParallelRangeTLS *__restrict UNUSED(tls))
+                                      const TaskParallelTLS *__restrict UNUSED(tls))
 {
   SampleCallbackData *data = (SampleCallbackData *)data_v;
 
@@ -887,8 +910,8 @@ static void point_density_sample_func(void *__restrict data_v,
   }
 
   size_t z = (size_t)iter;
-  for (size_t y = 0; y < resolution; ++y) {
-    for (size_t x = 0; x < resolution; ++x) {
+  for (size_t y = 0; y < resolution; y++) {
+    for (size_t x = 0; x < resolution; x++) {
       size_t index = z * resolution2 + y * resolution + x;
       float texvec[3];
       float age, vec[3], col[3];
@@ -943,7 +966,7 @@ void RE_point_density_sample(Depsgraph *depsgraph,
   data.min = min;
   data.dim = dim;
   data.values = values;
-  ParallelRangeSettings settings;
+  TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
   settings.use_threading = (resolution > 32);
   BLI_task_parallel_range(0, resolution, &data, point_density_sample_func, &settings);

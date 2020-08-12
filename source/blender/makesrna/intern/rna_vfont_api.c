@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2015 by the Blender Foundation.
@@ -26,15 +26,16 @@
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
 
+#include "BKE_packedFile.h"
+
 #include "rna_internal.h"
 
 #ifdef RNA_RUNTIME
 
-#  include "BKE_packedFile.h"
-
 static void rna_VectorFont_pack(VFont *vfont, Main *bmain, ReportList *reports)
 {
-  vfont->packedfile = newPackedFile(reports, vfont->name, ID_BLEND_PATH(bmain, &vfont->id));
+  vfont->packedfile = BKE_packedfile_new(
+      reports, vfont->filepath, ID_BLEND_PATH(bmain, &vfont->id));
 }
 
 static void rna_VectorFont_unpack(VFont *vfont, Main *bmain, ReportList *reports, int method)
@@ -44,7 +45,7 @@ static void rna_VectorFont_unpack(VFont *vfont, Main *bmain, ReportList *reports
   }
   else {
     /* reports its own error on failure */
-    unpackVFont(bmain, reports, vfont, method);
+    BKE_packedfile_unpack_vfont(bmain, reports, vfont, method);
   }
 }
 

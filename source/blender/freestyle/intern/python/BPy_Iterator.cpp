@@ -22,15 +22,15 @@
 
 #include "BPy_Convert.h"
 #include "Iterator/BPy_AdjacencyIterator.h"
-#include "Iterator/BPy_Interface0DIterator.h"
-#include "Iterator/BPy_CurvePointIterator.h"
-#include "Iterator/BPy_StrokeVertexIterator.h"
-#include "Iterator/BPy_SVertexIterator.h"
-#include "Iterator/BPy_orientedViewEdgeIterator.h"
-#include "Iterator/BPy_ViewEdgeIterator.h"
-#include "Iterator/BPy_ChainingIterator.h"
 #include "Iterator/BPy_ChainPredicateIterator.h"
 #include "Iterator/BPy_ChainSilhouetteIterator.h"
+#include "Iterator/BPy_ChainingIterator.h"
+#include "Iterator/BPy_CurvePointIterator.h"
+#include "Iterator/BPy_Interface0DIterator.h"
+#include "Iterator/BPy_SVertexIterator.h"
+#include "Iterator/BPy_StrokeVertexIterator.h"
+#include "Iterator/BPy_ViewEdgeIterator.h"
+#include "Iterator/BPy_orientedViewEdgeIterator.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -41,62 +41,74 @@ extern "C" {
 //-------------------MODULE INITIALIZATION--------------------------------
 int Iterator_Init(PyObject *module)
 {
-  if (module == NULL)
+  if (module == NULL) {
     return -1;
+  }
 
-  if (PyType_Ready(&Iterator_Type) < 0)
+  if (PyType_Ready(&Iterator_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&Iterator_Type);
   PyModule_AddObject(module, "Iterator", (PyObject *)&Iterator_Type);
 
-  if (PyType_Ready(&AdjacencyIterator_Type) < 0)
+  if (PyType_Ready(&AdjacencyIterator_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&AdjacencyIterator_Type);
   PyModule_AddObject(module, "AdjacencyIterator", (PyObject *)&AdjacencyIterator_Type);
 
-  if (PyType_Ready(&Interface0DIterator_Type) < 0)
+  if (PyType_Ready(&Interface0DIterator_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&Interface0DIterator_Type);
   PyModule_AddObject(module, "Interface0DIterator", (PyObject *)&Interface0DIterator_Type);
 
-  if (PyType_Ready(&CurvePointIterator_Type) < 0)
+  if (PyType_Ready(&CurvePointIterator_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&CurvePointIterator_Type);
   PyModule_AddObject(module, "CurvePointIterator", (PyObject *)&CurvePointIterator_Type);
 
-  if (PyType_Ready(&StrokeVertexIterator_Type) < 0)
+  if (PyType_Ready(&StrokeVertexIterator_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&StrokeVertexIterator_Type);
   PyModule_AddObject(module, "StrokeVertexIterator", (PyObject *)&StrokeVertexIterator_Type);
 
-  if (PyType_Ready(&SVertexIterator_Type) < 0)
+  if (PyType_Ready(&SVertexIterator_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&SVertexIterator_Type);
   PyModule_AddObject(module, "SVertexIterator", (PyObject *)&SVertexIterator_Type);
 
-  if (PyType_Ready(&orientedViewEdgeIterator_Type) < 0)
+  if (PyType_Ready(&orientedViewEdgeIterator_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&orientedViewEdgeIterator_Type);
   PyModule_AddObject(
       module, "orientedViewEdgeIterator", (PyObject *)&orientedViewEdgeIterator_Type);
 
-  if (PyType_Ready(&ViewEdgeIterator_Type) < 0)
+  if (PyType_Ready(&ViewEdgeIterator_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&ViewEdgeIterator_Type);
   PyModule_AddObject(module, "ViewEdgeIterator", (PyObject *)&ViewEdgeIterator_Type);
 
-  if (PyType_Ready(&ChainingIterator_Type) < 0)
+  if (PyType_Ready(&ChainingIterator_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&ChainingIterator_Type);
   PyModule_AddObject(module, "ChainingIterator", (PyObject *)&ChainingIterator_Type);
 
-  if (PyType_Ready(&ChainPredicateIterator_Type) < 0)
+  if (PyType_Ready(&ChainPredicateIterator_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&ChainPredicateIterator_Type);
   PyModule_AddObject(module, "ChainPredicateIterator", (PyObject *)&ChainPredicateIterator_Type);
 
-  if (PyType_Ready(&ChainSilhouetteIterator_Type) < 0)
+  if (PyType_Ready(&ChainSilhouetteIterator_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&ChainSilhouetteIterator_Type);
   PyModule_AddObject(module, "ChainSilhouetteIterator", (PyObject *)&ChainSilhouetteIterator_Type);
 
@@ -116,16 +128,16 @@ static int Iterator_init(BPy_Iterator *self, PyObject *args, PyObject *kwds)
 {
   static const char *kwlist[] = {NULL};
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "", (char **)kwlist))
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "", (char **)kwlist)) {
     return -1;
+  }
   self->it = new Iterator();
   return 0;
 }
 
 static void Iterator_dealloc(BPy_Iterator *self)
 {
-  if (self->it)
-    delete self->it;
+  delete self->it;
   Py_TYPE(self)->tp_free((PyObject *)self);
 }
 
@@ -183,7 +195,7 @@ static PyObject *Iterator_name_get(BPy_Iterator *self, void *UNUSED(closure))
 }
 
 PyDoc_STRVAR(Iterator_is_begin_doc,
-             "True if the interator points the first element.\n"
+             "True if the iterator points to the first element.\n"
              "\n"
              ":type: bool");
 
@@ -193,7 +205,7 @@ static PyObject *Iterator_is_begin_get(BPy_Iterator *self, void *UNUSED(closure)
 }
 
 PyDoc_STRVAR(Iterator_is_end_doc,
-             "True if the interator points the last element.\n"
+             "True if the iterator points to the last element.\n"
              "\n"
              ":type: bool");
 
@@ -203,17 +215,9 @@ static PyObject *Iterator_is_end_get(BPy_Iterator *self, void *UNUSED(closure))
 }
 
 static PyGetSetDef BPy_Iterator_getseters[] = {
-    {(char *)"name", (getter)Iterator_name_get, (setter)NULL, (char *)Iterator_name_doc, NULL},
-    {(char *)"is_begin",
-     (getter)Iterator_is_begin_get,
-     (setter)NULL,
-     (char *)Iterator_is_begin_doc,
-     NULL},
-    {(char *)"is_end",
-     (getter)Iterator_is_end_get,
-     (setter)NULL,
-     (char *)Iterator_is_end_doc,
-     NULL},
+    {"name", (getter)Iterator_name_get, (setter)NULL, Iterator_name_doc, NULL},
+    {"is_begin", (getter)Iterator_is_begin_get, (setter)NULL, Iterator_is_begin_doc, NULL},
+    {"is_end", (getter)Iterator_is_end_get, (setter)NULL, Iterator_is_end_doc, NULL},
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };
 

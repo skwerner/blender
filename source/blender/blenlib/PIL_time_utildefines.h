@@ -25,8 +25,8 @@
 #ifndef __PIL_TIME_UTILDEFINES_H__
 #define __PIL_TIME_UTILDEFINES_H__
 
-#include "PIL_time.h"        /* for PIL_check_seconds_timer */
 #include "BLI_utildefines.h" /* for AT */
+#include "PIL_time.h"        /* for PIL_check_seconds_timer */
 
 #define TIMEIT_START(var) \
   { \
@@ -62,8 +62,9 @@
   (void)0
 
 /**
- * _AVERAGED variants do same thing as their basic counterpart, but additionally add elapsed time to an averaged
- * static value, useful to get sensible timing of code running fast and often.
+ * _AVERAGED variants do same thing as their basic counterpart,
+ * but additionally add elapsed time to an averaged static value,
+ * useful to get sensible timing of code running fast and often.
  */
 #define TIMEIT_START_AVERAGED(var) \
   { \

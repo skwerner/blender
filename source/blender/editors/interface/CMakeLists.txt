@@ -30,8 +30,8 @@ set(INC
   ../../makesrna
   ../../python
   ../../windowmanager
-  ../../../../intern/guardedalloc
   ../../../../intern/glew-mx
+  ../../../../intern/guardedalloc
 )
 
 set(INC_SYS
@@ -50,6 +50,7 @@ set(SRC
   interface_eyedropper_datablock.c
   interface_eyedropper_depth.c
   interface_eyedropper_driver.c
+  interface_eyedropper_gpencil_color.c
   interface_handlers.c
   interface_icons.c
   interface_icons_event.c
@@ -67,11 +68,16 @@ set(SRC
   interface_region_tooltip.c
   interface_regions.c
   interface_style.c
+  interface_template_search_menu.c
+  interface_template_search_operator.c
   interface_templates.c
+  interface_undo.c
   interface_utils.c
   interface_widgets.c
   resources.c
   view2d.c
+  view2d_draw.c
+  view2d_gizmo_navigate.c
   view2d_ops.c
 
   interface_eyedropper_intern.h

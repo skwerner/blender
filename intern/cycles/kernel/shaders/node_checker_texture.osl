@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#include "stdosl.h"
-#include "node_texture.h"
+#include "stdcycles.h"
 
 /* Checker */
 

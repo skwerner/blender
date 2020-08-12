@@ -22,8 +22,8 @@
  */
 
 #include <ctype.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
@@ -82,6 +82,21 @@ size_t BLI_split_name_num(char *left, int *nr, const char *name, const char deli
   return name_len;
 }
 
+bool BLI_string_is_decimal(const char *string)
+{
+  if (*string == '\0') {
+    return false;
+  }
+
+  /* Keep iterating over the string until a non-digit is found. */
+  while (isdigit(*string)) {
+    string++;
+  }
+
+  /* If the non-digit we found is the terminating \0, everything was digits. */
+  return *string == '\0';
+}
+
 static bool is_char_sep(const char c)
 {
   return ELEM(c, '.', ' ', '-', '_');
@@ -132,10 +147,13 @@ void BLI_string_split_prefix(const char *string, char *r_pre, char *r_body, cons
 }
 
 /**
- * Finds the best possible flipped (left/right) name. For renaming; check for unique names afterwards.
+ * Finds the best possible flipped (left/right) name.
+ * For renaming; check for unique names afterwards.
  *
- * \param r_name: flipped name, assumed to be a pointer to a string of at least \a name_len size.
- * \param from_name: original name, assumed to be a pointer to a string of at least \a name_len size.
+ * \param r_name: flipped name,
+ * assumed to be a pointer to a string of at least \a name_len size.
+ * \param from_name: original name,
+ * assumed to be a pointer to a string of at least \a name_len size.
  * \param strip_number: If set, remove number extensions.
  */
 void BLI_string_flip_side_name(char *r_name,
@@ -164,8 +182,8 @@ void BLI_string_flip_side_name(char *r_name,
 
   /* We first check the case with a .### extension, let's find the last period */
   if (isdigit(r_name[len - 1])) {
-    index = strrchr(r_name, '.');      // last occurrence
-    if (index && isdigit(index[1])) {  // doesnt handle case bone.1abc2 correct..., whatever!
+    index = strrchr(r_name, '.');     /* last occurrence. */
+    if (index && isdigit(index[1])) { /* doesn't handle case bone.1abc2 correct..., whatever! */
       if (strip_number == false) {
         BLI_strncpy(number, index, name_len);
       }
@@ -326,7 +344,8 @@ bool BLI_uniquename_cb(UniquenameCheckCallback unique_check,
  *
  * For places where this is used, see constraint.c for example...
  *
- * \param name_offs: should be calculated using offsetof(structname, membername) macro from stddef.h
+ * \param name_offs: should be calculated using offsetof(structname, membername)
+ * macro from stddef.h
  */
 static bool uniquename_find_dupe(ListBase *list, void *vlink, const char *name, int name_offs)
 {
@@ -391,11 +410,52 @@ bool BLI_uniquename(
 /** \name Join Strings
  *
  * For non array versions of these functions, use the macros:
+ * - #BLI_string_join
  * - #BLI_string_joinN
  * - #BLI_string_join_by_sep_charN
  * - #BLI_string_join_by_sep_char_with_tableN
  *
  * \{ */
+
+char *BLI_string_join_array(char *result,
+                            size_t result_len,
+                            const char *strings[],
+                            uint strings_len)
+{
+  char *c = result;
+  char *c_end = &result[result_len - 1];
+  for (uint i = 0; i < strings_len; i++) {
+    const char *p = strings[i];
+    while (*p && (c < c_end)) {
+      *c++ = *p++;
+    }
+  }
+  *c = '\0';
+  return c;
+}
+
+/**
+ * A version of #BLI_string_join that takes a separator which can be any character including '\0'.
+ */
+char *BLI_string_join_array_by_sep_char(
+    char *result, size_t result_len, char sep, const char *strings[], uint strings_len)
+{
+  char *c = result;
+  char *c_end = &result[result_len - 1];
+  for (uint i = 0; i < strings_len; i++) {
+    if (i != 0) {
+      if (c < c_end) {
+        *c++ = sep;
+      }
+    }
+    const char *p = strings[i];
+    while (*p && (c < c_end)) {
+      *c++ = *p++;
+    }
+  }
+  *c = '\0';
+  return c;
+}
 
 /**
  * Join an array of strings into a newly allocated, null terminated string.

@@ -21,8 +21,8 @@
 #include "BPy_UnaryFunction1DVectorViewShape.h"
 
 #include "../BPy_Convert.h"
-#include "../BPy_Interface1D.h"
 #include "../BPy_IntegrationType.h"
+#include "../BPy_Interface1D.h"
 
 #include "UnaryFunction1D_vector_ViewShape/BPy_GetOccludeeF1D.h"
 #include "UnaryFunction1D_vector_ViewShape/BPy_GetOccludersF1D.h"
@@ -38,27 +38,32 @@ extern "C" {
 
 int UnaryFunction1DVectorViewShape_Init(PyObject *module)
 {
-  if (module == NULL)
+  if (module == NULL) {
     return -1;
+  }
 
-  if (PyType_Ready(&UnaryFunction1DVectorViewShape_Type) < 0)
+  if (PyType_Ready(&UnaryFunction1DVectorViewShape_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&UnaryFunction1DVectorViewShape_Type);
   PyModule_AddObject(
       module, "UnaryFunction1DVectorViewShape", (PyObject *)&UnaryFunction1DVectorViewShape_Type);
 
-  if (PyType_Ready(&GetOccludeeF1D_Type) < 0)
+  if (PyType_Ready(&GetOccludeeF1D_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&GetOccludeeF1D_Type);
   PyModule_AddObject(module, "GetOccludeeF1D", (PyObject *)&GetOccludeeF1D_Type);
 
-  if (PyType_Ready(&GetOccludersF1D_Type) < 0)
+  if (PyType_Ready(&GetOccludersF1D_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&GetOccludersF1D_Type);
   PyModule_AddObject(module, "GetOccludersF1D", (PyObject *)&GetOccludersF1D_Type);
 
-  if (PyType_Ready(&GetShapeF1D_Type) < 0)
+  if (PyType_Ready(&GetShapeF1D_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&GetShapeF1D_Type);
   PyModule_AddObject(module, "GetShapeF1D", (PyObject *)&GetShapeF1D_Type);
 
@@ -94,8 +99,9 @@ static int UnaryFunction1DVectorViewShape___init__(BPy_UnaryFunction1DVectorView
   PyObject *obj = 0;
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwds, "|O!", (char **)kwlist, &IntegrationType_Type, &obj))
+          args, kwds, "|O!", (char **)kwlist, &IntegrationType_Type, &obj)) {
     return -1;
+  }
 
   if (!obj) {
     self->uf1D_vectorviewshape = new UnaryFunction1D<std::vector<ViewShape *>>();
@@ -112,8 +118,7 @@ static int UnaryFunction1DVectorViewShape___init__(BPy_UnaryFunction1DVectorView
 
 static void UnaryFunction1DVectorViewShape___dealloc__(BPy_UnaryFunction1DVectorViewShape *self)
 {
-  if (self->uf1D_vectorviewshape)
-    delete self->uf1D_vectorviewshape;
+  delete self->uf1D_vectorviewshape;
   UnaryFunction1D_Type.tp_dealloc((PyObject *)self);
 }
 
@@ -130,8 +135,9 @@ static PyObject *UnaryFunction1DVectorViewShape___call__(BPy_UnaryFunction1DVect
   static const char *kwlist[] = {"inter", NULL};
   PyObject *obj = 0;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "O!", (char **)kwlist, &Interface1D_Type, &obj))
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "O!", (char **)kwlist, &Interface1D_Type, &obj)) {
     return NULL;
+  }
 
   if (typeid(*(self->uf1D_vectorviewshape)) == typeid(UnaryFunction1D<std::vector<ViewShape *>>)) {
     PyErr_SetString(PyExc_TypeError, "__call__ method not properly overridden");
@@ -182,15 +188,15 @@ static int integration_type_set(BPy_UnaryFunction1DVectorViewShape *self,
 }
 
 static PyGetSetDef BPy_UnaryFunction1DVectorViewShape_getseters[] = {
-    {(char *)"integration_type",
+    {"integration_type",
      (getter)integration_type_get,
      (setter)integration_type_set,
-     (char *)integration_type_doc,
+     integration_type_doc,
      NULL},
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };
 
-/*-----------------------BPy_UnaryFunction1DVectorViewShape type definition ------------------------------*/
+/*-----------------------BPy_UnaryFunction1DVectorViewShape type definition ---------------------*/
 
 PyTypeObject UnaryFunction1DVectorViewShape_Type = {
     PyVarObject_HEAD_INIT(NULL, 0) "UnaryFunction1DVectorViewShape", /* tp_name */

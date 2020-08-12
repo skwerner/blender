@@ -55,12 +55,14 @@ PyDoc_STRVAR(Interface0DIterator_doc,
 
 static int convert_nested_it(PyObject *obj, void *v)
 {
-  if (!obj || !BPy_Iterator_Check(obj))
+  if (!obj || !BPy_Iterator_Check(obj)) {
     return 0;
+  }
   Interface0DIteratorNested *nested_it = dynamic_cast<Interface0DIteratorNested *>(
       ((BPy_Iterator *)obj)->it);
-  if (!nested_it)
+  if (!nested_it) {
     return 0;
+  }
   *((Interface0DIteratorNested **)v) = nested_it;
   return 1;
 }
@@ -178,7 +180,7 @@ static PyObject *Interface0DIterator_u_get(BPy_Interface0DIterator *self, void *
 }
 
 PyDoc_STRVAR(Interface0DIterator_at_last_doc,
-             "True if the interator points to the last valid element.\n"
+             "True if the iterator points to the last valid element.\n"
              "For its counterpart (pointing to the first valid element), use it.is_begin.\n"
              "\n"
              ":type: bool");
@@ -190,25 +192,17 @@ static PyObject *Interface0DIterator_at_last_get(BPy_Interface0DIterator *self,
 }
 
 static PyGetSetDef BPy_Interface0DIterator_getseters[] = {
-    {(char *)"object",
+    {"object",
      (getter)Interface0DIterator_object_get,
      (setter)NULL,
-     (char *)Interface0DIterator_object_doc,
+     Interface0DIterator_object_doc,
      NULL},
-    {(char *)"t",
-     (getter)Interface0DIterator_t_get,
-     (setter)NULL,
-     (char *)Interface0DIterator_t_doc,
-     NULL},
-    {(char *)"u",
-     (getter)Interface0DIterator_u_get,
-     (setter)NULL,
-     (char *)Interface0DIterator_u_doc,
-     NULL},
-    {(char *)"at_last",
+    {"t", (getter)Interface0DIterator_t_get, (setter)NULL, Interface0DIterator_t_doc, NULL},
+    {"u", (getter)Interface0DIterator_u_get, (setter)NULL, Interface0DIterator_u_doc, NULL},
+    {"at_last",
      (getter)Interface0DIterator_at_last_get,
      (setter)NULL,
-     (char *)Interface0DIterator_at_last_doc,
+     Interface0DIterator_at_last_doc,
      NULL},
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };

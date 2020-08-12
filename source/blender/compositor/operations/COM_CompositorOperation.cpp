@@ -17,18 +17,19 @@
  */
 
 #include "COM_CompositorOperation.h"
-#include "BLI_listbase.h"
 #include "BKE_global.h"
 #include "BKE_image.h"
-
-extern "C" {
-#include "BLI_threads.h"
-#include "RE_pipeline.h"
-#include "RE_shader_ext.h"
-#include "RE_render_ext.h"
+#include "BLI_listbase.h"
 #include "MEM_guardedalloc.h"
+
+#include "BLI_threads.h"
+
+#include "RE_pipeline.h"
+#include "RE_render_ext.h"
+#include "RE_shader_ext.h"
+
 #include "render_types.h"
-}
+
 #include "PIL_time.h"
 
 CompositorOperation::CompositorOperation() : NodeOperation()
@@ -54,8 +55,9 @@ CompositorOperation::CompositorOperation() : NodeOperation()
 
 void CompositorOperation::initExecution()
 {
-  if (!this->m_active)
+  if (!this->m_active) {
     return;
+  }
 
   // When initializing the tree during initial load the width and height can be zero.
   this->m_imageInput = getInputSocketReader(0);
@@ -73,10 +75,11 @@ void CompositorOperation::initExecution()
 
 void CompositorOperation::deinitExecution()
 {
-  if (!this->m_active)
+  if (!this->m_active) {
     return;
+  }
 
-  if (!isBreaked()) {
+  if (!isBraked()) {
     Render *re = RE_GetSceneRender(this->m_scene);
     RenderResult *rr = RE_AcquireResultWrite(re);
 
@@ -109,7 +112,7 @@ void CompositorOperation::deinitExecution()
 
     BLI_thread_lock(LOCK_DRAW_IMAGE);
     BKE_image_signal(G.main,
-                     BKE_image_verify_viewer(G.main, IMA_TYPE_R_RESULT, "Render Result"),
+                     BKE_image_ensure_viewer(G.main, IMA_TYPE_R_RESULT, "Render Result"),
                      NULL,
                      IMA_SIGNAL_FREE);
     BLI_thread_unlock(LOCK_DRAW_IMAGE);
@@ -136,8 +139,9 @@ void CompositorOperation::executeRegion(rcti *rect, unsigned int /*tileNumber*/)
   float *buffer = this->m_outputBuffer;
   float *zbuffer = this->m_depthBuffer;
 
-  if (!buffer)
+  if (!buffer) {
     return;
+  }
   int x1 = rect->xmin;
   int y1 = rect->ymin;
   int x2 = rect->xmax;
@@ -181,7 +185,7 @@ void CompositorOperation::executeRegion(rcti *rect, unsigned int /*tileNumber*/)
      *                      Full frame
      */
 
-    int full_width  = rd->xsch * rd->size / 100;
+    int full_width = rd->xsch * rd->size / 100;
     int full_height = rd->ysch * rd->size / 100;
 
     dx = rd->border.xmin * full_width - (full_width - this->getWidth()) / 2.0f;
@@ -204,7 +208,7 @@ void CompositorOperation::executeRegion(rcti *rect, unsigned int /*tileNumber*/)
       zbuffer[offset] = color[0];
       offset4 += COM_NUM_CHANNELS_COLOR;
       offset++;
-      if (isBreaked()) {
+      if (isBraked()) {
         breaked = true;
       }
     }

@@ -22,14 +22,14 @@
  */
 
 #include "BLI_compiler_attrs.h"
-#include "BLI_utildefines.h"
 #include "BLI_sys_types.h"
 #include "BLI_system.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_global.h"
 
-#include "GPU_glew.h"
 #include "GPU_debug.h"
+#include "GPU_glew.h"
 #include "intern/gpu_private.h"
 
 #include <stdio.h>
@@ -258,6 +258,7 @@ void GPU_string_marker(const char *buf)
 
 void GPU_print_error_debug(const char *str)
 {
-  if (G.debug & G_DEBUG)
+  if (G.debug & G_DEBUG) {
     fprintf(stderr, "GPU: %s\n", str);
+  }
 }

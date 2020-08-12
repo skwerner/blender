@@ -24,15 +24,15 @@
  * \ingroup bli
  */
 
-#include <stdarg.h>
 #include <inttypes.h>
+#include <stdarg.h>
+
+#include "BLI_compiler_attrs.h"
+#include "BLI_utildefines.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "BLI_compiler_attrs.h"
-#include "BLI_utildefines_variadic.h"
 
 char *BLI_strdupn(const char *str, const size_t len) ATTR_MALLOC ATTR_WARN_UNUSED_RESULT
     ATTR_NONNULL();
@@ -100,7 +100,7 @@ char *BLI_strncasestr(const char *s, const char *find, size_t len) ATTR_WARN_UNU
 int BLI_strcasecmp(const char *s1, const char *s2) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 int BLI_strncasecmp(const char *s1, const char *s2, size_t len) ATTR_WARN_UNUSED_RESULT
     ATTR_NONNULL();
-int BLI_natstrcmp(const char *s1, const char *s2) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
+int BLI_strcasecmp_natural(const char *s1, const char *s2) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 int BLI_strcmp_ignore_pad(const char *str1,
                           const char *str2,
                           const char pad) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
@@ -118,6 +118,7 @@ int BLI_str_index_in_array_n(const char *__restrict str,
 int BLI_str_index_in_array(const char *__restrict str, const char **__restrict str_array)
     ATTR_NONNULL();
 
+bool BLI_str_startswith(const char *__restrict str, const char *__restrict start) ATTR_NONNULL();
 bool BLI_str_endswith(const char *__restrict str, const char *__restrict end) ATTR_NONNULL();
 bool BLI_strn_endswith(const char *__restrict str, const char *__restrict end, size_t length)
     ATTR_NONNULL();
@@ -160,33 +161,42 @@ int BLI_string_find_split_words(const char *str,
  * Follows #ELEM macro convention.
  * \{ */
 
+/* Manual line breaks for readability. */
+/* clang-format off */
 /* STR_ELEM#(v, ...): is the first arg equal any others? */
 /* Internal helpers. */
 #define _VA_STR_ELEM2(v, a) (strcmp(v, a) == 0)
-#define _VA_STR_ELEM3(v, a, b) (_VA_STR_ELEM2(v, a) || ((v) == (b)))
-#define _VA_STR_ELEM4(v, a, b, c) (_VA_STR_ELEM3(v, a, b) || ((v) == (c)))
-#define _VA_STR_ELEM5(v, a, b, c, d) (_VA_STR_ELEM4(v, a, b, c) || ((v) == (d)))
-#define _VA_STR_ELEM6(v, a, b, c, d, e) (_VA_STR_ELEM5(v, a, b, c, d) || ((v) == (e)))
-#define _VA_STR_ELEM7(v, a, b, c, d, e, f) (_VA_STR_ELEM6(v, a, b, c, d, e) || ((v) == (f)))
-#define _VA_STR_ELEM8(v, a, b, c, d, e, f, g) (_VA_STR_ELEM7(v, a, b, c, d, e, f) || ((v) == (g)))
+#define _VA_STR_ELEM3(v, a, b) \
+  (_VA_STR_ELEM2(v, a) || (_VA_STR_ELEM2(v, b)))
+#define _VA_STR_ELEM4(v, a, b, c) \
+  (_VA_STR_ELEM3(v, a, b) || (_VA_STR_ELEM2(v, c)))
+#define _VA_STR_ELEM5(v, a, b, c, d) \
+  (_VA_STR_ELEM4(v, a, b, c) || (_VA_STR_ELEM2(v, d)))
+#define _VA_STR_ELEM6(v, a, b, c, d, e) \
+  (_VA_STR_ELEM5(v, a, b, c, d) || (_VA_STR_ELEM2(v, e)))
+#define _VA_STR_ELEM7(v, a, b, c, d, e, f) \
+  (_VA_STR_ELEM6(v, a, b, c, d, e) || (_VA_STR_ELEM2(v, f)))
+#define _VA_STR_ELEM8(v, a, b, c, d, e, f, g) \
+  (_VA_STR_ELEM7(v, a, b, c, d, e, f) || (_VA_STR_ELEM2(v, g)))
 #define _VA_STR_ELEM9(v, a, b, c, d, e, f, g, h) \
-  (_VA_STR_ELEM8(v, a, b, c, d, e, f, g) || ((v) == (h)))
+  (_VA_STR_ELEM8(v, a, b, c, d, e, f, g) || (_VA_STR_ELEM2(v, h)))
 #define _VA_STR_ELEM10(v, a, b, c, d, e, f, g, h, i) \
-  (_VA_STR_ELEM9(v, a, b, c, d, e, f, g, h) || ((v) == (i)))
+  (_VA_STR_ELEM9(v, a, b, c, d, e, f, g, h) || (_VA_STR_ELEM2(v, i)))
 #define _VA_STR_ELEM11(v, a, b, c, d, e, f, g, h, i, j) \
-  (_VA_STR_ELEM10(v, a, b, c, d, e, f, g, h, i) || ((v) == (j)))
+  (_VA_STR_ELEM10(v, a, b, c, d, e, f, g, h, i) || (_VA_STR_ELEM2(v, j)))
 #define _VA_STR_ELEM12(v, a, b, c, d, e, f, g, h, i, j, k) \
-  (_VA_STR_ELEM11(v, a, b, c, d, e, f, g, h, i, j) || ((v) == (k)))
+  (_VA_STR_ELEM11(v, a, b, c, d, e, f, g, h, i, j) || (_VA_STR_ELEM2(v, k)))
 #define _VA_STR_ELEM13(v, a, b, c, d, e, f, g, h, i, j, k, l) \
-  (_VA_STR_ELEM12(v, a, b, c, d, e, f, g, h, i, j, k) || ((v) == (l)))
+  (_VA_STR_ELEM12(v, a, b, c, d, e, f, g, h, i, j, k) || (_VA_STR_ELEM2(v, l)))
 #define _VA_STR_ELEM14(v, a, b, c, d, e, f, g, h, i, j, k, l, m) \
-  (_VA_STR_ELEM13(v, a, b, c, d, e, f, g, h, i, j, k, l) || ((v) == (m)))
+  (_VA_STR_ELEM13(v, a, b, c, d, e, f, g, h, i, j, k, l) || (_VA_STR_ELEM2(v, m)))
 #define _VA_STR_ELEM15(v, a, b, c, d, e, f, g, h, i, j, k, l, m, n) \
-  (_VA_STR_ELEM14(v, a, b, c, d, e, f, g, h, i, j, k, l, m) || ((v) == (n)))
+  (_VA_STR_ELEM14(v, a, b, c, d, e, f, g, h, i, j, k, l, m) || (_VA_STR_ELEM2(v, n)))
 #define _VA_STR_ELEM16(v, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) \
-  (_VA_STR_ELEM15(v, a, b, c, d, e, f, g, h, i, j, k, l, m, n) || ((v) == (o)))
+  (_VA_STR_ELEM15(v, a, b, c, d, e, f, g, h, i, j, k, l, m, n) || (_VA_STR_ELEM2(v, o)))
 #define _VA_STR_ELEM17(v, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) \
-  (_VA_STR_ELEM16(v, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) || ((v) == (p)))
+  (_VA_STR_ELEM16(v, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) || (_VA_STR_ELEM2(v, p)))
+/* clang-format on */
 
 /* reusable STR_ELEM macro */
 #define STR_ELEM(...) VA_NARGS_CALL_OVERLOAD(_VA_STR_ELEM, __VA_ARGS__)

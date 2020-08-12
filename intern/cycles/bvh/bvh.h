@@ -26,11 +26,14 @@
 CCL_NAMESPACE_BEGIN
 
 class Stats;
+class Device;
+class DeviceScene;
 class BVHNode;
 struct BVHStackEntry;
 class BVHParams;
 class BoundBox;
 class LeafNode;
+class Geometry;
 class Object;
 class Progress;
 
@@ -73,7 +76,7 @@ struct PackedBVH {
   }
 };
 
-enum BVH_TYPE { bvh2, bvh4, bvh8 };
+enum BVH_TYPE { bvh2 };
 
 /* BVH */
 
@@ -81,18 +84,27 @@ class BVH {
  public:
   PackedBVH pack;
   BVHParams params;
+  vector<Geometry *> geometry;
   vector<Object *> objects;
 
-  static BVH *create(const BVHParams &params, const vector<Object *> &objects);
+  static BVH *create(const BVHParams &params,
+                     const vector<Geometry *> &geometry,
+                     const vector<Object *> &objects);
   virtual ~BVH()
   {
   }
 
   virtual void build(Progress &progress, Stats *stats = NULL);
+  virtual void copy_to_device(Progress & /*progress*/, DeviceScene * /*dscene*/)
+  {
+  }
+
   void refit(Progress &progress);
 
  protected:
-  BVH(const BVHParams &params, const vector<Object *> &objects);
+  BVH(const BVHParams &params,
+      const vector<Geometry *> &geometry,
+      const vector<Object *> &objects);
 
   /* Refit range of primitives. */
   void refit_primitives(int start, int end, BoundBox &bbox, uint &visibility);

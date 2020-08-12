@@ -32,7 +32,7 @@
 
 #include "BKE_context.h"
 #include "BKE_image.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_node.h"
 #include "BKE_report.h"
@@ -40,8 +40,8 @@
 #include "BKE_texture.h"
 
 #include "ED_node.h" /* own include */
-#include "ED_screen.h"
 #include "ED_render.h"
+#include "ED_screen.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -54,8 +54,10 @@
 
 #include "node_intern.h" /* own include */
 
-/* XXX Does some additional initialization on top of nodeAddNode
- * Can be used with both custom and static nodes, if idname==NULL the static int type will be used instead.
+/**
+ * XXX Does some additional initialization on top of #nodeAddNode
+ * Can be used with both custom and static nodes,
+ * if `idname == NULL` the static int type will be used instead.
  */
 bNode *node_add_node(const bContext *C, const char *idname, int type, float locx, float locy)
 {
@@ -80,7 +82,7 @@ bNode *node_add_node(const bContext *C, const char *idname, int type, float locx
   nodeSetSelected(node, true);
 
   ntreeUpdateTree(bmain, snode->edittree);
-  ED_node_set_active(bmain, snode->edittree, node);
+  ED_node_set_active(bmain, snode->edittree, node, NULL);
 
   snode_update(snode, node);
 
@@ -213,7 +215,7 @@ static bNodeSocketLink *add_reroute_do_socket_section(bContext *C,
 static int add_reroute_exec(bContext *C, wmOperator *op)
 {
   SpaceNode *snode = CTX_wm_space_node(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   bNodeTree *ntree = snode->edittree;
   float mcoords[256][2];
   int i = 0;
@@ -224,7 +226,7 @@ static int add_reroute_exec(bContext *C, wmOperator *op)
 
     RNA_float_get_array(&itemptr, "loc", loc);
     UI_view2d_region_to_view(
-        &ar->v2d, (short)loc[0], (short)loc[1], &mcoords[i][0], &mcoords[i][1]);
+        &region->v2d, (short)loc[0], (short)loc[1], &mcoords[i][0], &mcoords[i][1]);
     i++;
     if (i >= 256) {
       break;
@@ -307,7 +309,7 @@ void NODE_OT_add_reroute(wmOperatorType *ot)
   prop = RNA_def_collection_runtime(ot->srna, "path", &RNA_OperatorMousePath, "Path", "");
   RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
   /* internal */
-  RNA_def_int(ot->srna, "cursor", BC_CROSSCURSOR, 0, INT_MAX, "Cursor", "", 0, INT_MAX);
+  RNA_def_int(ot->srna, "cursor", WM_CURSOR_CROSS, 0, INT_MAX, "Cursor", "", 0, INT_MAX);
 }
 
 /* ****************** Add File Node Operator  ******************* */
@@ -366,12 +368,12 @@ static int node_add_file_exec(bContext *C, wmOperator *op)
 
 static int node_add_file_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   SpaceNode *snode = CTX_wm_space_node(C);
 
   /* convert mouse coordinates to v2d space */
   UI_view2d_region_to_view(
-      &ar->v2d, event->mval[0], event->mval[1], &snode->cursor[0], &snode->cursor[1]);
+      &region->v2d, event->mval[0], event->mval[1], &snode->cursor[0], &snode->cursor[1]);
 
   snode->cursor[0] /= UI_DPI_FAC;
   snode->cursor[1] /= UI_DPI_FAC;
@@ -380,9 +382,7 @@ static int node_add_file_invoke(bContext *C, wmOperator *op, const wmEvent *even
       RNA_struct_property_is_set(op->ptr, "name")) {
     return node_add_file_exec(C, op);
   }
-  else {
-    return WM_operator_filesel(C, op, event);
-  }
+  return WM_operator_filesel(C, op, event);
 }
 
 void NODE_OT_add_file(wmOperatorType *ot)
@@ -519,7 +519,7 @@ static int new_node_tree_exec(bContext *C, wmOperator *op)
     id_us_min(&ntree->id);
 
     RNA_id_pointer_create(&ntree->id, &idptr);
-    RNA_property_pointer_set(&ptr, prop, idptr);
+    RNA_property_pointer_set(&ptr, prop, idptr, NULL);
     RNA_property_update(C, &ptr, prop);
   }
   else if (snode) {

@@ -22,9 +22,9 @@
 
 #include "BLI_utildefines.h"
 
+#include "IMB_filetype.h"
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
-#include "IMB_filetype.h"
 
 #include "IMB_colormanagement.h"
 
@@ -40,11 +40,11 @@
 #  include "dds/dds_api.h"
 #endif
 
-static int imb_ftype_default(const ImFileType *type, ImBuf *ibuf)
+static int imb_ftype_default(const ImFileType *type, const ImBuf *ibuf)
 {
   return (ibuf->ftype == type->filetype);
 }
-static int imb_ftype_iris(const ImFileType *type, ImBuf *ibuf)
+static int imb_ftype_iris(const ImFileType *type, const ImBuf *ibuf)
 {
   (void)type;
   return (ibuf->ftype == IMB_FTYPE_IMAGIC);
@@ -231,16 +231,20 @@ void imb_filetypes_init(void)
 {
   const ImFileType *type;
 
-  for (type = IMB_FILE_TYPES; type < IMB_FILE_TYPES_LAST; type++)
-    if (type->init)
+  for (type = IMB_FILE_TYPES; type < IMB_FILE_TYPES_LAST; type++) {
+    if (type->init) {
       type->init();
+    }
+  }
 }
 
 void imb_filetypes_exit(void)
 {
   const ImFileType *type;
 
-  for (type = IMB_FILE_TYPES; type < IMB_FILE_TYPES_LAST; type++)
-    if (type->exit)
+  for (type = IMB_FILE_TYPES; type < IMB_FILE_TYPES_LAST; type++) {
+    if (type->exit) {
       type->exit();
+    }
+  }
 }

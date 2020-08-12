@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2006 Blender Foundation.
@@ -25,14 +25,14 @@
 #ifndef __BKE_CUSTOMDATA_H__
 #define __BKE_CUSTOMDATA_H__
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "BLI_sys_types.h"
 #include "BLI_utildefines.h"
 
 #include "DNA_customdata_types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct BMesh;
 struct CustomData;
@@ -61,14 +61,18 @@ extern const CustomData_MeshMasks CD_MASK_EVERYTHING;
  * memory space for totelem elements. mask must be an array of length
  * CD_NUMTYPES elements, that indicate if a layer can be copied. */
 
-/* add/copy/merge allocation types */
+/** Add/copy/merge allocation types. */
 typedef enum eCDAllocType {
-  CD_ASSIGN = 0,    /* use the data pointer */
-  CD_CALLOC = 1,    /* allocate blank memory */
-  CD_DEFAULT = 2,   /* allocate and set to default */
-  CD_REFERENCE = 3, /* use data pointers, set layer flag NOFREE */
-  CD_DUPLICATE = 4, /* do a full copy of all layers, only allowed if source
-                      * has same number of elements */
+  /** Use the data pointer. */
+  CD_ASSIGN = 0,
+  /** Allocate blank memory. */
+  CD_CALLOC = 1,
+  /** Allocate and set to default. */
+  CD_DEFAULT = 2,
+  /** Use data pointers, set layer flag NOFREE. */
+  CD_REFERENCE = 3,
+  /** Do a full copy of all layers, only allowed if source has same number of elements. */
+  CD_DUPLICATE = 4,
 } eCDAllocType;
 
 #define CD_TYPE_AS_MASK(_type) (CustomDataMask)((CustomDataMask)1 << (CustomDataMask)(_type))
@@ -109,7 +113,8 @@ bool CustomData_has_referenced(const struct CustomData *data);
  * implemented for mloopuv/mloopcol, for now.*/
 void CustomData_data_copy_value(int type, const void *source, void *dest);
 
-/* Same as above, but doing advanced mixing. Only available for a few types of data (like colors...). */
+/* Same as above, but doing advanced mixing.
+ * Only available for a few types of data (like colors...). */
 void CustomData_data_mix_value(
     int type, const void *source, void *dest, const int mixmode, const float mixfactor);
 
@@ -163,8 +168,8 @@ bool CustomData_bmesh_merge(const struct CustomData *source,
 /** NULL's all members and resets the typemap. */
 void CustomData_reset(struct CustomData *data);
 
-/** frees data associated with a CustomData object (doesn't free the object
- * itself, though)
+/**
+ * Frees data associated with a CustomData object (doesn't free the object itself, though).
  */
 void CustomData_free(struct CustomData *data, int totelem);
 
@@ -253,6 +258,11 @@ void CustomData_bmesh_copy_data(const struct CustomData *source,
                                 struct CustomData *dest,
                                 void *src_block,
                                 void **dest_block);
+void CustomData_bmesh_copy_data_exclude_by_type(const struct CustomData *source,
+                                                struct CustomData *dest,
+                                                void *src_block,
+                                                void **dest_block,
+                                                const CustomDataMask mask_exclude);
 
 /* Copies data of a single layer of a given type. */
 void CustomData_copy_layer_type_data(const struct CustomData *source,
@@ -387,6 +397,9 @@ void CustomData_clear_layer_flag(struct CustomData *data, int type, int flag);
 void CustomData_bmesh_set_default(struct CustomData *data, void **block);
 void CustomData_bmesh_free_block(struct CustomData *data, void **block);
 void CustomData_bmesh_free_block_data(struct CustomData *data, void *block);
+void CustomData_bmesh_free_block_data_exclude_by_type(struct CustomData *data,
+                                                      void *block,
+                                                      const CustomDataMask mask_exclude);
 
 /* copy custom data to/from layers as in mesh/derivedmesh, to editmesh
  * blocks of data. the CustomData's must not be compatible */
@@ -474,8 +487,8 @@ typedef void (*cd_datatransfer_interp)(const struct CustomDataTransferLayerMap *
                                        const float mix_factor);
 
 /**
- * Fake CD_LAYERS (those are actually 'real' data stored directly into elements' structs, or otherwise not (directly)
- * accessible to usual CDLayer system). */
+ * Fake CD_LAYERS (those are actually 'real' data stored directly into elements' structs,
+ * or otherwise not (directly) accessible to usual CDLayer system). */
 enum {
   CD_FAKE = 1 << 8,
 
@@ -527,23 +540,29 @@ typedef struct CustomDataTransferLayerMap {
   int data_type;
   int mix_mode;
   float mix_factor;
-  const float *
-      mix_weights; /* If non-NULL, array of weights, one for each dest item, replaces mix_factor. */
+  /** If non-NULL, array of weights, one for each dest item, replaces mix_factor. */
+  const float *mix_weights;
 
-  const void *
-      data_src; /* Data source array (can be regular CD data, vertices/edges/etc., keyblocks...). */
-  void *data_dst;   /* Data dest array (same type as dat_src). */
-  int data_src_n;   /* Index to affect in data_src (used e.g. for vgroups). */
-  int data_dst_n;   /* Index to affect in data_dst (used e.g. for vgroups). */
-  size_t elem_size; /* Size of one element of data_src/data_dst. */
+  /** Data source array (can be regular CD data, vertices/edges/etc., keyblocks...). */
+  const void *data_src;
+  /** Data dest array (same type as dat_src). */
+  void *data_dst;
+  /** Index to affect in data_src (used e.g. for vgroups). */
+  int data_src_n;
+  /** Index to affect in data_dst (used e.g. for vgroups). */
+  int data_dst_n;
+  /** Size of one element of data_src/data_dst. */
+  size_t elem_size;
 
-  size_t data_size; /* Size of actual data we transfer. */
-  size_t
-      data_offset; /* Offset of actual data we transfer (in element contained in data_src/dst). */
-  uint64_t data_flag; /* For bitflag transfer, flag(s) to affect in transferred data. */
+  /** Size of actual data we transfer. */
+  size_t data_size;
+  /** Offset of actual data we transfer (in element contained in data_src/dst). */
+  size_t data_offset;
+  /** For bitflag transfer, flag(s) to affect in transferred data. */
+  uint64_t data_flag;
 
-  void *
-      interp_data; /* Opaque pointer, to be used by specific interp callback (e.g. transformspace for normals). */
+  /** Opaque pointer, to be used by specific interp callback (e.g. transformspace for normals). */
+  void *interp_data;
 
   cd_datatransfer_interp interp;
 } CustomDataTransferLayerMap;

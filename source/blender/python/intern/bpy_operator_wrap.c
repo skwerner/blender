@@ -33,19 +33,20 @@
 #include "RNA_access.h"
 #include "RNA_define.h"
 
-#include "bpy_rna.h"
 #include "bpy_intern_string.h"
 #include "bpy_operator_wrap.h" /* own include */
+#include "bpy_rna.h"
 
 static void operator_properties_init(wmOperatorType *ot)
 {
-  PyTypeObject *py_class = ot->ext.data;
-  RNA_struct_blender_type_set(ot->ext.srna, ot);
+  PyTypeObject *py_class = ot->rna_ext.data;
+  RNA_struct_blender_type_set(ot->rna_ext.srna, ot);
 
   /* Only call this so pyrna_deferred_register_class gives a useful error
    * WM_operatortype_append_ptr will call RNA_def_struct_identifier later.
    *
-   * Note the 'no_struct_map' function is used since the actual struct name is already used by the operator.
+   * Note the 'no_struct_map' function is used since the actual struct name
+   * is already used by the operator.
    */
   RNA_def_struct_identifier_no_struct_map(ot->srna, ot->idname);
 
@@ -56,8 +57,9 @@ static void operator_properties_init(wmOperatorType *ot)
 
   /* set the default property: ot->prop */
   {
-    /* picky developers will notice that 'bl_property' won't work with inheritance
-     * get direct from the dict to avoid raising a load of attribute errors (yes this isnt ideal) - campbell */
+    /* Picky developers will notice that 'bl_property' won't work with inheritance
+     * get direct from the dict to avoid raising a load of attribute errors (yes this isn't ideal)
+     * - campbell. */
     PyObject *py_class_dict = py_class->tp_dict;
     PyObject *bl_property = PyDict_GetItem(py_class_dict, bpy_intern_str_bl_property);
     const char *prop_id;
@@ -121,9 +123,9 @@ void BPY_RNA_operator_wrapper(wmOperatorType *ot, void *userdata)
   *ot = *((wmOperatorType *)userdata);
   ot->srna = srna; /* restore */
 
-  /* Use i18n context from ext.srna if possible (py operators). */
-  if (ot->ext.srna) {
-    RNA_def_struct_translation_context(ot->srna, RNA_struct_translation_context(ot->ext.srna));
+  /* Use i18n context from rna_ext.srna if possible (py operators). */
+  if (ot->rna_ext.srna) {
+    RNA_def_struct_translation_context(ot->srna, RNA_struct_translation_context(ot->rna_ext.srna));
   }
 
   operator_properties_init(ot);
@@ -140,11 +142,11 @@ void BPY_RNA_operator_macro_wrapper(wmOperatorType *ot, void *userdata)
   ot->flag |= data->flag; /* append flags to the one set by registration */
   ot->pyop_poll = data->pyop_poll;
   ot->ui = data->ui;
-  ot->ext = data->ext;
+  ot->rna_ext = data->rna_ext;
 
-  /* Use i18n context from ext.srna if possible (py operators). */
-  if (ot->ext.srna) {
-    RNA_def_struct_translation_context(ot->srna, RNA_struct_translation_context(ot->ext.srna));
+  /* Use i18n context from rna_ext.srna if possible (py operators). */
+  if (ot->rna_ext.srna) {
+    RNA_def_struct_translation_context(ot->srna, RNA_struct_translation_context(ot->rna_ext.srna));
   }
 
   operator_properties_init(ot);

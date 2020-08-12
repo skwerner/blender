@@ -26,6 +26,10 @@
 
 #include "BLI_compiler_attrs.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct BLI_mempool;
 struct MemArena;
 
@@ -51,6 +55,7 @@ int BLI_linklist_count(const LinkNode *list) ATTR_WARN_UNUSED_RESULT;
 int BLI_linklist_index(const LinkNode *list, void *ptr) ATTR_WARN_UNUSED_RESULT;
 
 LinkNode *BLI_linklist_find(LinkNode *list, int index) ATTR_WARN_UNUSED_RESULT;
+LinkNode *BLI_linklist_find_last(LinkNode *list) ATTR_WARN_UNUSED_RESULT;
 
 void BLI_linklist_reverse(LinkNode **listp) ATTR_NONNULL(1);
 
@@ -92,5 +97,9 @@ LinkNode *BLI_linklist_sort_r(LinkNode *list,
   BLI_linklist_prepend_nlink(listp, ptr, alloca(sizeof(LinkNode)))
 #define BLI_linklist_append_alloca(list_pair, ptr) \
   BLI_linklist_append_nlink(list_pair, ptr, alloca(sizeof(LinkNode)))
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __BLI_LINKLIST_H__ */

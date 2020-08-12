@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2017, Blender Foundation
@@ -30,20 +30,32 @@
 #include "BLI_blenlib.h"
 #include "BLI_math.h"
 
-#include "DNA_meshdata_types.h"
-#include "DNA_scene_types.h"
-#include "DNA_object_types.h"
-#include "DNA_gpencil_types.h"
-#include "DNA_gpencil_modifier_types.h"
+#include "BLT_translation.h"
 
+#include "DNA_gpencil_modifier_types.h"
+#include "DNA_gpencil_types.h"
+#include "DNA_meshdata_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
+
+#include "BKE_context.h"
 #include "BKE_gpencil.h"
+#include "BKE_gpencil_geom.h"
 #include "BKE_gpencil_modifier.h"
+#include "BKE_screen.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
 
-#include "MOD_gpencil_util.h"
 #include "MOD_gpencil_modifiertypes.h"
+#include "MOD_gpencil_ui_common.h"
+#include "MOD_gpencil_util.h"
 
 static void initData(GpencilModifierData *md)
 {
@@ -62,7 +74,7 @@ static void initData(GpencilModifierData *md)
 
 static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
 {
-  BKE_gpencil_modifier_copyData_generic(md, target);
+  BKE_gpencil_modifier_copydata_generic(md, target);
 }
 
 static bool dependsOnTime(GpencilModifierData *UNUSED(md))
@@ -74,7 +86,8 @@ static bool dependsOnTime(GpencilModifierData *UNUSED(md))
 /* Build Modifier - Stroke generation logic
  *
  * There are two modes for how the strokes are sequenced (at a macro-level):
- * - Sequential Mode - Strokes appear/disappear one after the other. Only a single one changes at a time.
+ * - Sequential Mode - Strokes appear/disappear one after the other. Only a single one changes at a
+ * time.
  * - Concurrent Mode - Multiple strokes appear/disappear at once.
  *
  * Assumptions:
@@ -106,7 +119,6 @@ static void gpf_clear_all_strokes(bGPDframe *gpf)
 /* Reduce the number of points in the stroke
  *
  * Note: This won't be called if all points are present/removed
- * TODO: Allow blending of growing/shrinking tip (e.g. for more gradual transitions)
  */
 static void reduce_stroke_points(bGPDstroke *gps,
                                  const int num_points,
@@ -114,19 +126,20 @@ static void reduce_stroke_points(bGPDstroke *gps,
 {
   bGPDspoint *new_points = MEM_callocN(sizeof(bGPDspoint) * num_points, __func__);
   MDeformVert *new_dvert = NULL;
-  if (gps->dvert != NULL) {
+  if ((gps->dvert != NULL) && (num_points > 0)) {
     new_dvert = MEM_callocN(sizeof(MDeformVert) * num_points, __func__);
   }
 
   /* Which end should points be removed from */
-  // TODO: free stroke weights
   switch (transition) {
-    case GP_BUILD_TRANSITION_GROW: /* Show in forward order = Remove ungrown-points from end of stroke */
-    case GP_BUILD_TRANSITION_SHRINK: /* Hide in reverse order = Remove dead-points from end of stroke */
+    case GP_BUILD_TRANSITION_GROW:   /* Show in forward order =
+                                      * Remove ungrown-points from end of stroke. */
+    case GP_BUILD_TRANSITION_SHRINK: /* Hide in reverse order =
+                                      * Remove dead-points from end of stroke. */
     {
       /* copy over point data */
       memcpy(new_points, gps->points, sizeof(bGPDspoint) * num_points);
-      if (gps->dvert != NULL) {
+      if ((gps->dvert != NULL) && (num_points > 0)) {
         memcpy(new_dvert, gps->dvert, sizeof(MDeformVert) * num_points);
 
         /* free unused point weights */
@@ -147,7 +160,7 @@ static void reduce_stroke_points(bGPDstroke *gps,
 
       /* copy over point data */
       memcpy(new_points, gps->points + offset, sizeof(bGPDspoint) * num_points);
-      if (gps->dvert != NULL) {
+      if ((gps->dvert != NULL) && (num_points > 0)) {
         memcpy(new_dvert, gps->dvert + offset, sizeof(MDeformVert) * num_points);
 
         /* free unused weights */
@@ -171,10 +184,8 @@ static void reduce_stroke_points(bGPDstroke *gps,
   gps->dvert = new_dvert;
   gps->totpoints = num_points;
 
-  /* mark stroke as needing to have its geometry caches rebuilt */
-  gps->flag |= GP_STROKE_RECALC_GEOMETRY;
-  gps->tot_triangles = 0;
-  MEM_SAFE_FREE(gps->triangles);
+  /* Calc geometry data. */
+  BKE_gpencil_stroke_geometry_update(gps);
 }
 
 /* --------------------------------------------- */
@@ -266,7 +277,6 @@ static void build_sequential(BuildGpencilModifierData *mmd, bGPDframe *gpf, floa
     }
     else {
       /* Some proportion of stroke is visible */
-      /* XXX: Will the transition settings still be valid now? */
       if ((first_visible <= cell->start_idx) && (last_visible >= cell->end_idx)) {
         /* Do nothing - whole stroke is visible */
       }
@@ -290,8 +300,6 @@ static void build_sequential(BuildGpencilModifierData *mmd, bGPDframe *gpf, floa
 /* --------------------------------------------- */
 
 /* Concurrent - Show multiple strokes at once */
-// TODO: Allow random offsets to start times
-// TODO: Allow varying speeds? Scaling of progress?
 static void build_concurrent(BuildGpencilModifierData *mmd, bGPDframe *gpf, float fac)
 {
   bGPDstroke *gps, *gps_next;
@@ -329,8 +337,7 @@ static void build_concurrent(BuildGpencilModifierData *mmd, bGPDframe *gpf, floa
         /* Build effect occurs over when fac = 0, to fac = relative_len */
         if (fac <= relative_len) {
           /* Scale fac to fit relative_len */
-          /* FIXME: prevent potential div by zero (e.g. very short stroke vs one very long one) */
-          const float scaled_fac = fac / relative_len;
+          const float scaled_fac = fac / MAX2(relative_len, PSEUDOINVERSE_EPSILON);
 
           if (reverse) {
             num_points = (int)roundf((1.0f - scaled_fac) * gps->totpoints);
@@ -353,12 +360,12 @@ static void build_concurrent(BuildGpencilModifierData *mmd, bGPDframe *gpf, floa
       }
       case GP_BUILD_TIMEALIGN_END: /* all end on same frame */
       {
-        /* Build effect occurs over  1.0 - relative_len, to 1.0  (i.e. over the end of the range) */
+        /* Build effect occurs over  1.0 - relative_len, to 1.0  (i.e. over the end of the range)
+         */
         const float start_fac = 1.0f - relative_len;
 
         if (fac >= start_fac) {
-          /* FIXME: prevent potential div by zero (e.g. very short stroke vs one very long one) */
-          const float scaled_fac = (fac - start_fac) / relative_len;
+          const float scaled_fac = (fac - start_fac) / MAX2(relative_len, PSEUDOINVERSE_EPSILON);
 
           if (reverse) {
             num_points = (int)roundf((1.0f - scaled_fac) * gps->totpoints);
@@ -379,8 +386,6 @@ static void build_concurrent(BuildGpencilModifierData *mmd, bGPDframe *gpf, floa
 
         break;
       }
-
-        /* TODO... */
     }
 
     /* Modify the stroke geometry */
@@ -396,19 +401,16 @@ static void build_concurrent(BuildGpencilModifierData *mmd, bGPDframe *gpf, floa
 }
 
 /* --------------------------------------------- */
-
-/* Entry-point for Build Modifier */
-static void generateStrokes(GpencilModifierData *md,
-                            Depsgraph *depsgraph,
-                            Object *UNUSED(ob),
-                            bGPDlayer *gpl,
-                            bGPDframe *gpf)
+static void generate_geometry(GpencilModifierData *md,
+                              Depsgraph *depsgraph,
+                              bGPDlayer *gpl,
+                              bGPDframe *gpf)
 {
   BuildGpencilModifierData *mmd = (BuildGpencilModifierData *)md;
   const bool reverse = (mmd->transition != GP_BUILD_TRANSITION_GROW);
+  const bool is_percentage = (mmd->flag & GP_BUILD_PERCENTAGE);
 
   const float ctime = DEG_get_ctime(depsgraph);
-  //printf("GP Build Modifier - %f\n", ctime);
 
   /* Early exit if it's an empty frame */
   if (gpf->strokes.first == NULL) {
@@ -455,7 +457,7 @@ static void generateStrokes(GpencilModifierData *md,
    * By default, the upper bound is given by the "maximum length" setting
    */
   float start_frame = gpf->framenum + mmd->start_delay;
-  float end_frame = gpf->framenum + mmd->length;
+  float end_frame = start_frame + mmd->length;
 
   if (gpf->next) {
     /* Use the next frame or upper bound as end frame, whichever is lower/closer */
@@ -463,7 +465,8 @@ static void generateStrokes(GpencilModifierData *md,
   }
 
   /* Early exit if current frame is outside start/end bounds */
-  /* NOTE: If we're beyond the next/prev frames (if existent), then we wouldn't have this problem anyway... */
+  /* NOTE: If we're beyond the next/previous frames (if existent),
+   * then we wouldn't have this problem anyway... */
   if (ctime < start_frame) {
     /* Before Start - Animation hasn't started. Display initial state. */
     if (reverse) {
@@ -500,8 +503,8 @@ static void generateStrokes(GpencilModifierData *md,
   }
 
   /* Determine how far along we are between the keyframes */
-  float fac = (ctime - start_frame) / (end_frame - start_frame);
-  //printf("  Progress on %d = %f (%f - %f)\n", gpf->framenum, fac, start_frame, end_frame);
+  float fac = is_percentage ? mmd->percentage_fac :
+                              (ctime - start_frame) / (end_frame - start_frame);
 
   /* Time management mode */
   switch (mmd->mode) {
@@ -519,6 +522,103 @@ static void generateStrokes(GpencilModifierData *md,
              mmd->modifier.name);
       break;
   }
+}
+
+/* Entry-point for Build Modifier */
+static void generateStrokes(GpencilModifierData *md, Depsgraph *depsgraph, Object *ob)
+{
+  Scene *scene = DEG_get_evaluated_scene(depsgraph);
+  bGPdata *gpd = (bGPdata *)ob->data;
+
+  LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
+    bGPDframe *gpf = BKE_gpencil_frame_retime_get(depsgraph, scene, ob, gpl);
+    if (gpf == NULL) {
+      continue;
+    }
+    generate_geometry(md, depsgraph, gpl, gpf);
+  }
+}
+
+static void panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *row, *sub;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  PointerRNA ob_ptr;
+  gpencil_modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+
+  int mode = RNA_enum_get(&ptr, "mode");
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, &ptr, "mode", 0, NULL, ICON_NONE);
+  if (mode == GP_BUILD_MODE_CONCURRENT) {
+    uiItemR(layout, &ptr, "concurrent_time_alignment", 0, NULL, ICON_NONE);
+  }
+
+  uiItemS(layout);
+
+  uiItemR(layout, &ptr, "transition", 0, NULL, ICON_NONE);
+  uiItemR(layout, &ptr, "start_delay", 0, NULL, ICON_NONE);
+  uiItemR(layout, &ptr, "length", 0, IFACE_("Frames"), ICON_NONE);
+
+  uiItemS(layout);
+
+  row = uiLayoutRowWithHeading(layout, true, IFACE_("Use Factor"));
+  uiItemR(row, &ptr, "use_percentage", 0, "", ICON_NONE);
+  sub = uiLayoutRow(row, true);
+  uiLayoutSetActive(sub, RNA_boolean_get(&ptr, "use_percentage"));
+  uiItemR(sub, &ptr, "percentage_factor", 0, "", ICON_NONE);
+
+  /* Check for incompatible time modifier. */
+  Object *ob = ob_ptr.data;
+  GpencilModifierData *md = ptr.data;
+  if (BKE_gpencil_modifiers_findby_type(ob, eGpencilModifierType_Time) != NULL) {
+    BKE_gpencil_modifier_set_error(md, "Build and Time Offset modifiers are incompatible");
+  }
+
+  gpencil_modifier_panel_end(layout, &ptr);
+}
+
+static void frame_range_header_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  gpencil_modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+
+  uiItemR(layout, &ptr, "use_restrict_frame_range", 0, IFACE_("Custom Range"), ICON_NONE);
+}
+
+static void frame_range_panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *col;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  gpencil_modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+
+  uiLayoutSetPropSep(layout, true);
+
+  col = uiLayoutColumn(layout, false);
+  uiItemR(col, &ptr, "frame_start", 0, IFACE_("Start"), ICON_NONE);
+  uiItemR(col, &ptr, "frame_end", 0, IFACE_("End"), ICON_NONE);
+}
+
+static void mask_panel_draw(const bContext *C, Panel *panel)
+{
+  gpencil_modifier_masking_panel_draw(C, panel, false, false);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  PanelType *panel_type = gpencil_modifier_panel_register(
+      region_type, eGpencilModifierType_Build, panel_draw);
+  gpencil_modifier_subpanel_register(
+      region_type, "frame_range", "", frame_range_header_draw, frame_range_panel_draw, panel_type);
+  gpencil_modifier_subpanel_register(
+      region_type, "_mask", "Influence", NULL, mask_panel_draw, panel_type);
 }
 
 /* ******************************************** */
@@ -545,5 +645,5 @@ GpencilModifierTypeInfo modifierType_Gpencil_Build = {
     /* foreachObjectLink */ NULL,
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
-    /* getDuplicationFactor */ NULL,
+    /* panelRegister */ panelRegister,
 };

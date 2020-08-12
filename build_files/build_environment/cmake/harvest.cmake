@@ -31,10 +31,6 @@ if(BUILD_MODE STREQUAL Release)
     COMMAND # jpeg rename libfile + copy include
         ${CMAKE_COMMAND} -E copy ${LIBDIR}/jpg/lib/jpeg-static.lib ${HARVEST_TARGET}/jpeg/lib/libjpeg.lib &&
         ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/jpg/include/ ${HARVEST_TARGET}/jpeg/include/ &&
-        # OpenImageIO
-        ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/OpenImageIO/include ${HARVEST_TARGET}/OpenImageIO/include &&
-        ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/OpenImageIO/lib ${HARVEST_TARGET}/OpenImageIO/lib &&
-        ${CMAKE_COMMAND} -E copy ${LIBDIR}/OpenImageIO/bin/idiff.exe ${HARVEST_TARGET}/OpenImageIO/bin/idiff.exe &&
         # png
         ${CMAKE_COMMAND} -E copy ${LIBDIR}/png/lib/libpng16_static.lib ${HARVEST_TARGET}/png/lib/libpng.lib &&
         ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/png/include/ ${HARVEST_TARGET}/png/include/ &&
@@ -44,38 +40,10 @@ if(BUILD_MODE STREQUAL Release)
         # glew-> opengl
         ${CMAKE_COMMAND} -E copy ${LIBDIR}/glew/lib/libglew32.lib ${HARVEST_TARGET}/opengl/lib/glew.lib &&
         ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/glew/include/ ${HARVEST_TARGET}/opengl/include/ &&
-        # sndfile
-        ${CMAKE_COMMAND} -E copy ${LIBDIR}/sndfile/lib/libsndfile.dll.a ${HARVEST_TARGET}/sndfile/lib/libsndfile-1.lib &&
-        ${CMAKE_COMMAND} -E copy ${LIBDIR}/sndfile/bin/libsndfile-1.dll ${HARVEST_TARGET}/sndfile/lib/libsndfile-1.dll &&
-        ${CMAKE_COMMAND} -E copy ${LIBDIR}/sndfile/include/sndfile.h ${HARVEST_TARGET}/sndfile/include/sndfile.h &&
         # tiff
         ${CMAKE_COMMAND} -E copy ${LIBDIR}/tiff/lib/tiff.lib ${HARVEST_TARGET}/tiff/lib/libtiff.lib &&
-        ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/tiff/include/ ${HARVEST_TARGET}/tiff/include/ &&
-        # BlendThumb
-        ${CMAKE_COMMAND} -E copy ${LIBDIR}/BlendThumb64/bin/blendthumb.dll ${HARVEST_TARGET}/ThumbHandler/lib/BlendThumb64.dll &&
-        ${CMAKE_COMMAND} -E copy ${LIBDIR}/BlendThumb32/bin/blendthumb.dll ${HARVEST_TARGET}/ThumbHandler/lib/BlendThumb.dll &&
-        # hidapi
-        ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/hidapi/ ${HARVEST_TARGET}/hidapi/ &&
-        # webp, straight up copy
-        ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/webp ${HARVEST_TARGET}/webp &&
+        ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/tiff/include/ ${HARVEST_TARGET}/tiff/include/
     DEPENDS
-  )
-endif()
-
-if(BUILD_MODE STREQUAL Debug)
-  add_custom_target(Harvest_Debug_Results
-        # OpenImageIO
-    COMMAND ${CMAKE_COMMAND} -E copy ${LIBDIR}/openimageio/lib/OpenImageIO.lib ${HARVEST_TARGET}/openimageio/lib/OpenImageIO_d.lib &&
-        ${CMAKE_COMMAND} -E copy ${LIBDIR}/openimageio/lib/OpenImageIO_Util.lib ${HARVEST_TARGET}/openimageio/lib/OpenImageIO_Util_d.lib &&
-        # python
-        ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/python/ ${HARVEST_TARGET}/python/ &&
-        # hdf5
-        ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/hdf5/lib ${HARVEST_TARGET}/hdf5/lib &&
-        # numpy
-        ${CMAKE_COMMAND} -E copy ${LIBDIR}/python${PYTHON_SHORT_VERSION_NO_DOTS}_numpy_${NUMPY_SHORT_VERSION}d.tar.gz ${HARVEST_TARGET}/Release/python${PYTHON_SHORT_VERSION_NO_DOTS}_numpy_${NUMPY_SHORT_VERSION}d.tar.gz &&
-        # python
-        ${CMAKE_COMMAND} -E copy ${LIBDIR}/python${PYTHON_SHORT_VERSION_NO_DOTS}_d.tar.gz ${HARVEST_TARGET}/Release/python${PYTHON_SHORT_VERSION_NO_DOTS}_d.tar.gz
-    DEPENDS Package_Python
   )
 endif()
 
@@ -121,8 +89,6 @@ harvest(freetype/include freetype/include "*.h")
 harvest(freetype/lib/libfreetype2ST.a freetype/lib/libfreetype.a)
 harvest(glew/include glew/include "*.h")
 harvest(glew/lib glew/lib "*.a")
-harvest(ilmbase openexr "*")
-harvest(ilmbase/include openexr/include "*.h")
 harvest(jemalloc/include jemalloc/include "*.h")
 harvest(jemalloc/lib jemalloc/lib "*.a")
 harvest(jpg/include jpeg/include "*.h")
@@ -166,12 +132,20 @@ harvest(openimageio/bin openimageio/bin "maketx")
 harvest(openimageio/bin openimageio/bin "oiiotool")
 harvest(openimageio/include openimageio/include "*")
 harvest(openimageio/lib openimageio/lib "*.a")
+if((NOT APPLE) OR ("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "x86_64"))
+  harvest(openimagedenoise/include openimagedenoise/include "*")
+  harvest(openimagedenoise/lib openimagedenoise/lib "*.a")
+  harvest(embree/include embree/include "*.h")
+  harvest(embree/lib embree/lib "*.a")
+endif()
 harvest(openjpeg/include/openjpeg-2.3 openjpeg/include "*.h")
 harvest(openjpeg/lib openjpeg/lib "*.a")
 harvest(opensubdiv/include opensubdiv/include "*.h")
 harvest(opensubdiv/lib opensubdiv/lib "*.a")
 harvest(openvdb/include/openvdb openvdb/include/openvdb "*.h")
 harvest(openvdb/lib openvdb/lib "*.a")
+harvest(xr_openxr_sdk/include/openxr xr_openxr_sdk/include/openxr "*.h")
+harvest(xr_openxr_sdk/lib xr_openxr_sdk/lib "*.a")
 harvest(osl/bin osl/bin "oslc")
 harvest(osl/include osl/include "*.h")
 harvest(osl/lib osl/lib "*.a")
@@ -193,11 +167,18 @@ harvest(theora/lib ffmpeg/lib "*.a")
 harvest(tiff/include tiff/include "*.h")
 harvest(tiff/lib tiff/lib "*.a")
 harvest(vorbis/lib ffmpeg/lib "*.a")
+harvest(opus/lib ffmpeg/lib "*.a")
 harvest(vpx/lib ffmpeg/lib "*.a")
 harvest(webp/lib ffmpeg/lib "*.a")
 harvest(x264/lib ffmpeg/lib "*.a")
 harvest(xvidcore/lib ffmpeg/lib "*.a")
-harvest(embree/include embree/include "*.h")
-harvest(embree/lib embree/lib "*.a")
+harvest(usd/include usd/include "*.h")
+harvest(usd/lib/usd usd/lib/usd "*")
+harvest(usd/plugin usd/plugin "*")
+
+if(UNIX AND NOT APPLE)
+  harvest(libglu/lib mesa/lib "*.so*")
+  harvest(mesa/lib mesa/lib "*.so*")
+endif()
 
 endif()

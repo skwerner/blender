@@ -38,6 +38,11 @@ float BM_face_calc_normal_vcos(const BMesh *bm,
                                const BMFace *f,
                                float r_no[3],
                                float const (*vertexCos)[3]) ATTR_NONNULL();
+
+void BM_verts_calc_normal_from_cloud_ex(
+    BMVert **varr, int varr_len, float r_normal[3], float r_center[3], int *r_index_tangent);
+void BM_verts_calc_normal_from_cloud(BMVert **varr, int varr_len, float r_normal[3]);
+
 float BM_face_calc_normal_subset(const BMLoop *l_first, const BMLoop *l_last, float r_no[3])
     ATTR_NONNULL();
 float BM_face_calc_area(const BMFace *f) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
@@ -55,10 +60,14 @@ void BM_face_calc_tangent_edge_diagonal(const BMFace *f, float r_plane[3]) ATTR_
 void BM_face_calc_tangent_vert_diagonal(const BMFace *f, float r_plane[3]) ATTR_NONNULL();
 void BM_face_calc_tangent_auto(const BMFace *f, float r_plane[3]) ATTR_NONNULL();
 void BM_face_calc_center_bounds(const BMFace *f, float center[3]) ATTR_NONNULL();
-void BM_face_calc_center_median(const BMFace *f, float center[3]) ATTR_NONNULL();
+void BM_face_calc_center_bounds_vcos(const BMesh *bm,
+                                     const BMFace *f,
+                                     float r_center[3],
+                                     float const (*vertexCos)[3]) ATTR_NONNULL();
+void BM_face_calc_center_median(const BMFace *f, float r_center[3]) ATTR_NONNULL();
 void BM_face_calc_center_median_vcos(const BMesh *bm,
                                      const BMFace *f,
-                                     float r_cent[3],
+                                     float r_center[3],
                                      float const (*vertexCos)[3]) ATTR_NONNULL();
 void BM_face_calc_center_median_weighted(const BMFace *f, float center[3]) ATTR_NONNULL();
 

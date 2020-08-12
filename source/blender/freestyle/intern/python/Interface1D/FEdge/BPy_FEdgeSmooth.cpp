@@ -66,10 +66,12 @@ static int FEdgeSmooth_init(BPy_FEdgeSmooth *self, PyObject *args, PyObject *kwd
 
   if (PyArg_ParseTupleAndKeywords(
           args, kwds, "|O!", (char **)kwlist_1, &FEdgeSmooth_Type, &obj1)) {
-    if (!obj1)
+    if (!obj1) {
       self->fes = new FEdgeSmooth();
-    else
+    }
+    else {
       self->fes = new FEdgeSmooth(*(((BPy_FEdgeSmooth *)obj1)->fes));
+    }
   }
   else if (PyErr_Clear(),
            PyArg_ParseTupleAndKeywords(args,
@@ -96,8 +98,9 @@ static int FEdgeSmooth_init(BPy_FEdgeSmooth *self, PyObject *args, PyObject *kwd
 
 static int FEdgeSmooth_mathutils_check(BaseMathObject *bmo)
 {
-  if (!BPy_FEdgeSmooth_Check(bmo->cb_user))
+  if (!BPy_FEdgeSmooth_Check(bmo->cb_user)) {
     return -1;
+  }
   return 0;
 }
 
@@ -189,8 +192,9 @@ static int FEdgeSmooth_material_index_set(BPy_FEdgeSmooth *self,
                                           void *UNUSED(closure))
 {
   unsigned int i = PyLong_AsUnsignedLong(value);
-  if (PyErr_Occurred())
+  if (PyErr_Occurred()) {
     return -1;
+  }
   self->fes->setFrsMaterialIndex(i);
   return 0;
 }
@@ -217,32 +221,29 @@ static PyObject *FEdgeSmooth_face_mark_get(BPy_FEdgeSmooth *self, void *UNUSED(c
 
 static int FEdgeSmooth_face_mark_set(BPy_FEdgeSmooth *self, PyObject *value, void *UNUSED(closure))
 {
-  if (!PyBool_Check(value))
+  if (!PyBool_Check(value)) {
     return -1;
+  }
   self->fes->setFaceMark(bool_from_PyBool(value));
   return 0;
 }
 
 static PyGetSetDef BPy_FEdgeSmooth_getseters[] = {
-    {(char *)"normal",
+    {"normal",
      (getter)FEdgeSmooth_normal_get,
      (setter)FEdgeSmooth_normal_set,
-     (char *)FEdgeSmooth_normal_doc,
+     FEdgeSmooth_normal_doc,
      NULL},
-    {(char *)"material_index",
+    {"material_index",
      (getter)FEdgeSmooth_material_index_get,
      (setter)FEdgeSmooth_material_index_set,
-     (char *)FEdgeSmooth_material_index_doc,
+     FEdgeSmooth_material_index_doc,
      NULL},
-    {(char *)"material",
-     (getter)FEdgeSmooth_material_get,
-     (setter)NULL,
-     (char *)FEdgeSmooth_material_doc,
-     NULL},
-    {(char *)"face_mark",
+    {"material", (getter)FEdgeSmooth_material_get, (setter)NULL, FEdgeSmooth_material_doc, NULL},
+    {"face_mark",
      (getter)FEdgeSmooth_face_mark_get,
      (setter)FEdgeSmooth_face_mark_set,
-     (char *)FEdgeSmooth_face_mark_doc,
+     FEdgeSmooth_face_mark_doc,
      NULL},
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };

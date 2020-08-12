@@ -18,7 +18,8 @@
 
 # <pep8-80 compliant>
 
-def url_prefill_from_blender():
+
+def url_prefill_from_blender(addon_info=None):
     import bpy
     import bgl
     import struct
@@ -30,13 +31,13 @@ def url_prefill_from_blender():
 
     fh.write("**System Information**\n")
     fh.write(
-        "Operating system: {!s} {!s} Bits\n".format(
+        "Operating system: %s %d Bits\n" % (
             platform.platform(),
             struct.calcsize("P") * 8,
         )
     )
     fh.write(
-        "Graphics card: {!s} {!s} {!s}\n".format(
+        "Graphics card: %s %s %s\n" % (
             bgl.glGetString(bgl.GL_RENDERER),
             bgl.glGetString(bgl.GL_VENDOR),
             bgl.glGetString(bgl.GL_VERSION),
@@ -44,10 +45,10 @@ def url_prefill_from_blender():
     )
     fh.write(
         "\n"
-        "\n**Blender Version**\n"
+        "**Blender Version**\n"
     )
     fh.write(
-        "Broken: version: {!s}, branch: {!s}, commit date: {!s} {!s}, hash: `rB{!s}`\n".format(
+        "Broken: version: %s, branch: %s, commit date: %s %s, hash: `rB%s`\n" % (
             bpy.app.version_string,
             bpy.app.build_branch.decode('utf-8', 'replace'),
             bpy.app.build_commit_date.decode('utf-8', 'replace'),
@@ -56,8 +57,16 @@ def url_prefill_from_blender():
         )
     )
     fh.write(
-        "Worked: (optional)\n"
-        "\n"
+        "Worked: (newest version of Blender that worked as expected)\n"
+    )
+    if addon_info:
+        fh.write(
+            "\n"
+            "**Addon Information**\n"
+        )
+        fh.write(addon_info)
+
+    fh.write(
         "\n"
         "**Short description of error**\n"
         "[Please fill out a short description of the error here]\n"
@@ -70,7 +79,8 @@ def url_prefill_from_blender():
 
     fh.seek(0)
 
+    form_number = 2 if addon_info else 1
     return (
-        "https://developer.blender.org/maniphest/task/edit/form/1?description=" +
+        "https://developer.blender.org/maniphest/task/edit/form/%i?description=" % form_number +
         urllib.parse.quote(fh.read())
     )

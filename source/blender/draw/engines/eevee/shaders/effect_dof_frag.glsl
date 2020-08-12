@@ -1,10 +1,9 @@
 
-uniform mat4 ProjectionMatrix;
-
 uniform sampler2D colorBuffer;
 uniform sampler2D depthBuffer;
 
 uniform vec2 dofParams;
+uniform bool unpremult;
 
 #define dof_mul dofParams.x  /* distance * aperturesize * invsensorsize */
 #define dof_bias dofParams.y /* aperturesize * invsensorsize */
@@ -40,6 +39,12 @@ float max_v4(vec4 v)
   return max(max(v.x, v.y), max(v.z, v.w));
 }
 
+vec4 safe_color(vec4 c)
+{
+  /* Clamp to avoid black square artifacts if a pixel goes NaN. */
+  return clamp(c, vec4(0.0), vec4(1e20)); /* 1e20 arbitrary. */
+}
+
 #define THRESHOLD 1.0
 
 #ifdef STEP_DOWNSAMPLE
@@ -56,10 +61,10 @@ void main(void)
   ivec4 uvs = ivec4(gl_FragCoord.xyxy) * 2 + ivec4(0, 0, 1, 1);
 
   /* custom downsampling */
-  vec4 color1 = texelFetch(colorBuffer, uvs.xy, 0);
-  vec4 color2 = texelFetch(colorBuffer, uvs.zw, 0);
-  vec4 color3 = texelFetch(colorBuffer, uvs.zy, 0);
-  vec4 color4 = texelFetch(colorBuffer, uvs.xw, 0);
+  vec4 color1 = safe_color(texelFetch(colorBuffer, uvs.xy, 0));
+  vec4 color2 = safe_color(texelFetch(colorBuffer, uvs.zw, 0));
+  vec4 color3 = safe_color(texelFetch(colorBuffer, uvs.zy, 0));
+  vec4 color4 = safe_color(texelFetch(colorBuffer, uvs.xw, 0));
 
   /* Leverage SIMD by combining 4 depth samples into a vec4 */
   vec4 depth;
@@ -120,7 +125,7 @@ void main(void)
   /* Circle Dof */
   float dist = length(particlecoord);
 
-  /* Ouside of bokeh shape */
+  /* Outside of bokeh shape */
   if (dist > 1.0) {
     discard;
   }
@@ -140,7 +145,7 @@ void main(void)
      * Giving us the new linear radius to the shape edge. */
     dist /= r;
 
-    /* Ouside of bokeh shape */
+    /* Outside of bokeh shape */
     if (dist > 1.0) {
       discard;
     }
@@ -241,8 +246,12 @@ void main(void)
   fragColor = (far_col + near_col + focus_col) * inv_weight_sum;
 
 #  ifdef USE_ALPHA_DOF
-  /* Unpremult */
-  fragColor.rgb /= (fragColor.a > 0.0) ? fragColor.a : 1.0;
+  /* Sigh... viewport expect premult output but
+   * the final render output needs to be with
+   * associated alpha. */
+  if (unpremult) {
+    fragColor.rgb /= (fragColor.a > 0.0) ? fragColor.a : 1.0;
+  }
 #  endif
 }
 

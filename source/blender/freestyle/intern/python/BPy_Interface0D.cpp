@@ -21,14 +21,14 @@
 #include "BPy_Interface0D.h"
 
 #include "BPy_Convert.h"
+#include "BPy_Nature.h"
 #include "Interface0D/BPy_CurvePoint.h"
-#include "Interface0D/CurvePoint/BPy_StrokeVertex.h"
 #include "Interface0D/BPy_SVertex.h"
 #include "Interface0D/BPy_ViewVertex.h"
+#include "Interface0D/CurvePoint/BPy_StrokeVertex.h"
 #include "Interface0D/ViewVertex/BPy_NonTVertex.h"
 #include "Interface0D/ViewVertex/BPy_TVertex.h"
 #include "Interface1D/BPy_FEdge.h"
-#include "BPy_Nature.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,41 +39,49 @@ extern "C" {
 //-------------------MODULE INITIALIZATION--------------------------------
 int Interface0D_Init(PyObject *module)
 {
-  if (module == NULL)
+  if (module == NULL) {
     return -1;
+  }
 
-  if (PyType_Ready(&Interface0D_Type) < 0)
+  if (PyType_Ready(&Interface0D_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&Interface0D_Type);
   PyModule_AddObject(module, "Interface0D", (PyObject *)&Interface0D_Type);
 
-  if (PyType_Ready(&CurvePoint_Type) < 0)
+  if (PyType_Ready(&CurvePoint_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&CurvePoint_Type);
   PyModule_AddObject(module, "CurvePoint", (PyObject *)&CurvePoint_Type);
 
-  if (PyType_Ready(&SVertex_Type) < 0)
+  if (PyType_Ready(&SVertex_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&SVertex_Type);
   PyModule_AddObject(module, "SVertex", (PyObject *)&SVertex_Type);
 
-  if (PyType_Ready(&ViewVertex_Type) < 0)
+  if (PyType_Ready(&ViewVertex_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&ViewVertex_Type);
   PyModule_AddObject(module, "ViewVertex", (PyObject *)&ViewVertex_Type);
 
-  if (PyType_Ready(&StrokeVertex_Type) < 0)
+  if (PyType_Ready(&StrokeVertex_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&StrokeVertex_Type);
   PyModule_AddObject(module, "StrokeVertex", (PyObject *)&StrokeVertex_Type);
 
-  if (PyType_Ready(&NonTVertex_Type) < 0)
+  if (PyType_Ready(&NonTVertex_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&NonTVertex_Type);
   PyModule_AddObject(module, "NonTVertex", (PyObject *)&NonTVertex_Type);
 
-  if (PyType_Ready(&TVertex_Type) < 0)
+  if (PyType_Ready(&TVertex_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&TVertex_Type);
   PyModule_AddObject(module, "TVertex", (PyObject *)&TVertex_Type);
 
@@ -96,8 +104,9 @@ static int Interface0D_init(BPy_Interface0D *self, PyObject *args, PyObject *kwd
 {
   static const char *kwlist[] = {NULL};
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "", (char **)kwlist))
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "", (char **)kwlist)) {
     return -1;
+  }
   self->if0D = new Interface0D();
   self->borrowed = false;
   return 0;
@@ -105,8 +114,9 @@ static int Interface0D_init(BPy_Interface0D *self, PyObject *args, PyObject *kwd
 
 static void Interface0D_dealloc(BPy_Interface0D *self)
 {
-  if (self->if0D && !self->borrowed)
+  if (self->if0D && !self->borrowed) {
     delete self->if0D;
+  }
   Py_TYPE(self)->tp_free((PyObject *)self);
 }
 
@@ -132,13 +142,17 @@ static PyObject *Interface0D_get_fedge(BPy_Interface0D *self, PyObject *args, Py
   static const char *kwlist[] = {"inter", NULL};
   PyObject *py_if0D;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "O!", (char **)kwlist, &Interface0D_Type, &py_if0D))
+  if (!PyArg_ParseTupleAndKeywords(
+          args, kwds, "O!", (char **)kwlist, &Interface0D_Type, &py_if0D)) {
     return NULL;
+  }
   FEdge *fe = self->if0D->getFEdge(*(((BPy_Interface0D *)py_if0D)->if0D));
-  if (PyErr_Occurred())
+  if (PyErr_Occurred()) {
     return NULL;
-  if (fe)
+  }
+  if (fe) {
     return Any_BPy_FEdge_from_FEdge(*fe);
+  }
   Py_RETURN_NONE;
 }
 
@@ -170,8 +184,9 @@ PyDoc_STRVAR(Interface0D_point_3d_doc,
 static PyObject *Interface0D_point_3d_get(BPy_Interface0D *self, void *UNUSED(closure))
 {
   Vec3f p(self->if0D->getPoint3D());
-  if (PyErr_Occurred())
+  if (PyErr_Occurred()) {
     return NULL;
+  }
   return Vector_from_Vec3f(p);
 }
 
@@ -183,8 +198,9 @@ PyDoc_STRVAR(Interface0D_projected_x_doc,
 static PyObject *Interface0D_projected_x_get(BPy_Interface0D *self, void *UNUSED(closure))
 {
   real x = self->if0D->getProjectedX();
-  if (PyErr_Occurred())
+  if (PyErr_Occurred()) {
     return NULL;
+  }
   return PyFloat_FromDouble(x);
 }
 
@@ -196,8 +212,9 @@ PyDoc_STRVAR(Interface0D_projected_y_doc,
 static PyObject *Interface0D_projected_y_get(BPy_Interface0D *self, void *UNUSED(closure))
 {
   real y = self->if0D->getProjectedY();
-  if (PyErr_Occurred())
+  if (PyErr_Occurred()) {
     return NULL;
+  }
   return PyFloat_FromDouble(y);
 }
 
@@ -209,8 +226,9 @@ PyDoc_STRVAR(Interface0D_projected_z_doc,
 static PyObject *Interface0D_projected_z_get(BPy_Interface0D *self, void *UNUSED(closure))
 {
   real z = self->if0D->getProjectedZ();
-  if (PyErr_Occurred())
+  if (PyErr_Occurred()) {
     return NULL;
+  }
   return PyFloat_FromDouble(z);
 }
 
@@ -222,8 +240,9 @@ PyDoc_STRVAR(Interface0D_point_2d_doc,
 static PyObject *Interface0D_point_2d_get(BPy_Interface0D *self, void *UNUSED(closure))
 {
   Vec2f p(self->if0D->getPoint2D());
-  if (PyErr_Occurred())
+  if (PyErr_Occurred()) {
     return NULL;
+  }
   return Vector_from_Vec2f(p);
 }
 
@@ -235,8 +254,9 @@ PyDoc_STRVAR(Interface0D_id_doc,
 static PyObject *Interface0D_id_get(BPy_Interface0D *self, void *UNUSED(closure))
 {
   Id id(self->if0D->getId());
-  if (PyErr_Occurred())
+  if (PyErr_Occurred()) {
     return NULL;
+  }
   return BPy_Id_from_Id(id);  // return a copy
 }
 
@@ -248,48 +268,33 @@ PyDoc_STRVAR(Interface0D_nature_doc,
 static PyObject *Interface0D_nature_get(BPy_Interface0D *self, void *UNUSED(closure))
 {
   Nature::VertexNature nature = self->if0D->getNature();
-  if (PyErr_Occurred())
+  if (PyErr_Occurred()) {
     return NULL;
+  }
   return BPy_Nature_from_Nature(nature);
 }
 
 static PyGetSetDef BPy_Interface0D_getseters[] = {
-    {(char *)"name",
-     (getter)Interface0D_name_get,
-     (setter)NULL,
-     (char *)Interface0D_name_doc,
-     NULL},
-    {(char *)"point_3d",
-     (getter)Interface0D_point_3d_get,
-     (setter)NULL,
-     (char *)Interface0D_point_3d_doc,
-     NULL},
-    {(char *)"projected_x",
+    {"name", (getter)Interface0D_name_get, (setter)NULL, Interface0D_name_doc, NULL},
+    {"point_3d", (getter)Interface0D_point_3d_get, (setter)NULL, Interface0D_point_3d_doc, NULL},
+    {"projected_x",
      (getter)Interface0D_projected_x_get,
      (setter)NULL,
-     (char *)Interface0D_projected_x_doc,
+     Interface0D_projected_x_doc,
      NULL},
-    {(char *)"projected_y",
+    {"projected_y",
      (getter)Interface0D_projected_y_get,
      (setter)NULL,
-     (char *)Interface0D_projected_y_doc,
+     Interface0D_projected_y_doc,
      NULL},
-    {(char *)"projected_z",
+    {"projected_z",
      (getter)Interface0D_projected_z_get,
      (setter)NULL,
-     (char *)Interface0D_projected_z_doc,
+     Interface0D_projected_z_doc,
      NULL},
-    {(char *)"point_2d",
-     (getter)Interface0D_point_2d_get,
-     (setter)NULL,
-     (char *)Interface0D_point_2d_doc,
-     NULL},
-    {(char *)"id", (getter)Interface0D_id_get, (setter)NULL, (char *)Interface0D_id_doc, NULL},
-    {(char *)"nature",
-     (getter)Interface0D_nature_get,
-     (setter)NULL,
-     (char *)Interface0D_nature_doc,
-     NULL},
+    {"point_2d", (getter)Interface0D_point_2d_get, (setter)NULL, Interface0D_point_2d_doc, NULL},
+    {"id", (getter)Interface0D_id_get, (setter)NULL, Interface0D_id_doc, NULL},
+    {"nature", (getter)Interface0D_nature_get, (setter)NULL, Interface0D_nature_doc, NULL},
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };
 

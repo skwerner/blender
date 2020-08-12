@@ -21,9 +21,9 @@
 #include "BKE_image.h"
 #include "BKE_scene.h"
 
+#include "COM_ExecutionSystem.h"
 #include "COM_SplitOperation.h"
 #include "COM_ViewerOperation.h"
-#include "COM_ExecutionSystem.h"
 
 SplitViewerNode::SplitViewerNode(bNode *editorNode) : Node(editorNode)
 {
@@ -69,6 +69,7 @@ void SplitViewerNode::convertToOperations(NodeConverter &converter,
 
   converter.addPreview(splitViewerOperation->getOutputSocket());
 
-  if (do_output)
+  if (do_output) {
     converter.registerViewer(viewerOperation);
+  }
 }

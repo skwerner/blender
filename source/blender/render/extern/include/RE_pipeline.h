@@ -24,15 +24,13 @@
 #ifndef __RE_PIPELINE_H__
 #define __RE_PIPELINE_H__
 
+#include "DEG_depsgraph.h"
 #include "DNA_listBase.h"
 #include "DNA_vec_types.h"
-#include "DEG_depsgraph.h"
 
-struct Depsgraph;
 struct Image;
 struct ImageFormatData;
 struct Main;
-struct NodeBlurData;
 struct Object;
 struct RenderData;
 struct RenderResult;
@@ -41,7 +39,10 @@ struct Scene;
 struct StampData;
 struct ViewLayer;
 struct bMovieHandle;
-struct bNodeTree;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 /* this include is what is exposed of render to outside world */
@@ -91,24 +92,18 @@ typedef struct RenderPass {
 
 /* a renderlayer is a full image, but with all passes and samples */
 /* size of the rects is defined in RenderResult */
-/* after render, the Combined pass is in combined, for renderlayers read from files it is a real pass */
+/* after render, the Combined pass is in combined,
+ * for renderlayers read from files it is a real pass */
 typedef struct RenderLayer {
   struct RenderLayer *next, *prev;
 
-  /* copy of RenderData */
+  /** copy of RenderData */
   char name[RE_MAXNAME];
   int layflag, passflag, pass_xor;
 
-  /* MULTIVIEW_TODO: acolrect and scolrect are not supported by multiview at the moment.
-   * If they are really required they should be in RenderView instead */
-
-  float *acolrect; /* 4 float, optional transparent buffer, needs storage for display updates */
-  float *scolrect; /* 4 float, optional strand buffer, needs storage for display updates */
-  int *display_buffer; /* 4 char, optional color managed display buffer which is used when
-                           * Save Buffer is enabled to display combined pass of the screen. */
   int rectx, recty;
 
-  /* optional saved endresult on disk */
+  /** Optional saved endresult on disk. */
   void *exrhandle;
 
   ListBase passes;
@@ -122,8 +117,8 @@ typedef struct RenderResult {
   int rectx, recty;
   short crop, sample_nr;
 
-  /* the following rect32, rectf and rectz buffers are for temporary storage only, for RenderResult structs
-   * created in #RE_AcquireResultImage - which do not have RenderView */
+  /* The following rect32, rectf and rectz buffers are for temporary storage only,
+   * for RenderResult structs created in #RE_AcquireResultImage - which do not have RenderView */
 
   /* optional, 32 bits version of picture, used for ogl render and image curves */
   int *rect32;
@@ -165,8 +160,7 @@ typedef struct RenderResult {
 
 typedef struct RenderStats {
   int cfra;
-  int totface, totvert, totstrand, tothalo, totlamp, totpart;
-  short curfield, curblur, curpart, partsdone, convertdone, curfsa;
+  int totface, totvert, totlamp, totpart;
   bool localview;
   double starttime, lastframetime;
   const char *infostr, *statstr;
@@ -237,6 +231,13 @@ struct RenderPass *RE_create_gp_pass(struct RenderResult *rr,
                                      const char *layername,
                                      const char *viewname);
 
+void RE_create_render_pass(struct RenderResult *rr,
+                           const char *name,
+                           int channels,
+                           const char *chan_id,
+                           const char *layername,
+                           const char *viewname);
+
 /* obligatory initialize call, disprect is optional */
 void RE_InitState(struct Render *re,
                   struct Render *source,
@@ -256,13 +257,10 @@ void RE_SetCamera(struct Render *re, struct Object *camera);
 void RE_SetWindow(struct Render *re, const rctf *viewplane, float clip_start, float clip_end);
 void RE_SetOrtho(struct Render *re, const rctf *viewplane, float clip_start, float clip_end);
 
-/* option to set viewmatrix before making dbase */
-void RE_SetView(struct Render *re, float mat[4][4]);
-
 /* get current view and window transform */
 void RE_GetViewPlane(struct Render *re, rctf *r_viewplane, rcti *r_disprect);
 
-/* set the render threads based on the commandline and autothreads setting */
+/* set the render threads based on the command-line and autothreads setting */
 void RE_init_threadcount(Render *re);
 
 bool RE_WriteRenderViewsImage(struct ReportList *reports,
@@ -280,21 +278,21 @@ bool RE_WriteRenderViewsMovie(struct ReportList *reports,
                               bool preview);
 
 /* only RE_NewRender() needed, main Blender render calls */
-void RE_BlenderFrame(struct Render *re,
-                     struct Main *bmain,
-                     struct Scene *scene,
-                     struct ViewLayer *single_layer,
-                     struct Object *camera_override,
-                     int frame,
-                     const bool write_still);
-void RE_BlenderAnim(struct Render *re,
+void RE_RenderFrame(struct Render *re,
                     struct Main *bmain,
                     struct Scene *scene,
                     struct ViewLayer *single_layer,
                     struct Object *camera_override,
-                    int sfra,
-                    int efra,
-                    int tfra);
+                    int frame,
+                    const bool write_still);
+void RE_RenderAnim(struct Render *re,
+                   struct Main *bmain,
+                   struct Scene *scene,
+                   struct ViewLayer *single_layer,
+                   struct Object *camera_override,
+                   int sfra,
+                   int efra,
+                   int tfra);
 #ifdef WITH_FREESTYLE
 void RE_RenderFreestyleStrokes(struct Render *re,
                                struct Main *bmain,
@@ -302,6 +300,9 @@ void RE_RenderFreestyleStrokes(struct Render *re,
                                int render);
 void RE_RenderFreestyleExternal(struct Render *re);
 #endif
+
+/* Free memory and clear runtime data which is only needed during rendering. */
+void RE_CleanAfterRender(struct Render *re);
 
 void RE_SetActiveRenderView(struct Render *re, const char *viewname);
 const char *RE_GetActiveRenderView(struct Render *re);
@@ -365,7 +366,7 @@ struct RenderPass *RE_pass_find_by_type(volatile struct RenderLayer *rl,
 #define RE_BAKE_DISPLACEMENT 1
 #define RE_BAKE_AO 2
 
-void RE_GetCameraWindow(struct Render *re, struct Object *camera, int frame, float mat[4][4]);
+void RE_GetCameraWindow(struct Render *re, struct Object *camera, float mat[4][4]);
 void RE_GetCameraWindowWithOverscan(struct Render *re, float mat[4][4], float overscan);
 void RE_GetCameraModelMatrix(struct Render *re, struct Object *camera, float r_mat[4][4]);
 struct Scene *RE_GetScene(struct Render *re);
@@ -387,5 +388,9 @@ struct RenderView *RE_RenderViewGetById(struct RenderResult *res, const int view
 struct RenderView *RE_RenderViewGetByName(struct RenderResult *res, const char *viewname);
 
 RenderResult *RE_DuplicateRenderResult(RenderResult *rr);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __RE_PIPELINE_H__ */

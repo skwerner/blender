@@ -19,8 +19,8 @@
 
 /** \file
  * \ingroup freestyle
- * \brief Class inherited from WingedEdgeBuilder and designed to build a WX (WingedEdge + extended info
- *         (silhouette etc...)) structure from a polygonal model
+ * \brief Class inherited from WingedEdgeBuilder and designed to build a WX (WingedEdge + extended
+ * info (silhouette etc...)) structure from a polygonal model
  */
 
 #include "WingedEdgeBuilder.h"
@@ -37,7 +37,7 @@ class WXEdgeBuilder : public WingedEdgeBuilder {
   virtual ~WXEdgeBuilder()
   {
   }
-  VISIT_DECL(IndexedFaceSet)
+  VISIT_DECL(IndexedFaceSet);
 
  protected:
   virtual void buildWVertices(WShape &shape, const float *vertices, unsigned vsize);

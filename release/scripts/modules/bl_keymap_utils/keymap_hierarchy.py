@@ -54,8 +54,7 @@ _km_hierarchy = [
     ('Window', 'EMPTY', 'WINDOW', []),  # file save, window change, exit
     ('Screen', 'EMPTY', 'WINDOW', [     # full screen, undo, screenshot
         ('Screen Editing', 'EMPTY', 'WINDOW', []),    # re-sizing, action corners
-        ('Header', 'EMPTY', 'WINDOW', []),            # header stuff (per region)
-        ('Footer', 'EMPTY', 'WINDOW', []),            # footer stuff (per region)
+        ('Region Context Menu', 'EMPTY', 'WINDOW', []),      # header/footer/navigation_bar stuff (per region)
     ]),
 
     ('View2D', 'EMPTY', 'WINDOW', []),    # view 2d navigation (per region)
@@ -96,8 +95,8 @@ _km_hierarchy = [
         ('Weight Paint', 'EMPTY', 'WINDOW', [
             _km_expand_from_toolsystem('VIEW_3D', 'PAINT_WEIGHT'),
         ]),
-        ('Weight Paint Vertex Selection', 'EMPTY', 'WINDOW', []),
-        ('Face Mask', 'EMPTY', 'WINDOW', []),
+        ('Paint Vertex Selection (Weight, Vertex)', 'EMPTY', 'WINDOW', []),
+        ('Paint Face Mask (Weight, Vertex, Texture)', 'EMPTY', 'WINDOW', []),
         # image and view3d
         ('Image Paint', 'EMPTY', 'WINDOW', [
             _km_expand_from_toolsystem('VIEW_3D', 'PAINT_TEXTURE'),
@@ -144,9 +143,18 @@ _km_hierarchy = [
     ('Timeline', 'TIMELINE', 'WINDOW', []),
 
     ('Image', 'IMAGE_EDITOR', 'WINDOW', [
-        ('UV Editor', 'EMPTY', 'WINDOW', []),  # image (reverse order, UVEdit before Image)
-        ('Image Paint', 'EMPTY', 'WINDOW', []),  # image and view3d
+        # Image (reverse order, UVEdit before Image).
+        ('UV Editor', 'EMPTY', 'WINDOW', [
+            _km_expand_from_toolsystem('IMAGE_EDITOR', 'UV'),
+        ]),
         ('UV Sculpt', 'EMPTY', 'WINDOW', []),
+        # Image and view3d.
+        ('Image Paint', 'EMPTY', 'WINDOW', [
+            _km_expand_from_toolsystem('IMAGE_EDITOR', 'PAINT'),
+        ]),
+        ('Image View', 'IMAGE_EDITOR', 'WINDOW', [
+            _km_expand_from_toolsystem('IMAGE_EDITOR', 'VIEW'),
+        ]),
         ('Image Generic', 'IMAGE_EDITOR', 'WINDOW', [
             _km_expand_from_toolsystem('IMAGE_EDITOR', None),
         ]),
@@ -186,9 +194,26 @@ _km_hierarchy = [
         ('Grease Pencil Stroke Paint (Draw brush)', 'EMPTY', 'WINDOW', []),
         ('Grease Pencil Stroke Paint (Fill)', 'EMPTY', 'WINDOW', []),
         ('Grease Pencil Stroke Paint (Erase)', 'EMPTY', 'WINDOW', []),
+        ('Grease Pencil Stroke Paint (Tint)', 'EMPTY', 'WINDOW', []),
         ('Grease Pencil Stroke Paint Mode', 'EMPTY', 'WINDOW', []),
         ('Grease Pencil Stroke Sculpt Mode', 'EMPTY', 'WINDOW', []),
+        ('Grease Pencil Stroke Sculpt (Smooth)', 'EMPTY', 'WINDOW', []),
+        ('Grease Pencil Stroke Sculpt (Thickness)', 'EMPTY', 'WINDOW', []),
+        ('Grease Pencil Stroke Sculpt (Strength)', 'EMPTY', 'WINDOW', []),
+        ('Grease Pencil Stroke Sculpt (Grab)', 'EMPTY', 'WINDOW', []),
+        ('Grease Pencil Stroke Sculpt (Push)', 'EMPTY', 'WINDOW', []),
+        ('Grease Pencil Stroke Sculpt (Twist)', 'EMPTY', 'WINDOW', []),
+        ('Grease Pencil Stroke Sculpt (Pinch)', 'EMPTY', 'WINDOW', []),
+        ('Grease Pencil Stroke Sculpt (Randomize)', 'EMPTY', 'WINDOW', []),
+        ('Grease Pencil Stroke Sculpt (Clone)', 'EMPTY', 'WINDOW', []),
         ('Grease Pencil Stroke Weight Mode', 'EMPTY', 'WINDOW', []),
+        ('Grease Pencil Stroke Weight (Draw)', 'EMPTY', 'WINDOW', []),
+        ('Grease Pencil Stroke Vertex Mode', 'EMPTY', 'WINDOW', []),
+        ('Grease Pencil Stroke Vertex (Draw)', 'EMPTY', 'WINDOW', []),
+        ('Grease Pencil Stroke Vertex (Blur)', 'EMPTY', 'WINDOW', []),
+        ('Grease Pencil Stroke Vertex (Average)', 'EMPTY', 'WINDOW', []),
+        ('Grease Pencil Stroke Vertex (Smear)', 'EMPTY', 'WINDOW', []),
+        ('Grease Pencil Stroke Vertex (Replace)', 'EMPTY', 'WINDOW', []),
     ]),
     ('Mask Editing', 'EMPTY', 'WINDOW', []),
     ('Frames', 'EMPTY', 'WINDOW', []),    # frame navigation (per region)

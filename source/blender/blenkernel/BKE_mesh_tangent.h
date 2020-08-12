@@ -20,6 +20,12 @@
  * \ingroup bke
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+struct ReportList;
+
 void BKE_mesh_calc_loop_tangent_single_ex(const struct MVert *mverts,
                                           const int numVerts,
                                           const struct MLoop *mloops,
@@ -77,5 +83,9 @@ void BKE_mesh_calc_loop_tangent_step_0(const struct CustomData *loopData,
                                        char *ract_uv_name,
                                        char *rren_uv_name,
                                        short *rtangent_mask);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __BKE_MESH_TANGENT_H__ */

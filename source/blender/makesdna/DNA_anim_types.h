@@ -24,14 +24,14 @@
 #ifndef __DNA_ANIM_TYPES_H__
 #define __DNA_ANIM_TYPES_H__
 
+#include "DNA_ID.h"
+#include "DNA_action_types.h"
+#include "DNA_curve_types.h"
+#include "DNA_listBase.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "DNA_ID.h"
-#include "DNA_listBase.h"
-#include "DNA_action_types.h"
-#include "DNA_curve_types.h"
 
 /* ************************************************ */
 /* F-Curve DataTypes */
@@ -319,6 +319,10 @@ typedef struct DriverTarget {
   /** Transform channel index (for DVAR_TYPE_TRANSFORM_CHAN.)*/
   short transChan;
 
+  /** Rotation channel calculation type. */
+  char rotation_mode;
+  char _pad[7];
+
   /**
    * Flags for the validity of the target
    * (NOTE: these get reset every time the types change).
@@ -357,9 +361,36 @@ typedef enum eDriverTarget_TransformChannels {
   DTAR_TRANSCHAN_SCALEX,
   DTAR_TRANSCHAN_SCALEY,
   DTAR_TRANSCHAN_SCALEZ,
+  DTAR_TRANSCHAN_SCALE_AVG,
+  DTAR_TRANSCHAN_ROTW,
 
   MAX_DTAR_TRANSCHAN_TYPES,
 } eDriverTarget_TransformChannels;
+
+/* Rotation channel mode for Driver Targets */
+typedef enum eDriverTarget_RotationMode {
+  /** Automatic euler mode. */
+  DTAR_ROTMODE_AUTO = 0,
+
+  /** Explicit euler rotation modes - must sync with BLI_math_rotation.h defines. */
+  DTAR_ROTMODE_EULER_XYZ = 1,
+  DTAR_ROTMODE_EULER_XZY,
+  DTAR_ROTMODE_EULER_YXZ,
+  DTAR_ROTMODE_EULER_YZX,
+  DTAR_ROTMODE_EULER_ZXY,
+  DTAR_ROTMODE_EULER_ZYX,
+
+  DTAR_ROTMODE_QUATERNION,
+
+  /** Implements the very common Damped Track + child trick to decompose
+   *  rotation into bending followed by twist around the remaining axis. */
+  DTAR_ROTMODE_SWING_TWIST_X,
+  DTAR_ROTMODE_SWING_TWIST_Y,
+  DTAR_ROTMODE_SWING_TWIST_Z,
+
+  DTAR_ROTMODE_EULER_MIN = DTAR_ROTMODE_EULER_XYZ,
+  DTAR_ROTMODE_EULER_MAX = DTAR_ROTMODE_EULER_ZYX,
+} eDriverTarget_RotationMode;
 
 /* --- */
 
@@ -456,8 +487,8 @@ typedef enum eDriverVar_Flags {
  * the value of some setting semi-procedurally.
  *
  * Drivers are stored as part of F-Curve data, so that the F-Curve's RNA-path settings (for storing
- * what setting the driver will affect). The order in which they are stored defines the order that they're
- * evaluated in. This order is set by the Depsgraph's sorting stuff.
+ * what setting the driver will affect). The order in which they are stored defines the order that
+ * they're evaluated in. This order is set by the Depsgraph's sorting stuff.
  */
 typedef struct ChannelDriver {
   /** Targets for this driver (i.e. list of DriverVar). */
@@ -508,7 +539,7 @@ typedef enum eDriver_Flags {
   DRIVER_FLAG_DEPRECATED = (1 << 1),
   /** Driver does replace value, but overrides (for layering of animation over driver) */
   // TODO: this needs to be implemented at some stage or left out...
-  //DRIVER_FLAG_LAYERING  = (1 << 2),
+  // DRIVER_FLAG_LAYERING  = (1 << 2),
   /** Use when the expression needs to be recompiled. */
   DRIVER_FLAG_RECOMPILE = (1 << 3),
   /** The names are cached so they don't need have python unicode versions created each time */
@@ -710,6 +741,11 @@ typedef struct NlaStrip {
   /** Settings. */
   int flag;
   char _pad2[4];
+
+  /* Pointer to an original NLA strip. */
+  struct NlaStrip *orig_strip;
+
+  void *_pad3;
 } NlaStrip;
 
 /* NLA Strip Blending Mode */
@@ -763,7 +799,7 @@ typedef enum eNlaStrip_Flag {
   /** NLA strip is muted (i.e. doesn't contribute in any way) */
   NLASTRIP_FLAG_MUTED = (1 << 12),
   /** NLA Strip is played back in 'ping-pong' style */
-  NLASTRIP_FLAG_MIRROR = (1 << 13),
+  /* NLASTRIP_FLAG_MIRROR = (1 << 13), */ /* UNUSED */
 
   /* temporary editing flags */
   /** NLA strip should ignore frame range and hold settings, and evaluate at global time. */
@@ -886,7 +922,7 @@ typedef enum eKSP_Grouping {
   KSP_GROUP_KSNAME,
   /** Path should be grouped using name of inner-most context item from templates
    * - this is most useful for relative KeyingSets only. */
-  KSP_GROUP_TEMPLATE_ITEM,
+  /* KSP_GROUP_TEMPLATE_ITEM, */ /* UNUSED */
 } eKSP_Grouping;
 
 /* ---------------- */
@@ -934,7 +970,7 @@ typedef struct KeyingSet {
 /* KeyingSet settings */
 typedef enum eKS_Settings {
   /** Keyingset cannot be removed (and doesn't need to be freed). */
-  KEYINGSET_BUILTIN = (1 << 0),
+  /* KEYINGSET_BUILTIN = (1 << 0), */ /* UNUSED */
   /** Keyingset does not depend on context info (i.e. paths are absolute). */
   KEYINGSET_ABSOLUTE = (1 << 1),
 } eKS_Settings;
@@ -949,7 +985,7 @@ typedef enum eInsertKeyFlags {
   /** don't recalculate handles,etc. after adding key */
   INSERTKEY_FAST = (1 << 2),
   /** don't realloc mem (or increase count, as array has already been set out) */
-  INSERTKEY_FASTR = (1 << 3),
+  /* INSERTKEY_FASTR = (1 << 3), */ /* UNUSED */
   /** only replace an existing keyframe (this overrides INSERTKEY_NEEDED) */
   INSERTKEY_REPLACE = (1 << 4),
   /** transform F-Curves should have XYZ->RGB color mode */
@@ -964,6 +1000,8 @@ typedef enum eInsertKeyFlags {
   INSERTKEY_DRIVER = (1 << 8),
   /** for cyclic FCurves, adjust key timing to preserve the cycle period and flow */
   INSERTKEY_CYCLE_AWARE = (1 << 9),
+  /** don't create new F-Curves (implied by INSERTKEY_REPLACE) */
+  INSERTKEY_AVAILABLE = (1 << 10),
 } eInsertKeyFlags;
 
 /* ************************************************ */
@@ -998,14 +1036,14 @@ typedef struct AnimOverride {
 /**
  * Animation data for some ID block (adt)
  *
- * This block of data is used to provide all of the necessary animation data for a datablock.
+ * This block of data is used to provide all of the necessary animation data for a data-block.
  * Currently, this data will not be reusable, as there shouldn't be any need to do so.
  *
  * This information should be made available for most if not all ID-blocks, which should
  * enable all of its settings to be animatable locally. Animation from 'higher-up' ID-AnimData
  * blocks may override local settings.
  *
- * This datablock should be placed immediately after the ID block where it is used, so that
+ * This data-block should be placed immediately after the ID block where it is used, so that
  * the code which retrieves this data can do so in an easier manner.
  * See blenkernel/intern/anim_sys.c for details.
  */
@@ -1072,7 +1110,7 @@ typedef enum eAnimData_Flag {
   /** Drivers expanded in UI. */
   ADT_DRIVERS_COLLAPSED = (1 << 10),
   /** Don't execute drivers. */
-  ADT_DRIVERS_DISABLED = (1 << 11),
+  /* ADT_DRIVERS_DISABLED = (1 << 11), */ /* UNUSED */
 
   /** AnimData block is selected in UI. */
   ADT_UI_SELECTED = (1 << 14),
@@ -1090,7 +1128,7 @@ typedef enum eAnimData_Flag {
 
 /**
  * Used for #BKE_animdata_from_id()
- * All ID-datablocks which have their own 'local' AnimData
+ * All ID-data-blocks which have their own 'local' AnimData
  * should have the same arrangement in their structs.
  */
 typedef struct IdAdtTemplate {

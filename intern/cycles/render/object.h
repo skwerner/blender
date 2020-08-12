@@ -23,8 +23,8 @@
 #include "util/util_array.h"
 #include "util/util_boundbox.h"
 #include "util/util_param.h"
-#include "util/util_transform.h"
 #include "util/util_thread.h"
+#include "util/util_transform.h"
 #include "util/util_types.h"
 #include "util/util_vector.h"
 
@@ -32,7 +32,7 @@ CCL_NAMESPACE_BEGIN
 
 class Device;
 class DeviceScene;
-class Mesh;
+class Geometry;
 class ParticleSystem;
 class Progress;
 class Scene;
@@ -46,11 +46,12 @@ class Object : public Node {
  public:
   NODE_DECLARE
 
-  Mesh *mesh;
+  Geometry *geometry;
   Transform tfm;
   BoundBox bounds;
   uint random_id;
   int pass_id;
+  float3 color;
   ustring asset_name;
   vector<ParamValue> attributes;
   uint visibility;
@@ -58,6 +59,7 @@ class Object : public Node {
   bool hide_on_missing_motion;
   bool use_holdout;
   bool is_shadow_catcher;
+  float shadow_terminator_offset;
 
   float3 dupli_generated;
   float2 dupli_uv;
@@ -80,6 +82,9 @@ class Object : public Node {
   int motion_step(float time) const;
   void update_motion();
 
+  /* Maximum number of motion steps supported (due to Embree). */
+  static const uint MAX_MOTION_STEPS = 129;
+
   /* Check whether object is traceable and it worth adding it to
    * kernel scene.
    */
@@ -92,6 +97,9 @@ class Object : public Node {
 
   /* Returns the index that is used in the kernel for this object. */
   int get_device_index() const;
+
+  /* Compute step size from attributes, shaders, transforms. */
+  float compute_volume_step_size() const;
 
  protected:
   /* Specifies the position of the object in scene->objects and

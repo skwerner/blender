@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -25,23 +25,36 @@
 
 #include "BLI_math.h"
 
+#include "BLT_translation.h"
+
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
+#include "DNA_screen_types.h"
 
 #include "BKE_action.h"
+#include "BKE_colortools.h"
+#include "BKE_context.h"
+#include "BKE_deform.h"
 #include "BKE_editmesh.h"
-#include "BKE_library.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
-#include "BKE_deform.h"
-#include "BKE_colortools.h"
+#include "BKE_screen.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "BLO_read_write.h"
+
+#include "RNA_access.h"
 
 #include "DEG_depsgraph_query.h"
 
 #include "MEM_guardedalloc.h"
 
+#include "MOD_ui_common.h"
 #include "MOD_util.h"
 
 static void initData(ModifierData *md)
@@ -49,7 +62,7 @@ static void initData(ModifierData *md)
   HookModifierData *hmd = (HookModifierData *)md;
 
   hmd->force = 1.0;
-  hmd->curfalloff = curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
+  hmd->curfalloff = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
   hmd->falloff_type = eHook_Falloff_Smooth;
   hmd->flag = 0;
 }
@@ -59,9 +72,9 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
   const HookModifierData *hmd = (const HookModifierData *)md;
   HookModifierData *thmd = (HookModifierData *)target;
 
-  modifier_copyData_generic(md, target, flag);
+  BKE_modifier_copydata_generic(md, target, flag);
 
-  thmd->curfalloff = curvemapping_copy(hmd->curfalloff);
+  thmd->curfalloff = BKE_curvemapping_copy(hmd->curfalloff);
 
   thmd->indexar = MEM_dupallocN(hmd->indexar);
 }
@@ -88,7 +101,7 @@ static void freeData(ModifierData *md)
 {
   HookModifierData *hmd = (HookModifierData *)md;
 
-  curvemapping_free(hmd->curfalloff);
+  BKE_curvemapping_free(hmd->curfalloff);
 
   MEM_SAFE_FREE(hmd->indexar);
 }
@@ -136,13 +149,15 @@ struct HookData_cb {
   float falloff_sq;
   float fac_orig;
 
-  unsigned int use_falloff : 1;
-  unsigned int use_uniform : 1;
+  uint use_falloff : 1;
+  uint use_uniform : 1;
 
   float cent[3];
 
   float mat_uniform[3][3];
   float mat[4][4];
+
+  bool invert_vgroup;
 };
 
 static float hook_falloff(const struct HookData_cb *hd, const float len_sq)
@@ -174,7 +189,7 @@ static float hook_falloff(const struct HookData_cb *hd, const float len_sq)
         break;
 #endif
       case eHook_Falloff_Curve:
-        fac = curvemapping_evaluateF(hd->curfalloff, 0, fac);
+        fac = BKE_curvemapping_evaluateF(hd->curfalloff, 0, fac);
         break;
       case eHook_Falloff_Sharp:
         fac = fac * fac;
@@ -236,7 +251,8 @@ static void hook_co_apply(struct HookData_cb *hd, const int j)
 
   if (fac) {
     if (hd->dvert) {
-      fac *= defvert_find_weight(&hd->dvert[j], hd->defgrp_index);
+      fac *= hd->invert_vgroup ? 1.0f - BKE_defvert_find_weight(&hd->dvert[j], hd->defgrp_index) :
+                                 BKE_defvert_find_weight(&hd->dvert[j], hd->defgrp_index);
     }
 
     if (fac) {
@@ -259,14 +275,15 @@ static void deformVerts_do(HookModifierData *hmd,
   float dmat[4][4];
   int i, *index_pt;
   struct HookData_cb hd;
+  const bool invert_vgroup = (hmd->flag & MOD_HOOK_INVERT_VGROUP) != 0;
 
   if (hmd->curfalloff == NULL) {
     /* should never happen, but bad lib linking could cause it */
-    hmd->curfalloff = curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
+    hmd->curfalloff = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
   }
 
   if (hmd->curfalloff) {
-    curvemapping_initialize(hmd->curfalloff);
+    BKE_curvemapping_initialize(hmd->curfalloff);
   }
 
   /* Generic data needed for applying per-vertex calculations (initialize all members) */
@@ -277,11 +294,13 @@ static void deformVerts_do(HookModifierData *hmd,
 
   hd.falloff_type = hmd->falloff_type;
   hd.falloff = (hmd->falloff_type == eHook_Falloff_None) ? 0.0f : hmd->falloff;
-  hd.falloff_sq = SQUARE(hd.falloff);
+  hd.falloff_sq = square_f(hd.falloff);
   hd.fac_orig = hmd->force;
 
   hd.use_falloff = (hd.falloff_sq != 0.0f);
   hd.use_uniform = (hmd->flag & MOD_HOOK_UNIFORM_SPACE) != 0;
+
+  hd.invert_vgroup = invert_vgroup;
 
   if (hd.use_uniform) {
     copy_m3_m4(hd.mat_uniform, hmd->parentinv);
@@ -310,7 +329,7 @@ static void deformVerts_do(HookModifierData *hmd,
    * This should always be true and I don't generally like
    * "paranoid" style code like this, but old files can have
    * indices that are out of range because old blender did
-   * not correct them on exit editmode. - zr
+   * not correct them on exit edit-mode. - zr
    */
 
   if (hmd->force == 0.0f) {
@@ -382,12 +401,104 @@ static void deformVertsEM(struct ModifierData *md,
   }
 }
 
+static void panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *row, *col;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  PointerRNA ob_ptr;
+  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+
+  PointerRNA hook_object_ptr = RNA_pointer_get(&ptr, "object");
+
+  uiLayoutSetPropSep(layout, true);
+
+  col = uiLayoutColumn(layout, false);
+  uiItemR(col, &ptr, "object", 0, NULL, ICON_NONE);
+  if (!RNA_pointer_is_null(&hook_object_ptr) &&
+      RNA_enum_get(&hook_object_ptr, "type") == OB_ARMATURE) {
+    PointerRNA hook_object_data_ptr = RNA_pointer_get(&hook_object_ptr, "data");
+    uiItemPointerR(
+        col, &ptr, "subtarget", &hook_object_data_ptr, "bones", IFACE_("Bone"), ICON_NONE);
+  }
+  modifier_vgroup_ui(layout, &ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
+
+  uiItemR(layout, &ptr, "strength", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
+
+  if (RNA_enum_get(&ob_ptr, "mode") == OB_MODE_EDIT) {
+    row = uiLayoutRow(layout, true);
+    uiItemO(row, "Reset", ICON_NONE, "OBJECT_OT_hook_reset");
+    uiItemO(row, "Recenter", ICON_NONE, "OBJECT_OT_hook_recenter");
+    row = uiLayoutRow(layout, true);
+    uiItemO(row, "Select", ICON_NONE, "OBJECT_OT_hook_select");
+    uiItemO(row, "Assign", ICON_NONE, "OBJECT_OT_hook_assign");
+  }
+
+  modifier_panel_end(layout, &ptr);
+}
+
+static void falloff_panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *row;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+
+  bool use_falloff = RNA_enum_get(&ptr, "falloff_type") != eWarp_Falloff_None;
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, &ptr, "falloff_type", 0, IFACE_("Type"), ICON_NONE);
+
+  row = uiLayoutRow(layout, false);
+  uiLayoutSetActive(row, use_falloff);
+  uiItemR(row, &ptr, "falloff_radius", 0, NULL, ICON_NONE);
+
+  uiItemR(layout, &ptr, "use_falloff_uniform", 0, NULL, ICON_NONE);
+
+  if (RNA_enum_get(&ptr, "falloff_type") == eWarp_Falloff_Curve) {
+    uiTemplateCurveMapping(layout, &ptr, "falloff_curve", 0, false, false, false, false);
+  }
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  PanelType *panel_type = modifier_panel_register(region_type, eModifierType_Hook, panel_draw);
+  modifier_subpanel_register(
+      region_type, "falloff", "Falloff", NULL, falloff_panel_draw, panel_type);
+}
+
+static void blendWrite(BlendWriter *writer, const ModifierData *md)
+{
+  const HookModifierData *hmd = (const HookModifierData *)md;
+
+  if (hmd->curfalloff) {
+    BKE_curvemapping_blend_write(writer, hmd->curfalloff);
+  }
+
+  BLO_write_int32_array(writer, hmd->totindex, hmd->indexar);
+}
+
+static void blendRead(BlendDataReader *reader, ModifierData *md)
+{
+  HookModifierData *hmd = (HookModifierData *)md;
+
+  BLO_read_data_address(reader, &hmd->curfalloff);
+  if (hmd->curfalloff) {
+    BKE_curvemapping_blend_read(reader, hmd->curfalloff);
+  }
+
+  BLO_read_int32_array(reader, hmd->totindex, &hmd->indexar);
+}
+
 ModifierTypeInfo modifierType_Hook = {
     /* name */ "Hook",
     /* structName */ "HookModifierData",
     /* structSize */ sizeof(HookModifierData),
     /* type */ eModifierTypeType_OnlyDeform,
-    /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsLattice |
+    /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsVertexCosOnly |
         eModifierTypeFlag_SupportsEditmode,
     /* copyData */ copyData,
 
@@ -395,7 +506,10 @@ ModifierTypeInfo modifierType_Hook = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ deformVertsEM,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,
@@ -408,4 +522,7 @@ ModifierTypeInfo modifierType_Hook = {
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ blendWrite,
+    /* blendRead */ blendRead,
 };

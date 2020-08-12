@@ -3,7 +3,7 @@ layout(std140) uniform common_block
 {
   mat4 pastViewProjectionMatrix;
   vec4 viewVecs[2];
-  vec2 mipRatio[10]; /* To correct mip level texel mis-alignement */
+  vec2 mipRatio[10]; /* To correct mip level texel misalignment */
   /* Ambient Occlusion */
   vec4 aoParameters[2];
   /* Volumetric */
@@ -23,6 +23,7 @@ layout(std140) uniform common_block
   float ssrFireflyFac;
   float ssrBrdfBias;
   bool ssrToggle;
+  bool ssrefractToggle;
   /* SubSurface Scattering */
   float sssJitterThreshold;
   bool sssToggle;
@@ -42,6 +43,10 @@ layout(std140) uniform common_block
   int hizMipOffset;
   int rayType;
   float rayDepth;
+  float alphaHashOffset;
+  float alphaHashScale;
+  float pad7;
+  float pad8;
 };
 
 /* rayType (keep in sync with ray_type) */

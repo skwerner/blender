@@ -17,12 +17,12 @@
  */
 
 #include "COM_DilateErodeNode.h"
-#include "COM_ExecutionSystem.h"
-#include "COM_DilateErodeOperation.h"
+#include "BLI_math.h"
 #include "COM_AntiAliasOperation.h"
+#include "COM_DilateErodeOperation.h"
+#include "COM_ExecutionSystem.h"
 #include "COM_GaussianAlphaXBlurOperation.h"
 #include "COM_GaussianAlphaYBlurOperation.h"
-#include "BLI_math.h"
 
 DilateErodeNode::DilateErodeNode(bNode *editorNode) : Node(editorNode)
 {
@@ -92,7 +92,8 @@ void DilateErodeNode::convertToOperations(NodeConverter &converter,
     converter.addOperation(operationx);
 
     converter.mapInputSocket(getInputSocket(0), operationx->getInputSocket(0));
-    // converter.mapInputSocket(getInputSocket(1), operationx->getInputSocket(1)); // no size input yet
+    // converter.mapInputSocket(getInputSocket(1), operationx->getInputSocket(1)); // no size input
+    // yet
 
     GaussianAlphaYBlurOperation *operationy = new GaussianAlphaYBlurOperation();
     operationy->setData(&m_alpha_blur);
@@ -101,7 +102,8 @@ void DilateErodeNode::convertToOperations(NodeConverter &converter,
     converter.addOperation(operationy);
 
     converter.addLink(operationx->getOutputSocket(), operationy->getInputSocket(0));
-    // converter.mapInputSocket(getInputSocket(1), operationy->getInputSocket(1)); // no size input yet
+    // converter.mapInputSocket(getInputSocket(1), operationy->getInputSocket(1)); // no size input
+    // yet
     converter.mapOutputSocket(getOutputSocket(0), operationy->getOutputSocket());
 
     converter.addPreview(operationy->getOutputSocket());

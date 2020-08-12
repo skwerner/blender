@@ -32,8 +32,6 @@
 
 #include "BLI_utildefines.h"
 
-#include "BIF_gl.h"
-
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_report.h"
@@ -42,9 +40,10 @@
 
 #include "ED_screen.h"
 
+#include "GPU_extensions.h"
 #include "GPU_immediate.h"
-#include "GPU_framebuffer.h"
 #include "GPU_texture.h"
+#include "GPU_viewport.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -54,100 +53,6 @@
 
 #include "UI_interface.h"
 #include "UI_resources.h"
-
-static eGPUInterlaceShader interlace_gpu_id_from_type(eStereo3dInterlaceType interlace_type)
-{
-  switch (interlace_type) {
-    case S3D_INTERLACE_ROW:
-      return GPU_SHADER_INTERLACE_ROW;
-    case S3D_INTERLACE_COLUMN:
-      return GPU_SHADER_INTERLACE_COLUMN;
-    case S3D_INTERLACE_CHECKERBOARD:
-    default:
-      return GPU_SHADER_INTERLACE_CHECKER;
-  }
-}
-
-void wm_stereo3d_draw_interlace(wmWindow *win, ARegion *ar)
-{
-  bool swap = (win->stereo3d_format->flag & S3D_INTERLACE_SWAP) != 0;
-  enum eStereo3dInterlaceType interlace_type = win->stereo3d_format->interlace_type;
-
-  /* wmOrtho for the screen has this same offset */
-  float halfx = GLA_PIXEL_OFS / ar->winx;
-  float halfy = GLA_PIXEL_OFS / ar->winy;
-
-  GPUVertFormat *format = immVertexFormat();
-  uint texcoord = GPU_vertformat_attr_add(format, "texCoord", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
-  uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
-
-  /* leave GL_TEXTURE0 as the latest active texture */
-  for (int view = 1; view >= 0; view--) {
-    GPUTexture *texture = wm_draw_region_texture(ar, view);
-    glActiveTexture(GL_TEXTURE0 + view);
-    glBindTexture(GL_TEXTURE_2D, GPU_texture_opengl_bindcode(texture));
-  }
-
-  immBindBuiltinProgram(GPU_SHADER_2D_IMAGE_INTERLACE);
-  immUniform1i("image_a", (swap) ? 1 : 0);
-  immUniform1i("image_b", (swap) ? 0 : 1);
-
-  immUniform1i("interlace_id", interlace_gpu_id_from_type(interlace_type));
-
-  immBegin(GPU_PRIM_TRI_FAN, 4);
-
-  immAttr2f(texcoord, halfx, halfy);
-  immVertex2f(pos, ar->winrct.xmin, ar->winrct.ymin);
-
-  immAttr2f(texcoord, 1.0f + halfx, halfy);
-  immVertex2f(pos, ar->winrct.xmax + 1, ar->winrct.ymin);
-
-  immAttr2f(texcoord, 1.0f + halfx, 1.0f + halfy);
-  immVertex2f(pos, ar->winrct.xmax + 1, ar->winrct.ymax + 1);
-
-  immAttr2f(texcoord, halfx, 1.0f + halfy);
-  immVertex2f(pos, ar->winrct.xmin, ar->winrct.ymax + 1);
-
-  immEnd();
-  immUnbindProgram();
-
-  for (int view = 1; view >= 0; view--) {
-    glActiveTexture(GL_TEXTURE0 + view);
-    glBindTexture(GL_TEXTURE_2D, 0);
-  }
-}
-
-void wm_stereo3d_draw_anaglyph(wmWindow *win, ARegion *ar)
-{
-  for (int view = 0; view < 2; view++) {
-    int bit = view + 1;
-
-    switch (win->stereo3d_format->anaglyph_type) {
-      case S3D_ANAGLYPH_REDCYAN:
-        glColorMask((1 & bit) ? GL_TRUE : GL_FALSE,
-                    (2 & bit) ? GL_TRUE : GL_FALSE,
-                    (2 & bit) ? GL_TRUE : GL_FALSE,
-                    GL_FALSE);
-        break;
-      case S3D_ANAGLYPH_GREENMAGENTA:
-        glColorMask((2 & bit) ? GL_TRUE : GL_FALSE,
-                    (1 & bit) ? GL_TRUE : GL_FALSE,
-                    (2 & bit) ? GL_TRUE : GL_FALSE,
-                    GL_FALSE);
-        break;
-      case S3D_ANAGLYPH_YELLOWBLUE:
-        glColorMask((1 & bit) ? GL_TRUE : GL_FALSE,
-                    (1 & bit) ? GL_TRUE : GL_FALSE,
-                    (2 & bit) ? GL_TRUE : GL_FALSE,
-                    GL_FALSE);
-        break;
-    }
-
-    wm_draw_region_blend(ar, view, false);
-  }
-
-  glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-}
 
 void wm_stereo3d_draw_sidebyside(wmWindow *win, int view)
 {
@@ -165,7 +70,7 @@ void wm_stereo3d_draw_sidebyside(wmWindow *win, int view)
       soffx = 0;
     }
   }
-  else {  //RIGHT_LEFT_ID
+  else {  // RIGHT_LEFT_ID
     if (cross_eyed) {
       soffx = 0;
     }
@@ -243,13 +148,6 @@ void wm_stereo3d_draw_topbottom(wmWindow *win, int view)
   immUnbindProgram();
 }
 
-static bool wm_stereo3d_quadbuffer_supported(void)
-{
-  GLboolean stereo = GL_FALSE;
-  glGetBooleanv(GL_STEREO, &stereo);
-  return stereo == GL_TRUE;
-}
-
 static bool wm_stereo3d_is_fullscreen_required(eStereoDisplayMode stereo_display)
 {
   return ELEM(stereo_display, S3D_DISPLAY_SIDEBYSIDE, S3D_DISPLAY_TOPBOTTOM);
@@ -280,7 +178,8 @@ bool WM_stereo3d_enabled(wmWindow *win, bool skip_stereo3d_check)
 }
 
 /**
- * If needed, this adjusts \a r_mouse_xy so that drawn cursor and handled mouse position are matching visually.
+ * If needed, adjust \a r_mouse_xy
+ * so that drawn cursor and handled mouse position are matching visually.
  */
 void wm_stereo3d_mouse_offset_apply(wmWindow *win, int *r_mouse_xy)
 {
@@ -420,7 +319,7 @@ int wm_stereo3d_set_exec(bContext *C, wmOperator *op)
     }
     /* pageflip requires a new window to be created with the proper OS flags */
     else if ((win_dst = wm_window_copy_test(C, win_src, false, false))) {
-      if (wm_stereo3d_quadbuffer_supported()) {
+      if (GPU_stereo_quadbuffer_support()) {
         BKE_report(op->reports, RPT_INFO, "Quad-buffer window successfully created");
       }
       else {
@@ -470,7 +369,7 @@ int wm_stereo3d_set_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(ev
     return wm_stereo3d_set_exec(C, op);
   }
   else {
-    return WM_operator_props_dialog_popup(C, op, 250, 100);
+    return WM_operator_props_dialog_popup(C, op, 250);
   }
 }
 

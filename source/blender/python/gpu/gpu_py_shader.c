@@ -26,7 +26,6 @@
 #include "BLI_utildefines.h"
 
 #include "GPU_shader.h"
-#include "GPU_shader_interface.h"
 
 #include "../generic/py_capi_utils.h"
 #include "../generic/python_utildefines.h"
@@ -37,7 +36,6 @@
 #include "gpu_py_vertex_format.h"
 
 /* -------------------------------------------------------------------- */
-
 /** \name Enum Conversion.
  * \{ */
 
@@ -80,10 +78,10 @@ static int bpygpu_uniform_location_get(GPUShader *shader,
                                        const char *name,
                                        const char *error_prefix)
 {
-  int uniform = GPU_shader_get_uniform_ensure(shader, name);
+  int uniform = GPU_shader_get_uniform(shader, name);
 
   if (uniform == -1) {
-    PyErr_Format(PyExc_ValueError, "%s: uniform %.32s %.32s not found", error_prefix, name);
+    PyErr_Format(PyExc_ValueError, "%s: uniform %.32s not found", error_prefix, name);
   }
 
   return uniform;
@@ -122,8 +120,8 @@ static PyObject *bpygpu_shader_new(PyTypeObject *UNUSED(type), PyObject *args, P
     return NULL;
   }
 
-  GPUShader *shader = GPU_shader_create(
-      params.vertexcode, params.fragcode, params.geocode, params.libcode, params.defines, NULL);
+  GPUShader *shader = GPU_shader_create_from_python(
+      params.vertexcode, params.fragcode, params.geocode, params.libcode, params.defines);
 
   if (shader == NULL) {
     PyErr_SetString(PyExc_Exception, "Shader Compile Error, see console for more details");
@@ -526,7 +524,7 @@ PyDoc_STRVAR(bpygpu_shader_calc_format_doc,
 static PyObject *bpygpu_shader_calc_format(BPyGPUShader *self, PyObject *UNUSED(arg))
 {
   BPyGPUVertFormat *ret = (BPyGPUVertFormat *)BPyGPUVertFormat_CreatePyObject(NULL);
-  GPU_vertformat_from_interface(&ret->fmt, GPU_shader_get_interface(self->shader));
+  GPU_vertformat_from_shader(&ret->fmt, self->shader);
   return (PyObject *)ret;
 }
 
@@ -580,11 +578,7 @@ static PyObject *bpygpu_shader_program_get(BPyGPUShader *self, void *UNUSED(clos
 }
 
 static PyGetSetDef bpygpu_shader_getseters[] = {
-    {(char *)"program",
-     (getter)bpygpu_shader_program_get,
-     (setter)NULL,
-     bpygpu_shader_program_doc,
-     NULL},
+    {"program", (getter)bpygpu_shader_program_get, (setter)NULL, bpygpu_shader_program_doc, NULL},
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };
 
@@ -614,6 +608,10 @@ PyDoc_STRVAR(
     "\n"
     "   To debug shaders, use the --debug-gpu-shaders command line option"
     "   to see full GLSL shader compilation and linking errors.\n"
+    "\n"
+    "   For drawing user interface elements and gizmos, use "
+    "   ``fragOutput = blender_srgb_to_framebuffer_space(fragOutput)``"
+    "   to transform the output sRGB colors to the framebuffer colorspace."
     "\n"
     "   :param vertexcode: Vertex shader code.\n"
     "   :type vertexcode: str\n"

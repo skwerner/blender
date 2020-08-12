@@ -21,8 +21,8 @@
 #include "BPy_UnaryFunction1DEdgeNature.h"
 
 #include "../BPy_Convert.h"
-#include "../BPy_Interface1D.h"
 #include "../BPy_IntegrationType.h"
+#include "../BPy_Interface1D.h"
 
 #include "UnaryFunction1D_Nature_EdgeNature/BPy_CurveNatureF1D.h"
 
@@ -36,17 +36,20 @@ extern "C" {
 
 int UnaryFunction1DEdgeNature_Init(PyObject *module)
 {
-  if (module == NULL)
+  if (module == NULL) {
     return -1;
+  }
 
-  if (PyType_Ready(&UnaryFunction1DEdgeNature_Type) < 0)
+  if (PyType_Ready(&UnaryFunction1DEdgeNature_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&UnaryFunction1DEdgeNature_Type);
   PyModule_AddObject(
       module, "UnaryFunction1DEdgeNature", (PyObject *)&UnaryFunction1DEdgeNature_Type);
 
-  if (PyType_Ready(&CurveNatureF1D_Type) < 0)
+  if (PyType_Ready(&CurveNatureF1D_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&CurveNatureF1D_Type);
   PyModule_AddObject(module, "CurveNatureF1D", (PyObject *)&CurveNatureF1D_Type);
 
@@ -81,11 +84,13 @@ static int UnaryFunction1DEdgeNature___init__(BPy_UnaryFunction1DEdgeNature *sel
   PyObject *obj = 0;
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwds, "|O!", (char **)kwlist, &IntegrationType_Type, &obj))
+          args, kwds, "|O!", (char **)kwlist, &IntegrationType_Type, &obj)) {
     return -1;
+  }
 
-  if (!obj)
+  if (!obj) {
     self->uf1D_edgenature = new UnaryFunction1D<Nature::EdgeNature>();
+  }
   else {
     self->uf1D_edgenature = new UnaryFunction1D<Nature::EdgeNature>(
         IntegrationType_from_BPy_IntegrationType(obj));
@@ -98,8 +103,7 @@ static int UnaryFunction1DEdgeNature___init__(BPy_UnaryFunction1DEdgeNature *sel
 
 static void UnaryFunction1DEdgeNature___dealloc__(BPy_UnaryFunction1DEdgeNature *self)
 {
-  if (self->uf1D_edgenature)
-    delete self->uf1D_edgenature;
+  delete self->uf1D_edgenature;
   UnaryFunction1D_Type.tp_dealloc((PyObject *)self);
 }
 
@@ -116,8 +120,9 @@ static PyObject *UnaryFunction1DEdgeNature___call__(BPy_UnaryFunction1DEdgeNatur
   static const char *kwlist[] = {"inter", NULL};
   PyObject *obj = 0;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "O!", (char **)kwlist, &Interface1D_Type, &obj))
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "O!", (char **)kwlist, &Interface1D_Type, &obj)) {
     return NULL;
+  }
 
   if (typeid(*(self->uf1D_edgenature)) == typeid(UnaryFunction1D<Nature::EdgeNature>)) {
     PyErr_SetString(PyExc_TypeError, "__call__ method not properly overridden");
@@ -158,15 +163,15 @@ static int integration_type_set(BPy_UnaryFunction1DEdgeNature *self,
 }
 
 static PyGetSetDef BPy_UnaryFunction1DEdgeNature_getseters[] = {
-    {(char *)"integration_type",
+    {"integration_type",
      (getter)integration_type_get,
      (setter)integration_type_set,
-     (char *)integration_type_doc,
+     integration_type_doc,
      NULL},
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };
 
-/*-----------------------BPy_UnaryFunction1DEdgeNature type definition ------------------------------*/
+/*-----------------------BPy_UnaryFunction1DEdgeNature type definition --------------------------*/
 
 PyTypeObject UnaryFunction1DEdgeNature_Type = {
     PyVarObject_HEAD_INIT(NULL, 0) "UnaryFunction1DEdgeNature", /* tp_name */

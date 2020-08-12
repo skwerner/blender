@@ -57,7 +57,7 @@ struct RenderResult *render_result_new_from_exr(
     void *exrhandle, const char *colorspace, bool predivide, int rectx, int recty);
 
 void render_result_view_new(struct RenderResult *rr, const char *viewname);
-void render_result_views_new(struct RenderResult *rr, struct RenderData *rd);
+void render_result_views_new(struct RenderResult *rr, const struct RenderData *rd);
 
 /* Merge */
 
@@ -66,12 +66,6 @@ void render_result_merge(struct RenderResult *rr, struct RenderResult *rrpart);
 /* Add Passes */
 
 void render_result_clone_passes(struct Render *re, struct RenderResult *rr, const char *viewname);
-void render_result_add_pass(struct RenderResult *rr,
-                            const char *name,
-                            int channels,
-                            const char *chan_id,
-                            const char *layername,
-                            const char *viewname);
 
 /* Free */
 
@@ -90,11 +84,12 @@ void render_result_exr_file_begin(struct Render *re, struct RenderEngine *engine
 void render_result_exr_file_end(struct Render *re, struct RenderEngine *engine);
 
 /* render pass wrapper for gpencil */
-struct RenderPass *gp_add_pass(struct RenderResult *rr,
-                               struct RenderLayer *rl,
-                               int channels,
-                               const char *name,
-                               const char *viewname);
+struct RenderPass *render_layer_add_pass(struct RenderResult *rr,
+                                         struct RenderLayer *rl,
+                                         int channels,
+                                         const char *name,
+                                         const char *viewname,
+                                         const char *chanid);
 
 void render_result_exr_file_merge(struct RenderResult *rr,
                                   struct RenderResult *rrpart,
@@ -116,7 +111,7 @@ bool render_result_exr_file_cache_read(struct Render *re);
 /* Combined Pixel Rect */
 
 struct ImBuf *render_result_rect_to_ibuf(struct RenderResult *rr,
-                                         struct RenderData *rd,
+                                         const struct RenderData *rd,
                                          const int view_id);
 
 void render_result_rect_fill_zero(struct RenderResult *rr, const int view_id);

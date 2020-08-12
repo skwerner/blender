@@ -39,7 +39,7 @@
 #include "bmesh.h"
 #include "intern/bmesh_private.h"
 
-/* edge and vertex share, currently theres no need to have different logic */
+/* edge and vertex share, currently there's no need to have different logic */
 static void bm_data_interp_from_elem(CustomData *data_layer,
                                      const BMElem *ele_src_1,
                                      const BMElem *ele_src_2,
@@ -160,13 +160,12 @@ void BM_data_interp_face_vert_edge(BMesh *bm,
     if (!l_v1 || !l_v2) {
       return;
     }
-    else {
-      const void *src[2];
-      src[0] = l_v1->head.data;
-      src[1] = l_v2->head.data;
 
-      CustomData_bmesh_interp(&bm->ldata, src, w, NULL, 2, l_v->head.data);
-    }
+    const void *src[2];
+    src[0] = l_v1->head.data;
+    src[1] = l_v2->head.data;
+
+    CustomData_bmesh_interp(&bm->ldata, src, w, NULL, 2, l_v->head.data);
   } while ((l_iter = l_iter->radial_next) != e->l);
 }
 
@@ -330,9 +329,9 @@ static bool quad_co(const float v1[3],
 }
 
 static void mdisp_axis_from_quad(float v1[3],
-                                 float v2[3],
+                                 const float v2[3],
                                  float UNUSED(v3[3]),
-                                 float v4[3],
+                                 const float v4[3],
                                  float r_axis_x[3],
                                  float r_axis_y[3])
 {
@@ -461,7 +460,7 @@ typedef struct BMLoopInterpMultiresData {
 
 static void loop_interp_multires_cb(void *__restrict userdata,
                                     const int ix,
-                                    const ParallelRangeTLS *__restrict UNUSED(tls))
+                                    const TaskParallelTLS *__restrict UNUSED(tls))
 {
   BMLoopInterpMultiresData *data = userdata;
 
@@ -561,7 +560,7 @@ void BM_loop_interp_multires_ex(BMesh *UNUSED(bm),
       .res = res,
       .d = 1.0f / (float)(res - 1),
   };
-  ParallelRangeSettings settings;
+  TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
   settings.use_threading = (res > 5);
   BLI_task_parallel_range(0, res, &data, loop_interp_multires_cb, &settings);
@@ -744,9 +743,21 @@ void BM_loop_interp_from_face(
   float co[2];
   int i;
 
-  /* convert the 3d coords into 2d for projection */
-  BLI_assert(BM_face_is_normal_valid(f_src));
-  axis_dominant_v3_to_m3(axis_mat, f_src->no);
+  /* Convert the 3d coords into 2d for projection. */
+  float axis_dominant[3];
+  if (!is_zero_v3(f_src->no)) {
+    BLI_assert(BM_face_is_normal_valid(f_src));
+    copy_v3_v3(axis_dominant, f_src->no);
+  }
+  else {
+    /* Rare case in which all the vertices of the face are aligned.
+     * Get a random axis that is orthogonal to the tangent. */
+    float vec[3];
+    BM_face_calc_tangent_auto(f_src, vec);
+    ortho_v3_v3(axis_dominant, vec);
+    normalize_v3(axis_dominant);
+  }
+  axis_dominant_v3_to_m3(axis_mat, axis_dominant);
 
   i = 0;
   l_iter = l_first = BM_FACE_FIRST_LOOP(f_src);

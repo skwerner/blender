@@ -18,12 +18,12 @@
  * \ingroup bke
  */
 
-#include "MEM_guardedalloc.h"
 #include "BLI_sys_types.h"  // for intptr_t support
+#include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h" /* for BLI_assert */
 #include "BLI_math.h"
 #include "BLI_task.h"
+#include "BLI_utildefines.h" /* for BLI_assert */
 
 #include "CCGSubSurf.h"
 #include "CCGSubSurf_intern.h"
@@ -38,9 +38,7 @@ static void *_edge_getCoVert(CCGEdge *e, CCGVert *v, int lvl, int x, int dataSiz
   if (v == e->v0) {
     return &EDGE_getLevelData(e)[dataSize * (levelBase + x)];
   }
-  else {
-    return &EDGE_getLevelData(e)[dataSize * (levelBase + (1 << lvl) - x)];
-  }
+  return &EDGE_getLevelData(e)[dataSize * (levelBase + (1 << lvl) - x)];
 }
 /* *************************************************** */
 
@@ -52,9 +50,11 @@ static int _edge_isBoundary(const CCGEdge *e)
 static int _vert_isBoundary(const CCGVert *v)
 {
   int i;
-  for (i = 0; i < v->numEdges; i++)
-    if (_edge_isBoundary(v->edges[i]))
+  for (i = 0; i < v->numEdges; i++) {
+    if (_edge_isBoundary(v->edges[i])) {
       return 1;
+    }
+  }
   return 0;
 }
 
@@ -63,9 +63,8 @@ static CCGVert *_edge_getOtherVert(CCGEdge *e, CCGVert *vQ)
   if (vQ == e->v0) {
     return e->v1;
   }
-  else {
-    return e->v0;
-  }
+
+  return e->v0;
 }
 
 static float *_face_getIFNoEdge(CCGFace *f,
@@ -106,14 +105,16 @@ static int VERT_seam(const CCGVert *v)
 
 static float EDGE_getSharpness(CCGEdge *e, int lvl)
 {
-  if (!lvl)
+  if (!lvl) {
     return e->crease;
-  else if (!e->crease)
+  }
+  if (!e->crease) {
     return 0.0f;
-  else if (e->crease - lvl < 0.0f)
+  }
+  if (e->crease - lvl < 0.0f) {
     return 0.0f;
-  else
-    return e->crease - lvl;
+  }
+  return e->crease - lvl;
 }
 
 typedef struct CCGSubSurfCalcSubdivData {
@@ -129,7 +130,7 @@ typedef struct CCGSubSurfCalcSubdivData {
 } CCGSubSurfCalcSubdivData;
 
 static void ccgSubSurf__calcVertNormals_faces_accumulate_cb(
-    void *__restrict userdata, const int ptrIdx, const ParallelRangeTLS *__restrict UNUSED(tls))
+    void *__restrict userdata, const int ptrIdx, const TaskParallelTLS *__restrict UNUSED(tls))
 {
   CCGSubSurfCalcSubdivData *data = userdata;
 
@@ -181,10 +182,12 @@ static void ccgSubSurf__calcVertNormals_faces_accumulate_cb(
         FACE_calcIFNo(f, lvl, S, x, y, no);
 
         NormAdd(FACE_getIFNo(f, lvl, S, x + 0, y + 0), no);
-        if (xPlusOk)
+        if (xPlusOk) {
           NormAdd(FACE_getIFNo(f, lvl, S, x + 1, y + 0), no);
-        if (yPlusOk)
+        }
+        if (yPlusOk) {
           NormAdd(FACE_getIFNo(f, lvl, S, x + 0, y + 1), no);
+        }
         if (xPlusOk && yPlusOk) {
           if (x < gridSize - 2 || y < gridSize - 2 ||
               FACE_getVerts(f)[S]->flags & Vert_eEffected) {
@@ -195,10 +198,12 @@ static void ccgSubSurf__calcVertNormals_faces_accumulate_cb(
         if (x == 0 && y == 0) {
           int K;
 
-          if (!yLimitNext || 1 < gridSize - 1)
+          if (!yLimitNext || 1 < gridSize - 1) {
             NormAdd(FACE_getIFNo(f, lvl, (S + 1) % f->numVerts, 0, 1), no);
-          if (!xLimitPrev || 1 < gridSize - 1)
+          }
+          if (!xLimitPrev || 1 < gridSize - 1) {
             NormAdd(FACE_getIFNo(f, lvl, (S - 1 + f->numVerts) % f->numVerts, 1, 0), no);
+          }
 
           for (K = 0; K < f->numVerts; K++) {
             if (K != S) {
@@ -208,13 +213,15 @@ static void ccgSubSurf__calcVertNormals_faces_accumulate_cb(
         }
         else if (y == 0) {
           NormAdd(FACE_getIFNo(f, lvl, (S + 1) % f->numVerts, 0, x), no);
-          if (!yLimitNext || x < gridSize - 2)
+          if (!yLimitNext || x < gridSize - 2) {
             NormAdd(FACE_getIFNo(f, lvl, (S + 1) % f->numVerts, 0, x + 1), no);
+          }
         }
         else if (x == 0) {
           NormAdd(FACE_getIFNo(f, lvl, (S - 1 + f->numVerts) % f->numVerts, y, 0), no);
-          if (!xLimitPrev || y < gridSize - 2)
+          if (!xLimitPrev || y < gridSize - 2) {
             NormAdd(FACE_getIFNo(f, lvl, (S - 1 + f->numVerts) % f->numVerts, y + 1, 0), no);
+          }
         }
       }
     }
@@ -222,7 +229,7 @@ static void ccgSubSurf__calcVertNormals_faces_accumulate_cb(
 }
 
 static void ccgSubSurf__calcVertNormals_faces_finalize_cb(
-    void *__restrict userdata, const int ptrIdx, const ParallelRangeTLS *__restrict UNUSED(tls))
+    void *__restrict userdata, const int ptrIdx, const TaskParallelTLS *__restrict UNUSED(tls))
 {
   CCGSubSurfCalcSubdivData *data = userdata;
 
@@ -261,7 +268,7 @@ static void ccgSubSurf__calcVertNormals_faces_finalize_cb(
 }
 
 static void ccgSubSurf__calcVertNormals_edges_accumulate_cb(
-    void *__restrict userdata, const int ptrIdx, const ParallelRangeTLS *__restrict UNUSED(tls))
+    void *__restrict userdata, const int ptrIdx, const TaskParallelTLS *__restrict UNUSED(tls))
 {
   CCGSubSurfCalcSubdivData *data = userdata;
 
@@ -335,7 +342,7 @@ static void ccgSubSurf__calcVertNormals(CCGSubSurf *ss,
   };
 
   {
-    ParallelRangeSettings settings;
+    TaskParallelSettings settings;
     BLI_parallel_range_settings_defaults(&settings);
     settings.min_iter_per_thread = CCG_TASK_LIMIT;
     BLI_task_parallel_range(
@@ -367,7 +374,7 @@ static void ccgSubSurf__calcVertNormals(CCGSubSurf *ss,
   }
 
   {
-    ParallelRangeSettings settings;
+    TaskParallelSettings settings;
     BLI_parallel_range_settings_defaults(&settings);
     settings.min_iter_per_thread = CCG_TASK_LIMIT;
     BLI_task_parallel_range(
@@ -375,7 +382,7 @@ static void ccgSubSurf__calcVertNormals(CCGSubSurf *ss,
   }
 
   {
-    ParallelRangeSettings settings;
+    TaskParallelSettings settings;
     BLI_parallel_range_settings_defaults(&settings);
     settings.min_iter_per_thread = CCG_TASK_LIMIT;
     BLI_task_parallel_range(
@@ -390,10 +397,11 @@ static void ccgSubSurf__calcVertNormals(CCGSubSurf *ss,
       int x;
       const int f_ed_idx = ccg_face_getEdgeIndex(f, e);
 
-      for (x = 0; x < edgeSize; x++)
+      for (x = 0; x < edgeSize; x++) {
         NormCopy(EDGE_getNo(e, lvl, x),
                  _face_getIFNoEdge(
                      f, e, f_ed_idx, lvl, x, 0, subdivLevels, vertDataSize, normalDataOffset));
+      }
     }
     else {
       /* set to zero here otherwise the normals are uninitialized memory
@@ -412,7 +420,7 @@ static void ccgSubSurf__calcVertNormals(CCGSubSurf *ss,
 }
 
 static void ccgSubSurf__calcSubdivLevel_interior_faces_edges_midpoints_cb(
-    void *__restrict userdata, const int ptrIdx, const ParallelRangeTLS *__restrict UNUSED(tls))
+    void *__restrict userdata, const int ptrIdx, const TaskParallelTLS *__restrict UNUSED(tls))
 {
   CCGSubSurfCalcSubdivData *data = userdata;
 
@@ -500,7 +508,7 @@ static void ccgSubSurf__calcSubdivLevel_interior_faces_edges_midpoints_cb(
 }
 
 static void ccgSubSurf__calcSubdivLevel_interior_faces_edges_centerpoints_shift_cb(
-    void *__restrict userdata, const int ptrIdx, const ParallelRangeTLS *__restrict UNUSED(tls))
+    void *__restrict userdata, const int ptrIdx, const TaskParallelTLS *__restrict UNUSED(tls))
 {
   CCGSubSurfCalcSubdivData *data = userdata;
 
@@ -606,7 +614,7 @@ static void ccgSubSurf__calcSubdivLevel_interior_faces_edges_centerpoints_shift_
 }
 
 static void ccgSubSurf__calcSubdivLevel_verts_copydata_cb(
-    void *__restrict userdata, const int ptrIdx, const ParallelRangeTLS *__restrict UNUSED(tls))
+    void *__restrict userdata, const int ptrIdx, const TaskParallelTLS *__restrict UNUSED(tls))
 {
   CCGSubSurfCalcSubdivData *data = userdata;
 
@@ -678,7 +686,7 @@ static void ccgSubSurf__calcSubdivLevel(CCGSubSurf *ss,
   };
 
   {
-    ParallelRangeSettings settings;
+    TaskParallelSettings settings;
     BLI_parallel_range_settings_defaults(&settings);
     settings.min_iter_per_thread = CCG_TASK_LIMIT;
     BLI_task_parallel_range(0,
@@ -763,8 +771,9 @@ static void ccgSubSurf__calcSubdivLevel(CCGSubSurf *ss,
       CCGEdge *e = v->edges[j];
       float sharpness = EDGE_getSharpness(e, curLvl);
 
-      if (seam && _edge_isBoundary(e))
+      if (seam && _edge_isBoundary(e)) {
         seamEdges++;
+      }
 
       if (sharpness != 0.0f) {
         sharpCount++;
@@ -782,8 +791,9 @@ static void ccgSubSurf__calcSubdivLevel(CCGSubSurf *ss,
       }
     }
 
-    if (seamEdges < 2 || seamEdges != v->numEdges)
+    if (seamEdges < 2 || seamEdges != v->numEdges) {
       seam = 0;
+    }
 
     if (!v->numEdges || ss->meshIFC.simpleSubdiv) {
       VertDataCopy(nCo, co, ss);
@@ -846,8 +856,9 @@ static void ccgSubSurf__calcSubdivLevel(CCGSubSurf *ss,
         float sharpness = EDGE_getSharpness(e, curLvl);
 
         if (seam) {
-          if (_edge_isBoundary(e))
+          if (_edge_isBoundary(e)) {
             VertDataAdd(q, _edge_getCoVert(e, v, curLvl, 1, vertDataSize), ss);
+          }
         }
         else if (sharpness != 0.0f) {
           VertDataAdd(q, _edge_getCoVert(e, v, curLvl, 1, vertDataSize), ss);
@@ -975,7 +986,7 @@ static void ccgSubSurf__calcSubdivLevel(CCGSubSurf *ss,
   }
 
   {
-    ParallelRangeSettings settings;
+    TaskParallelSettings settings;
     BLI_parallel_range_settings_defaults(&settings);
     settings.min_iter_per_thread = CCG_TASK_LIMIT;
     BLI_task_parallel_range(0,
@@ -996,7 +1007,7 @@ static void ccgSubSurf__calcSubdivLevel(CCGSubSurf *ss,
   }
 
   {
-    ParallelRangeSettings settings;
+    TaskParallelSettings settings;
     BLI_parallel_range_settings_defaults(&settings);
     settings.min_iter_per_thread = CCG_TASK_LIMIT;
     BLI_task_parallel_range(
@@ -1104,8 +1115,9 @@ void ccgSubSurf__sync_legacy(CCGSubSurf *ss)
       CCGEdge *e = v->edges[i];
       float sharpness = EDGE_getSharpness(e, curLvl);
 
-      if (seam && _edge_isBoundary(e))
+      if (seam && _edge_isBoundary(e)) {
         seamEdges++;
+      }
 
       if (sharpness != 0.0f) {
         sharpCount++;
@@ -1123,8 +1135,9 @@ void ccgSubSurf__sync_legacy(CCGSubSurf *ss)
       }
     }
 
-    if (seamEdges < 2 || seamEdges != v->numEdges)
+    if (seamEdges < 2 || seamEdges != v->numEdges) {
       seam = 0;
+    }
 
     if (!v->numEdges || ss->meshIFC.simpleSubdiv) {
       VertDataCopy(nCo, co, ss);
@@ -1267,13 +1280,15 @@ void ccgSubSurf__sync_legacy(CCGSubSurf *ss)
     }
   }
 
-  for (curLvl = 1; curLvl < subdivLevels; curLvl++)
+  for (curLvl = 1; curLvl < subdivLevels; curLvl++) {
     ccgSubSurf__calcSubdivLevel(
         ss, effectedV, effectedE, effectedF, numEffectedV, numEffectedE, numEffectedF, curLvl);
+  }
 
-  if (ss->calcVertNormals)
+  if (ss->calcVertNormals) {
     ccgSubSurf__calcVertNormals(
         ss, effectedV, effectedE, effectedF, numEffectedV, numEffectedE, numEffectedF);
+  }
 
   for (ptrIdx = 0; ptrIdx < numEffectedV; ptrIdx++) {
     CCGVert *v = effectedV[ptrIdx];
@@ -1303,24 +1318,29 @@ CCGError ccgSubSurf_updateNormals(CCGSubSurf *ss, CCGFace **effectedF, int numEf
   int i, numEffectedV, numEffectedE, freeF;
 
   ccgSubSurf__allFaces(ss, &effectedF, &numEffectedF, &freeF);
-  ccgSubSurf__effectedFaceNeighbours(
+  ccgSubSurf__effectedFaceNeighbors(
       ss, effectedF, numEffectedF, &effectedV, &numEffectedV, &effectedE, &numEffectedE);
 
-  if (ss->calcVertNormals)
+  if (ss->calcVertNormals) {
     ccgSubSurf__calcVertNormals(
         ss, effectedV, effectedE, effectedF, numEffectedV, numEffectedE, numEffectedF);
+  }
 
-  for (i = 0; i < numEffectedV; i++)
+  for (i = 0; i < numEffectedV; i++) {
     effectedV[i]->flags = 0;
-  for (i = 0; i < numEffectedE; i++)
+  }
+  for (i = 0; i < numEffectedE; i++) {
     effectedE[i]->flags = 0;
-  for (i = 0; i < numEffectedF; i++)
+  }
+  for (i = 0; i < numEffectedF; i++) {
     effectedF[i]->flags = 0;
+  }
 
   MEM_freeN(effectedE);
   MEM_freeN(effectedV);
-  if (freeF)
+  if (freeF) {
     MEM_freeN(effectedF);
+  }
 
   return eCCGError_None;
 }
@@ -1336,7 +1356,7 @@ CCGError ccgSubSurf_updateLevels(CCGSubSurf *ss, int lvl, CCGFace **effectedF, i
   int curLvl, subdivLevels = ss->subdivLevels;
 
   ccgSubSurf__allFaces(ss, &effectedF, &numEffectedF, &freeF);
-  ccgSubSurf__effectedFaceNeighbours(
+  ccgSubSurf__effectedFaceNeighbors(
       ss, effectedF, numEffectedF, &effectedV, &numEffectedV, &effectedE, &numEffectedE);
 
   for (curLvl = lvl; curLvl < subdivLevels; curLvl++) {
@@ -1344,17 +1364,21 @@ CCGError ccgSubSurf_updateLevels(CCGSubSurf *ss, int lvl, CCGFace **effectedF, i
         ss, effectedV, effectedE, effectedF, numEffectedV, numEffectedE, numEffectedF, curLvl);
   }
 
-  for (i = 0; i < numEffectedV; i++)
+  for (i = 0; i < numEffectedV; i++) {
     effectedV[i]->flags = 0;
-  for (i = 0; i < numEffectedE; i++)
+  }
+  for (i = 0; i < numEffectedE; i++) {
     effectedE[i]->flags = 0;
-  for (i = 0; i < numEffectedF; i++)
+  }
+  for (i = 0; i < numEffectedF; i++) {
     effectedF[i]->flags = 0;
+  }
 
   MEM_freeN(effectedE);
   MEM_freeN(effectedV);
-  if (freeF)
+  if (freeF) {
     MEM_freeN(effectedF);
+  }
 
   return eCCGError_None;
 }

@@ -25,17 +25,16 @@ class MemoryBuffer;
 #include "COM_MemoryProxy.h"
 #include "COM_SocketReader.h"
 
-extern "C" {
 #include "BLI_math.h"
 #include "BLI_rect.h"
-}
 
 /**
  * \brief state of a memory buffer
  * \ingroup Memory
  */
 typedef enum MemoryBufferState {
-  /** \brief memory has been allocated on creator device and CPU machine, but kernel has not been executed */
+  /** \brief memory has been allocated on creator device and CPU machine,
+   * but kernel has not been executed */
   COM_MB_ALLOCATED = 1,
   /** \brief memory is available for use, content has been created */
   COM_MB_AVAILABLE = 2,
@@ -72,7 +71,7 @@ class MemoryBuffer {
   rcti m_rect;
 
   /**
-   * brief refers to the chunknumber within the executiongroup where related to the MemoryProxy
+   * brief refers to the chunk-number within the execution-group where related to the MemoryProxy
    * \see memoryProxy
    */
   unsigned int m_chunkNumber;
@@ -158,10 +157,12 @@ class MemoryBuffer {
       case COM_MB_CLIP:
         break;
       case COM_MB_EXTEND:
-        if (x < 0)
+        if (x < 0) {
           x = 0;
-        if (x >= w)
+        }
+        if (x >= w) {
           x = w;
+        }
         break;
       case COM_MB_REPEAT:
         x = (x >= 0.0f ? (x % w) : (x % w) + w);
@@ -172,10 +173,12 @@ class MemoryBuffer {
       case COM_MB_CLIP:
         break;
       case COM_MB_EXTEND:
-        if (y < 0)
+        if (y < 0) {
           y = 0;
-        if (y >= h)
+        }
+        if (y >= h) {
           y = h;
+        }
         break;
       case COM_MB_REPEAT:
         y = (y >= 0.0f ? (y % h) : (y % h) + h);
@@ -197,10 +200,12 @@ class MemoryBuffer {
       case COM_MB_CLIP:
         break;
       case COM_MB_EXTEND:
-        if (x < 0)
+        if (x < 0) {
           x = 0.0f;
-        if (x >= w)
+        }
+        if (x >= w) {
           x = w;
+        }
         break;
       case COM_MB_REPEAT:
         x = fmodf(x, w);
@@ -211,10 +216,12 @@ class MemoryBuffer {
       case COM_MB_CLIP:
         break;
       case COM_MB_EXTEND:
-        if (y < 0)
+        if (y < 0) {
           y = 0.0f;
-        if (y >= h)
+        }
+        if (y >= h) {
           y = h;
+        }
         break;
       case COM_MB_REPEAT:
         y = fmodf(y, h);

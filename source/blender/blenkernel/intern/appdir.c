@@ -20,19 +20,20 @@
  * Access to application level directories.
  */
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 
-#include "BLI_utildefines.h"
 #include "BLI_fileops.h"
 #include "BLI_fileops_types.h"
 #include "BLI_listbase.h"
 #include "BLI_path_util.h"
 #include "BLI_string.h"
+#include "BLI_string_utf8.h"
+#include "BLI_utildefines.h"
 
-#include "BKE_blender_version.h"
 #include "BKE_appdir.h" /* own include */
+#include "BKE_blender_version.h"
 
 #include "GHOST_Path-api.h"
 
@@ -48,15 +49,16 @@
 #    undef _WIN32_IE
 #  endif
 #  define _WIN32_IE 0x0501
-#  include <windows.h>
-#  include <shlobj.h>
 #  include "BLI_winstuff.h"
+#  include <shlobj.h>
+#  include <windows.h>
 #else /* non windows */
 #  ifdef WITH_BINRELOC
 #    include "binreloc.h"
 #  endif
-#  include <unistd.h> /* mkdtemp on OSX (and probably all *BSD?), not worth making specific check for this OS. */
-#endif                /* WIN32 */
+/* #mkdtemp on OSX (and probably all *BSD?), not worth making specific check for this OS. */
+#  include <unistd.h>
+#endif /* WIN32 */
 
 /* local */
 static CLG_LogRef LOG = {"bke.appdir"};
@@ -73,8 +75,9 @@ const char *BKE_appdir_folder_default(void)
 #ifndef WIN32
   const char *const xdg_documents_dir = BLI_getenv("XDG_DOCUMENTS_DIR");
 
-  if (xdg_documents_dir)
+  if (xdg_documents_dir) {
     return xdg_documents_dir;
+  }
 
   return BLI_getenv("HOME");
 #else  /* Windows */
@@ -83,8 +86,9 @@ const char *BKE_appdir_folder_default(void)
 
   /* Check for %HOME% env var */
   if (uput_getenv("HOME", documentfolder, MAXPATHLEN)) {
-    if (BLI_is_dir(documentfolder))
+    if (BLI_is_dir(documentfolder)) {
       return documentfolder;
+    }
   }
 
   /* add user profile support for WIN 2K / NT.
@@ -95,8 +99,9 @@ const char *BKE_appdir_folder_default(void)
   hResult = SHGetFolderPath(NULL, CSIDL_PERSONAL, NULL, SHGFP_TYPE_CURRENT, documentfolder);
 
   if (hResult == S_OK) {
-    if (BLI_is_dir(documentfolder))
+    if (BLI_is_dir(documentfolder)) {
       return documentfolder;
+    }
   }
 
   return NULL;
@@ -105,7 +110,7 @@ const char *BKE_appdir_folder_default(void)
 
 // #define PATH_DEBUG
 
-/* returns a formatted representation of the specified version number. Non-reentrant! */
+/* returns a formatted representation of the specified version number. Non-re-entrant! */
 static char *blender_version_decimal(const int ver)
 {
   static char version_str[5];
@@ -115,7 +120,7 @@ static char *blender_version_decimal(const int ver)
 }
 
 /**
- * Concatenates path_base, (optional) path_sep and (optional) folder_name into targetpath,
+ * Concatenates path_base, (optional) path_sep and (optional) folder_name into \a targetpath,
  * returning true if result points to a directory.
  */
 static bool test_path(char *targetpath,
@@ -133,14 +138,14 @@ static bool test_path(char *targetpath,
     BLI_strncpy(tmppath, path_base, sizeof(tmppath));
   }
 
-  /* rare cases folder_name is omitted (when looking for ~/.config/blender/2.xx dir only) */
+  /* Rare cases folder_name is omitted (when looking for `~/.config/blender/2.xx` dir only). */
   if (folder_name) {
     BLI_join_dirfile(targetpath, targetpath_len, tmppath, folder_name);
   }
   else {
     BLI_strncpy(targetpath, tmppath, targetpath_len);
   }
-  /* FIXME: why is "//" on front of tmppath expanded to "/" (by BLI_join_dirfile)
+  /* FIXME: why is "//" on front of \a tmppath expanded to "/" (by BLI_join_dirfile)
    * if folder_name is specified but not otherwise? */
 
   if (BLI_is_dir(targetpath)) {
@@ -149,13 +154,12 @@ static bool test_path(char *targetpath,
 #endif
     return true;
   }
-  else {
+
 #ifdef PATH_DEBUG
-    printf("\t%s missing: %s\n", __func__, targetpath);
+  printf("\t%s missing: %s\n", __func__, targetpath);
 #endif
-    //targetpath[0] = '\0';
-    return false;
-  }
+  // targetpath[0] = '\0';
+  return false;
 }
 
 /**
@@ -165,8 +169,9 @@ static bool test_path(char *targetpath,
 static bool test_env_path(char *path, const char *envvar)
 {
   const char *env = envvar ? BLI_getenv(envvar) : NULL;
-  if (!env)
+  if (!env) {
     return false;
+  }
 
   if (BLI_is_dir(env)) {
     BLI_strncpy(path, env, FILE_MAX);
@@ -175,18 +180,17 @@ static bool test_env_path(char *path, const char *envvar)
 #endif
     return true;
   }
-  else {
-    path[0] = '\0';
+
+  path[0] = '\0';
 #ifdef PATH_DEBUG
-    printf("\t%s env %s missing: %s\n", __func__, envvar, env);
+  printf("\t%s env %s missing: %s\n", __func__, envvar, env);
 #endif
-    return false;
-  }
+  return false;
 }
 
 /**
  * Constructs in \a targetpath the name of a directory relative to a version-specific
- * subdirectory in the parent directory of the Blender executable.
+ * sub-directory in the parent directory of the Blender executable.
  *
  * \param targetpath: String to return path
  * \param folder_name: Optional folder name within version-specific directory
@@ -218,13 +222,15 @@ static bool get_path_local(char *targetpath,
     relfolder[0] = '\0';
   }
 
-  /* try EXECUTABLE_DIR/2.5x/folder_name - new default directory for local blender installed files */
+  /* Try EXECUTABLE_DIR/2.5x/folder_name -
+   * new default directory for local blender installed files. */
 #ifdef __APPLE__
-  /* due new codesign situation in OSX > 10.9.5 we must move the blender_version dir with contents to Resources */
+  /* Due new codesign situation in OSX > 10.9.5
+   * we must move the blender_version dir with contents to Resources. */
   char osx_resourses[FILE_MAX];
   BLI_snprintf(osx_resourses, sizeof(osx_resourses), "%s../Resources", bprogdir);
   /* Remove the '/../' added above. */
-  BLI_cleanup_path(NULL, osx_resourses);
+  BLI_path_normalize(NULL, osx_resourses);
   return test_path(
       targetpath, targetpath_len, osx_resourses, blender_version_decimal(ver), relfolder);
 #else
@@ -264,10 +270,8 @@ static bool get_path_environment(char *targetpath,
     if (subfolder_name) {
       return test_path(targetpath, targetpath_len, user_path, NULL, subfolder_name);
     }
-    else {
-      BLI_strncpy(targetpath, user_path, FILE_MAX);
-      return true;
-    }
+    BLI_strncpy(targetpath, user_path, FILE_MAX);
+    return true;
   }
   return false;
 }
@@ -292,10 +296,8 @@ static bool get_path_environment_notest(char *targetpath,
       BLI_join_dirfile(targetpath, targetpath_len, user_path, subfolder_name);
       return true;
     }
-    else {
-      BLI_strncpy(targetpath, user_path, FILE_MAX);
-      return true;
-    }
+    BLI_strncpy(targetpath, user_path, FILE_MAX);
+    return true;
   }
   return false;
 }
@@ -305,7 +307,7 @@ static bool get_path_environment_notest(char *targetpath,
  * \param targetpath: String to return path
  * \param folder_name: default name of folder within user area
  * \param subfolder_name: optional name of subfolder within folder
- * \param ver: Blender version, used to construct a subdirectory name
+ * \param ver: Blender version, used to construct a sub-directory name
  * \return true if it was able to construct such a path.
  */
 static bool get_path_user(char *targetpath,
@@ -324,11 +326,13 @@ static bool get_path_user(char *targetpath,
   user_path[0] = '\0';
 
   user_base_path = (const char *)GHOST_getUserDir(ver, blender_version_decimal(ver));
-  if (user_base_path)
+  if (user_base_path) {
     BLI_strncpy(user_path, user_base_path, FILE_MAX);
+  }
 
-  if (!user_path[0])
+  if (!user_path[0]) {
     return false;
+  }
 
 #ifdef PATH_DEBUG
   printf("%s: %s\n", __func__, user_path);
@@ -337,9 +341,8 @@ static bool get_path_user(char *targetpath,
   if (subfolder_name) {
     return test_path(targetpath, targetpath_len, user_path, folder_name, subfolder_name);
   }
-  else {
-    return test_path(targetpath, targetpath_len, user_path, NULL, folder_name);
-  }
+
+  return test_path(targetpath, targetpath_len, user_path, NULL, folder_name);
 }
 
 /**
@@ -347,9 +350,9 @@ static bool get_path_user(char *targetpath,
  *
  * \param targetpath: String to return path
  * \param folder_name: default name of folder within installation area
- * \param subfolder_name: optional name of subfolder within folder
- * \param ver: Blender version, used to construct a subdirectory name
- * \return  true if it was able to construct such a path.
+ * \param subfolder_name: optional name of sub-folder within folder
+ * \param ver: Blender version, used to construct a sub-directory name
+ * \return true if it was able to construct such a path.
  */
 static bool get_path_system(char *targetpath,
                             size_t targetpath_len,
@@ -375,11 +378,13 @@ static bool get_path_system(char *targetpath,
 
   system_path[0] = '\0';
   system_base_path = (const char *)GHOST_getSystemDir(ver, blender_version_decimal(ver));
-  if (system_base_path)
+  if (system_base_path) {
     BLI_strncpy(system_path, system_base_path, FILE_MAX);
+  }
 
-  if (!system_path[0])
+  if (!system_path[0]) {
     return false;
+  }
 
 #ifdef PATH_DEBUG
   printf("%s: %s\n", __func__, system_path);
@@ -389,10 +394,9 @@ static bool get_path_system(char *targetpath,
     /* try $BLENDERPATH/folder_name/subfolder_name */
     return test_path(targetpath, targetpath_len, system_path, folder_name, subfolder_name);
   }
-  else {
-    /* try $BLENDERPATH/folder_name */
-    return test_path(targetpath, targetpath_len, system_path, NULL, folder_name);
-  }
+
+  /* try $BLENDERPATH/folder_name */
+  return test_path(targetpath, targetpath_len, system_path, NULL, folder_name);
 }
 
 /**
@@ -411,71 +415,93 @@ const char *BKE_appdir_folder_id_ex(const int folder_id,
 
   switch (folder_id) {
     case BLENDER_DATAFILES: /* general case */
-      if (get_path_environment(path, path_len, subfolder, "BLENDER_USER_DATAFILES"))
+      if (get_path_environment(path, path_len, subfolder, "BLENDER_USER_DATAFILES")) {
         break;
-      if (get_path_user(path, path_len, "datafiles", subfolder, ver))
+      }
+      if (get_path_user(path, path_len, "datafiles", subfolder, ver)) {
         break;
-      if (get_path_environment(path, path_len, subfolder, "BLENDER_SYSTEM_DATAFILES"))
+      }
+      if (get_path_environment(path, path_len, subfolder, "BLENDER_SYSTEM_DATAFILES")) {
         break;
-      if (get_path_local(path, path_len, "datafiles", subfolder, ver))
+      }
+      if (get_path_local(path, path_len, "datafiles", subfolder, ver)) {
         break;
-      if (get_path_system(path, path_len, "datafiles", subfolder, ver))
+      }
+      if (get_path_system(path, path_len, "datafiles", subfolder, ver)) {
         break;
+      }
       return NULL;
 
     case BLENDER_USER_DATAFILES:
-      if (get_path_environment(path, path_len, subfolder, "BLENDER_USER_DATAFILES"))
+      if (get_path_environment(path, path_len, subfolder, "BLENDER_USER_DATAFILES")) {
         break;
-      if (get_path_user(path, path_len, "datafiles", subfolder, ver))
+      }
+      if (get_path_user(path, path_len, "datafiles", subfolder, ver)) {
         break;
+      }
       return NULL;
 
     case BLENDER_SYSTEM_DATAFILES:
-      if (get_path_environment(path, path_len, subfolder, "BLENDER_SYSTEM_DATAFILES"))
+      if (get_path_environment(path, path_len, subfolder, "BLENDER_SYSTEM_DATAFILES")) {
         break;
-      if (get_path_system(path, path_len, "datafiles", subfolder, ver))
+      }
+      if (get_path_system(path, path_len, "datafiles", subfolder, ver)) {
         break;
-      if (get_path_local(path, path_len, "datafiles", subfolder, ver))
+      }
+      if (get_path_local(path, path_len, "datafiles", subfolder, ver)) {
         break;
+      }
       return NULL;
 
     case BLENDER_USER_AUTOSAVE:
-      if (get_path_environment(path, path_len, subfolder, "BLENDER_USER_DATAFILES"))
+      if (get_path_environment(path, path_len, subfolder, "BLENDER_USER_DATAFILES")) {
         break;
-      if (get_path_user(path, path_len, "autosave", subfolder, ver))
+      }
+      if (get_path_user(path, path_len, "autosave", subfolder, ver)) {
         break;
+      }
       return NULL;
 
     case BLENDER_USER_CONFIG:
-      if (get_path_environment(path, path_len, subfolder, "BLENDER_USER_CONFIG"))
+      if (get_path_environment(path, path_len, subfolder, "BLENDER_USER_CONFIG")) {
         break;
-      if (get_path_user(path, path_len, "config", subfolder, ver))
+      }
+      if (get_path_user(path, path_len, "config", subfolder, ver)) {
         break;
+      }
       return NULL;
 
     case BLENDER_USER_SCRIPTS:
-      if (get_path_environment(path, path_len, subfolder, "BLENDER_USER_SCRIPTS"))
+      if (get_path_environment(path, path_len, subfolder, "BLENDER_USER_SCRIPTS")) {
         break;
-      if (get_path_user(path, path_len, "scripts", subfolder, ver))
+      }
+      if (get_path_user(path, path_len, "scripts", subfolder, ver)) {
         break;
+      }
       return NULL;
 
     case BLENDER_SYSTEM_SCRIPTS:
-      if (get_path_environment(path, path_len, subfolder, "BLENDER_SYSTEM_SCRIPTS"))
+      if (get_path_environment(path, path_len, subfolder, "BLENDER_SYSTEM_SCRIPTS")) {
         break;
-      if (get_path_system(path, path_len, "scripts", subfolder, ver))
+      }
+      if (get_path_system(path, path_len, "scripts", subfolder, ver)) {
         break;
-      if (get_path_local(path, path_len, "scripts", subfolder, ver))
+      }
+      if (get_path_local(path, path_len, "scripts", subfolder, ver)) {
         break;
+      }
       return NULL;
 
     case BLENDER_SYSTEM_PYTHON:
-      if (get_path_environment(path, path_len, subfolder, "BLENDER_SYSTEM_PYTHON"))
+      if (get_path_environment(path, path_len, subfolder, "BLENDER_SYSTEM_PYTHON")) {
         break;
-      if (get_path_system(path, path_len, "python", subfolder, ver))
+      }
+      if (get_path_system(path, path_len, "python", subfolder, ver)) {
         break;
-      if (get_path_local(path, path_len, "python", subfolder, ver))
+      }
+      if (get_path_local(path, path_len, "python", subfolder, ver)) {
         break;
+      }
       return NULL;
 
     default:
@@ -502,23 +528,27 @@ const char *BKE_appdir_folder_id_user_notest(const int folder_id, const char *su
 
   switch (folder_id) {
     case BLENDER_USER_DATAFILES:
-      if (get_path_environment_notest(path, sizeof(path), subfolder, "BLENDER_USER_DATAFILES"))
+      if (get_path_environment_notest(path, sizeof(path), subfolder, "BLENDER_USER_DATAFILES")) {
         break;
+      }
       get_path_user(path, sizeof(path), "datafiles", subfolder, ver);
       break;
     case BLENDER_USER_CONFIG:
-      if (get_path_environment_notest(path, sizeof(path), subfolder, "BLENDER_USER_CONFIG"))
+      if (get_path_environment_notest(path, sizeof(path), subfolder, "BLENDER_USER_CONFIG")) {
         break;
+      }
       get_path_user(path, sizeof(path), "config", subfolder, ver);
       break;
     case BLENDER_USER_AUTOSAVE:
-      if (get_path_environment_notest(path, sizeof(path), subfolder, "BLENDER_USER_AUTOSAVE"))
+      if (get_path_environment_notest(path, sizeof(path), subfolder, "BLENDER_USER_AUTOSAVE")) {
         break;
+      }
       get_path_user(path, sizeof(path), "autosave", subfolder, ver);
       break;
     case BLENDER_USER_SCRIPTS:
-      if (get_path_environment_notest(path, sizeof(path), subfolder, "BLENDER_USER_SCRIPTS"))
+      if (get_path_environment_notest(path, sizeof(path), subfolder, "BLENDER_USER_SCRIPTS")) {
         break;
+      }
       get_path_user(path, sizeof(path), "scripts", subfolder, ver);
       break;
     default:
@@ -544,15 +574,17 @@ const char *BKE_appdir_folder_id_create(const int folder_id, const char *subfold
             BLENDER_USER_DATAFILES,
             BLENDER_USER_CONFIG,
             BLENDER_USER_SCRIPTS,
-            BLENDER_USER_AUTOSAVE))
+            BLENDER_USER_AUTOSAVE)) {
     return NULL;
+  }
 
   path = BKE_appdir_folder_id(folder_id, subfolder);
 
   if (!path) {
     path = BKE_appdir_folder_id_user_notest(folder_id, subfolder);
-    if (path)
+    if (path) {
       BLI_dir_create_recursive(path);
+    }
   }
 
   return path;
@@ -603,7 +635,7 @@ const char *BKE_appdir_folder_id_version(const int folder_id, const int ver, con
  * adds the correct extension (.com .exe etc) from
  * $PATHEXT if necessary. Also on Windows it translates
  * the name to its 8.3 version to prevent problems with
- * spaces and stuff. Final result is returned in fullname.
+ * spaces and stuff. Final result is returned in \a fullname.
  *
  * \param fullname: The full path and full name of the executable
  * (must be FILE_MAX minimum)
@@ -647,12 +679,12 @@ static void where_am_i(char *fullname, const size_t maxlen, const char *name)
 
     BLI_strncpy(fullname, name, maxlen);
     if (name[0] == '.') {
-      BLI_path_cwd(fullname, maxlen);
+      BLI_path_abs_from_cwd(fullname, maxlen);
 #ifdef _WIN32
       BLI_path_program_extensions_add_win32(fullname, maxlen);
 #endif
     }
-    else if (BLI_last_slash(name)) {
+    else if (BLI_path_slash_rfind(name)) {
       // full path
       BLI_strncpy(fullname, name, maxlen);
 #ifdef _WIN32
@@ -663,7 +695,7 @@ static void where_am_i(char *fullname, const size_t maxlen, const char *name)
       BLI_path_program_search(fullname, maxlen, name);
     }
     /* Remove "/./" and "/../" so string comparisons can be used on the path. */
-    BLI_cleanup_path(NULL, fullname);
+    BLI_path_normalize(NULL, fullname);
 
 #if defined(DEBUG)
     if (!STREQ(name, fullname)) {
@@ -799,6 +831,26 @@ bool BKE_appdir_app_template_id_search(const char *app_template, char *path, siz
   return false;
 }
 
+bool BKE_appdir_app_template_has_userpref(const char *app_template)
+{
+  /* Test if app template provides a userpref.blend.
+   * If not, we will share user preferences with the rest of Blender. */
+  if (!app_template && app_template[0]) {
+    return false;
+  }
+
+  char app_template_path[FILE_MAX];
+  if (!BKE_appdir_app_template_id_search(
+          app_template, app_template_path, sizeof(app_template_path))) {
+    return false;
+  }
+
+  char userpref_path[FILE_MAX];
+  BLI_path_join(
+      userpref_path, sizeof(userpref_path), app_template_path, BLENDER_USERPREF_FILE, NULL);
+  return BLI_exists(userpref_path);
+}
+
 void BKE_appdir_app_templates(ListBase *templates)
 {
   BLI_listbase_clear(templates);
@@ -879,7 +931,7 @@ static void where_is_temp(char *fullname, char *basename, const size_t maxlen, c
   }
   else {
     /* add a trailing slash if needed */
-    BLI_add_slash(fullname);
+    BLI_path_slash_ensure(fullname);
 #ifdef WIN32
     if (userdir && userdir != fullname) {
       /* also set user pref to show %TEMP%. /tmp/ is just plain confusing for Windows users. */
@@ -907,7 +959,7 @@ static void where_is_temp(char *fullname, char *basename, const size_t maxlen, c
     if (BLI_is_dir(tmp_name)) {
       BLI_strncpy(basename, fullname, maxlen);
       BLI_strncpy(fullname, tmp_name, maxlen);
-      BLI_add_slash(fullname);
+      BLI_path_slash_ensure(fullname);
     }
     else {
       CLOG_WARN(&LOG,
@@ -923,7 +975,7 @@ static void where_is_temp(char *fullname, char *basename, const size_t maxlen, c
 /**
  * Sets btempdir_base to userdir if specified and is a valid directory, otherwise
  * chooses a suitable OS-specific temporary directory.
- * Sets btempdir_session to a mkdtemp-generated sub-dir of btempdir_base.
+ * Sets btempdir_session to a #mkdtemp generated sub-dir of btempdir_base.
  *
  * \note On Window userdir will be set to the temporary directory!
  */
@@ -964,4 +1016,25 @@ void BKE_tempdir_session_purge(void)
   if (btempdir_session[0] && BLI_is_dir(btempdir_session)) {
     BLI_delete(btempdir_session, true, true);
   }
+}
+
+/* Gets a good default directory for fonts */
+
+bool BKE_appdir_font_folder_default(
+    /* This parameter can only be `const` on non-windows platforms.
+     * NOLINTNEXTLINE: readability-non-const-parameter. */
+    char *dir)
+{
+  bool success = false;
+#ifdef WIN32
+  wchar_t wpath[FILE_MAXDIR];
+  success = SHGetSpecialFolderPathW(0, wpath, CSIDL_FONTS, 0);
+  if (success) {
+    wcscat(wpath, L"\\");
+    BLI_strncpy_wchar_as_utf8(dir, wpath, FILE_MAXDIR);
+  }
+#endif
+  /* TODO: Values for other platforms. */
+  UNUSED_VARS(dir);
+  return success;
 }

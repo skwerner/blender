@@ -33,7 +33,8 @@ enum FSMenuInsert;
 struct FSMenu;
 struct FSMenuEntry;
 
-/** Inserts a new fsmenu entry with the given \a path.
+/**
+ * Inserts a new fsmenu entry with the given \a path.
  * Duplicate entries are not added.
  * \param flag: Options for inserting the entry.
  */
@@ -41,6 +42,7 @@ void fsmenu_insert_entry(struct FSMenu *fsmenu,
                          enum FSMenuCategory category,
                          const char *path,
                          const char *name,
+                         int icon,
                          const enum FSMenuInsert flag);
 
 /** Refresh 'valid' status of given menu entry */
@@ -68,7 +70,7 @@ void fsmenu_free(void);
 void fsmenu_refresh_system_category(struct FSMenu *fsmenu);
 
 /** Refresh 'valid' status of all menu entries */
-void fsmenu_refresh_bookmarks_status(struct FSMenu *fsmenu);
+void fsmenu_refresh_bookmarks_status(struct wmWindowManager *wm, struct FSMenu *fsmenu);
 
 /** Get active index based on given directory. */
 int fsmenu_get_active_indices(struct FSMenu *fsmenu,

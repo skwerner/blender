@@ -24,17 +24,17 @@
  */
 
 #include "DNA_screen_types.h"
-#include "DNA_vec_types.h"
 #include "DNA_userdef_types.h"
+#include "DNA_vec_types.h"
 #include "DNA_windowmanager_types.h"
 
 #include "MEM_guardedalloc.h"
 
 #include "BLI_bitmap_draw_2d.h"
 #include "BLI_blenlib.h"
+#include "BLI_lasso_2d.h"
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
-#include "BLI_lasso_2d.h"
 
 #include "BKE_context.h"
 
@@ -51,18 +51,16 @@
 #include "BIF_glutil.h"
 
 /* context checked on having screen, window and area */
-wmGesture *WM_gesture_new(bContext *C, const wmEvent *event, int type)
+wmGesture *WM_gesture_new(wmWindow *window, const ARegion *region, const wmEvent *event, int type)
 {
   wmGesture *gesture = MEM_callocN(sizeof(wmGesture), "new gesture");
-  wmWindow *window = CTX_wm_window(C);
-  ARegion *ar = CTX_wm_region(C);
 
   BLI_addtail(&window->gesture, gesture);
 
   gesture->type = type;
   gesture->event_type = event->type;
-  gesture->winrct = ar->winrct;
-  gesture->userdata_free = true; /* Free if userdata is set. */
+  gesture->winrct = region->winrct;
+  gesture->user_data.use_free = true; /* Free if userdata is set. */
   gesture->modal_state = GESTURE_MODAL_NOP;
 
   if (ELEM(type,
@@ -97,27 +95,28 @@ wmGesture *WM_gesture_new(bContext *C, const wmEvent *event, int type)
   return gesture;
 }
 
-void WM_gesture_end(bContext *C, wmGesture *gesture)
+void WM_gesture_end(wmWindow *win, wmGesture *gesture)
 {
-  wmWindow *win = CTX_wm_window(C);
-
   if (win->tweak == gesture) {
     win->tweak = NULL;
   }
   BLI_remlink(&win->gesture, gesture);
   MEM_freeN(gesture->customdata);
-  if (gesture->userdata && gesture->userdata_free) {
-    MEM_freeN(gesture->userdata);
-  }
+  WM_generic_user_data_free(&gesture->user_data);
   MEM_freeN(gesture);
 }
 
-void WM_gestures_remove(bContext *C)
+void WM_gestures_free_all(wmWindow *win)
 {
-  wmWindow *win = CTX_wm_window(C);
-
   while (win->gesture.first) {
-    WM_gesture_end(C, win->gesture.first);
+    WM_gesture_end(win, win->gesture.first);
+  }
+}
+
+void WM_gestures_remove(wmWindow *win)
+{
+  while (win->gesture.first) {
+    WM_gesture_end(win, win->gesture.first);
   }
 }
 
@@ -130,15 +129,17 @@ bool WM_gesture_is_modal_first(const wmGesture *gesture)
 }
 
 /* tweak and line gestures */
-int wm_gesture_evaluate(wmGesture *gesture)
+int wm_gesture_evaluate(wmGesture *gesture, const wmEvent *event)
 {
   if (gesture->type == WM_GESTURE_TWEAK) {
     rcti *rect = gesture->customdata;
-    int dx = BLI_rcti_size_x(rect);
-    int dy = BLI_rcti_size_y(rect);
-    float tweak_threshold = U.tweak_threshold * U.dpi_fac;
-    if (abs(dx) + abs(dy) > tweak_threshold) {
-      int theta = round_fl_to_int(4.0f * atan2f((float)dy, (float)dx) / (float)M_PI);
+    const int delta[2] = {
+        BLI_rcti_size_x(rect),
+        BLI_rcti_size_y(rect),
+    };
+
+    if (WM_event_drag_test_with_delta(event, delta)) {
+      int theta = round_fl_to_int(4.0f * atan2f((float)delta[1], (float)delta[0]) / (float)M_PI);
       int val = EVT_GESTURE_W;
 
       if (theta == 0) {
@@ -165,14 +166,30 @@ int wm_gesture_evaluate(wmGesture *gesture)
 
 #if 0
       /* debug */
-      if (val == 1) printf("tweak north\n");
-      if (val == 2) printf("tweak north-east\n");
-      if (val == 3) printf("tweak east\n");
-      if (val == 4) printf("tweak south-east\n");
-      if (val == 5) printf("tweak south\n");
-      if (val == 6) printf("tweak south-west\n");
-      if (val == 7) printf("tweak west\n");
-      if (val == 8) printf("tweak north-west\n");
+      if (val == 1) {
+        printf("tweak north\n");
+      }
+      if (val == 2) {
+        printf("tweak north-east\n");
+      }
+      if (val == 3) {
+        printf("tweak east\n");
+      }
+      if (val == 4) {
+        printf("tweak south-east\n");
+      }
+      if (val == 5) {
+        printf("tweak south\n");
+      }
+      if (val == 6) {
+        printf("tweak south-west\n");
+      }
+      if (val == 7) {
+        printf("tweak west\n");
+      }
+      if (val == 8) {
+        printf("tweak north-west\n");
+      }
 #endif
       return val;
     }
@@ -192,13 +209,14 @@ static void wm_gesture_draw_line(wmGesture *gt)
   immBindBuiltinProgram(GPU_SHADER_2D_LINE_DASHED_UNIFORM_COLOR);
 
   float viewport_size[4];
-  glGetFloatv(GL_VIEWPORT, viewport_size);
+  GPU_viewport_size_get_f(viewport_size);
   immUniform2f("viewport_size", viewport_size[2], viewport_size[3]);
 
   immUniform1i("colors_len", 2); /* "advanced" mode */
   immUniformArray4fv(
       "colors", (float *)(float[][4]){{0.4f, 0.4f, 0.4f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, 2);
   immUniform1f("dash_width", 8.0f);
+  immUniform1f("dash_factor", 0.5f);
 
   float xmin = (float)rect->xmin;
   float ymin = (float)rect->ymin;
@@ -234,20 +252,22 @@ static void wm_gesture_draw_rect(wmGesture *gt)
   immBindBuiltinProgram(GPU_SHADER_2D_LINE_DASHED_UNIFORM_COLOR);
 
   float viewport_size[4];
-  glGetFloatv(GL_VIEWPORT, viewport_size);
+  GPU_viewport_size_get_f(viewport_size);
   immUniform2f("viewport_size", viewport_size[2], viewport_size[3]);
 
   immUniform1i("colors_len", 2); /* "advanced" mode */
   immUniformArray4fv(
       "colors", (float *)(float[][4]){{0.4f, 0.4f, 0.4f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, 2);
   immUniform1f("dash_width", 8.0f);
+  immUniform1f("dash_factor", 0.5f);
 
   imm_draw_box_wire_2d(
       shdr_pos, (float)rect->xmin, (float)rect->ymin, (float)rect->xmax, (float)rect->ymax);
 
   immUnbindProgram();
 
-  // wm_gesture_draw_line(gt); // draws a diagonal line in the lined box to test wm_gesture_draw_line
+  /* draws a diagonal line in the lined box to test wm_gesture_draw_line */
+  // wm_gesture_draw_line(gt);
 }
 
 static void wm_gesture_draw_circle(wmGesture *gt)
@@ -271,13 +291,14 @@ static void wm_gesture_draw_circle(wmGesture *gt)
   immBindBuiltinProgram(GPU_SHADER_2D_LINE_DASHED_UNIFORM_COLOR);
 
   float viewport_size[4];
-  glGetFloatv(GL_VIEWPORT, viewport_size);
+  GPU_viewport_size_get_f(viewport_size);
   immUniform2f("viewport_size", viewport_size[2], viewport_size[3]);
 
   immUniform1i("colors_len", 2); /* "advanced" mode */
   immUniformArray4fv(
       "colors", (float *)(float[][4]){{0.4f, 0.4f, 0.4f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, 2);
   immUniform1f("dash_width", 4.0f);
+  immUniform1f("dash_factor", 0.5f);
 
   imm_draw_circle_wire_2d(shdr_pos, (float)rect->xmin, (float)rect->ymin, (float)rect->xmax, 40);
 
@@ -299,24 +320,24 @@ static void draw_filled_lasso_px_cb(int x, int x_end, int y, void *user_data)
 static void draw_filled_lasso(wmGesture *gt)
 {
   const short *lasso = (short *)gt->customdata;
-  const int tot = gt->points;
-  int(*moves)[2] = MEM_mallocN(sizeof(*moves) * (tot + 1), __func__);
+  const int mcoords_len = gt->points;
+  int(*mcoords)[2] = MEM_mallocN(sizeof(*mcoords) * (mcoords_len + 1), __func__);
   int i;
   rcti rect;
   float red[4] = {1.0f, 0.0f, 0.0f, 0.0f};
 
-  for (i = 0; i < tot; i++, lasso += 2) {
-    moves[i][0] = lasso[0];
-    moves[i][1] = lasso[1];
+  for (i = 0; i < mcoords_len; i++, lasso += 2) {
+    mcoords[i][0] = lasso[0];
+    mcoords[i][1] = lasso[1];
   }
 
-  BLI_lasso_boundbox(&rect, (const int(*)[2])moves, tot);
+  BLI_lasso_boundbox(&rect, (const int(*)[2])mcoords, mcoords_len);
 
   BLI_rcti_translate(&rect, gt->winrct.xmin, gt->winrct.ymin);
   BLI_rcti_isect(&gt->winrct, &rect, &rect);
   BLI_rcti_translate(&rect, -gt->winrct.xmin, -gt->winrct.ymin);
 
-  /* highly unlikely this will fail, but could crash if (tot == 0) */
+  /* Highly unlikely this will fail, but could crash if (mcoords_len == 0). */
   if (BLI_rcti_is_empty(&rect) == false) {
     const int w = BLI_rcti_size_x(&rect);
     const int h = BLI_rcti_size_y(&rect);
@@ -327,24 +348,19 @@ static void draw_filled_lasso(wmGesture *gt)
                                   rect.ymin,
                                   rect.xmax,
                                   rect.ymax,
-                                  (const int(*)[2])moves,
-                                  tot,
+                                  (const int(*)[2])mcoords,
+                                  mcoords_len,
                                   draw_filled_lasso_px_cb,
                                   &lasso_fill_data);
 
     /* Additive Blending */
     GPU_blend(true);
-    glBlendFunc(GL_ONE, GL_ONE);
-
-    GLint unpack_alignment;
-    glGetIntegerv(GL_UNPACK_ALIGNMENT, &unpack_alignment);
-
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    GPU_blend_set_func(GPU_ONE, GPU_ONE);
 
     IMMDrawPixelsTexState state = immDrawPixelsTexSetup(GPU_SHADER_2D_IMAGE_SHUFFLE_COLOR);
     GPU_shader_bind(state.shader);
     GPU_shader_uniform_vector(
-        state.shader, GPU_shader_get_uniform_ensure(state.shader, "shuffle"), 4, 1, red);
+        state.shader, GPU_shader_get_uniform(state.shader, "shuffle"), 4, 1, red);
 
     immDrawPixelsTex(&state,
                      rect.xmin,
@@ -361,15 +377,13 @@ static void draw_filled_lasso(wmGesture *gt)
 
     GPU_shader_unbind();
 
-    glPixelStorei(GL_UNPACK_ALIGNMENT, unpack_alignment);
-
     MEM_freeN(pixel_buf);
 
     GPU_blend(false);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    GPU_blend_set_func(GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA);
   }
 
-  MEM_freeN(moves);
+  MEM_freeN(mcoords);
 }
 
 static void wm_gesture_draw_lasso(wmGesture *gt, bool filled)
@@ -394,13 +408,14 @@ static void wm_gesture_draw_lasso(wmGesture *gt, bool filled)
   immBindBuiltinProgram(GPU_SHADER_2D_LINE_DASHED_UNIFORM_COLOR);
 
   float viewport_size[4];
-  glGetFloatv(GL_VIEWPORT, viewport_size);
+  GPU_viewport_size_get_f(viewport_size);
   immUniform2f("viewport_size", viewport_size[2], viewport_size[3]);
 
   immUniform1i("colors_len", 2); /* "advanced" mode */
   immUniformArray4fv(
       "colors", (float *)(float[][4]){{0.4f, 0.4f, 0.4f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, 2);
   immUniform1f("dash_width", 2.0f);
+  immUniform1f("dash_factor", 0.5f);
 
   immBegin((gt->type == WM_GESTURE_LASSO) ? GPU_PRIM_LINE_LOOP : GPU_PRIM_LINE_STRIP, numverts);
 
@@ -427,13 +442,14 @@ static void wm_gesture_draw_cross(wmWindow *win, wmGesture *gt)
   immBindBuiltinProgram(GPU_SHADER_2D_LINE_DASHED_UNIFORM_COLOR);
 
   float viewport_size[4];
-  glGetFloatv(GL_VIEWPORT, viewport_size);
+  GPU_viewport_size_get_f(viewport_size);
   immUniform2f("viewport_size", viewport_size[2], viewport_size[3]);
 
   immUniform1i("colors_len", 2); /* "advanced" mode */
   immUniformArray4fv(
       "colors", (float *)(float[][4]){{0.4f, 0.4f, 0.4f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}, 2);
   immUniform1f("dash_width", 8.0f);
+  immUniform1f("dash_factor", 0.5f);
 
   immBegin(GPU_PRIM_LINES, 4);
 
@@ -471,8 +487,11 @@ void wm_gesture_draw(wmWindow *win)
     if (gt->type == WM_GESTURE_RECT) {
       wm_gesture_draw_rect(gt);
     }
-    //      else if (gt->type == WM_GESTURE_TWEAK)
-    //          wm_gesture_draw_line(gt);
+#if 0
+    else if (gt->type == WM_GESTURE_TWEAK) {
+      wm_gesture_draw_line(gt);
+    }
+#endif
     else if (gt->type == WM_GESTURE_CIRCLE) {
       wm_gesture_draw_circle(gt);
     }
@@ -496,9 +515,9 @@ void wm_gesture_draw(wmWindow *win)
   }
 }
 
-void wm_gesture_tag_redraw(bContext *C)
+void wm_gesture_tag_redraw(wmWindow *win)
 {
-  bScreen *screen = CTX_wm_screen(C);
+  bScreen *screen = WM_window_get_active_screen(win);
 
   if (screen) {
     screen->do_draw_gesture = true;

@@ -22,28 +22,18 @@
 /* **************** OUTPUT ******************** */
 
 static bNodeSocketTemplate sh_node_subsurface_scattering_in[] = {
-    {SOCK_RGBA, 1, N_("Color"), 0.8f, 0.8f, 0.8f, 1.0f, 0.0f, 1.0f},
-    {SOCK_FLOAT, 1, N_("Scale"), 1.0, 0.0f, 0.0f, 0.0f, 0.0f, 1000.0f},
-    {SOCK_VECTOR, 1, N_("Radius"), 1.0f, 0.2f, 0.1f, 0.0f, 0.0f, 100.0f},
-    {SOCK_FLOAT, 1, N_("Sharpness"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
-    {SOCK_FLOAT, 1, N_("Texture Blur"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
-    {SOCK_VECTOR,
-     1,
-     N_("Normal"),
-     0.0f,
-     0.0f,
-     0.0f,
-     1.0f,
-     -1.0f,
-     1.0f,
-     PROP_NONE,
-     SOCK_HIDE_VALUE},
-    {-1, 0, ""},
+    {SOCK_RGBA, N_("Color"), 0.8f, 0.8f, 0.8f, 1.0f, 0.0f, 1.0f},
+    {SOCK_FLOAT, N_("Scale"), 1.0, 0.0f, 0.0f, 0.0f, 0.0f, 1000.0f},
+    {SOCK_VECTOR, N_("Radius"), 1.0f, 0.2f, 0.1f, 0.0f, 0.0f, 100.0f, PROP_NONE, SOCK_COMPACT},
+    {SOCK_FLOAT, N_("Sharpness"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
+    {SOCK_FLOAT, N_("Texture Blur"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
+    {SOCK_VECTOR, N_("Normal"), 0.0f, 0.0f, 0.0f, 1.0f, -1.0f, 1.0f, PROP_NONE, SOCK_HIDE_VALUE},
+    {-1, ""},
 };
 
 static bNodeSocketTemplate sh_node_subsurface_scattering_out[] = {
-    {SOCK_SHADER, 0, N_("BSSRDF")},
-    {-1, 0, ""},
+    {SOCK_SHADER, N_("BSSRDF")},
+    {-1, ""},
 };
 
 static void node_shader_init_subsurface_scattering(bNodeTree *UNUSED(ntree), bNode *node)
@@ -57,12 +47,11 @@ static int node_shader_gpu_subsurface_scattering(GPUMaterial *mat,
                                                  GPUNodeStack *in,
                                                  GPUNodeStack *out)
 {
-  if (!in[5].link)
+  if (!in[5].link) {
     GPU_link(mat, "world_normals_get", &in[5].link);
+  }
 
-  GPU_material_flag_set(mat, GPU_MATFLAG_DIFFUSE | GPU_MATFLAG_SSS);
-
-  if (node->sss_id == 1) {
+  if (node->sss_id > 0) {
     bNodeSocket *socket = BLI_findlink(&node->original->inputs, 2);
     bNodeSocketValueRGBA *socket_data = socket->default_value;
     bNodeSocket *socket_sharp = BLI_findlink(&node->original->inputs, 3);
@@ -70,6 +59,10 @@ static int node_shader_gpu_subsurface_scattering(GPUMaterial *mat,
     /* For some reason it seems that the socket value is in ARGB format. */
     GPU_material_sss_profile_create(
         mat, &socket_data->value[1], &node->original->custom1, &socket_data_sharp->value);
+
+    /* sss_id is 0 only the node is not connected to any output.
+     * In this case flagging the material would trigger a bug (see T68736). */
+    GPU_material_flag_set(mat, GPU_MATFLAG_DIFFUSE | GPU_MATFLAG_SSS);
   }
 
   return GPU_stack_link(
@@ -83,10 +76,12 @@ static void node_shader_update_subsurface_scattering(bNodeTree *UNUSED(ntree), b
 
   for (sock = node->inputs.first; sock; sock = sock->next) {
     if (STREQ(sock->name, "Sharpness")) {
-      if (falloff == SHD_SUBSURFACE_CUBIC)
+      if (falloff == SHD_SUBSURFACE_CUBIC) {
         sock->flag &= ~SOCK_UNAVAIL;
-      else
+      }
+      else {
         sock->flag |= SOCK_UNAVAIL;
+      }
     }
   }
 }
@@ -104,7 +99,7 @@ void register_node_type_sh_subsurface_scattering(void)
   node_type_init(&ntype, node_shader_init_subsurface_scattering);
   node_type_storage(&ntype, "", NULL, NULL);
   node_type_gpu(&ntype, node_shader_gpu_subsurface_scattering);
-  node_type_update(&ntype, node_shader_update_subsurface_scattering, NULL);
+  node_type_update(&ntype, node_shader_update_subsurface_scattering);
 
   nodeRegisterType(&ntype);
 }

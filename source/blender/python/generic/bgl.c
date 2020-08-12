@@ -130,10 +130,17 @@
 #  define GLclampfP_def(number) Buffer *bgl_buffer##number
 #endif
 
+typedef struct BufferOrOffset {
+  Buffer *buffer;
+  void *offset;
+} BufferOrOffset;
+
 #define GLvoidP_str "O&"
-#define GLvoidP_var(number) ((bgl_buffer##number) ? (bgl_buffer##number)->buf.asvoid : NULL)
-#define GLvoidP_ref(number) BGL_BufferOrNoneConverter, &bgl_buffer##number
-#define GLvoidP_def(number) Buffer *bgl_buffer##number
+#define GLvoidP_var(number) \
+  ((bgl_buffer##number.buffer) ? (bgl_buffer##number.buffer)->buf.asvoid : \
+                                 (bgl_buffer##number.offset))
+#define GLvoidP_ref(number) BGL_BufferOrOffsetConverter, &bgl_buffer##number
+#define GLvoidP_def(number) BufferOrOffset bgl_buffer##number
 
 #define GLsizeiP_str "O!"
 #define GLsizeiP_var(number) (bgl_buffer##number)->buf.asvoid
@@ -160,19 +167,19 @@
  * so we use signed everything (even stuff that should be unsigned.
  */
 
-/* typedef unsigned int GLenum; */
+/* typedef uint GLenum; */
 #define GLenum_str "i"
 #define GLenum_var(num) bgl_var##num
 #define GLenum_ref(num) &bgl_var##num
 #define GLenum_def(num) /* unsigned */ int GLenum_var(num)
 
-/* typedef unsigned int GLboolean; */
+/* typedef uint GLboolean; */
 #define GLboolean_str "b"
 #define GLboolean_var(num) bgl_var##num
 #define GLboolean_ref(num) &bgl_var##num
 #define GLboolean_def(num) /* unsigned */ char GLboolean_var(num)
 
-/* typedef unsigned int GLbitfield; */
+/* typedef uint GLbitfield; */
 #define GLbitfield_str "i"
 #define GLbitfield_var(num) bgl_var##num
 #define GLbitfield_ref(num) &bgl_var##num
@@ -216,27 +223,27 @@
 #define GLintptr_ref(num) &bgl_var##num
 #define GLintptr_def(num) size_t GLintptr_var(num)
 
-/* typedef unsigned char GLubyte; */
+/* typedef uchar GLubyte; */
 #define GLubyte_str "B"
 #define GLubyte_var(num) bgl_var##num
 #define GLubyte_ref(num) &bgl_var##num
 #define GLubyte_def(num) /* unsigned */ char GLubyte_var(num)
 
 #if 0
-/* typedef unsigned short GLushort; */
+/* typedef ushort GLushort; */
 #  define GLushort_str "H"
 #  define GLushort_var(num) bgl_var##num
 #  define GLushort_ref(num) &bgl_var##num
 #  define GLushort_def(num) /* unsigned */ short GLushort_var(num)
 #endif
 
-/* typedef unsigned int GLuint; */
+/* typedef uint GLuint; */
 #define GLuint_str "I"
 #define GLuint_var(num) bgl_var##num
 #define GLuint_ref(num) &bgl_var##num
 #define GLuint_def(num) /* unsigned */ int GLuint_var(num)
 
-/* typedef unsigned int GLuint64; */
+/* typedef uint GLuint64; */
 #if 0
 #  define GLuint64_str "Q"
 #  define GLuint64_var(num) bgl_var##num
@@ -244,7 +251,7 @@
 #  define GLuint64_def(num) /* unsigned */ int GLuint64_var(num)
 #endif
 
-/* typedef unsigned int GLsync; */
+/* typedef uint GLsync; */
 #if 0
 #  define GLsync_str "I"
 #  define GLsync_var(num) bgl_var##num
@@ -377,7 +384,7 @@
 #define ret_set_GLint ret_int =
 #define ret_ret_GLint return PyLong_FromLong(ret_int)
 
-#define ret_def_GLuint unsigned int ret_uint
+#define ret_def_GLuint uint ret_uint
 #define ret_set_GLuint ret_uint =
 #define ret_ret_GLuint return PyLong_FromLong((long)ret_uint)
 
@@ -388,20 +395,20 @@
 #endif
 
 #if 0
-#  define ret_def_GLsync unsigned int ret_sync
+#  define ret_def_GLsync uint ret_sync
 #  define ret_set_GLsync ret_sync =
 #  define ret_ret_GLsync return PyLong_FromLong((long)ret_sync)
 #endif
 
-#define ret_def_GLenum unsigned int ret_uint
+#define ret_def_GLenum uint ret_uint
 #define ret_set_GLenum ret_uint =
 #define ret_ret_GLenum return PyLong_FromLong((long)ret_uint)
 
-#define ret_def_GLboolean unsigned char ret_bool
+#define ret_def_GLboolean uchar ret_bool
 #define ret_set_GLboolean ret_bool =
 #define ret_ret_GLboolean return PyLong_FromLong((long)ret_bool)
 
-#define ret_def_GLstring const unsigned char *ret_str
+#define ret_def_GLstring const uchar *ret_str
 #define ret_set_GLstring ret_str =
 
 #define ret_ret_GLstring \
@@ -480,7 +487,7 @@ static int gl_buffer_type_from_py_buffer(Py_buffer *pybuffer)
   return -1; /* UNKNOWN */
 }
 
-static bool compare_dimensions(int ndim, int *dim1, Py_ssize_t *dim2)
+static bool compare_dimensions(int ndim, const int *dim1, const Py_ssize_t *dim2)
 {
   for (int i = 0; i < ndim; i++) {
     if (dim1[i] != dim2[i]) {
@@ -569,7 +576,7 @@ static PyMethodDef Buffer_methods[] = {
 };
 
 static PyGetSetDef Buffer_getseters[] = {
-    {(char *)"dimensions", (getter)Buffer_dimensions, NULL, NULL, NULL},
+    {"dimensions", (getter)Buffer_dimensions, NULL, NULL, NULL},
     {NULL, NULL, NULL, NULL, NULL},
 };
 
@@ -688,15 +695,29 @@ Buffer *BGL_MakeBuffer(int type, int ndimensions, int *dimensions, void *initbuf
   return buffer;
 }
 
-/* Custom converter function so we can support a buffer or NULL. */
-static int BGL_BufferOrNoneConverter(PyObject *object, Buffer **buffer)
+/* Custom converter function so we can support a buffer, an integer or NULL.
+ * Many OpenGL API functions can accept both an actual pointer or an offset
+ * into a buffer that is already bound. */
+static int BGL_BufferOrOffsetConverter(PyObject *object, BufferOrOffset *buffer)
 {
   if (object == Py_None) {
-    *buffer = NULL;
+    buffer->buffer = NULL;
+    buffer->offset = NULL;
+    return 1;
+  }
+  else if (PyNumber_Check(object)) {
+    Py_ssize_t offset = PyNumber_AsSsize_t(object, PyExc_IndexError);
+    if (offset == -1 && PyErr_Occurred()) {
+      return 0;
+    }
+
+    buffer->buffer = NULL;
+    buffer->offset = (void *)offset;
     return 1;
   }
   else if (PyObject_TypeCheck(object, &BGL_bufferType)) {
-    *buffer = (Buffer *)object;
+    buffer->buffer = (Buffer *)object;
+    buffer->offset = NULL;
     return 1;
   }
   else {
@@ -1345,6 +1366,7 @@ BGL_Wrap(GenVertexArrays, void, (GLsizei, GLuintP));
 BGL_Wrap(GetStringi, GLstring, (GLenum, GLuint));
 BGL_Wrap(IsVertexArray, GLboolean, (GLuint));
 BGL_Wrap(RenderbufferStorage, void, (GLenum, GLenum, GLsizei, GLsizei));
+BGL_Wrap(VertexAttribIPointer, void, (GLuint, GLint, GLenum, GLsizei, GLvoidP));
 
 /* GL_VERSION_3_1 */
 BGL_Wrap(BindBufferBase, void, (GLenum, GLuint, GLuint));
@@ -1688,6 +1710,7 @@ PyObject *BPyInit_bgl(void)
     PY_MOD_ADD_METHOD(GetStringi);
     PY_MOD_ADD_METHOD(IsVertexArray);
     PY_MOD_ADD_METHOD(RenderbufferStorage);
+    PY_MOD_ADD_METHOD(VertexAttribIPointer);
   }
 
   /* GL_VERSION_3_1 */
@@ -2589,7 +2612,7 @@ PyObject *BPyInit_bgl(void)
 
 static PyObject *Method_ShaderSource(PyObject *UNUSED(self), PyObject *args)
 {
-  unsigned int shader;
+  uint shader;
   const char *source;
 
   if (!PyArg_ParseTuple(args, "Is", &shader, &source)) {

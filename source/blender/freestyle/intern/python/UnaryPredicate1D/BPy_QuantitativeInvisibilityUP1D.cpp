@@ -60,13 +60,14 @@ static int QuantitativeInvisibilityUP1D___init__(BPy_QuantitativeInvisibilityUP1
   static const char *kwlist[] = {"qi", NULL};
   int i = 0;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "|i", (char **)kwlist, &i))
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "|i", (char **)kwlist, &i)) {
     return -1;
+  }
   self->py_up1D.up1D = new Predicates1D::QuantitativeInvisibilityUP1D(i);
   return 0;
 }
 
-/*-----------------------BPy_QuantitativeInvisibilityUP1D type definition ------------------------------*/
+/*-----------------------BPy_QuantitativeInvisibilityUP1D type definition -----------------------*/
 
 PyTypeObject QuantitativeInvisibilityUP1D_Type = {
     PyVarObject_HEAD_INIT(NULL, 0) "QuantitativeInvisibilityUP1D", /* tp_name */

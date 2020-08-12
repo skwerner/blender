@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2017, Blender Foundation
@@ -23,32 +23,44 @@
 
 #include <stdio.h>
 
+#include "BLI_listbase.h"
 #include "BLI_utildefines.h"
 
 #include "BLI_math.h"
 
-#include "DNA_meshdata_types.h"
-#include "DNA_scene_types.h"
-#include "DNA_object_types.h"
-#include "DNA_gpencil_types.h"
+#include "BLT_translation.h"
+
 #include "DNA_gpencil_modifier_types.h"
+#include "DNA_gpencil_types.h"
+#include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
 
 #include "BKE_action.h"
 #include "BKE_colortools.h"
+#include "BKE_context.h"
 #include "BKE_deform.h"
-#include "BKE_gpencil.h"
+#include "BKE_gpencil_geom.h"
 #include "BKE_gpencil_modifier.h"
-#include "BKE_modifier.h"
-#include "BKE_library_query.h"
-#include "BKE_scene.h"
-#include "BKE_main.h"
 #include "BKE_layer.h"
+#include "BKE_lib_query.h"
+#include "BKE_main.h"
+#include "BKE_modifier.h"
+#include "BKE_scene.h"
+#include "BKE_screen.h"
 
 #include "MEM_guardedalloc.h"
 
-#include "MOD_gpencil_util.h"
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
+
 #include "MOD_gpencil_modifiertypes.h"
+#include "MOD_gpencil_ui_common.h"
+#include "MOD_gpencil_util.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
@@ -63,8 +75,8 @@ struct GPHookData_cb {
   float falloff_sq;
   float fac_orig;
 
-  unsigned int use_falloff : 1;
-  unsigned int use_uniform : 1;
+  uint use_falloff : 1;
+  uint use_uniform : 1;
 
   float cent[3];
 
@@ -76,14 +88,13 @@ static void initData(GpencilModifierData *md)
 {
   HookGpencilModifierData *gpmd = (HookGpencilModifierData *)md;
   gpmd->pass_index = 0;
-  gpmd->layername[0] = '\0';
-  gpmd->vgname[0] = '\0';
+  gpmd->material = NULL;
   gpmd->object = NULL;
   gpmd->force = 0.5f;
   gpmd->falloff_type = eGPHook_Falloff_Smooth;
-  gpmd->curfalloff = curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
+  gpmd->curfalloff = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
   if (gpmd->curfalloff) {
-    curvemapping_initialize(gpmd->curfalloff);
+    BKE_curvemapping_initialize(gpmd->curfalloff);
   }
 }
 
@@ -93,17 +104,17 @@ static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
   HookGpencilModifierData *tgmd = (HookGpencilModifierData *)target;
 
   if (tgmd->curfalloff != NULL) {
-    curvemapping_free(tgmd->curfalloff);
+    BKE_curvemapping_free(tgmd->curfalloff);
     tgmd->curfalloff = NULL;
   }
 
-  BKE_gpencil_modifier_copyData_generic(md, target);
+  BKE_gpencil_modifier_copydata_generic(md, target);
 
-  tgmd->curfalloff = curvemapping_copy(gmd->curfalloff);
+  tgmd->curfalloff = BKE_curvemapping_copy(gmd->curfalloff);
 }
 
 /* calculate factor of fallof */
-static float gp_hook_falloff(const struct GPHookData_cb *tData, const float len_sq)
+static float gpencil_hook_falloff(const struct GPHookData_cb *tData, const float len_sq)
 {
   BLI_assert(tData->falloff_sq);
   if (len_sq > tData->falloff_sq) {
@@ -126,7 +137,7 @@ static float gp_hook_falloff(const struct GPHookData_cb *tData, const float len_
 
     switch (tData->falloff_type) {
       case eGPHook_Falloff_Curve:
-        fac = curvemapping_evaluateF(tData->curfalloff, 0, fac);
+        fac = BKE_curvemapping_evaluateF(tData->curfalloff, 0, fac);
         break;
       case eGPHook_Falloff_Sharp:
         fac = fac * fac;
@@ -156,7 +167,7 @@ static float gp_hook_falloff(const struct GPHookData_cb *tData, const float len_
 }
 
 /* apply point deformation */
-static void gp_hook_co_apply(struct GPHookData_cb *tData, float weight, bGPDspoint *pt)
+static void gpencil_hook_co_apply(struct GPHookData_cb *tData, float weight, bGPDspoint *pt)
 {
   float fac;
 
@@ -172,7 +183,7 @@ static void gp_hook_co_apply(struct GPHookData_cb *tData, float weight, bGPDspoi
       len_sq = len_squared_v3v3(tData->cent, &pt->x);
     }
 
-    fac = gp_hook_falloff(tData, len_sq);
+    fac = gpencil_hook_falloff(tData, len_sq);
   }
   else {
     fac = tData->fac_orig;
@@ -190,6 +201,7 @@ static void deformStroke(GpencilModifierData *md,
                          Depsgraph *UNUSED(depsgraph),
                          Object *ob,
                          bGPDlayer *gpl,
+                         bGPDframe *UNUSED(gpf),
                          bGPDstroke *gps)
 {
   HookGpencilModifierData *mmd = (HookGpencilModifierData *)md;
@@ -197,7 +209,7 @@ static void deformStroke(GpencilModifierData *md,
     return;
   }
 
-  const int def_nr = defgroup_name_index(ob, mmd->vgname);
+  const int def_nr = BKE_object_defgroup_name_index(ob, mmd->vgname);
 
   bPoseChannel *pchan = BKE_pose_channel_find_name(mmd->object->pose, mmd->subtarget);
   float dmat[4][4];
@@ -205,6 +217,7 @@ static void deformStroke(GpencilModifierData *md,
 
   if (!is_stroke_affected_by_modifier(ob,
                                       mmd->layername,
+                                      mmd->material,
                                       mmd->pass_index,
                                       mmd->layer_pass,
                                       1,
@@ -212,7 +225,8 @@ static void deformStroke(GpencilModifierData *md,
                                       gps,
                                       mmd->flag & GP_HOOK_INVERT_LAYER,
                                       mmd->flag & GP_HOOK_INVERT_PASS,
-                                      mmd->flag & GP_HOOK_INVERT_LAYERPASS)) {
+                                      mmd->flag & GP_HOOK_INVERT_LAYERPASS,
+                                      mmd->flag & GP_HOOK_INVERT_MATERIAL)) {
     return;
   }
 
@@ -220,7 +234,7 @@ static void deformStroke(GpencilModifierData *md,
   tData.curfalloff = mmd->curfalloff;
   tData.falloff_type = mmd->falloff_type;
   tData.falloff = (mmd->falloff_type == eHook_Falloff_None) ? 0.0f : mmd->falloff;
-  tData.falloff_sq = SQUARE(tData.falloff);
+  tData.falloff_sq = square_f(tData.falloff);
   tData.fac_orig = mmd->force;
   tData.use_falloff = (tData.falloff_sq != 0.0f);
   tData.use_uniform = (mmd->flag & GP_HOOK_UNIFORM_SPACE) != 0;
@@ -257,8 +271,10 @@ static void deformStroke(GpencilModifierData *md,
     if (weight < 0.0f) {
       continue;
     }
-    gp_hook_co_apply(&tData, weight, pt);
+    gpencil_hook_co_apply(&tData, weight, pt);
   }
+  /* Calc geometry data. */
+  BKE_gpencil_stroke_geometry_update(gps);
 }
 
 /* FIXME: Ideally we be doing this on a copy of the main depsgraph
@@ -271,11 +287,12 @@ static void bakeModifier(Main *bmain, Depsgraph *depsgraph, GpencilModifierData 
   bGPdata *gpd = ob->data;
   int oldframe = (int)DEG_get_ctime(depsgraph);
 
-  if (mmd->object == NULL)
+  if (mmd->object == NULL) {
     return;
+  }
 
-  for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
-    for (bGPDframe *gpf = gpl->frames.first; gpf; gpf = gpf->next) {
+  LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
+    LISTBASE_FOREACH (bGPDframe *, gpf, &gpl->frames) {
       /* apply hook effects on this frame
        * NOTE: this assumes that we don't want hook animation on non-keyframed frames
        */
@@ -283,8 +300,8 @@ static void bakeModifier(Main *bmain, Depsgraph *depsgraph, GpencilModifierData 
       BKE_scene_graph_update_for_newframe(depsgraph, bmain);
 
       /* compute hook effects on this frame */
-      for (bGPDstroke *gps = gpf->strokes.first; gps; gps = gps->next) {
-        deformStroke(md, depsgraph, ob, gpl, gps);
+      LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
+        deformStroke(md, depsgraph, ob, gpl, gpf, gps);
       }
     }
   }
@@ -299,7 +316,7 @@ static void freeData(GpencilModifierData *md)
   HookGpencilModifierData *mmd = (HookGpencilModifierData *)md;
 
   if (mmd->curfalloff) {
-    curvemapping_free(mmd->curfalloff);
+    BKE_curvemapping_free(mmd->curfalloff);
   }
 }
 
@@ -330,6 +347,90 @@ static void foreachObjectLink(GpencilModifierData *md,
   walk(userData, ob, &mmd->object, IDWALK_CB_NOP);
 }
 
+static void foreachIDLink(GpencilModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
+{
+  HookGpencilModifierData *mmd = (HookGpencilModifierData *)md;
+
+  walk(userData, ob, (ID **)&mmd->material, IDWALK_CB_USER);
+
+  foreachObjectLink(md, ob, (ObjectWalkFunc)walk, userData);
+}
+
+static void panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *sub, *row, *col;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  PointerRNA ob_ptr;
+  gpencil_modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+
+  PointerRNA hook_object_ptr = RNA_pointer_get(&ptr, "object");
+  bool has_vertex_group = RNA_string_length(&ptr, "vertex_group") != 0;
+
+  uiLayoutSetPropSep(layout, true);
+
+  col = uiLayoutColumn(layout, false);
+  uiItemR(col, &ptr, "object", 0, NULL, ICON_NONE);
+  if (!RNA_pointer_is_null(&hook_object_ptr) &&
+      RNA_enum_get(&hook_object_ptr, "type") == OB_ARMATURE) {
+    PointerRNA hook_object_data_ptr = RNA_pointer_get(&hook_object_ptr, "data");
+    uiItemPointerR(
+        col, &ptr, "subtarget", &hook_object_data_ptr, "bones", IFACE_("Bone"), ICON_NONE);
+  }
+
+  row = uiLayoutRow(layout, true);
+  uiItemPointerR(row, &ptr, "vertex_group", &ob_ptr, "vertex_groups", NULL, ICON_NONE);
+  sub = uiLayoutRow(row, true);
+  uiLayoutSetActive(sub, has_vertex_group);
+  uiLayoutSetPropSep(sub, false);
+  uiItemR(sub, &ptr, "invert_vertex", 0, "", ICON_ARROW_LEFTRIGHT);
+
+  uiItemR(layout, &ptr, "strength", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
+
+  gpencil_modifier_panel_end(layout, &ptr);
+}
+
+static void falloff_panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *row;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  gpencil_modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+
+  bool use_falloff = RNA_enum_get(&ptr, "falloff_type") != eWarp_Falloff_None;
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, &ptr, "falloff_type", 0, IFACE_("Type"), ICON_NONE);
+
+  row = uiLayoutRow(layout, false);
+  uiLayoutSetActive(row, use_falloff);
+  uiItemR(row, &ptr, "falloff_radius", 0, NULL, ICON_NONE);
+
+  uiItemR(layout, &ptr, "use_falloff_uniform", 0, NULL, ICON_NONE);
+
+  if (RNA_enum_get(&ptr, "falloff_type") == eWarp_Falloff_Curve) {
+    uiTemplateCurveMapping(layout, &ptr, "falloff_curve", 0, false, false, false, false);
+  }
+}
+
+static void mask_panel_draw(const bContext *C, Panel *panel)
+{
+  gpencil_modifier_masking_panel_draw(C, panel, true, false);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  PanelType *panel_type = gpencil_modifier_panel_register(
+      region_type, eGpencilModifierType_Hook, panel_draw);
+  gpencil_modifier_subpanel_register(
+      region_type, "falloff", "Falloff", NULL, falloff_panel_draw, panel_type);
+  gpencil_modifier_subpanel_register(
+      region_type, "mask", "Influence", NULL, mask_panel_draw, panel_type);
+}
+
 GpencilModifierTypeInfo modifierType_Gpencil_Hook = {
     /* name */ "Hook",
     /* structName */ "HookGpencilModifierData",
@@ -350,7 +451,7 @@ GpencilModifierTypeInfo modifierType_Gpencil_Hook = {
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
     /* foreachObjectLink */ foreachObjectLink,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
-    /* getDuplicationFactor */ NULL,
+    /* panelRegister */ panelRegister,
 };

@@ -55,6 +55,10 @@ DeviceSplitKernel::DeviceSplitKernel(Device *device)
   kernel_next_iteration_setup = NULL;
   kernel_indirect_subsurface = NULL;
   kernel_buffer_update = NULL;
+  kernel_adaptive_stopping = NULL;
+  kernel_adaptive_filter_x = NULL;
+  kernel_adaptive_filter_y = NULL;
+  kernel_adaptive_adjust_samples = NULL;
 }
 
 DeviceSplitKernel::~DeviceSplitKernel()
@@ -83,6 +87,10 @@ DeviceSplitKernel::~DeviceSplitKernel()
   delete kernel_next_iteration_setup;
   delete kernel_indirect_subsurface;
   delete kernel_buffer_update;
+  delete kernel_adaptive_stopping;
+  delete kernel_adaptive_filter_x;
+  delete kernel_adaptive_filter_y;
+  delete kernel_adaptive_adjust_samples;
 }
 
 bool DeviceSplitKernel::load_kernels(const DeviceRequestedFeatures &requested_features)
@@ -114,6 +122,10 @@ bool DeviceSplitKernel::load_kernels(const DeviceRequestedFeatures &requested_fe
   LOAD_KERNEL(next_iteration_setup);
   LOAD_KERNEL(indirect_subsurface);
   LOAD_KERNEL(buffer_update);
+  LOAD_KERNEL(adaptive_stopping);
+  LOAD_KERNEL(adaptive_filter_x);
+  LOAD_KERNEL(adaptive_filter_y);
+  LOAD_KERNEL(adaptive_adjust_samples);
 
 #undef LOAD_KERNEL
 
@@ -133,7 +145,7 @@ size_t DeviceSplitKernel::max_elements_for_max_buffer_size(device_memory &kg,
   return max_buffer_size / size_per_element;
 }
 
-bool DeviceSplitKernel::path_trace(DeviceTask *task,
+bool DeviceSplitKernel::path_trace(DeviceTask &task,
                                    RenderTile &tile,
                                    device_memory &kgbuffer,
                                    device_memory &kernel_data)
@@ -202,13 +214,21 @@ bool DeviceSplitKernel::path_trace(DeviceTask *task,
     /* initial guess to start rolling average */
     const int initial_num_samples = 1;
     /* approx number of samples per second */
-    int samples_per_second = (avg_time_per_sample > 0.0) ?
-                                 int(double(time_multiplier) / avg_time_per_sample) + 1 :
-                                 initial_num_samples;
+    const int samples_per_second = (avg_time_per_sample > 0.0) ?
+                                       int(double(time_multiplier) / avg_time_per_sample) + 1 :
+                                       initial_num_samples;
 
     RenderTile subtile = tile;
     subtile.start_sample = tile.sample;
-    subtile.num_samples = min(samples_per_second,
+    subtile.num_samples = samples_per_second;
+
+    if (task.adaptive_sampling.use) {
+      subtile.num_samples = task.adaptive_sampling.align_dynamic_samples(subtile.start_sample,
+                                                                         subtile.num_samples);
+    }
+
+    /* Don't go beyond requested number of samples. */
+    subtile.num_samples = min(subtile.num_samples,
                               tile.start_sample + tile.num_samples - tile.sample);
 
     if (device->have_error()) {
@@ -266,7 +286,7 @@ bool DeviceSplitKernel::path_trace(DeviceTask *task,
         ENQUEUE_SPLIT_KERNEL(queue_enqueue, global_size, local_size);
         ENQUEUE_SPLIT_KERNEL(buffer_update, global_size, local_size);
 
-        if (task->get_cancel() && cancel_time == DBL_MAX) {
+        if (task.get_cancel() && cancel_time == DBL_MAX) {
           /* Wait up to twice as many seconds for current samples to finish
            * to avoid artifacts in render result from ending too soon.
            */
@@ -302,6 +322,23 @@ bool DeviceSplitKernel::path_trace(DeviceTask *task,
       }
     }
 
+    int filter_sample = tile.sample + subtile.num_samples - 1;
+    if (task.adaptive_sampling.use && task.adaptive_sampling.need_filter(filter_sample)) {
+      size_t buffer_size[2];
+      buffer_size[0] = round_up(tile.w, local_size[0]);
+      buffer_size[1] = round_up(tile.h, local_size[1]);
+      kernel_adaptive_stopping->enqueue(
+          KernelDimensions(buffer_size, local_size), kgbuffer, kernel_data);
+      buffer_size[0] = round_up(tile.h, local_size[0]);
+      buffer_size[1] = round_up(1, local_size[1]);
+      kernel_adaptive_filter_x->enqueue(
+          KernelDimensions(buffer_size, local_size), kgbuffer, kernel_data);
+      buffer_size[0] = round_up(tile.w, local_size[0]);
+      buffer_size[1] = round_up(1, local_size[1]);
+      kernel_adaptive_filter_y->enqueue(
+          KernelDimensions(buffer_size, local_size), kgbuffer, kernel_data);
+    }
+
     double time_per_sample = ((time_dt() - start_time) / subtile.num_samples);
 
     if (avg_time_per_sample == 0.0) {
@@ -315,13 +352,35 @@ bool DeviceSplitKernel::path_trace(DeviceTask *task,
 #undef ENQUEUE_SPLIT_KERNEL
 
     tile.sample += subtile.num_samples;
-    task->update_progress(&tile, tile.w * tile.h * subtile.num_samples);
+    task.update_progress(&tile, tile.w * tile.h * subtile.num_samples);
 
     time_multiplier = min(time_multiplier << 1, 10);
 
-    if (task->get_cancel()) {
+    if (task.get_cancel()) {
       return true;
     }
+  }
+
+  if (task.adaptive_sampling.use) {
+    /* Reset the start samples. */
+    RenderTile subtile = tile;
+    subtile.start_sample = tile.start_sample;
+    subtile.num_samples = tile.sample - tile.start_sample;
+    enqueue_split_kernel_data_init(KernelDimensions(global_size, local_size),
+                                   subtile,
+                                   num_global_elements,
+                                   kgbuffer,
+                                   kernel_data,
+                                   split_data,
+                                   ray_state,
+                                   queue_index,
+                                   use_queues_flag,
+                                   work_pool_wgs);
+    size_t buffer_size[2];
+    buffer_size[0] = round_up(tile.w, local_size[0]);
+    buffer_size[1] = round_up(tile.h, local_size[1]);
+    kernel_adaptive_adjust_samples->enqueue(
+        KernelDimensions(buffer_size, local_size), kgbuffer, kernel_data);
   }
 
   return true;

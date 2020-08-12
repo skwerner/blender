@@ -32,11 +32,13 @@ extern "C" {
 //-------------------MODULE INITIALIZATION--------------------------------
 int BinaryPredicate0D_Init(PyObject *module)
 {
-  if (module == NULL)
+  if (module == NULL) {
     return -1;
+  }
 
-  if (PyType_Ready(&BinaryPredicate0D_Type) < 0)
+  if (PyType_Ready(&BinaryPredicate0D_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&BinaryPredicate0D_Type);
   PyModule_AddObject(module, "BinaryPredicate0D", (PyObject *)&BinaryPredicate0D_Type);
 
@@ -72,8 +74,9 @@ static int BinaryPredicate0D___init__(BPy_BinaryPredicate0D *self, PyObject *arg
 {
   static const char *kwlist[] = {NULL};
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "", (char **)kwlist))
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "", (char **)kwlist)) {
     return -1;
+  }
   self->bp0D = new BinaryPredicate0D();
   self->bp0D->py_bp0D = (PyObject *)self;
   return 0;
@@ -81,8 +84,8 @@ static int BinaryPredicate0D___init__(BPy_BinaryPredicate0D *self, PyObject *arg
 
 static void BinaryPredicate0D___dealloc__(BPy_BinaryPredicate0D *self)
 {
-  if (self->bp0D)
-    delete self->bp0D;
+  delete self->bp0D;
+
   Py_TYPE(self)->tp_free((PyObject *)self);
 }
 
@@ -135,11 +138,7 @@ static PyObject *BinaryPredicate0D_name_get(BPy_BinaryPredicate0D *self, void *U
 }
 
 static PyGetSetDef BPy_BinaryPredicate0D_getseters[] = {
-    {(char *)"name",
-     (getter)BinaryPredicate0D_name_get,
-     (setter)NULL,
-     (char *)BinaryPredicate0D_name_doc,
-     NULL},
+    {"name", (getter)BinaryPredicate0D_name_get, (setter)NULL, BinaryPredicate0D_name_doc, NULL},
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };
 

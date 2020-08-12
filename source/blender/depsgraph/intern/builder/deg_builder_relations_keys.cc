@@ -25,12 +25,13 @@
 
 #include "intern/builder/deg_builder_relations.h"
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 ////////////////////////////////////////////////////////////////////////////////
 // Time source.
 
-TimeSourceKey::TimeSourceKey() : id(NULL)
+TimeSourceKey::TimeSourceKey() : id(nullptr)
 {
 }
 
@@ -46,7 +47,7 @@ string TimeSourceKey::identifier() const
 ////////////////////////////////////////////////////////////////////////////////
 // Component.
 
-ComponentKey::ComponentKey() : id(NULL), type(NodeType::UNDEFINED), name("")
+ComponentKey::ComponentKey() : id(nullptr), type(NodeType::UNDEFINED), name("")
 {
 }
 
@@ -72,7 +73,7 @@ string ComponentKey::identifier() const
 // Operation.
 
 OperationKey::OperationKey()
-    : id(NULL),
+    : id(nullptr),
       component_type(NodeType::UNDEFINED),
       component_name(""),
       opcode(OperationCode::OPERATION),
@@ -176,7 +177,7 @@ RNAPathKey::RNAPathKey(ID *id, const char *path, RNAPointerSource source) : id(i
   int index;
   if (!RNA_path_resolve_full(&id_ptr, path, &ptr, &prop, &index)) {
     ptr = PointerRNA_NULL;
-    prop = NULL;
+    prop = nullptr;
   }
 }
 
@@ -192,4 +193,5 @@ string RNAPathKey::identifier() const
   return string("RnaPathKey(") + "id: " + id_name + ", prop: '" + prop_name + "')";
 }
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

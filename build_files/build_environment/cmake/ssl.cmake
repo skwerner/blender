@@ -19,8 +19,8 @@
 set(SSL_CONFIGURE_COMMAND ./Configure)
 set(SSL_PATCH_CMD echo .)
 
-if (APPLE)
-  set(SSL_OS_COMPILER "blender-darwin-x86_64")
+if(APPLE)
+   set(SSL_OS_COMPILER "blender-darwin-${CMAKE_OSX_ARCHITECTURES}")
 else()
   if("${CMAKE_SIZEOF_VOID_P}" EQUAL "8")
     set(SSL_EXTRA_ARGS enable-ec_nistp_64_gcc_128)

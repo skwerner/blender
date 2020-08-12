@@ -19,8 +19,9 @@
 #include "blender/CCL_api.h"
 
 #include "blender/blender_device.h"
-#include "blender/blender_sync.h"
 #include "blender/blender_session.h"
+#include "blender/blender_sync.h"
+#include "blender/blender_util.h"
 
 #include "render/denoising.h"
 #include "render/merge.h"
@@ -30,15 +31,17 @@
 #include "util/util_logging.h"
 #include "util/util_md5.h"
 #include "util/util_opengl.h"
+#include "util/util_openimagedenoise.h"
 #include "util/util_path.h"
 #include "util/util_string.h"
+#include "util/util_task.h"
 #include "util/util_types.h"
 
 #ifdef WITH_OSL
 #  include "render/osl.h"
 
-#  include <OSL/oslquery.h>
 #  include <OSL/oslconfig.h>
+#  include <OSL/oslquery.h>
 #endif
 
 #ifdef WITH_OPENCL
@@ -57,6 +60,12 @@ void *pylong_as_voidptr_typesafe(PyObject *object)
   if (object == Py_None)
     return NULL;
   return PyLong_AsVoidPtr(object);
+}
+
+PyObject *pyunicode_from_string(const char *str)
+{
+  /* Ignore errors if device API returns invalid UTF-8 strings. */
+  return PyUnicode_DecodeUTF8(str, strlen(str), "ignore");
 }
 
 /* Synchronize debug flags from a given Blender scene.
@@ -81,6 +90,9 @@ bool debug_flags_sync_from_scene(BL::Scene b_scene)
   /* Synchronize CUDA flags. */
   flags.cuda.adaptive_compile = get_boolean(cscene, "debug_use_cuda_adaptive_compile");
   flags.cuda.split_kernel = get_boolean(cscene, "debug_use_cuda_split_kernel");
+  /* Synchronize OptiX flags. */
+  flags.optix.cuda_streams = get_int(cscene, "debug_optix_cuda_streams");
+  flags.optix.curves_api = get_boolean(cscene, "debug_optix_curves_api");
   /* Synchronize OpenCL device type. */
   switch (get_enum(cscene, "debug_opencl_device_type")) {
     case 0:
@@ -138,7 +150,7 @@ static const char *PyC_UnicodeAsByte(PyObject *py_str, PyObject **coerce)
   const char *result = _PyUnicode_AsString(py_str);
   if (result) {
     /* 99% of the time this is enough but we better support non unicode
-     * chars since blender doesnt limit this.
+     * chars since blender doesn't limit this.
      */
     return result;
   }
@@ -151,7 +163,7 @@ static const char *PyC_UnicodeAsByte(PyObject *py_str, PyObject **coerce)
       return PyBytes_AS_STRING(*coerce);
     }
     else {
-      /* Clear the error, so Cycles can be at leadt used without
+      /* Clear the error, so Cycles can be at least used without
        * GPU and OSL support,
        */
       PyErr_Clear();
@@ -177,6 +189,8 @@ static PyObject *init_func(PyObject * /*self*/, PyObject *args)
 
   BlenderSession::headless = headless;
 
+  DebugFlags().running_inside_blender = true;
+
   VLOG(2) << "Debug flags initialized to:\n" << DebugFlags();
 
   Py_RETURN_NONE;
@@ -192,14 +206,15 @@ static PyObject *exit_func(PyObject * /*self*/, PyObject * /*args*/)
 
 static PyObject *create_func(PyObject * /*self*/, PyObject *args)
 {
-  PyObject *pyengine, *pypreferences, *pydata, *pyregion, *pyv3d, *pyrv3d;
+  PyObject *pyengine, *pypreferences, *pydata, *pyscreen, *pyregion, *pyv3d, *pyrv3d;
   int preview_osl;
 
   if (!PyArg_ParseTuple(args,
-                        "OOOOOOi",
+                        "OOOOOOOi",
                         &pyengine,
                         &pypreferences,
                         &pydata,
+                        &pyscreen,
                         &pyregion,
                         &pyv3d,
                         &pyrv3d,
@@ -208,6 +223,8 @@ static PyObject *create_func(PyObject * /*self*/, PyObject *args)
   }
 
   /* RNA */
+  ID *bScreen = (ID *)PyLong_AsVoidPtr(pyscreen);
+
   PointerRNA engineptr;
   RNA_pointer_create(NULL, &RNA_RenderEngine, (void *)PyLong_AsVoidPtr(pyengine), &engineptr);
   BL::RenderEngine engine(engineptr);
@@ -222,15 +239,15 @@ static PyObject *create_func(PyObject * /*self*/, PyObject *args)
   BL::BlendData data(dataptr);
 
   PointerRNA regionptr;
-  RNA_pointer_create(NULL, &RNA_Region, pylong_as_voidptr_typesafe(pyregion), &regionptr);
+  RNA_pointer_create(bScreen, &RNA_Region, pylong_as_voidptr_typesafe(pyregion), &regionptr);
   BL::Region region(regionptr);
 
   PointerRNA v3dptr;
-  RNA_pointer_create(NULL, &RNA_SpaceView3D, pylong_as_voidptr_typesafe(pyv3d), &v3dptr);
+  RNA_pointer_create(bScreen, &RNA_SpaceView3D, pylong_as_voidptr_typesafe(pyv3d), &v3dptr);
   BL::SpaceView3D v3d(v3dptr);
 
   PointerRNA rv3dptr;
-  RNA_pointer_create(NULL, &RNA_RegionView3D, pylong_as_voidptr_typesafe(pyrv3d), &rv3dptr);
+  RNA_pointer_create(bScreen, &RNA_RegionView3D, pylong_as_voidptr_typesafe(pyrv3d), &rv3dptr);
   BL::RegionView3D rv3d(rv3dptr);
 
   /* create session */
@@ -284,22 +301,18 @@ static PyObject *render_func(PyObject * /*self*/, PyObject *args)
 static PyObject *bake_func(PyObject * /*self*/, PyObject *args)
 {
   PyObject *pysession, *pydepsgraph, *pyobject;
-  PyObject *pypixel_array, *pyresult;
   const char *pass_type;
-  int num_pixels, depth, object_id, pass_filter;
+  int pass_filter, width, height;
 
   if (!PyArg_ParseTuple(args,
-                        "OOOsiiOiiO",
+                        "OOOsiii",
                         &pysession,
                         &pydepsgraph,
                         &pyobject,
                         &pass_type,
                         &pass_filter,
-                        &object_id,
-                        &pypixel_array,
-                        &num_pixels,
-                        &depth,
-                        &pyresult))
+                        &width,
+                        &height))
     return NULL;
 
   BlenderSession *session = (BlenderSession *)PyLong_AsVoidPtr(pysession);
@@ -312,23 +325,9 @@ static PyObject *bake_func(PyObject * /*self*/, PyObject *args)
   RNA_id_pointer_create((ID *)PyLong_AsVoidPtr(pyobject), &objectptr);
   BL::Object b_object(objectptr);
 
-  void *b_result = PyLong_AsVoidPtr(pyresult);
-
-  PointerRNA bakepixelptr;
-  RNA_pointer_create(NULL, &RNA_BakePixel, PyLong_AsVoidPtr(pypixel_array), &bakepixelptr);
-  BL::BakePixel b_bake_pixel(bakepixelptr);
-
   python_thread_state_save(&session->python_thread_state);
 
-  session->bake(b_depsgraph,
-                b_object,
-                pass_type,
-                pass_filter,
-                object_id,
-                b_bake_pixel,
-                (size_t)num_pixels,
-                depth,
-                (float *)b_result);
+  session->bake(b_depsgraph, b_object, pass_type, pass_filter, width, height);
 
   python_thread_state_restore(&session->python_thread_state);
 
@@ -420,10 +419,11 @@ static PyObject *available_devices_func(PyObject * /*self*/, PyObject *args)
   for (size_t i = 0; i < devices.size(); i++) {
     DeviceInfo &device = devices[i];
     string type_name = Device::string_from_type(device.type);
-    PyObject *device_tuple = PyTuple_New(3);
-    PyTuple_SET_ITEM(device_tuple, 0, PyUnicode_FromString(device.description.c_str()));
-    PyTuple_SET_ITEM(device_tuple, 1, PyUnicode_FromString(type_name.c_str()));
-    PyTuple_SET_ITEM(device_tuple, 2, PyUnicode_FromString(device.id.c_str()));
+    PyObject *device_tuple = PyTuple_New(4);
+    PyTuple_SET_ITEM(device_tuple, 0, pyunicode_from_string(device.description.c_str()));
+    PyTuple_SET_ITEM(device_tuple, 1, pyunicode_from_string(type_name.c_str()));
+    PyTuple_SET_ITEM(device_tuple, 2, pyunicode_from_string(device.id.c_str()));
+    PyTuple_SET_ITEM(device_tuple, 3, PyBool_FromLong(device.has_peer_memory));
     PyTuple_SET_ITEM(ret, i, device_tuple);
   }
 
@@ -634,7 +634,7 @@ static PyObject *osl_compile_func(PyObject * /*self*/, PyObject *args)
 static PyObject *system_info_func(PyObject * /*self*/, PyObject * /*value*/)
 {
   string system_info = Device::device_capabilities();
-  return PyUnicode_FromString(system_info.c_str());
+  return pyunicode_from_string(system_info.c_str());
 }
 
 #ifdef WITH_OPENCL
@@ -937,6 +937,15 @@ static PyObject *set_resumable_chunk_range_func(PyObject * /*self*/, PyObject *a
   Py_RETURN_NONE;
 }
 
+static PyObject *clear_resumable_chunk_func(PyObject * /*self*/, PyObject * /*value*/)
+{
+  VLOG(1) << "Clear resumable render";
+  BlenderSession::num_resumable_chunks = 0;
+  BlenderSession::current_resumable_chunk = 0;
+
+  Py_RETURN_NONE;
+}
+
 static PyObject *enable_print_stats_func(PyObject * /*self*/, PyObject * /*args*/)
 {
   BlenderSession::print_render_stats = true;
@@ -946,14 +955,16 @@ static PyObject *enable_print_stats_func(PyObject * /*self*/, PyObject * /*args*
 static PyObject *get_device_types_func(PyObject * /*self*/, PyObject * /*args*/)
 {
   vector<DeviceType> device_types = Device::available_types();
-  bool has_cuda = false, has_opencl = false;
+  bool has_cuda = false, has_optix = false, has_opencl = false;
   foreach (DeviceType device_type, device_types) {
     has_cuda |= (device_type == DEVICE_CUDA);
+    has_optix |= (device_type == DEVICE_OPTIX);
     has_opencl |= (device_type == DEVICE_OPENCL);
   }
-  PyObject *list = PyTuple_New(2);
+  PyObject *list = PyTuple_New(3);
   PyTuple_SET_ITEM(list, 0, PyBool_FromLong(has_cuda));
-  PyTuple_SET_ITEM(list, 1, PyBool_FromLong(has_opencl));
+  PyTuple_SET_ITEM(list, 1, PyBool_FromLong(has_optix));
+  PyTuple_SET_ITEM(list, 2, PyBool_FromLong(has_opencl));
   return list;
 }
 
@@ -992,6 +1003,7 @@ static PyMethodDef methods[] = {
     /* Resumable render */
     {"set_resumable_chunk", set_resumable_chunk_func, METH_VARARGS, ""},
     {"set_resumable_chunk_range", set_resumable_chunk_range_func, METH_VARARGS, ""},
+    {"clear_resumable_chunk", clear_resumable_chunk_func, METH_NOARGS, ""},
 
     /* Compute Device selection */
     {"get_device_types", get_device_types_func, METH_VARARGS, ""},
@@ -1065,6 +1077,15 @@ void *CCL_python_module_init()
   PyModule_AddObject(mod, "with_embree", Py_False);
   Py_INCREF(Py_False);
 #endif /* WITH_EMBREE */
+
+  if (ccl::openimagedenoise_supported()) {
+    PyModule_AddObject(mod, "with_openimagedenoise", Py_True);
+    Py_INCREF(Py_True);
+  }
+  else {
+    PyModule_AddObject(mod, "with_openimagedenoise", Py_False);
+    Py_INCREF(Py_False);
+  }
 
   return (void *)mod;
 }

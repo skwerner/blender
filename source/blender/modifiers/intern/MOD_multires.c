@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -27,23 +27,37 @@
 
 #include "BLI_utildefines.h"
 
+#include "BLT_translation.h"
+
 #include "DNA_mesh_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
 
 #include "BKE_cdderivedmesh.h"
+#include "BKE_context.h"
 #include "BKE_mesh.h"
-#include "BKE_multires.h"
 #include "BKE_modifier.h"
+#include "BKE_multires.h"
 #include "BKE_paint.h"
+#include "BKE_screen.h"
 #include "BKE_subdiv.h"
 #include "BKE_subdiv_ccg.h"
+#include "BKE_subdiv_deform.h"
 #include "BKE_subdiv_mesh.h"
 #include "BKE_subsurf.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
+
+#include "WM_types.h" /* For subdivide operator UI. */
 
 #include "DEG_depsgraph_query.h"
 
 #include "MOD_modifiertypes.h"
+#include "MOD_ui_common.h"
 
 typedef struct MultiresRuntimeData {
   /* Cached subdivision surface descriptor, with topology and settings. */
@@ -59,13 +73,36 @@ static void initData(ModifierData *md)
   mmd->renderlvl = 0;
   mmd->totlvl = 0;
   mmd->uv_smooth = SUBSURF_UV_SMOOTH_PRESERVE_CORNERS;
-  mmd->quality = 3;
-  mmd->flags |= eMultiresModifierFlag_UseCrease;
+  mmd->quality = 4;
+  mmd->flags |= (eMultiresModifierFlag_UseCrease | eMultiresModifierFlag_ControlEdges);
+
+  /* Open subdivision panels by default. */
+  md->ui_expand_flag = (1 << 0) | (1 << 1);
+}
+
+static void requiredDataMask(Object *UNUSED(ob),
+                             ModifierData *md,
+                             CustomData_MeshMasks *r_cddata_masks)
+{
+  MultiresModifierData *mmd = (MultiresModifierData *)md;
+  if (mmd->flags & eMultiresModifierFlag_UseCustomNormals) {
+    r_cddata_masks->lmask |= CD_MASK_NORMAL;
+    r_cddata_masks->lmask |= CD_MASK_CUSTOMLOOPNORMAL;
+  }
+}
+
+static bool dependsOnNormals(ModifierData *md)
+{
+  MultiresModifierData *mmd = (MultiresModifierData *)md;
+  if (mmd->flags & eMultiresModifierFlag_UseCustomNormals) {
+    return true;
+  }
+  return false;
 }
 
 static void copyData(const ModifierData *md_src, ModifierData *md_dst, const int flag)
 {
-  modifier_copyData_generic(md_src, md_dst, flag);
+  BKE_modifier_copydata_generic(md_src, md_dst, flag);
 }
 
 static void freeRuntimeData(void *runtime_data_v)
@@ -118,11 +155,17 @@ static Mesh *multires_as_mesh(MultiresModifierData *mmd,
   Mesh *result = mesh;
   const bool use_render_params = (ctx->flag & MOD_APPLY_RENDER);
   const bool ignore_simplify = (ctx->flag & MOD_APPLY_IGNORE_SIMPLIFY);
+  const bool ignore_control_edges = (ctx->flag & MOD_APPLY_TO_BASE_MESH);
   const Scene *scene = DEG_get_evaluated_scene(ctx->depsgraph);
   Object *object = ctx->object;
   SubdivToMeshSettings mesh_settings;
-  BKE_multires_subdiv_mesh_settings_init(
-      &mesh_settings, scene, object, mmd, use_render_params, ignore_simplify);
+  BKE_multires_subdiv_mesh_settings_init(&mesh_settings,
+                                         scene,
+                                         object,
+                                         mmd,
+                                         use_render_params,
+                                         ignore_simplify,
+                                         ignore_control_edges);
   if (mesh_settings.resolution < 3) {
     return result;
   }
@@ -165,9 +208,13 @@ static Mesh *multires_as_ccg(MultiresModifierData *mmd,
   return result;
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   Mesh *result = mesh;
+#if !defined(WITH_OPENSUBDIV)
+  BKE_modifier_set_error(md, "Disabled, built without OpenSubdiv");
+  return result;
+#endif
   MultiresModifierData *mmd = (MultiresModifierData *)md;
   SubdivSettings subdiv_settings;
   BKE_multires_subdiv_settings_init(&subdiv_settings, mmd);
@@ -181,11 +228,17 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
     /* Happens on bad topology, ut also on empty input mesh. */
     return result;
   }
+  const bool use_clnors = mmd->flags & eMultiresModifierFlag_UseCustomNormals &&
+                          mesh->flag & ME_AUTOSMOOTH &&
+                          CustomData_has_layer(&mesh->ldata, CD_CUSTOMLOOPNORMAL);
   /* NOTE: Orco needs final coordinates on CPU side, which are expected to be
    * accessible via MVert. For this reason we do not evaluate multires to
    * grids when orco is requested. */
   const bool for_orco = (ctx->flag & MOD_APPLY_ORCO) != 0;
-  if ((ctx->object->mode & OB_MODE_SCULPT) && !for_orco) {
+  /* Needed when rendering or baking will in sculpt mode. */
+  const bool for_render = (ctx->flag & MOD_APPLY_RENDER) != 0;
+
+  if ((ctx->object->mode & OB_MODE_SCULPT) && !for_orco && !for_render) {
     /* NOTE: CCG takes ownership over Subdiv. */
     result = multires_as_ccg(mmd, ctx, mesh, subdiv);
     result->runtime.subdiv_ccg_tot_level = mmd->totlvl;
@@ -195,7 +248,16 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
      * Annoying and not so much black-boxed as far as sculpting goes, and
      * surely there is a better way of solving this. */
     if (ctx->object->sculpt != NULL) {
-      ctx->object->sculpt->subdiv_ccg = result->runtime.subdiv_ccg;
+      SculptSession *sculpt_session = ctx->object->sculpt;
+      sculpt_session->subdiv_ccg = result->runtime.subdiv_ccg;
+      sculpt_session->multires.active = true;
+      sculpt_session->multires.modifier = mmd;
+      sculpt_session->multires.level = mmd->sculptlvl;
+      sculpt_session->totvert = mesh->totvert;
+      sculpt_session->totpoly = mesh->totpoly;
+      sculpt_session->mvert = NULL;
+      sculpt_session->mpoly = NULL;
+      sculpt_session->mloop = NULL;
     }
     /* NOTE: CCG becomes an owner of Subdiv descriptor, so can not share
      * this pointer. Not sure if it's needed, but might have a second look
@@ -204,13 +266,233 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
     // BKE_subdiv_stats_print(&subdiv->stats);
   }
   else {
+    if (use_clnors) {
+      /* If custom normals are present and the option is turned on calculate the split
+       * normals and clear flag so the normals get interpolated to the result mesh. */
+      BKE_mesh_calc_normals_split(mesh);
+      CustomData_clear_layer_flag(&mesh->ldata, CD_NORMAL, CD_FLAG_TEMPORARY);
+    }
+
     result = multires_as_mesh(mmd, ctx, mesh, subdiv);
+
+    if (use_clnors) {
+      float(*lnors)[3] = CustomData_get_layer(&result->ldata, CD_NORMAL);
+      BLI_assert(lnors != NULL);
+      BKE_mesh_set_custom_normals(result, lnors);
+      CustomData_set_layer_flag(&mesh->ldata, CD_NORMAL, CD_FLAG_TEMPORARY);
+      CustomData_set_layer_flag(&result->ldata, CD_NORMAL, CD_FLAG_TEMPORARY);
+    }
     // BKE_subdiv_stats_print(&subdiv->stats);
     if (subdiv != runtime_data->subdiv) {
       BKE_subdiv_free(subdiv);
     }
   }
   return result;
+}
+
+static void deformMatrices(ModifierData *md,
+                           const ModifierEvalContext *UNUSED(ctx),
+                           Mesh *mesh,
+                           float (*vertex_cos)[3],
+                           float (*deform_matrices)[3][3],
+                           int num_verts)
+
+{
+#if !defined(WITH_OPENSUBDIV)
+  BKE_modifier_set_error(md, "Disabled, built without OpenSubdiv");
+  return;
+#endif
+
+  /* Subsurf does not require extra space mapping, keep matrices as is. */
+  (void)deform_matrices;
+
+  MultiresModifierData *mmd = (MultiresModifierData *)md;
+  SubdivSettings subdiv_settings;
+  BKE_multires_subdiv_settings_init(&subdiv_settings, mmd);
+  if (subdiv_settings.level == 0) {
+    return;
+  }
+  BKE_subdiv_settings_validate_for_mesh(&subdiv_settings, mesh);
+  MultiresRuntimeData *runtime_data = multires_ensure_runtime(mmd);
+  Subdiv *subdiv = subdiv_descriptor_ensure(mmd, &subdiv_settings, mesh);
+  if (subdiv == NULL) {
+    /* Happens on bad topology, ut also on empty input mesh. */
+    return;
+  }
+  BKE_subdiv_displacement_attach_from_multires(subdiv, mesh, mmd);
+  BKE_subdiv_deform_coarse_vertices(subdiv, mesh, vertex_cos, num_verts);
+  if (subdiv != runtime_data->subdiv) {
+    BKE_subdiv_free(subdiv);
+  }
+}
+
+static void panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *col;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+
+  uiLayoutSetPropSep(layout, true);
+
+  col = uiLayoutColumn(layout, true);
+  uiItemR(col, &ptr, "levels", 0, IFACE_("Level Viewport"), ICON_NONE);
+  uiItemR(col, &ptr, "sculpt_levels", 0, IFACE_("Sculpt"), ICON_NONE);
+  uiItemR(col, &ptr, "render_levels", 0, IFACE_("Render"), ICON_NONE);
+
+  uiItemR(layout, &ptr, "show_only_control_edges", 0, NULL, ICON_NONE);
+
+  modifier_panel_end(layout, &ptr);
+}
+
+static void subdivisions_panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *row;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  PointerRNA ob_ptr;
+  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+
+  uiLayoutSetEnabled(layout, RNA_enum_get(&ob_ptr, "mode") != OB_MODE_EDIT);
+
+  MultiresModifierData *mmd = (MultiresModifierData *)ptr.data;
+
+  /**
+   * Changing some of the properties can not be done once there is an
+   * actual displacement stored for this multi-resolution modifier.
+   * This check will disallow changes for those properties.
+   * This check is a bit stupid but it should be sufficient for the usual
+   * multi-resolution usage. It might become less strict and only disallow
+   * modifications if there is CD_MDISPS layer, or if there is actual
+   * non-zero displacement, but such checks will be too slow to be done
+   * on every redraw.
+   */
+
+  PointerRNA op_ptr;
+  uiItemFullO(layout,
+              "OBJECT_OT_multires_subdivide",
+              IFACE_("Subdivide"),
+              ICON_NONE,
+              NULL,
+              WM_OP_EXEC_DEFAULT,
+              0,
+              &op_ptr);
+  RNA_enum_set(&op_ptr, "mode", MULTIRES_SUBDIVIDE_CATMULL_CLARK);
+  RNA_string_set(&op_ptr, "modifier", ((ModifierData *)mmd)->name);
+
+  row = uiLayoutRow(layout, false);
+  uiItemFullO(row,
+              "OBJECT_OT_multires_subdivide",
+              IFACE_("Simple"),
+              ICON_NONE,
+              NULL,
+              WM_OP_EXEC_DEFAULT,
+              0,
+              &op_ptr);
+  RNA_enum_set(&op_ptr, "mode", MULTIRES_SUBDIVIDE_SIMPLE);
+  RNA_string_set(&op_ptr, "modifier", ((ModifierData *)mmd)->name);
+  uiItemFullO(row,
+              "OBJECT_OT_multires_subdivide",
+              IFACE_("Linear"),
+              ICON_NONE,
+              NULL,
+              WM_OP_EXEC_DEFAULT,
+              0,
+              &op_ptr);
+  RNA_enum_set(&op_ptr, "mode", MULTIRES_SUBDIVIDE_LINEAR);
+  RNA_string_set(&op_ptr, "modifier", ((ModifierData *)mmd)->name);
+
+  uiItemS(layout);
+
+  uiItemO(layout, IFACE_("Unsubdivide"), ICON_NONE, "OBJECT_OT_multires_unsubdivide");
+
+  row = uiLayoutRow(layout, false);
+  uiItemL(row, "", ICON_NONE);
+  uiItemO(row, IFACE_("Delete Higher"), ICON_NONE, "OBJECT_OT_multires_higher_levels_delete");
+}
+
+static void shape_panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *row;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  PointerRNA ob_ptr;
+  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+
+  uiLayoutSetEnabled(layout, RNA_enum_get(&ob_ptr, "mode") != OB_MODE_EDIT);
+
+  row = uiLayoutRow(layout, false);
+  uiItemO(row, IFACE_("Reshape"), ICON_NONE, "OBJECT_OT_multires_reshape");
+  uiItemO(row, IFACE_("Apply Base"), ICON_NONE, "OBJECT_OT_multires_base_apply");
+}
+
+static void generate_panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *col, *row;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  MultiresModifierData *mmd = (MultiresModifierData *)ptr.data;
+
+  bool is_external = RNA_boolean_get(&ptr, "is_external");
+
+  if (mmd->totlvl == 0) {
+    uiItemO(
+        layout, IFACE_("Rebuild Subdivisions"), ICON_NONE, "OBJECT_OT_multires_rebuild_subdiv");
+  }
+
+  col = uiLayoutColumn(layout, false);
+  row = uiLayoutRow(col, false);
+  if (is_external) {
+    uiItemO(row, IFACE_("Pack External"), ICON_NONE, "OBJECT_OT_multires_external_pack");
+    uiLayoutSetPropSep(col, true);
+    row = uiLayoutRow(col, false);
+    uiItemR(row, &ptr, "filepath", 0, NULL, ICON_NONE);
+  }
+  else {
+    uiItemO(col, IFACE_("Save External..."), ICON_NONE, "OBJECT_OT_multires_external_save");
+  }
+}
+
+static void advanced_panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *col;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+
+  bool has_displacement = RNA_int_get(&ptr, "total_levels") != 0;
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiLayoutSetEnabled(layout, !has_displacement);
+
+  uiItemR(layout, &ptr, "subdivision_type", 0, NULL, ICON_NONE);
+  uiItemR(layout, &ptr, "quality", 0, NULL, ICON_NONE);
+
+  col = uiLayoutColumn(layout, false);
+  uiLayoutSetEnabled(col, true);
+  uiItemR(col, &ptr, "uv_smooth", 0, NULL, ICON_NONE);
+
+  uiItemR(layout, &ptr, "use_creases", 0, NULL, ICON_NONE);
+  uiItemR(layout, &ptr, "use_custom_normals", 0, NULL, ICON_NONE);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  PanelType *panel_type = modifier_panel_register(region_type, eModifierType_Multires, panel_draw);
+  modifier_subpanel_register(
+      region_type, "subdivide", "Subdivions", NULL, subdivisions_panel_draw, panel_type);
+  modifier_subpanel_register(region_type, "shape", "Shape", NULL, shape_panel_draw, panel_type);
+  modifier_subpanel_register(
+      region_type, "generate", "Generate", NULL, generate_panel_draw, panel_type);
+  modifier_subpanel_register(
+      region_type, "advanced", "Advanced", NULL, advanced_panel_draw, panel_type);
 }
 
 ModifierTypeInfo modifierType_Multires = {
@@ -224,20 +506,26 @@ ModifierTypeInfo modifierType_Multires = {
     /* copyData */ copyData,
 
     /* deformVerts */ NULL,
-    /* deformMatrices */ NULL,
+    /* deformMatrices */ deformMatrices,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
-    /* requiredDataMask */ NULL,
+    /* requiredDataMask */ requiredDataMask,
     /* freeData */ freeData,
     /* isDisabled */ NULL,
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ NULL,
-    /* dependsOnNormals */ NULL,
+    /* dependsOnNormals */ dependsOnNormals,
     /* foreachObjectLink */ NULL,
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ freeRuntimeData,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

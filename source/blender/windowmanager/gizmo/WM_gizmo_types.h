@@ -67,24 +67,33 @@ typedef enum eWM_GizmoFlag {
   WM_GIZMO_DRAW_VALUE = (1 << 2),
   WM_GIZMO_HIDDEN = (1 << 3),
   WM_GIZMO_HIDDEN_SELECT = (1 << 4),
+  /** Ignore the key-map for this gizmo. */
+  WM_GIZMO_HIDDEN_KEYMAP = (1 << 5),
   /**
    * When set 'scale_final' value also scales the offset.
    * Use when offset is to avoid screen-space overlap instead of absolute positioning. */
-  WM_GIZMO_DRAW_OFFSET_SCALE = (1 << 5),
+  WM_GIZMO_DRAW_OFFSET_SCALE = (1 << 6),
   /**
    * User should still use 'scale_final' for any handles and UI elements.
    * This simply skips scale when calculating the final matrix.
    * Needed when the gizmo needs to align with the interface underneath it. */
-  WM_GIZMO_DRAW_NO_SCALE = (1 << 6),
+  WM_GIZMO_DRAW_NO_SCALE = (1 << 7),
   /**
    * Hide the cursor and lock it's position while interacting with this gizmo.
    */
-  WM_GIZMO_MOVE_CURSOR = (1 << 7),
+  WM_GIZMO_MOVE_CURSOR = (1 << 8),
   /** Don't write into the depth buffer when selecting. */
-  WM_GIZMO_SELECT_BACKGROUND = (1 << 8),
+  WM_GIZMO_SELECT_BACKGROUND = (1 << 9),
 
   /** Use the active tools operator properties when running as an operator. */
-  WM_GIZMO_OPERATOR_TOOL_INIT = (1 << 9),
+  WM_GIZMO_OPERATOR_TOOL_INIT = (1 << 10),
+
+  /** Don't pass through events to other handlers
+   * (allows click/drag not to have it's events stolen by press events in other keymaps). */
+  WM_GIZMO_EVENT_HANDLE_ALL = (1 << 11),
+
+  /** Don't use tool-tips for this gizmo (can be distracting). */
+  WM_GIZMO_NO_TOOLTIP = (1 << 12),
 } eWM_GizmoFlag;
 
 /**
@@ -116,6 +125,32 @@ typedef enum eWM_GizmoFlagGroupTypeFlag {
    * We could even move the options into the key-map item.
    * ~ campbell. */
   WM_GIZMOGROUPTYPE_TOOL_INIT = (1 << 6),
+
+  /**
+   * This gizmo type supports using the fallback tools keymap.
+   * #wmGizmoGroup.use_tool_fallback will need to be set too.
+   *
+   * Often useful in combination with #WM_GIZMOGROUPTYPE_DELAY_REFRESH_FOR_TWEAK
+   */
+  WM_GIZMOGROUPTYPE_TOOL_FALLBACK_KEYMAP = (1 << 7),
+
+  /**
+   * Use this from a gizmos refresh callback so we can postpone the refresh operation
+   * until the tweak operation is finished.
+   * Only do this when the group doesn't have a highlighted gizmo.
+   *
+   * The result for the user is tweak events delay the gizmo from flashing under the users cursor,
+   * for selection operations. This means gizmos that use this check don't interfere
+   * with click drag events by popping up under the cursor and catching the tweak event.
+   */
+  WM_GIZMOGROUPTYPE_DELAY_REFRESH_FOR_TWEAK = (1 << 8),
+
+  /**
+   * Cause continuous redraws, i.e. set the region redraw flag on every main loop iteration. This
+   * should really be avoided by using proper region redraw tagging, notifiers and the message-bus,
+   * however for VR it's sometimes needed.
+   */
+  WM_GIZMOGROUPTYPE_VR_REDRAWS = (1 << 9),
 } eWM_GizmoFlagGroupTypeFlag;
 
 /**
@@ -182,6 +217,9 @@ struct wmGizmo {
   /** Pointer back to group this gizmo is in (just for quick access). */
   struct wmGizmoGroup *parent_gzgroup;
 
+  /** Optional keymap to use for this gizmo (overrides #wmGizmoGroupType.keymap) */
+  struct wmKeyMap *keymap;
+
   void *py_instance;
 
   /** Rna pointer to access properties. */
@@ -195,8 +233,16 @@ struct wmGizmo {
   /** Optional ID for highlighting different parts of this gizmo.
    * -1 when unset, otherwise a valid index. (Used as index to 'op_data'). */
   int highlight_part;
-  /** For single click button gizmos, use a different part as a fallback, -1 when unused. */
+
+  /**
+   * For gizmos that differentiate between click & drag,
+   * use a different part for any drag events, -1 when unused.
+   */
   int drag_part;
+
+  /** Distance to bias this gizmo above others when picking
+   * (in worldspace, scaled by the gizmo scale - when used). */
+  float select_bias;
 
   /**
    * Transformation of the gizmo in 2d or 3d space.
@@ -232,6 +278,9 @@ struct wmGizmo {
   int op_data_len;
 
   struct IDProperty *properties;
+
+  /** Redraw tag. */
+  bool do_draw;
 
   /** Temporary data (assume dirty). */
   union {
@@ -302,7 +351,7 @@ typedef struct wmGizmoType {
   wmGizmoFnDrawSelect draw_select;
 
   /** Determine if the mouse intersects with the gizmo.
-   * The calculation should be done in the callback itself, -1 for no seleciton. */
+   * The calculation should be done in the callback itself, -1 for no selection. */
   wmGizmoFnTestSelect test_select;
 
   /** Handler used by the gizmo. Usually handles interaction tied to a gizmo type. */
@@ -322,7 +371,7 @@ typedef struct wmGizmoType {
   /** Activate a gizmo state when the user clicks on it. */
   wmGizmoFnInvoke invoke;
 
-  /** Called when gizmo tweaking is done - used to free data and reset property when cancelling. */
+  /** Called when gizmo tweaking is done - used to free data and reset property when canceling. */
   wmGizmoFnExit exit;
 
   wmGizmoFnCursorGet cursor_get;
@@ -337,7 +386,7 @@ typedef struct wmGizmoType {
   struct StructRNA *srna;
 
   /** RNA integration. */
-  ExtensionRNA ext;
+  ExtensionRNA rna_ext;
 
   ListBase target_property_defs;
   int target_property_defs_len;
@@ -392,7 +441,7 @@ typedef struct wmGizmoGroupType {
   struct StructRNA *srna;
 
   /** RNA integration. */
-  ExtensionRNA ext;
+  ExtensionRNA rna_ext;
 
   eWM_GizmoFlagGroupTypeFlag flag;
 
@@ -401,6 +450,12 @@ typedef struct wmGizmoGroupType {
 
   /** Same as gizmo-maps, so registering/unregistering goes to the correct region. */
   struct wmGizmoMapType_Params gzmap_params;
+
+  /**
+   * Number of #wmGizmoGroup instances.
+   * Decremented when 'tag_remove' is set, or when removed.
+   */
+  int users;
 
 } wmGizmoGroupType;
 
@@ -416,6 +471,20 @@ typedef struct wmGizmoGroup {
   void *py_instance;
   /** Errors and warnings storage. */
   struct ReportList *reports;
+
+  /** Has the same result as hiding all gizmos individually. */
+  union {
+    /** Reasons for hiding. */
+    struct {
+      uint delay_refresh_for_tweak : 1;
+    };
+    /** All, when we only want to check if any are hidden. */
+    uint any;
+  } hide;
+
+  bool tag_remove;
+
+  bool use_fallback_keymap;
 
   void *customdata;
   /** For freeing customdata from above. */

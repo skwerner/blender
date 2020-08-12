@@ -23,8 +23,8 @@
  * \ingroup edarmature
  */
 
-#include "DNA_mesh_types.h"
 #include "DNA_armature_types.h"
+#include "DNA_mesh_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
@@ -55,7 +55,7 @@
 #include "armature_intern.h"
 #include "meshlaplacian.h"
 
-/* ********************************** Bone Skinning *********************************************** */
+/* ******************************* Bone Skinning *********************************************** */
 
 static int bone_skinnable_cb(Object *UNUSED(ob), Bone *bone, void *datap)
 {
@@ -93,10 +93,12 @@ static int bone_skinnable_cb(Object *UNUSED(ob), Bone *bone, void *datap)
   if (!(data->is_weight_paint) || !(bone->flag & BONE_HIDDEN_P)) {
     if (!(bone->flag & BONE_NO_DEFORM)) {
       if (data->heat && data->armob->pose &&
-          BKE_pose_channel_find_name(data->armob->pose, bone->name))
+          BKE_pose_channel_find_name(data->armob->pose, bone->name)) {
         segments = bone->segments;
-      else
+      }
+      else {
         segments = 1;
+      }
 
       if (data->list != NULL) {
         hbone = (Bone ***)&data->list;
@@ -119,7 +121,7 @@ static int vgroup_add_unique_bone_cb(Object *ob, Bone *bone, void *UNUSED(ptr))
    * If such a vertex group already exist the routine exits.
    */
   if (!(bone->flag & BONE_NO_DEFORM)) {
-    if (!defgroup_find_name(ob, bone->name)) {
+    if (!BKE_object_defgroup_find_name(ob, bone->name)) {
       BKE_object_defgroup_add_name(ob, bone->name);
       return 1;
     }
@@ -165,13 +167,15 @@ static int dgroup_skinnable_cb(Object *ob, Bone *bone, void *datap)
   if (!data->is_weight_paint || !(bone->flag & BONE_HIDDEN_P)) {
     if (!(bone->flag & BONE_NO_DEFORM)) {
       if (data->heat && data->armob->pose &&
-          BKE_pose_channel_find_name(data->armob->pose, bone->name))
+          BKE_pose_channel_find_name(data->armob->pose, bone->name)) {
         segments = bone->segments;
-      else
+      }
+      else {
         segments = 1;
+      }
 
       if (!data->is_weight_paint || ((arm->layer & bone->layer) && (bone->flag & BONE_SELECTED))) {
-        if (!(defgroup = defgroup_find_name(ob, bone->name))) {
+        if (!(defgroup = BKE_object_defgroup_find_name(ob, bone->name))) {
           defgroup = BKE_object_defgroup_add_name(ob, bone->name);
         }
         else if (defgroup->flag & DG_LOCK_WEIGHT) {
@@ -230,9 +234,10 @@ static void envelope_bone_weighting(Object *ob,
     iflip = (dgroupflip) ? mesh_get_x_mirror_vert(ob, NULL, i, use_topology) : -1;
 
     /* for each skinnable bone */
-    for (j = 0; j < numbones; ++j) {
-      if (!selected[j])
+    for (j = 0; j < numbones; j++) {
+      if (!selected[j]) {
         continue;
+      }
 
       bone = bonelist[j];
       dgroup = dgrouplist[j];
@@ -246,17 +251,21 @@ static void envelope_bone_weighting(Object *ob,
                                     bone->dist * scale);
 
       /* add the vert to the deform group if (weight != 0.0) */
-      if (distance != 0.0f)
+      if (distance != 0.0f) {
         ED_vgroup_vert_add(ob, dgroup, i, distance, WEIGHT_REPLACE);
-      else
+      }
+      else {
         ED_vgroup_vert_remove(ob, dgroup, i);
+      }
 
       /* do same for mirror */
       if (dgroupflip && dgroupflip[j] && iflip != -1) {
-        if (distance != 0.0f)
+        if (distance != 0.0f) {
           ED_vgroup_vert_add(ob, dgroupflip[j], iflip, distance, WEIGHT_REPLACE);
-        else
+        }
+        else {
           ED_vgroup_vert_remove(ob, dgroupflip[j], iflip);
+        }
       }
     }
   }
@@ -274,11 +283,11 @@ static void add_verts_to_dgroups(ReportList *reports,
    * weights, either through envelopes or using a heat equilibrium.
    *
    * This function can be called both when parenting a mesh to an armature,
-   * or in weightpaint + posemode. In the latter case selection is taken
+   * or in weight-paint + pose-mode. In the latter case selection is taken
    * into account and vertex weights can be mirrored.
    *
    * The mesh vertex positions used are either the final deformed coords
-   * from the evaluated mesh in weightpaint mode, the final subsurf coords
+   * from the evaluated mesh in weight-paint mode, the final sub-surface coords
    * when parenting, or simply the original mesh coords.
    */
 
@@ -308,11 +317,13 @@ static void add_verts_to_dgroups(ReportList *reports,
   /* count the number of skinnable bones */
   numbones = bone_looper(ob, arm->bonebase.first, &looper_data, bone_skinnable_cb);
 
-  if (numbones == 0)
+  if (numbones == 0) {
     return;
+  }
 
-  if (BKE_object_defgroup_data_create(ob->data) == NULL)
+  if (BKE_object_defgroup_data_create(ob->data) == NULL) {
     return;
+  }
 
   /* create an array of pointer to bones that are skinnable
    * and fill it with all of the skinnable bones */
@@ -335,7 +346,7 @@ static void add_verts_to_dgroups(ReportList *reports,
   tip = MEM_callocN(numbones * sizeof(float) * 3, "tip");
   selected = MEM_callocN(numbones * sizeof(int), "selected");
 
-  for (j = 0; j < numbones; ++j) {
+  for (j = 0; j < numbones; j++) {
     bone = bonelist[j];
     dgroup = dgrouplist[j];
 
@@ -377,18 +388,20 @@ static void add_verts_to_dgroups(ReportList *reports,
 
     /* set selected */
     if (wpmode) {
-      if ((arm->layer & bone->layer) && (bone->flag & BONE_SELECTED))
+      if ((arm->layer & bone->layer) && (bone->flag & BONE_SELECTED)) {
         selected[j] = 1;
+      }
     }
-    else
+    else {
       selected[j] = 1;
+    }
 
     /* find flipped group */
     if (dgroup && mirror) {
       char name_flip[MAXBONENAME];
 
       BLI_string_flip_side_name(name_flip, dgroup->name, false, sizeof(name_flip));
-      dgroupflip[j] = defgroup_find_name(ob, name_flip);
+      dgroupflip[j] = BKE_object_defgroup_find_name(ob, name_flip);
     }
   }
 
@@ -405,7 +418,7 @@ static void add_verts_to_dgroups(ReportList *reports,
     BKE_mesh_foreach_mapped_vert_coords_get(me_eval, verts, mesh->totvert);
     vertsfilled = 1;
   }
-  else if (modifiers_findByType(ob, eModifierType_Subsurf)) {
+  else if (BKE_modifiers_findby_type(ob, eModifierType_Subsurf)) {
     /* is subsurf on? Lets use the verts on the limit surface then.
      * = same amount of vertices as mesh, but vertices  moved to the
      * subsurfed position, like for 'optimal'. */
@@ -415,8 +428,9 @@ static void add_verts_to_dgroups(ReportList *reports,
 
   /* transform verts to global space */
   for (i = 0; i < mesh->totvert; i++) {
-    if (!vertsfilled)
+    if (!vertsfilled) {
       copy_v3_v3(verts[i], mesh->mvert[i].co);
+    }
     mul_m4_v3(ob->obmat, verts[i]);
   }
 
@@ -445,7 +459,7 @@ static void add_verts_to_dgroups(ReportList *reports,
   }
 
   /* only generated in some cases but can call anyway */
-  ED_mesh_mirror_spatial_table(ob, NULL, NULL, NULL, 'e');
+  ED_mesh_mirror_spatial_table_end(ob);
 
   /* free the memory allocated */
   MEM_freeN(bonelist);

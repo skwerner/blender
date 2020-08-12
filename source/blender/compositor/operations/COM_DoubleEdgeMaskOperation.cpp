@@ -18,16 +18,16 @@
 
 #include <stdlib.h>
 
-#include "COM_DoubleEdgeMaskOperation.h"
 #include "BLI_math.h"
+#include "COM_DoubleEdgeMaskOperation.h"
 #include "DNA_node_types.h"
 #include "MEM_guardedalloc.h"
 
 // this part has been copied from the double edge mask
 static void do_adjacentKeepBorders(unsigned int t,
                                    unsigned int rw,
-                                   unsigned int *limask,
-                                   unsigned int *lomask,
+                                   const unsigned int *limask,
+                                   const unsigned int *lomask,
                                    unsigned int *lres,
                                    float *res,
                                    unsigned int *rsize)
@@ -196,8 +196,8 @@ static void do_adjacentKeepBorders(unsigned int t,
 
 static void do_adjacentBleedBorders(unsigned int t,
                                     unsigned int rw,
-                                    unsigned int *limask,
-                                    unsigned int *lomask,
+                                    const unsigned int *limask,
+                                    const unsigned int *lomask,
                                     unsigned int *lres,
                                     float *res,
                                     unsigned int *rsize)
@@ -417,8 +417,8 @@ static void do_adjacentBleedBorders(unsigned int t,
 
 static void do_allKeepBorders(unsigned int t,
                               unsigned int rw,
-                              unsigned int *limask,
-                              unsigned int *lomask,
+                              const unsigned int *limask,
+                              const unsigned int *lomask,
                               unsigned int *lres,
                               float *res,
                               unsigned int *rsize)
@@ -579,8 +579,8 @@ static void do_allKeepBorders(unsigned int t,
 
 static void do_allBleedBorders(unsigned int t,
                                unsigned int rw,
-                               unsigned int *limask,
-                               unsigned int *lomask,
+                               const unsigned int *limask,
+                               const unsigned int *lomask,
                                unsigned int *lres,
                                float *res,
                                unsigned int *rsize)
@@ -793,8 +793,8 @@ static void do_allBleedBorders(unsigned int t,
 
 static void do_allEdgeDetection(unsigned int t,
                                 unsigned int rw,
-                                unsigned int *limask,
-                                unsigned int *lomask,
+                                const unsigned int *limask,
+                                const unsigned int *lomask,
                                 unsigned int *lres,
                                 float *res,
                                 unsigned int *rsize,
@@ -863,8 +863,8 @@ static void do_allEdgeDetection(unsigned int t,
 
 static void do_adjacentEdgeDetection(unsigned int t,
                                      unsigned int rw,
-                                     unsigned int *limask,
-                                     unsigned int *lomask,
+                                     const unsigned int *limask,
+                                     const unsigned int *lomask,
                                      unsigned int *lres,
                                      float *res,
                                      unsigned int *rsize,
@@ -935,7 +935,7 @@ static void do_adjacentEdgeDetection(unsigned int t,
 
 static void do_createEdgeLocationBuffer(unsigned int t,
                                         unsigned int rw,
-                                        unsigned int *lres,
+                                        const unsigned int *lres,
                                         float *res,
                                         unsigned short *gbuf,
                                         unsigned int *innerEdgeOffset,
@@ -950,12 +950,16 @@ static void do_createEdgeLocationBuffer(unsigned int t,
 
   unsigned int rsl;  // long used for finding fast 1.0/sqrt
   unsigned int gradientFillOffset;
-  unsigned int innerAccum =
-      0;  // for looping inner edge pixel indexes, represents current position from offset
-  unsigned int outerAccum =
-      0;  // for looping outer edge pixel indexes, represents current position from offset
-  unsigned int gradientAccum =
-      0;  // for looping gradient pixel indexes, represents current position from offset
+
+  /* For looping inner edge pixel indexes, represents current position from offset. */
+  unsigned int innerAccum = 0;
+  /* For looping outer edge pixel indexes, represents current position from offset. */
+  unsigned int outerAccum = 0;
+  /* For looping gradient pixel indexes, represents current position from offset. */
+  unsigned int gradientAccum = 0;
+
+  /*  */
+  /* clang-format off */
   /*
    * Here we compute the size of buffer needed to hold (row,col) coordinates
    * for each pixel previously determined to be either gradient, inner edge,
@@ -1017,6 +1021,7 @@ static void do_createEdgeLocationBuffer(unsigned int t,
    * each iteration of the final gradient calculation than it is to deconstruct
    * a memory location into x,y pairs each round.
    */
+  /* clang-format on */
 
   gradientFillOffset = 0;  // since there are likely "more" of these, put it first. :)
   *innerEdgeOffset = gradientFillOffset + gsz;     // set start of inner edge indexes
@@ -1025,7 +1030,7 @@ static void do_createEdgeLocationBuffer(unsigned int t,
   gradientAccum = gradientFillOffset;  // each accumulator variable starts at its respective
   innerAccum = *innerEdgeOffset;       // section's offset so when we start filling, each
   outerAccum = *outerEdgeOffset;       // section fills up it's allocated space in gbuf
-  //uses dmin=row, rsl=col
+  // uses dmin=row, rsl=col
   for (x = 0, dmin = 0; x < t; x += rw, dmin++) {
     for (rsl = 0; rsl < rw; rsl++) {
       a = x + rsl;
@@ -1055,7 +1060,7 @@ static void do_createEdgeLocationBuffer(unsigned int t,
 
 static void do_fillGradientBuffer(unsigned int rw,
                                   float *res,
-                                  unsigned short *gbuf,
+                                  const unsigned short *gbuf,
                                   unsigned int isz,
                                   unsigned int osz,
                                   unsigned int gsz,
@@ -1131,7 +1136,7 @@ static void do_fillGradientBuffer(unsigned int rw,
    * purpose of GO for the proportion calculation.
    *
    * For the purposes of the minimum distance comparisons, we only check
-   * the sums-of-squares against eachother, since they are in the same
+   * the sums-of-squares against each other, since they are in the same
    * mathematical sort-order as if we did go ahead and take square roots
    *
    * Loop through all gradient pixels.
@@ -1187,7 +1192,7 @@ static void do_fillGradientBuffer(unsigned int rw,
      * Pixel Index = Pixel Column + ( Pixel Row * Row Width )
      */
     res[gbuf[gradientFillOffset + 1] + (gbuf[gradientFillOffset] * rw)] =
-        (idist / (idist + odist));  //set intensity
+        (idist / (idist + odist));  // set intensity
   }
 }
 
@@ -1340,8 +1345,9 @@ void DoubleEdgeMaskOperation::initExecution()
 
 void *DoubleEdgeMaskOperation::initializeTileData(rcti *rect)
 {
-  if (this->m_cachedInstance)
+  if (this->m_cachedInstance) {
     return this->m_cachedInstance;
+  }
 
   lockMutex();
   if (this->m_cachedInstance == NULL) {

@@ -21,17 +21,17 @@ set(INC
   ../../blenlib
   ../../blenloader
   ../../blentranslation
+  ../../bmesh
   ../../depsgraph
   ../../draw
   ../../gpu
   ../../imbuf
-  ../../bmesh
   ../../makesdna
   ../../makesrna
   ../../render/extern/include
   ../../windowmanager
-  ../../../../intern/guardedalloc
   ../../../../intern/glew-mx
+  ../../../../intern/guardedalloc
 )
 
 set(INC_SYS
@@ -55,6 +55,10 @@ set(LIB
 
 if(WITH_HEADLESS)
   add_definitions(-DWITH_HEADLESS)
+else()
+  list(APPEND LIB
+    bf_editor_datafiles
+  )
 endif()
 
 add_definitions(${GL_DEFINITIONS})

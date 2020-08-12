@@ -18,9 +18,9 @@
  * \ingroup modifiers
  */
 
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
-#include <errno.h>
 
 #include "BLI_utildefines.h"
 
@@ -155,12 +155,12 @@ bool MOD_meshcache_read_mdd_index(FILE *fp,
     return false;
   }
 
-  if (fseek(fp, mdd_head.frame_tot * sizeof(int), SEEK_CUR) != 0) {
+  if (BLI_fseek(fp, mdd_head.frame_tot * sizeof(int), SEEK_CUR) != 0) {
     *err_str = "Header seek failed";
     return false;
   }
 
-  if (fseek(fp, sizeof(float) * 3 * index * mdd_head.verts_tot, SEEK_CUR) != 0) {
+  if (BLI_fseek(fp, sizeof(float) * 3 * index * mdd_head.verts_tot, SEEK_CUR) != 0) {
     *err_str = "Failed to seek frame";
     return false;
   }
@@ -168,7 +168,7 @@ bool MOD_meshcache_read_mdd_index(FILE *fp,
   if (factor >= 1.0f) {
 #if 1
     float *vco = *vertexCos;
-    unsigned int i;
+    uint i;
     for (i = mdd_head.verts_tot; i != 0; i--, vco += 3) {
       fread(vco, sizeof(float) * 3, 1, fp);
 
@@ -192,7 +192,7 @@ bool MOD_meshcache_read_mdd_index(FILE *fp,
   else {
     const float ifactor = 1.0f - factor;
     float *vco = *vertexCos;
-    unsigned int i;
+    uint i;
     for (i = mdd_head.verts_tot; i != 0; i--, vco += 3) {
       float tvec[3];
       fread(tvec, sizeof(float) * 3, 1, fp);
@@ -234,7 +234,7 @@ bool MOD_meshcache_read_mdd_frame(FILE *fp,
 
   if (index_range[0] == index_range[1]) {
     /* read single */
-    if ((fseek(fp, 0, SEEK_SET) == 0) &&
+    if ((BLI_fseek(fp, 0, SEEK_SET) == 0) &&
         MOD_meshcache_read_mdd_index(fp, vertexCos, verts_tot, index_range[0], 1.0f, err_str)) {
       return true;
     }
@@ -244,9 +244,9 @@ bool MOD_meshcache_read_mdd_frame(FILE *fp,
   }
   else {
     /* read both and interpolate */
-    if ((fseek(fp, 0, SEEK_SET) == 0) &&
+    if ((BLI_fseek(fp, 0, SEEK_SET) == 0) &&
         MOD_meshcache_read_mdd_index(fp, vertexCos, verts_tot, index_range[0], 1.0f, err_str) &&
-        (fseek(fp, 0, SEEK_SET) == 0) &&
+        (BLI_fseek(fp, 0, SEEK_SET) == 0) &&
         MOD_meshcache_read_mdd_index(fp, vertexCos, verts_tot, index_range[1], factor, err_str)) {
       return true;
     }

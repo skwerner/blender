@@ -224,8 +224,9 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg,
 
 #if defined(__BRANCHED_PATH__) || defined(__SUBSURFACE__) || defined(__SHADOW_TRICKS__) || \
     defined(__BAKING__)
-/* branched path tracing: connect path directly to position on one or more lights and add it to L */
-ccl_device_noinline void kernel_branched_path_surface_connect_light(
+/* branched path tracing: connect path directly to position on one or more lights and add it to L
+ */
+ccl_device_noinline_cpu void kernel_branched_path_surface_connect_light(
     KernelGlobals *kg,
     ShaderData *sd,
     ShaderData *emission_sd,
@@ -438,9 +439,9 @@ ccl_device bool kernel_branched_path_surface_bounce(KernelGlobals *kg,
 {
   /* sample BSDF */
   float bsdf_pdf;
-  BsdfEval bsdf_eval;
-  float3 bsdf_omega_in;
-  differential3 bsdf_domega_in;
+  BsdfEval bsdf_eval ccl_optional_struct_init;
+  float3 bsdf_omega_in ccl_optional_struct_init;
+  differential3 bsdf_domega_in ccl_optional_struct_init;
   float bsdf_u, bsdf_v;
   path_branched_rng_2D(
       kg, state->rng_hash, state, sample, num_samples, PRNG_BSDF_U, &bsdf_u, &bsdf_v);
@@ -570,9 +571,9 @@ ccl_device bool kernel_path_surface_bounce(KernelGlobals *kg,
   if (sd->flag & SD_BSDF) {
     /* sample BSDF */
     float bsdf_pdf;
-    BsdfEval bsdf_eval;
-    float3 bsdf_omega_in;
-    differential3 bsdf_domega_in;
+    BsdfEval bsdf_eval ccl_optional_struct_init;
+    float3 bsdf_omega_in ccl_optional_struct_init;
+    differential3 bsdf_domega_in ccl_optional_struct_init;
     float bsdf_u, bsdf_v;
     path_state_rng_2D(kg, state, PRNG_BSDF_U, &bsdf_u, &bsdf_v);
     int label;

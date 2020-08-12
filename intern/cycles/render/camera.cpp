@@ -26,9 +26,11 @@
 #include "util/util_function.h"
 #include "util/util_logging.h"
 #include "util/util_math_cdf.h"
+#include "util/util_task.h"
 #include "util/util_vector.h"
 
 /* needed for calculating differentials */
+// clang-format off
 #include "kernel/kernel_compat_cpu.h"
 #include "kernel/split/kernel_split_data.h"
 #include "kernel/kernel_globals.h"
@@ -36,6 +38,7 @@
 #include "kernel/kernel_differential.h"
 #include "kernel/kernel_montecarlo.h"
 #include "kernel/kernel_camera.h"
+// clang-format on
 
 CCL_NAMESPACE_BEGIN
 
@@ -117,6 +120,8 @@ NODE_DEFINE(Camera)
   stereo_eye_enum.insert("left", STEREO_LEFT);
   stereo_eye_enum.insert("right", STEREO_RIGHT);
   SOCKET_ENUM(stereo_eye, "Stereo Eye", stereo_eye_enum, STEREO_NONE);
+
+  SOCKET_BOOLEAN(use_spherical_stereo, "Use Spherical Stereo", false);
 
   SOCKET_FLOAT(interocular_distance, "Interocular Distance", 0.065f);
   SOCKET_FLOAT(convergence_distance, "Convergence Distance", 30.0f * 0.065f);
@@ -492,20 +497,35 @@ void Camera::device_update_volume(Device * /*device*/, DeviceScene *dscene, Scen
   if (!need_device_update && !need_flags_update) {
     return;
   }
-  KernelCamera *kcam = &dscene->data.cam;
-  BoundBox viewplane_boundbox = viewplane_bounds_get();
-  for (size_t i = 0; i < scene->objects.size(); ++i) {
-    Object *object = scene->objects[i];
-    if (object->mesh->has_volume && viewplane_boundbox.intersects(object->bounds)) {
-      /* TODO(sergey): Consider adding more grained check. */
-      VLOG(1) << "Detected camera inside volume.";
-      kcam->is_inside_volume = 1;
-      break;
+
+  KernelIntegrator *kintegrator = &dscene->data.integrator;
+  if (kintegrator->use_volumes) {
+    KernelCamera *kcam = &dscene->data.cam;
+    BoundBox viewplane_boundbox = viewplane_bounds_get();
+
+    /* Parallel object update, with grain size to avoid too much threading overhead
+     * for individual objects. */
+    static const int OBJECTS_PER_TASK = 32;
+    parallel_for(blocked_range<size_t>(0, scene->objects.size(), OBJECTS_PER_TASK),
+                 [&](const blocked_range<size_t> &r) {
+                   for (size_t i = r.begin(); i != r.end(); i++) {
+                     Object *object = scene->objects[i];
+                     if (object->geometry->has_volume &&
+                         viewplane_boundbox.intersects(object->bounds)) {
+                       /* TODO(sergey): Consider adding more grained check. */
+                       VLOG(1) << "Detected camera inside volume.";
+                       kcam->is_inside_volume = 1;
+                       parallel_for_cancel();
+                       break;
+                     }
+                   }
+                 });
+
+    if (!kcam->is_inside_volume) {
+      VLOG(1) << "Camera is outside of the volume.";
     }
   }
-  if (!kcam->is_inside_volume) {
-    VLOG(1) << "Camera is outside of the volume.";
-  }
+
   need_device_update = false;
   need_flags_update = false;
 }
@@ -563,8 +583,7 @@ float3 Camera::transform_raster_to_world(float raster_x, float raster_y)
 BoundBox Camera::viewplane_bounds_get()
 {
   /* TODO(sergey): This is all rather stupid, but is there a way to perform
-   * checks we need in a more clear and smart fasion?
-   */
+   * checks we need in a more clear and smart fashion? */
   BoundBox bounds = BoundBox::empty;
 
   if (type == CAMERA_PANORAMA) {
@@ -642,7 +661,8 @@ float Camera::world_to_raster_size(float3 P)
     float3 D = normalize(Ddiff);
     res = len(dist * dDdx - dot(dist * dDdx, D) * D);
 
-    /* Decent approx distance to frustum (doesn't handle corners correctly, but not that big of a deal) */
+    /* Decent approx distance to frustum
+     * (doesn't handle corners correctly, but not that big of a deal) */
     float f_dist = 0.0f;
 
     if (offscreen_dicing_scale > 1.0f) {
@@ -686,7 +706,8 @@ float Camera::world_to_raster_size(float3 P)
               f_dist = max(f_dist, *d);
             }
             else {
-              /* Possibly far enough behind the frustum to use distance to origin instead of edge */
+              /* Possibly far enough behind the frustum to use distance to origin instead of edge
+               */
               test_o = true;
             }
           }
@@ -716,10 +737,17 @@ float Camera::world_to_raster_size(float3 P)
     float3 raster = transform_perspective(&full_cameratoraster, make_float3(dir.x, dir.y, 0.0f));
 
     ray.t = 1.0f;
-    camera_sample_panorama(&kernel_camera, kernel_camera_motion.data(), raster.x, raster.y, 0.0f, 0.0f, &ray);
-    if(ray.t == 0.0f) {
+    camera_sample_panorama(
+        &kernel_camera, kernel_camera_motion.data(), raster.x, raster.y, 0.0f, 0.0f, &ray);
+    if (ray.t == 0.0f) {
       /* No differentials, just use from directly ahead. */
-      camera_sample_panorama(&kernel_camera, kernel_camera_motion.data(), 0.5f*full_width, 0.5f*full_height, 0.0f, 0.0f, &ray);
+      camera_sample_panorama(&kernel_camera,
+                             kernel_camera_motion.data(),
+                             0.5f * full_width,
+                             0.5f * full_height,
+                             0.0f,
+                             0.0f,
+                             &ray);
     }
 #else
     camera_sample_panorama(&kernel_camera,

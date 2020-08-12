@@ -25,9 +25,9 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_heap.h"
 #include "BLI_strict_flags.h"
+#include "BLI_utildefines.h"
 
 /***/
 
@@ -366,7 +366,7 @@ void BLI_heap_remove(Heap *heap, HeapNode *node)
 /**
  * Can be used to avoid #BLI_heap_remove, #BLI_heap_insert calls,
  * balancing the tree still has a performance cost,
- * but is often much less than remove/insert, difference is most noticable with large heaps.
+ * but is often much less than remove/insert, difference is most noticeable with large heaps.
  */
 void BLI_heap_node_value_update(Heap *heap, HeapNode *node, float value)
 {

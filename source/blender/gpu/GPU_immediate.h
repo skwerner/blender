@@ -26,12 +26,17 @@
 #ifndef __GPU_IMMEDIATE_H__
 #define __GPU_IMMEDIATE_H__
 
-#include "GPU_vertex_format.h"
-#include "GPU_primitive.h"
-#include "GPU_shader_interface.h"
 #include "GPU_batch.h"
 #include "GPU_immediate_util.h"
+#include "GPU_primitive.h"
 #include "GPU_shader.h"
+#include "GPU_shader_interface.h"
+#include "GPU_texture.h"
+#include "GPU_vertex_format.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /** Returns a cleared vertex format, ready for #add_attr. */
 GPUVertFormat *immVertexFormat(void);
@@ -47,9 +52,10 @@ void immBegin(GPUPrimType, uint vertex_len);
 void immBeginAtMost(GPUPrimType, uint max_vertex_len);
 void immEnd(void); /* finishes and draws. */
 
-/* ImmBegin a batch, then use standard immFunctions as usual. */
-/* ImmEnd will finalize the batch instead of drawing. */
-/* Then you can draw it as many times as you like! Partially replaces the need for display lists. */
+/* immBegin a batch, then use standard immFunctions as usual. */
+/* immEnd will finalize the batch instead of drawing. */
+/* Then you can draw it as many times as you like!
+ * Partially replaces the need for display lists. */
 GPUBatch *immBeginBatch(GPUPrimType, uint vertex_len);
 GPUBatch *immBeginBatchAtMost(GPUPrimType, uint vertex_len);
 
@@ -110,6 +116,9 @@ void immUniform4fv(const char *name, const float data[4]);
 void immUniformArray4fv(const char *bare_name, const float *data, int count);
 void immUniformMatrix4fv(const char *name, const float data[4][4]);
 
+void immBindTexture(const char *name, GPUTexture *tex);
+void immBindTextureSampler(const char *name, GPUTexture *tex, eGPUSamplerState state);
+
 /* Convenience functions for setting "uniform vec4 color". */
 /* The rgb functions have implicit alpha = 1.0. */
 void immUniformColor4f(float r, float g, float b, float a);
@@ -144,5 +153,9 @@ void immInit(void);
 void immActivate(void);
 void immDeactivate(void);
 void immDestroy(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __GPU_IMMEDIATE_H__ */

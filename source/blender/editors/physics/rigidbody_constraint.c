@@ -31,7 +31,7 @@
 
 #include "BKE_collection.h"
 #include "BKE_context.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
 #include "BKE_rigidbody.h"
@@ -46,6 +46,7 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
+#include "ED_object.h"
 #include "ED_physics.h"
 #include "ED_screen.h"
 
@@ -56,12 +57,29 @@
 
 static bool ED_operator_rigidbody_con_active_poll(bContext *C)
 {
+  Scene *scene = CTX_data_scene(C);
+  if (scene == NULL || ID_IS_LINKED(&scene->id) ||
+      (scene->rigidbody_world != NULL && scene->rigidbody_world->constraints != NULL &&
+       ID_IS_LINKED(&scene->rigidbody_world->constraints->id))) {
+    return false;
+  }
+
   if (ED_operator_object_active_editable(C)) {
-    Object *ob = CTX_data_active_object(C);
+    Object *ob = ED_object_active_context(C);
     return (ob && ob->rigidbody_constraint);
   }
-  else
-    return 0;
+  return false;
+}
+
+static bool ED_operator_rigidbody_con_add_poll(bContext *C)
+{
+  Scene *scene = CTX_data_scene(C);
+  if (scene == NULL || ID_IS_LINKED(&scene->id) ||
+      (scene->rigidbody_world != NULL && scene->rigidbody_world->constraints != NULL &&
+       ID_IS_LINKED(&scene->rigidbody_world->constraints->id))) {
+    return false;
+  }
+  return ED_operator_object_active_editable(C);
 }
 
 bool ED_rigidbody_constraint_add(
@@ -95,13 +113,7 @@ bool ED_rigidbody_constraint_add(
 
 void ED_rigidbody_constraint_remove(Main *bmain, Scene *scene, Object *ob)
 {
-  RigidBodyWorld *rbw = BKE_rigidbody_get_world(scene);
-
-  BKE_rigidbody_remove_constraint(scene, ob);
-  if (rbw) {
-    BKE_collection_object_remove(bmain, rbw->constraints, ob, false);
-    DEG_id_tag_update(&rbw->constraints->id, ID_RECALC_COPY_ON_WRITE);
-  }
+  BKE_rigidbody_remove_constraint(bmain, scene, ob, false);
 
   DEG_relations_tag_update(bmain);
   DEG_id_tag_update(&ob->id, ID_RECALC_TRANSFORM);
@@ -137,9 +149,7 @@ static int rigidbody_con_add_exec(bContext *C, wmOperator *op)
     /* done */
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void RIGIDBODY_OT_constraint_add(wmOperatorType *ot)
@@ -151,7 +161,7 @@ void RIGIDBODY_OT_constraint_add(wmOperatorType *ot)
 
   /* callbacks */
   ot->exec = rigidbody_con_add_exec;
-  ot->poll = ED_operator_object_active_editable;
+  ot->poll = ED_operator_rigidbody_con_add_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -179,9 +189,7 @@ static int rigidbody_con_remove_exec(bContext *C, wmOperator *op)
     BKE_report(op->reports, RPT_ERROR, "Object has no Rigid Body Constraint to remove");
     return OPERATOR_CANCELLED;
   }
-  else {
-    ED_rigidbody_constraint_remove(bmain, scene, ob);
-  }
+  ED_rigidbody_constraint_remove(bmain, scene, ob);
 
   /* send updates */
   WM_event_add_notifier(C, NC_OBJECT | ND_TRANSFORM, NULL);

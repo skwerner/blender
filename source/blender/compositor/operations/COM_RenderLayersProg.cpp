@@ -18,15 +18,13 @@
 
 #include "COM_RenderLayersProg.h"
 
-#include "BLI_listbase.h"
 #include "BKE_scene.h"
+#include "BLI_listbase.h"
 #include "DNA_scene_types.h"
 
-extern "C" {
 #include "RE_pipeline.h"
-#include "RE_shader_ext.h"
 #include "RE_render_ext.h"
-}
+#include "RE_shader_ext.h"
 
 /* ******** Render Layers Base Prog ******** */
 
@@ -47,8 +45,9 @@ void RenderLayersProg::initExecution()
   Render *re = (scene) ? RE_GetSceneRender(scene) : NULL;
   RenderResult *rr = NULL;
 
-  if (re)
+  if (re) {
     rr = RE_AcquireResultRead(re);
+  }
 
   if (rr) {
     ViewLayer *view_layer = (ViewLayer *)BLI_findlink(&scene->view_layers, getLayerId());
@@ -74,12 +73,15 @@ void RenderLayersProg::doInterpolation(float output[4], float x, float y, PixelS
 
   int ix = x, iy = y;
   if (ix < 0 || iy < 0 || ix >= width || iy >= height) {
-    if (this->m_elementsize == 1)
+    if (this->m_elementsize == 1) {
       output[0] = 0.0f;
-    else if (this->m_elementsize == 3)
+    }
+    else if (this->m_elementsize == 3) {
       zero_v3(output);
-    else
+    }
+    else {
       zero_v4(output);
+    }
     return;
   }
 
@@ -87,12 +89,15 @@ void RenderLayersProg::doInterpolation(float output[4], float x, float y, PixelS
     case COM_PS_NEAREST: {
       offset = (iy * width + ix) * this->m_elementsize;
 
-      if (this->m_elementsize == 1)
+      if (this->m_elementsize == 1) {
         output[0] = this->m_inputBuffer[offset];
-      else if (this->m_elementsize == 3)
+      }
+      else if (this->m_elementsize == 3) {
         copy_v3_v3(output, &this->m_inputBuffer[offset]);
-      else
+      }
+      else {
         copy_v4_v4(output, &this->m_inputBuffer[offset]);
+      }
       break;
     }
 
@@ -119,7 +124,7 @@ void RenderLayersProg::executePixelSampled(float output[4], float x, float y, Pi
     /* see comment in executeRegion describing coordinate mapping,
      * here it simply goes other way around
      */
-    int full_width  = rd->xsch * rd->size / 100;
+    int full_width = rd->xsch * rd->size / 100;
     int full_height = rd->ysch * rd->size / 100;
 
     dx = rd->border.xmin * full_width - (full_width - this->getWidth()) / 2.0f;
@@ -185,8 +190,9 @@ void RenderLayersProg::determineResolution(unsigned int resolution[2],
   resolution[0] = 0;
   resolution[1] = 0;
 
-  if (re)
+  if (re) {
     rr = RE_AcquireResultRead(re);
+  }
 
   if (rr) {
     ViewLayer *view_layer = (ViewLayer *)BLI_findlink(&sce->view_layers, getLayerId());
@@ -199,8 +205,9 @@ void RenderLayersProg::determineResolution(unsigned int resolution[2],
     }
   }
 
-  if (re)
+  if (re) {
     RE_ReleaseResult(re);
+  }
 }
 
 /* ******** Render Layers AO Operation ******** */

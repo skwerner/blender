@@ -26,15 +26,15 @@
 
 #include <Python.h>
 
-#include "BLI_utildefines.h"
 #include "BLI_dynstr.h"
+#include "BLI_utildefines.h"
 
 #include "MEM_guardedalloc.h"
 
 #include "bmesh.h"
 
-#include "bmesh_py_ops_call.h"
 #include "bmesh_py_ops.h" /* own include */
+#include "bmesh_py_ops_call.h"
 
 /* bmesh operator 'bmesh.ops.*' callable types
  * ******************************************* */
@@ -154,7 +154,7 @@ static PyObject *bpy_bmesh_op_doc_get(BPy_BMeshOpFunc *self, void *UNUSED(closur
 }
 
 static PyGetSetDef bpy_bmesh_op_getseters[] = {
-    {(char *)"__doc__", (getter)bpy_bmesh_op_doc_get, (setter)NULL, NULL, NULL},
+    {"__doc__", (getter)bpy_bmesh_op_doc_get, (setter)NULL, NULL, NULL},
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };
 
@@ -166,10 +166,10 @@ static PyTypeObject bmesh_op_Type = {
     sizeof(BPy_BMeshOpFunc),                      /* tp_basicsize */
     0,                                            /* tp_itemsize */
     /* methods */
-    NULL, /* tp_dealloc */
-    NULL, /* printfunc tp_print; */
-    NULL, /* getattrfunc tp_getattr; */
-    NULL, /* setattrfunc tp_setattr; */
+    NULL,            /* tp_dealloc */
+    (printfunc)NULL, /* printfunc tp_print; */
+    NULL,            /* getattrfunc tp_getattr; */
+    NULL,            /* setattrfunc tp_setattr; */
     NULL,
     /* tp_compare */             /* DEPRECATED in python 3.0! */
     (reprfunc)bpy_bmesh_op_repr, /* tp_repr */
@@ -259,8 +259,8 @@ static PyObject *bpy_bmesh_ops_fakemod_getattro(PyObject *UNUSED(self), PyObject
 
 static PyObject *bpy_bmesh_ops_fakemod_dir(PyObject *UNUSED(self))
 {
-  const unsigned int tot = bmo_opdefines_total;
-  unsigned int i;
+  const uint tot = bmo_opdefines_total;
+  uint i;
   PyObject *ret;
 
   ret = PyList_New(bmo_opdefines_total);
@@ -282,10 +282,10 @@ static PyTypeObject bmesh_ops_fakemod_Type = {
     0,                                               /* tp_basicsize */
     0,                                               /* tp_itemsize */
     /* methods */
-    NULL, /* tp_dealloc */
-    NULL, /* printfunc tp_print; */
-    NULL, /* getattrfunc tp_getattr; */
-    NULL, /* setattrfunc tp_setattr; */
+    NULL,            /* tp_dealloc */
+    (printfunc)NULL, /* printfunc tp_print; */
+    NULL,            /* getattrfunc tp_getattr; */
+    NULL,            /* setattrfunc tp_setattr; */
     NULL,
     /* tp_compare */ /* DEPRECATED in python 3.0! */
     NULL,            /* tp_repr */

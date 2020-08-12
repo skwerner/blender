@@ -24,15 +24,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "BLI_utildefines.h"
 #include "BLI_string.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_idprop.h"
 
 #include "MEM_guardedalloc.h"
 
-#include "IMB_imbuf_types.h"
 #include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
 
 #include "IMB_metadata.h"
 
@@ -55,7 +55,6 @@ void IMB_metadata_free(struct IDProperty *metadata)
   }
 
   IDP_FreeProperty(metadata);
-  MEM_freeN(metadata);
 }
 
 bool IMB_metadata_get_field(struct IDProperty *metadata,

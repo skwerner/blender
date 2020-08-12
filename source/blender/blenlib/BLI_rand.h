@@ -20,10 +20,17 @@
 #ifndef __BLI_RAND_H__
 #define __BLI_RAND_H__
 
+#include "BLI_compiler_attrs.h"
+#include "BLI_sys_types.h"
+
 /** \file
  * \ingroup bli
  * \brief Random number functions.
  */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* RNG is an abstract random number generator type that avoids using globals.
  * Always use this instead of the global RNG unless you have a good reason,
@@ -68,9 +75,9 @@ void BLI_array_frand(float *ar, int count, unsigned int seed);
 /** Return a pseudo-random (hash) float from an integer value */
 float BLI_hash_frand(unsigned int seed) ATTR_WARN_UNUSED_RESULT;
 
-/** Shuffle an array randomly using the given seed.
- * contents. This routine does not use nor modify
- * the state of the BLI random number generator.
+/**
+ * Shuffle an array randomly using the given seed contents.
+ * This routine does not use nor modify the state of the BLI random number generator.
  */
 void BLI_array_randomize(void *data,
                          unsigned int elem_size,
@@ -98,12 +105,16 @@ int BLI_rng_thread_rand(RNG_THREAD_ARRAY *rngarr, int thread) ATTR_WARN_UNUSED_R
 
 /** Return the _n_th number of the given low-discrepancy sequence. */
 void BLI_halton_1d(unsigned int prime, double offset, int n, double *r);
-void BLI_halton_2d(unsigned int prime[2], double offset[2], int n, double *r);
-void BLI_halton_3d(unsigned int prime[3], double offset[3], int n, double *r);
+void BLI_halton_2d(const unsigned int prime[2], double offset[2], int n, double *r);
+void BLI_halton_3d(const unsigned int prime[3], double offset[3], int n, double *r);
 void BLI_hammersley_1d(unsigned int n, double *r);
 
 /** Return the whole low-discrepancy sequence up to _n_. */
-void BLI_halton_2d_sequence(unsigned int prime[2], double offset[2], int n, double *r);
+void BLI_halton_2d_sequence(const unsigned int prime[2], double offset[2], int n, double *r);
 void BLI_hammersley_2d_sequence(unsigned int n, double *r);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __BLI_RAND_H__ */

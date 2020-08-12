@@ -28,15 +28,14 @@
 
 #include "MEM_guardedalloc.h"
 
-extern "C" {
-#include "BLI_utildefines.h"
-#include "BLI_math.h"
-#include "BKE_anim.h"
+#include "BKE_duplilist.h"
 #include "BKE_idprop.h"
 #include "BKE_layer.h"
 #include "BKE_node.h"
 #include "BKE_object.h"
-} /* extern "C" */
+
+#include "BLI_math.h"
+#include "BLI_utildefines.h"
 
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
@@ -60,6 +59,8 @@ extern "C" {
 #  define INVALIDATE_WORK_DATA
 #endif
 
+namespace deg = blender::deg;
+
 /* ************************ DEG ITERATORS ********************* */
 
 namespace {
@@ -67,7 +68,7 @@ namespace {
 void deg_invalidate_iterator_work_data(DEGObjectIterData *data)
 {
 #ifdef INVALIDATE_WORK_DATA
-  BLI_assert(data != NULL);
+  BLI_assert(data != nullptr);
   memset(&data->temp_dupli_object, 0xff, sizeof(data->temp_dupli_object));
 #else
   (void)data;
@@ -76,14 +77,14 @@ void deg_invalidate_iterator_work_data(DEGObjectIterData *data)
 
 void verify_id_properties_freed(DEGObjectIterData *data)
 {
-  if (data->dupli_object_current == NULL) {
+  if (data->dupli_object_current == nullptr) {
     // We didn't enter duplication yet, so we can't have any dangling
     // pointers.
     return;
   }
   const Object *dupli_object = data->dupli_object_current->ob;
   Object *temp_dupli_object = &data->temp_dupli_object;
-  if (temp_dupli_object->id.properties == NULL) {
+  if (temp_dupli_object->id.properties == nullptr) {
     // No ID properties in temp datablock -- no leak is possible.
     return;
   }
@@ -94,17 +95,19 @@ void verify_id_properties_freed(DEGObjectIterData *data)
   // Free memory which is owned by temporary storage which is about to
   // get overwritten.
   IDP_FreeProperty(temp_dupli_object->id.properties);
-  MEM_freeN(temp_dupli_object->id.properties);
-  temp_dupli_object->id.properties = NULL;
+  temp_dupli_object->id.properties = nullptr;
 }
 
-static bool deg_object_hide_original(eEvaluationMode eval_mode, Object *ob, DupliObject *dob)
+bool deg_object_hide_original(eEvaluationMode eval_mode, Object *ob, DupliObject *dob)
 {
   /* Automatic hiding if this object is being instanced on verts/faces/frames
    * by its parent. Ideally this should not be needed, but due to the wrong
    * dependency direction in the data design there is no way to keep the object
    * visible otherwise. The better solution eventually would be for objects
-   * to specify which object they instance, instead of through parenting. */
+   * to specify which object they instance, instead of through parenting.
+   *
+   * This function should not be used for metaballs. They have custom visibility rules, as hiding
+   * the base metaball will also hide all the other balls in the group. */
   if (eval_mode == DAG_EVAL_RENDER || dob) {
     const int hide_original_types = OB_DUPLIVERTS | OB_DUPLIFACES;
 
@@ -121,7 +124,7 @@ static bool deg_object_hide_original(eEvaluationMode eval_mode, Object *ob, Dupl
 bool deg_objects_dupli_iterator_next(BLI_Iterator *iter)
 {
   DEGObjectIterData *data = (DEGObjectIterData *)iter->data;
-  while (data->dupli_object_next != NULL) {
+  while (data->dupli_object_next != nullptr) {
     DupliObject *dob = data->dupli_object_next;
     Object *obd = dob->ob;
 
@@ -145,30 +148,37 @@ bool deg_objects_dupli_iterator_next(BLI_Iterator *iter)
     Object *dupli_parent = data->dupli_parent;
     Object *temp_dupli_object = &data->temp_dupli_object;
     *temp_dupli_object = *dob->ob;
-    temp_dupli_object->select_id = dupli_parent->select_id;
     temp_dupli_object->base_flag = dupli_parent->base_flag | BASE_FROM_DUPLI;
     temp_dupli_object->base_local_view_bits = dupli_parent->base_local_view_bits;
+    temp_dupli_object->runtime.local_collections_bits =
+        dupli_parent->runtime.local_collections_bits;
     temp_dupli_object->dt = MIN2(temp_dupli_object->dt, dupli_parent->dt);
     copy_v4_v4(temp_dupli_object->color, dupli_parent->color);
 
     /* Duplicated elements shouldn't care whether their original collection is visible or not. */
-    temp_dupli_object->base_flag |= BASE_VISIBLE;
+    temp_dupli_object->base_flag |= BASE_VISIBLE_DEPSGRAPH;
 
     int ob_visibility = BKE_object_visibility(temp_dupli_object, data->eval_mode);
-    if (ob_visibility == 0) {
+    if ((ob_visibility & (OB_VISIBLE_SELF | OB_VISIBLE_PARTICLES)) == 0) {
       continue;
     }
 
+    /* This could be avoided by refactoring make_dupli() in order to track all negative scaling
+     * recursively. */
+    bool is_neg_scale = is_negative_m4(dob->mat);
+    SET_FLAG_FROM_TEST(data->temp_dupli_object.transflag, is_neg_scale, OB_NEG_SCALE);
+
     copy_m4_m4(data->temp_dupli_object.obmat, dob->mat);
+    invert_m4_m4(data->temp_dupli_object.imat, data->temp_dupli_object.obmat);
     iter->current = &data->temp_dupli_object;
-    BLI_assert(DEG::deg_validate_copy_on_write_datablock(&data->temp_dupli_object.id));
+    BLI_assert(deg::deg_validate_copy_on_write_datablock(&data->temp_dupli_object.id));
     return true;
   }
 
   return false;
 }
 
-void deg_iterator_objects_step(BLI_Iterator *iter, DEG::IDNode *id_node)
+void deg_iterator_objects_step(BLI_Iterator *iter, deg::IDNode *id_node)
 {
   /* Set it early in case we need to exit and we are running from within a loop. */
   iter->skip = true;
@@ -185,17 +195,17 @@ void deg_iterator_objects_step(BLI_Iterator *iter, DEG::IDNode *id_node)
   }
 
   switch (id_node->linked_state) {
-    case DEG::DEG_ID_LINKED_DIRECTLY:
+    case deg::DEG_ID_LINKED_DIRECTLY:
       if ((data->flag & DEG_ITER_OBJECT_FLAG_LINKED_DIRECTLY) == 0) {
         return;
       }
       break;
-    case DEG::DEG_ID_LINKED_VIA_SET:
+    case deg::DEG_ID_LINKED_VIA_SET:
       if ((data->flag & DEG_ITER_OBJECT_FLAG_LINKED_VIA_SET) == 0) {
         return;
       }
       break;
-    case DEG::DEG_ID_LINKED_INDIRECTLY:
+    case deg::DEG_ID_LINKED_INDIRECTLY:
       if ((data->flag & DEG_ITER_OBJECT_FLAG_LINKED_INDIRECTLY) == 0) {
         return;
       }
@@ -203,13 +213,13 @@ void deg_iterator_objects_step(BLI_Iterator *iter, DEG::IDNode *id_node)
   }
 
   Object *object = (Object *)id_node->id_cow;
-  BLI_assert(DEG::deg_validate_copy_on_write_datablock(&object->id));
+  BLI_assert(deg::deg_validate_copy_on_write_datablock(&object->id));
 
   int ob_visibility = OB_VISIBLE_ALL;
   if (data->flag & DEG_ITER_OBJECT_FLAG_VISIBLE) {
     ob_visibility = BKE_object_visibility(object, data->eval_mode);
 
-    if (deg_object_hide_original(data->eval_mode, object, NULL)) {
+    if (object->type != OB_MBALL && deg_object_hide_original(data->eval_mode, object, nullptr)) {
       return;
     }
   }
@@ -233,7 +243,7 @@ void deg_iterator_objects_step(BLI_Iterator *iter, DEG::IDNode *id_node)
 void DEG_iterator_objects_begin(BLI_Iterator *iter, DEGObjectIterData *data)
 {
   Depsgraph *depsgraph = data->graph;
-  DEG::Depsgraph *deg_graph = reinterpret_cast<DEG::Depsgraph *>(depsgraph);
+  deg::Depsgraph *deg_graph = reinterpret_cast<deg::Depsgraph *>(depsgraph);
   const size_t num_id_nodes = deg_graph->id_nodes.size();
 
   iter->data = data;
@@ -243,17 +253,17 @@ void DEG_iterator_objects_begin(BLI_Iterator *iter, DEGObjectIterData *data)
     return;
   }
 
-  data->dupli_parent = NULL;
-  data->dupli_list = NULL;
-  data->dupli_object_next = NULL;
-  data->dupli_object_current = NULL;
+  data->dupli_parent = nullptr;
+  data->dupli_list = nullptr;
+  data->dupli_object_next = nullptr;
+  data->dupli_object_current = nullptr;
   data->scene = DEG_get_evaluated_scene(depsgraph);
   data->id_node_index = 0;
   data->num_id_nodes = num_id_nodes;
   data->eval_mode = DEG_get_mode(depsgraph);
   deg_invalidate_iterator_work_data(data);
 
-  DEG::IDNode *id_node = deg_graph->id_nodes[data->id_node_index];
+  deg::IDNode *id_node = deg_graph->id_nodes[data->id_node_index];
   deg_iterator_objects_step(iter, id_node);
 
   if (iter->skip) {
@@ -265,7 +275,7 @@ void DEG_iterator_objects_next(BLI_Iterator *iter)
 {
   DEGObjectIterData *data = (DEGObjectIterData *)iter->data;
   Depsgraph *depsgraph = data->graph;
-  DEG::Depsgraph *deg_graph = reinterpret_cast<DEG::Depsgraph *>(depsgraph);
+  deg::Depsgraph *deg_graph = reinterpret_cast<deg::Depsgraph *>(depsgraph);
   do {
     iter->skip = false;
     if (data->dupli_list) {
@@ -275,10 +285,10 @@ void DEG_iterator_objects_next(BLI_Iterator *iter)
       else {
         verify_id_properties_freed(data);
         free_object_duplilist(data->dupli_list);
-        data->dupli_parent = NULL;
-        data->dupli_list = NULL;
-        data->dupli_object_next = NULL;
-        data->dupli_object_current = NULL;
+        data->dupli_parent = nullptr;
+        data->dupli_list = nullptr;
+        data->dupli_object_next = nullptr;
+        data->dupli_object_current = nullptr;
         deg_invalidate_iterator_work_data(data);
       }
     }
@@ -289,7 +299,7 @@ void DEG_iterator_objects_next(BLI_Iterator *iter)
       return;
     }
 
-    DEG::IDNode *id_node = deg_graph->id_nodes[data->id_node_index];
+    deg::IDNode *id_node = deg_graph->id_nodes[data->id_node_index];
     deg_iterator_objects_step(iter, id_node);
   } while (iter->skip);
 }
@@ -297,7 +307,7 @@ void DEG_iterator_objects_next(BLI_Iterator *iter)
 void DEG_iterator_objects_end(BLI_Iterator *iter)
 {
   DEGObjectIterData *data = (DEGObjectIterData *)iter->data;
-  if (data != NULL) {
+  if (data != nullptr) {
     /* Force crash in case the iterator data is referenced and accessed down
      * the line. (T51718) */
     deg_invalidate_iterator_work_data(data);
@@ -306,7 +316,7 @@ void DEG_iterator_objects_end(BLI_Iterator *iter)
 
 /* ************************ DEG ID ITERATOR ********************* */
 
-static void DEG_iterator_ids_step(BLI_Iterator *iter, DEG::IDNode *id_node, bool only_updated)
+static void DEG_iterator_ids_step(BLI_Iterator *iter, deg::IDNode *id_node, bool only_updated)
 {
   ID *id_cow = id_node->id_cow;
 
@@ -331,7 +341,7 @@ static void DEG_iterator_ids_step(BLI_Iterator *iter, DEG::IDNode *id_node, bool
 void DEG_iterator_ids_begin(BLI_Iterator *iter, DEGIDIterData *data)
 {
   Depsgraph *depsgraph = data->graph;
-  DEG::Depsgraph *deg_graph = reinterpret_cast<DEG::Depsgraph *>(depsgraph);
+  deg::Depsgraph *deg_graph = reinterpret_cast<deg::Depsgraph *>(depsgraph);
   const size_t num_id_nodes = deg_graph->id_nodes.size();
 
   iter->data = data;
@@ -344,7 +354,7 @@ void DEG_iterator_ids_begin(BLI_Iterator *iter, DEGIDIterData *data)
   data->id_node_index = 0;
   data->num_id_nodes = num_id_nodes;
 
-  DEG::IDNode *id_node = deg_graph->id_nodes[data->id_node_index];
+  deg::IDNode *id_node = deg_graph->id_nodes[data->id_node_index];
   DEG_iterator_ids_step(iter, id_node, data->only_updated);
 
   if (iter->skip) {
@@ -356,7 +366,7 @@ void DEG_iterator_ids_next(BLI_Iterator *iter)
 {
   DEGIDIterData *data = (DEGIDIterData *)iter->data;
   Depsgraph *depsgraph = data->graph;
-  DEG::Depsgraph *deg_graph = reinterpret_cast<DEG::Depsgraph *>(depsgraph);
+  deg::Depsgraph *deg_graph = reinterpret_cast<deg::Depsgraph *>(depsgraph);
 
   do {
     iter->skip = false;
@@ -367,7 +377,7 @@ void DEG_iterator_ids_next(BLI_Iterator *iter)
       return;
     }
 
-    DEG::IDNode *id_node = deg_graph->id_nodes[data->id_node_index];
+    deg::IDNode *id_node = deg_graph->id_nodes[data->id_node_index];
     DEG_iterator_ids_step(iter, id_node, data->only_updated);
   } while (iter->skip);
 }

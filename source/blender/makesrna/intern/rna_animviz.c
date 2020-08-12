@@ -20,8 +20,8 @@
 
 #include <stdlib.h>
 
-#include "DNA_anim_types.h"
 #include "DNA_action_types.h"
+#include "DNA_anim_types.h"
 #include "DNA_scene_types.h"
 
 #include "BLI_utildefines.h"
@@ -40,7 +40,13 @@
 const EnumPropertyItem rna_enum_motionpath_bake_location_items[] = {
     {MOTIONPATH_BAKE_HEADS, "HEADS", 0, "Heads", "Calculate bone paths from heads"},
     {0, "TAILS", 0, "Tails", "Calculate bone paths from tails"},
-    //{MOTIONPATH_BAKE_CENTERS, "CENTROID", 0, "Centers", "Calculate bone paths from center of mass"},
+#if 0
+    {MOTIONPATH_BAKE_CENTERS,
+     "CENTROID",
+     0,
+     "Centers",
+     "Calculate bone paths from center of mass"},
+#endif
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -57,6 +63,8 @@ static void rna_AnimViz_path_start_frame_set(PointerRNA *ptr, int value)
 
   /* XXX: watchit! Path Start > MAXFRAME/2 could be a problem... */
   data->path_sf = value;
+  FRAMENUMBER_MIN_CLAMP(data->path_sf);
+
   CLAMP(data->path_ef, data->path_sf + 1, MAXFRAME / 2);
 }
 
@@ -65,7 +73,11 @@ static void rna_AnimViz_path_end_frame_set(PointerRNA *ptr, int value)
   bAnimVizSettings *data = (bAnimVizSettings *)ptr->data;
 
   data->path_ef = value;
-  CLAMP(data->path_sf, 1, data->path_ef - 1);
+  CLAMP_MAX(data->path_sf, data->path_ef - 1);
+  if (U.flag & USER_NONEGFRAMES) {
+    CLAMP_MIN(data->path_sf, 0);
+    CLAMP_MIN(data->path_ef, 1);
+  }
 }
 
 #else
@@ -138,7 +150,7 @@ static void rna_def_animviz_motion_path(BlenderRNA *brna)
   prop = RNA_def_property(srna, "line_thickness", PROP_INT, PROP_NONE);
   RNA_def_property_int_sdna(prop, NULL, "line_thickness");
   RNA_def_property_range(prop, 1, 6);
-  RNA_def_property_ui_text(prop, "Line thickness", "Line thickness for drawing path");
+  RNA_def_property_ui_text(prop, "Line Thickness", "Line thickness for drawing path");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
   /* Settings */
@@ -158,7 +170,7 @@ static void rna_def_animviz_motion_path(BlenderRNA *brna)
   /* Use custom color */
   prop = RNA_def_property(srna, "use_custom_color", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", MOTIONPATH_FLAG_CUSTOM);
-  RNA_def_property_ui_text(prop, "Custom colors", "Use custom color for this motion path");
+  RNA_def_property_ui_text(prop, "Custom Colors", "Use custom color for this motion path");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
   /* Draw lines between keyframes */
@@ -296,9 +308,8 @@ static void rna_def_animviz_paths(BlenderRNA *brna)
   /* Readonly Property - Do any motion paths exist/need updating? (Mainly for bone paths) */
   prop = RNA_def_property(srna, "has_motion_paths", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "path_bakeflag", MOTIONPATH_BAKE_HAS_PATHS);
-  RNA_def_property_clear_flag(
-      prop,
-      PROP_EDITABLE); /* NOTE: This is really an internal state var for convenience, so don't allow edits! */
+  /* NOTE: This is really an internal state var for convenience, so don't allow edits! */
+  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
   RNA_def_property_ui_text(
       prop, "Has Motion Paths", "Are there any bone paths that will need updating (read-only)");
 }

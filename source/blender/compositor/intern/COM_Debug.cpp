@@ -20,24 +20,24 @@
 
 #ifdef COM_DEBUG
 
-#  include <typeinfo>
 #  include <map>
+#  include <typeinfo>
 #  include <vector>
 
 extern "C" {
-#  include "BLI_sys_types.h"
 #  include "BLI_fileops.h"
 #  include "BLI_path_util.h"
 #  include "BLI_string.h"
+#  include "BLI_sys_types.h"
 
-#  include "DNA_node_types.h"
 #  include "BKE_appdir.h"
 #  include "BKE_node.h"
+#  include "DNA_node_types.h"
 }
 
-#  include "COM_Node.h"
-#  include "COM_ExecutionSystem.h"
 #  include "COM_ExecutionGroup.h"
+#  include "COM_ExecutionSystem.h"
+#  include "COM_Node.h"
 
 #  include "COM_ReadBufferOperation.h"
 #  include "COM_ViewerOperation.h"
@@ -53,19 +53,23 @@ DebugInfo::GroupStateMap DebugInfo::m_group_states;
 std::string DebugInfo::node_name(const Node *node)
 {
   NodeNameMap::const_iterator it = m_node_names.find(node);
-  if (it != m_node_names.end())
+  if (it != m_node_names.end()) {
     return it->second;
-  else
+  }
+  else {
     return "";
+  }
 }
 
 std::string DebugInfo::operation_name(const NodeOperation *op)
 {
   OpNameMap::const_iterator it = m_op_names.find(op);
-  if (it != m_op_names.end())
+  if (it != m_op_names.end()) {
     return it->second;
-  else
+  }
+  else {
     return "";
+  }
 }
 
 void DebugInfo::convert_started()
@@ -79,8 +83,9 @@ void DebugInfo::execute_started(const ExecutionSystem *system)
   m_group_states.clear();
   for (ExecutionSystem::Groups::const_iterator it = system->m_groups.begin();
        it != system->m_groups.end();
-       ++it)
+       ++it) {
     m_group_states[*it] = EG_WAIT;
+  }
 }
 
 void DebugInfo::node_added(const Node *node)
@@ -145,10 +150,12 @@ int DebugInfo::graphviz_operation(const ExecutionSystem *system,
   }
 
   len += snprintf(str + len, maxlen > len ? maxlen - len : 0, "// OPERATION: %p\r\n", operation);
-  if (group)
+  if (group) {
     len += snprintf(str + len, maxlen > len ? maxlen - len : 0, "\"O_%p_%p\"", operation, group);
-  else
+  }
+  else {
     len += snprintf(str + len, maxlen > len ? maxlen - len : 0, "\"O_%p\"", operation);
+  }
   len += snprintf(str + len,
                   maxlen > len ? maxlen - len : 0,
                   " [fillcolor=%s,style=filled,shape=record,label=\"{",
@@ -315,17 +322,20 @@ bool DebugInfo::graphviz_system(const ExecutionSystem *system, char *str, int ma
 
 #  if 0
   for (ExecutionSystem::Operations::const_iterator it = system->m_operations.begin();
-       it != system->m_operations.end(); ++it)
-  {
+       it != system->m_operations.end();
+       ++it) {
     NodeOperation *op = *it;
-    len += snprintf(str + len, maxlen > len ? maxlen - len : 0, "// OPERATION: %s\r\n", node->getbNode()->typeinfo->ui_name);
+    len += snprintf(str + len,
+                    maxlen > len ? maxlen - len : 0,
+                    "// OPERATION: %s\r\n",
+                    node->getbNode()->typeinfo->ui_name);
   }
 #  endif
 
   int totops = system->m_operations.size();
   int totgroups = system->m_groups.size();
   std::map<NodeOperation *, std::vector<std::string>> op_groups;
-  for (int i = 0; i < totgroups; ++i) {
+  for (int i = 0; i < totgroups; i++) {
     const ExecutionGroup *group = system->m_groups[i];
 
     len += snprintf(str + len, maxlen > len ? maxlen - len : 0, "// GROUP: %d\r\n", i);
@@ -357,16 +367,21 @@ bool DebugInfo::graphviz_system(const ExecutionSystem *system, char *str, int ma
           system, operation, group, str + len, maxlen > len ? maxlen - len : 0);
     }
 
-    //      len += snprintf(str+len, maxlen>len ? maxlen-len : 0, "//  OUTPUTOPERATION: %p\r\n", group->getOutputOperation());
-    //      len += snprintf(str+len, maxlen>len ? maxlen-len : 0, " O_%p\r\n", group->getOutputOperation());
+    // len += snprintf(str+len,
+    //     maxlen>len ? maxlen-len : 0,
+    //     "//  OUTPUTOPERATION: %p\r\n", group->getOutputOperation());
+    // len += snprintf(
+    //     str+len, maxlen>len ? maxlen-len : 0,
+    //     " O_%p\r\n", group->getOutputOperation());
     len += snprintf(str + len, maxlen > len ? maxlen - len : 0, "}\r\n");
   }
 
   /* operations not included in any group */
-  for (int j = 0; j < totops; ++j) {
+  for (int j = 0; j < totops; j++) {
     NodeOperation *operation = system->m_operations[j];
-    if (op_groups.find(operation) != op_groups.end())
+    if (op_groups.find(operation) != op_groups.end()) {
       continue;
+    }
 
     op_groups[operation].push_back(std::string(""));
 
@@ -382,8 +397,8 @@ bool DebugInfo::graphviz_system(const ExecutionSystem *system, char *str, int ma
       std::vector<std::string> &read_groups = op_groups[read];
       std::vector<std::string> &write_groups = op_groups[write];
 
-      for (int k = 0; k < write_groups.size(); ++k) {
-        for (int l = 0; l < read_groups.size(); ++l) {
+      for (int k = 0; k < write_groups.size(); k++) {
+        for (int l = 0; l < read_groups.size(); l++) {
           len += snprintf(str + len,
                           maxlen > len ? maxlen - len : 0,
                           "\"O_%p%s\" -> \"O_%p%s\" [style=dotted]\r\n",
@@ -404,8 +419,9 @@ bool DebugInfo::graphviz_system(const ExecutionSystem *system, char *str, int ma
       NodeOperationInput *to = *it;
       NodeOperationOutput *from = to->getLink();
 
-      if (!from)
+      if (!from) {
         continue;
+      }
 
       std::string color;
       switch (from->getDataType()) {
@@ -432,8 +448,8 @@ bool DebugInfo::graphviz_system(const ExecutionSystem *system, char *str, int ma
                       from,
                       to_op,
                       to);
-      for (int k = 0; k < from_groups.size(); ++k) {
-        for (int l = 0; l < to_groups.size(); ++l) {
+      for (int k = 0; k < from_groups.size(); k++) {
+        for (int l = 0; l < to_groups.size(); l++) {
           len += snprintf(str + len,
                           maxlen > len ? maxlen - len : 0,
                           "\"O_%p%s\":\"OUT_%p\":e -> \"O_%p%s\":\"IN_%p\":w",
@@ -467,7 +483,7 @@ void DebugInfo::graphviz(const ExecutionSystem *system)
 
     BLI_snprintf(basename, sizeof(basename), "compositor_%d.dot", m_file_index);
     BLI_join_dirfile(filename, sizeof(filename), BKE_tempdir_session(), basename);
-    ++m_file_index;
+    m_file_index++;
 
     FILE *fp = BLI_fopen(filename, "wb");
     fputs(str, fp);

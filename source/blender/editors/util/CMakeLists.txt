@@ -17,19 +17,20 @@
 
 set(INC
   ../include
+  ../space_sequencer
   ../../blenkernel
   ../../blenlib
   ../../blentranslation
   ../../bmesh
   ../../depsgraph
-  ../../imbuf
   ../../gpu
+  ../../imbuf
   ../../makesdna
   ../../makesrna
   ../../windowmanager
-  ../../../../intern/guardedalloc
   ../../../../intern/clog
   ../../../../intern/glew-mx
+  ../../../../intern/guardedalloc
 )
 
 set(INC_SYS
@@ -39,12 +40,12 @@ set(INC_SYS
 set(SRC
   ed_transverts.c
   ed_util.c
+  ed_util_imbuf.c
   gizmo_utils.c
   numinput.c
   select_utils.c
 
   # general includes
-  ../include/BIF_gl.h
   ../include/BIF_glutil.h
   ../include/ED_anim_api.h
   ../include/ED_armature.h
@@ -84,14 +85,18 @@ set(SRC
   ../include/ED_sound.h
   ../include/ED_space_api.h
   ../include/ED_text.h
+  ../include/ED_time_scrub_ui.h
   ../include/ED_transform.h
   ../include/ED_transform_snap_object_context.h
   ../include/ED_transverts.h
   ../include/ED_types.h
   ../include/ED_undo.h
+  ../include/ED_userpref.h
   ../include/ED_util.h
+  ../include/ED_util_imbuf.h
   ../include/ED_uvedit.h
   ../include/ED_view3d.h
+  ../include/ED_view3d_offscreen.h
   ../include/UI_icons.h
   ../include/UI_interface.h
   ../include/UI_interface_icons.h

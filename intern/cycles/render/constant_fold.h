@@ -17,8 +17,8 @@
 #ifndef __CONSTANT_FOLD_H__
 #define __CONSTANT_FOLD_H__
 
-#include "util/util_types.h"
 #include "kernel/svm/svm_types.h"
+#include "util/util_types.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -64,8 +64,9 @@ class ConstantFolder {
 
   /* Specific nodes. */
   void fold_mix(NodeMix type, bool clamp) const;
-  void fold_math(NodeMath type, bool clamp) const;
-  void fold_vector_math(NodeVectorMath type) const;
+  void fold_math(NodeMathType type) const;
+  void fold_vector_math(NodeVectorMathType type) const;
+  void fold_mapping(NodeMappingType type) const;
 };
 
 CCL_NAMESPACE_END

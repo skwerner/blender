@@ -18,41 +18,41 @@
  * \ingroup imbdds
  */
 
-extern "C" {
 #include "BLI_utildefines.h"
-}
 
-#include <stddef.h>
-#include <dds_api.h>
-#include <Stream.h>
 #include <DirectDrawSurface.h>
 #include <FlipDXT.h>
-#include <stdio.h>  // printf
+#include <Stream.h>
+#include <dds_api.h>
 #include <fstream>
+#include <stddef.h>
+#include <stdio.h>  // printf
 
 #if defined(WIN32)
 #  include "utfconv.h"
 #endif
 
-extern "C" {
-
-#include "imbuf.h"
-#include "IMB_imbuf_types.h"
-#include "IMB_imbuf.h"
 #include "IMB_allocimbuf.h"
+#include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
+#include "imbuf.h"
 
 #include "IMB_colormanagement.h"
 #include "IMB_colormanagement_intern.h"
+
+extern "C" {
 
 int imb_save_dds(struct ImBuf *ibuf, const char *name, int /*flags*/)
 {
   return (0); /* todo: finish this function */
 
   /* check image buffer */
-  if (ibuf == 0)
+  if (ibuf == 0) {
     return (0);
-  if (ibuf->rect == 0)
+  }
+  if (ibuf->rect == 0) {
     return (0);
+  }
 
   /* open file for writing */
   std::ofstream fildes;
@@ -76,11 +76,13 @@ int imb_is_a_dds(const unsigned char *mem)  // note: use at most first 32 bytes
 {
   /* heuristic check to see if mem contains a DDS file */
   /* header.fourcc == FOURCC_DDS */
-  if ((mem[0] != 'D') || (mem[1] != 'D') || (mem[2] != 'S') || (mem[3] != ' '))
+  if ((mem[0] != 'D') || (mem[1] != 'D') || (mem[2] != 'S') || (mem[3] != ' ')) {
     return (0);
+  }
   /* header.size == 124 */
-  if ((mem[4] != 124) || mem[5] || mem[6] || mem[7])
+  if ((mem[4] != 124) || mem[5] || mem[6] || mem[7]) {
     return (0);
+  }
   return (1);
 }
 
@@ -106,14 +108,16 @@ struct ImBuf *imb_load_dds(const unsigned char *mem,
    */
   colorspace_set_default_role(colorspace, IM_MAX_SPACE, COLOR_ROLE_DEFAULT_BYTE);
 
-  if (!imb_is_a_dds(mem))
+  if (!imb_is_a_dds(mem)) {
     return (0);
+  }
 
   /* check if DDS is valid and supported */
   if (!dds.isValid()) {
     /* no need to print error here, just testing if it is a DDS */
-    if (flags & IB_test)
+    if (flags & IB_test) {
       return (0);
+    }
 
     printf("DDS: not valid; header follows\n");
     dds.printInfo();
@@ -144,18 +148,21 @@ struct ImBuf *imb_load_dds(const unsigned char *mem,
     }
   }
   ibuf = IMB_allocImBuf(dds.width(), dds.height(), bits_per_pixel, 0);
-  if (ibuf == 0)
+  if (ibuf == 0) {
     return (0); /* memory allocation failed */
+  }
 
   ibuf->ftype = IMB_FTYPE_DDS;
   ibuf->dds_data.fourcc = dds.fourCC();
   ibuf->dds_data.nummipmaps = dds.mipmapCount();
 
   if ((flags & IB_test) == 0) {
-    if (!imb_addrectImBuf(ibuf))
+    if (!imb_addrectImBuf(ibuf)) {
       return (ibuf);
-    if (ibuf->rect == 0)
+    }
+    if (ibuf->rect == 0) {
       return (ibuf);
+    }
 
     rect = ibuf->rect;
     cp[3] = 0xff; /* default alpha if alpha channel is not present */
@@ -165,8 +172,9 @@ struct ImBuf *imb_load_dds(const unsigned char *mem,
       cp[0] = pixel.r; /* set R component of col */
       cp[1] = pixel.g; /* set G component of col */
       cp[2] = pixel.b; /* set B component of col */
-      if (dds.hasAlpha())
+      if (dds.hasAlpha()) {
         cp[3] = pixel.a; /* set A component of col */
+      }
       rect[i] = col;
     }
 

@@ -27,7 +27,10 @@
 
 //#include "BKE_customdata.h"  /* for CustomDataMask */
 
-struct ColorBand;
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct CustomData;
 struct CustomData_MeshMasks;
 struct Depsgraph;
@@ -46,6 +49,7 @@ void BKE_mesh_runtime_looptri_recalc(struct Mesh *mesh);
 const struct MLoopTri *BKE_mesh_runtime_looptri_ensure(struct Mesh *mesh);
 bool BKE_mesh_runtime_ensure_edit_data(struct Mesh *mesh);
 bool BKE_mesh_runtime_clear_edit_data(struct Mesh *mesh);
+bool BKE_mesh_runtime_reset_edit_data(struct Mesh *mesh);
 void BKE_mesh_runtime_clear_geometry(struct Mesh *mesh);
 void BKE_mesh_runtime_clear_cache(struct Mesh *mesh);
 
@@ -103,5 +107,9 @@ void BKE_mesh_runtime_debug_print(struct Mesh *me_eval);
 void BKE_mesh_runtime_debug_print_cdlayers(struct CustomData *data);
 bool BKE_mesh_runtime_is_valid(struct Mesh *me_eval);
 #endif /* NDEBUG */
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __BKE_MESH_RUNTIME_H__ */

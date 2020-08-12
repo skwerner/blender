@@ -18,16 +18,16 @@
  * \ingroup bke
  */
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <ctype.h>
-#include <string.h>
 #include <assert.h>
+#include <ctype.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-#include "BLI_sys_types.h"
 #include "BLI_math.h"
 #include "BLI_string.h"
 #include "BLI_string_utf8.h"
+#include "BLI_sys_types.h"
 
 #include "DNA_scene_types.h"
 
@@ -112,6 +112,8 @@ enum {
   B_UNIT_DEF_TENTH = 2,
   /** Short unit name is case sensitive, for example to distinguish mW and MW */
   B_UNIT_DEF_CASE_SENSITIVE = 4,
+  /** Short unit name does not have space between it and preceding number */
+  B_UNIT_DEF_NO_SPACE = 8,
 };
 
 /* define a single unit */
@@ -157,12 +159,12 @@ static struct bUnitDef buMetricLenDef[] = {
 static const struct bUnitCollection buMetricLenCollection = {buMetricLenDef, 3, 0, UNIT_COLLECTION_LENGTH(buMetricLenDef)};
 
 static struct bUnitDef buImperialLenDef[] = {
-  {"mile",    "miles",    "mi",   "m",  "Miles",    "MILES",    UN_SC_MI,  0.0, B_UNIT_DEF_NONE},
+  {"mile",    "miles",    "mi",   NULL, "Miles",    "MILES",    UN_SC_MI,  0.0, B_UNIT_DEF_NONE},
   {"furlong", "furlongs", "fur",  NULL, "Furlongs", "FURLONGS", UN_SC_FUR, 0.0, B_UNIT_DEF_SUPPRESS},
   {"chain",   "chains",   "ch",   NULL, "Chains",   "CHAINS",   UN_SC_CH,  0.0, B_UNIT_DEF_SUPPRESS},
   {"yard",    "yards",    "yd",   NULL, "Yards",    "YARDS",    UN_SC_YD,  0.0, B_UNIT_DEF_SUPPRESS},
-  {"foot",    "feet",     "'",    "ft", "Feet",     "FEET",     UN_SC_FT,  0.0, B_UNIT_DEF_NONE}, /* base unit */
-  {"inch",    "inches",   "\"",   "in", "Inches",   "INCHES",   UN_SC_IN,  0.0, B_UNIT_DEF_NONE},
+  {"foot",    "feet",     "'",    "ft", "Feet",     "FEET",     UN_SC_FT,  0.0, B_UNIT_DEF_NONE | B_UNIT_DEF_NO_SPACE}, /* base unit */
+  {"inch",    "inches",   "\"",   "in", "Inches",   "INCHES",   UN_SC_IN,  0.0, B_UNIT_DEF_NONE | B_UNIT_DEF_NO_SPACE},
   {"thou",    "thou",     "thou", "mil", "Thou",    "THOU",     UN_SC_MIL, 0.0, B_UNIT_DEF_NONE}, /* plural for thou has no 's' */
   NULL_UNIT,
 };
@@ -289,10 +291,10 @@ static struct bUnitCollection buNaturalTimeCollection = {buNaturalTimeDef, 3, 0,
 
 
 static struct bUnitDef buNaturalRotDef[] = {
-  {"degree",    "degrees",     "°",  "d",   "Degrees",    "DEGREES",    M_PI / 180.0,             0.0,  B_UNIT_DEF_NONE},
+  {"degree",    "degrees",     "°",  "d",   "Degrees",    "DEGREES",    M_PI / 180.0,             0.0,  B_UNIT_DEF_NONE | B_UNIT_DEF_NO_SPACE},
   /* arcminutes/arcseconds are used in Astronomy/Navigation areas... */
-  {"arcminute", "arcminutes",  "'",  NULL,  "Arcminutes", "ARCMINUTES", (M_PI / 180.0) / 60.0,    0.0,  B_UNIT_DEF_SUPPRESS},
-  {"arcsecond", "arcseconds",  "\"", NULL,  "Arcseconds", "ARCSECONDS", (M_PI / 180.0) / 3600.0,  0.0,  B_UNIT_DEF_SUPPRESS},
+  {"arcminute", "arcminutes",  "'",  NULL,  "Arcminutes", "ARCMINUTES", (M_PI / 180.0) / 60.0,    0.0,  B_UNIT_DEF_SUPPRESS | B_UNIT_DEF_NO_SPACE},
+  {"arcsecond", "arcseconds",  "\"", NULL,  "Arcseconds", "ARCSECONDS", (M_PI / 180.0) / 3600.0,  0.0,  B_UNIT_DEF_SUPPRESS | B_UNIT_DEF_NO_SPACE},
   {"radian",    "radians",     "r",  NULL,  "Radians",    "RADIANS",    1.0,                      0.0,  B_UNIT_DEF_NONE},
 //  {"turn",      "turns",       "t",  NULL,  "Turns",      NULL, 1.0 / (M_PI * 2.0),       0.0,  B_UNIT_DEF_NONE},
   NULL_UNIT,
@@ -356,8 +358,9 @@ static const bUnitDef *unit_best_fit(double value,
 
   for (unit = unit_start ? unit_start : usys->units; unit->name; unit++) {
 
-    if (suppress && (unit->flag & B_UNIT_DEF_SUPPRESS))
+    if (suppress && (unit->flag & B_UNIT_DEF_SUPPRESS)) {
       continue;
+    }
 
     /* scale down scalar so 1cm doesn't convert to 10mm because of float error */
     if (UNLIKELY(unit->flag & B_UNIT_DEF_TENTH)) {
@@ -385,10 +388,12 @@ static void unit_dual_convert(double value,
                               const bUnitDef *main_unit)
 {
   const bUnitDef *unit;
-  if (main_unit)
+  if (main_unit) {
     unit = main_unit;
-  else
+  }
+  else {
     unit = unit_best_fit(value, usys, NULL, 1);
+  }
 
   *r_value_a = (value < 0.0 ? ceil : floor)(value / unit->scalar) * unit->scalar;
   *r_value_b = value - (*r_value_a);
@@ -423,8 +428,8 @@ static size_t unit_as_string(char *str,
   value_conv = value / unit->scalar;
 
   /* Adjust precision to expected number of significant digits.
-   * Note that here, we shall not have to worry about very big/small numbers, units are expected to replace
-   * 'scientific notation' in those cases. */
+   * Note that here, we shall not have to worry about very big/small numbers, units are expected to
+   * replace 'scientific notation' in those cases. */
   prec -= integer_digits_d(value_conv);
   CLAMP(prec, 0, 6);
 
@@ -448,6 +453,11 @@ static size_t unit_as_string(char *str,
     }
   }
 
+  /* Now add a space for all units except foot, inch, degree, arcminute, arcsecond */
+  if (!(unit->flag & B_UNIT_DEF_NO_SPACE)) {
+    str[++i] = ' ';
+  }
+
   /* Now add the suffix */
   if (i < len_max) {
     int j = 0;
@@ -458,8 +468,9 @@ static size_t unit_as_string(char *str,
   }
 
   /* terminate no matter what's done with padding above */
-  if (i >= len_max)
+  if (i >= len_max) {
     i = len_max - 1;
+  }
 
   str[i] = '\0';
   return i;
@@ -490,12 +501,12 @@ static PreferredUnits preferred_units_from_UnitSettings(const UnitSettings *sett
   return units;
 }
 
-static size_t unit_as_string_splitted(char *str,
-                                      int len_max,
-                                      double value,
-                                      int prec,
-                                      const bUnitCollection *usys,
-                                      const bUnitDef *main_unit)
+static size_t unit_as_string_split_pair(char *str,
+                                        int len_max,
+                                        double value,
+                                        int prec,
+                                        const bUnitCollection *usys,
+                                        const bUnitDef *main_unit)
 {
   const bUnitDef *unit_a, *unit_b;
   double value_a, value_b;
@@ -532,8 +543,9 @@ static bool is_valid_unit_collection(const bUnitCollection *usys)
 static const bUnitDef *get_preferred_display_unit_if_used(int type, PreferredUnits units)
 {
   const bUnitCollection *usys = unit_get_system(units.system, type);
-  if (!is_valid_unit_collection(usys))
+  if (!is_valid_unit_collection(usys)) {
     return NULL;
+  }
 
   int max_offset = usys->length - 1;
 
@@ -541,22 +553,27 @@ static const bUnitDef *get_preferred_display_unit_if_used(int type, PreferredUni
     case B_UNIT_LENGTH:
     case B_UNIT_AREA:
     case B_UNIT_VOLUME:
-      if (units.length == USER_UNIT_ADAPTIVE)
+      if (units.length == USER_UNIT_ADAPTIVE) {
         return NULL;
+      }
       return usys->units + MIN2(units.length, max_offset);
     case B_UNIT_MASS:
-      if (units.mass == USER_UNIT_ADAPTIVE)
+      if (units.mass == USER_UNIT_ADAPTIVE) {
         return NULL;
+      }
       return usys->units + MIN2(units.mass, max_offset);
     case B_UNIT_TIME:
-      if (units.time == USER_UNIT_ADAPTIVE)
+      if (units.time == USER_UNIT_ADAPTIVE) {
         return NULL;
+      }
       return usys->units + MIN2(units.time, max_offset);
     case B_UNIT_ROTATION:
-      if (units.rotation == 0)
+      if (units.rotation == 0) {
         return usys->units + 0;
-      else if (units.rotation == USER_UNIT_ROT_RADIANS)
+      }
+      else if (units.rotation == USER_UNIT_ROT_RADIANS) {
         return usys->units + 3;
+      }
       break;
     default:
       break;
@@ -585,10 +602,11 @@ static size_t unit_as_string_main(char *str,
   }
 
   if (split && unit_should_be_split(type)) {
-    int length = unit_as_string_splitted(str, len_max, value, prec, usys, main_unit);
+    int length = unit_as_string_split_pair(str, len_max, value, prec, usys, main_unit);
     /* failed when length is negative, fallback to no split */
-    if (length >= 0)
+    if (length >= 0) {
       return length;
+    }
   }
 
   return unit_as_string(str, len_max, value, prec, usys, main_unit, pad ? ' ' : '\0');
@@ -630,10 +648,12 @@ static const char *unit_find_str(const char *str, const char *substr, bool case_
     while (true) {
       /* Unit detection is case insensitive. */
       const char *str_found;
-      if (case_sensitive)
+      if (case_sensitive) {
         str_found = strstr(str, substr);
-      else
+      }
+      else {
         str_found = BLI_strcasestr(str, substr);
+      }
 
       if (str_found) {
         /* Previous char cannot be a letter. */
@@ -649,8 +669,9 @@ static const char *unit_find_str(const char *str, const char *substr, bool case_
           }
         }
         /* If str_found is not a valid unit, we have to check further in the string... */
-        for (str_found++; isalpha_or_utf8(*str_found); str_found++)
-          ;
+        for (str_found++; isalpha_or_utf8(*str_found); str_found++) {
+          /* pass */
+        }
         str = str_found;
       }
       else {
@@ -692,6 +713,113 @@ static bool ch_is_op(char op)
   }
 }
 
+/**
+ * Helper function for #unit_distribute_negatives to find the next negative to distribute.
+ *
+ * \note This unnecessarily skips the next space if it comes right after the "-"
+ * just to make a more predictable output.
+ */
+static char *find_next_negative(const char *str, const char *remaining_str)
+{
+  char *str_found = strstr(remaining_str, "-");
+
+  if (str_found == NULL) {
+    return NULL;
+  }
+
+  /* Don't use the "-" from scientific notation, but make sure we can look backwards first. */
+  if ((str_found != str) && ELEM(*(str_found - 1), 'e', 'E')) {
+    return find_next_negative(str, str_found + 1);
+  }
+
+  if (*(str_found + 1) == ' ') {
+    str_found++;
+  }
+
+  return str_found + 1;
+}
+
+/**
+ * Helper function for #unit_distribute_negatives to find the next operation, including "-".
+ *
+ * \note This unnecessarily skips the space before the operation character
+ * just to make a more predictable output.
+ */
+static char *find_next_op(const char *str, char *remaining_str, int len_max)
+{
+  int i;
+  bool scientific_notation = false;
+  for (i = 0; i < len_max; i++) {
+    if (remaining_str[i] == '\0') {
+      return remaining_str + i;
+    }
+
+    if (ch_is_op(remaining_str[i])) {
+      if (scientific_notation) {
+        scientific_notation = false;
+        continue;
+      }
+
+      /* Make sure we don't look backwards before the start of the string. */
+      if (remaining_str != str && i != 0) {
+        /* Check for scientific notation. */
+        if (remaining_str[i - 1] == 'e' || remaining_str[i - 1] == 'E') {
+          scientific_notation = true;
+          continue;
+        }
+
+        /* Return position before a space character. */
+        if (remaining_str[i - 1] == ' ') {
+          i--;
+        }
+      }
+
+      return remaining_str + i;
+    }
+  }
+  BLI_assert(!"String should be NULL terminated");
+  return remaining_str + i;
+}
+
+/**
+ * Put parentheses around blocks of values after negative signs to get rid of an implied "+"
+ * between numbers without an operation between them. For example:
+ *
+ * "-1m50cm + 1 - 2m50cm"  ->  "-(1m50cm) + 1 - (2m50cm)"
+ */
+static bool unit_distribute_negatives(char *str, const int len_max)
+{
+  bool changed = false;
+
+  char *remaining_str = str;
+  int remaining_str_len = len_max;
+  while ((remaining_str = find_next_negative(str, remaining_str)) != NULL) {
+    /* Exit early in the unlikely situation that we've run out of length to add the parentheses. */
+    remaining_str_len = len_max - (int)(remaining_str - str);
+    if (remaining_str_len <= 2) {
+      return changed;
+    }
+
+    changed = true;
+
+    /* Add '(', shift the following characters to the right to make space. */
+    memmove(remaining_str + 1, remaining_str, remaining_str_len - 2);
+    *remaining_str = '(';
+
+    /* Add the ')' before the next operation or at the end. */
+    remaining_str = find_next_op(str, remaining_str + 1, remaining_str_len);
+    remaining_str_len = len_max - (int)(remaining_str - str);
+    memmove(remaining_str + 1, remaining_str, remaining_str_len - 2);
+    *remaining_str = ')';
+
+    /* Only move forward by 1 even though we added two characters. Minus signs need to be able to
+     * apply to the next block of values too. */
+    remaining_str += 1;
+  }
+
+  return changed;
+}
+
 static int unit_scale_str(char *str,
                           int len_max,
                           char *str_tmp,
@@ -713,11 +841,13 @@ static int unit_scale_str(char *str,
 
     len_name = strlen(replace_str);
     len_move = (len - (found_ofs + len_name)) + 1; /* 1+ to copy the string terminator */
-    len_num = BLI_snprintf(
-        str_tmp, TEMP_STR_SIZE, "*%.9g" SEP_STR, unit->scalar / scale_pref); /* # removed later */
 
-    if (len_num > len_max)
+    /* # removed later */
+    len_num = BLI_snprintf(str_tmp, TEMP_STR_SIZE, "*%.9g" SEP_STR, unit->scalar / scale_pref);
+
+    if (len_num > len_max) {
       len_num = len_max;
+    }
 
     if (found_ofs + len_num + len_move > len_max) {
       /* can't move the whole string, move just as much as will fit */
@@ -726,8 +856,9 @@ static int unit_scale_str(char *str,
 
     if (len_move > 0) {
       /* resize the last part of the string */
-      memmove(
-          str_found + len_num, str_found + len_name, len_move); /* may grow or shrink the string */
+
+      /* May grow or shrink the string. */
+      memmove(str_found + len_num, str_found + len_name, len_move);
     }
 
     if (found_ofs + len_num > len_max) {
@@ -766,14 +897,18 @@ static int unit_replace(
 static bool unit_find(const char *str, const bUnitDef *unit)
 {
   const bool case_sensitive = (unit->flag & B_UNIT_DEF_CASE_SENSITIVE) != 0;
-  if (unit_find_str(str, unit->name_short, case_sensitive))
+  if (unit_find_str(str, unit->name_short, case_sensitive)) {
     return true;
-  if (unit_find_str(str, unit->name_plural, false))
+  }
+  if (unit_find_str(str, unit->name_plural, false)) {
     return true;
-  if (unit_find_str(str, unit->name_alt, case_sensitive))
+  }
+  if (unit_find_str(str, unit->name_alt, case_sensitive)) {
     return true;
-  if (unit_find_str(str, unit->name, false))
+  }
+  if (unit_find_str(str, unit->name, false)) {
     return true;
+  }
 
   return false;
 }
@@ -784,20 +919,23 @@ static const bUnitDef *unit_detect_from_str(const bUnitCollection *usys,
 {
   /* Try to find a default unit from current or previous string.
    * This allows us to handle cases like 2 + 2mm, people would expect to get 4mm, not 2.002m!
-   * Note this does not handle corner cases like 2 + 2cm + 1 + 2.5mm... We can't support everything. */
+   * Note this does not handle corner cases like 2 + 2cm + 1 + 2.5mm... We can't support
+   * everything. */
   const bUnitDef *unit = NULL;
 
   /* see which units the new value has */
   for (unit = usys->units; unit->name; unit++) {
-    if (unit_find(str, unit))
+    if (unit_find(str, unit)) {
       break;
+    }
   }
   /* Else, try to infer the default unit from the previous string. */
   if (str_prev && (unit == NULL || unit->name == NULL)) {
     /* see which units the original value had */
     for (unit = usys->units; unit->name; unit++) {
-      if (unit_find(str_prev, unit))
+      if (unit_find(str_prev, unit)) {
         break;
+      }
     }
   }
   /* Else, fall back to default unit. */
@@ -812,8 +950,9 @@ bool bUnit_ContainsUnit(const char *str, int type)
 {
   for (int system = 0; system < UNIT_SYSTEM_TOT; system++) {
     const bUnitCollection *usys = unit_get_system(system, type);
-    if (!is_valid_unit_collection(usys))
+    if (!is_valid_unit_collection(usys)) {
       continue;
+    }
 
     for (int i = 0; i < usys->length; i++) {
       if (unit_find(str, usys->units + i)) {
@@ -828,10 +967,12 @@ double bUnit_PreferredInputUnitScalar(const struct UnitSettings *settings, int t
 {
   PreferredUnits units = preferred_units_from_UnitSettings(settings);
   const bUnitDef *unit = get_preferred_display_unit_if_used(type, units);
-  if (unit)
+  if (unit) {
     return unit->scalar;
-  else
+  }
+  else {
     return bUnit_BaseScalar(units.system, type);
+  }
 }
 
 /* make a copy of the string that replaces the units with numbers
@@ -853,21 +994,28 @@ bool bUnit_ReplaceString(
     char *str, int len_max, const char *str_prev, double scale_pref, int system, int type)
 {
   const bUnitCollection *usys = unit_get_system(system, type);
-  if (!is_valid_unit_collection(usys))
+  if (!is_valid_unit_collection(usys)) {
     return false;
+  }
 
   const bUnitDef *unit = NULL, *default_unit;
   double scale_pref_base = scale_pref;
   char str_tmp[TEMP_STR_SIZE];
   bool changed = false;
 
+  /* Fix cases like "-1m50cm" which would evaluate to -0.5m without this. */
+  changed |= unit_distribute_negatives(str, len_max);
+  printf("%s\n", str);
+
   /* Try to find a default unit from current or previous string. */
   default_unit = unit_detect_from_str(usys, str, str_prev);
 
-  /* We apply the default unit to the whole expression (default unit is now the reference '1.0' one). */
+  /* We apply the default unit to the whole expression (default unit is now the reference '1.0'
+   * one). */
   scale_pref_base *= default_unit->scalar;
 
-  /* Apply the default unit on the whole expression, this allows to handle nasty cases like '2+2in'. */
+  /* Apply the default unit on the whole expression, this allows to handle nasty cases like
+   * '2+2in'. */
   if (BLI_snprintf(str_tmp, sizeof(str_tmp), "(%s)*%.9g", str, default_unit->scalar) <
       sizeof(str_tmp)) {
     strncpy(str, str_tmp, len_max);
@@ -880,16 +1028,17 @@ bool bUnit_ReplaceString(
 
   for (unit = usys->units; unit->name; unit++) {
     /* in case there are multiple instances */
-    while (unit_replace(str, len_max, str_tmp, scale_pref_base, unit))
+    while (unit_replace(str, len_max, str_tmp, scale_pref_base, unit)) {
       changed = true;
+    }
   }
   unit = NULL;
 
   {
     /* try other unit systems now, so we can evaluate imperial when metric is set for eg. */
-    /* Note that checking other systems at that point means we do not support their units as 'default' one.
-     * In other words, when in metrics, typing '2+2in' will give 2 meters 2 inches, not 4 inches.
-     * I do think this is the desired behavior!
+    /* Note that checking other systems at that point means we do not support their units as
+     * 'default' one. In other words, when in metrics, typing '2+2in' will give 2 meters 2 inches,
+     * not 4 inches. I do think this is the desired behavior!
      */
     const bUnitCollection *usys_iter;
     int system_iter;
@@ -901,8 +1050,10 @@ bool bUnit_ReplaceString(
           for (unit = usys_iter->units; unit->name; unit++) {
             int ofs = 0;
             /* in case there are multiple instances */
-            while ((ofs = unit_replace(str + ofs, len_max - ofs, str_tmp, scale_pref_base, unit)))
+            while (
+                (ofs = unit_replace(str + ofs, len_max - ofs, str_tmp, scale_pref_base, unit))) {
               changed = true;
+            }
           }
         }
       }
@@ -964,10 +1115,12 @@ void bUnit_ToUnitAltName(char *str, int len_max, const char *orig_str, int syste
         len_max -= offset;
 
         /* print the alt_name */
-        if (unit->name_alt)
+        if (unit->name_alt) {
           len_name = BLI_strncpy_rlen(str, unit->name_alt, len_max);
-        else
+        }
+        else {
           len_name = 0;
+        }
 
         len_name = (len_name < len_max ? len_name : len_max);
         str += len_name;
@@ -985,12 +1138,14 @@ double bUnit_ClosestScalar(double value, int system, int type)
   const bUnitCollection *usys = unit_get_system(system, type);
   const bUnitDef *unit;
 
-  if (usys == NULL)
+  if (usys == NULL) {
     return -1;
+  }
 
   unit = unit_best_fit(value, usys, NULL, 1);
-  if (unit == NULL)
+  if (unit == NULL) {
     return -1;
+  }
 
   return unit->scalar;
 }
@@ -998,10 +1153,12 @@ double bUnit_ClosestScalar(double value, int system, int type)
 double bUnit_BaseScalar(int system, int type)
 {
   const bUnitCollection *usys = unit_get_system(system, type);
-  if (usys)
+  if (usys) {
     return unit_default(usys)->scalar;
-  else
+  }
+  else {
     return 1.0;
+  }
 }
 
 /* external access */

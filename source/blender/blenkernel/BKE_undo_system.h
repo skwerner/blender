@@ -20,6 +20,13 @@
  * \ingroup bke
  */
 
+#include "DNA_ID.h"
+#include "DNA_listBase.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct Main;
 struct UndoStep;
 struct bContext;
@@ -30,9 +37,6 @@ struct Mesh;
 struct Object;
 struct Scene;
 struct Text;
-
-#include "DNA_ID.h"
-#include "DNA_listBase.h"
 
 typedef struct UndoRefID {
   struct ID *ptr;
@@ -48,6 +52,8 @@ UNDO_REF_ID_TYPE(Mesh);
 UNDO_REF_ID_TYPE(Object);
 UNDO_REF_ID_TYPE(Scene);
 UNDO_REF_ID_TYPE(Text);
+UNDO_REF_ID_TYPE(Image);
+UNDO_REF_ID_TYPE(PaintCurve);
 
 typedef struct UndoStack {
   ListBase steps;
@@ -77,6 +83,9 @@ typedef struct UndoStep {
   bool skip;
   /** Some situations require the global state to be stored, edge cases when exiting modes. */
   bool use_memfile_step;
+  /** When this is true, undo/memfile read code is allowed to re-use old data-blocks for unchanged
+   * IDs, and existing depsgraphes. This has to be forbidden in some cases (like renamed IDs). */
+  bool use_old_bmain_data;
   /** For use by undo systems that accumulate changes (text editor, painting). */
   bool is_applied;
   /* Over alloc 'type->struct_size'. */
@@ -92,7 +101,8 @@ typedef struct UndoType {
   /**
    * When NULL, we don't consider this undo type for context checks.
    * Operators must explicitly set the undo type and handle adding the undo step.
-   * This is needed when tools operate on data which isn't the primary mode (eg, paint-curve in sculpt mode).
+   * This is needed when tools operate on data which isn't the primary mode
+   * (eg, paint-curve in sculpt mode).
    */
   bool (*poll)(struct bContext *C);
 
@@ -100,16 +110,19 @@ typedef struct UndoType {
    * None of these callbacks manage list add/removal.
    *
    * Note that 'step_encode_init' is optional,
-   * some undo types need to perform operatons before undo push finishes.
+   * some undo types need to perform operations before undo push finishes.
    */
   void (*step_encode_init)(struct bContext *C, UndoStep *us);
 
   bool (*step_encode)(struct bContext *C, struct Main *bmain, UndoStep *us);
-  void (*step_decode)(struct bContext *C, struct Main *bmain, UndoStep *us, int dir);
+  void (*step_decode)(
+      struct bContext *C, struct Main *bmain, UndoStep *us, int dir, bool is_final);
 
   /**
    * \note When freeing all steps,
-   * free from the last since #MemFileUndoType will merge with the next undo type in the list. */
+   * free from the last since #BKE_UNDOSYS_TYPE_MEMFILE
+   * will merge with the next undo type in the list.
+   */
   void (*step_free)(UndoStep *us);
 
   void (*step_foreach_ID_ref)(UndoStep *us,
@@ -121,7 +134,7 @@ typedef struct UndoType {
   int step_size;
 } UndoType;
 
-/* expose since we need to perform operations on spesific undo types (rarely). */
+/* Expose since we need to perform operations on specific undo types (rarely). */
 extern const UndoType *BKE_UNDOSYS_TYPE_IMAGE;
 extern const UndoType *BKE_UNDOSYS_TYPE_MEMFILE;
 extern const UndoType *BKE_UNDOSYS_TYPE_PAINTCURVE;
@@ -141,6 +154,8 @@ void BKE_undosys_stack_init_from_context(UndoStack *ustack, struct bContext *C);
 UndoStep *BKE_undosys_stack_active_with_type(UndoStack *ustack, const UndoType *ut);
 UndoStep *BKE_undosys_stack_init_or_active_with_type(UndoStack *ustack, const UndoType *ut);
 void BKE_undosys_stack_limit_steps_and_memory(UndoStack *ustack, int steps, size_t memory_limit);
+#define BKE_undosys_stack_limit_steps_and_memory_defaults(ustack) \
+  BKE_undosys_stack_limit_steps_and_memory(ustack, U.undosteps, (size_t)U.undomemory * 1024 * 1024)
 
 /* Only some UndoType's require init. */
 UndoStep *BKE_undosys_step_push_init_with_type(UndoStack *ustack,
@@ -187,27 +202,15 @@ void BKE_undosys_type_free_all(void);
 
 /* ID Accessor */
 #if 0 /* functionality is only used internally for now. */
-void BKE_undosys_foreach_ID_ref(UndoStack *ustack, UndoTypeForEachIDRefFn foreach_ID_ref_fn, void *user_data);
+void BKE_undosys_foreach_ID_ref(UndoStack *ustack,
+                                UndoTypeForEachIDRefFn foreach_ID_ref_fn,
+                                void *user_data);
 #endif
 
-/* Use when the undo step stores many arbitrary pointers. */
-struct UndoIDPtrMap;
-struct UndoIDPtrMap *BKE_undosys_ID_map_create(void);
-void BKE_undosys_ID_map_destroy(struct UndoIDPtrMap *map);
-void BKE_undosys_ID_map_add(struct UndoIDPtrMap *map, ID *id);
-struct ID *BKE_undosys_ID_map_lookup(const struct UndoIDPtrMap *map, const struct ID *id_src);
-
-void BKE_undosys_ID_map_add_with_prev(struct UndoIDPtrMap *map,
-                                      struct ID *id,
-                                      struct ID **id_prev);
-struct ID *BKE_undosys_ID_map_lookup_with_prev(const struct UndoIDPtrMap *map,
-                                               struct ID *id_src,
-                                               struct ID *id_prev_match[2]);
-
-void BKE_undosys_ID_map_foreach_ID_ref(struct UndoIDPtrMap *map,
-                                       UndoTypeForEachIDRefFn foreach_ID_ref_fn,
-                                       void *user_data);
-
 void BKE_undosys_print(UndoStack *ustack);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __BKE_UNDO_SYSTEM_H__ */

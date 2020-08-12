@@ -29,10 +29,6 @@ ENDIF()
 
 SET(_embree_SEARCH_DIRS
   ${EMBREE_ROOT_DIR}
-  /usr/local
-  /sw # Fink
-  /opt/local # DarwinPorts
-  /opt/embree
   /opt/lib/embree
 )
 
@@ -47,10 +43,10 @@ FIND_PATH(EMBREE_INCLUDE_DIR
 
 
 SET(_embree_FIND_COMPONENTS
+  embree3
   embree_avx
   embree_avx2
   embree_sse42
-  embree3
   lexers
   math
   simd
@@ -86,7 +82,7 @@ FIND_LIBRARY(EMBREE_LIBRARY
 # handle the QUIETLY and REQUIRED arguments and set EMBREE_FOUND to TRUE if
 # all listed variables are TRUE
 INCLUDE(FindPackageHandleStandardArgs)
-FIND_PACKAGE_HANDLE_STANDARD_ARGS(EMBREE DEFAULT_MSG
+FIND_PACKAGE_HANDLE_STANDARD_ARGS(Embree DEFAULT_MSG
     _embree_LIBRARIES EMBREE_INCLUDE_DIR)
 
 IF(EMBREE_FOUND)

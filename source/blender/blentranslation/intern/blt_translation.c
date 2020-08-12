@@ -61,8 +61,8 @@ const char *BLT_pgettext(const char *msgctxt, const char *msgid)
       msgctxt = BLT_I18NCONTEXT_DEFAULT;
     }
     ret = bl_locale_pgettext(msgctxt, msgid);
-    /* We assume if the returned string is the same (memory level) as the msgid, no translation was found,
-     * and we can try py scripts' ones!
+    /* We assume if the returned string is the same (memory level) as the msgid,
+     * no translation was found, and we can try py scripts' ones!
      */
 #  ifdef WITH_PYTHON
     if (ret == msgid) {
@@ -81,7 +81,7 @@ const char *BLT_pgettext(const char *msgctxt, const char *msgid)
 bool BLT_translate(void)
 {
 #ifdef WITH_INTERNATIONAL
-  return BLI_thread_is_main() && (U.transopts & USER_DOTRANSLATE);
+  return BLI_thread_is_main() && (U.language != ULANGUAGE_ENGLISH);
 #else
   return false;
 #endif

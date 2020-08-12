@@ -65,14 +65,15 @@ static int QuantitativeInvisibilityF1D___init__(BPy_QuantitativeInvisibilityF1D 
   PyObject *obj = 0;
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwds, "|O!", (char **)kwlist, &IntegrationType_Type, &obj))
+          args, kwds, "|O!", (char **)kwlist, &IntegrationType_Type, &obj)) {
     return -1;
+  }
   IntegrationType t = (obj) ? IntegrationType_from_BPy_IntegrationType(obj) : MEAN;
   self->py_uf1D_unsigned.uf1D_unsigned = new Functions1D::QuantitativeInvisibilityF1D(t);
   return 0;
 }
 
-/*-----------------------BPy_QuantitativeInvisibilityF1D type definition ------------------------------*/
+/*-----------------------BPy_QuantitativeInvisibilityF1D type definition ------------------------*/
 
 PyTypeObject QuantitativeInvisibilityF1D_Type = {
     PyVarObject_HEAD_INIT(NULL, 0) "QuantitativeInvisibilityF1D", /* tp_name */

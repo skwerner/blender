@@ -21,8 +21,8 @@
  * \ingroup RNA
  */
 
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
@@ -39,14 +39,14 @@
 
 #  include <stddef.h>
 
-#  include "BKE_animsys.h"
 #  include "BKE_fcurve.h"
 
 #  include "BLI_math.h"
 
 static void rna_FCurve_convert_to_samples(FCurve *fcu, ReportList *reports, int start, int end)
 {
-  /* XXX fcurve_store_samples uses end frame included, which is not consistent with usual behavior in Blender,
+  /* XXX fcurve_store_samples uses end frame included,
+   * which is not consistent with usual behavior in Blender,
    * nor python slices, etc. Let have public py API be consistent here at least. */
   end--;
   if (start > end) {
@@ -85,8 +85,9 @@ static void rna_FCurve_convert_to_keyframes(FCurve *fcu, ReportList *reports, in
     fcu->totvert = tot_kf;
 
     /* Get first sample point to 'copy' as keyframe. */
-    for (; tot_sp && (fpt->vec[0] < (float)start); fpt++, tot_sp--)
-      ;
+    for (; tot_sp && (fpt->vec[0] < (float)start); fpt++, tot_sp--) {
+      /* pass */
+    }
 
     /* Add heading dummy flat points if needed. */
     for (; tot_kf && (fpt->vec[0] > (float)start); start++, bezt++, tot_kf--) {

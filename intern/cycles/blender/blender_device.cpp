@@ -17,7 +17,18 @@
 #include "blender/blender_device.h"
 #include "blender/blender_util.h"
 
+#include "util/util_foreach.h"
+
 CCL_NAMESPACE_BEGIN
+
+enum ComputeDevice {
+  COMPUTE_DEVICE_CPU = 0,
+  COMPUTE_DEVICE_CUDA = 1,
+  COMPUTE_DEVICE_OPENCL = 2,
+  COMPUTE_DEVICE_OPTIX = 3,
+
+  COMPUTE_DEVICE_NUM
+};
 
 int blender_device_threads(BL::Scene &b_scene)
 {
@@ -40,7 +51,7 @@ DeviceInfo blender_device_info(BL::Preferences &b_preferences, BL::Scene &b_scen
     /* Find network device. */
     vector<DeviceInfo> devices = Device::available_devices(DEVICE_MASK_NETWORK);
     if (!devices.empty()) {
-      device = devices.front();
+      return devices.front();
     }
   }
   else if (get_enum(cscene, "device") == 1) {
@@ -57,13 +68,6 @@ DeviceInfo blender_device_info(BL::Preferences &b_preferences, BL::Scene &b_scen
     }
 
     /* Test if we are using GPU devices. */
-    enum ComputeDevice {
-      COMPUTE_DEVICE_CPU = 0,
-      COMPUTE_DEVICE_CUDA = 1,
-      COMPUTE_DEVICE_OPENCL = 2,
-      COMPUTE_DEVICE_NUM = 3,
-    };
-
     ComputeDevice compute_device = (ComputeDevice)get_enum(
         cpreferences, "compute_device_type", COMPUTE_DEVICE_NUM, COMPUTE_DEVICE_CPU);
 
@@ -72,6 +76,10 @@ DeviceInfo blender_device_info(BL::Preferences &b_preferences, BL::Scene &b_scen
       uint mask = DEVICE_MASK_CPU;
       if (compute_device == COMPUTE_DEVICE_CUDA) {
         mask |= DEVICE_MASK_CUDA;
+      }
+      else if (compute_device == COMPUTE_DEVICE_OPTIX) {
+        /* Cannot use CPU and OptiX device at the same time right now, so replace mask. */
+        mask = DEVICE_MASK_OPTIX;
       }
       else if (compute_device == COMPUTE_DEVICE_OPENCL) {
         mask |= DEVICE_MASK_OPENCL;
@@ -98,6 +106,10 @@ DeviceInfo blender_device_info(BL::Preferences &b_preferences, BL::Scene &b_scen
         device = Device::get_multi_device(used_devices, threads, background);
       }
       /* Else keep using the CPU device that was set before. */
+
+      if (!get_boolean(cpreferences, "peer_memory")) {
+        device.has_peer_memory = false;
+      }
     }
   }
 

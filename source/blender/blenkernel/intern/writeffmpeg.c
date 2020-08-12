@@ -20,16 +20,10 @@
  */
 
 #ifdef WITH_FFMPEG
-#  include <string.h>
 #  include <stdio.h>
+#  include <string.h>
 
 #  include <stdlib.h>
-
-#  include <libavformat/avformat.h>
-#  include <libavcodec/avcodec.h>
-#  include <libavutil/rational.h>
-#  include <libavutil/samplefmt.h>
-#  include <libswscale/swscale.h>
 
 #  include "MEM_guardedalloc.h"
 
@@ -42,18 +36,28 @@
 #    include <AUD_Special.h>
 #  endif
 
+#  include "BLI_math_base.h"
 #  include "BLI_utildefines.h"
 
 #  include "BKE_global.h"
 #  include "BKE_idprop.h"
 #  include "BKE_image.h"
-#  include "BKE_library.h"
+#  include "BKE_lib_id.h"
 #  include "BKE_main.h"
 #  include "BKE_report.h"
 #  include "BKE_sound.h"
 #  include "BKE_writeffmpeg.h"
 
 #  include "IMB_imbuf.h"
+
+/* This needs to be included after BLI_math_base.h otherwise it will redefine some math defines
+ * like M_SQRT1_2 leading to warnings with MSVC */
+#  include <libavcodec/avcodec.h>
+#  include <libavformat/avformat.h>
+#  include <libavutil/imgutils.h>
+#  include <libavutil/rational.h>
+#  include <libavutil/samplefmt.h>
+#  include <libswscale/swscale.h>
 
 #  include "ffmpeg_compat.h"
 
@@ -77,7 +81,10 @@ typedef struct FFMpegContext {
   AVFormatContext *outfile;
   AVStream *video_stream;
   AVStream *audio_stream;
-  AVFrame *current_frame;
+  AVFrame *current_frame; /* Image frame in output pixel format. */
+
+  /* Image frame in Blender's own pixel format, may need conversion to the output pixel format. */
+  AVFrame *img_convert_frame;
   struct SwsContext *img_convert_ctx;
 
   uint8_t *audio_input_buffer;
@@ -107,16 +114,20 @@ typedef struct FFMpegContext {
 static void ffmpeg_dict_set_int(AVDictionary **dict, const char *key, int value);
 static void ffmpeg_dict_set_float(AVDictionary **dict, const char *key, float value);
 static void ffmpeg_set_expert_options(RenderData *rd);
-static void ffmpeg_filepath_get(
-    FFMpegContext *context, char *string, struct RenderData *rd, bool preview, const char *suffix);
+static void ffmpeg_filepath_get(FFMpegContext *context,
+                                char *string,
+                                const struct RenderData *rd,
+                                bool preview,
+                                const char *suffix);
 
 /* Delete a picture buffer */
 
 static void delete_picture(AVFrame *f)
 {
   if (f) {
-    if (f->data[0])
+    if (f->data[0]) {
       MEM_freeN(f->data[0]);
+    }
     av_free(f);
   }
 }
@@ -207,12 +218,15 @@ static int write_audio_frame(FFMpegContext *context)
 #    endif
 
   if (got_output) {
-    if (pkt.pts != AV_NOPTS_VALUE)
+    if (pkt.pts != AV_NOPTS_VALUE) {
       pkt.pts = av_rescale_q(pkt.pts, c->time_base, context->audio_stream->time_base);
-    if (pkt.dts != AV_NOPTS_VALUE)
+    }
+    if (pkt.dts != AV_NOPTS_VALUE) {
       pkt.dts = av_rescale_q(pkt.dts, c->time_base, context->audio_stream->time_base);
-    if (pkt.duration > 0)
+    }
+    if (pkt.duration > 0) {
       pkt.duration = av_rescale_q(pkt.duration, c->time_base, context->audio_stream->time_base);
+    }
 
     pkt.stream_index = context->audio_stream->index;
 
@@ -220,16 +234,18 @@ static int write_audio_frame(FFMpegContext *context)
 
     if (av_interleaved_write_frame(context->outfile, &pkt) != 0) {
       fprintf(stderr, "Error writing audio packet!\n");
-      if (frame)
+      if (frame) {
         av_frame_free(&frame);
+      }
       return -1;
     }
 
     av_free_packet(&pkt);
   }
 
-  if (frame)
+  if (frame) {
     av_frame_free(&frame);
+  }
 
   return 0;
 }
@@ -244,8 +260,9 @@ static AVFrame *alloc_picture(int pix_fmt, int width, int height)
 
   /* allocate space for the struct */
   f = av_frame_alloc();
-  if (!f)
+  if (!f) {
     return NULL;
+  }
   size = avpicture_get_size(pix_fmt, width, height);
   /* allocate the actual picture buffer */
   buf = MEM_mallocN(size, "AVFrame buffer");
@@ -254,6 +271,10 @@ static AVFrame *alloc_picture(int pix_fmt, int width, int height)
     return NULL;
   }
   avpicture_fill((AVPicture *)f, buf, pix_fmt, width, height);
+  f->format = pix_fmt;
+  f->width = width;
+  f->height = height;
+
   return f;
 }
 
@@ -309,6 +330,10 @@ static const char **get_file_extensions(int format)
       static const char *rv[] = {".ogv", ".ogg", NULL};
       return rv;
     }
+    case FFMPEG_WEBM: {
+      static const char *rv[] = {".webm", NULL};
+      return rv;
+    }
     default:
       return NULL;
   }
@@ -316,7 +341,7 @@ static const char **get_file_extensions(int format)
 
 /* Write a frame to the output file */
 static int write_video_frame(
-    FFMpegContext *context, RenderData *rd, int cfra, AVFrame *frame, ReportList *reports)
+    FFMpegContext *context, const RenderData *rd, int cfra, AVFrame *frame, ReportList *reports)
 {
   int got_output;
   int ret, success = 1;
@@ -353,74 +378,60 @@ static int write_video_frame(
     success = 0;
   }
 
-  if (!success)
+  if (!success) {
     BKE_report(reports, RPT_ERROR, "Error writing frame");
+  }
 
   return success;
 }
 
 /* read and encode a frame of audio from the buffer */
-static AVFrame *generate_video_frame(FFMpegContext *context, uint8_t *pixels, ReportList *reports)
+static AVFrame *generate_video_frame(FFMpegContext *context,
+                                     const uint8_t *pixels,
+                                     ReportList *reports)
 {
-  uint8_t *rendered_frame;
-
   AVCodecContext *c = context->video_stream->codec;
-  int width = c->width;
   int height = c->height;
   AVFrame *rgb_frame;
 
-  if (c->pix_fmt != AV_PIX_FMT_BGR32) {
-    rgb_frame = alloc_picture(AV_PIX_FMT_BGR32, width, height);
-    if (!rgb_frame) {
-      BKE_report(reports, RPT_ERROR, "Could not allocate temporary frame");
-      return NULL;
-    }
+  if (context->img_convert_frame != NULL) {
+    /* Pixel format conversion is needed. */
+    rgb_frame = context->img_convert_frame;
   }
   else {
+    /* The output pixel format is Blender's internal pixel format. */
     rgb_frame = context->current_frame;
   }
 
-  rendered_frame = pixels;
+  /* Copy the Blender pixels into the FFmpeg datastructure, taking care of endianness and flipping
+   * the image vertically. */
+  int linesize = rgb_frame->linesize[0];
+  for (int y = 0; y < height; y++) {
+    uint8_t *target = rgb_frame->data[0] + linesize * (height - y - 1);
+    const uint8_t *src = pixels + linesize * y;
 
-  /* Do RGBA-conversion and flipping in one step depending
-   * on CPU-Endianess */
+#  if ENDIAN_ORDER == L_ENDIAN
+    memcpy(target, src, linesize);
 
-  if (ENDIAN_ORDER == L_ENDIAN) {
-    int y;
-    for (y = 0; y < height; y++) {
-      uint8_t *target = rgb_frame->data[0] + width * 4 * (height - y - 1);
-      uint8_t *src = rendered_frame + width * 4 * y;
-      uint8_t *end = src + width * 4;
-      while (src != end) {
-        target[3] = src[3];
-        target[2] = src[2];
-        target[1] = src[1];
-        target[0] = src[0];
+#  elif ENDIAN_ORDER == B_ENDIAN
+    const uint8_t *end = src + linesize;
+    while (src != end) {
+      target[3] = src[0];
+      target[2] = src[1];
+      target[1] = src[2];
+      target[0] = src[3];
 
-        target += 4;
-        src += 4;
-      }
+      target += 4;
+      src += 4;
     }
-  }
-  else {
-    int y;
-    for (y = 0; y < height; y++) {
-      uint8_t *target = rgb_frame->data[0] + width * 4 * (height - y - 1);
-      uint8_t *src = rendered_frame + width * 4 * y;
-      uint8_t *end = src + width * 4;
-      while (src != end) {
-        target[3] = src[0];
-        target[2] = src[1];
-        target[1] = src[2];
-        target[0] = src[3];
-
-        target += 4;
-        src += 4;
-      }
-    }
+#  else
+#    error ENDIAN_ORDER should either be L_ENDIAN or B_ENDIAN.
+#  endif
   }
 
-  if (c->pix_fmt != AV_PIX_FMT_BGR32) {
+  /* Convert to the output pixel format, if it's different that Blender's internal one. */
+  if (context->img_convert_frame != NULL) {
+    BLI_assert(context->img_convert_ctx != NULL);
     sws_scale(context->img_convert_ctx,
               (const uint8_t *const *)rgb_frame->data,
               rgb_frame->linesize,
@@ -428,12 +439,7 @@ static AVFrame *generate_video_frame(FFMpegContext *context, uint8_t *pixels, Re
               c->height,
               context->current_frame->data,
               context->current_frame->linesize);
-    delete_picture(rgb_frame);
   }
-
-  context->current_frame->format = AV_PIX_FMT_BGR32;
-  context->current_frame->width = width;
-  context->current_frame->height = height;
 
   return context->current_frame;
 }
@@ -527,8 +533,9 @@ static void set_ffmpeg_properties(RenderData *rd,
   }
 
   for (curr = prop->data.group.first; curr; curr = curr->next) {
-    if (ffmpeg_proprty_valid(c, prop_name, curr))
+    if (ffmpeg_proprty_valid(c, prop_name, curr)) {
       set_ffmpeg_property_option(c, curr, dictionary);
+    }
   }
 }
 
@@ -551,8 +558,9 @@ static AVStream *alloc_video_stream(FFMpegContext *context,
   error[0] = '\0';
 
   st = avformat_new_stream(of, NULL);
-  if (!st)
+  if (!st) {
     return NULL;
+  }
   st->id = 0;
 
   /* Set up the codec context */
@@ -578,15 +586,30 @@ static AVStream *alloc_video_stream(FFMpegContext *context,
     c->time_base.den = rd->frs_sec;
     c->time_base.num = (int)rd->frs_sec_base;
   }
+  else if (compare_ff(rd->frs_sec_base, 1.001f, 0.000001f)) {
+    /* This converts xx/1.001 (which is used in presets) to xx000/1001 (which is used in the rest
+     * of the world, including FFmpeg). */
+    c->time_base.den = (int)(rd->frs_sec * 1000);
+    c->time_base.num = (int)(rd->frs_sec_base * 1000);
+  }
   else {
-    c->time_base.den = rd->frs_sec * 100000;
-    c->time_base.num = ((double)rd->frs_sec_base) * 100000;
+    /* This calculates a fraction (DENUM_MAX / num) which approximates the scene frame rate
+     * (frs_sec / frs_sec_base). It uses the maximum denominator allowed by FFmpeg.
+     */
+    const double DENUM_MAX = (codec_id == AV_CODEC_ID_MPEG4) ? (1UL << 16) - 1 : (1UL << 31) - 1;
+    const double num = (DENUM_MAX / (double)rd->frs_sec) * rd->frs_sec_base;
+
+    c->time_base.den = (int)DENUM_MAX;
+    c->time_base.num = (int)num;
   }
 
   c->gop_size = context->ffmpeg_gop_size;
   c->max_b_frames = context->ffmpeg_max_b_frames;
 
-  if (context->ffmpeg_crf >= 0) {
+  if (context->ffmpeg_type == FFMPEG_WEBM && context->ffmpeg_crf == 0) {
+    ffmpeg_dict_set_int(&opts, "lossless", 1);
+  }
+  else if (context->ffmpeg_crf >= 0) {
     ffmpeg_dict_set_int(&opts, "crf", context->ffmpeg_crf);
   }
   else {
@@ -627,11 +650,12 @@ static AVStream *alloc_video_stream(FFMpegContext *context,
   }
 
   /* Deprecated and not doing anything since July 2015, deleted in recent ffmpeg */
-  //c->me_method = ME_EPZS;
+  // c->me_method = ME_EPZS;
 
   codec = avcodec_find_encoder(c->codec_id);
-  if (!codec)
+  if (!codec) {
     return NULL;
+  }
 
   /* Be sure to use the correct pixel format(e.g. RGB, YUV) */
 
@@ -675,6 +699,12 @@ static AVStream *alloc_video_stream(FFMpegContext *context,
     }
   }
 
+  if (codec_id == AV_CODEC_ID_VP9) {
+    if (rd->im_format.planes == R_IMF_PLANES_RGBA) {
+      c->pix_fmt = AV_PIX_FMT_YUVA420P;
+    }
+  }
+
   if (codec_id == AV_CODEC_ID_PNG) {
     if (rd->im_format.planes == R_IMF_PLANES_RGBA) {
       c->pix_fmt = AV_PIX_FMT_RGBA;
@@ -701,18 +731,29 @@ static AVStream *alloc_video_stream(FFMpegContext *context,
   }
   av_dict_free(&opts);
 
+  /* FFmpeg expects its data in the output pixel format. */
   context->current_frame = alloc_picture(c->pix_fmt, c->width, c->height);
 
-  context->img_convert_ctx = sws_getContext(c->width,
-                                            c->height,
-                                            AV_PIX_FMT_BGR32,
-                                            c->width,
-                                            c->height,
-                                            c->pix_fmt,
-                                            SWS_BICUBIC,
-                                            NULL,
-                                            NULL,
-                                            NULL);
+  if (c->pix_fmt == AV_PIX_FMT_RGBA) {
+    /* Output pixel format is the same we use internally, no conversion necessary. */
+    context->img_convert_frame = NULL;
+    context->img_convert_ctx = NULL;
+  }
+  else {
+    /* Output pixel format is different, allocate frame for conversion. */
+    context->img_convert_frame = alloc_picture(AV_PIX_FMT_RGBA, c->width, c->height);
+    context->img_convert_ctx = sws_getContext(c->width,
+                                              c->height,
+                                              AV_PIX_FMT_RGBA,
+                                              c->width,
+                                              c->height,
+                                              c->pix_fmt,
+                                              SWS_BICUBIC,
+                                              NULL,
+                                              NULL,
+                                              NULL);
+  }
+
   return st;
 }
 
@@ -731,8 +772,9 @@ static AVStream *alloc_audio_stream(FFMpegContext *context,
   error[0] = '\0';
 
   st = avformat_new_stream(of, NULL);
-  if (!st)
+  if (!st) {
     return NULL;
+  }
   st->id = 1;
 
   c = st->codec;
@@ -775,19 +817,21 @@ static AVStream *alloc_audio_stream(FFMpegContext *context,
 
   codec = avcodec_find_encoder(c->codec_id);
   if (!codec) {
-    //XXX error("Couldn't find a valid audio codec");
+    // XXX error("Couldn't find a valid audio codec");
     return NULL;
   }
 
   if (codec->sample_fmts) {
-    /* check if the preferred sample format for this codec is supported.
-     * this is because, depending on the version of libav, and with the whole ffmpeg/libav fork situation,
-     * you have various implementations around. float samples in particular are not always supported.
-     */
+    /* Check if the preferred sample format for this codec is supported.
+     * this is because, depending on the version of libav,
+     * and with the whole ffmpeg/libav fork situation,
+     * you have various implementations around.
+     * Float samples in particular are not always supported. */
     const enum AVSampleFormat *p = codec->sample_fmts;
     for (; *p != -1; p++) {
-      if (*p == st->codec->sample_fmt)
+      if (*p == st->codec->sample_fmt) {
         break;
+      }
     }
     if (*p == -1) {
       /* sample format incompatible with codec. Defaulting to a format known to work */
@@ -817,7 +861,7 @@ static AVStream *alloc_audio_stream(FFMpegContext *context,
   set_ffmpeg_properties(rd, c, "audio", &opts);
 
   if (avcodec_open2(c, codec, &opts) < 0) {
-    //XXX error("Couldn't initialize audio codec");
+    // XXX error("Couldn't initialize audio codec");
     BLI_strncpy(error, IMB_ffmpeg_last_error(), error_size);
     av_dict_free(&opts);
     return NULL;
@@ -833,16 +877,18 @@ static AVStream *alloc_audio_stream(FFMpegContext *context,
   context->audio_outbuf_size = FF_MIN_BUFFER_SIZE;
 #  endif
 
-  if (c->frame_size == 0)
+  if (c->frame_size == 0) {
     // used to be if ((c->codec_id >= CODEC_ID_PCM_S16LE) && (c->codec_id <= CODEC_ID_PCM_DVD))
     // not sure if that is needed anymore, so let's try out if there are any
     // complaints regarding some ffmpeg versions users might have
     context->audio_input_samples = FF_MIN_BUFFER_SIZE * 8 / c->bits_per_coded_sample / c->channels;
+  }
   else {
     context->audio_input_samples = c->frame_size;
 #  ifndef FFMPEG_HAVE_ENCODE_AUDIO2
-    if (c->frame_size * c->channels * sizeof(int16_t) * 4 > context->audio_outbuf_size)
+    if (c->frame_size * c->channels * sizeof(int16_t) * 4 > context->audio_outbuf_size) {
       context->audio_outbuf_size = c->frame_size * c->channels * sizeof(int16_t) * 4;
+    }
 #  endif
   }
 
@@ -856,9 +902,10 @@ static AVStream *alloc_audio_stream(FFMpegContext *context,
   context->audio_output_buffer = (uint8_t *)av_malloc(context->audio_outbuf_size);
 #  endif
 
-  if (context->audio_deinterleave)
+  if (context->audio_deinterleave) {
     context->audio_deinterleave_buffer = (uint8_t *)av_malloc(
         context->audio_input_samples * c->channels * context->audio_sample_size);
+  }
 
   context->audio_time = 0.0f;
 
@@ -1041,10 +1088,12 @@ static int start_ffmpeg_impl(FFMpegContext *context,
         context, rd, fmt->video_codec, of, rectx, recty, error, sizeof(error));
     PRINT("alloc video stream %p\n", context->video_stream);
     if (!context->video_stream) {
-      if (error[0])
+      if (error[0]) {
         BKE_report(reports, RPT_ERROR, error);
-      else
+      }
+      else {
         BKE_report(reports, RPT_ERROR, "Error initializing video stream");
+      }
       goto fail;
     }
   }
@@ -1053,10 +1102,12 @@ static int start_ffmpeg_impl(FFMpegContext *context,
     context->audio_stream = alloc_audio_stream(
         context, rd, fmt->audio_codec, of, error, sizeof(error));
     if (!context->audio_stream) {
-      if (error[0])
+      if (error[0]) {
         BKE_report(reports, RPT_ERROR, error);
-      else
+      }
+      else {
         BKE_report(reports, RPT_ERROR, "Error initializing audio stream");
+      }
       goto fail;
     }
   }
@@ -1172,7 +1223,7 @@ static void flush_ffmpeg(FFMpegContext *context)
 
 /* Get the output filename-- similar to the other output formats */
 static void ffmpeg_filepath_get(
-    FFMpegContext *context, char *string, RenderData *rd, bool preview, const char *suffix)
+    FFMpegContext *context, char *string, const RenderData *rd, bool preview, const char *suffix)
 {
   char autosplit[20];
 
@@ -1180,8 +1231,9 @@ static void ffmpeg_filepath_get(
   const char **fe = exts;
   int sfra, efra;
 
-  if (!string || !exts)
+  if (!string || !exts) {
     return;
+  }
 
   if (preview) {
     sfra = rd->psfra;
@@ -1236,13 +1288,13 @@ static void ffmpeg_filepath_get(
   BLI_path_suffix(string, FILE_MAX, suffix, "");
 }
 
-void BKE_ffmpeg_filepath_get(char *string, RenderData *rd, bool preview, const char *suffix)
+void BKE_ffmpeg_filepath_get(char *string, const RenderData *rd, bool preview, const char *suffix)
 {
   ffmpeg_filepath_get(NULL, string, rd, preview, suffix);
 }
 
 int BKE_ffmpeg_start(void *context_v,
-                     struct Scene *scene,
+                     const struct Scene *scene,
                      RenderData *rd,
                      int rectx,
                      int recty,
@@ -1390,6 +1442,11 @@ static void end_ffmpeg_impl(FFMpegContext *context, int is_autosplit)
     delete_picture(context->current_frame);
     context->current_frame = NULL;
   }
+  if (context->img_convert_frame != NULL) {
+    delete_picture(context->img_convert_frame);
+    context->img_convert_frame = NULL;
+  }
+
   if (context->outfile != NULL && context->outfile->oformat) {
     if (!(context->outfile->oformat->flags & AVFMT_NOFILE)) {
       avio_close(context->outfile->pb);
@@ -1501,7 +1558,6 @@ static IDProperty *BKE_ffmpeg_property_add(RenderData *rd,
           (char
                *)"                                                                               ";
       val.string.len = 80;
-      /*      val.str = (char *)"                                                                               ";*/
       idp_type = IDP_STRING;
       break;
     case AV_OPT_TYPE_CONST:
@@ -1533,8 +1589,9 @@ int BKE_ffmpeg_property_add_string(RenderData *rd, const char *type, const char 
   BLI_strncpy(name_, str, sizeof(name_));
 
   name = name_;
-  while (*name == ' ')
+  while (*name == ' ') {
     name++;
+  }
 
   param = strchr(name, ':');
 
@@ -1543,8 +1600,9 @@ int BKE_ffmpeg_property_add_string(RenderData *rd, const char *type, const char 
   }
   if (param) {
     *param++ = '\0';
-    while (*param == ' ')
+    while (*param == ' ') {
       param++;
+    }
   }
 
   o = av_opt_find(&c, name, NULL, 0, AV_OPT_SEARCH_CHILDREN | AV_OPT_SEARCH_FAKE_OBJ);
@@ -1592,8 +1650,9 @@ static void ffmpeg_set_expert_options(RenderData *rd)
 {
   int codec_id = rd->ffcodecdata.codec;
 
-  if (rd->ffcodecdata.properties)
-    IDP_FreeProperty(rd->ffcodecdata.properties);
+  if (rd->ffcodecdata.properties) {
+    IDP_FreePropertyContent(rd->ffcodecdata.properties);
+  }
 
   if (codec_id == AV_CODEC_ID_H264) {
     /*
@@ -1612,7 +1671,9 @@ static void ffmpeg_set_expert_options(RenderData *rd)
      * The other options were taken from the libx264-default.preset
      * included in the ffmpeg distribution.
      */
-    //      ffmpeg_property_add_string(rd, "video", "flags:loop"); // this breaks compatibility for QT
+
+    /* This breaks compatibility for QT. */
+    // BKE_ffmpeg_property_add_string(rd, "video", "flags:loop");
     BKE_ffmpeg_property_add_string(rd, "video", "cmp:chroma");
     BKE_ffmpeg_property_add_string(rd, "video", "partitions:parti4x4");  // Deprecated.
     BKE_ffmpeg_property_add_string(rd, "video", "partitions:partp8x8");  // Deprecated.
@@ -1643,8 +1704,9 @@ static void ffmpeg_set_expert_options(RenderData *rd)
 #  endif
   }
   else if (codec_id == AV_CODEC_ID_DNXHD) {
-    if (rd->ffcodecdata.flags & FFMPEG_LOSSLESS_OUTPUT)
+    if (rd->ffcodecdata.flags & FFMPEG_LOSSLESS_OUTPUT) {
       BKE_ffmpeg_property_add_string(rd, "video", "mbd:rd");
+    }
   }
 }
 
@@ -1652,8 +1714,9 @@ void BKE_ffmpeg_preset_set(RenderData *rd, int preset)
 {
   int isntsc = (rd->frs_sec != 25);
 
-  if (rd->ffcodecdata.properties)
-    IDP_FreeProperty(rd->ffcodecdata.properties);
+  if (rd->ffcodecdata.properties) {
+    IDP_FreePropertyContent(rd->ffcodecdata.properties);
+  }
 
   switch (preset) {
     case FFMPEG_PRESET_VCD:
@@ -1789,25 +1852,18 @@ void BKE_ffmpeg_codec_settings_verify(RenderData *rd)
   ffmpeg_set_expert_options(rd);
 }
 
-bool BKE_ffmpeg_alpha_channel_is_supported(RenderData *rd)
+bool BKE_ffmpeg_alpha_channel_is_supported(const RenderData *rd)
 {
   int codec = rd->ffcodecdata.codec;
 
-  if (codec == AV_CODEC_ID_QTRLE)
-    return true;
-
-  if (codec == AV_CODEC_ID_PNG)
-    return true;
-
-  if (codec == AV_CODEC_ID_HUFFYUV)
-    return true;
-
 #  ifdef FFMPEG_FFV1_ALPHA_SUPPORTED
-  if (codec == AV_CODEC_ID_FFV1)
+  /* Visual Studio 2019 doesn't like #ifdef within ELEM(). */
+  if (codec == AV_CODEC_ID_FFV1) {
     return true;
+  }
 #  endif
 
-  return false;
+  return ELEM(codec, AV_CODEC_ID_QTRLE, AV_CODEC_ID_PNG, AV_CODEC_ID_VP9, AV_CODEC_ID_HUFFYUV);
 }
 
 void *BKE_ffmpeg_context_create(void)

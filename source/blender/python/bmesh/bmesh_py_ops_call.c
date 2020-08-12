@@ -37,8 +37,8 @@
 
 #include "bmesh_py_types.h"
 
-#include "../generic/python_utildefines.h"
 #include "../generic/py_capi_utils.h"
+#include "../generic/python_utildefines.h"
 
 BLI_STATIC_ASSERT(sizeof(PyC_FlagSet) == sizeof(BMO_FlagSet), "size mismatch");
 
@@ -337,7 +337,7 @@ static int bpy_slot_from_py(BMesh *bm,
           BMIter iter;
           BMHeader *ele;
           int tot;
-          unsigned int i;
+          uint i;
 
           if (bpy_slot_from_py_elemseq_check(
                   (BPy_BMGeneric *)value,
@@ -358,8 +358,7 @@ static int bpy_slot_from_py(BMesh *bm,
           BMO_slot_buffer_alloc(bmop, bmop->slots_in, slot_name, tot);
 
           i = 0;
-          BM_ITER_BPY_BM_SEQ(ele, &iter, ((BPy_BMElemSeq *)value))
-          {
+          BM_ITER_BPY_BM_SEQ (ele, &iter, ((BPy_BMElemSeq *)value)) {
             slot->data.buf[i] = ele;
             i++;
           }

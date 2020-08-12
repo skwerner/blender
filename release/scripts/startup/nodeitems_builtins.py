@@ -40,19 +40,29 @@ class SortedNodeCategory(NodeCategory):
 class CompositorNodeCategory(SortedNodeCategory):
     @classmethod
     def poll(cls, context):
-        return (context.space_data.tree_type == 'CompositorNodeTree')
+        return (context.space_data.type == 'NODE_EDITOR' and
+                context.space_data.tree_type == 'CompositorNodeTree')
 
 
 class ShaderNodeCategory(SortedNodeCategory):
     @classmethod
     def poll(cls, context):
-        return (context.space_data.tree_type == 'ShaderNodeTree')
+        return (context.space_data.type == 'NODE_EDITOR' and
+                context.space_data.tree_type == 'ShaderNodeTree')
 
 
 class TextureNodeCategory(SortedNodeCategory):
     @classmethod
     def poll(cls, context):
-        return context.space_data.tree_type == 'TextureNodeTree'
+        return (context.space_data.type == 'NODE_EDITOR' and
+                context.space_data.tree_type == 'TextureNodeTree')
+
+
+class SimulationNodeCategory(SortedNodeCategory):
+    @classmethod
+    def poll(cls, context):
+        return (context.space_data.type == 'NODE_EDITOR' and
+                context.space_data.tree_type == 'SimulationNodeTree')
 
 
 # menu entry for node group tools
@@ -67,10 +77,11 @@ node_tree_group_type = {
     'CompositorNodeTree': 'CompositorNodeGroup',
     'ShaderNodeTree': 'ShaderNodeGroup',
     'TextureNodeTree': 'TextureNodeGroup',
+    'SimulationNodeTree': 'SimulationNodeGroup',
 }
 
 
-# generic node group items generator for shader, compositor and texture node groups
+# generic node group items generator for shader, compositor, simulation and texture node groups
 def node_group_items(context):
     if context is None:
         return
@@ -154,6 +165,11 @@ def object_cycles_shader_nodes_poll(context):
             cycles_shader_nodes_poll(context))
 
 
+def cycles_aov_node_poll(context):
+    return (object_cycles_shader_nodes_poll(context) or
+            world_shader_nodes_poll(context))
+
+
 def object_eevee_shader_nodes_poll(context):
     return (object_shader_nodes_poll(context) and
             eevee_shader_nodes_poll(context))
@@ -183,15 +199,18 @@ shader_node_categories = [
         NodeItem("ShaderNodeAmbientOcclusion"),
         NodeItem("ShaderNodeObjectInfo"),
         NodeItem("ShaderNodeHairInfo"),
+        NodeItem("ShaderNodeVolumeInfo"),
         NodeItem("ShaderNodeParticleInfo"),
         NodeItem("ShaderNodeCameraData"),
         NodeItem("ShaderNodeUVMap"),
+        NodeItem("ShaderNodeVertexColor"),
         NodeItem("ShaderNodeUVAlongStroke", poll=line_style_shader_nodes_poll),
         NodeItem("NodeGroupInput", poll=group_input_output_item_poll),
     ]),
     ShaderNodeCategory("SH_NEW_OUTPUT", "Output", items=[
         NodeItem("ShaderNodeOutputMaterial", poll=object_eevee_cycles_shader_nodes_poll),
         NodeItem("ShaderNodeOutputLight", poll=object_cycles_shader_nodes_poll),
+        NodeItem("ShaderNodeOutputAOV", poll=cycles_aov_node_poll),
         NodeItem("ShaderNodeOutputWorld", poll=world_shader_nodes_poll),
         NodeItem("ShaderNodeOutputLineStyle", poll=line_style_shader_nodes_poll),
         NodeItem("NodeGroupOutput", poll=group_input_output_item_poll),
@@ -210,10 +229,10 @@ shader_node_categories = [
         NodeItem("ShaderNodeBsdfVelvet", poll=object_cycles_shader_nodes_poll),
         NodeItem("ShaderNodeBsdfToon", poll=object_cycles_shader_nodes_poll),
         NodeItem("ShaderNodeSubsurfaceScattering", poll=object_eevee_cycles_shader_nodes_poll),
-        NodeItem("ShaderNodeEmission", poll=object_eevee_cycles_shader_nodes_poll),
+        NodeItem("ShaderNodeEmission", poll=eevee_cycles_shader_nodes_poll),
         NodeItem("ShaderNodeBsdfHair", poll=object_cycles_shader_nodes_poll),
         NodeItem("ShaderNodeBackground", poll=world_shader_nodes_poll),
-        NodeItem("ShaderNodeHoldout", poll=object_cycles_shader_nodes_poll),
+        NodeItem("ShaderNodeHoldout", poll=object_eevee_cycles_shader_nodes_poll),
         NodeItem("ShaderNodeVolumeAbsorption", poll=eevee_cycles_shader_nodes_poll),
         NodeItem("ShaderNodeVolumeScatter", poll=eevee_cycles_shader_nodes_poll),
         NodeItem("ShaderNodeVolumePrincipled"),
@@ -234,6 +253,7 @@ shader_node_categories = [
         NodeItem("ShaderNodeTexBrick"),
         NodeItem("ShaderNodeTexPointDensity"),
         NodeItem("ShaderNodeTexIES"),
+        NodeItem("ShaderNodeTexWhiteNoise"),
     ]),
     ShaderNodeCategory("SH_NEW_OP_COLOR", "Color", items=[
         NodeItem("ShaderNodeMixRGB"),
@@ -252,9 +272,12 @@ shader_node_categories = [
         NodeItem("ShaderNodeNormalMap"),
         NodeItem("ShaderNodeNormal"),
         NodeItem("ShaderNodeVectorCurve"),
+        NodeItem("ShaderNodeVectorRotate"),
         NodeItem("ShaderNodeVectorTransform"),
     ]),
     ShaderNodeCategory("SH_NEW_CONVERTOR", "Converter", items=[
+        NodeItem("ShaderNodeMapRange"),
+        NodeItem("ShaderNodeClamp"),
         NodeItem("ShaderNodeMath"),
         NodeItem("ShaderNodeValToRGB"),
         NodeItem("ShaderNodeRGBToBW"),
@@ -347,6 +370,7 @@ compositor_node_categories = [
         NodeItem("CompositorNodeDBlur"),
         NodeItem("CompositorNodePixelate"),
         NodeItem("CompositorNodeSunBeams"),
+        NodeItem("CompositorNodeDenoise"),
     ]),
     CompositorNodeCategory("CMP_OP_VECTOR", "Vector", items=[
         NodeItem("CompositorNodeNormal"),
@@ -451,17 +475,83 @@ texture_node_categories = [
     ]),
 ]
 
+simulation_node_categories = [
+    # Simulation Nodes
+    SimulationNodeCategory("SIM_OUTPUT", "Output", items=[
+        NodeItem("SimulationNodeParticleSimulation"),
+    ]),
+    SimulationNodeCategory("SIM_INPUTS", "Input", items=[
+        NodeItem("SimulationNodeTime"),
+        NodeItem("SimulationNodeParticleAttribute"),
+        NodeItem("FunctionNodeGroupInstanceID"),
+        NodeItem("ShaderNodeValue"),
+        NodeItem("FunctionNodeObjectTransforms"),
+    ]),
+    SimulationNodeCategory("SIM_EMITTERS", "Emitters", items=[
+        NodeItem("SimulationNodeParticleMeshEmitter"),
+        NodeItem("SimulationNodeEmitParticles"),
+    ]),
+    SimulationNodeCategory("SIM_EVENTS", "Events", items=[
+        NodeItem("SimulationNodeParticleBirthEvent"),
+        NodeItem("SimulationNodeParticleTimeStepEvent"),
+        NodeItem("SimulationNodeParticleMeshCollisionEvent"),
+    ]),
+    SimulationNodeCategory("SIM_FORCES", "Forces", items=[
+        NodeItem("SimulationNodeForce"),
+    ]),
+    SimulationNodeCategory("SIM_EXECUTE", "Execute", items=[
+        NodeItem("SimulationNodeSetParticleAttribute"),
+        NodeItem("SimulationNodeExecuteCondition"),
+        NodeItem("SimulationNodeMultiExecute"),
+    ]),
+    SimulationNodeCategory("SIM_NOISE", "Noise", items=[
+        NodeItem("ShaderNodeTexNoise"),
+        NodeItem("ShaderNodeTexWhiteNoise"),
+    ]),
+    SimulationNodeCategory("SIM_COLOR", "Color", items=[
+        NodeItem("ShaderNodeMixRGB"),
+        NodeItem("ShaderNodeInvert"),
+        NodeItem("ShaderNodeHueSaturation"),
+        NodeItem("ShaderNodeGamma"),
+        NodeItem("ShaderNodeBrightContrast"),
+    ]),
+    SimulationNodeCategory("SIM_CONVERTER", "Converter", items=[
+        NodeItem("ShaderNodeMapRange"),
+        NodeItem("ShaderNodeClamp"),
+        NodeItem("ShaderNodeMath"),
+        NodeItem("ShaderNodeValToRGB"),
+        NodeItem("ShaderNodeVectorMath"),
+        NodeItem("ShaderNodeSeparateRGB"),
+        NodeItem("ShaderNodeCombineRGB"),
+        NodeItem("ShaderNodeSeparateXYZ"),
+        NodeItem("ShaderNodeCombineXYZ"),
+        NodeItem("ShaderNodeSeparateHSV"),
+        NodeItem("ShaderNodeCombineHSV"),
+        NodeItem("FunctionNodeBooleanMath"),
+        NodeItem("FunctionNodeFloatCompare"),
+        NodeItem("FunctionNodeSwitch"),
+        NodeItem("FunctionNodeCombineStrings"),
+    ]),
+    SimulationNodeCategory("SIM_GROUP", "Group", items=node_group_items),
+    SimulationNodeCategory("SIM_LAYOUT", "Layout", items=[
+        NodeItem("NodeFrame"),
+        NodeItem("NodeReroute"),
+    ]),
+]
+
 
 def register():
     nodeitems_utils.register_node_categories('SHADER', shader_node_categories)
     nodeitems_utils.register_node_categories('COMPOSITING', compositor_node_categories)
     nodeitems_utils.register_node_categories('TEXTURE', texture_node_categories)
+    nodeitems_utils.register_node_categories('SIMULATION', simulation_node_categories)
 
 
 def unregister():
     nodeitems_utils.unregister_node_categories('SHADER')
     nodeitems_utils.unregister_node_categories('COMPOSITING')
     nodeitems_utils.unregister_node_categories('TEXTURE')
+    nodeitems_utils.unregister_node_categories('SIMULATION')
 
 
 if __name__ == "__main__":

@@ -22,17 +22,19 @@
 set(INC
   .
   intern
+  ../blenfont
   ../blenkernel
   ../blenlib
-  ../blenfont
+  ../blentranslation
+  ../bmesh
   ../depsgraph
+  ../editors/include
   ../makesdna
   ../makesrna
-  ../bmesh
   ../render/extern/include
-  ../../../intern/elbeem/extern
-  ../../../intern/guardedalloc
+  ../windowmanager
   ../../../intern/eigen
+  ../../../intern/guardedalloc
 )
 
 set(INC_SYS
@@ -40,7 +42,7 @@ set(INC_SYS
 )
 
 set(SRC
-  intern/MOD_gpencil_util.h
+  intern/MOD_gpencil_ui_common.c
 
   intern/MOD_gpencil_util.c
   intern/MOD_gpencilarmature.c
@@ -50,17 +52,21 @@ set(SRC
   intern/MOD_gpencilhook.c
   intern/MOD_gpencillattice.c
   intern/MOD_gpencilmirror.c
+  intern/MOD_gpencilmultiply.c
   intern/MOD_gpencilnoise.c
   intern/MOD_gpenciloffset.c
   intern/MOD_gpencilopacity.c
   intern/MOD_gpencilsimplify.c
   intern/MOD_gpencilsmooth.c
   intern/MOD_gpencilsubdiv.c
+  intern/MOD_gpenciltexture.c
   intern/MOD_gpencilthick.c
   intern/MOD_gpenciltime.c
   intern/MOD_gpenciltint.c
 
   MOD_gpencil_modifiertypes.h
+  intern/MOD_gpencil_ui_common.h
+  intern/MOD_gpencil_util.h
 )
 
 set(LIB

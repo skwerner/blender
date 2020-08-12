@@ -27,34 +27,37 @@
 #include "MEM_guardedalloc.h"
 
 #include "BLI_listbase.h"
+#include "BLI_math.h"
 #include "BLI_string.h"
 #include "BLI_string_utils.h"
 #include "BLI_utildefines.h"
-#include "BLI_math.h"
 
 #include "BLT_translation.h"
 
-#include "DNA_sequence_types.h"
+#include "DNA_mask_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_sequence_types.h"
 
 #include "BKE_colortools.h"
 #include "BKE_sequencer.h"
 
+#include "IMB_colormanagement.h"
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
-#include "IMB_colormanagement.h"
 
 static SequenceModifierTypeInfo *modifiersTypes[NUM_SEQUENCE_MODIFIER_TYPES];
 static bool modifierTypesInit = false;
 
-/*********************** Modifiers *************************/
+/* -------------------------------------------------------------------- */
+/** \name Modifier Multi-Threading Utilities
+ * \{ */
 
 typedef void (*modifier_apply_threaded_cb)(int width,
                                            int height,
                                            unsigned char *rect,
                                            float *rect_float,
                                            unsigned char *mask_rect,
-                                           float *mask_rect_float,
+                                           const float *mask_rect_float,
                                            void *data_v);
 
 typedef struct ModifierInitData {
@@ -107,18 +110,22 @@ static void modifier_init_handle(void *handle_v, int start_line, int tot_line, v
   handle->apply_callback = init_data->apply_callback;
   handle->user_data = init_data->user_data;
 
-  if (ibuf->rect)
+  if (ibuf->rect) {
     handle->rect = (unsigned char *)ibuf->rect + offset;
+  }
 
-  if (ibuf->rect_float)
+  if (ibuf->rect_float) {
     handle->rect_float = ibuf->rect_float + offset;
+  }
 
   if (mask) {
-    if (mask->rect)
+    if (mask->rect) {
       handle->mask_rect = (unsigned char *)mask->rect + offset;
+    }
 
-    if (mask->rect_float)
+    if (mask->rect_float) {
       handle->mask_rect_float = mask->rect_float + offset;
+    }
   }
   else {
     handle->mask_rect = NULL;
@@ -158,7 +165,11 @@ static void modifier_apply_threaded(ImBuf *ibuf,
       ibuf->y, sizeof(ModifierThread), &init_data, modifier_init_handle, modifier_do_thread);
 }
 
-/* **** Color Balance Modifier **** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Color Balance Modifier
+ * \{ */
 
 static void colorBalance_init_data(SequenceModifierData *smd)
 {
@@ -191,7 +202,11 @@ static SequenceModifierTypeInfo seqModifier_ColorBalance = {
     colorBalance_apply,                                   /* apply */
 };
 
-/* **** White Balance Modifier **** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name White Balance Modifier
+ * \{ */
 
 static void whiteBalance_init_data(SequenceModifierData *smd)
 {
@@ -208,7 +223,7 @@ static void whiteBalance_apply_threaded(int width,
                                         unsigned char *rect,
                                         float *rect_float,
                                         unsigned char *mask_rect,
-                                        float *mask_rect_float,
+                                        const float *mask_rect_float,
                                         void *data_v)
 {
   int x, y;
@@ -283,20 +298,24 @@ static SequenceModifierTypeInfo seqModifier_WhiteBalance = {
     whiteBalance_apply,                                   /* apply */
 };
 
-/* **** Curves Modifier **** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Curves Modifier
+ * \{ */
 
 static void curves_init_data(SequenceModifierData *smd)
 {
   CurvesModifierData *cmd = (CurvesModifierData *)smd;
 
-  curvemapping_set_defaults(&cmd->curve_mapping, 4, 0.0f, 0.0f, 1.0f, 1.0f);
+  BKE_curvemapping_set_defaults(&cmd->curve_mapping, 4, 0.0f, 0.0f, 1.0f, 1.0f);
 }
 
 static void curves_free_data(SequenceModifierData *smd)
 {
   CurvesModifierData *cmd = (CurvesModifierData *)smd;
 
-  curvemapping_free_data(&cmd->curve_mapping);
+  BKE_curvemapping_free_data(&cmd->curve_mapping);
 }
 
 static void curves_copy_data(SequenceModifierData *target, SequenceModifierData *smd)
@@ -304,7 +323,7 @@ static void curves_copy_data(SequenceModifierData *target, SequenceModifierData 
   CurvesModifierData *cmd = (CurvesModifierData *)smd;
   CurvesModifierData *cmd_target = (CurvesModifierData *)target;
 
-  curvemapping_copy_data(&cmd_target->curve_mapping, &cmd->curve_mapping);
+  BKE_curvemapping_copy_data(&cmd_target->curve_mapping, &cmd->curve_mapping);
 }
 
 static void curves_apply_threaded(int width,
@@ -312,7 +331,7 @@ static void curves_apply_threaded(int width,
                                   unsigned char *rect,
                                   float *rect_float,
                                   unsigned char *mask_rect,
-                                  float *mask_rect_float,
+                                  const float *mask_rect_float,
                                   void *data_v)
 {
   CurveMapping *curve_mapping = (CurveMapping *)data_v;
@@ -326,7 +345,7 @@ static void curves_apply_threaded(int width,
         float *pixel = rect_float + pixel_index;
         float result[3];
 
-        curvemapping_evaluate_premulRGBF(curve_mapping, result, pixel);
+        BKE_curvemapping_evaluate_premulRGBF(curve_mapping, result, pixel);
 
         if (mask_rect_float) {
           const float *m = mask_rect_float + pixel_index;
@@ -347,7 +366,7 @@ static void curves_apply_threaded(int width,
 
         straight_uchar_to_premul_float(tempc, pixel);
 
-        curvemapping_evaluate_premulRGBF(curve_mapping, result, tempc);
+        BKE_curvemapping_evaluate_premulRGBF(curve_mapping, result, tempc);
 
         if (mask_rect) {
           float t[3];
@@ -377,14 +396,14 @@ static void curves_apply(struct SequenceModifierData *smd, ImBuf *ibuf, ImBuf *m
   float black[3] = {0.0f, 0.0f, 0.0f};
   float white[3] = {1.0f, 1.0f, 1.0f};
 
-  curvemapping_initialize(&cmd->curve_mapping);
+  BKE_curvemapping_initialize(&cmd->curve_mapping);
 
-  curvemapping_premultiply(&cmd->curve_mapping, 0);
-  curvemapping_set_black_white(&cmd->curve_mapping, black, white);
+  BKE_curvemapping_premultiply(&cmd->curve_mapping, 0);
+  BKE_curvemapping_set_black_white(&cmd->curve_mapping, black, white);
 
   modifier_apply_threaded(ibuf, mask, curves_apply_threaded, &cmd->curve_mapping);
 
-  curvemapping_premultiply(&cmd->curve_mapping, 1);
+  BKE_curvemapping_premultiply(&cmd->curve_mapping, 1);
 }
 
 static SequenceModifierTypeInfo seqModifier_Curves = {
@@ -397,20 +416,24 @@ static SequenceModifierTypeInfo seqModifier_Curves = {
     curves_apply,                                  /* apply */
 };
 
-/* **** Hue Correct Modifier **** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Hue Correct Modifier
+ * \{ */
 
 static void hue_correct_init_data(SequenceModifierData *smd)
 {
   HueCorrectModifierData *hcmd = (HueCorrectModifierData *)smd;
   int c;
 
-  curvemapping_set_defaults(&hcmd->curve_mapping, 1, 0.0f, 0.0f, 1.0f, 1.0f);
+  BKE_curvemapping_set_defaults(&hcmd->curve_mapping, 1, 0.0f, 0.0f, 1.0f, 1.0f);
   hcmd->curve_mapping.preset = CURVE_PRESET_MID9;
 
   for (c = 0; c < 3; c++) {
     CurveMap *cuma = &hcmd->curve_mapping.cm[c];
 
-    curvemap_reset(
+    BKE_curvemap_reset(
         cuma, &hcmd->curve_mapping.clipr, hcmd->curve_mapping.preset, CURVEMAP_SLOPE_POSITIVE);
   }
 
@@ -422,7 +445,7 @@ static void hue_correct_free_data(SequenceModifierData *smd)
 {
   HueCorrectModifierData *hcmd = (HueCorrectModifierData *)smd;
 
-  curvemapping_free_data(&hcmd->curve_mapping);
+  BKE_curvemapping_free_data(&hcmd->curve_mapping);
 }
 
 static void hue_correct_copy_data(SequenceModifierData *target, SequenceModifierData *smd)
@@ -430,7 +453,7 @@ static void hue_correct_copy_data(SequenceModifierData *target, SequenceModifier
   HueCorrectModifierData *hcmd = (HueCorrectModifierData *)smd;
   HueCorrectModifierData *hcmd_target = (HueCorrectModifierData *)target;
 
-  curvemapping_copy_data(&hcmd_target->curve_mapping, &hcmd->curve_mapping);
+  BKE_curvemapping_copy_data(&hcmd_target->curve_mapping, &hcmd->curve_mapping);
 }
 
 static void hue_correct_apply_threaded(int width,
@@ -438,7 +461,7 @@ static void hue_correct_apply_threaded(int width,
                                        unsigned char *rect,
                                        float *rect_float,
                                        unsigned char *mask_rect,
-                                       float *mask_rect_float,
+                                       const float *mask_rect_float,
                                        void *data_v)
 {
   CurveMapping *curve_mapping = (CurveMapping *)data_v;
@@ -450,23 +473,25 @@ static void hue_correct_apply_threaded(int width,
       float pixel[3], result[3], mask[3] = {1.0f, 1.0f, 1.0f};
       float hsv[3], f;
 
-      if (rect_float)
+      if (rect_float) {
         copy_v3_v3(pixel, rect_float + pixel_index);
-      else
+      }
+      else {
         rgb_uchar_to_float(pixel, rect + pixel_index);
+      }
 
       rgb_to_hsv(pixel[0], pixel[1], pixel[2], hsv, hsv + 1, hsv + 2);
 
       /* adjust hue, scaling returned default 0.5 up to 1 */
-      f = curvemapping_evaluateF(curve_mapping, 0, hsv[0]);
+      f = BKE_curvemapping_evaluateF(curve_mapping, 0, hsv[0]);
       hsv[0] += f - 0.5f;
 
       /* adjust saturation, scaling returned default 0.5 up to 1 */
-      f = curvemapping_evaluateF(curve_mapping, 1, hsv[0]);
+      f = BKE_curvemapping_evaluateF(curve_mapping, 1, hsv[0]);
       hsv[1] *= (f * 2.0f);
 
       /* adjust value, scaling returned default 0.5 up to 1 */
-      f = curvemapping_evaluateF(curve_mapping, 2, hsv[0]);
+      f = BKE_curvemapping_evaluateF(curve_mapping, 2, hsv[0]);
       hsv[2] *= (f * 2.f);
 
       hsv[0] = hsv[0] - floorf(hsv[0]); /* mod 1.0 */
@@ -475,19 +500,23 @@ static void hue_correct_apply_threaded(int width,
       /* convert back to rgb */
       hsv_to_rgb(hsv[0], hsv[1], hsv[2], result, result + 1, result + 2);
 
-      if (mask_rect_float)
+      if (mask_rect_float) {
         copy_v3_v3(mask, mask_rect_float + pixel_index);
-      else if (mask_rect)
+      }
+      else if (mask_rect) {
         rgb_uchar_to_float(mask, mask_rect + pixel_index);
+      }
 
       result[0] = pixel[0] * (1.0f - mask[0]) + result[0] * mask[0];
       result[1] = pixel[1] * (1.0f - mask[1]) + result[1] * mask[1];
       result[2] = pixel[2] * (1.0f - mask[2]) + result[2] * mask[2];
 
-      if (rect_float)
+      if (rect_float) {
         copy_v3_v3(rect_float + pixel_index, result);
-      else
+      }
+      else {
         rgb_float_to_uchar(rect + pixel_index, result);
+      }
     }
   }
 }
@@ -496,7 +525,7 @@ static void hue_correct_apply(struct SequenceModifierData *smd, ImBuf *ibuf, ImB
 {
   HueCorrectModifierData *hcmd = (HueCorrectModifierData *)smd;
 
-  curvemapping_initialize(&hcmd->curve_mapping);
+  BKE_curvemapping_initialize(&hcmd->curve_mapping);
 
   modifier_apply_threaded(ibuf, mask, hue_correct_apply_threaded, &hcmd->curve_mapping);
 }
@@ -511,7 +540,11 @@ static SequenceModifierTypeInfo seqModifier_HueCorrect = {
     hue_correct_apply,                                  /* apply */
 };
 
-/* **** Bright/Contrast Modifier **** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Bright/Contrast Modifier
+ * \{ */
 
 typedef struct BrightContrastThreadData {
   float bright;
@@ -523,7 +556,7 @@ static void brightcontrast_apply_threaded(int width,
                                           unsigned char *rect,
                                           float *rect_float,
                                           unsigned char *mask_rect,
-                                          float *mask_rect_float,
+                                          const float *mask_rect_float,
                                           void *data_v)
 {
   BrightContrastThreadData *data = (BrightContrastThreadData *)data_v;
@@ -535,20 +568,20 @@ static void brightcontrast_apply_threaded(int width,
   float brightness = data->bright / 100.0f;
   float contrast = data->contrast;
   float delta = contrast / 200.0f;
-
-  a = 1.0f - delta * 2.0f;
   /*
    * The algorithm is by Werner D. Streidt
    * (http://visca.com/ffactory/archives/5-99/msg00021.html)
    * Extracted of OpenCV demhist.c
    */
   if (contrast > 0) {
-    a = 1.0f / a;
+    a = 1.0f - delta * 2.0f;
+    a = 1.0f / max_ff(a, FLT_EPSILON);
     b = a * (brightness - delta);
   }
   else {
     delta *= -1;
-    b = a * (brightness + delta);
+    a = max_ff(1.0f - delta * 2.0f, 0.0f);
+    b = a * brightness + delta;
   }
 
   for (y = 0; y < height; y++) {
@@ -584,8 +617,9 @@ static void brightcontrast_apply_threaded(int width,
 
             pixel[c] = pixel[c] * (1.0f - m[c]) + v * m[c];
           }
-          else
+          else {
             pixel[c] = v;
+          }
         }
       }
     }
@@ -613,23 +647,29 @@ static SequenceModifierTypeInfo seqModifier_BrightContrast = {
     brightcontrast_apply,                                   /* apply */
 };
 
-/* **** Mask Modifier **** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Mask Modifier
+ * \{ */
 
 static void maskmodifier_apply_threaded(int width,
                                         int height,
                                         unsigned char *rect,
                                         float *rect_float,
                                         unsigned char *mask_rect,
-                                        float *mask_rect_float,
+                                        const float *mask_rect_float,
                                         void *UNUSED(data_v))
 {
   int x, y;
 
-  if (rect && !mask_rect)
+  if (rect && !mask_rect) {
     return;
+  }
 
-  if (rect_float && !mask_rect_float)
+  if (rect_float && !mask_rect_float) {
     return;
+  }
 
   for (y = 0; y < height; y++) {
     for (x = 0; x < width; x++) {
@@ -655,8 +695,9 @@ static void maskmodifier_apply_threaded(int width,
         /* float buffers are premultiplied, so need to premul color
          * as well to make it easy to alpha-over masted strip.
          */
-        for (c = 0; c < 4; c++)
+        for (c = 0; c < 4; c++) {
           pixel[c] = pixel[c] * mask;
+        }
       }
     }
   }
@@ -679,7 +720,11 @@ static SequenceModifierTypeInfo seqModifier_Mask = {
     maskmodifier_apply,                          /* apply */
 };
 
-/* **** Tonemap Modifier **** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Tonemap Modifier
+ * \{ */
 
 typedef struct AvgLogLum {
   SequencerTonemapModifierData *tmmd;
@@ -710,7 +755,7 @@ static void tonemapmodifier_apply_threaded_simple(int width,
                                                   unsigned char *rect,
                                                   float *rect_float,
                                                   unsigned char *mask_rect,
-                                                  float *mask_rect_float,
+                                                  const float *mask_rect_float,
                                                   void *data_v)
 {
   AvgLogLum *avg = (AvgLogLum *)data_v;
@@ -769,7 +814,7 @@ static void tonemapmodifier_apply_threaded_photoreceptor(int width,
                                                          unsigned char *rect,
                                                          float *rect_float,
                                                          unsigned char *mask_rect,
-                                                         float *mask_rect_float,
+                                                         const float *mask_rect_float,
                                                          void *data_v)
 {
   AvgLogLum *avg = (AvgLogLum *)data_v;
@@ -891,7 +936,11 @@ static SequenceModifierTypeInfo seqModifier_Tonemap = {
     tonemapmodifier_apply,                          /* apply */
 };
 
-/*********************** Modifier functions *************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Public Modifier Functions
+ * \{ */
 
 static void sequence_modifier_type_info_init(void)
 {
@@ -928,25 +977,29 @@ SequenceModifierData *BKE_sequence_modifier_new(Sequence *seq, const char *name,
   smd->type = type;
   smd->flag |= SEQUENCE_MODIFIER_EXPANDED;
 
-  if (!name || !name[0])
+  if (!name || !name[0]) {
     BLI_strncpy(smd->name, smti->name, sizeof(smd->name));
-  else
+  }
+  else {
     BLI_strncpy(smd->name, name, sizeof(smd->name));
+  }
 
   BLI_addtail(&seq->modifiers, smd);
 
   BKE_sequence_modifier_unique_name(seq, smd);
 
-  if (smti->init_data)
+  if (smti->init_data) {
     smti->init_data(smd);
+  }
 
   return smd;
 }
 
 bool BKE_sequence_modifier_remove(Sequence *seq, SequenceModifierData *smd)
 {
-  if (BLI_findindex(&seq->modifiers, smd) == -1)
+  if (BLI_findindex(&seq->modifiers, smd) == -1) {
     return false;
+  }
 
   BLI_remlink(&seq->modifiers, smd);
   BKE_sequence_modifier_free(smd);
@@ -1011,12 +1064,14 @@ ImBuf *BKE_sequence_modifier_apply_stack(const SeqRenderData *context,
     const SequenceModifierTypeInfo *smti = BKE_sequence_modifier_type_info_get(smd->type);
 
     /* could happen if modifier is being removed or not exists in current version of blender */
-    if (!smti)
+    if (!smti) {
       continue;
+    }
 
     /* modifier is muted, do nothing */
-    if (smd->flag & SEQUENCE_MODIFIER_MUTE)
+    if (smd->flag & SEQUENCE_MODIFIER_MUTE) {
       continue;
+    }
 
     if (smti->apply) {
       int frame_offset;
@@ -1024,18 +1079,20 @@ ImBuf *BKE_sequence_modifier_apply_stack(const SeqRenderData *context,
         frame_offset = seq->start;
       }
       else /*if (smd->mask_time == SEQUENCE_MASK_TIME_ABSOLUTE)*/ {
-        frame_offset = 0;
+        frame_offset = smd->mask_id ? ((Mask *)smd->mask_id)->sfra : 0;
       }
 
       ImBuf *mask = modifier_mask_get(smd, context, cfra, frame_offset, ibuf->rect_float != NULL);
 
-      if (processed_ibuf == ibuf)
+      if (processed_ibuf == ibuf) {
         processed_ibuf = IMB_dupImBuf(ibuf);
+      }
 
       smti->apply(smd, processed_ibuf, mask);
 
-      if (mask)
+      if (mask) {
         IMB_freeImBuf(mask);
+      }
     }
   }
 
@@ -1056,8 +1113,9 @@ void BKE_sequence_modifier_list_copy(Sequence *seqn, Sequence *seq)
 
     smdn = MEM_dupallocN(smd);
 
-    if (smti && smti->copy_data)
+    if (smti && smti->copy_data) {
       smti->copy_data(smdn, smd);
+    }
 
     smdn->next = smdn->prev = NULL;
     BLI_addtail(&seqn->modifiers, smdn);
@@ -1068,3 +1126,5 @@ int BKE_sequence_supports_modifiers(Sequence *seq)
 {
   return !ELEM(seq->type, SEQ_TYPE_SOUND_RAM, SEQ_TYPE_SOUND_HD);
 }
+
+/** \} */

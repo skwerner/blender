@@ -28,10 +28,10 @@
 
 #include "BKE_node.h"
 
-#include "node_shader_util.h"
 #include "NOD_common.h"
 #include "node_common.h"
 #include "node_exec.h"
+#include "node_shader_util.h"
 
 #include "RNA_access.h"
 
@@ -67,8 +67,9 @@ static void *group_initexec(bNodeExecContext *context, bNode *node, bNodeInstanc
   bNodeTree *ngroup = (bNodeTree *)node->id;
   bNodeTreeExec *exec;
 
-  if (!ngroup)
+  if (!ngroup) {
     return NULL;
+  }
 
   /* initialize the internal node tree execution */
   exec = ntreeShaderBeginExecTree_internal(context, ngroup, key);
@@ -80,8 +81,9 @@ static void group_freeexec(void *nodedata)
 {
   bNodeTreeExec *gexec = (bNodeTreeExec *)nodedata;
 
-  if (gexec)
+  if (gexec) {
     ntreeShaderEndExecTree_internal(gexec);
+  }
 }
 
 /* Copy inputs to the internal stack.
@@ -96,10 +98,11 @@ static void group_copy_inputs(bNode *gnode, bNodeStack **in, bNodeStack *gstack)
 
   for (node = ngroup->nodes.first; node; node = node->next) {
     if (node->type == NODE_GROUP_INPUT) {
-      for (sock = node->outputs.first, a = 0; sock; sock = sock->next, ++a) {
+      for (sock = node->outputs.first, a = 0; sock; sock = sock->next, a++) {
         ns = node_get_socket_stack(gstack, sock);
-        if (ns)
+        if (ns) {
           copy_stack(ns, in[a]);
+        }
       }
     }
   }
@@ -117,10 +120,11 @@ static void group_move_outputs(bNode *gnode, bNodeStack **out, bNodeStack *gstac
 
   for (node = ngroup->nodes.first; node; node = node->next) {
     if (node->type == NODE_GROUP_OUTPUT && (node->flag & NODE_DO_OUTPUT)) {
-      for (sock = node->inputs.first, a = 0; sock; sock = sock->next, ++a) {
+      for (sock = node->inputs.first, a = 0; sock; sock = sock->next, a++) {
         ns = node_get_socket_stack(gstack, sock);
-        if (ns)
+        if (ns) {
           move_stack(out[a], ns);
+        }
       }
       break; /* only one active output node */
     }
@@ -137,16 +141,18 @@ static void group_execute(void *data,
   bNodeTreeExec *exec = execdata->data;
   bNodeThreadStack *nts;
 
-  if (!exec)
+  if (!exec) {
     return;
+  }
 
   /* XXX same behavior as trunk: all nodes inside group are executed.
    * it's stupid, but just makes it work. compo redesign will do this better.
    */
   {
     bNode *inode;
-    for (inode = exec->nodetree->nodes.first; inode; inode = inode->next)
+    for (inode = exec->nodetree->nodes.first; inode; inode = inode->next) {
       inode->need_exec = 1;
+    }
   }
 
   nts = ntreeGetThreadStack(exec, thread);
@@ -168,7 +174,7 @@ static void group_gpu_copy_inputs(bNode *gnode, GPUNodeStack *in, bNodeStack *gs
 
   for (node = ngroup->nodes.first; node; node = node->next) {
     if (node->type == NODE_GROUP_INPUT) {
-      for (sock = node->outputs.first, a = 0; sock; sock = sock->next, ++a) {
+      for (sock = node->outputs.first, a = 0; sock; sock = sock->next, a++) {
         ns = node_get_socket_stack(gstack, sock);
         if (ns) {
           /* convert the external gpu stack back to internal node stack data */
@@ -191,7 +197,7 @@ static void group_gpu_move_outputs(bNode *gnode, GPUNodeStack *out, bNodeStack *
 
   for (node = ngroup->nodes.first; node; node = node->next) {
     if (node->type == NODE_GROUP_OUTPUT && (node->flag & NODE_DO_OUTPUT)) {
-      for (sock = node->inputs.first, a = 0; sock; sock = sock->next, ++a) {
+      for (sock = node->inputs.first, a = 0; sock; sock = sock->next, a++) {
         ns = node_get_socket_stack(gstack, sock);
         if (ns) {
           /* convert the node stack data result back to gpu stack */
@@ -208,8 +214,9 @@ static int gpu_group_execute(
 {
   bNodeTreeExec *exec = execdata->data;
 
-  if (!node->id)
+  if (!node->id) {
     return 0;
+  }
 
   group_gpu_copy_inputs(node, in, exec->stack);
   ntreeExecGPUNodes(exec, mat, NULL);
@@ -231,14 +238,14 @@ void register_node_type_sh_group(void)
   ntype.poll_instance = node_group_poll_instance;
   ntype.insert_link = node_insert_link_default;
   ntype.update_internal_links = node_update_internal_links_default;
-  ntype.ext.srna = RNA_struct_find("ShaderNodeGroup");
-  BLI_assert(ntype.ext.srna != NULL);
-  RNA_struct_blender_type_set(ntype.ext.srna, &ntype);
+  ntype.rna_ext.srna = RNA_struct_find("ShaderNodeGroup");
+  BLI_assert(ntype.rna_ext.srna != NULL);
+  RNA_struct_blender_type_set(ntype.rna_ext.srna, &ntype);
 
   node_type_socket_templates(&ntype, NULL, NULL);
   node_type_size(&ntype, 140, 60, 400);
   node_type_label(&ntype, node_group_label);
-  node_type_update(&ntype, NULL, node_group_verify);
+  node_type_group_update(&ntype, node_group_update);
   node_type_exec(&ntype, group_initexec, group_freeexec, group_execute);
   node_type_gpu(&ntype, gpu_group_execute);
 
@@ -247,7 +254,7 @@ void register_node_type_sh_group(void)
 
 void register_node_type_sh_custom_group(bNodeType *ntype)
 {
-  /* These methods can be overriden but need a default implementation otherwise. */
+  /* These methods can be overridden but need a default implementation otherwise. */
   if (ntype->poll == NULL) {
     ntype->poll = sh_node_poll_default;
   }

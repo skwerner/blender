@@ -26,19 +26,15 @@
 
 #include <stdlib.h>
 
-#include "GPU_immediate.h"
-#include "GPU_draw.h"
-#include "GPU_select.h"
-#include "GPU_extensions.h"
 #include "GPU_glew.h"
+#include "GPU_select.h"
+#include "GPU_state.h"
 
 #include "MEM_guardedalloc.h"
 
 #include "BLI_rect.h"
 
 #include "BLI_utildefines.h"
-
-#include "PIL_time.h"
 
 #include "gpu_select_private.h"
 
@@ -92,20 +88,23 @@ void gpu_select_query_begin(
 
   gpuPushAttr(GPU_DEPTH_BUFFER_BIT | GPU_VIEWPORT_BIT | GPU_SCISSOR_BIT);
   /* disable writing to the framebuffer */
-  glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+  GPU_color_mask(false, false, false, false);
 
   /* In order to save some fill rate we minimize the viewport using rect.
    * We need to get the region of the viewport so that our geometry doesn't
    * get rejected before the depth test. Should probably cull rect against
    * the viewport but this is a rare case I think */
-  glGetFloatv(GL_VIEWPORT, viewport);
-  glViewport(viewport[0], viewport[1], BLI_rcti_size_x(input), BLI_rcti_size_y(input));
+  GPU_viewport_size_get_f(viewport);
+  GPU_viewport(viewport[0], viewport[1], BLI_rcti_size_x(input), BLI_rcti_size_y(input));
 
   /* occlusion queries operates on fragments that pass tests and since we are interested on all
    * objects in the view frustum independently of their order, we need to disable the depth test */
   if (mode == GPU_SELECT_ALL) {
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
+    /* glQueries on Windows+Intel drivers only works with depth testing turned on.
+     * See T62947 for details */
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_ALWAYS);
+    glDepthMask(GL_TRUE);
   }
   else if (mode == GPU_SELECT_NEAREST_FIRST_PASS) {
     glClear(GL_DEPTH_BUFFER_BIT);
@@ -170,15 +169,8 @@ uint gpu_select_query_end(void)
 
   for (i = 0; i < g_query_state.active_query; i++) {
     uint result = 0;
-    /* Wait until the result is available. */
-    while (result == 0) {
-      glGetQueryObjectuiv(g_query_state.queries[i], GL_QUERY_RESULT_AVAILABLE, &result);
-      if (result == 0) {
-        /* (fclem) Not sure if this is better than calling
-         * glGetQueryObjectuiv() indefinitely. */
-        PIL_sleep_ms(1);
-      }
-    }
+    /* We are not using GL_QUERY_RESULT_AVAILABLE and sleep to wait for results,
+     * because it causes lagging on Windows/NVIDIA, see T61474. */
     glGetQueryObjectuiv(g_query_state.queries[i], GL_QUERY_RESULT, &result);
     if (result > 0) {
       if (g_query_state.mode != GPU_SELECT_NEAREST_SECOND_PASS) {
@@ -214,7 +206,7 @@ uint gpu_select_query_end(void)
   MEM_freeN(g_query_state.queries);
   MEM_freeN(g_query_state.id);
   gpuPopAttr();
-  glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+  GPU_color_mask(true, true, true, true);
 
   return hits;
 }

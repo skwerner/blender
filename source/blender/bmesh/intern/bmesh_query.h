@@ -48,6 +48,8 @@ BMLoop *BM_face_other_edge_loop(BMFace *f, BMEdge *e, BMVert *v) ATTR_WARN_UNUSE
 BMLoop *BM_loop_other_edge_loop(BMLoop *l, BMVert *v) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 BMLoop *BM_face_other_vert_loop(BMFace *f, BMVert *v_prev, BMVert *v) ATTR_WARN_UNUSED_RESULT
     ATTR_NONNULL();
+BMLoop *BM_loop_other_vert_loop_by_edge(BMLoop *l, BMEdge *e) ATTR_WARN_UNUSED_RESULT
+    ATTR_NONNULL();
 BMLoop *BM_loop_other_vert_loop(BMLoop *l, BMVert *v) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 BMLoop *BM_vert_step_fan_loop(BMLoop *l, BMEdge **e_step) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 
@@ -62,6 +64,13 @@ bool BM_vert_pair_share_face_check_cb(BMVert *v_a,
                                       bool (*test_fn)(BMFace *f, void *user_data),
                                       void *user_data) ATTR_WARN_UNUSED_RESULT
     ATTR_NONNULL(1, 2, 3);
+BMFace *BM_vert_pair_shared_face_cb(BMVert *v_a,
+                                    BMVert *v_b,
+                                    const bool allow_adjacent,
+                                    bool (*callback)(BMFace *, BMLoop *, BMLoop *, void *userdata),
+                                    void *user_data,
+                                    BMLoop **r_l_a,
+                                    BMLoop **r_l_b) ATTR_NONNULL(1, 2, 4, 6, 7);
 BMFace *BM_vert_pair_share_face_by_len(BMVert *v_a,
                                        BMVert *v_b,
                                        BMLoop **r_l_a,
@@ -135,6 +144,16 @@ float BM_loop_calc_face_normal(const BMLoop *l, float r_normal[3]) ATTR_NONNULL(
 float BM_loop_calc_face_normal_safe(const BMLoop *l, float r_normal[3]) ATTR_NONNULL();
 float BM_loop_calc_face_normal_safe_ex(const BMLoop *l, const float epsilon, float r_normal[3])
     ATTR_NONNULL();
+float BM_loop_calc_face_normal_safe_vcos_ex(const BMLoop *l,
+                                            const float normal_fallback[3],
+                                            float const (*vertexCos)[3],
+                                            const float epsilon_sq,
+                                            float r_normal[3]) ATTR_NONNULL();
+float BM_loop_calc_face_normal_safe_vcos(const BMLoop *l,
+                                         const float normal_fallback[3],
+                                         float const (*vertexCos)[3],
+                                         float r_normal[3]) ATTR_NONNULL();
+
 void BM_loop_calc_face_direction(const BMLoop *l, float r_normal[3]);
 void BM_loop_calc_face_tangent(const BMLoop *l, float r_tangent[3]);
 
@@ -154,7 +173,6 @@ float BM_edge_calc_face_angle_with_imat3(const BMEdge *e,
 float BM_edge_calc_face_angle_signed(const BMEdge *e) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 void BM_edge_calc_face_tangent(const BMEdge *e, const BMLoop *e_loop, float r_tangent[3])
     ATTR_NONNULL();
-
 float BM_vert_calc_edge_angle(const BMVert *v) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 float BM_vert_calc_edge_angle_ex(const BMVert *v, const float fallback) ATTR_WARN_UNUSED_RESULT
     ATTR_NONNULL();
@@ -219,6 +237,8 @@ bool BM_edge_is_all_face_flag_test(const BMEdge *e,
 
 bool BM_edge_is_any_vert_flag_test(const BMEdge *e, const char hflag) ATTR_WARN_UNUSED_RESULT
     ATTR_NONNULL();
+bool BM_edge_is_any_face_flag_test(const BMEdge *e, const char hflag) ATTR_WARN_UNUSED_RESULT
+    ATTR_NONNULL();
 bool BM_face_is_any_vert_flag_test(const BMFace *f, const char hflag) ATTR_WARN_UNUSED_RESULT
     ATTR_NONNULL();
 bool BM_face_is_any_edge_flag_test(const BMFace *f, const char hflag) ATTR_WARN_UNUSED_RESULT
@@ -226,7 +246,7 @@ bool BM_face_is_any_edge_flag_test(const BMFace *f, const char hflag) ATTR_WARN_
 
 bool BM_face_is_normal_valid(const BMFace *f) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 
-float BM_mesh_calc_volume(BMesh *bm, bool is_signed) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
+double BM_mesh_calc_volume(BMesh *bm, bool is_signed) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 
 int BM_mesh_calc_face_groups(BMesh *bm,
                              int *r_groups_array,
@@ -241,6 +261,13 @@ int BM_mesh_calc_edge_groups(BMesh *bm,
                              BMVertFilterFunc filter_fn,
                              void *user_data,
                              const char hflag_test) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL(1, 2, 3);
+
+int BM_mesh_calc_edge_groups_as_arrays(BMesh *bm,
+                                       BMVert **verts,
+                                       BMEdge **edges,
+                                       BMFace **faces,
+                                       int (**r_groups)[3]) ATTR_WARN_UNUSED_RESULT
+    ATTR_NONNULL(1, 2, 3, 4, 5);
 
 /* not really any good place  to put this */
 float bmesh_subd_falloff_calc(const int falloff, float val) ATTR_WARN_UNUSED_RESULT;

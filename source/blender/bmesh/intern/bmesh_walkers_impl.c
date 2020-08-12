@@ -45,12 +45,10 @@ static bool bmw_mask_check_vert(BMWalker *walker, BMVert *v)
   if ((walker->flag & BMW_FLAG_TEST_HIDDEN) && BM_elem_flag_test(v, BM_ELEM_HIDDEN)) {
     return false;
   }
-  else if (walker->mask_vert && !BMO_vert_flag_test(walker->bm, v, walker->mask_vert)) {
+  if (walker->mask_vert && !BMO_vert_flag_test(walker->bm, v, walker->mask_vert)) {
     return false;
   }
-  else {
-    return true;
-  }
+  return true;
 }
 
 static bool bmw_mask_check_edge(BMWalker *walker, BMEdge *e)
@@ -58,12 +56,10 @@ static bool bmw_mask_check_edge(BMWalker *walker, BMEdge *e)
   if ((walker->flag & BMW_FLAG_TEST_HIDDEN) && BM_elem_flag_test(e, BM_ELEM_HIDDEN)) {
     return false;
   }
-  else if (walker->mask_edge && !BMO_edge_flag_test(walker->bm, e, walker->mask_edge)) {
+  if (walker->mask_edge && !BMO_edge_flag_test(walker->bm, e, walker->mask_edge)) {
     return false;
   }
-  else {
-    return true;
-  }
+  return true;
 }
 
 static bool bmw_mask_check_face(BMWalker *walker, BMFace *f)
@@ -71,12 +67,10 @@ static bool bmw_mask_check_face(BMWalker *walker, BMFace *f)
   if ((walker->flag & BMW_FLAG_TEST_HIDDEN) && BM_elem_flag_test(f, BM_ELEM_HIDDEN)) {
     return false;
   }
-  else if (walker->mask_face && !BMO_face_flag_test(walker->bm, f, walker->mask_face)) {
+  if (walker->mask_face && !BMO_face_flag_test(walker->bm, f, walker->mask_face)) {
     return false;
   }
-  else {
-    return true;
-  }
+  return true;
 }
 
 /** \} */
@@ -94,13 +88,9 @@ static bool bmw_edge_is_wire(const BMWalker *walker, const BMEdge *e)
     if (BM_edge_is_wire(e)) {
       return true;
     }
-    else {
-      return BM_edge_is_all_face_flag_test(e, BM_ELEM_HIDDEN, false);
-    }
+    return BM_edge_is_all_face_flag_test(e, BM_ELEM_HIDDEN, false);
   }
-  else {
-    return BM_edge_is_wire(e);
-  }
+  return BM_edge_is_wire(e);
 }
 /** \} */
 
@@ -209,14 +199,13 @@ static void *bmw_VertShellWalker_step(BMWalker *walker)
 
   BMW_state_remove(walker);
 
-
   /* find the next edge whose other vertex has not been visite */
   curedge = shellWalk.curedge;
   do {
     if (!BLI_gset_haskey(walker->visit_set, curedge)) {
       if (!walker->restrictflag ||
-          (walker->restrictflag && BMO_edge_flag_test(walker->bm, curedge, walker->restrictflag)))
-      {
+          (walker->restrictflag &&
+           BMO_edge_flag_test(walker->bm, curedge, walker->restrictflag))) {
         BMwShellWalker *newstate;
 
         v_old = BM_edge_other_vert(curedge, shellWalk.base);
@@ -502,16 +491,15 @@ static void *bmw_LoopShellWireWalker_step(BMWalker *walker)
 
     return l;
   }
-  else {
-    BMEdge *e = (BMEdge *)swalk->curelem;
 
-    BLI_assert(e->head.htype == BM_EDGE);
+  BMEdge *e = (BMEdge *)swalk->curelem;
 
-    bmw_LoopShellWireWalker_visitVert(walker, e->v1, e);
-    bmw_LoopShellWireWalker_visitVert(walker, e->v2, e);
+  BLI_assert(e->head.htype == BM_EDGE);
 
-    return e;
-  }
+  bmw_LoopShellWireWalker_visitVert(walker, e->v1, e);
+  bmw_LoopShellWireWalker_visitVert(walker, e->v2, e);
+
+  return e;
 }
 
 /** \} */
@@ -649,7 +637,7 @@ static void *bmw_ConnectedVertexWalker_step(BMWalker *walker)
  * \note that this doesn't work on non-manifold geometry.
  * it might be better to rewrite this to extract
  * boundary info from the island walker, rather then directly walking
- * over the boundary.  raises an error if it encounters nonmanifold geometry.
+ * over the boundary.  raises an error if it encounters non-manifold geometry.
  *
  * \todo Add restriction flag/callback for wire edges.
  */
@@ -719,7 +707,7 @@ static void *bmw_IslandboundWalker_step(BMWalker *walker)
   if (l == owalk.curloop) {
     return NULL;
   }
-  else if (BLI_gset_haskey(walker->visit_set, l)) {
+  if (BLI_gset_haskey(walker->visit_set, l)) {
     return owalk.curloop;
   }
 
@@ -727,9 +715,9 @@ static void *bmw_IslandboundWalker_step(BMWalker *walker)
   iwalk = BMW_state_add(walker);
   iwalk->base = owalk.base;
 
-  //if (!BMO_face_flag_test(walker->bm, l->f, walker->restrictflag))
+  // if (!BMO_face_flag_test(walker->bm, l->f, walker->restrictflag))
   //  iwalk->curloop = l->radial_next;
-  iwalk->curloop = l;  //else iwalk->curloop = l;
+  iwalk->curloop = l;  // else iwalk->curloop = l;
   iwalk->lastv = v;
 
   return owalk.curloop;
@@ -806,7 +794,7 @@ static void *bmw_IslandWalker_step_ex(BMWalker *walker, bool only_manifold)
         continue;
       }
 
-      /* saves checking BLI_gset_haskey below (manifold edges theres a 50% chance) */
+      /* saves checking BLI_gset_haskey below (manifold edges there's a 50% chance) */
       if (f == iwalk->cur) {
         continue;
       }
@@ -990,8 +978,9 @@ static void *bmw_EdgeLoopWalker_step(BMWalker *walker)
 
     vert_edge_tot = BM_vert_edge_count_nonwire(v);
 
-    /* typical loopiong over edges in the middle of a mesh */
-    /* however, why use 2 here at all? I guess for internal ngon loops it can be useful. Antony R. */
+    /* Typical loopiong over edges in the middle of a mesh */
+    /* However, why use 2 here at all?
+     * I guess for internal ngon loops it can be useful. Antony R. */
     if (vert_edge_tot == 4 || vert_edge_tot == 2) {
       int i_opposite = vert_edge_tot / 2;
       int i = 0;
@@ -1246,9 +1235,7 @@ static void bmw_EdgeringWalker_begin(BMWalker *walker, void *data)
     lwalk->wireedge = e;
     return;
   }
-  else {
-    lwalk->wireedge = NULL;
-  }
+  lwalk->wireedge = NULL;
 
   BLI_gset_insert(walker->visit_set, lwalk->l->e);
 
@@ -1285,9 +1272,7 @@ static void *bmw_EdgeringWalker_yield(BMWalker *walker)
   if (lwalk->l) {
     return lwalk->l->e;
   }
-  else {
-    return lwalk->wireedge;
-  }
+  return lwalk->wireedge;
 }
 
 static void *bmw_EdgeringWalker_step(BMWalker *walker)

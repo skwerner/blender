@@ -20,10 +20,10 @@
 
 #include "BPy_ChainPredicateIterator.h"
 
-#include "../BPy_Convert.h"
 #include "../BPy_BinaryPredicate1D.h"
-#include "../Interface1D/BPy_ViewEdge.h"
+#include "../BPy_Convert.h"
 #include "../BPy_UnaryPredicate1D.h"
+#include "../Interface1D/BPy_ViewEdge.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -85,8 +85,9 @@ PyDoc_STRVAR(ChainPredicateIterator_doc,
 
 static int check_begin(PyObject *obj, void *v)
 {
-  if (obj != NULL && obj != Py_None && !BPy_ViewEdge_Check(obj))
+  if (obj != NULL && obj != Py_None && !BPy_ViewEdge_Check(obj)) {
     return 0;
+  }
   *((PyObject **)v) = obj;
   return 1;
 }
@@ -161,7 +162,7 @@ static void ChainPredicateIterator_dealloc(BPy_ChainPredicateIterator *self)
   ChainingIterator_Type.tp_dealloc((PyObject *)self);
 }
 
-/*-----------------------BPy_ChainPredicateIterator type definition ------------------------------*/
+/*-----------------------BPy_ChainPredicateIterator type definition ----------------------------*/
 
 PyTypeObject ChainPredicateIterator_Type = {
     PyVarObject_HEAD_INIT(NULL, 0) "ChainPredicateIterator", /* tp_name */

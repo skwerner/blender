@@ -28,11 +28,14 @@ set(INC
   ../../makesdna
   ../../makesrna
   ../../render/extern/include
-  ../../windowmanager
   ../../depsgraph
-  ../../../../intern/guardedalloc
+  ../../windowmanager
   ../../../../intern/glew-mx
-  ../../../../intern/smoke/extern
+  ../../../../intern/guardedalloc
+  ../../../../intern/mantaflow/extern
+
+  # dna_type_offsets.h
+  ${CMAKE_CURRENT_BINARY_DIR}/../../makesdna/intern
 )
 
 set(INC_SYS
@@ -45,7 +48,6 @@ set(SRC
   view3d_buttons.c
   view3d_camera_control.c
   view3d_draw.c
-  view3d_draw_legacy.c
   view3d_edit.c
   view3d_fly.c
   view3d_gizmo_armature.c
@@ -58,13 +60,14 @@ set(SRC
   view3d_gizmo_preselect.c
   view3d_gizmo_preselect_type.c
   view3d_gizmo_ruler.c
+  view3d_gizmo_tool_generic.c
   view3d_header.c
   view3d_iterators.c
   view3d_ops.c
+  view3d_placement.c
   view3d_project.c
   view3d_select.c
   view3d_snap.c
-  view3d_toolbar.c
   view3d_utils.c
   view3d_view.c
   view3d_walk.c
@@ -92,8 +95,11 @@ if(WITH_FREESTYLE)
   add_definitions(-DWITH_FREESTYLE)
 endif()
 
-if(WITH_MOD_SMOKE)
-  add_definitions(-DWITH_SMOKE)
+if(WITH_XR_OPENXR)
+  add_definitions(-DWITH_XR_OPENXR)
 endif()
 
 blender_add_lib(bf_editor_space_view3d "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
+
+# Needed so we can use dna_type_offsets.h for defaults initialization.
+add_dependencies(bf_editor_space_view3d bf_dna)

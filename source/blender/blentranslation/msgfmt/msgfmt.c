@@ -24,21 +24,23 @@
  *
  * Generate binary message catalog from textual translation description.
  *
- * This program converts a textual Uniforum-style message catalog (.po file) into a binary GNU catalog (.mo file).
- * This is essentially the same function as the GNU msgfmt program, however, it is a simpler implementation.
+ * This program converts a textual Uniform-style message catalog (.po file)
+ * into a binary GNU catalog (.mo file).
+ * This is essentially the same function as the GNU msgfmt program,
+ * however, it is a simpler implementation.
  *
  * Usage: msgfmt input.po output.po
  */
 
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
-#include "BLI_utildefines.h"
 #include "BLI_dynstr.h"
 #include "BLI_fileops.h"
 #include "BLI_ghash.h"
 #include "BLI_linklist.h"
 #include "BLI_memarena.h"
+#include "BLI_utildefines.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -80,12 +82,15 @@ static char *trim(char *str)
     return str;
   }
 
-  for (i = 0; i < len && ELEM(str[0], ' ', '\t', '\n'); str++, i++)
-    ;
+  for (i = 0; i < len && ELEM(str[0], ' ', '\t', '\r', '\n'); str++, i++) {
+    /* pass */
+  }
 
   char *end = &str[len - 1 - i];
-  for (i = len; i > 0 && ELEM(end[0], ' ', '\t', '\n'); end--, i--)
-    ;
+  for (i = len; i > 0 && ELEM(end[0], ' ', '\t', '\r', '\n'); end--, i--) {
+    /* pass */
+  }
+
   end[1] = '\0';
 
   return str;
@@ -206,7 +211,8 @@ static char *generate(GHash *messages, size_t *r_output_size)
     tot_vals_len += off->val_len + 1;
   }
 
-  /* The header is 7 32-bit unsigned integers. then comes the keys index table, then the values index table. */
+  /* The header is 7 32-bit unsigned integers.
+   * Then comes the keys index table, then the values index table. */
   const uint32_t idx_keystart = 7 * 4;
   const uint32_t idx_valstart = idx_keystart + 8 * num_keys;
   /* We don't use hash tables, so the keys start right after the index tables. */
@@ -356,7 +362,7 @@ static int make(const char *input_file_name, const char *output_file_name)
     else if (strstr(l, msgid_plural_kw) == l) {
       /* This is a message with plural forms. */
       if (section != SECTION_ID) {
-        printf("msgid_plural not preceeded by msgid on %s:%d\n", input_file_name, lno);
+        printf("msgid_plural not preceded by msgid on %s:%d\n", input_file_name, lno);
         return EXIT_FAILURE;
       }
       l = l + msgid_plural_len;

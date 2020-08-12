@@ -24,7 +24,11 @@ if(WIN32)
   endif()
 else()
   if(APPLE)
-    set(VPX_EXTRA_FLAGS --target=x86_64-darwin13-gcc)
+    if("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64")
+      set(VPX_EXTRA_FLAGS --target=generic-gnu)
+    else()
+      set(VPX_EXTRA_FLAGS --target=x86_64-darwin17-gcc)
+    endif()
   else()
     set(VPX_EXTRA_FLAGS --target=generic-gnu)
   endif()
@@ -49,6 +53,8 @@ ExternalProject_Add(external_vpx
       --disable-avx2
       --disable-unit-tests
       --disable-examples
+      --enable-vp8
+      --enable-vp9
       ${VPX_EXTRA_FLAGS}
   BUILD_COMMAND ${CONFIGURE_ENV} && cd ${BUILD_DIR}/vpx/src/external_vpx/ && make -j${MAKE_THREADS}
   INSTALL_COMMAND ${CONFIGURE_ENV} && cd ${BUILD_DIR}/vpx/src/external_vpx/ && make install

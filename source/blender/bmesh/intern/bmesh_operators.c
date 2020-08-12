@@ -22,12 +22,12 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_string.h"
+#include "BLI_listbase.h"
 #include "BLI_math.h"
 #include "BLI_memarena.h"
 #include "BLI_mempool.h"
-#include "BLI_listbase.h"
+#include "BLI_string.h"
+#include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
@@ -44,18 +44,14 @@ static int bmo_name_to_slotcode_check(BMOpSlot slot_args[BMO_OP_MAX_SLOTS],
 
 static const char *bmo_error_messages[] = {
     NULL,
-    N_("Self intersection error"),
-    N_("Could not dissolve vert"),
     N_("Could not connect vertices"),
-    N_("Could not traverse mesh"),
     N_("Could not dissolve faces"),
-    N_("Tessellation error"),
-    N_("Cannot deal with non-manifold geometry"),
     N_("Invalid selection"),
     N_("Internal mesh error"),
+    N_("Convex hull failed"),
 };
 
-BLI_STATIC_ASSERT(ARRAY_SIZE(bmo_error_messages) + 1 == BMERR_TOTAL, "message mismatch");
+BLI_STATIC_ASSERT(ARRAY_SIZE(bmo_error_messages) == BMERR_TOTAL, "message mismatch");
 
 /* operator slot type information - size of one element of the type given. */
 const int BMO_OPSLOT_TYPEINFO[BMO_OP_SLOT_TOTAL_TYPES] = {
@@ -142,6 +138,8 @@ static void bmo_op_slots_init(const BMOSlotType *slot_types, BMOpSlot *slot_args
                  BMO_OP_SLOT_SUBTYPE_INT_ENUM,
                  BMO_OP_SLOT_SUBTYPE_INT_FLAG)) {
           slot->data.enum_data.flags = slot_types[i].enum_flags;
+          /* Set the first value of the enum as the default value. */
+          slot->data.i = slot->data.enum_data.flags[0].value;
         }
       default:
         break;
@@ -272,7 +270,7 @@ BMOpSlot *BMO_slot_get(BMOpSlot slot_args[BMO_OP_MAX_SLOTS], const char *identif
   int slot_code = bmo_name_to_slotcode_check(slot_args, identifier);
 
   if (UNLIKELY(slot_code < 0)) {
-    //return &BMOpEmptySlot;
+    // return &BMOpEmptySlot;
     BLI_assert(0);
     return NULL; /* better crash */
   }
@@ -734,19 +732,17 @@ void *bmo_slot_buffer_grow(BMesh *bm, BMOperator *op, int slot_code, int totadd)
   BLI_assert(slot->slottype == BMO_OP_SLOT_ELEMENT_BUF);
 
   /* check if its actually a buffer */
-  if (slot->slottype != BMO_OP_SLOT_ELEMENT_BUF)
+  if (slot->slottype != BMO_OP_SLOT_ELEMENT_BUF) {
     return NULL;
+  }
 
   if (slot->flag & BMOS_DYNAMIC_ARRAY) {
     if (slot->len >= slot->size) {
       slot->size = (slot->size + 1 + totadd) * 2;
 
-      allocsize = BMO_OPSLOT_TYPEINFO[bmo_opdefines[op->type]->slot_types[slot_code].type] * slot->size;
-
-      tmp = slot->data.buf;
-      slot->data.buf = MEM_callocN(allocsize, "opslot dynamic array");
-      memcpy(slot->data.buf, tmp, allocsize);
-      MEM_freeN(tmp);
+      allocsize = BMO_OPSLOT_TYPEINFO[bmo_opdefines[op->type]->slot_types[slot_code].type] *
+                  slot->size;
+      slot->data.buf = MEM_recallocN_id(slot->data.buf, allocsize, "opslot dynamic array");
     }
 
     slot->len += totadd;
@@ -756,7 +752,8 @@ void *bmo_slot_buffer_grow(BMesh *bm, BMOperator *op, int slot_code, int totadd)
     slot->len += totadd;
     slot->size = slot->len + 2;
 
-    allocsize = BMO_OPSLOT_TYPEINFO[bmo_opdefines[op->type]->slot_types[slot_code].type] * slot->len;
+    allocsize = BMO_OPSLOT_TYPEINFO[bmo_opdefines[op->type]->slot_types[slot_code].type] *
+                slot->len;
 
     tmp = slot->data.buf;
     slot->data.buf = MEM_callocN(allocsize, "opslot dynamic array");
@@ -1504,7 +1501,7 @@ void *BMO_iter_step(BMOIter *iter)
 
     return ele;
   }
-  else if (slot->slot_type == BMO_OP_SLOT_MAPPING) {
+  if (slot->slot_type == BMO_OP_SLOT_MAPPING) {
     void *ret;
 
     if (BLI_ghashIterator_done(&iter->giter) == false) {
@@ -1520,9 +1517,7 @@ void *BMO_iter_step(BMOIter *iter)
 
     return ret;
   }
-  else {
-    BLI_assert(0);
-  }
+  BLI_assert(0);
 
   return NULL;
 }
@@ -1736,7 +1731,7 @@ static int BMO_opcode_from_opname_check(const char *opname)
  *
  * \note The common v/e/f suffix can be mixed,
  * so `avef` is can be used for all verts, edges and faces.
- * Order is not important so `Hfev` is also valid (all unflagged verts, edges and faces).
+ * Order is not important so `Hfev` is also valid (all un-flagged verts, edges and faces).
  */
 
 bool BMO_op_vinitf(BMesh *bm, BMOperator *op, const int flag, const char *_fmt, va_list vlist)

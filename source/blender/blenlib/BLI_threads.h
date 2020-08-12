@@ -23,14 +23,13 @@
 /** \file
  * \ingroup bli
  */
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #include <pthread.h>
 
-#ifdef __APPLE__
-#  include <libkern/OSAtomic.h>
+#include "BLI_sys_types.h"
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 /* for tables, button in UI, etc */
@@ -45,8 +44,6 @@ struct TaskScheduler;
 void BLI_threadapi_init(void);
 void BLI_threadapi_exit(void);
 
-struct TaskScheduler *BLI_task_scheduler_get(void);
-
 void BLI_threadpool_init(struct ListBase *threadbase, void *(*do_thread)(void *), int tot);
 int BLI_available_threads(struct ListBase *threadbase);
 int BLI_threadpool_available_thread_index(struct ListBase *threadbase);
@@ -56,9 +53,6 @@ void BLI_threadpool_remove_index(struct ListBase *threadbase, int index);
 void BLI_threadpool_clear(struct ListBase *threadbase);
 void BLI_threadpool_end(struct ListBase *threadbase);
 int BLI_thread_is_main(void);
-
-void BLI_threaded_malloc_begin(void);
-void BLI_threaded_malloc_end(void);
 
 /* System Information */
 
@@ -102,10 +96,18 @@ void BLI_mutex_unlock(ThreadMutex *mutex);
 
 /* Spin Lock */
 
-#if defined(__APPLE__)
-typedef OSSpinLock SpinLock;
+/* By default we use TBB for spin lock on all platforms. When building without
+ * TBB fall-back to spin lock implementation which is native to the platform.
+ *
+ * On macOS we use mutex lock instead of spin since the spin lock has been
+ * deprecated in SDK 10.12 and is discouraged from use. */
+
+#ifdef WITH_TBB
+typedef uint32_t SpinLock;
+#elif defined(__APPLE__)
+typedef ThreadMutex SpinLock;
 #elif defined(_MSC_VER)
-typedef volatile int SpinLock;
+typedef volatile unsigned int SpinLock;
 #else
 typedef pthread_spinlock_t SpinLock;
 #endif

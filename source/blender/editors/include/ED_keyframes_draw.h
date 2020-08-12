@@ -24,6 +24,10 @@
 #ifndef __ED_KEYFRAMES_DRAW_H__
 #define __ED_KEYFRAMES_DRAW_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct AnimData;
 struct CacheFile;
 struct DLRBT_Tree;
@@ -31,7 +35,6 @@ struct FCurve;
 struct ListBase;
 struct MaskLayer;
 struct Object;
-struct Palette;
 struct Scene;
 struct View2D;
 struct bAction;
@@ -127,7 +130,7 @@ typedef enum eKeyframeExtremeDrawOpts {
   KEYFRAME_EXTREME_MAX = (1 << 1),
   /* Grouped keys have different states. */
   KEYFRAME_EXTREME_MIXED = (1 << 2),
-  /* Both neigbors are equal to this key. */
+  /* Both neighbors are equal to this key. */
   KEYFRAME_EXTREME_FLAT = (1 << 3),
 } eKeyframeExtremeDrawOpts;
 
@@ -266,5 +269,9 @@ bool actkeyblock_is_valid(ActKeyColumn *ab);
 
 /* Checks if ActKeyColumn can be used as a block (i.e. drawn/used to detect "holds") */
 int actkeyblock_get_valid_hold(ActKeyColumn *ab);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /*  __ED_KEYFRAMES_DRAW_H__ */

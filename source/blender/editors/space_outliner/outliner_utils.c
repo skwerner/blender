@@ -21,18 +21,54 @@
  * \ingroup spoutliner
  */
 
+#include <string.h>
+
+#include "BLI_listbase.h"
 #include "BLI_utildefines.h"
 
 #include "DNA_action_types.h"
+#include "DNA_screen_types.h"
 #include "DNA_space_types.h"
 
+#include "BKE_context.h"
+#include "BKE_layer.h"
+#include "BKE_object.h"
 #include "BKE_outliner_treehash.h"
 
 #include "ED_armature.h"
+#include "ED_outliner.h"
 
 #include "UI_interface.h"
+#include "UI_view2d.h"
 
 #include "outliner_intern.h"
+
+/* -------------------------------------------------------------------- */
+/** \name Tree View Context
+ * \{ */
+
+void outliner_viewcontext_init(const bContext *C, TreeViewContext *tvc)
+{
+  memset(tvc, 0, sizeof(*tvc));
+
+  /* Scene level. */
+  tvc->scene = CTX_data_scene(C);
+  tvc->view_layer = CTX_data_view_layer(C);
+
+  /* Objects. */
+  tvc->obact = OBACT(tvc->view_layer);
+  if (tvc->obact != NULL) {
+    tvc->ob_edit = OBEDIT_FROM_OBACT(tvc->obact);
+
+    if ((tvc->obact->type == OB_ARMATURE) ||
+        /* This could be made into it's own function. */
+        ((tvc->obact->type == OB_MESH) && tvc->obact->mode & OB_MODE_WEIGHT_PAINT)) {
+      tvc->ob_pose = BKE_object_pose_armature_get(tvc->obact);
+    }
+  }
+}
+
+/** \} */
 
 /**
  * Try to find an item under y-coordinate \a view_co_y (view-space).
@@ -42,23 +78,67 @@ TreeElement *outliner_find_item_at_y(const SpaceOutliner *soops,
                                      const ListBase *tree,
                                      float view_co_y)
 {
-  for (TreeElement *te_iter = tree->first; te_iter; te_iter = te_iter->next) {
+  LISTBASE_FOREACH (TreeElement *, te_iter, tree) {
     if (view_co_y < (te_iter->ys + UI_UNIT_Y)) {
       if (view_co_y >= te_iter->ys) {
         /* co_y is inside this element */
         return te_iter;
       }
-      else if (TSELEM_OPEN(te_iter->store_elem, soops)) {
-        /* co_y is lower than current element, possibly inside children */
-        TreeElement *te_sub = outliner_find_item_at_y(soops, &te_iter->subtree, view_co_y);
-        if (te_sub) {
-          return te_sub;
-        }
+
+      if (BLI_listbase_is_empty(&te_iter->subtree) || !TSELEM_OPEN(TREESTORE(te_iter), soops)) {
+        /* No need for recursion. */
+        continue;
+      }
+
+      /* If the coordinate is lower than the next element, we can continue with that one and skip
+       * recursion too. */
+      const TreeElement *te_next = te_iter->next;
+      if (te_next && (view_co_y < (te_next->ys + UI_UNIT_Y))) {
+        continue;
+      }
+
+      /* co_y is lower than current element (but not lower than the next one), possibly inside
+       * children */
+      TreeElement *te_sub = outliner_find_item_at_y(soops, &te_iter->subtree, view_co_y);
+      if (te_sub) {
+        return te_sub;
       }
     }
   }
 
   return NULL;
+}
+
+static TreeElement *outliner_find_item_at_x_in_row_recursive(const TreeElement *parent_te,
+                                                             float view_co_x,
+                                                             bool *r_merged)
+{
+  TreeElement *child_te = parent_te->subtree.first;
+
+  bool over_element = false;
+
+  while (child_te) {
+    over_element = (view_co_x > child_te->xs) && (view_co_x < child_te->xend);
+    if ((child_te->flag & TE_ICONROW) && over_element) {
+      return child_te;
+    }
+    if ((child_te->flag & TE_ICONROW_MERGED) && over_element) {
+      if (r_merged) {
+        *r_merged = true;
+      }
+      return child_te;
+    }
+
+    TreeElement *te = outliner_find_item_at_x_in_row_recursive(child_te, view_co_x, r_merged);
+    if (te != child_te) {
+      return te;
+    }
+
+    child_te = child_te->next;
+  }
+
+  /* return parent if no child is hovered */
+  return (TreeElement *)parent_te;
 }
 
 /**
@@ -69,24 +149,14 @@ TreeElement *outliner_find_item_at_y(const SpaceOutliner *soops,
  */
 TreeElement *outliner_find_item_at_x_in_row(const SpaceOutliner *soops,
                                             const TreeElement *parent_te,
-                                            float view_co_x)
+                                            float view_co_x,
+                                            bool *r_merged)
 {
-  /* if parent_te is opened, it doesn't show childs in row */
+  /* if parent_te is opened, it doesn't show children in row */
   if (!TSELEM_OPEN(TREESTORE(parent_te), soops)) {
-    /* no recursion, items can only display their direct children in the row */
-    for (TreeElement *child_te = parent_te->subtree.first;
-         /* don't look further if co_x is smaller than child position*/
-         child_te && view_co_x >= child_te->xs;
-
-         child_te = child_te->next) {
-      if ((child_te->flag & TE_ICONROW) && (view_co_x > child_te->xs) &&
-          (view_co_x < child_te->xend)) {
-        return child_te;
-      }
-    }
+    return outliner_find_item_at_x_in_row_recursive(parent_te, view_co_x, r_merged);
   }
 
-  /* return parent if no child is hovered */
   return (TreeElement *)parent_te;
 }
 
@@ -146,7 +216,7 @@ TreeElement *outliner_find_tse(SpaceOutliner *soops, const TreeStoreElem *tse)
 /* Find treestore that refers to given ID */
 TreeElement *outliner_find_id(SpaceOutliner *soops, ListBase *lb, const ID *id)
 {
-  for (TreeElement *te = lb->first; te; te = te->next) {
+  LISTBASE_FOREACH (TreeElement *, te, lb) {
     TreeStoreElem *tselem = TREESTORE(te);
     if (tselem->type == 0) {
       if (tselem->id == id) {
@@ -164,7 +234,7 @@ TreeElement *outliner_find_id(SpaceOutliner *soops, ListBase *lb, const ID *id)
 
 TreeElement *outliner_find_posechannel(ListBase *lb, const bPoseChannel *pchan)
 {
-  for (TreeElement *te = lb->first; te; te = te->next) {
+  LISTBASE_FOREACH (TreeElement *, te, lb) {
     if (te->directdata == pchan) {
       return te;
     }
@@ -182,7 +252,7 @@ TreeElement *outliner_find_posechannel(ListBase *lb, const bPoseChannel *pchan)
 
 TreeElement *outliner_find_editbone(ListBase *lb, const EditBone *ebone)
 {
-  for (TreeElement *te = lb->first; te; te = te->next) {
+  LISTBASE_FOREACH (TreeElement *, te, lb) {
     if (te->directdata == ebone) {
       return te;
     }
@@ -198,7 +268,7 @@ TreeElement *outliner_find_editbone(ListBase *lb, const EditBone *ebone)
   return NULL;
 }
 
-ID *outliner_search_back(SpaceOutliner *UNUSED(soops), TreeElement *te, short idcode)
+TreeElement *outliner_search_back_te(TreeElement *te, short idcode)
 {
   TreeStoreElem *tselem;
   te = te->parent;
@@ -206,9 +276,22 @@ ID *outliner_search_back(SpaceOutliner *UNUSED(soops), TreeElement *te, short id
   while (te) {
     tselem = TREESTORE(te);
     if (tselem->type == 0 && te->idcode == idcode) {
-      return tselem->id;
+      return te;
     }
     te = te->parent;
+  }
+  return NULL;
+}
+
+ID *outliner_search_back(TreeElement *te, short idcode)
+{
+  TreeElement *search_te;
+  TreeStoreElem *tselem;
+
+  search_te = outliner_search_back_te(te, idcode);
+  if (search_te) {
+    tselem = TREESTORE(search_te);
+    return tselem->id;
   }
   return NULL;
 }
@@ -260,4 +343,137 @@ bool outliner_tree_traverse(const SpaceOutliner *soops,
   }
 
   return true;
+}
+
+float outliner_restrict_columns_width(const SpaceOutliner *soops)
+{
+  int num_columns = 0;
+
+  switch (soops->outlinevis) {
+    case SO_DATA_API:
+    case SO_SEQUENCE:
+    case SO_LIBRARIES:
+      return 0.0f;
+    case SO_ID_ORPHANS:
+      num_columns = 3;
+      break;
+    case SO_VIEW_LAYER:
+      if (soops->show_restrict_flags & SO_RESTRICT_HOLDOUT) {
+        num_columns++;
+      }
+      if (soops->show_restrict_flags & SO_RESTRICT_INDIRECT_ONLY) {
+        num_columns++;
+      }
+      ATTR_FALLTHROUGH;
+    case SO_SCENES:
+      if (soops->show_restrict_flags & SO_RESTRICT_SELECT) {
+        num_columns++;
+      }
+      if (soops->show_restrict_flags & SO_RESTRICT_HIDE) {
+        num_columns++;
+      }
+      if (soops->show_restrict_flags & SO_RESTRICT_VIEWPORT) {
+        num_columns++;
+      }
+      if (soops->show_restrict_flags & SO_RESTRICT_RENDER) {
+        num_columns++;
+      }
+      break;
+  }
+  return (num_columns * UI_UNIT_X + V2D_SCROLL_WIDTH);
+}
+
+/* Find first tree element in tree with matching treestore flag */
+TreeElement *outliner_find_element_with_flag(const ListBase *lb, short flag)
+{
+  LISTBASE_FOREACH (TreeElement *, te, lb) {
+    if ((TREESTORE(te)->flag & flag) == flag) {
+      return te;
+    }
+    TreeElement *active_element = outliner_find_element_with_flag(&te->subtree, flag);
+    if (active_element) {
+      return active_element;
+    }
+  }
+  return NULL;
+}
+
+/* Find if element is visible in the outliner tree */
+bool outliner_is_element_visible(const TreeElement *te)
+{
+  TreeStoreElem *tselem;
+
+  while (te->parent) {
+    tselem = TREESTORE(te->parent);
+
+    if (tselem->flag & TSE_CLOSED) {
+      return false;
+    }
+    te = te->parent;
+  }
+
+  return true;
+}
+
+/* Find if x coordinate is over an icon or name */
+bool outliner_item_is_co_over_name_icons(const TreeElement *te, float view_co_x)
+{
+  /* Special case: count area left of Scene Collection as empty space */
+  bool outside_left = (TREESTORE(te)->type == TSE_VIEW_COLLECTION_BASE) ?
+                          (view_co_x > te->xs + UI_UNIT_X) :
+                          (view_co_x > te->xs);
+
+  return outside_left && (view_co_x < te->xend);
+}
+
+/* Find if x coordinate is over element disclosure toggle */
+bool outliner_item_is_co_within_close_toggle(const TreeElement *te, float view_co_x)
+{
+  return (view_co_x > te->xs) && (view_co_x < te->xs + UI_UNIT_X);
+}
+
+/* Scroll view vertically while keeping within total bounds */
+void outliner_scroll_view(ARegion *region, int delta_y)
+{
+  int y_min = MIN2(region->v2d.cur.ymin, region->v2d.tot.ymin);
+
+  region->v2d.cur.ymax += delta_y;
+  region->v2d.cur.ymin += delta_y;
+
+  /* Adjust view if delta placed view outside total area */
+  int offset;
+  if (region->v2d.cur.ymax > -UI_UNIT_Y) {
+    offset = region->v2d.cur.ymax;
+    region->v2d.cur.ymax -= offset;
+    region->v2d.cur.ymin -= offset;
+  }
+  else if (region->v2d.cur.ymin < y_min) {
+    offset = y_min - region->v2d.cur.ymin;
+    region->v2d.cur.ymax += offset;
+    region->v2d.cur.ymin += offset;
+  }
+}
+
+/* Get base of object under cursor. Used for eyedropper tool */
+Base *ED_outliner_give_base_under_cursor(bContext *C, const int mval[2])
+{
+  ARegion *region = CTX_wm_region(C);
+  ViewLayer *view_layer = CTX_data_view_layer(C);
+  SpaceOutliner *soops = CTX_wm_space_outliner(C);
+  TreeElement *te;
+  Base *base = NULL;
+  float view_mval[2];
+
+  UI_view2d_region_to_view(&region->v2d, mval[0], mval[1], &view_mval[0], &view_mval[1]);
+
+  te = outliner_find_item_at_y(soops, &soops->tree, view_mval[1]);
+  if (te) {
+    TreeStoreElem *tselem = TREESTORE(te);
+    if (tselem->type == 0) {
+      Object *ob = (Object *)tselem->id;
+      base = (te->directdata) ? (Base *)te->directdata : BKE_view_layer_base_find(view_layer, ob);
+    }
+  }
+
+  return base;
 }

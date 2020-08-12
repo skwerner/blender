@@ -31,7 +31,6 @@ from mathutils import (
 )
 
 
-INTERN_PREVIEW_TYPES = {'MATERIAL', 'LIGHT', 'WORLD', 'TEXTURE', 'IMAGE'}
 OBJECT_TYPES_RENDER = {'MESH', 'CURVE', 'SURFACE', 'META', 'FONT'}
 
 
@@ -123,7 +122,7 @@ def do_previews(do_objects, do_collections, do_scenes, do_data_intern):
             scene.collection.objects.link(light)
 
             scene.render.engine = 'CYCLES'
-            scene.cycles.film_transparent = True
+            scene.render.film_transparent = True
             # TODO: define Cycles world?
 
         scene.render.image_settings.file_format = 'PNG'
@@ -284,7 +283,8 @@ def do_previews(do_objects, do_collections, do_scenes, do_data_intern):
             camera = bpy.data.objects[render_context.camera, None]
             light = bpy.data.objects[render_context.light, None] if render_context.light is not None else None
             cos = objects_bbox_calc(camera, objects, offset_matrix)
-            loc, _ortho_scale = camera.camera_fit_coords(bpy.context.depsgraph, cos)
+            depsgraph = bpy.context.evaluated_depsgraph_get()
+            loc, _ortho_scale = camera.camera_fit_coords(depsgraph, cos)
             camera.location = loc
             # Set camera clipping accordingly to computed bbox.
             min_dist = 1e24
@@ -298,9 +298,9 @@ def do_previews(do_objects, do_collections, do_scenes, do_data_intern):
             camera.data.clip_start = min_dist / 2
             camera.data.clip_end = max_dist * 2
             if light:
-                loc, _ortho_scale = light.camera_fit_coords(bpy.context.depsgraph, cos)
+                loc, _ortho_scale = light.camera_fit_coords(depsgraph, cos)
                 light.location = loc
-        scene.update()
+        bpy.context.view_layer.update()
 
         bpy.ops.render.render(write_still=True)
 
@@ -314,7 +314,7 @@ def do_previews(do_objects, do_collections, do_scenes, do_data_intern):
     do_save = True
 
     if do_data_intern:
-        bpy.ops.wm.previews_clear(id_type=INTERN_PREVIEW_TYPES)
+        bpy.ops.wm.previews_clear(id_type='SHADING')
         bpy.ops.wm.previews_ensure()
 
     render_contexts = {}
@@ -350,7 +350,7 @@ def do_previews(do_objects, do_collections, do_scenes, do_data_intern):
                 if obname not in scene.objects:
                     scene.collection.objects.link(ob)
                 ob.hide_render = False
-            scene.update()
+            bpy.context.view_layer.update()
 
             preview_render_do(render_context, 'objects', root.name, objects)
 
@@ -392,7 +392,7 @@ def do_previews(do_objects, do_collections, do_scenes, do_data_intern):
             bpy.ops.object.collection_instance_add(collection=grp.name)
             grp_ob = next((ob for ob in scene.objects if ob.instance_collection and ob.instance_collection.name == grp.name))
             grp_obname = grp_ob.name
-            scene.update()
+            bpy.context.view_layer.update()
 
             offset_matrix = Matrix.Translation(grp.instance_offset).inverted()
 
@@ -411,7 +411,7 @@ def do_previews(do_objects, do_collections, do_scenes, do_data_intern):
             has_camera = scene.camera is not None
             bpy.context.window.scene = scene
             render_context = render_context_create('__SCENE', objects_ignored)
-            scene.update()
+            bpy.context.view_layer.update()
 
             objects = None
             if not has_camera:
@@ -439,7 +439,7 @@ def do_previews(do_objects, do_collections, do_scenes, do_data_intern):
 
 def do_clear_previews(do_objects, do_collections, do_scenes, do_data_intern):
     if do_data_intern:
-        bpy.ops.wm.previews_clear(id_type=INTERN_PREVIEW_TYPES)
+        bpy.ops.wm.previews_clear(id_type='SHADING')
 
     if do_objects:
         for ob in ids_nolib(bpy.data.objects):
@@ -505,7 +505,7 @@ def main():
 
 
 if __name__ == "__main__":
-    print("\n\n *** Running {} *** \n".format(__file__))
-    print(" *** Blend file {} *** \n".format(bpy.data.filepath))
+    print("\n\n *** Running %s *** \n" % __file__)
+    print(" *** Blend file %s *** \n" % bpy.data.filepath)
     main()
     bpy.ops.wm.quit_blender()

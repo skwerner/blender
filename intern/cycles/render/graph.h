@@ -61,12 +61,13 @@ enum ShaderNodeSpecialType {
   SHADER_SPECIAL_TYPE_PROXY,
   SHADER_SPECIAL_TYPE_AUTOCONVERT,
   SHADER_SPECIAL_TYPE_GEOMETRY,
-  SHADER_SPECIAL_TYPE_SCRIPT,
+  SHADER_SPECIAL_TYPE_OSL,
   SHADER_SPECIAL_TYPE_IMAGE_SLOT,
   SHADER_SPECIAL_TYPE_CLOSURE,
   SHADER_SPECIAL_TYPE_COMBINE_CLOSURE,
   SHADER_SPECIAL_TYPE_OUTPUT,
   SHADER_SPECIAL_TYPE_BUMP,
+  SHADER_SPECIAL_TYPE_OUTPUT_AOV,
 };
 
 /* Input
@@ -104,6 +105,8 @@ class ShaderInput {
     ((Node *)parent)->set(socket_type, f);
   }
 
+  void disconnect();
+
   const SocketType &socket_type;
   ShaderNode *parent;
   ShaderOutput *link;
@@ -130,6 +133,8 @@ class ShaderOutput {
     return socket_type.type;
   }
 
+  void disconnect();
+
   const SocketType &socket_type;
   ShaderNode *parent;
   vector<ShaderInput *> links;
@@ -147,6 +152,7 @@ class ShaderNode : public Node {
   virtual ~ShaderNode();
 
   void create_inputs_outputs(const NodeType *type);
+  void remove_input(ShaderInput *input);
 
   ShaderInput *input(const char *name);
   ShaderOutput *output(const char *name);
@@ -157,6 +163,11 @@ class ShaderNode : public Node {
   virtual void attributes(Shader *shader, AttributeRequestSet *attributes);
   virtual void compile(SVMCompiler &compiler) = 0;
   virtual void compile(OSLCompiler &compiler) = 0;
+
+  /* Expand node into additional nodes. */
+  virtual void expand(ShaderGraph * /* graph */)
+  {
+  }
 
   /* ** Node optimization ** */
   /* Check whether the node can be replaced with single constant. */
@@ -190,10 +201,6 @@ class ShaderNode : public Node {
     return false;
   }
   virtual bool has_spatial_varying()
-  {
-    return false;
-  }
-  virtual bool has_object_dependency()
   {
     return false;
   }
@@ -322,6 +329,8 @@ class ShaderGraph {
   void connect(ShaderOutput *from, ShaderInput *to);
   void disconnect(ShaderOutput *from);
   void disconnect(ShaderInput *to);
+  void relink(ShaderInput *from, ShaderInput *to);
+  void relink(ShaderOutput *from, ShaderOutput *to);
   void relink(ShaderNode *node, ShaderOutput *from, ShaderOutput *to);
 
   void remove_proxy_nodes();
@@ -346,6 +355,7 @@ class ShaderGraph {
   void break_cycles(ShaderNode *node, vector<bool> &visited, vector<bool> &on_stack);
   void bump_from_displacement(bool use_object_space);
   void refine_bump_nodes();
+  void expand();
   void default_inputs(bool do_osl);
   void transform_multi_closure(ShaderNode *node, ShaderOutput *weight_out, bool volume);
 

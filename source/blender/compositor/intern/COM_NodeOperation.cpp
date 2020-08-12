@@ -16,11 +16,11 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#include <typeinfo>
 #include <stdio.h>
+#include <typeinfo>
 
-#include "COM_defines.h"
 #include "COM_ExecutionSystem.h"
+#include "COM_defines.h"
 
 #include "COM_NodeOperation.h" /* own include */
 
@@ -142,10 +142,12 @@ SocketReader *NodeOperation::getInputSocketReader(unsigned int inputSocketIndex)
 NodeOperation *NodeOperation::getInputOperation(unsigned int inputSocketIndex)
 {
   NodeOperationInput *input = getInputSocket(inputSocketIndex);
-  if (input && input->isConnected())
+  if (input && input->isConnected()) {
     return &input->getLink()->getOperation();
-  else
+  }
+  else {
     return NULL;
+  }
 }
 
 void NodeOperation::getConnectedInputSockets(Inputs *sockets)
@@ -216,8 +218,9 @@ SocketReader *NodeOperationInput::getReader()
 void NodeOperationInput::determineResolution(unsigned int resolution[2],
                                              unsigned int preferredResolution[2])
 {
-  if (m_link)
+  if (m_link) {
     m_link->determineResolution(resolution, preferredResolution);
+  }
 }
 
 /******************

@@ -30,23 +30,15 @@ struct ARegion;
 struct ARegionType;
 struct FileSelectParams;
 struct SpaceFile;
-
-/* file_ops.c */
-struct ARegion *file_tools_region(struct ScrArea *sa);
+struct View2D;
 
 /* file_draw.c */
-#define TILE_BORDER_X (UI_UNIT_X / 4)
-#define TILE_BORDER_Y (UI_UNIT_Y / 4)
-
-/* ui geometry */
-#define IMASEL_BUTTONS_HEIGHT (UI_UNIT_Y * 2)
-#define IMASEL_BUTTONS_MARGIN (UI_UNIT_Y / 6)
+#define ATTRIBUTE_COLUMN_PADDING (0.5f * UI_UNIT_X)
 
 #define SMALL_SIZE_CHECK(_size) ((_size) < 64) /* Related to FileSelectParams.thumbnail_size. */
 
-void file_draw_buttons(const bContext *C, ARegion *ar);
-void file_calc_previews(const bContext *C, ARegion *ar);
-void file_draw_list(const bContext *C, ARegion *ar);
+void file_calc_previews(const bContext *C, ARegion *region);
+void file_draw_list(const bContext *C, ARegion *region);
 
 void file_draw_check(bContext *C);
 void file_draw_check_cb(bContext *C, void *arg1, void *arg2);
@@ -56,14 +48,8 @@ bool file_draw_check_exists(SpaceFile *sfile);
 struct wmOperator;
 struct wmOperatorType;
 
-typedef enum WalkSelectDirection {
-  FILE_SELECT_WALK_UP,
-  FILE_SELECT_WALK_DOWN,
-  FILE_SELECT_WALK_LEFT,
-  FILE_SELECT_WALK_RIGHT,
-} WalkSelectDirections;
-
 void FILE_OT_highlight(struct wmOperatorType *ot);
+void FILE_OT_sort_column_ui_context(struct wmOperatorType *ot);
 void FILE_OT_select(struct wmOperatorType *ot);
 void FILE_OT_select_walk(struct wmOperatorType *ot);
 void FILE_OT_select_all(struct wmOperatorType *ot);
@@ -82,25 +68,17 @@ void FILE_OT_directory_new(struct wmOperatorType *ot);
 void FILE_OT_previous(struct wmOperatorType *ot);
 void FILE_OT_next(struct wmOperatorType *ot);
 void FILE_OT_refresh(struct wmOperatorType *ot);
-void FILE_OT_bookmark_toggle(struct wmOperatorType *ot);
 void FILE_OT_filenum(struct wmOperatorType *ot);
 void FILE_OT_delete(struct wmOperatorType *ot);
 void FILE_OT_rename(struct wmOperatorType *ot);
 void FILE_OT_smoothscroll(struct wmOperatorType *ot);
 void FILE_OT_filepath_drop(struct wmOperatorType *ot);
-
-int file_exec(bContext *C, struct wmOperator *exec_op);
-int file_cancel_exec(bContext *C, struct wmOperator *unused);
-int file_parent_exec(bContext *C, struct wmOperator *unused);
-int file_previous_exec(bContext *C, struct wmOperator *unused);
-int file_next_exec(bContext *C, struct wmOperator *unused);
-int file_directory_new_exec(bContext *C, struct wmOperator *unused);
-int file_delete_exec(bContext *C, struct wmOperator *unused);
+void FILE_OT_start_filter(struct wmOperatorType *ot);
 
 void file_directory_enter_handle(bContext *C, void *arg_unused, void *arg_but);
 void file_filename_enter_handle(bContext *C, void *arg_unused, void *arg_but);
 
-int file_highlight_set(struct SpaceFile *sfile, struct ARegion *ar, int mx, int my);
+int file_highlight_set(struct SpaceFile *sfile, struct ARegion *region, int mx, int my);
 
 void file_sfile_filepath_set(struct SpaceFile *sfile, const char *filepath);
 void file_sfile_to_operator_ex(bContext *C,
@@ -108,10 +86,21 @@ void file_sfile_to_operator_ex(bContext *C,
                                struct SpaceFile *sfile,
                                char *filepath);
 void file_sfile_to_operator(bContext *C, struct wmOperator *op, struct SpaceFile *sfile);
+
 void file_operator_to_sfile(bContext *C, struct SpaceFile *sfile, struct wmOperator *op);
 
 /* filesel.c */
 void fileselect_file_set(SpaceFile *sfile, const int index);
+bool file_attribute_column_type_enabled(const FileSelectParams *params,
+                                        FileAttributeColumnType column);
+bool file_attribute_column_header_is_inside(const struct View2D *v2d,
+                                            const FileLayout *layout,
+                                            int x,
+                                            int y);
+FileAttributeColumnType file_attribute_column_type_find_isect(const View2D *v2d,
+                                                              const FileSelectParams *params,
+                                                              FileLayout *layout,
+                                                              int x);
 float file_string_width(const char *str);
 
 float file_font_pointsize(void);
@@ -122,9 +111,10 @@ int autocomplete_file(struct bContext *C, char *str, void *arg_v);
 void file_params_renamefile_activate(struct SpaceFile *sfile, struct FileSelectParams *params);
 
 /* file_panels.c */
-void file_panels_register(struct ARegionType *art);
+void file_tool_props_region_panels_register(struct ARegionType *art);
+void file_execute_region_panels_register(struct ARegionType *art);
 
 /* file_utils.c */
-void file_tile_boundbox(const ARegion *ar, FileLayout *layout, const int file, rcti *r_bounds);
+void file_tile_boundbox(const ARegion *region, FileLayout *layout, const int file, rcti *r_bounds);
 
 #endif /* __FILE_INTERN_H__ */

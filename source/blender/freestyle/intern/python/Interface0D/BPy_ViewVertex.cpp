@@ -21,8 +21,8 @@
 #include "BPy_ViewVertex.h"
 
 #include "../BPy_Convert.h"
-#include "../Interface1D/BPy_ViewEdge.h"
 #include "../BPy_Nature.h"
+#include "../Interface1D/BPy_ViewEdge.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -105,8 +105,9 @@ static PyObject *ViewVertex_edges_iterator(BPy_ViewVertex *self, PyObject *args,
   static const char *kwlist[] = {"edge", NULL};
   PyObject *py_ve;
 
-  if (PyArg_ParseTupleAndKeywords(args, kwds, "O!", (char **)kwlist, &ViewEdge_Type, &py_ve))
+  if (PyArg_ParseTupleAndKeywords(args, kwds, "O!", (char **)kwlist, &ViewEdge_Type, &py_ve)) {
     return NULL;
+  }
   ViewEdge *ve = ((BPy_ViewEdge *)py_ve)->ve;
   ViewVertexInternal::orientedViewEdgeIterator ove_it(self->vv->edgesIterator(ve));
   return BPy_orientedViewEdgeIterator_from_orientedViewEdgeIterator(ove_it, false);
@@ -132,8 +133,9 @@ PyDoc_STRVAR(ViewVertex_nature_doc,
 static PyObject *ViewVertex_nature_get(BPy_ViewVertex *self, void *UNUSED(closure))
 {
   Nature::VertexNature nature = self->vv->getNature();
-  if (PyErr_Occurred())
+  if (PyErr_Occurred()) {
     return NULL;
+  }
   return BPy_Nature_from_Nature(nature);  // return a copy
 }
 
@@ -148,10 +150,10 @@ static int ViewVertex_nature_set(BPy_ViewVertex *self, PyObject *value, void *UN
 }
 
 static PyGetSetDef BPy_ViewVertex_getseters[] = {
-    {(char *)"nature",
+    {"nature",
      (getter)ViewVertex_nature_get,
      (setter)ViewVertex_nature_set,
-     (char *)ViewVertex_nature_doc,
+     ViewVertex_nature_doc,
      NULL},
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };

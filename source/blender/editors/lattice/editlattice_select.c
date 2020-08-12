@@ -25,11 +25,11 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_bitmap.h"
 #include "BLI_listbase.h"
 #include "BLI_math.h"
-#include "BLI_utildefines.h"
 #include "BLI_rand.h"
-#include "BLI_bitmap.h"
+#include "BLI_utildefines.h"
 
 #include "DNA_curve_types.h"
 #include "DNA_lattice_types.h"
@@ -43,13 +43,13 @@
 
 #include "BKE_context.h"
 #include "BKE_lattice.h"
-#include "BKE_report.h"
 #include "BKE_layer.h"
+#include "BKE_report.h"
 
+#include "ED_lattice.h"
 #include "ED_object.h"
 #include "ED_screen.h"
 #include "ED_select_utils.h"
-#include "ED_lattice.h"
 #include "ED_view3d.h"
 
 #include "WM_api.h"
@@ -89,8 +89,9 @@ bool ED_lattice_deselect_all_multi_ex(struct Base **bases, const uint bases_len)
 
 bool ED_lattice_deselect_all_multi(struct bContext *C)
 {
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewContext vc;
-  ED_view3d_viewcontext_init(C, &vc);
+  ED_view3d_viewcontext_init(C, &vc, depsgraph);
   uint bases_len = 0;
   Base **bases = BKE_view_layer_array_from_bases_in_edit_mode_unique_data(
       vc.view_layer, vc.v3d, &bases_len);
@@ -267,18 +268,17 @@ void LATTICE_OT_select_mirror(wmOperatorType *ot)
  * \{ */
 
 static bool lattice_test_bitmap_uvw(
-    Lattice *lt, BLI_bitmap *selpoints, int u, int v, int w, const bool selected)
+    Lattice *lt, const BLI_bitmap *selpoints, int u, int v, int w, const bool selected)
 {
   if ((u < 0 || u >= lt->pntsu) || (v < 0 || v >= lt->pntsv) || (w < 0 || w >= lt->pntsw)) {
     return false;
   }
-  else {
-    int i = BKE_lattice_index_from_uvw(lt, u, v, w);
-    if (lt->def[i].hide == 0) {
-      return (BLI_BITMAP_TEST(selpoints, i) != 0) == selected;
-    }
-    return false;
+
+  int i = BKE_lattice_index_from_uvw(lt, u, v, w);
+  if (lt->def[i].hide == 0) {
+    return (BLI_BITMAP_TEST(selpoints, i) != 0) == selected;
   }
+  return false;
 }
 
 static int lattice_select_more_less(bContext *C, const bool select)
@@ -582,8 +582,9 @@ static void findnearestLattvert__doClosest(void *userData, BPoint *bp, const flo
   } *data = userData;
   float dist_test = len_manhattan_v2v2(data->mval_fl, screen_co);
 
-  if ((bp->f1 & SELECT) && data->select)
+  if ((bp->f1 & SELECT) && data->select) {
     dist_test += 5.0f;
+  }
 
   if (dist_test < data->dist) {
     data->dist = dist_test;
@@ -633,11 +634,12 @@ static BPoint *findnearestLattvert(ViewContext *vc, int sel, Base **r_base)
 bool ED_lattice_select_pick(
     bContext *C, const int mval[2], bool extend, bool deselect, bool toggle)
 {
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewContext vc;
   BPoint *bp = NULL;
   Base *basact = NULL;
 
-  ED_view3d_viewcontext_init(C, &vc);
+  ED_view3d_viewcontext_init(C, &vc, depsgraph);
   vc.mval[0] = mval[0];
   vc.mval[1] = mval[1];
 

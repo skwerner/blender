@@ -35,7 +35,7 @@ PyDoc_STRVAR(CurvePointIterator_doc,
              "Class hierarchy: :class:`Iterator` > :class:`CurvePointIterator`\n"
              "\n"
              "Class representing an iterator on a curve.  Allows an iterating\n"
-             "outside initial vertices.  A CurvePoint is instanciated and returned\n"
+             "outside initial vertices.  A CurvePoint is instantiated and returned\n"
              "through the .object attribute.\n"
              "\n"
              ".. method:: __init__()\n"
@@ -67,11 +67,13 @@ static int CurvePointIterator_init(BPy_CurvePointIterator *self, PyObject *args,
 
   if (PyArg_ParseTupleAndKeywords(
           args, kwds, "|O!", (char **)kwlist_1, &CurvePointIterator_Type, &brother)) {
-    if (!brother)
+    if (!brother) {
       self->cp_it = new CurveInternal::CurvePointIterator();
-    else
+    }
+    else {
       self->cp_it = new CurveInternal::CurvePointIterator(
           *(((BPy_CurvePointIterator *)brother)->cp_it));
+    }
   }
   else if (PyErr_Clear(), PyArg_ParseTupleAndKeywords(args, kwds, "f", (char **)kwlist_2, &step)) {
     self->cp_it = new CurveInternal::CurvePointIterator(step);
@@ -121,21 +123,13 @@ static PyObject *CurvePointIterator_u_get(BPy_CurvePointIterator *self, void *UN
 }
 
 static PyGetSetDef BPy_CurvePointIterator_getseters[] = {
-    {(char *)"object",
+    {"object",
      (getter)CurvePointIterator_object_get,
      (setter)NULL,
-     (char *)CurvePointIterator_object_doc,
+     CurvePointIterator_object_doc,
      NULL},
-    {(char *)"t",
-     (getter)CurvePointIterator_t_get,
-     (setter)NULL,
-     (char *)CurvePointIterator_t_doc,
-     NULL},
-    {(char *)"u",
-     (getter)CurvePointIterator_u_get,
-     (setter)NULL,
-     (char *)CurvePointIterator_u_doc,
-     NULL},
+    {"t", (getter)CurvePointIterator_t_get, (setter)NULL, CurvePointIterator_t_doc, NULL},
+    {"u", (getter)CurvePointIterator_u_get, (setter)NULL, CurvePointIterator_u_doc, NULL},
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };
 

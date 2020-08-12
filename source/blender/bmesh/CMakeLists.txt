@@ -24,9 +24,9 @@ set(INC
   ../blenlib
   ../blentranslation
   ../makesdna
-  ../../../intern/guardedalloc
   ../../../intern/atomic
   ../../../intern/eigen
+  ../../../intern/guardedalloc
   ../../../extern/rangetree
 )
 
@@ -56,7 +56,7 @@ set(SRC
   operators/bmo_hull.c
   operators/bmo_inset.c
   operators/bmo_join_triangles.c
-  operators/bmo_mesh_conv.c
+  operators/bmo_mesh_convert.c
   operators/bmo_mirror.c
   operators/bmo_normals.c
   operators/bmo_offset_edgeloops.c
@@ -97,8 +97,10 @@ set(SRC
   intern/bmesh_marking.h
   intern/bmesh_mesh.c
   intern/bmesh_mesh.h
-  intern/bmesh_mesh_conv.c
-  intern/bmesh_mesh_conv.h
+  intern/bmesh_mesh_convert.c
+  intern/bmesh_mesh_convert.h
+  intern/bmesh_mesh_duplicate.c
+  intern/bmesh_mesh_duplicate.h
   intern/bmesh_mesh_validate.c
   intern/bmesh_mesh_validate.h
   intern/bmesh_mods.c
@@ -116,6 +118,8 @@ set(SRC
   intern/bmesh_query.c
   intern/bmesh_query.h
   intern/bmesh_query_inline.h
+  intern/bmesh_query_uv.c
+  intern/bmesh_query_uv.h
   intern/bmesh_structure.c
   intern/bmesh_structure.h
   intern/bmesh_structure_inline.h
@@ -143,10 +147,16 @@ set(SRC
   tools/bmesh_edgesplit.h
   tools/bmesh_intersect.c
   tools/bmesh_intersect.h
+  tools/bmesh_intersect_edges.c
+  tools/bmesh_intersect_edges.h
   tools/bmesh_path.c
   tools/bmesh_path.h
   tools/bmesh_path_region.c
   tools/bmesh_path_region.h
+  tools/bmesh_path_uv.c
+  tools/bmesh_path_uv.h
+  tools/bmesh_path_region_uv.c
+  tools/bmesh_path_region_uv.h
   tools/bmesh_region_match.c
   tools/bmesh_region_match.h
   tools/bmesh_separate.c
@@ -179,6 +189,8 @@ if(WITH_BULLET)
   )
   list(APPEND LIB
     extern_bullet
+
+    ${BULLET_LIBRARIES}
   )
   add_definitions(-DWITH_BULLET)
 endif()

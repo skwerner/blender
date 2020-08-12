@@ -24,9 +24,9 @@
  * with checks for drivers and GPU support.
  */
 
-#include "BLI_utildefines.h"
 #include "BLI_math_base.h"
 #include "BLI_math_vector.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_global.h"
 #include "MEM_guardedalloc.h"
@@ -34,12 +34,13 @@
 #include "GPU_extensions.h"
 #include "GPU_framebuffer.h"
 #include "GPU_glew.h"
+#include "GPU_platform.h"
 #include "GPU_texture.h"
 
 #include "intern/gpu_private.h"
 
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #ifdef WIN32
@@ -68,27 +69,36 @@ static struct GPUGlobal {
   GLint maxubosize;
   GLint maxubobinds;
   int samples_color_texture_max;
-  eGPUDeviceType device;
-  eGPUOSType os;
-  eGPUDriverType driver;
   float line_width_range[2];
   /* workaround for different calculation of dfdy factors on GPUs. Some GPUs/drivers
-   * calculate dfdy in shader differently when drawing to an offscreen buffer. First
+   * calculate dfdy in shader differently when drawing to an off-screen buffer. First
    * number is factor on screen and second is off-screen */
   float dfdyfactors[2];
   float max_anisotropy;
+  /* Some Intel drivers have limited support for `GLEW_ARB_base_instance` so in
+   * these cases it is best to indicate that it is not supported. See T67951 */
+  bool glew_arb_base_instance_is_supported;
+  /* Cubemap Array support. */
+  bool glew_arb_texture_cube_map_array_is_supported;
   /* Some Intel drivers have issues with using mips as framebuffer targets if
    * GL_TEXTURE_MAX_LEVEL is higher than the target mip.
    * We need a workaround in this cases. */
   bool mip_render_workaround;
-  /* There is an issue with the glBlitFramebuffer on MacOS with radeon pro graphics.
-   * Blitting depth with GL_DEPTH24_STENCIL8 is buggy so the workaround is to use
-   * GPU_DEPTH32F_STENCIL8. Then Blitting depth will work but blitting stencil will
+  /* There is an issue with the #glBlitFramebuffer on MacOS with radeon pro graphics.
+   * Blitting depth with#GL_DEPTH24_STENCIL8 is buggy so the workaround is to use
+   * #GPU_DEPTH32F_STENCIL8. Then Blitting depth will work but blitting stencil will
    * still be broken. */
   bool depth_blitting_workaround;
   /* Crappy driver don't know how to map framebuffer slot to output vars...
    * We need to have no "holes" in the output buffer slots. */
   bool unused_fb_slot_workaround;
+  bool broken_amd_driver;
+  /* Some crappy Intel drivers don't work well with shaders created in different
+   * rendering contexts. */
+  bool context_local_shaders_workaround;
+  /* Intel drivers exhibit artifacts when using #glCopyImageSubData & workbench anti-aliasing.
+   * (see T76273) */
+  bool texture_copy_workaround;
 } GG = {1, 0};
 
 static void gpu_detect_mip_render_workaround(void)
@@ -118,13 +128,6 @@ static void gpu_detect_mip_render_workaround(void)
 
   MEM_freeN(data);
   GPU_texture_free(tex);
-}
-
-/* GPU Types */
-
-bool GPU_type_matches(eGPUDeviceType device, eGPUOSType os, eGPUDriverType driver)
-{
-  return (GG.device & device) && (GG.os & os) && (GG.driver & driver);
 }
 
 /* GPU Extensions */
@@ -194,6 +197,16 @@ void GPU_get_dfdy_factors(float fac[2])
   copy_v2_v2(fac, GG.dfdyfactors);
 }
 
+bool GPU_arb_base_instance_is_supported(void)
+{
+  return GG.glew_arb_base_instance_is_supported;
+}
+
+bool GPU_arb_texture_cube_map_array_is_supported(void)
+{
+  return GG.glew_arb_texture_cube_map_array_is_supported;
+}
+
 bool GPU_mip_render_workaround(void)
 {
   return GG.mip_render_workaround;
@@ -209,10 +222,20 @@ bool GPU_unused_fb_slot_workaround(void)
   return GG.unused_fb_slot_workaround;
 }
 
+bool GPU_context_local_shaders_workaround(void)
+{
+  return GG.context_local_shaders_workaround;
+}
+
+bool GPU_texture_copy_workaround(void)
+{
+  return GG.texture_copy_workaround;
+}
+
 bool GPU_crappy_amd_driver(void)
 {
   /* Currently are the same drivers with the `unused_fb_slot` problem. */
-  return GPU_unused_fb_slot_workaround();
+  return GG.broken_amd_driver;
 }
 
 void gpu_extensions_init(void)
@@ -232,24 +255,17 @@ void gpu_extensions_init(void)
   glGetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS, &GG.maxtexlayers);
   glGetIntegerv(GL_MAX_CUBE_MAP_TEXTURE_SIZE, &GG.maxcubemapsize);
 
-  if (GLEW_EXT_texture_filter_anisotropic)
+  if (GLEW_EXT_texture_filter_anisotropic) {
     glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &GG.max_anisotropy);
-  else
+  }
+  else {
     GG.max_anisotropy = 1.0f;
+  }
 
   glGetIntegerv(GL_MAX_FRAGMENT_UNIFORM_BLOCKS, &GG.maxubobinds);
   glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &GG.maxubosize);
 
   glGetFloatv(GL_ALIASED_LINE_WIDTH_RANGE, GG.line_width_range);
-
-#ifndef NDEBUG
-  GLint ret;
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  glGetFramebufferAttachmentParameteriv(
-      GL_FRAMEBUFFER, GL_FRONT_LEFT, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, &ret);
-  /* We expect FRONT_LEFT to be the default buffer. */
-  BLI_assert(ret == GL_FRAMEBUFFER_DEFAULT);
-#endif
 
   glGetIntegerv(GL_MAX_COLOR_TEXTURE_SAMPLES, &GG.samples_color_texture_max);
 
@@ -257,11 +273,7 @@ void gpu_extensions_init(void)
   const char *renderer = (const char *)glGetString(GL_RENDERER);
   const char *version = (const char *)glGetString(GL_VERSION);
 
-  if (strstr(vendor, "ATI") || strstr(vendor, "AMD")) {
-    GG.device = GPU_DEVICE_ATI;
-    GG.driver = GPU_DRIVER_OFFICIAL;
-
-#ifdef _WIN32
+  if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_WIN, GPU_DRIVER_OFFICIAL)) {
     if (strstr(version, "4.5.13399") || strstr(version, "4.5.13417") ||
         strstr(version, "4.5.13422")) {
       /* The renderers include:
@@ -272,76 +284,48 @@ void gpu_extensions_init(void)
        * And many others... */
 
       GG.unused_fb_slot_workaround = true;
+      GG.broken_amd_driver = true;
     }
-#endif
+  }
 
-#if defined(__APPLE__)
+  if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_UNIX, GPU_DRIVER_OPENSOURCE) &&
+      strstr(renderer, "AMD VERDE")) {
+    /* We have issues with this specific renderer. (see T74024) */
+    GG.unused_fb_slot_workaround = true;
+    GG.broken_amd_driver = true;
+  }
+
+  if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_UNIX, GPU_DRIVER_OPENSOURCE) &&
+      strstr(version, "Mesa 19.3.4")) {
+    /* Fix slowdown on this particular driver. (see T77641) */
+    GG.broken_amd_driver = true;
+  }
+
+  if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_MAC, GPU_DRIVER_OFFICIAL)) {
     if (strstr(renderer, "AMD Radeon Pro") || strstr(renderer, "AMD Radeon R9") ||
         strstr(renderer, "AMD Radeon RX")) {
       GG.depth_blitting_workaround = true;
     }
-#endif
   }
-  else if (strstr(vendor, "NVIDIA")) {
-    GG.device = GPU_DEVICE_NVIDIA;
-    GG.driver = GPU_DRIVER_OFFICIAL;
-  }
-  else if (strstr(vendor, "Intel") ||
-           /* src/mesa/drivers/dri/intel/intel_context.c */
-           strstr(renderer, "Mesa DRI Intel") || strstr(renderer, "Mesa DRI Mobile Intel")) {
-    GG.device = GPU_DEVICE_INTEL;
-    GG.driver = GPU_DRIVER_OFFICIAL;
 
-    if (strstr(renderer, "UHD Graphics") ||
-        /* Not UHD but affected by the same bugs. */
-        strstr(renderer, "HD Graphics 530") || strstr(renderer, "Kaby Lake GT2")) {
-      GG.device |= GPU_DEVICE_INTEL_UHD;
+  if (GPU_type_matches(GPU_DEVICE_INTEL, GPU_OS_WIN, GPU_DRIVER_OFFICIAL)) {
+    /* Limit this fix to older hardware with GL < 4.5. This means Broadwell GPUs are
+     * covered since they only support GL 4.4 on windows.
+     * This fixes some issues with workbench antialiasing on Win + Intel GPU. (see T76273) */
+    if (!GLEW_VERSION_4_5) {
+      GG.texture_copy_workaround = true;
     }
   }
-  else if ((strstr(renderer, "Mesa DRI R")) ||
-           (strstr(renderer, "Radeon") && strstr(vendor, "X.Org")) ||
-           (strstr(renderer, "Gallium ") && strstr(renderer, " on ATI ")) ||
-           (strstr(renderer, "Gallium ") && strstr(renderer, " on AMD "))) {
-    GG.device = GPU_DEVICE_ATI;
-    GG.driver = GPU_DRIVER_OPENSOURCE;
-  }
-  else if (strstr(renderer, "Nouveau") || strstr(vendor, "nouveau")) {
-    GG.device = GPU_DEVICE_NVIDIA;
-    GG.driver = GPU_DRIVER_OPENSOURCE;
-  }
-  else if (strstr(vendor, "Mesa")) {
-    GG.device = GPU_DEVICE_SOFTWARE;
-    GG.driver = GPU_DRIVER_SOFTWARE;
-  }
-  else if (strstr(vendor, "Microsoft")) {
-    GG.device = GPU_DEVICE_SOFTWARE;
-    GG.driver = GPU_DRIVER_SOFTWARE;
-  }
-  else if (strstr(renderer, "Apple Software Renderer")) {
-    GG.device = GPU_DEVICE_SOFTWARE;
-    GG.driver = GPU_DRIVER_SOFTWARE;
-  }
-  else if (strstr(renderer, "llvmpipe")) {
-    GG.device = GPU_DEVICE_SOFTWARE;
-    GG.driver = GPU_DRIVER_SOFTWARE;
-  }
-  else {
-    printf("Warning: Could not find a matching GPU name. Things may not behave as expected.\n");
-    printf("Detected OpenGL configuration:\n");
-    printf("Vendor: %s\n", vendor);
-    printf("Renderer: %s\n", renderer);
-    GG.device = GPU_DEVICE_ANY;
-    GG.driver = GPU_DRIVER_ANY;
-  }
 
-#ifdef _WIN32
-  GG.os = GPU_OS_WIN;
-#elif defined(__APPLE__)
-  GG.os = GPU_OS_MAC;
-#else
-  GG.os = GPU_OS_UNIX;
-#endif
-
+  /* Limit support for GLEW_ARB_base_instance to OpenGL 4.0 and higher. NVIDIA Quadro FX 4800
+   * (TeraScale) report that they support GLEW_ARB_base_instance, but the driver does not support
+   * GLEW_ARB_draw_indirect as it has an OpenGL3 context what also matches the minimum needed
+   * requirements.
+   *
+   * We use it as a target for glMapBuffer(Range) what is part of the OpenGL 4 API. So better
+   * disable it when we don't have an OpenGL4 context (See T77657) */
+  GG.glew_arb_base_instance_is_supported = GLEW_ARB_base_instance && GLEW_VERSION_4_0;
+  GG.glew_arb_texture_cube_map_array_is_supported = GLEW_ARB_texture_cube_map_array;
   gpu_detect_mip_render_workaround();
 
   if (G.debug & G_DEBUG_GPU_FORCE_WORKAROUNDS) {
@@ -354,39 +338,81 @@ void gpu_extensions_init(void)
     GG.mip_render_workaround = true;
     GG.depth_blitting_workaround = true;
     GG.unused_fb_slot_workaround = true;
+    GG.texture_copy_workaround = true;
+  }
+
+  /* Special fix for theses specific GPUs.
+   * Without this workaround, blender crashes on startup. (see T72098) */
+  if (GPU_type_matches(GPU_DEVICE_INTEL, GPU_OS_WIN, GPU_DRIVER_OFFICIAL) &&
+      (strstr(renderer, "HD Graphics 620") || strstr(renderer, "HD Graphics 630"))) {
+    GG.mip_render_workaround = true;
+  }
+
+  /* Intel Ivy Bridge GPU's seems to have buggy cube-map array support. (see T75943) */
+  if (GPU_type_matches(GPU_DEVICE_INTEL, GPU_OS_WIN, GPU_DRIVER_OFFICIAL) &&
+      (strstr(renderer, "HD Graphics 4000") || strstr(renderer, "HD Graphics 2500"))) {
+    GG.glew_arb_texture_cube_map_array_is_supported = false;
   }
 
   /* df/dy calculation factors, those are dependent on driver */
-  if ((strstr(vendor, "ATI") && strstr(version, "3.3.10750"))) {
+  GG.dfdyfactors[0] = 1.0;
+  GG.dfdyfactors[1] = 1.0;
+
+  if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_ANY, GPU_DRIVER_ANY) &&
+      strstr(version, "3.3.10750")) {
     GG.dfdyfactors[0] = 1.0;
     GG.dfdyfactors[1] = -1.0;
   }
-  else if ((GG.device == GPU_DEVICE_INTEL) && (GG.os == GPU_OS_WIN) &&
-           (strstr(version, "4.0.0 - Build 10.18.10.3308") ||
-            strstr(version, "4.0.0 - Build 9.18.10.3186") ||
-            strstr(version, "4.0.0 - Build 9.18.10.3165") ||
-            strstr(version, "3.1.0 - Build 9.17.10.3347") ||
-            strstr(version, "3.1.0 - Build 9.17.10.4101") ||
-            strstr(version, "3.3.0 - Build 8.15.10.2618"))) {
-    GG.dfdyfactors[0] = -1.0;
-    GG.dfdyfactors[1] = 1.0;
+  else if (GPU_type_matches(GPU_DEVICE_INTEL, GPU_OS_WIN, GPU_DRIVER_ANY)) {
+    if (strstr(version, "4.0.0 - Build 10.18.10.3308") ||
+        strstr(version, "4.0.0 - Build 9.18.10.3186") ||
+        strstr(version, "4.0.0 - Build 9.18.10.3165") ||
+        strstr(version, "3.1.0 - Build 9.17.10.3347") ||
+        strstr(version, "3.1.0 - Build 9.17.10.4101") ||
+        strstr(version, "3.3.0 - Build 8.15.10.2618")) {
+      GG.dfdyfactors[0] = -1.0;
+      GG.dfdyfactors[1] = 1.0;
+    }
+
+    if (strstr(version, "Build 10.18.10.3") || strstr(version, "Build 10.18.10.4") ||
+        strstr(version, "Build 10.18.10.5") || strstr(version, "Build 10.18.14.4") ||
+        strstr(version, "Build 10.18.14.5")) {
+      /* Maybe not all of these drivers have problems with `GLEW_ARB_base_instance`.
+       * But it's hard to test each case. */
+      GG.glew_arb_base_instance_is_supported = false;
+      GG.context_local_shaders_workaround = true;
+    }
+
+    if (strstr(version, "Build 20.19.15.4285")) {
+      /* Somehow fixes armature display issues (see T69743). */
+      GG.context_local_shaders_workaround = true;
+    }
   }
-  else {
-    GG.dfdyfactors[0] = 1.0;
-    GG.dfdyfactors[1] = 1.0;
+  else if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_UNIX, GPU_DRIVER_OPENSOURCE) &&
+           (strstr(version, "Mesa 18.") || strstr(version, "Mesa 19.0") ||
+            strstr(version, "Mesa 19.1") || strstr(version, "Mesa 19.2"))) {
+    /* See T70187: merging vertices fail. This has been tested from 18.2.2 till 19.3.0~dev of the
+     * Mesa driver */
+    GG.unused_fb_slot_workaround = true;
   }
 
   GPU_invalid_tex_init();
+  GPU_samplers_init();
 }
 
 void gpu_extensions_exit(void)
 {
   GPU_invalid_tex_free();
+  GPU_samplers_free();
 }
 
 bool GPU_mem_stats_supported(void)
 {
-  return (GLEW_NVX_gpu_memory_info || GLEW_ATI_meminfo) && (G.debug & G_DEBUG_GPU_MEM);
+#ifndef GPU_STANDALONE
+  return (GLEW_NVX_gpu_memory_info || GLEW_ATI_meminfo);
+#else
+  return false;
+#endif
 }
 
 void GPU_mem_stats_get(int *totalmem, int *freemem)
@@ -410,4 +436,12 @@ void GPU_mem_stats_get(int *totalmem, int *freemem)
     *totalmem = 0;
     *freemem = 0;
   }
+}
+
+/* Return support for the active context + window. */
+bool GPU_stereo_quadbuffer_support(void)
+{
+  GLboolean stereo = GL_FALSE;
+  glGetBooleanv(GL_STEREO, &stereo);
+  return stereo == GL_TRUE;
 }

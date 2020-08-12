@@ -18,12 +18,11 @@
 
 #include "COM_ScreenLensDistortionOperation.h"
 
-extern "C" {
 #include "BLI_math.h"
-#include "BLI_utildefines.h"
 #include "BLI_rand.h"
+#include "BLI_utildefines.h"
+
 #include "PIL_time.h"
-}
 
 ScreenLensDistortionOperation::ScreenLensDistortionOperation() : NodeOperation()
 {
@@ -125,8 +124,9 @@ bool ScreenLensDistortionOperation::get_delta(float r_sq,
     distort_uv(uv, t, delta);
     return true;
   }
-  else
+  else {
     return false;
+  }
 }
 
 void ScreenLensDistortionOperation::accumulate(MemoryBuffer *buffer,
@@ -147,7 +147,7 @@ void ScreenLensDistortionOperation::accumulate(MemoryBuffer *buffer,
   float k4 = m_k4[a];
   float dk4 = m_dk4[a];
 
-  for (float z = 0; z < ds; ++z) {
+  for (float z = 0; z < ds; z++) {
     float tz = (z + (m_jitter ? BLI_rng_get_float(m_rng) : 0.5f)) * sd;
     float t = 1.0f - (k4 + tz * dk4) * r_sq;
 
@@ -182,12 +182,15 @@ void ScreenLensDistortionOperation::executePixel(float output[4], int x, int y, 
     accumulate(buffer, 0, 1, uv_dot, uv, delta, sum, count);
     accumulate(buffer, 1, 2, uv_dot, uv, delta, sum, count);
 
-    if (count[0])
+    if (count[0]) {
       output[0] = 2.0f * sum[0] / (float)count[0];
-    if (count[1])
+    }
+    if (count[1]) {
       output[1] = 2.0f * sum[1] / (float)count[1];
-    if (count[2])
+    }
+    if (count[2]) {
       output[2] = 2.0f * sum[2] / (float)count[2];
+    }
 
     /* set alpha */
     output[3] = 1.0f;

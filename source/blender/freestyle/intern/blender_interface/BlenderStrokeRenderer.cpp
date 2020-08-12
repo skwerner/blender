@@ -23,7 +23,6 @@
 #include "../application/AppConfig.h"
 #include "../stroke/Canvas.h"
 
-extern "C" {
 #include "MEM_guardedalloc.h"
 
 #include "RNA_access.h"
@@ -31,21 +30,21 @@ extern "C" {
 
 #include "DNA_camera_types.h"
 #include "DNA_collection_types.h"
-#include "DNA_listBase.h"
 #include "DNA_linestyle_types.h"
+#include "DNA_listBase.h"
 #include "DNA_material_types.h"
-#include "DNA_meshdata_types.h"
 #include "DNA_mesh_types.h"
+#include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
-#include "DNA_screen_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
 
 #include "BKE_collection.h"
 #include "BKE_customdata.h"
-#include "BKE_idprop.h"
 #include "BKE_global.h"
+#include "BKE_idprop.h"
 #include "BKE_layer.h"
-#include "BKE_library.h" /* free_libblock */
+#include "BKE_lib_id.h" /* free_libblock */
 #include "BKE_material.h"
 #include "BKE_mesh.h"
 #include "BKE_node.h"
@@ -64,7 +63,6 @@ extern "C" {
 #include "RE_pipeline.h"
 
 #include "render_types.h"
-}
 
 #include <limits.h>
 
@@ -74,7 +72,16 @@ const char *BlenderStrokeRenderer::uvNames[] = {"along_stroke", "along_stroke_ti
 
 BlenderStrokeRenderer::BlenderStrokeRenderer(Render *re, int render_count) : StrokeRenderer()
 {
-  freestyle_bmain = re->freestyle_bmain;
+  freestyle_bmain = BKE_main_new();
+
+  /* We use the same window manager for freestyle bmain as
+   * real bmain uses. This is needed because freestyle's
+   * bmain could be used to tag scenes for update, which
+   * implies call of ED_render_scene_update in some cases
+   * and that function requires proper window manager
+   * to present (sergey)
+   */
+  freestyle_bmain->wm = re->main->wm;
 
   // for stroke mesh generation
   _width = re->winx;
@@ -105,10 +112,6 @@ BlenderStrokeRenderer::BlenderStrokeRenderer(Render *re, int render_count) : Str
   freestyle_scene->r.border.xmax = old_scene->r.border.xmax;
   freestyle_scene->r.border.ymax = old_scene->r.border.ymax;
   strcpy(freestyle_scene->r.pic, old_scene->r.pic);
-  freestyle_scene->r.safety.xmin = old_scene->r.safety.xmin;
-  freestyle_scene->r.safety.ymin = old_scene->r.safety.ymin;
-  freestyle_scene->r.safety.xmax = old_scene->r.safety.xmax;
-  freestyle_scene->r.safety.ymax = old_scene->r.safety.ymax;
   freestyle_scene->r.dither_intensity = old_scene->r.dither_intensity;
   STRNCPY(freestyle_scene->r.engine, old_scene->r.engine);
   if (G.debug & G_DEBUG_FREESTYLE) {
@@ -121,16 +124,11 @@ BlenderStrokeRenderer::BlenderStrokeRenderer(Render *re, int render_count) : Str
   if (old_scene->id.properties) {
     freestyle_scene->id.properties = IDP_CopyProperty_ex(old_scene->id.properties, 0);
   }
+  // Copy eevee render settings.
+  BKE_scene_copy_data_eevee(freestyle_scene, old_scene);
 
   /* Render with transparent background. */
   freestyle_scene->r.alphamode = R_ALPHAPREMUL;
-
-  if (STREQ(freestyle_scene->r.engine, RE_engine_id_CYCLES)) {
-    PointerRNA freestyle_scene_ptr;
-    RNA_id_pointer_create(&freestyle_scene->id, &freestyle_scene_ptr);
-    PointerRNA freestyle_cycles_ptr = RNA_pointer_get(&freestyle_scene_ptr, "cycles");
-    RNA_boolean_set(&freestyle_cycles_ptr, "film_transparent", 1);
-  }
 
   if (G.debug & G_DEBUG_FREESTYLE) {
     printf("%s: %d thread(s)\n", __func__, BKE_render_num_threads(&freestyle_scene->r));
@@ -168,7 +166,8 @@ BlenderStrokeRenderer::BlenderStrokeRenderer(Render *re, int render_count) : Str
   _nodetree_hash = BLI_ghash_ptr_new("BlenderStrokeRenderer::_nodetree_hash");
 
   // Depsgraph
-  freestyle_depsgraph = DEG_graph_new(freestyle_scene, view_layer, DAG_EVAL_RENDER);
+  freestyle_depsgraph = DEG_graph_new(
+      freestyle_bmain, freestyle_scene, view_layer, DAG_EVAL_RENDER);
   DEG_graph_id_tag_update(freestyle_bmain, freestyle_depsgraph, &freestyle_scene->id, 0);
   DEG_graph_id_tag_update(freestyle_bmain, freestyle_depsgraph, &object_camera->id, 0);
   DEG_graph_tag_relations_update(freestyle_depsgraph);
@@ -176,58 +175,27 @@ BlenderStrokeRenderer::BlenderStrokeRenderer(Render *re, int render_count) : Str
 
 BlenderStrokeRenderer::~BlenderStrokeRenderer()
 {
-  // The freestyle_scene object is not released here.  Instead,
-  // the scene is released in free_all_freestyle_renders() in
-  // source/blender/render/intern/source/pipeline.c, after the
-  // compositor has finished.
-
-  // release objects and data blocks
-  Base *base_next = NULL;
-  ViewLayer *view_layer = (ViewLayer *)freestyle_scene->view_layers.first;
-  for (Base *b = (Base *)view_layer->object_bases.first; b; b = base_next) {
-    base_next = b->next;
-    Object *ob = b->object;
-    char *name = ob->id.name;
-#if 0
-    if (G.debug & G_DEBUG_FREESTYLE) {
-      cout << "removing " << name[0] << name[1] << ":" << (name+2) << endl;
-    }
-#endif
-    switch (ob->type) {
-      case OB_CAMERA:
-        freestyle_scene->camera = NULL;
-        ATTR_FALLTHROUGH;
-      case OB_MESH:
-        BKE_scene_collections_object_remove(freestyle_bmain, freestyle_scene, ob, true);
-        break;
-      default:
-        cerr << "Warning: unexpected object in the scene: " << name[0] << name[1] << ":"
-             << (name + 2) << endl;
-    }
-  }
-
-  // release materials
-  Link *lnk = (Link *)freestyle_bmain->materials.first;
-
-  while (lnk) {
-    Material *ma = (Material *)lnk;
-    lnk = lnk->next;
-    BKE_id_free(freestyle_bmain, ma);
-  }
-
   BLI_ghash_free(_nodetree_hash, NULL, NULL);
 
   DEG_graph_free(freestyle_depsgraph);
 
   FreeStrokeGroups();
+
+  /* detach the window manager from freestyle bmain (see comments
+   * in add_freestyle() for more detail)
+   */
+  BLI_listbase_clear(&freestyle_bmain->wm);
+
+  BKE_main_free(freestyle_bmain);
 }
 
 float BlenderStrokeRenderer::get_stroke_vertex_z(void) const
 {
   float z = _z;
   BlenderStrokeRenderer *self = const_cast<BlenderStrokeRenderer *>(this);
-  if (!(_z < _z_delta * 100000.0f))
+  if (!(_z < _z_delta * 100000.0f)) {
     self->_z_delta *= 10.0f;
+  }
   self->_z += _z_delta;
   return -z;
 }
@@ -270,6 +238,7 @@ Material *BlenderStrokeRenderer::GetStrokeShader(Main *bmain,
   }
   ma->nodetree = ntree;
   ma->use_nodes = 1;
+  ma->blend_method = MA_BM_HASHED;
 
   bNode *input_attr_color = nodeAddStaticNode(NULL, ntree, SH_NODE_ATTRIBUTE);
   input_attr_color->locx = 0.0f;
@@ -478,8 +447,9 @@ void BlenderStrokeRenderer::RenderStrokeRepBasic(StrokeRep *iStrokeRep) const
 
     // count visible faces and strip segments
     test_strip_visibility(strip_vertices, &visible_faces, &visible_segments);
-    if (visible_faces == 0)
+    if (visible_faces == 0) {
       continue;
+    }
 
     totvert += visible_faces + visible_segments * 2;
     totedge += visible_faces * 2 + visible_segments;
@@ -491,7 +461,7 @@ void BlenderStrokeRenderer::RenderStrokeRepBasic(StrokeRep *iStrokeRep) const
   vector<StrokeGroup *> *groups = hasTex ? &self->texturedStrokeGroups : &self->strokeGroups;
   StrokeGroup *group;
   if (groups->empty() || !(groups->back()->totvert + totvert < MESH_MAX_VERTS &&
-                           groups->back()->totcol + 1 < MAXMAT)) {
+                           groups->back()->materials.size() + 1 < MAXMAT)) {
     group = new StrokeGroup;
     groups->push_back(group);
   }
@@ -503,7 +473,10 @@ void BlenderStrokeRenderer::RenderStrokeRepBasic(StrokeRep *iStrokeRep) const
   group->totedge += totedge;
   group->totpoly += totpoly;
   group->totloop += totloop;
-  group->totcol++;
+
+  if (!group->materials.contains(ma)) {
+    group->materials.add_new(ma, group->materials.size());
+  }
 }
 
 // Check if the triangle is visible (i.e., within the render image boundary)
@@ -515,14 +488,18 @@ bool BlenderStrokeRenderer::test_triangle_visibility(StrokeVertexRep *svRep[3]) 
   xl = xu = yl = yu = 0;
   for (int i = 0; i < 3; i++) {
     p = svRep[i]->point2d();
-    if (p[0] < 0.0)
+    if (p[0] < 0.0) {
       xl++;
-    else if (p[0] > _width)
+    }
+    else if (p[0] > _width) {
       xu++;
-    if (p[1] < 0.0)
+    }
+    if (p[1] < 0.0) {
       yl++;
-    else if (p[1] > _height)
+    }
+    else if (p[1] > _height) {
       yu++;
+    }
   }
   return !(xl == 3 || xu == 3 || yl == 3 || yu == 3);
 }
@@ -551,8 +528,9 @@ void BlenderStrokeRenderer::test_strip_visibility(Strip::vertex_container &strip
     svRep[2] = *(v[2]);
     if (test_triangle_visibility(svRep)) {
       (*visible_faces)++;
-      if (!visible)
+      if (!visible) {
         (*visible_segments)++;
+      }
       visible = true;
     }
     else {
@@ -598,7 +576,8 @@ int BlenderStrokeRenderer::get_stroke_count() const
 void BlenderStrokeRenderer::GenerateStrokeMesh(StrokeGroup *group, bool hasTex)
 {
 #if 0
-  Object *object_mesh = BKE_object_add(freestyle_bmain, freestyle_scene, (ViewLayer *)freestyle_scene->view_layers.first, OB_MESH);
+  Object *object_mesh = BKE_object_add(
+      freestyle_bmain, freestyle_scene, (ViewLayer *)freestyle_scene->view_layers.first, OB_MESH);
   DEG_relations_tag_update(freestyle_bmain);
 #else
   Object *object_mesh = NewMesh();
@@ -609,7 +588,7 @@ void BlenderStrokeRenderer::GenerateStrokeMesh(StrokeGroup *group, bool hasTex)
   mesh->totedge = group->totedge;
   mesh->totpoly = group->totpoly;
   mesh->totloop = group->totloop;
-  mesh->totcol = group->totcol;
+  mesh->totcol = group->materials.size();
 
   mesh->mvert = (MVert *)CustomData_add_layer(
       &mesh->vdata, CD_MVERT, CD_CALLOC, NULL, mesh->totvert);
@@ -650,12 +629,20 @@ void BlenderStrokeRenderer::GenerateStrokeMesh(StrokeGroup *group, bool hasTex)
   mesh->mloopcol = colors;
 
   mesh->mat = (Material **)MEM_mallocN(sizeof(Material *) * mesh->totcol, "MaterialList");
+  for (const auto &item : group->materials.items()) {
+    Material *material = item.key;
+    const int matnr = item.value;
+    mesh->mat[matnr] = material;
+    if (material) {
+      id_us_plus(&material->id);
+    }
+  }
 
   ////////////////////
   //  Data copy
   ////////////////////
 
-  int vertex_index = 0, edge_index = 0, loop_index = 0, material_index = 0;
+  int vertex_index = 0, edge_index = 0, loop_index = 0;
   int visible_faces, visible_segments;
   bool visible;
   Strip::vertex_container::iterator v[3];
@@ -666,8 +653,7 @@ void BlenderStrokeRenderer::GenerateStrokeMesh(StrokeGroup *group, bool hasTex)
                                            itend = group->strokes.end();
        it != itend;
        ++it) {
-    mesh->mat[material_index] = (*it)->getMaterial();
-    id_us_plus(&mesh->mat[material_index]->id);
+    const int matnr = group->materials.lookup_default((*it)->getMaterial(), 0);
 
     vector<Strip *> &strips = (*it)->getStrips();
     for (vector<Strip *>::const_iterator s = strips.begin(), send = strips.end(); s != send; ++s) {
@@ -676,8 +662,9 @@ void BlenderStrokeRenderer::GenerateStrokeMesh(StrokeGroup *group, bool hasTex)
 
       // count visible faces and strip segments
       test_strip_visibility(strip_vertices, &visible_faces, &visible_segments);
-      if (visible_faces == 0)
+      if (visible_faces == 0) {
         continue;
+      }
 
       v[0] = strip_vertices.begin();
       v[1] = v[0] + 1;
@@ -748,7 +735,7 @@ void BlenderStrokeRenderer::GenerateStrokeMesh(StrokeGroup *group, bool hasTex)
           // poly
           polys->loopstart = loop_index;
           polys->totloop = 3;
-          polys->mat_nr = material_index;
+          polys->mat_nr = matnr;
           ++polys;
 
           // Even and odd loops connect triangles vertices differently
@@ -833,16 +820,14 @@ void BlenderStrokeRenderer::GenerateStrokeMesh(StrokeGroup *group, bool hasTex)
         }
       }  // loop over strip vertices
     }    // loop over strips
-    material_index++;
-  }  // loop over strokes
+  }      // loop over strokes
 
-  test_object_materials(freestyle_bmain, object_mesh, (ID *)mesh);
+  BKE_object_materials_test(freestyle_bmain, object_mesh, (ID *)mesh);
 
 #if 0  // XXX
   BLI_assert(mesh->totvert == vertex_index);
   BLI_assert(mesh->totedge == edge_index);
   BLI_assert(mesh->totloop == loop_index);
-  BLI_assert(mesh->totcol == material_index);
   BKE_mesh_validate(mesh, true, true);
 #endif
 }
@@ -859,7 +844,7 @@ Object *BlenderStrokeRenderer::NewMesh() const
   BLI_snprintf(name, MAX_ID_NAME, "0%08xME", mesh_id);
   ob->data = BKE_mesh_add(freestyle_bmain, name);
 
-  Collection *collection_master = BKE_collection_master(freestyle_scene);
+  Collection *collection_master = freestyle_scene->master_collection;
   BKE_collection_object_add(freestyle_bmain, collection_master, ob);
   DEG_graph_tag_relations_update(freestyle_depsgraph);
 
@@ -874,8 +859,9 @@ Object *BlenderStrokeRenderer::NewMesh() const
 Render *BlenderStrokeRenderer::RenderScene(Render * /*re*/, bool render)
 {
   Camera *camera = (Camera *)freestyle_scene->camera->data;
-  if (camera->clip_end < _z)
+  if (camera->clip_end < _z) {
     camera->clip_end = _z + _z_delta * 100.0f;
+  }
 #if 0
   if (G.debug & G_DEBUG_FREESTYLE) {
     cout << "clip_start " << camera->clip_start << ", clip_end " << camera->clip_end << endl;

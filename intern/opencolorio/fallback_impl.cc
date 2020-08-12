@@ -19,10 +19,11 @@
 
 #include <algorithm>
 #include <cstring>
+#include <vector>
 
-#include "MEM_guardedalloc.h"
 #include "BLI_math_color.h"
 #include "BLI_math_vector.h"
+#include "MEM_guardedalloc.h"
 
 #include "ocio_impl.h"
 
@@ -56,7 +57,7 @@ struct FallbackTransform {
   {
   }
 
-  ~FallbackTransform()
+  virtual ~FallbackTransform()
   {
     delete linear_transform;
     delete display_transform;
@@ -159,7 +160,17 @@ struct FallbackTransform {
   float matrix[16];
   float offset[4];
 
-  MEM_CXX_CLASS_ALLOC_FUNCS("FallbackProcessor");
+  MEM_CXX_CLASS_ALLOC_FUNCS("FallbackTransform");
+};
+
+struct FallbackGroupTransform : FallbackTransform {
+  ~FallbackGroupTransform()
+  {
+    for (auto transform : list) {
+      delete transform;
+    }
+  }
+  std::vector<FallbackTransform *> list;
 };
 
 struct FallbackProcessor {
@@ -283,7 +294,7 @@ const char *FallbackImpl::configGetDisplay(OCIO_ConstConfigRcPtr * /*config*/, i
 const char *FallbackImpl::configGetDefaultView(OCIO_ConstConfigRcPtr * /*config*/,
                                                const char * /*display*/)
 {
-  return "Default";
+  return "Standard";
 }
 
 int FallbackImpl::configGetNumViews(OCIO_ConstConfigRcPtr * /*config*/, const char * /*display*/)
@@ -296,7 +307,7 @@ const char *FallbackImpl::configGetView(OCIO_ConstConfigRcPtr * /*config*/,
                                         int index)
 {
   if (index == 0) {
-    return "Default";
+    return "Standard";
   }
   return NULL;
 }
@@ -361,6 +372,25 @@ int FallbackImpl::colorSpaceIsInvertible(OCIO_ConstColorSpaceRcPtr * /*cs*/)
 int FallbackImpl::colorSpaceIsData(OCIO_ConstColorSpaceRcPtr * /*cs*/)
 {
   return 0;
+}
+
+void FallbackImpl::colorSpaceIsBuiltin(OCIO_ConstConfigRcPtr * /*config*/,
+                                       OCIO_ConstColorSpaceRcPtr *cs,
+                                       bool &is_scene_linear,
+                                       bool &is_srgb)
+{
+  if (cs == COLORSPACE_LINEAR) {
+    is_scene_linear = true;
+    is_srgb = false;
+  }
+  else if (cs == COLORSPACE_SRGB) {
+    is_scene_linear = false;
+    is_srgb = true;
+  }
+  else {
+    is_scene_linear = false;
+    is_srgb = false;
+  }
 }
 
 void FallbackImpl::colorSpaceRelease(OCIO_ConstColorSpaceRcPtr * /*cs*/)
@@ -575,6 +605,45 @@ void FallbackImpl::OCIO_PackedImageDescRelease(OCIO_PackedImageDesc *id)
   MEM_freeN(id);
 }
 
+OCIO_GroupTransformRcPtr *FallbackImpl::createGroupTransform(void)
+{
+  FallbackTransform *transform = new FallbackGroupTransform();
+  transform->type = TRANSFORM_UNKNOWN;
+  return (OCIO_GroupTransformRcPtr *)transform;
+}
+
+void FallbackImpl::groupTransformSetDirection(OCIO_GroupTransformRcPtr * /*gt*/,
+                                              const bool /*forward */)
+{
+}
+
+void FallbackImpl::groupTransformPushBack(OCIO_GroupTransformRcPtr *gt,
+                                          OCIO_ConstTransformRcPtr *transform)
+{
+  FallbackGroupTransform *group = (FallbackGroupTransform *)gt;
+  group->list.push_back((FallbackTransform *)transform);
+}
+
+void FallbackImpl::groupTransformRelease(OCIO_GroupTransformRcPtr * /*gt*/)
+{
+}
+
+OCIO_ColorSpaceTransformRcPtr *FallbackImpl::createColorSpaceTransform(void)
+{
+  FallbackTransform *transform = new FallbackTransform();
+  transform->type = TRANSFORM_UNKNOWN;
+  return (OCIO_ColorSpaceTransformRcPtr *)transform;
+}
+
+void FallbackImpl::colorSpaceTransformSetSrc(OCIO_ColorSpaceTransformRcPtr * /*ct*/,
+                                             const char * /*name*/)
+{
+}
+
+void FallbackImpl::colorSpaceTransformRelease(OCIO_ColorSpaceTransformRcPtr * /*ct*/)
+{
+}
+
 OCIO_ExponentTransformRcPtr *FallbackImpl::createExponentTransform(void)
 {
   FallbackTransform *transform = new FallbackTransform();
@@ -639,10 +708,12 @@ bool FallbackImpl::supportGLSLDraw(void)
 }
 
 bool FallbackImpl::setupGLSLDraw(struct OCIO_GLSLDrawState ** /*state_r*/,
-                                 OCIO_ConstProcessorRcPtr * /*processor*/,
+                                 OCIO_ConstProcessorRcPtr * /*ocio_processor_scene_to_ui*/,
+                                 OCIO_ConstProcessorRcPtr * /*ocio_processor_ui_to_display*/,
                                  OCIO_CurveMappingSettings * /*curve_mapping_settings*/,
                                  float /*dither*/,
-                                 bool /*predivide*/)
+                                 bool /*predivide*/,
+                                 bool /*overlay*/)
 {
   return false;
 }

@@ -24,10 +24,10 @@
 #ifndef __GHOST_DROPTARGETWIN32_H__
 #define __GHOST_DROPTARGETWIN32_H__
 
-#include <string.h>
-#include <GHOST_Types.h>
-#include "GHOST_WindowWin32.h"
 #include "GHOST_SystemWin32.h"
+#include "GHOST_WindowWin32.h"
+#include <GHOST_Types.h>
+#include <string.h>
 
 class GHOST_DropTargetWin32 : public IDropTarget {
  public:
@@ -89,7 +89,7 @@ class GHOST_DropTargetWin32 : public IDropTarget {
   /* Internal helper functions */
 
   /**
-   * Base the effect on those allowed by the dropsource.
+   * Base the effect on those allowed by the drop-source.
    * \param dwAllowed Drop sources allowed drop effect.
    * \return The allowed drop effect.
    */
@@ -125,7 +125,7 @@ class GHOST_DropTargetWin32 : public IDropTarget {
   void *getDropDataAsString(IDataObject *pDataObject);
 
   /**
-   * Convert Unicode to ANSI, replacing unconvertable chars with '?'.
+   * Convert Unicode to ANSI, replacing uncomfortable chars with '?'.
    * The ANSI codepage is the system default codepage,
    * and can change from system to system.
    * \param in LPCWSTR.

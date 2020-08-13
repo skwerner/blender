@@ -326,13 +326,34 @@ class CYCLES_RENDER_PT_sampling_advanced(CyclesButtonsPanel, Panel):
                 layout.row().prop(cscene, "use_layer_samples")
                 break
 
+class CYCLES_RENDER_PT_sampling_light_tree(CyclesButtonsPanel, Panel):
+    bl_label = "Light Tree"
+    bl_parent_id = "CYCLES_RENDER_PT_sampling"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        return (context.scene.cycles.feature_set == 'EXPERIMENTAL')
+
+    def draw_header(self, context):
+        layout = self.layout
+        scene = context.scene
+        cscene = scene.cycles
+
+        layout.prop(cscene, "use_light_tree", text="")
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+
+        scene = context.scene
+        cscene = scene.cycles
+
+        layout.active = cscene.use_light_tree
         row = layout.row(align=True)
-        row.label(text="Experimental:")
-        row.prop(cscene, "use_light_tree", text="Light Tree")
-        if cscene.use_light_tree and use_branched_path(context):
-            row = layout.row(align=True)
-            row.label(text="") # create empty column
-            row.prop(cscene, "splitting_threshold", text="Splitting")
+        row.label(text="") # create empty column
+        row.prop(cscene, "splitting_threshold", text="Splitting")
 
 
 class CYCLES_RENDER_PT_sampling_total(CyclesButtonsPanel, Panel):
@@ -2280,6 +2301,7 @@ classes = (
     CYCLES_RENDER_PT_sampling_adaptive,
     CYCLES_RENDER_PT_sampling_denoising,
     CYCLES_RENDER_PT_sampling_advanced,
+    CYCLES_RENDER_PT_sampling_light_tree,
     CYCLES_RENDER_PT_light_paths,
     CYCLES_RENDER_PT_light_paths_max_bounces,
     CYCLES_RENDER_PT_light_paths_clamping,

@@ -423,7 +423,6 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
     }
 
     /* Setup and evaluate shader. */
-    bool has_volume = (sd.flag & SD_HAS_VOLUME) != 0;
     shader_setup_from_ray(kg, &sd, &isect, &ray);
 
     /* Skip most work for volume bounding surface. */
@@ -435,8 +434,7 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
       shader_merge_closures(&sd);
 
       /* Apply shadow catcher, holdout, emission. */
-      if (!kernel_path_shader_apply(
-              kg, &sd, &state, &ray, throughput, emission_sd, L, buffer, has_volume)) {
+      if (!kernel_path_shader_apply(kg, &sd, &state, &ray, throughput, emission_sd, L, buffer)) {
         break;
       }
 

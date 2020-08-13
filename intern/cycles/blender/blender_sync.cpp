@@ -305,12 +305,7 @@ void BlenderSync::sync_integrator()
       cscene, "progressive", Integrator::NUM_METHODS, Integrator::PATH);
 
   integrator->use_light_tree = get_boolean(cscene, "use_light_tree");
-  if (get_enum(cscene, "progressive") == 0) {
-    integrator->splitting_threshold = get_float(cscene, "splitting_threshold");
-  }
-  else {  // Not using branched path tracing
-    integrator->splitting_threshold = 0.0f;
-  }
+  integrator->splitting_threshold = get_float(cscene, "splitting_threshold");
   integrator->sample_all_lights_direct = get_boolean(cscene, "sample_all_lights_direct");
   integrator->sample_all_lights_indirect = get_boolean(cscene, "sample_all_lights_indirect");
   integrator->light_sampling_threshold = get_float(cscene, "light_sampling_threshold");

@@ -107,16 +107,7 @@ ccl_device void kernel_holdout_emission_blurring_pathtermination_ao(
       throughput = kernel_split_state.throughput[ray_index];
       state = &kernel_split_state.path_state[ray_index];
 
-      if (!kernel_path_shader_apply(kg,
-                                    sd,
-                                    state,
-                                    ray,
-                                    throughput,
-                                    emission_sd,
-                                    L,
-                                    buffer,
-                                    false))  // todo: check if starting from volume
-      {
+      if (!kernel_path_shader_apply(kg, sd, state, ray, throughput, emission_sd, L, buffer)) {
         kernel_split_path_end(kg, ray_index);
       }
     }

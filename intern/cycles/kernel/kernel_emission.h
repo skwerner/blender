@@ -206,14 +206,8 @@ ccl_device_noinline_cpu bool direct_emission(KernelGlobals *kg,
 
 /* Indirect Primitive Emission */
 
-ccl_device_noinline_cpu float3 indirect_primitive_emission(KernelGlobals *kg,
-                                                           ShaderData *sd,
-                                                           float t,
-                                                           float3 P,
-                                                           float3 N,
-                                                           int path_flag,
-                                                           float bsdf_pdf,
-                                                           bool has_volume)
+ccl_device_noinline_cpu float3 indirect_primitive_emission(
+    KernelGlobals *kg, ShaderData *sd, float t, float3 P, float3 N, int path_flag, float bsdf_pdf)
 {
   /* evaluate emissive closure */
   float3 L = shader_emissive_eval(sd);

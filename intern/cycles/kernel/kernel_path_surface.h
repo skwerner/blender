@@ -524,7 +524,6 @@ ccl_device_inline void kernel_path_surface_connect_light(KernelGlobals *kg,
 #    endif
 
   if (kernel_data.integrator.use_direct_light && (sd->flag & SD_BSDF_HAS_EVAL)) {
-    bool has_volume = ((sd->flag & SD_HAS_VOLUME) != 0);
     float light_u, light_v;
     path_state_rng_2D(kg, state, PRNG_LIGHT_U, &light_u, &light_v);
 

@@ -64,9 +64,8 @@ ccl_device_noinline void compute_light_pass(
 
     /* sample emission */
     if ((pass_filter & BAKE_FILTER_EMISSION) && (sd->flag & SD_EMISSION)) {
-      bool is_volume_boundary = (state.volume_bounce > 0) || (state.volume_bounds_bounce > 0);
       float3 emission = indirect_primitive_emission(
-          kg, sd, 0.0f, sd->P_pick, sd->N_pick, state.flag, state.ray_pdf, is_volume_boundary);
+          kg, sd, 0.0f, sd->P_pick, sd->N_pick, state.flag, state.ray_pdf);
       path_radiance_accum_emission(kg, L, &state, throughput, emission);
     }
 
@@ -83,9 +82,9 @@ ccl_device_noinline void compute_light_pass(
               kg, sd, emission_sd, L, &state, &ray, &throughput, &ss_indirect)) {
         while (ss_indirect.num_rays) {
           kernel_path_subsurface_setup_indirect(kg, &ss_indirect, &state, &ray, L, &throughput);
-          kernel_path_indirect(kg, &indirect_sd, emission_sd, &ray, throughput, &state, L);
           indirect_sd.P_pick = sd->P_pick;
           indirect_sd.N_pick = sd->N_pick;
+          indirect_sd.t_pick = sd->t_pick;
           kernel_path_indirect(kg, &indirect_sd, emission_sd, &ray, throughput, &state, L);
         }
         is_sss_sample = true;
@@ -104,6 +103,7 @@ ccl_device_noinline void compute_light_pass(
         /* compute indirect light */
         indirect_sd.P_pick = sd->P_pick;
         indirect_sd.N_pick = sd->N_pick;
+        indirect_sd.t_pick = sd->t_pick;
         kernel_path_indirect(kg, &indirect_sd, emission_sd, &ray, throughput, &state, L);
 
         /* sum and reset indirect light pass variables for the next samples */
@@ -123,9 +123,8 @@ ccl_device_noinline void compute_light_pass(
 
     /* sample emission */
     if ((pass_filter & BAKE_FILTER_EMISSION) && (sd->flag & SD_EMISSION)) {
-      bool is_volume_boundary = (state.volume_bounce > 0) || (state.volume_bounds_bounce > 0);
       float3 emission = indirect_primitive_emission(
-          kg, sd, 0.0f, sd->P_pick, sd->N_pick, state.flag, state.ray_pdf, is_volume_boundary);
+          kg, sd, 0.0f, sd->P_pick, sd->N_pick, state.flag, state.ray_pdf);
       path_radiance_accum_emission(kg, L, &state, throughput, emission);
     }
 

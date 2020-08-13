@@ -1492,7 +1492,7 @@ int2 LightManager::get_background_map_resolution(const Light *background_light, 
     foreach (ShaderNode *node, shader->graph->nodes) {
       if (node->type == EnvironmentTextureNode::node_type) {
         EnvironmentTextureNode *env = (EnvironmentTextureNode *)node;
-        ImageMetaData metadata = env->handle.metadata();;
+        ImageMetaData metadata = env->handle.metadata();
         res.x = max(res.x, metadata.width);
         res.y = max(res.y, metadata.height);
       }

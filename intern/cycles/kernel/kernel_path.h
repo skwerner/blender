@@ -264,8 +264,7 @@ ccl_device_forceinline bool kernel_path_shader_apply(KernelGlobals *kg,
                                                      float3 throughput,
                                                      ShaderData *emission_sd,
                                                      PathRadiance *L,
-                                                     ccl_global float *buffer,
-                                                     bool has_volume)
+                                                     ccl_global float *buffer)
 {
   PROFILING_INIT(kg, PROFILING_SHADER_APPLY);
 
@@ -328,7 +327,7 @@ ccl_device_forceinline bool kernel_path_shader_apply(KernelGlobals *kg,
     float ray_length = state->ray_t + sd->ray_length;
 
     float3 emission = indirect_primitive_emission(
-        kg, sd, ray_length, P_pick, N_pick, state->flag, state->ray_pdf, has_volume);
+        kg, sd, ray_length, P_pick, N_pick, state->flag, state->ray_pdf);
     path_radiance_accum_emission(kg, L, state, throughput, emission);
   }
 #endif /* __EMISSION__ */
@@ -442,7 +441,6 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
       }
 
       /* Setup shader data. */
-      bool has_volume = (sd->flag & SD_HAS_VOLUME) != 0;
       shader_setup_from_ray(kg, sd, &isect, ray);
 
       /* Skip most work for volume bounding surface. */
@@ -455,8 +453,7 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
         shader_prepare_closures(sd, state);
 
         /* Apply shadow catcher, holdout, emission. */
-        if (!kernel_path_shader_apply(
-                kg, sd, state, ray, throughput, emission_sd, L, NULL, has_volume)) {
+        if (!kernel_path_shader_apply(kg, sd, state, ray, throughput, emission_sd, L, NULL)) {
           break;
         }
 
@@ -584,7 +581,6 @@ ccl_device_forceinline void kernel_path_integrate(KernelGlobals *kg,
       }
 
       /* Setup shader data. */
-      bool has_volume = (sd.flag & SD_HAS_VOLUME) != 0;
       shader_setup_from_ray(kg, &sd, &isect, ray);
 
       /* Skip most work for volume bounding surface. */
@@ -597,8 +593,7 @@ ccl_device_forceinline void kernel_path_integrate(KernelGlobals *kg,
         shader_prepare_closures(&sd, state);
 
         /* Apply shadow catcher, holdout, emission. */
-        if (!kernel_path_shader_apply(
-                kg, &sd, state, ray, throughput, emission_sd, L, buffer, has_volume)) {
+        if (!kernel_path_shader_apply(kg, &sd, state, ray, throughput, emission_sd, L, buffer)) {
           break;
         }
 

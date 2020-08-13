@@ -12,27 +12,32 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
- * All rights reserved.
  */
 
 /** \file
- * \ingroup editors
+ * \ingroup DNA
  */
 
-#ifndef __ED_LOGIC_H__
-#define __ED_LOGIC_H__
+#pragma once
+
+#include "BLI_sys_types.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* logic_ops.c */
-void ED_operatortypes_logic(void);
+/* Is a structure because of the following considerations:
+ *
+ * - It is not possible to use custom types in DNA members: makesdna does not recognize them.
+ * - It allows to add more bits, more than standard fixed-size types can store. For example, if
+ *   we ever need to go 128 bits, it is as simple as adding extra 64bit field.
+ */
+typedef struct SessionUUID {
+  /* Never access directly, as it might cause a headache when more bits are needed: if the field
+   * is used directly it will not be easy to find all places where partial access is used. */
+  uint64_t uuid_;
+} SessionUUID;
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_LOGIC_H__ */

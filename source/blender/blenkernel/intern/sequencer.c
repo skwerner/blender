@@ -46,6 +46,7 @@
 #include "BLI_listbase.h"
 #include "BLI_math.h"
 #include "BLI_path_util.h"
+#include "BLI_session_uuid.h"
 #include "BLI_string.h"
 #include "BLI_string_utf8.h"
 #include "BLI_threads.h"
@@ -3154,12 +3155,33 @@ static ImBuf *seq_render_image_strip(const SeqRenderData *context,
   return ibuf;
 }
 
+static ImBuf *seq_render_movie_strip_custom_file_proxy(const SeqRenderData *context,
+                                                       Sequence *seq,
+                                                       int cfra)
+{
+  char name[PROXY_MAXFILE];
+  StripProxy *proxy = seq->strip->proxy;
+
+  if (proxy->anim == NULL) {
+    if (seq_proxy_get_custom_file_fname(seq, name, context->view_id)) {
+      proxy->anim = openanim(name, IB_rect, 0, seq->strip->colorspace_settings.name);
+    }
+    if (proxy->anim == NULL) {
+      return NULL;
+    }
+  }
+
+  int frameno = (int)BKE_sequencer_give_stripelem_index(seq, cfra) + seq->anim_startofs;
+  return IMB_anim_absolute(proxy->anim, frameno, IMB_TC_NONE, IMB_PROXY_NONE);
+}
+
 /**
  * Render individual view for multi-view or single (default view) for mono-view.
  */
 static ImBuf *seq_render_movie_strip_view(const SeqRenderData *context,
                                           Sequence *seq,
                                           float nr,
+                                          float cfra,
                                           StripAnim *sanim,
                                           bool *r_is_proxy_image)
 {
@@ -3169,10 +3191,19 @@ static ImBuf *seq_render_movie_strip_view(const SeqRenderData *context,
   IMB_anim_set_preseek(sanim->anim, seq->anim_preseek);
 
   if (seq_can_use_proxy(seq, psize)) {
-    ibuf = IMB_anim_absolute(sanim->anim,
-                             nr + seq->anim_startofs,
-                             seq->strip->proxy ? seq->strip->proxy->tc : IMB_TC_RECORD_RUN,
-                             psize);
+    /* Try to get a proxy image.
+     * Movie proxies are handled by ImBuf module with exception of `custom file` setting. */
+    if (context->scene->ed->proxy_storage != SEQ_EDIT_PROXY_DIR_STORAGE &&
+        seq->strip->proxy->storage & SEQ_STORAGE_PROXY_CUSTOM_FILE) {
+      ibuf = seq_render_movie_strip_custom_file_proxy(context, seq, cfra);
+    }
+    else {
+      ibuf = IMB_anim_absolute(sanim->anim,
+                               nr + seq->anim_startofs,
+                               seq->strip->proxy ? seq->strip->proxy->tc : IMB_TC_RECORD_RUN,
+                               psize);
+    }
+
     if (ibuf != NULL) {
       *r_is_proxy_image = true;
     }
@@ -3221,7 +3252,7 @@ static ImBuf *seq_render_movie_strip(
     for (ibuf_view_id = 0, sanim = seq->anims.first; sanim; sanim = sanim->next, ibuf_view_id++) {
       if (sanim->anim) {
         ibuf_arr[ibuf_view_id] = seq_render_movie_strip_view(
-            context, seq, nr, sanim, r_is_proxy_image);
+            context, seq, nr, cfra, sanim, r_is_proxy_image);
       }
     }
 
@@ -3258,7 +3289,7 @@ static ImBuf *seq_render_movie_strip(
     MEM_freeN(ibuf_arr);
   }
   else {
-    ibuf = seq_render_movie_strip_view(context, seq, nr, sanim, r_is_proxy_image);
+    ibuf = seq_render_movie_strip_view(context, seq, nr, cfra, sanim, r_is_proxy_image);
   }
 
   if (ibuf == NULL) {
@@ -4301,6 +4332,10 @@ void BKE_sequence_invalidate_movieclip_strips(Main *bmain, MovieClip *clip_targe
 
 void BKE_sequencer_free_imbuf(Scene *scene, ListBase *seqbase, bool for_render)
 {
+  if (scene->ed == NULL) {
+    return;
+  }
+
   Sequence *seq;
 
   BKE_sequencer_cache_cleanup(scene);
@@ -5348,7 +5383,14 @@ Sequence *BKE_sequence_alloc(ListBase *lb, int cfra, int machine, int type)
   seq->stereo3d_format = MEM_callocN(sizeof(Stereo3dFormat), "Sequence Stereo Format");
   seq->cache_flag = SEQ_CACHE_STORE_RAW | SEQ_CACHE_STORE_PREPROCESSED | SEQ_CACHE_STORE_COMPOSITE;
 
+  BKE_sequence_session_uuid_generate(seq);
+
   return seq;
+}
+
+void BKE_sequence_session_uuid_generate(struct Sequence *sequence)
+{
+  sequence->runtime.session_uuid = BLI_session_uuid_generate();
 }
 
 void BKE_sequence_alpha_mode_from_extension(Sequence *seq)
@@ -5580,6 +5622,9 @@ Sequence *BKE_sequencer_add_movie_strip(bContext *C, ListBase *seqbasep, SeqLoad
     }
   }
 
+  if (seq_load->flag & SEQ_LOAD_MOVIE_SOUND) {
+    seq_load->channel++;
+  }
   seq = BKE_sequence_alloc(seqbasep, seq_load->start_frame, seq_load->channel, SEQ_TYPE_MOVIE);
 
   /* multiview settings */
@@ -5636,11 +5681,8 @@ Sequence *BKE_sequencer_add_movie_strip(bContext *C, ListBase *seqbasep, SeqLoad
   if (seq_load->flag & SEQ_LOAD_MOVIE_SOUND) {
     int start_frame_back = seq_load->start_frame;
     seq_load->channel--;
-
     seq_load->seq_sound = BKE_sequencer_add_sound_strip(C, seqbasep, seq_load);
-
     seq_load->start_frame = start_frame_back;
-    seq_load->channel++;
   }
 
   /* can be NULL */
@@ -5659,6 +5701,10 @@ static Sequence *seq_dupli(const Scene *scene_src,
                            const int flag)
 {
   Sequence *seqn = MEM_dupallocN(seq);
+
+  if ((flag & LIB_ID_CREATE_NO_MAIN) == 0) {
+    BKE_sequence_session_uuid_generate(seq);
+  }
 
   seq->tmp = seqn;
   seqn->strip = MEM_dupallocN(seq->strip);
@@ -6041,4 +6087,56 @@ bool BKE_sequencer_check_scene_recursion(Scene *scene, ReportList *reports)
   }
 
   return false;
+}
+
+/* Check if "seq_main" (indirectly) uses strip "seq". */
+bool BKE_sequencer_render_loop_check(Sequence *seq_main, Sequence *seq)
+{
+  if (seq_main == seq) {
+    return true;
+  }
+
+  if ((seq_main->seq1 && BKE_sequencer_render_loop_check(seq_main->seq1, seq)) ||
+      (seq_main->seq2 && BKE_sequencer_render_loop_check(seq_main->seq2, seq)) ||
+      (seq_main->seq3 && BKE_sequencer_render_loop_check(seq_main->seq3, seq))) {
+    return true;
+  }
+
+  SequenceModifierData *smd;
+  for (smd = seq_main->modifiers.first; smd; smd = smd->next) {
+    if (smd->mask_sequence && BKE_sequencer_render_loop_check(smd->mask_sequence, seq)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+void BKE_sequencer_check_uuids_unique_and_report(const Scene *scene)
+{
+  if (scene->ed == NULL) {
+    return;
+  }
+
+  struct GSet *used_uuids = BLI_gset_new(
+      BLI_session_uuid_ghash_hash, BLI_session_uuid_ghash_compare, "sequencer used uuids");
+
+  const Sequence *sequence;
+  SEQ_BEGIN (scene->ed, sequence) {
+    const SessionUUID *session_uuid = &sequence->runtime.session_uuid;
+    if (!BLI_session_uuid_is_generated(session_uuid)) {
+      printf("Sequence %s does not have UUID generated.\n", sequence->name);
+      continue;
+    }
+
+    if (BLI_gset_lookup(used_uuids, session_uuid) != NULL) {
+      printf("Sequence %s has duplicate UUID generated.\n", sequence->name);
+      continue;
+    }
+
+    BLI_gset_insert(used_uuids, (void *)session_uuid);
+  }
+  SEQ_END;
+
+  BLI_gset_free(used_uuids, NULL);
 }

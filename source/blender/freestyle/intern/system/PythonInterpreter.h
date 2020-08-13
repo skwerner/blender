@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_PYTHON_INTERPRETER_H__
-#define __FREESTYLE_PYTHON_INTERPRETER_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -34,7 +33,6 @@ extern "C" {
 #include "MEM_guardedalloc.h"
 
 // soc
-extern "C" {
 #include "DNA_text_types.h"
 
 #include "BKE_context.h"
@@ -47,7 +45,6 @@ extern "C" {
 #include "BPY_extern.h"
 
 #include "bpy_capi_utils.h"
-}
 
 namespace Freestyle {
 
@@ -149,5 +146,3 @@ class PythonInterpreter : public Interpreter {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_PYTHON_INTERPRETER_H__

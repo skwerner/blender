@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_LIB_OVERRIDE_H__
-#define __BKE_LIB_OVERRIDE_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -119,6 +118,9 @@ bool BKE_lib_override_library_status_check_reference(struct Main *bmain, struct 
 bool BKE_lib_override_library_operations_create(struct Main *bmain, struct ID *local);
 void BKE_lib_override_library_main_operations_create(struct Main *bmain, const bool force_auto);
 
+void BKE_lib_override_library_id_reset(struct Main *bmain, struct ID *id_root);
+void BKE_lib_override_library_id_hierarchy_reset(struct Main *bmain, struct ID *id_root);
+
 void BKE_lib_override_library_operations_tag(struct IDOverrideLibraryProperty *override_property,
                                              const short tag,
                                              const bool do_set);
@@ -148,5 +150,3 @@ void BKE_lib_override_library_operations_store_finalize(OverrideLibraryStorage *
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_LIB_OVERRIDE_H__ */

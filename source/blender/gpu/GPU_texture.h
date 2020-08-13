@@ -21,14 +21,10 @@
  * \ingroup gpu
  */
 
-#ifndef __GPU_TEXTURE_H__
-#define __GPU_TEXTURE_H__
+#pragma once
 
+#include "BLI_utildefines.h"
 #include "GPU_state.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 struct GPUVertBuf;
 struct ImBuf;
@@ -59,6 +55,10 @@ typedef enum eGPUSamplerState {
   /* Don't use that. */
   GPU_SAMPLER_MAX = (1 << 8),
 } eGPUSamplerState;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define GPU_SAMPLER_DEFAULT GPU_SAMPLER_FILTER
 #define GPU_SAMPLER_REPEAT (GPU_SAMPLER_REPEAT_S | GPU_SAMPLER_REPEAT_T | GPU_SAMPLER_REPEAT_R)
@@ -300,5 +300,3 @@ void GPU_sampler_icon_bind(int number);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __GPU_TEXTURE_H__ */

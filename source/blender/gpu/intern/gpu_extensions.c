@@ -95,7 +95,7 @@ static struct GPUGlobal {
   bool broken_amd_driver;
   /* Some crappy Intel drivers don't work well with shaders created in different
    * rendering contexts. */
-  bool context_local_shaders_workaround;
+  bool use_main_context_workaround;
   /* Intel drivers exhibit artifacts when using #glCopyImageSubData & workbench anti-aliasing.
    * (see T76273) */
   bool texture_copy_workaround;
@@ -222,9 +222,9 @@ bool GPU_unused_fb_slot_workaround(void)
   return GG.unused_fb_slot_workaround;
 }
 
-bool GPU_context_local_shaders_workaround(void)
+bool GPU_use_main_context_workaround(void)
 {
-  return GG.context_local_shaders_workaround;
+  return GG.use_main_context_workaround;
 }
 
 bool GPU_texture_copy_workaround(void)
@@ -350,7 +350,8 @@ void gpu_extensions_init(void)
 
   /* Intel Ivy Bridge GPU's seems to have buggy cube-map array support. (see T75943) */
   if (GPU_type_matches(GPU_DEVICE_INTEL, GPU_OS_WIN, GPU_DRIVER_OFFICIAL) &&
-      (strstr(renderer, "HD Graphics 4000") || strstr(renderer, "HD Graphics 2500"))) {
+      (strstr(renderer, "HD Graphics 4000") || strstr(renderer, "HD Graphics 4400") ||
+       strstr(renderer, "HD Graphics 2500"))) {
     GG.glew_arb_texture_cube_map_array_is_supported = false;
   }
 
@@ -380,12 +381,12 @@ void gpu_extensions_init(void)
       /* Maybe not all of these drivers have problems with `GLEW_ARB_base_instance`.
        * But it's hard to test each case. */
       GG.glew_arb_base_instance_is_supported = false;
-      GG.context_local_shaders_workaround = true;
+      GG.use_main_context_workaround = true;
     }
 
     if (strstr(version, "Build 20.19.15.4285")) {
       /* Somehow fixes armature display issues (see T69743). */
-      GG.context_local_shaders_workaround = true;
+      GG.use_main_context_workaround = true;
     }
   }
   else if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_UNIX, GPU_DRIVER_OPENSOURCE) &&

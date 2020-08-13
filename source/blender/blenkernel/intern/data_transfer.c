@@ -43,6 +43,7 @@
 #include "BKE_mesh_mapping.h"
 #include "BKE_mesh_remap.h"
 #include "BKE_mesh_runtime.h"
+#include "BKE_mesh_wrapper.h"
 #include "BKE_modifier.h"
 #include "BKE_object.h"
 #include "BKE_object_deform.h"
@@ -1467,6 +1468,7 @@ bool BKE_object_data_transfer_ex(struct Depsgraph *depsgraph,
   if (!me_src) {
     return changed;
   }
+  BKE_mesh_wrapper_ensure_mdata(me_src);
 
   if (auto_transform) {
     if (space_transform == NULL) {
@@ -1573,7 +1575,7 @@ bool BKE_object_data_transfer_ex(struct Depsgraph *depsgraph,
                                                space_transform)) {
         CustomDataTransferLayerMap *lay_mapit;
 
-        changed = (lay_map.first != NULL);
+        changed |= (lay_map.first != NULL);
 
         for (lay_mapit = lay_map.first; lay_mapit; lay_mapit = lay_mapit->next) {
           CustomData_data_transfer(&geom_map[VDATA], lay_mapit);
@@ -1651,7 +1653,7 @@ bool BKE_object_data_transfer_ex(struct Depsgraph *depsgraph,
                                                space_transform)) {
         CustomDataTransferLayerMap *lay_mapit;
 
-        changed = (lay_map.first != NULL);
+        changed |= (lay_map.first != NULL);
 
         for (lay_mapit = lay_map.first; lay_mapit; lay_mapit = lay_mapit->next) {
           CustomData_data_transfer(&geom_map[EDATA], lay_mapit);
@@ -1747,7 +1749,7 @@ bool BKE_object_data_transfer_ex(struct Depsgraph *depsgraph,
                                                space_transform)) {
         CustomDataTransferLayerMap *lay_mapit;
 
-        changed = (lay_map.first != NULL);
+        changed |= (lay_map.first != NULL);
 
         for (lay_mapit = lay_map.first; lay_mapit; lay_mapit = lay_mapit->next) {
           CustomData_data_transfer(&geom_map[LDATA], lay_mapit);
@@ -1838,7 +1840,7 @@ bool BKE_object_data_transfer_ex(struct Depsgraph *depsgraph,
                                                space_transform)) {
         CustomDataTransferLayerMap *lay_mapit;
 
-        changed = (lay_map.first != NULL);
+        changed |= (lay_map.first != NULL);
 
         for (lay_mapit = lay_map.first; lay_mapit; lay_mapit = lay_mapit->next) {
           CustomData_data_transfer(&geom_map[PDATA], lay_mapit);

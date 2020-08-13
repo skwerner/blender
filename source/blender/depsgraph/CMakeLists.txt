@@ -46,6 +46,7 @@ set(SRC
   intern/builder/deg_builder_nodes_view_layer.cc
   intern/builder/deg_builder_pchanmap.cc
   intern/builder/deg_builder_relations.cc
+  intern/builder/deg_builder_relations_drivers.cc
   intern/builder/deg_builder_relations_keys.cc
   intern/builder/deg_builder_relations_rig.cc
   intern/builder/deg_builder_relations_scene.cc
@@ -100,6 +101,7 @@ set(SRC
   intern/builder/deg_builder.h
   intern/builder/deg_builder_cache.h
   intern/builder/deg_builder_cycle.h
+  intern/builder/deg_builder_relations_drivers.h
   intern/builder/deg_builder_map.h
   intern/builder/deg_builder_nodes.h
   intern/builder/deg_builder_pchanmap.h
@@ -145,3 +147,14 @@ set(LIB
 )
 
 blender_add_lib(bf_depsgraph "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
+
+if(WITH_GTESTS)
+  set(TEST_SRC
+    intern/builder/deg_builder_rna_test.cc
+  )
+  set(TEST_LIB
+    bf_depsgraph
+  )
+  include(GTestTesting)
+  blender_add_test_lib(bf_depsgraph_tests "${TEST_SRC}" "${INC};${TEST_INC}" "${INC_SYS}" "${LIB}")
+endif()

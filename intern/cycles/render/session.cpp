@@ -945,8 +945,14 @@ void Session::set_pause(bool pause_)
     }
   }
 
-  if (notify)
-    pause_cond.notify_all();
+  if (session_thread) {
+    if (notify) {
+      pause_cond.notify_all();
+    }
+  }
+  else if (pause_) {
+    update_status_time(pause_);
+  }
 }
 
 void Session::set_denoising(const DenoiseParams &denoising)
@@ -1150,8 +1156,15 @@ bool Session::render_need_denoise(bool &delayed)
     return false;
   }
 
+  /* Immediately denoise when we reach the start sample or last sample. */
+  const int num_samples_finished = tile_manager.state.sample + 1;
+  if (num_samples_finished == params.denoising.start_sample ||
+      num_samples_finished == params.samples) {
+    return true;
+  }
+
   /* Do not denoise until the sample at which denoising should start is reached. */
-  if (tile_manager.state.sample < min(params.denoising.start_sample, params.samples - 1)) {
+  if (num_samples_finished < params.denoising.start_sample) {
     return false;
   }
 

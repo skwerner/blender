@@ -21,14 +21,13 @@
  * \ingroup gpu
  */
 
-#ifndef __GPU_FRAMEBUFFER_H__
-#define __GPU_FRAMEBUFFER_H__
+#pragma once
+
+#include "GPU_texture.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "GPU_texture.h"
 
 typedef struct GPUAttachment {
   struct GPUTexture *tex;
@@ -235,5 +234,3 @@ void GPU_backbuffer_bind(eGPUBackBuffer buffer);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __GPU_FRAMEBUFFER_H__ */

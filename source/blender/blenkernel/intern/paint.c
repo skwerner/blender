@@ -1314,6 +1314,13 @@ static void sculptsession_free_pbvh(Object *object)
 
   MEM_SAFE_FREE(ss->preview_vert_index_list);
   ss->preview_vert_index_count = 0;
+
+  MEM_SAFE_FREE(ss->preview_vert_index_list);
+
+  MEM_SAFE_FREE(ss->vertex_info.connected_component);
+  MEM_SAFE_FREE(ss->vertex_info.boundary);
+
+  MEM_SAFE_FREE(ss->fake_neighbors.fake_neighbor_index);
 }
 
 void BKE_sculptsession_bm_to_me_for_render(Object *object)
@@ -1365,13 +1372,6 @@ void BKE_sculptsession_free(Object *ob)
     MEM_SAFE_FREE(ss->orig_cos);
     MEM_SAFE_FREE(ss->deform_cos);
     MEM_SAFE_FREE(ss->deform_imats);
-
-    MEM_SAFE_FREE(ss->preview_vert_index_list);
-
-    MEM_SAFE_FREE(ss->vertex_info.connected_component);
-    MEM_SAFE_FREE(ss->vertex_info.boundary);
-
-    MEM_SAFE_FREE(ss->fake_neighbors.fake_neighbor_index);
 
     if (ss->pose_ik_chain_preview) {
       for (int i = 0; i < ss->pose_ik_chain_preview->tot_segments; i++) {
@@ -1484,7 +1484,7 @@ static void sculpt_update_object(Depsgraph *depsgraph,
                                  Mesh *me_eval,
                                  bool need_pmap,
                                  bool need_mask,
-                                 bool need_colors)
+                                 bool UNUSED(need_colors))
 {
   Scene *scene = DEG_get_input_scene(depsgraph);
   Sculpt *sd = scene->toolsettings->sculpt;
@@ -1511,16 +1511,6 @@ static void sculpt_update_object(Depsgraph *depsgraph,
       if (!CustomData_has_layer(&me->ldata, CD_GRID_PAINT_MASK)) {
         BKE_sculpt_mask_layers_ensure(ob, mmd);
       }
-    }
-  }
-
-  /* Add a color layer if a color tool is used. */
-  Mesh *orig_me = BKE_object_get_original_mesh(ob);
-  if (need_colors && U.experimental.use_sculpt_vertex_colors) {
-    if (!CustomData_has_layer(&orig_me->vdata, CD_PROP_COLOR)) {
-      CustomData_add_layer(&orig_me->vdata, CD_PROP_COLOR, CD_DEFAULT, NULL, orig_me->totvert);
-      BKE_mesh_update_customdata_pointers(orig_me, true);
-      DEG_id_tag_update(&orig_me->id, ID_RECALC_GEOMETRY);
     }
   }
 
@@ -1684,8 +1674,24 @@ void BKE_sculpt_update_object_after_eval(Depsgraph *depsgraph, Object *ob_eval)
   Mesh *me_eval = BKE_object_get_evaluated_mesh(ob_eval);
 
   BLI_assert(me_eval != NULL);
-
   sculpt_update_object(depsgraph, ob_orig, me_eval, false, false, false);
+}
+
+void BKE_sculpt_color_layer_create_if_needed(struct Object *object)
+{
+  Mesh *orig_me = BKE_object_get_original_mesh(object);
+  if (!U.experimental.use_sculpt_vertex_colors) {
+    return;
+  }
+
+  if (CustomData_has_layer(&orig_me->vdata, CD_PROP_COLOR)) {
+    return;
+  }
+
+  CustomData_add_layer(&orig_me->vdata, CD_PROP_COLOR, CD_DEFAULT, NULL, orig_me->totvert);
+  BKE_mesh_update_customdata_pointers(orig_me, true);
+  DEG_id_tag_update(&orig_me->id, ID_RECALC_GEOMETRY);
+  return;
 }
 
 void BKE_sculpt_update_object_for_edit(
@@ -1819,6 +1825,64 @@ static bool check_sculpt_object_deformed(Object *object, const bool for_construc
   return deformed;
 }
 
+static void sculpt_sync_face_sets_visibility_to_base_mesh(Mesh *mesh)
+{
+  int *face_sets = CustomData_get_layer(&mesh->pdata, CD_SCULPT_FACE_SETS);
+  if (!face_sets) {
+    return;
+  }
+
+  for (int i = 0; i < mesh->totvert; i++) {
+    mesh->mvert[i].flag |= ME_HIDE;
+  }
+
+  for (int i = 0; i < mesh->totpoly; i++) {
+    if (face_sets[i] >= 0) {
+      for (int l = 0; l < mesh->mpoly[i].totloop; l++) {
+        MLoop *loop = &mesh->mloop[mesh->mpoly[i].loopstart + l];
+        mesh->mvert[loop->v].flag &= ~ME_HIDE;
+      }
+    }
+  }
+}
+
+static void sculpt_sync_face_sets_visibility_to_grids(Mesh *mesh, SubdivCCG *subdiv_ccg)
+{
+  int *face_sets = CustomData_get_layer(&mesh->pdata, CD_SCULPT_FACE_SETS);
+  if (!face_sets) {
+    return;
+  }
+
+  if (!subdiv_ccg) {
+    return;
+  }
+
+  CCGKey key;
+  BKE_subdiv_ccg_key_top_level(&key, subdiv_ccg);
+  for (int i = 0; i < mesh->totloop; i++) {
+    const int face_index = BKE_subdiv_ccg_grid_to_face_index(subdiv_ccg, i);
+    const bool is_hidden = (face_sets[face_index] < 0);
+
+    /* Avoid creating and modifying the grid_hidden bitmap if the base mesh face is visible and
+     * there is not bitmap for the grid. This is because missing grid_hidden implies grid is fully
+     * visible. */
+    if (is_hidden) {
+      BKE_subdiv_ccg_grid_hidden_ensure(subdiv_ccg, i);
+    }
+
+    BLI_bitmap *gh = subdiv_ccg->grid_hidden[i];
+    if (gh) {
+      BLI_bitmap_set_all(gh, is_hidden, key.grid_area);
+    }
+  }
+}
+
+void BKE_sculpt_sync_face_set_visibility(struct Mesh *mesh, struct SubdivCCG *subdiv_ccg)
+{
+  sculpt_sync_face_sets_visibility_to_base_mesh(mesh);
+  sculpt_sync_face_sets_visibility_to_grids(mesh, subdiv_ccg);
+}
+
 static PBVH *build_pbvh_for_dynamic_topology(Object *ob)
 {
   PBVH *pbvh = BKE_pbvh_new();
@@ -1843,6 +1907,8 @@ static PBVH *build_pbvh_from_regular_mesh(Object *ob, Mesh *me_eval_deform, bool
   MLoopTri *looptri = MEM_malloc_arrayN(looptris_num, sizeof(*looptri), __func__);
 
   BKE_mesh_recalc_looptri(me->mloop, me->mpoly, me->mvert, me->totloop, me->totpoly, looptri);
+
+  BKE_sculpt_sync_face_set_visibility(me, NULL);
 
   BKE_pbvh_build_mesh(pbvh,
                       me,
@@ -1876,6 +1942,10 @@ static PBVH *build_pbvh_from_ccg(Object *ob, SubdivCCG *subdiv_ccg, bool respect
   BKE_subdiv_ccg_key_top_level(&key, subdiv_ccg);
   PBVH *pbvh = BKE_pbvh_new();
   BKE_pbvh_respect_hide_set(pbvh, respect_hide);
+
+  Mesh *base_mesh = BKE_mesh_from_object(ob);
+  BKE_sculpt_sync_face_set_visibility(base_mesh, subdiv_ccg);
+
   BKE_pbvh_build_grids(pbvh,
                        subdiv_ccg->grids,
                        subdiv_ccg->num_grids,

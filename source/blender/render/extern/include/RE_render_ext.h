@@ -20,8 +20,7 @@
  * \ingroup render
  */
 
-#ifndef __RE_RENDER_EXT_H__
-#define __RE_RENDER_EXT_H__
+#pragma once
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 /* this include is for non-render pipeline exports (still old cruft here) */
@@ -31,6 +30,10 @@
 struct Depsgraph;
 struct ImagePool;
 struct MTex;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* render_texture.c */
 bool RE_texture_evaluate(const struct MTex *mtex,
@@ -72,4 +75,6 @@ void RE_point_density_free(struct PointDensity *pd);
 
 void RE_point_density_fix_linking(void);
 
-#endif /* __RE_RENDER_EXT_H__ */
+#ifdef __cplusplus
+}
+#endif

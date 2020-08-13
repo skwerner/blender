@@ -18,11 +18,14 @@
  * \ingroup pythonintern
  */
 
-#ifndef __BPY_CAPI_UTILS_H__
-#define __BPY_CAPI_UTILS_H__
+#pragma once
 
 #if PY_VERSION_HEX < 0x03070000
 #  error "Python 3.7 or greater is required, you'll need to update your Python."
+#endif
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 struct EnumPropertyItem;
@@ -50,4 +53,6 @@ void BPy_SetContext(struct bContext *C);
 extern void bpy_context_set(struct bContext *C, PyGILState_STATE *gilstate);
 extern void bpy_context_clear(struct bContext *C, const PyGILState_STATE *gilstate);
 
-#endif /* __BPY_CAPI_UTILS_H__ */
+#ifdef __cplusplus
+}
+#endif

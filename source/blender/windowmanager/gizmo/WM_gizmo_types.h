@@ -26,8 +26,7 @@
  * Only included in WM_types.h and lower level files.
  */
 
-#ifndef __WM_GIZMO_TYPES_H__
-#define __WM_GIZMO_TYPES_H__
+#pragma once
 
 #include "BLI_compiler_attrs.h"
 
@@ -39,6 +38,10 @@ struct wmGizmoProperty;
 struct wmKeyConfig;
 
 #include "DNA_listBase.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* -------------------------------------------------------------------- */
 /* Enum Typedef's */
@@ -506,4 +509,6 @@ typedef enum eWM_GizmoFlagMapDrawStep {
 } eWM_GizmoFlagMapDrawStep;
 #define WM_GIZMOMAP_DRAWSTEP_MAX 2
 
-#endif /* __WM_GIZMO_TYPES_H__ */
+#ifdef __cplusplus
+}
+#endif

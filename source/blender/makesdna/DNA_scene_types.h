@@ -21,8 +21,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_SCENE_TYPES_H__
-#define __DNA_SCENE_TYPES_H__
+#pragma once
 
 #include "DNA_defs.h"
 
@@ -2241,6 +2240,8 @@ enum {
 #define UVCALC_USESUBSURF (1 << 3)
 /** adjust UV's while transforming to avoid distortion */
 #define UVCALC_TRANSFORM_CORRECT (1 << 4)
+/** Keep equal values merged while correcting custom-data. */
+#define UVCALC_TRANSFORM_CORRECT_KEEP_CONNECTED (1 << 5)
 
 /* ToolSettings.uv_flag */
 #define UV_SYNC_SELECTION 1
@@ -2412,5 +2413,3 @@ enum {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __DNA_SCENE_TYPES_H__ */

@@ -115,8 +115,8 @@ void ED_view3d_update_viewmat(Depsgraph *depsgraph,
                               const Scene *scene,
                               View3D *v3d,
                               ARegion *region,
-                              float viewmat[4][4],
-                              float winmat[4][4],
+                              const float viewmat[4][4],
+                              const float winmat[4][4],
                               const rcti *rect,
                               bool offscreen)
 {
@@ -197,8 +197,8 @@ static void view3d_main_region_setup_view(Depsgraph *depsgraph,
                                           Scene *scene,
                                           View3D *v3d,
                                           ARegion *region,
-                                          float viewmat[4][4],
-                                          float winmat[4][4],
+                                          const float viewmat[4][4],
+                                          const float winmat[4][4],
                                           const rcti *rect)
 {
   RegionView3D *rv3d = region->regiondata;
@@ -214,8 +214,8 @@ static void view3d_main_region_setup_offscreen(Depsgraph *depsgraph,
                                                const Scene *scene,
                                                View3D *v3d,
                                                ARegion *region,
-                                               float viewmat[4][4],
-                                               float winmat[4][4])
+                                               const float viewmat[4][4],
+                                               const float winmat[4][4])
 {
   RegionView3D *rv3d = region->regiondata;
   ED_view3d_update_viewmat(depsgraph, scene, v3d, region, viewmat, winmat, NULL, true);
@@ -353,8 +353,8 @@ void ED_view3d_draw_setup_view(const wmWindowManager *wm,
                                Scene *scene,
                                ARegion *region,
                                View3D *v3d,
-                               float viewmat[4][4],
-                               float winmat[4][4],
+                               const float viewmat[4][4],
+                               const float winmat[4][4],
                                const rcti *rect)
 {
   RegionView3D *rv3d = region->regiondata;
@@ -668,7 +668,8 @@ static void drawviewborder(Scene *scene, Depsgraph *depsgraph, ARegion *region, 
 
   /* safety border */
   if (ca) {
-    immUniformThemeColorBlend(TH_VIEW_OVERLAY, TH_BACK, 0.25f);
+    GPU_blend(true);
+    immUniformThemeColorAlpha(TH_VIEW_OVERLAY, 0.75f);
 
     if (ca->dtx & CAM_DTX_CENTER) {
       float x3, y3;
@@ -778,6 +779,8 @@ static void drawviewborder(Scene *scene, Depsgraph *depsgraph, ARegion *region, 
        * 2.0f round corner effect was nearly not visible anyway... */
       imm_draw_box_wire_2d(shdr_pos, rect.xmin, rect.ymin, rect.xmax, rect.ymax);
     }
+
+    GPU_blend(false);
   }
 
   immUnbindProgram();
@@ -1640,7 +1643,7 @@ static void view3d_stereo3d_setup_offscreen(Depsgraph *depsgraph,
                                             const Scene *scene,
                                             View3D *v3d,
                                             ARegion *region,
-                                            float winmat[4][4],
+                                            const float winmat[4][4],
                                             const char *viewname)
 {
   /* update the viewport matrices with the new camera */
@@ -1667,8 +1670,8 @@ void ED_view3d_draw_offscreen(Depsgraph *depsgraph,
                               ARegion *region,
                               int winx,
                               int winy,
-                              float viewmat[4][4],
-                              float winmat[4][4],
+                              const float viewmat[4][4],
+                              const float winmat[4][4],
                               bool is_image_render,
                               bool do_sky,
                               bool UNUSED(is_persp),
@@ -1759,8 +1762,8 @@ void ED_view3d_draw_offscreen_simple(Depsgraph *depsgraph,
                                      int winx,
                                      int winy,
                                      uint draw_flags,
-                                     float viewmat[4][4],
-                                     float winmat[4][4],
+                                     const float viewmat[4][4],
+                                     const float winmat[4][4],
                                      float clip_start,
                                      float clip_end,
                                      bool is_image_render,
@@ -2406,7 +2409,7 @@ struct RV3DMatrixStore *ED_view3d_mats_rv3d_backup(struct RegionView3D *rv3d)
   copy_m4_m4(rv3dmat->viewinv, rv3d->viewinv);
   copy_v4_v4(rv3dmat->viewcamtexcofac, rv3d->viewcamtexcofac);
   rv3dmat->pixsize = rv3d->pixsize;
-  return (void *)rv3dmat;
+  return rv3dmat;
 }
 
 void ED_view3d_mats_rv3d_restore(struct RegionView3D *rv3d, struct RV3DMatrixStore *rv3dmat_pt)

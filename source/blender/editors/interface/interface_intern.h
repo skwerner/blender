@@ -21,8 +21,7 @@
  * \ingroup edinterface
  */
 
-#ifndef __INTERFACE_INTERN_H__
-#define __INTERFACE_INTERN_H__
+#pragma once
 
 #include "BLI_compiler_attrs.h"
 #include "BLI_rect.h"
@@ -536,6 +535,9 @@ void ui_but_extra_operator_icons_free(uiBut *but);
 extern void ui_but_rna_menu_convert_to_panel_type(struct uiBut *but, const char *panel_type);
 extern void ui_but_rna_menu_convert_to_menu_type(struct uiBut *but, const char *menu_type);
 extern bool ui_but_menu_draw_as_popover(const uiBut *but);
+
+void ui_but_range_set_hard(uiBut *but);
+void ui_but_range_set_soft(uiBut *but);
 
 extern void ui_but_update(uiBut *but);
 extern void ui_but_update_edited(uiBut *but);
@@ -1075,5 +1077,3 @@ bool ui_jump_to_target_button_poll(struct bContext *C);
 
 /* interface_queries.c */
 void ui_interface_tag_script_reload_queries(void);
-
-#endif /* __INTERFACE_INTERN_H__ */

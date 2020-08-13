@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_LATTICE_H__
-#define __BKE_LATTICE_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -67,8 +66,8 @@ void BKE_lattice_minmax_dl(struct Object *ob, struct Lattice *lt, float min[3], 
 void BKE_lattice_minmax(struct Lattice *lt, float min[3], float max[3]);
 void BKE_lattice_center_median(struct Lattice *lt, float cent[3]);
 void BKE_lattice_center_bounds(struct Lattice *lt, float cent[3]);
-void BKE_lattice_translate(struct Lattice *lt, float offset[3], bool do_keys);
-void BKE_lattice_transform(struct Lattice *lt, float mat[4][4], bool do_keys);
+void BKE_lattice_translate(struct Lattice *lt, const float offset[3], bool do_keys);
+void BKE_lattice_transform(struct Lattice *lt, const float mat[4][4], bool do_keys);
 
 bool BKE_lattice_is_any_selected(const struct Lattice *lt);
 
@@ -140,5 +139,3 @@ void BKE_lattice_deform_coords_with_editmesh(const struct Object *ob_lattice,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_LATTICE_H__ */

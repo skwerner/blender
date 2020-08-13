@@ -17,8 +17,7 @@
  * This is a new part of Blender
  */
 
-#ifndef __BKE_GPENCIL_GEOM_H__
-#define __BKE_GPENCIL_GEOM_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -76,7 +75,7 @@ void BKE_gpencil_stroke_fill_triangulate(struct bGPDstroke *gps);
 void BKE_gpencil_stroke_geometry_update(struct bGPDstroke *gps);
 void BKE_gpencil_stroke_uv_update(struct bGPDstroke *gps);
 
-void BKE_gpencil_transform(struct bGPdata *gpd, float mat[4][4]);
+void BKE_gpencil_transform(struct bGPdata *gpd, const float mat[4][4]);
 
 typedef struct GPencilPointCoordinates {
   /* This is used when doing "move only origin" in object_data_transform.c.
@@ -131,5 +130,3 @@ void BKE_gpencil_convert_mesh(struct Main *bmain,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /*  __BKE_GPENCIL_GEOM_H__ */

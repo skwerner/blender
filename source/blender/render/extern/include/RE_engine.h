@@ -21,8 +21,7 @@
  * \ingroup render
  */
 
-#ifndef __RE_ENGINE_H__
-#define __RE_ENGINE_H__
+#pragma once
 
 #include "DNA_listBase.h"
 #include "DNA_node_types.h"
@@ -47,6 +46,10 @@ struct Scene;
 struct ViewLayer;
 struct bNode;
 struct bNodeTree;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* External Engine */
 
@@ -237,4 +240,6 @@ void RE_bake_engine_set_engine_parameters(struct Render *re,
 
 void RE_engine_free_blender_memory(struct RenderEngine *engine);
 
-#endif /* __RE_ENGINE_H__ */
+#ifdef __cplusplus
+}
+#endif

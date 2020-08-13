@@ -18,8 +18,11 @@
  * \ingroup pythonintern
  */
 
-#ifndef __BPY_H__
-#define __BPY_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 void BPy_init_modules(void);
 extern PyObject *bpy_package_py;
@@ -31,4 +34,6 @@ void BPY_atexit_unregister(void);
 extern struct CLG_LogRef *BPY_LOG_CONTEXT;
 extern struct CLG_LogRef *BPY_LOG_RNA;
 
-#endif /* __BPY_H__ */
+#ifdef __cplusplus
+}
+#endif

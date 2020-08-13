@@ -2192,7 +2192,9 @@ static bool outliner_element_is_collection_or_object(TreeElement *te)
   if ((tselem->type == 0) && (te->idcode == ID_OB)) {
     return true;
   }
-  if (outliner_is_collection_tree_element(te)) {
+
+  /* Collection instance datablocks should not be extracted. */
+  if (outliner_is_collection_tree_element(te) && !(te->parent && te->parent->idcode == ID_OB)) {
     return true;
   }
 
@@ -2459,7 +2461,9 @@ void outliner_build_tree(
         te_object->directdata = base;
       }
 
-      outliner_make_object_parent_hierarchy(&soops->tree);
+      if ((soops->filter & SO_FILTER_NO_CHILDREN) == 0) {
+        outliner_make_object_parent_hierarchy(&soops->tree);
+      }
     }
     else {
       /* Show collections in the view layer. */

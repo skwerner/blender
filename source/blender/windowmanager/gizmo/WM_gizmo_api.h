@@ -26,8 +26,7 @@
  * Only included in WM_api.h
  */
 
-#ifndef __WM_GIZMO_API_H__
-#define __WM_GIZMO_API_H__
+#pragma once
 
 struct ARegion;
 struct GHashIterator;
@@ -51,6 +50,10 @@ struct wmMsgSubscribeValue;
 struct wmWindowManager;
 
 #include "wm_gizmo_fn.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* -------------------------------------------------------------------- */
 /* wmGizmo */
@@ -396,4 +399,6 @@ void WM_gizmo_group_tag_remove(struct wmGizmoGroup *gzgroup);
 bool WM_gizmo_group_type_poll(const struct bContext *C, const struct wmGizmoGroupType *gzgt);
 void WM_gizmo_group_refresh(const struct bContext *C, struct wmGizmoGroup *gzgroup);
 
-#endif /* __WM_GIZMO_API_H__ */
+#ifdef __cplusplus
+}
+#endif

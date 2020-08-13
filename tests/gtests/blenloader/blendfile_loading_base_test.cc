@@ -19,7 +19,6 @@
 
 #include "MEM_guardedalloc.h"
 
-extern "C" {
 #include "BKE_appdir.h"
 #include "BKE_blender.h"
 #include "BKE_context.h"
@@ -48,7 +47,6 @@ extern "C" {
 
 #include "WM_api.h"
 #include "wm.h"
-}
 
 BlendfileLoadingBaseTest::~BlendfileLoadingBaseTest()
 {
@@ -99,14 +97,6 @@ void BlendfileLoadingBaseTest::TearDownTestCase()
   BLI_threadapi_exit();
 
   BKE_blender_atexit();
-
-  if (MEM_get_memory_blocks_in_use() != 0) {
-    size_t mem_in_use = MEM_get_memory_in_use() + MEM_get_memory_in_use();
-    printf("Error: Not freed memory blocks: %u, total unfreed memory %f MB\n",
-           MEM_get_memory_blocks_in_use(),
-           (double)mem_in_use / 1024 / 1024);
-    MEM_printmemlist();
-  }
 
   BKE_tempdir_session_purge();
 

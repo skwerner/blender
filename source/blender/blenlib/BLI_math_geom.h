@@ -20,8 +20,7 @@
  *
  * */
 
-#ifndef __BLI_MATH_GEOM_H__
-#define __BLI_MATH_GEOM_H__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -403,15 +402,19 @@ bool isect_ray_tri_epsilon_v3(const float ray_origin[3],
                               float *r_lambda,
                               float r_uv[2],
                               const float epsilon);
-bool isect_tri_tri_epsilon_v3(const float t_a0[3],
-                              const float t_a1[3],
-                              const float t_a2[3],
-                              const float t_b0[3],
-                              const float t_b1[3],
-                              const float t_b2[3],
-                              float r_i1[3],
-                              float r_i2[3],
-                              const float epsilon);
+bool isect_tri_tri_v3_ex(const float tri_a[3][3],
+                         const float tri_b[3][3],
+                         float r_i1[3],
+                         float r_i2[3],
+                         int *r_tri_a_edge_isect_count);
+bool isect_tri_tri_v3(const float t_a0[3],
+                      const float t_a1[3],
+                      const float t_a2[3],
+                      const float t_b0[3],
+                      const float t_b1[3],
+                      const float t_b2[3],
+                      float r_i1[3],
+                      float r_i2[3]);
 
 bool isect_tri_tri_v2(const float p1[2],
                       const float q1[2],
@@ -454,11 +457,11 @@ bool isect_ray_seg_v2(const float ray_origin[2],
                       float *r_lambda,
                       float *r_u);
 
-bool isect_ray_seg_v3(const float ray_origin[3],
-                      const float ray_direction[3],
-                      const float v0[3],
-                      const float v1[3],
-                      float *r_lambda);
+bool isect_ray_line_v3(const float ray_origin[3],
+                       const float ray_direction[3],
+                       const float v0[3],
+                       const float v1[3],
+                       float *r_lambda);
 
 /* point in polygon */
 bool isect_point_poly_v2(const float pt[2],
@@ -825,5 +828,3 @@ float cubic_tangent_factor_circle_v3(const float tan_l[3], const float tan_r[3])
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLI_MATH_GEOM_H__ */

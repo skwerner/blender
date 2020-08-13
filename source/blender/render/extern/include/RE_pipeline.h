@@ -21,8 +21,7 @@
  * \ingroup render
  */
 
-#ifndef __RE_PIPELINE_H__
-#define __RE_PIPELINE_H__
+#pragma once
 
 #include "DEG_depsgraph.h"
 #include "DNA_listBase.h"
@@ -367,8 +366,8 @@ struct RenderPass *RE_pass_find_by_type(volatile struct RenderLayer *rl,
 #define RE_BAKE_AO 2
 
 void RE_GetCameraWindow(struct Render *re, struct Object *camera, float mat[4][4]);
-void RE_GetCameraWindowWithOverscan(struct Render *re, float mat[4][4], float overscan);
-void RE_GetCameraModelMatrix(struct Render *re, struct Object *camera, float r_mat[4][4]);
+void RE_GetCameraWindowWithOverscan(struct Render *re, float overscan, float r_winmat[4][4]);
+void RE_GetCameraModelMatrix(struct Render *re, struct Object *camera, float r_modelmat[4][4]);
 struct Scene *RE_GetScene(struct Render *re);
 void RE_SetScene(struct Render *re, struct Scene *sce);
 
@@ -392,5 +391,3 @@ RenderResult *RE_DuplicateRenderResult(RenderResult *rr);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __RE_PIPELINE_H__ */

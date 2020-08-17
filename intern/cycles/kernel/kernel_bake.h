@@ -64,8 +64,7 @@ ccl_device_noinline void compute_light_pass(
 
     /* sample emission */
     if ((pass_filter & BAKE_FILTER_EMISSION) && (sd->flag & SD_EMISSION)) {
-      float3 emission = indirect_primitive_emission(
-          kg, sd, 0.0f, sd->P_pick, sd->N_pick, state.flag, state.ray_pdf);
+      float3 emission = indirect_primitive_emission(kg, sd, 0.0f, state.flag, state.ray_pdf);
       path_radiance_accum_emission(kg, L, &state, throughput, emission);
     }
 
@@ -123,8 +122,7 @@ ccl_device_noinline void compute_light_pass(
 
     /* sample emission */
     if ((pass_filter & BAKE_FILTER_EMISSION) && (sd->flag & SD_EMISSION)) {
-      float3 emission = indirect_primitive_emission(
-          kg, sd, 0.0f, sd->P_pick, sd->N_pick, state.flag, state.ray_pdf);
+      float3 emission = indirect_primitive_emission(kg, sd, 0.0f, state.flag, state.ray_pdf);
       path_radiance_accum_emission(kg, L, &state, throughput, emission);
     }
 

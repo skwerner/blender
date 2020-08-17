@@ -97,9 +97,8 @@ ccl_device_forceinline void kernel_path_lamp_emission(KernelGlobals *kg,
   if (kernel_data.integrator.use_lamp_mis && !(state->flag & PATH_RAY_CAMERA)) {
     /* ray starting from previous non-transparent bounce */
     Ray light_ray ccl_optional_struct_init;
-    float3 N_pick;
+
     light_ray.P = ray->P - state->ray_t * ray->D;
-    N_pick = state->ray_N;
 
     state->ray_t += isect->t;
     light_ray.D = ray->D;
@@ -109,7 +108,7 @@ ccl_device_forceinline void kernel_path_lamp_emission(KernelGlobals *kg,
     light_ray.dP = ray->dP;
 
     /* intersect with lamp */
-    indirect_lamp_emission(kg, emission_sd, state, N_pick, L, &light_ray, throughput);
+    indirect_lamp_emission(kg, emission_sd, state, L, &light_ray, throughput);
   }
 #endif /* __LAMP_MIS__ */
 }
@@ -140,7 +139,7 @@ ccl_device_forceinline void kernel_path_background(KernelGlobals *kg,
 
 #ifdef __BACKGROUND__
   /* sample background shader */
-  float3 L_background = indirect_background(kg, sd, sd->N_pick, state, buffer, ray);
+  float3 L_background = indirect_background(kg, sd, state, buffer, ray);
   path_radiance_accum_background(kg, L, state, throughput, L_background);
 #endif /* __BACKGROUND__ */
 }
@@ -275,7 +274,7 @@ ccl_device_forceinline bool kernel_path_shader_apply(KernelGlobals *kg,
 
       float3 bg = make_float3(0.0f, 0.0f, 0.0f);
       if (!kernel_data.background.transparent) {
-        bg = indirect_background(kg, emission_sd, sd->N_pick, state, NULL, ray);
+        bg = indirect_background(kg, emission_sd, state, NULL, ray);
       }
       path_radiance_accum_shadowcatcher(L, throughput, bg);
     }
@@ -317,24 +316,11 @@ ccl_device_forceinline bool kernel_path_shader_apply(KernelGlobals *kg,
 #ifdef __EMISSION__
   /* emission */
   if (sd->flag & SD_EMISSION) {
-
-    /* ray starting from previous non-transparent bounce */
-    float3 P_pick;
-    float3 N_pick;
-    P_pick = ray->P - state->ray_t * ray->D;
-    N_pick = state->ray_N;
-
-    float ray_length = state->ray_t + sd->ray_length;
-
     float3 emission = indirect_primitive_emission(
-        kg, sd, ray_length, P_pick, N_pick, state->flag, state->ray_pdf);
+        kg, sd, sd->ray_length, state->flag, state->ray_pdf);
     path_radiance_accum_emission(kg, L, state, throughput, emission);
   }
 #endif /* __EMISSION__ */
-
-#if defined(__LAMP_MIS__) || defined(__EMISSION__) || defined(__BACKGROUND_MIS__)
-  state->ray_t += sd->ray_length;
-#endif
 
   return true;
 }

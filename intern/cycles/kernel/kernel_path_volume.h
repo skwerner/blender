@@ -457,7 +457,7 @@ ccl_device void kernel_branched_path_volume_connect_light(KernelGlobals *kg,
   }
   else {
     int num_lights = 1;
-    if (sample_all_lights && !use_light_tree) {
+    if (sample_all_lights) {
       num_lights = kernel_data.integrator.num_all_lights;
       if (kernel_data.integrator.pdf_triangles != 0.0f) {
         num_lights += 1;
@@ -471,7 +471,7 @@ ccl_device void kernel_branched_path_volume_connect_light(KernelGlobals *kg,
       bool is_mesh_light = false;
       bool is_lamp = false;
 
-      if (sample_all_lights && !use_light_tree) {
+      if (sample_all_lights) {
         /* lamp sampling */
         is_lamp = i < kernel_data.integrator.num_all_lights;
         if (is_lamp) {

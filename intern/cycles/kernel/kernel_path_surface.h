@@ -327,7 +327,7 @@ ccl_device_noinline_cpu void kernel_branched_path_surface_connect_light(
   else {
     int num_lights = 0;
     if (kernel_data.integrator.use_direct_light) {
-      if (sample_all_lights && !use_light_tree) {
+      if (sample_all_lights) {
         num_lights = kernel_data.integrator.num_all_lights;
         if (kernel_data.integrator.pdf_triangles != 0.0f) {
           num_lights += 1;
@@ -346,7 +346,7 @@ ccl_device_noinline_cpu void kernel_branched_path_surface_connect_light(
       bool is_mesh_light = false;
       bool is_lamp = false;
 
-      if (sample_all_lights && !use_light_tree) {
+      if (sample_all_lights) {
         /* lamp sampling */
         is_lamp = i < kernel_data.integrator.num_all_lights;
         if (is_lamp) {
@@ -374,13 +374,12 @@ ccl_device_noinline_cpu void kernel_branched_path_surface_connect_light(
 #    ifdef __OBJECT_MOTION__
         light_ray.time = sd->time;
 #    endif
-        float light_u, light_v;
-        float terminate;
 
         if (kernel_data.integrator.use_direct_light && (sd->flag & SD_BSDF_HAS_EVAL)) {
+          float light_u, light_v;
           path_branched_rng_2D(
               kg, lamp_rng_hash, state, j, num_samples, PRNG_LIGHT_U, &light_u, &light_v);
-          terminate = path_branched_rng_light_termination(
+          float terminate = path_branched_rng_light_termination(
               kg, lamp_rng_hash, state, j, num_samples);
 
           /* only sample triangle lights */
@@ -591,7 +590,7 @@ ccl_device bool kernel_path_surface_bounce(KernelGlobals *kg,
     /* set labels */
     if (!(label & LABEL_TRANSPARENT)) {
       state->ray_pdf = bsdf_pdf;
-#if defined(__LAMP_MIS__) || defined(__EMISSION__) || defined(__BACKGROUND_MIS__)
+#ifdef __LAMP_MIS__
       state->ray_t = 0.0f;
 #endif
       state->min_ray_pdf = fminf(bsdf_pdf, state->min_ray_pdf);

@@ -552,7 +552,7 @@ ccl_device void kernel_branched_path_volume_connect_light(KernelGlobals *kg,
                              sd->time,
                              sd->P_pick,
                              sd->N_pick,
-                             -1.0,
+                             sd->t_pick,
                              state->bounce,
                              &ls)) {
               if (double_pdf) {

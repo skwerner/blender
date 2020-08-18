@@ -396,7 +396,7 @@ ccl_device_noinline_cpu void kernel_branched_path_surface_connect_light(
                            sd->time,
                            sd->P_pick,
                            sd->N_pick,
-                           -1.0f,
+                           sd->t_pick,
                            state->bounce,
                            &ls)) {
             /* The sampling probability returned by lamp_light_sample assumes that all lights were
@@ -534,7 +534,7 @@ ccl_device_inline void kernel_path_surface_connect_light(KernelGlobals *kg,
                      sd->time,
                      sd->P_pick,
                      sd->N_pick,
-                     -1.0f,
+                     sd->t_pick,
                      state->bounce,
                      &ls)) {
       float terminate = path_state_rng_light_termination(kg, state);

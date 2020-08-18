@@ -93,7 +93,7 @@ ccl_device void kernel_direct_lighting(KernelGlobals *kg,
                        sd->time,
                        sd->P_pick,
                        sd->N_pick,
-                       -1.0f,
+                       sd->t_pick,
                        state->bounce,
                        &ls)) {
         Ray light_ray;

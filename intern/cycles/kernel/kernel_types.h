@@ -951,8 +951,8 @@ typedef ccl_addr_space struct ccl_align(16) ShaderData
   float3 Ng;
   /* position used in light picking */
   float3 P_pick;
-  /* normal used in light picking */
-  float3 N_pick;
+  /* normal or ray direction used in light picking */
+  float3 V_pick;
   /* ray dist used for light picking */
   float t_pick;
   /* view/incoming direction */
@@ -1081,8 +1081,7 @@ typedef struct PathState {
   float min_ray_pdf; /* smallest bounce pdf over entire path up to now */
   float ray_pdf;     /* last bounce pdf */
 #ifdef __LAMP_MIS__
-  float ray_t;  /* accumulated distance through transparent surfaces */
-  float3 ray_N; /* geometry normal at last non-transparent surface */
+  float ray_t; /* accumulated distance through transparent surfaces */
 #endif
 
   /* volume rendering */

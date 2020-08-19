@@ -222,7 +222,7 @@ ccl_device_noinline_cpu float3 indirect_primitive_emission(
     /* multiple importance sampling, get triangle light pdf,
      * and compute weight with respect to BSDF pdf */
     float pdf = triangle_light_pdf(kg, sd, t);
-    pdf *= light_distribution_pdf(kg, sd->P_pick, sd->N_pick, sd->t_pick, sd->prim, sd->object);
+    pdf *= light_distribution_pdf(kg, sd->P_pick, sd->V_pick, sd->t_pick, sd->prim, sd->object);
     float mis_weight = power_heuristic(bsdf_pdf, pdf);
 
     return L * mis_weight;
@@ -280,7 +280,7 @@ ccl_device_noinline_cpu void indirect_lamp_emission(KernelGlobals *kg,
 
       /* multiply with light picking probablity to pdf */
       ls.pdf *= light_distribution_pdf(
-          kg, emission_sd->P_pick, emission_sd->N_pick, emission_sd->t_pick, ~ls.lamp, -1);
+          kg, emission_sd->P_pick, emission_sd->V_pick, emission_sd->t_pick, ~ls.lamp, -1);
       float mis_weight = power_heuristic(state->ray_pdf, ls.pdf);
       lamp_L *= mis_weight;
     }

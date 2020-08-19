@@ -102,7 +102,7 @@ ccl_device_forceinline void kernel_branched_path_volume(KernelGlobals *kg,
     shader_setup_from_volume(kg, sd, &volume_ray);
     kernel_volume_decoupled_record(kg, state, &volume_ray, sd, &volume_segment, step_size);
 
-    kernel_update_light_picking(kg, sd, state, &volume_ray);
+    kernel_update_light_picking(sd, &volume_ray);
 
     /* direct light sampling */
     if (volume_segment.closure_flag & SD_SCATTER) {
@@ -137,7 +137,7 @@ ccl_device_forceinline void kernel_branched_path_volume(KernelGlobals *kg,
         if (result == VOLUME_PATH_SCATTERED &&
             kernel_path_volume_bounce(kg, sd, &tp, &ps, &L->state, &pray)) {
           indirect_sd->P_pick = sd->P_pick;
-          indirect_sd->N_pick = sd->N_pick;
+          indirect_sd->V_pick = sd->V_pick;
           indirect_sd->t_pick = sd->t_pick;
           kernel_path_indirect(kg, indirect_sd, emission_sd, &pray, tp * num_samples_inv, &ps, L);
 
@@ -178,7 +178,7 @@ ccl_device_forceinline void kernel_branched_path_volume(KernelGlobals *kg,
       VolumeIntegrateResult result = kernel_volume_integrate(
           kg, &ps, sd, &volume_ray, L, &tp, step_size);
 
-      kernel_update_light_picking(kg, sd, &ps, &volume_ray);
+      kernel_update_light_picking(sd, &volume_ray);
 
 #      ifdef __VOLUME_SCATTER__
       if (result == VOLUME_PATH_SCATTERED) {
@@ -188,7 +188,7 @@ ccl_device_forceinline void kernel_branched_path_volume(KernelGlobals *kg,
 
         if (kernel_path_volume_bounce(kg, sd, &tp, &ps, &L->state, &pray)) {
           indirect_sd->P_pick = sd->P_pick;
-          indirect_sd->N_pick = sd->N_pick;
+          indirect_sd->V_pick = sd->V_pick;
           indirect_sd->t_pick = sd->t_pick;
           kernel_path_indirect(kg, indirect_sd, emission_sd, &pray, tp, &ps, L);
 
@@ -276,7 +276,7 @@ ccl_device_noinline_cpu void kernel_branched_path_surface_indirect_light(KernelG
 
       ps.rng_hash = state->rng_hash;
       indirect_sd->P_pick = sd->P_pick;
-      indirect_sd->N_pick = sd->N_pick;
+      indirect_sd->V_pick = sd->V_pick;
       indirect_sd->t_pick = sd->t_pick;
       kernel_path_indirect(kg, indirect_sd, emission_sd, &bsdf_ray, tp * num_samples_inv, &ps, L);
 
@@ -458,7 +458,7 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
         }
       }
 
-      kernel_update_light_picking(kg, &sd, &state, NULL);
+      kernel_update_light_picking(&sd, NULL);
 
 #    ifdef __DENOISING_FEATURES__
       kernel_update_denoising_features(kg, &sd, &state, L);

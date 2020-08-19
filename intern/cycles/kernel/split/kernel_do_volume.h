@@ -63,7 +63,7 @@ ccl_device_noinline bool kernel_split_branched_path_volume_indirect_light_iter(K
     VolumeIntegrateResult result = kernel_volume_integrate(
         kg, ps, sd, &volume_ray, L, tp, step_size);
 
-    kernel_update_light_picking(kg, sd, ps, NULL);
+    kernel_update_light_picking(sd, NULL);
 
 #  ifdef __VOLUME_SCATTER__
     if (result == VOLUME_PATH_SCATTERED) {

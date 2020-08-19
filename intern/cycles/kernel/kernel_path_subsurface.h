@@ -68,7 +68,7 @@ ccl_device_inline
        * integration loop stops when this function returns true.
        */
       subsurface_scatter_multi_setup(kg, &ss_isect, hit, sd, state, bssrdf_type, bssrdf_roughness);
-      kernel_update_light_picking(kg, sd, state, NULL);
+      kernel_update_light_picking(sd, NULL);
 
       kernel_path_surface_connect_light(kg, sd, emission_sd, *throughput, state, L);
 

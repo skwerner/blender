@@ -65,7 +65,7 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg,
                                               ShaderData *emission_sd)
 {
   float3 P = sd->P_pick;
-  float3 N = sd->N_pick;
+  float3 V = sd->V_pick;
   float t = sd->t_pick;
 
   float time = sd->time;
@@ -102,7 +102,7 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg,
          * see comment in light_tree_sample() for this piece of code */
         float sum = 0.0f;
         for (int i = 0; i < num_emitters; ++i) {
-          sum += calc_light_importance(kg, t, P, N, offset, i);
+          sum += calc_light_importance(kg, P, V, t, offset, i);
         }
 
         if (sum == 0.0f) {
@@ -116,7 +116,7 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg,
         float prob = 0.0f;
         int light = num_emitters - 1;
         for (int i = 1; i < num_emitters + 1; ++i) {
-          prob = calc_light_importance(kg, t, P, N, offset, i - 1) * sum_inv;
+          prob = calc_light_importance(kg, P, V, t, offset, i - 1) * sum_inv;
           cdf_R = cdf_L + prob;
           if (randu < cdf_R) {
             light = i - 1;
@@ -195,8 +195,8 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg,
         /* go down one of the child nodes */
 
         /* evaluate the importance of each of the child nodes */
-        float I_L = calc_node_importance(kg, t, P, N, child_offsetL);
-        float I_R = calc_node_importance(kg, t, P, N, child_offsetR);
+        float I_L = calc_node_importance(kg, P, V, t, child_offsetL);
+        float I_R = calc_node_importance(kg, P, V, t, child_offsetR);
 
         if ((I_L == 0.0f) && (I_R == 0.0f)) {
           return;
@@ -395,7 +395,7 @@ ccl_device_noinline_cpu void kernel_branched_path_surface_connect_light(
                            light_v,
                            sd->time,
                            sd->P_pick,
-                           sd->N_pick,
+                           sd->V_pick,
                            sd->t_pick,
                            state->bounce,
                            &ls)) {
@@ -533,7 +533,7 @@ ccl_device_inline void kernel_path_surface_connect_light(KernelGlobals *kg,
                      light_v,
                      sd->time,
                      sd->P_pick,
-                     sd->N_pick,
+                     sd->V_pick,
                      sd->t_pick,
                      state->bounce,
                      &ls)) {
@@ -601,7 +601,7 @@ ccl_device bool kernel_path_surface_bounce(KernelGlobals *kg,
 
     /* setup ray */
     ray->P = ray_offset(sd->P, (label & LABEL_TRANSMIT) ? -sd->Ng : sd->Ng);
-    kernel_update_light_picking(kg, sd, state, NULL);
+    kernel_update_light_picking(sd, NULL);
     ray->D = normalize(bsdf_omega_in);
 
     if (state->bounce == 0)
@@ -634,7 +634,7 @@ ccl_device bool kernel_path_surface_bounce(KernelGlobals *kg,
 
     /* setup ray position, direction stays unchanged */
     ray->P = ray_offset(sd->P, -sd->Ng);
-    kernel_update_light_picking(kg, sd, state, NULL);
+    kernel_update_light_picking(sd, NULL);
 
 #  ifdef __RAY_DIFFERENTIALS__
     ray->dP = sd->dP;

@@ -643,6 +643,10 @@ ccl_device_inline bool light_select_reached_max_bounces(KernelGlobals *kg, int i
   return (bounce > kernel_tex_fetch(__lights, index).max_bounces);
 }
 
+/*
+ * Finds the solid angle of the smallest cone with vertex P that contains the bounding box. If P is
+ * inside the bounding box light can be in any direction so use the entire sphere.
+ */
 ccl_device float calc_bbox_solid_angle(float3 P,
                                        float3 centroid_to_P_dir,
                                        float3 bboxMin,
@@ -676,7 +680,10 @@ ccl_device float calc_bbox_solid_angle(float3 P,
   }
 }
 
-/* calculates the importance metric for the given node and shading point P */
+/* calculates the importance metric for the given node and shading point P
+ * If t_max is negative assume that V is the normal vector and use surface importance calculation.
+ * Otherwise assume that V is the ray direction and use volume importance.
+ */
 ccl_device float calc_importance(KernelGlobals *kg,
                                  float3 P,
                                  float3 V,
@@ -717,20 +724,16 @@ ccl_device float calc_importance(KernelGlobals *kg,
     const float cos_theta_prime = fast_cosf(theta_prime);
 
     /* f_a|cos(theta'_i)| -- diffuse approximation */
-    if (V != make_float3(0.0f, 0.0f, 0.0f)) {
-      const float cos_theta_i = dot(V, -centroid_to_P_dir);
-      const float theta_i = fast_acosf(cos_theta_i);
-      const float theta_i_prime = fmaxf(theta_i - theta_u, 0.0f);
-      const float cos_theta_i_prime = fast_cosf(theta_i_prime);
-      const float abs_cos_theta_i_prime = fabsf(cos_theta_i_prime);
-      /* doing something similar to bsdf_diffuse_eval_reflect() */
-      /* TODO: Use theta_i or theta_i_prime here? */
-      const float f_a = fmaxf(cos_theta_i_prime, 0.0f) * M_1_PI_F;
+    const float cos_theta_i = dot(V, -centroid_to_P_dir);
+    const float theta_i = fast_acosf(cos_theta_i);
+    const float theta_i_prime = fmaxf(theta_i - theta_u, 0.0f);
+    const float cos_theta_i_prime = fast_cosf(theta_i_prime);
+    const float abs_cos_theta_i_prime = fabsf(cos_theta_i_prime);
+    /* doing something similar to bsdf_diffuse_eval_reflect() */
+    /* TODO: Use theta_i or theta_i_prime here? */
+    const float f_a = fmaxf(cos_theta_i_prime, 0.0f) * M_1_PI_F;
 
-      return f_a * abs_cos_theta_i_prime * energy * cos_theta_prime / d2;
-    }
-
-    return energy * cos_theta_prime / d2;
+    return f_a * abs_cos_theta_i_prime * energy * cos_theta_prime / d2;
   }
   else {
     const float3 p_to_c = centroid - P;

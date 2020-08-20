@@ -179,7 +179,6 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg,
       /* choose whether to go down both(split) or only one of the children */
       if (can_split && split(kg, P, offset)) {
         /* go down both child nodes */
-        //++stack_idx;
         randu_stack[stack_idx] = randu;
         randv_stack[stack_idx] = randv;
         offset_stack[stack_idx] = child_offsetL;
@@ -221,7 +220,6 @@ ccl_device void accum_light_tree_contribution(KernelGlobals *kg,
           pdf_factor *= 1.0f - P_L;
         }
 
-        //++stack_idx;
         can_split = false;
         randu_stack[stack_idx] = randu;
         randv_stack[stack_idx] = randv;

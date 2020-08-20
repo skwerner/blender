@@ -41,7 +41,7 @@ if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
   endif()
 endif()
 
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.10)
 
 # Prever LEGACY OpenGL to eb compatible with all the existing releases and
 # platforms which don't hare GLVND yet. Only do it if preference was not set
@@ -214,6 +214,8 @@ if(WITH_GHOST_X11)
   option(WITH_GHOST_XDND    "Enable drag'n'drop support on X11 using XDND protocol" ON)
 endif()
 
+option(WITH_GMP "Use the gmp library for more accurate booleans" OFF)
+
 # Misc...
 option(WITH_HEADLESS      "Build without graphical support (renderfarm, server mode only)" OFF)
 mark_as_advanced(WITH_HEADLESS)
@@ -321,14 +323,6 @@ mark_as_advanced(WITH_SYSTEM_GLOG)
 # Freestyle
 option(WITH_FREESTYLE     "Enable Freestyle (advanced edges rendering)" ON)
 
-# New object types
-option(WITH_NEW_OBJECT_TYPES "Enable new hair and pointcloud objects (use for development only, don't save in files)" OFF)
-mark_as_advanced(WITH_NEW_OBJECT_TYPES)
-
-# New simulation data block
-option(WITH_NEW_SIMULATION_TYPE "Enable simulation data block (use for development only, don't save in files)" OFF)
-mark_as_advanced(WITH_NEW_SIMULATION_TYPE)
-
 # Misc
 if(WIN32)
   option(WITH_INPUT_IME "Enable Input Method Editor (IME) for complex Asian character input" ON)
@@ -375,7 +369,7 @@ option(WITH_CYCLES_CUDA_BINARIES    "Build Cycles CUDA binaries" OFF)
 option(WITH_CYCLES_CUBIN_COMPILER   "Build cubins with nvrtc based compiler instead of nvcc" OFF)
 option(WITH_CYCLES_CUDA_BUILD_SERIAL "Build cubins one after another (useful on machines with limited RAM)" OFF)
 mark_as_advanced(WITH_CYCLES_CUDA_BUILD_SERIAL)
-set(CYCLES_CUDA_BINARIES_ARCH sm_30 sm_35 sm_37 sm_50 sm_52 sm_60 sm_61 sm_70 sm_75 CACHE STRING "CUDA architectures to build binaries for")
+set(CYCLES_CUDA_BINARIES_ARCH sm_30 sm_35 sm_37 sm_50 sm_52 sm_60 sm_61 sm_70 sm_75 compute_75 CACHE STRING "CUDA architectures to build binaries for")
 mark_as_advanced(CYCLES_CUDA_BINARIES_ARCH)
 unset(PLATFORM_DEFAULT)
 option(WITH_CYCLES_LOGGING  "Build Cycles with logging support" ON)
@@ -423,6 +417,11 @@ mark_as_advanced(WITH_CXX_GUARDEDALLOC)
 option(WITH_ASSERT_ABORT "Call abort() when raising an assertion through BLI_assert()" ON)
 mark_as_advanced(WITH_ASSERT_ABORT)
 
+if(UNIX AND NOT APPLE)
+  option(WITH_CLANG_TIDY "Use Clang Tidy to analyze the source code (only enable for development on Linux using Clang)" OFF)
+  mark_as_advanced(WITH_CLANG_TIDY)
+endif()
+
 option(WITH_BOOST "Enable features depending on boost" ON)
 option(WITH_TBB   "Enable features depending on TBB (OpenVDB, OpenImageDenoise, sculpt multithreading)" ON)
 
@@ -430,6 +429,10 @@ option(WITH_TBB   "Enable features depending on TBB (OpenVDB, OpenImageDenoise, 
 if(WIN32)
   option(WITH_TBB_MALLOC_PROXY "Enable the TBB malloc replacement" ON)
 endif()
+
+# This should be turned off when Blender enter beta/rc/release
+option(WITH_EXPERIMENTAL_FEATURES "Enable experimental features (still need to enable them in the user preferences)" ON)
+mark_as_advanced(WITH_EXPERIMENTAL_FEATURES)
 
 # Unit testsing
 option(WITH_GTESTS "Enable GTest unit testing" OFF)
@@ -903,7 +906,7 @@ if(MSVC)
   # endianess-detection and auto-setting is counterproductive
   # so we just set endianness according CMAKE_OSX_ARCHITECTURES
 
-elseif(CMAKE_OSX_ARCHITECTURES MATCHES i386 OR CMAKE_OSX_ARCHITECTURES MATCHES x86_64)
+elseif(CMAKE_OSX_ARCHITECTURES MATCHES i386 OR CMAKE_OSX_ARCHITECTURES MATCHES x86_64 OR CMAKE_OSX_ARCHITECTURES MATCHES arm64)
   add_definitions(-D__LITTLE_ENDIAN__)
 elseif(CMAKE_OSX_ARCHITECTURES MATCHES ppc OR CMAKE_OSX_ARCHITECTURES MATCHES ppc64)
   add_definitions(-D__BIG_ENDIAN__)
@@ -1630,10 +1633,6 @@ endif()
 
 #-----------------------------------------------------------------------------
 # Libraries
-
-if(WITH_GTESTS)
-  include(GTestTesting)
-endif()
 
 if(WITH_BLENDER)
   add_subdirectory(intern)

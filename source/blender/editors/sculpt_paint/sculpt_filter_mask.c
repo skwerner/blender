@@ -175,7 +175,7 @@ static void mask_filter_task_cb(void *__restrict userdata,
         *vd.mask = gain * (*vd.mask) + offset;
         break;
     }
-    CLAMP(*vd.mask, 0.0f, 1.0f);
+    *vd.mask = clamp_f(*vd.mask, 0.0f, 1.0f);
     if (*vd.mask != prev_val) {
       update = true;
     }
@@ -202,9 +202,9 @@ static int sculpt_mask_filter_exec(bContext *C, wmOperator *op)
   int totnode;
   int filter_type = RNA_enum_get(op->ptr, "filter_type");
 
-  BKE_sculpt_update_object_for_edit(depsgraph, ob, true, true);
+  BKE_sculpt_update_object_for_edit(depsgraph, ob, true, true, false);
 
-  SCULPT_vertex_random_access_init(ss);
+  SCULPT_vertex_random_access_ensure(ss);
 
   if (!ob->sculpt->pmap) {
     return OPERATOR_CANCELLED;
@@ -247,7 +247,7 @@ static int sculpt_mask_filter_exec(bContext *C, wmOperator *op)
     };
 
     TaskParallelSettings settings;
-    BKE_pbvh_parallel_range_settings(&settings, (sd->flags & SCULPT_USE_OPENMP), totnode);
+    BKE_pbvh_parallel_range_settings(&settings, true, totnode);
     BLI_task_parallel_range(0, totnode, &data, mask_filter_task_cb, &settings);
 
     if (ELEM(filter_type, MASK_FILTER_GROW, MASK_FILTER_SHRINK)) {
@@ -276,7 +276,7 @@ void SCULPT_mask_filter_smooth_apply(
 
   for (int i = 0; i < smooth_iterations; i++) {
     TaskParallelSettings settings;
-    BKE_pbvh_parallel_range_settings(&settings, (sd->flags & SCULPT_USE_OPENMP), totnode);
+    BKE_pbvh_parallel_range_settings(&settings, true, totnode);
     BLI_task_parallel_range(0, totnode, &data, mask_filter_task_cb, &settings);
   }
 }
@@ -432,9 +432,9 @@ static int sculpt_dirty_mask_exec(bContext *C, wmOperator *op)
   Sculpt *sd = CTX_data_tool_settings(C)->sculpt;
   int totnode;
 
-  BKE_sculpt_update_object_for_edit(depsgraph, ob, true, true);
+  BKE_sculpt_update_object_for_edit(depsgraph, ob, true, true, false);
 
-  SCULPT_vertex_random_access_init(ss);
+  SCULPT_vertex_random_access_ensure(ss);
 
   if (!ob->sculpt->pmap) {
     return OPERATOR_CANCELLED;
@@ -459,7 +459,7 @@ static int sculpt_dirty_mask_exec(bContext *C, wmOperator *op)
   };
 
   TaskParallelSettings settings;
-  BKE_pbvh_parallel_range_settings(&settings, (sd->flags & SCULPT_USE_OPENMP), totnode);
+  BKE_pbvh_parallel_range_settings(&settings, true, totnode);
 
   settings.func_reduce = dirty_mask_compute_range_reduce;
   settings.userdata_chunk = &range;

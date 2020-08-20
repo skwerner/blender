@@ -21,8 +21,7 @@
  * \ingroup spseq
  */
 
-#ifndef __SEQUENCER_INTERN_H__
-#define __SEQUENCER_INTERN_H__
+#pragma once
 
 #include "DNA_sequence_types.h"
 #include "RNA_access.h"
@@ -43,6 +42,7 @@ struct wmOperator;
 
 /* sequencer_draw.c */
 void draw_timeline_seq(const struct bContext *C, struct ARegion *region);
+void draw_timeline_seq_display(const struct bContext *C, struct ARegion *region);
 void sequencer_draw_preview(const struct bContext *C,
                             struct Scene *scene,
                             struct ARegion *region,
@@ -207,5 +207,3 @@ int sequencer_image_seq_get_minmax_frame(struct wmOperator *op,
                                          int *r_numdigits);
 void sequencer_image_seq_reserve_frames(
     struct wmOperator *op, struct StripElem *se, int len, int minframe, int numdigits);
-
-#endif /* __SEQUENCER_INTERN_H__ */

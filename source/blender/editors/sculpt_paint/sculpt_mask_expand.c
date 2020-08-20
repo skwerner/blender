@@ -174,7 +174,7 @@ static int sculpt_mask_expand_modal(bContext *C, wmOperator *op, const wmEvent *
   ARegion *region = CTX_wm_region(C);
   float prevclick_f[2];
   copy_v2_v2(prevclick_f, op->customdata);
-  int prevclick[2] = {(int)prevclick_f[0], (int)prevclick_f[1]};
+  const int prevclick[2] = {(int)prevclick_f[0], (int)prevclick_f[1]};
   int len = (int)len_v2v2_int(prevclick, event->mval);
   len = abs(len);
   int mask_speed = RNA_int_get(op->ptr, "mask_speed");
@@ -206,7 +206,7 @@ static int sculpt_mask_expand_modal(bContext *C, wmOperator *op, const wmEvent *
       (event->type == EVT_PADENTER && event->val == KM_PRESS)) {
 
     /* Smooth iterations. */
-    BKE_sculpt_update_object_for_edit(depsgraph, ob, true, false);
+    BKE_sculpt_update_object_for_edit(depsgraph, ob, true, false, false);
     const int smooth_iterations = RNA_int_get(op->ptr, "smooth_iterations");
     SCULPT_mask_filter_smooth_apply(
         sd, ob, ss->filter_cache->nodes, ss->filter_cache->totnode, smooth_iterations);
@@ -289,8 +289,7 @@ static int sculpt_mask_expand_modal(bContext *C, wmOperator *op, const wmEvent *
         .mask_expand_create_face_set = RNA_boolean_get(op->ptr, "create_face_set"),
     };
     TaskParallelSettings settings;
-    BKE_pbvh_parallel_range_settings(
-        &settings, (sd->flags & SCULPT_USE_OPENMP), ss->filter_cache->totnode);
+    BKE_pbvh_parallel_range_settings(&settings, true, ss->filter_cache->totnode);
     BLI_task_parallel_range(0, ss->filter_cache->totnode, &data, sculpt_expand_task_cb, &settings);
     ss->filter_cache->mask_update_current_it = mask_expand_update_it;
   }
@@ -358,14 +357,14 @@ static int sculpt_mask_expand_invoke(bContext *C, wmOperator *op, const wmEvent 
   mouse[0] = event->mval[0];
   mouse[1] = event->mval[1];
 
-  SCULPT_vertex_random_access_init(ss);
+  SCULPT_vertex_random_access_ensure(ss);
 
-  op->customdata = MEM_mallocN(2 * sizeof(float), "initial mouse position");
+  op->customdata = MEM_mallocN(sizeof(float[2]), "initial mouse position");
   copy_v2_v2(op->customdata, mouse);
 
   SCULPT_cursor_geometry_info_update(C, &sgi, mouse, false);
 
-  BKE_sculpt_update_object_for_edit(depsgraph, ob, true, true);
+  BKE_sculpt_update_object_for_edit(depsgraph, ob, true, true, false);
 
   int vertex_count = SCULPT_vertex_count_get(ss);
 
@@ -459,8 +458,7 @@ static int sculpt_mask_expand_invoke(bContext *C, wmOperator *op, const wmEvent 
       .mask_expand_create_face_set = RNA_boolean_get(op->ptr, "create_face_set"),
   };
   TaskParallelSettings settings;
-  BKE_pbvh_parallel_range_settings(
-      &settings, (sd->flags & SCULPT_USE_OPENMP), ss->filter_cache->totnode);
+  BKE_pbvh_parallel_range_settings(&settings, true, ss->filter_cache->totnode);
   BLI_task_parallel_range(0, ss->filter_cache->totnode, &data, sculpt_expand_task_cb, &settings);
 
   const char *status_str = TIP_(

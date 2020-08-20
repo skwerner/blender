@@ -702,7 +702,7 @@ static float rna_CurveMapping_evaluateF(struct CurveMapping *cumap,
 
 static void rna_CurveMap_initialize(struct CurveMapping *cumap)
 {
-  BKE_curvemapping_initialize(cumap);
+  BKE_curvemapping_init(cumap);
 }
 #else
 
@@ -1222,7 +1222,7 @@ static void rna_def_colormanage(BlenderRNA *brna)
                               "rna_ColorManagedViewSettings_look_set",
                               "rna_ColorManagedViewSettings_look_itemf");
   RNA_def_property_ui_text(
-      prop, "Look", "Additional transform applied before view transform for an artistic needs");
+      prop, "Look", "Additional transform applied before view transform for artistic needs");
   RNA_def_property_update(prop, NC_WINDOW, "rna_ColorManagement_update");
 
   prop = RNA_def_property(srna, "view_transform", PROP_ENUM, PROP_NONE);

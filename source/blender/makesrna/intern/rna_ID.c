@@ -71,17 +71,13 @@ const EnumPropertyItem rna_enum_id_type_items[] = {
     {ID_PA, "PARTICLE", ICON_PARTICLE_DATA, "Particle", ""},
     {ID_LP, "LIGHT_PROBE", ICON_LIGHTPROBE_CUBEMAP, "Light Probe", ""},
     {ID_SCE, "SCENE", ICON_SCENE_DATA, "Scene", ""},
-#ifdef WITH_NEW_SIMULATION_TYPE
     {ID_SIM, "SIMULATION", ICON_PHYSICS, "Simulation", ""}, /* TODO: Use correct icon. */
-#endif
     {ID_SO, "SOUND", ICON_SOUND, "Sound", ""},
     {ID_SPK, "SPEAKER", ICON_SPEAKER, "Speaker", ""},
     {ID_TXT, "TEXT", ICON_TEXT, "Text", ""},
     {ID_TE, "TEXTURE", ICON_TEXTURE_DATA, "Texture", ""},
-#ifdef WITH_NEW_OBJECT_TYPES
     {ID_HA, "HAIR", ICON_HAIR_DATA, "Hair", ""},
     {ID_PT, "POINTCLOUD", ICON_POINTCLOUD_DATA, "PointCloud", ""},
-#endif
     {ID_VO, "VOLUME", ICON_VOLUME_DATA, "Volume", ""},
     {ID_WM, "WINDOWMANAGER", ICON_WINDOW, "Window Manager", ""},
     {ID_WO, "WORLD", ICON_WORLD_DATA, "World", ""},
@@ -100,6 +96,7 @@ const EnumPropertyItem rna_enum_id_type_items[] = {
 #  include "BKE_font.h"
 #  include "BKE_global.h" /* XXX, remove me */
 #  include "BKE_idprop.h"
+#  include "BKE_idtype.h"
 #  include "BKE_lib_override.h"
 #  include "BKE_lib_query.h"
 #  include "BKE_lib_remap.h"
@@ -254,7 +251,7 @@ short RNA_type_to_ID_code(const StructRNA *type)
   if (base_type == &RNA_FreestyleLineStyle) {
     return ID_LS;
   }
-#  ifdef WITH_NEW_OBJECT_TYPES
+#  ifdef WITH_HAIR_NODES
   if (base_type == &RNA_Hair) {
     return ID_HA;
   }
@@ -292,7 +289,7 @@ short RNA_type_to_ID_code(const StructRNA *type)
   if (base_type == &RNA_PaintCurve) {
     return ID_PC;
   }
-#  ifdef WITH_NEW_OBJECT_TYPES
+#  ifdef WITH_PARTICLE_NODES
   if (base_type == &RNA_PointCloud) {
     return ID_PT;
   }
@@ -306,7 +303,7 @@ short RNA_type_to_ID_code(const StructRNA *type)
   if (base_type == &RNA_Screen) {
     return ID_SCR;
   }
-#  ifdef WITH_NEW_SIMULATION_TYPE
+#  ifdef WITH_PARTICLE_NODES
   if (base_type == &RNA_Simulation) {
     return ID_SIM;
   }
@@ -364,7 +361,7 @@ StructRNA *ID_code_to_RNA_type(short idcode)
     case ID_GR:
       return &RNA_Collection;
     case ID_HA:
-#  ifdef WITH_NEW_OBJECT_TYPES
+#  ifdef WITH_HAIR_NODES
       return &RNA_Hair;
 #  else
       return &RNA_ID;
@@ -402,7 +399,7 @@ StructRNA *ID_code_to_RNA_type(short idcode)
     case ID_PC:
       return &RNA_PaintCurve;
     case ID_PT:
-#  ifdef WITH_NEW_OBJECT_TYPES
+#  ifdef WITH_PARTICLE_NODES
       return &RNA_PointCloud;
 #  else
       return &RNA_ID;
@@ -414,7 +411,7 @@ StructRNA *ID_code_to_RNA_type(short idcode)
     case ID_SCR:
       return &RNA_Screen;
     case ID_SIM:
-#  ifdef WITH_NEW_SIMULATION_TYPE
+#  ifdef WITH_PARTICLE_NODES
       return &RNA_Simulation;
 #  else
       return &RNA_ID;
@@ -540,7 +537,7 @@ static ID *rna_ID_copy(ID *id, Main *bmain)
 
 static ID *rna_ID_override_create(ID *id, Main *bmain, bool remap_local_usages)
 {
-  if (!BKE_lib_override_library_is_enabled() || !ID_IS_OVERRIDABLE_LIBRARY(id)) {
+  if (!ID_IS_OVERRIDABLE_LIBRARY(id)) {
     return NULL;
   }
 
@@ -1657,7 +1654,7 @@ static void rna_def_library(BlenderRNA *brna)
   RNA_def_struct_ui_icon(srna, ICON_LIBRARY_DATA_DIRECT);
 
   prop = RNA_def_property(srna, "filepath", PROP_STRING, PROP_FILEPATH);
-  RNA_def_property_string_sdna(prop, NULL, "name");
+  RNA_def_property_string_sdna(prop, NULL, "filepath");
   RNA_def_property_ui_text(prop, "File Path", "Path to the library .blend file");
   RNA_def_property_string_funcs(prop, NULL, NULL, "rna_Library_filepath_set");
 

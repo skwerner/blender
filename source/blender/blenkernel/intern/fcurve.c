@@ -320,7 +320,7 @@ int BKE_fcurves_filter(ListBase *dst, ListBase *src, const char *dataPrefix, con
   if (ELEM(NULL, dst, src, dataPrefix, dataName)) {
     return 0;
   }
-  else if ((dataPrefix[0] == 0) || (dataName[0] == 0)) {
+  if ((dataPrefix[0] == 0) || (dataName[0] == 0)) {
     return 0;
   }
 
@@ -915,7 +915,7 @@ void bezt_add_to_cfra_elem(ListBase *lb, BezTriple *bezt)
       return;
     }
     /* should key be inserted before this column? */
-    else if (ce->cfra > bezt->vec[1][0]) {
+    if (ce->cfra > bezt->vec[1][0]) {
       break;
     }
   }
@@ -1063,9 +1063,9 @@ static BezTriple *cycle_offset_triple(
 /**
  * Variant of #calchandles_fcurve() that allows calculating based on a different select flag.
  *
- * \param sel_flag: The flag (bezt.f1/2/3) value to use to determine selection. Usually `SELECT`,
- *                  but may want to use a different one at times (if caller does not operate on
- *                  selection).
+ * \param handle_sel_flag: The flag (bezt.f1/2/3) value to use to determine selection.
+ * Usually `SELECT`, but may want to use a different one at times
+ * (if caller does not operate on selection).
  */
 void calchandles_fcurve_ex(FCurve *fcu, eBezTriple_Flag handle_sel_flag)
 {
@@ -1277,7 +1277,7 @@ short test_time_fcurve(FCurve *fcu)
  * than the horizontal distance between (v1-v4).
  * This is to prevent curve loops.
  */
-void correct_bezpart(float v1[2], float v2[2], float v3[2], float v4[2])
+void correct_bezpart(const float v1[2], float v2[2], float v3[2], const float v4[2])
 {
   float h1[2], h2[2], len1, len2, len, fac;
 
@@ -1872,17 +1872,18 @@ float evaluate_fcurve_only_curve(FCurve *fcu, float evaltime)
 float evaluate_fcurve_driver(PathResolvedRNA *anim_rna,
                              FCurve *fcu,
                              ChannelDriver *driver_orig,
-                             float evaltime)
+                             const AnimationEvalContext *anim_eval_context)
 {
   BLI_assert(fcu->driver != NULL);
   float cvalue = 0.0f;
+  float evaltime = anim_eval_context->eval_time;
 
   /* If there is a driver (only if this F-Curve is acting as 'driver'),
    * evaluate it to find value to use as "evaltime" since drivers essentially act as alternative
    * input (i.e. in place of 'time') for F-Curves. */
   if (fcu->driver) {
     /* evaltime now serves as input for the curve */
-    evaltime = evaluate_driver(anim_rna, fcu->driver, driver_orig, evaltime);
+    evaltime = evaluate_driver(anim_rna, fcu->driver, driver_orig, anim_eval_context);
 
     /* only do a default 1-1 mapping if it's unlikely that anything else will set a value... */
     if (fcu->totvert == 0) {
@@ -1924,7 +1925,9 @@ bool BKE_fcurve_is_empty(FCurve *fcu)
 }
 
 /* Calculate the value of the given F-Curve at the given frame, and set its curval */
-float calculate_fcurve(PathResolvedRNA *anim_rna, FCurve *fcu, float evaltime)
+float calculate_fcurve(PathResolvedRNA *anim_rna,
+                       FCurve *fcu,
+                       const AnimationEvalContext *anim_eval_context)
 {
   /* only calculate + set curval (overriding the existing value) if curve has
    * any data which warrants this...
@@ -1936,10 +1939,10 @@ float calculate_fcurve(PathResolvedRNA *anim_rna, FCurve *fcu, float evaltime)
   /* calculate and set curval (evaluates driver too if necessary) */
   float curval;
   if (fcu->driver) {
-    curval = evaluate_fcurve_driver(anim_rna, fcu, fcu->driver, evaltime);
+    curval = evaluate_fcurve_driver(anim_rna, fcu, fcu->driver, anim_eval_context);
   }
   else {
-    curval = evaluate_fcurve(fcu, evaltime);
+    curval = evaluate_fcurve(fcu, anim_eval_context->eval_time);
   }
   fcu->curval = curval; /* debug display only, not thread safe! */
   return curval;

@@ -76,6 +76,9 @@ static void initData(ModifierData *md)
   amd->fit_type = MOD_ARR_FIXEDCOUNT;
   amd->offset_type = MOD_ARR_OFF_RELATIVE;
   amd->flags = 0;
+
+  /* Open the first subpanel by default, it corresspnds to Relative offset which is enabled too. */
+  md->ui_expand_flag = (1 << 0) | (1 << 1);
 }
 
 static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk, void *userData)
@@ -136,12 +139,11 @@ static int svert_sum_cmp(const void *e1, const void *e2)
   if (sv1->sum_co > sv2->sum_co) {
     return 1;
   }
-  else if (sv1->sum_co < sv2->sum_co) {
+  if (sv1->sum_co < sv2->sum_co) {
     return -1;
   }
-  else {
-    return 0;
-  }
+
+  return 0;
 }
 
 static void svert_from_mvert(SortVertsElem *sv,
@@ -823,10 +825,10 @@ static bool isDisabled(const struct Scene *UNUSED(scene),
   if (amd->curve_ob && amd->curve_ob->type != OB_CURVE) {
     return true;
   }
-  else if (amd->start_cap && amd->start_cap->type != OB_MESH) {
+  if (amd->start_cap && amd->start_cap->type != OB_MESH) {
     return true;
   }
-  else if (amd->end_cap && amd->end_cap->type != OB_MESH) {
+  if (amd->end_cap && amd->end_cap->type != OB_MESH) {
     return true;
   }
 
@@ -835,7 +837,6 @@ static bool isDisabled(const struct Scene *UNUSED(scene),
 
 static void panel_draw(const bContext *C, Panel *panel)
 {
-  uiLayout *col;
   uiLayout *layout = panel->layout;
 
   PointerRNA ptr;
@@ -856,12 +857,6 @@ static void panel_draw(const bContext *C, Panel *panel)
   else if (fit_type == MOD_ARR_FITCURVE) {
     uiItemR(layout, &ptr, "curve", 0, NULL, ICON_NONE);
   }
-
-  uiItemS(layout);
-
-  col = uiLayoutColumn(layout, false);
-  uiItemR(col, &ptr, "start_cap", 0, IFACE_("Cap Start"), ICON_NONE);
-  uiItemR(col, &ptr, "end_cap", 0, IFACE_("End"), ICON_NONE);
 
   modifier_panel_end(layout, &ptr);
 }
@@ -984,6 +979,21 @@ static void uv_panel_draw(const bContext *C, Panel *panel)
   uiItemR(col, &ptr, "offset_v", UI_ITEM_R_EXPAND, IFACE_("V"), ICON_NONE);
 }
 
+static void caps_panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *col;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ptr;
+  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+
+  uiLayoutSetPropSep(layout, true);
+
+  col = uiLayoutColumn(layout, false);
+  uiItemR(col, &ptr, "start_cap", 0, IFACE_("Cap Start"), ICON_NONE);
+  uiItemR(col, &ptr, "end_cap", 0, IFACE_("End"), ICON_NONE);
+}
+
 static void panelRegister(ARegionType *region_type)
 {
   PanelType *panel_type = modifier_panel_register(region_type, eModifierType_Array, panel_draw);
@@ -1004,6 +1014,7 @@ static void panelRegister(ARegionType *region_type)
   modifier_subpanel_register(
       region_type, "merge", "", symmetry_panel_header_draw, symmetry_panel_draw, panel_type);
   modifier_subpanel_register(region_type, "uv", "UVs", NULL, uv_panel_draw, panel_type);
+  modifier_subpanel_register(region_type, "caps", "Caps", NULL, caps_panel_draw, panel_type);
 }
 
 ModifierTypeInfo modifierType_Array = {

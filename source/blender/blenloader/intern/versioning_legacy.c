@@ -102,7 +102,7 @@ static void vcol_to_fcol(Mesh *me)
     return;
   }
 
-  mcoln = mcolmain = MEM_malloc_arrayN(me->totface, 4 * sizeof(int), "mcoln");
+  mcoln = mcolmain = MEM_malloc_arrayN(me->totface, sizeof(int[4]), "mcoln");
   mcol = (uint *)me->mcol;
   mface = me->mface;
   for (a = me->totface; a > 0; a--, mface++) {
@@ -493,6 +493,7 @@ void blo_do_version_old_trackto_to_constraints(Object *ob)
   ob->track = NULL;
 }
 
+/* NOLINTNEXTLINE: readability-function-size */
 void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
 {
   /* WATCH IT!!!: pointers from libdata have not been converted */
@@ -579,7 +580,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
   }
 
   if (bmain->versionfile <= 109) {
-    /* new variable: gridlines */
+    /* New variable: `gridlines`. */
     bScreen *screen = bmain->screens.first;
     while (screen) {
       ScrArea *area = screen->areabase.first;
@@ -856,8 +857,8 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
   if (bmain->versionfile <= 223) {
     VFont *vf;
     for (vf = bmain->fonts.first; vf; vf = vf->id.next) {
-      if (STREQ(vf->name + strlen(vf->name) - 6, ".Bfont")) {
-        strcpy(vf->name, FO_BUILTIN_NAME);
+      if (STREQ(vf->filepath + strlen(vf->filepath) - 6, ".Bfont")) {
+        strcpy(vf->filepath, FO_BUILTIN_NAME);
       }
     }
   }
@@ -1339,7 +1340,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
         arm = blo_do_versions_newlibadr(fd, lib, ob->data);
         enum { ARM_DRAWXRAY = (1 << 1) };
         if (arm->flag & ARM_DRAWXRAY) {
-          ob->dtx |= OB_DRAWXRAY;
+          ob->dtx |= OB_DRAW_IN_FRONT;
         }
       }
       else if (ob->type == OB_MESH) {
@@ -1643,9 +1644,9 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     if (bmain->versionfile == 241) {
       Image *ima;
       for (ima = bmain->images.first; ima; ima = ima->id.next) {
-        if (STREQ(ima->name, "Compositor")) {
+        if (STREQ(ima->filepath, "Compositor")) {
           strcpy(ima->id.name + 2, "Viewer Node");
-          strcpy(ima->name, "Viewer Node");
+          strcpy(ima->filepath, "Viewer Node");
         }
       }
     }
@@ -2096,7 +2097,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
 
         if (la->curfalloff == NULL) {
           la->curfalloff = BKE_curvemapping_add(1, 0.0f, 1.0f, 1.0f, 0.0f);
-          BKE_curvemapping_initialize(la->curfalloff);
+          BKE_curvemapping_init(la->curfalloff);
         }
       }
     }

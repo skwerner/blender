@@ -23,8 +23,7 @@
  * GPU element list (AKA index buffer)
  */
 
-#ifndef __GPU_ELEMENT_H__
-#define __GPU_ELEMENT_H__
+#pragma once
 
 #include "GPU_primitive.h"
 
@@ -54,6 +53,8 @@ typedef struct GPUIndexBuf {
     struct GPUIndexBuf *src; /* if is_subrange is true, this is the source buffer. */
   };
 } GPUIndexBuf;
+
+GPUIndexBuf *GPU_indexbuf_calloc(void);
 
 void GPU_indexbuf_use(GPUIndexBuf *);
 uint GPU_indexbuf_size_get(const GPUIndexBuf *);
@@ -116,5 +117,3 @@ int GPU_indexbuf_primitive_len(GPUPrimType prim_type);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __GPU_ELEMENT_H__ */

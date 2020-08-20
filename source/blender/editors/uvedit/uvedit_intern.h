@@ -21,8 +21,7 @@
  * \ingroup eduv
  */
 
-#ifndef __UVEDIT_INTERN_H__
-#define __UVEDIT_INTERN_H__
+#pragma once
 
 struct BMFace;
 struct BMLoop;
@@ -34,7 +33,6 @@ struct wmOperatorType;
 
 /* geometric utilities */
 void uv_poly_copy_aspect(float uv_orig[][2], float uv[][2], float aspx, float aspy, int len);
-void uv_poly_center(struct BMFace *f, float r_cent[2], const int cd_loop_uv_offset);
 
 /* find nearest */
 
@@ -88,6 +86,15 @@ bool uv_find_nearest_face_multi(struct Scene *scene,
                                 const float co[2],
                                 struct UvNearestHit *hit_final);
 
+BMLoop *uv_find_nearest_loop_from_vert(struct Scene *scene,
+                                       struct Object *obedit,
+                                       struct BMVert *v,
+                                       const float co[2]);
+BMLoop *uv_find_nearest_loop_from_edge(struct Scene *scene,
+                                       struct Object *obedit,
+                                       struct BMEdge *e,
+                                       const float co[2]);
+
 /* utility tool functions */
 
 void uvedit_live_unwrap_update(struct SpaceImage *sima,
@@ -106,7 +113,13 @@ void UV_OT_pack_islands(struct wmOperatorType *ot);
 void UV_OT_reset(struct wmOperatorType *ot);
 void UV_OT_sphere_project(struct wmOperatorType *ot);
 void UV_OT_unwrap(struct wmOperatorType *ot);
+void UV_OT_rip(struct wmOperatorType *ot);
 void UV_OT_stitch(struct wmOperatorType *ot);
+void UV_OT_smart_project(struct wmOperatorType *ot);
+
+/* uvedit_path.c */
+void UV_OT_shortest_path_pick(struct wmOperatorType *ot);
+void UV_OT_shortest_path_select(struct wmOperatorType *ot);
 
 /* uvedit_select.c */
 
@@ -121,6 +134,7 @@ const float *uvedit_first_selected_uv_from_vertex(struct Scene *scene,
 void UV_OT_select_all(struct wmOperatorType *ot);
 void UV_OT_select(struct wmOperatorType *ot);
 void UV_OT_select_loop(struct wmOperatorType *ot);
+void UV_OT_select_edge_ring(struct wmOperatorType *ot);
 void UV_OT_select_linked(struct wmOperatorType *ot);
 void UV_OT_select_linked_pick(struct wmOperatorType *ot);
 void UV_OT_select_split(struct wmOperatorType *ot);
@@ -131,5 +145,3 @@ void UV_OT_select_circle(struct wmOperatorType *ot);
 void UV_OT_select_more(struct wmOperatorType *ot);
 void UV_OT_select_less(struct wmOperatorType *ot);
 void UV_OT_select_overlap(struct wmOperatorType *ot);
-
-#endif /* __UVEDIT_INTERN_H__ */

@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BMESH_TOOLS_H__
-#define __BMESH_TOOLS_H__
+#pragma once
 
 /** \file
  * \ingroup bmesh
@@ -36,6 +35,8 @@ extern "C" {
 #include "tools/bmesh_edgesplit.h"
 #include "tools/bmesh_path.h"
 #include "tools/bmesh_path_region.h"
+#include "tools/bmesh_path_region_uv.h"
+#include "tools/bmesh_path_uv.h"
 #include "tools/bmesh_region_match.h"
 #include "tools/bmesh_separate.h"
 #include "tools/bmesh_triangulate.h"
@@ -43,5 +44,3 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BMESH_TOOLS_H__ */

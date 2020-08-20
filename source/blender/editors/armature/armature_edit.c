@@ -140,7 +140,16 @@ void ED_armature_origin_set(
     mul_m4_v3(ob->imat, cent);
   }
   else {
-    if (around == V3D_AROUND_CENTER_MEDIAN) {
+    if (around == V3D_AROUND_CENTER_BOUNDS) {
+      float min[3], max[3];
+      INIT_MINMAX(min, max);
+      for (ebone = arm->edbo->first; ebone; ebone = ebone->next) {
+        minmax_v3v3_v3(min, max, ebone->head);
+        minmax_v3v3_v3(min, max, ebone->tail);
+      }
+      mid_v3_v3v3(cent, min, max);
+    }
+    else { /* #V3D_AROUND_CENTER_MEDIAN. */
       int total = 0;
       zero_v3(cent);
       for (ebone = arm->edbo->first; ebone; ebone = ebone->next) {
@@ -151,15 +160,6 @@ void ED_armature_origin_set(
       if (total) {
         mul_v3_fl(cent, 1.0f / (float)total);
       }
-    }
-    else {
-      float min[3], max[3];
-      INIT_MINMAX(min, max);
-      for (ebone = arm->edbo->first; ebone; ebone = ebone->next) {
-        minmax_v3v3_v3(min, max, ebone->head);
-        minmax_v3v3_v3(min, max, ebone->tail);
-      }
-      mid_v3_v3v3(cent, min, max);
     }
   }
 
@@ -728,7 +728,8 @@ static int armature_fill_bones_exec(bContext *C, wmOperator *op)
     BKE_report(op->reports, RPT_ERROR, "No joints selected");
     return OPERATOR_CANCELLED;
   }
-  else if (mixed_object_error) {
+
+  if (mixed_object_error) {
     BKE_report(op->reports, RPT_ERROR, "Bones for different objects selected");
     BLI_freelistN(&points);
     return OPERATOR_CANCELLED;
@@ -1093,7 +1094,8 @@ static int armature_align_bones_exec(bContext *C, wmOperator *op)
     BKE_report(op->reports, RPT_ERROR, "Operation requires an active bone");
     return OPERATOR_CANCELLED;
   }
-  else if (arm->flag & ARM_MIRROR_EDIT) {
+
+  if (arm->flag & ARM_MIRROR_EDIT) {
     /* For X-Axis Mirror Editing option, we may need a mirror copy of actbone
      * - if there's a mirrored copy of selbone, try to find a mirrored copy of actbone
      *   (i.e.  selbone="child.L" and actbone="parent.L", find "child.R" and "parent.R").

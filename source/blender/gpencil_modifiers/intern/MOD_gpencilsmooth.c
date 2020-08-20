@@ -66,7 +66,7 @@ static void initData(GpencilModifierData *md)
   gpmd->curve_intensity = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
   if (gpmd->curve_intensity) {
     CurveMapping *curve = gpmd->curve_intensity;
-    BKE_curvemapping_initialize(curve);
+    BKE_curvemapping_init(curve);
   }
 }
 
@@ -195,7 +195,7 @@ static void panel_draw(const bContext *C, Panel *panel)
 
   row = uiLayoutRow(layout, true);
   uiItemR(row, &ptr, "use_edit_position", UI_ITEM_R_TOGGLE, IFACE_("Position"), ICON_NONE);
-  uiItemR(row, &ptr, "use_edit_strength", UI_ITEM_R_TOGGLE, IFACE_("Stength"), ICON_NONE);
+  uiItemR(row, &ptr, "use_edit_strength", UI_ITEM_R_TOGGLE, IFACE_("Strength"), ICON_NONE);
   uiItemR(row, &ptr, "use_edit_thickness", UI_ITEM_R_TOGGLE, IFACE_("Thickness"), ICON_NONE);
   uiItemR(row, &ptr, "use_edit_uv", UI_ITEM_R_TOGGLE, IFACE_("UV"), ICON_NONE);
 

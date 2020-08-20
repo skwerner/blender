@@ -27,7 +27,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "GPU_draw.h"
+#include "GPU_framebuffer.h"
 #include "GPU_glew.h"
 #include "GPU_immediate.h"
 #include "GPU_select.h"
@@ -205,12 +205,11 @@ static int depth_id_cmp(const void *v1, const void *v2)
   if (d1->id < d2->id) {
     return -1;
   }
-  else if (d1->id > d2->id) {
+  if (d1->id > d2->id) {
     return 1;
   }
-  else {
-    return 0;
-  }
+
+  return 0;
 }
 
 static int depth_cmp(const void *v1, const void *v2)
@@ -219,12 +218,11 @@ static int depth_cmp(const void *v1, const void *v2)
   if (d1->depth < d2->depth) {
     return -1;
   }
-  else if (d1->depth > d2->depth) {
+  if (d1->depth > d2->depth) {
     return 1;
   }
-  else {
-    return 0;
-  }
+
+  return 0;
 }
 
 /* depth sorting */
@@ -285,6 +283,12 @@ typedef struct GPUPickState {
       uint *rect_id;
     } nearest;
   };
+
+  /* Previous state to restore after drawing. */
+  int viewport[4];
+  int scissor[4];
+  eGPUWriteMask write_mask;
+  eGPUDepthTest depth_test;
 } GPUPickState;
 
 static GPUPickState g_pick_state = {0};
@@ -307,20 +311,21 @@ void gpu_select_pick_begin(uint (*buffer)[4], uint bufsize, const rcti *input, c
 
   /* Restrict OpenGL operations for when we don't have cache */
   if (ps->is_cached == false) {
-    gpuPushAttr(GPU_DEPTH_BUFFER_BIT | GPU_VIEWPORT_BIT);
+    ps->write_mask = GPU_write_mask_get();
+    ps->depth_test = GPU_depth_test_get();
+    GPU_scissor_get(ps->scissor);
 
     /* disable writing to the framebuffer */
-    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+    GPU_color_mask(false, false, false, false);
 
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
+    GPU_depth_mask(true);
     /* Always use #GL_LEQUAL even though GPU_SELECT_PICK_ALL always clears the buffer. This is
      * because individual objects themselves might have sections that overlap and we need these
      * to have the correct distance information. */
-    glDepthFunc(GL_LEQUAL);
+    GPU_depth_test(GPU_DEPTH_LESS_EQUAL);
 
     float viewport[4];
-    glGetFloatv(GL_VIEWPORT, viewport);
+    GPU_viewport_size_get_f(viewport);
 
     ps->src.clip_rect = *input;
     ps->src.rect_len = rect_len;
@@ -330,11 +335,11 @@ void gpu_select_pick_begin(uint (*buffer)[4], uint bufsize, const rcti *input, c
     ps->gl.clip_readpixels[2] = BLI_rcti_size_x(&ps->src.clip_rect);
     ps->gl.clip_readpixels[3] = BLI_rcti_size_y(&ps->src.clip_rect);
 
-    glViewport(UNPACK4(ps->gl.clip_readpixels));
+    GPU_viewport(UNPACK4(ps->gl.clip_readpixels));
 
     /* It's possible we don't want to clear depth buffer,
      * so existing elements are masked by current z-buffer. */
-    glClear(GL_DEPTH_BUFFER_BIT);
+    GPU_clear(GPU_DEPTH_BIT);
 
     /* scratch buffer (read new values here) */
     ps->gl.rect_depth_test = depth_buf_malloc(rect_len);
@@ -514,7 +519,7 @@ bool gpu_select_pick_load_id(uint id, bool end)
 
       if (g_pick_state.mode == GPU_SELECT_PICK_ALL) {
         /* we want new depths every time */
-        glClear(GL_DEPTH_BUFFER_BIT);
+        GPU_clear(GPU_DEPTH_BIT);
       }
     }
   }
@@ -538,8 +543,9 @@ uint gpu_select_pick_end(void)
       /* force finishing last pass */
       gpu_select_pick_load_id(ps->gl.prev_id, true);
     }
-    gpuPopAttr();
-    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    GPU_write_mask(ps->write_mask);
+    GPU_depth_test(ps->depth_test);
+    GPU_viewport(UNPACK4(ps->viewport));
   }
 
   /* assign but never free directly since it may be in cache */

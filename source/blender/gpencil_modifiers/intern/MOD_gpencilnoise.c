@@ -79,7 +79,7 @@ static void initData(GpencilModifierData *md)
   if (gpmd->curve_intensity) {
     CurveMapping *curve = gpmd->curve_intensity;
     BKE_curvemap_reset(curve->cm, &curve->clipr, CURVE_PRESET_BELL, CURVEMAP_SLOPE_POSITIVE);
-    BKE_curvemapping_initialize(curve);
+    BKE_curvemapping_init(curve);
   }
 }
 
@@ -327,7 +327,7 @@ static void random_panel_draw(const bContext *C, Panel *panel)
 
 static void mask_panel_draw(const bContext *C, Panel *panel)
 {
-  gpencil_modifier_masking_panel_draw(C, panel, true, false);
+  gpencil_modifier_masking_panel_draw(C, panel, true, true);
 }
 
 static void panelRegister(ARegionType *region_type)

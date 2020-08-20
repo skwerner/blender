@@ -109,7 +109,7 @@ const UserDef U_default = {
     .keyconfigstr = "blender",
     .undosteps = 32,
     .undomemory = 0,
-    .gp_manhattendist = 1,
+    .gp_manhattandist = 1,
     .gp_euclideandist = 2,
     .gp_eraser = 25,
     .gp_settings = 0,
@@ -228,6 +228,8 @@ const UserDef U_default = {
     .sequencer_disk_cache_flag = 0,
 
     .collection_instance_empty_size = 1.0f,
+
+    .statusbar_flag = STATUSBAR_SHOW_VERSION,
 
     .runtime =
         {

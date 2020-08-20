@@ -57,7 +57,7 @@ typedef void (*modifier_apply_threaded_cb)(int width,
                                            unsigned char *rect,
                                            float *rect_float,
                                            unsigned char *mask_rect,
-                                           float *mask_rect_float,
+                                           const float *mask_rect_float,
                                            void *data_v);
 
 typedef struct ModifierInitData {
@@ -223,7 +223,7 @@ static void whiteBalance_apply_threaded(int width,
                                         unsigned char *rect,
                                         float *rect_float,
                                         unsigned char *mask_rect,
-                                        float *mask_rect_float,
+                                        const float *mask_rect_float,
                                         void *data_v)
 {
   int x, y;
@@ -331,7 +331,7 @@ static void curves_apply_threaded(int width,
                                   unsigned char *rect,
                                   float *rect_float,
                                   unsigned char *mask_rect,
-                                  float *mask_rect_float,
+                                  const float *mask_rect_float,
                                   void *data_v)
 {
   CurveMapping *curve_mapping = (CurveMapping *)data_v;
@@ -393,10 +393,10 @@ static void curves_apply(struct SequenceModifierData *smd, ImBuf *ibuf, ImBuf *m
 {
   CurvesModifierData *cmd = (CurvesModifierData *)smd;
 
-  float black[3] = {0.0f, 0.0f, 0.0f};
-  float white[3] = {1.0f, 1.0f, 1.0f};
+  const float black[3] = {0.0f, 0.0f, 0.0f};
+  const float white[3] = {1.0f, 1.0f, 1.0f};
 
-  BKE_curvemapping_initialize(&cmd->curve_mapping);
+  BKE_curvemapping_init(&cmd->curve_mapping);
 
   BKE_curvemapping_premultiply(&cmd->curve_mapping, 0);
   BKE_curvemapping_set_black_white(&cmd->curve_mapping, black, white);
@@ -461,7 +461,7 @@ static void hue_correct_apply_threaded(int width,
                                        unsigned char *rect,
                                        float *rect_float,
                                        unsigned char *mask_rect,
-                                       float *mask_rect_float,
+                                       const float *mask_rect_float,
                                        void *data_v)
 {
   CurveMapping *curve_mapping = (CurveMapping *)data_v;
@@ -525,7 +525,7 @@ static void hue_correct_apply(struct SequenceModifierData *smd, ImBuf *ibuf, ImB
 {
   HueCorrectModifierData *hcmd = (HueCorrectModifierData *)smd;
 
-  BKE_curvemapping_initialize(&hcmd->curve_mapping);
+  BKE_curvemapping_init(&hcmd->curve_mapping);
 
   modifier_apply_threaded(ibuf, mask, hue_correct_apply_threaded, &hcmd->curve_mapping);
 }
@@ -556,7 +556,7 @@ static void brightcontrast_apply_threaded(int width,
                                           unsigned char *rect,
                                           float *rect_float,
                                           unsigned char *mask_rect,
-                                          float *mask_rect_float,
+                                          const float *mask_rect_float,
                                           void *data_v)
 {
   BrightContrastThreadData *data = (BrightContrastThreadData *)data_v;
@@ -658,7 +658,7 @@ static void maskmodifier_apply_threaded(int width,
                                         unsigned char *rect,
                                         float *rect_float,
                                         unsigned char *mask_rect,
-                                        float *mask_rect_float,
+                                        const float *mask_rect_float,
                                         void *UNUSED(data_v))
 {
   int x, y;
@@ -755,7 +755,7 @@ static void tonemapmodifier_apply_threaded_simple(int width,
                                                   unsigned char *rect,
                                                   float *rect_float,
                                                   unsigned char *mask_rect,
-                                                  float *mask_rect_float,
+                                                  const float *mask_rect_float,
                                                   void *data_v)
 {
   AvgLogLum *avg = (AvgLogLum *)data_v;
@@ -814,7 +814,7 @@ static void tonemapmodifier_apply_threaded_photoreceptor(int width,
                                                          unsigned char *rect,
                                                          float *rect_float,
                                                          unsigned char *mask_rect,
-                                                         float *mask_rect_float,
+                                                         const float *mask_rect_float,
                                                          void *data_v)
 {
   AvgLogLum *avg = (AvgLogLum *)data_v;

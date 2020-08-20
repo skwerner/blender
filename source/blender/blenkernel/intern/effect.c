@@ -313,10 +313,10 @@ ListBase *BKE_effectors_create(Depsgraph *depsgraph,
       if (ob == ob_src) {
         continue;
       }
-      else if (weights->weight[ob->pd->forcefield] == 0.0f) {
+      if (weights->weight[ob->pd->forcefield] == 0.0f) {
         continue;
       }
-      else if (ob->pd->shape == PFIELD_SHAPE_POINTS && BKE_object_get_evaluated_mesh(ob) == NULL) {
+      if (ob->pd->shape == PFIELD_SHAPE_POINTS && BKE_object_get_evaluated_mesh(ob) == NULL) {
         continue;
       }
 
@@ -1094,11 +1094,11 @@ void BKE_effectors_apply(ListBase *effectors,
    * Modifies the force on a particle according to its
    * relation with the effector object
    * Different kind of effectors include:
-   *     Forcefields: Gravity-like attractor
+   *     Force-fields: Gravity-like attractor
    *     (force power is related to the inverse of distance to the power of a falloff value)
    *     Vortex fields: swirling effectors
    *     (particles rotate around Z-axis of the object. otherwise, same relation as)
-   *     (Forcefields, but this is not done through a force/acceleration)
+   *     (Force-fields, but this is not done through a force/acceleration)
    *     Guide: particles on a path
    *     (particles are guided along a curve bezier or old nurbs)
    *     (is independent of other effectors)

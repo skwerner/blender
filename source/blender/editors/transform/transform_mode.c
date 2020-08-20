@@ -50,6 +50,23 @@
 /* Own include. */
 #include "transform_mode.h"
 
+int transform_mode_really_used(bContext *C, int mode)
+{
+  if (mode == TFM_BONESIZE) {
+    Object *ob = CTX_data_active_object(C);
+    BLI_assert(ob);
+    if (ob->type != OB_ARMATURE) {
+      return TFM_RESIZE;
+    }
+    bArmature *arm = ob->data;
+    if (arm->drawtype == ARM_ENVELOPE) {
+      return TFM_BONE_ENVELOPE_DIST;
+    }
+  }
+
+  return mode;
+}
+
 bool transdata_check_local_center(TransInfo *t, short around)
 {
   return ((around == V3D_AROUND_LOCAL_ORIGINS) &&
@@ -161,7 +178,7 @@ static void protectedRotateBits(short protectflag, float eul[3], const float old
 /* this function only does the delta rotation */
 /* axis-angle is usually internally stored as quats... */
 static void protectedAxisAngleBits(
-    short protectflag, float axis[3], float *angle, float oldAxis[3], float oldAngle)
+    short protectflag, float axis[3], float *angle, const float oldAxis[3], float oldAngle)
 {
   /* check that protection flags are set */
   if ((protectflag & (OB_LOCK_ROTX | OB_LOCK_ROTY | OB_LOCK_ROTZ | OB_LOCK_ROTW)) == 0) {
@@ -431,20 +448,19 @@ static void constraintSizeLim(TransInfo *t, TransData *td)
       /* scale val and reset size */
       return;  // TODO: fix this case
     }
-    else {
-      /* Reset val if SINGLESIZE but using a constraint */
-      if (td->flag & TD_SINGLESIZE) {
-        return;
-      }
 
-      /* separate out sign to apply back later */
-      for (i = 0; i < 3; i++) {
-        size_sign[i] = signf(td->ext->size[i]);
-        size_abs[i] = fabsf(td->ext->size[i]);
-      }
-
-      size_to_mat4(cob.matrix, size_abs);
+    /* Reset val if SINGLESIZE but using a constraint */
+    if (td->flag & TD_SINGLESIZE) {
+      return;
     }
+
+    /* separate out sign to apply back later */
+    for (i = 0; i < 3; i++) {
+      size_sign[i] = signf(td->ext->size[i]);
+      size_abs[i] = fabsf(td->ext->size[i]);
+    }
+
+    size_to_mat4(cob.matrix, size_abs);
 
     /* Evaluate valid constraints */
     for (con = td->con; con; con = con->next) {
@@ -491,16 +507,15 @@ static void constraintSizeLim(TransInfo *t, TransData *td)
       /* scale val and reset size */
       return;  // TODO: fix this case
     }
-    else {
-      /* Reset val if SINGLESIZE but using a constraint */
-      if (td->flag & TD_SINGLESIZE) {
-        return;
-      }
 
-      /* extrace scale from matrix and apply back sign */
-      mat4_to_size(td->ext->size, cob.matrix);
-      mul_v3_v3(td->ext->size, size_sign);
+    /* Reset val if SINGLESIZE but using a constraint */
+    if (td->flag & TD_SINGLESIZE) {
+      return;
     }
+
+    /* extrace scale from matrix and apply back sign */
+    mat4_to_size(td->ext->size, cob.matrix);
+    mul_v3_v3(td->ext->size, size_sign);
   }
 }
 
@@ -881,7 +896,7 @@ void headerResize(TransInfo *t, const float vec[3], char str[UI_MAX_DRAW_STR])
  *
  * \note this is a tricky area, before making changes see: T29633, T42444
  */
-static void TransMat3ToSize(float mat[3][3], float smat[3][3], float size[3])
+static void TransMat3ToSize(const float mat[3][3], const float smat[3][3], float size[3])
 {
   float rmat[3][3];
 
@@ -1174,25 +1189,12 @@ void transform_mode_init(TransInfo *t, wmOperator *op, const int mode)
     case TFM_CREASE:
       initCrease(t);
       break;
-    case TFM_BONESIZE: { /* used for both B-Bone width (bonesize) as for deform-dist (envelope) */
-      /* Note: we have to pick one, use the active object. */
-      TransDataContainer *tc = TRANS_DATA_CONTAINER_FIRST_OK(t);
-      bArmature *arm = tc->poseobj->data;
-      if (arm->drawtype == ARM_ENVELOPE) {
-        initBoneEnvelope(t);
-        t->mode = TFM_BONE_ENVELOPE_DIST;
-      }
-      else {
-        initBoneSize(t);
-      }
+    case TFM_BONESIZE:
+      initBoneSize(t);
       break;
-    }
     case TFM_BONE_ENVELOPE:
-      initBoneEnvelope(t);
-      break;
     case TFM_BONE_ENVELOPE_DIST:
       initBoneEnvelope(t);
-      t->mode = TFM_BONE_ENVELOPE_DIST;
       break;
     case TFM_EDGE_SLIDE:
     case TFM_VERT_SLIDE: {
@@ -1265,6 +1267,12 @@ void transform_mode_init(TransInfo *t, wmOperator *op, const int mode)
     case TFM_GPENCIL_OPACITY:
       initGPOpacity(t);
       break;
+  }
+
+  if (t->data_type == TC_MESH_VERTS) {
+    /* Init Custom Data correction.
+     * Ideally this should be called when creating the TransData. */
+    mesh_customdatacorrect_init(t);
   }
 
   /* TODO(germano): Some of these operations change the `t->mode`.

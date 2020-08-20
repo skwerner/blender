@@ -137,24 +137,20 @@ void blend_mode_output(
   }
 }
 
-#ifdef GPU_VERTEX_SHADER
-#  define IN_OUT out
-#else
-#  define IN_OUT in
-#endif
-
-/* Shader interface. */
-IN_OUT vec4 finalColorMul;
-IN_OUT vec4 finalColorAdd;
-IN_OUT vec3 finalPos;
-IN_OUT vec2 finalUvs;
-noperspective IN_OUT float strokeThickness;
-noperspective IN_OUT float strokeHardeness;
-flat IN_OUT vec2 strokeAspect;
-flat IN_OUT vec2 strokePt1;
-flat IN_OUT vec2 strokePt2;
-flat IN_OUT int matFlag;
-flat IN_OUT float depth;
+IN_OUT ShaderStageInterface
+{
+  vec4 finalColorMul;
+  vec4 finalColorAdd;
+  vec3 finalPos;
+  vec2 finalUvs;
+  noperspective float strokeThickness;
+  noperspective float strokeHardeness;
+  flat vec2 strokeAspect;
+  flat vec2 strokePt1;
+  flat vec2 strokePt2;
+  flat int matFlag;
+  flat float depth;
+};
 
 #ifdef GPU_FRAGMENT_SHADER
 
@@ -491,7 +487,7 @@ void stroke_vertex()
 
     vec2 screen_ofs = miter * y;
 
-    /* Reminder: we packed the cap flag into the sign of stength and thickness sign. */
+    /* Reminder: we packed the cap flag into the sign of strength and thickness sign. */
     if ((is_stroke_start && strength1 > 0.0) || (is_stroke_end && thickness1 > 0.0) ||
         (miter_break && !is_stroke_start && !is_stroke_end)) {
       screen_ofs += line * x;

@@ -95,7 +95,15 @@ static void mesh_copy_data(Main *bmain, ID *id_dst, const ID *id_src, const int 
     /* This is a direct copy of a main mesh, so for now it has the same topology. */
     mesh_dst->runtime.deformed_only = true;
   }
-  /* XXX WHAT? Why? Comment, please! And pretty sure this is not valid for regular Mesh copying? */
+  /* This option is set for run-time meshes that have been copied from the current objects mode.
+   * Currently this is used for edit-mesh although it could be used for sculpt or other
+   * kinds of data specific to an objects mode.
+   *
+   * The flag signals that the mesh hasn't been modified from the data that generated it,
+   * allowing us to use the object-mode data for drawing.
+   *
+   * While this could be the callers responsibility, keep here since it's
+   * highly unlikely we want to create a duplicate and not use it for drawing. */
   mesh_dst->runtime.is_original = false;
 
   /* Only do tessface if we have no polys. */
@@ -591,9 +599,8 @@ bool BKE_mesh_has_custom_loop_normals(Mesh *me)
   if (me->edit_mesh) {
     return CustomData_has_layer(&me->edit_mesh->bm->ldata, CD_CUSTOMLOOPNORMAL);
   }
-  else {
-    return CustomData_has_layer(&me->ldata, CD_CUSTOMLOOPNORMAL);
-  }
+
+  return CustomData_has_layer(&me->ldata, CD_CUSTOMLOOPNORMAL);
 }
 
 /** Free (or release) any data used by this mesh (does not free the mesh itself). */
@@ -1096,9 +1103,8 @@ Mesh *BKE_mesh_from_object(Object *ob)
   if (ob->type == OB_MESH) {
     return ob->data;
   }
-  else {
-    return NULL;
-  }
+
+  return NULL;
 }
 
 void BKE_mesh_assign_object(Main *bmain, Object *ob, Mesh *me)
@@ -1270,12 +1276,11 @@ int BKE_mesh_edge_other_vert(const MEdge *e, int v)
   if (e->v1 == v) {
     return e->v2;
   }
-  else if (e->v2 == v) {
+  if (e->v2 == v) {
     return e->v1;
   }
-  else {
-    return -1;
-  }
+
+  return -1;
 }
 
 /**
@@ -1305,7 +1310,7 @@ bool BKE_mesh_minmax(const Mesh *me, float r_min[3], float r_max[3])
   return (me->totvert != 0);
 }
 
-void BKE_mesh_transform(Mesh *me, float mat[4][4], bool do_keys)
+void BKE_mesh_transform(Mesh *me, const float mat[4][4], bool do_keys)
 {
   int i;
   MVert *mvert = me->mvert;
@@ -1406,30 +1411,29 @@ void BKE_mesh_do_versions_cd_flag_init(Mesh *mesh)
   if (UNLIKELY(mesh->cd_flag)) {
     return;
   }
-  else {
-    MVert *mv;
-    MEdge *med;
-    int i;
 
-    for (mv = mesh->mvert, i = 0; i < mesh->totvert; mv++, i++) {
-      if (mv->bweight != 0) {
-        mesh->cd_flag |= ME_CDFLAG_VERT_BWEIGHT;
+  MVert *mv;
+  MEdge *med;
+  int i;
+
+  for (mv = mesh->mvert, i = 0; i < mesh->totvert; mv++, i++) {
+    if (mv->bweight != 0) {
+      mesh->cd_flag |= ME_CDFLAG_VERT_BWEIGHT;
+      break;
+    }
+  }
+
+  for (med = mesh->medge, i = 0; i < mesh->totedge; med++, i++) {
+    if (med->bweight != 0) {
+      mesh->cd_flag |= ME_CDFLAG_EDGE_BWEIGHT;
+      if (mesh->cd_flag & ME_CDFLAG_EDGE_CREASE) {
         break;
       }
     }
-
-    for (med = mesh->medge, i = 0; i < mesh->totedge; med++, i++) {
-      if (med->bweight != 0) {
-        mesh->cd_flag |= ME_CDFLAG_EDGE_BWEIGHT;
-        if (mesh->cd_flag & ME_CDFLAG_EDGE_CREASE) {
-          break;
-        }
-      }
-      if (med->crease != 0) {
-        mesh->cd_flag |= ME_CDFLAG_EDGE_CREASE;
-        if (mesh->cd_flag & ME_CDFLAG_EDGE_BWEIGHT) {
-          break;
-        }
+    if (med->crease != 0) {
+      mesh->cd_flag |= ME_CDFLAG_EDGE_CREASE;
+      if (mesh->cd_flag & ME_CDFLAG_EDGE_BWEIGHT) {
+        break;
       }
     }
   }

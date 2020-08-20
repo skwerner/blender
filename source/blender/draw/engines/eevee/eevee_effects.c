@@ -138,7 +138,7 @@ void EEVEE_effects_init(EEVEE_ViewLayerData *sldata,
   DefaultTextureList *dtxl = DRW_viewport_texture_list_get();
 
   const float *viewport_size = DRW_viewport_size_get();
-  int size_fs[2] = {(int)viewport_size[0], (int)viewport_size[1]};
+  const int size_fs[2] = {(int)viewport_size[0], (int)viewport_size[1]};
 
   /* Shaders */
   if (!e_data.downsample_sh) {
@@ -147,13 +147,14 @@ void EEVEE_effects_init(EEVEE_ViewLayerData *sldata,
 
   if (!stl->effects) {
     stl->effects = MEM_callocN(sizeof(EEVEE_EffectsInfo), "EEVEE_EffectsInfo");
+    stl->effects->taa_render_sample = 1;
   }
 
   effects = stl->effects;
 
   effects->enabled_effects = 0;
   effects->enabled_effects |= (G.debug_value == 9) ? EFFECT_VELOCITY_BUFFER : 0;
-  effects->enabled_effects |= EEVEE_motion_blur_init(sldata, vedata, camera);
+  effects->enabled_effects |= EEVEE_motion_blur_init(sldata, vedata);
   effects->enabled_effects |= EEVEE_bloom_init(sldata, vedata);
   effects->enabled_effects |= EEVEE_depth_of_field_init(sldata, vedata, camera);
   effects->enabled_effects |= EEVEE_temporal_sampling_init(sldata, vedata);
@@ -486,7 +487,7 @@ void EEVEE_downsample_buffer(EEVEE_Data *vedata, GPUTexture *texture_src, int le
 }
 
 /**
- * Simple down-sampling algorithm for cubemap. Reconstruct mip chain up to mip level.
+ * Simple down-sampling algorithm for cube-map. Reconstruct mip chain up to mip level.
  */
 void EEVEE_downsample_cube_buffer(EEVEE_Data *vedata, GPUTexture *texture_src, int level)
 {

@@ -41,6 +41,7 @@
 #include "BLI_linklist.h"
 #include "BLI_listbase.h"
 #include "BLI_path_util.h"
+#include "BLI_session_uuid.h"
 #include "BLI_string.h"
 #include "BLI_string_utils.h"
 #include "BLI_utildefines.h"
@@ -112,9 +113,8 @@ const ModifierTypeInfo *BKE_modifier_get_info(ModifierType type)
   if (type < NUM_MODIFIER_TYPES && modifier_types[type] && modifier_types[type]->name[0] != '\0') {
     return modifier_types[type];
   }
-  else {
-    return NULL;
-  }
+
+  return NULL;
 }
 
 /**
@@ -141,7 +141,7 @@ ModifierData *BKE_modifier_new(int type)
   md->type = type;
   md->mode = eModifierMode_Realtime | eModifierMode_Render;
   md->flag = eModifierFlag_OverrideLibrary_Local;
-  md->ui_expand_flag = 1; /* Only open the main panel at the beginning, not the subpanels. */
+  md->ui_expand_flag = 1; /* Only open the main panel at the beginning, not the sub-panels. */
 
   if (mti->flags & eModifierTypeFlag_EnableInEditmode) {
     md->mode |= eModifierMode_Editmode;
@@ -150,6 +150,8 @@ ModifierData *BKE_modifier_new(int type)
   if (mti->initData) {
     mti->initData(md);
   }
+
+  BKE_modifier_session_uuid_generate(md);
 
   return md;
 }
@@ -191,6 +193,11 @@ void BKE_modifier_free_ex(ModifierData *md, const int flag)
 void BKE_modifier_free(ModifierData *md)
 {
   BKE_modifier_free_ex(md, 0);
+}
+
+void BKE_modifier_session_uuid_generate(ModifierData *md)
+{
+  md->session_uuid = BLI_session_uuid_generate();
 }
 
 bool BKE_modifier_unique_name(ListBase *modifiers, ModifierData *md)
@@ -368,6 +375,17 @@ void BKE_modifier_copydata_ex(ModifierData *md, ModifierData *target, const int 
     else if (mti->foreachObjectLink) {
       mti->foreachObjectLink(target, NULL, (ObjectWalkFunc)modifier_copy_data_id_us_cb, NULL);
     }
+  }
+
+  if (flag & LIB_ID_CREATE_NO_MAIN) {
+    /* Make sure UUID is the same between the source and the target.
+     * This is needed in the cases when UUID is to be preserved and when there is no copyData
+     * callback, or the copyData does not do full byte copy of the modifier data. */
+    target->session_uuid = md->session_uuid;
+  }
+  else {
+    /* In the case copyData made full byte copy force UUID to be re-generated. */
+    BKE_modifier_session_uuid_generate(md);
   }
 }
 
@@ -919,11 +937,10 @@ const char *BKE_modifier_path_relbase(Main *bmain, Object *ob)
   if (G.relbase_valid || ID_IS_LINKED(ob)) {
     return ID_BLEND_PATH(bmain, &ob->id);
   }
-  else {
-    /* last resort, better then using "" which resolves to the current
-     * working directory */
-    return BKE_tempdir_session();
-  }
+
+  /* last resort, better then using "" which resolves to the current
+   * working directory */
+  return BKE_tempdir_session();
 }
 
 const char *BKE_modifier_path_relbase_from_global(Object *ob)
@@ -931,11 +948,10 @@ const char *BKE_modifier_path_relbase_from_global(Object *ob)
   if (G.relbase_valid || ID_IS_LINKED(ob)) {
     return ID_BLEND_PATH_FROM_GLOBAL(&ob->id);
   }
-  else {
-    /* last resort, better then using "" which resolves to the current
-     * working directory */
-    return BKE_tempdir_session();
-  }
+
+  /* last resort, better then using "" which resolves to the current
+   * working directory */
+  return BKE_tempdir_session();
 }
 
 /* initializes the path with either */
@@ -1073,4 +1089,27 @@ struct ModifierData *BKE_modifier_get_evaluated(Depsgraph *depsgraph,
     return md;
   }
   return BKE_modifiers_findby_name(object_eval, md->name);
+}
+
+void BKE_modifier_check_uuids_unique_and_report(const Object *object)
+{
+  struct GSet *used_uuids = BLI_gset_new(
+      BLI_session_uuid_ghash_hash, BLI_session_uuid_ghash_compare, "modifier used uuids");
+
+  LISTBASE_FOREACH (ModifierData *, md, &object->modifiers) {
+    const SessionUUID *session_uuid = &md->session_uuid;
+    if (!BLI_session_uuid_is_generated(session_uuid)) {
+      printf("Modifier %s -> %s does not have UUID generated.\n", object->id.name + 2, md->name);
+      continue;
+    }
+
+    if (BLI_gset_lookup(used_uuids, session_uuid) != NULL) {
+      printf("Modifier %s -> %s has duplicate UUID generated.\n", object->id.name + 2, md->name);
+      continue;
+    }
+
+    BLI_gset_insert(used_uuids, (void *)session_uuid);
+  }
+
+  BLI_gset_free(used_uuids, NULL);
 }

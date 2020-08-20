@@ -71,7 +71,7 @@ void GPENCIL_engine_init(void *ved)
   }
 
   if (txl->dummy_texture == NULL) {
-    float pixels[1][4] = {{1.0f, 0.0f, 1.0f, 1.0f}};
+    const float pixels[1][4] = {{1.0f, 0.0f, 1.0f, 1.0f}};
     txl->dummy_texture = DRW_texture_create_2d(1, 1, GPU_RGBA8, DRW_TEX_WRAP, (float *)pixels);
   }
 
@@ -384,7 +384,7 @@ static void gpencil_drawcall_flush(gpIterPopulateData *iter)
 }
 
 /* Group drawcalls that are consecutive and with the same type. Reduces GPU driver overhead. */
-static void gp_drawcall_add(
+static void gpencil_drawcall_add(
     gpIterPopulateData *iter, struct GPUBatch *geom, bool instancing, int v_first, int v_count)
 {
 #if DISABLE_BATCHING
@@ -414,7 +414,7 @@ static void gpencil_stroke_cache_populate(bGPDlayer *gpl,
                                           bGPDstroke *gps,
                                           void *thunk);
 
-static void gp_sbuffer_cache_populate(gpIterPopulateData *iter)
+static void gpencil_sbuffer_cache_populate(gpIterPopulateData *iter)
 {
   iter->do_sbuffer_call = DRAW_NOW;
   /* In order to draw the sbuffer stroke correctly mixed with other strokes,
@@ -451,7 +451,7 @@ static void gpencil_layer_cache_populate(bGPDlayer *gpl,
   gpencil_drawcall_flush(iter);
 
   if (iter->do_sbuffer_call) {
-    gp_sbuffer_cache_populate(iter);
+    gpencil_sbuffer_cache_populate(iter);
   }
   else {
     iter->do_sbuffer_call = !pd->do_fast_drawing && (gpd == pd->sbuffer_gpd) &&
@@ -488,7 +488,8 @@ static void gpencil_stroke_cache_populate(bGPDlayer *gpl,
   MaterialGPencilStyle *gp_style = BKE_gpencil_material_settings(iter->ob, gps->mat_nr + 1);
 
   bool hide_material = (gp_style->flag & GP_MATERIAL_HIDE) != 0;
-  bool show_stroke = (gp_style->flag & GP_MATERIAL_STROKE_SHOW) != 0;
+  bool show_stroke = ((gp_style->flag & GP_MATERIAL_STROKE_SHOW) != 0) ||
+                     ((gps->flag & GP_STROKE_NOFILL) != 0);
   bool show_fill = (gps->tot_triangles > 0) && ((gp_style->flag & GP_MATERIAL_FILL_SHOW) != 0) &&
                    (!iter->pd->simplify_fill) && ((gps->flag & GP_STROKE_NOFILL) == 0);
 
@@ -525,12 +526,6 @@ static void gpencil_stroke_cache_populate(bGPDlayer *gpl,
       DRW_shgroup_uniform_texture(iter->grp, "gpStrokeTexture", tex_stroke);
       iter->tex_stroke = tex_stroke;
     }
-
-    /* TODO(fclem): This is a quick workaround but
-     * ideally we should have this as a permanent bind. */
-    const bool is_masked = iter->tgp_ob->layers.last->mask_bits != NULL;
-    GPUTexture **mask_tex = (is_masked) ? &iter->pd->mask_tx : &iter->pd->dummy_tx;
-    DRW_shgroup_uniform_texture_ref(iter->grp, "gpMaskTexture", mask_tex);
   }
 
   bool do_sbuffer = (iter->do_sbuffer_call == DRAW_NOW);
@@ -540,7 +535,7 @@ static void gpencil_stroke_cache_populate(bGPDlayer *gpl,
                                   DRW_cache_gpencil_fills_get(iter->ob, iter->pd->cfra);
     int vfirst = gps->runtime.fill_start * 3;
     int vcount = gps->tot_triangles * 3;
-    gp_drawcall_add(iter, geom, false, vfirst, vcount);
+    gpencil_drawcall_add(iter, geom, false, vfirst, vcount);
   }
 
   if (show_stroke) {
@@ -550,13 +545,13 @@ static void gpencil_stroke_cache_populate(bGPDlayer *gpl,
     int vfirst = gps->runtime.stroke_start - 1;
     /* Include "potential" cyclic vertex and start adj vertex (see shader). */
     int vcount = gps->totpoints + 1 + 1;
-    gp_drawcall_add(iter, geom, true, vfirst, vcount);
+    gpencil_drawcall_add(iter, geom, true, vfirst, vcount);
   }
 
   iter->stroke_index_last = gps->runtime.stroke_start + gps->totpoints + 1;
 }
 
-static void gp_sbuffer_cache_populate_fast(GPENCIL_Data *vedata, gpIterPopulateData *iter)
+static void gpencil_sbuffer_cache_populate_fast(GPENCIL_Data *vedata, gpIterPopulateData *iter)
 {
   bGPdata *gpd = (bGPdata *)iter->ob->data;
   if (gpd != iter->pd->sbuffer_gpd) {
@@ -633,13 +628,13 @@ void GPENCIL_cache_populate(void *ved, Object *ob)
     gpencil_drawcall_flush(&iter);
 
     if (iter.do_sbuffer_call) {
-      gp_sbuffer_cache_populate(&iter);
+      gpencil_sbuffer_cache_populate(&iter);
     }
 
     gpencil_vfx_cache_populate(vedata, ob, iter.tgp_ob);
 
     if (pd->do_fast_drawing) {
-      gp_sbuffer_cache_populate_fast(vedata, &iter);
+      gpencil_sbuffer_cache_populate_fast(vedata, &iter);
     }
   }
 
@@ -772,7 +767,7 @@ static void gpencil_draw_mask(GPENCIL_Data *vedata, GPENCIL_tObject *ob, GPENCIL
 {
   GPENCIL_PassList *psl = vedata->psl;
   GPENCIL_FramebufferList *fbl = vedata->fbl;
-  float clear_col[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+  const float clear_col[4] = {1.0f, 1.0f, 1.0f, 1.0f};
   float clear_depth = ob->is_drawmode3d ? 1.0f : 0.0f;
   bool inverted = false;
   /* OPTI(fclem) we could optimize by only clearing if the new mask_bits does not contain all
@@ -819,7 +814,7 @@ static void GPENCIL_draw_object(GPENCIL_Data *vedata, GPENCIL_tObject *ob)
   GPENCIL_PassList *psl = vedata->psl;
   GPENCIL_PrivateData *pd = vedata->stl->pd;
   GPENCIL_FramebufferList *fbl = vedata->fbl;
-  float clear_cols[2][4] = {{0.0f, 0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}};
+  const float clear_cols[2][4] = {{0.0f, 0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}};
 
   DRW_stats_group_start("GPencil Object");
 

@@ -63,7 +63,7 @@ static struct GPUTexture *gpencil_image_texture_get(Image *image, bool *r_alpha_
   ibuf = BKE_image_acquire_ibuf(image, &iuser, &lock);
 
   if (ibuf != NULL && ibuf->rect != NULL) {
-    gpu_tex = GPU_texture_from_blender(image, &iuser, ibuf, GL_TEXTURE_2D);
+    gpu_tex = BKE_image_get_gpu_texture(image, &iuser, ibuf);
     *r_alpha_premult = (image->alpha_mode == IMA_ALPHA_PREMUL);
   }
   BKE_image_release_ibuf(image, ibuf, lock);
@@ -359,12 +359,11 @@ static float light_power_get(const Light *la)
   if (la->type == LA_AREA) {
     return 1.0f / (4.0f * M_PI);
   }
-  else if (la->type == LA_SPOT || la->type == LA_LOCAL) {
+  if (la->type == LA_SPOT || la->type == LA_LOCAL) {
     return 1.0f / (4.0f * M_PI * M_PI);
   }
-  else {
-    return 1.0f / M_PI;
-  }
+
+  return 1.0f / M_PI;
 }
 
 void gpencil_light_pool_populate(GPENCIL_LightPool *lightpool, Object *ob)

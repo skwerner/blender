@@ -81,14 +81,14 @@ static int Interface0DIterator_init(BPy_Interface0DIterator *self, PyObject *arg
     self->at_start = true;
     self->reversed = false;
   }
-  else if (PyErr_Clear(),
+  else if ((void)PyErr_Clear(),
            PyArg_ParseTupleAndKeywords(
                args, kwds, "O!", (char **)kwlist_2, &Interface1D_Type, &inter)) {
     self->if0D_it = new Interface0DIterator(((BPy_Interface1D *)inter)->if1D->verticesBegin());
     self->at_start = true;
     self->reversed = false;
   }
-  else if (PyErr_Clear(),
+  else if ((void)PyErr_Clear(),
            PyArg_ParseTupleAndKeywords(
                args, kwds, "O!", (char **)kwlist_3, &Interface0DIterator_Type, &brother)) {
     self->if0D_it = new Interface0DIterator(*(((BPy_Interface0DIterator *)brother)->if0D_it));
@@ -124,7 +124,7 @@ static PyObject *Interface0DIterator_iternext(BPy_Interface0DIterator *self)
       PyErr_SetNone(PyExc_StopIteration);
       return NULL;
     }
-    else if (self->at_start) {
+    if (self->at_start) {
       self->at_start = false;
     }
     else if (self->if0D_it->atLast()) {

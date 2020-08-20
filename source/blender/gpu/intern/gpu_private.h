@@ -18,8 +18,11 @@
  * \ingroup gpu
  */
 
-#ifndef __GPU_PRIVATE_H__
-#define __GPU_PRIVATE_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* call this before running any of the functions below */
 void gpu_platform_init(void);
@@ -41,4 +44,6 @@ void gpu_framebuffer_module_exit(void);
 void gpu_pbvh_init(void);
 void gpu_pbvh_exit(void);
 
-#endif /* __GPU_PRIVATE_H__ */
+#ifdef __cplusplus
+}
+#endif

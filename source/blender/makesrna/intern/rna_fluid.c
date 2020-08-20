@@ -77,7 +77,7 @@ static void rna_Fluid_datacache_reset(Main *UNUSED(bmain), Scene *UNUSED(scene),
 {
 #  ifdef WITH_FLUID
   FluidDomainSettings *settings = (FluidDomainSettings *)ptr->data;
-  if (settings->mmd && settings->mmd->domain) {
+  if (settings->fmd && settings->fmd->domain) {
     Object *ob = (Object *)ptr->owner_id;
     int cache_map = (FLUID_DOMAIN_OUTDATED_DATA | FLUID_DOMAIN_OUTDATED_NOISE |
                      FLUID_DOMAIN_OUTDATED_MESH | FLUID_DOMAIN_OUTDATED_PARTICLES);
@@ -90,7 +90,7 @@ static void rna_Fluid_noisecache_reset(Main *UNUSED(bmain), Scene *UNUSED(scene)
 {
 #  ifdef WITH_FLUID
   FluidDomainSettings *settings = (FluidDomainSettings *)ptr->data;
-  if (settings->mmd && settings->mmd->domain) {
+  if (settings->fmd && settings->fmd->domain) {
     Object *ob = (Object *)ptr->owner_id;
     int cache_map = FLUID_DOMAIN_OUTDATED_NOISE;
     BKE_fluid_cache_free(settings, ob, cache_map);
@@ -102,7 +102,7 @@ static void rna_Fluid_meshcache_reset(Main *UNUSED(bmain), Scene *UNUSED(scene),
 {
 #  ifdef WITH_FLUID
   FluidDomainSettings *settings = (FluidDomainSettings *)ptr->data;
-  if (settings->mmd && settings->mmd->domain) {
+  if (settings->fmd && settings->fmd->domain) {
     Object *ob = (Object *)ptr->owner_id;
     int cache_map = FLUID_DOMAIN_OUTDATED_MESH;
     BKE_fluid_cache_free(settings, ob, cache_map);
@@ -116,7 +116,7 @@ static void rna_Fluid_particlescache_reset(Main *UNUSED(bmain),
 {
 #  ifdef WITH_FLUID
   FluidDomainSettings *settings = (FluidDomainSettings *)ptr->data;
-  if (settings->mmd && settings->mmd->domain) {
+  if (settings->fmd && settings->fmd->domain) {
     Object *ob = (Object *)ptr->owner_id;
     int cache_map = FLUID_DOMAIN_OUTDATED_PARTICLES;
     BKE_fluid_cache_free(settings, ob, cache_map);
@@ -130,7 +130,7 @@ static void rna_Fluid_guidingcache_reset(Main *UNUSED(bmain),
 {
 #  ifdef WITH_FLUID
   FluidDomainSettings *settings = (FluidDomainSettings *)ptr->data;
-  if (settings->mmd && settings->mmd->domain) {
+  if (settings->fmd && settings->fmd->domain) {
     Object *ob = (Object *)ptr->owner_id;
     int cache_map = (FLUID_DOMAIN_OUTDATED_DATA | FLUID_DOMAIN_OUTDATED_NOISE |
                      FLUID_DOMAIN_OUTDATED_MESH | FLUID_DOMAIN_OUTDATED_PARTICLES |
@@ -161,14 +161,47 @@ static void rna_Fluid_flow_reset(Main *bmain, Scene *scene, PointerRNA *ptr)
   rna_Fluid_update(bmain, scene, ptr);
 }
 
-static void rna_Fluid_domain_reset(Main *bmain, Scene *scene, PointerRNA *ptr)
+static void rna_Fluid_domain_data_reset(Main *bmain, Scene *scene, PointerRNA *ptr)
 {
 #  ifdef WITH_FLUID
   FluidDomainSettings *settings = (FluidDomainSettings *)ptr->data;
-  BKE_fluid_modifier_reset(settings->mmd);
+  BKE_fluid_modifier_reset(settings->fmd);
 #  endif
 
   rna_Fluid_datacache_reset(bmain, scene, ptr);
+  rna_Fluid_update(bmain, scene, ptr);
+}
+
+static void rna_Fluid_domain_noise_reset(Main *bmain, Scene *scene, PointerRNA *ptr)
+{
+#  ifdef WITH_FLUID
+  FluidDomainSettings *settings = (FluidDomainSettings *)ptr->data;
+  BKE_fluid_modifier_reset(settings->fmd);
+#  endif
+
+  rna_Fluid_noisecache_reset(bmain, scene, ptr);
+  rna_Fluid_update(bmain, scene, ptr);
+}
+
+static void rna_Fluid_domain_mesh_reset(Main *bmain, Scene *scene, PointerRNA *ptr)
+{
+#  ifdef WITH_FLUID
+  FluidDomainSettings *settings = (FluidDomainSettings *)ptr->data;
+  BKE_fluid_modifier_reset(settings->fmd);
+#  endif
+
+  rna_Fluid_meshcache_reset(bmain, scene, ptr);
+  rna_Fluid_update(bmain, scene, ptr);
+}
+
+static void rna_Fluid_domain_particles_reset(Main *bmain, Scene *scene, PointerRNA *ptr)
+{
+#  ifdef WITH_FLUID
+  FluidDomainSettings *settings = (FluidDomainSettings *)ptr->data;
+  BKE_fluid_modifier_reset(settings->fmd);
+#  endif
+
+  rna_Fluid_particlescache_reset(bmain, scene, ptr);
   rna_Fluid_update(bmain, scene, ptr);
 }
 
@@ -176,7 +209,7 @@ static void rna_Fluid_reset_dependency(Main *bmain, Scene *scene, PointerRNA *pt
 {
 #  ifdef WITH_FLUID
   FluidDomainSettings *settings = (FluidDomainSettings *)ptr->data;
-  BKE_fluid_modifier_reset(settings->mmd);
+  BKE_fluid_modifier_reset(settings->fmd);
 #  endif
 
   rna_Fluid_dependency_update(bmain, scene, ptr);
@@ -223,27 +256,27 @@ static bool rna_Fluid_parts_exists(PointerRNA *ptr, int ptype)
 static void rna_Fluid_flip_parts_update(Main *bmain, Scene *scene, PointerRNA *ptr)
 {
   Object *ob = (Object *)ptr->owner_id;
-  FluidModifierData *mmd;
-  mmd = (FluidModifierData *)BKE_modifiers_findby_type(ob, eModifierType_Fluid);
+  FluidModifierData *fmd;
+  fmd = (FluidModifierData *)BKE_modifiers_findby_type(ob, eModifierType_Fluid);
   bool exists = rna_Fluid_parts_exists(ptr, PART_FLUID_FLIP);
 
   /* Only create a particle system in liquid domain mode.
    * Remove any remaining data from a liquid sim when switching to gas. */
-  if (mmd->domain->type != FLUID_DOMAIN_TYPE_LIQUID) {
+  if (fmd->domain->type != FLUID_DOMAIN_TYPE_LIQUID) {
     rna_Fluid_parts_delete(ptr, PART_FLUID_FLIP);
-    mmd->domain->particle_type &= ~FLUID_DOMAIN_PARTICLE_FLIP;
-    rna_Fluid_domain_reset(bmain, scene, ptr);
+    fmd->domain->particle_type &= ~FLUID_DOMAIN_PARTICLE_FLIP;
+    rna_Fluid_domain_data_reset(bmain, scene, ptr);
     return;
   }
 
   if (ob->type == OB_MESH && !exists) {
     rna_Fluid_parts_create(
         bmain, ptr, "LiquidParticleSettings", "Liquid", "Liquid Particle System", PART_FLUID_FLIP);
-    mmd->domain->particle_type |= FLUID_DOMAIN_PARTICLE_FLIP;
+    fmd->domain->particle_type |= FLUID_DOMAIN_PARTICLE_FLIP;
   }
   else {
     rna_Fluid_parts_delete(ptr, PART_FLUID_FLIP);
-    mmd->domain->particle_type &= ~FLUID_DOMAIN_PARTICLE_FLIP;
+    fmd->domain->particle_type &= ~FLUID_DOMAIN_PARTICLE_FLIP;
   }
   rna_Fluid_update(bmain, scene, ptr);
 }
@@ -251,26 +284,26 @@ static void rna_Fluid_flip_parts_update(Main *bmain, Scene *scene, PointerRNA *p
 static void rna_Fluid_spray_parts_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
 {
   Object *ob = (Object *)ptr->owner_id;
-  FluidModifierData *mmd;
-  mmd = (FluidModifierData *)BKE_modifiers_findby_type(ob, eModifierType_Fluid);
+  FluidModifierData *fmd;
+  fmd = (FluidModifierData *)BKE_modifiers_findby_type(ob, eModifierType_Fluid);
   bool exists = rna_Fluid_parts_exists(ptr, PART_FLUID_SPRAY);
 
   if (ob->type == OB_MESH && !exists) {
     rna_Fluid_parts_create(
         bmain, ptr, "SprayParticleSettings", "Spray", "Spray Particle System", PART_FLUID_SPRAY);
-    mmd->domain->particle_type |= FLUID_DOMAIN_PARTICLE_SPRAY;
+    fmd->domain->particle_type |= FLUID_DOMAIN_PARTICLE_SPRAY;
   }
   else {
     rna_Fluid_parts_delete(ptr, PART_FLUID_SPRAY);
-    mmd->domain->particle_type &= ~FLUID_DOMAIN_PARTICLE_SPRAY;
+    fmd->domain->particle_type &= ~FLUID_DOMAIN_PARTICLE_SPRAY;
   }
 }
 
 static void rna_Fluid_bubble_parts_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
 {
   Object *ob = (Object *)ptr->owner_id;
-  FluidModifierData *mmd;
-  mmd = (FluidModifierData *)BKE_modifiers_findby_type(ob, eModifierType_Fluid);
+  FluidModifierData *fmd;
+  fmd = (FluidModifierData *)BKE_modifiers_findby_type(ob, eModifierType_Fluid);
   bool exists = rna_Fluid_parts_exists(ptr, PART_FLUID_BUBBLE);
 
   if (ob->type == OB_MESH && !exists) {
@@ -280,37 +313,37 @@ static void rna_Fluid_bubble_parts_update(Main *bmain, Scene *UNUSED(scene), Poi
                            "Bubbles",
                            "Bubble Particle System",
                            PART_FLUID_BUBBLE);
-    mmd->domain->particle_type |= FLUID_DOMAIN_PARTICLE_BUBBLE;
+    fmd->domain->particle_type |= FLUID_DOMAIN_PARTICLE_BUBBLE;
   }
   else {
     rna_Fluid_parts_delete(ptr, PART_FLUID_BUBBLE);
-    mmd->domain->particle_type &= ~FLUID_DOMAIN_PARTICLE_BUBBLE;
+    fmd->domain->particle_type &= ~FLUID_DOMAIN_PARTICLE_BUBBLE;
   }
 }
 
 static void rna_Fluid_foam_parts_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
 {
   Object *ob = (Object *)ptr->owner_id;
-  FluidModifierData *mmd;
-  mmd = (FluidModifierData *)BKE_modifiers_findby_type(ob, eModifierType_Fluid);
+  FluidModifierData *fmd;
+  fmd = (FluidModifierData *)BKE_modifiers_findby_type(ob, eModifierType_Fluid);
   bool exists = rna_Fluid_parts_exists(ptr, PART_FLUID_FOAM);
 
   if (ob->type == OB_MESH && !exists) {
     rna_Fluid_parts_create(
         bmain, ptr, "FoamParticleSettings", "Foam", "Foam Particle System", PART_FLUID_FOAM);
-    mmd->domain->particle_type |= FLUID_DOMAIN_PARTICLE_FOAM;
+    fmd->domain->particle_type |= FLUID_DOMAIN_PARTICLE_FOAM;
   }
   else {
     rna_Fluid_parts_delete(ptr, PART_FLUID_FOAM);
-    mmd->domain->particle_type &= ~FLUID_DOMAIN_PARTICLE_FOAM;
+    fmd->domain->particle_type &= ~FLUID_DOMAIN_PARTICLE_FOAM;
   }
 }
 
 static void rna_Fluid_tracer_parts_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
 {
   Object *ob = (Object *)ptr->owner_id;
-  FluidModifierData *mmd;
-  mmd = (FluidModifierData *)BKE_modifiers_findby_type(ob, eModifierType_Fluid);
+  FluidModifierData *fmd;
+  fmd = (FluidModifierData *)BKE_modifiers_findby_type(ob, eModifierType_Fluid);
   bool exists = rna_Fluid_parts_exists(ptr, PART_FLUID_TRACER);
 
   if (ob->type == OB_MESH && !exists) {
@@ -320,21 +353,21 @@ static void rna_Fluid_tracer_parts_update(Main *bmain, Scene *UNUSED(scene), Poi
                            "Tracers",
                            "Tracer Particle System",
                            PART_FLUID_TRACER);
-    mmd->domain->particle_type |= FLUID_DOMAIN_PARTICLE_TRACER;
+    fmd->domain->particle_type |= FLUID_DOMAIN_PARTICLE_TRACER;
   }
   else {
     rna_Fluid_parts_delete(ptr, PART_FLUID_TRACER);
-    mmd->domain->particle_type &= ~FLUID_DOMAIN_PARTICLE_TRACER;
+    fmd->domain->particle_type &= ~FLUID_DOMAIN_PARTICLE_TRACER;
   }
 }
 
 static void rna_Fluid_combined_export_update(Main *bmain, Scene *scene, PointerRNA *ptr)
 {
   Object *ob = (Object *)ptr->owner_id;
-  FluidModifierData *mmd;
-  mmd = (FluidModifierData *)BKE_modifiers_findby_type(ob, eModifierType_Fluid);
+  FluidModifierData *fmd;
+  fmd = (FluidModifierData *)BKE_modifiers_findby_type(ob, eModifierType_Fluid);
 
-  if (mmd->domain->sndparticle_combined_export == SNDPARTICLE_COMBINED_EXPORT_OFF) {
+  if (fmd->domain->sndparticle_combined_export == SNDPARTICLE_COMBINED_EXPORT_OFF) {
     rna_Fluid_parts_delete(ptr, PART_FLUID_SPRAYFOAM);
     rna_Fluid_parts_delete(ptr, PART_FLUID_SPRAYBUBBLE);
     rna_Fluid_parts_delete(ptr, PART_FLUID_FOAMBUBBLE);
@@ -345,17 +378,17 @@ static void rna_Fluid_combined_export_update(Main *bmain, Scene *scene, PointerR
     bool exists_bubble = rna_Fluid_parts_exists(ptr, PART_FLUID_BUBBLE);
 
     /* Re-add each particle type if enabled and no particle system exists for them anymore. */
-    if ((mmd->domain->particle_type & FLUID_DOMAIN_PARTICLE_SPRAY) && !exists_spray) {
+    if ((fmd->domain->particle_type & FLUID_DOMAIN_PARTICLE_SPRAY) && !exists_spray) {
       rna_Fluid_spray_parts_update(bmain, scene, ptr);
     }
-    if ((mmd->domain->particle_type & FLUID_DOMAIN_PARTICLE_FOAM) && !exists_foam) {
+    if ((fmd->domain->particle_type & FLUID_DOMAIN_PARTICLE_FOAM) && !exists_foam) {
       rna_Fluid_foam_parts_update(bmain, scene, ptr);
     }
-    if ((mmd->domain->particle_type & FLUID_DOMAIN_PARTICLE_BUBBLE) && !exists_bubble) {
+    if ((fmd->domain->particle_type & FLUID_DOMAIN_PARTICLE_BUBBLE) && !exists_bubble) {
       rna_Fluid_bubble_parts_update(bmain, scene, ptr);
     }
   }
-  else if (mmd->domain->sndparticle_combined_export == SNDPARTICLE_COMBINED_EXPORT_SPRAY_FOAM) {
+  else if (fmd->domain->sndparticle_combined_export == SNDPARTICLE_COMBINED_EXPORT_SPRAY_FOAM) {
     if (ob->type == OB_MESH && !rna_Fluid_parts_exists(ptr, PART_FLUID_SPRAYFOAM)) {
 
       rna_Fluid_parts_create(bmain,
@@ -365,8 +398,8 @@ static void rna_Fluid_combined_export_update(Main *bmain, Scene *scene, PointerR
                              "Spray + Foam Particle System",
                              PART_FLUID_SPRAYFOAM);
 
-      mmd->domain->particle_type |= FLUID_DOMAIN_PARTICLE_SPRAY;
-      mmd->domain->particle_type |= FLUID_DOMAIN_PARTICLE_FOAM;
+      fmd->domain->particle_type |= FLUID_DOMAIN_PARTICLE_SPRAY;
+      fmd->domain->particle_type |= FLUID_DOMAIN_PARTICLE_FOAM;
 
       rna_Fluid_parts_delete(ptr, PART_FLUID_SPRAY);
       rna_Fluid_parts_delete(ptr, PART_FLUID_FOAM);
@@ -376,12 +409,12 @@ static void rna_Fluid_combined_export_update(Main *bmain, Scene *scene, PointerR
 
       /* Re-add spray if enabled and no particle system exists for it anymore. */
       bool exists_bubble = rna_Fluid_parts_exists(ptr, PART_FLUID_BUBBLE);
-      if ((mmd->domain->particle_type & FLUID_DOMAIN_PARTICLE_BUBBLE) && !exists_bubble) {
+      if ((fmd->domain->particle_type & FLUID_DOMAIN_PARTICLE_BUBBLE) && !exists_bubble) {
         rna_Fluid_bubble_parts_update(bmain, scene, ptr);
       }
     }
   }
-  else if (mmd->domain->sndparticle_combined_export == SNDPARTICLE_COMBINED_EXPORT_SPRAY_BUBBLE) {
+  else if (fmd->domain->sndparticle_combined_export == SNDPARTICLE_COMBINED_EXPORT_SPRAY_BUBBLE) {
     if (ob->type == OB_MESH && !rna_Fluid_parts_exists(ptr, PART_FLUID_SPRAYBUBBLE)) {
 
       rna_Fluid_parts_create(bmain,
@@ -391,8 +424,8 @@ static void rna_Fluid_combined_export_update(Main *bmain, Scene *scene, PointerR
                              "Spray + Bubble Particle System",
                              PART_FLUID_SPRAYBUBBLE);
 
-      mmd->domain->particle_type |= FLUID_DOMAIN_PARTICLE_SPRAY;
-      mmd->domain->particle_type |= FLUID_DOMAIN_PARTICLE_BUBBLE;
+      fmd->domain->particle_type |= FLUID_DOMAIN_PARTICLE_SPRAY;
+      fmd->domain->particle_type |= FLUID_DOMAIN_PARTICLE_BUBBLE;
 
       rna_Fluid_parts_delete(ptr, PART_FLUID_SPRAY);
       rna_Fluid_parts_delete(ptr, PART_FLUID_BUBBLE);
@@ -402,12 +435,12 @@ static void rna_Fluid_combined_export_update(Main *bmain, Scene *scene, PointerR
 
       /* Re-add foam if enabled and no particle system exists for it anymore. */
       bool exists_foam = rna_Fluid_parts_exists(ptr, PART_FLUID_FOAM);
-      if ((mmd->domain->particle_type & FLUID_DOMAIN_PARTICLE_FOAM) && !exists_foam) {
+      if ((fmd->domain->particle_type & FLUID_DOMAIN_PARTICLE_FOAM) && !exists_foam) {
         rna_Fluid_foam_parts_update(bmain, scene, ptr);
       }
     }
   }
-  else if (mmd->domain->sndparticle_combined_export == SNDPARTICLE_COMBINED_EXPORT_FOAM_BUBBLE) {
+  else if (fmd->domain->sndparticle_combined_export == SNDPARTICLE_COMBINED_EXPORT_FOAM_BUBBLE) {
     if (ob->type == OB_MESH && !rna_Fluid_parts_exists(ptr, PART_FLUID_FOAMBUBBLE)) {
 
       rna_Fluid_parts_create(bmain,
@@ -417,8 +450,8 @@ static void rna_Fluid_combined_export_update(Main *bmain, Scene *scene, PointerR
                              "Foam + Bubble Particle System",
                              PART_FLUID_FOAMBUBBLE);
 
-      mmd->domain->particle_type |= FLUID_DOMAIN_PARTICLE_FOAM;
-      mmd->domain->particle_type |= FLUID_DOMAIN_PARTICLE_BUBBLE;
+      fmd->domain->particle_type |= FLUID_DOMAIN_PARTICLE_FOAM;
+      fmd->domain->particle_type |= FLUID_DOMAIN_PARTICLE_BUBBLE;
 
       rna_Fluid_parts_delete(ptr, PART_FLUID_FOAM);
       rna_Fluid_parts_delete(ptr, PART_FLUID_BUBBLE);
@@ -428,12 +461,12 @@ static void rna_Fluid_combined_export_update(Main *bmain, Scene *scene, PointerR
 
       /* Re-add foam if enabled and no particle system exists for it anymore. */
       bool exists_spray = rna_Fluid_parts_exists(ptr, PART_FLUID_SPRAY);
-      if ((mmd->domain->particle_type & FLUID_DOMAIN_PARTICLE_SPRAY) && !exists_spray) {
+      if ((fmd->domain->particle_type & FLUID_DOMAIN_PARTICLE_SPRAY) && !exists_spray) {
         rna_Fluid_spray_parts_update(bmain, scene, ptr);
       }
     }
   }
-  else if (mmd->domain->sndparticle_combined_export ==
+  else if (fmd->domain->sndparticle_combined_export ==
            SNDPARTICLE_COMBINED_EXPORT_SPRAY_FOAM_BUBBLE) {
     if (ob->type == OB_MESH && !rna_Fluid_parts_exists(ptr, PART_FLUID_SPRAYFOAMBUBBLE)) {
 
@@ -444,9 +477,9 @@ static void rna_Fluid_combined_export_update(Main *bmain, Scene *scene, PointerR
                              "Spray + Foam + Bubble Particle System",
                              PART_FLUID_SPRAYFOAMBUBBLE);
 
-      mmd->domain->particle_type |= FLUID_DOMAIN_PARTICLE_SPRAY;
-      mmd->domain->particle_type |= FLUID_DOMAIN_PARTICLE_FOAM;
-      mmd->domain->particle_type |= FLUID_DOMAIN_PARTICLE_BUBBLE;
+      fmd->domain->particle_type |= FLUID_DOMAIN_PARTICLE_SPRAY;
+      fmd->domain->particle_type |= FLUID_DOMAIN_PARTICLE_FOAM;
+      fmd->domain->particle_type |= FLUID_DOMAIN_PARTICLE_BUBBLE;
 
       rna_Fluid_parts_delete(ptr, PART_FLUID_SPRAY);
       rna_Fluid_parts_delete(ptr, PART_FLUID_FOAM);
@@ -512,20 +545,20 @@ static void rna_Fluid_guide_parent_set(struct PointerRNA *ptr,
                                        struct PointerRNA value,
                                        struct ReportList *UNUSED(reports))
 {
-  FluidDomainSettings *mds = (FluidDomainSettings *)ptr->data;
+  FluidDomainSettings *fds = (FluidDomainSettings *)ptr->data;
   Object *par = (Object *)value.data;
 
-  FluidModifierData *mmd_par = NULL;
+  FluidModifierData *fmd_par = NULL;
 
   if (par != NULL) {
-    mmd_par = (FluidModifierData *)BKE_modifiers_findby_type(par, eModifierType_Fluid);
-    if (mmd_par && mmd_par->domain) {
-      mds->guide_parent = value.data;
-      copy_v3_v3_int(mds->guide_res, mmd_par->domain->res);
+    fmd_par = (FluidModifierData *)BKE_modifiers_findby_type(par, eModifierType_Fluid);
+    if (fmd_par && fmd_par->domain) {
+      fds->guide_parent = value.data;
+      copy_v3_v3_int(fds->guide_res, fmd_par->domain->res);
     }
   }
   else {
-    mds->guide_parent = NULL;
+    fds->guide_parent = NULL;
   }
 }
 
@@ -557,7 +590,7 @@ static const EnumPropertyItem *rna_Fluid_cachetype_mesh_itemf(bContext *UNUSED(C
 }
 
 static const EnumPropertyItem *rna_Fluid_cachetype_volume_itemf(bContext *UNUSED(C),
-                                                                PointerRNA *UNUSED(ptr),
+                                                                PointerRNA *ptr,
                                                                 PropertyRNA *UNUSED(prop),
                                                                 bool *r_free)
 {
@@ -579,11 +612,16 @@ static const EnumPropertyItem *rna_Fluid_cachetype_volume_itemf(bContext *UNUSED
   RNA_enum_item_add(&item, &totitem, &tmp);
 #  endif
 
-  tmp.value = FLUID_DOMAIN_FILE_RAW;
-  tmp.identifier = "RAW";
-  tmp.name = "Raw Cache";
-  tmp.description = "Raw file format (.raw)";
-  RNA_enum_item_add(&item, &totitem, &tmp);
+  /* Support for deprecated .raw format. */
+  FluidDomainSettings *fds = (FluidDomainSettings *)ptr->data;
+  if (fds->cache_data_format == FLUID_DOMAIN_FILE_RAW ||
+      fds->cache_noise_format == FLUID_DOMAIN_FILE_RAW) {
+    tmp.value = FLUID_DOMAIN_FILE_RAW;
+    tmp.identifier = "RAW";
+    tmp.name = "Raw Cache";
+    tmp.description = "Raw file format (.raw)";
+    RNA_enum_item_add(&item, &totitem, &tmp);
+  }
 
   RNA_enum_item_end(&item, &totitem);
   *r_free = true;
@@ -637,7 +675,7 @@ static void rna_Fluid_domaintype_set(struct PointerRNA *ptr, int value)
 static char *rna_FluidDomainSettings_path(PointerRNA *ptr)
 {
   FluidDomainSettings *settings = (FluidDomainSettings *)ptr->data;
-  ModifierData *md = (ModifierData *)settings->mmd;
+  ModifierData *md = (ModifierData *)settings->fmd;
   char name_esc[sizeof(md->name) * 2];
 
   BLI_strescape(name_esc, md->name, sizeof(name_esc));
@@ -647,7 +685,7 @@ static char *rna_FluidDomainSettings_path(PointerRNA *ptr)
 static char *rna_FluidFlowSettings_path(PointerRNA *ptr)
 {
   FluidFlowSettings *settings = (FluidFlowSettings *)ptr->data;
-  ModifierData *md = (ModifierData *)settings->mmd;
+  ModifierData *md = (ModifierData *)settings->fmd;
   char name_esc[sizeof(md->name) * 2];
 
   BLI_strescape(name_esc, md->name, sizeof(name_esc));
@@ -657,7 +695,7 @@ static char *rna_FluidFlowSettings_path(PointerRNA *ptr)
 static char *rna_FluidEffectorSettings_path(PointerRNA *ptr)
 {
   FluidEffectorSettings *settings = (FluidEffectorSettings *)ptr->data;
-  ModifierData *md = (ModifierData *)settings->mmd;
+  ModifierData *md = (ModifierData *)settings->fmd;
   char name_esc[sizeof(md->name) * 2];
 
   BLI_strescape(name_esc, md->name, sizeof(name_esc));
@@ -672,23 +710,23 @@ static char *rna_FluidEffectorSettings_path(PointerRNA *ptr)
 
 static int rna_FluidModifier_grid_get_length(PointerRNA *ptr, int length[RNA_MAX_ARRAY_DIMENSION])
 {
-  FluidDomainSettings *mds = (FluidDomainSettings *)ptr->data;
+  FluidDomainSettings *fds = (FluidDomainSettings *)ptr->data;
   float *density = NULL;
   int size = 0;
 
-  if (mds->flags & FLUID_DOMAIN_USE_NOISE && mds->fluid) {
+  if (fds->flags & FLUID_DOMAIN_USE_NOISE && fds->fluid) {
     /* high resolution smoke */
     int res[3];
 
-    manta_smoke_turbulence_get_res(mds->fluid, res);
+    manta_noise_get_res(fds->fluid, res);
     size = res[0] * res[1] * res[2];
 
-    density = manta_smoke_turbulence_get_density(mds->fluid);
+    density = manta_noise_get_density(fds->fluid);
   }
-  else if (mds->fluid) {
+  else if (fds->fluid) {
     /* regular resolution */
-    size = mds->res[0] * mds->res[1] * mds->res[2];
-    density = manta_smoke_get_density(mds->fluid);
+    size = fds->res[0] * fds->res[1] * fds->res[2];
+    density = manta_smoke_get_density(fds->fluid);
   }
 
   length[0] = (density) ? size : 0;
@@ -707,18 +745,18 @@ static int rna_FluidModifier_color_grid_get_length(PointerRNA *ptr,
 static int rna_FluidModifier_velocity_grid_get_length(PointerRNA *ptr,
                                                       int length[RNA_MAX_ARRAY_DIMENSION])
 {
-  FluidDomainSettings *mds = (FluidDomainSettings *)ptr->data;
+  FluidDomainSettings *fds = (FluidDomainSettings *)ptr->data;
   float *vx = NULL;
   float *vy = NULL;
   float *vz = NULL;
   int size = 0;
 
   /* Velocity data is always low-resolution. */
-  if (mds->fluid) {
-    size = 3 * mds->res[0] * mds->res[1] * mds->res[2];
-    vx = manta_get_velocity_x(mds->fluid);
-    vy = manta_get_velocity_y(mds->fluid);
-    vz = manta_get_velocity_z(mds->fluid);
+  if (fds->fluid) {
+    size = 3 * fds->res[0] * fds->res[1] * fds->res[2];
+    vx = manta_get_velocity_x(fds->fluid);
+    vy = manta_get_velocity_y(fds->fluid);
+    vz = manta_get_velocity_z(fds->fluid);
   }
 
   length[0] = (vx && vy && vz) ? size : 0;
@@ -728,14 +766,14 @@ static int rna_FluidModifier_velocity_grid_get_length(PointerRNA *ptr,
 static int rna_FluidModifier_heat_grid_get_length(PointerRNA *ptr,
                                                   int length[RNA_MAX_ARRAY_DIMENSION])
 {
-  FluidDomainSettings *mds = (FluidDomainSettings *)ptr->data;
+  FluidDomainSettings *fds = (FluidDomainSettings *)ptr->data;
   float *heat = NULL;
   int size = 0;
 
   /* Heat data is always low-resolution. */
-  if (mds->fluid) {
-    size = mds->res[0] * mds->res[1] * mds->res[2];
-    heat = manta_smoke_get_heat(mds->fluid);
+  if (fds->fluid) {
+    size = fds->res[0] * fds->res[1] * fds->res[2];
+    heat = manta_smoke_get_heat(fds->fluid);
   }
 
   length[0] = (heat) ? size : 0;
@@ -744,38 +782,38 @@ static int rna_FluidModifier_heat_grid_get_length(PointerRNA *ptr,
 
 static void rna_FluidModifier_density_grid_get(PointerRNA *ptr, float *values)
 {
-  FluidDomainSettings *mds = (FluidDomainSettings *)ptr->data;
+  FluidDomainSettings *fds = (FluidDomainSettings *)ptr->data;
   int length[RNA_MAX_ARRAY_DIMENSION];
   int size = rna_FluidModifier_grid_get_length(ptr, length);
   float *density;
 
-  BLI_rw_mutex_lock(mds->fluid_mutex, THREAD_LOCK_READ);
+  BLI_rw_mutex_lock(fds->fluid_mutex, THREAD_LOCK_READ);
 
-  if (mds->flags & FLUID_DOMAIN_USE_NOISE && mds->fluid) {
-    density = manta_smoke_turbulence_get_density(mds->fluid);
+  if (fds->flags & FLUID_DOMAIN_USE_NOISE && fds->fluid) {
+    density = manta_noise_get_density(fds->fluid);
   }
   else {
-    density = manta_smoke_get_density(mds->fluid);
+    density = manta_smoke_get_density(fds->fluid);
   }
 
   memcpy(values, density, size * sizeof(float));
 
-  BLI_rw_mutex_unlock(mds->fluid_mutex);
+  BLI_rw_mutex_unlock(fds->fluid_mutex);
 }
 
 static void rna_FluidModifier_velocity_grid_get(PointerRNA *ptr, float *values)
 {
-  FluidDomainSettings *mds = (FluidDomainSettings *)ptr->data;
+  FluidDomainSettings *fds = (FluidDomainSettings *)ptr->data;
   int length[RNA_MAX_ARRAY_DIMENSION];
   int size = rna_FluidModifier_velocity_grid_get_length(ptr, length);
   float *vx, *vy, *vz;
   int i;
 
-  BLI_rw_mutex_lock(mds->fluid_mutex, THREAD_LOCK_READ);
+  BLI_rw_mutex_lock(fds->fluid_mutex, THREAD_LOCK_READ);
 
-  vx = manta_get_velocity_x(mds->fluid);
-  vy = manta_get_velocity_y(mds->fluid);
-  vz = manta_get_velocity_z(mds->fluid);
+  vx = manta_get_velocity_x(fds->fluid);
+  vy = manta_get_velocity_y(fds->fluid);
+  vz = manta_get_velocity_z(fds->fluid);
 
   for (i = 0; i < size; i += 3) {
     *(values++) = *(vx++);
@@ -783,56 +821,56 @@ static void rna_FluidModifier_velocity_grid_get(PointerRNA *ptr, float *values)
     *(values++) = *(vz++);
   }
 
-  BLI_rw_mutex_unlock(mds->fluid_mutex);
+  BLI_rw_mutex_unlock(fds->fluid_mutex);
 }
 
 static void rna_FluidModifier_color_grid_get(PointerRNA *ptr, float *values)
 {
-  FluidDomainSettings *mds = (FluidDomainSettings *)ptr->data;
+  FluidDomainSettings *fds = (FluidDomainSettings *)ptr->data;
   int length[RNA_MAX_ARRAY_DIMENSION];
   int size = rna_FluidModifier_grid_get_length(ptr, length);
 
-  BLI_rw_mutex_lock(mds->fluid_mutex, THREAD_LOCK_READ);
+  BLI_rw_mutex_lock(fds->fluid_mutex, THREAD_LOCK_READ);
 
-  if (!mds->fluid) {
+  if (!fds->fluid) {
     memset(values, 0, size * sizeof(float));
   }
   else {
-    if (mds->flags & FLUID_DOMAIN_USE_NOISE) {
-      if (manta_smoke_turbulence_has_colors(mds->fluid)) {
-        manta_smoke_turbulence_get_rgba(mds->fluid, values, 0);
+    if (fds->flags & FLUID_DOMAIN_USE_NOISE) {
+      if (manta_noise_has_colors(fds->fluid)) {
+        manta_noise_get_rgba(fds->fluid, values, 0);
       }
       else {
-        manta_smoke_turbulence_get_rgba_fixed_color(mds->fluid, mds->active_color, values, 0);
+        manta_noise_get_rgba_fixed_color(fds->fluid, fds->active_color, values, 0);
       }
     }
     else {
-      if (manta_smoke_has_colors(mds->fluid)) {
-        manta_smoke_get_rgba(mds->fluid, values, 0);
+      if (manta_smoke_has_colors(fds->fluid)) {
+        manta_smoke_get_rgba(fds->fluid, values, 0);
       }
       else {
-        manta_smoke_get_rgba_fixed_color(mds->fluid, mds->active_color, values, 0);
+        manta_smoke_get_rgba_fixed_color(fds->fluid, fds->active_color, values, 0);
       }
     }
   }
 
-  BLI_rw_mutex_unlock(mds->fluid_mutex);
+  BLI_rw_mutex_unlock(fds->fluid_mutex);
 }
 
 static void rna_FluidModifier_flame_grid_get(PointerRNA *ptr, float *values)
 {
-  FluidDomainSettings *mds = (FluidDomainSettings *)ptr->data;
+  FluidDomainSettings *fds = (FluidDomainSettings *)ptr->data;
   int length[RNA_MAX_ARRAY_DIMENSION];
   int size = rna_FluidModifier_grid_get_length(ptr, length);
   float *flame;
 
-  BLI_rw_mutex_lock(mds->fluid_mutex, THREAD_LOCK_READ);
+  BLI_rw_mutex_lock(fds->fluid_mutex, THREAD_LOCK_READ);
 
-  if (mds->flags & FLUID_DOMAIN_USE_NOISE && mds->fluid) {
-    flame = manta_smoke_turbulence_get_flame(mds->fluid);
+  if (fds->flags & FLUID_DOMAIN_USE_NOISE && fds->fluid) {
+    flame = manta_noise_get_flame(fds->fluid);
   }
   else {
-    flame = manta_smoke_get_flame(mds->fluid);
+    flame = manta_smoke_get_flame(fds->fluid);
   }
 
   if (flame) {
@@ -842,19 +880,19 @@ static void rna_FluidModifier_flame_grid_get(PointerRNA *ptr, float *values)
     memset(values, 0, size * sizeof(float));
   }
 
-  BLI_rw_mutex_unlock(mds->fluid_mutex);
+  BLI_rw_mutex_unlock(fds->fluid_mutex);
 }
 
 static void rna_FluidModifier_heat_grid_get(PointerRNA *ptr, float *values)
 {
-  FluidDomainSettings *mds = (FluidDomainSettings *)ptr->data;
+  FluidDomainSettings *fds = (FluidDomainSettings *)ptr->data;
   int length[RNA_MAX_ARRAY_DIMENSION];
   int size = rna_FluidModifier_heat_grid_get_length(ptr, length);
   float *heat;
 
-  BLI_rw_mutex_lock(mds->fluid_mutex, THREAD_LOCK_READ);
+  BLI_rw_mutex_lock(fds->fluid_mutex, THREAD_LOCK_READ);
 
-  heat = manta_smoke_get_heat(mds->fluid);
+  heat = manta_smoke_get_heat(fds->fluid);
 
   if (heat != NULL) {
     /* scale heat values from -2.0-2.0 to -1.0-1.0. */
@@ -866,29 +904,29 @@ static void rna_FluidModifier_heat_grid_get(PointerRNA *ptr, float *values)
     memset(values, 0, size * sizeof(float));
   }
 
-  BLI_rw_mutex_unlock(mds->fluid_mutex);
+  BLI_rw_mutex_unlock(fds->fluid_mutex);
 }
 
 static void rna_FluidModifier_temperature_grid_get(PointerRNA *ptr, float *values)
 {
-  FluidDomainSettings *mds = (FluidDomainSettings *)ptr->data;
+  FluidDomainSettings *fds = (FluidDomainSettings *)ptr->data;
   int length[RNA_MAX_ARRAY_DIMENSION];
   int size = rna_FluidModifier_grid_get_length(ptr, length);
   float *flame;
 
-  BLI_rw_mutex_lock(mds->fluid_mutex, THREAD_LOCK_READ);
+  BLI_rw_mutex_lock(fds->fluid_mutex, THREAD_LOCK_READ);
 
-  if (mds->flags & FLUID_DOMAIN_USE_NOISE && mds->fluid) {
-    flame = manta_smoke_turbulence_get_flame(mds->fluid);
+  if (fds->flags & FLUID_DOMAIN_USE_NOISE && fds->fluid) {
+    flame = manta_noise_get_flame(fds->fluid);
   }
   else {
-    flame = manta_smoke_get_flame(mds->fluid);
+    flame = manta_smoke_get_flame(fds->fluid);
   }
 
   if (flame) {
     /* Output is such that 0..1 maps to 0..1000K */
-    float offset = mds->flame_ignition;
-    float scale = mds->flame_max_temp - mds->flame_ignition;
+    float offset = fds->flame_ignition;
+    float scale = fds->flame_max_temp - fds->flame_ignition;
 
     for (int i = 0; i < size; i++) {
       values[i] = (flame[i] > 0.01f) ? offset + flame[i] * scale : 0.0f;
@@ -898,7 +936,7 @@ static void rna_FluidModifier_temperature_grid_get(PointerRNA *ptr, float *value
     memset(values, 0, size * sizeof(float));
   }
 
-  BLI_rw_mutex_unlock(mds->fluid_mutex);
+  BLI_rw_mutex_unlock(fds->fluid_mutex);
 }
 #  endif /* WITH_FLUID */
 
@@ -930,12 +968,12 @@ static void rna_FluidFlow_uvlayer_set(struct PointerRNA *ptr, const char *value)
 
 static void rna_Fluid_use_color_ramp_set(struct PointerRNA *ptr, bool value)
 {
-  FluidDomainSettings *mds = (FluidDomainSettings *)ptr->data;
+  FluidDomainSettings *fds = (FluidDomainSettings *)ptr->data;
 
-  mds->use_coba = value;
+  fds->use_coba = value;
 
-  if (value && mds->coba == NULL) {
-    mds->coba = BKE_colorband_add(false);
+  if (value && fds->coba == NULL) {
+    fds->coba = BKE_colorband_add(false);
   }
 }
 
@@ -986,14 +1024,18 @@ static void rna_Fluid_flowtype_set(struct PointerRNA *ptr, int value)
   FluidFlowSettings *settings = (FluidFlowSettings *)ptr->data;
 
   if (value != settings->type) {
+    short prev_value = settings->type;
     settings->type = value;
 
-    /* Force flow source to mesh */
+    /* Force flow source to mesh for liquids.
+     * Also use different surface emission. Liquids should by default not emit around surface. */
     if (value == FLUID_FLOW_TYPE_LIQUID) {
       rna_Fluid_flowsource_set(ptr, FLUID_FLOW_SOURCE_MESH);
       settings->surface_distance = 0.0f;
     }
-    else {
+    /* Use some surface emission when switching to a gas emitter. Gases should by default emit a
+     * bit around surface. */
+    if (prev_value == FLUID_FLOW_TYPE_LIQUID) {
       settings->surface_distance = 1.5f;
     }
   }
@@ -1058,27 +1100,18 @@ static void rna_def_fluid_domain_settings(BlenderRNA *brna)
   };
 
   static EnumPropertyItem cache_types[] = {
-      {FLUID_DOMAIN_CACHE_REPLAY,
-       "REPLAY",
-       0,
-       "Replay",
-       "Use the timeline to bake the scene. Pausing and resuming possible"},
+      {FLUID_DOMAIN_CACHE_REPLAY, "REPLAY", 0, "Replay", "Use the timeline to bake the scene"},
       {FLUID_DOMAIN_CACHE_MODULAR,
        "MODULAR",
        0,
        "Modular",
-       "Bake every stage of the simulation separately. Pausing and resuming possible"},
-      {FLUID_DOMAIN_CACHE_FINAL,
-       "FINAL",
-       0,
-       "Final",
-       "Bake the entire simulation at once. Only generates the most essential cache files. "
-       "Pausing and resuming not possible"},
+       "Bake every stage of the simulation separately"},
+      {FLUID_DOMAIN_CACHE_ALL, "ALL", 0, "All", "Bake all simulation settings at once"},
       {0, NULL, 0, NULL, NULL}};
 
-  static const EnumPropertyItem smoke_data_depth_items[] = {
-      {16, "16", 0, "Float (Half)", "Half float (16 bit data)"},
-      {0, "32", 0, "Float (Full)", "Full float (32 bit data)"}, /* default */
+  static const EnumPropertyItem fluid_data_depth_items[] = {
+      {VDB_PRECISION_HALF_FLOAT, "16", 0, "Half", "Half float (16 bit data)"},
+      {VDB_PRECISION_FULL_FLOAT, "32", 0, "Full", "Full float (32 bit data)"},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -1354,7 +1387,7 @@ static void rna_def_fluid_domain_settings(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop, "Adaptive Domain", "Adapt simulation resolution and size to fluid");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-  RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_domain_reset");
+  RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_domain_data_reset");
 
   /* fluid domain options */
 
@@ -1368,7 +1401,7 @@ static void rna_def_fluid_domain_settings(BlenderRNA *brna)
       "Resolution used for the fluid domain. Value corresponds to the longest domain side "
       "(resolution for other domain sides is calculated automatically)");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-  RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_domain_reset");
+  RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_domain_data_reset");
 
   prop = RNA_def_property(srna, "use_collision_border_front", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "border_collisions", FLUID_DOMAIN_BORDER_FRONT);
@@ -1551,7 +1584,7 @@ static void rna_def_fluid_domain_settings(BlenderRNA *brna)
                            "The noise simulation is scaled up by this factor (compared to the "
                            "base resolution of the domain)");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-  RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_domain_reset");
+  RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_domain_noise_reset");
 
   prop = RNA_def_property(srna, "noise_type", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, NULL, "noise_type");
@@ -1559,7 +1592,7 @@ static void rna_def_fluid_domain_settings(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop, "Noise Method", "Noise method which is used during the high-res simulation");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-  RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_domain_reset");
+  RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_domain_noise_reset");
 
   prop = RNA_def_property(srna, "use_noise", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flags", FLUID_DOMAIN_USE_NOISE);
@@ -1573,7 +1606,7 @@ static void rna_def_fluid_domain_settings(BlenderRNA *brna)
   RNA_def_property_enum_sdna(prop, NULL, "simulation_method");
   RNA_def_property_enum_items(prop, simulation_methods);
   RNA_def_property_ui_text(prop, "Simulation Method", "Change the underlying simulation method");
-  RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_domain_reset");
+  RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_domain_data_reset");
 
   prop = RNA_def_property(srna, "flip_ratio", PROP_FLOAT, PROP_NONE);
   RNA_def_property_range(prop, 0.0, 1.0);
@@ -1648,10 +1681,19 @@ static void rna_def_fluid_domain_settings(BlenderRNA *brna)
   RNA_def_property_range(prop, 0.001, 1.0);
   RNA_def_property_ui_range(prop, 0.01, 1.0, 0.05, -1);
   RNA_def_property_ui_text(prop,
-                           "Obstacle-Fluid Threshold ",
+                           "Obstacle-Fluid Threshold",
                            "Determines how much fluid is allowed in an obstacle cell "
                            "(higher values will tag a boundary cell as an obstacle easier "
                            "and reduce the boundary smoothening effect)");
+  RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_datacache_reset");
+
+  prop = RNA_def_property(srna, "sys_particle_maximum", PROP_INT, PROP_NONE);
+  RNA_def_property_int_sdna(prop, NULL, "sys_particle_maximum");
+  RNA_def_property_range(prop, 0, INT_MAX);
+  RNA_def_property_ui_text(
+      prop,
+      "System Maximum",
+      "Maximum number of fluid particles that are allowed in this simulation");
   RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_datacache_reset");
 
   /*  diffusion options */
@@ -1661,7 +1703,7 @@ static void rna_def_fluid_domain_settings(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop, "Use Diffusion", "Enable fluid diffusion settings (e.g. viscosity, surface tension)");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-  RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_domain_reset");
+  RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_datacache_reset");
 
   prop = RNA_def_property(srna, "surface_tension", PROP_FLOAT, PROP_NONE);
   RNA_def_property_range(prop, 0.0, 100.0);
@@ -1728,7 +1770,7 @@ static void rna_def_fluid_domain_settings(BlenderRNA *brna)
                            "resolution of the domain). For best meshing, it is recommended to "
                            "adjust the mesh particle radius alongside this value");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-  RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_meshcache_reset");
+  RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_domain_mesh_reset");
 
   prop = RNA_def_property(srna, "mesh_generator", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, NULL, "mesh_generator");
@@ -1928,7 +1970,7 @@ static void rna_def_fluid_domain_settings(BlenderRNA *brna)
                            "The particle simulation is scaled up by this factor (compared to the "
                            "base resolution of the domain)");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-  RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_domain_reset");
+  RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_domain_particles_reset");
 
   prop = RNA_def_property(srna, "use_spray_particles", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "particle_type", FLUID_DOMAIN_PARTICLE_SPRAY);
@@ -2006,13 +2048,31 @@ static void rna_def_fluid_domain_settings(BlenderRNA *brna)
   RNA_def_property_int_sdna(prop, NULL, "cache_frame_start");
   RNA_def_property_range(prop, -MAXFRAME, MAXFRAME);
   RNA_def_property_int_funcs(prop, NULL, "rna_Fluid_cache_startframe_set", NULL);
-  RNA_def_property_ui_text(prop, "Start", "Frame on which the simulation starts");
+  RNA_def_property_ui_text(
+      prop,
+      "Start",
+      "Frame on which the simulation starts. This is the first frame that will be baked");
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 
   prop = RNA_def_property(srna, "cache_frame_end", PROP_INT, PROP_TIME);
   RNA_def_property_int_sdna(prop, NULL, "cache_frame_end");
   RNA_def_property_range(prop, -MAXFRAME, MAXFRAME);
   RNA_def_property_int_funcs(prop, NULL, "rna_Fluid_cache_endframe_set", NULL);
-  RNA_def_property_ui_text(prop, "End", "Frame on which the simulation stops");
+  RNA_def_property_ui_text(
+      prop,
+      "End",
+      "Frame on which the simulation stops. This is the last frame that will be baked");
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+
+  prop = RNA_def_property(srna, "cache_frame_offset", PROP_INT, PROP_TIME);
+  RNA_def_property_int_sdna(prop, NULL, "cache_frame_offset");
+  RNA_def_property_range(prop, -MAXFRAME, MAXFRAME);
+  RNA_def_property_ui_text(
+      prop,
+      "Offset",
+      "Frame offset that is used when loading the simulation from the cache. It is not considered "
+      "when baking the simulation, only when loading it");
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 
   prop = RNA_def_property(srna, "cache_frame_pause_data", PROP_INT, PROP_TIME);
   RNA_def_property_int_sdna(prop, NULL, "cache_frame_pause_data");
@@ -2036,6 +2096,7 @@ static void rna_def_fluid_domain_settings(BlenderRNA *brna)
       prop, NULL, "rna_Fluid_cachetype_mesh_set", "rna_Fluid_cachetype_mesh_itemf");
   RNA_def_property_ui_text(
       prop, "File Format", "Select the file format to be used for caching surface data");
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_meshcache_reset");
 
   prop = RNA_def_property(srna, "cache_data_format", PROP_ENUM, PROP_NONE);
@@ -2045,6 +2106,7 @@ static void rna_def_fluid_domain_settings(BlenderRNA *brna)
       prop, NULL, "rna_Fluid_cachetype_data_set", "rna_Fluid_cachetype_volume_itemf");
   RNA_def_property_ui_text(
       prop, "File Format", "Select the file format to be used for caching volumetric data");
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_datacache_reset");
 
   prop = RNA_def_property(srna, "cache_particle_format", PROP_ENUM, PROP_NONE);
@@ -2054,6 +2116,7 @@ static void rna_def_fluid_domain_settings(BlenderRNA *brna)
       prop, NULL, "rna_Fluid_cachetype_particle_set", "rna_Fluid_cachetype_particle_itemf");
   RNA_def_property_ui_text(
       prop, "File Format", "Select the file format to be used for caching particle data");
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_particlescache_reset");
 
   prop = RNA_def_property(srna, "cache_noise_format", PROP_ENUM, PROP_NONE);
@@ -2063,6 +2126,7 @@ static void rna_def_fluid_domain_settings(BlenderRNA *brna)
       prop, NULL, "rna_Fluid_cachetype_noise_set", "rna_Fluid_cachetype_volume_itemf");
   RNA_def_property_ui_text(
       prop, "File Format", "Select the file format to be used for caching noise data");
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_noisecache_reset");
 
   prop = RNA_def_property(srna, "cache_type", PROP_ENUM, PROP_NONE);
@@ -2070,7 +2134,19 @@ static void rna_def_fluid_domain_settings(BlenderRNA *brna)
   RNA_def_property_enum_items(prop, cache_types);
   RNA_def_property_enum_funcs(prop, NULL, "rna_Fluid_cachetype_set", NULL);
   RNA_def_property_ui_text(prop, "Type", "Change the cache type of the simulation");
-  RNA_def_property_update(prop, NC_OBJECT | ND_DRAW, "rna_Fluid_domain_reset");
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+  RNA_def_property_update(prop, NC_OBJECT | ND_DRAW, "rna_Fluid_domain_data_reset");
+
+  prop = RNA_def_property(srna, "cache_resumable", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flags", FLUID_DOMAIN_USE_RESUMABLE_CACHE);
+  RNA_def_property_ui_text(
+      prop,
+      "Resumable",
+      "Additional data will be saved so that the bake jobs can be resumed after pausing. Because "
+      "more data will be written to disk it is recommended to avoid enabling this option when "
+      "baking at high resolutions");
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+  RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_datacache_reset");
 
   prop = RNA_def_property(srna, "cache_directory", PROP_STRING, PROP_DIRPATH);
   RNA_def_property_string_maxlength(prop, FILE_MAX);
@@ -2137,7 +2213,7 @@ static void rna_def_fluid_domain_settings(BlenderRNA *brna)
       "only needed if you plan to analyze the cache (e.g. view grids, velocity vectors, "
       "particles) in Mantaflow directly (outside of Blender) after baking the simulation");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-  RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_domain_reset");
+  RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_domain_data_reset");
 
   /* time options */
 
@@ -2320,13 +2396,13 @@ static void rna_def_fluid_domain_settings(BlenderRNA *brna)
   /* OpenVDB options */
 
   prop = RNA_def_property(srna, "openvdb_cache_compress_type", PROP_ENUM, PROP_NONE);
-  RNA_def_property_enum_sdna(prop, NULL, "openvdb_comp");
+  RNA_def_property_enum_sdna(prop, NULL, "openvdb_compression");
   RNA_def_property_enum_items(prop, prop_compression_items);
   RNA_def_property_ui_text(prop, "Compression", "Compression method to be used");
 
-  prop = RNA_def_property(srna, "data_depth", PROP_ENUM, PROP_NONE);
-  RNA_def_property_enum_bitflag_sdna(prop, NULL, "data_depth");
-  RNA_def_property_enum_items(prop, smoke_data_depth_items);
+  prop = RNA_def_property(srna, "openvdb_data_depth", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_bitflag_sdna(prop, NULL, "openvdb_data_depth");
+  RNA_def_property_enum_items(prop, fluid_data_depth_items);
   RNA_def_property_ui_text(prop,
                            "Data Depth",
                            "Bit depth for writing all scalar (including vector) "
@@ -2634,7 +2710,7 @@ static void rna_def_fluid_effector_settings(BlenderRNA *brna)
   prop = RNA_def_property(srna, "use_plane_init", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flags", FLUID_EFFECTOR_USE_PLANE_INIT);
   RNA_def_property_ui_text(prop, "Is Planar", "Treat this object as a planar, unclosed mesh");
-  RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_domain_reset");
+  RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_domain_data_reset");
 
   prop = RNA_def_property(srna, "velocity_factor", PROP_FLOAT, PROP_NONE);
   RNA_def_property_float_sdna(prop, NULL, "vel_multi");

@@ -17,6 +17,7 @@
  * All rights reserved.
  */
 #include "IO_abstract_hierarchy_iterator.h"
+#include "dupli_parent_finder.hh"
 
 #include <iostream>
 #include <limits.h>
@@ -27,6 +28,7 @@
 #include "BKE_anim_data.h"
 #include "BKE_duplilist.h"
 #include "BKE_key.h"
+#include "BKE_object.h"
 #include "BKE_particle.h"
 
 #include "BLI_assert.h"
@@ -38,6 +40,7 @@
 #include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
 #include "DNA_particle_types.h"
+#include "DNA_rigidbody_types.h"
 
 #include "DEG_depsgraph_query.h"
 
@@ -73,6 +76,29 @@ void HierarchyContext::mark_as_instance_of(const std::string &reference_export_p
 void HierarchyContext::mark_as_not_instanced()
 {
   original_export_path.clear();
+}
+
+bool HierarchyContext::is_object_visible(const enum eEvaluationMode evaluation_mode) const
+{
+  const bool is_dupli = duplicator != nullptr;
+  int base_flag;
+
+  if (is_dupli) {
+    /* Construct the object's base flags from its dupli-parent, just like is done in
+     * deg_objects_dupli_iterator_next(). Without this, the visibility check below will fail. Doing
+     * this here, instead of a more suitable location in AbstractHierarchyIterator, prevents
+     * copying the Object for every dupli. */
+    base_flag = object->base_flag;
+    object->base_flag = duplicator->base_flag | BASE_FROM_DUPLI;
+  }
+
+  const int visibility = BKE_object_visibility(object, evaluation_mode);
+
+  if (is_dupli) {
+    object->base_flag = base_flag;
+  }
+
+  return (visibility & OB_VISIBLE_SELF) != 0;
 }
 
 EnsuredWriter::EnsuredWriter() : writer_(nullptr), newly_created_(false)
@@ -126,6 +152,9 @@ bool AbstractHierarchyWriter::check_is_animated(const HierarchyContext &context)
   if (BKE_key_from_object(object) != nullptr) {
     return true;
   }
+  if (check_has_deforming_physics(context)) {
+    return true;
+  }
 
   /* Test modifiers. */
   /* TODO(Sybren): replace this with a check on the depsgraph to properly check for dependency on
@@ -141,6 +170,18 @@ bool AbstractHierarchyWriter::check_is_animated(const HierarchyContext &context)
   return false;
 }
 
+bool AbstractHierarchyWriter::check_has_physics(const HierarchyContext &context)
+{
+  const RigidBodyOb *rbo = context.object->rigidbody_object;
+  return rbo != nullptr && rbo->type == RBO_TYPE_ACTIVE;
+}
+
+bool AbstractHierarchyWriter::check_has_deforming_physics(const HierarchyContext &context)
+{
+  const RigidBodyOb *rbo = context.object->rigidbody_object;
+  return rbo != nullptr && rbo->type == RBO_TYPE_ACTIVE && (rbo->flag & RBO_FLAG_USE_DEFORM) != 0;
+}
+
 AbstractHierarchyIterator::AbstractHierarchyIterator(Depsgraph *depsgraph)
     : depsgraph_(depsgraph), writers_(), export_subset_({true, true})
 {
@@ -148,6 +189,12 @@ AbstractHierarchyIterator::AbstractHierarchyIterator(Depsgraph *depsgraph)
 
 AbstractHierarchyIterator::~AbstractHierarchyIterator()
 {
+  /* release_writers() cannot be called here directly, as it calls into the pure-virtual
+   * release_writer() function. By the time this destructor is called, the subclass that implements
+   * that pure-virtual function is already destructed. */
+  BLI_assert(
+      writers_.empty() ||
+      !"release_writers() should be called before the AbstractHierarchyIterator goes out of scope");
 }
 
 void AbstractHierarchyIterator::iterate_and_write()
@@ -164,7 +211,7 @@ void AbstractHierarchyIterator::iterate_and_write()
 void AbstractHierarchyIterator::release_writers()
 {
   for (WriterMap::value_type it : writers_) {
-    delete_object_writer(it.second);
+    release_writer(it.second);
   }
   writers_.clear();
 }
@@ -200,9 +247,9 @@ void AbstractHierarchyIterator::debug_print_export_graph(const ExportGraph &grap
 {
   size_t total_graph_size = 0;
   for (const ExportGraph::value_type &map_iter : graph) {
-    const DupliAndDuplicator &parent_info = map_iter.first;
-    Object *const export_parent = parent_info.first;
-    Object *const duplicator = parent_info.second;
+    const ObjectIdentifier &parent_info = map_iter.first;
+    const Object *const export_parent = parent_info.object;
+    const Object *const duplicator = parent_info.duplicated_by;
 
     if (duplicator != nullptr) {
       printf("    DU %s (as dupped by %s):\n",
@@ -217,24 +264,24 @@ void AbstractHierarchyIterator::debug_print_export_graph(const ExportGraph &grap
     for (HierarchyContext *child_ctx : map_iter.second) {
       if (child_ctx->duplicator == nullptr) {
         printf("       - %s%s%s\n",
-               child_ctx->object->id.name + 2,
+               child_ctx->export_name.c_str(),
                child_ctx->weak_export ? " (weak)" : "",
-               child_ctx->original_export_path.size() ?
-                   (std::string("ref ") + child_ctx->original_export_path).c_str() :
-                   "");
+               child_ctx->original_export_path.empty() ?
+                   "" :
+                   (std::string("ref ") + child_ctx->original_export_path).c_str());
       }
       else {
         printf("       - %s (dup by %s%s) %s\n",
-               child_ctx->object->id.name + 2,
+               child_ctx->export_name.c_str(),
                child_ctx->duplicator->id.name + 2,
                child_ctx->weak_export ? ", weak" : "",
-               child_ctx->original_export_path.size() ?
-                   (std::string("ref ") + child_ctx->original_export_path).c_str() :
-                   "");
+               child_ctx->original_export_path.empty() ?
+                   "" :
+                   (std::string("ref ") + child_ctx->original_export_path).c_str());
       }
     }
   }
-  printf("    (Total graph size: %zu objects\n", total_graph_size);
+  printf("    (Total graph size: %zu objects)\n", total_graph_size);
 }
 
 void AbstractHierarchyIterator::export_graph_construct()
@@ -257,22 +304,21 @@ void AbstractHierarchyIterator::export_graph_construct()
     // Export the duplicated objects instanced by this object.
     ListBase *lb = object_duplilist(depsgraph_, scene, object);
     if (lb) {
-      // Construct the set of duplicated objects, so that later we can determine whether a parent
-      // is also duplicated itself.
-      std::set<Object *> dupli_set;
+      DupliParentFinder dupli_parent_finder;
+
       LISTBASE_FOREACH (DupliObject *, dupli_object, lb) {
+        PersistentID persistent_id(dupli_object);
         if (!should_visit_dupli_object(dupli_object)) {
           continue;
         }
-        dupli_set.insert(dupli_object->ob);
+        dupli_parent_finder.insert(dupli_object);
       }
 
       LISTBASE_FOREACH (DupliObject *, dupli_object, lb) {
         if (!should_visit_dupli_object(dupli_object)) {
           continue;
         }
-
-        visit_dupli_object(dupli_object, object, dupli_set);
+        visit_dupli_object(dupli_object, object, dupli_parent_finder);
       }
     }
 
@@ -291,29 +337,30 @@ void AbstractHierarchyIterator::connect_loose_objects()
   for (const ExportGraph::value_type &map_iter : export_graph_) {
     for (const HierarchyContext *child : map_iter.second) {
       // An object that is marked as a child of another object is not considered 'loose'.
-      loose_objects_graph.erase(std::make_pair(child->object, child->duplicator));
+      ObjectIdentifier child_oid = ObjectIdentifier::for_hierarchy_context(child);
+      loose_objects_graph.erase(child_oid);
     }
   }
   // The root of the hierarchy is always found, so it's never considered 'loose'.
-  loose_objects_graph.erase(std::make_pair(nullptr, nullptr));
+  loose_objects_graph.erase(ObjectIdentifier::for_graph_root());
 
   // Iterate over the loose objects and connect them to their export parent.
   for (const ExportGraph::value_type &map_iter : loose_objects_graph) {
-    const DupliAndDuplicator &export_info = map_iter.first;
-    Object *object = export_info.first;
+    const ObjectIdentifier &graph_key = map_iter.first;
+    Object *object = graph_key.object;
 
     while (true) {
       // Loose objects will all be real objects, as duplicated objects always have
       // their duplicator or other exported duplicated object as ancestor.
 
       ExportGraph::iterator found_parent_iter = export_graph_.find(
-          std::make_pair(object->parent, nullptr));
+          ObjectIdentifier::for_real_object(object->parent));
       visit_object(object, object->parent, true);
       if (found_parent_iter != export_graph_.end()) {
         break;
       }
       // 'object->parent' will never be nullptr here, as the export graph contains the
-      // tuple <nullptr, nullptr> as root and thus will cause a break.
+      // root as nullptr and thus will cause a break above.
       BLI_assert(object->parent != nullptr);
 
       object = object->parent;
@@ -326,10 +373,8 @@ static bool remove_weak_subtrees(const HierarchyContext *context,
                                  const AbstractHierarchyIterator::ExportGraph &input_graph)
 {
   bool all_is_weak = context != nullptr && context->weak_export;
-  Object *object = context != nullptr ? context->object : nullptr;
-  Object *duplicator = context != nullptr ? context->duplicator : nullptr;
+  const ObjectIdentifier map_key = ObjectIdentifier::for_hierarchy_context(context);
 
-  const AbstractHierarchyIterator::DupliAndDuplicator map_key = std::make_pair(object, duplicator);
   AbstractHierarchyIterator::ExportGraph::const_iterator child_iterator;
 
   child_iterator = input_graph.find(map_key);
@@ -399,7 +444,7 @@ void AbstractHierarchyIterator::visit_object(Object *object,
   // check on whether an object is part of the export, rather than having to check all objects in
   // the map. Note that it's not possible to simply search for (object->parent, nullptr), as the
   // object's parent in Blender may not be the same as its export-parent.
-  ExportGraph::key_type object_key = std::make_pair(object, nullptr);
+  ExportGraph::key_type object_key = ObjectIdentifier::for_real_object(object);
   if (export_graph_.find(object_key) == export_graph_.end()) {
     export_graph_[object_key] = ExportChildren();
   }
@@ -408,16 +453,17 @@ void AbstractHierarchyIterator::visit_object(Object *object,
 AbstractHierarchyIterator::ExportGraph::key_type AbstractHierarchyIterator::
     determine_graph_index_object(const HierarchyContext *context)
 {
-  return std::make_pair(context->export_parent, nullptr);
+  return ObjectIdentifier::for_real_object(context->export_parent);
 }
 
 void AbstractHierarchyIterator::visit_dupli_object(DupliObject *dupli_object,
                                                    Object *duplicator,
-                                                   const std::set<Object *> &dupli_set)
+                                                   const DupliParentFinder &dupli_parent_finder)
 {
   HierarchyContext *context = new HierarchyContext();
   context->object = dupli_object->ob;
   context->duplicator = duplicator;
+  context->persistent_id = PersistentID(dupli_object);
   context->weak_export = false;
   context->export_path = "";
   context->original_export_path = "";
@@ -427,38 +473,36 @@ void AbstractHierarchyIterator::visit_dupli_object(DupliObject *dupli_object,
   copy_m4_m4(context->matrix_world, dupli_object->mat);
 
   // Construct export name for the dupli-instance.
-  std::stringstream suffix_stream;
-  suffix_stream << std::hex;
-  for (int i = 0; i < MAX_DUPLI_RECUR && dupli_object->persistent_id[i] != INT_MAX; i++) {
-    suffix_stream << "-" << dupli_object->persistent_id[i];
-  }
-  context->export_name = make_valid_name(get_object_name(context->object) + suffix_stream.str());
+  std::stringstream export_name_stream;
+  export_name_stream << get_object_name(context->object) << "-"
+                     << context->persistent_id.as_object_name_suffix();
+  context->export_name = make_valid_name(export_name_stream.str());
 
-  ExportGraph::key_type graph_index = determine_graph_index_dupli(context, dupli_set);
+  ExportGraph::key_type graph_index = determine_graph_index_dupli(
+      context, dupli_object, dupli_parent_finder);
   context_update_for_graph_index(context, graph_index);
+
   export_graph_[graph_index].insert(context);
 }
 
 AbstractHierarchyIterator::ExportGraph::key_type AbstractHierarchyIterator::
     determine_graph_index_dupli(const HierarchyContext *context,
-                                const std::set<Object *> &dupli_set)
+                                const DupliObject *dupli_object,
+                                const DupliParentFinder &dupli_parent_finder)
 {
-  /* If the dupli-object's parent is also instanced by this object, use that as the
-   * export parent. Otherwise use the dupli-parent as export parent. */
+  const DupliObject *dupli_parent = dupli_parent_finder.find_suitable_export_parent(dupli_object);
 
-  Object *parent = context->object->parent;
-  if (parent != nullptr && dupli_set.find(parent) != dupli_set.end()) {
-    // The parent object is part of the duplicated collection.
-    return std::make_pair(parent, context->duplicator);
+  if (dupli_parent != nullptr) {
+    return ObjectIdentifier::for_duplicated_object(dupli_parent, context->duplicator);
   }
-  return std::make_pair(context->duplicator, nullptr);
+  return ObjectIdentifier::for_real_object(context->duplicator);
 }
 
 void AbstractHierarchyIterator::context_update_for_graph_index(
     HierarchyContext *context, const ExportGraph::key_type &graph_index) const
 {
   // Update the HierarchyContext so that it is consistent with the graph index.
-  context->export_parent = graph_index.first;
+  context->export_parent = graph_index.object;
   if (context->export_parent != context->object->parent) {
     /* The parent object in Blender is NOT used as the export parent. This means
      * that the world transform of this object can be influenced by objects that
@@ -470,11 +514,7 @@ void AbstractHierarchyIterator::context_update_for_graph_index(
 AbstractHierarchyIterator::ExportChildren &AbstractHierarchyIterator::graph_children(
     const HierarchyContext *context)
 {
-  if (context == nullptr) {
-    return export_graph_[std::make_pair(nullptr, nullptr)];
-  }
-
-  return export_graph_[std::make_pair(context->object, context->duplicator)];
+  return export_graph_[ObjectIdentifier::for_hierarchy_context(context)];
 }
 
 void AbstractHierarchyIterator::determine_export_paths(const HierarchyContext *parent_context)

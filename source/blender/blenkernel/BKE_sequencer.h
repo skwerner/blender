@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_SEQUENCER_H__
-#define __BKE_SEQUENCER_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -285,6 +284,11 @@ void BKE_sequence_reload_new_file(struct Main *bmain,
                                   struct Scene *scene,
                                   struct Sequence *seq,
                                   const bool lock_range);
+void BKE_sequence_movie_reload_if_needed(struct Main *bmain,
+                                         struct Scene *scene,
+                                         struct Sequence *seq,
+                                         bool *r_was_reloaded,
+                                         bool *r_can_produce_frames);
 int BKE_sequencer_evaluate_frame(struct Scene *scene, int cfra);
 int BKE_sequencer_get_shown_sequences(struct ListBase *seqbasep,
                                       int cfra,
@@ -522,6 +526,9 @@ typedef struct Sequence *(*SeqLoadFn)(struct bContext *, ListBase *, struct SeqL
 
 struct Sequence *BKE_sequence_alloc(ListBase *lb, int cfra, int machine, int type);
 
+/* Generate new UUID for the given sequence. */
+void BKE_sequence_session_uuid_generate(struct Sequence *sequence);
+
 void BKE_sequence_alpha_mode_from_extension(struct Sequence *seq);
 void BKE_sequence_init_colorspace(struct Sequence *seq);
 
@@ -619,9 +626,16 @@ void BKE_sequencer_color_balance_apply(struct StripColorBalance *cb,
 
 void BKE_sequencer_all_free_anim_ibufs(struct Scene *scene, int cfra);
 bool BKE_sequencer_check_scene_recursion(struct Scene *scene, struct ReportList *reports);
+bool BKE_sequencer_render_loop_check(struct Sequence *seq_main, struct Sequence *seq);
+void BKE_sequencer_flag_for_removal(struct Scene *scene,
+                                    struct ListBase *seqbase,
+                                    struct Sequence *seq);
+void BKE_sequencer_remove_flagged_sequences(struct Scene *scene, struct ListBase *seqbase);
+
+/* A debug and development function which checks whether sequences have unique UUIDs.
+ * Errors will be reported to the console. */
+void BKE_sequencer_check_uuids_unique_and_report(const struct Scene *scene);
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_SEQUENCER_H__ */

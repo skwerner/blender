@@ -73,7 +73,7 @@ static void rna_Scene_frame_set(Scene *scene, Main *bmain, int frame, float subf
   for (ViewLayer *view_layer = scene->view_layers.first; view_layer != NULL;
        view_layer = view_layer->next) {
     Depsgraph *depsgraph = BKE_scene_get_depsgraph(bmain, scene, view_layer, true);
-    BKE_scene_graph_update_for_newframe(depsgraph, bmain);
+    BKE_scene_graph_update_for_newframe(depsgraph);
   }
 
 #  ifdef WITH_PYTHON
@@ -98,13 +98,13 @@ static void rna_Scene_frame_set(Scene *scene, Main *bmain, int frame, float subf
   }
 }
 
-static void rna_Scene_uvedit_aspect(Scene *scene, Object *ob, float *aspect)
+static void rna_Scene_uvedit_aspect(Scene *UNUSED(scene), Object *ob, float *aspect)
 {
   if ((ob->type == OB_MESH) && (ob->mode == OB_MODE_EDIT)) {
     BMEditMesh *em;
     em = BKE_editmesh_from_object(ob);
     if (EDBM_uv_check(em)) {
-      ED_uvedit_get_aspect(scene, ob, em->bm, aspect, aspect + 1);
+      ED_uvedit_get_aspect(ob, aspect, aspect + 1);
       return;
     }
   }
@@ -138,8 +138,7 @@ static void rna_SceneRender_get_frame_path(
 }
 
 static void rna_Scene_ray_cast(Scene *scene,
-                               Main *bmain,
-                               ViewLayer *view_layer,
+                               Depsgraph *depsgraph,
                                float origin[3],
                                float direction[3],
                                float ray_dist,
@@ -151,8 +150,6 @@ static void rna_Scene_ray_cast(Scene *scene,
                                float r_obmat[16])
 {
   normalize_v3(direction);
-
-  Depsgraph *depsgraph = BKE_scene_get_depsgraph(bmain, scene, view_layer, true);
   SnapObjectContext *sctx = ED_transform_snap_object_context_create(scene, 0);
 
   bool ret = ED_transform_snap_object_project_ray_ex(sctx,
@@ -292,9 +289,9 @@ void RNA_api_scene(StructRNA *srna)
 
   /* Ray Cast */
   func = RNA_def_function(srna, "ray_cast", "rna_Scene_ray_cast");
-  RNA_def_function_flag(func, FUNC_USE_MAIN);
   RNA_def_function_ui_description(func, "Cast a ray onto in object space");
-  parm = RNA_def_pointer(func, "view_layer", "ViewLayer", "", "Scene Layer");
+
+  parm = RNA_def_pointer(func, "depsgraph", "Depsgraph", "", "The current dependency graph");
   RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED);
   /* ray start and end */
   parm = RNA_def_float_vector(func, "origin", 3, NULL, -FLT_MAX, FLT_MAX, "", "", -1e4, 1e4);

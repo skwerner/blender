@@ -30,6 +30,7 @@ add_subdirectory(opensubdiv)
 add_subdirectory(mikktspace)
 add_subdirectory(glew-mx)
 add_subdirectory(eigen)
+add_subdirectory(sky)
 
 if(WITH_AUDASPACE)
   add_subdirectory(audaspace)
@@ -74,6 +75,10 @@ endif()
 
 if(WITH_QUADRIFLOW)
   add_subdirectory(quadriflow)
+endif()
+
+if(WITH_CODEC_FFMPEG)
+  add_subdirectory(ffmpeg)
 endif()
 
 if(UNIX AND NOT APPLE)

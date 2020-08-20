@@ -322,9 +322,7 @@ static short acf_generic_basic_offset(bAnimContext *ac, bAnimListElem *ale)
   if (acf && acf->get_indent_level) {
     return acf->get_indent_level(ac, ale) * INDENT_STEP_SIZE;
   }
-  else {
-    return 0;
-  }
+  return 0;
 }
 
 /* offset based on nodetree type */
@@ -514,11 +512,10 @@ static int acf_summary_setting_flag(bAnimContext *UNUSED(ac),
     *neg = true;
     return ADS_FLAG_SUMMARY_COLLAPSED;
   }
-  else {
-    /* unsupported */
-    *neg = false;
-    return 0;
-  }
+
+  /* unsupported */
+  *neg = false;
+  return 0;
 }
 
 /* get pointer to the setting */
@@ -538,11 +535,10 @@ static void *acf_summary_setting_ptr(bAnimListElem *ale,
     /* return pointer to DopeSheet's flag */
     return GET_ACF_FLAG_PTR(ads->flag, type);
   }
-  else {
-    /* can't return anything useful - unsupported */
-    *type = 0;
-    return NULL;
-  }
+
+  /* can't return anything useful - unsupported */
+  *type = 0;
+  return NULL;
 }
 
 /* all animation summary (DopeSheet only) type define */
@@ -2846,8 +2842,9 @@ static void *acf_dshair_setting_ptr(bAnimListElem *ale, eAnimChannel_Settings se
     case ACHANNEL_SETTING_SELECT:  /* selected */
     case ACHANNEL_SETTING_MUTE:    /* muted (for NLA only) */
     case ACHANNEL_SETTING_VISIBLE: /* visible (for Graph Editor only) */
-      if (hair->adt)
+      if (hair->adt) {
         return GET_ACF_FLAG_PTR(hair->adt->flag, type);
+      }
       return NULL;
 
     default: /* unsupported */
@@ -2926,8 +2923,9 @@ static void *acf_dspointcloud_setting_ptr(bAnimListElem *ale,
     case ACHANNEL_SETTING_SELECT:  /* selected */
     case ACHANNEL_SETTING_MUTE:    /* muted (for NLA only) */
     case ACHANNEL_SETTING_VISIBLE: /* visible (for Graph Editor only) */
-      if (pointcloud->adt)
+      if (pointcloud->adt) {
         return GET_ACF_FLAG_PTR(pointcloud->adt->flag, type);
+      }
       return NULL;
 
     default: /* unsupported */
@@ -3006,8 +3004,9 @@ static void *acf_dsvolume_setting_ptr(bAnimListElem *ale,
     case ACHANNEL_SETTING_SELECT:  /* selected */
     case ACHANNEL_SETTING_MUTE:    /* muted (for NLA only) */
     case ACHANNEL_SETTING_VISIBLE: /* visible (for Graph Editor only) */
-      if (volume->adt)
+      if (volume->adt) {
         return GET_ACF_FLAG_PTR(volume->adt->flag, type);
+      }
       return NULL;
 
     default: /* unsupported */
@@ -3084,8 +3083,9 @@ static void *acf_dssimulation_setting_ptr(bAnimListElem *ale,
     case ACHANNEL_SETTING_SELECT:  /* selected */
     case ACHANNEL_SETTING_MUTE:    /* muted (for NLA only) */
     case ACHANNEL_SETTING_VISIBLE: /* visible (for Graph Editor only) */
-      if (simulation->adt)
+      if (simulation->adt) {
         return GET_ACF_FLAG_PTR(simulation->adt->flag, type);
+      }
       return NULL;
 
     default: /* unsupported */
@@ -3815,19 +3815,15 @@ static bool acf_nlatrack_setting_valid(bAnimContext *UNUSED(ac),
             /* ok - we've got a solo track, and this is it */
             return true;
           }
-          else {
-            /* not ok - we've got a solo track, but this isn't it, so make it more obvious */
-            return false;
-          }
+          /* not ok - we've got a solo track, but this isn't it, so make it more obvious */
+          return false;
         }
 
         /* ok - no tracks are solo'd, and this isn't being tweaked */
         return true;
       }
-      else {
-        /* unsupported - this track is being tweaked */
-        return false;
-      }
+      /* unsupported - this track is being tweaked */
+      return false;
 
     /* unsupported */
     default:
@@ -3901,9 +3897,8 @@ static int acf_nlaaction_icon(bAnimListElem *ale)
   if ((adt) && (adt->flag & ADT_NLA_EDIT_ON)) {
     return ICON_ACTION_TWEAK;
   }
-  else {
-    return ICON_ACTION;
-  }
+
+  return ICON_ACTION;
 }
 
 /* Backdrop color for nla action channel
@@ -4157,9 +4152,8 @@ const bAnimChannelType *ANIM_channel_get_typeinfo(bAnimListElem *ale)
   if ((ale->type >= 0) && (ale->type < ANIMTYPE_NUM_TYPES)) {
     return animchannelTypeInfo[ale->type];
   }
-  else {
-    return NULL;
-  }
+
+  return NULL;
 }
 
 /* --------------------------- */
@@ -4227,9 +4221,7 @@ short ANIM_channel_setting_get(bAnimContext *ac, bAnimListElem *ale, eAnimChanne
           if (negflag) {
             return ((*val) & flag) == 0;
           }
-          else {
-            return ((*val) & flag) != 0;
-          }
+          return ((*val) & flag) != 0;
         }
         case sizeof(short): /* short pointer for setting */
         {
@@ -4238,9 +4230,7 @@ short ANIM_channel_setting_get(bAnimContext *ac, bAnimListElem *ale, eAnimChanne
           if (negflag) {
             return ((*val) & flag) == 0;
           }
-          else {
-            return ((*val) & flag) != 0;
-          }
+          return ((*val) & flag) != 0;
         }
         case sizeof(char): /* char pointer for setting */
         {
@@ -4249,9 +4239,7 @@ short ANIM_channel_setting_get(bAnimContext *ac, bAnimListElem *ale, eAnimChanne
           if (negflag) {
             return ((*val) & flag) == 0;
           }
-          else {
-            return ((*val) & flag) != 0;
-          }
+          return ((*val) & flag) != 0;
         }
       }
     }
@@ -4398,9 +4386,7 @@ void ANIM_channel_draw(
   }
 
   /* set blending again, as may not be set in previous step */
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   /* step 1) draw backdrop ...........................................  */
   if (acf->draw_backdrop) {
@@ -4449,7 +4435,7 @@ void ANIM_channel_draw(
       }
 
       /* turn off blending, since not needed anymore... */
-      GPU_blend(false);
+      GPU_blend(GPU_BLEND_NONE);
 
       /* icon is drawn as widget now... */
       if (acf->has_setting(ac, ale, ACHANNEL_SETTING_VISIBLE)) {
@@ -4720,6 +4706,7 @@ static void achannel_setting_slider_cb(bContext *C, void *id_poin, void *fcu_poi
 
   ReportList *reports = CTX_wm_reports(C);
   Scene *scene = CTX_data_scene(C);
+  Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
   ToolSettings *ts = scene->toolsettings;
   ListBase nla_cache = {NULL, NULL};
   PointerRNA id_ptr, ptr;
@@ -4732,8 +4719,10 @@ static void achannel_setting_slider_cb(bContext *C, void *id_poin, void *fcu_poi
   RNA_id_pointer_create(id, &id_ptr);
 
   /* Get NLA context for value remapping */
+  const AnimationEvalContext anim_eval_context = BKE_animsys_eval_context_construct(depsgraph,
+                                                                                    (float)CFRA);
   NlaKeyframingContext *nla_context = BKE_animsys_get_nla_keyframing_context(
-      &nla_cache, &id_ptr, adt, (float)CFRA, false);
+      &nla_cache, &id_ptr, adt, &anim_eval_context, false);
 
   /* get current frame and apply NLA-mapping to it (if applicable) */
   cfra = BKE_nla_tweakedit_remap(adt, (float)CFRA, NLATIME_CONVERT_UNMAP);
@@ -4750,7 +4739,7 @@ static void achannel_setting_slider_cb(bContext *C, void *id_poin, void *fcu_poi
 
     /* insert a keyframe for this F-Curve */
     done = insert_keyframe_direct(
-        reports, ptr, prop, fcu, cfra, ts->keyframe_type, nla_context, flag);
+        reports, ptr, prop, fcu, &anim_eval_context, ts->keyframe_type, nla_context, flag);
 
     if (done) {
       if (adt->action != NULL) {
@@ -4774,23 +4763,26 @@ static void achannel_setting_slider_shapekey_cb(bContext *C, void *key_poin, voi
 
   ReportList *reports = CTX_wm_reports(C);
   Scene *scene = CTX_data_scene(C);
+  Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
   ToolSettings *ts = scene->toolsettings;
   ListBase nla_cache = {NULL, NULL};
   PointerRNA id_ptr, ptr;
   PropertyRNA *prop;
   eInsertKeyFlags flag = 0;
   bool done = false;
-  float cfra;
 
   /* Get RNA pointer */
   RNA_id_pointer_create((ID *)key, &id_ptr);
 
   /* Get NLA context for value remapping */
+  const AnimationEvalContext anim_eval_context = BKE_animsys_eval_context_construct(depsgraph,
+                                                                                    (float)CFRA);
   NlaKeyframingContext *nla_context = BKE_animsys_get_nla_keyframing_context(
-      &nla_cache, &id_ptr, key->adt, (float)CFRA, false);
+      &nla_cache, &id_ptr, key->adt, &anim_eval_context, false);
 
   /* get current frame and apply NLA-mapping to it (if applicable) */
-  cfra = BKE_nla_tweakedit_remap(key->adt, (float)CFRA, NLATIME_CONVERT_UNMAP);
+  const float remapped_frame = BKE_nla_tweakedit_remap(
+      key->adt, anim_eval_context.eval_time, NLATIME_CONVERT_UNMAP);
 
   /* get flags for keyframing */
   flag = ANIM_get_keyframing_flags(scene, true);
@@ -4803,13 +4795,21 @@ static void achannel_setting_slider_shapekey_cb(bContext *C, void *key_poin, voi
     FCurve *fcu = ED_action_fcurve_ensure(bmain, act, NULL, &ptr, rna_path, 0);
 
     /* set the special 'replace' flag if on a keyframe */
-    if (fcurve_frame_has_keyframe(fcu, cfra, 0)) {
+    if (fcurve_frame_has_keyframe(fcu, remapped_frame, 0)) {
       flag |= INSERTKEY_REPLACE;
     }
 
     /* insert a keyframe for this F-Curve */
-    done = insert_keyframe_direct(
-        reports, ptr, prop, fcu, cfra, ts->keyframe_type, nla_context, flag);
+    const AnimationEvalContext remapped_anim_eval_context = BKE_animsys_eval_context_construct_at(
+        &anim_eval_context, remapped_frame);
+    done = insert_keyframe_direct(reports,
+                                  ptr,
+                                  prop,
+                                  fcu,
+                                  &remapped_anim_eval_context,
+                                  ts->keyframe_type,
+                                  nla_context,
+                                  flag);
 
     if (done) {
       WM_event_add_notifier(C, NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, NULL);
@@ -4860,7 +4860,11 @@ static void achannel_setting_slider_nla_curve_cb(bContext *C,
     }
 
     /* insert a keyframe for this F-Curve */
-    done = insert_keyframe_direct(reports, ptr, prop, fcu, cfra, ts->keyframe_type, NULL, flag);
+    Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
+    const AnimationEvalContext anim_eval_context = BKE_animsys_eval_context_construct(depsgraph,
+                                                                                      cfra);
+    done = insert_keyframe_direct(
+        reports, ptr, prop, fcu, &anim_eval_context, ts->keyframe_type, NULL, flag);
 
     if (done) {
       WM_event_add_notifier(C, NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, NULL);

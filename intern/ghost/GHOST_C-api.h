@@ -21,8 +21,7 @@
  * \brief GHOST C-API function and type declarations.
  */
 
-#ifndef __GHOST_C_API_H__
-#define __GHOST_C_API_H__
+#pragma once
 
 #include "GHOST_Types.h"
 
@@ -362,8 +361,8 @@ extern GHOST_TSuccess GHOST_HasCursorShape(GHOST_WindowHandle windowhandle,
  * \param mask The mask data for the cursor.
  * \param sizex The width of the cursor
  * \param sizey The height of the cursor
- * \param hotX The X coordinate of the cursor hotspot.
- * \param hotY The Y coordinate of the cursor hotspot.
+ * \param hotX The X coordinate of the cursor hot-spot.
+ * \param hotY The Y coordinate of the cursor hot-spot.
  * \param canInvertColor Let macOS invert cursor color to match platform convention.
  * \return Indication of success.
  */
@@ -1071,6 +1070,4 @@ GHOST_TSuccess GHOST_XrEventsHandle(GHOST_XrContextHandle xr_context);
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

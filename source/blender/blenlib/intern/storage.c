@@ -53,9 +53,9 @@
 #  include "BLI_string_utf8.h"
 #  include "BLI_winstuff.h"
 #  include "utfconv.h"
+#  include <ShObjIdl.h>
 #  include <direct.h>
 #  include <io.h>
-#  include <shobjidl_core.h>
 #  include <stdbool.h>
 #else
 #  include <pwd.h>
@@ -96,9 +96,7 @@ char *BLI_current_working_dir(char *dir, const size_t maxncpy)
       memcpy(dir, pwd, srclen + 1);
       return dir;
     }
-    else {
-      return NULL;
-    }
+    return NULL;
   }
   return getcwd(dir, maxncpy);
 #endif
@@ -275,25 +273,26 @@ eFileAttributes BLI_file_attributes(const char *path)
     ret |= FILE_ATTR_REPARSE_POINT;
   }
 
-#  endif
+#  else
 
-#  ifdef __linux__
   UNUSED_VARS(path);
 
   /* TODO:
    * If Immutable set FILE_ATTR_READONLY
    * If Archived set FILE_ATTR_ARCHIVE
    */
-
 #  endif
-
   return ret;
 }
 #endif
 
 /* Return alias/shortcut file target. Apple version is defined in storage_apple.mm */
 #ifndef __APPLE__
-bool BLI_file_alias_target(char target[FILE_MAXDIR], const char *filepath)
+bool BLI_file_alias_target(
+    /* This parameter can only be const on non-windows platforms.
+     * NOLINTNEXTLINE: readability-non-const-parameter. */
+    char target[FILE_MAXDIR],
+    const char *filepath)
 {
 #  ifdef WIN32
   if (!BLI_path_extension_check(filepath, ".lnk")) {
@@ -330,9 +329,7 @@ bool BLI_file_alias_target(char target[FILE_MAXDIR], const char *filepath)
   }
 
   return (success && target[0]);
-#  endif
-
-#  ifdef __linux__
+#  else
   UNUSED_VARS(target, filepath);
   /* File-based redirection not supported. */
   return false;
@@ -374,13 +371,13 @@ int BLI_exists(const char *name)
 
   free(tmp_16);
   if (res == -1) {
-    return (0);
+    return 0;
   }
 #else
   struct stat st;
   BLI_assert(!BLI_path_is_rel(name));
   if (stat(name, &st)) {
-    return (0);
+    return 0;
   }
 #endif
   return (st.st_mode);
@@ -529,7 +526,7 @@ void *BLI_file_read_binary_as_mem(const char *filepath, size_t pad_bytes, size_t
  * Return the text file data with:
 
  * - Newlines replaced with '\0'.
- * - Optionally trim whitespace, replacing trailing ' ' & '\t' with '\0'.
+ * - Optionally trim white-space, replacing trailing <space> & <tab> with '\0'.
  *
  * This is an alternative to using #BLI_file_read_as_lines,
  * allowing us to loop over lines without converting it into a linked list

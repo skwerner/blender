@@ -49,6 +49,8 @@
 #include "UI_interface.h"
 #include "UI_resources.h"
 
+#include "BLO_read_write.h"
+
 #include "RNA_access.h"
 
 #include "DEG_depsgraph.h"
@@ -121,9 +123,8 @@ static bool dependsOnTime(ModifierData *md)
   if (wmd->texture) {
     return BKE_texture_dependsOnTime(wmd->texture);
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 static void freeData(ModifierData *md)
@@ -234,7 +235,7 @@ static void warpModifier_do(WarpModifierData *wmd,
   }
 
   if (wmd->curfalloff) {
-    BKE_curvemapping_initialize(wmd->curfalloff);
+    BKE_curvemapping_init(wmd->curfalloff);
   }
 
   invert_m4_m4(obinv, ob->obmat);
@@ -466,6 +467,7 @@ static void falloff_panel_draw(const bContext *C, Panel *panel)
 
 static void texture_panel_draw(const bContext *C, Panel *panel)
 {
+  uiLayout *col;
   uiLayout *layout = panel->layout;
 
   PointerRNA ptr;
@@ -478,15 +480,15 @@ static void texture_panel_draw(const bContext *C, Panel *panel)
 
   uiLayoutSetPropSep(layout, true);
 
-  uiItemR(layout, &ptr, "texture_coords", 0, IFACE_("Coordinates"), ICON_NONE);
-
+  col = uiLayoutColumn(layout, false);
+  uiItemR(col, &ptr, "texture_coords", 0, IFACE_("Coordinates"), ICON_NONE);
   if (texture_coords == MOD_DISP_MAP_OBJECT) {
-    uiItemR(layout, &ptr, "texture_coords_object", 0, "Object", ICON_NONE);
+    uiItemR(col, &ptr, "texture_coords_object", 0, IFACE_("Object"), ICON_NONE);
     PointerRNA texture_coords_obj_ptr = RNA_pointer_get(&ptr, "texture_coords_object");
     if (!RNA_pointer_is_null(&texture_coords_obj_ptr) &&
         (RNA_enum_get(&texture_coords_obj_ptr, "type") == OB_ARMATURE)) {
       PointerRNA texture_coords_obj_data_ptr = RNA_pointer_get(&texture_coords_obj_ptr, "data");
-      uiItemPointerR(layout,
+      uiItemPointerR(col,
                      &ptr,
                      "texture_coords_bone",
                      &texture_coords_obj_data_ptr,
@@ -497,7 +499,7 @@ static void texture_panel_draw(const bContext *C, Panel *panel)
   }
   else if (texture_coords == MOD_DISP_MAP_UV && RNA_enum_get(&ob_ptr, "type") == OB_MESH) {
     PointerRNA obj_data_ptr = RNA_pointer_get(&ob_ptr, "data");
-    uiItemPointerR(layout, &ptr, "uv_layer", &obj_data_ptr, "uv_layers", NULL, ICON_NONE);
+    uiItemPointerR(col, &ptr, "uv_layer", &obj_data_ptr, "uv_layers", NULL, ICON_NONE);
   }
 }
 
@@ -508,6 +510,25 @@ static void panelRegister(ARegionType *region_type)
       region_type, "falloff", "Falloff", NULL, falloff_panel_draw, panel_type);
   modifier_subpanel_register(
       region_type, "texture", "Texture", NULL, texture_panel_draw, panel_type);
+}
+
+static void blendWrite(BlendWriter *writer, const ModifierData *md)
+{
+  const WarpModifierData *tmd = (const WarpModifierData *)md;
+
+  if (tmd->curfalloff) {
+    BKE_curvemapping_blend_write(writer, tmd->curfalloff);
+  }
+}
+
+static void blendRead(BlendDataReader *reader, ModifierData *md)
+{
+  WarpModifierData *tmd = (WarpModifierData *)md;
+
+  BLO_read_data_address(reader, &tmd->curfalloff);
+  if (tmd->curfalloff) {
+    BKE_curvemapping_blend_read(reader, tmd->curfalloff);
+  }
 }
 
 ModifierTypeInfo modifierType_Warp = {
@@ -540,6 +561,6 @@ ModifierTypeInfo modifierType_Warp = {
     /* foreachTexLink */ foreachTexLink,
     /* freeRuntimeData */ NULL,
     /* panelRegister */ panelRegister,
-    /* blendWrite */ NULL,
-    /* blendRead */ NULL,
+    /* blendWrite */ blendWrite,
+    /* blendRead */ blendRead,
 };

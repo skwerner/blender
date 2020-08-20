@@ -21,8 +21,7 @@
  * \ingroup gpu
  */
 
-#ifndef __GPU_UNIFORMBUFFER_H__
-#define __GPU_UNIFORMBUFFER_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -42,8 +41,7 @@ void GPU_uniformbuffer_dynamic_update(GPUUniformBuffer *ubo_);
 
 void GPU_uniformbuffer_bind(GPUUniformBuffer *ubo, int number);
 void GPU_uniformbuffer_unbind(GPUUniformBuffer *ubo);
-
-int GPU_uniformbuffer_bindpoint(GPUUniformBuffer *ubo);
+void GPU_uniformbuffer_unbind_all(void);
 
 bool GPU_uniformbuffer_is_empty(GPUUniformBuffer *ubo);
 bool GPU_uniformbuffer_is_dirty(GPUUniformBuffer *ubo);
@@ -53,5 +51,3 @@ bool GPU_uniformbuffer_is_dirty(GPUUniformBuffer *ubo);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __GPU_UNIFORMBUFFER_H__ */

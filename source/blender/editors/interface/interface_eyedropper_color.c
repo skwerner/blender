@@ -39,8 +39,6 @@
 
 #include "RNA_access.h"
 
-#include "GPU_glew.h"
-
 #include "UI_interface.h"
 
 #include "IMB_colormanagement.h"
@@ -174,7 +172,7 @@ void eyedropper_color_sample_fl(bContext *C, int mx, int my, float r_col[3])
       ARegion *region = BKE_area_find_region_xy(area, RGN_TYPE_WINDOW, mx, my);
       if (region) {
         SpaceNode *snode = area->spacedata.first;
-        int mval[2] = {mx - region->winrct.xmin, my - region->winrct.ymin};
+        const int mval[2] = {mx - region->winrct.xmin, my - region->winrct.ymin};
 
         if (ED_space_node_color_sample(bmain, snode, region, mval, r_col)) {
           return;
@@ -196,7 +194,7 @@ void eyedropper_color_sample_fl(bContext *C, int mx, int my, float r_col[3])
 
   if (win) {
     /* Fallback to simple opengl picker. */
-    int mval[2] = {mx, my};
+    const int mval[2] = {mx, my};
     WM_window_pixel_sample_read(wm, win, mval, r_col);
     IMB_colormanagement_display_to_scene_linear_v3(r_col, display);
   }
@@ -320,9 +318,7 @@ static int eyedropper_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(
 
     return OPERATOR_RUNNING_MODAL;
   }
-  else {
-    return OPERATOR_PASS_THROUGH;
-  }
+  return OPERATOR_PASS_THROUGH;
 }
 
 /* Repeat operator */
@@ -338,9 +334,7 @@ static int eyedropper_exec(bContext *C, wmOperator *op)
 
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_PASS_THROUGH;
-  }
+  return OPERATOR_PASS_THROUGH;
 }
 
 static bool eyedropper_poll(bContext *C)

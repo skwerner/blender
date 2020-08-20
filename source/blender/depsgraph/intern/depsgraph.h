@@ -31,6 +31,8 @@
 
 #include <stdlib.h>
 
+#include "MEM_guardedalloc.h"
+
 #include "DNA_ID.h" /* for ID_Type */
 
 #include "BKE_main.h" /* for MAX_LIBARRAY */
@@ -47,7 +49,8 @@ struct ID;
 struct Scene;
 struct ViewLayer;
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 struct IDNode;
 struct Node;
@@ -65,6 +68,7 @@ struct Depsgraph {
 
   TimeSourceNode *add_time_source();
   TimeSourceNode *find_time_source() const;
+  void tag_time_source();
 
   IDNode *find_id_node(const ID *id) const;
   IDNode *add_id_node(ID *id, ID *id_cow_hint = nullptr);
@@ -118,10 +122,6 @@ struct Depsgraph {
   /* Nodes which have been tagged as "directly modified". */
   Set<OperationNode *> entry_tags;
 
-  /* Special entry tag for time source. Allows to tag invisible dependency graphs for update when
-   * scene frame changes, so then when dependency graph becomes visible it is on a proper state. */
-  bool need_update_time;
-
   /* Convenience Data ................... */
 
   /* XXX: should be collected after building (if actually needed?) */
@@ -167,6 +167,9 @@ struct Depsgraph {
   /* Cached list of colliders/effectors for collections and the scene
    * created along with relations, for fast lookup during evaluation. */
   Map<const ID *, ListBase *> *physics_relations[DEG_PHYSICS_RELATIONS_NUM];
+
+  MEM_CXX_CLASS_ALLOC_FUNCS("Depsgraph");
 };
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_CONTEXT_H__
-#define __BKE_CONTEXT_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -312,6 +311,8 @@ int CTX_data_visible_gpencil_layers(const bContext *C, ListBase *list);
 int CTX_data_editable_gpencil_layers(const bContext *C, ListBase *list);
 int CTX_data_editable_gpencil_strokes(const bContext *C, ListBase *list);
 
+bool CTX_wm_interface_locked(const bContext *C);
+
 /* Gets pointer to the dependency graph.
  * If it doesn't exist yet, it will be allocated.
  *
@@ -343,6 +344,4 @@ struct Depsgraph *CTX_data_depsgraph_on_load(const bContext *C);
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

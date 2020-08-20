@@ -47,6 +47,8 @@
 #include "UI_interface.h"
 #include "UI_resources.h"
 
+#include "BLO_read_write.h"
+
 #include "RNA_access.h"
 
 #include "DEG_depsgraph.h"
@@ -370,9 +372,8 @@ BLI_INLINE uint nearestVert(SDefBindCalcData *const data, const float point_co[3
       len_squared_v3v3(point_co, data->targetCos[edge->v2])) {
     return edge->v1;
   }
-  else {
-    return edge->v2;
-  }
+
+  return edge->v2;
 }
 
 BLI_INLINE int isPolyValid(const float coords[][2], const uint nr)
@@ -448,7 +449,7 @@ BLI_INLINE SDefBindWeightData *computeBindWeights(SDefBindCalcData *const data,
   SDefBindWeightData *bwdata;
   SDefBindPoly *bpoly;
 
-  float world[3] = {0.0f, 0.0f, 1.0f};
+  const float world[3] = {0.0f, 0.0f, 1.0f};
   float avg_point_dist = 0.0f;
   float tot_weight = 0.0f;
   int inf_weight_flags = 0;
@@ -1128,7 +1129,7 @@ static bool surfacedeformBind(SurfaceDeformModifierData *smd_orig,
     freeData((ModifierData *)smd_orig);
   }
   else if (data.success == MOD_SDEF_BIND_RESULT_OVERLAP_ERR) {
-    BKE_modifier_set_error((ModifierData *)smd_eval, "Target contains overlapping verts");
+    BKE_modifier_set_error((ModifierData *)smd_eval, "Target contains overlapping vertices");
     freeData((ModifierData *)smd_orig);
   }
   else if (data.success == MOD_SDEF_BIND_RESULT_GENERIC_ERR) {
@@ -1278,10 +1279,10 @@ static void surfacedeformModifier_do(ModifierData *md,
 
   /* Poly count checks */
   if (smd->numverts != numverts) {
-    BKE_modifier_set_error(md, "Verts changed from %u to %u", smd->numverts, numverts);
+    BKE_modifier_set_error(md, "Vertices changed from %u to %u", smd->numverts, numverts);
     return;
   }
-  else if (smd->numpoly != tnumpoly) {
+  if (smd->numpoly != tnumpoly) {
     BKE_modifier_set_error(md, "Target polygons changed from %u to %u", smd->numpoly, tnumpoly);
     return;
   }
@@ -1438,6 +1439,64 @@ static void panelRegister(ARegionType *region_type)
   modifier_panel_register(region_type, eModifierType_SurfaceDeform, panel_draw);
 }
 
+static void blendWrite(BlendWriter *writer, const ModifierData *md)
+{
+  const SurfaceDeformModifierData *smd = (const SurfaceDeformModifierData *)md;
+
+  BLO_write_struct_array(writer, SDefVert, smd->numverts, smd->verts);
+
+  if (smd->verts) {
+    for (int i = 0; i < smd->numverts; i++) {
+      BLO_write_struct_array(writer, SDefBind, smd->verts[i].numbinds, smd->verts[i].binds);
+
+      if (smd->verts[i].binds) {
+        for (int j = 0; j < smd->verts[i].numbinds; j++) {
+          BLO_write_uint32_array(
+              writer, smd->verts[i].binds[j].numverts, smd->verts[i].binds[j].vert_inds);
+
+          if (smd->verts[i].binds[j].mode == MOD_SDEF_MODE_CENTROID ||
+              smd->verts[i].binds[j].mode == MOD_SDEF_MODE_LOOPTRI) {
+            BLO_write_float3_array(writer, 1, smd->verts[i].binds[j].vert_weights);
+          }
+          else {
+            BLO_write_float_array(
+                writer, smd->verts[i].binds[j].numverts, smd->verts[i].binds[j].vert_weights);
+          }
+        }
+      }
+    }
+  }
+}
+
+static void blendRead(BlendDataReader *reader, ModifierData *md)
+{
+  SurfaceDeformModifierData *smd = (SurfaceDeformModifierData *)md;
+
+  BLO_read_data_address(reader, &smd->verts);
+
+  if (smd->verts) {
+    for (int i = 0; i < smd->numverts; i++) {
+      BLO_read_data_address(reader, &smd->verts[i].binds);
+
+      if (smd->verts[i].binds) {
+        for (int j = 0; j < smd->verts[i].numbinds; j++) {
+          BLO_read_uint32_array(
+              reader, smd->verts[i].binds[j].numverts, &smd->verts[i].binds[j].vert_inds);
+
+          if (smd->verts[i].binds[j].mode == MOD_SDEF_MODE_CENTROID ||
+              smd->verts[i].binds[j].mode == MOD_SDEF_MODE_LOOPTRI) {
+            BLO_read_float3_array(reader, 1, &smd->verts[i].binds[j].vert_weights);
+          }
+          else {
+            BLO_read_float_array(
+                reader, smd->verts[i].binds[j].numverts, &smd->verts[i].binds[j].vert_weights);
+          }
+        }
+      }
+    }
+  }
+}
+
 ModifierTypeInfo modifierType_SurfaceDeform = {
     /* name */ "SurfaceDeform",
     /* structName */ "SurfaceDeformModifierData",
@@ -1468,6 +1527,6 @@ ModifierTypeInfo modifierType_SurfaceDeform = {
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
     /* panelRegister */ panelRegister,
-    /* blendWrite */ NULL,
-    /* blendRead */ NULL,
+    /* blendWrite */ blendWrite,
+    /* blendRead */ blendRead,
 };

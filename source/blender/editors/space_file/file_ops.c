@@ -518,7 +518,7 @@ static int file_select_invoke(bContext *C, wmOperator *op, const wmEvent *event)
   rect.ymin = rect.ymax = event->mval[1];
 
   if (!ED_fileselect_layout_is_inside_pt(sfile->layout, &region->v2d, rect.xmin, rect.ymin)) {
-    return OPERATOR_CANCELLED;
+    return OPERATOR_CANCELLED | OPERATOR_PASS_THROUGH;
   }
 
   if (sfile && sfile->params) {
@@ -778,7 +778,7 @@ static bool file_walk_select_do(bContext *C,
       }
       /* if we don't extend, selecting '..' (index == 0) is allowed so
        * using key selection to go to parent directory is possible */
-      else if (active_new != 0) {
+      if (active_new != 0) {
         /* select initial file */
         active_new = active_old;
       }
@@ -1697,6 +1697,19 @@ static int file_exec(bContext *C, wmOperator *exec_op)
   return OPERATOR_FINISHED;
 }
 
+static int file_exec_invoke(bContext *C, wmOperator *op, const wmEvent *event)
+{
+  ARegion *region = CTX_wm_region(C);
+  SpaceFile *sfile = CTX_wm_space_file(C);
+
+  if (!ED_fileselect_layout_is_inside_pt(
+          sfile->layout, &region->v2d, event->mval[0], event->mval[1])) {
+    return OPERATOR_CANCELLED | OPERATOR_PASS_THROUGH;
+  }
+
+  return file_exec(C, op);
+}
+
 void FILE_OT_execute(struct wmOperatorType *ot)
 {
   PropertyRNA *prop;
@@ -1707,6 +1720,7 @@ void FILE_OT_execute(struct wmOperatorType *ot)
   ot->idname = "FILE_OT_execute";
 
   /* api callbacks */
+  ot->invoke = file_exec_invoke;
   ot->exec = file_exec;
   ot->poll = file_operator_poll;
 

@@ -119,9 +119,8 @@ static void splineik_init_tree_from_pchan(Scene *UNUSED(scene),
   if (segcount == 0) {
     return;
   }
-  else {
-    pchanRoot = pchanChain[segcount - 1];
-  }
+
+  pchanRoot = pchanChain[segcount - 1];
 
   /* perform binding step if required */
   if ((ikData->flag & CONSTRAINT_SPLINEIK_BOUND) == 0) {
@@ -659,7 +658,7 @@ void BKE_pose_eval_init_ik(struct Depsgraph *depsgraph, Scene *scene, Object *ob
     return;
   }
   /* construct the IK tree (standard IK) */
-  BIK_initialize_tree(depsgraph, scene, object, ctime);
+  BIK_init_tree(depsgraph, scene, object, ctime);
   /* construct the Spline IK trees
    * - this is not integrated as an IK plugin, since it should be able
    *   to function in conjunction with standard IK.  */
@@ -717,7 +716,7 @@ void BKE_pose_constraints_evaluate(struct Depsgraph *depsgraph,
   if (armature->flag & ARM_RESTPOS) {
     return;
   }
-  else if (pchan->flag & POSE_IKTREE || pchan->flag & POSE_IKSPLINE) {
+  if (pchan->flag & POSE_IKTREE || pchan->flag & POSE_IKSPLINE) {
     /* IK are being solved separately/ */
   }
   else {

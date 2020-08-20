@@ -405,7 +405,8 @@ static CDTEdge *add_vert_to_symedge_edge(CDT_state *cdt, CDTVert *v, SymEdge *se
   return e;
 }
 
-/* Connect the verts of se1 and se2, assuming that currently those two SymEdges are on
+/**
+ * Connect the verts of se1 and se2, assuming that currently those two #SymEdges are on
  * the outer boundary (have face == outer_face) of two components that are isolated from
  * each other.
  */
@@ -479,7 +480,7 @@ static CDTEdge *split_edge(CDT_state *cdt, SymEdge *se, double lambda)
  * the deleted edge will be the one that was e's face.
  * There will be now an unused face, marked by setting its deleted flag,
  * and an unused #CDTEdge, marked by setting the next and rot pointers of
- * its SymEdges to NULL.
+ * its #SymEdge(s) to NULL.
  * <pre>
  *        .  v2               .
  *       / \                 / \
@@ -599,19 +600,19 @@ static int site_lexicographic_cmp(const void *a, const void *b)
   if (co1[0] < co2[0]) {
     return -1;
   }
-  else if (co1[0] > co2[0]) {
+  if (co1[0] > co2[0]) {
     return 1;
   }
-  else if (co1[1] < co2[1]) {
+  if (co1[1] < co2[1]) {
     return -1;
   }
-  else if (co1[1] > co2[1]) {
+  if (co1[1] > co2[1]) {
     return 1;
   }
-  else if (s1->orig_index < s2->orig_index) {
+  if (s1->orig_index < s2->orig_index) {
     return -1;
   }
-  else if (s1->orig_index > s2->orig_index) {
+  if (s1->orig_index > s2->orig_index) {
     return 1;
   }
   return 0;
@@ -951,7 +952,7 @@ static void initial_triangulation(CDT_state *cdt)
   }
 #endif
 
-  /* Now dedup according to user-defined epsilon.
+  /* Now de-duplicate according to user-defined epsilon.
    * We will merge a vertex into an earlier-indexed vertex
    * that is within epsilon (Euclidean distance).
    * Merges may cascade. So we may end up merging two things
@@ -973,7 +974,7 @@ static void initial_triangulation(CDT_state *cdt)
       if (jco[0] > xend) {
         break; /* No more j's to process. */
       }
-      else if (jco[1] > yend) {
+      if (jco[1] > yend) {
         /* Get past any string of v's with the same x and too-big y. */
         xcur = jco[0];
         while (++j < n) {
@@ -1017,7 +1018,9 @@ static void initial_triangulation(CDT_state *cdt)
   MEM_freeN(sites);
 }
 
-/** Use LinkNode linked list as stack of SymEdges, allocating from cdt->listpool. */
+/**
+ * Use #LinkNode linked list as stack of #SymEdges, allocating from `cdt->listpool` .
+ */
 typedef LinkNode *Stack;
 
 BLI_INLINE void push(Stack *stack, SymEdge *se, CDT_state *cdt)
@@ -1153,22 +1156,22 @@ static double tri_orient(const SymEdge *t)
  * in the path we will take to insert an edge constraint.
  * Each such point will either be
  * (a) a vertex or
- * (b) a fraction lambda (0 < lambda < 1) along some SymEdge.]
+ * (b) a fraction lambda (0 < lambda < 1) along some #SymEdge.]
  *
  * In general, lambda=0 indicates case a and lambda != 0 indicates case be.
  * The 'in' edge gives the destination attachment point of a diagonal from the previous crossing,
  * and the 'out' edge gives the origin attachment point of a diagonal to the next crossing.
  * But in some cases, 'in' and 'out' are undefined or not needed, and will be NULL.
  *
- * For case (a), 'vert' will be the vertex, and lambda will be 0, and 'in' will be the SymEdge from
- * 'vert' that has as face the one that you go through to get to this vertex. If you go exactly
- * along an edge then we set 'in' to NULL, since it won't be needed. The first crossing will have
- * 'in' = NULL. We set 'out' to the SymEdge that has the face we go though to get to the next
- * crossing, or, if the next crossing is a case (a), then it is the edge that goes to that next
- * vertex. 'out' wlll be NULL for the last one.
+ * For case (a), 'vert' will be the vertex, and lambda will be 0, and 'in' will be the #SymEdge
+ * from 'vert' that has as face the one that you go through to get to this vertex. If you go
+ * exactly along an edge then we set 'in' to NULL, since it won't be needed. The first crossing
+ * will have 'in' = NULL. We set 'out' to the #SymEdge that has the face we go though to get to the
+ * next crossing, or, if the next crossing is a case (a), then it is the edge that goes to that
+ * next vertex. 'out' wlll be NULL for the last one.
  *
  * For case (b), vert will be NULL at first, and later filled in with the created split vertex,
- * and 'in' will be the SymEdge that we go through, and lambda will be between 0 and 1,
+ * and 'in' will be the #SymEdge that we go through, and lambda will be between 0 and 1,
  * the fraction from in's vert to in->next's vert to put the split vertex.
  * 'out' is not needed in this case, since the attachment point will be the sym of the first
  * half of the split edge.
@@ -1231,8 +1234,8 @@ static void fill_crossdata_for_through_vert(CDTVert *v,
 
 /**
  * As part of finding crossings, we found a case where orient tests say that the next crossing
- * is on the SymEdge t, while intersecting with the ray from curco to v2.
- * Find the intersection point and fill in the CrossData for that point.
+ * is on the #SymEdge t, while intersecting with the ray from \a curco to \a v2.
+ * Find the intersection point and fill in the #CrossData for that point.
  * It may turn out that when doing the intersection, we get an answer that says that
  * this case is better handled as through-vertex case instead, so we may do that.
  * In the latter case, we want to avoid a situation where the current crossing is on an edge
@@ -1411,7 +1414,7 @@ static bool get_next_crossing_from_vert(CDT_state *cdt,
       ok = true;
       break;
     }
-    else if (t->face != cdt->outer_face) {
+    if (t->face != cdt->outer_face) {
       orient2 = orient2d(vcur->co, vb->co, v2->co);
 #ifdef DEBUG_CDT
       if (dbg_level > 1) {
@@ -1442,12 +1445,12 @@ static bool get_next_crossing_from_vert(CDT_state *cdt,
 }
 
 /**
- * As part of finding the crossings of a ray to v2, find the next crossing after 'cd', assuming
+ * As part of finding the crossings of a ray to 'v2', find the next crossing after 'cd', assuming
  * 'cd' represents a crossing that goes through a an edge, not at either end of that edge.
  *
- * We have the triangle vb-va-vc, where va and vb are the split edge and vc is the third vertex on
- * that new side of the edge (should be closer to v2). The next crossing should be through vc or
- * intersecting vb-vc or va-vc.
+ * We have the triangle 'vb-va-vc', where va and vb are the split edge and 'vc' is the third vertex
+ * on that new side of the edge (should be closer to v2). The next crossing should be through 'vc'
+ * or intersecting 'vb-vc' or 'va-vc'.
  */
 static void get_next_crossing_from_edge(CDT_state *cdt,
                                         CrossData *cd,
@@ -1680,14 +1683,12 @@ static void add_edge_constraint(
             (cd_prev->lambda != 0.0 && cd_prev->in->vert != v && cd_prev->in->next->vert != v)) {
           break;
         }
-        else {
-          cd_prev->lambda = -1.0; /* Mark cd_prev as 'deleted'. */
+        cd_prev->lambda = -1.0; /* Mark cd_prev as 'deleted'. */
 #ifdef DEBUG_CDT
-          if (dbg_level > 0) {
-            fprintf(stderr, "deleted crossing %d\n", j);
-          }
-#endif
+        if (dbg_level > 0) {
+          fprintf(stderr, "deleted crossing %d\n", j);
         }
+#endif
       }
       if (j < i - 1) {
         /* Some crossings were deleted. Fix the in and out edges across gap. */
@@ -1999,19 +2000,19 @@ static int evl_cmp(const void *a, const void *b)
   if (area->e_id < sb->e_id) {
     return -1;
   }
-  else if (area->e_id > sb->e_id) {
+  if (area->e_id > sb->e_id) {
     return 1;
   }
-  else if (area->lambda < sb->lambda) {
+  if (area->lambda < sb->lambda) {
     return -1;
   }
-  else if (area->lambda > sb->lambda) {
+  if (area->lambda > sb->lambda) {
     return 1;
   }
-  else if (area->v_id < sb->v_id) {
+  if (area->v_id < sb->v_id) {
     return -1;
   }
-  else if (area->v_id > sb->v_id) {
+  if (area->v_id > sb->v_id) {
     return 1;
   }
   return 0;
@@ -2233,16 +2234,15 @@ static const CDT_input *modify_input_for_near_edge_ends(const CDT_input *input, 
     new_input->epsilon = input->epsilon;
     new_input->verts_len = input->verts_len;
     new_input->vert_coords = (float(*)[2])MEM_malloc_arrayN(
-        new_input->verts_len, 2 * sizeof(float), __func__);
+        new_input->verts_len, sizeof(float[2]), __func__);
     /* We don't do it now, but may decide to change coords of snapped verts. */
     memmove(new_input->vert_coords,
             input->vert_coords,
-            (size_t)new_input->verts_len * sizeof(float) * 2);
+            sizeof(float[2]) * (size_t)new_input->verts_len);
 
     if (edges_len > 0) {
       new_input->edges_len = new_tot_con_edges;
-      new_input->edges = (int(*)[2])MEM_malloc_arrayN(
-          new_tot_con_edges, 2 * sizeof(int), __func__);
+      new_input->edges = (int(*)[2])MEM_malloc_arrayN(new_tot_con_edges, sizeof(int[2]), __func__);
     }
 
     if (input->faces_len > 0) {
@@ -2383,9 +2383,7 @@ static const CDT_input *modify_input_for_near_edge_ends(const CDT_input *input, 
   if (new_input != NULL) {
     return (const CDT_input *)new_input;
   }
-  else {
-    return input;
-  }
+  return input;
 }
 
 static void free_modified_input(CDT_input *input)
@@ -2742,7 +2740,7 @@ static int edge_to_sort_cmp(const void *a, const void *b)
   if (e1->len_squared > e2->len_squared) {
     return -1;
   }
-  else if (e1->len_squared < e2->len_squared) {
+  if (e1->len_squared < e2->len_squared) {
     return 1;
   }
   return 0;
@@ -3379,6 +3377,9 @@ CDT_result *BLI_delaunay_2d_cdt_calc(const CDT_input *input, const CDT_output_ty
 
   if (input != input_orig) {
     free_modified_input((CDT_input *)input);
+  }
+  if (new_edge_map != NULL) {
+    MEM_freeN(new_edge_map);
   }
   new_cdt_free(cdt);
   return result;
@@ -4317,7 +4318,7 @@ static void exactinit(void)
  */
 
 static int fast_expansion_sum_zeroelim(
-    int elen, double *e, int flen, double *f, double *h) /* h cannot be e or f. */
+    int elen, const double *e, int flen, const double *f, double *h) /* h cannot be e or f. */
 {
   double Q;
   INEXACT double Qnew;
@@ -4402,7 +4403,7 @@ static int fast_expansion_sum_zeroelim(
  */
 
 static int scale_expansion_zeroelim(int elen,
-                                    double *e,
+                                    const double *e,
                                     double b,
                                     double *h) /* e and h cannot be the same. */
 {
@@ -4448,7 +4449,7 @@ static int scale_expansion_zeroelim(int elen,
  *  See either version of my paper for details.
  */
 
-static double estimate(int elen, double *e)
+static double estimate(int elen, const double *e)
 {
   double Q;
   int eindex;
@@ -4567,17 +4568,13 @@ static double orient2d(const double *pa, const double *pb, const double *pc)
     if (detright <= 0.0) {
       return det;
     }
-    else {
-      detsum = detleft + detright;
-    }
+    detsum = detleft + detright;
   }
   else if (detleft < 0.0) {
     if (detright >= 0.0) {
       return det;
     }
-    else {
-      detsum = -detleft - detright;
-    }
+    detsum = -detleft - detright;
   }
   else {
     return det;
@@ -4606,8 +4603,13 @@ static double orient2d(const double *pa, const double *pb, const double *pc)
  *  returned value has the correct sign.  Hence, incircle() is usually quite
  *  fast, but will run more slowly when the input points are cocircular or
  *  nearly so.
- */
-
+ *
+ * This function is allowed to be long for two reasons. Firstly, it was taken
+ * from an external source and only slightly adapted, and keeping its original
+ * form will make integration of upstream changes easier. Secondly, it is very
+ * sensitive to floating point errors, and refactoring may break it in subtle
+ * and hard to detect ways.
+ * NOLINTNEXTLINE: readability-function-size */
 static double incircleadapt(
     const double *pa, const double *pb, const double *pc, const double *pd, double permanent)
 {

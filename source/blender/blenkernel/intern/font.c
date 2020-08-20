@@ -78,7 +78,7 @@ static void vfont_init_data(ID *id)
     if (vfd) {
       vfont->data = vfd;
 
-      BLI_strncpy(vfont->name, FO_BUILTIN_NAME, sizeof(vfont->name));
+      BLI_strncpy(vfont->filepath, FO_BUILTIN_NAME, sizeof(vfont->filepath));
     }
 
     /* Free the packed file */
@@ -177,7 +177,7 @@ static int builtin_font_size = 0;
 
 bool BKE_vfont_is_builtin(struct VFont *vfont)
 {
-  return STREQ(vfont->name, FO_BUILTIN_NAME);
+  return STREQ(vfont->filepath, FO_BUILTIN_NAME);
 }
 
 void BKE_vfont_builtin_register(void *mem, int size)
@@ -193,13 +193,12 @@ static PackedFile *get_builtin_packedfile(void)
 
     return NULL;
   }
-  else {
-    void *mem = MEM_mallocN(builtin_font_size, "vfd_builtin");
 
-    memcpy(mem, builtin_font_data, builtin_font_size);
+  void *mem = MEM_mallocN(builtin_font_size, "vfd_builtin");
 
-    return BKE_packedfile_new_from_memory(mem, builtin_font_size);
-  }
+  memcpy(mem, builtin_font_data, builtin_font_size);
+
+  return BKE_packedfile_new_from_memory(mem, builtin_font_size);
 }
 
 static VFontData *vfont_get_data(VFont *vfont)
@@ -237,20 +236,20 @@ static VFontData *vfont_get_data(VFont *vfont)
         }
       }
       else {
-        pf = BKE_packedfile_new(NULL, vfont->name, ID_BLEND_PATH_FROM_GLOBAL(&vfont->id));
+        pf = BKE_packedfile_new(NULL, vfont->filepath, ID_BLEND_PATH_FROM_GLOBAL(&vfont->id));
 
         if (vfont->temp_pf == NULL) {
           vfont->temp_pf = BKE_packedfile_new(
-              NULL, vfont->name, ID_BLEND_PATH_FROM_GLOBAL(&vfont->id));
+              NULL, vfont->filepath, ID_BLEND_PATH_FROM_GLOBAL(&vfont->id));
         }
       }
       if (!pf) {
-        CLOG_WARN(&LOG, "Font file doesn't exist: %s", vfont->name);
+        CLOG_WARN(&LOG, "Font file doesn't exist: %s", vfont->filepath);
 
         /* DON'T DO THIS
          * missing file shouldn't modify path! - campbell */
 #if 0
-        strcpy(vfont->name, FO_BUILTIN_NAME);
+        strcpy(vfont->filepath, FO_BUILTIN_NAME);
 #endif
         pf = get_builtin_packedfile();
       }
@@ -301,7 +300,7 @@ VFont *BKE_vfont_load(Main *bmain, const char *filepath)
       if (vfd->name[0] != '\0') {
         BLI_strncpy(vfont->id.name + 2, vfd->name, sizeof(vfont->id.name) - 2);
       }
-      BLI_strncpy(vfont->name, filepath, sizeof(vfont->name));
+      BLI_strncpy(vfont->filepath, filepath, sizeof(vfont->filepath));
 
       /* if autopack is on store the packedfile in de font structure */
       if (!is_builtin && (G.fileflags & G_FILE_AUTOPACK)) {
@@ -333,7 +332,7 @@ VFont *BKE_vfont_load_exists_ex(struct Main *bmain, const char *filepath, bool *
 
   /* first search an identical filepath */
   for (vfont = bmain->fonts.first; vfont; vfont = vfont->id.next) {
-    BLI_strncpy(strtest, vfont->name, sizeof(vfont->name));
+    BLI_strncpy(strtest, vfont->filepath, sizeof(vfont->filepath));
     BLI_path_abs(strtest, ID_BLEND_PATH(bmain, &vfont->id));
 
     if (BLI_path_cmp(strtest, str) == 0) {
@@ -621,12 +620,11 @@ int BKE_vfont_select_get(Object *ob, int *r_start, int *r_end)
   if (start == end + 1) {
     return 0;
   }
-  else {
-    BLI_assert(start < end + 1);
-    *r_start = start;
-    *r_end = end;
-    return direction;
-  }
+
+  BLI_assert(start < end + 1);
+  *r_start = start;
+  *r_end = end;
+  return direction;
 }
 
 void BKE_vfont_select_clamp(Object *ob)
@@ -647,12 +645,11 @@ static float char_width(Curve *cu, VChar *che, CharInfo *info)
   if (che == NULL) {
     return 0.0f;
   }
-  else if (info->flag & CU_CHINFO_SMALLCAPS_CHECK) {
+  if (info->flag & CU_CHINFO_SMALLCAPS_CHECK) {
     return che->width * cu->smallcaps_scale;
   }
-  else {
-    return che->width;
-  }
+
+  return che->width;
 }
 
 static void textbox_scale(TextBox *tb_dst, const TextBox *tb_src, float scale)
@@ -797,7 +794,7 @@ static bool vfont_to_curve(Object *ob,
   }
   else {
     char32_t *mem_tmp;
-    slen = cu->len_wchar;
+    slen = cu->len_char32;
 
     /* Create unicode string */
     mem_tmp = MEM_malloc_arrayN((slen + 1), sizeof(*mem_tmp), "convertedmem");
@@ -1603,32 +1600,32 @@ static bool vfont_to_curve(Object *ob,
     }
     return true;
   }
+
+  ok = true;
+finally:
+  if (r_text) {
+    *r_text = mem;
+    *r_text_len = slen;
+    *r_text_free = (ef == NULL);
+  }
   else {
-    ok = true;
-  finally:
-    if (r_text) {
-      *r_text = mem;
-      *r_text_len = slen;
-      *r_text_free = (ef == NULL);
+    if (ef == NULL) {
+      MEM_freeN((void *)mem);
+    }
+  }
+
+  if (chartransdata) {
+    if (ok && r_chartransdata) {
+      *r_chartransdata = chartransdata;
     }
     else {
-      if (ef == NULL) {
-        MEM_freeN((void *)mem);
-      }
+      MEM_freeN(chartransdata);
     }
-
-    if (chartransdata) {
-      if (ok && r_chartransdata) {
-        *r_chartransdata = chartransdata;
-      }
-      else {
-        MEM_freeN(chartransdata);
-      }
-    }
-
-    /* Store the effective scale, to use for the textbox lines. */
-    cu->fsize_realtime = font_size;
   }
+
+  /* Store the effective scale, to use for the textbox lines. */
+  cu->fsize_realtime = font_size;
+
   return ok;
 
 #undef MARGIN_X_MIN

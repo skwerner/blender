@@ -130,9 +130,7 @@ AnimData *BKE_animdata_from_id(ID *id)
     IdAdtTemplate *iat = (IdAdtTemplate *)id;
     return iat->adt;
   }
-  else {
-    return NULL;
-  }
+  return NULL;
 }
 
 /* Add AnimData to the given ID-block. In order for this to work, we assume that
@@ -161,9 +159,7 @@ AnimData *BKE_animdata_add_id(ID *id)
 
     return iat->adt;
   }
-  else {
-    return NULL;
-  }
+  return NULL;
 }
 
 /* Action Setter --------------------------------------- */
@@ -379,17 +375,19 @@ bool BKE_animdata_copy_id(Main *bmain, ID *id_to, ID *id_from, const int flag)
   return true;
 }
 
-void BKE_animdata_copy_id_action(Main *bmain, ID *id, const bool set_newid)
+static void animdata_copy_id_action(Main *bmain,
+                                    ID *id,
+                                    const bool set_newid,
+                                    const bool do_linked_id)
 {
-  const bool is_id_liboverride = ID_IS_OVERRIDE_LIBRARY(id);
   AnimData *adt = BKE_animdata_from_id(id);
   if (adt) {
-    if (adt->action && (!is_id_liboverride || !ID_IS_LINKED(adt->action))) {
+    if (adt->action && (do_linked_id || !ID_IS_LINKED(adt->action))) {
       id_us_min((ID *)adt->action);
       adt->action = set_newid ? ID_NEW_SET(adt->action, BKE_action_copy(bmain, adt->action)) :
                                 BKE_action_copy(bmain, adt->action);
     }
-    if (adt->tmpact && (!is_id_liboverride || !ID_IS_LINKED(adt->tmpact))) {
+    if (adt->tmpact && (do_linked_id || !ID_IS_LINKED(adt->tmpact))) {
       id_us_min((ID *)adt->tmpact);
       adt->tmpact = set_newid ? ID_NEW_SET(adt->tmpact, BKE_action_copy(bmain, adt->tmpact)) :
                                 BKE_action_copy(bmain, adt->tmpact);
@@ -397,10 +395,25 @@ void BKE_animdata_copy_id_action(Main *bmain, ID *id, const bool set_newid)
   }
   bNodeTree *ntree = ntreeFromID(id);
   if (ntree) {
-    BKE_animdata_copy_id_action(bmain, &ntree->id, set_newid);
+    animdata_copy_id_action(bmain, &ntree->id, set_newid, do_linked_id);
   }
   /* Note that collections are not animatable currently, so no need to handle scenes' master
    * collection here. */
+}
+
+void BKE_animdata_copy_id_action(Main *bmain, ID *id)
+{
+  const bool is_id_liboverride = ID_IS_OVERRIDE_LIBRARY(id);
+  animdata_copy_id_action(bmain, id, false, !is_id_liboverride);
+}
+
+void BKE_animdata_duplicate_id_action(struct Main *bmain,
+                                      struct ID *id,
+                                      const eDupli_ID_Flags duplicate_flags)
+{
+  if (duplicate_flags & USER_DUP_ACT) {
+    animdata_copy_id_action(bmain, id, true, (duplicate_flags & USER_DUP_LINKED_ID) != 0);
+  }
 }
 
 /* Merge copies of the data from the src AnimData into the destination AnimData */
@@ -492,24 +505,43 @@ static bool animpath_matches_basepath(const char path[], const char basepath[])
   return (path && basepath) && STRPREFIX(path, basepath);
 }
 
+static void animpath_update_basepath(FCurve *fcu,
+                                     const char *old_basepath,
+                                     const char *new_basepath)
+{
+  BLI_assert(animpath_matches_basepath(fcu->rna_path, old_basepath));
+  if (STREQ(old_basepath, new_basepath)) {
+    return;
+  }
+
+  char *new_path = BLI_sprintfN("%s%s", new_basepath, fcu->rna_path + strlen(old_basepath));
+  MEM_freeN(fcu->rna_path);
+  fcu->rna_path = new_path;
+}
+
 /* Move F-Curves in src action to dst action, setting up all the necessary groups
  * for this to happen, but only if the F-Curves being moved have the appropriate
  * "base path".
  * - This is used when data moves from one data-block to another, causing the
  *   F-Curves to need to be moved over too
  */
-void action_move_fcurves_by_basepath(bAction *srcAct, bAction *dstAct, const char basepath[])
+static void action_move_fcurves_by_basepath(bAction *srcAct,
+                                            bAction *dstAct,
+                                            const char *src_basepath,
+                                            const char *dst_basepath)
 {
   FCurve *fcu, *fcn = NULL;
 
   /* sanity checks */
-  if (ELEM(NULL, srcAct, dstAct, basepath)) {
+  if (ELEM(NULL, srcAct, dstAct, src_basepath, dst_basepath)) {
     if (G.debug & G_DEBUG) {
       CLOG_ERROR(&LOG,
-                 "srcAct: %p, dstAct: %p, basepath: %p has insufficient info to work with",
+                 "srcAct: %p, dstAct: %p, src_basepath: %p, dst_basepath: %p has insufficient "
+                 "info to work with",
                  (void *)srcAct,
                  (void *)dstAct,
-                 (void *)basepath);
+                 (void *)src_basepath,
+                 (void *)dst_basepath);
     }
     return;
   }
@@ -527,7 +559,7 @@ void action_move_fcurves_by_basepath(bAction *srcAct, bAction *dstAct, const cha
     /* should F-Curve be moved over?
      * - we only need the start of the path to match basepath
      */
-    if (animpath_matches_basepath(fcu->rna_path, basepath)) {
+    if (animpath_matches_basepath(fcu->rna_path, src_basepath)) {
       bActionGroup *agrp = NULL;
 
       /* if grouped... */
@@ -548,6 +580,8 @@ void action_move_fcurves_by_basepath(bAction *srcAct, bAction *dstAct, const cha
 
       /* perform the migration now */
       action_groups_remove_channel(srcAct, fcu);
+
+      animpath_update_basepath(fcu, src_basepath, dst_basepath);
 
       if (agrp) {
         action_groups_add_channel(dstAct, agrp, fcu);
@@ -581,14 +615,31 @@ void action_move_fcurves_by_basepath(bAction *srcAct, bAction *dstAct, const cha
   }
 }
 
+static void animdata_move_drivers_by_basepath(AnimData *srcAdt,
+                                              AnimData *dstAdt,
+                                              const char *src_basepath,
+                                              const char *dst_basepath)
+{
+  LISTBASE_FOREACH_MUTABLE (FCurve *, fcu, &srcAdt->drivers) {
+    if (animpath_matches_basepath(fcu->rna_path, src_basepath)) {
+      animpath_update_basepath(fcu, src_basepath, dst_basepath);
+      BLI_remlink(&srcAdt->drivers, fcu);
+      BLI_addtail(&dstAdt->drivers, fcu);
+
+      /* TODO: add depsgraph flushing calls? */
+    }
+  }
+}
+
 /* Transfer the animation data from srcID to dstID where the srcID
  * animation data is based off "basepath", creating new AnimData and
- * associated data as necessary
+ * associated data as necessary.
+ *
+ * basepaths is a list of AnimationBasePathChange.
  */
-void BKE_animdata_separate_by_basepath(Main *bmain, ID *srcID, ID *dstID, ListBase *basepaths)
+void BKE_animdata_transfer_by_basepath(Main *bmain, ID *srcID, ID *dstID, ListBase *basepaths)
 {
   AnimData *srcAdt = NULL, *dstAdt = NULL;
-  LinkData *ld;
 
   /* sanity checks */
   if (ELEM(NULL, srcID, dstID)) {
@@ -630,35 +681,19 @@ void BKE_animdata_separate_by_basepath(Main *bmain, ID *srcID, ID *dstID, ListBa
     }
 
     /* loop over base paths, trying to fix for each one... */
-    for (ld = basepaths->first; ld; ld = ld->next) {
-      const char *basepath = (const char *)ld->data;
-      action_move_fcurves_by_basepath(srcAdt->action, dstAdt->action, basepath);
+    LISTBASE_FOREACH (const AnimationBasePathChange *, basepath_change, basepaths) {
+      action_move_fcurves_by_basepath(srcAdt->action,
+                                      dstAdt->action,
+                                      basepath_change->src_basepath,
+                                      basepath_change->dst_basepath);
     }
   }
 
   /* drivers */
   if (srcAdt->drivers.first) {
-    FCurve *fcu, *fcn = NULL;
-
-    /* check each driver against all the base paths to see if any should go */
-    for (fcu = srcAdt->drivers.first; fcu; fcu = fcn) {
-      fcn = fcu->next;
-
-      /* try each basepath in turn, but stop on the first one which works */
-      for (ld = basepaths->first; ld; ld = ld->next) {
-        const char *basepath = (const char *)ld->data;
-
-        if (animpath_matches_basepath(fcu->rna_path, basepath)) {
-          /* just need to change lists */
-          BLI_remlink(&srcAdt->drivers, fcu);
-          BLI_addtail(&dstAdt->drivers, fcu);
-
-          /* TODO: add depsgraph flushing calls? */
-
-          /* can stop now, as moved already */
-          break;
-        }
-      }
+    LISTBASE_FOREACH (const AnimationBasePathChange *, basepath_change, basepaths) {
+      animdata_move_drivers_by_basepath(
+          srcAdt, dstAdt, basepath_change->src_basepath, basepath_change->dst_basepath);
     }
   }
 }
@@ -775,10 +810,9 @@ static char *rna_path_rename_fix(ID *owner_id,
         MEM_freeN(oldpath);
         return newPath;
       }
-      else {
-        /* still couldn't resolve the path... so, might as well just leave it alone */
-        MEM_freeN(newPath);
-      }
+
+      /* still couldn't resolve the path... so, might as well just leave it alone */
+      MEM_freeN(newPath);
     }
   }
 

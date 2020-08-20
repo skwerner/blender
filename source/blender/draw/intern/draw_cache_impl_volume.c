@@ -163,7 +163,7 @@ static void drw_volume_wireframe_cb(
   GPU_vertbuf_attr_fill_stride(cache->face_wire.pos_nor_in_order, nor_id, 0, &packed_normal);
 
   /* Create wiredata. */
-  GPUVertBuf *vbo_wiredata = MEM_callocN(sizeof(GPUVertBuf), __func__);
+  GPUVertBuf *vbo_wiredata = GPU_vertbuf_create(GPU_USAGE_STATIC);
   DRW_vertbuf_create_wiredata(vbo_wiredata, totvert);
 
   if (volume->display.wireframe_type == VOLUME_WIREFRAME_POINTS) {
@@ -266,7 +266,7 @@ static DRWVolumeGrid *volume_grid_cache_get(Volume *volume,
                                                 NULL);
 
     GPU_texture_bind(cache_grid->texture, 0);
-    GPU_texture_swizzle_channel_auto(cache_grid->texture, channels);
+    GPU_texture_swizzle_set(cache_grid->texture, (channels == 3) ? "rgb1" : "rrr1");
     GPU_texture_wrap_mode(cache_grid->texture, false, false);
     GPU_texture_unbind(cache_grid->texture);
 

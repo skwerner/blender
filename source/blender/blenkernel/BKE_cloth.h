@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) Blender Foundation.
  * All rights reserved.
  */
-#ifndef __BKE_CLOTH_H__
-#define __BKE_CLOTH_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -93,10 +92,10 @@ typedef struct Cloth {
   struct Implicit_Data *implicit; /* our implicit solver connects to this pointer */
   struct EdgeSet *edgeset;        /* used for selfcollisions */
   int last_frame;
-  float initial_mesh_volume;     /* Initial volume of the mesh. Used for pressure */
-  float average_acceleration[3]; /* Moving average of overall acceleration. */
-  struct MEdge *edges;           /* Used for hair collisions. */
-  struct GHash *sew_edge_graph;  /* Sewing edges represented using a GHash */
+  float initial_mesh_volume;      /* Initial volume of the mesh. Used for pressure */
+  float average_acceleration[3];  /* Moving average of overall acceleration. */
+  struct MEdge *edges;            /* Used for hair collisions. */
+  struct EdgeSet *sew_edge_graph; /* Sewing edges represented using a GHash */
 } Cloth;
 
 /**
@@ -306,6 +305,4 @@ void cloth_parallel_transport_hair_frame(float mat[3][3],
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

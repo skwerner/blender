@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLI_VECTOR_HH__
-#define __BLI_VECTOR_HH__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -70,7 +69,7 @@ template<
      * When T is large, the small buffer optimization is disabled by default to avoid large
      * unexpected allocations on the stack. It can still be enabled explicitly though.
      */
-    uint InlineBufferCapacity = (sizeof(T) < 100) ? 4 : 0,
+    int64_t InlineBufferCapacity = default_inline_buffer_capacity(sizeof(T)),
     /**
      * The allocator used by this vector. Should rarely be changed, except when you don't want that
      * MEM_* is used internally.
@@ -84,15 +83,15 @@ class Vector {
    *
    * The pointers might point to the memory in the inline buffer.
    */
-  T *m_begin;
-  T *m_end;
-  T *m_capacity_end;
+  T *begin_;
+  T *end_;
+  T *capacity_end_;
 
   /** Used for allocations when the inline buffer is too small. */
-  Allocator m_allocator;
+  Allocator allocator_;
 
   /** A placeholder buffer that will remain uninitialized until it is used. */
-  AlignedBuffer<(uint)sizeof(T) * InlineBufferCapacity, (uint)alignof(T)> m_inline_buffer;
+  TypedBuffer<T, InlineBufferCapacity> inline_buffer_;
 
   /**
    * Store the size of the vector explicitly in debug builds. Otherwise you'd always have to call
@@ -100,17 +99,18 @@ class Vector {
    * annoying. Knowing the size of a vector is often quite essential when debugging some code.
    */
 #ifndef NDEBUG
-  uint m_debug_size;
-#  define UPDATE_VECTOR_SIZE(ptr) (ptr)->m_debug_size = (uint)((ptr)->m_end - (ptr)->m_begin)
+  int64_t debug_size_;
+#  define UPDATE_VECTOR_SIZE(ptr) \
+    (ptr)->debug_size_ = static_cast<int64_t>((ptr)->end_ - (ptr)->begin_)
 #else
 #  define UPDATE_VECTOR_SIZE(ptr) ((void)0)
 #endif
 
   /**
-   * Be a friend with other vector instanciations. This is necessary to implement some memory
+   * Be a friend with other vector instantiations. This is necessary to implement some memory
    * management logic.
    */
-  template<typename OtherT, uint OtherInlineBufferCapacity, typename OtherAllocator>
+  template<typename OtherT, int64_t OtherInlineBufferCapacity, typename OtherAllocator>
   friend class Vector;
 
  public:
@@ -118,12 +118,16 @@ class Vector {
    * Create an empty vector.
    * This does not do any memory allocation.
    */
-  Vector()
+  Vector(Allocator allocator = {}) noexcept : allocator_(allocator)
   {
-    m_begin = this->inline_buffer();
-    m_end = m_begin;
-    m_capacity_end = m_begin + InlineBufferCapacity;
+    begin_ = inline_buffer_;
+    end_ = begin_;
+    capacity_end_ = begin_ + InlineBufferCapacity;
     UPDATE_VECTOR_SIZE(this);
+  }
+
+  Vector(NoExceptConstructor, Allocator allocator = {}) noexcept : Vector(allocator)
+  {
   }
 
   /**
@@ -131,7 +135,8 @@ class Vector {
    * The elements will be default constructed.
    * If T is trivially constructible, the elements in the vector are not touched.
    */
-  explicit Vector(uint size) : Vector()
+  explicit Vector(int64_t size, Allocator allocator = {})
+      : Vector(NoExceptConstructor(), allocator)
   {
     this->resize(size);
   }
@@ -139,45 +144,56 @@ class Vector {
   /**
    * Create a vector filled with a specific value.
    */
-  Vector(uint size, const T &value) : Vector()
+  Vector(int64_t size, const T &value, Allocator allocator = {})
+      : Vector(NoExceptConstructor(), allocator)
   {
-    this->reserve(size);
-    this->increase_size_by_unchecked(size);
-    blender::uninitialized_fill_n(m_begin, size, value);
-  }
-
-  /**
-   * Create a vector that contains copys of the values in the initialized list.
-   *
-   * This allows you to write code like:
-   * Vector<int> vec = {3, 4, 5};
-   */
-  Vector(const std::initializer_list<T> &values) : Vector(Span<T>(values))
-  {
+    this->resize(size, value);
   }
 
   /**
    * Create a vector from an array ref. The values in the vector are copy constructed.
    */
-  Vector(Span<T> values) : Vector()
+  template<typename U, typename std::enable_if_t<std::is_convertible_v<U, T>> * = nullptr>
+  Vector(Span<U> values, Allocator allocator = {}) : Vector(NoExceptConstructor(), allocator)
   {
-    uint size = values.size();
+    const int64_t size = values.size();
     this->reserve(size);
+    uninitialized_convert_n<U, T>(values.data(), size, begin_);
     this->increase_size_by_unchecked(size);
-    blender::uninitialized_copy_n(values.data(), size, m_begin);
   }
 
   /**
-   * Create a vector from any container. It must be possible to use the container in a range-for
-   * loop.
+   * Create a vector that contains copies of the values in the initialized list.
+   *
+   * This allows you to write code like:
+   * Vector<int> vec = {3, 4, 5};
    */
-  template<typename ContainerT> static Vector FromContainer(const ContainerT &container)
+  template<typename U, typename std::enable_if_t<std::is_convertible_v<U, T>> * = nullptr>
+  Vector(const std::initializer_list<U> &values) : Vector(Span<U>(values))
   {
-    Vector vector;
-    for (const auto &value : container) {
-      vector.append(value);
+  }
+
+  Vector(const std::initializer_list<T> &values) : Vector(Span<T>(values))
+  {
+  }
+
+  template<typename U,
+           size_t N,
+           typename std::enable_if_t<std::is_convertible_v<U, T>> * = nullptr>
+  Vector(const std::array<U, N> &values) : Vector(Span(values))
+  {
+  }
+
+  template<typename InputIt,
+           /* This constructor should not be called with e.g. Vector(3, 10), because that is
+              expected to produce the vector (10, 10, 10). */
+           typename std::enable_if_t<!std::is_convertible_v<InputIt, int>> * = nullptr>
+  Vector(InputIt first, InputIt last, Allocator allocator = {})
+      : Vector(NoExceptConstructor(), allocator)
+  {
+    for (InputIt current = first; current != last; ++current) {
+      this->append(*current);
     }
-    return vector;
   }
 
   /**
@@ -187,7 +203,7 @@ class Vector {
    * Example Usage:
    *  Vector<ModifierData *> modifiers(ob->modifiers);
    */
-  Vector(ListBase &values) : Vector()
+  Vector(ListBase &values, Allocator allocator = {}) : Vector(NoExceptConstructor(), allocator)
   {
     LISTBASE_FOREACH (T, value, &values) {
       this->append(value);
@@ -198,79 +214,117 @@ class Vector {
    * Create a copy of another vector. The other vector will not be changed. If the other vector has
    * less than InlineBufferCapacity elements, no allocation will be made.
    */
-  Vector(const Vector &other) : m_allocator(other.m_allocator)
+  Vector(const Vector &other) : Vector(other.as_span(), other.allocator_)
   {
-    this->init_copy_from_other_vector(other);
   }
 
   /**
    * Create a copy of a vector with a different InlineBufferCapacity. This needs to be handled
    * separately, so that the other one is a valid copy constructor.
    */
-  template<uint OtherInlineBufferCapacity>
+  template<int64_t OtherInlineBufferCapacity>
   Vector(const Vector<T, OtherInlineBufferCapacity, Allocator> &other)
-      : m_allocator(other.m_allocator)
+      : Vector(other.as_span(), other.allocator_)
   {
-    this->init_copy_from_other_vector(other);
   }
 
   /**
    * Steal the elements from another vector. This does not do an allocation. The other vector will
    * have zero elements afterwards.
    */
-  template<uint OtherInlineBufferCapacity>
-  Vector(Vector<T, OtherInlineBufferCapacity, Allocator> &&other) noexcept
-      : m_allocator(other.m_allocator)
+  template<int64_t OtherInlineBufferCapacity>
+  Vector(Vector<T, OtherInlineBufferCapacity, Allocator> &&other) noexcept(
+      std::is_nothrow_move_constructible_v<T>)
+      : Vector(NoExceptConstructor(), other.allocator_)
   {
-    uint size = other.size();
+    const int64_t size = other.size();
 
     if (other.is_inline()) {
       if (size <= InlineBufferCapacity) {
         /* Copy between inline buffers. */
-        m_begin = this->inline_buffer();
-        m_end = m_begin + size;
-        m_capacity_end = m_begin + InlineBufferCapacity;
-        uninitialized_relocate_n(other.m_begin, size, m_begin);
+        uninitialized_relocate_n(other.begin_, size, begin_);
+        end_ = begin_ + size;
       }
       else {
         /* Copy from inline buffer to newly allocated buffer. */
-        uint capacity = size;
-        m_begin = (T *)m_allocator.allocate(sizeof(T) * capacity, alignof(T), AT);
-        m_end = m_begin + size;
-        m_capacity_end = m_begin + capacity;
-        uninitialized_relocate_n(other.m_begin, size, m_begin);
+        const int64_t capacity = size;
+        begin_ = static_cast<T *>(
+            allocator_.allocate(sizeof(T) * static_cast<size_t>(capacity), alignof(T), AT));
+        capacity_end_ = begin_ + capacity;
+        uninitialized_relocate_n(other.begin_, size, begin_);
+        end_ = begin_ + size;
       }
     }
     else {
       /* Steal the pointer. */
-      m_begin = other.m_begin;
-      m_end = other.m_end;
-      m_capacity_end = other.m_capacity_end;
+      begin_ = other.begin_;
+      end_ = other.end_;
+      capacity_end_ = other.capacity_end_;
     }
 
-    other.m_begin = other.inline_buffer();
-    other.m_end = other.m_begin;
-    other.m_capacity_end = other.m_begin + OtherInlineBufferCapacity;
+    other.begin_ = other.inline_buffer_;
+    other.end_ = other.begin_;
+    other.capacity_end_ = other.begin_ + OtherInlineBufferCapacity;
     UPDATE_VECTOR_SIZE(this);
     UPDATE_VECTOR_SIZE(&other);
   }
 
   ~Vector()
   {
-    destruct_n(m_begin, this->size());
+    destruct_n(begin_, this->size());
     if (!this->is_inline()) {
-      m_allocator.deallocate(m_begin);
+      allocator_.deallocate(begin_);
     }
+  }
+
+  Vector &operator=(const Vector &other)
+  {
+    return copy_assign_container(*this, other);
+  }
+
+  Vector &operator=(Vector &&other)
+  {
+    return move_assign_container(*this, std::move(other));
+  }
+
+  /**
+   * Get the value at the given index. This invokes undefined behavior when the index is out of
+   * bounds.
+   */
+  const T &operator[](int64_t index) const
+  {
+    BLI_assert(index >= 0);
+    BLI_assert(index < this->size());
+    return begin_[index];
+  }
+
+  T &operator[](int64_t index)
+  {
+    BLI_assert(index >= 0);
+    BLI_assert(index < this->size());
+    return begin_[index];
   }
 
   operator Span<T>() const
   {
-    return Span<T>(m_begin, this->size());
+    return Span<T>(begin_, this->size());
   }
 
   operator MutableSpan<T>()
   {
-    return MutableSpan<T>(m_begin, this->size());
+    return MutableSpan<T>(begin_, this->size());
+  }
+
+  template<typename U, typename std::enable_if_t<is_convertible_pointer_v<T, U>> * = nullptr>
+  operator Span<U>() const
+  {
+    return Span<U>(begin_, this->size());
+  }
+
+  template<typename U, typename std::enable_if_t<is_convertible_pointer_v<T, U>> * = nullptr>
+  operator MutableSpan<U>()
+  {
+    return MutableSpan<U>(begin_, this->size());
   }
 
   Span<T> as_span() const
@@ -283,38 +337,12 @@ class Vector {
     return *this;
   }
 
-  Vector &operator=(const Vector &other)
-  {
-    if (this == &other) {
-      return *this;
-    }
-
-    this->~Vector();
-    new (this) Vector(other);
-
-    return *this;
-  }
-
-  Vector &operator=(Vector &&other)
-  {
-    if (this == &other) {
-      return *this;
-    }
-
-    /* This can be incorrect, when the vector is used to build a recursive data structure. However,
-       we don't take care of it at this low level. See https://youtu.be/7Qgd9B1KuMQ?t=840. */
-    this->~Vector();
-    new (this) Vector(std::move(other));
-
-    return *this;
-  }
-
   /**
    * Make sure that enough memory is allocated to hold min_capacity elements.
    * This won't necessarily make an allocation when min_capacity is small.
    * The actual size of the vector does not change.
    */
-  void reserve(uint min_capacity)
+  void reserve(const int64_t min_capacity)
   {
     if (min_capacity > this->capacity()) {
       this->realloc_to_at_least(min_capacity);
@@ -327,17 +355,18 @@ class Vector {
    * destructed. If new_size is larger than the old size, the new elements at the end are default
    * constructed. If T is trivially constructible, the memory is not touched by this function.
    */
-  void resize(uint new_size)
+  void resize(const int64_t new_size)
   {
-    uint old_size = this->size();
+    BLI_assert(new_size >= 0);
+    const int64_t old_size = this->size();
     if (new_size > old_size) {
       this->reserve(new_size);
-      default_construct_n(m_begin + old_size, new_size - old_size);
+      default_construct_n(begin_ + old_size, new_size - old_size);
     }
     else {
-      destruct_n(m_begin + new_size, old_size - new_size);
+      destruct_n(begin_ + new_size, old_size - new_size);
     }
-    m_end = m_begin + new_size;
+    end_ = begin_ + new_size;
     UPDATE_VECTOR_SIZE(this);
   }
 
@@ -347,17 +376,18 @@ class Vector {
    * destructed. If new_size is larger than the old size, the new elements will be copy constructed
    * from the given value.
    */
-  void resize(uint new_size, const T &value)
+  void resize(const int64_t new_size, const T &value)
   {
-    uint old_size = this->size();
+    BLI_assert(new_size >= 0);
+    const int64_t old_size = this->size();
     if (new_size > old_size) {
       this->reserve(new_size);
-      uninitialized_fill_n(m_begin + old_size, new_size - old_size, value);
+      uninitialized_fill_n(begin_ + old_size, new_size - old_size, value);
     }
     else {
-      destruct_n(m_begin + new_size, old_size - new_size);
+      destruct_n(begin_ + new_size, old_size - new_size);
     }
-    m_end = m_begin + new_size;
+    end_ = begin_ + new_size;
     UPDATE_VECTOR_SIZE(this);
   }
 
@@ -367,8 +397,8 @@ class Vector {
    */
   void clear()
   {
-    destruct_n(m_begin, this->size());
-    m_end = m_begin;
+    destruct_n(begin_, this->size());
+    end_ = begin_;
     UPDATE_VECTOR_SIZE(this);
   }
 
@@ -378,14 +408,14 @@ class Vector {
    */
   void clear_and_make_inline()
   {
-    destruct_n(m_begin, this->size());
+    destruct_n(begin_, this->size());
     if (!this->is_inline()) {
-      m_allocator.deallocate(m_begin);
+      allocator_.deallocate(begin_);
     }
 
-    m_begin = this->inline_buffer();
-    m_end = m_begin;
-    m_capacity_end = m_begin + InlineBufferCapacity;
+    begin_ = inline_buffer_;
+    end_ = begin_;
+    capacity_end_ = begin_ + InlineBufferCapacity;
     UPDATE_VECTOR_SIZE(this);
   }
 
@@ -410,9 +440,9 @@ class Vector {
    * Append the value to the vector and return the index that can be used to access the newly
    * added value.
    */
-  uint append_and_get_index(const T &value)
+  int64_t append_and_get_index(const T &value)
   {
-    uint index = this->size();
+    const int64_t index = this->size();
     this->append(value);
     return index;
   }
@@ -434,18 +464,11 @@ class Vector {
    * behavior when not enough capacity has been reserved beforehand. Only use this in performance
    * critical code.
    */
-  void append_unchecked(const T &value)
+  template<typename ForwardT> void append_unchecked(ForwardT &&value)
   {
-    BLI_assert(m_end < m_capacity_end);
-    new (m_end) T(value);
-    m_end++;
-    UPDATE_VECTOR_SIZE(this);
-  }
-  void append_unchecked(T &&value)
-  {
-    BLI_assert(m_end < m_capacity_end);
-    new (m_end) T(std::move(value));
-    m_end++;
+    BLI_assert(end_ < capacity_end_);
+    new (end_) T(std::forward<ForwardT>(value));
+    end_++;
     UPDATE_VECTOR_SIZE(this);
   }
 
@@ -453,10 +476,11 @@ class Vector {
    * Insert the same element n times at the end of the vector.
    * This might result in a reallocation internally.
    */
-  void append_n_times(const T &value, uint n)
+  void append_n_times(const T &value, const int64_t n)
   {
+    BLI_assert(n >= 0);
     this->reserve(this->size() + n);
-    blender::uninitialized_fill_n(m_end, n, value);
+    uninitialized_fill_n(end_, n, value);
     this->increase_size_by_unchecked(n);
   }
 
@@ -466,10 +490,10 @@ class Vector {
    * useful when you want to call constructors in the vector yourself. This should only be done in
    * very rare cases and has to be justified every time.
    */
-  void increase_size_by_unchecked(uint n)
+  void increase_size_by_unchecked(const int64_t n) noexcept
   {
-    BLI_assert(m_end + n <= m_capacity_end);
-    m_end += n;
+    BLI_assert(end_ + n <= capacity_end_);
+    end_ += n;
     UPDATE_VECTOR_SIZE(this);
   }
 
@@ -482,7 +506,7 @@ class Vector {
   {
     this->extend(array.data(), array.size());
   }
-  void extend(const T *start, uint amount)
+  void extend(const T *start, int64_t amount)
   {
     this->reserve(this->size() + amount);
     this->extend_unchecked(start, amount);
@@ -508,52 +532,128 @@ class Vector {
   {
     this->extend_unchecked(array.data(), array.size());
   }
-  void extend_unchecked(const T *start, uint amount)
+  void extend_unchecked(const T *start, int64_t amount)
   {
-    BLI_assert(m_begin + amount <= m_capacity_end);
-    blender::uninitialized_copy_n(start, amount, m_end);
-    m_end += amount;
+    BLI_assert(amount >= 0);
+    BLI_assert(begin_ + amount <= capacity_end_);
+    uninitialized_copy_n(start, amount, end_);
+    end_ += amount;
+    UPDATE_VECTOR_SIZE(this);
+  }
+
+  template<typename InputIt> void extend(InputIt first, InputIt last)
+  {
+    this->insert(this->end(), first, last);
+  }
+
+  /**
+   * Insert elements into the vector at the specified position. This has a running time of O(n)
+   * where n is the number of values that have to be moved. Undefined behavior is invoked when the
+   * insert position is out of bounds.
+   */
+  void insert(const int64_t insert_index, const T &value)
+  {
+    this->insert(insert_index, Span<T>(&value, 1));
+  }
+  void insert(const int64_t insert_index, T &&value)
+  {
+    this->insert(
+        insert_index, std::make_move_iterator(&value), std::make_move_iterator(&value + 1));
+  }
+  void insert(const int64_t insert_index, Span<T> array)
+  {
+    this->insert(begin_ + insert_index, array.begin(), array.end());
+  }
+  template<typename InputIt> void insert(const T *insert_position, InputIt first, InputIt last)
+  {
+    const int64_t insert_index = insert_position - begin_;
+    this->insert(insert_index, first, last);
+  }
+  template<typename InputIt> void insert(const int64_t insert_index, InputIt first, InputIt last)
+  {
+    BLI_assert(insert_index >= 0);
+    BLI_assert(insert_index <= this->size());
+
+    const int64_t insert_amount = std::distance(first, last);
+    const int64_t old_size = this->size();
+    const int64_t new_size = old_size + insert_amount;
+    const int64_t move_amount = old_size - insert_index;
+
+    this->reserve(new_size);
+    for (int64_t i = 0; i < move_amount; i++) {
+      const int64_t src_index = insert_index + move_amount - i - 1;
+      const int64_t dst_index = new_size - i - 1;
+      try {
+        new (static_cast<void *>(begin_ + dst_index)) T(std::move(begin_[src_index]));
+      }
+      catch (...) {
+        /* Destruct all values that have been moved already. */
+        destruct_n(begin_ + dst_index + 1, i);
+        end_ = begin_ + src_index + 1;
+        UPDATE_VECTOR_SIZE(this);
+        throw;
+      }
+      begin_[src_index].~T();
+    }
+
+    try {
+      std::uninitialized_copy_n(first, insert_amount, begin_ + insert_index);
+    }
+    catch (...) {
+      /* Destruct all values that have been moved. */
+      destruct_n(begin_ + new_size - move_amount, move_amount);
+      end_ = begin_ + insert_index;
+      UPDATE_VECTOR_SIZE(this);
+      throw;
+    }
+    end_ = begin_ + new_size;
     UPDATE_VECTOR_SIZE(this);
   }
 
   /**
+   * Insert values at the beginning of the vector. The has to move all the other elements, so it
+   * has a linear running time.
+   */
+  void prepend(const T &&value)
+  {
+    this->insert(0, value);
+  }
+  void prepend(T &&value)
+  {
+    this->insert(0, std::move(value));
+  }
+  void prepend(Span<T> values)
+  {
+    this->insert(0, values);
+  }
+  template<typename InputIt> void prepend(InputIt first, InputIt last)
+  {
+    this->insert(0, first, last);
+  }
+
+  /**
    * Return a reference to the last element in the vector.
-   * This will assert when the vector is empty.
+   * This invokes undefined behavior when the vector is empty.
    */
   const T &last() const
   {
     BLI_assert(this->size() > 0);
-    return *(m_end - 1);
+    return *(end_ - 1);
   }
   T &last()
   {
     BLI_assert(this->size() > 0);
-    return *(m_end - 1);
-  }
-
-  /**
-   * Replace every element with a new value.
-   */
-  void fill(const T &value)
-  {
-    initialized_fill_n(m_begin, this->size(), value);
-  }
-
-  /**
-   * Copy the value to all positions specified by the indices array.
-   */
-  void fill_indices(Span<uint> indices, const T &value)
-  {
-    MutableSpan<T>(*this).fill_indices(indices, value);
+    return *(end_ - 1);
   }
 
   /**
    * Return how many values are currently stored in the vector.
    */
-  uint size() const
+  int64_t size() const
   {
-    BLI_assert(m_debug_size == (uint)(m_end - m_begin));
-    return (uint)(m_end - m_begin);
+    const int64_t current_size = static_cast<int64_t>(end_ - begin_);
+    BLI_assert(debug_size_ == current_size);
+    return current_size;
   }
 
   /**
@@ -563,7 +663,7 @@ class Vector {
    */
   bool is_empty() const
   {
-    return m_begin == m_end;
+    return begin_ == end_;
   }
 
   /**
@@ -573,8 +673,8 @@ class Vector {
   void remove_last()
   {
     BLI_assert(!this->is_empty());
-    m_end--;
-    m_end->~T();
+    end_--;
+    end_->~T();
     UPDATE_VECTOR_SIZE(this);
   }
 
@@ -587,9 +687,9 @@ class Vector {
   T pop_last()
   {
     BLI_assert(!this->is_empty());
-    m_end--;
-    T value = std::move(*m_end);
-    m_end->~T();
+    T value = std::move(*(end_ - 1));
+    end_--;
+    end_->~T();
     UPDATE_VECTOR_SIZE(this);
     return value;
   }
@@ -598,26 +698,27 @@ class Vector {
    * Delete any element in the vector. The empty space will be filled by the previously last
    * element. This takes O(1) time.
    */
-  void remove_and_reorder(uint index)
+  void remove_and_reorder(const int64_t index)
   {
+    BLI_assert(index >= 0);
     BLI_assert(index < this->size());
-    T *element_to_remove = m_begin + index;
-    m_end--;
-    if (element_to_remove < m_end) {
-      *element_to_remove = std::move(*m_end);
+    T *element_to_remove = begin_ + index;
+    if (element_to_remove < end_) {
+      *element_to_remove = std::move(*(end_ - 1));
     }
-    m_end->~T();
+    end_--;
+    end_->~T();
     UPDATE_VECTOR_SIZE(this);
   }
 
   /**
-   * Finds the first occurence of the value, removes it and copies the last element to the hole in
+   * Finds the first occurrence of the value, removes it and copies the last element to the hole in
    * the vector. This takes O(n) time.
    */
   void remove_first_occurrence_and_reorder(const T &value)
   {
-    uint index = this->first_index_of(value);
-    this->remove_and_reorder((uint)index);
+    const int64_t index = this->first_index_of(value);
+    this->remove_and_reorder(index);
   }
 
   /**
@@ -627,15 +728,16 @@ class Vector {
    *
    * This is similar to std::vector::erase.
    */
-  void remove(uint index)
+  void remove(const int64_t index)
   {
+    BLI_assert(index >= 0);
     BLI_assert(index < this->size());
-    uint last_index = this->size() - 1;
-    for (uint i = index; i < last_index; i++) {
-      m_begin[i] = std::move(m_begin[i + 1]);
+    const int64_t last_index = this->size() - 1;
+    for (int64_t i = index; i < last_index; i++) {
+      begin_[i] = std::move(begin_[i + 1]);
     }
-    m_begin[last_index].~T();
-    m_end--;
+    begin_[last_index].~T();
+    end_--;
     UPDATE_VECTOR_SIZE(this);
   }
 
@@ -643,11 +745,11 @@ class Vector {
    * Do a linear search to find the value in the vector.
    * When found, return the first index, otherwise return -1.
    */
-  int first_index_of_try(const T &value) const
+  int64_t first_index_of_try(const T &value) const
   {
-    for (T *current = m_begin; current != m_end; current++) {
+    for (const T *current = begin_; current != end_; current++) {
       if (*current == value) {
-        return (int)(current - m_begin);
+        return static_cast<int64_t>(current - begin_);
       }
     }
     return -1;
@@ -657,11 +759,11 @@ class Vector {
    * Do a linear search to find the value in the vector and return the found index. This invokes
    * undefined behavior when the value is not in the vector.
    */
-  uint first_index_of(const T &value) const
+  int64_t first_index_of(const T &value) const
   {
-    int index = this->first_index_of_try(value);
+    const int64_t index = this->first_index_of_try(value);
     BLI_assert(index >= 0);
-    return (uint)index;
+    return index;
   }
 
   /**
@@ -674,19 +776,11 @@ class Vector {
   }
 
   /**
-   * Get the value at the given index. This invokes undefined behavior when the index is out of
-   * bounds.
+   * Copies the given value to every element in the vector.
    */
-  const T &operator[](uint index) const
+  void fill(const T &value) const
   {
-    BLI_assert(index < this->size());
-    return m_begin[index];
-  }
-
-  T &operator[](uint index)
-  {
-    BLI_assert(index < this->size());
-    return m_begin[index];
+    initialized_fill_n(begin_, this->size(), value);
   }
 
   /**
@@ -694,7 +788,7 @@ class Vector {
    */
   T *data()
   {
-    return m_begin;
+    return begin_;
   }
 
   /**
@@ -702,34 +796,52 @@ class Vector {
    */
   const T *data() const
   {
-    return m_begin;
+    return begin_;
   }
 
   T *begin()
   {
-    return m_begin;
+    return begin_;
   }
   T *end()
   {
-    return m_end;
+    return end_;
   }
 
   const T *begin() const
   {
-    return m_begin;
+    return begin_;
   }
   const T *end() const
   {
-    return m_end;
+    return end_;
+  }
+
+  std::reverse_iterator<T *> rbegin()
+  {
+    return std::reverse_iterator<T *>(this->end());
+  }
+  std::reverse_iterator<T *> rend()
+  {
+    return std::reverse_iterator<T *>(this->begin());
+  }
+
+  std::reverse_iterator<const T *> rbegin() const
+  {
+    return std::reverse_iterator<T *>(this->end());
+  }
+  std::reverse_iterator<const T *> rend() const
+  {
+    return std::reverse_iterator<T *>(this->begin());
   }
 
   /**
    * Get the current capacity of the vector, i.e. the maximum number of elements the vector can
    * hold, before it has to reallocate.
    */
-  uint capacity() const
+  int64_t capacity() const
   {
-    return (uint)(m_capacity_end - m_begin);
+    return static_cast<int64_t>(capacity_end_ - begin_);
   }
 
   /**
@@ -737,7 +849,7 @@ class Vector {
    * Obviously, this should only be used when you actually need the index in the loop.
    *
    * Example:
-   *  for (uint i : myvector.index_range()) {
+   *  for (int64_t i : myvector.index_range()) {
    *    do_something(i, my_vector[i]);
    *  }
    */
@@ -754,7 +866,7 @@ class Vector {
     std::cout << "Vector Stats: " << name << "\n";
     std::cout << "  Address: " << this << "\n";
     std::cout << "  Elements: " << this->size() << "\n";
-    std::cout << "  Capacity: " << (m_capacity_end - m_begin) << "\n";
+    std::cout << "  Capacity: " << (capacity_end_ - begin_) << "\n";
     std::cout << "  Inline Capacity: " << InlineBufferCapacity << "\n";
 
     char memory_size_str[15];
@@ -763,24 +875,19 @@ class Vector {
   }
 
  private:
-  T *inline_buffer() const
-  {
-    return (T *)m_inline_buffer.ptr();
-  }
-
   bool is_inline() const
   {
-    return m_begin == this->inline_buffer();
+    return begin_ == inline_buffer_;
   }
 
   void ensure_space_for_one()
   {
-    if (UNLIKELY(m_end >= m_capacity_end)) {
+    if (UNLIKELY(end_ >= capacity_end_)) {
       this->realloc_to_at_least(this->size() + 1);
     }
   }
 
-  BLI_NOINLINE void realloc_to_at_least(uint min_capacity)
+  BLI_NOINLINE void realloc_to_at_least(const int64_t min_capacity)
   {
     if (this->capacity() >= min_capacity) {
       return;
@@ -788,60 +895,38 @@ class Vector {
 
     /* At least double the size of the previous allocation. Otherwise consecutive calls to grow can
      * cause a reallocation every time even though min_capacity only increments.  */
-    uint min_new_capacity = this->capacity() * 2;
+    const int64_t min_new_capacity = this->capacity() * 2;
 
-    uint new_capacity = std::max(min_capacity, min_new_capacity);
-    uint size = this->size();
+    const int64_t new_capacity = std::max(min_capacity, min_new_capacity);
+    const int64_t size = this->size();
 
-    T *new_array = (T *)m_allocator.allocate(new_capacity * (uint)sizeof(T), alignof(T), AT);
-    uninitialized_relocate_n(m_begin, size, new_array);
+    T *new_array = static_cast<T *>(
+        allocator_.allocate(static_cast<size_t>(new_capacity) * sizeof(T), alignof(T), AT));
+    try {
+      uninitialized_relocate_n(begin_, size, new_array);
+    }
+    catch (...) {
+      allocator_.deallocate(new_array);
+      throw;
+    }
 
     if (!this->is_inline()) {
-      m_allocator.deallocate(m_begin);
+      allocator_.deallocate(begin_);
     }
 
-    m_begin = new_array;
-    m_end = m_begin + size;
-    m_capacity_end = m_begin + new_capacity;
-  }
-
-  /**
-   * Initialize all properties, except for m_allocator, which has to be initialized beforehand.
-   */
-  template<uint OtherInlineBufferCapacity>
-  void init_copy_from_other_vector(const Vector<T, OtherInlineBufferCapacity, Allocator> &other)
-  {
-    m_allocator = other.m_allocator;
-
-    uint size = other.size();
-    uint capacity = size;
-
-    if (size <= InlineBufferCapacity) {
-      m_begin = this->inline_buffer();
-      capacity = InlineBufferCapacity;
-    }
-    else {
-      m_begin = (T *)m_allocator.allocate(sizeof(T) * size, alignof(T), AT);
-      capacity = size;
-    }
-
-    m_end = m_begin + size;
-    m_capacity_end = m_begin + capacity;
-
-    uninitialized_copy_n(other.data(), size, m_begin);
-    UPDATE_VECTOR_SIZE(this);
+    begin_ = new_array;
+    end_ = begin_ + size;
+    capacity_end_ = begin_ + new_capacity;
   }
 };
 
 #undef UPDATE_VECTOR_SIZE
 
 /**
- * Use when the vector is used in the local scope of a function. It has a larger inline storage by
- * default to make allocations less likely.
+ * Same as a normal Vector, but does not use Blender's guarded allocator. This is useful when
+ * allocating memory with static storage duration.
  */
-template<typename T, uint InlineBufferCapacity = 20>
-using ScopedVector = Vector<T, InlineBufferCapacity, GuardedAllocator>;
+template<typename T, int64_t InlineBufferCapacity = default_inline_buffer_capacity(sizeof(T))>
+using RawVector = Vector<T, InlineBufferCapacity, RawAllocator>;
 
 } /* namespace blender */
-
-#endif /* __BLI_VECTOR_HH__ */

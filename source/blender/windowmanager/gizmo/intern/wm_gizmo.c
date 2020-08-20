@@ -29,7 +29,6 @@
 #include "BKE_context.h"
 
 #include "GPU_batch.h"
-#include "GPU_glew.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -108,7 +107,7 @@ wmGizmo *WM_gizmo_new_ptr(const wmGizmoType *gzt, wmGizmoGroup *gzgroup, Pointer
 }
 
 /**
- * \param name: Must be a valid gizmo type name,
+ * \param idname: Must be a valid gizmo type name,
  * if you need to check it exists use #WM_gizmo_new_ptr
  * because callers of this function don't NULL check the return value.
  */
@@ -453,9 +452,7 @@ bool wm_gizmo_select_and_highlight(bContext *C, wmGizmoMap *gzmap, wmGizmo *gz)
     wm_gizmomap_highlight_set(gzmap, C, gz, gz->highlight_part);
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 /**

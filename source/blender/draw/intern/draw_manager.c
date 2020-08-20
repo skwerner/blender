@@ -369,10 +369,12 @@ void DRW_engine_viewport_data_size_get(
 }
 
 /* WARNING: only use for custom pipeline. 99% of the time, you don't want to use this. */
-void DRW_render_viewport_size_set(int size[2])
+void DRW_render_viewport_size_set(const int size[2])
 {
   DST.size[0] = size[0];
   DST.size[1] = size[1];
+  DST.inv_size[0] = 1.0f / size[0];
+  DST.inv_size[1] = 1.0f / size[1];
 }
 
 const float *DRW_viewport_size_get(void)
@@ -790,9 +792,8 @@ DrawDataList *DRW_drawdatalist_from_id(ID *id)
     IdDdtTemplate *idt = (IdDdtTemplate *)id;
     return &idt->drawdata;
   }
-  else {
-    return NULL;
-  }
+
+  return NULL;
 }
 
 DrawData *DRW_drawdata_get(ID *id, DrawEngineType *engine_type)
@@ -1313,15 +1314,15 @@ void DRW_draw_callbacks_post_scene(void)
     /* annotations - temporary drawing buffer (3d space) */
     /* XXX: Or should we use a proper draw/overlay engine for this case? */
     if (do_annotations) {
-      GPU_depth_test(false);
+      GPU_depth_test(GPU_DEPTH_NONE);
       /* XXX: as scene->gpd is not copied for COW yet */
       ED_annotation_draw_view3d(DEG_get_input_scene(depsgraph), depsgraph, v3d, region, true);
-      GPU_depth_test(true);
+      GPU_depth_test(GPU_DEPTH_LESS_EQUAL);
     }
 
     drw_debug_draw();
 
-    GPU_depth_test(false);
+    GPU_depth_test(GPU_DEPTH_NONE);
     ED_region_draw_cb_draw(DST.draw_ctx.evil_C, DST.draw_ctx.region, REGION_DRAW_POST_VIEW);
 
     /* Callback can be nasty and do whatever they want with the state.
@@ -1330,11 +1331,11 @@ void DRW_draw_callbacks_post_scene(void)
 
     /* needed so gizmo isn't obscured */
     if ((v3d->gizmo_flag & V3D_GIZMO_HIDE) == 0) {
-      GPU_depth_test(false);
+      GPU_depth_test(GPU_DEPTH_NONE);
       DRW_draw_gizmo_3d();
     }
 
-    GPU_depth_test(false);
+    GPU_depth_test(GPU_DEPTH_NONE);
     drw_engines_draw_text();
 
     DRW_draw_region_info();
@@ -1342,7 +1343,7 @@ void DRW_draw_callbacks_post_scene(void)
     /* annotations - temporary drawing buffer (screenspace) */
     /* XXX: Or should we use a proper draw/overlay engine for this case? */
     if (((v3d->flag2 & V3D_HIDE_OVERLAYS) == 0) && (do_annotations)) {
-      GPU_depth_test(false);
+      GPU_depth_test(GPU_DEPTH_NONE);
       /* XXX: as scene->gpd is not copied for COW yet */
       ED_annotation_draw_view3d(DEG_get_input_scene(depsgraph), depsgraph, v3d, region, false);
     }
@@ -1350,18 +1351,18 @@ void DRW_draw_callbacks_post_scene(void)
     if ((v3d->gizmo_flag & V3D_GIZMO_HIDE) == 0) {
       /* Draw 2D after region info so we can draw on top of the camera passepartout overlay.
        * 'DRW_draw_region_info' sets the projection in pixel-space. */
-      GPU_depth_test(false);
+      GPU_depth_test(GPU_DEPTH_NONE);
       DRW_draw_gizmo_2d();
     }
 
     if (G.debug_value > 20 && G.debug_value < 30) {
-      GPU_depth_test(false);
+      GPU_depth_test(GPU_DEPTH_NONE);
       /* local coordinate visible rect inside region, to accommodate overlapping ui */
       const rcti *rect = ED_region_visible_rect(DST.draw_ctx.region);
       DRW_stats_draw(rect);
     }
 
-    GPU_depth_test(true);
+    GPU_depth_test(GPU_DEPTH_LESS_EQUAL);
   }
 }
 
@@ -1594,8 +1595,7 @@ void DRW_draw_render_loop_offscreen(struct Depsgraph *depsgraph,
     GPU_clear_color(0.0f, 0.0f, 0.0f, 1.0f);
     GPU_clear(GPU_COLOR_BIT);
     /* Premult Alpha over black background. */
-    GPU_blend_set_func(GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
-    GPU_blend(true);
+    GPU_blend(GPU_BLEND_ALPHA_PREMULT);
   }
 
   GPU_matrix_identity_set();
@@ -1605,9 +1605,7 @@ void DRW_draw_render_loop_offscreen(struct Depsgraph *depsgraph,
 
   if (draw_background) {
     /* Reset default. */
-    GPU_blend_set_func_separate(
-        GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
   }
 
   /* Free temporary viewport. */
@@ -1656,26 +1654,9 @@ void DRW_render_gpencil(struct RenderEngine *engine, struct Depsgraph *depsgraph
   Scene *scene = DEG_get_evaluated_scene(depsgraph);
   ViewLayer *view_layer = DEG_get_evaluated_view_layer(depsgraph);
   RenderEngineType *engine_type = engine->type;
-  RenderData *r = &scene->r;
   Render *render = engine->re;
-  /* Changing Context */
-  if (G.background && DST.gl_context == NULL) {
-    WM_init_opengl(G_MAIN);
-  }
 
-  void *re_gl_context = RE_gl_context_get(render);
-  void *re_gpu_context = NULL;
-
-  /* Changing Context */
-  if (re_gl_context != NULL) {
-    DRW_opengl_render_context_enable(re_gl_context);
-    /* We need to query gpu context after a gl context has been bound. */
-    re_gpu_context = RE_gpu_context_get(render);
-    DRW_gpu_render_context_enable(re_gpu_context);
-  }
-  else {
-    DRW_opengl_context_enable();
-  }
+  DRW_render_context_enable(render);
 
   /* Reset before using it. */
   drw_state_prepare_clean_for_draw(&DST);
@@ -1694,7 +1675,7 @@ void DRW_render_gpencil(struct RenderEngine *engine, struct Depsgraph *depsgraph
   drw_context_state_init();
 
   DST.viewport = GPU_viewport_create();
-  const int size[2] = {(r->size * r->xsch) / 100, (r->size * r->ysch) / 100};
+  const int size[2] = {engine->resolution_x, engine->resolution_y};
   GPU_viewport_size_set(DST.viewport, size);
 
   drw_viewport_var_init();
@@ -1722,19 +1703,12 @@ void DRW_render_gpencil(struct RenderEngine *engine, struct Depsgraph *depsgraph
   GPU_viewport_free(DST.viewport);
   DRW_state_reset();
 
-  glDisable(GL_DEPTH_TEST);
+  GPU_depth_test(GPU_DEPTH_NONE);
 
   /* Restore Drawing area. */
   GPU_framebuffer_restore();
 
-  /* Changing Context */
-  if (re_gl_context != NULL) {
-    DRW_gpu_render_context_disable(re_gpu_context);
-    DRW_opengl_render_context_disable(re_gl_context);
-  }
-  else {
-    DRW_opengl_context_disable();
-  }
+  DRW_render_context_disable(render);
 
   DST.buffer_finish_called = false;
 }
@@ -1746,24 +1720,6 @@ void DRW_render_to_image(RenderEngine *engine, struct Depsgraph *depsgraph)
   RenderEngineType *engine_type = engine->type;
   DrawEngineType *draw_engine_type = engine_type->draw_engine;
   Render *render = engine->re;
-
-  if (G.background && DST.gl_context == NULL) {
-    WM_init_opengl(G_MAIN);
-  }
-
-  void *re_gl_context = RE_gl_context_get(render);
-  void *re_gpu_context = NULL;
-
-  /* Changing Context */
-  if (re_gl_context != NULL) {
-    DRW_opengl_render_context_enable(re_gl_context);
-    /* We need to query gpu context after a gl context has been bound. */
-    re_gpu_context = RE_gpu_context_get(render);
-    DRW_gpu_render_context_enable(re_gpu_context);
-  }
-  else {
-    DRW_opengl_context_enable();
-  }
 
   /* IMPORTANT: We don't support immediate mode in render mode!
    * This shall remain in effect until immediate mode supports
@@ -1791,9 +1747,6 @@ void DRW_render_to_image(RenderEngine *engine, struct Depsgraph *depsgraph)
 
   ViewportEngineData *data = drw_viewport_engine_data_ensure(draw_engine_type);
 
-  /* set default viewport */
-  glViewport(0, 0, size[0], size[1]);
-
   /* Main rendering. */
   rctf view_rect;
   rcti render_rect;
@@ -1802,17 +1755,18 @@ void DRW_render_to_image(RenderEngine *engine, struct Depsgraph *depsgraph)
     BLI_rcti_init(&render_rect, 0, size[0], 0, size[1]);
   }
 
-  /* Set the default Blender draw state */
-  GPU_state_init();
   /* Reset state before drawing */
   DRW_state_reset();
+
+  /* set default viewport */
+  GPU_viewport(0, 0, size[0], size[1]);
 
   /* Init render result. */
   RenderResult *render_result = RE_engine_begin_result(engine,
                                                        0,
                                                        0,
-                                                       (int)size[0],
-                                                       (int)size[1],
+                                                       size[0],
+                                                       size[1],
                                                        view_layer->name,
                                                        /* RR_ALL_VIEWS */ NULL);
 
@@ -1840,15 +1794,6 @@ void DRW_render_to_image(RenderEngine *engine, struct Depsgraph *depsgraph)
 
   /* Reset state after drawing */
   DRW_state_reset();
-
-  /* Changing Context */
-  if (re_gl_context != NULL) {
-    DRW_gpu_render_context_disable(re_gpu_context);
-    DRW_opengl_render_context_disable(re_gl_context);
-  }
-  else {
-    DRW_opengl_context_disable();
-  }
 }
 
 void DRW_render_object_iter(
@@ -1942,6 +1887,28 @@ void DRW_custom_pipeline(DrawEngineType *draw_engine_type,
 #endif
 }
 
+/* Used when the render engine want to redo another cache populate inside the same render frame. */
+void DRW_cache_restart(void)
+{
+  /* Save viewport size. */
+  float size[2], inv_size[2];
+  copy_v2_v2(size, DST.size);
+  copy_v2_v2(inv_size, DST.inv_size);
+
+  /* Force cache to reset. */
+  drw_viewport_cache_resize();
+
+  drw_viewport_var_init();
+
+  DST.buffer_finish_called = false;
+
+  DRW_hair_init();
+
+  /* Restore. */
+  copy_v2_v2(DST.size, size);
+  copy_v2_v2(DST.inv_size, inv_size);
+}
+
 static struct DRWSelectBuffer {
   struct GPUFrameBuffer *framebuffer_depth_only;
   struct GPUTexture *texture_depth;
@@ -1980,13 +1947,21 @@ void DRW_render_instance_buffer_finish(void)
   drw_resource_buffer_finish(DST.vmempool);
 }
 
+/* WARNING: Changing frame might free the ViewLayerEngineData */
+void DRW_render_set_time(RenderEngine *engine, Depsgraph *depsgraph, int frame, float subframe)
+{
+  RE_engine_frame_set(engine, frame, subframe);
+  DST.draw_ctx.scene = DEG_get_evaluated_scene(depsgraph);
+  DST.draw_ctx.view_layer = DEG_get_evaluated_view_layer(depsgraph);
+}
+
 /**
  * object mode select-loop, see: ED_view3d_draw_select_loop (legacy drawing).
  */
 void DRW_draw_select_loop(struct Depsgraph *depsgraph,
                           ARegion *region,
                           View3D *v3d,
-                          bool UNUSED(use_obedit_skip),
+                          bool use_obedit_skip,
                           bool draw_surface,
                           bool UNUSED(use_nearest),
                           const rcti *rect,
@@ -1999,7 +1974,7 @@ void DRW_draw_select_loop(struct Depsgraph *depsgraph,
   RenderEngineType *engine_type = ED_view3d_engine_type(scene, v3d->shading.type);
   ViewLayer *view_layer = DEG_get_evaluated_view_layer(depsgraph);
   Object *obact = OBACT(view_layer);
-  Object *obedit = OBEDIT_FROM_OBACT(obact);
+  Object *obedit = use_obedit_skip ? NULL : OBEDIT_FROM_OBACT(obact);
 #ifndef USE_GPU_SELECT
   UNUSED_VARS(scene, view_layer, v3d, region, rect);
 #else
@@ -2050,7 +2025,7 @@ void DRW_draw_select_loop(struct Depsgraph *depsgraph,
     }
   }
 
-  int viewport_size[2] = {BLI_rcti_size_x(rect), BLI_rcti_size_y(rect)};
+  const int viewport_size[2] = {BLI_rcti_size_x(rect), BLI_rcti_size_y(rect)};
   struct GPUViewport *viewport = GPU_viewport_create();
   GPU_viewport_size_set(viewport, viewport_size);
 
@@ -2445,12 +2420,6 @@ void DRW_draw_select_id(Depsgraph *depsgraph, ARegion *region, View3D *v3d, cons
 #endif
 }
 
-/** See #DRW_shgroup_world_clip_planes_from_rv3d. */
-static void draw_world_clip_planes_from_rv3d(GPUBatch *batch, const float world_clip_planes[6][4])
-{
-  GPU_batch_uniform_4fv_array(batch, "WorldClipPlanes", 6, world_clip_planes[0]);
-}
-
 /**
  * Clears the Depth Buffer and draws only the specified object.
  */
@@ -2469,11 +2438,11 @@ void DRW_draw_depth_object(
 
   GPU_framebuffer_bind(fbl->depth_only_fb);
   GPU_framebuffer_clear_depth(fbl->depth_only_fb, 1.0f);
-  GPU_depth_test(true);
+  GPU_depth_test(GPU_DEPTH_LESS_EQUAL);
 
   const float(*world_clip_planes)[4] = NULL;
   if (RV3D_CLIPPING_ENABLED(v3d, rv3d)) {
-    ED_view3d_clipping_set(rv3d);
+    GPU_clip_distances(6);
     ED_view3d_clipping_local(rv3d, object->obmat);
     world_clip_planes = rv3d->clip_local;
   }
@@ -2501,7 +2470,7 @@ void DRW_draw_depth_object(
                                                           GPU_SHADER_CFG_DEFAULT;
       GPU_batch_program_set_builtin_with_config(batch, GPU_SHADER_3D_DEPTH_ONLY, sh_cfg);
       if (world_clip_planes != NULL) {
-        draw_world_clip_planes_from_rv3d(batch, world_clip_planes);
+        GPU_batch_uniform_4fv_array(batch, "WorldClipPlanes", 6, world_clip_planes);
       }
 
       GPU_batch_draw(batch);
@@ -2512,11 +2481,11 @@ void DRW_draw_depth_object(
   }
 
   if (RV3D_CLIPPING_ENABLED(v3d, rv3d)) {
-    ED_view3d_clipping_disable();
+    GPU_clip_distances(0);
   }
 
   GPU_matrix_set(rv3d->viewmat);
-  GPU_depth_test(false);
+  GPU_depth_test(GPU_DEPTH_NONE);
   GPU_framebuffer_restore();
   DRW_opengl_context_disable();
 }
@@ -2745,6 +2714,54 @@ void DRW_engines_free(void)
   DRW_opengl_context_disable();
 }
 
+void DRW_render_context_enable(Render *render)
+{
+  if (G.background && DST.gl_context == NULL) {
+    WM_init_opengl();
+  }
+
+  if (GPU_use_main_context_workaround()) {
+    GPU_context_main_lock();
+    DRW_opengl_context_enable();
+    return;
+  }
+
+  void *re_gl_context = RE_gl_context_get(render);
+
+  /* Changing Context */
+  if (re_gl_context != NULL) {
+    DRW_opengl_render_context_enable(re_gl_context);
+    /* We need to query gpu context after a gl context has been bound. */
+    void *re_gpu_context = NULL;
+    re_gpu_context = RE_gpu_context_get(render);
+    DRW_gpu_render_context_enable(re_gpu_context);
+  }
+  else {
+    DRW_opengl_context_enable();
+  }
+}
+
+void DRW_render_context_disable(Render *render)
+{
+  if (GPU_use_main_context_workaround()) {
+    DRW_opengl_context_disable();
+    GPU_context_main_unlock();
+    return;
+  }
+
+  void *re_gl_context = RE_gl_context_get(render);
+
+  if (re_gl_context != NULL) {
+    void *re_gpu_context = NULL;
+    re_gpu_context = RE_gpu_context_get(render);
+    DRW_gpu_render_context_disable(re_gpu_context);
+    DRW_opengl_render_context_disable(re_gl_context);
+  }
+  else {
+    DRW_opengl_context_disable();
+  }
+}
+
 /** \} */
 
 /** \name Init/Exit (DRW_opengl_ctx)
@@ -2766,8 +2783,6 @@ void DRW_opengl_context_create(void)
   if (!G.background) {
     immActivate();
   }
-  /* Set default Blender OpenGL state */
-  GPU_state_init();
   /* So we activate the window's one afterwards. */
   wm_window_reset_drawable();
 }
@@ -2802,7 +2817,6 @@ void DRW_opengl_context_enable_ex(bool restore)
       if (!G.background) {
         immActivate();
       }
-      BLF_batch_reset();
     }
   }
 }
@@ -2831,7 +2845,7 @@ void DRW_opengl_context_disable_ex(bool restore)
 void DRW_opengl_context_enable(void)
 {
   if (G.background && DST.gl_context == NULL) {
-    WM_init_opengl(G_MAIN);
+    WM_init_opengl();
   }
   DRW_opengl_context_enable_ex(true);
 }
@@ -2866,13 +2880,11 @@ void DRW_gpu_render_context_enable(void *re_gpu_context)
   BLI_assert(!BLI_thread_is_main());
 
   GPU_context_active_set(re_gpu_context);
-  DRW_shape_cache_reset(); /* XXX fix that too. */
 }
 
 /* Needs to be called BEFORE DRW_opengl_render_context_disable() */
 void DRW_gpu_render_context_disable(void *UNUSED(re_gpu_context))
 {
-  DRW_shape_cache_reset(); /* XXX fix that too. */
   GPU_context_active_set(NULL);
 }
 
@@ -2885,8 +2897,8 @@ void DRW_gpu_render_context_disable(void *UNUSED(re_gpu_context))
  * switch to it just to submit the final frame, which has notable performance impact.
  *
  * We could "inject" a context through DRW_opengl_render_context_enable(), but that would have to
- * work from the main thread, which is tricky to get working too. The preferable solution would be
- * using a separate thread for VR drawing where a single context can stay active. */
+ * work from the main thread, which is tricky to get working too. The preferable solution would
+ * be using a separate thread for VR drawing where a single context can stay active. */
 void *DRW_xr_opengl_context_get(void)
 {
   return DST.gl_context;

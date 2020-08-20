@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BMESH_MESH_H__
-#define __BMESH_MESH_H__
+#pragma once
 
 /** \file
  * \ingroup bmesh
@@ -118,6 +117,7 @@ BLI_INLINE BMFace *BM_face_at_index(BMesh *bm, const int index)
 BMVert *BM_vert_at_index_find(BMesh *bm, const int index);
 BMEdge *BM_edge_at_index_find(BMesh *bm, const int index);
 BMFace *BM_face_at_index_find(BMesh *bm, const int index);
+BMLoop *BM_loop_at_index_find(BMesh *bm, const int index);
 
 BMVert *BM_vert_at_index_find_or_table(BMesh *bm, const int index);
 BMEdge *BM_edge_at_index_find_or_table(BMesh *bm, const int index);
@@ -170,5 +170,3 @@ void BM_mesh_vert_coords_apply(BMesh *bm, const float (*orco)[3]);
 void BM_mesh_vert_coords_apply_with_mat4(BMesh *bm,
                                          const float (*vert_coords)[3],
                                          const float mat[4][4]);
-
-#endif /* __BMESH_MESH_H__ */

@@ -18,8 +18,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_LAYER_TYPES_H__
-#define __DNA_LAYER_TYPES_H__
+#pragma once
 
 #include "DNA_freestyle_types.h"
 #include "DNA_listBase.h"
@@ -115,7 +114,6 @@ typedef struct ViewLayer {
   ListBase object_bases;
   /** Default allocated now. */
   struct SceneStats *stats;
-  char footer_str[128];
   struct Base *basact;
 
   /** A view layer has one top level layer collection, because a scene has only one top level
@@ -217,5 +215,3 @@ typedef struct SceneCollection {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __DNA_LAYER_TYPES_H__ */

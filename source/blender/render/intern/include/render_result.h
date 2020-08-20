@@ -21,8 +21,7 @@
  * \ingroup render
  */
 
-#ifndef __RENDER_RESULT_H__
-#define __RENDER_RESULT_H__
+#pragma once
 
 #define PASS_VECTOR_MAX 10000.0f
 
@@ -43,6 +42,10 @@ struct RenderLayer;
 struct RenderResult;
 struct Scene;
 struct rcti;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* New */
 
@@ -148,4 +151,6 @@ bool render_result_has_views(struct RenderResult *rr);
   } \
   ((void)0)
 
-#endif /* __RENDER_RESULT_H__ */
+#ifdef __cplusplus
+}
+#endif

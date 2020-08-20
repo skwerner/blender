@@ -82,7 +82,6 @@
 
 #include "BIF_glutil.h"
 
-#include "GPU_glew.h"
 #include "GPU_shader.h"
 
 #include "RE_engine.h"
@@ -632,18 +631,8 @@ static bool ed_preview_draw_rect(ScrArea *area, int split, int first, rcti *rect
         }
 
         IMMDrawPixelsTexState state = immDrawPixelsTexSetup(GPU_SHADER_2D_IMAGE_COLOR);
-        immDrawPixelsTex(&state,
-                         fx,
-                         fy,
-                         rres.rectx,
-                         rres.recty,
-                         GL_RGBA,
-                         GL_UNSIGNED_BYTE,
-                         GL_NEAREST,
-                         rect_byte,
-                         1.0f,
-                         1.0f,
-                         NULL);
+        immDrawPixelsTex(
+            &state, fx, fy, rres.rectx, rres.recty, GPU_RGBA8, false, rect_byte, 1.0f, 1.0f, NULL);
 
         MEM_freeN(rect_byte);
 
@@ -775,7 +764,7 @@ static void shader_preview_texture(ShaderPreview *sp, Tex *tex, Scene *sce, Rend
   /* Create buffer in empty RenderView created in the init step. */
   RenderResult *rr = RE_AcquireResultWrite(re);
   RenderView *rv = (RenderView *)rr->views.first;
-  rv->rectf = MEM_callocN(sizeof(float) * 4 * width * height, "texture render result");
+  rv->rectf = MEM_callocN(sizeof(float[4]) * width * height, "texture render result");
   RE_ReleaseResult(re);
 
   /* Get texture image pool (if any) */

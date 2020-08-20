@@ -22,8 +22,7 @@
  * \brief ID and Library types, which are fundamental for sdna.
  */
 
-#ifndef __DNA_ID_H__
-#define __DNA_ID_H__
+#pragma once
 
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
@@ -206,7 +205,10 @@ typedef struct IDOverrideLibraryProperty {
 
   /** Runtime, tags are common to both IDOverrideProperty and IDOverridePropertyOperation. */
   short tag;
-  char _pad0[6];
+  char _pad[2];
+
+  /** The property type matching the rna_path. */
+  unsigned int rna_prop_type;
 } IDOverrideLibraryProperty;
 
 /* IDOverrideProperty->tag and IDOverridePropertyOperation->tag. */
@@ -215,8 +217,18 @@ enum {
   IDOVERRIDE_LIBRARY_TAG_UNUSED = 1 << 0,
 };
 
-/* We do not need a full struct for that currently, just a GHash. */
-typedef struct GHash IDOverrideLibraryRuntime;
+#
+#
+typedef struct IDOverrideLibraryRuntime {
+  struct GHash *rna_path_to_override_properties;
+  uint tag;
+} IDOverrideLibraryRuntime;
+
+/* IDOverrideLibraryRuntime->tag. */
+enum {
+  /** This override needs to be reloaded. */
+  IDOVERRIDE_LIBRARY_RUNTIME_TAG_NEEDS_RELOAD = 1 << 0,
+};
 
 /* Main container for all overriding data info of a data-block. */
 typedef struct IDOverrideLibrary {
@@ -302,16 +314,17 @@ typedef struct Library {
   ID id;
   struct FileData *filedata;
   /** Path name used for reading, can be relative and edited in the outliner. */
-  char name[1024];
+  char filepath[1024];
 
   /**
-   * Absolute filepath, this is only for convenience,
-   * 'name' is the real path used on file read but in
-   * some cases its useful to access the absolute one.
-   * This is set on file read.
-   * Use BKE_library_filepath_set() rather than setting 'name'
-   * directly and it will be kept in sync - campbell */
-  char filepath[1024];
+   * Run-time only, absolute file-path (set on read).
+   * This is only for convenience, `filepath` is the real path
+   * used on file read but in some cases its useful to access the absolute one.
+   *
+   * Use #BKE_library_filepath_set() rather than setting `filepath`
+   * directly and it will be kept in sync - campbell
+   */
+  char filepath_abs[1024];
 
   /** Set for indirectly linked libs, used in the outliner and while reading. */
   struct Library *parent;
@@ -448,29 +461,37 @@ typedef enum ID_Type {
 /* fluidsim Ipo */
 #define ID_FLUIDSIM MAKE_ID2('F', 'S')
 
-#define ID_FAKE_USERS(id) ((((ID *)id)->flag & LIB_FAKEUSER) ? 1 : 0)
-#define ID_REAL_USERS(id) (((ID *)id)->us - ID_FAKE_USERS(id))
-#define ID_EXTRA_USERS(id) (((ID *)id)->tag & LIB_TAG_EXTRAUSER ? 1 : 0)
+#define ID_FAKE_USERS(id) ((((const ID *)id)->flag & LIB_FAKEUSER) ? 1 : 0)
+#define ID_REAL_USERS(id) (((const ID *)id)->us - ID_FAKE_USERS(id))
+#define ID_EXTRA_USERS(id) (((const ID *)id)->tag & LIB_TAG_EXTRAUSER ? 1 : 0)
 
 #define ID_CHECK_UNDO(id) \
   ((GS((id)->name) != ID_SCR) && (GS((id)->name) != ID_WM) && (GS((id)->name) != ID_WS))
 
 #define ID_BLEND_PATH(_bmain, _id) \
-  ((_id)->lib ? (_id)->lib->filepath : BKE_main_blendfile_path((_bmain)))
+  ((_id)->lib ? (_id)->lib->filepath_abs : BKE_main_blendfile_path((_bmain)))
 #define ID_BLEND_PATH_FROM_GLOBAL(_id) \
-  ((_id)->lib ? (_id)->lib->filepath : BKE_main_blendfile_path_from_global())
+  ((_id)->lib ? (_id)->lib->filepath_abs : BKE_main_blendfile_path_from_global())
 
-#define ID_MISSING(_id) ((((ID *)(_id))->tag & LIB_TAG_MISSING) != 0)
+#define ID_MISSING(_id) ((((const ID *)(_id))->tag & LIB_TAG_MISSING) != 0)
 
-#define ID_IS_LINKED(_id) (((ID *)(_id))->lib != NULL)
+#define ID_IS_LINKED(_id) (((const ID *)(_id))->lib != NULL)
 
 /* Note that this is a fairly high-level check, should be used at user interaction level, not in
  * BKE_library_override typically (especially due to the check on LIB_TAG_EXTERN). */
 #define ID_IS_OVERRIDABLE_LIBRARY(_id) \
-  (ID_IS_LINKED(_id) && !ID_MISSING(_id) && (((ID *)(_id))->tag & LIB_TAG_EXTERN) != 0)
+  (ID_IS_LINKED(_id) && !ID_MISSING(_id) && (((const ID *)(_id))->tag & LIB_TAG_EXTERN) != 0 && \
+   (BKE_idtype_get_info_from_id((const ID *)(_id))->flags & IDTYPE_FLAGS_NO_LIBLINKING) == 0)
+
+#define ID_IS_OVERRIDE_LIBRARY_REAL(_id) \
+  (((const ID *)(_id))->override_library != NULL && \
+   ((const ID *)(_id))->override_library->reference != NULL)
+
+#define ID_IS_OVERRIDE_LIBRARY_VIRTUAL(_id) \
+  ((((const ID *)(_id))->flag & LIB_EMBEDDED_DATA_LIB_OVERRIDE) != 0)
 
 #define ID_IS_OVERRIDE_LIBRARY(_id) \
-  (((ID *)(_id))->override_library != NULL && ((ID *)(_id))->override_library->reference != NULL)
+  (ID_IS_OVERRIDE_LIBRARY_REAL(_id) || ID_IS_OVERRIDE_LIBRARY_VIRTUAL(_id))
 
 #define ID_IS_OVERRIDE_LIBRARY_TEMPLATE(_id) \
   (((ID *)(_id))->override_library != NULL && ((ID *)(_id))->override_library->reference == NULL)
@@ -508,6 +529,11 @@ enum {
    * we want to restore if possible, and silently drop if it's missing.
    */
   LIB_INDIRECT_WEAK_LINK = 1 << 11,
+  /**
+   * The data-block is a sub-data of another one, which is an override.
+   * Note that this also applies to shapekeys, even though they are not 100% embedded data...
+   */
+  LIB_EMBEDDED_DATA_LIB_OVERRIDE = 1 << 12,
 };
 
 /**
@@ -660,10 +686,6 @@ typedef enum IDRecalcFlag {
 
   ID_RECALC_PARAMETERS = (1 << 21),
 
-  /* Makes it so everything what depends on time.
-   * Basically, the same what changing frame in a timeline will do. */
-  ID_RECALC_TIME = (1 << 22),
-
   /* Input has changed and datablock is to be reload from disk.
    * Applies to movie clips to inform that copy-on-written version is to be refreshed for the new
    * input file or for color space changes. */
@@ -792,6 +814,4 @@ enum {
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

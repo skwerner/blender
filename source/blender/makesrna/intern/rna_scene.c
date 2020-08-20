@@ -924,11 +924,21 @@ static void rna_Scene_volume_update(Main *UNUSED(bmain), Scene *UNUSED(scene), P
   DEG_id_tag_update(&scene->id, ID_RECALC_AUDIO_VOLUME | ID_RECALC_SEQUENCER_STRIPS);
 }
 
-static const char *rna_Scene_statistics_string_get(Scene *UNUSED(scene),
-                                                   Main *UNUSED(bmain),
+static const char *rna_Scene_statistics_string_get(Scene *scene,
+                                                   Main *bmain,
+                                                   ReportList *reports,
                                                    ViewLayer *view_layer)
 {
-  return ED_info_footer_string(view_layer);
+  if (BKE_scene_find_from_view_layer(bmain, view_layer) != scene) {
+    BKE_reportf(reports,
+                RPT_ERROR,
+                "View Layer '%s' not found in scene '%s'",
+                view_layer->name,
+                scene->id.name + 2);
+    return "";
+  }
+
+  return ED_info_statistics_string(bmain, scene, view_layer);
 }
 
 static void rna_Scene_framelen_update(Main *UNUSED(bmain), Scene *scene, PointerRNA *UNUSED(ptr))
@@ -1662,7 +1672,7 @@ static void rna_RenderSettings_engine_update(Main *bmain,
                                              Scene *UNUSED(unused),
                                              PointerRNA *UNUSED(ptr))
 {
-  ED_render_engine_changed(bmain);
+  ED_render_engine_changed(bmain, true);
 }
 
 static bool rna_RenderSettings_multiple_engines_get(PointerRNA *UNUSED(ptr))
@@ -1873,11 +1883,10 @@ static void object_simplify_update(Object *ob)
   }
 
   if (ob->instance_collection) {
-    CollectionObject *cob;
-
-    for (cob = ob->instance_collection->gobject.first; cob; cob = cob->next) {
-      object_simplify_update(cob->ob);
+    FOREACH_COLLECTION_OBJECT_RECURSIVE_BEGIN (ob->instance_collection, ob_collection) {
+      object_simplify_update(ob_collection);
     }
+    FOREACH_COLLECTION_OBJECT_RECURSIVE_END;
   }
 }
 
@@ -2869,7 +2878,7 @@ static void rna_def_tool_settings(BlenderRNA *brna)
        "3D Cursor",
        "Draw stroke at 3D cursor location"},
       /* Weird, GP_PROJECT_VIEWALIGN is inverted. */
-      {0, "VIEW", ICON_RESTRICT_VIEW_ON, "View", "Stick stroke to the view "},
+      {0, "VIEW", ICON_RESTRICT_VIEW_ON, "View", "Stick stroke to the view"},
       {GP_PROJECT_VIEWSPACE | GP_PROJECT_DEPTH_VIEW,
        "SURFACE",
        ICON_FACESEL,
@@ -3089,6 +3098,22 @@ static void rna_def_tool_settings(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop, "Transform Parents", "Transform the parents, leaving the children in place");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+
+  prop = RNA_def_property(srna, "use_transform_correct_face_attributes", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "uvcalc_flag", UVCALC_TRANSFORM_CORRECT);
+  RNA_def_property_ui_text(prop,
+                           "Correct Face Attributes",
+                           "Correct data such as UV's and vertex colors when transforming");
+  RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
+
+  prop = RNA_def_property(srna, "use_transform_correct_keep_connected", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(
+      prop, NULL, "uvcalc_flag", UVCALC_TRANSFORM_CORRECT_KEEP_CONNECTED);
+  RNA_def_property_ui_text(
+      prop,
+      "Keep Connected",
+      "During the Face Attributes correction, merge attributes connected to the same vertex");
+  RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
   prop = RNA_def_property(srna, "use_mesh_automerge", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "automerge", AUTO_MERGE);
@@ -3449,7 +3474,7 @@ static void rna_def_tool_settings(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "use_edge_path_live_unwrap", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "edge_mode_live_unwrap", 1);
-  RNA_def_property_ui_text(prop, "Live Unwrap", "Changing edges seam re-calculates UV unwrap");
+  RNA_def_property_ui_text(prop, "Live Unwrap", "Changing edges seam recalculates UV unwrap");
 
   prop = RNA_def_property(srna, "normal_vector", PROP_FLOAT, PROP_XYZ);
   RNA_def_property_ui_text(prop, "Normal Vector", "Normal Vector used to copy, add or multiply");
@@ -3580,7 +3605,7 @@ static void rna_def_unified_paint_settings(BlenderRNA *brna)
   RNA_def_property_enum_bitflag_sdna(prop, NULL, "flag");
   RNA_def_property_enum_items(prop, brush_size_unit_items);
   RNA_def_property_ui_text(
-      prop, "Radius Unit", "Measure brush size relative to the view or the scene ");
+      prop, "Radius Unit", "Measure brush size relative to the view or the scene");
 }
 
 static void rna_def_curve_paint_settings(BlenderRNA *brna)
@@ -4807,7 +4832,7 @@ void rna_def_freestyle_settings(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop,
       "View Map Cache",
-      "Keep the computed view map and avoid re-calculating it if mesh geometry is unchanged");
+      "Keep the computed view map and avoid recalculating it if mesh geometry is unchanged");
   RNA_def_property_update(
       prop, NC_SCENE | ND_RENDER_OPTIONS, "rna_Scene_use_view_map_cache_update");
 
@@ -6456,7 +6481,7 @@ static void rna_def_scene_render_data(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "simplify_gpencil_shader_fx", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_negative_sdna(prop, NULL, "simplify_gpencil", SIMPLIFY_GPENCIL_FX);
-  RNA_def_property_ui_text(prop, "ShadersFX", "Display Shader FX");
+  RNA_def_property_ui_text(prop, "Shader Effects", "Display Shader Effects");
   RNA_def_property_update(prop, NC_GPENCIL | ND_DATA, "rna_GPencil_update");
 
   prop = RNA_def_property(srna, "simplify_gpencil_tint", PROP_BOOLEAN, PROP_NONE);
@@ -7169,8 +7194,18 @@ static void rna_def_scene_eevee(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "motion_blur_max", PROP_INT, PROP_PIXEL);
   RNA_def_property_ui_text(prop, "Max Blur", "Maximum blur distance a pixel can spread over");
-  RNA_def_property_range(prop, 1, 2048);
-  RNA_def_property_ui_range(prop, 1, 512, 1, -1);
+  RNA_def_property_range(prop, 0, 2048);
+  RNA_def_property_ui_range(prop, 0, 512, 1, -1);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
+  RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, NULL);
+
+  prop = RNA_def_property(srna, "motion_blur_steps", PROP_INT, PROP_NONE);
+  RNA_def_property_ui_text(prop,
+                           "Motion steps",
+                           "Controls accuracy of motion blur, "
+                           "more steps means longer render time");
+  RNA_def_property_range(prop, 1, INT_MAX);
+  RNA_def_property_ui_range(prop, 1, 64, 1, -1);
   RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, NULL);
 
@@ -7480,6 +7515,7 @@ void RNA_def_scene(BlenderRNA *brna)
   /* Nodes (Compositing) */
   prop = RNA_def_property(srna, "node_tree", PROP_POINTER, PROP_NONE);
   RNA_def_property_pointer_sdna(prop, NULL, "nodetree");
+  RNA_def_property_clear_flag(prop, PROP_PTR_NO_OWNERSHIP);
   RNA_def_property_ui_text(prop, "Node Tree", "Compositing node tree");
 
   prop = RNA_def_property(srna, "use_nodes", PROP_BOOLEAN, PROP_NONE);
@@ -7653,8 +7689,8 @@ void RNA_def_scene(BlenderRNA *brna)
 
   /* Statistics */
   func = RNA_def_function(srna, "statistics", "rna_Scene_statistics_string_get");
-  RNA_def_function_flag(func, FUNC_USE_MAIN);
-  parm = RNA_def_pointer(func, "view_layer", "ViewLayer", "", "Active layer");
+  RNA_def_function_flag(func, FUNC_USE_MAIN | FUNC_USE_REPORTS);
+  parm = RNA_def_pointer(func, "view_layer", "ViewLayer", "View Layer", "");
   RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED);
   parm = RNA_def_string(func, "statistics", NULL, 0, "Statistics", "");
   RNA_def_function_return(func, parm);
@@ -7710,6 +7746,7 @@ void RNA_def_scene(BlenderRNA *brna)
   RNA_def_property_flag(prop, PROP_NEVER_NULL);
   RNA_def_property_pointer_sdna(prop, NULL, "master_collection");
   RNA_def_property_struct_type(prop, "Collection");
+  RNA_def_property_clear_flag(prop, PROP_PTR_NO_OWNERSHIP);
   RNA_def_property_ui_text(
       prop,
       "Collection",

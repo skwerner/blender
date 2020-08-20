@@ -23,8 +23,7 @@
  * GPU vertex buffer
  */
 
-#ifndef __GPU_VERTEX_BUFFER_H__
-#define __GPU_VERTEX_BUFFER_H__
+#pragma once
 
 #include "GPU_vertex_format.h"
 
@@ -59,10 +58,12 @@ typedef struct GPUVertBuf {
   /** 0 indicates not yet allocated. */
   uint32_t vbo_id;
   /** Usage hint for GL optimisation. */
-  uint usage : 2;
+  GPUUsageType usage;
+  /** This counter will only avoid freeing the GPUVertBuf, not the data. */
+  char handle_refcount;
   /** Data has been touched and need to be reuploaded to GPU. */
-  uint dirty : 1;
-  unsigned char *data; /* NULL indicates data in VRAM (unmapped) */
+  bool dirty;
+  uchar *data; /* NULL indicates data in VRAM (unmapped) */
 } GPUVertBuf;
 
 GPUVertBuf *GPU_vertbuf_create(GPUUsageType);
@@ -73,6 +74,10 @@ GPUVertBuf *GPU_vertbuf_create_with_format_ex(const GPUVertFormat *, GPUUsageTyp
 
 void GPU_vertbuf_clear(GPUVertBuf *verts);
 void GPU_vertbuf_discard(GPUVertBuf *);
+
+/* Avoid GPUVertBuf datablock being free but not its data. */
+void GPU_vertbuf_handle_ref_add(GPUVertBuf *verts);
+void GPU_vertbuf_handle_ref_remove(GPUVertBuf *verts);
 
 void GPU_vertbuf_init(GPUVertBuf *, GPUUsageType);
 void GPU_vertbuf_init_with_format_ex(GPUVertBuf *, const GPUVertFormat *, GPUUsageType);
@@ -147,5 +152,3 @@ uint GPU_vertbuf_get_memory_usage(void);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __GPU_VERTEX_BUFFER_H__ */

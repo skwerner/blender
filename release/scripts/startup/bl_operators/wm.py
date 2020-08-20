@@ -1276,6 +1276,11 @@ class WM_OT_properties_edit(Operator):
 
         # First remove
         item = eval("context.%s" % data_path)
+
+        if (item.id_data and item.id_data.override_library and item.id_data.override_library.reference):
+            self.report({'ERROR'}, "Cannot edit properties from override data")
+            return {'CANCELLED'}
+
         prop_type_old = type(item[prop_old])
 
         rna_idprop_ui_prop_clear(item, prop_old)
@@ -1375,6 +1380,10 @@ class WM_OT_properties_edit(Operator):
 
         item = eval("context.%s" % data_path)
 
+        if (item.id_data and item.id_data.override_library and item.id_data.override_library.reference):
+            self.report({'ERROR'}, "Cannot edit properties from override data")
+            return {'CANCELLED'}
+
         # retrieve overridable static
         exec_str = "item.is_property_overridable_library('[\"%s\"]')" % (self.property)
         self.is_overridable_library = bool(eval(exec_str))
@@ -1450,6 +1459,10 @@ class WM_OT_properties_edit(Operator):
         )
 
         layout = self.layout
+
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+
         layout.prop(self, "property")
         layout.prop(self, "value")
 
@@ -1457,22 +1470,21 @@ class WM_OT_properties_edit(Operator):
         proptype, is_array = rna_idprop_value_item_type(value)
 
         row = layout.row()
-        row.enabled = proptype in {int, float}
+        row.enabled = proptype in {int, float, str}
         row.prop(self, "default")
 
-        row = layout.row(align=True)
-        row.prop(self, "min")
-        row.prop(self, "max")
+        col = layout.column(align=True)
+        col.prop(self, "min")
+        col.prop(self, "max")
 
-        row = layout.row()
-        row.prop(self, "use_soft_limits")
-        if bpy.app.use_override_library:
-            row.prop(self, "is_overridable_library")
+        col = layout.column()
+        col.prop(self, "is_overridable_library")
+        col.prop(self, "use_soft_limits")
 
-        row = layout.row(align=True)
-        row.enabled = self.use_soft_limits
-        row.prop(self, "soft_min", text="Soft Min")
-        row.prop(self, "soft_max", text="Soft Max")
+        col = layout.column(align=True)
+        col.enabled = self.use_soft_limits
+        col.prop(self, "soft_min", text="Soft Min")
+        col.prop(self, "soft_max", text="Max")
         layout.prop(self, "description")
 
         if is_array and proptype == float:
@@ -1494,6 +1506,10 @@ class WM_OT_properties_add(Operator):
 
         data_path = self.data_path
         item = eval("context.%s" % data_path)
+
+        if (item.id_data and item.id_data.override_library and item.id_data.override_library.reference):
+            self.report({'ERROR'}, "Cannot add properties to override data")
+            return {'CANCELLED'}
 
         def unique_name(names):
             prop = "prop"
@@ -1547,6 +1563,11 @@ class WM_OT_properties_remove(Operator):
         )
         data_path = self.data_path
         item = eval("context.%s" % data_path)
+
+        if (item.id_data and item.id_data.override_library and item.id_data.override_library.reference):
+            self.report({'ERROR'}, "Cannot remove properties from override data")
+            return {'CANCELLED'}
+
         prop = self.property
         rna_idprop_ui_prop_update(item, prop)
         del item[prop]
@@ -1697,7 +1718,7 @@ class WM_OT_tool_set_by_id(Operator):
                 tool_settings.workspace_tool_type = 'FALLBACK'
             return {'FINISHED'}
         else:
-            self.report({'WARNING'}, f"Tool {self.name!r:s} not found for space {space_type!r:s}.")
+            self.report({'WARNING'}, "Tool %r not found for space %r." % (self.name, space_type))
             return {'CANCELLED'}
 
 
@@ -2216,8 +2237,8 @@ class WM_OT_batch_rename(Operator):
             elif ty == 'STRIP':
                 chars = action.strip_chars
                 chars_strip = (
-                    "{:s}{:s}{:s}"
-                ).format(
+                    "%s%s%s"
+                ) % (
                     string.punctuation if 'PUNCT' in chars else "",
                     string.digits if 'DIGIT' in chars else "",
                     " " if 'SPACE' in chars else "",
@@ -2282,7 +2303,7 @@ class WM_OT_batch_rename(Operator):
         split.prop(self, "data_type", text="")
 
         split = layout.split(factor=0.5)
-        split.label(text="Rename {:d} {:s}:".format(len(self._data[0]), self._data[2]))
+        split.label(text="Rename %d %s:" % (len(self._data[0]), self._data[2]))
         split.row().prop(self, "data_source", expand=True)
 
         for action in self.actions:
@@ -2397,7 +2418,7 @@ class WM_OT_batch_rename(Operator):
                 change_len += 1
             total_len += 1
 
-        self.report({'INFO'}, "Renamed {:d} of {:d} {:s}".format(change_len, total_len, descr))
+        self.report({'INFO'}, "Renamed %d of %d %s" % (change_len, total_len, descr))
 
         return {'FINISHED'}
 

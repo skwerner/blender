@@ -97,7 +97,6 @@
 
 #include "UI_interface.h"
 
-#include "GPU_glew.h"
 #include "GPU_matrix.h"
 
 #include "DEG_depsgraph.h"
@@ -1398,9 +1397,7 @@ static int view3d_lasso_select_exec(bContext *C, wmOperator *op)
     if (changed_multi) {
       return OPERATOR_FINISHED;
     }
-    else {
-      return OPERATOR_CANCELLED;
-    }
+    return OPERATOR_CANCELLED;
   }
   return OPERATOR_PASS_THROUGH;
 }
@@ -1542,9 +1539,7 @@ static int object_select_menu_exec(bContext *C, wmOperator *op)
 
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void VIEW3D_OT_select_menu(wmOperatorType *ot)
@@ -1576,7 +1571,7 @@ void VIEW3D_OT_select_menu(wmOperatorType *ot)
 
 static Base *object_mouse_select_menu(bContext *C,
                                       ViewContext *vc,
-                                      uint *buffer,
+                                      const uint *buffer,
                                       int hits,
                                       const int mval[2],
                                       bool extend,
@@ -1630,37 +1625,34 @@ static Base *object_mouse_select_menu(bContext *C,
     BLI_linklist_free(linklist, NULL);
     return base;
   }
-  else {
-    /* UI, full in static array values that we later use in an enum function */
-    LinkNode *node;
-    int i;
 
-    memset(object_mouse_select_menu_data, 0, sizeof(object_mouse_select_menu_data));
+  /* UI, full in static array values that we later use in an enum function */
+  LinkNode *node;
+  int i;
 
-    for (node = linklist, i = 0; node; node = node->next, i++) {
-      Base *base = node->link;
-      Object *ob = base->object;
-      const char *name = ob->id.name + 2;
+  memset(object_mouse_select_menu_data, 0, sizeof(object_mouse_select_menu_data));
 
-      BLI_strncpy(object_mouse_select_menu_data[i].idname, name, MAX_ID_NAME - 2);
-      object_mouse_select_menu_data[i].icon = UI_icon_from_id(&ob->id);
-    }
+  for (node = linklist, i = 0; node; node = node->next, i++) {
+    Base *base = node->link;
+    Object *ob = base->object;
+    const char *name = ob->id.name + 2;
 
-    {
-      wmOperatorType *ot = WM_operatortype_find("VIEW3D_OT_select_menu", false);
-      PointerRNA ptr;
-
-      WM_operator_properties_create_ptr(&ptr, ot);
-      RNA_boolean_set(&ptr, "extend", extend);
-      RNA_boolean_set(&ptr, "deselect", deselect);
-      RNA_boolean_set(&ptr, "toggle", toggle);
-      WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &ptr);
-      WM_operator_properties_free(&ptr);
-    }
-
-    BLI_linklist_free(linklist, NULL);
-    return NULL;
+    BLI_strncpy(object_mouse_select_menu_data[i].idname, name, MAX_ID_NAME - 2);
+    object_mouse_select_menu_data[i].icon = UI_icon_from_id(&ob->id);
   }
+
+  wmOperatorType *ot = WM_operatortype_find("VIEW3D_OT_select_menu", false);
+  PointerRNA ptr;
+
+  WM_operator_properties_create_ptr(&ptr, ot);
+  RNA_boolean_set(&ptr, "extend", extend);
+  RNA_boolean_set(&ptr, "deselect", deselect);
+  RNA_boolean_set(&ptr, "toggle", toggle);
+  WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &ptr);
+  WM_operator_properties_free(&ptr);
+
+  BLI_linklist_free(linklist, NULL);
+  return NULL;
 }
 
 static bool selectbuffer_has_bones(const uint *buffer, const uint hits)
@@ -2120,7 +2112,7 @@ static bool ed_object_select_pick(bContext *C,
 
     if (hits > 0) {
       /* note: bundles are handling in the same way as bones */
-      const bool has_bones = selectbuffer_has_bones(buffer, hits);
+      const bool has_bones = object ? false : selectbuffer_has_bones(buffer, hits);
 
       /* note; shift+alt goes to group-flush-selecting */
       if (enumerate) {
@@ -2504,9 +2496,7 @@ static int view3d_select_exec(bContext *C, wmOperator *op)
     WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, scene);
     return OPERATOR_PASS_THROUGH | OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_PASS_THROUGH; /* nothing selected, just passthrough */
-  }
+  return OPERATOR_PASS_THROUGH; /* nothing selected, just passthrough */
 }
 
 static int view3d_select_invoke(bContext *C, wmOperator *op, const wmEvent *event)
@@ -3116,12 +3106,10 @@ static int opengl_bone_select_buffer_cmp(const void *sel_a_p, const void *sel_b_
   if (sel_a < sel_b) {
     return -1;
   }
-  else if (sel_a > sel_b) {
+  if (sel_a > sel_b) {
     return 1;
   }
-  else {
-    return 0;
-  }
+  return 0;
 }
 
 static bool do_object_box_select(bContext *C, ViewContext *vc, rcti *rect, const eSelectOp sel_op)
@@ -3347,12 +3335,7 @@ static int view3d_box_select_exec(bContext *C, wmOperator *op)
     FOREACH_OBJECT_IN_MODE_END;
   }
   else { /* No edit-mode, unified for bones and objects. */
-    if (vc.obact && vc.obact->mode & OB_MODE_SCULPT) {
-      /* XXX, this is not selection, could be it's own operator. */
-      changed_multi = ED_sculpt_mask_box_select(
-          C, &vc, &rect, sel_op == SEL_OP_ADD ? true : false);
-    }
-    else if (vc.obact && BKE_paint_select_face_test(vc.obact)) {
+    if (vc.obact && BKE_paint_select_face_test(vc.obact)) {
       changed_multi = do_paintface_box_select(&vc, wm_userdata, &rect, sel_op);
     }
     else if (vc.obact && BKE_paint_select_vert_test(vc.obact)) {
@@ -3380,9 +3363,7 @@ static int view3d_box_select_exec(bContext *C, wmOperator *op)
   if (changed_multi) {
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void VIEW3D_OT_select_box(wmOperatorType *ot)

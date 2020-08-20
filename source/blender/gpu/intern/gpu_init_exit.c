@@ -26,6 +26,7 @@
 #include "BLI_sys_types.h"
 #include "GPU_batch.h"
 #include "GPU_buffers.h"
+#include "GPU_context.h"
 #include "GPU_immediate.h"
 
 #include "intern/gpu_codegen.h"
@@ -95,7 +96,7 @@ void GPU_exit(void)
   initialized = false;
 }
 
-bool GPU_is_initialized(void)
+bool GPU_is_init(void)
 {
   return initialized;
 }

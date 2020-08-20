@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_MATERIAL_H__
-#define __BKE_MATERIAL_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -84,7 +83,8 @@ void BKE_object_material_assign(
 void BKE_object_material_array_assign(struct Main *bmain,
                                       struct Object *ob,
                                       struct Material ***matar,
-                                      short totcol);
+                                      int totcol,
+                                      const bool to_object_only);
 
 short BKE_object_material_slot_find_index(struct Object *ob, struct Material *ma);
 bool BKE_object_material_slot_add(struct Main *bmain, struct Object *ob);
@@ -134,6 +134,4 @@ void BKE_material_eval(struct Depsgraph *depsgraph, struct Material *material);
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

@@ -44,7 +44,9 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
-namespace USD {
+namespace blender {
+namespace io {
+namespace usd {
 
 struct ExportJobData {
   Main *bmain;
@@ -57,7 +59,12 @@ struct ExportJobData {
   bool export_ok;
 };
 
-static void export_startjob(void *customdata, short *stop, short *do_update, float *progress)
+static void export_startjob(void *customdata,
+                            /* Cannot be const, this function implements wm_jobs_start_callback.
+                             * NOLINTNEXTLINE: readability-non-const-parameter. */
+                            short *stop,
+                            short *do_update,
+                            float *progress)
 {
   ExportJobData *data = static_cast<ExportJobData *>(customdata);
   data->export_ok = false;
@@ -68,8 +75,12 @@ static void export_startjob(void *customdata, short *stop, short *do_update, flo
 
   // Construct the depsgraph for exporting.
   Scene *scene = DEG_get_input_scene(data->depsgraph);
-  ViewLayer *view_layer = DEG_get_input_view_layer(data->depsgraph);
-  DEG_graph_build_from_view_layer(data->depsgraph, data->bmain, scene, view_layer);
+  if (data->params.visible_objects_only) {
+    DEG_graph_build_from_view_layer(data->depsgraph);
+  }
+  else {
+    DEG_graph_build_for_all_objects(data->depsgraph);
+  }
   BKE_scene_graph_update_tagged(data->depsgraph, data->bmain);
 
   *progress = 0.0f;
@@ -115,7 +126,7 @@ static void export_startjob(void *customdata, short *stop, short *do_update, flo
       // Update the scene for the next frame to render.
       scene->r.cfra = static_cast<int>(frame);
       scene->r.subframe = frame - scene->r.cfra;
-      BKE_scene_graph_update_for_newframe(data->depsgraph, data->bmain);
+      BKE_scene_graph_update_for_newframe(data->depsgraph);
 
       iter.set_export_frame(frame);
       iter.iterate_and_write();
@@ -135,7 +146,7 @@ static void export_startjob(void *customdata, short *stop, short *do_update, flo
   // Finish up by going back to the keyframe that was current before we started.
   if (CFRA != orig_frame) {
     CFRA = orig_frame;
-    BKE_scene_graph_update_for_newframe(data->depsgraph, data->bmain);
+    BKE_scene_graph_update_for_newframe(data->depsgraph);
   }
 
   data->export_ok = true;
@@ -157,7 +168,9 @@ static void export_endjob(void *customdata)
   WM_set_locked_interface(data->wm, false);
 }
 
-}  // namespace USD
+}  // namespace usd
+}  // namespace io
+}  // namespace blender
 
 bool USD_export(bContext *C,
                 const char *filepath,
@@ -167,8 +180,8 @@ bool USD_export(bContext *C,
   ViewLayer *view_layer = CTX_data_view_layer(C);
   Scene *scene = CTX_data_scene(C);
 
-  USD::ExportJobData *job = static_cast<USD::ExportJobData *>(
-      MEM_mallocN(sizeof(USD::ExportJobData), "ExportJobData"));
+  blender::io::usd::ExportJobData *job = static_cast<blender::io::usd::ExportJobData *>(
+      MEM_mallocN(sizeof(blender::io::usd::ExportJobData), "ExportJobData"));
 
   job->bmain = CTX_data_main(C);
   job->wm = CTX_wm_manager(C);
@@ -186,7 +199,11 @@ bool USD_export(bContext *C,
     /* setup job */
     WM_jobs_customdata_set(wm_job, job, MEM_freeN);
     WM_jobs_timer(wm_job, 0.1, NC_SCENE | ND_FRAME, NC_SCENE | ND_FRAME);
-    WM_jobs_callbacks(wm_job, USD::export_startjob, nullptr, nullptr, USD::export_endjob);
+    WM_jobs_callbacks(wm_job,
+                      blender::io::usd::export_startjob,
+                      nullptr,
+                      nullptr,
+                      blender::io::usd::export_endjob);
 
     WM_jobs_start(CTX_wm_manager(C), wm_job);
   }
@@ -195,8 +212,8 @@ bool USD_export(bContext *C,
     short stop = 0, do_update = 0;
     float progress = 0.f;
 
-    USD::export_startjob(job, &stop, &do_update, &progress);
-    USD::export_endjob(job);
+    blender::io::usd::export_startjob(job, &stop, &do_update, &progress);
+    blender::io::usd::export_endjob(job);
     export_ok = job->export_ok;
 
     MEM_freeN(job);

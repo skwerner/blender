@@ -94,7 +94,7 @@ static void initData(GpencilModifierData *md)
   gpmd->falloff_type = eGPHook_Falloff_Smooth;
   gpmd->curfalloff = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
   if (gpmd->curfalloff) {
-    BKE_curvemapping_initialize(gpmd->curfalloff);
+    BKE_curvemapping_init(gpmd->curfalloff);
   }
 }
 
@@ -114,13 +114,13 @@ static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
 }
 
 /* calculate factor of fallof */
-static float gp_hook_falloff(const struct GPHookData_cb *tData, const float len_sq)
+static float gpencil_hook_falloff(const struct GPHookData_cb *tData, const float len_sq)
 {
   BLI_assert(tData->falloff_sq);
   if (len_sq > tData->falloff_sq) {
     return 0.0f;
   }
-  else if (len_sq > 0.0f) {
+  if (len_sq > 0.0f) {
     float fac;
 
     if (tData->falloff_type == eGPHook_Falloff_Const) {
@@ -167,7 +167,7 @@ static float gp_hook_falloff(const struct GPHookData_cb *tData, const float len_
 }
 
 /* apply point deformation */
-static void gp_hook_co_apply(struct GPHookData_cb *tData, float weight, bGPDspoint *pt)
+static void gpencil_hook_co_apply(struct GPHookData_cb *tData, float weight, bGPDspoint *pt)
 {
   float fac;
 
@@ -183,7 +183,7 @@ static void gp_hook_co_apply(struct GPHookData_cb *tData, float weight, bGPDspoi
       len_sq = len_squared_v3v3(tData->cent, &pt->x);
     }
 
-    fac = gp_hook_falloff(tData, len_sq);
+    fac = gpencil_hook_falloff(tData, len_sq);
   }
   else {
     fac = tData->fac_orig;
@@ -271,7 +271,7 @@ static void deformStroke(GpencilModifierData *md,
     if (weight < 0.0f) {
       continue;
     }
-    gp_hook_co_apply(&tData, weight, pt);
+    gpencil_hook_co_apply(&tData, weight, pt);
   }
   /* Calc geometry data. */
   BKE_gpencil_stroke_geometry_update(gps);
@@ -280,7 +280,10 @@ static void deformStroke(GpencilModifierData *md,
 /* FIXME: Ideally we be doing this on a copy of the main depsgraph
  * (i.e. one where we don't have to worry about restoring state)
  */
-static void bakeModifier(Main *bmain, Depsgraph *depsgraph, GpencilModifierData *md, Object *ob)
+static void bakeModifier(Main *UNUSED(bmain),
+                         Depsgraph *depsgraph,
+                         GpencilModifierData *md,
+                         Object *ob)
 {
   HookGpencilModifierData *mmd = (HookGpencilModifierData *)md;
   Scene *scene = DEG_get_evaluated_scene(depsgraph);
@@ -297,7 +300,7 @@ static void bakeModifier(Main *bmain, Depsgraph *depsgraph, GpencilModifierData 
        * NOTE: this assumes that we don't want hook animation on non-keyframed frames
        */
       CFRA = gpf->framenum;
-      BKE_scene_graph_update_for_newframe(depsgraph, bmain);
+      BKE_scene_graph_update_for_newframe(depsgraph);
 
       /* compute hook effects on this frame */
       LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
@@ -308,7 +311,7 @@ static void bakeModifier(Main *bmain, Depsgraph *depsgraph, GpencilModifierData 
 
   /* return frame state and DB to original state */
   CFRA = oldframe;
-  BKE_scene_graph_update_for_newframe(depsgraph, bmain);
+  BKE_scene_graph_update_for_newframe(depsgraph);
 }
 
 static void freeData(GpencilModifierData *md)

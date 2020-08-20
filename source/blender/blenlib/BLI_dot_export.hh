@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLI_DOT_EXPORT_HH__
-#define __BLI_DOT_EXPORT_HH__
+#pragma once
 
 /**
  * Language grammar: https://www.graphviz.org/doc/info/lang.html
@@ -25,17 +24,16 @@
  */
 
 #include "BLI_map.hh"
-#include "BLI_optional.hh"
 #include "BLI_set.hh"
 #include "BLI_utility_mixins.hh"
 #include "BLI_vector.hh"
 
 #include "BLI_dot_export_attribute_enums.hh"
 
+#include <optional>
 #include <sstream>
 
-namespace blender {
-namespace DotExport {
+namespace blender::dot {
 
 class Graph;
 class DirectedGraph;
@@ -45,32 +43,38 @@ class NodePort;
 class DirectedEdge;
 class UndirectedEdge;
 class Cluster;
-class AttributeList;
 
-class AttributeList {
+class Attributes {
  private:
-  Map<std::string, std::string> m_attributes;
+  Map<std::string, std::string> attributes_;
 
  public:
   void export__as_bracket_list(std::stringstream &ss) const;
 
   void set(StringRef key, StringRef value)
   {
-    m_attributes.add_overwrite(key, value);
+    attributes_.add_overwrite(key, value);
+  }
+
+  void set(StringRef key, float value)
+  {
+    attributes_.add_overwrite(key, std::to_string(value));
   }
 };
 
 class Graph {
  private:
-  AttributeList m_attributes;
-  Vector<std::unique_ptr<Node>> m_nodes;
-  Vector<std::unique_ptr<Cluster>> m_clusters;
+  Vector<std::unique_ptr<Node>> nodes_;
+  Vector<std::unique_ptr<Cluster>> clusters_;
 
-  Set<Node *> m_top_level_nodes;
-  Set<Cluster *> m_top_level_clusters;
+  Set<Node *> top_level_nodes_;
+  Set<Cluster *> top_level_clusters_;
 
   friend Cluster;
   friend Node;
+
+ public:
+  Attributes attributes;
 
  public:
   Node &new_node(StringRef label);
@@ -78,14 +82,9 @@ class Graph {
 
   void export__declare_nodes_and_clusters(std::stringstream &ss) const;
 
-  void set_attribute(StringRef key, StringRef value)
-  {
-    m_attributes.set(key, value);
-  }
-
   void set_rankdir(Attr_rankdir rankdir)
   {
-    this->set_attribute("rankdir", rankdir_to_string(rankdir));
+    attributes.set("rankdir", rankdir_to_string(rankdir));
   }
 
   void set_random_cluster_bgcolors();
@@ -93,25 +92,27 @@ class Graph {
 
 class Cluster {
  private:
-  AttributeList m_attributes;
-  Graph &m_graph;
-  Cluster *m_parent = nullptr;
-  Set<Cluster *> m_children;
-  Set<Node *> m_nodes;
+  Graph &graph_;
+  Cluster *parent_ = nullptr;
+  Set<Cluster *> children_;
+  Set<Node *> nodes_;
 
   friend Graph;
   friend Node;
 
-  Cluster(Graph &graph) : m_graph(graph)
+ public:
+  Attributes attributes;
+
+  Cluster(Graph &graph) : graph_(graph)
   {
   }
 
  public:
   void export__declare_nodes_and_clusters(std::stringstream &ss) const;
 
-  void set_attribute(StringRef key, StringRef value)
+  std::string name() const
   {
-    m_attributes.set(key, value);
+    return "cluster_" + std::to_string((uintptr_t)this);
   }
 
   void set_parent_cluster(Cluster *cluster);
@@ -120,53 +121,52 @@ class Cluster {
     this->set_parent_cluster(&cluster);
   }
 
+  Cluster *parent_cluster()
+  {
+    return parent_;
+  }
+
   void set_random_cluster_bgcolors();
+
+  bool contains(Node &node) const;
 };
 
 class Node {
  private:
-  AttributeList m_attributes;
-  Graph &m_graph;
-  Cluster *m_cluster = nullptr;
+  Graph &graph_;
+  Cluster *cluster_ = nullptr;
 
   friend Graph;
 
-  Node(Graph &graph) : m_graph(graph)
+ public:
+  Attributes attributes;
+
+  Node(Graph &graph) : graph_(graph)
   {
   }
 
  public:
-  const AttributeList &attributes() const
-  {
-    return m_attributes;
-  }
-
-  AttributeList &attributes()
-  {
-    return m_attributes;
-  }
-
   void set_parent_cluster(Cluster *cluster);
   void set_parent_cluster(Cluster &cluster)
   {
     this->set_parent_cluster(&cluster);
   }
 
-  void set_attribute(StringRef key, StringRef value)
+  Cluster *parent_cluster()
   {
-    m_attributes.set(key, value);
+    return cluster_;
   }
 
   void set_shape(Attr_shape shape)
   {
-    this->set_attribute("shape", shape_to_string(shape));
+    attributes.set("shape", shape_to_string(shape));
   }
 
   /* See https://www.graphviz.org/doc/info/attrs.html#k:color. */
   void set_background_color(StringRef name)
   {
-    this->set_attribute("fillcolor", name);
-    this->set_attribute("style", "filled");
+    attributes.set("fillcolor", name);
+    attributes.set("style", "filled");
   }
 
   void export__as_id(std::stringstream &ss) const;
@@ -176,7 +176,7 @@ class Node {
 
 class UndirectedGraph final : public Graph {
  private:
-  Vector<std::unique_ptr<UndirectedEdge>> m_edges;
+  Vector<std::unique_ptr<UndirectedEdge>> edges_;
 
  public:
   std::string to_dot_string() const;
@@ -186,7 +186,7 @@ class UndirectedGraph final : public Graph {
 
 class DirectedGraph final : public Graph {
  private:
-  Vector<std::unique_ptr<DirectedEdge>> m_edges;
+  Vector<std::unique_ptr<DirectedEdge>> edges_;
 
  public:
   std::string to_dot_string() const;
@@ -196,12 +196,12 @@ class DirectedGraph final : public Graph {
 
 class NodePort {
  private:
-  Node *m_node;
-  Optional<std::string> m_port_name;
+  Node *node_;
+  std::optional<std::string> port_name_;
 
  public:
-  NodePort(Node &node, Optional<std::string> port_name = {})
-      : m_node(&node), m_port_name(std::move(port_name))
+  NodePort(Node &node, std::optional<std::string> port_name = {})
+      : node_(&node), port_name_(std::move(port_name))
   {
   }
 
@@ -210,33 +210,35 @@ class NodePort {
 
 class Edge : blender::NonCopyable, blender::NonMovable {
  protected:
-  AttributeList m_attributes;
-  NodePort m_a;
-  NodePort m_b;
+  NodePort a_;
+  NodePort b_;
 
  public:
-  Edge(NodePort a, NodePort b) : m_a(std::move(a)), m_b(std::move(b))
-  {
-  }
+  Attributes attributes;
 
-  void set_attribute(StringRef key, StringRef value)
+ public:
+  Edge(NodePort a, NodePort b) : a_(std::move(a)), b_(std::move(b))
   {
-    m_attributes.set(key, value);
   }
 
   void set_arrowhead(Attr_arrowType type)
   {
-    this->set_attribute("arrowhead", arrowType_to_string(type));
+    attributes.set("arrowhead", arrowType_to_string(type));
   }
 
   void set_arrowtail(Attr_arrowType type)
   {
-    this->set_attribute("arrowtail", arrowType_to_string(type));
+    attributes.set("arrowtail", arrowType_to_string(type));
   }
 
   void set_dir(Attr_dirType type)
   {
-    this->set_attribute("dir", dirType_to_string(type));
+    attributes.set("dir", dirType_to_string(type));
+  }
+
+  void set_label(StringRef label)
+  {
+    attributes.set("label", label);
   }
 };
 
@@ -262,7 +264,7 @@ std::string color_attr_from_hsv(float h, float s, float v);
 
 class NodeWithSocketsRef {
  private:
-  Node *m_node;
+  Node *node_;
 
  public:
   NodeWithSocketsRef(Node &node,
@@ -270,20 +272,22 @@ class NodeWithSocketsRef {
                      Span<std::string> input_names,
                      Span<std::string> output_names);
 
-  NodePort input(uint index) const
+  Node &node()
   {
-    std::string port = "\"in" + std::to_string(index) + "\"";
-    return NodePort(*m_node, port);
+    return *node_;
   }
 
-  NodePort output(uint index) const
+  NodePort input(int index) const
+  {
+    std::string port = "\"in" + std::to_string(index) + "\"";
+    return NodePort(*node_, port);
+  }
+
+  NodePort output(int index) const
   {
     std::string port = "\"out" + std::to_string(index) + "\"";
-    return NodePort(*m_node, port);
+    return NodePort(*node_, port);
   }
 };
 
-}  // namespace DotExport
-}  // namespace blender
-
-#endif /* __BLI_DOT_EXPORT_HH__ */
+}  // namespace blender::dot

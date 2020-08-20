@@ -21,8 +21,7 @@
  * \ingroup gpu
  */
 
-#ifndef __GPU_BUFFERS_H__
-#define __GPU_BUFFERS_H__
+#pragma once
 
 #include <stddef.h>
 
@@ -37,6 +36,7 @@ struct DMFlagMat;
 struct GSet;
 struct MLoop;
 struct MLoopCol;
+struct MPropCol;
 struct MLoopTri;
 struct MPoly;
 struct MVert;
@@ -66,7 +66,7 @@ GPU_PBVH_Buffers *GPU_pbvh_bmesh_buffers_build(bool smooth_shading);
 void GPU_pbvh_bmesh_buffers_update_free(GPU_PBVH_Buffers *buffers);
 void GPU_pbvh_grid_buffers_update_free(GPU_PBVH_Buffers *buffers,
                                        const struct DMFlagMat *grid_flag_mats,
-                                       int *grid_indices);
+                                       const int *grid_indices);
 
 /* Update mesh buffers without topology changes. Threaded. */
 enum {
@@ -82,6 +82,7 @@ void GPU_pbvh_mesh_buffers_update(GPU_PBVH_Buffers *buffers,
                                   const int *sculpt_face_sets,
                                   const int face_sets_color_seed,
                                   const int face_sets_color_default,
+                                  const struct MPropCol *vtcol,
                                   const int update_flags);
 
 void GPU_pbvh_bmesh_buffers_update(GPU_PBVH_Buffers *buffers,
@@ -118,6 +119,4 @@ bool GPU_pbvh_buffers_has_overlays(GPU_PBVH_Buffers *buffers);
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

@@ -284,23 +284,21 @@ static int node_resize_area_default(bNode *node, int x, int y)
     if (BLI_rctf_isect_pt(&totr, x, y)) {
       return NODE_RESIZE_RIGHT;
     }
-    else {
-      return 0;
-    }
-  }
-  else {
-    const float size = NODE_RESIZE_MARGIN;
-    rctf totr = node->totr;
-    int dir = 0;
 
-    if (x >= totr.xmax - size && x < totr.xmax && y >= totr.ymin && y < totr.ymax) {
-      dir |= NODE_RESIZE_RIGHT;
-    }
-    if (x >= totr.xmin && x < totr.xmin + size && y >= totr.ymin && y < totr.ymax) {
-      dir |= NODE_RESIZE_LEFT;
-    }
-    return dir;
+    return 0;
   }
+
+  const float size = NODE_RESIZE_MARGIN;
+  rctf totr = node->totr;
+  int dir = 0;
+
+  if (x >= totr.xmax - size && x < totr.xmax && y >= totr.ymin && y < totr.ymax) {
+    dir |= NODE_RESIZE_RIGHT;
+  }
+  if (x >= totr.xmin && x < totr.xmin + size && y >= totr.ymin && y < totr.ymax) {
+    dir |= NODE_RESIZE_LEFT;
+  }
+  return dir;
 }
 
 /* ****************** BUTTON CALLBACKS FOR COMMON NODES ***************** */
@@ -604,7 +602,7 @@ static void node_draw_reroute(const bContext *C,
 
   /* outline active and selected emphasis */
   if (node->flag & SELECT) {
-    GPU_blend(true);
+    GPU_blend(GPU_BLEND_ALPHA);
     GPU_line_smooth(true);
     /* using different shades of TH_TEXT_HI for the empasis, like triangle */
     if (node->flag & NODE_ACTIVE) {
@@ -616,7 +614,7 @@ static void node_draw_reroute(const bContext *C,
     UI_draw_roundbox_4fv(false, rct->xmin, rct->ymin, rct->xmax, rct->ymax, size, debug_color);
 
     GPU_line_smooth(false);
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
   }
 #endif
 
@@ -862,11 +860,13 @@ static void node_shader_buts_tex_sky(uiLayout *layout, bContext *UNUSED(C), Poin
   if (RNA_enum_get(ptr, "sky_type") == SHD_SKY_NISHITA) {
     uiItemR(layout, ptr, "sun_disc", DEFAULT_FLAGS, NULL, 0);
 
+    uiLayout *col;
     if (RNA_boolean_get(ptr, "sun_disc")) {
-      uiItemR(layout, ptr, "sun_size", DEFAULT_FLAGS, NULL, ICON_NONE);
+      col = uiLayoutColumn(layout, true);
+      uiItemR(col, ptr, "sun_size", DEFAULT_FLAGS, NULL, ICON_NONE);
+      uiItemR(col, ptr, "sun_intensity", DEFAULT_FLAGS, NULL, ICON_NONE);
     }
 
-    uiLayout *col;
     col = uiLayoutColumn(layout, true);
     uiItemR(col, ptr, "sun_elevation", DEFAULT_FLAGS, NULL, ICON_NONE);
     uiItemR(col, ptr, "sun_rotation", DEFAULT_FLAGS, NULL, ICON_NONE);
@@ -1014,7 +1014,15 @@ static void node_shader_buts_vertex_color(uiLayout *layout, bContext *C, Pointer
   PointerRNA obptr = CTX_data_pointer_get(C, "active_object");
   if (obptr.data && RNA_enum_get(&obptr, "type") == OB_MESH) {
     PointerRNA dataptr = RNA_pointer_get(&obptr, "data");
-    uiItemPointerR(layout, ptr, "layer_name", &dataptr, "vertex_colors", "", ICON_GROUP_VCOL);
+
+    if (U.experimental.use_sculpt_vertex_colors &&
+        RNA_collection_length(&dataptr, "sculpt_vertex_colors")) {
+      uiItemPointerR(
+          layout, ptr, "layer_name", &dataptr, "sculpt_vertex_colors", "", ICON_GROUP_VCOL);
+    }
+    else {
+      uiItemPointerR(layout, ptr, "layer_name", &dataptr, "vertex_colors", "", ICON_GROUP_VCOL);
+    }
   }
   else {
     uiItemL(layout, "No mesh in active object.", ICON_ERROR);
@@ -3568,6 +3576,8 @@ static void std_node_socket_interface_draw(bContext *UNUSED(C), uiLayout *layout
       break;
     }
   }
+
+  uiItemR(layout, ptr, "hide_value", DEFAULT_FLAGS, NULL, 0);
 }
 
 void ED_init_standard_node_socket_type(bNodeSocketType *stype)
@@ -3668,9 +3678,8 @@ void draw_nodespace_back_pix(const bContext *C,
                          y,
                          ibuf->x,
                          ibuf->y,
-                         GL_RGBA,
-                         GL_UNSIGNED_BYTE,
-                         GL_NEAREST,
+                         GPU_RGBA8,
+                         false,
                          display_buffer,
                          snode->zoom,
                          snode->zoom,
@@ -3679,16 +3688,14 @@ void draw_nodespace_back_pix(const bContext *C,
         GPU_shader_unbind();
       }
       else if (snode->flag & SNODE_USE_ALPHA) {
-        GPU_blend(true);
-        GPU_blend_set_func_separate(
-            GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+        GPU_blend(GPU_BLEND_ALPHA);
 
-        ED_draw_imbuf_ctx(C, ibuf, x, y, GL_NEAREST, snode->zoom, snode->zoom);
+        ED_draw_imbuf_ctx(C, ibuf, x, y, false, snode->zoom, snode->zoom);
 
-        GPU_blend(false);
+        GPU_blend(GPU_BLEND_NONE);
       }
       else {
-        ED_draw_imbuf_ctx(C, ibuf, x, y, GL_NEAREST, snode->zoom, snode->zoom);
+        ED_draw_imbuf_ctx(C, ibuf, x, y, false, snode->zoom, snode->zoom);
       }
 
       if (cache_handle) {
@@ -3826,7 +3833,7 @@ static bool node_link_bezier_handles(View2D *v2d,
   if (v2d && min_ffff(vec[0][0], vec[1][0], vec[2][0], vec[3][0]) > v2d->cur.xmax) {
     return 0; /* clipped */
   }
-  else if (v2d && max_ffff(vec[0][0], vec[1][0], vec[2][0], vec[3][0]) < v2d->cur.xmin) {
+  if (v2d && max_ffff(vec[0][0], vec[1][0], vec[2][0], vec[3][0]) < v2d->cur.xmin) {
     return 0; /* clipped */
   }
 
@@ -3842,9 +3849,9 @@ bool node_link_bezier_points(
   if (node_link_bezier_handles(v2d, snode, link, vec)) {
     /* always do all three, to prevent data hanging around */
     BKE_curve_forward_diff_bezier(
-        vec[0][0], vec[1][0], vec[2][0], vec[3][0], coord_array[0] + 0, resol, sizeof(float) * 2);
+        vec[0][0], vec[1][0], vec[2][0], vec[3][0], coord_array[0] + 0, resol, sizeof(float[2]));
     BKE_curve_forward_diff_bezier(
-        vec[0][1], vec[1][1], vec[2][1], vec[3][1], coord_array[0] + 1, resol, sizeof(float) * 2);
+        vec[0][1], vec[1][1], vec[2][1], vec[3][1], coord_array[0] + 1, resol, sizeof(float[2]));
 
     return 1;
   }
@@ -4004,7 +4011,7 @@ static void nodelink_batch_draw(SpaceNode *snode)
     return;
   }
 
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   float colors[6][4] = {{0.0f}};
   UI_GetThemeColor4fv(TH_WIRE_INNER, colors[nodelink_get_color_id(TH_WIRE_INNER)]);
@@ -4017,14 +4024,14 @@ static void nodelink_batch_draw(SpaceNode *snode)
   GPU_vertbuf_use(g_batch_link.inst_vbo); /* force update. */
 
   GPU_batch_program_set_builtin(g_batch_link.batch, GPU_SHADER_2D_NODELINK_INST);
-  GPU_batch_uniform_4fv_array(g_batch_link.batch, "colors", 6, (float *)colors);
+  GPU_batch_uniform_4fv_array(g_batch_link.batch, "colors", 6, colors);
   GPU_batch_uniform_1f(g_batch_link.batch, "expandSize", snode->aspect * LINK_WIDTH);
   GPU_batch_uniform_1f(g_batch_link.batch, "arrowSize", ARROW_SIZE);
   GPU_batch_draw(g_batch_link.batch);
 
   nodelink_batch_reset();
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 }
 
 void nodelink_batch_start(SpaceNode *UNUSED(snode))
@@ -4099,8 +4106,8 @@ void node_draw_link_bezier(
 
       GPUBatch *batch = g_batch_link.batch_single;
       GPU_batch_program_set_builtin(batch, GPU_SHADER_2D_NODELINK);
-      GPU_batch_uniform_2fv_array(batch, "bezierPts", 4, (float *)vec);
-      GPU_batch_uniform_4fv_array(batch, "colors", 3, (float *)colors);
+      GPU_batch_uniform_2fv_array(batch, "bezierPts", 4, vec);
+      GPU_batch_uniform_4fv_array(batch, "colors", 3, colors);
       GPU_batch_uniform_1f(batch, "expandSize", snode->aspect * LINK_WIDTH);
       GPU_batch_uniform_1f(batch, "arrowSize", ARROW_SIZE);
       GPU_batch_uniform_1i(batch, "doArrow", drawarrow);

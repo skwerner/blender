@@ -52,7 +52,7 @@
 
 #ifdef RNA_RUNTIME
 static const EnumPropertyItem part_from_items[] = {
-    {PART_FROM_VERT, "VERT", 0, "Verts", ""},
+    {PART_FROM_VERT, "VERT", 0, "Vertices", ""},
     {PART_FROM_FACE, "FACE", 0, "Faces", ""},
     {PART_FROM_VOLUME, "VOLUME", 0, "Volume", ""},
     {0, NULL, 0, NULL, NULL},
@@ -61,7 +61,7 @@ static const EnumPropertyItem part_from_items[] = {
 
 #ifndef RNA_RUNTIME
 static const EnumPropertyItem part_reactor_from_items[] = {
-    {PART_FROM_VERT, "VERT", 0, "Verts", ""},
+    {PART_FROM_VERT, "VERT", 0, "Vertices", ""},
     {PART_FROM_FACE, "FACE", 0, "Faces", ""},
     {PART_FROM_VOLUME, "VOLUME", 0, "Volume", ""},
     {0, NULL, 0, NULL, NULL},
@@ -2887,7 +2887,7 @@ static void rna_def_particle_settings(BlenderRNA *brna)
   RNA_def_property_int_sdna(prop, NULL, "userjit");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_range(prop, 0, 1000);
-  RNA_def_property_ui_text(prop, "P/F", "Emission locations / face (0 = automatic)");
+  RNA_def_property_ui_text(prop, "Particles/Face", "Emission locations per face (0 = automatic)");
   RNA_def_property_update(prop, 0, "rna_Particle_reset");
 
   prop = RNA_def_property(srna, "grid_resolution", PROP_INT, PROP_UNSIGNED);
@@ -2957,7 +2957,7 @@ static void rna_def_particle_settings(BlenderRNA *brna)
   prop = RNA_def_property(srna, "tangent_phase", PROP_FLOAT, PROP_NONE);
   RNA_def_property_float_sdna(prop, NULL, "tanphase");
   RNA_def_property_range(prop, -1.0f, 1.0f);
-  RNA_def_property_ui_text(prop, "Rot", "Rotate the surface tangent");
+  RNA_def_property_ui_text(prop, "Rotation", "Rotate the surface tangent");
   RNA_def_property_update(prop, 0, "rna_Particle_reset");
 
   prop = RNA_def_property(srna, "reactor_factor", PROP_FLOAT, PROP_NONE);

@@ -152,12 +152,14 @@
 #include "MEM_guardedalloc.h"  // MEM_freeN
 
 #include "BKE_action.h"
+#include "BKE_armature.h"
 #include "BKE_blender_version.h"
 #include "BKE_bpath.h"
 #include "BKE_collection.h"
 #include "BKE_colortools.h"
 #include "BKE_constraint.h"
 #include "BKE_curve.h"
+#include "BKE_curveprofile.h"
 #include "BKE_fcurve.h"
 #include "BKE_fcurve_driver.h"
 #include "BKE_global.h"  // for G
@@ -239,9 +241,8 @@ static bool ww_open_none(WriteWrap *ww, const char *filepath)
     FILE_HANDLE(ww) = file;
     return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 static bool ww_close_none(WriteWrap *ww)
 {
@@ -266,9 +267,8 @@ static bool ww_open_zlib(WriteWrap *ww, const char *filepath)
     FILE_HANDLE(ww) = file;
     return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 static bool ww_close_zlib(WriteWrap *ww)
 {
@@ -968,12 +968,6 @@ static void write_animdata(BlendWriter *writer, AnimData *adt)
   write_nladata(writer, &adt->nla_tracks);
 }
 
-static void write_CurveProfile(BlendWriter *writer, CurveProfile *profile)
-{
-  BLO_write_struct(writer, CurveProfile, profile);
-  BLO_write_struct_array(writer, CurveProfilePoint, profile->path_len, profile->path);
-}
-
 static void write_node_socket_default_value(BlendWriter *writer, bNodeSocket *sock)
 {
   if (sock->default_value == NULL) {
@@ -1587,7 +1581,7 @@ static void write_constraints(BlendWriter *writer, ListBase *conlist)
   }
 }
 
-static void write_pose(BlendWriter *writer, bPose *pose)
+static void write_pose(BlendWriter *writer, bPose *pose, bArmature *arm)
 {
   bPoseChannel *chan;
   bActionGroup *grp;
@@ -1596,6 +1590,8 @@ static void write_pose(BlendWriter *writer, bPose *pose)
   if (pose == NULL) {
     return;
   }
+
+  BLI_assert(arm != NULL);
 
   /* Write channels */
   for (chan = pose->chanbase.first; chan; chan = chan->next) {
@@ -1609,11 +1605,15 @@ static void write_pose(BlendWriter *writer, bPose *pose)
 
     write_motionpath(writer, chan->mpath);
 
-    /* prevent crashes with autosave,
-     * when a bone duplicated in editmode has not yet been assigned to its posechannel */
-    if (chan->bone) {
+    /* Prevent crashes with autosave,
+     * when a bone duplicated in editmode has not yet been assigned to its posechannel.
+     * Also needed with memundo, in some cases we can store a step before pose has been
+     * properly rebuilt from previous undo step. */
+    Bone *bone = (pose->flag & POSE_RECALC) ? BKE_armature_find_bone_name(arm, chan->name) :
+                                              chan->bone;
+    if (bone != NULL) {
       /* gets restored on read, for library armatures */
-      chan->selectflag = chan->bone->flag & BONE_SELECTED;
+      chan->selectflag = bone->flag & BONE_SELECTED;
     }
 
     BLO_write_struct(writer, bPoseChannel, chan);
@@ -1666,16 +1666,7 @@ static void write_modifiers(BlendWriter *writer, ListBase *modbase)
 
     BLO_write_struct_by_name(writer, mti->structName, md);
 
-    if (md->type == eModifierType_Hook) {
-      HookModifierData *hmd = (HookModifierData *)md;
-
-      if (hmd->curfalloff) {
-        BKE_curvemapping_blend_write(writer, hmd->curfalloff);
-      }
-
-      BLO_write_int32_array(writer, hmd->totindex, hmd->indexar);
-    }
-    else if (md->type == eModifierType_Cloth) {
+    if (md->type == eModifierType_Cloth) {
       ClothModifierData *clmd = (ClothModifierData *)md;
 
       BLO_write_struct(writer, ClothSimSettings, clmd->sim_parms);
@@ -1684,37 +1675,37 @@ static void write_modifiers(BlendWriter *writer, ListBase *modbase)
       write_pointcaches(writer, &clmd->ptcaches);
     }
     else if (md->type == eModifierType_Fluid) {
-      FluidModifierData *mmd = (FluidModifierData *)md;
+      FluidModifierData *fmd = (FluidModifierData *)md;
 
-      if (mmd->type & MOD_FLUID_TYPE_DOMAIN) {
-        BLO_write_struct(writer, FluidDomainSettings, mmd->domain);
+      if (fmd->type & MOD_FLUID_TYPE_DOMAIN) {
+        BLO_write_struct(writer, FluidDomainSettings, fmd->domain);
 
-        if (mmd->domain) {
-          write_pointcaches(writer, &(mmd->domain->ptcaches[0]));
+        if (fmd->domain) {
+          write_pointcaches(writer, &(fmd->domain->ptcaches[0]));
 
           /* create fake pointcache so that old blender versions can read it */
-          mmd->domain->point_cache[1] = BKE_ptcache_add(&mmd->domain->ptcaches[1]);
-          mmd->domain->point_cache[1]->flag |= PTCACHE_DISK_CACHE | PTCACHE_FAKE_SMOKE;
-          mmd->domain->point_cache[1]->step = 1;
+          fmd->domain->point_cache[1] = BKE_ptcache_add(&fmd->domain->ptcaches[1]);
+          fmd->domain->point_cache[1]->flag |= PTCACHE_DISK_CACHE | PTCACHE_FAKE_SMOKE;
+          fmd->domain->point_cache[1]->step = 1;
 
-          write_pointcaches(writer, &(mmd->domain->ptcaches[1]));
+          write_pointcaches(writer, &(fmd->domain->ptcaches[1]));
 
-          if (mmd->domain->coba) {
-            BLO_write_struct(writer, ColorBand, mmd->domain->coba);
+          if (fmd->domain->coba) {
+            BLO_write_struct(writer, ColorBand, fmd->domain->coba);
           }
 
           /* cleanup the fake pointcache */
-          BKE_ptcache_free_list(&mmd->domain->ptcaches[1]);
-          mmd->domain->point_cache[1] = NULL;
+          BKE_ptcache_free_list(&fmd->domain->ptcaches[1]);
+          fmd->domain->point_cache[1] = NULL;
 
-          BLO_write_struct(writer, EffectorWeights, mmd->domain->effector_weights);
+          BLO_write_struct(writer, EffectorWeights, fmd->domain->effector_weights);
         }
       }
-      else if (mmd->type & MOD_FLUID_TYPE_FLOW) {
-        BLO_write_struct(writer, FluidFlowSettings, mmd->flow);
+      else if (fmd->type & MOD_FLUID_TYPE_FLOW) {
+        BLO_write_struct(writer, FluidFlowSettings, fmd->flow);
       }
-      else if (mmd->type & MOD_FLUID_TYPE_EFFEC) {
-        BLO_write_struct(writer, FluidEffectorSettings, mmd->effector);
+      else if (fmd->type & MOD_FLUID_TYPE_EFFEC) {
+        BLO_write_struct(writer, FluidEffectorSettings, fmd->effector);
       }
     }
     else if (md->type == eModifierType_Fluidsim) {
@@ -1756,59 +1747,6 @@ static void write_modifiers(BlendWriter *writer, ListBase *modbase)
       writestruct(wd, DATA, MVert, collmd->numverts, collmd->xnew);
       writestruct(wd, DATA, MFace, collmd->numfaces, collmd->mfaces);
 #endif
-    }
-    else if (md->type == eModifierType_Warp) {
-      WarpModifierData *tmd = (WarpModifierData *)md;
-      if (tmd->curfalloff) {
-        BKE_curvemapping_blend_write(writer, tmd->curfalloff);
-      }
-    }
-    else if (md->type == eModifierType_WeightVGEdit) {
-      WeightVGEditModifierData *wmd = (WeightVGEditModifierData *)md;
-
-      if (wmd->cmap_curve) {
-        BKE_curvemapping_blend_write(writer, wmd->cmap_curve);
-      }
-    }
-    else if (md->type == eModifierType_CorrectiveSmooth) {
-      CorrectiveSmoothModifierData *csmd = (CorrectiveSmoothModifierData *)md;
-
-      if (csmd->bind_coords) {
-        BLO_write_float3_array(writer, csmd->bind_coords_num, (float *)csmd->bind_coords);
-      }
-    }
-    else if (md->type == eModifierType_SurfaceDeform) {
-      SurfaceDeformModifierData *smd = (SurfaceDeformModifierData *)md;
-
-      BLO_write_struct_array(writer, SDefVert, smd->numverts, smd->verts);
-
-      if (smd->verts) {
-        for (int i = 0; i < smd->numverts; i++) {
-          BLO_write_struct_array(writer, SDefBind, smd->verts[i].numbinds, smd->verts[i].binds);
-
-          if (smd->verts[i].binds) {
-            for (int j = 0; j < smd->verts[i].numbinds; j++) {
-              BLO_write_uint32_array(
-                  writer, smd->verts[i].binds[j].numverts, smd->verts[i].binds[j].vert_inds);
-
-              if (smd->verts[i].binds[j].mode == MOD_SDEF_MODE_CENTROID ||
-                  smd->verts[i].binds[j].mode == MOD_SDEF_MODE_LOOPTRI) {
-                BLO_write_float3_array(writer, 1, smd->verts[i].binds[j].vert_weights);
-              }
-              else {
-                BLO_write_float_array(
-                    writer, smd->verts[i].binds[j].numverts, smd->verts[i].binds[j].vert_weights);
-              }
-            }
-          }
-        }
-      }
-    }
-    else if (md->type == eModifierType_Bevel) {
-      BevelModifierData *bmd = (BevelModifierData *)md;
-      if (bmd->custom_profile) {
-        write_CurveProfile(writer, bmd->custom_profile);
-      }
     }
 
     if (mti->blendWrite != NULL) {
@@ -1920,15 +1858,16 @@ static void write_object(BlendWriter *writer, Object *ob, const void *id_address
     BLO_write_pointer_array(writer, ob->totcol, ob->mat);
     BLO_write_raw(writer, sizeof(char) * ob->totcol, ob->matbits);
 
+    bArmature *arm = NULL;
     if (ob->type == OB_ARMATURE) {
-      bArmature *arm = ob->data;
+      arm = ob->data;
       if (arm && ob->pose && arm->act_bone) {
         BLI_strncpy(
             ob->pose->proxy_act_bone, arm->act_bone->name, sizeof(ob->pose->proxy_act_bone));
       }
     }
 
-    write_pose(writer, ob->pose);
+    write_pose(writer, ob->pose, arm);
     write_defgroups(writer, &ob->defbase);
     write_fmaps(writer, &ob->fmaps);
     write_constraints(writer, &ob->constraints);
@@ -2074,7 +2013,7 @@ static void write_curve(BlendWriter *writer, Curve *cu, const void *id_address)
 
     if (cu->vfont) {
       BLO_write_raw(writer, cu->len + 1, cu->str);
-      BLO_write_struct_array(writer, CharInfo, cu->len_wchar + 1, cu->strinfo);
+      BLO_write_struct_array(writer, CharInfo, cu->len_char32 + 1, cu->strinfo);
       BLO_write_struct_array(writer, TextBox, cu->totbox, cu->tb);
     }
     else {
@@ -2564,7 +2503,12 @@ static void write_lightcache_texture(BlendWriter *writer, LightCacheTexture *tex
     else if (tex->data_type == LIGHTCACHETEX_UINT) {
       data_size *= sizeof(uint);
     }
-    BLO_write_raw(writer, data_size, tex->data);
+
+    /* FIXME: We can't save more than what 32bit systems can handle.
+     * The solution would be to split the texture but it is too late for 2.90. (see T78529) */
+    if (data_size < INT_MAX) {
+      BLO_write_raw(writer, data_size, tex->data);
+    }
   }
 }
 
@@ -2650,7 +2594,7 @@ static void write_scene(BlendWriter *writer, Scene *sce, const void *id_address)
   }
   /* Write the curve profile to the file. */
   if (tos->custom_bevel_profile_preset) {
-    write_CurveProfile(writer, tos->custom_bevel_profile_preset);
+    BKE_curveprofile_blend_write(writer, tos->custom_bevel_profile_preset);
   }
 
   write_paint(writer, &tos->imapaint.paint);
@@ -2902,12 +2846,12 @@ static void write_uilist(BlendWriter *writer, uiList *ui_list)
   }
 }
 
-static void write_soops(BlendWriter *writer, SpaceOutliner *so)
+static void write_space_outliner(BlendWriter *writer, SpaceOutliner *space_outliner)
 {
-  BLI_mempool *ts = so->treestore;
+  BLI_mempool *ts = space_outliner->treestore;
 
   if (ts) {
-    SpaceOutliner so_flat = *so;
+    SpaceOutliner space_outliner_flat = *space_outliner;
 
     int elems = BLI_mempool_len(ts);
     /* linearize mempool to array */
@@ -2928,7 +2872,7 @@ static void write_soops(BlendWriter *writer, SpaceOutliner *so)
       ts_flat.totelem = elems;
       ts_flat.data = data_addr;
 
-      BLO_write_struct(writer, SpaceOutliner, so);
+      BLO_write_struct(writer, SpaceOutliner, space_outliner);
 
       BLO_write_struct_at_address(writer, TreeStore, ts, &ts_flat);
       BLO_write_struct_array_at_address(writer, TreeStoreElem, elems, data_addr, data);
@@ -2936,12 +2880,12 @@ static void write_soops(BlendWriter *writer, SpaceOutliner *so)
       MEM_freeN(data);
     }
     else {
-      so_flat.treestore = NULL;
-      BLO_write_struct_at_address(writer, SpaceOutliner, so, &so_flat);
+      space_outliner_flat.treestore = NULL;
+      BLO_write_struct_at_address(writer, SpaceOutliner, space_outliner, &space_outliner_flat);
     }
   }
   else {
-    BLO_write_struct(writer, SpaceOutliner, so);
+    BLO_write_struct(writer, SpaceOutliner, space_outliner);
   }
 }
 
@@ -3017,8 +2961,8 @@ static void write_area_regions(BlendWriter *writer, ScrArea *area)
       BLO_write_struct(writer, SpaceSeq, sl);
     }
     else if (sl->spacetype == SPACE_OUTLINER) {
-      SpaceOutliner *so = (SpaceOutliner *)sl;
-      write_soops(writer, so);
+      SpaceOutliner *space_outliner = (SpaceOutliner *)sl;
+      write_space_outliner(writer, space_outliner);
     }
     else if (sl->spacetype == SPACE_IMAGE) {
       BLO_write_struct(writer, SpaceImage, sl);
@@ -3206,8 +3150,8 @@ static void write_text(BlendWriter *writer, Text *text, const void *id_address)
   BLO_write_id_struct(writer, Text, id_address, &text->id);
   write_iddata(writer, &text->id);
 
-  if (text->name) {
-    BLO_write_string(writer, text->name);
+  if (text->filepath) {
+    BLO_write_string(writer, text->filepath);
   }
 
   if (!(text->flags & TXT_ISEXT)) {
@@ -3899,28 +3843,37 @@ static void write_simulation(BlendWriter *writer, Simulation *simulation, const 
     }
 
     LISTBASE_FOREACH (SimulationState *, state, &simulation->states) {
-      switch ((eSimulationStateType)state->type) {
-        case SIM_STATE_TYPE_PARTICLES: {
-          ParticleSimulationState *particle_state = (ParticleSimulationState *)state;
-          BLO_write_struct(writer, ParticleSimulationState, particle_state);
+      BLO_write_string(writer, state->name);
+      BLO_write_string(writer, state->type);
+      /* TODO: Decentralize this part. */
+      if (STREQ(state->type, SIM_TYPE_NAME_PARTICLE_SIMULATION)) {
+        ParticleSimulationState *particle_state = (ParticleSimulationState *)state;
+        BLO_write_struct(writer, ParticleSimulationState, particle_state);
 
-          CustomDataLayer *layers = NULL;
-          CustomDataLayer layers_buff[CD_TEMP_CHUNK_SIZE];
-          CustomData_file_write_prepare(
-              &particle_state->attributes, &layers, layers_buff, ARRAY_SIZE(layers_buff));
+        CustomDataLayer *layers = NULL;
+        CustomDataLayer layers_buff[CD_TEMP_CHUNK_SIZE];
+        CustomData_file_write_prepare(
+            &particle_state->attributes, &layers, layers_buff, ARRAY_SIZE(layers_buff));
 
-          write_customdata(writer,
-                           &simulation->id,
-                           particle_state->tot_particles,
-                           &particle_state->attributes,
-                           layers,
-                           CD_MASK_ALL);
+        write_customdata(writer,
+                         &simulation->id,
+                         particle_state->tot_particles,
+                         &particle_state->attributes,
+                         layers,
+                         CD_MASK_ALL);
 
-          write_pointcaches(writer, &particle_state->ptcaches);
-          break;
+        if (layers != NULL && layers != layers_buff) {
+          MEM_freeN(layers);
         }
       }
+      else if (STREQ(state->type, SIM_TYPE_NAME_PARTICLE_MESH_EMITTER)) {
+        ParticleMeshEmitterSimulationState *emitter_state = (ParticleMeshEmitterSimulationState *)
+            state;
+        BLO_write_struct(writer, ParticleMeshEmitterSimulationState, emitter_state);
+      }
     }
+
+    BLO_write_struct_list(writer, SimulationDependency, &simulation->dependencies);
   }
 }
 
@@ -3974,7 +3927,7 @@ static void write_libraries(WriteData *wd, Main *main)
         writestruct(wd, DATA, PackedFile, 1, pf);
         writedata(wd, DATA, pf->size, pf->data);
         if (wd->use_memfile == false) {
-          printf("write packed .blend: %s\n", main->curlib->name);
+          printf("write packed .blend: %s\n", main->curlib->filepath);
         }
       }
 
@@ -3989,7 +3942,7 @@ static void write_libraries(WriteData *wd, Main *main)
                   "ERROR: write file: data-block '%s' from lib '%s' is not linkable "
                   "but is flagged as directly linked",
                   id->name,
-                  main->curlib->filepath);
+                  main->curlib->filepath_abs);
               BLI_assert(0);
             }
             writestruct(wd, ID_LINK_PLACEHOLDER, ID, 1, id);
@@ -4105,8 +4058,9 @@ static bool write_file_handle(Main *mainvar,
    * avoid thumbnail detecting changes because of this. */
   mywrite_flush(wd);
 
-  OverrideLibraryStorage *override_storage =
-      wd->use_memfile ? NULL : BKE_lib_override_library_operations_store_initialize();
+  OverrideLibraryStorage *override_storage = wd->use_memfile ?
+                                                 NULL :
+                                                 BKE_lib_override_library_operations_store_init();
 
 #define ID_BUFFER_STATIC_SIZE 8192
   /* This outer loop allows to save first data-blocks from real mainvar,
@@ -4137,7 +4091,8 @@ static bool write_file_handle(Main *mainvar,
         BLI_assert(
             (id->tag & (LIB_TAG_NO_MAIN | LIB_TAG_NO_USER_REFCOUNT | LIB_TAG_NOT_ALLOCATED)) == 0);
 
-        const bool do_override = !ELEM(override_storage, NULL, bmain) && id->override_library;
+        const bool do_override = !ELEM(override_storage, NULL, bmain) &&
+                                 ID_IS_OVERRIDE_LIBRARY_REAL(id);
 
         if (do_override) {
           BKE_lib_override_library_operations_store_start(bmain, override_storage, id);
@@ -4656,7 +4611,7 @@ void BLO_write_pointer_array(BlendWriter *writer, int size, const void *data_ptr
 
 void BLO_write_float3_array(BlendWriter *writer, int size, const float *data_ptr)
 {
-  BLO_write_raw(writer, sizeof(float) * 3 * size, data_ptr);
+  BLO_write_raw(writer, sizeof(float[3]) * size, data_ptr);
 }
 
 /**

@@ -25,11 +25,11 @@
  * or sequenced in the non-linear-editor (NLA).
  */
 
-#ifndef __DNA_ACTION_TYPES_H__
-#define __DNA_ACTION_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_listBase.h"
+#include "DNA_session_uuid_types.h"
 #include "DNA_userdef_types.h" /* ThemeWireColor */
 #include "DNA_vec_types.h"
 #include "DNA_view2d_types.h"
@@ -188,6 +188,8 @@ struct DualQuat;
 struct Mat4;
 
 typedef struct bPoseChannel_Runtime {
+  SessionUUID session_uuid;
+
   /* Cached dual quaternion for deformation. */
   struct DualQuat deform_dual_quat;
 
@@ -703,8 +705,9 @@ typedef struct bDopeSheet {
   /** String to search for in displayed names of F-Curves, or NlaTracks/GP Layers/etc. */
   char searchstr[64];
 
-  /** Flags to use for filtering data. */
+  /** Flags to use for filtering data #eAnimFilter_Flags. */
   int filterflag;
+  /** #eDopeSheet_FilterFlag2 */
   int filterflag2;
   /** Standard flags. */
   int flag;
@@ -952,5 +955,3 @@ typedef struct bActionChannel {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __DNA_ACTION_TYPES_H__ */

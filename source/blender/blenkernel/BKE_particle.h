@@ -20,8 +20,7 @@
  * Copyright 2011-2012 AutoCRC
  */
 
-#ifndef __BKE_PARTICLE_H__
-#define __BKE_PARTICLE_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -47,7 +46,6 @@ struct ParticleSystemModifierData;
 struct BVHTreeRay;
 struct BVHTreeRayHit;
 struct CustomData_MeshMasks;
-struct Depsgraph;
 struct Depsgraph;
 struct EdgeHash;
 struct KDTree_3d;
@@ -218,7 +216,7 @@ typedef struct ParticleCollision {
   /** Collision modifier for current object. */
   struct CollisionModifierData *md;
 
-  /** Time factor of previous collision, needed for substracting face velocity. */
+  /** Time factor of previous collision, needed for subtracting face velocity. */
   float f;
   float fac1, fac2;
 
@@ -366,6 +364,10 @@ struct ModifierData *object_add_particle_system(struct Main *bmain,
                                                 struct Scene *scene,
                                                 struct Object *ob,
                                                 const char *name);
+struct ModifierData *object_copy_particle_system(struct Main *bmain,
+                                                 struct Scene *scene,
+                                                 struct Object *ob,
+                                                 const struct ParticleSystem *psys_orig);
 void object_remove_particle_system(struct Main *bmain, struct Scene *scene, struct Object *ob);
 struct ParticleSettings *BKE_particlesettings_add(struct Main *bmain, const char *name);
 struct ParticleSettings *BKE_particlesettings_copy(struct Main *bmain,
@@ -577,7 +579,7 @@ void psys_particle_on_dm(struct Mesh *mesh_final,
 
 /* particle_system.c */
 void distribute_particles(struct ParticleSimulationData *sim, int from);
-void initialize_particle(struct ParticleSimulationData *sim, struct ParticleData *pa);
+void init_particle(struct ParticleSimulationData *sim, struct ParticleData *pa);
 void psys_calc_dmcache(struct Object *ob,
                        struct Mesh *mesh_final,
                        struct Mesh *mesh_original,
@@ -628,5 +630,3 @@ extern void (*BKE_particle_batch_cache_free_cb)(struct ParticleSystem *psys);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_PARTICLE_H__ */

@@ -7,19 +7,12 @@
 #  EMBREE_ROOT_DIR, The base directory to search for Embree.
 #                        This can also be an environment variable.
 #  EMBREEFOUND, If false, do not try to use Embree.
-#
-# also defined, but not for general use are
-#  EMBREE_LIBRARY, where to find the Embree library.
 
 #=============================================================================
 # Copyright 2018 Blender Foundation.
 #
-# Distributed under the OSI-approved BSD License (the "License");
-# see accompanying file Copyright.txt for details.
-#
-# This software is distributed WITHOUT ANY WARRANTY; without even the
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-# See the License for more information.
+# Distributed under the OSI-approved BSD 3-Clause License,
+# see accompanying file BSD-3-Clause-license.txt for details.
 #=============================================================================
 
 # If EMBREE_ROOT_DIR was defined in the environment, use it.
@@ -70,19 +63,10 @@ FOREACH(COMPONENT ${_embree_FIND_COMPONENTS})
 ENDFOREACH()
 
 
-FIND_LIBRARY(EMBREE_LIBRARY
-  NAMES
-    libembree3
-  HINTS
-    ${_embree_SEARCH_DIRS}
-  PATH_SUFFIXES
-    lib64 lib
-)
-
 # handle the QUIETLY and REQUIRED arguments and set EMBREE_FOUND to TRUE if
 # all listed variables are TRUE
 INCLUDE(FindPackageHandleStandardArgs)
-FIND_PACKAGE_HANDLE_STANDARD_ARGS(EMBREE DEFAULT_MSG
+FIND_PACKAGE_HANDLE_STANDARD_ARGS(Embree DEFAULT_MSG
     _embree_LIBRARIES EMBREE_INCLUDE_DIR)
 
 IF(EMBREE_FOUND)

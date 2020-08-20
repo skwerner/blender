@@ -242,7 +242,7 @@ static void do_version_action_editor_properties_region(ListBase *regionbase)
       /* already exists */
       return;
     }
-    else if (region->regiontype == RGN_TYPE_WINDOW) {
+    if (region->regiontype == RGN_TYPE_WINDOW) {
       /* add new region here */
       ARegion *arnew = MEM_callocN(sizeof(ARegion), "buttons for action");
 
@@ -377,9 +377,8 @@ static char *replace_bbone_easing_rnapath(char *old_path)
     MEM_freeN(old_path);
     return new_path;
   }
-  else {
-    return old_path;
-  }
+
+  return old_path;
 }
 
 static void do_version_bbone_easing_fcurve_fix(ID *UNUSED(id),
@@ -421,6 +420,7 @@ static void do_version_bbone_easing_fcurve_fix(ID *UNUSED(id),
   }
 }
 
+/* NOLINTNEXTLINE: readability-function-size */
 void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
 {
   if (!MAIN_VERSION_ATLEAST(bmain, 270, 0)) {
@@ -981,7 +981,7 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
         BLI_addtail(&ima->packedfiles, imapf);
 
         imapf->packedfile = ima->packedfile;
-        BLI_strncpy(imapf->filepath, ima->name, FILE_MAX);
+        BLI_strncpy(imapf->filepath, ima->filepath, FILE_MAX);
         ima->packedfile = NULL;
       }
     }
@@ -1108,7 +1108,7 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
       for (scene = bmain->scenes.first; scene != NULL; scene = scene->id.next) {
         CurveMapping *curve_mapping = &scene->r.mblur_shutter_curve;
         BKE_curvemapping_set_defaults(curve_mapping, 1, 0.0f, 0.0f, 1.0f, 1.0f);
-        BKE_curvemapping_initialize(curve_mapping);
+        BKE_curvemapping_init(curve_mapping);
         BKE_curvemap_reset(
             curve_mapping->cm, &curve_mapping->clipr, CURVE_PRESET_MAX, CURVEMAP_SLOPE_POS_NEG);
       }
@@ -1470,11 +1470,11 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
       for (ob = bmain->objects.first; ob; ob = ob->id.next) {
         for (md = ob->modifiers.first; md; md = md->next) {
           if (md->type == eModifierType_Fluid) {
-            FluidModifierData *mmd = (FluidModifierData *)md;
-            if (mmd->domain) {
-              mmd->domain->slice_per_voxel = 5.0f;
-              mmd->domain->slice_depth = 0.5f;
-              mmd->domain->display_thickness = 1.0f;
+            FluidModifierData *fmd = (FluidModifierData *)md;
+            if (fmd->domain) {
+              fmd->domain->slice_per_voxel = 5.0f;
+              fmd->domain->slice_depth = 0.5f;
+              fmd->domain->display_thickness = 1.0f;
             }
           }
         }
@@ -1640,9 +1640,9 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
       for (ob = bmain->objects.first; ob; ob = ob->id.next) {
         for (md = ob->modifiers.first; md; md = md->next) {
           if (md->type == eModifierType_Fluid) {
-            FluidModifierData *mmd = (FluidModifierData *)md;
-            if (mmd->domain) {
-              mmd->domain->clipping = 1e-3f;
+            FluidModifierData *fmd = (FluidModifierData *)md;
+            if (fmd->domain) {
+              fmd->domain->clipping = 1e-3f;
             }
           }
         }

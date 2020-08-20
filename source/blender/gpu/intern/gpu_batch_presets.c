@@ -35,7 +35,6 @@
 #include "GPU_batch.h"
 #include "GPU_batch_presets.h" /* own include */
 #include "GPU_batch_utils.h"
-#include "gpu_shader_private.h"
 
 /* -------------------------------------------------------------------- */
 /** \name Local Structures
@@ -129,12 +128,11 @@ GPUBatch *GPU_batch_preset_sphere(int lod)
   if (lod == 0) {
     return g_presets_3d.batch.sphere_low;
   }
-  else if (lod == 1) {
+  if (lod == 1) {
     return g_presets_3d.batch.sphere_med;
   }
-  else {
-    return g_presets_3d.batch.sphere_high;
-  }
+
+  return g_presets_3d.batch.sphere_high;
 }
 
 GPUBatch *GPU_batch_preset_sphere_wire(int lod)
@@ -145,9 +143,8 @@ GPUBatch *GPU_batch_preset_sphere_wire(int lod)
   if (lod == 0) {
     return g_presets_3d.batch.sphere_wire_low;
   }
-  else {
-    return g_presets_3d.batch.sphere_wire_med;
-  }
+
+  return g_presets_3d.batch.sphere_wire_med;
 }
 
 /** \} */
@@ -380,18 +377,6 @@ bool gpu_batch_presets_unregister(GPUBatch *preset_batch)
   }
   BLI_mutex_unlock(&g_presets_3d.mutex);
   return false;
-}
-
-void gpu_batch_presets_reset(void)
-{
-  BLI_mutex_lock(&g_presets_3d.mutex);
-  /* Reset vao caches for these every time we switch opengl context.
-   * This way they will draw correctly for each window. */
-  LISTBASE_FOREACH (LinkData *, link, &presets_list) {
-    GPUBatch *preset = link->data;
-    GPU_batch_vao_cache_clear(preset);
-  }
-  BLI_mutex_unlock(&g_presets_3d.mutex);
 }
 
 void gpu_batch_presets_exit(void)

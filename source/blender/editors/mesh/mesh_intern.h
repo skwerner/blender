@@ -23,8 +23,7 @@
 
 /* Internal for editmesh_xxxx.c functions */
 
-#ifndef __MESH_INTERN_H__
-#define __MESH_INTERN_H__
+#pragma once
 
 struct BMEditMesh;
 struct BMElem;
@@ -76,6 +75,7 @@ struct BMElem *EDBM_elem_from_selectmode(struct BMEditMesh *em,
                                          struct BMVert *eve,
                                          struct BMEdge *eed,
                                          struct BMFace *efa);
+
 int EDBM_elem_to_index_any(struct BMEditMesh *em, struct BMElem *ele);
 struct BMElem *EDBM_elem_from_index_any(struct BMEditMesh *em, int index);
 
@@ -267,11 +267,11 @@ void MESH_OT_uv_texture_add(struct wmOperatorType *ot);
 void MESH_OT_uv_texture_remove(struct wmOperatorType *ot);
 void MESH_OT_vertex_color_add(struct wmOperatorType *ot);
 void MESH_OT_vertex_color_remove(struct wmOperatorType *ot);
+void MESH_OT_sculpt_vertex_color_add(struct wmOperatorType *ot);
+void MESH_OT_sculpt_vertex_color_remove(struct wmOperatorType *ot);
 /* no create_mask yet */
 void MESH_OT_customdata_mask_clear(struct wmOperatorType *ot);
 void MESH_OT_customdata_skin_add(struct wmOperatorType *ot);
 void MESH_OT_customdata_skin_clear(struct wmOperatorType *ot);
 void MESH_OT_customdata_custom_splitnormals_add(struct wmOperatorType *ot);
 void MESH_OT_customdata_custom_splitnormals_clear(struct wmOperatorType *ot);
-
-#endif /* __MESH_INTERN_H__ */

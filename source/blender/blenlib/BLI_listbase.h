@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BLI_LISTBASE_H__
-#define __BLI_LISTBASE_H__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -172,6 +171,15 @@ struct LinkData *BLI_genericNodeN(void *data);
 #define LISTBASE_FOREACH(type, var, list) \
   for (type var = (type)((list)->first); var != NULL; var = (type)(((Link *)(var))->next))
 
+/**
+ * A version of #LISTBASE_FOREACH that supports incrementing an index variable at every step.
+ * Including this in the macro helps prevent mistakes where "continue" mistakenly skips the
+ * incrementation.
+ */
+#define LISTBASE_FOREACH_INDEX(type, var, list, index_var) \
+  for (type var = (((void)(index_var = 0)), (type)((list)->first)); var != NULL; \
+       var = (type)(((Link *)(var))->next), index_var++)
+
 #define LISTBASE_FOREACH_BACKWARD(type, var, list) \
   for (type var = (type)((list)->last); var != NULL; var = (type)(((Link *)(var))->prev))
 
@@ -190,5 +198,3 @@ struct LinkData *BLI_genericNodeN(void *data);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLI_LISTBASE_H__ */

@@ -31,6 +31,7 @@
 #include "GPU_immediate.h"
 #include "GPU_matrix.h"
 #include "GPU_state.h"
+#include "GPU_texture.h"
 
 #include "BLI_blenlib.h"
 #include "BLI_fileops_types.h"
@@ -134,7 +135,7 @@ typedef struct DrawInfo {
 } DrawInfo;
 
 typedef struct IconTexture {
-  GLuint id[2];
+  struct GPUTexture *tex[2];
   int num_textures;
   int w;
   int h;
@@ -151,7 +152,7 @@ typedef struct IconType {
 /* Static here to cache results of icon directory scan, so it's not
  * scanning the file-system each time the menu is drawn. */
 static struct ListBase iconfilelist = {NULL, NULL};
-static IconTexture icongltex = {{0, 0}, 0, 0, 0, 0.0f, 0.0f};
+static IconTexture icongltex = {{NULL, NULL}, 0, 0, 0, 0.0f, 0.0f};
 
 #ifndef WITH_HEADLESS
 
@@ -593,10 +594,10 @@ int UI_icon_from_event_type(short event_type, short event_value)
   if (event_type == LEFTMOUSE) {
     return ELEM(event_value, KM_CLICK, KM_PRESS) ? ICON_MOUSE_LMB : ICON_MOUSE_LMB_DRAG;
   }
-  else if (event_type == MIDDLEMOUSE) {
+  if (event_type == MIDDLEMOUSE) {
     return ELEM(event_value, KM_CLICK, KM_PRESS) ? ICON_MOUSE_MMB : ICON_MOUSE_MMB_DRAG;
   }
-  else if (event_type == RIGHTMOUSE) {
+  if (event_type == RIGHTMOUSE) {
     return ELEM(event_value, KM_CLICK, KM_PRESS) ? ICON_MOUSE_RMB : ICON_MOUSE_RMB_DRAG;
   }
 
@@ -802,9 +803,12 @@ static ImBuf *create_mono_icon_with_border(ImBuf *buf,
 static void free_icons_textures(void)
 {
   if (icongltex.num_textures > 0) {
-    glDeleteTextures(icongltex.num_textures, icongltex.id);
-    icongltex.id[0] = 0;
-    icongltex.id[1] = 0;
+    for (int i = 0; i < 2; i++) {
+      if (icongltex.tex[i]) {
+        GPU_texture_free(icongltex.tex[i]);
+        icongltex.tex[i] = NULL;
+      }
+    }
     icongltex.num_textures = 0;
   }
 }
@@ -854,69 +858,40 @@ void UI_icons_reload_internal_textures(void)
 
     /* Allocate OpenGL texture. */
     icongltex.num_textures = need_icons_with_border ? 2 : 1;
-    glGenTextures(icongltex.num_textures, icongltex.id);
 
     /* Note the filter and LOD bias were tweaked to better preserve icon
      * sharpness at different UI scales. */
-    if (icongltex.id[0]) {
+    if (icongltex.tex[0] == NULL) {
       icongltex.w = b32buf->x;
       icongltex.h = b32buf->y;
       icongltex.invw = 1.0f / b32buf->x;
       icongltex.invh = 1.0f / b32buf->y;
 
-      glBindTexture(GL_TEXTURE_2D, icongltex.id[0]);
-      glTexImage2D(GL_TEXTURE_2D,
-                   0,
-                   GL_RGBA8,
-                   b32buf->x,
-                   b32buf->y,
-                   0,
-                   GL_RGBA,
-                   GL_UNSIGNED_BYTE,
-                   b32buf->rect);
-      glTexImage2D(GL_TEXTURE_2D,
-                   1,
-                   GL_RGBA8,
-                   b16buf->x,
-                   b16buf->y,
-                   0,
-                   GL_RGBA,
-                   GL_UNSIGNED_BYTE,
-                   b16buf->rect);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_NEAREST);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-      glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_LOD_BIAS, -0.5f);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 1);
-      glBindTexture(GL_TEXTURE_2D, 0);
+      icongltex.tex[0] = GPU_texture_create_nD(b32buf->x,
+                                               b32buf->y,
+                                               0,
+                                               2,
+                                               b32buf->rect,
+                                               GPU_RGBA8,
+                                               GPU_DATA_UNSIGNED_BYTE,
+                                               0,
+                                               false,
+                                               NULL);
+      GPU_texture_add_mipmap(icongltex.tex[0], GPU_DATA_UNSIGNED_BYTE, 1, b16buf->rect);
     }
 
-    if (need_icons_with_border && icongltex.id[1]) {
-      glBindTexture(GL_TEXTURE_2D, icongltex.id[1]);
-      glTexImage2D(GL_TEXTURE_2D,
-                   0,
-                   GL_RGBA8,
-                   b32buf_border->x,
-                   b32buf_border->y,
-                   0,
-                   GL_RGBA,
-                   GL_UNSIGNED_BYTE,
-                   b32buf_border->rect);
-      glTexImage2D(GL_TEXTURE_2D,
-                   1,
-                   GL_RGBA8,
-                   b16buf_border->x,
-                   b16buf_border->y,
-                   0,
-                   GL_RGBA,
-                   GL_UNSIGNED_BYTE,
-                   b16buf_border->rect);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_NEAREST);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-      glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_LOD_BIAS, -0.5f);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 1);
-      glBindTexture(GL_TEXTURE_2D, 0);
+    if (need_icons_with_border && icongltex.tex[1] == NULL) {
+      icongltex.tex[1] = GPU_texture_create_nD(b32buf_border->x,
+                                               b32buf_border->y,
+                                               0,
+                                               2,
+                                               b32buf_border->rect,
+                                               GPU_RGBA8,
+                                               GPU_DATA_UNSIGNED_BYTE,
+                                               0,
+                                               false,
+                                               NULL);
+      GPU_texture_add_mipmap(icongltex.tex[1], GPU_DATA_UNSIGNED_BYTE, 1, b16buf_border->rect);
     }
   }
 
@@ -1542,18 +1517,8 @@ static void icon_draw_rect(float x,
     immUniform1f("factor", desaturate);
   }
 
-  immDrawPixelsTex(&state,
-                   draw_x,
-                   draw_y,
-                   draw_w,
-                   draw_h,
-                   GL_RGBA,
-                   GL_UNSIGNED_BYTE,
-                   GL_NEAREST,
-                   rect,
-                   1.0f,
-                   1.0f,
-                   col);
+  immDrawPixelsTex(
+      &state, draw_x, draw_y, draw_w, draw_h, GPU_RGBA8, false, rect, 1.0f, 1.0f, col);
 
   if (ima) {
     IMB_freeImBuf(ima);
@@ -1590,28 +1555,27 @@ void UI_icon_draw_cache_begin(void)
   g_icon_draw_cache.enabled = true;
 }
 
-static void icon_draw_cache_texture_flush_ex(GLuint texture,
+static void icon_draw_cache_texture_flush_ex(GPUTexture *texture,
                                              IconTextureDrawCall *texture_draw_calls)
 {
   if (texture_draw_calls->calls == 0) {
     return;
   }
 
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, texture);
-
   GPUShader *shader = GPU_shader_get_builtin_shader(GPU_SHADER_2D_IMAGE_MULTI_RECT_COLOR);
   GPU_shader_bind(shader);
 
-  int img_loc = GPU_shader_get_uniform(shader, "image");
+  int img_binding = GPU_shader_get_texture_binding(shader, "image");
   int data_loc = GPU_shader_get_uniform(shader, "calls_data");
 
-  glUniform1i(img_loc, 0);
-  glUniform4fv(data_loc, ICON_DRAW_CACHE_SIZE * 3, (float *)texture_draw_calls->drawcall_cache);
+  GPU_texture_bind(texture, img_binding);
+  GPU_sampler_icon_bind(img_binding);
+  GPU_shader_uniform_vector(
+      shader, data_loc, 4, ICON_DRAW_CACHE_SIZE * 3, (float *)texture_draw_calls->drawcall_cache);
 
   GPU_draw_primitive(GPU_PRIM_TRIS, 6 * texture_draw_calls->calls);
 
-  glBindTexture(GL_TEXTURE_2D, 0);
+  GPU_texture_unbind(texture);
 
   texture_draw_calls->calls = 0;
 }
@@ -1631,18 +1595,17 @@ static void icon_draw_cache_flush_ex(bool only_full_caches)
     /* We need to flush widget base first to ensure correct ordering. */
     UI_widgetbase_draw_cache_flush();
 
-    GPU_blend_set_func(GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+    GPU_blend(GPU_BLEND_ALPHA_PREMULT);
 
     if (!only_full_caches || g_icon_draw_cache.normal.calls == ICON_DRAW_CACHE_SIZE) {
-      icon_draw_cache_texture_flush_ex(icongltex.id[0], &g_icon_draw_cache.normal);
+      icon_draw_cache_texture_flush_ex(icongltex.tex[0], &g_icon_draw_cache.normal);
     }
 
     if (!only_full_caches || g_icon_draw_cache.border.calls == ICON_DRAW_CACHE_SIZE) {
-      icon_draw_cache_texture_flush_ex(icongltex.id[1], &g_icon_draw_cache.border);
+      icon_draw_cache_texture_flush_ex(icongltex.tex[1], &g_icon_draw_cache.border);
     }
 
-    GPU_blend_set_func_separate(
-        GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+    GPU_blend(GPU_BLEND_ALPHA);
   }
 }
 
@@ -1656,9 +1619,9 @@ void UI_icon_draw_cache_end(void)
     return;
   }
 
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
   icon_draw_cache_flush_ex(false);
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 }
 
 static void icon_draw_texture_cached(float x,
@@ -1726,7 +1689,7 @@ static void icon_draw_texture(float x,
   /* We need to flush widget base first to ensure correct ordering. */
   UI_widgetbase_draw_cache_flush();
 
-  GPU_blend_set_func(GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+  GPU_blend(GPU_BLEND_ALPHA_PREMULT);
 
   float x1, x2, y1, y2;
 
@@ -1735,31 +1698,34 @@ static void icon_draw_texture(float x,
   y1 = iy * icongltex.invh;
   y2 = (iy + ih) * icongltex.invh;
 
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, with_border ? icongltex.id[1] : icongltex.id[0]);
+  GPUTexture *texture = with_border ? icongltex.tex[1] : icongltex.tex[0];
 
   GPUShader *shader = GPU_shader_get_builtin_shader(GPU_SHADER_2D_IMAGE_RECT_COLOR);
   GPU_shader_bind(shader);
 
+  int img_binding = GPU_shader_get_texture_binding(shader, "image");
+  int color_loc = GPU_shader_get_builtin_uniform(shader, GPU_UNIFORM_COLOR);
+  int rect_tex_loc = GPU_shader_get_uniform(shader, "rect_icon");
+  int rect_geom_loc = GPU_shader_get_uniform(shader, "rect_geom");
+
   if (rgb) {
-    glUniform4f(
-        GPU_shader_get_builtin_uniform(shader, GPU_UNIFORM_COLOR), rgb[0], rgb[1], rgb[2], alpha);
+    GPU_shader_uniform_vector(shader, color_loc, 4, 1, (float[4]){UNPACK3(rgb), alpha});
   }
   else {
-    glUniform4f(
-        GPU_shader_get_builtin_uniform(shader, GPU_UNIFORM_COLOR), alpha, alpha, alpha, alpha);
+    GPU_shader_uniform_vector(shader, color_loc, 4, 1, (float[4]){alpha, alpha, alpha, alpha});
   }
 
-  glUniform1i(GPU_shader_get_uniform(shader, "image"), 0);
-  glUniform4f(GPU_shader_get_uniform(shader, "rect_icon"), x1, y1, x2, y2);
-  glUniform4f(GPU_shader_get_uniform(shader, "rect_geom"), x, y, x + w, y + h);
+  GPU_shader_uniform_vector(shader, rect_tex_loc, 4, 1, (float[4]){x1, y1, x2, y2});
+  GPU_shader_uniform_vector(shader, rect_geom_loc, 4, 1, (float[4]){x, y, x + w, y + h});
+
+  GPU_texture_bind(texture, img_binding);
+  GPU_sampler_icon_bind(img_binding);
 
   GPU_draw_primitive(GPU_PRIM_TRI_STRIP, 4);
 
-  glBindTexture(GL_TEXTURE_2D, 0);
+  GPU_texture_unbind(texture);
 
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+  GPU_blend(GPU_BLEND_ALPHA);
 }
 
 /* Drawing size for preview images */
@@ -1847,11 +1813,9 @@ static void icon_draw_size(float x,
       di->data.geom.inverted = invert;
     }
 
-    GPU_blend_set_func_separate(
-        GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+    GPU_blend(GPU_BLEND_ALPHA_PREMULT);
     icon_draw_rect(x, y, w, h, aspect, w, h, ibuf->rect, alpha, desaturate);
-    GPU_blend_set_func_separate(
-        GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+    GPU_blend(GPU_BLEND_ALPHA);
   }
   else if (di->type == ICON_TYPE_EVENT) {
     const short event_type = di->data.input.event_type;
@@ -1932,12 +1896,10 @@ static void icon_draw_size(float x,
       }
 
       /* Preview images use premultiplied alpha. */
-      GPU_blend_set_func_separate(
-          GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+      GPU_blend(GPU_BLEND_ALPHA_PREMULT);
       icon_draw_rect(
           x, y, w, h, aspect, pi->w[size], pi->h[size], pi->rect[size], alpha, desaturate);
-      GPU_blend_set_func_separate(
-          GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+      GPU_blend(GPU_BLEND_ALPHA);
     }
   }
   else if (di->type == ICON_TYPE_GPLAYER) {
@@ -2139,7 +2101,8 @@ static int ui_id_brush_get_icon(const bContext *C, ID *id)
       }
       return id->icon_id;
     }
-    else if (paint_mode != PAINT_MODE_INVALID) {
+
+    if (paint_mode != PAINT_MODE_INVALID) {
       items = BKE_paint_get_tool_enum_from_paintmode(paint_mode);
       const uint tool_offset = BKE_paint_get_brush_tool_offset_from_paintmode(paint_mode);
       const int tool_type = *(char *)POINTER_OFFSET(br, tool_offset);
@@ -2192,6 +2155,24 @@ int ui_id_icon_get(const bContext *C, ID *id, const bool big)
   return iconid;
 }
 
+int UI_library_icon_get(const ID *id)
+{
+  if (ID_IS_LINKED(id)) {
+    if (id->tag & LIB_TAG_MISSING) {
+      return ICON_LIBRARY_DATA_BROKEN;
+    }
+    if (id->tag & LIB_TAG_INDIRECT) {
+      return ICON_LIBRARY_DATA_INDIRECT;
+    }
+    return ICON_LIBRARY_DATA_DIRECT;
+  }
+  if (ID_IS_OVERRIDE_LIBRARY(id)) {
+    return ICON_LIBRARY_DATA_OVERRIDE;
+  }
+
+  return ICON_NONE;
+}
+
 int UI_rnaptr_icon_get(bContext *C, PointerRNA *ptr, int rnaicon, const bool big)
 {
   ID *id = NULL;
@@ -2219,10 +2200,10 @@ int UI_rnaptr_icon_get(bContext *C, PointerRNA *ptr, int rnaicon, const bool big
     if (surface->format == MOD_DPAINT_SURFACE_F_PTEX) {
       return ICON_SHADING_TEXTURE;
     }
-    else if (surface->format == MOD_DPAINT_SURFACE_F_VERTEX) {
+    if (surface->format == MOD_DPAINT_SURFACE_F_VERTEX) {
       return ICON_OUTLINER_DATA_MESH;
     }
-    else if (surface->format == MOD_DPAINT_SURFACE_F_IMAGESEQ) {
+    if (surface->format == MOD_DPAINT_SURFACE_F_IMAGESEQ) {
       return ICON_FILE_IMAGE;
     }
   }

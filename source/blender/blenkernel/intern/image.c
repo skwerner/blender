@@ -57,6 +57,7 @@
 #include "DNA_packedFile_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_sequence_types.h"
+#include "DNA_simulation_types.h"
 #include "DNA_world_types.h"
 
 #include "BLI_blenlib.h"
@@ -64,7 +65,7 @@
 #include "BLI_mempool.h"
 #include "BLI_system.h"
 #include "BLI_threads.h"
-#include "BLI_timecode.h" /* for stamp timecode format */
+#include "BLI_timecode.h" /* For stamp time-code format. */
 #include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
@@ -89,7 +90,6 @@
 
 #include "RE_pipeline.h"
 
-#include "GPU_draw.h"
 #include "GPU_texture.h"
 
 #include "BLI_sys_types.h"  // for intptr_t support
@@ -185,6 +185,37 @@ static void image_free_data(ID *id)
   BLI_freelistN(&image->tiles);
 }
 
+static void image_foreach_cache(ID *id,
+                                IDTypeForeachCacheFunctionCallback function_callback,
+                                void *user_data)
+{
+  Image *image = (Image *)id;
+  IDCacheKey key = {
+      .id_session_uuid = id->session_uuid,
+      .offset_in_ID = offsetof(Image, cache),
+      .cache_v = image->cache,
+  };
+  function_callback(id, &key, (void **)&image->cache, 0, user_data);
+
+  for (int eye = 0; eye < 2; eye++) {
+    for (int a = 0; a < TEXTARGET_COUNT; a++) {
+      key.offset_in_ID = offsetof(Image, gputexture[a][eye]);
+      key.cache_v = image->gputexture[a][eye];
+      function_callback(id, &key, (void **)&image->gputexture[a][eye], 0, user_data);
+    }
+  }
+
+  key.offset_in_ID = offsetof(Image, rr);
+  key.cache_v = image->rr;
+  function_callback(id, &key, (void **)&image->rr, 0, user_data);
+
+  LISTBASE_FOREACH (RenderSlot *, slot, &image->renderslots) {
+    key.offset_in_ID = (size_t)BLI_ghashutil_strhash_p(slot->name);
+    key.cache_v = slot->render;
+    function_callback(id, &key, (void **)&slot->render, 0, user_data);
+  }
+}
+
 IDTypeInfo IDType_ID_IM = {
     .id_code = ID_IM,
     .id_filter = FILTER_ID_IM,
@@ -200,6 +231,7 @@ IDTypeInfo IDType_ID_IM = {
     .free_data = image_free_data,
     .make_local = NULL,
     .foreach_id = NULL,
+    .foreach_cache = image_foreach_cache,
 };
 
 /* prototypes */
@@ -360,13 +392,7 @@ void BKE_image_free_buffers_ex(Image *ima, bool do_lock)
     ima->rr = NULL;
   }
 
-  if (!G.background) {
-    /* Background mode doesn't use OpenGL,
-     * so we can avoid freeing GPU images and save some
-     * time by skipping mutex lock.
-     */
-    GPU_free_image(ima);
-  }
+  BKE_image_free_gputextures(ima);
 
   LISTBASE_FOREACH (ImageTile *, tile, &ima->tiles) {
     tile->ok = IMA_OK;
@@ -641,14 +667,13 @@ char BKE_image_alpha_mode_from_extension_ex(const char *filepath)
   if (BLI_path_extension_check_n(filepath, ".exr", ".cin", ".dpx", ".hdr", NULL)) {
     return IMA_ALPHA_PREMUL;
   }
-  else {
-    return IMA_ALPHA_STRAIGHT;
-  }
+
+  return IMA_ALPHA_STRAIGHT;
 }
 
 void BKE_image_alpha_mode_from_extension(Image *image)
 {
-  image->alpha_mode = BKE_image_alpha_mode_from_extension_ex(image->name);
+  image->alpha_mode = BKE_image_alpha_mode_from_extension_ex(image->filepath);
 }
 
 Image *BKE_image_load(Main *bmain, const char *filepath)
@@ -668,7 +693,7 @@ Image *BKE_image_load(Main *bmain, const char *filepath)
   close(file);
 
   ima = image_alloc(bmain, BLI_path_basename(filepath), IMA_SRC_FILE, IMA_TYPE_IMAGE);
-  STRNCPY(ima->name, filepath);
+  STRNCPY(ima->filepath, filepath);
 
   if (BLI_path_extension_check_array(filepath, imb_ext_movie)) {
     ima->source = IMA_SRC_MOVIE;
@@ -694,7 +719,7 @@ Image *BKE_image_load_exists_ex(Main *bmain, const char *filepath, bool *r_exist
   /* first search an identical filepath */
   for (ima = bmain->images.first; ima; ima = ima->id.next) {
     if (ima->source != IMA_SRC_VIEWER && ima->source != IMA_SRC_GENERATED) {
-      STRNCPY(strtest, ima->name);
+      STRNCPY(strtest, ima->filepath);
       BLI_path_abs(strtest, ID_BLEND_PATH(bmain, &ima->id));
 
       if (BLI_path_cmp(strtest, str) == 0) {
@@ -830,7 +855,7 @@ Image *BKE_image_add_generated(Main *bmain,
   int view_id;
   const char *names[2] = {STEREO_LEFT_NAME, STEREO_RIGHT_NAME};
 
-  /* STRNCPY(ima->name, name); */ /* don't do this, this writes in ain invalid filepath! */
+  /* STRNCPY(ima->filepath, name); */ /* don't do this, this writes in ain invalid filepath! */
   ima->gen_x = width;
   ima->gen_y = height;
   ima->gen_type = gen_type;
@@ -846,7 +871,7 @@ Image *BKE_image_add_generated(Main *bmain,
   for (view_id = 0; view_id < 2; view_id++) {
     ImBuf *ibuf;
     ibuf = add_ibuf_size(
-        width, height, ima->name, depth, floatbuf, gen_type, color, &ima->colorspace_settings);
+        width, height, ima->filepath, depth, floatbuf, gen_type, color, &ima->colorspace_settings);
     int index = tiled ? 0 : IMA_NO_INDEX;
     int entry = tiled ? 1001 : 0;
     image_assign_ibuf(ima, ibuf, stereo3d ? view_id : index, entry);
@@ -881,7 +906,7 @@ Image *BKE_image_add_from_imbuf(Main *bmain, ImBuf *ibuf, const char *name)
   ima = image_alloc(bmain, name, IMA_SRC_FILE, IMA_TYPE_IMAGE);
 
   if (ima) {
-    STRNCPY(ima->name, ibuf->name);
+    STRNCPY(ima->filepath, ibuf->name);
     image_assign_ibuf(ima, ibuf, IMA_NO_INDEX, 0);
     ImageTile *tile = BKE_image_get_tile(ima, 0);
     tile->ok = IMA_OK_LOADED;
@@ -981,9 +1006,9 @@ void BKE_image_packfiles(ReportList *reports, Image *ima, const char *basepath)
   if (totfiles == 1) {
     ImagePackedFile *imapf = MEM_mallocN(sizeof(ImagePackedFile), "Image packed file");
     BLI_addtail(&ima->packedfiles, imapf);
-    imapf->packedfile = BKE_packedfile_new(reports, ima->name, basepath);
+    imapf->packedfile = BKE_packedfile_new(reports, ima->filepath, basepath);
     if (imapf->packedfile) {
-      STRNCPY(imapf->filepath, ima->name);
+      STRNCPY(imapf->filepath, ima->filepath);
     }
     else {
       BLI_freelinkN(&ima->packedfiles, imapf);
@@ -1020,7 +1045,7 @@ void BKE_image_packfiles_from_mem(ReportList *reports,
     ImagePackedFile *imapf = MEM_mallocN(sizeof(ImagePackedFile), __func__);
     BLI_addtail(&ima->packedfiles, imapf);
     imapf->packedfile = BKE_packedfile_new_from_memory(data, data_len);
-    STRNCPY(imapf->filepath, ima->name);
+    STRNCPY(imapf->filepath, ima->filepath);
   }
 }
 
@@ -1175,57 +1200,56 @@ int BKE_image_imtype_to_ftype(const char imtype, ImbFormatOptions *r_options)
   if (imtype == R_IMF_IMTYPE_TARGA) {
     return IMB_FTYPE_TGA;
   }
-  else if (imtype == R_IMF_IMTYPE_RAWTGA) {
+  if (imtype == R_IMF_IMTYPE_RAWTGA) {
     r_options->flag = RAWTGA;
     return IMB_FTYPE_TGA;
   }
-  else if (imtype == R_IMF_IMTYPE_IRIS) {
+  if (imtype == R_IMF_IMTYPE_IRIS) {
     return IMB_FTYPE_IMAGIC;
   }
 #ifdef WITH_HDR
-  else if (imtype == R_IMF_IMTYPE_RADHDR) {
+  if (imtype == R_IMF_IMTYPE_RADHDR) {
     return IMB_FTYPE_RADHDR;
   }
 #endif
-  else if (imtype == R_IMF_IMTYPE_PNG) {
+  if (imtype == R_IMF_IMTYPE_PNG) {
     r_options->quality = 15;
     return IMB_FTYPE_PNG;
   }
 #ifdef WITH_DDS
-  else if (imtype == R_IMF_IMTYPE_DDS) {
+  if (imtype == R_IMF_IMTYPE_DDS) {
     return IMB_FTYPE_DDS;
   }
 #endif
-  else if (imtype == R_IMF_IMTYPE_BMP) {
+  if (imtype == R_IMF_IMTYPE_BMP) {
     return IMB_FTYPE_BMP;
   }
 #ifdef WITH_TIFF
-  else if (imtype == R_IMF_IMTYPE_TIFF) {
+  if (imtype == R_IMF_IMTYPE_TIFF) {
     return IMB_FTYPE_TIF;
   }
 #endif
-  else if (imtype == R_IMF_IMTYPE_OPENEXR || imtype == R_IMF_IMTYPE_MULTILAYER) {
+  if (imtype == R_IMF_IMTYPE_OPENEXR || imtype == R_IMF_IMTYPE_MULTILAYER) {
     return IMB_FTYPE_OPENEXR;
   }
 #ifdef WITH_CINEON
-  else if (imtype == R_IMF_IMTYPE_CINEON) {
+  if (imtype == R_IMF_IMTYPE_CINEON) {
     return IMB_FTYPE_CINEON;
   }
-  else if (imtype == R_IMF_IMTYPE_DPX) {
+  if (imtype == R_IMF_IMTYPE_DPX) {
     return IMB_FTYPE_DPX;
   }
 #endif
 #ifdef WITH_OPENJPEG
-  else if (imtype == R_IMF_IMTYPE_JP2) {
+  if (imtype == R_IMF_IMTYPE_JP2) {
     r_options->flag |= JP2_JP2;
     r_options->quality = 90;
     return IMB_FTYPE_JP2;
   }
 #endif
-  else {
-    r_options->quality = 90;
-    return IMB_FTYPE_JPG;
-  }
+
+  r_options->quality = 90;
+  return IMB_FTYPE_JPG;
 }
 
 char BKE_image_ftype_to_imtype(const int ftype, const ImbFormatOptions *options)
@@ -1233,57 +1257,55 @@ char BKE_image_ftype_to_imtype(const int ftype, const ImbFormatOptions *options)
   if (ftype == 0) {
     return R_IMF_IMTYPE_TARGA;
   }
-  else if (ftype == IMB_FTYPE_IMAGIC) {
+  if (ftype == IMB_FTYPE_IMAGIC) {
     return R_IMF_IMTYPE_IRIS;
   }
 #ifdef WITH_HDR
-  else if (ftype == IMB_FTYPE_RADHDR) {
+  if (ftype == IMB_FTYPE_RADHDR) {
     return R_IMF_IMTYPE_RADHDR;
   }
 #endif
-  else if (ftype == IMB_FTYPE_PNG) {
+  if (ftype == IMB_FTYPE_PNG) {
     return R_IMF_IMTYPE_PNG;
   }
 #ifdef WITH_DDS
-  else if (ftype == IMB_FTYPE_DDS) {
+  if (ftype == IMB_FTYPE_DDS) {
     return R_IMF_IMTYPE_DDS;
   }
 #endif
-  else if (ftype == IMB_FTYPE_BMP) {
+  if (ftype == IMB_FTYPE_BMP) {
     return R_IMF_IMTYPE_BMP;
   }
 #ifdef WITH_TIFF
-  else if (ftype == IMB_FTYPE_TIF) {
+  if (ftype == IMB_FTYPE_TIF) {
     return R_IMF_IMTYPE_TIFF;
   }
 #endif
-  else if (ftype == IMB_FTYPE_OPENEXR) {
+  if (ftype == IMB_FTYPE_OPENEXR) {
     return R_IMF_IMTYPE_OPENEXR;
   }
 #ifdef WITH_CINEON
-  else if (ftype == IMB_FTYPE_CINEON) {
+  if (ftype == IMB_FTYPE_CINEON) {
     return R_IMF_IMTYPE_CINEON;
   }
-  else if (ftype == IMB_FTYPE_DPX) {
+  if (ftype == IMB_FTYPE_DPX) {
     return R_IMF_IMTYPE_DPX;
   }
 #endif
-  else if (ftype == IMB_FTYPE_TGA) {
+  if (ftype == IMB_FTYPE_TGA) {
     if (options && (options->flag & RAWTGA)) {
       return R_IMF_IMTYPE_RAWTGA;
     }
-    else {
-      return R_IMF_IMTYPE_TARGA;
-    }
+
+    return R_IMF_IMTYPE_TARGA;
   }
 #ifdef WITH_OPENJPEG
-  else if (ftype == IMB_FTYPE_JP2) {
+  if (ftype == IMB_FTYPE_JP2) {
     return R_IMF_IMTYPE_JP2;
   }
 #endif
-  else {
-    return R_IMF_IMTYPE_JPEG90;
-  }
+
+  return R_IMF_IMTYPE_JPEG90;
 }
 
 bool BKE_imtype_is_movie(const char imtype)
@@ -1417,78 +1439,77 @@ char BKE_imtype_from_arg(const char *imtype_arg)
   if (STREQ(imtype_arg, "TGA")) {
     return R_IMF_IMTYPE_TARGA;
   }
-  else if (STREQ(imtype_arg, "IRIS")) {
+  if (STREQ(imtype_arg, "IRIS")) {
     return R_IMF_IMTYPE_IRIS;
   }
 #ifdef WITH_DDS
-  else if (STREQ(imtype_arg, "DDS")) {
+  if (STREQ(imtype_arg, "DDS")) {
     return R_IMF_IMTYPE_DDS;
   }
 #endif
-  else if (STREQ(imtype_arg, "JPEG")) {
+  if (STREQ(imtype_arg, "JPEG")) {
     return R_IMF_IMTYPE_JPEG90;
   }
-  else if (STREQ(imtype_arg, "IRIZ")) {
+  if (STREQ(imtype_arg, "IRIZ")) {
     return R_IMF_IMTYPE_IRIZ;
   }
-  else if (STREQ(imtype_arg, "RAWTGA")) {
+  if (STREQ(imtype_arg, "RAWTGA")) {
     return R_IMF_IMTYPE_RAWTGA;
   }
-  else if (STREQ(imtype_arg, "AVIRAW")) {
+  if (STREQ(imtype_arg, "AVIRAW")) {
     return R_IMF_IMTYPE_AVIRAW;
   }
-  else if (STREQ(imtype_arg, "AVIJPEG")) {
+  if (STREQ(imtype_arg, "AVIJPEG")) {
     return R_IMF_IMTYPE_AVIJPEG;
   }
-  else if (STREQ(imtype_arg, "PNG")) {
+  if (STREQ(imtype_arg, "PNG")) {
     return R_IMF_IMTYPE_PNG;
   }
-  else if (STREQ(imtype_arg, "BMP")) {
+  if (STREQ(imtype_arg, "BMP")) {
     return R_IMF_IMTYPE_BMP;
   }
 #ifdef WITH_HDR
-  else if (STREQ(imtype_arg, "HDR")) {
+  if (STREQ(imtype_arg, "HDR")) {
     return R_IMF_IMTYPE_RADHDR;
   }
 #endif
 #ifdef WITH_TIFF
-  else if (STREQ(imtype_arg, "TIFF")) {
+  if (STREQ(imtype_arg, "TIFF")) {
     return R_IMF_IMTYPE_TIFF;
   }
 #endif
 #ifdef WITH_OPENEXR
-  else if (STREQ(imtype_arg, "OPEN_EXR")) {
+  if (STREQ(imtype_arg, "OPEN_EXR")) {
     return R_IMF_IMTYPE_OPENEXR;
   }
-  else if (STREQ(imtype_arg, "OPEN_EXR_MULTILAYER")) {
+  if (STREQ(imtype_arg, "OPEN_EXR_MULTILAYER")) {
     return R_IMF_IMTYPE_MULTILAYER;
   }
-  else if (STREQ(imtype_arg, "EXR")) {
+  if (STREQ(imtype_arg, "EXR")) {
     return R_IMF_IMTYPE_OPENEXR;
   }
-  else if (STREQ(imtype_arg, "MULTILAYER")) {
+  if (STREQ(imtype_arg, "MULTILAYER")) {
     return R_IMF_IMTYPE_MULTILAYER;
   }
 #endif
-  else if (STREQ(imtype_arg, "FFMPEG")) {
+  if (STREQ(imtype_arg, "FFMPEG")) {
     return R_IMF_IMTYPE_FFMPEG;
   }
 #ifdef WITH_CINEON
-  else if (STREQ(imtype_arg, "CINEON")) {
+  if (STREQ(imtype_arg, "CINEON")) {
     return R_IMF_IMTYPE_CINEON;
   }
-  else if (STREQ(imtype_arg, "DPX")) {
+  if (STREQ(imtype_arg, "DPX")) {
     return R_IMF_IMTYPE_DPX;
   }
 #endif
 #ifdef WITH_OPENJPEG
-  else if (STREQ(imtype_arg, "JP2")) {
+  if (STREQ(imtype_arg, "JP2")) {
     return R_IMF_IMTYPE_JP2;
   }
 #endif
-  else {
-    return R_IMF_IMTYPE_INVALID;
-  }
+
+  return R_IMF_IMTYPE_INVALID;
 }
 
 static bool do_add_image_extension(char *string,
@@ -1612,13 +1633,11 @@ static bool do_add_image_extension(char *string,
     if (BLI_path_extension_check_array(string, imb_ext_image)) {
       return BLI_path_extension_replace(string, FILE_MAX, extension);
     }
-    else {
-      return BLI_path_extension_ensure(string, FILE_MAX, extension);
-    }
+
+    return BLI_path_extension_ensure(string, FILE_MAX, extension);
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 int BKE_image_path_ensure_ext_from_imformat(char *string, const ImageFormatData *im_format)
@@ -2858,7 +2877,7 @@ int BKE_imbuf_write(ImBuf *ibuf, const char *name, const ImageFormatData *imf)
     perror(name);
   }
 
-  return (ok);
+  return ok;
 }
 
 /* same as BKE_imbuf_write() but crappy workaround not to permanently modify
@@ -2986,7 +3005,7 @@ struct anim *openanim(const char *name, int flags, int streamindex, char colorsp
   }
   IMB_freeImBuf(ibuf);
 
-  return (anim);
+  return anim;
 }
 
 /* ************************* New Image API *************** */
@@ -3214,6 +3233,12 @@ static void image_walk_id_all_users(
       if (scene->nodetree && scene->use_nodes && !skip_nested_nodes) {
         image_walk_ntree_all_users(scene->nodetree, &scene->id, customdata, callback);
       }
+      break;
+    }
+    case ID_SIM: {
+      Simulation *simulation = (Simulation *)id;
+      image_walk_ntree_all_users(simulation->nodetree, &simulation->id, customdata, callback);
+      break;
     }
     default:
       break;
@@ -3318,8 +3343,7 @@ static void image_free_tile(Image *ima, ImageTile *tile)
   for (int i = 0; i < TEXTARGET_COUNT; i++) {
     /* Only two textures depends on all tiles, so if this is a secondary tile we can keep the other
      * two. */
-    if (tile != ima->tiles.first &&
-        !(ELEM(i, TEXTARGET_TEXTURE_2D_ARRAY, TEXTARGET_TEXTURE_TILE_MAPPING))) {
+    if (tile != ima->tiles.first && !(ELEM(i, TEXTARGET_2D_ARRAY, TEXTARGET_TILE_MAPPING))) {
       continue;
     }
 
@@ -3385,7 +3409,7 @@ void BKE_image_signal(Main *bmain, Image *ima, ImageUser *iuser, int signal)
          * Here we ensure original image path wouldn't be used when saving
          * generated image.
          */
-        ima->name[0] = '\0';
+        ima->filepath[0] = '\0';
       }
 
       if (ima->source != IMA_SRC_TILED) {
@@ -3517,9 +3541,8 @@ static RenderPass *image_render_pass_get(RenderLayer *rl,
         /* no multiview or left eye */
         break;
       }
-      else {
-        rp_name = rpass->name;
-      }
+
+      rp_name = rpass->name;
     }
     /* multiview */
     else if (rp_name[0] && STREQ(rpass->name, rp_name) && (rpass->view_id == view)) {
@@ -3580,7 +3603,7 @@ ImageTile *BKE_image_add_tile(struct Image *ima, int tile_number, const char *la
   }
 
   ImageTile *tile = MEM_callocN(sizeof(ImageTile), "image new tile");
-  tile->ok = 1;
+  tile->ok = IMA_OK;
   tile->tile_number = tile_number;
 
   if (next_tile) {
@@ -3596,13 +3619,13 @@ ImageTile *BKE_image_add_tile(struct Image *ima, int tile_number, const char *la
 
   for (int eye = 0; eye < 2; eye++) {
     /* Reallocate GPU tile array. */
-    if (ima->gputexture[TEXTARGET_TEXTURE_2D_ARRAY][eye] != NULL) {
-      GPU_texture_free(ima->gputexture[TEXTARGET_TEXTURE_2D_ARRAY][eye]);
-      ima->gputexture[TEXTARGET_TEXTURE_2D_ARRAY][eye] = NULL;
+    if (ima->gputexture[TEXTARGET_2D_ARRAY][eye] != NULL) {
+      GPU_texture_free(ima->gputexture[TEXTARGET_2D_ARRAY][eye]);
+      ima->gputexture[TEXTARGET_2D_ARRAY][eye] = NULL;
     }
-    if (ima->gputexture[TEXTARGET_TEXTURE_TILE_MAPPING][eye] != NULL) {
-      GPU_texture_free(ima->gputexture[TEXTARGET_TEXTURE_TILE_MAPPING][eye]);
-      ima->gputexture[TEXTARGET_TEXTURE_TILE_MAPPING][eye] = NULL;
+    if (ima->gputexture[TEXTARGET_TILE_MAPPING][eye] != NULL) {
+      GPU_texture_free(ima->gputexture[TEXTARGET_TILE_MAPPING][eye]);
+      ima->gputexture[TEXTARGET_TILE_MAPPING][eye] = NULL;
     }
   }
 
@@ -3643,12 +3666,12 @@ bool BKE_image_fill_tile(struct Image *ima,
   image_free_tile(ima, tile);
 
   ImBuf *tile_ibuf = add_ibuf_size(
-      width, height, ima->name, planes, is_float, gen_type, color, &ima->colorspace_settings);
+      width, height, ima->filepath, planes, is_float, gen_type, color, &ima->colorspace_settings);
 
   if (tile_ibuf != NULL) {
     image_assign_ibuf(ima, tile_ibuf, 0, tile->tile_number);
     BKE_image_release_ibuf(ima, tile_ibuf, NULL);
-    tile->ok = 1;
+    tile->ok = IMA_OK;
     return true;
   }
   return false;
@@ -3682,9 +3705,8 @@ RenderPass *BKE_image_multilayer_index(RenderResult *rr, ImageUser *iuser)
         iuser->multi_index = index + rp_index;
         break;
       }
-      else {
-        index += BLI_listbase_count(&rl->passes);
-      }
+
+      index += BLI_listbase_count(&rl->passes);
     }
   }
 
@@ -3807,7 +3829,7 @@ bool BKE_image_is_openexr(struct Image *ima)
 {
 #ifdef WITH_OPENEXR
   if (ELEM(ima->source, IMA_SRC_FILE, IMA_SRC_SEQUENCE, IMA_SRC_TILED)) {
-    return BLI_path_extension_check(ima->name, ".exr");
+    return BLI_path_extension_check(ima->filepath, ".exr");
   }
 #else
   UNUSED_VARS(ima);
@@ -3911,7 +3933,7 @@ static void image_create_multilayer(Image *ima, ImBuf *ibuf, int framenr)
 #endif /* WITH_OPENEXR */
 
 /* common stuff to do with images after loading */
-static void image_initialize_after_load(Image *ima, ImageUser *iuser, ImBuf *UNUSED(ibuf))
+static void image_init_after_load(Image *ima, ImageUser *iuser, ImBuf *UNUSED(ibuf))
 {
   /* Preview is NULL when it has never been used as an icon before.
    * Never handle previews/icons outside of main thread. */
@@ -3955,13 +3977,12 @@ static int image_num_files(Image *ima)
   if (!is_multiview) {
     return 1;
   }
-  else if (ima->views_format == R_IMF_VIEWS_STEREO_3D) {
+  if (ima->views_format == R_IMF_VIEWS_STEREO_3D) {
     return 1;
   }
   /* R_IMF_VIEWS_INDIVIDUAL */
-  else {
-    return BLI_listbase_count(&ima->views);
-  }
+
+  return BLI_listbase_count(&ima->views);
 }
 
 static ImBuf *load_sequence_single(
@@ -4014,11 +4035,11 @@ static ImBuf *load_sequence_single(
       }
     }
     else {
-      image_initialize_after_load(ima, iuser, ibuf);
+      image_init_after_load(ima, iuser, ibuf);
       *r_assign = true;
     }
 #else
-    image_initialize_after_load(ima, iuser, ibuf);
+    image_init_after_load(ima, iuser, ibuf);
     *r_assign = true;
 #endif
   }
@@ -4123,7 +4144,7 @@ static ImBuf *image_load_sequence_multilayer(Image *ima, ImageUser *iuser, int e
 
       BKE_imbuf_stamp_info(ima->rr, ibuf);
 
-      image_initialize_after_load(ima, iuser, ibuf);
+      image_init_after_load(ima, iuser, ibuf);
       image_assign_ibuf(ima, ibuf, iuser ? iuser->multi_index : 0, entry);
     }
     // else printf("pass not found\n");
@@ -4187,7 +4208,7 @@ static ImBuf *load_movie_single(Image *ima, ImageUser *iuser, int frame, const i
     ibuf = IMB_makeSingleUser(IMB_anim_absolute(ia->anim, fra, IMB_TC_RECORD_RUN, IMB_PROXY_NONE));
 
     if (ibuf) {
-      image_initialize_after_load(ima, iuser, ibuf);
+      image_init_after_load(ima, iuser, ibuf);
     }
     else {
       tile->ok = 0;
@@ -4332,12 +4353,12 @@ static ImBuf *load_image_single(Image *ima,
     else
 #endif
     {
-      image_initialize_after_load(ima, iuser, ibuf);
+      image_init_after_load(ima, iuser, ibuf);
       *r_assign = true;
 
       /* make packed file for autopack */
       if ((has_packed == false) && (G.fileflags & G_FILE_AUTOPACK)) {
-        ImagePackedFile *imapf = MEM_mallocN(sizeof(ImagePackedFile), "Image Packefile");
+        ImagePackedFile *imapf = MEM_mallocN(sizeof(ImagePackedFile), "Image Pack-file");
         BLI_addtail(&ima->packedfiles, imapf);
 
         STRNCPY(imapf->filepath, filepath);
@@ -4446,7 +4467,7 @@ static ImBuf *image_get_ibuf_multilayer(Image *ima, ImageUser *iuser)
     if (rpass) {
       ibuf = IMB_allocImBuf(ima->rr->rectx, ima->rr->recty, 32, 0);
 
-      image_initialize_after_load(ima, iuser, ibuf);
+      image_init_after_load(ima, iuser, ibuf);
 
       ibuf->rect_float = rpass->rect;
       ibuf->flags |= IB_rectfloat;
@@ -4676,7 +4697,7 @@ static int image_get_multiview_index(Image *ima, ImageUser *iuser)
   if (is_multilayer) {
     return iuser ? iuser->multi_index : index;
   }
-  else if (is_backdrop) {
+  if (is_backdrop) {
     if (BKE_image_is_stereo(ima)) {
       /* backdrop hackaround (since there is no iuser */
       return ima->eye;
@@ -4813,7 +4834,7 @@ BLI_INLINE bool image_quick_test(Image *ima, const ImageUser *iuser)
   if (tile == NULL) {
     return false;
   }
-  else if (tile->ok == 0) {
+  if (tile->ok == 0) {
     return false;
   }
 
@@ -4893,7 +4914,7 @@ static ImBuf *image_acquire_ibuf(Image *ima, ImageUser *iuser, void **r_lock)
       }
       ibuf = add_ibuf_size(ima->gen_x,
                            ima->gen_y,
-                           ima->name,
+                           ima->filepath,
                            ima->gen_depth,
                            (ima->gen_flag & IMA_GEN_FLOAT) != 0,
                            ima->gen_type,
@@ -5130,81 +5151,88 @@ int BKE_image_user_frame_get(const ImageUser *iuser, int cfra, bool *r_is_in_ran
   if (len == 0) {
     return 0;
   }
-  else {
-    int framenr;
-    cfra = cfra - iuser->sfra + 1;
 
-    /* cyclic */
-    if (iuser->cycl) {
-      cfra = ((cfra) % len);
-      if (cfra < 0) {
-        cfra += len;
-      }
-      if (cfra == 0) {
-        cfra = len;
-      }
+  int framenr;
+  cfra = cfra - iuser->sfra + 1;
 
-      if (r_is_in_range) {
-        *r_is_in_range = true;
-      }
-    }
-
+  /* cyclic */
+  if (iuser->cycl) {
+    cfra = ((cfra) % len);
     if (cfra < 0) {
-      cfra = 0;
+      cfra += len;
     }
-    else if (cfra > len) {
+    if (cfra == 0) {
       cfra = len;
     }
-    else {
-      if (r_is_in_range) {
-        *r_is_in_range = true;
-      }
+
+    if (r_is_in_range) {
+      *r_is_in_range = true;
     }
-
-    /* transform to images space */
-    framenr = cfra;
-    if (framenr > iuser->frames) {
-      framenr = iuser->frames;
-    }
-
-    if (iuser->cycl) {
-      framenr = ((framenr) % len);
-      while (framenr < 0) {
-        framenr += len;
-      }
-      if (framenr == 0) {
-        framenr = len;
-      }
-    }
-
-    /* important to apply after else we cant loop on frames 100 - 110 for eg. */
-    framenr += iuser->offset;
-
-    return framenr;
   }
+
+  if (cfra < 0) {
+    cfra = 0;
+  }
+  else if (cfra > len) {
+    cfra = len;
+  }
+  else {
+    if (r_is_in_range) {
+      *r_is_in_range = true;
+    }
+  }
+
+  /* transform to images space */
+  framenr = cfra;
+  if (framenr > iuser->frames) {
+    framenr = iuser->frames;
+  }
+
+  if (iuser->cycl) {
+    framenr = ((framenr) % len);
+    while (framenr < 0) {
+      framenr += len;
+    }
+    if (framenr == 0) {
+      framenr = len;
+    }
+  }
+
+  /* important to apply after else we cant loop on frames 100 - 110 for eg. */
+  framenr += iuser->offset;
+
+  return framenr;
 }
 
 void BKE_image_user_frame_calc(Image *ima, ImageUser *iuser, int cfra)
 {
   if (iuser) {
-    bool is_in_range;
-    const int framenr = BKE_image_user_frame_get(iuser, cfra, &is_in_range);
+    if (ima && BKE_image_is_animated(ima)) {
+      /* Compute current frame for animated image. */
+      bool is_in_range;
+      const int framenr = BKE_image_user_frame_get(iuser, cfra, &is_in_range);
 
-    if (is_in_range) {
-      iuser->flag |= IMA_USER_FRAME_IN_RANGE;
+      if (is_in_range) {
+        iuser->flag |= IMA_USER_FRAME_IN_RANGE;
+      }
+      else {
+        iuser->flag &= ~IMA_USER_FRAME_IN_RANGE;
+      }
+
+      iuser->framenr = framenr;
     }
     else {
-      iuser->flag &= ~IMA_USER_FRAME_IN_RANGE;
+      /* Set fixed frame number for still image. */
+      iuser->framenr = 0;
+      iuser->flag |= IMA_USER_FRAME_IN_RANGE;
     }
 
-    iuser->framenr = framenr;
-
-    if (ima && BKE_image_is_animated(ima) && ima->gpuframenr != framenr) {
+    if (ima && ima->gpuframenr != iuser->framenr) {
       /* Note: a single texture and refresh doesn't really work when
        * multiple image users may use different frames, this is to
        * be improved with perhaps a GPU texture cache. */
       ima->gpuflag |= IMA_GPU_REFRESH;
-      ima->gpuframenr = framenr;
+      ima->gpuframenr = iuser->framenr;
     }
 
     if (iuser->ok == 0) {
@@ -5300,11 +5328,11 @@ void BKE_image_user_file_path(ImageUser *iuser, Image *ima, char *filepath)
       BLI_strncpy(filepath, iv->filepath, FILE_MAX);
     }
     else {
-      BLI_strncpy(filepath, ima->name, FILE_MAX);
+      BLI_strncpy(filepath, ima->filepath, FILE_MAX);
     }
   }
   else {
-    BLI_strncpy(filepath, ima->name, FILE_MAX);
+    BLI_strncpy(filepath, ima->filepath, FILE_MAX);
   }
 
   if (ELEM(ima->source, IMA_SRC_SEQUENCE, IMA_SRC_TILED)) {
@@ -5339,9 +5367,8 @@ bool BKE_image_has_alpha(struct Image *image)
   if (planes == 32) {
     return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 void BKE_image_get_size(Image *image, ImageUser *iuser, int *r_width, int *r_height)
@@ -5461,7 +5488,7 @@ float *BKE_image_get_float_pixels_for_frame(struct Image *image, int frame, int 
 
 int BKE_image_sequence_guess_offset(Image *image)
 {
-  return BLI_path_sequence_decode(image->name, NULL, NULL, NULL);
+  return BLI_path_sequence_decode(image->filepath, NULL, NULL, NULL);
 }
 
 bool BKE_image_has_anim(Image *ima)
@@ -5478,7 +5505,7 @@ bool BKE_image_has_filepath(Image *ima)
 {
   /* This could be improved to detect cases like //../../, currently path
    * remapping empty file paths empty. */
-  return ima->name[0] != '\0';
+  return ima->filepath[0] != '\0';
 }
 
 /* Checks the image buffer changes with time (not keyframed values). */
@@ -5653,14 +5680,14 @@ static void image_update_views_format(Image *ima, ImageUser *iuser)
     const char *names[2] = {STEREO_LEFT_NAME, STEREO_RIGHT_NAME};
 
     for (i = 0; i < 2; i++) {
-      image_add_view(ima, names[i], ima->name);
+      image_add_view(ima, names[i], ima->filepath);
     }
     return;
   }
   else {
     /* R_IMF_VIEWS_INDIVIDUAL */
     char prefix[FILE_MAX] = {'\0'};
-    char *name = ima->name;
+    char *name = ima->filepath;
     const char *ext = NULL;
 
     BKE_scene_multiview_view_prefix_get(scene, name, prefix, &ext);
@@ -5807,17 +5834,16 @@ bool BKE_image_clear_renderslot(Image *ima, ImageUser *iuser, int index)
     RE_ClearResult(re);
     return true;
   }
-  else {
-    RenderSlot *slot = BLI_findlink(&ima->renderslots, index);
-    if (!slot) {
-      return false;
-    }
-    if (slot->render) {
-      RE_FreeRenderResult(slot->render);
-      slot->render = NULL;
-    }
-    return true;
+
+  RenderSlot *slot = BLI_findlink(&ima->renderslots, index);
+  if (!slot) {
+    return false;
   }
+  if (slot->render) {
+    RE_FreeRenderResult(slot->render);
+    slot->render = NULL;
+  }
+  return true;
 }
 
 RenderSlot *BKE_image_get_renderslot(Image *ima, int index)

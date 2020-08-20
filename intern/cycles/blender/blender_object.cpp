@@ -59,7 +59,7 @@ bool BlenderSync::BKE_object_is_modified(BL::Object &b_ob)
   return false;
 }
 
-bool BlenderSync::object_is_mesh(BL::Object &b_ob)
+bool BlenderSync::object_is_geometry(BL::Object &b_ob)
 {
   BL::ID b_ob_data = b_ob.data();
 
@@ -69,11 +69,7 @@ bool BlenderSync::object_is_mesh(BL::Object &b_ob)
 
   BL::Object::type_enum type = b_ob.type();
 
-#ifdef WITH_NEW_OBJECT_TYPES
   if (type == BL::Object::type_VOLUME || type == BL::Object::type_HAIR) {
-#else
-  if (type == BL::Object::type_VOLUME) {
-#endif
     /* Will be exported attached to mesh. */
     return true;
   }
@@ -147,7 +143,7 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
   }
 
   /* only interested in object that we can create meshes from */
-  if (!object_is_mesh(b_ob)) {
+  if (!object_is_geometry(b_ob)) {
     return NULL;
   }
 
@@ -462,15 +458,19 @@ void BlenderSync::sync_motion(BL::RenderSettings &b_render,
     python_thread_state_restore(python_thread_state);
     b_engine.frame_set(frame, subframe);
     python_thread_state_save(python_thread_state);
-    sync_camera_motion(b_render, b_cam, width, height, 0.0f);
+    if (b_cam) {
+      sync_camera_motion(b_render, b_cam, width, height, 0.0f);
+    }
     sync_objects(b_depsgraph, b_v3d, 0.0f);
   }
 
   /* Insert motion times from camera. Motion times from other objects
    * have already been added in a sync_objects call. */
-  uint camera_motion_steps = object_motion_steps(b_cam, b_cam);
-  for (size_t step = 0; step < camera_motion_steps; step++) {
-    motion_times.insert(scene->camera->motion_time(step));
+  if (b_cam) {
+    uint camera_motion_steps = object_motion_steps(b_cam, b_cam);
+    for (size_t step = 0; step < camera_motion_steps; step++) {
+      motion_times.insert(scene->camera->motion_time(step));
+    }
   }
 
   /* note iteration over motion_times set happens in sorted order */

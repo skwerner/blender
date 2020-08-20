@@ -198,12 +198,11 @@ static bool particle_skip(ParticleInstanceModifierData *pimd, ParticleSystem *ps
   if (maxp > minp) {
     return randp < minp || randp >= maxp;
   }
-  else if (maxp < minp) {
+  if (maxp < minp) {
     return randp < minp && randp >= maxp;
   }
-  else {
-    return true;
-  }
+
+  return true;
 
   return false;
 }
@@ -443,7 +442,7 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
             float angle = 2.0f * M_PI *
                           (pimd->rotation +
                            pimd->random_rotation * (psys_frand(psys, 19957323 + p) - 0.5f));
-            float eul[3] = {0.0f, 0.0f, angle};
+            const float eul[3] = {0.0f, 0.0f, angle};
             float rot[4];
 
             eul_to_quat(rot, eul);
@@ -645,6 +644,7 @@ static void path_panel_draw(const bContext *C, Panel *panel)
 
 static void layers_panel_draw(const bContext *C, Panel *panel)
 {
+  uiLayout *col;
   uiLayout *layout = panel->layout;
 
   PointerRNA ptr;
@@ -655,20 +655,11 @@ static void layers_panel_draw(const bContext *C, Panel *panel)
 
   uiLayoutSetPropSep(layout, true);
 
-  uiItemPointerR(layout,
-                 &ptr,
-                 "index_layer_name",
-                 &obj_data_ptr,
-                 "vertex_colors",
-                 IFACE_("Index"),
-                 ICON_NONE);
-  uiItemPointerR(layout,
-                 &ptr,
-                 "value_layer_name",
-                 &obj_data_ptr,
-                 "vertex_colors",
-                 IFACE_("Value"),
-                 ICON_NONE);
+  col = uiLayoutColumn(layout, false);
+  uiItemPointerR(
+      col, &ptr, "index_layer_name", &obj_data_ptr, "vertex_colors", IFACE_("Index"), ICON_NONE);
+  uiItemPointerR(
+      col, &ptr, "value_layer_name", &obj_data_ptr, "vertex_colors", IFACE_("Value"), ICON_NONE);
 }
 
 static void panelRegister(ARegionType *region_type)

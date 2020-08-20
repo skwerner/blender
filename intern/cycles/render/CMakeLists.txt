@@ -2,6 +2,7 @@
 set(INC
   ..
   ../../glew-mx
+  ../../sky/include
 )
 
 set(INC_SYS
@@ -33,7 +34,6 @@ set(SRC
   mesh.cpp
   mesh_displace.cpp
   mesh_subdivision.cpp
-  mesh_volume.cpp
   nodes.cpp
   object.cpp
   osl.cpp
@@ -47,6 +47,7 @@ set(SRC
   svm.cpp
   tables.cpp
   tile.cpp
+  volume.cpp
 )
 
 set(SRC_HEADERS
@@ -85,6 +86,7 @@ set(SRC_HEADERS
   svm.h
   tables.h
   tile.h
+  volume.h
 )
 
 set(LIB
@@ -92,6 +94,7 @@ set(LIB
   cycles_device
   cycles_subd
   cycles_util
+  bf_intern_sky
 )
 
 if(WITH_CYCLES_OSL)

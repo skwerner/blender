@@ -20,7 +20,11 @@
 
 # Libraries configuration for Apple.
 
-set(MACOSX_DEPLOYMENT_TARGET "10.11")
+if("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64")
+  set(MACOSX_DEPLOYMENT_TARGET 11.00)
+else()
+  set(MACOSX_DEPLOYMENT_TARGET 10.13)
+endif()
 
 macro(find_package_wrapper)
 # do nothing, just satisfy the macro
@@ -369,13 +373,20 @@ if(WITH_CYCLES_OSL)
   list(APPEND OSL_LIBRARIES ${OSL_LIB_COMP} -force_load ${OSL_LIB_EXEC} ${OSL_LIB_QUERY})
   find_path(OSL_INCLUDE_DIR OSL/oslclosure.h PATHS ${CYCLES_OSL}/include)
   find_program(OSL_COMPILER NAMES oslc PATHS ${CYCLES_OSL}/bin)
+  find_path(OSL_SHADER_DIR NAMES stdosl.h PATHS ${CYCLES_OSL}/shaders)
 
-  if(OSL_INCLUDE_DIR AND OSL_LIBRARIES AND OSL_COMPILER)
+  if(OSL_INCLUDE_DIR AND OSL_LIBRARIES AND OSL_COMPILER AND OSL_SHADER_DIR)
     set(OSL_FOUND TRUE)
   else()
     message(STATUS "OSL not found")
     set(WITH_CYCLES_OSL OFF)
   endif()
+endif()
+
+if("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64")
+  set(WITH_CYCLES_EMBREE OFF)
+  set(WITH_OPENIMAGEDENOISE OFF)
+  set(WITH_CPU_SSE OFF)
 endif()
 
 if(WITH_CYCLES_EMBREE)
@@ -420,10 +431,18 @@ if(WITH_OPENMP)
 endif()
 
 if(WITH_XR_OPENXR)
-  find_package(OpenXR-SDK)
-  if(NOT OPENXR_SDK_FOUND)
+  find_package(XR_OpenXR_SDK)
+  if(NOT XR_OPENXR_SDK_FOUND)
     message(WARNING "OpenXR-SDK was not found, disabling WITH_XR_OPENXR")
     set(WITH_XR_OPENXR OFF)
+  endif()
+endif()
+
+if(WITH_GMP)
+  find_package(GMP)
+  if(NOT GMP_FOUND)
+    message(WARNING "GMP not found, disabling WITH_GMP")
+    set(WITH_GMP OFF)
   endif()
 endif()
 
@@ -439,8 +458,8 @@ if(CMAKE_OSX_ARCHITECTURES MATCHES "x86_64" OR CMAKE_OSX_ARCHITECTURES MATCHES "
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -ftree-vectorize  -fvariable-expansion-in-unroller")
   endif()
 else()
-  set(CMAKE_C_FLAGS_RELEASE "-mdynamic-no-pic -fno-strict-aliasing")
-  set(CMAKE_CXX_FLAGS_RELEASE "-mdynamic-no-pic -fno-strict-aliasing")
+  set(CMAKE_C_FLAGS_RELEASE "-O2 -mdynamic-no-pic -fno-strict-aliasing")
+  set(CMAKE_CXX_FLAGS_RELEASE "-O2 -mdynamic-no-pic -fno-strict-aliasing")
 endif()
 
 if(${XCODE_VERSION} VERSION_EQUAL 5 OR ${XCODE_VERSION} VERSION_GREATER 5)

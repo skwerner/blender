@@ -28,6 +28,8 @@ endif()
 
 set(INC
   .
+  intern
+  opengl
   ../blenkernel
   ../blenlib
   ../bmesh
@@ -42,6 +44,7 @@ set(INC
   ../nodes
   ../nodes/intern
 
+  ../../../intern/ghost
   ../../../intern/glew-mx
   ../../../intern/guardedalloc
   ../../../intern/mantaflow/extern
@@ -52,39 +55,47 @@ set(INC_SYS
 )
 
 set(SRC
-  intern/gpu_attr_binding.c
-  intern/gpu_batch.c
+  intern/gpu_attr_binding.cc
+  intern/gpu_batch.cc
   intern/gpu_batch_presets.c
   intern/gpu_batch_utils.c
   intern/gpu_buffers.c
   intern/gpu_codegen.c
-  intern/gpu_context.cpp
-  intern/gpu_debug.c
-  intern/gpu_draw.c
-  intern/gpu_draw_smoke.c
-  intern/gpu_element.c
-  intern/gpu_extensions.c
-  intern/gpu_framebuffer.c
-  intern/gpu_immediate.c
+  intern/gpu_context.cc
+  intern/gpu_debug.cc
+  intern/gpu_drawlist.cc
+  intern/gpu_element.cc
+  intern/gpu_extensions.cc
+  intern/gpu_framebuffer.cc
+  intern/gpu_immediate.cc
   intern/gpu_immediate_util.c
   intern/gpu_init_exit.c
   intern/gpu_material.c
   intern/gpu_material_library.c
-  intern/gpu_matrix.c
+  intern/gpu_matrix.cc
   intern/gpu_node_graph.c
-  intern/gpu_platform.c
+  intern/gpu_platform.cc
   intern/gpu_primitive.c
   intern/gpu_select.c
   intern/gpu_select_pick.c
   intern/gpu_select_sample_query.c
-  intern/gpu_shader.c
-  intern/gpu_shader_interface.c
-  intern/gpu_state.c
-  intern/gpu_texture.c
-  intern/gpu_uniformbuffer.c
-  intern/gpu_vertex_buffer.c
-  intern/gpu_vertex_format.c
+  intern/gpu_shader.cc
+  intern/gpu_shader_builtin.c
+  intern/gpu_shader_interface.cc
+  intern/gpu_state.cc
+  intern/gpu_texture.cc
+  intern/gpu_uniformbuffer.cc
+  intern/gpu_vertex_buffer.cc
+  intern/gpu_vertex_format.cc
   intern/gpu_viewport.c
+
+  opengl/gl_batch.cc
+  opengl/gl_context.cc
+  opengl/gl_drawlist.cc
+  opengl/gl_shader.cc
+  opengl/gl_shader_interface.cc
+  opengl/gl_state.cc
+  opengl/gl_vertex_array.cc
 
   GPU_attr_binding.h
   GPU_batch.h
@@ -94,7 +105,7 @@ set(SRC
   GPU_common.h
   GPU_context.h
   GPU_debug.h
-  GPU_draw.h
+  GPU_drawlist.h
   GPU_element.h
   GPU_extensions.h
   GPU_framebuffer.h
@@ -109,7 +120,6 @@ set(SRC
   GPU_primitive.h
   GPU_select.h
   GPU_shader.h
-  GPU_shader_interface.h
   GPU_state.h
   GPU_texture.h
   GPU_uniformbuffer.h
@@ -118,17 +128,30 @@ set(SRC
   GPU_viewport.h
 
   intern/gpu_attr_binding_private.h
-  intern/gpu_batch_private.h
+  intern/gpu_backend.hh
+  intern/gpu_batch_private.hh
   intern/gpu_codegen.h
-  intern/gpu_context_private.h
+  intern/gpu_context_private.hh
+  intern/gpu_drawlist_private.hh
   intern/gpu_material_library.h
   intern/gpu_matrix_private.h
   intern/gpu_node_graph.h
   intern/gpu_primitive_private.h
   intern/gpu_private.h
   intern/gpu_select_private.h
-  intern/gpu_shader_private.h
+  intern/gpu_shader_private.hh
+  intern/gpu_shader_interface.hh
+  intern/gpu_state_private.hh
   intern/gpu_vertex_format_private.h
+
+  opengl/gl_backend.hh
+  opengl/gl_batch.hh
+  opengl/gl_context.hh
+  opengl/gl_drawlist.hh
+  opengl/gl_shader.hh
+  opengl/gl_shader_interface.hh
+  opengl/gl_state.hh
+  opengl/gl_vertex_array.hh
 )
 
 set(LIB
@@ -171,9 +194,6 @@ data_to_c_simple(shaders/gpu_shader_image_desaturate_frag.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_image_overlays_merge_frag.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_image_overlays_stereo_merge_frag.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_image_shuffle_color_frag.glsl SRC)
-data_to_c_simple(shaders/gpu_shader_image_mask_uniform_color_frag.glsl SRC)
-data_to_c_simple(shaders/gpu_shader_image_modulate_alpha_frag.glsl SRC)
-data_to_c_simple(shaders/gpu_shader_image_alpha_color_frag.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_image_color_frag.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_image_varying_color_frag.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_3D_image_vert.glsl SRC)
@@ -210,6 +230,7 @@ data_to_c_simple(shaders/gpu_shader_2D_point_uniform_size_varying_color_outline_
 data_to_c_simple(shaders/gpu_shader_2D_edituvs_points_vert.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_2D_edituvs_facedots_vert.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_2D_edituvs_edges_vert.glsl SRC)
+data_to_c_simple(shaders/gpu_shader_2D_edituvs_edges_frag.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_2D_edituvs_faces_vert.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_2D_edituvs_stretch_vert.glsl SRC)
 
@@ -217,6 +238,8 @@ data_to_c_simple(shaders/gpu_shader_text_vert.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_text_frag.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_keyframe_diamond_vert.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_keyframe_diamond_frag.glsl SRC)
+
+data_to_c_simple(shaders/gpu_shader_codegen_lib.glsl SRC)
 
 data_to_c_simple(shaders/gpu_shader_geometry.glsl SRC)
 

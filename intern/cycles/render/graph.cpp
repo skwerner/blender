@@ -484,8 +484,8 @@ void ShaderGraph::remove_proxy_nodes()
         vector<ShaderInput *> links(output->links);
 
         foreach (ShaderInput *to, links) {
-          /* remove any autoconvert nodes too if they lead to
-           * sockets with an automatically set default value */
+          /* Remove any auto-convert nodes too if they lead to
+           * sockets with an automatically set default value. */
           ShaderNode *tonode = to->parent;
 
           if (tonode->special_type == SHADER_SPECIAL_TYPE_AUTOCONVERT) {
@@ -942,12 +942,12 @@ void ShaderGraph::refine_bump_nodes()
       foreach (NodePair &pair, nodes_dy)
         add(pair.second);
 
-      /* connect what is connected is bump to samplecenter input*/
+      /* Connect what is connected is bump to sample-center input. */
       connect(out, node->input("SampleCenter"));
 
-      /* bump input is just for connectivity purpose for the graph input,
-       * we re-connected this input to samplecenter, so lets disconnect it
-       * from bump input */
+      /* Bump input is just for connectivity purpose for the graph input,
+       * we re-connected this input to sample-center, so lets disconnect it
+       * from bump input. */
       disconnect(bump_input);
     }
   }

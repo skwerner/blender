@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_MOVIECLIP_H__
-#define __BKE_MOVIECLIP_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -113,6 +112,11 @@ bool BKE_movieclip_put_frame_if_possible(struct MovieClip *clip,
                                          struct MovieClipUser *user,
                                          struct ImBuf *ibuf);
 
+struct GPUTexture *BKE_movieclip_get_gpu_texture(struct MovieClip *clip,
+                                                 struct MovieClipUser *cuser);
+
+void BKE_movieclip_free_gputexture(struct MovieClip *clip);
+
 /* Dependency graph evaluation. */
 
 void BKE_movieclip_eval_update(struct Depsgraph *depsgraph,
@@ -131,6 +135,4 @@ void BKE_movieclip_eval_selection_update(struct Depsgraph *depsgraph, struct Mov
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

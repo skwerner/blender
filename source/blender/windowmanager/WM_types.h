@@ -106,8 +106,7 @@
  * \endcode
  */
 
-#ifndef __WM_TYPES_H__
-#define __WM_TYPES_H__
+#pragma once
 
 struct ID;
 struct ImBuf;
@@ -361,6 +360,7 @@ typedef struct wmNotifier {
 #define ND_LOD (30 << 16)
 #define ND_DRAW_RENDER_VIEWPORT \
   (31 << 16) /* for camera & sequencer viewport update, also /w NC_SCENE */
+#define ND_SHADERFX (32 << 16)
 
 /* NC_MATERIAL Material */
 #define ND_SHADING (30 << 16)
@@ -438,7 +438,10 @@ typedef struct wmNotifier {
 
 /* subtype 3d view editing */
 #define NS_VIEW3D_GPU (16 << 8)
-#define NS_VIEW3D_SHADING (16 << 9)
+#define NS_VIEW3D_SHADING (17 << 8)
+
+/* subtype layer editing */
+#define NS_LAYER_COLLECTION (24 << 8)
 
 /* action classification */
 #define NOTE_ACTION (0x000000FF)
@@ -448,7 +451,8 @@ typedef struct wmNotifier {
 #define NA_REMOVED 4
 #define NA_RENAME 5
 #define NA_SELECTED 6
-#define NA_PAINTING 7
+#define NA_ACTIVATED 7
+#define NA_PAINTING 8
 
 /* ************** Gesture Manager data ************** */
 
@@ -927,5 +931,3 @@ extern struct CLG_LogRef *WM_LOG_MSGBUS_SUB;
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __WM_TYPES_H__ */

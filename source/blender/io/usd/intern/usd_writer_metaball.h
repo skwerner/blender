@@ -16,12 +16,13 @@
  * The Original Code is Copyright (C) 2020 Blender Foundation.
  * All rights reserved.
  */
-#ifndef __USD_WRITER_METABALL_H__
-#define __USD_WRITER_METABALL_H__
+#pragma once
 
 #include "usd_writer_mesh.h"
 
-namespace USD {
+namespace blender {
+namespace io {
+namespace usd {
 
 class USDMetaballWriter : public USDGenericMeshWriter {
  public:
@@ -37,6 +38,6 @@ class USDMetaballWriter : public USDGenericMeshWriter {
   bool is_basis_ball(Scene *scene, Object *ob) const;
 };
 
-}  // namespace USD
-
-#endif /* __USD_WRITER_METABALL_H__ */
+}  // namespace usd
+}  // namespace io
+}  // namespace blender

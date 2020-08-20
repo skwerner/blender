@@ -57,9 +57,9 @@
 #include "gpencil_intern.h"
 
 /* Check frame_end is always > start frame! */
-static void gp_bake_set_frame_end(struct Main *UNUSED(main),
-                                  struct Scene *UNUSED(scene),
-                                  struct PointerRNA *ptr)
+static void gpencil_bake_set_frame_end(struct Main *UNUSED(main),
+                                       struct Scene *UNUSED(scene),
+                                       struct PointerRNA *ptr)
 {
   int frame_start = RNA_int_get(ptr, "frame_start");
   int frame_end = RNA_int_get(ptr, "frame_end");
@@ -70,7 +70,7 @@ static void gp_bake_set_frame_end(struct Main *UNUSED(main),
 }
 
 /* Extract mesh animation to Grease Pencil. */
-static bool gp_bake_mesh_animation_poll(bContext *C)
+static bool gpencil_bake_mesh_animation_poll(bContext *C)
 {
   if (CTX_data_mode_enum(C) != CTX_MODE_OBJECT) {
     return false;
@@ -82,11 +82,11 @@ static bool gp_bake_mesh_animation_poll(bContext *C)
 }
 
 typedef struct GpBakeOb {
-  struct GPBakelist *next, *prev;
+  struct GpBakeOb *next, *prev;
   Object *ob;
 } GpBakeOb;
 
-static void gp_bake_duplilist(Depsgraph *depsgraph, Scene *scene, Object *ob, ListBase *list)
+static void gpencil_bake_duplilist(Depsgraph *depsgraph, Scene *scene, Object *ob, ListBase *list)
 {
   GpBakeOb *elem = NULL;
   ListBase *lb;
@@ -104,9 +104,10 @@ static void gp_bake_duplilist(Depsgraph *depsgraph, Scene *scene, Object *ob, Li
   free_object_duplilist(lb);
 }
 
-static void gp_bake_ob_list(bContext *C, Depsgraph *depsgraph, Scene *scene, ListBase *list)
+static bool gpencil_bake_ob_list(bContext *C, Depsgraph *depsgraph, Scene *scene, ListBase *list)
 {
   GpBakeOb *elem = NULL;
+  bool simple_material = false;
 
   /* Add active object. In some files this could not be in selected array. */
   Object *obact = CTX_data_active_object(C);
@@ -118,7 +119,8 @@ static void gp_bake_ob_list(bContext *C, Depsgraph *depsgraph, Scene *scene, Lis
   }
   /* Add duplilist. */
   else if (obact->type == OB_EMPTY) {
-    gp_bake_duplilist(depsgraph, scene, obact, list);
+    gpencil_bake_duplilist(depsgraph, scene, obact, list);
+    simple_material |= true;
   }
 
   /* Add other selected objects. */
@@ -135,20 +137,22 @@ static void gp_bake_ob_list(bContext *C, Depsgraph *depsgraph, Scene *scene, Lis
 
     /* Add duplilist. */
     if (ob->type == OB_EMPTY) {
-      gp_bake_duplilist(depsgraph, scene, obact, list);
+      gpencil_bake_duplilist(depsgraph, scene, obact, list);
     }
   }
   CTX_DATA_END;
+
+  return simple_material;
 }
 
-static void gp_bake_free_ob_list(ListBase *list)
+static void gpencil_bake_free_ob_list(ListBase *list)
 {
   LISTBASE_FOREACH_MUTABLE (GpBakeOb *, elem, list) {
     MEM_SAFE_FREE(elem);
   }
 }
 
-static int gp_bake_mesh_animation_exec(bContext *C, wmOperator *op)
+static int gpencil_bake_mesh_animation_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
@@ -158,12 +162,12 @@ static int gp_bake_mesh_animation_exec(bContext *C, wmOperator *op)
   Object *ob_gpencil = NULL;
 
   ListBase list = {NULL, NULL};
-  gp_bake_ob_list(C, depsgraph, scene, &list);
+  const bool simple_material = gpencil_bake_ob_list(C, depsgraph, scene, &list);
 
   /* Cannot check this in poll because the active object changes. */
   if (list.first == NULL) {
     BKE_report(op->reports, RPT_INFO, "No valid object selected");
-    gp_bake_free_ob_list(&list);
+    gpencil_bake_free_ob_list(&list);
     return OPERATOR_CANCELLED;
   }
 
@@ -192,7 +196,7 @@ static int gp_bake_mesh_animation_exec(bContext *C, wmOperator *op)
   bool newob = false;
   if (STREQ(target, "*NEW")) {
     ushort local_view_bits = (v3d && v3d->localvd) ? v3d->local_view_uuid : 0;
-    float loc[3] = {0.0f, 0.0f, 0.0f};
+    const float loc[3] = {0.0f, 0.0f, 0.0f};
     ob_gpencil = ED_gpencil_add_object(C, loc, local_view_bits);
     newob = true;
   }
@@ -202,7 +206,7 @@ static int gp_bake_mesh_animation_exec(bContext *C, wmOperator *op)
 
   if ((ob_gpencil == NULL) || (ob_gpencil->type != OB_GPENCIL)) {
     BKE_report(op->reports, RPT_ERROR, "Target grease pencil object not valid");
-    gp_bake_free_ob_list(&list);
+    gpencil_bake_free_ob_list(&list);
     return OPERATOR_CANCELLED;
   }
 
@@ -216,7 +220,7 @@ static int gp_bake_mesh_animation_exec(bContext *C, wmOperator *op)
   SnapObjectContext *sctx = NULL;
   if (project_type != GP_REPROJECT_KEEP) {
     /* Init space conversion stuff. */
-    gp_point_conversion_init(C, &gsc);
+    gpencil_point_conversion_init(C, &gsc);
     /* Init snap context for geometry projection. */
     sctx = ED_transform_snap_object_context_create_view3d(scene, 0, region, CTX_wm_view3d(C));
 
@@ -242,7 +246,7 @@ static int gp_bake_mesh_animation_exec(bContext *C, wmOperator *op)
 
     /* Move scene to new frame. */
     CFRA = i;
-    BKE_scene_graph_update_for_newframe(depsgraph, bmain);
+    BKE_scene_graph_update_for_newframe(depsgraph);
 
     /* Loop all objects in the list. */
     LISTBASE_FOREACH (GpBakeOb *, elem, &list) {
@@ -260,7 +264,8 @@ static int gp_bake_mesh_animation_exec(bContext *C, wmOperator *op)
                                ob_eval->obmat,
                                frame_offset,
                                use_seams,
-                               use_faces);
+                               use_faces,
+                               simple_material);
 
       /* Reproject all untaged created strokes. */
       if (project_type != GP_REPROJECT_KEEP) {
@@ -282,7 +287,7 @@ static int gp_bake_mesh_animation_exec(bContext *C, wmOperator *op)
 
   /* Return scene frame state and DB to original state. */
   CFRA = oldframe;
-  BKE_scene_graph_update_for_newframe(depsgraph, bmain);
+  BKE_scene_graph_update_for_newframe(depsgraph);
 
   /* Remove unused materials. */
   int actcol = ob_gpencil->actcol;
@@ -310,7 +315,7 @@ static int gp_bake_mesh_animation_exec(bContext *C, wmOperator *op)
   }
 
   /* Free memory. */
-  gp_bake_free_ob_list(&list);
+  gpencil_bake_free_ob_list(&list);
   if (sctx != NULL) {
     ED_transform_snap_object_context_destroy(sctx);
   }
@@ -359,8 +364,8 @@ void GPENCIL_OT_bake_mesh_animation(wmOperatorType *ot)
   ot->description = "Bake Mesh Animation to Grease Pencil strokes";
 
   /* callbacks */
-  ot->exec = gp_bake_mesh_animation_exec;
-  ot->poll = gp_bake_mesh_animation_poll;
+  ot->exec = gpencil_bake_mesh_animation_exec;
+  ot->poll = gpencil_bake_mesh_animation_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -371,7 +376,7 @@ void GPENCIL_OT_bake_mesh_animation(wmOperatorType *ot)
 
   prop = RNA_def_int(
       ot->srna, "frame_end", 250, 1, 100000, "End Frame", "The end frame of animation", 1, 100000);
-  RNA_def_property_update_runtime(prop, gp_bake_set_frame_end);
+  RNA_def_property_update_runtime(prop, gpencil_bake_set_frame_end);
 
   prop = RNA_def_int(ot->srna, "step", 1, 1, 100, "Step", "Step between generated frames", 1, 100);
 

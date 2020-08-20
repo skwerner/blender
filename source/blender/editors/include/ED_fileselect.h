@@ -21,8 +21,7 @@
  * \ingroup editors
  */
 
-#ifndef __ED_FILESELECT_H__
-#define __ED_FILESELECT_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -106,7 +105,7 @@ struct FileSelectParams *ED_fileselect_get_params(struct SpaceFile *sfile);
 short ED_fileselect_set_params(struct SpaceFile *sfile);
 void ED_fileselect_set_params_from_userdef(struct SpaceFile *sfile);
 void ED_fileselect_params_to_userdef(struct SpaceFile *sfile,
-                                     int temp_win_size[],
+                                     const int temp_win_size[],
                                      const bool is_maximized);
 
 void ED_fileselect_reset_params(struct SpaceFile *sfile);
@@ -214,5 +213,3 @@ void ED_fsmenu_entry_set_icon(struct FSMenuEntry *fsentry, const int icon);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_FILESELECT_H__ */

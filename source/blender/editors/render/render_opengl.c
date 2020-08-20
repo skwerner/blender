@@ -79,7 +79,6 @@
 #include "RNA_define.h"
 
 #include "GPU_framebuffer.h"
-#include "GPU_glew.h"
 #include "GPU_matrix.h"
 
 #include "render_intern.h"
@@ -350,8 +349,8 @@ static void screen_opengl_render_doit(const bContext *C, OGLRender *oglrender, R
       ED_annotation_draw_ex(scene, gpd, sizex, sizey, scene->r.cfra, SPACE_SEQ);
       G.f &= ~G_FLAG_RENDER_VIEWPORT;
 
-      gp_rect = MEM_mallocN(sizex * sizey * sizeof(uchar) * 4, "offscreen rect");
-      GPU_offscreen_read_pixels(oglrender->ofs, GL_UNSIGNED_BYTE, gp_rect);
+      gp_rect = MEM_mallocN(sizeof(uchar[4]) * sizex * sizey, "offscreen rect");
+      GPU_offscreen_read_pixels(oglrender->ofs, GPU_DATA_UNSIGNED_BYTE, gp_rect);
 
       for (i = 0; i < sizex * sizey * 4; i += 4) {
         blend_color_mix_byte(&render_rect[i], &render_rect[i], &gp_rect[i]);
@@ -766,7 +765,7 @@ static bool screen_opengl_render_init(bContext *C, wmOperator *op)
 
   /* corrects render size with actual size, not every card supports non-power-of-two dimensions */
   DRW_opengl_context_enable(); /* Offscreen creation needs to be done in DRW context. */
-  ofs = GPU_offscreen_create(sizex, sizey, 0, true, true, err_out);
+  ofs = GPU_offscreen_create(sizex, sizey, true, true, err_out);
   DRW_opengl_context_disable();
 
   if (!ofs) {
@@ -880,7 +879,6 @@ static bool screen_opengl_render_init(bContext *C, wmOperator *op)
 
 static void screen_opengl_render_end(bContext *C, OGLRender *oglrender)
 {
-  Main *bmain = CTX_data_main(C);
   Scene *scene = oglrender->scene;
   int i;
 
@@ -930,7 +928,7 @@ static void screen_opengl_render_end(bContext *C, OGLRender *oglrender)
   if (oglrender->timer) { /* exec will not have a timer */
     Depsgraph *depsgraph = oglrender->depsgraph;
     scene->r.cfra = oglrender->cfrao;
-    BKE_scene_graph_update_for_newframe(depsgraph, bmain);
+    BKE_scene_graph_update_for_newframe(depsgraph);
 
     WM_event_remove_timer(oglrender->wm, oglrender->win, oglrender->timer);
   }
@@ -963,7 +961,7 @@ static void screen_opengl_render_cancel(bContext *C, wmOperator *op)
 }
 
 /* share between invoke and exec */
-static bool screen_opengl_render_anim_initialize(bContext *C, wmOperator *op)
+static bool screen_opengl_render_anim_init(bContext *C, wmOperator *op)
 {
   /* initialize animation */
   OGLRender *oglrender;
@@ -1120,7 +1118,6 @@ static bool schedule_write_result(OGLRender *oglrender, RenderResult *rr)
 
 static bool screen_opengl_render_anim_step(bContext *C, wmOperator *op)
 {
-  Main *bmain = CTX_data_main(C);
   OGLRender *oglrender = op->customdata;
   Scene *scene = oglrender->scene;
   Depsgraph *depsgraph = oglrender->depsgraph;
@@ -1135,7 +1132,7 @@ static bool screen_opengl_render_anim_step(bContext *C, wmOperator *op)
     CFRA++;
   }
   while (CFRA < oglrender->nfra) {
-    BKE_scene_graph_update_for_newframe(depsgraph, bmain);
+    BKE_scene_graph_update_for_newframe(depsgraph);
     CFRA++;
   }
 
@@ -1162,7 +1159,7 @@ static bool screen_opengl_render_anim_step(bContext *C, wmOperator *op)
 
   WM_cursor_time(oglrender->win, scene->r.cfra);
 
-  BKE_scene_graph_update_for_newframe(depsgraph, bmain);
+  BKE_scene_graph_update_for_newframe(depsgraph);
 
   if (view_context) {
     if (oglrender->rv3d->persp == RV3D_CAMOB && oglrender->v3d->camera &&
@@ -1236,9 +1233,8 @@ static int screen_opengl_render_modal(bContext *C, wmOperator *op, const wmEvent
     screen_opengl_render_end(C, op->customdata);
     return OPERATOR_FINISHED;
   }
-  else {
-    ret = screen_opengl_render_anim_step(C, op);
-  }
+
+  ret = screen_opengl_render_anim_step(C, op);
 
   /* stop at the end or on error */
   if (ret == false) {
@@ -1258,7 +1254,7 @@ static int screen_opengl_render_invoke(bContext *C, wmOperator *op, const wmEven
   }
 
   if (anim) {
-    if (!screen_opengl_render_anim_initialize(C, op)) {
+    if (!screen_opengl_render_anim_init(C, op)) {
       return OPERATOR_CANCELLED;
     }
   }
@@ -1291,16 +1287,15 @@ static int screen_opengl_render_exec(bContext *C, wmOperator *op)
 
     return OPERATOR_FINISHED;
   }
-  else {
-    bool ret = true;
 
-    if (!screen_opengl_render_anim_initialize(C, op)) {
-      return OPERATOR_CANCELLED;
-    }
+  bool ret = true;
 
-    while (ret) {
-      ret = screen_opengl_render_anim_step(C, op);
-    }
+  if (!screen_opengl_render_anim_init(C, op)) {
+    return OPERATOR_CANCELLED;
+  }
+
+  while (ret) {
+    ret = screen_opengl_render_anim_step(C, op);
   }
 
   /* no redraw needed, we leave state as we entered it */

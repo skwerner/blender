@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
  */
-#ifndef __BLO_READFILE_H__
-#define __BLO_READFILE_H__
+#pragma once
 
 #include "BLI_sys_types.h"
 
@@ -48,6 +47,18 @@ struct wmWindowManager;
 
 typedef struct BlendHandle BlendHandle;
 
+typedef struct WorkspaceConfigFileData {
+  struct Main *main; /* has to be freed when done reading file data */
+
+  struct ListBase workspaces;
+} WorkspaceConfigFileData;
+
+/* -------------------------------------------------------------------- */
+/** \name BLO Read File API
+ *
+ * \see #BLO_write_file for file writing.
+ * \{ */
+
 typedef enum eBlenFileType {
   BLENFILETYPE_BLEND = 1,
   /* BLENFILETYPE_PUB = 2, */     /* UNUSED */
@@ -68,12 +79,6 @@ typedef struct BlendFileData {
 
   eBlenFileType type;
 } BlendFileData;
-
-typedef struct WorkspaceConfigFileData {
-  struct Main *main; /* has to be freed when done reading file data */
-
-  struct ListBase workspaces;
-} WorkspaceConfigFileData;
 
 struct BlendFileReadParams {
   uint skip_flags : 3; /* eBLOReadSkip */
@@ -108,6 +113,12 @@ BlendFileData *BLO_read_from_memfile(struct Main *oldmain,
 
 void BLO_blendfiledata_free(BlendFileData *bfd);
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name BLO Blend File Handle API
+ * \{ */
+
 BlendHandle *BLO_blendhandle_from_file(const char *filepath, struct ReportList *reports);
 BlendHandle *BLO_blendhandle_from_memory(const void *mem, int memsize);
 
@@ -119,7 +130,7 @@ struct LinkNode *BLO_blendhandle_get_linkable_groups(BlendHandle *bh);
 
 void BLO_blendhandle_close(BlendHandle *bh);
 
-/***/
+/** \} */
 
 #define BLO_GROUP_MAX 32
 #define BLO_EMBEDDED_STARTUP_BLEND "<startup.blend>"
@@ -175,6 +186,9 @@ void BLO_update_defaults_workspace(struct WorkSpace *workspace, const char *app_
 /* Version patch user preferences. */
 void BLO_version_defaults_userpref_blend(struct Main *mainvar, struct UserDef *userdef);
 
+/* Disable unwanted experimental feature settings on startup. */
+void BLO_sanitize_experimental_features_userpref_blend(struct UserDef *userdef);
+
 struct BlendThumbnail *BLO_thumbnail_from_file(const char *filepath);
 
 /* datafiles (generated theme) */
@@ -184,5 +198,3 @@ extern const struct UserDef U_default;
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLO_READFILE_H__ */

@@ -21,8 +21,7 @@
  * \ingroup editorui
  */
 
-#ifndef __UI_INTERFACE_H__
-#define __UI_INTERFACE_H__
+#pragma once
 
 #include "BLI_compiler_attrs.h"
 #include "BLI_sys_types.h" /* size_t */
@@ -58,13 +57,13 @@ struct bNodeSocket;
 struct bNodeTree;
 struct bScreen;
 struct rcti;
+struct uiButSearch;
 struct uiFontStyle;
 struct uiList;
 struct uiStyle;
 struct uiWidgetColors;
 struct wmDrag;
 struct wmDropBox;
-struct wmEvent;
 struct wmEvent;
 struct wmGizmo;
 struct wmKeyConfig;
@@ -102,7 +101,7 @@ typedef struct uiPopupBlockHandle uiPopupBlockHandle;
 /* use for clamping popups within the screen */
 #define UI_SCREEN_MARGIN 10
 
-/* uiBlock->dt and uiBut->dt */
+/** #uiBlock.emboss and #uiBut.emboss */
 enum {
   UI_EMBOSS = 0,          /* use widget style for drawing */
   UI_EMBOSS_NONE = 1,     /* Nothing, only icon and/or text */
@@ -174,13 +173,6 @@ enum {
   UI_RETURN_UPDATE = 1 << 4,
   /** Popup is ok to be handled. */
   UI_RETURN_POPUP_OK = 1 << 5,
-};
-
-/* panel controls */
-enum {
-  UI_PNL_SOLID = 1 << 1,
-  UI_PNL_CLOSE = 1 << 5,
-  UI_PNL_SCALE = 1 << 9,
 };
 
 /* but->flag - general state flags. */
@@ -301,12 +293,13 @@ enum {
 /* 16 to copy ICON_DEFAULT_HEIGHT */
 #define UI_DPI_ICON_SIZE ((float)16 * UI_DPI_FAC)
 
-/* Button types, bits stored in 1 value... and a short even!
- * - bits 0-4:  bitnr (0-31)
+/**
+ * Button types, bits stored in 1 value... and a short even!
+ * - bits 0-4:  #uiBut.bitnr (0-31)
  * - bits 5-7:  pointer type
  * - bit  8:    for 'bit'
  * - bit  9-15: button type (now 6 bits, 64 types)
- * */
+ */
 typedef enum {
   UI_BUT_POIN_CHAR = 32,
   UI_BUT_POIN_SHORT = 64,
@@ -379,12 +372,13 @@ typedef enum {
   UI_BTYPE_SEPR_SPACER = 56 << 9,
   /** Resize handle (resize uilist). */
   UI_BTYPE_GRIP = 57 << 9,
+  UI_BTYPE_DECORATOR = 58 << 9,
 } eButType;
 
 #define BUTTYPE (63 << 9)
 
 /** Gradient types, for color picker #UI_BTYPE_HSVCUBE etc. */
-enum {
+typedef enum eButGradientType {
   UI_GRAD_SV = 0,
   UI_GRAD_HV = 1,
   UI_GRAD_HS = 2,
@@ -394,9 +388,7 @@ enum {
 
   UI_GRAD_V_ALT = 9,
   UI_GRAD_L_ALT = 10,
-};
-
-#define UI_PALETTE_COLOR 20
+} eButGradientType;
 
 /* Drawing
  *
@@ -508,7 +500,7 @@ typedef int (*uiButCompleteFunc)(struct bContext *C, char *str, void *arg);
 /* Search types. */
 typedef struct ARegion *(*uiButSearchCreateFn)(struct bContext *C,
                                                struct ARegion *butregion,
-                                               uiBut *but);
+                                               struct uiButSearch *search_but);
 typedef void (*uiButSearchUpdateFn)(const struct bContext *C,
                                     void *arg,
                                     const char *str,
@@ -545,7 +537,7 @@ typedef bool (*uiMenuStepFunc)(struct bContext *C, int direction, void *arg1);
 bool UI_but_has_tooltip_label(const uiBut *but);
 bool UI_but_is_tool(const uiBut *but);
 bool UI_but_is_utf8(const uiBut *but);
-#define UI_but_is_decorator(but) ((but)->func == ui_but_anim_decorate_cb)
+#define UI_but_is_decorator(but) ((but)->type == UI_BTYPE_DECORATOR)
 
 bool UI_block_is_empty_ex(const uiBlock *block, const bool skip_title);
 bool UI_block_is_empty(const uiBlock *block);
@@ -664,7 +656,7 @@ bool UI_popup_block_name_exists(const struct bScreen *screen, const char *name);
 uiBlock *UI_block_begin(const struct bContext *C,
                         struct ARegion *region,
                         const char *name,
-                        short dt);
+                        char emboss);
 void UI_block_end_ex(const struct bContext *C, uiBlock *block, const int xy[2], int r_xy[2]);
 void UI_block_end(const struct bContext *C, uiBlock *block);
 void UI_block_draw(const struct bContext *C, struct uiBlock *block);
@@ -678,7 +670,7 @@ enum {
 };
 void UI_block_theme_style_set(uiBlock *block, char theme_style);
 char UI_block_emboss_get(uiBlock *block);
-void UI_block_emboss_set(uiBlock *block, char dt);
+void UI_block_emboss_set(uiBlock *block, char emboss);
 
 void UI_block_free(const struct bContext *C, uiBlock *block);
 void UI_blocklist_free(const struct bContext *C, struct ListBase *lb);
@@ -1513,7 +1505,7 @@ uiBut *uiDefHotKeyevtButS(uiBlock *block,
                           short width,
                           short height,
                           short *keypoin,
-                          short *modkeypoin,
+                          const short *modkeypoin,
                           const char *tip);
 
 uiBut *uiDefSearchBut(uiBlock *block,
@@ -1582,7 +1574,13 @@ eAutoPropButsReturn uiDefAutoButsRNA(uiLayout *layout,
                                      const bool compact);
 
 /* use inside searchfunc to add items */
-bool UI_search_item_add(uiSearchItems *items, const char *name, void *poin, int iconid, int state);
+bool UI_search_item_add(uiSearchItems *items,
+                        const char *name,
+                        void *poin,
+                        int iconid,
+                        int state,
+                        uint8_t name_prefix_offset);
+
 void UI_but_func_search_set(uiBut *but,
                             uiButSearchCreateFn search_create_fn,
                             uiButSearchUpdateFn search_update_fn,
@@ -1669,19 +1667,13 @@ void UI_panels_end(const struct bContext *C, struct ARegion *region, int *r_x, i
 void UI_panels_draw(const struct bContext *C, struct ARegion *region);
 
 struct Panel *UI_panel_find_by_type(struct ListBase *lb, struct PanelType *pt);
-struct Panel *UI_panel_begin(struct ScrArea *area,
-                             struct ARegion *region,
+struct Panel *UI_panel_begin(struct ARegion *region,
                              struct ListBase *lb,
                              uiBlock *block,
                              struct PanelType *pt,
                              struct Panel *panel,
                              bool *r_open);
-void UI_panel_end(const struct ScrArea *area,
-                  const struct ARegion *region,
-                  uiBlock *block,
-                  int width,
-                  int height,
-                  bool open);
+void UI_panel_end(const struct ARegion *region, uiBlock *block, int width, int height, bool open);
 
 void UI_panels_scale(struct ARegion *region, float new_width);
 void UI_panel_label_offset(struct uiBlock *block, int *r_x, int *r_y);
@@ -1706,13 +1698,18 @@ void UI_panel_category_draw_all(struct ARegion *region, const char *category_id_
 
 struct PanelType *UI_paneltype_find(int space_id, int region_id, const char *idname);
 
+struct PointerRNA *UI_region_panel_custom_data_under_cursor(const struct bContext *C,
+                                                            const struct wmEvent *event);
+void UI_panel_custom_data_set(struct Panel *panel, struct PointerRNA *custom_data);
+
 /* Polyinstantiated panels for representing a list of data. */
 struct Panel *UI_panel_add_instanced(struct ScrArea *area,
                                      struct ARegion *region,
                                      struct ListBase *panels,
                                      char *panel_idname,
-                                     int list_index);
-void UI_panels_free_instanced(struct bContext *C, struct ARegion *region);
+                                     int list_index,
+                                     struct PointerRNA *custom_data);
+void UI_panels_free_instanced(const struct bContext *C, struct ARegion *region);
 
 #define LIST_PANEL_UNIQUE_STR_LEN 4
 void UI_list_panel_unique_str(struct Panel *panel, char *r_name);
@@ -1926,8 +1923,6 @@ uiLayout *uiLayoutGridFlow(uiLayout *layout,
 uiLayout *uiLayoutBox(uiLayout *layout);
 uiLayout *uiLayoutListBox(uiLayout *layout,
                           struct uiList *ui_list,
-                          struct PointerRNA *ptr,
-                          struct PropertyRNA *prop,
                           struct PointerRNA *actptr,
                           struct PropertyRNA *actprop);
 uiLayout *uiLayoutAbsolute(uiLayout *layout, bool align);
@@ -2573,5 +2568,3 @@ void UI_interface_tag_script_reload(void);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __UI_INTERFACE_H__ */

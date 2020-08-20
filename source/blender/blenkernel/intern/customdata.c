@@ -300,7 +300,7 @@ static void layerInterp_mdeformvert(const void **sources,
 
   /* now we know how many unique deform weights there are, so realloc */
   if (dvert->dw && (dvert->totweight == totweight)) {
-    /* pass (fastpath if we don't need to realloc) */
+    /* pass (fast-path if we don't need to realloc). */
   }
   else {
     if (dvert->dw) {
@@ -597,14 +597,14 @@ static void layerSwap_mdisps(void *data, const int *ci)
 
       MEM_freeN(s->disps);
       s->totdisp = (s->totdisp / corners) * nverts;
-      s->disps = MEM_calloc_arrayN(s->totdisp, sizeof(float) * 3, "mdisp swap");
+      s->disps = MEM_calloc_arrayN(s->totdisp, sizeof(float[3]), "mdisp swap");
       return;
     }
 
-    d = MEM_calloc_arrayN(s->totdisp, 3 * sizeof(float), "mdisps swap");
+    d = MEM_calloc_arrayN(s->totdisp, sizeof(float[3]), "mdisps swap");
 
     for (S = 0; S < corners; S++) {
-      memcpy(d + cornersize * S, s->disps + cornersize * ci[S], cornersize * 3 * sizeof(float));
+      memcpy(d + cornersize * S, s->disps + cornersize * ci[S], sizeof(float[3]) * cornersize);
     }
 
     MEM_freeN(s->disps);
@@ -660,10 +660,10 @@ static int layerRead_mdisps(CDataFile *cdf, void *data, int count)
 
   for (i = 0; i < count; i++) {
     if (!d[i].disps) {
-      d[i].disps = MEM_calloc_arrayN(d[i].totdisp, 3 * sizeof(float), "mdisps read");
+      d[i].disps = MEM_calloc_arrayN(d[i].totdisp, sizeof(float[3]), "mdisps read");
     }
 
-    if (!cdf_read_data(cdf, d[i].totdisp * 3 * sizeof(float), d[i].disps)) {
+    if (!cdf_read_data(cdf, sizeof(float[3]) * d[i].totdisp, d[i].disps)) {
       CLOG_ERROR(&LOG, "failed to read multires displacement %d/%d %d", i, count, d[i].totdisp);
       return 0;
     }
@@ -678,7 +678,7 @@ static int layerWrite_mdisps(CDataFile *cdf, const void *data, int count)
   int i;
 
   for (i = 0; i < count; i++) {
-    if (!cdf_write_data(cdf, d[i].totdisp * 3 * sizeof(float), d[i].disps)) {
+    if (!cdf_write_data(cdf, sizeof(float[3]) * d[i].totdisp, d[i].disps)) {
       CLOG_ERROR(&LOG, "failed to write multires displacement %d/%d %d", i, count, d[i].totdisp);
       return 0;
     }
@@ -694,7 +694,7 @@ static size_t layerFilesize_mdisps(CDataFile *UNUSED(cdf), const void *data, int
   int i;
 
   for (i = 0; i < count; i++) {
-    size += d[i].totdisp * 3 * sizeof(float);
+    size += sizeof(float[3]) * d[i].totdisp;
   }
 
   return size;
@@ -771,7 +771,7 @@ static void layerCopyValue_mloopcol(const void *source,
       if (mixmode == CDT_MIX_REPLACE_ABOVE_THRESHOLD && f < mixfactor) {
         return; /* Do Nothing! */
       }
-      else if (mixmode == CDT_MIX_REPLACE_BELOW_THRESHOLD && f > mixfactor) {
+      if (mixmode == CDT_MIX_REPLACE_BELOW_THRESHOLD && f > mixfactor) {
         return; /* Do Nothing! */
       }
     }
@@ -858,7 +858,6 @@ static void layerDoMinMax_mloopcol(const void *data, void *vmin, void *vmax)
   if (m->a < min->a) {
     min->a = m->a;
   }
-
   if (m->r > max->r) {
     max->r = m->r;
   }
@@ -1355,37 +1354,37 @@ static void layerCopyValue_propcol(const void *source,
     /* Modes that do a full copy or nothing. */
     if (ELEM(mixmode, CDT_MIX_REPLACE_ABOVE_THRESHOLD, CDT_MIX_REPLACE_BELOW_THRESHOLD)) {
       /* TODO: Check for a real valid way to get 'factor' value of our dest color? */
-      const float f = (m2->col[0] + m2->col[1] + m2->col[2]) / 3.0f;
+      const float f = (m2->color[0] + m2->color[1] + m2->color[2]) / 3.0f;
       if (mixmode == CDT_MIX_REPLACE_ABOVE_THRESHOLD && f < mixfactor) {
         return; /* Do Nothing! */
       }
-      else if (mixmode == CDT_MIX_REPLACE_BELOW_THRESHOLD && f > mixfactor) {
+      if (mixmode == CDT_MIX_REPLACE_BELOW_THRESHOLD && f > mixfactor) {
         return; /* Do Nothing! */
       }
     }
-    copy_v3_v3(m2->col, m1->col);
+    copy_v3_v3(m2->color, m1->color);
   }
   else { /* Modes that support 'real' mix factor. */
     if (mixmode == CDT_MIX_MIX) {
-      blend_color_mix_float(tmp_col, m2->col, m1->col);
+      blend_color_mix_float(tmp_col, m2->color, m1->color);
     }
     else if (mixmode == CDT_MIX_ADD) {
-      blend_color_add_float(tmp_col, m2->col, m1->col);
+      blend_color_add_float(tmp_col, m2->color, m1->color);
     }
     else if (mixmode == CDT_MIX_SUB) {
-      blend_color_sub_float(tmp_col, m2->col, m1->col);
+      blend_color_sub_float(tmp_col, m2->color, m1->color);
     }
     else if (mixmode == CDT_MIX_MUL) {
-      blend_color_mul_float(tmp_col, m2->col, m1->col);
+      blend_color_mul_float(tmp_col, m2->color, m1->color);
     }
     else {
-      memcpy(tmp_col, m1->col, sizeof(tmp_col));
+      memcpy(tmp_col, m1->color, sizeof(tmp_col));
     }
-    blend_color_interpolate_float(m2->col, m2->col, tmp_col, mixfactor);
+    blend_color_interpolate_float(m2->color, m2->color, tmp_col, mixfactor);
 
-    copy_v3_v3(m2->col, m1->col);
+    copy_v3_v3(m2->color, m1->color);
   }
-  m2->col[3] = m1->col[3];
+  m2->color[3] = m1->color[3];
 }
 
 static bool layerEqual_propcol(const void *data1, const void *data2)
@@ -1394,7 +1393,7 @@ static bool layerEqual_propcol(const void *data1, const void *data2)
   float tot = 0;
 
   for (int i = 0; i < 4; i++) {
-    float c = (m1->col[i] - m2->col[i]);
+    float c = (m1->color[i] - m2->color[i]);
     tot += c * c;
   }
 
@@ -1404,29 +1403,29 @@ static bool layerEqual_propcol(const void *data1, const void *data2)
 static void layerMultiply_propcol(void *data, float fac)
 {
   MPropCol *m = data;
-  mul_v4_fl(m->col, fac);
+  mul_v4_fl(m->color, fac);
 }
 
 static void layerAdd_propcol(void *data1, const void *data2)
 {
   MPropCol *m = data1;
   const MPropCol *m2 = data2;
-  add_v4_v4(m->col, m2->col);
+  add_v4_v4(m->color, m2->color);
 }
 
 static void layerDoMinMax_propcol(const void *data, void *vmin, void *vmax)
 {
   const MPropCol *m = data;
   MPropCol *min = vmin, *max = vmax;
-  minmax_v4v4_v4(min->col, max->col, m->col);
+  minmax_v4v4_v4(min->color, max->color, m->color);
 }
 
 static void layerInitMinMax_propcol(void *vmin, void *vmax)
 {
   MPropCol *min = vmin, *max = vmax;
 
-  copy_v4_fl(min->col, FLT_MAX);
-  copy_v4_fl(max->col, FLT_MIN);
+  copy_v4_fl(min->color, FLT_MAX);
+  copy_v4_fl(max->color, FLT_MIN);
 }
 
 static void layerDefault_propcol(void *data, int count)
@@ -1436,7 +1435,7 @@ static void layerDefault_propcol(void *data, int count)
   MPropCol *pcol = (MPropCol *)data;
   int i;
   for (i = 0; i < count; i++) {
-    copy_v4_v4(pcol[i].col, default_propcol.col);
+    copy_v4_v4(pcol[i].color, default_propcol.color);
   }
 }
 
@@ -1450,14 +1449,14 @@ static void layerInterp_propcol(
     float weight = weights ? weights[i] : 1.0f;
     const MPropCol *src = sources[i];
     if (sub_weights) {
-      madd_v4_v4fl(col, src->col, (*sub_weight) * weight);
+      madd_v4_v4fl(col, src->color, (*sub_weight) * weight);
       sub_weight++;
     }
     else {
-      madd_v4_v4fl(col, src->col, weight);
+      madd_v4_v4fl(col, src->color, weight);
     }
   }
-  copy_v4_v4(mc->col, col);
+  copy_v4_v4(mc->color, col);
 }
 
 static int layerMaxNum_propcol(void)
@@ -1465,11 +1464,107 @@ static int layerMaxNum_propcol(void)
   return MAX_MCOL;
 }
 
+static void layerInterp_propfloat3(
+    const void **sources, const float *weights, const float *sub_weights, int count, void *dest)
+{
+  vec3f result = {0.0f, 0.0f, 0.0f};
+  for (int i = 0; i < count; i++) {
+    float weight = weights ? weights[i] : 1.0f;
+    const vec3f *src = sources[i];
+    if (sub_weights) {
+      madd_v3_v3fl(&result.x, &src->x, sub_weights[i] * weight);
+    }
+    else {
+      madd_v3_v3fl(&result.x, &src->x, weight);
+    }
+  }
+  copy_v3_v3((float *)dest, &result.x);
+}
+
+static void layerMultiply_propfloat3(void *data, float fac)
+{
+  vec3f *vec = data;
+  vec->x *= fac;
+  vec->y *= fac;
+  vec->z *= fac;
+}
+
+static void layerAdd_propfloat3(void *data1, const void *data2)
+{
+  vec3f *vec1 = data1;
+  const vec3f *vec2 = data2;
+  vec1->x += vec2->x;
+  vec1->y += vec2->y;
+  vec1->z += vec2->z;
+}
+
+static bool layerValidate_propfloat3(void *data, const uint totitems, const bool do_fixes)
+{
+  float *values = data;
+  bool has_errors = false;
+  for (int i = 0; i < totitems * 3; i++) {
+    if (!isfinite(values[i])) {
+      if (do_fixes) {
+        values[i] = 0.0f;
+      }
+      has_errors = true;
+    }
+  }
+  return has_errors;
+}
+
+static void layerInterp_propfloat2(
+    const void **sources, const float *weights, const float *sub_weights, int count, void *dest)
+{
+  vec2f result = {0.0f, 0.0f};
+  for (int i = 0; i < count; i++) {
+    float weight = weights ? weights[i] : 1.0f;
+    const vec2f *src = sources[i];
+    if (sub_weights) {
+      madd_v2_v2fl(&result.x, &src->x, sub_weights[i] * weight);
+    }
+    else {
+      madd_v2_v2fl(&result.x, &src->x, weight);
+    }
+  }
+  copy_v2_v2((float *)dest, &result.x);
+}
+
+static void layerMultiply_propfloat2(void *data, float fac)
+{
+  vec2f *vec = data;
+  vec->x *= fac;
+  vec->y *= fac;
+}
+
+static void layerAdd_propfloat2(void *data1, const void *data2)
+{
+  vec2f *vec1 = data1;
+  const vec2f *vec2 = data2;
+  vec1->x += vec2->x;
+  vec1->y += vec2->y;
+}
+
+static bool layerValidate_propfloat2(void *data, const uint totitems, const bool do_fixes)
+{
+  float *values = data;
+  bool has_errors = false;
+  for (int i = 0; i < totitems * 2; i++) {
+    if (!isfinite(values[i])) {
+      if (do_fixes) {
+        values[i] = 0.0f;
+      }
+      has_errors = true;
+    }
+  }
+  return has_errors;
+}
+
 static const LayerTypeInfo LAYERTYPEINFO[CD_NUMTYPES] = {
     /* 0: CD_MVERT */
     {sizeof(MVert), "MVert", 1, NULL, NULL, NULL, NULL, NULL, NULL},
     /* 1: CD_MSTICKY */ /* DEPRECATED */
-    {sizeof(float) * 2, "", 1, NULL, NULL, NULL, NULL, NULL, NULL},
+    {sizeof(float[2]), "", 1, NULL, NULL, NULL, NULL, NULL, NULL},
     /* 2: CD_MDEFORMVERT */
     {sizeof(MDeformVert),
      "MDeformVert",
@@ -1507,7 +1602,7 @@ static const LayerTypeInfo LAYERTYPEINFO[CD_NUMTYPES] = {
      layerMaxNum_tface},
     /* 6: CD_MCOL */
     /* 4 MCol structs per face */
-    {sizeof(MCol) * 4,
+    {sizeof(MCol[4]),
      "MCol",
      4,
      N_("Col"),
@@ -1531,7 +1626,7 @@ static const LayerTypeInfo LAYERTYPEINFO[CD_NUMTYPES] = {
     {sizeof(int), "", 0, NULL, NULL, NULL, NULL, NULL, layerDefault_origindex},
     /* 8: CD_NORMAL */
     /* 3 floats per normal vector */
-    {sizeof(float) * 3,
+    {sizeof(float[3]),
      "vec3f",
      1,
      NULL,
@@ -1582,7 +1677,7 @@ static const LayerTypeInfo LAYERTYPEINFO[CD_NUMTYPES] = {
      layerSwap_origspace_face,
      layerDefault_origspace_face},
     /* 14: CD_ORCO */
-    {sizeof(float) * 3, "", 0, NULL, NULL, NULL, NULL, NULL, NULL},
+    {sizeof(float[3]), "", 0, NULL, NULL, NULL, NULL, NULL, NULL},
     /* 15: CD_MTEXPOLY */ /* DEPRECATED */
     /* note, when we expose the UV Map / TexFace split to the user,
      * change this back to face Texture. */
@@ -1630,7 +1725,7 @@ static const LayerTypeInfo LAYERTYPEINFO[CD_NUMTYPES] = {
      NULL,
      layerMaxNum_mloopcol},
     /* 18: CD_TANGENT */
-    {sizeof(float) * 4 * 4, "", 0, N_("Tangent"), NULL, NULL, NULL, NULL, NULL},
+    {sizeof(float[4][4]), "", 0, N_("Tangent"), NULL, NULL, NULL, NULL, NULL},
     /* 19: CD_MDISPS */
     {sizeof(MDisps),
      "MDisps",
@@ -1652,7 +1747,7 @@ static const LayerTypeInfo LAYERTYPEINFO[CD_NUMTYPES] = {
      layerWrite_mdisps,
      layerFilesize_mdisps},
     /* 20: CD_PREVIEW_MCOL */
-    {sizeof(MCol) * 4,
+    {sizeof(MCol[4]),
      "MCol",
      4,
      N_("PreviewCol"),
@@ -1662,9 +1757,9 @@ static const LayerTypeInfo LAYERTYPEINFO[CD_NUMTYPES] = {
      layerSwap_mcol,
      layerDefault_mcol},
     /* 21: CD_ID_MCOL */ /* DEPRECATED */
-    {sizeof(MCol) * 4, "", 0, NULL, NULL, NULL, NULL, NULL, NULL},
+    {sizeof(MCol[4]), "", 0, NULL, NULL, NULL, NULL, NULL, NULL},
     /* 22: CD_TEXTURE_MCOL */
-    {sizeof(MCol) * 4,
+    {sizeof(MCol[4]),
      "MCol",
      4,
      N_("TexturedCol"),
@@ -1674,7 +1769,7 @@ static const LayerTypeInfo LAYERTYPEINFO[CD_NUMTYPES] = {
      layerSwap_mcol,
      layerDefault_mcol},
     /* 23: CD_CLOTH_ORCO */
-    {sizeof(float) * 3, "", 0, NULL, NULL, NULL, NULL, NULL, NULL},
+    {sizeof(float[3]), "", 0, NULL, NULL, NULL, NULL, NULL, NULL},
     /* 24: CD_RECAST */
     {sizeof(MRecast), "MRecast", 1, N_("Recast"), NULL, NULL, NULL, NULL},
 
@@ -1686,7 +1781,7 @@ static const LayerTypeInfo LAYERTYPEINFO[CD_NUMTYPES] = {
     /* 27: CD_SHAPE_KEYINDEX */
     {sizeof(int), "", 0, NULL, NULL, NULL, NULL, NULL, NULL},
     /* 28: CD_SHAPEKEY */
-    {sizeof(float) * 3, "", 0, N_("ShapeKey"), NULL, NULL, layerInterp_shapekey},
+    {sizeof(float[3]), "", 0, N_("ShapeKey"), NULL, NULL, layerInterp_shapekey},
     /* 29: CD_BWEIGHT */
     {sizeof(float), "", 0, N_("BevelWeight"), NULL, NULL, layerInterp_bweight},
     /* 30: CD_CREASE */
@@ -1784,7 +1879,7 @@ static const LayerTypeInfo LAYERTYPEINFO[CD_NUMTYPES] = {
     {sizeof(MPropCol),
      "MPropCol",
      1,
-     N_("Col"),
+     N_("Color"),
      NULL,
      NULL,
      layerInterp_propcol,
@@ -1800,7 +1895,38 @@ static const LayerTypeInfo LAYERTYPEINFO[CD_NUMTYPES] = {
      NULL,
      NULL,
      NULL,
-     layerMaxNum_propcol}};
+     layerMaxNum_propcol},
+    /* 48: CD_PROP_FLOAT3 */
+    {sizeof(float[3]),
+     "vec3f",
+     1,
+     N_("Float3"),
+     NULL,
+     NULL,
+     layerInterp_propfloat3,
+     NULL,
+     NULL,
+     layerValidate_propfloat3,
+     NULL,
+     layerMultiply_propfloat3,
+     NULL,
+     layerAdd_propfloat3},
+    /* 49: CD_PROP_FLOAT2 */
+    {sizeof(float[2]),
+     "vec2f",
+     1,
+     N_("Float2"),
+     NULL,
+     NULL,
+     layerInterp_propfloat2,
+     NULL,
+     NULL,
+     layerValidate_propfloat2,
+     NULL,
+     layerMultiply_propfloat2,
+     NULL,
+     layerAdd_propfloat2},
+};
 
 static const char *LAYERTYPENAMES[CD_NUMTYPES] = {
     /*   0-4 */ "CDMVert",
@@ -1853,6 +1979,8 @@ static const char *LAYERTYPENAMES[CD_NUMTYPES] = {
     "CDHairMapping",
     "CDPoint",
     "CDPropCol",
+    "CDPropFloat3",
+    "CDPropFloat2",
 };
 
 const CustomData_MeshMasks CD_MASK_BAREMESH = {
@@ -1871,7 +1999,7 @@ const CustomData_MeshMasks CD_MASK_BAREMESH_ORIGINDEX = {
 };
 const CustomData_MeshMasks CD_MASK_MESH = {
     .vmask = (CD_MASK_MVERT | CD_MASK_MDEFORMVERT | CD_MASK_MVERT_SKIN | CD_MASK_PAINT_MASK |
-              CD_MASK_GENERIC_DATA),
+              CD_MASK_GENERIC_DATA | CD_MASK_PROP_COLOR),
     .emask = (CD_MASK_MEDGE | CD_MASK_FREESTYLE_EDGE | CD_MASK_GENERIC_DATA),
     .fmask = 0,
     .lmask = (CD_MASK_MLOOP | CD_MASK_MDISPS | CD_MASK_MLOOPUV | CD_MASK_MLOOPCOL |
@@ -1881,7 +2009,7 @@ const CustomData_MeshMasks CD_MASK_MESH = {
 };
 const CustomData_MeshMasks CD_MASK_EDITMESH = {
     .vmask = (CD_MASK_MDEFORMVERT | CD_MASK_PAINT_MASK | CD_MASK_MVERT_SKIN | CD_MASK_SHAPEKEY |
-              CD_MASK_SHAPE_KEYINDEX | CD_MASK_GENERIC_DATA),
+              CD_MASK_SHAPE_KEYINDEX | CD_MASK_GENERIC_DATA | CD_MASK_PROP_COLOR),
     .emask = (CD_MASK_GENERIC_DATA),
     .fmask = 0,
     .lmask = (CD_MASK_MDISPS | CD_MASK_MLOOPUV | CD_MASK_MLOOPCOL | CD_MASK_CUSTOMLOOPNORMAL |
@@ -1890,7 +2018,7 @@ const CustomData_MeshMasks CD_MASK_EDITMESH = {
 };
 const CustomData_MeshMasks CD_MASK_DERIVEDMESH = {
     .vmask = (CD_MASK_ORIGINDEX | CD_MASK_MDEFORMVERT | CD_MASK_SHAPEKEY | CD_MASK_MVERT_SKIN |
-              CD_MASK_ORCO | CD_MASK_CLOTH_ORCO | CD_MASK_GENERIC_DATA),
+              CD_MASK_ORCO | CD_MASK_CLOTH_ORCO | CD_MASK_GENERIC_DATA | CD_MASK_PROP_COLOR),
     .emask = (CD_MASK_ORIGINDEX | CD_MASK_FREESTYLE_EDGE | CD_MASK_GENERIC_DATA),
     .fmask = (CD_MASK_ORIGINDEX | CD_MASK_ORIGSPACE | CD_MASK_PREVIEW_MCOL | CD_MASK_TANGENT),
     .lmask = (CD_MASK_MLOOPUV | CD_MASK_MLOOPCOL | CD_MASK_CUSTOMLOOPNORMAL |
@@ -1901,7 +2029,8 @@ const CustomData_MeshMasks CD_MASK_DERIVEDMESH = {
 };
 const CustomData_MeshMasks CD_MASK_BMESH = {
     .vmask = (CD_MASK_MDEFORMVERT | CD_MASK_BWEIGHT | CD_MASK_MVERT_SKIN | CD_MASK_SHAPEKEY |
-              CD_MASK_SHAPE_KEYINDEX | CD_MASK_PAINT_MASK | CD_MASK_GENERIC_DATA),
+              CD_MASK_SHAPE_KEYINDEX | CD_MASK_PAINT_MASK | CD_MASK_GENERIC_DATA |
+              CD_MASK_PROP_COLOR),
     .emask = (CD_MASK_BWEIGHT | CD_MASK_CREASE | CD_MASK_FREESTYLE_EDGE | CD_MASK_GENERIC_DATA),
     .fmask = 0,
     .lmask = (CD_MASK_MDISPS | CD_MASK_MLOOPUV | CD_MASK_MLOOPCOL | CD_MASK_CUSTOMLOOPNORMAL |
@@ -1925,7 +2054,7 @@ const CustomData_MeshMasks CD_MASK_EVERYTHING = {
     .vmask = (CD_MASK_MVERT | CD_MASK_BM_ELEM_PYPTR | CD_MASK_ORIGINDEX | CD_MASK_NORMAL |
               CD_MASK_MDEFORMVERT | CD_MASK_BWEIGHT | CD_MASK_MVERT_SKIN | CD_MASK_ORCO |
               CD_MASK_CLOTH_ORCO | CD_MASK_SHAPEKEY | CD_MASK_SHAPE_KEYINDEX | CD_MASK_PAINT_MASK |
-              CD_MASK_GENERIC_DATA),
+              CD_MASK_GENERIC_DATA | CD_MASK_PROP_COLOR),
     .emask = (CD_MASK_MEDGE | CD_MASK_BM_ELEM_PYPTR | CD_MASK_ORIGINDEX | CD_MASK_BWEIGHT |
               CD_MASK_CREASE | CD_MASK_FREESTYLE_EDGE | CD_MASK_GENERIC_DATA),
     .fmask = (CD_MASK_MFACE | CD_MASK_ORIGINDEX | CD_MASK_NORMAL | CD_MASK_MTFACE | CD_MASK_MCOL |
@@ -2072,13 +2201,13 @@ bool CustomData_merge(const struct CustomData *source,
     if (flag & CD_FLAG_NOCOPY) {
       continue;
     }
-    else if (!(mask & CD_TYPE_AS_MASK(type))) {
+    if (!(mask & CD_TYPE_AS_MASK(type))) {
       continue;
     }
-    else if ((maxnumber != -1) && (number >= maxnumber)) {
+    if ((maxnumber != -1) && (number >= maxnumber)) {
       continue;
     }
-    else if (CustomData_get_named_layer_index(dest, type, layer->name) != -1) {
+    if (CustomData_get_named_layer_index(dest, type, layer->name) != -1) {
       continue;
     }
 
@@ -2514,11 +2643,13 @@ static CustomDataLayer *customData_add_layer__internal(CustomData *data,
   }
 
   if (alloctype == CD_DUPLICATE && layerdata) {
-    if (typeInfo->copy) {
-      typeInfo->copy(layerdata, newlayerdata, totelem);
-    }
-    else {
-      memcpy(newlayerdata, layerdata, (size_t)totelem * typeInfo->size);
+    if (totelem > 0) {
+      if (typeInfo->copy) {
+        typeInfo->copy(layerdata, newlayerdata, totelem);
+      }
+      else {
+        memcpy(newlayerdata, layerdata, (size_t)totelem * typeInfo->size);
+      }
     }
   }
   else if (alloctype == CD_DEFAULT) {
@@ -3921,9 +4052,8 @@ bool CustomData_data_equals(int type, const void *data1, const void *data2)
   if (typeInfo->equal) {
     return typeInfo->equal(data1, data2);
   }
-  else {
-    return !memcmp(data1, data2, typeInfo->size);
-  }
+
+  return !memcmp(data1, data2, typeInfo->size);
 }
 
 void CustomData_data_initminmax(int type, void *min, void *max)
@@ -4280,7 +4410,7 @@ int CustomData_layertype_layers_max(const int type)
   if (typeInfo->defaultname == NULL) {
     return 1;
   }
-  else if (typeInfo->layers_max == NULL) {
+  if (typeInfo->layers_max == NULL) {
     return -1;
   }
 
@@ -4438,6 +4568,32 @@ bool CustomData_layer_validate(CustomDataLayer *layer, const uint totitems, cons
   }
 
   return false;
+}
+
+void CustomData_layers__print(CustomData *data)
+{
+  int i;
+  const CustomDataLayer *layer;
+
+  printf("{\n");
+
+  for (i = 0, layer = data->layers; i < data->totlayer; i++, layer++) {
+
+    const char *name = CustomData_layertype_name(layer->type);
+    const int size = CustomData_sizeof(layer->type);
+    const char *structname;
+    int structnum;
+    CustomData_file_write_info(layer->type, &structname, &structnum);
+    printf("        dict(name='%s', struct='%s', type=%d, ptr='%p', elem=%d, length=%d),\n",
+           name,
+           structname,
+           layer->type,
+           (const void *)layer->data,
+           size,
+           (int)(MEM_allocN_len(layer->data) / size));
+  }
+
+  printf("}\n");
 }
 
 /****************************** External Files *******************************/

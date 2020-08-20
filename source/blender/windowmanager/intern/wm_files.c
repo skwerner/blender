@@ -121,7 +121,8 @@
 #include "RE_engine.h"
 
 #ifdef WITH_PYTHON
-#  include "BPY_extern.h"
+#  include "BPY_extern_python.h"
+#  include "BPY_extern_run.h"
 #endif
 
 #include "DEG_depsgraph.h"
@@ -258,7 +259,7 @@ static void wm_window_match_keep_current_wm(const bContext *C,
   bScreen *screen = NULL;
 
   /* match oldwm to new dbase, only old files */
-  wm->initialized &= ~WM_WINDOW_IS_INITIALIZED;
+  wm->initialized &= ~WM_WINDOW_IS_INIT;
 
   /* when loading without UI, no matching needed */
   if (load_ui && (screen = CTX_wm_screen(C))) {
@@ -579,14 +580,14 @@ static void wm_file_read_post(bContext *C,
       if (use_userdef || reset_app_template) {
         /* Only run when we have a template path found. */
         if (BKE_appdir_app_template_any()) {
-          BPY_execute_string(
+          BPY_run_string_eval(
               C, (const char *[]){"bl_app_template_utils", NULL}, "bl_app_template_utils.reset()");
           reset_all = true;
         }
       }
       if (reset_all) {
         /* sync addons, these may have changed from the defaults */
-        BPY_execute_string(C, (const char *[]){"addon_utils", NULL}, "addon_utils.reset_all()");
+        BPY_run_string_eval(C, (const char *[]){"addon_utils", NULL}, "addon_utils.reset_all()");
       }
       if (use_data) {
         BPY_python_reset(C);
@@ -923,7 +924,7 @@ void wm_homefile_read(bContext *C,
        *
        * Note that this fits into 'wm_file_read_pre' function but gets messy
        * since we need to know if 'reset_app_template' is true. */
-      BPY_execute_string(C, (const char *[]){"addon_utils", NULL}, "addon_utils.disable_all()");
+      BPY_run_string_eval(C, (const char *[]){"addon_utils", NULL}, "addon_utils.disable_all()");
     }
 #endif /* WITH_PYTHON */
   }
@@ -1026,13 +1027,6 @@ void wm_homefile_read(bContext *C,
                                        .skip_flags = skip_flags | BLO_READ_SKIP_USERDEF,
                                    },
                                    NULL);
-    }
-    if (BLI_listbase_is_empty(&U.themes)) {
-      if (G.debug & G_DEBUG) {
-        printf("\nNote: No (valid) '%s' found, fall back to built-in default.\n\n",
-               filepath_startup);
-      }
-      success = false;
     }
     if (success) {
       if (update_defaults) {
@@ -1411,10 +1405,8 @@ bool write_crash_blend(void)
     printf("written: %s\n", path);
     return 1;
   }
-  else {
-    printf("failed: %s\n", path);
-    return 0;
-  }
+  printf("failed: %s\n", path);
+  return 0;
 }
 
 /**
@@ -1458,7 +1450,7 @@ static bool wm_file_write(bContext *C,
 
   /* send the OnSave event */
   for (li = bmain->libraries.first; li; li = li->id.next) {
-    if (BLI_path_cmp(li->filepath, filepath) == 0) {
+    if (BLI_path_cmp(li->filepath_abs, filepath) == 0) {
       BKE_reportf(reports, RPT_ERROR, "Cannot overwrite used library '%.240s'", filepath);
       return ok;
     }
@@ -1611,16 +1603,14 @@ void wm_autosave_timer(Main *bmain, wmWindowManager *wm, wmTimer *UNUSED(wt))
 
   WM_event_remove_timer(wm, NULL, wm->autosavetimer);
 
-  /* if a modal operator is running, don't autosave, but try again in 10 seconds */
+  /* If a modal operator is running, don't autosave because we might not be in
+   * a valid state to save. But try again in 10ms. */
   LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
     LISTBASE_FOREACH (wmEventHandler *, handler_base, &win->modalhandlers) {
       if (handler_base->type == WM_HANDLER_TYPE_OP) {
         wmEventHandler_Op *handler = (wmEventHandler_Op *)handler_base;
         if (handler->op) {
-          wm->autosavetimer = WM_event_add_timer(wm, NULL, TIMERAUTOSAVE, 10.0);
-          if (G.debug) {
-            printf("Skipping auto-save, modal operator running, retrying in ten seconds...\n");
-          }
+          wm->autosavetimer = WM_event_add_timer(wm, NULL, TIMERAUTOSAVE, 0.01);
           return;
         }
       }
@@ -2100,9 +2090,7 @@ static int wm_homefile_read_invoke(bContext *C, wmOperator *op, const wmEvent *U
     wm_close_file_dialog(C, callback);
     return OPERATOR_INTERFACE;
   }
-  else {
-    return wm_homefile_read_exec(C, op);
-  }
+  return wm_homefile_read_exec(C, op);
 }
 
 static void read_homefile_props(wmOperatorType *ot)
@@ -2264,9 +2252,7 @@ static int wm_open_mainfile__discard_changes(bContext *C, wmOperator *op)
     wm_close_file_dialog(C, callback);
     return OPERATOR_INTERFACE;
   }
-  else {
-    return wm_open_mainfile_dispatch(C, op);
-  }
+  return wm_open_mainfile_dispatch(C, op);
 }
 
 static int wm_open_mainfile__select_file_path(bContext *C, wmOperator *op)
@@ -2337,9 +2323,7 @@ static int wm_open_mainfile__open(bContext *C, wmOperator *op)
     ED_view3d_local_collections_reset(C, (G.fileflags & G_FILE_NO_UI) != 0);
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 static OperatorDispatchTarget wm_open_mainfile_dispatch_targets[] = {
@@ -2484,9 +2468,7 @@ static int wm_revert_mainfile_exec(bContext *C, wmOperator *op)
   if (success) {
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 static bool wm_revert_mainfile_poll(bContext *UNUSED(C))
@@ -2581,9 +2563,7 @@ static int wm_recover_auto_save_exec(bContext *C, wmOperator *op)
   if (success) {
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 static int wm_recover_auto_save_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))

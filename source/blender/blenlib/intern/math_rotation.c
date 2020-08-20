@@ -543,8 +543,8 @@ void rotation_between_quats_to_quat(float q[4], const float q1[4], const float q
  *
  * \param q: input quaternion.
  * \param axis: twist axis in [0,1,2]
- * \param r_swing[out]: if not NULL, receives the swing quaternion.
- * \param r_twist[out]: if not NULL, receives the twist quaternion.
+ * \param r_swing: if not NULL, receives the swing quaternion.
+ * \param r_twist: if not NULL, receives the twist quaternion.
  * \returns twist angle.
  */
 float quat_split_swing_and_twist(const float q[4], int axis, float r_swing[4], float r_twist[4])
@@ -644,9 +644,8 @@ float angle_signed_normalized_qt(const float q[4])
   if (q[0] >= 0.0f) {
     return 2.0f * saacos(q[0]);
   }
-  else {
-    return -2.0f * saacos(-q[0]);
-  }
+
+  return -2.0f * saacos(-q[0]);
 }
 
 float angle_signed_normalized_qtqt(const float q1[4], const float q2[4])
@@ -654,11 +653,10 @@ float angle_signed_normalized_qtqt(const float q1[4], const float q2[4])
   if (dot_qtqt(q1, q2) >= 0.0f) {
     return angle_normalized_qtqt(q1, q2);
   }
-  else {
-    float q2_copy[4];
-    negate_v4_v4(q2_copy, q2);
-    return -angle_normalized_qtqt(q1, q2_copy);
-  }
+
+  float q2_copy[4];
+  negate_v4_v4(q2_copy, q2);
+  return -angle_normalized_qtqt(q1, q2_copy);
 }
 
 float angle_signed_qt(const float q[4])
@@ -675,11 +673,10 @@ float angle_signed_qtqt(const float q1[4], const float q2[4])
   if (dot_qtqt(q1, q2) >= 0.0f) {
     return angle_qtqt(q1, q2);
   }
-  else {
-    float q2_copy[4];
-    negate_v4_v4(q2_copy, q2);
-    return -angle_qtqt(q1, q2_copy);
-  }
+
+  float q2_copy[4];
+  negate_v4_v4(q2_copy, q2);
+  return -angle_qtqt(q1, q2_copy);
 }
 
 /** \} */
@@ -1594,12 +1591,11 @@ static const RotOrderInfo *get_rotation_order_info(const short order)
   if (order < 1) {
     return &rotOrders[0];
   }
-  else if (order < 6) {
+  if (order < 6) {
     return &rotOrders[order - 1];
   }
-  else {
-    return &rotOrders[5];
-  }
+
+  return &rotOrders[5];
 }
 
 /* Construct quaternion from Euler angles (in radians). */
@@ -2127,7 +2123,7 @@ void mul_v3m3_dq(float co[3], float mat[3][3], DualQuat *dq)
   co[1] = (co[1] + t[1]) * len2;
   co[2] = (co[2] + t[2]) * len2;
 
-  /* compute crazyspace correction mat */
+  /* Compute crazy-space correction matrix. */
   if (mat) {
     if (dq->scale_weight) {
       copy_m3_m4(scalemat, dq->scale);
@@ -2367,8 +2363,8 @@ bool mat3_from_axis_conversion(
   value = ((src_forward << (0 * 3)) | (src_up << (1 * 3)) | (dst_forward << (2 * 3)) |
            (dst_up << (3 * 3)));
 
-  for (uint i = 0; i < (sizeof(_axis_convert_matrix) / sizeof(*_axis_convert_matrix)); i++) {
-    for (uint j = 0; j < (sizeof(*_axis_convert_lut) / sizeof(*_axis_convert_lut[0])); j++) {
+  for (uint i = 0; i < (ARRAY_SIZE(_axis_convert_matrix)); i++) {
+    for (uint j = 0; j < (ARRAY_SIZE(*_axis_convert_lut)); j++) {
       if (_axis_convert_lut[i][j] == value) {
         copy_m3_m3(r_mat, _axis_convert_matrix[i]);
         return true;

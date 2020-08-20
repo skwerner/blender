@@ -20,8 +20,7 @@
  * \ingroup draw
  */
 
-#ifndef __DRAW_CACHE_EXTRACT_H__
-#define __DRAW_CACHE_EXTRACT_H__
+#pragma once
 
 struct TaskGraph;
 
@@ -53,16 +52,21 @@ typedef struct DRW_MeshCDMask {
   uint32_t uv : 8;
   uint32_t tan : 8;
   uint32_t vcol : 8;
+  uint32_t sculpt_vcol : 8;
   uint32_t orco : 1;
   uint32_t tan_orco : 1;
   /** Edit uv layer is from the base edit mesh as
    *  modifiers could remove it. (see T68857) */
   uint32_t edit_uv : 1;
 } DRW_MeshCDMask;
+/* Keep `DRW_MeshCDMask` struct within an `uint64_t`.
+ * bit-wise and atomic operations are used to compare and update the struct.
+ * See `mesh_cd_layers_type_*` functions. */
+BLI_STATIC_ASSERT(sizeof(DRW_MeshCDMask) <= sizeof(uint64_t), "DRW_MeshCDMask exceeds 64 bits")
 
 typedef enum eMRIterType {
   MR_ITER_LOOPTRI = 1 << 0,
-  MR_ITER_LOOP = 1 << 1,
+  MR_ITER_POLY = 1 << 1,
   MR_ITER_LEDGE = 1 << 2,
   MR_ITER_LVERT = 1 << 3,
 } eMRIterType;
@@ -165,8 +169,7 @@ typedef enum DRWBatchFlag {
   MBC_WIRE_EDGES = (1 << 23),
   MBC_WIRE_LOOPS = (1 << 24),
   MBC_WIRE_LOOPS_UVS = (1 << 25),
-  MBC_SURF_PER_MAT = (1 << 26),
-  MBC_SKIN_ROOTS = (1 << 27),
+  MBC_SKIN_ROOTS = (1 << 26),
 } DRWBatchFlag;
 
 #define MBC_EDITUV \
@@ -265,5 +268,3 @@ void mesh_buffer_cache_create_requested(struct TaskGraph *task_graph,
                                         const Scene *scene,
                                         const ToolSettings *ts,
                                         const bool use_hide);
-
-#endif /* __DRAW_CACHE_EXTRACT_H__ */

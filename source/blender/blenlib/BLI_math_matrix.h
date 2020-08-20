@@ -19,8 +19,7 @@
  * The Original Code is: some of this file.
  * */
 
-#ifndef __BLI_MATH_MATRIX_H__
-#define __BLI_MATH_MATRIX_H__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -64,7 +63,7 @@ void swap_m3m3(float A[3][3], float B[3][3]);
 void swap_m4m4(float A[4][4], float B[4][4]);
 
 /* Build index shuffle matrix */
-void shuffle_m4(float R[4][4], int index[4]);
+void shuffle_m4(float R[4][4], const int index[4]);
 
 /******************************** Arithmetic *********************************/
 
@@ -399,5 +398,3 @@ void print_m4(const char *str, const float M[4][4]);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLI_MATH_MATRIX_H__ */

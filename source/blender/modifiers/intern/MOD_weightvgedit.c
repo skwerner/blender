@@ -47,6 +47,8 @@
 #include "UI_interface.h"
 #include "UI_resources.h"
 
+#include "BLO_read_write.h"
+
 #include "RNA_access.h"
 
 #include "DEG_depsgraph_build.h"
@@ -70,7 +72,7 @@ static void initData(ModifierData *md)
   wmd->default_weight = 0.0f;
 
   wmd->cmap_curve = BKE_curvemapping_add(1, 0.0, 0.0, 1.0, 1.0);
-  BKE_curvemapping_initialize(wmd->cmap_curve);
+  BKE_curvemapping_init(wmd->cmap_curve);
 
   wmd->rem_threshold = 0.01f;
   wmd->add_threshold = 0.01f;
@@ -310,6 +312,8 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
   MEM_freeN(new_w);
   MEM_freeN(dw);
 
+  mesh->runtime.is_original = false;
+
   /* Return the vgroup-modified mesh. */
   return mesh;
 }
@@ -399,6 +403,25 @@ static void panelRegister(ARegionType *region_type)
       region_type, "influence", "Influence", NULL, influence_panel_draw, panel_type);
 }
 
+static void blendWrite(BlendWriter *writer, const ModifierData *md)
+{
+  const WeightVGEditModifierData *wmd = (const WeightVGEditModifierData *)md;
+
+  if (wmd->cmap_curve) {
+    BKE_curvemapping_blend_write(writer, wmd->cmap_curve);
+  }
+}
+
+static void blendRead(BlendDataReader *reader, ModifierData *md)
+{
+  WeightVGEditModifierData *wmd = (WeightVGEditModifierData *)md;
+
+  BLO_read_data_address(reader, &wmd->cmap_curve);
+  if (wmd->cmap_curve) {
+    BKE_curvemapping_blend_read(reader, wmd->cmap_curve);
+  }
+}
+
 ModifierTypeInfo modifierType_WeightVGEdit = {
     /* name */ "VertexWeightEdit",
     /* structName */ "WeightVGEditModifierData",
@@ -430,6 +453,6 @@ ModifierTypeInfo modifierType_WeightVGEdit = {
     /* foreachTexLink */ foreachTexLink,
     /* freeRuntimeData */ NULL,
     /* panelRegister */ panelRegister,
-    /* blendWrite */ NULL,
-    /* blendRead */ NULL,
+    /* blendWrite */ blendWrite,
+    /* blendRead */ blendRead,
 };

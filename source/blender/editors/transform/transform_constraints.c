@@ -388,7 +388,7 @@ void transform_constraint_snap_axis_to_face(const TransInfo *t,
  * Return true if the 2x axis are both aligned when projected into the view.
  * In this case, we can't usefully project the cursor onto the plane.
  */
-static bool isPlaneProjectionViewAligned(const TransInfo *t, float plane[4])
+static bool isPlaneProjectionViewAligned(const TransInfo *t, const float plane[4])
 {
   const float eps = 0.001f;
   float view_to_plane[3];
@@ -510,10 +510,12 @@ static void applyObjectConstraintVec(
   else {
     /* Specific TransData's space. */
     copy_v3_v3(out, in);
-    mul_m3_v3(t->spacemtx_inv, out);
-    mul_m3_v3(td->axismtx, out);
-    if (t->flag & T_EDIT) {
-      mul_m3_v3(tc->mat3_unit, out);
+    if (t->con.mode & CON_APPLY) {
+      mul_m3_v3(t->spacemtx_inv, out);
+      mul_m3_v3(td->axismtx, out);
+      if (t->flag & T_EDIT) {
+        mul_m3_v3(tc->mat3_unit, out);
+      }
     }
   }
 }
@@ -783,7 +785,6 @@ void drawConstraint(TransInfo *t)
   else {
     if (tc->mode & CON_SELECT) {
       float vec[3];
-      int depth_test_enabled;
 
       convertViewVec(t, vec, (t->mval[0] - t->con.imval[0]), (t->mval[1] - t->con.imval[1]));
       add_v3_v3(vec, t->center_global);
@@ -792,9 +793,9 @@ void drawConstraint(TransInfo *t)
       drawLine(t, t->center_global, t->spacemtx[1], 'Y', 0);
       drawLine(t, t->center_global, t->spacemtx[2], 'Z', 0);
 
-      depth_test_enabled = GPU_depth_test_enabled();
+      eGPUDepthTest depth_test_enabled = GPU_depth_test_get();
       if (depth_test_enabled) {
-        GPU_depth_test(false);
+        GPU_depth_test(GPU_DEPTH_NONE);
       }
 
       const uint shdr_pos = GPU_vertformat_attr_add(
@@ -819,7 +820,7 @@ void drawConstraint(TransInfo *t)
       immUnbindProgram();
 
       if (depth_test_enabled) {
-        GPU_depth_test(true);
+        GPU_depth_test(GPU_DEPTH_LESS_EQUAL);
       }
     }
 
@@ -841,7 +842,6 @@ void drawPropCircle(const struct bContext *C, TransInfo *t)
   if (t->flag & T_PROP_EDIT) {
     RegionView3D *rv3d = CTX_wm_region_view3d(C);
     float tmat[4][4], imat[4][4];
-    int depth_test_enabled;
 
     if (t->spacetype == SPACE_VIEW3D && rv3d != NULL) {
       copy_m4_m4(tmat, rv3d->viewmat);
@@ -871,24 +871,33 @@ void drawPropCircle(const struct bContext *C, TransInfo *t)
       GPU_matrix_scale_2f(1.0f, (ysize / xsize) * (xmask / ymask));
     }
 
-    depth_test_enabled = GPU_depth_test_enabled();
+    eGPUDepthTest depth_test_enabled = GPU_depth_test_get();
     if (depth_test_enabled) {
-      GPU_depth_test(false);
+      GPU_depth_test(GPU_DEPTH_NONE);
     }
 
     uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
 
-    immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
-    immUniformThemeColor(TH_GRID);
+    immBindBuiltinProgram(GPU_SHADER_3D_POLYLINE_UNIFORM_COLOR);
 
-    GPU_logic_op_invert_set(true);
+    float viewport[4];
+    GPU_viewport_size_get_f(viewport);
+    GPU_blend(GPU_BLEND_ALPHA);
+
+    immUniform2fv("viewportSize", &viewport[2]);
+    immUniform1f("lineWidth", 3.0f * U.pixelsize);
+
+    immUniformThemeColorShadeAlpha(TH_GRID, -20, 255);
     imm_drawcircball(t->center_global, t->prop_size, imat, pos);
-    GPU_logic_op_invert_set(false);
+
+    immUniform1f("lineWidth", 1.0f * U.pixelsize);
+    immUniformThemeColorShadeAlpha(TH_GRID, 20, 255);
+    imm_drawcircball(t->center_global, t->prop_size, imat, pos);
 
     immUnbindProgram();
 
     if (depth_test_enabled) {
-      GPU_depth_test(true);
+      GPU_depth_test(GPU_DEPTH_LESS_EQUAL);
     }
 
     GPU_matrix_pop();

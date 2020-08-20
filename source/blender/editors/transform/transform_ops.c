@@ -516,22 +516,19 @@ static int transform_invoke(bContext *C, wmOperator *op, const wmEvent *event)
   if ((event == NULL) && RNA_struct_property_is_set(op->ptr, "value")) {
     return transform_exec(C, op);
   }
-  else {
-    /* add temp handler */
-    WM_event_add_modal_handler(C, op);
 
-    op->flag |= OP_IS_MODAL_GRAB_CURSOR;  // XXX maybe we want this with the gizmo only?
+  /* add temp handler */
+  WM_event_add_modal_handler(C, op);
 
-    /* Use when modal input has some transformation to begin with. */
-    {
-      TransInfo *t = op->customdata;
-      if (UNLIKELY(!is_zero_v4(t->values_modal_offset))) {
-        transformApply(C, t);
-      }
-    }
+  op->flag |= OP_IS_MODAL_GRAB_CURSOR;  // XXX maybe we want this with the gizmo only?
 
-    return OPERATOR_RUNNING_MODAL;
+  /* Use when modal input has some transformation to begin with. */
+  TransInfo *t = op->customdata;
+  if (UNLIKELY(!is_zero_v4(t->values_modal_offset))) {
+    transformApply(C, t);
   }
+
+  return OPERATOR_RUNNING_MODAL;
 }
 
 static bool transform_poll_property(const bContext *UNUSED(C),
@@ -1049,11 +1046,11 @@ static void TRANSFORM_OT_bbone_resize(struct wmOperatorType *ot)
   ot->exec = transform_exec;
   ot->modal = transform_modal;
   ot->cancel = transform_cancel;
-  ot->poll = ED_operator_editarmature;
+  ot->poll = ED_operator_object_active;
   ot->poll_property = transform_poll_property;
 
   RNA_def_float_translation(
-      ot->srna, "value", 2, VecOne, -FLT_MAX, FLT_MAX, "Display Size", "", -FLT_MAX, FLT_MAX);
+      ot->srna, "value", 3, VecOne, -FLT_MAX, FLT_MAX, "Display Size", "", -FLT_MAX, FLT_MAX);
 
   WM_operatortype_props_advanced_begin(ot);
 

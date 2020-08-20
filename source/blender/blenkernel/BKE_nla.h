@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_NLA_H__
-#define __BKE_NLA_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -103,6 +102,7 @@ void BKE_nlastrip_set_active(struct AnimData *adt, struct NlaStrip *strip);
 
 bool BKE_nlastrip_within_bounds(struct NlaStrip *strip, float min, float max);
 void BKE_nlastrip_recalculate_bounds(struct NlaStrip *strip);
+void BKE_nlastrip_recalculate_bounds_sync_action(struct NlaStrip *strip);
 
 void BKE_nlastrip_validate_name(struct AnimData *adt, struct NlaStrip *strip);
 
@@ -148,6 +148,4 @@ float BKE_nla_tweakedit_remap(struct AnimData *adt, float cframe, short mode);
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

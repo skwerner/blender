@@ -28,6 +28,8 @@
 #include "BLI_memblock.h"
 
 #include "BKE_duplilist.h"
+#include "BKE_modifier.h"
+#include "BKE_object.h"
 
 #include "DEG_depsgraph_query.h"
 
@@ -41,8 +43,24 @@
 static void eevee_motion_blur_mesh_data_free(void *val)
 {
   EEVEE_GeometryMotionData *geom_mb = (EEVEE_GeometryMotionData *)val;
-  for (int i = 0; i < ARRAY_SIZE(geom_mb->vbo); i++) {
-    GPU_VERTBUF_DISCARD_SAFE(geom_mb->vbo[i]);
+  EEVEE_HairMotionData *hair_mb = (EEVEE_HairMotionData *)val;
+  switch (geom_mb->type) {
+    case EEVEE_MOTION_DATA_HAIR:
+      for (int j = 0; j < hair_mb->psys_len; j++) {
+        for (int i = 0; i < ARRAY_SIZE(hair_mb->psys[0].hair_pos); i++) {
+          GPU_VERTBUF_DISCARD_SAFE(hair_mb->psys[j].hair_pos[i]);
+        }
+        for (int i = 0; i < ARRAY_SIZE(hair_mb->psys[0].hair_pos); i++) {
+          DRW_TEXTURE_FREE_SAFE(hair_mb->psys[j].hair_pos_tx[i]);
+        }
+      }
+      break;
+
+    case EEVEE_MOTION_DATA_MESH:
+      for (int i = 0; i < ARRAY_SIZE(geom_mb->vbo); i++) {
+        GPU_VERTBUF_DISCARD_SAFE(geom_mb->vbo[i]);
+      }
+      break;
   }
   MEM_freeN(val);
 }
@@ -52,7 +70,7 @@ static uint eevee_object_key_hash(const void *key)
   EEVEE_ObjectKey *ob_key = (EEVEE_ObjectKey *)key;
   uint hash = BLI_ghashutil_ptrhash(ob_key->ob);
   hash = BLI_ghashutil_combine_hash(hash, BLI_ghashutil_ptrhash(ob_key->parent));
-  for (int i = 0; i < 16; i++) {
+  for (int i = 0; i < MAX_DUPLI_RECUR; i++) {
     if (ob_key->id[i] != 0) {
       hash = BLI_ghashutil_combine_hash(hash, BLI_ghashutil_inthash(ob_key->id[i]));
     }
@@ -103,14 +121,17 @@ void EEVEE_motion_blur_data_free(EEVEE_MotionBlurData *mb)
   }
 }
 
-EEVEE_ObjectMotionData *EEVEE_motion_blur_object_data_get(EEVEE_MotionBlurData *mb, Object *ob)
+EEVEE_ObjectMotionData *EEVEE_motion_blur_object_data_get(EEVEE_MotionBlurData *mb,
+                                                          Object *ob,
+                                                          bool hair)
 {
   if (mb->object == NULL) {
     return NULL;
   }
 
   EEVEE_ObjectKey key, *key_p;
-  key.ob = ob;
+  /* Small hack to avoid another comparisson. */
+  key.ob = (Object *)((char *)ob + hair);
   DupliObject *dup = DRW_object_get_dupli(ob);
   if (dup) {
     key.parent = DRW_object_get_dupli_parent(ob);
@@ -133,22 +154,53 @@ EEVEE_ObjectMotionData *EEVEE_motion_blur_object_data_get(EEVEE_MotionBlurData *
   return ob_step;
 }
 
-EEVEE_GeometryMotionData *EEVEE_motion_blur_geometry_data_get(EEVEE_MotionBlurData *mb, Object *ob)
+static void *motion_blur_deform_data_get(EEVEE_MotionBlurData *mb, Object *ob, bool hair)
 {
   if (mb->geom == NULL) {
     return NULL;
   }
-
-  /* Use original data as key to ensure matching accross update. */
-  Object *ob_orig = DEG_get_original_object(ob);
-
-  EEVEE_GeometryMotionData *geom_step = BLI_ghash_lookup(mb->geom, ob_orig->data);
-  if (geom_step == NULL) {
-    geom_step = MEM_callocN(sizeof(EEVEE_GeometryMotionData), __func__);
-    BLI_ghash_insert(mb->geom, ob_orig->data, geom_step);
+  DupliObject *dup = DRW_object_get_dupli(ob);
+  void *key;
+  if (dup) {
+    key = dup->ob;
   }
-
+  else {
+    key = ob;
+  }
+  /* Only use data for object that have no modifiers. */
+  if (!BKE_object_is_modified(DRW_context_state_get()->scene, ob)) {
+    key = ob->data;
+  }
+  key = (char *)key + (int)hair;
+  EEVEE_GeometryMotionData *geom_step = BLI_ghash_lookup(mb->geom, key);
+  if (geom_step == NULL) {
+    if (hair) {
+      EEVEE_HairMotionData *hair_step;
+      /* Ugly, we allocate for each modifiers and just fill based on modifier index in the list. */
+      int psys_len = (ob->type != OB_HAIR) ? BLI_listbase_count(&ob->modifiers) : 1;
+      hair_step = MEM_callocN(sizeof(EEVEE_HairMotionData) + sizeof(hair_step->psys[0]) * psys_len,
+                              __func__);
+      hair_step->psys_len = psys_len;
+      geom_step = (EEVEE_GeometryMotionData *)hair_step;
+      geom_step->type = EEVEE_MOTION_DATA_HAIR;
+    }
+    else {
+      geom_step = MEM_callocN(sizeof(EEVEE_GeometryMotionData), __func__);
+      geom_step->type = EEVEE_MOTION_DATA_MESH;
+    }
+    BLI_ghash_insert(mb->geom, key, geom_step);
+  }
   return geom_step;
+}
+
+EEVEE_GeometryMotionData *EEVEE_motion_blur_geometry_data_get(EEVEE_MotionBlurData *mb, Object *ob)
+{
+  return motion_blur_deform_data_get(mb, ob, false);
+}
+
+EEVEE_HairMotionData *EEVEE_motion_blur_hair_data_get(EEVEE_MotionBlurData *mb, Object *ob)
+{
+  return motion_blur_deform_data_get(mb, ob, true);
 }
 
 /* View Layer data. */
@@ -187,6 +239,7 @@ void EEVEE_view_layer_data_free(void *storage)
   DRW_UBO_FREE_SAFE(sldata->renderpass_ubo.spec_color);
   DRW_UBO_FREE_SAFE(sldata->renderpass_ubo.spec_light);
   DRW_UBO_FREE_SAFE(sldata->renderpass_ubo.emit);
+  DRW_UBO_FREE_SAFE(sldata->renderpass_ubo.environment);
 
   if (sldata->material_cache) {
     BLI_memblock_destroy(sldata->material_cache, NULL);
@@ -199,6 +252,11 @@ EEVEE_ViewLayerData *EEVEE_view_layer_data_get(void)
   return (EEVEE_ViewLayerData *)DRW_view_layer_engine_data_get(&draw_engine_eevee_type);
 }
 
+static void eevee_view_layer_init(EEVEE_ViewLayerData *sldata)
+{
+  sldata->common_ubo = DRW_uniformbuffer_create(sizeof(sldata->common_data), NULL);
+}
+
 EEVEE_ViewLayerData *EEVEE_view_layer_data_ensure_ex(struct ViewLayer *view_layer)
 {
   EEVEE_ViewLayerData **sldata = (EEVEE_ViewLayerData **)DRW_view_layer_engine_data_ensure_ex(
@@ -206,6 +264,7 @@ EEVEE_ViewLayerData *EEVEE_view_layer_data_ensure_ex(struct ViewLayer *view_laye
 
   if (*sldata == NULL) {
     *sldata = MEM_callocN(sizeof(**sldata), "EEVEE_ViewLayerData");
+    eevee_view_layer_init(*sldata);
   }
 
   return *sldata;
@@ -218,6 +277,7 @@ EEVEE_ViewLayerData *EEVEE_view_layer_data_ensure(void)
 
   if (*sldata == NULL) {
     *sldata = MEM_callocN(sizeof(**sldata), "EEVEE_ViewLayerData");
+    eevee_view_layer_init(*sldata);
   }
 
   return *sldata;
@@ -229,6 +289,8 @@ static void eevee_object_data_init(DrawData *dd)
 {
   EEVEE_ObjectEngineData *eevee_data = (EEVEE_ObjectEngineData *)dd;
   eevee_data->shadow_caster_id = -1;
+  eevee_data->need_update = false;
+  eevee_data->geom_update = false;
 }
 
 EEVEE_ObjectEngineData *EEVEE_object_data_get(Object *ob)

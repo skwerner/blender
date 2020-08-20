@@ -22,10 +22,10 @@
  * \brief transform modes used by different operators.
  */
 
-#ifndef __TRANSFORM_MODE_H__
-#define __TRANSFORM_MODE_H__
+#pragma once
 
 struct AnimData;
+struct bContext;
 struct LinkNode;
 struct TransData;
 struct TransDataContainer;
@@ -40,6 +40,7 @@ typedef struct TransDataGenericSlideVert {
 } TransDataGenericSlideVert;
 
 /* transform_mode.c */
+int transform_mode_really_used(struct bContext *C, int mode);
 bool transdata_check_local_center(TransInfo *t, short around);
 bool transform_mode_is_changeable(const int mode);
 void protectedTransBits(short protectflag, float vec[3]);
@@ -95,7 +96,6 @@ void initSeqSlide(TransInfo *t);
 
 /* transform_mode_edge_slide.c */
 void drawEdgeSlide(TransInfo *t);
-void doEdgeSlide(TransInfo *t, float perc);
 void initEdgeSlide_ex(
     TransInfo *t, bool use_double_side, bool use_even, bool flipped, bool use_clamp);
 void initEdgeSlide(TransInfo *t);
@@ -153,7 +153,5 @@ void initTranslation(TransInfo *t);
 
 /* transform_mode_vert_slide.c */
 void drawVertSlide(TransInfo *t);
-void doVertSlide(TransInfo *t, float perc);
 void initVertSlide_ex(TransInfo *t, bool use_even, bool flipped, bool use_clamp);
 void initVertSlide(TransInfo *t);
-#endif

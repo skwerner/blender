@@ -85,7 +85,7 @@ struct GPUMaterial {
   bool has_surface_output;
 
   /* Only used by Eevee to know which bsdf are used. */
-  int flag;
+  eGPUMatFlag flag;
 
   /* Used by 2.8 pipeline */
   GPUUniformBuffer *ubo; /* UBOs for shader uniforms. */
@@ -311,12 +311,11 @@ static float eval_profile(float r, short falloff_type, float sharpness, float pa
   if (falloff_type == SHD_SUBSURFACE_BURLEY || falloff_type == SHD_SUBSURFACE_RANDOM_WALK) {
     return burley_profile(r, param) / BURLEY_TRUNCATE_CDF;
   }
-  else if (falloff_type == SHD_SUBSURFACE_CUBIC) {
+  if (falloff_type == SHD_SUBSURFACE_CUBIC) {
     return cubic_profile(r, param, sharpness);
   }
-  else {
-    return gaussian_profile(r, param);
-  }
+
+  return gaussian_profile(r, param);
 }
 
 /* Resolution for each sample of the precomputed kernel profile */
@@ -440,7 +439,7 @@ static void compute_sss_translucence_kernel(const GPUSssKernelData *kd,
                                             float **output)
 {
   float(*texels)[4];
-  texels = MEM_callocN(sizeof(float) * 4 * resolution, "compute_sss_translucence_kernel");
+  texels = MEM_callocN(sizeof(float[4]) * resolution, "compute_sss_translucence_kernel");
   *output = (float *)texels;
 
   /* Last texel should be black, hence the - 1. */
@@ -497,8 +496,8 @@ static void compute_sss_translucence_kernel(const GPUSssKernelData *kd,
 
 void GPU_material_sss_profile_create(GPUMaterial *material,
                                      float radii[3],
-                                     short *falloff_type,
-                                     float *sharpness)
+                                     const short *falloff_type,
+                                     const float *sharpness)
 {
   copy_v3_v3(material->sss_radii, radii);
   material->sss_falloff = (falloff_type) ? *falloff_type : 0.0;
@@ -659,7 +658,8 @@ GPUMaterial *GPU_material_from_nodetree(Scene *scene,
                                         const char *geom_code,
                                         const char *frag_lib,
                                         const char *defines,
-                                        const char *name)
+                                        const char *name,
+                                        GPUMaterialEvalCallbackFn callback)
 {
   LinkData *link;
   bool has_volume_output, has_surface_output;
@@ -696,6 +696,9 @@ GPUMaterial *GPU_material_from_nodetree(Scene *scene,
   mat->has_volume_output = has_volume_output;
 
   if (mat->graph.outlink) {
+    if (callback) {
+      callback(mat, options, &vert_code, &geom_code, &frag_lib, &defines);
+    }
     /* HACK: this is only for eevee. We add the define here after the nodetree evaluation. */
     if (GPU_material_flag_get(mat, GPU_MATFLAG_SSS)) {
       defines = BLI_string_joinN(defines,

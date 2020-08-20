@@ -14,15 +14,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#include "FN_cpp_types.hh"
+#include "FN_cpp_type.hh"
 
 #include "BLI_color.hh"
 #include "BLI_float2.hh"
 #include "BLI_float3.hh"
 #include "BLI_float4x4.hh"
 
-namespace blender {
-namespace fn {
+namespace blender::fn {
 
 MAKE_CPP_TYPE(bool, bool)
 
@@ -39,5 +38,4 @@ MAKE_CPP_TYPE(Color4b, blender::Color4b)
 
 MAKE_CPP_TYPE(string, std::string)
 
-}  // namespace fn
-}  // namespace blender
+}  // namespace blender::fn

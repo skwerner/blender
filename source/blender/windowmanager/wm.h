@@ -21,14 +21,17 @@
  * \ingroup wm
  */
 
-#ifndef __WM_H__
-#define __WM_H__
+#pragma once
 
 struct ARegion;
 struct ReportList;
 struct wmWindow;
 
 #include "gizmo/wm_gizmo_wmapi.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct wmPaintCursor {
   struct wmPaintCursor *next, *prev;
@@ -97,4 +100,6 @@ void wm_stereo3d_set_cancel(bContext *C, wmOperator *op);
 void wm_open_init_load_ui(wmOperator *op, bool use_prefs);
 void wm_open_init_use_scripts(wmOperator *op, bool use_prefs);
 
+#ifdef __cplusplus
+}
 #endif

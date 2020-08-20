@@ -89,6 +89,7 @@
 #include "GPU_init_exit.h"
 #include "GPU_platform.h"
 #include "GPU_state.h"
+#include "GPU_texture.h"
 
 #include "UI_resources.h"
 
@@ -354,10 +355,8 @@ wmWindow *wm_window_copy_test(bContext *C,
     WM_event_add_notifier_ex(wm, CTX_wm_window(C), NC_WINDOW | NA_ADDED, NULL);
     return win_dst;
   }
-  else {
-    wm_window_close(C, wm, win_dst);
-    return NULL;
-  }
+  wm_window_close(C, wm, win_dst);
+  return NULL;
 }
 
 /** \} */
@@ -616,8 +615,7 @@ static void wm_window_ghostwindow_add(wmWindowManager *wm,
   if (ghostwin) {
     GHOST_RectangleHandle bounds;
 
-    GLuint default_fb = GHOST_GetDefaultOpenGLFramebuffer(ghostwin);
-    win->gpuctx = GPU_context_create(default_fb);
+    win->gpuctx = GPU_context_create(ghostwin);
 
     /* needed so we can detect the graphics card below */
     GPU_init();
@@ -648,10 +646,10 @@ static void wm_window_ghostwindow_add(wmWindowManager *wm,
     }
 #endif
     /* until screens get drawn, make it nice gray */
-    glClearColor(0.55, 0.55, 0.55, 0.0);
+    GPU_clear_color(0.55, 0.55, 0.55, 1.0f);
     /* Crash on OSS ATI: bugs.launchpad.net/ubuntu/+source/mesa/+bug/656100 */
     if (!GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_UNIX, GPU_DRIVER_OPENSOURCE)) {
-      glClear(GL_COLOR_BUFFER_BIT);
+      GPU_clear(GPU_COLOR_BIT);
     }
 
     /* needed here, because it's used before it reads userdef */
@@ -660,9 +658,6 @@ static void wm_window_ghostwindow_add(wmWindowManager *wm,
     wm_window_swap_buffers(win);
 
     // GHOST_SetWindowState(ghostwin, GHOST_kWindowStateModified);
-
-    /* standard state vars for window */
-    GPU_state_init();
   }
   else {
     wm_window_set_drawable(wm, prev_windrawable, false);
@@ -812,9 +807,7 @@ static bool wm_window_update_size_position(wmWindow *win)
     win->posy = posy;
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 /**
@@ -839,11 +832,10 @@ wmWindow *WM_window_open(bContext *C, const rcti *rect)
   if (win->ghostwin) {
     return win;
   }
-  else {
-    wm_window_close(C, wm, win);
-    CTX_wm_window_set(C, win_prev);
-    return NULL;
-  }
+
+  wm_window_close(C, wm, win);
+  CTX_wm_window_set(C, win_prev);
+  return NULL;
 }
 
 /**
@@ -968,13 +960,12 @@ wmWindow *WM_window_open_temp(bContext *C,
     GHOST_SetTitle(win->ghostwin, title);
     return win;
   }
-  else {
-    /* very unlikely! but opening a new window can fail */
-    wm_window_close(C, wm, win);
-    CTX_wm_window_set(C, win_prev);
 
-    return NULL;
-  }
+  /* very unlikely! but opening a new window can fail */
+  wm_window_close(C, wm, win);
+  CTX_wm_window_set(C, win_prev);
+
+  return NULL;
 }
 
 /* ****************** Operators ****************** */
@@ -1118,8 +1109,6 @@ static void wm_window_set_drawable(wmWindowManager *wm, wmWindow *win, bool acti
 void wm_window_clear_drawable(wmWindowManager *wm)
 {
   if (wm->windrawable) {
-    BLF_batch_reset();
-    gpu_batch_presets_reset();
     immDeactivate();
     wm->windrawable = NULL;
   }
@@ -1205,7 +1194,7 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr C_void_ptr
     /* Ghost now can call this function for life resizes,
      * but it should return if WM didn't initialize yet.
      * Can happen on file read (especially full size window). */
-    if ((wm->initialized & WM_WINDOW_IS_INITIALIZED) == 0) {
+    if ((wm->initialized & WM_WINDOW_IS_INIT) == 0) {
       return 1;
     }
     if (!ghostwin) {
@@ -1214,15 +1203,13 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr C_void_ptr
       puts("<!> event has no window");
       return 1;
     }
-    else if (!GHOST_ValidWindow(g_system, ghostwin)) {
+    if (!GHOST_ValidWindow(g_system, ghostwin)) {
       /* XXX - should be checked, why are we getting an event here, and */
       /* what is it? */
       puts("<!> event has invalid window");
       return 1;
     }
-    else {
-      win = GHOST_GetWindowUserData(ghostwin);
-    }
+    win = GHOST_GetWindowUserData(ghostwin);
 
     switch (type) {
       case GHOST_kEventWindowDeactivate:
@@ -2054,9 +2041,7 @@ void WM_window_pixel_sample_read(const wmWindowManager *wm,
     GPU_context_active_set(win->gpuctx);
   }
 
-  glReadBuffer(GL_FRONT);
-  glReadPixels(pos[0], pos[1], 1, 1, GL_RGB, GL_FLOAT, r_col);
-  glReadBuffer(GL_BACK);
+  GPU_frontbuffer_read_pixels(pos[0], pos[1], 1, 1, 3, GPU_DATA_FLOAT, r_col);
 
   if (setup_context) {
     if (wm->windrawable) {
@@ -2089,10 +2074,7 @@ uint *WM_window_pixels_read(wmWindowManager *wm, wmWindow *win, int r_size[2])
   const uint rect_len = r_size[0] * r_size[1];
   uint *rect = MEM_mallocN(sizeof(*rect) * rect_len, __func__);
 
-  glReadBuffer(GL_FRONT);
-  glReadPixels(0, 0, r_size[0], r_size[1], GL_RGBA, GL_UNSIGNED_BYTE, rect);
-  glFinish();
-  glReadBuffer(GL_BACK);
+  GPU_frontbuffer_read_pixels(0, 0, r_size[0], r_size[1], 4, GPU_DATA_UNSIGNED_BYTE, rect);
 
   if (setup_context) {
     if (wm->windrawable) {

@@ -130,7 +130,7 @@ typedef struct bUnitCollection {
 /* Keep table lignment. */
 /* clang-format off */
 
-#define UNIT_COLLECTION_LENGTH(def) (sizeof(def) / sizeof(bUnitDef) - 1)
+#define UNIT_COLLECTION_LENGTH(def) (ARRAY_SIZE(def) - 1)
 #define NULL_UNIT {NULL, NULL, NULL, NULL, NULL, NULL, 0.0, 0.0}
 
 /* Dummy */
@@ -757,7 +757,6 @@ static char *find_next_op(const char *str, char *remaining_str, int len_max)
     if (ch_is_op(remaining_str[i])) {
       if (scientific_notation) {
         scientific_notation = false;
-        continue;
       }
 
       /* Make sure we don't look backwards before the start of the string. */
@@ -970,9 +969,8 @@ double bUnit_PreferredInputUnitScalar(const struct UnitSettings *settings, int t
   if (unit) {
     return unit->scalar;
   }
-  else {
-    return bUnit_BaseScalar(units.system, type);
-  }
+
+  return bUnit_BaseScalar(units.system, type);
 }
 
 /* make a copy of the string that replaces the units with numbers
@@ -1005,7 +1003,6 @@ bool bUnit_ReplaceString(
 
   /* Fix cases like "-1m50cm" which would evaluate to -0.5m without this. */
   changed |= unit_distribute_negatives(str, len_max);
-  printf("%s\n", str);
 
   /* Try to find a default unit from current or previous string. */
   default_unit = unit_detect_from_str(usys, str, str_prev);
@@ -1156,9 +1153,8 @@ double bUnit_BaseScalar(int system, int type)
   if (usys) {
     return unit_default(usys)->scalar;
   }
-  else {
-    return 1.0;
-  }
+
+  return 1.0;
 }
 
 /* external access */

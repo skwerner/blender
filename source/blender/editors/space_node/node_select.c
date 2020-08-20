@@ -1097,9 +1097,7 @@ static int node_select_same_type_step_exec(bContext *C, wmOperator *op)
         if (node->type == active->type) {
           break;
         }
-        else {
-          node = NULL;
-        }
+        node = NULL;
       }
       if (node) {
         active = node;
@@ -1184,7 +1182,7 @@ static void node_find_update_fn(const struct bContext *C,
       else {
         BLI_strncpy(name, node->name, 256);
       }
-      if (!UI_search_item_add(items, name, node, ICON_NONE, 0)) {
+      if (!UI_search_item_add(items, name, node, ICON_NONE, 0, 0)) {
         break;
       }
     }

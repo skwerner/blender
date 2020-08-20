@@ -131,7 +131,7 @@ static void basic_cache_init(void *vedata)
     stl->g_data = MEM_callocN(sizeof(*stl->g_data), __func__);
   }
 
-  /* Twice for normal and infront objects. */
+  /* Twice for normal and in front objects. */
   for (int i = 0; i < 2; i++) {
     DRWState clip_state = (draw_ctx->sh_cfg == GPU_SHADER_CFG_CLIPPED) ? DRW_STATE_CLIP_PLANES : 0;
     DRWState infront_state = (DRW_state_is_select() && (i == 1)) ? DRW_STATE_IN_FRONT_SELECT : 0;
@@ -165,7 +165,7 @@ static void basic_cache_populate(void *vedata, Object *ob)
     return;
   }
 
-  bool do_in_front = (ob->dtx & OB_DRAWXRAY) != 0;
+  bool do_in_front = (ob->dtx & OB_DRAW_IN_FRONT) != 0;
 
   const DRWContextState *draw_ctx = DRW_context_state_get();
   if (ob != draw_ctx->object_edit) {

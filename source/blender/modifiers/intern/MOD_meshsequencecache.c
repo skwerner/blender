@@ -33,6 +33,8 @@
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
 
+#include "MEM_guardedalloc.h"
+
 #include "BKE_cachefile.h"
 #include "BKE_context.h"
 #include "BKE_lib_query.h"
@@ -43,6 +45,8 @@
 #include "UI_resources.h"
 
 #include "RNA_access.h"
+
+#include "BLO_read_write.h"
 
 #include "DEG_depsgraph_build.h"
 #include "DEG_depsgraph_query.h"
@@ -63,6 +67,9 @@ static void initData(ModifierData *md)
   mcmd->cache_file = NULL;
   mcmd->object_path[0] = '\0';
   mcmd->read_flag = MOD_MESHSEQ_READ_ALL;
+  mcmd->velocity_scale = 1.0f;
+  mcmd->vertex_velocities = NULL;
+  mcmd->num_vertices = 0;
 
   mcmd->reader = NULL;
   mcmd->reader_object_path[0] = '\0';
@@ -88,6 +95,10 @@ static void freeData(ModifierData *md)
   if (mcmd->reader) {
     mcmd->reader_object_path[0] = '\0';
     BKE_cachefile_reader_free(mcmd->cache_file, &mcmd->reader);
+  }
+
+  if (mcmd->vertex_velocities) {
+    MEM_freeN(mcmd->vertex_velocities);
   }
 }
 
@@ -152,6 +163,17 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
 
   Mesh *result = ABC_read_mesh(mcmd->reader, ctx->object, mesh, time, &err_str, mcmd->read_flag);
 
+  mcmd->velocity_delta = 1.0f;
+  if (mcmd->cache_file->velocity_unit == CACHEFILE_VELOCITY_UNIT_SECOND) {
+    mcmd->velocity_delta /= FPS;
+  }
+
+  mcmd->last_lookup_time = time;
+
+  if (result != NULL) {
+    mcmd->num_vertices = result->totvert;
+  }
+
   if (err_str) {
     BKE_modifier_set_error(md, "%s", err_str);
   }
@@ -198,7 +220,6 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
 
 static void panel_draw(const bContext *C, Panel *panel)
 {
-  uiLayout *box;
   uiLayout *layout = panel->layout;
 
   PointerRNA ptr;
@@ -208,10 +229,9 @@ static void panel_draw(const bContext *C, Panel *panel)
   PointerRNA cache_file_ptr = RNA_pointer_get(&ptr, "cache_file");
   bool has_cache_file = !RNA_pointer_is_null(&cache_file_ptr);
 
-  box = uiLayoutBox(layout);
-  uiTemplateCacheFile(box, C, &ptr, "cache_file");
-
   uiLayoutSetPropSep(layout, true);
+
+  uiTemplateCacheFile(layout, C, &ptr, "cache_file");
 
   if (has_cache_file) {
     uiItemPointerR(layout, &ptr, "object_path", &cache_file_ptr, "object_paths", NULL, ICON_NONE);
@@ -221,12 +241,21 @@ static void panel_draw(const bContext *C, Panel *panel)
     uiItemR(layout, &ptr, "read_data", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
   }
 
+  uiItemR(layout, &ptr, "velocity_scale", 0, NULL, ICON_NONE);
+
   modifier_panel_end(layout, &ptr);
 }
 
 static void panelRegister(ARegionType *region_type)
 {
   modifier_panel_register(region_type, eModifierType_MeshSequenceCache, panel_draw);
+}
+
+static void blendRead(BlendDataReader *UNUSED(reader), ModifierData *md)
+{
+  MeshSeqCacheModifierData *msmcd = (MeshSeqCacheModifierData *)md;
+  msmcd->reader = NULL;
+  msmcd->reader_object_path[0] = '\0';
 }
 
 ModifierTypeInfo modifierType_MeshSequenceCache = {
@@ -260,5 +289,5 @@ ModifierTypeInfo modifierType_MeshSequenceCache = {
     /* freeRuntimeData */ NULL,
     /* panelRegister */ panelRegister,
     /* blendWrite */ NULL,
-    /* blendRead */ NULL,
+    /* blendRead */ blendRead,
 };

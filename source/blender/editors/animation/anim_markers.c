@@ -110,9 +110,7 @@ ListBase *ED_animcontext_get_markers(const bAnimContext *ac)
   if (ac) {
     return context_get_markers(ac->scene, ac->area);
   }
-  else {
-    return NULL;
-  }
+  return NULL;
 }
 
 /* --------------------------------- */
@@ -307,7 +305,7 @@ static void add_marker_to_cfra_elem(ListBase *lb, TimeMarker *marker, short only
       }
       return;
     }
-    else if (ce->cfra > marker->frame) {
+    if (ce->cfra > marker->frame) {
       break;
     }
   }
@@ -487,13 +485,11 @@ static int marker_get_icon_id(TimeMarker *marker, int flag)
                                      (marker->flag & SELECT) ? ICON_PMARKER_SEL : ICON_PMARKER;
   }
 #ifdef DURIAN_CAMERA_SWITCH
-  else if (marker->camera) {
+  if (marker->camera) {
     return (marker->flag & SELECT) ? ICON_OUTLINER_OB_CAMERA : ICON_CAMERA_DATA;
   }
 #endif
-  else {
-    return (marker->flag & SELECT) ? ICON_MARKER_HLT : ICON_MARKER;
-  }
+  return (marker->flag & SELECT) ? ICON_MARKER_HLT : ICON_MARKER;
 }
 
 static void draw_marker(
@@ -503,16 +499,14 @@ static void draw_marker(
 
   marker_color_get(marker, text_color, line_color);
 
-  GPU_blend(true);
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   draw_marker_line(line_color, xpos, UI_DPI_FAC * 20, region_height);
 
   int icon_id = marker_get_icon_id(marker, flag);
   UI_icon_draw(xpos - 0.55f * UI_DPI_ICON_SIZE, UI_DPI_FAC * 18, icon_id);
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 
   float name_y = UI_DPI_FAC * 18;
   /* Give an offset to the marker name when selected,
@@ -533,18 +527,16 @@ static void draw_markers_background(rctf *rect)
 
   immUniformColor4ubv(shade);
 
-  GPU_blend(true);
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   immRectf(pos, rect->xmin, rect->ymin, rect->xmax, rect->ymax);
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 
   immUnbindProgram();
 }
 
-static bool marker_is_in_frame_range(TimeMarker *marker, int frame_range[2])
+static bool marker_is_in_frame_range(TimeMarker *marker, const int frame_range[2])
 {
   if (marker->frame < frame_range[0]) {
     return false;
@@ -1508,9 +1500,8 @@ static int ed_marker_rename_exec(bContext *C, wmOperator *op)
 
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+
+  return OPERATOR_CANCELLED;
 }
 
 static int ed_marker_rename_invoke(bContext *C, wmOperator *op, const wmEvent *event)

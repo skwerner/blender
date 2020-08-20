@@ -115,7 +115,9 @@ static void autokeyframe_pose(
   ToolSettings *ts = scene->toolsettings;
   KeyingSet *active_ks = ANIM_scene_get_active_keyingset(scene);
   ListBase nla_cache = {NULL, NULL};
-  float cfra = (float)CFRA;
+  Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
+  const AnimationEvalContext anim_eval_context = BKE_animsys_eval_context_construct(depsgraph,
+                                                                                    (float)CFRA);
   eInsertKeyFlags flag = 0;
 
   /* flag is initialized from UserPref keyframing settings
@@ -146,7 +148,8 @@ static void autokeyframe_pose(
     /* only insert into active keyingset? */
     if (IS_AUTOKEY_FLAG(scene, ONLYKEYINGSET) && (active_ks)) {
       /* run the active Keying Set on the current datasource */
-      ANIM_apply_keyingset(C, &dsources, NULL, active_ks, MODIFYKEY_MODE_INSERT, cfra);
+      ANIM_apply_keyingset(
+          C, &dsources, NULL, active_ks, MODIFYKEY_MODE_INSERT, anim_eval_context.eval_time);
     }
     /* only insert into available channels? */
     else if (IS_AUTOKEY_FLAG(scene, INSERTAVAIL)) {
@@ -169,7 +172,7 @@ static void autokeyframe_pose(
                             ((fcu->grp) ? (fcu->grp->name) : (NULL)),
                             fcu->rna_path,
                             fcu->array_index,
-                            cfra,
+                            &anim_eval_context,
                             ts->keyframe_type,
                             &nla_cache,
                             flag);
@@ -220,21 +223,25 @@ static void autokeyframe_pose(
 
       if (do_loc) {
         KeyingSet *ks = ANIM_builtin_keyingset_get_named(NULL, ANIM_KS_LOCATION_ID);
-        ANIM_apply_keyingset(C, &dsources, NULL, ks, MODIFYKEY_MODE_INSERT, cfra);
+        ANIM_apply_keyingset(
+            C, &dsources, NULL, ks, MODIFYKEY_MODE_INSERT, anim_eval_context.eval_time);
       }
       if (do_rot) {
         KeyingSet *ks = ANIM_builtin_keyingset_get_named(NULL, ANIM_KS_ROTATION_ID);
-        ANIM_apply_keyingset(C, &dsources, NULL, ks, MODIFYKEY_MODE_INSERT, cfra);
+        ANIM_apply_keyingset(
+            C, &dsources, NULL, ks, MODIFYKEY_MODE_INSERT, anim_eval_context.eval_time);
       }
       if (do_scale) {
         KeyingSet *ks = ANIM_builtin_keyingset_get_named(NULL, ANIM_KS_SCALING_ID);
-        ANIM_apply_keyingset(C, &dsources, NULL, ks, MODIFYKEY_MODE_INSERT, cfra);
+        ANIM_apply_keyingset(
+            C, &dsources, NULL, ks, MODIFYKEY_MODE_INSERT, anim_eval_context.eval_time);
       }
     }
     /* insert keyframe in all (transform) channels */
     else {
       KeyingSet *ks = ANIM_builtin_keyingset_get_named(NULL, ANIM_KS_LOC_ROT_SCALE_ID);
-      ANIM_apply_keyingset(C, &dsources, NULL, ks, MODIFYKEY_MODE_INSERT, cfra);
+      ANIM_apply_keyingset(
+          C, &dsources, NULL, ks, MODIFYKEY_MODE_INSERT, anim_eval_context.eval_time);
     }
 
     /* free temp info */
@@ -553,8 +560,7 @@ static void pose_mirror_info_init(PoseInitData_Mirror *pid,
 /** \name Convert Armature
  * \{ */
 
-static void add_pose_transdata(
-    TransInfo *t, bPoseChannel *pchan, Object *ob, TransDataContainer *tc, TransData *td)
+static void add_pose_transdata(TransInfo *t, bPoseChannel *pchan, Object *ob, TransData *td)
 {
   Bone *bone = pchan->bone;
   float pmat[3][3], omat[3][3];
@@ -667,20 +673,16 @@ static void add_pose_transdata(
   mul_m3_m3m3(td->axismtx, omat, pmat);
   normalize_m3(td->axismtx);
 
-  if (ELEM(t->mode, TFM_BONESIZE, TFM_BONE_ENVELOPE_DIST)) {
-    bArmature *arm = tc->poseobj->data;
-
-    if ((t->mode == TFM_BONE_ENVELOPE_DIST) || (arm->drawtype == ARM_ENVELOPE)) {
-      td->loc = NULL;
-      td->val = &bone->dist;
-      td->ival = bone->dist;
-    }
-    else {
-      // abusive storage of scale in the loc pointer :)
-      td->loc = &bone->xwidth;
-      copy_v3_v3(td->iloc, td->loc);
-      td->val = NULL;
-    }
+  if (t->mode == TFM_BONE_ENVELOPE_DIST) {
+    td->loc = NULL;
+    td->val = &bone->dist;
+    td->ival = bone->dist;
+  }
+  else if (t->mode == TFM_BONESIZE) {
+    // abusive storage of scale in the loc pointer :)
+    td->loc = &bone->xwidth;
+    copy_v3_v3(td->iloc, td->loc);
+    td->val = NULL;
   }
 
   /* in this case we can do target-less IK grabbing */
@@ -836,7 +838,7 @@ void createTransPose(TransInfo *t)
     td = tc->data;
     LISTBASE_FOREACH (bPoseChannel *, pchan, &ob->pose->chanbase) {
       if (pchan->bone->flag & BONE_TRANSFORM) {
-        add_pose_transdata(t, pchan, ob, tc, td);
+        add_pose_transdata(t, pchan, ob, td);
         td++;
       }
     }
@@ -862,8 +864,6 @@ void createTransPose(TransInfo *t)
   }
 
   t->flag |= T_POSE;
-  /* disable PET, its not usable in pose mode yet [#32444] */
-  t->flag &= ~T_PROP_EDIT_ALL;
 }
 
 void createTransArmatureVerts(TransInfo *t)
@@ -988,7 +988,7 @@ void createTransArmatureVerts(TransInfo *t)
         }
         else if (ELEM(t->mode, TFM_BONESIZE, TFM_BONE_ENVELOPE_DIST)) {
           if (ebo->flag & BONE_SELECTED) {
-            if ((t->mode == TFM_BONE_ENVELOPE_DIST) || (arm->drawtype == ARM_ENVELOPE)) {
+            if (t->mode == TFM_BONE_ENVELOPE_DIST) {
               td->loc = NULL;
               td->val = &ebo->dist;
               td->ival = ebo->dist;

@@ -190,16 +190,49 @@ enum_aov_types = (
     ('COLOR', "Color", "Write a Color pass", 1),
 )
 
-enum_viewport_denoising = (
-    ('NONE', "None", "Disable viewport denoising", 0),
-    ('OPTIX', "OptiX AI-Accelerated", "Use the OptiX denoiser running on the GPU (requires at least one compatible OptiX device)", 1),
-)
 
-enum_denoising_optix_input_passes = (
+def enum_openimagedenoise_denoiser(self, context):
+    if _cycles.with_openimagedenoise:
+        return [('OPENIMAGEDENOISE', "OpenImageDenoise", "Use Intel OpenImageDenoise AI denoiser running on the CPU", 4)]
+    return []
+
+def enum_optix_denoiser(self, context):
+    if not context or bool(context.preferences.addons[__package__].preferences.get_devices_for_type('OPTIX')):
+        return [('OPTIX', "OptiX", "Use the OptiX AI denoiser with GPU acceleration, only available on NVIDIA GPUs", 2)]
+    return []
+
+def enum_preview_denoiser(self, context):
+    optix_items = enum_optix_denoiser(self, context)
+    oidn_items = enum_openimagedenoise_denoiser(self, context)
+
+    if len(optix_items) or len(oidn_items):
+        items = [('AUTO', "Automatic", "Use the fastest available denoiser for viewport rendering (OptiX if available, OpenImageDenoise otherwise)", 0)]
+    else:
+        items = [('AUTO', "None", "Blender was compiled without a viewport denoiser", 0)]
+
+    items += optix_items
+    items += oidn_items
+    return items
+
+def enum_denoiser(self, context):
+    items = [('NLM', "NLM", "Cycles native non-local means denoiser, running on any compute device", 1)]
+    items += enum_optix_denoiser(self, context)
+    items += enum_openimagedenoise_denoiser(self, context)
+    return items
+
+enum_denoising_input_passes = (
     ('RGB', "Color", "Use only color as input", 1),
     ('RGB_ALBEDO', "Color + Albedo", "Use color and albedo data as input", 2),
     ('RGB_ALBEDO_NORMAL', "Color + Albedo + Normal", "Use color, albedo and normal data as input", 3),
 )
+
+
+def update_render_passes(self, context):
+    scene = context.scene
+    view_layer = context.view_layer
+    view_layer.update_render_passes()
+    engine.detect_conflicting_passes(scene, view_layer)
+
 
 class CyclesRenderSettings(bpy.types.PropertyGroup):
 
@@ -232,11 +265,32 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         description="Pause all viewport preview renders",
         default=False,
     )
-    preview_denoising: EnumProperty(
-        name="Viewport Denoising",
-        description="Denoise the image after each preview update with the selected denoiser engine",
-        items=enum_viewport_denoising,
-        default='NONE',
+
+    use_denoising: BoolProperty(
+        name="Use Denoising",
+        description="Denoise the rendered image",
+        default=False,
+    )
+    use_preview_denoising: BoolProperty(
+        name="Use Viewport Denoising",
+        description="Denoise the image in the 3D viewport",
+        default=False,
+    )
+
+    denoiser: EnumProperty(
+        name="Denoiser",
+        description="Denoise the image with the selected denoiser. "
+        "For denoising the image after rendering, denoising data render passes "
+        "also adapt to the selected denoiser",
+        items=enum_denoiser,
+        default=1,
+        update=update_render_passes,
+    )
+    preview_denoiser: EnumProperty(
+        name="Viewport Denoiser",
+        description="Denoise the image after each preview update with the selected denoiser",
+        items=enum_preview_denoiser,
+        default=0,
     )
 
     use_square_samples: BoolProperty(
@@ -252,7 +306,7 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         default=128,
     )
     preview_samples: IntProperty(
-        name="Preview Samples",
+        name="Viewport Samples",
         description="Number of samples to render in the viewport, unlimited if 0",
         min=0, max=(1 << 24),
         default=32,
@@ -486,7 +540,7 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         subtype='PIXEL'
     )
     preview_dicing_rate: FloatProperty(
-        name="Preview Dicing Rate",
+        name="Viewport Dicing Rate",
         description="Size of a micropolygon in pixels during preview render",
         min=0.1, max=1000.0, soft_min=0.5,
         default=8.0,
@@ -799,6 +853,7 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
     debug_use_cuda_split_kernel: BoolProperty(name="Split Kernel", default=False)
 
     debug_optix_cuda_streams: IntProperty(name="CUDA Streams", default=1, min=1)
+    debug_optix_curves_api: BoolProperty(name="Native OptiX Curve Primitive", default=False)
 
     debug_opencl_kernel_type: EnumProperty(
         name="OpenCL Kernel Type",
@@ -1272,12 +1327,6 @@ class CyclesCurveRenderSettings(bpy.types.PropertyGroup):
         del bpy.types.Scene.cycles_curves
 
 
-def update_render_passes(self, context):
-    view_layer = context.view_layer
-    view_layer.update_render_passes()
-    engine.detect_conflicting_passes(view_layer)
-
-
 class CyclesAOVPass(bpy.types.PropertyGroup):
     name: StringProperty(
         name="Name",
@@ -1352,7 +1401,7 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
     use_denoising: BoolProperty(
         name="Use Denoising",
         description="Denoise the rendered image",
-        default=False,
+        default=True,
         update=update_render_passes,
     )
     denoising_diffuse_direct: BoolProperty(
@@ -1411,7 +1460,7 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
     )
     denoising_store_passes: BoolProperty(
         name="Store Denoising Passes",
-        description="Store the denoising feature passes and the noisy image",
+        description="Store the denoising feature passes and the noisy image. The passes adapt to the denoiser selected for rendering",
         default=False,
         update=update_render_passes,
     )
@@ -1422,17 +1471,18 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
         default=0,
     )
 
-    use_optix_denoising: BoolProperty(
-        name="OptiX AI-Accelerated",
-        description="Use the OptiX denoiser to denoise the rendered image",
-        default=False,
-        update=update_render_passes,
-    )
     denoising_optix_input_passes: EnumProperty(
         name="Input Passes",
-        description="Passes handed over to the OptiX denoiser (this can have different effects on the denoised image)",
-        items=enum_denoising_optix_input_passes,
+        description="Passes used by the denoiser to distinguish noise from shader and geometry detail",
+        items=enum_denoising_input_passes,
         default='RGB_ALBEDO',
+    )
+
+    denoising_openimagedenoise_input_passes: EnumProperty(
+        name="Input Passes",
+        description="Passes used by the denoiser to distinguish noise from shader and geometry detail",
+        items=enum_denoising_input_passes,
+        default='RGB_ALBEDO_NORMAL',
     )
 
     use_pass_crypto_object: BoolProperty(

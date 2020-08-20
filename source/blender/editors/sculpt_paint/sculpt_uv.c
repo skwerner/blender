@@ -228,8 +228,6 @@ static void HC_relaxation_iteration_uv(BMEditMesh *em,
   }
 
   MEM_freeN(tmp_uvdata);
-
-  return;
 }
 
 static void laplacian_relaxation_iteration_uv(BMEditMesh *em,
@@ -302,8 +300,6 @@ static void laplacian_relaxation_iteration_uv(BMEditMesh *em,
   }
 
   MEM_freeN(tmp_uvdata);
-
-  return;
 }
 
 static void uv_sculpt_stroke_apply(bContext *C,
@@ -492,7 +488,7 @@ static UvSculptData *uv_sculpt_stroke_init(bContext *C, wmOperator *op, const wm
 
   op->customdata = data;
 
-  BKE_curvemapping_initialize(ts->uvsculpt->paint.brush->curve);
+  BKE_curvemapping_init(ts->uvsculpt->paint.brush->curve);
 
   if (data) {
     int counter = 0, i;

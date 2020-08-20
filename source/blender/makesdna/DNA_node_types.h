@@ -21,8 +21,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_NODE_TYPES_H__
-#define __DNA_NODE_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_listBase.h"
@@ -845,14 +844,15 @@ typedef struct NodeTexSky {
   float turbidity;
   float ground_albedo;
   float sun_size;
+  float sun_intensity;
   float sun_elevation;
   float sun_rotation;
-  int altitude;
+  float altitude;
   float air_density;
   float dust_density;
   float ozone_density;
   char sun_disc;
-  char _pad[3];
+  char _pad[7];
 } NodeTexSky;
 
 typedef struct NodeTexImage {
@@ -1438,5 +1438,3 @@ typedef enum NodeSimInputTimeType {
   NODE_SIM_INPUT_SIMULATION_TIME = 0,
   NODE_SIM_INPUT_SCENE_TIME = 1,
 } NodeSimInputTimeType;
-
-#endif

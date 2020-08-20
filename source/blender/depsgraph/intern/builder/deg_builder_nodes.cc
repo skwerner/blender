@@ -119,7 +119,8 @@
 #include "intern/node/deg_node_id.h"
 #include "intern/node/deg_node_operation.h"
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 /* ************ */
 /* Node Builder */
@@ -594,7 +595,7 @@ void DepsgraphNodeBuilder::build_object(int base_index,
   }
   id_node->has_base |= (base_index != -1);
   /* Various flags, flushing from bases/collections. */
-  build_object_flags(base_index, object, linked_state);
+  build_object_from_layer(base_index, object, linked_state);
   /* Transform. */
   build_object_transform(object);
   /* Parent. */
@@ -660,6 +661,21 @@ void DepsgraphNodeBuilder::build_object(int base_index,
                      NodeType::SYNCHRONIZATION,
                      OperationCode::SYNCHRONIZE_TO_ORIGINAL,
                      function_bind(BKE_object_sync_to_original, _1, object_cow));
+}
+
+void DepsgraphNodeBuilder::build_object_from_layer(int base_index,
+                                                   Object *object,
+                                                   eDepsNode_LinkedState_Type linked_state)
+{
+
+  OperationNode *entry_node = add_operation_node(
+      &object->id, NodeType::OBJECT_FROM_LAYER, OperationCode::OBJECT_FROM_LAYER_ENTRY);
+  entry_node->set_as_entry();
+  OperationNode *exit_node = add_operation_node(
+      &object->id, NodeType::OBJECT_FROM_LAYER, OperationCode::OBJECT_FROM_LAYER_EXIT);
+  exit_node->set_as_exit();
+
+  build_object_flags(base_index, object, linked_state);
 }
 
 void DepsgraphNodeBuilder::build_object_flags(int base_index,
@@ -733,7 +749,7 @@ void DepsgraphNodeBuilder::build_object_data(Object *object, bool is_object_visi
       break;
     case OB_ARMATURE:
       if (ID_IS_LINKED(object) && object->proxy_from != nullptr) {
-        build_proxy_rig(object);
+        build_proxy_rig(object, is_object_visible);
       }
       else {
         build_rig(object, is_object_visible);
@@ -1110,6 +1126,12 @@ void DepsgraphNodeBuilder::build_rigidbody(Scene *scene)
       if (object->type != OB_MESH) {
         continue;
       }
+      if (object->rigidbody_object == nullptr) {
+        continue;
+      }
+      if (object->rigidbody_object->type == RBO_TYPE_PASSIVE) {
+        continue;
+      }
       /* Create operation for flushing results. */
       /* Object's transform component - where the rigidbody operation
        * lives. */
@@ -1450,6 +1472,18 @@ void DepsgraphNodeBuilder::build_light(Light *lamp)
                      function_bind(BKE_light_eval, _1, lamp_cow));
 }
 
+void DepsgraphNodeBuilder::build_nodetree_socket(bNodeSocket *socket)
+{
+  build_idproperties(socket->prop);
+
+  if (socket->type == SOCK_OBJECT) {
+    build_id((ID *)((bNodeSocketValueObject *)socket->default_value)->value);
+  }
+  else if (socket->type == SOCK_IMAGE) {
+    build_id((ID *)((bNodeSocketValueImage *)socket->default_value)->value);
+  }
+}
+
 void DepsgraphNodeBuilder::build_nodetree(bNodeTree *ntree)
 {
   if (ntree == nullptr) {
@@ -1478,10 +1512,10 @@ void DepsgraphNodeBuilder::build_nodetree(bNodeTree *ntree)
   LISTBASE_FOREACH (bNode *, bnode, &ntree->nodes) {
     build_idproperties(bnode->prop);
     LISTBASE_FOREACH (bNodeSocket *, socket, &bnode->inputs) {
-      build_idproperties(socket->prop);
+      build_nodetree_socket(socket);
     }
     LISTBASE_FOREACH (bNodeSocket *, socket, &bnode->outputs) {
-      build_idproperties(socket->prop);
+      build_nodetree_socket(socket);
     }
 
     ID *id = bnode->id;
@@ -1764,8 +1798,10 @@ void DepsgraphNodeBuilder::build_simulation(Simulation *simulation)
     return;
   }
   add_id_node(&simulation->id);
+  build_idproperties(simulation->id.properties);
   build_animdata(&simulation->id);
   build_parameters(&simulation->id);
+  build_nodetree(simulation->nodetree);
 
   Simulation *simulation_cow = get_cow_datablock(simulation);
   Scene *scene_cow = get_cow_datablock(scene_);
@@ -1779,6 +1815,9 @@ void DepsgraphNodeBuilder::build_simulation(Simulation *simulation)
 void DepsgraphNodeBuilder::build_scene_sequencer(Scene *scene)
 {
   if (scene->ed == nullptr) {
+    return;
+  }
+  if (built_map_.checkIsBuiltAndTag(scene, BuilderMap::TAG_SCENE_SEQUENCER)) {
     return;
   }
   build_scene_audio(scene);
@@ -1814,6 +1853,10 @@ void DepsgraphNodeBuilder::build_scene_audio(Scene *scene)
   if (built_map_.checkIsBuiltAndTag(scene, BuilderMap::TAG_SCENE_AUDIO)) {
     return;
   }
+
+  OperationNode *audio_entry_node = add_operation_node(
+      &scene->id, NodeType::AUDIO, OperationCode::AUDIO_ENTRY);
+  audio_entry_node->set_as_entry();
 
   add_operation_node(&scene->id, NodeType::AUDIO, OperationCode::SOUND_EVAL);
 
@@ -1884,4 +1927,5 @@ void DepsgraphNodeBuilder::constraint_walk(bConstraint * /*con*/,
   }
 }
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

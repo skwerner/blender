@@ -18,8 +18,11 @@
  * \ingroup render
  */
 
-#ifndef __ZBUF_H__
-#define __ZBUF_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* span fill in method, is also used to localize data for zbuffering */
 typedef struct ZSpan {
@@ -40,4 +43,6 @@ void zspan_scanconvert(struct ZSpan *zpan,
                        float *v3,
                        void (*func)(void *, int, int, float, float));
 
+#ifdef __cplusplus
+}
 #endif

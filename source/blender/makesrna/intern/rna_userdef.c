@@ -179,6 +179,7 @@ static const EnumPropertyItem rna_enum_userdef_viewport_aa_items[] = {
 #  include "BKE_blender.h"
 #  include "BKE_global.h"
 #  include "BKE_idprop.h"
+#  include "BKE_image.h"
 #  include "BKE_main.h"
 #  include "BKE_mesh_runtime.h"
 #  include "BKE_paint.h"
@@ -187,8 +188,9 @@ static const EnumPropertyItem rna_enum_userdef_viewport_aa_items[] = {
 
 #  include "DEG_depsgraph.h"
 
-#  include "GPU_draw.h"
+#  include "GPU_extensions.h"
 #  include "GPU_select.h"
+#  include "GPU_texture.h"
 
 #  include "BLF_api.h"
 
@@ -362,13 +364,14 @@ static void rna_userdef_load_ui_update(Main *UNUSED(bmain), Scene *UNUSED(scene)
 
 static void rna_userdef_anisotropic_update(Main *bmain, Scene *scene, PointerRNA *ptr)
 {
-  GPU_set_anisotropic(U.anisotropic_filter);
+  GPU_samplers_free();
+  GPU_samplers_init();
   rna_userdef_update(bmain, scene, ptr);
 }
 
 static void rna_userdef_gl_texture_limit_update(Main *bmain, Scene *scene, PointerRNA *ptr)
 {
-  GPU_free_images(bmain);
+  BKE_image_free_all_gputextures(bmain);
   rna_userdef_update(bmain, scene, ptr);
 }
 
@@ -439,13 +442,12 @@ static void rna_userdef_timecode_style_set(PointerRNA *ptr, int value)
   UserDef *userdef = (UserDef *)ptr->data;
   int required_size = userdef->v2d_min_gridsize;
 
-  /* set the timecode style */
+  /* Set the time-code style. */
   userdef->timecode_style = value;
 
-  /* adjust the v2d gridsize if needed so that timecodes don't overlap
+  /* Adjust the v2d grid-size if needed so that time-codes don't overlap
    * NOTE: most of these have been hand-picked to avoid overlaps while still keeping
-   * things from getting too blown out
-   */
+   * things from getting too blown out. */
   switch (value) {
     case USER_TIMECODE_MINIMAL:
     case USER_TIMECODE_SECONDS_ONLY:
@@ -1066,6 +1068,11 @@ static void rna_UserDef_studiolight_light_ambient_get(PointerRNA *ptr, float *va
   copy_v3_v3(values, sl->light_ambient);
 }
 
+int rna_show_statusbar_vram_editable(struct PointerRNA *UNUSED(ptr), const char **UNUSED(r_info))
+{
+  return GPU_mem_stats_supported() ? PROP_EDITABLE : 0;
+}
+
 #else
 
 #  define USERDEF_TAG_DIRTY_PROPERTY_UPDATE_ENABLE \
@@ -1081,7 +1088,7 @@ static void rna_UserDef_studiolight_light_ambient_get(PointerRNA *ptr, float *va
 static size_t max_memory_in_megabytes(void)
 {
   /* Maximum addressable bytes on this platform. */
-  const size_t limit_bytes = (((size_t)1) << ((sizeof(size_t) * 8) - 1));
+  const size_t limit_bytes = (((size_t)1) << ((sizeof(size_t[8])) - 1));
   /* Convert it to megabytes and return. */
   return (limit_bytes >> 20);
 }
@@ -2272,7 +2279,7 @@ static void rna_def_userdef_theme_space_view3d(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "editmesh_active", PROP_FLOAT, PROP_COLOR_GAMMA);
   RNA_def_property_array(prop, 4);
-  RNA_def_property_ui_text(prop, "Active Vert/Edge/Face", "");
+  RNA_def_property_ui_text(prop, "Active Vertex/Edge/Face", "");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "normal", PROP_FLOAT, PROP_COLOR_GAMMA);
@@ -2971,7 +2978,7 @@ static void rna_def_userdef_theme_space_image(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "editmesh_active", PROP_FLOAT, PROP_COLOR_GAMMA);
   RNA_def_property_array(prop, 4);
-  RNA_def_property_ui_text(prop, "Active Vert/Edge/Face", "");
+  RNA_def_property_ui_text(prop, "Active Vertex/Edge/Face", "");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "wire_edit", PROP_FLOAT, PROP_COLOR_GAMMA);
@@ -3973,12 +3980,13 @@ static void rna_def_userdef_studiolights(BlenderRNA *brna)
 
   func = RNA_def_function(srna, "new", "rna_StudioLights_new");
   RNA_def_function_ui_description(func, "Create studiolight from default lighting");
-  parm = RNA_def_string(func,
-                        "path",
-                        NULL,
-                        0,
-                        "Path",
-                        "Path to the file that will contain the lighing info (without extension)");
+  parm = RNA_def_string(
+      func,
+      "path",
+      NULL,
+      0,
+      "Path",
+      "Path to the file that will contain the lighting info (without extension)");
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
   parm = RNA_def_pointer(func, "studio_light", "StudioLight", "", "Newly created StudioLight");
   RNA_def_function_return(func, parm);
@@ -4587,7 +4595,7 @@ static void rna_def_userdef_view(BlenderRNA *brna)
                            "no matter opening direction");
 
   static const EnumPropertyItem header_align_items[] = {
-      {0, "NONE", 0, "Default", "Keep existing header alignment"},
+      {0, "NONE", 0, "Keep Existing", "Keep existing header alignment"},
       {USER_HEADER_FROM_PREF, "TOP", 0, "Top", "Top aligned on load"},
       {USER_HEADER_FROM_PREF | USER_HEADER_BOTTOM,
        "BOTTOM",
@@ -4770,6 +4778,29 @@ static void rna_def_userdef_view(BlenderRNA *brna)
                            "Translate New Names",
                            "Translate the names of new data-blocks (objects, materials...)");
   RNA_def_property_update(prop, 0, "rna_userdef_update");
+
+  /* Statusbar. */
+
+  prop = RNA_def_property(srna, "show_statusbar_memory", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "statusbar_flag", STATUSBAR_SHOW_MEMORY);
+  RNA_def_property_ui_text(prop, "Show Memory", "Show Blender memory usage");
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_INFO, "rna_userdef_update");
+
+  prop = RNA_def_property(srna, "show_statusbar_vram", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "statusbar_flag", STATUSBAR_SHOW_VRAM);
+  RNA_def_property_ui_text(prop, "Show VRAM", "Show GPU video memory usage");
+  RNA_def_property_editable_func(prop, "rna_show_statusbar_vram_editable");
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_INFO, "rna_userdef_update");
+
+  prop = RNA_def_property(srna, "show_statusbar_version", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "statusbar_flag", STATUSBAR_SHOW_VERSION);
+  RNA_def_property_ui_text(prop, "Show Version", "Show Blender version string");
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_INFO, "rna_userdef_update");
+
+  prop = RNA_def_property(srna, "show_statusbar_stats", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "statusbar_flag", STATUSBAR_SHOW_STATS);
+  RNA_def_property_ui_text(prop, "Show Statistics", "Show scene statistics");
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_INFO, "rna_userdef_update");
 }
 
 static void rna_def_userdef_edit(BlenderRNA *brna)
@@ -4959,7 +4990,7 @@ static void rna_def_userdef_edit(BlenderRNA *brna)
 
   /* grease pencil */
   prop = RNA_def_property(srna, "grease_pencil_manhattan_distance", PROP_INT, PROP_PIXEL);
-  RNA_def_property_int_sdna(prop, NULL, "gp_manhattendist");
+  RNA_def_property_int_sdna(prop, NULL, "gp_manhattandist");
   RNA_def_property_range(prop, 0, 100);
   RNA_def_property_ui_text(prop,
                            "Grease Pencil Manhattan Distance",
@@ -5063,7 +5094,6 @@ static void rna_def_userdef_edit(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop, "Duplicate GPencil", "Causes grease pencil data to be duplicated with the object");
 
-#  ifdef WITH_NEW_OBJECT_TYPES
   prop = RNA_def_property(srna, "use_duplicate_hair", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "dupflag", USER_DUP_HAIR);
   RNA_def_property_ui_text(
@@ -5073,7 +5103,6 @@ static void rna_def_userdef_edit(BlenderRNA *brna)
   RNA_def_property_boolean_sdna(prop, NULL, "dupflag", USER_DUP_POINTCLOUD);
   RNA_def_property_ui_text(
       prop, "Duplicate Point Cloud", "Causes point cloud data to be duplicated with the object");
-#  endif
 
   prop = RNA_def_property(srna, "use_duplicate_volume", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "dupflag", USER_DUP_VOLUME);
@@ -6072,6 +6101,24 @@ static void rna_def_userdef_experimental(BlenderRNA *brna)
       prop,
       "Undo Legacy",
       "Use legacy undo (slower than the new default one, but may be more stable in some cases)");
+
+  prop = RNA_def_property(srna, "use_new_particle_system", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "use_new_particle_system", 1);
+  RNA_def_property_ui_text(
+      prop, "New Particle System", "Enable the new particle system in the ui");
+
+  prop = RNA_def_property(srna, "use_new_hair_type", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "use_new_hair_type", 1);
+  RNA_def_property_ui_text(prop, "New Hair Type", "Enable the new hair type in the ui");
+
+  prop = RNA_def_property(srna, "use_cycles_debug", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "use_cycles_debug", 1);
+  RNA_def_property_ui_text(prop, "Cycles Debug", "Enable Cycles debugging options for developers");
+  RNA_def_property_update(prop, 0, "rna_userdef_update");
+
+  prop = RNA_def_property(srna, "use_sculpt_vertex_colors", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "use_sculpt_vertex_colors", 1);
+  RNA_def_property_ui_text(prop, "Sculpt Vertex Colors", "Use the new Vertex Painting system");
 }
 
 static void rna_def_userdef_addon_collection(BlenderRNA *brna, PropertyRNA *cprop)

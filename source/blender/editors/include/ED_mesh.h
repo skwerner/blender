@@ -21,8 +21,7 @@
  * \ingroup editors
  */
 
-#ifndef __ED_MESH_H__
-#define __ED_MESH_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -47,8 +46,6 @@ struct ReportList;
 struct Scene;
 struct UndoType;
 struct UvMapVert;
-struct UvMapVert;
-struct UvVertMap;
 struct UvVertMap;
 struct View3D;
 struct ViewContext;
@@ -125,7 +122,6 @@ struct BMFace *EDBM_uv_active_face_get(struct BMEditMesh *em,
 void BM_uv_vert_map_free(struct UvVertMap *vmap);
 struct UvMapVert *BM_uv_vert_map_at_index(struct UvVertMap *vmap, unsigned int v);
 struct UvVertMap *BM_uv_vert_map_create(struct BMesh *bm,
-                                        const float limit[2],
                                         const bool use_select,
                                         const bool use_winding);
 
@@ -426,6 +422,15 @@ bool ED_mesh_color_remove_index(struct Mesh *me, const int n);
 bool ED_mesh_color_remove_active(struct Mesh *me);
 bool ED_mesh_color_remove_named(struct Mesh *me, const char *name);
 
+bool ED_mesh_sculpt_color_ensure(struct Mesh *me, const char *name);
+int ED_mesh_sculpt_color_add(struct Mesh *me,
+                             const char *name,
+                             const bool active_set,
+                             const bool do_init);
+bool ED_mesh_sculpt_color_remove_index(struct Mesh *me, const int n);
+bool ED_mesh_sculpt_color_remove_active(struct Mesh *me);
+bool ED_mesh_sculpt_color_remove_named(struct Mesh *me, const char *name);
+
 void ED_mesh_report_mirror(struct wmOperator *op, int totmirr, int totfail);
 void ED_mesh_report_mirror_ex(struct wmOperator *op, int totmirr, int totfail, char selectmode);
 
@@ -511,5 +516,3 @@ void EDBM_mesh_elem_index_ensure_multi(struct Object **objects,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_MESH_H__ */

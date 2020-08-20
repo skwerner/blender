@@ -48,8 +48,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 // OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef __BLOCKDXT_H__
-#define __BLOCKDXT_H__
+#pragma once
 
 #include <Color.h>
 #include <ColorBlock.h>
@@ -76,7 +75,7 @@ struct BlockDXT1 {
   void decodeBlock(ColorBlock *block) const;
   void decodeBlockNV5x(ColorBlock *block) const;
 
-  void setIndices(int *idx);
+  void setIndices(const int *idx);
 
   void flip4();
   void flip2();
@@ -289,7 +288,7 @@ struct BlockCTX1 {
   };
 
   void evaluatePalette(Color32 color_array[4]) const;
-  void setIndices(int *idx);
+  void setIndices(const int *idx);
 
   void decodeBlock(ColorBlock *block) const;
 
@@ -305,5 +304,3 @@ void mem_read(Stream &mem, BlockDXT5 &block);
 void mem_read(Stream &mem, BlockATI1 &block);
 void mem_read(Stream &mem, BlockATI2 &block);
 void mem_read(Stream &mem, BlockCTX1 &block);
-
-#endif /* __BLOCKDXT_H__ */

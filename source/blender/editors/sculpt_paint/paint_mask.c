@@ -25,6 +25,7 @@
 
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
+#include "DNA_vec_types.h"
 
 #include "BLI_bitmap_draw_2d.h"
 #include "BLI_lasso_2d.h"
@@ -99,6 +100,9 @@ typedef struct MaskTaskData {
   PaintMaskFloodMode mode;
   float value;
   float (*clip_planes_final)[4];
+
+  bool front_faces_only;
+  float view_normal[3];
 } MaskTaskData;
 
 static void mask_flood_fill_task_cb(void *__restrict userdata,
@@ -146,12 +150,11 @@ static int mask_flood_fill_exec(bContext *C, wmOperator *op)
   PBVHNode **nodes;
   int totnode;
   bool multires;
-  Sculpt *sd = CTX_data_tool_settings(C)->sculpt;
 
   mode = RNA_enum_get(op->ptr, "mode");
   value = RNA_float_get(op->ptr, "value");
 
-  BKE_sculpt_update_object_for_edit(depsgraph, ob, false, true);
+  BKE_sculpt_update_object_for_edit(depsgraph, ob, false, true, false);
   pbvh = ob->sculpt->pbvh;
   multires = (BKE_pbvh_type(pbvh) == PBVH_GRIDS);
 
@@ -169,7 +172,7 @@ static int mask_flood_fill_exec(bContext *C, wmOperator *op)
   };
 
   TaskParallelSettings settings;
-  BKE_pbvh_parallel_range_settings(&settings, (sd->flags & SCULPT_USE_OPENMP), totnode);
+  BKE_pbvh_parallel_range_settings(&settings, true, totnode);
   BLI_task_parallel_range(0, totnode, &data, mask_flood_fill_task_cb, &settings);
 
   if (multires) {
@@ -265,9 +268,15 @@ static void mask_box_select_task_cb(void *__restrict userdata,
   bool any_masked = false;
   bool redraw = false;
 
+  float vertex_normal[3];
+
   BKE_pbvh_vertex_iter_begin(data->pbvh, node, vi, PBVH_ITER_UNIQUE)
   {
-    if (is_effected(clip_planes_final, vi.co)) {
+    SCULPT_vertex_normal_get(data->ob->sculpt, vi.index, vertex_normal);
+    float dot = dot_v3v3(data->view_normal, vertex_normal);
+    const bool is_effected_front_face = !(data->front_faces_only && dot < 0.0f);
+
+    if (is_effected_front_face && is_effected(clip_planes_final, vi.co)) {
       float prevmask = *vi.mask;
       if (!any_masked) {
         any_masked = true;
@@ -291,33 +300,49 @@ static void mask_box_select_task_cb(void *__restrict userdata,
   }
 }
 
-bool ED_sculpt_mask_box_select(struct bContext *C, ViewContext *vc, const rcti *rect, bool select)
+static int paint_mask_gesture_box_exec(bContext *C, wmOperator *op)
 {
+  ViewContext vc;
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
-  Sculpt *sd = vc->scene->toolsettings->sculpt;
+  ED_view3d_viewcontext_init(C, &vc, depsgraph);
+
+  Sculpt *sd = vc.scene->toolsettings->sculpt;
   BoundBox bb;
   float clip_planes[4][4];
   float clip_planes_final[4][4];
-  ARegion *region = vc->region;
-  Object *ob = vc->obact;
-  PaintMaskFloodMode mode;
+  ARegion *region = vc.region;
+  Object *ob = vc.obact;
   bool multires;
   PBVH *pbvh;
   PBVHNode **nodes;
   int totnode;
   int symm = sd->paint.symmetry_flags & PAINT_SYMM_AXIS_ALL;
 
-  mode = PAINT_MASK_FLOOD_VALUE;
-  float value = select ? 1.0f : 0.0f;
+  const PaintMaskFloodMode mode = RNA_enum_get(op->ptr, "mode");
+  const float value = RNA_float_get(op->ptr, "value");
+  const bool front_faces_only = RNA_boolean_get(op->ptr, "use_front_faces_only");
+
+  rcti rect;
+  WM_operator_properties_border_to_rcti(op, &rect);
 
   /* Transform the clip planes in object space. */
-  ED_view3d_clipping_calc(&bb, clip_planes, vc->region, vc->obact, rect);
+  ED_view3d_clipping_calc(&bb, clip_planes, vc.region, vc.obact, &rect);
 
-  BKE_sculpt_update_object_for_edit(depsgraph, ob, false, true);
+  BKE_sculpt_update_object_for_edit(depsgraph, ob, false, true, false);
   pbvh = ob->sculpt->pbvh;
   multires = (BKE_pbvh_type(pbvh) == PBVH_GRIDS);
 
   SCULPT_undo_push_begin("Mask box fill");
+
+  /* Calculate the view normal in object space. */
+  float mat[3][3];
+  float view_dir[3] = {0.0f, 0.0f, 1.0f};
+  float true_view_normal[3];
+  copy_m3_m4(mat, vc.rv3d->viewinv);
+  mul_m3_v3(mat, view_dir);
+  copy_m3_m4(mat, ob->imat);
+  mul_m3_v3(mat, view_dir);
+  normalize_v3_v3(true_view_normal, view_dir);
 
   for (int symmpass = 0; symmpass <= symm; symmpass++) {
     if (symmpass == 0 || (symm & symmpass && (symm != 5 || symmpass != 3) &&
@@ -341,10 +366,13 @@ bool ED_sculpt_mask_box_select(struct bContext *C, ViewContext *vc, const rcti *
           .mode = mode,
           .value = value,
           .clip_planes_final = clip_planes_final,
+          .front_faces_only = front_faces_only,
       };
 
+      flip_v3_v3(data.view_normal, true_view_normal, symmpass);
+
       TaskParallelSettings settings;
-      BKE_pbvh_parallel_range_settings(&settings, (sd->flags & SCULPT_USE_OPENMP), totnode);
+      BKE_pbvh_parallel_range_settings(&settings, true, totnode);
       BLI_task_parallel_range(0, totnode, &data, mask_box_select_task_cb, &settings);
 
       if (nodes) {
@@ -384,7 +412,7 @@ typedef struct LassoMaskData {
  * Lasso select. This could be defined as part of #VIEW3D_OT_select_lasso,
  * still the shortcuts conflict, so we will use a separate operator.
  */
-static bool is_effected_lasso(LassoMaskData *data, float co[3])
+static bool is_effected_lasso(LassoMaskData *data, const float co[3])
 {
   float scr_co_f[2];
   int scr_co_s[2];
@@ -434,9 +462,15 @@ static void mask_gesture_lasso_task_cb(void *__restrict userdata,
   PBVHVertexIter vi;
   bool any_masked = false;
 
+  float vertex_normal[3];
+
   BKE_pbvh_vertex_iter_begin(data->pbvh, node, vi, PBVH_ITER_UNIQUE)
   {
-    if (is_effected_lasso(lasso_data, vi.co)) {
+    SCULPT_vertex_normal_get(data->ob->sculpt, vi.index, vertex_normal);
+    float dot = dot_v3v3(lasso_data->task_data.view_normal, vertex_normal);
+    const bool is_effected_front_face = !(data->front_faces_only && dot < 0.0f);
+
+    if (is_effected_front_face && is_effected_lasso(lasso_data, vi.co)) {
       if (!any_masked) {
         any_masked = true;
 
@@ -474,6 +508,7 @@ static int paint_mask_gesture_lasso_exec(bContext *C, wmOperator *op)
     bool multires;
     PaintMaskFloodMode mode = RNA_enum_get(op->ptr, "mode");
     float value = RNA_float_get(op->ptr, "value");
+    const bool front_faces_only = RNA_boolean_get(op->ptr, "use_front_faces_only");
 
     /* Calculations of individual vertices are done in 2D screen space to diminish the amount of
      * calculations done. Bounding box PBVH collision is not computed against enclosing rectangle
@@ -500,11 +535,21 @@ static int paint_mask_gesture_lasso_exec(bContext *C, wmOperator *op)
 
     ED_view3d_clipping_calc(&bb, clip_planes, vc.region, vc.obact, &data.rect);
 
-    BKE_sculpt_update_object_for_edit(depsgraph, ob, false, true);
+    BKE_sculpt_update_object_for_edit(depsgraph, ob, false, true, false);
     pbvh = ob->sculpt->pbvh;
     multires = (BKE_pbvh_type(pbvh) == PBVH_GRIDS);
 
     SCULPT_undo_push_begin("Mask lasso fill");
+
+    /* Calculate the view normal in object space. */
+    float mat[3][3];
+    float view_dir[3] = {0.0f, 0.0f, 1.0f};
+    float true_view_normal[3];
+    copy_m3_m4(mat, vc.rv3d->viewinv);
+    mul_m3_v3(mat, view_dir);
+    copy_m3_m4(mat, ob->imat);
+    mul_m3_v3(mat, view_dir);
+    normalize_v3_v3(true_view_normal, view_dir);
 
     for (int symmpass = 0; symmpass <= symm; symmpass++) {
       if ((symmpass == 0) || (symm & symmpass && (symm != 5 || symmpass != 3) &&
@@ -514,6 +559,8 @@ static int paint_mask_gesture_lasso_exec(bContext *C, wmOperator *op)
         for (int j = 0; j < 4; j++) {
           flip_plane(clip_planes_final[j], clip_planes[j], symmpass);
         }
+
+        flip_v3_v3(data.task_data.view_normal, true_view_normal, symmpass);
 
         data.symmpass = symmpass;
 
@@ -531,9 +578,10 @@ static int paint_mask_gesture_lasso_exec(bContext *C, wmOperator *op)
         data.task_data.multires = multires;
         data.task_data.mode = mode;
         data.task_data.value = value;
+        data.task_data.front_faces_only = front_faces_only;
 
         TaskParallelSettings settings;
-        BKE_pbvh_parallel_range_settings(&settings, (sd->flags & SCULPT_USE_OPENMP), totnode);
+        BKE_pbvh_parallel_range_settings(&settings, true, totnode);
         BLI_task_parallel_range(0, totnode, &data, mask_gesture_lasso_task_cb, &settings);
 
         if (nodes) {
@@ -589,4 +637,44 @@ void PAINT_OT_mask_lasso_gesture(wmOperatorType *ot)
       "Mask level to use when mode is 'Value'; zero means no masking and one is fully masked",
       0.0f,
       1.0f);
+  RNA_def_boolean(ot->srna,
+                  "use_front_faces_only",
+                  false,
+                  "Front Faces Only",
+                  "Affect only faces facing towards the view");
+}
+
+void PAINT_OT_mask_box_gesture(wmOperatorType *ot)
+{
+  ot->name = "Mask Box Gesture";
+  ot->idname = "PAINT_OT_mask_box_gesture";
+  ot->description = "Add mask within the box as you move the brush";
+
+  ot->invoke = WM_gesture_box_invoke;
+  ot->modal = WM_gesture_box_modal;
+  ot->exec = paint_mask_gesture_box_exec;
+
+  ot->poll = SCULPT_mode_poll;
+
+  ot->flag = OPTYPE_REGISTER;
+
+  /* Properties. */
+  WM_operator_properties_border(ot);
+
+  RNA_def_enum(ot->srna, "mode", mode_items, PAINT_MASK_FLOOD_VALUE, "Mode", NULL);
+  RNA_def_float(
+      ot->srna,
+      "value",
+      1.0f,
+      0.0f,
+      1.0f,
+      "Value",
+      "Mask level to use when mode is 'Value'; zero means no masking and one is fully masked",
+      0.0f,
+      1.0f);
+  RNA_def_boolean(ot->srna,
+                  "use_front_faces_only",
+                  false,
+                  "Front Faces Only",
+                  "Affect only faces facing towards the view");
 }

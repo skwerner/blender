@@ -94,9 +94,8 @@ struct LaplacianSystem {
     float (*verts)[3]; /* vertex coordinates */
     float (*vnors)[3]; /* vertex normals */
 
-    float (*root)[3];   /* bone root */
-    float (*tip)[3];    /* bone tip */
-    float (*source)[3]; /* vertex source */
+    float (*root)[3]; /* bone root */
+    float (*tip)[3];  /* bone tip */
     int numsource;
 
     float *H;       /* diagonal H matrix */
@@ -224,7 +223,7 @@ static LaplacianSystem *laplacian_system_construct_begin(int totvert, int totfac
 
   sys->verts = MEM_callocN(sizeof(float *) * totvert, "LaplacianSystemVerts");
   sys->vpinned = MEM_callocN(sizeof(char) * totvert, "LaplacianSystemVpinned");
-  sys->faces = MEM_callocN(sizeof(int) * 3 * totface, "LaplacianSystemFaces");
+  sys->faces = MEM_callocN(sizeof(int[3]) * totface, "LaplacianSystemFaces");
 
   sys->totvert = 0;
   sys->totface = 0;
@@ -297,7 +296,7 @@ static void laplacian_system_construct_end(LaplacianSystem *sys)
   }
 
   if (sys->storeweights) {
-    sys->fweights = MEM_callocN(sizeof(float) * 3 * totface, "LaplacianFWeight");
+    sys->fweights = MEM_callocN(sizeof(float[3]) * totface, "LaplacianFWeight");
   }
 
   for (a = 0, face = sys->faces; a < totface; a++, face++) {
@@ -569,7 +568,7 @@ static void heat_calc_vnormals(LaplacianSystem *sys)
   float fnor[3];
   int a, v1, v2, v3, (*face)[3];
 
-  sys->heat.vnors = MEM_callocN(sizeof(float) * 3 * sys->totvert, "HeatVNors");
+  sys->heat.vnors = MEM_callocN(sizeof(float[3]) * sys->totvert, "HeatVNors");
 
   for (a = 0, face = sys->faces; a < sys->totface; a++, face++) {
     v1 = (*face)[0];
@@ -641,13 +640,11 @@ static float heat_limit_weight(float weight)
   if (weight < WEIGHT_LIMIT_END) {
     return 0.0f;
   }
-  else if (weight < WEIGHT_LIMIT_START) {
+  if (weight < WEIGHT_LIMIT_START) {
     t = (weight - WEIGHT_LIMIT_END) / (WEIGHT_LIMIT_START - WEIGHT_LIMIT_END);
     return t * WEIGHT_LIMIT_START;
   }
-  else {
-    return weight;
-  }
+  return weight;
 }
 
 void heat_bone_weighting(Object *ob,
@@ -658,7 +655,7 @@ void heat_bone_weighting(Object *ob,
                          bDeformGroup **dgroupflip,
                          float (*root)[3],
                          float (*tip)[3],
-                         int *selected,
+                         const int *selected,
                          const char **err_str)
 {
   LaplacianSystem *sys;
@@ -1239,7 +1236,7 @@ static float meshdeform_boundary_phi(const MeshDeformBind *mdb,
 }
 
 static float meshdeform_interp_w(MeshDeformBind *mdb,
-                                 float *gridvec,
+                                 const float *gridvec,
                                  float *UNUSED(vec),
                                  int UNUSED(cagevert))
 {
@@ -1765,7 +1762,7 @@ void ED_mesh_deform_bind_callback(MeshDeformModifierData *mmd,
   memset(&mdb, 0, sizeof(MeshDeformBind));
 
   /* get mesh and cage mesh */
-  mdb.vertexcos = MEM_callocN(sizeof(float) * 3 * totvert, "MeshDeformCos");
+  mdb.vertexcos = MEM_callocN(sizeof(float[3]) * totvert, "MeshDeformCos");
   mdb.totvert = totvert;
 
   mdb.cagemesh = cagemesh;

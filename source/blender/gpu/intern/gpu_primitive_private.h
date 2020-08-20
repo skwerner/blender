@@ -23,9 +23,15 @@
  * GPU geometric primitives
  */
 
-#ifndef __GPU_PRIMITIVE_PRIVATE_H__
-#define __GPU_PRIMITIVE_PRIVATE_H__
+#pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO(fclem) move to OGL backend */
 GLenum convert_prim_type_to_gl(GPUPrimType);
 
-#endif /* __GPU_PRIMITIVE_PRIVATE_H__ */
+#ifdef __cplusplus
+}
+#endif

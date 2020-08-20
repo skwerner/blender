@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
  */
-#ifndef __BKE_MAIN_H__
-#define __BKE_MAIN_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -173,6 +172,7 @@ void BKE_main_unlock(struct Main *bmain);
 
 void BKE_main_relations_create(struct Main *bmain, const short flag);
 void BKE_main_relations_free(struct Main *bmain);
+void BKE_main_relations_ID_remove(struct Main *bmain, struct ID *id);
 
 struct GSet *BKE_main_gset_create(struct Main *bmain, struct GSet *gset);
 
@@ -249,5 +249,3 @@ int set_listbasepointers(struct Main *main, struct ListBase *lb[MAX_LIBARRAY]);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_MAIN_H__ */

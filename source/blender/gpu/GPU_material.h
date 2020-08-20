@@ -21,8 +21,7 @@
  * \ingroup gpu
  */
 
-#ifndef __GPU_MATERIAL_H__
-#define __GPU_MATERIAL_H__
+#pragma once
 
 #include "DNA_customdata_types.h" /* for CustomDataType */
 #include "DNA_listBase.h"
@@ -110,16 +109,8 @@ typedef enum eGPUMatFlag {
   GPU_MATFLAG_GLOSSY = (1 << 1),
   GPU_MATFLAG_REFRACT = (1 << 2),
   GPU_MATFLAG_SSS = (1 << 3),
+  GPU_MATFLAG_BARYCENTRIC = (1 << 4),
 } eGPUMatFlag;
-
-typedef enum eGPUBlendMode {
-  GPU_BLEND_SOLID = 0,
-  GPU_BLEND_ADD = 1,
-  GPU_BLEND_ALPHA = 2,
-  GPU_BLEND_CLIP = 4,
-  GPU_BLEND_ALPHA_SORT = 8,
-  GPU_BLEND_ALPHA_TO_COVERAGE = 16,
-} eGPUBlendMode;
 
 typedef struct GPUNodeStack {
   eGPUType type;
@@ -136,6 +127,13 @@ typedef enum eGPUMaterialStatus {
   GPU_MAT_QUEUED,
   GPU_MAT_SUCCESS,
 } eGPUMaterialStatus;
+
+typedef void (*GPUMaterialEvalCallbackFn)(GPUMaterial *mat,
+                                          int options,
+                                          const char **vert_code,
+                                          const char **geom_code,
+                                          const char **frag_lib,
+                                          const char **defines);
 
 GPUNodeLink *GPU_constant(const float *num);
 GPUNodeLink *GPU_uniform(const float *num);
@@ -169,8 +167,8 @@ void GPU_material_output_link(GPUMaterial *material, GPUNodeLink *link);
 
 void GPU_material_sss_profile_create(GPUMaterial *material,
                                      float radii[3],
-                                     short *falloff_type,
-                                     float *sharpness);
+                                     const short *falloff_type,
+                                     const float *sharpness);
 struct GPUUniformBuffer *GPU_material_sss_profile_get(GPUMaterial *material,
                                                       int sample_len,
                                                       struct GPUTexture **tex_profile);
@@ -190,7 +188,8 @@ GPUMaterial *GPU_material_from_nodetree(struct Scene *scene,
                                         const char *geom_code,
                                         const char *frag_lib,
                                         const char *defines,
-                                        const char *name);
+                                        const char *name,
+                                        GPUMaterialEvalCallbackFn callback);
 void GPU_material_compile(GPUMaterial *mat);
 void GPU_material_free(struct ListBase *gpumaterial);
 
@@ -255,5 +254,3 @@ ListBase GPU_material_volume_grids(GPUMaterial *material);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /*__GPU_MATERIAL_H__*/

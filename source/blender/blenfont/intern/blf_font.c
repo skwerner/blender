@@ -113,13 +113,6 @@ static void blf_batch_draw_exit(void)
   GPU_BATCH_DISCARD_SAFE(g_batch.batch);
 }
 
-void blf_batch_draw_vao_clear(void)
-{
-  if (g_batch.batch) {
-    GPU_batch_vao_cache_clear(g_batch.batch);
-  }
-}
-
 void blf_batch_draw_begin(FontBLF *font)
 {
   if (g_batch.batch == NULL) {
@@ -194,6 +187,8 @@ static GPUTexture *blf_batch_cache_texture_load(void)
     int offset_x = bitmap_len_landed % tex_width;
     int offset_y = bitmap_len_landed / tex_width;
 
+    GPU_texture_bind(gc->texture, 0);
+
     /* TODO(germano): Update more than one row in a single call. */
     while (remain) {
       int remain_row = tex_width - offset_x;
@@ -226,9 +221,7 @@ void blf_batch_draw(void)
     return;
   }
 
-  GPU_blend(true);
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+  GPU_blend(GPU_BLEND_ALPHA);
 
 #ifndef BLF_STANDALONE
   /* We need to flush widget base first to ensure correct ordering. */
@@ -244,7 +237,7 @@ void blf_batch_draw(void)
   GPU_batch_uniform_1i(g_batch.batch, "glyph", 0);
   GPU_batch_draw(g_batch.batch);
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 
   /* restart to 1st vertex data pointers */
   GPU_vertbuf_attr_get_raw_data(g_batch.verts, g_batch.pos_loc, &g_batch.pos_step);
@@ -297,7 +290,7 @@ void blf_font_size(FontBLF *font, unsigned int size, unsigned int dpi)
     }
   }
 
-  err = FT_Set_Char_Size(font->face, 0, (FT_F26Dot6)(size * 64), dpi, dpi);
+  err = FT_Set_Char_Size(font->face, 0, ((FT_F26Dot6)(size)) * 64, dpi, dpi);
   if (err) {
     /* FIXME: here we can go through the fixed size and choice a close one */
     printf("The current font don't support the size, %u and dpi, %u\n", size, dpi);

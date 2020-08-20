@@ -37,11 +37,11 @@ using std::vector;
 
 struct MANTA {
  public:
-  MANTA(int *res, struct FluidModifierData *mmd);
+  MANTA(int *res, struct FluidModifierData *fmd);
   MANTA(){};
   virtual ~MANTA();
 
-  // Mirroring Mantaflow structures for particle data (pVel also used for mesh vert vels)
+  /* Mirroring Mantaflow structures for particle data (pVel also used for mesh vert vels). */
   typedef struct PData {
     float pos[3];
     int flag;
@@ -50,7 +50,7 @@ struct MANTA {
     float pos[3];
   } pVel;
 
-  // Mirroring Mantaflow structures for meshes
+  /* Mirroring Mantaflow structures for meshes. */
   typedef struct Node {
     int flags;
     float pos[3], normal[3];
@@ -60,82 +60,61 @@ struct MANTA {
     int flags;
   } Triangle;
 
-  // Cache helper typedefs
-  typedef struct GridItem {
-    void **pointer; /* Array of pointers for this grid.*/
-    int type;
-    int *res;
-    string name;
-  } GridItem;
+  /* Grid initialization functions. */
+  bool initHeat(struct FluidModifierData *fmd = nullptr);
+  bool initFire(struct FluidModifierData *fmd = nullptr);
+  bool initColors(struct FluidModifierData *fmd = nullptr);
+  bool initFireHigh(struct FluidModifierData *fmd = nullptr);
+  bool initColorsHigh(struct FluidModifierData *fmd = nullptr);
+  bool initLiquid(FluidModifierData *fmd = nullptr);
+  bool initLiquidMesh(FluidModifierData *fmd = nullptr);
+  bool initObstacle(FluidModifierData *fmd = nullptr);
+  bool initCurvature(FluidModifierData *fmd = nullptr);
+  bool initGuiding(FluidModifierData *fmd = nullptr);
+  bool initFractions(FluidModifierData *fmd = nullptr);
+  bool initInVelocity(FluidModifierData *fmd = nullptr);
+  bool initOutflow(FluidModifierData *fmd = nullptr);
+  bool initSndParts(FluidModifierData *fmd = nullptr);
+  bool initLiquidSndParts(FluidModifierData *fmd = nullptr);
 
-  typedef struct FileItem {
-    string filename;
-    vector<GridItem> grids;
-  } FileItem;
+  /* Pointer transfer: Mantaflow -> Blender. Use flush to reset all pointers to nullptr. */
+  void updatePointers(FluidModifierData *fmd, bool flush = false);
 
-  // Manta step, handling everything
-  void step(struct FluidModifierData *mmd, int startFrame);
+  /* Write cache. */
+  bool writeConfiguration(FluidModifierData *fmd, int framenr);
+  bool writeData(FluidModifierData *fmd, int framenr);
+  bool writeNoise(FluidModifierData *fmd, int framenr);
+  /* Write calls for mesh and particles were left in bake calls for now. */
 
-  // Grid initialization functions
-  void initHeat(struct FluidModifierData *mmd = NULL);
-  void initFire(struct FluidModifierData *mmd = NULL);
-  void initColors(struct FluidModifierData *mmd = NULL);
-  void initFireHigh(struct FluidModifierData *mmd = NULL);
-  void initColorsHigh(struct FluidModifierData *mmd = NULL);
-  void initLiquid(FluidModifierData *mmd = NULL);
-  void initLiquidMesh(FluidModifierData *mmd = NULL);
-  void initObstacle(FluidModifierData *mmd = NULL);
-  void initCurvature(FluidModifierData *mmd = NULL);
-  void initGuiding(FluidModifierData *mmd = NULL);
-  void initFractions(FluidModifierData *mmd = NULL);
-  void initInVelocity(FluidModifierData *mmd = NULL);
-  void initOutflow(FluidModifierData *mmd = NULL);
-  void initSndParts(FluidModifierData *mmd = NULL);
-  void initLiquidSndParts(FluidModifierData *mmd = NULL);
+  /* Read cache (via Python). */
+  bool readConfiguration(FluidModifierData *fmd, int framenr);
+  bool readData(FluidModifierData *fmd, int framenr, bool resumable);
+  bool readNoise(FluidModifierData *fmd, int framenr, bool resumable);
+  bool readMesh(FluidModifierData *fmd, int framenr);
+  bool readParticles(FluidModifierData *fmd, int framenr, bool resumable);
+  bool readGuiding(FluidModifierData *fmd, int framenr, bool sourceDomain);
 
-  // Pointer transfer: Mantaflow -> Blender
-  void updatePointers();
+  /* Propagate variable changes from RNA to Python. */
+  bool updateVariables(FluidModifierData *fmd);
 
-  // Write cache
-  bool writeConfiguration(FluidModifierData *mmd, int framenr);
-  bool writeData(FluidModifierData *mmd, int framenr);
-  bool writeNoise(FluidModifierData *mmd, int framenr);
-  // write calls for mesh and particles were left in bake calls for now
+  /* Bake cache. */
+  bool bakeData(FluidModifierData *fmd, int framenr);
+  bool bakeNoise(FluidModifierData *fmd, int framenr);
+  bool bakeMesh(FluidModifierData *fmd, int framenr);
+  bool bakeParticles(FluidModifierData *fmd, int framenr);
+  bool bakeGuiding(FluidModifierData *fmd, int framenr);
 
-  // Read cache (via Manta save/load)
-  bool readConfiguration(FluidModifierData *mmd, int framenr);
-  bool readData(FluidModifierData *mmd, int framenr);
-  bool readNoise(FluidModifierData *mmd, int framenr);
-  bool readMesh(FluidModifierData *mmd, int framenr);
-  bool readParticles(FluidModifierData *mmd, int framenr);
-  bool readGuiding(FluidModifierData *mmd, int framenr, bool sourceDomain);
+  /* IO for Mantaflow scene script. */
+  void exportSmokeScript(struct FluidModifierData *fmd);
+  void exportLiquidScript(struct FluidModifierData *fmd);
 
-  // Read cache (via file read functions in MANTA - e.g. read .bobj.gz meshes, .uni particles)
-  bool updateMeshStructures(FluidModifierData *mmd, int framenr);
-  bool updateFlipStructures(FluidModifierData *mmd, int framenr);
-  bool updateParticleStructures(FluidModifierData *mmd, int framenr);
-  bool updateSmokeStructures(FluidModifierData *mmd, int framenr);
-  bool updateNoiseStructures(FluidModifierData *mmd, int framenr);
-  bool updateVariables(FluidModifierData *mmd);
-
-  // Bake cache
-  bool bakeData(FluidModifierData *mmd, int framenr);
-  bool bakeNoise(FluidModifierData *mmd, int framenr);
-  bool bakeMesh(FluidModifierData *mmd, int framenr);
-  bool bakeParticles(FluidModifierData *mmd, int framenr);
-  bool bakeGuiding(FluidModifierData *mmd, int framenr);
-
-  // IO for Mantaflow scene script
-  void exportSmokeScript(struct FluidModifierData *mmd);
-  void exportLiquidScript(struct FluidModifierData *mmd);
-
-  // Check cache status by frame
-  bool hasConfig(FluidModifierData *mmd, int framenr);
-  bool hasData(FluidModifierData *mmd, int framenr);
-  bool hasNoise(FluidModifierData *mmd, int framenr);
-  bool hasMesh(FluidModifierData *mmd, int framenr);
-  bool hasParticles(FluidModifierData *mmd, int framenr);
-  bool hasGuiding(FluidModifierData *mmd, int framenr, bool sourceDomain);
+  /* Check cache status by frame. */
+  bool hasConfig(FluidModifierData *fmd, int framenr);
+  bool hasData(FluidModifierData *fmd, int framenr);
+  bool hasNoise(FluidModifierData *fmd, int framenr);
+  bool hasMesh(FluidModifierData *fmd, int framenr);
+  bool hasParticles(FluidModifierData *fmd, int framenr);
+  bool hasGuiding(FluidModifierData *fmd, int framenr, bool sourceDomain);
 
   inline size_t getTotalCells()
   {
@@ -206,7 +185,7 @@ struct MANTA {
     return mUpresParticle;
   }
 
-  // Smoke getters
+  /* Smoke getters. */
   inline float *getDensity()
   {
     return mDensity;
@@ -435,9 +414,9 @@ struct MANTA {
   }
 
   static atomic<int> solverID;
-  static int with_debug;  // on or off (1 or 0), also sets manta debug level
+  static int with_debug; /* On or off (1 or 0), also sets manta debug level. */
 
-  // Mesh getters
+  /* Mesh getters. */
   inline int getNumVertices()
   {
     return (mMeshNodes && !mMeshNodes->empty()) ? mMeshNodes->size() : 0;
@@ -576,9 +555,9 @@ struct MANTA {
   inline int getSndParticleFlagAt(int i)
   {
     assert(i >= 0);
-    if (mSndParticleData && !mSndParticleData->empty()) {
-      assert(i < mSndParticleData->size());
-      return (*mSndParticleData)[i].flag;
+    if (mParticleData && !mParticleData->empty()) {
+      assert(i < mParticleData->size());
+      return (*mParticleData)[i].flag;
     }
     return 0;
   }
@@ -614,27 +593,27 @@ struct MANTA {
   inline float getSndParticlePositionXAt(int i)
   {
     assert(i >= 0);
-    if (mSndParticleData && !mSndParticleData->empty()) {
-      assert(i < mSndParticleData->size());
-      return (*mSndParticleData)[i].pos[0];
+    if (mParticleData && !mParticleData->empty()) {
+      assert(i < mParticleData->size());
+      return (*mParticleData)[i].pos[0];
     }
     return 0.0f;
   }
   inline float getSndParticlePositionYAt(int i)
   {
     assert(i >= 0);
-    if (mSndParticleData && !mSndParticleData->empty()) {
-      assert(i < mSndParticleData->size());
-      return (*mSndParticleData)[i].pos[1];
+    if (mParticleData && !mParticleData->empty()) {
+      assert(i < mParticleData->size());
+      return (*mParticleData)[i].pos[1];
     }
     return 0.0f;
   }
   inline float getSndParticlePositionZAt(int i)
   {
     assert(i >= 0);
-    if (mSndParticleData && !mSndParticleData->empty()) {
-      assert(i < mSndParticleData->size());
-      return (*mSndParticleData)[i].pos[2];
+    if (mParticleData && !mParticleData->empty()) {
+      assert(i < mParticleData->size());
+      return (*mParticleData)[i].pos[2];
     }
     return 0.0f;
   }
@@ -670,27 +649,27 @@ struct MANTA {
   inline float getSndParticleVelocityXAt(int i)
   {
     assert(i >= 0);
-    if (mSndParticleVelocity && !mSndParticleVelocity->empty()) {
-      assert(i < mSndParticleVelocity->size());
-      return (*mSndParticleVelocity)[i].pos[0];
+    if (mParticleVelocity && !mParticleVelocity->empty()) {
+      assert(i < mParticleVelocity->size());
+      return (*mParticleVelocity)[i].pos[0];
     }
     return 0.0f;
   }
   inline float getSndParticleVelocityYAt(int i)
   {
     assert(i >= 0);
-    if (mSndParticleVelocity && !mSndParticleVelocity->empty()) {
-      assert(i < mSndParticleVelocity->size());
-      return (*mSndParticleVelocity)[i].pos[1];
+    if (mParticleVelocity && !mParticleVelocity->empty()) {
+      assert(i < mParticleVelocity->size());
+      return (*mParticleVelocity)[i].pos[1];
     }
     return 0.0f;
   }
   inline float getSndParticleVelocityZAt(int i)
   {
     assert(i >= 0);
-    if (mSndParticleVelocity && !mSndParticleVelocity->empty()) {
-      assert(i < mSndParticleVelocity->size());
-      return (*mSndParticleVelocity)[i].pos[2];
+    if (mParticleVelocity && !mParticleVelocity->empty()) {
+      assert(i < mParticleVelocity->size());
+      return (*mParticleVelocity)[i].pos[2];
     }
     return 0.0f;
   }
@@ -699,30 +678,28 @@ struct MANTA {
   {
     return (mFlipParticleData && !mFlipParticleData->empty()) ?
                (float *)&mFlipParticleData->front() :
-               NULL;
+               nullptr;
   }
   inline float *getSndParticleData()
   {
-    return (mSndParticleData && !mSndParticleData->empty()) ? (float *)&mSndParticleData->front() :
-                                                              NULL;
+    return (mParticleData && !mParticleData->empty()) ? (float *)&mParticleData->front() : nullptr;
   }
 
   inline float *getFlipParticleVelocity()
   {
     return (mFlipParticleVelocity && !mFlipParticleVelocity->empty()) ?
                (float *)&mFlipParticleVelocity->front() :
-               NULL;
+               nullptr;
   }
   inline float *getSndParticleVelocity()
   {
-    return (mSndParticleVelocity && !mSndParticleVelocity->empty()) ?
-               (float *)&mSndParticleVelocity->front() :
-               NULL;
+    return (mParticleVelocity && !mParticleVelocity->empty()) ?
+               (float *)&mParticleVelocity->front() :
+               nullptr;
   }
   inline float *getSndParticleLife()
   {
-    return (mSndParticleLife && !mSndParticleLife->empty()) ? (float *)&mSndParticleLife->front() :
-                                                              NULL;
+    return (mParticleLife && !mParticleLife->empty()) ? (float *)&mParticleLife->front() : nullptr;
   }
 
   inline int getNumFlipParticles()
@@ -731,7 +708,7 @@ struct MANTA {
   }
   inline int getNumSndParticles()
   {
-    return (mSndParticleData && !mSndParticleData->empty()) ? mSndParticleData->size() : 0;
+    return (mParticleData && !mParticleData->empty()) ? mParticleData->size() : 0;
   }
 
   inline bool usingFlipFromFile()
@@ -747,15 +724,15 @@ struct MANTA {
     return mParticlesFromFile;
   }
 
-  // Direct access to solver time attributes
+  /* Direct access to solver time attributes. */
   int getFrame();
   float getTimestep();
   void adaptTimestep();
 
-  bool needsRealloc(FluidModifierData *mmd);
+  bool needsRealloc(FluidModifierData *fmd);
 
  private:
-  // simulation constants
+  /* Simulation constants. */
   size_t mTotalCells;
   size_t mTotalCellsHigh;
   size_t mTotalCellsMesh;
@@ -763,6 +740,7 @@ struct MANTA {
 
   unordered_map<string, string> mRNAMap;
 
+  /* The ID of the solver objects will be incremented for every new object. */
   int mCurrentID;
 
   bool mUsingHeat;
@@ -809,10 +787,7 @@ struct MANTA {
   int mUpresMesh;
   int mUpresParticle;
 
-  float mTempAmb; /* ambient temperature */
-  float mConstantScaling;
-
-  // Fluid grids
+  /* Fluid grids. */
   float *mVelocityX;
   float *mVelocityY;
   float *mVelocityZ;
@@ -832,7 +807,7 @@ struct MANTA {
   float *mNumObstacle;
   float *mNumGuide;
 
-  // Smoke grids
+  /* Smoke grids. */
   float *mDensity;
   float *mHeat;
   float *mFlame;
@@ -864,7 +839,7 @@ struct MANTA {
   float *mTextureV2;
   float *mTextureW2;
 
-  // Liquid grids
+  /* Liquid grids. */
   float *mPhiIn;
   float *mPhiStaticIn;
   float *mPhiObsIn;
@@ -874,43 +849,33 @@ struct MANTA {
   float *mPhiOutStaticIn;
   float *mPhi;
 
-  // Mesh fields
+  /* Mesh fields. */
   vector<Node> *mMeshNodes;
   vector<Triangle> *mMeshTriangles;
   vector<pVel> *mMeshVelocities;
 
-  // Particle fields
+  /* Particle fields. */
   vector<pData> *mFlipParticleData;
   vector<pVel> *mFlipParticleVelocity;
 
-  vector<pData> *mSndParticleData;
-  vector<pVel> *mSndParticleVelocity;
-  vector<float> *mSndParticleLife;
+  vector<pData> *mParticleData;
+  vector<pVel> *mParticleVelocity;
+  vector<float> *mParticleLife;
 
-  void initializeRNAMap(struct FluidModifierData *mmd = NULL);
-  void initDomain(struct FluidModifierData *mmd = NULL);
-  void initNoise(struct FluidModifierData *mmd = NULL);
-  void initMesh(struct FluidModifierData *mmd = NULL);
-  void initSmoke(struct FluidModifierData *mmd = NULL);
-  void initSmokeNoise(struct FluidModifierData *mmd = NULL);
+  void initializeRNAMap(struct FluidModifierData *doRnaRefresh = nullptr);
+  bool initDomain(struct FluidModifierData *doRnaRefresh = nullptr);
+  bool initNoise(struct FluidModifierData *doRnaRefresh = nullptr);
+  bool initMesh(struct FluidModifierData *doRnaRefresh = nullptr);
+  bool initSmoke(struct FluidModifierData *doRnaRefresh = nullptr);
+  bool initSmokeNoise(struct FluidModifierData *doRnaRefresh = nullptr);
   void initializeMantaflow();
   void terminateMantaflow();
   bool runPythonString(vector<string> commands);
   string getRealValue(const string &varName);
   string parseLine(const string &line);
-  string parseScript(const string &setup_string, FluidModifierData *mmd = NULL);
-  bool updateMeshFromBobj(string filename);
-  bool updateMeshFromObj(string filename);
-  bool updateMeshFromUni(string filename);
-  bool updateParticlesFromUni(string filename, bool isSecondarySys, bool isVelData);
-  bool updateGridsFromUni(string filename, vector<GridItem> grids);
-  bool updateGridsFromVDB(string filename, vector<GridItem> grids);
-  bool updateGridsFromRaw(string filename, vector<GridItem> grids);
-  bool updateMeshFromFile(string filename);
-  bool updateParticlesFromFile(string filename, bool isSecondarySys, bool isVelData);
-  bool updateGridsFromFile(string filename, vector<GridItem> grids);
-  string getDirectory(struct FluidModifierData *mmd, string subdirectory);
-  string getFile(struct FluidModifierData *mmd,
+  string parseScript(const string &setup_string, FluidModifierData *fmd = nullptr);
+  string getDirectory(struct FluidModifierData *fmd, string subdirectory);
+  string getFile(struct FluidModifierData *fmd,
                  string subdirectory,
                  string fname,
                  string extension,

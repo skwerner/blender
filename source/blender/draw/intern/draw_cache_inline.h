@@ -20,8 +20,7 @@
  * \ingroup draw
  */
 
-#ifndef __DRAW_CACHE_INLINE_H__
-#define __DRAW_CACHE_INLINE_H__
+#pragma once
 
 #include "GPU_batch.h"
 #include "MEM_guardedalloc.h"
@@ -49,7 +48,7 @@ BLI_INLINE GPUBatch *DRW_batch_request(GPUBatch **batch)
 {
   /* XXX TODO(fclem): We are writing to batch cache here. Need to make this thread safe. */
   if (*batch == NULL) {
-    *batch = MEM_callocN(sizeof(GPUBatch), "GPUBatch");
+    *batch = GPU_batch_calloc();
   }
   return *batch;
 }
@@ -70,11 +69,10 @@ BLI_INLINE bool DRW_batch_requested(GPUBatch *batch, int prim_type)
 BLI_INLINE void DRW_ibo_request(GPUBatch *batch, GPUIndexBuf **ibo)
 {
   if (*ibo == NULL) {
-    *ibo = MEM_callocN(sizeof(GPUIndexBuf), "GPUIndexBuf");
+    *ibo = GPU_indexbuf_calloc();
   }
   if (batch != NULL) {
-    GPU_batch_vao_cache_clear(batch);
-    batch->elem = *ibo;
+    GPU_batch_elembuf_set(batch, *ibo, false);
   }
 }
 
@@ -88,13 +86,12 @@ BLI_INLINE bool DRW_ibo_requested(GPUIndexBuf *ibo)
 BLI_INLINE void DRW_vbo_request(GPUBatch *batch, GPUVertBuf **vbo)
 {
   if (*vbo == NULL) {
-    *vbo = MEM_callocN(sizeof(GPUVertBuf), "GPUVertBuf");
+    *vbo = GPU_vertbuf_create(GPU_USAGE_STATIC);
   }
   if (batch != NULL) {
     /* HACK set first vbo if not init. */
     if (batch->verts[0] == NULL) {
-      GPU_batch_vao_cache_clear(batch);
-      batch->verts[0] = *vbo;
+      GPU_batch_vertbuf_add(batch, *vbo);
     }
     else {
       /* HACK: bypass assert */
@@ -110,5 +107,3 @@ BLI_INLINE bool DRW_vbo_requested(GPUVertBuf *vbo)
 {
   return (vbo != NULL && vbo->format.attr_len == 0);
 }
-
-#endif /* __DRAW_CACHE_INLINE_H__ */

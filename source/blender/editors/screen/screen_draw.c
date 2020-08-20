@@ -296,8 +296,7 @@ static GPUBatch *batch_screen_edges_get(int *corner_len)
  */
 static void scrarea_draw_shape_dark(ScrArea *area, char dir, uint pos)
 {
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+  GPU_blend(GPU_BLEND_ALPHA);
   immUniformColor4ub(0, 0, 0, 50);
 
   draw_join_shape(area, dir, pos);
@@ -308,10 +307,8 @@ static void scrarea_draw_shape_dark(ScrArea *area, char dir, uint pos)
  */
 static void scrarea_draw_shape_light(ScrArea *area, char UNUSED(dir), uint pos)
 {
-  GPU_blend_set_func(GPU_DST_COLOR, GPU_SRC_ALPHA);
-  /* value 181 was hardly computed: 181~105 */
-  immUniformColor4ub(255, 255, 255, 50);
-  /* draw_join_shape(area, dir); */
+  GPU_blend(GPU_BLEND_ALPHA);
+  immUniformColor4ub(255, 255, 255, 25);
 
   immRectf(pos, area->v1->vec.x, area->v1->vec.y, area->v3->vec.x, area->v3->vec.y);
 }
@@ -343,6 +340,7 @@ static void drawscredge_area_draw(
   }
 
   GPUBatch *batch = batch_screen_edges_get(NULL);
+  GPU_batch_program_set_builtin(batch, GPU_SHADER_2D_AREA_EDGES);
   GPU_batch_uniform_4fv(batch, "rect", (float *)&rect);
   GPU_batch_draw(batch);
 }
@@ -404,7 +402,7 @@ void ED_screen_draw_edges(wmWindow *win)
   /* It seems that all areas gets smaller when pixelsize is > 1.
    * So in order to avoid missing pixels we just disable de scissors. */
   if (U.pixelsize <= 1.0f) {
-    glEnable(GL_SCISSOR_TEST);
+    GPU_scissor_test(true);
   }
 
   UI_GetThemeColor4fv(TH_EDITOR_OUTLINE, col);
@@ -412,9 +410,7 @@ void ED_screen_draw_edges(wmWindow *win)
   corner_scale = U.pixelsize * 8.0f;
   edge_thickness = corner_scale * 0.21f;
 
-  GPU_blend(true);
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   GPUBatch *batch = batch_screen_edges_get(&verts_per_corner);
   GPU_batch_program_set_builtin(batch, GPU_SHADER_2D_AREA_EDGES);
@@ -426,10 +422,10 @@ void ED_screen_draw_edges(wmWindow *win)
     drawscredge_area(area, winsize_x, winsize_y, edge_thickness);
   }
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 
   if (U.pixelsize <= 1.0f) {
-    glDisable(GL_SCISSOR_TEST);
+    GPU_scissor_test(false);
   }
 }
 
@@ -469,12 +465,12 @@ void ED_screen_draw_join_shape(ScrArea *sa1, ScrArea *sa2)
         break;
     }
 
-    GPU_blend(true);
+    GPU_blend(GPU_BLEND_ALPHA);
 
     scrarea_draw_shape_dark(sa2, dir, pos);
     scrarea_draw_shape_light(sa1, dira, pos);
 
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
   }
 
   immUnbindProgram();
@@ -486,9 +482,7 @@ void ED_screen_draw_split_preview(ScrArea *area, const int dir, const float fac)
   immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
 
   /* splitpoint */
-  GPU_blend(true);
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   immUniformColor4ub(255, 255, 255, 100);
 
@@ -530,7 +524,7 @@ void ED_screen_draw_split_preview(ScrArea *area, const int dir, const float fac)
     immEnd();
   }
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 
   immUnbindProgram();
 }
@@ -611,7 +605,7 @@ static void screen_preview_draw(const bScreen *screen, int size_x, int size_y)
 void ED_screen_preview_render(const bScreen *screen, int size_x, int size_y, uint *r_rect)
 {
   char err_out[256] = "unknown";
-  GPUOffScreen *offscreen = GPU_offscreen_create(size_x, size_y, 0, true, false, err_out);
+  GPUOffScreen *offscreen = GPU_offscreen_create(size_x, size_y, true, false, err_out);
 
   GPU_offscreen_bind(offscreen, true);
   GPU_clear_color(0.0, 0.0, 0.0, 0.0);
@@ -619,7 +613,7 @@ void ED_screen_preview_render(const bScreen *screen, int size_x, int size_y, uin
 
   screen_preview_draw(screen, size_x, size_y);
 
-  GPU_offscreen_read_pixels(offscreen, GL_UNSIGNED_BYTE, r_rect);
+  GPU_offscreen_read_pixels(offscreen, GPU_DATA_UNSIGNED_BYTE, r_rect);
   GPU_offscreen_unbind(offscreen, true);
 
   GPU_offscreen_free(offscreen);

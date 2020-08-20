@@ -35,6 +35,7 @@
 #include "BKE_screen.h"
 #include "BKE_shader_fx.h"
 
+#include "ED_buttons.h"
 #include "ED_screen.h"
 #include "ED_space_api.h"
 #include "ED_view3d.h" /* To draw toolbar UI. */
@@ -49,13 +50,11 @@
 
 #include "UI_resources.h"
 
-#include "GPU_glew.h"
-
 #include "buttons_intern.h" /* own include */
 
 /* ******************** default callbacks for buttons space ***************** */
 
-static SpaceLink *buttons_new(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
+static SpaceLink *buttons_create(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
 {
   ARegion *region;
   SpaceProperties *sbuts;
@@ -139,6 +138,98 @@ static void buttons_main_region_init(wmWindowManager *wm, ARegion *region)
   WM_event_add_keymap_handler(&region->handlers, keymap);
 }
 
+/**
+ * Fills an array with the tab context values for the properties editor. -1 signals a separator.
+ *
+ * \return The total number of items in the array returned.
+ */
+int ED_buttons_tabs_list(SpaceProperties *sbuts, int *context_tabs_array)
+{
+  int length = 0;
+  if (sbuts->pathflag & (1 << BCONTEXT_TOOL)) {
+    context_tabs_array[length] = BCONTEXT_TOOL;
+    length++;
+  }
+  if (length != 0) {
+    context_tabs_array[length] = -1;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_RENDER)) {
+    context_tabs_array[length] = BCONTEXT_RENDER;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_OUTPUT)) {
+    context_tabs_array[length] = BCONTEXT_OUTPUT;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_VIEW_LAYER)) {
+    context_tabs_array[length] = BCONTEXT_VIEW_LAYER;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_SCENE)) {
+    context_tabs_array[length] = BCONTEXT_SCENE;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_WORLD)) {
+    context_tabs_array[length] = BCONTEXT_WORLD;
+    length++;
+  }
+  if (length != 0) {
+    context_tabs_array[length] = -1;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_OBJECT)) {
+    context_tabs_array[length] = BCONTEXT_OBJECT;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_MODIFIER)) {
+    context_tabs_array[length] = BCONTEXT_MODIFIER;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_SHADERFX)) {
+    context_tabs_array[length] = BCONTEXT_SHADERFX;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_PARTICLE)) {
+    context_tabs_array[length] = BCONTEXT_PARTICLE;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_PHYSICS)) {
+    context_tabs_array[length] = BCONTEXT_PHYSICS;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_CONSTRAINT)) {
+    context_tabs_array[length] = BCONTEXT_CONSTRAINT;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_DATA)) {
+    context_tabs_array[length] = BCONTEXT_DATA;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_BONE)) {
+    context_tabs_array[length] = BCONTEXT_BONE;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_BONE_CONSTRAINT)) {
+    context_tabs_array[length] = BCONTEXT_BONE_CONSTRAINT;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_MATERIAL)) {
+    context_tabs_array[length] = BCONTEXT_MATERIAL;
+    length++;
+  }
+  if (length != 0) {
+    context_tabs_array[length] = -1;
+    length++;
+  }
+  if (sbuts->pathflag & (1 << BCONTEXT_TEXTURE)) {
+    context_tabs_array[length] = BCONTEXT_TEXTURE;
+    length++;
+  }
+
+  return length;
+}
+
 static void buttons_main_region_layout_properties(const bContext *C,
                                                   SpaceProperties *sbuts,
                                                   ARegion *region)
@@ -201,9 +292,7 @@ static void buttons_main_region_layout_properties(const bContext *C,
       break;
   }
 
-  const bool vertical = true;
-  ED_region_panels_layout_ex(
-      C, region, &region->type->paneltypes, contexts, sbuts->mainb, vertical, NULL);
+  ED_region_panels_layout_ex(C, region, &region->type->paneltypes, contexts, NULL);
 }
 
 static void buttons_main_region_layout(const bContext *C, ARegion *region)
@@ -422,6 +511,9 @@ static void buttons_area_listener(wmWindow *UNUSED(win),
           buttons_area_redraw(area, BCONTEXT_CONSTRAINT);
           buttons_area_redraw(area, BCONTEXT_BONE_CONSTRAINT);
           break;
+        case ND_SHADERFX:
+          buttons_area_redraw(area, BCONTEXT_SHADERFX);
+          break;
         case ND_PARTICLE:
           if (wmn->action == NA_EDITED) {
             buttons_area_redraw(area, BCONTEXT_PARTICLE);
@@ -434,13 +526,6 @@ static void buttons_area_listener(wmWindow *UNUSED(win),
           buttons_area_redraw(area, BCONTEXT_PHYSICS);
           /* Needed to refresh context path when changing active particle system index. */
           buttons_area_redraw(area, BCONTEXT_PARTICLE);
-          break;
-        case ND_SHADING:
-        case ND_SHADING_DRAW:
-        case ND_SHADING_LINKS:
-        case ND_SHADING_PREVIEW:
-          /* currently works by redraws... if preview is set, it (re)starts job */
-          sbuts->preview = 1;
           break;
         default:
           /* Not all object RNA props have a ND_ notifier (yet) */
@@ -497,6 +582,10 @@ static void buttons_area_listener(wmWindow *UNUSED(win),
       if (wmn->data == ND_SPACE_PROPERTIES) {
         ED_area_tag_redraw(area);
       }
+      else if (wmn->data == ND_SPACE_CHANGED) {
+        ED_area_tag_redraw(area);
+        sbuts->preview = 1;
+      }
       break;
     case NC_ID:
       if (wmn->action == NA_RENAME) {
@@ -533,6 +622,12 @@ static void buttons_area_listener(wmWindow *UNUSED(win),
     /* Listener for preview render, when doing an global undo. */
     case NC_WM:
       if (wmn->data == ND_UNDO) {
+        ED_area_tag_redraw(area);
+        sbuts->preview = 1;
+      }
+      break;
+    case NC_SCREEN:
+      if (wmn->data == ND_LAYOUTSET) {
         ED_area_tag_redraw(area);
         sbuts->preview = 1;
       }
@@ -612,7 +707,7 @@ void ED_spacetype_buttons(void)
   st->spaceid = SPACE_PROPERTIES;
   strncpy(st->name, "Buttons", BKE_ST_MAXNAME);
 
-  st->new = buttons_new;
+  st->create = buttons_create;
   st->free = buttons_free;
   st->init = buttons_init;
   st->duplicate = buttons_duplicate;

@@ -307,14 +307,13 @@ char *ED_fsmenu_entry_get_name(struct FSMenuEntry *fsentry)
   if (fsentry->name[0]) {
     return fsentry->name;
   }
-  else {
-    /* Here we abuse fsm_iter->name, keeping first char NULL. */
-    char *name = fsentry->name + 1;
-    size_t name_size = sizeof(fsentry->name) - 1;
 
-    fsmenu_entry_generate_name(fsentry, name, name_size);
-    return name;
-  }
+  /* Here we abuse fsm_iter->name, keeping first char NULL. */
+  char *name = fsentry->name + 1;
+  size_t name_size = sizeof(fsentry->name) - 1;
+
+  fsmenu_entry_generate_name(fsentry, name, name_size);
+  return name;
 }
 
 void ED_fsmenu_entry_set_name(struct FSMenuEntry *fsentry, const char *name)
@@ -411,7 +410,7 @@ void fsmenu_insert_entry(struct FSMenu *fsmenu,
         }
         return;
       }
-      else if ((flag & FS_INSERT_SORTED) && cmp_ret < 0) {
+      if ((flag & FS_INSERT_SORTED) && cmp_ret < 0) {
         break;
       }
     }
@@ -755,8 +754,7 @@ void fsmenu_read_system(struct FSMenu *fsmenu, int read_bookmarks)
           fsmenu, FS_CATEGORY_OTHER, &FOLDERID_SkyDrive, NULL, ICON_URL, FS_INSERT_LAST);
     }
   }
-#else
-#  ifdef __APPLE__
+#elif defined(__APPLE__)
   {
     /* We store some known macOS system paths and corresponding icons
      * and names in the FS_CATEGORY_OTHER (not displayed directly) category. */
@@ -775,9 +773,9 @@ void fsmenu_read_system(struct FSMenu *fsmenu, int read_bookmarks)
 
     const char *home = BLI_getenv("HOME");
 
-#    define FS_MACOS_PATH(path, name, icon) \
-      BLI_snprintf(line, sizeof(line), path, home); \
-      fsmenu_insert_entry(fsmenu, FS_CATEGORY_OTHER, line, name, icon, FS_INSERT_LAST);
+#  define FS_MACOS_PATH(path, name, icon) \
+    BLI_snprintf(line, sizeof(line), path, home); \
+    fsmenu_insert_entry(fsmenu, FS_CATEGORY_OTHER, line, name, icon, FS_INSERT_LAST);
 
     FS_MACOS_PATH("%s/", NULL, ICON_HOME)
     FS_MACOS_PATH("%s/Desktop/", IFACE_("Desktop"), ICON_DESKTOP)
@@ -788,7 +786,7 @@ void fsmenu_read_system(struct FSMenu *fsmenu, int read_bookmarks)
     FS_MACOS_PATH("%s/Pictures/", IFACE_("Pictures"), ICON_FILE_IMAGE)
     FS_MACOS_PATH("%s/Library/Fonts/", IFACE_("Fonts"), ICON_FILE_FONT)
 
-#    undef FS_MACOS_PATH
+#  undef FS_MACOS_PATH
 
     /* Get mounted volumes better method OSX 10.6 and higher, see:
      * https://developer.apple.com/library/mac/#documentation/CoreFOundation/Reference/CFURLRef/Reference/reference.html
@@ -850,8 +848,8 @@ void fsmenu_read_system(struct FSMenu *fsmenu, int read_bookmarks)
 
     /* kLSSharedFileListFavoriteItems is deprecated, but available till macOS 10.15.
      * Will have to find a new method to sync the Finder Favorites with File Browser. */
-#    pragma GCC diagnostic push
-#    pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     /* Finally get user favorite places */
     if (read_bookmarks) {
       UInt32 seed;
@@ -895,9 +893,9 @@ void fsmenu_read_system(struct FSMenu *fsmenu, int read_bookmarks)
       CFRelease(pathesArray);
       CFRelease(list);
     }
-#    pragma GCC diagnostic pop
+#  pragma GCC diagnostic pop
   }
-#  else
+#else
   /* unix */
   {
     const char *home = BLI_getenv("HOME");
@@ -933,14 +931,14 @@ void fsmenu_read_system(struct FSMenu *fsmenu, int read_bookmarks)
 
     {
       int found = 0;
-#    ifdef __linux__
+#  ifdef __linux__
       /* loop over mount points */
       struct mntent *mnt;
       FILE *fp;
 
       fp = setmntent(MOUNTED, "r");
       if (fp == NULL) {
-        fprintf(stderr, "could not get a list of mounted filesystems\n");
+        fprintf(stderr, "could not get a list of mounted file-systems\n");
       }
       else {
         while ((mnt = getmntent(fp))) {
@@ -948,10 +946,10 @@ void fsmenu_read_system(struct FSMenu *fsmenu, int read_bookmarks)
             /* Hide share not usable to the user. */
             continue;
           }
-          else if (!STRPREFIX(mnt->mnt_fsname, "/dev")) {
+          if (!STRPREFIX(mnt->mnt_fsname, "/dev")) {
             continue;
           }
-          else if (STRPREFIX(mnt->mnt_fsname, "/dev/loop")) {
+          if (STRPREFIX(mnt->mnt_fsname, "/dev/loop")) {
             /* The dev/loop* entries are SNAPS used by desktop environment
              * (Gnome) no need for them to show up in the list. */
             continue;
@@ -995,7 +993,7 @@ void fsmenu_read_system(struct FSMenu *fsmenu, int read_bookmarks)
         }
         BLI_filelist_free(dir, dir_len);
       }
-#    endif
+#  endif
 
       /* fallback */
       if (!found) {
@@ -1004,7 +1002,6 @@ void fsmenu_read_system(struct FSMenu *fsmenu, int read_bookmarks)
       }
     }
   }
-#  endif
 #endif
 
 #if defined(WIN32) || defined(__APPLE__)
@@ -1132,10 +1129,13 @@ int fsmenu_get_active_indices(struct FSMenu *fsmenu, enum FSMenuCategory categor
  * before being defined as unreachable by the OS, we need to validate the bookmarks in an async
  * job...
  */
-static void fsmenu_bookmark_validate_job_startjob(void *fsmenuv,
-                                                  short *stop,
-                                                  short *do_update,
-                                                  float *UNUSED(progress))
+static void fsmenu_bookmark_validate_job_startjob(
+    void *fsmenuv,
+    /* Cannot be const, this function implements wm_jobs_start_callback.
+     * NOLINTNEXTLINE: readability-non-const-parameter. */
+    short *stop,
+    short *do_update,
+    float *UNUSED(progress))
 {
   FSMenu *fsmenu = fsmenuv;
 

@@ -96,19 +96,15 @@ set(DEFSRC
   rna_xr.c
 )
 
-if(WITH_NEW_OBJECT_TYPES)
+if(WITH_EXPERIMENTAL_FEATURES)
+  add_definitions(-DWITH_PARTICLE_NODES)
+  add_definitions(-DWITH_HAIR_NODES)
   list(APPEND DEFSRC
-    rna_hair.c
     rna_pointcloud.c
-  )
-endif()
-
-if (WITH_NEW_SIMULATION_TYPE)
-  list(APPEND DEFSRC
     rna_simulation.c
+    rna_hair.c
   )
 endif()
-
 
 set(APISRC
   rna_action_api.c
@@ -162,6 +158,16 @@ endif()
 unset(GENSRC_CFLAGS)
 
 
+# NOTE: Disable clang-tidy because generated files are stored outside of the source,
+# so the clang-tidy can not find our .clang-tidy and fall-backs to own set of rules
+# which are too noisy for Blender.
+#
+# In the future clang-tidy would either need to be inlined checks and passed via the
+# command line (instead of using .clang-tidy file). Or, maybe, there is a way to
+# pass configuration file to the clang-tidy command.
+unset(CMAKE_C_CLANG_TIDY)
+unset(CMAKE_CXX_CLANG_TIDY)
+
 set(SRC_RNA_INC
   ../RNA_access.h
   ../RNA_define.h
@@ -176,6 +182,7 @@ set(SRC
   ${DEFSRC}
   ${APISRC}
   ../../../../intern/clog/clog.c
+  ../../../../intern/guardedalloc/intern/leak_detector.cc
   ../../../../intern/guardedalloc/intern/mallocn.c
   ../../../../intern/guardedalloc/intern/mallocn_guarded_impl.c
   ../../../../intern/guardedalloc/intern/mallocn_lockfree_impl.c
@@ -345,15 +352,6 @@ if(WITH_XR_OPENXR)
   add_definitions(-DWITH_XR_OPENXR)
 endif()
 
-if(WITH_NEW_OBJECT_TYPES)
-  add_definitions(-DWITH_NEW_OBJECT_TYPES)
-endif()
-
-if (WITH_NEW_SIMULATION_TYPE)
-  add_definitions(-DWITH_NEW_SIMULATION_TYPE)
-endif()
-
-
 # Build makesrna executable
 blender_include_dirs(
   .
@@ -370,7 +368,7 @@ blender_include_dirs(
   ../../imbuf
   ../../makesdna
   ../../nodes/
-  ../../physics
+  ../../simulation
   ../../windowmanager
   ../../editors/include
   ../../render/extern/include

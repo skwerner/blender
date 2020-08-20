@@ -18,8 +18,7 @@
  * \ingroup collada
  */
 
-#ifndef __MESHIMPORTER_H__
-#define __MESHIMPORTER_H__
+#pragma once
 
 #include <map>
 #include <vector>
@@ -105,7 +104,7 @@ class MeshImporter : public MeshImporterBase {
   std::multimap<COLLADAFW::UniqueId, COLLADAFW::UniqueId> materials_mapped_to_geom;
 
   bool set_poly_indices(
-      MPoly *mpoly, MLoop *mloop, int loop_index, unsigned int *indices, int loop_count);
+      MPoly *mpoly, MLoop *mloop, int loop_index, const unsigned int *indices, int loop_count);
 
   void set_face_uv(MLoopUV *mloopuv,
                    UVDataWrapper &uvs,
@@ -177,5 +176,3 @@ class MeshImporter : public MeshImporterBase {
   bool write_geometry(const COLLADAFW::Geometry *geom);
   std::string *get_geometry_name(const std::string &mesh_name);
 };
-
-#endif

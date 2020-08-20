@@ -61,6 +61,7 @@
 #include "BKE_lib_query.h"
 #include "BKE_main.h"
 #include "BKE_node.h"
+#include "BKE_simulation.h"
 
 #include "BLI_ghash.h"
 #include "BLI_threads.h"
@@ -315,6 +316,33 @@ static void node_foreach_id(ID *id, LibraryForeachIDData *data)
   }
 }
 
+static void node_foreach_cache(ID *id,
+                               IDTypeForeachCacheFunctionCallback function_callback,
+                               void *user_data)
+{
+  bNodeTree *nodetree = (bNodeTree *)id;
+  IDCacheKey key = {
+      .id_session_uuid = id->session_uuid,
+      .offset_in_ID = offsetof(bNodeTree, previews),
+      .cache_v = nodetree->previews,
+  };
+
+  /* TODO, see also `direct_link_nodetree()` in readfile.c. */
+#if 0
+  function_callback(id, &key, (void **)&nodetree->previews, 0, user_data);
+#endif
+
+  if (nodetree->type == NTREE_COMPOSIT) {
+    for (bNode *node = nodetree->nodes.first; node; node = node->next) {
+      if (node->type == CMP_NODE_MOVIEDISTORTION) {
+        key.offset_in_ID = (size_t)BLI_ghashutil_strhash_p(node->name);
+        key.cache_v = node->storage;
+        function_callback(id, &key, (void **)&node->storage, 0, user_data);
+      }
+    }
+  }
+}
+
 IDTypeInfo IDType_ID_NT = {
     .id_code = ID_NT,
     .id_filter = FILTER_ID_NT,
@@ -330,6 +358,7 @@ IDTypeInfo IDType_ID_NT = {
     .free_data = ntree_free_data,
     .make_local = NULL,
     .foreach_id = node_foreach_id,
+    .foreach_cache = node_foreach_cache,
 };
 
 static void node_add_sockets_from_type(bNodeTree *ntree, bNode *node, bNodeType *ntype)
@@ -748,7 +777,7 @@ GHashIterator *nodeSocketTypeGetIterator(void)
   return BLI_ghashIterator_new(nodesockettypes_hash);
 }
 
-struct bNodeSocket *nodeFindSocket(bNode *node, int in_out, const char *identifier)
+struct bNodeSocket *nodeFindSocket(const bNode *node, int in_out, const char *identifier)
 {
   bNodeSocket *sock = (in_out == SOCK_IN ? node->inputs.first : node->outputs.first);
   for (; sock; sock = sock->next) {
@@ -817,12 +846,12 @@ static void socket_id_user_increment(bNodeSocket *sock)
   switch ((eNodeSocketDatatype)sock->type) {
     case SOCK_OBJECT: {
       bNodeSocketValueObject *default_value = sock->default_value;
-      id_us_plus(&default_value->value->id);
+      id_us_plus((ID *)default_value->value);
       break;
     }
     case SOCK_IMAGE: {
       bNodeSocketValueImage *default_value = sock->default_value;
-      id_us_plus(&default_value->value->id);
+      id_us_plus((ID *)default_value->value);
       break;
     }
     case SOCK_FLOAT:
@@ -1237,9 +1266,8 @@ bNode *nodeFindRootParent(bNode *node)
   if (node->parent) {
     return nodeFindRootParent(node->parent);
   }
-  else {
-    return node->type == NODE_FRAME ? node : NULL;
-  }
+
+  return node->type == NODE_FRAME ? node : NULL;
 }
 
 /**
@@ -1251,7 +1279,7 @@ bool nodeIsChildOf(const bNode *parent, const bNode *child)
   if (parent == child) {
     return true;
   }
-  else if (child->parent) {
+  if (child->parent) {
     return nodeIsChildOf(parent, child->parent);
   }
   return false;
@@ -1310,9 +1338,8 @@ static void iter_backwards_ex(const bNodeTree *ntree,
     if (link->fromnode->iter_flag & recursion_mask) {
       continue;
     }
-    else {
-      link->fromnode->iter_flag |= recursion_mask;
-    }
+
+    link->fromnode->iter_flag |= recursion_mask;
 
     if (!callback(link->fromnode, link->tonode, userdata)) {
       return;
@@ -1890,7 +1917,7 @@ bNodePreview *BKE_node_preview_verify(
   }
 
   if (preview->rect == NULL) {
-    preview->rect = MEM_callocN(4 * xsize + xsize * ysize * sizeof(char) * 4, "node preview rect");
+    preview->rect = MEM_callocN(4 * xsize + xsize * ysize * sizeof(char[4]), "node preview rect");
     preview->xsize = xsize;
     preview->ysize = ysize;
   }
@@ -2028,7 +2055,7 @@ static void node_preview_sync(bNodePreview *to, bNodePreview *from)
   if (to->rect && from->rect) {
     int xsize = to->xsize;
     int ysize = to->ysize;
-    memcpy(to->rect, from->rect, xsize * ysize * sizeof(char) * 4);
+    memcpy(to->rect, from->rect, xsize * ysize * sizeof(char[4]));
   }
 }
 
@@ -2465,6 +2492,7 @@ ID *BKE_node_tree_find_owner_ID(Main *bmain, struct bNodeTree *ntree)
                        &bmain->textures,
                        &bmain->scenes,
                        &bmain->linestyles,
+                       &bmain->simulations,
                        NULL};
 
   for (int i = 0; lists[i] != NULL; i++) {
@@ -2552,9 +2580,8 @@ bNodeTree *ntreeLocalize(bNodeTree *ntree)
 
     return ltree;
   }
-  else {
-    return NULL;
-  }
+
+  return NULL;
 }
 
 /* sync local composite with real tree */
@@ -2959,9 +2986,8 @@ bNode *nodeGetActiveID(bNodeTree *ntree, short idtype)
     return node_get_active_id_recursive(
         ntree->active_viewer_key, NODE_INSTANCE_KEY_BASE, ntree, idtype);
   }
-  else {
-    return NULL;
-  }
+
+  return NULL;
 }
 
 bool nodeSetActiveID(bNodeTree *ntree, short idtype, ID *id)
@@ -3097,9 +3123,8 @@ int nodeSocketLinkLimit(struct bNodeSocket *sock)
     int limit = (sock->in_out == SOCK_IN) ? stype->input_link_limit : stype->output_link_limit;
     return limit;
   }
-  else {
-    return sock->limit;
-  }
+
+  return sock->limit;
 }
 
 /* ************** Node Clipboard *********** */
@@ -3216,7 +3241,7 @@ void BKE_node_clipboard_add_node(bNode *node)
     BLI_strncpy(node_info->id_name, node->id->name, sizeof(node_info->id_name));
     if (ID_IS_LINKED(node->id)) {
       BLI_strncpy(
-          node_info->library_name, node->id->lib->filepath, sizeof(node_info->library_name));
+          node_info->library_name, node->id->lib->filepath_abs, sizeof(node_info->library_name));
     }
     else {
       node_info->library_name[0] = '\0';
@@ -3389,9 +3414,8 @@ bool BKE_node_instance_hash_tag_key(bNodeInstanceHash *hash, bNodeInstanceKey ke
     entry->tag = 1;
     return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 void BKE_node_instance_hash_remove_untagged(bNodeInstanceHash *hash,
@@ -3609,6 +3633,16 @@ void ntreeUpdateAllUsers(Main *main, ID *ngroup)
   FOREACH_NODETREE_END;
 }
 
+static void ntreeUpdateSimulationDependencies(Main *main, bNodeTree *simulation_ntree)
+{
+  FOREACH_NODETREE_BEGIN (main, ntree, owner_id) {
+    if (GS(owner_id->name) == ID_SIM && ntree == simulation_ntree) {
+      BKE_simulation_update_dependencies((Simulation *)owner_id, main);
+    }
+  }
+  FOREACH_NODETREE_END;
+}
+
 void ntreeUpdateTree(Main *bmain, bNodeTree *ntree)
 {
   bNode *node;
@@ -3651,7 +3685,6 @@ void ntreeUpdateTree(Main *bmain, bNodeTree *ntree)
     ntreeInterfaceTypeUpdate(ntree);
   }
 
-  /* XXX hack, should be done by depsgraph!! */
   if (bmain) {
     ntreeUpdateAllUsers(bmain, &ntree->id);
   }
@@ -3665,6 +3698,11 @@ void ntreeUpdateTree(Main *bmain, bNodeTree *ntree)
 
     /* check link validity */
     ntree_validate_links(ntree);
+  }
+
+  if (bmain != NULL && ntree->typeinfo == ntreeType_Simulation &&
+      (ntree->id.flag & LIB_EMBEDDED_DATA)) {
+    ntreeUpdateSimulationDependencies(bmain, ntree);
   }
 
   /* clear update flags */
@@ -3791,6 +3829,7 @@ static bool node_poll_instance_default(bNode *node, bNodeTree *ntree)
   return node->typeinfo->poll(node->typeinfo, ntree);
 }
 
+/* NOLINTNEXTLINE: readability-function-size */
 void node_type_base(bNodeType *ntype, int type, const char *name, short nclass, short flag)
 {
   /* Use static type info header to map static int type to identifier string and RNA struct type.
@@ -4308,6 +4347,8 @@ static void registerSimulationNodes(void)
   register_node_type_sim_emit_particles();
   register_node_type_sim_time();
   register_node_type_sim_particle_attribute();
+  register_node_type_sim_age_reached_event();
+  register_node_type_sim_kill_particle();
 }
 
 static void registerFunctionNodes(void)
@@ -4317,6 +4358,8 @@ static void registerFunctionNodes(void)
   register_node_type_fn_switch();
   register_node_type_fn_group_instance_id();
   register_node_type_fn_combine_strings();
+  register_node_type_fn_object_transforms();
+  register_node_type_fn_random_float();
 }
 
 void init_nodesystem(void)

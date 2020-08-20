@@ -128,12 +128,12 @@ const EnumPropertyItem rna_enum_object_greasepencil_modifier_type_items[] = {
      ICON_MOD_OPACITY,
      "Opacity",
      "Opacity of the strokes"},
-    {eGpencilModifierType_Tint, "GP_TINT", ICON_MOD_TINT, "Tint", "Tint strokes with new color"},
     {eGpencilModifierType_Texture,
      "GP_TEXTURE",
      ICON_TEXTURE,
      "Texture Mapping",
      "Change stroke uv texture values"},
+    {eGpencilModifierType_Tint, "GP_TINT", ICON_MOD_TINT, "Tint", "Tint strokes with new color"},
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -1817,8 +1817,7 @@ static void rna_def_modifier_gpencilmirror(BlenderRNA *brna)
   PropertyRNA *prop;
 
   srna = RNA_def_struct(brna, "MirrorGpencilModifier", "GpencilModifier");
-  RNA_def_struct_ui_text(
-      srna, "Mirror Modifier", "Change stroke using lattice to deform modifier");
+  RNA_def_struct_ui_text(srna, "Mirror Modifier", "Create mirroring strokes");
   RNA_def_struct_sdna(srna, "MirrorGpencilModifierData");
   RNA_def_struct_ui_icon(srna, ICON_MOD_MIRROR);
 

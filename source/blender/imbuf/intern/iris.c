@@ -122,7 +122,7 @@ static int expandrow2(
 static void interleaverow(uchar *lptr, const uchar *cptr, int z, int n);
 static void interleaverow2(float *lptr, const uchar *cptr, int z, int n);
 static int compressrow(uchar *lbuf, uchar *rlebuf, int z, int cnt);
-static void lumrow(uchar *rgbptr, uchar *lumptr, int n);
+static void lumrow(const uchar *rgbptr, uchar *lumptr, int n);
 
 /*
  * byte order independent read/write of shorts and ints.
@@ -281,18 +281,18 @@ struct ImBuf *imb_loadiris(const uchar *mem, size_t size, int flags, char colors
   readheader(inf, &image);
   if (image.imagic != IMAGIC) {
     fprintf(stderr, "longimagedata: bad magic number in image file\n");
-    return (NULL);
+    return NULL;
   }
 
   rle = ISRLE(image.type);
   bpp = BPP(image.type);
   if (bpp != 1 && bpp != 2) {
     fprintf(stderr, "longimagedata: image must have 1 or 2 byte per pix chan\n");
-    return (NULL);
+    return NULL;
   }
   if ((uint)image.zsize > 8) {
     fprintf(stderr, "longimagedata: channels over 8 not supported\n");
-    return (NULL);
+    return NULL;
   }
 
   const int xsize = image.xsize;
@@ -304,7 +304,7 @@ struct ImBuf *imb_loadiris(const uchar *mem, size_t size, int flags, char colors
     if (ibuf) {
       ibuf->ftype = IMB_FTYPE_IMAGIC;
     }
-    return (ibuf);
+    return ibuf;
   }
 
   if (rle) {
@@ -598,7 +598,7 @@ struct ImBuf *imb_loadiris(const uchar *mem, size_t size, int flags, char colors
     IMB_convert_rgba_to_abgr(ibuf);
   }
 
-  return (ibuf);
+  return ibuf;
 }
 
 /* static utility functions for longimagedata */
@@ -892,15 +892,14 @@ static int output_iris(uint *lptr, int xsize, int ysize, int zsize, const char *
   if (goodwrite) {
     return 1;
   }
-  else {
-    fprintf(stderr, "output_iris: not enough space for image!!\n");
-    return 0;
-  }
+
+  fprintf(stderr, "output_iris: not enough space for image!!\n");
+  return 0;
 }
 
 /* static utility functions for output_iris */
 
-static void lumrow(uchar *rgbptr, uchar *lumptr, int n)
+static void lumrow(const uchar *rgbptr, uchar *lumptr, int n)
 {
   lumptr += CHANOFFSET(0);
   while (n--) {
@@ -989,5 +988,5 @@ int imb_saveiris(struct ImBuf *ibuf, const char *name, int flags)
   IMB_convert_rgba_to_abgr(ibuf);
   test_endian_zbuf(ibuf);
 
-  return (ret);
+  return ret;
 }

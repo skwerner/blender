@@ -214,7 +214,13 @@ static bool track_markers_initjob(bContext *C, TrackMarkersJob *tmj, bool backwa
   return true;
 }
 
-static void track_markers_startjob(void *tmv, short *stop, short *do_update, float *progress)
+static void track_markers_startjob(
+    void *tmv,
+    /* Cannot be const, this function implements wm_jobs_start_callback.
+     * NOLINTNEXTLINE: readability-non-const-parameter. */
+    short *stop,
+    short *do_update,
+    float *progress)
 {
   TrackMarkersJob *tmj = (TrackMarkersJob *)tmv;
   int framenr = tmj->sfra;
@@ -358,14 +364,13 @@ static int track_markers(bContext *C, wmOperator *op, bool use_job)
 
     return OPERATOR_RUNNING_MODAL;
   }
-  else {
-    short stop = 0, do_update = 0;
-    float progress = 0.0f;
-    track_markers_startjob(tmj, &stop, &do_update, &progress);
-    track_markers_endjob(tmj);
-    track_markers_freejob(tmj);
-    return OPERATOR_FINISHED;
-  }
+
+  short stop = 0, do_update = 0;
+  float progress = 0.0f;
+  track_markers_startjob(tmj, &stop, &do_update, &progress);
+  track_markers_endjob(tmj);
+  track_markers_freejob(tmj);
+  return OPERATOR_FINISHED;
 }
 
 static int track_markers_exec(bContext *C, wmOperator *op)

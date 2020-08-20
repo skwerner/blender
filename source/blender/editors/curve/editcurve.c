@@ -569,14 +569,14 @@ GHash *ED_curve_keyindex_hash_duplicate(GHash *keyindex)
 static void key_to_bezt(float *key, BezTriple *basebezt, BezTriple *bezt)
 {
   memcpy(bezt, basebezt, sizeof(BezTriple));
-  memcpy(bezt->vec, key, sizeof(float) * 9);
+  memcpy(bezt->vec, key, sizeof(float[9]));
   bezt->tilt = key[9];
   bezt->radius = key[10];
 }
 
 static void bezt_to_key(BezTriple *bezt, float *key)
 {
-  memcpy(key, bezt->vec, sizeof(float) * 9);
+  memcpy(key, bezt->vec, sizeof(float[9]));
   key[9] = bezt->tilt;
   key[10] = bezt->radius;
 }
@@ -691,7 +691,7 @@ static void calc_shapeKeys(Object *obedit, ListBase *newnurbs)
           nu = nu->next;
         }
 
-        ofs = MEM_callocN(sizeof(float) * 3 * totvec, "currkey->data");
+        ofs = MEM_callocN(sizeof(float[3]) * totvec, "currkey->data");
         nu = editnurb->nurbs.first;
         i = 0;
         while (nu) {
@@ -1137,7 +1137,7 @@ int ED_curve_updateAnimPaths(Main *bmain, Curve *cu)
 /** \name Edit Mode Conversion (Make & Load)
  * \{ */
 
-static int *initialize_index_map(Object *obedit, int *r_old_totvert)
+static int *init_index_map(Object *obedit, int *r_old_totvert)
 {
   Curve *curve = (Curve *)obedit->data;
   EditNurb *editnurb = curve->editnurb;
@@ -1225,7 +1225,7 @@ static void remap_hooks_and_vertex_parents(Main *bmain, Object *obedit)
     if ((object->parent) && (object->parent->data == curve) &&
         ELEM(object->partype, PARVERT1, PARVERT3)) {
       if (old_to_new_map == NULL) {
-        old_to_new_map = initialize_index_map(obedit, &old_totvert);
+        old_to_new_map = init_index_map(obedit, &old_totvert);
       }
 
       if (object->par1 < old_totvert) {
@@ -1254,7 +1254,7 @@ static void remap_hooks_and_vertex_parents(Main *bmain, Object *obedit)
           int i, j;
 
           if (old_to_new_map == NULL) {
-            old_to_new_map = initialize_index_map(obedit, &old_totvert);
+            old_to_new_map = init_index_map(obedit, &old_totvert);
           }
 
           for (i = j = 0; i < hmd->totindex; i++) {
@@ -1716,7 +1716,10 @@ static bool isNurbselV(Nurb *nu, int *u, int flag)
   return 1;
 }
 
-static void rotateflagNurb(ListBase *editnurb, short flag, const float cent[3], float rotmat[3][3])
+static void rotateflagNurb(ListBase *editnurb,
+                           short flag,
+                           const float cent[3],
+                           const float rotmat[3][3])
 {
   /* all verts with (flag & 'flag') rotate */
   Nurb *nu;
@@ -2436,12 +2439,12 @@ static void adduplicateflagNurb(
                       /* actvert in cyclicu selection */
                       break;
                     }
-                    else if (calc_duplicate_actvert(editnurb,
-                                                    newnurb,
-                                                    cu,
-                                                    starta,
-                                                    starta + newu,
-                                                    cu->actvert - starta + b * newnu->pntsu)) {
+                    if (calc_duplicate_actvert(editnurb,
+                                               newnurb,
+                                               cu,
+                                               starta,
+                                               starta + newu,
+                                               cu->actvert - starta + b * newnu->pntsu)) {
                       /* actvert in 'current' iteration selection */
                       break;
                     }
@@ -3495,7 +3498,7 @@ static void subdividenurb(Object *obedit, View3D *v3d, int number_cuts)
               BEZT_ISSEL_ANY_HIDDENHANDLES(v3d, nextbezt)) {
             float prevvec[3][3];
 
-            memcpy(prevvec, bezt->vec, sizeof(float) * 9);
+            memcpy(prevvec, bezt->vec, sizeof(float[9]));
 
             for (i = 0; i < number_cuts; i++) {
               factor = 1.0f / (number_cuts + 1 - i);
@@ -3527,7 +3530,7 @@ static void subdividenurb(Object *obedit, View3D *v3d, int number_cuts)
               beztn->radius = (bezt->radius + nextbezt->radius) / 2;
               beztn->weight = (bezt->weight + nextbezt->weight) / 2;
 
-              memcpy(prevvec, beztn->vec, sizeof(float) * 9);
+              memcpy(prevvec, beztn->vec, sizeof(float[9]));
               beztn++;
             }
           }
@@ -4085,7 +4088,7 @@ static int curve_normals_make_consistent_exec(bContext *C, wmOperator *op)
 void CURVE_OT_normals_make_consistent(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Recalc Normals";
+  ot->name = "Recalculate Handles";
   ot->description = "Recalculate the direction of selected handles";
   ot->idname = "CURVE_OT_normals_make_consistent";
 
@@ -4544,15 +4547,13 @@ static int make_segment_exec(bContext *C, wmOperator *op)
         if (nu_select_num > 1) {
           break;
         }
-        else {
-          /* only 1 selected, not first or last, a little complex, but intuitive */
-          if (nu->pntsv == 1) {
-            if ((nu->bp->f1 & SELECT) || (nu->bp[nu->pntsu - 1].f1 & SELECT)) {
-              /* pass */
-            }
-            else {
-              break;
-            }
+        /* only 1 selected, not first or last, a little complex, but intuitive */
+        if (nu->pntsv == 1) {
+          if ((nu->bp->f1 & SELECT) || (nu->bp[nu->pntsu - 1].f1 & SELECT)) {
+            /* pass */
+          }
+          else {
+            break;
           }
         }
       }
@@ -5500,6 +5501,7 @@ static int ed_editcurve_addvert(Curve *cu,
 
       if (nu) {
         nurb_new = BKE_nurb_copy(nu, 1, 1);
+        memcpy(nurb_new->bezt, nu->bezt, sizeof(BezTriple));
       }
       else {
         nurb_new = MEM_callocN(sizeof(Nurb), "BLI_editcurve_addvert new_bezt_nurb 2");
@@ -5593,9 +5595,7 @@ static int add_vertex_exec(bContext *C, wmOperator *op)
 
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 static int add_vertex_invoke(bContext *C, wmOperator *op, const wmEvent *event)
@@ -6517,9 +6517,7 @@ static int curve_delete_exec(bContext *C, wmOperator *op)
   if (changed_multi) {
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 static const EnumPropertyItem curve_delete_type_items[] = {

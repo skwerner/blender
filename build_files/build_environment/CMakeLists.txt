@@ -30,7 +30,7 @@
 #   build_deps 2015 x64 / build_deps 2015 x86
 #
 # MAC OS X USAGE:
-#   Install with homebrew: brew install cmake autoconf automake libtool yasm nasm
+#   Install with homebrew: brew install cmake autoconf automake libtool yasm nasm bison
 #   Run "make deps" from main Blender directory
 #
 # LINUX USAGE:
@@ -48,11 +48,7 @@ include(cmake/options.cmake)
 include(cmake/versions.cmake)
 
 if(ENABLE_MINGW64)
-  if("${CMAKE_SIZEOF_VOID_P}" EQUAL "8")
-    include(cmake/setup_mingw64.cmake)
-  else()
-    include(cmake/setup_mingw32.cmake)
-  endif()
+  include(cmake/setup_mingw64.cmake)
 else()
   set(mingw_LIBDIR ${LIBDIR})
 endif()
@@ -61,7 +57,6 @@ include(cmake/zlib.cmake)
 include(cmake/openal.cmake)
 include(cmake/png.cmake)
 include(cmake/jpeg.cmake)
-include(cmake/boost.cmake)
 include(cmake/blosc.cmake)
 include(cmake/pthreads.cmake)
 include(cmake/openexr.cmake)
@@ -80,6 +75,7 @@ include(cmake/llvm.cmake)
 include(cmake/clang.cmake)
 if(APPLE)
   include(cmake/openmp.cmake)
+  include(cmake/nasm.cmake)
 endif()
 include(cmake/openimageio.cmake)
 include(cmake/tiff.cmake)
@@ -92,22 +88,27 @@ include(cmake/python_site_packages.cmake)
 include(cmake/package_python.cmake)
 include(cmake/numpy.cmake)
 include(cmake/usd.cmake)
+# Boost needs to be included after python.cmake due to the PYTHON_BINARY variable being needed.
+include(cmake/boost.cmake)
 if(UNIX)
   # Rely on PugiXML compiled with OpenImageIO
 else()
   include(cmake/pugixml.cmake)
 endif()
-include(cmake/openimagedenoise.cmake)
-include(cmake/embree.cmake)
-include(cmake/xr_openxr.cmake)
+if((NOT APPLE) OR ("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "x86_64"))
+  include(cmake/ispc.cmake)
+  include(cmake/openimagedenoise.cmake)
+  include(cmake/embree.cmake)
+endif()
+if(NOT APPLE)
+  include(cmake/xr_openxr.cmake)
+endif()
 
 if(WITH_WEBP)
   include(cmake/webp.cmake)
 endif()
 
 if(WIN32)
-  # HMD branch deps
-  include(cmake/hidapi.cmake)
   # OCIO deps
   include(cmake/tinyxml.cmake)
   include(cmake/yamlcpp.cmake)
@@ -117,6 +118,7 @@ if(WIN32)
 endif()
 
 if(NOT WIN32 OR ENABLE_MINGW64)
+  include(cmake/gmp.cmake)
   include(cmake/openjpeg.cmake)
   if(NOT WIN32 OR BUILD_MODE STREQUAL Release)
     if(WIN32)

@@ -42,7 +42,11 @@
 #include "DNA_object_fluidsim_types.h"
 #include "DNA_particle_types.h"
 
-namespace USD {
+#include <iostream>
+
+namespace blender {
+namespace io {
+namespace usd {
 
 USDGenericMeshWriter::USDGenericMeshWriter(const USDExporterContext &ctx) : USDAbstractWriter(ctx)
 {
@@ -50,27 +54,10 @@ USDGenericMeshWriter::USDGenericMeshWriter(const USDExporterContext &ctx) : USDA
 
 bool USDGenericMeshWriter::is_supported(const HierarchyContext *context) const
 {
-  Object *object = context->object;
-  bool is_dupli = context->duplicator != nullptr;
-  int base_flag;
-
-  if (is_dupli) {
-    /* Construct the object's base flags from its dupli-parent, just like is done in
-     * deg_objects_dupli_iterator_next(). Without this, the visibility check below will fail. Doing
-     * this here, instead of a more suitable location in AbstractHierarchyIterator, prevents
-     * copying the Object for every dupli. */
-    base_flag = object->base_flag;
-    object->base_flag = context->duplicator->base_flag | BASE_FROM_DUPLI;
+  if (usd_export_context_.export_params.visible_objects_only) {
+    return context->is_object_visible(usd_export_context_.export_params.evaluation_mode);
   }
-
-  int visibility = BKE_object_visibility(object,
-                                         usd_export_context_.export_params.evaluation_mode);
-
-  if (is_dupli) {
-    object->base_flag = base_flag;
-  }
-
-  return (visibility & OB_VISIBLE_SELF) != 0;
+  return true;
 }
 
 void USDGenericMeshWriter::do_write(HierarchyContext &context)
@@ -167,6 +154,8 @@ void USDGenericMeshWriter::write_mesh(HierarchyContext &context, Mesh *mesh)
   const pxr::SdfPath &usd_path = usd_export_context_.usd_path;
 
   pxr::UsdGeomMesh usd_mesh = pxr::UsdGeomMesh::Define(stage, usd_path);
+  write_visibility(context, timecode, usd_mesh);
+
   USDMeshData usd_mesh_data;
   get_geometry_data(mesh, usd_mesh_data);
 
@@ -336,7 +325,7 @@ void USDGenericMeshWriter::assign_materials(const HierarchyContext &context,
    * https://github.com/PixarAnimationStudios/USD/issues/542 for more info. */
   bool mesh_material_bound = false;
   pxr::UsdShadeMaterialBindingAPI material_binding_api(usd_mesh.GetPrim());
-  for (short mat_num = 0; mat_num < context.object->totcol; mat_num++) {
+  for (int mat_num = 0; mat_num < context.object->totcol; mat_num++) {
     Material *material = BKE_object_material_get(context.object, mat_num + 1);
     if (material == nullptr) {
       continue;
@@ -484,4 +473,6 @@ Mesh *USDMeshWriter::get_export_mesh(Object *object_eval, bool & /*r_needsfree*/
   return BKE_object_get_evaluated_mesh(object_eval);
 }
 
-}  // namespace USD
+}  // namespace usd
+}  // namespace io
+}  // namespace blender

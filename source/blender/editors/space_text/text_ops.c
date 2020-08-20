@@ -55,6 +55,7 @@
 
 #ifdef WITH_PYTHON
 #  include "BPY_extern.h"
+#  include "BPY_extern_run.h"
 #endif
 
 #include "text_format.h"
@@ -85,7 +86,7 @@ static void test_line_start(char c, bool *r_last_state)
 
 /**
  * This function converts the indentation tabs from a buffer to spaces.
- * \param buf: A pointer to a cstring.
+ * \param in_buf: A pointer to a cstring.
  * \param tab_size: The size, in spaces, of the tab character.
  */
 static char *buf_tabs_to_spaces(const char *in_buf, const int tab_size)
@@ -370,7 +371,7 @@ static int text_open_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(e
 {
   Main *bmain = CTX_data_main(C);
   Text *text = CTX_data_edit_text(C);
-  const char *path = (text && text->name) ? text->name : BKE_main_blendfile_path(bmain);
+  const char *path = (text && text->filepath) ? text->filepath : BKE_main_blendfile_path(bmain);
 
   if (RNA_struct_property_is_set(op->ptr, "filepath")) {
     return text_open_exec(C, op);
@@ -430,7 +431,7 @@ static int text_reload_exec(bContext *C, wmOperator *op)
 
   /* Don't make this part of 'poll', since 'Alt-R' will type 'R',
    * if poll checks for the filename. */
-  if (text->name == NULL) {
+  if (text->filepath == NULL) {
     BKE_report(op->reports, RPT_ERROR, "This text has not been saved");
     return OPERATOR_CANCELLED;
   }
@@ -543,10 +544,7 @@ static int text_make_internal_exec(bContext *C, wmOperator *UNUSED(op))
 
   text->flags |= TXT_ISMEM | TXT_ISDIRTY;
 
-  if (text->name) {
-    MEM_freeN(text->name);
-    text->name = NULL;
-  }
+  MEM_SAFE_FREE(text->filepath);
 
   text_update_cursor_moved(C);
   WM_event_add_notifier(C, NC_TEXT | NA_EDITED, text);
@@ -583,7 +581,7 @@ static bool text_save_poll(bContext *C)
     return 0;
   }
 
-  return (text->name != NULL && !(text->flags & TXT_ISMEM));
+  return (text->filepath != NULL && !(text->flags & TXT_ISMEM));
 }
 
 static void txt_write_file(Main *bmain, Text *text, ReportList *reports)
@@ -593,7 +591,7 @@ static void txt_write_file(Main *bmain, Text *text, ReportList *reports)
   BLI_stat_t st;
   char filepath[FILE_MAX];
 
-  BLI_strncpy(filepath, text->name, FILE_MAX);
+  BLI_strncpy(filepath, text->filepath, FILE_MAX);
   BLI_path_abs(filepath, BKE_main_blendfile_path(bmain));
 
   fp = BLI_fopen(filepath, "w");
@@ -676,10 +674,10 @@ static int text_save_as_exec(bContext *C, wmOperator *op)
 
   RNA_string_get(op->ptr, "filepath", str);
 
-  if (text->name) {
-    MEM_freeN(text->name);
+  if (text->filepath) {
+    MEM_freeN(text->filepath);
   }
-  text->name = BLI_strdup(str);
+  text->filepath = BLI_strdup(str);
   text->flags &= ~TXT_ISMEM;
 
   txt_write_file(bmain, text, op->reports);
@@ -700,8 +698,8 @@ static int text_save_as_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSE
     return text_save_as_exec(C, op);
   }
 
-  if (text->name) {
-    str = text->name;
+  if (text->filepath) {
+    str = text->filepath;
   }
   else if (text->flags & TXT_ISMEM) {
     str = text->id.name + 2;
@@ -759,7 +757,7 @@ static int text_run_script(bContext *C, ReportList *reports)
   void *curl_prev = text->curl;
   int curc_prev = text->curc;
 
-  if (BPY_execute_text(C, text, reports, !is_live)) {
+  if (BPY_run_text(C, text, reports, !is_live)) {
     if (is_live) {
       /* for nice live updates */
       WM_event_add_notifier(C, NC_WINDOW | NA_EDITED, NULL);
@@ -2590,7 +2588,7 @@ static void text_scroll_apply(bContext *C, wmOperator *op, const wmEvent *event)
 {
   SpaceText *st = CTX_wm_space_text(C);
   TextScroll *tsc = op->customdata;
-  int mval[2] = {event->x, event->y};
+  const int mval[2] = {event->x, event->y};
 
   text_update_character_width(st);
 
@@ -3015,7 +3013,7 @@ static void text_cursor_set_to_pos_wrapped(
           break;
           /* Exactly at the cursor */
         }
-        else if (y == 0 && i - start <= x && i + columns - start > x) {
+        if (y == 0 && i - start <= x && i + columns - start > x) {
           /* current position could be wrapped to next line */
           /* this should be checked when end of current line would be reached */
           charp = curs = j;
@@ -3474,21 +3472,20 @@ static int text_insert_invoke(bContext *C, wmOperator *op, const wmEvent *event)
     if ((event->ctrl || event->oskey) && !event->utf8_buf[0]) {
       return OPERATOR_PASS_THROUGH;
     }
-    else {
-      char str[BLI_UTF8_MAX + 1];
-      size_t len;
 
-      if (event->utf8_buf[0]) {
-        len = BLI_str_utf8_size_safe(event->utf8_buf);
-        memcpy(str, event->utf8_buf, len);
-      }
-      else {
-        /* in theory, ghost can set value to extended ascii here */
-        len = BLI_str_utf8_from_unicode(event->ascii, str);
-      }
-      str[len] = '\0';
-      RNA_string_set(op->ptr, "text", str);
+    char str[BLI_UTF8_MAX + 1];
+    size_t len;
+
+    if (event->utf8_buf[0]) {
+      len = BLI_str_utf8_size_safe(event->utf8_buf);
+      memcpy(str, event->utf8_buf, len);
     }
+    else {
+      /* in theory, ghost can set value to extended ascii here */
+      len = BLI_str_utf8_from_unicode(event->ascii, str);
+    }
+    str[len] = '\0';
+    RNA_string_set(op->ptr, "text", str);
   }
 
   ret = text_insert_exec(C, op);
@@ -3628,8 +3625,54 @@ void TEXT_OT_find(wmOperatorType *ot)
 /** \name Replace Operator
  * \{ */
 
+static int text_replace_all(bContext *C)
+{
+  SpaceText *st = CTX_wm_space_text(C);
+  Text *text = st->text;
+  const int flags = st->flags;
+  int found = 0;
+
+  if (!st->findstr[0]) {
+    return OPERATOR_CANCELLED;
+  }
+
+  const int orig_curl = BLI_findindex(&text->lines, text->curl);
+  const int orig_curc = text->curc;
+  bool has_sel = txt_has_sel(text);
+
+  txt_move_toline(text, 0, false);
+
+  found = txt_find_string(text, st->findstr, 0, flags & ST_MATCH_CASE);
+  if (found) {
+    ED_text_undo_push_init(C);
+
+    do {
+      txt_insert_buf(text, st->replacestr);
+      if (text->curl && text->curl->format) {
+        MEM_freeN(text->curl->format);
+        text->curl->format = NULL;
+      }
+      found = txt_find_string(text, st->findstr, 0, flags & ST_MATCH_CASE);
+    } while (found);
+
+    WM_event_add_notifier(C, NC_TEXT | NA_EDITED, text);
+    text_drawcache_tag_update(CTX_wm_space_text(C), 1);
+  }
+  else {
+    /* Restore position */
+    txt_move_to(text, orig_curl, orig_curc, has_sel);
+    return OPERATOR_CANCELLED;
+  }
+
+  return OPERATOR_FINISHED;
+}
+
 static int text_replace_exec(bContext *C, wmOperator *op)
 {
+  bool replace_all = RNA_boolean_get(op->ptr, "all");
+  if (replace_all) {
+    return text_replace_all(C);
+  }
   return text_find_and_replace(C, op, TEXT_REPLACE);
 }
 
@@ -3646,6 +3689,11 @@ void TEXT_OT_replace(wmOperatorType *ot)
 
   /* flags */
   ot->flag = OPTYPE_UNDO;
+
+  /* properties */
+  PropertyRNA *prop;
+  prop = RNA_def_boolean(ot->srna, "all", false, "Replace all", "Replace all occurrences");
+  RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
 }
 
 /** \} */

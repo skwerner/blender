@@ -127,7 +127,7 @@ static void scene_init_data(ID *id)
 
   mblur_shutter_curve = &scene->r.mblur_shutter_curve;
   BKE_curvemapping_set_defaults(mblur_shutter_curve, 1, 0.0f, 0.0f, 1.0f, 1.0f);
-  BKE_curvemapping_initialize(mblur_shutter_curve);
+  BKE_curvemapping_init(mblur_shutter_curve);
   BKE_curvemap_reset(mblur_shutter_curve->cm,
                      &mblur_shutter_curve->clipr,
                      CURVE_PRESET_MAX,
@@ -140,13 +140,13 @@ static void scene_init_data(ID *id)
   /* grease pencil multiframe falloff curve */
   scene->toolsettings->gp_sculpt.cur_falloff = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
   CurveMapping *gp_falloff_curve = scene->toolsettings->gp_sculpt.cur_falloff;
-  BKE_curvemapping_initialize(gp_falloff_curve);
+  BKE_curvemapping_init(gp_falloff_curve);
   BKE_curvemap_reset(
       gp_falloff_curve->cm, &gp_falloff_curve->clipr, CURVE_PRESET_GAUSS, CURVEMAP_SLOPE_POSITIVE);
 
   scene->toolsettings->gp_sculpt.cur_primitive = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
   CurveMapping *gp_primitive_curve = scene->toolsettings->gp_sculpt.cur_primitive;
-  BKE_curvemapping_initialize(gp_primitive_curve);
+  BKE_curvemapping_init(gp_primitive_curve);
   BKE_curvemap_reset(gp_primitive_curve->cm,
                      &gp_primitive_curve->clipr,
                      CURVE_PRESET_BELL,
@@ -570,6 +570,24 @@ static void scene_foreach_id(ID *id, LibraryForeachIDData *data)
   }
 }
 
+static void scene_foreach_cache(ID *id,
+                                IDTypeForeachCacheFunctionCallback function_callback,
+                                void *user_data)
+{
+  Scene *scene = (Scene *)id;
+  IDCacheKey key = {
+      .id_session_uuid = id->session_uuid,
+      .offset_in_ID = offsetof(Scene, eevee.light_cache_data),
+      .cache_v = scene->eevee.light_cache_data,
+  };
+
+  function_callback(id,
+                    &key,
+                    (void **)&scene->eevee.light_cache_data,
+                    IDTYPE_CACHE_CB_FLAGS_PERSISTENT,
+                    user_data);
+}
+
 IDTypeInfo IDType_ID_SCE = {
     .id_code = ID_SCE,
     .id_filter = FILTER_ID_SCE,
@@ -587,6 +605,7 @@ IDTypeInfo IDType_ID_SCE = {
      * support all possible corner cases. */
     .make_local = NULL,
     .foreach_id = scene_foreach_id,
+    .foreach_cache = scene_foreach_cache,
 };
 
 const char *RE_engine_id_BLENDER_EEVEE = "BLENDER_EEVEE";
@@ -751,7 +770,6 @@ void BKE_scene_copy_data_eevee(Scene *sce_dst, const Scene *sce_src)
 
 Scene *BKE_scene_duplicate(Main *bmain, Scene *sce, eSceneCopyMethod type)
 {
-  const bool is_scene_liboverride = ID_IS_OVERRIDE_LIBRARY(sce);
   Scene *sce_copy;
 
   /* TODO this should/could most likely be replaced by call to more generic code at some point...
@@ -821,81 +839,78 @@ Scene *BKE_scene_duplicate(Main *bmain, Scene *sce, eSceneCopyMethod type)
 
     return sce_copy;
   }
-  else {
-    const eDupli_ID_Flags duplicate_flags = U.dupflag | USER_DUP_OBJECT;
 
-    BKE_id_copy(bmain, (ID *)sce, (ID **)&sce_copy);
-    id_us_min(&sce_copy->id);
-    id_us_ensure_real(&sce_copy->id);
+  eDupli_ID_Flags duplicate_flags = U.dupflag | USER_DUP_OBJECT;
 
-    if (duplicate_flags & USER_DUP_ACT) {
-      BKE_animdata_copy_id_action(bmain, &sce_copy->id, true);
+  BKE_id_copy(bmain, (ID *)sce, (ID **)&sce_copy);
+  id_us_min(&sce_copy->id);
+  id_us_ensure_real(&sce_copy->id);
+
+  BKE_animdata_duplicate_id_action(bmain, &sce_copy->id, duplicate_flags);
+
+  /* Extra actions, most notably SCE_FULL_COPY also duplicates several 'children' datablocks. */
+
+  if (type == SCE_COPY_FULL) {
+    /* Scene duplication is always root of duplication currently. */
+    const bool is_subprocess = false;
+
+    if (!is_subprocess) {
+      BKE_main_id_tag_all(bmain, LIB_TAG_NEW, false);
+      BKE_main_id_clear_newpoins(bmain);
+      /* In case root duplicated ID is linked, assume we want to get a local copy of it and
+       * duplicate all expected linked data. */
+      if (ID_IS_LINKED(sce)) {
+        duplicate_flags |= USER_DUP_LINKED_ID;
+      }
     }
 
-    /* Extra actions, most notably SCE_FULL_COPY also duplicates several 'children' datablocks. */
-
-    if (type == SCE_COPY_FULL) {
-      /* Scene duplication is always root of duplication currently. */
-      const bool is_subprocess = false;
-
-      if (!is_subprocess) {
-        BKE_main_id_tag_all(bmain, LIB_TAG_NEW, false);
-        BKE_main_id_clear_newpoins(bmain);
+    /* Copy Freestyle LineStyle datablocks. */
+    LISTBASE_FOREACH (ViewLayer *, view_layer_dst, &sce_copy->view_layers) {
+      LISTBASE_FOREACH (FreestyleLineSet *, lineset, &view_layer_dst->freestyle_config.linesets) {
+        BKE_id_copy_for_duplicate(bmain, (ID *)lineset->linestyle, duplicate_flags);
       }
+    }
 
-      /* Copy Freestyle LineStyle datablocks. */
-      LISTBASE_FOREACH (ViewLayer *, view_layer_dst, &sce_copy->view_layers) {
-        LISTBASE_FOREACH (
-            FreestyleLineSet *, lineset, &view_layer_dst->freestyle_config.linesets) {
-          BKE_id_copy_for_duplicate(
-              bmain, &lineset->linestyle->id, is_scene_liboverride, duplicate_flags);
-        }
-      }
+    /* Full copy of world (included animations) */
+    BKE_id_copy_for_duplicate(bmain, (ID *)sce->world, duplicate_flags);
 
-      /* Full copy of world (included animations) */
-      BKE_id_copy_for_duplicate(bmain, &sce->world->id, is_scene_liboverride, duplicate_flags);
+    /* Full copy of GreasePencil. */
+    BKE_id_copy_for_duplicate(bmain, (ID *)sce->gpd, duplicate_flags);
 
-      /* Full copy of GreasePencil. */
-      BKE_id_copy_for_duplicate(bmain, &sce->gpd->id, is_scene_liboverride, duplicate_flags);
+    /* Deep-duplicate collections and objects (using preferences' settings for which sub-data to
+     * duplicate along the object itself). */
+    BKE_collection_duplicate(
+        bmain, NULL, sce_copy->master_collection, duplicate_flags, LIB_ID_DUPLICATE_IS_SUBPROCESS);
 
-      /* Deep-duplicate collections and objects (using preferences' settings for which sub-data to
-       * duplicate along the object itself). */
-      BKE_collection_duplicate(bmain,
-                               NULL,
-                               sce_copy->master_collection,
-                               duplicate_flags,
-                               LIB_ID_DUPLICATE_IS_SUBPROCESS);
-
-      if (!is_subprocess) {
-        /* This code will follow into all ID links using an ID tagged with LIB_TAG_NEW.*/
-        BKE_libblock_relink_to_newid(&sce_copy->id);
+    if (!is_subprocess) {
+      /* This code will follow into all ID links using an ID tagged with LIB_TAG_NEW.*/
+      BKE_libblock_relink_to_newid(&sce_copy->id);
 
 #ifndef NDEBUG
-        /* Call to `BKE_libblock_relink_to_newid` above is supposed to have cleared all those
-         * flags. */
-        ID *id_iter;
-        FOREACH_MAIN_ID_BEGIN (bmain, id_iter) {
-          BLI_assert((id_iter->tag & LIB_TAG_NEW) == 0);
-        }
-        FOREACH_MAIN_ID_END;
+      /* Call to `BKE_libblock_relink_to_newid` above is supposed to have cleared all those
+       * flags. */
+      ID *id_iter;
+      FOREACH_MAIN_ID_BEGIN (bmain, id_iter) {
+        BLI_assert((id_iter->tag & LIB_TAG_NEW) == 0);
+      }
+      FOREACH_MAIN_ID_END;
 #endif
 
-        /* Cleanup. */
-        BKE_main_id_tag_all(bmain, LIB_TAG_NEW, false);
-        BKE_main_id_clear_newpoins(bmain);
+      /* Cleanup. */
+      BKE_main_id_tag_all(bmain, LIB_TAG_NEW, false);
+      BKE_main_id_clear_newpoins(bmain);
 
-        BKE_main_collection_sync(bmain);
-      }
+      BKE_main_collection_sync(bmain);
     }
-    else {
-      /* Remove sequencer if not full copy */
-      /* XXX Why in Hell? :/ */
-      remove_sequencer_fcurves(sce_copy);
-      BKE_sequencer_editing_free(sce_copy, true);
-    }
-
-    return sce_copy;
   }
+  else {
+    /* Remove sequencer if not full copy */
+    /* XXX Why in Hell? :/ */
+    remove_sequencer_fcurves(sce_copy);
+    BKE_sequencer_editing_free(sce_copy, true);
+  }
+
+  return sce_copy;
 }
 
 void BKE_scene_groups_relink(Scene *sce)
@@ -987,7 +1002,7 @@ Scene *BKE_scene_set_name(Main *bmain, const char *name)
   return NULL;
 }
 
-/* Used by metaballs, return *all* objects (including duplis)
+/* Used by meta-balls, return *all* objects (including duplis)
  * existing in the scene (including scene's sets). */
 int BKE_scene_base_iter_next(
     Depsgraph *depsgraph, SceneBaseIter *iter, Scene **scene, int val, Base **base, Object **ob)
@@ -1058,7 +1073,7 @@ int BKE_scene_base_iter_next(
       else {
         if (iter->phase != F_DUPLI) {
           if (depsgraph && (*base)->object->transflag & OB_DUPLI) {
-            /* collections cannot be duplicated for metaballs yet,
+            /* Collections cannot be duplicated for meta-balls yet,
              * this enters eternal loop because of
              * makeDispListMBall getting called inside of collection_duplilist */
             if ((*base)->object->instance_collection == NULL) {
@@ -1112,6 +1127,17 @@ int BKE_scene_base_iter_next(
   }
 
   return iter->phase;
+}
+
+Scene *BKE_scene_find_from_view_layer(const Main *bmain, const ViewLayer *layer)
+{
+  for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
+    if (BLI_findindex(&scene->view_layers, layer) != -1) {
+      return scene;
+    }
+  }
+
+  return NULL;
 }
 
 Scene *BKE_scene_find_from_collection(const Main *bmain, const Collection *collection)
@@ -1470,7 +1496,7 @@ static void scene_graph_update_tagged(Depsgraph *depsgraph, Main *bmain, bool on
 
   for (int pass = 0; pass < 2; pass++) {
     /* (Re-)build dependency graph if needed. */
-    DEG_graph_relations_update(depsgraph, bmain, scene, view_layer);
+    DEG_graph_relations_update(depsgraph);
     /* Uncomment this to check if graph was properly tagged for update. */
     // DEG_debug_graph_relations_validate(depsgraph, bmain, scene);
     /* Flush editing data if needed. */
@@ -1478,7 +1504,7 @@ static void scene_graph_update_tagged(Depsgraph *depsgraph, Main *bmain, bool on
     /* Update all objects: drivers, matrices, displists, etc. flags set
      * by depgraph or manual, no layer check here, gets correct flushed.
      */
-    DEG_evaluate_on_refresh(bmain, depsgraph);
+    DEG_evaluate_on_refresh(depsgraph);
     /* Update sound system. */
     BKE_scene_update_sound(depsgraph, bmain);
     /* Notify python about depsgraph update. */
@@ -1497,7 +1523,7 @@ static void scene_graph_update_tagged(Depsgraph *depsgraph, Main *bmain, bool on
        * be tagged for an update anyway.
        *
        * If there are no relations changed by the callback this call will do nothing. */
-      DEG_graph_relations_update(depsgraph, bmain, scene, view_layer);
+      DEG_graph_relations_update(depsgraph);
     }
     /* Inform editors about possible changes. */
     DEG_ids_check_recalc(bmain, depsgraph, scene, view_layer, false);
@@ -1526,10 +1552,11 @@ void BKE_scene_graph_evaluated_ensure(Depsgraph *depsgraph, Main *bmain)
 }
 
 /* applies changes right away, does all sets too */
-void BKE_scene_graph_update_for_newframe(Depsgraph *depsgraph, Main *bmain)
+void BKE_scene_graph_update_for_newframe(Depsgraph *depsgraph)
 {
   Scene *scene = DEG_get_input_scene(depsgraph);
   ViewLayer *view_layer = DEG_get_input_view_layer(depsgraph);
+  Main *bmain = DEG_get_bmain(depsgraph);
 
   /* Keep this first. */
   BKE_callback_exec_id(bmain, &scene->id, BKE_CB_EVT_FRAME_CHANGE_PRE);
@@ -1540,7 +1567,7 @@ void BKE_scene_graph_update_for_newframe(Depsgraph *depsgraph, Main *bmain)
      */
     BKE_image_editors_update_frame(bmain, scene->r.cfra);
     BKE_sound_set_cfra(scene->r.cfra);
-    DEG_graph_relations_update(depsgraph, bmain, scene, view_layer);
+    DEG_graph_relations_update(depsgraph);
     /* Update all objects: drivers, matrices, displists, etc. flags set
      * by depgraph or manual, no layer check here, gets correct flushed.
      *
@@ -1549,10 +1576,10 @@ void BKE_scene_graph_update_for_newframe(Depsgraph *depsgraph, Main *bmain)
      * loose any possible unkeyed changes made by the handler. */
     if (pass == 0) {
       const float ctime = BKE_scene_frame_get(scene);
-      DEG_evaluate_on_framechange(bmain, depsgraph, ctime);
+      DEG_evaluate_on_framechange(depsgraph, ctime);
     }
     else {
-      DEG_evaluate_on_refresh(bmain, depsgraph);
+      DEG_evaluate_on_refresh(depsgraph);
     }
     /* Update sound system animation. */
     BKE_scene_update_sound(depsgraph, bmain);
@@ -1563,7 +1590,7 @@ void BKE_scene_graph_update_for_newframe(Depsgraph *depsgraph, Main *bmain)
 
       /* NOTE: Similar to this case in scene_graph_update_tagged(). Need to ensure that
        * DEG_ids_clear_recalc() doesn't access freed memory of possibly removed ID. */
-      DEG_graph_relations_update(depsgraph, bmain, scene, view_layer);
+      DEG_graph_relations_update(depsgraph);
     }
 
     /* Inform editors about possible changes. */
@@ -1622,7 +1649,7 @@ bool BKE_scene_remove_render_view(Scene *scene, SceneRenderView *srv)
   if (act == -1) {
     return false;
   }
-  else if (scene->r.views.first == scene->r.views.last) {
+  if (scene->r.views.first == scene->r.views.last) {
     /* ensure 1 view is kept */
     return false;
   }
@@ -1643,13 +1670,11 @@ int get_render_subsurf_level(const RenderData *r, int lvl, bool for_render)
     if (for_render) {
       return min_ii(r->simplify_subsurf_render, lvl);
     }
-    else {
-      return min_ii(r->simplify_subsurf, lvl);
-    }
+
+    return min_ii(r->simplify_subsurf, lvl);
   }
-  else {
-    return lvl;
-  }
+
+  return lvl;
 }
 
 int get_render_child_particle_number(const RenderData *r, int num, bool for_render)
@@ -1658,13 +1683,11 @@ int get_render_child_particle_number(const RenderData *r, int num, bool for_rend
     if (for_render) {
       return (int)(r->simplify_particles_render * num);
     }
-    else {
-      return (int)(r->simplify_particles * num);
-    }
+
+    return (int)(r->simplify_particles * num);
   }
-  else {
-    return num;
-  }
+
+  return num;
 }
 
 /**
@@ -1679,7 +1702,7 @@ Base *_setlooper_base_step(Scene **sce_iter, ViewLayer *view_layer, Base *base)
     /* Common case, step to the next. */
     return base->next;
   }
-  else if ((base == NULL) && (view_layer != NULL)) {
+  if ((base == NULL) && (view_layer != NULL)) {
     /* First time looping, return the scenes first base. */
     /* For the first loop we should get the layer from workspace when available. */
     if (view_layer->object_bases.first) {
@@ -1998,9 +2021,8 @@ const char *BKE_scene_multiview_render_view_name_get(const RenderData *rd, const
   if (srv) {
     return srv->name;
   }
-  else {
-    return "";
-  }
+
+  return "";
 }
 
 int BKE_scene_multiview_view_id_get(const RenderData *rd, const char *viewname)
@@ -2021,9 +2043,8 @@ int BKE_scene_multiview_view_id_get(const RenderData *rd, const char *viewname)
       if (STREQ(viewname, srv->name)) {
         return nr;
       }
-      else {
-        nr += 1;
-      }
+
+      nr += 1;
     }
   }
 
@@ -2074,9 +2095,8 @@ const char *BKE_scene_multiview_view_suffix_get(const RenderData *rd, const char
   if (srv) {
     return srv->suffix;
   }
-  else {
-    return viewname;
-  }
+
+  return viewname;
 }
 
 const char *BKE_scene_multiview_view_id_suffix_get(const RenderData *rd, const int view_id)
@@ -2084,10 +2104,9 @@ const char *BKE_scene_multiview_view_id_suffix_get(const RenderData *rd, const i
   if ((rd->scemode & R_MULTIVIEW) == 0) {
     return "";
   }
-  else {
-    const char *viewname = BKE_scene_multiview_render_view_name_get(rd, view_id);
-    return BKE_scene_multiview_view_suffix_get(rd, viewname);
-  }
+
+  const char *viewname = BKE_scene_multiview_render_view_name_get(rd, view_id);
+  return BKE_scene_multiview_view_suffix_get(rd, viewname);
 }
 
 void BKE_scene_multiview_view_prefix_get(Scene *scene,
@@ -2155,10 +2174,9 @@ int BKE_scene_multiview_num_videos_get(const RenderData *rd)
   if (rd->im_format.views_format == R_IMF_VIEWS_STEREO_3D) {
     return 1;
   }
-  else {
-    /* R_IMF_VIEWS_INDIVIDUAL */
-    return BKE_scene_multiview_num_views_get(rd);
-  }
+
+  /* R_IMF_VIEWS_INDIVIDUAL */
+  return BKE_scene_multiview_num_views_get(rd);
 }
 
 /* Manipulation of depsgraph storage. */
@@ -2239,6 +2257,7 @@ static Depsgraph **scene_get_depsgraph_p(Main *bmain,
 {
   BLI_assert(scene != NULL);
   BLI_assert(view_layer != NULL);
+  BLI_assert(BKE_scene_find_from_view_layer(bmain, view_layer) == scene);
   /* Make sure hash itself exists. */
   if (allocate_ghash_entry) {
     BKE_scene_ensure_depsgraph_hash(scene);
@@ -2293,7 +2312,8 @@ static char *scene_undo_depsgraph_gen_key(Scene *scene, ViewLayer *view_layer, c
 
   size_t key_full_offset = BLI_strncpy_rlen(key_full, scene->id.name, MAX_ID_NAME);
   if (scene->id.lib != NULL) {
-    key_full_offset += BLI_strncpy_rlen(key_full + key_full_offset, scene->id.lib->name, FILE_MAX);
+    key_full_offset += BLI_strncpy_rlen(
+        key_full + key_full_offset, scene->id.lib->filepath, FILE_MAX);
   }
   key_full_offset += BLI_strncpy_rlen(key_full + key_full_offset, view_layer->name, MAX_NAME);
   BLI_assert(key_full_offset < MAX_ID_NAME + FILE_MAX + MAX_NAME);

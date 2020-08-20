@@ -678,7 +678,7 @@ static ShaderNode *add_node(Scene *scene,
          * builtin names for packed images and movies
          */
         int scene_frame = b_scene.frame_current();
-        int image_frame = image_user_frame_number(b_image_user, scene_frame);
+        int image_frame = image_user_frame_number(b_image_user, b_image, scene_frame);
         image->handle = scene->image_manager->add_image(
             new BlenderImageLoader(b_image, image_frame), image->image_params());
       }
@@ -713,7 +713,7 @@ static ShaderNode *add_node(Scene *scene,
 
       if (is_builtin) {
         int scene_frame = b_scene.frame_current();
-        int image_frame = image_user_frame_number(b_image_user, scene_frame);
+        int image_frame = image_user_frame_number(b_image_user, b_image, scene_frame);
         env->handle = scene->image_manager->add_image(new BlenderImageLoader(b_image, image_frame),
                                                       env->image_params());
       }
@@ -815,9 +815,10 @@ static ShaderNode *add_node(Scene *scene,
     sky->ground_albedo = b_sky_node.ground_albedo();
     sky->sun_disc = b_sky_node.sun_disc();
     sky->sun_size = b_sky_node.sun_size();
+    sky->sun_intensity = b_sky_node.sun_intensity();
     sky->sun_elevation = b_sky_node.sun_elevation();
     sky->sun_rotation = b_sky_node.sun_rotation();
-    sky->altitude = b_sky_node.altitude();
+    sky->altitude = 1000.0f * b_sky_node.altitude();
     sky->air_density = b_sky_node.air_density();
     sky->dust_density = b_sky_node.dust_density();
     sky->ozone_density = b_sky_node.ozone_density();

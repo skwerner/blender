@@ -14,30 +14,29 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FN_MULTI_FUNCTION_SIGNATURE_HH__
-#define __FN_MULTI_FUNCTION_SIGNATURE_HH__
+#pragma once
 
 /** \file
  * \ingroup fn
  *
  * The signature of a multi-function contains the functions name and expected parameters. New
- * signatures should be build using the MFSignatureBuilder class.
+ * signatures should be build using the #MFSignatureBuilder class.
  */
 
 #include "FN_multi_function_param_type.hh"
 
 #include "BLI_vector.hh"
 
-namespace blender {
-namespace fn {
+namespace blender::fn {
 
 struct MFSignature {
   std::string function_name;
   Vector<std::string> param_names;
   Vector<MFParamType> param_types;
-  Vector<uint> param_data_indices;
+  Vector<int> param_data_indices;
+  bool depends_on_context = false;
 
-  uint data_index(uint param_index) const
+  int data_index(int param_index) const
   {
     return param_data_indices[param_index];
   }
@@ -45,21 +44,21 @@ struct MFSignature {
 
 class MFSignatureBuilder {
  private:
-  MFSignature &m_data;
-  uint m_span_count = 0;
-  uint m_virtual_span_count = 0;
-  uint m_virtual_array_span_count = 0;
-  uint m_vector_array_count = 0;
+  MFSignature &data_;
+  int span_count_ = 0;
+  int virtual_span_count_ = 0;
+  int virtual_array_span_count_ = 0;
+  int vector_array_count_ = 0;
 
  public:
-  MFSignatureBuilder(MFSignature &data) : m_data(data)
+  MFSignatureBuilder(MFSignature &data) : data_(data)
   {
     BLI_assert(data.param_names.is_empty());
     BLI_assert(data.param_types.is_empty());
     BLI_assert(data.param_data_indices.is_empty());
   }
 
-  /* Input Param Types */
+  /* Input Parameter Types */
 
   template<typename T> void single_input(StringRef name)
   {
@@ -79,20 +78,20 @@ class MFSignatureBuilder {
   }
   void input(StringRef name, MFDataType data_type)
   {
-    m_data.param_names.append(name);
-    m_data.param_types.append(MFParamType(MFParamType::Input, data_type));
+    data_.param_names.append(name);
+    data_.param_types.append(MFParamType(MFParamType::Input, data_type));
 
     switch (data_type.category()) {
       case MFDataType::Single:
-        m_data.param_data_indices.append(m_virtual_span_count++);
+        data_.param_data_indices.append(virtual_span_count_++);
         break;
       case MFDataType::Vector:
-        m_data.param_data_indices.append(m_virtual_array_span_count++);
+        data_.param_data_indices.append(virtual_array_span_count_++);
         break;
     }
   }
 
-  /* Output Param Types */
+  /* Output Parameter Types */
 
   template<typename T> void single_output(StringRef name)
   {
@@ -112,20 +111,20 @@ class MFSignatureBuilder {
   }
   void output(StringRef name, MFDataType data_type)
   {
-    m_data.param_names.append(name);
-    m_data.param_types.append(MFParamType(MFParamType::Output, data_type));
+    data_.param_names.append(name);
+    data_.param_types.append(MFParamType(MFParamType::Output, data_type));
 
     switch (data_type.category()) {
       case MFDataType::Single:
-        m_data.param_data_indices.append(m_span_count++);
+        data_.param_data_indices.append(span_count_++);
         break;
       case MFDataType::Vector:
-        m_data.param_data_indices.append(m_vector_array_count++);
+        data_.param_data_indices.append(vector_array_count_++);
         break;
     }
   }
 
-  /* Mutable Param Types */
+  /* Mutable Parameter Types */
 
   template<typename T> void single_mutable(StringRef name)
   {
@@ -145,21 +144,27 @@ class MFSignatureBuilder {
   }
   void mutable_(StringRef name, MFDataType data_type)
   {
-    m_data.param_names.append(name);
-    m_data.param_types.append(MFParamType(MFParamType::Mutable, data_type));
+    data_.param_names.append(name);
+    data_.param_types.append(MFParamType(MFParamType::Mutable, data_type));
 
     switch (data_type.category()) {
       case MFDataType::Single:
-        m_data.param_data_indices.append(m_span_count++);
+        data_.param_data_indices.append(span_count_++);
         break;
       case MFDataType::Vector:
-        m_data.param_data_indices.append(m_vector_array_count++);
+        data_.param_data_indices.append(vector_array_count_++);
         break;
     }
   }
+
+  /* Context */
+
+  /** This indicates that the function accesses the context. This disables optimizations that
+   * depend on the fact that the function always performers the same operation. */
+  void depends_on_context()
+  {
+    data_.depends_on_context = true;
+  }
 };
 
-}  // namespace fn
-}  // namespace blender
-
-#endif /* __FN_MULTI_FUNCTION_SIGNATURE_HH__ */
+}  // namespace blender::fn

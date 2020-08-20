@@ -399,8 +399,8 @@ class QuickSmoke(ObjectModeOperator, Operator):
         if self.style == 'FIRE' or self.style == 'BOTH':
             obj.modifiers[-1].domain_settings.use_noise = True
 
-        # set correct cache file format for smoke
-        obj.modifiers[-1].domain_settings.cache_data_format = 'UNI'
+        # ensure correct cache file format for smoke
+        obj.modifiers[-1].domain_settings.cache_data_format = 'OPENVDB'
 
         # Setup material
 
@@ -514,7 +514,8 @@ class QuickLiquid(Operator):
         obj.modifiers[-1].domain_settings.use_collision_border_top = True
         obj.modifiers[-1].domain_settings.use_collision_border_bottom = True
 
-        # set correct cache file format for liquid
+        # ensure correct cache file formats for liquid
+        obj.modifiers[-1].domain_settings.cache_data_format = 'OPENVDB'
         obj.modifiers[-1].domain_settings.cache_mesh_format = 'BOBJECT'
 
         # change domain type, will also allocate and show particle system for FLIP
@@ -560,9 +561,61 @@ class QuickLiquid(Operator):
         return {'FINISHED'}
 
 
+class QuickParticles(Operator):
+    """Use active object as particle emitter"""
+    bl_idname = "object.quick_particles"
+    bl_label = "Quick Particles"
+
+    @classmethod
+    def poll(cls, context):
+        if not context.preferences.experimental.use_new_particle_system:
+            return False
+        if context.mode != 'OBJECT':
+            return False
+        if context.active_object is None:
+            return False
+        if context.active_object.type != 'MESH':
+            return False
+        return True
+
+    def execute(self, context):
+        pointcloud = bpy.data.pointclouds.new("Particles")
+        pointcloud_object = bpy.data.objects.new("Particles", pointcloud)
+        modifier = pointcloud_object.modifiers.new("Simulation", 'SIMULATION')
+        simulation = bpy.data.simulations.new("Particle Simulation")
+        tree = simulation.node_tree
+
+        default_name = "Particles"
+        particle_simulation_node = tree.nodes.new('SimulationNodeParticleSimulation')
+        particle_simulation_node.name = default_name
+        emitter_node = tree.nodes.new('SimulationNodeParticleMeshEmitter')
+        emitter_node.location.x -= 200
+        emitter_node.location.y += 50
+        emitter_node.inputs["Object"].default_value = context.active_object
+        force_node = tree.nodes.new('SimulationNodeForce')
+        force_node.location.x -= 200
+        force_node.location.y -= 100
+        force_node.inputs["Force"].default_value = (0, 0, -1)
+
+        tree.links.new(particle_simulation_node.inputs["Emitters"], emitter_node.outputs["Emitter"])
+        tree.links.new(particle_simulation_node.inputs["Forces"], force_node.outputs["Force"])
+
+        modifier.simulation = simulation
+        modifier.data_path = default_name
+
+        for obj in context.selected_objects:
+            obj.select_set(False)
+
+        context.collection.objects.link(pointcloud_object)
+        pointcloud_object.select_set(True)
+        context.view_layer.objects.active = pointcloud_object
+        pointcloud_object.show_bounds = True
+        return {'FINISHED'}
+
 classes = (
     QuickExplode,
     QuickFur,
     QuickSmoke,
     QuickLiquid,
+    QuickParticles,
 )

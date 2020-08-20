@@ -90,6 +90,8 @@
 #include "BKE_key.h"
 #include "BKE_main.h"
 
+#include "DEG_depsgraph_query.h"
+
 #include "bmesh.h"
 #include "intern/bmesh_private.h" /* For element checking. */
 
@@ -231,7 +233,13 @@ void BM_mesh_bm_from_me(BMesh *bm, const Mesh *me, const struct BMeshFromMeshPar
 
   /* -------------------------------------------------------------------- */
   /* Shape Key */
-  int tot_shape_keys = me->key ? BLI_listbase_count(&me->key->block) : 0;
+  int tot_shape_keys = 0;
+  if (me->key != NULL && DEG_is_original_id(&me->id)) {
+    /* Evaluated meshes can be topologically inconsistent with their shape keys.
+     * Shape keys are also already integrated into the state of the evaluated
+     * mesh, so considering them here would kind of apply them twice. */
+    tot_shape_keys = BLI_listbase_count(&me->key->block);
+  }
   if (is_new == false) {
     tot_shape_keys = min_ii(tot_shape_keys, CustomData_number_of_layers(&bm->vdata, CD_SHAPEKEY));
   }
@@ -239,7 +247,7 @@ void BM_mesh_bm_from_me(BMesh *bm, const Mesh *me, const struct BMeshFromMeshPar
                                           BLI_array_alloca(shape_key_table, tot_shape_keys) :
                                           NULL;
 
-  if ((params->active_shapekey != 0) && (me->key != NULL)) {
+  if ((params->active_shapekey != 0) && tot_shape_keys > 0) {
     actkey = BLI_findlink(&me->key->block, params->active_shapekey - 1);
   }
   else {
@@ -298,7 +306,8 @@ void BM_mesh_bm_from_me(BMesh *bm, const Mesh *me, const struct BMeshFromMeshPar
   const int cd_vert_bweight_offset = CustomData_get_offset(&bm->vdata, CD_BWEIGHT);
   const int cd_edge_bweight_offset = CustomData_get_offset(&bm->edata, CD_BWEIGHT);
   const int cd_edge_crease_offset = CustomData_get_offset(&bm->edata, CD_CREASE);
-  const int cd_shape_key_offset = me->key ? CustomData_get_offset(&bm->vdata, CD_SHAPEKEY) : -1;
+  const int cd_shape_key_offset = tot_shape_keys ? CustomData_get_offset(&bm->vdata, CD_SHAPEKEY) :
+                                                   -1;
   const int cd_shape_keyindex_offset = is_new && (tot_shape_keys || params->add_key_index) ?
                                            CustomData_get_offset(&bm->vdata, CD_SHAPE_KEYINDEX) :
                                            -1;
@@ -860,7 +869,7 @@ void BM_mesh_bm_to_me(Main *bmain, BMesh *bm, Mesh *me, const struct BMeshToMesh
       if (act_is_basis) {
         const float(*fp)[3] = actkey->data;
 
-        ofs = MEM_callocN(sizeof(float) * 3 * bm->totvert, "currkey->data");
+        ofs = MEM_callocN(sizeof(float[3]) * bm->totvert, "currkey->data");
         mvert = me->mvert;
         BM_ITER_MESH_INDEX (eve, &iter, bm, BM_VERTS_OF_MESH, i) {
           const int keyi = BM_ELEM_CD_GET_INT(eve, cd_shape_keyindex_offset);
@@ -925,7 +934,7 @@ void BM_mesh_bm_to_me(Main *bmain, BMesh *bm, Mesh *me, const struct BMeshToMesh
         else if ((oldkey != NULL) && (cd_shape_keyindex_offset != -1) &&
                  ((keyi = BM_ELEM_CD_GET_INT(eve, cd_shape_keyindex_offset)) != ORIGINDEX_NONE) &&
                  (keyi < currkey->totelem)) {
-          /* Old method of reconstructing keys via vertice's original key indices,
+          /* Old method of reconstructing keys via vertices original key indices,
            * currently used if the new method above fails
            * (which is theoretically possible in certain cases of undo). */
           copy_v3_v3(fp, oldkey[keyi]);
@@ -938,9 +947,9 @@ void BM_mesh_bm_to_me(Main *bmain, BMesh *bm, Mesh *me, const struct BMeshToMesh
         /* Propagate edited basis offsets to other shapes. */
         if (apply_offset) {
           add_v3_v3(fp, *ofs_pt++);
-          /* Apply back new coordinates of offsetted shape-keys into BMesh.
-           * Otherwise, in case we call again BM_mesh_bm_to_me on same BMesh,
-           * we'll apply diff from previous call to BM_mesh_bm_to_me,
+          /* Apply back new coordinates shape-keys that have offset into BMesh.
+           * Otherwise, in case we call again #BM_mesh_bm_to_me on same BMesh,
+           * we'll apply diff from previous call to #BM_mesh_bm_to_me,
            * to shape-key values from *original creation of the BMesh*. See T50524. */
           copy_v3_v3(BM_ELEM_CD_GET_VOID_P(eve, cd_shape_offset), fp);
         }
@@ -976,7 +985,7 @@ void BM_mesh_bm_to_me(Main *bmain, BMesh *bm, Mesh *me, const struct BMeshToMesh
     MEM_freeN(oldverts);
   }
 
-  /* Topology could be changed, ensure mdisps are ok. */
+  /* Topology could be changed, ensure #CD_MDISPS are ok. */
   multires_topology_changed(me);
 
   /* To be removed as soon as COW is enabled by default.. */

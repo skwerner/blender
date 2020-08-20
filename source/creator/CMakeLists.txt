@@ -694,6 +694,23 @@ elseif(WIN32)
     )
   endif()
 
+  if(WITH_GMP)
+    install(
+          FILES ${LIBDIR}/gmp/lib/libgmp-10.dll
+          DESTINATION "."
+    )
+    install(
+          FILES ${LIBDIR}/gmp/lib/libgmpxx.dll
+          DESTINATION "."
+          CONFIGURATIONS Release;RelWithDebInfo;MinSizeRel
+    )
+    install(
+          FILES ${LIBDIR}/gmp/lib/libgmpxx_d.dll
+          DESTINATION "."
+          CONFIGURATIONS Debug
+    )
+  endif()
+
   if(WITH_WINDOWS_PDB)
     if(WITH_WINDOWS_STRIPPED_PDB)
       # Icky hack for older cmake from https://stackoverflow.com/a/21198501
@@ -703,6 +720,19 @@ elseif(WIN32)
     else()
       install(FILES $<TARGET_PDB_FILE:blender> DESTINATION . RENAME blender.pdb)
     endif()
+  endif()
+
+  if(WITH_OPENVDB)
+      install(
+        FILES ${LIBDIR}/openvdb/bin/openvdb.dll
+        DESTINATION "."
+        CONFIGURATIONS Release;RelWithDebInfo;MinSizeRel
+      )
+      install(
+        FILES ${LIBDIR}/openvdb/bin/openvdb_d.dll
+        DESTINATION "."
+        CONFIGURATIONS Debug
+      )
   endif()
 
   if(WITH_PYTHON)

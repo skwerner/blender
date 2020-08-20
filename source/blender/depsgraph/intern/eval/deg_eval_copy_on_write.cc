@@ -100,7 +100,8 @@
 #include "intern/node/deg_node.h"
 #include "intern/node/deg_node_id.h"
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 #define DEBUG_PRINT \
   if (G.debug & G_DEBUG_DEPSGRAPH_EVAL) \
@@ -119,6 +120,7 @@ union NestedIDHackTempStorage {
   Scene scene;
   Tex tex;
   World world;
+  Simulation simulation;
 };
 
 /* Set nested owned ID pointers to nullptr. */
@@ -136,6 +138,7 @@ void nested_id_hack_discard_pointers(ID *id_cow)
     SPECIAL_CASE(ID_MA, Material, nodetree)
     SPECIAL_CASE(ID_TE, Tex, nodetree)
     SPECIAL_CASE(ID_WO, World, nodetree)
+    SPECIAL_CASE(ID_SIM, Simulation, nodetree)
 
     SPECIAL_CASE(ID_CU, Curve, key)
     SPECIAL_CASE(ID_LT, Lattice, key)
@@ -184,6 +187,7 @@ const ID *nested_id_hack_get_discarded_pointers(NestedIDHackTempStorage *storage
     SPECIAL_CASE(ID_MA, Material, nodetree, material)
     SPECIAL_CASE(ID_TE, Tex, nodetree, tex)
     SPECIAL_CASE(ID_WO, World, nodetree, world)
+    SPECIAL_CASE(ID_SIM, Simulation, nodetree, simulation)
 
     SPECIAL_CASE(ID_CU, Curve, key, curve)
     SPECIAL_CASE(ID_LT, Lattice, key, lattice)
@@ -223,6 +227,7 @@ void nested_id_hack_restore_pointers(const ID *old_id, ID *new_id)
     SPECIAL_CASE(ID_SCE, Scene, nodetree)
     SPECIAL_CASE(ID_TE, Tex, nodetree)
     SPECIAL_CASE(ID_WO, World, nodetree)
+    SPECIAL_CASE(ID_SIM, Simulation, nodetree)
 
     SPECIAL_CASE(ID_CU, Curve, key)
     SPECIAL_CASE(ID_LT, Lattice, key)
@@ -260,6 +265,7 @@ void ntree_hack_remap_pointers(const Depsgraph *depsgraph, ID *id_cow)
     SPECIAL_CASE(ID_SCE, Scene, nodetree, bNodeTree)
     SPECIAL_CASE(ID_TE, Tex, nodetree, bNodeTree)
     SPECIAL_CASE(ID_WO, World, nodetree, bNodeTree)
+    SPECIAL_CASE(ID_SIM, Simulation, nodetree, bNodeTree)
 
     SPECIAL_CASE(ID_CU, Curve, key, Key)
     SPECIAL_CASE(ID_LT, Lattice, key, Key)
@@ -281,6 +287,14 @@ struct ValidateData {
 bool id_copy_inplace_no_main(const ID *id, ID *newid)
 {
   const ID *id_for_copy = id;
+
+  if (G.debug & G_DEBUG_DEPSGRAPH_UUID) {
+    const ID_Type id_type = GS(id_for_copy->name);
+    if (id_type == ID_OB) {
+      const Object *object = reinterpret_cast<const Object *>(id_for_copy);
+      BKE_object_check_uuids_unique_and_report(object);
+    }
+  }
 
 #ifdef NESTED_ID_NASTY_WORKAROUND
   NestedIDHackTempStorage id_hack_storage;
@@ -304,6 +318,10 @@ bool id_copy_inplace_no_main(const ID *id, ID *newid)
 bool scene_copy_inplace_no_main(const Scene *scene, Scene *new_scene)
 {
   const ID *id_for_copy = &scene->id;
+
+  if (G.debug & G_DEBUG_DEPSGRAPH_UUID) {
+    BKE_sequencer_check_uuids_unique_and_report(scene);
+  }
 
 #ifdef NESTED_ID_NASTY_WORKAROUND
   NestedIDHackTempStorage id_hack_storage;
@@ -330,7 +348,7 @@ ViewLayer *get_original_view_layer(const Depsgraph *depsgraph, const IDNode *id_
   if (id_node->linked_state == DEG_ID_LINKED_DIRECTLY) {
     return depsgraph->view_layer;
   }
-  else if (id_node->linked_state == DEG_ID_LINKED_VIA_SET) {
+  if (id_node->linked_state == DEG_ID_LINKED_VIA_SET) {
     Scene *scene_orig = reinterpret_cast<Scene *>(id_node->id_orig);
     return BKE_view_layer_default_render(scene_orig);
   }
@@ -364,7 +382,7 @@ void scene_remove_unused_view_layers(const Depsgraph *depsgraph,
     }
     return;
   }
-  else if (id_node->linked_state == DEG_ID_LINKED_INDIRECTLY) {
+  if (id_node->linked_state == DEG_ID_LINKED_INDIRECTLY) {
     /* Indirectly linked scenes means it's not an input scene and not a set scene, and is pulled
      * via some driver. Such scenes should not have view layers after copy. */
     view_layer_input = nullptr;
@@ -475,27 +493,8 @@ void scene_setup_view_layers_after_remap(const Depsgraph *depsgraph,
    * Still not an excuse to have those. */
 }
 
-void update_sequence_orig_pointers(const ListBase *sequences_orig, ListBase *sequences_cow)
-{
-  Sequence *sequence_orig = reinterpret_cast<Sequence *>(sequences_orig->first);
-  Sequence *sequence_cow = reinterpret_cast<Sequence *>(sequences_cow->first);
-  while (sequence_orig != nullptr) {
-    update_sequence_orig_pointers(&sequence_orig->seqbase, &sequence_cow->seqbase);
-    sequence_cow->orig_sequence = sequence_orig;
-    sequence_cow = sequence_cow->next;
-    sequence_orig = sequence_orig->next;
-  }
-}
-
-void update_scene_orig_pointers(const Scene *scene_orig, Scene *scene_cow)
-{
-  if (scene_orig->ed != nullptr) {
-    update_sequence_orig_pointers(&scene_orig->ed->seqbase, &scene_cow->ed->seqbase);
-  }
-}
-
 /* Check whether given ID is expanded or still a shallow copy. */
-BLI_INLINE bool check_datablock_expanded(const ID *id_cow)
+inline bool check_datablock_expanded(const ID *id_cow)
 {
   return (id_cow->name[0] != '\0');
 }
@@ -710,13 +709,6 @@ void update_modifiers_orig_pointers(const Object *object_orig, Object *object_co
       &object_orig->modifiers, &object_cow->modifiers, &ModifierData::orig_modifier_data);
 }
 
-void update_simulation_states_orig_pointers(const Simulation *simulation_orig,
-                                            Simulation *simulation_cow)
-{
-  update_list_orig_pointers(
-      &simulation_orig->states, &simulation_cow->states, &SimulationState::orig_state);
-}
-
 void update_nla_strips_orig_pointers(const ListBase *strips_orig, ListBase *strips_cow)
 {
   NlaStrip *strip_orig = reinterpret_cast<NlaStrip *>(strips_orig->first);
@@ -813,13 +805,6 @@ void update_id_after_copy(const Depsgraph *depsgraph,
       scene_cow->toolsettings = scene_orig->toolsettings;
       scene_cow->eevee.light_cache_data = scene_orig->eevee.light_cache_data;
       scene_setup_view_layers_after_remap(depsgraph, id_node, reinterpret_cast<Scene *>(id_cow));
-      update_scene_orig_pointers(scene_orig, scene_cow);
-      break;
-    }
-    case ID_SIM: {
-      Simulation *simulation_cow = (Simulation *)id_cow;
-      const Simulation *simulation_orig = (const Simulation *)id_orig;
-      update_simulation_states_orig_pointers(simulation_orig, simulation_cow);
       break;
     }
     default:
@@ -945,7 +930,7 @@ ID *deg_expand_copy_on_write_datablock(const Depsgraph *depsgraph,
                                        DepsgraphNodeBuilder *node_builder,
                                        bool create_placeholders)
 {
-  DEG::IDNode *id_node = depsgraph->find_id_node(id_orig);
+  IDNode *id_node = depsgraph->find_id_node(id_orig);
   BLI_assert(id_node != nullptr);
   return deg_expand_copy_on_write_datablock(depsgraph, id_node, node_builder, create_placeholders);
 }
@@ -969,7 +954,7 @@ ID *deg_update_copy_on_write_datablock(const Depsgraph *depsgraph, const IDNode 
 /* NOTE: Depsgraph is supposed to have ID node already. */
 ID *deg_update_copy_on_write_datablock(const Depsgraph *depsgraph, ID *id_orig)
 {
-  DEG::IDNode *id_node = depsgraph->find_id_node(id_orig);
+  IDNode *id_node = depsgraph->find_id_node(id_orig);
   BLI_assert(id_node != nullptr);
   return deg_update_copy_on_write_datablock(depsgraph, id_node);
 }
@@ -1089,7 +1074,7 @@ void deg_free_copy_on_write_datablock(ID *id_cow)
 
 void deg_evaluate_copy_on_write(struct ::Depsgraph *graph, const IDNode *id_node)
 {
-  const DEG::Depsgraph *depsgraph = reinterpret_cast<const DEG::Depsgraph *>(graph);
+  const Depsgraph *depsgraph = reinterpret_cast<const Depsgraph *>(graph);
   DEG_debug_print_eval(graph, __func__, id_node->id_orig->name, id_node->id_cow);
   if (id_node->id_orig == &depsgraph->scene->id) {
     /* NOTE: This is handled by eval_ctx setup routines, which
@@ -1137,4 +1122,5 @@ bool deg_copy_on_write_is_needed(const ID_Type id_type)
   return ID_TYPE_IS_COW(id_type);
 }
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

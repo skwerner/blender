@@ -38,8 +38,7 @@
  * necessary.
  */
 
-#ifndef __BLO_READ_WRITE_H__
-#define __BLO_READ_WRITE_H__
+#pragma once
 
 /* for SDNA_TYPE_FROM_STRUCT() macro */
 #include "dna_type_offsets.h"
@@ -180,7 +179,7 @@ bool BLO_write_is_undo(BlendWriter *writer);
 void *BLO_read_get_new_data_address(BlendDataReader *reader, const void *old_address);
 
 #define BLO_read_data_address(reader, ptr_p) \
-  *(ptr_p) = BLO_read_get_new_data_address((reader), *(ptr_p))
+  *((void **)ptr_p) = BLO_read_get_new_data_address((reader), *(ptr_p))
 
 typedef void (*BlendReadListFn)(BlendDataReader *reader, void *data);
 void BLO_read_list_cb(BlendDataReader *reader, struct ListBase *list, BlendReadListFn callback);
@@ -223,5 +222,3 @@ void BLO_expand_id(BlendExpander *expander, struct ID *id);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLO_READ_WRITE_H__ */

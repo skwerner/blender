@@ -267,7 +267,7 @@ static void file_draw_preview(uiBlock *block,
   xco = sx + (int)dx;
   yco = sy - layout->prv_h + (int)dy;
 
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   /* the large image */
 
@@ -290,8 +290,7 @@ static void file_draw_preview(uiBlock *block,
 
   if (!is_icon && typeflags & FILE_TYPE_BLENDERLIB) {
     /* Datablock preview images use premultiplied alpha. */
-    GPU_blend_set_func_separate(
-        GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+    GPU_blend(GPU_BLEND_ALPHA_PREMULT);
   }
 
   IMMDrawPixelsTexState state = immDrawPixelsTexSetup(GPU_SHADER_2D_IMAGE_COLOR);
@@ -300,9 +299,8 @@ static void file_draw_preview(uiBlock *block,
                          (float)yco,
                          imb->x,
                          imb->y,
-                         GL_RGBA,
-                         GL_UNSIGNED_BYTE,
-                         GL_NEAREST,
+                         GPU_RGBA8,
+                         false,
                          imb->rect,
                          scale,
                          scale,
@@ -310,8 +308,7 @@ static void file_draw_preview(uiBlock *block,
                          1.0f,
                          col);
 
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   if (icon && is_icon) {
     /* Small icon in the middle of large image, scaled to fit container and UI scale */
@@ -392,7 +389,7 @@ static void file_draw_preview(uiBlock *block,
     UI_but_drag_set_image(but, BLI_strdup(path), icon, imb, scale, true);
   }
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 }
 
 static void renamebutton_cb(bContext *C, void *UNUSED(arg1), char *oldname)
@@ -876,7 +873,9 @@ void file_draw_list(const bContext *C, ARegion *region)
             sfile->files, file, FILE_SEL_REMOVE, FILE_SEL_EDITING, CHECK_ALL);
       }
     }
-    else {
+
+    /* file_selflag might have been modified by branch above. */
+    if ((file_selflag & FILE_SEL_EDITING) == 0) {
       const int txpos = (params->display == FILE_IMGDISPLAY) ? sx : sx + 1 + icon_ofs;
       const int typos = (params->display == FILE_IMGDISPLAY) ?
                             sy - layout->tile_h + layout->textheight :

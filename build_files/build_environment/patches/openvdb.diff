@@ -1,10 +1,10 @@
 diff -Naur orig/cmake/FindIlmBase.cmake openvdb/cmake/FindIlmBase.cmake
 --- orig/cmake/FindIlmBase.cmake	2019-12-06 12:11:33 -0700
 +++ openvdb/cmake/FindIlmBase.cmake	2020-08-12 12:48:44 -0600
-@@ -225,6 +225,12 @@
-   list(APPEND CMAKE_FIND_LIBRARY_SUFFIXES
-     "-${IlmBase_VERSION_MAJOR}_${IlmBase_VERSION_MINOR}.lib"
-   )
+@@ -217,6 +217,12 @@
+     set(CMAKE_FIND_LIBRARY_SUFFIXES ".lib")
+   endif()
+   list(APPEND CMAKE_FIND_LIBRARY_SUFFIXES "${_IlmBase_Version_Suffix}.lib")
 +  list(APPEND CMAKE_FIND_LIBRARY_SUFFIXES
 +    "_s.lib"
 +  )
@@ -13,14 +13,14 @@ diff -Naur orig/cmake/FindIlmBase.cmake openvdb/cmake/FindIlmBase.cmake
 +  )
  else()
    if(ILMBASE_USE_STATIC_LIBS)
-     list(APPEND CMAKE_FIND_LIBRARY_SUFFIXES
+     set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
 diff -Naur orig/cmake/FindOpenEXR.cmake openvdb/cmake/FindOpenEXR.cmake
 --- orig/cmake/FindOpenEXR.cmake	2019-12-06 12:11:33 -0700
 +++ openvdb/cmake/FindOpenEXR.cmake	2020-08-12 12:48:44 -0600
-@@ -218,6 +218,12 @@
-   list(APPEND CMAKE_FIND_LIBRARY_SUFFIXES
-     "-${OpenEXR_VERSION_MAJOR}_${OpenEXR_VERSION_MINOR}.lib"
-   )
+@@ -210,6 +210,12 @@
+     set(CMAKE_FIND_LIBRARY_SUFFIXES ".lib")
+   endif()
+   list(APPEND CMAKE_FIND_LIBRARY_SUFFIXES "${_OpenEXR_Version_Suffix}.lib")
 +  list(APPEND CMAKE_FIND_LIBRARY_SUFFIXES
 +    "_s.lib"
 +  )
@@ -29,10 +29,10 @@ diff -Naur orig/cmake/FindOpenEXR.cmake openvdb/cmake/FindOpenEXR.cmake
 +  )
  else()
    if(OPENEXR_USE_STATIC_LIBS)
-     list(APPEND CMAKE_FIND_LIBRARY_SUFFIXES
-diff -Naur orig/openvdb/CMakeLists.txt openvdb/openvdb/CMakeLists.txt
+     set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
+diff -Naur orig/openvdb/openvdb/CMakeLists.txt openvdb/openvdb/openvdb/CMakeLists.txt
 --- orig/openvdb/CMakeLists.txt	2019-12-06 12:11:33 -0700
-+++ openvdb/openvdb/CMakeLists.txt	2020-08-12 14:12:26 -0600
++++ openvdb/openvdb/openvdb/CMakeLists.txt	2020-08-12 14:12:26 -0600
 @@ -105,7 +105,9 @@
    #        http://boost.2283326.n4.nabble.com/CMake-config-scripts-broken-in-1-70-td4708957.html
    #        https://github.com/boostorg/boost_install/commit/160c7cb2b2c720e74463865ef0454d4c4cd9ae7c
@@ -118,3 +118,40 @@ diff -Naur orig/openvdb/version.rc.in openvdb/openvdb/version.rc.in
 +
 +    END
 +END
+diff -Naur openvdb-original/CMakeLists.txt openvdb/CMakeLists.txt
+--- openvdb-original/CMakeLists.txt	2020-08-27 03:34:02.000000000 +0200
++++ openvdb/CMakeLists.txt	2020-09-02 10:56:21.665735244 +0200
+@@ -68,6 +68,7 @@
+ option(OPENVDB_INSTALL_HOUDINI_PYTHONRC [=[Install a Houdini startup script that sets
+ the visibilty of OpenVDB nodes and their native equivalents.]=] OFF)
+ option(OPENVDB_BUILD_MAYA_PLUGIN "Build the Maya plugin" OFF)
++option(OPENVDB_BUILD_NANOVDB "Build nanovdb" ON)
+ option(OPENVDB_ENABLE_RPATH "Build with RPATH information" ON)
+ option(OPENVDB_CXX_STRICT "Enable or disable pre-defined compiler warnings" OFF)
+ option(OPENVDB_CODE_COVERAGE "Enable code coverage. This also overrides CMAKE_BUILD_TYPE to Debug" OFF)
+@@ -740,6 +741,10 @@
+   add_subdirectory(openvdb_maya)
+ endif()
+ 
++if(OPENVDB_BUILD_NANOVDB)
++  add_subdirectory(nanovdb)
++endif()
++
+ ##########################################################################
+ 
+ add_custom_target(uninstall
+ diff -Naur openvdb-original/nanovdb/CMakeLists.txt /openvdb/nanovdb/CMakeLists.txt
+--- openvdb-original/nanovdb/CMakeLists.txt    2020-08-27 03:34:02.000000000 +0200
++++ openvdb/nanovdb/CMakeLists.txt   2020-09-02 12:08:31.064760806 +0200
+@@ -276,9 +276,9 @@
+ #
+ 
+ # ---------------------------------------------------------------
+-# copy header files to ${release}/nanovdb/*
++# copy header files to ${release}/include/nanovdb/*
+ install(DIRECTORY ${NANOVDB_INCLUDE_DIR}/nanovdb
+-    DESTINATION ./
++    DESTINATION include
+ )
+ 
+ # ---------------------------------------------------------------

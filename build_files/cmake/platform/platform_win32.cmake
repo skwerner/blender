@@ -537,7 +537,7 @@ endif()
 
 if(WITH_NANOVDB)
   set(NANOVDB ${LIBDIR}/nanoVDB)
-  set(NANOVDB_INCLUDE_DIR ${NANOVDB})
+  set(NANOVDB_INCLUDE_DIR ${NANOVDB}/include)
 endif()
 
 if(WITH_OPENIMAGEDENOISE)

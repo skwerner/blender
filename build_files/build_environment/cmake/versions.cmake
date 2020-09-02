@@ -145,9 +145,9 @@ set(TBB_VERSION 2019_U9)
 set(TBB_URI https://github.com/oneapi-src/oneTBB/archive/${TBB_VERSION}.tar.gz)
 set(TBB_HASH 26263622e9187212ec240dcf01b66207)
 
-set(OPENVDB_VERSION 7.0.0)
-set(OPENVDB_URI https://github.com/dreamworksanimation/openvdb/archive/v${OPENVDB_VERSION}.tar.gz)
-set(OPENVDB_HASH fd6c4f168282f7e0e494d290cd531fa8)
+set(OPENVDB_GIT_UID dd9765079d825f0fcbd25b13647a4ed6c03f40fd)
+set(OPENVDB_URI https://github.com/AcademySoftwareFoundation/openvdb/archive/${OPENVDB_GIT_UID}.tar.gz)
+set(OPENVDB_HASH 529b9c8971a083cc41ef600f363a9eb3)
 
 set(IDNA_VERSION 2.9)
 set(CHARDET_VERSION 3.0.4)

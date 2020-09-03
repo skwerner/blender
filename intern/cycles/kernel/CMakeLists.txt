@@ -428,6 +428,12 @@ if(WITH_CYCLES_CUDA_BINARIES)
       set(cuda_flags ${cuda_flags} -D __KERNEL_DEBUG__)
     endif()
 
+    if(WITH_NANOVDB)
+      set(cuda_flags ${cuda_flags}
+        -D WITH_NANOVDB
+        -I "${NANOVDB_INCLUDE_DIR}")
+    endif()
+
     if(WITH_CYCLES_CUBIN_COMPILER)
       string(SUBSTRING ${arch} 3 -1 CUDA_ARCH)
 
@@ -513,8 +519,14 @@ if(WITH_CYCLES_DEVICE_OPTIX AND WITH_CYCLES_CUDA_BINARIES)
       set(cuda_flags ${cuda_flags}
         -D __KERNEL_DEBUG__)
     endif()
-    if(WITH_CYCLES_CUBIN_COMPILER)
 
+    if(WITH_NANOVDB)
+      set(cuda_flags ${cuda_flags}
+        -D WITH_NANOVDB
+        -I "${NANOVDB_INCLUDE_DIR}")
+    endif()
+
+    if(WITH_CYCLES_CUBIN_COMPILER)
       # Needed to find libnvrtc-builtins.so. Can't do it from inside
       # cycles_cubin_cc since the env variable is read before main()
       if(APPLE)
@@ -695,3 +707,11 @@ delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_SVM_HEADERS}" ${CYCLES_INSTAL
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_GEOM_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/geom)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_UTIL_HEADERS}" ${CYCLES_INSTALL_PATH}/source/util)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_SPLIT_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/split)
+
+if(WITH_CYCLES_DEVICE_OPENCL AND WITH_NANOVDB)
+  set(SRC_NANOVDB_HEADERS
+    cnanovdb/CNanoVDB.h
+    cnanovdb/util/CSampleFromVoxels.h
+  )
+  delayed_install(${NANOVDB_INCLUDE_DIR} "${SRC_NANOVDB_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/kernels/opencl/cnanovdb)
+endif()

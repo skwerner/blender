@@ -29,16 +29,17 @@
 
 #include "glew-mx.h"
 
-#include "GPU_extensions.h"
-
 #include "gpu_batch_private.hh"
 #include "gpu_shader_private.hh"
 
-#include "gl_batch.hh"
+#include "gl_backend.hh"
 #include "gl_context.hh"
 #include "gl_debug.hh"
+#include "gl_index_buffer.hh"
 #include "gl_primitive.hh"
 #include "gl_vertex_array.hh"
+
+#include "gl_batch.hh"
 
 using namespace blender::gpu;
 
@@ -295,14 +296,6 @@ GLBatch::~GLBatch()
 /** \name Drawing
  * \{ */
 
-#if GPU_TRACK_INDEX_RANGE
-#  define BASE_INDEX(el) ((el)->base_index)
-#  define INDEX_TYPE(el) ((el)->gl_index_type)
-#else
-#  define BASE_INDEX(el) 0
-#  define INDEX_TYPE(el) GL_UNSIGNED_INT
-#endif
-
 void GLBatch::bind(int i_first)
 {
   GPU_context_active_get()->state_manager->apply_state();
@@ -315,12 +308,12 @@ void GLBatch::bind(int i_first)
 #if GPU_TRACK_INDEX_RANGE
   /* Can be removed if GL 4.3 is required. */
   if (!GLEW_ARB_ES3_compatibility && (elem != NULL)) {
-    glPrimitiveRestartIndex((elem->index_type == GPU_INDEX_U16) ? 0xFFFFu : 0xFFFFFFFFu);
+    glPrimitiveRestartIndex(this->elem_()->restart_index());
   }
 #endif
 
   /* Can be removed if GL 4.2 is required. */
-  if (!GPU_arb_base_instance_is_supported() && (i_first > 0)) {
+  if (!GLContext::base_instance_support && (i_first > 0)) {
     glBindVertexArray(vao_cache_.base_instance_vao_get(this, i_first));
   }
   else {
@@ -340,18 +333,12 @@ void GLBatch::draw(int v_first, int v_count, int i_first, int i_count)
   GLenum gl_type = to_gl(prim_type);
 
   if (elem) {
-    const GPUIndexBuf *el = elem;
-    GLenum index_type = INDEX_TYPE(el);
-    GLint base_index = BASE_INDEX(el);
-    void *v_first_ofs = (GLuint *)0 + v_first + el->index_start;
+    const GLIndexBuf *el = this->elem_();
+    GLenum index_type = to_gl(el->index_type_);
+    GLint base_index = el->index_base_;
+    void *v_first_ofs = el->offset_ptr(v_first);
 
-#if GPU_TRACK_INDEX_RANGE
-    if (el->index_type == GPU_INDEX_U16) {
-      v_first_ofs = (GLushort *)0 + v_first + el->index_start;
-    }
-#endif
-
-    if (GPU_arb_base_instance_is_supported()) {
+    if (GLContext::base_instance_support) {
       glDrawElementsInstancedBaseVertexBaseInstance(
           gl_type, v_count, index_type, v_first_ofs, i_count, base_index, i_first);
     }
@@ -365,7 +352,7 @@ void GLBatch::draw(int v_first, int v_count, int i_first, int i_count)
 #ifdef __APPLE__
     glDisable(GL_PRIMITIVE_RESTART);
 #endif
-    if (GPU_arb_base_instance_is_supported()) {
+    if (GLContext::base_instance_support) {
       glDrawArraysInstancedBaseInstance(gl_type, v_first, v_count, i_count, i_first);
     }
     else {

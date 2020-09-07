@@ -32,6 +32,14 @@
 
 #include "GPU_texture.h"
 
+typedef enum eGPUFrameBufferBits {
+  GPU_COLOR_BIT = (1 << 0),
+  GPU_DEPTH_BIT = (1 << 1),
+  GPU_STENCIL_BIT = (1 << 2),
+} eGPUFrameBufferBits;
+
+ENUM_OPERATORS(eGPUFrameBufferBits)
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -40,12 +48,6 @@ typedef struct GPUAttachment {
   struct GPUTexture *tex;
   int layer, mip;
 } GPUAttachment;
-
-typedef enum eGPUFrameBufferBits {
-  GPU_COLOR_BIT = (1 << 0),
-  GPU_DEPTH_BIT = (1 << 1),
-  GPU_STENCIL_BIT = (1 << 2),
-} eGPUFrameBufferBits;
 
 typedef enum eGPUBackBuffer {
   GPU_BACKBUFFER_LEFT = 0,
@@ -217,7 +219,7 @@ GPUOffScreen *GPU_offscreen_create(
 void GPU_offscreen_free(GPUOffScreen *ofs);
 void GPU_offscreen_bind(GPUOffScreen *ofs, bool save);
 void GPU_offscreen_unbind(GPUOffScreen *ofs, bool restore);
-void GPU_offscreen_read_pixels(GPUOffScreen *ofs, eGPUDataFormat type, void *pixels);
+void GPU_offscreen_read_pixels(GPUOffScreen *ofs, eGPUDataFormat format, void *pixels);
 void GPU_offscreen_draw_to_screen(GPUOffScreen *ofs, int x, int y);
 int GPU_offscreen_width(const GPUOffScreen *ofs);
 int GPU_offscreen_height(const GPUOffScreen *ofs);

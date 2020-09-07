@@ -84,7 +84,7 @@ void BKE_object_free_shaderfx(struct Object *ob, const int flag);
 void BKE_object_make_proxy(struct Main *bmain,
                            struct Object *ob,
                            struct Object *target,
-                           struct Object *gob);
+                           struct Object *cob);
 void BKE_object_copy_proxy_drivers(struct Object *ob, struct Object *target);
 
 bool BKE_object_exists_check(struct Main *bmain, const struct Object *obtest);
@@ -112,10 +112,9 @@ int BKE_object_visibility(const struct Object *ob, const int dag_eval_mode);
 struct Object *BKE_object_add_only_object(struct Main *bmain, int type, const char *name)
     ATTR_NONNULL(1) ATTR_RETURNS_NONNULL;
 struct Object *BKE_object_add(struct Main *bmain,
-                              struct Scene *scene,
                               struct ViewLayer *view_layer,
                               int type,
-                              const char *name) ATTR_NONNULL(1, 2, 3) ATTR_RETURNS_NONNULL;
+                              const char *name) ATTR_NONNULL(1, 2) ATTR_RETURNS_NONNULL;
 struct Object *BKE_object_add_from(struct Main *bmain,
                                    struct Scene *scene,
                                    struct ViewLayer *view_layer,
@@ -142,7 +141,7 @@ struct Object *BKE_object_duplicate(struct Main *bmain,
                                     uint dupflag,
                                     const uint duplicate_options);
 
-void BKE_object_obdata_size_init(struct Object *ob, const float scale);
+void BKE_object_obdata_size_init(struct Object *ob, const float size);
 
 void BKE_object_scale_to_mat3(struct Object *ob, float r_mat[3][3]);
 void BKE_object_rot_to_mat3(const struct Object *ob, float r_mat[3][3], bool use_drot);
@@ -201,7 +200,7 @@ void BKE_object_where_is_calc_time(struct Depsgraph *depsgraph,
                                    float ctime);
 void BKE_object_where_is_calc_mat4(struct Object *ob, float r_obmat[4][4]);
 
-/* possibly belong in own moduke? */
+/* Possibly belong in own module? */
 struct BoundBox *BKE_boundbox_alloc_unit(void);
 void BKE_boundbox_init_from_minmax(struct BoundBox *bb, const float min[3], const float max[3]);
 void BKE_boundbox_calc_center_aabb(const struct BoundBox *bb, float r_cent[3]);

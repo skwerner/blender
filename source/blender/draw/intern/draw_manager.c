@@ -64,7 +64,7 @@
 #include "ED_space_api.h"
 #include "ED_view3d.h"
 
-#include "GPU_extensions.h"
+#include "GPU_capabilities.h"
 #include "GPU_framebuffer.h"
 #include "GPU_immediate.h"
 #include "GPU_matrix.h"
@@ -1929,7 +1929,7 @@ static void draw_select_framebuffer_depth_only_setup(const int size[2])
 
   if (g_select_buffer.texture_depth == NULL) {
     g_select_buffer.texture_depth = GPU_texture_create_2d(
-        size[0], size[1], GPU_DEPTH_COMPONENT24, NULL, NULL);
+        "select_depth", size[0], size[1], 1, GPU_DEPTH_COMPONENT24, NULL);
 
     GPU_framebuffer_texture_attach(
         g_select_buffer.framebuffer_depth_only, g_select_buffer.texture_depth, 0, 0);
@@ -2495,11 +2495,6 @@ void DRW_draw_depth_object(
 /* -------------------------------------------------------------------- */
 /** \name Draw Manager State (DRW_state)
  * \{ */
-
-void DRW_state_dfdy_factors_get(float dfdyfac[2])
-{
-  GPU_get_dfdy_factors(dfdyfac);
-}
 
 /**
  * When false, drawing doesn't output to a pixel buffer

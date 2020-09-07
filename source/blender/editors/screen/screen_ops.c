@@ -89,7 +89,7 @@
 #include "UI_resources.h"
 #include "UI_view2d.h"
 
-#include "GPU_extensions.h"
+#include "GPU_capabilities.h"
 
 #include "screen_intern.h" /* own module include */
 
@@ -4475,7 +4475,7 @@ static int screen_animation_step(bContext *C, wmOperator *UNUSED(op), const wmEv
         scene->r.cfra++;
       }
       else {
-        scene->r.cfra = max_ii(scene->r.cfra, newfra + 0.5);
+        scene->r.cfra = max_ii(scene->r.cfra, round(newfra));
       }
 
 #ifdef PROFILE_AUDIO_SYNCH

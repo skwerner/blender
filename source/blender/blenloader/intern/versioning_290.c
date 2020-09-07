@@ -513,6 +513,7 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
           if (md->type == eModifierType_Boolean) {
             BooleanModifierData *bmd = (BooleanModifierData *)md;
             bmd->solver = eBooleanModifierSolver_Fast;
+            bmd->flag = 0;
           }
         }
       }
@@ -546,6 +547,14 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
    * \note Keep this message at the bottom of the function.
    */
   {
+    /* Set the minimum sequence interpolate for grease pencil. */
+    if (!DNA_struct_elem_find(fd->filesdna, "GP_Interpolate_Settings", "int", "step")) {
+      LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+        ToolSettings *ts = scene->toolsettings;
+        ts->gp_interpolate.step = 1;
+      }
+    }
+
     /* Keep this block, even when empty. */
   }
 }

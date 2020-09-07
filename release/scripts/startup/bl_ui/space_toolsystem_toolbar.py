@@ -1255,6 +1255,57 @@ class _defs_sculpt:
         )
 
     @ToolDef.from_fn
+    def face_set_box():
+        def draw_settings(_context, layout, tool):
+            props = tool.operator_properties("sculpt.face_set_box_gesture")
+            layout.prop(props, "use_front_faces_only", expand=False)
+
+        return dict(
+            idname="builtin.box_face_set",
+            label="Box Face Set",
+            icon="ops.sculpt.border_face_set",
+            widget=None,
+            keymap=(),
+            draw_settings=draw_settings,
+        )
+
+    @ToolDef.from_fn
+    def face_set_lasso():
+        def draw_settings(_context, layout, tool):
+            props = tool.operator_properties("sculpt.face_set_lasso_gesture")
+            layout.prop(props, "use_front_faces_only", expand=False)
+
+        return dict(
+            idname="builtin.lasso_face_set",
+            label="Lasso Face Set",
+            icon="ops.sculpt.lasso_face_set",
+            widget=None,
+            keymap=(),
+            draw_settings=draw_settings,
+        )
+
+    @ToolDef.from_fn
+    def trim_box():
+        return dict(
+            idname="builtin.box_trim",
+            label="Box Trim",
+            icon="ops.sculpt.box_trim",
+            widget=None,
+            keymap=(),
+        )
+
+    @ToolDef.from_fn
+    def trim_lasso():
+        return dict(
+            idname="builtin.lasso_trim",
+            label="Lasso Trim",
+            icon="ops.sculpt.lasso_trim",
+            widget=None,
+            keymap=(),
+        )
+
+
+    @ToolDef.from_fn
     def mesh_filter():
         def draw_settings(_context, layout, tool):
             props = tool.operator_properties("sculpt.mesh_filter")
@@ -2596,7 +2647,15 @@ class VIEW3D_PT_tools_active(ToolSelectPanelHelper, Panel):
                 _defs_sculpt.mask_border,
                 _defs_sculpt.mask_lasso,
             ),
+            (
+                _defs_sculpt.face_set_box,
+                _defs_sculpt.face_set_lasso,
+            ),
             _defs_sculpt.hide_border,
+            (
+                _defs_sculpt.trim_box,
+                _defs_sculpt.trim_lasso,
+            ),
             None,
             _defs_sculpt.mesh_filter,
             _defs_sculpt.cloth_filter,

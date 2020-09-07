@@ -46,7 +46,7 @@
 
 #include "BLF_api.h"
 
-#include "GPU_extensions.h"
+#include "GPU_capabilities.h"
 #include "GPU_immediate.h"
 
 #include "blf_internal.h"
@@ -508,8 +508,7 @@ void blf_glyph_render(FontBLF *font, GlyphCacheBLF *gc, GlyphBLF *g, float x, fl
       if (gc->texture) {
         GPU_texture_free(gc->texture);
       }
-      gc->texture = GPU_texture_create_nD(
-          w, h, 0, 1, NULL, GPU_R8, GPU_DATA_UNSIGNED_BYTE, 0, false, NULL);
+      gc->texture = GPU_texture_create_1d_array(__func__, w, h, 1, GPU_R8, NULL);
 
       gc->bitmap_len_landed = 0;
     }

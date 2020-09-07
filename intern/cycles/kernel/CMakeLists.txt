@@ -708,10 +708,16 @@ delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_GEOM_HEADERS}" ${CYCLES_INSTA
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_UTIL_HEADERS}" ${CYCLES_INSTALL_PATH}/source/util)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_SPLIT_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/split)
 
-if(WITH_CYCLES_DEVICE_OPENCL AND WITH_NANOVDB)
+
+if(WITH_NANOVDB)
   set(SRC_NANOVDB_HEADERS
+    nanovdb/NanoVDB.h
     nanovdb/CNanoVDB.h
-    nanovdb/util/CSampleFromVoxels.h
   )
-  delayed_install(${NANOVDB_INCLUDE_DIR} "${SRC_NANOVDB_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/kernels/opencl/nanovdb)
+  set(SRC_NANOVDB_UTIL_HEADERS
+    nanovdb/util/CSampleFromVoxels.h
+    nanovdb/util/SampleFromVoxels.h
+  )
+  delayed_install(${NANOVDB_INCLUDE_DIR} "${SRC_NANOVDB_HEADERS}" ${CYCLES_INSTALL_PATH}/source/nanovdb)
+  delayed_install(${NANOVDB_INCLUDE_DIR} "${SRC_NANOVDB_UTIL_HEADERS}" ${CYCLES_INSTALL_PATH}/source/nanovdb/util)
 endif()

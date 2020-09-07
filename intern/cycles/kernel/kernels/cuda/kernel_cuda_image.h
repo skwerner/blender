@@ -145,6 +145,21 @@ ccl_device_inline T kernel_tex_image_interp_nanovdb(
       return nanovdb::SampleFromVoxels<nanovdb::ReadAccessor<nanovdb::NanoRoot<T>>, 1>(root)(xyz);
   }
 }
+
+/* Until there is nanovdb::SampleFromVoxels for Vec3f, this is the fallback to neirest heigbor sampling. */
+template<>
+ccl_device_inline nanovdb::Vec3f kernel_tex_image_interp_nanovdb<nanovdb::Vec3f>(
+    const TextureInfo &info, float x, float y, float z, uint interpolation)
+{
+  nanovdb::NanoGrid<nanovdb::Vec3f> *const grid = (nanovdb::NanoGrid<nanovdb::Vec3f> *)info.data;
+  const nanovdb::NanoRoot<nanovdb::Vec3f> &root = grid->tree().root();
+
+  const nanovdb::Coord off(root.bbox().min());
+  const nanovdb::Coord dim(root.bbox().dim());
+  const nanovdb::Coord xyz((int)(off[0] + x * dim[0]), (int)(off[1] + y * dim[1]), (int(off[2] + z * dim[2])));
+
+  return root.getValue(xyz);
+ }
 #endif
 
 ccl_device float4 kernel_tex_image_interp(KernelGlobals *kg, int id, float x, float y)

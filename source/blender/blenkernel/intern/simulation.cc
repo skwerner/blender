@@ -45,25 +45,39 @@
 #include "BKE_lib_remap.h"
 #include "BKE_main.h"
 #include "BKE_node.h"
-#include "BKE_node_tree_multi_function.hh"
 #include "BKE_pointcache.h"
 #include "BKE_simulation.h"
 
+#include "NOD_node_tree_multi_function.hh"
 #include "NOD_simulation.h"
 
+#include "BLI_map.hh"
 #include "BLT_translation.h"
 
 #include "FN_attributes_ref.hh"
-#include "FN_cpp_types.hh"
 #include "FN_multi_function_network_evaluation.hh"
 #include "FN_multi_function_network_optimization.hh"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
 
-extern "C" {
-void WM_clipboard_text_set(const char *buf, bool selection);
-}
+#include "SIM_simulation_update.hh"
+
+using StateInitFunction = void (*)(SimulationState *state);
+using StateResetFunction = void (*)(SimulationState *state);
+using StateRemoveFunction = void (*)(SimulationState *state);
+using StateCopyFunction = void (*)(const SimulationState *src, SimulationState *dst);
+
+struct SimulationStateType {
+  const char *name;
+  int size;
+  StateInitFunction init;
+  StateResetFunction reset;
+  StateRemoveFunction remove;
+  StateCopyFunction copy;
+};
+
+static const SimulationStateType *try_get_state_type(blender::StringRefNull type_name);
 
 static void simulation_init_data(ID *id)
 {
@@ -79,7 +93,7 @@ static void simulation_init_data(ID *id)
 static void simulation_copy_data(Main *bmain, ID *id_dst, const ID *id_src, const int flag)
 {
   Simulation *simulation_dst = (Simulation *)id_dst;
-  Simulation *simulation_src = (Simulation *)id_src;
+  const Simulation *simulation_src = (const Simulation *)id_src;
 
   /* We always need allocation of our private ID data. */
   const int flag_private_id_data = flag & ~LIB_ID_CREATE_NO_ALLOCATE;
@@ -92,19 +106,14 @@ static void simulation_copy_data(Main *bmain, ID *id_dst, const ID *id_src, cons
   }
 
   BLI_listbase_clear(&simulation_dst->states);
-}
+  LISTBASE_FOREACH (const SimulationState *, state_src, &simulation_src->states) {
+    SimulationState *state_dst = BKE_simulation_state_add(
+        simulation_dst, state_src->type, state_src->name);
+    BKE_simulation_state_copy_data(state_src, state_dst);
+  }
 
-static void free_simulation_state_head(SimulationState *state)
-{
-  MEM_freeN(state->name);
-}
-
-static void free_particle_simulation_state(ParticleSimulationState *state)
-{
-  free_simulation_state_head(&state->head);
-  CustomData_free(&state->attributes, state->tot_particles);
-  BKE_ptcache_free_list(&state->ptcaches);
-  MEM_freeN(state);
+  BLI_listbase_clear(&simulation_dst->dependencies);
+  BLI_duplicatelist(&simulation_dst->dependencies, &simulation_src->dependencies);
 }
 
 static void simulation_free_data(ID *id)
@@ -119,14 +128,9 @@ static void simulation_free_data(ID *id)
     simulation->nodetree = nullptr;
   }
 
-  LISTBASE_FOREACH_MUTABLE (SimulationState *, state, &simulation->states) {
-    switch ((eSimulationStateType)state->type) {
-      case SIM_STATE_TYPE_PARTICLES: {
-        free_particle_simulation_state((ParticleSimulationState *)state);
-        break;
-      }
-    }
-  }
+  BKE_simulation_state_remove_all(simulation);
+
+  BLI_freelistN(&simulation->dependencies);
 }
 
 static void simulation_foreach_id(ID *id, LibraryForeachIDData *data)
@@ -135,6 +139,9 @@ static void simulation_foreach_id(ID *id, LibraryForeachIDData *data)
   if (simulation->nodetree) {
     /* nodetree **are owned by IDs**, treat them as mere sub-data and not real ID! */
     BKE_library_foreach_ID_embedded(data, (ID **)&simulation->nodetree);
+  }
+  LISTBASE_FOREACH (SimulationDependency *, dependency, &simulation->dependencies) {
+    BKE_LIB_FOREACHID_PROCESS_ID(data, dependency->id, IDWALK_CB_USER);
   }
 }
 
@@ -153,6 +160,12 @@ IDTypeInfo IDType_ID_SIM = {
     /* free_data */ simulation_free_data,
     /* make_local */ nullptr,
     /* foreach_id */ simulation_foreach_id,
+    /* foreach_cache */ NULL,
+
+    /* blend_write */ NULL,
+    /* blend_read_data */ NULL,
+    /* blend_read_lib */ NULL,
+    /* blend_read_expand */ NULL,
 };
 
 void *BKE_simulation_add(Main *bmain, const char *name)
@@ -164,311 +177,200 @@ void *BKE_simulation_add(Main *bmain, const char *name)
   return simulation;
 }
 
-namespace blender::bke {
-
-static void ensure_attributes_exist(ParticleSimulationState *state)
+SimulationState *BKE_simulation_state_add(Simulation *simulation,
+                                          const char *type,
+                                          const char *name)
 {
-  if (CustomData_get_layer_named(&state->attributes, CD_LOCATION, "Position") == nullptr) {
-    CustomData_add_layer_named(
-        &state->attributes, CD_LOCATION, CD_CALLOC, nullptr, state->tot_particles, "Position");
-  }
-  if (CustomData_get_layer_named(&state->attributes, CD_LOCATION, "Velocity") == nullptr) {
-    CustomData_add_layer_named(
-        &state->attributes, CD_LOCATION, CD_CALLOC, nullptr, state->tot_particles, "Velocity");
+  BLI_assert(simulation != nullptr);
+  BLI_assert(name != nullptr);
+
+  const SimulationStateType *state_type = try_get_state_type(type);
+  BLI_assert(state_type != nullptr);
+
+  SimulationState *state = (SimulationState *)MEM_callocN(state_type->size, AT);
+  state->type = BLI_strdup(type);
+  state->name = BLI_strdup(name);
+
+  state_type->init(state);
+  BLI_addtail(&simulation->states, state);
+  return state;
+}
+
+void BKE_simulation_state_remove(Simulation *simulation, SimulationState *state)
+{
+  BLI_assert(simulation != nullptr);
+  BLI_assert(state != nullptr);
+  BLI_assert(BLI_findindex(&simulation->states, state) >= 0);
+
+  BLI_remlink(&simulation->states, state);
+  const SimulationStateType *state_type = try_get_state_type(state->type);
+  BLI_assert(state_type != nullptr);
+  state_type->remove(state);
+  MEM_freeN(state->name);
+  MEM_freeN(state->type);
+  MEM_freeN(state);
+}
+
+void BKE_simulation_state_remove_all(Simulation *simulation)
+{
+  BLI_assert(simulation != nullptr);
+
+  while (!BLI_listbase_is_empty(&simulation->states)) {
+    BKE_simulation_state_remove(simulation, (SimulationState *)simulation->states.first);
   }
 }
 
-static void copy_states_to_cow(Simulation *simulation_orig, Simulation *simulation_cow)
+void BKE_simulation_state_reset(Simulation *UNUSED(simulation), SimulationState *state)
 {
-  LISTBASE_FOREACH_MUTABLE (SimulationState *, state_cow, &simulation_cow->states) {
-    switch ((eSimulationStateType)state_cow->type) {
-      case SIM_STATE_TYPE_PARTICLES: {
-        BLI_remlink(&simulation_cow->states, state_cow);
-        free_particle_simulation_state((ParticleSimulationState *)state_cow);
-        break;
-      }
-    }
-  }
-  simulation_cow->current_frame = simulation_orig->current_frame;
+  BLI_assert(state != nullptr);
 
-  LISTBASE_FOREACH (SimulationState *, state_orig, &simulation_orig->states) {
-    switch ((eSimulationStateType)state_orig->type) {
-      case SIM_STATE_TYPE_PARTICLES: {
-        ParticleSimulationState *particle_state_orig = (ParticleSimulationState *)state_orig;
-        ParticleSimulationState *particle_state_cow = (ParticleSimulationState *)MEM_callocN(
-            sizeof(*particle_state_cow), AT);
-        particle_state_cow->tot_particles = particle_state_orig->tot_particles;
-        particle_state_cow->head.name = BLI_strdup(state_orig->name);
-        CustomData_copy(&particle_state_orig->attributes,
-                        &particle_state_cow->attributes,
-                        CD_MASK_ALL,
-                        CD_DUPLICATE,
-                        particle_state_orig->tot_particles);
-        BLI_addtail(&simulation_cow->states, particle_state_cow);
-        break;
-      }
-    }
-  }
+  const SimulationStateType *state_type = try_get_state_type(state->type);
+  BLI_assert(state_type != nullptr);
+  state_type->reset(state);
 }
 
-using AttributeNodeMap = Map<fn::MFDummyNode *, std::pair<std::string, fn::MFDataType>>;
-
-static AttributeNodeMap deduplicate_attribute_nodes(fn::MFNetwork &network,
-                                                    MFNetworkTreeMap &network_map,
-                                                    const DerivedNodeTree &tree)
+void BKE_simulation_state_reset_all(Simulation *simulation)
 {
-  Span<const DNode *> attribute_dnodes = tree.nodes_by_type("SimulationNodeParticleAttribute");
-  uint amount = attribute_dnodes.size();
-  if (amount == 0) {
-    return {};
-  }
+  BLI_assert(simulation != nullptr);
 
-  Vector<fn::MFInputSocket *> name_sockets;
-  for (const DNode *dnode : attribute_dnodes) {
-    fn::MFInputSocket &name_socket = network_map.lookup_dummy(dnode->input(0));
-    name_sockets.append(&name_socket);
-  }
-
-  fn::MFNetworkEvaluator network_fn{{}, name_sockets.as_span()};
-
-  fn::MFParamsBuilder params{network_fn, 1};
-
-  Array<std::string> attribute_names{amount, NoInitialization()};
-  for (uint i : IndexRange(amount)) {
-    params.add_uninitialized_single_output(
-        fn::GMutableSpan(fn::CPPType_string, attribute_names.data() + i, 1));
-  }
-
-  fn::MFContextBuilder context;
-  /* Todo: Check that the names don't depend on dummy nodes. */
-  network_fn.call({0}, params, context);
-
-  Map<std::pair<std::string, fn::MFDataType>, Vector<fn::MFNode *>>
-      attribute_nodes_by_name_and_type;
-  for (uint i : IndexRange(amount)) {
-    attribute_nodes_by_name_and_type
-        .lookup_or_add_default({attribute_names[i], name_sockets[i]->data_type()})
-        .append(&name_sockets[i]->node());
-  }
-
-  AttributeNodeMap final_attribute_nodes;
-  for (auto item : attribute_nodes_by_name_and_type.items()) {
-    StringRef attribute_name = item.key.first;
-    fn::MFDataType data_type = item.key.second;
-    Span<fn::MFNode *> nodes = item.value;
-
-    fn::MFOutputSocket &new_attribute_socket = network.add_input(
-        "Attribute '" + attribute_name + "'", data_type);
-    for (fn::MFNode *node : nodes) {
-      network.relink(node->output(0), new_attribute_socket);
-    }
-    network.remove(nodes);
-
-    final_attribute_nodes.add_new(&new_attribute_socket.node().as_dummy(), item.key);
-  }
-
-  return final_attribute_nodes;
-}
-
-class CustomDataAttributesRef {
- private:
-  Vector<void *> buffers_;
-  uint size_;
-  std::unique_ptr<fn::AttributesInfo> info_;
-
- public:
-  CustomDataAttributesRef(CustomData &custom_data, uint size)
-  {
-    fn::AttributesInfoBuilder builder;
-    for (const CustomDataLayer &layer : Span(custom_data.layers, custom_data.totlayer)) {
-      buffers_.append(layer.data);
-      builder.add<float3>(layer.name, {0, 0, 0});
-    }
-    info_ = std::make_unique<fn::AttributesInfo>(builder);
-    size_ = size;
-  }
-
-  operator fn::MutableAttributesRef()
-  {
-    return fn::MutableAttributesRef(*info_, buffers_, size_);
-  }
-
-  operator fn::AttributesRef() const
-  {
-    return fn::AttributesRef(*info_, buffers_, size_);
-  }
-};
-
-static std::string dnode_to_path(const DNode &dnode)
-{
-  std::string path;
-  for (const DParentNode *parent = dnode.parent(); parent; parent = parent->parent()) {
-    path = parent->node_ref().name() + "/" + path;
-  }
-  path = path + dnode.name();
-  return path;
-}
-
-static void remove_unused_states(Simulation *simulation, const VectorSet<std::string> &state_names)
-{
-  LISTBASE_FOREACH_MUTABLE (SimulationState *, state, &simulation->states) {
-    if (!state_names.contains(state->name)) {
-      BLI_remlink(&simulation->states, state);
-      free_particle_simulation_state((ParticleSimulationState *)state);
-    }
-  }
-}
-
-static void reset_states(Simulation *simulation)
-{
   LISTBASE_FOREACH (SimulationState *, state, &simulation->states) {
-    switch ((eSimulationStateType)state->type) {
-      case SIM_STATE_TYPE_PARTICLES: {
-        ParticleSimulationState *particle_state = (ParticleSimulationState *)state;
-        CustomData_free(&particle_state->attributes, particle_state->tot_particles);
-        particle_state->tot_particles = 0;
-        break;
-      }
-    }
+    BKE_simulation_state_reset(simulation, state);
   }
 }
 
-static SimulationState *try_find_state_by_name(Simulation *simulation, StringRef name)
+void BKE_simulation_state_copy_data(const SimulationState *src_state, SimulationState *dst_state)
 {
+  BLI_assert(src_state != nullptr);
+  BLI_assert(dst_state != nullptr);
+  BLI_assert(STREQ(src_state->type, dst_state->type));
+
+  const SimulationStateType *state_type = try_get_state_type(src_state->type);
+  BLI_assert(state_type != nullptr);
+  state_type->copy(src_state, dst_state);
+}
+
+SimulationState *BKE_simulation_state_try_find_by_name(Simulation *simulation, const char *name)
+{
+  if (simulation == nullptr) {
+    return nullptr;
+  }
+  if (name == nullptr) {
+    return nullptr;
+  }
+
   LISTBASE_FOREACH (SimulationState *, state, &simulation->states) {
-    if (state->name == name) {
+    if (STREQ(state->name, name)) {
       return state;
     }
   }
   return nullptr;
 }
 
-static void add_missing_particle_states(Simulation *simulation, Span<std::string> state_names)
+SimulationState *BKE_simulation_state_try_find_by_name_and_type(Simulation *simulation,
+                                                                const char *name,
+                                                                const char *type)
 {
-  for (StringRefNull name : state_names) {
-    SimulationState *state = try_find_state_by_name(simulation, name);
-    if (state != nullptr) {
-      BLI_assert(state->type == SIM_STATE_TYPE_PARTICLES);
-      continue;
-    }
-
-    ParticleSimulationState *particle_state = (ParticleSimulationState *)MEM_callocN(
-        sizeof(*particle_state), AT);
-    particle_state->head.type = SIM_STATE_TYPE_PARTICLES;
-    particle_state->head.name = BLI_strdup(name.data());
-    CustomData_reset(&particle_state->attributes);
-    particle_state->point_cache = BKE_ptcache_add(&particle_state->ptcaches);
-    BLI_addtail(&simulation->states, particle_state);
+  if (type == nullptr) {
+    return nullptr;
   }
+
+  SimulationState *state = BKE_simulation_state_try_find_by_name(simulation, name);
+  if (state == nullptr) {
+    return nullptr;
+  }
+  if (STREQ(state->type, type)) {
+    return state;
+  }
+  return nullptr;
 }
-
-static void reinitialize_empty_simulation_states(Simulation *simulation,
-                                                 const DerivedNodeTree &tree)
-{
-  VectorSet<std::string> state_names;
-  for (const DNode *dnode : tree.nodes_by_type("SimulationNodeParticleSimulation")) {
-    state_names.add(dnode_to_path(*dnode));
-  }
-
-  remove_unused_states(simulation, state_names);
-  reset_states(simulation);
-  add_missing_particle_states(simulation, state_names);
-}
-
-static void update_simulation_state_list(Simulation *simulation, const DerivedNodeTree &tree)
-{
-  VectorSet<std::string> state_names;
-  for (const DNode *dnode : tree.nodes_by_type("SimulationNodeParticleSimulation")) {
-    state_names.add(dnode_to_path(*dnode));
-  }
-
-  remove_unused_states(simulation, state_names);
-  add_missing_particle_states(simulation, state_names);
-}
-
-static void simulation_data_update(Depsgraph *depsgraph, Scene *scene, Simulation *simulation_cow)
-{
-  int current_frame = scene->r.cfra;
-  if (simulation_cow->current_frame == current_frame) {
-    return;
-  }
-
-  /* Below we modify the original state/cache. Only the active depsgraph is allowed to do that. */
-  if (!DEG_is_active(depsgraph)) {
-    return;
-  }
-
-  Simulation *simulation_orig = (Simulation *)DEG_get_original_id(&simulation_cow->id);
-
-  NodeTreeRefMap tree_refs;
-  /* TODO: Use simulation_cow, but need to add depsgraph relations before that. */
-  const DerivedNodeTree tree{simulation_orig->nodetree, tree_refs};
-  fn::MFNetwork network;
-  ResourceCollector resources;
-  MFNetworkTreeMap network_map = insert_node_tree_into_mf_network(network, tree, resources);
-  AttributeNodeMap attribute_node_map = deduplicate_attribute_nodes(network, network_map, tree);
-  fn::mf_network_optimization::constant_folding(network, resources);
-  fn::mf_network_optimization::common_subnetwork_elimination(network);
-  fn::mf_network_optimization::dead_node_removal(network);
-  UNUSED_VARS(attribute_node_map);
-  // WM_clipboard_text_set(network.to_dot().c_str(), false);
-
-  if (current_frame == 1) {
-    reinitialize_empty_simulation_states(simulation_orig, tree);
-
-    RNG *rng = BLI_rng_new(0);
-
-    simulation_orig->current_frame = 1;
-    LISTBASE_FOREACH (ParticleSimulationState *, state, &simulation_orig->states) {
-      state->tot_particles = 100;
-      CustomData_realloc(&state->attributes, state->tot_particles);
-      ensure_attributes_exist(state);
-
-      CustomDataAttributesRef custom_data_attributes{state->attributes,
-                                                     (uint)state->tot_particles};
-
-      fn::MutableAttributesRef attributes = custom_data_attributes;
-      MutableSpan<float3> positions = attributes.get<float3>("Position");
-      MutableSpan<float3> velocities = attributes.get<float3>("Velocity");
-
-      for (uint i : positions.index_range()) {
-        positions[i] = {i / 10.0f, 0, 0};
-        velocities[i] = {0, BLI_rng_get_float(rng), BLI_rng_get_float(rng) * 2 + 1};
-      }
-    }
-
-    BLI_rng_free(rng);
-
-    copy_states_to_cow(simulation_orig, simulation_cow);
-  }
-  else if (current_frame == simulation_orig->current_frame + 1) {
-    update_simulation_state_list(simulation_orig, tree);
-    float time_step = 1.0f / 24.0f;
-    simulation_orig->current_frame = current_frame;
-
-    LISTBASE_FOREACH (ParticleSimulationState *, state, &simulation_orig->states) {
-      ensure_attributes_exist(state);
-
-      CustomDataAttributesRef custom_data_attributes{state->attributes,
-                                                     (uint)state->tot_particles};
-
-      fn::MutableAttributesRef attributes = custom_data_attributes;
-      MutableSpan<float3> positions = attributes.get<float3>("Position");
-      MutableSpan<float3> velocities = attributes.get<float3>("Velocity");
-
-      for (uint i : positions.index_range()) {
-        velocities[i].z += -1.0f * time_step;
-        positions[i] += velocities[i] * time_step;
-      }
-    }
-
-    copy_states_to_cow(simulation_orig, simulation_cow);
-  }
-}
-
-}  // namespace blender::bke
 
 void BKE_simulation_data_update(Depsgraph *depsgraph, Scene *scene, Simulation *simulation)
 {
-  blender::bke::simulation_data_update(depsgraph, scene, simulation);
+  blender::sim::update_simulation_in_depsgraph(depsgraph, scene, simulation);
+}
+
+void BKE_simulation_update_dependencies(Simulation *simulation, Main *bmain)
+{
+  bool dependencies_changed = blender::sim::update_simulation_dependencies(simulation);
+  if (dependencies_changed) {
+    DEG_relations_tag_update(bmain);
+  }
+}
+
+using StateTypeMap = blender::Map<std::string, std::unique_ptr<SimulationStateType>>;
+
+template<typename T>
+static void add_state_type(StateTypeMap &map,
+                           void (*init)(T *state),
+                           void (*reset)(T *state),
+                           void (*remove)(T *state),
+                           void (*copy)(const T *src, T *dst))
+{
+  SimulationStateType state_type{
+      BKE_simulation_get_state_type_name<T>(),
+      static_cast<int>(sizeof(T)),
+      (StateInitFunction)init,
+      (StateResetFunction)reset,
+      (StateRemoveFunction)remove,
+      (StateCopyFunction)copy,
+  };
+  map.add_new(state_type.name, std::make_unique<SimulationStateType>(state_type));
+}
+
+static StateTypeMap init_state_types()
+{
+  StateTypeMap map;
+  add_state_type<ParticleSimulationState>(
+      map,
+      [](ParticleSimulationState *state) { CustomData_reset(&state->attributes); },
+      [](ParticleSimulationState *state) {
+        CustomData_free(&state->attributes, state->tot_particles);
+        state->tot_particles = 0;
+        state->next_particle_id = 0;
+      },
+      [](ParticleSimulationState *state) {
+        CustomData_free(&state->attributes, state->tot_particles);
+      },
+      [](const ParticleSimulationState *src, ParticleSimulationState *dst) {
+        CustomData_free(&dst->attributes, dst->tot_particles);
+        dst->tot_particles = src->tot_particles;
+        dst->next_particle_id = src->next_particle_id;
+        CustomData_copy(
+            &src->attributes, &dst->attributes, CD_MASK_ALL, CD_DUPLICATE, src->tot_particles);
+      });
+
+  add_state_type<ParticleMeshEmitterSimulationState>(
+      map,
+      [](ParticleMeshEmitterSimulationState *UNUSED(state)) {},
+      [](ParticleMeshEmitterSimulationState *state) { state->last_birth_time = 0.0f; },
+      [](ParticleMeshEmitterSimulationState *UNUSED(state)) {},
+      [](const ParticleMeshEmitterSimulationState *src, ParticleMeshEmitterSimulationState *dst) {
+        dst->last_birth_time = src->last_birth_time;
+      });
+  return map;
+}
+
+static StateTypeMap &get_state_types()
+{
+  static StateTypeMap state_type_map = init_state_types();
+  return state_type_map;
+}
+
+static const SimulationStateType *try_get_state_type(blender::StringRefNull type_name)
+{
+  std::unique_ptr<SimulationStateType> *type = get_state_types().lookup_ptr_as(type_name);
+  if (type == nullptr) {
+    return nullptr;
+  }
+  return type->get();
+}
+
+template<> const char *BKE_simulation_get_state_type_name<ParticleSimulationState>()
+{
+  return SIM_TYPE_NAME_PARTICLE_SIMULATION;
+}
+
+template<> const char *BKE_simulation_get_state_type_name<ParticleMeshEmitterSimulationState>()
+{
+  return SIM_TYPE_NAME_PARTICLE_MESH_EMITTER;
 }

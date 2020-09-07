@@ -174,7 +174,8 @@ static RenderResult *render_result_from_bake(RenderEngine *engine, int x, int y,
   BLI_addtail(&rr->layers, rl);
 
   /* Add render passes. */
-  render_layer_add_pass(rr, rl, engine->bake.depth, RE_PASSNAME_COMBINED, "", "RGBA");
+  RenderPass *result_pass = render_layer_add_pass(
+      rr, rl, engine->bake.depth, RE_PASSNAME_COMBINED, "", "RGBA");
   RenderPass *primitive_pass = render_layer_add_pass(rr, rl, 4, "BakePrimitive", "", "RGBA");
   RenderPass *differential_pass = render_layer_add_pass(rr, rl, 4, "BakeDifferential", "", "RGBA");
 
@@ -208,6 +209,15 @@ static RenderResult *render_result_from_bake(RenderEngine *engine, int x, int y,
       differential += 4;
       bake_pixel++;
     }
+  }
+
+  /* Initialize tile render result from full image bake result. */
+  for (int ty = 0; ty < h; ty++) {
+    size_t offset = ty * w * engine->bake.depth;
+    size_t bake_offset = ((y + ty) * engine->bake.width + x) * engine->bake.depth;
+    size_t size = w * engine->bake.depth * sizeof(float);
+
+    memcpy(result_pass->rect + offset, engine->bake.result + bake_offset, size);
   }
 
   return rr;
@@ -503,15 +513,14 @@ void RE_engine_active_view_set(RenderEngine *engine, const char *viewname)
 
 float RE_engine_get_camera_shift_x(RenderEngine *engine, Object *camera, bool use_spherical_stereo)
 {
-  Render *re = engine->re;
-
   /* When using spherical stereo, get camera shift without multiview,
    * leaving stereo to be handled by the engine. */
-  if (use_spherical_stereo) {
-    re = NULL;
+  Render *re = engine->re;
+  if (use_spherical_stereo || re == NULL) {
+    return BKE_camera_multiview_shift_x(NULL, camera, NULL);
   }
 
-  return BKE_camera_multiview_shift_x(re ? &re->r : NULL, camera, re->viewname);
+  return BKE_camera_multiview_shift_x(&re->r, camera, re->viewname);
 }
 
 void RE_engine_get_camera_model_matrix(RenderEngine *engine,
@@ -519,16 +528,15 @@ void RE_engine_get_camera_model_matrix(RenderEngine *engine,
                                        bool use_spherical_stereo,
                                        float *r_modelmat)
 {
-  Render *re = engine->re;
-
   /* When using spherical stereo, get model matrix without multiview,
    * leaving stereo to be handled by the engine. */
-  if (use_spherical_stereo) {
-    re = NULL;
+  Render *re = engine->re;
+  if (use_spherical_stereo || re == NULL) {
+    BKE_camera_multiview_model_matrix(NULL, camera, NULL, (float(*)[4])r_modelmat);
   }
-
-  BKE_camera_multiview_model_matrix(
-      re ? &re->r : NULL, camera, re->viewname, (float(*)[4])r_modelmat);
+  else {
+    BKE_camera_multiview_model_matrix(&re->r, camera, re->viewname, (float(*)[4])r_modelmat);
+  }
 }
 
 bool RE_engine_get_spherical_stereo(RenderEngine *engine, Object *camera)
@@ -601,13 +609,13 @@ static void engine_depsgraph_init(RenderEngine *engine, ViewLayer *view_layer)
 
   if (engine->re->r.scemode & R_BUTS_PREVIEW) {
     Depsgraph *depsgraph = engine->depsgraph;
-    DEG_graph_relations_update(depsgraph, bmain, scene, view_layer);
-    DEG_evaluate_on_framechange(bmain, depsgraph, CFRA);
+    DEG_graph_relations_update(depsgraph);
+    DEG_evaluate_on_framechange(depsgraph, CFRA);
     DEG_ids_check_recalc(bmain, depsgraph, scene, view_layer, true);
     DEG_ids_clear_recalc(bmain, depsgraph);
   }
   else {
-    BKE_scene_graph_update_for_newframe(engine->depsgraph, bmain);
+    BKE_scene_graph_update_for_newframe(engine->depsgraph);
   }
 }
 
@@ -624,22 +632,14 @@ void RE_engine_frame_set(RenderEngine *engine, int frame, float subframe)
     return;
   }
 
-#ifdef WITH_PYTHON
-  BPy_BEGIN_ALLOW_THREADS;
-#endif
-
   Render *re = engine->re;
   double cfra = (double)frame + (double)subframe;
 
   CLAMP(cfra, MINAFRAME, MAXFRAME);
   BKE_scene_frame_set(re->scene, cfra);
-  BKE_scene_graph_update_for_newframe(engine->depsgraph, re->main);
+  BKE_scene_graph_update_for_newframe(engine->depsgraph);
 
   BKE_scene_camera_switch_update(re->scene);
-
-#ifdef WITH_PYTHON
-  BPy_END_ALLOW_THREADS;
-#endif
 }
 
 /* Bake */
@@ -871,7 +871,15 @@ int RE_engine_render(Render *re, int do_all)
         re->draw_lock(re->dlh, 0);
       }
 
+      if (engine->type->flag & RE_USE_GPU_CONTEXT) {
+        DRW_render_context_enable(engine->re);
+      }
+
       type->render(engine, engine->depsgraph);
+
+      if (engine->type->flag & RE_USE_GPU_CONTEXT) {
+        DRW_render_context_disable(engine->re);
+      }
 
       /* Grease pencil render over previous render result.
        *

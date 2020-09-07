@@ -143,6 +143,11 @@ IDTypeInfo IDType_ID_SO = {
     .make_local = NULL,
     .foreach_id = NULL,
     .foreach_cache = sound_foreach_cache,
+
+    .blend_write = NULL,
+    .blend_read_data = NULL,
+    .blend_read_lib = NULL,
+    .blend_read_expand = NULL,
 };
 
 #ifdef WITH_AUDASPACE
@@ -898,9 +903,8 @@ double BKE_sound_sync_scene(Scene *scene)
     if (scene->audio.flag & AUDIO_SYNC) {
       return AUD_getSynchronizerPosition(scene->playback_handle);
     }
-    else {
-      return AUD_Handle_getPosition(scene->playback_handle);
-    }
+
+    return AUD_Handle_getPosition(scene->playback_handle);
   }
   return NAN_FLT;
 }
@@ -922,9 +926,8 @@ int BKE_sound_scene_playing(Scene *scene)
   if (scene->audio.flag & AUDIO_SYNC) {
     return AUD_isSynchronizerPlaying();
   }
-  else {
-    return -1;
-  }
+
+  return -1;
 }
 
 void BKE_sound_free_waveform(bSound *sound)
@@ -959,7 +962,7 @@ void BKE_sound_read_waveform(Main *bmain, bSound *sound, short *stop)
   if (info.length > 0) {
     int length = info.length * SOUND_WAVE_SAMPLES_PER_SECOND;
 
-    waveform->data = MEM_mallocN(length * sizeof(float) * 3, "SoundWaveform.samples");
+    waveform->data = MEM_mallocN(sizeof(float[3]) * length, "SoundWaveform.samples");
     waveform->length = AUD_readSound(
         sound->playback_handle, waveform->data, length, SOUND_WAVE_SAMPLES_PER_SECOND, stop);
   }

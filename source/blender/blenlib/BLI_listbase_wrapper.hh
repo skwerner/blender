@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLI_LISTBASE_WRAPPER_HH__
-#define __BLI_LISTBASE_WRAPPER_HH__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -81,7 +80,7 @@ template<typename T> class ListBaseWrapper {
 
   Iterator begin() const
   {
-    return Iterator(listbase_, (T *)listbase_->first);
+    return Iterator(listbase_, static_cast<T *>(listbase_->first));
   }
 
   Iterator end() const
@@ -93,12 +92,12 @@ template<typename T> class ListBaseWrapper {
   {
     void *ptr = BLI_findlink(listbase_, index);
     BLI_assert(ptr);
-    return (T *)ptr;
+    return static_cast<T *>(ptr);
   }
 
-  uint index_of(const T *value) const
+  int64_t index_of(const T *value) const
   {
-    uint index = 0;
+    int64_t index = 0;
     for (T *ptr : *this) {
       if (ptr == value) {
         return index;
@@ -106,10 +105,8 @@ template<typename T> class ListBaseWrapper {
       index++;
     }
     BLI_assert(false);
-    return 0;
+    return -1;
   }
 };
 
 } /* namespace blender */
-
-#endif /* __BLI_LISTBASE_WRAPPER_HH__ */

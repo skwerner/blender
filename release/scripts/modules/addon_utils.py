@@ -367,7 +367,7 @@ def enable(module_name, *, default_set=False, persistent=False, handle_error=Non
 
         if mod.bl_info.get("blender", (0, 0, 0)) < (2, 80, 0):
             if _bpy.app.debug:
-                print(f"Warning: Add-on '{module_name:s}' was not upgraded for 2.80, ignoring")
+                print("Warning: Add-on '%s' was not upgraded for 2.80, ignoring" % module_name)
             return None
 
         # 2) Try register collected modules.
@@ -492,6 +492,8 @@ def disable_all():
         item for item in sys.modules.items()
         if getattr(item[1], "__addon_enabled__", False)
     ]
+    # Check the enabled state again since it's possible the disable call
+    # of one add-on disables others.
     for mod_name, mod in addon_modules:
         if getattr(mod, "__addon_enabled__", False):
             disable(mod_name)

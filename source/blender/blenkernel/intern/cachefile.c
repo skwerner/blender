@@ -61,6 +61,8 @@ static void cache_file_init_data(ID *id)
   BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(cache_file, id));
 
   cache_file->scale = 1.0f;
+  cache_file->velocity_unit = CACHEFILE_VELOCITY_UNIT_SECOND;
+  BLI_strncpy(cache_file->velocity_name, ".velocities", sizeof(cache_file->velocity_name));
 }
 
 static void cache_file_copy_data(Main *UNUSED(bmain),
@@ -98,6 +100,12 @@ IDTypeInfo IDType_ID_CF = {
     .free_data = cache_file_free_data,
     .make_local = NULL,
     .foreach_id = NULL,
+    .foreach_cache = NULL,
+
+    .blend_write = NULL,
+    .blend_read_data = NULL,
+    .blend_read_lib = NULL,
+    .blend_read_expand = NULL,
 };
 
 /* TODO: make this per cache file to avoid global locks. */

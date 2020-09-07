@@ -815,7 +815,7 @@ static void rna_trackingCameras_matrix_from_frame(ID *id,
   MovieTrackingObject *object = find_object_for_reconstruction(tracking, reconstruction);
   BKE_tracking_camera_get_reconstructed_interpolate(tracking, object, framenr, mat);
 
-  memcpy(matrix, mat, sizeof(float) * 16);
+  memcpy(matrix, mat, sizeof(float[4][4]));
 }
 
 #else
@@ -2440,7 +2440,7 @@ static void rna_def_trackingDopesheet(BlenderRNA *brna)
   prop = RNA_def_property(srna, "show_only_selected", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", TRACKING_DOPE_SELECTED_ONLY);
   RNA_def_property_ui_text(
-      prop, "Only Selected", "Only include channels relating to selected objects and data");
+      prop, "Only Show Selected", "Only include channels relating to selected objects and data");
   RNA_def_property_ui_icon(prop, ICON_RESTRICT_SELECT_OFF, 0);
   RNA_def_property_update(prop, NC_MOVIECLIP | NA_EDITED, "rna_trackingDopesheet_tagUpdate");
 

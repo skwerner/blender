@@ -74,7 +74,6 @@
 #include "RNA_access.h"
 #include "RNA_define.h"
 
-#include "GPU_draw.h"
 #include "GPU_immediate.h"
 #include "GPU_state.h"
 
@@ -182,7 +181,7 @@ void imapaint_image_update(
     int h = imapaintpartial.y2 - imapaintpartial.y1;
     if (w && h) {
       /* Testing with partial update in uv editor too */
-      GPU_paint_update_image(image, iuser, imapaintpartial.x1, imapaintpartial.y1, w, h);
+      BKE_image_update_gputexture(image, iuser, imapaintpartial.x1, imapaintpartial.y1, w, h);
     }
   }
 }
@@ -439,7 +438,7 @@ static void gradient_draw_line(bContext *UNUSED(C), int x, int y, void *customda
 
   if (pop) {
     GPU_line_smooth(true);
-    GPU_blend(true);
+    GPU_blend(GPU_BLEND_ALPHA);
 
     GPUVertFormat *format = immVertexFormat();
     uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_I32, 2, GPU_FETCH_INT_TO_FLOAT);
@@ -468,7 +467,7 @@ static void gradient_draw_line(bContext *UNUSED(C), int x, int y, void *customda
 
     immUnbindProgram();
 
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
     GPU_line_smooth(false);
   }
 }
@@ -1118,7 +1117,6 @@ void PAINT_OT_sample_color(wmOperatorType *ot)
 
 void ED_object_texture_paint_mode_enter_ex(Main *bmain, Scene *scene, Object *ob)
 {
-  bScreen *screen;
   Image *ima = NULL;
   ImagePaintSettings *imapaint = &scene->toolsettings->imapaint;
 
@@ -1142,17 +1140,16 @@ void ED_object_texture_paint_mode_enter_ex(Main *bmain, Scene *scene, Object *ob
   }
 
   if (ima) {
-    for (screen = bmain->screens.first; screen; screen = screen->id.next) {
-      ScrArea *area;
-      for (area = screen->areabase.first; area; area = area->next) {
-        SpaceLink *sl;
-        for (sl = area->spacedata.first; sl; sl = sl->next) {
-          if (sl->spacetype == SPACE_IMAGE) {
-            SpaceImage *sima = (SpaceImage *)sl;
+    wmWindowManager *wm = bmain->wm.first;
+    for (wmWindow *win = wm->windows.first; win; win = win->next) {
+      const bScreen *screen = WM_window_get_active_screen(win);
+      for (ScrArea *area = screen->areabase.first; area; area = area->next) {
+        SpaceLink *sl = area->spacedata.first;
+        if (sl->spacetype == SPACE_IMAGE) {
+          SpaceImage *sima = (SpaceImage *)sl;
 
-            if (!sima->pin) {
-              ED_space_image_set(bmain, sima, NULL, ima, true);
-            }
+          if (!sima->pin) {
+            ED_space_image_set(bmain, sima, NULL, ima, true);
           }
         }
       }
@@ -1166,9 +1163,9 @@ void ED_object_texture_paint_mode_enter_ex(Main *bmain, Scene *scene, Object *ob
   BKE_paint_toolslots_brush_validate(bmain, &imapaint->paint);
 
   if (U.glreslimit != 0) {
-    GPU_free_images(bmain);
+    BKE_image_free_all_gputextures(bmain);
   }
-  GPU_paint_set_mipmap(bmain, 0);
+  BKE_image_paint_set_mipmap(bmain, 0);
 
   toggle_paint_cursor(scene, true);
 
@@ -1191,9 +1188,9 @@ void ED_object_texture_paint_mode_exit_ex(Main *bmain, Scene *scene, Object *ob)
   ob->mode &= ~OB_MODE_TEXTURE_PAINT;
 
   if (U.glreslimit != 0) {
-    GPU_free_images(bmain);
+    BKE_image_free_all_gputextures(bmain);
   }
-  GPU_paint_set_mipmap(bmain, 1);
+  BKE_image_paint_set_mipmap(bmain, 1);
   toggle_paint_cursor(scene, false);
 
   Mesh *me = BKE_mesh_from_object(ob);
@@ -1336,7 +1333,7 @@ void ED_imapaint_bucket_fill(struct bContext *C,
 
     ED_image_undo_push_begin(op->type->name, PAINT_MODE_TEXTURE_2D);
 
-    float mouse_init[2] = {mouse[0], mouse[1]};
+    const float mouse_init[2] = {mouse[0], mouse[1]};
     paint_2d_bucket_fill(C, color, NULL, mouse_init, NULL, NULL);
 
     ED_image_undo_push_end();

@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLI_MEMORY_UTILS_HH__
-#define __BLI_MEMORY_UTILS_HH__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -43,8 +42,10 @@ namespace blender {
  * After:
  *  ptr: uninitialized
  */
-template<typename T> void destruct_n(T *ptr, uint n)
+template<typename T> void destruct_n(T *ptr, int64_t n)
 {
+  BLI_assert(n >= 0);
+
   static_assert(std::is_nothrow_destructible_v<T>,
                 "This should be true for all types. Destructors are noexcept by default.");
 
@@ -54,7 +55,7 @@ template<typename T> void destruct_n(T *ptr, uint n)
     return;
   }
 
-  for (uint i = 0; i < n; i++) {
+  for (int64_t i = 0; i < n; i++) {
     ptr[i].~T();
   }
 }
@@ -70,18 +71,20 @@ template<typename T> void destruct_n(T *ptr, uint n)
  * After:
  *  ptr: initialized
  */
-template<typename T> void default_construct_n(T *ptr, uint n)
+template<typename T> void default_construct_n(T *ptr, int64_t n)
 {
+  BLI_assert(n >= 0);
+
   /* This is not strictly necessary, because the loop below will be optimized away anyway. It is
    * nice to make behavior this explicitly, though. */
   if (std::is_trivially_constructible_v<T>) {
     return;
   }
 
-  uint current = 0;
+  int64_t current = 0;
   try {
     for (; current < n; current++) {
-      new ((void *)(ptr + current)) T;
+      new (static_cast<void *>(ptr + current)) T;
     }
   }
   catch (...) {
@@ -102,9 +105,11 @@ template<typename T> void default_construct_n(T *ptr, uint n)
  *  src: initialized
  *  dst: initialized
  */
-template<typename T> void initialized_copy_n(const T *src, uint n, T *dst)
+template<typename T> void initialized_copy_n(const T *src, int64_t n, T *dst)
 {
-  for (uint i = 0; i < n; i++) {
+  BLI_assert(n >= 0);
+
+  for (int64_t i = 0; i < n; i++) {
     dst[i] = src[i];
   }
 }
@@ -121,12 +126,14 @@ template<typename T> void initialized_copy_n(const T *src, uint n, T *dst)
  *  src: initialized
  *  dst: initialized
  */
-template<typename T> void uninitialized_copy_n(const T *src, uint n, T *dst)
+template<typename T> void uninitialized_copy_n(const T *src, int64_t n, T *dst)
 {
-  uint current = 0;
+  BLI_assert(n >= 0);
+
+  int64_t current = 0;
   try {
     for (; current < n; current++) {
-      new ((void *)(dst + current)) T(src[current]);
+      new (static_cast<void *>(dst + current)) T(src[current]);
     }
   }
   catch (...) {
@@ -147,12 +154,15 @@ template<typename T> void uninitialized_copy_n(const T *src, uint n, T *dst)
  *  src: initialized
  *  dst: initialized
  */
-template<typename From, typename To> void uninitialized_convert_n(const From *src, uint n, To *dst)
+template<typename From, typename To>
+void uninitialized_convert_n(const From *src, int64_t n, To *dst)
 {
-  uint current = 0;
+  BLI_assert(n >= 0);
+
+  int64_t current = 0;
   try {
     for (; current < n; current++) {
-      new ((void *)(dst + current)) To((To)src[current]);
+      new (static_cast<void *>(dst + current)) To(static_cast<To>(src[current]));
     }
   }
   catch (...) {
@@ -173,9 +183,11 @@ template<typename From, typename To> void uninitialized_convert_n(const From *sr
  *  src: initialized, moved-from
  *  dst: initialized
  */
-template<typename T> void initialized_move_n(T *src, uint n, T *dst)
+template<typename T> void initialized_move_n(T *src, int64_t n, T *dst)
 {
-  for (uint i = 0; i < n; i++) {
+  BLI_assert(n >= 0);
+
+  for (int64_t i = 0; i < n; i++) {
     dst[i] = std::move(src[i]);
   }
 }
@@ -192,16 +204,14 @@ template<typename T> void initialized_move_n(T *src, uint n, T *dst)
  *  src: initialized, moved-from
  *  dst: initialized
  */
-template<typename T> void uninitialized_move_n(T *src, uint n, T *dst)
+template<typename T> void uninitialized_move_n(T *src, int64_t n, T *dst)
 {
-  static_assert(std::is_nothrow_move_constructible_v<T>,
-                "Ideally, all types should have this property. We might have to remove this "
-                "limitation of a real reason comes up.");
+  BLI_assert(n >= 0);
 
-  uint current = 0;
+  int64_t current = 0;
   try {
     for (; current < n; current++) {
-      new ((void *)(dst + current)) T(std::move(src[current]));
+      new (static_cast<void *>(dst + current)) T(std::move(src[current]));
     }
   }
   catch (...) {
@@ -223,8 +233,10 @@ template<typename T> void uninitialized_move_n(T *src, uint n, T *dst)
  *  src: uninitialized
  *  dst: initialized
  */
-template<typename T> void initialized_relocate_n(T *src, uint n, T *dst)
+template<typename T> void initialized_relocate_n(T *src, int64_t n, T *dst)
 {
+  BLI_assert(n >= 0);
+
   initialized_move_n(src, n, dst);
   destruct_n(src, n);
 }
@@ -242,8 +254,10 @@ template<typename T> void initialized_relocate_n(T *src, uint n, T *dst)
  *  src: uninitialized
  *  dst: initialized
  */
-template<typename T> void uninitialized_relocate_n(T *src, uint n, T *dst)
+template<typename T> void uninitialized_relocate_n(T *src, int64_t n, T *dst)
 {
+  BLI_assert(n >= 0);
+
   uninitialized_move_n(src, n, dst);
   destruct_n(src, n);
 }
@@ -258,9 +272,11 @@ template<typename T> void uninitialized_relocate_n(T *src, uint n, T *dst)
  * After:
  *  dst: initialized
  */
-template<typename T> void initialized_fill_n(T *dst, uint n, const T &value)
+template<typename T> void initialized_fill_n(T *dst, int64_t n, const T &value)
 {
-  for (uint i = 0; i < n; i++) {
+  BLI_assert(n >= 0);
+
+  for (int64_t i = 0; i < n; i++) {
     dst[i] = value;
   }
 }
@@ -275,12 +291,14 @@ template<typename T> void initialized_fill_n(T *dst, uint n, const T &value)
  * After:
  *  dst: initialized
  */
-template<typename T> void uninitialized_fill_n(T *dst, uint n, const T &value)
+template<typename T> void uninitialized_fill_n(T *dst, int64_t n, const T &value)
 {
-  uint current = 0;
+  BLI_assert(n >= 0);
+
+  int64_t current = 0;
   try {
     for (; current < n; current++) {
-      new ((void *)(dst + current)) T(value);
+      new (static_cast<void *>(dst + current)) T(value);
     }
   }
   catch (...) {
@@ -314,22 +332,22 @@ template<size_t Size, size_t Alignment> class alignas(Alignment) AlignedBuffer {
  public:
   operator void *()
   {
-    return (void *)buffer_;
+    return buffer_;
   }
 
   operator const void *() const
   {
-    return (void *)buffer_;
+    return buffer_;
   }
 
   void *ptr()
   {
-    return (void *)buffer_;
+    return buffer_;
   }
 
   const void *ptr() const
   {
-    return (const void *)buffer_;
+    return buffer_;
   }
 };
 
@@ -338,49 +356,49 @@ template<size_t Size, size_t Alignment> class alignas(Alignment) AlignedBuffer {
  * lifetime of the object they are embedded in. It's used by containers with small buffer
  * optimization and hash table implementations.
  */
-template<typename T, size_t Size = 1> class TypedBuffer {
+template<typename T, int64_t Size = 1> class TypedBuffer {
  private:
-  AlignedBuffer<sizeof(T) * Size, alignof(T)> buffer_;
+  AlignedBuffer<sizeof(T) * (size_t)Size, alignof(T)> buffer_;
 
  public:
   operator T *()
   {
-    return (T *)&buffer_;
+    return static_cast<T *>(buffer_.ptr());
   }
 
   operator const T *() const
   {
-    return (const T *)&buffer_;
+    return static_cast<const T *>(buffer_.ptr());
   }
 
   T &operator*()
   {
-    return *(T *)&buffer_;
+    return *static_cast<T *>(buffer_.ptr());
   }
 
   const T &operator*() const
   {
-    return *(const T *)&buffer_;
+    return *static_cast<const T *>(buffer_.ptr());
   }
 
   T *ptr()
   {
-    return (T *)&buffer_;
+    return static_cast<T *>(buffer_.ptr());
   }
 
   const T *ptr() const
   {
-    return (const T *)&buffer_;
+    return static_cast<const T *>(buffer_.ptr());
   }
 
   T &ref()
   {
-    return *(T *)&buffer_;
+    return *static_cast<T *>(buffer_.ptr());
   }
 
   const T &ref() const
   {
-    return *(const T *)&buffer_;
+    return *static_cast<const T *>(buffer_.ptr());
   }
 };
 
@@ -392,6 +410,15 @@ class NoInitialization {
 };
 
 /**
+ * This can be used to mark a constructor of an object that does not throw exceptions. Other
+ * constructors can delegate to this constructor to make sure that the object lifetime starts.
+ * With this, the destructor of the object will be called, even when the remaining constructor
+ * throws.
+ */
+class NoExceptConstructor {
+};
+
+/**
  * Helper variable that checks if a pointer type can be converted into another pointer type without
  * issues. Possible issues are casting away const and casting a pointer to a child class.
  * Adding const or casting to a parent class is fine.
@@ -400,6 +427,58 @@ template<typename From, typename To>
 inline constexpr bool is_convertible_pointer_v =
     std::is_convertible_v<From, To> &&std::is_pointer_v<From> &&std::is_pointer_v<To>;
 
-}  // namespace blender
+/**
+ * Inline buffers for small-object-optimization should be disable by default. Otherwise we might
+ * get large unexpected allocations on the stack.
+ */
+inline constexpr int64_t default_inline_buffer_capacity(size_t element_size)
+{
+  return (static_cast<int64_t>(element_size) < 100) ? 4 : 0;
+}
 
-#endif /* __BLI_MEMORY_UTILS_HH__ */
+/**
+ * This can be used by containers to implement an exception-safe copy-assignment-operator.
+ * It assumes that the container has an exception safe copy constructor and an exception-safe
+ * move-assignment-operator.
+ */
+template<typename Container> Container &copy_assign_container(Container &dst, const Container &src)
+{
+  if (&src == &dst) {
+    return dst;
+  }
+
+  Container container_copy{src};
+  dst = std::move(container_copy);
+  return dst;
+}
+
+/**
+ * This can be used by containers to implement an exception-safe move-assignment-operator.
+ * It assumes that the container has an exception-safe move-constructor and a noexcept constructor
+ * tagged with the NoExceptConstructor tag.
+ */
+template<typename Container>
+Container &move_assign_container(Container &dst, Container &&src) noexcept(
+    std::is_nothrow_move_constructible_v<Container>)
+{
+  if (&dst == &src) {
+    return dst;
+  }
+
+  dst.~Container();
+  if constexpr (std::is_nothrow_move_constructible_v<Container>) {
+    new (&dst) Container(std::move(src));
+  }
+  else {
+    try {
+      new (&dst) Container(std::move(src));
+    }
+    catch (...) {
+      new (&dst) Container(NoExceptConstructor());
+      throw;
+    }
+  }
+  return dst;
+}
+
+}  // namespace blender

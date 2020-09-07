@@ -167,7 +167,7 @@ static void postConstraintChecks(TransInfo *t, float vec[3])
 {
   mul_m3_v3(t->spacemtx_inv, vec);
 
-  snapGridIncrement(t, vec);
+  transform_snap_increment(t, vec);
 
   if (t->flag & T_NULL_ONE) {
     if (!(t->con.mode & CON_AXIS0)) {
@@ -388,7 +388,7 @@ void transform_constraint_snap_axis_to_face(const TransInfo *t,
  * Return true if the 2x axis are both aligned when projected into the view.
  * In this case, we can't usefully project the cursor onto the plane.
  */
-static bool isPlaneProjectionViewAligned(const TransInfo *t, float plane[4])
+static bool isPlaneProjectionViewAligned(const TransInfo *t, const float plane[4])
 {
   const float eps = 0.001f;
   float view_to_plane[3];
@@ -510,10 +510,12 @@ static void applyObjectConstraintVec(
   else {
     /* Specific TransData's space. */
     copy_v3_v3(out, in);
-    mul_m3_v3(t->spacemtx_inv, out);
-    mul_m3_v3(td->axismtx, out);
-    if (t->flag & T_EDIT) {
-      mul_m3_v3(tc->mat3_unit, out);
+    if (t->con.mode & CON_APPLY) {
+      mul_m3_v3(t->spacemtx_inv, out);
+      mul_m3_v3(td->axismtx, out);
+      if (t->flag & T_EDIT) {
+        mul_m3_v3(tc->mat3_unit, out);
+      }
     }
   }
 }
@@ -783,7 +785,6 @@ void drawConstraint(TransInfo *t)
   else {
     if (tc->mode & CON_SELECT) {
       float vec[3];
-      int depth_test_enabled;
 
       convertViewVec(t, vec, (t->mval[0] - t->con.imval[0]), (t->mval[1] - t->con.imval[1]));
       add_v3_v3(vec, t->center_global);
@@ -792,9 +793,9 @@ void drawConstraint(TransInfo *t)
       drawLine(t, t->center_global, t->spacemtx[1], 'Y', 0);
       drawLine(t, t->center_global, t->spacemtx[2], 'Z', 0);
 
-      depth_test_enabled = GPU_depth_test_enabled();
+      eGPUDepthTest depth_test_enabled = GPU_depth_test_get();
       if (depth_test_enabled) {
-        GPU_depth_test(false);
+        GPU_depth_test(GPU_DEPTH_NONE);
       }
 
       const uint shdr_pos = GPU_vertformat_attr_add(
@@ -819,7 +820,7 @@ void drawConstraint(TransInfo *t)
       immUnbindProgram();
 
       if (depth_test_enabled) {
-        GPU_depth_test(true);
+        GPU_depth_test(GPU_DEPTH_LESS_EQUAL);
       }
     }
 
@@ -841,7 +842,6 @@ void drawPropCircle(const struct bContext *C, TransInfo *t)
   if (t->flag & T_PROP_EDIT) {
     RegionView3D *rv3d = CTX_wm_region_view3d(C);
     float tmat[4][4], imat[4][4];
-    int depth_test_enabled;
 
     if (t->spacetype == SPACE_VIEW3D && rv3d != NULL) {
       copy_m4_m4(tmat, rv3d->viewmat);
@@ -871,9 +871,9 @@ void drawPropCircle(const struct bContext *C, TransInfo *t)
       GPU_matrix_scale_2f(1.0f, (ysize / xsize) * (xmask / ymask));
     }
 
-    depth_test_enabled = GPU_depth_test_enabled();
+    eGPUDepthTest depth_test_enabled = GPU_depth_test_get();
     if (depth_test_enabled) {
-      GPU_depth_test(false);
+      GPU_depth_test(GPU_DEPTH_NONE);
     }
 
     uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
@@ -882,7 +882,7 @@ void drawPropCircle(const struct bContext *C, TransInfo *t)
 
     float viewport[4];
     GPU_viewport_size_get_f(viewport);
-    GPU_blend(true);
+    GPU_blend(GPU_BLEND_ALPHA);
 
     immUniform2fv("viewportSize", &viewport[2]);
     immUniform1f("lineWidth", 3.0f * U.pixelsize);
@@ -897,7 +897,7 @@ void drawPropCircle(const struct bContext *C, TransInfo *t)
     immUnbindProgram();
 
     if (depth_test_enabled) {
-      GPU_depth_test(true);
+      GPU_depth_test(GPU_DEPTH_LESS_EQUAL);
     }
 
     GPU_matrix_pop();
@@ -976,6 +976,11 @@ void startConstraint(TransInfo *t)
 
 void stopConstraint(TransInfo *t)
 {
+  if (t->orient_curr != 0) {
+    t->orient_curr = 0;
+    transform_orientations_current_set(t, t->orient_curr);
+  }
+
   t->con.mode &= ~(CON_APPLY | CON_SELECT);
   *t->con.text = '\0';
   t->num.idx_max = t->idx_max;
@@ -1079,34 +1084,16 @@ static void setNearestAxis3d(TransInfo *t)
   }
 
   if (len[0] <= len[1] && len[0] <= len[2]) {
-    if (t->modifiers & MOD_CONSTRAINT_PLANE) {
-      t->con.mode |= (CON_AXIS1 | CON_AXIS2);
-      BLI_snprintf(t->con.text, sizeof(t->con.text), TIP_(" locking %s X axis"), t->spacename);
-    }
-    else {
-      t->con.mode |= CON_AXIS0;
-      BLI_snprintf(t->con.text, sizeof(t->con.text), TIP_(" along %s X axis"), t->spacename);
-    }
+    t->con.mode |= CON_AXIS0;
+    BLI_snprintf(t->con.text, sizeof(t->con.text), TIP_(" along %s X axis"), t->spacename);
   }
   else if (len[1] <= len[0] && len[1] <= len[2]) {
-    if (t->modifiers & MOD_CONSTRAINT_PLANE) {
-      t->con.mode |= (CON_AXIS0 | CON_AXIS2);
-      BLI_snprintf(t->con.text, sizeof(t->con.text), TIP_(" locking %s Y axis"), t->spacename);
-    }
-    else {
-      t->con.mode |= CON_AXIS1;
-      BLI_snprintf(t->con.text, sizeof(t->con.text), TIP_(" along %s Y axis"), t->spacename);
-    }
+    t->con.mode |= CON_AXIS1;
+    BLI_snprintf(t->con.text, sizeof(t->con.text), TIP_(" along %s Y axis"), t->spacename);
   }
   else if (len[2] <= len[1] && len[2] <= len[0]) {
-    if (t->modifiers & MOD_CONSTRAINT_PLANE) {
-      t->con.mode |= (CON_AXIS0 | CON_AXIS1);
-      BLI_snprintf(t->con.text, sizeof(t->con.text), TIP_(" locking %s Z axis"), t->spacename);
-    }
-    else {
-      t->con.mode |= CON_AXIS2;
-      BLI_snprintf(t->con.text, sizeof(t->con.text), TIP_(" along %s Z axis"), t->spacename);
-    }
+    t->con.mode |= CON_AXIS2;
+    BLI_snprintf(t->con.text, sizeof(t->con.text), TIP_(" along %s Z axis"), t->spacename);
   }
 }
 

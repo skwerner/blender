@@ -13,8 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
-#ifndef __BKE_SHADER_FX_H__
-#define __BKE_SHADER_FX_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -168,7 +167,7 @@ typedef struct ShaderFxTypeInfo {
 /* Initialize  global data (type info and some common global storages). */
 void BKE_shaderfx_init(void);
 
-void BKE_shaderfxType_panel_id(ShaderFxType type, char *panel_id);
+void BKE_shaderfxType_panel_id(ShaderFxType type, char *r_idname);
 const ShaderFxTypeInfo *BKE_shaderfx_get_info(ShaderFxType type);
 struct ShaderFxData *BKE_shaderfx_new(int type);
 void BKE_shaderfx_free_ex(struct ShaderFxData *fx, const int flag);
@@ -189,5 +188,3 @@ bool BKE_shaderfx_has_gpencil(struct Object *ob);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_SHADER_FX_H__ */

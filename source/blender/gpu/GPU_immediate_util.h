@@ -20,8 +20,7 @@
  * Utility drawing functions (rough equivalent to OpenGL's GLU)
  */
 
-#ifndef __GPU_IMMEDIATE_UTIL_H__
-#define __GPU_IMMEDIATE_UTIL_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -45,9 +44,9 @@ void imm_draw_circle_wire_2d(uint shdr_pos, float x, float y, float radius, int 
 void imm_draw_circle_fill_2d(uint shdr_pos, float x, float y, float radius, int nsegments);
 
 void imm_draw_circle_wire_aspect_2d(
-    uint shdr_pos, float x, float y, float radius_x, float radius_y, int nsegments);
+    uint shdr_pos, float x, float y, float rad_x, float rad_y, int nsegments);
 void imm_draw_circle_fill_aspect_2d(
-    uint shdr_pos, float x, float y, float radius_x, float radius_y, int nsegments);
+    uint shdr_pos, float x, float y, float rad_x, float rad_y, int nsegments);
 
 /* use this version when GPUVertFormat has a vec3 position */
 void imm_draw_circle_wire_3d(uint pos, float x, float y, float radius, int nsegments);
@@ -61,8 +60,8 @@ void imm_draw_circle_partial_wire_2d(
 void imm_draw_disk_partial_fill_2d(uint pos,
                                    float x,
                                    float y,
-                                   float radius_inner,
-                                   float radius_outer,
+                                   float rad_inner,
+                                   float rad_outer,
                                    int nsegments,
                                    float start,
                                    float sweep);
@@ -92,5 +91,3 @@ void imm_draw_cylinder_fill_3d(
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __GPU_IMMEDIATE_UTIL_H__ */

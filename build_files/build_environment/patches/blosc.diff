@@ -116,7 +116,7 @@ diff -Naur external_blosc.orig/blosc/blosc.c external_blosc/blosc/blosc.c
       ENDIF (AVX_TRUE)
    ELSEIF(CMAKE_SYSTEM_NAME MATCHES "Darwin")
   +   execute_process(COMMAND uname -m OUTPUT_VARIABLE ARCHITECTURE OUTPUT_STRIP_TRAILING_WHITESPACE)
-  +   message(STATUS "fooooo ${ARCHITECTURE}")
+  +   message(STATUS "Detected architecture ${ARCHITECTURE}")
   +   IF("${ARCHITECTURE}" STREQUAL "arm64")
   +      set(SSE2_FOUND   false  CACHE BOOL "SSE2 available on host")
   +      set(SSE3_FOUND   false CACHE BOOL "SSE3 available on host")

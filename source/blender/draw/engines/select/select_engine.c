@@ -65,7 +65,7 @@ static void select_engine_framebuffer_setup(void)
   size[1] = GPU_texture_height(dtxl->depth);
 
   if (e_data.framebuffer_select_id == NULL) {
-    e_data.framebuffer_select_id = GPU_framebuffer_create();
+    e_data.framebuffer_select_id = GPU_framebuffer_create("framebuffer_select_id");
   }
 
   if ((e_data.texture_u32 != NULL) && ((GPU_texture_width(e_data.texture_u32) != size[0]) ||
@@ -79,7 +79,8 @@ static void select_engine_framebuffer_setup(void)
   GPU_framebuffer_texture_attach(e_data.framebuffer_select_id, dtxl->depth, 0, 0);
 
   if (e_data.texture_u32 == NULL) {
-    e_data.texture_u32 = GPU_texture_create_2d(size[0], size[1], GPU_R32UI, NULL, NULL);
+    e_data.texture_u32 = GPU_texture_create_2d(
+        "select_buf_ids", size[0], size[1], 1, GPU_R32UI, NULL);
     GPU_framebuffer_texture_attach(e_data.framebuffer_select_id, e_data.texture_u32, 0, 0);
 
     GPU_framebuffer_check_valid(e_data.framebuffer_select_id, NULL);
@@ -378,7 +379,7 @@ RenderEngineType DRW_engine_viewport_select_type = {
     NULL,
     SELECT_ENGINE,
     N_("Select ID"),
-    RE_INTERNAL | RE_USE_STEREO_VIEWPORT,
+    RE_INTERNAL | RE_USE_STEREO_VIEWPORT | RE_USE_GPU_CONTEXT,
     NULL,
     NULL,
     NULL,

@@ -35,6 +35,9 @@
 
 #include "BLT_translation.h"
 
+/* Allow using deprecated functionality for .blend file I/O. */
+#define DNA_DEPRECATED_ALLOW
+
 #include "DNA_curve_types.h"
 #include "DNA_defaults.h"
 #include "DNA_key_types.h"
@@ -43,7 +46,9 @@
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
+#include "BKE_anim_data.h"
 #include "BKE_curve.h"
+#include "BKE_deform.h"
 #include "BKE_displist.h"
 #include "BKE_idtype.h"
 #include "BKE_lattice.h"
@@ -53,9 +58,9 @@
 #include "BKE_modifier.h"
 #include "BKE_object.h"
 
-#include "BKE_deform.h"
-
 #include "DEG_depsgraph_query.h"
+
+#include "BLO_read_write.h"
 
 static void lattice_init_data(ID *id)
 {
@@ -124,6 +129,59 @@ static void lattice_foreach_id(ID *id, LibraryForeachIDData *data)
   BKE_LIB_FOREACHID_PROCESS(data, lattice->key, IDWALK_CB_USER);
 }
 
+static void lattice_blend_write(BlendWriter *writer, ID *id, const void *id_address)
+{
+  Lattice *lt = (Lattice *)id;
+  if (lt->id.us > 0 || BLO_write_is_undo(writer)) {
+    /* Clean up, important in undo case to reduce false detection of changed datablocks. */
+    lt->editlatt = NULL;
+    lt->batch_cache = NULL;
+
+    /* write LibData */
+    BLO_write_id_struct(writer, Lattice, id_address, &lt->id);
+    BKE_id_blend_write(writer, &lt->id);
+
+    /* write animdata */
+    if (lt->adt) {
+      BKE_animdata_blend_write(writer, lt->adt);
+    }
+
+    /* direct data */
+    BLO_write_struct_array(writer, BPoint, lt->pntsu * lt->pntsv * lt->pntsw, lt->def);
+
+    BKE_defvert_blend_write(writer, lt->pntsu * lt->pntsv * lt->pntsw, lt->dvert);
+  }
+}
+
+static void lattice_blend_read_data(BlendDataReader *reader, ID *id)
+{
+  Lattice *lt = (Lattice *)id;
+  BLO_read_data_address(reader, &lt->def);
+
+  BLO_read_data_address(reader, &lt->dvert);
+  BKE_defvert_blend_read(reader, lt->pntsu * lt->pntsv * lt->pntsw, lt->dvert);
+
+  lt->editlatt = NULL;
+  lt->batch_cache = NULL;
+
+  BLO_read_data_address(reader, &lt->adt);
+  BKE_animdata_blend_read_data(reader, lt->adt);
+}
+
+static void lattice_blend_read_lib(BlendLibReader *reader, ID *id)
+{
+  Lattice *lt = (Lattice *)id;
+  BLO_read_id_address(reader, lt->id.lib, &lt->ipo);  // XXX deprecated - old animation system
+  BLO_read_id_address(reader, lt->id.lib, &lt->key);
+}
+
+static void lattice_blend_read_expand(BlendExpander *expander, ID *id)
+{
+  Lattice *lt = (Lattice *)id;
+  BLO_expand(expander, lt->ipo);  // XXX deprecated - old animation system
+  BLO_expand(expander, lt->key);
+}
+
 IDTypeInfo IDType_ID_LT = {
     .id_code = ID_LT,
     .id_filter = FILTER_ID_LT,
@@ -139,6 +197,12 @@ IDTypeInfo IDType_ID_LT = {
     .free_data = lattice_free_data,
     .make_local = NULL,
     .foreach_id = lattice_foreach_id,
+    .foreach_cache = NULL,
+
+    .blend_write = lattice_blend_write,
+    .blend_read_data = lattice_blend_read_data,
+    .blend_read_lib = lattice_blend_read_lib,
+    .blend_read_expand = lattice_blend_read_expand,
 };
 
 int BKE_lattice_index_from_uvw(Lattice *lt, const int u, const int v, const int w)
@@ -356,9 +420,8 @@ bool object_deform_mball(Object *ob, ListBase *dispbase)
 
     return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 static BPoint *latt_bp(Lattice *lt, int u, int v, int w)
@@ -461,12 +524,12 @@ float (*BKE_lattice_vert_coords_alloc(const Lattice *lt, int *r_vert_len))[3]
 }
 
 void BKE_lattice_vert_coords_apply_with_mat4(struct Lattice *lt,
-                                             const float (*vertexCos)[3],
+                                             const float (*vert_coords)[3],
                                              const float mat[4][4])
 {
   int i, numVerts = lt->pntsu * lt->pntsv * lt->pntsw;
   for (i = 0; i < numVerts; i++) {
-    mul_v3_m4v3(lt->def[i].vec, mat, vertexCos[i]);
+    mul_v3_m4v3(lt->def[i].vec, mat, vert_coords[i]);
   }
 }
 
@@ -575,9 +638,8 @@ struct BPoint *BKE_lattice_active_point_get(Lattice *lt)
   if ((lt->actbp != LT_ACTBP_NONE) && (lt->actbp < lt->pntsu * lt->pntsv * lt->pntsw)) {
     return &lt->def[lt->actbp];
   }
-  else {
-    return NULL;
-  }
+
+  return NULL;
 }
 
 void BKE_lattice_center_median(Lattice *lt, float cent[3])
@@ -672,7 +734,7 @@ void BKE_lattice_center_bounds(Lattice *lt, float cent[3])
   mid_v3_v3v3(cent, min, max);
 }
 
-void BKE_lattice_transform(Lattice *lt, float mat[4][4], bool do_keys)
+void BKE_lattice_transform(Lattice *lt, const float mat[4][4], bool do_keys)
 {
   BPoint *bp = lt->def;
   int i = lt->pntsu * lt->pntsv * lt->pntsw;
@@ -694,7 +756,7 @@ void BKE_lattice_transform(Lattice *lt, float mat[4][4], bool do_keys)
   }
 }
 
-void BKE_lattice_translate(Lattice *lt, float offset[3], bool do_keys)
+void BKE_lattice_translate(Lattice *lt, const float offset[3], bool do_keys)
 {
   int i, numVerts;
 

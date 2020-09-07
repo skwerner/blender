@@ -101,6 +101,7 @@ BMVert *BM_vert_create(BMesh *bm,
   /* may add to middle of the pool */
   bm->elem_index_dirty |= BM_VERT;
   bm->elem_table_dirty |= BM_VERT;
+  bm->spacearr_dirty |= BM_SPACEARR_DIRTY_ALL;
 
   bm->totvert++;
 
@@ -181,7 +182,7 @@ BMEdge *BM_edge_create(
   e->v2 = v2;
   e->l = NULL;
 
-  memset(&e->v1_disk_link, 0, sizeof(BMDiskLink) * 2);
+  memset(&e->v1_disk_link, 0, sizeof(BMDiskLink[2]));
   /* --- done --- */
 
   bmesh_disk_edge_append(e, e->v1);
@@ -190,6 +191,7 @@ BMEdge *BM_edge_create(
   /* may add to middle of the pool */
   bm->elem_index_dirty |= BM_EDGE;
   bm->elem_table_dirty |= BM_EDGE;
+  bm->spacearr_dirty |= BM_SPACEARR_DIRTY_ALL;
 
   bm->totedge++;
 
@@ -259,6 +261,7 @@ static BMLoop *bm_loop_create(BMesh *bm,
 
   /* may add to middle of the pool */
   bm->elem_index_dirty |= BM_LOOP;
+  bm->spacearr_dirty |= BM_SPACEARR_DIRTY_ALL;
 
   bm->totloop++;
 
@@ -402,6 +405,7 @@ BLI_INLINE BMFace *bm_face_create__internal(BMesh *bm)
   /* may add to middle of the pool */
   bm->elem_index_dirty |= BM_FACE;
   bm->elem_table_dirty |= BM_FACE;
+  bm->spacearr_dirty |= BM_SPACEARR_DIRTY_ALL;
 
   bm->totface++;
 
@@ -748,6 +752,7 @@ static void bm_kill_only_vert(BMesh *bm, BMVert *v)
   bm->totvert--;
   bm->elem_index_dirty |= BM_VERT;
   bm->elem_table_dirty |= BM_VERT;
+  bm->spacearr_dirty |= BM_SPACEARR_DIRTY_ALL;
 
   BM_select_history_remove(bm, v);
 
@@ -770,6 +775,7 @@ static void bm_kill_only_edge(BMesh *bm, BMEdge *e)
   bm->totedge--;
   bm->elem_index_dirty |= BM_EDGE;
   bm->elem_table_dirty |= BM_EDGE;
+  bm->spacearr_dirty |= BM_SPACEARR_DIRTY_ALL;
 
   BM_select_history_remove(bm, (BMElem *)e);
 
@@ -796,6 +802,7 @@ static void bm_kill_only_face(BMesh *bm, BMFace *f)
   bm->totface--;
   bm->elem_index_dirty |= BM_FACE;
   bm->elem_table_dirty |= BM_FACE;
+  bm->spacearr_dirty |= BM_SPACEARR_DIRTY_ALL;
 
   BM_select_history_remove(bm, (BMElem *)f);
 
@@ -817,6 +824,8 @@ static void bm_kill_only_loop(BMesh *bm, BMLoop *l)
 {
   bm->totloop--;
   bm->elem_index_dirty |= BM_LOOP;
+  bm->spacearr_dirty |= BM_SPACEARR_DIRTY_ALL;
+
   if (l->head.data) {
     CustomData_bmesh_free_block(&bm->ldata, &l->head.data);
   }
@@ -1795,7 +1804,7 @@ BMEdge *bmesh_kernel_join_edge_kill_vert(BMesh *bm,
                                          BMEdge *e_kill,
                                          BMVert *v_kill,
                                          const bool do_del,
-                                         const bool check_edge_double,
+                                         const bool check_edge_exists,
                                          const bool kill_degenerate_faces)
 {
   BMEdge *e_old;
@@ -1837,7 +1846,7 @@ BMEdge *bmesh_kernel_join_edge_kill_vert(BMesh *bm,
     valence2 = bmesh_disk_count(v_target);
 #endif
 
-    if (check_edge_double) {
+    if (check_edge_exists) {
       e_splice = BM_edge_exists(v_target, v_old);
     }
 
@@ -1917,7 +1926,7 @@ BMEdge *bmesh_kernel_join_edge_kill_vert(BMesh *bm,
       BM_CHECK_ELEMENT(l->f);
     }
 #endif
-    if (check_edge_double) {
+    if (check_edge_exists) {
       if (e_splice) {
         /* removes e_splice */
         BM_edge_splice(bm, e_old, e_splice);
@@ -1962,7 +1971,7 @@ BMVert *bmesh_kernel_join_vert_kill_edge(BMesh *bm,
                                          BMEdge *e_kill,
                                          BMVert *v_kill,
                                          const bool do_del,
-                                         const bool check_edge_double,
+                                         const bool check_edge_exists,
                                          const bool kill_degenerate_faces)
 {
   BLI_SMALLSTACK_DECLARE(faces_degenerate, BMFace *);
@@ -2011,14 +2020,14 @@ BMVert *bmesh_kernel_join_vert_kill_edge(BMesh *bm,
     while ((e = v_kill->e)) {
       BMEdge *e_target;
 
-      if (check_edge_double) {
+      if (check_edge_exists) {
         e_target = BM_edge_exists(v_target, BM_edge_other_vert(e, v_kill));
       }
 
       bmesh_edge_vert_swap(e, v_target, v_kill);
       BLI_assert(e->v1 != e->v2);
 
-      if (check_edge_double) {
+      if (check_edge_exists) {
         if (e_target) {
           BM_edge_splice(bm, e_target, e);
         }

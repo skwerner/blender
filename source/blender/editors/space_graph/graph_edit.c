@@ -681,9 +681,10 @@ static void insert_graph_keys(bAnimContext *ac, eGraphKeys_InsertKey_Types mode)
     }
   }
   else {
+    const AnimationEvalContext anim_eval_context = BKE_animsys_eval_context_construct(
+        ac->depsgraph, (float)CFRA);
     for (ale = anim_data.first; ale; ale = ale->next) {
       FCurve *fcu = (FCurve *)ale->key_data;
-      float cfra = (float)CFRA;
 
       /* Read value from property the F-Curve represents, or from the curve only?
        *
@@ -705,7 +706,7 @@ static void insert_graph_keys(bAnimContext *ac, eGraphKeys_InsertKey_Types mode)
                         ((fcu->grp) ? (fcu->grp->name) : (NULL)),
                         fcu->rna_path,
                         fcu->array_index,
-                        cfra,
+                        &anim_eval_context,
                         ts->keyframe_type,
                         &nla_cache,
                         flag);
@@ -714,6 +715,7 @@ static void insert_graph_keys(bAnimContext *ac, eGraphKeys_InsertKey_Types mode)
         AnimData *adt = ANIM_nla_mapping_get(ac, ale);
 
         /* adjust current frame for NLA-mapping */
+        float cfra = (float)CFRA;
         if ((sipo) && (sipo->mode == SIPO_MODE_DRIVERS)) {
           cfra = sipo->cursorTime;
         }
@@ -1485,7 +1487,7 @@ static int graphkeys_decimate_invoke(bContext *C, wmOperator *op, const wmEvent 
   dgo->area = CTX_wm_area(C);
   dgo->region = CTX_wm_region(C);
 
-  /* initialise percentage so that it will have the correct value before the first mouse move. */
+  /* Initialize percentage so that it will have the correct value before the first mouse move. */
   decimate_mouse_update_percentage(dgo, op, event);
 
   decimate_draw_status_header(op, dgo);

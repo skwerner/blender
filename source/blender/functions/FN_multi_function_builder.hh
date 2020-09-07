@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FN_MULTI_FUNCTION_BUILDER_HH__
-#define __FN_MULTI_FUNCTION_BUILDER_HH__
+#pragma once
 
 /** \file
  * \ingroup fn
@@ -59,7 +58,8 @@ template<typename In1, typename Out1> class CustomMF_SI_SO : public MultiFunctio
   template<typename ElementFuncT> static FunctionT create_function(ElementFuncT element_fn)
   {
     return [=](IndexMask mask, VSpan<In1> in1, MutableSpan<Out1> out1) {
-      mask.foreach_index([&](uint i) { new ((void *)&out1[i]) Out1(element_fn(in1[i])); });
+      mask.foreach_index(
+          [&](int i) { new (static_cast<void *>(&out1[i])) Out1(element_fn(in1[i])); });
     };
   }
 
@@ -101,7 +101,8 @@ class CustomMF_SI_SI_SO : public MultiFunction {
   template<typename ElementFuncT> static FunctionT create_function(ElementFuncT element_fn)
   {
     return [=](IndexMask mask, VSpan<In1> in1, VSpan<In2> in2, MutableSpan<Out1> out1) {
-      mask.foreach_index([&](uint i) { new ((void *)&out1[i]) Out1(element_fn(in1[i], in2[i])); });
+      mask.foreach_index(
+          [&](int i) { new (static_cast<void *>(&out1[i])) Out1(element_fn(in1[i], in2[i])); });
     };
   }
 
@@ -151,8 +152,9 @@ class CustomMF_SI_SI_SI_SO : public MultiFunction {
                VSpan<In2> in2,
                VSpan<In3> in3,
                MutableSpan<Out1> out1) {
-      mask.foreach_index(
-          [&](uint i) { new ((void *)&out1[i]) Out1(element_fn(in1[i], in2[i], in3[i])); });
+      mask.foreach_index([&](int i) {
+        new (static_cast<void *>(&out1[i])) Out1(element_fn(in1[i], in2[i], in3[i]));
+      });
     };
   }
 
@@ -191,7 +193,7 @@ template<typename Mut1> class CustomMF_SM : public MultiFunction {
   template<typename ElementFuncT> static FunctionT create_function(ElementFuncT element_fn)
   {
     return [=](IndexMask mask, MutableSpan<Mut1> mut1) {
-      mask.foreach_index([&](uint i) { element_fn(mut1[i]); });
+      mask.foreach_index([&](int i) { element_fn(mut1[i]); });
     };
   }
 
@@ -199,6 +201,30 @@ template<typename Mut1> class CustomMF_SM : public MultiFunction {
   {
     MutableSpan<Mut1> mut1 = params.single_mutable<Mut1>(0);
     function_(mask, mut1);
+  }
+};
+
+/**
+ * Generates a multi-function that converts between two types.
+ */
+template<typename From, typename To> class CustomMF_Convert : public MultiFunction {
+ public:
+  CustomMF_Convert()
+  {
+    std::string name = CPPType::get<From>().name() + " to " + CPPType::get<To>().name();
+    MFSignatureBuilder signature = this->get_builder(std::move(name));
+    signature.single_input<From>("Input");
+    signature.single_output<To>("Output");
+  }
+
+  void call(IndexMask mask, MFParams params, MFContext UNUSED(context)) const override
+  {
+    VSpan<From> inputs = params.readonly_single_input<From>(0);
+    MutableSpan<To> outputs = params.uninitialized_single_output<To>(1);
+
+    for (int64_t i : mask) {
+      new (static_cast<void *>(&outputs[i])) To(inputs[i]);
+    }
   }
 };
 
@@ -216,7 +242,7 @@ class CustomMF_GenericConstant : public MultiFunction {
  public:
   CustomMF_GenericConstant(const CPPType &type, const void *value);
   void call(IndexMask mask, MFParams params, MFContext context) const override;
-  uint32_t hash() const override;
+  uint64_t hash() const override;
   bool equals(const MultiFunction &other) const override;
 };
 
@@ -252,10 +278,10 @@ template<typename T> class CustomMF_Constant : public MultiFunction {
   void call(IndexMask mask, MFParams params, MFContext UNUSED(context)) const override
   {
     MutableSpan<T> output = params.uninitialized_single_output<T>(0);
-    mask.foreach_index([&](uint i) { new (&output[i]) T(value_); });
+    mask.foreach_index([&](int i) { new (&output[i]) T(value_); });
   }
 
-  uint32_t hash() const override
+  uint64_t hash() const override
   {
     return DefaultHash<T>{}(value_);
   }
@@ -271,13 +297,22 @@ template<typename T> class CustomMF_Constant : public MultiFunction {
     if (other2 != nullptr) {
       const CPPType &type = CPPType::get<T>();
       if (type == other2->type_) {
-        return type.is_equal((const void *)&value_, other2->value_);
+        return type.is_equal(static_cast<const void *>(&value_), other2->value_);
       }
     }
     return false;
   }
 };
 
-}  // namespace blender::fn
+class CustomMF_DefaultOutput : public MultiFunction {
+ private:
+  int output_amount_;
 
-#endif /* __FN_MULTI_FUNCTION_BUILDER_HH__ */
+ public:
+  CustomMF_DefaultOutput(StringRef name,
+                         Span<MFDataType> input_types,
+                         Span<MFDataType> output_types);
+  void call(IndexMask mask, MFParams params, MFContext context) const override;
+};
+
+}  // namespace blender::fn

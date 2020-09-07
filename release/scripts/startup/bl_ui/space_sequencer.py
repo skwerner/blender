@@ -327,6 +327,7 @@ class SEQUENCER_MT_view(Menu):
         if is_preview:
             layout.separator()
             if st.display_mode == 'IMAGE':
+                layout.prop(st, "use_zoom_to_fit")
                 layout.prop(ed, "show_overlay", text="Show Frame Overlay")
                 layout.prop(st, "show_safe_areas", text="Show Safe Areas")
                 layout.prop(st, "show_metadata", text="Show Metadata")
@@ -796,7 +797,7 @@ class SEQUENCER_MT_context_menu(Menu):
         props = layout.operator("wm.call_panel", text="Rename...")
         props.name = "TOPBAR_PT_name"
         props.keep_open = False
-        layout.operator("sequencer.delete", text="Delete...")
+        layout.operator("sequencer.delete", text="Delete")
 
         layout.separator()
 

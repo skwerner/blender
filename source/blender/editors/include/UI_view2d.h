@@ -23,8 +23,7 @@
  * \ingroup editorui
  */
 
-#ifndef __UI_VIEW2D_H__
-#define __UI_VIEW2D_H__
+#pragma once
 
 #include "BLI_compiler_attrs.h"
 
@@ -120,6 +119,12 @@ void UI_view2d_region_reinit(struct View2D *v2d, short type, int winx, int winy)
 void UI_view2d_curRect_validate(struct View2D *v2d);
 void UI_view2d_curRect_reset(struct View2D *v2d);
 void UI_view2d_sync(struct bScreen *screen, struct ScrArea *area, struct View2D *v2dcur, int flag);
+
+/* Perform all required updates after `v2d->cur` as been modified.
+ * This includes like validation view validation (#UI_view2d_curRect_validate).
+ *
+ * Current intent is to use it from user code, such as view navigation and zoom operations. */
+void UI_view2d_curRect_changed(const struct bContext *C, struct View2D *v2d);
 
 void UI_view2d_totRect_set(struct View2D *v2d, int width, int height);
 void UI_view2d_totRect_set_resize(struct View2D *v2d, int width, int height, bool resize);
@@ -288,5 +293,3 @@ void VIEW2D_GGT_navigate_impl(struct wmGizmoGroupType *gzgt, const char *idname)
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __UI_VIEW2D_H__ */

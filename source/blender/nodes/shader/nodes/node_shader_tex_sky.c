@@ -43,10 +43,11 @@ static void node_shader_init_tex_sky(bNodeTree *UNUSED(ntree), bNode *node)
   tex->turbidity = 2.2f;
   tex->ground_albedo = 0.3f;
   tex->sun_disc = true;
-  tex->sun_size = DEG2RADF(0.545);
-  tex->sun_elevation = M_PI_2;
+  tex->sun_size = DEG2RADF(0.545f);
+  tex->sun_intensity = 1.0f;
+  tex->sun_elevation = DEG2RADF(15.0f);
   tex->sun_rotation = 0.0f;
-  tex->altitude = 0;
+  tex->altitude = 0.0f;
   tex->air_density = 1.0f;
   tex->dust_density = 1.0f;
   tex->ozone_density = 1.0f;
@@ -64,7 +65,7 @@ typedef struct XYZ_to_RGB /* transposed imbuf_xyz_to_rgb, passed as 3x vec3 */
   float r[3], g[3], b[3];
 } XYZ_to_RGB;
 
-static float sky_perez_function(float *lam, float theta, float gamma)
+static float sky_perez_function(const float *lam, float theta, float gamma)
 {
   float ctheta = cosf(theta);
   float cgamma = cosf(gamma);
@@ -73,7 +74,7 @@ static float sky_perez_function(float *lam, float theta, float gamma)
          (1.0 + lam[2] * expf(lam[3] * gamma) + lam[4] * cgamma * cgamma);
 }
 
-static void sky_precompute_old(SkyModelPreetham *sunsky, float sun_angles[], float turbidity)
+static void sky_precompute_old(SkyModelPreetham *sunsky, const float sun_angles[], float turbidity)
 {
   float theta = sun_angles[0];
   float theta2 = theta * theta;
@@ -169,7 +170,7 @@ static int node_shader_gpu_tex_sky(GPUMaterial *mat,
                           GPU_uniform(xyz_to_rgb.g),
                           GPU_uniform(xyz_to_rgb.b));
   }
-  else if (tex->sky_model == 1) {
+  if (tex->sky_model == 1) {
     /* Hosek / Wilkie */
     sun_angles[0] = fmin(M_PI_2, sun_angles[0]); /* clamp to horizon */
     SKY_ArHosekSkyModelState *sky_state = SKY_arhosek_xyz_skymodelstate_alloc_init(
@@ -209,9 +210,16 @@ static int node_shader_gpu_tex_sky(GPUMaterial *mat,
                           GPU_uniform(xyz_to_rgb.g),
                           GPU_uniform(xyz_to_rgb.b));
   }
-  else {
-    return GPU_stack_link(mat, node, "node_tex_sky_nishita", in, out);
-  }
+
+  return GPU_stack_link(mat, node, "node_tex_sky_nishita", in, out);
+}
+
+static void node_shader_update_sky(bNodeTree *UNUSED(ntree), bNode *node)
+{
+  bNodeSocket *sockVector = nodeFindSocket(node, SOCK_IN, "Vector");
+
+  NodeTexSky *tex = (NodeTexSky *)node->storage;
+  nodeSetSocketAvailability(sockVector, !(tex->sky_model == 2 && tex->sun_disc == 1));
 }
 
 /* node type definition */
@@ -225,6 +233,8 @@ void register_node_type_sh_tex_sky(void)
   node_type_init(&ntype, node_shader_init_tex_sky);
   node_type_storage(&ntype, "NodeTexSky", node_free_standard_storage, node_copy_standard_storage);
   node_type_gpu(&ntype, node_shader_gpu_tex_sky);
+  /* remove Vector input for Nishita */
+  node_type_update(&ntype, node_shader_update_sky);
 
   nodeRegisterType(&ntype);
 }

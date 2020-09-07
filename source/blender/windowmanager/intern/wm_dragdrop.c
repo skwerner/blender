@@ -39,7 +39,6 @@
 #include "BKE_context.h"
 #include "BKE_idtype.h"
 
-#include "GPU_glew.h"
 #include "GPU_shader.h"
 #include "GPU_state.h"
 #include "GPU_viewport.h"
@@ -297,7 +296,7 @@ void WM_drag_add_ID(wmDrag *drag, ID *id, ID *from_parent)
       }
       return;
     }
-    else if (GS(drag_id->id->name) != GS(id->name)) {
+    if (GS(drag_id->id->name) != GS(id->name)) {
       BLI_assert(!"All dragged IDs must have the same type");
       return;
     }
@@ -356,7 +355,7 @@ static const char *wm_drag_name(wmDrag *drag)
       if (single) {
         return id->name + 2;
       }
-      else if (id) {
+      if (id) {
         return BKE_idtype_idcode_to_name_plural(GS(id->name));
       }
       break;
@@ -402,7 +401,7 @@ void wm_drags_draw(bContext *C, wmWindow *win, rcti *rect)
   }
 
   /* XXX todo, multiline drag draws... but maybe not, more types mixed wont work well */
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
   for (drag = wm->drags.first; drag; drag = drag->next) {
     const uchar text_col[] = {255, 255, 255, 255};
     int iconsize = UI_DPI_ICON_SIZE;
@@ -424,9 +423,8 @@ void wm_drags_draw(bContext *C, wmWindow *win, rcti *rect)
                                y,
                                drag->imb->x,
                                drag->imb->y,
-                               GL_RGBA,
-                               GL_UNSIGNED_BYTE,
-                               GL_NEAREST,
+                               GPU_RGBA8,
+                               false,
                                drag->imb->rect,
                                drag->scale,
                                drag->scale,
@@ -497,5 +495,5 @@ void wm_drags_draw(bContext *C, wmWindow *win, rcti *rect)
       }
     }
   }
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 }

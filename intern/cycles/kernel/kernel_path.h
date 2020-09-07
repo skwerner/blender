@@ -288,7 +288,7 @@ ccl_device_forceinline bool kernel_path_shader_apply(KernelGlobals *kg,
     if (kernel_data.background.transparent) {
       L->transparent += average(holdout_weight * throughput);
     }
-    if (holdout_weight == make_float3(1.0f, 1.0f, 1.0f)) {
+    if (isequal_float3(holdout_weight, make_float3(1.0f, 1.0f, 1.0f))) {
       return false;
     }
   }
@@ -665,11 +665,9 @@ ccl_device void kernel_path_trace(
 
   kernel_path_trace_setup(kg, sample, x, y, &rng_hash, &ray);
 
-#  ifndef __KERNEL_OPTIX__
   if (ray.t == 0.0f) {
     return;
   }
-#  endif
 
   /* Initialize state. */
   float3 throughput = make_float3(1.0f, 1.0f, 1.0f);

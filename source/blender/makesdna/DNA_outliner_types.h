@@ -21,8 +21,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_OUTLINER_TYPES_H__
-#define __DNA_OUTLINER_TYPES_H__
+#pragma once
 
 #include "DNA_defs.h"
 
@@ -110,6 +109,8 @@ enum {
 #define TSE_SCENE_COLLECTION_BASE 39
 #define TSE_VIEW_COLLECTION_BASE 40
 #define TSE_SCENE_OBJECTS_BASE 41
+#define TSE_GPENCIL_EFFECT_BASE 42
+#define TSE_GPENCIL_EFFECT 43
 
 /* Check whether given TreeStoreElem should have a real ID in its ->id member. */
 #define TSE_IS_REAL_ID(_tse) \
@@ -127,5 +128,3 @@ enum {
          TSE_KEYMAP_ITEM, \
          TSE_ID_BASE, \
          TSE_GP_LAYER))
-
-#endif

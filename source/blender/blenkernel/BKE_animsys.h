@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_ANIMSYS_H__
-#define __BKE_ANIMSYS_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -47,6 +46,23 @@ struct Scene;
 struct bAction;
 struct bActionGroup;
 struct bContext;
+
+/* Container for data required to do FCurve and Driver evaluation. */
+typedef struct AnimationEvalContext {
+  /* For drivers, so that they have access to the dependency graph and the current view layer. See
+   * T77086. */
+  struct Depsgraph *depsgraph;
+
+  /* FCurves and Drivers can be evaluated at a different time than the current scene time, for
+   * example when evaluating NLA strips. This means that, even though the current time is stored in
+   * the dependency graph, we need an explicit evaluation time. */
+  float eval_time;
+} AnimationEvalContext;
+
+AnimationEvalContext BKE_animsys_eval_context_construct(struct Depsgraph *depsgraph,
+                                                        float eval_time);
+AnimationEvalContext BKE_animsys_eval_context_construct_at(
+    const AnimationEvalContext *anim_eval_context, float eval_time);
 
 /* ************************************* */
 /* KeyingSets API */
@@ -131,16 +147,17 @@ bool BKE_animdata_fix_paths_remove(struct ID *id, const char *path);
 
 /* -------------------------------------- */
 
+typedef struct AnimationBasePathChange {
+  struct AnimationBasePathChange *next, *prev;
+  const char *src_basepath;
+  const char *dst_basepath;
+} AnimationBasePathChange;
+
 /* Move animation data from src to destination if it's paths are based on basepaths */
-void BKE_animdata_separate_by_basepath(struct Main *bmain,
+void BKE_animdata_transfer_by_basepath(struct Main *bmain,
                                        struct ID *srcID,
                                        struct ID *dstID,
                                        struct ListBase *basepaths);
-
-/* Move F-Curves from src to destination if it's path is based on basepath */
-void action_move_fcurves_by_basepath(struct bAction *srcAct,
-                                     struct bAction *dstAct,
-                                     const char basepath[]);
 
 char *BKE_animdata_driver_path_hack(struct bContext *C,
                                     struct PointerRNA *ptr,
@@ -172,11 +189,12 @@ void BKE_fcurves_id_cb(struct ID *id, ID_FCurve_Edit_Callback func, void *user_d
 
 typedef struct NlaKeyframingContext NlaKeyframingContext;
 
-struct NlaKeyframingContext *BKE_animsys_get_nla_keyframing_context(struct ListBase *cache,
-                                                                    struct PointerRNA *ptr,
-                                                                    struct AnimData *adt,
-                                                                    float ctime,
-                                                                    const bool flush_to_original);
+struct NlaKeyframingContext *BKE_animsys_get_nla_keyframing_context(
+    struct ListBase *cache,
+    struct PointerRNA *ptr,
+    struct AnimData *adt,
+    const struct AnimationEvalContext *anim_eval_context,
+    const bool flush_to_original);
 bool BKE_animsys_nla_remap_keyframe_values(struct NlaKeyframingContext *context,
                                            struct PointerRNA *prop_ptr,
                                            struct PropertyRNA *prop,
@@ -209,7 +227,7 @@ bool BKE_animsys_write_rna_setting(struct PathResolvedRNA *anim_rna, const float
 /* Evaluation loop for evaluating animation data  */
 void BKE_animsys_evaluate_animdata(struct ID *id,
                                    struct AnimData *adt,
-                                   float ctime,
+                                   const struct AnimationEvalContext *anim_eval_context,
                                    eAnimData_Recalc recalc,
                                    const bool flush_to_original);
 
@@ -229,14 +247,14 @@ void BKE_animsys_evaluate_all_animation(struct Main *main,
 /* Evaluate Action (F-Curve Bag) */
 void animsys_evaluate_action(struct PointerRNA *ptr,
                              struct bAction *act,
-                             float ctime,
+                             const struct AnimationEvalContext *anim_eval_context,
                              const bool flush_to_original);
 
 /* Evaluate Action Group */
 void animsys_evaluate_action_group(struct PointerRNA *ptr,
                                    struct bAction *act,
                                    struct bActionGroup *agrp,
-                                   float ctime);
+                                   const struct AnimationEvalContext *anim_eval_context);
 
 /* ************************************* */
 
@@ -257,5 +275,3 @@ void BKE_animsys_update_driver_array(struct ID *id);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_ANIMSYS_H__*/

@@ -21,8 +21,7 @@
  * \ingroup nodes
  */
 
-#ifndef __NODE_SHADER_UTIL_H__
-#define __NODE_SHADER_UTIL_H__
+#pragma once
 
 #include <float.h>
 #include <math.h>
@@ -42,6 +41,7 @@
 
 #include "BLI_blenlib.h"
 #include "BLI_math.h"
+#include "BLI_math_base_safe.h"
 #include "BLI_rand.h"
 #include "BLI_threads.h"
 #include "BLI_utildefines.h"
@@ -67,13 +67,14 @@
 
 #include "GPU_material.h"
 #include "GPU_texture.h"
-#include "GPU_uniformbuffer.h"
+#include "GPU_uniform_buffer.h"
 
 #ifdef __cplusplus
 #  include "FN_multi_function_builder.hh"
 
-#  include "BKE_node_tree_multi_function.hh"
+#  include "NOD_node_tree_multi_function.hh"
 
+#  include "BLI_color.hh"
 #  include "BLI_float3.hh"
 
 extern "C" {
@@ -113,6 +114,4 @@ void ntreeExecGPUNodes(struct bNodeTreeExec *exec,
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

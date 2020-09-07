@@ -20,13 +20,17 @@ namespace blender::fn {
 
 AttributesInfoBuilder::~AttributesInfoBuilder()
 {
-  for (uint i : defaults_.index_range()) {
+  for (int i : defaults_.index_range()) {
     types_[i]->destruct(defaults_[i]);
   }
 }
 
-void AttributesInfoBuilder::add(StringRef name, const CPPType &type, const void *default_value)
+bool AttributesInfoBuilder::add(StringRef name, const CPPType &type, const void *default_value)
 {
+  if (name.size() == 0) {
+    std::cout << "Warning: Tried to add an attribute with empty name.\n";
+    return false;
+  }
   if (names_.add_as(name)) {
     types_.append(&type);
 
@@ -36,16 +40,20 @@ void AttributesInfoBuilder::add(StringRef name, const CPPType &type, const void 
     void *dst = allocator_.allocate(type.size(), type.alignment());
     type.copy_to_uninitialized(default_value, dst);
     defaults_.append(dst);
+    return true;
   }
-  else {
-    /* The same name can be added more than once as long as the type is always the same. */
-    BLI_assert(types_[names_.index_of_as(name)] == &type);
+
+  const CPPType &stored_type = *types_[names_.index_of_as(name)];
+  if (stored_type != type) {
+    std::cout << "Warning: Tried to add an attribute twice with different types (" << name << ": "
+              << stored_type.name() << ", " << type.name() << ").\n";
   }
+  return false;
 }
 
 AttributesInfo::AttributesInfo(const AttributesInfoBuilder &builder)
 {
-  for (uint i : builder.types_.index_range()) {
+  for (int i : builder.types_.index_range()) {
     StringRefNull name = allocator_.copy_string(builder.names_[i]);
     const CPPType &type = *builder.types_[i];
     const void *default_value = builder.defaults_[i];
@@ -62,7 +70,7 @@ AttributesInfo::AttributesInfo(const AttributesInfoBuilder &builder)
 
 AttributesInfo::~AttributesInfo()
 {
-  for (uint i : defaults_.index_range()) {
+  for (int i : defaults_.index_range()) {
     type_by_index_[i]->destruct(defaults_[i]);
   }
 }

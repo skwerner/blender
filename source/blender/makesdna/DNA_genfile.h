@@ -22,12 +22,15 @@
  * \brief blenloader genfile private function prototypes
  */
 
-#ifndef __DNA_GENFILE_H__
-#define __DNA_GENFILE_H__
+#pragma once
 
 #include "intern/dna_utils.h"
 
 struct SDNA;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * DNAstr contains the prebuilt SDNA structure defining the layouts of the types
@@ -134,4 +137,6 @@ bool DNA_struct_alias_elem_find(const struct SDNA *sdna,
                                 const char *name);
 void DNA_sdna_alias_data_ensure_structs_map(struct SDNA *sdna);
 
-#endif /* __DNA_GENFILE_H__ */
+#ifdef __cplusplus
+}
+#endif

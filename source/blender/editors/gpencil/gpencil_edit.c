@@ -39,6 +39,7 @@
 
 #include "BLT_translation.h"
 
+#include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
@@ -52,7 +53,9 @@
 #include "BKE_global.h"
 #include "BKE_gpencil.h"
 #include "BKE_gpencil_geom.h"
+#include "BKE_layer.h"
 #include "BKE_lib_id.h"
+#include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_object.h"
@@ -75,6 +78,7 @@
 
 #include "UI_view2d.h"
 
+#include "ED_armature.h"
 #include "ED_gpencil.h"
 #include "ED_object.h"
 #include "ED_outliner.h"
@@ -93,6 +97,8 @@
 /* -------------------------------------------------------------------- */
 /** \name Stroke Edit Mode Management
  * \{ */
+
+static void gpencil_flip_stroke(bGPDstroke *gps);
 
 /* poll callback for all stroke editing operators */
 static bool gpencil_stroke_edit_poll(bContext *C)
@@ -569,6 +575,8 @@ static int gpencil_weightmode_toggle_exec(bContext *C, wmOperator *op)
     gpd = ob->data;
     is_object = true;
   }
+  const int mode_flag = OB_MODE_WEIGHT_GPENCIL;
+  const bool is_mode_set = (ob->mode & mode_flag) != 0;
 
   if (gpd == NULL) {
     return OPERATOR_CANCELLED;
@@ -591,6 +599,9 @@ static int gpencil_weightmode_toggle_exec(bContext *C, wmOperator *op)
     }
     ob->restore_mode = ob->mode;
     ob->mode = mode;
+
+    /* Prepare armature posemode. */
+    ED_object_posemode_set_for_weight_paint(C, bmain, ob, is_mode_set);
   }
 
   if (mode == OB_MODE_WEIGHT_GPENCIL) {
@@ -1124,6 +1135,11 @@ static void gpencil_add_move_points(bGPDframe *gpf, bGPDstroke *gps)
       /* select new */
       pt = &gps->points[gps->totpoints - 1];
       pt->flag |= GP_SPOINT_SELECT;
+    }
+
+    /* Flip stroke if it was only one point to consider extrude point as last point. */
+    if (gps->totpoints == 2) {
+      gpencil_flip_stroke(gps);
     }
 
     /* Calc geometry data. */
@@ -1764,7 +1780,7 @@ static int gpencil_blank_frame_add_exec(bContext *C, wmOperator *op)
 
   const bool all_layers = RNA_boolean_get(op->ptr, "all_layers");
 
-  /* Initialise datablock and an active layer if nothing exists yet */
+  /* Initialize data-block and an active layer if nothing exists yet. */
   if (ELEM(NULL, gpd, active_gpl)) {
     /* Let's just be lazy, and call the "Add New Layer" operator,
      * which sets everything up as required. */
@@ -3369,7 +3385,7 @@ static void gpencil_stroke_join_strokes(bGPDstroke *gps_a,
   bGPDspoint point;
   bGPDspoint *pt;
   int i;
-  float delta[3] = {1.0f, 1.0f, 1.0f};
+  const float delta[3] = {1.0f, 1.0f, 1.0f};
   float deltatime = 0.0f;
 
   /* sanity checks */
@@ -3638,7 +3654,6 @@ static int gpencil_strokes_reproject_exec(bContext *C, wmOperator *op)
 {
   bGPdata *gpd = ED_gpencil_data_get_active(C);
   Scene *scene = CTX_data_scene(C);
-  Main *bmain = CTX_data_main(C);
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ARegion *region = CTX_wm_region(C);
   int oldframe = (int)DEG_get_ctime(depsgraph);
@@ -3662,7 +3677,7 @@ static int gpencil_strokes_reproject_exec(bContext *C, wmOperator *op)
       if ((mode == GP_REPROJECT_SURFACE) && (cfra_prv != gpf_->framenum)) {
         cfra_prv = gpf_->framenum;
         CFRA = gpf_->framenum;
-        BKE_scene_graph_update_for_newframe(depsgraph, bmain);
+        BKE_scene_graph_update_for_newframe(depsgraph);
       }
 
       ED_gpencil_stroke_reproject(depsgraph, &gsc, sctx, gpl, gpf_, gps, mode, keep_original);
@@ -3672,7 +3687,7 @@ static int gpencil_strokes_reproject_exec(bContext *C, wmOperator *op)
 
   /* return frame state and DB to original state */
   CFRA = oldframe;
-  BKE_scene_graph_update_for_newframe(depsgraph, bmain);
+  BKE_scene_graph_update_for_newframe(depsgraph);
 
   if (sctx != NULL) {
     ED_transform_snap_object_context_destroy(sctx);
@@ -4283,11 +4298,14 @@ static int gpencil_stroke_separate_exec(bContext *C, wmOperator *op)
   base_new = ED_object_add_duplicate(bmain, scene, view_layer, base_prev, dupflag);
   ob_dst = base_new->object;
   ob_dst->mode = OB_MODE_OBJECT;
-  /* create new grease pencil datablock */
+  /* Duplication will increment #bGPdata user-count, but since we create a new grease-pencil
+   * data-block for ob_dst (which gets its own user automatically),
+   * we have to decrement the user-count again. */
   gpd_dst = BKE_gpencil_data_addnew(bmain, gpd_src->id.name + 2);
+  id_us_min(ob_dst->data);
   ob_dst->data = (bGPdata *)gpd_dst;
 
-  /* loop old datablock and separate parts */
+  /* Loop old data-block and separate parts. */
   if ((mode == GP_SEPARATE_POINT) || (mode == GP_SEPARATE_STROKE)) {
     CTX_DATA_BEGIN (C, bGPDlayer *, gpl, editable_gpencil_layers) {
       gpl_dst = NULL;

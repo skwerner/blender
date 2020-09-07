@@ -180,7 +180,6 @@ class DeviceRequestedFeatures {
   DeviceRequestedFeatures()
   {
     /* TODO(sergey): Find more meaningful defaults. */
-    experimental = false;
     max_nodes_group = 0;
     nodes_features = 0;
     use_hair = false;
@@ -203,8 +202,7 @@ class DeviceRequestedFeatures {
 
   bool modified(const DeviceRequestedFeatures &requested_features)
   {
-    return !(experimental == requested_features.experimental &&
-             max_nodes_group == requested_features.max_nodes_group &&
+    return !(max_nodes_group == requested_features.max_nodes_group &&
              nodes_features == requested_features.nodes_features &&
              use_hair == requested_features.use_hair &&
              use_hair_thick == requested_features.use_hair_thick &&
@@ -373,6 +371,12 @@ class Device {
     return NULL;
   }
 
+  /* Device specific pointer for BVH creation. Currently only used by Embree. */
+  virtual void *bvh_device() const
+  {
+    return NULL;
+  }
+
   /* load/compile kernels, must be called before adding tasks */
   virtual bool load_kernels(const DeviceRequestedFeatures & /*requested_features*/)
   {
@@ -439,10 +443,10 @@ class Device {
   {
     return 0;
   }
-  virtual void map_neighbor_tiles(Device * /*sub_device*/, RenderTile * /*tiles*/)
+  virtual void map_neighbor_tiles(Device * /*sub_device*/, RenderTileNeighbors & /*neighbors*/)
   {
   }
-  virtual void unmap_neighbor_tiles(Device * /*sub_device*/, RenderTile * /*tiles*/)
+  virtual void unmap_neighbor_tiles(Device * /*sub_device*/, RenderTileNeighbors & /*neighbors*/)
   {
   }
 

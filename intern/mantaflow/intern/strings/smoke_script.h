@@ -100,6 +100,9 @@ color_r_in_s$ID$ = None\n\
 color_g_in_s$ID$ = None\n\
 color_b_in_s$ID$ = None\n\
 \n\
+# Set some initial values\n\
+shadow_s$ID$.setConst(-1)\n\
+\n\
 # Keep track of important objects in dict to load them later on\n\
 smoke_data_dict_final_s$ID$ = { 'density' : density_s$ID$, 'shadow' : shadow_s$ID$ }\n\
 smoke_data_dict_resume_s$ID$ = { 'densityIn' : densityIn_s$ID$, 'emission' : emission_s$ID$ }\n";
@@ -490,6 +493,9 @@ def step_noise_$ID$():\n\
     advectSemiLagrange(flags=flags_s$ID$, vel=vel_s$ID$, grid=uvGrid1_s$ID$, order=2)\n\
     updateUvWeight(resetTime=sn$ID$.timestep*10.0 , index=1, numUvs=uvs_s$ID$, uv=uvGrid1_s$ID$, offset=uvs_offset_s$ID$)\n\
     \n\
+    if not domainClosed_s$ID$ or using_outflow_s$ID$:\n\
+        resetOutflow(flags=flags_sn$ID$, real=density_sn$ID$)\n\
+    \n\
     mantaMsg('Energy')\n\
     computeEnergy(flags=flags_s$ID$, vel=vel_s$ID$, energy=energy_s$ID$)\n\
     \n\
@@ -595,7 +601,7 @@ const std::string smoke_standalone =
 def load(frame, cache_resumable):\n\
     smoke_load_data_$ID$(os.path.join(cache_dir, 'data'), frame, file_format_data, cache_resumable)\n\
     if using_noise_s$ID$:\n\
-        smoke_load_noise_$ID$(os.path.join(cache_dir, 'noise'), frame, file_format_noise, cache_resumable)\n\
+        smoke_load_noise_$ID$(os.path.join(cache_dir, 'noise'), frame, file_format_data, cache_resumable)\n\
     if using_guiding_s$ID$:\n\
         fluid_load_guiding_$ID$(os.path.join(cache_dir, 'guiding'), frame, file_format_data)\n\
 \n\

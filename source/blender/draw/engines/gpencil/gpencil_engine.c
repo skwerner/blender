@@ -42,7 +42,7 @@
 #include "DNA_view3d_types.h"
 
 #include "GPU_texture.h"
-#include "GPU_uniformbuffer.h"
+#include "GPU_uniform_buffer.h"
 
 #include "gpencil_engine.h"
 
@@ -71,7 +71,7 @@ void GPENCIL_engine_init(void *ved)
   }
 
   if (txl->dummy_texture == NULL) {
-    float pixels[1][4] = {{1.0f, 0.0f, 1.0f, 1.0f}};
+    const float pixels[1][4] = {{1.0f, 0.0f, 1.0f, 1.0f}};
     txl->dummy_texture = DRW_texture_create_2d(1, 1, GPU_RGBA8, DRW_TEX_WRAP, (float *)pixels);
   }
 
@@ -345,8 +345,8 @@ typedef struct gpIterPopulateData {
   GPENCIL_MaterialPool *matpool;
   DRWShadingGroup *grp;
   /* Last material UBO bound. Used to avoid uneeded buffer binding. */
-  GPUUniformBuffer *ubo_mat;
-  GPUUniformBuffer *ubo_lights;
+  GPUUniformBuf *ubo_mat;
+  GPUUniformBuf *ubo_lights;
   /* Last texture bound. */
   GPUTexture *tex_fill;
   GPUTexture *tex_stroke;
@@ -487,8 +487,10 @@ static void gpencil_stroke_cache_populate(bGPDlayer *gpl,
 
   MaterialGPencilStyle *gp_style = BKE_gpencil_material_settings(iter->ob, gps->mat_nr + 1);
 
+  const bool is_render = iter->pd->is_render;
   bool hide_material = (gp_style->flag & GP_MATERIAL_HIDE) != 0;
-  bool show_stroke = (gp_style->flag & GP_MATERIAL_STROKE_SHOW) != 0;
+  bool show_stroke = ((gp_style->flag & GP_MATERIAL_STROKE_SHOW) != 0) ||
+                     (!is_render && ((gps->flag & GP_STROKE_NOFILL) != 0));
   bool show_fill = (gps->tot_triangles > 0) && ((gp_style->flag & GP_MATERIAL_FILL_SHOW) != 0) &&
                    (!iter->pd->simplify_fill) && ((gps->flag & GP_STROKE_NOFILL) == 0);
 
@@ -500,7 +502,7 @@ static void gpencil_stroke_cache_populate(bGPDlayer *gpl,
     return;
   }
 
-  GPUUniformBuffer *ubo_mat;
+  GPUUniformBuf *ubo_mat;
   GPUTexture *tex_stroke, *tex_fill;
   gpencil_material_resources_get(
       iter->matpool, iter->mat_ofs + gps->mat_nr, &tex_stroke, &tex_fill, &ubo_mat);
@@ -525,12 +527,6 @@ static void gpencil_stroke_cache_populate(bGPDlayer *gpl,
       DRW_shgroup_uniform_texture(iter->grp, "gpStrokeTexture", tex_stroke);
       iter->tex_stroke = tex_stroke;
     }
-
-    /* TODO(fclem): This is a quick workaround but
-     * ideally we should have this as a permanent bind. */
-    const bool is_masked = iter->tgp_ob->layers.last->mask_bits != NULL;
-    GPUTexture **mask_tex = (is_masked) ? &iter->pd->mask_tx : &iter->pd->dummy_tx;
-    DRW_shgroup_uniform_texture_ref(iter->grp, "gpMaskTexture", mask_tex);
   }
 
   bool do_sbuffer = (iter->do_sbuffer_call == DRAW_NOW);
@@ -659,13 +655,13 @@ void GPENCIL_cache_finish(void *ved)
   BLI_memblock_iternew(pd->gp_material_pool, &iter);
   GPENCIL_MaterialPool *pool;
   while ((pool = (GPENCIL_MaterialPool *)BLI_memblock_iterstep(&iter))) {
-    GPU_uniformbuffer_update(pool->ubo, pool->mat_data);
+    GPU_uniformbuf_update(pool->ubo, pool->mat_data);
   }
 
   BLI_memblock_iternew(pd->gp_light_pool, &iter);
   GPENCIL_LightPool *lpool;
   while ((lpool = (GPENCIL_LightPool *)BLI_memblock_iterstep(&iter))) {
-    GPU_uniformbuffer_update(lpool->ubo, lpool->light_data);
+    GPU_uniformbuf_update(lpool->ubo, lpool->light_data);
   }
 
   /* Sort object by decreasing Z to avoid most of alpha ordering issues. */
@@ -772,7 +768,7 @@ static void gpencil_draw_mask(GPENCIL_Data *vedata, GPENCIL_tObject *ob, GPENCIL
 {
   GPENCIL_PassList *psl = vedata->psl;
   GPENCIL_FramebufferList *fbl = vedata->fbl;
-  float clear_col[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+  const float clear_col[4] = {1.0f, 1.0f, 1.0f, 1.0f};
   float clear_depth = ob->is_drawmode3d ? 1.0f : 0.0f;
   bool inverted = false;
   /* OPTI(fclem) we could optimize by only clearing if the new mask_bits does not contain all
@@ -819,7 +815,7 @@ static void GPENCIL_draw_object(GPENCIL_Data *vedata, GPENCIL_tObject *ob)
   GPENCIL_PassList *psl = vedata->psl;
   GPENCIL_PrivateData *pd = vedata->stl->pd;
   GPENCIL_FramebufferList *fbl = vedata->fbl;
-  float clear_cols[2][4] = {{0.0f, 0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}};
+  const float clear_cols[2][4] = {{0.0f, 0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}};
 
   DRW_stats_group_start("GPencil Object");
 

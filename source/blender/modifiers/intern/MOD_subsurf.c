@@ -36,6 +36,7 @@
 #include "DNA_screen_types.h"
 
 #include "BKE_context.h"
+#include "BKE_mesh.h"
 #include "BKE_scene.h"
 #include "BKE_screen.h"
 #include "BKE_subdiv.h"
@@ -75,6 +76,26 @@ static void initData(ModifierData *md)
   smd->uv_smooth = SUBSURF_UV_SMOOTH_PRESERVE_CORNERS;
   smd->quality = 3;
   smd->flags |= (eSubsurfModifierFlag_UseCrease | eSubsurfModifierFlag_ControlEdges);
+}
+
+static void requiredDataMask(Object *UNUSED(ob),
+                             ModifierData *md,
+                             CustomData_MeshMasks *r_cddata_masks)
+{
+  SubsurfModifierData *smd = (SubsurfModifierData *)md;
+  if (smd->flags & eSubsurfModifierFlag_UseCustomNormals) {
+    r_cddata_masks->lmask |= CD_MASK_NORMAL;
+    r_cddata_masks->lmask |= CD_MASK_CUSTOMLOOPNORMAL;
+  }
+}
+
+static bool dependsOnNormals(ModifierData *md)
+{
+  SubsurfModifierData *smd = (SubsurfModifierData *)md;
+  if (smd->flags & eSubsurfModifierFlag_UseCustomNormals) {
+    return true;
+  }
+  return false;
 }
 
 static void copyData(const ModifierData *md, ModifierData *target, const int flag)
@@ -242,6 +263,15 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
     /* Happens on bad topology, but also on empty input mesh. */
     return result;
   }
+  const bool use_clnors = (smd->flags & eSubsurfModifierFlag_UseCustomNormals) &&
+                          (mesh->flag & ME_AUTOSMOOTH) &&
+                          CustomData_has_layer(&mesh->ldata, CD_CUSTOMLOOPNORMAL);
+  if (use_clnors) {
+    /* If custom normals are present and the option is turned on calculate the split
+     * normals and clear flag so the normals get interpolated to the result mesh. */
+    BKE_mesh_calc_normals_split(mesh);
+    CustomData_clear_layer_flag(&mesh->ldata, CD_NORMAL, CD_FLAG_TEMPORARY);
+  }
   /* TODO(sergey): Decide whether we ever want to use CCG for subsurf,
    * maybe when it is a last modifier in the stack? */
   if (true) {
@@ -249,6 +279,14 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
   }
   else {
     result = subdiv_as_ccg(smd, ctx, mesh, subdiv);
+  }
+
+  if (use_clnors) {
+    float(*lnors)[3] = CustomData_get_layer(&result->ldata, CD_NORMAL);
+    BLI_assert(lnors != NULL);
+    BKE_mesh_set_custom_normals(result, lnors);
+    CustomData_set_layer_flag(&mesh->ldata, CD_NORMAL, CD_FLAG_TEMPORARY);
+    CustomData_set_layer_flag(&result->ldata, CD_NORMAL, CD_FLAG_TEMPORARY);
   }
   // BKE_subdiv_stats_print(&subdiv->stats);
   if (subdiv != runtime_data->subdiv) {
@@ -301,9 +339,8 @@ static bool get_show_adaptive_options(const bContext *C, Panel *panel)
   }
 
   /* Only show adaptive options if this is the last modifier. */
-  PointerRNA md_ptr;
-  modifier_panel_get_property_pointers(C, panel, NULL, &md_ptr);
-  ModifierData *md = md_ptr.data;
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
+  ModifierData *md = ptr->data;
   if (md->next != NULL) {
     return false;
   }
@@ -327,9 +364,8 @@ static void panel_draw(const bContext *C, Panel *panel)
 {
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
   PointerRNA ob_ptr;
-  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
 
   /* Only test for adaptive subdivision if built with cycles. */
   bool show_adaptive_options = false;
@@ -348,9 +384,11 @@ static void panel_draw(const bContext *C, Panel *panel)
       show_adaptive_options = get_show_adaptive_options(C, panel);
     }
   }
+#else
+  UNUSED_VARS(C);
 #endif
 
-  uiItemR(layout, &ptr, "subdivision_type", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "subdivision_type", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
 
   uiLayoutSetPropSep(layout, true);
 
@@ -376,26 +414,25 @@ static void panel_draw(const bContext *C, Panel *panel)
 
     uiItemS(layout);
 
-    uiItemR(layout, &ptr, "levels", 0, IFACE_("Levels Viewport"), ICON_NONE);
+    uiItemR(layout, ptr, "levels", 0, IFACE_("Levels Viewport"), ICON_NONE);
   }
   else {
     uiLayout *col = uiLayoutColumn(layout, true);
-    uiItemR(col, &ptr, "levels", 0, IFACE_("Levels Viewport"), ICON_NONE);
-    uiItemR(col, &ptr, "render_levels", 0, IFACE_("Render"), ICON_NONE);
+    uiItemR(col, ptr, "levels", 0, IFACE_("Levels Viewport"), ICON_NONE);
+    uiItemR(col, ptr, "render_levels", 0, IFACE_("Render"), ICON_NONE);
   }
 
-  uiItemR(layout, &ptr, "show_only_control_edges", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "show_only_control_edges", 0, NULL, ICON_NONE);
 
-  modifier_panel_end(layout, &ptr);
+  modifier_panel_end(layout, ptr);
 }
 
 static void advanced_panel_draw(const bContext *C, Panel *panel)
 {
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
   PointerRNA ob_ptr;
-  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
 
   bool ob_use_adaptive_subdivision = false;
   bool show_adaptive_options = false;
@@ -408,14 +445,17 @@ static void advanced_panel_draw(const bContext *C, Panel *panel)
       show_adaptive_options = get_show_adaptive_options(C, panel);
     }
   }
+#else
+  UNUSED_VARS(C);
 #endif
 
   uiLayoutSetPropSep(layout, true);
 
   uiLayoutSetActive(layout, !(show_adaptive_options && ob_use_adaptive_subdivision));
-  uiItemR(layout, &ptr, "quality", 0, NULL, ICON_NONE);
-  uiItemR(layout, &ptr, "uv_smooth", 0, NULL, ICON_NONE);
-  uiItemR(layout, &ptr, "use_creases", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "quality", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "uv_smooth", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "use_creases", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "use_custom_normals", 0, NULL, ICON_NONE);
 }
 
 static void panelRegister(ARegionType *region_type)
@@ -453,12 +493,12 @@ ModifierTypeInfo modifierType_Subsurf = {
     /* modifyVolume */ NULL,
 
     /* initData */ initData,
-    /* requiredDataMask */ NULL,
+    /* requiredDataMask */ requiredDataMask,
     /* freeData */ freeData,
     /* isDisabled */ isDisabled,
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ NULL,
-    /* dependsOnNormals */ NULL,
+    /* dependsOnNormals */ dependsOnNormals,
     /* foreachObjectLink */ NULL,
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,

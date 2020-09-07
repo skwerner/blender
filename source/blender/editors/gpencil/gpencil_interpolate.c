@@ -136,15 +136,17 @@ static void gpencil_interpolate_free_temp_strokes(bGPDframe *gpf)
 }
 
 /* Helper: Untag all strokes. */
-static void gpencil_interpolate_untag_strokes(bGPDframe *gpf)
+static void gpencil_interpolate_untag_strokes(bGPDlayer *gpl)
 {
-  if (gpf == NULL) {
+  if (gpl == NULL) {
     return;
   }
 
-  LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
-    if (gps->flag & GP_STROKE_TAG) {
-      gps->flag &= ~GP_STROKE_TAG;
+  LISTBASE_FOREACH (bGPDframe *, gpf, &gpl->frames) {
+    LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
+      if (gps->flag & GP_STROKE_TAG) {
+        gps->flag &= ~GP_STROKE_TAG;
+      }
     }
   }
 }
@@ -263,15 +265,6 @@ static void gpencil_interpolate_set_points(bContext *C, tGPDinterpolate *tgpi)
   /* set layers */
   LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
     tGPDinterpolate_layer *tgpil;
-
-    /* Untag strokes to be sure nothing is pending. This must be done for
-     * all layer because it could be anything tagged and it would be removed
-     * at the end of the process when all tagged strokes are removed. */
-    if (gpl->actframe != NULL) {
-      gpencil_interpolate_untag_strokes(gpl->actframe);
-      gpencil_interpolate_untag_strokes(gpl->actframe->next);
-    }
-
     /* all layers or only active */
     if (!(tgpi->flag & GP_TOOLFLAG_INTERPOLATE_ALL_LAYERS) && (gpl != active_gpl)) {
       continue;
@@ -483,6 +476,11 @@ static bool gpencil_interpolate_set_init_values(bContext *C, wmOperator *op, tGP
   /* set layers */
   gpencil_interpolate_set_points(C, tgpi);
 
+  /* Untag strokes to be sure nothing is pending due any canceled process. */
+  LISTBASE_FOREACH (bGPDlayer *, gpl, &tgpi->gpd->layers) {
+    gpencil_interpolate_untag_strokes(gpl);
+  }
+
   return 1;
 }
 
@@ -606,6 +604,8 @@ static int gpencil_interpolate_modal(bContext *C, wmOperator *op, const wmEvent 
 
           /* make copy of source stroke, then adjust pointer to points too */
           gps_dst = BKE_gpencil_stroke_duplicate(gps_src, true);
+          gps_dst->flag &= ~GP_STROKE_TAG;
+
           /* Calc geometry data. */
           BKE_gpencil_stroke_geometry_update(gps_dst);
 
@@ -949,6 +949,7 @@ static int gpencil_interpolate_seq_exec(bContext *C, wmOperator *op)
 
   GP_Interpolate_Settings *ipo_settings = &ts->gp_interpolate;
   eGP_Interpolate_SettingsFlag flag = ipo_settings->flag;
+  const int step = ipo_settings->step;
 
   /* cannot interpolate if not between 2 frames */
   if (ELEM(NULL, actframe, actframe->next)) {
@@ -990,7 +991,7 @@ static int gpencil_interpolate_seq_exec(bContext *C, wmOperator *op)
     nextFrame = gpl->actframe->next;
 
     /* Loop over intermediary frames and create the interpolation */
-    for (cframe = prevFrame->framenum + 1; cframe < nextFrame->framenum; cframe++) {
+    for (cframe = prevFrame->framenum + step; cframe < nextFrame->framenum; cframe += step) {
       bGPDframe *interFrame = NULL;
       float factor;
 

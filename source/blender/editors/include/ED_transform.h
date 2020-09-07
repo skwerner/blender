@@ -21,8 +21,7 @@
  * \ingroup editors
  */
 
-#ifndef __ED_TRANSFORM_H__
-#define __ED_TRANSFORM_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -120,7 +119,7 @@ struct TransformOrientation;
 struct bContext;
 
 void BIF_clearTransformOrientation(struct bContext *C);
-void BIF_removeTransformOrientation(struct bContext *C, struct TransformOrientation *ts);
+void BIF_removeTransformOrientation(struct bContext *C, struct TransformOrientation *target);
 void BIF_removeTransformOrientationIndex(struct bContext *C, int index);
 bool BIF_createTransformOrientation(struct bContext *C,
                                     struct ReportList *reports,
@@ -128,7 +127,7 @@ bool BIF_createTransformOrientation(struct bContext *C,
                                     const bool use_view,
                                     const bool activate,
                                     const bool overwrite);
-void BIF_selectTransformOrientation(struct bContext *C, struct TransformOrientation *ts);
+void BIF_selectTransformOrientation(struct bContext *C, struct TransformOrientation *target);
 
 void ED_getTransformOrientationMatrix(const struct bContext *C,
                                       float orientation_mat[3][3],
@@ -215,5 +214,3 @@ int ED_transform_calc_gizmo_stats(const struct bContext *C,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_TRANSFORM_H__ */

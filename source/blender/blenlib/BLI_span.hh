@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLI_SPAN_HH__
-#define __BLI_SPAN_HH__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -87,8 +86,8 @@ namespace blender {
  */
 template<typename T> class Span {
  private:
-  const T *start_ = nullptr;
-  uint size_ = 0;
+  const T *data_ = nullptr;
+  int64_t size_ = 0;
 
  public:
   /**
@@ -96,13 +95,15 @@ template<typename T> class Span {
    */
   Span() = default;
 
-  Span(const T *start, uint size) : start_(start), size_(size)
+  Span(const T *start, int64_t size) : data_(start), size_(size)
   {
+    BLI_assert(size >= 0);
   }
 
   template<typename U, typename std::enable_if_t<is_convertible_pointer_v<U, T>> * = nullptr>
-  Span(const U *start, uint size) : start_((const T *)start), size_(size)
+  Span(const U *start, int64_t size) : data_(static_cast<const T *>(start)), size_(size)
   {
+    BLI_assert(size >= 0);
   }
 
   /**
@@ -116,11 +117,12 @@ template<typename T> class Span {
    *  Span<int> span = {1, 2, 3, 4};
    *  call_function_with_array(span);
    */
-  Span(const std::initializer_list<T> &list) : Span(list.begin(), (uint)list.size())
+  Span(const std::initializer_list<T> &list)
+      : Span(list.begin(), static_cast<int64_t>(list.size()))
   {
   }
 
-  Span(const std::vector<T> &vector) : Span(vector.data(), (uint)vector.size())
+  Span(const std::vector<T> &vector) : Span(vector.data(), static_cast<int64_t>(vector.size()))
   {
   }
 
@@ -131,10 +133,9 @@ template<typename T> class Span {
   /**
    * Support implicit conversions like the ones below:
    *   Span<T *> -> Span<const T *>
-   *   Span<Derived *> -> Span<Base *>
    */
   template<typename U, typename std::enable_if_t<is_convertible_pointer_v<U, T>> * = nullptr>
-  Span(Span<U> array) : start_((T *)array.data()), size_(array.size())
+  Span(Span<U> array) : data_(static_cast<const T *>(array.data())), size_(array.size())
   {
   }
 
@@ -142,10 +143,12 @@ template<typename T> class Span {
    * Returns a contiguous part of the array. This invokes undefined behavior when the slice does
    * not stay within the bounds of the array.
    */
-  Span slice(uint start, uint size) const
+  Span slice(int64_t start, int64_t size) const
   {
+    BLI_assert(start >= 0);
+    BLI_assert(size >= 0);
     BLI_assert(start + size <= this->size() || size == 0);
-    return Span(start_ + start, size);
+    return Span(data_ + start, size);
   }
 
   Span slice(IndexRange range) const
@@ -157,8 +160,9 @@ template<typename T> class Span {
    * Returns a new Span with n elements removed from the beginning. This invokes undefined
    * behavior when the array is too small.
    */
-  Span drop_front(uint n) const
+  Span drop_front(int64_t n) const
   {
+    BLI_assert(n >= 0);
     BLI_assert(n <= this->size());
     return this->slice(n, this->size() - n);
   }
@@ -167,8 +171,9 @@ template<typename T> class Span {
    * Returns a new Span with n elements removed from the beginning. This invokes undefined
    * behavior when the array is too small.
    */
-  Span drop_back(uint n) const
+  Span drop_back(int64_t n) const
   {
+    BLI_assert(n >= 0);
     BLI_assert(n <= this->size());
     return this->slice(0, this->size() - n);
   }
@@ -177,8 +182,9 @@ template<typename T> class Span {
    * Returns a new Span that only contains the first n elements. This invokes undefined
    * behavior when the array is too small.
    */
-  Span take_front(uint n) const
+  Span take_front(int64_t n) const
   {
+    BLI_assert(n >= 0);
     BLI_assert(n <= this->size());
     return this->slice(0, n);
   }
@@ -187,8 +193,9 @@ template<typename T> class Span {
    * Returns a new Span that only contains the last n elements. This invokes undefined
    * behavior when the array is too small.
    */
-  Span take_back(uint n) const
+  Span take_back(int64_t n) const
   {
+    BLI_assert(n >= 0);
     BLI_assert(n <= this->size());
     return this->slice(this->size() - n, n);
   }
@@ -199,33 +206,42 @@ template<typename T> class Span {
    */
   const T *data() const
   {
-    return start_;
+    return data_;
   }
 
   const T *begin() const
   {
-    return start_;
+    return data_;
   }
-
   const T *end() const
   {
-    return start_ + size_;
+    return data_ + size_;
+  }
+
+  std::reverse_iterator<const T *> rbegin() const
+  {
+    return std::reverse_iterator<const T *>(this->end());
+  }
+  std::reverse_iterator<const T *> rend() const
+  {
+    return std::reverse_iterator<const T *>(this->begin());
   }
 
   /**
    * Access an element in the array. This invokes undefined behavior when the index is out of
    * bounds.
    */
-  const T &operator[](uint index) const
+  const T &operator[](int64_t index) const
   {
+    BLI_assert(index >= 0);
     BLI_assert(index < size_);
-    return start_[index];
+    return data_[index];
   }
 
   /**
    * Returns the number of elements in the referenced array.
    */
-  uint size() const
+  int64_t size() const
   {
     return size_;
   }
@@ -241,7 +257,7 @@ template<typename T> class Span {
   /**
    * Returns the number of bytes referenced by this Span.
    */
-  uint size_in_bytes() const
+  int64_t size_in_bytes() const
   {
     return sizeof(T) * size_;
   }
@@ -273,9 +289,9 @@ template<typename T> class Span {
    * Does a linear search to count how often the value is in the array.
    * Returns the number of occurrences.
    */
-  uint count(const T &value) const
+  int64_t count(const T &value) const
   {
-    uint counter = 0;
+    int64_t counter = 0;
     for (const T &element : *this) {
       if (element == value) {
         counter++;
@@ -291,7 +307,7 @@ template<typename T> class Span {
   const T &first() const
   {
     BLI_assert(size_ > 0);
-    return start_[0];
+    return data_[0];
   }
 
   /**
@@ -301,17 +317,17 @@ template<typename T> class Span {
   const T &last() const
   {
     BLI_assert(size_ > 0);
-    return start_[size_ - 1];
+    return data_[size_ - 1];
   }
 
   /**
    * Returns the element at the given index. If the index is out of range, return the fallback
    * value.
    */
-  T get(uint index, const T &fallback) const
+  T get(int64_t index, const T &fallback) const
   {
-    if (index < size_) {
-      return start_[index];
+    if (index < size_ && index >= 0) {
+      return data_[index];
     }
     return fallback;
   }
@@ -326,10 +342,10 @@ template<typename T> class Span {
      * changed. */
     BLI_assert(size_ < 1000);
 
-    for (uint i = 0; i < size_; i++) {
-      const T &value = start_[i];
-      for (uint j = i + 1; j < size_; j++) {
-        if (value == start_[j]) {
+    for (int64_t i = 0; i < size_; i++) {
+      const T &value = data_[i];
+      for (int64_t j = i + 1; j < size_; j++) {
+        if (value == data_[j]) {
           return true;
         }
       }
@@ -348,8 +364,8 @@ template<typename T> class Span {
      * changed. */
     BLI_assert(size_ < 1000);
 
-    for (uint i = 0; i < size_; i++) {
-      const T &value = start_[i];
+    for (int64_t i = 0; i < size_; i++) {
+      const T &value = data_[i];
       if (other.contains(value)) {
         return true;
       }
@@ -361,20 +377,20 @@ template<typename T> class Span {
    * Returns the index of the first occurrence of the given value. This invokes undefined behavior
    * when the value is not in the array.
    */
-  uint first_index(const T &search_value) const
+  int64_t first_index(const T &search_value) const
   {
-    const int index = this->first_index_try(search_value);
+    const int64_t index = this->first_index_try(search_value);
     BLI_assert(index >= 0);
-    return (uint)index;
+    return index;
   }
 
   /**
    * Returns the index of the first occurrence of the given value or -1 if it does not exist.
    */
-  int first_index_try(const T &search_value) const
+  int64_t first_index_try(const T &search_value) const
   {
-    for (uint i = 0; i < size_; i++) {
-      if (start_[i] == search_value) {
+    for (int64_t i = 0; i < size_; i++) {
+      if (data_[i] == search_value) {
         return i;
       }
     }
@@ -396,8 +412,8 @@ template<typename T> class Span {
   template<typename NewT> Span<NewT> cast() const
   {
     BLI_assert((size_ * sizeof(T)) % sizeof(NewT) == 0);
-    uint new_size = size_ * sizeof(T) / sizeof(NewT);
-    return Span<NewT>(reinterpret_cast<const NewT *>(start_), new_size);
+    int64_t new_size = size_ * sizeof(T) / sizeof(NewT);
+    return Span<NewT>(reinterpret_cast<const NewT *>(data_), new_size);
   }
 
   /**
@@ -430,28 +446,13 @@ template<typename T> class Span {
  */
 template<typename T> class MutableSpan {
  private:
-  T *start_;
-  uint size_;
+  T *data_;
+  int64_t size_;
 
  public:
   MutableSpan() = default;
 
-  MutableSpan(T *start, const uint size) : start_(start), size_(size)
-  {
-  }
-
-  /**
-   * Reference an initializer_list. Note that the data in the initializer_list is only valid until
-   * the expression containing it is fully computed.
-   *
-   * Do:
-   *  call_function_with_array({1, 2, 3, 4});
-   *
-   * Don't:
-   *  MutableSpan<int> span = {1, 2, 3, 4};
-   *  call_function_with_array(span);
-   */
-  MutableSpan(std::initializer_list<T> &list) : MutableSpan(list.begin(), list.size())
+  MutableSpan(T *start, const int64_t size) : data_(start), size_(size)
   {
   }
 
@@ -465,13 +466,13 @@ template<typename T> class MutableSpan {
 
   operator Span<T>() const
   {
-    return Span<T>(start_, size_);
+    return Span<T>(data_, size_);
   }
 
   /**
    * Returns the number of elements in the array.
    */
-  uint size() const
+  int64_t size() const
   {
     return size_;
   }
@@ -481,18 +482,18 @@ template<typename T> class MutableSpan {
    */
   void fill(const T &value)
   {
-    initialized_fill_n(start_, size_, value);
+    initialized_fill_n(data_, size_, value);
   }
 
   /**
    * Replace a subset of all elements with the given value. This invokes undefined behavior when
    * one of the indices is out of bounds.
    */
-  void fill_indices(Span<uint> indices, const T &value)
+  void fill_indices(Span<int64_t> indices, const T &value)
   {
-    for (uint i : indices) {
+    for (int64_t i : indices) {
       BLI_assert(i < size_);
-      start_[i] = value;
+      data_[i] = value;
     }
   }
 
@@ -502,40 +503,48 @@ template<typename T> class MutableSpan {
    */
   T *data() const
   {
-    return start_;
+    return data_;
   }
 
   T *begin() const
   {
-    return start_;
+    return data_;
   }
-
   T *end() const
   {
-    return start_ + size_;
+    return data_ + size_;
   }
 
-  T &operator[](const uint index) const
+  std::reverse_iterator<T *> rbegin() const
+  {
+    return std::reverse_iterator<T *>(this->end());
+  }
+  std::reverse_iterator<T *> rend() const
+  {
+    return std::reverse_iterator<T *>(this->begin());
+  }
+
+  T &operator[](const int64_t index) const
   {
     BLI_assert(index < this->size());
-    return start_[index];
+    return data_[index];
   }
 
   /**
    * Returns a contiguous part of the array. This invokes undefined behavior when the slice would
    * go out of bounds.
    */
-  MutableSpan slice(const uint start, const uint length) const
+  MutableSpan slice(const int64_t start, const int64_t length) const
   {
     BLI_assert(start + length <= this->size());
-    return MutableSpan(start_ + start, length);
+    return MutableSpan(data_ + start, length);
   }
 
   /**
    * Returns a new MutableSpan with n elements removed from the beginning. This invokes
    * undefined behavior when the array is too small.
    */
-  MutableSpan drop_front(const uint n) const
+  MutableSpan drop_front(const int64_t n) const
   {
     BLI_assert(n <= this->size());
     return this->slice(n, this->size() - n);
@@ -545,7 +554,7 @@ template<typename T> class MutableSpan {
    * Returns a new MutableSpan with n elements removed from the end. This invokes undefined
    * behavior when the array is too small.
    */
-  MutableSpan drop_back(const uint n) const
+  MutableSpan drop_back(const int64_t n) const
   {
     BLI_assert(n <= this->size());
     return this->slice(0, this->size() - n);
@@ -555,7 +564,7 @@ template<typename T> class MutableSpan {
    * Returns a new MutableSpan that only contains the first n elements. This invokes undefined
    * behavior when the array is too small.
    */
-  MutableSpan take_front(const uint n) const
+  MutableSpan take_front(const int64_t n) const
   {
     BLI_assert(n <= this->size());
     return this->slice(0, n);
@@ -565,7 +574,7 @@ template<typename T> class MutableSpan {
    * Return a new MutableSpan that only contains the last n elements. This invokes undefined
    * behavior when the array is too small.
    */
-  MutableSpan take_back(const uint n) const
+  MutableSpan take_back(const int64_t n) const
   {
     BLI_assert(n <= this->size());
     return this->slice(this->size() - n, n);
@@ -577,7 +586,7 @@ template<typename T> class MutableSpan {
    */
   Span<T> as_span() const
   {
-    return Span<T>(start_, size_);
+    return Span<T>(data_, size_);
   }
 
   /**
@@ -596,7 +605,33 @@ template<typename T> class MutableSpan {
   T &last() const
   {
     BLI_assert(size_ > 0);
-    return start_[size_ - 1];
+    return data_[size_ - 1];
+  }
+
+  /**
+   * Does a linear search to count how often the value is in the array.
+   * Returns the number of occurrences.
+   */
+  int64_t count(const T &value) const
+  {
+    int64_t counter = 0;
+    for (const T &element : *this) {
+      if (element == value) {
+        counter++;
+      }
+    }
+    return counter;
+  }
+
+  /**
+   * Copy all values from another span into this span. This invokes undefined behavior when the
+   * destination contains uninitialized data and T is not trivially copy constructible.
+   * The size of both spans is expected to be the same.
+   */
+  void copy_from(Span<T> values)
+  {
+    BLI_assert(size_ == values.size());
+    initialized_copy_n(values.data(), size_, data_);
   }
 
   /**
@@ -605,8 +640,8 @@ template<typename T> class MutableSpan {
   template<typename NewT> MutableSpan<NewT> cast() const
   {
     BLI_assert((size_ * sizeof(T)) % sizeof(NewT) == 0);
-    uint new_size = size_ * sizeof(T) / sizeof(NewT);
-    return MutableSpan<NewT>(reinterpret_cast<NewT *>(start_), new_size);
+    int64_t new_size = size_ * sizeof(T) / sizeof(NewT);
+    return MutableSpan<NewT>(reinterpret_cast<NewT *>(data_), new_size);
   }
 };
 
@@ -617,7 +652,7 @@ template<typename T1, typename T2> void assert_same_size(const T1 &v1, const T2 
 {
   UNUSED_VARS_NDEBUG(v1, v2);
 #ifdef DEBUG
-  uint size = v1.size();
+  int64_t size = v1.size();
   BLI_assert(size == v1.size());
   BLI_assert(size == v2.size());
 #endif
@@ -628,7 +663,7 @@ void assert_same_size(const T1 &v1, const T2 &v2, const T3 &v3)
 {
   UNUSED_VARS_NDEBUG(v1, v2, v3);
 #ifdef DEBUG
-  uint size = v1.size();
+  int64_t size = v1.size();
   BLI_assert(size == v1.size());
   BLI_assert(size == v2.size());
   BLI_assert(size == v3.size());
@@ -636,5 +671,3 @@ void assert_same_size(const T1 &v1, const T2 &v2, const T3 &v3)
 }
 
 } /* namespace blender */
-
-#endif /* __BLI_SPAN_HH__ */

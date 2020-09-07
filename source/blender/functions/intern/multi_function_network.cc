@@ -15,6 +15,8 @@
  */
 
 #include "BLI_dot_export.hh"
+#include "BLI_stack.hh"
+
 #include "FN_multi_function_network.hh"
 
 namespace blender::fn {
@@ -48,9 +50,9 @@ void MFNode::destruct_sockets()
  */
 MFFunctionNode &MFNetwork::add_function(const MultiFunction &function)
 {
-  Vector<uint, 16> input_param_indices, output_param_indices;
+  Vector<int, 16> input_param_indices, output_param_indices;
 
-  for (uint param_index : function.param_indices()) {
+  for (int param_index : function.param_indices()) {
     switch (function.param_type(param_index).interface_type()) {
       case MFParamType::Input: {
         input_param_indices.append(param_index);
@@ -75,16 +77,16 @@ MFFunctionNode &MFNetwork::add_function(const MultiFunction &function)
   node.is_dummy_ = false;
   node.id_ = node_or_null_by_id_.append_and_get_index(&node);
   node.function_ = &function;
-  node.input_param_indices_ = allocator_.construct_array_copy<uint>(input_param_indices);
-  node.output_param_indices_ = allocator_.construct_array_copy<uint>(output_param_indices);
+  node.input_param_indices_ = allocator_.construct_array_copy<int>(input_param_indices);
+  node.output_param_indices_ = allocator_.construct_array_copy<int>(output_param_indices);
 
   node.inputs_ = allocator_.construct_elements_and_pointer_array<MFInputSocket>(
       input_param_indices.size());
   node.outputs_ = allocator_.construct_elements_and_pointer_array<MFOutputSocket>(
       output_param_indices.size());
 
-  for (uint i : input_param_indices.index_range()) {
-    uint param_index = input_param_indices[i];
+  for (int i : input_param_indices.index_range()) {
+    int param_index = input_param_indices[i];
     MFParamType param = function.param_type(param_index);
     BLI_assert(param.is_input_or_mutable());
 
@@ -98,8 +100,8 @@ MFFunctionNode &MFNetwork::add_function(const MultiFunction &function)
     socket.id_ = socket_or_null_by_id_.append_and_get_index(&socket);
   }
 
-  for (uint i : output_param_indices.index_range()) {
-    uint param_index = output_param_indices[i];
+  for (int i : output_param_indices.index_range()) {
+    int param_index = output_param_indices[i];
     MFParamType param = function.param_type(param_index);
     BLI_assert(param.is_output_or_mutable());
 
@@ -143,7 +145,7 @@ MFDummyNode &MFNetwork::add_dummy(StringRef name,
   node.input_names_ = allocator_.allocate_array<StringRefNull>(input_types.size());
   node.output_names_ = allocator_.allocate_array<StringRefNull>(output_types.size());
 
-  for (uint i : input_types.index_range()) {
+  for (int i : input_types.index_range()) {
     MFInputSocket &socket = *node.inputs_[i];
     socket.data_type_ = input_types[i];
     socket.node_ = &node;
@@ -154,7 +156,7 @@ MFDummyNode &MFNetwork::add_dummy(StringRef name,
     node.input_names_[i] = socket.name_;
   }
 
-  for (uint i : output_types.index_range()) {
+  for (int i : output_types.index_range()) {
     MFOutputSocket &socket = *node.outputs_[i];
     socket.data_type_ = output_types[i];
     socket.node_ = &node;
@@ -195,6 +197,7 @@ MFInputSocket &MFNetwork::add_output(StringRef name, MFDataType data_type)
 void MFNetwork::relink(MFOutputSocket &old_output, MFOutputSocket &new_output)
 {
   BLI_assert(&old_output != &new_output);
+  BLI_assert(old_output.data_type_ == new_output.data_type_);
   for (MFInputSocket *input : old_output.targets()) {
     input->origin_ = &new_output;
   }
@@ -237,6 +240,43 @@ void MFNetwork::remove(Span<MFNode *> nodes)
   }
 }
 
+void MFNetwork::find_dependencies(Span<const MFInputSocket *> sockets,
+                                  VectorSet<const MFOutputSocket *> &r_dummy_sockets,
+                                  VectorSet<const MFInputSocket *> &r_unlinked_inputs) const
+{
+  Set<const MFNode *> visited_nodes;
+  Stack<const MFInputSocket *> sockets_to_check;
+  sockets_to_check.push_multiple(sockets);
+
+  while (!sockets_to_check.is_empty()) {
+    const MFInputSocket &socket = *sockets_to_check.pop();
+    const MFOutputSocket *origin_socket = socket.origin();
+    if (origin_socket == nullptr) {
+      r_unlinked_inputs.add(&socket);
+      continue;
+    }
+
+    const MFNode &origin_node = origin_socket->node();
+
+    if (origin_node.is_dummy()) {
+      r_dummy_sockets.add(origin_socket);
+      continue;
+    }
+
+    if (visited_nodes.add(&origin_node)) {
+      sockets_to_check.push_multiple(origin_node.inputs());
+    }
+  }
+}
+
+bool MFNetwork::have_dummy_or_unlinked_dependencies(Span<const MFInputSocket *> sockets) const
+{
+  VectorSet<const MFOutputSocket *> dummy_sockets;
+  VectorSet<const MFInputSocket *> unlinked_inputs;
+  this->find_dependencies(sockets, dummy_sockets, unlinked_inputs);
+  return dummy_sockets.size() + unlinked_inputs.size() > 0;
+}
+
 std::string MFNetwork::to_dot(Span<const MFNode *> marked_nodes) const
 {
   dot::DirectedGraph digraph;
@@ -245,8 +285,8 @@ std::string MFNetwork::to_dot(Span<const MFNode *> marked_nodes) const
   Map<const MFNode *, dot::NodeWithSocketsRef> dot_nodes;
 
   Vector<const MFNode *> all_nodes;
-  all_nodes.extend(function_nodes_.as_span());
-  all_nodes.extend(dummy_nodes_.as_span());
+  all_nodes.extend(function_nodes_.as_span().cast<const MFNode *>());
+  all_nodes.extend(dummy_nodes_.as_span().cast<const MFNode *>());
 
   for (const MFNode *node : all_nodes) {
     dot::Node &dot_node = digraph.new_node("");

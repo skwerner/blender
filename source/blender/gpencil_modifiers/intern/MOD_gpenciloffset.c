@@ -105,18 +105,22 @@ static void deformStroke(GpencilModifierData *md,
     bGPDspoint *pt = &gps->points[i];
     MDeformVert *dvert = gps->dvert != NULL ? &gps->dvert[i] : NULL;
 
-    /* verify vertex group */
+    /* Verify vertex group. */
     const float weight = get_modifier_point_weight(
         dvert, (mmd->flag & GP_OFFSET_INVERT_VGROUP) != 0, def_nr);
     if (weight < 0.0f) {
       continue;
     }
-    /* calculate matrix */
+    /* Calculate matrix. */
     mul_v3_v3fl(loc, mmd->loc, weight);
     mul_v3_v3fl(rot, mmd->rot, weight);
     mul_v3_v3fl(scale, mmd->scale, weight);
     add_v3_fl(scale, 1.0);
     loc_eul_size_to_mat4(mat, loc, rot, scale);
+
+    /* Apply scale to thickness. */
+    float unit_scale = (scale[0] + scale[1] + scale[2]) / 3.0f;
+    pt->pressure *= unit_scale;
 
     mul_m4_v3(mat, &pt->x);
   }
@@ -147,25 +151,24 @@ static void foreachIDLink(GpencilModifierData *md, Object *ob, IDWalkFunc walk, 
   walk(userData, ob, (ID **)&mmd->material, IDWALK_CB_USER);
 }
 
-static void panel_draw(const bContext *C, Panel *panel)
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  gpencil_modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, NULL);
 
   uiLayoutSetPropSep(layout, true);
 
-  uiItemR(layout, &ptr, "location", 0, NULL, ICON_NONE);
-  uiItemR(layout, &ptr, "rotation", 0, NULL, ICON_NONE);
-  uiItemR(layout, &ptr, "scale", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "location", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "rotation", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "scale", 0, NULL, ICON_NONE);
 
-  gpencil_modifier_panel_end(layout, &ptr);
+  gpencil_modifier_panel_end(layout, ptr);
 }
 
-static void mask_panel_draw(const bContext *C, Panel *panel)
+static void mask_panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
-  gpencil_modifier_masking_panel_draw(C, panel, true, true);
+  gpencil_modifier_masking_panel_draw(panel, true, true);
 }
 
 static void panelRegister(ARegionType *region_type)

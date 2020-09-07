@@ -21,8 +21,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_CURVEPROFILE_TYPES_H__
-#define __DNA_CURVEPROFILE_TYPES_H__
+#pragma once
 
 #include "DNA_vec_types.h"
 
@@ -31,7 +30,7 @@
 /** Number of table points per control point. */
 #define PROF_RESOL 16
 /** Dynamic size of widget's high resolution table. Input should be profile->totpoint. */
-#define PROF_N_TABLE(n_pts) min_ii(PROF_TABLE_MAX, (((n_pts - 1)) * PROF_RESOL) + 1)
+#define PROF_TABLE_LEN(n_pts) min_ii(PROF_TABLE_MAX, (((n_pts - 1)) * PROF_RESOL) + 1)
 
 /**
  * Each control point that makes up the profile.
@@ -99,5 +98,3 @@ typedef enum eCurveProfilePresets {
   PROF_PRESET_CROWN = 3,    /* Second molding example. */
   PROF_PRESET_STEPS = 4,    /* Dynamic number of steps defined by segments_len. */
 } eCurveProfilePresets;
-
-#endif /* __DNA_CURVEPROFILE_TYPES_H__ */

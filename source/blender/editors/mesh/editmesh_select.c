@@ -110,7 +110,7 @@ void EDBM_select_mirrored(BMEditMesh *em,
     }
   }
 
-  EDBM_verts_mirror_cache_begin(em, axis, true, true, use_topology);
+  EDBM_verts_mirror_cache_begin(em, axis, true, true, false, use_topology);
 
   if (!extend) {
     EDBM_flag_disable_all(em, BM_ELEM_SELECT);
@@ -205,7 +205,7 @@ static BMElem *edbm_select_id_bm_elem_get(Base **bases, const uint sel_id, uint 
 /* -------------------------------------------------------------------- */
 /** \name Find Nearest Vert/Edge/Face
  *
- * \note Screen-space manhatten distances are used here,
+ * \note Screen-space manhattan distances are used here,
  * since its faster and good enough for the purpose of selection.
  *
  * \note \a dist_bias is used so we can bias against selected items.
@@ -415,7 +415,7 @@ struct NearestEdgeUserData_Hit {
   int index;
   BMEdge *edge;
 
-  /* edges only, un-biased manhatten distance to which ever edge we pick
+  /* edges only, un-biased manhattan distance to which ever edge we pick
    * (not used for choosing) */
   float dist_center;
 };
@@ -1423,15 +1423,13 @@ void MESH_OT_select_mode(wmOperatorType *ot)
 static void walker_select_count(BMEditMesh *em,
                                 int walkercode,
                                 void *start,
-                                const bool select,
-                                const bool select_mix,
-                                int *r_totsel,
-                                int *r_totunsel)
+                                int r_count_by_select[2])
 {
   BMesh *bm = em->bm;
   BMElem *ele;
   BMWalker walker;
-  int tot[2] = {0, 0};
+
+  r_count_by_select[0] = r_count_by_select[1] = 0;
 
   BMW_init(&walker,
            bm,
@@ -1443,16 +1441,14 @@ static void walker_select_count(BMEditMesh *em,
            BMW_NIL_LAY);
 
   for (ele = BMW_begin(&walker, start); ele; ele = BMW_step(&walker)) {
-    tot[(BM_elem_flag_test_bool(ele, BM_ELEM_SELECT) != select)] += 1;
+    r_count_by_select[BM_elem_flag_test(ele, BM_ELEM_SELECT) ? 1 : 0] += 1;
 
-    if (!select_mix && tot[0] && tot[1]) {
-      tot[0] = tot[1] = -1;
+    /* Early exit when mixed (could be optional if needed. */
+    if (r_count_by_select[0] && r_count_by_select[1]) {
+      r_count_by_select[0] = r_count_by_select[1] = -1;
       break;
     }
   }
-
-  *r_totsel = tot[0];
-  *r_totunsel = tot[1];
 
   BMW_end(&walker);
 }
@@ -1590,18 +1586,18 @@ static void mouse_mesh_loop_edge(
 {
   bool edge_boundary = false;
 
-  /* cycle between BMW_EDGELOOP / BMW_EDGEBOUNDARY  */
+  /* Cycle between BMW_EDGELOOP / BMW_EDGEBOUNDARY. */
   if (select_cycle && BM_edge_is_boundary(eed)) {
-    int tot[2];
+    int count_by_select[2];
 
-    /* if the loops selected toggle the boundaries */
-    walker_select_count(em, BMW_EDGELOOP, eed, select, false, &tot[0], &tot[1]);
-    if (tot[select] == 0) {
+    /* If the loops selected toggle the boundaries. */
+    walker_select_count(em, BMW_EDGELOOP, eed, count_by_select);
+    if (count_by_select[!select] == 0) {
       edge_boundary = true;
 
-      /* if the boundaries selected, toggle back to the loop */
-      walker_select_count(em, BMW_EDGEBOUNDARY, eed, select, false, &tot[0], &tot[1]);
-      if (tot[select] == 0) {
+      /* If the boundaries selected, toggle back to the loop. */
+      walker_select_count(em, BMW_EDGEBOUNDARY, eed, count_by_select);
+      if (count_by_select[!select] == 0) {
         edge_boundary = false;
       }
     }
@@ -4229,10 +4225,7 @@ static int edbm_select_nth_exec(bContext *C, wmOperator *op)
   MEM_freeN(objects);
 
   if (!found_active_elt) {
-    BKE_report(op->reports,
-               RPT_ERROR,
-               (objects_len == 1 ? "Mesh has no active vert/edge/face" :
-                                   "Meshes have no active vert/edge/face"));
+    BKE_report(op->reports, RPT_ERROR, "Mesh object(s) have no active vertex/edge/face");
     return OPERATOR_CANCELLED;
   }
 

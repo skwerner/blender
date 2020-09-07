@@ -95,16 +95,16 @@ static float mix_weight(float weight, float weight2, char mix_mode)
   if (mix_mode == MOD_WVG_MIX_SET) {
     return weight2;
   }
-  else if (mix_mode == MOD_WVG_MIX_ADD) {
+  if (mix_mode == MOD_WVG_MIX_ADD) {
     return (weight + weight2);
   }
-  else if (mix_mode == MOD_WVG_MIX_SUB) {
+  if (mix_mode == MOD_WVG_MIX_SUB) {
     return (weight - weight2);
   }
-  else if (mix_mode == MOD_WVG_MIX_MUL) {
+  if (mix_mode == MOD_WVG_MIX_MUL) {
     return (weight * weight2);
   }
-  else if (mix_mode == MOD_WVG_MIX_DIV) {
+  if (mix_mode == MOD_WVG_MIX_DIV) {
     /* Avoid dividing by zero (or really small values). */
     if (weight2 < 0.0f && weight2 > -MOD_WVG_ZEROFLOOR) {
       weight2 = -MOD_WVG_ZEROFLOOR;
@@ -114,15 +114,14 @@ static float mix_weight(float weight, float weight2, char mix_mode)
     }
     return (weight / weight2);
   }
-  else if (mix_mode == MOD_WVG_MIX_DIF) {
+  if (mix_mode == MOD_WVG_MIX_DIF) {
     return (weight < weight2 ? weight2 - weight : weight - weight2);
   }
-  else if (mix_mode == MOD_WVG_MIX_AVG) {
+  if (mix_mode == MOD_WVG_MIX_AVG) {
     return (weight + weight2) * 0.5f;
   }
-  else {
-    return weight2;
-  }
+
+  return weight2;
 }
 
 /**************************************
@@ -456,48 +455,47 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
   MEM_freeN(dw2);
   MEM_SAFE_FREE(indices);
 
+  mesh->runtime.is_original = false;
+
   /* Return the vgroup-modified mesh. */
   return mesh;
 }
 
-static void panel_draw(const bContext *C, Panel *panel)
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
   PointerRNA ob_ptr;
-  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
 
   uiLayoutSetPropSep(layout, true);
 
-  modifier_vgroup_ui(layout, &ptr, &ob_ptr, "vertex_group_a", "invert_vertex_group_a", NULL);
-  modifier_vgroup_ui(
-      layout, &ptr, &ob_ptr, "vertex_group_b", "invert_vertex_group_b", IFACE_("B"));
+  modifier_vgroup_ui(layout, ptr, &ob_ptr, "vertex_group_a", "invert_vertex_group_a", NULL);
+  modifier_vgroup_ui(layout, ptr, &ob_ptr, "vertex_group_b", "invert_vertex_group_b", IFACE_("B"));
 
   uiItemS(layout);
 
-  uiItemR(layout, &ptr, "default_weight_a", 0, NULL, ICON_NONE);
-  uiItemR(layout, &ptr, "default_weight_b", 0, IFACE_("B"), ICON_NONE);
+  uiItemR(layout, ptr, "default_weight_a", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "default_weight_b", 0, IFACE_("B"), ICON_NONE);
 
   uiItemS(layout);
 
-  uiItemR(layout, &ptr, "mix_set", 0, NULL, ICON_NONE);
-  uiItemR(layout, &ptr, "mix_mode", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "mix_set", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "mix_mode", 0, NULL, ICON_NONE);
 
-  uiItemR(layout, &ptr, "normalize", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "normalize", 0, NULL, ICON_NONE);
 
-  modifier_panel_end(layout, &ptr);
+  modifier_panel_end(layout, ptr);
 }
 
 static void influence_panel_draw(const bContext *C, Panel *panel)
 {
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
   PointerRNA ob_ptr;
-  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
 
-  weightvg_ui_common(C, &ob_ptr, &ptr, layout);
+  weightvg_ui_common(C, &ob_ptr, ptr, layout);
 }
 
 static void panelRegister(ARegionType *region_type)

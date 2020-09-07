@@ -64,7 +64,7 @@ void workbench_engine_init(void *ved)
   workbench_update_world_ubo(wpd);
 
   if (txl->dummy_image_tx == NULL) {
-    float fpixel[4] = {1.0f, 0.0f, 1.0f, 1.0f};
+    const float fpixel[4] = {1.0f, 0.0f, 1.0f, 1.0f};
     txl->dummy_image_tx = DRW_texture_create_2d(1, 1, GPU_RGBA8, 0, fpixel);
   }
   wpd->dummy_image_tx = txl->dummy_image_tx;
@@ -114,7 +114,7 @@ static void workbench_cache_sculpt_populate(WORKBENCH_PrivateData *wpd,
                                             eV3DShadingColorType color_type)
 {
   const bool use_single_drawcall = !ELEM(color_type, V3D_SHADING_MATERIAL_COLOR);
-  BLI_assert(wpd->shading.color_type != V3D_SHADING_TEXTURE_COLOR);
+  BLI_assert(color_type != V3D_SHADING_TEXTURE_COLOR);
 
   if (use_single_drawcall) {
     DRWShadingGroup *grp = workbench_material_setup(wpd, ob, 0, color_type, NULL);
@@ -127,6 +127,17 @@ static void workbench_cache_sculpt_populate(WORKBENCH_PrivateData *wpd,
       shgrps[i] = workbench_material_setup(wpd, ob, i + 1, color_type, NULL);
     }
     DRW_shgroup_call_sculpt_with_materials(shgrps, materials_len, ob);
+  }
+}
+
+BLI_INLINE void workbench_object_drawcall(DRWShadingGroup *grp, struct GPUBatch *geom, Object *ob)
+{
+  if (ob->type == OB_POINTCLOUD) {
+    /* Draw range to avoid drawcall batching messing up the instance attrib. */
+    DRW_shgroup_call_instance_range(grp, ob, geom, 0, 0);
+  }
+  else {
+    DRW_shgroup_call(grp, geom, ob);
   }
 }
 
@@ -145,7 +156,7 @@ static void workbench_cache_texpaint_populate(WORKBENCH_PrivateData *wpd, Object
       SET_FLAG_FROM_TEST(state, imapaint->interp == IMAGEPAINT_INTERP_LINEAR, GPU_SAMPLER_FILTER);
 
       DRWShadingGroup *grp = workbench_image_setup(wpd, ob, 0, ima, NULL, state);
-      DRW_shgroup_call(grp, geom, ob);
+      workbench_object_drawcall(grp, geom, ob);
     }
   }
   else {
@@ -157,7 +168,7 @@ static void workbench_cache_texpaint_populate(WORKBENCH_PrivateData *wpd, Object
           continue;
         }
         DRWShadingGroup *grp = workbench_image_setup(wpd, ob, i + 1, NULL, NULL, 0);
-        DRW_shgroup_call(grp, geoms[i], ob);
+        workbench_object_drawcall(grp, geoms[i], ob);
       }
     }
   }
@@ -194,7 +205,7 @@ static void workbench_cache_common_populate(WORKBENCH_PrivateData *wpd,
 
     if (geom) {
       DRWShadingGroup *grp = workbench_material_setup(wpd, ob, 0, color_type, r_transp);
-      DRW_shgroup_call(grp, geom, ob);
+      workbench_object_drawcall(grp, geom, ob);
     }
   }
   else {
@@ -207,7 +218,7 @@ static void workbench_cache_common_populate(WORKBENCH_PrivateData *wpd,
           continue;
         }
         DRWShadingGroup *grp = workbench_material_setup(wpd, ob, i + 1, color_type, r_transp);
-        DRW_shgroup_call(grp, geoms[i], ob);
+        workbench_object_drawcall(grp, geoms[i], ob);
       }
     }
   }
@@ -296,6 +307,11 @@ static eV3DShadingColorType workbench_color_type_get(WORKBENCH_PrivateData *wpd,
     else if (is_vertpaint_mode && me && me->mloopcol) {
       color_type = V3D_SHADING_VERTEX_COLOR;
     }
+  }
+
+  if (is_sculpt_pbvh && color_type == V3D_SHADING_TEXTURE_COLOR) {
+    /* Force use of material color for sculpt. */
+    color_type = V3D_SHADING_MATERIAL_COLOR;
   }
 
   if (r_draw_shadow) {
@@ -450,7 +466,7 @@ void workbench_cache_finish(void *ved)
   /* TODO don't free reuse next redraw. */
   for (int i = 0; i < 2; i++) {
     for (int j = 0; j < 2; j++) {
-      for (int k = 0; k < 2; k++) {
+      for (int k = 0; k < WORKBENCH_DATATYPE_MAX; k++) {
         if (wpd->prepass[i][j][k].material_hash) {
           BLI_ghash_free(wpd->prepass[i][j][k].material_hash, NULL, NULL);
           wpd->prepass[i][j][k].material_hash = NULL;
@@ -469,8 +485,8 @@ void workbench_draw_sample(void *ved)
   WORKBENCH_PrivateData *wpd = vedata->stl->wpd;
   WORKBENCH_PassList *psl = vedata->psl;
   DefaultFramebufferList *dfbl = DRW_viewport_framebuffer_list_get();
-  float clear_col[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-  float clear_col_with_alpha[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+  const float clear_col[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+  const float clear_col_with_alpha[4] = {0.0f, 0.0f, 0.0f, 1.0f};
 
   const bool do_render = workbench_antialiasing_setup(vedata);
   const bool xray_is_visible = wpd->shading.xray_alpha > 0.0f;
@@ -630,7 +646,7 @@ RenderEngineType DRW_engine_viewport_workbench_type = {
     NULL,
     WORKBENCH_ENGINE,
     N_("Workbench"),
-    RE_INTERNAL | RE_USE_STEREO_VIEWPORT,
+    RE_INTERNAL | RE_USE_STEREO_VIEWPORT | RE_USE_GPU_CONTEXT,
     NULL,
     &DRW_render_to_image,
     NULL,

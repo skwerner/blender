@@ -46,15 +46,10 @@
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
 #include "BKE_pointcloud.h"
+#include "BKE_screen.h"
 #include "BKE_simulation.h"
 
 #include "BLO_read_write.h"
-
-/* SpaceType struct has a member called 'new' which obviously conflicts with C++
- * so temporarily redefining the new keyword to make it compile. */
-#define new extern_new
-#include "BKE_screen.h"
-#undef new
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -71,7 +66,7 @@ using blender::float3;
 
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
 {
-  SimulationModifierData *smd = (SimulationModifierData *)md;
+  SimulationModifierData *smd = reinterpret_cast<SimulationModifierData *>(md);
   if (smd->simulation) {
     DEG_add_simulation_relation(ctx->node, smd->simulation, "Accessed Simulation");
   }
@@ -79,7 +74,7 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
 
 static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
-  SimulationModifierData *smd = (SimulationModifierData *)md;
+  SimulationModifierData *smd = reinterpret_cast<SimulationModifierData *>(md);
   walk(userData, ob, (ID **)&smd->simulation, IDWALK_CB_USER);
 }
 
@@ -87,33 +82,22 @@ static bool isDisabled(const struct Scene *UNUSED(scene),
                        ModifierData *md,
                        bool UNUSED(useRenderParams))
 {
-  SimulationModifierData *smd = (SimulationModifierData *)md;
+  SimulationModifierData *smd = reinterpret_cast<SimulationModifierData *>(md);
   return smd->simulation == nullptr;
 }
 
 static const ParticleSimulationState *find_particle_state(SimulationModifierData *smd)
 {
-  if (smd->simulation == nullptr) {
-    return nullptr;
-  }
-  if (smd->data_path == nullptr) {
-    return nullptr;
-  }
-  LISTBASE_FOREACH (const SimulationState *, state, &smd->simulation->states) {
-    if (STREQ(smd->data_path, state->name)) {
-      if (state->type == SIM_STATE_TYPE_PARTICLES) {
-        return (ParticleSimulationState *)state;
-      }
-    }
-  }
-  return nullptr;
+  return reinterpret_cast<const ParticleSimulationState *>(
+      BKE_simulation_state_try_find_by_name_and_type(
+          smd->simulation, smd->data_path, SIM_TYPE_NAME_PARTICLE_SIMULATION));
 }
 
 static PointCloud *modifyPointCloud(ModifierData *md,
                                     const ModifierEvalContext *UNUSED(ctx),
                                     PointCloud *input_pointcloud)
 {
-  SimulationModifierData *smd = (SimulationModifierData *)md;
+  SimulationModifierData *smd = reinterpret_cast<SimulationModifierData *>(md);
   const ParticleSimulationState *state = find_particle_state(smd);
   if (state == nullptr) {
     return input_pointcloud;
@@ -124,29 +108,33 @@ static PointCloud *modifyPointCloud(ModifierData *md,
     return pointcloud;
   }
 
-  const float3 *positions = (const float3 *)CustomData_get_layer_named(
-      &state->attributes, CD_LOCATION, "Position");
+  const float3 *positions = static_cast<const float3 *>(
+      CustomData_get_layer_named(&state->attributes, CD_PROP_FLOAT3, "Position"));
+  const float *radii = static_cast<const float *>(
+      CustomData_get_layer_named(&state->attributes, CD_PROP_FLOAT, "Radius"));
   memcpy(pointcloud->co, positions, sizeof(float3) * state->tot_particles);
 
   for (int i = 0; i < state->tot_particles; i++) {
-    pointcloud->radius[i] = 0.1f;
+    pointcloud->radius[i] = radii[i];
   }
 
   return pointcloud;
 }
 
-static void panel_draw(const bContext *C, Panel *panel)
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
   PointerRNA ob_ptr;
-  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
 
-  uiItemR(layout, &ptr, "simulation", 0, NULL, ICON_NONE);
-  uiItemR(layout, &ptr, "data_path", 0, NULL, ICON_NONE);
+  uiLayoutSetPropSep(layout, true);
+  uiLayoutSetPropDecorate(layout, false);
 
-  modifier_panel_end(layout, &ptr);
+  uiItemR(layout, ptr, "simulation", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "data_path", 0, NULL, ICON_NONE);
+
+  modifier_panel_end(layout, ptr);
 }
 
 static void panelRegister(ARegionType *region_type)
@@ -156,20 +144,20 @@ static void panelRegister(ARegionType *region_type)
 
 static void blendWrite(BlendWriter *writer, const ModifierData *md)
 {
-  const SimulationModifierData *smd = (const SimulationModifierData *)md;
+  const SimulationModifierData *smd = reinterpret_cast<const SimulationModifierData *>(md);
   BLO_write_string(writer, smd->data_path);
 }
 
 static void blendRead(BlendDataReader *reader, ModifierData *md)
 {
-  SimulationModifierData *smd = (SimulationModifierData *)md;
+  SimulationModifierData *smd = reinterpret_cast<SimulationModifierData *>(md);
   BLO_read_data_address(reader, &smd->data_path);
 }
 
 static void copyData(const ModifierData *md, ModifierData *target, const int flag)
 {
-  const SimulationModifierData *smd = (const SimulationModifierData *)md;
-  SimulationModifierData *tsmd = (SimulationModifierData *)target;
+  const SimulationModifierData *smd = reinterpret_cast<const SimulationModifierData *>(md);
+  SimulationModifierData *tsmd = reinterpret_cast<SimulationModifierData *>(target);
 
   BKE_modifier_copydata_generic(md, target, flag);
   if (smd->data_path != nullptr) {
@@ -179,7 +167,7 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
 
 static void freeData(ModifierData *md)
 {
-  SimulationModifierData *smd = (SimulationModifierData *)md;
+  SimulationModifierData *smd = reinterpret_cast<SimulationModifierData *>(md);
   if (smd->data_path) {
     MEM_freeN(smd->data_path);
   }

@@ -26,8 +26,7 @@
  * \note This is deprecated & should eventually be removed.
  */
 
-#ifndef __BKE_CDDERIVEDMESH_H__
-#define __BKE_CDDERIVEDMESH_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -44,10 +43,8 @@ struct DerivedMesh *CDDM_from_mesh(struct Mesh *mesh);
 
 /* Copies the given DerivedMesh with verts, faces & edges stored as
  * custom element data. */
-struct DerivedMesh *CDDM_copy(struct DerivedMesh *dm);
+struct DerivedMesh *CDDM_copy(struct DerivedMesh *source);
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

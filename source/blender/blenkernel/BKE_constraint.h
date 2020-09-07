@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_CONSTRAINT_H__
-#define __BKE_CONSTRAINT_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -206,7 +205,7 @@ void BKE_constraint_mat_convertspace(struct Object *ob,
 void BKE_constraint_target_matrix_get(struct Depsgraph *depsgraph,
                                       struct Scene *scene,
                                       struct bConstraint *con,
-                                      int n,
+                                      int index,
                                       short ownertype,
                                       void *ownerdata,
                                       float mat[4][4],
@@ -223,6 +222,4 @@ void BKE_constraints_solve(struct Depsgraph *depsgraph,
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

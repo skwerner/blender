@@ -74,17 +74,17 @@ static void square_to_circle(float x, float y, float *r, float *T)
 #define KERNEL_RAD (3)
 #define SAMP_LEN SQUARE_UNSAFE(KERNEL_RAD * 2 + 1)
 
-static void workbench_dof_setup_samples(struct GPUUniformBuffer **ubo,
+static void workbench_dof_setup_samples(struct GPUUniformBuf **ubo,
                                         float **data,
                                         float bokeh_sides,
                                         float bokeh_rotation,
                                         float bokeh_ratio)
 {
   if (*data == NULL) {
-    *data = MEM_callocN(sizeof(float) * 4 * SAMP_LEN, "workbench dof samples");
+    *data = MEM_callocN(sizeof(float[4]) * SAMP_LEN, "workbench dof samples");
   }
   if (*ubo == NULL) {
-    *ubo = DRW_uniformbuffer_create(sizeof(float) * 4 * SAMP_LEN, NULL);
+    *ubo = GPU_uniformbuf_create(sizeof(float[4]) * SAMP_LEN);
   }
 
   float *samp = *data;
@@ -120,7 +120,7 @@ static void workbench_dof_setup_samples(struct GPUUniformBuffer **ubo,
     }
   }
 
-  DRW_uniformbuffer_update(*ubo, *data);
+  GPU_uniformbuf_update(*ubo, *data);
 }
 
 void workbench_dof_engine_init(WORKBENCH_Data *vedata)
@@ -155,7 +155,7 @@ void workbench_dof_engine_init(WORKBENCH_Data *vedata)
   }
 
   const float *full_size = DRW_viewport_size_get();
-  int size[2] = {max_ii(1, (int)full_size[0] / 2), max_ii(1, (int)full_size[1] / 2)};
+  const int size[2] = {max_ii(1, (int)full_size[0] / 2), max_ii(1, (int)full_size[1] / 2)};
 #if 0 /* TODO(fclem) finish COC min_max optimisation */
   /* NOTE: We Ceil here in order to not miss any edge texel if using a NPO2 texture.  */
   int shrink_h_size[2] = {ceilf(size[0] / 8.0f), size[1]};

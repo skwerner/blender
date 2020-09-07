@@ -58,6 +58,7 @@
 #include "BIF_glutil.h"
 
 #include "GPU_context.h"
+#include "GPU_framebuffer.h"
 #include "GPU_immediate.h"
 #include "GPU_immediate_util.h"
 #include "GPU_init_exit.h"
@@ -309,13 +310,11 @@ static void playanim_toscreen(
   CLAMP(offs_x, 0.0f, 1.0f);
   CLAMP(offs_y, 0.0f, 1.0f);
 
-  glClearColor(0.1, 0.1, 0.1, 0.0);
-  glClear(GL_COLOR_BUFFER_BIT);
+  GPU_clear_color(0.1f, 0.1f, 0.1f, 0.0f);
 
   /* checkerboard for case alpha */
   if (ibuf->planes == 32) {
-    GPU_blend(true);
-    glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    GPU_blend(GPU_BLEND_ALPHA);
 
     imm_draw_box_checker_2d_ex(offs_x,
                                offs_y,
@@ -333,15 +332,14 @@ static void playanim_toscreen(
                    offs_y + (ps->draw_flip[1] ? span_y : 0.0f),
                    ibuf->x,
                    ibuf->y,
-                   GL_RGBA,
-                   GL_UNSIGNED_BYTE,
-                   GL_NEAREST,
+                   GPU_RGBA8,
+                   false,
                    ibuf->rect,
                    ((ps->draw_flip[0] ? -1.0f : 1.0f)) * (ps->zoom / (float)ps->win_x),
                    ((ps->draw_flip[1] ? -1.0f : 1.0f)) * (ps->zoom / (float)ps->win_y),
                    NULL);
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 
   pupdate_time();
 
@@ -1058,8 +1056,8 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr ps_void)
       /* zoom always show entire image */
       ps->zoom = MIN2(zoomx, zoomy);
 
-      glViewport(0, 0, ps->win_x, ps->win_y);
-      glScissor(0, 0, ps->win_x, ps->win_y);
+      GPU_viewport(0, 0, ps->win_x, ps->win_y);
+      GPU_scissor(0, 0, ps->win_x, ps->win_y);
 
       playanim_gl_matrix();
 
@@ -1292,8 +1290,7 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
   // GHOST_ActivateWindowDrawingContext(g_WS.ghost_window);
 
   /* initialize OpenGL immediate mode */
-  GLuint default_fb = GHOST_GetDefaultOpenGLFramebuffer(g_WS.ghost_window);
-  g_WS.gpu_context = GPU_context_create(default_fb);
+  g_WS.gpu_context = GPU_context_create(g_WS.ghost_window);
   GPU_init();
   immActivate();
 
@@ -1315,13 +1312,12 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
     maxwiny = ibuf->y * (1 + (maxwiny / ibuf->y));
   }
 
-  glClearColor(0.1, 0.1, 0.1, 0.0);
-  glClear(GL_COLOR_BUFFER_BIT);
+  GPU_clear_color(0.1f, 0.1f, 0.1f, 0.0f);
 
   int win_x, win_y;
   playanim_window_get_size(&win_x, &win_y);
-  glViewport(0, 0, win_x, win_y);
-  glScissor(0, 0, win_x, win_y);
+  GPU_viewport(0, 0, win_x, win_y);
+  GPU_scissor(0, 0, win_x, win_y);
   playanim_gl_matrix();
 
   GHOST_SwapWindowBuffers(g_WS.ghost_window);

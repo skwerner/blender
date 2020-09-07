@@ -106,7 +106,7 @@ GPENCIL_tObject *gpencil_object_cache_add(GPENCIL_PrivateData *pd, Object *ob)
   copy_v3_v3(tgp_ob->plane_mat[3], center);
 
   /* Add to corresponding list if is in front. */
-  if (ob->dtx & OB_DRAWXRAY) {
+  if (ob->dtx & OB_DRAW_IN_FRONT) {
     BLI_LINKS_APPEND(&pd->tobjects_infront, tgp_ob);
   }
   else {
@@ -132,12 +132,11 @@ static int gpencil_tobject_dist_sort(const void *a, const void *b)
   if (ob_a->camera_z > ob_b->camera_z) {
     return 1;
   }
-  else if (ob_a->camera_z < ob_b->camera_z) {
+  if (ob_a->camera_z < ob_b->camera_z) {
     return -1;
   }
-  else {
-    return 0;
-  }
+
+  return 0;
 }
 
 void gpencil_object_cache_sort(GPENCIL_PrivateData *pd)
@@ -193,7 +192,7 @@ static float gpencil_layer_final_opacity_get(const GPENCIL_PrivateData *pd,
     if (is_obact && is_fade) {
       return gpl->opacity * pd->fade_layer_opacity;
     }
-    else if (!is_obact && (pd->fade_gp_object_opacity > -1.0f)) {
+    if (!is_obact && (pd->fade_gp_object_opacity > -1.0f)) {
       return gpl->opacity * pd->fade_gp_object_opacity;
     }
   }
@@ -246,7 +245,7 @@ static void gpencil_layer_random_color_get(const Object *ob,
   uint ob_hash = BLI_ghashutil_strhash_p_murmur(ob->id.name);
   uint gpl_hash = BLI_ghashutil_strhash_p_murmur(gpl->info);
   float hue = BLI_hash_int_01(ob_hash * gpl_hash);
-  float hsv[3] = {hue, hsv_saturation, hsv_value};
+  const float hsv[3] = {hue, hsv_saturation, hsv_value};
   hsv_to_rgb_v(hsv, r_color);
 }
 
@@ -258,7 +257,7 @@ GPENCIL_tLayer *gpencil_layer_cache_add(GPENCIL_PrivateData *pd,
 {
   bGPdata *gpd = (bGPdata *)ob->data;
 
-  const bool is_in_front = (ob->dtx & OB_DRAWXRAY);
+  const bool is_in_front = (ob->dtx & OB_DRAW_IN_FRONT);
   const bool is_screenspace = (gpd->flag & GP_DATA_STROKE_KEEPTHICKNESS) != 0;
   const bool overide_vertcol = (pd->v3d_color_type != -1);
   const bool is_vert_col_mode = (pd->v3d_color_type == V3D_SHADING_VERTEX_COLOR) ||

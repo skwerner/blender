@@ -2035,19 +2035,26 @@ static bool flip_custom_normals(BMesh *bm, BMLoopNorEditDataArray *lnors_ed_arr)
   }
 
   BMFace *f;
-  BMLoop *l;
-  BMIter iter_f, iter_l;
+  BMLoop *l, *l_start;
+  BMIter iter_f;
   BM_ITER_MESH (f, &iter_f, bm, BM_FACES_OF_MESH) {
+    /* Flip all the custom loop normals on the selected faces. */
     if (!BM_elem_flag_test(f, BM_ELEM_SELECT)) {
       continue;
     }
-    /* Flip all the custom loop normals on the selected faces. */
 
-    BM_ITER_ELEM (l, &iter_l, f, BM_LOOPS_OF_FACE) {
+    /* Because the winding has changed, we need to go the reverse way around the face to get the
+     * correct placement of the normals. However we need to derive the old loop index to get the
+     * correct data. Note that the first loop index is the same though. So the loop starts and ends
+     * in the same place as before the flip.
+     */
 
+    l_start = l = BM_FACE_FIRST_LOOP(f);
+    int old_index = BM_elem_index_get(l);
+    do {
       int loop_index = BM_elem_index_get(l);
 
-      BMLoopNorEditData *lnor_ed = lnors_ed_arr->lidx_to_lnor_editdata[loop_index];
+      BMLoopNorEditData *lnor_ed = lnors_ed_arr->lidx_to_lnor_editdata[old_index];
       BMLoopNorEditData *lnor_ed_new = lnors_ed_arr_new_full->lidx_to_lnor_editdata[loop_index];
       BLI_assert(lnor_ed != NULL && lnor_ed_new != NULL);
 
@@ -2055,7 +2062,10 @@ static bool flip_custom_normals(BMesh *bm, BMLoopNorEditDataArray *lnors_ed_arr)
 
       BKE_lnor_space_custom_normal_to_data(
           bm->lnor_spacearr->lspacearr[loop_index], lnor_ed->nloc, lnor_ed_new->clnors_data);
-    }
+
+      old_index++;
+      l = l->prev;
+    } while (l != l_start);
   }
   BM_loop_normal_editdata_array_free(lnors_ed_arr_new_full);
   return true;
@@ -2503,7 +2513,7 @@ static int edbm_do_smooth_vertex_exec(bContext *C, wmOperator *op)
 
     /* mirror before smooth */
     if (((Mesh *)obedit->data)->editflag & ME_EDIT_MIRROR_X) {
-      EDBM_verts_mirror_cache_begin(em, 0, false, true, use_topology);
+      EDBM_verts_mirror_cache_begin(em, 0, false, true, false, use_topology);
     }
 
     /* if there is a mirror modifier with clipping, flag the verts that
@@ -2648,7 +2658,7 @@ static int edbm_do_smooth_laplacian_vertex_exec(bContext *C, wmOperator *op)
 
     /* Mirror before smooth. */
     if (((Mesh *)obedit->data)->editflag & ME_EDIT_MIRROR_X) {
-      EDBM_verts_mirror_cache_begin(em, 0, false, true, use_topology);
+      EDBM_verts_mirror_cache_begin(em, 0, false, true, false, use_topology);
     }
 
     bool failed_repeat_loop = false;
@@ -3677,7 +3687,10 @@ static void edbm_blend_from_shape_ui(bContext *C, wmOperator *op)
   RNA_pointer_create(NULL, op->type->srna, op->properties, &ptr);
   RNA_id_pointer_create((ID *)me->key, &ptr_key);
 
-  uiItemPointerR(layout, &ptr, "shape", &ptr_key, "key_blocks", "", ICON_SHAPEKEY_DATA);
+  uiLayoutSetPropSep(layout, true);
+  uiLayoutSetPropDecorate(layout, false);
+
+  uiItemPointerR(layout, &ptr, "shape", &ptr_key, "key_blocks", NULL, ICON_SHAPEKEY_DATA);
   uiItemR(layout, &ptr, "blend", 0, NULL, ICON_NONE);
   uiItemR(layout, &ptr, "add", 0, NULL, ICON_NONE);
 }
@@ -4021,7 +4034,7 @@ static int edbm_knife_cut_exec(bContext *C, wmOperator *op)
 
   /* the floating point coordinates of verts in screen space will be
    * stored in a hash table according to the vertices pointer */
-  screen_vert_coords = sco = MEM_mallocN(bm->totvert * sizeof(float) * 2, __func__);
+  screen_vert_coords = sco = MEM_mallocN(sizeof(float[2]) * bm->totvert, __func__);
 
   BM_ITER_MESH_INDEX (bv, &iter, bm, BM_VERTS_OF_MESH, i) {
     if (ED_view3d_project_float_object(region, bv->co, *sco, V3D_PROJ_TEST_CLIP_NEAR) !=
@@ -4169,7 +4182,8 @@ static Base *mesh_separate_tagged(
   BKE_object_material_array_assign(bmain,
                                    base_new->object,
                                    BKE_object_material_array_p(obedit),
-                                   *BKE_object_material_len_p(obedit));
+                                   *BKE_object_material_len_p(obedit),
+                                   false);
 
   ED_object_base_select(base_new, BA_SELECT);
 
@@ -4241,7 +4255,8 @@ static Base *mesh_separate_arrays(Main *bmain,
   BKE_object_material_array_assign(bmain,
                                    base_new->object,
                                    BKE_object_material_array_p(obedit),
-                                   *BKE_object_material_len_p(obedit));
+                                   *BKE_object_material_len_p(obedit),
+                                   false);
 
   ED_object_base_select(base_new, BA_SELECT);
 
@@ -5587,25 +5602,26 @@ static bool edbm_decimate_check(bContext *UNUSED(C), wmOperator *UNUSED(op))
 
 static void edbm_decimate_ui(bContext *UNUSED(C), wmOperator *op)
 {
-  uiLayout *layout = op->layout, *box, *row, *col;
+  uiLayout *layout = op->layout, *row, *col, *sub;
   PointerRNA ptr;
 
   RNA_pointer_create(NULL, op->type->srna, op->properties, &ptr);
 
+  uiLayoutSetPropSep(layout, true);
+
   uiItemR(layout, &ptr, "ratio", 0, NULL, ICON_NONE);
 
-  box = uiLayoutBox(layout);
-  uiItemR(box, &ptr, "use_vertex_group", 0, NULL, ICON_NONE);
-  col = uiLayoutColumn(box, false);
+  uiItemR(layout, &ptr, "use_vertex_group", 0, NULL, ICON_NONE);
+  col = uiLayoutColumn(layout, false);
   uiLayoutSetActive(col, RNA_boolean_get(&ptr, "use_vertex_group"));
   uiItemR(col, &ptr, "vertex_group_factor", 0, NULL, ICON_NONE);
   uiItemR(col, &ptr, "invert_vertex_group", 0, NULL, ICON_NONE);
 
-  box = uiLayoutBox(layout);
-  uiItemR(box, &ptr, "use_symmetry", 0, NULL, ICON_NONE);
-  row = uiLayoutRow(box, true);
-  uiLayoutSetActive(row, RNA_boolean_get(&ptr, "use_symmetry"));
-  uiItemR(row, &ptr, "symmetry_axis", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+  row = uiLayoutRowWithHeading(layout, true, IFACE_("Symmetry"));
+  uiItemR(row, &ptr, "use_symmetry", 0, "", ICON_NONE);
+  sub = uiLayoutRow(row, true);
+  uiLayoutSetActive(sub, RNA_boolean_get(&ptr, "use_symmetry"));
+  uiItemR(sub, &ptr, "symmetry_axis", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
 }
 
 void MESH_OT_decimate(wmOperatorType *ot)
@@ -5660,7 +5676,7 @@ static void edbm_dissolve_prop__use_verts(wmOperatorType *ot, bool value, int fl
   PropertyRNA *prop;
 
   prop = RNA_def_boolean(
-      ot->srna, "use_verts", value, "Dissolve Verts", "Dissolve remaining vertices");
+      ot->srna, "use_verts", value, "Dissolve Vertices", "Dissolve remaining vertices");
 
   if (flag) {
     RNA_def_property_flag(prop, flag);
@@ -5725,7 +5741,7 @@ void MESH_OT_dissolve_verts(wmOperatorType *ot)
 {
   /* identifiers */
   ot->name = "Dissolve Vertices";
-  ot->description = "Dissolve verts, merge edges and faces";
+  ot->description = "Dissolve vertices, merge edges and faces";
   ot->idname = "MESH_OT_dissolve_verts";
 
   /* api callbacks */
@@ -5992,7 +6008,7 @@ void MESH_OT_dissolve_limited(wmOperatorType *ot)
   ot->name = "Limited Dissolve";
   ot->idname = "MESH_OT_dissolve_limited";
   ot->description =
-      "Dissolve selected edges and verts, limited by the angle of surrounding geometry";
+      "Dissolve selected edges and vertices, limited by the angle of surrounding geometry";
 
   /* api callbacks */
   ot->exec = edbm_dissolve_limited_exec;
@@ -7203,7 +7219,7 @@ void MESH_OT_wireframe(wmOperatorType *ot)
   PropertyRNA *prop;
 
   /* identifiers */
-  ot->name = "Wire Frame";
+  ot->name = "Wireframe";
   ot->idname = "MESH_OT_wireframe";
   ot->description = "Create a solid wire-frame from faces";
 
@@ -7584,7 +7600,7 @@ static int mesh_symmetry_snap_exec(bContext *C, wmOperator *op)
     BMVert *v;
     int i;
 
-    EDBM_verts_mirror_cache_begin_ex(em, axis, true, true, use_topology, thresh, index);
+    EDBM_verts_mirror_cache_begin_ex(em, axis, true, true, false, use_topology, thresh, index);
 
     BM_mesh_elem_table_ensure(bm, BM_VERT);
 
@@ -7879,7 +7895,7 @@ void MESH_OT_mark_freestyle_face(wmOperatorType *ot)
 
 /* NOTE: these defines are saved in keymap files, do not change values but just add new ones */
 /* NOTE: We could add more here, like e.g. a switch between local or global coordinates of target,
- *       use numinput to type in explicit vector values... */
+ *       use number-input to type in explicit vector values. */
 enum {
   /* Generic commands. */
   EDBM_CLNOR_MODAL_CANCEL = 1,
@@ -8403,6 +8419,8 @@ static void edbm_point_normals_ui(bContext *C, wmOperator *op)
 
   RNA_pointer_create(&wm->id, op->type->srna, op->properties, &ptr);
 
+  uiLayoutSetPropSep(layout, true);
+
   /* Main auto-draw call */
   uiDefAutoButsRNA(layout, &ptr, point_normals_draw_check_prop, NULL, NULL, '\0', false);
 }
@@ -8691,17 +8709,21 @@ enum {
 };
 
 static EnumPropertyItem average_method_items[] = {
-    {EDBM_CLNOR_AVERAGE_LOOP, "CUSTOM_NORMAL", 0, "Custom Normal", "Take Average of vert Normals"},
+    {EDBM_CLNOR_AVERAGE_LOOP,
+     "CUSTOM_NORMAL",
+     0,
+     "Custom Normal",
+     "Take average of vertex normals"},
     {EDBM_CLNOR_AVERAGE_FACE_AREA,
      "FACE_AREA",
      0,
      "Face Area",
-     "Set all vert normals by Face Area"},
+     "Set all vertex normals by face area"},
     {EDBM_CLNOR_AVERAGE_ANGLE,
      "CORNER_ANGLE",
      0,
      "Corner Angle",
-     "Set all vert normals by Corner Angle"},
+     "Set all vertex normals by corner angle"},
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -8874,6 +8896,8 @@ static void edbm_average_normals_ui(bContext *C, wmOperator *op)
   PointerRNA ptr;
 
   RNA_pointer_create(&wm->id, op->type->srna, op->properties, &ptr);
+
+  uiLayoutSetPropSep(layout, true);
 
   /* Main auto-draw call */
   uiDefAutoButsRNA(layout, &ptr, average_normals_draw_check_prop, NULL, NULL, '\0', false);

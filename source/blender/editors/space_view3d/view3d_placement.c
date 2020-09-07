@@ -86,6 +86,11 @@ enum ePlace_Depth {
   PLACE_DEPTH_CURSOR_VIEW = 3,
 };
 
+enum ePlace_Orient {
+  PLACE_ORIENT_SURFACE = 1,
+  PLACE_ORIENT_DEFAULT = 2,
+};
+
 struct InteractivePlaceData {
   /* Window manager variables (set these even when waiting for input). */
   Scene *scene;
@@ -145,14 +150,94 @@ struct InteractivePlaceData {
 /* On-screen snap distance. */
 #define MVAL_MAX_PX_DIST 12.0f
 
-static bool idp_snap_point_from_gizmo(wmGizmo *gz, float r_location[3])
+static bool idp_snap_point_from_gizmo_ex(wmGizmo *gz, const char *prop_id, float r_location[3])
 {
   if (gz->state & WM_GIZMO_STATE_HIGHLIGHT) {
-    PropertyRNA *prop_location = RNA_struct_find_property(gz->ptr, "location");
+    PropertyRNA *prop_location = RNA_struct_find_property(gz->ptr, prop_id);
     RNA_property_float_get_array(gz->ptr, prop_location, r_location);
     return true;
   }
   return false;
+}
+
+static bool idp_snap_point_from_gizmo(wmGizmo *gz, float r_location[3])
+{
+  return idp_snap_point_from_gizmo_ex(gz, "location", r_location);
+}
+
+static bool idp_snap_normal_from_gizmo(wmGizmo *gz, float r_normal[3])
+{
+  return idp_snap_point_from_gizmo_ex(gz, "normal", r_normal);
+}
+
+/**
+ * Calculate a 3x3 orientation matrix from the surface under the cursor.
+ */
+static bool idp_poject_surface_normal(SnapObjectContext *snap_context,
+                                      struct Depsgraph *depsgraph,
+                                      const float mval_fl[2],
+                                      const float mat_fallback[3][3],
+                                      const float normal_fallback[3],
+                                      float r_mat[3][3])
+{
+  bool success = false;
+  float normal[3] = {0.0f};
+  float co_dummy[3];
+  /* We could use the index to get the orientation from the face. */
+  Object *ob_snap;
+  float obmat[4][4];
+
+  if (ED_transform_snap_object_project_view3d_ex(snap_context,
+                                                 depsgraph,
+                                                 SCE_SNAP_MODE_FACE,
+                                                 &(const struct SnapObjectParams){
+                                                     .snap_select = SNAP_ALL,
+                                                     .use_object_edit_cage = true,
+                                                 },
+                                                 mval_fl,
+                                                 NULL,
+                                                 NULL,
+                                                 co_dummy,
+                                                 normal,
+                                                 NULL,
+                                                 &ob_snap,
+                                                 obmat)) {
+    /* pass */
+  }
+  else if (normal_fallback != NULL) {
+    copy_m4_m3(obmat, mat_fallback);
+    copy_v3_v3(normal, normal_fallback);
+  }
+
+  if (!is_zero_v3(normal)) {
+    float mat[3][3];
+    copy_m3_m4(mat, obmat);
+    normalize_m3(mat);
+
+    float dot_best = fabsf(dot_v3v3(mat[0], normal));
+    int i_best = 0;
+    for (int i = 1; i < 3; i++) {
+      float dot_test = fabsf(dot_v3v3(mat[i], normal));
+      if (dot_test > dot_best) {
+        i_best = i;
+        dot_best = dot_test;
+      }
+    }
+    if (dot_v3v3(mat[i_best], normal) < 0.0f) {
+      negate_v3(mat[(i_best + 1) % 3]);
+      negate_v3(mat[(i_best + 2) % 3]);
+    }
+    copy_v3_v3(mat[i_best], normal);
+    orthogonalize_m3(mat, i_best);
+    normalize_m3(mat);
+
+    copy_v3_v3(r_mat[0], mat[(i_best + 1) % 3]);
+    copy_v3_v3(r_mat[1], mat[(i_best + 2) % 3]);
+    copy_v3_v3(r_mat[2], mat[i_best]);
+    success = true;
+  }
+
+  return success;
 }
 
 /** \} */
@@ -161,7 +246,7 @@ static bool idp_snap_point_from_gizmo(wmGizmo *gz, float r_location[3])
 /** \name Primitive Drawing (Cube, Cone, Cylinder...)
  * \{ */
 
-static void draw_line_loop(float coords[][3], int coords_len, const float color[4])
+static void draw_line_loop(const float coords[][3], int coords_len, const float color[4])
 {
   GPUVertFormat *format = immVertexFormat();
   uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
@@ -173,11 +258,9 @@ static void draw_line_loop(float coords[][3], int coords_len, const float color[
     GPU_vertbuf_attr_set(vert, pos, i, coords[i]);
   }
 
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
   GPUBatch *batch = GPU_batch_create_ex(GPU_PRIM_LINE_LOOP, vert, NULL, GPU_BATCH_OWNS_VBO);
   GPU_batch_program_set_builtin(batch, GPU_SHADER_3D_POLYLINE_UNIFORM_COLOR);
-
-  GPU_batch_bind(batch);
 
   GPU_batch_uniform_4fv(batch, "color", color);
 
@@ -188,13 +271,11 @@ static void draw_line_loop(float coords[][3], int coords_len, const float color[
 
   GPU_batch_draw(batch);
 
-  GPU_batch_program_use_end(batch);
-
   GPU_batch_discard(batch);
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 }
 
-static void draw_line_pairs(float coords_a[][3],
+static void draw_line_pairs(const float coords_a[][3],
                             float coords_b[][3],
                             int coords_len,
                             const float color[4])
@@ -210,11 +291,9 @@ static void draw_line_pairs(float coords_a[][3],
     GPU_vertbuf_attr_set(vert, pos, (i * 2) + 1, coords_b[i]);
   }
 
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
   GPUBatch *batch = GPU_batch_create_ex(GPU_PRIM_LINES, vert, NULL, GPU_BATCH_OWNS_VBO);
   GPU_batch_program_set_builtin(batch, GPU_SHADER_3D_POLYLINE_UNIFORM_COLOR);
-
-  GPU_batch_bind(batch);
 
   GPU_batch_uniform_4fv(batch, "color", color);
 
@@ -225,10 +304,8 @@ static void draw_line_pairs(float coords_a[][3],
 
   GPU_batch_draw(batch);
 
-  GPU_batch_program_use_end(batch);
-
   GPU_batch_discard(batch);
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 }
 
 static void draw_line_bounds(const BoundBox *bounds, const float color[4])
@@ -236,7 +313,7 @@ static void draw_line_bounds(const BoundBox *bounds, const float color[4])
   GPUVertFormat *format = immVertexFormat();
   uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
 
-  int edges[12][2] = {
+  const int edges[12][2] = {
       /* First side. */
       {0, 1},
       {1, 2},
@@ -262,11 +339,9 @@ static void draw_line_bounds(const BoundBox *bounds, const float color[4])
     GPU_vertbuf_attr_set(vert, pos, j++, bounds->vec[edges[i][1]]);
   }
 
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
   GPUBatch *batch = GPU_batch_create_ex(GPU_PRIM_LINES, vert, NULL, GPU_BATCH_OWNS_VBO);
   GPU_batch_program_set_builtin(batch, GPU_SHADER_3D_POLYLINE_UNIFORM_COLOR);
-
-  GPU_batch_bind(batch);
 
   GPU_batch_uniform_4fv(batch, "color", color);
 
@@ -277,10 +352,8 @@ static void draw_line_bounds(const BoundBox *bounds, const float color[4])
 
   GPU_batch_draw(batch);
 
-  GPU_batch_program_use_end(batch);
-
   GPU_batch_discard(batch);
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 }
 
 static bool calc_bbox(struct InteractivePlaceData *ipd, BoundBox *bounds)
@@ -422,7 +495,7 @@ static void draw_circle_in_quad(const float v1[2],
     float theta = ((2.0f * M_PI) * ((float)i / (float)resolution)) + 0.01f;
     float x = cosf(theta);
     float y = sinf(theta);
-    float pt[2] = {x, y};
+    const float pt[2] = {x, y};
     float w[4];
     barycentric_weights_v2_quad(UNPACK4(quad), pt, w);
 
@@ -513,23 +586,23 @@ static void draw_primitive_view(const struct bContext *C, ARegion *UNUSED(region
   UI_GetThemeColor3fv(TH_GIZMO_PRIMARY, color);
 
   const bool use_depth = !XRAY_ENABLED(ipd->v3d);
-  const bool depth_test_enabled = GPU_depth_test_enabled();
+  const eGPUDepthTest depth_test_enabled = GPU_depth_test_get();
 
   if (use_depth) {
-    GPU_depth_test(false);
+    GPU_depth_test(GPU_DEPTH_NONE);
     color[3] = 0.15f;
     draw_primitive_view_impl(C, ipd, color);
   }
 
   if (use_depth) {
-    GPU_depth_test(true);
+    GPU_depth_test(GPU_DEPTH_LESS_EQUAL);
   }
   color[3] = 1.0f;
   draw_primitive_view_impl(C, ipd, color);
 
   if (use_depth) {
     if (depth_test_enabled == false) {
-      GPU_depth_test(false);
+      GPU_depth_test(GPU_DEPTH_NONE);
     }
   }
 }
@@ -549,20 +622,13 @@ static void view3d_interactive_add_begin(bContext *C, wmOperator *op, const wmEv
   const int plane_axis = RNA_enum_get(op->ptr, "plane_axis");
   const enum ePlace_Depth plane_depth = RNA_enum_get(op->ptr, "plane_depth");
   const enum ePlace_Origin plane_origin = RNA_enum_get(op->ptr, "plane_origin");
+  const enum ePlace_Orient plane_orient = RNA_enum_get(op->ptr, "plane_orientation");
+
+  const float mval_fl[2] = {UNPACK2(event->mval)};
 
   struct InteractivePlaceData *ipd = op->customdata;
 
   RegionView3D *rv3d = ipd->region->regiondata;
-
-  ipd->launch_event = WM_userdef_event_type_from_keymap_type(event->type);
-
-  ED_transform_calc_orientation_from_type(C, ipd->matrix_orient);
-
-  ipd->orient_axis = plane_axis;
-  ipd->is_centered_init = (plane_origin == PLACE_ORIGIN_CENTER);
-  ipd->step[0].is_centered = ipd->is_centered_init;
-  ipd->step[1].is_centered = ipd->is_centered_init;
-  ipd->step_index = STEP_BASE;
 
   /* Assign snap gizmo which is may be used as part of the tool. */
   {
@@ -572,6 +638,52 @@ static void view3d_interactive_add_begin(bContext *C, wmOperator *op, const wmEv
       ipd->snap_gizmo = gzgroup->gizmos.first;
     }
   }
+
+  ipd->launch_event = WM_userdef_event_type_from_keymap_type(event->type);
+
+  ED_transform_calc_orientation_from_type(C, ipd->matrix_orient);
+
+  /* Set the orientation. */
+  if (plane_orient == PLACE_ORIENT_SURFACE) {
+    bool snap_context_free = false;
+    SnapObjectContext *snap_context =
+        (ipd->snap_gizmo ? ED_gizmotypes_snap_3d_context_ensure(
+                               ipd->scene, ipd->region, ipd->v3d, ipd->snap_gizmo) :
+                           NULL);
+    if (snap_context == NULL) {
+      snap_context = ED_transform_snap_object_context_create_view3d(
+          ipd->scene, 0, ipd->region, ipd->v3d);
+      snap_context_free = true;
+    }
+
+    float matrix_orient_surface[3][3];
+
+    /* Use the snap normal as a fallback in case the cursor isn't over a surface
+     * but snapping is enabled. */
+    float normal_fallback[3];
+    bool use_normal_fallback = ipd->snap_gizmo ?
+                                   idp_snap_normal_from_gizmo(ipd->snap_gizmo, normal_fallback) :
+                                   false;
+
+    if (idp_poject_surface_normal(snap_context,
+                                  CTX_data_ensure_evaluated_depsgraph(C),
+                                  mval_fl,
+                                  use_normal_fallback ? ipd->matrix_orient : NULL,
+                                  use_normal_fallback ? normal_fallback : NULL,
+                                  matrix_orient_surface)) {
+      copy_m3_m3(ipd->matrix_orient, matrix_orient_surface);
+    }
+
+    if (snap_context_free) {
+      ED_transform_snap_object_context_destroy(snap_context);
+    }
+  }
+
+  ipd->orient_axis = plane_axis;
+  ipd->is_centered_init = (plane_origin == PLACE_ORIGIN_CENTER);
+  ipd->step[0].is_centered = ipd->is_centered_init;
+  ipd->step[1].is_centered = ipd->is_centered_init;
+  ipd->step_index = STEP_BASE;
 
   {
     PropertyRNA *prop = RNA_struct_find_property(op->ptr, "primitive_type");
@@ -617,8 +729,6 @@ static void view3d_interactive_add_begin(bContext *C, wmOperator *op, const wmEv
 
   plane_from_point_normal_v3(
       ipd->step[0].plane, ipd->scene->cursor.location, ipd->matrix_orient[ipd->orient_axis]);
-
-  const float mval_fl[2] = {UNPACK2(event->mval)};
 
   const bool is_snap_found = ipd->snap_gizmo ?
                                  idp_snap_point_from_gizmo(ipd->snap_gizmo, ipd->co_src) :
@@ -1100,6 +1210,25 @@ void VIEW3D_OT_interactive_add(struct wmOperatorType *ot)
   RNA_def_property_ui_text(prop, "Origin", "The initial position for placement");
   RNA_def_property_enum_default(prop, PLACE_ORIGIN_BASE);
   RNA_def_property_enum_items(prop, origin_items);
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+
+  static const EnumPropertyItem plane_orientation_items[] = {
+      {PLACE_ORIENT_SURFACE,
+       "SURFACE",
+       ICON_SNAP_NORMAL,
+       "Surface",
+       "Use the surface normal (the transform orientation as a fallback)"},
+      {PLACE_ORIENT_DEFAULT,
+       "DEFAULT",
+       ICON_ORIENTATION_GLOBAL,
+       "Default",
+       "Use the current transform orientation"},
+      {0, NULL, 0, NULL, NULL},
+  };
+  prop = RNA_def_property(ot->srna, "plane_orientation", PROP_ENUM, PROP_NONE);
+  RNA_def_property_ui_text(prop, "Orientation", "The initial depth used when placing the cursor");
+  RNA_def_property_enum_default(prop, PLACE_ORIENT_SURFACE);
+  RNA_def_property_enum_items(prop, plane_orientation_items);
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 
   /* When not accessed via a tool. */

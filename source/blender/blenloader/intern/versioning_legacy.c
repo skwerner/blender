@@ -102,7 +102,7 @@ static void vcol_to_fcol(Mesh *me)
     return;
   }
 
-  mcoln = mcolmain = MEM_malloc_arrayN(me->totface, 4 * sizeof(int), "mcoln");
+  mcoln = mcolmain = MEM_malloc_arrayN(me->totface, sizeof(int[4]), "mcoln");
   mcol = (uint *)me->mcol;
   mface = me->mface;
   for (a = me->totface; a > 0; a--, mface++) {
@@ -493,6 +493,7 @@ void blo_do_version_old_trackto_to_constraints(Object *ob)
   ob->track = NULL;
 }
 
+/* NOLINTNEXTLINE: readability-function-size */
 void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
 {
   /* WATCH IT!!!: pointers from libdata have not been converted */
@@ -579,7 +580,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
   }
 
   if (bmain->versionfile <= 109) {
-    /* new variable: gridlines */
+    /* New variable: `gridlines`. */
     bScreen *screen = bmain->screens.first;
     while (screen) {
       ScrArea *area = screen->areabase.first;
@@ -1250,12 +1251,12 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     while (sce) {
       ed = sce->ed;
       if (ed) {
-        SEQ_BEGIN (sce->ed, seq) {
+        SEQ_ALL_BEGIN (sce->ed, seq) {
           if (seq->type == SEQ_TYPE_IMAGE || seq->type == SEQ_TYPE_MOVIE) {
             seq->alpha_mode = SEQ_ALPHA_STRAIGHT;
           }
         }
-        SEQ_END;
+        SEQ_ALL_END;
       }
 
       sce = sce->id.next;
@@ -1339,7 +1340,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
         arm = blo_do_versions_newlibadr(fd, lib, ob->data);
         enum { ARM_DRAWXRAY = (1 << 1) };
         if (arm->flag & ARM_DRAWXRAY) {
-          ob->dtx |= OB_DRAWXRAY;
+          ob->dtx |= OB_DRAW_IN_FRONT;
         }
       }
       else if (ob->type == OB_MESH) {
@@ -2096,7 +2097,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
 
         if (la->curfalloff == NULL) {
           la->curfalloff = BKE_curvemapping_add(1, 0.0f, 1.0f, 1.0f, 0.0f);
-          BKE_curvemapping_initialize(la->curfalloff);
+          BKE_curvemapping_init(la->curfalloff);
         }
       }
     }
@@ -2441,12 +2442,12 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     Sequence *seq;
 
     for (sce = bmain->scenes.first; sce; sce = sce->id.next) {
-      SEQ_BEGIN (sce->ed, seq) {
+      SEQ_ALL_BEGIN (sce->ed, seq) {
         if (seq->blend_mode == 0) {
           seq->blend_opacity = 100.0f;
         }
       }
-      SEQ_END;
+      SEQ_ALL_END;
     }
   }
 
@@ -2594,12 +2595,12 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     while (sce) {
       ed = sce->ed;
       if (ed) {
-        SEQP_BEGIN (ed, seq) {
+        SEQ_CURRENT_BEGIN (ed, seq) {
           if (seq->strip && seq->strip->proxy) {
             seq->strip->proxy->quality = 90;
           }
         }
-        SEQ_END;
+        SEQ_CURRENT_END;
       }
 
       sce = sce->id.next;

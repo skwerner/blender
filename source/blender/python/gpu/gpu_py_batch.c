@@ -50,7 +50,7 @@
 
 static bool bpygpu_batch_is_program_or_error(BPyGPUBatch *self)
 {
-  if (!glIsProgram(self->batch->program)) {
+  if (!self->batch->shader) {
     PyErr_SetString(PyExc_RuntimeError, "batch does not have any program assigned to it");
     return false;
   }
@@ -141,11 +141,12 @@ static PyObject *bpygpu_Batch_vertbuf_add(BPyGPUBatch *self, BPyGPUVertBuf *py_b
     return NULL;
   }
 
-  if (self->batch->verts[0]->vertex_len != py_buf->buf->vertex_len) {
+  if (GPU_vertbuf_get_vertex_len(self->batch->verts[0]) !=
+      GPU_vertbuf_get_vertex_len(py_buf->buf)) {
     PyErr_Format(PyExc_TypeError,
                  "Expected %d length, got %d",
-                 self->batch->verts[0]->vertex_len,
-                 py_buf->buf->vertex_len);
+                 GPU_vertbuf_get_vertex_len(self->batch->verts[0]),
+                 GPU_vertbuf_get_vertex_len(py_buf->buf));
     return NULL;
   }
 
@@ -184,8 +185,7 @@ static PyObject *bpygpu_Batch_program_set(BPyGPUBatch *self, BPyGPUShader *py_sh
   }
 
   GPUShader *shader = py_shader->shader;
-  GPU_batch_program_set(
-      self->batch, GPU_shader_get_program(shader), GPU_shader_get_interface(shader));
+  GPU_batch_set_shader(self->batch, shader);
 
 #ifdef USE_GPU_PY_REFERENCES
   /* Remove existing user (if any), hold new user. */
@@ -223,15 +223,13 @@ static PyObject *bpygpu_Batch_draw(BPyGPUBatch *self, PyObject *args)
   if (!PyArg_ParseTuple(args, "|O!:GPUBatch.draw", &BPyGPUShader_Type, &py_program)) {
     return NULL;
   }
-  else if (py_program == NULL) {
+  if (py_program == NULL) {
     if (!bpygpu_batch_is_program_or_error(self)) {
       return NULL;
     }
   }
-  else if (self->batch->program != GPU_shader_get_program(py_program->shader)) {
-    GPU_batch_program_set(self->batch,
-                          GPU_shader_get_program(py_program->shader),
-                          GPU_shader_get_interface(py_program->shader));
+  else if (self->batch->shader != py_program->shader) {
+    GPU_batch_set_shader(self->batch, py_program->shader);
   }
 
   GPU_batch_draw(self->batch);
@@ -243,7 +241,7 @@ static PyObject *bpygpu_Batch_program_use_begin(BPyGPUBatch *self)
   if (!bpygpu_batch_is_program_or_error(self)) {
     return NULL;
   }
-  GPU_batch_program_use_begin(self->batch);
+  GPU_shader_bind(self->batch->shader);
   Py_RETURN_NONE;
 }
 
@@ -252,7 +250,7 @@ static PyObject *bpygpu_Batch_program_use_end(BPyGPUBatch *self)
   if (!bpygpu_batch_is_program_or_error(self)) {
     return NULL;
   }
-  GPU_batch_program_use_end(self->batch);
+  GPU_shader_unbind();
   Py_RETURN_NONE;
 }
 

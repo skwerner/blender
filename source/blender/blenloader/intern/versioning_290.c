@@ -21,25 +21,28 @@
 #define DNA_DEPRECATED_ALLOW
 
 #include "BLI_listbase.h"
+#include "BLI_math.h"
+#include "BLI_string.h"
 #include "BLI_utildefines.h"
 
 #include "DNA_brush_types.h"
+#include "DNA_cachefile_types.h"
 #include "DNA_constraint_types.h"
 #include "DNA_genfile.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
-#include "DNA_lattice_types.h"
-#include "DNA_mesh_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
+#include "DNA_rigidbody_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_shader_fx_types.h"
 
 #include "BKE_collection.h"
 #include "BKE_colortools.h"
-#include "BKE_deform.h"
+#include "BKE_gpencil.h"
 #include "BKE_lib_id.h"
 #include "BKE_main.h"
+#include "BKE_node.h"
 
 #include "BLO_readfile.h"
 #include "readfile.h"
@@ -185,6 +188,36 @@ void do_versions_after_linking_290(Main *bmain, ReportList *UNUSED(reports))
         }
       }
     }
+
+    /* Patch first frame for old files. */
+    Scene *scene = bmain->scenes.first;
+    if (scene != NULL) {
+      LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
+        if (ob->type != OB_GPENCIL) {
+          continue;
+        }
+        bGPdata *gpd = ob->data;
+        LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
+          bGPDframe *gpf = gpl->frames.first;
+          if (gpf && gpf->framenum > scene->r.sfra) {
+            bGPDframe *gpf_dup = BKE_gpencil_frame_duplicate(gpf);
+            gpf_dup->framenum = scene->r.sfra;
+            BLI_addhead(&gpl->frames, gpf_dup);
+          }
+        }
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 291, 1)) {
+    LISTBASE_FOREACH (Collection *, collection, &bmain->collections) {
+      if (BKE_collection_cycles_fix(bmain, collection)) {
+        printf(
+            "WARNING: Cycle detected in collection '%s', fixed as best as possible.\n"
+            "You may have to reconstruct your View Layers...\n",
+            collection->id.name);
+      }
+    }
   }
 
   /**
@@ -198,7 +231,23 @@ void do_versions_after_linking_290(Main *bmain, ReportList *UNUSED(reports))
    * \note Keep this message at the bottom of the function.
    */
   {
+
     /* Keep this block, even when empty. */
+  }
+}
+
+static void panels_remove_x_closed_flag_recursive(Panel *panel)
+{
+  const bool was_closed_x = panel->flag & PNL_UNUSED_1;
+  const bool was_closed_y = panel->flag & PNL_CLOSED; /* That value was the Y closed flag. */
+
+  SET_FLAG_FROM_TEST(panel->flag, was_closed_x || was_closed_y, PNL_CLOSED);
+
+  /* Clear the old PNL_CLOSEDX flag. */
+  panel->flag &= ~PNL_UNUSED_1;
+
+  LISTBASE_FOREACH (Panel *, child_panel, &panel->children) {
+    panels_remove_x_closed_flag_recursive(child_panel);
   }
 }
 
@@ -258,6 +307,28 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
           ((WeightVGEditModifierData *)md)->edit_flags &= ~MOD_WVG_EDIT_WEIGHTS_NORMALIZE;
         }
       }
+    }
+
+    /* Initialize parameters of the new Nishita sky model. */
+    if (!DNA_struct_elem_find(fd->filesdna, "NodeTexSky", "float", "sun_size")) {
+      FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
+        if (ntree->type == NTREE_SHADER) {
+          LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+            if (node->type == SH_NODE_TEX_SKY && node->storage) {
+              NodeTexSky *tex = (NodeTexSky *)node->storage;
+              tex->sun_disc = true;
+              tex->sun_size = DEG2RADF(0.545);
+              tex->sun_elevation = M_PI_2;
+              tex->sun_rotation = 0.0f;
+              tex->altitude = 0.0f;
+              tex->air_density = 1.0f;
+              tex->dust_density = 1.0f;
+              tex->ozone_density = 1.0f;
+            }
+          }
+        }
+      }
+      FOREACH_NODETREE_END;
     }
   }
 
@@ -358,23 +429,110 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
     }
   }
 
-  /* Make sure that all weights of MDeformVert are sorted. */
-  if (!MAIN_VERSION_ATLEAST(bmain, 290, 7)) {
-    for (Mesh *mesh = bmain->meshes.first; mesh != NULL; mesh = mesh->id.next) {
-      BKE_defvert_array_sort_weights(mesh->dvert, mesh->totvert);
-    }
-    for (Lattice *lt = bmain->lattices.first; lt != NULL; lt = lt->id.next) {
-      const int totvert = lt->pntsu * lt->pntsv * lt->pntsw;
-      BKE_defvert_array_sort_weights(lt->dvert, totvert);
-    }
-    for (bGPdata *gp = bmain->gpencils.first; gp != NULL; gp = gp->id.next) {
-      LISTBASE_FOREACH (bGPDlayer *, layer, &gp->layers) {
-        LISTBASE_FOREACH (bGPDframe *, frame, &layer->frames) {
-          LISTBASE_FOREACH (bGPDstroke *, stroke, &frame->strokes) {
-            BKE_defvert_array_sort_weights(stroke->dvert, stroke->totpoints);
+  if (!MAIN_VERSION_ATLEAST(bmain, 291, 1)) {
+
+    /* Initialize additional parameter of the Nishita sky model and change altitude unit. */
+    if (!DNA_struct_elem_find(fd->filesdna, "NodeTexSky", "float", "sun_intensity")) {
+      FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
+        if (ntree->type == NTREE_SHADER) {
+          LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+            if (node->type == SH_NODE_TEX_SKY && node->storage) {
+              NodeTexSky *tex = (NodeTexSky *)node->storage;
+              tex->sun_intensity = 1.0f;
+              tex->altitude *= 0.001f;
+            }
           }
         }
       }
+      FOREACH_NODETREE_END;
+    }
+
+    /* Refactor bevel affect type to use an enum. */
+    if (!DNA_struct_elem_find(fd->filesdna, "BevelModifierData", "char", "affect_type")) {
+      for (Object *object = bmain->objects.first; object != NULL; object = object->id.next) {
+        LISTBASE_FOREACH (ModifierData *, md, &object->modifiers) {
+          if (md->type == eModifierType_Bevel) {
+            BevelModifierData *bmd = (BevelModifierData *)md;
+            const bool use_vertex_bevel = bmd->flags & MOD_BEVEL_VERT_DEPRECATED;
+            bmd->affect_type = use_vertex_bevel ? MOD_BEVEL_AFFECT_VERTICES :
+                                                  MOD_BEVEL_AFFECT_EDGES;
+          }
+        }
+      }
+    }
+
+    /* Initialise additional velocity parameter for CacheFiles. */
+    if (!DNA_struct_elem_find(
+            fd->filesdna, "MeshSeqCacheModifierData", "float", "velocity_scale")) {
+      for (Object *object = bmain->objects.first; object != NULL; object = object->id.next) {
+        LISTBASE_FOREACH (ModifierData *, md, &object->modifiers) {
+          if (md->type == eModifierType_MeshSequenceCache) {
+            MeshSeqCacheModifierData *mcmd = (MeshSeqCacheModifierData *)md;
+            mcmd->velocity_scale = 1.0f;
+            mcmd->vertex_velocities = NULL;
+            mcmd->num_vertices = 0;
+          }
+        }
+      }
+    }
+
+    if (!DNA_struct_elem_find(fd->filesdna, "CacheFile", "char", "velocity_unit")) {
+      for (CacheFile *cache_file = bmain->cachefiles.first; cache_file != NULL;
+           cache_file = cache_file->id.next) {
+        BLI_strncpy(cache_file->velocity_name, ".velocities", sizeof(cache_file->velocity_name));
+        cache_file->velocity_unit = CACHEFILE_VELOCITY_UNIT_SECOND;
+      }
+    }
+
+    if (!DNA_struct_elem_find(fd->filesdna, "OceanModifierData", "int", "viewport_resolution")) {
+      for (Object *object = bmain->objects.first; object != NULL; object = object->id.next) {
+        LISTBASE_FOREACH (ModifierData *, md, &object->modifiers) {
+          if (md->type == eModifierType_Ocean) {
+            OceanModifierData *omd = (OceanModifierData *)md;
+            omd->viewport_resolution = omd->resolution;
+          }
+        }
+      }
+    }
+
+    /* Remove panel X axis collapsing, a remnant of horizontal panel alignment. */
+    LISTBASE_FOREACH (bScreen *, screen, &bmain->screens) {
+      LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+        LISTBASE_FOREACH (ARegion *, region, &area->regionbase) {
+          LISTBASE_FOREACH (Panel *, panel, &region->panels) {
+            panels_remove_x_closed_flag_recursive(panel);
+          }
+        }
+      }
+    }
+
+    /* Initialize solver for Boolean. */
+    if (!DNA_struct_elem_find(fd->filesdna, "BooleanModifierData", "enum", "solver")) {
+      for (Object *object = bmain->objects.first; object != NULL; object = object->id.next) {
+        LISTBASE_FOREACH (ModifierData *, md, &object->modifiers) {
+          if (md->type == eModifierType_Boolean) {
+            BooleanModifierData *bmd = (BooleanModifierData *)md;
+            bmd->solver = eBooleanModifierSolver_Fast;
+          }
+        }
+      }
+    }
+  }
+
+  for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
+    RigidBodyWorld *rbw = scene->rigidbody_world;
+
+    if (rbw == NULL) {
+      continue;
+    }
+
+    /* The substep method changed from "per second" to "per frame".
+     * To get the new value simply divide the old bullet sim fps with the scene fps.
+     */
+    rbw->substeps_per_frame /= FPS;
+
+    if (rbw->substeps_per_frame <= 0) {
+      rbw->substeps_per_frame = 1;
     }
   }
 
@@ -388,6 +546,14 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
    * \note Keep this message at the bottom of the function.
    */
   {
+    /* Set the minimum sequence interpolate for grease pencil. */
+    if (!DNA_struct_elem_find(fd->filesdna, "GP_Interpolate_Settings", "int", "step")) {
+      LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+        ToolSettings *ts = scene->toolsettings;
+        ts->gp_interpolate.step = 1;
+      }
+    }
+
     /* Keep this block, even when empty. */
   }
 }

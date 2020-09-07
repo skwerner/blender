@@ -38,18 +38,16 @@
 #include "BKE_volume.h"
 #include "BKE_volume_render.h"
 
-#include "GPU_draw.h"
-
 void workbench_volume_engine_init(WORKBENCH_Data *vedata)
 {
   WORKBENCH_TextureList *txl = vedata->txl;
 
   if (txl->dummy_volume_tx == NULL) {
-    float zero[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-    float one[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-    txl->dummy_volume_tx = GPU_texture_create_3d(1, 1, 1, GPU_RGBA8, zero, NULL);
-    txl->dummy_shadow_tx = GPU_texture_create_3d(1, 1, 1, GPU_RGBA8, one, NULL);
-    txl->dummy_coba_tx = GPU_texture_create_1d(1, GPU_RGBA8, zero, NULL);
+    const float zero[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    const float one[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+    txl->dummy_volume_tx = GPU_texture_create_3d("dummy_volume", 1, 1, 1, 1, GPU_RGBA8, zero);
+    txl->dummy_shadow_tx = GPU_texture_create_3d("dummy_shadow", 1, 1, 1, 1, GPU_RGBA8, one);
+    txl->dummy_coba_tx = GPU_texture_create_1d("dummy_coba", 1, 1, GPU_RGBA8, zero);
   }
 }
 
@@ -79,13 +77,10 @@ static void workbench_volume_modifier_cache_populate(WORKBENCH_Data *vedata,
 
   wpd->volumes_do = true;
   if (fds->use_coba) {
-    GPU_create_smoke_coba_field(fmd);
+    DRW_smoke_ensure_coba_field(fmd);
   }
-  else if (!(fds->flags & FLUID_DOMAIN_USE_NOISE)) {
-    GPU_create_smoke(fmd, 0);
-  }
-  else if (fds->flags & FLUID_DOMAIN_USE_NOISE) {
-    GPU_create_smoke(fmd, 1);
+  else {
+    DRW_smoke_ensure(fmd, fds->flags & FLUID_DOMAIN_USE_NOISE);
   }
 
   if ((!fds->use_coba && (fds->tex_density == NULL && fds->tex_color == NULL)) ||
@@ -293,7 +288,7 @@ void workbench_volume_draw_finish(WORKBENCH_Data *vedata)
    * all viewport in a redraw at least. */
   LISTBASE_FOREACH (LinkData *, link, &wpd->smoke_domains) {
     FluidModifierData *fmd = (FluidModifierData *)link->data;
-    GPU_free_smoke(fmd);
+    DRW_smoke_free(fmd);
   }
   BLI_freelistN(&wpd->smoke_domains);
 }

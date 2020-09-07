@@ -313,10 +313,10 @@ ListBase *BKE_effectors_create(Depsgraph *depsgraph,
       if (ob == ob_src) {
         continue;
       }
-      else if (weights->weight[ob->pd->forcefield] == 0.0f) {
+      if (weights->weight[ob->pd->forcefield] == 0.0f) {
         continue;
       }
-      else if (ob->pd->shape == PFIELD_SHAPE_POINTS && BKE_object_get_evaluated_mesh(ob) == NULL) {
+      if (ob->pd->shape == PFIELD_SHAPE_POINTS && BKE_object_get_evaluated_mesh(ob) == NULL) {
         continue;
       }
 
@@ -1207,9 +1207,9 @@ static bool debug_element_compare(const void *a, const void *b)
   const SimDebugElement *elem2 = b;
 
   if (elem1->hash == elem2->hash) {
-    return 0;
+    return false;
   }
-  return 1;
+  return true;
 }
 
 static void debug_element_free(void *val)

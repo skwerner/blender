@@ -22,8 +22,7 @@
  * Declaration of GHOST_SystemX11 class.
  */
 
-#ifndef __GHOST_SYSTEMX11_H__
-#define __GHOST_SYSTEMX11_H__
+#pragma once
 
 #include <X11/XKBlib.h> /* allow detectable autorepeate */
 #include <X11/Xlib.h>
@@ -154,7 +153,7 @@ class GHOST_SystemX11 : public GHOST_System {
    * Never explicitly delete the context, use disposeContext() instead.
    * \return  The new context (or 0 if creation failed).
    */
-  GHOST_IContext *createOffscreenContext();
+  GHOST_IContext *createOffscreenContext(GHOST_GLSettings glSettings);
 
   /**
    * Dispose of a context.
@@ -392,5 +391,3 @@ class GHOST_SystemX11 : public GHOST_System {
 
   bool generateWindowExposeEvents();
 };
-
-#endif

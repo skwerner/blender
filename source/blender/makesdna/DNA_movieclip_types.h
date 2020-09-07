@@ -21,8 +21,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_MOVIECLIP_TYPES_H__
-#define __DNA_MOVIECLIP_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_color_types.h" /* for color management */
@@ -64,8 +63,8 @@ typedef struct MovieClipProxy {
 typedef struct MovieClip_RuntimeGPUTexture {
   void *next, *prev;
   MovieClipUser user;
-  /** Not written in file 4 = TEXTARGET_COUNT. */
-  struct GPUTexture *gputexture[4];
+  /** Not written in file 3 = TEXTARGET_COUNT. */
+  struct GPUTexture *gputexture[3];
 } MovieClip_RuntimeGPUTexture;
 
 typedef struct MovieClip_Runtime {
@@ -207,6 +206,4 @@ enum {
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

@@ -20,8 +20,7 @@
  * \ingroup draw
  */
 
-#ifndef __DRAW_CACHE_IMPL_H__
-#define __DRAW_CACHE_IMPL_H__
+#pragma once
 
 struct GPUBatch;
 struct GPUIndexBuf;
@@ -144,6 +143,10 @@ int DRW_hair_material_count_get(struct Hair *hair);
 int DRW_pointcloud_material_count_get(struct PointCloud *pointcloud);
 
 struct GPUBatch *DRW_pointcloud_batch_cache_get_dots(struct Object *ob);
+struct GPUBatch *DRW_pointcloud_batch_cache_get_surface(struct Object *ob);
+struct GPUBatch **DRW_cache_pointcloud_surface_shaded_get(struct Object *ob,
+                                                          struct GPUMaterial **gpumat_array,
+                                                          uint gpumat_array_len);
 
 /* Volume */
 int DRW_volume_material_count_get(struct Volume *volume);
@@ -250,5 +253,3 @@ struct GPUBatch *DRW_particles_batch_cache_get_edit_inner_points(struct Object *
 struct GPUBatch *DRW_particles_batch_cache_get_edit_tip_points(struct Object *object,
                                                                struct ParticleSystem *psys,
                                                                struct PTCacheEdit *edit);
-
-#endif /* __DRAW_CACHE_IMPL_H__ */

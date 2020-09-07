@@ -250,7 +250,8 @@ typedef struct tGPsdata {
   short shift;
   /** size in pixels for uv calculation */
   float totpixlen;
-
+  /** Special mode for fill brush. */
+  bool disable_stabilizer;
   /* guide */
   tGPguide guide;
 
@@ -268,7 +269,7 @@ typedef struct tGPsdata {
 
 /* Macros for accessing sensitivity thresholds... */
 /* minimum number of pixels mouse should move before new point created */
-#define MIN_MANHATTEN_PX (U.gp_manhattendist)
+#define MIN_MANHATTEN_PX (U.gp_manhattandist)
 /* minimum length of new segment before new point can be added */
 #define MIN_EUCLIDEAN_PX (U.gp_euclideandist)
 
@@ -362,7 +363,7 @@ static void gpencil_get_3d_reference(tGPsdata *p, float vec[3])
 
 /* Stroke Editing ---------------------------- */
 /* check if the current mouse position is suitable for adding a new point */
-static bool gpencil_stroke_filtermval(tGPsdata *p, const float mval[2], float mvalo[2])
+static bool gpencil_stroke_filtermval(tGPsdata *p, const float mval[2], const float mvalo[2])
 {
   Brush *brush = p->brush;
   int dx = (int)fabsf(mval[0] - mvalo[0]);
@@ -374,7 +375,7 @@ static bool gpencil_stroke_filtermval(tGPsdata *p, const float mval[2], float mv
     return true;
   }
   /* if lazy mouse, check minimum distance */
-  if (GPENCIL_LAZY_MODE(brush, p->shift)) {
+  if (GPENCIL_LAZY_MODE(brush, p->shift) && (!p->disable_stabilizer)) {
     brush->gpencil_settings->flag |= GP_BRUSH_STABILIZE_MOUSE_TEMP;
     if ((dx * dx + dy * dy) > (brush->smooth_stroke_radius * brush->smooth_stroke_radius)) {
       return true;
@@ -519,7 +520,7 @@ static void gpencil_brush_angle(bGPdata *gpd, Brush *brush, tGPspoint *pt, const
   /* default angle of brush in radians */
   float angle = brush->gpencil_settings->draw_angle;
   /* angle vector of the brush with full thickness */
-  float v0[2] = {cos(angle), sin(angle)};
+  const float v0[2] = {cos(angle), sin(angle)};
 
   /* Apply to first point (only if there are 2 points because before no data to do it ) */
   if (gpd->runtime.sbuffer_used == 1) {
@@ -836,7 +837,7 @@ static short gpencil_stroke_addpoint(tGPsdata *p,
     }
 
     /* color strength */
-    if (brush_settings->flag & GP_BRUSH_USE_STENGTH_PRESSURE) {
+    if (brush_settings->flag & GP_BRUSH_USE_STRENGTH_PRESSURE) {
       pt->strength *= BKE_curvemapping_evaluateF(brush_settings->curve_strength, 0, pressure);
       CLAMP(pt->strength, GPENCIL_STRENGTH_MIN, 1.0f);
     }
@@ -1817,15 +1818,15 @@ static void gpencil_init_drawing_brush(bContext *C, tGPsdata *p)
     changed = true;
   }
   /* Be sure curves are initializated. */
-  BKE_curvemapping_initialize(paint->brush->gpencil_settings->curve_sensitivity);
-  BKE_curvemapping_initialize(paint->brush->gpencil_settings->curve_strength);
-  BKE_curvemapping_initialize(paint->brush->gpencil_settings->curve_jitter);
-  BKE_curvemapping_initialize(paint->brush->gpencil_settings->curve_rand_pressure);
-  BKE_curvemapping_initialize(paint->brush->gpencil_settings->curve_rand_strength);
-  BKE_curvemapping_initialize(paint->brush->gpencil_settings->curve_rand_uv);
-  BKE_curvemapping_initialize(paint->brush->gpencil_settings->curve_rand_hue);
-  BKE_curvemapping_initialize(paint->brush->gpencil_settings->curve_rand_saturation);
-  BKE_curvemapping_initialize(paint->brush->gpencil_settings->curve_rand_value);
+  BKE_curvemapping_init(paint->brush->gpencil_settings->curve_sensitivity);
+  BKE_curvemapping_init(paint->brush->gpencil_settings->curve_strength);
+  BKE_curvemapping_init(paint->brush->gpencil_settings->curve_jitter);
+  BKE_curvemapping_init(paint->brush->gpencil_settings->curve_rand_pressure);
+  BKE_curvemapping_init(paint->brush->gpencil_settings->curve_rand_strength);
+  BKE_curvemapping_init(paint->brush->gpencil_settings->curve_rand_uv);
+  BKE_curvemapping_init(paint->brush->gpencil_settings->curve_rand_hue);
+  BKE_curvemapping_init(paint->brush->gpencil_settings->curve_rand_saturation);
+  BKE_curvemapping_init(paint->brush->gpencil_settings->curve_rand_value);
 
   /* assign to temp tGPsdata */
   p->brush = paint->brush;
@@ -1886,6 +1887,7 @@ static bool gpencil_session_initdata(bContext *C, wmOperator *op, tGPsdata *p)
   p->depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   p->win = CTX_wm_window(C);
   p->disable_fill = RNA_boolean_get(op->ptr, "disable_fill");
+  p->disable_stabilizer = RNA_boolean_get(op->ptr, "disable_stabilizer");
 
   unit_m4(p->imat);
   unit_m4(p->mat);
@@ -2266,9 +2268,7 @@ static void gpencil_draw_eraser(bContext *UNUSED(C), int x, int y, void *p_ptr)
     immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
 
     GPU_line_smooth(true);
-    GPU_blend(true);
-    GPU_blend_set_func_separate(
-        GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+    GPU_blend(GPU_BLEND_ALPHA);
 
     immUniformColor4ub(255, 100, 100, 20);
     imm_draw_circle_fill_2d(shdr_pos, x, y, p->radius, 40);
@@ -2296,7 +2296,7 @@ static void gpencil_draw_eraser(bContext *UNUSED(C), int x, int y, void *p_ptr)
 
     immUnbindProgram();
 
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
     GPU_line_smooth(false);
   }
 }
@@ -2681,7 +2681,7 @@ static void gpencil_draw_apply(bContext *C, wmOperator *op, tGPsdata *p, Depsgra
   else if (gpencil_stroke_filtermval(p, p->mval, p->mvalo)) {
 
     /* if lazy mouse, interpolate the last and current mouse positions */
-    if (GPENCIL_LAZY_MODE(p->brush, p->shift)) {
+    if (GPENCIL_LAZY_MODE(p->brush, p->shift) && (!p->disable_stabilizer)) {
       float now_mouse[2];
       float last_mouse[2];
       copy_v2_v2(now_mouse, p->mval);
@@ -3247,7 +3247,7 @@ static void gpencil_brush_angle_segment(tGPsdata *p, tGPspoint *pt_prev, tGPspoi
   float fac;
 
   /* angle vector of the brush with full thickness */
-  float v0[2] = {cos(angle), sin(angle)};
+  const float v0[2] = {cos(angle), sin(angle)};
 
   mvec[0] = pt->x - pt_prev->x;
   mvec[1] = pt->y - pt_prev->y;
@@ -3269,7 +3269,7 @@ static void gpencil_brush_angle_segment(tGPsdata *p, tGPspoint *pt_prev, tGPspoi
  *  + PtA - 1
  * /
  * CTL is the vertice of the triangle created between PtA and PtB */
-static void gpencil_add_arc_points(tGPsdata *p, float mval[2], int segments)
+static void gpencil_add_arc_points(tGPsdata *p, const float mval[2], int segments)
 {
   bGPdata *gpd = p->gpd;
   BrushGpencilSettings *brush_settings = p->brush->gpencil_settings;
@@ -3443,7 +3443,7 @@ static void gpencil_add_fake_points(const wmEvent *event, tGPsdata *p)
 {
   Brush *brush = p->brush;
   /* Lazy mode do not use fake events. */
-  if (GPENCIL_LAZY_MODE(brush, p->shift)) {
+  if (GPENCIL_LAZY_MODE(brush, p->shift) && (!p->disable_stabilizer)) {
     return;
   }
 
@@ -3852,7 +3852,7 @@ void GPENCIL_OT_draw(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Grease Pencil Draw";
   ot->idname = "GPENCIL_OT_draw";
-  ot->description = "Draw mouse_prv new stroke in the active Grease Pencil Object";
+  ot->description = "Draw a new stroke in the active Grease Pencil object";
 
   /* api callbacks */
   ot->exec = gpencil_draw_exec;
@@ -3889,6 +3889,9 @@ void GPENCIL_OT_draw(wmOperatorType *ot)
                          false,
                          "No Fill Areas",
                          "Disable fill to use stroke as fill boundary");
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+
+  prop = RNA_def_boolean(ot->srna, "disable_stabilizer", false, "No Stabilizer", "");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 
   /* guides */

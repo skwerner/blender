@@ -34,20 +34,6 @@
 
 #define SH_CASTER_ALLOC_CHUNK 32
 
-static struct {
-  struct GPUShader *shadow_sh;
-  struct GPUShader *shadow_accum_sh;
-} e_data = {NULL}; /* Engine data */
-
-extern char datatoc_shadow_vert_glsl[];
-extern char datatoc_shadow_frag_glsl[];
-extern char datatoc_shadow_accum_frag_glsl[];
-extern char datatoc_common_view_lib_glsl[];
-extern char datatoc_common_uniforms_lib_glsl[];
-extern char datatoc_bsdf_common_lib_glsl[];
-extern char datatoc_lights_lib_glsl[];
-extern char datatoc_raytrace_lib_glsl[];
-
 void eevee_contact_shadow_setup(const Light *la, EEVEE_Shadow *evsh)
 {
   evsh->contact_dist = (la->mode & LA_SHAD_CONTACT) ? la->contact_dist : 0.0f;
@@ -64,30 +50,10 @@ void EEVEE_shadows_init(EEVEE_ViewLayerData *sldata)
   const DRWContextState *draw_ctx = DRW_context_state_get();
   const Scene *scene_eval = DEG_get_evaluated_scene(draw_ctx->depsgraph);
 
-  if (!e_data.shadow_sh) {
-    e_data.shadow_sh = DRW_shader_create_with_lib(datatoc_shadow_vert_glsl,
-                                                  NULL,
-                                                  datatoc_shadow_frag_glsl,
-                                                  datatoc_common_view_lib_glsl,
-                                                  NULL);
-  }
-
-  if (!e_data.shadow_accum_sh) {
-    char *frag_str = BLI_string_joinN(datatoc_common_view_lib_glsl,
-                                      datatoc_common_uniforms_lib_glsl,
-                                      datatoc_bsdf_common_lib_glsl,
-                                      datatoc_raytrace_lib_glsl,
-                                      datatoc_lights_lib_glsl,
-                                      datatoc_shadow_accum_frag_glsl);
-
-    e_data.shadow_accum_sh = DRW_shader_create_fullscreen(frag_str, SHADER_DEFINES);
-    MEM_freeN(frag_str);
-  }
-
   if (!sldata->lights) {
     sldata->lights = MEM_callocN(sizeof(EEVEE_LightsInfo), "EEVEE_LightsInfo");
-    sldata->light_ubo = DRW_uniformbuffer_create(sizeof(EEVEE_Light) * MAX_LIGHT, NULL);
-    sldata->shadow_ubo = DRW_uniformbuffer_create(shadow_ubo_size, NULL);
+    sldata->light_ubo = GPU_uniformbuf_create_ex(sizeof(EEVEE_Light) * MAX_LIGHT, NULL, "evLight");
+    sldata->shadow_ubo = GPU_uniformbuf_create_ex(shadow_ubo_size, NULL, "evShadow");
 
     for (int i = 0; i < 2; i++) {
       sldata->shcasters_buffers[i].bbox = MEM_callocN(
@@ -155,7 +121,8 @@ void EEVEE_shadows_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
     DRWState state = DRW_STATE_WRITE_DEPTH | DRW_STATE_DEPTH_LESS_EQUAL | DRW_STATE_SHADOW_OFFSET;
     DRW_PASS_CREATE(psl->shadow_pass, state);
 
-    stl->g_data->shadow_shgrp = DRW_shgroup_create(e_data.shadow_sh, psl->shadow_pass);
+    stl->g_data->shadow_shgrp = DRW_shgroup_create(EEVEE_shaders_shadow_sh_get(),
+                                                   psl->shadow_pass);
   }
 }
 
@@ -278,7 +245,7 @@ void EEVEE_shadows_update(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
   }
 
   if (sldata->shadow_fb == NULL) {
-    sldata->shadow_fb = GPU_framebuffer_create();
+    sldata->shadow_fb = GPU_framebuffer_create("shadow_fb");
   }
 
   /* Gather all light own update bits. to avoid costly intersection check.  */
@@ -353,7 +320,7 @@ void EEVEE_shadows_draw(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata, DRWView
 
   if (any_visible) {
     sldata->common_data.ray_type = EEVEE_RAY_SHADOW;
-    DRW_uniformbuffer_update(sldata->common_ubo, &sldata->common_data);
+    GPU_uniformbuf_update(sldata->common_ubo, &sldata->common_data);
   }
 
   DRW_stats_group_start("Cube Shadow Maps");
@@ -376,11 +343,11 @@ void EEVEE_shadows_draw(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata, DRWView
 
   DRW_view_set_active(view);
 
-  DRW_uniformbuffer_update(sldata->shadow_ubo, &linfo->shadow_data); /* Update all data at once */
+  GPU_uniformbuf_update(sldata->shadow_ubo, &linfo->shadow_data); /* Update all data at once */
 
   if (any_visible) {
     sldata->common_data.ray_type = saved_ray_type;
-    DRW_uniformbuffer_update(sldata->common_ubo, &sldata->common_data);
+    GPU_uniformbuf_update(sldata->common_ubo, &sldata->common_data);
   }
 }
 
@@ -400,7 +367,7 @@ void EEVEE_shadow_output_init(EEVEE_ViewLayerData *sldata,
   EEVEE_EffectsInfo *effects = stl->effects;
   DefaultTextureList *dtxl = DRW_viewport_texture_list_get();
 
-  float clear[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+  const float clear[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 
   /* Create FrameBuffer. */
   const eGPUTextureFormat texture_format = GPU_R32F;
@@ -418,7 +385,8 @@ void EEVEE_shadow_output_init(EEVEE_ViewLayerData *sldata,
   /* Create Pass and shgroup. */
   DRW_PASS_CREATE(psl->shadow_accum_pass,
                   DRW_STATE_WRITE_COLOR | DRW_STATE_DEPTH_ALWAYS | DRW_STATE_BLEND_ADD_FULL);
-  DRWShadingGroup *grp = DRW_shgroup_create(e_data.shadow_accum_sh, psl->shadow_accum_pass);
+  DRWShadingGroup *grp = DRW_shgroup_create(EEVEE_shaders_shadow_accum_sh_get(),
+                                            psl->shadow_accum_pass);
   DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &dtxl->depth);
   DRW_shgroup_uniform_texture(grp, "utilTex", EEVEE_materials_get_util_tex());
   DRW_shgroup_uniform_block(grp, "probe_block", sldata->probe_ubo);
@@ -449,9 +417,3 @@ void EEVEE_shadow_output_accumulate(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_D
 }
 
 /* \} */
-
-void EEVEE_shadows_free(void)
-{
-  DRW_SHADER_FREE_SAFE(e_data.shadow_sh);
-  DRW_SHADER_FREE_SAFE(e_data.shadow_accum_sh);
-}

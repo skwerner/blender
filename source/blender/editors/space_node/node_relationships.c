@@ -251,6 +251,12 @@ static bNodeSocket *best_socket_output(bNodeTree *ntree,
     }
   }
 
+  /* Always allow linking to an reroute node. The socket type of the reroute sockets might change
+   * after the link has been created. */
+  if (node->type == NODE_REROUTE) {
+    return node->outputs.first;
+  }
+
   return NULL;
 }
 
@@ -664,6 +670,8 @@ static void node_link_exit(bContext *C, wmOperator *op, bool apply_links)
   }
   ntree->is_updating = false;
 
+  do_tag_update |= ED_node_is_simulation(snode);
+
   ntreeUpdateTree(bmain, ntree);
   snode_notify(C, snode);
   if (do_tag_update) {
@@ -996,7 +1004,7 @@ void NODE_OT_link_make(wmOperatorType *ot)
 }
 
 /* ********************** Cut Link operator ***************** */
-static bool cut_links_intersect(bNodeLink *link, float mcoords[][2], int tot)
+static bool cut_links_intersect(bNodeLink *link, const float mcoords[][2], int tot)
 {
   float coord_array[NODE_LINK_RESOL + 1][2];
   int i, b;
@@ -1063,6 +1071,8 @@ static int cut_links_exec(bContext *C, wmOperator *op)
         nodeRemLink(snode->edittree, link);
       }
     }
+
+    do_tag_update |= ED_node_is_simulation(snode);
 
     if (found) {
       ntreeUpdateTree(CTX_data_main(C), snode->edittree);

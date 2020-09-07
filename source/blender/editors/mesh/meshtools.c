@@ -452,7 +452,7 @@ int ED_mesh_join_objects_exec(bContext *C, wmOperator *op)
       if (kb->data) {
         MEM_freeN(kb->data);
       }
-      kb->data = MEM_callocN(sizeof(float) * 3 * totvert, "join_shapekey");
+      kb->data = MEM_callocN(sizeof(float[3]) * totvert, "join_shapekey");
       kb->totelem = totvert;
     }
   }
@@ -550,7 +550,7 @@ int ED_mesh_join_objects_exec(bContext *C, wmOperator *op)
               BKE_keyblock_copy_settings(kbn, kb);
 
               /* adjust settings to fit (allocate a new data-array) */
-              kbn->data = MEM_callocN(sizeof(float) * 3 * totvert, "joined_shapekey");
+              kbn->data = MEM_callocN(sizeof(float[3]) * totvert, "joined_shapekey");
               kbn->totelem = totvert;
             }
 
@@ -590,8 +590,9 @@ int ED_mesh_join_objects_exec(bContext *C, wmOperator *op)
   loopofs = 0;
   polyofs = 0;
 
-  /* inverse transform for all selected meshes in this object */
-  invert_m4_m4(imat, ob->obmat);
+  /* Inverse transform for all selected meshes in this object,
+   * See #object_join_exec for detailed comment on why the safe version is used. */
+  invert_m4_m4_safe_ortho(imat, ob->obmat);
 
   /* Add back active mesh first.
    * This allows to keep things similar as they were, as much as possible
@@ -741,6 +742,7 @@ int ED_mesh_join_objects_exec(bContext *C, wmOperator *op)
 
   DEG_id_tag_update(&scene->id, ID_RECALC_SELECT);
   WM_event_add_notifier(C, NC_SCENE | ND_OB_ACTIVE, scene);
+  WM_event_add_notifier(C, NC_SCENE | ND_LAYER_CONTENT, scene);
 
   return OPERATOR_FINISHED;
 }
@@ -1063,7 +1065,7 @@ static float *editmesh_get_mirror_uv(
     BMFace *efa;
 
     BM_ITER_MESH (efa, &iter, em->bm, BM_FACES_OF_MESH) {
-      uv_poly_center(efa, cent, cd_loop_uv_offset);
+      BM_face_uv_calc_center_median(efa, cd_loop_uv_offset, cent);
 
       if ((fabsf(cent[0] - cent_vec[0]) < 0.001f) && (fabsf(cent[1] - cent_vec[1]) < 0.001f)) {
         BMIter liter;
@@ -1154,7 +1156,7 @@ int *mesh_get_x_mirror_faces(Object *ob, BMEditMesh *em, Mesh *me_eval)
   int a;
 
   mirrorverts = MEM_callocN(sizeof(int) * totvert, "MirrorVerts");
-  mirrorfaces = MEM_callocN(sizeof(int) * 2 * totface, "MirrorFaces");
+  mirrorfaces = MEM_callocN(sizeof(int[2]) * totface, "MirrorFaces");
 
   mvert = me_eval ? me_eval->mvert : me->mvert;
   mface = me_eval ? me_eval->mface : me->mface;

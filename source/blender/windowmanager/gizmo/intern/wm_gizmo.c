@@ -29,7 +29,6 @@
 #include "BKE_context.h"
 
 #include "GPU_batch.h"
-#include "GPU_glew.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -453,9 +452,7 @@ bool wm_gizmo_select_and_highlight(bContext *C, wmGizmoMap *gzmap, wmGizmo *gz)
     wm_gizmomap_highlight_set(gzmap, C, gz, gz->highlight_part);
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 /**

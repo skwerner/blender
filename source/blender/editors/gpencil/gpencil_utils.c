@@ -1080,7 +1080,7 @@ void ED_gpencil_project_stroke_to_plane(const Scene *scene,
     }
   }
   else {
-    float scale[3] = {1.0f, 1.0f, 1.0f};
+    const float scale[3] = {1.0f, 1.0f, 1.0f};
     plane_normal[2] = 1.0f;
     float mat[4][4];
     loc_eul_size_to_mat4(mat, cursor->location, cursor->rotation_euler, scale);
@@ -1285,7 +1285,7 @@ void ED_gpencil_project_point_to_plane(const Scene *scene,
     }
   }
   else {
-    float scale[3] = {1.0f, 1.0f, 1.0f};
+    const float scale[3] = {1.0f, 1.0f, 1.0f};
     plane_normal[2] = 1.0f;
     float mat[4][4];
     loc_eul_size_to_mat4(mat, cursor->location, cursor->rotation_euler, scale);
@@ -1469,7 +1469,7 @@ void ED_gpencil_reset_layers_parent(Depsgraph *depsgraph, Object *obact, bGPdata
 /* Helper function to create new OB_GPENCIL Object */
 Object *ED_gpencil_add_object(bContext *C, const float loc[3], ushort local_view_bits)
 {
-  float rot[3] = {0.0f};
+  const float rot[3] = {0.0f};
 
   Object *ob = ED_object_add_type(C, OB_GPENCIL, NULL, loc, rot, false, local_view_bits);
 
@@ -1500,7 +1500,7 @@ void ED_gpencil_add_defaults(bContext *C, Object *ob)
   if (ts->gp_sculpt.cur_falloff == NULL) {
     ts->gp_sculpt.cur_falloff = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
     CurveMapping *gp_falloff_curve = ts->gp_sculpt.cur_falloff;
-    BKE_curvemapping_initialize(gp_falloff_curve);
+    BKE_curvemapping_init(gp_falloff_curve);
     BKE_curvemap_reset(gp_falloff_curve->cm,
                        &gp_falloff_curve->clipr,
                        CURVE_PRESET_GAUSS,
@@ -1723,7 +1723,7 @@ void ED_gpencil_vgroup_deselect(bContext *C, Object *ob)
 /* Cursor drawing */
 
 /* check if cursor is in drawing region */
-static bool gpencil_check_cursor_region(bContext *C, int mval_i[2])
+static bool gpencil_check_cursor_region(bContext *C, const int mval_i[2])
 {
   ARegion *region = CTX_wm_region(C);
   ScrArea *area = CTX_wm_area(C);
@@ -1760,8 +1760,7 @@ void ED_gpencil_brush_draw_eraser(Brush *brush, int x, int y)
   immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
 
   GPU_line_smooth(true);
-  GPU_blend(true);
-  glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   immUniformColor4ub(255, 100, 100, 20);
   imm_draw_circle_fill_2d(shdr_pos, x, y, radius, 40);
@@ -1771,7 +1770,7 @@ void ED_gpencil_brush_draw_eraser(Brush *brush, int x, int y)
   immBindBuiltinProgram(GPU_SHADER_2D_LINE_DASHED_UNIFORM_COLOR);
 
   float viewport_size[4];
-  glGetFloatv(GL_VIEWPORT, viewport_size);
+  GPU_viewport_size_get_f(viewport_size);
   immUniform2f("viewport_size", viewport_size[2], viewport_size[3]);
 
   immUniformColor4f(1.0f, 0.39f, 0.39f, 0.78f);
@@ -1789,7 +1788,7 @@ void ED_gpencil_brush_draw_eraser(Brush *brush, int x, int y)
 
   immUnbindProgram();
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
   GPU_line_smooth(false);
 }
 
@@ -1943,7 +1942,7 @@ static void gpencil_brush_cursor_draw(bContext *C, int x, int y, void *customdat
   immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
 
   GPU_line_smooth(true);
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   /* Inner Ring: Color from UI panel */
   immUniformColor4f(color[0], color[1], color[2], 0.8f);
@@ -1962,13 +1961,13 @@ static void gpencil_brush_cursor_draw(bContext *C, int x, int y, void *customdat
   immUniformColor4f(darkcolor[0], darkcolor[1], darkcolor[2], 0.8f);
   imm_draw_circle_wire_2d(pos, x, y, radius + 1, 40);
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
   GPU_line_smooth(false);
 
   /* Draw line for lazy mouse */
   if ((last_mouse_position) && (brush->gpencil_settings->flag & GP_BRUSH_STABILIZE_MOUSE_TEMP)) {
     GPU_line_smooth(true);
-    GPU_blend(true);
+    GPU_blend(GPU_BLEND_ALPHA);
 
     copy_v3_v3(color, brush->add_col);
     immUniformColor4f(color[0], color[1], color[2], 0.8f);
@@ -1980,7 +1979,7 @@ static void gpencil_brush_cursor_draw(bContext *C, int x, int y, void *customdat
                 last_mouse_position[1] + region->winrct.ymin);
     immEnd();
 
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
     GPU_line_smooth(false);
   }
 
@@ -2245,7 +2244,7 @@ static void gpencil_copy_points(
 }
 
 static void gpencil_insert_point(
-    bGPDstroke *gps, bGPDspoint *a_pt, bGPDspoint *b_pt, const float co_a[3], float co_b[3])
+    bGPDstroke *gps, bGPDspoint *a_pt, bGPDspoint *b_pt, const float co_a[3], const float co_b[3])
 {
   bGPDspoint *temp_points;
   int totnewpoints, oldtotpoints;
@@ -2310,7 +2309,9 @@ static void gpencil_insert_point(
   MEM_SAFE_FREE(temp_points);
 }
 
-static float gpencil_calc_factor(float p2d_a1[2], float p2d_a2[2], float r_hit2d[2])
+static float gpencil_calc_factor(const float p2d_a1[2],
+                                 const float p2d_a2[2],
+                                 const float r_hit2d[2])
 {
   float dist1 = len_squared_v2v2(p2d_a1, p2d_a2);
   float dist2 = len_squared_v2v2(p2d_a1, r_hit2d);
@@ -2687,7 +2688,11 @@ void ED_gpencil_tag_scene_gpencil(Scene *scene)
 
 void ED_gpencil_fill_vertex_color_set(ToolSettings *ts, Brush *brush, bGPDstroke *gps)
 {
-  if (GPENCIL_USE_VERTEX_COLOR_FILL(ts, brush)) {
+  const bool is_vertex = (GPENCIL_USE_VERTEX_COLOR_FILL(ts, brush) &&
+                          (brush->gpencil_settings->brush_draw_mode != GP_BRUSH_MODE_MATERIAL)) ||
+                         (!GPENCIL_USE_VERTEX_COLOR_FILL(ts, brush) &&
+                          (brush->gpencil_settings->brush_draw_mode == GP_BRUSH_MODE_VERTEXCOLOR));
+  if (is_vertex) {
     copy_v3_v3(gps->vert_color_fill, brush->rgb);
     gps->vert_color_fill[3] = brush->gpencil_settings->vertex_factor;
     srgb_to_linearrgb_v4(gps->vert_color_fill, gps->vert_color_fill);
@@ -2702,7 +2707,12 @@ void ED_gpencil_point_vertex_color_set(ToolSettings *ts,
                                        bGPDspoint *pt,
                                        tGPspoint *tpt)
 {
-  if (GPENCIL_USE_VERTEX_COLOR_STROKE(ts, brush)) {
+  const bool is_vertex = (GPENCIL_USE_VERTEX_COLOR_STROKE(ts, brush) &&
+                          (brush->gpencil_settings->brush_draw_mode != GP_BRUSH_MODE_MATERIAL)) ||
+                         (!GPENCIL_USE_VERTEX_COLOR_STROKE(ts, brush) &&
+                          (brush->gpencil_settings->brush_draw_mode == GP_BRUSH_MODE_VERTEXCOLOR));
+
+  if (is_vertex) {
     if (tpt == NULL) {
       copy_v3_v3(pt->vert_color, brush->rgb);
       pt->vert_color[3] = brush->gpencil_settings->vertex_factor;
@@ -2764,7 +2774,7 @@ void ED_gpencil_init_random_settings(Brush *brush,
 }
 
 static void gpencil_sbuffer_vertex_color_random(
-    bGPdata *gpd, Brush *brush, tGPspoint *tpt, float random_color[3], float pen_pressure)
+    bGPdata *gpd, Brush *brush, tGPspoint *tpt, const float random_color[3], float pen_pressure)
 {
   BrushGpencilSettings *brush_settings = brush->gpencil_settings;
   if (brush_settings->flag & GP_BRUSH_GROUP_RANDOM) {
@@ -2858,6 +2868,18 @@ void ED_gpencil_sbuffer_vertex_color_set(Depsgraph *depsgraph,
   bGPdata *gpd_eval = (bGPdata *)ob_eval->data;
   MaterialGPencilStyle *gp_style = material->gp_style;
 
+  const bool is_vertex_fill =
+      (GPENCIL_USE_VERTEX_COLOR_FILL(ts, brush) &&
+       (brush->gpencil_settings->brush_draw_mode != GP_BRUSH_MODE_MATERIAL)) ||
+      (!GPENCIL_USE_VERTEX_COLOR_FILL(ts, brush) &&
+       (brush->gpencil_settings->brush_draw_mode == GP_BRUSH_MODE_VERTEXCOLOR));
+
+  const bool is_vertex_stroke =
+      (GPENCIL_USE_VERTEX_COLOR_STROKE(ts, brush) &&
+       (brush->gpencil_settings->brush_draw_mode != GP_BRUSH_MODE_MATERIAL)) ||
+      (!GPENCIL_USE_VERTEX_COLOR_STROKE(ts, brush) &&
+       (brush->gpencil_settings->brush_draw_mode == GP_BRUSH_MODE_VERTEXCOLOR));
+
   int idx = gpd->runtime.sbuffer_used;
   tGPspoint *tpt = (tGPspoint *)gpd->runtime.sbuffer + idx;
 
@@ -2867,14 +2889,14 @@ void ED_gpencil_sbuffer_vertex_color_set(Depsgraph *depsgraph,
   srgb_to_linearrgb_v4(vertex_color, vertex_color);
 
   /* Copy fill vertex color. */
-  if (GPENCIL_USE_VERTEX_COLOR_FILL(ts, brush)) {
+  if (is_vertex_fill) {
     copy_v4_v4(gpd->runtime.vert_color_fill, vertex_color);
   }
   else {
     copy_v4_v4(gpd->runtime.vert_color_fill, gp_style->fill_rgba);
   }
   /* Copy stroke vertex color. */
-  if (GPENCIL_USE_VERTEX_COLOR_STROKE(ts, brush)) {
+  if (is_vertex_stroke) {
     copy_v4_v4(tpt->vert_color, vertex_color);
   }
   else {
@@ -2895,7 +2917,7 @@ void ED_gpencil_sbuffer_vertex_color_set(Depsgraph *depsgraph,
 /* Check if the stroke collides with brush. */
 bool ED_gpencil_stroke_check_collision(GP_SpaceConversion *gsc,
                                        bGPDstroke *gps,
-                                       float mouse[2],
+                                       const float mouse[2],
                                        const int radius,
                                        const float diff_mat[4][4])
 {
@@ -2956,7 +2978,7 @@ bool ED_gpencil_stroke_point_is_inside(bGPDstroke *gps,
 
   int(*mcoords)[2] = NULL;
   int len = gps->totpoints;
-  mcoords = MEM_mallocN(sizeof(int) * 2 * len, __func__);
+  mcoords = MEM_mallocN(sizeof(int[2]) * len, __func__);
 
   /* Convert stroke to 2D array of points. */
   bGPDspoint *pt;

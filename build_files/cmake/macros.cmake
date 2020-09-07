@@ -169,6 +169,26 @@ function(blender_include_dirs_sys
   include_directories(SYSTEM ${_ALL_INCS})
 endfunction()
 
+# Set include paths for header files included with "*.h" syntax.
+# This enables auto-complete suggestions for user header files on Xcode.
+# Build process is not affected since the include paths are the same
+# as in HEADER_SEARCH_PATHS.
+function(blender_user_header_search_paths
+  name
+  includes
+  )
+
+  if(XCODE)
+    set(_ALL_INCS "")
+    foreach(_INC ${includes})
+      get_filename_component(_ABS_INC ${_INC} ABSOLUTE)
+      # _ALL_INCS is a space-separated string of file paths in quotes.
+      set(_ALL_INCS "${_ALL_INCS} \"${_ABS_INC}\"")
+    endforeach()
+    set_target_properties(${name} PROPERTIES XCODE_ATTRIBUTE_USER_HEADER_SEARCH_PATHS "${_ALL_INCS}")
+  endif()
+endfunction()
+
 function(blender_source_group
   name
   sources
@@ -317,6 +337,7 @@ function(blender_add_lib__impl
   # works fine without having the includes
   # listed is helpful for IDE's (QtCreator/MSVC)
   blender_source_group("${name}" "${sources}")
+  blender_user_header_search_paths("${name}" "${includes}")
 
   list_assert_duplicates("${sources}")
   list_assert_duplicates("${includes}")
@@ -354,6 +375,42 @@ function(blender_add_lib
   set_property(GLOBAL APPEND PROPERTY BLENDER_LINK_LIBS ${name})
 endfunction()
 
+# blender_add_test_lib() is used to define a test library. It is intended to be
+# called in tandem with blender_add_lib(). The test library will be linked into
+# the bf_gtest_runner_test executable (see tests/gtests/CMakeLists.txt).
+function(blender_add_test_lib
+  name
+  sources
+  includes
+  includes_sys
+  library_deps
+  )
+
+  add_cc_flags_custom_test(${name} PARENT_SCOPE)
+
+  # Otherwise external projects will produce warnings that we cannot fix.
+  remove_strict_flags()
+
+  # This duplicates logic that's also in GTestTesting.cmake, macro BLENDER_SRC_GTEST_EX.
+  # TODO(Sybren): deduplicate after the general approach in D7649 has been approved.
+  LIST(APPEND includes
+    ${CMAKE_SOURCE_DIR}/tests/gtests
+  )
+  LIST(APPEND includes_sys
+    ${GLOG_INCLUDE_DIRS}
+    ${GFLAGS_INCLUDE_DIRS}
+    ${CMAKE_SOURCE_DIR}/extern/gtest/include
+    ${CMAKE_SOURCE_DIR}/extern/gmock/include
+  )
+  add_definitions(-DBLENDER_GFLAGS_NAMESPACE=${GFLAGS_NAMESPACE})
+  add_definitions(${GFLAGS_DEFINES})
+  add_definitions(${GLOG_DEFINES})
+
+  blender_add_lib__impl(${name} "${sources}" "${includes}" "${includes_sys}" "${library_deps}")
+
+  set_property(GLOBAL APPEND PROPERTY BLENDER_TEST_LIBS ${name})
+endfunction()
+
 # Ninja only: assign 'heavy pool' to some targets that are especially RAM-consuming to build.
 function(setup_heavy_lib_pool)
   if(WITH_NINJA_POOL_JOBS AND NINJA_MAX_NUM_PARALLEL_COMPILE_HEAVY_JOBS)
@@ -361,7 +418,7 @@ function(setup_heavy_lib_pool)
       list(APPEND _HEAVY_LIBS "cycles_device" "cycles_kernel")
     endif()
     if(WITH_LIBMV)
-      list(APPEND _HEAVY_LIBS "bf_intern_libmv")
+      list(APPEND _HEAVY_LIBS "extern_ceres" "bf_intern_libmv")
     endif()
     if(WITH_OPENVDB)
       list(APPEND _HEAVY_LIBS "bf_intern_openvdb")
@@ -437,6 +494,10 @@ function(SETUP_LIBDIRS)
 
     if(WITH_ALEMBIC)
       link_directories(${ALEMBIC_LIBPATH})
+    endif()
+
+    if(WITH_GMP)
+      link_directories(${GMP_LIBPATH})
     endif()
 
     if(WITH_GHOST_WAYLAND)

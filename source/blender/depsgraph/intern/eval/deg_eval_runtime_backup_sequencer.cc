@@ -26,6 +26,8 @@
 #include "DNA_scene_types.h"
 #include "DNA_sequence_types.h"
 
+#include "BLI_assert.h"
+
 #include "BKE_sequencer.h"
 #include "BKE_sound.h"
 
@@ -39,26 +41,30 @@ SequencerBackup::SequencerBackup(const Depsgraph *depsgraph) : depsgraph(depsgra
 void SequencerBackup::init_from_scene(Scene *scene)
 {
   Sequence *sequence;
-  SEQ_BEGIN (scene->ed, sequence) {
+  SEQ_ALL_BEGIN (scene->ed, sequence) {
     SequenceBackup sequence_backup(depsgraph);
     sequence_backup.init_from_sequence(sequence);
     if (!sequence_backup.isEmpty()) {
-      sequences_backup.add(sequence->orig_sequence, sequence_backup);
+      const SessionUUID &session_uuid = sequence->runtime.session_uuid;
+      BLI_assert(BLI_session_uuid_is_generated(&session_uuid));
+      sequences_backup.add(session_uuid, sequence_backup);
     }
   }
-  SEQ_END;
+  SEQ_ALL_END;
 }
 
 void SequencerBackup::restore_to_scene(Scene *scene)
 {
   Sequence *sequence;
-  SEQ_BEGIN (scene->ed, sequence) {
-    SequenceBackup *sequence_backup = sequences_backup.lookup_ptr(sequence->orig_sequence);
+  SEQ_ALL_BEGIN (scene->ed, sequence) {
+    const SessionUUID &session_uuid = sequence->runtime.session_uuid;
+    BLI_assert(BLI_session_uuid_is_generated(&session_uuid));
+    SequenceBackup *sequence_backup = sequences_backup.lookup_ptr(session_uuid);
     if (sequence_backup != nullptr) {
       sequence_backup->restore_to_sequence(sequence);
     }
   }
-  SEQ_END;
+  SEQ_ALL_END;
   /* Cleanup audio while the scene is still known. */
   for (SequenceBackup &sequence_backup : sequences_backup.values()) {
     if (sequence_backup.scene_sound != nullptr) {

@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_FLUID_H__
-#define __BKE_FLUID_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -37,7 +36,7 @@ struct Main;
 struct Scene;
 
 typedef float (*BKE_Fluid_BresenhamFn)(
-    float *result, float *input, int res[3], int *pixel, float *tRay, float correct);
+    float *result, const float *input, int res[3], int *pixel, float *tRay, float correct);
 
 struct Mesh *BKE_fluid_modifier_do(struct FluidModifierData *fmd,
                                    struct Depsgraph *depsgraph,
@@ -56,9 +55,9 @@ bool BKE_fluid_reallocate_fluid(struct FluidDomainSettings *fds, int res[3], int
 void BKE_fluid_reallocate_copy_fluid(struct FluidDomainSettings *fds,
                                      int o_res[3],
                                      int n_res[3],
-                                     int o_min[3],
-                                     int n_min[3],
-                                     int o_max[3],
+                                     const int o_min[3],
+                                     const int n_min[3],
+                                     const int o_max[3],
                                      int o_shift[3],
                                      int n_shift[3]);
 void BKE_fluid_cache_free_all(struct FluidDomainSettings *fds, struct Object *ob);
@@ -101,5 +100,3 @@ void BKE_fluid_flow_behavior_set(struct Object *object,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_FLUID_H__ */

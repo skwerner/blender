@@ -17,8 +17,7 @@
  * This is a new part of Blender
  */
 
-#ifndef __BKE_GPENCIL_GEOM_H__
-#define __BKE_GPENCIL_GEOM_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -52,7 +51,7 @@ void BKE_gpencil_stroke_boundingbox_calc(struct bGPDstroke *gps);
 
 /* stroke geometry utilities */
 void BKE_gpencil_stroke_normal(const struct bGPDstroke *gps, float r_normal[3]);
-void BKE_gpencil_stroke_simplify_adaptive(struct bGPDstroke *gps, float factor);
+void BKE_gpencil_stroke_simplify_adaptive(struct bGPDstroke *gps, float epsilon);
 void BKE_gpencil_stroke_simplify_fixed(struct bGPDstroke *gps);
 void BKE_gpencil_stroke_subdivide(struct bGPDstroke *gps, int level, int type);
 bool BKE_gpencil_stroke_trim(struct bGPDstroke *gps);
@@ -76,7 +75,21 @@ void BKE_gpencil_stroke_fill_triangulate(struct bGPDstroke *gps);
 void BKE_gpencil_stroke_geometry_update(struct bGPDstroke *gps);
 void BKE_gpencil_stroke_uv_update(struct bGPDstroke *gps);
 
-void BKE_gpencil_transform(struct bGPdata *gpd, float mat[4][4]);
+void BKE_gpencil_transform(struct bGPdata *gpd, const float mat[4][4]);
+
+typedef struct GPencilPointCoordinates {
+  /* This is used when doing "move only origin" in object_data_transform.c.
+   * pressure is needs to be stored here as it is tied to object scale. */
+  float co[3];
+  float pressure;
+} GPencilPointCoordinates;
+
+int BKE_gpencil_stroke_point_count(struct bGPdata *gpd);
+void BKE_gpencil_point_coords_get(struct bGPdata *gpd, GPencilPointCoordinates *elem_data);
+void BKE_gpencil_point_coords_apply(struct bGPdata *gpd, const GPencilPointCoordinates *elem_data);
+void BKE_gpencil_point_coords_apply_with_mat4(struct bGPdata *gpd,
+                                              const GPencilPointCoordinates *elem_data,
+                                              const float mat[4][4]);
 
 bool BKE_gpencil_stroke_sample(struct bGPDstroke *gps, const float dist, const bool select);
 bool BKE_gpencil_stroke_smooth(struct bGPDstroke *gps, int i, float inf);
@@ -98,6 +111,8 @@ bool BKE_gpencil_stroke_shrink(struct bGPDstroke *gps, const float dist);
 
 float BKE_gpencil_stroke_length(const struct bGPDstroke *gps, bool use_3d);
 
+void BKE_gpencil_stroke_set_random_color(struct bGPDstroke *gps);
+
 void BKE_gpencil_convert_mesh(struct Main *bmain,
                               struct Depsgraph *depsgraph,
                               struct Scene *scene,
@@ -109,10 +124,9 @@ void BKE_gpencil_convert_mesh(struct Main *bmain,
                               const float matrix[4][4],
                               const int frame_offset,
                               const bool use_seams,
-                              const bool use_faces);
+                              const bool use_faces,
+                              const bool simple_material);
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif /*  __BKE_GPENCIL_GEOM_H__ */

@@ -31,12 +31,7 @@
 #include "BLI_rand.h"
 #include "BLI_string_utils.h"
 
-extern char datatoc_bsdf_lut_frag_glsl[];
-extern char datatoc_btdf_lut_frag_glsl[];
-extern char datatoc_bsdf_common_lib_glsl[];
-extern char datatoc_bsdf_sampling_lib_glsl[];
-extern char datatoc_lightprobe_geom_glsl[];
-extern char datatoc_lightprobe_vert_glsl[];
+#include "eevee_private.h"
 
 static struct GPUTexture *create_ggx_lut_texture(int UNUSED(w), int UNUSED(h))
 {
@@ -45,18 +40,8 @@ static struct GPUTexture *create_ggx_lut_texture(int UNUSED(w), int UNUSED(h))
   static float samples_len = 8192.0f;
   static float inv_samples_len = 1.0f / 8192.0f;
 
-  char *lib_str = BLI_string_joinN(datatoc_bsdf_common_lib_glsl, datatoc_bsdf_sampling_lib_glsl);
-
-  struct GPUShader *sh = DRW_shader_create_with_lib(datatoc_lightprobe_vert_glsl,
-                                                    datatoc_lightprobe_geom_glsl,
-                                                    datatoc_bsdf_lut_frag_glsl,
-                                                    lib_str,
-                                                    "#define HAMMERSLEY_SIZE 8192\n"
-                                                    "#define BRDF_LUT_SIZE 64\n"
-                                                    "#define NOISE_SIZE 64\n");
-
   DRWPass *pass = DRW_pass_create("LightProbe Filtering", DRW_STATE_WRITE_COLOR);
-  DRWShadingGroup *grp = DRW_shgroup_create(sh, pass);
+  DRWShadingGroup *grp = DRW_shgroup_create(EEVEE_shaders_ggx_lut_sh_get(), pass);
   DRW_shgroup_uniform_float(grp, "sampleCount", &samples_len, 1);
   DRW_shgroup_uniform_float(grp, "invSampleCount", &inv_samples_len, 1);
   DRW_shgroup_uniform_texture(grp, "texHammersley", e_data.hammersley);
@@ -76,8 +61,7 @@ static struct GPUTexture *create_ggx_lut_texture(int UNUSED(w), int UNUSED(h))
   DRW_draw_pass(pass);
 
   float *data = MEM_mallocN(sizeof(float[3]) * w * h, "lut");
-  glReadBuffer(GL_COLOR_ATTACHMENT0);
-  glReadPixels(0, 0, w, h, GL_RGB, GL_FLOAT, data);
+  GPU_framebuffer_read_color(fb, 0, 0, w, h, 3, 0, GPU_DATA_FLOAT, data);
 
   printf("{");
   for (int i = 0; i < w * h * 3; i += 3) {
@@ -106,19 +90,8 @@ static struct GPUTexture *create_ggx_refraction_lut_texture(int w, int h)
   static float a2 = 0.0f;
   static float inv_samples_len = 1.0f / 8192.0f;
 
-  char *frag_str = BLI_string_joinN(
-      datatoc_bsdf_common_lib_glsl, datatoc_bsdf_sampling_lib_glsl, datatoc_btdf_lut_frag_glsl);
-
-  struct GPUShader *sh = DRW_shader_create_fullscreen(frag_str,
-                                                      "#define HAMMERSLEY_SIZE 8192\n"
-                                                      "#define BRDF_LUT_SIZE 64\n"
-                                                      "#define NOISE_SIZE 64\n"
-                                                      "#define LUT_SIZE 64\n");
-
-  MEM_freeN(frag_str);
-
   DRWPass *pass = DRW_pass_create("LightProbe Filtering", DRW_STATE_WRITE_COLOR);
-  DRWShadingGroup *grp = DRW_shgroup_create(sh, pass);
+  DRWShadingGroup *grp = DRW_shgroup_create(EEVEE_shaders_ggx_refraction_lut_sh_get(), pass);
   DRW_shgroup_uniform_float(grp, "a2", &a2, 1);
   DRW_shgroup_uniform_float(grp, "sampleCount", &samples_len, 1);
   DRW_shgroup_uniform_float(grp, "invSampleCount", &inv_samples_len, 1);

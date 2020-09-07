@@ -1403,6 +1403,8 @@ static void do_sequence_proxy(void *pjv,
                               int build_count,
                               int *build_undistort_sizes,
                               int build_undistort_count,
+                              /* Cannot be const, because it is assigned to a non-const variable.
+                               * NOLINTNEXTLINE: readability-non-const-parameter. */
                               short *stop,
                               short *do_update,
                               float *progress)
@@ -1513,7 +1515,7 @@ static void proxy_endjob(void *pjv)
   }
 
   if (pj->clip->source == MCLIP_SRC_MOVIE) {
-    /* Timecode might have changed, so do a full reload to deal with this. */
+    /* Time-code might have changed, so do a full reload to deal with this. */
     DEG_id_tag_update(&pj->clip->id, ID_RECALC_SOURCE);
   }
   else {

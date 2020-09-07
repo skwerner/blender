@@ -174,7 +174,10 @@ static void generateStrokes(GpencilModifierData *md, Depsgraph *depsgraph, Objec
   }
 }
 
-static void bakeModifier(Main *bmain, Depsgraph *depsgraph, GpencilModifierData *md, Object *ob)
+static void bakeModifier(Main *UNUSED(bmain),
+                         Depsgraph *depsgraph,
+                         GpencilModifierData *md,
+                         Object *ob)
 {
   Scene *scene = DEG_get_evaluated_scene(depsgraph);
   bGPdata *gpd = ob->data;
@@ -184,7 +187,7 @@ static void bakeModifier(Main *bmain, Depsgraph *depsgraph, GpencilModifierData 
     LISTBASE_FOREACH (bGPDframe *, gpf, &gpl->frames) {
       /* apply mirror effects on this frame */
       CFRA = gpf->framenum;
-      BKE_scene_graph_update_for_newframe(depsgraph, bmain);
+      BKE_scene_graph_update_for_newframe(depsgraph);
 
       /* compute mirror effects on this frame */
       generate_geometry(md, ob, gpl, gpf);
@@ -193,7 +196,7 @@ static void bakeModifier(Main *bmain, Depsgraph *depsgraph, GpencilModifierData 
 
   /* return frame state and DB to original state */
   CFRA = oldframe;
-  BKE_scene_graph_update_for_newframe(depsgraph, bmain);
+  BKE_scene_graph_update_for_newframe(depsgraph);
 }
 
 static bool isDisabled(GpencilModifierData *UNUSED(md), int UNUSED(userRenderParams))
@@ -232,30 +235,29 @@ static void foreachIDLink(GpencilModifierData *md, Object *ob, IDWalkFunc walk, 
   foreachObjectLink(md, ob, (ObjectWalkFunc)walk, userData);
 }
 
-static void panel_draw(const bContext *C, Panel *panel)
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *row;
   uiLayout *layout = panel->layout;
   int toggles_flag = UI_ITEM_R_TOGGLE | UI_ITEM_R_FORCE_BLANK_DECORATE;
 
-  PointerRNA ptr;
-  gpencil_modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, NULL);
 
   uiLayoutSetPropSep(layout, true);
 
   row = uiLayoutRowWithHeading(layout, true, IFACE_("Axis"));
-  uiItemR(row, &ptr, "x_axis", toggles_flag, NULL, ICON_NONE);
-  uiItemR(row, &ptr, "y_axis", toggles_flag, NULL, ICON_NONE);
-  uiItemR(row, &ptr, "z_axis", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, ptr, "x_axis", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, ptr, "y_axis", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, ptr, "z_axis", toggles_flag, NULL, ICON_NONE);
 
-  uiItemR(layout, &ptr, "object", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "object", 0, NULL, ICON_NONE);
 
-  gpencil_modifier_panel_end(layout, &ptr);
+  gpencil_modifier_panel_end(layout, ptr);
 }
 
-static void mask_panel_draw(const bContext *C, Panel *panel)
+static void mask_panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
-  gpencil_modifier_masking_panel_draw(C, panel, true, false);
+  gpencil_modifier_masking_panel_draw(panel, true, false);
 }
 
 static void panelRegister(ARegionType *region_type)

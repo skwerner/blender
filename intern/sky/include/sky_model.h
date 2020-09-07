@@ -112,7 +112,7 @@ bands, you would need something like
 
     ArHosekSkyModelState  * skymodel_state[num_channels];
 
-You then have to allocate and initialise these states. In the following code
+You then have to allocate and initialize these states. In the following code
 snippet, we assume that 'albedo' is defined as
 
     double  albedo[num_channels];
@@ -228,7 +228,7 @@ actually not altered at all in this release. All we did was to add some support
 functionality for doing this more easily with the existing data and functions,
 and to add some explanations.
 
-Just use 'arhosekskymodelstate_alienworld_alloc_init()' to initialise the sky
+Just use 'arhosekskymodelstate_alienworld_alloc_init()' to initialize the sky
 model states (you will have to provide values for star temperature and solar
 intensity compared to the terrestrial sun), and do everything else as you
 did before.
@@ -351,20 +351,20 @@ typedef struct SKY_ArHosekSkyModelState {
     arhosekskymodelstate_alloc_init() function
     ------------------------------------------
 
-    Initialises an ArHosekSkyModelState struct for a terrestrial setting.
+    Initializes an #ArHosekSkyModelState struct for a terrestrial setting.
 
 ---------------------------------------------------------------------------- */
 
 SKY_ArHosekSkyModelState *SKY_arhosekskymodelstate_alloc_init(const double solar_elevation,
-                                                      const double atmospheric_turbidity,
-                                                      const double ground_albedo);
+                                                              const double atmospheric_turbidity,
+                                                              const double ground_albedo);
 
 /* ----------------------------------------------------------------------------
 
     arhosekskymodelstate_alienworld_alloc_init() function
     -----------------------------------------------------
 
-    Initialises an ArHosekSkyModelState struct for an "alien world" setting
+    Initializes an ArHosekSkyModelState struct for an "alien world" setting
     with a sun of a surface temperature given in 'kelvin'. The parameter
     'solar_intensity' controls the overall brightness of the sky, relative
     to the solar irradiance on Earth. A value of 1.0 yields a sky dome that
@@ -398,56 +398,55 @@ SKY_ArHosekSkyModelState *SKY_arhosekskymodelstate_alienworld_alloc_init(
 void SKY_arhosekskymodelstate_free(SKY_ArHosekSkyModelState *state);
 
 double SKY_arhosekskymodel_radiance(SKY_ArHosekSkyModelState *state,
-                                double theta,
-                                double gamma,
-                                double wavelength);
+                                    double theta,
+                                    double gamma,
+                                    double wavelength);
 
 // CIE XYZ and RGB versions
 
 SKY_ArHosekSkyModelState *SKY_arhosek_xyz_skymodelstate_alloc_init(const double turbidity,
-                                                           const double albedo,
-                                                           const double elevation);
+                                                                   const double albedo,
+                                                                   const double elevation);
 
 SKY_ArHosekSkyModelState *SKY_arhosek_rgb_skymodelstate_alloc_init(const double turbidity,
-                                                           const double albedo,
-                                                           const double elevation);
+                                                                   const double albedo,
+                                                                   const double elevation);
 
 double SKY_arhosek_tristim_skymodel_radiance(SKY_ArHosekSkyModelState *state,
-                                         double theta,
-                                         double gamma,
-                                         int channel);
+                                             double theta,
+                                             double gamma,
+                                             int channel);
 
 //   Delivers the complete function: sky + sun, including limb darkening.
 //   Please read the above description before using this - there are several
 //   caveats!
 
 double SKY_arhosekskymodel_solar_radiance(SKY_ArHosekSkyModelState *state,
-                                      double theta,
-                                      double gamma,
-                                      double wavelength);
-
+                                          double theta,
+                                          double gamma,
+                                          double wavelength);
 
 /* Nishita improved sky model */
 
 void SKY_nishita_skymodel_precompute_texture(float *pixels,
-                                         int stride,
-                                         int start_y,
-                                         int end_y,
-                                         int width,
-                                         int height,
-                                         float sun_elevation,
+                                             int stride,
+                                             int start_y,
+                                             int end_y,
+                                             int width,
+                                             int height,
+                                             float sun_elevation,
+                                             float altitude,
+                                             float air_density,
+                                             float dust_density,
+                                             float ozone_density);
+
+void SKY_nishita_skymodel_precompute_sun(float sun_elevation,
+                                         float angular_diameter,
                                          float altitude,
                                          float air_density,
                                          float dust_density,
-                                         float ozone_density);
-
-void SKY_nishita_skymodel_precompute_sun(float sun_elevation,
-                                     float angular_diameter,
-                                     float altitude,
-                                     float air_density,
-                                     float dust_density,
-                                     float *pixel_bottom,
-                                     float *pixel_top);
+                                         float *r_pixel_bottom,
+                                         float *r_pixel_top);
 
 #ifdef __cplusplus
 }

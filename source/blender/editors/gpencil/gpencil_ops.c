@@ -600,6 +600,7 @@ void ED_operatortypes_gpencil(void)
   WM_operatortype_append(GPENCIL_OT_frame_duplicate);
   WM_operatortype_append(GPENCIL_OT_frame_clean_fill);
   WM_operatortype_append(GPENCIL_OT_frame_clean_loose);
+  WM_operatortype_append(GPENCIL_OT_frame_clean_duplicate);
 
   WM_operatortype_append(GPENCIL_OT_convert);
   WM_operatortype_append(GPENCIL_OT_bake_mesh_animation);
@@ -664,7 +665,11 @@ void ED_operatortypes_gpencil(void)
   WM_operatortype_append(GPENCIL_OT_interpolate_reverse);
 
   /* Primitives */
-  WM_operatortype_append(GPENCIL_OT_primitive);
+  WM_operatortype_append(GPENCIL_OT_primitive_box);
+  WM_operatortype_append(GPENCIL_OT_primitive_line);
+  WM_operatortype_append(GPENCIL_OT_primitive_polyline);
+  WM_operatortype_append(GPENCIL_OT_primitive_circle);
+  WM_operatortype_append(GPENCIL_OT_primitive_curve);
 
   /* convert old 2.7 files to 2.8 */
   WM_operatortype_append(GPENCIL_OT_convert_old_files);

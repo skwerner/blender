@@ -21,8 +21,7 @@
  * \ingroup imbuf
  */
 
-#ifndef __IMB_THUMBS_H__
-#define __IMB_THUMBS_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -63,7 +62,7 @@ typedef enum ThumbSource {
 struct ImBuf *IMB_thumb_create(const char *path,
                                ThumbSize size,
                                ThumbSource source,
-                               struct ImBuf *ibuf);
+                               struct ImBuf *img);
 
 /* read thumbnail for file and returns new imbuf for thumbnail */
 struct ImBuf *IMB_thumb_read(const char *path, ThumbSize size);
@@ -98,5 +97,3 @@ void IMB_thumb_path_unlock(const char *path);
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
-
-#endif /* __IMB_THUMBS_H__ */

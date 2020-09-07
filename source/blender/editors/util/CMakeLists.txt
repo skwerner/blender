@@ -63,7 +63,6 @@ set(SRC
   ../include/ED_keyframes_edit.h
   ../include/ED_keyframing.h
   ../include/ED_lattice.h
-  ../include/ED_logic.h
   ../include/ED_markers.h
   ../include/ED_mask.h
   ../include/ED_mball.h
@@ -96,6 +95,7 @@ set(SRC
   ../include/ED_util_imbuf.h
   ../include/ED_uvedit.h
   ../include/ED_view3d.h
+  ../include/ED_view3d_offscreen.h
   ../include/UI_icons.h
   ../include/UI_interface.h
   ../include/UI_interface_icons.h

@@ -53,9 +53,9 @@
 #  include "BLI_string_utf8.h"
 #  include "BLI_winstuff.h"
 #  include "utfconv.h"
+#  include <ShObjIdl.h>
 #  include <direct.h>
 #  include <io.h>
-#  include <shobjidl_core.h>
 #  include <stdbool.h>
 #else
 #  include <pwd.h>
@@ -96,9 +96,7 @@ char *BLI_current_working_dir(char *dir, const size_t maxncpy)
       memcpy(dir, pwd, srclen + 1);
       return dir;
     }
-    else {
-      return NULL;
-    }
+    return NULL;
   }
   return getcwd(dir, maxncpy);
 #endif
@@ -275,25 +273,26 @@ eFileAttributes BLI_file_attributes(const char *path)
     ret |= FILE_ATTR_REPARSE_POINT;
   }
 
-#  endif
+#  else
 
-#  ifdef __linux__
   UNUSED_VARS(path);
 
   /* TODO:
    * If Immutable set FILE_ATTR_READONLY
    * If Archived set FILE_ATTR_ARCHIVE
    */
-
 #  endif
-
   return ret;
 }
 #endif
 
 /* Return alias/shortcut file target. Apple version is defined in storage_apple.mm */
 #ifndef __APPLE__
-bool BLI_file_alias_target(char target[FILE_MAXDIR], const char *filepath)
+bool BLI_file_alias_target(
+    /* This parameter can only be const on non-windows platforms.
+     * NOLINTNEXTLINE: readability-non-const-parameter. */
+    char target[FILE_MAXDIR],
+    const char *filepath)
 {
 #  ifdef WIN32
   if (!BLI_path_extension_check(filepath, ".lnk")) {
@@ -330,9 +329,7 @@ bool BLI_file_alias_target(char target[FILE_MAXDIR], const char *filepath)
   }
 
   return (success && target[0]);
-#  endif
-
-#  ifdef __linux__
+#  else
   UNUSED_VARS(target, filepath);
   /* File-based redirection not supported. */
   return false;
@@ -344,11 +341,11 @@ bool BLI_file_alias_target(char target[FILE_MAXDIR], const char *filepath)
  * Returns the st_mode from stat-ing the specified path name, or 0 if stat fails
  * (most likely doesn't exist or no access).
  */
-int BLI_exists(const char *name)
+int BLI_exists(const char *path)
 {
 #if defined(WIN32)
   BLI_stat_t st;
-  wchar_t *tmp_16 = alloc_utf16_from_8(name, 1);
+  wchar_t *tmp_16 = alloc_utf16_from_8(path, 1);
   int len, res;
 
   len = wcslen(tmp_16);
@@ -374,12 +371,12 @@ int BLI_exists(const char *name)
 
   free(tmp_16);
   if (res == -1) {
-    return (0);
+    return 0;
   }
 #else
   struct stat st;
-  BLI_assert(!BLI_path_is_rel(name));
-  if (stat(name, &st)) {
+  BLI_assert(!BLI_path_is_rel(path));
+  if (stat(path, &st)) {
     return (0);
   }
 #endif
@@ -585,9 +582,9 @@ void *BLI_file_read_text_as_mem_with_newline_as_nil(const char *filepath,
 /**
  * Reads the contents of a text file and returns the lines in a linked list.
  */
-LinkNode *BLI_file_read_as_lines(const char *name)
+LinkNode *BLI_file_read_as_lines(const char *filepath)
 {
-  FILE *fp = BLI_fopen(name, "r");
+  FILE *fp = BLI_fopen(filepath, "r");
   LinkNodePair lines = {NULL, NULL};
   char *buf;
   size_t size;

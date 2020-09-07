@@ -198,7 +198,7 @@ void ycc_to_rgb(float y, float cb, float cr, float *r_r, float *r_g, float *r_b,
   *r_b = b / 255.0f;
 }
 
-void hex_to_rgb(char *hexcol, float *r_r, float *r_g, float *r_b)
+void hex_to_rgb(const char *hexcol, float *r_r, float *r_g, float *r_b)
 {
   unsigned int ri, gi, bi;
 
@@ -439,9 +439,8 @@ float srgb_to_linearrgb(float c)
   if (c < 0.04045f) {
     return (c < 0.0f) ? 0.0f : c * (1.0f / 12.92f);
   }
-  else {
-    return powf((c + 0.055f) * (1.0f / 1.055f), 2.4f);
-  }
+
+  return powf((c + 0.055f) * (1.0f / 1.055f), 2.4f);
 }
 
 float linearrgb_to_srgb(float c)
@@ -449,9 +448,8 @@ float linearrgb_to_srgb(float c)
   if (c < 0.0031308f) {
     return (c < 0.0f) ? 0.0f : c * 12.92f;
   }
-  else {
-    return 1.055f * powf(c, 1.0f / 2.4f) - 0.055f;
-  }
+
+  return 1.055f * powf(c, 1.0f / 2.4f) - 0.055f;
 }
 
 void minmax_rgb(short c[3])
@@ -503,8 +501,12 @@ int constrain_rgb(float *r, float *g, float *b)
 
 /* ********************** lift/gamma/gain / ASC-CDL conversion ********************************* */
 
-void lift_gamma_gain_to_asc_cdl(
-    float *lift, float *gamma, float *gain, float *offset, float *slope, float *power)
+void lift_gamma_gain_to_asc_cdl(const float *lift,
+                                const float *gamma,
+                                const float *gain,
+                                float *offset,
+                                float *slope,
+                                float *power)
 {
   int c;
   for (c = 0; c < 3; c++) {

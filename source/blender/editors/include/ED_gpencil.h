@@ -21,8 +21,7 @@
  * \ingroup editors
  */
 
-#ifndef __ED_GPENCIL_H__
-#define __ED_GPENCIL_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -351,7 +350,7 @@ void ED_gpencil_init_random_settings(struct Brush *brush,
 
 bool ED_gpencil_stroke_check_collision(struct GP_SpaceConversion *gsc,
                                        struct bGPDstroke *gps,
-                                       float mouse[2],
+                                       const float mouse[2],
                                        const int radius,
                                        const float diff_mat[4][4]);
 bool ED_gpencil_stroke_point_is_inside(struct bGPDstroke *gps,
@@ -362,5 +361,3 @@ bool ED_gpencil_stroke_point_is_inside(struct bGPDstroke *gps,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /*  __ED_GPENCIL_H__ */

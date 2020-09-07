@@ -22,6 +22,7 @@
  */
 
 #include "DNA_camera_types.h"
+#include "DNA_gpencil_modifier_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
@@ -37,6 +38,7 @@
 #include "BKE_camera.h"
 #include "BKE_context.h"
 #include "BKE_global.h"
+#include "BKE_gpencil_modifier.h"
 #include "BKE_idprop.h"
 #include "BKE_layer.h"
 #include "BKE_main.h"
@@ -50,7 +52,6 @@
 
 #include "UI_resources.h"
 
-#include "GPU_glew.h"
 #include "GPU_matrix.h"
 #include "GPU_select.h"
 #include "GPU_state.h"
@@ -497,13 +498,13 @@ static bool view3d_camera_to_view_poll(bContext *C)
     if (v3d && v3d->camera && !ID_IS_LINKED(v3d->camera)) {
       if (rv3d && (RV3D_LOCK_FLAGS(rv3d) & RV3D_LOCK_ANY_TRANSFORM) == 0) {
         if (rv3d->persp != RV3D_CAMOB) {
-          return 1;
+          return true;
         }
       }
     }
   }
 
-  return 0;
+  return false;
 }
 
 void VIEW3D_OT_camera_to_view(wmOperatorType *ot)
@@ -950,7 +951,7 @@ static bool drw_select_loop_pass(eDRWSelectStage stage, void *user_data)
 eV3DSelectObjectFilter ED_view3d_select_filter_from_mode(const Scene *scene, const Object *obact)
 {
   if (scene->toolsettings->object_flag & SCE_OBJECT_MODE_LOCK) {
-    if (obact && (obact->mode & OB_MODE_WEIGHT_PAINT) &&
+    if (obact && (obact->mode & OB_MODE_ALL_WEIGHT_PAINT) &&
         BKE_object_pose_armature_get((Object *)obact)) {
       return VIEW3D_SELECT_FILTER_WPAINT_POSE_MODE_LOCK;
     }
@@ -1054,18 +1055,33 @@ int view3d_opengl_select(ViewContext *vc,
     }
     case VIEW3D_SELECT_FILTER_WPAINT_POSE_MODE_LOCK: {
       Object *obact = vc->obact;
-      BLI_assert(obact && (obact->mode & OB_MODE_WEIGHT_PAINT));
-
+      BLI_assert(obact && (obact->mode & OB_MODE_ALL_WEIGHT_PAINT));
       /* While this uses 'alloca' in a loop (which we typically avoid),
        * the number of items is nearly always 1, maybe 2..3 in rare cases. */
       LinkNode *ob_pose_list = NULL;
-      VirtualModifierData virtualModifierData;
-      const ModifierData *md = BKE_modifiers_get_virtual_modifierlist(obact, &virtualModifierData);
-      for (; md; md = md->next) {
-        if (md->type == eModifierType_Armature) {
-          ArmatureModifierData *amd = (ArmatureModifierData *)md;
-          if (amd->object && (amd->object->mode & OB_MODE_POSE)) {
-            BLI_linklist_prepend_alloca(&ob_pose_list, amd->object);
+      if (obact->type == OB_GPENCIL) {
+        GpencilVirtualModifierData virtualModifierData;
+        const GpencilModifierData *md = BKE_gpencil_modifiers_get_virtual_modifierlist(
+            obact, &virtualModifierData);
+        for (; md; md = md->next) {
+          if (md->type == eGpencilModifierType_Armature) {
+            ArmatureGpencilModifierData *agmd = (ArmatureGpencilModifierData *)md;
+            if (agmd->object && (agmd->object->mode & OB_MODE_POSE)) {
+              BLI_linklist_prepend_alloca(&ob_pose_list, agmd->object);
+            }
+          }
+        }
+      }
+      else {
+        VirtualModifierData virtualModifierData;
+        const ModifierData *md = BKE_modifiers_get_virtual_modifierlist(obact,
+                                                                        &virtualModifierData);
+        for (; md; md = md->next) {
+          if (md->type == eModifierType_Armature) {
+            ArmatureModifierData *amd = (ArmatureModifierData *)md;
+            if (amd->object && (amd->object->mode & OB_MODE_POSE)) {
+              BLI_linklist_prepend_alloca(&ob_pose_list, amd->object);
+            }
           }
         }
       }
@@ -1101,11 +1117,7 @@ int view3d_opengl_select(ViewContext *vc,
       wm, vc->win, depsgraph, scene, region, v3d, vc->rv3d->viewmat, NULL, &rect);
 
   if (!XRAY_ACTIVE(v3d)) {
-    GPU_depth_test(true);
-  }
-
-  if (RV3D_CLIPPING_ENABLED(vc->v3d, vc->rv3d)) {
-    ED_view3d_clipping_set(vc->rv3d);
+    GPU_depth_test(GPU_DEPTH_LESS_EQUAL);
   }
 
   /* If in xray mode, we select the wires in priority. */
@@ -1170,11 +1182,7 @@ int view3d_opengl_select(ViewContext *vc,
       wm, vc->win, depsgraph, scene, region, v3d, vc->rv3d->viewmat, NULL, NULL);
 
   if (!XRAY_ACTIVE(v3d)) {
-    GPU_depth_test(false);
-  }
-
-  if (RV3D_CLIPPING_ENABLED(v3d, vc->rv3d)) {
-    ED_view3d_clipping_disable();
+    GPU_depth_test(GPU_DEPTH_NONE);
   }
 
   DRW_opengl_context_disable();
@@ -1741,6 +1749,8 @@ void ED_view3d_xr_shading_update(wmWindowManager *wm, const View3D *v3d, const S
 {
   if (v3d->runtime.flag & V3D_RUNTIME_XR_SESSION_ROOT) {
     View3DShading *xr_shading = &wm->xr.session_settings.shading;
+    /* Flags that shouldn't be overridden by the 3D View shading. */
+    const int flag_copy = V3D_SHADING_WORLD_ORIENTATION;
 
     BLI_assert(WM_xr_session_exists(&wm->xr));
 
@@ -1758,7 +1768,9 @@ void ED_view3d_xr_shading_update(wmWindowManager *wm, const View3D *v3d, const S
     }
 
     /* Copy shading from View3D to VR view. */
+    const int old_xr_shading_flag = xr_shading->flag;
     *xr_shading = v3d->shading;
+    xr_shading->flag = (xr_shading->flag & ~flag_copy) | (old_xr_shading_flag & flag_copy);
     if (v3d->shading.prop) {
       xr_shading->prop = IDP_CopyProperty(xr_shading->prop);
     }

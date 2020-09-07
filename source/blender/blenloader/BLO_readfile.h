@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
  */
-#ifndef __BLO_READFILE_H__
-#define __BLO_READFILE_H__
+#pragma once
 
 #include "BLI_sys_types.h"
 
@@ -173,7 +172,7 @@ void blo_lib_link_restore(struct Main *oldmain,
                           struct Main *newmain,
                           struct wmWindowManager *curwm,
                           struct Scene *curscene,
-                          struct ViewLayer *cur_render_layer);
+                          struct ViewLayer *cur_view_layer);
 
 typedef void (*BLOExpandDoitCallback)(void *fdhandle, struct Main *mainvar, void *idv);
 
@@ -181,11 +180,14 @@ void BLO_main_expander(BLOExpandDoitCallback expand_doit_func);
 void BLO_expand_main(void *fdhandle, struct Main *mainvar);
 
 /* Update defaults in startup.blend & userprefs.blend, without having to save and embed it */
-void BLO_update_defaults_startup_blend(struct Main *mainvar, const char *app_template);
+void BLO_update_defaults_startup_blend(struct Main *bmain, const char *app_template);
 void BLO_update_defaults_workspace(struct WorkSpace *workspace, const char *app_template);
 
 /* Version patch user preferences. */
-void BLO_version_defaults_userpref_blend(struct Main *mainvar, struct UserDef *userdef);
+void BLO_version_defaults_userpref_blend(struct Main *bmain, struct UserDef *userdef);
+
+/* Disable unwanted experimental feature settings on startup. */
+void BLO_sanitize_experimental_features_userpref_blend(struct UserDef *userdef);
 
 struct BlendThumbnail *BLO_thumbnail_from_file(const char *filepath);
 
@@ -196,5 +198,3 @@ extern const struct UserDef U_default;
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLO_READFILE_H__ */

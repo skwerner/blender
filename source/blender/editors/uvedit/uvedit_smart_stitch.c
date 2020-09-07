@@ -323,7 +323,10 @@ static int getNumOfIslandUvs(UvElementMap *elementMap, int island)
   return elementMap->islandIndices[island + 1] - elementMap->islandIndices[island];
 }
 
-static void stitch_uv_rotate(float mat[2][2], float medianPoint[2], float uv[2], float aspect)
+static void stitch_uv_rotate(const float mat[2][2],
+                             const float medianPoint[2],
+                             float uv[2],
+                             float aspect)
 {
   float uv_rotation_result[2];
 
@@ -534,7 +537,7 @@ static void stitch_island_calculate_edge_rotation(UvEdge *edge,
                                                   StitchStateContainer *ssc,
                                                   StitchState *state,
                                                   UVVertAverage *uv_average,
-                                                  uint *uvfinal_map,
+                                                  const uint *uvfinal_map,
                                                   IslandStitchData *island_stitch_data)
 {
   BMesh *bm = state->em->bm;
@@ -981,7 +984,7 @@ static void stitch_propagate_uv_final_position(Scene *scene,
       if (final) {
         copy_v2_v2(luv->uv, final_position[index].uv);
 
-        uvedit_uv_select_enable(state->em, scene, l, false, cd_loop_uv_offset);
+        uvedit_uv_select_enable(scene, state->em, l, false, cd_loop_uv_offset);
       }
       else {
         int face_preview_pos =
@@ -1222,14 +1225,14 @@ static int stitch_process_data(StitchStateContainer *ssc,
     uint buffer_index = 0;
 
     /* initialize the preview buffers */
-    preview->preview_polys = MEM_mallocN(preview->preview_uvs * sizeof(float) * 2,
+    preview->preview_polys = MEM_mallocN(sizeof(float[2]) * preview->preview_uvs,
                                          "tri_uv_stitch_prev");
-    preview->uvs_per_polygon = MEM_mallocN(preview->num_polys * sizeof(*preview->uvs_per_polygon),
+    preview->uvs_per_polygon = MEM_mallocN(sizeof(*preview->uvs_per_polygon) * preview->num_polys,
                                            "tri_uv_stitch_prev");
 
-    preview->static_tris = MEM_mallocN(state->tris_per_island[ssc->static_island] * sizeof(float) *
-                                           6,
-                                       "static_island_preview_tris");
+    preview->static_tris = MEM_mallocN(
+        (sizeof(float[6]) * state->tris_per_island[ssc->static_island]),
+        "static_island_preview_tris");
 
     preview->num_static_tris = state->tris_per_island[ssc->static_island];
     /* will cause cancel and freeing of all data structures so OK */
@@ -1268,9 +1271,9 @@ static int stitch_process_data(StitchStateContainer *ssc,
                   &bm->ldata, lnext->next->head.data, CD_MLOOPUV);
               luv = CustomData_bmesh_get(&bm->ldata, lnext->head.data, CD_MLOOPUV);
 
-              memcpy(preview->static_tris + buffer_index, fuv->uv, 2 * sizeof(float));
-              memcpy(preview->static_tris + buffer_index + 2, luv->uv, 2 * sizeof(float));
-              memcpy(preview->static_tris + buffer_index + 4, luvnext->uv, 2 * sizeof(float));
+              memcpy(preview->static_tris + buffer_index, fuv->uv, sizeof(float[2]));
+              memcpy(preview->static_tris + buffer_index + 2, luv->uv, sizeof(float[2]));
+              memcpy(preview->static_tris + buffer_index + 4, luvnext->uv, sizeof(float[2]));
               buffer_index += 6;
             }
             else {
@@ -1762,7 +1765,7 @@ static void stitch_draw(const bContext *UNUSED(C), ARegion *UNUSED(region), void
       pos_id = GPU_vertformat_attr_add(&format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
     }
 
-    GPU_blend(true);
+    GPU_blend(GPU_BLEND_ALPHA);
 
     /* Static Tris */
     if (stitch_preview->static_tris) {
@@ -1826,7 +1829,7 @@ static void stitch_draw(const bContext *UNUSED(C), ARegion *UNUSED(region), void
       stitch_draw_vbo(vbo_line, GPU_PRIM_LINES, col);
     }
 
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
 
     /* draw stitch vert/lines preview */
     if (ssc->mode == STITCH_VERT) {

@@ -134,13 +134,11 @@ static int vertex_parent_set_exec(bContext *C, wmOperator *op)
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
   Object *obedit = CTX_data_edit_object(C);
-  BMVert *eve;
-  BMIter iter;
-  Nurb *nu;
-  BezTriple *bezt;
-  BPoint *bp;
   Object *par;
-  int a, v1 = 0, v2 = 0, v3 = 0, v4 = 0, nr = 1;
+
+#define INDEX_UNSET -1
+  int par1, par2, par3, par4;
+  par1 = par2 = par3 = par4 = INDEX_UNSET;
 
   /* we need 1 to 3 selected vertices */
 
@@ -165,114 +163,108 @@ static int vertex_parent_set_exec(bContext *C, wmOperator *op)
      * objects are also up to date. */
     BKE_scene_graph_update_tagged(depsgraph, bmain);
 
-    BM_ITER_MESH (eve, &iter, em->bm, BM_VERTS_OF_MESH) {
+    BMVert *eve;
+    BMIter iter;
+    int curr_index;
+    BM_ITER_MESH_INDEX (eve, &iter, em->bm, BM_VERTS_OF_MESH, curr_index) {
       if (BM_elem_flag_test(eve, BM_ELEM_SELECT)) {
-        if (v1 == 0) {
-          v1 = nr;
+        if (par1 == INDEX_UNSET) {
+          par1 = curr_index;
         }
-        else if (v2 == 0) {
-          v2 = nr;
+        else if (par2 == INDEX_UNSET) {
+          par2 = curr_index;
         }
-        else if (v3 == 0) {
-          v3 = nr;
+        else if (par3 == INDEX_UNSET) {
+          par3 = curr_index;
         }
-        else if (v4 == 0) {
-          v4 = nr;
+        else if (par4 == INDEX_UNSET) {
+          par4 = curr_index;
         }
         else {
           break;
         }
       }
-      nr++;
     }
   }
   else if (ELEM(obedit->type, OB_SURF, OB_CURVE)) {
     ListBase *editnurb = object_editcurve_get(obedit);
 
-    nu = editnurb->first;
-    while (nu) {
+    for (Nurb *nu = editnurb->first; nu != NULL; nu = nu->next) {
       if (nu->type == CU_BEZIER) {
-        bezt = nu->bezt;
-        a = nu->pntsu;
-        while (a--) {
+        BezTriple *bezt = nu->bezt;
+        for (int curr_index = 0; curr_index < nu->pntsu; curr_index++, bezt++) {
           if (BEZT_ISSEL_ANY_HIDDENHANDLES(v3d, bezt)) {
-            if (v1 == 0) {
-              v1 = nr;
+            if (par1 == INDEX_UNSET) {
+              par1 = curr_index;
             }
-            else if (v2 == 0) {
-              v2 = nr;
+            else if (par2 == INDEX_UNSET) {
+              par2 = curr_index;
             }
-            else if (v3 == 0) {
-              v3 = nr;
+            else if (par3 == INDEX_UNSET) {
+              par3 = curr_index;
             }
-            else if (v4 == 0) {
-              v4 = nr;
+            else if (par4 == INDEX_UNSET) {
+              par4 = curr_index;
             }
             else {
               break;
             }
           }
-          nr++;
-          bezt++;
         }
       }
       else {
-        bp = nu->bp;
-        a = nu->pntsu * nu->pntsv;
-        while (a--) {
+        BPoint *bp = nu->bp;
+        const int num_points = nu->pntsu * nu->pntsv;
+        for (int curr_index = 0; curr_index < num_points; curr_index++, bp++) {
           if (bp->f1 & SELECT) {
-            if (v1 == 0) {
-              v1 = nr;
+            if (par1 == INDEX_UNSET) {
+              par1 = curr_index;
             }
-            else if (v2 == 0) {
-              v2 = nr;
+            else if (par2 == INDEX_UNSET) {
+              par2 = curr_index;
             }
-            else if (v3 == 0) {
-              v3 = nr;
+            else if (par3 == INDEX_UNSET) {
+              par3 = curr_index;
             }
-            else if (v4 == 0) {
-              v4 = nr;
+            else if (par4 == INDEX_UNSET) {
+              par4 = curr_index;
             }
             else {
               break;
             }
           }
-          nr++;
-          bp++;
         }
       }
-      nu = nu->next;
     }
   }
   else if (obedit->type == OB_LATTICE) {
     Lattice *lt = obedit->data;
 
-    a = lt->editlatt->latt->pntsu * lt->editlatt->latt->pntsv * lt->editlatt->latt->pntsw;
-    bp = lt->editlatt->latt->def;
-    while (a--) {
+    const int num_points = lt->editlatt->latt->pntsu * lt->editlatt->latt->pntsv *
+                           lt->editlatt->latt->pntsw;
+    BPoint *bp = lt->editlatt->latt->def;
+    for (int curr_index = 0; curr_index < num_points; curr_index++, bp++) {
       if (bp->f1 & SELECT) {
-        if (v1 == 0) {
-          v1 = nr;
+        if (par1 == INDEX_UNSET) {
+          par1 = curr_index;
         }
-        else if (v2 == 0) {
-          v2 = nr;
+        else if (par2 == INDEX_UNSET) {
+          par2 = curr_index;
         }
-        else if (v3 == 0) {
-          v3 = nr;
+        else if (par3 == INDEX_UNSET) {
+          par3 = curr_index;
         }
-        else if (v4 == 0) {
-          v4 = nr;
+        else if (par4 == INDEX_UNSET) {
+          par4 = curr_index;
         }
         else {
           break;
         }
       }
-      nr++;
-      bp++;
     }
   }
 
-  if (v4 || !((v1 && v2 == 0 && v3 == 0) || (v1 && v2 && v3))) {
+  if (par4 != INDEX_UNSET || par1 == INDEX_UNSET || (par2 != INDEX_UNSET && par3 == INDEX_UNSET)) {
     BKE_report(op->reports, RPT_ERROR, "Select either 1 or 3 vertices to parent to");
     return OPERATOR_CANCELLED;
   }
@@ -289,11 +281,11 @@ static int vertex_parent_set_exec(bContext *C, wmOperator *op)
         Object workob;
 
         ob->parent = BASACT(view_layer)->object;
-        if (v3) {
+        if (par3 != INDEX_UNSET) {
           ob->partype = PARVERT3;
-          ob->par1 = v1 - 1;
-          ob->par2 = v2 - 1;
-          ob->par3 = v3 - 1;
+          ob->par1 = par1;
+          ob->par2 = par2;
+          ob->par3 = par3;
 
           /* inverse parent matrix */
           BKE_object_workob_calc_parent(depsgraph, scene, ob, &workob);
@@ -301,7 +293,7 @@ static int vertex_parent_set_exec(bContext *C, wmOperator *op)
         }
         else {
           ob->partype = PARVERT1;
-          ob->par1 = v1 - 1;
+          ob->par1 = par1;
 
           /* inverse parent matrix */
           BKE_object_workob_calc_parent(depsgraph, scene, ob, &workob);
@@ -317,6 +309,8 @@ static int vertex_parent_set_exec(bContext *C, wmOperator *op)
   WM_event_add_notifier(C, NC_OBJECT, NULL);
 
   return OPERATOR_FINISHED;
+
+#undef INDEX_UNSET
 }
 
 void OBJECT_OT_vertex_parent_set(wmOperatorType *ot)
@@ -1175,7 +1169,7 @@ static int parent_noinv_set_exec(bContext *C, wmOperator *op)
       else {
         /* clear inverse matrix and also the object location */
         unit_m4(ob->parentinv);
-        memset(ob->loc, 0, 3 * sizeof(float));
+        memset(ob->loc, 0, sizeof(float[3]));
 
         /* set recalc flags */
         DEG_id_tag_update(&ob->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
@@ -1474,7 +1468,8 @@ static int make_links_scene_exec(bContext *C, wmOperator *op)
   /* redraw the 3D view because the object center points are colored differently */
   WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, NULL);
 
-  /* one day multiple scenes will be visible, then we should have some update function for them */
+  /* one day multiple scenes will be visible, then we should have some update function for them
+   */
   return OPERATOR_FINISHED;
 }
 
@@ -1794,9 +1789,9 @@ static Collection *single_object_users_collection(Main *bmain,
 
     if (is_master_collection && copy_collections && child->collection != collection_child_new) {
       /* We do not want a collection sync here, our collections are in a complete uninitialized
-       * state currently. With current code, that would lead to a memory leak - because of reasons.
-       * It would be a useless loss of computing anyway, since caller has to fully refresh
-       * view-layers/collections caching at the end. */
+       * state currently. With current code, that would lead to a memory leak - because of
+       * reasons. It would be a useless loss of computing anyway, since caller has to fully
+       * refresh view-layers/collections caching at the end. */
       BKE_collection_child_add_no_sync(collection, collection_child_new);
       BLI_remlink(&collection->children, child);
       MEM_freeN(child);
@@ -2242,71 +2237,22 @@ void OBJECT_OT_make_local(wmOperatorType *ot)
 /** \name Make Library Override Operator
  * \{ */
 
-static bool make_override_hierarchy_recursive_tag(Main *bmain, ID *id)
+static bool make_override_library_ovject_overridable_check(Main *bmain, Object *object)
 {
-  MainIDRelationsEntry *entry = BLI_ghash_lookup(bmain->relations->id_user_to_used, id);
-
-  /* This way we won't process again that ID should we encounter it again through another
-   * relationship hierarchy.
-   * Note that this does not free any memory from relations, so we can still use the entries.
-   */
-  BKE_main_relations_ID_remove(bmain, id);
-
-  for (; entry != NULL; entry = entry->next) {
-    /* We only consider IDs from the same library. */
-    if (entry->id_pointer != NULL && (*entry->id_pointer)->lib == id->lib) {
-      if (make_override_hierarchy_recursive_tag(bmain, *entry->id_pointer)) {
-        id->tag |= LIB_TAG_DOIT;
-      }
+  /* An object is actually overrideable only if it is in at least one local collections.
+   * Unfortunately 'direct link' flag is not enough here. */
+  LISTBASE_FOREACH (Collection *, collection, &bmain->collections) {
+    if (!ID_IS_LINKED(collection) && BKE_collection_has_object(collection, object)) {
+      return true;
     }
   }
-
-  return (id->tag & LIB_TAG_DOIT) != 0;
-}
-
-static int make_override_tag_ids_cb(LibraryIDLinkCallbackData *cb_data)
-{
-  if (cb_data->cb_flag & (IDWALK_CB_EMBEDDED | IDWALK_CB_LOOPBACK)) {
-    return IDWALK_RET_STOP_RECURSION;
-  }
-
-  ID *id_root = cb_data->user_data;
-  Library *library_root = id_root->lib;
-  ID *id = *cb_data->id_pointer;
-  ID *id_owner = cb_data->id_owner;
-
-  BLI_assert(id_owner == cb_data->id_self);
-
-  if (ELEM(id, NULL, id_owner)) {
-    return IDWALK_RET_NOP;
-  }
-
-  BLI_assert(id->lib != NULL);
-  BLI_assert(id_owner->lib == library_root);
-
-  if (id->tag & LIB_TAG_DOIT) {
-    /* Already processed, but maybe not with the same chain of dependency, so we need to check that
-     * one nonetheless. */
-    return IDWALK_RET_STOP_RECURSION;
-  }
-
-  if (id->lib != library_root) {
-    /* We do not override data-blocks from other libraries, nor do we process them. */
-    return IDWALK_RET_STOP_RECURSION;
-  }
-
-  /* We tag all collections and objects for override. And we also tag all other data-blocks which
-   * would user one of those. */
-  if (ELEM(GS(id->name), ID_OB, ID_GR)) {
-    id->tag |= LIB_TAG_DOIT;
-  }
-
-  return IDWALK_RET_NOP;
+  return false;
 }
 
 /* Set the object to override. */
 static int make_override_library_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
+  Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
   Object *obact = ED_object_active_context(C);
 
@@ -2315,14 +2261,9 @@ static int make_override_library_invoke(bContext *C, wmOperator *op, const wmEve
     return OPERATOR_CANCELLED;
   }
 
-  /* Get object to work on - use a menu if we need to... */
-  if (!ID_IS_LINKED(obact) && obact->instance_collection != NULL &&
-      ID_IS_LINKED(obact->instance_collection)) {
-    /* Gives menu with list of objects in group. */
-    WM_enum_search_invoke(C, op, event);
-    return OPERATOR_CANCELLED;
-  }
-  if (ID_IS_LINKED(obact)) {
+  if ((!ID_IS_LINKED(obact) && obact->instance_collection != NULL &&
+       ID_IS_OVERRIDABLE_LIBRARY(obact->instance_collection)) ||
+      make_override_library_ovject_overridable_check(bmain, obact)) {
     uiPopupMenu *pup = UI_popup_menu_begin(C, IFACE_("OK?"), ICON_QUESTION);
     uiLayout *layout = UI_popup_menu_layout(pup);
 
@@ -2338,6 +2279,12 @@ static int make_override_library_invoke(bContext *C, wmOperator *op, const wmEve
     return OPERATOR_INTERFACE;
   }
 
+  if (ID_IS_LINKED(obact)) {
+    /* Show menu with list of directly linked collections containing the active object. */
+    WM_enum_search_invoke(C, op, event);
+    return OPERATOR_CANCELLED;
+  }
+
   /* Error.. cannot continue. */
   BKE_report(op->reports,
              RPT_ERROR,
@@ -2348,10 +2295,11 @@ static int make_override_library_invoke(bContext *C, wmOperator *op, const wmEve
 static int make_override_library_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
+  Scene *scene = CTX_data_scene(C);
+  ViewLayer *view_layer = CTX_data_view_layer(C);
   Object *obact = CTX_data_active_object(C);
   ID *id_root = NULL;
-
-  bool success = false;
+  bool is_override_instancing_object = false;
 
   if (!ID_IS_LINKED(obact) && obact->instance_collection != NULL &&
       ID_IS_LINKED(obact->instance_collection)) {
@@ -2364,13 +2312,31 @@ static int make_override_library_exec(bContext *C, wmOperator *op)
     }
 
     id_root = &obact->instance_collection->id;
+    is_override_instancing_object = true;
   }
-  else if (!ID_IS_OVERRIDABLE_LIBRARY(obact)) {
-    BKE_reportf(op->reports,
-                RPT_ERROR_INVALID_INPUT,
-                "Active object '%s' is not overridable",
-                obact->id.name + 2);
-    return OPERATOR_CANCELLED;
+  else if (!make_override_library_ovject_overridable_check(bmain, obact)) {
+    const int i = RNA_property_enum_get(op->ptr, op->type->prop);
+    const uint collection_session_uuid = *((uint *)&i);
+    if (collection_session_uuid == MAIN_ID_SESSION_UUID_UNSET) {
+      BKE_reportf(op->reports,
+                  RPT_ERROR_INVALID_INPUT,
+                  "Active object '%s' is not overridable",
+                  obact->id.name + 2);
+      return OPERATOR_CANCELLED;
+    }
+
+    Collection *collection = BLI_listbase_bytes_find(&bmain->collections,
+                                                     &collection_session_uuid,
+                                                     sizeof(collection_session_uuid),
+                                                     offsetof(ID, session_uuid));
+    if (!ID_IS_OVERRIDABLE_LIBRARY(collection)) {
+      BKE_reportf(op->reports,
+                  RPT_ERROR_INVALID_INPUT,
+                  "Could not find an overridable collection containing object '%s'",
+                  obact->id.name + 2);
+      return OPERATOR_CANCELLED;
+    }
+    id_root = &collection->id;
   }
   /* Else, poll func ensures us that ID_IS_LINKED(obact) is true. */
   else {
@@ -2379,138 +2345,14 @@ static int make_override_library_exec(bContext *C, wmOperator *op)
 
   BKE_main_id_tag_all(bmain, LIB_TAG_DOIT, false);
 
-  /* Tag all collections and objects, as well as other IDs using them. */
-  id_root->tag |= LIB_TAG_DOIT;
+  const bool success = BKE_lib_override_library_create(
+      bmain, scene, view_layer, id_root, &obact->id);
 
-  BKE_main_relations_create(bmain, 0);
-
-  BKE_library_foreach_ID_link(
-      bmain, id_root, make_override_tag_ids_cb, id_root, IDWALK_READONLY | IDWALK_RECURSE);
-
-  /* Then, we remove (untag) bone shape objects, you shall never want to override those
-   * (hopefully)... */
-  LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
-    if (ob->type == OB_ARMATURE && ob->pose != NULL && (ob->id.tag & LIB_TAG_DOIT)) {
-      for (bPoseChannel *pchan = ob->pose->chanbase.first; pchan != NULL; pchan = pchan->next) {
-        if (pchan->custom != NULL) {
-          pchan->custom->id.tag &= ~LIB_TAG_DOIT;
-        }
-      }
-    }
+  /* Remove the instance empty from this scene, the items now have an overridden collection
+   * instead. */
+  if (success && is_override_instancing_object) {
+    ED_object_base_free_and_unlink(bmain, scene, obact);
   }
-
-  /* Then we tag all intermediary data-blocks in-between two overridden ones (e.g. if a shapekey
-   * has a driver using an armature object's bone, we need to override the shapekey/obdata, the
-   * objects using them, etc.) */
-  make_override_hierarchy_recursive_tag(bmain, id_root);
-
-  BKE_main_relations_free(bmain);
-
-  ID *id;
-  FOREACH_MAIN_ID_BEGIN (bmain, id) {
-    if (id->tag & LIB_TAG_DOIT && id->lib != NULL) {
-      printf("ID %s tagged for override\n", id->name);
-    }
-  }
-  FOREACH_MAIN_ID_END;
-
-  success = BKE_lib_override_library_create_from_tag(bmain);
-
-  if (success) {
-    Scene *scene = CTX_data_scene(C);
-    ViewLayer *view_layer = CTX_data_view_layer(C);
-
-    BKE_main_collection_sync(bmain);
-
-    switch (GS(id_root->name)) {
-      case ID_GR: {
-        Collection *collection_new = ((Collection *)id_root->newid);
-        BKE_collection_add_from_object(bmain, scene, obact, collection_new);
-
-        FOREACH_COLLECTION_OBJECT_RECURSIVE_BEGIN (collection_new, ob_new) {
-          if (ob_new != NULL && ob_new->id.override_library != NULL) {
-            Base *base;
-            if ((base = BKE_view_layer_base_find(view_layer, ob_new)) == NULL) {
-              BKE_collection_object_add_from(bmain, scene, obact, ob_new);
-              base = BKE_view_layer_base_find(view_layer, ob_new);
-              DEG_id_tag_update_ex(bmain, &ob_new->id, ID_RECALC_TRANSFORM | ID_RECALC_BASE_FLAGS);
-            }
-
-            if (ob_new == (Object *)obact->id.newid) {
-              /* TODO: is setting active needed? */
-              BKE_view_layer_base_select_and_set_active(view_layer, base);
-            }
-          }
-        }
-        FOREACH_COLLECTION_OBJECT_RECURSIVE_END;
-        break;
-      }
-      case ID_OB: {
-        BKE_collection_object_add_from(bmain, scene, obact, ((Object *)id_root->newid));
-        break;
-      }
-      default:
-        BLI_assert(0);
-    }
-
-    /* We need to ensure all new overrides of objects are properly instantiated. */
-    LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
-      Object *ob_new = (Object *)ob->id.newid;
-      if (ob_new != NULL) {
-        BLI_assert(ob_new->id.override_library != NULL &&
-                   ob_new->id.override_library->reference == &ob->id);
-
-        Collection *default_instantiating_collection = NULL;
-        Base *base;
-        if ((base = BKE_view_layer_base_find(view_layer, ob_new)) == NULL) {
-          if (default_instantiating_collection == NULL) {
-            switch (GS(id_root->name)) {
-              case ID_GR: {
-                default_instantiating_collection = BKE_collection_add(
-                    bmain, (Collection *)id_root, "OVERRIDE_HIDDEN");
-                break;
-              }
-              case ID_OB: {
-                /* Add the new container collection to one of the collections instantiating the
-                 * root object, or scene's master collection if none found. */
-                Object *ob_root = (Object *)id_root;
-                LISTBASE_FOREACH (Collection *, collection, &bmain->collections) {
-                  if (BKE_collection_has_object(collection, ob_root) &&
-                      BKE_view_layer_has_collection(view_layer, collection)) {
-                    default_instantiating_collection = BKE_collection_add(
-                        bmain, collection, "OVERRIDE_HIDDEN");
-                  }
-                }
-                if (default_instantiating_collection == NULL) {
-                  default_instantiating_collection = BKE_collection_add(
-                      bmain, scene->master_collection, "OVERRIDE_HIDDEN");
-                }
-                break;
-              }
-              default:
-                BLI_assert(0);
-            }
-            /* Hide the collection from viewport and render. */
-            default_instantiating_collection->flag |= COLLECTION_RESTRICT_VIEWPORT |
-                                                      COLLECTION_RESTRICT_RENDER;
-          }
-
-          BKE_collection_object_add(bmain, default_instantiating_collection, ob_new);
-          DEG_id_tag_update_ex(bmain, &ob_new->id, ID_RECALC_TRANSFORM | ID_RECALC_BASE_FLAGS);
-        }
-      }
-    }
-
-    /* Remove the instance empty from this scene, the items now have an overridden collection
-     * instead. */
-    if (id_root != &obact->id) {
-      ED_object_base_free_and_unlink(bmain, scene, obact);
-    }
-  }
-
-  /* Cleanup. */
-  BKE_main_id_clear_newpoins(bmain);
-  BKE_main_id_tag_all(bmain, LIB_TAG_DOIT, false);
 
   DEG_id_tag_update(&CTX_data_scene(C)->id, ID_RECALC_BASE_FLAGS | ID_RECALC_COPY_ON_WRITE);
   WM_event_add_notifier(C, NC_WINDOW, NULL);
@@ -2523,10 +2365,40 @@ static bool make_override_library_poll(bContext *C)
   Object *obact = CTX_data_active_object(C);
 
   /* Object must be directly linked to be overridable. */
-  return (BKE_lib_override_library_is_enabled() && ED_operator_objectmode(C) && obact != NULL &&
-          ((ID_IS_LINKED(obact) && obact->id.tag & LIB_TAG_EXTERN) ||
-           (!ID_IS_LINKED(obact) && obact->instance_collection != NULL &&
-            ID_IS_LINKED(obact->instance_collection))));
+  return (ED_operator_objectmode(C) && obact != NULL &&
+          (ID_IS_LINKED(obact) || (obact->instance_collection != NULL &&
+                                   ID_IS_OVERRIDABLE_LIBRARY(obact->instance_collection))));
+}
+
+static const EnumPropertyItem *make_override_collections_of_linked_object_itemf(
+    bContext *C, PointerRNA *UNUSED(ptr), PropertyRNA *UNUSED(prop), bool *r_free)
+{
+  EnumPropertyItem item_tmp = {0}, *item = NULL;
+  int totitem = 0;
+
+  Object *object = ED_object_active_context(C);
+  Main *bmain = CTX_data_main(C);
+
+  if (!object || !ID_IS_LINKED(object)) {
+    return DummyRNA_DEFAULT_items;
+  }
+
+  LISTBASE_FOREACH (Collection *, collection, &bmain->collections) {
+    /* Only check for directly linked collections. */
+    if (!ID_IS_LINKED(&collection->id) || (collection->id.tag & LIB_TAG_INDIRECT) != 0) {
+      continue;
+    }
+    if (BKE_collection_has_object_recursive(collection, object)) {
+      item_tmp.identifier = item_tmp.name = collection->id.name + 2;
+      item_tmp.value = *((int *)&collection->id.session_uuid);
+      RNA_enum_item_add(&item, &totitem, &item_tmp);
+    }
+  }
+
+  RNA_enum_item_end(&item, &totitem);
+  *r_free = true;
+
+  return item;
 }
 
 void OBJECT_OT_make_override_library(wmOperatorType *ot)
@@ -2547,12 +2419,13 @@ void OBJECT_OT_make_override_library(wmOperatorType *ot)
   /* properties */
   PropertyRNA *prop;
   prop = RNA_def_enum(ot->srna,
-                      "object",
+                      "collection",
                       DummyRNA_DEFAULT_items,
-                      0,
-                      "Override Object",
-                      "Name of lib-linked/collection object to make an override from");
-  RNA_def_enum_funcs(prop, proxy_collection_object_itemf);
+                      MAIN_ID_SESSION_UUID_UNSET,
+                      "Override Collection",
+                      "Name of directly linked collection containing the selected object, to make "
+                      "an override from");
+  RNA_def_enum_funcs(prop, make_override_collections_of_linked_object_itemf);
   RNA_def_property_flag(prop, PROP_ENUM_NO_TRANSLATE);
   ot->prop = prop;
 }

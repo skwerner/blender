@@ -1,0 +1,106 @@
+/*
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ *
+ * Copyright 2020, Blender Foundation.
+ * All rights reserved.
+ */
+
+/** \file
+ * \ingroup gpu
+ */
+
+#pragma once
+
+#include "gpu_context_private.hh"
+
+#include "GPU_framebuffer.h"
+
+#include "BLI_set.hh"
+#include "BLI_vector.hh"
+
+#include "gl_state.hh"
+
+#include "glew-mx.h"
+
+#include <mutex>
+
+namespace blender {
+namespace gpu {
+
+class GLVaoCache;
+
+class GLSharedOrphanLists {
+ public:
+  /** Mutex for the bellow structures. */
+  std::mutex lists_mutex;
+  /** Buffers and textures are shared across context. Any context can free them. */
+  Vector<GLuint> textures;
+  Vector<GLuint> buffers;
+
+ public:
+  void orphans_clear(void);
+};
+
+class GLContext : public GPUContext {
+ public:
+  /** Used for debugging purpose. Bitflags of all bound slots. */
+  uint16_t bound_ubo_slots;
+
+  /* TODO(fclem) these needs to become private. */
+ public:
+  /** VBO for missing vertex attrib binding. Avoid undefined behavior on some implementation. */
+  GLuint default_attr_vbo_;
+  /**
+   * GPUBatch & GPUFramebuffer have references to the context they are from, in the case the
+   * context is destroyed, we need to remove any reference to it.
+   */
+  Set<GLVaoCache *> vao_caches_;
+  Set<GPUFrameBuffer *> framebuffers_;
+  /** Mutex for the bellow structures. */
+  std::mutex lists_mutex_;
+  /** VertexArrays and framebuffers are not shared across context. */
+  Vector<GLuint> orphaned_vertarrays_;
+  Vector<GLuint> orphaned_framebuffers_;
+  /** GLBackend onws this data. */
+  GLSharedOrphanLists &shared_orphan_list_;
+
+ public:
+  GLContext(void *ghost_window, GLSharedOrphanLists &shared_orphan_list);
+  ~GLContext();
+
+  static void check_error(const char *info);
+
+  void activate(void) override;
+  void deactivate(void) override;
+
+  static inline GLStateManager *state_manager_active_get()
+  {
+    GLContext *ctx = static_cast<GLContext *>(GPU_context_active_get());
+    return static_cast<GLStateManager *>(ctx->state_manager);
+  };
+
+  /* TODO(fclem) these needs to become private. */
+ public:
+  void orphans_add(Vector<GLuint> &orphan_list, std::mutex &list_mutex, GLuint id);
+  void orphans_clear(void);
+
+  void vao_free(GLuint vao_id);
+  void fbo_free(GLuint fbo_id);
+  void vao_cache_register(GLVaoCache *cache);
+  void vao_cache_unregister(GLVaoCache *cache);
+};
+
+}  // namespace gpu
+}  // namespace blender

@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_SEQUENCER_H__
-#define __BKE_SEQUENCER_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -63,29 +62,33 @@ typedef struct SeqIterator {
   int valid;
 } SeqIterator;
 
-void BKE_sequence_iterator_begin(struct Editing *ed, SeqIterator *iter, bool use_pointer);
+void BKE_sequence_iterator_begin(struct Editing *ed,
+                                 SeqIterator *iter,
+                                 const bool use_current_sequences);
 void BKE_sequence_iterator_next(SeqIterator *iter);
 void BKE_sequence_iterator_end(SeqIterator *iter);
 
-#define SEQP_BEGIN(_ed, _seq) \
-  { \
-    SeqIterator iter_macro; \
-    for (BKE_sequence_iterator_begin(_ed, &iter_macro, true); iter_macro.valid; \
-         BKE_sequence_iterator_next(&iter_macro)) { \
-      _seq = iter_macro.seq;
-
-#define SEQ_BEGIN(ed, _seq) \
+#define SEQ_ALL_BEGIN(ed, _seq) \
   { \
     SeqIterator iter_macro; \
     for (BKE_sequence_iterator_begin(ed, &iter_macro, false); iter_macro.valid; \
          BKE_sequence_iterator_next(&iter_macro)) { \
       _seq = iter_macro.seq;
 
-#define SEQ_END \
+#define SEQ_ALL_END \
   } \
   BKE_sequence_iterator_end(&iter_macro); \
   } \
   ((void)0)
+
+#define SEQ_CURRENT_BEGIN(_ed, _seq) \
+  { \
+    SeqIterator iter_macro; \
+    for (BKE_sequence_iterator_begin(_ed, &iter_macro, true); iter_macro.valid; \
+         BKE_sequence_iterator_next(&iter_macro)) { \
+      _seq = iter_macro.seq;
+
+#define SEQ_CURRENT_END SEQ_ALL_END
 
 typedef enum eSeqTaskId {
   SEQ_TASK_MAIN_RENDER,
@@ -260,10 +263,10 @@ struct Mask *BKE_sequencer_mask_get(struct Scene *scene);
 
 /* apply functions recursively */
 int BKE_sequencer_base_recursive_apply(struct ListBase *seqbase,
-                                       int (*apply_func)(struct Sequence *seq, void *),
+                                       int (*apply_fn)(struct Sequence *seq, void *),
                                        void *arg);
 int BKE_sequencer_recursive_apply(struct Sequence *seq,
-                                  int (*apply_func)(struct Sequence *, void *),
+                                  int (*apply_fn)(struct Sequence *, void *),
                                   void *arg);
 
 /* maintenance functions, mostly for RNA */
@@ -285,6 +288,11 @@ void BKE_sequence_reload_new_file(struct Main *bmain,
                                   struct Scene *scene,
                                   struct Sequence *seq,
                                   const bool lock_range);
+void BKE_sequence_movie_reload_if_needed(struct Main *bmain,
+                                         struct Scene *scene,
+                                         struct Sequence *seq,
+                                         bool *r_was_reloaded,
+                                         bool *r_can_produce_frames);
 int BKE_sequencer_evaluate_frame(struct Scene *scene, int cfra);
 int BKE_sequencer_get_shown_sequences(struct ListBase *seqbasep,
                                       int cfra,
@@ -311,7 +319,7 @@ bool BKE_sequencer_proxy_rebuild_context(struct Main *bmain,
 void BKE_sequencer_proxy_rebuild(struct SeqIndexBuildContext *context,
                                  short *stop,
                                  short *do_update,
-                                 float *num_frames_prefetched);
+                                 float *progress);
 void BKE_sequencer_proxy_rebuild_finish(struct SeqIndexBuildContext *context, bool stop);
 
 void BKE_sequencer_proxy_set(struct Sequence *seq, bool value);
@@ -332,7 +340,7 @@ void BKE_sequencer_cache_put(const SeqRenderData *context,
                              struct Sequence *seq,
                              float cfra,
                              int type,
-                             struct ImBuf *nval,
+                             struct ImBuf *i,
                              float cost,
                              bool skip_disk_cache);
 bool BKE_sequencer_cache_put_if_possible(const SeqRenderData *context,
@@ -522,6 +530,9 @@ typedef struct Sequence *(*SeqLoadFn)(struct bContext *, ListBase *, struct SeqL
 
 struct Sequence *BKE_sequence_alloc(ListBase *lb, int cfra, int machine, int type);
 
+/* Generate new UUID for the given sequence. */
+void BKE_sequence_session_uuid_generate(struct Sequence *sequence);
+
 void BKE_sequence_alpha_mode_from_extension(struct Sequence *seq);
 void BKE_sequence_init_colorspace(struct Sequence *seq);
 
@@ -619,9 +630,16 @@ void BKE_sequencer_color_balance_apply(struct StripColorBalance *cb,
 
 void BKE_sequencer_all_free_anim_ibufs(struct Scene *scene, int cfra);
 bool BKE_sequencer_check_scene_recursion(struct Scene *scene, struct ReportList *reports);
+bool BKE_sequencer_render_loop_check(struct Sequence *seq_main, struct Sequence *seq);
+void BKE_sequencer_flag_for_removal(struct Scene *scene,
+                                    struct ListBase *seqbase,
+                                    struct Sequence *seq);
+void BKE_sequencer_remove_flagged_sequences(struct Scene *scene, struct ListBase *seqbase);
+
+/* A debug and development function which checks whether sequences have unique UUIDs.
+ * Errors will be reported to the console. */
+void BKE_sequencer_check_uuids_unique_and_report(const struct Scene *scene);
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_SEQUENCER_H__ */

@@ -59,7 +59,7 @@
 #include "MOD_ui_common.h"
 
 #ifdef WITH_OCEANSIM
-static void init_cache_data(Object *ob, struct OceanModifierData *omd)
+static void init_cache_data(Object *ob, struct OceanModifierData *omd, const int resolution)
 {
   const char *relbase = BKE_modifier_path_relbase_from_global(ob);
 
@@ -71,7 +71,7 @@ static void init_cache_data(Object *ob, struct OceanModifierData *omd)
                                          omd->chop_amount,
                                          omd->foam_coverage,
                                          omd->foam_fade,
-                                         omd->resolution);
+                                         resolution);
 }
 
 static void simulate_ocean_modifier(struct OceanModifierData *omd)
@@ -87,7 +87,11 @@ static void initData(ModifierData *md)
 #ifdef WITH_OCEANSIM
   OceanModifierData *omd = (OceanModifierData *)md;
 
+  /* Render resolution */
   omd->resolution = 7;
+  /* Display resolution for the non-render case */
+  omd->viewport_resolution = 7;
+
   omd->spatial_size = 50;
 
   omd->wave_alignment = 0.0;
@@ -126,7 +130,7 @@ static void initData(ModifierData *md)
   omd->spraylayername[0] = '\0'; /* layer name empty by default */
 
   omd->ocean = BKE_ocean_add();
-  BKE_ocean_init_from_modifier(omd->ocean, omd);
+  BKE_ocean_init_from_modifier(omd->ocean, omd, omd->viewport_resolution);
   simulate_ocean_modifier(omd);
 #else  /* WITH_OCEANSIM */
   /* unused */
@@ -164,7 +168,7 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
   tomd->oceancache = NULL;
 
   tomd->ocean = BKE_ocean_add();
-  BKE_ocean_init_from_modifier(tomd->ocean, tomd);
+  BKE_ocean_init_from_modifier(tomd->ocean, tomd, tomd->viewport_resolution);
   simulate_ocean_modifier(tomd);
 #else  /* WITH_OCEANSIM */
   /* unused */
@@ -288,7 +292,7 @@ static void generate_ocean_geometry_uvs(void *__restrict userdata,
   }
 }
 
-static Mesh *generate_ocean_geometry(OceanModifierData *omd, Mesh *mesh_orig)
+static Mesh *generate_ocean_geometry(OceanModifierData *omd, Mesh *mesh_orig, const int resolution)
 {
   Mesh *result;
 
@@ -297,10 +301,10 @@ static Mesh *generate_ocean_geometry(OceanModifierData *omd, Mesh *mesh_orig)
   int num_verts;
   int num_polys;
 
-  const bool use_threading = omd->resolution > 4;
+  const bool use_threading = resolution > 4;
 
-  gogd.rx = omd->resolution * omd->resolution;
-  gogd.ry = omd->resolution * omd->resolution;
+  gogd.rx = resolution * resolution;
+  gogd.ry = resolution * resolution;
   gogd.res_x = gogd.rx * omd->repeat_x;
   gogd.res_y = gogd.ry * omd->repeat_y;
 
@@ -362,6 +366,9 @@ static Mesh *doOcean(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mes
   Mesh *result = NULL;
   OceanResult ocr;
 
+  const int resolution = (ctx->flag & MOD_APPLY_RENDER) ? omd->resolution :
+                                                          omd->viewport_resolution;
+
   MVert *mverts;
 
   int cfra_for_cache;
@@ -383,7 +390,7 @@ static Mesh *doOcean(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mes
   /* do ocean simulation */
   if (omd->cached == true) {
     if (!omd->oceancache) {
-      init_cache_data(ob, omd);
+      init_cache_data(ob, omd, resolution);
     }
     BKE_ocean_simulate_cache(omd->oceancache, cfra_scene);
   }
@@ -393,12 +400,12 @@ static Mesh *doOcean(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mes
      * This function is only called on an original object when applying the modifier
      * using the 'Apply Modifier' button, and thus it is not called frequently for
      * simulation. */
-    allocated_ocean |= BKE_ocean_ensure(omd);
+    allocated_ocean |= BKE_ocean_ensure(omd, resolution);
     simulate_ocean_modifier(omd);
   }
 
   if (omd->geometry_mode == MOD_OCEAN_GEOM_GENERATE) {
-    result = generate_ocean_geometry(omd, mesh);
+    result = generate_ocean_geometry(omd, mesh, resolution);
     BKE_mesh_ensure_normals(result);
   }
   else if (omd->geometry_mode == MOD_OCEAN_GEOM_DISPLACE) {
@@ -539,166 +546,160 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
   return result;
 }
 // #define WITH_OCEANSIM
-static void panel_draw(const bContext *C, Panel *panel)
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *layout = panel->layout;
 #ifdef WITH_OCEANSIM
   uiLayout *col, *sub;
 
-  PointerRNA ptr;
   PointerRNA ob_ptr;
-  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
 
   uiLayoutSetPropSep(layout, true);
 
   col = uiLayoutColumn(layout, false);
-  uiItemR(col, &ptr, "geometry_mode", 0, NULL, ICON_NONE);
-  if (RNA_enum_get(&ptr, "geometry_mode") == MOD_OCEAN_GEOM_GENERATE) {
+  uiItemR(col, ptr, "geometry_mode", 0, NULL, ICON_NONE);
+  if (RNA_enum_get(ptr, "geometry_mode") == MOD_OCEAN_GEOM_GENERATE) {
     sub = uiLayoutColumn(col, true);
-    uiItemR(sub, &ptr, "repeat_x", 0, IFACE_("Repeat X"), ICON_NONE);
-    uiItemR(sub, &ptr, "repeat_y", 0, IFACE_("Y"), ICON_NONE);
+    uiItemR(sub, ptr, "repeat_x", 0, IFACE_("Repeat X"), ICON_NONE);
+    uiItemR(sub, ptr, "repeat_y", 0, IFACE_("Y"), ICON_NONE);
   }
-  uiItemR(col, &ptr, "resolution", 0, NULL, ICON_NONE);
 
-  uiItemR(col, &ptr, "time", 0, NULL, ICON_NONE);
+  sub = uiLayoutColumn(col, true);
+  uiItemR(sub, ptr, "viewport_resolution", 0, IFACE_("Resolution Viewport"), ICON_NONE);
+  uiItemR(sub, ptr, "resolution", 0, IFACE_("Render"), ICON_NONE);
 
-  uiItemR(col, &ptr, "depth", 0, NULL, ICON_NONE);
-  uiItemR(col, &ptr, "size", 0, NULL, ICON_NONE);
-  uiItemR(col, &ptr, "spatial_size", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "time", 0, NULL, ICON_NONE);
 
-  uiItemR(col, &ptr, "random_seed", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "depth", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "size", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "spatial_size", 0, NULL, ICON_NONE);
 
-  uiItemR(col, &ptr, "use_normals", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "random_seed", 0, NULL, ICON_NONE);
 
-  modifier_panel_end(layout, &ptr);
+  uiItemR(col, ptr, "use_normals", 0, NULL, ICON_NONE);
+
+  modifier_panel_end(layout, ptr);
 
 #else  /* WITH_OCEANSIM */
   uiItemL(layout, IFACE_("Built without Ocean modifier"), ICON_NONE);
-  UNUSED_VARS(C);
 #endif /* WITH_OCEANSIM */
 }
 
 #ifdef WITH_OCEANSIM
-static void waves_panel_draw(const bContext *C, Panel *panel)
+static void waves_panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *col, *sub;
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
 
   uiLayoutSetPropSep(layout, true);
 
   col = uiLayoutColumn(layout, false);
-  uiItemR(col, &ptr, "wave_scale", 0, IFACE_("Scale"), ICON_NONE);
-  uiItemR(col, &ptr, "wave_scale_min", 0, NULL, ICON_NONE);
-  uiItemR(col, &ptr, "choppiness", 0, NULL, ICON_NONE);
-  uiItemR(col, &ptr, "wind_velocity", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "wave_scale", 0, IFACE_("Scale"), ICON_NONE);
+  uiItemR(col, ptr, "wave_scale_min", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "choppiness", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "wind_velocity", 0, NULL, ICON_NONE);
 
   uiItemS(layout);
 
   col = uiLayoutColumn(layout, false);
-  uiItemR(col, &ptr, "wave_alignment", UI_ITEM_R_SLIDER, IFACE_("Alignment"), ICON_NONE);
+  uiItemR(col, ptr, "wave_alignment", UI_ITEM_R_SLIDER, IFACE_("Alignment"), ICON_NONE);
   sub = uiLayoutColumn(col, false);
-  uiLayoutSetActive(sub, RNA_float_get(&ptr, "wave_alignment") > 0.0f);
-  uiItemR(sub, &ptr, "wave_direction", 0, IFACE_("Direction"), ICON_NONE);
-  uiItemR(sub, &ptr, "damping", 0, NULL, ICON_NONE);
+  uiLayoutSetActive(sub, RNA_float_get(ptr, "wave_alignment") > 0.0f);
+  uiItemR(sub, ptr, "wave_direction", 0, IFACE_("Direction"), ICON_NONE);
+  uiItemR(sub, ptr, "damping", 0, NULL, ICON_NONE);
 }
 
-static void foam_panel_draw_header(const bContext *C, Panel *panel)
+static void foam_panel_draw_header(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
 
-  uiItemR(layout, &ptr, "use_foam", 0, IFACE_("Foam"), ICON_NONE);
+  uiItemR(layout, ptr, "use_foam", 0, IFACE_("Foam"), ICON_NONE);
 }
 
-static void foam_panel_draw(const bContext *C, Panel *panel)
+static void foam_panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *col;
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
 
-  bool use_foam = RNA_boolean_get(&ptr, "use_foam");
+  bool use_foam = RNA_boolean_get(ptr, "use_foam");
 
   uiLayoutSetPropSep(layout, true);
 
   col = uiLayoutColumn(layout, false);
   uiLayoutSetActive(col, use_foam);
-  uiItemR(col, &ptr, "foam_layer_name", 0, IFACE_("Data Layer"), ICON_NONE);
-  uiItemR(col, &ptr, "foam_coverage", 0, IFACE_("Coverage"), ICON_NONE);
+  uiItemR(col, ptr, "foam_layer_name", 0, IFACE_("Data Layer"), ICON_NONE);
+  uiItemR(col, ptr, "foam_coverage", 0, IFACE_("Coverage"), ICON_NONE);
 }
 
-static void spray_panel_draw_header(const bContext *C, Panel *panel)
+static void spray_panel_draw_header(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *row;
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
 
-  bool use_foam = RNA_boolean_get(&ptr, "use_foam");
+  bool use_foam = RNA_boolean_get(ptr, "use_foam");
 
   row = uiLayoutRow(layout, false);
   uiLayoutSetActive(row, use_foam);
-  uiItemR(row, &ptr, "use_spray", 0, IFACE_("Spray"), ICON_NONE);
+  uiItemR(row, ptr, "use_spray", 0, IFACE_("Spray"), ICON_NONE);
 }
 
-static void spray_panel_draw(const bContext *C, Panel *panel)
+static void spray_panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *col;
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
 
-  bool use_foam = RNA_boolean_get(&ptr, "use_foam");
-  bool use_spray = RNA_boolean_get(&ptr, "use_spray");
+  bool use_foam = RNA_boolean_get(ptr, "use_foam");
+  bool use_spray = RNA_boolean_get(ptr, "use_spray");
 
   uiLayoutSetPropSep(layout, true);
 
   col = uiLayoutColumn(layout, false);
   uiLayoutSetActive(col, use_foam && use_spray);
-  uiItemR(col, &ptr, "spray_layer_name", 0, IFACE_("Data Layer"), ICON_NONE);
-  uiItemR(col, &ptr, "invert_spray", 0, IFACE_("Invert"), ICON_NONE);
+  uiItemR(col, ptr, "spray_layer_name", 0, IFACE_("Data Layer"), ICON_NONE);
+  uiItemR(col, ptr, "invert_spray", 0, IFACE_("Invert"), ICON_NONE);
 }
 
-static void spectrum_panel_draw(const bContext *C, Panel *panel)
+static void spectrum_panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *col;
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
 
-  int spectrum = RNA_enum_get(&ptr, "spectrum");
+  int spectrum = RNA_enum_get(ptr, "spectrum");
 
   uiLayoutSetPropSep(layout, true);
 
   col = uiLayoutColumn(layout, false);
-  uiItemR(col, &ptr, "spectrum", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "spectrum", 0, NULL, ICON_NONE);
   if (ELEM(spectrum, MOD_OCEAN_SPECTRUM_TEXEL_MARSEN_ARSLOE, MOD_OCEAN_SPECTRUM_JONSWAP)) {
-    uiItemR(col, &ptr, "sharpen_peak_jonswap", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
-    uiItemR(col, &ptr, "fetch_jonswap", 0, NULL, ICON_NONE);
+    uiItemR(col, ptr, "sharpen_peak_jonswap", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
+    uiItemR(col, ptr, "fetch_jonswap", 0, NULL, ICON_NONE);
   }
 }
 
-static void bake_panel_draw(const bContext *C, Panel *panel)
+static void bake_panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *col;
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
 
   uiLayoutSetPropSep(layout, true);
 
-  bool is_cached = RNA_boolean_get(&ptr, "is_cached");
-  bool use_foam = RNA_boolean_get(&ptr, "use_foam");
+  bool is_cached = RNA_boolean_get(ptr, "is_cached");
+  bool use_foam = RNA_boolean_get(ptr, "use_foam");
 
   if (is_cached) {
     PointerRNA op_ptr;
@@ -716,16 +717,16 @@ static void bake_panel_draw(const bContext *C, Panel *panel)
     uiItemO(layout, NULL, ICON_NONE, "OBJECT_OT_ocean_bake");
   }
 
-  uiItemR(layout, &ptr, "filepath", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "filepath", 0, NULL, ICON_NONE);
 
   col = uiLayoutColumn(layout, true);
   uiLayoutSetEnabled(col, !is_cached);
-  uiItemR(col, &ptr, "frame_start", 0, IFACE_("Frame Start"), ICON_NONE);
-  uiItemR(col, &ptr, "frame_end", 0, IFACE_("End"), ICON_NONE);
+  uiItemR(col, ptr, "frame_start", 0, IFACE_("Frame Start"), ICON_NONE);
+  uiItemR(col, ptr, "frame_end", 0, IFACE_("End"), ICON_NONE);
 
   col = uiLayoutColumn(layout, false);
   uiLayoutSetActive(col, use_foam);
-  uiItemR(col, &ptr, "bake_foam_fade", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "bake_foam_fade", 0, NULL, ICON_NONE);
 }
 #endif /* WITH_OCEANSIM */
 

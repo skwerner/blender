@@ -126,19 +126,19 @@ static CLG_LogRef LOG = {"bke.pointcache"};
 
 static int ptcache_data_size[] = {
     sizeof(unsigned int),  // BPHYS_DATA_INDEX
-    3 * sizeof(float),     // BPHYS_DATA_LOCATION
-    3 * sizeof(float),     // BPHYS_DATA_VELOCITY
-    4 * sizeof(float),     // BPHYS_DATA_ROTATION
-    3 * sizeof(float),     // BPHYS_DATA_AVELOCITY / BPHYS_DATA_XCONST
+    sizeof(float[3]),      // BPHYS_DATA_LOCATION
+    sizeof(float[3]),      // BPHYS_DATA_VELOCITY
+    sizeof(float[4]),      // BPHYS_DATA_ROTATION
+    sizeof(float[3]),      // BPHYS_DATA_AVELOCITY / BPHYS_DATA_XCONST
     sizeof(float),         // BPHYS_DATA_SIZE
-    3 * sizeof(float),     // BPHYS_DATA_TIMES
+    sizeof(float[3]),      // BPHYS_DATA_TIMES
     sizeof(BoidData),      // case BPHYS_DATA_BOIDS
 };
 
 static int ptcache_extra_datasize[] = {
     0,
     sizeof(ParticleSpring),
-    sizeof(float) * 3,
+    sizeof(float[3]),
 };
 
 /* forward declarations */
@@ -206,22 +206,27 @@ static int ptcache_softbody_write(int index, void *soft_v, void **data, int UNUS
   return 1;
 }
 static void ptcache_softbody_read(
-    int index, void *soft_v, void **data, float UNUSED(cfra), float *old_data)
+    int index, void *soft_v, void **data, float UNUSED(cfra), const float *old_data)
 {
   SoftBody *soft = soft_v;
   BodyPoint *bp = soft->bpoint + index;
 
   if (old_data) {
-    memcpy(bp->pos, data, 3 * sizeof(float));
-    memcpy(bp->vec, data + 3, 3 * sizeof(float));
+    memcpy(bp->pos, data, sizeof(float[3]));
+    memcpy(bp->vec, data + 3, sizeof(float[3]));
   }
   else {
     PTCACHE_DATA_TO(data, BPHYS_DATA_LOCATION, 0, bp->pos);
     PTCACHE_DATA_TO(data, BPHYS_DATA_VELOCITY, 0, bp->vec);
   }
 }
-static void ptcache_softbody_interpolate(
-    int index, void *soft_v, void **data, float cfra, float cfra1, float cfra2, float *old_data)
+static void ptcache_softbody_interpolate(int index,
+                                         void *soft_v,
+                                         void **data,
+                                         float cfra,
+                                         float cfra1,
+                                         float cfra2,
+                                         const float *old_data)
 {
   SoftBody *soft = soft_v;
   BodyPoint *bp = soft->bpoint + index;
@@ -236,8 +241,8 @@ static void ptcache_softbody_interpolate(
   copy_v3_v3(keys[1].vel, bp->vec);
 
   if (old_data) {
-    memcpy(keys[2].co, old_data, 3 * sizeof(float));
-    memcpy(keys[2].vel, old_data + 3, 3 * sizeof(float));
+    memcpy(keys[2].co, old_data, sizeof(float[3]));
+    memcpy(keys[2].vel, old_data + 3, sizeof(float[3]));
   }
   else {
     BKE_ptcache_make_particle_key(keys + 2, 0, data, cfra2);
@@ -316,7 +321,7 @@ static int ptcache_particle_write(int index, void *psys_v, void **data, int cfra
   return 1 + (pa->state.time >= pa->time && pa->prev_state.time <= pa->time);
 }
 static void ptcache_particle_read(
-    int index, void *psys_v, void **data, float cfra, float *old_data)
+    int index, void *psys_v, void **data, float cfra, const float *old_data)
 {
   ParticleSystem *psys = psys_v;
   ParticleData *pa;
@@ -383,8 +388,13 @@ static void ptcache_particle_read(
     unit_qt(pa->state.rot);
   }
 }
-static void ptcache_particle_interpolate(
-    int index, void *psys_v, void **data, float cfra, float cfra1, float cfra2, float *old_data)
+static void ptcache_particle_interpolate(int index,
+                                         void *psys_v,
+                                         void **data,
+                                         float cfra,
+                                         float cfra1,
+                                         float cfra2,
+                                         const float *old_data)
 {
   ParticleSystem *psys = psys_v;
   ParticleData *pa;
@@ -528,16 +538,16 @@ static int ptcache_cloth_write(int index, void *cloth_v, void **data, int UNUSED
   return 1;
 }
 static void ptcache_cloth_read(
-    int index, void *cloth_v, void **data, float UNUSED(cfra), float *old_data)
+    int index, void *cloth_v, void **data, float UNUSED(cfra), const float *old_data)
 {
   ClothModifierData *clmd = cloth_v;
   Cloth *cloth = clmd->clothObject;
   ClothVertex *vert = cloth->verts + index;
 
   if (old_data) {
-    memcpy(vert->x, data, 3 * sizeof(float));
-    memcpy(vert->xconst, data + 3, 3 * sizeof(float));
-    memcpy(vert->v, data + 6, 3 * sizeof(float));
+    memcpy(vert->x, data, sizeof(float[3]));
+    memcpy(vert->xconst, data + 3, sizeof(float[3]));
+    memcpy(vert->v, data + 6, sizeof(float[3]));
   }
   else {
     PTCACHE_DATA_TO(data, BPHYS_DATA_LOCATION, 0, vert->x);
@@ -545,8 +555,13 @@ static void ptcache_cloth_read(
     PTCACHE_DATA_TO(data, BPHYS_DATA_XCONST, 0, vert->xconst);
   }
 }
-static void ptcache_cloth_interpolate(
-    int index, void *cloth_v, void **data, float cfra, float cfra1, float cfra2, float *old_data)
+static void ptcache_cloth_interpolate(int index,
+                                      void *cloth_v,
+                                      void **data,
+                                      float cfra,
+                                      float cfra1,
+                                      float cfra2,
+                                      const float *old_data)
 {
   ClothModifierData *clmd = cloth_v;
   Cloth *cloth = clmd->clothObject;
@@ -562,8 +577,8 @@ static void ptcache_cloth_interpolate(
   copy_v3_v3(keys[1].vel, vert->v);
 
   if (old_data) {
-    memcpy(keys[2].co, old_data, 3 * sizeof(float));
-    memcpy(keys[2].vel, old_data + 6, 3 * sizeof(float));
+    memcpy(keys[2].co, old_data, sizeof(float[3]));
+    memcpy(keys[2].vel, old_data + 6, sizeof(float[3]));
   }
   else {
     BKE_ptcache_make_particle_key(keys + 2, 0, data, cfra2);
@@ -1389,9 +1404,8 @@ static int ptcache_dynamicpaint_totpoint(void *sd, int UNUSED(cfra))
   if (!surface->data) {
     return 0;
   }
-  else {
-    return surface->data->total_points;
-  }
+
+  return surface->data->total_points;
 }
 
 static void ptcache_dynamicpaint_error(void *UNUSED(sd), const char *UNUSED(message))
@@ -1407,7 +1421,7 @@ static int ptcache_dynamicpaint_write(PTCacheFile *pf, void *dp_v)
   int cache_compress = 1;
 
   /* version header */
-  ptcache_file_write(pf, DPAINT_CACHE_VERSION, 1, sizeof(char) * 4);
+  ptcache_file_write(pf, DPAINT_CACHE_VERSION, 1, sizeof(char[4]));
 
   if (surface->format != MOD_DPAINT_SURFACE_F_IMAGESEQ && surface->data) {
     int total_points = surface->data->total_points;
@@ -1445,7 +1459,7 @@ static int ptcache_dynamicpaint_read(PTCacheFile *pf, void *dp_v)
   char version[4];
 
   /* version header */
-  ptcache_file_read(pf, version, 1, sizeof(char) * 4);
+  ptcache_file_read(pf, version, 1, sizeof(char[4]));
   if (!STREQLEN(version, DPAINT_CACHE_VERSION, 4)) {
     CLOG_ERROR(&LOG, "Dynamic Paint: Invalid cache version: '%c%c%c%c'!", UNPACK4(version));
     return 0;
@@ -1496,7 +1510,7 @@ static int ptcache_rigidbody_write(int index, void *rb_v, void **data, int UNUSE
   if (ob && ob->rigidbody_object) {
     RigidBodyOb *rbo = ob->rigidbody_object;
 
-    if (rbo->type == RBO_TYPE_ACTIVE) {
+    if (rbo->type == RBO_TYPE_ACTIVE && rbo->shared->physics_object != NULL) {
 #ifdef WITH_BULLET
       RB_body_get_position(rbo->shared->physics_object, rbo->pos);
       RB_body_get_orientation(rbo->shared->physics_object, rbo->orn);
@@ -1509,7 +1523,7 @@ static int ptcache_rigidbody_write(int index, void *rb_v, void **data, int UNUSE
   return 1;
 }
 static void ptcache_rigidbody_read(
-    int index, void *rb_v, void **data, float UNUSED(cfra), float *old_data)
+    int index, void *rb_v, void **data, float UNUSED(cfra), const float *old_data)
 {
   RigidBodyWorld *rbw = rb_v;
   Object *ob = NULL;
@@ -1524,8 +1538,8 @@ static void ptcache_rigidbody_read(
     if (rbo->type == RBO_TYPE_ACTIVE) {
 
       if (old_data) {
-        memcpy(rbo->pos, data, 3 * sizeof(float));
-        memcpy(rbo->orn, data + 3, 4 * sizeof(float));
+        memcpy(rbo->pos, data, sizeof(float[3]));
+        memcpy(rbo->orn, data + 3, sizeof(float[4]));
       }
       else {
         PTCACHE_DATA_TO(data, BPHYS_DATA_LOCATION, 0, rbo->pos);
@@ -1534,8 +1548,13 @@ static void ptcache_rigidbody_read(
     }
   }
 }
-static void ptcache_rigidbody_interpolate(
-    int index, void *rb_v, void **data, float cfra, float cfra1, float cfra2, float *old_data)
+static void ptcache_rigidbody_interpolate(int index,
+                                          void *rb_v,
+                                          void **data,
+                                          float cfra,
+                                          float cfra1,
+                                          float cfra2,
+                                          const float *old_data)
 {
   RigidBodyWorld *rbw = rb_v;
   Object *ob = NULL;
@@ -1558,8 +1577,8 @@ static void ptcache_rigidbody_interpolate(
       copy_qt_qt(keys[1].rot, rbo->orn);
 
       if (old_data) {
-        memcpy(keys[2].co, data, 3 * sizeof(float));
-        memcpy(keys[2].rot, data + 3, 4 * sizeof(float));
+        memcpy(keys[2].co, data, sizeof(float[3]));
+        memcpy(keys[2].rot, data + 3, sizeof(float[4]));
       }
       else {
         BKE_ptcache_make_particle_key(&keys[2], 0, data, cfra2);
@@ -1865,81 +1884,6 @@ void BKE_ptcache_id_from_rigidbody(PTCacheID *pid, Object *ob, RigidBodyWorld *r
   pid->file_type = PTCACHE_FILE_PTCACHE;
 }
 
-static int ptcache_sim_particle_totpoint(void *state_v, int UNUSED(cfra))
-{
-  ParticleSimulationState *state = (ParticleSimulationState *)state_v;
-  return state->tot_particles;
-}
-
-static void ptcache_sim_particle_error(void *UNUSED(state_v), const char *UNUSED(message))
-{
-}
-
-static int ptcache_sim_particle_write(int index, void *state_v, void **data, int UNUSED(cfra))
-{
-  ParticleSimulationState *state = (ParticleSimulationState *)state_v;
-
-  const float *positions = (const float *)CustomData_get_layer_named(
-      &state->attributes, CD_LOCATION, "Position");
-
-  PTCACHE_DATA_FROM(data, BPHYS_DATA_LOCATION, positions + (index * 3));
-
-  return 1;
-}
-static void ptcache_sim_particle_read(
-    int index, void *state_v, void **data, float UNUSED(cfra), float *UNUSED(old_data))
-{
-  ParticleSimulationState *state = (ParticleSimulationState *)state_v;
-
-  BLI_assert(index < state->tot_particles);
-  float *positions = (float *)CustomData_get_layer_named(
-      &state->attributes, CD_LOCATION, "Position");
-
-  PTCACHE_DATA_TO(data, BPHYS_DATA_LOCATION, 0, positions + (index * 3));
-}
-
-void BKE_ptcache_id_from_sim_particles(PTCacheID *pid,
-                                       ParticleSimulationState *state_orig,
-                                       ParticleSimulationState *state_cow)
-{
-  memset(pid, 0, sizeof(PTCacheID));
-
-  pid->calldata = state_cow;
-  pid->type = PTCACHE_TYPE_SIM_PARTICLES;
-  pid->cache = state_orig->point_cache;
-  pid->cache_ptr = &state_orig->point_cache;
-  pid->ptcaches = &state_orig->ptcaches;
-  pid->totpoint = ptcache_sim_particle_totpoint;
-  pid->totwrite = ptcache_sim_particle_totpoint;
-  pid->error = ptcache_sim_particle_error;
-
-  pid->write_point = ptcache_sim_particle_write;
-  pid->read_point = ptcache_sim_particle_read;
-  pid->interpolate_point = NULL;
-
-  pid->write_stream = NULL;
-  pid->read_stream = NULL;
-
-  pid->write_openvdb_stream = NULL;
-  pid->read_openvdb_stream = NULL;
-
-  pid->write_extra_data = NULL;
-  pid->read_extra_data = NULL;
-  pid->interpolate_extra_data = NULL;
-
-  pid->write_header = NULL;
-  pid->read_header = NULL;
-
-  pid->data_types = 1 << BPHYS_DATA_LOCATION;
-  pid->info_types = 0;
-
-  pid->stack_index = 0;
-
-  pid->default_step = 1;
-  pid->max_step = 1;
-  pid->file_type = PTCACHE_FILE_PTCACHE;
-}
-
 /**
  * \param ob: Optional, may be NULL.
  * \param scene: Optional may be NULL.
@@ -2039,17 +1983,7 @@ static bool foreach_object_modifier_ptcache(Object *object,
       }
     }
     else if (md->type == eModifierType_Simulation) {
-      SimulationModifierData *smd = (SimulationModifierData *)md;
-      if (smd->simulation) {
-        LISTBASE_FOREACH (SimulationState *, state, &smd->simulation->states) {
-          switch ((eSimulationStateType)state->type) {
-            case SIM_STATE_TYPE_PARTICLES: {
-              /* TODO(jacques) */
-              break;
-            }
-          }
-        }
-      }
+      /* TODO(jacques) */
     }
   }
   return true;
@@ -2193,7 +2127,7 @@ static int ptcache_path(PTCacheID *pid, char *filename)
 
     return BLI_path_slash_ensure(filename); /* new strlen() */
   }
-  else if (G.relbase_valid || lib) {
+  if (G.relbase_valid || lib) {
     char file[MAX_PTCACHE_PATH]; /* we don't want the dir, only the file */
 
     BLI_split_file_part(blendfilename, file, sizeof(file));
@@ -2342,7 +2276,7 @@ static int ptcache_file_compressed_read(PTCacheFile *pf, unsigned char *result, 
   size_t out_len = len;
 #endif
   unsigned char *in;
-  unsigned char *props = MEM_callocN(16 * sizeof(char), "tmp");
+  unsigned char *props = MEM_callocN(sizeof(char[16]), "tmp");
 
   ptcache_file_read(pf, &compressed, 1, sizeof(unsigned char));
   if (compressed) {
@@ -2388,7 +2322,7 @@ static int ptcache_file_compressed_write(
   int r = 0;
   unsigned char compressed = 0;
   size_t out_len = 0;
-  unsigned char *props = MEM_callocN(16 * sizeof(char), "tmp");
+  unsigned char *props = MEM_callocN(sizeof(char[16]), "tmp");
   size_t sizeOfIt = 5;
 
   (void)mode; /* unused when building w/o compression */
@@ -2586,9 +2520,8 @@ int BKE_ptcache_mem_index_find(PTCacheMem *pm, unsigned int index)
 
     return -1;
   }
-  else {
-    return (index < pm->totpoint ? index : -1);
-  }
+
+  return (index < pm->totpoint ? index : -1);
 }
 
 void BKE_ptcache_mem_pointers_init(PTCacheMem *pm)
@@ -2690,13 +2623,13 @@ static void ptcache_mem_clear(PTCacheMem *pm)
 static int ptcache_old_elemsize(PTCacheID *pid)
 {
   if (pid->type == PTCACHE_TYPE_SOFTBODY) {
-    return 6 * sizeof(float);
+    return sizeof(float[6]);
   }
-  else if (pid->type == PTCACHE_TYPE_PARTICLES) {
+  if (pid->type == PTCACHE_TYPE_PARTICLES) {
     return sizeof(ParticleKey);
   }
-  else if (pid->type == PTCACHE_TYPE_CLOTH) {
-    return 9 * sizeof(float);
+  if (pid->type == PTCACHE_TYPE_CLOTH) {
+    return sizeof(float[9]);
   }
 
   return 0;
@@ -3650,16 +3583,15 @@ int BKE_ptcache_id_exist(PTCacheID *pid, int cfra)
 
     return BLI_exists(filename);
   }
-  else {
-    PTCacheMem *pm = pid->cache->mem_cache.first;
 
-    for (; pm; pm = pm->next) {
-      if (pm->frame == cfra) {
-        return 1;
-      }
+  PTCacheMem *pm = pid->cache->mem_cache.first;
+
+  for (; pm; pm = pm->next) {
+    if (pm->frame == cfra) {
+      return 1;
     }
-    return 0;
   }
+  return 0;
 }
 void BKE_ptcache_id_time(
     PTCacheID *pid, Scene *scene, float cfra, int *startframe, int *endframe, float *timescale)
@@ -4093,7 +4025,6 @@ static void ptcache_dt_to_str(char *str, double dtime)
 /* if bake is not given run simulations to current frame */
 void BKE_ptcache_bake(PTCacheBaker *baker)
 {
-  Main *bmain = baker->bmain;
   Scene *scene = baker->scene;
   ViewLayer *view_layer = baker->view_layer;
   struct Depsgraph *depsgraph = baker->depsgraph;
@@ -4224,7 +4155,7 @@ void BKE_ptcache_bake(PTCacheBaker *baker)
   stime = ptime = PIL_check_seconds_timer();
 
   for (int fr = CFRA; fr <= endframe; fr += baker->quick_step, CFRA = fr) {
-    BKE_scene_graph_update_for_newframe(depsgraph, bmain);
+    BKE_scene_graph_update_for_newframe(depsgraph);
 
     if (baker->update_progress) {
       float progress = ((float)(CFRA - startframe) / (float)(endframe - startframe));
@@ -4323,7 +4254,7 @@ void BKE_ptcache_bake(PTCacheBaker *baker)
   CFRA = cfrao;
 
   if (bake) { /* already on cfra unless baking */
-    BKE_scene_graph_update_for_newframe(depsgraph, bmain);
+    BKE_scene_graph_update_for_newframe(depsgraph);
   }
 
   /* TODO: call redraw all windows somehow */

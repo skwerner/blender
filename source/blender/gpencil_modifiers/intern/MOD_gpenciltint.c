@@ -96,7 +96,7 @@ static void initData(GpencilModifierData *md)
   gpmd->curve_intensity = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
   if (gpmd->curve_intensity) {
     CurveMapping *curve = gpmd->curve_intensity;
-    BKE_curvemapping_initialize(curve);
+    BKE_curvemapping_init(curve);
   }
 }
 
@@ -259,7 +259,10 @@ static void deformStroke(GpencilModifierData *md,
 /* FIXME: Ideally we be doing this on a copy of the main depsgraph
  * (i.e. one where we don't have to worry about restoring state)
  */
-static void bakeModifier(Main *bmain, Depsgraph *depsgraph, GpencilModifierData *md, Object *ob)
+static void bakeModifier(Main *UNUSED(bmain),
+                         Depsgraph *depsgraph,
+                         GpencilModifierData *md,
+                         Object *ob)
 {
   TintGpencilModifierData *mmd = (TintGpencilModifierData *)md;
   Scene *scene = DEG_get_evaluated_scene(depsgraph);
@@ -276,7 +279,7 @@ static void bakeModifier(Main *bmain, Depsgraph *depsgraph, GpencilModifierData 
        * NOTE: this assumes that we don't want animation on non-keyframed frames
        */
       CFRA = gpf->framenum;
-      BKE_scene_graph_update_for_newframe(depsgraph, bmain);
+      BKE_scene_graph_update_for_newframe(depsgraph);
 
       /* compute effects on this frame */
       LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
@@ -287,7 +290,7 @@ static void bakeModifier(Main *bmain, Depsgraph *depsgraph, GpencilModifierData 
 
   /* return frame state and DB to original state */
   CFRA = oldframe;
-  BKE_scene_graph_update_for_newframe(depsgraph, bmain);
+  BKE_scene_graph_update_for_newframe(depsgraph);
 }
 
 static void freeData(GpencilModifierData *md)
@@ -341,40 +344,39 @@ static void foreachIDLink(GpencilModifierData *md, Object *ob, IDWalkFunc walk, 
   foreachObjectLink(md, ob, (ObjectWalkFunc)walk, userData);
 }
 
-static void panel_draw(const bContext *C, Panel *panel)
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *col;
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  gpencil_modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, NULL);
 
-  int tint_type = RNA_enum_get(&ptr, "tint_type");
+  int tint_type = RNA_enum_get(ptr, "tint_type");
 
   uiLayoutSetPropSep(layout, true);
 
-  uiItemR(layout, &ptr, "vertex_mode", 0, NULL, ICON_NONE);
-  uiItemR(layout, &ptr, "factor", 0, NULL, ICON_NONE);
-  uiItemR(layout, &ptr, "tint_type", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "vertex_mode", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "factor", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "tint_type", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
 
   if (tint_type == GP_TINT_UNIFORM) {
-    uiItemR(layout, &ptr, "color", 0, NULL, ICON_NONE);
+    uiItemR(layout, ptr, "color", 0, NULL, ICON_NONE);
   }
   else {
     col = uiLayoutColumn(layout, false);
     uiLayoutSetPropSep(col, false);
-    uiTemplateColorRamp(col, &ptr, "colors", true);
+    uiTemplateColorRamp(col, ptr, "colors", true);
     uiItemS(layout);
-    uiItemR(layout, &ptr, "object", 0, NULL, ICON_NONE);
-    uiItemR(layout, &ptr, "radius", 0, NULL, ICON_NONE);
+    uiItemR(layout, ptr, "object", 0, NULL, ICON_NONE);
+    uiItemR(layout, ptr, "radius", 0, NULL, ICON_NONE);
   }
 
-  gpencil_modifier_panel_end(layout, &ptr);
+  gpencil_modifier_panel_end(layout, ptr);
 }
 
-static void mask_panel_draw(const bContext *C, Panel *panel)
+static void mask_panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
-  gpencil_modifier_masking_panel_draw(C, panel, true, true);
+  gpencil_modifier_masking_panel_draw(panel, true, true);
 }
 
 static void panelRegister(ARegionType *region_type)

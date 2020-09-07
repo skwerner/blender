@@ -21,8 +21,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_MESHDATA_TYPES_H__
-#define __DNA_MESHDATA_TYPES_H__
+#pragma once
 
 #include "DNA_customdata_types.h"
 #include "DNA_listBase.h"
@@ -286,7 +285,6 @@ typedef struct MDeformWeight {
 } MDeformWeight;
 
 typedef struct MDeformVert {
-  /* Mut be sorted by def_nr due to binary search. */
   struct MDeformWeight *dw;
   int totweight;
   /** Flag is only in use as a run-time tag at the moment. */
@@ -571,5 +569,3 @@ typedef struct Multires {
 /* End multi-res structs. */
 
 /** \} */
-
-#endif /* __DNA_MESHDATA_TYPES_H__ */

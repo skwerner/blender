@@ -28,12 +28,12 @@
  * - Meta Strip (SEQ_TYPE_META): Support for nesting Sequences.
  */
 
-#ifndef __DNA_SEQUENCE_TYPES_H__
-#define __DNA_SEQUENCE_TYPES_H__
+#pragma once
 
 #include "DNA_color_types.h"
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
+#include "DNA_session_uuid_types.h"
 #include "DNA_vec_types.h"
 #include "DNA_vfont_types.h"
 
@@ -118,6 +118,10 @@ typedef struct Strip {
   /* color management */
   ColorManagedColorspaceSettings colorspace_settings;
 } Strip;
+
+typedef struct SequenceRuntime {
+  SessionUUID session_uuid;
+} SequenceRuntime;
 
 /**
  * The sequence structure is the basic struct used by any strip.
@@ -237,8 +241,7 @@ typedef struct Sequence {
   int cache_flag;
   int _pad2[3];
 
-  struct Sequence *orig_sequence;
-  void *_pad3;
+  SequenceRuntime runtime;
 } Sequence;
 
 typedef struct MetaStack {
@@ -692,5 +695,3 @@ enum {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __DNA_SEQUENCE_TYPES_H__ */

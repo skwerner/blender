@@ -164,7 +164,7 @@ static void do_paint_brush_task_cb_ex(void *__restrict userdata,
 
       /* Density. */
       float noise = 1.0f;
-      const float density = brush->density;
+      const float density = ss->cache->paint_brush.density;
       if (density < 1.0f) {
         const float hash_noise = BLI_hash_int_01(ss->cache->density_seed * 1000 * vd.index);
         if (hash_noise > density) {
@@ -178,11 +178,12 @@ static void do_paint_brush_task_cb_ex(void *__restrict userdata,
       float wet_mix_color[4];
       float buffer_color[4];
 
-      mul_v4_v4fl(paint_color, brush_color, fade * brush->flow);
-      mul_v4_v4fl(wet_mix_color, data->wet_mix_sampled_color, fade * brush->flow);
+      mul_v4_v4fl(paint_color, brush_color, fade * ss->cache->paint_brush.flow);
+      mul_v4_v4fl(wet_mix_color, data->wet_mix_sampled_color, fade * ss->cache->paint_brush.flow);
 
       /* Interpolate with the wet_mix color for wet paint mixing. */
-      blend_color_interpolate_float(paint_color, paint_color, wet_mix_color, brush->wet_mix);
+      blend_color_interpolate_float(
+          paint_color, paint_color, wet_mix_color, ss->cache->paint_brush.wet_mix);
       blend_color_mix_float(color_buffer->color[vd.i], color_buffer->color[vd.i], paint_color);
 
       /* Final mix over the original color using brush alpha. */
@@ -254,7 +255,7 @@ void SCULPT_do_paint_brush(Sculpt *sd, Object *ob, PBVHNode **nodes, int totnode
     return;
   }
 
-  BKE_curvemapping_initialize(brush->curve);
+  BKE_curvemapping_init(brush->curve);
 
   float area_no[3];
   float mat[4][4];
@@ -305,7 +306,7 @@ void SCULPT_do_paint_brush(Sculpt *sd, Object *ob, PBVHNode **nodes, int totnode
 
   /* Wet paint color sampling. */
   float wet_color[4] = {0.0f};
-  if (brush->wet_mix > 0.0f) {
+  if (ss->cache->paint_brush.wet_mix > 0.0f) {
     SculptThreadedTaskData task_data = {
         .sd = sd,
         .ob = ob,
@@ -326,14 +327,16 @@ void SCULPT_do_paint_brush(Sculpt *sd, Object *ob, PBVHNode **nodes, int totnode
 
     if (swptd.tot_samples > 0 && is_finite_v4(swptd.color)) {
       copy_v4_v4(wet_color, swptd.color);
-      mul_v4_fl(wet_color, 1.0f / (float)swptd.tot_samples);
+      mul_v4_fl(wet_color, 1.0f / swptd.tot_samples);
       CLAMP4(wet_color, 0.0f, 1.0f);
 
       if (ss->cache->first_time) {
         copy_v4_v4(ss->cache->wet_mix_prev_color, wet_color);
       }
-      blend_color_interpolate_float(
-          wet_color, wet_color, ss->cache->wet_mix_prev_color, brush->wet_persistence);
+      blend_color_interpolate_float(wet_color,
+                                    wet_color,
+                                    ss->cache->wet_mix_prev_color,
+                                    ss->cache->paint_brush.wet_persistence);
       copy_v4_v4(ss->cache->wet_mix_prev_color, wet_color);
       CLAMP4(ss->cache->wet_mix_prev_color, 0.0f, 1.0f);
     }
@@ -388,7 +391,17 @@ static void do_smear_brush_task_cb_exec(void *__restrict userdata,
       float interp_color[4];
       copy_v4_v4(interp_color, ss->cache->prev_colors[vd.index]);
 
-      sub_v3_v3v3(current_disp, ss->cache->location, ss->cache->last_location);
+      switch (brush->smear_deform_type) {
+        case BRUSH_SMEAR_DEFORM_DRAG:
+          sub_v3_v3v3(current_disp, ss->cache->location, ss->cache->last_location);
+          break;
+        case BRUSH_SMEAR_DEFORM_PINCH:
+          sub_v3_v3v3(current_disp, ss->cache->location, vd.co);
+          break;
+        case BRUSH_SMEAR_DEFORM_EXPAND:
+          sub_v3_v3v3(current_disp, vd.co, ss->cache->location);
+          break;
+      }
       normalize_v3_v3(current_disp_norm, current_disp);
       mul_v3_v3fl(current_disp, current_disp_norm, ss->cache->bstrength);
 
@@ -448,14 +461,14 @@ void SCULPT_do_smear_brush(Sculpt *sd, Object *ob, PBVHNode **nodes, int totnode
 
   if (SCULPT_stroke_is_first_brush_step(ss->cache)) {
     if (!ss->cache->prev_colors) {
-      ss->cache->prev_colors = MEM_callocN(sizeof(float) * 4 * totvert, "prev colors");
+      ss->cache->prev_colors = MEM_callocN(sizeof(float[4]) * totvert, "prev colors");
       for (int i = 0; i < totvert; i++) {
         copy_v4_v4(ss->cache->prev_colors[i], SCULPT_vertex_color_get(ss, i));
       }
     }
   }
 
-  BKE_curvemapping_initialize(brush->curve);
+  BKE_curvemapping_init(brush->curve);
 
   SculptThreadedTaskData data = {
       .sd = sd,

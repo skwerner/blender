@@ -222,7 +222,7 @@ void BlenderFileLoader::clipTriangle(int numTris,
                                      bool em1,
                                      bool em2,
                                      bool em3,
-                                     int clip[3])
+                                     const int clip[3])
 {
   float *v[3], *n[3];
   bool em[3];
@@ -684,7 +684,7 @@ void BlenderFileLoader::insertShapeNode(Object *ob, Mesh *me, int id)
     if (v0 == v1 || v0 == v2 || v1 == v2) {
       continue;  // do nothing for now
     }
-    else if (GeomUtils::distPointSegment<Vec3r>(v0, v1, v2) < 1.0e-6) {
+    if (GeomUtils::distPointSegment<Vec3r>(v0, v1, v2) < 1.0e-6) {
       detri.viP = vi0;
       detri.viA = vi1;
       detri.viB = vi2;

@@ -148,7 +148,7 @@ class BlenderSync {
                       bool *use_portal);
 
   /* Volume */
-  void sync_volume(BL::Object &b_ob, Mesh *mesh, const vector<Shader *> &used_shaders);
+  void sync_volume(BL::Object &b_ob, Volume *volume, const vector<Shader *> &used_shaders);
 
   /* Mesh */
   void sync_mesh(BL::Depsgraph b_depsgraph,
@@ -208,7 +208,7 @@ class BlenderSync {
   /* util */
   void find_shader(BL::ID &id, vector<Shader *> &used_shaders, Shader *default_shader);
   bool BKE_object_is_modified(BL::Object &b_ob);
-  bool object_is_mesh(BL::Object &b_ob);
+  bool object_is_geometry(BL::Object &b_ob);
   bool object_is_light(BL::Object &b_ob);
 
   /* variables */

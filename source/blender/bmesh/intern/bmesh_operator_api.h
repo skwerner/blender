@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BMESH_OPERATOR_API_H__
-#define __BMESH_OPERATOR_API_H__
+#pragma once
 
 /** \file
  * \ingroup bmesh
@@ -576,7 +575,7 @@ void BMO_slot_map_insert(BMOperator *op, BMOpSlot *slot, const void *element, co
 void BMO_slot_map_to_flag(BMesh *bm,
                           BMOpSlot slot_args[BMO_OP_MAX_SLOTS],
                           const char *slot_name,
-                          const char hflag,
+                          const char htype,
                           const short oflag);
 
 void *BMO_slot_buffer_alloc(BMOperator *op,
@@ -668,5 +667,3 @@ int BMO_opcode_from_opname(const char *opname);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BMESH_OPERATOR_API_H__ */

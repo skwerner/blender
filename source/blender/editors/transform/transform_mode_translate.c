@@ -68,15 +68,27 @@ static void headerTranslation(TransInfo *t, const float vec[3], char str[UI_MAX_
   }
   else {
     float dvec[3];
-
-    copy_v3_v3(dvec, vec);
-    applyAspectRatio(t, dvec);
+    if (!(t->flag & T_2D_EDIT) && t->con.mode & CON_APPLY) {
+      int i = 0;
+      zero_v3(dvec);
+      if (t->con.mode & CON_AXIS0) {
+        dvec[i++] = vec[0];
+      }
+      if (t->con.mode & CON_AXIS1) {
+        dvec[i++] = vec[1];
+      }
+      if (t->con.mode & CON_AXIS2) {
+        dvec[i++] = vec[2];
+      }
+    }
+    else {
+      copy_v3_v3(dvec, vec);
+      applyAspectRatio(t, dvec);
+    }
 
     dist = len_v3(vec);
     if (!(t->flag & T_2D_EDIT) && t->scene->unit.system) {
-      int i;
-
-      for (i = 0; i < 3; i++) {
+      for (int i = 0; i < 3; i++) {
         bUnit_AsString2(&tvec[NUM_STR_REP_LEN * i],
                         NUM_STR_REP_LEN,
                         dvec[i] * t->scene->unit.scale_length,
@@ -350,15 +362,28 @@ static void applyTranslation(TransInfo *t, const int UNUSED(mval[2]))
   }
   else {
     copy_v3_v3(global_dir, t->values);
-    if ((t->con.mode & CON_APPLY) == 0) {
-      snapGridIncrement(t, global_dir);
-    }
-
     if (applyNumInput(&t->num, global_dir)) {
       removeAspectRatio(t, global_dir);
     }
+    else {
+      applySnapping(t, global_dir);
 
-    applySnapping(t, global_dir);
+      if (!validSnap(t) && !(t->con.mode & CON_APPLY)) {
+        float dist_sq = FLT_MAX;
+        if (transform_snap_grid(t, global_dir)) {
+          dist_sq = len_squared_v3v3(t->values, global_dir);
+        }
+
+        /* Check the snap distance to the initial value to work with mixed snap. */
+        float increment_loc[3];
+        copy_v3_v3(increment_loc, t->values);
+        if (transform_snap_increment(t, increment_loc)) {
+          if ((dist_sq == FLT_MAX) || (len_squared_v3v3(t->values, increment_loc) < dist_sq)) {
+            copy_v3_v3(global_dir, increment_loc);
+          }
+        }
+      }
+    }
   }
 
   if (t->con.mode & CON_APPLY) {

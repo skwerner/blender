@@ -23,6 +23,7 @@
 
 #include "DNA_anim_types.h"
 #include "DNA_armature_types.h"
+#include "DNA_constraint_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
@@ -338,6 +339,46 @@ static void applyarmature_process_selected_recursive(bArmature *arm,
   }
 }
 
+/* Reset bone constraint so that it is correct after the pose has been applied. */
+static void applyarmature_reset_bone_constraint(const bConstraint *constraint)
+{
+  /* TODO(Sybren): This function needs too much knowledge of the internals of specific constraints.
+   * When it is extended with one or two more constraints, move the functionality into a
+   * bConstraintTypeInfo callback function. */
+  switch (constraint->type) {
+    case CONSTRAINT_TYPE_STRETCHTO: {
+      bStretchToConstraint *stretch_to = (bStretchToConstraint *)constraint->data;
+      stretch_to->orglength = 0.0f; /* Force recalculation on next evaluation. */
+      break;
+    }
+    default:
+      /* Most constraints don't need resetting. */
+      break;
+  }
+}
+
+/* Reset bone constraints of the given pose channel so that they are correct after the pose has
+ * been applied. */
+static void applyarmature_reset_bone_constraints(const bPoseChannel *pchan)
+{
+  LISTBASE_FOREACH (bConstraint *, constraint, &pchan->constraints) {
+    applyarmature_reset_bone_constraint(constraint);
+  }
+}
+
+/* Reset all (or only selected) bone constraints so that they are correct after the pose has been
+ * applied. */
+static void applyarmature_reset_constraints(bPose *pose, const bool use_selected)
+{
+  for (bPoseChannel *pchan = pose->chanbase.first; pchan; pchan = pchan->next) {
+    BLI_assert(pchan->bone != NULL);
+    if (use_selected && (pchan->bone->flag & BONE_SELECTED) == 0) {
+      continue;
+    }
+    applyarmature_reset_bone_constraints(pchan);
+  }
+}
+
 /* set the current pose as the restpose */
 static int apply_armature_pose2bones_exec(bContext *C, wmOperator *op)
 {
@@ -415,6 +456,9 @@ static int apply_armature_pose2bones_exec(bContext *C, wmOperator *op)
 
   /* fix parenting of objects which are bone-parented */
   applyarmature_fix_boneparents(C, scene, ob);
+
+  /* For the affected bones, reset specific constraints that are now known to be invalid. */
+  applyarmature_reset_constraints(pose, use_selected);
 
   /* note, notifier might evolve */
   WM_event_add_notifier(C, NC_OBJECT | ND_POSE, ob);
@@ -1219,7 +1263,9 @@ static int pose_clear_user_transforms_exec(bContext *C, wmOperator *op)
   ViewLayer *view_layer = CTX_data_view_layer(C);
   View3D *v3d = CTX_wm_view3d(C);
   Scene *scene = CTX_data_scene(C);
-  float cframe = (float)CFRA;
+  Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
+  const AnimationEvalContext anim_eval_context = BKE_animsys_eval_context_construct(depsgraph,
+                                                                                    (float)CFRA);
   const bool only_select = RNA_boolean_get(op->ptr, "only_selected");
 
   FOREACH_OBJECT_IN_MODE_BEGIN (view_layer, v3d, OB_ARMATURE, OB_MODE_POSE, ob) {
@@ -1240,7 +1286,8 @@ static int pose_clear_user_transforms_exec(bContext *C, wmOperator *op)
       workob.adt = ob->adt;
       workob.pose = dummyPose;
 
-      BKE_animsys_evaluate_animdata(&workob.id, workob.adt, cframe, ADT_RECALC_ANIM, false);
+      BKE_animsys_evaluate_animdata(
+          &workob.id, workob.adt, &anim_eval_context, ADT_RECALC_ANIM, false);
 
       /* copy back values, but on selected bones only  */
       for (pchan = dummyPose->chanbase.first; pchan; pchan = pchan->next) {
@@ -1259,10 +1306,8 @@ static int pose_clear_user_transforms_exec(bContext *C, wmOperator *op)
       MEM_freeN(dummyPose);
     }
     else {
-      /* no animation, so just reset whole pose to rest pose
-       * (cannot just restore for selected though)
-       */
-      BKE_pose_rest(ob->pose);
+      /* No animation, so just reset to the rest pose. */
+      BKE_pose_rest(ob->pose, only_select);
     }
 
     /* notifiers and updates */
@@ -1279,7 +1324,7 @@ void POSE_OT_user_transforms_clear(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Clear User Transforms";
   ot->idname = "POSE_OT_user_transforms_clear";
-  ot->description = "Reset pose on selected bones to keyframed state";
+  ot->description = "Reset pose bone transforms to keyframed state";
 
   /* callbacks */
   ot->exec = pose_clear_user_transforms_exec;

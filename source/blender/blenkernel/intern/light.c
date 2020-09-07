@@ -58,7 +58,7 @@ static void light_init_data(ID *id)
   MEMCPY_STRUCT_AFTER(la, DNA_struct_default_get(Light), id);
 
   la->curfalloff = BKE_curvemapping_add(1, 0.0f, 1.0f, 1.0f, 0.0f);
-  BKE_curvemapping_initialize(la->curfalloff);
+  BKE_curvemapping_init(la->curfalloff);
 }
 
 /**
@@ -134,6 +134,12 @@ IDTypeInfo IDType_ID_LA = {
     .free_data = light_free_data,
     .make_local = NULL,
     .foreach_id = light_foreach_id,
+    .foreach_cache = NULL,
+
+    .blend_write = NULL,
+    .blend_read_data = NULL,
+    .blend_read_lib = NULL,
+    .blend_read_expand = NULL,
 };
 
 Light *BKE_light_add(Main *bmain, const char *name)

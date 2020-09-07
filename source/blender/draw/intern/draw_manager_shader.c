@@ -34,6 +34,7 @@
 
 #include "DEG_depsgraph_query.h"
 
+#include "GPU_extensions.h"
 #include "GPU_material.h"
 #include "GPU_shader.h"
 
@@ -91,10 +92,13 @@ static void drw_deferred_shader_queue_free(ListBase *queue)
   }
 }
 
-static void drw_deferred_shader_compilation_exec(void *custom_data,
-                                                 short *stop,
-                                                 short *do_update,
-                                                 float *progress)
+static void drw_deferred_shader_compilation_exec(
+    void *custom_data,
+    /* Cannot be const, this function implements wm_jobs_start_callback.
+     * NOLINTNEXTLINE: readability-non-const-parameter. */
+    short *stop,
+    short *do_update,
+    float *progress)
 {
   DRWShaderCompiler *comp = (DRWShaderCompiler *)custom_data;
   void *gl_context = comp->gl_context;
@@ -102,6 +106,12 @@ static void drw_deferred_shader_compilation_exec(void *custom_data,
 #if TRUST_NO_ONE
   BLI_assert(gl_context != NULL);
 #endif
+
+  const bool use_main_context_workaround = GPU_use_main_context_workaround();
+  if (use_main_context_workaround) {
+    BLI_assert(gl_context == DST.gl_context);
+    GPU_context_main_lock();
+  }
 
   WM_opengl_context_activate(gl_context);
 
@@ -151,6 +161,9 @@ static void drw_deferred_shader_compilation_exec(void *custom_data,
   }
 
   WM_opengl_context_release(gl_context);
+  if (use_main_context_workaround) {
+    GPU_context_main_unlock();
+  }
 }
 
 static void drw_deferred_shader_compilation_free(void *custom_data)
@@ -193,6 +206,8 @@ static void drw_deferred_shader_add(GPUMaterial *mat, bool deferred)
     GPU_material_compile(mat);
     return;
   }
+  const bool use_main_context = GPU_use_main_context_workaround();
+  const bool job_own_context = !use_main_context;
 
   DRWDeferredShader *dsh = MEM_callocN(sizeof(DRWDeferredShader), "Deferred Shader");
 
@@ -224,7 +239,7 @@ static void drw_deferred_shader_add(GPUMaterial *mat, bool deferred)
     if (old_comp->gl_context) {
       comp->gl_context = old_comp->gl_context;
       old_comp->own_context = false;
-      comp->own_context = true;
+      comp->own_context = job_own_context;
     }
   }
 
@@ -232,9 +247,14 @@ static void drw_deferred_shader_add(GPUMaterial *mat, bool deferred)
 
   /* Create only one context. */
   if (comp->gl_context == NULL) {
-    comp->gl_context = WM_opengl_context_create();
-    WM_opengl_context_activate(DST.gl_context);
-    comp->own_context = true;
+    if (use_main_context) {
+      comp->gl_context = DST.gl_context;
+    }
+    else {
+      comp->gl_context = WM_opengl_context_create();
+      WM_opengl_context_activate(DST.gl_context);
+    }
+    comp->own_context = job_own_context;
   }
 
   WM_jobs_customdata_set(wm_job, comp, drw_deferred_shader_compilation_free);
@@ -292,16 +312,18 @@ void DRW_deferred_shader_remove(GPUMaterial *mat)
 
 /** \{ */
 
-GPUShader *DRW_shader_create(const char *vert,
-                             const char *geom,
-                             const char *frag,
-                             const char *defines)
+GPUShader *DRW_shader_create_ex(
+    const char *vert, const char *geom, const char *frag, const char *defines, const char *name)
 {
-  return GPU_shader_create(vert, frag, geom, NULL, defines, __func__);
+  return GPU_shader_create(vert, frag, geom, NULL, defines, name);
 }
 
-GPUShader *DRW_shader_create_with_lib(
-    const char *vert, const char *geom, const char *frag, const char *lib, const char *defines)
+GPUShader *DRW_shader_create_with_lib_ex(const char *vert,
+                                         const char *geom,
+                                         const char *frag,
+                                         const char *lib,
+                                         const char *defines,
+                                         const char *name)
 {
   GPUShader *sh;
   char *vert_with_lib = NULL;
@@ -314,13 +336,34 @@ GPUShader *DRW_shader_create_with_lib(
     geom_with_lib = BLI_string_joinN(lib, geom);
   }
 
-  sh = GPU_shader_create(vert_with_lib, frag_with_lib, geom_with_lib, NULL, defines, __func__);
+  sh = GPU_shader_create(vert_with_lib, frag_with_lib, geom_with_lib, NULL, defines, name);
 
   MEM_freeN(vert_with_lib);
   MEM_freeN(frag_with_lib);
   if (geom) {
     MEM_freeN(geom_with_lib);
   }
+
+  return sh;
+}
+
+GPUShader *DRW_shader_create_with_shaderlib_ex(const char *vert,
+                                               const char *geom,
+                                               const char *frag,
+                                               const DRWShaderLibrary *lib,
+                                               const char *defines,
+                                               const char *name)
+{
+  GPUShader *sh;
+  char *vert_with_lib = DRW_shader_library_create_shader_string(lib, vert);
+  char *frag_with_lib = DRW_shader_library_create_shader_string(lib, frag);
+  char *geom_with_lib = (geom) ? DRW_shader_library_create_shader_string(lib, geom) : NULL;
+
+  sh = GPU_shader_create(vert_with_lib, frag_with_lib, geom_with_lib, NULL, defines, name);
+
+  MEM_SAFE_FREE(vert_with_lib);
+  MEM_SAFE_FREE(frag_with_lib);
+  MEM_SAFE_FREE(geom_with_lib);
 
   return sh;
 }
@@ -343,10 +386,26 @@ GPUShader *DRW_shader_create_with_transform_feedback(const char *vert,
                               __func__);
 }
 
-GPUShader *DRW_shader_create_fullscreen(const char *frag, const char *defines)
+GPUShader *DRW_shader_create_fullscreen_ex(const char *frag, const char *defines, const char *name)
 {
-  return GPU_shader_create(
-      datatoc_common_fullscreen_vert_glsl, frag, NULL, NULL, defines, __func__);
+  return GPU_shader_create(datatoc_common_fullscreen_vert_glsl, frag, NULL, NULL, defines, name);
+}
+
+GPUShader *DRW_shader_create_fullscreen_with_shaderlib_ex(const char *frag,
+                                                          const DRWShaderLibrary *lib,
+                                                          const char *defines,
+                                                          const char *name)
+{
+
+  GPUShader *sh;
+  char *vert = datatoc_common_fullscreen_vert_glsl;
+  char *frag_with_lib = DRW_shader_library_create_shader_string(lib, frag);
+
+  sh = GPU_shader_create(vert, frag_with_lib, NULL, NULL, defines, name);
+
+  MEM_SAFE_FREE(frag_with_lib);
+
+  return sh;
 }
 
 GPUMaterial *DRW_shader_find_from_world(World *wo,
@@ -391,7 +450,8 @@ GPUMaterial *DRW_shader_create_from_world(struct Scene *scene,
                                           const char *geom,
                                           const char *frag_lib,
                                           const char *defines,
-                                          bool deferred)
+                                          bool deferred,
+                                          GPUMaterialEvalCallbackFn callback)
 {
   GPUMaterial *mat = NULL;
   if (DRW_state_is_image_render() || !deferred) {
@@ -411,7 +471,8 @@ GPUMaterial *DRW_shader_create_from_world(struct Scene *scene,
                                      geom,
                                      frag_lib,
                                      defines,
-                                     wo->id.name);
+                                     wo->id.name,
+                                     callback);
   }
 
   if (GPU_material_status(mat) == GPU_MAT_QUEUED) {
@@ -431,7 +492,8 @@ GPUMaterial *DRW_shader_create_from_material(struct Scene *scene,
                                              const char *geom,
                                              const char *frag_lib,
                                              const char *defines,
-                                             bool deferred)
+                                             bool deferred,
+                                             GPUMaterialEvalCallbackFn callback)
 {
   GPUMaterial *mat = NULL;
   if (DRW_state_is_image_render() || !deferred) {
@@ -451,7 +513,8 @@ GPUMaterial *DRW_shader_create_from_material(struct Scene *scene,
                                      geom,
                                      frag_lib,
                                      defines,
-                                     ma->id.name);
+                                     ma->id.name,
+                                     callback);
   }
 
   if (GPU_material_status(mat) == GPU_MAT_QUEUED) {
@@ -502,7 +565,7 @@ void DRW_shader_library_free(DRWShaderLibrary *lib)
   MEM_SAFE_FREE(lib);
 }
 
-static int drw_shader_library_search(DRWShaderLibrary *lib, const char *name)
+static int drw_shader_library_search(const DRWShaderLibrary *lib, const char *name)
 {
   for (int i = 0; i < MAX_LIB; i++) {
     if (lib->libs[i]) {
@@ -518,18 +581,28 @@ static int drw_shader_library_search(DRWShaderLibrary *lib, const char *name)
 }
 
 /* Return bitmap of dependencies. */
-static uint32_t drw_shader_dependencies_get(DRWShaderLibrary *lib, char *lib_code)
+static uint32_t drw_shader_dependencies_get(const DRWShaderLibrary *lib, const char *lib_code)
 {
   /* Search dependencies. */
   uint32_t deps = 0;
-  char *haystack = lib_code;
+  const char *haystack = lib_code;
   while ((haystack = strstr(haystack, "BLENDER_REQUIRE("))) {
     haystack += 16;
     int dep = drw_shader_library_search(lib, haystack);
     if (dep == -1) {
+      char dbg_name[32];
+      int i = 0;
+      while ((haystack[0] != ')') && (i < 31)) {
+        dbg_name[i] = haystack[0];
+        haystack++;
+        i++;
+      }
+      dbg_name[i + 1] = '\0';
+
       printf(
-          "Error: Dependency not found.\n"
-          "This might be due to bad lib ordering.\n");
+          "Error: Dependency not found: %s\n"
+          "This might be due to bad lib ordering.\n",
+          dbg_name);
       BLI_assert(0);
     }
     else {
@@ -562,7 +635,7 @@ void DRW_shader_library_add_file(DRWShaderLibrary *lib, char *lib_code, const ch
 
 /* Return an allocN'ed string containing the shader code with its dependencies prepended.
  * Caller must free the string with MEM_freeN after use. */
-char *DRW_shader_library_create_shader_string(DRWShaderLibrary *lib, char *shader_code)
+char *DRW_shader_library_create_shader_string(const DRWShaderLibrary *lib, const char *shader_code)
 {
   uint32_t deps = drw_shader_dependencies_get(lib, shader_code);
 

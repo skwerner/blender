@@ -22,8 +22,7 @@
 
 /* Private functions / structs of the draw manager */
 
-#ifndef __DRAW_MANAGER_H__
-#define __DRAW_MANAGER_H__
+#pragma once
 
 #include "DRW_engine.h"
 #include "DRW_render.h"
@@ -36,9 +35,10 @@
 
 #include "GPU_batch.h"
 #include "GPU_context.h"
+#include "GPU_drawlist.h"
 #include "GPU_framebuffer.h"
 #include "GPU_shader.h"
-#include "GPU_uniformbuffer.h"
+#include "GPU_uniform_buffer.h"
 #include "GPU_viewport.h"
 
 #include "draw_instance_data.h"
@@ -308,8 +308,8 @@ struct DRWUniform {
     };
     /* DRW_UNIFORM_BLOCK */
     union {
-      GPUUniformBuffer *block;
-      GPUUniformBuffer **block_ref;
+      GPUUniformBuf *block;
+      GPUUniformBuf **block_ref;
     };
     /* DRW_UNIFORM_FLOAT_COPY */
     float fvalue[4];
@@ -380,6 +380,7 @@ typedef struct DRWViewUboStorage {
   float wininv[4][4];
 
   float clipplanes[6][4];
+  float viewvecs[2][4];
   /* Should not be here. Not view dependent (only main view). */
   float viewcamtexcofac[4];
 } DRWViewUboStorage;
@@ -583,7 +584,7 @@ void drw_state_set(DRWState state);
 void drw_debug_draw(void);
 void drw_debug_init(void);
 
-eDRWCommandType command_type_get(uint64_t *command_type_bits, int index);
+eDRWCommandType command_type_get(const uint64_t *command_type_bits, int index);
 
 void drw_batch_cache_validate(Object *ob);
 void drw_batch_cache_generate_requested(struct Object *ob);
@@ -595,5 +596,3 @@ void drw_resource_buffer_finish(ViewportMemoryPool *vmempool);
 GPUBatch *drw_cache_procedural_points_get(void);
 GPUBatch *drw_cache_procedural_lines_get(void);
 GPUBatch *drw_cache_procedural_triangles_get(void);
-
-#endif /* __DRAW_MANAGER_H__ */

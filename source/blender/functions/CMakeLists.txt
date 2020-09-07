@@ -38,7 +38,7 @@ set(SRC
   FN_array_spans.hh
   FN_attributes_ref.hh
   FN_cpp_type.hh
-  FN_cpp_types.hh
+  FN_generic_vector_array.hh
   FN_multi_function.hh
   FN_multi_function_builder.hh
   FN_multi_function_context.hh
@@ -57,3 +57,20 @@ set(LIB
 )
 
 blender_add_lib(bf_functions "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
+
+if(WITH_GTESTS)
+  set(TEST_SRC
+    tests/FN_array_spans_test.cc
+    tests/FN_attributes_ref_test.cc
+    tests/FN_cpp_type_test.cc
+    tests/FN_generic_vector_array_test.cc
+    tests/FN_multi_function_network_test.cc
+    tests/FN_multi_function_test.cc
+    tests/FN_spans_test.cc
+  )
+  set (TEST_LIB
+    bf_functions
+  )
+  include(GTestTesting)
+  blender_add_test_lib(bf_functions_tests "${TEST_SRC}" "${INC};${TEST_INC}" "${INC_SYS}" "${LIB};${TEST_LIB}")
+endif()

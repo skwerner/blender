@@ -42,7 +42,7 @@ if(BUILD_MODE STREQUAL Release)
         ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/glew/include/ ${HARVEST_TARGET}/opengl/include/ &&
         # tiff
         ${CMAKE_COMMAND} -E copy ${LIBDIR}/tiff/lib/tiff.lib ${HARVEST_TARGET}/tiff/lib/libtiff.lib &&
-        ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/tiff/include/ ${HARVEST_TARGET}/tiff/include/ &&
+        ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/tiff/include/ ${HARVEST_TARGET}/tiff/include/
     DEPENDS
   )
 endif()
@@ -89,6 +89,8 @@ harvest(freetype/include freetype/include "*.h")
 harvest(freetype/lib/libfreetype2ST.a freetype/lib/libfreetype.a)
 harvest(glew/include glew/include "*.h")
 harvest(glew/lib glew/lib "*.a")
+harvest(gmp/include gmp/include "*.h")
+harvest(gmp/lib gmp/lib "*.a")
 harvest(jemalloc/include jemalloc/include "*.h")
 harvest(jemalloc/lib jemalloc/lib "*.a")
 harvest(jpg/include jpeg/include "*.h")

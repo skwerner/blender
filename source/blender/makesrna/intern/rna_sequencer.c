@@ -637,6 +637,8 @@ static void rna_Sequence_name_set(PointerRNA *ptr, const char *value)
   char oldname[sizeof(seq->name)];
   AnimData *adt;
 
+  BKE_sequencer_prefetch_stop(scene);
+
   /* make a copy of the old name first */
   BLI_strncpy(oldname, seq->name + 2, sizeof(seq->name) - 2);
 
@@ -749,6 +751,25 @@ static IDProperty *rna_Sequence_idprops(PointerRNA *ptr, bool create)
   return seq->prop;
 }
 
+static bool rna_MovieSequence_reload_if_needed(ID *scene_id, Sequence *seq, Main *bmain)
+{
+  Scene *scene = (Scene *)scene_id;
+  bool has_reloaded;
+  bool can_produce_frames;
+
+  BKE_sequence_movie_reload_if_needed(bmain, scene, seq, &has_reloaded, &can_produce_frames);
+
+  if (has_reloaded && can_produce_frames) {
+    BKE_sequence_calc(scene, seq);
+    BKE_sequence_invalidate_cache_raw(scene, seq);
+
+    DEG_id_tag_update(&scene->id, ID_RECALC_SEQUENCER_STRIPS);
+    WM_main_add_notifier(NC_SCENE | ND_SEQUENCER, scene);
+  }
+
+  return can_produce_frames;
+}
+
 static PointerRNA rna_MovieSequence_metadata_get(Sequence *seq)
 {
   if (seq == NULL || seq->anims.first == NULL) {
@@ -843,6 +864,43 @@ static int rna_Sequence_input_count_get(PointerRNA *ptr)
   return BKE_sequence_effect_get_num_inputs(seq->type);
 }
 
+static void rna_Sequence_input_set(PointerRNA *ptr,
+                                   PointerRNA ptr_value,
+                                   struct ReportList *reports,
+                                   int input_num)
+{
+
+  Sequence *seq = ptr->data;
+  Sequence *input = ptr_value.data;
+
+  if (BKE_sequencer_render_loop_check(input, seq)) {
+    BKE_report(reports, RPT_ERROR, "Cannot reassign inputs: recursion detected");
+    return;
+  }
+
+  switch (input_num) {
+    case 1:
+      seq->seq1 = input;
+      break;
+    case 2:
+      seq->seq2 = input;
+      break;
+  }
+}
+
+static void rna_Sequence_input_1_set(PointerRNA *ptr,
+                                     PointerRNA ptr_value,
+                                     struct ReportList *reports)
+{
+  rna_Sequence_input_set(ptr, ptr_value, reports, 1);
+}
+
+static void rna_Sequence_input_2_set(PointerRNA *ptr,
+                                     PointerRNA ptr_value,
+                                     struct ReportList *reports)
+{
+  rna_Sequence_input_set(ptr, ptr_value, reports, 2);
+}
 #  if 0
 static void rna_SoundSequence_filename_set(PointerRNA *ptr, const char *value)
 {
@@ -1251,6 +1309,24 @@ static void rna_Sequence_modifier_clear(Sequence *seq, bContext *C)
   BKE_sequence_invalidate_cache_preprocessed(scene, seq);
 
   WM_main_add_notifier(NC_SCENE | ND_SEQUENCER, NULL);
+}
+
+static void rna_SequenceModifier_strip_set(PointerRNA *ptr,
+                                           PointerRNA value,
+                                           struct ReportList *reports)
+{
+  SequenceModifierData *smd = ptr->data;
+  Scene *scene = (Scene *)ptr->owner_id;
+  Editing *ed = BKE_sequencer_editing_get(scene, false);
+  Sequence *seq = sequence_get_by_modifier(ed, smd);
+  Sequence *target = (Sequence *)value.data;
+
+  if (target != NULL && BKE_sequencer_render_loop_check(target, seq)) {
+    BKE_report(reports, RPT_ERROR, "Recursion detected, can not use this strip");
+    return;
+  }
+
+  smd->mask_sequence = target;
 }
 
 static float rna_Sequence_fps_get(PointerRNA *ptr)
@@ -2126,7 +2202,7 @@ static void rna_def_proxy(StructRNA *srna)
   prop = RNA_def_property(srna, "use_proxy", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", SEQ_USE_PROXY);
   RNA_def_property_ui_text(
-      prop, "Use Proxy / Timecode", "Use a preview proxy and/or timecode index for this strip");
+      prop, "Use Proxy / Timecode", "Use a preview proxy and/or time-code index for this strip");
   RNA_def_property_boolean_funcs(prop, NULL, "rna_Sequence_use_proxy_set");
   RNA_def_property_update(prop, NC_SCENE | ND_SEQUENCER, "rna_Sequence_invalidate_raw_update");
 
@@ -2174,6 +2250,7 @@ static void rna_def_effect_inputs(StructRNA *srna, int count)
     prop = RNA_def_property(srna, "input_1", PROP_POINTER, PROP_NONE);
     RNA_def_property_pointer_sdna(prop, NULL, "seq1");
     RNA_def_property_flag(prop, PROP_EDITABLE | PROP_NEVER_NULL);
+    RNA_def_property_pointer_funcs(prop, NULL, "rna_Sequence_input_1_set", NULL, NULL);
     RNA_def_property_ui_text(prop, "Input 1", "First input for the effect strip");
   }
 
@@ -2181,6 +2258,7 @@ static void rna_def_effect_inputs(StructRNA *srna, int count)
     prop = RNA_def_property(srna, "input_2", PROP_POINTER, PROP_NONE);
     RNA_def_property_pointer_sdna(prop, NULL, "seq2");
     RNA_def_property_flag(prop, PROP_EDITABLE | PROP_NEVER_NULL);
+    RNA_def_property_pointer_funcs(prop, NULL, "rna_Sequence_input_2_set", NULL, NULL);
     RNA_def_property_ui_text(prop, "Input 2", "Second input for the effect strip");
   }
 
@@ -2384,6 +2462,13 @@ static void rna_def_movie(BlenderRNA *brna)
                                 "rna_Sequence_filepath_length",
                                 "rna_Sequence_filepath_set");
   RNA_def_property_update(prop, NC_SCENE | ND_SEQUENCER, "rna_Sequence_filepath_update");
+
+  func = RNA_def_function(srna, "reload_if_needed", "rna_MovieSequence_reload_if_needed");
+  RNA_def_function_flag(func, FUNC_USE_SELF_ID | FUNC_USE_MAIN);
+  /* return type */
+  parm = RNA_def_boolean(
+      func, "can_produce_frames", 0, "True if the strip can produce frames, False otherwise", "");
+  RNA_def_function_return(func, parm);
 
   /* metadata */
   func = RNA_def_function(srna, "metadata", "rna_MovieSequence_metadata_get");
@@ -3027,8 +3112,11 @@ static void rna_def_modifier(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "input_mask_strip", PROP_POINTER, PROP_NONE);
   RNA_def_property_pointer_sdna(prop, NULL, "mask_sequence");
-  RNA_def_property_pointer_funcs(
-      prop, NULL, NULL, NULL, "rna_SequenceModifier_otherSequence_poll");
+  RNA_def_property_pointer_funcs(prop,
+                                 NULL,
+                                 "rna_SequenceModifier_strip_set",
+                                 NULL,
+                                 "rna_SequenceModifier_otherSequence_poll");
   RNA_def_property_flag(prop, PROP_EDITABLE);
   RNA_def_property_ui_text(prop, "Mask Strip", "Strip used as mask input for the modifier");
   RNA_def_property_update(prop, NC_SCENE | ND_SEQUENCER, "rna_SequenceModifier_update");

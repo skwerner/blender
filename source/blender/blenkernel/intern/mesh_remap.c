@@ -73,9 +73,8 @@ static bool mesh_remap_bvhtree_query_nearest(BVHTreeFromMesh *treedata,
     *r_hit_dist = sqrtf(nearest->dist_sq);
     return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 static bool mesh_remap_bvhtree_query_raycast(BVHTreeFromMesh *treedata,
@@ -107,9 +106,8 @@ static bool mesh_remap_bvhtree_query_raycast(BVHTreeFromMesh *treedata,
     *r_hit_dist = rayhit->dist;
     return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 /** \} */
@@ -1071,7 +1069,7 @@ static void mesh_island_to_astar_graph_edge_process(MeshIslandStore *islands,
                                                     BLI_bitmap *done_edges,
                                                     MeshElemMap *edge_to_poly_map,
                                                     const bool is_edge_innercut,
-                                                    int *poly_island_index_map,
+                                                    const int *poly_island_index_map,
                                                     float (*poly_centers)[3],
                                                     unsigned char *poly_status)
 {

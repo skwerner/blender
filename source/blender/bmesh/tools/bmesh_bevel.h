@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BMESH_BEVEL_H__
-#define __BMESH_BEVEL_H__
+#pragma once
 
 /** \file
  * \ingroup bmesh
@@ -30,7 +29,7 @@ void BM_mesh_bevel(BMesh *bm,
                    const int profile_type,
                    const int segments,
                    const float profile,
-                   const bool vertex_only,
+                   const bool affect_type,
                    const bool use_weights,
                    const bool limit_offset,
                    const struct MDeformVert *dvert,
@@ -47,5 +46,3 @@ void BM_mesh_bevel(BMesh *bm,
                    const float smoothresh,
                    const struct CurveProfile *custom_profile,
                    const int vmesh_method);
-
-#endif /* __BMESH_BEVEL_H__ */

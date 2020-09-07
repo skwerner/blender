@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BKE_IDPROP_H__
-#define __BKE_IDPROP_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -31,6 +30,10 @@ extern "C" {
 
 struct ID;
 struct IDProperty;
+struct BlendWriter;
+struct BlendDataReader;
+struct BlendLibReader;
+struct BlendExpander;
 
 typedef union IDPropertyTemplate {
   int i;
@@ -197,8 +200,14 @@ void IDP_repr_fn(const IDProperty *prop,
                  void *user_data);
 void IDP_print(const struct IDProperty *prop);
 
+void IDP_BlendWrite(struct BlendWriter *writer, const struct IDProperty *prop);
+void IDP_BlendReadData_impl(struct BlendDataReader *reader,
+                            IDProperty **prop,
+                            const char *caller_func_id);
+#define IDP_BlendDataRead(reader, prop) IDP_BlendReadData_impl(reader, prop, __func__)
+void IDP_BlendReadLib(struct BlendLibReader *reader, IDProperty *prop);
+void IDP_BlendReadExpand(struct BlendExpander *expander, IDProperty *prop);
+
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_IDPROP_H__ */

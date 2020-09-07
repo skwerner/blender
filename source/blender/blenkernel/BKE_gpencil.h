@@ -17,8 +17,7 @@
  * This is a new part of Blender
  */
 
-#ifndef __BKE_GPENCIL_H__
-#define __BKE_GPENCIL_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -132,6 +131,11 @@ bool BKE_gpencil_merge_materials_table_get(struct Object *ob,
                                            const float sat_threshold,
                                            const float val_threshold,
                                            struct GHash *r_mat_table);
+bool BKE_gpencil_merge_materials(struct Object *ob,
+                                 const float hue_threshold,
+                                 const float sat_threshold,
+                                 const float val_threshold,
+                                 int *r_removed);
 
 /* statistics functions */
 void BKE_gpencil_stats_update(struct bGPdata *gpd);
@@ -280,5 +284,3 @@ void BKE_gpencil_update_layer_parent(const struct Depsgraph *depsgraph, struct O
 #ifdef __cplusplus
 }
 #endif
-
-#endif /*  __BKE_GPENCIL_H__ */

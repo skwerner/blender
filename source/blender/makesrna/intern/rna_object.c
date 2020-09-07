@@ -174,7 +174,7 @@ static const EnumPropertyItem parent_type_items[] = {
 
 #define INSTANCE_ITEMS_SHARED \
   {0, "NONE", 0, "None", ""}, \
-      {OB_DUPLIVERTS, "VERTS", 0, "Verts", "Instantiate child objects on all vertices"}, \
+      {OB_DUPLIVERTS, "VERTS", 0, "Vertices", "Instantiate child objects on all vertices"}, \
   { \
     OB_DUPLIFACES, "FACES", 0, "Faces", "Instantiate child objects on all faces" \
   }
@@ -191,6 +191,12 @@ static const EnumPropertyItem instance_items[] = {
 #ifdef RNA_RUNTIME
 static EnumPropertyItem instance_items_nogroup[] = {
     INSTANCE_ITEMS_SHARED,
+    {0, NULL, 0, NULL, NULL},
+};
+
+static EnumPropertyItem instance_items_pointcloud[] = {
+    {0, "NONE", 0, "None", ""},
+    {OB_DUPLIVERTS, "POINTS", 0, "Points", "Instantiate child objects on all points"},
     {0, NULL, 0, NULL, NULL},
 };
 #endif
@@ -397,7 +403,7 @@ static void rna_Object_matrix_local_set(PointerRNA *ptr, const float values[16])
     copy_m4_m4(local_mat, (float(*)[4])values);
   }
 
-  /* Don't use compat so we get predictable rotation, and do not use parenting either,
+  /* Don't use compatible so we get predictable rotation, and do not use parenting either,
    * because it's a local matrix! */
   BKE_object_apply_mat4(ob, local_mat, false, false);
 }
@@ -564,9 +570,17 @@ static StructRNA *rna_Object_data_typef(PointerRNA *ptr)
     case OB_GPENCIL:
       return &RNA_GreasePencil;
     case OB_HAIR:
+#  ifdef WITH_HAIR_NODES
       return &RNA_Hair;
+#  else
+      return &RNA_ID;
+#  endif
     case OB_POINTCLOUD:
+#  ifdef WITH_PARTICLE_NODES
       return &RNA_PointCloud;
+#  else
+      return &RNA_ID;
+#  endif
     case OB_VOLUME:
       return &RNA_Volume;
     default:
@@ -706,6 +720,9 @@ static const EnumPropertyItem *rna_Object_instance_type_itemf(bContext *UNUSED(C
 
   if (ob->type == OB_EMPTY) {
     item = instance_items;
+  }
+  else if (ob->type == OB_POINTCLOUD) {
+    item = instance_items_pointcloud;
   }
   else {
     item = instance_items_nogroup;
@@ -3242,7 +3259,7 @@ static void rna_def_object(BlenderRNA *brna)
   RNA_def_property_update(prop, NC_OBJECT | ND_DRAW, NULL);
 
   prop = RNA_def_property(srna, "show_in_front", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "dtx", OB_DRAWXRAY);
+  RNA_def_property_boolean_sdna(prop, NULL, "dtx", OB_DRAW_IN_FRONT);
   RNA_def_property_ui_text(prop, "In Front", "Make the object draw in front of others");
   RNA_def_property_update(prop, NC_OBJECT | ND_DRAW, "rna_GPencil_update");
 

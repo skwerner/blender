@@ -23,8 +23,7 @@
 
 /* Internal for editmesh_xxxx.c functions */
 
-#ifndef __MESH_INTERN_H__
-#define __MESH_INTERN_H__
+#pragma once
 
 struct BMEditMesh;
 struct BMElem;
@@ -254,6 +253,7 @@ void MESH_OT_mod_weighted_strength(struct wmOperatorType *ot);
 
 /* *** editmesh_mask_extract.c *** */
 void MESH_OT_paint_mask_extract(struct wmOperatorType *ot);
+void MESH_OT_face_set_extract(struct wmOperatorType *ot);
 void MESH_OT_paint_mask_slice(struct wmOperatorType *ot);
 
 struct wmKeyMap *point_normals_modal_keymap(wmKeyConfig *keyconf);
@@ -276,5 +276,3 @@ void MESH_OT_customdata_skin_add(struct wmOperatorType *ot);
 void MESH_OT_customdata_skin_clear(struct wmOperatorType *ot);
 void MESH_OT_customdata_custom_splitnormals_add(struct wmOperatorType *ot);
 void MESH_OT_customdata_custom_splitnormals_clear(struct wmOperatorType *ot);
-
-#endif /* __MESH_INTERN_H__ */

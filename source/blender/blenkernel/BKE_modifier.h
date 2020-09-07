@@ -13,8 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
-#ifndef __BKE_MODIFIER_H__
-#define __BKE_MODIFIER_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -414,13 +413,17 @@ void BKE_modifier_type_panel_id(ModifierType type, char *r_idname);
  * default values if pointer is optional.
  */
 struct ModifierData *BKE_modifier_new(int type);
+
 void BKE_modifier_free_ex(struct ModifierData *md, const int flag);
 void BKE_modifier_free(struct ModifierData *md);
+
+/* Generate new UUID for the given modifier. */
+void BKE_modifier_session_uuid_generate(struct ModifierData *md);
 
 bool BKE_modifier_unique_name(struct ListBase *modifiers, struct ModifierData *md);
 
 void BKE_modifier_copydata_generic(const struct ModifierData *md,
-                                   struct ModifierData *target,
+                                   struct ModifierData *md_dst,
                                    const int flag);
 void BKE_modifier_copydata(struct ModifierData *md, struct ModifierData *target);
 void BKE_modifier_copydata_ex(struct ModifierData *md,
@@ -540,8 +543,8 @@ void BKE_modifier_deform_vertsEM(ModifierData *md,
 struct Mesh *BKE_modifier_get_evaluated_mesh_from_evaluated_object(struct Object *ob_eval,
                                                                    const bool get_cage_mesh);
 
+void BKE_modifier_check_uuids_unique_and_report(const struct Object *object);
+
 #ifdef __cplusplus
 }
-#endif
-
 #endif

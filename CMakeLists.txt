@@ -41,7 +41,7 @@ if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
   endif()
 endif()
 
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.10)
 
 # Prever LEGACY OpenGL to eb compatible with all the existing releases and
 # platforms which don't hare GLVND yet. Only do it if preference was not set
@@ -100,6 +100,11 @@ cmake_policy(SET CMP0014 NEW)
 # Silence draco warning on macOS, new policy works fine.
 if(POLICY CMP0068)
   cmake_policy(SET CMP0068 NEW)
+endif()
+
+# find_package() uses <PackageName>_ROOT variables.
+if(POLICY CMP0074)
+  cmake_policy(SET CMP0074 NEW)
 endif()
 
 #-----------------------------------------------------------------------------
@@ -183,6 +188,7 @@ if(APPLE)
 else()
   option(WITH_XR_OPENXR   "Enable VR features through the OpenXR specification" ON)
 endif()
+option(WITH_GMP "Enable features depending on GMP (Exact Boolean)" ON)
 
 # Compositor
 option(WITH_COMPOSITOR         "Enable the tile based nodal compositor" ON)
@@ -213,6 +219,8 @@ endif()
 if(WITH_GHOST_X11)
   option(WITH_GHOST_XDND    "Enable drag'n'drop support on X11 using XDND protocol" ON)
 endif()
+
+option(WITH_GMP "Use the gmp library for more accurate booleans" OFF)
 
 # Misc...
 option(WITH_HEADLESS      "Build without graphical support (renderfarm, server mode only)" OFF)
@@ -367,7 +375,7 @@ option(WITH_CYCLES_CUDA_BINARIES    "Build Cycles CUDA binaries" OFF)
 option(WITH_CYCLES_CUBIN_COMPILER   "Build cubins with nvrtc based compiler instead of nvcc" OFF)
 option(WITH_CYCLES_CUDA_BUILD_SERIAL "Build cubins one after another (useful on machines with limited RAM)" OFF)
 mark_as_advanced(WITH_CYCLES_CUDA_BUILD_SERIAL)
-set(CYCLES_CUDA_BINARIES_ARCH sm_30 sm_35 sm_37 sm_50 sm_52 sm_60 sm_61 sm_70 sm_75 CACHE STRING "CUDA architectures to build binaries for")
+set(CYCLES_CUDA_BINARIES_ARCH sm_30 sm_35 sm_37 sm_50 sm_52 sm_60 sm_61 sm_70 sm_75 compute_75 CACHE STRING "CUDA architectures to build binaries for")
 mark_as_advanced(CYCLES_CUDA_BINARIES_ARCH)
 unset(PLATFORM_DEFAULT)
 option(WITH_CYCLES_LOGGING  "Build Cycles with logging support" ON)
@@ -416,7 +424,7 @@ option(WITH_ASSERT_ABORT "Call abort() when raising an assertion through BLI_ass
 mark_as_advanced(WITH_ASSERT_ABORT)
 
 if(UNIX AND NOT APPLE)
-  option(WITH_CLANG_TIDY "Use Clang Tidy to analyze the source code (only enable for development on Limux using Clang)" OFF)
+  option(WITH_CLANG_TIDY "Use Clang Tidy to analyze the source code (only enable for development on Linux using Clang)" OFF)
   mark_as_advanced(WITH_CLANG_TIDY)
 endif()
 
@@ -427,6 +435,10 @@ option(WITH_TBB   "Enable features depending on TBB (OpenVDB, OpenImageDenoise, 
 if(WIN32)
   option(WITH_TBB_MALLOC_PROXY "Enable the TBB malloc replacement" ON)
 endif()
+
+# This should be turned off when Blender enter beta/rc/release
+option(WITH_EXPERIMENTAL_FEATURES "Enable experimental features (still need to enable them in the user preferences)" ON)
+mark_as_advanced(WITH_EXPERIMENTAL_FEATURES)
 
 # Unit testsing
 option(WITH_GTESTS "Enable GTest unit testing" OFF)
@@ -1560,6 +1572,12 @@ endif()
 
 if(MSVC)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17")
+  # Make MSVC properly report the value of the __cplusplus preprocessor macro
+  # Available MSVC 15.7 (1914) and up, without this it reports 199711L regardless
+  # of the C++ standard chosen above 
+  if(MSVC_VERSION GREATER 1913)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Zc:__cplusplus")
+  endif()
 elseif(
   CMAKE_COMPILER_IS_GNUCC OR
   CMAKE_C_COMPILER_ID MATCHES "Clang" OR
@@ -1627,10 +1645,6 @@ endif()
 
 #-----------------------------------------------------------------------------
 # Libraries
-
-if(WITH_GTESTS)
-  include(GTestTesting)
-endif()
 
 if(WITH_BLENDER)
   add_subdirectory(intern)
@@ -1726,6 +1740,7 @@ if(FIRST_RUN)
   info_cfg_option(WITH_QUADRIFLOW)
   info_cfg_option(WITH_USD)
   info_cfg_option(WITH_TBB)
+  info_cfg_option(WITH_GMP)
 
   info_cfg_text("Compiler Options:")
   info_cfg_option(WITH_BUILDINFO)

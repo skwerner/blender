@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __NODE_FUNCTION_UTIL_H__
-#define __NODE_FUNCTION_UTIL_H__
+#pragma once
 
 #include <string.h>
 
@@ -27,11 +26,11 @@
 #include "DNA_node_types.h"
 
 #include "BKE_node.h"
-#include "BKE_node_tree_multi_function.hh"
 
 #include "BLT_translation.h"
 
 #include "NOD_function.h"
+#include "NOD_node_tree_multi_function.hh"
 
 #include "node_util.h"
 
@@ -40,5 +39,3 @@
 void fn_node_type_base(
     struct bNodeType *ntype, int type, const char *name, short nclass, short flag);
 bool fn_node_poll_default(struct bNodeType *ntype, struct bNodeTree *ntree);
-
-#endif /* __NODE_FUNCTION_UTIL_H__ */

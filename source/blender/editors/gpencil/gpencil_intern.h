@@ -21,8 +21,7 @@
  * \ingroup edgpencil
  */
 
-#ifndef __GPENCIL_INTERN_H__
-#define __GPENCIL_INTERN_H__
+#pragma once
 
 #include "DNA_vec_types.h"
 
@@ -203,6 +202,8 @@ typedef struct tGPDprimitive {
   tGPspoint *points;
   /** number of edges allocated */
   int point_count;
+  /** number of subdivisions. */
+  int subdiv;
   /** stored number of polygon edges */
   int tot_stored_edges;
   /** number of polygon edges */
@@ -485,6 +486,7 @@ void GPENCIL_OT_active_frames_delete_all(struct wmOperatorType *ot);
 void GPENCIL_OT_frame_duplicate(struct wmOperatorType *ot);
 void GPENCIL_OT_frame_clean_fill(struct wmOperatorType *ot);
 void GPENCIL_OT_frame_clean_loose(struct wmOperatorType *ot);
+void GPENCIL_OT_frame_clean_duplicate(struct wmOperatorType *ot);
 
 void GPENCIL_OT_convert(struct wmOperatorType *ot);
 void GPENCIL_OT_bake_mesh_animation(struct wmOperatorType *ot);
@@ -553,7 +555,11 @@ void GPENCIL_OT_interpolate_reverse(struct wmOperatorType *ot);
 
 /* primitives ---------- */
 
-void GPENCIL_OT_primitive(struct wmOperatorType *ot);
+void GPENCIL_OT_primitive_box(struct wmOperatorType *ot);
+void GPENCIL_OT_primitive_line(struct wmOperatorType *ot);
+void GPENCIL_OT_primitive_polyline(struct wmOperatorType *ot);
+void GPENCIL_OT_primitive_circle(struct wmOperatorType *ot);
+void GPENCIL_OT_primitive_curve(struct wmOperatorType *ot);
 
 /* vertex groups ------------ */
 void GPENCIL_OT_vertex_group_assign(struct wmOperatorType *ot);
@@ -731,5 +737,3 @@ struct GP_EditableStrokes_Iter {
   (void)0
 
 /* ****************************************************** */
-
-#endif /* __GPENCIL_INTERN_H__ */

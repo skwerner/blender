@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BLI_KDOPBVH_H__
-#define __BLI_KDOPBVH_H__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -247,7 +246,7 @@ int BLI_bvhtree_find_nearest_projected(BVHTree *tree,
                                        float winsize[2],
                                        float mval[2],
                                        float clip_planes[6][4],
-                                       int clip_num,
+                                       int clip_plane_len,
                                        BVHTreeNearest *nearest,
                                        BVHTree_NearestProjectedCallback callback,
                                        void *userdata);
@@ -264,5 +263,3 @@ extern const float bvhtree_kdop_axes[13][3];
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLI_KDOPBVH_H__ */

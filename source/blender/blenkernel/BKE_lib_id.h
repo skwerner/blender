@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
  */
-#ifndef __BKE_LIB_ID_H__
-#define __BKE_LIB_ID_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -60,6 +59,8 @@ struct Main;
 struct PointerRNA;
 struct PropertyRNA;
 struct bContext;
+struct BlendWriter;
+struct BlendDataReader;
 
 size_t BKE_libblock_get_alloc_info(short type, const char **name);
 void *BKE_libblock_alloc_notest(short type) ATTR_WARN_UNUSED_RESULT;
@@ -263,11 +264,12 @@ void BKE_main_id_repair_duplicate_names_listbase(struct ListBase *lb);
 
 #define MAX_ID_FULL_NAME (64 + 64 + 3 + 1)         /* 64 is MAX_ID_NAME - 2 */
 #define MAX_ID_FULL_NAME_UI (MAX_ID_FULL_NAME + 3) /* Adds 'keycode' two letters at beginning. */
-void BKE_id_full_name_get(char name[MAX_ID_FULL_NAME], const struct ID *id, char separator_str);
+void BKE_id_full_name_get(char name[MAX_ID_FULL_NAME], const struct ID *id, char separator_char);
 void BKE_id_full_name_ui_prefix_get(char name[MAX_ID_FULL_NAME_UI],
                                     const struct ID *id,
                                     const bool add_lib_hint,
-                                    char separator_char);
+                                    char separator_char,
+                                    int *r_prefix_len);
 
 char *BKE_id_to_unique_string_key(const struct ID *id);
 
@@ -285,10 +287,10 @@ bool BKE_id_is_in_global_main(struct ID *id);
 void BKE_id_ordered_list(struct ListBase *ordered_lb, const struct ListBase *lb);
 void BKE_id_reorder(const struct ListBase *lb, struct ID *id, struct ID *relative, bool after);
 
+void BKE_id_blend_write(struct BlendWriter *writer, struct ID *id);
+
 #define IS_TAGGED(_id) ((_id) && (((ID *)_id)->tag & LIB_TAG_DOIT))
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_LIB_ID_H__ */

@@ -190,7 +190,7 @@ static void do_version_workspaces_create_from_screens(Main *bmain)
 static void do_version_area_change_space_to_space_action(ScrArea *area, const Scene *scene)
 {
   SpaceType *stype = BKE_spacetype_from_id(SPACE_ACTION);
-  SpaceAction *saction = (SpaceAction *)stype->new (area, scene);
+  SpaceAction *saction = (SpaceAction *)stype->create(area, scene);
   ARegion *region_channels;
 
   /* Properly free current regions */
@@ -1201,7 +1201,7 @@ static void do_version_fcurve_hide_viewport_fix(struct ID *UNUSED(id),
                                                 struct FCurve *fcu,
                                                 void *UNUSED(user_data))
 {
-  if (strcmp(fcu->rna_path, "hide")) {
+  if (!STREQ(fcu->rna_path, "hide")) {
     return;
   }
 
@@ -1282,20 +1282,20 @@ void do_versions_after_linking_280(Main *bmain, ReportList *UNUSED(reports))
       LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
         LISTBASE_FOREACH (SpaceLink *, space, &area->spacedata) {
           if (space->spacetype == SPACE_OUTLINER) {
-            SpaceOutliner *soutliner = (SpaceOutliner *)space;
+            SpaceOutliner *space_outliner = (SpaceOutliner *)space;
 
-            soutliner->outlinevis = SO_VIEW_LAYER;
+            space_outliner->outlinevis = SO_VIEW_LAYER;
 
             if (BLI_listbase_count_at_most(&layer->layer_collections, 2) == 1) {
-              if (soutliner->treestore == NULL) {
-                soutliner->treestore = BLI_mempool_create(
+              if (space_outliner->treestore == NULL) {
+                space_outliner->treestore = BLI_mempool_create(
                     sizeof(TreeStoreElem), 1, 512, BLI_MEMPOOL_ALLOW_ITER);
               }
 
               /* Create a tree store element for the collection. This is normally
                * done in check_persistent (outliner_tree.c), but we need to access
                * it here :/ (expand element if it's the only one) */
-              TreeStoreElem *tselem = BLI_mempool_calloc(soutliner->treestore);
+              TreeStoreElem *tselem = BLI_mempool_calloc(space_outliner->treestore);
               tselem->type = TSE_LAYER_COLLECTION;
               tselem->id = layer->layer_collections.first;
               tselem->nr = tselem->used = 0;
@@ -1792,6 +1792,7 @@ static void do_versions_seq_set_cache_defaults(Editing *ed)
   ed->recycle_max_cost = 10.0f;
 }
 
+/* NOLINTNEXTLINE: readability-function-size */
 void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
 {
   bool use_collection_compat_28 = true;
@@ -1958,7 +1959,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
           GP_Sculpt_Settings *gset = &scene->toolsettings->gp_sculpt;
           if ((gset) && (gset->cur_falloff == NULL)) {
             gset->cur_falloff = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
-            BKE_curvemapping_initialize(gset->cur_falloff);
+            BKE_curvemapping_init(gset->cur_falloff);
             BKE_curvemap_reset(gset->cur_falloff->cm,
                                &gset->cur_falloff->clipr,
                                CURVE_PRESET_GAUSS,
@@ -2024,15 +2025,15 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
         for (area = screen->areabase.first; area; area = area->next) {
           for (sl = area->spacedata.first; sl; sl = sl->next) {
             if (sl->spacetype == SPACE_OUTLINER) {
-              SpaceOutliner *so = (SpaceOutliner *)sl;
+              SpaceOutliner *space_outliner = (SpaceOutliner *)sl;
 
-              if (!ELEM(so->outlinevis,
+              if (!ELEM(space_outliner->outlinevis,
                         SO_SCENES,
                         SO_LIBRARIES,
                         SO_SEQUENCE,
                         SO_DATA_API,
                         SO_ID_ORPHANS)) {
-                so->outlinevis = SO_VIEW_LAYER;
+                space_outliner->outlinevis = SO_VIEW_LAYER;
               }
             }
           }
@@ -2412,9 +2413,9 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
         LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
           LISTBASE_FOREACH (SpaceLink *, sl, &area->spacedata) {
             if (sl->spacetype == SPACE_OUTLINER) {
-              SpaceOutliner *soops = (SpaceOutliner *)sl;
-              soops->filter_id_type = ID_GR;
-              soops->outlinevis = SO_VIEW_LAYER;
+              SpaceOutliner *space_outliner = (SpaceOutliner *)sl;
+              space_outliner->filter_id_type = ID_GR;
+              space_outliner->outlinevis = SO_VIEW_LAYER;
             }
           }
         }
@@ -3341,7 +3342,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
           LISTBASE_FOREACH (SpaceLink *, sl, &area->spacedata) {
             if (sl->spacetype == SPACE_VIEW3D) {
               View3D *v3d = (View3D *)sl;
-              memcpy(v3d->shading.lookdev_light, v3d->shading.studio_light, sizeof(char) * 256);
+              memcpy(v3d->shading.lookdev_light, v3d->shading.studio_light, sizeof(char[256]));
             }
           }
         }
@@ -3371,7 +3372,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
         GP_Sculpt_Settings *gset = &scene->toolsettings->gp_sculpt;
         if ((gset) && (gset->cur_primitive == NULL)) {
           gset->cur_primitive = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
-          BKE_curvemapping_initialize(gset->cur_primitive);
+          BKE_curvemapping_init(gset->cur_primitive);
           BKE_curvemap_reset(gset->cur_primitive->cm,
                              &gset->cur_primitive->clipr,
                              CURVE_PRESET_BELL,
@@ -3411,9 +3412,10 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
               break;
             }
             case SPACE_OUTLINER: {
-              SpaceOutliner *so = (SpaceOutliner *)sl;
-              so->filter &= ~(SO_FILTER_UNUSED_1 | SO_FILTER_UNUSED_5 | SO_FILTER_UNUSED_12);
-              so->storeflag &= ~(SO_TREESTORE_UNUSED_1);
+              SpaceOutliner *space_outliner = (SpaceOutliner *)sl;
+              space_outliner->filter &= ~(SO_FILTER_UNUSED_1 | SO_FILTER_UNUSED_5 |
+                                          SO_FILTER_UNUSED_12);
+              space_outliner->storeflag &= ~(SO_TREESTORE_UNUSED_1);
               break;
             }
             case SPACE_FILE: {
@@ -3461,7 +3463,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
 
       if (scene->ed) {
         Sequence *seq;
-        SEQ_BEGIN (scene->ed, seq) {
+        SEQ_ALL_BEGIN (scene->ed, seq) {
           seq->flag &= ~(SEQ_FLAG_UNUSED_6 | SEQ_FLAG_UNUSED_18 | SEQ_FLAG_UNUSED_19 |
                          SEQ_FLAG_UNUSED_21);
           if (seq->type == SEQ_TYPE_SPEED) {
@@ -3469,7 +3471,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
             s->flags &= ~(SEQ_SPEED_UNUSED_1);
           }
         }
-        SEQ_END;
+        SEQ_ALL_END;
       }
     }
 
@@ -4027,9 +4029,9 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
           if (sl->spacetype != SPACE_OUTLINER) {
             continue;
           }
-          SpaceOutliner *so = (SpaceOutliner *)sl;
-          so->filter &= ~SO_FLAG_UNUSED_1;
-          so->show_restrict_flags = SO_RESTRICT_ENABLE | SO_RESTRICT_HIDE;
+          SpaceOutliner *space_outliner = (SpaceOutliner *)sl;
+          space_outliner->filter &= ~SO_FLAG_UNUSED_1;
+          space_outliner->show_restrict_flags = SO_RESTRICT_ENABLE | SO_RESTRICT_HIDE;
         }
       }
     }
@@ -4161,9 +4163,9 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
           }
           /* Mark outliners as dirty for syncing and enable synced selection */
           if (sl->spacetype == SPACE_OUTLINER) {
-            SpaceOutliner *soutliner = (SpaceOutliner *)sl;
-            soutliner->sync_select_dirty |= WM_OUTLINER_SYNC_SELECT_FROM_ALL;
-            soutliner->flag |= SO_SYNC_SELECT;
+            SpaceOutliner *space_outliner = (SpaceOutliner *)sl;
+            space_outliner->sync_select_dirty |= WM_OUTLINER_SYNC_SELECT_FROM_ALL;
+            space_outliner->flag |= SO_SYNC_SELECT;
           }
         }
       }
@@ -4767,7 +4769,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
               if (mmd->curve_intensity == NULL) {
                 mmd->curve_intensity = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
                 if (mmd->curve_intensity) {
-                  BKE_curvemapping_initialize(mmd->curve_intensity);
+                  BKE_curvemapping_init(mmd->curve_intensity);
                 }
               }
               break;
@@ -4778,7 +4780,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
               if (mmd->curve_intensity == NULL) {
                 mmd->curve_intensity = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
                 if (mmd->curve_intensity) {
-                  BKE_curvemapping_initialize(mmd->curve_intensity);
+                  BKE_curvemapping_init(mmd->curve_intensity);
                 }
               }
               break;
@@ -4788,7 +4790,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
               if (mmd->curve_intensity == NULL) {
                 mmd->curve_intensity = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
                 if (mmd->curve_intensity) {
-                  BKE_curvemapping_initialize(mmd->curve_intensity);
+                  BKE_curvemapping_init(mmd->curve_intensity);
                 }
               }
               break;
@@ -4798,7 +4800,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
               if (mmd->curve_intensity == NULL) {
                 mmd->curve_intensity = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
                 if (mmd->curve_intensity) {
-                  BKE_curvemapping_initialize(mmd->curve_intensity);
+                  BKE_curvemapping_init(mmd->curve_intensity);
                 }
               }
               break;
@@ -4808,7 +4810,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
               if (mmd->curve_intensity == NULL) {
                 mmd->curve_intensity = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
                 if (mmd->curve_intensity) {
-                  BKE_curvemapping_initialize(mmd->curve_intensity);
+                  BKE_curvemapping_init(mmd->curve_intensity);
                 }
               }
               break;
@@ -4951,8 +4953,6 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
         const View3D *v3d_default = DNA_struct_default_get(View3D);
 
         wm->xr.session_settings.shading = v3d_default->shading;
-        /* Don't rotate light with the viewer by default, make it fixed. */
-        wm->xr.session_settings.shading.flag |= V3D_SHADING_WORLD_ORIENTATION;
         wm->xr.session_settings.draw_flags = (V3D_OFSDRAW_SHOW_GRIDFLOOR |
                                               V3D_OFSDRAW_SHOW_ANNOTATION);
         wm->xr.session_settings.clip_start = v3d_default->clip_start;
@@ -5108,6 +5108,12 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
           part->pd2->f_wind_factor = 1.0f;
         }
       }
+    }
+
+    for (wmWindowManager *wm = bmain->wm.first; wm; wm = wm->id.next) {
+      /* Don't rotate light with the viewer by default, make it fixed. Shading settings can't be
+       * edited and this flag should always be set. So we can always execute this. */
+      wm->xr.session_settings.shading.flag |= V3D_SHADING_WORLD_ORIENTATION;
     }
 
     /* Keep this block, even when empty. */

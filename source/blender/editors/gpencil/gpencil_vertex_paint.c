@@ -348,7 +348,7 @@ static void gpencil_grid_cell_average_color_idx_get(tGP_BrushVertexpaintData *gs
   }
 }
 
-static int gpencil_grid_cell_index_get(tGP_BrushVertexpaintData *gso, int pc[2])
+static int gpencil_grid_cell_index_get(tGP_BrushVertexpaintData *gso, const int pc[2])
 {
   float bottom[2], top[2];
 
@@ -727,7 +727,7 @@ static bool gpencil_vertexpaint_brush_init(bContext *C, wmOperator *op)
 
   gso->brush = paint->brush;
   srgb_to_linearrgb_v3_v3(gso->linear_color, gso->brush->rgb);
-  BKE_curvemapping_initialize(gso->brush->curve);
+  BKE_curvemapping_init(gso->brush->curve);
 
   gso->is_painting = false;
   gso->first = true;
@@ -759,7 +759,7 @@ static bool gpencil_vertexpaint_brush_init(bContext *C, wmOperator *op)
   /* Init multi-edit falloff curve data before doing anything,
    * so we won't have to do it again later. */
   if (gso->is_multiframe) {
-    BKE_curvemapping_initialize(ts->gp_sculpt.cur_falloff);
+    BKE_curvemapping_init(ts->gp_sculpt.cur_falloff);
   }
 
   /* Setup space conversions. */

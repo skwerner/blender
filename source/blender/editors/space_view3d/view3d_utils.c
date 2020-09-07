@@ -220,7 +220,7 @@ void view3d_region_operator_needs_opengl(wmWindow *UNUSED(win), ARegion *region)
 }
 
 /**
- * Use instead of: ``bglPolygonOffset(rv3d->dist, ...)`` see bug [#37727]
+ * Use instead of: ``GPU_polygon_offset(rv3d->dist, ...)`` see bug [#37727]
  */
 void ED_view3d_polygon_offset(const RegionView3D *rv3d, const float dist)
 {
@@ -241,7 +241,7 @@ void ED_view3d_polygon_offset(const RegionView3D *rv3d, const float dist)
     }
   }
 
-  bglPolygonOffset(viewdist, dist);
+  GPU_polygon_offset(viewdist, dist);
 }
 
 bool ED_view3d_context_activate(bContext *C)
@@ -335,7 +335,7 @@ void ED_view3d_clipping_calc(
  *
  * \{ */
 
-static bool view3d_boundbox_clip_m4(const BoundBox *bb, float persmatob[4][4])
+static bool view3d_boundbox_clip_m4(const BoundBox *bb, const float persmatob[4][4])
 {
   int a, flag = -1, fl;
 
@@ -1028,8 +1028,11 @@ void ED_view3d_autodist_init(Depsgraph *depsgraph, ARegion *region, View3D *v3d,
 }
 
 /* no 4x4 sampling, run #ED_view3d_autodist_init first */
-bool ED_view3d_autodist_simple(
-    ARegion *region, const int mval[2], float mouse_worldloc[3], int margin, float *force_depth)
+bool ED_view3d_autodist_simple(ARegion *region,
+                               const int mval[2],
+                               float mouse_worldloc[3],
+                               int margin,
+                               const float *force_depth)
 {
   float depth;
 
@@ -1074,9 +1077,9 @@ static bool depth_segment_cb(int x, int y, void *userData)
 
   if (depth != FLT_MAX) {
     data->depth = depth;
-    return 0;
+    return false;
   }
-  return 1;
+  return true;
 }
 
 bool ED_view3d_autodist_depth_seg(
@@ -1240,7 +1243,9 @@ float ED_view3d_radius_to_dist(const View3D *v3d,
  * \param fallback_dist: The distance to use if the object is too near or in front of \a ofs.
  * \returns A newly calculated distance or the fallback.
  */
-float ED_view3d_offset_distance(float mat[4][4], const float ofs[3], const float fallback_dist)
+float ED_view3d_offset_distance(const float mat[4][4],
+                                const float ofs[3],
+                                const float fallback_dist)
 {
   float pos[4] = {0.0f, 0.0f, 0.0f, 1.0f};
   float dir[4] = {0.0f, 0.0f, 1.0f, 0.0f};
@@ -1371,11 +1376,11 @@ static float view3d_quat_axis[6][4][4] = {
 
 };
 
-bool ED_view3d_quat_from_axis_view(const char view, const char view_axis_roll, float quat[4])
+bool ED_view3d_quat_from_axis_view(const char view, const char view_axis_roll, float r_quat[4])
 {
   BLI_assert(view_axis_roll <= RV3D_VIEW_AXIS_ROLL_270);
   if (RV3D_VIEW_IS_AXIS(view)) {
-    copy_qt_qt(quat, view3d_quat_axis[view - RV3D_VIEW_FRONT][view_axis_roll]);
+    copy_qt_qt(r_quat, view3d_quat_axis[view - RV3D_VIEW_FRONT][view_axis_roll]);
     return true;
   }
   return false;
@@ -1458,7 +1463,7 @@ bool ED_view3d_lock(RegionView3D *rv3d)
  * \param quat: The view rotation, quaternion normally from RegionView3D.viewquat.
  * \param dist: The view distance from ofs, normally from RegionView3D.dist.
  */
-void ED_view3d_from_m4(const float mat[4][4], float ofs[3], float quat[4], float *dist)
+void ED_view3d_from_m4(const float mat[4][4], float ofs[3], float quat[4], const float *dist)
 {
   float nmat[3][3];
 
@@ -1494,7 +1499,7 @@ void ED_view3d_from_m4(const float mat[4][4], float ofs[3], float quat[4], float
  */
 void ED_view3d_to_m4(float mat[4][4], const float ofs[3], const float quat[4], const float dist)
 {
-  float iviewquat[4] = {-quat[0], quat[1], quat[2], quat[3]};
+  const float iviewquat[4] = {-quat[0], quat[1], quat[2], quat[3]};
   float dvec[3] = {0.0f, 0.0f, dist};
 
   quat_to_mat4(mat, iviewquat);

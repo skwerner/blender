@@ -147,19 +147,19 @@ static void init_complex(fftw_complex cmpl, float real, float image)
   cmpl[1] = image;
 }
 
-static void add_comlex_c(fftw_complex res, fftw_complex cmpl1, fftw_complex cmpl2)
+static void add_comlex_c(fftw_complex res, const fftw_complex cmpl1, const fftw_complex cmpl2)
 {
   res[0] = cmpl1[0] + cmpl2[0];
   res[1] = cmpl1[1] + cmpl2[1];
 }
 
-static void mul_complex_f(fftw_complex res, fftw_complex cmpl, float f)
+static void mul_complex_f(fftw_complex res, const fftw_complex cmpl, float f)
 {
   res[0] = cmpl[0] * (double)f;
   res[1] = cmpl[1] * (double)f;
 }
 
-static void mul_complex_c(fftw_complex res, fftw_complex cmpl1, fftw_complex cmpl2)
+static void mul_complex_c(fftw_complex res, const fftw_complex cmpl1, const fftw_complex cmpl2)
 {
   fftwf_complex temp;
   temp[0] = cmpl1[0] * cmpl2[0] - cmpl1[1] * cmpl2[1];
@@ -178,7 +178,7 @@ static float image_c(fftw_complex cmpl)
   return cmpl[1];
 }
 
-static void conj_complex(fftw_complex res, fftw_complex cmpl1)
+static void conj_complex(fftw_complex res, const fftw_complex cmpl1)
 {
   res[0] = cmpl1[0];
   res[1] = -cmpl1[1];
@@ -753,18 +753,25 @@ struct Ocean *BKE_ocean_add(void)
   return oc;
 }
 
-bool BKE_ocean_ensure(struct OceanModifierData *omd)
+bool BKE_ocean_ensure(struct OceanModifierData *omd, const int resolution)
 {
   if (omd->ocean) {
-    return false;
+    /* Check that the ocean has the same resolution than we want now. */
+    if (omd->ocean->_M == resolution * resolution) {
+      return false;
+    }
+
+    BKE_ocean_free(omd->ocean);
   }
 
   omd->ocean = BKE_ocean_add();
-  BKE_ocean_init_from_modifier(omd->ocean, omd);
+  BKE_ocean_init_from_modifier(omd->ocean, omd, resolution);
   return true;
 }
 
-void BKE_ocean_init_from_modifier(struct Ocean *ocean, struct OceanModifierData const *omd)
+void BKE_ocean_init_from_modifier(struct Ocean *ocean,
+                                  struct OceanModifierData const *omd,
+                                  const int resolution)
 {
   short do_heightfield, do_chop, do_normals, do_jacobian;
 
@@ -774,9 +781,10 @@ void BKE_ocean_init_from_modifier(struct Ocean *ocean, struct OceanModifierData 
   do_jacobian = (omd->flag & MOD_OCEAN_GENERATE_FOAM);
 
   BKE_ocean_free_data(ocean);
+
   BKE_ocean_init(ocean,
-                 omd->resolution * omd->resolution,
-                 omd->resolution * omd->resolution,
+                 resolution * resolution,
+                 resolution * resolution,
                  omd->spatial_size,
                  omd->spatial_size,
                  omd->wind_velocity,
@@ -1607,7 +1615,8 @@ void BKE_ocean_bake(struct Ocean *UNUSED(o),
 }
 
 void BKE_ocean_init_from_modifier(struct Ocean *UNUSED(ocean),
-                                  struct OceanModifierData const *UNUSED(omd))
+                                  struct OceanModifierData const *UNUSED(omd),
+                                  int UNUSED(resolution))
 {
 }
 

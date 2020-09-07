@@ -98,9 +98,7 @@ void ANIM_draw_previewrange(const bContext *C, View2D *v2d, int end_frame_width)
 
   /* only draw this if preview range is set */
   if (PRVRANGEON) {
-    GPU_blend_set_func_separate(
-        GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
-    GPU_blend(true);
+    GPU_blend(GPU_BLEND_ALPHA);
 
     GPUVertFormat *format = immVertexFormat();
     uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
@@ -121,7 +119,7 @@ void ANIM_draw_previewrange(const bContext *C, View2D *v2d, int end_frame_width)
 
     immUnbindProgram();
 
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
   }
 }
 
@@ -133,9 +131,7 @@ void ANIM_draw_previewrange(const bContext *C, View2D *v2d, int end_frame_width)
 void ANIM_draw_framerange(Scene *scene, View2D *v2d)
 {
   /* draw darkened area outside of active timeline frame range */
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   GPUVertFormat *format = immVertexFormat();
   uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
@@ -151,7 +147,7 @@ void ANIM_draw_framerange(Scene *scene, View2D *v2d)
     immRectf(pos, v2d->cur.xmin, v2d->cur.ymin, v2d->cur.xmax, v2d->cur.ymax);
   }
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 
   /* thin lines where the actual frames are */
   immUniformThemeColorShade(TH_BACK, -60);
@@ -398,9 +394,9 @@ static float normalization_factor_get(Scene *scene, FCurve *fcu, short flag, flo
               correct_bezpart(v1, v2, v3, v4);
 
               BKE_curve_forward_diff_bezier(
-                  v1[0], v2[0], v3[0], v4[0], data, resol, sizeof(float) * 3);
+                  v1[0], v2[0], v3[0], v4[0], data, resol, sizeof(float[3]));
               BKE_curve_forward_diff_bezier(
-                  v1[1], v2[1], v3[1], v4[1], data + 1, resol, sizeof(float) * 3);
+                  v1[1], v2[1], v3[1], v4[1], data + 1, resol, sizeof(float[3]));
 
               for (int j = 0; j <= resol; ++j) {
                 const float *fp = &data[j * 3];

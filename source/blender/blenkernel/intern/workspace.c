@@ -90,6 +90,12 @@ IDTypeInfo IDType_ID_WS = {
     .free_data = workspace_free_data,
     .make_local = NULL,
     .foreach_id = workspace_foreach_id,
+    .foreach_cache = NULL,
+
+    .blend_write = NULL,
+    .blend_read_data = NULL,
+    .blend_read_lib = NULL,
+    .blend_read_expand = NULL,
 };
 
 /** \name Internal Utils
@@ -157,9 +163,8 @@ static void *workspace_relation_get_data_matching_parent(const ListBase *relatio
   if (relation != NULL) {
     return relation->value;
   }
-  else {
-    return NULL;
-  }
+
+  return NULL;
 }
 
 /**
@@ -397,10 +402,9 @@ bool BKE_workspace_owner_id_check(const WorkSpace *workspace, const char *owner_
   if ((*owner_id == '\0') || ((workspace->flags & WORKSPACE_USE_FILTER_BY_ORIGIN) == 0)) {
     return true;
   }
-  else {
-    /* We could use hash lookup, for now this list is highly likely under < ~16 items. */
-    return BLI_findstring(&workspace->owner_ids, owner_id, offsetof(wmOwnerID, name)) != NULL;
-  }
+
+  /* We could use hash lookup, for now this list is highly likely under < ~16 items. */
+  return BLI_findstring(&workspace->owner_ids, owner_id, offsetof(wmOwnerID, name)) != NULL;
 }
 
 void BKE_workspace_id_tag_all_visible(Main *bmain, int tag)

@@ -427,7 +427,7 @@ bool ANIM_animdata_get_context(const bContext *C, bAnimContext *ac)
   ac->spacetype = (area) ? area->spacetype : 0;
   ac->regiontype = (region) ? region->regiontype : 0;
 
-  /* initialise default y-scale factor */
+  /* Initialize default y-scale factor. */
   animedit_get_yscale_factor(ac);
 
   /* get data context info */
@@ -1152,7 +1152,7 @@ static bool name_matches_dopesheet_filter(bDopeSheet *ads, char *name)
   if (ads->flag & ADS_FLAG_FUZZY_NAMES) {
     /* full fuzzy, multi-word, case insensitive matches */
     const size_t str_len = strlen(ads->searchstr);
-    const int words_max = (str_len / 2) + 1;
+    const int words_max = BLI_string_max_possible_word_count(str_len);
 
     int(*words)[2] = BLI_array_alloca(words, words_max);
     const int words_len = BLI_string_find_split_words(
@@ -1555,7 +1555,7 @@ static size_t animfilter_nla(bAnimContext *UNUSED(ac),
       next = nlt->next;
     }
 
-    /* if we're in NLA-tweakmode, don't show this track if it was disabled
+    /* If we're in NLA-tweak-mode, don't show this track if it was disabled
      * (due to tweaking) for now:
      * - active track should still get shown though (even though it has disabled flag set)
      */

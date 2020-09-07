@@ -303,10 +303,10 @@ static void do_alphaover_effect_float(
       mfac = 1.0f - (fac2 * rt1[3]);
 
       if (fac <= 0.0f) {
-        memcpy(rt, rt2, 4 * sizeof(float));
+        memcpy(rt, rt2, sizeof(float[4]));
       }
       else if (mfac <= 0) {
-        memcpy(rt, rt1, 4 * sizeof(float));
+        memcpy(rt, rt1, sizeof(float[4]));
       }
       else {
         rt[0] = fac * rt1[0] + mfac * rt2[0];
@@ -330,10 +330,10 @@ static void do_alphaover_effect_float(
       mfac = 1.0f - (fac4 * rt1[3]);
 
       if (fac <= 0.0f) {
-        memcpy(rt, rt2, 4 * sizeof(float));
+        memcpy(rt, rt2, sizeof(float[4]));
       }
       else if (mfac <= 0.0f) {
-        memcpy(rt, rt1, 4 * sizeof(float));
+        memcpy(rt, rt1, sizeof(float[4]));
       }
       else {
         rt[0] = fac * rt1[0] + mfac * rt2[0];
@@ -499,16 +499,16 @@ static void do_alphaunder_effect_float(
        * 'skybuf' can be crossed in
        */
       if (rt2[3] <= 0 && fac2 >= 1.0f) {
-        memcpy(rt, rt1, 4 * sizeof(float));
+        memcpy(rt, rt1, sizeof(float[4]));
       }
       else if (rt2[3] >= 1.0f) {
-        memcpy(rt, rt2, 4 * sizeof(float));
+        memcpy(rt, rt2, sizeof(float[4]));
       }
       else {
         fac = fac2 * (1.0f - rt2[3]);
 
         if (fac == 0) {
-          memcpy(rt, rt2, 4 * sizeof(float));
+          memcpy(rt, rt2, sizeof(float[4]));
         }
         else {
           rt[0] = fac * rt1[0] + rt2[0];
@@ -530,16 +530,16 @@ static void do_alphaunder_effect_float(
     x = xo;
     while (x--) {
       if (rt2[3] <= 0 && fac4 >= 1.0f) {
-        memcpy(rt, rt1, 4 * sizeof(float));
+        memcpy(rt, rt1, sizeof(float[4]));
       }
       else if (rt2[3] >= 1.0f) {
-        memcpy(rt, rt2, 4 * sizeof(float));
+        memcpy(rt, rt2, sizeof(float[4]));
       }
       else {
         fac = fac4 * (1.0f - rt2[3]);
 
         if (fac == 0) {
-          memcpy(rt, rt2, 4 * sizeof(float));
+          memcpy(rt, rt2, sizeof(float[4]));
         }
         else {
           rt[0] = fac * rt1[0] + rt2[0];
@@ -2387,6 +2387,8 @@ static void copy_transform_effect(Sequence *dst, Sequence *src, const int UNUSED
 
 static void transform_image(int x,
                             int y,
+                            int start_line,
+                            int total_lines,
                             ImBuf *ibuf1,
                             ImBuf *out,
                             float scale_x,
@@ -2396,34 +2398,27 @@ static void transform_image(int x,
                             float rotate,
                             int interpolation)
 {
-  int xo, yo, xi, yi;
-  float xt, yt, xr, yr;
-  float s, c;
-
-  xo = x;
-  yo = y;
-
   /* Rotate */
-  s = sinf(rotate);
-  c = cosf(rotate);
+  float s = sinf(rotate);
+  float c = cosf(rotate);
 
-  for (yi = 0; yi < yo; yi++) {
-    for (xi = 0; xi < xo; xi++) {
+  for (int yi = start_line; yi < start_line + total_lines; yi++) {
+    for (int xi = 0; xi < x; xi++) {
       /* translate point */
-      xt = xi - translate_x;
-      yt = yi - translate_y;
+      float xt = xi - translate_x;
+      float yt = yi - translate_y;
 
       /* rotate point with center ref */
-      xr = c * xt + s * yt;
-      yr = -s * xt + c * yt;
+      float xr = c * xt + s * yt;
+      float yr = -s * xt + c * yt;
 
       /* scale point with center ref */
       xt = xr / scale_x;
       yt = yr / scale_y;
 
       /* undo reference center point  */
-      xt += (xo / 2.0f);
-      yt += (yo / 2.0f);
+      xt += (x / 2.0f);
+      yt += (y / 2.0f);
 
       /* interpolate */
       switch (interpolation) {
@@ -2441,9 +2436,19 @@ static void transform_image(int x,
   }
 }
 
-static void do_transform(
-    Scene *scene, Sequence *seq, float UNUSED(facf0), int x, int y, ImBuf *ibuf1, ImBuf *out)
+static void do_transform_effect(const SeqRenderData *context,
+                                Sequence *seq,
+                                float UNUSED(cfra),
+                                float UNUSED(facf0),
+                                float UNUSED(facf1),
+                                ImBuf *ibuf1,
+                                ImBuf *UNUSED(ibuf2),
+                                ImBuf *UNUSED(ibuf3),
+                                int start_line,
+                                int total_lines,
+                                ImBuf *out)
 {
+  Scene *scene = context->scene;
   TransformVars *transform = (TransformVars *)seq->effectdata;
   float scale_x, scale_y, translate_x, translate_y, rotate_radians;
 
@@ -2455,6 +2460,9 @@ static void do_transform(
     scale_x = transform->ScalexIni;
     scale_y = transform->ScaleyIni;
   }
+
+  int x = context->rectx;
+  int y = context->recty;
 
   /* Translate */
   if (!transform->percent) {
@@ -2473,6 +2481,8 @@ static void do_transform(
 
   transform_image(x,
                   y,
+                  start_line,
+                  total_lines,
                   ibuf1,
                   out,
                   scale_x,
@@ -2481,22 +2491,6 @@ static void do_transform(
                   translate_y,
                   rotate_radians,
                   transform->interpolation);
-}
-
-static ImBuf *do_transform_effect(const SeqRenderData *context,
-                                  Sequence *seq,
-                                  float UNUSED(cfra),
-                                  float facf0,
-                                  float UNUSED(facf1),
-                                  ImBuf *ibuf1,
-                                  ImBuf *ibuf2,
-                                  ImBuf *ibuf3)
-{
-  ImBuf *out = prepare_effect_imbufs(context, ibuf1, ibuf2, ibuf3);
-
-  do_transform(context->scene, seq, facf0, context->rectx, context->recty, ibuf1, out);
-
-  return out;
 }
 
 /*********************** Glow *************************/
@@ -2522,7 +2516,7 @@ static void RVBlurBitmap2_float(float *map, int width, int height, float blur, i
   }
 
   /* Allocate memory for the tempmap and the blur filter matrix */
-  temp = MEM_mallocN((width * height * 4 * sizeof(float)), "blurbitmaptemp");
+  temp = MEM_mallocN(sizeof(float[4]) * width * height, "blurbitmaptemp");
   if (!temp) {
     return;
   }
@@ -2746,8 +2740,8 @@ static void do_glow_effect_byte(Sequence *seq,
   float *outbuf, *inbuf;
   GlowVars *glow = (GlowVars *)seq->effectdata;
 
-  inbuf = MEM_mallocN(4 * sizeof(float) * x * y, "glow effect input");
-  outbuf = MEM_mallocN(4 * sizeof(float) * x * y, "glow effect output");
+  inbuf = MEM_mallocN(sizeof(float[4]) * x * y, "glow effect input");
+  outbuf = MEM_mallocN(sizeof(float[4]) * x * y, "glow effect output");
 
   IMB_buffer_float_from_byte(inbuf, rect1, IB_PROFILE_SRGB, IB_PROFILE_SRGB, false, x, y, x, x);
   IMB_buffer_float_premultiply(inbuf, x, y);
@@ -3269,9 +3263,8 @@ float BKE_sequencer_speed_effect_target_frame_get(const SeqRenderData *context,
   if (input == 0) { /* Current frame. */
     return floor(seq->start + s->frameMap[nr]);
   }
-  else { /* Next frame. */
-    return ceil(seq->start + s->frameMap[nr]);
-  }
+  /* Next frame. */
+  return ceil(seq->start + s->frameMap[nr]);
 }
 
 static float speed_effect_interpolation_ratio_get(SpeedControlVars *s, Sequence *seq, float cfra)
@@ -4024,7 +4017,7 @@ static int early_out_fade(Sequence *UNUSED(seq), float facf0, float facf1)
   if (facf0 == 0.0f && facf1 == 0.0f) {
     return EARLY_USE_INPUT_1;
   }
-  else if (facf0 == 1.0f && facf1 == 1.0f) {
+  if (facf0 == 1.0f && facf1 == 1.0f) {
     return EARLY_USE_INPUT_2;
   }
   return EARLY_DO_EFFECT;
@@ -4184,11 +4177,12 @@ static struct SeqEffectHandle get_sequence_effect_impl(int seq_type)
       rval.execute = do_glow_effect;
       break;
     case SEQ_TYPE_TRANSFORM:
+      rval.multithreaded = true;
       rval.init = init_transform_effect;
       rval.num_inputs = num_inputs_transform;
       rval.free = free_transform_effect;
       rval.copy = copy_transform_effect;
-      rval.execute = do_transform_effect;
+      rval.execute_slice = do_transform_effect;
       break;
     case SEQ_TYPE_SPEED:
       rval.init = init_speed_effect;

@@ -21,8 +21,7 @@
  * \ingroup render
  */
 
-#ifndef __RE_PIPELINE_H__
-#define __RE_PIPELINE_H__
+#pragma once
 
 #include "DEG_depsgraph.h"
 #include "DNA_listBase.h"
@@ -252,8 +251,8 @@ void RE_ChangeModeFlag(struct Render *re, int flag, bool clear);
 
 /* set up the viewplane/perspective matrix, three choices */
 struct Object *RE_GetCamera(struct Render *re); /* return camera override if set */
-void RE_SetOverrideCamera(struct Render *re, struct Object *camera);
-void RE_SetCamera(struct Render *re, struct Object *camera);
+void RE_SetOverrideCamera(struct Render *re, struct Object *cam_ob);
+void RE_SetCamera(struct Render *re, struct Object *cam_ob);
 void RE_SetWindow(struct Render *re, const rctf *viewplane, float clip_start, float clip_end);
 void RE_SetOrtho(struct Render *re, const rctf *viewplane, float clip_start, float clip_end);
 
@@ -367,8 +366,8 @@ struct RenderPass *RE_pass_find_by_type(volatile struct RenderLayer *rl,
 #define RE_BAKE_AO 2
 
 void RE_GetCameraWindow(struct Render *re, struct Object *camera, float mat[4][4]);
-void RE_GetCameraWindowWithOverscan(struct Render *re, float mat[4][4], float overscan);
-void RE_GetCameraModelMatrix(struct Render *re, struct Object *camera, float r_mat[4][4]);
+void RE_GetCameraWindowWithOverscan(struct Render *re, float overscan, float r_winmat[4][4]);
+void RE_GetCameraModelMatrix(struct Render *re, struct Object *camera, float r_modelmat[4][4]);
 struct Scene *RE_GetScene(struct Render *re);
 void RE_SetScene(struct Render *re, struct Scene *sce);
 
@@ -384,13 +383,11 @@ bool RE_allow_render_generic_object(struct Object *ob);
 bool RE_HasCombinedLayer(RenderResult *res);
 bool RE_HasFloatPixels(RenderResult *res);
 bool RE_RenderResult_is_stereo(RenderResult *res);
-struct RenderView *RE_RenderViewGetById(struct RenderResult *res, const int view_id);
-struct RenderView *RE_RenderViewGetByName(struct RenderResult *res, const char *viewname);
+struct RenderView *RE_RenderViewGetById(struct RenderResult *rr, const int view_id);
+struct RenderView *RE_RenderViewGetByName(struct RenderResult *rr, const char *viewname);
 
 RenderResult *RE_DuplicateRenderResult(RenderResult *rr);
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __RE_PIPELINE_H__ */

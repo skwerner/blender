@@ -43,29 +43,13 @@
 
 /* Utils */
 
-#if 0
-#  define param_assert(condition)
-#  define param_warning(message)
-#  define param_test_equals_ptr(condition)
-#  define param_test_equals_int(condition)
-#else
-#  define param_assert(condition) \
-    if (!(condition)) { /*printf("Assertion %s:%d\n", __FILE__, __LINE__); abort();*/ \
-    } \
-    (void)0
-#  define param_warning(message) \
-    {/*printf("Warning %s:%d: %s\n", __FILE__, __LINE__, message);*/}(void)0
-#  if 0
-#    define param_test_equals_ptr(str, a, b) \
-      if (a != b) { /*printf("Equals %s => %p != %p\n", str, a, b);*/ \
-      } \
-      (void)0
-#    define param_test_equals_int(str, a, b) \
-      if (a != b) { /*printf("Equals %s => %d != %d\n", str, a, b);*/ \
-      } \
-      (void)0
-#  endif
-#endif
+#define param_assert(condition) \
+  if (!(condition)) { /*printf("Assertion %s:%d\n", __FILE__, __LINE__); abort();*/ \
+  } \
+  (void)0
+#define param_warning(message) \
+  {/*printf("Warning %s:%d: %s\n", __FILE__, __LINE__, message);*/}(void)0
+
 typedef enum PBool {
   P_TRUE = 1,
   P_FALSE = 0,
@@ -190,6 +174,9 @@ typedef struct PChart {
       LinearSolver *context;
       float *abf_alpha;
       PVert *pin1, *pin2;
+      PVert *single_pin;
+      float single_pin_area;
+      float single_pin_uv[2];
     } lscm;
     struct PChartPack {
       float rescale, area;
@@ -467,6 +454,17 @@ static void p_chart_uv_bbox(PChart *chart, float minv[2], float maxv[2])
   }
 }
 
+static float p_chart_uv_area(PChart *chart)
+{
+  float area = 0.0f;
+
+  for (PFace *f = chart->faces; f; f = f->nextlink) {
+    area += fabsf(p_face_uv_area_signed(f));
+  }
+
+  return area;
+}
+
 static void p_chart_uv_scale(PChart *chart, float scale)
 {
   PVert *v;
@@ -497,7 +495,7 @@ static void p_chart_uv_translate(PChart *chart, const float trans[2])
   }
 }
 
-static void p_chart_uv_transform(PChart *chart, float mat[2][2])
+static void p_chart_uv_transform(PChart *chart, const float mat[2][2])
 {
   PVert *v;
 
@@ -1498,10 +1496,10 @@ static void p_polygon_kernel_center(float (*points)[2], int npoints, float *cent
   float(*oldpoints)[2], (*newpoints)[2], *p1, *p2;
 
   size = npoints * 3;
-  oldpoints = MEM_mallocN(sizeof(float) * 2 * size, "PPolygonOldPoints");
-  newpoints = MEM_mallocN(sizeof(float) * 2 * size, "PPolygonNewPoints");
+  oldpoints = MEM_mallocN(sizeof(float[2]) * size, "PPolygonOldPoints");
+  newpoints = MEM_mallocN(sizeof(float[2]) * size, "PPolygonNewPoints");
 
-  memcpy(oldpoints, points, sizeof(float) * 2 * npoints);
+  memcpy(oldpoints, points, sizeof(float[2]) * npoints);
 
   for (i = 0; i < npoints; i++) {
     p1 = points[i];
@@ -1510,7 +1508,7 @@ static void p_polygon_kernel_center(float (*points)[2], int npoints, float *cent
 
     if (nnewpoints == 0) {
       /* degenerate case, use center of original polygon */
-      memcpy(oldpoints, points, sizeof(float) * 2 * npoints);
+      memcpy(oldpoints, points, sizeof(float[2]) * npoints);
       nnewpoints = npoints;
       break;
     }
@@ -1528,10 +1526,10 @@ static void p_polygon_kernel_center(float (*points)[2], int npoints, float *cent
     if (nnewpoints * 2 > size) {
       size *= 2;
       MEM_freeN(oldpoints);
-      oldpoints = MEM_mallocN(sizeof(float) * 2 * size, "oldpoints");
-      memcpy(oldpoints, newpoints, sizeof(float) * 2 * nnewpoints);
+      oldpoints = MEM_mallocN(sizeof(float[2]) * size, "oldpoints");
+      memcpy(oldpoints, newpoints, sizeof(float[2]) * nnewpoints);
       MEM_freeN(newpoints);
-      newpoints = MEM_mallocN(sizeof(float) * 2 * size, "newpoints");
+      newpoints = MEM_mallocN(sizeof(float[2]) * size, "newpoints");
     }
     else {
       float(*sw_points)[2] = oldpoints;
@@ -1687,7 +1685,7 @@ static void p_vert_harmonic_insert(PVert *v)
       npoints++;
     }
 
-    points = MEM_mallocN(sizeof(float) * 2 * npoints, "PHarmonicPoints");
+    points = MEM_mallocN(sizeof(float[2]) * npoints, "PHarmonicPoints");
 
     e = v->edge;
     i = 0;
@@ -2427,7 +2425,7 @@ static void p_abf_setup_system(PAbfSystem *sys)
 
   sys->bAlpha = (float *)MEM_mallocN(sizeof(float) * sys->nangles, "ABFbalpha");
   sys->bTriangle = (float *)MEM_mallocN(sizeof(float) * sys->nfaces, "ABFbtriangle");
-  sys->bInterior = (float *)MEM_mallocN(sizeof(float) * 2 * sys->ninterior, "ABFbinterior");
+  sys->bInterior = (float *)MEM_mallocN(sizeof(float[2]) * sys->ninterior, "ABFbinterior");
 
   sys->lambdaTriangle = (float *)MEM_callocN(sizeof(float) * sys->nfaces, "ABFlambdatri");
   sys->lambdaPlanar = (float *)MEM_callocN(sizeof(float) * sys->ninterior, "ABFlamdaplane");
@@ -3176,7 +3174,7 @@ static void p_chart_lscm_begin(PChart *chart, PBool live, PBool abf)
     }
   }
 
-  if ((live && (!select || !deselect)) || (npins == 1)) {
+  if ((live && (!select || !deselect))) {
     chart->u.lscm.context = NULL;
   }
   else {
@@ -3185,6 +3183,16 @@ static void p_chart_lscm_begin(PChart *chart, PBool live, PBool abf)
     p_chart_topological_sanity_check(chart);
 #endif
 
+    if (npins == 1) {
+      chart->u.lscm.single_pin_area = p_chart_uv_area(chart);
+      for (v = chart->verts; v; v = v->nextlink) {
+        if (v->flag & PVERT_PIN) {
+          chart->u.lscm.single_pin = v;
+          break;
+        }
+      }
+    }
+
     if (abf) {
       if (!p_chart_abf_solve(chart)) {
         param_warning("ABF solving failed: falling back to LSCM.\n");
@@ -3192,12 +3200,12 @@ static void p_chart_lscm_begin(PChart *chart, PBool live, PBool abf)
     }
 
     if (npins <= 1) {
-      /* not enough pins, lets find some ourself */
+      /* No pins, let's find some ourself. */
       PEdge *outer;
 
       p_chart_boundaries(chart, NULL, &outer);
 
-      /* outer can be NULL with non-finite coords. */
+      /* Outer can be NULL with non-finite coords. */
       if (!(outer && p_chart_symmetry_pins(chart, outer, &pin1, &pin2))) {
         p_chart_extrema_verts(chart, &pin1, &pin2);
       }
@@ -3233,6 +3241,11 @@ static PBool p_chart_lscm_solve(PHandle *handle, PChart *chart)
     if (v->flag & PVERT_PIN) {
       p_vert_load_pin_select_uvs(handle, v); /* reload for live */
     }
+  }
+
+  if (chart->u.lscm.single_pin) {
+    /* If only one pin, save area and pin for transform later. */
+    copy_v2_v2(chart->u.lscm.single_pin_uv, chart->u.lscm.single_pin->uv);
   }
 
   if (chart->u.lscm.pin1) {
@@ -3358,6 +3371,25 @@ static PBool p_chart_lscm_solve(PHandle *handle, PChart *chart)
   return P_FALSE;
 }
 
+static void p_chart_lscm_transform_single_pin(PChart *chart)
+{
+  PVert *pin = chart->u.lscm.single_pin;
+
+  /* If only one pin, keep UV area the same. */
+  const float new_area = p_chart_uv_area(chart);
+  if (new_area > 0.0f) {
+    const float scale = chart->u.lscm.single_pin_area / new_area;
+    if (scale > 0.0f) {
+      p_chart_uv_scale(chart, sqrtf(scale));
+    }
+  }
+
+  /* Translate to keep the pinned vertex in place. */
+  float offset[2];
+  sub_v2_v2v2(offset, chart->u.lscm.single_pin_uv, pin->uv);
+  p_chart_uv_translate(chart, offset);
+}
+
 static void p_chart_lscm_end(PChart *chart)
 {
   if (chart->u.lscm.context) {
@@ -3372,6 +3404,8 @@ static void p_chart_lscm_end(PChart *chart)
   chart->u.lscm.context = NULL;
   chart->u.lscm.pin1 = NULL;
   chart->u.lscm.pin2 = NULL;
+  chart->u.lscm.single_pin = NULL;
+  chart->u.lscm.single_pin_area = 0.0f;
 }
 
 /* Stretch */
@@ -3778,6 +3812,23 @@ static void p_chart_rotate_minimum_area(PChart *chart)
     float oldu = v->uv[0], oldv = v->uv[1];
     v->uv[0] = cosine * oldu - sine * oldv;
     v->uv[1] = sine * oldu + cosine * oldv;
+  }
+}
+
+static void p_chart_rotate_fit_aabb(PChart *chart)
+{
+  float(*points)[2] = MEM_mallocN(sizeof(*points) * chart->nverts, __func__);
+
+  p_chart_uv_to_array(chart, points);
+
+  float angle = BLI_convexhull_aabb_fit_points_2d(points, chart->nverts);
+
+  MEM_freeN(points);
+
+  if (angle != 0.0f) {
+    float mat[2][2];
+    angle_to_mat2(mat, angle);
+    p_chart_uv_transform(chart, mat);
   }
 }
 
@@ -4576,8 +4627,12 @@ void param_lscm_solve(ParamHandle *handle)
       if (result && !(chart->flag & PCHART_HAS_PINS)) {
         p_chart_rotate_minimum_area(chart);
       }
+      else if (result && chart->u.lscm.single_pin) {
+        p_chart_rotate_fit_aabb(chart);
+        p_chart_lscm_transform_single_pin(chart);
+      }
 
-      if (!result || (chart->u.lscm.pin1)) {
+      if (!result || !(chart->flag & PCHART_HAS_PINS)) {
         p_chart_lscm_end(chart);
       }
     }
@@ -4692,28 +4747,13 @@ static void param_pack_rotate(ParamHandle *handle, bool ignore_pinned)
   PHandle *phandle = (PHandle *)handle;
 
   for (i = 0; i < phandle->ncharts; i++) {
-    float(*points)[2];
-    float angle;
-
     chart = phandle->charts[i];
 
     if (ignore_pinned && (chart->flag & PCHART_HAS_PINS)) {
       continue;
     }
 
-    points = MEM_mallocN(sizeof(*points) * chart->nverts, __func__);
-
-    p_chart_uv_to_array(chart, points);
-
-    angle = BLI_convexhull_aabb_fit_points_2d(points, chart->nverts);
-
-    MEM_freeN(points);
-
-    if (angle != 0.0f) {
-      float mat[2][2];
-      angle_to_mat2(mat, angle);
-      p_chart_uv_transform(chart, mat);
-    }
+    p_chart_rotate_fit_aabb(chart);
   }
 }
 

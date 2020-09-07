@@ -21,8 +21,7 @@
  * \ingroup editors
  */
 
-#ifndef __ED_UVEDIT_H__
-#define __ED_UVEDIT_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -217,6 +216,9 @@ struct BMLoop *ED_uvedit_active_vert_loop_get(struct BMesh *bm);
 void ED_uvedit_active_edge_loop_set(struct BMesh *bm, struct BMLoop *l);
 struct BMLoop *ED_uvedit_active_edge_loop_get(struct BMesh *bm);
 
+char ED_uvedit_select_mode_get(const Scene *scene);
+void ED_uvedit_select_sync_flush(const ToolSettings *ts, struct BMEditMesh *em, const bool select);
+
 /* uvedit_unwrap_ops.c */
 void ED_uvedit_live_unwrap_begin(struct Scene *scene, struct Object *obedit);
 void ED_uvedit_live_unwrap_re_solve(void);
@@ -240,5 +242,3 @@ void ED_uvedit_buttons_register(struct ARegionType *art);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_UVEDIT_H__ */

@@ -18,11 +18,11 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_MODIFIER_TYPES_H__
-#define __DNA_MODIFIER_TYPES_H__
+#pragma once
 
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
+#include "DNA_session_uuid_types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -125,6 +125,11 @@ typedef struct ModifierData {
 
   /* Pointer to a ModifierData in the original domain. */
   struct ModifierData *orig_modifier_data;
+
+  /* Runtime field which contains unique identifier of the modifier. */
+  SessionUUID session_uuid;
+
+  /* Runtime field which contains runtime data which is specific to a modifier type. */
   void *runtime;
 } ModifierData;
 
@@ -857,7 +862,8 @@ typedef struct BooleanModifierData {
 
   struct Object *object;
   char operation;
-  char _pad[2];
+  char solver;
+  char _pad[1];
   char bm_flag;
   float double_threshold;
 } BooleanModifierData;
@@ -868,7 +874,12 @@ typedef enum {
   eBooleanModifierOp_Difference = 2,
 } BooleanModifierOp;
 
-/* bm_flag (only used when G_DEBUG) */
+typedef enum {
+  eBooleanModifierSolver_Fast = 0,
+  eBooleanModifierSolver_Exact = 1,
+} BooleanModifierSolver;
+
+/* bm_flag only used when G_DEBUG. */
 enum {
   eBooleanModifierBMeshFlag_BMesh_Separate = (1 << 0),
   eBooleanModifierBMeshFlag_BMesh_NoDissolve = (1 << 1),
@@ -1028,6 +1039,7 @@ typedef enum {
   eMultiresModifierFlag_PlainUv_DEPRECATED = (1 << 1),
   eMultiresModifierFlag_UseCrease = (1 << 2),
   eMultiresModifierFlag_UseCustomNormals = (1 << 3),
+  eMultiresModifierFlag_UseSculptBaseMesh = (1 << 4),
 } MultiresModifierFlag;
 
 /* DEPRECATED, only used for versioning. */
@@ -1277,7 +1289,11 @@ typedef struct OceanModifierData {
   struct Ocean *ocean;
   struct OceanCache *oceancache;
 
+  /** Render resolution. */
   int resolution;
+  /** Viewport resolution for the non-render case. */
+  int viewport_resolution;
+
   int spatial_size;
 
   float wind_velocity;
@@ -1293,8 +1309,6 @@ typedef struct OceanModifierData {
   float chop_amount;
   float foam_coverage;
   float time;
-
-  char _pad1[4];
 
   /* Spectrum being used. */
   int spectrum;
@@ -2052,6 +2066,10 @@ enum {
   MOD_NORMALEDIT_MIX_MUL = 3,
 };
 
+typedef struct MeshCacheVertexVelocity {
+  float vel[3];
+} MeshCacheVertexVelocity;
+
 typedef struct MeshSeqCacheModifierData {
   ModifierData modifier;
 
@@ -2060,11 +2078,31 @@ typedef struct MeshSeqCacheModifierData {
   char object_path[1024];
 
   char read_flag;
-  char _pad[7];
+  char _pad[3];
+
+  float velocity_scale;
 
   /* Runtime. */
   struct CacheReader *reader;
   char reader_object_path[1024];
+
+  /* Vertex velocities read from the cache. The velocities are not automatically read during
+   * modifier execution, and therefore have to manually be read when needed. This is only used
+   * through the RNA for now. */
+  struct MeshCacheVertexVelocity *vertex_velocities;
+
+  /* The number of vertices of the Alembic mesh, set when the modifier is executed. */
+  int num_vertices;
+
+  /* Time (in frames or seconds) between two velocity samples. Automatically computed to
+   * scale the velocity vectors at render time for generating proper motion blur data. */
+  float velocity_delta;
+
+  /* Caches the scene time (in seconds) used to lookup data in the Alembic archive when the
+   * modifier was last executed. Used to access Alembic samples through the RNA. */
+  float last_lookup_time;
+
+  int _pad1;
 } MeshSeqCacheModifierData;
 
 /* MeshSeqCacheModifierData.read_flag */
@@ -2164,5 +2202,3 @@ typedef struct SimulationModifierData {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __DNA_MODIFIER_TYPES_H__ */

@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLI_SPAN_HH__
-#define __BLI_SPAN_HH__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -102,7 +101,7 @@ template<typename T> class Span {
   }
 
   template<typename U, typename std::enable_if_t<is_convertible_pointer_v<U, T>> * = nullptr>
-  Span(const U *start, int64_t size) : data_((const T *)start), size_(size)
+  Span(const U *start, int64_t size) : data_(static_cast<const T *>(start)), size_(size)
   {
     BLI_assert(size >= 0);
   }
@@ -118,11 +117,12 @@ template<typename T> class Span {
    *  Span<int> span = {1, 2, 3, 4};
    *  call_function_with_array(span);
    */
-  Span(const std::initializer_list<T> &list) : Span(list.begin(), (int64_t)list.size())
+  Span(const std::initializer_list<T> &list)
+      : Span(list.begin(), static_cast<int64_t>(list.size()))
   {
   }
 
-  Span(const std::vector<T> &vector) : Span(vector.data(), (int64_t)vector.size())
+  Span(const std::vector<T> &vector) : Span(vector.data(), static_cast<int64_t>(vector.size()))
   {
   }
 
@@ -133,10 +133,9 @@ template<typename T> class Span {
   /**
    * Support implicit conversions like the ones below:
    *   Span<T *> -> Span<const T *>
-   *   Span<Derived *> -> Span<Base *>
    */
   template<typename U, typename std::enable_if_t<is_convertible_pointer_v<U, T>> * = nullptr>
-  Span(Span<U> array) : data_((T *)array.data()), size_(array.size())
+  Span(Span<U> array) : data_(static_cast<const T *>(array.data())), size_(array.size())
   {
   }
 
@@ -214,10 +213,18 @@ template<typename T> class Span {
   {
     return data_;
   }
-
   const T *end() const
   {
     return data_ + size_;
+  }
+
+  std::reverse_iterator<const T *> rbegin() const
+  {
+    return std::reverse_iterator<const T *>(this->end());
+  }
+  std::reverse_iterator<const T *> rend() const
+  {
+    return std::reverse_iterator<const T *>(this->begin());
   }
 
   /**
@@ -374,7 +381,7 @@ template<typename T> class Span {
   {
     const int64_t index = this->first_index_try(search_value);
     BLI_assert(index >= 0);
-    return (int64_t)index;
+    return index;
   }
 
   /**
@@ -503,10 +510,18 @@ template<typename T> class MutableSpan {
   {
     return data_;
   }
-
   T *end() const
   {
     return data_ + size_;
+  }
+
+  std::reverse_iterator<T *> rbegin() const
+  {
+    return std::reverse_iterator<T *>(this->end());
+  }
+  std::reverse_iterator<T *> rend() const
+  {
+    return std::reverse_iterator<T *>(this->begin());
   }
 
   T &operator[](const int64_t index) const
@@ -656,5 +671,3 @@ void assert_same_size(const T1 &v1, const T2 &v2, const T3 &v3)
 }
 
 } /* namespace blender */
-
-#endif /* __BLI_SPAN_HH__ */

@@ -21,8 +21,7 @@
  * \ingroup gpu
  */
 
-#ifndef __GPU_BUFFERS_H__
-#define __GPU_BUFFERS_H__
+#pragma once
 
 #include <stddef.h>
 
@@ -53,9 +52,9 @@ typedef struct GPU_PBVH_Buffers GPU_PBVH_Buffers;
 GPU_PBVH_Buffers *GPU_pbvh_mesh_buffers_build(const struct MPoly *mpoly,
                                               const struct MLoop *mloop,
                                               const struct MLoopTri *looptri,
-                                              const struct MVert *verts,
+                                              const struct MVert *mvert,
                                               const int *face_indices,
-                                              const int *sculpt_facemap,
+                                              const int *sculpt_face_sets,
                                               const int face_indices_len,
                                               const struct Mesh *mesh);
 
@@ -120,6 +119,4 @@ bool GPU_pbvh_buffers_has_overlays(GPU_PBVH_Buffers *buffers);
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

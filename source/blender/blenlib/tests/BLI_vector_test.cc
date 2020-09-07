@@ -1,5 +1,6 @@
 /* Apache License, Version 2.0 */
 
+#include "BLI_exception_safety_test_utils.hh"
 #include "BLI_strict_flags.h"
 #include "BLI_vector.hh"
 #include "testing/testing.h"
@@ -98,14 +99,14 @@ TEST(vector, ListBaseConstructor)
   delete value3;
 }
 
-TEST(vector, ContainerConstructor)
+TEST(vector, IteratorConstructor)
 {
   std::forward_list<int> list;
   list.push_front(3);
   list.push_front(1);
   list.push_front(5);
 
-  Vector<int> vec = Vector<int>::FromContainer(list);
+  Vector<int> vec = Vector<int>(list.begin(), list.end());
   EXPECT_EQ(vec.size(), 3);
   EXPECT_EQ(vec[0], 5);
   EXPECT_EQ(vec[1], 1);
@@ -277,6 +278,15 @@ TEST(vector, ExtendNonDuplicates)
   EXPECT_EQ(vec.size(), 4);
   vec.extend_non_duplicates({0, 1, 2, 3});
   EXPECT_EQ(vec.size(), 5);
+}
+
+TEST(vector, ExtendIterator)
+{
+  Vector<int> vec = {3, 4, 5};
+  std::forward_list<int> list = {8, 9};
+  vec.extend(list.begin(), list.end());
+  EXPECT_EQ(vec.size(), 5);
+  EXPECT_EQ_ARRAY(vec.data(), Span({3, 4, 5, 8, 9}).data(), 5);
 }
 
 TEST(vector, Iterator)
@@ -634,6 +644,185 @@ TEST(vector, Fill)
   EXPECT_EQ(vec[2], 3);
   EXPECT_EQ(vec[3], 3);
   EXPECT_EQ(vec[4], 3);
+}
+
+TEST(vector, InsertAtBeginning)
+{
+  Vector<int> vec = {1, 2, 3};
+  vec.insert(0, {6, 7});
+  EXPECT_EQ(vec.size(), 5);
+  EXPECT_EQ_ARRAY(vec.data(), Span({6, 7, 1, 2, 3}).data(), 5);
+}
+
+TEST(vector, InsertAtEnd)
+{
+  Vector<int> vec = {1, 2, 3};
+  vec.insert(3, {6, 7});
+  EXPECT_EQ(vec.size(), 5);
+  EXPECT_EQ_ARRAY(vec.data(), Span({1, 2, 3, 6, 7}).data(), 5);
+}
+
+TEST(vector, InsertInMiddle)
+{
+  Vector<int> vec = {1, 2, 3};
+  vec.insert(1, {6, 7});
+  EXPECT_EQ(vec.size(), 5);
+  EXPECT_EQ_ARRAY(vec.data(), Span({1, 6, 7, 2, 3}).data(), 5);
+}
+
+TEST(vector, InsertAtIterator)
+{
+  Vector<std::string> vec = {"1", "2", "3"};
+  Vector<std::string> other_vec = {"hello", "world"};
+  vec.insert(vec.begin() + 1, other_vec.begin(), other_vec.end());
+  EXPECT_EQ(vec.size(), 5);
+  EXPECT_EQ_ARRAY(vec.data(), Span<std::string>({"1", "hello", "world", "2", "3"}).data(), 5);
+}
+
+TEST(vector, InsertMoveOnlyType)
+{
+  Vector<std::unique_ptr<int>> vec;
+  vec.append(std::make_unique<int>(1));
+  vec.append(std::make_unique<int>(2));
+  vec.insert(1, std::make_unique<int>(30));
+  EXPECT_EQ(vec.size(), 3);
+  EXPECT_EQ(*vec[0], 1);
+  EXPECT_EQ(*vec[1], 30);
+  EXPECT_EQ(*vec[2], 2);
+}
+
+TEST(vector, Prepend)
+{
+  Vector<int> vec = {1, 2, 3};
+  vec.prepend({7, 8});
+  EXPECT_EQ(vec.size(), 5);
+  EXPECT_EQ_ARRAY(vec.data(), Span({7, 8, 1, 2, 3}).data(), 5);
+}
+
+TEST(vector, ReverseIterator)
+{
+  Vector<int> vec = {4, 5, 6, 7};
+  Vector<int> reversed_vec;
+  for (auto it = vec.rbegin(); it != vec.rend(); ++it) {
+    reversed_vec.append(*it);
+  }
+  EXPECT_EQ(reversed_vec.size(), 4);
+  EXPECT_EQ_ARRAY(reversed_vec.data(), Span({7, 6, 5, 4}).data(), 4);
+}
+
+TEST(vector, SizeValueConstructorExceptions)
+{
+  ExceptionThrower value;
+  value.throw_during_copy = true;
+  EXPECT_ANY_THROW({ Vector<ExceptionThrower> vec(5, value); });
+}
+
+TEST(vector, SpanConstructorExceptions)
+{
+  std::array<ExceptionThrower, 5> values;
+  values[3].throw_during_copy = true;
+  EXPECT_ANY_THROW({ Vector<ExceptionThrower> vec(values); });
+}
+
+TEST(vector, MoveConstructorExceptions)
+{
+  Vector<ExceptionThrower, 4> vec(3);
+  vec[2].throw_during_move = true;
+  EXPECT_ANY_THROW({ Vector<ExceptionThrower> moved_vector{std::move(vec)}; });
+}
+
+TEST(vector, AppendExceptions)
+{
+  Vector<ExceptionThrower, 4> vec(2);
+  ExceptionThrower *ptr1 = &vec.last();
+  ExceptionThrower value;
+  value.throw_during_copy = true;
+  EXPECT_ANY_THROW({ vec.append(value); });
+  EXPECT_EQ(vec.size(), 2);
+  ExceptionThrower *ptr2 = &vec.last();
+  EXPECT_EQ(ptr1, ptr2);
+}
+
+TEST(vector, ExtendExceptions)
+{
+  Vector<ExceptionThrower> vec(5);
+  std::array<ExceptionThrower, 10> values;
+  values[6].throw_during_copy = true;
+  EXPECT_ANY_THROW({ vec.extend(values); });
+  EXPECT_EQ(vec.size(), 5);
+}
+
+TEST(vector, Insert1Exceptions)
+{
+  Vector<ExceptionThrower> vec(10);
+  std::array<ExceptionThrower, 5> values;
+  values[3].throw_during_copy = true;
+  EXPECT_ANY_THROW({ vec.insert(7, values); });
+}
+
+TEST(vector, Insert2Exceptions)
+{
+  Vector<ExceptionThrower> vec(10);
+  vec.reserve(100);
+  vec[8].throw_during_move = true;
+  std::array<ExceptionThrower, 5> values;
+  EXPECT_ANY_THROW({ vec.insert(3, values); });
+}
+
+TEST(vector, PopLastExceptions)
+{
+  Vector<ExceptionThrower> vec(10);
+  vec.last().throw_during_move = true;
+  EXPECT_ANY_THROW({ vec.pop_last(); }); /* NOLINT: bugprone-throw-keyword-missing */
+  EXPECT_EQ(vec.size(), 10);
+}
+
+TEST(vector, RemoveAndReorderExceptions)
+{
+  Vector<ExceptionThrower> vec(10);
+  vec.last().throw_during_move = true;
+  EXPECT_ANY_THROW({ vec.remove_and_reorder(3); });
+  EXPECT_EQ(vec.size(), 10);
+}
+
+TEST(vector, RemoveExceptions)
+{
+  Vector<ExceptionThrower> vec(10);
+  vec[8].throw_during_move = true;
+  EXPECT_ANY_THROW({ vec.remove(2); });
+  EXPECT_EQ(vec.size(), 10);
+}
+
+TEST(vector, RemoveChunk)
+{
+  Vector<int> vec = {2, 3, 4, 5, 6, 7, 8};
+  EXPECT_EQ(vec.size(), 7);
+  vec.remove(2, 4);
+  EXPECT_EQ(vec.size(), 3);
+  EXPECT_EQ(vec[0], 2);
+  EXPECT_EQ(vec[1], 3);
+  EXPECT_EQ(vec[2], 8);
+  vec.remove(0, 1);
+  EXPECT_EQ(vec.size(), 2);
+  EXPECT_EQ(vec[0], 3);
+  EXPECT_EQ(vec[1], 8);
+  vec.remove(1, 1);
+  EXPECT_EQ(vec.size(), 1);
+  EXPECT_EQ(vec[0], 3);
+  vec.remove(0, 1);
+  EXPECT_EQ(vec.size(), 0);
+  vec.remove(0, 0);
+  EXPECT_EQ(vec.size(), 0);
+}
+
+TEST(vector, RemoveChunkExceptions)
+{
+  Vector<ExceptionThrower> vec(10);
+  vec.remove(1, 3);
+  EXPECT_EQ(vec.size(), 7);
+  vec[5].throw_during_move = true;
+  EXPECT_ANY_THROW({ vec.remove(2, 3); });
+  EXPECT_EQ(vec.size(), 7);
 }
 
 }  // namespace blender::tests

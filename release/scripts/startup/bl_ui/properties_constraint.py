@@ -114,11 +114,7 @@ class ConstraintButtonsPanel(Panel):
                 col.prop_search(con, "subtarget", con.target, "vertex_groups", text="Vertex Group")
 
     def get_constraint(self, context):
-        con = None
-        if context.pose_bone:
-            con = context.pose_bone.constraints[self.list_panel_index]
-        else:
-            con = context.object.constraints[self.list_panel_index]
+        con = self.custom_data
         self.layout.context_pointer_set("constraint", con)
         return con
 
@@ -963,11 +959,7 @@ class ConstraintButtonsSubPanel(Panel):
     bl_options = {'DRAW_BOX'}
 
     def get_constraint(self, context):
-        con = None
-        if context.pose_bone:
-            con = context.pose_bone.constraints[self.list_panel_index]
-        else:
-            con = context.object.constraints[self.list_panel_index]
+        con = self.custom_data
         self.layout.context_pointer_set("constraint", con)
         return con
 
@@ -1029,7 +1021,7 @@ class ConstraintButtonsSubPanel(Panel):
         col = layout.column(align=True)
         col.prop(con, "map_to_z_from", expand=False, text="Z Source Axis")
         col.prop(con, "to_min_z" + ext, text="Min")
-        col.prop(con, "to_max_z" + ext, text="Max")      
+        col.prop(con, "to_max_z" + ext, text="Max")
 
         layout.prop(con, "mix_mode" + ext, text="Mix")
 
@@ -1396,7 +1388,7 @@ class BONE_PT_bTransformConstraint_from(BoneConstraintPanel, ConstraintButtonsSu
     def draw(self, context):
         self.draw_transform_from(context)
 
-  
+
 class OBJECT_PT_bTransformConstraint_destination(ObjectConstraintPanel, ConstraintButtonsSubPanel):
     bl_parent_id = "OBJECT_PT_bTransformConstraint"
     bl_label = "Map To"

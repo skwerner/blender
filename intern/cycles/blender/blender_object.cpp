@@ -207,7 +207,7 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
   /* test if we need to sync */
   bool object_updated = false;
 
-  if (object_map.add_or_update(&object, b_ob, b_parent, key))
+  if (object_map.add_or_update(scene, &object, b_ob, b_parent, key))
     object_updated = true;
 
   /* mesh sync */
@@ -405,14 +405,10 @@ void BlenderSync::sync_objects(BL::Depsgraph &b_depsgraph,
     sync_background_light(b_v3d, use_portal);
 
     /* handle removed data and modified pointers */
-    if (light_map.post_sync())
-      scene->light_manager->tag_update(scene);
-    if (geometry_map.post_sync())
-      scene->geometry_manager->tag_update(scene);
-    if (object_map.post_sync())
-      scene->object_manager->tag_update(scene);
-    if (particle_system_map.post_sync())
-      scene->particle_system_manager->tag_update(scene);
+    light_map.post_sync(scene);
+    geometry_map.post_sync(scene);
+    object_map.post_sync(scene);
+    particle_system_map.post_sync(scene);
   }
 
   if (motion)
@@ -458,15 +454,19 @@ void BlenderSync::sync_motion(BL::RenderSettings &b_render,
     python_thread_state_restore(python_thread_state);
     b_engine.frame_set(frame, subframe);
     python_thread_state_save(python_thread_state);
-    sync_camera_motion(b_render, b_cam, width, height, 0.0f);
+    if (b_cam) {
+      sync_camera_motion(b_render, b_cam, width, height, 0.0f);
+    }
     sync_objects(b_depsgraph, b_v3d, 0.0f);
   }
 
   /* Insert motion times from camera. Motion times from other objects
    * have already been added in a sync_objects call. */
-  uint camera_motion_steps = object_motion_steps(b_cam, b_cam);
-  for (size_t step = 0; step < camera_motion_steps; step++) {
-    motion_times.insert(scene->camera->motion_time(step));
+  if (b_cam) {
+    uint camera_motion_steps = object_motion_steps(b_cam, b_cam);
+    for (size_t step = 0; step < camera_motion_steps; step++) {
+      motion_times.insert(scene->camera->motion_time(step));
+    }
   }
 
   /* note iteration over motion_times set happens in sorted order */

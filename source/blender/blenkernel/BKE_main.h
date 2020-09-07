@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
  */
-#ifndef __BKE_MAIN_H__
-#define __BKE_MAIN_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -226,7 +225,7 @@ void BKE_main_thumbnail_create(struct Main *bmain);
 const char *BKE_main_blendfile_path(const struct Main *bmain) ATTR_NONNULL();
 const char *BKE_main_blendfile_path_from_global(void);
 
-struct ListBase *which_libbase(struct Main *mainlib, short type);
+struct ListBase *which_libbase(struct Main *bmain, short type);
 
 #define MAX_LIBARRAY 41
 int set_listbasepointers(struct Main *main, struct ListBase *lb[MAX_LIBARRAY]);
@@ -250,5 +249,3 @@ int set_listbasepointers(struct Main *main, struct ListBase *lb[MAX_LIBARRAY]);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_MAIN_H__ */

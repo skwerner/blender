@@ -44,6 +44,7 @@
 #include "BKE_lib_query.h"
 #include "BKE_material.h"
 #include "BKE_mesh.h"
+#include "BKE_mesh_wrapper.h"
 #include "BKE_modifier.h"
 #include "BKE_screen.h"
 
@@ -61,6 +62,7 @@
 
 #include "bmesh.h"
 #include "bmesh_tools.h"
+#include "tools/bmesh_boolean.h"
 #include "tools/bmesh_intersect.h"
 
 #ifdef DEBUG_TIME
@@ -74,6 +76,7 @@ static void initData(ModifierData *md)
 
   bmd->double_threshold = 1e-6f;
   bmd->operation = eBooleanModifierOp_Difference;
+  bmd->solver = eBooleanModifierSolver_Exact;
 }
 
 static bool isDisabled(const struct Scene *UNUSED(scene),
@@ -179,6 +182,10 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
   mesh_other = BKE_modifier_get_evaluated_mesh_from_evaluated_object(other, false);
   if (mesh_other) {
     Object *object = ctx->object;
+
+    /* XXX This is utterly non-optimal, we may go from a bmesh to a mesh back to a bmesh!
+     * But for 2.90 better not try to be smart here. */
+    BKE_mesh_wrapper_ensure_mdata(mesh_other);
 
     /* when one of objects is empty (has got no faces) we could speed up
      * calculation a bit returning one of objects' derived meshes (or empty one)
@@ -310,19 +317,33 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
                                0;
         }
 
-        BM_mesh_intersect(bm,
-                          looptris,
-                          tottri,
-                          bm_face_isect_pair,
-                          NULL,
-                          false,
-                          use_separate,
-                          use_dissolve,
-                          use_island_connect,
-                          false,
-                          false,
-                          bmd->operation,
-                          bmd->double_threshold);
+#ifdef WITH_GMP
+        const bool use_exact = bmd->solver == eBooleanModifierSolver_Exact;
+#else
+        if (bmd->solver == eBooleanModifierSolver_Exact) {
+          BKE_modifier_set_error(md, "Compiled without GMP, using fast solver");
+        }
+        const bool use_exact = false;
+#endif
+
+        if (use_exact) {
+          BM_mesh_boolean(bm, looptris, tottri, bm_face_isect_pair, NULL, false, bmd->operation);
+        }
+        else {
+          BM_mesh_intersect(bm,
+                            looptris,
+                            tottri,
+                            bm_face_isect_pair,
+                            NULL,
+                            false,
+                            use_separate,
+                            use_dissolve,
+                            use_island_connect,
+                            false,
+                            false,
+                            bmd->operation,
+                            bmd->double_threshold);
+        }
 
         MEM_freeN(looptris);
       }
@@ -357,26 +378,31 @@ static void requiredDataMask(Object *UNUSED(ob),
   r_cddata_masks->fmask |= CD_MASK_MTFACE;
 }
 
-static void panel_draw(const bContext *C, Panel *panel)
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
 
-  uiItemR(layout, &ptr, "operation", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "operation", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
 
   uiLayoutSetPropSep(layout, true);
 
-  uiItemR(layout, &ptr, "object", 0, NULL, ICON_NONE);
-  uiItemR(layout, &ptr, "double_threshold", 0, NULL, ICON_NONE);
+  const bool use_exact = RNA_enum_get(ptr, "solver") == eBooleanModifierSolver_Exact;
+
+  uiItemR(layout, ptr, "object", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "solver", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+
+  if (!use_exact) {
+    uiItemR(layout, ptr, "double_threshold", 0, NULL, ICON_NONE);
+  }
 
   if (G.debug) {
     uiLayout *col = uiLayoutColumn(layout, true);
-    uiItemR(col, &ptr, "debug_options", 0, NULL, ICON_NONE);
+    uiItemR(col, ptr, "debug_options", 0, NULL, ICON_NONE);
   }
 
-  modifier_panel_end(layout, &ptr);
+  modifier_panel_end(layout, ptr);
 }
 
 static void panelRegister(ARegionType *region_type)
@@ -389,7 +415,7 @@ ModifierTypeInfo modifierType_Boolean = {
     /* structName */ "BooleanModifierData",
     /* structSize */ sizeof(BooleanModifierData),
     /* type */ eModifierTypeType_Nonconstructive,
-    /* flags */ eModifierTypeFlag_AcceptsMesh,
+    /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsEditmode,
 
     /* copyData */ BKE_modifier_copydata_generic,
 

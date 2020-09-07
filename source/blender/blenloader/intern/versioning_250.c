@@ -270,9 +270,9 @@ static void area_add_window_regions(ScrArea *area, SpaceLink *sl, ListBase *lb)
         break;
 
       case SPACE_OUTLINER: {
-        SpaceOutliner *soops = (SpaceOutliner *)sl;
+        SpaceOutliner *space_outliner = (SpaceOutliner *)sl;
 
-        memcpy(&region->v2d, &soops->v2d, sizeof(View2D));
+        memcpy(&region->v2d, &space_outliner->v2d, sizeof(View2D));
 
         region->v2d.scroll &= ~V2D_SCROLL_LEFT;
         region->v2d.scroll |= (V2D_SCROLL_RIGHT | V2D_SCROLL_BOTTOM);
@@ -280,7 +280,7 @@ static void area_add_window_regions(ScrArea *area, SpaceLink *sl, ListBase *lb)
         region->v2d.keepzoom |= (V2D_LOCKZOOM_X | V2D_LOCKZOOM_Y | V2D_KEEPASPECT);
         region->v2d.keeptot = V2D_KEEPTOT_STRICT;
         region->v2d.minzoom = region->v2d.maxzoom = 1.0f;
-        // region->v2d.flag |= V2D_IS_INITIALISED;
+        // region->v2d.flag |= V2D_IS_INIT;
         break;
       }
       case SPACE_GRAPH: {
@@ -297,7 +297,7 @@ static void area_add_window_regions(ScrArea *area, SpaceLink *sl, ListBase *lb)
         region->v2d.max[0] = MAXFRAMEF;
         region->v2d.max[1] = FLT_MAX;
 
-        // region->v2d.flag |= V2D_IS_INITIALISED;
+        // region->v2d.flag |= V2D_IS_INIT;
         break;
       }
       case SPACE_NLA: {
@@ -355,7 +355,7 @@ static void area_add_window_regions(ScrArea *area, SpaceLink *sl, ListBase *lb)
         region->v2d.scroll |= (V2D_SCROLL_BOTTOM | V2D_SCROLL_HORIZONTAL_HANDLES);
         region->v2d.scroll |= (V2D_SCROLL_LEFT | V2D_SCROLL_VERTICAL_HANDLES);
         region->v2d.align = V2D_ALIGN_NO_NEG_Y;
-        region->v2d.flag |= V2D_IS_INITIALISED;
+        region->v2d.flag |= V2D_IS_INIT;
         break;
       }
       case SPACE_NODE: {
@@ -635,6 +635,7 @@ static void do_versions_socket_default_value_259(bNodeSocket *sock)
   }
 }
 
+/* NOLINTNEXTLINE: readability-function-size */
 void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
 {
   /* WATCH IT!!!: pointers from libdata have not been converted */
@@ -665,7 +666,7 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
 
     for (scene = bmain->scenes.first; scene; scene = scene->id.next) {
       if (scene->ed && scene->ed->seqbasep) {
-        SEQ_BEGIN (scene->ed, seq) {
+        SEQ_ALL_BEGIN (scene->ed, seq) {
           if (seq->type == SEQ_TYPE_SOUND_HD) {
             char str[FILE_MAX];
             BLI_join_dirfile(str, sizeof(str), seq->strip->dir, seq->strip->stripdata->name);
@@ -681,7 +682,7 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
 #undef SEQ_USE_PROXY_CUSTOM_DIR
 #undef SEQ_USE_PROXY_CUSTOM_FILE
         }
-        SEQ_END;
+        SEQ_ALL_END;
       }
     }
 
@@ -965,7 +966,7 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
         bPoseChannel *pchan;
 
         for (pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
-          /* just need to initialise rotation axis properly... */
+          /* Just need to initialize rotation axis properly. */
           pchan->rotAxis[1] = 1.0f;
         }
       }
@@ -1408,10 +1409,10 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
         sce->r.ffcodecdata.audio_codec = 0x0;  // CODEC_ID_NONE
       }
 
-      SEQ_BEGIN (sce->ed, seq) {
+      SEQ_ALL_BEGIN (sce->ed, seq) {
         seq->volume = 1.0f;
       }
-      SEQ_END;
+      SEQ_ALL_END;
     }
 
     /* particle brush strength factor was changed from int to float */
@@ -1680,12 +1681,12 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
 
     for (scene = bmain->scenes.first; scene; scene = scene->id.next) {
       Sequence *seq;
-      SEQ_BEGIN (scene->ed, seq) {
+      SEQ_ALL_BEGIN (scene->ed, seq) {
         if (seq->sat == 0.0f) {
           seq->sat = 1.0f;
         }
       }
-      SEQ_END;
+      SEQ_ALL_END;
     }
 
     /* GSOC 2010 Sculpt - New settings for Brush */
@@ -2165,10 +2166,10 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
       for (scene = bmain->scenes.first; scene; scene = scene->id.next) {
         scene->r.ffcodecdata.audio_channels = 2;
         scene->audio.volume = 1.0f;
-        SEQ_BEGIN (scene->ed, seq) {
+        SEQ_ALL_BEGIN (scene->ed, seq) {
           seq->pitch = 1.0f;
         }
-        SEQ_END;
+        SEQ_ALL_END;
       }
     }
 

@@ -22,8 +22,7 @@
  * Structs for each of space type in the user interface.
  */
 
-#ifndef __DNA_SPACE_TYPES_H__
-#define __DNA_SPACE_TYPES_H__
+#pragma once
 
 #include "DNA_color_types.h" /* for Histogram */
 #include "DNA_defs.h"
@@ -613,6 +612,7 @@ typedef enum eSpaceSeq_Flag {
   SEQ_SHOW_SAFE_CENTER = (1 << 9),
   SEQ_SHOW_METADATA = (1 << 10),
   SEQ_SHOW_MARKERS = (1 << 11), /* show markers region */
+  SEQ_ZOOM_TO_FIT = (1 << 12),
 } eSpaceSeq_Flag;
 
 /* SpaceSeq.view */
@@ -1735,5 +1735,3 @@ typedef enum eSpace_Type {
 #define IMG_SIZE_FALLBACK 256
 
 /** \} */
-
-#endif /* __DNA_SPACE_TYPES_H__ */

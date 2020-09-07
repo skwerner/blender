@@ -83,7 +83,7 @@ string gnuplotify_id_code(const string &name)
 
 string gnuplotify_name(const string &name)
 {
-  string result = "";
+  string result;
   const int length = name.length();
   for (int i = 0; i < length; i++) {
     const char ch = name[i];
@@ -153,7 +153,7 @@ void deg_debug_stats_gnuplot(const DebugContext &ctx)
 }  // namespace blender
 
 void DEG_debug_stats_gnuplot(const Depsgraph *depsgraph,
-                             FILE *f,
+                             FILE *fp,
                              const char *label,
                              const char *output_filename)
 {
@@ -161,7 +161,7 @@ void DEG_debug_stats_gnuplot(const Depsgraph *depsgraph,
     return;
   }
   deg::DebugContext ctx;
-  ctx.file = f;
+  ctx.file = fp;
   ctx.graph = (deg::Depsgraph *)depsgraph;
   ctx.label = label;
   ctx.output_filename = output_filename;

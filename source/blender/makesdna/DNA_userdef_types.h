@@ -21,8 +21,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_USERDEF_TYPES_H__
-#define __DNA_USERDEF_TYPES_H__
+#pragma once
 
 #include "DNA_listBase.h"
 #include "DNA_texture_types.h" /* ColorBand */
@@ -328,7 +327,7 @@ typedef struct ThemeSpace {
   unsigned char syntaxd[4], syntaxr[4];  // in nodespace used for distort
 
   unsigned char line_numbers[4];
-  char _pad6[7];
+  char _pad6[3];
 
   unsigned char nodeclass_output[4], nodeclass_filter[4];
   unsigned char nodeclass_vector[4], nodeclass_texture[4];
@@ -373,8 +372,6 @@ typedef struct ThemeSpace {
 
   /** Two uses, for uvs with modifier applied on mesh and uvs during painting. */
   unsigned char uv_shadow[4];
-  /** Uvs of other objects. */
-  unsigned char uv_others[4];
 
   /** Outliner - filter match. */
   unsigned char match[4];
@@ -690,16 +687,17 @@ typedef struct UserDef {
   int audioformat;
   int audiochannels;
 
-  /** Setting for UI scale. */
+  /** Setting for UI scale (fractional), before screen DPI has been applied. */
   float ui_scale;
   /** Setting for UI line width. */
   int ui_line_width;
   /** Runtime, full DPI divided by `pixelsize`. */
   int dpi;
-  /** Runtime, multiplier to scale UI elements based on DPI. */
+  /** Runtime, multiplier to scale UI elements based on DPI (fractional). */
   float dpi_fac;
+  /** Runtime, `1.0 / dpi_fac` */
   float inv_dpi_fac;
-  /** Runtime, line width and point size based on DPI. */
+  /** Runtime, calculated from line-width and point-size based on DPI (rounded to int). */
   float pixelsize;
   /** Deprecated, for forward compatibility. */
   int virtual_pixel;
@@ -733,7 +731,7 @@ typedef struct UserDef {
   char _pad1[2];
   int undomemory;
   float gpu_viewport_quality DNA_DEPRECATED;
-  short gp_manhattendist, gp_euclideandist, gp_eraser;
+  short gp_manhattandist, gp_euclideandist, gp_eraser;
   /** #eGP_UserdefSettings. */
   short gp_settings;
   char _pad13[4];
@@ -1338,6 +1336,4 @@ enum {
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

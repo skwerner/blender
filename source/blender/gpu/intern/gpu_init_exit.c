@@ -26,6 +26,7 @@
 #include "BLI_sys_types.h"
 #include "GPU_batch.h"
 #include "GPU_buffers.h"
+#include "GPU_context.h"
 #include "GPU_immediate.h"
 
 #include "intern/gpu_codegen.h"
@@ -52,11 +53,6 @@ void GPU_init(void)
 
   gpu_codegen_init();
   gpu_material_library_init();
-  gpu_framebuffer_module_init();
-
-  if (G.debug & G_DEBUG_GPU) {
-    gpu_debug_init();
-  }
 
   gpu_batch_init();
 
@@ -81,11 +77,6 @@ void GPU_exit(void)
 
   gpu_batch_exit();
 
-  if (G.debug & G_DEBUG_GPU) {
-    gpu_debug_exit();
-  }
-
-  gpu_framebuffer_module_exit();
   gpu_material_library_exit();
   gpu_codegen_exit();
 
@@ -95,7 +86,7 @@ void GPU_exit(void)
   initialized = false;
 }
 
-bool GPU_is_initialized(void)
+bool GPU_is_init(void)
 {
   return initialized;
 }

@@ -54,6 +54,8 @@
 #include "BKE_nla.h"
 #include "BKE_sound.h"
 
+#include "BLO_read_write.h"
+
 #include "RNA_access.h"
 #include "nla_private.h"
 
@@ -480,46 +482,41 @@ static float nlastrip_get_frame_actionclip(NlaStrip *strip, float cframe, short 
     if (mode == NLATIME_CONVERT_MAP) {
       return strip->end - scale * (cframe - strip->actstart);
     }
-    else if (mode == NLATIME_CONVERT_UNMAP) {
+    if (mode == NLATIME_CONVERT_UNMAP) {
       return (strip->end + (strip->actstart * scale - cframe)) / scale;
     }
-    else { /* if (mode == NLATIME_CONVERT_EVAL) */
-      if (IS_EQF((float)cframe, strip->end) && IS_EQF(strip->repeat, floorf(strip->repeat))) {
-        /* This case prevents the motion snapping back to the first frame at the end of the strip
-         * by catching the case where repeats is a whole number, which means that the end of the
-         * strip could also be interpreted as the end of the start of a repeat. */
-        return strip->actstart;
-      }
-      else {
-        /* - the 'fmod(..., actlength * scale)' is needed to get the repeats working
-         * - the '/ scale' is needed to ensure that scaling influences the timing within the repeat
-         */
-        return strip->actend - fmodf(cframe - strip->start, actlength * scale) / scale;
-      }
+    /* if (mode == NLATIME_CONVERT_EVAL) */
+    if (IS_EQF((float)cframe, strip->end) && IS_EQF(strip->repeat, floorf(strip->repeat))) {
+      /* This case prevents the motion snapping back to the first frame at the end of the strip
+       * by catching the case where repeats is a whole number, which means that the end of the
+       * strip could also be interpreted as the end of the start of a repeat. */
+      return strip->actstart;
     }
+
+    /* - the 'fmod(..., actlength * scale)' is needed to get the repeats working
+     * - the '/ scale' is needed to ensure that scaling influences the timing within the repeat
+     */
+    return strip->actend - fmodf(cframe - strip->start, actlength * scale) / scale;
   }
-  else {
-    if (mode == NLATIME_CONVERT_MAP) {
-      return strip->start + scale * (cframe - strip->actstart);
-    }
-    else if (mode == NLATIME_CONVERT_UNMAP) {
-      return strip->actstart + (cframe - strip->start) / scale;
-    }
-    else { /* if (mode == NLATIME_CONVERT_EVAL) */
-      if (IS_EQF(cframe, strip->end) && IS_EQF(strip->repeat, floorf(strip->repeat))) {
-        /* This case prevents the motion snapping back to the first frame at the end of the strip
-         * by catching the case where repeats is a whole number, which means that the end of the
-         * strip could also be interpreted as the end of the start of a repeat. */
-        return strip->actend;
-      }
-      else {
-        /* - the 'fmod(..., actlength * scale)' is needed to get the repeats working
-         * - the '/ scale' is needed to ensure that scaling influences the timing within the repeat
-         */
-        return strip->actstart + fmodf(cframe - strip->start, actlength * scale) / scale;
-      }
-    }
+
+  if (mode == NLATIME_CONVERT_MAP) {
+    return strip->start + scale * (cframe - strip->actstart);
   }
+  if (mode == NLATIME_CONVERT_UNMAP) {
+    return strip->actstart + (cframe - strip->start) / scale;
+  }
+  /* if (mode == NLATIME_CONVERT_EVAL) */
+  if (IS_EQF(cframe, strip->end) && IS_EQF(strip->repeat, floorf(strip->repeat))) {
+    /* This case prevents the motion snapping back to the first frame at the end of the strip
+     * by catching the case where repeats is a whole number, which means that the end of the
+     * strip could also be interpreted as the end of the start of a repeat. */
+    return strip->actend;
+  }
+
+  /* - the 'fmod(..., actlength * scale)' is needed to get the repeats working
+   * - the '/ scale' is needed to ensure that scaling influences the timing within the repeat
+   */
+  return strip->actstart + fmodf(cframe - strip->start, actlength * scale) / scale;
 }
 
 /* non clipped mapping for strip-time <-> global time (for Transitions)
@@ -537,18 +534,15 @@ static float nlastrip_get_frame_transition(NlaStrip *strip, float cframe, short 
     if (mode == NLATIME_CONVERT_MAP) {
       return strip->end - (length * cframe);
     }
-    else {
-      return (strip->end - cframe) / length;
-    }
+
+    return (strip->end - cframe) / length;
   }
-  else {
-    if (mode == NLATIME_CONVERT_MAP) {
-      return (length * cframe) + strip->start;
-    }
-    else {
-      return (cframe - strip->start) / length;
-    }
+
+  if (mode == NLATIME_CONVERT_MAP) {
+    return (length * cframe) + strip->start;
   }
+
+  return (cframe - strip->start) / length;
 }
 
 /* non clipped mapping for strip-time <-> global time
@@ -882,11 +876,10 @@ bool BKE_nlameta_add_strip(NlaStrip *mstrip, NlaStrip *strip)
 
       return true;
     }
-    else { /* failed... no room before */
-      return false;
-    }
+    /* failed... no room before */
+    return false;
   }
-  else if (strip->end > mstrip->end) {
+  if (strip->end > mstrip->end) {
     /* check if strip to the right (if it exists) starts before the
      * end of the strip we're trying to add
      */
@@ -897,14 +890,12 @@ bool BKE_nlameta_add_strip(NlaStrip *mstrip, NlaStrip *strip)
 
       return true;
     }
-    else { /* failed... no room after */
-      return false;
-    }
+    /* failed... no room after */
+    return false;
   }
-  else {
-    /* just try to add to the meta-strip (no dimension changes needed) */
-    return BKE_nlastrips_add_strip(&mstrip->strips, strip);
-  }
+
+  /* just try to add to the meta-strip (no dimension changes needed) */
+  return BKE_nlastrips_add_strip(&mstrip->strips, strip);
 }
 
 /* Adjust the settings of NLA-Strips contained within a Meta-Strip (recursively),
@@ -1034,7 +1025,7 @@ NlaTrack *BKE_nlatrack_find_tweaked(AnimData *adt)
       if (BLI_findindex(&nlt->strips, adt->actstrip) != -1) {
         return nlt;
       }
-      else if (G.debug & G_DEBUG) {
+      if (G.debug & G_DEBUG) {
         printf("%s: Active strip (%p, %s) not in NLA track found (%p, %s)\n",
                __func__,
                adt->actstrip,
@@ -1372,6 +1363,25 @@ static void nlastrip_fix_resize_overlaps(NlaStrip *strip)
   }
 }
 
+/** Recalculate the start and end frames for the strip to match the bounds of its action such that
+ * the overall NLA animation result is unchanged. */
+void BKE_nlastrip_recalculate_bounds_sync_action(NlaStrip *strip)
+{
+  float prev_actstart;
+
+  if (strip == NULL || strip->type != NLASTRIP_TYPE_CLIP) {
+    return;
+  }
+
+  prev_actstart = strip->actstart;
+
+  calc_action_range(strip->act, &strip->actstart, &strip->actend, 0);
+
+  /* Set start such that key's do not visually move, to preserve the overall animation result. */
+  strip->start += (strip->actstart - prev_actstart) * strip->scale;
+
+  BKE_nlastrip_recalculate_bounds(strip);
+}
 /* Recalculate the start and end frames for the current strip, after changing
  * the extents of the action or the mapping (repeats or scale factor) info
  */
@@ -2144,11 +2154,7 @@ void BKE_nla_tweakmode_exit(AnimData *adt)
 
     /* must be action-clip only (transitions don't have scale) */
     if ((strip->type == NLASTRIP_TYPE_CLIP) && (strip->act)) {
-      /* recalculate the length of the action */
-      calc_action_range(strip->act, &strip->actstart, &strip->actend, 0);
-
-      /* adjust the strip extents in response to this */
-      BKE_nlastrip_recalculate_bounds(strip);
+      BKE_nlastrip_recalculate_bounds_sync_action(strip);
     }
   }
 
@@ -2162,11 +2168,7 @@ void BKE_nla_tweakmode_exit(AnimData *adt)
       /* sync strip extents if this strip uses the same action */
       if ((adt->actstrip) && (adt->actstrip->act == strip->act) &&
           (strip->flag & NLASTRIP_FLAG_SYNC_LENGTH)) {
-        /* recalculate the length of the action */
-        calc_action_range(strip->act, &strip->actstart, &strip->actend, 0);
-
-        /* adjust the strip extents in response to this */
-        BKE_nlastrip_recalculate_bounds(strip);
+        BKE_nlastrip_recalculate_bounds_sync_action(strip);
       }
 
       /* clear tweakuser flag */
@@ -2189,4 +2191,104 @@ void BKE_nla_tweakmode_exit(AnimData *adt)
   adt->act_track = NULL;
   adt->actstrip = NULL;
   adt->flag &= ~ADT_NLA_EDIT_ON;
+}
+
+static void blend_write_nla_strips(BlendWriter *writer, ListBase *strips)
+{
+  BLO_write_struct_list(writer, NlaStrip, strips);
+  LISTBASE_FOREACH (NlaStrip *, strip, strips) {
+    /* write the strip's F-Curves and modifiers */
+    BKE_fcurve_blend_write(writer, &strip->fcurves);
+    BKE_fmodifiers_blend_write(writer, &strip->modifiers);
+
+    /* write the strip's children */
+    blend_write_nla_strips(writer, &strip->strips);
+  }
+}
+
+static void blend_data_read_nla_strips(BlendDataReader *reader, ListBase *strips)
+{
+  LISTBASE_FOREACH (NlaStrip *, strip, strips) {
+    /* strip's child strips */
+    BLO_read_list(reader, &strip->strips);
+    blend_data_read_nla_strips(reader, &strip->strips);
+
+    /* strip's F-Curves */
+    BLO_read_list(reader, &strip->fcurves);
+    BKE_fcurve_blend_read_data(reader, &strip->fcurves);
+
+    /* strip's F-Modifiers */
+    BLO_read_list(reader, &strip->modifiers);
+    BKE_fmodifiers_blend_read_data(reader, &strip->modifiers, NULL);
+  }
+}
+
+static void blend_lib_read_nla_strips(BlendLibReader *reader, ID *id, ListBase *strips)
+{
+  LISTBASE_FOREACH (NlaStrip *, strip, strips) {
+    /* check strip's children */
+    blend_lib_read_nla_strips(reader, id, &strip->strips);
+
+    /* check strip's F-Curves */
+    BKE_fcurve_blend_read_lib(reader, id, &strip->fcurves);
+
+    /* reassign the counted-reference to action */
+    BLO_read_id_address(reader, id->lib, &strip->act);
+  }
+}
+
+static void blend_read_expand_nla_strips(BlendExpander *expander, ListBase *strips)
+{
+  LISTBASE_FOREACH (NlaStrip *, strip, strips) {
+    /* check child strips */
+    blend_read_expand_nla_strips(expander, &strip->strips);
+
+    /* check F-Curves */
+    BKE_fcurve_blend_read_expand(expander, &strip->fcurves);
+
+    /* check F-Modifiers */
+    BKE_fmodifiers_blend_read_expand(expander, &strip->modifiers);
+
+    /* relink referenced action */
+    BLO_expand(expander, strip->act);
+  }
+}
+
+void BKE_nla_blend_write(BlendWriter *writer, ListBase *tracks)
+{
+  /* write all the tracks */
+  LISTBASE_FOREACH (NlaTrack *, nlt, tracks) {
+    /* write the track first */
+    BLO_write_struct(writer, NlaTrack, nlt);
+
+    /* write the track's strips */
+    blend_write_nla_strips(writer, &nlt->strips);
+  }
+}
+
+void BKE_nla_blend_read_data(BlendDataReader *reader, ListBase *tracks)
+{
+  LISTBASE_FOREACH (NlaTrack *, nlt, tracks) {
+    /* relink list of strips */
+    BLO_read_list(reader, &nlt->strips);
+
+    /* relink strip data */
+    blend_data_read_nla_strips(reader, &nlt->strips);
+  }
+}
+
+void BKE_nla_blend_read_lib(BlendLibReader *reader, ID *id, ListBase *tracks)
+{
+  /* we only care about the NLA strips inside the tracks */
+  LISTBASE_FOREACH (NlaTrack *, nlt, tracks) {
+    blend_lib_read_nla_strips(reader, id, &nlt->strips);
+  }
+}
+
+void BKE_nla_blend_read_expand(struct BlendExpander *expander, struct ListBase *tracks)
+{
+  /* nla-data - referenced actions */
+  LISTBASE_FOREACH (NlaTrack *, nlt, tracks) {
+    blend_read_expand_nla_strips(expander, &nlt->strips);
+  }
 }

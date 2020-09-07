@@ -179,13 +179,12 @@ BMLoop *BM_loop_other_vert_loop_by_edge(BMLoop *l, BMEdge *e)
   if (l->e == e) {
     return l->next;
   }
-  else if (l->prev->e == e) {
+  if (l->prev->e == e) {
     return l->prev;
   }
-  else {
-    BLI_assert(0);
-    return NULL;
-  }
+
+  BLI_assert(0);
+  return NULL;
 }
 
 /**
@@ -1188,16 +1187,16 @@ bool BM_vert_is_boundary(const BMVert *v)
  * \note Could be sped up a bit by not using iterators and by tagging
  * faces on either side, then count the tags rather then searching.
  */
-int BM_face_share_face_count(BMFace *f1, BMFace *f2)
+int BM_face_share_face_count(BMFace *f_a, BMFace *f_b)
 {
   BMIter iter1, iter2;
   BMEdge *e;
   BMFace *f;
   int count = 0;
 
-  BM_ITER_ELEM (e, &iter1, f1, BM_EDGES_OF_FACE) {
+  BM_ITER_ELEM (e, &iter1, f_a, BM_EDGES_OF_FACE) {
     BM_ITER_ELEM (f, &iter2, e, BM_FACES_OF_EDGE) {
-      if (f != f1 && f != f2 && BM_face_share_edge_check(f, f2)) {
+      if (f != f_a && f != f_b && BM_face_share_edge_check(f, f_b)) {
         count++;
       }
     }
@@ -1209,15 +1208,15 @@ int BM_face_share_face_count(BMFace *f1, BMFace *f2)
 /**
  * same as #BM_face_share_face_count but returns a bool
  */
-bool BM_face_share_face_check(BMFace *f1, BMFace *f2)
+bool BM_face_share_face_check(BMFace *f_a, BMFace *f_b)
 {
   BMIter iter1, iter2;
   BMEdge *e;
   BMFace *f;
 
-  BM_ITER_ELEM (e, &iter1, f1, BM_EDGES_OF_FACE) {
+  BM_ITER_ELEM (e, &iter1, f_a, BM_EDGES_OF_FACE) {
     BM_ITER_ELEM (f, &iter2, e, BM_FACES_OF_EDGE) {
-      if (f != f1 && f != f2 && BM_face_share_edge_check(f, f2)) {
+      if (f != f_a && f != f_b && BM_face_share_edge_check(f, f_b)) {
         return true;
       }
     }
@@ -2509,6 +2508,22 @@ bool BM_face_is_any_edge_flag_test(const BMFace *f, const char hflag)
       return true;
     }
   } while ((l_iter = l_iter->next) != l_first);
+  return false;
+}
+
+bool BM_edge_is_any_face_len_test(const BMEdge *e, const int len)
+{
+  if (e->l) {
+    BMLoop *l_iter, *l_first;
+
+    l_iter = l_first = e->l;
+    do {
+      if (l_iter->f->len == len) {
+        return true;
+      }
+    } while ((l_iter = l_iter->radial_next) != l_first);
+  }
+
   return false;
 }
 

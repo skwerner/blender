@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __SIM_SIMULATION_SOLVER_INFLUENCES_HH__
-#define __SIM_SIMULATION_SOLVER_INFLUENCES_HH__
+#pragma once
 
 #include "BLI_float3.hh"
 #include "BLI_float4x4.hh"
@@ -42,9 +41,10 @@ using fn::GMutableSpan;
 using fn::GSpan;
 using fn::MutableAttributesRef;
 
-class ParticleEmitterContext;
-class ParticleForceContext;
-class ParticleActionContext;
+struct ParticleEmitterContext;
+struct ParticleForceContext;
+struct ParticleActionContext;
+struct ParticleEventFilterContext;
 
 class ParticleEmitter {
  public:
@@ -64,11 +64,19 @@ class ParticleAction {
   virtual void execute(ParticleActionContext &context) const = 0;
 };
 
+class ParticleEvent {
+ public:
+  virtual ~ParticleEvent();
+  virtual void filter(ParticleEventFilterContext &context) const = 0;
+  virtual void execute(ParticleActionContext &context) const = 0;
+};
+
 struct SimulationInfluences {
   MultiValueMap<std::string, const ParticleForce *> particle_forces;
   MultiValueMap<std::string, const ParticleAction *> particle_birth_actions;
   MultiValueMap<std::string, const ParticleAction *> particle_time_step_begin_actions;
   MultiValueMap<std::string, const ParticleAction *> particle_time_step_end_actions;
+  MultiValueMap<std::string, const ParticleEvent *> particle_events;
   Map<std::string, AttributesInfoBuilder *> particle_attributes_builder;
   Vector<const ParticleEmitter *> particle_emitters;
 };
@@ -88,7 +96,7 @@ class SimulationStateMap {
   template<typename StateType> StateType *lookup(StringRef name) const
   {
     const char *type = BKE_simulation_get_state_type_name<StateType>();
-    return (StateType *)this->lookup_name_type(name, type);
+    return reinterpret_cast<StateType *>(this->lookup_name_type(name, type));
   }
 
   template<typename StateType> Span<StateType *> lookup() const
@@ -157,9 +165,37 @@ class ParticleAllocators {
   }
 };
 
+struct ParticleChunkIntegrationContext {
+  MutableSpan<float3> position_diffs;
+  MutableSpan<float3> velocity_diffs;
+  MutableSpan<float> durations;
+  float end_time;
+};
+
 struct ParticleChunkContext {
+  ParticleSimulationState &state;
   IndexMask index_mask;
   MutableAttributesRef attributes;
+  ParticleChunkIntegrationContext *integration = nullptr;
+
+  void update_diffs_after_velocity_change()
+  {
+    if (integration == nullptr) {
+      return;
+    }
+
+    Span<float> remaining_durations = integration->durations;
+    MutableSpan<float3> position_diffs = integration->position_diffs;
+    Span<float3> velocities = attributes.get<float3>("Velocity");
+
+    for (int i : index_mask) {
+      const float duration = remaining_durations[i];
+      /* This is certainly not a perfect way to "re-integrate" the velocity, but it should be good
+       * enough for most use cases. Changing the velocity in an instant is not physically correct
+       * anyway. */
+      position_diffs[i] = velocities[i] * duration;
+    }
+  }
 };
 
 struct ParticleEmitterContext {
@@ -189,6 +225,10 @@ struct ParticleActionContext {
   ParticleChunkContext &particles;
 };
 
-}  // namespace blender::sim
+struct ParticleEventFilterContext {
+  SimulationSolveContext &solve_context;
+  ParticleChunkContext &particles;
+  MutableSpan<float> factor_dst;
+};
 
-#endif /* __SIM_SIMULATION_SOLVER_INFLUENCES_HH__ */
+}  // namespace blender::sim

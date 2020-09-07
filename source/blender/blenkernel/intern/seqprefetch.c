@@ -138,7 +138,7 @@ static bool seq_prefetch_job_is_waiting(Scene *scene)
 static Sequence *sequencer_prefetch_get_original_sequence(Sequence *seq, ListBase *seqbase)
 {
   LISTBASE_FOREACH (Sequence *, seq_orig, seqbase) {
-    if (strcmp(seq->name, seq_orig->name) == 0) {
+    if (STREQ(seq->name, seq_orig->name)) {
       return seq_orig;
     }
 
@@ -207,7 +207,7 @@ static void seq_prefetch_free_depsgraph(PrefetchJob *pfjob)
 
 static void seq_prefetch_update_depsgraph(PrefetchJob *pfjob)
 {
-  DEG_evaluate_on_framechange(pfjob->bmain_eval, pfjob->depsgraph, seq_prefetch_cfra(pfjob));
+  DEG_evaluate_on_framechange(pfjob->depsgraph, seq_prefetch_cfra(pfjob));
 }
 
 static void seq_prefetch_init_depsgraph(PrefetchJob *pfjob)
@@ -220,7 +220,7 @@ static void seq_prefetch_init_depsgraph(PrefetchJob *pfjob)
   DEG_debug_name_set(pfjob->depsgraph, "SEQUENCER PREFETCH");
 
   /* Make sure there is a correct evaluated scene pointer. */
-  DEG_graph_build_for_render_pipeline(pfjob->depsgraph, bmain, scene, view_layer);
+  DEG_graph_build_for_render_pipeline(pfjob->depsgraph);
 
   /* Update immediately so we have proper evaluated scene. */
   seq_prefetch_update_depsgraph(pfjob);

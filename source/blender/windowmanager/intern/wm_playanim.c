@@ -310,14 +310,11 @@ static void playanim_toscreen(
   CLAMP(offs_x, 0.0f, 1.0f);
   CLAMP(offs_y, 0.0f, 1.0f);
 
-  GPU_clear_color(0.1, 0.1, 0.1, 0.0);
-  GPU_clear(GPU_COLOR_BIT);
+  GPU_clear_color(0.1f, 0.1f, 0.1f, 0.0f);
 
   /* checkerboard for case alpha */
   if (ibuf->planes == 32) {
-    GPU_blend(true);
-    GPU_blend_set_func_separate(
-        GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+    GPU_blend(GPU_BLEND_ALPHA);
 
     imm_draw_box_checker_2d_ex(offs_x,
                                offs_y,
@@ -342,7 +339,7 @@ static void playanim_toscreen(
                    ((ps->draw_flip[1] ? -1.0f : 1.0f)) * (ps->zoom / (float)ps->win_y),
                    NULL);
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 
   pupdate_time();
 
@@ -1293,8 +1290,7 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
   // GHOST_ActivateWindowDrawingContext(g_WS.ghost_window);
 
   /* initialize OpenGL immediate mode */
-  GLuint default_fb = GHOST_GetDefaultOpenGLFramebuffer(g_WS.ghost_window);
-  g_WS.gpu_context = GPU_context_create(default_fb);
+  g_WS.gpu_context = GPU_context_create(g_WS.ghost_window);
   GPU_init();
   immActivate();
 
@@ -1316,8 +1312,7 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
     maxwiny = ibuf->y * (1 + (maxwiny / ibuf->y));
   }
 
-  GPU_clear_color(0.1, 0.1, 0.1, 0.0);
-  GPU_clear(GPU_COLOR_BIT);
+  GPU_clear_color(0.1f, 0.1f, 0.1f, 0.0f);
 
   int win_x, win_y;
   playanim_window_get_size(&win_x, &win_y);

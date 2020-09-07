@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BKE_PBVH_H__
-#define __BKE_PBVH_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -115,7 +114,7 @@ void BKE_pbvh_build_mesh(PBVH *pbvh,
                          const struct MLoopTri *looptri,
                          int looptri_num);
 void BKE_pbvh_build_grids(PBVH *pbvh,
-                          struct CCGElem **grid_elems,
+                          struct CCGElem **grids,
                           int totgrid,
                           struct CCGKey *key,
                           void **gridfaces,
@@ -276,7 +275,7 @@ void BKE_pbvh_node_get_grids(PBVH *pbvh,
                              int *totgrid,
                              int *maxgrid,
                              int *gridsize,
-                             struct CCGElem ***grid_elems);
+                             struct CCGElem ***r_griddata);
 void BKE_pbvh_node_num_verts(PBVH *pbvh, PBVHNode *node, int *r_uniquevert, int *r_totvert);
 void BKE_pbvh_node_get_verts(PBVH *pbvh,
                              PBVHNode *node,
@@ -308,7 +307,7 @@ void BKE_pbvh_update_normals(PBVH *pbvh, struct SubdivCCG *subdiv_ccg);
 void BKE_pbvh_redraw_BB(PBVH *pbvh, float bb_min[3], float bb_max[3]);
 void BKE_pbvh_get_grid_updates(PBVH *pbvh, bool clear, void ***r_gridfaces, int *r_totface);
 void BKE_pbvh_grids_update(PBVH *pbvh,
-                           struct CCGElem **grid_elems,
+                           struct CCGElem **grids,
                            void **gridfaces,
                            struct DMFlagMat *flagmats,
                            unsigned int **grid_hidden);
@@ -459,7 +458,7 @@ void pbvh_vertex_iter_init(PBVH *pbvh, PBVHNode *node, PBVHVertexIter *vi, int m
 void BKE_pbvh_node_get_proxies(PBVHNode *node, PBVHProxyNode **proxies, int *proxy_count);
 void BKE_pbvh_node_free_proxies(PBVHNode *node);
 PBVHProxyNode *BKE_pbvh_node_add_proxy(PBVH *pbvh, PBVHNode *node);
-void BKE_pbvh_gather_proxies(PBVH *pbvh, PBVHNode ***nodes, int *totnode);
+void BKE_pbvh_gather_proxies(PBVH *pbvh, PBVHNode ***r_array, int *r_tot);
 void BKE_pbvh_node_get_bm_orco_data(PBVHNode *node,
                                     int (**r_orco_tris)[3],
                                     int *r_orco_tris_num,
@@ -489,5 +488,3 @@ void BKE_pbvh_node_color_buffer_free(PBVH *pbvh);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_PBVH_H__ */

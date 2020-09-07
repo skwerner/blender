@@ -60,7 +60,7 @@
 
 /* ******************** default callbacks for action space ***************** */
 
-static SpaceLink *action_new(const ScrArea *area, const Scene *scene)
+static SpaceLink *action_create(const ScrArea *area, const Scene *scene)
 {
   SpaceAction *saction;
   ARegion *region;
@@ -191,7 +191,6 @@ static void action_main_region_draw(const bContext *C, ARegion *region)
 
   /* clear and setup matrix */
   UI_ThemeClearColor(TH_BACK);
-  GPU_clear(GPU_COLOR_BIT);
 
   UI_view2d_view_ortho(v2d);
 
@@ -278,7 +277,6 @@ static void action_channel_region_draw(const bContext *C, ARegion *region)
 
   /* clear and setup matrix */
   UI_ThemeClearColor(TH_BACK);
-  GPU_clear(GPU_COLOR_BIT);
 
   UI_view2d_view_ortho(v2d);
 
@@ -863,7 +861,7 @@ void ED_spacetype_action(void)
   st->spaceid = SPACE_ACTION;
   strncpy(st->name, "Action", BKE_ST_MAXNAME);
 
-  st->new = action_new;
+  st->create = action_create;
   st->free = action_free;
   st->init = action_init;
   st->duplicate = action_duplicate;

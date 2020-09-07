@@ -518,7 +518,7 @@ static int file_select_invoke(bContext *C, wmOperator *op, const wmEvent *event)
   rect.ymin = rect.ymax = event->mval[1];
 
   if (!ED_fileselect_layout_is_inside_pt(sfile->layout, &region->v2d, rect.xmin, rect.ymin)) {
-    return OPERATOR_CANCELLED;
+    return OPERATOR_CANCELLED | OPERATOR_PASS_THROUGH;
   }
 
   if (sfile && sfile->params) {
@@ -1697,6 +1697,19 @@ static int file_exec(bContext *C, wmOperator *exec_op)
   return OPERATOR_FINISHED;
 }
 
+static int file_exec_invoke(bContext *C, wmOperator *op, const wmEvent *event)
+{
+  ARegion *region = CTX_wm_region(C);
+  SpaceFile *sfile = CTX_wm_space_file(C);
+
+  if (!ED_fileselect_layout_is_inside_pt(
+          sfile->layout, &region->v2d, event->mval[0], event->mval[1])) {
+    return OPERATOR_CANCELLED | OPERATOR_PASS_THROUGH;
+  }
+
+  return file_exec(C, op);
+}
+
 void FILE_OT_execute(struct wmOperatorType *ot)
 {
   PropertyRNA *prop;
@@ -1707,8 +1720,13 @@ void FILE_OT_execute(struct wmOperatorType *ot)
   ot->idname = "FILE_OT_execute";
 
   /* api callbacks */
+  ot->invoke = file_exec_invoke;
   ot->exec = file_exec;
-  ot->poll = file_operator_poll;
+  /* Important since handler is on window level.
+   *
+   * Avoid using #file_operator_poll since this is also used for entering directories
+   * which is used even when the file manager doesn't have an operator. */
+  ot->poll = ED_operator_file_active;
 
   /* properties */
   prop = RNA_def_boolean(ot->srna,
@@ -2279,7 +2297,7 @@ static void file_expand_directory(bContext *C)
     }
 #else
     {
-      get_default_root(sfile->params->dir);
+      BLI_windows_get_default_root_dir(sfile->params->dir);
     }
     /* change "C:" --> "C:\", [#28102] */
     else if ((isalpha(sfile->params->dir[0]) && (sfile->params->dir[1] == ':')) &&

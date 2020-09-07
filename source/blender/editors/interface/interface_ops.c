@@ -91,11 +91,11 @@ static bool copy_data_path_button_poll(bContext *C)
 
     if (path) {
       MEM_freeN(path);
-      return 1;
+      return true;
     }
   }
 
-  return 0;
+  return false;
 }
 
 static int copy_data_path_button_exec(bContext *C, wmOperator *op)
@@ -182,11 +182,11 @@ static bool copy_as_driver_button_poll(bContext *C)
 
     if (path) {
       MEM_freeN(path);
-      return 1;
+      return true;
     }
   }
 
-  return 0;
+  return false;
 }
 
 static int copy_as_driver_button_exec(bContext *C, wmOperator *op)
@@ -201,7 +201,7 @@ static int copy_as_driver_button_exec(bContext *C, wmOperator *op)
 
   if (ptr.owner_id && ptr.data && prop) {
     ID *id;
-    int dim = RNA_property_array_dimension(&ptr, prop, NULL);
+    const int dim = RNA_property_array_dimension(&ptr, prop, NULL);
     char *path = RNA_path_from_real_ID_to_property_index(bmain, &ptr, prop, dim, index, &id);
 
     if (path) {
@@ -378,7 +378,7 @@ static bool assign_default_button_poll(bContext *C)
   UI_context_active_but_prop_get(C, &ptr, &prop, &index);
 
   if (ptr.data && prop && RNA_property_editable(&ptr, prop)) {
-    PropertyType type = RNA_property_type(prop);
+    const PropertyType type = RNA_property_type(prop);
 
     return RNA_property_is_idprop(prop) && !RNA_property_array_check(prop) &&
            ELEM(type, PROP_INT, PROP_FLOAT);
@@ -715,8 +715,7 @@ static void ui_context_selected_bones_via_pose(bContext *C, ListBase *r_lb)
   lb = CTX_data_collection_get(C, "selected_pose_bones");
 
   if (!BLI_listbase_is_empty(&lb)) {
-    CollectionPointerLink *link;
-    for (link = lb.first; link; link = link->next) {
+    LISTBASE_FOREACH (CollectionPointerLink *, link, &lb) {
       bPoseChannel *pchan = link->ptr.data;
       RNA_pointer_create(link->ptr.owner_id, &RNA_Bone, pchan->bone, &link->ptr);
     }
@@ -843,12 +842,10 @@ bool UI_context_copy_to_selected_list(bContext *C,
 
     /* Now filter by type */
     if (node) {
-      CollectionPointerLink *link, *link_next;
       lb = CTX_data_collection_get(C, "selected_nodes");
 
-      for (link = lb.first; link; link = link_next) {
+      LISTBASE_FOREACH_MUTABLE (CollectionPointerLink *, link, &lb) {
         bNode *node_data = link->ptr.data;
-        link_next = link->next;
 
         if (node_data->type != node->type) {
           BLI_remlink(&lb, link);
@@ -876,9 +873,7 @@ bool UI_context_copy_to_selected_list(bContext *C,
 
       /* de-duplicate obdata */
       if (!BLI_listbase_is_empty(&lb)) {
-        CollectionPointerLink *link, *link_next;
-
-        for (link = lb.first; link; link = link->next) {
+        LISTBASE_FOREACH (CollectionPointerLink *, link, &lb) {
           Object *ob = (Object *)link->ptr.owner_id;
           if (ob->data) {
             ID *id_data = ob->data;
@@ -886,10 +881,9 @@ bool UI_context_copy_to_selected_list(bContext *C,
           }
         }
 
-        for (link = lb.first; link; link = link_next) {
+        LISTBASE_FOREACH_MUTABLE (CollectionPointerLink *, link, &lb) {
           Object *ob = (Object *)link->ptr.owner_id;
           ID *id_data = ob->data;
-          link_next = link->next;
 
           if ((id_data == NULL) || (id_data->tag & LIB_TAG_DOIT) == 0 || ID_IS_LINKED(id_data) ||
               (GS(id_data->name) != id_code)) {
@@ -970,12 +964,11 @@ static bool copy_to_selected_button(bContext *C, bool all, bool poll)
   if (ptr.data && prop) {
     char *path = NULL;
     bool use_path_from_id;
-    CollectionPointerLink *link;
     ListBase lb = {NULL};
 
     if (UI_context_copy_to_selected_list(C, &ptr, prop, &lb, &use_path_from_id, &path) &&
         !BLI_listbase_is_empty(&lb)) {
-      for (link = lb.first; link; link = link->next) {
+      LISTBASE_FOREACH (CollectionPointerLink *, link, &lb) {
         if (link->ptr.data != ptr.data) {
           if (use_path_from_id) {
             /* Path relative to ID. */
@@ -1148,10 +1141,11 @@ static bool jump_to_target_button(bContext *C, bool poll)
     /* For string properties with prop_search, look up the search collection item. */
     if (type == PROP_STRING) {
       const uiBut *but = UI_context_active_but_get(C);
+      const uiButSearch *search_but = (but->type == UI_BTYPE_SEARCH_MENU) ? (uiButSearch *)but :
+                                                                            NULL;
 
-      if (but->type == UI_BTYPE_SEARCH_MENU && but->search &&
-          but->search->update_fn == ui_rna_collection_search_update_fn) {
-        uiRNACollectionSearch *coll_search = but->search->arg;
+      if (search_but && search_but->items_update_fn == ui_rna_collection_search_update_fn) {
+        uiRNACollectionSearch *coll_search = search_but->arg;
 
         char str_buf[MAXBONENAME];
         char *str_ptr = RNA_property_string_get_alloc(&ptr, prop, str_buf, sizeof(str_buf), NULL);
@@ -1180,7 +1174,7 @@ bool ui_jump_to_target_button_poll(bContext *C)
 
 static int jump_to_target_button_exec(bContext *C, wmOperator *UNUSED(op))
 {
-  bool success = jump_to_target_button(C, false);
+  const bool success = jump_to_target_button(C, false);
 
   return (success) ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
 }
@@ -1298,13 +1292,14 @@ static int editsource_text_edit(bContext *C,
                                 const int line)
 {
   struct Main *bmain = CTX_data_main(C);
-  Text *text;
+  Text *text = NULL;
 
   /* Developers may wish to copy-paste to an external editor. */
   printf("%s:%d\n", filepath, line);
 
-  for (text = bmain->texts.first; text; text = text->id.next) {
-    if (text->filepath && BLI_path_cmp(text->filepath, filepath) == 0) {
+  LISTBASE_FOREACH (Text *, text_iter, &bmain->texts) {
+    if (text_iter->filepath && BLI_path_cmp(text_iter->filepath, filepath) == 0) {
+      text = text_iter;
       break;
     }
   }
@@ -1807,7 +1802,7 @@ static void UI_OT_drop_color(wmOperatorType *ot)
   ot->flag = OPTYPE_INTERNAL;
 
   RNA_def_float_color(ot->srna, "color", 3, NULL, 0.0, FLT_MAX, "Color", "Source color", 0.0, 1.0);
-  RNA_def_boolean(ot->srna, "gamma", 0, "Gamma Corrected", "The source color is gamma corrected ");
+  RNA_def_boolean(ot->srna, "gamma", 0, "Gamma Corrected", "The source color is gamma corrected");
 }
 
 /** \} */

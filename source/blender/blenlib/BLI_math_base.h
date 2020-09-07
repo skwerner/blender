@@ -20,8 +20,7 @@
  *
  * */
 
-#ifndef __BLI_MATH_BASE_H__
-#define __BLI_MATH_BASE_H__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -243,6 +242,14 @@ double double_round(double x, int ndigits);
     } \
     (void)0
 
+#  define BLI_ASSERT_UNIT_V3_DB(v) \
+    { \
+      const double _test_unit = len_squared_v3_db(v); \
+      BLI_assert(!(fabs(_test_unit - 1.0) >= BLI_ASSERT_UNIT_EPSILON) || \
+                 !(fabs(_test_unit) >= BLI_ASSERT_UNIT_EPSILON)); \
+    } \
+    (void)0
+
 #  define BLI_ASSERT_UNIT_V2(v) \
     { \
       const float _test_unit = len_squared_v2(v); \
@@ -289,5 +296,3 @@ double double_round(double x, int ndigits);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLI_MATH_BASE_H__ */

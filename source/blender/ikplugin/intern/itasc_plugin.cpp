@@ -22,6 +22,7 @@
  * \ingroup ikplugin
  */
 
+#include <cmath>
 #include <stdlib.h>
 #include <string.h>
 #include <vector>
@@ -446,24 +447,21 @@ static double EulerAngleFromMatrix(const KDL::Rotation &R, int axis)
     if (axis == 0) {
       return -KDL::atan2(R(1, 2), R(2, 2));
     }
-    else if (axis == 1) {
+    if (axis == 1) {
       return KDL::atan2(-R(0, 2), t);
     }
-    else {
-      return -KDL::atan2(R(0, 1), R(0, 0));
-    }
+
+    return -KDL::atan2(R(0, 1), R(0, 0));
   }
-  else {
-    if (axis == 0) {
-      return -KDL::atan2(-R(2, 1), R(1, 1));
-    }
-    else if (axis == 1) {
-      return KDL::atan2(-R(0, 2), t);
-    }
-    else {
-      return 0.0f;
-    }
+
+  if (axis == 0) {
+    return -KDL::atan2(-R(2, 1), R(1, 1));
   }
+  if (axis == 1) {
+    return KDL::atan2(-R(0, 2), t);
+  }
+
+  return 0.0f;
 }
 
 static double ComputeTwist(const KDL::Rotation &R)
@@ -1768,7 +1766,7 @@ static void execute_scene(struct Depsgraph *depsgraph,
 
   if (ikscene->cache && !reiterate && simulation) {
     iTaSC::CacheTS sts, cts;
-    sts = cts = (iTaSC::CacheTS)(timestamp * 1000.0 + 0.5);
+    sts = cts = (iTaSC::CacheTS)std::round(timestamp * 1000.0);
     if (ikscene->cache->getPreviousCacheItem(ikscene->armature, 0, &cts) == NULL || cts == 0) {
       // the cache is empty before this time, reiterate
       if (ikparam->flag & ITASC_INITIAL_REITERATION) {

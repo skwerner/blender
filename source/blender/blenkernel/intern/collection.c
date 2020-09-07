@@ -173,6 +173,12 @@ IDTypeInfo IDType_ID_GR = {
     .free_data = collection_free_data,
     .make_local = NULL,
     .foreach_id = collection_foreach_id,
+    .foreach_cache = NULL,
+
+    .blend_write = NULL,
+    .blend_read_data = NULL,
+    .blend_read_lib = NULL,
+    .blend_read_expand = NULL,
 };
 
 /** \} */
@@ -408,18 +414,28 @@ static Collection *collection_duplicate_recursive(Main *bmain,
   }
 
   if (do_objects) {
-    /* We can loop on collection_old's objects, that list is currently identical the collection_new
-     * objects, and won't be changed here. */
+    /* We need to first duplicate the objects in a separate loop, to support the master collection
+     * case, where both old and new collections are the same.
+     * Otherwise, depending on naming scheme and sorting, we may end up duplicating the new objects
+     * we just added, in some infinite loop. */
     LISTBASE_FOREACH (CollectionObject *, cob, &collection_old->gobject) {
+      Object *ob_old = cob->ob;
+
+      if (ob_old->id.newid == NULL) {
+        BKE_object_duplicate(
+            bmain, ob_old, duplicate_flags, duplicate_options | LIB_ID_DUPLICATE_IS_SUBPROCESS);
+      }
+    }
+
+    /* We can loop on collection_old's objects, but have to consider it mutable because with master
+     * collections collection_old and collection_new are the same data here. */
+    LISTBASE_FOREACH_MUTABLE (CollectionObject *, cob, &collection_old->gobject) {
       Object *ob_old = cob->ob;
       Object *ob_new = (Object *)ob_old->id.newid;
 
-      if (ob_new == NULL) {
-        ob_new = BKE_object_duplicate(
-            bmain, ob_old, duplicate_flags, duplicate_options | LIB_ID_DUPLICATE_IS_SUBPROCESS);
-      }
-
-      if (ob_new == ob_old) {
+      /* New object can be NULL in master collection case, since new and old objects are in same
+       * collection. */
+      if (ELEM(ob_new, ob_old, NULL)) {
         continue;
       }
 
@@ -540,9 +556,8 @@ const char *BKE_collection_ui_name_get(struct Collection *collection)
   if (collection->flag & COLLECTION_IS_MASTER) {
     return IFACE_("Scene Collection");
   }
-  else {
-    return collection->id.name + 2;
-  }
+
+  return collection->id.name + 2;
 }
 
 /** \} */
@@ -617,9 +632,8 @@ Base *BKE_collection_or_layer_objects(const ViewLayer *view_layer, Collection *c
   if (collection) {
     return BKE_collection_object_cache_get(collection).first;
   }
-  else {
-    return FIRSTBASE(view_layer);
-  }
+
+  return FIRSTBASE(view_layer);
 }
 
 /** \} */
@@ -671,14 +685,13 @@ static bool collection_object_cyclic_check_internal(Object *object, Collection *
     if (dup_collection == collection) {
       return true;
     }
-    else {
-      FOREACH_COLLECTION_OBJECT_RECURSIVE_BEGIN (dup_collection, collection_object) {
-        if (collection_object_cyclic_check_internal(collection_object, dup_collection)) {
-          return true;
-        }
+
+    FOREACH_COLLECTION_OBJECT_RECURSIVE_BEGIN (dup_collection, collection_object) {
+      if (collection_object_cyclic_check_internal(collection_object, dup_collection)) {
+        return true;
       }
-      FOREACH_COLLECTION_OBJECT_RECURSIVE_END;
     }
+    FOREACH_COLLECTION_OBJECT_RECURSIVE_END;
 
     /* un-flag the object, it's allowed to have the same collection multiple times in parallel */
     dup_collection->id.tag |= LIB_TAG_DOIT;
@@ -725,9 +738,8 @@ static Collection *collection_next_find(Main *bmain, Scene *scene, Collection *c
   if (scene && collection == scene->master_collection) {
     return bmain->collections.first;
   }
-  else {
-    return collection->id.next;
-  }
+
+  return collection->id.next;
 }
 
 Collection *BKE_collection_object_find(Main *bmain,
@@ -1510,9 +1522,8 @@ bool BKE_collection_objects_select(ViewLayer *view_layer, Collection *collection
   if (layer_collection != NULL) {
     return BKE_layer_collection_objects_select(view_layer, layer_collection, deselect);
   }
-  else {
-    return collection_objects_select(view_layer, collection, deselect);
-  }
+
+  return collection_objects_select(view_layer, collection, deselect);
 }
 
 /** \} */

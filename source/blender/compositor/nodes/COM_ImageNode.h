@@ -16,8 +16,7 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_IMAGENODE_H__
-#define __COM_IMAGENODE_H__
+#pragma once
 
 #include "COM_Node.h"
 #include "COM_defines.h"
@@ -38,7 +37,7 @@ class ImageNode : public Node {
                                    ImageUser *user,
                                    int framenumber,
                                    int outputsocketIndex,
-                                   int passtype,
+                                   int passindex,
                                    int view,
                                    DataType datatype) const;
 
@@ -46,5 +45,3 @@ class ImageNode : public Node {
   ImageNode(bNode *editorNode);
   void convertToOperations(NodeConverter &converter, const CompositorContext &context) const;
 };
-
-#endif /* __COM_IMAGENODE_H__ */

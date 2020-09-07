@@ -36,8 +36,8 @@ set(INC
   ../makesrna
   ../modifiers
   ../nodes
-  ../simulation
   ../shader_fx
+  ../simulation
   ../render/extern/include
   ../../../intern/ghost
   ../../../intern/glew-mx
@@ -100,6 +100,7 @@ set(SRC
   intern/context.c
   intern/crazyspace.c
   intern/curve.c
+  intern/curve_bevel.c
   intern/curve_decimate.c
   intern/curve_deform.c
   intern/curveprofile.c
@@ -134,6 +135,7 @@ set(SRC
   intern/idtype.c
   intern/image.c
   intern/image_gen.c
+  intern/image_gpu.c
   intern/image_save.c
   intern/ipo.c
   intern/kelvinlet.c
@@ -363,8 +365,8 @@ set(SRC
   BKE_packedFile.h
   BKE_paint.h
   BKE_particle.h
-  BKE_persistent_data_handle.hh
   BKE_pbvh.h
+  BKE_persistent_data_handle.hh
   BKE_pointcache.h
   BKE_pointcloud.h
   BKE_report.h
@@ -438,9 +440,9 @@ set(LIB
   bf_intern_opensubdiv  # Uses stub when disabled.
   bf_modifiers
   bf_nodes
-  bf_simulation
   bf_rna
   bf_shader_fx
+  bf_simulation
 )
 
 if(WITH_BINRELOC)
@@ -480,9 +482,15 @@ if(WITH_BULLET)
   list(APPEND INC
     ../../../intern/rigidbody
   )
+
+  if(NOT WITH_SYSTEM_BULLET)
+    list(APPEND LIB
+      extern_bullet
+    )
+  endif()
+
   list(APPEND LIB
     bf_intern_rigidbody
-    extern_bullet
 
     ${BULLET_LIBRARIES}
   )

@@ -117,7 +117,7 @@ static bool gpencil_object_modifier_remove(Main *bmain,
    * get called twice on same modifier, so make
    * sure it is in list. */
   if (BLI_findindex(&ob->greasepencil_modifiers, md) == -1) {
-    return 0;
+    return false;
   }
 
   DEG_relations_tag_update(bmain);
@@ -126,7 +126,7 @@ static bool gpencil_object_modifier_remove(Main *bmain,
   BKE_gpencil_modifier_free(md);
   BKE_object_free_derived_caches(ob);
 
-  return 1;
+  return true;
 }
 
 bool ED_object_gpencil_modifier_remove(ReportList *reports,
@@ -141,13 +141,13 @@ bool ED_object_gpencil_modifier_remove(ReportList *reports,
 
   if (!ok) {
     BKE_reportf(reports, RPT_ERROR, "Modifier '%s' not in object '%s'", md->name, ob->id.name);
-    return 0;
+    return false;
   }
 
   DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
   DEG_relations_tag_update(bmain);
 
-  return 1;
+  return true;
 }
 
 void ED_object_gpencil_modifier_clear(Main *bmain, Object *ob)
@@ -412,28 +412,30 @@ void OBJECT_OT_gpencil_modifier_add(wmOperatorType *ot)
 
 /********** generic functions for operators using mod names and data context *********************/
 
-static int gpencil_edit_modifier_poll_generic(bContext *C, StructRNA *rna_type, int obtype_flag)
+static bool gpencil_edit_modifier_poll_generic(bContext *C, StructRNA *rna_type, int obtype_flag)
 {
   PointerRNA ptr = CTX_data_pointer_get_type(C, "modifier", rna_type);
   Object *ob = (ptr.owner_id) ? (Object *)ptr.owner_id : ED_object_active_context(C);
+  GpencilModifierData *mod = ptr.data; /* May be NULL. */
 
   if (!ob || ID_IS_LINKED(ob)) {
-    return 0;
+    return false;
   }
   if (obtype_flag && ((1 << ob->type) & obtype_flag) == 0) {
-    return 0;
+    return false;
   }
   if (ptr.owner_id && ID_IS_LINKED(ptr.owner_id)) {
-    return 0;
+    return false;
   }
 
   if (ID_IS_OVERRIDE_LIBRARY(ob)) {
-    CTX_wm_operator_poll_msg_set(C, "Cannot edit modifiers coming from library override");
-    return (((GpencilModifierData *)ptr.data)->flag &
-            eGpencilModifierFlag_OverrideLibrary_Local) != 0;
+    if ((mod == NULL) || (mod->flag & eGpencilModifierFlag_OverrideLibrary_Local) == 0) {
+      CTX_wm_operator_poll_msg_set(C, "Cannot edit modifiers coming from library override");
+      return false;
+    }
   }
 
-  return 1;
+  return true;
 }
 
 static bool gpencil_edit_modifier_poll(bContext *C)

@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
  */
-#ifndef __BKE_KEY_H__
-#define __BKE_KEY_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -37,7 +36,7 @@ struct Object;
 extern "C" {
 #endif
 
-void BKE_key_free(struct Key *sc);
+void BKE_key_free(struct Key *key);
 void BKE_key_free_nolib(struct Key *key);
 struct Key *BKE_key_add(struct Main *bmain, struct ID *id);
 struct Key *BKE_key_copy(struct Main *bmain, const struct Key *key);
@@ -125,7 +124,7 @@ void BKE_keyblock_data_get(const struct Key *key, float (*arr)[3]);
 
 void BKE_keyblock_data_set_with_mat4(struct Key *key,
                                      const int shape_index,
-                                     const float (*vertices)[3],
+                                     const float (*coords)[3],
                                      const float mat[4][4]);
 void BKE_keyblock_curve_data_set_with_mat4(struct Key *key,
                                            const struct ListBase *nurb,
@@ -139,5 +138,3 @@ void BKE_keyblock_data_set(struct Key *key, const int shape_index, const void *d
 #ifdef __cplusplus
 };
 #endif
-
-#endif /* __BKE_KEY_H__ */

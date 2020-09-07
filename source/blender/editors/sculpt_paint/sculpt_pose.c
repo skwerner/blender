@@ -165,6 +165,7 @@ static void do_pose_brush_task_cb_ex(void *__restrict userdata,
   SculptSession *ss = data->ob->sculpt;
   SculptPoseIKChain *ik_chain = ss->cache->pose_ik_chain;
   SculptPoseIKChainSegment *segments = ik_chain->segments;
+  const Brush *brush = data->brush;
 
   PBVHVertexIter vd;
   float disp[3], new_co[3];
@@ -206,7 +207,9 @@ static void do_pose_brush_task_cb_ex(void *__restrict userdata,
 
     /* Apply the accumulated displacement to the vertex. */
     add_v3_v3v3(final_pos, orig_data.co, total_disp);
-    copy_v3_v3(vd.co, final_pos);
+
+    float *target_co = SCULPT_brush_deform_target_vertex_co_get(ss, brush->deform_target, &vd);
+    copy_v3_v3(target_co, final_pos);
 
     if (vd.mvert) {
       vd.mvert->flag |= ME_VERT_PBVH_UPDATE;
@@ -549,7 +552,7 @@ void SCULPT_pose_calc_pose_data(Sculpt *sd,
                                 float *r_pose_origin,
                                 float *r_pose_factor)
 {
-  SCULPT_vertex_random_access_init(ss);
+  SCULPT_vertex_random_access_ensure(ss);
 
   /* Calculate the pose rotation point based on the boundaries of the brush factor. */
   SculptFloodFill flood;
@@ -830,17 +833,21 @@ static bool pose_face_sets_fk_find_masked_floodfill_cb(
   }
 
   const int to_face_set = SCULPT_vertex_face_set_get(ss, to_v);
-  if (SCULPT_vertex_has_unique_face_set(ss, to_v) &&
-      !SCULPT_vertex_has_unique_face_set(ss, from_v) &&
-      SCULPT_vertex_has_face_set(ss, from_v, to_face_set)) {
+  if (!BLI_gset_haskey(data->visited_face_sets, POINTER_FROM_INT(to_face_set))) {
+    if (SCULPT_vertex_has_unique_face_set(ss, to_v) &&
+        !SCULPT_vertex_has_unique_face_set(ss, from_v) &&
+        SCULPT_vertex_has_face_set(ss, from_v, to_face_set)) {
 
-    if (data->floodfill_it[to_v] > data->masked_face_set_it) {
-      data->masked_face_set = to_face_set;
-      data->masked_face_set_it = data->floodfill_it[to_v];
-    }
+      BLI_gset_add(data->visited_face_sets, POINTER_FROM_INT(to_face_set));
 
-    if (data->target_face_set == SCULPT_FACE_SET_NONE) {
-      data->target_face_set = to_face_set;
+      if (data->floodfill_it[to_v] >= data->masked_face_set_it) {
+        data->masked_face_set = to_face_set;
+        data->masked_face_set_it = data->floodfill_it[to_v];
+      }
+
+      if (data->target_face_set == SCULPT_FACE_SET_NONE) {
+        data->target_face_set = to_face_set;
+      }
     }
   }
 
@@ -875,8 +882,10 @@ static SculptPoseIKChain *pose_ik_chain_init_face_sets_fk(
   fdata.masked_face_set = SCULPT_FACE_SET_NONE;
   fdata.target_face_set = SCULPT_FACE_SET_NONE;
   fdata.masked_face_set_it = 0;
+  fdata.visited_face_sets = BLI_gset_int_new_ex("visited_face_sets", 3);
   SCULPT_floodfill_execute(ss, &flood, pose_face_sets_fk_find_masked_floodfill_cb, &fdata);
   SCULPT_floodfill_free(&flood);
+  BLI_gset_free(fdata.visited_face_sets, NULL);
 
   int origin_count = 0;
   float origin_acc[3] = {0.0f};
@@ -1000,7 +1009,7 @@ void SCULPT_pose_brush_init(Sculpt *sd, Object *ob, SculptSession *ss, Brush *br
 static void sculpt_pose_do_translate_deform(SculptSession *ss, Brush *brush)
 {
   SculptPoseIKChain *ik_chain = ss->cache->pose_ik_chain;
-  BKE_curvemapping_initialize(brush->curve);
+  BKE_curvemapping_init(brush->curve);
   pose_solve_translate_chain(ik_chain, ss->cache->grab_delta);
 }
 
@@ -1025,8 +1034,10 @@ static void sculpt_pose_do_scale_deform(SculptSession *ss, Brush *brush)
   copy_v3_v3(ik_target, ss->cache->true_location);
   add_v3_v3(ik_target, ss->cache->grab_delta);
 
-  /* Solve the IK for the first segment to include rotation as part of scale. */
-  pose_solve_ik_chain(ik_chain, ik_target, brush->flag2 & BRUSH_POSE_IK_ANCHORED);
+  /* Solve the IK for the first segment to include rotation as part of scale if enabled. */
+  if (!(brush->flag2 & BRUSH_POSE_USE_LOCK_ROTATION)) {
+    pose_solve_ik_chain(ik_chain, ik_target, brush->flag2 & BRUSH_POSE_IK_ANCHORED);
+  }
 
   float scale[3];
   copy_v3_fl(scale, sculpt_pose_get_scale_from_grab_delta(ss, ik_target));
@@ -1041,7 +1052,7 @@ static void sculpt_pose_do_twist_deform(SculptSession *ss, Brush *brush)
 
   /* Calculate the maximum roll. 0.02 radians per pixel works fine. */
   float roll = (ss->cache->initial_mouse[0] - ss->cache->mouse[0]) * ss->cache->bstrength * 0.02f;
-  BKE_curvemapping_initialize(brush->curve);
+  BKE_curvemapping_init(brush->curve);
   pose_solve_roll_chain(ik_chain, brush, roll);
 }
 

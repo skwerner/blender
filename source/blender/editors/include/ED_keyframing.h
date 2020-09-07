@@ -21,8 +21,7 @@
  * \ingroup editors
  */
 
-#ifndef __ED_KEYFRAMING_H__
-#define __ED_KEYFRAMING_H__
+#pragma once
 
 #include "DNA_anim_types.h"
 #include "RNA_types.h"
@@ -106,8 +105,11 @@ int insert_bezt_fcurve(struct FCurve *fcu, const struct BezTriple *bezt, eInsert
  *  already exists. It will insert a keyframe using the current value being keyframed.
  *  Returns the index at which a keyframe was added (or -1 if failed)
  */
-int insert_vert_fcurve(
-    struct FCurve *fcu, float x, float y, eBezTriple_KeyframeType keytype, eInsertKeyFlags flag);
+int insert_vert_fcurve(struct FCurve *fcu,
+                       float x,
+                       float y,
+                       eBezTriple_KeyframeType keyframe_type,
+                       eInsertKeyFlags flag);
 
 /* -------- */
 
@@ -267,7 +269,7 @@ int ANIM_scene_get_keyingset_index(struct Scene *scene, struct KeyingSet *ks);
 
 /* Get Keying Set to use for Auto-Keyframing some transforms */
 struct KeyingSet *ANIM_get_keyingset_for_autokeying(const struct Scene *scene,
-                                                    const char *tranformKSName);
+                                                    const char *transformKSName);
 
 /* Dynamically populate an enum of Keying Sets */
 const struct EnumPropertyItem *ANIM_keying_sets_enum_itemf(struct bContext *C,
@@ -516,5 +518,3 @@ bool ED_autokeyframe_property(struct bContext *C,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /*  __ED_KEYFRAMING_H__ */

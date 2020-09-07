@@ -56,37 +56,6 @@ static struct {
   float noise_offsets[3];
 } e_data = {NULL}; /* Engine data */
 
-extern char datatoc_lights_lib_glsl[];
-extern char datatoc_lightprobe_lib_glsl[];
-extern char datatoc_ambient_occlusion_lib_glsl[];
-extern char datatoc_prepass_frag_glsl[];
-extern char datatoc_prepass_vert_glsl[];
-extern char datatoc_default_frag_glsl[];
-extern char datatoc_default_world_frag_glsl[];
-extern char datatoc_ltc_lib_glsl[];
-extern char datatoc_bsdf_common_lib_glsl[];
-extern char datatoc_bsdf_sampling_lib_glsl[];
-extern char datatoc_common_uniforms_lib_glsl[];
-extern char datatoc_common_hair_lib_glsl[];
-extern char datatoc_common_view_lib_glsl[];
-extern char datatoc_irradiance_lib_glsl[];
-extern char datatoc_octahedron_lib_glsl[];
-extern char datatoc_cubemap_lib_glsl[];
-extern char datatoc_lit_surface_frag_glsl[];
-extern char datatoc_lit_surface_vert_glsl[];
-extern char datatoc_raytrace_lib_glsl[];
-extern char datatoc_ssr_lib_glsl[];
-extern char datatoc_shadow_vert_glsl[];
-extern char datatoc_lightprobe_geom_glsl[];
-extern char datatoc_lightprobe_vert_glsl[];
-extern char datatoc_background_vert_glsl[];
-extern char datatoc_update_noise_frag_glsl[];
-extern char datatoc_volumetric_vert_glsl[];
-extern char datatoc_volumetric_geom_glsl[];
-extern char datatoc_volumetric_frag_glsl[];
-extern char datatoc_volumetric_lib_glsl[];
-extern char datatoc_gpu_shader_uniform_color_frag_glsl[];
-
 typedef struct EeveeMaterialCache {
   struct DRWShadingGroup *depth_grp;
   struct DRWShadingGroup *shading_grp;
@@ -238,46 +207,6 @@ void EEVEE_update_noise(EEVEE_PassList *psl, EEVEE_FramebufferList *fbl, const d
   DRW_draw_pass(psl->update_noise_pass);
 }
 
-void EEVEE_update_viewvecs(float invproj[4][4], float winmat[4][4], float (*r_viewvecs)[4])
-{
-  /* view vectors for the corners of the view frustum.
-   * Can be used to recreate the world space position easily */
-  float view_vecs[4][4] = {
-      {-1.0f, -1.0f, -1.0f, 1.0f},
-      {1.0f, -1.0f, -1.0f, 1.0f},
-      {-1.0f, 1.0f, -1.0f, 1.0f},
-      {-1.0f, -1.0f, 1.0f, 1.0f},
-  };
-
-  /* convert the view vectors to view space */
-  const bool is_persp = (winmat[3][3] == 0.0f);
-  for (int i = 0; i < 4; i++) {
-    mul_project_m4_v3(invproj, view_vecs[i]);
-    /* normalized trick see:
-     * http://www.derschmale.com/2014/01/26/reconstructing-positions-from-the-depth-buffer */
-    if (is_persp) {
-      /* Divide XY by Z. */
-      mul_v2_fl(view_vecs[i], 1.0f / view_vecs[i][2]);
-    }
-  }
-
-  /**
-   * If ortho : view_vecs[0] is the near-bottom-left corner of the frustum and
-   *            view_vecs[1] is the vector going from the near-bottom-left corner to
-   *            the far-top-right corner.
-   * If Persp : view_vecs[0].xy and view_vecs[1].xy are respectively the bottom-left corner
-   *            when Z = 1, and top-left corner if Z = 1.
-   *            view_vecs[0].z the near clip distance and view_vecs[1].z is the (signed)
-   *            distance from the near plane to the far clip plane.
-   */
-  copy_v4_v4(r_viewvecs[0], view_vecs[0]);
-
-  /* we need to store the differences */
-  r_viewvecs[1][0] = view_vecs[1][0] - view_vecs[0][0];
-  r_viewvecs[1][1] = view_vecs[2][1] - view_vecs[0][1];
-  r_viewvecs[1][2] = view_vecs[3][2] - view_vecs[0][2];
-}
-
 void EEVEE_materials_init(EEVEE_ViewLayerData *sldata,
                           EEVEE_Data *vedata,
                           EEVEE_StorageList *stl,
@@ -305,15 +234,6 @@ void EEVEE_materials_init(EEVEE_ViewLayerData *sldata,
   }
 
   {
-    /* Update view_vecs */
-    float invproj[4][4], winmat[4][4];
-    DRW_view_winmat_get(NULL, winmat, false);
-    DRW_view_winmat_get(NULL, invproj, true);
-
-    EEVEE_update_viewvecs(invproj, winmat, sldata->common_data.view_vecs);
-  }
-
-  {
     /* Update noise Framebuffer. */
     GPU_framebuffer_ensure_config(
         &fbl->update_noise_fb,
@@ -323,33 +243,34 @@ void EEVEE_materials_init(EEVEE_ViewLayerData *sldata,
   {
     /* Create RenderPass UBO */
     if (sldata->renderpass_ubo.combined == NULL) {
-      sldata->renderpass_ubo.combined = DRW_uniformbuffer_create(
-          sizeof(EEVEE_RenderPassData),
-          &(const EEVEE_RenderPassData){true, true, true, true, true, false, false});
+      EEVEE_RenderPassData data;
+      data = (EEVEE_RenderPassData){true, true, true, true, true, false, false};
+      sldata->renderpass_ubo.combined = GPU_uniformbuf_create_ex(
+          sizeof(data), &data, "renderpass_ubo.combined");
 
-      sldata->renderpass_ubo.diff_color = DRW_uniformbuffer_create(
-          sizeof(EEVEE_RenderPassData),
-          &(const EEVEE_RenderPassData){true, false, false, false, false, true, false});
+      data = (EEVEE_RenderPassData){true, false, false, false, false, true, false};
+      sldata->renderpass_ubo.diff_color = GPU_uniformbuf_create_ex(
+          sizeof(data), &data, "renderpass_ubo.diff_color");
 
-      sldata->renderpass_ubo.diff_light = DRW_uniformbuffer_create(
-          sizeof(EEVEE_RenderPassData),
-          &(const EEVEE_RenderPassData){true, true, false, false, false, false, false});
+      data = (EEVEE_RenderPassData){true, true, false, false, false, false, false};
+      sldata->renderpass_ubo.diff_light = GPU_uniformbuf_create_ex(
+          sizeof(data), &data, "renderpass_ubo.diff_light");
 
-      sldata->renderpass_ubo.spec_color = DRW_uniformbuffer_create(
-          sizeof(EEVEE_RenderPassData),
-          &(const EEVEE_RenderPassData){false, false, true, false, false, false, false});
+      data = (EEVEE_RenderPassData){false, false, true, false, false, false, false};
+      sldata->renderpass_ubo.spec_color = GPU_uniformbuf_create_ex(
+          sizeof(data), &data, "renderpass_ubo.spec_color");
 
-      sldata->renderpass_ubo.spec_light = DRW_uniformbuffer_create(
-          sizeof(EEVEE_RenderPassData),
-          &(const EEVEE_RenderPassData){false, false, true, true, false, false, false});
+      data = (EEVEE_RenderPassData){false, false, true, true, false, false, false};
+      sldata->renderpass_ubo.spec_light = GPU_uniformbuf_create_ex(
+          sizeof(data), &data, "renderpass_ubo.spec_light");
 
-      sldata->renderpass_ubo.emit = DRW_uniformbuffer_create(
-          sizeof(EEVEE_RenderPassData),
-          &(const EEVEE_RenderPassData){false, false, false, false, true, false, false});
+      data = (EEVEE_RenderPassData){false, false, false, false, true, false, false};
+      sldata->renderpass_ubo.emit = GPU_uniformbuf_create_ex(
+          sizeof(data), &data, "renderpass_ubo.emit");
 
-      sldata->renderpass_ubo.environment = DRW_uniformbuffer_create(
-          sizeof(EEVEE_RenderPassData),
-          &(const EEVEE_RenderPassData){true, true, true, true, true, false, true});
+      data = (EEVEE_RenderPassData){true, true, true, true, true, false, true};
+      sldata->renderpass_ubo.environment = GPU_uniformbuf_create_ex(
+          sizeof(data), &data, "renderpass_ubo.environment");
     }
 
     /* Used combined pass by default. */
@@ -391,39 +312,28 @@ void EEVEE_materials_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
   {
     DRW_PASS_CREATE(psl->background_ps, DRW_STATE_WRITE_COLOR | DRW_STATE_DEPTH_EQUAL);
 
-    struct GPUBatch *geom = DRW_cache_fullscreen_quad_get();
     DRWShadingGroup *grp = NULL;
+    EEVEE_lookdev_cache_init(vedata, sldata, psl->background_ps, NULL, &grp);
 
-    Scene *scene = draw_ctx->scene;
-    World *wo = scene->world;
+    if (grp == NULL) {
+      Scene *scene = draw_ctx->scene;
+      World *world = (scene->world) ? scene->world : EEVEE_world_default_get();
 
-    EEVEE_lookdev_cache_init(vedata, sldata, &grp, psl->background_ps, wo, NULL);
-
-    if (!grp && wo) {
-      struct GPUMaterial *gpumat = EEVEE_material_get(
-          vedata, scene, NULL, wo, VAR_WORLD_BACKGROUND);
+      const int options = VAR_WORLD_BACKGROUND;
+      struct GPUMaterial *gpumat = EEVEE_material_get(vedata, scene, NULL, world, options);
 
       grp = DRW_shgroup_material_create(gpumat, psl->background_ps);
       DRW_shgroup_uniform_float(grp, "backgroundAlpha", &stl->g_data->background_alpha, 1);
-      /* TODO (fclem): remove those (need to clean the GLSL files). */
-      DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
-      DRW_shgroup_uniform_block(grp, "grid_block", sldata->grid_ubo);
-      DRW_shgroup_uniform_block(grp, "probe_block", sldata->probe_ubo);
-      DRW_shgroup_uniform_block(grp, "planar_block", sldata->planar_ubo);
-      DRW_shgroup_uniform_block(grp, "light_block", sldata->light_ubo);
-      DRW_shgroup_uniform_block(grp, "shadow_block", sldata->shadow_ubo);
-      DRW_shgroup_uniform_block_ref(grp, "renderpass_block", &stl->g_data->renderpass_ubo);
-      DRW_shgroup_call(grp, geom, NULL);
     }
 
-    /* Fallback if shader fails or if not using nodetree. */
-    if (grp == NULL) {
-      GPUShader *sh = EEVEE_shaders_default_background_sh_get();
-      grp = DRW_shgroup_create(sh, psl->background_ps);
-      DRW_shgroup_uniform_vec3(grp, "color", G_draw.block.colorBackground, 1);
-      DRW_shgroup_uniform_float(grp, "backgroundAlpha", &stl->g_data->background_alpha, 1);
-      DRW_shgroup_call(grp, geom, NULL);
-    }
+    DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
+    DRW_shgroup_uniform_block(grp, "grid_block", sldata->grid_ubo);
+    DRW_shgroup_uniform_block(grp, "probe_block", sldata->probe_ubo);
+    DRW_shgroup_uniform_block(grp, "planar_block", sldata->planar_ubo);
+    DRW_shgroup_uniform_block(grp, "light_block", sldata->light_ubo);
+    DRW_shgroup_uniform_block(grp, "shadow_block", sldata->shadow_ubo);
+    DRW_shgroup_uniform_block_ref(grp, "renderpass_block", &stl->g_data->renderpass_ubo);
+    DRW_shgroup_call(grp, DRW_cache_fullscreen_quad_get(), NULL);
   }
 
 #define EEVEE_PASS_CREATE(pass, state) \
@@ -574,9 +484,8 @@ static EeveeMaterialCache material_opaque(EEVEE_Data *vedata,
   if (BLI_ghash_ensure_p(pd->material_hash, key, (void ***)&emc_p)) {
     return **emc_p;
   }
-  else {
-    *emc_p = emc = BLI_memblock_alloc(sldata->material_cache);
-  }
+
+  *emc_p = emc = BLI_memblock_alloc(sldata->material_cache);
 
   material_shadow(vedata, sldata, ma, is_hair, emc);
 
@@ -999,7 +908,7 @@ static void material_renderpass_init(EEVEE_FramebufferList *fbl,
   DRW_texture_ensure_fullscreen_2d(output_tx, format, 0);
   /* Clear texture. */
   if (do_clear) {
-    float clear[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    const float clear[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     /* TODO(fclem) replace by GPU_texture_clear once it is fast. */
     GPU_framebuffer_texture_attach(fbl->material_accum_fb, *output_tx, 0, 0);
     GPU_framebuffer_bind(fbl->material_accum_fb);
@@ -1054,7 +963,7 @@ static void material_renderpass_accumulate(EEVEE_FramebufferList *fbl,
                                            DRWPass *renderpass,
                                            EEVEE_PrivateData *pd,
                                            GPUTexture *output_tx,
-                                           struct GPUUniformBuffer *renderpass_option_ubo)
+                                           struct GPUUniformBuf *renderpass_option_ubo)
 {
   GPU_framebuffer_texture_attach(fbl->material_accum_fb, output_tx, 0, 0);
   GPU_framebuffer_bind(fbl->material_accum_fb);

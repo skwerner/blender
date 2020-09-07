@@ -21,8 +21,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_IMAGE_TYPES_H__
-#define __DNA_IMAGE_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_color_types.h" /* for color management */
@@ -117,6 +116,14 @@ typedef struct ImageTile {
 #define IMA_NEED_FRAME_RECALC (1 << 3)
 #define IMA_SHOW_STEREO (1 << 4)
 
+/* Used to get the correct gpu texture from an Image datablock. */
+typedef enum eGPUTextureTarget {
+  TEXTARGET_2D = 0,
+  TEXTARGET_2D_ARRAY,
+  TEXTARGET_TILE_MAPPING,
+  TEXTARGET_COUNT,
+} eGPUTextureTarget;
+
 typedef struct Image {
   ID id;
 
@@ -125,8 +132,8 @@ typedef struct Image {
 
   /** Not written in file. */
   struct MovieCache *cache;
-  /** Not written in file 4 = TEXTARGET_COUNT, 2 = stereo eyes. */
-  struct GPUTexture *gputexture[4][2];
+  /** Not written in file 3 = TEXTARGET_COUNT, 2 = stereo eyes. */
+  struct GPUTexture *gputexture[3][2];
 
   /* sources from: */
   ListBase anims;
@@ -257,5 +264,3 @@ enum {
   IMA_ALPHA_CHANNEL_PACKED = 2,
   IMA_ALPHA_IGNORE = 3,
 };
-
-#endif

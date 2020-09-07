@@ -254,9 +254,8 @@ TimeSourceNode *DepsgraphRelationBuilder::get_node(const TimeSourceKey &key) con
     /* XXX TODO */
     return nullptr;
   }
-  else {
-    return graph_->time_source;
-  }
+
+  return graph_->time_source;
 }
 
 ComponentNode *DepsgraphRelationBuilder::get_node(const ComponentKey &key) const
@@ -353,16 +352,16 @@ Relation *DepsgraphRelationBuilder::add_time_relation(TimeSourceNode *timesrc,
   if (timesrc && node_to) {
     return graph_->add_new_relation(timesrc, node_to, description, flags);
   }
-  else {
-    DEG_DEBUG_PRINTF((::Depsgraph *)graph_,
-                     BUILD,
-                     "add_time_relation(%p = %s, %p = %s, %s) Failed\n",
-                     timesrc,
-                     (timesrc) ? timesrc->identifier().c_str() : "<None>",
-                     node_to,
-                     (node_to) ? node_to->identifier().c_str() : "<None>",
-                     description);
-  }
+
+  DEG_DEBUG_PRINTF((::Depsgraph *)graph_,
+                   BUILD,
+                   "add_time_relation(%p = %s, %p = %s, %s) Failed\n",
+                   timesrc,
+                   (timesrc) ? timesrc->identifier().c_str() : "<None>",
+                   node_to,
+                   (node_to) ? node_to->identifier().c_str() : "<None>",
+                   description);
+
   return nullptr;
 }
 
@@ -374,16 +373,16 @@ Relation *DepsgraphRelationBuilder::add_operation_relation(OperationNode *node_f
   if (node_from && node_to) {
     return graph_->add_new_relation(node_from, node_to, description, flags);
   }
-  else {
-    DEG_DEBUG_PRINTF((::Depsgraph *)graph_,
-                     BUILD,
-                     "add_operation_relation(%p = %s, %p = %s, %s) Failed\n",
-                     node_from,
-                     (node_from) ? node_from->identifier().c_str() : "<None>",
-                     node_to,
-                     (node_to) ? node_to->identifier().c_str() : "<None>",
-                     description);
-  }
+
+  DEG_DEBUG_PRINTF((::Depsgraph *)graph_,
+                   BUILD,
+                   "add_operation_relation(%p = %s, %p = %s, %s) Failed\n",
+                   node_from,
+                   (node_from) ? node_from->identifier().c_str() : "<None>",
+                   node_to,
+                   (node_to) ? node_to->identifier().c_str() : "<None>",
+                   description);
+
   return nullptr;
 }
 
@@ -979,13 +978,13 @@ void DepsgraphRelationBuilder::build_object_parent(Object *object)
       break;
     }
   }
-  /* Metaballs are the odd balls here (no pun intended): they will request
+  /* Meta-balls are the odd balls here (no pun intended): they will request
    * instance-list (formerly known as dupli-list) during evaluation. This is
    * their way of interacting with all instanced surfaces, making a nice
    * effect when is used form particle system. */
   if (object->type == OB_MBALL && parent->transflag & OB_DUPLI) {
     ComponentKey parent_geometry_key(parent_id, NodeType::GEOMETRY);
-    /* NOTE: Metaballs are evaluating geometry only after their transform,
+    /* NOTE: Meta-balls are evaluating geometry only after their transform,
      * so we only hook up to transform channel here. */
     add_relation(parent_geometry_key, object_transform_key, "Parent");
   }
@@ -1013,6 +1012,9 @@ void DepsgraphRelationBuilder::build_object_pointcache(Object *object)
     /* Check which components needs the point cache. */
     int flag = -1;
     if (ptcache_id->type == PTCACHE_TYPE_RIGIDBODY) {
+      if (object->rigidbody_object->type == RBO_TYPE_PASSIVE) {
+        continue;
+      }
       flag = FLAG_TRANSFORM;
       OperationKey transform_key(
           &object->id, NodeType::TRANSFORM, OperationCode::TRANSFORM_SIMULATION_INIT);
@@ -1698,10 +1700,19 @@ void DepsgraphRelationBuilder::build_rigidbody(Scene *scene)
       if (object->type != OB_MESH) {
         continue;
       }
-      OperationKey rb_transform_copy_key(
-          &object->id, NodeType::TRANSFORM, OperationCode::RIGIDBODY_TRANSFORM_COPY);
-      /* Rigid body synchronization depends on the actual simulation. */
-      add_relation(rb_simulate_key, rb_transform_copy_key, "Rigidbody Sim Eval -> RBO Sync");
+      if (object->rigidbody_object == nullptr) {
+        continue;
+      }
+
+      if (object->parent != nullptr && object->parent->rigidbody_object != nullptr &&
+          object->parent->rigidbody_object->shape == RB_SHAPE_COMPOUND) {
+        /* If we are a child of a compound shape object, the transforms and sim evaluation will be
+         * handled by the parent compound shape object. Do not add any evaluation triggers
+         * for the child objects.
+         */
+        continue;
+      }
+
       /* Simulation uses object transformation after parenting and solving constraints. */
       OperationKey object_transform_simulation_init_key(
           &object->id, NodeType::TRANSFORM, OperationCode::TRANSFORM_SIMULATION_INIT);
@@ -1713,49 +1724,35 @@ void DepsgraphRelationBuilder::build_rigidbody(Scene *scene)
       /* Geometry must be known to create the rigid body. RBO_MESH_BASE
        * uses the non-evaluated mesh, so then the evaluation is
        * unnecessary. */
-      if (object->rigidbody_object != nullptr &&
-          object->rigidbody_object->mesh_source != RBO_MESH_BASE) {
+      if (rigidbody_object_depends_on_evaluated_geometry(object->rigidbody_object)) {
         /* NOTE: We prefer this relation to be never killed, to avoid
          * access partially evaluated mesh from solver. */
         ComponentKey object_geometry_key(&object->id, NodeType::GEOMETRY);
         add_relation(object_geometry_key,
                      rb_simulate_key,
-                     "Object Geom Eval -> Rigidbody Rebuild",
+                     "Object Geom Eval -> Rigidbody Sim Eval",
                      RELATION_FLAG_GODMODE);
       }
+
       /* Final transform is whetever solver gave to us. */
-      OperationKey object_transform_final_key(
-          &object->id, NodeType::TRANSFORM, OperationCode::TRANSFORM_FINAL);
-      add_relation(
-          rb_transform_copy_key, object_transform_final_key, "Rigidbody Sync -> Transform Final");
-    }
-    FOREACH_COLLECTION_OBJECT_RECURSIVE_END;
-  }
-  /* Constraints. */
-  if (rbw->constraints != nullptr) {
-    FOREACH_COLLECTION_OBJECT_RECURSIVE_BEGIN (rbw->constraints, object) {
-      RigidBodyCon *rbc = object->rigidbody_constraint;
-      if (rbc == nullptr || rbc->ob1 == nullptr || rbc->ob2 == nullptr) {
-        /* When either ob1 or ob2 is nullptr, the constraint doesn't
-         * work. */
-        continue;
+      if (object->rigidbody_object->type == RBO_TYPE_ACTIVE) {
+        /* We do not have to update the objects final transform after the simulation if it is
+         * passive or controlled by the animation system in blender.
+         * (Bullet doesn't move the object at all in these cases).
+         * But we can't update the depgraph when the animated property in changed during playback.
+         * So always assume that active bodies needs updating.
+         */
+        OperationKey rb_transform_copy_key(
+            &object->id, NodeType::TRANSFORM, OperationCode::RIGIDBODY_TRANSFORM_COPY);
+        /* Rigid body synchronization depends on the actual simulation. */
+        add_relation(rb_simulate_key, rb_transform_copy_key, "Rigidbody Sim Eval -> RBO Sync");
+
+        OperationKey object_transform_final_key(
+            &object->id, NodeType::TRANSFORM, OperationCode::TRANSFORM_FINAL);
+        add_relation(rb_transform_copy_key,
+                     object_transform_final_key,
+                     "Rigidbody Sync -> Transform Final");
       }
-      /* Make sure indirectly linked objects are fully built. */
-      build_object(object);
-      build_object(rbc->ob1);
-      build_object(rbc->ob2);
-      /* final result of the constraint object's transform controls how
-       * the constraint affects the physics sim for these objects. */
-      ComponentKey trans_key(&object->id, NodeType::TRANSFORM);
-      OperationKey ob1_key(
-          &rbc->ob1->id, NodeType::TRANSFORM, OperationCode::RIGIDBODY_TRANSFORM_COPY);
-      OperationKey ob2_key(
-          &rbc->ob2->id, NodeType::TRANSFORM, OperationCode::RIGIDBODY_TRANSFORM_COPY);
-      /* Constrained-objects sync depends on the constraint-holder. */
-      add_relation(trans_key, ob1_key, "RigidBodyConstraint -> RBC.Object_1");
-      add_relation(trans_key, ob2_key, "RigidBodyConstraint -> RBC.Object_2");
-      /* Ensure that sim depends on this constraint's transform. */
-      add_relation(trans_key, rb_simulate_key, "RigidBodyConstraint Transform -> RB Simulation");
     }
     FOREACH_COLLECTION_OBJECT_RECURSIVE_END;
   }
@@ -2666,7 +2663,7 @@ void DepsgraphRelationBuilder::build_scene_sequencer(Scene *scene)
   ComponentKey sequencer_key(&scene->id, NodeType::SEQUENCER);
   Sequence *seq;
   bool has_audio_strips = false;
-  SEQ_BEGIN (scene->ed, seq) {
+  SEQ_ALL_BEGIN (scene->ed, seq) {
     build_idproperties(seq->prop);
     if (seq->sound != nullptr) {
       build_sound(seq->sound);
@@ -2692,7 +2689,7 @@ void DepsgraphRelationBuilder::build_scene_sequencer(Scene *scene)
     }
     /* TODO(sergey): Movie clip, camera, mask. */
   }
-  SEQ_END;
+  SEQ_ALL_END;
   if (has_audio_strips) {
     add_relation(sequencer_key, scene_audio_key, "Sequencer -> Audio");
   }

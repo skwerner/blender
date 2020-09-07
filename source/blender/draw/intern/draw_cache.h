@@ -20,8 +20,7 @@
  * \ingroup draw
  */
 
-#ifndef __DRAW_CACHE_H__
-#define __DRAW_CACHE_H__
+#pragma once
 
 struct GPUBatch;
 struct GPUMaterial;
@@ -34,7 +33,6 @@ struct VolumeGrid;
 struct bGPDstroke;
 
 void DRW_shape_cache_free(void);
-void DRW_shape_cache_reset(void);
 
 /* 3D cursor */
 struct GPUBatch *DRW_cache_cursor_get(bool crosshair_lines);
@@ -251,5 +249,3 @@ struct GPUBatch *DRW_cache_gpencil_face_wireframe_get(struct Object *ob);
 
 struct bGPDstroke *DRW_cache_gpencil_sbuffer_stroke_data_get(struct Object *ob);
 void DRW_cache_gpencil_sbuffer_clear(struct Object *ob);
-
-#endif /* __DRAW_CACHE_H__ */

@@ -113,7 +113,7 @@ bool OVERLAY_armature_is_pose_mode(Object *ob, const DRWContextState *draw_ctx)
   }
 
   /* Armature parent is also handled by pose mode engine. */
-  if ((active_ob != NULL) && ((draw_ctx->object_mode & OB_MODE_WEIGHT_PAINT) != 0)) {
+  if ((active_ob != NULL) && (draw_ctx->object_mode & OB_MODE_ALL_WEIGHT_PAINT)) {
     if (ob == draw_ctx->object_pose) {
       return true;
     }
@@ -601,7 +601,7 @@ static void drw_shgroup_bone_custom_empty(ArmatureDrawContext *ctx,
                                           const float color[4],
                                           Object *custom)
 {
-  float final_color[4] = {color[0], color[1], color[2], 1.0f};
+  const float final_color[4] = {color[0], color[1], color[2], 1.0f};
   float mat[4][4];
   mul_m4_m4m4(mat, ctx->ob->obmat, bone_mat);
 
@@ -924,12 +924,11 @@ static float get_bone_wire_thickness(const ArmatureDrawContext *ctx, int bonefla
   if (ctx->const_color) {
     return ctx->const_wire;
   }
-  else if (boneflag & (BONE_DRAW_ACTIVE | BONE_SELECTED)) {
+  if (boneflag & (BONE_DRAW_ACTIVE | BONE_SELECTED)) {
     return 2.0f;
   }
-  else {
-    return 1.0f;
-  }
+
+  return 1.0f;
 }
 
 static const float *get_bone_wire_color(const ArmatureDrawContext *ctx,
@@ -1079,7 +1078,7 @@ static void edbo_compute_bbone_child(bArmature *arm)
 }
 
 /* A version of BKE_pchan_bbone_spline_setup() for previewing editmode curve settings. */
-static void ebone_spline_preview(EditBone *ebone, float result_array[MAX_BBONE_SUBDIV][4][4])
+static void ebone_spline_preview(EditBone *ebone, const float result_array[MAX_BBONE_SUBDIV][4][4])
 {
   BBoneSplineParameters param;
   EditBone *prev, *next;
@@ -2001,7 +2000,7 @@ static void draw_armature_pose(ArmatureDrawContext *ctx)
                   (scene->toolsettings->object_flag & SCE_OBJECT_MODE_LOCK) == 0) ||
                  /* Allow selection when in weight-paint mode
                   * (selection code ensures this wont become active). */
-                 ((draw_ctx->object_mode == OB_MODE_WEIGHT_PAINT) &&
+                 ((draw_ctx->object_mode & OB_MODE_ALL_WEIGHT_PAINT) &&
                   (draw_ctx->object_pose != NULL))))) &&
         DRW_state_is_select();
 
@@ -2012,7 +2011,7 @@ static void draw_armature_pose(ArmatureDrawContext *ctx)
   }
 
   /* In weight paint mode retrieve the vertex group lock status. */
-  if ((draw_ctx->object_mode == OB_MODE_WEIGHT_PAINT) && (draw_ctx->object_pose == ob) &&
+  if ((draw_ctx->object_mode & OB_MODE_ALL_WEIGHT_PAINT) && (draw_ctx->object_pose == ob) &&
       (draw_ctx->obact != NULL)) {
     draw_locked_weights = true;
 
@@ -2219,13 +2218,13 @@ static bool POSE_is_driven_by_active_armature(Object *ob)
     }
     return is_active;
   }
-  else {
-    Object *ob_mesh_deform = BKE_modifiers_is_deformed_by_meshdeform(ob);
-    if (ob_mesh_deform) {
-      /* Recursive. */
-      return POSE_is_driven_by_active_armature(ob_mesh_deform);
-    }
+
+  Object *ob_mesh_deform = BKE_modifiers_is_deformed_by_meshdeform(ob);
+  if (ob_mesh_deform) {
+    /* Recursive. */
+    return POSE_is_driven_by_active_armature(ob_mesh_deform);
   }
+
   return false;
 }
 

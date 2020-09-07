@@ -13,8 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
-#ifndef __BKE_GPENCIL_MODIFIER_H__
-#define __BKE_GPENCIL_MODIFIER_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -293,6 +292,14 @@ void BKE_gpencil_modifiers_foreach_tex_link(struct Object *ob,
                                             GreasePencilTexWalkFunc walk,
                                             void *userData);
 
+typedef struct GpencilVirtualModifierData {
+  ArmatureGpencilModifierData amd;
+  LatticeGpencilModifierData lmd;
+} GpencilVirtualModifierData;
+
+struct GpencilModifierData *BKE_gpencil_modifiers_get_virtual_modifierlist(
+    const struct Object *ob, struct GpencilVirtualModifierData *data);
+
 bool BKE_gpencil_has_geometry_modifiers(struct Object *ob);
 bool BKE_gpencil_has_time_modifiers(struct Object *ob);
 bool BKE_gpencil_has_transform_modifiers(struct Object *ob);
@@ -316,5 +323,3 @@ struct bGPDframe *BKE_gpencil_frame_retime_get(struct Depsgraph *depsgraph,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_GPENCIL_MODIFIER_H__ */

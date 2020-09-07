@@ -21,12 +21,15 @@
  * \ingroup wm
  */
 
-#ifndef __WM_DRAW_H__
-#define __WM_DRAW_H__
+#pragma once
 
 struct GPUOffScreen;
 struct GPUTexture;
 struct GPUViewport;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct wmDrawBuffer {
   struct GPUOffScreen *offscreen;
@@ -48,4 +51,6 @@ void wm_draw_region_test(struct bContext *C, struct ScrArea *area, struct ARegio
 
 struct GPUTexture *wm_draw_region_texture(struct ARegion *region, int view);
 
-#endif /* __WM_DRAW_H__ */
+#ifdef __cplusplus
+}
+#endif

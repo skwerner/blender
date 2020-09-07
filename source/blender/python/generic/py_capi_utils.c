@@ -51,6 +51,10 @@
 #  include "BLI_math_base.h" /* isfinite() */
 #endif
 
+/* -------------------------------------------------------------------- */
+/** \name Fast Python to C Array Conversion for Primitive Types
+ * \{ */
+
 /* array utility function */
 int PyC_AsArray_FAST(void *array,
                      PyObject *value_fast,
@@ -137,11 +141,12 @@ int PyC_AsArray(void *array,
   return ret;
 }
 
+/** \} */
+
 /* -------------------------------------------------------------------- */
 /** \name Typed Tuple Packing
  *
  * \note See #PyC_Tuple_Pack_* macros that take multiple arguments.
- *
  * \{ */
 
 /* array utility function */
@@ -192,13 +197,17 @@ PyObject *PyC_Tuple_PackArray_Bool(const bool *array, uint len)
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
+/** \name Tuple/List Filling
+ * \{ */
+
 /**
  * Caller needs to ensure tuple is uninitialized.
  * Handy for filling a tuple with None for eg.
  */
 void PyC_Tuple_Fill(PyObject *tuple, PyObject *value)
 {
-  uint tot = PyTuple_GET_SIZE(tuple);
+  const uint tot = PyTuple_GET_SIZE(tuple);
   uint i;
 
   for (i = 0; i < tot; i++) {
@@ -209,7 +218,7 @@ void PyC_Tuple_Fill(PyObject *tuple, PyObject *value)
 
 void PyC_List_Fill(PyObject *list, PyObject *value)
 {
-  uint tot = PyList_GET_SIZE(list);
+  const uint tot = PyList_GET_SIZE(list);
   uint i;
 
   for (i = 0; i < tot; i++) {
@@ -217,6 +226,12 @@ void PyC_List_Fill(PyObject *list, PyObject *value)
     Py_INCREF(value);
   }
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Bool/Enum Argument Parsing
+ * \{ */
 
 /**
  * Use with PyArg_ParseTuple's "O&" formatting.
@@ -274,7 +289,15 @@ int PyC_CheckArgs_DeepCopy(PyObject *args)
   return PyArg_ParseTuple(args, "|O!:__deepcopy__", &PyDict_Type, &dummy_pydict) != 0;
 }
 
+/** \} */
+
 #ifndef MATH_STANDALONE
+
+/* -------------------------------------------------------------------- */
+/** \name Simple Printing (for debugging)
+ *
+ * These are useful to run directly from a debugger to be able to inspect the state.
+ * \{ */
 
 /* for debugging */
 void PyC_ObSpit(const char *name, PyObject *var)
@@ -352,13 +375,18 @@ void PyC_StackSpit(void)
     fprintf(stderr, "python line lookup failed, interpreter inactive\n");
     return;
   }
-  else {
-    /* lame but handy */
-    PyGILState_STATE gilstate = PyGILState_Ensure();
-    PyRun_SimpleString("__import__('traceback').print_stack()");
-    PyGILState_Release(gilstate);
-  }
+
+  /* lame but handy */
+  const PyGILState_STATE gilstate = PyGILState_Ensure();
+  PyRun_SimpleString("__import__('traceback').print_stack()");
+  PyGILState_Release(gilstate);
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Access Current Frame File Name & Line Number
+ * \{ */
 
 void PyC_FileAndNum(const char **r_filename, int *r_lineno)
 {
@@ -419,6 +447,12 @@ void PyC_FileAndNum_Safe(const char **r_filename, int *r_lineno)
   PyC_FileAndNum(r_filename, r_lineno);
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Object Access Utilities
+ * \{ */
+
 /* Would be nice if python had this built in */
 PyObject *PyC_Object_GetAttrStringArgs(PyObject *o, Py_ssize_t n, ...)
 {
@@ -447,6 +481,12 @@ PyObject *PyC_Object_GetAttrStringArgs(PyObject *o, Py_ssize_t n, ...)
   return item;
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Frozen Set Creation
+ * \{ */
+
 PyObject *PyC_FrozenSetFromStrings(const char **strings)
 {
   const char **str;
@@ -462,6 +502,12 @@ PyObject *PyC_FrozenSetFromStrings(const char **strings)
 
   return ret;
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Exception Utilities
+ * \{ */
 
 /**
  * Similar to #PyErr_Format(),
@@ -527,6 +573,12 @@ void PyC_Err_PrintWithFunc(PyObject *py_func)
           f_code->co_firstlineno,
           _PyUnicode_AsString(((PyFunctionObject *)py_func)->func_name));
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Exception Buffer Access
+ * \{ */
 
 /* returns the exception string as a new PyUnicode object, depends on external traceback module */
 #  if 0
@@ -673,6 +725,14 @@ PyObject *PyC_ExceptionBuffer_Simple(void)
   return string_io_buf;
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Unicode Conversion
+ *
+ * In some cases we need to coerce strings, avoid doing this inline.
+ * \{ */
+
 /* string conversion, escape non-unicode chars, coerce must be set to NULL */
 const char *PyC_UnicodeAsByteAndSize(PyObject *py_str, Py_ssize_t *size, PyObject **coerce)
 {
@@ -685,22 +745,20 @@ const char *PyC_UnicodeAsByteAndSize(PyObject *py_str, Py_ssize_t *size, PyObjec
      * chars since blender doesn't limit this */
     return result;
   }
-  else {
-    PyErr_Clear();
 
-    if (PyBytes_Check(py_str)) {
-      *size = PyBytes_GET_SIZE(py_str);
-      return PyBytes_AS_STRING(py_str);
-    }
-    else if ((*coerce = PyUnicode_EncodeFSDefault(py_str))) {
-      *size = PyBytes_GET_SIZE(*coerce);
-      return PyBytes_AS_STRING(*coerce);
-    }
-    else {
-      /* leave error raised from EncodeFS */
-      return NULL;
-    }
+  PyErr_Clear();
+
+  if (PyBytes_Check(py_str)) {
+    *size = PyBytes_GET_SIZE(py_str);
+    return PyBytes_AS_STRING(py_str);
   }
+  if ((*coerce = PyUnicode_EncodeFSDefault(py_str))) {
+    *size = PyBytes_GET_SIZE(*coerce);
+    return PyBytes_AS_STRING(*coerce);
+  }
+
+  /* leave error raised from EncodeFS */
+  return NULL;
 }
 
 const char *PyC_UnicodeAsByte(PyObject *py_str, PyObject **coerce)
@@ -714,20 +772,18 @@ const char *PyC_UnicodeAsByte(PyObject *py_str, PyObject **coerce)
      * chars since blender doesn't limit this. */
     return result;
   }
-  else {
-    PyErr_Clear();
 
-    if (PyBytes_Check(py_str)) {
-      return PyBytes_AS_STRING(py_str);
-    }
-    else if ((*coerce = PyUnicode_EncodeFSDefault(py_str))) {
-      return PyBytes_AS_STRING(*coerce);
-    }
-    else {
-      /* leave error raised from EncodeFS */
-      return NULL;
-    }
+  PyErr_Clear();
+
+  if (PyBytes_Check(py_str)) {
+    return PyBytes_AS_STRING(py_str);
   }
+  if ((*coerce = PyUnicode_EncodeFSDefault(py_str))) {
+    return PyBytes_AS_STRING(*coerce);
+  }
+
+  /* leave error raised from EncodeFS */
+  return NULL;
 }
 
 PyObject *PyC_UnicodeFromByteAndSize(const char *str, Py_ssize_t size)
@@ -738,18 +794,23 @@ PyObject *PyC_UnicodeFromByteAndSize(const char *str, Py_ssize_t size)
      * chars since blender doesn't limit this */
     return result;
   }
-  else {
-    PyErr_Clear();
-    /* this means paths will always be accessible once converted, on all OS's */
-    result = PyUnicode_DecodeFSDefaultAndSize(str, size);
-    return result;
-  }
+
+  PyErr_Clear();
+  /* this means paths will always be accessible once converted, on all OS's */
+  result = PyUnicode_DecodeFSDefaultAndSize(str, size);
+  return result;
 }
 
 PyObject *PyC_UnicodeFromByte(const char *str)
 {
   return PyC_UnicodeFromByteAndSize(str, strlen(str));
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Name Space Creation/Manipulation
+ * \{ */
 
 /*****************************************************************************
  * Description: This function creates a new Python dictionary object.
@@ -816,6 +877,12 @@ void PyC_MainModule_Restore(PyObject *main_mod)
   Py_XDECREF(main_mod);
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name #Py_SetPythonHome Wrapper
+ * \{ */
+
 /**
  * - Must be called before #Py_Initialize.
  * - Expects output of `BKE_appdir_folder_id(BLENDER_PYTHON, NULL)`.
@@ -867,6 +934,12 @@ bool PyC_IsInterpreterActive(void)
   return (PyThreadState_GetDict() != NULL);
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name #Py_SetPythonHome Wrapper
+ * \{ */
+
 /* Would be nice if python had this built in
  * See: https://wiki.blender.org/wiki/Tools/Debugging/PyFromC
  */
@@ -875,7 +948,7 @@ void PyC_RunQuicky(const char *filepath, int n, ...)
   FILE *fp = fopen(filepath, "r");
 
   if (fp) {
-    PyGILState_STATE gilstate = PyGILState_Ensure();
+    const PyGILState_STATE gilstate = PyGILState_Ensure();
 
     va_list vargs;
 
@@ -1043,14 +1116,21 @@ void *PyC_RNA_AsPointer(PyObject *value, const char *type_name)
 
     return result;
   }
-  else {
-    PyErr_Format(PyExc_TypeError,
-                 "expected '%.200s' type found '%.200s' instead",
-                 type_name,
-                 Py_TYPE(value)->tp_name);
-    return NULL;
-  }
+
+  PyErr_Format(PyExc_TypeError,
+               "expected '%.200s' type found '%.200s' instead",
+               type_name,
+               Py_TYPE(value)->tp_name);
+  return NULL;
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Flag Set Utilities (#PyC_FlagSet)
+ *
+ * Convert to/from Python set of strings to an int flag.
+ * \{ */
 
 PyObject *PyC_FlagSet_AsString(PyC_FlagSet *item)
 {
@@ -1151,6 +1231,12 @@ PyObject *PyC_FlagSet_FromBitfield(PyC_FlagSet *items, int flag)
 
   return ret;
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Run String (Evaluate to Primitive Types)
+ * \{ */
 
 /**
  * \return success
@@ -1315,6 +1401,8 @@ bool PyC_RunString_AsString(const char *imports[],
   return PyC_RunString_AsStringAndSize(imports, expr, filename, r_value, &value_size);
 }
 
+/** \} */
+
 #endif /* #ifndef MATH_STANDALONE */
 
 /* -------------------------------------------------------------------- */
@@ -1335,7 +1423,7 @@ bool PyC_RunString_AsString(const char *imports[],
  */
 int PyC_Long_AsBool(PyObject *value)
 {
-  int test = _PyLong_AsInt(value);
+  const int test = _PyLong_AsInt(value);
   if (UNLIKELY((uint)test > 1)) {
     PyErr_SetString(PyExc_TypeError, "Python number not a bool (0/1)");
     return -1;
@@ -1345,7 +1433,7 @@ int PyC_Long_AsBool(PyObject *value)
 
 int8_t PyC_Long_AsI8(PyObject *value)
 {
-  int test = _PyLong_AsInt(value);
+  const int test = _PyLong_AsInt(value);
   if (UNLIKELY(test < INT8_MIN || test > INT8_MAX)) {
     PyErr_SetString(PyExc_OverflowError, "Python int too large to convert to C int8");
     return -1;
@@ -1355,7 +1443,7 @@ int8_t PyC_Long_AsI8(PyObject *value)
 
 int16_t PyC_Long_AsI16(PyObject *value)
 {
-  int test = _PyLong_AsInt(value);
+  const int test = _PyLong_AsInt(value);
   if (UNLIKELY(test < INT16_MIN || test > INT16_MAX)) {
     PyErr_SetString(PyExc_OverflowError, "Python int too large to convert to C int16");
     return -1;
@@ -1370,7 +1458,7 @@ int16_t PyC_Long_AsI16(PyObject *value)
 
 uint8_t PyC_Long_AsU8(PyObject *value)
 {
-  ulong test = PyLong_AsUnsignedLong(value);
+  const ulong test = PyLong_AsUnsignedLong(value);
   if (UNLIKELY(test > UINT8_MAX)) {
     PyErr_SetString(PyExc_OverflowError, "Python int too large to convert to C uint8");
     return (uint8_t)-1;
@@ -1380,7 +1468,7 @@ uint8_t PyC_Long_AsU8(PyObject *value)
 
 uint16_t PyC_Long_AsU16(PyObject *value)
 {
-  ulong test = PyLong_AsUnsignedLong(value);
+  const ulong test = PyLong_AsUnsignedLong(value);
   if (UNLIKELY(test > UINT16_MAX)) {
     PyErr_SetString(PyExc_OverflowError, "Python int too large to convert to C uint16");
     return (uint16_t)-1;
@@ -1390,7 +1478,7 @@ uint16_t PyC_Long_AsU16(PyObject *value)
 
 uint32_t PyC_Long_AsU32(PyObject *value)
 {
-  ulong test = PyLong_AsUnsignedLong(value);
+  const ulong test = PyLong_AsUnsignedLong(value);
   if (UNLIKELY(test > UINT32_MAX)) {
     PyErr_SetString(PyExc_OverflowError, "Python int too large to convert to C uint32");
     return (uint32_t)-1;
@@ -1401,6 +1489,12 @@ uint32_t PyC_Long_AsU32(PyObject *value)
 /* Inlined in header:
  * PyC_Long_AsU64
  */
+
+#ifdef __GNUC__
+#  pragma warning(pop)
+#endif
+
+/** \} */
 
 /* -------------------------------------------------------------------- */
 /** \name Py_buffer Utils
@@ -1476,11 +1570,5 @@ bool PyC_StructFmt_type_is_bool(char format)
       return false;
   }
 }
-
-/** \} */
-
-#ifdef __GNUC__
-#  pragma warning(pop)
-#endif
 
 /** \} */

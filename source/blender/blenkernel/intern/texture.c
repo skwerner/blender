@@ -149,6 +149,12 @@ IDTypeInfo IDType_ID_TE = {
     .free_data = texture_free_data,
     .make_local = NULL,
     .foreach_id = texture_foreach_id,
+    .foreach_cache = NULL,
+
+    .blend_write = NULL,
+    .blend_read_data = NULL,
+    .blend_read_lib = NULL,
+    .blend_read_expand = NULL,
 };
 
 /* Utils for all IDs using those texture slots. */
@@ -664,11 +670,11 @@ bool BKE_texture_dependsOnTime(const struct Tex *texture)
   if (texture->ima && BKE_image_is_animated(texture->ima)) {
     return true;
   }
-  else if (texture->adt) {
+  if (texture->adt) {
     /* assume anything in adt means the texture is animated */
     return true;
   }
-  else if (texture->type == TEX_NOISE) {
+  if (texture->type == TEX_NOISE) {
     /* noise always varies with time */
     return true;
   }

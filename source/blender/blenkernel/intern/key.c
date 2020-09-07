@@ -113,6 +113,12 @@ IDTypeInfo IDType_ID_KE = {
     .free_data = shapekey_free_data,
     .make_local = NULL,
     .foreach_id = shapekey_foreach_id,
+    .foreach_cache = NULL,
+
+    .blend_write = NULL,
+    .blend_read_data = NULL,
+    .blend_read_lib = NULL,
+    .blend_read_expand = NULL,
 };
 
 #define KEY_MODE_DUMMY 0 /* use where mode isn't checked for */
@@ -569,7 +575,7 @@ static char *key_block_get_data(Key *key, KeyBlock *actkb, KeyBlock *kb, char **
 
       if (me->edit_mesh && me->edit_mesh->bm->totvert == kb->totelem) {
         a = 0;
-        co = MEM_mallocN(sizeof(float) * 3 * me->edit_mesh->bm->totvert, "key_block_get_data");
+        co = MEM_mallocN(sizeof(float[3]) * me->edit_mesh->bm->totvert, "key_block_get_data");
 
         BM_ITER_MESH (eve, &iter, me->edit_mesh->bm, BM_VERTS_OF_MESH) {
           copy_v3_v3(co[a], eve->co);

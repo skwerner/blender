@@ -537,7 +537,7 @@ static void contarget_get_lattice_mat(Object *ob, const char *substring, float m
       MDeformWeight *dw = BKE_defvert_find_index(dv, defgroup);
       if (dw && dw->weight > 0.0f) {
         /* copy coordinates of point to temporary vector, then add to find average */
-        memcpy(tvec, co ? co : bp->vec, 3 * sizeof(float));
+        memcpy(tvec, co ? co : bp->vec, sizeof(float[3]));
 
         add_v3_v3(vec, tvec);
         grouped++;
@@ -602,8 +602,7 @@ static void constraint_target_to_mat4(Object *ob,
     pchan = BKE_pose_channel_find_name(ob->pose, substring);
     if (pchan) {
       /* Multiply the PoseSpace accumulation/final matrix for this
-       * PoseChannel by the Armature Object's Matrix to get a worldspace
-       * matrix.
+       * PoseChannel by the Armature Object's Matrix to get a world-space matrix.
        */
       bool is_bbone = (pchan->bone) && (pchan->bone->segments > 1) &&
                       (flag & CONSTRAINT_BBONE_SHAPE);
@@ -972,7 +971,7 @@ static void childof_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *tar
   }
 
   /* Multiply together the target (parent) matrix, parent inverse,
-   * and the owner transform matrixto get the effect of this constraint
+   * and the owner transform matrix to get the effect of this constraint
    * (i.e.  owner is 'parented' to parent). */
   float orig_cob_matrix[4][4];
   copy_m4_m4(orig_cob_matrix, cob->matrix);
@@ -2404,7 +2403,7 @@ static void armdef_get_tarmat(struct Depsgraph *UNUSED(depsgraph),
   }
 }
 
-static void armdef_accumulate_matrix(float obmat[4][4],
+static void armdef_accumulate_matrix(const float obmat[4][4],
                                      const float iobmat[4][4],
                                      const float basemat[4][4],
                                      const float bonemat[4][4],
@@ -5284,9 +5283,8 @@ const bConstraintTypeInfo *BKE_constraint_typeinfo_from_type(int type)
     /* there shouldn't be any segfaults here... */
     return constraintsTypeInfo[type];
   }
-  else {
-    CLOG_WARN(&LOG, "No valid constraint type-info data available. Type = %i", type);
-  }
+
+  CLOG_WARN(&LOG, "No valid constraint type-info data available. Type = %i", type);
 
   return NULL;
 }
@@ -5300,9 +5298,8 @@ const bConstraintTypeInfo *BKE_constraint_typeinfo_get(bConstraint *con)
   if (con) {
     return BKE_constraint_typeinfo_from_type(con->type);
   }
-  else {
-    return NULL;
-  }
+
+  return NULL;
 }
 
 /* ************************* General Constraints API ************************** */
@@ -5384,9 +5381,8 @@ bool BKE_constraint_remove(ListBase *list, bConstraint *con)
     BLI_freelinkN(list, con);
     return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 bool BKE_constraint_remove_ex(ListBase *list, Object *ob, bConstraint *con, bool clear_dep)
@@ -5399,9 +5395,8 @@ bool BKE_constraint_remove_ex(ListBase *list, Object *ob, bConstraint *con, bool
     }
     return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 /* ......... */
@@ -6037,7 +6032,7 @@ void BKE_constraints_solve(struct Depsgraph *depsgraph,
      */
     enf = con->enforce;
 
-    /* make copy of worldspace matrix pre-constraint for use with blending later */
+    /* make copy of world-space matrix pre-constraint for use with blending later */
     copy_m4_m4(oldmat, cob->matrix);
 
     /* move owner matrix into right space */
@@ -6058,16 +6053,16 @@ void BKE_constraints_solve(struct Depsgraph *depsgraph,
       cti->flush_constraint_targets(con, &targets, 1);
     }
 
-    /* move owner back into worldspace for next constraint/other business */
+    /* move owner back into world-space for next constraint/other business */
     if ((con->flag & CONSTRAINT_SPACEONCE) == 0) {
       BKE_constraint_mat_convertspace(
           cob->ob, cob->pchan, cob->matrix, con->ownspace, CONSTRAINT_SPACE_WORLD, false);
     }
 
     /* Interpolate the enforcement, to blend result of constraint into final owner transform
-     * - all this happens in worldspace to prevent any weirdness creeping in
+     * - all this happens in world-space to prevent any weirdness creeping in
      *   (T26014 and T25725), since some constraints may not convert the solution back to the input
-     *   space before blending but all are guaranteed to end up in good "worldspace" result.
+     *   space before blending but all are guaranteed to end up in good "world-space" result.
      */
     /* Note: all kind of stuff here before (caused trouble), much easier to just interpolate,
      * or did I miss something? -jahka (r.32105) */

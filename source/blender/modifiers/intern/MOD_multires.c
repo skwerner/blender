@@ -238,7 +238,9 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
   /* Needed when rendering or baking will in sculpt mode. */
   const bool for_render = (ctx->flag & MOD_APPLY_RENDER) != 0;
 
-  if ((ctx->object->mode & OB_MODE_SCULPT) && !for_orco && !for_render) {
+  const bool sculpt_base_mesh = mmd->flags & eMultiresModifierFlag_UseSculptBaseMesh;
+
+  if ((ctx->object->mode & OB_MODE_SCULPT) && !for_orco && !for_render && !sculpt_base_mesh) {
     /* NOTE: CCG takes ownership over Subdiv. */
     result = multires_as_ccg(mmd, ctx, mesh, subdiv);
     result->runtime.subdiv_ccg_tot_level = mmd->totlvl;
@@ -331,33 +333,37 @@ static void panel_draw(const bContext *C, Panel *panel)
   uiLayout *col;
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
 
   uiLayoutSetPropSep(layout, true);
 
   col = uiLayoutColumn(layout, true);
-  uiItemR(col, &ptr, "levels", 0, IFACE_("Level Viewport"), ICON_NONE);
-  uiItemR(col, &ptr, "sculpt_levels", 0, IFACE_("Sculpt"), ICON_NONE);
-  uiItemR(col, &ptr, "render_levels", 0, IFACE_("Render"), ICON_NONE);
+  uiItemR(col, ptr, "levels", 0, IFACE_("Level Viewport"), ICON_NONE);
+  uiItemR(col, ptr, "sculpt_levels", 0, IFACE_("Sculpt"), ICON_NONE);
+  uiItemR(col, ptr, "render_levels", 0, IFACE_("Render"), ICON_NONE);
 
-  uiItemR(layout, &ptr, "show_only_control_edges", 0, NULL, ICON_NONE);
+  const bool is_sculpt_mode = CTX_data_active_object(C)->mode & OB_MODE_SCULPT;
+  uiBlock *block = uiLayoutGetBlock(panel->layout);
+  UI_block_lock_set(block, !is_sculpt_mode, IFACE_("Sculpt Base Mesh"));
+  uiItemR(col, ptr, "use_sculpt_base_mesh", 0, IFACE_("Sculpt Base Mesh"), ICON_NONE);
+  UI_block_lock_clear(block);
 
-  modifier_panel_end(layout, &ptr);
+  uiItemR(layout, ptr, "show_only_control_edges", 0, NULL, ICON_NONE);
+
+  modifier_panel_end(layout, ptr);
 }
 
-static void subdivisions_panel_draw(const bContext *C, Panel *panel)
+static void subdivisions_panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *row;
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
   PointerRNA ob_ptr;
-  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
 
   uiLayoutSetEnabled(layout, RNA_enum_get(&ob_ptr, "mode") != OB_MODE_EDIT);
 
-  MultiresModifierData *mmd = (MultiresModifierData *)ptr.data;
+  MultiresModifierData *mmd = (MultiresModifierData *)ptr->data;
 
   /**
    * Changing some of the properties can not be done once there is an
@@ -407,20 +413,16 @@ static void subdivisions_panel_draw(const bContext *C, Panel *panel)
   uiItemS(layout);
 
   uiItemO(layout, IFACE_("Unsubdivide"), ICON_NONE, "OBJECT_OT_multires_unsubdivide");
-
-  row = uiLayoutRow(layout, false);
-  uiItemL(row, "", ICON_NONE);
-  uiItemO(row, IFACE_("Delete Higher"), ICON_NONE, "OBJECT_OT_multires_higher_levels_delete");
+  uiItemO(layout, IFACE_("Delete Higher"), ICON_NONE, "OBJECT_OT_multires_higher_levels_delete");
 }
 
-static void shape_panel_draw(const bContext *C, Panel *panel)
+static void shape_panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *row;
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
   PointerRNA ob_ptr;
-  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+  modifier_panel_get_property_pointers(panel, &ob_ptr);
 
   uiLayoutSetEnabled(layout, RNA_enum_get(&ob_ptr, "mode") != OB_MODE_EDIT);
 
@@ -429,16 +431,15 @@ static void shape_panel_draw(const bContext *C, Panel *panel)
   uiItemO(row, IFACE_("Apply Base"), ICON_NONE, "OBJECT_OT_multires_base_apply");
 }
 
-static void generate_panel_draw(const bContext *C, Panel *panel)
+static void generate_panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *col, *row;
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
-  MultiresModifierData *mmd = (MultiresModifierData *)ptr.data;
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
+  MultiresModifierData *mmd = (MultiresModifierData *)ptr->data;
 
-  bool is_external = RNA_boolean_get(&ptr, "is_external");
+  bool is_external = RNA_boolean_get(ptr, "is_external");
 
   if (mmd->totlvl == 0) {
     uiItemO(
@@ -451,43 +452,42 @@ static void generate_panel_draw(const bContext *C, Panel *panel)
     uiItemO(row, IFACE_("Pack External"), ICON_NONE, "OBJECT_OT_multires_external_pack");
     uiLayoutSetPropSep(col, true);
     row = uiLayoutRow(col, false);
-    uiItemR(row, &ptr, "filepath", 0, NULL, ICON_NONE);
+    uiItemR(row, ptr, "filepath", 0, NULL, ICON_NONE);
   }
   else {
     uiItemO(col, IFACE_("Save External..."), ICON_NONE, "OBJECT_OT_multires_external_save");
   }
 }
 
-static void advanced_panel_draw(const bContext *C, Panel *panel)
+static void advanced_panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *col;
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
 
-  bool has_displacement = RNA_int_get(&ptr, "total_levels") != 0;
+  bool has_displacement = RNA_int_get(ptr, "total_levels") != 0;
 
   uiLayoutSetPropSep(layout, true);
 
   uiLayoutSetEnabled(layout, !has_displacement);
 
-  uiItemR(layout, &ptr, "subdivision_type", 0, NULL, ICON_NONE);
-  uiItemR(layout, &ptr, "quality", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "subdivision_type", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "quality", 0, NULL, ICON_NONE);
 
   col = uiLayoutColumn(layout, false);
   uiLayoutSetEnabled(col, true);
-  uiItemR(col, &ptr, "uv_smooth", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "uv_smooth", 0, NULL, ICON_NONE);
 
-  uiItemR(layout, &ptr, "use_creases", 0, NULL, ICON_NONE);
-  uiItemR(layout, &ptr, "use_custom_normals", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "use_creases", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "use_custom_normals", 0, NULL, ICON_NONE);
 }
 
 static void panelRegister(ARegionType *region_type)
 {
   PanelType *panel_type = modifier_panel_register(region_type, eModifierType_Multires, panel_draw);
   modifier_subpanel_register(
-      region_type, "subdivide", "Subdivions", NULL, subdivisions_panel_draw, panel_type);
+      region_type, "subdivide", "Subdivision", NULL, subdivisions_panel_draw, panel_type);
   modifier_subpanel_register(region_type, "shape", "Shape", NULL, shape_panel_draw, panel_type);
   modifier_subpanel_register(
       region_type, "generate", "Generate", NULL, generate_panel_draw, panel_type);

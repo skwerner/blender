@@ -138,7 +138,7 @@ void EEVEE_effects_init(EEVEE_ViewLayerData *sldata,
   DefaultTextureList *dtxl = DRW_viewport_texture_list_get();
 
   const float *viewport_size = DRW_viewport_size_get();
-  int size_fs[2] = {(int)viewport_size[0], (int)viewport_size[1]};
+  const int size_fs[2] = {(int)viewport_size[0], (int)viewport_size[1]};
 
   /* Shaders */
   if (!e_data.downsample_sh) {
@@ -147,6 +147,7 @@ void EEVEE_effects_init(EEVEE_ViewLayerData *sldata,
 
   if (!stl->effects) {
     stl->effects = MEM_callocN(sizeof(EEVEE_EffectsInfo), "EEVEE_EffectsInfo");
+    stl->effects->taa_render_sample = 1;
   }
 
   effects = stl->effects;
@@ -194,14 +195,14 @@ void EEVEE_effects_init(EEVEE_ViewLayerData *sldata,
   }
 
   if (fbl->downsample_fb == NULL) {
-    fbl->downsample_fb = GPU_framebuffer_create();
+    fbl->downsample_fb = GPU_framebuffer_create("downsample_fb");
   }
 
   /**
    * Compute Mipmap texel alignment.
    */
   for (int i = 0; i < 10; i++) {
-    int mip_size[2];
+    int mip_size[3];
     GPU_texture_get_mipmap_size(txl->color, i, mip_size);
     common_data->mip_ratio[i][0] = viewport_size[0] / (mip_size[0] * powf(2.0f, i));
     common_data->mip_ratio[i][1] = viewport_size[1] / (mip_size[1] * powf(2.0f, i));
@@ -431,7 +432,7 @@ void EEVEE_create_minmax_buffer(EEVEE_Data *vedata, GPUTexture *depth_src, int l
   int minmax_size[3], depth_size[3];
   GPU_texture_get_mipmap_size(depth_src, 0, depth_size);
   GPU_texture_get_mipmap_size(txl->maxzbuffer, 0, minmax_size);
-  bool is_full_res_minmaxz = (minmax_size[0] == depth_size[0] && minmax_size[1] == depth_size[1]);
+  bool is_full_res_minmaxz = equals_v2v2_int(minmax_size, depth_size);
 
   DRW_stats_group_start("Max buffer");
   /* Copy depth buffer to max texture top level */

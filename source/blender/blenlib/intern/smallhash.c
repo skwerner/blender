@@ -222,12 +222,12 @@ void BLI_smallhash_release(SmallHash *sh)
   }
 }
 
-void BLI_smallhash_insert(SmallHash *sh, uintptr_t key, void *val)
+void BLI_smallhash_insert(SmallHash *sh, uintptr_t key, void *item)
 {
   SmallHashEntry *e;
 
   BLI_assert(key != SMHASH_KEY_UNUSED);
-  BLI_assert(smallhash_val_is_used(val));
+  BLI_assert(smallhash_val_is_used(item));
   BLI_assert(BLI_smallhash_haskey(sh, key) == false);
 
   if (UNLIKELY(smallhash_test_expand_buckets(++sh->nentries, sh->nbuckets))) {
@@ -236,7 +236,7 @@ void BLI_smallhash_insert(SmallHash *sh, uintptr_t key, void *val)
 
   e = smallhash_lookup_first_free(sh, key);
   e->key = key;
-  e->val = val;
+  e->val = item;
 }
 
 /**
@@ -253,10 +253,9 @@ bool BLI_smallhash_reinsert(SmallHash *sh, uintptr_t key, void *item)
     e->val = item;
     return false;
   }
-  else {
-    BLI_smallhash_insert(sh, key, item);
-    return true;
-  }
+
+  BLI_smallhash_insert(sh, key, item);
+  return true;
 }
 
 #ifdef USE_REMOVE

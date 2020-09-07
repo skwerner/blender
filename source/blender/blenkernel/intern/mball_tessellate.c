@@ -315,7 +315,7 @@ static float densfunc(const MetaElem *ball, float x, float y, float z)
   float dist2;
   float dvec[3] = {x, y, z};
 
-  mul_m4_v3((float(*)[4])ball->imat, dvec);
+  mul_m4_v3((const float(*)[4])ball->imat, dvec);
 
   switch (ball->type) {
     case MB_BALL:
@@ -405,7 +405,7 @@ static float densfunc(const MetaElem *ball, float x, float y, float z)
 }
 
 /**
- * Computes density at given position form all metaballs which contain this point in their box.
+ * Computes density at given position form all meta-balls which contain this point in their box.
  * Traverses BVH using a queue.
  */
 static float metaball(PROCESS *process, float x, float y, float z)
@@ -1276,8 +1276,8 @@ static void init_meta(Depsgraph *depsgraph, PROCESS *process, Scene *scene, Obje
             new_ml = BLI_memarena_alloc(process->pgn_elements, sizeof(MetaElem));
             *(new_ml) = *ml;
             new_ml->bb = BLI_memarena_alloc(process->pgn_elements, sizeof(BoundBox));
-            new_ml->mat = BLI_memarena_alloc(process->pgn_elements, 4 * 4 * sizeof(float));
-            new_ml->imat = BLI_memarena_alloc(process->pgn_elements, 4 * 4 * sizeof(float));
+            new_ml->mat = BLI_memarena_alloc(process->pgn_elements, sizeof(float[4][4]));
+            new_ml->imat = BLI_memarena_alloc(process->pgn_elements, sizeof(float[4][4]));
 
             /* too big stiffness seems only ugly due to linear interpolation
              * no need to have possibility for too big stiffness */
@@ -1443,9 +1443,9 @@ void BKE_mball_polygonize(Depsgraph *depsgraph, Scene *scene, Object *ob, ListBa
   if (process.totelem > 0) {
     build_bvh_spatial(&process, &process.metaball_bvh, 0, process.totelem, &process.allbb);
 
-    /* Don't polygonize metaballs with too high resolution (base mball to small)
-     * note: Eps was 0.0001f but this was giving problems for blood animation for durian,
-     * using 0.00001f. */
+    /* Don't polygonize meta-balls with too high resolution (base mball to small)
+     * note: Eps was 0.0001f but this was giving problems for blood animation for
+     * the open movie "Sintel", using 0.00001f. */
     if (ob->scale[0] > 0.00001f * (process.allbb.max[0] - process.allbb.min[0]) ||
         ob->scale[1] > 0.00001f * (process.allbb.max[1] - process.allbb.min[1]) ||
         ob->scale[2] > 0.00001f * (process.allbb.max[2] - process.allbb.min[2])) {

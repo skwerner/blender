@@ -187,6 +187,7 @@ void DRW_globals_update(void)
   /* M_SQRT2 to be at least the same size of the old square */
   gb->sizeVertex = U.pixelsize *
                    (max_ff(1.0f, UI_GetThemeValuef(TH_VERTEX_SIZE) * (float)M_SQRT2 / 2.0f));
+  gb->sizeVertexGpencil = U.pixelsize * UI_GetThemeValuef(TH_GP_VERTEX_SIZE);
   gb->sizeFaceDot = U.pixelsize * UI_GetThemeValuef(TH_FACEDOT_SIZE);
   gb->sizeEdge = U.pixelsize * (1.0f / 2.0f); /* TODO Theme */
   gb->sizeEdgeFix = U.pixelsize * (0.5f + 2.0f * (2.0f * (gb->sizeEdge * (float)M_SQRT1_2)));
@@ -213,10 +214,11 @@ void DRW_globals_update(void)
   }
 
   if (G_draw.block_ubo == NULL) {
-    G_draw.block_ubo = DRW_uniformbuffer_create(sizeof(GlobalsUboStorage), gb);
+    G_draw.block_ubo = GPU_uniformbuf_create_ex(
+        sizeof(GlobalsUboStorage), gb, "GlobalsUboStorage");
   }
 
-  DRW_uniformbuffer_update(G_draw.block_ubo, gb);
+  GPU_uniformbuf_update(G_draw.block_ubo, gb);
 
   if (!G_draw.ramp) {
     ColorBand ramp = {0};
@@ -236,7 +238,7 @@ void DRW_globals_update(void)
 
     BKE_colorband_evaluate_table_rgba(&ramp, &colors, &col_size);
 
-    G_draw.ramp = GPU_texture_create_1d(col_size, GPU_RGBA8, colors, NULL);
+    G_draw.ramp = GPU_texture_create_1d("ramp", col_size, 1, GPU_RGBA8, colors);
 
     MEM_freeN(colors);
   }
@@ -455,11 +457,11 @@ bool DRW_object_is_flat(Object *ob, int *r_axis)
     *r_axis = 0;
     return true;
   }
-  else if (dim[1] == 0.0f) {
+  if (dim[1] == 0.0f) {
     *r_axis = 1;
     return true;
   }
-  else if (dim[2] == 0.0f) {
+  if (dim[2] == 0.0f) {
     *r_axis = 2;
     return true;
   }
@@ -489,7 +491,7 @@ static void DRW_evaluate_weight_to_color(const float weight, float result[4])
      * increasing widens yellow/cyan vs red/green/blue.
      * Gamma 1.0 produces the original 2.79 color ramp. */
     const float gamma = 1.5f;
-    float hsv[3] = {(2.0f / 3.0f) * (1.0f - weight), 1.0f, pow(0.5f + 0.5f * weight, gamma)};
+    const float hsv[3] = {(2.0f / 3.0f) * (1.0f - weight), 1.0f, pow(0.5f + 0.5f * weight, gamma)};
 
     hsv_to_rgb_v(hsv, result);
 
@@ -501,12 +503,11 @@ static void DRW_evaluate_weight_to_color(const float weight, float result[4])
 
 static GPUTexture *DRW_create_weight_colorramp_texture(void)
 {
-  char error[256];
   float pixels[256][4];
   for (int i = 0; i < 256; i++) {
     DRW_evaluate_weight_to_color(i / 255.0f, pixels[i]);
     pixels[i][3] = 1.0f;
   }
 
-  return GPU_texture_create_1d(256, GPU_SRGB8_A8, pixels[0], error);
+  return GPU_texture_create_1d("weight_color_ramp", 256, 1, GPU_SRGB8_A8, pixels[0]);
 }

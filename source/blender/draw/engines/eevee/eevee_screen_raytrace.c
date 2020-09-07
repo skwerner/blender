@@ -48,30 +48,12 @@ static struct {
   struct GPUTexture *depth_src;
 } e_data = {{NULL}}; /* Engine data */
 
-extern char datatoc_ambient_occlusion_lib_glsl[];
-extern char datatoc_common_view_lib_glsl[];
-extern char datatoc_common_uniforms_lib_glsl[];
-extern char datatoc_bsdf_common_lib_glsl[];
-extern char datatoc_bsdf_sampling_lib_glsl[];
-extern char datatoc_octahedron_lib_glsl[];
-extern char datatoc_cubemap_lib_glsl[];
 extern char datatoc_effect_ssr_frag_glsl[];
-extern char datatoc_lightprobe_lib_glsl[];
-extern char datatoc_raytrace_lib_glsl[];
 
 static struct GPUShader *eevee_effects_screen_raytrace_shader_get(int options)
 {
   if (e_data.ssr_sh[options] == NULL) {
-    char *ssr_shader_str = BLI_string_joinN(datatoc_common_view_lib_glsl,
-                                            datatoc_common_uniforms_lib_glsl,
-                                            datatoc_bsdf_common_lib_glsl,
-                                            datatoc_bsdf_sampling_lib_glsl,
-                                            datatoc_ambient_occlusion_lib_glsl,
-                                            datatoc_octahedron_lib_glsl,
-                                            datatoc_cubemap_lib_glsl,
-                                            datatoc_lightprobe_lib_glsl,
-                                            datatoc_raytrace_lib_glsl,
-                                            datatoc_effect_ssr_frag_glsl);
+    DRWShaderLibrary *lib = EEVEE_shader_lib_get();
 
     DynStr *ds_defines = BLI_dynstr_new();
     BLI_dynstr_append(ds_defines, SHADER_DEFINES);
@@ -91,9 +73,9 @@ static struct GPUShader *eevee_effects_screen_raytrace_shader_get(int options)
     char *ssr_define_str = BLI_dynstr_get_cstring(ds_defines);
     BLI_dynstr_free(ds_defines);
 
-    e_data.ssr_sh[options] = DRW_shader_create_fullscreen(ssr_shader_str, ssr_define_str);
+    e_data.ssr_sh[options] = DRW_shader_create_fullscreen_with_shaderlib(
+        datatoc_effect_ssr_frag_glsl, lib, ssr_define_str);
 
-    MEM_freeN(ssr_shader_str);
     MEM_freeN(ssr_define_str);
   }
 
@@ -156,7 +138,7 @@ int EEVEE_screen_raytrace_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
 
     const int divisor = (effects->reflection_trace_full) ? 1 : 2;
     int tracing_res[2] = {(int)viewport_size[0] / divisor, (int)viewport_size[1] / divisor};
-    int size_fs[2] = {(int)viewport_size[0], (int)viewport_size[1]};
+    const int size_fs[2] = {(int)viewport_size[0], (int)viewport_size[1]};
     const bool high_qual_input = true; /* TODO dither low quality input */
     const eGPUTextureFormat format = (high_qual_input) ? GPU_RGBA16F : GPU_RGBA8;
 
@@ -348,7 +330,7 @@ void EEVEE_reflection_output_init(EEVEE_ViewLayerData *UNUSED(sldata),
   EEVEE_StorageList *stl = vedata->stl;
   EEVEE_EffectsInfo *effects = stl->effects;
 
-  float clear[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+  const float clear[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 
   /* Create FrameBuffer. */
   const eGPUTextureFormat texture_format = (tot_samples > 256) ? GPU_RGBA32F : GPU_RGBA16F;

@@ -80,7 +80,7 @@ LatticeDeformData *BKE_lattice_deform_data_create(const Object *oblatt, const Ob
   }
   bp = lt->def;
 
-  fp = latticedata = MEM_mallocN(sizeof(float) * 3 * lt->pntsu * lt->pntsv * lt->pntsw,
+  fp = latticedata = MEM_mallocN(sizeof(float[3]) * lt->pntsu * lt->pntsv * lt->pntsw,
                                  "latticedata");
 
   /* for example with a particle system: (ob == NULL) */
@@ -453,7 +453,7 @@ void BKE_lattice_deform_coords_with_editmesh(const struct Object *ob_lattice,
                                              const int vert_coords_len,
                                              const short flag,
                                              const char *defgrp_name,
-                                             const float influence,
+                                             const float fac,
                                              struct BMEditMesh *em_target)
 {
   lattice_deform_coords_impl(ob_lattice,
@@ -462,7 +462,7 @@ void BKE_lattice_deform_coords_with_editmesh(const struct Object *ob_lattice,
                              vert_coords_len,
                              flag,
                              defgrp_name,
-                             influence,
+                             fac,
                              NULL,
                              em_target);
 }

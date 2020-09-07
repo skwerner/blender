@@ -221,7 +221,7 @@ ViewLayer *BKE_view_layer_add(Scene *scene,
       view_layer_new = view_layer_add(name);
       BLI_addtail(&scene->view_layers, view_layer_new);
 
-      /* Initialise layercollections */
+      /* Initialize layer-collections. */
       BKE_layer_collection_sync(scene, view_layer_new);
       layer_collection_exclude_all(view_layer_new->layer_collections.first);
 
@@ -555,19 +555,17 @@ static bool layer_collection_hidden(ViewLayer *view_layer, LayerCollection *lc)
   if (lc->flag & LAYER_COLLECTION_HIDE || lc->collection->flag & COLLECTION_RESTRICT_VIEWPORT) {
     return true;
   }
-  else {
-    /* Restriction flags stay set, so we need to check parents */
-    CollectionParent *parent = lc->collection->parents.first;
 
-    if (parent) {
-      lc = BKE_layer_collection_first_from_scene_collection(view_layer, parent->collection);
+  /* Restriction flags stay set, so we need to check parents */
+  CollectionParent *parent = lc->collection->parents.first;
 
-      return lc && layer_collection_hidden(view_layer, lc);
-    }
-    else {
-      return false;
-    }
+  if (parent) {
+    lc = BKE_layer_collection_first_from_scene_collection(view_layer, parent->collection);
+
+    return lc && layer_collection_hidden(view_layer, lc);
   }
+
+  return false;
 
   return false;
 }
@@ -1090,7 +1088,7 @@ bool BKE_base_is_visible(const View3D *v3d, const Base *base)
   return base->flag & BASE_VISIBLE_VIEWLAYER;
 }
 
-bool BKE_object_is_visible_in_viewport(const struct View3D *v3d, const struct Object *ob)
+bool BKE_object_is_visible_in_viewport(const View3D *v3d, const struct Object *ob)
 {
   BLI_assert(v3d != NULL);
 
@@ -1233,7 +1231,7 @@ static void layer_collection_local_sync(ViewLayer *view_layer,
   }
 }
 
-void BKE_layer_collection_local_sync(ViewLayer *view_layer, View3D *v3d)
+void BKE_layer_collection_local_sync(ViewLayer *view_layer, const View3D *v3d)
 {
   const unsigned short local_collections_uuid = v3d->local_collections_uuid;
 
@@ -1253,7 +1251,7 @@ void BKE_layer_collection_local_sync(ViewLayer *view_layer, View3D *v3d)
  * Same as BKE_layer_collection_isolate_local but for a viewport
  */
 void BKE_layer_collection_isolate_local(ViewLayer *view_layer,
-                                        View3D *v3d,
+                                        const View3D *v3d,
                                         LayerCollection *lc,
                                         bool extend)
 {
@@ -1465,11 +1463,11 @@ bool BKE_scene_has_object(Scene *scene, Object *ob)
  * \{ */
 
 typedef struct LayerObjectBaseIteratorData {
-  View3D *v3d;
+  const View3D *v3d;
   Base *base;
 } LayerObjectBaseIteratorData;
 
-static bool object_bases_iterator_is_valid(View3D *v3d, Base *base, const int flag)
+static bool object_bases_iterator_is_valid(const View3D *v3d, Base *base, const int flag)
 {
   BLI_assert((v3d == NULL) || (v3d->spacetype == SPACE_VIEW3D));
 
@@ -1486,7 +1484,7 @@ static void object_bases_iterator_begin(BLI_Iterator *iter, void *data_in_v, con
 {
   ObjectsVisibleIteratorData *data_in = data_in_v;
   ViewLayer *view_layer = data_in->view_layer;
-  View3D *v3d = data_in->v3d;
+  const View3D *v3d = data_in->v3d;
   Base *base = view_layer->object_bases.first;
 
   /* when there are no objects */
@@ -1610,10 +1608,9 @@ void BKE_view_layer_selected_editable_objects_iterator_begin(BLI_Iterator *iter,
       // First object is valid (selectable and not libdata) -> all good.
       return;
     }
-    else {
-      // Object is selectable but not editable -> search for another one.
-      BKE_view_layer_selected_editable_objects_iterator_next(iter);
-    }
+
+    // Object is selectable but not editable -> search for another one.
+    BKE_view_layer_selected_editable_objects_iterator_next(iter);
   }
 }
 

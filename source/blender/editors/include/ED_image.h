@@ -21,8 +21,7 @@
  * \ingroup editors
  */
 
-#ifndef __ED_IMAGE_H__
-#define __ED_IMAGE_H__
+#pragma once
 
 #include "DNA_listBase.h"
 #include "DNA_space_types.h"
@@ -110,7 +109,7 @@ bool ED_space_image_show_uvedit(struct SpaceImage *sima, struct Object *obedit);
 
 bool ED_space_image_paint_curve(const struct bContext *C);
 
-bool ED_space_image_check_show_maskedit(struct SpaceImage *sima, struct ViewLayer *view_layer);
+bool ED_space_image_check_show_maskedit(struct SpaceImage *sima, struct Object *obedit);
 bool ED_space_image_maskedit_poll(struct bContext *C);
 bool ED_space_image_maskedit_mask_poll(struct bContext *C);
 bool ED_space_image_cursor_poll(struct bContext *C);
@@ -157,5 +156,3 @@ ListBase ED_image_filesel_detect_sequences(struct Main *bmain,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_IMAGE_H__ */

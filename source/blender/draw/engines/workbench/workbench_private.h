@@ -20,8 +20,7 @@
  * \ingroup draw_engine
  */
 
-#ifndef __WORKBENCH_PRIVATE_H__
-#define __WORKBENCH_PRIVATE_H__
+#pragma once
 
 #include "BKE_studiolight.h"
 
@@ -33,6 +32,10 @@
 #include "DRW_render.h"
 
 #include "workbench_engine.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 extern struct DrawEngineType draw_engine_workbench;
 
@@ -239,7 +242,7 @@ typedef struct WORKBENCH_PrivateData {
   /** Copy of context mode for faster access. */
   eContextObjectMode ctx_mode;
   /** Shorthand for wpd->vldata->world_ubo. */
-  struct GPUUniformBuffer *world_ubo;
+  struct GPUUniformBuf *world_ubo;
   /** Background color to clear the color buffer with. */
   float background_color[4];
 
@@ -310,7 +313,7 @@ typedef struct WORKBENCH_PrivateData {
   struct BLI_memblock *material_ubo_data;
   /** Current material chunk being filled by workbench_material_setup_ex(). */
   WORKBENCH_UBO_Material *material_ubo_data_curr;
-  struct GPUUniformBuffer *material_ubo_curr;
+  struct GPUUniformBuf *material_ubo_curr;
   /** Copy of txl->dummy_image_tx for faster access. */
   struct GPUTexture *dummy_image_tx;
   /** Total number of used material chunk. */
@@ -360,11 +363,11 @@ typedef struct WORKBENCH_ObjectData {
 
 typedef struct WORKBENCH_ViewLayerData {
   /** Depth of field sample location array.*/
-  struct GPUUniformBuffer *dof_sample_ubo;
+  struct GPUUniformBuf *dof_sample_ubo;
   /** All constant data used for a render loop.*/
-  struct GPUUniformBuffer *world_ubo;
+  struct GPUUniformBuf *world_ubo;
   /** Cavity sample location array.*/
-  struct GPUUniformBuffer *cavity_sample_ubo;
+  struct GPUUniformBuf *cavity_sample_ubo;
   /** Blue noise texture used to randomize the sampling of some effects.*/
   struct GPUTexture *cavity_jitter_tx;
   /** Materials ubos allocated in a memblock for easy bookeeping. */
@@ -491,7 +494,7 @@ DRWShadingGroup *workbench_image_setup_ex(WORKBENCH_PrivateData *wpd,
 void workbench_private_data_init(WORKBENCH_PrivateData *wpd);
 void workbench_update_world_ubo(WORKBENCH_PrivateData *wpd);
 void workbench_update_material_ubos(WORKBENCH_PrivateData *wpd);
-struct GPUUniformBuffer *workbench_material_ubo_alloc(WORKBENCH_PrivateData *wpd);
+struct GPUUniformBuf *workbench_material_ubo_alloc(WORKBENCH_PrivateData *wpd);
 
 /* workbench_volume.c */
 void workbench_volume_engine_init(WORKBENCH_Data *vedata);
@@ -520,5 +523,6 @@ void workbench_render(void *ved,
 void workbench_render_update_passes(struct RenderEngine *engine,
                                     struct Scene *scene,
                                     struct ViewLayer *view_layer);
-
+#ifdef __cplusplus
+}
 #endif

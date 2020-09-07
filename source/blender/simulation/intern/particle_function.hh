@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __SIM_PARTICLE_FUNCTION_HH__
-#define __SIM_PARTICLE_FUNCTION_HH__
+#pragma once
 
 #include "FN_attributes_ref.hh"
 #include "FN_multi_function.hh"
@@ -26,10 +25,15 @@
 
 namespace blender::sim {
 
+struct ParticleFunctionInputContext {
+  const SimulationSolveContext &solve_context;
+  const ParticleChunkContext &particles;
+};
+
 class ParticleFunctionInput {
  public:
   virtual ~ParticleFunctionInput() = default;
-  virtual void add_input(fn::AttributesRef attributes,
+  virtual void add_input(ParticleFunctionInputContext &context,
                          fn::MFParamsBuilder &params,
                          ResourceCollector &resources) const = 0;
 };
@@ -88,5 +92,3 @@ class ParticleFunctionEvaluator {
 };
 
 }  // namespace blender::sim
-
-#endif /* __SIM_PARTICLE_FUNCTION_HH__ */

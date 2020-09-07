@@ -22,8 +22,7 @@
  * \brief Object is a sort of wrapper for general info.
  */
 
-#ifndef __DNA_OBJECT_TYPES_H__
-#define __DNA_OBJECT_TYPES_H__
+#pragma once
 
 #include "DNA_object_enums.h"
 
@@ -108,15 +107,6 @@ enum {
   BOUNDBOX_DISABLED = (1 << 0),
   BOUNDBOX_DIRTY = (1 << 1),
 };
-
-typedef struct LodLevel {
-  struct LodLevel *next, *prev;
-  struct Object *source;
-  int flags;
-  float distance;
-  char _pad0[4];
-  int obhysteresis;
-} LodLevel;
 
 struct CustomData_MeshMasks;
 
@@ -394,10 +384,6 @@ typedef struct Object {
   char empty_image_flag;
   char _pad8[5];
 
-  /** Contains data for levels of detail. */
-  ListBase lodlevels;
-  LodLevel *currentlod;
-
   struct PreviewImage *preview;
 
   /** Runtime evaluation data (keep last). */
@@ -495,19 +481,19 @@ enum {
         ID_VO))
 
 #define OB_DATA_SUPPORT_ID_CASE \
-ID_ME: \
-case ID_CU: \
-case ID_MB: \
-case ID_LA: \
-case ID_SPK: \
-case ID_LP: \
-case ID_CA: \
-case ID_LT: \
-case ID_GD: \
-case ID_AR: \
-case ID_HA: \
-case ID_PT: \
-case ID_VO
+  ID_ME: \
+  case ID_CU: \
+  case ID_MB: \
+  case ID_LA: \
+  case ID_SPK: \
+  case ID_LP: \
+  case ID_CA: \
+  case ID_LT: \
+  case ID_GD: \
+  case ID_AR: \
+  case ID_HA: \
+  case ID_PT: \
+  case ID_VO
 
 /* partype: first 4 bits: type */
 enum {
@@ -538,8 +524,6 @@ enum {
   OB_TRANSFLAG_UNUSED_12 = 1 << 12, /* cleared */
   /* runtime constraints disable */
   OB_NO_CONSTRAINTS = 1 << 13,
-  /* hack to work around particle issue */
-  OB_NO_PSYS_UPDATE = 1 << 14,
 
   OB_DUPLI = OB_DUPLIVERTS | OB_DUPLICOLLECTION | OB_DUPLIFACES | OB_DUPLIPARTS,
 };
@@ -714,6 +698,4 @@ enum {
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

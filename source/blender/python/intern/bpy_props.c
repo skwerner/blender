@@ -93,13 +93,13 @@ static const EnumPropertyItem property_flag_override_items[] = {
      "LIBRARY_OVERRIDABLE",
      0,
      "Library Overridable",
-     "Allow that property to be overridable from library linked data-blocks"},
+     "Make that property editable in library overrides of linked data-blocks"},
     {0, NULL, 0, NULL, NULL},
 };
 
 #define BPY_PROPDEF_OPTIONS_OVERRIDE_DOC \
-  "   :arg options: Enumerator in ['LIBRARY_OVERRIDE'].\n" \
-  "   :type options: set\n"
+  "   :arg override: Enumerator in ['LIBRARY_OVERRIDABLE'].\n" \
+  "   :type override: set\n"
 
 static const EnumPropertyItem property_flag_override_collection_items[] = {
     {PROPOVERRIDE_OVERRIDABLE_LIBRARY,
@@ -116,8 +116,8 @@ static const EnumPropertyItem property_flag_override_collection_items[] = {
 };
 
 #define BPY_PROPDEF_OPTIONS_OVERRIDE_COLLECTION_DOC \
-  "   :arg options: Enumerator in ['LIBRARY_OVERRIDE', 'NO_PROPERTY_NAME'].\n" \
-  "   :type options: set\n"
+  "   :arg override: Enumerator in ['LIBRARY_OVERRIDABLE', 'NO_PROPERTY_NAME'].\n" \
+  "   :type override: set\n"
 
 /* subtypes */
 /* XXX Keep in sync with rna_rna.c's rna_enum_property_subtype_items ???
@@ -351,7 +351,7 @@ static bool bpy_prop_boolean_get_cb(struct PointerRNA *ptr, struct PropertyRNA *
     value = false;
   }
   else {
-    int value_i = PyC_Long_AsBool(ret);
+    const int value_i = PyC_Long_AsBool(ret);
 
     if (value_i == -1 && PyErr_Occurred()) {
       PyC_Err_PrintWithFunc(py_func);
@@ -443,7 +443,7 @@ static bool bpy_prop_poll_cb(struct PointerRNA *self,
   PyObject *ret;
   bool result;
   const int is_write_ok = pyrna_write_check();
-  PyGILState_STATE gilstate = PyGILState_Ensure();
+  const PyGILState_STATE gilstate = PyGILState_Ensure();
 
   BLI_assert(self != NULL);
 
@@ -560,7 +560,7 @@ static void bpy_prop_boolean_array_set_cb(struct PointerRNA *ptr,
   PyGILState_STATE gilstate;
   bool use_gil;
   const bool is_write_ok = pyrna_write_check();
-  int len = RNA_property_array_length(ptr, prop);
+  const int len = RNA_property_array_length(ptr, prop);
 
   BLI_assert(py_data != NULL);
 
@@ -804,7 +804,7 @@ static void bpy_prop_int_array_set_cb(struct PointerRNA *ptr,
   PyGILState_STATE gilstate;
   bool use_gil;
   const bool is_write_ok = pyrna_write_check();
-  int len = RNA_property_array_length(ptr, prop);
+  const int len = RNA_property_array_length(ptr, prop);
 
   BLI_assert(py_data != NULL);
 
@@ -1048,7 +1048,7 @@ static void bpy_prop_float_array_set_cb(struct PointerRNA *ptr,
   PyGILState_STATE gilstate;
   bool use_gil;
   const bool is_write_ok = pyrna_write_check();
-  int len = RNA_property_array_length(ptr, prop);
+  const int len = RNA_property_array_length(ptr, prop);
 
   BLI_assert(py_data != NULL);
 
@@ -1408,9 +1408,8 @@ static bool py_long_as_int(PyObject *py_long, int *r_int)
     *r_int = (int)PyLong_AS_LONG(py_long);
     return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 #if 0
@@ -1716,16 +1715,15 @@ static int bpy_prop_callback_check(PyObject *py_func, const char *keyword, int a
                    Py_TYPE(py_func)->tp_name);
       return -1;
     }
-    else {
-      PyCodeObject *f_code = (PyCodeObject *)PyFunction_GET_CODE(py_func);
-      if (f_code->co_argcount != argcount) {
-        PyErr_Format(PyExc_TypeError,
-                     "%s keyword: expected a function taking %d arguments, not %d",
-                     keyword,
-                     argcount,
-                     f_code->co_argcount);
-        return -1;
-      }
+
+    PyCodeObject *f_code = (PyCodeObject *)PyFunction_GET_CODE(py_func);
+    if (f_code->co_argcount != argcount) {
+      PyErr_Format(PyExc_TypeError,
+                   "%s keyword: expected a function taking %d arguments, not %d",
+                   keyword,
+                   argcount,
+                   f_code->co_argcount);
+      return -1;
     }
   }
 
@@ -1981,7 +1979,7 @@ static void bpy_prop_callback_assign_enum(struct PropertyRNA *prop,
     Py_DECREF(args); \
     return ret; \
   } \
-  else if (PyTuple_GET_SIZE(args) > 1) { \
+  if (PyTuple_GET_SIZE(args) > 1) { \
     PyErr_SetString(PyExc_ValueError, "all args must be keywords"); \
     return NULL; \
   } \
@@ -2961,7 +2959,7 @@ PyDoc_STRVAR(BPy_StringProperty_doc,
              "default=\"\", "
              "maxlen=0, "
              "options={'ANIMATABLE'}, "
-             "options=set(), "
+             "override=set(), "
              "tags=set(), "
              "subtype='NONE', "
              "update=None, "
@@ -3537,7 +3535,7 @@ static PyObject *BPy_RemoveProperty(PyObject *self, PyObject *args, PyObject *kw
     Py_DECREF(args);
     return ret;
   }
-  else if (PyTuple_GET_SIZE(args) > 1) {
+  if (PyTuple_GET_SIZE(args) > 1) {
     PyErr_SetString(PyExc_ValueError, "expected one positional arg, one keyword arg");
     return NULL;
   }
@@ -3546,27 +3544,27 @@ static PyObject *BPy_RemoveProperty(PyObject *self, PyObject *args, PyObject *kw
   if (srna == NULL && PyErr_Occurred()) {
     return NULL; /* self's type was compatible but error getting the srna */
   }
-  else if (srna == NULL) {
+  if (srna == NULL) {
     PyErr_SetString(PyExc_TypeError, "RemoveProperty(): struct rna not available for this type");
     return NULL;
   }
-  else {
-    const char *id = NULL;
 
-    static const char *_keywords[] = {
-        "attr",
-        NULL,
-    };
-    static _PyArg_Parser _parser = {"s:RemoveProperty", _keywords, 0};
-    if (!_PyArg_ParseTupleAndKeywordsFast(args, kw, &_parser, &id)) {
-      return NULL;
-    }
+  const char *id = NULL;
 
-    if (RNA_def_property_free_identifier(srna, id) != 1) {
-      PyErr_Format(PyExc_TypeError, "RemoveProperty(): '%s' not a defined dynamic property", id);
-      return NULL;
-    }
+  static const char *_keywords[] = {
+      "attr",
+      NULL,
+  };
+  static _PyArg_Parser _parser = {"s:RemoveProperty", _keywords, 0};
+  if (!_PyArg_ParseTupleAndKeywordsFast(args, kw, &_parser, &id)) {
+    return NULL;
   }
+
+  if (RNA_def_property_free_identifier(srna, id) != 1) {
+    PyErr_Format(PyExc_TypeError, "RemoveProperty(): '%s' not a defined dynamic property", id);
+    return NULL;
+  }
+
   Py_RETURN_NONE;
 }
 

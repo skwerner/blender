@@ -62,6 +62,7 @@ set(SRC
   bpy_gizmo_wrap.c
   bpy_interface.c
   bpy_interface_atexit.c
+  bpy_interface_run.c
   bpy_intern_string.c
   bpy_library_load.c
   bpy_library_write.c
@@ -78,6 +79,7 @@ set(SRC
   bpy_rna_gizmo.c
   bpy_rna_id_collection.c
   bpy_rna_types_capi.c
+  bpy_rna_ui.c
   bpy_traceback.c
   bpy_utils_previews.c
   bpy_utils_units.c
@@ -115,6 +117,7 @@ set(SRC
   bpy_rna_gizmo.h
   bpy_rna_id_collection.h
   bpy_rna_types_capi.h
+  bpy_rna_ui.h
   bpy_traceback.h
   bpy_utils_previews.h
   bpy_utils_units.h

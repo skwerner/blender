@@ -4386,9 +4386,7 @@ void ANIM_channel_draw(
   }
 
   /* set blending again, as may not be set in previous step */
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   /* step 1) draw backdrop ...........................................  */
   if (acf->draw_backdrop) {
@@ -4408,7 +4406,7 @@ void ANIM_channel_draw(
   }
 
   /* step 4) draw special toggles  .................................
-   * - in Graph Editor, checkboxes for visibility in curves area
+   * - in Graph Editor, check-boxes for visibility in curves area
    * - in NLA Editor, glowing dots for solo/not solo...
    * - in Grease Pencil mode, color swatches for layer color
    */
@@ -4437,7 +4435,7 @@ void ANIM_channel_draw(
       }
 
       /* turn off blending, since not needed anymore... */
-      GPU_blend(false);
+      GPU_blend(GPU_BLEND_NONE);
 
       /* icon is drawn as widget now... */
       if (acf->has_setting(ac, ale, ACHANNEL_SETTING_VISIBLE)) {

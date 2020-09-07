@@ -1267,12 +1267,12 @@ void IMB_colormanagement_check_file_config(Main *bmain)
 
     /* check sequencer strip input color space settings */
     Sequence *seq;
-    SEQ_BEGIN (scene->ed, seq) {
+    SEQ_ALL_BEGIN (scene->ed, seq) {
       if (seq->strip) {
         colormanage_check_colorspace_settings(&seq->strip->colorspace_settings, "sequencer strip");
       }
     }
-    SEQ_END;
+    SEQ_ALL_END;
   }
 
   /* ** check input color space settings ** */
@@ -1399,9 +1399,8 @@ const char *IMB_colormanagement_get_float_colorspace(ImBuf *ibuf)
   if (ibuf->float_colorspace) {
     return ibuf->float_colorspace->name;
   }
-  else {
-    return IMB_colormanagement_role_colorspace_name_get(COLOR_ROLE_SCENE_LINEAR);
-  }
+
+  return IMB_colormanagement_role_colorspace_name_get(COLOR_ROLE_SCENE_LINEAR);
 }
 
 const char *IMB_colormanagement_get_rect_colorspace(ImBuf *ibuf)
@@ -1409,9 +1408,8 @@ const char *IMB_colormanagement_get_rect_colorspace(ImBuf *ibuf)
   if (ibuf->rect_colorspace) {
     return ibuf->rect_colorspace->name;
   }
-  else {
-    return IMB_colormanagement_role_colorspace_name_get(COLOR_ROLE_DEFAULT_BYTE);
-  }
+
+  return IMB_colormanagement_role_colorspace_name_get(COLOR_ROLE_DEFAULT_BYTE);
 }
 
 bool IMB_colormanagement_space_is_data(ColorSpace *colorspace)
@@ -2344,7 +2342,7 @@ void IMB_colormanagement_imbuf_to_float_texture(float *out_buffer,
         }
       }
       else {
-        memcpy(out, in, sizeof(float) * 4 * width);
+        memcpy(out, in, sizeof(float[4]) * width);
       }
     }
   }
@@ -3513,7 +3511,7 @@ static void partial_buffer_update_rect(ImBuf *ibuf,
         size_t display_offset = ((size_t)display_stride * i + xmin) * 4;
 
         memcpy(
-            display_buffer + display_offset, byte_buffer + byte_offset, 4 * sizeof(char) * width);
+            display_buffer + display_offset, byte_buffer + byte_offset, sizeof(char[4]) * width);
       }
     }
   }
@@ -3958,7 +3956,7 @@ static void curve_mapping_to_ocio_settings(CurveMapping *curve_mapping,
 {
   int i;
 
-  BKE_curvemapping_initialize(curve_mapping);
+  BKE_curvemapping_init(curve_mapping);
   BKE_curvemapping_premultiply(curve_mapping, false);
   BKE_curvemapping_table_RGBA(
       curve_mapping, &curve_mapping_settings->lut, &curve_mapping_settings->lut_size);

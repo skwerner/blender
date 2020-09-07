@@ -18,8 +18,7 @@
  * \ingroup editors
  */
 
-#ifndef __ED_PAINT_H__
-#define __ED_PAINT_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -66,16 +65,16 @@ void ED_image_undo_restore(struct UndoStep *us);
 
 void ED_image_undosys_type(struct UndoType *ut);
 
-void *ED_image_paint_tile_find(struct ListBase *undo_tiles,
-                               struct Image *ima,
+void *ED_image_paint_tile_find(struct ListBase *paint_tiles,
+                               struct Image *image,
                                struct ImBuf *ibuf,
                                struct ImageUser *iuser,
                                int x_tile,
                                int y_tile,
                                unsigned short **r_mask,
                                bool validate);
-void *ED_image_paint_tile_push(struct ListBase *undo_tiles,
-                               struct Image *ima,
+void *ED_image_paint_tile_push(struct ListBase *paint_tiles,
+                               struct Image *image,
                                struct ImBuf *ibuf,
                                struct ImBuf **tmpibuf,
                                struct ImageUser *iuser,
@@ -104,5 +103,3 @@ void ED_paintcurve_undosys_type(struct UndoType *ut);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_PAINT_H__ */

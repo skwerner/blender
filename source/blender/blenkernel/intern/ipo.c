@@ -124,6 +124,12 @@ IDTypeInfo IDType_ID_IP = {
     .free_data = ipo_free_data,
     .make_local = NULL,
     .foreach_id = NULL,
+    .foreach_cache = NULL,
+
+    .blend_write = NULL,
+    .blend_read_data = NULL,
+    .blend_read_lib = NULL,
+    .blend_read_expand = NULL,
 };
 
 /* *************************************************** */
@@ -158,7 +164,7 @@ static AdrBit2Path ob_layer_bits[] = {
 /* quick macro for returning the appropriate array for adrcode_bitmaps_to_paths() */
 #define RET_ABP(items) \
   { \
-    *tot = sizeof(items) / sizeof(AdrBit2Path); \
+    *tot = ARRAY_SIZE(items); \
     return items; \
   } \
   (void)0
@@ -517,9 +523,8 @@ static const char *mtex_adrcodes_to_paths(int adrcode, int *UNUSED(array_index))
     BLI_snprintf(buf, 128, "%s.%s", base, prop);
     return buf;
   }
-  else {
-    return NULL;
-  }
+
+  return NULL;
 }
 
 /* Texture types */
@@ -1074,10 +1079,9 @@ static char *get_rna_access(ID *id,
 
     return NULL;
   }
-  else {
-    if (array_index) {
-      *array_index = dummy_index;
-    }
+
+  if (array_index) {
+    *array_index = dummy_index;
   }
 
   /* 'buf' _must_ be initialized in this block */
@@ -1976,7 +1980,7 @@ void do_versions_ipos_to_animato(Main *bmain)
     CLOG_WARN(&LOG, "Animation data too new to convert (Version %d)", bmain->versionfile);
     return;
   }
-  else if (G.debug & G_DEBUG) {
+  if (G.debug & G_DEBUG) {
     printf("INFO: Converting to Animato...\n");
   }
 
@@ -2199,7 +2203,7 @@ void do_versions_ipos_to_animato(Main *bmain)
 
       AnimData *adt = BKE_animdata_add_id(id);
 
-      SEQ_BEGIN (ed, seq) {
+      SEQ_ALL_BEGIN (ed, seq) {
         IpoCurve *icu = (seq->ipo) ? seq->ipo->curve.first : NULL;
         short adrcode = SEQ_FAC1;
 
@@ -2240,7 +2244,7 @@ void do_versions_ipos_to_animato(Main *bmain)
         id_us_min(&seq->ipo->id);
         seq->ipo = NULL;
       }
-      SEQ_END;
+      SEQ_ALL_END;
     }
   }
 

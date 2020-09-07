@@ -18,8 +18,7 @@
  * \ingroup RNA
  */
 
-#ifndef __RNA_INTERNAL_H__
-#define __RNA_INTERNAL_H__
+#pragma once
 
 #include "BLI_utildefines.h"
 
@@ -456,10 +455,16 @@ void RNA_def_main_cachefiles(BlenderRNA *brna, PropertyRNA *cprop);
 void RNA_def_main_paintcurves(BlenderRNA *brna, PropertyRNA *cprop);
 void RNA_def_main_workspaces(BlenderRNA *brna, PropertyRNA *cprop);
 void RNA_def_main_lightprobes(BlenderRNA *brna, PropertyRNA *cprop);
+#ifdef WITH_HAIR_NODES
 void RNA_def_main_hairs(BlenderRNA *brna, PropertyRNA *cprop);
+#endif
+#ifdef WITH_PARTICLE_NODES
 void RNA_def_main_pointclouds(BlenderRNA *brna, PropertyRNA *cprop);
+#endif
 void RNA_def_main_volumes(BlenderRNA *brna, PropertyRNA *cprop);
+#ifdef WITH_PARTICLE_NODES
 void RNA_def_main_simulations(BlenderRNA *brna, PropertyRNA *cprop);
+#endif
 
 /* ID Properties */
 
@@ -644,5 +649,3 @@ void rna_RenderPass_rect_set(PointerRNA *ptr, const float *values);
              : -FLT_MAX, double \
              : -DBL_MAX)
 #endif
-
-#endif /* __RNA_INTERNAL_H__ */

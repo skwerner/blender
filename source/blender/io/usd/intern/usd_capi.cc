@@ -20,6 +20,7 @@
 #include "usd.h"
 #include "usd_hierarchy_iterator.h"
 
+#include <pxr/base/plug/registry.h>
 #include <pxr/pxr.h>
 #include <pxr/usd/usd/stage.h>
 #include <pxr/usd/usdGeom/tokens.h>
@@ -32,6 +33,7 @@
 
 #include "DNA_scene_types.h"
 
+#include "BKE_appdir.h"
 #include "BKE_blender_version.h"
 #include "BKE_context.h"
 #include "BKE_global.h"
@@ -59,6 +61,21 @@ struct ExportJobData {
   bool export_ok;
 };
 
+static void ensure_usd_plugin_path_registered(void)
+{
+  static bool plugin_path_registered = false;
+  if (plugin_path_registered) {
+    return;
+  }
+  plugin_path_registered = true;
+
+  /* Tell USD which directory to search for its JSON files. If 'datafiles/usd'
+   * does not exist, the USD library will not be able to read or write any files. */
+  const std::string blender_usd_datafiles = BKE_appdir_folder_id(BLENDER_DATAFILES, "usd");
+  /* The trailing slash indicates to the USD library that the path is a directory. */
+  pxr::PlugRegistry::GetInstance().RegisterPlugins(blender_usd_datafiles + "/");
+}
+
 static void export_startjob(void *customdata,
                             /* Cannot be const, this function implements wm_jobs_start_callback.
                              * NOLINTNEXTLINE: readability-non-const-parameter. */
@@ -75,8 +92,12 @@ static void export_startjob(void *customdata,
 
   // Construct the depsgraph for exporting.
   Scene *scene = DEG_get_input_scene(data->depsgraph);
-  ViewLayer *view_layer = DEG_get_input_view_layer(data->depsgraph);
-  DEG_graph_build_from_view_layer(data->depsgraph, data->bmain, scene, view_layer);
+  if (data->params.visible_objects_only) {
+    DEG_graph_build_from_view_layer(data->depsgraph);
+  }
+  else {
+    DEG_graph_build_for_all_objects(data->depsgraph);
+  }
   BKE_scene_graph_update_tagged(data->depsgraph, data->bmain);
 
   *progress = 0.0f;
@@ -122,7 +143,7 @@ static void export_startjob(void *customdata,
       // Update the scene for the next frame to render.
       scene->r.cfra = static_cast<int>(frame);
       scene->r.subframe = frame - scene->r.cfra;
-      BKE_scene_graph_update_for_newframe(data->depsgraph, data->bmain);
+      BKE_scene_graph_update_for_newframe(data->depsgraph);
 
       iter.set_export_frame(frame);
       iter.iterate_and_write();
@@ -142,7 +163,7 @@ static void export_startjob(void *customdata,
   // Finish up by going back to the keyframe that was current before we started.
   if (CFRA != orig_frame) {
     CFRA = orig_frame;
-    BKE_scene_graph_update_for_newframe(data->depsgraph, data->bmain);
+    BKE_scene_graph_update_for_newframe(data->depsgraph);
   }
 
   data->export_ok = true;
@@ -175,6 +196,8 @@ bool USD_export(bContext *C,
 {
   ViewLayer *view_layer = CTX_data_view_layer(C);
   Scene *scene = CTX_data_scene(C);
+
+  blender::io::usd::ensure_usd_plugin_path_registered();
 
   blender::io::usd::ExportJobData *job = static_cast<blender::io::usd::ExportJobData *>(
       MEM_mallocN(sizeof(blender::io::usd::ExportJobData), "ExportJobData"));

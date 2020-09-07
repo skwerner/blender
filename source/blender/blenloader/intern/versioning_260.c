@@ -658,6 +658,7 @@ static void do_versions_nodetree_customnodes(bNodeTree *ntree, int UNUSED(is_gro
   }
 }
 
+/* NOLINTNEXTLINE: readability-function-size */
 void blo_do_versions_260(FileData *fd, Library *UNUSED(lib), Main *bmain)
 {
   if (bmain->versionfile < 260) {
@@ -1205,7 +1206,7 @@ void blo_do_versions_260(FileData *fd, Library *UNUSED(lib), Main *bmain)
               if (region->regiontype == RGN_TYPE_PREVIEW) {
                 if (region->alignment != RGN_ALIGN_NONE) {
                   region->flag |= RGN_FLAG_HIDDEN;
-                  region->v2d.flag &= ~V2D_IS_INITIALISED;
+                  region->v2d.flag &= ~V2D_IS_INIT;
                   region->alignment = RGN_ALIGN_NONE;
 
                   hide = true;
@@ -1488,7 +1489,7 @@ void blo_do_versions_260(FileData *fd, Library *UNUSED(lib), Main *bmain)
       if (scene->ed) {
         Sequence *seq;
 
-        SEQ_BEGIN (scene->ed, seq) {
+        SEQ_ALL_BEGIN (scene->ed, seq) {
           Strip *strip = seq->strip;
 
           if (strip && strip->color_balance) {
@@ -1511,7 +1512,7 @@ void blo_do_versions_260(FileData *fd, Library *UNUSED(lib), Main *bmain)
             strip->color_balance = NULL;
           }
         }
-        SEQ_END;
+        SEQ_ALL_END;
       }
     }
   }
@@ -1803,7 +1804,7 @@ void blo_do_versions_260(FileData *fd, Library *UNUSED(lib), Main *bmain)
     for (scene = bmain->scenes.first; scene; scene = scene->id.next) {
       Sequence *seq;
 
-      SEQ_BEGIN (scene->ed, seq) {
+      SEQ_ALL_BEGIN (scene->ed, seq) {
         enum { SEQ_MAKE_PREMUL = (1 << 6) };
         if (seq->flag & SEQ_MAKE_PREMUL) {
           seq->alpha_mode = SEQ_ALPHA_STRAIGHT;
@@ -1812,7 +1813,7 @@ void blo_do_versions_260(FileData *fd, Library *UNUSED(lib), Main *bmain)
           BKE_sequence_alpha_mode_from_extension(seq);
         }
       }
-      SEQ_END;
+      SEQ_ALL_END;
 
       if (scene->r.bake_samples == 0) {
         scene->r.bake_samples = 256;
@@ -2348,10 +2349,14 @@ void blo_do_versions_260(FileData *fd, Library *UNUSED(lib), Main *bmain)
       for (area = screen->areabase.first; area; area = area->next) {
         for (sl = area->spacedata.first; sl; sl = sl->next) {
           if (sl->spacetype == SPACE_OUTLINER) {
-            SpaceOutliner *so = (SpaceOutliner *)sl;
+            SpaceOutliner *space_outliner = (SpaceOutliner *)sl;
 
-            if (!ELEM(so->outlinevis, SO_SCENES, SO_LIBRARIES, SO_SEQUENCE, SO_DATA_API)) {
-              so->outlinevis = SO_SCENES;
+            if (!ELEM(space_outliner->outlinevis,
+                      SO_SCENES,
+                      SO_LIBRARIES,
+                      SO_SEQUENCE,
+                      SO_DATA_API)) {
+              space_outliner->outlinevis = SO_SCENES;
             }
           }
         }
@@ -2442,13 +2447,13 @@ void blo_do_versions_260(FileData *fd, Library *UNUSED(lib), Main *bmain)
 
       for (scene = bmain->scenes.first; scene; scene = scene->id.next) {
         Sequence *seq;
-        SEQ_BEGIN (scene->ed, seq) {
+        SEQ_ALL_BEGIN (scene->ed, seq) {
           if (seq->type == SEQ_TYPE_WIPE) {
             WipeVars *wv = seq->effectdata;
             wv->angle = DEG2RADF(wv->angle);
           }
         }
-        SEQ_END;
+        SEQ_ALL_END;
       }
 
       FOREACH_NODETREE_BEGIN (bmain, ntree, id) {

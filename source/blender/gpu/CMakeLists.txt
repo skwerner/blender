@@ -28,6 +28,8 @@ endif()
 
 set(INC
   .
+  intern
+  opengl
   ../blenkernel
   ../blenlib
   ../bmesh
@@ -42,6 +44,7 @@ set(INC
   ../nodes
   ../nodes/intern
 
+  ../../../intern/ghost
   ../../../intern/glew-mx
   ../../../intern/guardedalloc
   ../../../intern/mantaflow/extern
@@ -52,7 +55,6 @@ set(INC_SYS
 )
 
 set(SRC
-  intern/gpu_attr_binding.cc
   intern/gpu_batch.cc
   intern/gpu_batch_presets.c
   intern/gpu_batch_utils.c
@@ -60,33 +62,45 @@ set(SRC
   intern/gpu_codegen.c
   intern/gpu_context.cc
   intern/gpu_debug.cc
-  intern/gpu_element.cc
+  intern/gpu_drawlist.cc
   intern/gpu_extensions.cc
   intern/gpu_framebuffer.cc
   intern/gpu_immediate.cc
   intern/gpu_immediate_util.c
+  intern/gpu_index_buffer.cc
   intern/gpu_init_exit.c
   intern/gpu_material.c
   intern/gpu_material_library.c
-  intern/gpu_matrix.c
+  intern/gpu_matrix.cc
   intern/gpu_node_graph.c
   intern/gpu_platform.cc
-  intern/gpu_primitive.c
   intern/gpu_select.c
   intern/gpu_select_pick.c
   intern/gpu_select_sample_query.c
-  intern/gpu_shader.c
-  intern/gpu_shader_interface.c
-  intern/gpu_state.c
-  intern/gpu_texture.c
-  intern/gpu_texture_image.cc
-  intern/gpu_texture_smoke.cc
-  intern/gpu_uniformbuffer.c
-  intern/gpu_vertex_buffer.c
-  intern/gpu_vertex_format.c
+  intern/gpu_shader.cc
+  intern/gpu_shader_builtin.c
+  intern/gpu_shader_interface.cc
+  intern/gpu_state.cc
+  intern/gpu_texture.cc
+  intern/gpu_uniform_buffer.cc
+  intern/gpu_vertex_buffer.cc
+  intern/gpu_vertex_format.cc
   intern/gpu_viewport.c
 
-  GPU_attr_binding.h
+  opengl/gl_batch.cc
+  opengl/gl_context.cc
+  opengl/gl_drawlist.cc
+  opengl/gl_debug.cc
+  opengl/gl_framebuffer.cc
+  opengl/gl_immediate.cc
+  opengl/gl_index_buffer.cc
+  opengl/gl_shader.cc
+  opengl/gl_shader_interface.cc
+  opengl/gl_state.cc
+  opengl/gl_texture.cc
+  opengl/gl_uniform_buffer.cc
+  opengl/gl_vertex_array.cc
+
   GPU_batch.h
   GPU_batch_presets.h
   GPU_batch_utils.h
@@ -94,13 +108,13 @@ set(SRC
   GPU_common.h
   GPU_context.h
   GPU_debug.h
-  GPU_draw.h
-  GPU_element.h
+  GPU_drawlist.h
   GPU_extensions.h
   GPU_framebuffer.h
   GPU_glew.h
   GPU_immediate.h
   GPU_immediate_util.h
+  GPU_index_buffer.h
   GPU_init_exit.h
   GPU_legacy_stubs.h
   GPU_material.h
@@ -109,26 +123,49 @@ set(SRC
   GPU_primitive.h
   GPU_select.h
   GPU_shader.h
-  GPU_shader_interface.h
   GPU_state.h
   GPU_texture.h
-  GPU_uniformbuffer.h
+  GPU_uniform_buffer.h
   GPU_vertex_buffer.h
   GPU_vertex_format.h
   GPU_viewport.h
 
-  intern/gpu_attr_binding_private.h
-  intern/gpu_batch_private.h
+  intern/gpu_backend.hh
+  intern/gpu_batch_private.hh
   intern/gpu_codegen.h
-  intern/gpu_context_private.h
+  intern/gpu_context_private.hh
+  intern/gpu_drawlist_private.hh
+  intern/gpu_framebuffer_private.hh
+  intern/gpu_immediate_private.hh
+  intern/gpu_index_buffer_private.hh
   intern/gpu_material_library.h
   intern/gpu_matrix_private.h
   intern/gpu_node_graph.h
-  intern/gpu_primitive_private.h
   intern/gpu_private.h
   intern/gpu_select_private.h
-  intern/gpu_shader_private.h
+  intern/gpu_shader_private.hh
+  intern/gpu_shader_interface.hh
+  intern/gpu_state_private.hh
+  intern/gpu_texture_private.hh
+  intern/gpu_uniform_buffer_private.hh
+  intern/gpu_vertex_buffer_private.hh
   intern/gpu_vertex_format_private.h
+
+  opengl/gl_backend.hh
+  opengl/gl_batch.hh
+  opengl/gl_context.hh
+  opengl/gl_debug.hh
+  opengl/gl_drawlist.hh
+  opengl/gl_framebuffer.hh
+  opengl/gl_immediate.hh
+  opengl/gl_index_buffer.hh
+  opengl/gl_primitive.hh
+  opengl/gl_shader.hh
+  opengl/gl_shader_interface.hh
+  opengl/gl_state.hh
+  opengl/gl_texture.hh
+  opengl/gl_uniform_buffer.hh
+  opengl/gl_vertex_array.hh
 )
 
 set(LIB
@@ -215,6 +252,8 @@ data_to_c_simple(shaders/gpu_shader_text_vert.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_text_frag.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_keyframe_diamond_vert.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_keyframe_diamond_frag.glsl SRC)
+
+data_to_c_simple(shaders/gpu_shader_codegen_lib.glsl SRC)
 
 data_to_c_simple(shaders/gpu_shader_geometry.glsl SRC)
 

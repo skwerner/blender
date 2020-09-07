@@ -54,6 +54,7 @@
 #include "BLI_ghash.h"
 #include "BLI_memarena.h"
 #include "BLI_sys_types.h" /* for intptr_t support */
+#include "BLI_system.h"    /* for 'BLI_system_backtrace' stub. */
 #include "BLI_utildefines.h"
 
 #include "dna_utils.h"
@@ -98,6 +99,7 @@ static const char *includefiles[] = {
     "DNA_sdna_types.h",
     "DNA_fileglobal_types.h",
     "DNA_sequence_types.h",
+    "DNA_session_uuid_types.h",
     "DNA_effect_types.h",
     "DNA_outliner_types.h",
     "DNA_sound_types.h",
@@ -358,7 +360,7 @@ static int add_type(const char *str, int size)
   if (str[0] == 0) {
     return -1;
   }
-  else if (strchr(str, '*')) {
+  if (strchr(str, '*')) {
     /* note: this is valid C syntax but we can't parse, complain!
      * `struct SomeStruct* some_var;` <-- correct but we cant handle right now. */
     return -1;
@@ -368,7 +370,7 @@ static int add_type(const char *str, int size)
 
   /* search through type array */
   for (int index = 0; index < types_len; index++) {
-    if (strcmp(str, types[index]) == 0) {
+    if (STREQ(str, types[index])) {
       if (size) {
         types_size_native[index] = size;
         types_size_32[index] = size;
@@ -521,7 +523,7 @@ static int add_name(const char *str)
 
   /* search name array */
   for (nr = 0; nr < names_len; nr++) {
-    if (strcmp(name, names[nr]) == 0) {
+    if (STREQ(name, names[nr])) {
       return nr;
     }
   }
@@ -1371,6 +1373,7 @@ static int make_structDNA(const char *base_directory,
   /* write a simple enum with all structs offsets,
    * should only be accessed via SDNA_TYPE_FROM_STRUCT macro */
   {
+    fprintf(file_offsets, "#pragma once\n");
     fprintf(file_offsets, "#define SDNA_TYPE_FROM_STRUCT(id) _SDNA_TYPE_##id\n");
     fprintf(file_offsets, "enum {\n");
     for (i = 0; i < structs_len; i++) {
@@ -1601,6 +1604,7 @@ int main(int argc, char **argv)
 #include "DNA_screen_types.h"
 #include "DNA_sdna_types.h"
 #include "DNA_sequence_types.h"
+#include "DNA_session_uuid_types.h"
 #include "DNA_shader_fx_types.h"
 #include "DNA_simulation_types.h"
 #include "DNA_sound_types.h"

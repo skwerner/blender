@@ -28,6 +28,7 @@
 #include "BKE_anim_data.h"
 #include "BKE_duplilist.h"
 #include "BKE_key.h"
+#include "BKE_object.h"
 #include "BKE_particle.h"
 
 #include "BLI_assert.h"
@@ -39,6 +40,7 @@
 #include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
 #include "DNA_particle_types.h"
+#include "DNA_rigidbody_types.h"
 
 #include "DEG_depsgraph_query.h"
 
@@ -74,6 +76,29 @@ void HierarchyContext::mark_as_instance_of(const std::string &reference_export_p
 void HierarchyContext::mark_as_not_instanced()
 {
   original_export_path.clear();
+}
+
+bool HierarchyContext::is_object_visible(const enum eEvaluationMode evaluation_mode) const
+{
+  const bool is_dupli = duplicator != nullptr;
+  int base_flag;
+
+  if (is_dupli) {
+    /* Construct the object's base flags from its dupli-parent, just like is done in
+     * deg_objects_dupli_iterator_next(). Without this, the visibility check below will fail. Doing
+     * this here, instead of a more suitable location in AbstractHierarchyIterator, prevents
+     * copying the Object for every dupli. */
+    base_flag = object->base_flag;
+    object->base_flag = duplicator->base_flag | BASE_FROM_DUPLI;
+  }
+
+  const int visibility = BKE_object_visibility(object, evaluation_mode);
+
+  if (is_dupli) {
+    object->base_flag = base_flag;
+  }
+
+  return (visibility & OB_VISIBLE_SELF) != 0;
 }
 
 EnsuredWriter::EnsuredWriter() : writer_(nullptr), newly_created_(false)
@@ -127,6 +152,9 @@ bool AbstractHierarchyWriter::check_is_animated(const HierarchyContext &context)
   if (BKE_key_from_object(object) != nullptr) {
     return true;
   }
+  if (check_has_deforming_physics(context)) {
+    return true;
+  }
 
   /* Test modifiers. */
   /* TODO(Sybren): replace this with a check on the depsgraph to properly check for dependency on
@@ -140,6 +168,18 @@ bool AbstractHierarchyWriter::check_is_animated(const HierarchyContext &context)
   }
 
   return false;
+}
+
+bool AbstractHierarchyWriter::check_has_physics(const HierarchyContext &context)
+{
+  const RigidBodyOb *rbo = context.object->rigidbody_object;
+  return rbo != nullptr && rbo->type == RBO_TYPE_ACTIVE;
+}
+
+bool AbstractHierarchyWriter::check_has_deforming_physics(const HierarchyContext &context)
+{
+  const RigidBodyOb *rbo = context.object->rigidbody_object;
+  return rbo != nullptr && rbo->type == RBO_TYPE_ACTIVE && (rbo->flag & RBO_FLAG_USE_DEFORM) != 0;
 }
 
 AbstractHierarchyIterator::AbstractHierarchyIterator(Depsgraph *depsgraph)

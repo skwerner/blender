@@ -258,7 +258,7 @@ static void knife_input_ray_segment(KnifeTool_OpData *kcd,
                                     const float mval[2],
                                     const float ofs,
                                     float r_origin[3],
-                                    float r_dest[3]);
+                                    float r_origin_ofs[3]);
 
 static bool knife_verts_edge_in_face(KnifeVert *v1, KnifeVert *v2, BMFace *f);
 
@@ -1051,7 +1051,7 @@ static void knife_init_colors(KnifeColors *colors)
 static void knifetool_draw(const bContext *UNUSED(C), ARegion *UNUSED(region), void *arg)
 {
   const KnifeTool_OpData *kcd = arg;
-  GPU_depth_test(false);
+  GPU_depth_test(GPU_DEPTH_NONE);
 
   GPU_matrix_push_projection();
   GPU_polygon_offset(1.0f, 1.0f);
@@ -1128,9 +1128,7 @@ static void knifetool_draw(const bContext *UNUSED(C), ARegion *UNUSED(region), v
     int i, snapped_verts_count, other_verts_count;
     float fcol[4];
 
-    GPU_blend(true);
-    GPU_blend_set_func_separate(
-        GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+    GPU_blend(GPU_BLEND_ALPHA);
 
     GPUVertBuf *vert = GPU_vertbuf_create_with_format(format);
     GPU_vertbuf_data_alloc(vert, kcd->totlinehit);
@@ -1147,16 +1145,13 @@ static void knifetool_draw(const bContext *UNUSED(C), ARegion *UNUSED(region), v
 
     GPUBatch *batch = GPU_batch_create_ex(GPU_PRIM_POINTS, vert, NULL, GPU_BATCH_OWNS_VBO);
     GPU_batch_program_set_builtin(batch, GPU_SHADER_3D_UNIFORM_COLOR);
-    GPU_batch_bind(batch);
 
     /* draw any snapped verts first */
     rgba_uchar_to_float(fcol, kcd->colors.point_a);
     GPU_batch_uniform_4fv(batch, "color", fcol);
-    GPU_matrix_bind(batch->interface);
-    GPU_shader_set_srgb_uniform(batch->interface);
     GPU_point_size(11);
     if (snapped_verts_count > 0) {
-      GPU_batch_draw_advanced(batch, 0, snapped_verts_count, 0, 0);
+      GPU_batch_draw_range(batch, 0, snapped_verts_count);
     }
 
     /* now draw the rest */
@@ -1164,13 +1159,12 @@ static void knifetool_draw(const bContext *UNUSED(C), ARegion *UNUSED(region), v
     GPU_batch_uniform_4fv(batch, "color", fcol);
     GPU_point_size(7);
     if (other_verts_count > 0) {
-      GPU_batch_draw_advanced(batch, snapped_verts_count, other_verts_count, 0, 0);
+      GPU_batch_draw_range(batch, snapped_verts_count, other_verts_count);
     }
 
-    GPU_batch_program_use_end(batch);
     GPU_batch_discard(batch);
 
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
   }
 
   if (kcd->totkedge > 0) {
@@ -1228,7 +1222,7 @@ static void knifetool_draw(const bContext *UNUSED(C), ARegion *UNUSED(region), v
   GPU_matrix_pop_projection();
 
   /* Reset default */
-  GPU_depth_test(true);
+  GPU_depth_test(GPU_DEPTH_LESS_EQUAL);
 }
 
 /**
@@ -1628,9 +1622,9 @@ static void knife_find_line_hits(KnifeTool_OpData *kcd)
     plane_from_point_normal_v3(plane, v1, plane);
   }
 
-  /* First use bvh tree to find faces, knife edges, and knife verts that might
+  /* First use BVH tree to find faces, knife edges, and knife verts that might
    * intersect the cut plane with rays v1-v3 and v2-v4.
-   * This deduplicates the candidates before doing more expensive intersection tests. */
+   * This de-duplicates the candidates before doing more expensive intersection tests. */
 
   tree = BKE_bmbvh_tree_get(kcd->bmbvh);
   results = BLI_bvhtree_intersect_plane(tree, plane, &tot);
@@ -2632,7 +2626,7 @@ static void knifetool_update_mval(KnifeTool_OpData *kcd, const float mval[2])
 
 static void knifetool_update_mval_i(KnifeTool_OpData *kcd, const int mval_i[2])
 {
-  float mval[2] = {UNPACK2(mval_i)};
+  const float mval[2] = {UNPACK2(mval_i)};
   knifetool_update_mval(kcd, mval);
 }
 

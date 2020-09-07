@@ -178,7 +178,7 @@ static void protectedRotateBits(short protectflag, float eul[3], const float old
 /* this function only does the delta rotation */
 /* axis-angle is usually internally stored as quats... */
 static void protectedAxisAngleBits(
-    short protectflag, float axis[3], float *angle, float oldAxis[3], float oldAngle)
+    short protectflag, float axis[3], float *angle, const float oldAxis[3], float oldAngle)
 {
   /* check that protection flags are set */
   if ((protectflag & (OB_LOCK_ROTX | OB_LOCK_ROTY | OB_LOCK_ROTZ | OB_LOCK_ROTW)) == 0) {
@@ -896,7 +896,7 @@ void headerResize(TransInfo *t, const float vec[3], char str[UI_MAX_DRAW_STR])
  *
  * \note this is a tricky area, before making changes see: T29633, T42444
  */
-static void TransMat3ToSize(float mat[3][3], float smat[3][3], float size[3])
+static void TransMat3ToSize(const float mat[3][3], const float smat[3][3], float size[3])
 {
   float rmat[3][3];
 
@@ -1014,7 +1014,7 @@ void ElementResize(TransInfo *t, TransDataContainer *tc, TransData *td, float ma
 
     /* scale stroke thickness */
     if (td->val) {
-      snapGridIncrement(t, t->values_final);
+      transform_snap_increment(t, t->values_final);
       applyNumInput(&t->num, t->values_final);
 
       float ratio = t->values_final[0];
@@ -1272,7 +1272,7 @@ void transform_mode_init(TransInfo *t, wmOperator *op, const int mode)
   if (t->data_type == TC_MESH_VERTS) {
     /* Init Custom Data correction.
      * Ideally this should be called when creating the TransData. */
-    trans_mesh_customdata_correction_init(t);
+    mesh_customdatacorrect_init(t);
   }
 
   /* TODO(germano): Some of these operations change the `t->mode`.

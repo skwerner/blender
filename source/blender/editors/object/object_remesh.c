@@ -72,7 +72,6 @@
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
 
-#include "GPU_draw.h"
 #include "GPU_immediate.h"
 #include "GPU_immediate_util.h"
 #include "GPU_matrix.h"
@@ -295,7 +294,7 @@ static void voxel_size_edit_draw(const bContext *UNUSED(C), ARegion *UNUSED(ar),
 {
   VoxelSizeEditCustomData *cd = arg;
 
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
   GPU_line_smooth(true);
 
   uint pos3d = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
@@ -364,7 +363,7 @@ static void voxel_size_edit_draw(const bContext *UNUSED(C), ARegion *UNUSED(ar),
 
   GPU_matrix_pop();
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
   GPU_line_smooth(false);
 }
 
@@ -407,7 +406,7 @@ static int voxel_size_edit_modal(bContext *C, wmOperator *op, const wmEvent *eve
     return OPERATOR_FINISHED;
   }
 
-  float mval[2] = {event->mval[0], event->mval[1]};
+  const float mval[2] = {event->mval[0], event->mval[1]};
 
   float d = cd->init_mval[0] - mval[0];
 
@@ -471,7 +470,7 @@ static int voxel_size_edit_invoke(bContext *C, wmOperator *op, const wmEvent *ev
   BoundBox *bb = BKE_mesh_boundbox_get(cd->active_object);
 
   /* Indices of the Bounding Box faces. */
-  int BB_faces[6][4] = {
+  const int BB_faces[6][4] = {
       {3, 0, 4, 7},
       {1, 2, 6, 5},
       {3, 2, 1, 0},
@@ -526,7 +525,7 @@ static int voxel_size_edit_invoke(bContext *C, wmOperator *op, const wmEvent *ev
   float d_a[3], d_b[3];
   float d_a_proj[2], d_b_proj[2];
   float preview_plane_proj[4][3];
-  float y_axis_proj[2] = {0.0f, 1.0f};
+  const float y_axis_proj[2] = {0.0f, 1.0f};
 
   mid_v3_v3v3(text_pos, cd->preview_plane[0], cd->preview_plane[2]);
 

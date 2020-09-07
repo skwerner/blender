@@ -88,7 +88,7 @@ static bool is_cursor_visible(const DRWContextState *draw_ctx, Scene *scene, Vie
     /* no exception met? then don't draw cursor! */
     return false;
   }
-  else if (draw_ctx->object_mode & OB_MODE_WEIGHT_GPENCIL) {
+  if (draw_ctx->object_mode & OB_MODE_WEIGHT_GPENCIL) {
     /* grease pencil hide always in some modes */
     return false;
   }
@@ -105,7 +105,7 @@ void DRW_draw_cursor(void)
 
   GPU_color_mask(true, true, true, true);
   GPU_depth_mask(false);
-  GPU_depth_test(false);
+  GPU_depth_test(GPU_DEPTH_NONE);
 
   if (is_cursor_visible(draw_ctx, scene, view_layer)) {
     int co[2];
@@ -123,7 +123,7 @@ void DRW_draw_cursor(void)
 
       /* Draw nice Anti Aliased cursor. */
       GPU_line_width(1.0f);
-      GPU_blend(true);
+      GPU_blend(GPU_BLEND_ALPHA);
       GPU_line_smooth(true);
 
       float eps = 1e-5f;
@@ -184,12 +184,11 @@ void DRW_draw_cursor(void)
 
       GPUBatch *cursor_batch = DRW_cache_cursor_get(is_aligned);
       GPUShader *shader = GPU_shader_get_builtin_shader(GPU_SHADER_2D_FLAT_COLOR);
-      GPU_batch_program_set(
-          cursor_batch, GPU_shader_get_program(shader), GPU_shader_get_interface(shader));
+      GPU_batch_set_shader(cursor_batch, shader);
 
       GPU_batch_draw(cursor_batch);
 
-      GPU_blend(false);
+      GPU_blend(GPU_BLEND_NONE);
       GPU_line_smooth(false);
       GPU_matrix_pop();
       GPU_matrix_projection_set(original_proj);

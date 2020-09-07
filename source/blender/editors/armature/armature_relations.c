@@ -304,6 +304,10 @@ int ED_armature_join_objects_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
+  /* Inverse transform for all selected armatures in this object,
+   * See #object_join_exec for detailed comment on why the safe version is used. */
+  invert_m4_m4_safe_ortho(oimat, ob_active->obmat);
+
   /* Get edit-bones of active armature to add edit-bones to */
   ED_armature_to_edit(arm);
 
@@ -334,7 +338,6 @@ int ED_armature_join_objects_exec(bContext *C, wmOperator *op)
       // BASACT->flag &= ~OB_MODE_POSE;
 
       /* Find the difference matrix */
-      invert_m4_m4(oimat, ob_active->obmat);
       mul_m4_m4m4(mat, oimat, ob_iter->obmat);
 
       /* Copy bones and posechannels from the object to the edit armature */
@@ -384,6 +387,7 @@ int ED_armature_join_objects_exec(bContext *C, wmOperator *op)
         BLI_remlink(curarm->edbo, curbone);
         BLI_addtail(arm->edbo, curbone);
 
+        /* Pose channel is moved from one storage to another, its UUID is still unique. */
         BLI_remlink(&opose->chanbase, pchan);
         BLI_addtail(&pose->chanbase, pchan);
         BKE_pose_channels_hash_free(opose);
@@ -434,6 +438,7 @@ int ED_armature_join_objects_exec(bContext *C, wmOperator *op)
 
   DEG_id_tag_update(&scene->id, ID_RECALC_SELECT);
   WM_event_add_notifier(C, NC_SCENE | ND_OB_ACTIVE, scene);
+  WM_event_add_notifier(C, NC_SCENE | ND_LAYER_CONTENT, scene);
 
   return OPERATOR_FINISHED;
 }

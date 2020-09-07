@@ -23,8 +23,7 @@
  * GPU vertex format
  */
 
-#ifndef __GPU_VERTEX_FORMAT_PRIVATE_H__
-#define __GPU_VERTEX_FORMAT_PRIVATE_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,9 +32,8 @@ extern "C" {
 void VertexFormat_pack(GPUVertFormat *format);
 uint padding(uint offset, uint alignment);
 uint vertex_buffer_size(const GPUVertFormat *format, uint vertex_len);
+GLenum convert_comp_type_to_gl(GPUVertCompType type);
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __GPU_VERTEX_FORMAT_PRIVATE_H__ */

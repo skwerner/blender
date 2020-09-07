@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_MULTIRES_H__
-#define __BKE_MULTIRES_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -152,7 +151,7 @@ void multiresModifier_ensure_external_read(struct Mesh *mesh,
 void old_mdisps_bilinear(float out[3], float (*disps)[3], const int st, float u, float v);
 int mdisp_rot_face_to_crn(struct MVert *mvert,
                           struct MPoly *mpoly,
-                          struct MLoop *mloops,
+                          struct MLoop *mloop,
                           const struct MLoopTri *lt,
                           const int face_side,
                           const float u,
@@ -235,5 +234,3 @@ BLI_INLINE void BKE_multires_construct_tangent_matrix(float tangent_matrix[3][3]
 #endif
 
 #include "intern/multires_inline.h"
-
-#endif /* __BKE_MULTIRES_H__ */

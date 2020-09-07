@@ -1,12 +1,8 @@
 #=============================================================================
 # Copyright 2014 Blender Foundation.
 #
-# Distributed under the OSI-approved BSD License (the "License");
-# see accompanying file Copyright.txt for details.
-#
-# This software is distributed WITHOUT ANY WARRANTY; without even the
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-# See the License for more information.
+# Distributed under the OSI-approved BSD 3-Clause License,
+# see accompanying file BSD-3-Clause-license.txt for details.
 #
 # Inspired on the Testing.cmake from Libmv
 #
@@ -73,6 +69,9 @@ macro(BLENDER_SRC_GTEST_EX)
     endif()
     if(WITH_TBB)
       target_link_libraries(${TARGET_NAME} ${TBB_LIBRARIES})
+    endif()
+    if(WITH_GMP)
+      target_link_libraries(${TARGET_NAME} ${GMP_LIBRARIES})
     endif()
 
     get_property(GENERATOR_IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)

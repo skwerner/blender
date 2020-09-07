@@ -102,9 +102,8 @@ fn::GVSpan ParticleFunctionEvaluator::get(int output_index, StringRef expected_n
   if (particle_fn_.output_is_global_[output_index]) {
     return fn::GVSpan::FromSingleWithMaxSize(type, buffer);
   }
-  else {
-    return fn::GVSpan(fn::GSpan(type, buffer, mask_.min_array_size()));
-  }
+
+  return fn::GVSpan(fn::GSpan(type, buffer, mask_.min_array_size()));
 }
 
 void ParticleFunctionEvaluator::compute_globals()
@@ -116,8 +115,9 @@ void ParticleFunctionEvaluator::compute_globals()
   fn::MFParamsBuilder params(*particle_fn_.global_fn_, mask_.min_array_size());
 
   /* Add input parameters. */
+  ParticleFunctionInputContext input_context{solve_context_, particles_};
   for (const ParticleFunctionInput *input : particle_fn_.global_inputs_) {
-    input->add_input(particles_.attributes, params, resources_);
+    input->add_input(input_context, params, resources_);
   }
 
   /* Add output parameters. */
@@ -143,8 +143,9 @@ void ParticleFunctionEvaluator::compute_per_particle()
   fn::MFParamsBuilder params(*particle_fn_.per_particle_fn_, mask_.min_array_size());
 
   /* Add input parameters. */
+  ParticleFunctionInputContext input_context{solve_context_, particles_};
   for (const ParticleFunctionInput *input : particle_fn_.per_particle_inputs_) {
-    input->add_input(particles_.attributes, params, resources_);
+    input->add_input(input_context, params, resources_);
   }
 
   /* Add output parameters. */

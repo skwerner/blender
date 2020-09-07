@@ -21,8 +21,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_BRUSH_TYPES_H__
-#define __DNA_BRUSH_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_curve_types.h"
@@ -67,7 +66,9 @@ typedef struct BrushGpencilSettings {
   short draw_smoothlvl;
   /** Number of times to subdivide new strokes. */
   short draw_subdivide;
-  char _pad[4];
+  /** Layers used for fill. */
+  short fill_layer_mode;
+  short fill_direction;
 
   /** Factor for transparency. */
   float fill_threshold;
@@ -118,7 +119,8 @@ typedef struct BrushGpencilSettings {
   int sculpt_mode_flag;
   /** Preset type (used to reset brushes - internal). */
   short preset_type;
-  char _pad3[2];
+  /** Brush preselected mode (Active/Material/Vertexcolor). */
+  short brush_draw_mode;
 
   /** Randomness for Hue. */
   float random_hue;
@@ -190,7 +192,7 @@ typedef enum eGPDbrush_Flag {
   /* brush use pressure */
   GP_BRUSH_USE_PRESSURE = (1 << 0),
   /* brush use pressure for alpha factor */
-  GP_BRUSH_USE_STENGTH_PRESSURE = (1 << 1),
+  GP_BRUSH_USE_STRENGTH_PRESSURE = (1 << 1),
   /* brush use pressure for alpha factor */
   GP_BRUSH_USE_JITTER_PRESSURE = (1 << 2),
   /* fill hide transparent */
@@ -251,12 +253,29 @@ typedef enum eGP_FillDrawModes {
   GP_FILL_DMODE_CONTROL = 2,
 } eGP_FillDrawModes;
 
+/* BrushGpencilSettings->fill_layer_mode */
+typedef enum eGP_FillLayerModes {
+  GP_FILL_GPLMODE_VISIBLE = 0,
+  GP_FILL_GPLMODE_ACTIVE = 1,
+  GP_FILL_GPLMODE_ALL_ABOVE = 2,
+  GP_FILL_GPLMODE_ALL_BELOW = 3,
+  GP_FILL_GPLMODE_ABOVE = 4,
+  GP_FILL_GPLMODE_BELOW = 5,
+} eGP_FillLayerModes;
+
 /* BrushGpencilSettings->gp_eraser_mode */
 typedef enum eGP_BrushEraserMode {
   GP_BRUSH_ERASER_SOFT = 0,
   GP_BRUSH_ERASER_HARD = 1,
   GP_BRUSH_ERASER_STROKE = 2,
 } eGP_BrushEraserMode;
+
+/* BrushGpencilSettings->brush_draw_mode */
+typedef enum eGP_BrushMode {
+  GP_BRUSH_MODE_ACTIVE = 0,
+  GP_BRUSH_MODE_MATERIAL = 1,
+  GP_BRUSH_MODE_VERTEXCOLOR = 2,
+} eGP_BrushMode;
 
 /* BrushGpencilSettings default brush icons */
 typedef enum eGP_BrushIcons {
@@ -303,6 +322,11 @@ typedef enum eBrushCurvePreset {
   BRUSH_CURVE_SMOOTHER = 9,
 } eBrushCurvePreset;
 
+typedef enum eBrushDeformTarget {
+  BRUSH_DEFORM_TARGET_GEOMETRY = 0,
+  BRUSH_DEFORM_TARGET_CLOTH_SIM = 1,
+} eBrushDeformTarget;
+
 typedef enum eBrushElasticDeformType {
   BRUSH_ELASTIC_DEFORM_GRAB = 0,
   BRUSH_ELASTIC_DEFORM_GRAB_BISCALE = 1,
@@ -319,6 +343,7 @@ typedef enum eBrushClothDeformType {
   BRUSH_CLOTH_DEFORM_PINCH_PERPENDICULAR = 4,
   BRUSH_CLOTH_DEFORM_INFLATE = 5,
   BRUSH_CLOTH_DEFORM_EXPAND = 6,
+  BRUSH_CLOTH_DEFORM_SNAKE_HOOK = 7,
 } eBrushClothDeformType;
 
 typedef enum eBrushSmoothDeformType {
@@ -330,6 +355,11 @@ typedef enum eBrushClothForceFalloffType {
   BRUSH_CLOTH_FORCE_FALLOFF_RADIAL = 0,
   BRUSH_CLOTH_FORCE_FALLOFF_PLANE = 1,
 } eBrushClothForceFalloffType;
+
+typedef enum eBrushClothSimulationAreaType {
+  BRUSH_CLOTH_SIMULATION_AREA_LOCAL = 0,
+  BRUSH_CLOTH_SIMULATION_AREA_GLOBAL = 1,
+} eBrushClothSimulationAreaType;
 
 typedef enum eBrushPoseDeformType {
   BRUSH_POSE_DEFORM_ROTATE_TWIST = 0,
@@ -354,6 +384,21 @@ typedef enum eBrushSlideDeformType {
   BRUSH_SLIDE_DEFORM_PINCH = 1,
   BRUSH_SLIDE_DEFORM_EXPAND = 2,
 } eBrushSlideDeformType;
+
+typedef enum eBrushBoundaryDeformType {
+  BRUSH_BOUNDARY_DEFORM_BEND = 0,
+  BRUSH_BOUNDARY_DEFORM_EXPAND = 1,
+  BRUSH_BOUNDARY_DEFORM_INFLATE = 2,
+  BRUSH_BOUNDARY_DEFORM_GRAB = 3,
+  BRUSH_BOUNDARY_DEFORM_TWIST = 4,
+} eBrushBushBoundaryDeformType;
+
+typedef enum eBrushBoundaryFalloffType {
+  BRUSH_BOUNDARY_FALLOFF_CONSTANT = 0,
+  BRUSH_BOUNDARY_FALLOFF_RADIUS = 1,
+  BRUSH_BOUNDARY_FALLOFF_LOOP = 2,
+  BRUSH_BOUNDARY_FALLOFF_LOOP_INVERT = 3,
+} eBrushBoundaryFalloffType;
 
 /* Gpencilsettings.Vertex_mode */
 typedef enum eGp_Vertex_Mode {
@@ -500,7 +545,7 @@ typedef struct Brush {
   /** Source for fill tool color gradient application. */
   char gradient_fill_mode;
 
-  char _pad0[1];
+  char _pad0[5];
 
   /** Projection shape (sphere, circle). */
   char falloff_shape;
@@ -526,7 +571,7 @@ typedef struct Brush {
   char gpencil_sculpt_tool;
   /** Active grease pencil weight tool. */
   char gpencil_weight_tool;
-  char _pad1[6];
+  char _pad1[2];
 
   float autosmooth_factor;
 
@@ -548,6 +593,8 @@ typedef struct Brush {
   /* Maximun distance to search fake neighbors from a vertex. */
   float disconnected_distance_max;
 
+  int deform_target;
+
   /* automasking */
   int automasking_flags;
   int automasking_boundary_edges_propagation_steps;
@@ -562,15 +609,23 @@ typedef struct Brush {
   int pose_ik_segments;
   int pose_origin_type;
 
+  /* boundary */
+  int boundary_deform_type;
+  int boundary_falloff_type;
+  float boundary_offset;
+
   /* cloth */
   int cloth_deform_type;
   int cloth_force_falloff_type;
+  int cloth_simulation_area_type;
 
   float cloth_mass;
   float cloth_damping;
 
   float cloth_sim_limit;
   float cloth_sim_falloff;
+
+  float cloth_constraint_softbody_strength;
 
   /* smooth */
   int smooth_deform_type;
@@ -716,6 +771,9 @@ typedef enum eBrushFlags2 {
   BRUSH_MULTIPLANE_SCRAPE_PLANES_PREVIEW = (1 << 1),
   BRUSH_POSE_IK_ANCHORED = (1 << 2),
   BRUSH_USE_CONNECTED_ONLY = (1 << 3),
+  BRUSH_CLOTH_PIN_SIMULATION_BOUNDARY = (1 << 4),
+  BRUSH_POSE_USE_LOCK_ROTATION = (1 << 5),
+  BRUSH_CLOTH_USE_COLLISION = (1 << 6),
 } eBrushFlags2;
 
 typedef enum {
@@ -768,6 +826,8 @@ typedef enum eBrushSculptTool {
   SCULPT_TOOL_DRAW_FACE_SETS = 27,
   SCULPT_TOOL_PAINT = 28,
   SCULPT_TOOL_SMEAR = 29,
+  SCULPT_TOOL_BOUNDARY = 30,
+  SCULPT_TOOL_DISPLACEMENT_ERASER = 31,
 } eBrushSculptTool;
 
 /* Brush.uv_sculpt_tool */
@@ -805,6 +865,7 @@ typedef enum eBrushUVSculptTool {
         SCULPT_TOOL_CLOTH, \
         SCULPT_TOOL_THUMB, \
         SCULPT_TOOL_LAYER, \
+        SCULPT_TOOL_DISPLACEMENT_ERASER, \
         SCULPT_TOOL_DRAW_SHARP, \
         SCULPT_TOOL_SLIDE_RELAX, \
         SCULPT_TOOL_ELASTIC_DEFORM, \
@@ -824,6 +885,7 @@ typedef enum eBrushUVSculptTool {
         SCULPT_TOOL_ROTATE, \
         SCULPT_TOOL_THUMB, \
         SCULPT_TOOL_DRAW_SHARP, \
+        SCULPT_TOOL_DISPLACEMENT_ERASER, \
         SCULPT_TOOL_SLIDE_RELAX, \
         SCULPT_TOOL_MASK) == 0)
 
@@ -915,5 +977,3 @@ enum {
 
 #define MAX_BRUSH_PIXEL_RADIUS 500
 #define GP_MAX_BRUSH_PIXEL_RADIUS 1000
-
-#endif /* __DNA_BRUSH_TYPES_H__ */

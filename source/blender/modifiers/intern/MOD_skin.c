@@ -222,9 +222,8 @@ static bool skin_frame_find_contained_faces(const Frame *frame, BMFace *fill_fac
   if (diag) {
     return BM_edge_face_pair(diag, &fill_faces[0], &fill_faces[1]);
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 /* Returns true if hull is successfully built, false otherwise */
@@ -460,7 +459,7 @@ static void node_frames_init(SkinNode *nf, int totframe)
 }
 
 static void create_frame(
-    Frame *frame, const float co[3], const float radius[2], float mat[3][3], float offset)
+    Frame *frame, const float co[3], const float radius[2], const float mat[3][3], float offset)
 {
   float rx[3], ry[3], rz[3];
   int i;
@@ -773,6 +772,11 @@ static EMat *build_edge_mats(const MVertSkin *vs,
 
         *has_valid_root = true;
       }
+      else if (totedge == 0) {
+        /* Vertex-only mesh is valid, mark valid root as well (will display error otherwise). */
+        *has_valid_root = true;
+        break;
+      }
     }
   }
 
@@ -814,9 +818,8 @@ static int calc_edge_subdivisions(const MVert *mvert,
     if (v1_branch && v2_branch) {
       return 2;
     }
-    else {
-      return 0;
-    }
+
+    return 0;
   }
 
   avg_radius = half_v2(evs[0]->radius) + half_v2(evs[1]->radius);
@@ -1278,7 +1281,7 @@ static void skin_choose_quad_bridge_order(BMVert *a[4], BMVert *b[4], int best_o
 
     if (len < shortest_len) {
       shortest_len = len;
-      memcpy(best_order, orders[i], sizeof(int) * 4);
+      memcpy(best_order, orders[i], sizeof(int[4]));
     }
   }
 }
@@ -1947,28 +1950,27 @@ static void requiredDataMask(Object *UNUSED(ob),
   r_cddata_masks->vmask |= CD_MASK_MVERT_SKIN | CD_MASK_MDEFORMVERT;
 }
 
-static void panel_draw(const bContext *C, Panel *panel)
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *row;
   uiLayout *layout = panel->layout;
   int toggles_flag = UI_ITEM_R_TOGGLE | UI_ITEM_R_FORCE_BLANK_DECORATE;
 
-  PointerRNA ptr;
   PointerRNA ob_ptr;
-  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
 
   PointerRNA op_ptr;
 
   uiLayoutSetPropSep(layout, true);
 
-  uiItemR(layout, &ptr, "branch_smoothing", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "branch_smoothing", 0, NULL, ICON_NONE);
 
   row = uiLayoutRowWithHeading(layout, true, IFACE_("Symmetry"));
-  uiItemR(row, &ptr, "use_x_symmetry", toggles_flag, NULL, ICON_NONE);
-  uiItemR(row, &ptr, "use_y_symmetry", toggles_flag, NULL, ICON_NONE);
-  uiItemR(row, &ptr, "use_z_symmetry", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, ptr, "use_x_symmetry", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, ptr, "use_y_symmetry", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, ptr, "use_z_symmetry", toggles_flag, NULL, ICON_NONE);
 
-  uiItemR(layout, &ptr, "use_smooth_shade", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "use_smooth_shade", 0, NULL, ICON_NONE);
 
   row = uiLayoutRow(layout, false);
   uiItemO(row, IFACE_("Create Armature"), ICON_NONE, "OBJECT_OT_skin_armature_create");
@@ -1997,7 +1999,7 @@ static void panel_draw(const bContext *C, Panel *panel)
   uiItemO(layout, IFACE_("Mark Root"), ICON_NONE, "OBJECT_OT_skin_root_mark");
   uiItemO(layout, IFACE_("Equalize Radii"), ICON_NONE, "OBJECT_OT_skin_radii_equalize");
 
-  modifier_panel_end(layout, &ptr);
+  modifier_panel_end(layout, ptr);
 }
 
 static void panelRegister(ARegionType *region_type)

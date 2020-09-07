@@ -231,7 +231,7 @@ static int rna_Area_ui_type_get(PointerRNA *ptr)
    * the area type is changing.
    * So manually do the lookup in those cases, but do not actually change area->type
    * since that prevents a proper exit when the area type is changing.
-   * Logic copied from `ED_area_initialize()`.*/
+   * Logic copied from `ED_area_init()`.*/
   SpaceType *type = area->type;
   if (type == NULL || area_changing) {
     type = BKE_spacetype_from_id(area_type);
@@ -288,9 +288,11 @@ static void rna_View2D_view_to_region(
   }
 }
 
-static const char *rna_Screen_statusbar_info_get(struct bScreen *screen, Main *bmain, bContext *C)
+static const char *rna_Screen_statusbar_info_get(struct bScreen *UNUSED(screen),
+                                                 Main *bmain,
+                                                 bContext *C)
 {
-  return ED_info_statusbar_string(bmain, screen, C);
+  return ED_info_statusbar_string(bmain, CTX_data_scene(C), CTX_data_view_layer(C));
 }
 
 #else

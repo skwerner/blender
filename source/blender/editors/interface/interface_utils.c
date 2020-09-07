@@ -30,6 +30,7 @@
 #include "DNA_object_types.h"
 #include "DNA_screen_types.h"
 
+#include "BLI_alloca.h"
 #include "BLI_listbase.h"
 #include "BLI_math.h"
 #include "BLI_string.h"
@@ -52,18 +53,6 @@
 #include "WM_types.h"
 
 #include "interface_intern.h"
-
-bool ui_str_has_word_prefix(const char *haystack, const char *needle, size_t needle_len)
-{
-  const char *match = BLI_strncasestr(haystack, needle, needle_len);
-  if (match) {
-    if ((match == haystack) || (*(match - 1) == ' ') || ispunct(*(match - 1))) {
-      return true;
-    }
-    return ui_str_has_word_prefix(match + 1, needle, needle_len);
-  }
-  return false;
-}
 
 /*************************** RNA Utilities ******************************/
 
@@ -148,7 +137,7 @@ uiBut *uiDefAutoButR(uiBlock *block,
       if (RNA_property_array_check(prop) && index == -1) {
         if (ELEM(RNA_property_subtype(prop), PROP_COLOR, PROP_COLOR_GAMMA)) {
           but = uiDefButR_prop(
-              block, UI_BTYPE_COLOR, 0, name, x1, y1, x2, y2, ptr, prop, -1, 0, 0, -1, -1, NULL);
+              block, UI_BTYPE_COLOR, 0, name, x1, y1, x2, y2, ptr, prop, -1, 0, 0, 0, 0, NULL);
         }
         else {
           return NULL;
@@ -175,7 +164,7 @@ uiBut *uiDefAutoButR(uiBlock *block,
       }
       else {
         but = uiDefButR_prop(
-            block, UI_BTYPE_NUM, 0, name, x1, y1, x2, y2, ptr, prop, index, 0, 0, -1, -1, NULL);
+            block, UI_BTYPE_NUM, 0, name, x1, y1, x2, y2, ptr, prop, index, 0, 0, 0, 0, NULL);
       }
 
       if (RNA_property_flag(prop) & PROP_TEXTEDIT_UPDATE) {
@@ -249,7 +238,7 @@ uiBut *uiDefAutoButR(uiBlock *block,
       break;
     case PROP_POINTER: {
       if (icon == 0) {
-        PointerRNA pptr = RNA_property_pointer_get(ptr, prop);
+        const PointerRNA pptr = RNA_property_pointer_get(ptr, prop);
         icon = RNA_struct_ui_icon(pptr.type ? pptr.type : RNA_property_pointer_type(ptr, prop));
       }
       if (icon == ICON_DOT) {
@@ -417,6 +406,12 @@ void ui_rna_collection_search_update_fn(const struct bContext *C,
   char *name;
   bool has_id_icon = false;
 
+  /* Prepare matching all words. */
+  const size_t str_len = strlen(str);
+  const int words_max = BLI_string_max_possible_word_count(str_len);
+  int(*words)[2] = BLI_array_alloca(words, words_max);
+  const int words_len = BLI_string_find_split_words(str, str_len, ' ', words, words_max);
+
   /* build a temporary list of relevant items first */
   RNA_PROP_BEGIN (&data->search_ptr, itemptr, data->search_prop) {
 
@@ -436,7 +431,7 @@ void ui_rna_collection_search_update_fn(const struct bContext *C,
     int name_prefix_offset = 0;
     int iconid = ICON_NONE;
     bool has_sep_char = false;
-    bool is_id = itemptr.type && RNA_struct_is_ID(itemptr.type);
+    const bool is_id = itemptr.type && RNA_struct_is_ID(itemptr.type);
 
     if (is_id) {
       iconid = ui_id_icon_get(C, itemptr.data, false);
@@ -462,7 +457,8 @@ void ui_rna_collection_search_update_fn(const struct bContext *C,
     }
 
     if (name) {
-      if (skip_filter || BLI_strcasestr(name + name_prefix_offset, str)) {
+      if (skip_filter ||
+          BLI_string_all_words_matched(name + name_prefix_offset, str, words, words_len)) {
         cis = MEM_callocN(sizeof(CollItemSearch), "CollectionItemSearch");
         cis->data = itemptr.data;
         cis->name = BLI_strdup(name);
@@ -489,7 +485,7 @@ void ui_rna_collection_search_update_fn(const struct bContext *C,
     /* If no item has an own icon to display, libraries can use the library icons rather than the
      * name prefix for showing the library status. */
     int name_prefix_offset = cis->name_prefix_offset;
-    if (!has_id_icon && cis->is_id) {
+    if (!has_id_icon && cis->is_id && !requires_exact_data_name) {
       cis->iconid = UI_library_icon_get(cis->data);
       /* No need to re-allocate, string should be shorter than before (lib status prefix is
        * removed). */
@@ -714,12 +710,8 @@ bool UI_butstore_is_valid(uiButStore *bs)
 
 bool UI_butstore_is_registered(uiBlock *block, uiBut *but)
 {
-  uiButStore *bs_handle;
-
-  for (bs_handle = block->butstore.first; bs_handle; bs_handle = bs_handle->next) {
-    uiButStoreElem *bs_elem;
-
-    for (bs_elem = bs_handle->items.first; bs_elem; bs_elem = bs_elem->next) {
+  LISTBASE_FOREACH (uiButStore *, bs_handle, &block->butstore) {
+    LISTBASE_FOREACH (uiButStoreElem *, bs_elem, &bs_handle->items) {
       if (*bs_elem->but_p == but) {
         return true;
       }
@@ -740,10 +732,7 @@ void UI_butstore_register(uiButStore *bs_handle, uiBut **but_p)
 
 void UI_butstore_unregister(uiButStore *bs_handle, uiBut **but_p)
 {
-  uiButStoreElem *bs_elem, *bs_elem_next;
-
-  for (bs_elem = bs_handle->items.first; bs_elem; bs_elem = bs_elem_next) {
-    bs_elem_next = bs_elem->next;
+  LISTBASE_FOREACH_MUTABLE (uiButStoreElem *, bs_elem, &bs_handle->items) {
     if (bs_elem->but_p == but_p) {
       BLI_remlink(&bs_handle->items, bs_elem);
       MEM_freeN(bs_elem);
@@ -758,12 +747,10 @@ void UI_butstore_unregister(uiButStore *bs_handle, uiBut **but_p)
  */
 bool UI_butstore_register_update(uiBlock *block, uiBut *but_dst, const uiBut *but_src)
 {
-  uiButStore *bs_handle;
   bool found = false;
 
-  for (bs_handle = block->butstore.first; bs_handle; bs_handle = bs_handle->next) {
-    uiButStoreElem *bs_elem;
-    for (bs_elem = bs_handle->items.first; bs_elem; bs_elem = bs_elem->next) {
+  LISTBASE_FOREACH (uiButStore *, bs_handle, &block->butstore) {
+    LISTBASE_FOREACH (uiButStoreElem *, bs_elem, &bs_handle->items) {
       if (*bs_elem->but_p == but_src) {
         *bs_elem->but_p = but_dst;
         found = true;
@@ -779,14 +766,9 @@ bool UI_butstore_register_update(uiBlock *block, uiBut *but_dst, const uiBut *bu
  */
 void UI_butstore_clear(uiBlock *block)
 {
-  uiButStore *bs_handle;
-
-  for (bs_handle = block->butstore.first; bs_handle; bs_handle = bs_handle->next) {
-    uiButStoreElem *bs_elem;
-
+  LISTBASE_FOREACH (uiButStore *, bs_handle, &block->butstore) {
     bs_handle->block = NULL;
-
-    for (bs_elem = bs_handle->items.first; bs_elem; bs_elem = bs_elem->next) {
+    LISTBASE_FOREACH (uiButStoreElem *, bs_elem, &bs_handle->items) {
       *bs_elem->but_p = NULL;
     }
   }
@@ -797,8 +779,6 @@ void UI_butstore_clear(uiBlock *block)
  */
 void UI_butstore_update(uiBlock *block)
 {
-  uiButStore *bs_handle;
-
   /* move this list to the new block */
   if (block->oldblock) {
     if (block->oldblock->butstore.first) {
@@ -812,17 +792,14 @@ void UI_butstore_update(uiBlock *block)
 
   /* warning, loop-in-loop, in practice we only store <10 buttons at a time,
    * so this isn't going to be a problem, if that changes old-new mapping can be cached first */
-  for (bs_handle = block->butstore.first; bs_handle; bs_handle = bs_handle->next) {
-
+  LISTBASE_FOREACH (uiButStore *, bs_handle, &block->butstore) {
     BLI_assert((bs_handle->block == NULL) || (bs_handle->block == block) ||
                (block->oldblock && block->oldblock == bs_handle->block));
 
     if (bs_handle->block == block->oldblock) {
-      uiButStoreElem *bs_elem;
-
       bs_handle->block = block;
 
-      for (bs_elem = bs_handle->items.first; bs_elem; bs_elem = bs_elem->next) {
+      LISTBASE_FOREACH (uiButStoreElem *, bs_elem, &bs_handle->items) {
         if (*bs_elem->but_p) {
           uiBut *but_new = ui_but_find_new(block, *bs_elem->but_p);
 

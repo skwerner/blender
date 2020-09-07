@@ -146,6 +146,12 @@ IDTypeInfo IDType_ID_CU = {
     .free_data = curve_free_data,
     .make_local = NULL,
     .foreach_id = curve_foreach_id,
+    .foreach_cache = NULL,
+
+    .blend_write = NULL,
+    .blend_read_data = NULL,
+    .blend_read_lib = NULL,
+    .blend_read_expand = NULL,
 };
 
 static int cu_isectLL(const float v1[3],
@@ -262,7 +268,7 @@ ListBase *BKE_curve_editNurbs_get(Curve *cu)
   return NULL;
 }
 
-short BKE_curve_type_get(Curve *cu)
+short BKE_curve_type_get(const Curve *cu)
 {
   Nurb *nu;
   int type = cu->type;
@@ -725,7 +731,7 @@ float BKE_nurb_calc_length(const Nurb *nu, int resolution)
                                         bezt->vec[1][j],
                                         points + j,
                                         resolu,
-                                        3 * sizeof(float));
+                                        sizeof(float[3]));
         }
 
         prevpntsit = pntsit = points;
@@ -1726,205 +1732,6 @@ static void forward_diff_bezier_cotangent(const float p0[3],
   }
 }
 
-/* ***************** BEVEL ****************** */
-
-void BKE_curve_bevel_make(Object *ob, ListBase *disp)
-{
-  DispList *dl, *dlnew;
-  Curve *bevcu, *cu;
-  float *fp, facx, facy, angle, dangle;
-  int nr, a;
-
-  cu = ob->data;
-  BLI_listbase_clear(disp);
-
-  /* if a font object is being edited, then do nothing */
-  // XXX  if ( ob == obedit && ob->type == OB_FONT ) return;
-
-  if (cu->bevobj) {
-    if (cu->bevobj->type != OB_CURVE) {
-      return;
-    }
-
-    bevcu = cu->bevobj->data;
-    if (bevcu->ext1 == 0.0f && bevcu->ext2 == 0.0f) {
-      ListBase bevdisp = {NULL, NULL};
-      facx = cu->bevobj->scale[0];
-      facy = cu->bevobj->scale[1];
-
-      if (cu->bevobj->runtime.curve_cache) {
-        dl = cu->bevobj->runtime.curve_cache->disp.first;
-      }
-      else {
-        BLI_assert(cu->bevobj->runtime.curve_cache != NULL);
-        dl = NULL;
-      }
-
-      while (dl) {
-        if (ELEM(dl->type, DL_POLY, DL_SEGM)) {
-          dlnew = MEM_mallocN(sizeof(DispList), "makebevelcurve1");
-          *dlnew = *dl;
-          dlnew->verts = MEM_malloc_arrayN(
-              dl->parts * dl->nr, 3 * sizeof(float), "makebevelcurve1");
-          memcpy(dlnew->verts, dl->verts, 3 * sizeof(float) * dl->parts * dl->nr);
-
-          if (dlnew->type == DL_SEGM) {
-            dlnew->flag |= (DL_FRONT_CURVE | DL_BACK_CURVE);
-          }
-
-          BLI_addtail(disp, dlnew);
-          fp = dlnew->verts;
-          nr = dlnew->parts * dlnew->nr;
-          while (nr--) {
-            fp[2] = fp[1] * facy;
-            fp[1] = -fp[0] * facx;
-            fp[0] = 0.0;
-            fp += 3;
-          }
-        }
-        dl = dl->next;
-      }
-
-      BKE_displist_free(&bevdisp);
-    }
-  }
-  else if (cu->ext1 == 0.0f && cu->ext2 == 0.0f) {
-    /* pass */
-  }
-  else if (cu->ext2 == 0.0f) {
-    dl = MEM_callocN(sizeof(DispList), "makebevelcurve2");
-    dl->verts = MEM_malloc_arrayN(2, sizeof(float[3]), "makebevelcurve2");
-    BLI_addtail(disp, dl);
-    dl->type = DL_SEGM;
-    dl->parts = 1;
-    dl->flag = DL_FRONT_CURVE | DL_BACK_CURVE;
-    dl->nr = 2;
-
-    fp = dl->verts;
-    fp[0] = fp[1] = 0.0;
-    fp[2] = -cu->ext1;
-    fp[3] = fp[4] = 0.0;
-    fp[5] = cu->ext1;
-  }
-  else if ((cu->flag & (CU_FRONT | CU_BACK)) == 0 && cu->ext1 == 0.0f) {
-    /* We make a full round bevel in that case. */
-
-    nr = 4 + 2 * cu->bevresol;
-
-    dl = MEM_callocN(sizeof(DispList), "makebevelcurve p1");
-    dl->verts = MEM_malloc_arrayN(nr, sizeof(float[3]), "makebevelcurve p1");
-    BLI_addtail(disp, dl);
-    dl->type = DL_POLY;
-    dl->parts = 1;
-    dl->flag = DL_BACK_CURVE;
-    dl->nr = nr;
-
-    /* a circle */
-    fp = dl->verts;
-    dangle = (2.0f * (float)M_PI / (nr));
-    angle = -(nr - 1) * dangle;
-
-    for (a = 0; a < nr; a++) {
-      fp[0] = 0.0;
-      fp[1] = (cosf(angle) * (cu->ext2));
-      fp[2] = (sinf(angle) * (cu->ext2)) - cu->ext1;
-      angle += dangle;
-      fp += 3;
-    }
-  }
-  else {
-    /* The general case for nonzero extrusion or an incomplete loop. */
-    dl = MEM_callocN(sizeof(DispList), "makebevelcurve");
-    if ((cu->flag & (CU_FRONT | CU_BACK)) == 0) {
-      /* The full loop. */
-      nr = 4 * cu->bevresol + 6;
-      dl->flag = DL_FRONT_CURVE | DL_BACK_CURVE;
-    }
-    else if ((cu->flag & CU_FRONT) && (cu->flag & CU_BACK)) {
-      /* Half the loop. */
-      nr = 2 * (cu->bevresol + 1) + ((cu->ext1 == 0.0f) ? 1 : 2);
-      dl->flag = DL_FRONT_CURVE | DL_BACK_CURVE;
-    }
-    else {
-      /* One quarter of the loop (just front or back). */
-      nr = (cu->ext1 == 0.0f) ? cu->bevresol + 2 : cu->bevresol + 3;
-      dl->flag = (cu->flag & CU_FRONT) ? DL_FRONT_CURVE : DL_BACK_CURVE;
-    }
-
-    dl->verts = MEM_malloc_arrayN(nr, sizeof(float[3]), "makebevelcurve");
-    BLI_addtail(disp, dl);
-    /* Use a different type depending on whether the loop is complete or not. */
-    dl->type = ((cu->flag & (CU_FRONT | CU_BACK)) == 0) ? DL_POLY : DL_SEGM;
-    dl->parts = 1;
-    dl->nr = nr;
-
-    fp = dl->verts;
-    dangle = (float)M_PI_2 / (cu->bevresol + 1);
-    angle = 0.0;
-
-    /* Build the back section. */
-    if (cu->flag & CU_BACK || !(cu->flag & CU_FRONT)) {
-      angle = (float)M_PI_2 * 3.0f;
-      for (a = 0; a < cu->bevresol + 2; a++) {
-        fp[0] = 0.0;
-        fp[1] = (float)(cosf(angle) * (cu->ext2));
-        fp[2] = (float)(sinf(angle) * (cu->ext2)) - cu->ext1;
-        angle += dangle;
-        fp += 3;
-      }
-      if ((cu->ext1 != 0.0f) && !(cu->flag & CU_FRONT) && (cu->flag & CU_BACK)) {
-        /* Add the extrusion if we're only building the back. */
-        fp[0] = 0.0;
-        fp[1] = cu->ext2;
-        fp[2] = cu->ext1;
-      }
-    }
-
-    /* Build the front section. */
-    if (cu->flag & CU_FRONT || !(cu->flag & CU_BACK)) {
-      if ((cu->ext1 != 0.0f) && !(cu->flag & CU_BACK) && (cu->flag & CU_FRONT)) {
-        /* Add the extrusion if we're only building the back. */
-        fp[0] = 0.0;
-        fp[1] = cu->ext2;
-        fp[2] = -cu->ext1;
-        fp += 3;
-      }
-      /* Don't duplicate the last back vertex. */
-      angle = (cu->ext1 == 0.0f && (cu->flag & CU_BACK)) ? dangle : 0;
-      int front_len = (cu->ext1 == 0.0f && ((cu->flag & CU_BACK) || !(cu->flag & CU_FRONT))) ?
-                          cu->bevresol + 1 :
-                          cu->bevresol + 2;
-      for (a = 0; a < front_len; a++) {
-        fp[0] = 0.0;
-        fp[1] = (float)(cosf(angle) * (cu->ext2));
-        fp[2] = (float)(sinf(angle) * (cu->ext2)) + cu->ext1;
-        angle += dangle;
-        fp += 3;
-      }
-    }
-
-    /* Build the other half only if we're building the full loop. */
-    if (!(cu->flag & (CU_FRONT | CU_BACK))) {
-      for (a = 0; a < cu->bevresol + 1; a++) {
-        fp[0] = 0.0;
-        fp[1] = (float)(cosf(angle) * (cu->ext2));
-        fp[2] = (float)(sinf(angle) * (cu->ext2)) + cu->ext1;
-        angle += dangle;
-        fp += 3;
-      }
-
-      angle = (float)M_PI;
-      for (a = 0; a < cu->bevresol + 1; a++) {
-        fp[0] = 0.0;
-        fp[1] = (float)(cosf(angle) * (cu->ext2));
-        fp[2] = (float)(sinf(angle) * (cu->ext2)) - cu->ext1;
-        angle += dangle;
-        fp += 3;
-      }
-    }
-  }
-}
-
 static int cu_isectLL(const float v1[3],
                       const float v2[3],
                       const float v3[3],
@@ -2500,7 +2307,7 @@ static void make_bevel_list_3D_tangent(BevList *bl)
   while (nr--) {
     /* make perpendicular, modify tan in place, is ok */
     float cross_tmp[3];
-    float zero[3] = {0, 0, 0};
+    const float zero[3] = {0, 0, 0};
 
     cross_v3_v3v3(cross_tmp, bevp1->tan, bevp1->dir);
     normalize_v3(cross_tmp);
@@ -3514,8 +3321,9 @@ static void calchandlesNurb_intern(Nurb *nu, eBezTriple_Flag handle_sel_flag, bo
   }
 }
 
-/* A utility function for allocating a number of arrays of the same length
- * with easy error checking and deallocation, and an easy way to add or remove
+/**
+ * A utility function for allocating a number of arrays of the same length
+ * with easy error checking and de-allocation, and an easy way to add or remove
  * arrays that are processed in this way when changing code.
  *
  * floats, chars: NULL-terminated arrays of pointers to array pointers that need to be allocated.
@@ -3797,7 +3605,10 @@ static void bezier_clamp(
 }
 
 /* write changes to a bezier handle */
-static void bezier_output_handle_inner(BezTriple *bezt, bool right, float newval[3], bool endpoint)
+static void bezier_output_handle_inner(BezTriple *bezt,
+                                       bool right,
+                                       const float newval[3],
+                                       bool endpoint)
 {
   float tmp[3];
 
@@ -4037,15 +3848,15 @@ static bool is_free_auto_point(BezTriple *bezt)
   return BEZT_IS_AUTOH(bezt) && bezt->f5 == HD_AUTOTYPE_NORMAL;
 }
 
-void BKE_nurb_handle_smooth_fcurve(BezTriple *bezt, int total, bool cycle)
+void BKE_nurb_handle_smooth_fcurve(BezTriple *bezt, int total, bool cyclic)
 {
   /* ignore cyclic extrapolation if end points are locked */
-  cycle = cycle && is_free_auto_point(&bezt[0]) && is_free_auto_point(&bezt[total - 1]);
+  cyclic = cyclic && is_free_auto_point(&bezt[0]) && is_free_auto_point(&bezt[total - 1]);
 
   /* if cyclic, try to find a sequence break point */
   int search_base = 0;
 
-  if (cycle) {
+  if (cyclic) {
     for (int i = 1; i < total - 1; i++) {
       if (!is_free_auto_point(&bezt[i])) {
         search_base = i;
@@ -4055,7 +3866,7 @@ void BKE_nurb_handle_smooth_fcurve(BezTriple *bezt, int total, bool cycle)
 
     /* all points of the curve are freely changeable auto handles - solve as full cycle */
     if (search_base == 0) {
-      bezier_handle_calc_smooth_fcurve(bezt, total, 0, total, cycle);
+      bezier_handle_calc_smooth_fcurve(bezt, total, 0, total, cyclic);
       return;
     }
   }
@@ -4066,13 +3877,13 @@ void BKE_nurb_handle_smooth_fcurve(BezTriple *bezt, int total, bool cycle)
 
   for (int i = 1, j = start + 1; i < total; i++, j++) {
     /* in cyclic mode: jump from last to first point when necessary */
-    if (j == total - 1 && cycle) {
+    if (j == total - 1 && cyclic) {
       j = 0;
     }
 
     /* non auto handle closes the list (we come here at least for the last handle, see above) */
     if (!is_free_auto_point(&bezt[j])) {
-      bezier_handle_calc_smooth_fcurve(bezt, total, start, count + 1, cycle);
+      bezier_handle_calc_smooth_fcurve(bezt, total, start, count + 1, cyclic);
       start = j;
       count = 1;
     }
@@ -4082,7 +3893,7 @@ void BKE_nurb_handle_smooth_fcurve(BezTriple *bezt, int total, bool cycle)
   }
 
   if (count > 1) {
-    bezier_handle_calc_smooth_fcurve(bezt, total, start, count, cycle);
+    bezier_handle_calc_smooth_fcurve(bezt, total, start, count, cyclic);
   }
 }
 
@@ -5309,8 +5120,11 @@ bool BKE_curve_center_bounds(Curve *cu, float cent[3])
   return false;
 }
 
-void BKE_curve_transform_ex(
-    Curve *cu, float mat[4][4], const bool do_keys, const bool do_props, const float unit_scale)
+void BKE_curve_transform_ex(Curve *cu,
+                            const float mat[4][4],
+                            const bool do_keys,
+                            const bool do_props,
+                            const float unit_scale)
 {
   Nurb *nu;
   BPoint *bp;
@@ -5373,13 +5187,13 @@ void BKE_curve_transform_ex(
   }
 }
 
-void BKE_curve_transform(Curve *cu, float mat[4][4], const bool do_keys, const bool do_props)
+void BKE_curve_transform(Curve *cu, const float mat[4][4], const bool do_keys, const bool do_props)
 {
   float unit_scale = mat4_to_scale(mat);
   BKE_curve_transform_ex(cu, mat, do_keys, do_props, unit_scale);
 }
 
-void BKE_curve_translate(Curve *cu, float offset[3], const bool do_keys)
+void BKE_curve_translate(Curve *cu, const float offset[3], const bool do_keys)
 {
   ListBase *nurb_lb = BKE_curve_nurbs_get(cu);
   Nurb *nu;

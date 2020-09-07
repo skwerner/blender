@@ -21,8 +21,7 @@
  * \ingroup blf
  */
 
-#ifndef __BLF_INTERNAL_H__
-#define __BLF_INTERNAL_H__
+#pragma once
 
 struct FontBLF;
 struct GlyphBLF;
@@ -31,7 +30,6 @@ struct ResultBLF;
 struct rctf;
 struct rcti;
 
-void blf_batch_draw_vao_clear(void);
 void blf_batch_draw_begin(struct FontBLF *font);
 void blf_batch_draw(void);
 
@@ -151,5 +149,3 @@ extern FT_Error FT_New_Face__win32_compat(FT_Library library,
                                           FT_Face *aface);
 #  endif
 #endif
-
-#endif /* __BLF_INTERNAL_H__ */

@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLI_RESOURCE_COLLECTOR_HH__
-#define __BLI_RESOURCE_COLLECTOR_HH__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -79,6 +78,12 @@ class ResourceCollector : NonCopyable, NonMovable {
    */
   template<typename T> void add(destruct_ptr<T> resource, const char *name)
   {
+    /* There is no need to keep track of such types. */
+    if (std::is_trivially_destructible_v<T>) {
+      resource.release();
+      return;
+    }
+
     BLI_assert(resource.get() != nullptr);
     this->add(
         resource.release(),
@@ -141,5 +146,3 @@ class ResourceCollector : NonCopyable, NonMovable {
 };
 
 }  // namespace blender
-
-#endif /* __BLI_RESOURCE_COLLECTOR_HH__ */

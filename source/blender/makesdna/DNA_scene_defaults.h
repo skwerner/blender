@@ -18,8 +18,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_SCENE_DEFAULTS_H__
-#define __DNA_SCENE_DEFAULTS_H__
+#pragma once
 
 #include "DNA_view3d_defaults.h"
 
@@ -365,5 +364,3 @@
   }
 
 /* clang-format off */
-
-#endif  /* __DNA_SCENE_DEFAULTS_H__ */

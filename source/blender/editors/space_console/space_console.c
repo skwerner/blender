@@ -46,7 +46,7 @@
 
 /* ******************** default callbacks for console space ***************** */
 
-static SpaceLink *console_new(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
+static SpaceLink *console_create(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
 {
   ARegion *region;
   SpaceConsole *sconsole;
@@ -215,7 +215,6 @@ static void console_main_region_draw(const bContext *C, ARegion *region)
 
   /* clear and setup matrix */
   UI_ThemeClearColor(TH_BACK);
-  GPU_clear(GPU_COLOR_BIT);
 
   /* worlks best with no view2d matrix set */
   UI_view2d_view_ortho(v2d);
@@ -312,7 +311,7 @@ void ED_spacetype_console(void)
   st->spaceid = SPACE_CONSOLE;
   strncpy(st->name, "Console", BKE_ST_MAXNAME);
 
-  st->new = console_new;
+  st->create = console_create;
   st->free = console_free;
   st->init = console_init;
   st->duplicate = console_duplicate;

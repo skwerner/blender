@@ -462,8 +462,10 @@ static int add_vertex_handle_cyclic_at_point(bContext *C,
   const float tolerance_in_pixels_squared = 4 * 4;
 
   if (spline->flag & MASK_SPLINE_CYCLIC) {
-    /* No cycling toggle needed, we've got nothing meaningful to do in this operator. */
-    return OPERATOR_CANCELLED;
+    /* The spline is already cyclic, so there is no need to handle anything here.
+     * Return PASS_THROUGH so that it's possible to add vertices close to the endpoints of the
+     * cyclic spline. */
+    return OPERATOR_PASS_THROUGH;
   }
 
   float co_pixel[2];
@@ -796,7 +798,7 @@ static void define_primitive_add_properties(wmOperatorType *ot)
 static int primitive_circle_add_exec(bContext *C, wmOperator *op)
 {
   const float points[4][2] = {{0.0f, 0.5f}, {0.5f, 1.0f}, {1.0f, 0.5f}, {0.5f, 0.0f}};
-  int num_points = sizeof(points) / (2 * sizeof(float));
+  int num_points = sizeof(points) / (sizeof(float[2]));
 
   create_primitive_from_points(C, op, points, num_points, HD_AUTO);
 
@@ -827,7 +829,7 @@ void MASK_OT_primitive_circle_add(wmOperatorType *ot)
 static int primitive_square_add_exec(bContext *C, wmOperator *op)
 {
   const float points[4][2] = {{0.0f, 0.0f}, {0.0f, 1.0f}, {1.0f, 1.0f}, {1.0f, 0.0f}};
-  int num_points = sizeof(points) / (2 * sizeof(float));
+  int num_points = sizeof(points) / (sizeof(float[2]));
 
   create_primitive_from_points(C, op, points, num_points, HD_VECT);
 

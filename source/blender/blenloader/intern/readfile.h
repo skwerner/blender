@@ -22,8 +22,7 @@
  * \ingroup blenloader
  */
 
-#ifndef __READFILE_H__
-#define __READFILE_H__
+#pragma once
 
 #include "DNA_sdna_types.h"
 #include "DNA_space_types.h"
@@ -143,7 +142,7 @@ void blo_split_main(ListBase *mainlist, struct Main *main);
 BlendFileData *blo_read_file_internal(FileData *fd, const char *filepath);
 
 FileData *blo_filedata_from_file(const char *filepath, struct ReportList *reports);
-FileData *blo_filedata_from_memory(const void *buffer, int buffersize, struct ReportList *reports);
+FileData *blo_filedata_from_memory(const void *mem, int memsize, struct ReportList *reports);
 FileData *blo_filedata_from_memfile(struct MemFile *memfile,
                                     const struct BlendFileReadParams *params,
                                     struct ReportList *reports);
@@ -199,5 +198,3 @@ void do_versions_after_linking_270(struct Main *bmain);
 void do_versions_after_linking_280(struct Main *bmain, struct ReportList *reports);
 void do_versions_after_linking_290(struct Main *bmain, struct ReportList *reports);
 void do_versions_after_linking_cycles(struct Main *bmain);
-
-#endif

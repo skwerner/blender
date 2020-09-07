@@ -17,8 +17,8 @@
 #include "render/colorspace.h"
 #include "render/image.h"
 #include "render/image_vdb.h"
-#include "render/mesh.h"
 #include "render/object.h"
+#include "render/volume.h"
 
 #include "blender/blender_sync.h"
 #include "blender/blender_util.h"
@@ -181,7 +181,7 @@ class BlenderSmokeLoader : public ImageLoader {
   AttributeStandard attribute;
 };
 
-static void sync_smoke_volume(Scene *scene, BL::Object &b_ob, Mesh *mesh, float frame)
+static void sync_smoke_volume(Scene *scene, BL::Object &b_ob, Volume *volume, float frame)
 {
   BL::FluidDomainSettings b_domain = object_fluid_gas_domain_find(b_ob);
   if (!b_domain) {
@@ -198,13 +198,13 @@ static void sync_smoke_volume(Scene *scene, BL::Object &b_ob, Mesh *mesh, float 
 
   for (int i = 0; attributes[i] != ATTR_STD_NONE; i++) {
     AttributeStandard std = attributes[i];
-    if (!mesh->need_attribute(scene, std)) {
+    if (!volume->need_attribute(scene, std)) {
       continue;
     }
 
-    mesh->volume_clipping = b_domain.clipping();
+    volume->clipping = b_domain.clipping();
 
-    Attribute *attr = mesh->attributes.add(std);
+    Attribute *attr = volume->attributes.add(std);
 
     ImageLoader *loader = new BlenderSmokeLoader(b_ob, std);
     ImageParams params;
@@ -217,43 +217,29 @@ static void sync_smoke_volume(Scene *scene, BL::Object &b_ob, Mesh *mesh, float 
 class BlenderVolumeLoader : public VDBImageLoader {
  public:
   BlenderVolumeLoader(BL::BlendData &b_data, BL::Volume &b_volume, const string &grid_name)
-      : VDBImageLoader(grid_name), b_data(b_data), b_volume(b_volume), unload(false)
-  {
-  }
-
-  bool load_metadata(ImageMetaData &metadata) override
+      : VDBImageLoader(grid_name), b_volume(b_volume)
   {
     b_volume.grids.load(b_data.ptr.data);
-    BL::VolumeGrid b_volume_grid = find_grid();
-
-    if (!b_volume_grid) {
-      return false;
-    }
-
-    unload = !b_volume_grid.is_loaded();
 
 #ifdef WITH_OPENVDB
-    Volume *volume = (Volume *)b_volume.ptr.data;
-    VolumeGrid *volume_grid = (VolumeGrid *)b_volume_grid.ptr.data;
-    grid = BKE_volume_grid_openvdb_for_read(volume, volume_grid);
-#endif
+    BL::Volume::grids_iterator b_grid_iter;
+    for (b_volume.grids.begin(b_grid_iter); b_grid_iter != b_volume.grids.end(); ++b_grid_iter) {
+      BL::VolumeGrid b_volume_grid(*b_grid_iter);
+      if (b_volume_grid.name() == grid_name) {
+        const bool unload = !b_volume_grid.is_loaded();
 
-    return VDBImageLoader::load_metadata(metadata);
-  }
+        ::Volume *volume = (::Volume *)b_volume.ptr.data;
+        VolumeGrid *volume_grid = (VolumeGrid *)b_volume_grid.ptr.data;
+        grid = BKE_volume_grid_openvdb_for_read(volume, volume_grid);
 
-  bool load_pixels(const ImageMetaData &metadata,
-                   void *pixels,
-                   const size_t pixel_size,
-                   const bool associate_alpha) override
-  {
-    b_volume.grids.load(b_data.ptr.data);
-    BL::VolumeGrid b_volume_grid = find_grid();
+        if (unload) {
+          b_volume_grid.unload();
+        }
 
-    if (!b_volume_grid) {
-      return false;
+        break;
+      }
     }
-
-    return VDBImageLoader::load_pixels(metadata, pixels, pixel_size, associate_alpha);
+#endif
   }
 
   bool equals(const ImageLoader &other) const override
@@ -263,48 +249,22 @@ class BlenderVolumeLoader : public VDBImageLoader {
     return b_volume == other_loader.b_volume && grid_name == other_loader.grid_name;
   }
 
-  void cleanup() override
-  {
-    VDBImageLoader::cleanup();
-
-    BL::VolumeGrid b_volume_grid = find_grid();
-    if (b_volume_grid && unload) {
-      b_volume_grid.unload();
-    }
-  }
-
-  /* Find grid with matching name. Grid point not stored in the class since
-   * grids may be unloaded before we load the pixels, for example for motion
-   * blur where we move between frames. */
-  BL::VolumeGrid find_grid()
-  {
-#ifdef WITH_OPENVDB
-    BL::Volume::grids_iterator b_grid_iter;
-    for (b_volume.grids.begin(b_grid_iter); b_grid_iter != b_volume.grids.end(); ++b_grid_iter) {
-      if (b_grid_iter->name() == grid_name) {
-        return *b_grid_iter;
-      }
-    }
-#endif
-
-    return BL::VolumeGrid(PointerRNA_NULL);
-  }
-
-  BL::BlendData b_data;
   BL::Volume b_volume;
-  bool unload;
 };
 
-static void sync_volume_object(BL::BlendData &b_data, BL::Object &b_ob, Scene *scene, Mesh *mesh)
+static void sync_volume_object(BL::BlendData &b_data,
+                               BL::Object &b_ob,
+                               Scene *scene,
+                               Volume *volume)
 {
   BL::Volume b_volume(b_ob.data());
   b_volume.grids.load(b_data.ptr.data);
 
   BL::VolumeRender b_render(b_volume.render());
 
-  mesh->volume_clipping = b_render.clipping();
-  mesh->volume_step_size = b_render.step_size();
-  mesh->volume_object_space = (b_render.space() == BL::VolumeRender::space_OBJECT);
+  volume->clipping = b_render.clipping();
+  volume->step_size = b_render.step_size();
+  volume->object_space = (b_render.space() == BL::VolumeRender::space_OBJECT);
 
   /* Find grid with matching name. */
   BL::Volume::grids_iterator b_grid_iter;
@@ -332,17 +292,17 @@ static void sync_volume_object(BL::BlendData &b_data, BL::Object &b_ob, Scene *s
       std = ATTR_STD_VOLUME_VELOCITY;
     }
 
-    if ((std != ATTR_STD_NONE && mesh->need_attribute(scene, std)) ||
-        mesh->need_attribute(scene, name)) {
+    if ((std != ATTR_STD_NONE && volume->need_attribute(scene, std)) ||
+        volume->need_attribute(scene, name)) {
       Attribute *attr = (std != ATTR_STD_NONE) ?
-                            mesh->attributes.add(std) :
-                            mesh->attributes.add(name, TypeDesc::TypeFloat, ATTR_ELEMENT_VOXEL);
+                            volume->attributes.add(std) :
+                            volume->attributes.add(name, TypeDesc::TypeFloat, ATTR_ELEMENT_VOXEL);
 
       ImageLoader *loader = new BlenderVolumeLoader(b_data, b_volume, name.string());
       ImageParams params;
       params.frame = b_volume.grids.frame();
 
-      attr->data_voxel() = scene->image_manager->add_image(loader, params);
+      attr->data_voxel() = scene->image_manager->add_image(loader, params, false);
     }
   }
 }
@@ -360,28 +320,30 @@ static vector<int> get_voxel_image_slots(Mesh *mesh)
   return slots;
 }
 
-void BlenderSync::sync_volume(BL::Object &b_ob, Mesh *mesh, const vector<Shader *> &used_shaders)
+void BlenderSync::sync_volume(BL::Object &b_ob,
+                              Volume *volume,
+                              const vector<Shader *> &used_shaders)
 {
-  vector<int> old_voxel_slots = get_voxel_image_slots(mesh);
+  vector<int> old_voxel_slots = get_voxel_image_slots(volume);
 
-  mesh->clear();
-  mesh->used_shaders = used_shaders;
+  volume->clear();
+  volume->used_shaders = used_shaders;
 
   if (view_layer.use_volumes) {
     if (b_ob.type() == BL::Object::type_VOLUME) {
       /* Volume object. Create only attributes, bounding mesh will then
        * be automatically generated later. */
-      sync_volume_object(b_data, b_ob, scene, mesh);
+      sync_volume_object(b_data, b_ob, scene, volume);
     }
     else {
       /* Smoke domain. */
-      sync_smoke_volume(scene, b_ob, mesh, b_scene.frame_current());
+      sync_smoke_volume(scene, b_ob, volume, b_scene.frame_current());
     }
   }
 
   /* Tag update. */
-  bool rebuild = (old_voxel_slots != get_voxel_image_slots(mesh));
-  mesh->tag_update(scene, rebuild);
+  bool rebuild = (old_voxel_slots != get_voxel_image_slots(volume));
+  volume->tag_update(scene, rebuild);
 }
 
 CCL_NAMESPACE_END

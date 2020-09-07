@@ -1,7 +1,9 @@
 /* Apache License, Version 2.0 */
 
 #include "BLI_array.hh"
+#include "BLI_exception_safety_test_utils.hh"
 #include "BLI_strict_flags.h"
+#include "BLI_vector.hh"
 #include "testing/testing.h"
 
 namespace blender::tests {
@@ -171,6 +173,81 @@ TEST(array, Fill)
   EXPECT_EQ(array[2], 3);
   EXPECT_EQ(array[3], 3);
   EXPECT_EQ(array[4], 3);
+}
+
+TEST(array, ReverseIterator)
+{
+  Array<int> array = {3, 4, 5, 6};
+  Vector<int> reversed_vec;
+
+  for (auto it = array.rbegin(); it != array.rend(); ++it) {
+    reversed_vec.append(*it);
+    *it += 10;
+  }
+
+  EXPECT_EQ_ARRAY(reversed_vec.data(), Span({6, 5, 4, 3}).data(), 4);
+  EXPECT_EQ_ARRAY(array.data(), Span({13, 14, 15, 16}).data(), 4);
+}
+
+TEST(array, SpanConstructorExceptions)
+{
+  std::array<ExceptionThrower, 4> values;
+  values[2].throw_during_copy = true;
+  Span<ExceptionThrower> span{values};
+  EXPECT_ANY_THROW({ Array<ExceptionThrower> array(span); });
+}
+
+TEST(array, SizeValueConstructorExceptions)
+{
+  ExceptionThrower value;
+  value.throw_during_copy = true;
+  EXPECT_ANY_THROW({ Array<ExceptionThrower> array(5, value); });
+}
+
+TEST(array, MoveConstructorExceptions)
+{
+  Array<ExceptionThrower, 4> array(3);
+  array[1].throw_during_move = true;
+  EXPECT_ANY_THROW({ Array<ExceptionThrower> array_copy(std::move(array)); });
+}
+
+TEST(array, CopyAssignmentExceptions)
+{
+  Array<ExceptionThrower> array(5);
+  array[3].throw_during_copy = true;
+  Array<ExceptionThrower> array_copy(10);
+  EXPECT_ANY_THROW({ array_copy = array; });
+}
+
+TEST(array, MoveAssignmentExceptions)
+{
+  Array<ExceptionThrower, 4> array(4);
+  array[2].throw_during_move = true;
+  Array<ExceptionThrower> array_moved(10);
+  EXPECT_ANY_THROW({ array_moved = std::move(array); });
+}
+
+TEST(array, Last)
+{
+  Array<int> array = {5, 7, 8, 9};
+  EXPECT_EQ(array.last(), 9);
+  array.last() = 1;
+  EXPECT_EQ(array[3], 1);
+  EXPECT_EQ(const_cast<const Array<int> &>(array).last(), 1);
+}
+
+TEST(array, Reinitialize)
+{
+  Array<std::string> array = {"hello", "world"};
+  EXPECT_EQ(array.size(), 2);
+  EXPECT_EQ(array[1], "world");
+  array.reinitialize(3);
+  EXPECT_EQ(array.size(), 3);
+  EXPECT_EQ(array[0], "");
+  EXPECT_EQ(array[1], "");
+  EXPECT_EQ(array[2], "");
+  array.reinitialize(0);
+  EXPECT_EQ(array.size(), 0);
 }
 
 }  // namespace blender::tests

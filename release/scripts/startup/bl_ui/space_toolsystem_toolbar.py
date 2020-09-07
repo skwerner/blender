@@ -1226,23 +1226,64 @@ class _defs_sculpt:
 
     @ToolDef.from_fn
     def mask_border():
+        def draw_settings(_context, layout, tool):
+            props = tool.operator_properties("paint.mask_box_gesture")
+            layout.prop(props, "use_front_faces_only", expand=False)
+
         return dict(
             idname="builtin.box_mask",
             label="Box Mask",
             icon="ops.sculpt.border_mask",
             widget=None,
             keymap=(),
+            draw_settings=draw_settings,
         )
 
     @ToolDef.from_fn
     def mask_lasso():
+        def draw_settings(_context, layout, tool):
+            props = tool.operator_properties("paint.mask_lasso_gesture")
+            layout.prop(props, "use_front_faces_only", expand=False)
+
         return dict(
             idname="builtin.lasso_mask",
             label="Lasso Mask",
             icon="ops.sculpt.lasso_mask",
             widget=None,
             keymap=(),
+            draw_settings=draw_settings,
         )
+
+    @ToolDef.from_fn
+    def face_set_box():
+        def draw_settings(_context, layout, tool):
+            props = tool.operator_properties("sculpt.face_set_box_gesture")
+            layout.prop(props, "use_front_faces_only", expand=False)
+
+        return dict(
+            idname="builtin.box_face_set",
+            label="Box Face Set",
+            icon="ops.sculpt.border_face_set",
+            widget=None,
+            keymap=(),
+            draw_settings=draw_settings,
+        )
+
+    @ToolDef.from_fn
+    def face_set_lasso():
+        def draw_settings(_context, layout, tool):
+            props = tool.operator_properties("sculpt.face_set_lasso_gesture")
+            layout.prop(props, "use_front_faces_only", expand=False)
+
+        return dict(
+            idname="builtin.lasso_face_set",
+            label="Lasso Face Set",
+            icon="ops.sculpt.lasso_face_set",
+            widget=None,
+            keymap=(),
+            draw_settings=draw_settings,
+        )
+
 
     @ToolDef.from_fn
     def mesh_filter():
@@ -1250,13 +1291,17 @@ class _defs_sculpt:
             props = tool.operator_properties("sculpt.mesh_filter")
             layout.prop(props, "type", expand=False)
             layout.prop(props, "strength")
-            layout.prop(props, "deform_axis")
+            row = layout.row(align=True)
+            row.prop(props, "deform_axis")
+            layout.prop(props, "orientation", expand=False)
             layout.prop(props, "use_face_sets")
             if props.type == 'SURFACE_SMOOTH':
                 layout.prop(props, "surface_smooth_shape_preservation", expand=False)
                 layout.prop(props, "surface_smooth_current_vertex", expand=False)
             elif props.type == 'SHARPEN':
                 layout.prop(props, "sharpen_smooth_ratio", expand=False)
+                layout.prop(props, "sharpen_intensify_detail_strength", expand=False)
+                layout.prop(props, "sharpen_curvature_smooth_iterations", expand=False)
 
         return dict(
             idname="builtin.mesh_filter",
@@ -1273,9 +1318,13 @@ class _defs_sculpt:
             props = tool.operator_properties("sculpt.cloth_filter")
             layout.prop(props, "type", expand=False)
             layout.prop(props, "strength")
+            row = layout.row(align=True)
+            row.prop(props, "force_axis")
+            layout.prop(props, "orientation", expand=False)
             layout.prop(props, "cloth_mass")
             layout.prop(props, "cloth_damping")
             layout.prop(props, "use_face_sets")
+            layout.prop(props, "use_collisions")
 
         return dict(
             idname="builtin.cloth_filter",
@@ -1319,6 +1368,22 @@ class _defs_sculpt:
             icon="ops.sculpt.mask_by_color",
             widget=None,
             keymap=(),
+            draw_settings=draw_settings,
+        )
+
+    @ToolDef.from_fn
+    def face_set_edit():
+        def draw_settings(_context, layout, tool):
+            props = tool.operator_properties("sculpt.face_set_edit")
+            layout.prop(props, "mode", expand=False)
+            layout.prop(props, "modify_hidden")
+
+        return dict(
+            idname="builtin.face_set_edit",
+            label="Edit Face Set",
+            icon="ops.sculpt.face_set_edit",
+            widget=None,
+            keymap="3D View Tool: Sculpt, Face Set Edit",
             draw_settings=draw_settings,
         )
 
@@ -1658,6 +1723,29 @@ class _defs_image_uv_sculpt:
 class _defs_gpencil_paint:
 
     @staticmethod
+    def gpencil_primitive_toolbar(context, layout, tool, props):
+        paint = context.tool_settings.gpencil_paint
+        brush = paint.brush
+
+        if brush is None:
+            return False
+
+        gp_settings = brush.gpencil_settings
+
+        row = layout.row(align=True)
+        tool_settings = context.scene.tool_settings
+        settings = tool_settings.gpencil_paint
+        row.template_ID_preview(settings, "brush", rows=3, cols=8, hide_buttons=True)
+
+        from bl_ui.properties_paint_common import (
+            brush_basic_gpencil_paint_settings,
+            brush_basic__draw_color_selector,
+        )
+
+        brush_basic__draw_color_selector(context, layout, brush, gp_settings, props)
+        brush_basic_gpencil_paint_settings(layout, context, brush, compact=True)
+
+    @staticmethod
     def generate_from_brushes(context):
         return generate_from_enum_ex(
             context,
@@ -1684,6 +1772,10 @@ class _defs_gpencil_paint:
 
     @ToolDef.from_fn
     def line():
+        def draw_settings(context, layout, tool):
+            props = tool.operator_properties("gpencil.primitive_line")
+            _defs_gpencil_paint.gpencil_primitive_toolbar(context, layout, tool, props)
+
         return dict(
             idname="builtin.line",
             label="Line",
@@ -1691,10 +1783,15 @@ class _defs_gpencil_paint:
             cursor='CROSSHAIR',
             widget=None,
             keymap=(),
+            draw_settings=draw_settings,
         )
 
     @ToolDef.from_fn
     def polyline():
+        def draw_settings(context, layout, tool):
+            props = tool.operator_properties("gpencil.primitive_polyline")
+            _defs_gpencil_paint.gpencil_primitive_toolbar(context, layout, tool, props)
+
         return dict(
             idname="builtin.polyline",
             label="Polyline",
@@ -1702,10 +1799,15 @@ class _defs_gpencil_paint:
             cursor='CROSSHAIR',
             widget=None,
             keymap=(),
+            draw_settings=draw_settings,
         )
 
     @ToolDef.from_fn
     def box():
+        def draw_settings(context, layout, tool):
+            props = tool.operator_properties("gpencil.primitive_box")
+            _defs_gpencil_paint.gpencil_primitive_toolbar(context, layout, tool, props)
+
         return dict(
             idname="builtin.box",
             label="Box",
@@ -1713,10 +1815,15 @@ class _defs_gpencil_paint:
             cursor='CROSSHAIR',
             widget=None,
             keymap=(),
+            draw_settings=draw_settings,
         )
 
     @ToolDef.from_fn
     def circle():
+        def draw_settings(context, layout, tool):
+            props = tool.operator_properties("gpencil.primitive_circle")
+            _defs_gpencil_paint.gpencil_primitive_toolbar(context, layout, tool, props)
+
         return dict(
             idname="builtin.circle",
             label="Circle",
@@ -1724,10 +1831,15 @@ class _defs_gpencil_paint:
             cursor='CROSSHAIR',
             widget=None,
             keymap=(),
+            draw_settings=draw_settings,
         )
 
     @ToolDef.from_fn
     def arc():
+        def draw_settings(context, layout, tool):
+            props = tool.operator_properties("gpencil.primitive_curve")
+            _defs_gpencil_paint.gpencil_primitive_toolbar(context, layout, tool, props)
+
         return dict(
             idname="builtin.arc",
             label="Arc",
@@ -1735,10 +1847,15 @@ class _defs_gpencil_paint:
             cursor='CROSSHAIR',
             widget=None,
             keymap=(),
+            draw_settings=draw_settings,
         )
 
     @ToolDef.from_fn
     def curve():
+        def draw_settings(context, layout, tool):
+            props = tool.operator_properties("gpencil.primitive_curve")
+            _defs_gpencil_paint.gpencil_primitive_toolbar(context, layout, tool, props)
+
         return dict(
             idname="builtin.curve",
             label="Curve",
@@ -1746,6 +1863,7 @@ class _defs_gpencil_paint:
             cursor='CROSSHAIR',
             widget=None,
             keymap=(),
+            draw_settings=draw_settings,
         )
 
     @ToolDef.from_fn
@@ -2509,6 +2627,10 @@ class VIEW3D_PT_tools_active(ToolSelectPanelHelper, Panel):
                 _defs_sculpt.mask_border,
                 _defs_sculpt.mask_lasso,
             ),
+            (
+                _defs_sculpt.face_set_box,
+                _defs_sculpt.face_set_lasso,
+            ),
             _defs_sculpt.hide_border,
             None,
             _defs_sculpt.mesh_filter,
@@ -2528,6 +2650,8 @@ class VIEW3D_PT_tools_active(ToolSelectPanelHelper, Panel):
                         context.preferences.experimental.use_sculpt_vertex_colors)
                 else ()
             ),
+            None,
+            _defs_sculpt.face_set_edit,
             None,
             _defs_transform.translate,
             _defs_transform.rotate,

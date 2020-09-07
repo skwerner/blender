@@ -499,9 +499,9 @@ class IMAGE_MT_uvs_context_menu(Menu):
             layout.separator()
 
             # Remove
-            layout.operator("uv.remove_doubles", text="Merge By Distance")
+            layout.menu("IMAGE_MT_uvs_merge")
             layout.operator("uv.stitch")
-            layout.operator("uv.weld")
+            layout.menu("IMAGE_MT_uvs_split")
 
 
 class IMAGE_MT_pivot_pie(Menu):
@@ -1137,6 +1137,7 @@ class IMAGE_PT_paint_settings_advanced(Panel, ImagePaintPanel):
     bl_parent_id = "IMAGE_PT_paint_settings"
     bl_category = "Tool"
     bl_label = "Advanced"
+    bl_ui_units_x = 12
 
     def draw(self, context):
         layout = self.layout
@@ -1193,6 +1194,7 @@ class IMAGE_PT_tools_brush_display(Panel, BrushButtonsPanel, DisplayPanel):
     bl_category = "Tool"
     bl_label = "Brush Tip"
     bl_options = {'DEFAULT_CLOSED'}
+    bl_ui_units_x = 15
 
 
 class IMAGE_PT_tools_brush_texture(BrushButtonsPanel, Panel):
@@ -1219,6 +1221,7 @@ class IMAGE_PT_tools_mask_texture(Panel, BrushButtonsPanel, TextureMaskPanel):
     bl_parent_id = "IMAGE_PT_paint_settings"
     bl_category = "Tool"
     bl_label = "Texture Mask"
+    bl_ui_units_x = 12
 
 
 class IMAGE_PT_paint_stroke(BrushButtonsPanel, Panel, StrokePanel):

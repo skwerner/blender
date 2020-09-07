@@ -227,22 +227,6 @@ void uvedit_live_unwrap_update(SpaceImage *sima, Scene *scene, Object *obedit)
 /** \name Geometric Utilities
  * \{ */
 
-void uv_poly_center(BMFace *f, float r_cent[2], const int cd_loop_uv_offset)
-{
-  BMLoop *l;
-  MLoopUV *luv;
-  BMIter liter;
-
-  zero_v2(r_cent);
-
-  BM_ITER_ELEM (l, &liter, f, BM_LOOPS_OF_FACE) {
-    luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
-    add_v2_v2(r_cent, luv->uv);
-  }
-
-  mul_v2_fl(r_cent, 1.0f / (float)f->len);
-}
-
 void uv_poly_copy_aspect(float uv_orig[][2], float uv[][2], float aspx, float aspy, int len)
 {
   int i;
@@ -2109,7 +2093,7 @@ void ED_operatormacros_uvedit(void)
 
   ot = WM_operatortype_append_macro("UV_OT_rip_move",
                                     "UV Rip Move",
-                                    "unstitch UV's and move the result",
+                                    "Unstitch UV's and move the result",
                                     OPTYPE_UNDO | OPTYPE_REGISTER);
   WM_operatortype_macro_define(ot, "UV_OT_rip");
   otmacro = WM_operatortype_macro_define(ot, "TRANSFORM_OT_translate");

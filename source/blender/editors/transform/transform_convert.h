@@ -22,8 +22,7 @@
  * \brief conversion and adaptation of different datablocks to a common struct.
  */
 
-#ifndef __TRANSFORM_CONVERT_H__
-#define __TRANSFORM_CONVERT_H__
+#pragma once
 
 struct BezTriple;
 struct FCurve;
@@ -47,7 +46,7 @@ bool clipUVTransform(TransInfo *t, float vec[2], const bool resize);
 void clipUVData(TransInfo *t);
 
 /* transform_convert_mesh.c */
-void trans_mesh_customdata_correction_init(TransInfo *t);
+void mesh_customdatacorrect_init(TransInfo *t);
 
 /* transform_convert_sequencer.c */
 int transform_convert_sequencer_get_snap_bound(TransInfo *t);
@@ -189,4 +188,3 @@ void special_aftertrans_update__sequencer(bContext *C, TransInfo *t);
 void createTransTrackingData(bContext *C, TransInfo *t);
 void recalcData_tracking(TransInfo *t);
 void special_aftertrans_update__movieclip(bContext *C, TransInfo *t);
-#endif

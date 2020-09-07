@@ -23,6 +23,7 @@ set(INC
   ../blenkernel
   ../blenlib
   ../blentranslation
+  ../depsgraph
   ../makesdna
   ../../../intern/atomic
   ../../../intern/eigen
@@ -137,6 +138,8 @@ set(SRC
   tools/bmesh_bevel.h
   tools/bmesh_bisect_plane.c
   tools/bmesh_bisect_plane.h
+  tools/bmesh_boolean.cc
+  tools/bmesh_boolean.h
   tools/bmesh_decimate.h
   tools/bmesh_decimate_collapse.c
   tools/bmesh_decimate_dissolve.c
@@ -153,10 +156,10 @@ set(SRC
   tools/bmesh_path.h
   tools/bmesh_path_region.c
   tools/bmesh_path_region.h
-  tools/bmesh_path_uv.c
-  tools/bmesh_path_uv.h
   tools/bmesh_path_region_uv.c
   tools/bmesh_path_region_uv.h
+  tools/bmesh_path_uv.c
+  tools/bmesh_path_uv.h
   tools/bmesh_region_match.c
   tools/bmesh_region_match.h
   tools/bmesh_separate.c
@@ -186,10 +189,15 @@ endif()
 if(WITH_BULLET)
   list(APPEND INC_SYS
     ${BULLET_INCLUDE_DIRS}
+    "../../../intern/rigidbody/"
   )
+  if(NOT WITH_SYSTEM_BULLET)
   list(APPEND LIB
     extern_bullet
+    )
+  endif()
 
+  list(APPEND LIB
     ${BULLET_LIBRARIES}
   )
   add_definitions(-DWITH_BULLET)
@@ -203,4 +211,29 @@ if(WITH_FREESTYLE)
   add_definitions(-DWITH_FREESTYLE)
 endif()
 
+if(WITH_GMP)
+  add_definitions(-DWITH_GMP)
+
+  list(APPEND INC_SYS
+    ${GMP_INCLUDE_DIRS}
+  )
+
+  list(APPEND LIB
+    ${GMP_LIBRARIES}
+  )
+endif()
+
 blender_add_lib(bf_bmesh "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
+
+if(WITH_GTESTS)
+  set(TEST_SRC
+    tests/bmesh_core_test.cc
+  )
+  set(TEST_INC
+  )
+  set(TEST_LIB
+    bf_bmesh
+  )
+  include(GTestTesting)
+  blender_add_test_lib(bf_bmesh_tests "${TEST_SRC}" "${INC};${TEST_INC}" "${INC_SYS}" "${LIB};${TEST_LIB}")
+endif()

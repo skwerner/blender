@@ -69,7 +69,6 @@
 
 #include "DEG_depsgraph.h"
 
-#include "GPU_draw.h"
 #include "GPU_immediate.h"
 #include "GPU_state.h"
 
@@ -271,10 +270,10 @@ static bool space_image_main_area_not_uv_brush_poll(bContext *C)
   ToolSettings *toolsettings = scene->toolsettings;
 
   if (sima && !toolsettings->uvsculpt && (CTX_data_edit_object(C) == NULL)) {
-    return 1;
+    return true;
   }
 
-  return 0;
+  return false;
 }
 
 /** \} */
@@ -900,7 +899,7 @@ static int image_view_selected_exec(bContext *C, wmOperator *UNUSED(op))
       return OPERATOR_CANCELLED;
     }
   }
-  else if (ED_space_image_check_show_maskedit(sima, view_layer)) {
+  else if (ED_space_image_check_show_maskedit(sima, obedit)) {
     if (!ED_mask_selected_minmax(C, min, max)) {
       return OPERATOR_CANCELLED;
     }
@@ -2769,7 +2768,7 @@ static int image_invert_exec(bContext *C, wmOperator *op)
   ED_image_undo_push_end();
 
   /* force GPU reupload, all image is invalid */
-  GPU_free_image(ima);
+  BKE_image_free_gputextures(ima);
 
   WM_event_add_notifier(C, NC_IMAGE | NA_EDITED, ima);
 
@@ -2860,7 +2859,7 @@ static int image_scale_exec(bContext *C, wmOperator *op)
   ED_image_undo_push_end();
 
   /* force GPU reupload, all image is invalid */
-  GPU_free_image(ima);
+  BKE_image_free_gputextures(ima);
 
   DEG_id_tag_update(&ima->id, 0);
   WM_event_add_notifier(C, NC_IMAGE | NA_EDITED, ima);
@@ -2898,16 +2897,16 @@ static bool image_pack_test(bContext *C, wmOperator *op)
   Image *ima = image_from_context(C);
 
   if (!ima) {
-    return 0;
+    return false;
   }
 
   if (ELEM(ima->source, IMA_SRC_SEQUENCE, IMA_SRC_MOVIE, IMA_SRC_TILED)) {
     BKE_report(
         op->reports, RPT_ERROR, "Packing movies, image sequences or tiled images not supported");
-    return 0;
+    return false;
   }
 
-  return 1;
+  return true;
 }
 
 static int image_pack_exec(bContext *C, wmOperator *op)
@@ -3715,7 +3714,7 @@ static void draw_fill_tile(PointerRNA *ptr, uiLayout *layout)
   uiItemR(col[1], ptr, "float", 0, NULL, ICON_NONE);
 }
 
-static void initialize_fill_tile(PointerRNA *ptr, Image *ima, ImageTile *tile)
+static void tile_fill_init(PointerRNA *ptr, Image *ima, ImageTile *tile)
 {
   ImageUser iuser;
   BKE_imageuser_default(&iuser);
@@ -3828,7 +3827,7 @@ static int tile_add_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(ev
   }
 
   ImageTile *tile = BLI_findlink(&ima->tiles, ima->active_tile_index);
-  initialize_fill_tile(op->ptr, ima, tile);
+  tile_fill_init(op->ptr, ima, tile);
 
   RNA_int_set(op->ptr, "number", next_number);
   RNA_int_set(op->ptr, "count", 1);
@@ -3974,7 +3973,7 @@ static int tile_fill_exec(bContext *C, wmOperator *op)
 
 static int tile_fill_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
 {
-  initialize_fill_tile(op->ptr, CTX_data_edit_image(C), NULL);
+  tile_fill_init(op->ptr, CTX_data_edit_image(C), NULL);
 
   return WM_operator_props_dialog_popup(C, op, 15 * UI_UNIT_X);
 }

@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_ANIM_DATA_H__
-#define __BKE_ANIM_DATA_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -36,6 +35,10 @@ struct LibraryForeachIDData;
 struct Main;
 struct ReportList;
 struct bAction;
+struct BlendWriter;
+struct BlendDataReader;
+struct BlendLibReader;
+struct BlendExpander;
 
 /* ************************************* */
 /* AnimData API */
@@ -95,8 +98,13 @@ void BKE_animdata_merge_copy(struct Main *bmain,
                              eAnimData_MergeCopy_Modes action_mode,
                              bool fix_drivers);
 
+void BKE_animdata_blend_write(struct BlendWriter *writer, struct AnimData *adt);
+void BKE_animdata_blend_read_data(struct BlendDataReader *reader, struct AnimData *adt);
+void BKE_animdata_blend_read_lib(struct BlendLibReader *reader,
+                                 struct ID *id,
+                                 struct AnimData *adt);
+void BKE_animdata_blend_read_expand(struct BlendExpander *expander, struct AnimData *adt);
+
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_ANIM_DATA_H__*/

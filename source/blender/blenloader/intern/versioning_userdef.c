@@ -38,6 +38,7 @@
 #include "DNA_windowmanager_types.h"
 
 #include "BKE_addon.h"
+#include "BKE_blender_version.h"
 #include "BKE_colorband.h"
 #include "BKE_idprop.h"
 #include "BKE_keyconfig.h"
@@ -227,6 +228,11 @@ static void do_versions_theme(const UserDef *userdef, bTheme *btheme)
    */
   {
     /* Keep this block, even when empty. */
+
+    /* The new defaults for the file browser theme are the same as
+     * the outliner's, and it's less disruptive to just copy them. */
+    copy_v4_v4_uchar(btheme->space_file.back, btheme->space_outliner.back);
+    copy_v4_v4_uchar(btheme->space_file.row_alternate, btheme->space_outliner.row_alternate);
   }
 
 #undef FROM_DEFAULT_V4_UCHAR
@@ -366,7 +372,7 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
   }
   if (!USER_VERSION_ATLEAST(250, 0)) {
     /* adjust grease-pencil distances */
-    userdef->gp_manhattendist = 1;
+    userdef->gp_manhattandist = 1;
     userdef->gp_euclideandist = 2;
 
     /* adjust default interpolation for new IPO-curves */
@@ -757,6 +763,12 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
     userdef->statusbar_flag = STATUSBAR_SHOW_VERSION;
   }
 
+  if (!USER_VERSION_ATLEAST(291, 1)) {
+    if (userdef->collection_instance_empty_size == 0) {
+      userdef->collection_instance_empty_size = 1.0f;
+    }
+  }
+
   /**
    * Versioning code until next subversion bump goes here.
    *
@@ -768,10 +780,6 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
    */
   {
     /* Keep this block, even when empty. */
-
-    if (userdef->collection_instance_empty_size == 0) {
-      userdef->collection_instance_empty_size = 1.0f;
-    }
   }
 
   if (userdef->pixelsize == 0.0f) {
@@ -782,6 +790,25 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
     do_versions_theme(userdef, btheme);
   }
 #undef USER_VERSION_ATLEAST
+}
+
+void BLO_sanitize_experimental_features_userpref_blend(UserDef *userdef)
+{
+  /* User preference experimental settings are only supported in alpha builds.
+   * This prevents users corrupting data and relying on API that may change.
+   *
+   * If user preferences are saved this will be stored in disk as expected.
+   * This only starts to take effect when there is a release branch (on beta).
+   *
+   * At that time master already has its version bumped so its user preferences
+   * are not touched by these settings. */
+
+  if (BKE_blender_version_is_alpha()) {
+    return;
+  }
+  userdef->experimental.use_new_particle_system = false;
+  userdef->experimental.use_new_hair_type = false;
+  userdef->experimental.use_sculpt_vertex_colors = false;
 }
 
 #undef USER_LMOUSESELECT

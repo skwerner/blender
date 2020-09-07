@@ -594,6 +594,7 @@ typedef struct WPGradient_userData {
 
   /* options */
   bool use_select;
+  bool use_vgroup_restrict;
   short type;
   float weightpaint;
 } WPGradient_userData;
@@ -602,8 +603,13 @@ static void gradientVert_update(WPGradient_userData *grad_data, int index)
 {
   Mesh *me = grad_data->me;
   WPGradient_vertStore *vs = &grad_data->vert_cache->elem[index];
-  float alpha;
 
+  /* Optionally restrict to assigned verices only. */
+  if (grad_data->use_vgroup_restrict && ((vs->flag & VGRAD_STORE_DW_EXIST) == 0)) {
+    return;
+  }
+
+  float alpha;
   if (grad_data->type == WPAINT_GRADIENT_TYPE_LINEAR) {
     alpha = line_point_factor_v2(vs->sco, grad_data->sco_start, grad_data->sco_end);
   }
@@ -757,8 +763,8 @@ static int paint_weight_gradient_exec(bContext *C, wmOperator *op)
   int y_start = RNA_int_get(op->ptr, "ystart");
   int x_end = RNA_int_get(op->ptr, "xend");
   int y_end = RNA_int_get(op->ptr, "yend");
-  float sco_start[2] = {x_start, y_start};
-  float sco_end[2] = {x_end, y_end};
+  const float sco_start[2] = {x_start, y_start};
+  const float sco_end[2] = {x_end, y_end};
   const bool is_interactive = (gesture != NULL);
 
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
@@ -811,10 +817,11 @@ static int paint_weight_gradient_exec(bContext *C, wmOperator *op)
     VPaint *wp = ts->wpaint;
     struct Brush *brush = BKE_paint_brush(&wp->paint);
 
-    BKE_curvemapping_initialize(brush->curve);
+    BKE_curvemapping_init(brush->curve);
 
     data.brush = brush;
     data.weightpaint = BKE_brush_weight_get(scene, brush);
+    data.use_vgroup_restrict = (ts->wpaint->flag & VP_FLAG_VGROUP_RESTRICT) != 0;
   }
 
   ED_view3d_init_mats_rv3d(ob, region->regiondata);

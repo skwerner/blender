@@ -242,7 +242,7 @@ void UI_view2d_region_reinit(View2D *v2d, short type, int winx, int winy)
   bool tot_changed = false, do_init;
   const uiStyle *style = UI_style_get();
 
-  do_init = (v2d->flag & V2D_IS_INITIALISED) == 0;
+  do_init = (v2d->flag & V2D_IS_INIT) == 0;
 
   /* see eView2D_CommonViewTypes in UI_view2d.h for available view presets */
   switch (type) {
@@ -351,7 +351,7 @@ void UI_view2d_region_reinit(View2D *v2d, short type, int winx, int winy)
       v2d->scroll |= (V2D_SCROLL_HORIZONTAL_HIDE | V2D_SCROLL_VERTICAL_HIDE);
 
       if (do_init) {
-        float panelzoom = (style) ? style->panelzoom : 1.0f;
+        const float panelzoom = (style) ? style->panelzoom : 1.0f;
 
         v2d->tot.xmin = 0.0f;
         v2d->tot.xmax = winx;
@@ -374,8 +374,8 @@ void UI_view2d_region_reinit(View2D *v2d, short type, int winx, int winy)
       break;
   }
 
-  /* set initialized flag so that View2D doesn't get reinitialised next time again */
-  v2d->flag |= V2D_IS_INITIALISED;
+  /* set initialized flag so that View2D doesn't get reinitialized next time again */
+  v2d->flag |= V2D_IS_INIT;
 
   /* store view size */
   v2d->winx = winx;
@@ -566,7 +566,7 @@ static void ui_view2d_curRect_validate_resize(View2D *v2d, bool resize)
          * - width is not adjusted for changed ratios here.
          */
         if (winx < v2d->oldwinx) {
-          float temp = v2d->oldwinx - winx;
+          const float temp = v2d->oldwinx - winx;
 
           cur->xmin -= temp;
           cur->xmax -= temp;
@@ -588,7 +588,7 @@ static void ui_view2d_curRect_validate_resize(View2D *v2d, bool resize)
          */
 
         if (winy < v2d->oldwiny) {
-          float temp = v2d->oldwiny - winy;
+          const float temp = v2d->oldwiny - winy;
 
           if (v2d->align & V2D_ALIGN_NO_NEG_Y) {
             cur->ymin -= temp;
@@ -853,14 +853,23 @@ void UI_view2d_curRect_validate(View2D *v2d)
   ui_view2d_curRect_validate_resize(v2d, false);
 }
 
+void UI_view2d_curRect_changed(const bContext *C, View2D *v2d)
+{
+  UI_view2d_curRect_validate(v2d);
+
+  ARegion *region = CTX_wm_region(C);
+
+  if (region->type->on_view2d_changed != NULL) {
+    region->type->on_view2d_changed(C, region);
+  }
+}
+
 /* ------------------ */
 
 /* Called by menus to activate it, or by view2d operators
  * to make sure 'related' views stay in synchrony */
 void UI_view2d_sync(bScreen *screen, ScrArea *area, View2D *v2dcur, int flag)
 {
-  ARegion *region;
-
   /* don't continue if no view syncing to be done */
   if ((v2dcur->flag & (V2D_VIEWSYNC_SCREEN_TIME | V2D_VIEWSYNC_AREA_VERTICAL)) == 0) {
     return;
@@ -868,7 +877,7 @@ void UI_view2d_sync(bScreen *screen, ScrArea *area, View2D *v2dcur, int flag)
 
   /* check if doing within area syncing (i.e. channels/vertical) */
   if ((v2dcur->flag & V2D_VIEWSYNC_AREA_VERTICAL) && (area)) {
-    for (region = area->regionbase.first; region; region = region->next) {
+    LISTBASE_FOREACH (ARegion *, region, &area->regionbase) {
       /* don't operate on self */
       if (v2dcur != &region->v2d) {
         /* only if view has vertical locks enabled */
@@ -894,7 +903,7 @@ void UI_view2d_sync(bScreen *screen, ScrArea *area, View2D *v2dcur, int flag)
   /* check if doing whole screen syncing (i.e. time/horizontal) */
   if ((v2dcur->flag & V2D_VIEWSYNC_SCREEN_TIME) && (screen)) {
     LISTBASE_FOREACH (ScrArea *, area_iter, &screen->areabase) {
-      for (region = area_iter->regionbase.first; region; region = region->next) {
+      LISTBASE_FOREACH (ARegion *, region, &area_iter->regionbase) {
         /* don't operate on self */
         if (v2dcur != &region->v2d) {
           /* only if view has horizontal locks enabled */
@@ -1112,14 +1121,14 @@ static void view2d_map_cur_using_mask(const View2D *v2d, rctf *r_curmasked)
   *r_curmasked = v2d->cur;
 
   if (view2d_scroll_mapped(v2d->scroll)) {
-    float sizex = BLI_rcti_size_x(&v2d->mask);
-    float sizey = BLI_rcti_size_y(&v2d->mask);
+    const float sizex = BLI_rcti_size_x(&v2d->mask);
+    const float sizey = BLI_rcti_size_y(&v2d->mask);
 
     /* prevent tiny or narrow regions to get
      * invalid coordinates - mask can get negative even... */
     if (sizex > 0.0f && sizey > 0.0f) {
-      float dx = BLI_rctf_size_x(&v2d->cur) / (sizex + 1);
-      float dy = BLI_rctf_size_y(&v2d->cur) / (sizey + 1);
+      const float dx = BLI_rctf_size_x(&v2d->cur) / (sizex + 1);
+      const float dy = BLI_rctf_size_y(&v2d->cur) / (sizey + 1);
 
       if (v2d->mask.xmin != 0) {
         r_curmasked->xmin -= dx * (float)v2d->mask.xmin;
@@ -1216,8 +1225,8 @@ void UI_view2d_view_orthoSpecial(ARegion *region, View2D *v2d, const bool xaxis)
 void UI_view2d_view_restore(const bContext *C)
 {
   ARegion *region = CTX_wm_region(C);
-  int width = BLI_rcti_size_x(&region->winrct) + 1;
-  int height = BLI_rcti_size_y(&region->winrct) + 1;
+  const int width = BLI_rcti_size_x(&region->winrct) + 1;
+  const int height = BLI_rcti_size_y(&region->winrct) + 1;
 
   wmOrtho2(0.0f, (float)width, 0.0f, (float)height);
   GPU_matrix_identity_set();
@@ -1269,8 +1278,8 @@ void UI_view2d_constant_grid_draw(const View2D *v2d, float step)
 
   if (count_x > 0 || count_y > 0) {
     GPUVertFormat *format = immVertexFormat();
-    uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
-    uint color = GPU_vertformat_attr_add(format, "color", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
+    const uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+    const uint color = GPU_vertformat_attr_add(format, "color", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
     float theme_color[3];
 
     UI_GetThemeColorShade3fv(TH_BACK, -10, theme_color);
@@ -1322,7 +1331,7 @@ void UI_view2d_multi_grid_draw(
   vertex_count += 2 * ((int)((v2d->cur.ymax - v2d->cur.ymin) / lstep) + 1);
 
   GPUVertFormat *format = immVertexFormat();
-  uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+  const uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
   uint color = GPU_vertformat_attr_add(
       format, "color", GPU_COMP_U8, 3, GPU_FETCH_INT_TO_FLOAT_UNIT);
 
@@ -1419,7 +1428,7 @@ void UI_view2d_scrollers_calc(View2D *v2d,
 {
   rcti vert, hor;
   float fac1, fac2, totsize, scrollsize;
-  int scroll = view2d_scroll_mapped(v2d->scroll);
+  const int scroll = view2d_scroll_mapped(v2d->scroll);
   int smaller;
 
   /* Always update before drawing (for dynamically sized scrollers). */
@@ -1901,7 +1910,7 @@ View2D *UI_view2d_fromcontext_rwin(const bContext *C)
  * disabled. */
 void UI_view2d_scroller_size_get(const View2D *v2d, float *r_x, float *r_y)
 {
-  int scroll = view2d_scroll_mapped(v2d->scroll);
+  const int scroll = view2d_scroll_mapped(v2d->scroll);
 
   if (r_x) {
     if (scroll & V2D_SCROLL_VERTICAL) {
@@ -2119,7 +2128,7 @@ void UI_view2d_text_cache_add(
   BLI_assert(str_len == strlen(str));
 
   if (UI_view2d_view_to_region_clip(v2d, x, y, &mval[0], &mval[1])) {
-    int alloc_len = str_len + 1;
+    const int alloc_len = str_len + 1;
     View2DString *v2s;
 
     if (g_v2d_strings_arena == NULL) {
@@ -2150,7 +2159,7 @@ void UI_view2d_text_cache_add_rectf(
   BLI_assert(str_len == strlen(str));
 
   if (UI_view2d_view_to_region_rcti_clip(v2d, rect_view, &rect)) {
-    int alloc_len = str_len + 1;
+    const int alloc_len = str_len + 1;
     View2DString *v2s;
 
     if (g_v2d_strings_arena == NULL) {

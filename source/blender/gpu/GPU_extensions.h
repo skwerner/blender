@@ -21,8 +21,7 @@
  * \ingroup gpu
  */
 
-#ifndef __GPU_EXTENSIONS_H__
-#define __GPU_EXTENSIONS_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -31,6 +30,7 @@ extern "C" {
 /* GPU extensions support */
 
 int GPU_max_texture_size(void);
+int GPU_max_texture_3d_size(void);
 int GPU_max_texture_layers(void);
 int GPU_max_textures(void);
 int GPU_max_textures_vert(void);
@@ -41,16 +41,17 @@ int GPU_max_color_texture_samples(void);
 int GPU_max_cube_map_size(void);
 int GPU_max_ubo_binds(void);
 int GPU_max_ubo_size(void);
-float GPU_max_line_width(void);
 void GPU_get_dfdy_factors(float fac[2]);
 bool GPU_arb_base_instance_is_supported(void);
 bool GPU_arb_texture_cube_map_array_is_supported(void);
 bool GPU_mip_render_workaround(void);
 bool GPU_depth_blitting_workaround(void);
 bool GPU_unused_fb_slot_workaround(void);
-bool GPU_context_local_shaders_workaround(void);
+bool GPU_use_main_context_workaround(void);
 bool GPU_texture_copy_workaround(void);
 bool GPU_crappy_amd_driver(void);
+
+int GPU_texture_size_with_limit(int res);
 
 bool GPU_mem_stats_supported(void);
 void GPU_mem_stats_get(int *totalmem, int *freemem);
@@ -62,5 +63,3 @@ bool GPU_stereo_quadbuffer_support(void);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __GPU_EXTENSIONS_H__ */

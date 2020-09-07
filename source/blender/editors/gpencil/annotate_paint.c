@@ -200,7 +200,7 @@ typedef struct tGPsdata {
 
 /* Macros for accessing sensitivity thresholds... */
 /* minimum number of pixels mouse should move before new point created */
-#define MIN_MANHATTEN_PX (U.gp_manhattendist)
+#define MIN_MANHATTAN_PX (U.gp_manhattandist)
 /* minimum length of new segment before new point can be added */
 #define MIN_EUCLIDEAN_PX (U.gp_euclideandist)
 
@@ -271,7 +271,7 @@ static void annotation_get_3d_reference(tGPsdata *p, float vec[3])
 /* Stroke Editing ---------------------------- */
 
 /* check if the current mouse position is suitable for adding a new point */
-static bool annotation_stroke_filtermval(tGPsdata *p, const float mval[2], float pmval[2])
+static bool annotation_stroke_filtermval(tGPsdata *p, const float mval[2], const float pmval[2])
 {
   int dx = (int)fabsf(mval[0] - pmval[0]);
   int dy = (int)fabsf(mval[1] - pmval[1]);
@@ -297,7 +297,7 @@ static bool annotation_stroke_filtermval(tGPsdata *p, const float mval[2], float
     return false;
   }
 
-  if ((dx > MIN_MANHATTEN_PX) && (dy > MIN_MANHATTEN_PX)) {
+  if ((dx > MIN_MANHATTAN_PX) && (dy > MIN_MANHATTAN_PX)) {
     return true;
   }
 
@@ -573,14 +573,14 @@ static short annotation_stroke_addpoint(tGPsdata *p,
         /* Arrow end corner. */
         if (gpd->runtime.sbuffer_sflag & GP_STROKE_USE_ARROW_END) {
           pt++;
-          float e_heading[2] = {start[0] - end[0], start[1] - end[1]};
+          const float e_heading[2] = {start[0] - end[0], start[1] - end[1]};
           /* Calculate points for ending arrow. */
           annotation_stroke_arrow_calc_points(
               pt, e_heading, end, gpd->runtime.arrow_end, gpd->runtime.arrow_end_style);
         }
         /* Arrow start corner. */
         if (gpd->runtime.sbuffer_sflag & GP_STROKE_USE_ARROW_START) {
-          float s_heading[2] = {end[0] - start[0], end[1] - start[1]};
+          const float s_heading[2] = {end[0] - start[0], end[1] - start[1]};
           /* Calculate points for starting arrow. */
           annotation_stroke_arrow_calc_points(
               NULL, s_heading, start, gpd->runtime.arrow_start, gpd->runtime.arrow_start_style);
@@ -603,7 +603,7 @@ static short annotation_stroke_addpoint(tGPsdata *p,
     /* store settings */
     copy_v2_v2(&pt->x, mval);
     pt->pressure = pressure;
-    /* unused for annotations, but initialise for easier conversions to GP Object */
+    /* Unused for annotations, but initialize for easier conversions to GP Object. */
     pt->strength = 1.0f;
 
     /* point time */
@@ -704,7 +704,7 @@ static void annotation_stroke_arrow_init_point(
     tGPsdata *p, tGPspoint *ptc, bGPDspoint *pt, const float co[8], const int co_idx)
 {
   /* Note: provided co_idx should be always pair number as it's [x1, y1, x2, y2, x3, y3]. */
-  float real_co[2] = {co[co_idx], co[co_idx + 1]};
+  const float real_co[2] = {co[co_idx], co[co_idx + 1]};
   copy_v2_v2(&ptc->x, real_co);
   annotation_stroke_convertcoords(p, &ptc->x, &pt->x, NULL);
   annotation_stroke_arrow_init_point_default(pt);
@@ -1700,9 +1700,7 @@ static void annotation_draw_eraser(bContext *UNUSED(C), int x, int y, void *p_pt
     immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
 
     GPU_line_smooth(true);
-    GPU_blend(true);
-    GPU_blend_set_func_separate(
-        GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+    GPU_blend(GPU_BLEND_ALPHA);
 
     immUniformColor4ub(255, 100, 100, 20);
     imm_draw_circle_fill_2d(shdr_pos, x, y, p->radius, 40);
@@ -1730,7 +1728,7 @@ static void annotation_draw_eraser(bContext *UNUSED(C), int x, int y, void *p_pt
 
     immUnbindProgram();
 
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
     GPU_line_smooth(false);
   }
 }
@@ -1768,7 +1766,7 @@ static void annotation_draw_stabilizer(bContext *C, int x, int y, void *p_ptr)
   uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
   immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
   GPU_line_smooth(true);
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
   GPU_line_width(1.25f);
   const float color[3] = {1.0f, 0.39f, 0.39f};
 
@@ -1793,7 +1791,7 @@ static void annotation_draw_stabilizer(bContext *C, int x, int y, void *p_ptr)
   immEnd();
 
   /* Returns back all GPU settings */
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
   GPU_line_smooth(false);
 
   immUnbindProgram();

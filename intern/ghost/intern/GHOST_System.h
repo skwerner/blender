@@ -22,8 +22,7 @@
  * Declaration of GHOST_System class.
  */
 
-#ifndef __GHOST_SYSTEM_H__
-#define __GHOST_SYSTEM_H__
+#pragma once
 
 #include "GHOST_ISystem.h"
 
@@ -116,7 +115,7 @@ class GHOST_System : public GHOST_ISystem {
    * Never explicitly delete the context, use disposeContext() instead.
    * \return  The new context (or 0 if creation failed).
    */
-  virtual GHOST_IContext *createOffscreenContext() = 0;
+  virtual GHOST_IContext *createOffscreenContext(GHOST_GLSettings glSettings) = 0;
 
   /**
    * Returns whether a window is valid.
@@ -424,5 +423,3 @@ inline GHOST_NDOFManager *GHOST_System::getNDOFManager() const
   return m_ndofManager;
 }
 #endif
-
-#endif  // __GHOST_SYSTEM_H__

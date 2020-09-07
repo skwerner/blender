@@ -1,6 +1,5 @@
 
 #define EPSILON 0.00001
-#define M_PI 3.14159265358979323846
 
 #define CAVITY_BUFFER_RANGE 4.0
 
@@ -66,32 +65,4 @@ void workbench_float_pair_decode(float data, out float v1, out float v2)
   int idata = int(data);
   v1 = float(idata & v1_mask) * (1.0 / float(v1_mask));
   v2 = float(idata >> int(ROUGHNESS_BITS)) * (1.0 / float(v2_mask));
-}
-
-vec3 view_vector_from_screen_uv(vec2 uv, vec4 viewvecs[2], mat4 proj_mat)
-{
-  if (proj_mat[3][3] == 0.0) {
-    return normalize(vec3(viewvecs[0].xy + uv * viewvecs[1].xy, 1.0));
-  }
-  else {
-    return vec3(0.0, 0.0, 1.0);
-  }
-}
-
-vec3 view_position_from_depth(vec2 uvcoords, float depth, vec4 viewvecs[2], mat4 proj_mat)
-{
-  if (proj_mat[3][3] == 0.0) {
-    /* Perspective */
-    float d = 2.0 * depth - 1.0;
-
-    float zview = -proj_mat[3][2] / (d + proj_mat[2][2]);
-
-    return zview * vec3(viewvecs[0].xy + uvcoords * viewvecs[1].xy, 1.0);
-  }
-  else {
-    /* Orthographic */
-    vec3 offset = vec3(uvcoords, depth);
-
-    return viewvecs[0].xyz + offset * viewvecs[1].xyz;
-  }
 }

@@ -5434,7 +5434,8 @@ static void def_sh_bevel(StructRNA *srna)
 
   prop = RNA_def_property(srna, "samples", PROP_INT, PROP_UNSIGNED);
   RNA_def_property_int_sdna(prop, NULL, "custom1");
-  RNA_def_property_range(prop, 2, 16);
+  RNA_def_property_range(prop, 2, 128);
+  RNA_def_property_ui_range(prop, 2, 16, 1, 1);
   RNA_def_property_ui_text(prop, "Samples", "Number of rays to trace per shader evaluation");
   RNA_def_property_update(prop, 0, "rna_Node_update");
 }
@@ -6504,7 +6505,7 @@ static void def_cmp_channel_matte(StructRNA *srna)
 
   static const EnumPropertyItem algorithm_items[] = {
       {0, "SINGLE", 0, "Single", "Limit by single channel"},
-      {1, "MAX", 0, "Max", "Limit by max of other channels "},
+      {1, "MAX", 0, "Max", "Limit by max of other channels"},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -8475,6 +8476,12 @@ static void rna_def_node_socket_interface(BlenderRNA *brna)
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
   RNA_def_property_ui_text(prop, "Is Output", "True if the socket is an output, otherwise input");
 
+  prop = RNA_def_property(srna, "hide_value", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flag", SOCK_HIDE_VALUE);
+  RNA_def_property_ui_text(
+      prop, "Hide Value", "Hide the socket input value even when the socket is not connected");
+  RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_NodeSocketInterface_update");
+
   /* registration */
   prop = RNA_def_property(srna, "bl_socket_idname", PROP_STRING, PROP_NONE);
   RNA_def_property_string_sdna(prop, NULL, "typeinfo->idname");
@@ -9921,7 +9928,7 @@ static void rna_def_composite_nodetree(BlenderRNA *brna)
   prop = RNA_def_property(srna, "use_viewer_border", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", NTREE_VIEWER_BORDER);
   RNA_def_property_ui_text(
-      prop, "Viewer Border", "Use boundaries for viewer nodes and composite backdrop");
+      prop, "Viewer Region", "Use boundaries for viewer nodes and composite backdrop");
   RNA_def_property_update(prop, NC_NODE | ND_DISPLAY, "rna_NodeTree_update");
 }
 

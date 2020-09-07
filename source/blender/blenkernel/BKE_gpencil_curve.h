@@ -17,8 +17,7 @@
  * This is a new part of Blender
  */
 
-#ifndef __BKE_GPENCIL_CURVE_H__
-#define __BKE_GPENCIL_CURVE_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -36,12 +35,10 @@ void BKE_gpencil_convert_curve(struct Main *bmain,
                                struct Scene *scene,
                                struct Object *ob_gp,
                                struct Object *ob_cu,
-                               const bool gpencil_lines,
                                const bool use_collections,
-                               const bool only_stroke);
+                               const float scale_thickness,
+                               const float sample);
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif /*  __BKE_GPENCIL_CURVE_H__ */

@@ -193,6 +193,12 @@ static EnumPropertyItem instance_items_nogroup[] = {
     INSTANCE_ITEMS_SHARED,
     {0, NULL, 0, NULL, NULL},
 };
+
+static EnumPropertyItem instance_items_pointcloud[] = {
+    {0, "NONE", 0, "None", ""},
+    {OB_DUPLIVERTS, "POINTS", 0, "Points", "Instantiate child objects on all points"},
+    {0, NULL, 0, NULL, NULL},
+};
 #endif
 #undef INSTANCE_ITEMS_SHARED
 #undef INSTANCE_ITEM_COLLECTION
@@ -564,9 +570,17 @@ static StructRNA *rna_Object_data_typef(PointerRNA *ptr)
     case OB_GPENCIL:
       return &RNA_GreasePencil;
     case OB_HAIR:
+#  ifdef WITH_HAIR_NODES
       return &RNA_Hair;
+#  else
+      return &RNA_ID;
+#  endif
     case OB_POINTCLOUD:
+#  ifdef WITH_PARTICLE_NODES
       return &RNA_PointCloud;
+#  else
+      return &RNA_ID;
+#  endif
     case OB_VOLUME:
       return &RNA_Volume;
     default:
@@ -706,6 +720,9 @@ static const EnumPropertyItem *rna_Object_instance_type_itemf(bContext *UNUSED(C
 
   if (ob->type == OB_EMPTY) {
     item = instance_items;
+  }
+  else if (ob->type == OB_POINTCLOUD) {
+    item = instance_items_pointcloud;
   }
   else {
     item = instance_items_nogroup;

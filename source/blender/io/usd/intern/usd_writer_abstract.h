@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) 2019 Blender Foundation.
  * All rights reserved.
  */
-#ifndef __USD_WRITER_ABSTRACT_H__
-#define __USD_WRITER_ABSTRACT_H__
+#pragma once
 
 #include "IO_abstract_hierarchy_iterator.h"
 #include "usd_exporter_context.h"
@@ -73,10 +72,12 @@ class USDAbstractWriter : public AbstractHierarchyWriter {
   pxr::UsdTimeCode get_export_time_code() const;
 
   pxr::UsdShadeMaterial ensure_usd_material(Material *material);
+
+  void write_visibility(const HierarchyContext &context,
+                        const pxr::UsdTimeCode timecode,
+                        pxr::UsdGeomImageable &usd_geometry);
 };
 
 }  // namespace usd
 }  // namespace io
 }  // namespace blender
-
-#endif /* __USD_WRITER_ABSTRACT_H__ */

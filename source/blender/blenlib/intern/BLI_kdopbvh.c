@@ -201,6 +201,23 @@ const float bvhtree_kdop_axes[13][3] = {
     {0, 1.0, -1.0},
 };
 
+/* Used to correct the epsilon and thus match the overlap distance. */
+const float bvhtree_kdop_axes_length[13] = {
+    1.0f,
+    1.0f,
+    1.0f,
+    1.7320508075688772f,
+    1.7320508075688772f,
+    1.7320508075688772f,
+    1.7320508075688772f,
+    1.4142135623730951f,
+    1.4142135623730951f,
+    1.4142135623730951f,
+    1.4142135623730951f,
+    1.4142135623730951f,
+    1.4142135623730951f,
+};
+
 /* -------------------------------------------------------------------- */
 /** \name Utility Functions
  * \{ */
@@ -284,28 +301,19 @@ static BVHNode *bvh_medianof3(BVHNode **a, int lo, int mid, int hi, int axis)
     if ((a[hi])->bv[axis] < (a[mid])->bv[axis]) {
       return a[mid];
     }
-    else {
-      if ((a[hi])->bv[axis] < (a[lo])->bv[axis]) {
-        return a[hi];
-      }
-      else {
-        return a[lo];
-      }
+    if ((a[hi])->bv[axis] < (a[lo])->bv[axis]) {
+      return a[hi];
     }
+    return a[lo];
   }
-  else {
-    if ((a[hi])->bv[axis] < (a[mid])->bv[axis]) {
-      if ((a[hi])->bv[axis] < (a[lo])->bv[axis]) {
-        return a[lo];
-      }
-      else {
-        return a[hi];
-      }
+
+  if ((a[hi])->bv[axis] < (a[mid])->bv[axis]) {
+    if ((a[hi])->bv[axis] < (a[lo])->bv[axis]) {
+      return a[lo];
     }
-    else {
-      return a[mid];
-    }
+    return a[hi];
   }
+  return a[mid];
 }
 
 /**
@@ -422,18 +430,12 @@ static char get_largest_axis(const float *bv)
     if (middle_point[0] > middle_point[2]) {
       return 1; /* max x axis */
     }
-    else {
-      return 5; /* max z axis */
-    }
+    return 5; /* max z axis */
   }
-  else {
-    if (middle_point[1] > middle_point[2]) {
-      return 3; /* max y axis */
-    }
-    else {
-      return 5; /* max z axis */
-    }
+  if (middle_point[1] > middle_point[2]) {
+    return 3; /* max y axis */
   }
+  return 5; /* max z axis */
 }
 
 /**
@@ -619,13 +621,11 @@ static int implicit_leafs_index(const BVHBuildHelper *data, const int depth, con
   if (min_leaf_index <= data->remain_leafs) {
     return min_leaf_index;
   }
-  else if (data->leafs_per_child[depth]) {
+  if (data->leafs_per_child[depth]) {
     return data->totleafs -
            (data->branches_on_level[depth - 1] - child_index) * data->leafs_per_child[depth];
   }
-  else {
-    return data->remain_leafs;
-  }
+  return data->remain_leafs;
 }
 
 /**
@@ -987,9 +987,18 @@ void BLI_bvhtree_balance(BVHTree *tree)
 #endif
 }
 
-void BLI_bvhtree_insert(BVHTree *tree, int index, const float co[3], int numpoints)
+static void bvhtree_node_inflate(const BVHTree *tree, BVHNode *node, const float dist)
 {
   axis_t axis_iter;
+  for (axis_iter = tree->start_axis; axis_iter < tree->stop_axis; axis_iter++) {
+    float dist_corrected = dist * bvhtree_kdop_axes_length[axis_iter];
+    node->bv[(2 * axis_iter)] -= dist_corrected;     /* minimum */
+    node->bv[(2 * axis_iter) + 1] += dist_corrected; /* maximum */
+  }
+}
+
+void BLI_bvhtree_insert(BVHTree *tree, int index, const float co[3], int numpoints)
+{
   BVHNode *node = NULL;
 
   /* insert should only possible as long as tree->totbranch is 0 */
@@ -1003,10 +1012,7 @@ void BLI_bvhtree_insert(BVHTree *tree, int index, const float co[3], int numpoin
   node->index = index;
 
   /* inflate the bv with some epsilon */
-  for (axis_iter = tree->start_axis; axis_iter < tree->stop_axis; axis_iter++) {
-    node->bv[(2 * axis_iter)] -= tree->epsilon;     /* minimum */
-    node->bv[(2 * axis_iter) + 1] += tree->epsilon; /* maximum */
-  }
+  bvhtree_node_inflate(tree, node, tree->epsilon);
 }
 
 /* call before BLI_bvhtree_update_tree() */
@@ -1014,7 +1020,6 @@ bool BLI_bvhtree_update_node(
     BVHTree *tree, int index, const float co[3], const float co_moving[3], int numpoints)
 {
   BVHNode *node = NULL;
-  axis_t axis_iter;
 
   /* check if index exists */
   if (index > tree->totleaf) {
@@ -1030,10 +1035,7 @@ bool BLI_bvhtree_update_node(
   }
 
   /* inflate the bv with some epsilon */
-  for (axis_iter = tree->start_axis; axis_iter < tree->stop_axis; axis_iter++) {
-    node->bv[(2 * axis_iter)] -= tree->epsilon;     /* minimum */
-    node->bv[(2 * axis_iter) + 1] += tree->epsilon; /* maximum */
-  }
+  bvhtree_node_inflate(tree, node, tree->epsilon);
 
   return true;
 }
@@ -1668,10 +1670,8 @@ static bool dfs_find_duplicate_fast_dfs(BVHNearestData *data, BVHNode *node)
         data->callback(data->userdata, node->index, data->co, &data->nearest);
         return (data->nearest.dist_sq < dist_sq);
       }
-      else {
-        data->nearest.index = node->index;
-        return true;
-      }
+      data->nearest.index = node->index;
+      return true;
     }
   }
   else {
@@ -1805,9 +1805,7 @@ static float fast_ray_nearest_hit(const BVHRayCastData *data, const BVHNode *nod
       (t1x > data->hit.dist || t1y > data->hit.dist || t1z > data->hit.dist)) {
     return FLT_MAX;
   }
-  else {
-    return max_fff(t1x, t1y, t1z);
-  }
+  return max_fff(t1x, t1y, t1z);
 }
 
 static void dfs_raycast(BVHRayCastData *data, BVHNode *node)
@@ -2354,26 +2352,25 @@ static bool bvhtree_walk_dfs_recursive(BVHTree_WalkData *walk_data, const BVHNod
     return walk_data->walk_leaf_cb(
         (const BVHTreeAxisRange *)node->bv, node->index, walk_data->userdata);
   }
-  else {
-    /* First pick the closest node to recurse into */
-    if (walk_data->walk_order_cb(
-            (const BVHTreeAxisRange *)node->bv, node->main_axis, walk_data->userdata)) {
-      for (int i = 0; i != node->totnode; i++) {
-        if (walk_data->walk_parent_cb((const BVHTreeAxisRange *)node->children[i]->bv,
-                                      walk_data->userdata)) {
-          if (!bvhtree_walk_dfs_recursive(walk_data, node->children[i])) {
-            return false;
-          }
+
+  /* First pick the closest node to recurse into */
+  if (walk_data->walk_order_cb(
+          (const BVHTreeAxisRange *)node->bv, node->main_axis, walk_data->userdata)) {
+    for (int i = 0; i != node->totnode; i++) {
+      if (walk_data->walk_parent_cb((const BVHTreeAxisRange *)node->children[i]->bv,
+                                    walk_data->userdata)) {
+        if (!bvhtree_walk_dfs_recursive(walk_data, node->children[i])) {
+          return false;
         }
       }
     }
-    else {
-      for (int i = node->totnode - 1; i >= 0; i--) {
-        if (walk_data->walk_parent_cb((const BVHTreeAxisRange *)node->children[i]->bv,
-                                      walk_data->userdata)) {
-          if (!bvhtree_walk_dfs_recursive(walk_data, node->children[i])) {
-            return false;
-          }
+  }
+  else {
+    for (int i = node->totnode - 1; i >= 0; i--) {
+      if (walk_data->walk_parent_cb((const BVHTreeAxisRange *)node->children[i]->bv,
+                                    walk_data->userdata)) {
+        if (!bvhtree_walk_dfs_recursive(walk_data, node->children[i])) {
+          return false;
         }
       }
     }

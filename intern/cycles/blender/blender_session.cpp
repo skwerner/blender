@@ -59,6 +59,7 @@ BlenderSession::BlenderSession(BL::RenderEngine &b_engine,
                                BL::BlendData &b_data,
                                bool preview_osl)
     : session(NULL),
+      scene(NULL),
       sync(NULL),
       b_engine(b_engine),
       b_userpref(b_userpref),
@@ -88,6 +89,7 @@ BlenderSession::BlenderSession(BL::RenderEngine &b_engine,
                                int width,
                                int height)
     : session(NULL),
+      scene(NULL),
       sync(NULL),
       b_engine(b_engine),
       b_userpref(b_userpref),
@@ -361,7 +363,8 @@ void BlenderSession::do_write_update_render_tile(RenderTile &rtile,
       PassType pass_type = BlenderSync::get_pass_type(b_pass);
       int components = b_pass.channels();
 
-      rtile.buffers->set_pass_rect(pass_type, components, (float *)b_pass.rect());
+      rtile.buffers->set_pass_rect(
+          pass_type, components, (float *)b_pass.rect(), rtile.num_samples);
     }
 
     end_render_result(b_engine, b_rr, false, false, false);
@@ -492,27 +495,15 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
   /* Update denoising parameters. */
   session->set_denoising(session_params.denoising);
 
-  bool use_denoising = session_params.denoising.use;
-  bool store_denoising_passes = session_params.denoising.store_passes;
-
-  buffer_params.denoising_data_pass = use_denoising || store_denoising_passes;
-  buffer_params.denoising_clean_pass = (scene->film->denoising_flags & DENOISING_CLEAN_ALL_PASSES);
-  buffer_params.denoising_prefiltered_pass = store_denoising_passes &&
-                                             session_params.denoising.type == DENOISER_NLM;
-
-  scene->film->denoising_data_pass = buffer_params.denoising_data_pass;
-  scene->film->denoising_clean_pass = buffer_params.denoising_clean_pass;
-  scene->film->denoising_prefiltered_pass = buffer_params.denoising_prefiltered_pass;
-
-  /* Add passes */
+  /* Compute render passes and film settings. */
   vector<Pass> passes = sync->sync_render_passes(
       b_rlay, b_view_layer, session_params.adaptive_sampling, session_params.denoising);
-  buffer_params.passes = passes;
 
-  scene->film->pass_alpha_threshold = b_view_layer.pass_alpha_threshold();
-  scene->film->tag_passes_update(scene, passes);
-  scene->film->tag_update(scene);
-  scene->integrator->tag_update(scene);
+  /* Set buffer params, using film settings from sync_render_passes. */
+  buffer_params.passes = passes;
+  buffer_params.denoising_data_pass = scene->film->denoising_data_pass;
+  buffer_params.denoising_clean_pass = scene->film->denoising_clean_pass;
+  buffer_params.denoising_prefiltered_pass = scene->film->denoising_prefiltered_pass;
 
   BL::RenderResult::views_iterator b_view_iter;
 
@@ -655,7 +646,7 @@ void BlenderSession::bake(BL::Depsgraph &b_depsgraph_,
 
   /* Passes are identified by name, so in order to return the combined pass we need to set the
    * name. */
-  Pass::add(PASS_COMBINED, scene->film->passes, "Combined");
+  Pass::add(PASS_COMBINED, scene->passes, "Combined");
 
   session->read_bake_tile_cb = function_bind(&BlenderSession::read_render_tile, this, _1);
   session->write_render_tile_cb = function_bind(&BlenderSession::write_render_tile, this, _1);
@@ -688,7 +679,7 @@ void BlenderSession::bake(BL::Depsgraph &b_depsgraph_,
     BufferParams buffer_params;
     buffer_params.width = bake_width;
     buffer_params.height = bake_height;
-    buffer_params.passes = scene->film->passes;
+    buffer_params.passes = scene->passes;
 
     /* Update session. */
     session->tile_manager.set_samples(session_params.samples);
@@ -982,7 +973,8 @@ void BlenderSession::update_status_progress()
     remaining_time = (1.0 - (double)progress) * (render_time / (double)progress);
 
   if (background) {
-    scene_status += " | " + scene->name;
+    if (scene)
+      scene_status += " | " + scene->name;
     if (b_rlay_name != "")
       scene_status += ", " + b_rlay_name;
 

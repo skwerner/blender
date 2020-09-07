@@ -126,6 +126,12 @@ IDTypeInfo IDType_ID_GD = {
     .free_data = greasepencil_free_data,
     .make_local = NULL,
     .foreach_id = greasepencil_foreach_id,
+    .foreach_cache = NULL,
+
+    .blend_write = NULL,
+    .blend_read_data = NULL,
+    .blend_read_lib = NULL,
+    .blend_read_expand = NULL,
 };
 
 /* ************************************************** */
@@ -381,7 +387,7 @@ bGPDframe *BKE_gpencil_frame_addcopy(bGPDlayer *gpl, int cframe)
     /* no layer */
     return NULL;
   }
-  else if (gpl->actframe == NULL) {
+  if (gpl->actframe == NULL) {
     /* no active frame, so just create a new one from scratch */
     return BKE_gpencil_frame_addnew(gpl, cframe);
   }
@@ -398,7 +404,7 @@ bGPDframe *BKE_gpencil_frame_addcopy(bGPDlayer *gpl, int cframe)
       found = true;
       break;
     }
-    else if (gpf->framenum == cframe) {
+    if (gpf->framenum == cframe) {
       /* This only happens when we're editing with framelock on...
        * - Delete the new frame and don't do anything else here...
        */
@@ -532,6 +538,7 @@ bGPdata *BKE_gpencil_data_addnew(Main *bmain, const char name[])
   gpd->grid.lines = GP_DEFAULT_GRID_LINES;            /* Number of lines */
 
   /* Onion-skinning settings (data-block level) */
+  gpd->onion_keytype = -1; /* All by default. */
   gpd->onion_flag |= (GP_ONION_GHOST_PREVCOL | GP_ONION_GHOST_NEXTCOL);
   gpd->onion_flag |= GP_ONION_FADE;
   gpd->onion_mode = GP_ONION_MODE_RELATIVE;
@@ -1009,7 +1016,7 @@ bGPDframe *BKE_gpencil_layer_frame_get(bGPDlayer *gpl, int cframe, eGP_GetFrame_
           found = true;
           break;
         }
-        else if ((gpf->next) && (gpf->next->framenum > cframe)) {
+        if ((gpf->next) && (gpf->next->framenum > cframe)) {
           found = true;
           break;
         }
@@ -1484,10 +1491,9 @@ Material *BKE_gpencil_object_material_ensure_from_brush(Main *bmain, Object *ob,
 
     return ma;
   }
-  else {
-    /* using active material instead */
-    return BKE_object_material_get(ob, ob->actcol);
-  }
+
+  /* using active material instead */
+  return BKE_object_material_get(ob, ob->actcol);
 }
 
 /**
@@ -1546,9 +1552,8 @@ Material *BKE_gpencil_object_material_from_brush_get(Object *ob, Brush *brush)
     Material *ma = BKE_gpencil_brush_material_get(brush);
     return ma;
   }
-  else {
-    return BKE_object_material_get(ob, ob->actcol);
-  }
+
+  return BKE_object_material_get(ob, ob->actcol);
 }
 
 /**
@@ -1562,9 +1567,8 @@ int BKE_gpencil_object_material_get_index_from_brush(Object *ob, Brush *brush)
   if ((brush) && (brush->gpencil_settings->flag & GP_BRUSH_MATERIAL_PINNED)) {
     return BKE_gpencil_object_material_index_get(ob, brush->gpencil_settings->material);
   }
-  else {
-    return ob->actcol - 1;
-  }
+
+  return ob->actcol - 1;
 }
 
 /**
@@ -1581,9 +1585,8 @@ Material *BKE_gpencil_object_material_ensure_from_active_input_toolsettings(Main
     return BKE_gpencil_object_material_ensure_from_active_input_brush(
         bmain, ob, ts->gp_paint->paint.brush);
   }
-  else {
-    return BKE_gpencil_object_material_ensure_from_active_input_brush(bmain, ob, NULL);
-  }
+
+  return BKE_gpencil_object_material_ensure_from_active_input_brush(bmain, ob, NULL);
 }
 
 /**
@@ -1602,7 +1605,7 @@ Material *BKE_gpencil_object_material_ensure_from_active_input_brush(Main *bmain
     if (ma) {
       return ma;
     }
-    else if (brush->gpencil_settings->flag & GP_BRUSH_MATERIAL_PINNED) {
+    if (brush->gpencil_settings->flag & GP_BRUSH_MATERIAL_PINNED) {
       /* it is easier to just unpin a NULL material, instead of setting a new one */
       brush->gpencil_settings->flag &= ~GP_BRUSH_MATERIAL_PINNED;
     }
@@ -1883,6 +1886,7 @@ bool BKE_gpencil_merge_materials_table_get(Object *ob,
   Material *ma_secondary = NULL;
   MaterialGPencilStyle *gp_style_primary = NULL;
   MaterialGPencilStyle *gp_style_secondary = NULL;
+  GHash *mat_used = BLI_ghash_int_new(__func__);
 
   short *totcol = BKE_object_material_len_p(ob);
   if (totcol == 0) {
@@ -1895,8 +1899,15 @@ bool BKE_gpencil_merge_materials_table_get(Object *ob,
     if (ma_primary == NULL) {
       continue;
     }
+    for (int idx_secondary = 0; idx_secondary < *totcol; idx_secondary++) {
+      if ((idx_secondary == idx_primary) ||
+          BLI_ghash_haskey(r_mat_table, POINTER_FROM_INT(idx_secondary))) {
+        continue;
+      }
+      if (BLI_ghash_haskey(mat_used, POINTER_FROM_INT(idx_secondary))) {
+        continue;
+      }
 
-    for (int idx_secondary = idx_primary + 1; idx_secondary < *totcol; idx_secondary++) {
       /* Read secondary material to compare with primary material. */
       ma_secondary = BKE_gpencil_material(ob, idx_secondary + 1);
       if ((ma_secondary == NULL) ||
@@ -1934,6 +1945,11 @@ bool BKE_gpencil_merge_materials_table_get(Object *ob,
       }
 
       float s_hsv_a[3], s_hsv_b[3], f_hsv_a[3], f_hsv_b[3], col[3];
+      zero_v3(s_hsv_a);
+      zero_v3(s_hsv_b);
+      zero_v3(f_hsv_a);
+      zero_v3(f_hsv_b);
+
       copy_v3_v3(col, gp_style_primary->stroke_rgba);
       rgb_to_hsv_compat_v(col, s_hsv_a);
       copy_v3_v3(col, gp_style_secondary->stroke_rgba);
@@ -1944,24 +1960,102 @@ bool BKE_gpencil_merge_materials_table_get(Object *ob,
       copy_v3_v3(col, gp_style_secondary->fill_rgba);
       rgb_to_hsv_compat_v(col, f_hsv_b);
 
-      /* Check stroke and fill color (only Hue and Saturation). */
+      /* Check stroke and fill color. */
       if ((!compare_ff(s_hsv_a[0], s_hsv_b[0], hue_threshold)) ||
           (!compare_ff(s_hsv_a[1], s_hsv_b[1], sat_threshold)) ||
+          (!compare_ff(s_hsv_a[2], s_hsv_b[2], val_threshold)) ||
           (!compare_ff(f_hsv_a[0], f_hsv_b[0], hue_threshold)) ||
           (!compare_ff(f_hsv_a[1], f_hsv_b[1], sat_threshold)) ||
-          (!compare_ff(s_hsv_a[2], s_hsv_b[2], val_threshold)) ||
-          (!compare_ff(s_hsv_a[2], s_hsv_b[2], val_threshold)) ||
-          (!compare_ff(s_hsv_a[2], s_hsv_b[2], val_threshold)) ||
-          (!compare_ff(s_hsv_a[2], s_hsv_b[2], val_threshold))) {
+          (!compare_ff(f_hsv_a[2], f_hsv_b[2], val_threshold)) ||
+          (!compare_ff(gp_style_primary->stroke_rgba[3],
+                       gp_style_secondary->stroke_rgba[3],
+                       val_threshold)) ||
+          (!compare_ff(
+              gp_style_primary->fill_rgba[3], gp_style_secondary->fill_rgba[3], val_threshold))) {
         continue;
       }
 
       /* Save conversion indexes. */
-      BLI_ghash_insert(
-          r_mat_table, POINTER_FROM_INT(idx_secondary), POINTER_FROM_INT(idx_primary));
-      changed = true;
+      if (!BLI_ghash_haskey(r_mat_table, POINTER_FROM_INT(idx_secondary))) {
+        BLI_ghash_insert(
+            r_mat_table, POINTER_FROM_INT(idx_secondary), POINTER_FROM_INT(idx_primary));
+        changed = true;
+
+        if (!BLI_ghash_haskey(mat_used, POINTER_FROM_INT(idx_primary))) {
+          BLI_ghash_insert(mat_used, POINTER_FROM_INT(idx_primary), POINTER_FROM_INT(idx_primary));
+        }
+      }
     }
   }
+  /* Free hash memory. */
+  BLI_ghash_free(mat_used, NULL, NULL);
+
+  return changed;
+}
+
+/**
+ * Merge similar materials
+ * \param ob: Grease pencil object
+ * \param hue_threshold: Threshold for Hue
+ * \param sat_threshold: Threshold for Saturation
+ * \param val_threshold: Threshold for Value
+ * \param r_removed: Number of materials removed
+ * \return True if done
+ */
+bool BKE_gpencil_merge_materials(Object *ob,
+                                 const float hue_threshold,
+                                 const float sat_threshold,
+                                 const float val_threshold,
+                                 int *r_removed)
+{
+  bGPdata *gpd = ob->data;
+
+  short *totcol = BKE_object_material_len_p(ob);
+  if (totcol == 0) {
+    *r_removed = 0;
+    return 0;
+  }
+
+  /* Review materials. */
+  GHash *mat_table = BLI_ghash_int_new(__func__);
+
+  bool changed = BKE_gpencil_merge_materials_table_get(
+      ob, hue_threshold, sat_threshold, val_threshold, mat_table);
+
+  *r_removed = BLI_ghash_len(mat_table);
+
+  /* Update stroke material index. */
+  if (changed) {
+    LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
+      if (gpl->flag & GP_LAYER_HIDE) {
+        continue;
+      }
+
+      LISTBASE_FOREACH (bGPDframe *, gpf, &gpl->frames) {
+        LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
+          /* Check if the color is editable. */
+          MaterialGPencilStyle *gp_style = BKE_gpencil_material_settings(ob, gps->mat_nr + 1);
+          if (gp_style != NULL) {
+            if (gp_style->flag & GP_MATERIAL_HIDE) {
+              continue;
+            }
+            if (((gpl->flag & GP_LAYER_UNLOCK_COLOR) == 0) &&
+                (gp_style->flag & GP_MATERIAL_LOCKED)) {
+              continue;
+            }
+          }
+
+          if (BLI_ghash_haskey(mat_table, POINTER_FROM_INT(gps->mat_nr))) {
+            int *idx = BLI_ghash_lookup(mat_table, POINTER_FROM_INT(gps->mat_nr));
+            gps->mat_nr = POINTER_AS_INT(idx);
+          }
+        }
+      }
+    }
+  }
+
+  /* Free hash memory. */
+  BLI_ghash_free(mat_table, NULL, NULL);
 
   return changed;
 }
@@ -2016,7 +2110,6 @@ int BKE_gpencil_object_material_index_get(Object *ob, Material *ma)
  */
 void BKE_gpencil_palette_ensure(Main *bmain, Scene *scene)
 {
-  const int totcol = 120;
   const char *hexcol[] = {
       "FFFFFF", "F2F2F2", "E6E6E6", "D9D9D9", "CCCCCC", "BFBFBF", "B2B2B2", "A6A6A6", "999999",
       "8C8C8C", "808080", "737373", "666666", "595959", "4C4C4C", "404040", "333333", "262626",
@@ -2034,33 +2127,34 @@ void BKE_gpencil_palette_ensure(Main *bmain, Scene *scene)
       "0000FF", "3F007F", "00007F"};
 
   ToolSettings *ts = scene->toolsettings;
-  GpPaint *gp_paint = ts->gp_paint;
-  Paint *paint = &gp_paint->paint;
-
-  if (paint->palette != NULL) {
+  if (ts->gp_paint->paint.palette != NULL) {
     return;
   }
 
-  paint->palette = BLI_findstring(&bmain->palettes, "Palette", offsetof(ID, name) + 2);
-  /* Try with first palette. */
-  if (bmain->palettes.first != NULL) {
-    paint->palette = bmain->palettes.first;
-    ts->gp_vertexpaint->paint.palette = paint->palette;
-    return;
+  /* Try to find the default palette. */
+  const char *palette_id = "Palette";
+  struct Palette *palette = BLI_findstring(&bmain->palettes, palette_id, offsetof(ID, name) + 2);
+
+  if (palette == NULL) {
+    /* Fall back to the first palette. */
+    palette = bmain->palettes.first;
   }
 
-  if (paint->palette == NULL) {
-    paint->palette = BKE_palette_add(bmain, "Palette");
-    ts->gp_vertexpaint->paint.palette = paint->palette;
+  if (palette == NULL) {
+    /* Fall back to creating a palette. */
+    palette = BKE_palette_add(bmain, palette_id);
+    id_us_min(&palette->id);
 
     /* Create Colors. */
-    for (int i = 0; i < totcol; i++) {
-      PaletteColor *palcol = BKE_palette_color_add(paint->palette);
-      if (palcol) {
-        hex_to_rgb((char *)hexcol[i], palcol->rgb, palcol->rgb + 1, palcol->rgb + 2);
-      }
+    for (int i = 0; i < ARRAY_SIZE(hexcol); i++) {
+      PaletteColor *palcol = BKE_palette_color_add(palette);
+      hex_to_rgb(hexcol[i], palcol->rgb, palcol->rgb + 1, palcol->rgb + 2);
     }
   }
+
+  BLI_assert(palette != NULL);
+  BKE_paint_palette_set(&ts->gp_paint->paint, palette);
+  BKE_paint_palette_set(&ts->gp_vertexpaint->paint, palette);
 }
 
 /**
@@ -2425,31 +2519,29 @@ void BKE_gpencil_parent_matrix_get(const Depsgraph *depsgraph,
     unit_m4(diff_mat);
     return;
   }
-  else {
-    if ((gpl->partype == PAROBJECT) || (gpl->partype == PARSKEL)) {
-      mul_m4_m4m4(diff_mat, obparent_eval->obmat, gpl->inverse);
+
+  if ((gpl->partype == PAROBJECT) || (gpl->partype == PARSKEL)) {
+    mul_m4_m4m4(diff_mat, obparent_eval->obmat, gpl->inverse);
+    add_v3_v3(diff_mat[3], ob_eval->obmat[3]);
+    return;
+  }
+  if (gpl->partype == PARBONE) {
+    bPoseChannel *pchan = BKE_pose_channel_find_name(obparent_eval->pose, gpl->parsubstr);
+    if (pchan) {
+      float tmp_mat[4][4];
+      mul_m4_m4m4(tmp_mat, obparent_eval->obmat, pchan->pose_mat);
+      mul_m4_m4m4(diff_mat, tmp_mat, gpl->inverse);
       add_v3_v3(diff_mat[3], ob_eval->obmat[3]);
-      return;
-    }
-    else if (gpl->partype == PARBONE) {
-      bPoseChannel *pchan = BKE_pose_channel_find_name(obparent_eval->pose, gpl->parsubstr);
-      if (pchan) {
-        float tmp_mat[4][4];
-        mul_m4_m4m4(tmp_mat, obparent_eval->obmat, pchan->pose_mat);
-        mul_m4_m4m4(diff_mat, tmp_mat, gpl->inverse);
-        add_v3_v3(diff_mat[3], ob_eval->obmat[3]);
-      }
-      else {
-        /* if bone not found use object (armature) */
-        mul_m4_m4m4(diff_mat, obparent_eval->obmat, gpl->inverse);
-        add_v3_v3(diff_mat[3], ob_eval->obmat[3]);
-      }
-      return;
     }
     else {
-      unit_m4(diff_mat); /* not defined type */
+      /* if bone not found use object (armature) */
+      mul_m4_m4m4(diff_mat, obparent_eval->obmat, gpl->inverse);
+      add_v3_v3(diff_mat[3], ob_eval->obmat[3]);
     }
+    return;
   }
+
+  unit_m4(diff_mat); /* not defined type */
 }
 
 /**

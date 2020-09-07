@@ -21,8 +21,7 @@
  * \ingroup bke
  */
 
-#ifndef __BKE_SUBDIV_CCG_H__
-#define __BKE_SUBDIV_CCG_H__
+#pragma once
 
 #include "BKE_DerivedMesh.h"
 #include "BKE_customdata.h"
@@ -312,6 +311,9 @@ void BKE_subdiv_ccg_neighbor_coords_get(const SubdivCCG *subdiv_ccg,
                                         SubdivCCGNeighbors *r_neighbors);
 
 int BKE_subdiv_ccg_grid_to_face_index(const SubdivCCG *subdiv_ccg, const int grid_index);
+void BKE_subdiv_ccg_eval_limit_point(const SubdivCCG *subdiv_ccg,
+                                     const SubdivCCGCoord *coord,
+                                     float r_point[3]);
 
 typedef enum SubdivCCGAdjacencyType {
   SUBDIV_CCG_ADJACENT_NONE,
@@ -338,8 +340,8 @@ SubdivCCGAdjacencyType BKE_subdiv_ccg_coarse_mesh_adjacency_info_get(const Subdi
 const int *BKE_subdiv_ccg_start_face_grid_index_ensure(SubdivCCG *subdiv_ccg);
 const int *BKE_subdiv_ccg_start_face_grid_index_get(const SubdivCCG *subdiv_ccg);
 
+void BKE_subdiv_ccg_grid_hidden_ensure(SubdivCCG *subdiv_ccg, int grid_index);
+
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_SUBDIV_CCG_H__ */

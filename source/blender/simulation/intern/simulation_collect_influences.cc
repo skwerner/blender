@@ -28,12 +28,15 @@
 
 #include "BLI_hash.h"
 #include "BLI_rand.hh"
+#include "BLI_set.hh"
 
 namespace blender::sim {
 
 using fn::GVSpan;
 using fn::MFContextBuilder;
 using fn::MFDataType;
+using fn::MFDummyNode;
+using fn::MFFunctionNode;
 using fn::MFInputSocket;
 using fn::MFNetwork;
 using fn::MFNetworkEvaluator;
@@ -53,6 +56,8 @@ using nodes::NodeTreeRefMap;
 
 struct DummyDataSources {
   Map<const MFOutputSocket *, std::string> particle_attributes;
+  Set<const MFOutputSocket *> simulation_time;
+  Set<const MFOutputSocket *> scene_time;
 };
 
 extern "C" {
@@ -226,6 +231,47 @@ static void prepare_particle_attribute_nodes(CollectContext &context)
   }
 }
 
+static void prepare_time_input_nodes(CollectContext &context)
+{
+  Span<const DNode *> time_input_dnodes = nodes_by_type(context, "SimulationNodeTime");
+  Vector<const DNode *> simulation_time_inputs;
+  Vector<const DNode *> scene_time_inputs;
+  for (const DNode *dnode : time_input_dnodes) {
+    NodeSimInputTimeType type = (NodeSimInputTimeType)dnode->node_ref().bnode()->custom1;
+    switch (type) {
+      case NODE_SIM_INPUT_SIMULATION_TIME: {
+        simulation_time_inputs.append(dnode);
+        break;
+      }
+      case NODE_SIM_INPUT_SCENE_TIME: {
+        scene_time_inputs.append(dnode);
+        break;
+      }
+    }
+  }
+
+  if (simulation_time_inputs.size() > 0) {
+    MFOutputSocket &new_socket = context.network.add_input("Simulation Time",
+                                                           MFDataType::ForSingle<float>());
+    for (const DNode *dnode : simulation_time_inputs) {
+      MFOutputSocket &old_socket = context.network_map.lookup_dummy(dnode->output(0));
+      context.network.relink(old_socket, new_socket);
+      context.network.remove(old_socket.node());
+    }
+    context.data_sources.simulation_time.add(&new_socket);
+  }
+  if (scene_time_inputs.size() > 0) {
+    MFOutputSocket &new_socket = context.network.add_input("Scene Time",
+                                                           MFDataType::ForSingle<float>());
+    for (const DNode *dnode : scene_time_inputs) {
+      MFOutputSocket &old_socket = context.network_map.lookup_dummy(dnode->output(0));
+      context.network.relink(old_socket, new_socket);
+      context.network.remove(old_socket.node());
+    }
+    context.data_sources.scene_time.add(&new_socket);
+  }
+}
+
 class ParticleAttributeInput : public ParticleFunctionInput {
  private:
   std::string attribute_name_;
@@ -237,17 +283,41 @@ class ParticleAttributeInput : public ParticleFunctionInput {
   {
   }
 
-  void add_input(AttributesRef attributes,
+  void add_input(ParticleFunctionInputContext &context,
                  MFParamsBuilder &params,
                  ResourceCollector &UNUSED(resources)) const override
   {
-    std::optional<GSpan> span = attributes.try_get(attribute_name_, attribute_type_);
+    std::optional<GSpan> span = context.particles.attributes.try_get(attribute_name_,
+                                                                     attribute_type_);
     if (span.has_value()) {
       params.add_readonly_single_input(*span);
     }
     else {
       params.add_readonly_single_input(GVSpan::FromDefault(attribute_type_));
     }
+  }
+};
+
+class SceneTimeInput : public ParticleFunctionInput {
+  void add_input(ParticleFunctionInputContext &context,
+                 MFParamsBuilder &params,
+                 ResourceCollector &resources) const override
+  {
+    const float time = DEG_get_ctime(&context.solve_context.depsgraph);
+    float *time_ptr = &resources.construct<float>(AT, time);
+    params.add_readonly_single_input(time_ptr);
+  }
+};
+
+class SimulationTimeInput : public ParticleFunctionInput {
+  void add_input(ParticleFunctionInputContext &context,
+                 MFParamsBuilder &params,
+                 ResourceCollector &resources) const override
+  {
+    /* TODO: Vary this per particle. */
+    const float time = context.solve_context.solve_interval.stop();
+    float *time_ptr = &resources.construct<float>(AT, time);
+    params.add_readonly_single_input(time_ptr);
   }
 };
 
@@ -264,13 +334,21 @@ static const ParticleFunction *create_particle_function_for_inputs(
 
   Vector<const ParticleFunctionInput *> per_particle_inputs;
   for (const MFOutputSocket *socket : dummy_deps) {
-    const std::string *attribute_name = context.data_sources.particle_attributes.lookup_ptr(
-        socket);
-    if (attribute_name == nullptr) {
-      return nullptr;
+    if (context.data_sources.particle_attributes.contains(socket)) {
+      const std::string *attribute_name = context.data_sources.particle_attributes.lookup_ptr(
+          socket);
+      if (attribute_name == nullptr) {
+        return nullptr;
+      }
+      per_particle_inputs.append(&context.resources.construct<ParticleAttributeInput>(
+          AT, *attribute_name, socket->data_type().single_type()));
     }
-    per_particle_inputs.append(&context.resources.construct<ParticleAttributeInput>(
-        AT, *attribute_name, socket->data_type().single_type()));
+    else if (context.data_sources.scene_time.contains(socket)) {
+      per_particle_inputs.append(&context.resources.construct<SceneTimeInput>(AT));
+    }
+    else if (context.data_sources.simulation_time.contains(socket)) {
+      per_particle_inputs.append(&context.resources.construct<SimulationTimeInput>(AT));
+    }
   }
 
   const MultiFunction &per_particle_fn = context.resources.construct<MFNetworkEvaluator>(
@@ -287,6 +365,17 @@ static const ParticleFunction *create_particle_function_for_inputs(
       output_is_global.as_span());
 
   return &particle_fn;
+}
+
+static const ParticleFunction *create_particle_function_for_inputs(
+    CollectContext &context, Span<const DInputSocket *> dsockets_to_compute)
+{
+  Vector<const MFInputSocket *> sockets_to_compute;
+  for (const DInputSocket *dsocket : dsockets_to_compute) {
+    const MFInputSocket &socket = context.network_map.lookup_dummy(*dsocket);
+    sockets_to_compute.append(&socket);
+  }
+  return create_particle_function_for_inputs(context, sockets_to_compute);
 }
 
 class ParticleFunctionForce : public ParticleForce {
@@ -323,11 +412,8 @@ static void create_forces_for_particle_simulation(CollectContext &context,
       continue;
     }
 
-    const MFInputSocket &force_socket = context.network_map.lookup_dummy(
-        origin_node.input(0, "Force"));
-
-    const ParticleFunction *particle_fn = create_particle_function_for_inputs(context,
-                                                                              {&force_socket});
+    const ParticleFunction *particle_fn = create_particle_function_for_inputs(
+        context, {&origin_node.input(0, "Force")});
 
     if (particle_fn == nullptr) {
       continue;
@@ -356,7 +442,7 @@ static ParticleEmitter *create_particle_emitter(CollectContext &context, const D
     return nullptr;
   }
 
-  Array<const MFInputSocket *> input_sockets{dnode.inputs().size()};
+  Array<const MFInputSocket *> input_sockets{2};
   for (int i : input_sockets.index_range()) {
     input_sockets[i] = &context.network_map.lookup_dummy(dnode.input(i));
   }
@@ -368,10 +454,13 @@ static ParticleEmitter *create_particle_emitter(CollectContext &context, const D
   MultiFunction &inputs_fn = context.resources.construct<MFNetworkEvaluator>(
       AT, Span<const MFOutputSocket *>(), input_sockets.as_span());
 
+  const ParticleAction *birth_action = create_particle_action(
+      context, dnode.input(2, "Execute"), names);
+
   StringRefNull own_state_name = get_identifier(context, dnode);
   context.required_states.add(own_state_name, SIM_TYPE_NAME_PARTICLE_MESH_EMITTER);
   ParticleEmitter &emitter = context.resources.construct<ParticleMeshEmitter>(
-      AT, own_state_name, names.as_span(), inputs_fn);
+      AT, own_state_name, names.as_span(), inputs_fn, birth_action);
   return &emitter;
 }
 
@@ -412,15 +501,10 @@ static void collect_time_step_events(CollectContext &context)
 {
   for (const DNode *event_dnode : nodes_by_type(context, "SimulationNodeParticleTimeStepEvent")) {
     const DInputSocket &execute_input = event_dnode->input(0);
-    if (execute_input.linked_sockets().size() != 1) {
-      continue;
-    }
-
     Array<StringRefNull> particle_names = find_linked_particle_simulations(context,
                                                                            event_dnode->output(0));
 
-    const DOutputSocket &execute_source = *execute_input.linked_sockets()[0];
-    const ParticleAction *action = create_particle_action(context, execute_source, particle_names);
+    const ParticleAction *action = create_particle_action(context, execute_input, particle_names);
     if (action == nullptr) {
       continue;
     }
@@ -492,6 +576,10 @@ class SetParticleAttributeAction : public ParticleAction {
       cpp_type_.copy_to_initialized_indices(
           value_array.data(), attribute_array->data(), context.particles.index_mask);
     }
+
+    if (attribute_name_ == "Velocity") {
+      context.particles.update_diffs_after_velocity_change();
+    }
   }
 };
 
@@ -517,21 +605,28 @@ static const ParticleAction *create_set_particle_attribute_action(
     CollectContext &context, const DOutputSocket &dsocket, Span<StringRefNull> particle_names)
 {
   const DNode &dnode = dsocket.node();
+
+  const ParticleAction *previous_action = create_particle_action(
+      context, dnode.input(0), particle_names);
+
   MFInputSocket &name_socket = context.network_map.lookup_dummy(dnode.input(1));
   MFInputSocket &value_socket = name_socket.node().input(1);
   std::optional<Array<std::string>> names = compute_global_string_inputs(context.network_map,
                                                                          {&name_socket});
   if (!names.has_value()) {
-    return nullptr;
+    return previous_action;
   }
 
   std::string attribute_name = (*names)[0];
+  if (attribute_name.empty()) {
+    return previous_action;
+  }
   const CPPType &attribute_type = value_socket.data_type().single_type();
 
   const ParticleFunction *inputs_fn = create_particle_function_for_inputs(context,
                                                                           {&value_socket});
   if (inputs_fn == nullptr) {
-    return nullptr;
+    return previous_action;
   }
 
   for (StringRef particle_name : particle_names) {
@@ -541,9 +636,6 @@ static const ParticleAction *create_set_particle_attribute_action(
 
   ParticleAction &this_action = context.resources.construct<SetParticleAttributeAction>(
       AT, attribute_name, attribute_type, *inputs_fn);
-
-  const ParticleAction *previous_action = create_particle_action(
-      context, dnode.input(0), particle_names);
 
   return concatenate_actions(context, {previous_action, &this_action});
 }
@@ -596,12 +688,18 @@ class ParticleConditionAction : public ParticleAction {
       }
 
       if (action_true_ != nullptr) {
-        ParticleChunkContext chunk_context{true_indices.as_span(), context.particles.attributes};
+        ParticleChunkContext chunk_context{context.particles.state,
+                                           true_indices.as_span(),
+                                           context.particles.attributes,
+                                           context.particles.integration};
         ParticleActionContext action_context{context.solve_context, chunk_context};
         action_true_->execute(action_context);
       }
       if (action_false_ != nullptr) {
-        ParticleChunkContext chunk_context{false_indices.as_span(), context.particles.attributes};
+        ParticleChunkContext chunk_context{context.particles.state,
+                                           false_indices.as_span(),
+                                           context.particles.attributes,
+                                           context.particles.integration};
         ParticleActionContext action_context{context.solve_context, chunk_context};
         action_false_->execute(action_context);
       }
@@ -614,10 +712,9 @@ static const ParticleAction *create_particle_condition_action(CollectContext &co
                                                               Span<StringRefNull> particle_names)
 {
   const DNode &dnode = dsocket.node();
-  MFInputSocket &condition_socket = context.network_map.lookup_dummy(dnode.input(0));
 
-  const ParticleFunction *inputs_fn = create_particle_function_for_inputs(context,
-                                                                          {&condition_socket});
+  const ParticleFunction *inputs_fn = create_particle_function_for_inputs(
+      context, {&dnode.input(0, "Condition")});
   if (inputs_fn == nullptr) {
     return nullptr;
   }
@@ -634,16 +731,31 @@ static const ParticleAction *create_particle_condition_action(CollectContext &co
       AT, *inputs_fn, true_action, false_action);
 }
 
+class KillParticleAction : public ParticleAction {
+ public:
+  void execute(ParticleActionContext &context) const override
+  {
+    MutableSpan<int> dead_states = context.particles.attributes.get<int>("Dead");
+    for (int i : context.particles.index_mask) {
+      dead_states[i] = true;
+    }
+  }
+};
+
 static const ParticleAction *create_particle_action(CollectContext &context,
                                                     const DOutputSocket &dsocket,
                                                     Span<StringRefNull> particle_names)
 {
   const DNode &dnode = dsocket.node();
-  if (dnode.idname() == "SimulationNodeSetParticleAttribute") {
+  StringRef idname = dnode.idname();
+  if (idname == "SimulationNodeSetParticleAttribute") {
     return create_set_particle_attribute_action(context, dsocket, particle_names);
   }
-  if (dnode.idname() == "SimulationNodeExecuteCondition") {
+  if (idname == "SimulationNodeExecuteCondition") {
     return create_particle_condition_action(context, dsocket, particle_names);
+  }
+  if (idname == "SimulationNodeKillParticle") {
+    return &context.resources.construct<KillParticleAction>(AT);
   }
   return nullptr;
 }
@@ -662,6 +774,7 @@ static void initialize_particle_attribute_builders(CollectContext &context)
     /* TODO: Use uint32_t, but we don't have a corresponding custom property type. */
     attributes_builder.add<int>("Hash", 0);
     attributes_builder.add<float>("Birth Time", 0.0f);
+    attributes_builder.add<float>("Radius", 0.02f);
     context.influences.particle_attributes_builder.add_new(name, &attributes_builder);
   }
 }
@@ -672,6 +785,93 @@ static void optimize_function_network(CollectContext &context)
   fn::mf_network_optimization::common_subnetwork_elimination(context.network);
   fn::mf_network_optimization::dead_node_removal(context.network);
   // WM_clipboard_text_set(network.to_dot().c_str(), false);
+}
+
+class AgeReachedEvent : public ParticleEvent {
+ private:
+  std::string attribute_name_;
+  const ParticleFunction &inputs_fn_;
+  const ParticleAction &action_;
+
+ public:
+  AgeReachedEvent(std::string attribute_name,
+                  const ParticleFunction &inputs_fn,
+                  const ParticleAction &action)
+      : attribute_name_(std::move(attribute_name)), inputs_fn_(inputs_fn), action_(action)
+  {
+  }
+
+  void filter(ParticleEventFilterContext &context) const override
+  {
+    Span<float> birth_times = context.particles.attributes.get<float>("Birth Time");
+    std::optional<Span<int>> has_been_triggered = context.particles.attributes.try_get<int>(
+        attribute_name_);
+    if (!has_been_triggered.has_value()) {
+      return;
+    }
+
+    ParticleFunctionEvaluator evaluator{inputs_fn_, context.solve_context, context.particles};
+    evaluator.compute();
+    VSpan<float> trigger_ages = evaluator.get<float>(0, "Age");
+
+    const float end_time = context.particles.integration->end_time;
+    for (int i : context.particles.index_mask) {
+      if ((*has_been_triggered)[i]) {
+        continue;
+      }
+      const float trigger_age = trigger_ages[i];
+      const float birth_time = birth_times[i];
+      const float trigger_time = birth_time + trigger_age;
+      if (trigger_time > end_time) {
+        continue;
+      }
+
+      const float duration = context.particles.integration->durations[i];
+      TimeInterval interval(end_time - duration, duration);
+      const float time_factor = interval.safe_factor_at_time(trigger_time);
+
+      context.factor_dst[i] = std::max<float>(0.0f, time_factor);
+    }
+  }
+
+  void execute(ParticleActionContext &context) const override
+  {
+    MutableSpan<int> has_been_triggered = context.particles.attributes.get<int>(attribute_name_);
+    for (int i : context.particles.index_mask) {
+      has_been_triggered[i] = 1;
+    }
+    action_.execute(context);
+  }
+};
+
+static void collect_age_reached_events(CollectContext &context)
+{
+  for (const DNode *dnode : nodes_by_type(context, "SimulationNodeAgeReachedEvent")) {
+    const DInputSocket &age_input = dnode->input(0, "Age");
+    const DInputSocket &execute_input = dnode->input(1, "Execute");
+    Array<StringRefNull> particle_names = find_linked_particle_simulations(context,
+                                                                           dnode->output(0));
+    const ParticleAction *action = create_particle_action(context, execute_input, particle_names);
+    if (action == nullptr) {
+      continue;
+    }
+    const ParticleFunction *inputs_fn = create_particle_function_for_inputs(context, {&age_input});
+    if (inputs_fn == nullptr) {
+      continue;
+    }
+
+    std::string attribute_name = get_identifier(context, *dnode);
+    const ParticleEvent &event = context.resources.construct<AgeReachedEvent>(
+        AT, attribute_name, *inputs_fn, *action);
+    for (StringRefNull particle_name : particle_names) {
+      const bool added_attribute = context.influences.particle_attributes_builder
+                                       .lookup_as(particle_name)
+                                       ->add<int>(attribute_name, 0);
+      if (added_attribute) {
+        context.influences.particle_events.add_as(particle_name, &event);
+      }
+    }
+  }
 }
 
 void collect_simulation_influences(Simulation &simulation,
@@ -689,11 +889,13 @@ void collect_simulation_influences(Simulation &simulation,
   initialize_particle_attribute_builders(context);
 
   prepare_particle_attribute_nodes(context);
+  prepare_time_input_nodes(context);
 
   collect_forces(context);
   collect_emitters(context);
   collect_birth_events(context);
   collect_time_step_events(context);
+  collect_age_reached_events(context);
 
   optimize_function_network(context);
 

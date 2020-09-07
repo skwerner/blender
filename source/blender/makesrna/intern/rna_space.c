@@ -242,9 +242,9 @@ const EnumPropertyItem rna_enum_space_action_mode_items[] = {
 #undef SACT_ITEM_MASK
 #undef SACT_ITEM_CACHEFILE
 
-#define SI_ITEM_VIEW(name, icon) \
+#define SI_ITEM_VIEW(identifier, name, icon) \
   { \
-    SI_MODE_VIEW, "VIEW", icon, name, "View the image" \
+    SI_MODE_VIEW, identifier, icon, name, "View the image" \
   }
 #define SI_ITEM_UV \
   { \
@@ -260,7 +260,7 @@ const EnumPropertyItem rna_enum_space_action_mode_items[] = {
   }
 
 const EnumPropertyItem rna_enum_space_image_mode_all_items[] = {
-    SI_ITEM_VIEW("View", ICON_FILE_IMAGE),
+    SI_ITEM_VIEW("VIEW", "View", ICON_FILE_IMAGE),
     SI_ITEM_UV,
     SI_ITEM_PAINT,
     SI_ITEM_MASK,
@@ -268,14 +268,14 @@ const EnumPropertyItem rna_enum_space_image_mode_all_items[] = {
 };
 
 static const EnumPropertyItem rna_enum_space_image_mode_ui_items[] = {
-    SI_ITEM_VIEW("View", ICON_FILE_IMAGE),
+    SI_ITEM_VIEW("VIEW", "View", ICON_FILE_IMAGE),
     SI_ITEM_PAINT,
     SI_ITEM_MASK,
     {0, NULL, 0, NULL, NULL},
 };
 
 const EnumPropertyItem rna_enum_space_image_mode_items[] = {
-    SI_ITEM_VIEW("Image Editor", ICON_IMAGE),
+    SI_ITEM_VIEW("IMAGE_EDITOR", "Image Editor", ICON_IMAGE),
     SI_ITEM_UV,
     {0, NULL, 0, NULL, NULL},
 };
@@ -464,22 +464,18 @@ static const EnumPropertyItem fileselectparams_recursion_level_items[] = {
 };
 
 const EnumPropertyItem rna_enum_file_sort_items[] = {
-    {FILE_SORT_ALPHA,
-     "FILE_SORT_ALPHA",
-     ICON_SORTALPHA,
-     "Name",
-     "Sort the file list alphabetically"},
+    {FILE_SORT_ALPHA, "FILE_SORT_ALPHA", ICON_NONE, "Name", "Sort the file list alphabetically"},
     {FILE_SORT_EXTENSION,
      "FILE_SORT_EXTENSION",
-     ICON_SORTBYEXT,
+     ICON_NONE,
      "Extension",
      "Sort the file list by extension/type"},
     {FILE_SORT_TIME,
      "FILE_SORT_TIME",
-     ICON_SORTTIME,
+     ICON_NONE,
      "Modified Date",
      "Sort files by modification time"},
-    {FILE_SORT_SIZE, "FILE_SORT_SIZE", ICON_SORTSIZE, "Size", "Sort files by size"},
+    {FILE_SORT_SIZE, "FILE_SORT_SIZE", ICON_NONE, "Size", "Sort files by size"},
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -1297,15 +1293,13 @@ static const EnumPropertyItem *rna_3DViewShading_render_pass_itemf(bContext *C,
 {
   Scene *scene = CTX_data_scene(C);
 
-  const bool ao_enabled = scene->eevee.flag & SCE_EEVEE_GTAO_ENABLED;
   const bool bloom_enabled = scene->eevee.flag & SCE_EEVEE_BLOOM_ENABLED;
 
   int totitem = 0;
   EnumPropertyItem *result = NULL;
   for (int i = 0; rna_enum_view3dshading_render_pass_type_items[i].identifier != NULL; i++) {
     const EnumPropertyItem *item = &rna_enum_view3dshading_render_pass_type_items[i];
-    if (!((!ao_enabled && item->value == EEVEE_RENDER_PASS_AO) ||
-          (!bloom_enabled &&
+    if (!((!bloom_enabled &&
            (item->value == EEVEE_RENDER_PASS_BLOOM || STREQ(item->name, "Effects"))))) {
       RNA_enum_item_add(&result, &totitem, item);
     }
@@ -1321,9 +1315,6 @@ static int rna_3DViewShading_render_pass_get(PointerRNA *ptr)
   eViewLayerEEVEEPassType result = shading->render_pass;
   Scene *scene = rna_3DViewShading_scene(ptr);
 
-  if (result == EEVEE_RENDER_PASS_AO && ((scene->eevee.flag & SCE_EEVEE_GTAO_ENABLED) == 0)) {
-    result = EEVEE_RENDER_PASS_COMBINED;
-  }
   if (result == EEVEE_RENDER_PASS_BLOOM && ((scene->eevee.flag & SCE_EEVEE_BLOOM_ENABLED) == 0)) {
     result = EEVEE_RENDER_PASS_COMBINED;
   }
@@ -1470,11 +1461,14 @@ static bool rna_SpaceImageEditor_show_paint_get(PointerRNA *ptr)
 
 static bool rna_SpaceImageEditor_show_uvedit_get(PointerRNA *ptr)
 {
-  SpaceImage *sima = (SpaceImage *)(ptr->data);
+  SpaceImage *sima = ptr->data;
   bScreen *screen = (bScreen *)ptr->owner_id;
+  Object *obedit = NULL;
   wmWindow *win = ED_screen_window_find(screen, G_MAIN->wm.first);
-  ViewLayer *view_layer = WM_window_get_active_view_layer(win);
-  Object *obedit = OBEDIT_FROM_VIEW_LAYER(view_layer);
+  if (win != NULL) {
+    ViewLayer *view_layer = WM_window_get_active_view_layer(win);
+    obedit = OBEDIT_FROM_VIEW_LAYER(view_layer);
+  }
   return ED_space_image_show_uvedit(sima, obedit);
 }
 
@@ -1482,22 +1476,28 @@ static bool rna_SpaceImageEditor_show_maskedit_get(PointerRNA *ptr)
 {
   SpaceImage *sima = (SpaceImage *)(ptr->data);
   bScreen *screen = (bScreen *)ptr->owner_id;
+  Object *obedit = NULL;
   wmWindow *win = ED_screen_window_find(screen, G_MAIN->wm.first);
-  ViewLayer *view_layer = WM_window_get_active_view_layer(win);
-  return ED_space_image_check_show_maskedit(sima, view_layer);
+  if (win != NULL) {
+    ViewLayer *view_layer = WM_window_get_active_view_layer(win);
+    obedit = OBEDIT_FROM_VIEW_LAYER(view_layer);
+  }
+  return ED_space_image_check_show_maskedit(sima, obedit);
 }
 
 static void rna_SpaceImageEditor_image_set(PointerRNA *ptr,
                                            PointerRNA value,
                                            struct ReportList *UNUSED(reports))
 {
-  SpaceImage *sima = (SpaceImage *)(ptr->data);
-  bScreen *screen = (bScreen *)ptr->owner_id;
-  wmWindow *win = ED_screen_window_find(screen, G_MAIN->wm.first);
-  ViewLayer *view_layer = WM_window_get_active_view_layer(win);
-  Object *obedit = OBEDIT_FROM_VIEW_LAYER(view_layer);
-
   BLI_assert(BKE_id_is_in_global_main(value.data));
+  SpaceImage *sima = ptr->data;
+  bScreen *screen = (bScreen *)ptr->owner_id;
+  Object *obedit = NULL;
+  wmWindow *win = ED_screen_window_find(screen, G_MAIN->wm.first);
+  if (win != NULL) {
+    ViewLayer *view_layer = WM_window_get_active_view_layer(win);
+    obedit = OBEDIT_FROM_VIEW_LAYER(view_layer);
+  }
   ED_space_image_set(G_MAIN, sima, obedit, (Image *)value.data, false);
 }
 
@@ -2122,6 +2122,7 @@ static void rna_SpaceNodeEditor_node_tree_update(const bContext *C, PointerRNA *
   ED_node_tree_update(C);
 }
 
+#  ifdef WITH_PARTICLE_NODES
 static PointerRNA rna_SpaceNodeEditor_simulation_get(PointerRNA *ptr)
 {
   SpaceNode *snode = (SpaceNode *)ptr->data;
@@ -2153,6 +2154,7 @@ static void rna_SpaceNodeEditor_simulation_set(PointerRNA *ptr,
   }
   snode->id = &sim->id;
 }
+#  endif
 
 static int rna_SpaceNodeEditor_tree_type_get(PointerRNA *ptr)
 {
@@ -3792,14 +3794,14 @@ static void rna_def_space_view3d_overlay(BlenderRNA *brna)
   prop = RNA_def_property(srna, "texture_paint_mode_opacity", PROP_FLOAT, PROP_FACTOR);
   RNA_def_property_float_sdna(prop, NULL, "overlay.texture_paint_mode_opacity");
   RNA_def_property_ui_text(
-      prop, "Stencil Opacity", "Opacity of the texture paint mode stencil mask overlay");
+      prop, "Stencil Mask Opacity", "Opacity of the texture paint mode stencil mask overlay");
   RNA_def_property_range(prop, 0.0f, 1.0f);
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
   prop = RNA_def_property(srna, "vertex_paint_mode_opacity", PROP_FLOAT, PROP_FACTOR);
   RNA_def_property_float_sdna(prop, NULL, "overlay.vertex_paint_mode_opacity");
   RNA_def_property_ui_text(
-      prop, "Stencil Opacity", "Opacity of the texture paint mode stencil mask overlay");
+      prop, "Stencil Mask Opacity", "Opacity of the texture paint mode stencil mask overlay");
   RNA_def_property_range(prop, 0.0f, 1.0f);
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
@@ -4794,6 +4796,12 @@ static void rna_def_space_sequencer(BlenderRNA *brna)
   RNA_def_property_enum_bitflag_sdna(prop, NULL, "flag");
   RNA_def_property_enum_items(prop, waveform_type_display_items);
   RNA_def_property_ui_text(prop, "Waveform Displaying", "How Waveforms are drawn");
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_SEQUENCER, NULL);
+
+  prop = RNA_def_property(srna, "use_zoom_to_fit", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flag", SEQ_ZOOM_TO_FIT);
+  RNA_def_property_ui_text(
+      prop, "Zoom to Fit", "Automatically zoom preview image to make it fully fit the region");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_SEQUENCER, NULL);
 
   prop = RNA_def_property(srna, "show_overexposed", PROP_INT, PROP_NONE);
@@ -6207,6 +6215,7 @@ static void rna_def_space_node(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop, "ID From", "Data-block from which the edited data-block is linked");
 
+#  ifdef WITH_PARTICLE_NODES
   prop = RNA_def_property(srna, "simulation", PROP_POINTER, PROP_NONE);
   RNA_def_property_flag(prop, PROP_EDITABLE);
   RNA_def_property_struct_type(prop, "Simulation");
@@ -6217,6 +6226,7 @@ static void rna_def_space_node(BlenderRNA *brna)
                                  NULL,
                                  NULL);
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_NODE, NULL);
+#  endif
 
   prop = RNA_def_property(srna, "path", PROP_COLLECTION, PROP_NONE);
   RNA_def_property_collection_sdna(prop, NULL, "treepath", NULL);
@@ -6542,7 +6552,7 @@ static void rna_def_space_clip(BlenderRNA *brna)
   prop = RNA_def_property(srna, "show_graph_only_selected", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", SC_SHOW_GRAPH_SEL_ONLY);
   RNA_def_property_ui_text(
-      prop, "Only Selected", "Only include channels relating to selected objects and data");
+      prop, "Only Show Selected", "Only include channels relating to selected objects and data");
   RNA_def_property_ui_icon(prop, ICON_RESTRICT_SELECT_OFF, 0);
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_CLIP, NULL);
 

@@ -21,8 +21,7 @@
  * \ingroup spseq
  */
 
-#ifndef __SEQUENCER_INTERN_H__
-#define __SEQUENCER_INTERN_H__
+#pragma once
 
 #include "DNA_sequence_types.h"
 #include "RNA_access.h"
@@ -61,6 +60,7 @@ float sequence_handle_size_get_clamped(struct Sequence *seq, const float pixelx)
 /* void seq_reset_imageofs(struct SpaceSeq *sseq); */
 
 struct ImBuf *sequencer_ibuf_get(struct Main *bmain,
+                                 struct ARegion *region,
                                  struct Depsgraph *depsgraph,
                                  struct Scene *scene,
                                  struct SpaceSeq *sseq,
@@ -208,5 +208,3 @@ int sequencer_image_seq_get_minmax_frame(struct wmOperator *op,
                                          int *r_numdigits);
 void sequencer_image_seq_reserve_frames(
     struct wmOperator *op, struct StripElem *se, int len, int minframe, int numdigits);
-
-#endif /* __SEQUENCER_INTERN_H__ */

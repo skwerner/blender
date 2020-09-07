@@ -160,6 +160,12 @@ IDTypeInfo IDType_ID_SIM = {
     /* free_data */ simulation_free_data,
     /* make_local */ nullptr,
     /* foreach_id */ simulation_foreach_id,
+    /* foreach_cache */ NULL,
+
+    /* blend_write */ NULL,
+    /* blend_read_data */ NULL,
+    /* blend_read_lib */ NULL,
+    /* blend_read_expand */ NULL,
 };
 
 void *BKE_simulation_add(Main *bmain, const char *name)
@@ -295,21 +301,20 @@ using StateTypeMap = blender::Map<std::string, std::unique_ptr<SimulationStateTy
 
 template<typename T>
 static void add_state_type(StateTypeMap &map,
-                           const char *name,
                            void (*init)(T *state),
                            void (*reset)(T *state),
                            void (*remove)(T *state),
                            void (*copy)(const T *src, T *dst))
 {
   SimulationStateType state_type{
-      name,
-      (int)sizeof(T),
+      BKE_simulation_get_state_type_name<T>(),
+      static_cast<int>(sizeof(T)),
       (StateInitFunction)init,
       (StateResetFunction)reset,
       (StateRemoveFunction)remove,
       (StateCopyFunction)copy,
   };
-  map.add_new(name, std::make_unique<SimulationStateType>(state_type));
+  map.add_new(state_type.name, std::make_unique<SimulationStateType>(state_type));
 }
 
 static StateTypeMap init_state_types()
@@ -317,7 +322,6 @@ static StateTypeMap init_state_types()
   StateTypeMap map;
   add_state_type<ParticleSimulationState>(
       map,
-      SIM_TYPE_NAME_PARTICLE_SIMULATION,
       [](ParticleSimulationState *state) { CustomData_reset(&state->attributes); },
       [](ParticleSimulationState *state) {
         CustomData_free(&state->attributes, state->tot_particles);
@@ -337,7 +341,6 @@ static StateTypeMap init_state_types()
 
   add_state_type<ParticleMeshEmitterSimulationState>(
       map,
-      SIM_TYPE_NAME_PARTICLE_MESH_EMITTER,
       [](ParticleMeshEmitterSimulationState *UNUSED(state)) {},
       [](ParticleMeshEmitterSimulationState *state) { state->last_birth_time = 0.0f; },
       [](ParticleMeshEmitterSimulationState *UNUSED(state)) {},

@@ -20,8 +20,7 @@
  * \ingroup draw
  */
 
-#ifndef __DRAW_CACHE_EXTRACT_H__
-#define __DRAW_CACHE_EXTRACT_H__
+#pragma once
 
 struct TaskGraph;
 
@@ -261,6 +260,7 @@ void mesh_buffer_cache_create_requested(struct TaskGraph *task_graph,
                                         Mesh *me,
                                         const bool is_editmode,
                                         const bool is_paint_mode,
+                                        const bool is_mode_active,
                                         const float obmat[4][4],
                                         const bool do_final,
                                         const bool do_uvedit,
@@ -269,5 +269,3 @@ void mesh_buffer_cache_create_requested(struct TaskGraph *task_graph,
                                         const Scene *scene,
                                         const ToolSettings *ts,
                                         const bool use_hide);
-
-#endif /* __DRAW_CACHE_EXTRACT_H__ */

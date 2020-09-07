@@ -372,9 +372,8 @@ BLI_INLINE uint nearestVert(SDefBindCalcData *const data, const float point_co[3
       len_squared_v3v3(point_co, data->targetCos[edge->v2])) {
     return edge->v1;
   }
-  else {
-    return edge->v2;
-  }
+
+  return edge->v2;
 }
 
 BLI_INLINE int isPolyValid(const float coords[][2], const uint nr)
@@ -450,7 +449,7 @@ BLI_INLINE SDefBindWeightData *computeBindWeights(SDefBindCalcData *const data,
   SDefBindWeightData *bwdata;
   SDefBindPoly *bpoly;
 
-  float world[3] = {0.0f, 0.0f, 1.0f};
+  const float world[3] = {0.0f, 0.0f, 1.0f};
   float avg_point_dist = 0.0f;
   float tot_weight = 0.0f;
   int inf_weight_flags = 0;
@@ -1283,7 +1282,7 @@ static void surfacedeformModifier_do(ModifierData *md,
     BKE_modifier_set_error(md, "Vertices changed from %u to %u", smd->numverts, numverts);
     return;
   }
-  else if (smd->numpoly != tnumpoly) {
+  if (smd->numpoly != tnumpoly) {
     BKE_modifier_set_error(md, "Target polygons changed from %u to %u", smd->numpoly, tnumpoly);
     return;
   }
@@ -1398,29 +1397,28 @@ static bool isDisabled(const Scene *UNUSED(scene), ModifierData *md, bool UNUSED
          !(smd->verts != NULL && !(smd->flags & MOD_SDEF_BIND));
 }
 
-static void panel_draw(const bContext *C, Panel *panel)
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *col;
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
   PointerRNA ob_ptr;
-  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
 
-  PointerRNA target_ptr = RNA_pointer_get(&ptr, "target");
+  PointerRNA target_ptr = RNA_pointer_get(ptr, "target");
 
-  bool is_bound = RNA_boolean_get(&ptr, "is_bound");
+  bool is_bound = RNA_boolean_get(ptr, "is_bound");
 
   uiLayoutSetPropSep(layout, true);
 
   col = uiLayoutColumn(layout, false);
   uiLayoutSetActive(col, !is_bound);
-  uiItemR(col, &ptr, "target", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "target", 0, NULL, ICON_NONE);
 
-  uiItemR(col, &ptr, "falloff", 0, NULL, ICON_NONE);
-  uiItemR(col, &ptr, "strength", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "falloff", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "strength", 0, NULL, ICON_NONE);
 
-  modifier_vgroup_ui(layout, &ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
+  modifier_vgroup_ui(layout, ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
 
   uiItemS(layout);
 
@@ -1432,7 +1430,7 @@ static void panel_draw(const bContext *C, Panel *panel)
     uiLayoutSetActive(col, !RNA_pointer_is_null(&target_ptr));
     uiItemO(col, IFACE_("Bind"), ICON_NONE, "OBJECT_OT_surfacedeform_bind");
   }
-  modifier_panel_end(layout, &ptr);
+  modifier_panel_end(layout, ptr);
 }
 
 static void panelRegister(ARegionType *region_type)

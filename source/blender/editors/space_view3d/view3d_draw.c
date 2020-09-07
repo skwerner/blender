@@ -36,6 +36,7 @@
 #include "BKE_context.h"
 #include "BKE_customdata.h"
 #include "BKE_global.h"
+#include "BKE_image.h"
 #include "BKE_key.h"
 #include "BKE_layer.h"
 #include "BKE_main.h"
@@ -74,7 +75,6 @@
 
 #include "GPU_batch.h"
 #include "GPU_batch_presets.h"
-#include "GPU_draw.h"
 #include "GPU_framebuffer.h"
 #include "GPU_immediate.h"
 #include "GPU_immediate_util.h"
@@ -115,8 +115,8 @@ void ED_view3d_update_viewmat(Depsgraph *depsgraph,
                               const Scene *scene,
                               View3D *v3d,
                               ARegion *region,
-                              float viewmat[4][4],
-                              float winmat[4][4],
+                              const float viewmat[4][4],
+                              const float winmat[4][4],
                               const rcti *rect,
                               bool offscreen)
 {
@@ -197,8 +197,8 @@ static void view3d_main_region_setup_view(Depsgraph *depsgraph,
                                           Scene *scene,
                                           View3D *v3d,
                                           ARegion *region,
-                                          float viewmat[4][4],
-                                          float winmat[4][4],
+                                          const float viewmat[4][4],
+                                          const float winmat[4][4],
                                           const rcti *rect)
 {
   RegionView3D *rv3d = region->regiondata;
@@ -214,8 +214,8 @@ static void view3d_main_region_setup_offscreen(Depsgraph *depsgraph,
                                                const Scene *scene,
                                                View3D *v3d,
                                                ARegion *region,
-                                               float viewmat[4][4],
-                                               float winmat[4][4])
+                                               const float viewmat[4][4],
+                                               const float winmat[4][4])
 {
   RegionView3D *rv3d = region->regiondata;
   ED_view3d_update_viewmat(depsgraph, scene, v3d, region, viewmat, winmat, NULL, true);
@@ -353,8 +353,8 @@ void ED_view3d_draw_setup_view(const wmWindowManager *wm,
                                Scene *scene,
                                ARegion *region,
                                View3D *v3d,
-                               float viewmat[4][4],
-                               float winmat[4][4],
+                               const float viewmat[4][4],
+                               const float winmat[4][4],
                                const rcti *rect)
 {
   RegionView3D *rv3d = region->regiondata;
@@ -588,9 +588,7 @@ static void drawviewborder(Scene *scene, Depsgraph *depsgraph, ARegion *region, 
       float alpha = 1.0f;
 
       if (ca->passepartalpha != 1.0f) {
-        GPU_blend_set_func_separate(
-            GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
-        GPU_blend(true);
+        GPU_blend(GPU_BLEND_ALPHA);
         alpha = ca->passepartalpha;
       }
 
@@ -609,7 +607,7 @@ static void drawviewborder(Scene *scene, Depsgraph *depsgraph, ARegion *region, 
         immRectf(shdr_pos, x1i, y1i, x2i, 0.0f);
       }
 
-      GPU_blend(false);
+      GPU_blend(GPU_BLEND_NONE);
     }
 
     immUniformThemeColor3(TH_BACK);
@@ -668,7 +666,8 @@ static void drawviewborder(Scene *scene, Depsgraph *depsgraph, ARegion *region, 
 
   /* safety border */
   if (ca) {
-    immUniformThemeColorBlend(TH_VIEW_OVERLAY, TH_BACK, 0.25f);
+    GPU_blend(GPU_BLEND_ALPHA);
+    immUniformThemeColorAlpha(TH_VIEW_OVERLAY, 0.75f);
 
     if (ca->dtx & CAM_DTX_CENTER) {
       float x3, y3;
@@ -778,6 +777,8 @@ static void drawviewborder(Scene *scene, Depsgraph *depsgraph, ARegion *region, 
        * 2.0f round corner effect was nearly not visible anyway... */
       imm_draw_box_wire_2d(shdr_pos, rect.xmin, rect.ymin, rect.xmax, rect.ymax);
     }
+
+    GPU_blend(GPU_BLEND_NONE);
   }
 
   immUnbindProgram();
@@ -1024,9 +1025,7 @@ static void draw_view_axis(RegionView3D *rv3d, const rcti *rect)
   /* draw axis lines */
   GPU_line_width(2.0f);
   GPU_line_smooth(true);
-  GPU_blend(true);
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   GPUVertFormat *format = immVertexFormat();
   uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
@@ -1069,9 +1068,7 @@ static void draw_rotation_guide(const RegionView3D *rv3d)
 
   negate_v3_v3(o, rv3d->ofs);
 
-  GPU_blend(true);
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+  GPU_blend(GPU_BLEND_ALPHA);
   GPU_depth_mask(false); /* don't overwrite zbuf */
 
   GPUVertFormat *format = immVertexFormat();
@@ -1161,7 +1158,7 @@ static void draw_rotation_guide(const RegionView3D *rv3d)
   immEnd();
   immUnbindProgram();
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
   GPU_depth_mask(true);
 }
 #endif /* WITH_INPUT_NDOF */
@@ -1617,15 +1614,11 @@ void view3d_main_region_draw(const bContext *C, ARegion *region)
   view3d_draw_view(C, region);
 
   DRW_cache_free_old_batches(bmain);
-  GPU_free_images_old(bmain);
+  BKE_image_free_old_gputextures(bmain);
   GPU_pass_cache_garbage_collect();
 
-  /* XXX This is in order to draw UI batches with the DRW
-   * old context since we now use it for drawing the entire area. */
-  gpu_batch_presets_reset();
-
   /* No depth test for drawing action zones afterwards. */
-  GPU_depth_test(false);
+  GPU_depth_test(GPU_DEPTH_NONE);
 
   v3d->flag |= V3D_INVALID_BACKBUF;
 }
@@ -1640,7 +1633,7 @@ static void view3d_stereo3d_setup_offscreen(Depsgraph *depsgraph,
                                             const Scene *scene,
                                             View3D *v3d,
                                             ARegion *region,
-                                            float winmat[4][4],
+                                            const float winmat[4][4],
                                             const char *viewname)
 {
   /* update the viewport matrices with the new camera */
@@ -1667,8 +1660,8 @@ void ED_view3d_draw_offscreen(Depsgraph *depsgraph,
                               ARegion *region,
                               int winx,
                               int winy,
-                              float viewmat[4][4],
-                              float winmat[4][4],
+                              const float viewmat[4][4],
+                              const float winmat[4][4],
                               bool is_image_render,
                               bool do_sky,
                               bool UNUSED(is_persp),
@@ -1707,7 +1700,7 @@ void ED_view3d_draw_offscreen(Depsgraph *depsgraph,
   {
     /* free images which can have changed on frame-change
      * warning! can be slow so only free animated images - campbell */
-    GPU_free_images_anim(G.main); /* XXX :((( */
+    BKE_image_free_anim_gputextures(G.main); /* XXX :((( */
   }
 
   GPU_matrix_push_projection();
@@ -1759,8 +1752,8 @@ void ED_view3d_draw_offscreen_simple(Depsgraph *depsgraph,
                                      int winx,
                                      int winy,
                                      uint draw_flags,
-                                     float viewmat[4][4],
-                                     float winmat[4][4],
+                                     const float viewmat[4][4],
+                                     const float winmat[4][4],
                                      float clip_start,
                                      float clip_end,
                                      bool is_image_render,
@@ -2160,7 +2153,7 @@ static void view3d_opengl_read_Z_pixels(GPUViewport *viewport, rcti *rect, void 
 {
   DefaultTextureList *dtxl = (DefaultTextureList *)GPU_viewport_texture_list_get(viewport);
 
-  GPUFrameBuffer *tmp_fb = GPU_framebuffer_create();
+  GPUFrameBuffer *tmp_fb = GPU_framebuffer_create(__func__);
   GPU_framebuffer_texture_attach(tmp_fb, dtxl->depth, 0, 0);
   GPU_framebuffer_bind(tmp_fb);
 
@@ -2326,14 +2319,14 @@ void ED_view3d_draw_depth_gpencil(Depsgraph *depsgraph, Scene *scene, ARegion *r
   /* Setup view matrix. */
   ED_view3d_draw_setup_view(NULL, NULL, depsgraph, scene, region, v3d, NULL, NULL, NULL);
 
-  GPU_clear(GPU_DEPTH_BIT);
+  GPU_clear_depth(1.0f);
 
-  GPU_depth_test(true);
+  GPU_depth_test(GPU_DEPTH_LESS_EQUAL);
 
   GPUViewport *viewport = WM_draw_region_get_viewport(region);
   DRW_draw_depth_loop_gpencil(depsgraph, region, v3d, viewport);
 
-  GPU_depth_test(false);
+  GPU_depth_test(GPU_DEPTH_NONE);
 }
 
 /* *********************** customdata **************** */
@@ -2406,7 +2399,7 @@ struct RV3DMatrixStore *ED_view3d_mats_rv3d_backup(struct RegionView3D *rv3d)
   copy_m4_m4(rv3dmat->viewinv, rv3d->viewinv);
   copy_v4_v4(rv3dmat->viewcamtexcofac, rv3d->viewcamtexcofac);
   rv3dmat->pixsize = rv3d->pixsize;
-  return (void *)rv3dmat;
+  return rv3dmat;
 }
 
 void ED_view3d_mats_rv3d_restore(struct RegionView3D *rv3d, struct RV3DMatrixStore *rv3dmat_pt)

@@ -35,6 +35,7 @@
 #include "BKE_brush.h"
 #include "BKE_colortools.h"
 #include "BKE_context.h"
+#include "BKE_gpencil.h"
 #include "BKE_icons.h"
 #include "BKE_idtype.h"
 #include "BKE_lib_id.h"
@@ -210,6 +211,12 @@ IDTypeInfo IDType_ID_BR = {
     .free_data = brush_free_data,
     .make_local = brush_make_local,
     .foreach_id = brush_foreach_id,
+    .foreach_cache = NULL,
+
+    .blend_write = NULL,
+    .blend_read_data = NULL,
+    .blend_read_lib = NULL,
+    .blend_read_expand = NULL,
 };
 
 static RNG *brush_rng;
@@ -472,6 +479,12 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
 
   CurveMapping *custom_curve = NULL;
 
+  /* Optionally assign a material preset. */
+  enum {
+    PRESET_MATERIAL_NONE = 0,
+    PRESET_MATERIAL_DOT_STROKE,
+  } material_preset = PRESET_MATERIAL_NONE;
+
   /* Set general defaults at brush level. */
   brush->smooth_stroke_radius = SMOOTH_STROKE_RADIUS;
   brush->smooth_stroke_factor = SMOOTH_STROKE_FACTOR;
@@ -503,7 +516,7 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
 
       brush->gpencil_settings->draw_strength = 0.4f;
-      brush->gpencil_settings->flag |= GP_BRUSH_USE_STENGTH_PRESSURE;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
 
       brush->gpencil_settings->input_samples = 10;
       brush->gpencil_settings->active_smooth = ACTIVE_SMOOTH;
@@ -515,19 +528,10 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       brush->gpencil_tool = GPAINT_TOOL_DRAW;
       brush->gpencil_settings->icon_id = GP_BRUSH_ICON_AIRBRUSH;
 
-      /* Create and link Black Dots material to brush.
-       * This material is required because the brush uses the material to define how the stroke is
-       * drawn. */
-      Material *ma = BLI_findstring(&bmain->materials, "Dots Stroke", offsetof(ID, name) + 2);
-      if (ma == NULL) {
-        ma = BKE_gpencil_material_add(bmain, "Dots Stroke");
-        ma->gp_style->mode = GP_MATERIAL_MODE_DOT;
-      }
-      brush->gpencil_settings->material = ma;
-      /* Pin the matterial to the brush. */
-      brush->gpencil_settings->flag |= GP_BRUSH_MATERIAL_PINNED;
-
       zero_v3(brush->secondary_rgb);
+
+      material_preset = PRESET_MATERIAL_DOT_STROKE;
+
       break;
     }
     case GP_BRUSH_PRESET_INK_PEN: {
@@ -557,7 +561,7 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       /* Curve. */
       custom_curve = brush->gpencil_settings->curve_sensitivity;
       BKE_curvemapping_set_defaults(custom_curve, 0, 0.0f, 0.0f, 1.0f, 1.0f);
-      BKE_curvemapping_initialize(custom_curve);
+      BKE_curvemapping_init(custom_curve);
       brush_gpencil_curvemap_reset(custom_curve->cm, 3, GPCURVE_PRESET_INK);
 
       brush->gpencil_settings->icon_id = GP_BRUSH_ICON_INK;
@@ -594,7 +598,7 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       /* Curve. */
       custom_curve = brush->gpencil_settings->curve_sensitivity;
       BKE_curvemapping_set_defaults(custom_curve, 0, 0.0f, 0.0f, 1.0f, 1.0f);
-      BKE_curvemapping_initialize(custom_curve);
+      BKE_curvemapping_init(custom_curve);
       brush_gpencil_curvemap_reset(custom_curve->cm, 3, GPCURVE_PRESET_INKNOISE);
 
       brush->gpencil_settings->icon_id = GP_BRUSH_ICON_INKNOISE;
@@ -631,7 +635,7 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       /* Curve. */
       custom_curve = brush->gpencil_settings->curve_sensitivity;
       BKE_curvemapping_set_defaults(custom_curve, 0, 0.0f, 0.0f, 1.0f, 1.0f);
-      BKE_curvemapping_initialize(custom_curve);
+      BKE_curvemapping_init(custom_curve);
       brush_gpencil_curvemap_reset(custom_curve->cm, 4, GPCURVE_PRESET_MARKER);
 
       brush->gpencil_settings->icon_id = GP_BRUSH_ICON_MARKER;
@@ -667,12 +671,12 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       /* Curve. */
       custom_curve = brush->gpencil_settings->curve_sensitivity;
       BKE_curvemapping_set_defaults(custom_curve, 0, 0.0f, 0.0f, 1.0f, 1.0f);
-      BKE_curvemapping_initialize(custom_curve);
+      BKE_curvemapping_init(custom_curve);
       brush_gpencil_curvemap_reset(custom_curve->cm, 3, GPCURVE_PRESET_CHISEL_SENSIVITY);
 
       custom_curve = brush->gpencil_settings->curve_strength;
       BKE_curvemapping_set_defaults(custom_curve, 0, 0.0f, 0.0f, 1.0f, 1.0f);
-      BKE_curvemapping_initialize(custom_curve);
+      BKE_curvemapping_init(custom_curve);
       brush_gpencil_curvemap_reset(custom_curve->cm, 4, GPCURVE_PRESET_CHISEL_STRENGTH);
 
       brush->gpencil_settings->icon_id = GP_BRUSH_ICON_CHISEL;
@@ -686,7 +690,7 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       brush->gpencil_settings->flag &= ~GP_BRUSH_USE_PRESSURE;
 
       brush->gpencil_settings->draw_strength = 1.0f;
-      brush->gpencil_settings->flag &= ~GP_BRUSH_USE_STENGTH_PRESSURE;
+      brush->gpencil_settings->flag &= ~GP_BRUSH_USE_STRENGTH_PRESSURE;
 
       brush->gpencil_settings->input_samples = 10;
       brush->gpencil_settings->active_smooth = ACTIVE_SMOOTH;
@@ -717,7 +721,7 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
 
       brush->gpencil_settings->draw_strength = 0.4f;
-      brush->gpencil_settings->flag |= GP_BRUSH_USE_STENGTH_PRESSURE;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
 
       brush->gpencil_settings->input_samples = 10;
       brush->gpencil_settings->active_smooth = ACTIVE_SMOOTH;
@@ -740,19 +744,10 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       brush->gpencil_settings->icon_id = GP_BRUSH_ICON_PENCIL;
       brush->gpencil_tool = GPAINT_TOOL_DRAW;
 
-      /* Create and link Black Dots material to brush.
-       * This material is required because the brush uses the material to define how the stroke is
-       * drawn. */
-      Material *ma = BLI_findstring(&bmain->materials, "Dots Stroke", offsetof(ID, name) + 2);
-      if (ma == NULL) {
-        ma = BKE_gpencil_material_add(bmain, "Dots Stroke");
-        ma->gp_style->mode = GP_MATERIAL_MODE_DOT;
-      }
-      brush->gpencil_settings->material = ma;
-      /* Pin the matterial to the brush. */
-      brush->gpencil_settings->flag |= GP_BRUSH_MATERIAL_PINNED;
-
       zero_v3(brush->secondary_rgb);
+
+      material_preset = PRESET_MATERIAL_DOT_STROKE;
+
       break;
     }
     case GP_BRUSH_PRESET_PENCIL: {
@@ -760,7 +755,7 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
 
       brush->gpencil_settings->draw_strength = 0.6f;
-      brush->gpencil_settings->flag |= GP_BRUSH_USE_STENGTH_PRESSURE;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
 
       brush->gpencil_settings->input_samples = 10;
       brush->gpencil_settings->active_smooth = ACTIVE_SMOOTH;
@@ -812,7 +807,7 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       brush->gpencil_settings->draw_strength = 0.5f;
       brush->gpencil_settings->flag |= GP_BRUSH_DEFAULT_ERASER;
       brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
-      brush->gpencil_settings->flag |= GP_BRUSH_USE_STENGTH_PRESSURE;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
       brush->gpencil_settings->icon_id = GP_BRUSH_ICON_ERASE_SOFT;
       brush->gpencil_tool = GPAINT_TOOL_ERASE;
       brush->gpencil_settings->eraser_mode = GP_BRUSH_ERASER_SOFT;
@@ -859,7 +854,7 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
 
       brush->gpencil_settings->draw_strength = 0.8f;
-      brush->gpencil_settings->flag |= GP_BRUSH_USE_STENGTH_PRESSURE;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
 
       zero_v3(brush->secondary_rgb);
       break;
@@ -872,7 +867,7 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
 
       brush->gpencil_settings->draw_strength = 0.8f;
-      brush->gpencil_settings->flag |= GP_BRUSH_USE_STENGTH_PRESSURE;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
 
       zero_v3(brush->secondary_rgb);
       break;
@@ -885,7 +880,7 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
 
       brush->gpencil_settings->draw_strength = 0.8f;
-      brush->gpencil_settings->flag |= GP_BRUSH_USE_STENGTH_PRESSURE;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
 
       zero_v3(brush->secondary_rgb);
       break;
@@ -898,7 +893,7 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
 
       brush->gpencil_settings->draw_strength = 0.8f;
-      brush->gpencil_settings->flag |= GP_BRUSH_USE_STENGTH_PRESSURE;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
 
       zero_v3(brush->secondary_rgb);
       break;
@@ -911,7 +906,7 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
 
       brush->gpencil_settings->draw_strength = 0.8f;
-      brush->gpencil_settings->flag |= GP_BRUSH_USE_STENGTH_PRESSURE;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
 
       zero_v3(brush->secondary_rgb);
       break;
@@ -924,7 +919,7 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
 
       brush->gpencil_settings->draw_strength = 0.8f;
-      brush->gpencil_settings->flag |= GP_BRUSH_USE_STENGTH_PRESSURE;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
 
       zero_v3(brush->secondary_rgb);
       break;
@@ -937,7 +932,7 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
 
       brush->gpencil_settings->draw_strength = 0.3f;
-      brush->gpencil_settings->flag |= GP_BRUSH_USE_STENGTH_PRESSURE;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
       brush->gpencil_settings->sculpt_flag = GP_SCULPT_FLAG_SMOOTH_PRESSURE;
       brush->gpencil_settings->sculpt_mode_flag |= GP_SCULPT_FLAGMODE_APPLY_POSITION;
 
@@ -951,7 +946,7 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
 
       brush->gpencil_settings->draw_strength = 0.3f;
-      brush->gpencil_settings->flag |= GP_BRUSH_USE_STENGTH_PRESSURE;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
       brush->gpencil_settings->sculpt_flag = GP_SCULPT_FLAG_SMOOTH_PRESSURE;
       brush->gpencil_settings->sculpt_mode_flag |= GP_SCULPT_FLAGMODE_APPLY_POSITION;
 
@@ -965,7 +960,7 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
 
       brush->gpencil_settings->draw_strength = 0.5f;
-      brush->gpencil_settings->flag |= GP_BRUSH_USE_STENGTH_PRESSURE;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
       brush->gpencil_settings->sculpt_mode_flag |= GP_SCULPT_FLAGMODE_APPLY_POSITION;
 
       break;
@@ -978,7 +973,7 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       brush->size = 25.0f;
 
       brush->gpencil_settings->draw_strength = 0.3f;
-      brush->gpencil_settings->flag |= GP_BRUSH_USE_STENGTH_PRESSURE;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
       brush->gpencil_settings->sculpt_mode_flag |= GP_SCULPT_FLAGMODE_APPLY_POSITION;
 
       break;
@@ -991,7 +986,7 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
 
       brush->gpencil_settings->draw_strength = 0.3f;
-      brush->gpencil_settings->flag |= GP_BRUSH_USE_STENGTH_PRESSURE;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
       brush->gpencil_settings->sculpt_mode_flag |= GP_SCULPT_FLAGMODE_APPLY_POSITION;
 
       break;
@@ -1004,7 +999,7 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
 
       brush->gpencil_settings->draw_strength = 0.3f;
-      brush->gpencil_settings->flag |= GP_BRUSH_USE_STENGTH_PRESSURE;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
       brush->gpencil_settings->sculpt_mode_flag |= GP_SCULPT_FLAGMODE_APPLY_POSITION;
 
       break;
@@ -1017,7 +1012,7 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
 
       brush->gpencil_settings->draw_strength = 0.5f;
-      brush->gpencil_settings->flag |= GP_BRUSH_USE_STENGTH_PRESSURE;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
       brush->gpencil_settings->sculpt_mode_flag |= GP_SCULPT_FLAGMODE_APPLY_POSITION;
 
       break;
@@ -1030,7 +1025,7 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
 
       brush->gpencil_settings->draw_strength = 0.5f;
-      brush->gpencil_settings->flag |= GP_BRUSH_USE_STENGTH_PRESSURE;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
       brush->gpencil_settings->sculpt_mode_flag |= GP_SCULPT_FLAGMODE_APPLY_POSITION;
 
       break;
@@ -1043,7 +1038,7 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       brush->size = 25.0f;
 
       brush->gpencil_settings->draw_strength = 1.0f;
-      brush->gpencil_settings->flag |= GP_BRUSH_USE_STENGTH_PRESSURE;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
       brush->gpencil_settings->sculpt_mode_flag |= GP_SCULPT_FLAGMODE_APPLY_POSITION;
 
       break;
@@ -1056,13 +1051,37 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
 
       brush->gpencil_settings->draw_strength = 0.8f;
-      brush->gpencil_settings->flag |= GP_BRUSH_USE_STENGTH_PRESSURE;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
       brush->gpencil_settings->sculpt_mode_flag |= GP_SCULPT_FLAGMODE_APPLY_POSITION;
 
       break;
     }
     default:
       break;
+  }
+
+  switch (material_preset) {
+    case PRESET_MATERIAL_NONE:
+      break;
+    case PRESET_MATERIAL_DOT_STROKE: {
+      /* Create and link Black Dots material to brush.
+       * This material is required because the brush uses the material
+       * to define how the stroke is drawn. */
+      const char *ma_id = "Dots Stroke";
+      Material *ma = BLI_findstring(&bmain->materials, ma_id, offsetof(ID, name) + 2);
+      if (ma == NULL) {
+        ma = BKE_gpencil_material_add(bmain, ma_id);
+        ma->gp_style->mode = GP_MATERIAL_MODE_DOT;
+        BLI_assert(ma->id.us == 1);
+        id_us_min(&ma->id);
+      }
+
+      BKE_gpencil_brush_material_set(brush, ma);
+
+      /* Pin the material to the brush. */
+      brush->gpencil_settings->flag |= GP_BRUSH_MATERIAL_PINNED;
+      break;
+    }
   }
 }
 
@@ -1481,6 +1500,11 @@ void BKE_brush_sculpt_reset(Brush *br)
       br->curve_preset = BRUSH_CURVE_POW4;
       br->spacing = 5;
       break;
+    case SCULPT_TOOL_DISPLACEMENT_ERASER:
+      br->curve_preset = BRUSH_CURVE_SMOOTHER;
+      br->spacing = 10;
+      br->alpha = 1.0f;
+      break;
     case SCULPT_TOOL_SLIDE_RELAX:
       br->spacing = 10;
       br->alpha = 1.0f;
@@ -1534,7 +1558,6 @@ void BKE_brush_sculpt_reset(Brush *br)
       break;
     case SCULPT_TOOL_SMOOTH:
       br->flag &= ~BRUSH_SPACE_ATTEN;
-      br->automasking_flags |= BRUSH_AUTOMASKING_BOUNDARY_EDGES;
       br->spacing = 5;
       br->alpha = 0.7f;
       br->surface_smooth_shape_preservation = 0.5f;
@@ -1565,6 +1588,12 @@ void BKE_brush_sculpt_reset(Brush *br)
       br->flag &= ~BRUSH_ALPHA_PRESSURE;
       br->flag &= ~BRUSH_SPACE;
       br->flag &= ~BRUSH_SPACE_ATTEN;
+      break;
+    case SCULPT_TOOL_BOUNDARY:
+      br->flag &= ~BRUSH_ALPHA_PRESSURE;
+      br->flag &= ~BRUSH_SPACE;
+      br->flag &= ~BRUSH_SPACE_ATTEN;
+      br->curve_preset = BRUSH_CURVE_CONSTANT;
       break;
     case SCULPT_TOOL_DRAW_FACE_SETS:
       br->alpha = 0.5f;
@@ -1660,6 +1689,7 @@ void BKE_brush_sculpt_reset(Brush *br)
     case SCULPT_TOOL_ROTATE:
     case SCULPT_TOOL_ELASTIC_DEFORM:
     case SCULPT_TOOL_POSE:
+    case SCULPT_TOOL_BOUNDARY:
     case SCULPT_TOOL_SLIDE_RELAX:
       br->add_col[0] = 1.0f;
       br->add_col[1] = 0.95f;
@@ -1673,6 +1703,7 @@ void BKE_brush_sculpt_reset(Brush *br)
     case SCULPT_TOOL_PAINT:
     case SCULPT_TOOL_MASK:
     case SCULPT_TOOL_DRAW_FACE_SETS:
+    case SCULPT_TOOL_DISPLACEMENT_ERASER:
       br->add_col[0] = 0.75f;
       br->add_col[1] = 0.75f;
       br->add_col[2] = 0.75f;
@@ -1740,7 +1771,7 @@ float BKE_brush_sample_tex_3d(const Scene *scene,
   }
   else if (mtex->brush_map_mode == MTEX_MAP_MODE_STENCIL) {
     float rotation = -mtex->rot;
-    float point_2d[2] = {point[0], point[1]};
+    const float point_2d[2] = {point[0], point[1]};
     float x, y;
     float co[3];
 
@@ -1770,7 +1801,7 @@ float BKE_brush_sample_tex_3d(const Scene *scene,
   }
   else {
     float rotation = -mtex->rot;
-    float point_2d[2] = {point[0], point[1]};
+    const float point_2d[2] = {point[0], point[1]};
     float x = 0.0f, y = 0.0f; /* Quite warnings */
     float invradius = 1.0f;   /* Quite warnings */
     float co[3];
@@ -1853,7 +1884,7 @@ float BKE_brush_sample_masktex(
   }
   if (mtex->brush_map_mode == MTEX_MAP_MODE_STENCIL) {
     float rotation = -mtex->rot;
-    float point_2d[2] = {point[0], point[1]};
+    const float point_2d[2] = {point[0], point[1]};
     float x, y;
     float co[3];
 
@@ -1883,7 +1914,7 @@ float BKE_brush_sample_masktex(
   }
   else {
     float rotation = -mtex->rot;
-    float point_2d[2] = {point[0], point[1]};
+    const float point_2d[2] = {point[0], point[1]};
     float x = 0.0f, y = 0.0f; /* Quite warnings */
     float invradius = 1.0f;   /* Quite warnings */
     float co[3];
@@ -2274,7 +2305,7 @@ struct ImBuf *BKE_brush_gen_radial_control_imbuf(Brush *br, bool secondary, bool
   int half = side / 2;
   int i, j;
 
-  BKE_curvemapping_initialize(br->curve);
+  BKE_curvemapping_init(br->curve);
   texcache = BKE_brush_gen_texture_cache(br, half, secondary);
   im->rect_float = MEM_callocN(sizeof(float) * side * side, "radial control rect");
   im->x = im->y = side;

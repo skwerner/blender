@@ -21,21 +21,18 @@
  * \ingroup gpu
  */
 
-#ifndef __GPU_SHADER_H__
-#define __GPU_SHADER_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-typedef struct GPUShader GPUShader;
-struct GPUShaderInterface;
 struct GPUTexture;
-struct GPUUniformBuffer;
+struct GPUUniformBuf;
+struct GPUVertBuf;
 
-/* GPU Shader
- * - only for fragment shaders now
- * - must call texture bind before setting a texture as uniform! */
+/** Opaque type hidding blender::gpu::Shader */
+typedef struct GPUShader GPUShader;
 
 typedef enum eGPUShaderTFBType {
   GPU_SHADER_TFB_NONE = 0, /* Transform feedback unsupported. */
@@ -44,37 +41,36 @@ typedef enum eGPUShaderTFBType {
   GPU_SHADER_TFB_TRIANGLES = 3,
 } eGPUShaderTFBType;
 
-GPUShader *GPU_shader_create(const char *vertexcode,
+GPUShader *GPU_shader_create(const char *vertcode,
                              const char *fragcode,
-                             const char *geocode,
+                             const char *geomcode,
                              const char *libcode,
                              const char *defines,
-                             const char *shader_name);
-GPUShader *GPU_shader_create_from_python(const char *vertexcode,
+                             const char *shname);
+GPUShader *GPU_shader_create_from_python(const char *vertcode,
                                          const char *fragcode,
-                                         const char *geocode,
+                                         const char *geomcode,
                                          const char *libcode,
                                          const char *defines);
-GPUShader *GPU_shader_create_ex(const char *vertexcode,
+GPUShader *GPU_shader_create_ex(const char *vertcode,
                                 const char *fragcode,
-                                const char *geocode,
+                                const char *geomcode,
                                 const char *libcode,
                                 const char *defines,
                                 const eGPUShaderTFBType tf_type,
                                 const char **tf_names,
                                 const int tf_count,
-                                const char *shader_name);
-GPUShader *GPU_shader_load_from_binary(const char *binary,
-                                       const int binary_format,
-                                       const int binary_len,
-                                       const char *shname);
+                                const char *shname);
+
 struct GPU_ShaderCreateFromArray_Params {
   const char **vert, **geom, **frag, **defs;
 };
 struct GPUShader *GPU_shader_create_from_arrays_impl(
-    const struct GPU_ShaderCreateFromArray_Params *params);
+    const struct GPU_ShaderCreateFromArray_Params *params, const char *func, int line);
+
 #define GPU_shader_create_from_arrays(...) \
-  GPU_shader_create_from_arrays_impl(&(const struct GPU_ShaderCreateFromArray_Params)__VA_ARGS__)
+  GPU_shader_create_from_arrays_impl( \
+      &(const struct GPU_ShaderCreateFromArray_Params)__VA_ARGS__, __func__, __LINE__)
 
 void GPU_shader_free(GPUShader *shader);
 
@@ -82,14 +78,47 @@ void GPU_shader_bind(GPUShader *shader);
 void GPU_shader_unbind(void);
 
 /* Returns true if transform feedback was successfully enabled. */
-bool GPU_shader_transform_feedback_enable(GPUShader *shader, unsigned int vbo_id);
+bool GPU_shader_transform_feedback_enable(GPUShader *shader, struct GPUVertBuf *vertbuf);
 void GPU_shader_transform_feedback_disable(GPUShader *shader);
 
 int GPU_shader_get_program(GPUShader *shader);
 
-void *GPU_shader_get_interface(GPUShader *shader);
+typedef enum {
+  GPU_UNIFORM_MODEL = 0,      /* mat4 ModelMatrix */
+  GPU_UNIFORM_VIEW,           /* mat4 ViewMatrix */
+  GPU_UNIFORM_MODELVIEW,      /* mat4 ModelViewMatrix */
+  GPU_UNIFORM_PROJECTION,     /* mat4 ProjectionMatrix */
+  GPU_UNIFORM_VIEWPROJECTION, /* mat4 ViewProjectionMatrix */
+  GPU_UNIFORM_MVP,            /* mat4 ModelViewProjectionMatrix */
 
-void GPU_shader_set_srgb_uniform(const struct GPUShaderInterface *interface);
+  GPU_UNIFORM_MODEL_INV,          /* mat4 ModelMatrixInverse */
+  GPU_UNIFORM_VIEW_INV,           /* mat4 ViewMatrixInverse */
+  GPU_UNIFORM_MODELVIEW_INV,      /* mat4 ModelViewMatrixInverse */
+  GPU_UNIFORM_PROJECTION_INV,     /* mat4 ProjectionMatrixInverse */
+  GPU_UNIFORM_VIEWPROJECTION_INV, /* mat4 ViewProjectionMatrixInverse */
+
+  GPU_UNIFORM_NORMAL,     /* mat3 NormalMatrix */
+  GPU_UNIFORM_ORCO,       /* vec4 OrcoTexCoFactors[] */
+  GPU_UNIFORM_CLIPPLANES, /* vec4 WorldClipPlanes[] */
+
+  GPU_UNIFORM_COLOR,          /* vec4 color */
+  GPU_UNIFORM_BASE_INSTANCE,  /* int baseInstance */
+  GPU_UNIFORM_RESOURCE_CHUNK, /* int resourceChunk */
+  GPU_UNIFORM_RESOURCE_ID,    /* int resourceId */
+  GPU_UNIFORM_SRGB_TRANSFORM, /* bool srgbTarget */
+
+  GPU_NUM_UNIFORMS, /* Special value, denotes number of builtin uniforms. */
+} GPUUniformBuiltin;
+
+typedef enum {
+  GPU_UNIFORM_BLOCK_VIEW = 0, /* viewBlock */
+  GPU_UNIFORM_BLOCK_MODEL,    /* modelBlock */
+  GPU_UNIFORM_BLOCK_INFO,     /* infoBlock */
+
+  GPU_NUM_UNIFORM_BLOCKS, /* Special value, denotes number of builtin uniforms block. */
+} GPUUniformBlockBuiltin;
+
+void GPU_shader_set_srgb_uniform(GPUShader *shader);
 
 int GPU_shader_get_uniform(GPUShader *shader, const char *name);
 int GPU_shader_get_builtin_uniform(GPUShader *shader, int builtin);
@@ -107,9 +136,20 @@ void GPU_shader_uniform_vector_int(
 void GPU_shader_uniform_float(GPUShader *shader, int location, float value);
 void GPU_shader_uniform_int(GPUShader *shader, int location, int value);
 
-int GPU_shader_get_attribute(GPUShader *shader, const char *name);
+void GPU_shader_uniform_1i(GPUShader *sh, const char *name, int value);
+void GPU_shader_uniform_1b(GPUShader *sh, const char *name, bool value);
+void GPU_shader_uniform_1f(GPUShader *sh, const char *name, float value);
+void GPU_shader_uniform_2f(GPUShader *sh, const char *name, float x, float y);
+void GPU_shader_uniform_3f(GPUShader *sh, const char *name, float x, float y, float z);
+void GPU_shader_uniform_4f(GPUShader *sh, const char *name, float x, float y, float z, float w);
+void GPU_shader_uniform_2fv(GPUShader *sh, const char *name, const float data[2]);
+void GPU_shader_uniform_3fv(GPUShader *sh, const char *name, const float data[3]);
+void GPU_shader_uniform_4fv(GPUShader *sh, const char *name, const float data[4]);
+void GPU_shader_uniform_mat4(GPUShader *sh, const char *name, const float data[4][4]);
+void GPU_shader_uniform_2fv_array(GPUShader *sh, const char *name, int len, const float (*val)[2]);
+void GPU_shader_uniform_4fv_array(GPUShader *sh, const char *name, int len, const float (*val)[4]);
 
-char *GPU_shader_get_binary(GPUShader *shader, uint *r_binary_format, int *r_binary_len);
+int GPU_shader_get_attribute(GPUShader *shader, const char *name);
 
 void GPU_shader_set_framebuffer_srgb_target(int use_srgb_to_linear);
 
@@ -372,5 +412,3 @@ void GPU_shader_free_builtin_shaders(void);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __GPU_SHADER_H__ */

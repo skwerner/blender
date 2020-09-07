@@ -637,6 +637,8 @@ static void rna_Sequence_name_set(PointerRNA *ptr, const char *value)
   char oldname[sizeof(seq->name)];
   AnimData *adt;
 
+  BKE_sequencer_prefetch_stop(scene);
+
   /* make a copy of the old name first */
   BLI_strncpy(oldname, seq->name + 2, sizeof(seq->name) - 2);
 
@@ -872,7 +874,7 @@ static void rna_Sequence_input_set(PointerRNA *ptr,
   Sequence *input = ptr_value.data;
 
   if (BKE_sequencer_render_loop_check(input, seq)) {
-    BKE_report(reports, RPT_ERROR, "Cannot reassign inputs: recursion detected.");
+    BKE_report(reports, RPT_ERROR, "Cannot reassign inputs: recursion detected");
     return;
   }
 

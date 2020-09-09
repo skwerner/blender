@@ -59,6 +59,7 @@ BlenderSession::BlenderSession(BL::RenderEngine &b_engine,
                                BL::BlendData &b_data,
                                bool preview_osl)
     : session(NULL),
+      scene(NULL),
       sync(NULL),
       b_engine(b_engine),
       b_userpref(b_userpref),
@@ -88,6 +89,7 @@ BlenderSession::BlenderSession(BL::RenderEngine &b_engine,
                                int width,
                                int height)
     : session(NULL),
+      scene(NULL),
       sync(NULL),
       b_engine(b_engine),
       b_userpref(b_userpref),
@@ -158,7 +160,7 @@ void BlenderSession::create_session()
 
   /* set buffer parameters */
   BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_scene, b_render, b_v3d, b_rv3d, scene->camera, width, height);
+      b_render, b_v3d, b_rv3d, scene->camera, width, height, session_params.denoising.use);
   session->reset(buffer_params, session_params.samples);
 
   b_engine.use_highlight_tiles(session_params.progressive_refine == false);
@@ -239,8 +241,13 @@ void BlenderSession::reset_session(BL::BlendData &b_data, BL::Depsgraph &b_depsg
 
   BL::SpaceView3D b_null_space_view3d(PointerRNA_NULL);
   BL::RegionView3D b_null_region_view3d(PointerRNA_NULL);
-  BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_scene, b_render, b_null_space_view3d, b_null_region_view3d, scene->camera, width, height);
+  BufferParams buffer_params = BlenderSync::get_buffer_params(b_render,
+                                                              b_null_space_view3d,
+                                                              b_null_region_view3d,
+                                                              scene->camera,
+                                                              width,
+                                                              height,
+                                                              session_params.denoising.use);
   session->reset(buffer_params, session_params.samples);
 
   b_engine.use_highlight_tiles(session_params.progressive_refine == false);
@@ -356,7 +363,8 @@ void BlenderSession::do_write_update_render_tile(RenderTile &rtile,
       PassType pass_type = BlenderSync::get_pass_type(b_pass);
       int components = b_pass.channels();
 
-      rtile.buffers->set_pass_rect(pass_type, components, (float *)b_pass.rect());
+      rtile.buffers->set_pass_rect(
+          pass_type, components, (float *)b_pass.rect(), rtile.num_samples);
     }
 
     end_render_result(b_engine, b_rr, false, false, false);
@@ -468,14 +476,13 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
   session->update_render_tile_cb = function_bind(
       &BlenderSession::update_render_tile, this, _1, _2);
 
+  BL::ViewLayer b_view_layer = b_depsgraph.view_layer_eval();
+
   /* get buffer parameters */
   SessionParams session_params = BlenderSync::get_session_params(
-      b_engine, b_userpref, b_scene, background);
+      b_engine, b_userpref, b_scene, background, b_view_layer);
   BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_scene, b_render, b_v3d, b_rv3d, scene->camera, width, height);
-
-  /* render each layer */
-  BL::ViewLayer b_view_layer = b_depsgraph.view_layer_eval();
+      b_render, b_v3d, b_rv3d, scene->camera, width, height, session_params.denoising.use);
 
   /* temporary render result to find needed passes and views */
   BL::RenderResult b_rr = begin_render_result(
@@ -485,39 +492,18 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
   BL::RenderLayer b_rlay = *b_single_rlay;
   b_rlay_name = b_view_layer.name();
 
-  /* add passes */
+  /* Update denoising parameters. */
+  session->set_denoising(session_params.denoising);
+
+  /* Compute render passes and film settings. */
   vector<Pass> passes = sync->sync_render_passes(
-      b_rlay, b_view_layer, session_params.adaptive_sampling);
+      b_rlay, b_view_layer, session_params.adaptive_sampling, session_params.denoising);
+
+  /* Set buffer params, using film settings from sync_render_passes. */
   buffer_params.passes = passes;
-
-  PointerRNA crl = RNA_pointer_get(&b_view_layer.ptr, "cycles");
-  bool use_denoising = get_boolean(crl, "use_denoising");
-  bool use_optix_denoising = get_boolean(crl, "use_optix_denoising");
-  bool write_denoising_passes = get_boolean(crl, "denoising_store_passes");
-
-  buffer_params.denoising_data_pass = use_denoising || write_denoising_passes;
-  buffer_params.denoising_clean_pass = (scene->film->denoising_flags & DENOISING_CLEAN_ALL_PASSES);
-  buffer_params.denoising_prefiltered_pass = write_denoising_passes && !use_optix_denoising;
-
-  session->params.run_denoising = use_denoising || write_denoising_passes;
-  session->params.full_denoising = use_denoising && !use_optix_denoising;
-  session->params.optix_denoising = use_denoising && use_optix_denoising;
-  session->params.write_denoising_passes = write_denoising_passes && !use_optix_denoising;
-  session->params.denoising.radius = get_int(crl, "denoising_radius");
-  session->params.denoising.strength = get_float(crl, "denoising_strength");
-  session->params.denoising.feature_strength = get_float(crl, "denoising_feature_strength");
-  session->params.denoising.relative_pca = get_boolean(crl, "denoising_relative_pca");
-  session->params.denoising.optix_input_passes = get_enum(crl, "denoising_optix_input_passes");
-  session->tile_manager.schedule_denoising = session->params.run_denoising;
-
-  scene->film->denoising_data_pass = buffer_params.denoising_data_pass;
-  scene->film->denoising_clean_pass = buffer_params.denoising_clean_pass;
-  scene->film->denoising_prefiltered_pass = buffer_params.denoising_prefiltered_pass;
-
-  scene->film->pass_alpha_threshold = b_view_layer.pass_alpha_threshold();
-  scene->film->tag_passes_update(scene, passes);
-  scene->film->tag_update(scene);
-  scene->integrator->tag_update(scene);
+  buffer_params.denoising_data_pass = scene->film->denoising_data_pass;
+  buffer_params.denoising_clean_pass = scene->film->denoising_clean_pass;
+  buffer_params.denoising_prefiltered_pass = scene->film->denoising_prefiltered_pass;
 
   BL::RenderResult::views_iterator b_view_iter;
 
@@ -660,7 +646,7 @@ void BlenderSession::bake(BL::Depsgraph &b_depsgraph_,
 
   /* Passes are identified by name, so in order to return the combined pass we need to set the
    * name. */
-  Pass::add(PASS_COMBINED, scene->film->passes, "Combined");
+  Pass::add(PASS_COMBINED, scene->passes, "Combined");
 
   session->read_bake_tile_cb = function_bind(&BlenderSession::read_render_tile, this, _1);
   session->write_render_tile_cb = function_bind(&BlenderSession::write_render_tile, this, _1);
@@ -693,7 +679,7 @@ void BlenderSession::bake(BL::Depsgraph &b_depsgraph_,
     BufferParams buffer_params;
     buffer_params.width = bake_width;
     buffer_params.height = bake_height;
-    buffer_params.passes = scene->film->passes;
+    buffer_params.passes = scene->passes;
 
     /* Update session. */
     session->tile_manager.set_samples(session_params.samples);
@@ -798,7 +784,7 @@ void BlenderSession::synchronize(BL::Depsgraph &b_depsgraph_)
 
   /* increase samples, but never decrease */
   session->set_samples(session_params.samples);
-  session->set_denoising_start_sample(session_params.denoising_start_sample);
+  session->set_denoising_start_sample(session_params.denoising.start_sample);
   session->set_pause(session_pause);
 
   /* copy recalc flags, outside of mutex so we can decide to do the real
@@ -831,21 +817,17 @@ void BlenderSession::synchronize(BL::Depsgraph &b_depsgraph_)
 
   /* get buffer parameters */
   BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_scene, b_render, b_v3d, b_rv3d, scene->camera, width, height);
+      b_render, b_v3d, b_rv3d, scene->camera, width, height, session_params.denoising.use);
 
-  if (session_params.device.type != DEVICE_OPTIX &&
-      session_params.device.denoising_devices.empty()) {
-    /* cannot use OptiX denoising when it is not supported by the device. */
-    buffer_params.denoising_data_pass = false;
-  }
-  else {
-    session->set_denoising(buffer_params.denoising_data_pass, true);
+  if (!buffer_params.denoising_data_pass) {
+    session_params.denoising.use = false;
   }
 
+  session->set_denoising(session_params.denoising);
+
+  /* Update film if denoising data was enabled or disabled. */
   if (scene->film->denoising_data_pass != buffer_params.denoising_data_pass) {
     scene->film->denoising_data_pass = buffer_params.denoising_data_pass;
-
-    /* Force a scene and session reset below. */
     scene->film->tag_update(scene);
   }
 
@@ -917,7 +899,7 @@ bool BlenderSession::draw(int w, int h)
       SessionParams session_params = BlenderSync::get_session_params(
           b_engine, b_userpref, b_scene, background);
       BufferParams buffer_params = BlenderSync::get_buffer_params(
-          b_scene, b_render, b_v3d, b_rv3d, scene->camera, width, height);
+          b_render, b_v3d, b_rv3d, scene->camera, width, height, session_params.denoising.use);
       bool session_pause = BlenderSync::get_session_pause(b_scene, background);
 
       if (session_pause == false) {
@@ -935,7 +917,7 @@ bool BlenderSession::draw(int w, int h)
 
   /* draw */
   BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_scene, b_render, b_v3d, b_rv3d, scene->camera, width, height);
+      b_render, b_v3d, b_rv3d, scene->camera, width, height, session->params.denoising.use);
   DeviceDrawParams draw_params;
 
   if (session->params.display_buffer_linear) {
@@ -991,7 +973,8 @@ void BlenderSession::update_status_progress()
     remaining_time = (1.0 - (double)progress) * (render_time / (double)progress);
 
   if (background) {
-    scene_status += " | " + scene->name;
+    if (scene)
+      scene_status += " | " + scene->name;
     if (b_rlay_name != "")
       scene_status += ", " + b_rlay_name;
 

@@ -21,8 +21,7 @@
  * \ingroup edobj
  */
 
-#ifndef __OBJECT_INTERN_H__
-#define __OBJECT_INTERN_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -118,6 +117,7 @@ void OBJECT_OT_speaker_add(struct wmOperatorType *ot);
 void OBJECT_OT_hair_add(struct wmOperatorType *ot);
 void OBJECT_OT_pointcloud_add(struct wmOperatorType *ot);
 void OBJECT_OT_collection_instance_add(struct wmOperatorType *ot);
+void OBJECT_OT_data_instance_add(struct wmOperatorType *ot);
 
 void OBJECT_OT_duplicates_make_real(struct wmOperatorType *ot);
 void OBJECT_OT_duplicate(struct wmOperatorType *ot);
@@ -150,10 +150,13 @@ void COLLECTION_OT_objects_remove_active(struct wmOperatorType *ot);
 bool edit_modifier_poll_generic(struct bContext *C,
                                 struct StructRNA *rna_type,
                                 int obtype_flag,
-                                const bool is_editmode_allowed);
-bool edit_modifier_poll(struct bContext *C);
+                                const bool is_editmode_allowed,
+                                const bool is_liboverride_allowed);
 void edit_modifier_properties(struct wmOperatorType *ot);
-int edit_modifier_invoke_properties(struct bContext *C, struct wmOperator *op);
+bool edit_modifier_invoke_properties(struct bContext *C,
+                                     struct wmOperator *op,
+                                     const struct wmEvent *event,
+                                     int *r_retval);
 struct ModifierData *edit_modifier_property_get(struct wmOperator *op,
                                                 struct Object *ob,
                                                 int type);
@@ -164,6 +167,7 @@ void OBJECT_OT_modifier_move_up(struct wmOperatorType *ot);
 void OBJECT_OT_modifier_move_down(struct wmOperatorType *ot);
 void OBJECT_OT_modifier_move_to_index(struct wmOperatorType *ot);
 void OBJECT_OT_modifier_apply(struct wmOperatorType *ot);
+void OBJECT_OT_modifier_apply_as_shapekey(wmOperatorType *ot);
 void OBJECT_OT_modifier_convert(struct wmOperatorType *ot);
 void OBJECT_OT_modifier_copy(struct wmOperatorType *ot);
 void OBJECT_OT_multires_subdivide(struct wmOperatorType *ot);
@@ -307,5 +311,3 @@ void OBJECT_OT_datalayout_transfer(struct wmOperatorType *ot);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __OBJECT_INTERN_H__ */

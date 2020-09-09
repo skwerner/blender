@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BLO_WRITEFILE_H__
-#define __BLO_WRITEFILE_H__
+#pragma once
 
 /** \file
  * \ingroup blenloader
@@ -30,8 +29,14 @@ struct Main;
 struct MemFile;
 struct ReportList;
 
+/* -------------------------------------------------------------------- */
+/** \name BLO Write File API
+ *
+ * \see #BLO_read_from_file for file reading.
+ * \{ */
+
 /**
- * Adjust paths when saving (kept unless #G_FILE_SAVE_COPY is set).
+ * Adjust paths when saving (kept unless #BlendFileWriteParams.use_save_as_copy is set).
  */
 typedef enum eBLO_WritePathRemap {
   /** No path manipulation. */
@@ -66,4 +71,4 @@ extern bool BLO_write_file_mem(struct Main *mainvar,
                                struct MemFile *current,
                                int write_flags);
 
-#endif
+/** \} */

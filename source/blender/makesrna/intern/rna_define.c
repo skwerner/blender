@@ -1515,6 +1515,9 @@ void RNA_def_property_flag(PropertyRNA *prop, PropertyFlag flag)
 void RNA_def_property_clear_flag(PropertyRNA *prop, PropertyFlag flag)
 {
   prop->flag &= ~flag;
+  if (flag & PROP_PTR_NO_OWNERSHIP) {
+    prop->flag_internal |= PROP_INTERN_PTR_OWNERSHIP_FORCED;
+  }
 }
 
 void RNA_def_property_override_flag(PropertyRNA *prop, PropertyOverrideFlag flag)
@@ -4381,7 +4384,7 @@ void RNA_enum_item_add(EnumPropertyItem **items, int *totitem, const EnumPropert
   int tot = *totitem;
 
   if (tot == 0) {
-    *items = MEM_callocN(sizeof(EnumPropertyItem) * 8, __func__);
+    *items = MEM_callocN(sizeof(EnumPropertyItem[8]), __func__);
   }
   else if (tot >= 8 && (tot & (tot - 1)) == 0) {
     /* power of two > 8 */

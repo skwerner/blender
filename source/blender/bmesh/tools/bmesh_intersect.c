@@ -99,9 +99,7 @@ static BMEdge *bm_vert_other_edge(BMVert *v, BMEdge *e)
   if (v->e != e) {
     return v->e;
   }
-  else {
-    return BM_DISK_EDGE_NEXT(v->e, v);
-  }
+  return BM_DISK_EDGE_NEXT(v->e, v);
 }
 #endif
 
@@ -900,7 +898,7 @@ static int isect_bvhtree_point_v3(BVHTree *tree, const float **looptris, const f
       &z_buffer,
   };
   BVHTreeRayHit hit = {0};
-  float dir[3] = {1.0f, 0.0f, 0.0f};
+  const float dir[3] = {1.0f, 0.0f, 0.0f};
 
   /* Need to initialize hit even tho it's not used.
    * This is to make it so kd-tree believes we didn't intersect anything and
@@ -1341,10 +1339,8 @@ bool BM_mesh_intersect(BMesh *bm,
             splice_pair[1] = v_next;
             break;
           }
-          else {
-            e_next = bm_vert_other_edge(v_next, e_step);
-          }
 
+          e_next = bm_vert_other_edge(v_next, e_step);
           e_step = e_next;
           v_step = v_next;
           BM_elem_flag_enable(e_step, BM_ELEM_TAG);

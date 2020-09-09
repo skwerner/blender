@@ -20,7 +20,7 @@ CCL_NAMESPACE_BEGIN
 /* Curve primitive intersection functions.
  *
  * The code here was adapted from curve_intersector_sweep.h in Embree, to get
- * an exact match betwee Embree CPU ray-tracing and our GPU ray-tracing. */
+ * an exact match between Embree CPU ray-tracing and our GPU ray-tracing. */
 
 #define CURVE_NUM_BEZIER_SUBDIVISIONS 3
 #define CURVE_NUM_BEZIER_SUBDIVISIONS_UNSTABLE (CURVE_NUM_BEZIER_SUBDIVISIONS + 1)
@@ -176,7 +176,7 @@ ccl_device bool curve_intersect_iterative(const float3 ray_dir,
 {
   const float length_ray_dir = len(ray_dir);
 
-  /* Error of curve evaluations is propertional to largest coordinate. */
+  /* Error of curve evaluations is proportional to largest coordinate. */
   const float4 box_min = min(min(curve[0], curve[1]), min(curve[2], curve[3]));
   const float4 box_max = max(min(curve[0], curve[1]), max(curve[2], curve[3]));
   const float4 box_abs = max(fabs(box_min), fabs(box_max));
@@ -734,7 +734,6 @@ ccl_device_inline void curve_shader_setup(KernelGlobals *kg,
   }
 
   sd->u = isect->u;
-  sd->v = isect->v;
 
   P = P + D * t;
 
@@ -750,6 +749,7 @@ ccl_device_inline void curve_shader_setup(KernelGlobals *kg,
 
     sd->N = normalize(sine * bitangent - cosine * normalize(cross(tangent, bitangent)));
     sd->Ng = -D;
+    sd->v = isect->v;
 
 #  if 0
     /* This approximates the position and geometric normal of a thick curve too,
@@ -764,8 +764,11 @@ ccl_device_inline void curve_shader_setup(KernelGlobals *kg,
      * This could be optimized by recording the normal in the intersection,
      * however for Optix this would go beyond the size of the payload. */
     const float3 P_inside = float4_to_float3(catmull_rom_basis_eval(P_curve, isect->u));
-    sd->Ng = normalize(P - P_inside);
-    sd->N = sd->Ng;
+    const float3 Ng = normalize(P - P_inside);
+
+    sd->N = Ng;
+    sd->Ng = Ng;
+    sd->v = 0.0f;
   }
 
 #  ifdef __DPDU__

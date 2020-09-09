@@ -268,18 +268,17 @@ void LATTICE_OT_select_mirror(wmOperatorType *ot)
  * \{ */
 
 static bool lattice_test_bitmap_uvw(
-    Lattice *lt, BLI_bitmap *selpoints, int u, int v, int w, const bool selected)
+    Lattice *lt, const BLI_bitmap *selpoints, int u, int v, int w, const bool selected)
 {
   if ((u < 0 || u >= lt->pntsu) || (v < 0 || v >= lt->pntsv) || (w < 0 || w >= lt->pntsw)) {
     return false;
   }
-  else {
-    int i = BKE_lattice_index_from_uvw(lt, u, v, w);
-    if (lt->def[i].hide == 0) {
-      return (BLI_BITMAP_TEST(selpoints, i) != 0) == selected;
-    }
-    return false;
+
+  int i = BKE_lattice_index_from_uvw(lt, u, v, w);
+  if (lt->def[i].hide == 0) {
+    return (BLI_BITMAP_TEST(selpoints, i) != 0) == selected;
   }
+  return false;
 }
 
 static int lattice_select_more_less(bContext *C, const bool select)

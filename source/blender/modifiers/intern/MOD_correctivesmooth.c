@@ -54,6 +54,8 @@
 #include "MOD_ui_common.h"
 #include "MOD_util.h"
 
+#include "BLO_read_write.h"
+
 #include "BLI_strict_flags.h"
 
 #include "DEG_depsgraph_query.h"
@@ -781,40 +783,61 @@ static void deformVertsEM(ModifierData *md,
   }
 }
 
-static void panel_draw(const bContext *C, Panel *panel)
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
   PointerRNA ob_ptr;
-  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
 
   uiLayoutSetPropSep(layout, true);
 
-  uiItemR(layout, &ptr, "factor", 0, IFACE_("Factor"), ICON_NONE);
-  uiItemR(layout, &ptr, "iterations", 0, NULL, ICON_NONE);
-  uiItemR(layout, &ptr, "scale", 0, NULL, ICON_NONE);
-  uiItemR(layout, &ptr, "smooth_type", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "factor", 0, IFACE_("Factor"), ICON_NONE);
+  uiItemR(layout, ptr, "iterations", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "scale", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "smooth_type", 0, NULL, ICON_NONE);
 
-  modifier_vgroup_ui(layout, &ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
+  modifier_vgroup_ui(layout, ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
 
-  uiItemR(layout, &ptr, "use_only_smooth", 0, NULL, ICON_NONE);
-  uiItemR(layout, &ptr, "use_pin_boundary", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "use_only_smooth", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "use_pin_boundary", 0, NULL, ICON_NONE);
 
-  uiItemR(layout, &ptr, "rest_source", 0, NULL, ICON_NONE);
-  if (RNA_enum_get(&ptr, "rest_source") == MOD_CORRECTIVESMOOTH_RESTSOURCE_BIND) {
+  uiItemR(layout, ptr, "rest_source", 0, NULL, ICON_NONE);
+  if (RNA_enum_get(ptr, "rest_source") == MOD_CORRECTIVESMOOTH_RESTSOURCE_BIND) {
     uiItemO(layout,
-            (RNA_boolean_get(&ptr, "is_bind") ? IFACE_("Unbind") : IFACE_("Bind")),
+            (RNA_boolean_get(ptr, "is_bind") ? IFACE_("Unbind") : IFACE_("Bind")),
             ICON_NONE,
             "OBJECT_OT_correctivesmooth_bind");
   }
 
-  modifier_panel_end(layout, &ptr);
+  modifier_panel_end(layout, ptr);
 }
 
 static void panelRegister(ARegionType *region_type)
 {
   modifier_panel_register(region_type, eModifierType_CorrectiveSmooth, panel_draw);
+}
+
+static void blendWrite(BlendWriter *writer, const ModifierData *md)
+{
+  const CorrectiveSmoothModifierData *csmd = (const CorrectiveSmoothModifierData *)md;
+
+  if (csmd->bind_coords) {
+    BLO_write_float3_array(writer, (int)csmd->bind_coords_num, (float *)csmd->bind_coords);
+  }
+}
+
+static void blendRead(BlendDataReader *reader, ModifierData *md)
+{
+  CorrectiveSmoothModifierData *csmd = (CorrectiveSmoothModifierData *)md;
+
+  if (csmd->bind_coords) {
+    BLO_read_float3_array(reader, (int)csmd->bind_coords_num, (float **)&csmd->bind_coords);
+  }
+
+  /* runtime only */
+  csmd->delta_cache.deltas = NULL;
+  csmd->delta_cache.totverts = 0;
 }
 
 ModifierTypeInfo modifierType_CorrectiveSmooth = {
@@ -847,6 +870,6 @@ ModifierTypeInfo modifierType_CorrectiveSmooth = {
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
     /* panelRegister */ panelRegister,
-    /* blendWrite */ NULL,
-    /* blendRead */ NULL,
+    /* blendWrite */ blendWrite,
+    /* blendRead */ blendRead,
 };

@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
  */
-#ifndef __DNA_KEY_TYPES_H__
-#define __DNA_KEY_TYPES_H__
+#pragma once
 
 /** \file
  * \ingroup DNA
@@ -113,7 +112,7 @@ typedef struct Key {
 
   /**
    * Can never be 0, this is used for detecting old data.
-   * current free uid for keyblocks
+   * current free UID for key-blocks.
    */
   int uidgen;
 } Key;
@@ -159,5 +158,3 @@ enum {
 
 #define KEYELEM_ELEM_LEN_BEZTRIPLE 4
 #define KEYELEM_FLOAT_LEN_BEZTRIPLE (KEYELEM_ELEM_LEN_BEZTRIPLE * KEYELEM_ELEM_SIZE_CURVE)
-
-#endif /* __DNA_KEY_TYPES_H__  */

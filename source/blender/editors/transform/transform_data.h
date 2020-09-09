@@ -21,8 +21,7 @@
  * \ingroup edtransform
  */
 
-#ifndef __TRANSFORM_DATA_H__
-#define __TRANSFORM_DATA_H__
+#pragma once
 
 struct bConstraint;
 struct Object;
@@ -88,8 +87,8 @@ typedef struct TransDataExtension {
    * It is the same but without the #Bone.bone_mat, see #TD_PBONE_LOCAL_MTX_C. */
   float l_smtx[3][3];
   /** The rotscale matrix of pose bone, to allow using snap-align in translation mode,
-   * when td->mtx is the loc pose bone matrix (and hence can't be used to apply
-   * rotation in some cases, namely when a bone is in "NoLocal" or "Hinge" mode)... */
+   * when #TransData.mtx is the loc pose bone matrix (and hence can't be used to apply
+   * rotation in some cases, namely when a bone is in "No-Local" or "Hinge" mode)... */
   float r_mtx[3][3];
   /** Inverse of previous one. */
   float r_smtx[3][3];
@@ -193,5 +192,3 @@ enum {
 /* Hard min/max for proportional size. */
 #define T_PROP_SIZE_MIN 1e-6f
 #define T_PROP_SIZE_MAX 1e12f
-
-#endif

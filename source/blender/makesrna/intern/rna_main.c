@@ -109,7 +109,7 @@ RNA_MAIN_LISTBASE_FUNCS_DEF(collections)
 RNA_MAIN_LISTBASE_FUNCS_DEF(curves)
 RNA_MAIN_LISTBASE_FUNCS_DEF(fonts)
 RNA_MAIN_LISTBASE_FUNCS_DEF(gpencils)
-#  ifdef WITH_NEW_OBJECT_TYPES
+#  ifdef WITH_HAIR_NODES
 RNA_MAIN_LISTBASE_FUNCS_DEF(hairs)
 #  endif
 RNA_MAIN_LISTBASE_FUNCS_DEF(images)
@@ -128,13 +128,13 @@ RNA_MAIN_LISTBASE_FUNCS_DEF(objects)
 RNA_MAIN_LISTBASE_FUNCS_DEF(paintcurves)
 RNA_MAIN_LISTBASE_FUNCS_DEF(palettes)
 RNA_MAIN_LISTBASE_FUNCS_DEF(particles)
-#  ifdef WITH_NEW_OBJECT_TYPES
+#  ifdef WITH_PARTICLE_NODES
 RNA_MAIN_LISTBASE_FUNCS_DEF(pointclouds)
 #  endif
 RNA_MAIN_LISTBASE_FUNCS_DEF(scenes)
 RNA_MAIN_LISTBASE_FUNCS_DEF(screens)
 RNA_MAIN_LISTBASE_FUNCS_DEF(shapekeys)
-#  ifdef WITH_NEW_SIMULATION_TYPE
+#  ifdef WITH_PARTICLE_NODES
 RNA_MAIN_LISTBASE_FUNCS_DEF(simulations)
 #  endif
 RNA_MAIN_LISTBASE_FUNCS_DEF(sounds)
@@ -390,8 +390,10 @@ void RNA_def_main(BlenderRNA *brna)
        "LightProbes",
        "LightProbe data-blocks",
        RNA_def_main_lightprobes},
-#  ifdef WITH_NEW_OBJECT_TYPES
+#  ifdef WITH_HAIR_NODES
       {"hairs", "Hair", "rna_Main_hairs_begin", "Hairs", "Hair data-blocks", RNA_def_main_hairs},
+#  endif
+#  ifdef WITH_PARTICLE_NODES
       {"pointclouds",
        "PointCloud",
        "rna_Main_pointclouds_begin",
@@ -405,7 +407,7 @@ void RNA_def_main(BlenderRNA *brna)
        "Volumes",
        "Volume data-blocks",
        RNA_def_main_volumes},
-#  ifdef WITH_NEW_SIMULATION_TYPE
+#  ifdef WITH_PARTICLE_NODES
       {"simulations",
        "Simulation",
        "rna_Main_simulations_begin",
@@ -420,7 +422,7 @@ void RNA_def_main(BlenderRNA *brna)
 
   srna = RNA_def_struct(brna, "BlendData", NULL);
   RNA_def_struct_ui_text(srna,
-                         "Blendfile Data",
+                         "Blend-file Data",
                          "Main data structure representing a .blend file and all its data-blocks");
   RNA_def_struct_ui_icon(srna, ICON_BLENDER);
 
@@ -446,7 +448,7 @@ void RNA_def_main(BlenderRNA *brna)
   prop = RNA_def_property(srna, "use_autopack", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_funcs(prop, "rna_Main_use_autopack_get", "rna_Main_use_autopack_set");
   RNA_def_property_ui_text(
-      prop, "Use Autopack", "Automatically pack all external data into .blend file");
+      prop, "Use Auto-pack", "Automatically pack all external data into .blend file");
 
   prop = RNA_def_int_vector(srna,
                             "version",
@@ -455,7 +457,7 @@ void RNA_def_main(BlenderRNA *brna)
                             0,
                             INT_MAX,
                             "Version",
-                            "Version of Blender the .blend was saved with",
+                            "File format version the .blend file was saved with",
                             0,
                             INT_MAX);
   RNA_def_property_int_funcs(prop, "rna_Main_version_get", NULL, NULL);

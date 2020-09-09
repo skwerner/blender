@@ -50,6 +50,7 @@
 #include "BLT_translation.h"
 
 #include "transform.h"
+#include "transform_constraints.h"
 #include "transform_convert.h"
 #include "transform_mode.h"
 #include "transform_snap.h"
@@ -96,22 +97,26 @@ typedef struct EdgeSlideParams {
 } EdgeSlideParams;
 
 /**
- * Get the first valid EdgeSlideData.
+ * Get the first valid TransDataContainer *.
  *
  * Note we cannot trust TRANS_DATA_CONTAINER_FIRST_OK because of multi-object that
  * may leave items with invalid custom data in the transform data container.
  */
-static EdgeSlideData *edgeSlideFirstGet(TransInfo *t)
+static TransDataContainer *edge_slide_container_first_ok(TransInfo *t)
 {
   FOREACH_TRANS_DATA_CONTAINER (t, tc) {
-    EdgeSlideData *sld = tc->custom.mode.data;
-    if (sld == NULL) {
-      continue;
+    if (tc->custom.mode.data) {
+      return tc;
     }
-    return sld;
   }
   BLI_assert(!"Should never happen, at least one EdgeSlideData should be valid");
   return NULL;
+}
+
+static EdgeSlideData *edgeSlideFirstGet(TransInfo *t)
+{
+  TransDataContainer *tc = edge_slide_container_first_ok(t);
+  return tc->custom.mode.data;
 }
 
 static void calcEdgeSlideCustomPoints(struct TransInfo *t)
@@ -276,15 +281,14 @@ static BMLoop *get_next_loop(
       copy_v3_v3(r_slide_vec, vec_accum);
       return l;
     }
-    else {
-      /* accumulate the normalized edge vector,
-       * normalize so some edges don't skew the result */
-      float tvec[3];
-      sub_v3_v3v3(tvec, BM_edge_other_vert(l->e, v)->co, v->co);
-      vec_accum_len += normalize_v3(tvec);
-      add_v3_v3(vec_accum, tvec);
-      i += 1;
-    }
+
+    /* accumulate the normalized edge vector,
+     * normalize so some edges don't skew the result */
+    float tvec[3];
+    sub_v3_v3v3(tvec, BM_edge_other_vert(l->e, v)->co, v->co);
+    vec_accum_len += normalize_v3(tvec);
+    add_v3_v3(vec_accum, tvec);
+    i += 1;
 
     if (BM_loop_other_edge_loop(l, v)->e == e_next) {
       if (i) {
@@ -530,7 +534,7 @@ static EdgeSlideData *createEdgeSlideVerts_double_side(TransInfo *t, TransDataCo
   int sv_tot;
   int *sv_table; /* BMVert -> sv_array index */
   EdgeSlideData *sld = MEM_callocN(sizeof(*sld), "sld");
-  float mval[2] = {(float)t->mval[0], (float)t->mval[1]};
+  const float mval[2] = {(float)t->mval[0], (float)t->mval[1]};
   int numsel, i, loop_nr;
   bool use_occlude_geometry = false;
   View3D *v3d = NULL;
@@ -890,7 +894,7 @@ static EdgeSlideData *createEdgeSlideVerts_single_side(TransInfo *t, TransDataCo
   int sv_tot;
   int *sv_table; /* BMVert -> sv_array index */
   EdgeSlideData *sld = MEM_callocN(sizeof(*sld), "sld");
-  float mval[2] = {(float)t->mval[0], (float)t->mval[1]};
+  const float mval[2] = {(float)t->mval[0], (float)t->mval[1]};
   int loop_nr;
   bool use_occlude_geometry = false;
   View3D *v3d = NULL;
@@ -1129,132 +1133,225 @@ static eRedrawFlag handleEventEdgeSlide(struct TransInfo *t, const struct wmEven
 
 void drawEdgeSlide(TransInfo *t)
 {
-  if ((t->mode == TFM_EDGE_SLIDE) && edgeSlideFirstGet(t)) {
-    const EdgeSlideParams *slp = t->custom.mode.data;
-    EdgeSlideData *sld = edgeSlideFirstGet(t);
-    const bool is_clamp = !(t->flag & T_ALT_TRANSFORM);
+  if (t->mode != TFM_EDGE_SLIDE) {
+    return;
+  }
 
+  EdgeSlideData *sld = edgeSlideFirstGet(t);
+  if (sld == NULL) {
+    return;
+  }
+
+  const EdgeSlideParams *slp = t->custom.mode.data;
+  const bool is_clamp = !(t->flag & T_ALT_TRANSFORM);
+
+  const float line_size = UI_GetThemeValuef(TH_OUTLINE_WIDTH) + 0.5f;
+
+  GPU_depth_test(GPU_DEPTH_NONE);
+
+  GPU_blend(GPU_BLEND_ALPHA);
+
+  GPU_matrix_push();
+  GPU_matrix_mul(TRANS_DATA_CONTAINER_FIRST_OK(t)->obedit->obmat);
+
+  uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
+
+  immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
+
+  if (slp->use_even == true) {
     /* Even mode */
-    if ((slp->use_even == true) || (is_clamp == false)) {
-      const float line_size = UI_GetThemeValuef(TH_OUTLINE_WIDTH) + 0.5f;
+    float co_a[3], co_b[3], co_mark[3];
+    TransDataEdgeSlideVert *curr_sv = &sld->sv[sld->curr_sv_index];
+    const float fac = (slp->perc + 1.0f) / 2.0f;
+    const float ctrl_size = UI_GetThemeValuef(TH_FACEDOT_SIZE) + 1.5f;
+    const float guide_size = ctrl_size - 0.5f;
+    const int alpha_shade = -30;
 
-      GPU_depth_test(false);
+    add_v3_v3v3(co_a, curr_sv->v_co_orig, curr_sv->dir_side[0]);
+    add_v3_v3v3(co_b, curr_sv->v_co_orig, curr_sv->dir_side[1]);
 
-      GPU_blend(true);
-      GPU_blend_set_func_separate(
-          GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+    GPU_line_width(line_size);
+    immUniformThemeColorShadeAlpha(TH_EDGE_SELECT, 80, alpha_shade);
+    immBeginAtMost(GPU_PRIM_LINES, 4);
+    if (curr_sv->v_side[0]) {
+      immVertex3fv(pos, curr_sv->v_side[0]->co);
+      immVertex3fv(pos, curr_sv->v_co_orig);
+    }
+    if (curr_sv->v_side[1]) {
+      immVertex3fv(pos, curr_sv->v_side[1]->co);
+      immVertex3fv(pos, curr_sv->v_co_orig);
+    }
+    immEnd();
 
-      GPU_matrix_push();
-      GPU_matrix_mul(TRANS_DATA_CONTAINER_FIRST_OK(t)->obedit->obmat);
-
-      uint pos = GPU_vertformat_attr_add(
-          immVertexFormat(), "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
-
-      immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
-
-      if (slp->use_even == true) {
-        float co_a[3], co_b[3], co_mark[3];
-        TransDataEdgeSlideVert *curr_sv = &sld->sv[sld->curr_sv_index];
-        const float fac = (slp->perc + 1.0f) / 2.0f;
-        const float ctrl_size = UI_GetThemeValuef(TH_FACEDOT_SIZE) + 1.5f;
-        const float guide_size = ctrl_size - 0.5f;
-        const int alpha_shade = -30;
-
-        add_v3_v3v3(co_a, curr_sv->v_co_orig, curr_sv->dir_side[0]);
-        add_v3_v3v3(co_b, curr_sv->v_co_orig, curr_sv->dir_side[1]);
-
-        GPU_line_width(line_size);
-        immUniformThemeColorShadeAlpha(TH_EDGE_SELECT, 80, alpha_shade);
-        immBeginAtMost(GPU_PRIM_LINES, 4);
-        if (curr_sv->v_side[0]) {
-          immVertex3fv(pos, curr_sv->v_side[0]->co);
-          immVertex3fv(pos, curr_sv->v_co_orig);
-        }
+    {
+      float *co_test = NULL;
+      if (slp->flipped) {
         if (curr_sv->v_side[1]) {
-          immVertex3fv(pos, curr_sv->v_side[1]->co);
-          immVertex3fv(pos, curr_sv->v_co_orig);
+          co_test = curr_sv->v_side[1]->co;
         }
-        immEnd();
-
-        {
-          float *co_test = NULL;
-          if (slp->flipped) {
-            if (curr_sv->v_side[1]) {
-              co_test = curr_sv->v_side[1]->co;
-            }
-          }
-          else {
-            if (curr_sv->v_side[0]) {
-              co_test = curr_sv->v_side[0]->co;
-            }
-          }
-
-          if (co_test != NULL) {
-            immUniformThemeColorShadeAlpha(TH_SELECT, -30, alpha_shade);
-            GPU_point_size(ctrl_size);
-            immBegin(GPU_PRIM_POINTS, 1);
-            immVertex3fv(pos, co_test);
-            immEnd();
-          }
-        }
-
-        immUniformThemeColorShadeAlpha(TH_SELECT, 255, alpha_shade);
-        GPU_point_size(guide_size);
-        immBegin(GPU_PRIM_POINTS, 1);
-        interp_line_v3_v3v3v3(co_mark, co_b, curr_sv->v_co_orig, co_a, fac);
-        immVertex3fv(pos, co_mark);
-        immEnd();
       }
       else {
-        if (is_clamp == false) {
-          const int side_index = sld->curr_side_unclamp;
-          TransDataEdgeSlideVert *sv;
-          int i;
-          const int alpha_shade = -160;
-
-          GPU_line_width(line_size);
-          immUniformThemeColorShadeAlpha(TH_EDGE_SELECT, 80, alpha_shade);
-          immBegin(GPU_PRIM_LINES, sld->totsv * 2);
-
-          /* TODO(campbell): Loop over all verts  */
-          sv = sld->sv;
-          for (i = 0; i < sld->totsv; i++, sv++) {
-            float a[3], b[3];
-
-            if (!is_zero_v3(sv->dir_side[side_index])) {
-              copy_v3_v3(a, sv->dir_side[side_index]);
-            }
-            else {
-              copy_v3_v3(a, sv->dir_side[!side_index]);
-            }
-
-            mul_v3_fl(a, 100.0f);
-            negate_v3_v3(b, a);
-            add_v3_v3(a, sv->v_co_orig);
-            add_v3_v3(b, sv->v_co_orig);
-
-            immVertex3fv(pos, a);
-            immVertex3fv(pos, b);
-          }
-          immEnd();
-        }
-        else {
-          BLI_assert(0);
+        if (curr_sv->v_side[0]) {
+          co_test = curr_sv->v_side[0]->co;
         }
       }
 
-      immUnbindProgram();
-
-      GPU_matrix_pop();
-
-      GPU_blend(false);
-
-      GPU_depth_test(true);
+      if (co_test != NULL) {
+        immUniformThemeColorShadeAlpha(TH_SELECT, -30, alpha_shade);
+        GPU_point_size(ctrl_size);
+        immBegin(GPU_PRIM_POINTS, 1);
+        immVertex3fv(pos, co_test);
+        immEnd();
+      }
     }
+
+    immUniformThemeColorShadeAlpha(TH_SELECT, 255, alpha_shade);
+    GPU_point_size(guide_size);
+    immBegin(GPU_PRIM_POINTS, 1);
+    interp_line_v3_v3v3v3(co_mark, co_b, curr_sv->v_co_orig, co_a, fac);
+    immVertex3fv(pos, co_mark);
+    immEnd();
   }
+  else if (is_clamp == false) {
+    const int side_index = sld->curr_side_unclamp;
+    TransDataEdgeSlideVert *sv;
+    int i;
+    const int alpha_shade = -160;
+
+    GPU_line_width(line_size);
+    immUniformThemeColorShadeAlpha(TH_EDGE_SELECT, 80, alpha_shade);
+    immBegin(GPU_PRIM_LINES, sld->totsv * 2);
+
+    /* TODO(campbell): Loop over all verts  */
+    sv = sld->sv;
+    for (i = 0; i < sld->totsv; i++, sv++) {
+      float a[3], b[3];
+
+      if (!is_zero_v3(sv->dir_side[side_index])) {
+        copy_v3_v3(a, sv->dir_side[side_index]);
+      }
+      else {
+        copy_v3_v3(a, sv->dir_side[!side_index]);
+      }
+
+      mul_v3_fl(a, 100.0f);
+      negate_v3_v3(b, a);
+      add_v3_v3(a, sv->v_co_orig);
+      add_v3_v3(b, sv->v_co_orig);
+
+      immVertex3fv(pos, a);
+      immVertex3fv(pos, b);
+    }
+    immEnd();
+  }
+  else {
+    /* Common case. */
+    TransDataEdgeSlideVert *curr_sv = &sld->sv[sld->curr_sv_index];
+    const int alpha_shade = -160;
+
+    float co_dir[3];
+    add_v3_v3v3(co_dir, curr_sv->v_co_orig, curr_sv->dir_side[sld->curr_side_unclamp]);
+
+    GPU_line_width(line_size);
+    immUniformThemeColorShadeAlpha(TH_EDGE_SELECT, 80, alpha_shade);
+    immBeginAtMost(GPU_PRIM_LINES, 2);
+    immVertex3fv(pos, curr_sv->v_co_orig);
+    immVertex3fv(pos, co_dir);
+    immEnd();
+  }
+
+  immUnbindProgram();
+
+  GPU_matrix_pop();
+
+  GPU_blend(GPU_BLEND_NONE);
+
+  GPU_depth_test(GPU_DEPTH_LESS_EQUAL);
 }
 
-void doEdgeSlide(TransInfo *t, float perc)
+static void edge_slide_snap_apply(TransInfo *t, float *value)
+{
+  TransDataContainer *tc = edge_slide_container_first_ok(t);
+  EdgeSlideParams *slp = t->custom.mode.data;
+  EdgeSlideData *sld_active = tc->custom.mode.data;
+  TransDataEdgeSlideVert *sv = &sld_active->sv[sld_active->curr_sv_index];
+  float snap_point[3], co_orig[3], co_dest[2][3], dvec[3];
+
+  copy_v3_v3(co_orig, sv->v_co_orig);
+  add_v3_v3v3(co_dest[0], co_orig, sv->dir_side[0]);
+  add_v3_v3v3(co_dest[1], co_orig, sv->dir_side[1]);
+  if (tc->use_local_mat) {
+    mul_m4_v3(tc->mat, co_orig);
+    mul_m4_v3(tc->mat, co_dest[0]);
+    mul_m4_v3(tc->mat, co_dest[1]);
+  }
+
+  getSnapPoint(t, dvec);
+  sub_v3_v3(dvec, t->tsnap.snapTarget);
+  add_v3_v3v3(snap_point, co_orig, dvec);
+
+  float perc = *value;
+  int side_index;
+  float t_mid;
+  if (slp->use_even == false) {
+    const bool is_clamp = !(t->flag & T_ALT_TRANSFORM);
+    if (is_clamp) {
+      side_index = perc < 0.0f;
+    }
+    else {
+      side_index = sld_active->curr_side_unclamp;
+    }
+  }
+  else {
+    /* Could be pre-calculated. */
+    t_mid = line_point_factor_v3((float[3]){0.0f, 0.0f, 0.0f}, sv->dir_side[0], sv->dir_side[1]);
+
+    float t_snap = line_point_factor_v3(snap_point, co_dest[0], co_dest[1]);
+    side_index = t_snap >= t_mid;
+  }
+
+  if (t->tsnap.snapElem & (SCE_SNAP_MODE_EDGE | SCE_SNAP_MODE_FACE)) {
+    float co_dir[3];
+    sub_v3_v3v3(co_dir, co_dest[side_index], co_orig);
+    normalize_v3(co_dir);
+    if (t->tsnap.snapElem & SCE_SNAP_MODE_EDGE) {
+      transform_constraint_snap_axis_to_edge(t, co_dir, dvec);
+    }
+    else {
+      transform_constraint_snap_axis_to_face(t, co_dir, dvec);
+    }
+    add_v3_v3v3(snap_point, co_orig, dvec);
+  }
+
+  perc = line_point_factor_v3(snap_point, co_orig, co_dest[side_index]);
+  if (slp->use_even == false) {
+    if (side_index) {
+      perc *= -1;
+    }
+  }
+  else {
+    if (!side_index) {
+      perc = (1.0f - perc) * t_mid;
+    }
+    else {
+      perc = perc * (1.0f - t_mid) + t_mid;
+    }
+
+    if (slp->flipped) {
+      perc = 1.0f - perc;
+    }
+
+    perc = (2 * perc) - 1.0f;
+
+    if (!slp->flipped) {
+      perc *= -1;
+    }
+  }
+
+  *value = perc;
+}
+
+static void doEdgeSlide(TransInfo *t, float perc)
 {
   EdgeSlideParams *slp = t->custom.mode.data;
   EdgeSlideData *sld_active = edgeSlideFirstGet(t);
@@ -1365,7 +1462,10 @@ static void applyEdgeSlide(TransInfo *t, const int UNUSED(mval[2]))
 
   final = t->values[0];
 
-  snapGridIncrement(t, &final);
+  applySnapping(t, &final);
+  if (!validSnap(t)) {
+    transform_snap_increment(t, &final);
+  }
 
   /* only do this so out of range values are not displayed */
   if (is_constrained) {
@@ -1413,6 +1513,8 @@ void initEdgeSlide_ex(
   t->mode = TFM_EDGE_SLIDE;
   t->transform = applyEdgeSlide;
   t->handleEvent = handleEventEdgeSlide;
+  t->tsnap.applySnap = edge_slide_snap_apply;
+  t->tsnap.distance = transform_snap_distance_len_squared_fn;
 
   {
     EdgeSlideParams *slp = MEM_callocN(sizeof(*slp), __func__);
@@ -1438,7 +1540,6 @@ void initEdgeSlide_ex(
     if (sld) {
       tc->custom.mode.data = sld;
       tc->custom.mode.free_cb = freeEdgeSlideVerts;
-      trans_mesh_customdata_correction_init(t, tc);
       ok = true;
     }
   }

@@ -51,7 +51,7 @@
 
 /* ******************** default callbacks for script space ***************** */
 
-static SpaceLink *script_new(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
+static SpaceLink *script_create(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
 {
   ARegion *region;
   SpaceScript *sscript;
@@ -127,7 +127,6 @@ static void script_main_region_draw(const bContext *C, ARegion *region)
 
   /* clear and setup matrix */
   UI_ThemeClearColor(TH_BACK);
-  GPU_clear(GPU_COLOR_BIT);
 
   UI_view2d_view_ortho(v2d);
 
@@ -179,7 +178,7 @@ void ED_spacetype_script(void)
   st->spaceid = SPACE_SCRIPT;
   strncpy(st->name, "Script", BKE_ST_MAXNAME);
 
-  st->new = script_new;
+  st->create = script_create;
   st->free = script_free;
   st->init = script_init;
   st->duplicate = script_duplicate;

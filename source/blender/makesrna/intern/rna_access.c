@@ -558,9 +558,15 @@ static PropertyRNA *arraytypemap[IDP_NUMTYPES] = {
     (PropertyRNA *)&rna_PropertyGroupItem_double_array,
 };
 
-static void *rna_idproperty_check_ex(PropertyRNA **prop,
-                                     PointerRNA *ptr,
-                                     const bool return_rnaprop)
+/* This function initializes a PropertyRNAOrID with all required info, from a given PropertyRNA
+ * and PointerRNA data. It deals properly with the three cases (static RNA, runtime RNA, and
+ * IDProperty).
+ * WARNING: given `ptr` PointerRNA is assumed to be a valid data one here, calling code is
+ * responsible to ensure that.
+ */
+void rna_property_rna_or_id_get(PropertyRNA *prop,
+                                PointerRNA *ptr,
+                                PropertyRNAOrID *r_prop_rna_or_id)
 {
   /* This is quite a hack, but avoids some complexity in the API. we
    * pass IDProperty structs as PropertyRNA pointers to the outside.
@@ -568,36 +574,64 @@ static void *rna_idproperty_check_ex(PropertyRNA **prop,
    * distinguish it from IDProperty structs. If it is an ID property,
    * we look up an IDP PropertyRNA based on the type, and set the data
    * pointer to the IDProperty. */
+  memset(r_prop_rna_or_id, 0, sizeof(*r_prop_rna_or_id));
 
-  if ((*prop)->magic == RNA_MAGIC) {
-    if ((*prop)->flag & PROP_IDPROPERTY) {
-      IDProperty *idprop = rna_idproperty_find(ptr, (*prop)->identifier);
+  r_prop_rna_or_id->ptr = *ptr;
+  r_prop_rna_or_id->rawprop = prop;
 
-      if (idprop && !rna_idproperty_verify_valid(ptr, *prop, idprop)) {
+  if (prop->magic == RNA_MAGIC) {
+    r_prop_rna_or_id->rnaprop = prop;
+    r_prop_rna_or_id->identifier = prop->identifier;
+
+    r_prop_rna_or_id->is_array = prop->getlength || prop->totarraylength;
+    if (r_prop_rna_or_id->is_array) {
+      int arraylen[RNA_MAX_ARRAY_DIMENSION];
+      r_prop_rna_or_id->array_len = (prop->getlength && ptr->data) ?
+                                        (uint)prop->getlength(ptr, arraylen) :
+                                        prop->totarraylength;
+    }
+
+    if (prop->flag & PROP_IDPROPERTY) {
+      IDProperty *idprop = rna_idproperty_find(ptr, prop->identifier);
+
+      if (idprop != NULL && !rna_idproperty_verify_valid(ptr, prop, idprop)) {
         IDProperty *group = RNA_struct_idprops(ptr, 0);
 
         IDP_FreeFromGroup(group, idprop);
-        return NULL;
+        idprop = NULL;
       }
 
-      return idprop;
+      r_prop_rna_or_id->idprop = idprop;
+      r_prop_rna_or_id->is_set = idprop != NULL && (idprop->flag & IDP_FLAG_GHOST) == 0;
     }
     else {
-      return return_rnaprop ? *prop : NULL;
+      /* Full static RNA properties are always set. */
+      r_prop_rna_or_id->is_set = true;
     }
   }
+  else {
+    IDProperty *idprop = (IDProperty *)prop;
+    /* Given prop may come from the custom properties of another data, ensure we get the one from
+     * given data ptr. */
+    IDProperty *idprop_evaluated = rna_idproperty_find(ptr, idprop->name);
+    if (idprop_evaluated != NULL && idprop->type != idprop_evaluated->type) {
+      idprop_evaluated = NULL;
+    }
 
-  {
-    IDProperty *idprop = (IDProperty *)(*prop);
+    r_prop_rna_or_id->idprop = idprop_evaluated;
+    r_prop_rna_or_id->is_idprop = true;
+    /* Full IDProperties are always set, if it exists. */
+    r_prop_rna_or_id->is_set = (idprop_evaluated != NULL);
 
+    r_prop_rna_or_id->identifier = idprop->name;
     if (idprop->type == IDP_ARRAY) {
-      *prop = arraytypemap[(int)(idprop->subtype)];
+      r_prop_rna_or_id->rnaprop = arraytypemap[(int)(idprop->subtype)];
+      r_prop_rna_or_id->is_array = true;
+      r_prop_rna_or_id->array_len = idprop_evaluated != NULL ? (uint)idprop_evaluated->len : 0;
     }
     else {
-      *prop = typemap[(int)(idprop->type)];
+      r_prop_rna_or_id->rnaprop = typemap[(int)(idprop->type)];
     }
-
-    return idprop;
   }
 }
 
@@ -605,14 +639,26 @@ static void *rna_idproperty_check_ex(PropertyRNA **prop,
  * or NULL (in case IDProp could not be found, or prop is a real RNA property). */
 IDProperty *rna_idproperty_check(PropertyRNA **prop, PointerRNA *ptr)
 {
-  return rna_idproperty_check_ex(prop, ptr, false);
+  PropertyRNAOrID prop_rna_or_id;
+
+  rna_property_rna_or_id_get(*prop, ptr, &prop_rna_or_id);
+
+  *prop = prop_rna_or_id.rnaprop;
+  return prop_rna_or_id.idprop;
 }
 
 /* This function always return the valid, real data pointer, be it a regular RNA property one,
  * or an IDProperty one. */
 PropertyRNA *rna_ensure_property_realdata(PropertyRNA **prop, PointerRNA *ptr)
 {
-  return rna_idproperty_check_ex(prop, ptr, true);
+  PropertyRNAOrID prop_rna_or_id;
+
+  rna_property_rna_or_id_get(*prop, ptr, &prop_rna_or_id);
+
+  *prop = prop_rna_or_id.rnaprop;
+  return (prop_rna_or_id.is_idprop || prop_rna_or_id.idprop != NULL) ?
+             (PropertyRNA *)prop_rna_or_id.idprop :
+             prop_rna_or_id.rnaprop;
 }
 
 PropertyRNA *rna_ensure_property(PropertyRNA *prop)
@@ -2064,9 +2110,10 @@ bool RNA_property_editable(PointerRNA *ptr, PropertyRNA *prop_orig)
   PropertyRNA *prop = rna_ensure_property(prop_orig);
   flag = prop->editable ? prop->editable(ptr, &dummy_info) : prop->flag;
 
-  return ((flag & PROP_EDITABLE) && (flag & PROP_REGISTER) == 0 &&
-          (!id || ((!ID_IS_LINKED(id) || (prop->flag & PROP_LIB_EXCEPTION)) &&
-                   (!id->override_library || RNA_property_overridable_get(ptr, prop_orig)))));
+  return (
+      (flag & PROP_EDITABLE) && (flag & PROP_REGISTER) == 0 &&
+      (!id || ((!ID_IS_LINKED(id) || (prop->flag & PROP_LIB_EXCEPTION)) &&
+               (!ID_IS_OVERRIDE_LIBRARY(id) || RNA_property_overridable_get(ptr, prop_orig)))));
 }
 
 /**
@@ -2100,10 +2147,8 @@ bool RNA_property_editable_info(PointerRNA *ptr, PropertyRNA *prop, const char *
       }
       return false;
     }
-    if (id->override_library != NULL) {
-      /* We need the real data property in case of IDProperty here... */
-      PropertyRNA *real_prop = rna_ensure_property_realdata(&prop, ptr);
-      if (real_prop == NULL || !RNA_property_overridable_get(ptr, real_prop)) {
+    if (ID_IS_OVERRIDE_LIBRARY(id)) {
+      if (!RNA_property_overridable_get(ptr, prop)) {
         if (!(*r_info)[0]) {
           *r_info = N_("Can't edit this property from an override data-block");
         }
@@ -3472,6 +3517,24 @@ void RNA_property_string_get_default(PointerRNA *UNUSED(ptr), PropertyRNA *prop,
 {
   StringPropertyRNA *sprop = (StringPropertyRNA *)rna_ensure_property(prop);
 
+  if (prop->magic != RNA_MAGIC) {
+    /* attempt to get the local ID values */
+    const IDProperty *idp_ui = rna_idproperty_ui(prop);
+
+    if (idp_ui) {
+      IDProperty *item;
+
+      item = IDP_GetPropertyTypeFromGroup(idp_ui, "default", IDP_STRING);
+      if (item) {
+        strcpy(value, IDP_String(item));
+        return;
+      }
+    }
+
+    strcpy(value, "");
+    return;
+  }
+
   BLI_assert(RNA_property_type(prop) == PROP_STRING);
 
   strcpy(value, sprop->defaultvalue);
@@ -3505,6 +3568,22 @@ char *RNA_property_string_get_default_alloc(PointerRNA *ptr,
 int RNA_property_string_default_length(PointerRNA *UNUSED(ptr), PropertyRNA *prop)
 {
   StringPropertyRNA *sprop = (StringPropertyRNA *)rna_ensure_property(prop);
+
+  if (prop->magic != RNA_MAGIC) {
+    /* attempt to get the local ID values */
+    const IDProperty *idp_ui = rna_idproperty_ui(prop);
+
+    if (idp_ui) {
+      IDProperty *item;
+
+      item = IDP_GetPropertyTypeFromGroup(idp_ui, "default", IDP_STRING);
+      if (item) {
+        return strlen(IDP_String(item));
+      }
+    }
+
+    return 0;
+  }
 
   BLI_assert(RNA_property_type(prop) == PROP_STRING);
 
@@ -5379,7 +5458,7 @@ bool RNA_path_resolve_property_full(
  * This is a convenience method to avoid logic errors and ugly syntax,
  * it combines both \a RNA_path_resolve and #RNA_path_resolve_property in a single call.
  * \note Assumes all pointers provided are valid.
- * \param r_item_pointer: The final Pointer or Collection item value.
+ * \param r_item_ptr: The final Pointer or Collection item value.
  * You must check for its validity before use!
  * \return True only if both a valid pointer and property are found after resolving the path
  */
@@ -5405,7 +5484,7 @@ bool RNA_path_resolve_property_and_item_pointer(PointerRNA *ptr,
  * it combines both \a RNA_path_resolve_full and
  * \a RNA_path_resolve_property_full in a single call.
  * \note Assumes all pointers provided are valid.
- * \param r_item_pointer: The final Pointer or Collection item value.
+ * \param r_item_ptr: The final Pointer or Collection item value.
  * You must check for its validity before use!
  * \return True only if both a valid pointer and property are found after resolving the path
  */

@@ -21,8 +21,7 @@
  * \ingroup spnode
  */
 
-#ifndef __NODE_INTERN_H__
-#define __NODE_INTERN_H__
+#pragma once
 
 #include "BKE_node.h"
 #include "UI_interface.h"
@@ -213,7 +212,7 @@ void snode_update(struct SpaceNode *snode, struct bNode *node);
 bool composite_node_active(struct bContext *C);
 bool composite_node_editable(struct bContext *C);
 
-int node_has_hidden_sockets(struct bNode *node);
+bool node_has_hidden_sockets(struct bNode *node);
 void node_set_hidden_sockets(struct SpaceNode *snode, bNode *node, int set);
 int node_render_changed_exec(bContext *, struct wmOperator *);
 int node_find_indicated_socket(struct SpaceNode *snode,
@@ -301,5 +300,3 @@ enum eNodeSpace_ButEvents {
   B_NODE_LOADIMAGE,
   B_NODE_SETIMAGE,
 };
-
-#endif /* __NODE_INTERN_H__ */

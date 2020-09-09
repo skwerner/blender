@@ -346,7 +346,7 @@ static void menu_types_add_from_keymap_items(bContext *C,
         continue;
       }
 
-      else if (handler_base->poll == NULL || handler_base->poll(region, win->eventstate)) {
+      if (handler_base->poll == NULL || handler_base->poll(region, win->eventstate)) {
         wmEventHandler_Keymap *handler = (wmEventHandler_Keymap *)handler_base;
         wmKeyMap *keymap = WM_event_get_keymap_from_handler(wm, handler);
         if (keymap && WM_keymap_poll(C, keymap)) {
@@ -535,7 +535,7 @@ static struct MenuSearch_Data *menu_items_from_ui_create(
         RNA_pointer_create(&screen->id, &RNA_Area, area, &ptr);
         const int space_type_ui = RNA_property_enum_get(&ptr, prop_ui_type);
 
-        int space_type_ui_index = RNA_enum_from_value(space_type_ui_items, space_type_ui);
+        const int space_type_ui_index = RNA_enum_from_value(space_type_ui_items, space_type_ui);
         if (space_type_ui_index == -1) {
           continue;
         }
@@ -952,7 +952,7 @@ static void menu_search_exec_fn(bContext *C, void *UNUSED(arg1), void *arg2)
     case MENU_SEARCH_TYPE_RNA: {
       PointerRNA *ptr = &item->rna.ptr;
       PropertyRNA *prop = item->rna.prop;
-      int index = item->rna.index;
+      const int index = item->rna.index;
       const int prop_type = RNA_property_type(prop);
       bool changed = false;
 
@@ -992,24 +992,16 @@ static void menu_search_update_fn(const bContext *UNUSED(C),
                                   uiSearchItems *items)
 {
   struct MenuSearch_Data *data = arg;
-  const size_t str_len = strlen(str);
-  const int words_max = (str_len / 2) + 1;
-  int(*words)[2] = BLI_array_alloca(words, words_max);
 
+  /* Prepare BLI_string_all_words_matched. */
+  const size_t str_len = strlen(str);
+  const int words_max = BLI_string_max_possible_word_count(str_len);
+  int(*words)[2] = BLI_array_alloca(words, words_max);
   const int words_len = BLI_string_find_split_words(str, str_len, ' ', words, words_max);
 
   for (struct MenuSearch_Item *item = data->items.first; item; item = item->next) {
-    int index;
-
-    /* match name against all search words */
-    for (index = 0; index < words_len; index++) {
-      if (!ui_str_has_word_prefix(item->drawwstr_full, str + words[index][0], words[index][1])) {
-        break;
-      }
-    }
-
-    if (index == words_len) {
-      if (!UI_search_item_add(items, item->drawwstr_full, item, item->icon, item->state)) {
+    if (BLI_string_all_words_matched(item->drawwstr_full, str, words, words_len)) {
+      if (!UI_search_item_add(items, item->drawwstr_full, item, item->icon, item->state, 0)) {
         break;
       }
     }
@@ -1131,7 +1123,7 @@ void UI_but_func_menu_search(uiBut *but)
   ScrArea *area = CTX_wm_area(C);
   ARegion *region = CTX_wm_region(C);
   /* When run from top-bar scan all areas in the current window. */
-  bool include_all_areas = (area && (area->spacetype == SPACE_TOPBAR));
+  const bool include_all_areas = (area && (area->spacetype == SPACE_TOPBAR));
   struct MenuSearch_Data *data = menu_items_from_ui_create(
       C, win, area, region, include_all_areas);
   UI_but_func_search_set(but,

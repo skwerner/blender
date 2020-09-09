@@ -22,8 +22,7 @@
  * \brief CustomData interface, see also DNA_customdata_types.h.
  */
 
-#ifndef __BKE_CUSTOMDATA_H__
-#define __BKE_CUSTOMDATA_H__
+#pragma once
 
 #include "BLI_sys_types.h"
 #include "BLI_utildefines.h"
@@ -38,6 +37,8 @@ struct BMesh;
 struct CustomData;
 struct CustomData_MeshMasks;
 struct ID;
+struct BlendWriter;
+struct BlendDataReader;
 typedef uint64_t CustomDataMask;
 
 /*a data type large enough to hold 1 element from any customdata layer type*/
@@ -455,6 +456,7 @@ bool CustomData_from_bmeshpoly_test(CustomData *fdata, CustomData *ldata, bool f
 bool CustomData_layer_validate(struct CustomDataLayer *layer,
                                const uint totitems,
                                const bool do_fixes);
+void CustomData_layers__print(struct CustomData *data);
 
 /* External file storage */
 
@@ -571,8 +573,14 @@ typedef struct CustomDataTransferLayerMap {
 void CustomData_data_transfer(const struct MeshPairRemap *me_remap,
                               const CustomDataTransferLayerMap *laymap);
 
+/* .blend file I/O */
+void CustomData_blend_write(struct BlendWriter *writer,
+                            struct CustomData *data,
+                            int count,
+                            CustomDataMask cddata_mask,
+                            struct ID *id);
+void CustomData_blend_read(struct BlendDataReader *reader, struct CustomData *data, int count);
+
 #ifdef __cplusplus
 }
-#endif
-
 #endif

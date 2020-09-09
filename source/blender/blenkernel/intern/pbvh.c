@@ -109,18 +109,15 @@ int BB_widest_axis(const BB *bb)
     if (dim[0] > dim[2]) {
       return 0;
     }
-    else {
-      return 2;
-    }
+
+    return 2;
   }
-  else {
-    if (dim[1] > dim[2]) {
-      return 1;
-    }
-    else {
-      return 2;
-    }
+
+  if (dim[1] > dim[2]) {
+    return 1;
   }
+
+  return 2;
 }
 
 void BBC_update_centroid(BBC *bbc)
@@ -275,9 +272,8 @@ static int map_insert_vert(
     *value_p = POINTER_FROM_INT(value_i);
     return value_i;
   }
-  else {
-    return POINTER_AS_INT(*value_p);
-  }
+
+  return POINTER_AS_INT(*value_p);
 }
 
 /* Find vertices used by the faces in this node and update the draw buffers */
@@ -358,7 +354,7 @@ static void update_vb(PBVH *pbvh, PBVHNode *node, BBC *prim_bbc, int offset, int
 
 /* Returns the number of visible quads in the nodes' grids. */
 int BKE_pbvh_count_grid_quads(BLI_bitmap **grid_hidden,
-                              int *grid_indices,
+                              const int *grid_indices,
                               int totgrid,
                               int gridsize)
 {
@@ -644,7 +640,7 @@ void BKE_pbvh_build_grids(PBVH *pbvh,
   pbvh->totgrid = totgrid;
   pbvh->gridkey = *key;
   pbvh->grid_hidden = grid_hidden;
-  pbvh->leaf_limit = max_ii(LEAF_LIMIT / ((gridsize - 1) * (gridsize - 1)), 1);
+  pbvh->leaf_limit = max_ii(LEAF_LIMIT / (gridsize * gridsize), 1);
 
   BB cb;
   BB_reset(&cb);
@@ -804,14 +800,13 @@ static PBVHNode *pbvh_iter_next(PBVHIter *iter)
       /* immediately hit leaf node */
       return node;
     }
-    else {
-      /* come back later when children are done */
-      pbvh_stack_push(iter, node, true);
 
-      /* push two child nodes on the stack */
-      pbvh_stack_push(iter, iter->pbvh->nodes + node->children_offset + 1, false);
-      pbvh_stack_push(iter, iter->pbvh->nodes + node->children_offset, false);
-    }
+    /* come back later when children are done */
+    pbvh_stack_push(iter, node, true);
+
+    /* push two child nodes on the stack */
+    pbvh_stack_push(iter, iter->pbvh->nodes + node->children_offset + 1, false);
+    pbvh_stack_push(iter, iter->pbvh->nodes + node->children_offset, false);
   }
 
   return NULL;
@@ -838,10 +833,9 @@ static PBVHNode *pbvh_iter_next_occluded(PBVHIter *iter)
       /* immediately hit leaf node */
       return node;
     }
-    else {
-      pbvh_stack_push(iter, iter->pbvh->nodes + node->children_offset + 1, false);
-      pbvh_stack_push(iter, iter->pbvh->nodes + node->children_offset, false);
-    }
+
+    pbvh_stack_push(iter, iter->pbvh->nodes + node->children_offset + 1, false);
+    pbvh_stack_push(iter, iter->pbvh->nodes + node->children_offset, false);
   }
 
   return NULL;
@@ -1325,6 +1319,7 @@ static void pbvh_update_draw_buffer_cb(void *__restrict userdata,
                                      CustomData_get_layer(pbvh->pdata, CD_SCULPT_FACE_SETS),
                                      pbvh->face_sets_color_seed,
                                      pbvh->face_sets_color_default,
+                                     CustomData_get_layer(pbvh->vdata, CD_PROP_COLOR),
                                      update_flags);
         break;
       case PBVH_BMESH:
@@ -1390,16 +1385,15 @@ static int pbvh_flush_bb(PBVH *pbvh, PBVHNode *node, int flag)
 
     return update;
   }
-  else {
-    update |= pbvh_flush_bb(pbvh, pbvh->nodes + node->children_offset, flag);
-    update |= pbvh_flush_bb(pbvh, pbvh->nodes + node->children_offset + 1, flag);
 
-    if (update & PBVH_UpdateBB) {
-      update_node_vb(pbvh, node);
-    }
-    if (update & PBVH_UpdateOriginalBB) {
-      node->orig_vb = node->vb;
-    }
+  update |= pbvh_flush_bb(pbvh, pbvh->nodes + node->children_offset, flag);
+  update |= pbvh_flush_bb(pbvh, pbvh->nodes + node->children_offset + 1, flag);
+
+  if (update & PBVH_UpdateBB) {
+    update_node_vb(pbvh, node);
+  }
+  if (update & PBVH_UpdateOriginalBB) {
+    node->orig_vb = node->vb;
   }
 
   return update;
@@ -1440,6 +1434,10 @@ void BKE_pbvh_update_vertex_data(PBVH *pbvh, int flag)
 
   if (flag & (PBVH_UpdateMask)) {
     pbvh_update_mask_redraw(pbvh, nodes, totnode, flag);
+  }
+
+  if (flag & (PBVH_UpdateColor)) {
+    /* Do nothing */
   }
 
   if (flag & (PBVH_UpdateVisibility)) {
@@ -1537,7 +1535,7 @@ static void pbvh_update_visibility_task_cb(void *__restrict userdata,
   PBVHUpdateData *data = userdata;
   PBVH *pbvh = data->pbvh;
   PBVHNode *node = data->nodes[n];
-  if (node->flag & PBVH_UpdateMask) {
+  if (node->flag & PBVH_UpdateVisibility) {
     switch (BKE_pbvh_type(pbvh)) {
       case PBVH_FACES:
         pbvh_faces_node_visibility_update(pbvh, node);
@@ -1549,7 +1547,7 @@ static void pbvh_update_visibility_task_cb(void *__restrict userdata,
         pbvh_bmesh_node_visibility_update(node);
         break;
     }
-    node->flag &= ~PBVH_UpdateMask;
+    node->flag &= ~PBVH_UpdateVisibility;
   }
 }
 
@@ -1662,9 +1660,8 @@ bool BKE_pbvh_has_faces(const PBVH *pbvh)
   if (pbvh->type == PBVH_BMESH) {
     return (pbvh->bm->totface != 0);
   }
-  else {
-    return (pbvh->totprim != 0);
-  }
+
+  return (pbvh->totprim != 0);
 }
 
 void BKE_pbvh_bounding_box(const PBVH *pbvh, float min[3], float max[3])
@@ -1729,6 +1726,11 @@ void BKE_pbvh_node_mark_update_mask(PBVHNode *node)
   node->flag |= PBVH_UpdateMask | PBVH_UpdateDrawBuffers | PBVH_UpdateRedraw;
 }
 
+void BKE_pbvh_node_mark_update_color(PBVHNode *node)
+{
+  node->flag |= PBVH_UpdateColor | PBVH_UpdateDrawBuffers | PBVH_UpdateRedraw;
+}
+
 void BKE_pbvh_node_mark_update_visibility(PBVHNode *node)
 {
   node->flag |= PBVH_UpdateVisibility | PBVH_RebuildDrawBuffers | PBVH_UpdateDrawBuffers |
@@ -1760,6 +1762,11 @@ void BKE_pbvh_node_fully_hidden_set(PBVHNode *node, int fully_hidden)
   else {
     node->flag &= ~PBVH_FullyHidden;
   }
+}
+
+bool BKE_pbvh_node_fully_hidden_get(PBVHNode *node)
+{
+  return (node->flag & PBVH_Leaf) && (node->flag & PBVH_FullyHidden);
 }
 
 void BKE_pbvh_node_fully_masked_set(PBVHNode *node, int fully_masked)
@@ -2014,9 +2021,8 @@ bool ray_face_intersection_quad(const float ray_start[3],
     *depth = depth_test;
     return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 bool ray_face_intersection_tri(const float ray_start[3],
@@ -2032,9 +2038,8 @@ bool ray_face_intersection_tri(const float ray_start[3],
     *depth = depth_test;
     return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 /* Take advantage of the fact we know this wont be an intersection.
@@ -2085,9 +2090,8 @@ bool ray_face_nearest_quad(const float ray_start[3],
     }
     return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 bool ray_face_nearest_tri(const float ray_start[3],
@@ -2107,9 +2111,8 @@ bool ray_face_nearest_tri(const float ray_start[3],
     *depth = depth_test;
     return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 static bool pbvh_faces_node_raycast(PBVH *pbvh,
@@ -2342,7 +2345,7 @@ void BKE_pbvh_raycast_project_ray_root(
     struct IsectRayAABB_Precalc ray;
     float ray_normal_inv[3];
     float offset = 1.0f + 1e-3f;
-    float offset_vec[3] = {1e-3f, 1e-3f, 1e-3f};
+    const float offset_vec[3] = {1e-3f, 1e-3f, 1e-3f};
 
     if (original) {
       BKE_pbvh_node_get_original_BB(pbvh->nodes, bb_min_root, bb_max_root);
@@ -2602,7 +2605,7 @@ static PlaneAABBIsect test_frustum_aabb(const float bb_min[3],
     if (dot_v3v3(planes[i], vmin) + planes[i][3] < 0) {
       return ISECT_OUTSIDE;
     }
-    else if (dot_v3v3(planes[i], vmax) + planes[i][3] <= 0) {
+    if (dot_v3v3(planes[i], vmax) + planes[i][3] <= 0) {
       ret = ISECT_INTERSECT;
     }
   }
@@ -2905,6 +2908,26 @@ void BKE_pbvh_gather_proxies(PBVH *pbvh, PBVHNode ***r_array, int *r_tot)
   *r_tot = tot;
 }
 
+PBVHColorBufferNode *BKE_pbvh_node_color_buffer_get(PBVHNode *node)
+{
+
+  if (!node->color_buffer.color) {
+    node->color_buffer.color = MEM_callocN(sizeof(float[4]) * node->uniq_verts, "Color buffer");
+  }
+  return &node->color_buffer;
+}
+
+void BKE_pbvh_node_color_buffer_free(PBVH *pbvh)
+{
+  PBVHNode **nodes;
+  int totnode;
+  BKE_pbvh_search_gather(pbvh, NULL, NULL, &nodes, &totnode);
+  for (int i = 0; i < totnode; i++) {
+    MEM_SAFE_FREE(nodes[i]->color_buffer.color);
+  }
+  MEM_SAFE_FREE(nodes);
+}
+
 void pbvh_vertex_iter_init(PBVH *pbvh, PBVHNode *node, PBVHVertexIter *vi, int mode)
 {
   struct CCGElem **grids;
@@ -2958,6 +2981,7 @@ void pbvh_vertex_iter_init(PBVH *pbvh, PBVHNode *node, PBVHVertexIter *vi, int m
   vi->mask = NULL;
   if (pbvh->type == PBVH_FACES) {
     vi->vmask = CustomData_get_layer(pbvh->vdata, CD_PAINT_MASK);
+    vi->vcol = CustomData_get_layer(pbvh->vdata, CD_PROP_COLOR);
   }
 }
 

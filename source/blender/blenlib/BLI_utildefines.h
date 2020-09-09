@@ -627,11 +627,11 @@ extern bool BLI_memory_is_zero(const void *arr, const size_t arr_size);
 /** \name String Macros
  * \{ */
 
-/* Macro to convert a value to string in the preprocessor
- * STRINGIFY_ARG: gives the argument as a string
- * STRINGIFY_APPEND: appends any argument 'b' onto the string argument 'a',
- *   used by STRINGIFY because some preprocessors warn about zero arguments
- * STRINGIFY: gives the argument's value as a string */
+/* Macro to convert a value to string in the pre-processor:
+ * - `STRINGIFY_ARG`: gives the argument as a string
+ * - `STRINGIFY_APPEND`: appends any argument 'b' onto the string argument 'a',
+ *   used by `STRINGIFY` because some preprocessors warn about zero arguments
+ * - `STRINGIFY`: gives the argument's value as a string. */
 #define STRINGIFY_ARG(x) "" #x
 #define STRINGIFY_APPEND(a, b) "" a #b
 #define STRINGIFY(x) STRINGIFY_APPEND("", x)
@@ -751,6 +751,43 @@ extern bool BLI_memory_is_zero(const void *arr, const size_t arr_size);
     } \
   } \
   ((void)0)
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name C++ Macros
+ * \{ */
+
+#ifdef __cplusplus
+
+/* Useful to port C code using enums to C++ where enums are strongly typed.
+ * To use after the enum declaration. */
+#  define ENUM_OPERATORS(_enum_type) \
+    inline constexpr _enum_type operator|(_enum_type a, _enum_type b) \
+    { \
+      return static_cast<_enum_type>(static_cast<int>(a) | b); \
+    } \
+    inline constexpr _enum_type operator&(_enum_type a, _enum_type b) \
+    { \
+      return static_cast<_enum_type>(static_cast<int>(a) & b); \
+    } \
+    inline constexpr _enum_type operator~(_enum_type a) \
+    { \
+      return static_cast<_enum_type>(~static_cast<int>(a)); \
+    } \
+    inline _enum_type &operator|=(_enum_type &a, _enum_type b) \
+    { \
+      return a = static_cast<_enum_type>(static_cast<int>(a) | b); \
+    } \
+    inline _enum_type &operator&=(_enum_type &a, _enum_type b) \
+    { \
+      return a = static_cast<_enum_type>(static_cast<int>(a) & b); \
+    }
+
+#else
+/* Output nothing. */
+#  define ENUM_OPERATORS(_type)
+#endif
 
 /** \} */
 

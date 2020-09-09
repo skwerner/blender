@@ -147,19 +147,16 @@ static bool bpath_relative_rebase_visit_cb(void *userdata, char *path_dst, const
       data->count_changed++;
       return true;
     }
-    else {
-      /* Failed to make relative path absolute. */
-      BLI_assert(0);
-      BKE_reportf(data->reports, RPT_WARNING, "Path '%s' cannot be made absolute", path_src);
-      data->count_failed++;
-      return false;
-    }
+
+    /* Failed to make relative path absolute. */
+    BLI_assert(0);
+    BKE_reportf(data->reports, RPT_WARNING, "Path '%s' cannot be made absolute", path_src);
+    data->count_failed++;
     return false;
   }
-  else {
-    /* Absolute, leave this as-is. */
-    return false;
-  }
+
+  /* Absolute, leave this as-is. */
+  return false;
 }
 
 void BKE_bpath_relative_rebase(Main *bmain,
@@ -168,7 +165,7 @@ void BKE_bpath_relative_rebase(Main *bmain,
                                ReportList *reports)
 {
   BPathRebase_Data data = {NULL};
-  const int flag = BKE_BPATH_TRAVERSE_SKIP_LIBRARY;
+  const int flag = (BKE_BPATH_TRAVERSE_SKIP_LIBRARY | BKE_BPATH_TRAVERSE_SKIP_MULTIFILE);
 
   BLI_assert(basedir_src[0] != '\0');
   BLI_assert(basedir_dst[0] != '\0');
@@ -211,18 +208,17 @@ static bool bpath_relative_convert_visit_cb(void *userdata, char *path_dst, cons
   if (BLI_path_is_rel(path_src)) {
     return false; /* already relative */
   }
-  else {
-    strcpy(path_dst, path_src);
-    BLI_path_rel(path_dst, data->basedir);
-    if (BLI_path_is_rel(path_dst)) {
-      data->count_changed++;
-    }
-    else {
-      BKE_reportf(data->reports, RPT_WARNING, "Path '%s' cannot be made relative", path_src);
-      data->count_failed++;
-    }
-    return true;
+
+  strcpy(path_dst, path_src);
+  BLI_path_rel(path_dst, data->basedir);
+  if (BLI_path_is_rel(path_dst)) {
+    data->count_changed++;
   }
+  else {
+    BKE_reportf(data->reports, RPT_WARNING, "Path '%s' cannot be made relative", path_src);
+    data->count_failed++;
+  }
+  return true;
 }
 
 void BKE_bpath_relative_convert(Main *bmain, const char *basedir, ReportList *reports)
@@ -263,18 +259,17 @@ static bool bpath_absolute_convert_visit_cb(void *userdata, char *path_dst, cons
   if (BLI_path_is_rel(path_src) == false) {
     return false; /* already absolute */
   }
-  else {
-    strcpy(path_dst, path_src);
-    BLI_path_abs(path_dst, data->basedir);
-    if (BLI_path_is_rel(path_dst) == false) {
-      data->count_changed++;
-    }
-    else {
-      BKE_reportf(data->reports, RPT_WARNING, "Path '%s' cannot be made absolute", path_src);
-      data->count_failed++;
-    }
-    return true;
+
+  strcpy(path_dst, path_src);
+  BLI_path_abs(path_dst, data->basedir);
+  if (BLI_path_is_rel(path_dst) == false) {
+    data->count_changed++;
   }
+  else {
+    BKE_reportf(data->reports, RPT_WARNING, "Path '%s' cannot be made absolute", path_src);
+    data->count_failed++;
+  }
+  return true;
 }
 
 /* similar to BKE_bpath_relative_convert - keep in sync! */
@@ -411,7 +406,7 @@ static bool missing_files_find__visit_cb(void *userdata, char *path_dst, const c
                 BLI_path_basename(data->searchdir));
     return false;
   }
-  else if (found == false) {
+  if (found == false) {
     BKE_reportf(data->reports,
                 RPT_WARNING,
                 "Could not find '%s' in '%s'",
@@ -419,18 +414,17 @@ static bool missing_files_find__visit_cb(void *userdata, char *path_dst, const c
                 data->searchdir);
     return false;
   }
-  else {
-    bool was_relative = BLI_path_is_rel(path_dst);
 
-    BLI_strncpy(path_dst, filename_new, FILE_MAX);
+  bool was_relative = BLI_path_is_rel(path_dst);
 
-    /* keep path relative if the previous one was relative */
-    if (was_relative) {
-      BLI_path_rel(path_dst, data->basedir);
-    }
+  BLI_strncpy(path_dst, filename_new, FILE_MAX);
 
-    return true;
+  /* keep path relative if the previous one was relative */
+  if (was_relative) {
+    BLI_path_rel(path_dst, data->basedir);
   }
+
+  return true;
 }
 
 void BKE_bpath_missing_files_find(Main *bmain,
@@ -483,9 +477,8 @@ static bool rewrite_path_fixed(char *path,
     BLI_strncpy(path, path_dst, FILE_MAX);
     return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 static bool rewrite_path_fixed_dirfile(char path_dir[FILE_MAXDIR],
@@ -510,9 +503,8 @@ static bool rewrite_path_fixed_dirfile(char path_dir[FILE_MAXDIR],
     BLI_split_dirfile(path_dst, path_dir, path_file, FILE_MAXDIR, FILE_MAXFILE);
     return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 static bool rewrite_path_alloc(char **path,
@@ -538,9 +530,8 @@ static bool rewrite_path_alloc(char **path,
     (*path) = BLI_strdup(path_dst);
     return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 /**
@@ -564,8 +555,8 @@ void BKE_bpath_traverse_id(
          * don't make sense to add directories to until the image has been saved
          * once to give it a meaningful value. */
         if (ELEM(ima->source, IMA_SRC_FILE, IMA_SRC_MOVIE, IMA_SRC_SEQUENCE, IMA_SRC_TILED) &&
-            ima->name[0]) {
-          if (rewrite_path_fixed(ima->name, visit_cb, absbase, bpath_user_data)) {
+            ima->filepath[0]) {
+          if (rewrite_path_fixed(ima->filepath, visit_cb, absbase, bpath_user_data)) {
             if (flag & BKE_BPATH_TRAVERSE_RELOAD_EDITED) {
               if (!BKE_image_has_packedfile(ima) &&
                   /* image may have been painted onto (and not saved, T44543) */
@@ -609,9 +600,9 @@ void BKE_bpath_traverse_id(
           }
         }
         else if (md->type == eModifierType_Fluid) {
-          FluidModifierData *mmd = (FluidModifierData *)md;
-          if (mmd->type & MOD_FLUID_TYPE_DOMAIN && mmd->domain) {
-            rewrite_path_fixed(mmd->domain->cache_directory, visit_cb, absbase, bpath_user_data);
+          FluidModifierData *fmd = (FluidModifierData *)md;
+          if (fmd->type & MOD_FLUID_TYPE_DOMAIN && fmd->domain) {
+            rewrite_path_fixed(fmd->domain->cache_directory, visit_cb, absbase, bpath_user_data);
           }
         }
         else if (md->type == eModifierType_Cloth) {
@@ -643,7 +634,7 @@ void BKE_bpath_traverse_id(
     case ID_SO: {
       bSound *sound = (bSound *)id;
       if (sound->packedfile == NULL || (flag & BKE_BPATH_TRAVERSE_SKIP_PACKED) == 0) {
-        rewrite_path_fixed(sound->name, visit_cb, absbase, bpath_user_data);
+        rewrite_path_fixed(sound->filepath, visit_cb, absbase, bpath_user_data);
       }
       break;
     }
@@ -655,15 +646,15 @@ void BKE_bpath_traverse_id(
       break;
     }
     case ID_TXT:
-      if (((Text *)id)->name) {
-        rewrite_path_alloc(&((Text *)id)->name, visit_cb, absbase, bpath_user_data);
+      if (((Text *)id)->filepath) {
+        rewrite_path_alloc(&((Text *)id)->filepath, visit_cb, absbase, bpath_user_data);
       }
       break;
     case ID_VF: {
       VFont *vfont = (VFont *)id;
       if (vfont->packedfile == NULL || (flag & BKE_BPATH_TRAVERSE_SKIP_PACKED) == 0) {
         if (BKE_vfont_is_builtin(vfont) == false) {
-          rewrite_path_fixed(((VFont *)id)->name, visit_cb, absbase, bpath_user_data);
+          rewrite_path_fixed(((VFont *)id)->filepath, visit_cb, absbase, bpath_user_data);
         }
       }
       break;
@@ -712,7 +703,7 @@ void BKE_bpath_traverse_id(
       if (scene->ed) {
         Sequence *seq;
 
-        SEQ_BEGIN (scene->ed, seq) {
+        SEQ_ALL_BEGIN (scene->ed, seq) {
           if (SEQ_HAS_PATH(seq)) {
             StripElem *se = seq->strip->stripdata;
 
@@ -741,7 +732,7 @@ void BKE_bpath_traverse_id(
             }
           }
         }
-        SEQ_END;
+        SEQ_ALL_END;
       }
       break;
     }
@@ -756,15 +747,15 @@ void BKE_bpath_traverse_id(
       Library *lib = (Library *)id;
       /* keep packedfile paths always relative to the blend */
       if (lib->packedfile == NULL) {
-        if (rewrite_path_fixed(lib->name, visit_cb, absbase, bpath_user_data)) {
-          BKE_library_filepath_set(bmain, lib, lib->name);
+        if (rewrite_path_fixed(lib->filepath, visit_cb, absbase, bpath_user_data)) {
+          BKE_library_filepath_set(bmain, lib, lib->filepath);
         }
       }
       break;
     }
     case ID_MC: {
       MovieClip *clip = (MovieClip *)id;
-      rewrite_path_fixed(clip->name, visit_cb, absbase, bpath_user_data);
+      rewrite_path_fixed(clip->filepath, visit_cb, absbase, bpath_user_data);
       break;
     }
     case ID_CF: {
@@ -827,10 +818,9 @@ bool BKE_bpath_relocate_visitor(void *pathbase_v, char *path_dst, const char *pa
     BLI_strncpy(path_dst, filepath, FILE_MAX);
     return true;
   }
-  else {
-    /* Path was not relative to begin with. */
-    return false;
-  }
+
+  /* Path was not relative to begin with. */
+  return false;
 }
 
 /** \} */

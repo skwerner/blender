@@ -23,8 +23,11 @@
  * Blender copied the conventions quite some, and expanded it with internal new defines (ton)
  */
 
-#ifndef __WM_EVENT_TYPES_H__
-#define __WM_EVENT_TYPES_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* customdata type */
 enum {
@@ -489,4 +492,6 @@ enum {
   GESTURE_MODAL_CIRCLE_SIZE = 11,
 };
 
-#endif /* __WM_EVENT_TYPES_H__ */
+#ifdef __cplusplus
+}
+#endif

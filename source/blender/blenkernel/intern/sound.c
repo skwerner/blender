@@ -112,6 +112,20 @@ static void sound_free_data(ID *id)
   }
 }
 
+static void sound_foreach_cache(ID *id,
+                                IDTypeForeachCacheFunctionCallback function_callback,
+                                void *user_data)
+{
+  bSound *sound = (bSound *)id;
+  IDCacheKey key = {
+      .id_session_uuid = id->session_uuid,
+      .offset_in_ID = offsetof(bSound, waveform),
+      .cache_v = sound->waveform,
+  };
+
+  function_callback(id, &key, &sound->waveform, 0, user_data);
+}
+
 IDTypeInfo IDType_ID_SO = {
     .id_code = ID_SO,
     .id_filter = FILTER_ID_SO,
@@ -128,6 +142,12 @@ IDTypeInfo IDType_ID_SO = {
     .free_data = sound_free_data,
     .make_local = NULL,
     .foreach_id = NULL,
+    .foreach_cache = sound_foreach_cache,
+
+    .blend_write = NULL,
+    .blend_read_data = NULL,
+    .blend_read_lib = NULL,
+    .blend_read_expand = NULL,
 };
 
 #ifdef WITH_AUDASPACE
@@ -172,7 +192,7 @@ bSound *BKE_sound_new_file(Main *bmain, const char *filepath)
   BLI_path_abs(str, path);
 
   sound = BKE_libblock_alloc(bmain, ID_SO, BLI_path_basename(filepath), 0);
-  BLI_strncpy(sound->name, filepath, FILE_MAX);
+  BLI_strncpy(sound->filepath, filepath, FILE_MAX);
   /* sound->type = SOUND_TYPE_FILE; */ /* XXX unused currently */
 
   sound->spinlock = MEM_mallocN(sizeof(SpinLock), "sound_spinlock");
@@ -193,7 +213,7 @@ bSound *BKE_sound_new_file_exists_ex(Main *bmain, const char *filepath, bool *r_
 
   /* first search an identical filepath */
   for (sound = bmain->sounds.first; sound; sound = sound->id.next) {
-    BLI_strncpy(strtest, sound->name, sizeof(sound->name));
+    BLI_strncpy(strtest, sound->filepath, sizeof(sound->filepath));
     BLI_path_abs(strtest, ID_BLEND_PATH(bmain, &sound->id));
 
     if (BLI_path_cmp(strtest, str) == 0) {
@@ -452,8 +472,8 @@ static void sound_load_audio(Main *bmain, bSound *sound, bool free_waveform)
     /* load sound */
     PackedFile *pf = sound->packedfile;
 
-    /* don't modify soundact->sound->name, only change a copy */
-    BLI_strncpy(fullpath, sound->name, sizeof(fullpath));
+    /* don't modify soundact->sound->filepath, only change a copy */
+    BLI_strncpy(fullpath, sound->filepath, sizeof(fullpath));
     BLI_path_abs(fullpath, ID_BLEND_PATH(bmain, &sound->id));
 
     /* but we need a packed file then */
@@ -883,9 +903,8 @@ double BKE_sound_sync_scene(Scene *scene)
     if (scene->audio.flag & AUDIO_SYNC) {
       return AUD_getSynchronizerPosition(scene->playback_handle);
     }
-    else {
-      return AUD_Handle_getPosition(scene->playback_handle);
-    }
+
+    return AUD_Handle_getPosition(scene->playback_handle);
   }
   return NAN_FLT;
 }
@@ -907,9 +926,8 @@ int BKE_sound_scene_playing(Scene *scene)
   if (scene->audio.flag & AUDIO_SYNC) {
     return AUD_isSynchronizerPlaying();
   }
-  else {
-    return -1;
-  }
+
+  return -1;
 }
 
 void BKE_sound_free_waveform(bSound *sound)
@@ -944,7 +962,7 @@ void BKE_sound_read_waveform(Main *bmain, bSound *sound, short *stop)
   if (info.length > 0) {
     int length = info.length * SOUND_WAVE_SAMPLES_PER_SECOND;
 
-    waveform->data = MEM_mallocN(length * sizeof(float) * 3, "SoundWaveform.samples");
+    waveform->data = MEM_mallocN(sizeof(float[3]) * length, "SoundWaveform.samples");
     waveform->length = AUD_readSound(
         sound->playback_handle, waveform->data, length, SOUND_WAVE_SAMPLES_PER_SECOND, stop);
   }

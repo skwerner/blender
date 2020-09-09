@@ -216,11 +216,9 @@ PTCacheEdit *PE_get_current_from_psys(ParticleSystem *psys)
     if ((psys->flag & PSYS_HAIR_DYNAMICS) != 0 && (psys->pointcache->flag & PTCACHE_BAKED) != 0) {
       return psys->pointcache->edit;
     }
-    else {
-      return psys->edit;
-    }
+    return psys->edit;
   }
-  else if (psys->pointcache->flag & PTCACHE_BAKED) {
+  if (psys->pointcache->flag & PTCACHE_BAKED) {
     return psys->pointcache->edit;
   }
   return NULL;
@@ -561,9 +559,7 @@ static bool key_test_depth(const PEData *data, const float co[3], const int scre
   if (win[2] - 0.00001f > depth) {
     return 0;
   }
-  else {
-    return 1;
-  }
+  return 1;
 }
 
 static bool key_inside_circle(const PEData *data, float rad, const float co[3], float *distance)
@@ -618,9 +614,7 @@ static bool key_inside_test(PEData *data, const float co[3])
   if (data->mval) {
     return key_inside_circle(data, data->rad, co, NULL);
   }
-  else {
-    return key_inside_rect(data, co);
-  }
+  return key_inside_rect(data, co);
 }
 
 static bool point_is_selected(PTCacheEditPoint *point)
@@ -1392,7 +1386,7 @@ void recalc_emitter_field(Depsgraph *UNUSED(depsgraph), Object *UNUSED(ob), Part
   totface = mesh->totface;
   /*totvert=dm->getNumVerts(dm);*/ /*UNUSED*/
 
-  edit->emitter_cosnos = MEM_callocN(totface * 6 * sizeof(float), "emitter cosnos");
+  edit->emitter_cosnos = MEM_callocN(sizeof(float[6]) * totface, "emitter cosnos");
 
   edit->emitter_field = BLI_kdtree_3d_new(totface);
 
@@ -3219,11 +3213,11 @@ static void brush_drawcursor(bContext *C, int x, int y, void *UNUSED(customdata)
     immUniformColor4ub(255, 255, 255, 128);
 
     GPU_line_smooth(true);
-    GPU_blend(true);
+    GPU_blend(GPU_BLEND_ALPHA);
 
     imm_draw_circle_wire_2d(pos, (float)x, (float)y, pe_brush_size_get(scene, brush), 40);
 
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
     GPU_line_smooth(false);
 
     immUnbindProgram();
@@ -3372,9 +3366,7 @@ static void PE_mirror_x(Depsgraph *depsgraph, Scene *scene, Object *ob, int tagg
           PE_mirror_particle(ob, psmd_eval->mesh_final, psys, pa, NULL);
           continue;
         }
-        else {
-          point->flag |= PEP_TAG;
-        }
+        point->flag |= PEP_TAG;
       }
     }
 
@@ -3784,6 +3776,7 @@ static void brush_puff(PEData *data, int point_index, float mouse_distance)
 #else
           /* translate (not rotate) the rest of the hair if its not selected  */
           {
+/* NOLINTNEXTLINE: readability-redundant-preprocessor */
 #  if 0 /* kindof works but looks worse then what's below */
 
             /* Move the unselected point on a vector based on the
@@ -4103,7 +4096,7 @@ static void brush_add_count_iter(void *__restrict iter_data_v,
   BrushAddCountIterTLSData *tls = tls_v->userdata_chunk;
   const int number = iter_data->number;
   const short size = iter_data->size;
-  const short size2 = size * size;
+  const int size2 = size * size;
   float dmx, dmy;
   if (number > 1) {
     dmx = size;
@@ -4354,7 +4347,7 @@ static int brush_add(const bContext *C, PEData *data, short number)
       }
 
       pa->size = 1.0f;
-      initialize_particle(&sim, pa);
+      init_particle(&sim, pa);
       reset_particle(&sim, pa, 0.0, 1.0);
       point->flag |= PEP_EDIT_RECALC;
       if (pe_x_mirror(ob)) {

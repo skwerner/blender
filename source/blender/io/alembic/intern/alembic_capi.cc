@@ -22,6 +22,7 @@
 
 #include <Alembic/AbcMaterial/IMaterial.h>
 
+#include "abc_axis_conversion.h"
 #include "abc_reader_archive.h"
 #include "abc_reader_camera.h"
 #include "abc_reader_curves.h"
@@ -47,15 +48,12 @@
 #include "BKE_lib_id.h"
 #include "BKE_object.h"
 #include "BKE_scene.h"
+#include "BKE_screen.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
 
-/* SpaceType struct has a member called 'new' which obviously conflicts with C++
- * so temporarily redefining the new keyword to make it compile. */
-#define new extern_new
-#include "BKE_screen.h"
-#undef new
+#include "ED_undo.h"
 
 #include "BLI_compiler_compat.h"
 #include "BLI_fileops.h"
@@ -68,36 +66,24 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
-using Alembic::Abc::Int32ArraySamplePtr;
+using Alembic::Abc::IV3fArrayProperty;
 using Alembic::Abc::ObjectHeader;
-
-using Alembic::AbcGeom::kWrapExisting;
-using Alembic::AbcGeom::MetaData;
-using Alembic::AbcGeom::P3fArraySamplePtr;
-
+using Alembic::Abc::PropertyHeader;
+using Alembic::Abc::V3fArraySamplePtr;
 using Alembic::AbcGeom::ICamera;
-using Alembic::AbcGeom::ICompoundProperty;
 using Alembic::AbcGeom::ICurves;
-using Alembic::AbcGeom::ICurvesSchema;
 using Alembic::AbcGeom::IFaceSet;
 using Alembic::AbcGeom::ILight;
-using Alembic::AbcGeom::IN3fArrayProperty;
-using Alembic::AbcGeom::IN3fGeomParam;
 using Alembic::AbcGeom::INuPatch;
 using Alembic::AbcGeom::IObject;
 using Alembic::AbcGeom::IPoints;
-using Alembic::AbcGeom::IPointsSchema;
 using Alembic::AbcGeom::IPolyMesh;
 using Alembic::AbcGeom::IPolyMeshSchema;
 using Alembic::AbcGeom::ISampleSelector;
 using Alembic::AbcGeom::ISubD;
-using Alembic::AbcGeom::IV2fGeomParam;
 using Alembic::AbcGeom::IXform;
-using Alembic::AbcGeom::IXformSchema;
-using Alembic::AbcGeom::N3fArraySamplePtr;
-using Alembic::AbcGeom::V3fArraySamplePtr;
-using Alembic::AbcGeom::XformSample;
-
+using Alembic::AbcGeom::kWrapExisting;
+using Alembic::AbcGeom::MetaData;
 using Alembic::AbcMaterial::IMaterial;
 
 using namespace blender::io::alembic;
@@ -388,7 +374,7 @@ static std::pair<bool, AbcObjectReader *> visit_object(
     }
   }
   else if (object.getParent()) {
-    if (claiming_child_readers.size() > 0) {
+    if (!claiming_child_readers.empty()) {
       /* The first claiming child will serve just fine as parent to
        * our non-claiming children. Since all claiming children share
        * the same XForm, it doesn't really matter which one we pick. */
@@ -429,6 +415,7 @@ enum {
 };
 
 struct ImportJobData {
+  bContext *C;
   Main *bmain;
   Scene *scene;
   ViewLayer *view_layer;
@@ -447,6 +434,7 @@ struct ImportJobData {
   char error_code;
   bool was_cancelled;
   bool import_ok;
+  bool is_background_job;
 };
 
 static void import_startjob(void *user_data, short *stop, short *do_update, float *progress)
@@ -492,7 +480,7 @@ static void import_startjob(void *user_data, short *stop, short *do_update, floa
   visit_object(archive->getTop(), data->readers, data->settings, assign_as_parent);
 
   /* There shouldn't be any orphans. */
-  BLI_assert(assign_as_parent.size() == 0);
+  BLI_assert(assign_as_parent.empty());
 
   if (G.is_break) {
     data->was_cancelled = true;
@@ -630,6 +618,12 @@ static void import_endjob(void *user_data)
 
     DEG_id_tag_update(&data->scene->id, ID_RECALC_BASE_FLAGS);
     DEG_relations_tag_update(data->bmain);
+
+    if (data->is_background_job) {
+      /* Blender already returned from the import operator, so we need to store our own extra undo
+       * step. */
+      ED_undo_push(data->C, "Alembic Import Finished");
+    }
   }
 
   for (iter = data->readers.begin(); iter != data->readers.end(); ++iter) {
@@ -675,6 +669,7 @@ bool ABC_import(bContext *C,
 {
   /* Using new here since MEM_* functions do not call constructor to properly initialize data. */
   ImportJobData *job = new ImportJobData();
+  job->C = C;
   job->bmain = CTX_data_main(C);
   job->scene = CTX_data_scene(C);
   job->view_layer = CTX_data_view_layer(C);
@@ -691,6 +686,7 @@ bool ABC_import(bContext *C,
   job->error_code = ABC_NO_ERROR;
   job->was_cancelled = false;
   job->archive = NULL;
+  job->is_background_job = as_background_job;
 
   G.is_break = false;
 
@@ -863,4 +859,137 @@ CacheReader *CacheReader_open_alembic_object(AbcArchiveHandle *handle,
   abc_reader->incref();
 
   return reinterpret_cast<CacheReader *>(abc_reader);
+}
+
+/* ************************************************************************** */
+
+static const PropertyHeader *get_property_header(const IPolyMeshSchema &schema, const char *name)
+{
+  const PropertyHeader *prop_header = schema.getPropertyHeader(name);
+
+  if (prop_header) {
+    return prop_header;
+  }
+
+  ICompoundProperty prop = schema.getArbGeomParams();
+
+  if (!has_property(prop, name)) {
+    return nullptr;
+  }
+
+  return prop.getPropertyHeader(name);
+}
+
+bool ABC_has_vec3_array_property_named(struct CacheReader *reader, const char *name)
+{
+  AbcObjectReader *abc_reader = reinterpret_cast<AbcObjectReader *>(reader);
+
+  if (!abc_reader) {
+    return false;
+  }
+
+  IObject iobject = abc_reader->iobject();
+
+  if (!iobject.valid()) {
+    return false;
+  }
+
+  const ObjectHeader &header = iobject.getHeader();
+
+  if (!IPolyMesh::matches(header)) {
+    return false;
+  }
+
+  IPolyMesh mesh(iobject, kWrapExisting);
+  IPolyMeshSchema schema = mesh.getSchema();
+
+  const PropertyHeader *prop_header = get_property_header(schema, name);
+
+  if (!prop_header) {
+    return false;
+  }
+
+  return IV3fArrayProperty::matches(prop_header->getMetaData());
+}
+
+static V3fArraySamplePtr get_velocity_prop(const IPolyMeshSchema &schema,
+                                           const ISampleSelector &iss,
+                                           const std::string &name)
+{
+  const PropertyHeader *prop_header = schema.getPropertyHeader(name);
+
+  if (prop_header) {
+    const IV3fArrayProperty &velocity_prop = IV3fArrayProperty(schema, name, 0);
+    return velocity_prop.getValue(iss);
+  }
+
+  ICompoundProperty prop = schema.getArbGeomParams();
+
+  if (!has_property(prop, name)) {
+    return V3fArraySamplePtr();
+  }
+
+  const IV3fArrayProperty &velocity_prop = IV3fArrayProperty(prop, name, 0);
+
+  if (velocity_prop) {
+    return velocity_prop.getValue(iss);
+  }
+
+  return V3fArraySamplePtr();
+}
+
+int ABC_read_velocity_cache(CacheReader *reader,
+                            const char *velocity_name,
+                            const float time,
+                            float velocity_scale,
+                            int num_vertices,
+                            float *r_vertex_velocities)
+{
+  AbcObjectReader *abc_reader = reinterpret_cast<AbcObjectReader *>(reader);
+
+  if (!abc_reader) {
+    return -1;
+  }
+
+  IObject iobject = abc_reader->iobject();
+
+  if (!iobject.valid()) {
+    return -1;
+  }
+
+  const ObjectHeader &header = iobject.getHeader();
+
+  if (!IPolyMesh::matches(header)) {
+    return -1;
+  }
+
+  IPolyMesh mesh(iobject, kWrapExisting);
+  IPolyMeshSchema schema = mesh.getSchema();
+  ISampleSelector sample_sel(time);
+  const IPolyMeshSchema::Sample sample = schema.getValue(sample_sel);
+
+  V3fArraySamplePtr velocities = get_velocity_prop(schema, sample_sel, velocity_name);
+
+  if (!velocities) {
+    return -1;
+  }
+
+  float vel[3];
+
+  int num_velocity_vectors = static_cast<int>(velocities->size());
+
+  if (num_velocity_vectors != num_vertices) {
+    return -1;
+  }
+
+  for (size_t i = 0; i < velocities->size(); ++i) {
+    const Imath::V3f &vel_in = (*velocities)[i];
+    copy_zup_from_yup(vel, vel_in.getValue());
+
+    mul_v3_fl(vel, velocity_scale);
+
+    copy_v3_v3(r_vertex_velocities + i * 3, vel);
+  }
+
+  return num_vertices;
 }

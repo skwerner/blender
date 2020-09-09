@@ -21,6 +21,8 @@
 
 #include <pxr/base/tf/stringUtils.h>
 
+#include "BLI_assert.h"
+
 /* TfToken objects are not cheap to construct, so we do it once. */
 namespace usdtokens {
 // Materials
@@ -32,7 +34,9 @@ static const pxr::TfToken roughness("roughness", pxr::TfToken::Immortal);
 static const pxr::TfToken surface("surface", pxr::TfToken::Immortal);
 }  // namespace usdtokens
 
-namespace USD {
+namespace blender {
+namespace io {
+namespace usd {
 
 USDAbstractWriter::USDAbstractWriter(const USDExporterContext &usd_export_context)
     : usd_export_context_(usd_export_context),
@@ -112,4 +116,45 @@ pxr::UsdShadeMaterial USDAbstractWriter::ensure_usd_material(Material *material)
   return usd_material;
 }
 
-}  // namespace USD
+void USDAbstractWriter::write_visibility(const HierarchyContext &context,
+                                         const pxr::UsdTimeCode timecode,
+                                         pxr::UsdGeomImageable &usd_geometry)
+{
+  pxr::UsdAttribute attr_visibility = usd_geometry.CreateVisibilityAttr(pxr::VtValue(), true);
+
+  const bool is_visible = context.is_object_visible(
+      usd_export_context_.export_params.evaluation_mode);
+  const pxr::TfToken visibility = is_visible ? pxr::UsdGeomTokens->inherited :
+                                               pxr::UsdGeomTokens->invisible;
+
+  usd_value_writer_.SetAttribute(attr_visibility, pxr::VtValue(visibility), timecode);
+}
+
+/* Reference the original data instead of writing a copy. */
+bool USDAbstractWriter::mark_as_instance(const HierarchyContext &context, const pxr::UsdPrim &prim)
+{
+  BLI_assert(context.is_instance());
+
+  if (context.export_path == context.original_export_path) {
+    printf("USD ref error: export path is reference path: %s\n", context.export_path.c_str());
+    BLI_assert(!"USD reference error");
+    return false;
+  }
+
+  pxr::SdfPath ref_path(context.original_export_path);
+  if (!prim.GetReferences().AddInternalReference(ref_path)) {
+    /* See this URL for a description fo why referencing may fail"
+     * https://graphics.pixar.com/usd/docs/api/class_usd_references.html#Usd_Failing_References
+     */
+    printf("USD Export warning: unable to add reference from %s to %s, not instancing object\n",
+           context.export_path.c_str(),
+           context.original_export_path.c_str());
+    return false;
+  }
+
+  return true;
+}
+
+}  // namespace usd
+}  // namespace io
+}  // namespace blender

@@ -21,8 +21,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_SCENE_TYPES_H__
-#define __DNA_SCENE_TYPES_H__
+#pragma once
 
 #include "DNA_defs.h"
 
@@ -1138,6 +1137,9 @@ typedef struct GP_Interpolate_Settings {
   float back;
   /** BEZT_IPO_ELASTIC. */
   float amplitude, period;
+  /* Step between sequence interpolated frames. */
+  int step;
+  char _pad[4];
 
   /** Custom interpolation curve (for use with GP_IPO_CURVEMAP). */
   struct CurveMapping *custom_ipo;
@@ -1532,8 +1534,9 @@ typedef struct UnitSettings {
   char length_unit;
   char mass_unit;
   char time_unit;
+  char temperature_unit;
 
-  char _pad[5];
+  char _pad[4];
 } UnitSettings;
 
 /* ------------------------------------------- */
@@ -1590,7 +1593,6 @@ typedef struct SceneEEVEE {
   float gi_irradiance_smoothing;
   float gi_glossy_clamp;
   float gi_filter_quality;
-  char _pad[4];
 
   float gi_cubemap_draw_size;
   float gi_irradiance_draw_size;
@@ -1630,6 +1632,7 @@ typedef struct SceneEEVEE {
 
   int motion_blur_samples DNA_DEPRECATED;
   int motion_blur_max;
+  int motion_blur_steps;
   float motion_blur_shutter;
   float motion_blur_depth_scale;
 
@@ -2174,7 +2177,7 @@ typedef enum eSculptFlags {
 
   SCULPT_FLAG_UNUSED_6 = (1 << 6), /* cleared */
 
-  SCULPT_USE_OPENMP = (1 << 7),
+  SCULPT_FLAG_UNUSED_7 = (1 << 7), /* cleared */
   SCULPT_ONLY_DEFORM = (1 << 8),
   // SCULPT_SHOW_DIFFUSE = (1 << 9), // deprecated
 
@@ -2235,10 +2238,14 @@ enum {
 #define UVCALC_FILLHOLES (1 << 0)
 /** would call this UVCALC_ASPECT_CORRECT, except it should be default with old file */
 #define UVCALC_NO_ASPECT_CORRECT (1 << 1)
-/** adjust UV's while transforming to avoid distortion */
-#define UVCALC_TRANSFORM_CORRECT (1 << 2)
+/** Adjust UV's while transforming with Vert or Edge Slide. */
+#define UVCALC_TRANSFORM_CORRECT_SLIDE (1 << 2)
 /** Use mesh data after subsurf to compute UVs*/
 #define UVCALC_USESUBSURF (1 << 3)
+/** adjust UV's while transforming to avoid distortion */
+#define UVCALC_TRANSFORM_CORRECT (1 << 4)
+/** Keep equal values merged while correcting custom-data. */
+#define UVCALC_TRANSFORM_CORRECT_KEEP_CONNECTED (1 << 5)
 
 /* ToolSettings.uv_flag */
 #define UV_SYNC_SELECTION 1
@@ -2410,5 +2417,3 @@ enum {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __DNA_SCENE_TYPES_H__ */

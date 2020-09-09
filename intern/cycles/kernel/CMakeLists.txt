@@ -1,3 +1,17 @@
+# Copyright 2011-2020 Blender Foundation
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 remove_extra_strict_flags()
 
 set(INC
@@ -539,7 +553,7 @@ if(WITH_CYCLES_DEVICE_OPTIX AND WITH_CYCLES_CUDA_BINARIES)
           ${SRC_UTIL_HEADERS}
         COMMAND ${CUBIN_CC_ENV}
             "$<TARGET_FILE:cycles_cubin_cc>"
-            -target 30
+            -target 50
             -ptx
             -i ${CMAKE_CURRENT_SOURCE_DIR}/${input}
             ${cuda_flags}
@@ -563,7 +577,7 @@ if(WITH_CYCLES_DEVICE_OPTIX AND WITH_CYCLES_CUDA_BINARIES)
         COMMAND
           ${CUDA_NVCC_EXECUTABLE}
           --ptx
-          -arch=sm_30
+          -arch=sm_50
           ${cuda_flags}
           ${input}
         WORKING_DIRECTORY

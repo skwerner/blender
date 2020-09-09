@@ -570,7 +570,7 @@ static void rna_Curve_body_set(PointerRNA *ptr, const char *value)
 
   Curve *cu = (Curve *)ptr->owner_id;
 
-  cu->len_wchar = len_chars;
+  cu->len_char32 = len_chars;
   cu->len = len_bytes;
   cu->pos = len_chars;
 
@@ -1191,9 +1191,9 @@ static void rna_def_font(BlenderRNA *UNUSED(brna), StructRNA *srna)
   RNA_def_property_ui_text(
       prop,
       "Object Font",
-      "Use Objects as font characters (give font objects a common name "
+      "Use objects as font characters (give font objects a common name "
       "followed by the character they represent, eg. 'family-a', 'family-b', etc, "
-      "set this setting to 'family-', and turn on Vertex Duplication)");
+      "set this setting to 'family-', and turn on Vertex Instancing)");
   RNA_def_property_update(prop, 0, "rna_Curve_update_data");
 
   prop = RNA_def_property(srna, "body", PROP_STRING, PROP_NONE);
@@ -1206,7 +1206,7 @@ static void rna_def_font(BlenderRNA *UNUSED(brna), StructRNA *srna)
   RNA_def_property_update(prop, 0, "rna_Curve_update_data");
 
   prop = RNA_def_property(srna, "body_format", PROP_COLLECTION, PROP_NONE);
-  RNA_def_property_collection_sdna(prop, NULL, "strinfo", "len_wchar");
+  RNA_def_property_collection_sdna(prop, NULL, "strinfo", "len_char32");
   RNA_def_property_struct_type(prop, "TextCharacterFormat");
   RNA_def_property_ui_text(prop, "Character Info", "Stores the style of each character");
 
@@ -1534,6 +1534,8 @@ static void rna_def_curve(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "shape_keys", PROP_POINTER, PROP_NONE);
   RNA_def_property_pointer_sdna(prop, NULL, "key");
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
+  RNA_def_property_clear_flag(prop, PROP_PTR_NO_OWNERSHIP);
   RNA_def_property_ui_text(prop, "Shape Keys", "");
 
   prop = RNA_def_property(srna, "splines", PROP_COLLECTION, PROP_NONE);

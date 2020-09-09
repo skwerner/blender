@@ -136,14 +136,21 @@ add_definitions(
 # MSVC11 needs _ALLOW_KEYWORD_MACROS to build
 add_definitions(-D_ALLOW_KEYWORD_MACROS)
 
+# RTTI is on by default even without this switch
+# however having it in the CXX Flags makes it difficult
+# to remove for individual files that want to disable it
+# using the /GR- flag without generating a build warning
+# that both /GR and /GR- are specified.
+remove_cc_flag("/GR")
+
 # We want to support Windows 7 level ABI
 add_definitions(-D_WIN32_WINNT=0x601)
 include(build_files/cmake/platform/platform_win32_bundle_crt.cmake)
 remove_cc_flag("/MDd" "/MD" "/Zi")
 
 if(WITH_WINDOWS_PDB)
-	set(PDB_INFO_OVERRIDE_FLAGS "/Z7")
-	set(PDB_INFO_OVERRIDE_LINKER_FLAGS "/DEBUG /OPT:REF /OPT:ICF /INCREMENTAL:NO")
+  set(PDB_INFO_OVERRIDE_FLAGS "/Z7")
+  set(PDB_INFO_OVERRIDE_LINKER_FLAGS "/DEBUG /OPT:REF /OPT:ICF /INCREMENTAL:NO")
 endif()
 
 if(MSVC_CLANG) # Clangs version of cl doesn't support all flags
@@ -416,9 +423,6 @@ if(WITH_BOOST)
   if(WITH_INTERNATIONAL)
     list(APPEND boost_extra_libs locale)
   endif()
-  if(WITH_OPENVDB)
-    list(APPEND boost_extra_libs iostreams)
-  endif()
   set(Boost_USE_STATIC_RUNTIME ON) # prefix lib
   set(Boost_USE_MULTITHREADED ON) # suffix -mt
   set(Boost_USE_STATIC_LIBS ON) # suffix -s
@@ -524,12 +528,11 @@ if(WITH_OPENCOLORIO)
 endif()
 
 if(WITH_OPENVDB)
-  set(BLOSC_LIBRARIES optimized ${LIBDIR}/blosc/lib/libblosc.lib debug ${LIBDIR}/blosc/lib/libblosc_d.lib)
   set(OPENVDB ${LIBDIR}/openVDB)
   set(OPENVDB_LIBPATH ${OPENVDB}/lib)
   set(OPENVDB_INCLUDE_DIRS ${OPENVDB}/include)
-  set(OPENVDB_LIBRARIES optimized ${OPENVDB_LIBPATH}/openvdb.lib debug ${OPENVDB_LIBPATH}/openvdb_d.lib ${BLOSC_LIBRARIES})
-  set(OPENVDB_DEFINITIONS -DNOMINMAX -DOPENVDB_STATICLIB -D_USE_MATH_DEFINES)
+  set(OPENVDB_LIBRARIES optimized ${OPENVDB_LIBPATH}/openvdb.lib debug ${OPENVDB_LIBPATH}/openvdb_d.lib )
+  set(OPENVDB_DEFINITIONS -DNOMINMAX -D_USE_MATH_DEFINES)
 endif()
 
 if(WITH_OPENIMAGEDENOISE)
@@ -539,10 +542,10 @@ if(WITH_OPENIMAGEDENOISE)
   set(OPENIMAGEDENOISE_LIBRARIES
     optimized ${OPENIMAGEDENOISE_LIBPATH}/OpenImageDenoise.lib
     optimized ${OPENIMAGEDENOISE_LIBPATH}/common.lib
-    optimized ${OPENIMAGEDENOISE_LIBPATH}/mkldnn.lib
+    optimized ${OPENIMAGEDENOISE_LIBPATH}/dnnl.lib
     debug ${OPENIMAGEDENOISE_LIBPATH}/OpenImageDenoise_d.lib
     debug ${OPENIMAGEDENOISE_LIBPATH}/common_d.lib
-    debug ${OPENIMAGEDENOISE_LIBPATH}/mkldnn_d.lib)
+    debug ${OPENIMAGEDENOISE_LIBPATH}/dnnl_d.lib)
   set(OPENIMAGEDENOISE_DEFINITIONS)
 endif()
 
@@ -749,4 +752,11 @@ if(WITH_XR_OPENXR)
     message(WARNING "OpenXR-SDK was not found, disabling WITH_XR_OPENXR")
     set(WITH_XR_OPENXR OFF)
   endif()
+endif()
+
+if(WITH_GMP)
+  set(GMP_INCLUDE_DIRS ${LIBDIR}/gmp/include)
+  set(GMP_LIBRARIES ${LIBDIR}/gmp/lib/libgmp-10.lib optimized ${LIBDIR}/gmp/lib/libgmpxx.lib debug ${LIBDIR}/gmp/lib/libgmpxx_d.lib)
+  set(GMP_ROOT_DIR ${LIBDIR}/gmp)
+  set(GMP_FOUND On)
 endif()

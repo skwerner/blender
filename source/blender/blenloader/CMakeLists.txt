@@ -63,8 +63,8 @@ set(SRC
 
   BLO_blend_defs.h
   BLO_blend_validate.h
-  BLO_readfile.h
   BLO_read_write.h
+  BLO_readfile.h
   BLO_undofile.h
   BLO_writefile.h
   intern/readfile.h
@@ -98,3 +98,19 @@ blender_add_lib(bf_blenloader "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
 
 # needed so writefile.c can use dna_type_offsets.h
 add_dependencies(bf_blenloader bf_dna)
+
+if(WITH_GTESTS)
+  set(TEST_SRC
+    tests/blendfile_load_test.cc
+    tests/blendfile_loading_base_test.cc
+
+    tests/blendfile_loading_base_test.h
+  )
+  set(TEST_INC
+  )
+  set(TEST_LIB
+    bf_blenloader
+  )
+  include(GTestTesting)
+  blender_add_test_lib(bf_blenloader_tests "${TEST_SRC}" "${INC};${TEST_INC}" "${INC_SYS}" "${LIB};${TEST_LIB}")
+endif()

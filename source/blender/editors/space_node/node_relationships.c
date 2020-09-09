@@ -76,10 +76,9 @@ static bool ntree_check_nodes_connected_dfs(bNodeTree *ntree, bNode *from, bNode
       if (link->tonode == to) {
         return true;
       }
-      else {
-        if (ntree_check_nodes_connected_dfs(ntree, link->tonode, to)) {
-          return true;
-        }
+
+      if (ntree_check_nodes_connected_dfs(ntree, link->tonode, to)) {
+        return true;
       }
     }
   }
@@ -191,9 +190,7 @@ static int sort_nodes_locx(const void *a, const void *b)
   if (node1->locx > node2->locx) {
     return 1;
   }
-  else {
-    return 0;
-  }
+  return 0;
 }
 
 static bool socket_is_available(bNodeTree *UNUSED(ntree), bNodeSocket *sock, const bool allow_used)
@@ -252,6 +249,12 @@ static bNodeSocket *best_socket_output(bNodeTree *ntree,
     if (sock->type == sock_target->type) {
       return sock;
     }
+  }
+
+  /* Always allow linking to an reroute node. The socket type of the reroute sockets might change
+   * after the link has been created. */
+  if (node->type == NODE_REROUTE) {
+    return node->outputs.first;
   }
 
   return NULL;
@@ -667,6 +670,8 @@ static void node_link_exit(bContext *C, wmOperator *op, bool apply_links)
   }
   ntree->is_updating = false;
 
+  do_tag_update |= ED_node_is_simulation(snode);
+
   ntreeUpdateTree(bmain, ntree);
   snode_notify(C, snode);
   if (do_tag_update) {
@@ -921,9 +926,7 @@ static int node_link_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
     return OPERATOR_RUNNING_MODAL;
   }
-  else {
-    return OPERATOR_CANCELLED | OPERATOR_PASS_THROUGH;
-  }
+  return OPERATOR_CANCELLED | OPERATOR_PASS_THROUGH;
 }
 
 static void node_link_cancel(bContext *C, wmOperator *op)
@@ -1001,7 +1004,7 @@ void NODE_OT_link_make(wmOperatorType *ot)
 }
 
 /* ********************** Cut Link operator ***************** */
-static bool cut_links_intersect(bNodeLink *link, float mcoords[][2], int tot)
+static bool cut_links_intersect(bNodeLink *link, const float mcoords[][2], int tot)
 {
   float coord_array[NODE_LINK_RESOL + 1][2];
   int i, b;
@@ -1069,6 +1072,8 @@ static int cut_links_exec(bContext *C, wmOperator *op)
       }
     }
 
+    do_tag_update |= ED_node_is_simulation(snode);
+
     if (found) {
       ntreeUpdateTree(CTX_data_main(C), snode->edittree);
       snode_notify(C, snode);
@@ -1078,9 +1083,8 @@ static int cut_links_exec(bContext *C, wmOperator *op)
 
       return OPERATOR_FINISHED;
     }
-    else {
-      return OPERATOR_CANCELLED;
-    }
+
+    return OPERATOR_CANCELLED;
   }
 
   return OPERATOR_CANCELLED | OPERATOR_PASS_THROUGH;
@@ -1473,9 +1477,7 @@ static bool ed_node_link_conditions(ScrArea *area,
       if (select) {
         break;
       }
-      else {
-        select = node;
-      }
+      select = node;
     }
   }
   /* only one selected */

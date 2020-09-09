@@ -225,6 +225,7 @@ else:
         "aud",
         "bgl",
         "blf",
+        "bl_math",
         "imbuf",
         "bmesh",
         "bmesh.ops",
@@ -359,7 +360,7 @@ INFO_DOCS = (
     ("info_tips_and_tricks.rst",
      "Tips and Tricks: Hints to help you while writing scripts for Blender"),
     ("info_gotcha.rst",
-     "Gotcha's: some of the problems you may come up against when writing scripts"),
+     "Gotcha's: some of the problems you may encounter when writing scripts"),
     ("change_log.rst", "List of changes since last Blender release"),
 )
 
@@ -440,25 +441,30 @@ if ARGS.sphinx_build:
 
     if ARGS.log:
         SPHINX_BUILD_LOG = os.path.join(ARGS.output_dir, ".sphinx-build.log")
-        SPHINX_BUILD = ["sphinx-build",
-                        "-w", SPHINX_BUILD_LOG,
-                        SPHINX_IN, SPHINX_OUT]
+        SPHINX_BUILD = [
+            "sphinx-build",
+            "-w", SPHINX_BUILD_LOG,
+            SPHINX_IN, SPHINX_OUT,
+        ]
 
 # pdf build
 if ARGS.sphinx_build_pdf:
     SPHINX_OUT_PDF = os.path.join(ARGS.output_dir, "sphinx-out_pdf")
-    SPHINX_BUILD_PDF = ["sphinx-build",
-                        "-b", "latex",
-                        SPHINX_IN, SPHINX_OUT_PDF]
+    SPHINX_BUILD_PDF = [
+        "sphinx-build",
+        "-b", "latex",
+        SPHINX_IN, SPHINX_OUT_PDF,
+    ]
     SPHINX_MAKE_PDF = ["make", "-C", SPHINX_OUT_PDF]
     SPHINX_MAKE_PDF_STDOUT = None
 
     if ARGS.log:
         SPHINX_BUILD_PDF_LOG = os.path.join(ARGS.output_dir, ".sphinx-build_pdf.log")
-        SPHINX_BUILD_PDF = ["sphinx-build", "-b", "latex",
-                            "-w", SPHINX_BUILD_PDF_LOG,
-                            SPHINX_IN, SPHINX_OUT_PDF]
-
+        SPHINX_BUILD_PDF = [
+            "sphinx-build", "-b", "latex",
+            "-w", SPHINX_BUILD_PDF_LOG,
+            SPHINX_IN, SPHINX_OUT_PDF,
+        ]
         sphinx_make_pdf_log = os.path.join(ARGS.output_dir, ".latex_make.log")
         SPHINX_MAKE_PDF_STDOUT = open(sphinx_make_pdf_log, "w", encoding="utf-8")
 
@@ -690,13 +696,11 @@ def py_descr2sphinx(ident, fw, descr, module_name, type_name, identifier):
         doc = undocumented_message(module_name, type_name, identifier)
 
     if type(descr) == GetSetDescriptorType:
-        fw(ident + ".. attribute:: %s\n" % identifier)
-        fw(ident + "   :noindex:\n\n")
+        fw(ident + ".. attribute:: %s\n\n" % identifier)
         write_indented_lines(ident + "   ", fw, doc, False)
         fw("\n")
     elif type(descr) == MemberDescriptorType:  # same as above but use 'data'
-        fw(ident + ".. data:: %s\n" % identifier)
-        fw(ident + "   :noindex:\n\n")
+        fw(ident + ".. data:: %s\n\n" % identifier)
         write_indented_lines(ident + "   ", fw, doc, False)
         fw("\n")
     elif type(descr) in {MethodDescriptorType, ClassMethodDescriptorType}:
@@ -736,14 +740,11 @@ def pyprop2sphinx(ident, fw, identifier, py_prop):
     '''
     # readonly properties use "data" directive, variables use "attribute" directive
     if py_prop.fset is None:
-        fw(ident + ".. data:: %s\n" % identifier)
-        fw(ident + "   :noindex:\n\n")
+        fw(ident + ".. data:: %s\n\n" % identifier)
     else:
-        fw(ident + ".. attribute:: %s\n" % identifier)
-        fw(ident + "   :noindex:\n\n")
+        fw(ident + ".. attribute:: %s\n\n" % identifier)
     write_indented_lines(ident + "   ", fw, py_prop.__doc__)
     if py_prop.fset is None:
-        fw("\n")
         fw(ident + "   (readonly)\n\n")
     else:
         fw("\n")
@@ -909,8 +910,7 @@ def pymodule2sphinx(basepath, module_name, module, title):
         elif issubclass(value_type, (bool, int, float, str, tuple)):
             # constant, not much fun we can do here except to list it.
             # TODO, figure out some way to document these!
-            fw(".. data:: %s\n" % attribute)
-            fw("   :noindex:\n\n")
+            fw(".. data:: %s\n\n" % attribute)
             write_indented_lines("   ", fw, "constant value %s" % repr(value), False)
             fw("\n")
         else:
@@ -1028,6 +1028,7 @@ context_type_map = {
     "gpencil": ("GreasePencil", False),
     "gpencil_data": ("GreasePencil", False),
     "gpencil_data_owner": ("ID", False),
+    "hair": ("Hair", False),
     "image_paint_object": ("Object", False),
     "lattice": ("Lattice", False),
     "light": ("Light", False),
@@ -1044,6 +1045,7 @@ context_type_map = {
     "particle_settings": ("ParticleSettings", False),
     "particle_system": ("ParticleSystem", False),
     "particle_system_editable": ("ParticleSystem", False),
+    "pointcloud": ("PointCloud", False),
     "pose_bone": ("PoseBone", False),
     "pose_object": ("Object", False),
     "scene": ("Scene", False),
@@ -1118,8 +1120,7 @@ def pycontext2sphinx(basepath):
 
             type_descr = prop.get_type_description(
                 class_fmt=":class:`bpy.types.%s`", collection_id=_BPY_PROP_COLLECTION_ID)
-            fw(".. data:: %s\n" % prop.identifier)
-            fw("   :noindex:\n\n")
+            fw(".. data:: %s\n\n" % prop.identifier)
             if prop.description:
                 fw("   %s\n\n" % prop.description)
 
@@ -1164,8 +1165,7 @@ def pycontext2sphinx(basepath):
         i = 0
         while char_array[i] is not None:
             member = ctypes.string_at(char_array[i]).decode(encoding="ascii")
-            fw(".. data:: %s\n" % member)
-            fw("   :noindex:\n\n")
+            fw(".. data:: %s\n\n" % member)
             member_type, is_seq = context_type_map[member]
             fw("   :type: %s :class:`bpy.types.%s`\n\n" % ("sequence of " if is_seq else "", member_type))
             unique.add(member)
@@ -1371,11 +1371,9 @@ def pyrna2sphinx(basepath):
             type_descr = prop.get_type_description(class_fmt=":class:`%s`", collection_id=_BPY_PROP_COLLECTION_ID)
             # readonly properties use "data" directive, variables properties use "attribute" directive
             if 'readonly' in type_descr:
-                fw("   .. data:: %s\n" % prop.identifier)
-                fw("      :noindex:\n\n")
+                fw("   .. data:: %s\n\n" % prop.identifier)
             else:
-                fw("   .. attribute:: %s\n" % prop.identifier)
-                fw("      :noindex:\n\n")
+                fw("   .. attribute:: %s\n\n" % prop.identifier)
             if prop.description:
                 fw("      %s\n\n" % prop.description)
 
@@ -1719,7 +1717,7 @@ class PatchedPythonDomain(PythonDomain):
     # end workaround
 
     fw("def setup(app):\n")
-    fw("    app.add_stylesheet('css/theme_overrides.css')\n")
+    fw("    app.add_css_file('css/theme_overrides.css')\n")
     fw("    app.add_domain(PatchedPythonDomain, override=True)\n\n")
 
     file.close()
@@ -1791,8 +1789,18 @@ def write_rst_contents(basepath):
 
     standalone_modules = (
         # submodules are added in parent page
-        "mathutils", "freestyle", "bgl", "blf", "imbuf", "gpu", "gpu_extras",
-        "aud", "bpy_extras", "idprop.types", "bmesh",
+        "aud",
+        "bgl",
+        "bl_math",
+        "blf",
+        "bmesh",
+        "bpy_extras",
+        "freestyle",
+        "gpu",
+        "gpu_extras",
+        "idprop.types",
+        "imbuf",
+        "mathutils",
     )
 
     for mod in standalone_modules:
@@ -1944,6 +1952,7 @@ def write_rst_importable_modules(basepath):
         "mathutils.kdtree": "KDTree Utilities",
         "mathutils.interpolate": "Interpolation Utilities",
         "mathutils.noise": "Noise Utilities",
+        "bl_math": "Additional Math Functions",
         "freestyle": "Freestyle Module",
         "freestyle.types": "Freestyle Types",
         "freestyle.predicates": "Freestyle Predicates",

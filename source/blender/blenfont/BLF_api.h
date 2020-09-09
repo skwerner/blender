@@ -21,8 +21,7 @@
  * \ingroup blf
  */
 
-#ifndef __BLF_API_H__
-#define __BLF_API_H__
+#pragma once
 
 #include "BLI_compiler_attrs.h"
 #include "BLI_sys_types.h"
@@ -43,8 +42,7 @@ int BLF_init(void);
 void BLF_exit(void);
 void BLF_default_dpi(int dpi);
 void BLF_default_set(int fontid);
-int BLF_default(void);      /* get default font ID so we can pass it to other functions */
-void BLF_batch_reset(void); /* call when changing opengl context. */
+int BLF_default(void); /* get default font ID so we can pass it to other functions */
 
 void BLF_cache_clear(void);
 
@@ -305,5 +303,3 @@ struct ResultBLF {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLF_API_H__ */

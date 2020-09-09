@@ -257,10 +257,10 @@ static void sound_update_animation_flags(Scene *scene)
   }
   scene->id.tag |= LIB_TAG_DOIT;
 
-  SEQ_BEGIN (scene->ed, seq) {
+  SEQ_ALL_BEGIN (scene->ed, seq) {
     BKE_sequencer_recursive_apply(seq, sound_update_animation_flags_fn, scene);
   }
-  SEQ_END;
+  SEQ_ALL_END;
 
   fcu = id_data_find_fcurve(&scene->id, scene, &RNA_Scene, "audio_volume", 0, &driven);
   if (fcu || driven) {
@@ -306,7 +306,6 @@ static void SOUND_OT_update_animation_flags(wmOperatorType *ot)
 
 static int sound_bake_animation_exec(bContext *C, wmOperator *UNUSED(op))
 {
-  Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
   /* NOTE: We will be forcefully evaluating dependency graph at every frame, so no need to ensure
    * current scene state is evaluated as it will be lost anyway. */
@@ -318,11 +317,11 @@ static int sound_bake_animation_exec(bContext *C, wmOperator *UNUSED(op))
 
   for (cfra = (scene->r.sfra > 0) ? (scene->r.sfra - 1) : 0; cfra <= scene->r.efra + 1; cfra++) {
     scene->r.cfra = cfra;
-    BKE_scene_graph_update_for_newframe(depsgraph, bmain);
+    BKE_scene_graph_update_for_newframe(depsgraph);
   }
 
   scene->r.cfra = oldfra;
-  BKE_scene_graph_update_for_newframe(depsgraph, bmain);
+  BKE_scene_graph_update_for_newframe(depsgraph);
 
   return OPERATOR_FINISHED;
 }
@@ -387,7 +386,9 @@ static int sound_mixdown_exec(bContext *C, wmOperator *op)
                                      specs,
                                      container,
                                      codec,
-                                     bitrate);
+                                     bitrate,
+                                     NULL,
+                                     NULL);
   }
   else {
     result = AUD_mixdown(scene_eval->sound_scene,
@@ -398,7 +399,9 @@ static int sound_mixdown_exec(bContext *C, wmOperator *op)
                          specs,
                          container,
                          codec,
-                         bitrate);
+                         bitrate,
+                         NULL,
+                         NULL);
   }
 
   BKE_sound_reset_scene_specs(scene_eval);
@@ -563,6 +566,9 @@ static void sound_mixdown_draw(bContext *C, wmOperator *op)
   PropertyRNA *prop_format;
   PropertyRNA *prop_codec;
   PropertyRNA *prop_bitrate;
+
+  uiLayoutSetPropSep(layout, true);
+  uiLayoutSetPropDecorate(layout, false);
 
   AUD_Container container = RNA_enum_get(op->ptr, "container");
   AUD_Codec codec = RNA_enum_get(op->ptr, "codec");
@@ -747,10 +753,10 @@ static bool sound_poll(bContext *C)
   Editing *ed = CTX_data_scene(C)->ed;
 
   if (!ed || !ed->act_seq || ed->act_seq->type != SEQ_TYPE_SOUND_RAM) {
-    return 0;
+    return false;
   }
 
-  return 1;
+  return true;
 }
 /********************* pack operator *********************/
 
@@ -771,7 +777,7 @@ static int sound_pack_exec(bContext *C, wmOperator *op)
   }
 
   sound->packedfile = BKE_packedfile_new(
-      op->reports, sound->name, ID_BLEND_PATH(bmain, &sound->id));
+      op->reports, sound->filepath, ID_BLEND_PATH(bmain, &sound->id));
   BKE_sound_load(bmain, sound);
 
   return OPERATOR_FINISHED;
@@ -847,7 +853,8 @@ static int sound_unpack_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSE
                "AutoPack is enabled, so image will be packed again on file save");
   }
 
-  unpack_menu(C, "SOUND_OT_unpack", sound->id.name + 2, sound->name, "sounds", sound->packedfile);
+  unpack_menu(
+      C, "SOUND_OT_unpack", sound->id.name + 2, sound->filepath, "sounds", sound->packedfile);
 
   return OPERATOR_FINISHED;
 }

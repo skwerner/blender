@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BMESH_H__
-#define __BMESH_H__
+#pragma once
 
 /** \file
  * \ingroup bmesh
@@ -223,6 +222,7 @@ extern "C" {
 #include "intern/bmesh_polygon.h"
 #include "intern/bmesh_polygon_edgenet.h"
 #include "intern/bmesh_query.h"
+#include "intern/bmesh_query_uv.h"
 #include "intern/bmesh_walkers.h"
 
 #include "intern/bmesh_inline.h"
@@ -230,5 +230,3 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BMESH_H__ */

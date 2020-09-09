@@ -21,8 +21,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_CURVE_TYPES_H__
-#define __DNA_CURVE_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_defs.h"
@@ -274,9 +273,12 @@ typedef struct Curve {
   int selstart, selend;
 
   /* text data */
-  /** Number of characters (strinfo). */
-  int len_wchar;
-  /** Number of bytes (str - utf8). */
+  /**
+   * Number of characters (unicode code-points)
+   * This is the length of #Curve.strinfo and the result of `BLI_strlen_utf8(cu->str)`.
+   */
+  int len_char32;
+  /** Number of bytes: `strlen(Curve.str)`. */
   int len;
   char *str;
   struct EditFont *editfont;
@@ -544,5 +546,3 @@ enum {
 
 /* indicates point has been seen during surface duplication */
 #define SURF_SEEN 4
-
-#endif

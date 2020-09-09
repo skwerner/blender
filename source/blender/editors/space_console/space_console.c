@@ -46,7 +46,7 @@
 
 /* ******************** default callbacks for console space ***************** */
 
-static SpaceLink *console_new(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
+static SpaceLink *console_create(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
 {
   ARegion *region;
   SpaceConsole *sconsole;
@@ -208,7 +208,6 @@ static void console_main_region_draw(const bContext *C, ARegion *region)
   /* draw entirely, view changes should be handled here */
   SpaceConsole *sc = CTX_wm_space_console(C);
   View2D *v2d = &region->v2d;
-  View2DScrollers *scrollers;
 
   if (BLI_listbase_is_empty(&sc->scrollback)) {
     WM_operator_name_call((bContext *)C, "CONSOLE_OT_banner", WM_OP_EXEC_DEFAULT, NULL);
@@ -216,7 +215,6 @@ static void console_main_region_draw(const bContext *C, ARegion *region)
 
   /* clear and setup matrix */
   UI_ThemeClearColor(TH_BACK);
-  GPU_clear(GPU_COLOR_BIT);
 
   /* worlks best with no view2d matrix set */
   UI_view2d_view_ortho(v2d);
@@ -230,9 +228,7 @@ static void console_main_region_draw(const bContext *C, ARegion *region)
   UI_view2d_view_restore(C);
 
   /* scrollers */
-  scrollers = UI_view2d_scrollers_calc(v2d, NULL);
-  UI_view2d_scrollers_draw(v2d, scrollers);
-  UI_view2d_scrollers_free(scrollers);
+  UI_view2d_scrollers_draw(v2d, NULL);
 }
 
 static void console_operatortypes(void)
@@ -315,7 +311,7 @@ void ED_spacetype_console(void)
   st->spaceid = SPACE_CONSOLE;
   strncpy(st->name, "Console", BKE_ST_MAXNAME);
 
-  st->new = console_new;
+  st->create = console_create;
   st->free = console_free;
   st->init = console_init;
   st->duplicate = console_duplicate;

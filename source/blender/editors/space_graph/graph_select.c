@@ -95,12 +95,12 @@ typedef enum eGraphVertIndex {
 static bool fcurve_handle_sel_check(SpaceGraph *sipo, BezTriple *bezt)
 {
   if (sipo->flag & SIPO_NOHANDLES) {
-    return 0;
+    return false;
   }
   if ((sipo->flag & SIPO_SELVHANDLESONLY) && BEZT_ISSEL_ANY(bezt) == 0) {
-    return 0;
+    return false;
   }
-  return 1;
+  return true;
 }
 
 /* check if the given vertex is within bounds or not */
@@ -298,11 +298,10 @@ static tNearestVertInfo *get_best_nearest_fcurve_vert(ListBase *matches)
       BLI_remlink(matches, nvi);
       return nvi;
     }
-    else {
-      /* if vert is selected, we've got what we want... */
-      if (nvi->sel) {
-        found = 1;
-      }
+
+    /* if vert is selected, we've got what we want... */
+    if (nvi->sel) {
+      found = 1;
     }
   }
 

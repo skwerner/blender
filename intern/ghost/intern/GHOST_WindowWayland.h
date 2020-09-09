@@ -20,8 +20,7 @@
  * Declaration of GHOST_WindowWayland class.
  */
 
-#ifndef __GHOST_WINDOWWAYLAND_H__
-#define __GHOST_WINDOWWAYLAND_H__
+#pragma once
 
 #include "GHOST_Window.h"
 
@@ -109,6 +108,10 @@ class GHOST_WindowWayland : public GHOST_Window {
 
   bool isDialog() const override;
 
+#ifdef GHOST_OPENGL_ALPHA
+  void setOpaque() const;
+#endif
+
  private:
   GHOST_SystemWayland *m_system;
   struct window_t *w;
@@ -120,5 +123,3 @@ class GHOST_WindowWayland : public GHOST_Window {
    */
   GHOST_Context *newDrawingContext(GHOST_TDrawingContextType type) override;
 };
-
-#endif  // __GHOST_WINDOWWAYLAND_H__

@@ -56,7 +56,7 @@
 #endif
 
 /* local prototypes --------------------- */
-void BLO_blendhandle_print_sizes(BlendHandle *, void *);
+void BLO_blendhandle_print_sizes(BlendHandle *bh, void *fp);
 
 /* Access routines used by filesel. */
 
@@ -102,28 +102,27 @@ void BLO_blendhandle_print_sizes(BlendHandle *bh, void *fp)
     if (bhead->code == ENDB) {
       break;
     }
-    else {
-      const short *sp = fd->filesdna->structs[bhead->SDNAnr];
-      const char *name = fd->filesdna->types[sp[0]];
-      char buf[4];
 
-      buf[0] = (bhead->code >> 24) & 0xFF;
-      buf[1] = (bhead->code >> 16) & 0xFF;
-      buf[2] = (bhead->code >> 8) & 0xFF;
-      buf[3] = (bhead->code >> 0) & 0xFF;
+    const short *sp = fd->filesdna->structs[bhead->SDNAnr];
+    const char *name = fd->filesdna->types[sp[0]];
+    char buf[4];
 
-      buf[0] = buf[0] ? buf[0] : ' ';
-      buf[1] = buf[1] ? buf[1] : ' ';
-      buf[2] = buf[2] ? buf[2] : ' ';
-      buf[3] = buf[3] ? buf[3] : ' ';
+    buf[0] = (bhead->code >> 24) & 0xFF;
+    buf[1] = (bhead->code >> 16) & 0xFF;
+    buf[2] = (bhead->code >> 8) & 0xFF;
+    buf[3] = (bhead->code >> 0) & 0xFF;
 
-      fprintf(fp,
-              "['%.4s', '%s', %d, %ld ],\n",
-              buf,
-              name,
-              bhead->nr,
-              (long int)(bhead->len + sizeof(BHead)));
-    }
+    buf[0] = buf[0] ? buf[0] : ' ';
+    buf[1] = buf[1] ? buf[1] : ' ';
+    buf[2] = buf[2] ? buf[2] : ' ';
+    buf[3] = buf[3] ? buf[3] : ' ';
+
+    fprintf(fp,
+            "['%.4s', '%s', %d, %ld ],\n",
+            buf,
+            name,
+            bhead->nr,
+            (long int)(bhead->len + sizeof(BHead)));
   }
   fprintf(fp, "]\n");
 }
@@ -268,7 +267,7 @@ LinkNode *BLO_blendhandle_get_linkable_groups(BlendHandle *bh)
     if (bhead->code == ENDB) {
       break;
     }
-    else if (BKE_idtype_idcode_is_valid(bhead->code)) {
+    if (BKE_idtype_idcode_is_valid(bhead->code)) {
       if (BKE_idtype_idcode_is_linkable(bhead->code)) {
         const char *str = BKE_idtype_idcode_to_name(bhead->code);
 
@@ -390,39 +389,16 @@ BlendFileData *BLO_read_from_memfile(Main *oldmain,
       blo_make_old_idmap_from_main(fd, old_mainlist.first);
     }
 
-    /* makes lookup of existing images in old main */
-    blo_make_image_pointer_map(fd, oldmain);
-
-    /* makes lookup of existing light caches in old main */
-    blo_make_scene_pointer_map(fd, oldmain);
-
-    /* makes lookup of existing video clips in old main */
-    blo_make_movieclip_pointer_map(fd, oldmain);
-
-    /* make lookups of existing sound data in old main */
-    blo_make_sound_pointer_map(fd, oldmain);
-
-    /* make lookups of existing volume data in old main */
-    blo_make_volume_pointer_map(fd, oldmain);
-
     /* removed packed data from this trick - it's internal data that needs saves */
+
+    /* Store all existing ID caches pointers into a mapping, to allow restoring them into newly
+     * read IDs whenever possible. */
+    blo_cache_storage_init(fd, oldmain);
 
     bfd = blo_read_file_internal(fd, filename);
 
-    /* ensures relinked light caches are not freed */
-    blo_end_scene_pointer_map(fd, oldmain);
-
-    /* ensures relinked images are not freed */
-    blo_end_image_pointer_map(fd, oldmain);
-
-    /* ensures relinked movie clips are not freed */
-    blo_end_movieclip_pointer_map(fd, oldmain);
-
-    /* ensures relinked sounds are not freed */
-    blo_end_sound_pointer_map(fd, oldmain);
-
-    /* ensures relinked volumes are not freed */
-    blo_end_volume_pointer_map(fd, oldmain);
+    /* Ensure relinked caches are not freed together with their old IDs. */
+    blo_cache_storage_old_bmain_clear(fd, oldmain);
 
     /* Still in-use libraries have already been moved from oldmain to new mainlist,
      * but oldmain itself shall *never* be 'transferred' to new mainlist! */

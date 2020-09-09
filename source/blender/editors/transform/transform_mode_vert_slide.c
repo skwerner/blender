@@ -126,7 +126,7 @@ static void calcVertSlideMouseActiveVert(struct TransInfo *t, const int mval[2])
 {
   /* Active object may have no selected vertices. */
   VertSlideData *sld = TRANS_DATA_CONTAINER_FIRST_OK(t)->custom.mode.data;
-  float mval_fl[2] = {UNPACK2(mval)};
+  const float mval_fl[2] = {UNPACK2(mval)};
   TransDataVertSlideVert *sv;
 
   /* set the vertex to use as a reference for the mouse direction 'curr_sv_index' */
@@ -153,8 +153,8 @@ static void calcVertSlideMouseActiveVert(struct TransInfo *t, const int mval[2])
 static void calcVertSlideMouseActiveEdges(struct TransInfo *t, const int mval[2])
 {
   VertSlideData *sld = TRANS_DATA_CONTAINER_FIRST_OK(t)->custom.mode.data;
-  float imval_fl[2] = {UNPACK2(t->mouse.imval)};
-  float mval_fl[2] = {UNPACK2(mval)};
+  const float imval_fl[2] = {UNPACK2(t->mouse.imval)};
+  const float mval_fl[2] = {UNPACK2(mval)};
 
   float dir[3];
   TransDataVertSlideVert *sv;
@@ -390,11 +390,9 @@ void drawVertSlide(TransInfo *t)
       const int alpha_shade = -160;
       int i;
 
-      GPU_depth_test(false);
+      GPU_depth_test(GPU_DEPTH_NONE);
 
-      GPU_blend(true);
-      GPU_blend_set_func_separate(
-          GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+      GPU_blend(GPU_BLEND_ALPHA);
 
       GPU_matrix_push();
       GPU_matrix_mul(TRANS_DATA_CONTAINER_FIRST_OK(t)->obedit->obmat);
@@ -487,12 +485,12 @@ void drawVertSlide(TransInfo *t)
 
       GPU_matrix_pop();
 
-      GPU_depth_test(true);
+      GPU_depth_test(GPU_DEPTH_LESS_EQUAL);
     }
   }
 }
 
-void doVertSlide(TransInfo *t, float perc)
+static void doVertSlide(TransInfo *t, float perc)
 {
   VertSlideParams *slp = t->custom.mode.data;
 
@@ -500,6 +498,10 @@ void doVertSlide(TransInfo *t, float perc)
 
   FOREACH_TRANS_DATA_CONTAINER (t, tc) {
     VertSlideData *sld = tc->custom.mode.data;
+    if (sld == NULL) {
+      continue;
+    }
+
     TransDataVertSlideVert *svlist = sld->sv, *sv;
     int i;
 
@@ -556,13 +558,14 @@ static void vert_slide_snap_apply(TransInfo *t, float *value)
   getSnapPoint(t, dvec);
   sub_v3_v3(dvec, t->tsnap.snapTarget);
   if (t->tsnap.snapElem & (SCE_SNAP_MODE_EDGE | SCE_SNAP_MODE_FACE)) {
-    float co_dir_3d[3];
-    sub_v3_v3v3(co_dir_3d, co_curr_3d, co_orig_3d);
+    float co_dir[3];
+    sub_v3_v3v3(co_dir, co_curr_3d, co_orig_3d);
+    normalize_v3(co_dir);
     if (t->tsnap.snapElem & SCE_SNAP_MODE_EDGE) {
-      transform_constraint_snap_axis_to_edge(t, co_dir_3d, dvec);
+      transform_constraint_snap_axis_to_edge(t, co_dir, dvec);
     }
     else {
-      transform_constraint_snap_axis_to_face(t, co_dir_3d, dvec);
+      transform_constraint_snap_axis_to_face(t, co_dir, dvec);
     }
   }
 
@@ -584,7 +587,9 @@ static void applyVertSlide(TransInfo *t, const int UNUSED(mval[2]))
   final = t->values[0];
 
   applySnapping(t, &final);
-  snapGridIncrement(t, &final);
+  if (!validSnap(t)) {
+    transform_snap_increment(t, &final);
+  }
 
   /* only do this so out of range values are not displayed */
   if (is_constrained) {
@@ -596,7 +601,7 @@ static void applyVertSlide(TransInfo *t, const int UNUSED(mval[2]))
   t->values_final[0] = final;
 
   /* header string */
-  ofs += BLI_strncpy_rlen(str + ofs, TIP_("Vert Slide: "), sizeof(str) - ofs);
+  ofs += BLI_strncpy_rlen(str + ofs, TIP_("Vertex Slide: "), sizeof(str) - ofs);
   if (hasNumInput(&t->num)) {
     char c[NUM_STR_REP_LEN];
     outputNumInput(&(t->num), c, &t->scene->unit);
@@ -652,7 +657,6 @@ void initVertSlide_ex(TransInfo *t, bool use_even, bool flipped, bool use_clamp)
     if (sld) {
       tc->custom.mode.data = sld;
       tc->custom.mode.free_cb = freeVertSlideVerts;
-      trans_mesh_customdata_correction_init(t, tc);
       ok = true;
     }
   }

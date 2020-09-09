@@ -21,8 +21,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_MESH_TYPES_H__
-#define __DNA_MESH_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_customdata_types.h"
@@ -46,6 +45,7 @@ struct MLoopTri;
 struct MLoopUV;
 struct MPoly;
 struct MVert;
+struct MPropCol;
 struct Material;
 struct Mesh;
 struct Multires;
@@ -109,9 +109,12 @@ typedef struct Mesh_Runtime {
   /** Set by modifier stack if only deformed from original. */
   char deformed_only;
   /**
-   * Copied from edit-mesh (hint, draw with editmesh data).
-   * In the future we may leave the mesh-data empty
-   * since its not needed if we can use edit-mesh data. */
+   * Copied from edit-mesh (hint, draw with edit-mesh data when true).
+   *
+   * Modifiers that edit the mesh data in-place must set this to false
+   * (most #eModifierTypeType_NonGeometrical modifiers). Otherwise the edit-mesh
+   * data will be used for drawing, missing changes from modifiers. See T79517.
+   */
   char is_original;
 
   /** #eMeshWrapperType and others. */
@@ -244,9 +247,9 @@ typedef struct TFace {
 
 /** #Mesh_Runtime.wrapper_type */
 typedef enum eMeshWrapperType {
-  /** Use mesh data (#Mesh.mvert,#Mesh.medge, #Mesh.mloop, #Mesh.mpoly). */
+  /** Use mesh data (#Mesh.mvert, #Mesh.medge, #Mesh.mloop, #Mesh.mpoly). */
   ME_WRAPPER_TYPE_MDATA = 0,
-  /** Use edit-mesh data (#Mesh.#edit_mesh, #Mesh_Runtime.edit_data). */
+  /** Use edit-mesh data (#Mesh.edit_mesh, #Mesh_Runtime.edit_data). */
   ME_WRAPPER_TYPE_BMESH = 1,
   /* ME_WRAPPER_TYPE_SUBD = 2, */ /* TODO */
 } eMeshWrapperType;
@@ -285,7 +288,7 @@ enum {
   ME_AUTOSMOOTH = 1 << 5,
   ME_FLAG_UNUSED_6 = 1 << 6, /* cleared */
   ME_FLAG_UNUSED_7 = 1 << 7, /* cleared */
-  ME_FLAG_UNUSED_8 = 1 << 8, /* cleared */
+  ME_REMESH_REPROJECT_VERTEX_COLORS = 1 << 8,
   ME_DS_EXPAND = 1 << 9,
   ME_SCULPT_DYNAMIC_TOPOLOGY = 1 << 10,
   ME_REMESH_SMOOTH_NORMALS = 1 << 11,
@@ -318,6 +321,4 @@ enum {
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

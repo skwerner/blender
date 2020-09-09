@@ -141,8 +141,7 @@ BlenderStrokeRenderer::BlenderStrokeRenderer(Render *re, int render_count) : Str
   view_layer->layflag = SCE_LAY_SOLID | SCE_LAY_ZTRA;
 
   // Camera
-  Object *object_camera = BKE_object_add(
-      freestyle_bmain, freestyle_scene, view_layer, OB_CAMERA, NULL);
+  Object *object_camera = BKE_object_add(freestyle_bmain, view_layer, OB_CAMERA, NULL);
 
   Camera *camera = (Camera *)object_camera->data;
   camera->type = CAM_ORTHO;
@@ -577,7 +576,7 @@ void BlenderStrokeRenderer::GenerateStrokeMesh(StrokeGroup *group, bool hasTex)
 {
 #if 0
   Object *object_mesh = BKE_object_add(
-      freestyle_bmain, freestyle_scene, (ViewLayer *)freestyle_scene->view_layers.first, OB_MESH);
+      freestyle_bmain, (ViewLayer *)freestyle_scene->view_layers.first, OB_MESH);
   DEG_relations_tag_update(freestyle_bmain);
 #else
   Object *object_mesh = NewMesh();
@@ -869,8 +868,7 @@ Render *BlenderStrokeRenderer::RenderScene(Render * /*re*/, bool render)
 #endif
 
   Render *freestyle_render = RE_NewSceneRender(freestyle_scene);
-  ViewLayer *view_layer = (ViewLayer *)freestyle_scene->view_layers.first;
-  DEG_graph_relations_update(freestyle_depsgraph, freestyle_bmain, freestyle_scene, view_layer);
+  DEG_graph_relations_update(freestyle_depsgraph);
 
   RE_RenderFreestyleStrokes(
       freestyle_render, freestyle_bmain, freestyle_scene, render && get_stroke_count() > 0);

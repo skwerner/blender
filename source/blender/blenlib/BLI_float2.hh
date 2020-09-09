@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLI_FLOAT2_HH__
-#define __BLI_FLOAT2_HH__
+#pragma once
 
 #include "BLI_float3.hh"
 
@@ -46,6 +45,39 @@ struct float2 {
   operator const float *() const
   {
     return &x;
+  }
+
+  float length() const
+  {
+    return len_v2(*this);
+  }
+
+  float2 &operator+=(const float2 &other)
+  {
+    x += other.x;
+    y += other.y;
+    return *this;
+  }
+
+  float2 &operator-=(const float2 &other)
+  {
+    x -= other.x;
+    y -= other.y;
+    return *this;
+  }
+
+  float2 &operator*=(float factor)
+  {
+    x *= factor;
+    y *= factor;
+    return *this;
+  }
+
+  float2 &operator/=(float divisor)
+  {
+    x /= divisor;
+    y /= divisor;
+    return *this;
   }
 
   friend float2 operator+(const float2 &a, const float2 &b)
@@ -79,8 +111,57 @@ struct float2 {
     stream << "(" << v.x << ", " << v.y << ")";
     return stream;
   }
+
+  static float dot(const float2 &a, const float2 &b)
+  {
+    return a.x * b.x + a.y * b.y;
+  }
+
+  static float2 interpolate(const float2 &a, const float2 &b, float t)
+  {
+    return a * (1 - t) + b * t;
+  }
+
+  static float2 abs(const float2 &a)
+  {
+    return float2(fabsf(a.x), fabsf(a.y));
+  }
+
+  static float distance(const float2 &a, const float2 &b)
+  {
+    return (a - b).length();
+  }
+
+  static float distance_squared(const float2 &a, const float2 &b)
+  {
+    return float2::dot(a, b);
+  }
+
+  struct isect_result {
+    enum {
+      LINE_LINE_COLINEAR = -1,
+      LINE_LINE_NONE = 0,
+      LINE_LINE_EXACT = 1,
+      LINE_LINE_CROSS = 2,
+    } kind;
+    float lambda;
+    float mu;
+  };
+
+  static isect_result isect_seg_seg(const float2 &v1,
+                                    const float2 &v2,
+                                    const float2 &v3,
+                                    const float2 &v4);
+
+  friend bool operator==(const float2 &a, const float2 &b)
+  {
+    return a.x == b.x && a.y == b.y;
+  }
+
+  friend bool operator!=(const float2 &a, const float2 &b)
+  {
+    return !(a == b);
+  }
 };
 
 }  // namespace blender
-
-#endif /* __BLI_FLOAT2_HH__ */

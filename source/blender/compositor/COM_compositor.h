@@ -16,8 +16,7 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_COMPOSITOR_H__
-#define __COM_COMPOSITOR_H__
+#pragma once
 
 #include "DNA_color_types.h"
 #include "DNA_node_types.h"
@@ -363,5 +362,3 @@ void COM_deinitialize(void);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __COM_COMPOSITOR_H__ */

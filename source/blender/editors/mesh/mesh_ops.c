@@ -155,6 +155,8 @@ void ED_operatortypes_mesh(void)
   WM_operatortype_append(MESH_OT_uv_texture_remove);
   WM_operatortype_append(MESH_OT_vertex_color_add);
   WM_operatortype_append(MESH_OT_vertex_color_remove);
+  WM_operatortype_append(MESH_OT_sculpt_vertex_color_add);
+  WM_operatortype_append(MESH_OT_sculpt_vertex_color_remove);
   WM_operatortype_append(MESH_OT_customdata_mask_clear);
   WM_operatortype_append(MESH_OT_customdata_skin_add);
   WM_operatortype_append(MESH_OT_customdata_skin_clear);
@@ -195,6 +197,7 @@ void ED_operatortypes_mesh(void)
   WM_operatortype_append(MESH_OT_symmetry_snap);
 
   WM_operatortype_append(MESH_OT_paint_mask_extract);
+  WM_operatortype_append(MESH_OT_face_set_extract);
   WM_operatortype_append(MESH_OT_paint_mask_slice);
 
   WM_operatortype_append(MESH_OT_point_normals);

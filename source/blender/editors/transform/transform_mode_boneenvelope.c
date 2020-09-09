@@ -53,7 +53,7 @@ static void applyBoneEnvelope(TransInfo *t, const int UNUSED(mval[2]))
 
   ratio = t->values[0];
 
-  snapGridIncrement(t, &ratio);
+  transform_snap_increment(t, &ratio);
 
   applyNumInput(&t->num, &ratio);
 
@@ -96,7 +96,6 @@ static void applyBoneEnvelope(TransInfo *t, const int UNUSED(mval[2]))
 
 void initBoneEnvelope(TransInfo *t)
 {
-  t->mode = TFM_BONE_ENVELOPE;
   t->transform = applyBoneEnvelope;
 
   initMouseInputMode(t, &t->mouse, INPUT_SPRING);

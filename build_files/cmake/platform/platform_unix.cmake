@@ -36,6 +36,11 @@ if(NOT DEFINED LIBDIR)
   elseif(EXISTS ${LIBDIR_CENTOS7_ABI})
     set(LIBDIR ${LIBDIR_CENTOS7_ABI})
     set(WITH_CXX11_ABI OFF)
+
+    if(CMAKE_COMPILER_IS_GNUCC AND
+       CMAKE_C_COMPILER_VERSION VERSION_LESS 9.3)
+      message(FATAL_ERROR "GCC version must be at least 9.3 for precompiled libraries, found ${CMAKE_C_COMPILER_VERSION}")
+    endif()
   endif()
 
   # Avoid namespace pollustion.
@@ -229,10 +234,10 @@ endif()
 
 if(WITH_CYCLES_OSL)
   set(CYCLES_OSL ${LIBDIR}/osl CACHE PATH "Path to OpenShadingLanguage installation")
-  if(NOT OSL_ROOT)
+  if(EXISTS ${CYCLES_OSL} AND NOT OSL_ROOT)
     set(OSL_ROOT ${CYCLES_OSL})
   endif()
-  find_package_wrapper(OpenShadingLanguage)
+  find_package_wrapper(OSL)
   if(OSL_FOUND)
     if(${OSL_LIBRARY_VERSION_MAJOR} EQUAL "1" AND ${OSL_LIBRARY_VERSION_MINOR} LESS "6")
       # Note: --whole-archive is needed to force loading of all symbols in liboslexec,
@@ -422,11 +427,28 @@ if(WITH_TBB)
   find_package_wrapper(TBB)
 endif()
 
+if(WITH_GMP)
+  find_package(GMP)
+
+  if(NOT GMP_FOUND)
+    set(WITH_GMP OFF)
+    message(STATUS "GMP not found")
+  endif()
+endif()
+
 if(WITH_XR_OPENXR)
-  find_package(XR-OpenXR-SDK)
+  find_package(XR_OpenXR_SDK)
   if(NOT XR_OPENXR_SDK_FOUND)
     message(WARNING "OpenXR-SDK not found, disabling WITH_XR_OPENXR")
     set(WITH_XR_OPENXR OFF)
+  endif()
+endif()
+
+if(WITH_GMP)
+  find_package_wrapper(GMP)
+  if(NOT GMP_FOUND)
+    message(WARNING "GMP not found, disabling WITH_GMP")
+    set(WITH_GMP OFF)
   endif()
 endif()
 
@@ -576,6 +598,14 @@ endif()
 # GNU Compiler
 if(CMAKE_COMPILER_IS_GNUCC)
   set(PLATFORM_CFLAGS "-pipe -fPIC -funsigned-char -fno-strict-aliasing")
+
+  # `maybe-uninitialized` is unreliable in release builds, but fine in debug builds.
+  set(GCC_EXTRA_FLAGS_RELEASE "-Wno-maybe-uninitialized")
+  set(CMAKE_C_FLAGS_RELEASE          "${GCC_EXTRA_FLAGS_RELEASE} ${CMAKE_C_FLAGS_RELEASE}")
+  set(CMAKE_C_FLAGS_RELWITHDEBINFO   "${GCC_EXTRA_FLAGS_RELEASE} ${CMAKE_C_FLAGS_RELWITHDEBINFO}")
+  set(CMAKE_CXX_FLAGS_RELEASE        "${GCC_EXTRA_FLAGS_RELEASE} ${CMAKE_CXX_FLAGS_RELEASE}")
+  set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${GCC_EXTRA_FLAGS_RELEASE} ${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
+  unset(GCC_EXTRA_FLAGS_RELEASE)
 
   if(WITH_LINKER_GOLD)
     execute_process(

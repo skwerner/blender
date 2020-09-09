@@ -125,11 +125,6 @@ void BLF_exit(void)
   blf_font_exit();
 }
 
-void BLF_batch_reset(void)
-{
-  blf_batch_draw_vao_clear();
-}
-
 void BLF_cache_clear(void)
 {
   FontBLF *font;
@@ -509,7 +504,7 @@ void BLF_color4fv(int fontid, const float rgba[4])
 
 void BLF_color4f(int fontid, float r, float g, float b, float a)
 {
-  float rgba[4] = {r, g, b, a};
+  const float rgba[4] = {r, g, b, a};
   BLF_color4fv(fontid, rgba);
 }
 
@@ -523,7 +518,7 @@ void BLF_color3fv_alpha(int fontid, const float rgb[3], float alpha)
 
 void BLF_color3f(int fontid, float r, float g, float b)
 {
-  float rgba[4] = {r, g, b, 1.0f};
+  const float rgba[4] = {r, g, b, 1.0f};
   BLF_color4fv(fontid, rgba);
 }
 

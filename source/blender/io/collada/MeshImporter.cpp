@@ -48,9 +48,9 @@
 #include "collada_utils.h"
 
 // get node name, or fall back to original id if not present (name is optional)
-template<class T> static const std::string bc_get_dae_name(T *node)
+template<class T> static std::string bc_get_dae_name(T *node)
 {
-  return node->getName().size() ? node->getName() : node->getOriginalId();
+  return node->getName().empty() ? node->getOriginalId() : node->getName();
 }
 
 static const char *bc_primTypeToStr(COLLADAFW::MeshPrimitive::PrimitiveType type)
@@ -205,7 +205,7 @@ MeshImporter::MeshImporter(
 }
 
 bool MeshImporter::set_poly_indices(
-    MPoly *mpoly, MLoop *mloop, int loop_index, unsigned int *indices, int loop_count)
+    MPoly *mpoly, MLoop *mloop, int loop_index, const unsigned int *indices, int loop_count)
 {
   mpoly->loopstart = loop_index;
   mpoly->totloop = loop_count;
@@ -228,16 +228,16 @@ bool MeshImporter::set_poly_indices(
   return broken_loop;
 }
 
-void MeshImporter::set_vcol(MLoopCol *mlc,
+void MeshImporter::set_vcol(MLoopCol *mloopcol,
                             VCOLDataWrapper &vob,
                             int loop_index,
                             COLLADAFW::IndexList &index_list,
                             int count)
 {
   int index;
-  for (index = 0; index < count; index++, mlc++) {
+  for (index = 0; index < count; index++, mloopcol++) {
     int v_index = index_list.getIndex(index + loop_index);
-    vob.get_vcol(v_index, mlc);
+    vob.get_vcol(v_index, mloopcol);
   }
 }
 
@@ -891,10 +891,10 @@ Object *MeshImporter::get_object_by_geom_uid(const COLLADAFW::UniqueId &geom_uid
   return NULL;
 }
 
-Mesh *MeshImporter::get_mesh_by_geom_uid(const COLLADAFW::UniqueId &mesh_uid)
+Mesh *MeshImporter::get_mesh_by_geom_uid(const COLLADAFW::UniqueId &geom_uid)
 {
-  if (uid_mesh_map.find(mesh_uid) != uid_mesh_map.end()) {
-    return uid_mesh_map[mesh_uid];
+  if (uid_mesh_map.find(geom_uid) != uid_mesh_map.end()) {
+    return uid_mesh_map[geom_uid];
   }
   return NULL;
 }
@@ -1126,7 +1126,7 @@ Object *MeshImporter::create_mesh_object(
   }
 
   // name Object
-  const std::string &id = node->getName().size() ? node->getName() : node->getOriginalId();
+  const std::string &id = node->getName().empty() ? node->getOriginalId() : node->getName();
   const char *name = (id.length()) ? id.c_str() : NULL;
 
   // add object
@@ -1185,8 +1185,8 @@ bool MeshImporter::write_geometry(const COLLADAFW::Geometry *geom)
     return true;
   }
 
-  const std::string &str_geom_id = mesh->getName().size() ? mesh->getName() :
-                                                            mesh->getOriginalId();
+  const std::string &str_geom_id = mesh->getName().empty() ? mesh->getOriginalId() :
+                                                             mesh->getName();
   Mesh *me = BKE_mesh_add(m_bmain, (char *)str_geom_id.c_str());
   id_us_min(&me->id);  // is already 1 here, but will be set later in BKE_mesh_assign_object
 

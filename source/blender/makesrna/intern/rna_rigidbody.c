@@ -35,6 +35,8 @@
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
 
+#include "DEG_depsgraph_build.h"
+
 #include "WM_types.h"
 
 /* roles of objects in RigidBody Sims */
@@ -75,6 +77,11 @@ const EnumPropertyItem rna_enum_rigidbody_object_shape_items[] = {
      "Mesh",
      "Mesh consisting of triangles only, allowing for more detailed interactions than convex "
      "hulls"},
+    {RB_SHAPE_COMPOUND,
+     "COMPOUND",
+     ICON_MESH_DATA,
+     "Compound Parent",
+     "Combines all of its direct rigid body children into one rigid object."},
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -218,6 +225,7 @@ static void rna_RigidBodyOb_shape_update(Main *bmain, Scene *scene, PointerRNA *
   Object *ob = (Object *)ptr->owner_id;
 
   rna_RigidBodyOb_reset(bmain, scene, ptr);
+  DEG_relations_tag_update(bmain);
 
   WM_main_add_notifier(NC_OBJECT | ND_DRAW, ob);
 }
@@ -231,6 +239,16 @@ static void rna_RigidBodyOb_shape_reset(Main *UNUSED(bmain), Scene *scene, Point
   if (rbo->shared->physics_shape) {
     rbo->flag |= RBO_FLAG_NEEDS_RESHAPE;
   }
+}
+
+static void rna_RigidBodyOb_mesh_source_update(Main *bmain, Scene *scene, PointerRNA *ptr)
+{
+  Object *ob = (Object *)ptr->owner_id;
+
+  rna_RigidBodyOb_reset(bmain, scene, ptr);
+  DEG_relations_tag_update(bmain);
+
+  WM_main_add_notifier(NC_OBJECT | ND_DRAW, ob);
 }
 
 static char *rna_RigidBodyOb_path(PointerRNA *UNUSED(ptr))
@@ -888,15 +906,15 @@ static void rna_def_rigidbody_world(BlenderRNA *brna)
   RNA_def_property_update(prop, NC_SCENE, "rna_RigidBodyWorld_reset");
 
   /* timestep */
-  prop = RNA_def_property(srna, "steps_per_second", PROP_INT, PROP_NONE);
-  RNA_def_property_int_sdna(prop, NULL, "steps_per_second");
+  prop = RNA_def_property(srna, "substeps_per_frame", PROP_INT, PROP_NONE);
+  RNA_def_property_int_sdna(prop, NULL, "substeps_per_frame");
   RNA_def_property_range(prop, 1, SHRT_MAX);
-  RNA_def_property_ui_range(prop, 60, 1000, 1, -1);
-  RNA_def_property_int_default(prop, 60);
+  RNA_def_property_ui_range(prop, 1, 1000, 1, -1);
+  RNA_def_property_int_default(prop, 10);
   RNA_def_property_ui_text(
       prop,
-      "Steps Per Second",
-      "Number of simulation steps taken per second (higher values are more accurate "
+      "Substeps Per Frame",
+      "Number of simulation steps taken per frame (higher values are more accurate "
       "but slower)");
   RNA_def_property_update(prop, NC_SCENE, "rna_RigidBodyWorld_reset");
 
@@ -1026,7 +1044,7 @@ static void rna_def_rigidbody_object(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop, "Mesh Source", "Source of the mesh used to create collision shape");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-  RNA_def_property_update(prop, NC_OBJECT | ND_POINTCACHE, "rna_RigidBodyOb_reset");
+  RNA_def_property_update(prop, NC_OBJECT | ND_POINTCACHE, "rna_RigidBodyOb_mesh_source_update");
 
   /* booleans */
   prop = RNA_def_property(srna, "enabled", PROP_BOOLEAN, PROP_NONE);

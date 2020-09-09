@@ -71,12 +71,12 @@ void ED_sculpt_init_transform(struct bContext *C)
   copy_v4_v4(ss->init_pivot_rot, ss->pivot_rot);
 
   SCULPT_undo_push_begin("Transform");
-  BKE_sculpt_update_object_for_edit(depsgraph, ob, false, false);
+  BKE_sculpt_update_object_for_edit(depsgraph, ob, false, false, false);
 
   ss->pivot_rot[3] = 1.0f;
 
-  SCULPT_vertex_random_access_init(ss);
-  SCULPT_filter_cache_init(ob, sd);
+  SCULPT_vertex_random_access_ensure(ss);
+  SCULPT_filter_cache_init(C, ob, sd, SCULPT_UNDO_COORDS);
 }
 
 static void sculpt_transform_task_cb(void *__restrict userdata,
@@ -126,8 +126,8 @@ void ED_sculpt_update_modal_transform(struct bContext *C)
   Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
   const char symm = sd->paint.symmetry_flags & PAINT_SYMM_AXIS_ALL;
 
-  SCULPT_vertex_random_access_init(ss);
-  BKE_sculpt_update_object_for_edit(depsgraph, ob, false, false);
+  SCULPT_vertex_random_access_ensure(ss);
+  BKE_sculpt_update_object_for_edit(depsgraph, ob, false, false, false);
 
   SculptThreadedTaskData data = {
       .sd = sd,
@@ -178,8 +178,7 @@ void ED_sculpt_update_modal_transform(struct bContext *C)
   }
 
   TaskParallelSettings settings;
-  BKE_pbvh_parallel_range_settings(
-      &settings, (sd->flags & SCULPT_USE_OPENMP), ss->filter_cache->totnode);
+  BKE_pbvh_parallel_range_settings(&settings, true, ss->filter_cache->totnode);
   BLI_task_parallel_range(
       0, ss->filter_cache->totnode, &data, sculpt_transform_task_cb, &settings);
 
@@ -253,7 +252,7 @@ static int sculpt_set_pivot_position_exec(bContext *C, wmOperator *op)
 
   int mode = RNA_enum_get(op->ptr, "mode");
 
-  BKE_sculpt_update_object_for_edit(depsgraph, ob, false, true);
+  BKE_sculpt_update_object_for_edit(depsgraph, ob, false, true, false);
 
   /* Pivot to center. */
   if (mode == SCULPT_PIVOT_POSITION_ORIGIN) {
@@ -326,6 +325,12 @@ static int sculpt_set_pivot_position_exec(bContext *C, wmOperator *op)
 
     MEM_SAFE_FREE(nodes);
   }
+
+  /* Update the viewport navigation rotation origin. */
+  UnifiedPaintSettings *ups = &CTX_data_tool_settings(C)->unified_paint_settings;
+  copy_v3_v3(ups->average_stroke_accum, ss->pivot_pos);
+  ups->average_stroke_counter = 1;
+  ups->last_stroke_valid = true;
 
   ED_region_tag_redraw(region);
   WM_event_add_notifier(C, NC_GEOM | ND_SELECT, ob->data);

@@ -72,27 +72,42 @@
 
 #include "ED_mesh.h"
 #include "ED_object.h"
+#include "ED_screen.h"
 
 #include "UI_resources.h"
 
 #include "object_intern.h"
 
+static bool vertex_group_supported_poll_ex(bContext *C, const Object *ob);
+
 /* -------------------------------------------------------------------- */
-/** \name Public Utility Functions
+/** \name Local Utility Functions
  * \{ */
+
+static bool object_array_for_wpaint_filter(Object *ob, void *user_data)
+{
+  bContext *C = user_data;
+  if (vertex_group_supported_poll_ex(C, ob)) {
+    return true;
+  }
+  return false;
+}
+
+static Object **object_array_for_wpaint(bContext *C, uint *r_objects_len)
+{
+  return ED_object_array_in_mode_or_selected(C, object_array_for_wpaint_filter, C, r_objects_len);
+}
 
 static bool vertex_group_use_vert_sel(Object *ob)
 {
   if (ob->mode == OB_MODE_EDIT) {
     return true;
   }
-  else if ((ob->type == OB_MESH) &&
-           ((Mesh *)ob->data)->editflag & (ME_EDIT_PAINT_VERT_SEL | ME_EDIT_PAINT_FACE_SEL)) {
+  if ((ob->type == OB_MESH) &&
+      ((Mesh *)ob->data)->editflag & (ME_EDIT_PAINT_VERT_SEL | ME_EDIT_PAINT_FACE_SEL)) {
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 static Lattice *vgroup_edit_lattice(Object *ob)
@@ -101,6 +116,12 @@ static Lattice *vgroup_edit_lattice(Object *ob)
   BLI_assert(ob->type == OB_LATTICE);
   return (lt->editlatt) ? lt->editlatt->latt : lt;
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Public Utility Functions
+ * \{ */
 
 bool ED_vgroup_sync_from_pose(Object *ob)
 {
@@ -189,7 +210,7 @@ bool ED_vgroup_parray_alloc(ID *id,
 
           return true;
         }
-        else if (me->dvert) {
+        if (me->dvert) {
           MVert *mvert = me->mvert;
           MDeformVert *dvert = me->dvert;
           int i;
@@ -1771,12 +1792,14 @@ static void vgroup_lock_all(Object *ob, int action, int mask)
       switch (mask) {
         case VGROUP_MASK_INVERT_UNSELECTED:
         case VGROUP_MASK_SELECTED:
-          if (!selected[i])
+          if (!selected[i]) {
             continue;
+          }
           break;
         case VGROUP_MASK_UNSELECTED:
-          if (selected[i])
+          if (selected[i]) {
             continue;
+          }
           break;
         default:;
       }
@@ -1791,12 +1814,14 @@ static void vgroup_lock_all(Object *ob, int action, int mask)
   for (dg = ob->defbase.first, i = 0; dg; dg = dg->next, i++) {
     switch (mask) {
       case VGROUP_MASK_SELECTED:
-        if (!selected[i])
+        if (!selected[i]) {
           continue;
+        }
         break;
       case VGROUP_MASK_UNSELECTED:
-        if (selected[i])
+        if (selected[i]) {
           continue;
+        }
         break;
       default:;
     }
@@ -2115,15 +2140,13 @@ static int inv_cmp_mdef_vert_weights(const void *a1, const void *a2)
   if (dw1->weight < dw2->weight) {
     return 1;
   }
-  else if (dw1->weight > dw2->weight) {
+  if (dw1->weight > dw2->weight) {
     return -1;
   }
-  else if (&dw1 < &dw2) {
+  if (&dw1 < &dw2) {
     return 1; /* compare address for stable sort algorithm */
   }
-  else {
-    return -1;
-  }
+  return -1;
 }
 
 /* Used for limiting the number of influencing bones per vertex when exporting
@@ -2407,7 +2430,7 @@ void ED_vgroup_mirror(Object *ob,
         goto cleanup;
       }
 
-      EDBM_verts_mirror_cache_begin(em, 0, true, false, use_topology);
+      EDBM_verts_mirror_cache_begin(em, 0, true, false, false, use_topology);
 
       BM_mesh_elem_hflag_disable_all(em->bm, BM_VERT, BM_ELEM_TAG, false);
 
@@ -2659,46 +2682,50 @@ static void vgroup_assign_verts(Object *ob, const float weight)
 /** \name Shared Operator Poll Functions
  * \{ */
 
-static bool vertex_group_poll(bContext *C)
+static bool vertex_group_supported_poll_ex(bContext *C, const Object *ob)
 {
-  Object *ob = ED_object_context(C);
-  ID *data = (ob) ? ob->data : NULL;
-
-  return (ob && !ID_IS_LINKED(ob) && data && !ID_IS_LINKED(data) &&
-          OB_TYPE_SUPPORT_VGROUP(ob->type) && ob->defbase.first);
+  if (!ED_operator_object_active_local_editable_ex(C, ob)) {
+    return false;
+  }
+  const ID *data = ob->data;
+  return (OB_TYPE_SUPPORT_VGROUP(ob->type) &&
+          /* Data checks. */
+          (data != NULL) && !ID_IS_LINKED(data) && !ID_IS_OVERRIDE_LIBRARY(data));
 }
 
 static bool vertex_group_supported_poll(bContext *C)
 {
   Object *ob = ED_object_context(C);
-  ID *data = (ob) ? ob->data : NULL;
-  return (ob && !ID_IS_LINKED(ob) && OB_TYPE_SUPPORT_VGROUP(ob->type) && data &&
-          !ID_IS_LINKED(data));
+  return vertex_group_supported_poll_ex(C, ob);
+}
+
+static bool vertex_group_poll(bContext *C)
+{
+  Object *ob = ED_object_context(C);
+
+  return (vertex_group_supported_poll(C) && ob->defbase.first);
 }
 
 static bool vertex_group_mesh_poll(bContext *C)
 {
   Object *ob = ED_object_context(C);
-  ID *data = (ob) ? ob->data : NULL;
 
-  return (ob && !ID_IS_LINKED(ob) && data && !ID_IS_LINKED(data) && ob->type == OB_MESH &&
-          ob->defbase.first);
+  return (vertex_group_poll(C) && ob->type == OB_MESH);
 }
 
 static bool UNUSED_FUNCTION(vertex_group_mesh_supported_poll)(bContext *C)
 {
   Object *ob = ED_object_context(C);
-  ID *data = (ob) ? ob->data : NULL;
-  return (ob && !ID_IS_LINKED(ob) && ob->type == OB_MESH && data && !ID_IS_LINKED(data));
+
+  return (vertex_group_supported_poll(C) && ob->type == OB_MESH);
 }
 
 static bool UNUSED_FUNCTION(vertex_group_poll_edit)(bContext *C)
 {
   Object *ob = ED_object_context(C);
-  ID *data = (ob) ? ob->data : NULL;
 
-  if (!(ob && !ID_IS_LINKED(ob) && data && !ID_IS_LINKED(data))) {
-    return 0;
+  if (!vertex_group_supported_poll(C)) {
+    return false;
   }
 
   return BKE_object_is_in_editmode_vgroup(ob);
@@ -2710,9 +2737,8 @@ static bool vertex_group_vert_poll_ex(bContext *C,
                                       const short ob_type_flag)
 {
   Object *ob = ED_object_context(C);
-  ID *data = (ob) ? ob->data : NULL;
 
-  if (!(ob && !ID_IS_LINKED(ob) && data && !ID_IS_LINKED(data))) {
+  if (!vertex_group_supported_poll(C)) {
     return false;
   }
 
@@ -2723,23 +2749,17 @@ static bool vertex_group_vert_poll_ex(bContext *C,
   if (BKE_object_is_in_editmode_vgroup(ob)) {
     return true;
   }
-  else if (ob->mode & OB_MODE_WEIGHT_PAINT) {
+  if (ob->mode & OB_MODE_WEIGHT_PAINT) {
     if (needs_select) {
       if (BKE_object_is_in_wpaint_select_vert(ob)) {
         return true;
       }
-      else {
-        CTX_wm_operator_poll_msg_set(C, "Vertex select needs to be enabled in weight paint mode");
-        return false;
-      }
+      CTX_wm_operator_poll_msg_set(C, "Vertex select needs to be enabled in weight paint mode");
+      return false;
     }
-    else {
-      return true;
-    }
+    return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 #if 0
@@ -2770,14 +2790,13 @@ static bool vertex_group_mesh_vert_select_poll(bContext *C)
 static bool vertex_group_vert_select_unlocked_poll(bContext *C)
 {
   Object *ob = ED_object_context(C);
-  ID *data = (ob) ? ob->data : NULL;
 
-  if (!(ob && !ID_IS_LINKED(ob) && data && !ID_IS_LINKED(data))) {
-    return 0;
+  if (!vertex_group_supported_poll(C)) {
+    return false;
   }
 
   if (!(BKE_object_is_in_editmode_vgroup(ob) || BKE_object_is_in_wpaint_select_vert(ob))) {
-    return 0;
+    return false;
   }
 
   if (ob->actdef != 0) {
@@ -2786,21 +2805,20 @@ static bool vertex_group_vert_select_unlocked_poll(bContext *C)
       return !(dg->flag & DG_LOCK_WEIGHT);
     }
   }
-  return 1;
+  return true;
 }
 
 static bool vertex_group_vert_select_mesh_poll(bContext *C)
 {
   Object *ob = ED_object_context(C);
-  ID *data = (ob) ? ob->data : NULL;
 
-  if (!(ob && !ID_IS_LINKED(ob) && data && !ID_IS_LINKED(data))) {
-    return 0;
+  if (!vertex_group_supported_poll(C)) {
+    return false;
   }
 
   /* only difference to #vertex_group_vert_select_poll */
   if (ob->type != OB_MESH) {
-    return 0;
+    return false;
   }
 
   return (BKE_object_is_in_editmode_vgroup(ob) || BKE_object_is_in_wpaint_select_vert(ob));
@@ -3017,7 +3035,7 @@ void OBJECT_OT_vertex_group_remove_from(wmOperatorType *ot)
   /* properties */
   prop = RNA_def_boolean(ot->srna, "use_all_groups", 0, "All Groups", "Remove from all groups");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
-  prop = RNA_def_boolean(ot->srna, "use_all_verts", 0, "All Verts", "Clear the active group");
+  prop = RNA_def_boolean(ot->srna, "use_all_verts", 0, "All Vertices", "Clear the active group");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
 
@@ -3089,6 +3107,12 @@ void OBJECT_OT_vertex_group_deselect(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Vertex Group Copy Operator
+ * \{ */
+
 static int vertex_group_copy_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Object *ob = ED_object_context(C);
@@ -3101,12 +3125,6 @@ static int vertex_group_copy_exec(bContext *C, wmOperator *UNUSED(op))
 
   return OPERATOR_FINISHED;
 }
-
-/** \} */
-
-/* -------------------------------------------------------------------- */
-/** \name Vertex Group Copy Operator
- * \{ */
 
 void OBJECT_OT_vertex_group_copy(wmOperatorType *ot)
 {
@@ -3122,6 +3140,12 @@ void OBJECT_OT_vertex_group_copy(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Vertex Group Levels Operator
+ * \{ */
 
 static int vertex_group_levels_exec(bContext *C, wmOperator *op)
 {
@@ -3145,12 +3169,6 @@ static int vertex_group_levels_exec(bContext *C, wmOperator *op)
   return OPERATOR_FINISHED;
 }
 
-/** \} */
-
-/* -------------------------------------------------------------------- */
-/** \name Vertex Group Levels Operator
- * \{ */
-
 void OBJECT_OT_vertex_group_levels(wmOperatorType *ot)
 {
   /* identifiers */
@@ -3173,6 +3191,12 @@ void OBJECT_OT_vertex_group_levels(wmOperatorType *ot)
       ot->srna, "gain", 1.f, 0.f, FLT_MAX, "Gain", "Value to multiply weights by", 0.0f, 10.f);
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Vertex Group Normalize Operator
+ * \{ */
+
 static int vertex_group_normalize_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Object *ob = ED_object_context(C);
@@ -3187,16 +3211,8 @@ static int vertex_group_normalize_exec(bContext *C, wmOperator *UNUSED(op))
 
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
-
-/** \} */
-
-/* -------------------------------------------------------------------- */
-/** \name Vertex Group Normalize Operator
- * \{ */
 
 void OBJECT_OT_vertex_group_normalize(wmOperatorType *ot)
 {
@@ -3213,6 +3229,12 @@ void OBJECT_OT_vertex_group_normalize(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Vertex Group Normalize All Operator
+ * \{ */
 
 static int vertex_group_normalize_all_exec(bContext *C, wmOperator *op)
 {
@@ -3235,17 +3257,10 @@ static int vertex_group_normalize_all_exec(bContext *C, wmOperator *op)
 
     return OPERATOR_FINISHED;
   }
-  else {
-    /* allow to adjust settings */
-    return OPERATOR_FINISHED;
-  }
+
+  /* allow to adjust settings */
+  return OPERATOR_FINISHED;
 }
-
-/** \} */
-
-/* -------------------------------------------------------------------- */
-/** \name Vertex Group Normalize All Operator
- * \{ */
 
 void OBJECT_OT_vertex_group_normalize_all(wmOperatorType *ot)
 {
@@ -3509,12 +3524,12 @@ void OBJECT_OT_vertex_group_invert(wmOperatorType *ot)
                   "auto_assign",
                   true,
                   "Add Weights",
-                  "Add verts from groups that have zero weight before inverting");
+                  "Add vertices from groups that have zero weight before inverting");
   RNA_def_boolean(ot->srna,
                   "auto_remove",
                   true,
                   "Remove Weights",
-                  "Remove verts from groups that have zero weight after inverting");
+                  "Remove vertices from groups that have zero weight after inverting");
 }
 
 /** \} */
@@ -3527,22 +3542,11 @@ static int vertex_group_smooth_exec(bContext *C, wmOperator *op)
 {
   const float fac = RNA_float_get(op->ptr, "factor");
   const int repeat = RNA_int_get(op->ptr, "repeat");
-  eVGroupSelect subset_type = RNA_enum_get(op->ptr, "group_select_mode");
+  const eVGroupSelect subset_type = RNA_enum_get(op->ptr, "group_select_mode");
   const float fac_expand = RNA_float_get(op->ptr, "expand");
-  ViewLayer *view_layer = CTX_data_view_layer(C);
-  Object *ob_ctx = ED_object_context(C);
 
   uint objects_len;
-  Object **objects;
-  if (ob_ctx->mode == OB_MODE_WEIGHT_PAINT) {
-    /* Until weight paint supports multi-edit, use only the active. */
-    objects_len = 1;
-    objects = &ob_ctx;
-  }
-  else {
-    objects = BKE_view_layer_array_from_objects_in_mode_unique_data(
-        view_layer, CTX_wm_view3d(C), &objects_len, ob_ctx->mode);
-  }
+  Object **objects = object_array_for_wpaint(C, &objects_len);
 
   for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
     Object *ob = objects[ob_index];
@@ -3559,9 +3563,7 @@ static int vertex_group_smooth_exec(bContext *C, wmOperator *op)
     WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
     WM_event_add_notifier(C, NC_GEOM | ND_DATA, ob->data);
   }
-  if (objects != &ob_ctx) {
-    MEM_freeN(objects);
-  }
+  MEM_freeN(objects);
 
   return OPERATOR_FINISHED;
 }
@@ -3603,22 +3605,29 @@ void OBJECT_OT_vertex_group_smooth(wmOperatorType *ot)
 
 static int vertex_group_clean_exec(bContext *C, wmOperator *op)
 {
-  Object *ob = ED_object_context(C);
+  const float limit = RNA_float_get(op->ptr, "limit");
+  const bool keep_single = RNA_boolean_get(op->ptr, "keep_single");
+  const eVGroupSelect subset_type = RNA_enum_get(op->ptr, "group_select_mode");
 
-  float limit = RNA_float_get(op->ptr, "limit");
-  bool keep_single = RNA_boolean_get(op->ptr, "keep_single");
-  eVGroupSelect subset_type = RNA_enum_get(op->ptr, "group_select_mode");
+  uint objects_len;
+  Object **objects = object_array_for_wpaint(C, &objects_len);
 
-  int subset_count, vgroup_tot;
+  for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
+    Object *ob = objects[ob_index];
 
-  const bool *vgroup_validmap = BKE_object_defgroup_subset_from_select_type(
-      ob, subset_type, &vgroup_tot, &subset_count);
-  vgroup_clean_subset(ob, vgroup_validmap, vgroup_tot, subset_count, limit, keep_single);
-  MEM_freeN((void *)vgroup_validmap);
+    int subset_count, vgroup_tot;
 
-  DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
-  WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
-  WM_event_add_notifier(C, NC_GEOM | ND_DATA, ob->data);
+    const bool *vgroup_validmap = BKE_object_defgroup_subset_from_select_type(
+        ob, subset_type, &vgroup_tot, &subset_count);
+
+    vgroup_clean_subset(ob, vgroup_validmap, vgroup_tot, subset_count, limit, keep_single);
+    MEM_freeN((void *)vgroup_validmap);
+
+    DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+    WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
+    WM_event_add_notifier(C, NC_GEOM | ND_DATA, ob->data);
+  }
+  MEM_freeN(objects);
 
   return OPERATOR_FINISHED;
 }
@@ -3626,7 +3635,7 @@ static int vertex_group_clean_exec(bContext *C, wmOperator *op)
 void OBJECT_OT_vertex_group_clean(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Clean Vertex Group";
+  ot->name = "Clean Vertex Group Weights";
   ot->idname = "OBJECT_OT_vertex_group_clean";
   ot->description = "Remove vertex group assignments which are not required";
 
@@ -3707,33 +3716,43 @@ void OBJECT_OT_vertex_group_quantize(wmOperatorType *ot)
 
 static int vertex_group_limit_total_exec(bContext *C, wmOperator *op)
 {
-  Object *ob = ED_object_context(C);
-
   const int limit = RNA_int_get(op->ptr, "limit");
-  eVGroupSelect subset_type = RNA_enum_get(op->ptr, "group_select_mode");
+  const eVGroupSelect subset_type = RNA_enum_get(op->ptr, "group_select_mode");
+  int remove_multi_count = 0;
 
-  int subset_count, vgroup_tot;
+  uint objects_len;
+  Object **objects = object_array_for_wpaint(C, &objects_len);
+  for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
+    Object *ob = objects[ob_index];
 
-  const bool *vgroup_validmap = BKE_object_defgroup_subset_from_select_type(
-      ob, subset_type, &vgroup_tot, &subset_count);
-  int remove_tot = vgroup_limit_total_subset(ob, vgroup_validmap, vgroup_tot, subset_count, limit);
-  MEM_freeN((void *)vgroup_validmap);
+    int subset_count, vgroup_tot;
+    const bool *vgroup_validmap = BKE_object_defgroup_subset_from_select_type(
+        ob, subset_type, &vgroup_tot, &subset_count);
+    const int remove_count = vgroup_limit_total_subset(
+        ob, vgroup_validmap, vgroup_tot, subset_count, limit);
+    MEM_freeN((void *)vgroup_validmap);
 
-  BKE_reportf(
-      op->reports, remove_tot ? RPT_INFO : RPT_WARNING, "%d vertex weights limited", remove_tot);
+    if (remove_count != 0) {
+      DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+      WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
+      WM_event_add_notifier(C, NC_GEOM | ND_DATA, ob->data);
+    }
+    remove_multi_count += remove_count;
+  }
+  MEM_freeN(objects);
 
-  if (remove_tot) {
-    DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
-    WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
-    WM_event_add_notifier(C, NC_GEOM | ND_DATA, ob->data);
+  if (remove_multi_count) {
+    BKE_reportf(op->reports,
+                remove_multi_count ? RPT_INFO : RPT_WARNING,
+                "%d vertex weights limited",
+                remove_multi_count);
 
     return OPERATOR_FINISHED;
   }
-  else {
-    /* note, would normally return canceled, except we want the redo
-     * UI to show up for users to change */
-    return OPERATOR_FINISHED;
-  }
+
+  /* note, would normally return canceled, except we want the redo
+   * UI to show up for users to change */
+  return OPERATOR_FINISHED;
 }
 
 void OBJECT_OT_vertex_group_limit_total(wmOperatorType *ot)
@@ -4125,8 +4144,6 @@ static void vgroup_sort_bone_hierarchy(Object *ob, ListBase *bonebase)
       }
     }
   }
-
-  return;
 }
 
 enum {
@@ -4370,7 +4387,7 @@ void OBJECT_OT_vertex_weight_paste(wmOperatorType *ot)
   ot->name = "Paste Weight to Selected";
   ot->idname = "OBJECT_OT_vertex_weight_paste";
   ot->description =
-      "Copy this group's weight to other selected verts (disabled if vertex group is locked)";
+      "Copy this group's weight to other selected vertices (disabled if vertex group is locked)";
 
   /* api callbacks */
   ot->poll = vertex_group_vert_select_mesh_poll;
@@ -4509,9 +4526,7 @@ static int vertex_weight_normalize_active_vertex_exec(bContext *C, wmOperator *U
 
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void OBJECT_OT_vertex_weight_normalize_active_vertex(wmOperatorType *ot)

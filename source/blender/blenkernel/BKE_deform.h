@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_DEFORM_H__
-#define __BKE_DEFORM_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,9 +35,11 @@ struct MLoop;
 struct MPoly;
 struct Object;
 struct bDeformGroup;
+struct BlendWriter;
+struct BlendDataReader;
 
 struct bDeformGroup *BKE_object_defgroup_new(struct Object *ob, const char *name);
-void BKE_defgroup_copy_list(struct ListBase *lb1, const struct ListBase *lb2);
+void BKE_defgroup_copy_list(struct ListBase *outbase, const struct ListBase *inbase);
 struct bDeformGroup *BKE_defgroup_duplicate(const struct bDeformGroup *ingroup);
 struct bDeformGroup *BKE_object_defgroup_find_name(const struct Object *ob, const char *name);
 int *BKE_object_defgroup_flip_map(const struct Object *ob,
@@ -111,7 +112,7 @@ void BKE_defvert_sync_mapped(struct MDeformVert *dvert_dst,
                              const int *flip_map,
                              const int flip_map_len,
                              const bool use_ensure);
-void BKE_defvert_remap(struct MDeformVert *dvert, int *map, const int map_len);
+void BKE_defvert_remap(struct MDeformVert *dvert, const int *map, const int map_len);
 void BKE_defvert_flip(struct MDeformVert *dvert, const int *flip_map, const int flip_map_len);
 void BKE_defvert_flip_merged(struct MDeformVert *dvert,
                              const int *flip_map,
@@ -163,8 +164,11 @@ void BKE_defvert_extract_vgroup_to_polyweights(struct MDeformVert *dvert,
 
 void BKE_defvert_weight_to_rgb(float r_rgb[3], const float weight);
 
+void BKE_defvert_blend_write(struct BlendWriter *writer, int count, struct MDeformVert *dvlist);
+void BKE_defvert_blend_read(struct BlendDataReader *reader,
+                            int count,
+                            struct MDeformVert *mdverts);
+
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_DEFORM_H__ */

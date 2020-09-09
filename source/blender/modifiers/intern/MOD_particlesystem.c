@@ -46,6 +46,8 @@
 
 #include "DEG_depsgraph_query.h"
 
+#include "BLO_read_write.h"
+
 #include "MOD_ui_common.h"
 #include "MOD_util.h"
 
@@ -217,7 +219,7 @@ static void deformVerts(ModifierData *md,
   psmd->totdmedge = psmd->mesh_final->totedge;
   psmd->totdmface = psmd->mesh_final->totface;
 
-  if (!(ctx->object->transflag & OB_NO_PSYS_UPDATE)) {
+  {
     struct Scene *scene = DEG_get_evaluated_scene(ctx->depsgraph);
     psmd->flag &= ~eParticleSystemFlag_psys_updated;
     particle_system_update(
@@ -258,16 +260,15 @@ static void deformVertsEM(ModifierData *md,
 }
 #endif
 
-static void panel_draw(const bContext *C, Panel *panel)
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
   PointerRNA ob_ptr;
-  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
 
   Object *ob = ob_ptr.data;
-  ModifierData *md = (ModifierData *)ptr.data;
+  ModifierData *md = (ModifierData *)ptr->data;
   ParticleSystem *psys = ((ParticleSystemModifierData *)md)->psys;
 
   uiItemL(layout, IFACE_("Settings are in the particle tab"), ICON_NONE);
@@ -287,12 +288,24 @@ static void panel_draw(const bContext *C, Panel *panel)
     }
   }
 
-  modifier_panel_end(layout, &ptr);
+  modifier_panel_end(layout, ptr);
 }
 
 static void panelRegister(ARegionType *region_type)
 {
   modifier_panel_register(region_type, eModifierType_ParticleSystem, panel_draw);
+}
+
+static void blendRead(BlendDataReader *reader, ModifierData *md)
+{
+  ParticleSystemModifierData *psmd = (ParticleSystemModifierData *)md;
+
+  psmd->mesh_final = NULL;
+  psmd->mesh_original = NULL;
+  /* This is written as part of ob->particlesystem. */
+  BLO_read_data_address(reader, &psmd->psys);
+  psmd->flag &= ~eParticleSystemFlag_psys_updated;
+  psmd->flag |= eParticleSystemFlag_file_loaded;
 }
 
 ModifierTypeInfo modifierType_ParticleSystem = {
@@ -330,5 +343,5 @@ ModifierTypeInfo modifierType_ParticleSystem = {
     /* freeRuntimeData */ NULL,
     /* panelRegister */ panelRegister,
     /* blendWrite */ NULL,
-    /* blendRead */ NULL,
+    /* blendRead */ blendRead,
 };

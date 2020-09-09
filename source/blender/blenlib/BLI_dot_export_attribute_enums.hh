@@ -14,13 +14,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLI_DOT_EXPORT_ATTRIBUTE_ENUMS_HH__
-#define __BLI_DOT_EXPORT_ATTRIBUTE_ENUMS_HH__
+#pragma once
 
 #include "BLI_string_ref.hh"
 
-namespace blender {
-namespace DotExport {
+namespace blender ::dot {
 
 enum class Attr_rankdir {
   LeftToRight,
@@ -119,7 +117,4 @@ inline StringRef dirType_to_string(Attr_dirType value)
   return "";
 }
 
-}  // namespace DotExport
-}  // namespace blender
-
-#endif /* __BLI_DOT_EXPORT_ATTRIBUTE_ENUMS_HH__ */
+}  // namespace blender::dot

@@ -16,8 +16,7 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_NODEOPERATION_H__
-#define __COM_NODEOPERATION_H__
+#pragma once
 
 #include <list>
 #include <sstream>
@@ -167,7 +166,7 @@ class NodeOperation : public SocketReader {
    * the ExecutionSystem.
    *
    * \see ExecutionSystem
-   * \group check
+   * \ingroup check
    * \param rendering: [true false]
    *  true: rendering
    *  false: editing
@@ -521,5 +520,3 @@ class NodeOperationOutput {
   MEM_CXX_CLASS_ALLOC_FUNCS("COM:NodeOperation")
 #endif
 };
-
-#endif

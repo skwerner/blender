@@ -74,12 +74,10 @@ BLI_INLINE int clamp_float_to_int(const float f)
   if (UNLIKELY(f < min)) {
     return min;
   }
-  else if (UNLIKELY(f > max)) {
+  if (UNLIKELY(f > max)) {
     return (int)max;
   }
-  else {
-    return (int)f;
-  }
+  return (int)f;
 }
 
 /**
@@ -244,7 +242,7 @@ void UI_view2d_region_reinit(View2D *v2d, short type, int winx, int winy)
   bool tot_changed = false, do_init;
   const uiStyle *style = UI_style_get();
 
-  do_init = (v2d->flag & V2D_IS_INITIALISED) == 0;
+  do_init = (v2d->flag & V2D_IS_INIT) == 0;
 
   /* see eView2D_CommonViewTypes in UI_view2d.h for available view presets */
   switch (type) {
@@ -353,7 +351,7 @@ void UI_view2d_region_reinit(View2D *v2d, short type, int winx, int winy)
       v2d->scroll |= (V2D_SCROLL_HORIZONTAL_HIDE | V2D_SCROLL_VERTICAL_HIDE);
 
       if (do_init) {
-        float panelzoom = (style) ? style->panelzoom : 1.0f;
+        const float panelzoom = (style) ? style->panelzoom : 1.0f;
 
         v2d->tot.xmin = 0.0f;
         v2d->tot.xmax = winx;
@@ -376,8 +374,8 @@ void UI_view2d_region_reinit(View2D *v2d, short type, int winx, int winy)
       break;
   }
 
-  /* set initialized flag so that View2D doesn't get reinitialised next time again */
-  v2d->flag |= V2D_IS_INITIALISED;
+  /* set initialized flag so that View2D doesn't get reinitialized next time again */
+  v2d->flag |= V2D_IS_INIT;
 
   /* store view size */
   v2d->winx = winx;
@@ -568,7 +566,7 @@ static void ui_view2d_curRect_validate_resize(View2D *v2d, bool resize)
          * - width is not adjusted for changed ratios here.
          */
         if (winx < v2d->oldwinx) {
-          float temp = v2d->oldwinx - winx;
+          const float temp = v2d->oldwinx - winx;
 
           cur->xmin -= temp;
           cur->xmax -= temp;
@@ -590,7 +588,7 @@ static void ui_view2d_curRect_validate_resize(View2D *v2d, bool resize)
          */
 
         if (winy < v2d->oldwiny) {
-          float temp = v2d->oldwiny - winy;
+          const float temp = v2d->oldwiny - winy;
 
           if (v2d->align & V2D_ALIGN_NO_NEG_Y) {
             cur->ymin -= temp;
@@ -855,14 +853,23 @@ void UI_view2d_curRect_validate(View2D *v2d)
   ui_view2d_curRect_validate_resize(v2d, false);
 }
 
+void UI_view2d_curRect_changed(const bContext *C, View2D *v2d)
+{
+  UI_view2d_curRect_validate(v2d);
+
+  ARegion *region = CTX_wm_region(C);
+
+  if (region->type->on_view2d_changed != NULL) {
+    region->type->on_view2d_changed(C, region);
+  }
+}
+
 /* ------------------ */
 
 /* Called by menus to activate it, or by view2d operators
  * to make sure 'related' views stay in synchrony */
 void UI_view2d_sync(bScreen *screen, ScrArea *area, View2D *v2dcur, int flag)
 {
-  ARegion *region;
-
   /* don't continue if no view syncing to be done */
   if ((v2dcur->flag & (V2D_VIEWSYNC_SCREEN_TIME | V2D_VIEWSYNC_AREA_VERTICAL)) == 0) {
     return;
@@ -870,7 +877,7 @@ void UI_view2d_sync(bScreen *screen, ScrArea *area, View2D *v2dcur, int flag)
 
   /* check if doing within area syncing (i.e. channels/vertical) */
   if ((v2dcur->flag & V2D_VIEWSYNC_AREA_VERTICAL) && (area)) {
-    for (region = area->regionbase.first; region; region = region->next) {
+    LISTBASE_FOREACH (ARegion *, region, &area->regionbase) {
       /* don't operate on self */
       if (v2dcur != &region->v2d) {
         /* only if view has vertical locks enabled */
@@ -896,7 +903,7 @@ void UI_view2d_sync(bScreen *screen, ScrArea *area, View2D *v2dcur, int flag)
   /* check if doing whole screen syncing (i.e. time/horizontal) */
   if ((v2dcur->flag & V2D_VIEWSYNC_SCREEN_TIME) && (screen)) {
     LISTBASE_FOREACH (ScrArea *, area_iter, &screen->areabase) {
-      for (region = area_iter->regionbase.first; region; region = region->next) {
+      LISTBASE_FOREACH (ARegion *, region, &area_iter->regionbase) {
         /* don't operate on self */
         if (v2dcur != &region->v2d) {
           /* only if view has horizontal locks enabled */
@@ -1114,14 +1121,14 @@ static void view2d_map_cur_using_mask(const View2D *v2d, rctf *r_curmasked)
   *r_curmasked = v2d->cur;
 
   if (view2d_scroll_mapped(v2d->scroll)) {
-    float sizex = BLI_rcti_size_x(&v2d->mask);
-    float sizey = BLI_rcti_size_y(&v2d->mask);
+    const float sizex = BLI_rcti_size_x(&v2d->mask);
+    const float sizey = BLI_rcti_size_y(&v2d->mask);
 
     /* prevent tiny or narrow regions to get
      * invalid coordinates - mask can get negative even... */
     if (sizex > 0.0f && sizey > 0.0f) {
-      float dx = BLI_rctf_size_x(&v2d->cur) / (sizex + 1);
-      float dy = BLI_rctf_size_y(&v2d->cur) / (sizey + 1);
+      const float dx = BLI_rctf_size_x(&v2d->cur) / (sizex + 1);
+      const float dy = BLI_rctf_size_y(&v2d->cur) / (sizey + 1);
 
       if (v2d->mask.xmin != 0) {
         r_curmasked->xmin -= dx * (float)v2d->mask.xmin;
@@ -1218,8 +1225,8 @@ void UI_view2d_view_orthoSpecial(ARegion *region, View2D *v2d, const bool xaxis)
 void UI_view2d_view_restore(const bContext *C)
 {
   ARegion *region = CTX_wm_region(C);
-  int width = BLI_rcti_size_x(&region->winrct) + 1;
-  int height = BLI_rcti_size_y(&region->winrct) + 1;
+  const int width = BLI_rcti_size_x(&region->winrct) + 1;
+  const int height = BLI_rcti_size_y(&region->winrct) + 1;
 
   wmOrtho2(0.0f, (float)width, 0.0f, (float)height);
   GPU_matrix_identity_set();
@@ -1271,8 +1278,8 @@ void UI_view2d_constant_grid_draw(const View2D *v2d, float step)
 
   if (count_x > 0 || count_y > 0) {
     GPUVertFormat *format = immVertexFormat();
-    uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
-    uint color = GPU_vertformat_attr_add(format, "color", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
+    const uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+    const uint color = GPU_vertformat_attr_add(format, "color", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
     float theme_color[3];
 
     UI_GetThemeColorShade3fv(TH_BACK, -10, theme_color);
@@ -1324,7 +1331,7 @@ void UI_view2d_multi_grid_draw(
   vertex_count += 2 * ((int)((v2d->cur.ymax - v2d->cur.ymin) / lstep) + 1);
 
   GPUVertFormat *format = immVertexFormat();
-  uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+  const uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
   uint color = GPU_vertformat_attr_add(
       format, "color", GPU_COMP_U8, 3, GPU_FETCH_INT_TO_FLOAT_UNIT);
 
@@ -1408,21 +1415,21 @@ struct View2DScrollers {
   int vert_min, vert_max; /* vertical scrollbar */
   int hor_min, hor_max;   /* horizontal scrollbar */
 
-  rcti hor, vert;        /* exact size of slider backdrop */
-  int horfull, vertfull; /* set if sliders are full, we don't draw them */
+  /** Exact size of slider backdrop. */
+  rcti hor, vert;
+  /* set if sliders are full, we don't draw them */
+  /* int horfull, vertfull; */ /* UNUSED */
 };
 
 /* Calculate relevant scroller properties */
-View2DScrollers *UI_view2d_scrollers_calc(View2D *v2d, const rcti *mask_custom)
+void UI_view2d_scrollers_calc(View2D *v2d,
+                              const rcti *mask_custom,
+                              struct View2DScrollers *r_scrollers)
 {
-  View2DScrollers *scrollers;
   rcti vert, hor;
   float fac1, fac2, totsize, scrollsize;
-  int scroll = view2d_scroll_mapped(v2d->scroll);
+  const int scroll = view2d_scroll_mapped(v2d->scroll);
   int smaller;
-
-  /* scrollers is allocated here... */
-  scrollers = MEM_callocN(sizeof(View2DScrollers), "View2DScrollers");
 
   /* Always update before drawing (for dynamically sized scrollers). */
   view2d_masks(v2d, mask_custom);
@@ -1452,12 +1459,12 @@ View2DScrollers *UI_view2d_scrollers_calc(View2D *v2d, const rcti *mask_custom)
     vert.xmax -= smaller;
   }
 
-  CLAMP(vert.ymin, vert.ymin, vert.ymax - V2D_SCROLL_HANDLE_SIZE_HOTSPOT);
-  CLAMP(hor.xmin, hor.xmin, hor.xmax - V2D_SCROLL_HANDLE_SIZE_HOTSPOT);
+  CLAMP_MAX(vert.ymin, vert.ymax - V2D_SCROLL_HANDLE_SIZE_HOTSPOT);
+  CLAMP_MAX(hor.xmin, hor.xmax - V2D_SCROLL_HANDLE_SIZE_HOTSPOT);
 
   /* store in scrollers, used for drawing */
-  scrollers->vert = vert;
-  scrollers->hor = hor;
+  r_scrollers->vert = vert;
+  r_scrollers->hor = hor;
 
   /* scroller 'buttons':
    * - These should always remain within the visible region of the scrollbar
@@ -1475,30 +1482,30 @@ View2DScrollers *UI_view2d_scrollers_calc(View2D *v2d, const rcti *mask_custom)
 
     fac1 = (v2d->cur.xmin - v2d->tot.xmin) / totsize;
     if (fac1 <= 0.0f) {
-      scrollers->hor_min = hor.xmin;
+      r_scrollers->hor_min = hor.xmin;
     }
     else {
-      scrollers->hor_min = (int)(hor.xmin + (fac1 * scrollsize));
+      r_scrollers->hor_min = (int)(hor.xmin + (fac1 * scrollsize));
     }
 
     fac2 = (v2d->cur.xmax - v2d->tot.xmin) / totsize;
     if (fac2 >= 1.0f) {
-      scrollers->hor_max = hor.xmax;
+      r_scrollers->hor_max = hor.xmax;
     }
     else {
-      scrollers->hor_max = (int)(hor.xmin + (fac2 * scrollsize));
+      r_scrollers->hor_max = (int)(hor.xmin + (fac2 * scrollsize));
     }
 
     /* prevent inverted sliders */
-    if (scrollers->hor_min > scrollers->hor_max) {
-      scrollers->hor_min = scrollers->hor_max;
+    if (r_scrollers->hor_min > r_scrollers->hor_max) {
+      r_scrollers->hor_min = r_scrollers->hor_max;
     }
     /* prevent sliders from being too small to grab */
-    if ((scrollers->hor_max - scrollers->hor_min) < V2D_SCROLL_THUMB_SIZE_MIN) {
-      scrollers->hor_max = scrollers->hor_min + V2D_SCROLL_THUMB_SIZE_MIN;
+    if ((r_scrollers->hor_max - r_scrollers->hor_min) < V2D_SCROLL_THUMB_SIZE_MIN) {
+      r_scrollers->hor_max = r_scrollers->hor_min + V2D_SCROLL_THUMB_SIZE_MIN;
 
-      CLAMP(scrollers->hor_max, hor.xmin + V2D_SCROLL_THUMB_SIZE_MIN, hor.xmax);
-      CLAMP(scrollers->hor_min, hor.xmin, hor.xmax - V2D_SCROLL_THUMB_SIZE_MIN);
+      CLAMP(r_scrollers->hor_max, hor.xmin + V2D_SCROLL_THUMB_SIZE_MIN, hor.xmax);
+      CLAMP(r_scrollers->hor_min, hor.xmin, hor.xmax - V2D_SCROLL_THUMB_SIZE_MIN);
     }
   }
 
@@ -1513,39 +1520,39 @@ View2DScrollers *UI_view2d_scrollers_calc(View2D *v2d, const rcti *mask_custom)
 
     fac1 = (v2d->cur.ymin - v2d->tot.ymin) / totsize;
     if (fac1 <= 0.0f) {
-      scrollers->vert_min = vert.ymin;
+      r_scrollers->vert_min = vert.ymin;
     }
     else {
-      scrollers->vert_min = (int)(vert.ymin + (fac1 * scrollsize));
+      r_scrollers->vert_min = (int)(vert.ymin + (fac1 * scrollsize));
     }
 
     fac2 = (v2d->cur.ymax - v2d->tot.ymin) / totsize;
     if (fac2 >= 1.0f) {
-      scrollers->vert_max = vert.ymax;
+      r_scrollers->vert_max = vert.ymax;
     }
     else {
-      scrollers->vert_max = (int)(vert.ymin + (fac2 * scrollsize));
+      r_scrollers->vert_max = (int)(vert.ymin + (fac2 * scrollsize));
     }
 
     /* prevent inverted sliders */
-    if (scrollers->vert_min > scrollers->vert_max) {
-      scrollers->vert_min = scrollers->vert_max;
+    if (r_scrollers->vert_min > r_scrollers->vert_max) {
+      r_scrollers->vert_min = r_scrollers->vert_max;
     }
     /* prevent sliders from being too small to grab */
-    if ((scrollers->vert_max - scrollers->vert_min) < V2D_SCROLL_THUMB_SIZE_MIN) {
-      scrollers->vert_max = scrollers->vert_min + V2D_SCROLL_THUMB_SIZE_MIN;
+    if ((r_scrollers->vert_max - r_scrollers->vert_min) < V2D_SCROLL_THUMB_SIZE_MIN) {
+      r_scrollers->vert_max = r_scrollers->vert_min + V2D_SCROLL_THUMB_SIZE_MIN;
 
-      CLAMP(scrollers->vert_max, vert.ymin + V2D_SCROLL_THUMB_SIZE_MIN, vert.ymax);
-      CLAMP(scrollers->vert_min, vert.ymin, vert.ymax - V2D_SCROLL_THUMB_SIZE_MIN);
+      CLAMP(r_scrollers->vert_max, vert.ymin + V2D_SCROLL_THUMB_SIZE_MIN, vert.ymax);
+      CLAMP(r_scrollers->vert_min, vert.ymin, vert.ymax - V2D_SCROLL_THUMB_SIZE_MIN);
     }
   }
-
-  return scrollers;
 }
 
 /* Draw scrollbars in the given 2d-region */
-void UI_view2d_scrollers_draw(View2D *v2d, View2DScrollers *vs)
+void UI_view2d_scrollers_draw(View2D *v2d, const rcti *mask_custom)
 {
+  View2DScrollers scrollers;
+  UI_view2d_scrollers_calc(v2d, mask_custom, &scrollers);
   bTheme *btheme = UI_GetTheme();
   rcti vert, hor;
   const int scroll = view2d_scroll_mapped(v2d->scroll);
@@ -1556,8 +1563,8 @@ void UI_view2d_scrollers_draw(View2D *v2d, View2DScrollers *vs)
   UI_GetThemeColor4ubv(TH_BACK, scrollers_back_color);
 
   /* make copies of rects for less typing */
-  vert = vs->vert;
-  hor = vs->hor;
+  vert = scrollers.vert;
+  hor = scrollers.hor;
 
   /* horizontal scrollbar */
   if (scroll & V2D_SCROLL_HORIZONTAL) {
@@ -1566,8 +1573,8 @@ void UI_view2d_scrollers_draw(View2D *v2d, View2DScrollers *vs)
     rcti slider;
     int state;
 
-    slider.xmin = vs->hor_min;
-    slider.xmax = vs->hor_max;
+    slider.xmin = scrollers.hor_min;
+    slider.xmax = scrollers.hor_max;
     slider.ymin = hor.ymin;
     slider.ymax = hor.ymax;
 
@@ -1602,8 +1609,8 @@ void UI_view2d_scrollers_draw(View2D *v2d, View2DScrollers *vs)
 
     slider.xmin = vert.xmin;
     slider.xmax = vert.xmax;
-    slider.ymin = vs->vert_min;
-    slider.ymax = vs->vert_max;
+    slider.ymin = scrollers.vert_min;
+    slider.ymax = scrollers.vert_max;
 
     state = (v2d->scroll_ui & V2D_SCROLL_V_ACTIVE) ? UI_SCROLL_PRESSED : 0;
 
@@ -1629,12 +1636,6 @@ void UI_view2d_scrollers_draw(View2D *v2d, View2DScrollers *vs)
 
   /* Was changed above, so reset. */
   btheme->tui.widget_emboss[3] = emboss_alpha;
-}
-
-/* free temporary memory used for drawing scrollers */
-void UI_view2d_scrollers_free(View2DScrollers *scrollers)
-{
-  MEM_freeN(scrollers);
 }
 
 /** \} */
@@ -1762,12 +1763,11 @@ bool UI_view2d_view_to_region_clip(
 
     return true;
   }
-  else {
-    /* set initial value in case coordinate lies outside of bounds */
-    *r_region_x = *r_region_y = V2D_IS_CLIPPED;
 
-    return false;
-  }
+  /* set initial value in case coordinate lies outside of bounds */
+  *r_region_x = *r_region_y = V2D_IS_CLIPPED;
+
+  return false;
 }
 
 /**
@@ -1861,11 +1861,9 @@ bool UI_view2d_view_to_region_rcti_clip(const View2D *v2d, const rctf *rect_src,
 
     return true;
   }
-  else {
-    rect_dst->xmin = rect_dst->xmax = rect_dst->ymin = rect_dst->ymax = V2D_IS_CLIPPED;
 
-    return false;
-  }
+  rect_dst->xmin = rect_dst->xmax = rect_dst->ymin = rect_dst->ymax = V2D_IS_CLIPPED;
+  return false;
 }
 
 /** \} */
@@ -1912,7 +1910,7 @@ View2D *UI_view2d_fromcontext_rwin(const bContext *C)
  * disabled. */
 void UI_view2d_scroller_size_get(const View2D *v2d, float *r_x, float *r_y)
 {
-  int scroll = view2d_scroll_mapped(v2d->scroll);
+  const int scroll = view2d_scroll_mapped(v2d->scroll);
 
   if (r_x) {
     if (scroll & V2D_SCROLL_VERTICAL) {
@@ -2130,7 +2128,7 @@ void UI_view2d_text_cache_add(
   BLI_assert(str_len == strlen(str));
 
   if (UI_view2d_view_to_region_clip(v2d, x, y, &mval[0], &mval[1])) {
-    int alloc_len = str_len + 1;
+    const int alloc_len = str_len + 1;
     View2DString *v2s;
 
     if (g_v2d_strings_arena == NULL) {
@@ -2161,7 +2159,7 @@ void UI_view2d_text_cache_add_rectf(
   BLI_assert(str_len == strlen(str));
 
   if (UI_view2d_view_to_region_rcti_clip(v2d, rect_view, &rect)) {
-    int alloc_len = str_len + 1;
+    const int alloc_len = str_len + 1;
     View2DString *v2s;
 
     if (g_v2d_strings_arena == NULL) {

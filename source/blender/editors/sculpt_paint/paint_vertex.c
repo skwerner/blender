@@ -137,13 +137,11 @@ static float view_angle_limits_apply_falloff(const struct NormalAnglePrecalc *a,
     /* outsize the normal limit */
     return false;
   }
-  else if (angle_cos < a->angle_inner__cos) {
+  if (angle_cos < a->angle_inner__cos) {
     *mask_p *= (a->angle - acosf(angle_cos)) / a->angle_range;
     return true;
   }
-  else {
-    return true;
-  }
+  return true;
 }
 
 static bool vwpaint_use_normal(const VPaint *vp)
@@ -405,12 +403,10 @@ static float wpaint_clamp_monotonic(float oldval, float curval, float newval)
   if (newval < oldval) {
     return MIN2(newval, curval);
   }
-  else if (newval > oldval) {
+  if (newval > oldval) {
     return MAX2(newval, curval);
   }
-  else {
-    return newval;
-  }
+  return newval;
 }
 
 static float wpaint_undo_lock_relative(
@@ -535,7 +531,7 @@ static bool do_weight_paint_normalize_all_locked(MDeformVert *dvert,
 
     return (lock_weight == 1.0f);
   }
-  else if (sum_unlock != 0.0f) {
+  if (sum_unlock != 0.0f) {
     fac = (1.0f - lock_weight) / sum_unlock;
 
     for (i = dvert->totweight, dw = dvert->dw; i != 0; i--, dw++) {
@@ -1101,12 +1097,12 @@ static void vertex_paint_init_session(Depsgraph *depsgraph,
   BLI_assert(ob->sculpt == NULL);
   ob->sculpt = MEM_callocN(sizeof(SculptSession), "sculpt session");
   ob->sculpt->mode_type = object_mode;
-  BKE_sculpt_update_object_for_edit(depsgraph, ob, false, false);
+  BKE_sculpt_update_object_for_edit(depsgraph, ob, false, false, false);
 }
 
 static void vertex_paint_init_stroke(Depsgraph *depsgraph, Object *ob)
 {
-  BKE_sculpt_update_object_for_edit(depsgraph, ob, false, false);
+  BKE_sculpt_update_object_for_edit(depsgraph, ob, false, false, false);
 }
 
 static void vertex_paint_init_session_data(const ToolSettings *ts, Object *ob)
@@ -1380,55 +1376,13 @@ static int wpaint_mode_toggle_exec(bContext *C, wmOperator *op)
     BKE_paint_toolslots_brush_validate(bmain, &ts->wpaint->paint);
   }
 
-  /* When locked, it's almost impossible to select the pose-object
-   * then the mesh-object to enter weight paint mode.
-   * Even when the object mode is not locked this is inconvenient - so allow in either case.
-   *
-   * In this case move our pose object in/out of pose mode.
-   * This is in fits with the convention of selecting multiple objects and entering a mode.
-   */
-  {
-    VirtualModifierData virtualModifierData;
-    ModifierData *md = BKE_modifiers_get_virtual_modifierlist(ob, &virtualModifierData);
-    if (md != NULL) {
-      /* Can be NULL. */
-      View3D *v3d = CTX_wm_view3d(C);
-      ViewLayer *view_layer = CTX_data_view_layer(C);
-      for (; md; md = md->next) {
-        if (md->type == eModifierType_Armature) {
-          ArmatureModifierData *amd = (ArmatureModifierData *)md;
-          Object *ob_arm = amd->object;
-          if (ob_arm != NULL) {
-            const Base *base_arm = BKE_view_layer_base_find(view_layer, ob_arm);
-            if (base_arm && BASE_VISIBLE(v3d, base_arm)) {
-              if (is_mode_set) {
-                if ((ob_arm->mode & OB_MODE_POSE) != 0) {
-                  ED_object_posemode_exit_ex(bmain, ob_arm);
-                }
-              }
-              else {
-                /* Only check selected status when entering weight-paint mode
-                 * because we may have multiple armature objects.
-                 * Selecting one will de-select the other, which would leave it in pose-mode
-                 * when exiting weight paint mode. While usable, this looks like inconsistent
-                 * behavior from a user perspective. */
-                if (base_arm->flag & BASE_SELECTED) {
-                  if ((ob_arm->mode & OB_MODE_POSE) == 0) {
-                    ED_object_posemode_enter_ex(bmain, ob_arm);
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
+  /* Prepare armature posemode. */
+  ED_object_posemode_set_for_weight_paint(C, bmain, ob, is_mode_set);
 
-  /* Weightpaint works by overriding colors in mesh,
-   * so need to make sure we recalc on enter and
+  /* Weight-paint works by overriding colors in mesh,
+   * so need to make sure we recalculate on enter and
    * exit (exit needs doing regardless because we
-   * should redeform).
+   * should re-deform).
    */
   DEG_id_tag_update(&me->id, 0);
 
@@ -2171,7 +2125,7 @@ static void calculate_average_weight(SculptThreadedTaskData *data,
   data->custom_data = accum;
 
   TaskParallelSettings settings;
-  BKE_pbvh_parallel_range_settings(&settings, (data->sd->flags & SCULPT_USE_OPENMP), totnode);
+  BKE_pbvh_parallel_range_settings(&settings, true, totnode);
   BLI_task_parallel_range(0, totnode, data, do_wpaint_brush_calc_average_weight_cb_ex, &settings);
 
   uint accum_len = 0;

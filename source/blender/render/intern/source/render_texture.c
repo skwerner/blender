@@ -902,7 +902,7 @@ static void do_2d_mapping(
   float fx, fy, fac1, area[8];
   int ok, proj, areaflag = 0, wrap;
 
-  /* mtex variables localized, only cubemap doesn't cooperate yet... */
+  /* #MTex variables localized, only cube-map doesn't cooperate yet. */
   wrap = mtex->mapping;
   tex = mtex->tex;
 
@@ -1381,20 +1381,19 @@ static int multitex_nodes_intern(Tex *tex,
 
     return rgbnor;
   }
-  else {
-    return multitex(tex,
-                    texvec,
-                    dxt,
-                    dyt,
-                    osatex,
-                    texres,
-                    thread,
-                    which_output,
-                    pool,
-                    skip_load_image,
-                    texnode_preview,
-                    use_nodes);
-  }
+
+  return multitex(tex,
+                  texvec,
+                  dxt,
+                  dyt,
+                  osatex,
+                  texres,
+                  thread,
+                  which_output,
+                  pool,
+                  skip_load_image,
+                  texnode_preview,
+                  use_nodes);
 }
 
 /* this is called from the shader and texture nodes

@@ -21,8 +21,7 @@
  * \ingroup render
  */
 
-#ifndef __RE_ENGINE_H__
-#define __RE_ENGINE_H__
+#pragma once
 
 #include "DNA_listBase.h"
 #include "DNA_node_types.h"
@@ -48,6 +47,10 @@ struct ViewLayer;
 struct bNode;
 struct bNodeTree;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* External Engine */
 
 /* RenderEngineType.flag */
@@ -60,6 +63,7 @@ struct bNodeTree;
 #define RE_USE_SHADING_NODES_CUSTOM 64
 #define RE_USE_SPHERICAL_STEREO 128
 #define RE_USE_STEREO_VIEWPORT 256
+#define RE_USE_GPU_CONTEXT 512
 
 /* RenderEngine.flag */
 #define RE_ENGINE_ANIMATION 1
@@ -236,4 +240,6 @@ void RE_bake_engine_set_engine_parameters(struct Render *re,
 
 void RE_engine_free_blender_memory(struct RenderEngine *engine);
 
-#endif /* __RE_ENGINE_H__ */
+#ifdef __cplusplus
+}
+#endif

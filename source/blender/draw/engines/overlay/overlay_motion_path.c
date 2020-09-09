@@ -68,7 +68,9 @@ static GPUVertBuf *mpath_vbo_get(bMotionPath *mpath)
     mpath->points_vbo = GPU_vertbuf_create_with_format(&format);
     GPU_vertbuf_data_alloc(mpath->points_vbo, mpath->length);
     /* meh... a useless memcpy. */
-    memcpy(mpath->points_vbo->data, mpath->points, sizeof(bMotionPathVert) * mpath->length);
+    memcpy(GPU_vertbuf_get_data(mpath->points_vbo),
+           mpath->points,
+           sizeof(bMotionPathVert) * mpath->length);
   }
   return mpath->points_vbo;
 }
@@ -149,7 +151,7 @@ static void motion_path_cache(OVERLAY_Data *vedata,
 
   /* Draw curve-line of path. */
   if (show_lines) {
-    int motion_path_settings[4] = {cfra, sfra, efra, mpath->start_frame};
+    const int motion_path_settings[4] = {cfra, sfra, efra, mpath->start_frame};
     DRWShadingGroup *grp = DRW_shgroup_create_sub(pd->motion_path_lines_grp);
     DRW_shgroup_uniform_ivec4_copy(grp, "mpathLineSettings", motion_path_settings);
     DRW_shgroup_uniform_int_copy(grp, "lineThickness", mpath->line_thickness);
@@ -162,7 +164,7 @@ static void motion_path_cache(OVERLAY_Data *vedata,
   /* Draw points. */
   {
     int pt_size = max_ii(mpath->line_thickness - 1, 1);
-    int motion_path_settings[4] = {pt_size, cfra, mpath->start_frame, stepsize};
+    const int motion_path_settings[4] = {pt_size, cfra, mpath->start_frame, stepsize};
     DRWShadingGroup *grp = DRW_shgroup_create_sub(pd->motion_path_points_grp);
     DRW_shgroup_uniform_ivec4_copy(grp, "mpathPointSettings", motion_path_settings);
     DRW_shgroup_uniform_bool_copy(grp, "showKeyFrames", show_keyframes);

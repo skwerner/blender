@@ -49,6 +49,8 @@
 #include "UI_interface.h"
 #include "UI_resources.h"
 
+#include "BLO_read_write.h"
+
 #include "RNA_access.h"
 
 #include "DEG_depsgraph_query.h"
@@ -252,7 +254,7 @@ static void remap_faces_3_6_9_12(Mesh *mesh,
                                  Mesh *split,
                                  MFace *mf,
                                  int *facepa,
-                                 int *vertpa,
+                                 const int *vertpa,
                                  int i,
                                  EdgeHash *eh,
                                  int cur,
@@ -320,7 +322,7 @@ static void remap_faces_5_10(Mesh *mesh,
                              Mesh *split,
                              MFace *mf,
                              int *facepa,
-                             int *vertpa,
+                             const int *vertpa,
                              int i,
                              EdgeHash *eh,
                              int cur,
@@ -376,7 +378,7 @@ static void remap_faces_15(Mesh *mesh,
                            Mesh *split,
                            MFace *mf,
                            int *facepa,
-                           int *vertpa,
+                           const int *vertpa,
                            int i,
                            EdgeHash *eh,
                            int cur,
@@ -460,7 +462,7 @@ static void remap_faces_7_11_13_14(Mesh *mesh,
                                    Mesh *split,
                                    MFace *mf,
                                    int *facepa,
-                                   int *vertpa,
+                                   const int *vertpa,
                                    int i,
                                    EdgeHash *eh,
                                    int cur,
@@ -529,7 +531,7 @@ static void remap_faces_19_21_22(Mesh *mesh,
                                  Mesh *split,
                                  MFace *mf,
                                  int *facepa,
-                                 int *vertpa,
+                                 const int *vertpa,
                                  int i,
                                  EdgeHash *eh,
                                  int cur,
@@ -583,7 +585,7 @@ static void remap_faces_23(Mesh *mesh,
                            Mesh *split,
                            MFace *mf,
                            int *facepa,
-                           int *vertpa,
+                           const int *vertpa,
                            int i,
                            EdgeHash *eh,
                            int cur,
@@ -1178,54 +1180,60 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
       BKE_id_free(NULL, split_m);
       return explode;
     }
-    else {
-      return explodeMesh(emd, psmd, ctx, scene, mesh);
-    }
+
+    return explodeMesh(emd, psmd, ctx, scene, mesh);
   }
   return mesh;
 }
 
-static void panel_draw(const bContext *C, Panel *panel)
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
-  uiLayout *row;
+  uiLayout *row, *col;
   uiLayout *layout = panel->layout;
   int toggles_flag = UI_ITEM_R_TOGGLE | UI_ITEM_R_FORCE_BLANK_DECORATE;
 
-  PointerRNA ptr;
   PointerRNA ob_ptr;
-  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
 
   PointerRNA obj_data_ptr = RNA_pointer_get(&ob_ptr, "data");
-  bool has_vertex_group = RNA_string_length(&ptr, "vertex_group") != 0;
+  bool has_vertex_group = RNA_string_length(ptr, "vertex_group") != 0;
 
   uiLayoutSetPropSep(layout, true);
 
-  uiItemPointerR(layout, &ptr, "particle_uv", &obj_data_ptr, "uv_layers", NULL, ICON_NONE);
+  uiItemPointerR(layout, ptr, "particle_uv", &obj_data_ptr, "uv_layers", NULL, ICON_NONE);
 
   row = uiLayoutRowWithHeading(layout, true, IFACE_("Show"));
-  uiItemR(row, &ptr, "show_alive", toggles_flag, NULL, ICON_NONE);
-  uiItemR(row, &ptr, "show_dead", toggles_flag, NULL, ICON_NONE);
-  uiItemR(row, &ptr, "show_unborn", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, ptr, "show_alive", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, ptr, "show_dead", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, ptr, "show_unborn", toggles_flag, NULL, ICON_NONE);
 
   uiLayoutSetPropSep(layout, true);
 
-  uiItemR(layout, &ptr, "use_edge_cut", 0, NULL, ICON_NONE);
-  uiItemR(layout, &ptr, "use_size", 0, NULL, ICON_NONE);
+  col = uiLayoutColumn(layout, false);
+  uiItemR(col, ptr, "use_edge_cut", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "use_size", 0, NULL, ICON_NONE);
 
-  modifier_vgroup_ui(layout, &ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
+  modifier_vgroup_ui(layout, ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
 
   row = uiLayoutRow(layout, false);
   uiLayoutSetActive(row, has_vertex_group);
-  uiItemR(row, &ptr, "protect", 0, NULL, ICON_NONE);
+  uiItemR(row, ptr, "protect", 0, NULL, ICON_NONE);
 
   uiItemO(layout, IFACE_("Refresh"), ICON_NONE, "OBJECT_OT_explode_refresh");
 
-  modifier_panel_end(layout, &ptr);
+  modifier_panel_end(layout, ptr);
 }
 
 static void panelRegister(ARegionType *region_type)
 {
   modifier_panel_register(region_type, eModifierType_Explode, panel_draw);
+}
+
+static void blendRead(BlendDataReader *UNUSED(reader), ModifierData *md)
+{
+  ExplodeModifierData *psmd = (ExplodeModifierData *)md;
+
+  psmd->facepa = NULL;
 }
 
 ModifierTypeInfo modifierType_Explode = {
@@ -1258,5 +1266,5 @@ ModifierTypeInfo modifierType_Explode = {
     /* freeRuntimeData */ NULL,
     /* panelRegister */ panelRegister,
     /* blendWrite */ NULL,
-    /* blendRead */ NULL,
+    /* blendRead */ blendRead,
 };

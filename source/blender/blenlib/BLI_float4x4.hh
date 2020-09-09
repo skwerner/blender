@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLI_FLOAT4X4_HH__
-#define __BLI_FLOAT4X4_HH__
+#pragma once
 
 #include "BLI_float3.hh"
 #include "BLI_math_matrix.h"
@@ -32,35 +31,18 @@ struct float4x4 {
     memcpy(values, matrix, sizeof(float) * 16);
   }
 
-  float4x4(const float matrix[4][4]) : float4x4((float *)matrix)
+  float4x4(const float matrix[4][4]) : float4x4(static_cast<const float *>(matrix[0]))
   {
   }
 
   operator float *()
   {
-    return (float *)this;
+    return &values[0][0];
   }
 
   operator const float *() const
   {
-    return (const float *)this;
-  }
-
-  float4x4 inverted() const
-  {
-    float result[4][4];
-    invert_m4_m4(result, values);
-    return result;
-  }
-
-  /**
-   * Matrix inversion can be implemented more efficiently for affine matrices.
-   */
-  float4x4 inverted_affine() const
-  {
-    BLI_assert(values[0][3] == 0.0f && values[1][3] == 0.0f && values[2][3] == 0.0f &&
-               values[3][3] == 1.0f);
-    return this->inverted();
+    return &values[0][0];
   }
 
   friend float4x4 operator*(const float4x4 &a, const float4x4 &b)
@@ -86,6 +68,35 @@ struct float4x4 {
     return m * float3(v);
   }
 
+  float4x4 inverted() const
+  {
+    float4x4 result;
+    invert_m4_m4(result.values, values);
+    return result;
+  }
+
+  /**
+   * Matrix inversion can be implemented more efficiently for affine matrices.
+   */
+  float4x4 inverted_affine() const
+  {
+    BLI_assert(values[0][3] == 0.0f && values[1][3] == 0.0f && values[2][3] == 0.0f &&
+               values[3][3] == 1.0f);
+    return this->inverted();
+  }
+
+  float4x4 transposed() const
+  {
+    float4x4 result;
+    transpose_m4_m4(result.values, values);
+    return result;
+  }
+
+  float4x4 inverted_transposed_affine() const
+  {
+    return this->inverted_affine().transposed();
+  }
+
   struct float3x3_ref {
     const float4x4 &data;
 
@@ -108,8 +119,16 @@ struct float4x4 {
     interp_m4_m4m4(result, a.values, b.values, t);
     return result;
   }
+
+  uint64_t hash() const
+  {
+    uint64_t h = 435109;
+    for (int i = 0; i < 16; i++) {
+      float value = (static_cast<const float *>(values[0]))[i];
+      h = h * 33 + *reinterpret_cast<const uint32_t *>(&value);
+    }
+    return h;
+  }
 };
 
 }  // namespace blender
-
-#endif /* __BLI_FLOAT4X4_HH__ */

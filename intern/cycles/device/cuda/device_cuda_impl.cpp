@@ -383,11 +383,24 @@ string CUDADevice::compile_kernel(const DeviceRequestedFeatures &requested_featu
       }
     }
 
-    const string ptx = path_get(string_printf("lib/%s_compute_%d%d.ptx", name, major, minor));
-    VLOG(1) << "Testing for pre-compiled kernel " << ptx << ".";
-    if (path_exists(ptx)) {
-      VLOG(1) << "Using precompiled kernel.";
-      return ptx;
+    /* The driver can JIT-compile PTX generated for older generations, so find the closest one. */
+    int ptx_major = major, ptx_minor = minor;
+    while (ptx_major >= 3) {
+      const string ptx = path_get(
+          string_printf("lib/%s_compute_%d%d.ptx", name, ptx_major, ptx_minor));
+      VLOG(1) << "Testing for pre-compiled kernel " << ptx << ".";
+      if (path_exists(ptx)) {
+        VLOG(1) << "Using precompiled kernel.";
+        return ptx;
+      }
+
+      if (ptx_minor > 0) {
+        ptx_minor--;
+      }
+      else {
+        ptx_major--;
+        ptx_minor = 9;
+      }
     }
   }
 
@@ -1760,7 +1773,7 @@ void CUDADevice::denoise(RenderTile &rtile, DenoisingTask &denoising)
   denoising.render_buffer.samples = rtile.sample;
   denoising.buffer.gpu_temporary_mem = true;
 
-  denoising.run_denoising(&rtile);
+  denoising.run_denoising(rtile);
 }
 
 void CUDADevice::adaptive_sampling_filter(uint filter_sample,

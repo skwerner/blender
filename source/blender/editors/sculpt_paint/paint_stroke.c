@@ -143,7 +143,7 @@ static void paint_draw_smooth_cursor(bContext *C, int x, int y, void *customdata
 
   if (stroke && brush) {
     GPU_line_smooth(true);
-    GPU_blend(true);
+    GPU_blend(GPU_BLEND_ALPHA);
 
     ARegion *region = stroke->vc.region;
 
@@ -161,7 +161,7 @@ static void paint_draw_smooth_cursor(bContext *C, int x, int y, void *customdata
 
     immUnbindProgram();
 
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
     GPU_line_smooth(false);
   }
 }
@@ -225,6 +225,7 @@ static bool paint_tool_require_location(Brush *brush, ePaintMode mode)
                SCULPT_TOOL_GRAB,
                SCULPT_TOOL_ELASTIC_DEFORM,
                SCULPT_TOOL_POSE,
+               SCULPT_TOOL_BOUNDARY,
                SCULPT_TOOL_ROTATE,
                SCULPT_TOOL_SNAKE_HOOK,
                SCULPT_TOOL_THUMB)) {
@@ -265,6 +266,7 @@ static bool paint_tool_require_inbetween_mouse_events(Brush *brush, ePaintMode m
                SCULPT_TOOL_SNAKE_HOOK,
                SCULPT_TOOL_ELASTIC_DEFORM,
                SCULPT_TOOL_CLOTH,
+               SCULPT_TOOL_BOUNDARY,
                SCULPT_TOOL_POSE)) {
         return false;
       }
@@ -689,6 +691,14 @@ static float paint_space_stroke_spacing(bContext *C,
     spacing = spacing * (1.5f - spacing_pressure);
   }
 
+  if (SCULPT_is_cloth_deform_brush(brush)) {
+    /* The spacing in tools that use the cloth solver should not be affected by the brush radius to
+     * avoid affecting the simulation update rate when changing the radius of the brush.
+     With a value of 100 and the brush default of 10 for spacing, a simulation step runs every 2
+     pixels movement of the cursor. */
+    size_clamp = 100.0f;
+  }
+
   /* stroke system is used for 2d paint too, so we need to account for
    * the fact that brush can be scaled there. */
   spacing *= stroke->zoom_2d;
@@ -696,9 +706,7 @@ static float paint_space_stroke_spacing(bContext *C,
   if (paint_stroke_use_scene_spacing(brush, mode)) {
     return max_ff(0.001f, size_clamp * spacing / 50.f);
   }
-  else {
-    return max_ff(stroke->zoom_2d, size_clamp * spacing / 50.0f);
-  }
+  return max_ff(stroke->zoom_2d, size_clamp * spacing / 50.0f);
 }
 
 static float paint_stroke_overlapped_curve(Brush *br, float x, float spacing)
@@ -751,9 +759,7 @@ static float paint_stroke_integrate_overlap(Brush *br, float factor)
   if (max == 0.0f) {
     return 1.0f;
   }
-  else {
-    return 1.0f / max;
-  }
+  return 1.0f / max;
 }
 
 static float paint_space_stroke_spacing_variable(bContext *C,
@@ -781,10 +787,9 @@ static float paint_space_stroke_spacing_variable(bContext *C,
 
     return 0.5f * (last_spacing + new_spacing);
   }
-  else {
-    /* no size pressure */
-    return paint_space_stroke_spacing(C, scene, stroke, 1.0f, pressure);
-  }
+
+  /* no size pressure */
+  return paint_space_stroke_spacing(C, scene, stroke, 1.0f, pressure);
 }
 
 /* For brushes with stroke spacing enabled, moves mouse in steps
@@ -925,9 +930,9 @@ PaintStroke *paint_stroke_new(bContext *C,
   ups->average_stroke_counter = 0;
 
   /* initialize here to avoid initialization conflict with threaded strokes */
-  BKE_curvemapping_initialize(br->curve);
+  BKE_curvemapping_init(br->curve);
   if (p->flags & PAINT_USE_CAVITY_MASK) {
-    BKE_curvemapping_initialize(p->cavity_curve);
+    BKE_curvemapping_init(p->cavity_curve);
   }
 
   BKE_paint_set_overlay_override(br->overlay_flags);
@@ -1000,7 +1005,19 @@ static void stroke_done(bContext *C, wmOperator *op)
 /* Returns zero if the stroke dots should not be spaced, non-zero otherwise */
 bool paint_space_stroke_enabled(Brush *br, ePaintMode mode)
 {
-  return (br->flag & BRUSH_SPACE) && paint_supports_dynamic_size(br, mode);
+  if ((br->flag & BRUSH_SPACE) == 0) {
+    return false;
+  }
+
+  if (br->sculpt_tool == SCULPT_TOOL_CLOTH || SCULPT_is_cloth_deform_brush(br)) {
+    /* The Cloth Brush is a special case for stroke spacing. Even if it has grab modes which do
+     * not support dynamic size, stroke spacing needs to be enabled so it is possible to control
+     * whether the simulation runs constantly or only when the brush moves when using the cloth
+     * grab brushes. */
+    return true;
+  }
+
+  return paint_supports_dynamic_size(br, mode);
 }
 
 static bool sculpt_is_grab_tool(Brush *br)
@@ -1013,6 +1030,7 @@ static bool sculpt_is_grab_tool(Brush *br)
               SCULPT_TOOL_GRAB,
               SCULPT_TOOL_ELASTIC_DEFORM,
               SCULPT_TOOL_POSE,
+              SCULPT_TOOL_BOUNDARY,
               SCULPT_TOOL_THUMB,
               SCULPT_TOOL_ROTATE,
               SCULPT_TOOL_SNAKE_HOOK);
@@ -1203,7 +1221,10 @@ static void paint_line_strokes_spacing(bContext *C,
   *length_residue = length;
 }
 
-static void paint_stroke_line_end(bContext *C, wmOperator *op, PaintStroke *stroke, float mouse[2])
+static void paint_stroke_line_end(bContext *C,
+                                  wmOperator *op,
+                                  PaintStroke *stroke,
+                                  const float mouse[2])
 {
   Brush *br = stroke->brush;
   if (stroke->stroke_started && (br->flag & BRUSH_LINE)) {

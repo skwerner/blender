@@ -20,8 +20,7 @@
  * \ingroup draw
  */
 
-#ifndef __DRW_ENGINE_H__
-#define __DRW_ENGINE_H__
+#pragma once
 
 #include "BLI_sys_types.h" /* for bool */
 
@@ -43,6 +42,7 @@ struct GPUViewport;
 struct ID;
 struct Main;
 struct Object;
+struct Render;
 struct RenderEngine;
 struct RenderEngineType;
 struct Scene;
@@ -137,6 +137,9 @@ void DRW_render_gpencil(struct RenderEngine *engine, struct Depsgraph *depsgraph
 struct DRWInstanceDataList *DRW_instance_data_list_create(void);
 void DRW_instance_data_list_free(struct DRWInstanceDataList *idatalist);
 
+void DRW_render_context_enable(struct Render *render);
+void DRW_render_context_disable(struct Render *render);
+
 void DRW_opengl_context_create(void);
 void DRW_opengl_context_destroy(void);
 void DRW_opengl_context_enable(void);
@@ -170,5 +173,3 @@ void DRW_drawdata_free(struct ID *id);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __DRW_ENGINE_H__ */

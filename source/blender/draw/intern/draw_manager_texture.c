@@ -61,11 +61,13 @@ static bool drw_texture_format_supports_framebuffer(eGPUTextureFormat format)
 
 void drw_texture_set_parameters(GPUTexture *tex, DRWTextureFlag flags)
 {
+  if (tex == NULL) {
+    return;
+  }
+
   if (flags & DRW_TEX_MIPMAP) {
     GPU_texture_mipmap_mode(tex, true, flags & DRW_TEX_FILTER);
-    GPU_texture_bind(tex, 0);
     GPU_texture_generate_mipmap(tex);
-    GPU_texture_unbind(tex);
   }
   else {
     GPU_texture_filter_mode(tex, flags & DRW_TEX_FILTER);
@@ -79,7 +81,8 @@ GPUTexture *DRW_texture_create_1d(int w,
                                   DRWTextureFlag flags,
                                   const float *fpixels)
 {
-  GPUTexture *tex = GPU_texture_create_1d(w, format, fpixels, NULL);
+  int mips = (flags & DRW_TEX_MIPMAP) ? 9999 : 1;
+  GPUTexture *tex = GPU_texture_create_1d(__func__, w, mips, format, fpixels);
   drw_texture_set_parameters(tex, flags);
 
   return tex;
@@ -88,7 +91,8 @@ GPUTexture *DRW_texture_create_1d(int w,
 GPUTexture *DRW_texture_create_2d(
     int w, int h, eGPUTextureFormat format, DRWTextureFlag flags, const float *fpixels)
 {
-  GPUTexture *tex = GPU_texture_create_2d(w, h, format, fpixels, NULL);
+  int mips = (flags & DRW_TEX_MIPMAP) ? 9999 : 1;
+  GPUTexture *tex = GPU_texture_create_2d(__func__, w, h, mips, format, fpixels);
   drw_texture_set_parameters(tex, flags);
 
   return tex;
@@ -97,7 +101,8 @@ GPUTexture *DRW_texture_create_2d(
 GPUTexture *DRW_texture_create_2d_array(
     int w, int h, int d, eGPUTextureFormat format, DRWTextureFlag flags, const float *fpixels)
 {
-  GPUTexture *tex = GPU_texture_create_2d_array(w, h, d, format, fpixels, NULL);
+  int mips = (flags & DRW_TEX_MIPMAP) ? 9999 : 1;
+  GPUTexture *tex = GPU_texture_create_2d_array(__func__, w, h, d, mips, format, fpixels);
   drw_texture_set_parameters(tex, flags);
 
   return tex;
@@ -106,7 +111,8 @@ GPUTexture *DRW_texture_create_2d_array(
 GPUTexture *DRW_texture_create_3d(
     int w, int h, int d, eGPUTextureFormat format, DRWTextureFlag flags, const float *fpixels)
 {
-  GPUTexture *tex = GPU_texture_create_3d(w, h, d, format, fpixels, NULL);
+  int mips = (flags & DRW_TEX_MIPMAP) ? 9999 : 1;
+  GPUTexture *tex = GPU_texture_create_3d(__func__, w, h, d, mips, format, fpixels);
   drw_texture_set_parameters(tex, flags);
 
   return tex;
@@ -117,18 +123,18 @@ GPUTexture *DRW_texture_create_cube(int w,
                                     DRWTextureFlag flags,
                                     const float *fpixels)
 {
-  GPUTexture *tex = GPU_texture_create_cube(w, format, fpixels, NULL);
+  int mips = (flags & DRW_TEX_MIPMAP) ? 9999 : 1;
+  GPUTexture *tex = GPU_texture_create_cube(__func__, w, mips, format, fpixels);
   drw_texture_set_parameters(tex, flags);
-
   return tex;
 }
 
 GPUTexture *DRW_texture_create_cube_array(
     int w, int d, eGPUTextureFormat format, DRWTextureFlag flags, const float *fpixels)
 {
-  GPUTexture *tex = GPU_texture_create_cube_array(w, d, format, fpixels, NULL);
+  int mips = (flags & DRW_TEX_MIPMAP) ? 9999 : 1;
+  GPUTexture *tex = GPU_texture_create_cube_array(__func__, w, d, mips, format, fpixels);
   drw_texture_set_parameters(tex, flags);
-
   return tex;
 }
 
@@ -170,9 +176,7 @@ void DRW_texture_ensure_2d(
 
 void DRW_texture_generate_mipmaps(GPUTexture *tex)
 {
-  GPU_texture_bind(tex, 0);
   GPU_texture_generate_mipmap(tex);
-  GPU_texture_unbind(tex);
 }
 
 void DRW_texture_free(GPUTexture *tex)

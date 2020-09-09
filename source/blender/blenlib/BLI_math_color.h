@@ -20,8 +20,7 @@
  *
  * */
 
-#ifndef __BLI_MATH_COLOR_H__
-#define __BLI_MATH_COLOR_H__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -46,9 +45,9 @@ extern "C" {
 
 void hsv_to_rgb(float h, float s, float v, float *r_r, float *r_g, float *r_b);
 void hsv_to_rgb_v(const float hsv[3], float r_rgb[3]);
-void hsl_to_rgb(float h, float c, float l, float *r_r, float *r_g, float *r_b);
-void hsl_to_rgb_v(const float hcl[3], float r_rgb[3]);
-void hex_to_rgb(char *hexcol, float *r_r, float *r_g, float *r_b);
+void hsl_to_rgb(float h, float s, float l, float *r_r, float *r_g, float *r_b);
+void hsl_to_rgb_v(const float hsl[3], float r_rgb[3]);
+void hex_to_rgb(const char *hexcol, float *r_r, float *r_g, float *r_b);
 void yuv_to_rgb(float y, float u, float v, float *r_r, float *r_g, float *r_b, int colorspace);
 void ycc_to_rgb(float y, float cb, float cr, float *r_r, float *r_g, float *r_b, int colorspace);
 void cpack_to_rgb(unsigned int col, float *r_r, float *r_g, float *r_b);
@@ -148,8 +147,12 @@ void blackbody_temperature_to_rgb_table(float *r_table, int width, float min, fl
 
 /********* lift/gamma/gain / ASC-CDL conversion ***********/
 
-void lift_gamma_gain_to_asc_cdl(
-    float *lift, float *gamma, float *gain, float *offset, float *slope, float *power);
+void lift_gamma_gain_to_asc_cdl(const float *lift,
+                                const float *gamma,
+                                const float *gain,
+                                float *offset,
+                                float *slope,
+                                float *power);
 
 #if BLI_MATH_DO_INLINE
 #  include "intern/math_color_inline.c"
@@ -158,5 +161,3 @@ void lift_gamma_gain_to_asc_cdl(
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLI_MATH_COLOR_H__ */

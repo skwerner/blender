@@ -126,14 +126,14 @@ static ListBase selected_objects_get(bContext *C);
 /** \name Internal Utilities
  * \{ */
 
-Object *ED_object_context(bContext *C)
+Object *ED_object_context(const bContext *C)
 {
   return CTX_data_pointer_get_type(C, "object", &RNA_Object).data;
 }
 
 /* find the correct active object per context
  * note: context can be NULL when called from a enum with PROP_ENUM_NO_CONTEXT */
-Object *ED_object_active_context(bContext *C)
+Object *ED_object_active_context(const bContext *C)
 {
   Object *ob = NULL;
   if (C) {
@@ -143,6 +143,72 @@ Object *ED_object_active_context(bContext *C)
     }
   }
   return ob;
+}
+
+/**
+ * Return an array of objects:
+ * - When in the property space, return the pinned or active object.
+ * - When in edit-mode/pose-mode, return an array of objects in the mode.
+ * - Otherwise return selected objects,
+ *   the callers \a filter_fn needs to check of they are editable
+ *   (assuming they need to be modified).
+ */
+Object **ED_object_array_in_mode_or_selected(bContext *C,
+                                             bool (*filter_fn)(Object *ob, void *user_data),
+                                             void *filter_user_data,
+                                             uint *r_objects_len)
+{
+  ScrArea *area = CTX_wm_area(C);
+  ViewLayer *view_layer = CTX_data_view_layer(C);
+  Object *ob_active = OBACT(view_layer);
+  Object **objects;
+
+  Object *ob = NULL;
+  bool use_ob = true;
+  if (area && (area->spacetype == SPACE_PROPERTIES)) {
+    /* May return pinned object. */
+    ob = ED_object_context(C);
+  }
+  else if (ob_active && (ob_active->mode &
+                         (OB_MODE_ALL_PAINT | OB_MODE_ALL_SCULPT | OB_MODE_ALL_PAINT_GPENCIL))) {
+    /* When painting, limit to active. */
+    ob = ob_active;
+  }
+  else {
+    /* Otherwise use full selection. */
+    use_ob = false;
+  }
+
+  if (use_ob) {
+    if ((ob != NULL) && !filter_fn(ob, filter_user_data)) {
+      ob = NULL;
+    }
+    *r_objects_len = (ob != NULL) ? 1 : 0;
+    objects = MEM_mallocN(sizeof(*objects) * *r_objects_len, __func__);
+    if (ob != NULL) {
+      objects[0] = ob;
+    }
+  }
+  else {
+    const View3D *v3d = (area && area->spacetype == SPACE_VIEW3D) ? area->spacedata.first : NULL;
+    /* When in a mode that supports multiple active objects, use "objects in mode"
+     * instead of the object's selection. */
+    if ((ob_active != NULL) && (ob_active->mode & (OB_MODE_EDIT | OB_MODE_POSE))) {
+      objects = BKE_view_layer_array_from_objects_in_mode(
+          view_layer,
+          v3d,
+          r_objects_len,
+          {.no_dup_data = true, .filter_fn = filter_fn, .filter_userdata = filter_user_data});
+    }
+    else {
+      objects = BKE_view_layer_array_selected_objects(
+          view_layer,
+          v3d,
+          r_objects_len,
+          {.no_dup_data = true, .filter_fn = filter_fn, .filter_userdata = filter_user_data});
+    }
+  }
+  return objects;
 }
 
 /** \} */
@@ -156,9 +222,7 @@ static bool object_hide_poll(bContext *C)
   if (CTX_wm_space_outliner(C) != NULL) {
     return ED_outliner_collections_editor_poll(C);
   }
-  else {
-    return ED_operator_view3d_active(C);
-  }
+  return ED_operator_view3d_active(C);
 }
 
 static int object_hide_view_clear_exec(bContext *C, wmOperator *op)
@@ -600,7 +664,8 @@ bool ED_object_editmode_enter_ex(Main *bmain, Scene *scene, Object *ob, int flag
 {
   bool ok = false;
 
-  if (ELEM(NULL, ob, ob->data) || ID_IS_LINKED(ob)) {
+  if (ELEM(NULL, ob, ob->data) || ID_IS_LINKED(ob) || ID_IS_OVERRIDE_LIBRARY(ob) ||
+      ID_IS_OVERRIDE_LIBRARY(ob->data)) {
     return false;
   }
 
@@ -695,14 +760,10 @@ bool ED_object_editmode_enter(bContext *C, int flag)
 {
   Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
-  Object *ob;
 
   /* Active layer checked here for view3d,
    * callers that don't want view context can call the extended version. */
-  ob = CTX_data_active_object(C);
-  if ((ob == NULL) || ID_IS_LINKED(ob)) {
-    return false;
-  }
+  Object *ob = CTX_data_active_object(C);
   return ED_object_editmode_enter_ex(bmain, scene, ob, flag);
 }
 
@@ -760,7 +821,8 @@ static bool editmode_toggle_poll(bContext *C)
   Object *ob = CTX_data_active_object(C);
 
   /* covers proxies too */
-  if (ELEM(NULL, ob, ob->data) || ID_IS_LINKED(ob->data)) {
+  if (ELEM(NULL, ob, ob->data) || ID_IS_LINKED(ob->data) || ID_IS_OVERRIDE_LIBRARY(ob) ||
+      ID_IS_OVERRIDE_LIBRARY(ob->data)) {
     return 0;
   }
 
@@ -899,7 +961,7 @@ void ED_object_check_force_modifiers(Main *bmain, Scene *scene, Object *object)
   else {
     if (!pd || (pd->shape != PFIELD_SHAPE_SURFACE) ||
         ELEM(pd->forcefield, 0, PFIELD_GUIDE, PFIELD_TEXTURE)) {
-      ED_object_modifier_remove(NULL, bmain, object, md);
+      ED_object_modifier_remove(NULL, bmain, scene, object, md);
     }
   }
 }
@@ -1368,7 +1430,8 @@ static bool shade_poll(bContext *C)
   Object *obact = OBACT(view_layer);
   if (obact != NULL) {
     /* Doesn't handle edit-data, sculpt dynamic-topology, or their undo systems. */
-    if (obact->mode & (OB_MODE_EDIT | OB_MODE_SCULPT)) {
+    if (obact->mode & (OB_MODE_EDIT | OB_MODE_SCULPT) || obact->data == NULL ||
+        ID_IS_OVERRIDE_LIBRARY(obact) || ID_IS_OVERRIDE_LIBRARY(obact->data)) {
       return false;
     }
   }
@@ -1635,15 +1698,14 @@ static bool move_to_collection_poll(bContext *C)
   if (CTX_wm_space_outliner(C) != NULL) {
     return ED_outliner_collections_editor_poll(C);
   }
-  else {
-    View3D *v3d = CTX_wm_view3d(C);
 
-    if (v3d && v3d->localvd) {
-      return false;
-    }
+  View3D *v3d = CTX_wm_view3d(C);
 
-    return ED_operator_objectmode(C);
+  if (v3d && v3d->localvd) {
+    return false;
   }
+
+  return ED_operator_objectmode(C);
 }
 
 static int move_to_collection_exec(bContext *C, wmOperator *op)

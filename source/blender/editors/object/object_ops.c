@@ -109,16 +109,15 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(OBJECT_OT_light_add);
   WM_operatortype_append(OBJECT_OT_camera_add);
   WM_operatortype_append(OBJECT_OT_speaker_add);
-#ifdef WITH_NEW_OBJECT_TYPES
   WM_operatortype_append(OBJECT_OT_hair_add);
   WM_operatortype_append(OBJECT_OT_pointcloud_add);
-#endif
   WM_operatortype_append(OBJECT_OT_volume_add);
   WM_operatortype_append(OBJECT_OT_volume_import);
   WM_operatortype_append(OBJECT_OT_add);
   WM_operatortype_append(OBJECT_OT_add_named);
   WM_operatortype_append(OBJECT_OT_effector_add);
   WM_operatortype_append(OBJECT_OT_collection_instance_add);
+  WM_operatortype_append(OBJECT_OT_data_instance_add);
   WM_operatortype_append(OBJECT_OT_metaball_add);
   WM_operatortype_append(OBJECT_OT_duplicates_make_real);
   WM_operatortype_append(OBJECT_OT_duplicate);
@@ -132,6 +131,7 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(OBJECT_OT_modifier_move_down);
   WM_operatortype_append(OBJECT_OT_modifier_move_to_index);
   WM_operatortype_append(OBJECT_OT_modifier_apply);
+  WM_operatortype_append(OBJECT_OT_modifier_apply_as_shapekey);
   WM_operatortype_append(OBJECT_OT_modifier_convert);
   WM_operatortype_append(OBJECT_OT_modifier_copy);
   WM_operatortype_append(OBJECT_OT_multires_subdivide);

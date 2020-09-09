@@ -18,8 +18,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_GPENCIL_MODIFIER_TYPES_H__
-#define __DNA_GPENCIL_MODIFIER_TYPES_H__
+#pragma once
 
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
@@ -59,6 +58,7 @@ typedef enum GpencilModifierMode {
   eGpencilModifierMode_Render = (1 << 1),
   eGpencilModifierMode_Editmode = (1 << 2),
   eGpencilModifierMode_Expanded_DEPRECATED = (1 << 3),
+  eGpencilModifierMode_Virtual = (1 << 4),
 } GpencilModifierMode;
 
 typedef enum {
@@ -800,5 +800,3 @@ typedef enum eTextureGpencil_Mode {
   FILL = 1,
   STROKE_AND_FILL = 2,
 } eTextureGpencil_Mode;
-
-#endif /* __DNA_GPENCIL_MODIFIER_TYPES_H__ */

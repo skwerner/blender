@@ -54,7 +54,8 @@
 #include "intern/node/deg_node_operation.h"
 #include "intern/node/deg_node_time.h"
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 namespace {
 
@@ -85,8 +86,8 @@ enum class EvaluationStage {
 
   /* Workaround for areas which can not be evaluated in threads.
    *
-   * For example, metaballs, which are iterating over all bases and are requesting dupli-lists
-   * to see whether there are metaballs inside. */
+   * For example, meta-balls, which are iterating over all bases and are requesting dupli-lists
+   * to see whether there are meta-balls inside. */
   SINGLE_THREADED_WORKAROUND,
 };
 
@@ -352,9 +353,8 @@ static TaskPool *deg_evaluate_task_pool_create(DepsgraphEvalState *state)
   if (G.debug & G_DEBUG_DEPSGRAPH_NO_THREADS) {
     return BLI_task_pool_create_no_threads(state);
   }
-  else {
-    return BLI_task_pool_create_suspended(state, TASK_PRIORITY_HIGH);
-  }
+
+  return BLI_task_pool_create_suspended(state, TASK_PRIORITY_HIGH);
 }
 
 /**
@@ -416,4 +416,5 @@ void deg_evaluate_on_refresh(Depsgraph *graph)
   graph->debug.end_graph_evaluation();
 }
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

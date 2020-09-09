@@ -265,9 +265,9 @@ static int render_imbuf_write_stamp_test(ReportList *reports,
   return ok;
 }
 
-void RE_FreeRenderResult(RenderResult *res)
+void RE_FreeRenderResult(RenderResult *rr)
 {
-  render_result_free(res);
+  render_result_free(rr);
 }
 
 float *RE_RenderLayerGetPass(volatile RenderLayer *rl, const char *name, const char *viewname)
@@ -281,9 +281,8 @@ RenderLayer *RE_GetRenderLayer(RenderResult *rr, const char *name)
   if (rr == NULL) {
     return NULL;
   }
-  else {
-    return BLI_findstring(&rr->layers, name, offsetof(RenderLayer, name));
-  }
+
+  return BLI_findstring(&rr->layers, name, offsetof(RenderLayer, name));
 }
 
 bool RE_HasSingleLayer(Render *re)
@@ -1114,7 +1113,7 @@ void *RE_gl_context_get(Render *re)
 void *RE_gpu_context_get(Render *re)
 {
   if (re->gpu_context == NULL) {
-    re->gpu_context = GPU_context_create(0);
+    re->gpu_context = GPU_context_create(NULL);
   }
   return re->gpu_context;
 }
@@ -1655,9 +1654,8 @@ static bool check_valid_compositing_camera(Scene *scene, Object *camera_override
 
     return true;
   }
-  else {
-    return (camera_override != NULL || scene->camera != NULL);
-  }
+
+  return (camera_override != NULL || scene->camera != NULL);
 }
 
 static bool check_valid_camera_multiview(Scene *scene, Object *camera, ReportList *reports)
@@ -1755,7 +1753,7 @@ static bool node_tree_has_composite_output(bNodeTree *ntree)
     if (ELEM(node->type, CMP_NODE_COMPOSITE, CMP_NODE_OUTPUT_FILE)) {
       return true;
     }
-    else if (ELEM(node->type, NODE_GROUP, NODE_CUSTOM_GROUP)) {
+    if (ELEM(node->type, NODE_GROUP, NODE_CUSTOM_GROUP)) {
       if (node->id) {
         if (node_tree_has_composite_output((bNodeTree *)node->id)) {
           return true;
@@ -1859,7 +1857,7 @@ static void update_physics_cache(Render *re,
   baker.bmain = re->main;
   baker.scene = scene;
   baker.view_layer = view_layer;
-  baker.depsgraph = BKE_scene_get_depsgraph(re->main, scene, view_layer, true);
+  baker.depsgraph = BKE_scene_ensure_depsgraph(re->main, scene, view_layer);
   baker.bake = 0;
   baker.render = 1;
   baker.anim_init = 1;
@@ -1879,14 +1877,14 @@ const char *RE_GetActiveRenderView(Render *re)
 }
 
 /* evaluating scene options for general Blender render */
-static int render_initialize_from_main(Render *re,
-                                       const RenderData *rd,
-                                       Main *bmain,
-                                       Scene *scene,
-                                       ViewLayer *single_layer,
-                                       Object *camera_override,
-                                       int anim,
-                                       int anim_init)
+static int render_init_from_main(Render *re,
+                                 const RenderData *rd,
+                                 Main *bmain,
+                                 Scene *scene,
+                                 ViewLayer *single_layer,
+                                 Object *camera_override,
+                                 int anim,
+                                 int anim_init)
 {
   int winx, winy;
   rcti disprect;
@@ -1966,7 +1964,7 @@ void RE_SetReports(Render *re, ReportList *reports)
 static void render_update_depsgraph(Render *re)
 {
   Scene *scene = re->scene;
-  DEG_evaluate_on_framechange(re->main, re->pipeline_depsgraph, CFRA);
+  DEG_evaluate_on_framechange(re->pipeline_depsgraph, CFRA);
   BKE_scene_update_sound(re->pipeline_depsgraph, re->main);
 }
 
@@ -1979,7 +1977,7 @@ static void render_init_depsgraph(Render *re)
   DEG_debug_name_set(re->pipeline_depsgraph, "RENDER PIPELINE");
 
   /* Make sure there is a correct evaluated scene pointer. */
-  DEG_graph_build_for_render_pipeline(re->pipeline_depsgraph, re->main, scene, view_layer);
+  DEG_graph_build_for_render_pipeline(re->pipeline_depsgraph);
 
   /* Update immediately so we have proper evaluated scene. */
   render_update_depsgraph(re);
@@ -2004,8 +2002,7 @@ void RE_RenderFrame(Render *re,
 
   scene->r.cfra = frame;
 
-  if (render_initialize_from_main(
-          re, &scene->r, bmain, scene, single_layer, camera_override, 0, 0)) {
+  if (render_init_from_main(re, &scene->r, bmain, scene, single_layer, camera_override, 0, 0)) {
     const RenderData rd = scene->r;
     MEM_reset_peak_memory();
 
@@ -2058,7 +2055,7 @@ void RE_RenderFrame(Render *re,
 void RE_RenderFreestyleStrokes(Render *re, Main *bmain, Scene *scene, int render)
 {
   re->result_ok = 0;
-  if (render_initialize_from_main(re, &scene->r, bmain, scene, NULL, NULL, 0, 0)) {
+  if (render_init_from_main(re, &scene->r, bmain, scene, NULL, NULL, 0, 0)) {
     if (render) {
       do_render_3d(re);
     }
@@ -2422,7 +2419,7 @@ void RE_RenderAnim(Render *re,
                                   (rd.im_format.views_format == R_IMF_VIEWS_INDIVIDUAL));
 
   /* do not fully call for each frame, it initializes & pops output window */
-  if (!render_initialize_from_main(re, &rd, bmain, scene, single_layer, camera_override, 0, 1)) {
+  if (!render_init_from_main(re, &rd, bmain, scene, single_layer, camera_override, 0, 1)) {
     return;
   }
 
@@ -2493,21 +2490,22 @@ void RE_RenderAnim(Render *re,
       {
         float ctime = BKE_scene_frame_get(scene);
         AnimData *adt = BKE_animdata_from_id(&scene->id);
-        BKE_animsys_evaluate_animdata(&scene->id, adt, ctime, ADT_RECALC_ALL, false);
+        const AnimationEvalContext anim_eval_context = BKE_animsys_eval_context_construct(
+            re->pipeline_depsgraph, ctime);
+        BKE_animsys_evaluate_animdata(&scene->id, adt, &anim_eval_context, ADT_RECALC_ALL, false);
       }
 
       render_update_depsgraph(re);
 
       /* only border now, todo: camera lens. (ton) */
-      render_initialize_from_main(re, &rd, bmain, scene, single_layer, camera_override, 1, 0);
+      render_init_from_main(re, &rd, bmain, scene, single_layer, camera_override, 1, 0);
 
       if (nfra != scene->r.cfra) {
         /* Skip this frame, but could update for physics and particles system. */
         continue;
       }
-      else {
-        nfra += tfra;
-      }
+
+      nfra += tfra;
 
       /* Touch/NoOverwrite options are only valid for image's */
       if (is_movie == false) {
@@ -2781,7 +2779,7 @@ void RE_layer_load_from_file(
         IMB_float_from_rect(ibuf);
       }
 
-      memcpy(rpass->rect, ibuf->rect_float, sizeof(float) * 4 * layer->rectx * layer->recty);
+      memcpy(rpass->rect, ibuf->rect_float, sizeof(float[4]) * layer->rectx * layer->recty);
     }
     else {
       if ((ibuf->x - x >= layer->rectx) && (ibuf->y - y >= layer->recty)) {
@@ -2796,7 +2794,7 @@ void RE_layer_load_from_file(
           IMB_rectcpy(ibuf_clip, ibuf, 0, 0, x, y, layer->rectx, layer->recty);
 
           memcpy(
-              rpass->rect, ibuf_clip->rect_float, sizeof(float) * 4 * layer->rectx * layer->recty);
+              rpass->rect, ibuf_clip->rect_float, sizeof(float[4]) * layer->rectx * layer->recty);
           IMB_freeImBuf(ibuf_clip);
         }
         else {
@@ -2862,7 +2860,7 @@ RenderPass *RE_pass_find_by_name(volatile RenderLayer *rl, const char *name, con
       if (viewname == NULL || viewname[0] == '\0') {
         break;
       }
-      else if (STREQ(rp->view, viewname)) {
+      if (STREQ(rp->view, viewname)) {
         break;
       }
     }

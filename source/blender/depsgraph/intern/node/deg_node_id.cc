@@ -41,7 +41,8 @@
 #include "intern/node/deg_node_factory.h"
 #include "intern/node/deg_node_time.h"
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 const char *linkedStateAsString(eDepsNode_LinkedState_Type linked_state)
 {
@@ -66,7 +67,7 @@ bool IDNode::ComponentIDKey::operator==(const ComponentIDKey &other) const
   return type == other.type && STREQ(name, other.name);
 }
 
-uint32_t IDNode::ComponentIDKey::hash() const
+uint64_t IDNode::ComponentIDKey::hash() const
 {
   const int type_as_int = static_cast<int>(type);
   return BLI_ghashutil_combine_hash(BLI_ghashutil_uinthash(type_as_int),
@@ -132,7 +133,7 @@ void IDNode::destroy()
   }
 
   for (ComponentNode *comp_node : components.values()) {
-    OBJECT_GUARDED_DELETE(comp_node, ComponentNode);
+    delete comp_node;
   }
 
   /* Free memory used by this CoW ID. */
@@ -212,4 +213,5 @@ IDComponentsMask IDNode::get_visible_components_mask() const
   return result;
 }
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_MASK_H__
-#define __BKE_MASK_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -81,7 +80,7 @@ void BKE_mask_layer_rename(struct Mask *mask,
                            char *oldname,
                            char *newname);
 
-struct MaskLayer *BKE_mask_layer_copy(const struct MaskLayer *layer);
+struct MaskLayer *BKE_mask_layer_copy(const struct MaskLayer *masklay);
 void BKE_mask_layer_copy_list(struct ListBase *masklayers_new, const struct ListBase *masklayers);
 
 /* splines */
@@ -331,5 +330,3 @@ void BKE_maskrasterize_buffer(MaskRasterHandle *mr_handle,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_MASK_H__ */

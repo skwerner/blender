@@ -419,6 +419,7 @@ bool ANIM_animdata_get_context(const bContext *C, bAnimContext *ac)
     ac->markers = ED_context_get_markers(C);
   }
   ac->view_layer = CTX_data_view_layer(C);
+  ac->depsgraph = CTX_data_depsgraph_pointer(C);
   ac->obact = (ac->view_layer->basact) ? ac->view_layer->basact->object : NULL;
   ac->area = area;
   ac->region = region;
@@ -426,7 +427,7 @@ bool ANIM_animdata_get_context(const bContext *C, bAnimContext *ac)
   ac->spacetype = (area) ? area->spacetype : 0;
   ac->regiontype = (region) ? region->regiontype : 0;
 
-  /* initialise default y-scale factor */
+  /* Initialize default y-scale factor. */
   animedit_get_yscale_factor(ac);
 
   /* get data context info */
@@ -571,7 +572,7 @@ bool ANIM_animdata_get_context(const bContext *C, bAnimContext *ac)
     channel_data, channel_type, owner_id, fcurve_owner_id, ale_statement) \
   if (filter_mode & ANIMFILTER_TMP_PEEK) \
     return 1; \
-  else { \
+  { \
     bAnimListElem *ale = make_new_animlistelem( \
         channel_data, channel_type, (ID *)owner_id, fcurve_owner_id); \
     if (ale) { \
@@ -1151,7 +1152,7 @@ static bool name_matches_dopesheet_filter(bDopeSheet *ads, char *name)
   if (ads->flag & ADS_FLAG_FUZZY_NAMES) {
     /* full fuzzy, multi-word, case insensitive matches */
     const size_t str_len = strlen(ads->searchstr);
-    const int words_max = (str_len / 2) + 1;
+    const int words_max = BLI_string_max_possible_word_count(str_len);
 
     int(*words)[2] = BLI_array_alloca(words, words_max);
     const int words_len = BLI_string_find_split_words(
@@ -1169,10 +1170,8 @@ static bool name_matches_dopesheet_filter(bDopeSheet *ads, char *name)
     /* if we have a match somewhere, this returns true */
     return found;
   }
-  else {
-    /* fallback/default - just case insensitive, but starts from start of word */
-    return BLI_strcasestr(name, ads->searchstr) != NULL;
-  }
+  /* fallback/default - just case insensitive, but starts from start of word */
+  return BLI_strcasestr(name, ads->searchstr) != NULL;
 }
 
 /* (Display-)Name-based F-Curve filtering
@@ -1556,7 +1555,7 @@ static size_t animfilter_nla(bAnimContext *UNUSED(ac),
       next = nlt->next;
     }
 
-    /* if we're in NLA-tweakmode, don't show this track if it was disabled
+    /* If we're in NLA-tweak-mode, don't show this track if it was disabled
      * (due to tweaking) for now:
      * - active track should still get shown though (even though it has disabled flag set)
      */
@@ -1716,11 +1715,18 @@ static size_t animdata_filter_shapekey(bAnimContext *ac,
   /* check if channels or only F-Curves */
   if (filter_mode & ANIMFILTER_LIST_CHANNELS) {
     KeyBlock *kb;
+    bDopeSheet *ads = ac->ads;
 
     /* loop through the channels adding ShapeKeys as appropriate */
     for (kb = key->block.first; kb; kb = kb->next) {
       /* skip the first one, since that's the non-animatable basis */
       if (kb == key->block.first) {
+        continue;
+      }
+
+      /* Skip shapekey if the name doesn't match the filter string. */
+      if (ads != NULL && ads->searchstr[0] != '\0' &&
+          name_matches_dopesheet_filter(ads, kb->name) == false) {
         continue;
       }
 
@@ -2603,8 +2609,9 @@ static size_t animdata_filter_ds_obdata(
     {
       Hair *hair = (Hair *)ob->data;
 
-      if (ads->filterflag2 & ADS_FILTER_NOHAIR)
+      if (ads->filterflag2 & ADS_FILTER_NOHAIR) {
         return 0;
+      }
 
       type = ANIMTYPE_DSHAIR;
       expanded = FILTER_HAIR_OBJD(hair);
@@ -2614,8 +2621,9 @@ static size_t animdata_filter_ds_obdata(
     {
       PointCloud *pointcloud = (PointCloud *)ob->data;
 
-      if (ads->filterflag2 & ADS_FILTER_NOPOINTCLOUD)
+      if (ads->filterflag2 & ADS_FILTER_NOPOINTCLOUD) {
         return 0;
+      }
 
       type = ANIMTYPE_DSPOINTCLOUD;
       expanded = FILTER_POINTS_OBJD(pointcloud);
@@ -2625,8 +2633,9 @@ static size_t animdata_filter_ds_obdata(
     {
       Volume *volume = (Volume *)ob->data;
 
-      if (ads->filterflag2 & ADS_FILTER_NOVOLUME)
+      if (ads->filterflag2 & ADS_FILTER_NOVOLUME) {
         return 0;
+      }
 
       type = ANIMTYPE_DSVOLUME;
       expanded = FILTER_VOLUME_OBJD(volume);
@@ -3414,12 +3423,13 @@ static size_t animdata_filter_remove_duplis(ListBase *anim_data)
 
 /* ----------- Public API --------------- */
 
-/* This function filters the active data source to leave only animation channels suitable for
+/**
+ * This function filters the active data source to leave only animation channels suitable for
  * usage by the caller. It will return the length of the list
  *
- * *anim_data: is a pointer to a ListBase, to which the filtered animation channels
- * will be placed for use.
- * filter_mode: how should the data be filtered - bitmapping accessed flags
+ * \param anim_data: Is a pointer to a #ListBase,
+ * to which the filtered animation channels will be placed for use.
+ * \param filter_mode: how should the data be filtered - bit-mapping accessed flags.
  */
 size_t ANIM_animdata_filter(bAnimContext *ac,
                             ListBase *anim_data,

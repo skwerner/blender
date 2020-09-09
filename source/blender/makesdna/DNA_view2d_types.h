@@ -21,8 +21,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_VIEW2D_TYPES_H__
-#define __DNA_VIEW2D_TYPES_H__
+#pragma once
 
 #include "DNA_vec_types.h"
 
@@ -137,7 +136,7 @@ enum {
   /* apply pixel offsets on y-axis when setting view matrices */
   V2D_PIXELOFS_Y = (1 << 3),
   /* view settings need to be set still... */
-  V2D_IS_INITIALISED = (1 << 10),
+  V2D_IS_INIT = (1 << 10),
 };
 
 /* scroller flags for View2D (v2d->scroll) */
@@ -181,5 +180,3 @@ enum {
   V2D_ALIGN_NO_POS_Y = (1 << 2),
   V2D_ALIGN_NO_NEG_Y = (1 << 3),
 };
-
-#endif

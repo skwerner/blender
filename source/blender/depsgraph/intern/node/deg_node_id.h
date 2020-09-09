@@ -28,7 +28,8 @@
 #include "DNA_ID.h"
 #include "intern/node/deg_node.h"
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 struct ComponentNode;
 
@@ -50,7 +51,7 @@ const char *linkedStateAsString(eDepsNode_LinkedState_Type linked_state);
 struct IDNode : public Node {
   struct ComponentIDKey {
     ComponentIDKey(NodeType type, const char *name = "");
-    uint32_t hash() const;
+    uint64_t hash() const;
     bool operator==(const ComponentIDKey &other) const;
 
     NodeType type;
@@ -115,4 +116,5 @@ struct IDNode : public Node {
   DEG_DEPSNODE_DECLARE;
 };
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

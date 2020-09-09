@@ -21,8 +21,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_VIEW3D_TYPES_H__
-#define __DNA_VIEW3D_TYPES_H__
+#pragma once
 
 struct BoundBox;
 struct Object;
@@ -191,6 +190,7 @@ typedef struct View3DShading {
   int render_pass;
 
   struct IDProperty *prop;
+  void *_pad2;
 } View3DShading;
 
 /** 3D Viewport Overlay settings. */
@@ -629,5 +629,3 @@ enum {
 /** #BKE_screen_view3d_zoom_to_fac() values above */
 #define RV3D_CAMZOOM_MIN_FACTOR 0.1657359312880714853f
 #define RV3D_CAMZOOM_MAX_FACTOR 44.9852813742385702928f
-
-#endif

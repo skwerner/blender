@@ -23,8 +23,7 @@
  * Public API for Querying Depsgraph.
  */
 
-#ifndef __DEG_DEPSGRAPH_QUERY_H__
-#define __DEG_DEPSGRAPH_QUERY_H__
+#pragma once
 
 #include "BLI_iterator.h"
 
@@ -55,6 +54,9 @@ struct Scene *DEG_get_input_scene(const Depsgraph *graph);
 
 /* Get view layer that depsgraph was built for. */
 struct ViewLayer *DEG_get_input_view_layer(const Depsgraph *graph);
+
+/* Get bmain that depsgraph was built for. */
+struct Main *DEG_get_bmain(const Depsgraph *graph);
 
 /* Get evaluation mode that depsgraph was built for. */
 eEvaluationMode DEG_get_mode(const Depsgraph *graph);
@@ -261,5 +263,3 @@ void DEG_foreach_ID(const Depsgraph *depsgraph, DEGForeachIDCallback callback, v
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
-
-#endif /* __DEG_DEPSGRAPH_QUERY_H__ */

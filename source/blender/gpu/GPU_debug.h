@@ -21,10 +21,7 @@
  * \ingroup gpu
  */
 
-#ifndef __GPU_DEBUG_H__
-#define __GPU_DEBUG_H__
-
-#include "GPU_glew.h"
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,11 +30,6 @@ extern "C" {
 /* prints something if debug mode is active only */
 void GPU_print_error_debug(const char *str);
 
-/* inserts a debug marker message for the debug context messaging system */
-void GPU_string_marker(const char *str);
-
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __GPU_DEBUG_H__ */

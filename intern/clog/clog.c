@@ -98,6 +98,7 @@ typedef struct CLogContext {
   } default_type;
 
   struct {
+    void (*error_fn)(void *file_handle);
     void (*fatal_fn)(void *file_handle);
     void (*backtrace_fn)(void *file_handle);
   } callbacks;
@@ -153,7 +154,6 @@ static void clg_str_reserve(CLogStringBuf *cstr, const uint len)
       cstr->data = data;
       cstr->is_alloc = true;
     }
-    cstr->len_alloc = len;
   }
 }
 
@@ -179,26 +179,34 @@ static void clg_str_vappendf(CLogStringBuf *cstr, const char *fmt, va_list args)
 {
   /* Use limit because windows may use '-1' for a formatting error. */
   const uint len_max = 65535;
-  uint len_avail = (cstr->len_alloc - cstr->len);
-  if (len_avail == 0) {
-    len_avail = CLOG_BUF_LEN_INIT;
-    clg_str_reserve(cstr, len_avail);
-  }
   while (true) {
+    uint len_avail = cstr->len_alloc - cstr->len;
+
     va_list args_cpy;
     va_copy(args_cpy, args);
     int retval = vsnprintf(cstr->data + cstr->len, len_avail, fmt, args_cpy);
     va_end(args_cpy);
-    if (retval != -1) {
-      cstr->len += retval;
+
+    if (retval < 0) {
+      /* Some encoding error happened, not much we can do here, besides skipping/cancelling this
+       * message. */
+      break;
+    }
+    else if ((uint)retval <= len_avail) {
+      /* Copy was successful. */
+      cstr->len += (uint)retval;
       break;
     }
     else {
-      len_avail *= 2;
-      if (len_avail >= len_max) {
+      /* vsnprintf was not successful, due to lack of allocated space, retval contains expected
+       * length of the formated string, use it to allocate required amount of memory. */
+      uint len_alloc = cstr->len + (uint)retval;
+      if (len_alloc >= len_max) {
+        /* Safe upper-limit, just in case... */
         break;
       }
-      clg_str_reserve(cstr, len_avail);
+      clg_str_reserve(cstr, len_alloc);
+      len_avail = cstr->len_alloc - cstr->len;
     }
   }
 }
@@ -343,6 +351,13 @@ static CLG_LogType *clg_ctx_type_register(CLogContext *ctx, const char *identifi
     ty->flag |= CLG_FLAG_USE;
   }
   return ty;
+}
+
+static void clg_ctx_error_action(CLogContext *ctx)
+{
+  if (ctx->callbacks.error_fn != NULL) {
+    ctx->callbacks.error_fn(ctx->output_file);
+  }
 }
 
 static void clg_ctx_fatal_action(CLogContext *ctx)
@@ -515,6 +530,10 @@ void CLG_logf(CLG_LogType *lg,
     clg_ctx_backtrace(lg->ctx);
   }
 
+  if (severity == CLG_SEVERITY_ERROR) {
+    clg_ctx_error_action(lg->ctx);
+  }
+
   if (severity == CLG_SEVERITY_FATAL) {
     clg_ctx_fatal_action(lg->ctx);
   }
@@ -546,6 +565,12 @@ static void CLG_ctx_output_use_timestamp_set(CLogContext *ctx, int value)
   if (ctx->use_timestamp) {
     ctx->timestamp_tick_start = clg_timestamp_ticks_get();
   }
+}
+
+/** Action on error severity. */
+static void CLT_ctx_error_fn_set(CLogContext *ctx, void (*error_fn)(void *file_handle))
+{
+  ctx->callbacks.error_fn = error_fn;
 }
 
 /** Action on fatal severity. */
@@ -665,6 +690,11 @@ void CLG_output_use_basename_set(int value)
 void CLG_output_use_timestamp_set(int value)
 {
   CLG_ctx_output_use_timestamp_set(g_ctx, value);
+}
+
+void CLG_error_fn_set(void (*error_fn)(void *file_handle))
+{
+  CLT_ctx_error_fn_set(g_ctx, error_fn);
 }
 
 void CLG_fatal_fn_set(void (*fatal_fn)(void *file_handle))

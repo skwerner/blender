@@ -21,8 +21,7 @@
  * \ingroup render
  */
 
-#ifndef __RENDER_RESULT_H__
-#define __RENDER_RESULT_H__
+#pragma once
 
 #define PASS_VECTOR_MAX 10000.0f
 
@@ -43,6 +42,10 @@ struct RenderLayer;
 struct RenderResult;
 struct Scene;
 struct rcti;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* New */
 
@@ -89,7 +92,7 @@ struct RenderPass *render_layer_add_pass(struct RenderResult *rr,
                                          int channels,
                                          const char *name,
                                          const char *viewname,
-                                         const char *chanid);
+                                         const char *chan_id);
 
 void render_result_exr_file_merge(struct RenderResult *rr,
                                   struct RenderResult *rrpart,
@@ -148,4 +151,6 @@ bool render_result_has_views(struct RenderResult *rr);
   } \
   ((void)0)
 
-#endif /* __RENDER_RESULT_H__ */
+#ifdef __cplusplus
+}
+#endif

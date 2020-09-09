@@ -74,7 +74,7 @@ namespace Freestyle {
 
 Controller::Controller()
 {
-  const string sep(Config::DIR_SEP.c_str());
+  const string sep(Config::DIR_SEP);
 #if 0
   const string filename = Config::Path::getInstance()->getHomeDir() + sep + Config::OPTIONS_DIR +
                           sep + Config::OPTIONS_CURRENT_DIRS_FILE;
@@ -316,10 +316,9 @@ int Controller::LoadMesh(Render *re, ViewLayer *view_layer, Depsgraph *depsgraph
       ClearRootNode();
       return 0;
     }
-    else {
-      delete _ViewMap;
-      _ViewMap = NULL;
-    }
+
+    delete _ViewMap;
+    _ViewMap = NULL;
   }
 
   _Chrono.start();
@@ -469,7 +468,7 @@ void Controller::DeleteViewMap(bool freeCache)
 
 void Controller::ComputeViewMap()
 {
-  if (!_ListOfModels.size()) {
+  if (_ListOfModels.empty()) {
     return;
   }
 
@@ -836,9 +835,9 @@ bool Controller::getFaceSmoothness() const
   return _EnableFaceSmoothness;
 }
 
-void Controller::setComputeRidgesAndValleysFlag(bool iBool)
+void Controller::setComputeRidgesAndValleysFlag(bool b)
 {
-  _ComputeRidges = iBool;
+  _ComputeRidges = b;
 }
 
 bool Controller::getComputeRidgesAndValleysFlag() const

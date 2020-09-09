@@ -26,7 +26,9 @@
 
 #include "DNA_particle_types.h"
 
-namespace USD {
+namespace blender {
+namespace io {
+namespace usd {
 
 USDHairWriter::USDHairWriter(const USDExporterContext &ctx) : USDAbstractWriter(ctx)
 {
@@ -80,9 +82,11 @@ void USDHairWriter::do_write(HierarchyContext &context)
   }
 }
 
-bool USDHairWriter::check_is_animated(const HierarchyContext &) const
+bool USDHairWriter::check_is_animated(const HierarchyContext &UNUSED(context)) const
 {
   return true;
 }
 
-}  // namespace USD
+}  // namespace usd
+}  // namespace io
+}  // namespace blender

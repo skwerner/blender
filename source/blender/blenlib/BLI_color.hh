@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLI_COLOR_HH__
-#define __BLI_COLOR_HH__
+#pragma once
 
 #include <iostream>
 
@@ -27,6 +26,10 @@ struct Color4f {
   float r, g, b, a;
 
   Color4f() = default;
+
+  Color4f(const float *rgba) : r(rgba[0]), g(rgba[1]), b(rgba[2]), a(rgba[3])
+  {
+  }
 
   Color4f(float r, float g, float b, float a) : r(r), g(g), b(b), a(a)
   {
@@ -46,6 +49,25 @@ struct Color4f {
   {
     stream << "(" << c.r << ", " << c.g << ", " << c.b << ", " << c.a << ")";
     return stream;
+  }
+
+  friend bool operator==(const Color4f &a, const Color4f &b)
+  {
+    return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+  }
+
+  friend bool operator!=(const Color4f &a, const Color4f &b)
+  {
+    return !(a == b);
+  }
+
+  uint64_t hash() const
+  {
+    uint64_t x1 = *reinterpret_cast<const uint32_t *>(&r);
+    uint64_t x2 = *reinterpret_cast<const uint32_t *>(&g);
+    uint64_t x3 = *reinterpret_cast<const uint32_t *>(&b);
+    uint64_t x4 = *reinterpret_cast<const uint32_t *>(&a);
+    return (x1 * 1283591) ^ (x2 * 850177) ^ (x3 * 735391) ^ (x4 * 442319);
   }
 };
 
@@ -85,8 +107,22 @@ struct Color4b {
     stream << "(" << c.r << ", " << c.g << ", " << c.b << ", " << c.a << ")";
     return stream;
   }
+
+  friend bool operator==(const Color4b &a, const Color4b &b)
+  {
+    return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+  }
+
+  friend bool operator!=(const Color4b &a, const Color4b &b)
+  {
+    return !(a == b);
+  }
+
+  uint64_t hash() const
+  {
+    return static_cast<uint64_t>(r * 1283591) ^ static_cast<uint64_t>(g * 850177) ^
+           static_cast<uint64_t>(b * 735391) ^ static_cast<uint64_t>(a * 442319);
+  }
 };
 
 }  // namespace blender
-
-#endif /* __BLI_COLOR_HH__ */

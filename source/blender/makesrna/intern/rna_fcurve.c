@@ -687,7 +687,7 @@ static void rna_FModifier_start_frame_set(PointerRNA *ptr, float value)
   }
 }
 
-static void rna_FModifer_end_frame_set(PointerRNA *ptr, float value)
+static void rna_FModifier_end_frame_set(PointerRNA *ptr, float value)
 {
   FModifier *fcm = (FModifier *)ptr->data;
 
@@ -1635,7 +1635,7 @@ static void rna_def_fmodifier(BlenderRNA *brna)
   /* TODO: setting this to true must ensure that all others in stack are turned off too... */
   prop = RNA_def_property(srna, "active", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", FMODIFIER_FLAG_ACTIVE);
-  RNA_def_property_ui_text(prop, "Active", "F-Curve Modifier is the one being edited ");
+  RNA_def_property_ui_text(prop, "Active", "F-Curve Modifier is the one being edited");
   RNA_def_property_boolean_funcs(prop, NULL, "rna_FModifier_active_set");
   RNA_def_property_update(prop, NC_ANIMATION | ND_KEYFRAME_PROP, "rna_FModifier_active_update");
   RNA_def_property_ui_icon(prop, ICON_RADIOBUT_OFF, 1);
@@ -1665,7 +1665,7 @@ static void rna_def_fmodifier(BlenderRNA *brna)
   prop = RNA_def_property(srna, "frame_end", PROP_FLOAT, PROP_NONE);
   RNA_def_property_float_sdna(prop, NULL, "efra");
   RNA_def_property_float_funcs(
-      prop, NULL, "rna_FModifer_end_frame_set", "rna_FModifier_end_frame_range");
+      prop, NULL, "rna_FModifier_end_frame_set", "rna_FModifier_end_frame_range");
   RNA_def_property_ui_text(
       prop,
       "End Frame",

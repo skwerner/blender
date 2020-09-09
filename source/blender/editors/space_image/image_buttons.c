@@ -139,9 +139,7 @@ static bool ui_imageuser_slot_menu_step(bContext *C, int direction, void *image_
     WM_event_add_notifier(C, NC_IMAGE | ND_DRAW, NULL);
     return true;
   }
-  else {
-    return true;
-  }
+  return true;
 }
 
 static const char *ui_imageuser_layer_fake_name(RenderResult *rr)
@@ -150,12 +148,10 @@ static const char *ui_imageuser_layer_fake_name(RenderResult *rr)
   if (rv->rectf) {
     return IFACE_("Composite");
   }
-  else if (rv->rect32) {
+  if (rv->rect32) {
     return IFACE_("Sequence");
   }
-  else {
-    return NULL;
-  }
+  return NULL;
 }
 
 /* workaround for passing many args */
@@ -576,8 +572,12 @@ static void image_multiview_cb(bContext *C, void *rnd_pt, void *UNUSED(arg_v))
   WM_event_add_notifier(C, NC_IMAGE | ND_DRAW, NULL);
 }
 
-static void uiblock_layer_pass_buttons(
-    uiLayout *layout, Image *image, RenderResult *rr, ImageUser *iuser, int w, short *render_slot)
+static void uiblock_layer_pass_buttons(uiLayout *layout,
+                                       Image *image,
+                                       RenderResult *rr,
+                                       ImageUser *iuser,
+                                       int w,
+                                       const short *render_slot)
 {
   struct ImageUI_Data rnd_pt_local, *rnd_pt = NULL;
   uiBlock *block = uiLayoutGetBlock(layout);

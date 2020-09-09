@@ -40,6 +40,7 @@
 
 #include "ED_screen.h"
 
+#include "GPU_capabilities.h"
 #include "GPU_immediate.h"
 #include "GPU_texture.h"
 #include "GPU_viewport.h"
@@ -145,13 +146,6 @@ void wm_stereo3d_draw_topbottom(wmWindow *win, int view)
   immEnd();
 
   immUnbindProgram();
-}
-
-static bool wm_stereo3d_quadbuffer_supported(void)
-{
-  GLboolean stereo = GL_FALSE;
-  glGetBooleanv(GL_STEREO, &stereo);
-  return stereo == GL_TRUE;
 }
 
 static bool wm_stereo3d_is_fullscreen_required(eStereoDisplayMode stereo_display)
@@ -325,7 +319,7 @@ int wm_stereo3d_set_exec(bContext *C, wmOperator *op)
     }
     /* pageflip requires a new window to be created with the proper OS flags */
     else if ((win_dst = wm_window_copy_test(C, win_src, false, false))) {
-      if (wm_stereo3d_quadbuffer_supported()) {
+      if (GPU_stereo_quadbuffer_support()) {
         BKE_report(op->reports, RPT_INFO, "Quad-buffer window successfully created");
       }
       else {
@@ -359,12 +353,11 @@ int wm_stereo3d_set_exec(bContext *C, wmOperator *op)
     WM_event_add_notifier(C, NC_WINDOW, NULL);
     return OPERATOR_FINISHED;
   }
-  else {
-    /* without this, the popup won't be freed freed properly T44688 */
-    CTX_wm_window_set(C, win_src);
-    win_src->stereo3d_format->display_mode = prev_display_mode;
-    return OPERATOR_CANCELLED;
-  }
+
+  /* without this, the popup won't be freed freed properly T44688 */
+  CTX_wm_window_set(C, win_src);
+  win_src->stereo3d_format->display_mode = prev_display_mode;
+  return OPERATOR_CANCELLED;
 }
 
 int wm_stereo3d_set_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
@@ -374,9 +367,7 @@ int wm_stereo3d_set_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(ev
   if (wm_stereo3d_set_properties(C, op)) {
     return wm_stereo3d_set_exec(C, op);
   }
-  else {
-    return WM_operator_props_dialog_popup(C, op, 250);
-  }
+  return WM_operator_props_dialog_popup(C, op, 250);
 }
 
 void wm_stereo3d_set_draw(bContext *UNUSED(C), wmOperator *op)

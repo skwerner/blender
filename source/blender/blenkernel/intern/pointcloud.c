@@ -113,6 +113,12 @@ IDTypeInfo IDType_ID_PT = {
     .free_data = pointcloud_free_data,
     .make_local = NULL,
     .foreach_id = pointcloud_foreach_id,
+    .foreach_cache = NULL,
+
+    .blend_write = NULL,
+    .blend_read_data = NULL,
+    .blend_read_lib = NULL,
+    .blend_read_expand = NULL,
 };
 
 static void pointcloud_random(PointCloud *pointcloud)
@@ -169,8 +175,8 @@ BoundBox *BKE_pointcloud_boundbox_get(Object *ob)
     for (int a = 0; a < pointcloud->totpoint; a++) {
       float *co = pointcloud_co[a];
       float radius = (pointcloud_radius) ? pointcloud_radius[a] : 0.0f;
-      float co_min[3] = {co[0] - radius, co[1] - radius, co[2] - radius};
-      float co_max[3] = {co[0] + radius, co[1] + radius, co[2] + radius};
+      const float co_min[3] = {co[0] - radius, co[1] - radius, co[2] - radius};
+      const float co_max[3] = {co[0] + radius, co[1] + radius, co[2] + radius};
       DO_MIN(co_min, min);
       DO_MAX(co_max, max);
     }

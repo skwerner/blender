@@ -21,8 +21,7 @@
  * \ingroup nodes
  */
 
-#ifndef __NODE_TEXTURE_UTIL_H__
-#define __NODE_TEXTURE_UTIL_H__
+#pragma once
 
 #include <math.h>
 #include <string.h>
@@ -63,6 +62,10 @@
 
 #include "RE_pipeline.h"
 #include "RE_shader_ext.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct TexCallData {
   TexResult *target;
@@ -124,4 +127,6 @@ void tex_do_preview(bNodePreview *preview,
 
 void params_from_cdata(TexParams *out, TexCallData *in);
 
+#ifdef __cplusplus
+}
 #endif

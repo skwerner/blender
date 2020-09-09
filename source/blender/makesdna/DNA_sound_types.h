@@ -20,8 +20,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_SOUND_TYPES_H__
-#define __DNA_SOUND_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_defs.h"
@@ -36,7 +35,7 @@ typedef struct bSound {
    * The path to the sound file.
    */
   /** 1024 = FILE_MAX. */
-  char name[1024];
+  char filepath[1024];
 
   /**
    * The packed file.
@@ -117,5 +116,3 @@ enum {
   SOUND_TAGS_WAVEFORM_NO_RELOAD = 1 << 0,
   SOUND_TAGS_WAVEFORM_LOADING = (1 << 6),
 };
-
-#endif /* __DNA_SOUND_TYPES_H__ */

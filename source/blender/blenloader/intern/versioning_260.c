@@ -658,6 +658,7 @@ static void do_versions_nodetree_customnodes(bNodeTree *ntree, int UNUSED(is_gro
   }
 }
 
+/* NOLINTNEXTLINE: readability-function-size */
 void blo_do_versions_260(FileData *fd, Library *UNUSED(lib), Main *bmain)
 {
   if (bmain->versionfile < 260) {
@@ -1205,7 +1206,7 @@ void blo_do_versions_260(FileData *fd, Library *UNUSED(lib), Main *bmain)
               if (region->regiontype == RGN_TYPE_PREVIEW) {
                 if (region->alignment != RGN_ALIGN_NONE) {
                   region->flag |= RGN_FLAG_HIDDEN;
-                  region->v2d.flag &= ~V2D_IS_INITIALISED;
+                  region->v2d.flag &= ~V2D_IS_INIT;
                   region->alignment = RGN_ALIGN_NONE;
 
                   hide = true;
@@ -1310,11 +1311,11 @@ void blo_do_versions_260(FileData *fd, Library *UNUSED(lib), Main *bmain)
       ModifierData *md;
       for (md = ob->modifiers.first; md; md = md->next) {
         if (md->type == eModifierType_Fluid) {
-          FluidModifierData *mmd = (FluidModifierData *)md;
-          if ((mmd->type & MOD_FLUID_TYPE_DOMAIN) && mmd->domain) {
-            int maxres = max_iii(mmd->domain->res[0], mmd->domain->res[1], mmd->domain->res[2]);
-            mmd->domain->scale = mmd->domain->dx * maxres;
-            mmd->domain->dx = 1.0f / mmd->domain->scale;
+          FluidModifierData *fmd = (FluidModifierData *)md;
+          if ((fmd->type & MOD_FLUID_TYPE_DOMAIN) && fmd->domain) {
+            int maxres = max_iii(fmd->domain->res[0], fmd->domain->res[1], fmd->domain->res[2]);
+            fmd->domain->scale = fmd->domain->dx * maxres;
+            fmd->domain->dx = 1.0f / fmd->domain->scale;
           }
         }
       }
@@ -1488,7 +1489,7 @@ void blo_do_versions_260(FileData *fd, Library *UNUSED(lib), Main *bmain)
       if (scene->ed) {
         Sequence *seq;
 
-        SEQ_BEGIN (scene->ed, seq) {
+        SEQ_ALL_BEGIN (scene->ed, seq) {
           Strip *strip = seq->strip;
 
           if (strip && strip->color_balance) {
@@ -1511,7 +1512,7 @@ void blo_do_versions_260(FileData *fd, Library *UNUSED(lib), Main *bmain)
             strip->color_balance = NULL;
           }
         }
-        SEQ_END;
+        SEQ_ALL_END;
       }
     }
   }
@@ -1628,30 +1629,30 @@ void blo_do_versions_260(FileData *fd, Library *UNUSED(lib), Main *bmain)
         ModifierData *md;
         for (md = ob->modifiers.first; md; md = md->next) {
           if (md->type == eModifierType_Fluid) {
-            FluidModifierData *mmd = (FluidModifierData *)md;
-            if ((mmd->type & MOD_FLUID_TYPE_DOMAIN) && mmd->domain) {
+            FluidModifierData *fmd = (FluidModifierData *)md;
+            if ((fmd->type & MOD_FLUID_TYPE_DOMAIN) && fmd->domain) {
               /* keep branch saves if possible */
-              if (!mmd->domain->flame_max_temp) {
-                mmd->domain->burning_rate = 0.75f;
-                mmd->domain->flame_smoke = 1.0f;
-                mmd->domain->flame_vorticity = 0.5f;
-                mmd->domain->flame_ignition = 1.25f;
-                mmd->domain->flame_max_temp = 1.75f;
-                mmd->domain->adapt_threshold = 0.02f;
-                mmd->domain->adapt_margin = 4;
-                mmd->domain->flame_smoke_color[0] = 0.7f;
-                mmd->domain->flame_smoke_color[1] = 0.7f;
-                mmd->domain->flame_smoke_color[2] = 0.7f;
+              if (!fmd->domain->flame_max_temp) {
+                fmd->domain->burning_rate = 0.75f;
+                fmd->domain->flame_smoke = 1.0f;
+                fmd->domain->flame_vorticity = 0.5f;
+                fmd->domain->flame_ignition = 1.25f;
+                fmd->domain->flame_max_temp = 1.75f;
+                fmd->domain->adapt_threshold = 0.02f;
+                fmd->domain->adapt_margin = 4;
+                fmd->domain->flame_smoke_color[0] = 0.7f;
+                fmd->domain->flame_smoke_color[1] = 0.7f;
+                fmd->domain->flame_smoke_color[2] = 0.7f;
               }
             }
-            else if ((mmd->type & MOD_FLUID_TYPE_FLOW) && mmd->flow) {
-              if (!mmd->flow->texture_size) {
-                mmd->flow->fuel_amount = 1.0;
-                mmd->flow->surface_distance = 1.5;
-                mmd->flow->color[0] = 0.7f;
-                mmd->flow->color[1] = 0.7f;
-                mmd->flow->color[2] = 0.7f;
-                mmd->flow->texture_size = 1.0f;
+            else if ((fmd->type & MOD_FLUID_TYPE_FLOW) && fmd->flow) {
+              if (!fmd->flow->texture_size) {
+                fmd->flow->fuel_amount = 1.0;
+                fmd->flow->surface_distance = 1.5;
+                fmd->flow->color[0] = 0.7f;
+                fmd->flow->color[1] = 0.7f;
+                fmd->flow->color[2] = 0.7f;
+                fmd->flow->texture_size = 1.0f;
               }
             }
           }
@@ -1803,7 +1804,7 @@ void blo_do_versions_260(FileData *fd, Library *UNUSED(lib), Main *bmain)
     for (scene = bmain->scenes.first; scene; scene = scene->id.next) {
       Sequence *seq;
 
-      SEQ_BEGIN (scene->ed, seq) {
+      SEQ_ALL_BEGIN (scene->ed, seq) {
         enum { SEQ_MAKE_PREMUL = (1 << 6) };
         if (seq->flag & SEQ_MAKE_PREMUL) {
           seq->alpha_mode = SEQ_ALPHA_STRAIGHT;
@@ -1812,7 +1813,7 @@ void blo_do_versions_260(FileData *fd, Library *UNUSED(lib), Main *bmain)
           BKE_sequence_alpha_mode_from_extension(seq);
         }
       }
-      SEQ_END;
+      SEQ_ALL_END;
 
       if (scene->r.bake_samples == 0) {
         scene->r.bake_samples = 256;
@@ -2158,13 +2159,13 @@ void blo_do_versions_260(FileData *fd, Library *UNUSED(lib), Main *bmain)
       ModifierData *md;
       for (md = ob->modifiers.first; md; md = md->next) {
         if (md->type == eModifierType_Fluid) {
-          FluidModifierData *mmd = (FluidModifierData *)md;
-          if ((mmd->type & MOD_FLUID_TYPE_DOMAIN) && mmd->domain) {
-            if (mmd->domain->flags & FLUID_DOMAIN_USE_HIGH_SMOOTH) {
-              mmd->domain->highres_sampling = SM_HRES_LINEAR;
+          FluidModifierData *fmd = (FluidModifierData *)md;
+          if ((fmd->type & MOD_FLUID_TYPE_DOMAIN) && fmd->domain) {
+            if (fmd->domain->flags & FLUID_DOMAIN_USE_HIGH_SMOOTH) {
+              fmd->domain->highres_sampling = SM_HRES_LINEAR;
             }
             else {
-              mmd->domain->highres_sampling = SM_HRES_NEAREST;
+              fmd->domain->highres_sampling = SM_HRES_NEAREST;
             }
           }
         }
@@ -2225,10 +2226,10 @@ void blo_do_versions_260(FileData *fd, Library *UNUSED(lib), Main *bmain)
       ModifierData *md;
       for (md = ob->modifiers.first; md; md = md->next) {
         if (md->type == eModifierType_Fluid) {
-          FluidModifierData *mmd = (FluidModifierData *)md;
-          if ((mmd->type & MOD_FLUID_TYPE_FLOW) && mmd->flow) {
-            if (!mmd->flow->particle_size) {
-              mmd->flow->particle_size = 1.0f;
+          FluidModifierData *fmd = (FluidModifierData *)md;
+          if ((fmd->type & MOD_FLUID_TYPE_FLOW) && fmd->flow) {
+            if (!fmd->flow->particle_size) {
+              fmd->flow->particle_size = 1.0f;
             }
           }
         }
@@ -2348,10 +2349,14 @@ void blo_do_versions_260(FileData *fd, Library *UNUSED(lib), Main *bmain)
       for (area = screen->areabase.first; area; area = area->next) {
         for (sl = area->spacedata.first; sl; sl = sl->next) {
           if (sl->spacetype == SPACE_OUTLINER) {
-            SpaceOutliner *so = (SpaceOutliner *)sl;
+            SpaceOutliner *space_outliner = (SpaceOutliner *)sl;
 
-            if (!ELEM(so->outlinevis, SO_SCENES, SO_LIBRARIES, SO_SEQUENCE, SO_DATA_API)) {
-              so->outlinevis = SO_SCENES;
+            if (!ELEM(space_outliner->outlinevis,
+                      SO_SCENES,
+                      SO_LIBRARIES,
+                      SO_SEQUENCE,
+                      SO_DATA_API)) {
+              space_outliner->outlinevis = SO_SCENES;
             }
           }
         }
@@ -2442,13 +2447,13 @@ void blo_do_versions_260(FileData *fd, Library *UNUSED(lib), Main *bmain)
 
       for (scene = bmain->scenes.first; scene; scene = scene->id.next) {
         Sequence *seq;
-        SEQ_BEGIN (scene->ed, seq) {
+        SEQ_ALL_BEGIN (scene->ed, seq) {
           if (seq->type == SEQ_TYPE_WIPE) {
             WipeVars *wv = seq->effectdata;
             wv->angle = DEG2RADF(wv->angle);
           }
         }
-        SEQ_END;
+        SEQ_ALL_END;
       }
 
       FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
@@ -2520,7 +2525,7 @@ void blo_do_versions_260(FileData *fd, Library *UNUSED(lib), Main *bmain)
 
     for (cu = bmain->curves.first; cu; cu = cu->id.next) {
       if (cu->str) {
-        cu->len_wchar = BLI_strlen_utf8(cu->str);
+        cu->len_char32 = BLI_strlen_utf8(cu->str);
       }
     }
   }

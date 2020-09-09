@@ -221,7 +221,7 @@ std::string translate_id(const char *idString)
 
 std::string translate_id(const std::string &id)
 {
-  if (id.size() == 0) {
+  if (id.empty()) {
     return id;
   }
 
@@ -277,7 +277,7 @@ std::string encode_xml(std::string xml)
       {'<', "&lt;"}, {'>', "&gt;"}, {'"', "&quot;"}, {'\'', "&apos;"}, {'&', "&amp;"}};
 
   std::map<char, std::string>::const_iterator it;
-  std::string encoded_xml = "";
+  std::string encoded_xml;
 
   for (unsigned int i = 0; i < xml.size(); i++) {
     char c = xml.at(i);

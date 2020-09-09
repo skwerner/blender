@@ -31,6 +31,7 @@
 
 #include "DEG_depsgraph.h"
 
+struct bNodeSocket;
 struct CacheFile;
 struct Camera;
 struct Collection;
@@ -64,7 +65,8 @@ struct bNodeTree;
 struct bPoseChannel;
 struct bSound;
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 struct ComponentNode;
 struct Depsgraph;
@@ -168,6 +170,9 @@ class DepsgraphNodeBuilder : public DepsgraphBuilder {
   virtual void build_object_proxy_from(Object *object, bool is_object_visible);
   virtual void build_object_proxy_group(Object *object, bool is_object_visible);
   virtual void build_object_instance_collection(Object *object, bool is_object_visible);
+  virtual void build_object_from_layer(int base_index,
+                                       Object *object,
+                                       eDepsNode_LinkedState_Type linked_state);
   virtual void build_object_flags(int base_index,
                                   Object *object,
                                   eDepsNode_LinkedState_Type linked_state);
@@ -200,13 +205,14 @@ class DepsgraphNodeBuilder : public DepsgraphBuilder {
   virtual void build_ik_pose(Object *object, bPoseChannel *pchan, bConstraint *con);
   virtual void build_splineik_pose(Object *object, bPoseChannel *pchan, bConstraint *con);
   virtual void build_rig(Object *object, bool is_object_visible);
-  virtual void build_proxy_rig(Object *object);
+  virtual void build_proxy_rig(Object *object, bool is_object_visible);
   virtual void build_armature(bArmature *armature);
   virtual void build_armature_bones(ListBase *bones);
   virtual void build_shapekeys(Key *key);
   virtual void build_camera(Camera *camera);
   virtual void build_light(Light *lamp);
   virtual void build_nodetree(bNodeTree *ntree);
+  virtual void build_nodetree_socket(bNodeSocket *socket);
   virtual void build_material(Material *ma);
   virtual void build_materials(Material **materials, int num_materials);
   virtual void build_freestyle_lineset(FreestyleLineSet *fls);
@@ -287,4 +293,5 @@ class DepsgraphNodeBuilder : public DepsgraphBuilder {
   BuilderMap built_map_;
 };
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

@@ -23,6 +23,7 @@
 #  include <openvdb/tools/Dense.h>
 #  include <openvdb/tools/GridTransformer.h>
 #  include <openvdb/tools/Morphology.h>
+#  include <openvdb/tools/Statistics.h>
 #endif
 
 #include "util/util_foreach.h"
@@ -53,6 +54,7 @@ Volume::Volume() : Mesh(node_type, Geometry::VOLUME)
 {
   clipping = 0.001f;
   step_size = 0.0f;
+  max_density = -1.0f;
   object_space = false;
 }
 
@@ -492,6 +494,8 @@ void GeometryManager::create_volume_mesh(Volume *volume, Progress &progress)
 
   VolumeMeshBuilder builder;
 
+  float max_density = -1.0f;
+
 #ifdef WITH_OPENVDB
   foreach (Attribute &attr, volume->attributes.attributes) {
     if (attr.element != ATTR_ELEMENT_VOXEL) {
@@ -532,6 +536,10 @@ void GeometryManager::create_volume_mesh(Volume *volume, Progress &progress)
 
     if (grid) {
       builder.add_grid(grid, do_clipping, volume->clipping);
+      if(attr.std == ATTR_STD_VOLUME_DENSITY && grid->isType<openvdb::FloatGrid>()) {
+        openvdb::math::Extrema e = openvdb::tools::extrema(openvdb::GridBase::constGrid<openvdb::FloatGrid>(grid)->beginValueAll(), true);
+        volume->max_density = e.max();
+      }
     }
   }
 #endif

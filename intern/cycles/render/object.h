@@ -100,6 +100,7 @@ class Object : public Node {
 
   /* Compute step size from attributes, shaders, transforms. */
   float compute_volume_step_size() const;
+  float compute_volume_max_density() const;
 
  protected:
   /* Specifies the position of the object in scene->objects and

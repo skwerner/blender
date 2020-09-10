@@ -36,6 +36,7 @@ KERNEL_TEX(Transform, __object_motion_pass)
 KERNEL_TEX(DecomposedTransform, __object_motion)
 KERNEL_TEX(uint, __object_flag)
 KERNEL_TEX(float, __object_volume_step)
+KERNEL_TEX(float, __object_max_density)
 
 /* cameras */
 KERNEL_TEX(DecomposedTransform, __camera_motion)

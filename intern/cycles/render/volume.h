@@ -30,6 +30,7 @@ class Volume : public Mesh {
 
   float clipping;
   float step_size;
+  float max_density;
   bool object_space;
 
   virtual void clear() override;

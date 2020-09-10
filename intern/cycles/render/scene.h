@@ -95,6 +95,7 @@ class DeviceScene {
   device_vector<DecomposedTransform> object_motion;
   device_vector<uint> object_flag;
   device_vector<float> object_volume_step;
+  device_vector<float> object_max_density;
 
   /* cameras */
   device_vector<DecomposedTransform> camera_motion;

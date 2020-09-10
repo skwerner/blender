@@ -69,6 +69,7 @@ struct UpdateObjectTransformState {
   Transform *object_motion_pass;
   DecomposedTransform *object_motion;
   float *object_volume_step;
+  float *object_max_density;
 
   /* Flags which will be synchronized to Integrator. */
   bool have_motion;
@@ -349,6 +350,26 @@ float Object::compute_volume_step_size() const
   return step_size;
 }
 
+
+float Object::compute_volume_max_density() const
+{
+  if (geometry->type != Geometry::MESH && geometry->type != Geometry::VOLUME) {
+    return -1.0f;
+  }
+
+  Mesh *mesh = static_cast<Mesh *>(geometry);
+
+  if (!mesh->has_volume) {
+    return -1.0f;
+  }
+
+  if (geometry->type == Geometry::VOLUME) {
+    Volume *volume = static_cast<Volume *>(geometry);
+    return volume->max_density;
+  }
+  return -1.0f;
+}
+
 int Object::get_device_index() const
 {
   return index;
@@ -549,6 +570,7 @@ void ObjectManager::device_update_object_transform(UpdateObjectTransformState *s
   }
   state->object_flag[ob->index] = flag;
   state->object_volume_step[ob->index] = FLT_MAX;
+  state->object_max_density[ob->index] = -1.0f;
 
   /* Have curves. */
   if (geom->type == Geometry::HAIR) {
@@ -568,6 +590,7 @@ void ObjectManager::device_update_transforms(DeviceScene *dscene, Scene *scene, 
   state.objects = dscene->objects.alloc(scene->objects.size());
   state.object_flag = dscene->object_flag.alloc(scene->objects.size());
   state.object_volume_step = dscene->object_volume_step.alloc(scene->objects.size());
+  state.object_max_density = dscene->object_max_density.alloc(scene->objects.size());
   state.object_motion = NULL;
   state.object_motion_pass = NULL;
 
@@ -679,6 +702,7 @@ void ObjectManager::device_update_flags(
   /* Object info flag. */
   uint *object_flag = dscene->object_flag.data();
   float *object_volume_step = dscene->object_volume_step.data();
+  float *object_max_density = dscene->object_max_density.data();
 
   /* Object volume intersection. */
   vector<Object *> volume_objects;
@@ -690,9 +714,11 @@ void ObjectManager::device_update_flags(
       }
       has_volume_objects = true;
       object_volume_step[object->index] = object->compute_volume_step_size();
+      object_max_density[object->index] = object->compute_volume_max_density();
     }
     else {
       object_volume_step[object->index] = FLT_MAX;
+      object_max_density[object->index] = -1.0f;
     }
   }
 
@@ -740,6 +766,7 @@ void ObjectManager::device_update_flags(
   /* Copy object flag. */
   dscene->object_flag.copy_to_device();
   dscene->object_volume_step.copy_to_device();
+  dscene->object_max_density.copy_to_device();
 }
 
 void ObjectManager::device_update_mesh_offsets(Device *, DeviceScene *dscene, Scene *scene)

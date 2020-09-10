@@ -109,37 +109,48 @@ ccl_device float kernel_volume_channel_get(float3 value, int channel)
 
 ccl_device float volume_stack_step_size(KernelGlobals *kg, ccl_addr_space VolumeStack *stack)
 {
-  float step_size = FLT_MAX;
+  if (kernel_data.integrator.volume_integrator == VOLUME_INTEGRATOR_RAY_MARCH) {
+    float step_size = FLT_MAX;
 
-  for (int i = 0; stack[i].shader != SHADER_NONE; i++) {
-    int shader_flag = kernel_tex_fetch(__shaders, (stack[i].shader & SHADER_MASK)).flags;
+    for (int i = 0; stack[i].shader != SHADER_NONE; i++) {
+      int shader_flag = kernel_tex_fetch(__shaders, (stack[i].shader & SHADER_MASK)).flags;
 
-    bool heterogeneous = false;
+      bool heterogeneous = false;
 
-    if (shader_flag & SD_HETEROGENEOUS_VOLUME) {
-      heterogeneous = true;
-    }
-    else if (shader_flag & SD_NEED_VOLUME_ATTRIBUTES) {
-      /* We want to render world or objects without any volume grids
-       * as homogeneous, but can only verify this at run-time since other
-       * heterogeneous volume objects may be using the same shader. */
-      int object = stack[i].object;
-      if (object != OBJECT_NONE) {
-        int object_flag = kernel_tex_fetch(__object_flag, object);
-        if (object_flag & SD_OBJECT_HAS_VOLUME_ATTRIBUTES) {
-          heterogeneous = true;
+      if (shader_flag & SD_HETEROGENEOUS_VOLUME) {
+        heterogeneous = true;
+      }
+      else if (shader_flag & SD_NEED_VOLUME_ATTRIBUTES) {
+        /* We want to render world or objects without any volume grids
+         * as homogeneous, but can only verify this at run-time since other
+         * heterogeneous volume objects may be using the same shader. */
+        int object = stack[i].object;
+        if (object != OBJECT_NONE) {
+          int object_flag = kernel_tex_fetch(__object_flag, object);
+          if (object_flag & SD_OBJECT_HAS_VOLUME_ATTRIBUTES) {
+            heterogeneous = true;
+          }
         }
+      }
+
+      if (heterogeneous) {
+        float object_step_size = object_volume_step_size(kg, stack[i].object);
+        object_step_size *= kernel_data.integrator.volume_step_rate;
+        step_size = fminf(object_step_size, step_size);
       }
     }
 
-    if (heterogeneous) {
-      float object_step_size = object_volume_step_size(kg, stack[i].object);
-      object_step_size *= kernel_data.integrator.volume_step_rate;
-      step_size = fminf(object_step_size, step_size);
-    }
+    return step_size;
   }
+  else {
+    float density = -1.0f;
 
-  return step_size;
+    for (int i = 0; stack[i].shader != SHADER_NONE; i++) {
+      float object_density = object_volume_max_density(kg, stack[i].object) * object_volume_density(kg, stack[i].object);
+      density = fmaxf(object_density, density);
+    }
+    return density;
+  }
 }
 
 ccl_device int volume_stack_sampling_method(KernelGlobals *kg, VolumeStack *stack)
@@ -279,9 +290,9 @@ ccl_device void kernel_volume_transmission_woodcock(KernelGlobals *kg,
                                                     ccl_addr_space PathState *state,
                                                     Ray *ray,
                                                     ShaderData *sd,
-                                                    float3 *throughput)
+                                                    float3 *throughput,
+                                                    float sigma_m)
 {
-  const float sigma_m = kernel_data.integrator.volume_max_density;
   float t = 0.0f;
   float3 sigma_t;
   float s2;
@@ -314,12 +325,13 @@ ccl_device void kernel_volume_transmission_residual_ratio(KernelGlobals *kg,
                                                           ccl_addr_space PathState *state,
                                                           Ray *ray,
                                                           ShaderData *sd,
-                                                          float3 *throughput)
+                                                          float3 *throughput,
+                                                          float sigma_m)
 {
   /* Control variate, set to min density. */
   const float sigma_c = 0.0f;
   /* Residual compononent, max density - min density. */
-  const float sigma_r = kernel_data.integrator.volume_max_density - sigma_c;
+  const float sigma_r = sigma_m - sigma_c;
   float3 sigma_t = make_float3(0.0f, 0.0f, 0.0f);
   float t = 0.0f;
   float T_c = expf(-sigma_c * ray->t);
@@ -369,10 +381,10 @@ ccl_device_noinline void kernel_volume_shadow(KernelGlobals *kg,
       kernel_volume_shadow_heterogeneous(kg, state, ray, shadow_sd, throughput, step_size);
     }
     else if (kernel_data.integrator.volume_integrator == VOLUME_INTEGRATOR_WOODCOCK) {
-      kernel_volume_transmission_woodcock(kg, state, ray, shadow_sd, throughput);
+      kernel_volume_transmission_woodcock(kg, state, ray, shadow_sd, throughput, step_size);
     }
     else {
-      kernel_volume_transmission_residual_ratio(kg, state, ray, shadow_sd, throughput);
+      kernel_volume_transmission_residual_ratio(kg, state, ray, shadow_sd, throughput, step_size);
     }
   }
   else
@@ -850,11 +862,11 @@ kernel_volume_integrate_heterogeneous_woodcock_tracking(KernelGlobals *kg,
                                                         Ray *ray,
                                                         ShaderData *sd,
                                                         PathRadiance *L,
-                                                        ccl_addr_space float3 *throughput)
+                                                        ccl_addr_space float3 *throughput,
+                                                        float sigma_m)
 {
   uint lcg_state = lcg_state_init_addrspace(state, 0x12345678);
   float t = 0.0f;
-  float sigma_m = kernel_data.integrator.volume_max_density;
   VolumeShaderCoefficients coeff;
 
   for (int i = 0; i < kernel_data.integrator.volume_max_steps; ++i) {
@@ -1048,9 +1060,10 @@ kernel_volume_integrate(KernelGlobals *kg,
       return kernel_volume_integrate_heterogeneous_spectral_tracking(
           kg, state, ray, sd, L, throughput);
     }
-    else if (kernel_data.integrator.volume_integrator == VOLUME_INTEGRATOR_WOODCOCK) {
+    else if (kernel_data.integrator.volume_integrator == VOLUME_INTEGRATOR_WOODCOCK ||
+             kernel_data.integrator.volume_integrator == VOLUME_INTEGRATOR_RATIO_TRACKING) {
       return kernel_volume_integrate_heterogeneous_woodcock_tracking(
-          kg, state, ray, sd, L, throughput);
+          kg, state, ray, sd, L, throughput, step_size);
     }
     else {
       return kernel_volume_integrate_heterogeneous_distance(

@@ -56,15 +56,26 @@ class GLSharedOrphanLists {
 class GLContext : public Context {
  public:
   /** Capabilities. */
-  static GLint max_texture_3d_size;
   static GLint max_cubemap_size;
+  static GLint max_texture_3d_size;
   static GLint max_ubo_size;
   static GLint max_ubo_binds;
   /** Extensions. */
   static bool base_instance_support;
+  static bool clear_texture_support;
+  static bool copy_image_support;
+  static bool debug_layer_support;
+  static bool direct_state_access_support;
+  static bool fixed_restart_index_support;
+  static bool multi_bind_support;
+  static bool multi_draw_indirect_support;
+  static bool shader_draw_parameters_support;
   static bool texture_cube_map_array_support;
+  static bool texture_filter_anisotropic_support;
+  static bool texture_gather_support;
+  static bool vertex_attrib_binding_support;
   /** Workarounds. */
-  static bool texture_copy_workaround;
+  static bool debug_layer_workaround;
   static bool unused_fb_slot_workaround;
   static float derivative_signs[2];
 
@@ -123,6 +134,9 @@ class GLContext : public Context {
 
   void vao_cache_register(GLVaoCache *cache);
   void vao_cache_unregister(GLVaoCache *cache);
+
+  void debug_group_begin(const char *name, int index) override;
+  void debug_group_end(void) override;
 
  private:
   static void orphans_add(Vector<GLuint> &orphan_list, std::mutex &list_mutex, GLuint id);

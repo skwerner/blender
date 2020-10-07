@@ -26,9 +26,7 @@
 #include "CLG_log.h"
 static CLG_LogRef LOG = {"io.alembic"};
 
-namespace blender {
-namespace io {
-namespace alembic {
+namespace blender::io::alembic {
 
 using Alembic::Abc::OObject;
 
@@ -52,6 +50,16 @@ void ABCInstanceWriter::create_alembic_objects(const HierarchyContext *context)
   CLOG_INFO(&LOG, 2, "exporting instance %s", args_.abc_path.c_str());
 }
 
+void ABCInstanceWriter::ensure_custom_properties_exporter(const HierarchyContext & /*context*/)
+{
+  /* Intentionally do nothing. Instances should not have their own custom properties. */
+}
+
+Alembic::Abc::OCompoundProperty ABCInstanceWriter::abc_prop_for_custom_props()
+{
+  return Alembic::Abc::OCompoundProperty();
+}
+
 OObject ABCInstanceWriter::get_alembic_object() const
 {
   /* There is no OObject for an instance. */
@@ -69,6 +77,4 @@ void ABCInstanceWriter::do_write(HierarchyContext & /*context*/)
   /* Instances don't have data to be written. Just creating them is enough. */
 }
 
-}  // namespace alembic
-}  // namespace io
-}  // namespace blender
+}  // namespace blender::io::alembic

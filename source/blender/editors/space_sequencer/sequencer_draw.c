@@ -242,7 +242,6 @@ static void draw_seq_waveform(View2D *v2d,
   int x2_offset = min_ff(v2d->cur.xmax + 1.0f, x2);
 
   if (seq->sound && ((sseq->flag & SEQ_ALL_WAVEFORMS) || (seq->flag & SEQ_AUDIO_DRAW_WAVEFORM))) {
-    int i, j, p;
     int length = floor((x2_offset - x1_offset) / stepsize) + 1;
     float ymid = (y1 + y2) / 2.0f;
     float yscale = (y2 - y1) / 2.0f;
@@ -303,15 +302,15 @@ static void draw_seq_waveform(View2D *v2d,
     immBindBuiltinProgram(GPU_SHADER_2D_FLAT_COLOR);
     immBegin(GPU_PRIM_TRI_STRIP, length * 2);
 
-    for (i = 0; i < length; i++) {
+    for (int i = 0; i < length; i++) {
       float sampleoffset = startsample + ((x1_offset - x1) / stepsize + i) * samplestep;
-      p = sampleoffset;
+      int p = sampleoffset;
 
       value1 = waveform->data[p * 3];
       value2 = waveform->data[p * 3 + 1];
 
       if (samplestep > 1.0f) {
-        for (j = p + 1; (j < waveform->length) && (j < p + samplestep); j++) {
+        for (int j = p + 1; (j < waveform->length) && (j < p + samplestep); j++) {
           if (value1 > waveform->data[j * 3]) {
             value1 = waveform->data[j * 3];
           }
@@ -1251,11 +1250,11 @@ ImBuf *sequencer_ibuf_get(struct Main *bmain,
   double render_size;
   short is_break = G.is_break;
 
-  if (sseq->render_size == SEQ_PROXY_RENDER_SIZE_NONE) {
+  if (sseq->render_size == SEQ_RENDER_SIZE_NONE) {
     return NULL;
   }
 
-  if (sseq->render_size == SEQ_PROXY_RENDER_SIZE_SCENE) {
+  if (sseq->render_size == SEQ_RENDER_SIZE_SCENE) {
     render_size = scene->r.size / 100.0;
   }
   else {
@@ -1525,6 +1524,8 @@ static void *sequencer_OCIO_transform_ibuf(const bContext *C,
    * properly, in this case we fallback to CPU-based display transform. */
   if ((ibuf->rect || ibuf->rect_float) && !*r_glsl_used) {
     display_buffer = IMB_display_buffer_acquire_ctx(C, ibuf, &cache_handle);
+    *r_format = GPU_RGBA8;
+    *r_data = GPU_DATA_UNSIGNED_BYTE;
   }
   if (cache_handle) {
     IMB_display_buffer_release(cache_handle);
@@ -1794,7 +1795,7 @@ void sequencer_draw_preview(const bContext *C,
   GPU_framebuffer_bind_no_srgb(framebuffer_overlay);
   GPU_depth_test(GPU_DEPTH_NONE);
 
-  if (sseq->render_size == SEQ_PROXY_RENDER_SIZE_NONE) {
+  if (sseq->render_size == SEQ_RENDER_SIZE_NONE) {
     sequencer_preview_clear();
     return;
   }

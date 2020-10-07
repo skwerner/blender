@@ -374,7 +374,6 @@ class ConstraintButtonsPanel(Panel):
         subsub.prop(con, "max_z", text="")
         row.prop_decorator(con, "max_z")
 
-
         layout.prop(con, "use_transform_limit")
         layout.prop(con, "owner_space")
 
@@ -508,7 +507,18 @@ class ConstraintButtonsPanel(Panel):
         layout.use_property_split = True
         layout.use_property_decorate = True
 
-        self.target_template(layout, con)
+        target_row = layout.row(align=True)
+        target_row.active = not con.use_eval_time
+        self.target_template(target_row, con)
+
+        row = layout.row(align=True, heading="Evaluation Time")
+        row.use_property_decorate = False
+        sub = row.row(align=True)
+        sub.prop(con, "use_eval_time", text="")
+        subsub = sub.row(align=True)
+        subsub.active = con.use_eval_time
+        subsub.prop(con, "eval_time", text="")
+        row.prop_decorator(con, "eval_time")
 
         layout.prop(con, "mix_mode", text="Mix")
 
@@ -740,7 +750,6 @@ class ConstraintButtonsPanel(Panel):
         row = layout.row()
         row.active = not con.use_3d_position
         row.prop(con, "use_undistorted_position")
-
 
         if not con.use_active_clip:
             layout.prop(con, "clip")
@@ -1105,13 +1114,14 @@ class ConstraintButtonsSubPanel(Panel):
         layout.use_property_split = True
         layout.use_property_decorate = True
 
-        layout.prop(con, "transform_channel", text="Channel")
-        layout.prop(con, "target_space")
+        col = layout.column()
+        col.active = not con.use_eval_time
+        col.prop(con, "transform_channel", text="Channel")
+        col.prop(con, "target_space")
 
-        col = layout.column(align=True)
-        col.prop(con, "min", text="Range Min")
-        col.prop(con, "max", text="Max")
-
+        sub = col.column(align=True)
+        sub.prop(con, "min", text="Range Min")
+        sub.prop(con, "max", text="Max")
 
     def draw_action_action(self, context):
         layout = self.layout
@@ -1140,6 +1150,7 @@ class BONE_PT_bChildOfConstraint(BoneConstraintPanel, ConstraintButtonsPanel):
 
 # Track To Constraint
 
+
 class OBJECT_PT_bTrackToConstraint(ObjectConstraintPanel, ConstraintButtonsPanel):
     def draw(self, context):
         self.draw_trackto(context)
@@ -1150,6 +1161,7 @@ class BONE_PT_bTrackToConstraint(BoneConstraintPanel, ConstraintButtonsPanel):
         self.draw_trackto(context)
 
 # Follow Path Constraint
+
 
 class OBJECT_PT_bFollowPathConstraint(ObjectConstraintPanel, ConstraintButtonsPanel):
     def draw(self, context):
@@ -1518,10 +1530,10 @@ class OBJECT_PT_bPythonConstraint(ObjectConstraintPanel, ConstraintButtonsPanel)
     def draw(self, context):
         self.draw_python_constraint(context)
 
+
 class BONE_PT_bPythonConstraint(BoneConstraintPanel, ConstraintButtonsPanel):
     def draw(self, context):
         self.draw_python_constraint(context)
-
 
 
 # Armature Constraint
@@ -1562,7 +1574,6 @@ class OBJECT_PT_bKinematicConstraint(ObjectConstraintPanel, ConstraintButtonsPan
 class BONE_PT_bKinematicConstraint(BoneConstraintPanel, ConstraintButtonsPanel):
     def draw(self, context):
         self.draw_kinematic(context)
-
 
 
 classes = (

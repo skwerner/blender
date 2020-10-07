@@ -890,22 +890,36 @@ static PyObject *pyrna_struct_str(BPy_StructRNA *self)
 {
   PyObject *ret;
   const char *name;
+  const char *extra_info = "";
 
   if (!PYRNA_STRUCT_IS_VALID(self)) {
     return PyUnicode_FromFormat("<bpy_struct, %.200s invalid>", Py_TYPE(self)->tp_name);
   }
 
-  /* Print name if available. */
+  ID *id = self->ptr.owner_id;
+  if (id && id != DEG_get_original_id(id)) {
+    extra_info = ", evaluated";
+  }
+
+  /* Print name if available.
+   *
+   * Always include the pointer address since it can help identify unique data,
+   * or when data is re-allocated internally. */
   name = RNA_struct_name_get_alloc(&self->ptr, NULL, 0, NULL);
   if (name) {
-    ret = PyUnicode_FromFormat(
-        "<bpy_struct, %.200s(\"%.200s\")>", RNA_struct_identifier(self->ptr.type), name);
+    ret = PyUnicode_FromFormat("<bpy_struct, %.200s(\"%.200s\") at %p%s>",
+                               RNA_struct_identifier(self->ptr.type),
+                               name,
+                               self->ptr.data,
+                               extra_info);
     MEM_freeN((void *)name);
     return ret;
   }
 
-  return PyUnicode_FromFormat(
-      "<bpy_struct, %.200s at %p>", RNA_struct_identifier(self->ptr.type), self->ptr.data);
+  return PyUnicode_FromFormat("<bpy_struct, %.200s at %p%s>",
+                              RNA_struct_identifier(self->ptr.type),
+                              self->ptr.data,
+                              extra_info);
 }
 
 static PyObject *pyrna_struct_repr(BPy_StructRNA *self)
@@ -914,18 +928,14 @@ static PyObject *pyrna_struct_repr(BPy_StructRNA *self)
   PyObject *tmp_str;
   PyObject *ret;
 
-  if (id == NULL || !PYRNA_STRUCT_IS_VALID(self)) {
+  if (id == NULL || !PYRNA_STRUCT_IS_VALID(self) || (DEG_get_original_id(id) != id)) {
     /* fallback */
     return pyrna_struct_str(self);
   }
 
   tmp_str = PyUnicode_FromString(id->name + 2);
 
-  if (DEG_get_original_id(id) != id) {
-    ret = PyUnicode_FromFormat(
-        "Evaluated %s %R", BKE_idtype_idcode_to_name(GS(id->name)), tmp_str);
-  }
-  else if (RNA_struct_is_ID(self->ptr.type) && (id->flag & LIB_EMBEDDED_DATA) == 0) {
+  if (RNA_struct_is_ID(self->ptr.type) && (id->flag & LIB_EMBEDDED_DATA) == 0) {
     ret = PyUnicode_FromFormat(
         "bpy.data.%s[%R]", BKE_idtype_idcode_to_name_plural(GS(id->name)), tmp_str);
   }
@@ -4250,9 +4260,9 @@ static PyObject *pyrna_struct_getattro(BPy_StructRNA *self, PyObject *pyname)
       ListBase newlb;
       short newtype;
 
-      const int done = CTX_data_get(C, name, &newptr, &newlb, &newtype);
+      const eContextResult done = CTX_data_get(C, name, &newptr, &newlb, &newtype);
 
-      if (done == 1) { /* Found. */
+      if (done == CTX_RESULT_OK) {
         switch (newtype) {
           case CTX_DATA_TYPE_POINTER:
             if (newptr.data == NULL) {
@@ -4285,7 +4295,7 @@ static PyObject *pyrna_struct_getattro(BPy_StructRNA *self, PyObject *pyname)
             break;
         }
       }
-      else if (done == -1) { /* Found, but not set. */
+      else if (done == CTX_RESULT_NO_DATA) {
         ret = Py_None;
         Py_INCREF(ret);
       }
@@ -4472,9 +4482,9 @@ static int pyrna_struct_setattro(BPy_StructRNA *self, PyObject *pyname, PyObject
     ListBase newlb;
     short newtype;
 
-    const int done = CTX_data_get(C, name, &newptr, &newlb, &newtype);
+    const eContextResult done = CTX_data_get(C, name, &newptr, &newlb, &newtype);
 
-    if (done == 1) {
+    if (done == CTX_RESULT_OK) {
       PyErr_Format(
           PyExc_AttributeError, "bpy_struct: Context property \"%.200s\" is read-only", name);
       BLI_freelistN(&newlb);
@@ -5845,7 +5855,7 @@ static PyObject *pyrna_param_to_py(PointerRNA *ptr, PropertyRNA *prop, void *dat
 
     /* Resolve the array from a new pytype. */
 
-    /* TODO(Kazanbas) make multi-dimensional sequences here. */
+    /* TODO(Kazanbas): make multi-dimensional sequences here. */
 
     switch (type) {
       case PROP_BOOLEAN:
@@ -8690,19 +8700,21 @@ void pyrna_free_types(void)
 PyDoc_STRVAR(pyrna_register_class_doc,
              ".. method:: register_class(cls)\n"
              "\n"
-             "   Register a subclass of a blender type in (:class:`bpy.types.Panel`,\n"
-             "   :class:`bpy.types.UIList`, :class:`bpy.types.Menu`, :class:`bpy.types.Header`,\n"
-             "   :class:`bpy.types.Operator`, :class:`bpy.types.KeyingSetInfo`,\n"
-             "   :class:`bpy.types.RenderEngine`).\n"
+             "   Register a subclass of a Blender type class.\n"
              "\n"
-             "   If the class has a *register* class method it will be called\n"
-             "   before registration.\n"
+             "   :arg cls: Blender type class in:\n"
+             "      :class:`bpy.types.Panel`, :class:`bpy.types.UIList`,\n"
+             "      :class:`bpy.types.Menu`, :class:`bpy.types.Header`,\n"
+             "      :class:`bpy.types.Operator`, :class:`bpy.types.KeyingSetInfo`,\n"
+             "      :class:`bpy.types.RenderEngine`\n"
+             "   :type cls: class\n"
+             "   :raises ValueError:\n"
+             "      if the class is not a subclass of a registerable blender class.\n"
              "\n"
              "   .. note::\n"
              "\n"
-             "      :exc:`ValueError` exception is raised if the class is not a\n"
-             "      subclass of a registerable blender class.\n"
-             "\n");
+             "      If the class has a *register* class method it will be called\n"
+             "      before registration.\n");
 PyMethodDef meth_bpy_register_class = {
     "register_class", pyrna_register_class, METH_O, pyrna_register_class_doc};
 static PyObject *pyrna_register_class(PyObject *UNUSED(self), PyObject *py_class)

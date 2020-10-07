@@ -51,6 +51,7 @@ void GPU_vertformat_clear(GPUVertFormat *format)
   format->packed = false;
   format->name_offset = 0;
   format->name_len = 0;
+  format->deinterleaved = false;
 
   for (uint i = 0; i < GPU_VERT_ATTR_MAX_LEN; i++) {
     format->attrs[i].name_len = 0;
@@ -69,7 +70,7 @@ static uint comp_sz(GPUVertCompType type)
 #if TRUST_NO_ONE
   assert(type <= GPU_COMP_F32); /* other types have irregular sizes (not bytes) */
 #endif
-  const GLubyte sizes[] = {1, 1, 2, 2, 4, 4, 4};
+  const uint sizes[] = {1, 1, 2, 2, 4, 4, 4};
   return sizes[type];
 }
 

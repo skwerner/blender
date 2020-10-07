@@ -27,6 +27,7 @@
 
 #include "BLT_translation.h"
 
+#include "DNA_defaults.h"
 #include "DNA_object_types.h"
 #include "DNA_screen_types.h"
 
@@ -55,7 +56,10 @@
 static void initData(ModifierData *md)
 {
   LatticeModifierData *lmd = (LatticeModifierData *)md;
-  lmd->strength = 1.0f;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(lmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(lmd, DNA_struct_default_get(LatticeModifierData), modifier);
 }
 
 static void requiredDataMask(Object *UNUSED(ob),
@@ -84,11 +88,11 @@ static bool isDisabled(const struct Scene *UNUSED(scene),
   return !lmd->object || lmd->object->type != OB_LATTICE;
 }
 
-static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk, void *userData)
+static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   LatticeModifierData *lmd = (LatticeModifierData *)md;
 
-  walk(userData, ob, &lmd->object, IDWALK_CB_NOP);
+  walk(userData, ob, (ID **)&lmd->object, IDWALK_CB_NOP);
 }
 
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
@@ -174,9 +178,11 @@ ModifierTypeInfo modifierType_Lattice = {
     /* name */ "Lattice",
     /* structName */ "LatticeModifierData",
     /* structSize */ sizeof(LatticeModifierData),
+    /* srna */ &RNA_LatticeModifier,
     /* type */ eModifierTypeType_OnlyDeform,
     /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsVertexCosOnly |
         eModifierTypeFlag_SupportsEditmode,
+    /* icon */ ICON_MOD_LATTICE,
 
     /* copyData */ BKE_modifier_copydata_generic,
 
@@ -196,8 +202,7 @@ ModifierTypeInfo modifierType_Lattice = {
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
     /* panelRegister */ panelRegister,

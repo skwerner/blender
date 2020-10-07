@@ -59,6 +59,7 @@ class Progress;
 class BakeManager;
 class BakeData;
 class RenderStats;
+class SceneUpdateStats;
 class Volume;
 
 /* Scene Device Data */
@@ -261,6 +262,9 @@ class Scene : public NodeOwner {
   /* mutex must be locked manually by callers */
   thread_mutex mutex;
 
+  /* scene update statistics */
+  SceneUpdateStats *update_stats;
+
   Scene(const SceneParams &params, Device *device);
   ~Scene();
 
@@ -280,6 +284,8 @@ class Scene : public NodeOwner {
   void device_free();
 
   void collect_statistics(RenderStats *stats);
+
+  void enable_update_stats();
 
   bool update(Progress &progress, bool &kernel_switch_needed);
 

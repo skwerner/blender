@@ -377,7 +377,6 @@ int main(int argc,
   BKE_blender_globals_init(); /* blender.c */
 
   BKE_idtype_init();
-  IMB_init();
   BKE_cachefiles_init();
   BKE_images_init();
   BKE_modifier_init();
@@ -400,6 +399,10 @@ int main(int argc,
 
   main_args_setup(C, ba);
 
+  /* Begin argument parsing, ignore leaks so arguments that call #exit
+   * (such as '--version' & '--help') don't report leaks. */
+  MEM_use_memleak_detection(false);
+
   BLI_argsParse(ba, 1, NULL, NULL);
 
   main_signal_setup();
@@ -409,8 +412,15 @@ int main(int argc,
   G.factory_startup = true;
 #endif
 
+  /* After parsing the first level of arguments as `--env-*` impact BKE_appdir behavior. */
+  BKE_appdir_init();
+
   /* After parsing number of threads argument. */
   BLI_task_scheduler_init();
+
+  /* After parsing `--env-system-datafiles` which control where paths are searched
+   * (color-management) uses BKE_appdir to initialize. */
+  IMB_init();
 
 #ifdef WITH_FFMPEG
   IMB_ffmpeg_init();
@@ -448,11 +458,6 @@ int main(int argc,
     BLI_argsParse(ba, 3, NULL, NULL);
 #endif
     WM_init(C, argc, (const char **)argv);
-
-    /* This is properly initialized with user-preferences,
-     * but this is default.
-     * Call after loading the #BLENDER_STARTUP_FILE so we can read #U.tempdir */
-    BKE_tempdir_init(U.tempdir);
   }
   else {
 #ifndef WITH_PYTHON_MODULE
@@ -460,20 +465,8 @@ int main(int argc,
 #endif
 
     WM_init(C, argc, (const char **)argv);
-
-    /* Don't use user preferences #U.tempdir */
-    BKE_tempdir_init(NULL);
   }
-#ifdef WITH_PYTHON
-  /**
-   * \note the #U.pythondir string is NULL until #WM_init() is executed,
-   * so we provide the BPY_ function below to append the user defined
-   * python-dir to Python's `sys.path` at this point.  Simply putting
-   * #WM_init() before #BPY_python_start() crashes Blender at startup.
-   */
-
-  /* TODO: #U.pythondir */
-#else
+#ifndef WITH_PYTHON
   printf(
       "\n* WARNING * - Blender compiled without Python!\n"
       "this is not intended for typical usage\n\n");
@@ -500,6 +493,9 @@ int main(int argc,
   callback_main_atexit(&app_init_data);
   BKE_blender_atexit_unregister(callback_main_atexit, &app_init_data);
 
+  /* End argument parsing, allow memory leaks to be printed. */
+  MEM_use_memleak_detection(true);
+
   /* Paranoid, avoid accidental re-use. */
 #ifndef WITH_PYTHON_MODULE
   ba = NULL;
@@ -511,11 +507,7 @@ int main(int argc,
   (void)argv;
 #endif
 
-#ifdef WITH_PYTHON_MODULE
-  /* Keep blender in background-mode running. */
-  return 0;
-#endif
-
+#ifndef WITH_PYTHON_MODULE
   if (G.background) {
     /* Using window-manager API in background-mode is a bit odd, but works fine. */
     WM_exit(C);
@@ -524,9 +516,9 @@ int main(int argc,
     if (!G.file_loaded) {
       WM_init_splash(C);
     }
+    WM_main(C);
   }
-
-  WM_main(C);
+#endif /* WITH_PYTHON_MODULE */
 
   return 0;
 } /* End of int main(...) function. */

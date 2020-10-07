@@ -29,6 +29,7 @@
 
 #include "BLT_translation.h"
 
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_screen_types.h"
@@ -55,10 +56,9 @@ static void initData(ModifierData *md)
 {
   SmoothModifierData *smd = (SmoothModifierData *)md;
 
-  smd->fac = 0.5f;
-  smd->repeat = 1;
-  smd->flag = MOD_SMOOTH_X | MOD_SMOOTH_Y | MOD_SMOOTH_Z;
-  smd->defgrp_name[0] = '\0';
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(smd, modifier));
+
+  MEMCPY_STRUCT_AFTER(smd, DNA_struct_default_get(SmoothModifierData), modifier);
 }
 
 static bool isDisabled(const struct Scene *UNUSED(scene),
@@ -272,9 +272,11 @@ ModifierTypeInfo modifierType_Smooth = {
     /* name */ "Smooth",
     /* structName */ "SmoothModifierData",
     /* structSize */ sizeof(SmoothModifierData),
+    /* srna */ &RNA_SmoothModifier,
     /* type */ eModifierTypeType_OnlyDeform,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_AcceptsCVs |
         eModifierTypeFlag_SupportsEditmode,
+    /* icon */ ICON_MOD_SMOOTH,
 
     /* copyData */ BKE_modifier_copydata_generic,
 
@@ -294,7 +296,6 @@ ModifierTypeInfo modifierType_Smooth = {
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ NULL,
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,

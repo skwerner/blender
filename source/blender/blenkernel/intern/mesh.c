@@ -180,6 +180,18 @@ static void mesh_blend_write(BlendWriter *writer, ID *id, const void *id_address
     memset(&mesh->fdata, 0, sizeof(mesh->fdata));
     memset(&mesh->runtime, 0, sizeof(mesh->runtime));
 
+    CustomDataLayer *vlayers = NULL, vlayers_buff[CD_TEMP_CHUNK_SIZE];
+    CustomDataLayer *elayers = NULL, elayers_buff[CD_TEMP_CHUNK_SIZE];
+    CustomDataLayer *flayers = NULL, flayers_buff[CD_TEMP_CHUNK_SIZE];
+    CustomDataLayer *llayers = NULL, llayers_buff[CD_TEMP_CHUNK_SIZE];
+    CustomDataLayer *players = NULL, players_buff[CD_TEMP_CHUNK_SIZE];
+
+    CustomData_blend_write_prepare(&mesh->vdata, &vlayers, vlayers_buff, ARRAY_SIZE(vlayers_buff));
+    CustomData_blend_write_prepare(&mesh->edata, &elayers, elayers_buff, ARRAY_SIZE(elayers_buff));
+    flayers = flayers_buff;
+    CustomData_blend_write_prepare(&mesh->ldata, &llayers, llayers_buff, ARRAY_SIZE(llayers_buff));
+    CustomData_blend_write_prepare(&mesh->pdata, &players, players_buff, ARRAY_SIZE(players_buff));
+
     BLO_write_id_struct(writer, Mesh, id_address, &mesh->id);
     BKE_id_blend_write(writer, &mesh->id);
 
@@ -191,12 +203,34 @@ static void mesh_blend_write(BlendWriter *writer, ID *id, const void *id_address
     BLO_write_pointer_array(writer, mesh->totcol, mesh->mat);
     BLO_write_raw(writer, sizeof(MSelect) * mesh->totselect, mesh->mselect);
 
-    CustomData_blend_write(writer, &mesh->vdata, mesh->totvert, CD_MASK_MESH.vmask, &mesh->id);
-    CustomData_blend_write(writer, &mesh->edata, mesh->totedge, CD_MASK_MESH.emask, &mesh->id);
+    CustomData_blend_write(
+        writer, &mesh->vdata, vlayers, mesh->totvert, CD_MASK_MESH.vmask, &mesh->id);
+    CustomData_blend_write(
+        writer, &mesh->edata, elayers, mesh->totedge, CD_MASK_MESH.emask, &mesh->id);
     /* fdata is really a dummy - written so slots align */
-    CustomData_blend_write(writer, &mesh->fdata, mesh->totface, CD_MASK_MESH.fmask, &mesh->id);
-    CustomData_blend_write(writer, &mesh->ldata, mesh->totloop, CD_MASK_MESH.lmask, &mesh->id);
-    CustomData_blend_write(writer, &mesh->pdata, mesh->totpoly, CD_MASK_MESH.pmask, &mesh->id);
+    CustomData_blend_write(
+        writer, &mesh->fdata, flayers, mesh->totface, CD_MASK_MESH.fmask, &mesh->id);
+    CustomData_blend_write(
+        writer, &mesh->ldata, llayers, mesh->totloop, CD_MASK_MESH.lmask, &mesh->id);
+    CustomData_blend_write(
+        writer, &mesh->pdata, players, mesh->totpoly, CD_MASK_MESH.pmask, &mesh->id);
+
+    /* Free temporary data */
+
+/* Free custom-data layers, when not assigned a buffer value. */
+#define CD_LAYERS_FREE(id) \
+  if (id && id != id##_buff) { \
+    MEM_freeN(id); \
+  } \
+  ((void)0)
+
+    CD_LAYERS_FREE(vlayers);
+    CD_LAYERS_FREE(elayers);
+    /* CD_LAYER_FREE(flayers); */ /* Never allocated. */
+    CD_LAYERS_FREE(llayers);
+    CD_LAYERS_FREE(players);
+
+#undef CD_LAYERS_FREE
   }
 }
 
@@ -618,7 +652,7 @@ static void mesh_ensure_tessellation_customdata(Mesh *me)
 {
   if (UNLIKELY((me->totface != 0) && (me->totpoly == 0))) {
     /* Pass, otherwise this function  clears 'mface' before
-     * versioning 'mface -> mpoly' code kicks in [#30583]
+     * versioning 'mface -> mpoly' code kicks in T30583.
      *
      * Callers could also check but safer to do here - campbell */
   }
@@ -893,6 +927,7 @@ void BKE_mesh_copy_settings(Mesh *me_dst, const Mesh *me_src)
   me_dst->remesh_mode = me_src->remesh_mode;
 
   me_dst->face_sets_color_seed = me_src->face_sets_color_seed;
+  me_dst->face_sets_color_default = me_src->face_sets_color_default;
 
   /* Copy texture space. */
   me_dst->texflag = me_src->texflag;
@@ -1478,8 +1513,11 @@ bool BKE_mesh_minmax(const Mesh *me, float r_min[3], float r_max[3])
 void BKE_mesh_transform(Mesh *me, const float mat[4][4], bool do_keys)
 {
   int i;
-  MVert *mvert = me->mvert;
-  float(*lnors)[3] = CustomData_get_layer(&me->ldata, CD_NORMAL);
+  MVert *mvert = CustomData_duplicate_referenced_layer(&me->vdata, CD_MVERT, me->totvert);
+  float(*lnors)[3] = CustomData_duplicate_referenced_layer(&me->ldata, CD_NORMAL, me->totloop);
+
+  /* If the referenced l;ayer has been re-allocated need to update pointers stored in the mesh. */
+  BKE_mesh_update_customdata_pointers(me, false);
 
   for (i = 0; i < me->totvert; i++, mvert++) {
     mul_m4_v3(mat, mvert->co);
@@ -1525,21 +1563,6 @@ void BKE_mesh_translate(Mesh *me, const float offset[3], const bool do_keys)
         add_v3_v3(fp, offset);
       }
     }
-  }
-}
-
-void BKE_mesh_ensure_navmesh(Mesh *me)
-{
-  if (!CustomData_has_layer(&me->pdata, CD_RECAST)) {
-    int i;
-    int polys_len = me->totpoly;
-    int *recastData;
-    recastData = (int *)MEM_malloc_arrayN(polys_len, sizeof(int), __func__);
-    for (i = 0; i < polys_len; i++) {
-      recastData[i] = i + 1;
-    }
-    CustomData_add_layer_named(
-        &me->pdata, CD_RECAST, CD_ASSIGN, recastData, polys_len, "recastData");
   }
 }
 

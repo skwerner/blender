@@ -18,7 +18,6 @@
  * \ingroup RNA
  */
 
-#include <assert.h>
 #include <stdlib.h>
 
 #include "DNA_brush_types.h"
@@ -971,6 +970,38 @@ static bool rna_BrushGpencilSettings_material_poll(PointerRNA *UNUSED(ptr), Poin
   return (ma->gp_style != NULL);
 }
 
+static bool rna_GPencilBrush_pin_mode_get(PointerRNA *ptr)
+{
+  Brush *brush = (Brush *)ptr->owner_id;
+  if ((brush != NULL) && (brush->gpencil_settings != NULL)) {
+    return (brush->gpencil_settings->brush_draw_mode != GP_BRUSH_MODE_ACTIVE);
+  }
+  return false;
+}
+
+static void rna_GPencilBrush_pin_mode_set(PointerRNA *UNUSED(ptr), bool UNUSED(value))
+{
+  /* All data is set in update. Keep this function only to avoid RNA compilation errors. */
+  return;
+}
+
+static void rna_GPencilBrush_pin_mode_update(bContext *C, PointerRNA *ptr)
+{
+  Brush *brush = (Brush *)ptr->owner_id;
+  if ((brush != NULL) && (brush->gpencil_settings != NULL)) {
+    if (brush->gpencil_settings->brush_draw_mode != GP_BRUSH_MODE_ACTIVE) {
+      /* If not active, means that must be set to off. */
+      brush->gpencil_settings->brush_draw_mode = GP_BRUSH_MODE_ACTIVE;
+    }
+    else {
+      ToolSettings *ts = CTX_data_tool_settings(C);
+      brush->gpencil_settings->brush_draw_mode = GPENCIL_USE_VERTEX_COLOR(ts) ?
+                                                     GP_BRUSH_MODE_VERTEXCOLOR :
+                                                     GP_BRUSH_MODE_MATERIAL;
+    }
+  }
+}
+
 #else
 
 static void rna_def_brush_texture_slot(BlenderRNA *brna)
@@ -1689,13 +1720,22 @@ static void rna_def_gpencil_options(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Direction", "Direction of the fill");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 
+  prop = RNA_def_property(srna, "pin_draw_mode", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_funcs(
+      prop, "rna_GPencilBrush_pin_mode_get", "rna_GPencilBrush_pin_mode_set");
+  RNA_def_property_ui_icon(prop, ICON_UNPINNED, 1);
+  RNA_def_property_flag(prop, PROP_CONTEXT_UPDATE);
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+  RNA_def_property_update(prop, NC_GPENCIL | ND_DATA, "rna_GPencilBrush_pin_mode_update");
+  RNA_def_property_ui_text(prop, "Pin Mode", "Pin the mode to the brush");
+
   prop = RNA_def_property(srna, "brush_draw_mode", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, NULL, "brush_draw_mode");
   RNA_def_property_enum_items(prop, rna_enum_gpencil_brush_modes_items);
   RNA_def_property_ui_text(prop, "Mode", "Preselected mode when using this brush");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 
-  prop = RNA_def_property(srna, "trim", PROP_BOOLEAN, PROP_NONE);
+  prop = RNA_def_property(srna, "use_trim", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_BRUSH_TRIM_STROKE);
   RNA_def_property_boolean_default(prop, false);
   RNA_def_property_ui_text(prop, "Trim Stroke Ends", "Trim intersecting stroke ends");
@@ -2036,7 +2076,7 @@ static void rna_def_brush(BlenderRNA *brna)
        "RADIUS",
        0,
        "Brush Radius",
-       "Applies the deformation in a localiced area limited by the brush radius"},
+       "Applies the deformation in a localized area limited by the brush radius"},
       {BRUSH_BOUNDARY_FALLOFF_LOOP,
        "LOOP",
        0,
@@ -2046,8 +2086,8 @@ static void rna_def_brush(BlenderRNA *brna)
        "LOOP_INVERT",
        0,
        "Loop and Invert",
-       "Applies the fallof radius in a loop pattern, inverting the displacement direction in each "
-       "pattern repetition"},
+       "Applies the falloff radius in a loop pattern, inverting the displacement direction in "
+       "each pattern repetition"},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -2056,8 +2096,13 @@ static void rna_def_brush(BlenderRNA *brna)
        "LOCAL",
        0,
        "Local",
-       "Simulates only a specific area arround the brush limited by a fixed radius"},
+       "Simulates only a specific area around the brush limited by a fixed radius"},
       {BRUSH_CLOTH_SIMULATION_AREA_GLOBAL, "GLOBAL", 0, "Global", "Simulates the entire mesh"},
+      {BRUSH_CLOTH_SIMULATION_AREA_DYNAMIC,
+       "DYNAMIC",
+       0,
+       "Dynamic",
+       "The active simulation area moves with the brush"},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -2941,7 +2986,7 @@ static void rna_def_brush(BlenderRNA *brna)
       prop,
       "Pin Simulation Boundary",
       "Lock the position of the vertices in the simulation falloff area to avoid artifacts and "
-      "create a softer transitionwith with unnafected areas");
+      "create a softer transition with unaffected areas");
   RNA_def_property_update(prop, 0, "rna_Brush_update");
 
   prop = RNA_def_property(srna, "use_cloth_collision", PROP_BOOLEAN, PROP_NONE);
@@ -2969,6 +3014,13 @@ static void rna_def_brush(BlenderRNA *brna)
   RNA_def_property_ui_icon(prop, ICON_STYLUS_PRESSURE, 0);
   RNA_def_property_ui_text(
       prop, "Plane Offset Pressure", "Enable tablet pressure sensitivity for offset");
+  RNA_def_property_update(prop, 0, "rna_Brush_update");
+
+  prop = RNA_def_property(srna, "use_pressure_area_radius", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flag2", BRUSH_AREA_RADIUS_PRESSURE);
+  RNA_def_property_ui_icon(prop, ICON_STYLUS_PRESSURE, 0);
+  RNA_def_property_ui_text(
+      prop, "Area Radius Pressure", "Enable tablet pressure sensitivity for area radius");
   RNA_def_property_update(prop, 0, "rna_Brush_update");
 
   prop = RNA_def_property(srna, "use_pressure_size", PROP_BOOLEAN, PROP_NONE);

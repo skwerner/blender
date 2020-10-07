@@ -129,6 +129,13 @@ typedef enum eSpaceInfo_RptMask {
 /** \name Properties Editor
  * \{ */
 
+#
+#
+typedef struct SpaceProperties_Runtime {
+  /** For filtering properties displayed in the space. Length defined as UI_MAX_NAME_STR. */
+  char search_string[128];
+} SpaceProperties_Runtime;
+
 /* Properties Editor */
 typedef struct SpaceProperties {
   SpaceLink *next, *prev;
@@ -159,6 +166,9 @@ typedef struct SpaceProperties {
   ID *pinid;
 
   void *texuser;
+
+  /* Doesn't necessarily need to be a pointer, but runtime structs are still written to files. */
+  SpaceProperties_Runtime *runtime;
 } SpaceProperties;
 
 /* button defines (deprecated) */
@@ -284,6 +294,7 @@ typedef enum eSpaceOutliner_Flag {
   /* SO_HIDE_KEYINGSETINFO = (1 << 3), */ /* UNUSED */
   SO_SKIP_SORT_ALPHA = (1 << 4),
   SO_SYNC_SELECT = (1 << 5),
+  SO_MODE_COLUMN = (1 << 6),
 } eSpaceOutliner_Flag;
 
 /* SpaceOutliner.filter */
@@ -624,13 +635,13 @@ typedef enum eSpaceSeq_Displays {
 
 /* SpaceSeq.render_size */
 typedef enum eSpaceSeq_Proxy_RenderSize {
-  SEQ_PROXY_RENDER_SIZE_NONE = -1,
-  SEQ_PROXY_RENDER_SIZE_SCENE = 0,
-  SEQ_PROXY_RENDER_SIZE_25 = 25,
-  SEQ_PROXY_RENDER_SIZE_50 = 50,
-  SEQ_PROXY_RENDER_SIZE_75 = 75,
-  SEQ_PROXY_RENDER_SIZE_100 = 99,
-  SEQ_PROXY_RENDER_SIZE_FULL = 100,
+  SEQ_RENDER_SIZE_NONE = -1,
+  SEQ_RENDER_SIZE_SCENE = 0,
+  SEQ_RENDER_SIZE_PROXY_25 = 25,
+  SEQ_RENDER_SIZE_PROXY_50 = 50,
+  SEQ_RENDER_SIZE_PROXY_75 = 75,
+  SEQ_RENDER_SIZE_PROXY_100 = 99,
+  SEQ_RENDER_SIZE_FULL = 100,
 } eSpaceSeq_Proxy_RenderSize;
 
 typedef struct MaskSpaceInfo {

@@ -45,6 +45,7 @@
 #include "DNA_scene_types.h"
 
 #include "BKE_action.h"
+#include "BKE_anim_data.h"
 #include "BKE_anim_visualization.h"
 #include "BKE_armature.h"
 #include "BKE_constraint.h"
@@ -61,6 +62,8 @@
 #include "DEG_depsgraph_query.h"
 
 #include "BIK_api.h"
+
+#include "BLO_read_write.h"
 
 #include "CLG_log.h"
 
@@ -136,12 +139,11 @@ static void armature_free_data(struct ID *id)
   bArmature *armature = (bArmature *)id;
 
   BKE_armature_bone_hash_free(armature);
-  BKE_armature_bonelist_free(&armature->bonebase);
+  BKE_armature_bonelist_free(&armature->bonebase, false);
 
   /* free editmode data */
   if (armature->edbo) {
-    BLI_freelistN(armature->edbo);
-
+    BKE_armature_editbonelist_free(armature->edbo, false);
     MEM_freeN(armature->edbo);
     armature->edbo = NULL;
   }
@@ -157,11 +159,142 @@ static void armature_foreach_id_bone(Bone *bone, LibraryForeachIDData *data)
   }
 }
 
+static void armature_foreach_id_editbone(EditBone *edit_bone, LibraryForeachIDData *data)
+{
+  IDP_foreach_property(
+      edit_bone->prop, IDP_TYPE_FILTER_ID, BKE_lib_query_idpropertiesForeachIDLink_callback, data);
+}
+
 static void armature_foreach_id(ID *id, LibraryForeachIDData *data)
 {
   bArmature *arm = (bArmature *)id;
   LISTBASE_FOREACH (Bone *, bone, &arm->bonebase) {
     armature_foreach_id_bone(bone, data);
+  }
+
+  if (arm->edbo != NULL) {
+    LISTBASE_FOREACH (EditBone *, edit_bone, arm->edbo) {
+      armature_foreach_id_editbone(edit_bone, data);
+    }
+  }
+}
+
+static void write_bone(BlendWriter *writer, Bone *bone)
+{
+  /* PATCH for upward compatibility after 2.37+ armature recode */
+  bone->size[0] = bone->size[1] = bone->size[2] = 1.0f;
+
+  /* Write this bone */
+  BLO_write_struct(writer, Bone, bone);
+
+  /* Write ID Properties -- and copy this comment EXACTLY for easy finding
+   * of library blocks that implement this.*/
+  if (bone->prop) {
+    IDP_BlendWrite(writer, bone->prop);
+  }
+
+  /* Write Children */
+  LISTBASE_FOREACH (Bone *, cbone, &bone->childbase) {
+    write_bone(writer, cbone);
+  }
+}
+
+static void armature_blend_write(BlendWriter *writer, ID *id, const void *id_address)
+{
+  bArmature *arm = (bArmature *)id;
+  if (arm->id.us > 0 || BLO_write_is_undo(writer)) {
+    /* Clean up, important in undo case to reduce false detection of changed datablocks. */
+    arm->bonehash = NULL;
+    arm->edbo = NULL;
+    /* Must always be cleared (armatures don't have their own edit-data). */
+    arm->needs_flush_to_id = 0;
+    arm->act_edbone = NULL;
+
+    BLO_write_id_struct(writer, bArmature, id_address, &arm->id);
+    BKE_id_blend_write(writer, &arm->id);
+
+    if (arm->adt) {
+      BKE_animdata_blend_write(writer, arm->adt);
+    }
+
+    /* Direct data */
+    LISTBASE_FOREACH (Bone *, bone, &arm->bonebase) {
+      write_bone(writer, bone);
+    }
+  }
+}
+
+static void direct_link_bones(BlendDataReader *reader, Bone *bone)
+{
+  BLO_read_data_address(reader, &bone->parent);
+  BLO_read_data_address(reader, &bone->prop);
+  IDP_BlendDataRead(reader, &bone->prop);
+
+  BLO_read_data_address(reader, &bone->bbone_next);
+  BLO_read_data_address(reader, &bone->bbone_prev);
+
+  bone->flag &= ~(BONE_DRAW_ACTIVE | BONE_DRAW_LOCKED_WEIGHT);
+
+  BLO_read_list(reader, &bone->childbase);
+
+  LISTBASE_FOREACH (Bone *, child, &bone->childbase) {
+    direct_link_bones(reader, child);
+  }
+}
+
+static void armature_blend_read_data(BlendDataReader *reader, ID *id)
+{
+  bArmature *arm = (bArmature *)id;
+  BLO_read_list(reader, &arm->bonebase);
+  arm->bonehash = NULL;
+  arm->edbo = NULL;
+  /* Must always be cleared (armatures don't have their own edit-data). */
+  arm->needs_flush_to_id = 0;
+
+  BLO_read_data_address(reader, &arm->adt);
+  BKE_animdata_blend_read_data(reader, arm->adt);
+
+  LISTBASE_FOREACH (Bone *, bone, &arm->bonebase) {
+    direct_link_bones(reader, bone);
+  }
+
+  BLO_read_data_address(reader, &arm->act_bone);
+  arm->act_edbone = NULL;
+
+  BKE_armature_bone_hash_make(arm);
+}
+
+static void lib_link_bones(BlendLibReader *reader, Bone *bone)
+{
+  IDP_BlendReadLib(reader, bone->prop);
+
+  LISTBASE_FOREACH (Bone *, curbone, &bone->childbase) {
+    lib_link_bones(reader, curbone);
+  }
+}
+
+static void armature_blend_read_lib(BlendLibReader *reader, ID *id)
+{
+  bArmature *arm = (bArmature *)id;
+  LISTBASE_FOREACH (Bone *, curbone, &arm->bonebase) {
+    lib_link_bones(reader, curbone);
+  }
+}
+
+static void expand_bones(BlendExpander *expander, Bone *bone)
+{
+  IDP_BlendReadExpand(expander, bone->prop);
+
+  LISTBASE_FOREACH (Bone *, curBone, &bone->childbase) {
+    expand_bones(expander, curBone);
+  }
+}
+
+static void armature_blend_read_expand(BlendExpander *expander, ID *id)
+{
+  bArmature *arm = (bArmature *)id;
+  LISTBASE_FOREACH (Bone *, curBone, &arm->bonebase) {
+    expand_bones(expander, curBone);
   }
 }
 
@@ -182,10 +315,10 @@ IDTypeInfo IDType_ID_AR = {
     .foreach_id = armature_foreach_id,
     .foreach_cache = NULL,
 
-    .blend_write = NULL,
-    .blend_read_data = NULL,
-    .blend_read_lib = NULL,
-    .blend_read_expand = NULL,
+    .blend_write = armature_blend_write,
+    .blend_read_data = armature_blend_read_data,
+    .blend_read_lib = armature_blend_read_lib,
+    .blend_read_expand = armature_blend_read_expand,
 };
 
 /** \} */
@@ -223,18 +356,29 @@ int BKE_armature_bonelist_count(ListBase *lb)
   return i;
 }
 
-void BKE_armature_bonelist_free(ListBase *lb)
+void BKE_armature_bonelist_free(ListBase *lb, const bool do_id_user)
 {
   Bone *bone;
 
   for (bone = lb->first; bone; bone = bone->next) {
     if (bone->prop) {
-      IDP_FreeProperty(bone->prop);
+      IDP_FreeProperty_ex(bone->prop, do_id_user);
     }
-    BKE_armature_bonelist_free(&bone->childbase);
+    BKE_armature_bonelist_free(&bone->childbase, do_id_user);
   }
 
   BLI_freelistN(lb);
+}
+
+void BKE_armature_editbonelist_free(ListBase *lb, const bool do_id_user)
+{
+  LISTBASE_FOREACH_MUTABLE (EditBone *, edit_bone, lb) {
+    if (edit_bone->prop) {
+      IDP_FreeProperty_ex(edit_bone->prop, do_id_user);
+    }
+    BLI_remlink_safe(lb, edit_bone);
+    MEM_freeN(edit_bone);
+  }
 }
 
 static void copy_bonechildren(Bone *bone_dst,
@@ -565,7 +709,7 @@ void BKE_armature_refresh_layer_used(struct Depsgraph *depsgraph, struct bArmatu
  * unique names afterwards) strip_number: removes number extensions  (TODO: not used)
  * axis: the axis to name on
  * head/tail: the head/tail co-ordinate of the bone on the specified axis */
-int bone_autoside_name(
+bool bone_autoside_name(
     char name[MAXBONENAME], int UNUSED(strip_number), short axis, float head, float tail)
 {
   unsigned int len;
@@ -574,7 +718,7 @@ int bone_autoside_name(
 
   len = strlen(name);
   if (len == 0) {
-    return 0;
+    return false;
   }
   BLI_strncpy(basename, name, sizeof(basename));
 
@@ -689,9 +833,9 @@ int bone_autoside_name(
 
     BLI_snprintf(name, MAXBONENAME, "%s.%s", basename, extension);
 
-    return 1;
+    return true;
   }
-  return 0;
+  return false;
 }
 
 /** \} */

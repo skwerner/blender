@@ -47,10 +47,10 @@
 extern "C" {
 #endif
 
-typedef struct BlendWriter BlendWriter;
 typedef struct BlendDataReader BlendDataReader;
-typedef struct BlendLibReader BlendLibReader;
 typedef struct BlendExpander BlendExpander;
+typedef struct BlendLibReader BlendLibReader;
+typedef struct BlendWriter BlendWriter;
 
 /* Blend Write API
  * ===============
@@ -143,13 +143,13 @@ void blo_write_id_struct(BlendWriter *writer,
   blo_write_id_struct(writer, BLO_get_struct_id(writer, struct_name), id_address, id)
 
 /* Write raw data. */
-void BLO_write_raw(BlendWriter *writer, int size_in_bytes, const void *data_ptr);
-void BLO_write_int32_array(BlendWriter *writer, int size, const int32_t *data_ptr);
-void BLO_write_uint32_array(BlendWriter *writer, int size, const uint32_t *data_ptr);
-void BLO_write_float_array(BlendWriter *writer, int size, const float *data_ptr);
-void BLO_write_float3_array(BlendWriter *writer, int size, const float *data_ptr);
-void BLO_write_pointer_array(BlendWriter *writer, int size, const void *data_ptr);
-void BLO_write_string(BlendWriter *writer, const char *str);
+void BLO_write_raw(BlendWriter *writer, size_t size_in_bytes, const void *data_ptr);
+void BLO_write_int32_array(BlendWriter *writer, uint num, const int32_t *data_ptr);
+void BLO_write_uint32_array(BlendWriter *writer, uint num, const uint32_t *data_ptr);
+void BLO_write_float_array(BlendWriter *writer, uint num, const float *data_ptr);
+void BLO_write_float3_array(BlendWriter *writer, uint num, const float *data_ptr);
+void BLO_write_pointer_array(BlendWriter *writer, uint num, const void *data_ptr);
+void BLO_write_string(BlendWriter *writer, const char *data_ptr);
 
 /* Misc. */
 bool BLO_write_is_undo(BlendWriter *writer);
@@ -210,7 +210,7 @@ bool BLO_read_data_is_undo(BlendDataReader *reader);
 ID *BLO_read_get_new_id_address(BlendLibReader *reader, struct Library *lib, struct ID *id);
 
 #define BLO_read_id_address(reader, lib, id_ptr_p) \
-  *(id_ptr_p) = (void *)BLO_read_get_new_id_address((reader), (lib), (ID *)*(id_ptr_p))
+  *((void **)id_ptr_p) = (void *)BLO_read_get_new_id_address((reader), (lib), (ID *)*(id_ptr_p))
 
 /* Misc. */
 bool BLO_read_lib_is_undo(BlendLibReader *reader);

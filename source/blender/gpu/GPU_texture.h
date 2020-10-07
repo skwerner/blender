@@ -199,8 +199,14 @@ GPUTexture *GPU_texture_create_2d(
     const char *name, int w, int h, int mips, eGPUTextureFormat format, const float *data);
 GPUTexture *GPU_texture_create_2d_array(
     const char *name, int w, int h, int d, int mips, eGPUTextureFormat format, const float *data);
-GPUTexture *GPU_texture_create_3d(
-    const char *name, int w, int h, int d, int mips, eGPUTextureFormat format, const float *data);
+GPUTexture *GPU_texture_create_3d(const char *name,
+                                  int w,
+                                  int h,
+                                  int d,
+                                  int mips,
+                                  eGPUTextureFormat texture_format,
+                                  eGPUDataFormat data_format,
+                                  const void *data);
 GPUTexture *GPU_texture_create_cube(
     const char *name, int w, int mips, eGPUTextureFormat format, const float *data);
 GPUTexture *GPU_texture_create_cube_array(
@@ -243,6 +249,10 @@ void GPU_texture_bind_ex(GPUTexture *tex, eGPUSamplerState state, int unit, cons
 void GPU_texture_unbind(GPUTexture *tex);
 void GPU_texture_unbind_all(void);
 
+void GPU_texture_image_bind(GPUTexture *tex, int unit);
+void GPU_texture_image_unbind(GPUTexture *tex);
+void GPU_texture_image_unbind_all(void);
+
 void GPU_texture_copy(GPUTexture *dst, GPUTexture *src);
 
 void GPU_texture_generate_mipmap(GPUTexture *tex);
@@ -253,7 +263,6 @@ void GPU_texture_mipmap_mode(GPUTexture *tex, bool use_mipmap, bool use_filter);
 void GPU_texture_wrap_mode(GPUTexture *tex, bool use_repeat, bool use_clamp);
 void GPU_texture_swizzle_set(GPUTexture *tex, const char swizzle[4]);
 
-int GPU_texture_target(const GPUTexture *tex);
 int GPU_texture_width(const GPUTexture *tex);
 int GPU_texture_height(const GPUTexture *tex);
 int GPU_texture_orig_width(const GPUTexture *tex);

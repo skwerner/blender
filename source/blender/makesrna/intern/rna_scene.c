@@ -44,6 +44,7 @@
 #include "BKE_armature.h"
 #include "BKE_editmesh.h"
 #include "BKE_paint.h"
+#include "BKE_volume.h"
 
 #include "ED_gpencil.h"
 #include "ED_object.h"
@@ -1888,6 +1889,10 @@ static void object_simplify_update(Object *ob)
     }
     FOREACH_COLLECTION_OBJECT_RECURSIVE_END;
   }
+
+  if (ob->type == OB_VOLUME) {
+    DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+  }
 }
 
 static void rna_Scene_use_simplify_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
@@ -2514,7 +2519,7 @@ static const EnumPropertyItem *rna_UnitSettings_itemf_wrapper(const int system,
 {
   const void *usys;
   int len;
-  bUnit_GetSystem(system, type, &usys, &len);
+  BKE_unit_system_get(system, type, &usys, &len);
 
   EnumPropertyItem *items = NULL;
   int totitem = 0;
@@ -2526,10 +2531,10 @@ static const EnumPropertyItem *rna_UnitSettings_itemf_wrapper(const int system,
   RNA_enum_item_add(&items, &totitem, &adaptive);
 
   for (int i = 0; i < len; i++) {
-    if (!bUnit_IsSuppressed(usys, i)) {
+    if (!BKE_unit_is_suppressed(usys, i)) {
       EnumPropertyItem tmp = {0};
-      tmp.identifier = bUnit_GetIdentifier(usys, i);
-      tmp.name = bUnit_GetNameDisplay(usys, i);
+      tmp.identifier = BKE_unit_identifier_get(usys, i);
+      tmp.name = BKE_unit_display_name_get(usys, i);
       tmp.value = i;
       RNA_enum_item_add(&items, &totitem, &tmp);
     }
@@ -2587,8 +2592,8 @@ static void rna_UnitSettings_system_update(Main *UNUSED(bmain),
     unit->mass_unit = USER_UNIT_ADAPTIVE;
   }
   else {
-    unit->length_unit = bUnit_GetBaseUnitOfType(unit->system, B_UNIT_LENGTH);
-    unit->mass_unit = bUnit_GetBaseUnitOfType(unit->system, B_UNIT_MASS);
+    unit->length_unit = BKE_unit_base_of_type_get(unit->system, B_UNIT_LENGTH);
+    unit->mass_unit = BKE_unit_base_of_type_get(unit->system, B_UNIT_MASS);
   }
 }
 
@@ -6471,6 +6476,12 @@ static void rna_def_scene_render_data(BlenderRNA *brna)
   RNA_def_property_float_sdna(prop, NULL, "simplify_particles_render");
   RNA_def_property_ui_text(
       prop, "Simplify Child Particles", "Global child particles percentage during rendering");
+  RNA_def_property_update(prop, 0, "rna_Scene_simplify_update");
+
+  prop = RNA_def_property(srna, "simplify_volumes", PROP_FLOAT, PROP_FACTOR);
+  RNA_def_property_range(prop, 0.0, 1.0f);
+  RNA_def_property_ui_text(
+      prop, "Simplify Volumes", "Resolution percentage of volume objects in viewport");
   RNA_def_property_update(prop, 0, "rna_Scene_simplify_update");
 
   /* Grease Pencil - Simplify Options */

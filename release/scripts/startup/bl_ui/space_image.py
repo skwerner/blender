@@ -364,6 +364,29 @@ class IMAGE_MT_uvs_split(Menu):
         layout.operator("uv.select_split", text="Selection")
 
 
+class IMAGE_MT_uvs_unwrap(Menu):
+    bl_label = "Unwrap"
+
+    def draw(self, context):
+        layout = self.layout
+
+        layout.operator("uv.unwrap")
+
+        layout.separator()
+
+        layout.operator_context = 'INVOKE_DEFAULT'
+        layout.operator("uv.smart_project")
+        layout.operator("uv.lightmap_pack")
+        layout.operator("uv.follow_active_quads")
+
+        layout.separator()
+
+        layout.operator_context = 'EXEC_REGION_WIN'
+        layout.operator("uv.cube_project")
+        layout.operator("uv.cylinder_project")
+        layout.operator("uv.sphere_project")
+
+
 class IMAGE_MT_uvs(Menu):
     bl_label = "UV"
 
@@ -388,7 +411,7 @@ class IMAGE_MT_uvs(Menu):
         layout.separator()
 
         layout.prop(uv, "use_live_unwrap")
-        layout.operator("uv.unwrap")
+        layout.menu("IMAGE_MT_uvs_unwrap")
 
         layout.separator()
 
@@ -963,7 +986,9 @@ class IMAGE_PT_view_display(Panel):
 
         if ima:
             col.prop(ima, "display_aspect", text="Aspect Ratio")
-            col.prop(sima, "show_repeat", text="Repeat Image")
+            row = col.row()
+            row.active = ima.source != 'TILED'
+            row.prop(sima, "show_repeat", text="Repeat Image")
 
         if show_uvedit:
             col.prop(uvedit, "show_pixel_coords", text="Pixel Coordinates")
@@ -996,7 +1021,8 @@ class IMAGE_PT_view_display_uv_edit_overlays(Panel):
         col.prop(uvedit, "show_faces", text="Faces")
 
         col = layout.column()
-        col.prop(uvedit, "show_smooth_edges", text="Smooth")
+        if context.preferences.experimental.use_image_editor_legacy_drawing:
+            col.prop(uvedit, "show_smooth_edges", text="Smooth")
         col.prop(uvedit, "show_modified_edges", text="Modified")
         col.prop(uvedit, "uv_opacity")
 
@@ -1454,10 +1480,11 @@ class IMAGE_PT_uv_cursor(Panel):
 
         sima = context.space_data
 
-        col = layout.column()
+        layout.use_property_split = True
+        layout.use_property_decorate = False
 
         col = layout.column()
-        col.prop(sima, "cursor_location", text="Cursor Location")
+        col.prop(sima, "cursor_location", text="Location")
 
 
 class IMAGE_PT_udim_grid(Panel):
@@ -1477,6 +1504,9 @@ class IMAGE_PT_udim_grid(Panel):
 
         sima = context.space_data
         uvedit = sima.uv_editor
+
+        layout.use_property_split = True
+        layout.use_property_decorate = False
 
         col = layout.column()
         col.prop(uvedit, "tile_grid_shape", text="Grid Shape")
@@ -1508,6 +1538,7 @@ classes = (
     IMAGE_MT_uvs_align,
     IMAGE_MT_uvs_merge,
     IMAGE_MT_uvs_split,
+    IMAGE_MT_uvs_unwrap,
     IMAGE_MT_uvs_select_mode,
     IMAGE_MT_uvs_context_menu,
     IMAGE_MT_mask_context_menu,

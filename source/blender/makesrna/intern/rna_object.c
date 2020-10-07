@@ -741,9 +741,8 @@ static void rna_Object_dup_collection_set(PointerRNA *ptr,
   Object *ob = (Object *)ptr->data;
   Collection *grp = (Collection *)value.data;
 
-  /* must not let this be set if the object belongs in this group already,
-   * thus causing a cycle/infinite-recursion leading to crashes on load [#25298]
-   */
+  /* Must not let this be set if the object belongs in this group already,
+   * thus causing a cycle/infinite-recursion leading to crashes on load T25298. */
   if (BKE_collection_has_object_recursive(grp, ob) == 0) {
     if (ob->type == OB_EMPTY) {
       id_us_min(&ob->instance_collection->id);
@@ -1828,8 +1827,19 @@ static void rna_Object_boundbox_get(PointerRNA *ptr, float *values)
   }
 }
 
-static bDeformGroup *rna_Object_vgroup_new(Object *ob, Main *bmain, const char *name)
+static bDeformGroup *rna_Object_vgroup_new(Object *ob,
+                                           Main *bmain,
+                                           ReportList *reports,
+                                           const char *name)
 {
+  if (!OB_TYPE_SUPPORT_VGROUP(ob->type)) {
+    const char *ob_type_name = "Unknown";
+    RNA_enum_name_from_value(rna_enum_object_type_items, ob->type, &ob_type_name);
+    BKE_reportf(
+        reports, RPT_ERROR, "VertexGroups.new(): is not supported for '%s' objects", ob_type_name);
+    return NULL;
+  }
+
   bDeformGroup *defgroup = BKE_object_defgroup_add_name(ob, name);
 
   DEG_relations_tag_update(bmain);
@@ -2055,14 +2065,14 @@ static void rna_def_vertex_group(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Name", "Vertex group name");
   RNA_def_struct_name_property(srna, prop);
   RNA_def_property_string_funcs(prop, NULL, NULL, "rna_VertexGroup_name_set");
-  /* update data because modifiers may use [#24761] */
+  /* update data because modifiers may use T24761. */
   RNA_def_property_update(
       prop, NC_GEOM | ND_DATA | NA_RENAME, "rna_Object_internal_update_data_dependency");
 
   prop = RNA_def_property(srna, "lock_weight", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_ui_text(prop, "", "Maintain the relative weights for the group");
   RNA_def_property_boolean_sdna(prop, NULL, "flag", 0);
-  /* update data because modifiers may use [#24761] */
+  /* update data because modifiers may use T24761. */
   RNA_def_property_update(prop, NC_GEOM | ND_DATA | NA_RENAME, "rna_Object_internal_update_data");
 
   prop = RNA_def_property(srna, "index", PROP_INT, PROP_UNSIGNED);
@@ -2115,7 +2125,7 @@ static void rna_def_face_map(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Name", "Face map name");
   RNA_def_struct_name_property(srna, prop);
   RNA_def_property_string_funcs(prop, NULL, NULL, "rna_FaceMap_name_set");
-  /* update data because modifiers may use [#24761] */
+  /* update data because modifiers may use T24761. */
   RNA_def_property_update(prop, NC_GEOM | ND_DATA | NA_RENAME, "rna_Object_internal_update_data");
 
   prop = RNA_def_property(srna, "select", PROP_BOOLEAN, PROP_NONE);
@@ -2489,7 +2499,7 @@ static void rna_def_object_vertex_groups(BlenderRNA *brna, PropertyRNA *cprop)
 
   /* vertex groups */ /* add_vertex_group */
   func = RNA_def_function(srna, "new", "rna_Object_vgroup_new");
-  RNA_def_function_flag(func, FUNC_USE_MAIN);
+  RNA_def_function_flag(func, FUNC_USE_MAIN | FUNC_USE_REPORTS);
   RNA_def_function_ui_description(func, "Add vertex group to object");
   RNA_def_string(func, "name", "Group", 0, "", "Vertex group name"); /* optional */
   parm = RNA_def_pointer(func, "group", "VertexGroup", "", "New vertex group");

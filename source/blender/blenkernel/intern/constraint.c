@@ -788,9 +788,9 @@ static void default_get_tarmat_full_bbone(struct Depsgraph *UNUSED(depsgraph),
     ct->space = con->tarspace; \
     ct->flag = CONSTRAINT_TAR_TEMP; \
 \
-    if (ct->tar) \
+    if (ct->tar) { \
       ct->type = CONSTRAINT_OBTYPE_OBJECT; \
-\
+    } \
     BLI_addtail(list, ct); \
   } \
   (void)0
@@ -845,7 +845,8 @@ static void childof_new_data(void *cdata)
   bChildOfConstraint *data = (bChildOfConstraint *)cdata;
 
   data->flag = (CHILDOF_LOCX | CHILDOF_LOCY | CHILDOF_LOCZ | CHILDOF_ROTX | CHILDOF_ROTY |
-                CHILDOF_ROTZ | CHILDOF_SIZEX | CHILDOF_SIZEY | CHILDOF_SIZEZ);
+                CHILDOF_ROTZ | CHILDOF_SIZEX | CHILDOF_SIZEY | CHILDOF_SIZEZ |
+                CHILDOF_SET_INVERSE);
   unit_m4(data->invmat);
 }
 
@@ -2633,7 +2634,7 @@ static void actcon_get_tarmat(struct Depsgraph *depsgraph,
 {
   bActionConstraint *data = con->data;
 
-  if (VALID_CONS_TARGET(ct)) {
+  if (VALID_CONS_TARGET(ct) || data->flag & ACTCON_USE_EVAL_TIME) {
     float tempmat[4][4], vec[3];
     float s, t;
     short axis;
@@ -2641,42 +2642,49 @@ static void actcon_get_tarmat(struct Depsgraph *depsgraph,
     /* initialize return matrix */
     unit_m4(ct->matrix);
 
-    /* get the transform matrix of the target */
-    constraint_target_to_mat4(ct->tar,
-                              ct->subtarget,
-                              tempmat,
-                              CONSTRAINT_SPACE_WORLD,
-                              ct->space,
-                              con->flag,
-                              con->headtail);
-
-    /* determine where in transform range target is */
-    /* data->type is mapped as follows for backwards compatibility:
-     * 00,01,02 - rotation (it used to be like this)
-     * 10,11,12 - scaling
-     * 20,21,22 - location
-     */
-    if (data->type < 10) {
-      /* extract rotation (is in whatever space target should be in) */
-      mat4_to_eul(vec, tempmat);
-      mul_v3_fl(vec, RAD2DEGF(1.0f)); /* rad -> deg */
-      axis = data->type;
-    }
-    else if (data->type < 20) {
-      /* extract scaling (is in whatever space target should be in) */
-      mat4_to_size(vec, tempmat);
-      axis = data->type - 10;
+    /* Skip targets if we're using local float property to set action time */
+    if (data->flag & ACTCON_USE_EVAL_TIME) {
+      s = data->eval_time;
     }
     else {
-      /* extract location */
-      copy_v3_v3(vec, tempmat[3]);
-      axis = data->type - 20;
+      /* get the transform matrix of the target */
+      constraint_target_to_mat4(ct->tar,
+                                ct->subtarget,
+                                tempmat,
+                                CONSTRAINT_SPACE_WORLD,
+                                ct->space,
+                                con->flag,
+                                con->headtail);
+
+      /* determine where in transform range target is */
+      /* data->type is mapped as follows for backwards compatibility:
+       * 00,01,02 - rotation (it used to be like this)
+       * 10,11,12 - scaling
+       * 20,21,22 - location
+       */
+      if (data->type < 10) {
+        /* extract rotation (is in whatever space target should be in) */
+        mat4_to_eul(vec, tempmat);
+        mul_v3_fl(vec, RAD2DEGF(1.0f)); /* rad -> deg */
+        axis = data->type;
+      }
+      else if (data->type < 20) {
+        /* extract scaling (is in whatever space target should be in) */
+        mat4_to_size(vec, tempmat);
+        axis = data->type - 10;
+      }
+      else {
+        /* extract location */
+        copy_v3_v3(vec, tempmat[3]);
+        axis = data->type - 20;
+      }
+
+      BLI_assert((unsigned int)axis < 3);
+
+      /* Target defines the animation */
+      s = (vec[axis] - data->min) / (data->max - data->min);
     }
 
-    BLI_assert((unsigned int)axis < 3);
-
-    /* Target defines the animation */
-    s = (vec[axis] - data->min) / (data->max - data->min);
     CLAMP(s, 0, 1);
     t = (s * (data->end - data->start)) + data->start;
     const AnimationEvalContext anim_eval_context = BKE_animsys_eval_context_construct(depsgraph,
@@ -2733,7 +2741,7 @@ static void actcon_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *targ
   bActionConstraint *data = con->data;
   bConstraintTarget *ct = targets->first;
 
-  if (VALID_CONS_TARGET(ct)) {
+  if (VALID_CONS_TARGET(ct) || data->flag & ACTCON_USE_EVAL_TIME) {
     switch (data->mix_mode) {
       case ACTCON_MIX_BEFORE:
         mul_m4_m4m4_aligned_scale(cob->matrix, ct->matrix, cob->matrix);
@@ -3811,7 +3819,6 @@ static void transform_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *t
     float newloc[3], newrot[3][3], neweul[3], newsize[3];
     float dbuf[4], sval[3];
     float *const dvec = dbuf + 1;
-    int i;
 
     /* obtain target effect */
     switch (data->from) {
@@ -3854,7 +3861,7 @@ static void transform_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *t
 
     /* determine where in range current transforms lie */
     if (data->expo) {
-      for (i = 0; i < 3; i++) {
+      for (int i = 0; i < 3; i++) {
         if (from_max[i] - from_min[i]) {
           sval[i] = (dvec[i] - from_min[i]) / (from_max[i] - from_min[i]);
         }
@@ -3865,7 +3872,7 @@ static void transform_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *t
     }
     else {
       /* clamp transforms out of range */
-      for (i = 0; i < 3; i++) {
+      for (int i = 0; i < 3; i++) {
         CLAMP(dvec[i], from_min[i], from_max[i]);
         if (from_max[i] - from_min[i]) {
           sval[i] = (dvec[i] - from_min[i]) / (from_max[i] - from_min[i]);
@@ -3881,7 +3888,7 @@ static void transform_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *t
       case TRANS_SCALE:
         to_min = data->to_min_scale;
         to_max = data->to_max_scale;
-        for (i = 0; i < 3; i++) {
+        for (int i = 0; i < 3; i++) {
           newsize[i] = to_min[i] + (sval[(int)data->map[i]] * (to_max[i] - to_min[i]));
         }
         switch (data->mix_mode_scale) {
@@ -3897,7 +3904,7 @@ static void transform_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *t
       case TRANS_ROTATION:
         to_min = data->to_min_rot;
         to_max = data->to_max_rot;
-        for (i = 0; i < 3; i++) {
+        for (int i = 0; i < 3; i++) {
           neweul[i] = to_min[i] + (sval[(int)data->map[i]] * (to_max[i] - to_min[i]));
         }
         switch (data->mix_mode_rot) {
@@ -3924,7 +3931,7 @@ static void transform_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *t
       default:
         to_min = data->to_min;
         to_max = data->to_max;
-        for (i = 0; i < 3; i++) {
+        for (int i = 0; i < 3; i++) {
           newloc[i] = (to_min[i] + (sval[(int)data->map[i]] * (to_max[i] - to_min[i])));
         }
         switch (data->mix_mode_loc) {
@@ -5389,7 +5396,7 @@ bool BKE_constraint_remove_ex(ListBase *list, Object *ob, bConstraint *con, bool
 {
   const short type = con->type;
   if (BKE_constraint_remove(list, con)) {
-    /* ITASC needs to be rebuilt once a constraint is removed [#26920] */
+    /* ITASC needs to be rebuilt once a constraint is removed T26920. */
     if (clear_dep && ELEM(type, CONSTRAINT_TYPE_KINEMATIC, CONSTRAINT_TYPE_SPLINEIK)) {
       BIK_clear_data(ob->pose);
     }

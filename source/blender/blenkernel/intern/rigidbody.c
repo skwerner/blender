@@ -708,6 +708,8 @@ void BKE_rigidbody_calc_volume(Object *ob, float *r_vol)
 
         if (totvert > 0 && tottri > 0) {
           BKE_mesh_calc_volume(mvert, totvert, lt, tottri, mloop, &volume, NULL);
+          const float volume_scale = mat4_to_volume_scale(ob->obmat);
+          volume *= fabsf(volume_scale);
         }
       }
       else {
@@ -1554,17 +1556,17 @@ void BKE_rigidbody_remove_object(Main *bmain, Scene *scene, Object *ob, const bo
       BKE_collection_object_add(bmain, scene->master_collection, ob);
     }
     BKE_collection_object_remove(bmain, rbw->group, ob, free_us);
+
+    /* flag cache as outdated */
+    BKE_rigidbody_cache_reset(rbw);
+    /* Reset cache as the object order probably changed after freeing the object. */
+    PTCacheID pid;
+    BKE_ptcache_id_from_rigidbody(&pid, NULL, rbw);
+    BKE_ptcache_id_reset(scene, &pid, PTCACHE_RESET_OUTDATED);
   }
 
   /* remove object's settings */
   BKE_rigidbody_free_object(ob, rbw);
-
-  /* flag cache as outdated */
-  BKE_rigidbody_cache_reset(rbw);
-  /* Reset cache as the object order probably changed after freeing the object. */
-  PTCacheID pid;
-  BKE_ptcache_id_from_rigidbody(&pid, NULL, rbw);
-  BKE_ptcache_id_reset(scene, &pid, PTCACHE_RESET_OUTDATED);
 
   /* Dependency graph update */
   DEG_relations_tag_update(bmain);

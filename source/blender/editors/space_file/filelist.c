@@ -943,11 +943,9 @@ void filelist_init_icons(void)
 
 void filelist_free_icons(void)
 {
-  int i;
-
   BLI_assert(G.background == false);
 
-  for (i = 0; i < SPECIAL_IMG_MAX; i++) {
+  for (int i = 0; i < SPECIAL_IMG_MAX; i++) {
     IMB_freeImBuf(gSpecialFileImages[i]);
     gSpecialFileImages[i] = NULL;
   }
@@ -1106,7 +1104,7 @@ static int filelist_geticon_ex(FileDirEntry *file,
     return ICON_FILE_ARCHIVE;
   }
   if (typeflag & FILE_TYPE_BLENDERLIB) {
-    const int ret = UI_idcode_icon_get(file->blentype);
+    const int ret = UI_icon_from_idcode(file->blentype);
     if (ret != ICON_NONE) {
       return ret;
     }

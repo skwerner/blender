@@ -178,7 +178,7 @@ static bool detect_mip_render_workaround(void)
   glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
   glClear(GL_COLOR_BUFFER_BIT);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  glDrawBuffer(GL_BACK);
+
   /* Read mip 1. If color is not the same as the clear_color, the rendering failed. */
   glGetTexImage(GL_TEXTURE_CUBE_MAP_POSITIVE_X, 1, GL_RGBA, GL_FLOAT, source_pix);
   bool enable_workaround = !equals_v4v4(clear_color, source_pix);
@@ -207,11 +207,23 @@ static void detect_workarounds(void)
     printf("    version: %s\n\n", version);
     GCaps.depth_blitting_workaround = true;
     GCaps.mip_render_workaround = true;
+    GLContext::debug_layer_workaround = true;
     GLContext::unused_fb_slot_workaround = true;
-    GLContext::texture_copy_workaround = true;
     /* Turn off extensions. */
+    GCaps.shader_image_load_store_support = false;
     GLContext::base_instance_support = false;
+    GLContext::clear_texture_support = false;
+    GLContext::copy_image_support = false;
+    GLContext::debug_layer_support = false;
+    GLContext::direct_state_access_support = false;
+    GLContext::fixed_restart_index_support = false;
+    GLContext::multi_bind_support = false;
+    GLContext::multi_draw_indirect_support = false;
+    GLContext::shader_draw_parameters_support = false;
     GLContext::texture_cube_map_array_support = false;
+    GLContext::texture_filter_anisotropic_support = false;
+    GLContext::texture_gather_support = false;
+    GLContext::vertex_attrib_binding_support = false;
     return;
   }
 
@@ -239,17 +251,20 @@ static void detect_workarounds(void)
       (strstr(version, "4.5.13399") || strstr(version, "4.5.13417") ||
        strstr(version, "4.5.13422"))) {
     GLContext::unused_fb_slot_workaround = true;
+    GCaps.shader_image_load_store_support = false;
     GCaps.broken_amd_driver = true;
   }
   /* We have issues with this specific renderer. (see T74024) */
   if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_UNIX, GPU_DRIVER_OPENSOURCE) &&
       strstr(renderer, "AMD VERDE")) {
     GLContext::unused_fb_slot_workaround = true;
+    GCaps.shader_image_load_store_support = false;
     GCaps.broken_amd_driver = true;
   }
   /* Fix slowdown on this particular driver. (see T77641) */
   if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_UNIX, GPU_DRIVER_OPENSOURCE) &&
       strstr(version, "Mesa 19.3.4")) {
+    GCaps.shader_image_load_store_support = false;
     GCaps.broken_amd_driver = true;
   }
   /* There is an issue with the #glBlitFramebuffer on MacOS with radeon pro graphics.
@@ -266,7 +281,7 @@ static void detect_workarounds(void)
    * covered since they only support GL 4.4 on windows.
    * This fixes some issues with workbench anti-aliasing on Win + Intel GPU. (see T76273) */
   if (GPU_type_matches(GPU_DEVICE_INTEL, GPU_OS_WIN, GPU_DRIVER_OFFICIAL) && !GLEW_VERSION_4_5) {
-    GLContext::texture_copy_workaround = true;
+    GLContext::copy_image_support = false;
   }
   /* Special fix for theses specific GPUs.
    * Without this workaround, blender crashes on startup. (see T72098) */
@@ -303,6 +318,11 @@ static void detect_workarounds(void)
        strstr(version, "Mesa 19.1") || strstr(version, "Mesa 19.2"))) {
     GLContext::unused_fb_slot_workaround = true;
   }
+  /* There is a bug on older Nvidia GPU where GL_ARB_texture_gather
+   * is reported to be supported but yield a compile error (see T55802). */
+  if (GPU_type_matches(GPU_DEVICE_NVIDIA, GPU_OS_ANY, GPU_DRIVER_ANY) && !GLEW_VERSION_4_0) {
+    GLContext::texture_gather_support = false;
+  }
 
   /* dFdx/dFdy calculation factors, those are dependent on driver. */
   if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_ANY, GPU_DRIVER_ANY) &&
@@ -321,18 +341,38 @@ static void detect_workarounds(void)
       GLContext::derivative_signs[1] = 1.0;
     }
   }
+
+  /* Disable multidraw if the base instance cannot be read. */
+  if (GLContext::shader_draw_parameters_support == false) {
+    GLContext::multi_draw_indirect_support = false;
+  }
+  /* Enable our own incomplete debug layer if no other is available. */
+  if (GLContext::debug_layer_support == false) {
+    GLContext::debug_layer_workaround = true;
+  }
 }
 
 /** Internal capabilities. */
-GLint GLContext::max_texture_3d_size;
-GLint GLContext::max_cubemap_size;
-GLint GLContext::max_ubo_size;
-GLint GLContext::max_ubo_binds;
+GLint GLContext::max_cubemap_size = 0;
+GLint GLContext::max_texture_3d_size = 0;
+GLint GLContext::max_ubo_binds = 0;
+GLint GLContext::max_ubo_size = 0;
 /** Extensions. */
 bool GLContext::base_instance_support = false;
+bool GLContext::clear_texture_support = false;
+bool GLContext::copy_image_support = false;
+bool GLContext::debug_layer_support = false;
+bool GLContext::direct_state_access_support = false;
+bool GLContext::fixed_restart_index_support = false;
+bool GLContext::multi_bind_support = false;
+bool GLContext::multi_draw_indirect_support = false;
+bool GLContext::shader_draw_parameters_support = false;
 bool GLContext::texture_cube_map_array_support = false;
+bool GLContext::texture_filter_anisotropic_support = false;
+bool GLContext::texture_gather_support = false;
+bool GLContext::vertex_attrib_binding_support = false;
 /** Workarounds. */
-bool GLContext::texture_copy_workaround = false;
+bool GLContext::debug_layer_workaround = false;
 bool GLContext::unused_fb_slot_workaround = false;
 float GLContext::derivative_signs[2] = {1.0f, 1.0f};
 
@@ -347,15 +387,33 @@ void GLBackend::capabilities_init(void)
   glGetIntegerv(GL_MAX_GEOMETRY_TEXTURE_IMAGE_UNITS, &GCaps.max_textures_geom);
   glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &GCaps.max_textures);
   GCaps.mem_stats_support = GLEW_NVX_gpu_memory_info || GLEW_ATI_meminfo;
+  GCaps.shader_image_load_store_support = GLEW_ARB_shader_image_load_store;
   /* GL specific capabilities. */
   glGetIntegerv(GL_MAX_3D_TEXTURE_SIZE, &GLContext::max_texture_3d_size);
   glGetIntegerv(GL_MAX_CUBE_MAP_TEXTURE_SIZE, &GLContext::max_cubemap_size);
   glGetIntegerv(GL_MAX_FRAGMENT_UNIFORM_BLOCKS, &GLContext::max_ubo_binds);
   glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &GLContext::max_ubo_size);
   GLContext::base_instance_support = GLEW_ARB_base_instance;
+  GLContext::clear_texture_support = GLEW_ARB_clear_texture;
+  GLContext::copy_image_support = GLEW_ARB_copy_image;
+  GLContext::debug_layer_support = GLEW_VERSION_4_3 || GLEW_KHR_debug || GLEW_ARB_debug_output;
+  GLContext::direct_state_access_support = GLEW_ARB_direct_state_access;
+  GLContext::fixed_restart_index_support = GLEW_ARB_ES3_compatibility;
+  GLContext::multi_bind_support = GLEW_ARB_multi_bind;
+  GLContext::multi_draw_indirect_support = GLEW_ARB_multi_draw_indirect;
+  GLContext::shader_draw_parameters_support = GLEW_ARB_shader_draw_parameters;
   GLContext::texture_cube_map_array_support = GLEW_ARB_texture_cube_map_array;
+  GLContext::texture_filter_anisotropic_support = GLEW_EXT_texture_filter_anisotropic;
+  GLContext::texture_gather_support = GLEW_ARB_texture_gather;
+  GLContext::vertex_attrib_binding_support = GLEW_ARB_vertex_attrib_binding;
 
   detect_workarounds();
+
+  /* Disable this feature entirely when not debugging. */
+  if ((G.debug & G_DEBUG_GPU) == 0) {
+    GLContext::debug_layer_support = false;
+    GLContext::debug_layer_workaround = false;
+  }
 }
 
 /** \} */

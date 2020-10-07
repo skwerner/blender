@@ -4434,6 +4434,19 @@ static int gpencil_stroke_separate_exec(bContext *C, wmOperator *op)
     }
   }
 
+  /* Remove unused slots. */
+  int actcol = ob_dst->actcol;
+  for (int slot = 1; slot <= ob_dst->totcol; slot++) {
+    while (slot <= ob_dst->totcol && !BKE_object_material_slot_used(ob_dst->data, slot)) {
+      ob_dst->actcol = slot;
+      BKE_object_material_slot_remove(bmain, ob_dst);
+      if (actcol >= slot) {
+        actcol--;
+      }
+    }
+  }
+  ob_dst->actcol = actcol;
+
   DEG_id_tag_update(&gpd_src->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
   DEG_id_tag_update(&gpd_dst->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
 
@@ -4725,7 +4738,6 @@ static int gpencil_cutter_lasso_select(bContext *C,
   const float scale = ts->gp_sculpt.isect_threshold;
 
   bGPDspoint *pt;
-  int i;
   GP_SpaceConversion gsc = {NULL};
 
   bool changed = false;
@@ -4741,6 +4753,7 @@ static int gpencil_cutter_lasso_select(bContext *C,
 
   /* deselect all strokes first */
   CTX_DATA_BEGIN (C, bGPDstroke *, gps, editable_gpencil_strokes) {
+    int i;
     for (i = 0, pt = gps->points; i < gps->totpoints; i++, pt++) {
       pt->flag &= ~GP_SPOINT_SELECT;
     }
@@ -4753,7 +4766,7 @@ static int gpencil_cutter_lasso_select(bContext *C,
   GP_EDITABLE_STROKES_BEGIN (gpstroke_iter, C, gpl, gps) {
     int tot_inside = 0;
     const int oldtot = gps->totpoints;
-    for (i = 0; i < gps->totpoints; i++) {
+    for (int i = 0; i < gps->totpoints; i++) {
       pt = &gps->points[i];
       if ((pt->flag & GP_SPOINT_SELECT) || (pt->flag & GP_SPOINT_TAG)) {
         continue;
@@ -4777,7 +4790,7 @@ static int gpencil_cutter_lasso_select(bContext *C,
     }
     /* if mark all points inside lasso set to remove all stroke */
     if ((tot_inside == oldtot) || ((tot_inside == 1) && (oldtot == 2))) {
-      for (i = 0; i < gps->totpoints; i++) {
+      for (int i = 0; i < gps->totpoints; i++) {
         pt = &gps->points[i];
         pt->flag |= GP_SPOINT_SELECT;
       }

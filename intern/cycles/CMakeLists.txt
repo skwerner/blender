@@ -57,7 +57,7 @@ if(WITH_CYCLES_NATIVE_ONLY)
             COMPILE_OUTPUT_VARIABLE arch_compile_output
             RUN_OUTPUT_VARIABLE arch_run_output
         )
-        if (arch_compile_result AND "${arch_run_result}" EQUAL "0")
+        if(arch_compile_result AND "${arch_run_result}" EQUAL "0")
             string(STRIP ${arch_run_output} arch_run_output)
             set(MSVC_NATIVE_ARCH_FLAGS ${arch_run_output} CACHE STRING "MSVC Native architecture flags")
         endif()
@@ -270,11 +270,19 @@ if(WITH_CYCLES_EMBREE)
   )
 endif()
 
+if(WITH_NANOVDB)
+  add_definitions(-DWITH_NANOVDB)
+  include_directories(
+    SYSTEM
+    ${NANOVDB_INCLUDE_DIR}
+  )
+endif()
+
 if(WITH_OPENSUBDIV)
   add_definitions(-DWITH_OPENSUBDIV)
   include_directories(
     SYSTEM
-    ${OPENSUBDIV_INCLUDE_DIR}
+    ${OPENSUBDIV_INCLUDE_DIRS}
   )
 endif()
 

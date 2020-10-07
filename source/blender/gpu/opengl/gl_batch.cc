@@ -46,8 +46,8 @@ using namespace blender::gpu;
 /* -------------------------------------------------------------------- */
 /** \name Vao cache
  *
- * Each GLBatch has a small cache of VAO objects that are used to avoid VAO reconfiguration.
- * TODO(fclem) Could be revisited to avoid so much cross references.
+ * Each #GLBatch has a small cache of VAO objects that are used to avoid VAO reconfiguration.
+ * TODO(fclem): Could be revisited to avoid so much cross references.
  * \{ */
 
 GLVaoCache::GLVaoCache(void)
@@ -166,7 +166,7 @@ void GLVaoCache::clear(void)
     glDeleteVertexArrays(1, &vao_base_instance_);
   }
   else {
-    /* TODO(fclem) Slow way. Could avoid multiple mutex lock here */
+    /* TODO(fclem): Slow way. Could avoid multiple mutex lock here */
     for (int i = 0; i < count; i++) {
       context_->vao_free(vaos[i]);
     }
@@ -307,7 +307,7 @@ void GLBatch::bind(int i_first)
 
 #if GPU_TRACK_INDEX_RANGE
   /* Can be removed if GL 4.3 is required. */
-  if (!GLEW_ARB_ES3_compatibility && (elem != NULL)) {
+  if (!GLContext::fixed_restart_index_support && (elem != NULL)) {
     glPrimitiveRestartIndex(this->elem_()->restart_index());
   }
 #endif
@@ -324,7 +324,6 @@ void GLBatch::bind(int i_first)
 void GLBatch::draw(int v_first, int v_count, int i_first, int i_count)
 {
   GL_CHECK_RESOURCES("Batch");
-  GL_CHECK_ERROR("Batch Pre drawing");
 
   this->bind(i_first);
 
@@ -346,7 +345,6 @@ void GLBatch::draw(int v_first, int v_count, int i_first, int i_count)
       glDrawElementsInstancedBaseVertex(
           gl_type, v_count, index_type, v_first_ofs, i_count, base_index);
     }
-    GL_CHECK_ERROR("Batch Post-drawing Indexed");
   }
   else {
 #ifdef __APPLE__
@@ -361,7 +359,6 @@ void GLBatch::draw(int v_first, int v_count, int i_first, int i_count)
 #ifdef __APPLE__
     glEnable(GL_PRIMITIVE_RESTART);
 #endif
-    GL_CHECK_ERROR("Batch Post-drawing Non-indexed");
   }
 }
 

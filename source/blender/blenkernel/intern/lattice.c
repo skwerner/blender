@@ -246,14 +246,13 @@ int BKE_lattice_index_flip(
 }
 
 void BKE_lattice_bitmap_from_flag(
-    Lattice *lt, BLI_bitmap *bitmap, const short flag, const bool clear, const bool respecthide)
+    Lattice *lt, BLI_bitmap *bitmap, const uint8_t flag, const bool clear, const bool respecthide)
 {
   const unsigned int tot = lt->pntsu * lt->pntsv * lt->pntsw;
-  unsigned int i;
   BPoint *bp;
 
   bp = lt->def;
-  for (i = 0; i < tot; i++, bp++) {
+  for (int i = 0; i < tot; i++, bp++) {
     if ((bp->f1 & flag) && (!respecthide || !bp->hide)) {
       BLI_BITMAP_ENABLE(bitmap, i);
     }

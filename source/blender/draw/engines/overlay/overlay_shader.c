@@ -70,6 +70,15 @@ extern char datatoc_edit_mesh_analysis_vert_glsl[];
 extern char datatoc_edit_mesh_analysis_frag_glsl[];
 extern char datatoc_edit_particle_strand_vert_glsl[];
 extern char datatoc_edit_particle_point_vert_glsl[];
+extern char datatoc_edit_uv_verts_vert_glsl[];
+extern char datatoc_edit_uv_verts_frag_glsl[];
+extern char datatoc_edit_uv_edges_vert_glsl[];
+extern char datatoc_edit_uv_edges_geom_glsl[];
+extern char datatoc_edit_uv_edges_frag_glsl[];
+extern char datatoc_edit_uv_faces_vert_glsl[];
+extern char datatoc_edit_uv_face_dots_vert_glsl[];
+extern char datatoc_edit_uv_stretching_vert_glsl[];
+extern char datatoc_edit_uv_tiled_image_borders_vert_glsl[];
 extern char datatoc_extra_frag_glsl[];
 extern char datatoc_extra_vert_glsl[];
 extern char datatoc_extra_groundline_vert_glsl[];
@@ -106,6 +115,7 @@ extern char datatoc_particle_frag_glsl[];
 extern char datatoc_sculpt_mask_vert_glsl[];
 extern char datatoc_sculpt_mask_frag_glsl[];
 extern char datatoc_volume_velocity_vert_glsl[];
+extern char datatoc_volume_gridlines_vert_glsl[];
 extern char datatoc_wireframe_vert_glsl[];
 extern char datatoc_wireframe_frag_glsl[];
 extern char datatoc_xray_fade_frag_glsl[];
@@ -113,6 +123,7 @@ extern char datatoc_xray_fade_frag_glsl[];
 extern char datatoc_gpu_shader_depth_only_frag_glsl[];
 extern char datatoc_gpu_shader_point_varying_color_frag_glsl[];
 extern char datatoc_gpu_shader_3D_smooth_color_frag_glsl[];
+extern char datatoc_gpu_shader_2D_smooth_color_frag_glsl[];
 extern char datatoc_gpu_shader_uniform_color_frag_glsl[];
 extern char datatoc_gpu_shader_flat_color_frag_glsl[];
 extern char datatoc_gpu_shader_point_varying_color_varying_outline_aa_frag_glsl[];
@@ -120,6 +131,7 @@ extern char datatoc_gpu_shader_common_obinfos_lib_glsl[];
 
 extern char datatoc_gpencil_common_lib_glsl[];
 
+extern char datatoc_common_overlay_lib_glsl[];
 extern char datatoc_common_colormanagement_lib_glsl[];
 extern char datatoc_common_fullscreen_vert_glsl[];
 extern char datatoc_common_fxaa_lib_glsl[];
@@ -164,6 +176,13 @@ typedef struct OVERLAY_Shaders {
   GPUShader *edit_mesh_analysis;
   GPUShader *edit_particle_strand;
   GPUShader *edit_particle_point;
+  GPUShader *edit_uv_verts;
+  GPUShader *edit_uv_faces;
+  GPUShader *edit_uv_edges;
+  GPUShader *edit_uv_face_dots;
+  GPUShader *edit_uv_stretching_angle;
+  GPUShader *edit_uv_stretching_area;
+  GPUShader *edit_uv_tiled_image_borders;
   GPUShader *extra;
   GPUShader *extra_select;
   GPUShader *extra_groundline;
@@ -175,6 +194,7 @@ typedef struct OVERLAY_Shaders {
   GPUShader *facing;
   GPUShader *gpencil_canvas;
   GPUShader *grid;
+  GPUShader *grid_image;
   GPUShader *image;
   GPUShader *motion_path_line;
   GPUShader *motion_path_vert;
@@ -195,7 +215,11 @@ typedef struct OVERLAY_Shaders {
   GPUShader *sculpt_mask;
   GPUShader *uniform_color;
   GPUShader *volume_velocity_needle_sh;
+  GPUShader *volume_velocity_mac_sh;
   GPUShader *volume_velocity_sh;
+  GPUShader *volume_gridlines_sh;
+  GPUShader *volume_gridlines_flags_sh;
+  GPUShader *volume_gridlines_range_sh;
   GPUShader *wireframe_select;
   GPUShader *wireframe[2];
   GPUShader *xray_fade;
@@ -203,7 +227,19 @@ typedef struct OVERLAY_Shaders {
 
 static struct {
   OVERLAY_Shaders sh_data[GPU_SHADER_CFG_LEN];
+  DRWShaderLibrary *lib;
 } e_data = {{{NULL}}};
+
+void OVERLAY_shader_library_ensure(void)
+{
+  if (e_data.lib == NULL) {
+    e_data.lib = DRW_shader_library_create();
+    /* NOTE: Theses needs to be ordered by dependencies. */
+    DRW_SHADER_LIB_ADD(e_data.lib, common_globals_lib);
+    DRW_SHADER_LIB_ADD(e_data.lib, common_overlay_lib);
+    DRW_SHADER_LIB_ADD(e_data.lib, common_view_lib);
+  }
+}
 
 GPUShader *OVERLAY_shader_antialiasing(void)
 {
@@ -1012,6 +1048,20 @@ GPUShader *OVERLAY_shader_grid(void)
   return sh_data->grid;
 }
 
+GPUShader *OVERLAY_shader_grid_image(void)
+{
+  OVERLAY_Shaders *sh_data = &e_data.sh_data[0];
+  if (!sh_data->grid_image) {
+    sh_data->grid_image = DRW_shader_create_with_shaderlib(
+        datatoc_edit_uv_tiled_image_borders_vert_glsl,
+        NULL,
+        datatoc_gpu_shader_uniform_color_frag_glsl,
+        e_data.lib,
+        "#define blender_srgb_to_framebuffer_space(a) a\n");
+  }
+  return sh_data->grid_image;
+}
+
 GPUShader *OVERLAY_shader_image(void)
 {
   const DRWContextState *draw_ctx = DRW_context_state_get();
@@ -1369,7 +1419,7 @@ struct GPUShader *OVERLAY_shader_uniform_color(void)
   return sh_data->uniform_color;
 }
 
-struct GPUShader *OVERLAY_shader_volume_velocity(bool use_needle)
+struct GPUShader *OVERLAY_shader_volume_velocity(bool use_needle, bool use_mac)
 {
   OVERLAY_Shaders *sh_data = &e_data.sh_data[0];
   if (use_needle && !sh_data->volume_velocity_needle_sh) {
@@ -1381,6 +1431,15 @@ struct GPUShader *OVERLAY_shader_volume_velocity(bool use_needle)
         "#define blender_srgb_to_framebuffer_space(a) a\n"
         "#define USE_NEEDLE\n");
   }
+  else if (use_mac && !sh_data->volume_velocity_mac_sh) {
+    sh_data->volume_velocity_mac_sh = DRW_shader_create_with_lib(
+        datatoc_volume_velocity_vert_glsl,
+        NULL,
+        datatoc_gpu_shader_3D_smooth_color_frag_glsl,
+        datatoc_common_view_lib_glsl,
+        "#define blender_srgb_to_framebuffer_space(a) a\n"
+        "#define USE_MAC\n");
+  }
   else if (!sh_data->volume_velocity_sh) {
     sh_data->volume_velocity_sh = DRW_shader_create_with_lib(
         datatoc_volume_velocity_vert_glsl,
@@ -1389,7 +1448,54 @@ struct GPUShader *OVERLAY_shader_volume_velocity(bool use_needle)
         datatoc_common_view_lib_glsl,
         "#define blender_srgb_to_framebuffer_space(a) a\n");
   }
-  return (use_needle) ? sh_data->volume_velocity_needle_sh : sh_data->volume_velocity_sh;
+  if (use_needle) {
+    return sh_data->volume_velocity_needle_sh;
+  }
+  if (use_mac) {
+    return sh_data->volume_velocity_mac_sh;
+  }
+
+  return sh_data->volume_velocity_sh;
+}
+
+struct GPUShader *OVERLAY_shader_volume_gridlines(bool color_with_flags, bool color_range)
+{
+  OVERLAY_Shaders *sh_data = &e_data.sh_data[0];
+  if (!sh_data->volume_gridlines_flags_sh && color_with_flags) {
+    sh_data->volume_gridlines_flags_sh = DRW_shader_create_with_lib(
+        datatoc_volume_gridlines_vert_glsl,
+        NULL,
+        datatoc_gpu_shader_flat_color_frag_glsl,
+        datatoc_common_view_lib_glsl,
+        "#define blender_srgb_to_framebuffer_space(a) a\n"
+        "#define SHOW_FLAGS\n");
+  }
+  else if (!sh_data->volume_gridlines_range_sh && color_range) {
+    sh_data->volume_gridlines_range_sh = DRW_shader_create_with_lib(
+        datatoc_volume_gridlines_vert_glsl,
+        NULL,
+        datatoc_gpu_shader_flat_color_frag_glsl,
+        datatoc_common_view_lib_glsl,
+        "#define blender_srgb_to_framebuffer_space(a) a\n"
+        "#define SHOW_RANGE\n");
+  }
+  else if (!sh_data->volume_gridlines_sh) {
+    sh_data->volume_gridlines_sh = DRW_shader_create_with_lib(
+        datatoc_volume_gridlines_vert_glsl,
+        NULL,
+        datatoc_gpu_shader_flat_color_frag_glsl,
+        datatoc_common_view_lib_glsl,
+        "#define blender_srgb_to_framebuffer_space(a) a\n");
+  }
+
+  if (color_with_flags) {
+    return sh_data->volume_gridlines_flags_sh;
+  }
+  if (color_range) {
+    return sh_data->volume_gridlines_range_sh;
+  }
+
+  return sh_data->volume_gridlines_sh;
 }
 
 GPUShader *OVERLAY_shader_wireframe_select(void)
@@ -1448,6 +1554,108 @@ GPUShader *OVERLAY_shader_xray_fade(void)
   }
   return sh_data->xray_fade;
 }
+
+/* -------------------------------------------------------------------- */
+/** \name Edit UV shaders
+ * \{ */
+
+GPUShader *OVERLAY_shader_edit_uv_edges_get(void)
+{
+  OVERLAY_Shaders *sh_data = &e_data.sh_data[0];
+  if (!sh_data->edit_uv_edges) {
+    sh_data->edit_uv_edges = DRW_shader_create_with_shaderlib(datatoc_edit_uv_edges_vert_glsl,
+                                                              datatoc_edit_uv_edges_geom_glsl,
+                                                              datatoc_edit_uv_edges_frag_glsl,
+                                                              e_data.lib,
+                                                              NULL);
+  }
+  return sh_data->edit_uv_edges;
+}
+
+GPUShader *OVERLAY_shader_edit_uv_face_get(void)
+{
+  OVERLAY_Shaders *sh_data = &e_data.sh_data[0];
+  if (!sh_data->edit_uv_faces) {
+    sh_data->edit_uv_faces = DRW_shader_create_with_shaderlib(
+        datatoc_edit_uv_faces_vert_glsl,
+        NULL,
+        datatoc_gpu_shader_flat_color_frag_glsl,
+        e_data.lib,
+        "#define blender_srgb_to_framebuffer_space(a) a\n");
+  }
+  return sh_data->edit_uv_faces;
+}
+
+GPUShader *OVERLAY_shader_edit_uv_face_dots_get(void)
+{
+  OVERLAY_Shaders *sh_data = &e_data.sh_data[0];
+  if (!sh_data->edit_uv_face_dots) {
+    sh_data->edit_uv_face_dots = DRW_shader_create_with_shaderlib(
+        datatoc_edit_uv_face_dots_vert_glsl,
+        NULL,
+        datatoc_gpu_shader_flat_color_frag_glsl,
+        e_data.lib,
+        "#define blender_srgb_to_framebuffer_space(a) a\n");
+  }
+  return sh_data->edit_uv_face_dots;
+}
+
+GPUShader *OVERLAY_shader_edit_uv_verts_get(void)
+{
+  OVERLAY_Shaders *sh_data = &e_data.sh_data[0];
+  if (!sh_data->edit_uv_verts) {
+    sh_data->edit_uv_verts = DRW_shader_create_with_shaderlib(
+        datatoc_edit_uv_verts_vert_glsl, NULL, datatoc_edit_uv_verts_frag_glsl, e_data.lib, NULL);
+  }
+
+  return sh_data->edit_uv_verts;
+}
+
+GPUShader *OVERLAY_shader_edit_uv_stretching_area_get(void)
+{
+  OVERLAY_Shaders *sh_data = &e_data.sh_data[0];
+  if (!sh_data->edit_uv_stretching_area) {
+    sh_data->edit_uv_stretching_area = DRW_shader_create_with_shaderlib(
+        datatoc_edit_uv_stretching_vert_glsl,
+        NULL,
+        datatoc_gpu_shader_2D_smooth_color_frag_glsl,
+        e_data.lib,
+        "#define blender_srgb_to_framebuffer_space(a) a\n");
+  }
+
+  return sh_data->edit_uv_stretching_area;
+}
+
+GPUShader *OVERLAY_shader_edit_uv_stretching_angle_get(void)
+{
+  OVERLAY_Shaders *sh_data = &e_data.sh_data[0];
+  if (!sh_data->edit_uv_stretching_angle) {
+    sh_data->edit_uv_stretching_angle = DRW_shader_create_with_shaderlib(
+        datatoc_edit_uv_stretching_vert_glsl,
+        NULL,
+        datatoc_gpu_shader_2D_smooth_color_frag_glsl,
+        e_data.lib,
+        "#define blender_srgb_to_framebuffer_space(a) a\n#define STRETCH_ANGLE\n");
+  }
+
+  return sh_data->edit_uv_stretching_angle;
+}
+
+GPUShader *OVERLAY_shader_edit_uv_tiled_image_borders_get(void)
+{
+  OVERLAY_Shaders *sh_data = &e_data.sh_data[0];
+  if (!sh_data->edit_uv_tiled_image_borders) {
+    sh_data->edit_uv_tiled_image_borders = DRW_shader_create_with_shaderlib(
+        datatoc_edit_uv_tiled_image_borders_vert_glsl,
+        NULL,
+        datatoc_gpu_shader_uniform_color_frag_glsl,
+        e_data.lib,
+        "#define blender_srgb_to_framebuffer_space(a) a\n");
+  }
+  return sh_data->edit_uv_tiled_image_borders;
+}
+
+/* \} */
 
 static OVERLAY_InstanceFormats g_formats = {NULL};
 
@@ -1521,6 +1729,8 @@ OVERLAY_InstanceFormats *OVERLAY_shader_instance_formats_get(void)
 
 void OVERLAY_shader_free(void)
 {
+  DRW_SHADER_LIB_FREE_SAFE(e_data.lib);
+
   for (int sh_data_index = 0; sh_data_index < ARRAY_SIZE(e_data.sh_data); sh_data_index++) {
     OVERLAY_Shaders *sh_data = &e_data.sh_data[sh_data_index];
     GPUShader **sh_data_as_array = (GPUShader **)sh_data;

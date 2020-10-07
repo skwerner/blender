@@ -30,6 +30,7 @@
 
 #include "BKE_global.h"
 
+#include "GPU_debug.h"
 #include "GPU_platform.h"
 
 #include "glew-mx.h"
@@ -70,7 +71,11 @@ static void APIENTRY debug_callback(GLenum UNUSED(source),
                                     const GLchar *message,
                                     const GLvoid *UNUSED(userParm))
 {
-  const char format[] = "GPUDebug: %s%s\033[0m\n";
+  if (ELEM(type, GL_DEBUG_TYPE_PUSH_GROUP, GL_DEBUG_TYPE_POP_GROUP)) {
+    /* The debug layer will emit a message each time a debug group is pushed or popped.
+     * We use that for easy command grouping inside frame analyzer tools. */
+    return;
+  }
 
   if (TRIM_NVIDIA_BUFFER_INFO &&
       GPU_type_matches(GPU_DEVICE_NVIDIA, GPU_OS_ANY, GPU_DRIVER_OFFICIAL) &&
@@ -79,24 +84,29 @@ static void APIENTRY debug_callback(GLenum UNUSED(source),
     return;
   }
 
+  const char format[] = "GPUDebug: %s%s%s\033[0m\n";
+
   if (ELEM(severity, GL_DEBUG_SEVERITY_LOW, GL_DEBUG_SEVERITY_NOTIFICATION)) {
     if (VERBOSE) {
-      fprintf(stderr, format, "\033[2m", message);
+      fprintf(stderr, format, "\033[2m", "", message);
     }
   }
   else {
+    char debug_groups[512] = "";
+    GPU_debug_get_groups_names(sizeof(debug_groups), debug_groups);
+
     switch (type) {
       case GL_DEBUG_TYPE_ERROR:
       case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR:
       case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:
-        fprintf(stderr, format, "\033[31;1mError\033[39m: ", message);
+        fprintf(stderr, format, "\033[31;1mError\033[39m: ", debug_groups, message);
         break;
       case GL_DEBUG_TYPE_PORTABILITY:
       case GL_DEBUG_TYPE_PERFORMANCE:
       case GL_DEBUG_TYPE_OTHER:
       case GL_DEBUG_TYPE_MARKER: /* KHR has this, ARB does not */
       default:
-        fprintf(stderr, format, "\033[33;1mWarning\033[39m: ", message);
+        fprintf(stderr, format, "\033[33;1mWarning\033[39m: ", debug_groups, message);
         break;
     }
 
@@ -112,13 +122,9 @@ static void APIENTRY debug_callback(GLenum UNUSED(source),
 
 #undef APIENTRY
 
+/* This function needs to be called once per context. */
 void init_gl_callbacks(void)
 {
-#ifdef __APPLE__
-  fprintf(stderr, "GPUDebug: OpenGL debug callback is not available on Apple\n");
-  return;
-#endif /* not Apple */
-
   char msg[256] = "";
   const char format[] = "Successfully hooked OpenGL debug callback using %s";
 
@@ -148,7 +154,8 @@ void init_gl_callbacks(void)
                             msg);
   }
   else {
-    fprintf(stderr, "GPUDebug: Failed to hook OpenGL debug callback\n");
+    fprintf(stderr, "GPUDebug: Failed to hook OpenGL debug callback. Use fallback debug layer.\n");
+    init_debug_layer();
   }
 }
 
@@ -203,13 +210,16 @@ void check_gl_resources(const char *info)
    * be big enough to feed the data range the shader awaits. */
   uint16_t ubo_needed = interface->enabled_ubo_mask_;
   ubo_needed &= ~ctx->bound_ubo_slots;
-
   /* NOTE: This only check binding. To be valid, the bound texture needs to
    * be the same format/target the shader expects. */
   uint64_t tex_needed = interface->enabled_tex_mask_;
   tex_needed &= ~GLContext::state_manager_active_get()->bound_texture_slots();
+  /* NOTE: This only check binding. To be valid, the bound image needs to
+   * be the same format/target the shader expects. */
+  uint8_t ima_needed = interface->enabled_ima_mask_;
+  ima_needed &= ~GLContext::state_manager_active_get()->bound_image_slots();
 
-  if (ubo_needed == 0 && tex_needed == 0) {
+  if (ubo_needed == 0 && tex_needed == 0 && ima_needed == 0) {
     return;
   }
 
@@ -226,11 +236,24 @@ void check_gl_resources(const char *info)
 
   for (int i = 0; tex_needed != 0; i++, tex_needed >>= 1) {
     if ((tex_needed & 1) != 0) {
+      /* FIXME: texture_get might return an image input instead. */
       const ShaderInput *tex_input = interface->texture_get(i);
       const char *tex_name = interface->input_name_get(tex_input);
       const char *sh_name = ctx->shader->name_get();
       char msg[256];
       SNPRINTF(msg, "Missing Texture bind at slot %d : %s > %s : %s", i, sh_name, tex_name, info);
+      debug_callback(0, GL_DEBUG_TYPE_ERROR, 0, GL_DEBUG_SEVERITY_HIGH, 0, msg, NULL);
+    }
+  }
+
+  for (int i = 0; ima_needed != 0; i++, ima_needed >>= 1) {
+    if ((ima_needed & 1) != 0) {
+      /* FIXME: texture_get might return a texture input instead. */
+      const ShaderInput *tex_input = interface->texture_get(i);
+      const char *tex_name = interface->input_name_get(tex_input);
+      const char *sh_name = ctx->shader->name_get();
+      char msg[256];
+      SNPRINTF(msg, "Missing Image bind at slot %d : %s > %s : %s", i, sh_name, tex_name, info);
       debug_callback(0, GL_DEBUG_TYPE_ERROR, 0, GL_DEBUG_SEVERITY_HIGH, 0, msg, NULL);
     }
   }
@@ -243,4 +266,96 @@ void raise_gl_error(const char *info)
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
+/** \name Object Label
+ *
+ * Useful for debugging through render-doc. Only defined if using `--debug-gpu`.
+ * Make sure to bind the object first so that it gets defined by the GL implementation.
+ * \{ */
+
+static const char *to_str_prefix(GLenum type)
+{
+  switch (type) {
+    case GL_FRAGMENT_SHADER:
+    case GL_GEOMETRY_SHADER:
+    case GL_VERTEX_SHADER:
+    case GL_SHADER:
+    case GL_PROGRAM:
+      return "SHD-";
+    case GL_SAMPLER:
+      return "SAM-";
+    case GL_TEXTURE:
+      return "TEX-";
+    case GL_FRAMEBUFFER:
+      return "FBO-";
+    case GL_VERTEX_ARRAY:
+      return "VAO-";
+    case GL_UNIFORM_BUFFER:
+      return "UBO-";
+    case GL_BUFFER:
+      return "BUF-";
+    default:
+      return "";
+  }
+}
+static const char *to_str_suffix(GLenum type)
+{
+  switch (type) {
+    case GL_FRAGMENT_SHADER:
+      return "-Frag";
+    case GL_GEOMETRY_SHADER:
+      return "-Geom";
+    case GL_VERTEX_SHADER:
+      return "-Vert";
+    default:
+      return "";
+  }
+}
+
+void object_label(GLenum type, GLuint object, const char *name)
+{
+  if ((G.debug & G_DEBUG_GPU) && (GLEW_VERSION_4_3 || GLEW_KHR_debug)) {
+    char label[64];
+    SNPRINTF(label, "%s%s%s", to_str_prefix(type), name, to_str_suffix(type));
+    /* Small convenience for caller. */
+    if (ELEM(type, GL_FRAGMENT_SHADER, GL_GEOMETRY_SHADER, GL_VERTEX_SHADER)) {
+      type = GL_SHADER;
+    }
+    if (ELEM(type, GL_UNIFORM_BUFFER)) {
+      type = GL_BUFFER;
+    }
+    glObjectLabel(type, object, -1, label);
+  }
+}
+
+/** \} */
+
 }  // namespace blender::gpu::debug
+
+namespace blender::gpu {
+
+/* -------------------------------------------------------------------- */
+/** \name Debug Groups
+ *
+ * Useful for debugging through render-doc. This makes all the API calls grouped into "passes".
+ * \{ */
+
+void GLContext::debug_group_begin(const char *name, int index)
+{
+  if ((G.debug & G_DEBUG_GPU) && (GLEW_VERSION_4_3 || GLEW_KHR_debug)) {
+    /* Add 10 to avoid conlision with other indices from other possible callback layers. */
+    index += 10;
+    glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, index, -1, name);
+  }
+}
+
+void GLContext::debug_group_end(void)
+{
+  if ((G.debug & G_DEBUG_GPU) && (GLEW_VERSION_4_3 || GLEW_KHR_debug)) {
+    glPopDebugGroup();
+  }
+}
+
+/** \} */
+
+}  // namespace blender::gpu

@@ -32,7 +32,6 @@
  * For now it's not a priority, so leave as-is.
  */
 
-#include <assert.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
@@ -167,7 +166,6 @@ static void ui_tooltip_region_draw_cb(const bContext *UNUSED(C), ARegion *region
 
   float background_color[3];
   float tone_bg;
-  int i;
 
   wmOrtho2_region_pixelspace(region);
 
@@ -204,7 +202,7 @@ static void ui_tooltip_region_draw_cb(const bContext *UNUSED(C), ARegion *region
   bbox.xmin += 0.5f * pad_px; /* add padding to the text */
   bbox.ymax -= 0.25f * pad_px;
 
-  for (i = 0; i < data->fields_len; i++) {
+  for (int i = 0; i < data->fields_len; i++) {
     const uiTooltipField *field = &data->fields[i];
     const uiTooltipField *field_next = (i + 1) != data->fields_len ? &data->fields[i + 1] : NULL;
 

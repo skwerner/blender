@@ -11,6 +11,7 @@
 
 #include "engines/eevee/eevee_private.h"
 #include "engines/gpencil/gpencil_engine.h"
+#include "engines/image/image_private.h"
 #include "engines/overlay/overlay_private.h"
 #include "engines/workbench/workbench_private.h"
 
@@ -96,22 +97,53 @@ TEST_F(DrawTest, workbench_glsl_shaders)
   EXPECT_NE(workbench_shader_antialiasing_get(1), nullptr);
   EXPECT_NE(workbench_shader_antialiasing_get(2), nullptr);
 
-  EXPECT_NE(workbench_shader_volume_get(false, false, false, false), nullptr);
-  EXPECT_NE(workbench_shader_volume_get(false, false, false, true), nullptr);
-  EXPECT_NE(workbench_shader_volume_get(false, false, true, false), nullptr);
-  EXPECT_NE(workbench_shader_volume_get(false, false, true, true), nullptr);
-  EXPECT_NE(workbench_shader_volume_get(false, true, false, false), nullptr);
-  EXPECT_NE(workbench_shader_volume_get(false, true, false, true), nullptr);
-  EXPECT_NE(workbench_shader_volume_get(false, true, true, false), nullptr);
-  EXPECT_NE(workbench_shader_volume_get(false, true, true, true), nullptr);
-  EXPECT_NE(workbench_shader_volume_get(true, false, false, false), nullptr);
-  EXPECT_NE(workbench_shader_volume_get(true, false, false, true), nullptr);
-  EXPECT_NE(workbench_shader_volume_get(true, false, true, false), nullptr);
-  EXPECT_NE(workbench_shader_volume_get(true, false, true, true), nullptr);
-  EXPECT_NE(workbench_shader_volume_get(true, true, false, false), nullptr);
-  EXPECT_NE(workbench_shader_volume_get(true, true, false, true), nullptr);
-  EXPECT_NE(workbench_shader_volume_get(true, true, true, false), nullptr);
-  EXPECT_NE(workbench_shader_volume_get(true, true, true, true), nullptr);
+  EXPECT_NE(workbench_shader_volume_get(false, false, WORKBENCH_VOLUME_INTERP_LINEAR, false),
+            nullptr);
+  EXPECT_NE(workbench_shader_volume_get(false, false, WORKBENCH_VOLUME_INTERP_LINEAR, true),
+            nullptr);
+  EXPECT_NE(workbench_shader_volume_get(false, false, WORKBENCH_VOLUME_INTERP_CUBIC, false),
+            nullptr);
+  EXPECT_NE(workbench_shader_volume_get(false, false, WORKBENCH_VOLUME_INTERP_CUBIC, true),
+            nullptr);
+  EXPECT_NE(workbench_shader_volume_get(false, false, WORKBENCH_VOLUME_INTERP_CLOSEST, false),
+            nullptr);
+  EXPECT_NE(workbench_shader_volume_get(false, false, WORKBENCH_VOLUME_INTERP_CLOSEST, true),
+            nullptr);
+  EXPECT_NE(workbench_shader_volume_get(false, true, WORKBENCH_VOLUME_INTERP_LINEAR, false),
+            nullptr);
+  EXPECT_NE(workbench_shader_volume_get(false, true, WORKBENCH_VOLUME_INTERP_LINEAR, true),
+            nullptr);
+  EXPECT_NE(workbench_shader_volume_get(false, true, WORKBENCH_VOLUME_INTERP_CUBIC, false),
+            nullptr);
+  EXPECT_NE(workbench_shader_volume_get(false, true, WORKBENCH_VOLUME_INTERP_CUBIC, true),
+            nullptr);
+  EXPECT_NE(workbench_shader_volume_get(false, true, WORKBENCH_VOLUME_INTERP_CLOSEST, false),
+            nullptr);
+  EXPECT_NE(workbench_shader_volume_get(false, true, WORKBENCH_VOLUME_INTERP_CLOSEST, true),
+            nullptr);
+  EXPECT_NE(workbench_shader_volume_get(true, false, WORKBENCH_VOLUME_INTERP_LINEAR, false),
+            nullptr);
+  EXPECT_NE(workbench_shader_volume_get(true, false, WORKBENCH_VOLUME_INTERP_LINEAR, true),
+            nullptr);
+  EXPECT_NE(workbench_shader_volume_get(true, false, WORKBENCH_VOLUME_INTERP_CUBIC, false),
+            nullptr);
+  EXPECT_NE(workbench_shader_volume_get(true, false, WORKBENCH_VOLUME_INTERP_CUBIC, true),
+            nullptr);
+  EXPECT_NE(workbench_shader_volume_get(true, false, WORKBENCH_VOLUME_INTERP_CLOSEST, false),
+            nullptr);
+  EXPECT_NE(workbench_shader_volume_get(true, false, WORKBENCH_VOLUME_INTERP_CLOSEST, true),
+            nullptr);
+  EXPECT_NE(workbench_shader_volume_get(true, true, WORKBENCH_VOLUME_INTERP_LINEAR, false),
+            nullptr);
+  EXPECT_NE(workbench_shader_volume_get(true, true, WORKBENCH_VOLUME_INTERP_LINEAR, true),
+            nullptr);
+  EXPECT_NE(workbench_shader_volume_get(true, true, WORKBENCH_VOLUME_INTERP_CUBIC, false),
+            nullptr);
+  EXPECT_NE(workbench_shader_volume_get(true, true, WORKBENCH_VOLUME_INTERP_CUBIC, true), nullptr);
+  EXPECT_NE(workbench_shader_volume_get(true, true, WORKBENCH_VOLUME_INTERP_CLOSEST, false),
+            nullptr);
+  EXPECT_NE(workbench_shader_volume_get(true, true, WORKBENCH_VOLUME_INTERP_CLOSEST, true),
+            nullptr);
 
   GPUShader *dof_prepare_sh;
   GPUShader *dof_downsample_sh;
@@ -151,8 +183,20 @@ TEST_F(DrawTest, gpencil_glsl_shaders)
   GPENCIL_shader_free();
 }
 
+TEST_F(DrawTest, image_glsl_shaders)
+{
+  IMAGE_shader_library_ensure();
+
+  EXPECT_NE(IMAGE_shader_image_get(false), nullptr);
+  EXPECT_NE(IMAGE_shader_image_get(true), nullptr);
+
+  IMAGE_shader_free();
+}
+
 TEST_F(DrawTest, overlay_glsl_shaders)
 {
+  OVERLAY_shader_library_ensure();
+
   for (int i = 0; i < 2; i++) {
     eGPUShaderConfig sh_cfg = i == 0 ? GPU_SHADER_CFG_DEFAULT : GPU_SHADER_CFG_CLIPPED;
     DRW_draw_state_init_gtests(sh_cfg);
@@ -189,6 +233,13 @@ TEST_F(DrawTest, overlay_glsl_shaders)
     EXPECT_NE(OVERLAY_shader_edit_mesh_vert(), nullptr);
     EXPECT_NE(OVERLAY_shader_edit_particle_strand(), nullptr);
     EXPECT_NE(OVERLAY_shader_edit_particle_point(), nullptr);
+    EXPECT_NE(OVERLAY_shader_edit_uv_edges_get(), nullptr);
+    EXPECT_NE(OVERLAY_shader_edit_uv_face_get(), nullptr);
+    EXPECT_NE(OVERLAY_shader_edit_uv_face_dots_get(), nullptr);
+    EXPECT_NE(OVERLAY_shader_edit_uv_verts_get(), nullptr);
+    EXPECT_NE(OVERLAY_shader_edit_uv_stretching_area_get(), nullptr);
+    EXPECT_NE(OVERLAY_shader_edit_uv_stretching_angle_get(), nullptr);
+    EXPECT_NE(OVERLAY_shader_edit_uv_tiled_image_borders_get(), nullptr);
     EXPECT_NE(OVERLAY_shader_extra(false), nullptr);
     EXPECT_NE(OVERLAY_shader_extra(true), nullptr);
     EXPECT_NE(OVERLAY_shader_extra_groundline(), nullptr);
@@ -201,6 +252,7 @@ TEST_F(DrawTest, overlay_glsl_shaders)
     EXPECT_NE(OVERLAY_shader_facing(), nullptr);
     EXPECT_NE(OVERLAY_shader_gpencil_canvas(), nullptr);
     EXPECT_NE(OVERLAY_shader_grid(), nullptr);
+    EXPECT_NE(OVERLAY_shader_grid_image(), nullptr);
     EXPECT_NE(OVERLAY_shader_image(), nullptr);
     EXPECT_NE(OVERLAY_shader_motion_path_line(), nullptr);
     EXPECT_NE(OVERLAY_shader_motion_path_vert(), nullptr);
@@ -220,8 +272,9 @@ TEST_F(DrawTest, overlay_glsl_shaders)
     EXPECT_NE(OVERLAY_shader_particle_dot(), nullptr);
     EXPECT_NE(OVERLAY_shader_particle_shape(), nullptr);
     EXPECT_NE(OVERLAY_shader_sculpt_mask(), nullptr);
-    EXPECT_NE(OVERLAY_shader_volume_velocity(false), nullptr);
-    EXPECT_NE(OVERLAY_shader_volume_velocity(true), nullptr);
+    EXPECT_NE(OVERLAY_shader_volume_velocity(false, false), nullptr);
+    EXPECT_NE(OVERLAY_shader_volume_velocity(false, true), nullptr);
+    EXPECT_NE(OVERLAY_shader_volume_velocity(true, false), nullptr);
     EXPECT_NE(OVERLAY_shader_wireframe(false), nullptr);
     EXPECT_NE(OVERLAY_shader_wireframe(true), nullptr);
     EXPECT_NE(OVERLAY_shader_wireframe_select(), nullptr);

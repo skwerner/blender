@@ -41,6 +41,7 @@
 #include "DNA_object_fluidsim_types.h"
 #include "DNA_object_force_types.h"
 #include "DNA_object_types.h"
+#include "DNA_pointcloud_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_vfont_types.h"
 
@@ -529,9 +530,12 @@ Object *ED_object_add_type_with_obdata(bContext *C,
   ViewLayer *view_layer = CTX_data_view_layer(C);
   Object *ob;
 
-  /* for as long scene has editmode... */
-  if (CTX_data_edit_object(C)) {
-    ED_object_editmode_exit(C, EM_FREEDATA);
+  /* For as long scene has editmode... */
+  {
+    Object *obedit = OBEDIT_FROM_VIEW_LAYER(view_layer);
+    if (obedit != NULL) {
+      ED_object_editmode_exit_ex(bmain, scene, obedit, EM_FREEDATA);
+    }
   }
 
   /* deselects all, sets active object */
@@ -778,18 +782,20 @@ static int effector_add_exec(bContext *C, wmOperator *op)
   dia = RNA_float_get(op->ptr, "radius");
 
   if (type == PFIELD_GUIDE) {
+    Main *bmain = CTX_data_main(C);
+    Scene *scene = CTX_data_scene(C);
     Curve *cu;
     ob = ED_object_add_type(
         C, OB_CURVE, get_effector_defname(type), loc, rot, false, local_view_bits);
 
     cu = ob->data;
     cu->flag |= CU_PATH | CU_3D;
-    ED_object_editmode_enter(C, 0);
+    ED_object_editmode_enter_ex(bmain, scene, ob, 0);
     ED_object_new_primitive_matrix(C, ob, loc, rot, mat);
     BLI_addtail(&cu->editnurb->nurbs,
                 ED_curve_add_nurbs_primitive(C, ob, mat, CU_NURBS | CU_PRIM_PATH, dia));
     if (!enter_editmode) {
-      ED_object_editmode_exit(C, EM_FREEDATA);
+      ED_object_editmode_exit_ex(bmain, scene, ob, EM_FREEDATA);
     }
   }
   else {
@@ -900,7 +906,10 @@ void OBJECT_OT_camera_add(wmOperatorType *ot)
 
 static int object_metaball_add_exec(bContext *C, wmOperator *op)
 {
-  Object *obedit = CTX_data_edit_object(C);
+  Main *bmain = CTX_data_main(C);
+  Scene *scene = CTX_data_scene(C);
+  ViewLayer *view_layer = CTX_data_view_layer(C);
+  Object *obedit = OBEDIT_FROM_VIEW_LAYER(view_layer);
   bool newob = false;
   bool enter_editmode;
   ushort local_view_bits;
@@ -931,7 +940,7 @@ static int object_metaball_add_exec(bContext *C, wmOperator *op)
 
   /* userdef */
   if (newob && !enter_editmode) {
-    ED_object_editmode_exit(C, EM_FREEDATA);
+    ED_object_editmode_exit_ex(bmain, scene, obedit, EM_FREEDATA);
   }
 
   WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, obedit);
@@ -1017,7 +1026,11 @@ void OBJECT_OT_text_add(wmOperatorType *ot)
 
 static int object_armature_add_exec(bContext *C, wmOperator *op)
 {
-  Object *obedit = CTX_data_edit_object(C);
+  Main *bmain = CTX_data_main(C);
+  Scene *scene = CTX_data_scene(C);
+  ViewLayer *view_layer = CTX_data_view_layer(C);
+  Object *obedit = OBEDIT_FROM_VIEW_LAYER(view_layer);
+
   RegionView3D *rv3d = CTX_wm_region_view3d(C);
   bool newob = false;
   bool enter_editmode;
@@ -1032,7 +1045,7 @@ static int object_armature_add_exec(bContext *C, wmOperator *op)
   }
   if ((obedit == NULL) || (obedit->type != OB_ARMATURE)) {
     obedit = ED_object_add_type(C, OB_ARMATURE, NULL, loc, rot, true, local_view_bits);
-    ED_object_editmode_enter(C, 0);
+    ED_object_editmode_enter_ex(bmain, scene, obedit, 0);
     newob = true;
   }
   else {
@@ -1049,7 +1062,7 @@ static int object_armature_add_exec(bContext *C, wmOperator *op)
 
   /* userdef */
   if (newob && !enter_editmode) {
-    ED_object_editmode_exit(C, EM_FREEDATA);
+    ED_object_editmode_exit_ex(bmain, scene, obedit, EM_FREEDATA);
   }
 
   WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, obedit);
@@ -2316,8 +2329,15 @@ void OBJECT_OT_duplicates_make_real(wmOperatorType *ot)
 
 static const EnumPropertyItem convert_target_items[] = {
     {OB_CURVE, "CURVE", ICON_OUTLINER_OB_CURVE, "Curve from Mesh/Text", ""},
+#ifdef WITH_PARTICLE_NODES
+    {OB_MESH, "MESH", ICON_OUTLINER_OB_MESH, "Mesh from Curve/Meta/Surf/Text/Pointcloud", ""},
+#else
     {OB_MESH, "MESH", ICON_OUTLINER_OB_MESH, "Mesh from Curve/Meta/Surf/Text", ""},
+#endif
     {OB_GPENCIL, "GPENCIL", ICON_OUTLINER_OB_GREASEPENCIL, "Grease Pencil from Curve/Mesh", ""},
+#ifdef WITH_PARTICLE_NODES
+    {OB_POINTCLOUD, "POINTCLOUD", ICON_OUTLINER_OB_POINTCLOUD, "Pointcloud from Mesh", ""},
+#endif
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -2455,6 +2475,7 @@ static int object_convert_exec(bContext *C, wmOperator *op)
   MetaBall *mb;
   Mesh *me;
   Object *ob_gpencil = NULL;
+  PointCloud *pointcloud;
   const short target = RNA_enum_get(op->ptr, "target");
   bool keep_original = RNA_boolean_get(op->ptr, "keep_original");
 
@@ -2540,7 +2561,7 @@ static int object_convert_exec(bContext *C, wmOperator *op)
       /* obdata already modified */
       if (!IS_TAGGED(ob->data)) {
         /* When 2 objects with linked data are selected, converting both
-         * would keep modifiers on all but the converted object [#26003] */
+         * would keep modifiers on all but the converted object T26003. */
         if (ob->type == OB_MESH) {
           BKE_object_free_modifiers(ob, 0); /* after derivedmesh calls! */
         }
@@ -2572,7 +2593,9 @@ static int object_convert_exec(bContext *C, wmOperator *op)
 
       if (newob->type == OB_CURVE) {
         BKE_object_free_modifiers(newob, 0); /* after derivedmesh calls! */
-        ED_rigidbody_object_remove(bmain, scene, newob);
+        if (newob->rigidbody_object != NULL) {
+          ED_rigidbody_object_remove(bmain, scene, newob);
+        }
       }
     }
     else if (ob->type == OB_MESH && target == OB_GPENCIL) {
@@ -2594,20 +2617,18 @@ static int object_convert_exec(bContext *C, wmOperator *op)
       bGPdata *gpd = (bGPdata *)ob_gpencil->data;
       gpd->draw_mode = GP_DRAWMODE_3D;
 
-      BKE_gpencil_convert_mesh(bmain,
-                               depsgraph,
-                               scene,
-                               ob_gpencil,
-                               ob,
-                               angle,
-                               thickness,
-                               offset,
-                               matrix,
-                               0,
-                               use_seams,
-                               use_faces,
-                               false);
-      gpencilConverted = true;
+      gpencilConverted |= BKE_gpencil_convert_mesh(bmain,
+                                                   depsgraph,
+                                                   scene,
+                                                   ob_gpencil,
+                                                   ob,
+                                                   angle,
+                                                   thickness,
+                                                   offset,
+                                                   matrix,
+                                                   0,
+                                                   use_seams,
+                                                   use_faces);
 
       /* Remove unused materials. */
       int actcol = ob_gpencil->actcol;
@@ -2623,6 +2644,31 @@ static int object_convert_exec(bContext *C, wmOperator *op)
         }
       }
       ob_gpencil->actcol = actcol;
+    }
+    else if (ob->type == OB_MESH && target == OB_POINTCLOUD) {
+      ob->flag |= OB_DONE;
+
+      if (keep_original) {
+        basen = duplibase_for_convert(bmain, depsgraph, scene, view_layer, base, NULL);
+        newob = basen->object;
+
+        /* decrement original mesh's usage count  */
+        me = newob->data;
+        id_us_min(&me->id);
+
+        /* make a new copy of the mesh */
+        newob->data = BKE_mesh_copy(bmain, me);
+      }
+      else {
+        newob = ob;
+      }
+
+      BKE_mesh_to_pointcloud(bmain, depsgraph, scene, newob);
+
+      if (newob->type == OB_POINTCLOUD) {
+        BKE_object_free_modifiers(newob, 0); /* after derivedmesh calls! */
+        ED_rigidbody_object_remove(bmain, scene, newob);
+      }
     }
     else if (ob->type == OB_MESH) {
       ob->flag |= OB_DONE;
@@ -2807,6 +2853,31 @@ static int object_convert_exec(bContext *C, wmOperator *op)
 
         baseob->flag |= OB_DONE;
         mballConverted = 1;
+      }
+    }
+    else if (ob->type == OB_POINTCLOUD && target == OB_MESH) {
+      ob->flag |= OB_DONE;
+
+      if (keep_original) {
+        basen = duplibase_for_convert(bmain, depsgraph, scene, view_layer, base, NULL);
+        newob = basen->object;
+
+        /* decrement original pointclouds's usage count  */
+        pointcloud = newob->data;
+        id_us_min(&pointcloud->id);
+
+        /* make a new copy of the pointcloud */
+        newob->data = BKE_pointcloud_copy(bmain, pointcloud);
+      }
+      else {
+        newob = ob;
+      }
+
+      BKE_pointcloud_to_mesh(bmain, depsgraph, scene, newob);
+
+      if (newob->type == OB_MESH) {
+        BKE_object_free_modifiers(newob, 0); /* after derivedmesh calls! */
+        ED_rigidbody_object_remove(bmain, scene, newob);
       }
     }
     else {
@@ -3057,7 +3128,7 @@ Base *ED_object_add_duplicate(
 
   ob = basen->object;
 
-  /* link own references to the newly duplicated data [#26816] */
+  /* link own references to the newly duplicated data T26816. */
   BKE_libblock_relink_to_newid(&ob->id);
 
   /* DAG_relations_tag_update(bmain); */ /* caller must do */

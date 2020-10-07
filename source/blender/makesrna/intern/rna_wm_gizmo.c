@@ -45,8 +45,6 @@
 
 #ifdef RNA_RUNTIME
 
-#  include <assert.h>
-
 #  include "BLI_string_utils.h"
 
 #  include "WM_api.h"
@@ -240,7 +238,7 @@ static void rna_Gizmo_bl_idname_set(PointerRNA *ptr, const char *value)
     BLI_strncpy(str, value, MAX_NAME); /* utf8 already ensured */
   }
   else {
-    assert(!"setting the bl_idname on a non-builtin operator");
+    BLI_assert(!"setting the bl_idname on a non-builtin operator");
   }
 }
 
@@ -398,7 +396,7 @@ RNA_GIZMO_GENERIC_FLAG_RW_DEF(flag_use_draw_hover, flag, WM_GIZMO_DRAW_HOVER);
 RNA_GIZMO_GENERIC_FLAG_RW_DEF(flag_use_draw_modal, flag, WM_GIZMO_DRAW_MODAL);
 RNA_GIZMO_GENERIC_FLAG_RW_DEF(flag_use_draw_value, flag, WM_GIZMO_DRAW_VALUE);
 RNA_GIZMO_GENERIC_FLAG_RW_DEF(flag_use_draw_offset_scale, flag, WM_GIZMO_DRAW_OFFSET_SCALE);
-RNA_GIZMO_GENERIC_FLAG_NEG_RW_DEF(flag_use_draw_scale, flag, WM_GIZMO_DRAW_OFFSET_SCALE);
+RNA_GIZMO_GENERIC_FLAG_NEG_RW_DEF(flag_use_draw_scale, flag, WM_GIZMO_DRAW_NO_SCALE);
 RNA_GIZMO_GENERIC_FLAG_RW_DEF(flag_hide, flag, WM_GIZMO_HIDDEN);
 RNA_GIZMO_GENERIC_FLAG_RW_DEF(flag_hide_select, flag, WM_GIZMO_HIDDEN_SELECT);
 RNA_GIZMO_GENERIC_FLAG_RW_DEF(flag_hide_keymap, flag, WM_GIZMO_HIDDEN_KEYMAP);
@@ -632,7 +630,7 @@ static void rna_GizmoGroup_bl_idname_set(PointerRNA *ptr, const char *value)
     BLI_strncpy(str, value, MAX_NAME); /* utf8 already ensured */
   }
   else {
-    assert(!"setting the bl_idname on a non-builtin operator");
+    BLI_assert(!"setting the bl_idname on a non-builtin operator");
   }
 }
 
@@ -644,7 +642,7 @@ static void rna_GizmoGroup_bl_label_set(PointerRNA *ptr, const char *value)
     BLI_strncpy(str, value, MAX_NAME); /* utf8 already ensured */
   }
   else {
-    assert(!"setting the bl_label on a non-builtin operator");
+    BLI_assert(!"setting the bl_label on a non-builtin operator");
   }
 }
 

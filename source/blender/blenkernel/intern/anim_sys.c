@@ -69,6 +69,8 @@
 
 #include "RNA_access.h"
 
+#include "BLO_read_write.h"
+
 #include "nla_private.h"
 
 #include "atomic_ops.h"
@@ -305,6 +307,55 @@ void BKE_keyingsets_free(ListBase *list)
     ksn = ks->next;
     BKE_keyingset_free(ks);
     BLI_freelinkN(list, ks);
+  }
+}
+
+void BKE_keyingsets_blend_write(BlendWriter *writer, ListBase *list)
+{
+  LISTBASE_FOREACH (KeyingSet *, ks, list) {
+    /* KeyingSet */
+    BLO_write_struct(writer, KeyingSet, ks);
+
+    /* Paths */
+    LISTBASE_FOREACH (KS_Path *, ksp, &ks->paths) {
+      /* Path */
+      BLO_write_struct(writer, KS_Path, ksp);
+
+      if (ksp->rna_path) {
+        BLO_write_string(writer, ksp->rna_path);
+      }
+    }
+  }
+}
+
+void BKE_keyingsets_blend_read_data(BlendDataReader *reader, ListBase *list)
+{
+  LISTBASE_FOREACH (KeyingSet *, ks, list) {
+    /* paths */
+    BLO_read_list(reader, &ks->paths);
+
+    LISTBASE_FOREACH (KS_Path *, ksp, &ks->paths) {
+      /* rna path */
+      BLO_read_data_address(reader, &ksp->rna_path);
+    }
+  }
+}
+
+void BKE_keyingsets_blend_read_lib(BlendLibReader *reader, ID *id, ListBase *list)
+{
+  LISTBASE_FOREACH (KeyingSet *, ks, list) {
+    LISTBASE_FOREACH (KS_Path *, ksp, &ks->paths) {
+      BLO_read_id_address(reader, id->lib, &ksp->id);
+    }
+  }
+}
+
+void BKE_keyingsets_blend_read_expand(BlendExpander *expander, ListBase *list)
+{
+  LISTBASE_FOREACH (KeyingSet *, ks, list) {
+    LISTBASE_FOREACH (KS_Path *, ksp, &ks->paths) {
+      BLO_expand(expander, ksp->id);
+    }
   }
 }
 
@@ -1351,7 +1402,7 @@ static NlaEvalChannel *nlaevalchan_verify(PointerRNA *ptr, NlaEvalData *nlaeval,
 /* accumulate the old and new values of a channel according to mode and influence */
 static float nla_blend_value(int blendmode, float old_value, float value, float inf)
 {
-  /* optimisation: no need to try applying if there is no influence */
+  /* Optimization: no need to try applying if there is no influence. */
   if (IS_EQF(inf, 0.0f)) {
     return old_value;
   }
@@ -1392,7 +1443,7 @@ static float nla_blend_value(int blendmode, float old_value, float value, float 
 static float nla_combine_value(
     int mix_mode, float base_value, float old_value, float value, float inf)
 {
-  /* optimisation: no need to try applying if there is no influence */
+  /* Optimization: no need to try applying if there is no influence. */
   if (IS_EQF(inf, 0.0f)) {
     return old_value;
   }
@@ -1870,6 +1921,7 @@ static void nlastrip_evaluate_transition(PointerRNA *ptr,
   /* first strip */
   tmp_nes.strip_mode = NES_TIME_TRANSITION_START;
   tmp_nes.strip = s1;
+  tmp_nes.strip_time = s1->strip_time;
   nlaeval_snapshot_init(&snapshot1, channels, snapshot);
   nlastrip_evaluate(
       ptr, channels, &tmp_modifiers, &tmp_nes, &snapshot1, anim_eval_context, flush_to_original);
@@ -1877,6 +1929,7 @@ static void nlastrip_evaluate_transition(PointerRNA *ptr,
   /* second strip */
   tmp_nes.strip_mode = NES_TIME_TRANSITION_END;
   tmp_nes.strip = s2;
+  tmp_nes.strip_time = s2->strip_time;
   nlaeval_snapshot_init(&snapshot2, channels, snapshot);
   nlastrip_evaluate(
       ptr, channels, &tmp_modifiers, &tmp_nes, &snapshot2, anim_eval_context, flush_to_original);

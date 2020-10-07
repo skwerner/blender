@@ -96,7 +96,8 @@ Scene::Scene(const SceneParams &params_, Device *device)
       default_empty(NULL),
       device(device),
       dscene(device),
-      params(params_)
+      params(params_),
+      update_stats(NULL)
 {
   memset((void *)&dscene.data, 0, sizeof(dscene.data));
 
@@ -189,6 +190,7 @@ void Scene::free_memory(bool final)
     delete particle_system_manager;
     delete image_manager;
     delete bake_manager;
+    delete update_stats;
   }
 }
 
@@ -198,6 +200,20 @@ void Scene::device_update(Device *device_, Progress &progress)
     device = device_;
 
   bool print_stats = need_data_update();
+
+  if (update_stats) {
+    update_stats->clear();
+  }
+
+  scoped_callback_timer timer([this, print_stats](double time) {
+    if (update_stats) {
+      update_stats->scene.times.add_entry({"device_update", time});
+
+      if (print_stats) {
+        printf("Update statistics:\n%s\n", update_stats->full_report().c_str());
+      }
+    }
+  });
 
   /* The order of updates is important, because there's dependencies between
    * the different managers, using data computed by previous managers.
@@ -270,7 +286,7 @@ void Scene::device_update(Device *device_, Progress &progress)
     return;
 
   progress.set_status("Updating Lookup Tables");
-  lookup_tables->device_update(device, &dscene);
+  lookup_tables->device_update(device, &dscene, this);
 
   if (progress.get_cancel() || device->have_error())
     return;
@@ -294,7 +310,7 @@ void Scene::device_update(Device *device_, Progress &progress)
     return;
 
   progress.set_status("Updating Lookup Tables");
-  lookup_tables->device_update(device, &dscene);
+  lookup_tables->device_update(device, &dscene, this);
 
   if (progress.get_cancel() || device->have_error())
     return;
@@ -403,6 +419,13 @@ void Scene::collect_statistics(RenderStats *stats)
 {
   geometry_manager->collect_statistics(this, stats);
   image_manager->collect_statistics(stats);
+}
+
+void Scene::enable_update_stats()
+{
+  if (!update_stats) {
+    update_stats = new SceneUpdateStats();
+  }
 }
 
 DeviceRequestedFeatures Scene::get_requested_device_features()

@@ -27,9 +27,7 @@
 
 #include <Alembic/AbcGeom/OCurves.h>
 
-namespace blender {
-namespace io {
-namespace alembic {
+namespace blender::io::alembic {
 
 extern const std::string ABC_CURVE_RESOLUTION_U_PROPNAME;
 
@@ -43,6 +41,7 @@ class ABCCurveWriter : public ABCAbstractWriter {
 
   virtual void create_alembic_objects(const HierarchyContext *context) override;
   virtual Alembic::Abc::OObject get_alembic_object() const override;
+  Alembic::Abc::OCompoundProperty abc_prop_for_custom_props() override;
 
  protected:
   virtual void do_write(HierarchyContext &context) override;
@@ -56,6 +55,4 @@ class ABCCurveMeshWriter : public ABCGenericMeshWriter {
   virtual Mesh *get_export_mesh(Object *object_eval, bool &r_needsfree) override;
 };
 
-}  // namespace alembic
-}  // namespace io
-}  // namespace blender
+}  // namespace blender::io::alembic

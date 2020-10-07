@@ -62,7 +62,8 @@ static uint16_t vbo_bind(const ShaderInterface *interface,
       offset = a->offset;
     }
 
-    const GLvoid *pointer = (const GLubyte *)0 + offset + v_first * stride;
+    /* This is in fact an offset in memory. */
+    const GLvoid *pointer = (const GLubyte *)(intptr_t)(offset + v_first * stride);
     const GLenum type = to_gl(static_cast<GPUVertCompType>(a->comp_type));
 
     for (uint n_idx = 0; n_idx < a->name_len; n_idx++) {
@@ -135,7 +136,7 @@ void GLVertArray::update_bindings(const GLuint vao,
     }
   }
 
-  if (attr_mask != 0 && GLEW_ARB_vertex_attrib_binding) {
+  if (attr_mask != 0 && GLContext::vertex_attrib_binding_support) {
     for (uint16_t mask = 1, a = 0; a < 16; a++, mask <<= 1) {
       if (attr_mask & mask) {
         GLContext *ctx = GLContext::get();

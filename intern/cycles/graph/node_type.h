@@ -28,6 +28,8 @@ CCL_NAMESPACE_BEGIN
 struct Node;
 struct NodeType;
 
+typedef uint64_t SocketModifiedFlags;
+
 /* Socket Type */
 
 struct SocketType {
@@ -88,6 +90,7 @@ struct SocketType {
   const NodeType **node_type;
   int flags;
   ustring ui_name;
+  SocketModifiedFlags modified_flag_bit;
 
   size_t size() const;
   bool is_array() const;
@@ -162,12 +165,12 @@ struct NodeType {
 
 /* Sock Definition Macros */
 
-#define SOCKET_OFFSETOF(T, name) (((char *)&(((T *)1)->name)) - (char *)1)
-#define SOCKET_SIZEOF(T, name) (sizeof(((T *)1)->name))
+#define SOCKET_OFFSETOF(T, name) offsetof(T, name)
+#define SOCKET_SIZEOF(T, name) (sizeof(T::name))
 #define SOCKET_DEFINE(name, ui_name, default_value, datatype, TYPE, flags, ...) \
   { \
     static datatype defval = default_value; \
-    CHECK_TYPE(((T *)1)->name, datatype); \
+    CHECK_TYPE(T::name, datatype); \
     type->register_input(ustring(#name), \
                          ustring(ui_name), \
                          TYPE, \

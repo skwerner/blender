@@ -225,8 +225,10 @@ ModifierTypeInfo modifierType_Fluid = {
     /* name */ "Fluid",
     /* structName */ "FluidModifierData",
     /* structSize */ sizeof(FluidModifierData),
+    /* srna */ &RNA_FluidModifier,
     /* type */ eModifierTypeType_Constructive,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_Single,
+    /* icon */ ICON_MOD_FLUIDSIM,
 
     /* copyData */ copyData,
 
@@ -246,7 +248,6 @@ ModifierTypeInfo modifierType_Fluid = {
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ dependsOnTime,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ NULL,
     /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,

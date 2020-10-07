@@ -152,6 +152,7 @@ struct GPUBatch **DRW_cache_pointcloud_surface_shaded_get(struct Object *ob,
 int DRW_volume_material_count_get(struct Volume *volume);
 
 struct GPUBatch *DRW_volume_batch_cache_get_wireframes_face(struct Volume *volume);
+struct GPUBatch *DRW_volume_batch_cache_get_selection_surface(struct Volume *volume);
 
 /* Mesh */
 void DRW_mesh_batch_cache_create_requested(struct TaskGraph *task_graph,
@@ -175,6 +176,7 @@ struct GPUBatch *DRW_mesh_batch_cache_get_surface_texpaint_single(struct Mesh *m
 struct GPUBatch *DRW_mesh_batch_cache_get_surface_vertpaint(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_surface_sculpt(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_surface_weights(struct Mesh *me);
+struct GPUBatch *DRW_mesh_batch_cache_get_sculpt_overlays(struct Mesh *me);
 /* edit-mesh drawing */
 struct GPUBatch *DRW_mesh_batch_cache_get_edit_triangles(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_edit_vertices(struct Mesh *me);

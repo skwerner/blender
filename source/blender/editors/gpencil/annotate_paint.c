@@ -1119,7 +1119,6 @@ static void annotation_stroke_eraser_dostroke(tGPsdata *p,
   bGPDspoint *pt1, *pt2;
   int pc1[2] = {0};
   int pc2[2] = {0};
-  int i;
   int mval_i[2];
   round_v2i_v2fl(mval_i, mval);
 
@@ -1152,7 +1151,7 @@ static void annotation_stroke_eraser_dostroke(tGPsdata *p,
      * we don't miss anything, though things will be
      * slightly slower as a result
      */
-    for (i = 0; i < gps->totpoints; i++) {
+    for (int i = 0; i < gps->totpoints; i++) {
       bGPDspoint *pt = &gps->points[i];
       pt->flag &= ~GP_SPOINT_TAG;
     }
@@ -1161,7 +1160,7 @@ static void annotation_stroke_eraser_dostroke(tGPsdata *p,
      *   1) Thin out parts of the stroke under the brush
      *   2) Tag "too thin" parts for removal (in second pass)
      */
-    for (i = 0; (i + 1) < gps->totpoints; i++) {
+    for (int i = 0; (i + 1) < gps->totpoints; i++) {
       /* get points to work with */
       pt1 = gps->points + i;
       pt2 = gps->points + i + 1;
@@ -2090,7 +2089,7 @@ static void annotation_draw_apply_event(
   }
   else {
     p->straight[0] = 0;
-    /* We were using shift while having permanent stabilization actived,
+    /* We were using shift while having permanent stabilization active,
        so activate the temp flag back again. */
     if (p->flags & GP_PAINTFLAG_USE_STABILIZER) {
       if ((p->flags & GP_PAINTFLAG_USE_STABILIZER_TEMP) == 0) {
@@ -2354,7 +2353,7 @@ static tGPsdata *annotation_stroke_begin(bContext *C, wmOperator *op)
   tGPsdata *p = op->customdata;
 
   /* we must check that we're still within the area that we're set up to work from
-   * otherwise we could crash (see bug #20586)
+   * otherwise we could crash (see bug T20586)
    */
   if (CTX_wm_area(C) != p->area) {
     printf("\t\t\tGP - wrong area execution abort!\n");
@@ -2468,8 +2467,8 @@ static int annotation_draw_modal(bContext *C, wmOperator *op, const wmEvent *eve
              EVT_UPARROWKEY,
              EVT_ZKEY)) {
       /* allow some keys:
-       *   - for frame changing [#33412]
-       *   - for undo (during sketching sessions)
+       *   - For frame changing T33412.
+       *   - For undo (during sketching sessions).
        */
     }
     else if (ELEM(event->type,
@@ -2521,7 +2520,7 @@ static int annotation_draw_modal(bContext *C, wmOperator *op, const wmEvent *eve
    *  - LEFTMOUSE  = standard drawing (all) / straight line drawing (all) / polyline (toolbox
    * only)
    *  - RIGHTMOUSE = polyline (hotkey) / eraser (all)
-   *    (Disabling RIGHTMOUSE case here results in bugs like [#32647])
+   *    (Disabling RIGHTMOUSE case here results in bugs like T32647)
    * also making sure we have a valid event value, to not exit too early
    */
   if (ELEM(event->type, LEFTMOUSE, RIGHTMOUSE) && (ELEM(event->val, KM_PRESS, KM_RELEASE))) {

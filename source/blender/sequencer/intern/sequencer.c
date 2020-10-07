@@ -1529,20 +1529,17 @@ static int evaluate_seq_frame_gen(Sequence **seq_arr, ListBase *seqbase, int cfr
 
   /* Drop strips which are used for effect inputs, we don't want
    * them to blend into render stack in any other way than effect
-   * string rendering.
-   */
+   * string rendering. */
   for (LinkNode *seq_item = effect_inputs.list; seq_item; seq_item = seq_item->next) {
     Sequence *seq = seq_item->link;
-    /* It's possible that effetc strip would be placed to the same
+    /* It's possible that effect strip would be placed to the same
      * 'machine' as it's inputs. We don't want to clear such strips
-     * from the stack.
-     */
+     * from the stack. */
     if (seq_arr[seq->machine] && seq_arr[seq->machine]->type & SEQ_TYPE_EFFECT) {
       continue;
     }
-    /* If we're shown a specified channel, then we want to see the stirps
-     * which belongs to this machine.
-     */
+    /* If we're shown a specified channel, then we want to see the strips
+     * which belongs to this machine. */
     if (chanshown != 0 && chanshown <= seq->machine) {
       continue;
     }
@@ -1634,13 +1631,13 @@ typedef struct SeqIndexBuildContext {
 static IMB_Proxy_Size seq_rendersize_to_proxysize(int render_size)
 {
   switch (render_size) {
-    case SEQ_PROXY_RENDER_SIZE_25:
+    case SEQ_RENDER_SIZE_PROXY_25:
       return IMB_PROXY_25;
-    case SEQ_PROXY_RENDER_SIZE_50:
+    case SEQ_RENDER_SIZE_PROXY_50:
       return IMB_PROXY_50;
-    case SEQ_PROXY_RENDER_SIZE_75:
+    case SEQ_RENDER_SIZE_PROXY_75:
       return IMB_PROXY_75;
-    case SEQ_PROXY_RENDER_SIZE_100:
+    case SEQ_RENDER_SIZE_PROXY_100:
       return IMB_PROXY_100;
   }
   return IMB_PROXY_NONE;
@@ -1649,11 +1646,11 @@ static IMB_Proxy_Size seq_rendersize_to_proxysize(int render_size)
 double BKE_sequencer_rendersize_to_scale_factor(int render_size)
 {
   switch (render_size) {
-    case SEQ_PROXY_RENDER_SIZE_25:
+    case SEQ_RENDER_SIZE_PROXY_25:
       return 0.25;
-    case SEQ_PROXY_RENDER_SIZE_50:
+    case SEQ_RENDER_SIZE_PROXY_50:
       return 0.50;
-    case SEQ_PROXY_RENDER_SIZE_75:
+    case SEQ_RENDER_SIZE_PROXY_75:
       return 0.75;
   }
   return 1.0;
@@ -1776,7 +1773,7 @@ static void seq_open_anim_file(Scene *scene, Sequence *seq, bool openfile)
                                           seq->strip->colorspace_settings.name);
           }
 
-          /* no individual view files - monoscopic, stereo 3d or exr multiview */
+          /* No individual view files - monoscopic, stereo 3d or EXR multi-view. */
           totfiles = 1;
         }
 
@@ -1829,7 +1826,7 @@ static bool seq_proxy_get_custom_file_fname(Sequence *seq, char *name, const int
   if (view_id > 0) {
     BLI_snprintf(suffix, sizeof(suffix), "_%d", view_id);
     /* TODO(sergey): This will actually append suffix after extension
-     * which is weird but how was originally coded in multiview branch.
+     * which is weird but how was originally coded in multi-view branch.
      */
     BLI_snprintf(name, PROXY_MAXFILE, "%s_%s", fname, suffix);
   }
@@ -1855,7 +1852,7 @@ static bool seq_proxy_get_fname(Editing *ed,
     return false;
   }
 
-  /* Multiview suffix. */
+  /* Multi-view suffix. */
   if (view_id > 0) {
     BLI_snprintf(suffix, sizeof(suffix), "_%d", view_id);
   }
@@ -2566,7 +2563,9 @@ static void *color_balance_do_thread(void *thread_data_v)
   return NULL;
 }
 
-/* cfra is offset by fra_offset only in case we are using a real mask. */
+/**
+ * \a cfra is offset by \a fra_offset only in case we are using a real mask.
+ */
 ImBuf *BKE_sequencer_render_mask_input(const SeqRenderData *context,
                                        int mask_input_type,
                                        Sequence *mask_sequence,
@@ -2715,7 +2714,7 @@ static ImBuf *input_preprocess(const SeqRenderData *context,
 
     /* Calculate scale factor for current image if needed. */
     double scale_factor, image_scale_factor = 1.0;
-    if (context->preview_render_size == SEQ_PROXY_RENDER_SIZE_SCENE) {
+    if (context->preview_render_size == SEQ_RENDER_SIZE_SCENE) {
       scale_factor = image_scale_factor = (double)scene->r.size / 100;
     }
     else {
@@ -2968,7 +2967,7 @@ static ImBuf *seq_render_effect_strip_impl(const SeqRenderData *context,
       break;
     case EARLY_DO_EFFECT:
       for (i = 0; i < 3; i++) {
-        /* Speed effect requires time remapping of cfra for input(s). */
+        /* Speed effect requires time remapping of `cfra` for input(s). */
         if (input[0] && seq->type == SEQ_TYPE_SPEED) {
           float target_frame = BKE_sequencer_speed_effect_target_frame_get(context, seq, cfra, i);
           ibuf[i] = seq_render_strip(context, state, input[0], target_frame);
@@ -3013,7 +3012,9 @@ static ImBuf *seq_render_effect_strip_impl(const SeqRenderData *context,
   return out;
 }
 
-/* Render individual view for multiview or single (default view) for monoview. */
+/**
+ * Render individual view for multi-view or single (default view) for mono-view.
+ */
 static ImBuf *seq_render_image_strip_view(const SeqRenderData *context,
                                           Sequence *seq,
                                           char *name,
@@ -3048,7 +3049,7 @@ static ImBuf *seq_render_image_strip_view(const SeqRenderData *context,
     imb_freerectImBuf(ibuf);
   }
 
-  /* All sequencer color is done in SRGB space, linear gives odd crossfades. */
+  /* All sequencer color is done in SRGB space, linear gives odd cross-fades. */
   BKE_sequencer_imbuf_to_sequencer_space(context->scene, ibuf, false);
 
   return ibuf;
@@ -3872,7 +3873,7 @@ static ImBuf *seq_render_preprocess_ibuf(const SeqRenderData *context,
   if (use_preprocess) {
     float cost = seq_estimate_render_cost_end(context->scene, begin);
 
-    /* TODO (Richard): It should be possible to store in cache if image is proxy,
+    /* TODO(Richard): It should be possible to store in cache if image is proxy,
      * but it adds quite a bit of complexity. Since proxies are fast to read, I would
      * rather simplify existing code a bit. */
     if (!is_proxy_image) {

@@ -31,8 +31,8 @@
 #include "UI_interface.h"
 #include "UI_resources.h"
 
-struct AnimationEvalContext;
 struct ARegion;
+struct AnimationEvalContext;
 struct CurveMapping;
 struct CurveProfile;
 struct ID;
@@ -81,6 +81,8 @@ enum {
   UI_HAS_ICON = (1 << 3),
   UI_HIDDEN = (1 << 4),
   UI_SELECT_DRAW = (1 << 5), /* Display selected, doesn't impact interaction. */
+  /** Property search filter is active and the button does not match. */
+  UI_SEARCH_FILTER_NO_MATCH = (1 << 12),
   /* warn: rest of uiBut->flag in UI_interface.h */
 };
 
@@ -370,6 +372,8 @@ typedef struct uiButExtraOpIcon {
 
   BIFIconID icon;
   struct wmOperatorCallParams *optype_params;
+
+  bool highlighted;
 } uiButExtraOpIcon;
 
 typedef struct ColorPicker {
@@ -413,6 +417,26 @@ enum eBlockContentHints {
   UI_BLOCK_CONTAINS_SUBMENU_BUT = (1 << 0),
 };
 
+/**
+ * A group of button references, used by property search to keep track of sets of buttons that
+ * should be searched together. For example, in property split layouts number buttons and their
+ * labels (and even their decorators) are separate buttons, but they must be searched and
+ * highlighted together.
+ */
+typedef struct uiButtonGroup {
+  void *next, *prev;
+  ListBase buttons; /* #LinkData with #uiBut data field. */
+  short flag;
+} uiButtonGroup;
+
+/* #uiButtonGroup.flag. */
+typedef enum uiButtonGroupFlag {
+  /** While this flag is set, don't create new button groups for layout item calls. */
+  UI_BUTTON_GROUP_LOCK = (1 << 0),
+  /** The buttons in this group are inside a panel header. */
+  UI_BUTTON_GROUP_PANEL_HEADER = (1 << 1),
+} uiButtonGroupFlag;
+
 struct uiBlock {
   uiBlock *next, *prev;
 
@@ -421,6 +445,8 @@ struct uiBlock {
   uiBlock *oldblock;
 
   ListBase butstore; /* UI_butstore_* runtime function */
+
+  ListBase button_groups; /* #uiButtonGroup. */
 
   ListBase layouts;
   struct uiLayout *curlayout;
@@ -805,7 +831,9 @@ extern void ui_draw_aligned_panel(const struct uiStyle *style,
                                   const uiBlock *block,
                                   const rcti *rect,
                                   const bool show_pin,
-                                  const bool show_background);
+                                  const bool show_background,
+                                  const bool region_search_filter_active);
+void ui_panel_tag_search_filter_match(struct Panel *panel);
 
 /* interface_draw.c */
 extern void ui_draw_dropshadow(
@@ -987,7 +1015,6 @@ void icon_draw_rect_input(
     float x, float y, int w, int h, float alpha, short event_type, short event_value);
 
 /* resources.c */
-void init_userdef_do_versions(struct Main *bmain);
 void ui_resources_init(void);
 void ui_resources_free(void);
 
@@ -1003,6 +1030,12 @@ void ui_layout_list_set_labels_active(uiLayout *layout);
 /* menu callback */
 void ui_item_menutype_func(struct bContext *C, struct uiLayout *layout, void *arg_mt);
 void ui_item_paneltype_func(struct bContext *C, struct uiLayout *layout, void *arg_pt);
+
+/* interface_button_group.c */
+void ui_block_new_button_group(uiBlock *block, short flag);
+void ui_button_group_add_but(uiBlock *block, uiBut *but);
+void ui_button_group_replace_but_ptr(uiBlock *block, const void *old_but_ptr, uiBut *new_but);
+void ui_block_free_button_groups(uiBlock *block);
 
 /* interface_align.c */
 bool ui_but_can_align(const uiBut *but) ATTR_WARN_UNUSED_RESULT;

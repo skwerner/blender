@@ -1777,11 +1777,9 @@ static const EnumPropertyItem *rna_SpaceProperties_context_itemf(bContext *UNUSE
   SpaceProperties *sbuts = (SpaceProperties *)(ptr->data);
   EnumPropertyItem *item = NULL;
 
-  /* We use 32 tabs maximum here so a flag for each can fit into a 32 bit integer flag.
-   * A theoretical maximum would be BCONTEXT_TOT * 2, with every tab displayed and a spacer
-   * in every other item. But this size is currently limited by the size of integer
-   * supported by RNA enums. */
-  int context_tabs_array[32];
+  /* Although it would never reach this amount, a theoretical maximum number of tabs
+   * is BCONTEXT_TOT * 2, with every tab displayed and a spacer in every other item. */
+  short context_tabs_array[BCONTEXT_TOT * 2];
   int totitem = ED_buttons_tabs_list(sbuts, context_tabs_array);
   BLI_assert(totitem <= ARRAY_SIZE(context_tabs_array));
 
@@ -1815,6 +1813,18 @@ static void rna_SpaceProperties_context_update(Main *UNUSED(bmain),
   if (ELEM(sbuts->mainb, BCONTEXT_WORLD, BCONTEXT_MATERIAL, BCONTEXT_TEXTURE, BCONTEXT_DATA)) {
     sbuts->preview = 1;
   }
+}
+
+static void rna_SpaceProperties_search_filter_update(Main *UNUSED(bmain),
+                                                     Scene *UNUSED(scene),
+                                                     PointerRNA *ptr)
+{
+  ScrArea *area = rna_area_from_space(ptr);
+
+  /* Update the search filter flag for the main region with the panels. */
+  ARegion *main_region = BKE_area_find_region_type(area, RGN_TYPE_WINDOW);
+  BLI_assert(main_region != NULL);
+  ED_region_search_filter_update(area, main_region);
 }
 
 /* Space Console */
@@ -1910,78 +1920,73 @@ static void rna_SpaceDopeSheetEditor_action_update(bContext *C, PointerRNA *ptr)
   SpaceAction *saction = (SpaceAction *)(ptr->data);
   ViewLayer *view_layer = CTX_data_view_layer(C);
   Main *bmain = CTX_data_main(C);
+
   Object *obact = OBACT(view_layer);
-
-  /* we must set this action to be the one used by active object (if not pinned) */
-  if (obact /* && saction->pin == 0*/) {
-    AnimData *adt = NULL;
-
-    if (saction->mode == SACTCONT_ACTION) {
-      /* TODO: context selector could help decide this with more control? */
-      adt = BKE_animdata_add_id(&obact->id); /* this only adds if non-existent */
-    }
-    else if (saction->mode == SACTCONT_SHAPEKEY) {
-      Key *key = BKE_key_from_object(obact);
-      if (key) {
-        adt = BKE_animdata_add_id(&key->id); /* this only adds if non-existent */
-      }
-    }
-
-    /* set action */
-    // FIXME: this overlaps a lot with the BKE_animdata_set_action() API method
-    if (adt) {
-      /* Don't do anything if old and new actions are the same... */
-      if (adt->action != saction->action) {
-        /* NLA Tweak Mode needs special handling... */
-        if (adt->flag & ADT_NLA_EDIT_ON) {
-          /* Exit editmode first - we cannot change actions while in tweakmode
-           * NOTE: This will clear the action ref properly
-           */
-          BKE_nla_tweakmode_exit(adt);
-
-          /* Assign new action, and adjust the usercounts accordingly */
-          adt->action = saction->action;
-          id_us_plus((ID *)adt->action);
-        }
-        else {
-          /* Handle old action... */
-          if (adt->action) {
-            /* Fix id-count of action we're replacing */
-            id_us_min(&adt->action->id);
-
-            /* To prevent data loss (i.e. if users flip between actions using the Browse menu),
-             * stash this action if nothing else uses it.
-             *
-             * EXCEPTION:
-             * This callback runs when unlinking actions. In that case, we don't want to
-             * stash the action, as the user is signaling that they want to detach it.
-             * This can be reviewed again later,
-             * but it could get annoying if we keep these instead.
-             */
-            if ((adt->action->id.us <= 0) && (saction->action != NULL)) {
-              /* XXX: Things here get dodgy if this action is only partially completed,
-               *      and the user then uses the browse menu to get back to this action,
-               *      assigning it as the active action (i.e. the stash strip gets out of sync)
-               */
-              BKE_nla_action_stash(adt);
-            }
-          }
-
-          /* Assign new action, and adjust the usercounts accordingly */
-          adt->action = saction->action;
-          id_us_plus((ID *)adt->action);
-        }
-      }
-
-      /* Force update of animdata */
-      DEG_id_tag_update(&obact->id, ID_RECALC_ANIMATION);
-    }
-
-    /* force depsgraph flush too */
-    DEG_id_tag_update(&obact->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
-    /* Update relations as well, so new time source dependency is added. */
-    DEG_relations_tag_update(bmain);
+  if (obact == NULL) {
+    return;
   }
+
+  AnimData *adt = NULL;
+  ID *id = NULL;
+  switch (saction->mode) {
+    case SACTCONT_ACTION:
+      /* TODO: context selector could help decide this with more control? */
+      adt = BKE_animdata_add_id(&obact->id);
+      id = &obact->id;
+      break;
+    case SACTCONT_SHAPEKEY: {
+      Key *key = BKE_key_from_object(obact);
+      if (key == NULL) {
+        return;
+      }
+      adt = BKE_animdata_add_id(&key->id);
+      id = &key->id;
+      break;
+    }
+    case SACTCONT_GPENCIL:
+    case SACTCONT_DOPESHEET:
+    case SACTCONT_MASK:
+    case SACTCONT_CACHEFILE:
+    case SACTCONT_TIMELINE:
+      return;
+  }
+
+  if (adt == NULL) {
+    /* No animdata was added, so the depsgraph also doesn't need tagging. */
+    return;
+  }
+
+  /* Don't do anything if old and new actions are the same... */
+  if (adt->action == saction->action) {
+    return;
+  }
+
+  /* Exit editmode first - we cannot change actions while in tweakmode. */
+  BKE_nla_tweakmode_exit(adt);
+
+  /* To prevent data loss (i.e. if users flip between actions using the Browse menu),
+   * stash this action if nothing else uses it.
+   *
+   * EXCEPTION:
+   * This callback runs when unlinking actions. In that case, we don't want to
+   * stash the action, as the user is signaling that they want to detach it.
+   * This can be reviewed again later,
+   * but it could get annoying if we keep these instead.
+   */
+  if (adt->action != NULL && adt->action->id.us <= 0 && saction->action != NULL) {
+    /* XXX: Things here get dodgy if this action is only partially completed,
+     *      and the user then uses the browse menu to get back to this action,
+     *      assigning it as the active action (i.e. the stash strip gets out of sync)
+     */
+    BKE_nla_action_stash(adt);
+  }
+
+  BKE_animdata_set_action(NULL, id, saction->action);
+
+  DEG_id_tag_update(&obact->id, ID_RECALC_ANIMATION | ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
+
+  /* Update relations as well, so new time source dependency is added. */
+  DEG_relations_tag_update(bmain);
 }
 
 static void rna_SpaceDopeSheetEditor_mode_update(bContext *C, PointerRNA *ptr)
@@ -2606,9 +2611,10 @@ static void rna_FileBrowser_FSMenu_active_range(PointerRNA *UNUSED(ptr),
   *max = *softmax = ED_fsmenu_get_nentries(fsmenu, category) - 1;
 }
 
-static void rna_FileBrowser_FSMenu_active_update(struct bContext *C, PointerRNA *UNUSED(ptr))
+static void rna_FileBrowser_FSMenu_active_update(struct bContext *C, PointerRNA *ptr)
 {
-  ED_file_change_dir(C);
+  ScrArea *area = rna_area_from_space(ptr);
+  ED_file_change_dir_ex(C, (bScreen *)ptr->owner_id, area);
 }
 
 static int rna_FileBrowser_FSMenuSystem_active_get(PointerRNA *ptr)
@@ -2828,7 +2834,7 @@ static void rna_def_space_image_uv(BlenderRNA *brna)
        "SHARED_VERTEX",
        ICON_STICKY_UVS_VERT,
        "Shared Vertex",
-       "Select UVs that share mesh vertex, irrespective if they are in the same location"},
+       "Select UVs that share a mesh vertex, whether or not they are at the same location"},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -2856,9 +2862,7 @@ static void rna_def_space_image_uv(BlenderRNA *brna)
   RNA_def_property_enum_sdna(prop, NULL, "sticky");
   RNA_def_property_enum_items(prop, sticky_mode_items);
   RNA_def_property_ui_text(
-      prop,
-      "Sticky Selection Mode",
-      "Automatically select also UVs sharing the same vertex as the ones being selected");
+      prop, "Sticky Selection Mode", "Method for extending UV vertex selection");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_IMAGE, NULL);
 
   /* drawing */
@@ -2970,7 +2974,11 @@ static void rna_def_space_outliner(BlenderRNA *brna)
        ICON_RENDER_RESULT,
        "View Layer",
        "Display collections and objects in the view layer"},
-      {SO_SEQUENCE, "SEQUENCE", ICON_SEQUENCE, "Sequence", "Display sequence data-blocks"},
+      {SO_SEQUENCE,
+       "SEQUENCE",
+       ICON_SEQUENCE,
+       "Video Sequencer",
+       "Display data belonging to the Video Sequencer"},
       {SO_LIBRARIES,
        "LIBRARIES",
        ICON_FILE_BLEND,
@@ -3035,6 +3043,12 @@ static void rna_def_space_outliner(BlenderRNA *brna)
   RNA_def_property_boolean_sdna(prop, NULL, "flag", SO_SYNC_SELECT);
   RNA_def_property_ui_text(
       prop, "Sync Outliner Selection", "Sync outliner selection with other editors");
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_OUTLINER, NULL);
+
+  prop = RNA_def_property(srna, "show_mode_column", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flag", SO_MODE_COLUMN);
+  RNA_def_property_ui_text(
+      prop, "Show Mode Column", "Show the mode column for mode toggle and activation");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_OUTLINER, NULL);
 
   /* Granular restriction column option. */
@@ -3322,6 +3336,15 @@ static void rna_def_space_view3d_shading(BlenderRNA *brna)
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D | NS_VIEW3D_SHADING, NULL);
 
+  prop = RNA_def_property(srna, "use_studiolight_view_rotation", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_negative_sdna(
+      prop, NULL, "flag", V3D_SHADING_STUDIOLIGHT_VIEW_ROTATION);
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+  RNA_def_property_boolean_default(prop, false);
+  RNA_def_property_ui_text(
+      prop, "World Space Lighting", "Make the HDR rotation fixed and not follow the camera");
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D | NS_VIEW3D_SHADING, NULL);
+
   prop = RNA_def_property(srna, "color_type", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, NULL, "color_type");
   RNA_def_property_enum_items(prop, rna_enum_shading_color_type_items);
@@ -3582,6 +3605,20 @@ static void rna_def_space_view3d_overlay(BlenderRNA *brna)
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_ui_text(prop, "Face Orientation", "Show the Face Orientation Overlay");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+
+  prop = RNA_def_property(srna, "show_fade_inactive", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "overlay.flag", V3D_OVERLAY_FADE_INACTIVE);
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+  RNA_def_property_ui_text(
+      prop, "Fade Inactive Objects", "Fade inactive geometry using the viewport background color");
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+
+  prop = RNA_def_property(srna, "fade_inactive_alpha", PROP_FLOAT, PROP_FACTOR);
+  RNA_def_property_float_sdna(prop, NULL, "overlay.fade_alpha");
+  RNA_def_property_ui_text(prop, "Opacity", "Strength of the fade effect");
+  RNA_def_property_range(prop, 0.0f, 1.0f);
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, "rna_GPencil_update");
 
   prop = RNA_def_property(srna, "show_xray_bone", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "overlay.flag", V3D_OVERLAY_BONE_SELECT);
@@ -4471,6 +4508,14 @@ static void rna_def_space_properties(BlenderRNA *brna)
   prop = RNA_def_property(srna, "use_pin_id", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", SB_PIN_CONTEXT);
   RNA_def_property_ui_text(prop, "Pin ID", "Use the pinned context");
+
+  /* Property search. */
+  prop = RNA_def_property(srna, "search_filter", PROP_STRING, PROP_NONE);
+  RNA_def_property_string_sdna(prop, NULL, "runtime->search_string");
+  RNA_def_property_ui_text(prop, "Display Filter", "Live search filtering string");
+  RNA_def_property_flag(prop, PROP_TEXTEDIT_UPDATE);
+  RNA_def_property_update(
+      prop, NC_SPACE | ND_SPACE_PROPERTIES, "rna_SpaceProperties_search_filter_update");
 }
 
 static void rna_def_space_image(BlenderRNA *brna)
@@ -4656,13 +4701,13 @@ static void rna_def_space_sequencer(BlenderRNA *brna)
   };
 
   static const EnumPropertyItem proxy_render_size_items[] = {
-      {SEQ_PROXY_RENDER_SIZE_NONE, "NONE", 0, "No display", ""},
-      {SEQ_PROXY_RENDER_SIZE_SCENE, "SCENE", 0, "Scene render size", ""},
-      {SEQ_PROXY_RENDER_SIZE_25, "PROXY_25", 0, "Proxy size 25%", ""},
-      {SEQ_PROXY_RENDER_SIZE_50, "PROXY_50", 0, "Proxy size 50%", ""},
-      {SEQ_PROXY_RENDER_SIZE_75, "PROXY_75", 0, "Proxy size 75%", ""},
-      {SEQ_PROXY_RENDER_SIZE_100, "PROXY_100", 0, "Proxy size 100%", ""},
-      {SEQ_PROXY_RENDER_SIZE_FULL, "FULL", 0, "No proxy, full render", ""},
+      {SEQ_RENDER_SIZE_NONE, "NONE", 0, "No display", ""},
+      {SEQ_RENDER_SIZE_SCENE, "SCENE", 0, "Scene render size", ""},
+      {SEQ_RENDER_SIZE_PROXY_25, "PROXY_25", 0, "Proxy size 25%", ""},
+      {SEQ_RENDER_SIZE_PROXY_50, "PROXY_50", 0, "Proxy size 50%", ""},
+      {SEQ_RENDER_SIZE_PROXY_75, "PROXY_75", 0, "Proxy size 75%", ""},
+      {SEQ_RENDER_SIZE_PROXY_100, "PROXY_100", 0, "Proxy size 100%", ""},
+      {SEQ_RENDER_SIZE_FULL, "FULL", 0, "No proxy, full render", ""},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -5571,13 +5616,13 @@ static void rna_def_fileselect_idfilter(BlenderRNA *brna)
        ICON_IMAGE_DATA,
        "Images & Sounds",
        "Show images, movie clips, sounds and masks"},
-      {FILTER_ID_CA | FILTER_ID_LA | FILTER_ID_LP | FILTER_ID_SPK | FILTER_ID_WO | FILTER_ID_WS,
+      {FILTER_ID_CA | FILTER_ID_LA | FILTER_ID_LP | FILTER_ID_SPK | FILTER_ID_WO,
        "category_environment",
        ICON_WORLD_DATA,
        "Environment",
        "Show worlds, lights, cameras and speakers"},
       {FILTER_ID_BR | FILTER_ID_GD | FILTER_ID_PA | FILTER_ID_PAL | FILTER_ID_PC | FILTER_ID_TXT |
-           FILTER_ID_VF | FILTER_ID_CF,
+           FILTER_ID_VF | FILTER_ID_CF | FILTER_ID_WS,
        "category_misc",
        ICON_GREASEPENCIL,
        "Miscellaneous",

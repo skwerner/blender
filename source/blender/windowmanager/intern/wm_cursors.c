@@ -149,18 +149,18 @@ void WM_cursor_set(wmWindow *win, int curs)
     curs = win->modalcursor;
   }
 
-  if (win->cursor == curs) {
-    return; /* Cursor is already set */
-  }
-
-  win->cursor = curs;
-
   if (curs == WM_CURSOR_NONE) {
     GHOST_SetCursorVisibility(win->ghostwin, 0);
     return;
   }
 
   GHOST_SetCursorVisibility(win->ghostwin, 1);
+
+  if (win->cursor == curs) {
+    return; /* Cursor is already set */
+  }
+
+  win->cursor = curs;
 
   if (curs < 0 || curs >= WM_CURSOR_NUM) {
     BLI_assert(!"Invalid cursor number");
@@ -302,7 +302,7 @@ void WM_cursor_grab_disable(wmWindow *win, const int mouse_ungrab_xy[2])
 
 static void wm_cursor_warp_relative(wmWindow *win, int x, int y)
 {
-  /* note: don't use wmEvent coords because of continuous grab [#36409] */
+  /* note: don't use wmEvent coords because of continuous grab T36409. */
   int cx, cy;
   wm_get_cursor_position(win, &cx, &cy);
   WM_cursor_warp(win, cx + x, cy + y);
@@ -374,6 +374,8 @@ void WM_cursor_time(wmWindow *win, int nr)
   }
 
   window_set_custom_cursor(win, mask, bitmap, 7, 7);
+  /* Unset current cursor value so it's properly reset to wmWindow.lastcursor. */
+  win->cursor = 0;
 }
 
 /**

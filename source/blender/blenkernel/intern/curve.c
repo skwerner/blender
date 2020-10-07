@@ -28,11 +28,15 @@
 #include "MEM_guardedalloc.h"
 
 #include "BLI_blenlib.h"
+#include "BLI_endian_switch.h"
 #include "BLI_ghash.h"
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
+
+/* Allow using deprecated functionality for .blend file I/O. */
+#define DNA_DEPRECATED_ALLOW
 
 #include "DNA_anim_types.h"
 #include "DNA_curve_types.h"
@@ -44,7 +48,9 @@
 #include "DNA_object_types.h"
 #include "DNA_vfont_types.h"
 
+#include "BKE_anim_data.h"
 #include "BKE_curve.h"
+#include "BKE_curveprofile.h"
 #include "BKE_displist.h"
 #include "BKE_font.h"
 #include "BKE_idtype.h"
@@ -58,6 +64,8 @@
 #include "DEG_depsgraph_query.h"
 
 #include "CLG_log.h"
+
+#include "BLO_read_write.h"
 
 /* globals */
 
@@ -88,6 +96,8 @@ static void curve_copy_data(Main *bmain, ID *id_dst, const ID *id_src, const int
   curve_dst->tb = MEM_dupallocN(curve_src->tb);
   curve_dst->batch_cache = NULL;
 
+  curve_dst->bevel_profile = BKE_curveprofile_copy(curve_src->bevel_profile);
+
   if (curve_src->key && (flag & LIB_ID_COPY_SHAPEKEY)) {
     BKE_id_copy_ex(bmain, &curve_src->key->id, (ID **)&curve_dst->key, flag);
     /* XXX This is not nice, we need to make BKE_id_copy_ex fully re-entrant... */
@@ -108,6 +118,8 @@ static void curve_free_data(ID *id)
   BKE_curve_editfont_free(curve);
 
   BKE_curve_editNurb_free(curve);
+
+  BKE_curveprofile_free(curve->bevel_profile);
 
   MEM_SAFE_FREE(curve->mat);
   MEM_SAFE_FREE(curve->str);
@@ -131,6 +143,167 @@ static void curve_foreach_id(ID *id, LibraryForeachIDData *data)
   BKE_LIB_FOREACHID_PROCESS(data, curve->vfontbi, IDWALK_CB_USER);
 }
 
+static void curve_blend_write(BlendWriter *writer, ID *id, const void *id_address)
+{
+  Curve *cu = (Curve *)id;
+  if (cu->id.us > 0 || BLO_write_is_undo(writer)) {
+    /* Clean up, important in undo case to reduce false detection of changed datablocks. */
+    cu->editnurb = NULL;
+    cu->editfont = NULL;
+    cu->batch_cache = NULL;
+
+    /* write LibData */
+    BLO_write_id_struct(writer, Curve, id_address, &cu->id);
+    BKE_id_blend_write(writer, &cu->id);
+
+    /* direct data */
+    BLO_write_pointer_array(writer, cu->totcol, cu->mat);
+    if (cu->adt) {
+      BKE_animdata_blend_write(writer, cu->adt);
+    }
+
+    if (cu->vfont) {
+      BLO_write_raw(writer, cu->len + 1, cu->str);
+      BLO_write_struct_array(writer, CharInfo, cu->len_char32 + 1, cu->strinfo);
+      BLO_write_struct_array(writer, TextBox, cu->totbox, cu->tb);
+    }
+    else {
+      /* is also the order of reading */
+      LISTBASE_FOREACH (Nurb *, nu, &cu->nurb) {
+        BLO_write_struct(writer, Nurb, nu);
+      }
+      LISTBASE_FOREACH (Nurb *, nu, &cu->nurb) {
+        if (nu->type == CU_BEZIER) {
+          BLO_write_struct_array(writer, BezTriple, nu->pntsu, nu->bezt);
+        }
+        else {
+          BLO_write_struct_array(writer, BPoint, nu->pntsu * nu->pntsv, nu->bp);
+          if (nu->knotsu) {
+            BLO_write_float_array(writer, KNOTSU(nu), nu->knotsu);
+          }
+          if (nu->knotsv) {
+            BLO_write_float_array(writer, KNOTSV(nu), nu->knotsv);
+          }
+        }
+      }
+    }
+
+    if (cu->bevel_profile != NULL) {
+      BKE_curveprofile_blend_write(writer, cu->bevel_profile);
+    }
+  }
+}
+
+static void switch_endian_knots(Nurb *nu)
+{
+  if (nu->knotsu) {
+    BLI_endian_switch_float_array(nu->knotsu, KNOTSU(nu));
+  }
+  if (nu->knotsv) {
+    BLI_endian_switch_float_array(nu->knotsv, KNOTSV(nu));
+  }
+}
+
+static void curve_blend_read_data(BlendDataReader *reader, ID *id)
+{
+  Curve *cu = (Curve *)id;
+  BLO_read_data_address(reader, &cu->adt);
+  BKE_animdata_blend_read_data(reader, cu->adt);
+
+  /* Protect against integer overflow vulnerability. */
+  CLAMP(cu->len_char32, 0, INT_MAX - 4);
+
+  BLO_read_pointer_array(reader, (void **)&cu->mat);
+
+  BLO_read_data_address(reader, &cu->str);
+  BLO_read_data_address(reader, &cu->strinfo);
+  BLO_read_data_address(reader, &cu->tb);
+
+  if (cu->vfont == NULL) {
+    BLO_read_list(reader, &(cu->nurb));
+  }
+  else {
+    cu->nurb.first = cu->nurb.last = NULL;
+
+    TextBox *tb = MEM_calloc_arrayN(MAXTEXTBOX, sizeof(TextBox), "TextBoxread");
+    if (cu->tb) {
+      memcpy(tb, cu->tb, cu->totbox * sizeof(TextBox));
+      MEM_freeN(cu->tb);
+      cu->tb = tb;
+    }
+    else {
+      cu->totbox = 1;
+      cu->actbox = 1;
+      cu->tb = tb;
+      cu->tb[0].w = cu->linewidth;
+    }
+    if (cu->wordspace == 0.0f) {
+      cu->wordspace = 1.0f;
+    }
+  }
+
+  cu->editnurb = NULL;
+  cu->editfont = NULL;
+  cu->batch_cache = NULL;
+
+  LISTBASE_FOREACH (Nurb *, nu, &cu->nurb) {
+    BLO_read_data_address(reader, &nu->bezt);
+    BLO_read_data_address(reader, &nu->bp);
+    BLO_read_data_address(reader, &nu->knotsu);
+    BLO_read_data_address(reader, &nu->knotsv);
+    if (cu->vfont == NULL) {
+      nu->charidx = 0;
+    }
+
+    if (BLO_read_requires_endian_switch(reader)) {
+      switch_endian_knots(nu);
+    }
+  }
+  cu->texflag &= ~CU_AUTOSPACE_EVALUATED;
+
+  BLO_read_data_address(reader, &cu->bevel_profile);
+  if (cu->bevel_profile != NULL) {
+    BKE_curveprofile_blend_read(reader, cu->bevel_profile);
+  }
+}
+
+static void curve_blend_read_lib(BlendLibReader *reader, ID *id)
+{
+  Curve *cu = (Curve *)id;
+  for (int a = 0; a < cu->totcol; a++) {
+    BLO_read_id_address(reader, cu->id.lib, &cu->mat[a]);
+  }
+
+  BLO_read_id_address(reader, cu->id.lib, &cu->bevobj);
+  BLO_read_id_address(reader, cu->id.lib, &cu->taperobj);
+  BLO_read_id_address(reader, cu->id.lib, &cu->textoncurve);
+  BLO_read_id_address(reader, cu->id.lib, &cu->vfont);
+  BLO_read_id_address(reader, cu->id.lib, &cu->vfontb);
+  BLO_read_id_address(reader, cu->id.lib, &cu->vfonti);
+  BLO_read_id_address(reader, cu->id.lib, &cu->vfontbi);
+
+  BLO_read_id_address(reader, cu->id.lib, &cu->ipo);  // XXX deprecated - old animation system
+  BLO_read_id_address(reader, cu->id.lib, &cu->key);
+}
+
+static void curve_blend_read_expand(BlendExpander *expander, ID *id)
+{
+  Curve *cu = (Curve *)id;
+  for (int a = 0; a < cu->totcol; a++) {
+    BLO_expand(expander, cu->mat[a]);
+  }
+
+  BLO_expand(expander, cu->vfont);
+  BLO_expand(expander, cu->vfontb);
+  BLO_expand(expander, cu->vfonti);
+  BLO_expand(expander, cu->vfontbi);
+  BLO_expand(expander, cu->key);
+  BLO_expand(expander, cu->ipo);  // XXX deprecated - old animation system
+  BLO_expand(expander, cu->bevobj);
+  BLO_expand(expander, cu->taperobj);
+  BLO_expand(expander, cu->textoncurve);
+}
+
 IDTypeInfo IDType_ID_CU = {
     .id_code = ID_CU,
     .id_filter = FILTER_ID_CU,
@@ -148,10 +321,10 @@ IDTypeInfo IDType_ID_CU = {
     .foreach_id = curve_foreach_id,
     .foreach_cache = NULL,
 
-    .blend_write = NULL,
-    .blend_read_data = NULL,
-    .blend_read_lib = NULL,
-    .blend_read_expand = NULL,
+    .blend_write = curve_blend_write,
+    .blend_read_data = curve_blend_read_data,
+    .blend_read_lib = curve_blend_read_lib,
+    .blend_read_expand = curve_blend_read_expand,
 };
 
 static int cu_isectLL(const float v1[3],
@@ -238,6 +411,7 @@ void BKE_curve_init(Curve *cu, const short curve_type)
   else if (cu->type == OB_SURF) {
     cu->resolv = 4;
   }
+  cu->bevel_profile = NULL;
 }
 
 Curve *BKE_curve_add(Main *bmain, const char *name, int type)
@@ -782,11 +956,10 @@ float BKE_nurb_calc_length(const Nurb *nu, int resolution)
 /* be sure to call makeknots after this */
 void BKE_nurb_points_add(Nurb *nu, int number)
 {
-  BPoint *bp;
-  int i;
-
   nu->bp = MEM_recallocN(nu->bp, (nu->pntsu + number) * sizeof(BPoint));
 
+  BPoint *bp;
+  int i;
   for (i = 0, bp = &nu->bp[nu->pntsu]; i < number; i++, bp++) {
     bp->radius = 1.0f;
   }
@@ -1718,12 +1891,10 @@ static void forward_diff_bezier_cotangent(const float p0[3],
    * they need to be rotated for this,
    *
    * This could also be optimized like BKE_curve_forward_diff_bezier */
-  int a;
-  for (a = 0; a <= it; a++) {
+  for (int a = 0; a <= it; a++) {
     float t = (float)a / (float)it;
 
-    int i;
-    for (i = 0; i < 3; i++) {
+    for (int i = 0; i < 3; i++) {
       p[i] = (-6.0f * t + 6.0f) * p0[i] + (18.0f * t - 12.0f) * p1[i] +
              (-18.0f * t + 6.0f) * p2[i] + (6.0f * t) * p3[i];
     }
@@ -4068,23 +4239,20 @@ void BKE_nurb_handles_test(Nurb *nu, const bool use_handle, const bool use_aroun
   BKE_nurb_handles_calc(nu);
 }
 
-void BKE_nurb_handles_autocalc(Nurb *nu, int flag)
+void BKE_nurb_handles_autocalc(Nurb *nu, uint8_t flag)
 {
   /* checks handle coordinates and calculates type */
   const float eps = 0.0001f;
   const float eps_sq = eps * eps;
 
-  BezTriple *bezt2, *bezt1, *bezt0;
-  int i;
-
   if (nu == NULL || nu->bezt == NULL) {
     return;
   }
 
-  bezt2 = nu->bezt;
-  bezt1 = bezt2 + (nu->pntsu - 1);
-  bezt0 = bezt1 - 1;
-  i = nu->pntsu;
+  BezTriple *bezt2 = nu->bezt;
+  BezTriple *bezt1 = bezt2 + (nu->pntsu - 1);
+  BezTriple *bezt0 = bezt1 - 1;
+  int i = nu->pntsu;
 
   while (i--) {
     bool align = false, leftsmall = false, rightsmall = false;
@@ -4152,7 +4320,7 @@ void BKE_nurb_handles_autocalc(Nurb *nu, int flag)
   BKE_nurb_handles_calc(nu);
 }
 
-void BKE_nurbList_handles_autocalc(ListBase *editnurb, int flag)
+void BKE_nurbList_handles_autocalc(ListBase *editnurb, uint8_t flag)
 {
   Nurb *nu;
 
@@ -4257,7 +4425,9 @@ void BKE_nurbList_handles_set(ListBase *editnurb, const char code)
   }
 }
 
-void BKE_nurbList_handles_recalculate(ListBase *editnurb, const bool calc_length, const char flag)
+void BKE_nurbList_handles_recalculate(ListBase *editnurb,
+                                      const bool calc_length,
+                                      const uint8_t flag)
 {
   Nurb *nu;
   BezTriple *bezt;
@@ -4311,7 +4481,7 @@ void BKE_nurbList_handles_recalculate(ListBase *editnurb, const bool calc_length
   }
 }
 
-void BKE_nurbList_flag_set(ListBase *editnurb, short flag, bool set)
+void BKE_nurbList_flag_set(ListBase *editnurb, uint8_t flag, bool set)
 {
   Nurb *nu;
   BezTriple *bezt;
@@ -4350,7 +4520,7 @@ void BKE_nurbList_flag_set(ListBase *editnurb, short flag, bool set)
 /**
  * Set \a flag for every point that already has \a from_flag set.
  */
-bool BKE_nurbList_flag_set_from_flag(ListBase *editnurb, short from_flag, short flag)
+bool BKE_nurbList_flag_set_from_flag(ListBase *editnurb, uint8_t from_flag, uint8_t flag)
 {
   bool changed = false;
 
@@ -4358,7 +4528,7 @@ bool BKE_nurbList_flag_set_from_flag(ListBase *editnurb, short from_flag, short 
     if (nu->type == CU_BEZIER) {
       for (int i = 0; i < nu->pntsu; i++) {
         BezTriple *bezt = &nu->bezt[i];
-        int old_f1 = bezt->f1, old_f2 = bezt->f2, old_f3 = bezt->f3;
+        uint8_t old_f1 = bezt->f1, old_f2 = bezt->f2, old_f3 = bezt->f3;
 
         SET_FLAG_FROM_TEST(bezt->f1, bezt->f1 & from_flag, flag);
         SET_FLAG_FROM_TEST(bezt->f2, bezt->f2 & from_flag, flag);
@@ -4370,7 +4540,7 @@ bool BKE_nurbList_flag_set_from_flag(ListBase *editnurb, short from_flag, short 
     else {
       for (int i = 0; i < nu->pntsu * nu->pntsv; i++) {
         BPoint *bp = &nu->bp[i];
-        int old_f1 = bp->f1;
+        uint8_t old_f1 = bp->f1;
 
         SET_FLAG_FROM_TEST(bp->f1, bp->f1 & from_flag, flag);
         changed |= (old_f1 != bp->f1);
@@ -4411,12 +4581,12 @@ void BKE_nurb_direction_switch(Nurb *nu)
         swap_v3_v3(bezt2->vec[0], bezt2->vec[2]);
       }
 
-      SWAP(char, bezt1->h1, bezt1->h2);
-      SWAP(char, bezt1->f1, bezt1->f3);
+      SWAP(uint8_t, bezt1->h1, bezt1->h2);
+      SWAP(uint8_t, bezt1->f1, bezt1->f3);
 
       if (bezt1 != bezt2) {
-        SWAP(char, bezt2->h1, bezt2->h2);
-        SWAP(char, bezt2->f1, bezt2->f3);
+        SWAP(uint8_t, bezt2->h1, bezt2->h2);
+        SWAP(uint8_t, bezt2->f1, bezt2->f3);
         bezt1->tilt = -bezt1->tilt;
         bezt2->tilt = -bezt2->tilt;
       }
@@ -4546,14 +4716,12 @@ void BKE_curve_nurbs_vert_coords_apply_with_mat4(ListBase *lb,
                                                  const bool constrain_2d)
 {
   const float *co = vert_coords[0];
-  Nurb *nu;
-  int i;
 
-  for (nu = lb->first; nu; nu = nu->next) {
+  LISTBASE_FOREACH (Nurb *, nu, lb) {
     if (nu->type == CU_BEZIER) {
       BezTriple *bezt = nu->bezt;
 
-      for (i = 0; i < nu->pntsu; i++, bezt++) {
+      for (int i = 0; i < nu->pntsu; i++, bezt++) {
         mul_v3_m4v3(bezt->vec[0], mat, co);
         co += 3;
         mul_v3_m4v3(bezt->vec[1], mat, co);
@@ -4565,7 +4733,7 @@ void BKE_curve_nurbs_vert_coords_apply_with_mat4(ListBase *lb,
     else {
       BPoint *bp = nu->bp;
 
-      for (i = 0; i < nu->pntsu * nu->pntsv; i++, bp++) {
+      for (int i = 0; i < nu->pntsu * nu->pntsv; i++, bp++) {
         mul_v3_m4v3(bp->vec, mat, co);
         co += 3;
       }
@@ -4655,14 +4823,11 @@ float (*BKE_curve_nurbs_key_vert_coords_alloc(ListBase *lb, float *key, int *r_v
 
 void BKE_curve_nurbs_key_vert_tilts_apply(ListBase *lb, const float *key)
 {
-  Nurb *nu;
-  int i;
-
-  for (nu = lb->first; nu; nu = nu->next) {
+  LISTBASE_FOREACH (Nurb *, nu, lb) {
     if (nu->type == CU_BEZIER) {
       BezTriple *bezt = nu->bezt;
 
-      for (i = 0; i < nu->pntsu; i++, bezt++) {
+      for (int i = 0; i < nu->pntsu; i++, bezt++) {
         bezt->tilt = key[9];
         bezt->radius = key[10];
         key += KEYELEM_FLOAT_LEN_BEZTRIPLE;
@@ -4671,7 +4836,7 @@ void BKE_curve_nurbs_key_vert_tilts_apply(ListBase *lb, const float *key)
     else {
       BPoint *bp = nu->bp;
 
-      for (i = 0; i < nu->pntsu * nu->pntsv; i++, bp++) {
+      for (int i = 0; i < nu->pntsu * nu->pntsv; i++, bp++) {
         bp->tilt = key[3];
         bp->radius = key[4];
         key += KEYELEM_FLOAT_LEN_BPOINT;
@@ -4845,7 +5010,7 @@ bool BKE_nurb_type_convert(Nurb *nu,
           bp++;
         }
         else {
-          const char *f = &bezt->f1;
+          const uint8_t *f = &bezt->f1;
           for (c = 0; c < 3; c++, f++) {
             copy_v3_v3(bp->vec, bezt->vec[c]);
             bp->vec[3] = 1.0;
@@ -5196,38 +5361,32 @@ void BKE_curve_transform(Curve *cu, const float mat[4][4], const bool do_keys, c
 void BKE_curve_translate(Curve *cu, const float offset[3], const bool do_keys)
 {
   ListBase *nurb_lb = BKE_curve_nurbs_get(cu);
-  Nurb *nu;
-  int i;
 
-  for (nu = nurb_lb->first; nu; nu = nu->next) {
-    BezTriple *bezt;
-    BPoint *bp;
-
+  LISTBASE_FOREACH (Nurb *, nu, nurb_lb) {
     if (nu->type == CU_BEZIER) {
-      i = nu->pntsu;
-      for (bezt = nu->bezt; i--; bezt++) {
+      int i = nu->pntsu;
+      for (BezTriple *bezt = nu->bezt; i--; bezt++) {
         add_v3_v3(bezt->vec[0], offset);
         add_v3_v3(bezt->vec[1], offset);
         add_v3_v3(bezt->vec[2], offset);
       }
     }
     else {
-      i = nu->pntsu * nu->pntsv;
-      for (bp = nu->bp; i--; bp++) {
+      int i = nu->pntsu * nu->pntsv;
+      for (BPoint *bp = nu->bp; i--; bp++) {
         add_v3_v3(bp->vec, offset);
       }
     }
   }
 
   if (do_keys && cu->key) {
-    KeyBlock *kb;
-    for (kb = cu->key->block.first; kb; kb = kb->next) {
+    LISTBASE_FOREACH (KeyBlock *, kb, &cu->key->block) {
       float *fp = kb->data;
       int n = kb->totelem;
 
-      for (nu = cu->nurb.first; nu; nu = nu->next) {
+      LISTBASE_FOREACH (Nurb *, nu, &cu->nurb) {
         if (nu->type == CU_BEZIER) {
-          for (i = nu->pntsu; i && (n -= KEYELEM_ELEM_LEN_BEZTRIPLE) >= 0; i--) {
+          for (int i = nu->pntsu; i && (n -= KEYELEM_ELEM_LEN_BEZTRIPLE) >= 0; i--) {
             add_v3_v3(&fp[0], offset);
             add_v3_v3(&fp[3], offset);
             add_v3_v3(&fp[6], offset);
@@ -5235,7 +5394,7 @@ void BKE_curve_translate(Curve *cu, const float offset[3], const bool do_keys)
           }
         }
         else {
-          for (i = nu->pntsu * nu->pntsv; i && (n -= KEYELEM_ELEM_LEN_BPOINT) >= 0; i--) {
+          for (int i = nu->pntsu * nu->pntsv; i && (n -= KEYELEM_ELEM_LEN_BPOINT) >= 0; i--) {
             add_v3_v3(fp, offset);
             fp += KEYELEM_FLOAT_LEN_BPOINT;
           }
@@ -5251,17 +5410,14 @@ void BKE_curve_material_index_remove(Curve *cu, int index)
 
   if (curvetype == OB_FONT) {
     struct CharInfo *info = cu->strinfo;
-    int i;
-    for (i = cu->len_char32 - 1; i >= 0; i--, info++) {
+    for (int i = cu->len_char32 - 1; i >= 0; i--, info++) {
       if (info->mat_nr && info->mat_nr >= index) {
         info->mat_nr--;
       }
     }
   }
   else {
-    Nurb *nu;
-
-    for (nu = cu->nurb.first; nu; nu = nu->next) {
+    LISTBASE_FOREACH (Nurb *, nu, &cu->nurb) {
       if (nu->mat_nr && nu->mat_nr >= index) {
         nu->mat_nr--;
       }
@@ -5275,17 +5431,14 @@ bool BKE_curve_material_index_used(Curve *cu, int index)
 
   if (curvetype == OB_FONT) {
     struct CharInfo *info = cu->strinfo;
-    int i;
-    for (i = cu->len_char32 - 1; i >= 0; i--, info++) {
+    for (int i = cu->len_char32 - 1; i >= 0; i--, info++) {
       if (info->mat_nr == index) {
         return true;
       }
     }
   }
   else {
-    Nurb *nu;
-
-    for (nu = cu->nurb.first; nu; nu = nu->next) {
+    LISTBASE_FOREACH (Nurb *, nu, &cu->nurb) {
       if (nu->mat_nr == index) {
         return true;
       }
@@ -5301,15 +5454,12 @@ void BKE_curve_material_index_clear(Curve *cu)
 
   if (curvetype == OB_FONT) {
     struct CharInfo *info = cu->strinfo;
-    int i;
-    for (i = cu->len_char32 - 1; i >= 0; i--, info++) {
+    for (int i = cu->len_char32 - 1; i >= 0; i--, info++) {
       info->mat_nr = 0;
     }
   }
   else {
-    Nurb *nu;
-
-    for (nu = cu->nurb.first; nu; nu = nu->next) {
+    LISTBASE_FOREACH (Nurb *, nu, &cu->nurb) {
       nu->mat_nr = 0;
     }
   }

@@ -113,7 +113,7 @@ static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
   tgmd->curfalloff = BKE_curvemapping_copy(gmd->curfalloff);
 }
 
-/* calculate factor of fallof */
+/* Calculate the factor of falloff. */
 static float gpencil_hook_falloff(const struct GPHookData_cb *tData, const float len_sq)
 {
   BLI_assert(tData->falloff_sq);
@@ -340,23 +340,12 @@ static void updateDepsgraph(GpencilModifierData *md, const ModifierUpdateDepsgra
   DEG_add_object_relation(ctx->node, ctx->object, DEG_OB_COMP_TRANSFORM, "Hook Modifier");
 }
 
-static void foreachObjectLink(GpencilModifierData *md,
-                              Object *ob,
-                              ObjectWalkFunc walk,
-                              void *userData)
-{
-  HookGpencilModifierData *mmd = (HookGpencilModifierData *)md;
-
-  walk(userData, ob, &mmd->object, IDWALK_CB_NOP);
-}
-
 static void foreachIDLink(GpencilModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   HookGpencilModifierData *mmd = (HookGpencilModifierData *)md;
 
   walk(userData, ob, (ID **)&mmd->material, IDWALK_CB_USER);
-
-  foreachObjectLink(md, ob, (ObjectWalkFunc)walk, userData);
+  walk(userData, ob, (ID **)&mmd->object, IDWALK_CB_NOP);
 }
 
 static void panel_draw(const bContext *UNUSED(C), Panel *panel)
@@ -451,7 +440,6 @@ GpencilModifierTypeInfo modifierType_Gpencil_Hook = {
     /* isDisabled */ isDisabled,
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
     /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* panelRegister */ panelRegister,

@@ -24,16 +24,16 @@
 
 struct DRWPass;
 struct DRWShadingGroup;
+struct FluidModifierData;
 struct GPUMaterial;
 struct ModifierData;
-struct FluidModifierData;
 struct Object;
 struct ParticleSystem;
 struct RegionView3D;
 struct ViewLayer;
 
 #define UBO_FIRST_COLOR colorWire
-#define UBO_LAST_COLOR colorFaceFront
+#define UBO_LAST_COLOR colorUVShadow
 
 /* Used as ubo but colors can be directly referenced as well */
 /* Keep in sync with: common_globals_lib.glsl (globalsBlock) */
@@ -141,6 +141,8 @@ typedef struct GlobalsUboStorage {
   float colorFaceBack[4];
   float colorFaceFront[4];
 
+  float colorUVShadow[4];
+
   /* NOTE! Put all color before UBO_LAST_COLOR */
   float screenVecs[2][4];                    /* padded as vec4  */
   float sizeViewport[2], sizeViewportInv[2]; /* packed as vec4 in glsl */
@@ -194,6 +196,8 @@ void DRW_hair_free(void);
 void DRW_smoke_ensure(struct FluidModifierData *fmd, int highres);
 void DRW_smoke_ensure_coba_field(struct FluidModifierData *fmd);
 void DRW_smoke_ensure_velocity(struct FluidModifierData *fmd);
+void DRW_fluid_ensure_flags(struct FluidModifierData *fmd);
+void DRW_fluid_ensure_range_field(struct FluidModifierData *fmd);
 
 void DRW_smoke_free(struct FluidModifierData *fmd);
 void DRW_smoke_free_velocity(struct FluidModifierData *fmd);

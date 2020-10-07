@@ -51,6 +51,8 @@
 
 #include "DEG_depsgraph_query.h"
 
+#include "BLO_read_write.h"
+
 #include "CLG_log.h"
 
 #ifdef WITH_OPENVDB
@@ -152,7 +154,7 @@ static struct VolumeFileCache {
 
   ~VolumeFileCache()
   {
-    assert(cache.empty());
+    BLI_assert(cache.empty());
   }
 
   Entry *add_metadata_user(const Entry &template_entry)
@@ -509,6 +511,61 @@ static void volume_foreach_cache(ID *id,
   function_callback(id, &key, (void **)&volume->runtime.grids, 0, user_data);
 }
 
+static void volume_blend_write(BlendWriter *writer, ID *id, const void *id_address)
+{
+  Volume *volume = (Volume *)id;
+  if (volume->id.us > 0 || BLO_write_is_undo(writer)) {
+    /* Clean up, important in undo case to reduce false detection of changed datablocks. */
+    volume->runtime.grids = 0;
+
+    /* write LibData */
+    BLO_write_id_struct(writer, Volume, id_address, &volume->id);
+    BKE_id_blend_write(writer, &volume->id);
+
+    /* direct data */
+    BLO_write_pointer_array(writer, volume->totcol, volume->mat);
+    if (volume->adt) {
+      BKE_animdata_blend_write(writer, volume->adt);
+    }
+
+    BKE_packedfile_blend_write(writer, volume->packedfile);
+  }
+}
+
+static void volume_blend_read_data(BlendDataReader *reader, ID *id)
+{
+  Volume *volume = (Volume *)id;
+  BLO_read_data_address(reader, &volume->adt);
+  BKE_animdata_blend_read_data(reader, volume->adt);
+
+  BKE_packedfile_blend_read(reader, &volume->packedfile);
+  volume->runtime.frame = 0;
+
+  /* materials */
+  BLO_read_pointer_array(reader, (void **)&volume->mat);
+}
+
+static void volume_blend_read_lib(BlendLibReader *reader, ID *id)
+{
+  Volume *volume = (Volume *)id;
+  /* Needs to be done *after* cache pointers are restored (call to
+   * `foreach_cache`/`blo_cache_storage_entry_restore_in_new`), easier for now to do it in
+   * lib_link... */
+  BKE_volume_init_grids(volume);
+
+  for (int a = 0; a < volume->totcol; a++) {
+    BLO_read_id_address(reader, volume->id.lib, &volume->mat[a]);
+  }
+}
+
+static void volume_blend_read_expand(BlendExpander *expander, ID *id)
+{
+  Volume *volume = (Volume *)id;
+  for (int a = 0; a < volume->totcol; a++) {
+    BLO_expand(expander, volume->mat[a]);
+  }
+}
+
 IDTypeInfo IDType_ID_VO = {
     /* id_code */ ID_VO,
     /* id_filter */ FILTER_ID_VO,
@@ -526,10 +583,10 @@ IDTypeInfo IDType_ID_VO = {
     /* foreach_id */ volume_foreach_id,
     /* foreach_cache */ volume_foreach_cache,
 
-    /* blend_write */ NULL,
-    /* blend_read_data */ NULL,
-    /* blend_read_lib */ NULL,
-    /* blend_read_expand */ NULL,
+    /* blend_write */ volume_blend_write,
+    /* blend_read_data */ volume_blend_read_data,
+    /* blend_read_lib */ volume_blend_read_lib,
+    /* blend_read_expand */ volume_blend_read_expand,
 };
 
 void BKE_volume_init_grids(Volume *volume)
@@ -1212,6 +1269,8 @@ Volume *BKE_volume_new_for_eval(const Volume *volume_src)
   STRNCPY(volume_dst->id.name, volume_src->id.name);
   volume_dst->mat = (Material **)MEM_dupallocN(volume_src->mat);
   volume_dst->totcol = volume_src->totcol;
+  volume_dst->render = volume_src->render;
+  volume_dst->display = volume_src->display;
   BKE_volume_init_grids(volume_dst);
 
   return volume_dst;
@@ -1232,47 +1291,30 @@ Volume *BKE_volume_copy_for_eval(Volume *volume_src, bool reference)
   return result;
 }
 
+#ifdef WITH_OPENVDB
+struct CreateGridOp {
+  template<typename GridType> typename openvdb::GridBase::Ptr operator()()
+  {
+    if constexpr (std::is_same_v<GridType, openvdb::points::PointDataGrid>) {
+      return {};
+    }
+    else {
+      return GridType::create();
+    }
+  }
+};
+#endif
+
 VolumeGrid *BKE_volume_grid_add(Volume *volume, const char *name, VolumeGridType type)
 {
 #ifdef WITH_OPENVDB
   VolumeGridVector &grids = *volume->runtime.grids;
   BLI_assert(BKE_volume_grid_find(volume, name) == NULL);
+  BLI_assert(type != VOLUME_GRID_UNKNOWN);
 
-  openvdb::GridBase::Ptr vdb_grid;
-  switch (type) {
-    case VOLUME_GRID_FLOAT:
-      vdb_grid = openvdb::FloatGrid::create();
-      break;
-    case VOLUME_GRID_VECTOR_FLOAT:
-      vdb_grid = openvdb::Vec3fGrid::create();
-      break;
-    case VOLUME_GRID_BOOLEAN:
-      vdb_grid = openvdb::BoolGrid::create();
-      break;
-    case VOLUME_GRID_DOUBLE:
-      vdb_grid = openvdb::DoubleGrid::create();
-      break;
-    case VOLUME_GRID_INT:
-      vdb_grid = openvdb::Int32Grid::create();
-      break;
-    case VOLUME_GRID_INT64:
-      vdb_grid = openvdb::Int64Grid::create();
-      break;
-    case VOLUME_GRID_VECTOR_INT:
-      vdb_grid = openvdb::Vec3IGrid::create();
-      break;
-    case VOLUME_GRID_VECTOR_DOUBLE:
-      vdb_grid = openvdb::Vec3dGrid::create();
-      break;
-    case VOLUME_GRID_STRING:
-      vdb_grid = openvdb::StringGrid::create();
-      break;
-    case VOLUME_GRID_MASK:
-      vdb_grid = openvdb::MaskGrid::create();
-      break;
-    case VOLUME_GRID_POINTS:
-    case VOLUME_GRID_UNKNOWN:
-      return NULL;
+  openvdb::GridBase::Ptr vdb_grid = BKE_volume_grid_type_operation(type, CreateGridOp{});
+  if (!vdb_grid) {
+    return NULL;
   }
 
   vdb_grid->setName(name);

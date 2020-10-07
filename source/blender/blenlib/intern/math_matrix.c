@@ -24,7 +24,6 @@
  */
 
 #include "BLI_math.h"
-#include <assert.h>
 
 #include "BLI_strict_flags.h"
 
@@ -2156,7 +2155,7 @@ void mat4_to_loc_quat(float loc[3], float quat[4], const float wmat[4][4])
   copy_m3_m4(mat3, wmat);
   normalize_m3_m3(mat3_n, mat3);
 
-  /* so scale doesn't interfere with rotation [#24291] */
+  /* so scale doesn't interfere with rotation T24291. */
   /* note: this is a workaround for negative matrix not working for rotation conversion, FIXME */
   if (is_negative_m3(mat3)) {
     negate_m3(mat3_n);
@@ -2616,9 +2615,9 @@ void print_m4(const char *str, const float m[4][4])
  *
  * Compute the Single Value Decomposition of an arbitrary matrix A
  * That is compute the 3 matrices U,W,V with U column orthogonal (m,n)
- * ,W a diagonal matrix and V an orthogonal square matrix s.t.
- * A = U.W.Vt. From this decomposition it is trivial to compute the
- * (pseudo-inverse) of A as Ainv = V.Winv.tranpose(U).
+ * ,W a diagonal matrix and V an orthogonal square matrix `s.t.A = U.W.Vt`.
+ * From this decomposition it is trivial to compute the (pseudo-inverse)
+ * of `A` as `Ainv = V.Winv.transpose(U)`.
  */
 
 void svd_m4(float U[4][4], float s[4], float V[4][4], float A_[4][4])

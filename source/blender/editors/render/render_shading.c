@@ -57,7 +57,6 @@
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_object.h"
-#include "BKE_paint.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
 #include "BKE_texture.h"
@@ -82,6 +81,7 @@
 #include "ED_mesh.h"
 #include "ED_node.h"
 #include "ED_object.h"
+#include "ED_paint.h"
 #include "ED_render.h"
 #include "ED_scene.h"
 #include "ED_screen.h"
@@ -178,7 +178,7 @@ static int material_slot_add_exec(bContext *C, wmOperator *UNUSED(op))
 
   if (ob->mode & OB_MODE_TEXTURE_PAINT) {
     Scene *scene = CTX_data_scene(C);
-    BKE_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
+    ED_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
     WM_event_add_notifier(C, NC_SCENE | ND_TOOLSETTINGS, NULL);
   }
 
@@ -218,7 +218,7 @@ static int material_slot_remove_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
-  /* Removing material slots in edit mode screws things up, see bug #21822.*/
+  /* Removing material slots in edit mode screws things up, see bug T21822.*/
   if (ob == CTX_data_edit_object(C)) {
     BKE_report(op->reports, RPT_ERROR, "Unable to remove material slot in edit mode");
     return OPERATOR_CANCELLED;
@@ -228,7 +228,7 @@ static int material_slot_remove_exec(bContext *C, wmOperator *op)
 
   if (ob->mode & OB_MODE_TEXTURE_PAINT) {
     Scene *scene = CTX_data_scene(C);
-    BKE_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
+    ED_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
     WM_event_add_notifier(C, NC_SCENE | ND_TOOLSETTINGS, NULL);
   }
 
@@ -664,7 +664,7 @@ void OBJECT_OT_material_slot_move(wmOperatorType *ot)
 
 static int material_slot_remove_unused_exec(bContext *C, wmOperator *op)
 {
-  /* Removing material slots in edit mode screws things up, see bug #21822.*/
+  /* Removing material slots in edit mode screws things up, see bug T21822. */
   Object *ob_active = CTX_data_active_object(C);
   if (ob_active && BKE_object_is_in_editmode(ob_active)) {
     BKE_report(op->reports, RPT_ERROR, "Unable to remove material slot in edit mode");
@@ -705,7 +705,7 @@ static int material_slot_remove_unused_exec(bContext *C, wmOperator *op)
 
   if (ob_active->mode & OB_MODE_TEXTURE_PAINT) {
     Scene *scene = CTX_data_scene(C);
-    BKE_paint_proj_mesh_data_check(scene, ob_active, NULL, NULL, NULL, NULL);
+    ED_paint_proj_mesh_data_check(scene, ob_active, NULL, NULL, NULL, NULL);
     WM_event_add_notifier(C, NC_SCENE | ND_TOOLSETTINGS, NULL);
   }
 
@@ -873,7 +873,9 @@ static int new_world_exec(bContext *C, wmOperator *UNUSED(op))
 
   /* add or copy world */
   if (wo) {
-    wo = BKE_world_copy(bmain, wo);
+    World *new_wo = NULL;
+    BKE_id_copy_ex(bmain, &wo->id, (ID **)&new_wo, LIB_ID_COPY_DEFAULT | LIB_ID_COPY_ACTIONS);
+    wo = new_wo;
   }
   else {
     wo = BKE_world_add(bmain, DATA_("World"));
@@ -1121,8 +1123,7 @@ static int light_cache_bake_invoke(bContext *C, wmOperator *op, const wmEvent *U
 
   /* store actual owner of job, so modal operator could check for it,
    * the reason of this is that active scene could change when rendering
-   * several layers from compositor [#31800]
-   */
+   * several layers from compositor T31800. */
   op->customdata = scene;
 
   WM_jobs_start(wm, wm_job);

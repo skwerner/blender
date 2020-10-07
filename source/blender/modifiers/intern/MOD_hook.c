@@ -28,6 +28,7 @@
 
 #include "BLT_translation.h"
 
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
@@ -63,10 +64,11 @@ static void initData(ModifierData *md)
 {
   HookModifierData *hmd = (HookModifierData *)md;
 
-  hmd->force = 1.0;
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(hmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(hmd, DNA_struct_default_get(HookModifierData), modifier);
+
   hmd->curfalloff = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
-  hmd->falloff_type = eHook_Falloff_Smooth;
-  hmd->flag = 0;
 }
 
 static void copyData(const ModifierData *md, ModifierData *target, const int flag)
@@ -117,11 +119,11 @@ static bool isDisabled(const struct Scene *UNUSED(scene),
   return !hmd->object;
 }
 
-static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk, void *userData)
+static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   HookModifierData *hmd = (HookModifierData *)md;
 
-  walk(userData, ob, &hmd->object, IDWALK_CB_NOP);
+  walk(userData, ob, (ID **)&hmd->object, IDWALK_CB_NOP);
 }
 
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
@@ -313,10 +315,19 @@ static void deformVerts_do(HookModifierData *hmd,
   MOD_get_vgroup(ob, mesh, hmd->name, &dvert, &hd.defgrp_index);
   int cd_dvert_offset = -1;
 
-  if ((em != NULL) && (hd.defgrp_index != -1)) {
-    cd_dvert_offset = CustomData_get_offset(&em->bm->vdata, CD_MDEFORMVERT);
-    if (cd_dvert_offset == -1) {
-      hd.defgrp_index = -1;
+  if (hd.defgrp_index != -1) {
+    /* Edit-mesh. */
+    if (em != NULL) {
+      cd_dvert_offset = CustomData_get_offset(&em->bm->vdata, CD_MDEFORMVERT);
+      if (cd_dvert_offset == -1) {
+        hd.defgrp_index = -1;
+      }
+    }
+    else {
+      /* Regular mesh. */
+      if (dvert == NULL) {
+        hd.defgrp_index = -1;
+      }
     }
   }
 
@@ -549,9 +560,11 @@ ModifierTypeInfo modifierType_Hook = {
     /* name */ "Hook",
     /* structName */ "HookModifierData",
     /* structSize */ sizeof(HookModifierData),
+    /* srna */ &RNA_HookModifier,
     /* type */ eModifierTypeType_OnlyDeform,
     /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsVertexCosOnly |
         eModifierTypeFlag_SupportsEditmode,
+    /* icon */ ICON_HOOK,
     /* copyData */ copyData,
 
     /* deformVerts */ deformVerts,
@@ -570,8 +583,7 @@ ModifierTypeInfo modifierType_Hook = {
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
     /* panelRegister */ panelRegister,

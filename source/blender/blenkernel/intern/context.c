@@ -92,6 +92,11 @@ struct bContext {
     /** True if python is initialized. */
     bool py_init;
     void *py_context;
+    /**
+     * If we need to remove members, do so in a copy
+     * (keep this to check if the copy needs freeing).
+     */
+    void *py_context_orig;
   } data;
 };
 
@@ -226,9 +231,23 @@ void *CTX_py_dict_get(const bContext *C)
 {
   return C->data.py_context;
 }
-void CTX_py_dict_set(bContext *C, void *value)
+void *CTX_py_dict_get_orig(const bContext *C)
 {
+  return C->data.py_context_orig;
+}
+
+void CTX_py_state_push(bContext *C, struct bContext_PyState *pystate, void *value)
+{
+  pystate->py_context = C->data.py_context;
+  pystate->py_context_orig = C->data.py_context_orig;
+
   C->data.py_context = value;
+  C->data.py_context_orig = value;
+}
+void CTX_py_state_pop(bContext *C, struct bContext_PyState *pystate)
+{
+  C->data.py_context = pystate->py_context;
+  C->data.py_context_orig = pystate->py_context_orig;
 }
 
 /* data context utility functions */
@@ -275,7 +294,7 @@ static void *ctx_wm_python_context_get(const bContext *C,
   return fall_through;
 }
 
-static int ctx_data_get(bContext *C, const char *member, bContextDataResult *result)
+static eContextResult ctx_data_get(bContext *C, const char *member, bContextDataResult *result)
 {
   bScreen *screen;
   ScrArea *area;
@@ -355,7 +374,7 @@ static void *ctx_data_pointer_get(const bContext *C, const char *member)
 {
   bContextDataResult result;
 
-  if (C && ctx_data_get((bContext *)C, member, &result) == 1) {
+  if (C && ctx_data_get((bContext *)C, member, &result) == CTX_RESULT_OK) {
     BLI_assert(result.type == CTX_DATA_TYPE_POINTER);
     return result.ptr.data;
   }
@@ -372,7 +391,7 @@ static int ctx_data_pointer_verify(const bContext *C, const char *member, void *
     *pointer = NULL;
     return 1;
   }
-  if (ctx_data_get((bContext *)C, member, &result) == 1) {
+  if (ctx_data_get((bContext *)C, member, &result) == CTX_RESULT_OK) {
     BLI_assert(result.type == CTX_DATA_TYPE_POINTER);
     *pointer = result.ptr.data;
     return 1;
@@ -386,7 +405,7 @@ static int ctx_data_collection_get(const bContext *C, const char *member, ListBa
 {
   bContextDataResult result;
 
-  if (ctx_data_get((bContext *)C, member, &result) == 1) {
+  if (ctx_data_get((bContext *)C, member, &result) == CTX_RESULT_OK) {
     BLI_assert(result.type == CTX_DATA_TYPE_COLLECTION);
     *list = result.list;
     return 1;
@@ -434,7 +453,7 @@ PointerRNA CTX_data_pointer_get(const bContext *C, const char *member)
 {
   bContextDataResult result;
 
-  if (ctx_data_get((bContext *)C, member, &result) == 1) {
+  if (ctx_data_get((bContext *)C, member, &result) == CTX_RESULT_OK) {
     BLI_assert(result.type == CTX_DATA_TYPE_POINTER);
     return result.ptr;
   }
@@ -476,7 +495,7 @@ ListBase CTX_data_collection_get(const bContext *C, const char *member)
 {
   bContextDataResult result;
 
-  if (ctx_data_get((bContext *)C, member, &result) == 1) {
+  if (ctx_data_get((bContext *)C, member, &result) == CTX_RESULT_OK) {
     BLI_assert(result.type == CTX_DATA_TYPE_COLLECTION);
     return result.list;
   }
@@ -485,14 +504,13 @@ ListBase CTX_data_collection_get(const bContext *C, const char *member)
   return list;
 }
 
-/* 1:found,  -1:found but not set,  0:not found */
-int CTX_data_get(
+int /*eContextResult*/ CTX_data_get(
     const bContext *C, const char *member, PointerRNA *r_ptr, ListBase *r_lb, short *r_type)
 {
   bContextDataResult result;
-  int ret = ctx_data_get((bContext *)C, member, &result);
+  eContextResult ret = ctx_data_get((bContext *)C, member, &result);
 
-  if (ret == 1) {
+  if (ret == CTX_RESULT_OK) {
     *r_ptr = result.ptr;
     *r_lb = result.list;
     *r_type = result.type;
@@ -918,6 +936,13 @@ void CTX_wm_manager_set(bContext *C, wmWindowManager *wm)
   C->wm.region = NULL;
 }
 
+#ifdef WITH_PYTHON
+#  define PYCTX_REGION_MEMBERS "region", "region_data"
+#  define PYCTX_AREA_MEMBERS "area", "space_data", PYCTX_REGION_MEMBERS
+#  define PYCTX_SCREEN_MEMBERS "screen", PYCTX_AREA_MEMBERS
+#  define PYCTX_WINDOW_MEMBERS "window", "scene", "workspace", PYCTX_SCREEN_MEMBERS
+#endif
+
 void CTX_wm_window_set(bContext *C, wmWindow *win)
 {
   C->wm.window = win;
@@ -928,6 +953,12 @@ void CTX_wm_window_set(bContext *C, wmWindow *win)
   C->wm.screen = (win) ? BKE_workspace_active_screen_get(win->workspace_hook) : NULL;
   C->wm.area = NULL;
   C->wm.region = NULL;
+
+#ifdef WITH_PYTHON
+  if (C->data.py_context != NULL) {
+    BPY_context_dict_clear_members(C, PYCTX_WINDOW_MEMBERS);
+  }
+#endif
 }
 
 void CTX_wm_screen_set(bContext *C, bScreen *screen)
@@ -935,17 +966,35 @@ void CTX_wm_screen_set(bContext *C, bScreen *screen)
   C->wm.screen = screen;
   C->wm.area = NULL;
   C->wm.region = NULL;
+
+#ifdef WITH_PYTHON
+  if (C->data.py_context != NULL) {
+    BPY_context_dict_clear_members(C, PYCTX_SCREEN_MEMBERS);
+  }
+#endif
 }
 
 void CTX_wm_area_set(bContext *C, ScrArea *area)
 {
   C->wm.area = area;
   C->wm.region = NULL;
+
+#ifdef WITH_PYTHON
+  if (C->data.py_context != NULL) {
+    BPY_context_dict_clear_members(C, PYCTX_AREA_MEMBERS);
+  }
+#endif
 }
 
 void CTX_wm_region_set(bContext *C, ARegion *region)
 {
   C->wm.region = region;
+
+#ifdef WITH_PYTHON
+  if (C->data.py_context != NULL) {
+    BPY_context_dict_clear_members(C, PYCTX_REGION_MEMBERS);
+  }
+#endif
 }
 
 void CTX_wm_menu_set(bContext *C, ARegion *menu)
@@ -1154,6 +1203,12 @@ const char *CTX_data_mode_string(const bContext *C)
 void CTX_data_scene_set(bContext *C, Scene *scene)
 {
   C->data.scene = scene;
+
+#ifdef WITH_PYTHON
+  if (C->data.py_context != NULL) {
+    BPY_context_dict_clear_members(C, "scene");
+  }
+#endif
 }
 
 ToolSettings *CTX_data_tool_settings(const bContext *C)

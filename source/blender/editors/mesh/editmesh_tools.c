@@ -814,7 +814,7 @@ static BMElem *edbm_add_edge_face_exec__tricky_extend_sel(BMesh *bm)
            (BM_edge_share_face_check(e, ed_pair_v1[0]) == false) &&
            (BM_edge_share_face_check(e, ed_pair_v2[0]) == false)) ||
 
-#  if 1 /* better support mixed cases [#37203] */
+#  if 1 /* better support mixed cases T37203. */
           ((edbm_add_edge_face_exec__vert_edge_lookup(e->v1, e, ed_pair_v1, 2, BM_edge_is_wire) ==
             1) &&
            (edbm_add_edge_face_exec__vert_edge_lookup(
@@ -2512,7 +2512,7 @@ static int edbm_do_smooth_vertex_exec(bContext *C, wmOperator *op)
     }
 
     /* mirror before smooth */
-    if (((Mesh *)obedit->data)->editflag & ME_EDIT_MIRROR_X) {
+    if (((Mesh *)obedit->data)->symmetry & ME_SYMMETRY_X) {
       EDBM_verts_mirror_cache_begin(em, 0, false, true, false, use_topology);
     }
 
@@ -2559,7 +2559,7 @@ static int edbm_do_smooth_vertex_exec(bContext *C, wmOperator *op)
     }
 
     /* apply mirror */
-    if (((Mesh *)obedit->data)->editflag & ME_EDIT_MIRROR_X) {
+    if (((Mesh *)obedit->data)->symmetry & ME_SYMMETRY_X) {
       EDBM_verts_mirror_apply(em, BM_ELEM_SELECT, 0);
       EDBM_verts_mirror_cache_end(em);
     }
@@ -2657,7 +2657,7 @@ static int edbm_do_smooth_laplacian_vertex_exec(bContext *C, wmOperator *op)
     }
 
     /* Mirror before smooth. */
-    if (((Mesh *)obedit->data)->editflag & ME_EDIT_MIRROR_X) {
+    if (((Mesh *)obedit->data)->symmetry & ME_SYMMETRY_X) {
       EDBM_verts_mirror_cache_begin(em, 0, false, true, false, use_topology);
     }
 
@@ -2683,7 +2683,7 @@ static int edbm_do_smooth_laplacian_vertex_exec(bContext *C, wmOperator *op)
     }
 
     /* Apply mirror. */
-    if (((Mesh *)obedit->data)->editflag & ME_EDIT_MIRROR_X) {
+    if (((Mesh *)obedit->data)->symmetry & ME_SYMMETRY_X) {
       EDBM_verts_mirror_apply(em, BM_ELEM_SELECT, 0);
       EDBM_verts_mirror_cache_end(em);
     }

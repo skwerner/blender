@@ -979,10 +979,10 @@ static int sequencer_select_side_of_frame_exec(bContext *C, wmOperator *op)
     bool test = false;
     switch (side) {
       case -1:
-        test = (cfra >= seq->startdisp);
+        test = (cfra >= seq->enddisp);
         break;
       case 1:
-        test = (cfra <= seq->enddisp);
+        test = (cfra <= seq->startdisp);
         break;
       case 0:
         test = (cfra <= seq->enddisp) && (cfra >= seq->startdisp);
@@ -1388,9 +1388,8 @@ static bool select_grouped_effect(Editing *ed, Sequence *actseq, const int chann
   Sequence *seq;
   bool changed = false;
   bool effects[SEQ_TYPE_MAX + 1];
-  int i;
 
-  for (i = 0; i <= SEQ_TYPE_MAX; i++) {
+  for (int i = 0; i <= SEQ_TYPE_MAX; i++) {
     effects[i] = false;
   }
 

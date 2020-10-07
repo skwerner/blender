@@ -447,10 +447,10 @@ class QuickLiquid(Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     show_flows: BoolProperty(
-            name="Render Liquid Objects",
-            description="Keep the liquid objects visible during rendering",
-            default=False,
-            )
+        name="Render Liquid Objects",
+        description="Keep the liquid objects visible during rendering",
+        default=False,
+    )
 
     def execute(self, context):
         if not bpy.app.build_options.fluid:
@@ -522,6 +522,17 @@ class QuickLiquid(Operator):
 
         # change domain type, will also allocate and show particle system for FLIP
         obj.modifiers[-1].domain_settings.domain_type = 'LIQUID'
+
+        liquid_domain = obj.modifiers[-2]
+
+        # set color mapping field to show phi grid for liquid
+        liquid_domain.domain_settings.color_ramp_field = 'PHI'
+
+        # perform a single slice of the domain
+        liquid_domain.domain_settings.use_slice = True
+
+        # set display thickness to a lower value for more detailed display of phi grids
+        liquid_domain.domain_settings.display_thickness = 0.02
 
         # make the domain smooth so it renders nicely
         bpy.ops.object.shade_smooth()
@@ -613,6 +624,7 @@ class QuickParticles(Operator):
         context.view_layer.objects.active = pointcloud_object
         pointcloud_object.show_bounds = True
         return {'FINISHED'}
+
 
 classes = (
     QuickExplode,

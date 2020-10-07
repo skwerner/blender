@@ -23,7 +23,6 @@
  * Functions for dealing with append/link operators and helpers.
  */
 
-#include <assert.h>
 #include <ctype.h>
 #include <errno.h>
 #include <float.h>
@@ -527,7 +526,7 @@ static int wm_link_append_exec(bContext *C, wmOperator *op)
 
   /* TODO(sergey): Use proper flag for tagging here. */
 
-  /* TODO (dalai): Temporary solution!
+  /* TODO(dalai): Temporary solution!
    * Ideally we only need to tag the new objects themselves, not the scene.
    * This way we'll avoid flush of collection properties
    * to all objects and limit update to the particular object only.

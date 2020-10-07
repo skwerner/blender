@@ -618,8 +618,9 @@ int WM_gesture_lines_invoke(bContext *C, wmOperator *op, const wmEvent *event)
   return OPERATOR_RUNNING_MODAL;
 }
 
-static void gesture_lasso_apply(bContext *C, wmOperator *op)
+static int gesture_lasso_apply(bContext *C, wmOperator *op)
 {
+  int retval = OPERATOR_FINISHED;
   wmGesture *gesture = op->customdata;
   PointerRNA itemptr;
   float loc[2];
@@ -639,9 +640,11 @@ static void gesture_lasso_apply(bContext *C, wmOperator *op)
   gesture_modal_end(C, op);
 
   if (op->type->exec) {
-    int retval = op->type->exec(C, op);
+    retval = op->type->exec(C, op);
     OPERATOR_RETVAL_CHECK(retval);
   }
+
+  return retval;
 }
 
 int WM_gesture_lasso_modal(bContext *C, wmOperator *op, const wmEvent *event)
@@ -683,8 +686,7 @@ int WM_gesture_lasso_modal(bContext *C, wmOperator *op, const wmEvent *event)
     case MIDDLEMOUSE:
     case RIGHTMOUSE:
       if (event->val == KM_RELEASE) { /* key release */
-        gesture_lasso_apply(C, op);
-        return OPERATOR_FINISHED;
+        return gesture_lasso_apply(C, op);
       }
       break;
     case EVT_ESCKEY:
@@ -790,6 +792,15 @@ void WM_OT_lasso_gesture(wmOperatorType *ot)
 
 /* -------------------------------------------------------------------- */
 /** \name Straight Line Gesture
+ *
+ * Gesture defined by the start and end points of a line that is created between the position of
+ * the initial event and the position of the current event.
+ *
+ * Straight Line Gesture has two modal callbacks depending on the tool that is being implemented: a
+ * regular modal callback intended to update the data during the execution of the gesture and a
+ * one-shot callback that only updates the data once when the gesture finishes.
+ *
+ * It stores 4 values: `xstart, ystart, xend, yend`.
  * \{ */
 
 static bool gesture_straightline_apply(bContext *C, wmOperator *op)
@@ -838,7 +849,23 @@ int WM_gesture_straightline_invoke(bContext *C, wmOperator *op, const wmEvent *e
 
   return OPERATOR_RUNNING_MODAL;
 }
+/**
+ * This invoke callback starts the straightline gesture with a viewport preview to the right side
+ * of the line.
+ */
+int WM_gesture_straightline_active_side_invoke(bContext *C, wmOperator *op, const wmEvent *event)
+{
+  WM_gesture_straightline_invoke(C, op, event);
+  wmGesture *gesture = op->customdata;
+  gesture->draw_active_side = true;
+  return OPERATOR_RUNNING_MODAL;
+}
 
+/**
+ * This modal callback calls exec once per mouse move event while the gesture is active with the
+ * updated line start and end values, so it can be used for tools that have a real time preview
+ * (like a gradient updating in real time over the mesh).
+ */
 int WM_gesture_straightline_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
   wmGesture *gesture = op->customdata;
@@ -867,6 +894,63 @@ int WM_gesture_straightline_modal(bContext *C, wmOperator *op, const wmEvent *ev
         }
         break;
       case GESTURE_MODAL_SELECT:
+        if (gesture_straightline_apply(C, op)) {
+          gesture_modal_end(C, op);
+          return OPERATOR_FINISHED;
+        }
+        gesture_modal_end(C, op);
+        return OPERATOR_CANCELLED;
+
+      case GESTURE_MODAL_CANCEL:
+        gesture_modal_end(C, op);
+        return OPERATOR_CANCELLED;
+    }
+  }
+
+  gesture->is_active_prev = gesture->is_active;
+  return OPERATOR_RUNNING_MODAL;
+}
+
+/**
+ * This modal one-shot callback only calls exec once after the gesture finishes without any updates
+ * during the gesture execution. Should be used for operations that are intended to be applied once
+ * without real time preview (like a trimming tool that only applies the bisect operation once
+ * after finishing the gesture as the bisect operation is too heavy to be computed in real time for
+ * a preview).
+ */
+int WM_gesture_straightline_oneshot_modal(bContext *C, wmOperator *op, const wmEvent *event)
+{
+  wmGesture *gesture = op->customdata;
+  wmWindow *win = CTX_wm_window(C);
+  rcti *rect = gesture->customdata;
+
+  if (event->type == MOUSEMOVE) {
+    if (gesture->is_active == false) {
+      rect->xmin = rect->xmax = event->x - gesture->winrct.xmin;
+      rect->ymin = rect->ymax = event->y - gesture->winrct.ymin;
+    }
+    else {
+      rect->xmax = event->x - gesture->winrct.xmin;
+      rect->ymax = event->y - gesture->winrct.ymin;
+    }
+
+    wm_gesture_tag_redraw(win);
+  }
+  else if (event->type == EVT_MODAL_MAP) {
+    switch (event->val) {
+      case GESTURE_MODAL_BEGIN:
+        if (gesture->is_active == false) {
+          gesture->is_active = true;
+          wm_gesture_tag_redraw(win);
+        }
+        break;
+      case GESTURE_MODAL_SELECT:
+      case GESTURE_MODAL_DESELECT:
+      case GESTURE_MODAL_IN:
+      case GESTURE_MODAL_OUT:
+        if (gesture->wait_for_input) {
+          gesture->modal_state = event->val;
+        }
         if (gesture_straightline_apply(C, op)) {
           gesture_modal_end(C, op);
           return OPERATOR_FINISHED;

@@ -170,7 +170,7 @@ static PyObject *make_app_info(void)
   SetObjItem(PyBool_FromLong(G.factory_startup));
 
   /* build info, use bytes since we can't assume _any_ encoding:
-   * see patch [#30154] for issue */
+   * see patch T30154 for issue */
 #ifdef BUILD_DATE
   SetBytesItem(build_date);
   SetBytesItem(build_time);
@@ -383,7 +383,7 @@ PyDoc_STRVAR(bpy_app_preview_render_size_doc,
              "Reference size for icon/preview renders (read-only)");
 static PyObject *bpy_app_preview_render_size_get(PyObject *UNUSED(self), void *closure)
 {
-  return PyLong_FromLong((long)UI_preview_render_size(POINTER_AS_INT(closure)));
+  return PyLong_FromLong((long)UI_icon_preview_to_render_size(POINTER_AS_INT(closure)));
 }
 
 static PyObject *bpy_app_autoexec_fail_message_get(PyObject *UNUSED(self), void *UNUSED(closure))
@@ -532,7 +532,7 @@ PyObject *BPY_app_struct(void)
   BlenderAppType.tp_init = NULL;
   BlenderAppType.tp_new = NULL;
   BlenderAppType.tp_hash = (hashfunc)
-      _Py_HashPointer; /* without this we can't do set(sys.modules) [#29635] */
+      _Py_HashPointer; /* without this we can't do set(sys.modules) T29635. */
 
   /* kindof a hack ontop of PyStructSequence */
   py_struct_seq_getset_init();

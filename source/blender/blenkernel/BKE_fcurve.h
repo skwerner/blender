@@ -37,6 +37,10 @@ struct FModifier;
 struct AnimData;
 struct AnimationEvalContext;
 struct BezTriple;
+struct BlendDataReader;
+struct BlendExpander;
+struct BlendLibReader;
+struct BlendWriter;
 struct LibraryForeachIDData;
 struct PathResolvedRNA;
 struct PointerRNA;
@@ -44,10 +48,6 @@ struct PropertyRNA;
 struct StructRNA;
 struct bAction;
 struct bContext;
-struct BlendWriter;
-struct BlendDataReader;
-struct BlendLibReader;
-struct BlendExpander;
 
 /* ************** Keyframe Tools ***************** */
 
@@ -266,6 +266,18 @@ typedef enum eFCU_Cycle_Type {
 } eFCU_Cycle_Type;
 
 eFCU_Cycle_Type BKE_fcurve_get_cycle_type(struct FCurve *fcu);
+
+/** Adjust Bezier handles of all three given BezTriples, so that `bezt` can be inserted between
+ * `prev` and `next` without changing the resulting curve shape.
+ *
+ * \param r_pdelta: return Y difference between `bezt` and the original curve value at its X
+ * position.
+ * \return Whether the split was succesful.
+ */
+bool BKE_bezt_subdivide_handles(struct BezTriple *bezt,
+                                struct BezTriple *prev,
+                                struct BezTriple *next,
+                                float *r_pdelta);
 
 /* -------- Curve Sanity --------  */
 

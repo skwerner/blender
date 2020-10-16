@@ -494,8 +494,6 @@ void GeometryManager::create_volume_mesh(Volume *volume, Progress &progress)
 
   VolumeMeshBuilder builder;
 
-  float max_density = -1.0f;
-
 #ifdef WITH_OPENVDB
   foreach (Attribute &attr, volume->attributes.attributes) {
     if (attr.element != ATTR_ELEMENT_VOXEL) {
@@ -538,7 +536,7 @@ void GeometryManager::create_volume_mesh(Volume *volume, Progress &progress)
       builder.add_grid(grid, do_clipping, volume->clipping);
       if(attr.std == ATTR_STD_VOLUME_DENSITY && grid->isType<openvdb::FloatGrid>()) {
         openvdb::math::Extrema e = openvdb::tools::extrema(openvdb::GridBase::constGrid<openvdb::FloatGrid>(grid)->beginValueAll(), true);
-        volume->max_density = e.max();
+        volume->max_density = (float)e.max();
       }
     }
   }

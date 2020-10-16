@@ -31,9 +31,7 @@
 #include "CLG_log.h"
 static CLG_LogRef LOG = {"io.alembic"};
 
-namespace blender {
-namespace io {
-namespace alembic {
+namespace blender::io::alembic {
 
 using Alembic::Abc::OObject;
 using Alembic::AbcGeom::FloatArraySample;
@@ -70,7 +68,7 @@ void ABCNurbsWriter::create_alembic_objects(const HierarchyContext *context)
   }
 }
 
-const OObject ABCNurbsWriter::get_alembic_object() const
+OObject ABCNurbsWriter::get_alembic_object() const
 {
   if (abc_nurbs_.empty()) {
     return OObject();
@@ -78,6 +76,17 @@ const OObject ABCNurbsWriter::get_alembic_object() const
   /* For parenting purposes within the Alembic file, all NURBS patches are equal, so just use the
    * first one. */
   return abc_nurbs_[0];
+}
+
+Alembic::Abc::OCompoundProperty ABCNurbsWriter::abc_prop_for_custom_props()
+{
+  if (abc_nurbs_.empty()) {
+    return Alembic::Abc::OCompoundProperty();
+  }
+
+  /* A single NURBS object in Blender is expanded to multiple curves in Alembic.
+   * Just store the custom properties on the first one for simplicity. */
+  return abc_schema_prop_for_custom_props(abc_nurbs_schemas_[0]);
 }
 
 bool ABCNurbsWriter::check_is_animated(const HierarchyContext &context) const
@@ -181,6 +190,4 @@ void ABCNurbsWriter::do_write(HierarchyContext &context)
   }
 }
 
-}  // namespace alembic
-}  // namespace io
-}  // namespace blender
+}  // namespace blender::io::alembic

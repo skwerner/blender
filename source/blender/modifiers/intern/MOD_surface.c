@@ -27,6 +27,7 @@
 
 #include "BLT_translation.h"
 
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
@@ -59,10 +60,9 @@ static void initData(ModifierData *md)
 {
   SurfaceModifierData *surmd = (SurfaceModifierData *)md;
 
-  surmd->bvhtree = NULL;
-  surmd->mesh = NULL;
-  surmd->x = NULL;
-  surmd->v = NULL;
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(surmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(surmd, DNA_struct_default_get(SurfaceModifierData), modifier);
 }
 
 static void copyData(const ModifierData *md_src, ModifierData *md_dst, const int flag)
@@ -195,16 +195,15 @@ static void deformVerts(ModifierData *md,
   }
 }
 
-static void panel_draw(const bContext *C, Panel *panel)
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
 
   uiItemL(layout, IFACE_("Settings are inside the Physics tab"), ICON_NONE);
 
-  modifier_panel_end(layout, &ptr);
+  modifier_panel_end(layout, ptr);
 }
 
 static void panelRegister(ARegionType *region_type)
@@ -227,9 +226,11 @@ ModifierTypeInfo modifierType_Surface = {
     /* name */ "Surface",
     /* structName */ "SurfaceModifierData",
     /* structSize */ sizeof(SurfaceModifierData),
+    /* srna */ &RNA_SurfaceModifier,
     /* type */ eModifierTypeType_OnlyDeform,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_AcceptsCVs |
         eModifierTypeFlag_NoUserAdd,
+    /* icon */ ICON_MOD_PHYSICS,
 
     /* copyData */ copyData,
 
@@ -249,7 +250,6 @@ ModifierTypeInfo modifierType_Surface = {
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ dependsOnTime,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ NULL,
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,

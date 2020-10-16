@@ -31,8 +31,9 @@ COLORS = COLORS_DUMMY
 
 # NOTE: Keep everything lowercase.
 BLACKLIST = (
-  # 'file_to_blacklist.blend',
+    # 'file_to_blacklist.blend',
 )
+
 
 def print_message(message, type=None, status=''):
     if type == 'SUCCESS':
@@ -448,16 +449,17 @@ class Report:
             crash = False
             output = None
             try:
-                output = subprocess.check_output(command)
-            except subprocess.CalledProcessError as e:
-                crash = True
+                completed_process = subprocess.run(command, stdout=subprocess.PIPE)
+                if completed_process.returncode != 0:
+                    crash = True
+                output = completed_process.stdout
             except BaseException as e:
                 crash = True
 
             if verbose:
                 print(" ".join(command))
-                if output:
-                    print(output.decode("utf-8"))
+            if (verbose or crash) and output:
+                print(output.decode("utf-8"))
 
             # Detect missing filepaths and consider those errors
             for filepath, output_filepath in zip(remaining_filepaths[:], output_filepaths):

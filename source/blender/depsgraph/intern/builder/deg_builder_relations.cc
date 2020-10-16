@@ -1252,6 +1252,7 @@ void DepsgraphRelationBuilder::build_animdata(ID *id)
     ComponentKey animation_key(id, NodeType::ANIMATION);
     ComponentKey parameters_key(id, NodeType::PARAMETERS);
     add_relation(animation_key, parameters_key, "Animation -> Parameters");
+    build_animdata_force(id);
   }
 }
 
@@ -1396,6 +1397,24 @@ void DepsgraphRelationBuilder::build_animation_images(ID *id)
   }
 }
 
+void DepsgraphRelationBuilder::build_animdata_force(ID *id)
+{
+  if (GS(id->name) != ID_OB) {
+    return;
+  }
+
+  const Object *object = (Object *)id;
+  if (object->pd == nullptr || object->pd->forcefield == PFIELD_NULL) {
+    return;
+  }
+
+  /* Updates to animation data (in the UI, for example by altering FCurve Modifier parameters
+   * animating force field strength) may need to rebuild the rigid body world. */
+  ComponentKey animation_key(id, NodeType::ANIMATION);
+  OperationKey rigidbody_key(&scene_->id, NodeType::TRANSFORM, OperationCode::RIGIDBODY_REBUILD);
+  add_relation(animation_key, rigidbody_key, "Animation -> Rigid Body");
+}
+
 void DepsgraphRelationBuilder::build_action(bAction *action)
 {
   if (built_map_.checkIsBuiltAndTag(action)) {
@@ -1465,31 +1484,40 @@ void DepsgraphRelationBuilder::build_driver_data(ID *id, FCurve *fcu)
     /* Drivers on armature-level bone settings (i.e. bbone stuff),
      * which will affect the evaluation of corresponding pose bones. */
     Bone *bone = (Bone *)property_entry_key.ptr.data;
-    if (bone != nullptr) {
-      /* Find objects which use this, and make their eval callbacks
-       * depend on this. */
-      for (IDNode *to_node : graph_->id_nodes) {
-        if (GS(to_node->id_orig->name) == ID_OB) {
-          Object *object = (Object *)to_node->id_orig;
-          /* We only care about objects with pose data which use this. */
-          if (object->data == id_ptr && object->pose != nullptr) {
-            bPoseChannel *pchan = BKE_pose_channel_find_name(object->pose, bone->name);
-            if (pchan != nullptr) {
-              OperationKey bone_key(
-                  &object->id, NodeType::BONE, pchan->name, OperationCode::BONE_LOCAL);
-              add_relation(driver_key, bone_key, "Arm Bone -> Driver -> Bone");
-            }
-          }
-        }
-      }
-      /* Make the driver depend on COW, similar to the generic case below. */
-      if (id_ptr != id) {
-        ComponentKey cow_key(id_ptr, NodeType::COPY_ON_WRITE);
-        add_relation(cow_key, driver_key, "Driven CoW -> Driver", RELATION_CHECK_BEFORE_ADD);
-      }
-    }
-    else {
+    if (bone == nullptr) {
       fprintf(stderr, "Couldn't find armature bone name for driver path - '%s'\n", rna_path);
+      return;
+    }
+
+    const char *prop_identifier = RNA_property_identifier(property_entry_key.prop);
+    const bool driver_targets_bbone = STRPREFIX(prop_identifier, "bbone_");
+
+    /* Find objects which use this, and make their eval callbacks depend on this. */
+    for (IDNode *to_node : graph_->id_nodes) {
+      if (GS(to_node->id_orig->name) != ID_OB) {
+        continue;
+      }
+
+      /* We only care about objects with pose data which use this. */
+      Object *object = (Object *)to_node->id_orig;
+      if (object->data != id_ptr || object->pose == nullptr) {
+        continue;
+      }
+
+      bPoseChannel *pchan = BKE_pose_channel_find_name(object->pose, bone->name);
+      if (pchan == nullptr) {
+        continue;
+      }
+
+      OperationCode target_op = driver_targets_bbone ? OperationCode::BONE_SEGMENTS :
+                                                       OperationCode::BONE_LOCAL;
+      OperationKey bone_key(&object->id, NodeType::BONE, pchan->name, target_op);
+      add_relation(driver_key, bone_key, "Arm Bone -> Driver -> Bone");
+    }
+    /* Make the driver depend on COW, similar to the generic case below. */
+    if (id_ptr != id) {
+      ComponentKey cow_key(id_ptr, NodeType::COPY_ON_WRITE);
+      add_relation(cow_key, driver_key, "Driven CoW -> Driver", RELATION_CHECK_BEFORE_ADD);
     }
   }
   else {
@@ -1703,9 +1731,6 @@ void DepsgraphRelationBuilder::build_rigidbody(Scene *scene)
       if (object->rigidbody_object == nullptr) {
         continue;
       }
-      if (object->rigidbody_object->type == RBO_TYPE_PASSIVE) {
-        continue;
-      }
 
       if (object->parent != nullptr && object->parent->rigidbody_object != nullptr &&
           object->parent->rigidbody_object->shape == RB_SHAPE_COMPOUND) {
@@ -1716,10 +1741,6 @@ void DepsgraphRelationBuilder::build_rigidbody(Scene *scene)
         continue;
       }
 
-      OperationKey rb_transform_copy_key(
-          &object->id, NodeType::TRANSFORM, OperationCode::RIGIDBODY_TRANSFORM_COPY);
-      /* Rigid body synchronization depends on the actual simulation. */
-      add_relation(rb_simulate_key, rb_transform_copy_key, "Rigidbody Sim Eval -> RBO Sync");
       /* Simulation uses object transformation after parenting and solving constraints. */
       OperationKey object_transform_simulation_init_key(
           &object->id, NodeType::TRANSFORM, OperationCode::TRANSFORM_SIMULATION_INIT);
@@ -1737,47 +1758,29 @@ void DepsgraphRelationBuilder::build_rigidbody(Scene *scene)
         ComponentKey object_geometry_key(&object->id, NodeType::GEOMETRY);
         add_relation(object_geometry_key,
                      rb_simulate_key,
-                     "Object Geom Eval -> Rigidbody Rebuild",
+                     "Object Geom Eval -> Rigidbody Sim Eval",
                      RELATION_FLAG_GODMODE);
       }
+
       /* Final transform is whetever solver gave to us. */
-      OperationKey object_transform_final_key(
-          &object->id, NodeType::TRANSFORM, OperationCode::TRANSFORM_FINAL);
-      add_relation(
-          rb_transform_copy_key, object_transform_final_key, "Rigidbody Sync -> Transform Final");
-    }
-    FOREACH_COLLECTION_OBJECT_RECURSIVE_END;
-  }
-  /* Constraints. */
-  if (rbw->constraints != nullptr) {
-    FOREACH_COLLECTION_OBJECT_RECURSIVE_BEGIN (rbw->constraints, object) {
-      RigidBodyCon *rbc = object->rigidbody_constraint;
-      if (rbc == nullptr || rbc->ob1 == nullptr || rbc->ob2 == nullptr) {
-        /* When either ob1 or ob2 is nullptr, the constraint doesn't
-         * work. */
-        continue;
+      if (object->rigidbody_object->type == RBO_TYPE_ACTIVE) {
+        /* We do not have to update the objects final transform after the simulation if it is
+         * passive or controlled by the animation system in blender.
+         * (Bullet doesn't move the object at all in these cases).
+         * But we can't update the depgraph when the animated property in changed during playback.
+         * So always assume that active bodies needs updating.
+         */
+        OperationKey rb_transform_copy_key(
+            &object->id, NodeType::TRANSFORM, OperationCode::RIGIDBODY_TRANSFORM_COPY);
+        /* Rigid body synchronization depends on the actual simulation. */
+        add_relation(rb_simulate_key, rb_transform_copy_key, "Rigidbody Sim Eval -> RBO Sync");
+
+        OperationKey object_transform_final_key(
+            &object->id, NodeType::TRANSFORM, OperationCode::TRANSFORM_FINAL);
+        add_relation(rb_transform_copy_key,
+                     object_transform_final_key,
+                     "Rigidbody Sync -> Transform Final");
       }
-      /* Make sure indirectly linked objects are fully built. */
-      build_object(object);
-      build_object(rbc->ob1);
-      build_object(rbc->ob2);
-      /* final result of the constraint object's transform controls how
-       * the constraint affects the physics sim for these objects. */
-      ComponentKey trans_key(&object->id, NodeType::TRANSFORM);
-      if (rbc->ob1->rigidbody_object->type == RBO_TYPE_ACTIVE) {
-        OperationKey ob1_key(
-            &rbc->ob1->id, NodeType::TRANSFORM, OperationCode::RIGIDBODY_TRANSFORM_COPY);
-        /* Constrained-objects sync depends on the constraint-holder. */
-        add_relation(trans_key, ob1_key, "RigidBodyConstraint -> RBC.Object_1");
-      }
-      if (rbc->ob2->rigidbody_object->type == RBO_TYPE_ACTIVE) {
-        OperationKey ob2_key(
-            &rbc->ob2->id, NodeType::TRANSFORM, OperationCode::RIGIDBODY_TRANSFORM_COPY);
-        /* Constrained-objects sync depends on the constraint-holder. */
-        add_relation(trans_key, ob2_key, "RigidBodyConstraint -> RBC.Object_2");
-      }
-      /* Ensure that sim depends on this constraint's transform. */
-      add_relation(trans_key, rb_simulate_key, "RigidBodyConstraint Transform -> RB Simulation");
     }
     FOREACH_COLLECTION_OBJECT_RECURSIVE_END;
   }
@@ -2688,7 +2691,7 @@ void DepsgraphRelationBuilder::build_scene_sequencer(Scene *scene)
   ComponentKey sequencer_key(&scene->id, NodeType::SEQUENCER);
   Sequence *seq;
   bool has_audio_strips = false;
-  SEQ_BEGIN (scene->ed, seq) {
+  SEQ_ALL_BEGIN (scene->ed, seq) {
     build_idproperties(seq->prop);
     if (seq->sound != nullptr) {
       build_sound(seq->sound);
@@ -2714,7 +2717,7 @@ void DepsgraphRelationBuilder::build_scene_sequencer(Scene *scene)
     }
     /* TODO(sergey): Movie clip, camera, mask. */
   }
-  SEQ_END;
+  SEQ_ALL_END;
   if (has_audio_strips) {
     add_relation(sequencer_key, scene_audio_key, "Sequencer -> Audio");
   }

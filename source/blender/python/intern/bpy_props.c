@@ -93,13 +93,13 @@ static const EnumPropertyItem property_flag_override_items[] = {
      "LIBRARY_OVERRIDABLE",
      0,
      "Library Overridable",
-     "Allow that property to be overridable from library linked data-blocks"},
+     "Make that property editable in library overrides of linked data-blocks"},
     {0, NULL, 0, NULL, NULL},
 };
 
 #define BPY_PROPDEF_OPTIONS_OVERRIDE_DOC \
-  "   :arg options: Enumerator in ['LIBRARY_OVERRIDE'].\n" \
-  "   :type options: set\n"
+  "   :arg override: Enumerator in ['LIBRARY_OVERRIDABLE'].\n" \
+  "   :type override: set\n"
 
 static const EnumPropertyItem property_flag_override_collection_items[] = {
     {PROPOVERRIDE_OVERRIDABLE_LIBRARY,
@@ -112,12 +112,18 @@ static const EnumPropertyItem property_flag_override_collection_items[] = {
      0,
      "No Name",
      "Do not use the names of the items, only their indices in the collection"},
+    {PROPOVERRIDE_LIBRARY_INSERTION,
+     "USE_INSERTION",
+     0,
+     "Use Insertion",
+     "Allow users to add new items in that collection in library overrides"},
     {0, NULL, 0, NULL, NULL},
 };
 
 #define BPY_PROPDEF_OPTIONS_OVERRIDE_COLLECTION_DOC \
-  "   :arg options: Enumerator in ['LIBRARY_OVERRIDE', 'NO_PROPERTY_NAME'].\n" \
-  "   :type options: set\n"
+  "   :arg override: Enumerator in ['LIBRARY_OVERRIDABLE', 'NO_PROPERTY_NAME', " \
+  "'USE_INSERTION'].\n" \
+  "   :type override: set\n"
 
 /* subtypes */
 /* XXX Keep in sync with rna_rna.c's rna_enum_property_subtype_items ???
@@ -172,6 +178,7 @@ static const EnumPropertyItem property_subtype_array_items[] = {
     {PROP_LAYER, "LAYER", 0, "Layer", ""},
     {PROP_LAYER_MEMBER, "LAYER_MEMBER", 0, "Layer Member", ""},
     {PROP_POWER, "POWER", 0, "Power", ""},
+    {PROP_TEMPERATURE, "TEMPERATURE", 0, "Temperature", ""},
 
     {PROP_NONE, "NONE", 0, "None", ""},
     {0, NULL, 0, NULL, NULL},
@@ -1985,8 +1992,9 @@ static void bpy_prop_callback_assign_enum(struct PropertyRNA *prop,
   } \
   srna = srna_from_self(self, #_func "(...):"); \
   if (srna == NULL) { \
-    if (PyErr_Occurred()) \
+    if (PyErr_Occurred()) { \
       return NULL; \
+    } \
     return bpy_prop_deferred_return(pymeth_##_func, kw); \
   } \
   (void)0

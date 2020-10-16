@@ -32,6 +32,7 @@
 
 #include "BLT_translation.h"
 
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_object_types.h"
 #include "DNA_screen_types.h"
@@ -119,9 +120,9 @@ static void initData(ModifierData *md)
 {
   EdgeSplitModifierData *emd = (EdgeSplitModifierData *)md;
 
-  /* default to 30-degree split angle, sharpness from both angle & flag */
-  emd->split_angle = DEG2RADF(30.0f);
-  emd->flags = MOD_EDGESPLIT_FROMANGLE | MOD_EDGESPLIT_FROMFLAG;
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(emd, modifier));
+
+  MEMCPY_STRUCT_AFTER(emd, DNA_struct_default_get(EdgeSplitModifierData), modifier);
 }
 
 static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *UNUSED(ctx), Mesh *mesh)
@@ -138,25 +139,24 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *UNUSED(ctx)
   return result;
 }
 
-static void panel_draw(const bContext *C, Panel *panel)
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *row, *sub;
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
 
   uiLayoutSetPropSep(layout, true);
 
   row = uiLayoutRowWithHeading(layout, true, IFACE_("Edge Angle"));
-  uiItemR(row, &ptr, "use_edge_angle", 0, "", ICON_NONE);
+  uiItemR(row, ptr, "use_edge_angle", 0, "", ICON_NONE);
   sub = uiLayoutRow(row, true);
-  uiLayoutSetActive(sub, RNA_boolean_get(&ptr, "use_edge_angle"));
-  uiItemR(sub, &ptr, "split_angle", 0, "", ICON_NONE);
+  uiLayoutSetActive(sub, RNA_boolean_get(ptr, "use_edge_angle"));
+  uiItemR(sub, ptr, "split_angle", 0, "", ICON_NONE);
 
-  uiItemR(layout, &ptr, "use_edge_sharp", 0, IFACE_("Sharp Edges"), ICON_NONE);
+  uiItemR(layout, ptr, "use_edge_sharp", 0, IFACE_("Sharp Edges"), ICON_NONE);
 
-  modifier_panel_end(layout, &ptr);
+  modifier_panel_end(layout, ptr);
 }
 
 static void panelRegister(ARegionType *region_type)
@@ -168,10 +168,12 @@ ModifierTypeInfo modifierType_EdgeSplit = {
     /* name */ "EdgeSplit",
     /* structName */ "EdgeSplitModifierData",
     /* structSize */ sizeof(EdgeSplitModifierData),
+    /* srna */ &RNA_EdgeSplitModifier,
     /* type */ eModifierTypeType_Constructive,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_AcceptsCVs |
         eModifierTypeFlag_SupportsMapping | eModifierTypeFlag_SupportsEditmode |
         eModifierTypeFlag_EnableInEditmode,
+    /* icon */ ICON_MOD_EDGESPLIT,
 
     /* copyData */ BKE_modifier_copydata_generic,
 
@@ -191,7 +193,6 @@ ModifierTypeInfo modifierType_EdgeSplit = {
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ NULL,
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,

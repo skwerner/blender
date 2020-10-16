@@ -30,20 +30,18 @@
 
 #include "GPU_batch.h"
 #include "GPU_batch_presets.h"
-#include "GPU_extensions.h"
 #include "GPU_matrix.h"
 #include "GPU_platform.h"
 #include "GPU_shader.h"
 
 #include "gpu_backend.hh"
-#include "gpu_batch_private.hh"
 #include "gpu_context_private.hh"
-#include "gpu_primitive_private.h"
+#include "gpu_index_buffer_private.hh"
 #include "gpu_shader_private.hh"
-#include "gpu_vertex_format_private.h"
+#include "gpu_vertex_buffer_private.hh"
 
-#include <limits.h>
-#include <stdlib.h>
+#include "gpu_batch_private.hh"
+
 #include <string.h>
 
 using namespace blender::gpu;
@@ -200,7 +198,8 @@ int GPU_batch_vertbuf_add_ex(GPUBatch *batch, GPUVertBuf *verts, bool own_vbo)
     if (batch->verts[v] == NULL) {
       /* for now all VertexBuffers must have same vertex_len */
       if (batch->verts[0] != NULL) {
-        BLI_assert(verts->vertex_len == batch->verts[0]->vertex_len);
+        /* This is an issue for the HACK inside DRW_vbo_request(). */
+        // BLI_assert(verts->vertex_len == batch->verts[0]->vertex_len);
       }
       batch->verts[v] = verts;
       SET_FLAG_FROM_TEST(batch->flag, own_vbo, (eGPUBatchFlag)(GPU_BATCH_OWNS_VBO << v));
@@ -217,7 +216,7 @@ int GPU_batch_vertbuf_add_ex(GPUBatch *batch, GPUVertBuf *verts, bool own_vbo)
 /* -------------------------------------------------------------------- */
 /** \name Uniform setters
  *
- * TODO(fclem) port this to GPUShader.
+ * TODO(fclem): port this to GPUShader.
  * \{ */
 
 void GPU_batch_set_shader(GPUBatch *batch, GPUShader *shader)
@@ -236,14 +235,12 @@ void GPU_batch_draw(GPUBatch *batch)
 {
   GPU_shader_bind(batch->shader);
   GPU_batch_draw_advanced(batch, 0, 0, 0, 0);
-  GPU_shader_unbind();
 }
 
 void GPU_batch_draw_range(GPUBatch *batch, int v_first, int v_count)
 {
   GPU_shader_bind(batch->shader);
   GPU_batch_draw_advanced(batch, v_first, v_count, 0, 0);
-  GPU_shader_unbind();
 }
 
 /* Draw multiple instance of a batch without having any instance attributes. */
@@ -253,21 +250,27 @@ void GPU_batch_draw_instanced(GPUBatch *batch, int i_count)
 
   GPU_shader_bind(batch->shader);
   GPU_batch_draw_advanced(batch, 0, 0, 0, i_count);
-  GPU_shader_unbind();
 }
 
-void GPU_batch_draw_advanced(GPUBatch *batch, int v_first, int v_count, int i_first, int i_count)
+void GPU_batch_draw_advanced(
+    GPUBatch *gpu_batch, int v_first, int v_count, int i_first, int i_count)
 {
-  BLI_assert(GPU_context_active_get()->shader != NULL);
+  BLI_assert(Context::get()->shader != NULL);
+  Batch *batch = static_cast<Batch *>(gpu_batch);
 
   if (v_count == 0) {
-    v_count = (batch->elem) ? batch->elem->index_len : batch->verts[0]->vertex_len;
+    if (batch->elem) {
+      v_count = batch->elem_()->index_len_get();
+    }
+    else {
+      v_count = batch->verts_(0)->vertex_len;
+    }
   }
   if (i_count == 0) {
-    i_count = (batch->inst[0]) ? batch->inst[0]->vertex_len : 1;
+    i_count = (batch->inst[0]) ? batch->inst_(0)->vertex_len : 1;
     /* Meh. This is to be able to use different numbers of verts in instance vbos. */
     if (batch->inst[1] != NULL) {
-      i_count = min_ii(i_count, batch->inst[1]->vertex_len);
+      i_count = min_ii(i_count, batch->inst_(1)->vertex_len);
     }
   }
 
@@ -276,23 +279,7 @@ void GPU_batch_draw_advanced(GPUBatch *batch, int v_first, int v_count, int i_fi
     return;
   }
 
-  static_cast<Batch *>(batch)->draw(v_first, v_count, i_first, i_count);
-}
-
-/* just draw some vertices and let shader place them where we want. */
-void GPU_draw_primitive(GPUPrimType prim_type, int v_count)
-{
-  GPU_context_active_get()->state_manager->apply_state();
-
-  /* we cannot draw without vao ... annoying ... */
-  glBindVertexArray(GPU_vao_default());
-
-  GLenum type = convert_prim_type_to_gl(prim_type);
-  glDrawArrays(type, 0, v_count);
-
-  /* Performance hog if you are drawing with the same vao multiple time.
-   * Only activate for debugging.*/
-  // glBindVertexArray(0);
+  batch->draw(v_first, v_count, i_first, i_count);
 }
 
 /** \} */

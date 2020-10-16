@@ -765,7 +765,7 @@ GHOST_IWindow *GHOST_SystemCocoa::createWindow(const char *title,
  * Never explicitly delete the context, use #disposeContext() instead.
  * \return  The new context (or 0 if creation failed).
  */
-GHOST_IContext *GHOST_SystemCocoa::createOffscreenContext()
+GHOST_IContext *GHOST_SystemCocoa::createOffscreenContext(GHOST_GLSettings glSettings)
 {
   GHOST_Context *context = new GHOST_ContextCGL(false, NULL, NULL, NULL);
   if (context->initializeDrawingContext())
@@ -1249,7 +1249,7 @@ GHOST_TSuccess GHOST_SystemCocoa::handleDraggingEvent(GHOST_TEventType eventType
             [bitmapImage setSize:imgSize];
 
             /* Convert the image in a RGBA 32bit format */
-            /* As Core Graphics does not support contextes with non premutliplied alpha,
+            /* As Core Graphics does not support contexts with non premutliplied alpha,
              we need to get alpha key values in a separate batch */
 
             /* First get RGB values w/o Alpha to avoid pre-multiplication,
@@ -1838,7 +1838,7 @@ GHOST_TSuccess GHOST_SystemCocoa::handleKeyEvent(void *eventPtr)
                                      keyCode,
                                      ascii,
                                      utf8_buf,
-                                     false));
+                                     [event isARepeat]));
 #if 0
         printf("Key down rawCode=0x%x charsIgnoringModifiers=%c keyCode=%u ascii=%i %c utf8=%s\n",
                [event keyCode],

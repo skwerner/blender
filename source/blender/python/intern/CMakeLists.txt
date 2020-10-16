@@ -79,6 +79,7 @@ set(SRC
   bpy_rna_gizmo.c
   bpy_rna_id_collection.c
   bpy_rna_types_capi.c
+  bpy_rna_ui.c
   bpy_traceback.c
   bpy_utils_previews.c
   bpy_utils_units.c
@@ -116,11 +117,14 @@ set(SRC
   bpy_rna_gizmo.h
   bpy_rna_id_collection.h
   bpy_rna_types_capi.h
+  bpy_rna_ui.h
   bpy_traceback.h
   bpy_utils_previews.h
   bpy_utils_units.h
   ../BPY_extern.h
   ../BPY_extern_clog.h
+  ../BPY_extern_python.h
+  ../BPY_extern_run.h
 )
 
 set(LIB
@@ -337,6 +341,8 @@ if(WITH_XR_OPENXR)
   add_definitions(-DWITH_XR_OPENXR)
 endif()
 
-add_definitions(${GL_DEFINITIONS})
+if(WITH_POTRACE)
+  add_definitions(-DWITH_POTRACE)
+endif()
 
 blender_add_lib(bf_python "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

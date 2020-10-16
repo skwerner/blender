@@ -731,7 +731,7 @@ typedef struct RenderData {
   char seq_rend_type;
   /** Flag use for sequence render/draw. */
   char seq_flag;
-  char _pad5[7];
+  char _pad5[3];
 
   /* render simplify */
   short simplify_subsurf;
@@ -739,6 +739,7 @@ typedef struct RenderData {
   short simplify_gpencil;
   float simplify_particles;
   float simplify_particles_render;
+  float simplify_volumes;
 
   /* Freestyle line thickness options */
   int line_thickness_mode;
@@ -837,6 +838,7 @@ typedef struct TimeMarker {
   char name[64];
   unsigned int flag;
   struct Object *camera;
+  struct IDProperty *prop;
 } TimeMarker;
 
 /* *************************************************************** */
@@ -1137,6 +1139,9 @@ typedef struct GP_Interpolate_Settings {
   float back;
   /** BEZT_IPO_ELASTIC. */
   float amplitude, period;
+  /* Step between sequence interpolated frames. */
+  int step;
+  char _pad[4];
 
   /** Custom interpolation curve (for use with GP_IPO_CURVEMAP). */
   struct CurveMapping *custom_ipo;
@@ -1531,8 +1536,9 @@ typedef struct UnitSettings {
   char length_unit;
   char mass_unit;
   char time_unit;
+  char temperature_unit;
 
-  char _pad[5];
+  char _pad[4];
 } UnitSettings;
 
 /* ------------------------------------------- */

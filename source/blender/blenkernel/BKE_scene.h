@@ -110,8 +110,7 @@ void BKE_toolsettings_free(struct ToolSettings *toolsettings);
 struct Scene *BKE_scene_duplicate(struct Main *bmain, struct Scene *sce, eSceneCopyMethod type);
 void BKE_scene_groups_relink(struct Scene *sce);
 
-struct Scene *BKE_scene_find_from_view_layer(const struct Main *bmain,
-                                             const struct ViewLayer *layer);
+bool BKE_scene_has_view_layer(const struct Scene *scene, const struct ViewLayer *layer);
 struct Scene *BKE_scene_find_from_collection(const struct Main *bmain,
                                              const struct Collection *collection);
 
@@ -133,8 +132,9 @@ float BKE_scene_frame_to_ctime(const struct Scene *scene, const float frame);
 void BKE_scene_frame_set(struct Scene *scene, double cfra);
 
 struct TransformOrientationSlot *BKE_scene_orientation_slot_get_from_flag(struct Scene *scene,
-                                                                          int slot_index);
-struct TransformOrientationSlot *BKE_scene_orientation_slot_get(struct Scene *scene, int flag);
+                                                                          int flag);
+struct TransformOrientationSlot *BKE_scene_orientation_slot_get(struct Scene *scene,
+                                                                int slot_index);
 void BKE_scene_orientation_slot_set_index(struct TransformOrientationSlot *orient_slot,
                                           int orientation);
 int BKE_scene_orientation_slot_get_index(const struct TransformOrientationSlot *orient_slot);
@@ -157,7 +157,7 @@ struct SceneRenderView *BKE_scene_add_render_view(struct Scene *sce, const char 
 bool BKE_scene_remove_render_view(struct Scene *scene, struct SceneRenderView *srv);
 
 /* render profile */
-int get_render_subsurf_level(const struct RenderData *r, int level, bool for_render);
+int get_render_subsurf_level(const struct RenderData *r, int lvl, bool for_render);
 int get_render_child_particle_number(const struct RenderData *r, int num, bool for_render);
 
 bool BKE_scene_use_shading_nodes_custom(struct Scene *scene);
@@ -220,10 +220,12 @@ void BKE_scene_ensure_depsgraph_hash(struct Scene *scene);
 void BKE_scene_free_depsgraph_hash(struct Scene *scene);
 void BKE_scene_free_view_layer_depsgraph(struct Scene *scene, struct ViewLayer *view_layer);
 
-struct Depsgraph *BKE_scene_get_depsgraph(struct Main *bmain,
-                                          struct Scene *scene,
-                                          struct ViewLayer *view_layer,
-                                          bool allocate);
+/* Do not allocate new depsgraph. */
+struct Depsgraph *BKE_scene_get_depsgraph(struct Scene *scene, struct ViewLayer *view_layer);
+/* Allocate new depsgraph if necessary. */
+struct Depsgraph *BKE_scene_ensure_depsgraph(struct Main *bmain,
+                                             struct Scene *scene,
+                                             struct ViewLayer *view_layer);
 
 struct GHash *BKE_scene_undo_depsgraphs_extract(struct Main *bmain);
 void BKE_scene_undo_depsgraphs_restore(struct Main *bmain, struct GHash *depsgraph_extract);

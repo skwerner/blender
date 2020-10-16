@@ -976,7 +976,7 @@ static short paste_graph_keys(bAnimContext *ac,
    * - First time we try to filter more strictly, allowing only selected channels
    *   to allow copying animation between channels
    * - Second time, we loosen things up if nothing was found the first time, allowing
-   *   users to just paste keyframes back into the original curve again [#31670]
+   *   users to just paste keyframes back into the original curve again T31670.
    */
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_CURVE_VISIBLE | ANIMFILTER_FOREDIT |
             ANIMFILTER_NODUPLIS);
@@ -2731,7 +2731,7 @@ static bool graphkeys_framejump_poll(bContext *C)
 {
   /* prevent changes during render */
   if (G.is_rendering) {
-    return 0;
+    return false;
   }
 
   return graphop_visible_keyframes_poll(C);
@@ -3620,7 +3620,7 @@ static bool graph_driver_delete_invalid_poll(bContext *C)
 
   /* firstly, check if in Graph Editor */
   if ((area == NULL) || (area->spacetype != SPACE_GRAPH)) {
-    return 0;
+    return false;
   }
 
   /* try to init Anim-Context stuff ourselves and check */

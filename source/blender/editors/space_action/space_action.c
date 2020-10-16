@@ -191,7 +191,6 @@ static void action_main_region_draw(const bContext *C, ARegion *region)
 
   /* clear and setup matrix */
   UI_ThemeClearColor(TH_BACK);
-  GPU_clear(GPU_COLOR_BIT);
 
   UI_view2d_view_ortho(v2d);
 
@@ -278,7 +277,6 @@ static void action_channel_region_draw(const bContext *C, ARegion *region)
 
   /* clear and setup matrix */
   UI_ThemeClearColor(TH_BACK);
-  GPU_clear(GPU_COLOR_BIT);
 
   UI_view2d_view_ortho(v2d);
 
@@ -648,7 +646,7 @@ static void action_listener(wmWindow *UNUSED(win),
       break;
     case NC_WINDOW:
       if (saction->runtime.flag & SACTION_RUNTIME_FLAG_NEED_CHAN_SYNC) {
-        /* force redraw/refresh after undo/redo - [#28962] */
+        /* force redraw/refresh after undo/redo, see: T28962. */
         ED_area_tag_refresh(area);
       }
       break;
@@ -794,7 +792,7 @@ static void action_refresh(const bContext *C, ScrArea *area)
 
     /* Tag everything for redraw
      * - Regions (such as header) need to be manually tagged for redraw too
-     *   or else they don't update [#28962]
+     *   or else they don't update T28962.
      */
     ED_area_tag_redraw(area);
     for (region = area->regionbase.first; region; region = region->next) {

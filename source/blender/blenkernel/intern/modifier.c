@@ -34,6 +34,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "DNA_armature_types.h"
+#include "DNA_gpencil_modifier_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
@@ -53,6 +54,7 @@
 #include "BKE_editmesh.h"
 #include "BKE_editmesh_cache.h"
 #include "BKE_global.h"
+#include "BKE_gpencil_modifier.h"
 #include "BKE_idtype.h"
 #include "BKE_key.h"
 #include "BKE_lib_id.h"
@@ -175,9 +177,6 @@ void BKE_modifier_free_ex(ModifierData *md, const int flag)
     if (mti->foreachIDLink) {
       mti->foreachIDLink(md, NULL, modifier_free_data_id_us_cb, NULL);
     }
-    else if (mti->foreachObjectLink) {
-      mti->foreachObjectLink(md, NULL, (ObjectWalkFunc)modifier_free_data_id_us_cb, NULL);
-    }
   }
 
   if (mti->freeData) {
@@ -276,19 +275,6 @@ void BKE_modifiers_clear_errors(Object *ob)
   }
 }
 
-void BKE_modifiers_foreach_object_link(Object *ob, ObjectWalkFunc walk, void *userData)
-{
-  ModifierData *md = ob->modifiers.first;
-
-  for (; md; md = md->next) {
-    const ModifierTypeInfo *mti = BKE_modifier_get_info(md->type);
-
-    if (mti->foreachObjectLink) {
-      mti->foreachObjectLink(md, ob, walk, userData);
-    }
-  }
-}
-
 void BKE_modifiers_foreach_ID_link(Object *ob, IDWalkFunc walk, void *userData)
 {
   ModifierData *md = ob->modifiers.first;
@@ -298,11 +284,6 @@ void BKE_modifiers_foreach_ID_link(Object *ob, IDWalkFunc walk, void *userData)
 
     if (mti->foreachIDLink) {
       mti->foreachIDLink(md, ob, walk, userData);
-    }
-    else if (mti->foreachObjectLink) {
-      /* each Object can masquerade as an ID, so this should be OK */
-      ObjectWalkFunc fp = (ObjectWalkFunc)walk;
-      mti->foreachObjectLink(md, ob, fp, userData);
     }
   }
 }
@@ -371,9 +352,6 @@ void BKE_modifier_copydata_ex(ModifierData *md, ModifierData *target, const int 
   if ((flag & LIB_ID_CREATE_NO_USER_REFCOUNT) == 0) {
     if (mti->foreachIDLink) {
       mti->foreachIDLink(target, NULL, modifier_copy_data_id_us_cb, NULL);
-    }
-    else if (mti->foreachObjectLink) {
-      mti->foreachObjectLink(target, NULL, (ObjectWalkFunc)modifier_copy_data_id_us_cb, NULL);
     }
   }
 
@@ -653,9 +631,7 @@ ModifierData *BKE_modifier_get_last_preview(struct Scene *scene,
 ModifierData *BKE_modifiers_get_virtual_modifierlist(const Object *ob,
                                                      VirtualModifierData *virtualModifierData)
 {
-  ModifierData *md;
-
-  md = ob->modifiers.first;
+  ModifierData *md = ob->modifiers.first;
 
   *virtualModifierData = virtualModifierCommonData;
 
@@ -700,22 +676,46 @@ ModifierData *BKE_modifiers_get_virtual_modifierlist(const Object *ob,
  */
 Object *BKE_modifiers_is_deformed_by_armature(Object *ob)
 {
-  VirtualModifierData virtualModifierData;
-  ModifierData *md = BKE_modifiers_get_virtual_modifierlist(ob, &virtualModifierData);
-  ArmatureModifierData *amd = NULL;
+  if (ob->type == OB_GPENCIL) {
+    GpencilVirtualModifierData gpencilvirtualModifierData;
+    ArmatureGpencilModifierData *agmd = NULL;
+    GpencilModifierData *gmd = BKE_gpencil_modifiers_get_virtual_modifierlist(
+        ob, &gpencilvirtualModifierData);
+    gmd = ob->greasepencil_modifiers.first;
 
-  /* return the first selected armature, this lets us use multiple armatures */
-  for (; md; md = md->next) {
-    if (md->type == eModifierType_Armature) {
-      amd = (ArmatureModifierData *)md;
-      if (amd->object && (amd->object->base_flag & BASE_SELECTED)) {
-        return amd->object;
+    /* return the first selected armature, this lets us use multiple armatures */
+    for (; gmd; gmd = gmd->next) {
+      if (gmd->type == eGpencilModifierType_Armature) {
+        agmd = (ArmatureGpencilModifierData *)gmd;
+        if (agmd->object && (agmd->object->base_flag & BASE_SELECTED)) {
+          return agmd->object;
+        }
       }
     }
+    /* If we're still here then return the last armature. */
+    if (agmd) {
+      return agmd->object;
+    }
   }
+  else {
+    VirtualModifierData virtualModifierData;
+    ArmatureModifierData *amd = NULL;
+    ModifierData *md = BKE_modifiers_get_virtual_modifierlist(ob, &virtualModifierData);
+    md = ob->modifiers.first;
 
-  if (amd) { /* if we're still here then return the last armature */
-    return amd->object;
+    /* return the first selected armature, this lets us use multiple armatures */
+    for (; md; md = md->next) {
+      if (md->type == eModifierType_Armature) {
+        amd = (ArmatureModifierData *)md;
+        if (amd->object && (amd->object->base_flag & BASE_SELECTED)) {
+          return amd->object;
+        }
+      }
+    }
+    /* If we're still here then return the last armature. */
+    if (amd) {
+      return amd->object;
+    }
   }
 
   return NULL;

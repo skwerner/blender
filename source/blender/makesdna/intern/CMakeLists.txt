@@ -56,9 +56,9 @@ endif()
 # SRC_DNA_INC is defined in the parent dir
 
 add_cc_flags_custom_test(makesdna)
-setup_platform_linker_flags()
 
 add_executable(makesdna ${SRC} ${SRC_DNA_INC})
+setup_platform_linker_flags(makesdna)
 
 if(WIN32 AND NOT UNIX)
   target_link_libraries(makesdna ${PTHREADS_LIBRARIES})
@@ -151,6 +151,8 @@ set(SRC
   ../DNA_material_defaults.h
   ../DNA_mesh_defaults.h
   ../DNA_meta_defaults.h
+  ../DNA_modifier_defaults.h
+  ../DNA_modifier_types.h
   ../DNA_object_defaults.h
   ../DNA_pointcloud_defaults.h
   ../DNA_scene_defaults.h

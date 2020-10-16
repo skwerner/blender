@@ -76,6 +76,7 @@
 #include "GPU_framebuffer.h"
 #include "GPU_viewport.h"
 
+#include "DRW_engine.h"
 #include "DRW_engine_types.h"
 
 #include "image_intern.h"
@@ -368,10 +369,9 @@ static void image_listener(wmWindow *win, ScrArea *area, wmNotifier *wmn, Scene 
       }
       break;
     case NC_MASK: {
-      // Scene *scene = wmn->window->screen->scene;
-      /* ideally would check for: ED_space_image_check_show_maskedit(scene, sima)
-       * but we cant get the scene */
-      if (sima->mode == SI_MODE_MASK) {
+      ViewLayer *view_layer = WM_window_get_active_view_layer(win);
+      Object *obedit = OBEDIT_FROM_VIEW_LAYER(view_layer);
+      if (ED_space_image_check_show_maskedit(sima, obedit)) {
         switch (wmn->data) {
           case ND_SELECT:
             ED_area_tag_redraw(area);
@@ -442,25 +442,28 @@ static void image_listener(wmWindow *win, ScrArea *area, wmNotifier *wmn, Scene 
 
 const char *image_context_dir[] = {"edit_image", "edit_mask", NULL};
 
-static int image_context(const bContext *C, const char *member, bContextDataResult *result)
+static int /*eContextResult*/ image_context(const bContext *C,
+                                            const char *member,
+                                            bContextDataResult *result)
 {
   SpaceImage *sima = CTX_wm_space_image(C);
 
   if (CTX_data_dir(member)) {
     CTX_data_dir_set(result, image_context_dir);
+    /* TODO(sybren): return CTX_RESULT_OK; */
   }
   else if (CTX_data_equals(member, "edit_image")) {
     CTX_data_id_pointer_set(result, (ID *)ED_space_image(sima));
-    return 1;
+    return CTX_RESULT_OK;
   }
   else if (CTX_data_equals(member, "edit_mask")) {
     Mask *mask = ED_space_image_get_mask(sima);
     if (mask) {
       CTX_data_id_pointer_set(result, &mask->id);
     }
-    return true;
+    return CTX_RESULT_OK;
   }
-  return 0;
+  return CTX_RESULT_MEMBER_NOT_FOUND;
 }
 
 static void IMAGE_GGT_gizmo2d(wmGizmoGroupType *gzgt)
@@ -639,8 +642,6 @@ static void image_main_region_draw(const bContext *C, ARegion *region)
   Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
   View2D *v2d = &region->v2d;
-  // View2DScrollers *scrollers;
-  float col[3];
 
   GPUViewport *viewport = WM_draw_region_get_viewport(region);
   GPUFrameBuffer *framebuffer_default, *framebuffer_overlay;
@@ -648,36 +649,13 @@ static void image_main_region_draw(const bContext *C, ARegion *region)
   framebuffer_default = GPU_viewport_framebuffer_default_get(viewport);
   framebuffer_overlay = GPU_viewport_framebuffer_overlay_get(viewport);
 
-  GPU_framebuffer_bind(framebuffer_default);
-  GPU_clear_color(0.0f, 0.0f, 0.0f, 0.0f);
-  GPU_clear(GPU_COLOR_BIT);
-
-  GPU_framebuffer_bind(framebuffer_overlay);
-
   /* XXX not supported yet, disabling for now */
   scene->r.scemode &= ~R_COMP_CROP;
-
-  /* clear and setup matrix */
-  UI_GetThemeColor3fv(TH_BACK, col);
-  srgb_to_linearrgb_v3_v3(col, col);
-  GPU_clear_color(col[0], col[1], col[2], 1.0f);
-  GPU_clear(GPU_COLOR_BIT);
-  GPU_depth_test(GPU_DEPTH_NONE);
 
   image_user_refresh_scene(C, sima);
 
   /* we set view2d from own zoom and offset each time */
   image_main_region_set_view2d(sima, region);
-
-  /* we draw image in pixelspace */
-  draw_image_main(C, region);
-
-  /* and uvs in 0.0-1.0 space */
-  UI_view2d_view_ortho(v2d);
-
-  ED_region_draw_cb_draw(C, region, REGION_DRAW_PRE_VIEW);
-
-  ED_uvedit_draw_main(sima, scene, view_layer, obedit, obact, depsgraph);
 
   /* check for mask (delay draw) */
   if (ED_space_image_show_uvedit(sima, obedit)) {
@@ -690,21 +668,71 @@ static void image_main_region_draw(const bContext *C, ARegion *region)
     show_curve = true;
   }
 
-  ED_region_draw_cb_draw(C, region, REGION_DRAW_POST_VIEW);
+  /* we draw image in pixelspace */
+  if (!U.experimental.use_image_editor_legacy_drawing) {
+    DRW_draw_view(C);
+    draw_image_main_helpers(C, region);
 
-  if (sima->flag & SI_SHOW_GPENCIL) {
-    /* Grease Pencil too (in addition to UV's) */
-    draw_image_grease_pencil((bContext *)C, true);
+    /* Draw Meta data of the image isn't added to the DrawManager as it is
+     * used in other areas as well. */
+    if (sima->flag & SI_DRAW_METADATA) {
+      void *lock;
+      /* `ED_space_image_get_zoom` temporarily locks the image, so this needs to be done before
+       * the image is locked when calling `ED_space_image_acquire_buffer`. */
+      float zoomx, zoomy;
+      ED_space_image_get_zoom(sima, region, &zoomx, &zoomy);
+      ImBuf *ibuf = ED_space_image_acquire_buffer(sima, &lock, 0);
+      if (ibuf) {
+        int x, y;
+        rctf frame;
+        BLI_rctf_init(&frame, 0.0f, ibuf->x, 0.0f, ibuf->y);
+        UI_view2d_view_to_region(&region->v2d, 0.0f, 0.0f, &x, &y);
+        ED_region_image_metadata_draw(x, y, ibuf, &frame, zoomx, zoomy);
+        ED_space_image_release_buffer(sima, ibuf, lock);
+      }
+    }
+
+    /* sample line */
+    UI_view2d_view_ortho(v2d);
+    draw_image_sample_line(sima);
+    UI_view2d_view_restore(C);
   }
+  else {
+    GPU_framebuffer_bind(framebuffer_default);
+    GPU_clear_color(0.0f, 0.0f, 0.0f, 0.0f);
 
-  /* sample line */
-  draw_image_sample_line(sima);
+    GPU_framebuffer_bind(framebuffer_overlay);
 
-  UI_view2d_view_restore(C);
+    float col[3];
+    /* clear and setup matrix */
+    UI_GetThemeColor3fv(TH_BACK, col);
+    srgb_to_linearrgb_v3_v3(col, col);
+    GPU_clear_color(col[0], col[1], col[2], 1.0f);
+    GPU_depth_test(GPU_DEPTH_NONE);
+    draw_image_main(C, region);
 
-  if (sima->flag & SI_SHOW_GPENCIL) {
-    /* draw Grease Pencil - screen space only */
-    draw_image_grease_pencil((bContext *)C, false);
+    /* and uvs in 0.0-1.0 space */
+    UI_view2d_view_ortho(v2d);
+
+    ED_region_draw_cb_draw(C, region, REGION_DRAW_PRE_VIEW);
+
+    ED_uvedit_draw_main(sima, scene, view_layer, obedit, obact, depsgraph);
+
+    ED_region_draw_cb_draw(C, region, REGION_DRAW_POST_VIEW);
+
+    if (sima->flag & SI_SHOW_GPENCIL) {
+      /* Grease Pencil too (in addition to UV's) */
+      draw_image_grease_pencil((bContext *)C, true);
+    }
+    /* sample line */
+    draw_image_sample_line(sima);
+
+    UI_view2d_view_restore(C);
+
+    if (sima->flag & SI_SHOW_GPENCIL) {
+      /* draw Grease Pencil - screen space only */
+      draw_image_grease_pencil((bContext *)C, false);
+    }
   }
 
   if (mask) {
@@ -744,7 +772,7 @@ static void image_main_region_draw(const bContext *C, ARegion *region)
                         C);
   }
 
-  if (show_uvedit || mask || show_curve) {
+  if ((show_uvedit || mask || show_curve) && U.experimental.use_image_editor_legacy_drawing) {
     UI_view2d_view_ortho(v2d);
     ED_image_draw_cursor(region, sima->cursor);
     UI_view2d_view_restore(C);

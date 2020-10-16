@@ -50,6 +50,8 @@
 #include "BKE_object.h"
 #include "BKE_object_deform.h"
 
+#include "BLO_read_write.h"
+
 #include "data_transfer_intern.h"
 
 bDeformGroup *BKE_object_defgroup_new(Object *ob, const char *name)
@@ -198,9 +200,8 @@ void BKE_defvert_copy_index(MDeformVert *dvert_dst,
 void BKE_defvert_sync(MDeformVert *dvert_dst, const MDeformVert *dvert_src, const bool use_ensure)
 {
   if (dvert_src->totweight && dvert_dst->totweight) {
-    int i;
-    MDeformWeight *dw_src;
-    for (i = 0, dw_src = dvert_src->dw; i < dvert_src->totweight; i++, dw_src++) {
+    MDeformWeight *dw_src = dvert_src->dw;
+    for (int i = 0; i < dvert_src->totweight; i++, dw_src++) {
       MDeformWeight *dw_dst;
       if (use_ensure) {
         dw_dst = BKE_defvert_ensure_index(dvert_dst, dw_src->def_nr);
@@ -226,9 +227,8 @@ void BKE_defvert_sync_mapped(MDeformVert *dvert_dst,
                              const bool use_ensure)
 {
   if (dvert_src->totweight && dvert_dst->totweight) {
-    int i;
-    MDeformWeight *dw_src;
-    for (i = 0, dw_src = dvert_src->dw; i < dvert_src->totweight; i++, dw_src++) {
+    MDeformWeight *dw_src = dvert_src->dw;
+    for (int i = 0; i < dvert_src->totweight; i++, dw_src++) {
       if (dw_src->def_nr < flip_map_len) {
         MDeformWeight *dw_dst;
         if (use_ensure) {
@@ -252,8 +252,7 @@ void BKE_defvert_sync_mapped(MDeformVert *dvert_dst,
 void BKE_defvert_remap(MDeformVert *dvert, const int *map, const int map_len)
 {
   MDeformWeight *dw = dvert->dw;
-  unsigned int i;
-  for (i = dvert->totweight; i != 0; i--, dw++) {
+  for (int i = dvert->totweight; i != 0; i--, dw++) {
     if (dw->def_nr < map_len) {
       BLI_assert(map[dw->def_nr] >= 0);
 
@@ -279,11 +278,9 @@ void BKE_defvert_normalize_subset(MDeformVert *dvert,
     }
   }
   else {
-    MDeformWeight *dw;
-    unsigned int i;
+    MDeformWeight *dw = dvert->dw;
     float tot_weight = 0.0f;
-
-    for (i = dvert->totweight, dw = dvert->dw; i != 0; i--, dw++) {
+    for (int i = dvert->totweight; i != 0; i--, dw++) {
       if ((dw->def_nr < vgroup_tot) && vgroup_subset[dw->def_nr]) {
         tot_weight += dw->weight;
       }
@@ -291,7 +288,8 @@ void BKE_defvert_normalize_subset(MDeformVert *dvert,
 
     if (tot_weight > 0.0f) {
       float scalar = 1.0f / tot_weight;
-      for (i = dvert->totweight, dw = dvert->dw; i != 0; i--, dw++) {
+      dw = dvert->dw;
+      for (int i = dvert->totweight; i != 0; i--, dw++) {
         if ((dw->def_nr < vgroup_tot) && vgroup_subset[dw->def_nr]) {
           dw->weight *= scalar;
 
@@ -820,8 +818,7 @@ int BKE_defvert_find_shared(const MDeformVert *dvert_a, const MDeformVert *dvert
 bool BKE_defvert_is_weight_zero(const struct MDeformVert *dvert, const int defgroup_tot)
 {
   MDeformWeight *dw = dvert->dw;
-  unsigned int i;
-  for (i = dvert->totweight; i != 0; i--, dw++) {
+  for (int i = dvert->totweight; i != 0; i--, dw++) {
     if (dw->weight != 0.0f) {
       /* check the group is in-range, happens on rare situations */
       if (LIKELY(dw->def_nr < defgroup_tot)) {
@@ -839,7 +836,6 @@ float BKE_defvert_total_selected_weight(const struct MDeformVert *dv,
                                         int defbase_tot,
                                         const bool *defbase_sel)
 {
-  int i;
   float total = 0.0f;
   const MDeformWeight *dw = dv->dw;
 
@@ -847,7 +843,7 @@ float BKE_defvert_total_selected_weight(const struct MDeformVert *dv,
     return total;
   }
 
-  for (i = dv->totweight; i != 0; i--, dw++) {
+  for (int i = dv->totweight; i != 0; i--, dw++) {
     if (dw->def_nr < defbase_tot) {
       if (defbase_sel[dw->def_nr]) {
         total += dw->weight;
@@ -942,18 +938,17 @@ float BKE_defvert_lock_relative_weight(float weight,
 /** \name Defvert Array functions
  * \{ */
 
-void BKE_defvert_array_copy(MDeformVert *dst, const MDeformVert *src, int copycount)
+void BKE_defvert_array_copy(MDeformVert *dst, const MDeformVert *src, int totvert)
 {
   /* Assumes dst is already set up */
-  int i;
 
   if (!src || !dst) {
     return;
   }
 
-  memcpy(dst, src, copycount * sizeof(MDeformVert));
+  memcpy(dst, src, totvert * sizeof(MDeformVert));
 
-  for (i = 0; i < copycount; i++) {
+  for (int i = 0; i < totvert; i++) {
     if (src[i].dw) {
       dst[i].dw = MEM_mallocN(sizeof(MDeformWeight) * src[i].totweight, "copy_deformWeight");
       memcpy(dst[i].dw, src[i].dw, sizeof(MDeformWeight) * src[i].totweight);
@@ -966,14 +961,13 @@ void BKE_defvert_array_free_elems(MDeformVert *dvert, int totvert)
   /* Instead of freeing the verts directly,
    * call this function to delete any special
    * vert data */
-  int i;
 
   if (!dvert) {
     return;
   }
 
   /* Free any special data from the verts */
-  for (i = 0; i < totvert; i++) {
+  for (int i = 0; i < totvert; i++) {
     if (dvert[i].dw) {
       MEM_freeN(dvert[i].dw);
     }
@@ -1519,6 +1513,52 @@ void BKE_defvert_weight_to_rgb(float r_rgb[3], const float weight)
     r_rgb[0] = 1.0f;
     r_rgb[1] = 0.0f;
     r_rgb[2] = 1.0f;
+  }
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name .blend file I/O
+ * \{ */
+
+void BKE_defvert_blend_write(BlendWriter *writer, int count, MDeformVert *dvlist)
+{
+  if (dvlist == NULL) {
+    return;
+  }
+
+  /* Write the dvert list */
+  BLO_write_struct_array(writer, MDeformVert, count, dvlist);
+
+  /* Write deformation data for each dvert */
+  for (int i = 0; i < count; i++) {
+    if (dvlist[i].dw) {
+      BLO_write_struct_array(writer, MDeformWeight, dvlist[i].totweight, dvlist[i].dw);
+    }
+  }
+}
+
+void BKE_defvert_blend_read(BlendDataReader *reader, int count, MDeformVert *mdverts)
+{
+  if (mdverts == NULL) {
+    return;
+  }
+
+  for (int i = count; i > 0; i--, mdverts++) {
+    /* Convert to vertex group allocation system. */
+    MDeformWeight *dw;
+    if (mdverts->dw && (dw = BLO_read_get_new_data_address(reader, mdverts->dw))) {
+      const size_t dw_len = sizeof(MDeformWeight) * mdverts->totweight;
+      void *dw_tmp = MEM_mallocN(dw_len, __func__);
+      memcpy(dw_tmp, dw, dw_len);
+      mdverts->dw = dw_tmp;
+      MEM_freeN(dw);
+    }
+    else {
+      mdverts->dw = NULL;
+      mdverts->totweight = 0;
+    }
   }
 }
 

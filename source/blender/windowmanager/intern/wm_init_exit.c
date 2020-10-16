@@ -190,8 +190,6 @@ void WM_init_opengl(void)
 
   GPU_pass_cache_init();
 
-  BKE_subdiv_init();
-
   opengl_is_init = true;
 }
 
@@ -210,7 +208,7 @@ static void sound_jack_sync_callback(Main *bmain, int mode, double time)
       continue;
     }
     ViewLayer *view_layer = WM_window_get_active_view_layer(window);
-    Depsgraph *depsgraph = BKE_scene_get_depsgraph(bmain, scene, view_layer, false);
+    Depsgraph *depsgraph = BKE_scene_get_depsgraph(scene, view_layer);
     if (depsgraph == NULL) {
       continue;
     }
@@ -322,6 +320,8 @@ void WM_init(bContext *C, int argc, const char **argv)
 
     UI_init();
   }
+
+  BKE_subdiv_init();
 
   ED_spacemacros_init();
 

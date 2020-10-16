@@ -534,13 +534,14 @@
     </graph_editor>
     <file_browser>
       <ThemeFileBrowser
+        row_alternate="#ffffff0f"
         selected_file="#5680c2"
         >
         <space>
           <ThemeSpaceGeneric
-            back="#404040"
+            back="#999999"
             title="#000000"
-            text="#eeeeee"
+            text="#000000"
             text_hi="#ffffff"
             header="#adadadff"
             header_text="#000000"
@@ -712,6 +713,7 @@
     </dopesheet_editor>
     <image_editor>
       <ThemeImageEditor
+        grid="#353535ff"
         vertex="#000000"
         vertex_select="#ff8500"
         vertex_size="3"
@@ -735,7 +737,6 @@
         preview_stitch_unstitchable="#ff0000ff"
         preview_stitch_active="#e1d2c323"
         uv_shadow="#707070ff"
-        uv_others="#606060ff"
         frame_current="#5680c2"
         metadatabg="#000000"
         metadatatext="#ffffff"
@@ -845,7 +846,9 @@
       </ThemeSequenceEditor>
     </sequence_editor>
     <properties>
-      <ThemeProperties>
+      <ThemeProperties
+        match="#5680c2"
+        >
         <space>
           <ThemeSpaceGeneric
             back="#b3b3b3"
@@ -927,6 +930,7 @@
     </text_editor>
     <node_editor>
       <ThemeNodeEditor
+        grid="#353535"
         node_selected="#f15800"
         node_active="#f15800"
         wire="#a7a7a7"
@@ -1162,6 +1166,7 @@
     </console>
     <clip_editor>
       <ThemeClipEditor
+        grid="#393939ff"
         marker_outline="#000000"
         marker="#7f7f00"
         active_marker="#ffffff"

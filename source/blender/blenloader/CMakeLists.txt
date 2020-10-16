@@ -31,8 +31,10 @@ set(INC
   ../makesrna
   ../nodes
   ../render/extern/include
+  ../sequencer
   ../windowmanager
   ../../../intern/guardedalloc
+  ../../../intern/clog
 
   # for writefile.c: dna_type_offsets.h
   ${CMAKE_BINARY_DIR}/source/blender/makesdna/intern
@@ -103,6 +105,8 @@ if(WITH_GTESTS)
   set(TEST_SRC
     tests/blendfile_load_test.cc
     tests/blendfile_loading_base_test.cc
+
+    tests/blendfile_loading_base_test.h
   )
   set(TEST_INC
   )

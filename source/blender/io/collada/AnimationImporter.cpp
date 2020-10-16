@@ -977,7 +977,7 @@ void AnimationImporter::apply_matrix_curves(Object *ob,
  * If both values are specified, then the aspect ration is simply xfov/yfov
  * and if aspect ratio is defined, then .. well then its that one.
  */
-static const double get_aspect_ratio(const COLLADAFW::Camera *camera)
+static double get_aspect_ratio(const COLLADAFW::Camera *camera)
 {
   double aspect = camera->getAspectRatio().getValue();
 
@@ -1218,7 +1218,7 @@ void AnimationImporter::translate_Animations(
       for (unsigned int j = 0; j < matBinds.getCount(); j++) {
         const COLLADAFW::UniqueId &matuid = matBinds[j].getReferencedMaterial();
         const COLLADAFW::Effect *ef = (COLLADAFW::Effect *)(FW_object_map[matuid]);
-        if (ef != NULL) { /* can be NULL [#28909] */
+        if (ef != NULL) { /* can be NULL T28909. */
           Material *ma = uid_material_map[matuid];
           if (!ma) {
             fprintf(stderr,
@@ -1476,7 +1476,7 @@ AnimationImporter::AnimMix *AnimationImporter::get_animation_type(
     for (unsigned int j = 0; j < matBinds.getCount(); j++) {
       const COLLADAFW::UniqueId &matuid = matBinds[j].getReferencedMaterial();
       const COLLADAFW::Effect *ef = (COLLADAFW::Effect *)(FW_object_map[matuid]);
-      if (ef != NULL) { /* can be NULL [#28909] */
+      if (ef != NULL) { /* can be NULL T28909. */
         const COLLADAFW::CommonEffectPointerArray &commonEffects = ef->getCommonEffects();
         if (!commonEffects.empty()) {
           COLLADAFW::EffectCommon *efc = commonEffects[0];
@@ -2043,7 +2043,7 @@ bool AnimationImporter::evaluate_animation(COLLADAFW::Transformation *tm,
             mj = 0;
           }
         }
-        unit_converter->dae_matrix_to_mat4_(mat, matrix);
+        UnitConverter::dae_matrix_to_mat4_(mat, matrix);
         return true;
       }
     }

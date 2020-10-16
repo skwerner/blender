@@ -35,6 +35,7 @@
 #include "BKE_brush.h"
 #include "BKE_colortools.h"
 #include "BKE_context.h"
+#include "BKE_gpencil.h"
 #include "BKE_icons.h"
 #include "BKE_idtype.h"
 #include "BKE_lib_id.h"
@@ -50,6 +51,8 @@
 #include "IMB_imbuf_types.h"
 
 #include "RE_render_ext.h" /* RE_texture_evaluate */
+
+#include "BLO_read_write.h"
 
 static void brush_init_data(ID *id)
 {
@@ -195,6 +198,163 @@ static void brush_foreach_id(ID *id, LibraryForeachIDData *data)
   BKE_texture_mtex_foreach_id(data, &brush->mask_mtex);
 }
 
+static void brush_blend_write(BlendWriter *writer, ID *id, const void *id_address)
+{
+  Brush *brush = (Brush *)id;
+  if (brush->id.us > 0 || BLO_write_is_undo(writer)) {
+    BLO_write_id_struct(writer, Brush, id_address, &brush->id);
+    BKE_id_blend_write(writer, &brush->id);
+
+    if (brush->curve) {
+      BKE_curvemapping_blend_write(writer, brush->curve);
+    }
+
+    if (brush->gpencil_settings) {
+      BLO_write_struct(writer, BrushGpencilSettings, brush->gpencil_settings);
+
+      if (brush->gpencil_settings->curve_sensitivity) {
+        BKE_curvemapping_blend_write(writer, brush->gpencil_settings->curve_sensitivity);
+      }
+      if (brush->gpencil_settings->curve_strength) {
+        BKE_curvemapping_blend_write(writer, brush->gpencil_settings->curve_strength);
+      }
+      if (brush->gpencil_settings->curve_jitter) {
+        BKE_curvemapping_blend_write(writer, brush->gpencil_settings->curve_jitter);
+      }
+      if (brush->gpencil_settings->curve_rand_pressure) {
+        BKE_curvemapping_blend_write(writer, brush->gpencil_settings->curve_rand_pressure);
+      }
+      if (brush->gpencil_settings->curve_rand_strength) {
+        BKE_curvemapping_blend_write(writer, brush->gpencil_settings->curve_rand_strength);
+      }
+      if (brush->gpencil_settings->curve_rand_uv) {
+        BKE_curvemapping_blend_write(writer, brush->gpencil_settings->curve_rand_uv);
+      }
+      if (brush->gpencil_settings->curve_rand_hue) {
+        BKE_curvemapping_blend_write(writer, brush->gpencil_settings->curve_rand_hue);
+      }
+      if (brush->gpencil_settings->curve_rand_saturation) {
+        BKE_curvemapping_blend_write(writer, brush->gpencil_settings->curve_rand_saturation);
+      }
+      if (brush->gpencil_settings->curve_rand_value) {
+        BKE_curvemapping_blend_write(writer, brush->gpencil_settings->curve_rand_value);
+      }
+    }
+    if (brush->gradient) {
+      BLO_write_struct(writer, ColorBand, brush->gradient);
+    }
+  }
+}
+
+static void brush_blend_read_data(BlendDataReader *reader, ID *id)
+{
+  Brush *brush = (Brush *)id;
+
+  /* Falloff curve. */
+  BLO_read_data_address(reader, &brush->curve);
+
+  BLO_read_data_address(reader, &brush->gradient);
+
+  if (brush->curve) {
+    BKE_curvemapping_blend_read(reader, brush->curve);
+  }
+  else {
+    BKE_brush_curve_preset(brush, CURVE_PRESET_SHARP);
+  }
+
+  /* grease pencil */
+  BLO_read_data_address(reader, &brush->gpencil_settings);
+  if (brush->gpencil_settings != NULL) {
+    BLO_read_data_address(reader, &brush->gpencil_settings->curve_sensitivity);
+    BLO_read_data_address(reader, &brush->gpencil_settings->curve_strength);
+    BLO_read_data_address(reader, &brush->gpencil_settings->curve_jitter);
+
+    BLO_read_data_address(reader, &brush->gpencil_settings->curve_rand_pressure);
+    BLO_read_data_address(reader, &brush->gpencil_settings->curve_rand_strength);
+    BLO_read_data_address(reader, &brush->gpencil_settings->curve_rand_uv);
+    BLO_read_data_address(reader, &brush->gpencil_settings->curve_rand_hue);
+    BLO_read_data_address(reader, &brush->gpencil_settings->curve_rand_saturation);
+    BLO_read_data_address(reader, &brush->gpencil_settings->curve_rand_value);
+
+    if (brush->gpencil_settings->curve_sensitivity) {
+      BKE_curvemapping_blend_read(reader, brush->gpencil_settings->curve_sensitivity);
+    }
+
+    if (brush->gpencil_settings->curve_strength) {
+      BKE_curvemapping_blend_read(reader, brush->gpencil_settings->curve_strength);
+    }
+
+    if (brush->gpencil_settings->curve_jitter) {
+      BKE_curvemapping_blend_read(reader, brush->gpencil_settings->curve_jitter);
+    }
+
+    if (brush->gpencil_settings->curve_rand_pressure) {
+      BKE_curvemapping_blend_read(reader, brush->gpencil_settings->curve_rand_pressure);
+    }
+
+    if (brush->gpencil_settings->curve_rand_strength) {
+      BKE_curvemapping_blend_read(reader, brush->gpencil_settings->curve_rand_strength);
+    }
+
+    if (brush->gpencil_settings->curve_rand_uv) {
+      BKE_curvemapping_blend_read(reader, brush->gpencil_settings->curve_rand_uv);
+    }
+
+    if (brush->gpencil_settings->curve_rand_hue) {
+      BKE_curvemapping_blend_read(reader, brush->gpencil_settings->curve_rand_hue);
+    }
+
+    if (brush->gpencil_settings->curve_rand_saturation) {
+      BKE_curvemapping_blend_read(reader, brush->gpencil_settings->curve_rand_saturation);
+    }
+
+    if (brush->gpencil_settings->curve_rand_value) {
+      BKE_curvemapping_blend_read(reader, brush->gpencil_settings->curve_rand_value);
+    }
+  }
+
+  brush->preview = NULL;
+  brush->icon_imbuf = NULL;
+}
+
+static void brush_blend_read_lib(BlendLibReader *reader, ID *id)
+{
+  Brush *brush = (Brush *)id;
+
+  /* brush->(mask_)mtex.obj is ignored on purpose? */
+  BLO_read_id_address(reader, brush->id.lib, &brush->mtex.tex);
+  BLO_read_id_address(reader, brush->id.lib, &brush->mask_mtex.tex);
+  BLO_read_id_address(reader, brush->id.lib, &brush->clone.image);
+  BLO_read_id_address(reader, brush->id.lib, &brush->toggle_brush);
+  BLO_read_id_address(reader, brush->id.lib, &brush->paint_curve);
+
+  /* link default grease pencil palette */
+  if (brush->gpencil_settings != NULL) {
+    if (brush->gpencil_settings->flag & GP_BRUSH_MATERIAL_PINNED) {
+      BLO_read_id_address(reader, brush->id.lib, &brush->gpencil_settings->material);
+
+      if (!brush->gpencil_settings->material) {
+        brush->gpencil_settings->flag &= ~GP_BRUSH_MATERIAL_PINNED;
+      }
+    }
+    else {
+      brush->gpencil_settings->material = NULL;
+    }
+  }
+}
+
+static void brush_blend_read_expand(BlendExpander *expander, ID *id)
+{
+  Brush *brush = (Brush *)id;
+  BLO_expand(expander, brush->mtex.tex);
+  BLO_expand(expander, brush->mask_mtex.tex);
+  BLO_expand(expander, brush->clone.image);
+  BLO_expand(expander, brush->paint_curve);
+  if (brush->gpencil_settings != NULL) {
+    BLO_expand(expander, brush->gpencil_settings->material);
+  }
+}
+
 IDTypeInfo IDType_ID_BR = {
     .id_code = ID_BR,
     .id_filter = FILTER_ID_BR,
@@ -210,6 +370,12 @@ IDTypeInfo IDType_ID_BR = {
     .free_data = brush_free_data,
     .make_local = brush_make_local,
     .foreach_id = brush_foreach_id,
+    .foreach_cache = NULL,
+
+    .blend_write = brush_blend_write,
+    .blend_read_data = brush_blend_read_data,
+    .blend_read_lib = brush_blend_read_lib,
+    .blend_read_expand = brush_blend_read_expand,
 };
 
 static RNG *brush_rng;
@@ -472,6 +638,12 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
 
   CurveMapping *custom_curve = NULL;
 
+  /* Optionally assign a material preset. */
+  enum {
+    PRESET_MATERIAL_NONE = 0,
+    PRESET_MATERIAL_DOT_STROKE,
+  } material_preset = PRESET_MATERIAL_NONE;
+
   /* Set general defaults at brush level. */
   brush->smooth_stroke_radius = SMOOTH_STROKE_RADIUS;
   brush->smooth_stroke_factor = SMOOTH_STROKE_FACTOR;
@@ -515,19 +687,10 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       brush->gpencil_tool = GPAINT_TOOL_DRAW;
       brush->gpencil_settings->icon_id = GP_BRUSH_ICON_AIRBRUSH;
 
-      /* Create and link Black Dots material to brush.
-       * This material is required because the brush uses the material to define how the stroke is
-       * drawn. */
-      Material *ma = BLI_findstring(&bmain->materials, "Dots Stroke", offsetof(ID, name) + 2);
-      if (ma == NULL) {
-        ma = BKE_gpencil_material_add(bmain, "Dots Stroke");
-        ma->gp_style->mode = GP_MATERIAL_MODE_DOT;
-      }
-      brush->gpencil_settings->material = ma;
-      /* Pin the matterial to the brush. */
-      brush->gpencil_settings->flag |= GP_BRUSH_MATERIAL_PINNED;
-
       zero_v3(brush->secondary_rgb);
+
+      material_preset = PRESET_MATERIAL_DOT_STROKE;
+
       break;
     }
     case GP_BRUSH_PRESET_INK_PEN: {
@@ -740,19 +903,10 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       brush->gpencil_settings->icon_id = GP_BRUSH_ICON_PENCIL;
       brush->gpencil_tool = GPAINT_TOOL_DRAW;
 
-      /* Create and link Black Dots material to brush.
-       * This material is required because the brush uses the material to define how the stroke is
-       * drawn. */
-      Material *ma = BLI_findstring(&bmain->materials, "Dots Stroke", offsetof(ID, name) + 2);
-      if (ma == NULL) {
-        ma = BKE_gpencil_material_add(bmain, "Dots Stroke");
-        ma->gp_style->mode = GP_MATERIAL_MODE_DOT;
-      }
-      brush->gpencil_settings->material = ma;
-      /* Pin the matterial to the brush. */
-      brush->gpencil_settings->flag |= GP_BRUSH_MATERIAL_PINNED;
-
       zero_v3(brush->secondary_rgb);
+
+      material_preset = PRESET_MATERIAL_DOT_STROKE;
+
       break;
     }
     case GP_BRUSH_PRESET_PENCIL: {
@@ -1064,6 +1218,30 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
     default:
       break;
   }
+
+  switch (material_preset) {
+    case PRESET_MATERIAL_NONE:
+      break;
+    case PRESET_MATERIAL_DOT_STROKE: {
+      /* Create and link Black Dots material to brush.
+       * This material is required because the brush uses the material
+       * to define how the stroke is drawn. */
+      const char *ma_id = "Dots Stroke";
+      Material *ma = BLI_findstring(&bmain->materials, ma_id, offsetof(ID, name) + 2);
+      if (ma == NULL) {
+        ma = BKE_gpencil_material_add(bmain, ma_id);
+        ma->gp_style->mode = GP_MATERIAL_MODE_DOT;
+        BLI_assert(ma->id.us == 1);
+        id_us_min(&ma->id);
+      }
+
+      BKE_gpencil_brush_material_set(brush, ma);
+
+      /* Pin the material to the brush. */
+      brush->gpencil_settings->flag |= GP_BRUSH_MATERIAL_PINNED;
+      break;
+    }
+  }
 }
 
 static Brush *gpencil_brush_ensure(
@@ -1367,20 +1545,28 @@ void BKE_brush_debug_print_state(Brush *br)
   brush_defaults(&def);
 
 #define BR_TEST(field, t) \
-  if (br->field != def.field) \
-  printf("br->" #field " = %" #t ";\n", br->field)
+  if (br->field != def.field) { \
+    printf("br->" #field " = %" #t ";\n", br->field); \
+  } \
+  ((void)0)
 
 #define BR_TEST_FLAG(_f) \
-  if ((br->flag & _f) && !(def.flag & _f)) \
+  if ((br->flag & _f) && !(def.flag & _f)) { \
     printf("br->flag |= " #_f ";\n"); \
-  else if (!(br->flag & _f) && (def.flag & _f)) \
-  printf("br->flag &= ~" #_f ";\n")
+  } \
+  else if (!(br->flag & _f) && (def.flag & _f)) { \
+    printf("br->flag &= ~" #_f ";\n"); \
+  } \
+  ((void)0)
 
 #define BR_TEST_FLAG_OVERLAY(_f) \
-  if ((br->overlay_flags & _f) && !(def.overlay_flags & _f)) \
+  if ((br->overlay_flags & _f) && !(def.overlay_flags & _f)) { \
     printf("br->overlay_flags |= " #_f ";\n"); \
-  else if (!(br->overlay_flags & _f) && (def.overlay_flags & _f)) \
-  printf("br->overlay_flags &= ~" #_f ";\n")
+  } \
+  else if (!(br->overlay_flags & _f) && (def.overlay_flags & _f)) { \
+    printf("br->overlay_flags &= ~" #_f ";\n"); \
+  } \
+  ((void)0)
 
   /* print out any non-default brush state */
   BR_TEST(normal_weight, f);
@@ -1529,17 +1715,18 @@ void BKE_brush_sculpt_reset(Brush *br)
       break;
     case SCULPT_TOOL_SCRAPE:
     case SCULPT_TOOL_FILL:
-      br->alpha = 1.0f;
+      br->alpha = 0.7f;
+      br->area_radius_factor = 1.0f;
       br->spacing = 7;
       br->flag |= BRUSH_ACCUMULATE;
       br->flag |= BRUSH_INVERT_TO_SCRAPE_FILL;
+      br->flag2 |= BRUSH_AREA_RADIUS_PRESSURE;
       break;
     case SCULPT_TOOL_ROTATE:
       br->alpha = 1.0;
       break;
     case SCULPT_TOOL_SMOOTH:
       br->flag &= ~BRUSH_SPACE_ATTEN;
-      br->automasking_flags |= BRUSH_AUTOMASKING_BOUNDARY_EDGES;
       br->spacing = 5;
       br->alpha = 0.7f;
       br->surface_smooth_shape_preservation = 0.5f;

@@ -136,14 +136,21 @@ add_definitions(
 # MSVC11 needs _ALLOW_KEYWORD_MACROS to build
 add_definitions(-D_ALLOW_KEYWORD_MACROS)
 
+# RTTI is on by default even without this switch
+# however having it in the CXX Flags makes it difficult
+# to remove for individual files that want to disable it
+# using the /GR- flag without generating a build warning
+# that both /GR and /GR- are specified.
+remove_cc_flag("/GR")
+
 # We want to support Windows 7 level ABI
 add_definitions(-D_WIN32_WINNT=0x601)
 include(build_files/cmake/platform/platform_win32_bundle_crt.cmake)
 remove_cc_flag("/MDd" "/MD" "/Zi")
 
 if(WITH_WINDOWS_PDB)
-	set(PDB_INFO_OVERRIDE_FLAGS "/Z7")
-	set(PDB_INFO_OVERRIDE_LINKER_FLAGS "/DEBUG /OPT:REF /OPT:ICF /INCREMENTAL:NO")
+  set(PDB_INFO_OVERRIDE_FLAGS "/Z7")
+  set(PDB_INFO_OVERRIDE_LINKER_FLAGS "/DEBUG /OPT:REF /OPT:ICF /INCREMENTAL:NO")
 endif()
 
 if(MSVC_CLANG) # Clangs version of cl doesn't support all flags
@@ -528,6 +535,11 @@ if(WITH_OPENVDB)
   set(OPENVDB_DEFINITIONS -DNOMINMAX -D_USE_MATH_DEFINES)
 endif()
 
+if(WITH_NANOVDB)
+  set(NANOVDB ${LIBDIR}/nanoVDB)
+  set(NANOVDB_INCLUDE_DIR ${NANOVDB}/include)
+endif()
+
 if(WITH_OPENIMAGEDENOISE)
   set(OPENIMAGEDENOISE ${LIBDIR}/OpenImageDenoise)
   set(OPENIMAGEDENOISE_LIBPATH ${LIBDIR}/OpenImageDenoise/lib)
@@ -558,7 +570,7 @@ if(WITH_IMAGE_OPENJPEG)
 endif()
 
 if(WITH_OPENSUBDIV)
-  set(OPENSUBDIV_INCLUDE_DIR ${LIBDIR}/opensubdiv/include)
+  set(OPENSUBDIV_INCLUDE_DIRS ${LIBDIR}/opensubdiv/include)
   set(OPENSUBDIV_LIBPATH ${LIBDIR}/opensubdiv/lib)
   set(OPENSUBDIV_LIBRARIES
     optimized ${OPENSUBDIV_LIBPATH}/osdCPU.lib
@@ -752,4 +764,10 @@ if(WITH_GMP)
   set(GMP_LIBRARIES ${LIBDIR}/gmp/lib/libgmp-10.lib optimized ${LIBDIR}/gmp/lib/libgmpxx.lib debug ${LIBDIR}/gmp/lib/libgmpxx_d.lib)
   set(GMP_ROOT_DIR ${LIBDIR}/gmp)
   set(GMP_FOUND On)
+endif()
+
+if(WITH_POTRACE)
+  set(POTRACE_INCLUDE_DIRS ${LIBDIR}/potrace/include)
+  set(POTRACE_LIBRARIES ${LIBDIR}/potrace/lib/potrace.lib)
+  set(POTRACE_FOUND On)
 endif()

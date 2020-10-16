@@ -23,7 +23,6 @@
  * Color Picker Region & Color Utils
  */
 
-#include <assert.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
@@ -351,7 +350,7 @@ static void ui_colorpicker_hide_reveal(uiBlock *block, enum ePickerType colormod
 static void ui_colorpicker_create_mode_cb(bContext *UNUSED(C), void *bt1, void *UNUSED(arg))
 {
   uiBut *bt = bt1;
-  short colormode = ui_but_value_get(bt);
+  const short colormode = ui_but_value_get(bt);
   ui_colorpicker_hide_reveal(bt->block, colormode);
 }
 

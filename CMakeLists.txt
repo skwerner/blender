@@ -102,6 +102,11 @@ if(POLICY CMP0068)
   cmake_policy(SET CMP0068 NEW)
 endif()
 
+# find_package() uses <PackageName>_ROOT variables.
+if(POLICY CMP0074)
+  cmake_policy(SET CMP0074 NEW)
+endif()
+
 #-----------------------------------------------------------------------------
 # Load some macros.
 include(build_files/cmake/macros.cmake)
@@ -123,7 +128,9 @@ enable_testing()
 
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/bin CACHE INTERNAL "" FORCE)
 set(LIBRARY_OUTPUT_PATH ${CMAKE_BINARY_DIR}/lib CACHE INTERNAL "" FORCE)
-if(MSVC)
+
+get_property(GENERATOR_IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if(GENERATOR_IS_MULTI_CONFIG)
   set(TESTS_OUTPUT_DIR ${EXECUTABLE_OUTPUT_PATH}/tests/$<CONFIG>/ CACHE INTERNAL "" FORCE)
 else()
   set(TESTS_OUTPUT_DIR ${EXECUTABLE_OUTPUT_PATH}/tests/ CACHE INTERNAL "" FORCE)
@@ -183,6 +190,7 @@ if(APPLE)
 else()
   option(WITH_XR_OPENXR   "Enable VR features through the OpenXR specification" ON)
 endif()
+option(WITH_GMP "Enable features depending on GMP (Exact Boolean)" ON)
 
 # Compositor
 option(WITH_COMPOSITOR         "Enable the tile based nodal compositor" ON)
@@ -190,10 +198,12 @@ option(WITH_OPENIMAGEDENOISE   "Enable the OpenImageDenoise compositing node" ON
 
 option(WITH_OPENSUBDIV    "Enable OpenSubdiv for surface subdivision" ON)
 
+option(WITH_POTRACE       "Enable features relying on potrace" ON)
 option(WITH_OPENVDB       "Enable features relying on OpenVDB" ON)
 option(WITH_OPENVDB_BLOSC "Enable blosc compression for OpenVDB, only enable if OpenVDB was built with blosc support" ON)
 option(WITH_OPENVDB_3_ABI_COMPATIBLE "Assume OpenVDB library has been compiled with version 3 ABI compatibility" OFF)
 mark_as_advanced(WITH_OPENVDB_3_ABI_COMPATIBLE)
+option(WITH_NANOVDB       "Enable usage of NanoVDB data structure for accelerated rendering on the GPU" OFF)
 
 # GHOST Windowing Library Options
 option(WITH_GHOST_DEBUG   "Enable debugging output for the GHOST library" OFF)
@@ -213,8 +223,6 @@ endif()
 if(WITH_GHOST_X11)
   option(WITH_GHOST_XDND    "Enable drag'n'drop support on X11 using XDND protocol" ON)
 endif()
-
-option(WITH_GMP "Use the gmp library for more accurate booleans" OFF)
 
 # Misc...
 option(WITH_HEADLESS      "Build without graphical support (renderfarm, server mode only)" OFF)
@@ -431,8 +439,12 @@ if(WIN32)
 endif()
 
 # This should be turned off when Blender enter beta/rc/release
-option(WITH_EXPERIMENTAL_FEATURES "Enable experimental features (still need to enable them in the user preferences)" ON)
-mark_as_advanced(WITH_EXPERIMENTAL_FEATURES)
+if("${BLENDER_VERSION_CYCLE}" STREQUAL "release" OR
+   "${BLENDER_VERSION_CYCLE}" STREQUAL "rc")
+  set(WITH_EXPERIMENTAL_FEATURES OFF)
+else()
+  set(WITH_EXPERIMENTAL_FEATURES ON)
+endif()
 
 # Unit testsing
 option(WITH_GTESTS "Enable GTest unit testing" OFF)
@@ -504,9 +516,22 @@ if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang")
 -fno-sanitize=alignment \
 ")
 
-    if(NOT MSVC) # not all sanitizers are supported with clang-cl, these two however are very vocal about it
-      set(_asan_defaults "${_asan_defaults} -fsanitize=leak -fsanitize=object-size" )
+    if(MSVC)
+      # clang-cl doesn't support all sanitizers, but leak and object-size give errors/warnings.
+      set(_asan_defaults "${_asan_defaults}")
+    elseif(APPLE)
+      # AppleClang doesn't support all sanitizers, but leak gives error.
+      # Build type is not known for multi-config generator, so don't add object-size sanitizer.
+      if(CMAKE_BUILD_TYPE MATCHES "Debug" OR GENERATOR_IS_MULTI_CONFIG)
+        # Silence the warning that object-size is not effective in -O0.
+        set(_asan_defaults "${_asan_defaults}")
+      else()
+        set(_asan_defaults "${_asan_defaults} -fsanitize=object-size")
+      endif()
+    else()
+      set(_asan_defaults "${_asan_defaults} -fsanitize=leak -fsanitize=object-size")
     endif()
+
     set(COMPILER_ASAN_CFLAGS "${_asan_defaults}" CACHE STRING "C flags for address sanitizer")
     mark_as_advanced(COMPILER_ASAN_CFLAGS)
     set(COMPILER_ASAN_CXXFLAGS "${_asan_defaults}" CACHE STRING "C++ flags for address sanitizer")
@@ -514,16 +539,33 @@ if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang")
 
     unset(_asan_defaults)
 
-    if(NOT MSVC)
-      find_library(COMPILER_ASAN_LIBRARY asan ${CMAKE_C_IMPLICIT_LINK_DIRECTORIES})
-    else()
-      find_library(
-        COMPILER_ASAN_LIBRARY NAMES clang_rt.asan-x86_64
+    if(MSVC)
+        find_library(
+          COMPILER_ASAN_LIBRARY NAMES clang_rt.asan-x86_64
         PATHS
         [HKEY_LOCAL_MACHINE\\SOFTWARE\\Wow6432Node\\LLVM\\LLVM;]/lib/clang/7.0.0/lib/windows
         [HKEY_LOCAL_MACHINE\\SOFTWARE\\Wow6432Node\\LLVM\\LLVM;]/lib/clang/6.0.0/lib/windows
       )
+    elseif(APPLE)
+      execute_process(COMMAND ${CMAKE_CXX_COMPILER}
+        -print-file-name=lib
+        OUTPUT_VARIABLE CLANG_LIB_DIR
+      )
+      string(STRIP "${CLANG_LIB_DIR}" CLANG_LIB_DIR)
+      find_library(
+        COMPILER_ASAN_LIBRARY
+        NAMES
+          libclang_rt.asan_osx_dynamic.dylib
+        PATHS
+          "${CLANG_LIB_DIR}/darwin/"
+      )
+      unset(CLANG_LIB_DIR)
+    else()
+      find_library(
+        COMPILER_ASAN_LIBRARY asan ${CMAKE_C_IMPLICIT_LINK_DIRECTORIES}
+      )
     endif()
+
     mark_as_advanced(COMPILER_ASAN_LIBRARY)
   endif()
 endif()
@@ -663,6 +705,9 @@ set_and_warn_dependency(WITH_TBB WITH_OPENIMAGEDENOISE  OFF)
 set_and_warn_dependency(WITH_TBB WITH_OPENVDB           OFF)
 set_and_warn_dependency(WITH_TBB WITH_MOD_FLUID         OFF)
 
+# NanoVDB requires OpenVDB to convert the data structure
+set_and_warn_dependency(WITH_OPENVDB WITH_NANOVDB       OFF)
+
 # OpenVDB uses 'half' type from OpenEXR & fails to link without OpenEXR enabled.
 set_and_warn_dependency(WITH_IMAGE_OPENEXR WITH_OPENVDB OFF)
 
@@ -797,11 +842,10 @@ set(CXX_WARNINGS)
 set(C_REMOVE_STRICT_FLAGS)
 set(CXX_REMOVE_STRICT_FLAGS)
 
-# libraries to link the binary with passed to target_link_libraries()
-# known as LLIBS to scons
+# Libraries to link to targets in setup_platform_linker_libs
 set(PLATFORM_LINKLIBS "")
 
-# Added to linker flags in setup_liblinks
+# Added to target linker flags in setup_platform_linker_flags
 # - CMAKE_EXE_LINKER_FLAGS
 # - CMAKE_EXE_LINKER_FLAGS_DEBUG
 set(PLATFORM_LINKFLAGS "")
@@ -817,7 +861,13 @@ if(NOT CMAKE_BUILD_TYPE MATCHES "Release")
     if(MSVC)
       set(COMPILER_ASAN_LINKER_FLAGS "/FUNCTIONPADMIN:6")
     endif()
-    if(COMPILER_ASAN_LIBRARY)
+
+    if(APPLE AND COMPILER_ASAN_LIBRARY)
+      string(REPLACE " " ";" _list_COMPILER_ASAN_CFLAGS ${COMPILER_ASAN_CFLAGS})
+      add_compile_options("$<$<NOT:$<CONFIG:Release>>:${_list_COMPILER_ASAN_CFLAGS}>")
+      add_link_options("$<$<NOT:$<CONFIG:Release>>:-fno-omit-frame-pointer;-fsanitize=address>")
+      unset(_list_COMPILER_ASAN_CFLAGS)
+    elseif(COMPILER_ASAN_LIBRARY)
       set(PLATFORM_LINKLIBS "${PLATFORM_LINKLIBS};${COMPILER_ASAN_LIBRARY}")
       set(PLATFORM_LINKFLAGS "${COMPILER_ASAN_LIBRARY} ${COMPILER_ASAN_LINKER_FLAGS}")
       set(PLATFORM_LINKFLAGS_DEBUG "${COMPILER_ASAN_LIBRARY} ${COMPILER_ASAN_LINKER_FLAGS}")
@@ -1566,6 +1616,12 @@ endif()
 
 if(MSVC)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17")
+  # Make MSVC properly report the value of the __cplusplus preprocessor macro
+  # Available MSVC 15.7 (1914) and up, without this it reports 199711L regardless
+  # of the C++ standard chosen above
+  if(MSVC_VERSION GREATER 1913)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Zc:__cplusplus")
+  endif()
 elseif(
   CMAKE_COMPILER_IS_GNUCC OR
   CMAKE_C_COMPILER_ID MATCHES "Clang" OR
@@ -1728,6 +1784,7 @@ if(FIRST_RUN)
   info_cfg_option(WITH_QUADRIFLOW)
   info_cfg_option(WITH_USD)
   info_cfg_option(WITH_TBB)
+  info_cfg_option(WITH_GMP)
 
   info_cfg_text("Compiler Options:")
   info_cfg_option(WITH_BUILDINFO)

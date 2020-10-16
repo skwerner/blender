@@ -114,7 +114,7 @@ void BKE_pbvh_build_mesh(PBVH *pbvh,
                          const struct MLoopTri *looptri,
                          int looptri_num);
 void BKE_pbvh_build_grids(PBVH *pbvh,
-                          struct CCGElem **grid_elems,
+                          struct CCGElem **grids,
                           int totgrid,
                           struct CCGKey *key,
                           void **gridfaces,
@@ -275,7 +275,7 @@ void BKE_pbvh_node_get_grids(PBVH *pbvh,
                              int *totgrid,
                              int *maxgrid,
                              int *gridsize,
-                             struct CCGElem ***grid_elems);
+                             struct CCGElem ***r_griddata);
 void BKE_pbvh_node_num_verts(PBVH *pbvh, PBVHNode *node, int *r_uniquevert, int *r_totvert);
 void BKE_pbvh_node_get_verts(PBVH *pbvh,
                              PBVHNode *node,
@@ -307,7 +307,7 @@ void BKE_pbvh_update_normals(PBVH *pbvh, struct SubdivCCG *subdiv_ccg);
 void BKE_pbvh_redraw_BB(PBVH *pbvh, float bb_min[3], float bb_max[3]);
 void BKE_pbvh_get_grid_updates(PBVH *pbvh, bool clear, void ***r_gridfaces, int *r_totface);
 void BKE_pbvh_grids_update(PBVH *pbvh,
-                           struct CCGElem **grid_elems,
+                           struct CCGElem **grids,
                            void **gridfaces,
                            struct DMFlagMat *flagmats,
                            unsigned int **grid_hidden);
@@ -390,8 +390,9 @@ void pbvh_vertex_iter_init(PBVH *pbvh, PBVHNode *node, PBVHVertexIter *vi, int m
       vi.height = vi.gridsize; \
       vi.index = vi.grid_indices[vi.g] * vi.key.grid_area - 1; \
       vi.grid = vi.grids[vi.grid_indices[vi.g]]; \
-      if (mode == PBVH_ITER_UNIQUE) \
+      if (mode == PBVH_ITER_UNIQUE) { \
         vi.gh = vi.grid_hidden[vi.grid_indices[vi.g]]; \
+      } \
     } \
     else { \
       vi.width = vi.totvert; \
@@ -408,8 +409,9 @@ void pbvh_vertex_iter_init(PBVH *pbvh, PBVHNode *node, PBVHVertexIter *vi, int m
           vi.index++; \
           vi.visible = true; \
           if (vi.gh) { \
-            if (BLI_BITMAP_TEST(vi.gh, vi.gy * vi.gridsize + vi.gx)) \
+            if (BLI_BITMAP_TEST(vi.gh, vi.gy * vi.gridsize + vi.gx)) { \
               continue; \
+            } \
           } \
         } \
         else if (vi.mverts) { \
@@ -426,10 +428,12 @@ void pbvh_vertex_iter_init(PBVH *pbvh, PBVHNode *node, PBVHVertexIter *vi, int m
           vi.co = vi.mvert->co; \
           vi.no = vi.mvert->no; \
           vi.index = vi.vert_indices[vi.i]; \
-          if (vi.vmask) \
+          if (vi.vmask) { \
             vi.mask = &vi.vmask[vi.index]; \
-          if (vi.vcol) \
+          } \
+          if (vi.vcol) { \
             vi.col = vi.vcol[vi.index].color; \
+          } \
         } \
         else { \
           if (!BLI_gsetIterator_done(&vi.bm_unique_verts)) { \
@@ -441,8 +445,9 @@ void pbvh_vertex_iter_init(PBVH *pbvh, PBVHNode *node, PBVHVertexIter *vi, int m
             BLI_gsetIterator_step(&vi.bm_other_verts); \
           } \
           vi.visible = !BM_elem_flag_test_bool(vi.bm_vert, BM_ELEM_HIDDEN); \
-          if (mode == PBVH_ITER_UNIQUE && !vi.visible) \
+          if (mode == PBVH_ITER_UNIQUE && !vi.visible) { \
             continue; \
+          } \
           vi.co = vi.bm_vert->co; \
           vi.fno = vi.bm_vert->no; \
           vi.index = BM_elem_index_get(vi.bm_vert); \
@@ -458,7 +463,7 @@ void pbvh_vertex_iter_init(PBVH *pbvh, PBVHNode *node, PBVHVertexIter *vi, int m
 void BKE_pbvh_node_get_proxies(PBVHNode *node, PBVHProxyNode **proxies, int *proxy_count);
 void BKE_pbvh_node_free_proxies(PBVHNode *node);
 PBVHProxyNode *BKE_pbvh_node_add_proxy(PBVH *pbvh, PBVHNode *node);
-void BKE_pbvh_gather_proxies(PBVH *pbvh, PBVHNode ***nodes, int *totnode);
+void BKE_pbvh_gather_proxies(PBVH *pbvh, PBVHNode ***r_array, int *r_tot);
 void BKE_pbvh_node_get_bm_orco_data(PBVHNode *node,
                                     int (**r_orco_tris)[3],
                                     int *r_orco_tris_num,

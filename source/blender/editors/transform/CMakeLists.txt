@@ -28,14 +28,12 @@ set(INC
   ../../makesrna
   ../../render/extern/include
   ../../depsgraph
+  ../../sequencer
   ../../windowmanager
   ../../../../intern/glew-mx
   ../../../../intern/guardedalloc
 )
 
-set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
-)
 
 set(SRC
   transform.c
@@ -125,6 +123,5 @@ if(WITH_INTERNATIONAL)
   add_definitions(-DWITH_INTERNATIONAL)
 endif()
 
-add_definitions(${GL_DEFINITIONS})
 
 blender_add_lib(bf_editor_transform "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

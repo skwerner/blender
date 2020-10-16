@@ -113,6 +113,12 @@ IDTypeInfo IDType_ID_WM = {
     .free_data = window_manager_free_data,
     .make_local = NULL,
     .foreach_id = window_manager_foreach_id,
+    .foreach_cache = NULL,
+
+    .blend_write = NULL,
+    .blend_read_data = NULL,
+    .blend_read_lib = NULL,
+    .blend_read_expand = NULL,
 };
 
 #define MAX_OP_REGISTERED 32
@@ -389,7 +395,7 @@ void wm_add_default(Main *bmain, bContext *C)
   win->scene = CTX_data_scene(C);
   STRNCPY(win->view_layer_name, CTX_data_view_layer(C)->name);
   BKE_workspace_active_set(win->workspace_hook, workspace);
-  BKE_workspace_active_layout_set(win->workspace_hook, workspace, layout);
+  BKE_workspace_active_layout_set(win->workspace_hook, win->winid, workspace, layout);
   screen->winid = win->winid;
 
   wm->winactive = win;

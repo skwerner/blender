@@ -32,6 +32,7 @@
 #include "BLI_string.h"
 #include "BLI_utildefines.h"
 
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
@@ -63,6 +64,15 @@
 #include "MOD_ui_common.h"
 
 using blender::float3;
+
+static void initData(ModifierData *md)
+{
+  SimulationModifierData *smd = (SimulationModifierData *)md;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(smd, modifier));
+
+  MEMCPY_STRUCT_AFTER(smd, DNA_struct_default_get(SimulationModifierData), modifier);
+}
 
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
 {
@@ -114,6 +124,10 @@ static PointCloud *modifyPointCloud(ModifierData *md,
       CustomData_get_layer_named(&state->attributes, CD_PROP_FLOAT, "Radius"));
   memcpy(pointcloud->co, positions, sizeof(float3) * state->tot_particles);
 
+  CustomData_add_layer_named(
+      &pointcloud->pdata, CD_PROP_FLOAT, CD_CALLOC, NULL, state->tot_particles, "Radius");
+  BKE_pointcloud_update_customdata_pointers(pointcloud);
+
   for (int i = 0; i < state->tot_particles; i++) {
     pointcloud->radius[i] = radii[i];
   }
@@ -121,21 +135,20 @@ static PointCloud *modifyPointCloud(ModifierData *md,
   return pointcloud;
 }
 
-static void panel_draw(const bContext *C, Panel *panel)
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
   PointerRNA ob_ptr;
-  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
 
   uiLayoutSetPropSep(layout, true);
   uiLayoutSetPropDecorate(layout, false);
 
-  uiItemR(layout, &ptr, "simulation", 0, NULL, ICON_NONE);
-  uiItemR(layout, &ptr, "data_path", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "simulation", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "data_path", 0, NULL, ICON_NONE);
 
-  modifier_panel_end(layout, &ptr);
+  modifier_panel_end(layout, ptr);
 }
 
 static void panelRegister(ARegionType *region_type)
@@ -178,8 +191,14 @@ ModifierTypeInfo modifierType_Simulation = {
     /* name */ "Simulation",
     /* structName */ "SimulationModifierData",
     /* structSize */ sizeof(SimulationModifierData),
+#ifdef WITH_PARTICLE_NODES
+    /* srna */ &RNA_SimulationModifier,
+#else
+    /* srna */ &RNA_Modifier,
+#endif
     /* type */ eModifierTypeType_None,
     /* flags */ (ModifierTypeFlag)0,
+    /* icon */ ICON_PHYSICS, /* TODO: Use correct icon. */
 
     /* copyData */ copyData,
 
@@ -192,14 +211,13 @@ ModifierTypeInfo modifierType_Simulation = {
     /* modifyPointCloud */ modifyPointCloud,
     /* modifyVolume */ NULL,
 
-    /* initData */ NULL,
+    /* initData */ initData,
     /* requiredDataMask */ NULL,
     /* freeData */ freeData,
     /* isDisabled */ isDisabled,
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ NULL,
     /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,

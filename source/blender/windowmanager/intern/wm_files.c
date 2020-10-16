@@ -69,6 +69,7 @@
 #include "DNA_windowmanager_types.h"
 #include "DNA_workspace_types.h"
 
+#include "BKE_addon.h"
 #include "BKE_appdir.h"
 #include "BKE_autoexec.h"
 #include "BKE_blender.h"
@@ -388,13 +389,21 @@ static void wm_window_match_do(bContext *C,
 /** \name Preferences Initialization & Versioning
  * \{ */
 
-/* in case UserDef was read, we re-initialize all, and do versioning */
+/**
+ * In case #UserDef was read, re-initialize values that depend on it.
+ */
 static void wm_init_userdef(Main *bmain)
 {
-  /* versioning is here */
-  UI_init_userdef(bmain);
+  /* Not versioning, just avoid errors. */
+#ifndef WITH_CYCLES
+  BKE_addon_remove_safe(&U.addons, "cycles");
+#else
+  UNUSED_VARS(BKE_addon_remove_safe);
+#endif
 
-  /* needed so loading a file from the command line respects user-pref [#26156] */
+  UI_init_userdef();
+
+  /* needed so loading a file from the command line respects user-pref T26156. */
   SET_FLAG_FROM_TEST(G.fileflags, U.flag & USER_FILENOUI, G_FILE_NO_UI);
 
   /* set the python auto-execute setting from user prefs */
@@ -406,11 +415,13 @@ static void wm_init_userdef(Main *bmain)
   MEM_CacheLimiter_set_maximum(((size_t)U.memcachelimit) * 1024 * 1024);
   BKE_sound_init(bmain);
 
-  /* update tempdir from user preferences */
+  /* Update the temporary directory from the preferences or fallback to the system default. */
   BKE_tempdir_init(U.tempdir);
 
   /* Update tablet API preference. */
   WM_init_tablet_api();
+
+  BLO_sanitize_experimental_features_userpref_blend(&U);
 }
 
 /* return codes */
@@ -1020,20 +1031,17 @@ void wm_homefile_read(bContext *C,
 
   if (!use_factory_settings || (filepath_startup[0] != '\0')) {
     if (BLI_access(filepath_startup, R_OK) == 0) {
-      success = BKE_blendfile_read(C,
-                                   filepath_startup,
-                                   &(const struct BlendFileReadParams){
-                                       .is_startup = true,
-                                       .skip_flags = skip_flags | BLO_READ_SKIP_USERDEF,
-                                   },
-                                   NULL);
+      success = BKE_blendfile_read_ex(C,
+                                      filepath_startup,
+                                      &(const struct BlendFileReadParams){
+                                          .is_startup = true,
+                                          .skip_flags = skip_flags | BLO_READ_SKIP_USERDEF,
+                                      },
+                                      NULL,
+                                      update_defaults && use_data,
+                                      app_template);
     }
     if (success) {
-      if (update_defaults) {
-        if (use_data) {
-          BLO_update_defaults_startup_blend(CTX_data_main(C), app_template);
-        }
-      }
       is_factory_startup = filepath_startup_is_factory;
     }
   }
@@ -1052,15 +1060,16 @@ void wm_homefile_read(bContext *C,
   }
 
   if (success == false) {
-    success = BKE_blendfile_read_from_memory(C,
-                                             datatoc_startup_blend,
-                                             datatoc_startup_blend_size,
-                                             true,
-                                             &(const struct BlendFileReadParams){
-                                                 .is_startup = true,
-                                                 .skip_flags = skip_flags,
-                                             },
-                                             NULL);
+    success = BKE_blendfile_read_from_memory_ex(C,
+                                                datatoc_startup_blend,
+                                                datatoc_startup_blend_size,
+                                                &(const struct BlendFileReadParams){
+                                                    .is_startup = true,
+                                                    .skip_flags = skip_flags,
+                                                },
+                                                NULL,
+                                                true,
+                                                NULL);
 
     if (use_data && BLI_listbase_is_empty(&wmbase)) {
       wm_clear_default_size(C);
@@ -1576,7 +1585,7 @@ void wm_autosave_location(char *filepath)
    * Blender installed on D:\ drive, D:\ drive has D:\tmp\
    * Now, BLI_exists() will find '/tmp/' exists, but
    * BLI_make_file_string will create string that has it most likely on C:\
-   * through get_default_root().
+   * through BLI_windows_get_default_root_dir().
    * If there is no C:\tmp autosave fails. */
   if (!BLI_exists(BKE_tempdir_base())) {
     savedir = BKE_appdir_folder_id_create(BLENDER_USER_AUTOSAVE, NULL);
@@ -1982,7 +1991,10 @@ void WM_OT_read_history(wmOperatorType *ot)
 
 static int wm_homefile_read_exec(bContext *C, wmOperator *op)
 {
-  const bool use_factory_settings = (STREQ(op->type->idname, "WM_OT_read_factory_settings"));
+  const bool use_factory_startup_and_userdef = STREQ(op->type->idname,
+                                                     "WM_OT_read_factory_settings");
+  const bool use_factory_settings = use_factory_startup_and_userdef ||
+                                    RNA_boolean_get(op->ptr, "use_factory_startup");
   bool use_userdef = false;
   char filepath_buf[FILE_MAX];
   const char *filepath = NULL;
@@ -2007,10 +2019,12 @@ static int wm_homefile_read_exec(bContext *C, wmOperator *op)
     }
   }
   else {
-    /* always load UI for factory settings (prefs will re-init) */
-    G.fileflags &= ~G_FILE_NO_UI;
-    /* Always load preferences with factory settings. */
-    use_userdef = true;
+    if (use_factory_startup_and_userdef) {
+      /* always load UI for factory settings (prefs will re-init) */
+      G.fileflags &= ~G_FILE_NO_UI;
+      /* Always load preferences with factory settings. */
+      use_userdef = true;
+    }
   }
 
   char app_template_buf[sizeof(U.app_template)];
@@ -2125,6 +2139,12 @@ void WM_OT_read_homefile(wmOperatorType *ot)
 
   /* So the splash can be kept open after loading a file (for templates). */
   prop = RNA_def_boolean(ot->srna, "use_splash", false, "Splash", "");
+  RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
+
+  /* So scripts can load factory-startup without resetting preferences
+   * (which has other implications such as reloading all add-ons).
+   * Match naming for `--factory-startup` command line argument. */
+  prop = RNA_def_boolean(ot->srna, "use_factory_startup", false, "Factory Startup", "");
   RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
 
   read_homefile_props(ot);

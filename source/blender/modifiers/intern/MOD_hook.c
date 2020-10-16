@@ -28,6 +28,7 @@
 
 #include "BLT_translation.h"
 
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
@@ -63,10 +64,11 @@ static void initData(ModifierData *md)
 {
   HookModifierData *hmd = (HookModifierData *)md;
 
-  hmd->force = 1.0;
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(hmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(hmd, DNA_struct_default_get(HookModifierData), modifier);
+
   hmd->curfalloff = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
-  hmd->falloff_type = eHook_Falloff_Smooth;
-  hmd->flag = 0;
 }
 
 static void copyData(const ModifierData *md, ModifierData *target, const int flag)
@@ -117,11 +119,11 @@ static bool isDisabled(const struct Scene *UNUSED(scene),
   return !hmd->object;
 }
 
-static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk, void *userData)
+static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   HookModifierData *hmd = (HookModifierData *)md;
 
-  walk(userData, ob, &hmd->object, IDWALK_CB_NOP);
+  walk(userData, ob, (ID **)&hmd->object, IDWALK_CB_NOP);
 }
 
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
@@ -313,10 +315,19 @@ static void deformVerts_do(HookModifierData *hmd,
   MOD_get_vgroup(ob, mesh, hmd->name, &dvert, &hd.defgrp_index);
   int cd_dvert_offset = -1;
 
-  if ((em != NULL) && (hd.defgrp_index != -1)) {
-    cd_dvert_offset = CustomData_get_offset(&em->bm->vdata, CD_MDEFORMVERT);
-    if (cd_dvert_offset == -1) {
-      hd.defgrp_index = -1;
+  if (hd.defgrp_index != -1) {
+    /* Edit-mesh. */
+    if (em != NULL) {
+      cd_dvert_offset = CustomData_get_offset(&em->bm->vdata, CD_MDEFORMVERT);
+      if (cd_dvert_offset == -1) {
+        hd.defgrp_index = -1;
+      }
+    }
+    else {
+      /* Regular mesh. */
+      if (dvert == NULL) {
+        hd.defgrp_index = -1;
+      }
     }
   }
 
@@ -455,30 +466,29 @@ static void deformVertsEM(struct ModifierData *md,
   deformVerts_do(hmd, ctx, ctx->object, mesh, mesh ? NULL : editData, vertexCos, numVerts);
 }
 
-static void panel_draw(const bContext *C, Panel *panel)
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *row, *col;
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
   PointerRNA ob_ptr;
-  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
 
-  PointerRNA hook_object_ptr = RNA_pointer_get(&ptr, "object");
+  PointerRNA hook_object_ptr = RNA_pointer_get(ptr, "object");
 
   uiLayoutSetPropSep(layout, true);
 
   col = uiLayoutColumn(layout, false);
-  uiItemR(col, &ptr, "object", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "object", 0, NULL, ICON_NONE);
   if (!RNA_pointer_is_null(&hook_object_ptr) &&
       RNA_enum_get(&hook_object_ptr, "type") == OB_ARMATURE) {
     PointerRNA hook_object_data_ptr = RNA_pointer_get(&hook_object_ptr, "data");
     uiItemPointerR(
-        col, &ptr, "subtarget", &hook_object_data_ptr, "bones", IFACE_("Bone"), ICON_NONE);
+        col, ptr, "subtarget", &hook_object_data_ptr, "bones", IFACE_("Bone"), ICON_NONE);
   }
-  modifier_vgroup_ui(layout, &ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
+  modifier_vgroup_ui(layout, ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
 
-  uiItemR(layout, &ptr, "strength", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "strength", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
 
   if (RNA_enum_get(&ob_ptr, "mode") == OB_MODE_EDIT) {
     row = uiLayoutRow(layout, true);
@@ -489,31 +499,30 @@ static void panel_draw(const bContext *C, Panel *panel)
     uiItemO(row, "Assign", ICON_NONE, "OBJECT_OT_hook_assign");
   }
 
-  modifier_panel_end(layout, &ptr);
+  modifier_panel_end(layout, ptr);
 }
 
-static void falloff_panel_draw(const bContext *C, Panel *panel)
+static void falloff_panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *row;
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
 
-  bool use_falloff = RNA_enum_get(&ptr, "falloff_type") != eWarp_Falloff_None;
+  bool use_falloff = RNA_enum_get(ptr, "falloff_type") != eWarp_Falloff_None;
 
   uiLayoutSetPropSep(layout, true);
 
-  uiItemR(layout, &ptr, "falloff_type", 0, IFACE_("Type"), ICON_NONE);
+  uiItemR(layout, ptr, "falloff_type", 0, IFACE_("Type"), ICON_NONE);
 
   row = uiLayoutRow(layout, false);
   uiLayoutSetActive(row, use_falloff);
-  uiItemR(row, &ptr, "falloff_radius", 0, NULL, ICON_NONE);
+  uiItemR(row, ptr, "falloff_radius", 0, NULL, ICON_NONE);
 
-  uiItemR(layout, &ptr, "use_falloff_uniform", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "use_falloff_uniform", 0, NULL, ICON_NONE);
 
-  if (RNA_enum_get(&ptr, "falloff_type") == eWarp_Falloff_Curve) {
-    uiTemplateCurveMapping(layout, &ptr, "falloff_curve", 0, false, false, false, false);
+  if (RNA_enum_get(ptr, "falloff_type") == eWarp_Falloff_Curve) {
+    uiTemplateCurveMapping(layout, ptr, "falloff_curve", 0, false, false, false, false);
   }
 }
 
@@ -551,9 +560,11 @@ ModifierTypeInfo modifierType_Hook = {
     /* name */ "Hook",
     /* structName */ "HookModifierData",
     /* structSize */ sizeof(HookModifierData),
+    /* srna */ &RNA_HookModifier,
     /* type */ eModifierTypeType_OnlyDeform,
     /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsVertexCosOnly |
         eModifierTypeFlag_SupportsEditmode,
+    /* icon */ ICON_HOOK,
     /* copyData */ copyData,
 
     /* deformVerts */ deformVerts,
@@ -572,8 +583,7 @@ ModifierTypeInfo modifierType_Hook = {
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
     /* panelRegister */ panelRegister,

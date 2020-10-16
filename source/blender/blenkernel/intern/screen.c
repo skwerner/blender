@@ -245,6 +245,12 @@ IDTypeInfo IDType_ID_SCR = {
     .free_data = screen_free_data,
     .make_local = NULL,
     .foreach_id = screen_foreach_id,
+    .foreach_cache = NULL,
+
+    .blend_write = NULL,
+    .blend_read_data = NULL,
+    .blend_read_lib = NULL,
+    .blend_read_expand = NULL,
 };
 
 /* ************ Spacetype/regiontype handling ************** */
@@ -429,10 +435,6 @@ ARegion *BKE_area_region_copy(SpaceType *st, ARegion *region)
     }
   }
 
-  if (region->v2d.tab_offset) {
-    newar->v2d.tab_offset = MEM_dupallocN(region->v2d.tab_offset);
-  }
-
   panel_list_copy(&newar->panels, &region->panels);
 
   BLI_listbase_clear(&newar->ui_previews);
@@ -587,14 +589,14 @@ static void area_region_panels_free_recursive(Panel *panel)
   MEM_freeN(panel);
 }
 
-void BKE_area_region_panels_free(ListBase *lb)
+void BKE_area_region_panels_free(ListBase *panels)
 {
-  LISTBASE_FOREACH_MUTABLE (Panel *, panel, lb) {
+  LISTBASE_FOREACH_MUTABLE (Panel *, panel, panels) {
     /* Free custom data just for parent panels to avoid a double free. */
     MEM_SAFE_FREE(panel->runtime.custom_data_ptr);
     area_region_panels_free_recursive(panel);
   }
-  BLI_listbase_clear(lb);
+  BLI_listbase_clear(panels);
 }
 
 /* not region itself */
@@ -615,11 +617,6 @@ void BKE_area_region_free(SpaceType *st, ARegion *region)
   }
   else if (region->type && region->type->free) {
     region->type->free(region);
-  }
-
-  if (region->v2d.tab_offset) {
-    MEM_freeN(region->v2d.tab_offset);
-    region->v2d.tab_offset = NULL;
   }
 
   BKE_area_region_panels_free(&region->panels);
@@ -688,7 +685,7 @@ void BKE_screen_free(bScreen *screen)
 
 /* ***************** Screen edges & verts ***************** */
 
-ScrEdge *BKE_screen_find_edge(bScreen *screen, ScrVert *v1, ScrVert *v2)
+ScrEdge *BKE_screen_find_edge(const bScreen *screen, ScrVert *v1, ScrVert *v2)
 {
   ScrEdge *se;
 
@@ -1049,6 +1046,18 @@ void BKE_screen_view3d_shading_init(View3DShading *shading)
 {
   const View3DShading *shading_default = DNA_struct_default_get(View3DShading);
   memcpy(shading, shading_default, sizeof(*shading));
+}
+
+ARegion *BKE_screen_find_main_region_at_xy(bScreen *screen,
+                                           const int space_type,
+                                           const int x,
+                                           const int y)
+{
+  ScrArea *area = BKE_screen_find_area_xy(screen, space_type, x, y);
+  if (!area) {
+    return NULL;
+  }
+  return BKE_area_find_region_xy(area, RGN_TYPE_WINDOW, x, y);
 }
 
 /* magic zoom calculation, no idea what

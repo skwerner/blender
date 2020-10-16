@@ -117,7 +117,7 @@ static void bm_decim_build_quadrics(BMesh *bm, Quadric *vquadrics)
       cross_v3_v3v3(edge_plane, edge_vector, f->no);
       copy_v3db_v3fl(edge_plane_db, edge_plane);
 
-      if (normalize_v3_d(edge_plane_db) > (double)FLT_EPSILON) {
+      if (normalize_v3_db(edge_plane_db) > (double)FLT_EPSILON) {
         Quadric q;
         float center[3];
 
@@ -286,7 +286,7 @@ static void bm_decim_build_edge_cost_single(BMEdge *e,
   }
 
   /* note, 'cost' shouldn't be negative but happens sometimes with small values.
-   * this can cause faces that make up a flat surface to over-collapse, see [#37121] */
+   * this can cause faces that make up a flat surface to over-collapse, see T37121. */
   cost = fabsf(cost);
 
 #ifdef USE_TOPOLOGY_FALLBACK

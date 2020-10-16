@@ -51,7 +51,9 @@
 #include "ED_screen.h"
 #include "ED_view3d.h"
 
+#include "GPU_batch_presets.h"
 #include "GPU_context.h"
+#include "GPU_debug.h"
 #include "GPU_framebuffer.h"
 #include "GPU_immediate.h"
 #include "GPU_state.h"
@@ -309,12 +311,43 @@ static bool wm_region_use_viewport_by_type(short space_type, short region_type)
 {
   return (ELEM(space_type, SPACE_VIEW3D, SPACE_IMAGE, SPACE_NODE) &&
           region_type == RGN_TYPE_WINDOW) ||
-         ((space_type == SPACE_SEQ) && region_type == RGN_TYPE_PREVIEW);
+         ((space_type == SPACE_SEQ) && ELEM(region_type, RGN_TYPE_PREVIEW, RGN_TYPE_WINDOW));
 }
 
 bool WM_region_use_viewport(ScrArea *area, ARegion *region)
 {
   return wm_region_use_viewport_by_type(area->spacetype, region->regiontype);
+}
+
+static const char *wm_area_name(ScrArea *area)
+{
+#define SPACE_NAME(space) \
+  case space: \
+    return #space;
+
+  switch (area->spacetype) {
+    SPACE_NAME(SPACE_EMPTY);
+    SPACE_NAME(SPACE_VIEW3D);
+    SPACE_NAME(SPACE_GRAPH);
+    SPACE_NAME(SPACE_OUTLINER);
+    SPACE_NAME(SPACE_PROPERTIES);
+    SPACE_NAME(SPACE_FILE);
+    SPACE_NAME(SPACE_IMAGE);
+    SPACE_NAME(SPACE_INFO);
+    SPACE_NAME(SPACE_SEQ);
+    SPACE_NAME(SPACE_TEXT);
+    SPACE_NAME(SPACE_ACTION);
+    SPACE_NAME(SPACE_NLA);
+    SPACE_NAME(SPACE_SCRIPT);
+    SPACE_NAME(SPACE_NODE);
+    SPACE_NAME(SPACE_CONSOLE);
+    SPACE_NAME(SPACE_USERPREF);
+    SPACE_NAME(SPACE_CLIP);
+    SPACE_NAME(SPACE_TOPBAR);
+    SPACE_NAME(SPACE_STATUSBAR);
+    default:
+      return "Unkown Space";
+  }
 }
 
 /** \} */
@@ -394,9 +427,6 @@ static void wm_draw_offscreen_texture_parameters(GPUOffScreen *offscreen)
 {
   /* Setup offscreen color texture for drawing. */
   GPUTexture *texture = GPU_offscreen_color_texture(offscreen);
-
-  /* We don't support multisample textures here. */
-  BLI_assert(GPU_texture_target(texture) == GL_TEXTURE_2D);
 
   /* No mipmaps or filtering. */
   GPU_texture_mipmap_mode(texture, false, false);
@@ -597,7 +627,9 @@ void wm_draw_region_blend(ARegion *region, int view, bool blend)
   GPU_shader_uniform_vector(shader, rect_geo_loc, 4, 1, rectg);
   GPU_shader_uniform_vector(shader, color_loc, 4, 1, (const float[4]){1, 1, 1, 1});
 
-  GPU_draw_primitive(GPU_PRIM_TRI_STRIP, 4);
+  GPUBatch *quad = GPU_batch_preset_quad();
+  GPU_batch_set_shader(quad, shader);
+  GPU_batch_draw(quad);
 
   GPU_texture_unbind(texture);
 
@@ -635,6 +667,7 @@ static void wm_draw_window_offscreen(bContext *C, wmWindow *win, bool stereo)
   /* Draw screen areas into own frame buffer. */
   ED_screen_areas_iter (win, screen, area) {
     CTX_wm_area_set(C, area);
+    GPU_debug_group_begin(wm_area_name(area));
 
     /* Compute UI layouts for dynamically size regions. */
     LISTBASE_FOREACH (ARegion *, region, &area->regionbase) {
@@ -668,6 +701,8 @@ static void wm_draw_window_offscreen(bContext *C, wmWindow *win, bool stereo)
         CTX_wm_region_set(C, region);
         bool use_viewport = WM_region_use_viewport(area, region);
 
+        GPU_debug_group_begin(use_viewport ? "Viewport" : "ARegion");
+
         if (stereo && wm_draw_region_stereo_set(bmain, area, region, STEREO_LEFT_ID)) {
           wm_draw_region_buffer_create(region, true, use_viewport);
 
@@ -697,6 +732,8 @@ static void wm_draw_window_offscreen(bContext *C, wmWindow *win, bool stereo)
           wm_draw_region_unbind(region);
         }
 
+        GPU_debug_group_end();
+
         region->do_draw = false;
         CTX_wm_region_set(C, NULL);
       }
@@ -704,12 +741,16 @@ static void wm_draw_window_offscreen(bContext *C, wmWindow *win, bool stereo)
 
     wm_area_mark_invalid_backbuf(area);
     CTX_wm_area_set(C, NULL);
+
+    GPU_debug_group_end();
   }
 
   /* Draw menus into their own framebuffer. */
   LISTBASE_FOREACH (ARegion *, region, &screen->regionbase) {
     if (region->visible) {
       CTX_wm_menu_set(C, region);
+
+      GPU_debug_group_begin("Menu");
 
       if (region->type && region->type->layout) {
         /* UI code reads the OpenGL state, but we have to refresh
@@ -720,10 +761,11 @@ static void wm_draw_window_offscreen(bContext *C, wmWindow *win, bool stereo)
 
       wm_draw_region_buffer_create(region, false, false);
       wm_draw_region_bind(region, 0);
-      GPU_clear_color(0, 0, 0, 0);
-      GPU_clear(GPU_COLOR_BIT);
+      GPU_clear_color(0.0f, 0.0f, 0.0f, 0.0f);
       ED_region_do_draw(C, region);
       wm_draw_region_unbind(region);
+
+      GPU_debug_group_end();
 
       region->do_draw = false;
       CTX_wm_menu_set(C, NULL);
@@ -736,6 +778,8 @@ static void wm_draw_window_onscreen(bContext *C, wmWindow *win, int view)
   wmWindowManager *wm = CTX_wm_manager(C);
   bScreen *screen = WM_window_get_active_screen(win);
 
+  GPU_debug_group_begin("Window Redraw");
+
   /* Draw into the window framebuffer, in full window coordinates. */
   wmWindowViewport(win);
 
@@ -744,7 +788,6 @@ static void wm_draw_window_onscreen(bContext *C, wmWindow *win, int view)
    * If it becomes a problem we should clear only when window size changes. */
 #if 0
   GPU_clear_color(0, 0, 0, 0);
-  GPU_clear(GPU_COLOR_BIT);
 #endif
 
   /* Blit non-overlapping area regions. */
@@ -794,6 +837,7 @@ static void wm_draw_window_onscreen(bContext *C, wmWindow *win, int view)
   /* After area regions so we can do area 'overlay' drawing. */
   ED_screen_draw_edges(win);
   wm_draw_callbacks(win);
+  wmWindowViewport(win);
 
   /* Blend in floating regions (menus). */
   LISTBASE_FOREACH (ARegion *, region, &screen->regionbase) {
@@ -811,6 +855,8 @@ static void wm_draw_window_onscreen(bContext *C, wmWindow *win, int view)
   if (wm->drags.first) {
     wm_drags_draw(C, win, NULL);
   }
+
+  GPU_debug_group_end();
 }
 
 static void wm_draw_window(bContext *C, wmWindow *win)
@@ -828,13 +874,11 @@ static void wm_draw_window(bContext *C, wmWindow *win)
   }
   else if (win->stereo3d_format->display_mode == S3D_DISPLAY_PAGEFLIP) {
     /* For pageflip we simply draw to both back buffers. */
-    GPU_backbuffer_bind(GPU_BACKBUFFER_LEFT);
-    wm_draw_window_onscreen(C, win, 0);
-
     GPU_backbuffer_bind(GPU_BACKBUFFER_RIGHT);
     wm_draw_window_onscreen(C, win, 1);
 
-    GPU_backbuffer_bind(GPU_BACKBUFFER);
+    GPU_backbuffer_bind(GPU_BACKBUFFER_LEFT);
+    wm_draw_window_onscreen(C, win, 0);
   }
   else if (ELEM(win->stereo3d_format->display_mode, S3D_DISPLAY_ANAGLYPH, S3D_DISPLAY_INTERLACE)) {
     /* For anaglyph and interlace, we draw individual regions with
@@ -910,7 +954,7 @@ static bool wm_draw_update_test_window(Main *bmain, bContext *C, wmWindow *win)
   const wmWindowManager *wm = CTX_wm_manager(C);
   Scene *scene = WM_window_get_active_scene(win);
   ViewLayer *view_layer = WM_window_get_active_view_layer(win);
-  struct Depsgraph *depsgraph = BKE_scene_get_depsgraph(bmain, scene, view_layer, true);
+  struct Depsgraph *depsgraph = BKE_scene_ensure_depsgraph(bmain, scene, view_layer);
   bScreen *screen = WM_window_get_active_screen(win);
   ARegion *region;
   bool do_draw = false;

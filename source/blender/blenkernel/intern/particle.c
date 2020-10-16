@@ -209,6 +209,12 @@ IDTypeInfo IDType_ID_PA = {
     .free_data = particle_settings_free_data,
     .make_local = NULL,
     .foreach_id = particle_settings_foreach_id,
+    .foreach_cache = NULL,
+
+    .blend_write = NULL,
+    .blend_read_data = NULL,
+    .blend_read_lib = NULL,
+    .blend_read_expand = NULL,
 };
 
 unsigned int PSYS_FRAND_SEED_OFFSET[PSYS_FRAND_COUNT];
@@ -2662,7 +2668,7 @@ static void psys_thread_create_path(ParticleTask *task,
     cpa_num = (ELEM(pa->num_dmcache, DMCACHE_ISCHILD, DMCACHE_NOTFOUND)) ? pa->num :
                                                                            pa->num_dmcache;
 
-    /* XXX hack to avoid messed up particle num and subsequent crash (#40733) */
+    /* XXX hack to avoid messed up particle num and subsequent crash (T40733) */
     if (cpa_num > ctx->sim.psmd->mesh_final->totface) {
       cpa_num = 0;
     }
@@ -3991,8 +3997,9 @@ static int get_particle_uv(Mesh *mesh,
 
 #define CLAMP_WARP_PARTICLE_TEXTURE_POS(type, pvalue) \
   if (event & type) { \
-    if (pvalue < 0.0f) \
+    if (pvalue < 0.0f) { \
       pvalue = 1.0f + pvalue; \
+    } \
     CLAMP(pvalue, 0.0f, 1.0f); \
   } \
   (void)0
@@ -4797,7 +4804,6 @@ void psys_get_dupli_texture(ParticleSystem *psys,
                             float orco[3])
 {
   MFace *mface;
-  MTFace *mtface;
   float loc[3];
   int num;
 
@@ -4809,21 +4815,25 @@ void psys_get_dupli_texture(ParticleSystem *psys,
    * For now just include this workaround as an alternative to crashing,
    * but longer term meta-balls should behave in a more manageable way, see: T46622. */
 
-  uv[0] = uv[1] = 0.f;
+  uv[0] = uv[1] = 0.0f;
 
   /* Grid distribution doesn't support UV or emit from vertex mode */
   bool is_grid = (part->distr == PART_DISTR_GRID && part->from != PART_FROM_VERT);
 
   if (cpa) {
     if ((part->childtype == PART_CHILD_FACES) && (psmd->mesh_final != NULL)) {
-      CustomData *mtf_data = &psmd->mesh_final->fdata;
-      const int uv_idx = CustomData_get_render_layer(mtf_data, CD_MTFACE);
-      mtface = CustomData_get_layer_n(mtf_data, CD_MTFACE, uv_idx);
+      if (!is_grid) {
+        CustomData *mtf_data = &psmd->mesh_final->fdata;
+        const int uv_idx = CustomData_get_render_layer(mtf_data, CD_MTFACE);
 
-      if (mtface && !is_grid) {
-        mface = CustomData_get(&psmd->mesh_final->fdata, cpa->num, CD_MFACE);
-        mtface += cpa->num;
-        psys_interpolate_uvs(mtface, mface->v4, cpa->fuv, uv);
+        if (uv_idx >= 0) {
+          MTFace *mtface = CustomData_get_layer_n(mtf_data, CD_MTFACE, uv_idx);
+          if (mtface != NULL) {
+            mface = CustomData_get(&psmd->mesh_final->fdata, cpa->num, CD_MFACE);
+            mtface += cpa->num;
+            psys_interpolate_uvs(mtface, mface->v4, cpa->fuv, uv);
+          }
+        }
       }
 
       psys_particle_on_emitter(psmd,
@@ -4844,10 +4854,6 @@ void psys_get_dupli_texture(ParticleSystem *psys,
   }
 
   if ((part->from == PART_FROM_FACE) && (psmd->mesh_final != NULL) && !is_grid) {
-    CustomData *mtf_data = &psmd->mesh_final->fdata;
-    const int uv_idx = CustomData_get_render_layer(mtf_data, CD_MTFACE);
-    mtface = CustomData_get_layer_n(mtf_data, CD_MTFACE, uv_idx);
-
     num = pa->num_dmcache;
 
     if (num == DMCACHE_NOTFOUND) {
@@ -4860,10 +4866,16 @@ void psys_get_dupli_texture(ParticleSystem *psys,
       num = DMCACHE_NOTFOUND;
     }
 
-    if (mtface && !ELEM(num, DMCACHE_NOTFOUND, DMCACHE_ISCHILD)) {
-      mface = CustomData_get(&psmd->mesh_final->fdata, num, CD_MFACE);
-      mtface += num;
-      psys_interpolate_uvs(mtface, mface->v4, pa->fuv, uv);
+    if (!ELEM(num, DMCACHE_NOTFOUND, DMCACHE_ISCHILD)) {
+      CustomData *mtf_data = &psmd->mesh_final->fdata;
+      const int uv_idx = CustomData_get_render_layer(mtf_data, CD_MTFACE);
+
+      if (uv_idx >= 0) {
+        MTFace *mtface = CustomData_get_layer_n(mtf_data, CD_MTFACE, uv_idx);
+        mface = CustomData_get(&psmd->mesh_final->fdata, num, CD_MFACE);
+        mtface += num;
+        psys_interpolate_uvs(mtface, mface->v4, pa->fuv, uv);
+      }
     }
   }
 

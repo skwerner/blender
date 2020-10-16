@@ -29,23 +29,25 @@
 
 #include "glew-mx.h"
 
-#include "GPU_extensions.h"
-
 #include "gpu_batch_private.hh"
-#include "gpu_primitive_private.h"
 #include "gpu_shader_private.hh"
 
-#include "gl_batch.hh"
+#include "gl_backend.hh"
 #include "gl_context.hh"
+#include "gl_debug.hh"
+#include "gl_index_buffer.hh"
+#include "gl_primitive.hh"
 #include "gl_vertex_array.hh"
+
+#include "gl_batch.hh"
 
 using namespace blender::gpu;
 
 /* -------------------------------------------------------------------- */
 /** \name Vao cache
  *
- * Each GLBatch has a small cache of VAO objects that are used to avoid VAO reconfiguration.
- * TODO(fclem) Could be revisited to avoid so much cross references.
+ * Each #GLBatch has a small cache of VAO objects that are used to avoid VAO reconfiguration.
+ * TODO(fclem): Could be revisited to avoid so much cross references.
  * \{ */
 
 GLVaoCache::GLVaoCache(void)
@@ -69,6 +71,7 @@ void GLVaoCache::init(void)
   }
   vao_base_instance_ = 0;
   base_instance_ = 0;
+  vao_id_ = 0;
 }
 
 /* Create a new VAO object and store it in the cache. */
@@ -148,7 +151,7 @@ void GLVaoCache::remove(const GLShaderInterface *interface)
 
 void GLVaoCache::clear(void)
 {
-  GLContext *ctx = static_cast<GLContext *>(GPU_context_active_get());
+  GLContext *ctx = GLContext::get();
   const int count = (is_dynamic_vao_count) ? dynamic_vaos.count : GPU_VAO_STATIC_LEN;
   GLuint *vaos = (is_dynamic_vao_count) ? dynamic_vaos.vao_ids : static_vaos.vao_ids;
   const GLShaderInterface **interfaces = (is_dynamic_vao_count) ? dynamic_vaos.interfaces :
@@ -163,7 +166,7 @@ void GLVaoCache::clear(void)
     glDeleteVertexArrays(1, &vao_base_instance_);
   }
   else {
-    /* TODO(fclem) Slow way. Could avoid multiple mutex lock here */
+    /* TODO(fclem): Slow way. Could avoid multiple mutex lock here */
     for (int i = 0; i < count; i++) {
       context_->vao_free(vaos[i]);
     }
@@ -206,7 +209,7 @@ GLuint GLVaoCache::lookup(const GLShaderInterface *interface)
  * Reset the cache if trying to draw in another context; */
 void GLVaoCache::context_check(void)
 {
-  GLContext *ctx = static_cast<GLContext *>(GPU_context_active_get());
+  GLContext *ctx = GLContext::get();
   BLI_assert(ctx);
 
   if (context_ != ctx) {
@@ -225,7 +228,7 @@ GLuint GLVaoCache::base_instance_vao_get(GPUBatch *batch, int i_first)
 {
   this->context_check();
   /* Make sure the interface is up to date. */
-  Shader *shader = static_cast<Shader *>(GPU_context_active_get()->shader);
+  Shader *shader = GLContext::get()->shader;
   GLShaderInterface *interface = static_cast<GLShaderInterface *>(shader->interface);
   if (interface_ != interface) {
     vao_get(batch);
@@ -239,6 +242,7 @@ GLuint GLVaoCache::base_instance_vao_get(GPUBatch *batch, int i_first)
 #ifdef __APPLE__
   glDeleteVertexArrays(1, &vao_base_instance_);
   vao_base_instance_ = 0;
+  base_instance_ = 0;
 #endif
 
   if (vao_base_instance_ == 0) {
@@ -249,14 +253,14 @@ GLuint GLVaoCache::base_instance_vao_get(GPUBatch *batch, int i_first)
     base_instance_ = i_first;
     GLVertArray::update_bindings(vao_base_instance_, batch, interface_, i_first);
   }
-  return base_instance_;
+  return vao_base_instance_;
 }
 
 GLuint GLVaoCache::vao_get(GPUBatch *batch)
 {
   this->context_check();
 
-  Shader *shader = static_cast<Shader *>(GPU_context_active_get()->shader);
+  Shader *shader = GLContext::get()->shader;
   GLShaderInterface *interface = static_cast<GLShaderInterface *>(shader->interface);
   if (interface_ != interface) {
     interface_ = interface;
@@ -292,31 +296,24 @@ GLBatch::~GLBatch()
 /** \name Drawing
  * \{ */
 
-#if GPU_TRACK_INDEX_RANGE
-#  define BASE_INDEX(el) ((el)->base_index)
-#  define INDEX_TYPE(el) ((el)->gl_index_type)
-#else
-#  define BASE_INDEX(el) 0
-#  define INDEX_TYPE(el) GL_UNSIGNED_INT
-#endif
-
 void GLBatch::bind(int i_first)
 {
-  GPU_context_active_get()->state_manager->apply_state();
+  GLContext::get()->state_manager->apply_state();
 
   if (flag & GPU_BATCH_DIRTY) {
+    flag &= ~GPU_BATCH_DIRTY;
     vao_cache_.clear();
   }
 
 #if GPU_TRACK_INDEX_RANGE
   /* Can be removed if GL 4.3 is required. */
-  if (!GLEW_ARB_ES3_compatibility && (elem != NULL)) {
-    glPrimitiveRestartIndex((elem->index_type == GPU_INDEX_U16) ? 0xFFFFu : 0xFFFFFFFFu);
+  if (!GLContext::fixed_restart_index_support && (elem != NULL)) {
+    glPrimitiveRestartIndex(this->elem_()->restart_index());
   }
 #endif
 
   /* Can be removed if GL 4.2 is required. */
-  if (!GPU_arb_base_instance_is_supported() && (i_first > 0)) {
+  if (!GLContext::base_instance_support && (i_first > 0)) {
     glBindVertexArray(vao_cache_.base_instance_vao_get(this, i_first));
   }
   else {
@@ -326,25 +323,21 @@ void GLBatch::bind(int i_first)
 
 void GLBatch::draw(int v_first, int v_count, int i_first, int i_count)
 {
+  GL_CHECK_RESOURCES("Batch");
+
   this->bind(i_first);
 
   BLI_assert(v_count > 0 && i_count > 0);
 
-  GLenum gl_type = convert_prim_type_to_gl(prim_type);
+  GLenum gl_type = to_gl(prim_type);
 
   if (elem) {
-    const GPUIndexBuf *el = elem;
-    GLenum index_type = INDEX_TYPE(el);
-    GLint base_index = BASE_INDEX(el);
-    void *v_first_ofs = (GLuint *)0 + v_first + el->index_start;
+    const GLIndexBuf *el = this->elem_();
+    GLenum index_type = to_gl(el->index_type_);
+    GLint base_index = el->index_base_;
+    void *v_first_ofs = el->offset_ptr(v_first);
 
-#if GPU_TRACK_INDEX_RANGE
-    if (el->index_type == GPU_INDEX_U16) {
-      v_first_ofs = (GLushort *)0 + v_first + el->index_start;
-    }
-#endif
-
-    if (GPU_arb_base_instance_is_supported()) {
+    if (GLContext::base_instance_support) {
       glDrawElementsInstancedBaseVertexBaseInstance(
           gl_type, v_count, index_type, v_first_ofs, i_count, base_index, i_first);
     }
@@ -357,7 +350,7 @@ void GLBatch::draw(int v_first, int v_count, int i_first, int i_count)
 #ifdef __APPLE__
     glDisable(GL_PRIMITIVE_RESTART);
 #endif
-    if (GPU_arb_base_instance_is_supported()) {
+    if (GLContext::base_instance_support) {
       glDrawArraysInstancedBaseInstance(gl_type, v_first, v_count, i_count, i_first);
     }
     else {

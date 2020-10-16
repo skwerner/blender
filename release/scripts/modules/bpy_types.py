@@ -27,6 +27,7 @@ StructMetaPropGroup = bpy_types.bpy_struct_meta_idprop
 
 # Note that methods extended in C are defined in: 'bpy_rna_types_capi.c'
 
+
 class Context(StructRNA):
     __slots__ = ()
 
@@ -352,16 +353,15 @@ class _GenericBone:
     @property
     def _other_bones(self):
         id_data = self.id_data
-        id_data_type = type(id_data)
 
-        if id_data_type == bpy_types.Object:
-            bones = id_data.pose.bones
-        elif id_data_type == bpy_types.Armature:
-            bones = id_data.edit_bones
-            if not bones:  # not in edit mode
-                bones = id_data.bones
-
-        return bones
+        # `id_data` is an 'Object' for `PosePone`, otherwise it's an `Armature`.
+        if isinstance(self, PoseBone):
+            return id_data.pose.bones
+        if isinstance(self, EditBone):
+            return id_data.edit_bones
+        if isinstance(self, Bone):
+            return id_data.bones
+        raise RuntimeError("Invalid type %r" % self)
 
 
 class PoseBone(StructRNA, _GenericBone, metaclass=StructMetaPropGroup):
@@ -912,12 +912,12 @@ class Menu(StructRNA, _GenericUI, metaclass=RNAMeta):
         for directory in searchpaths:
             files.extend([
                 (f, os.path.join(directory, f))
-                 for f in os.listdir(directory)
-                 if (not f.startswith("."))
-                 if ((filter_ext is None) or
-                     (filter_ext(os.path.splitext(f)[1])))
-                 if ((filter_path is None) or
-                     (filter_path(f)))
+                for f in os.listdir(directory)
+                if (not f.startswith("."))
+                if ((filter_ext is None) or
+                    (filter_ext(os.path.splitext(f)[1])))
+                if ((filter_path is None) or
+                    (filter_path(f)))
             ])
 
         files.sort()

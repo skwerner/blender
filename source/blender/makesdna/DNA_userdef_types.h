@@ -327,7 +327,7 @@ typedef struct ThemeSpace {
   unsigned char syntaxd[4], syntaxr[4];  // in nodespace used for distort
 
   unsigned char line_numbers[4];
-  char _pad6[7];
+  char _pad6[3];
 
   unsigned char nodeclass_output[4], nodeclass_filter[4];
   unsigned char nodeclass_vector[4], nodeclass_texture[4];
@@ -372,8 +372,6 @@ typedef struct ThemeSpace {
 
   /** Two uses, for uvs with modifier applied on mesh and uvs during painting. */
   unsigned char uv_shadow[4];
-  /** Uvs of other objects. */
-  unsigned char uv_others[4];
 
   /** Outliner - filter match. */
   unsigned char match[4];
@@ -455,6 +453,10 @@ typedef enum eWireColor_Flags {
   /* TH_WIRECOLOR_TEXTCOLS = (1 << 1), */ /* UNUSED */
 } eWireColor_Flags;
 
+typedef struct ThemeCollectionColor {
+  unsigned char color[4];
+} ThemeCollectionColor;
+
 /**
  * A theme.
  *
@@ -492,6 +494,9 @@ typedef struct bTheme {
   /* 20 sets of bone colors for this theme */
   ThemeWireColor tarm[20];
   /*ThemeWireColor tobj[20];*/
+
+  /* See COLLECTION_COLOR_TOT for the number of collection colors. */
+  ThemeCollectionColor collection_color[8];
 
   int active_theme_area;
   char _pad0[4];
@@ -617,13 +622,19 @@ typedef struct UserDef_FileSpaceData {
 } UserDef_FileSpaceData;
 
 typedef struct UserDef_Experimental {
+  /* Debug options, always available. */
   char use_undo_legacy;
+  char use_cycles_debug;
+  char use_image_editor_legacy_drawing;
+  char SANITIZE_AFTER_HERE;
+  /* The following options are automatically sanitized (set to 0)
+   * when the release cycle is not alpha. */
   char use_new_particle_system;
   char use_new_hair_type;
-  char use_cycles_debug;
   char use_sculpt_vertex_colors;
-  /** `makesdna` does not allow empty structs. */
-  char _pad[3];
+  char use_tools_missing_icons;
+  char use_switch_object_operator;
+  char _pad[7];
 } UserDef_Experimental;
 
 #define USER_EXPERIMENTAL_TEST(userdef, member) \
@@ -978,8 +989,9 @@ typedef enum ePathCompare_Flag {
 /* Helper macro for checking frame clamping */
 #define FRAMENUMBER_MIN_CLAMP(cfra) \
   { \
-    if ((U.flag & USER_NONEGFRAMES) && (cfra < 0)) \
+    if ((U.flag & USER_NONEGFRAMES) && (cfra < 0)) { \
       cfra = 0; \
+    } \
   } \
   (void)0
 

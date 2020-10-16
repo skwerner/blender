@@ -537,10 +537,7 @@ class RENDER_PT_gpencil(RenderButtonsPanel, Panel):
     bl_label = "Grease Pencil"
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 10
-
-    @classmethod
-    def poll(cls, context):
-        return True
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     def draw(self, context):
         layout = self.layout
@@ -658,6 +655,9 @@ class RENDER_PT_simplify_viewport(RenderButtonsPanel, Panel):
 
         col = flow.column()
         col.prop(rd, "simplify_child_particles", text="Max Child Particles")
+
+        col = flow.column()
+        col.prop(rd, "simplify_volumes", text="Volume Resolution")
 
 
 class RENDER_PT_simplify_render(RenderButtonsPanel, Panel):

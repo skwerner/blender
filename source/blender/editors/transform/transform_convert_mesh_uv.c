@@ -301,6 +301,9 @@ void createTransUVs(bContext *C, TransInfo *t)
 
       BM_elem_flag_enable(efa, BM_ELEM_TAG);
       BM_ITER_ELEM (l, &liter, efa, BM_LOOPS_OF_FACE) {
+        /* Make sure that the loop element flag is cleared for when we use it in
+         * uv_set_connectivity_distance later. */
+        BM_elem_flag_disable(l, BM_ELEM_TAG);
         if (uvedit_uv_select_test(scene, l, cd_loop_uv_offset)) {
           countsel++;
 
@@ -321,6 +324,8 @@ void createTransUVs(bContext *C, TransInfo *t)
         }
       }
     }
+
+    float *prop_dists = NULL;
 
     /* Support other objects using PET to adjust these, unless connected is enabled. */
     if (((is_prop_edit && !is_prop_connected) ? count : countsel) == 0) {
@@ -348,8 +353,6 @@ void createTransUVs(bContext *C, TransInfo *t)
 
     td = tc->data;
     td2d = tc->data_2d;
-
-    float *prop_dists = NULL;
 
     if (is_prop_connected) {
       prop_dists = MEM_callocN(em->bm->totloop * sizeof(float), "TransObPropDists(UV Editing)");
@@ -397,7 +400,7 @@ void createTransUVs(bContext *C, TransInfo *t)
 
   finally:
     if (is_prop_connected) {
-      MEM_freeN(prop_dists);
+      MEM_SAFE_FREE(prop_dists);
     }
     if (is_island_center) {
       BM_uv_element_map_free(elementmap);

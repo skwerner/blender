@@ -3199,6 +3199,8 @@ static const char *rna_property_subtypename(PropertySubType type)
       return "PROP_PASSWORD";
     case PROP_POWER:
       return "PROP_POWER";
+    case PROP_TEMPERATURE:
+      return "PROP_TEMPERATURE";
     default: {
       /* in case we don't have a type preset that includes the subtype */
       if (RNA_SUBTYPE_UNIT(type)) {
@@ -3236,6 +3238,8 @@ static const char *rna_property_subtype_unit(PropertySubType type)
       return "PROP_UNIT_CAMERA";
     case PROP_UNIT_POWER:
       return "PROP_UNIT_POWER";
+    case PROP_UNIT_TEMPERATURE:
+      return "PROP_UNIT_TEMPERATURE";
     default:
       return "PROP_UNIT_UNKNOWN";
   }
@@ -4272,6 +4276,7 @@ static RNAProcessItem PROCESS_ITEMS[] = {
     {"rna_animation.c", "rna_animation_api.c", RNA_def_animation},
     {"rna_animviz.c", NULL, RNA_def_animviz},
     {"rna_armature.c", "rna_armature_api.c", RNA_def_armature},
+    {"rna_attribute.c", NULL, RNA_def_attribute},
     {"rna_boid.c", NULL, RNA_def_boid},
     {"rna_brush.c", NULL, RNA_def_brush},
     {"rna_cachefile.c", NULL, RNA_def_cachefile},
@@ -4624,8 +4629,9 @@ static const char *cpp_classes =
     "            ++i; \\\n"
     "        } \\\n"
     "        sname##_##identifier##_end(&iter); \\\n"
-    "        if (!found) \\\n"
+    "        if (!found) { \\\n"
     "            memset(r_ptr, 0, sizeof(*r_ptr)); \\\n"
+    "        } \\\n"
     "        return found; \\\n"
     "    } \n"
     "#define COLLECTION_PROPERTY_LOOKUP_INT_true(sname, identifier) \\\n"
@@ -4633,8 +4639,9 @@ static const char *cpp_classes =
     "PointerRNA *r_ptr) \\\n"
     "    { \\\n"
     "        int found = sname##_##identifier##_lookup_int(ptr, key, r_ptr); \\\n"
-    "        if (!found) \\\n"
+    "        if (!found) { \\\n"
     "            memset(r_ptr, 0, sizeof(*r_ptr)); \\\n"
+    "        } \\\n"
     "        return found; \\\n"
     "    } \n"
     "#define COLLECTION_PROPERTY_LOOKUP_STRING_false(sname, identifier) \\\n"
@@ -4655,13 +4662,15 @@ static const char *cpp_classes =
     "                *r_ptr = iter.ptr; \\\n"
     "                found = 1; \\\n"
     "            } \\\n"
-    "            if (name_fixed != name) \\\n"
+    "            if (name_fixed != name) { \\\n"
     "                MEM_freeN((void *) name); \\\n"
+    "            } \\\n"
     "            sname##_##identifier##_next(&iter); \\\n"
     "        } \\\n"
     "        sname##_##identifier##_end(&iter); \\\n"
-    "        if (!found) \\\n"
+    "        if (!found) { \\\n"
     "            memset(r_ptr, 0, sizeof(*r_ptr)); \\\n"
+    "        } \\\n"
     "        return found; \\\n"
     "    } \n"
     "#define COLLECTION_PROPERTY_LOOKUP_STRING_true(sname, identifier) \\\n"
@@ -4669,8 +4678,9 @@ static const char *cpp_classes =
     "*key, PointerRNA *r_ptr) \\\n"
     "    { \\\n"
     "        int found = sname##_##identifier##_lookup_string(ptr, key, r_ptr); \\\n"
-    "        if (!found) \\\n"
+    "        if (!found) { \\\n"
     "            memset(r_ptr, 0, sizeof(*r_ptr)); \\\n"
+    "        } \\\n"
     "        return found; \\\n"
     "    } \n"
     "#define COLLECTION_PROPERTY(collection_funcs, type, sname, identifier, has_length, "

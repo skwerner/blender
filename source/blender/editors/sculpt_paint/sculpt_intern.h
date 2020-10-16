@@ -88,6 +88,9 @@ float SCULPT_raycast_init(struct ViewContext *vc,
                           float ray_normal[3],
                           bool original);
 
+/* Symmetry */
+char SCULPT_mesh_symmetry_xyz_get(Object *object);
+
 /* Sculpt PBVH abstraction API */
 void SCULPT_vertex_random_access_ensure(struct SculptSession *ss);
 
@@ -99,6 +102,9 @@ const float *SCULPT_vertex_color_get(SculptSession *ss, int index);
 
 const float *SCULPT_vertex_persistent_co_get(SculptSession *ss, int index);
 void SCULPT_vertex_persistent_normal_get(SculptSession *ss, int index, float no[3]);
+
+/* Coordinates used for manipulating the base mesh when Grab Active Vertex is enabled. */
+const float *SCULPT_vertex_co_for_grab_active_get(SculptSession *ss, int index);
 
 /* Returns the info of the limit surface when Multires is available, otherwise it returns the
  * current coordinate of the vertex. */
@@ -360,12 +366,17 @@ void SCULPT_do_cloth_brush(struct Sculpt *sd,
 void SCULPT_cloth_simulation_free(struct SculptClothSimulation *cloth_sim);
 
 struct SculptClothSimulation *SCULPT_cloth_brush_simulation_create(struct SculptSession *ss,
-                                                                   struct Brush *brush,
                                                                    const float cloth_mass,
                                                                    const float cloth_damping,
-                                                                   const bool use_collisions);
+                                                                   const bool use_collisions,
+                                                                   const bool needs_deform_coords);
 void SCULPT_cloth_brush_simulation_init(struct SculptSession *ss,
                                         struct SculptClothSimulation *cloth_sim);
+
+void SCULPT_cloth_sim_activate_nodes(struct SculptClothSimulation *cloth_sim,
+                                     PBVHNode **nodes,
+                                     int totnode);
+
 void SCULPT_cloth_brush_store_simulation_state(struct SculptSession *ss,
                                                struct SculptClothSimulation *cloth_sim);
 
@@ -375,13 +386,13 @@ void SCULPT_cloth_brush_do_simulation_step(struct Sculpt *sd,
                                            struct PBVHNode **nodes,
                                            int totnode);
 
-void SCULPT_cloth_brush_build_nodes_constraints(struct Sculpt *sd,
-                                                struct Object *ob,
-                                                struct PBVHNode **nodes,
-                                                int totnode,
-                                                struct SculptClothSimulation *cloth_sim,
-                                                float initial_location[3],
-                                                const float radius);
+void SCULPT_cloth_brush_ensure_nodes_constraints(struct Sculpt *sd,
+                                                 struct Object *ob,
+                                                 struct PBVHNode **nodes,
+                                                 int totnode,
+                                                 struct SculptClothSimulation *cloth_sim,
+                                                 float initial_location[3],
+                                                 const float radius);
 
 void SCULPT_cloth_simulation_limits_draw(const uint gpuattr,
                                          const struct Brush *brush,
@@ -398,8 +409,9 @@ void SCULPT_cloth_plane_falloff_preview_draw(const uint gpuattr,
 
 BLI_INLINE bool SCULPT_is_cloth_deform_brush(const Brush *brush)
 {
-  return (brush->sculpt_tool == SCULPT_TOOL_CLOTH &&
-          brush->cloth_deform_type == BRUSH_CLOTH_DEFORM_GRAB) ||
+  return (brush->sculpt_tool == SCULPT_TOOL_CLOTH && ELEM(brush->cloth_deform_type,
+                                                          BRUSH_CLOTH_DEFORM_GRAB,
+                                                          BRUSH_CLOTH_DEFORM_SNAKE_HOOK)) ||
          /* All brushes that are not the cloth brush deform the simulation using softbody
             constriants instead of applying forces. */
          (brush->sculpt_tool != SCULPT_TOOL_CLOTH &&
@@ -967,6 +979,7 @@ typedef enum SculptFilterOrientation {
 
 void SCULPT_filter_to_orientation_space(float r_v[3], struct FilterCache *filter_cache);
 void SCULPT_filter_to_object_space(float r_v[3], struct FilterCache *filter_cache);
+void SCULPT_filter_zero_disabled_axis_components(float r_v[3], struct FilterCache *filter_cache);
 
 typedef struct FilterCache {
   bool enabled_axis[3];
@@ -1048,6 +1061,15 @@ bool SCULPT_get_redraw_rect(struct ARegion *region,
                             rcti *rect);
 
 /* Operators. */
+
+/* Gestures. */
+void SCULPT_OT_face_set_lasso_gesture(struct wmOperatorType *ot);
+void SCULPT_OT_face_set_box_gesture(struct wmOperatorType *ot);
+
+void SCULPT_OT_trim_lasso_gesture(struct wmOperatorType *ot);
+void SCULPT_OT_trim_box_gesture(struct wmOperatorType *ot);
+
+void SCULPT_OT_project_line_gesture(struct wmOperatorType *ot);
 
 /* Face Sets. */
 void SCULPT_OT_face_sets_randomize_colors(struct wmOperatorType *ot);

@@ -80,6 +80,10 @@ void ED_region_tag_redraw_no_rebuild(struct ARegion *region);
 void ED_region_tag_refresh_ui(struct ARegion *region);
 void ED_region_tag_redraw_editor_overlays(struct ARegion *region);
 
+void ED_region_search_filter_update(const struct ScrArea *area, struct ARegion *region);
+const char *ED_area_region_search_filter_get(const struct ScrArea *area,
+                                             const struct ARegion *region);
+
 void ED_region_panels_init(struct wmWindowManager *wm, struct ARegion *region);
 void ED_region_panels_ex(const struct bContext *C, struct ARegion *region, const char *contexts[]);
 void ED_region_panels(const struct bContext *C, struct ARegion *region);
@@ -344,6 +348,7 @@ bool ED_operator_console_active(struct bContext *C);
 bool ED_operator_object_active(struct bContext *C);
 bool ED_operator_object_active_editable_ex(struct bContext *C, const Object *ob);
 bool ED_operator_object_active_editable(struct bContext *C);
+bool ED_operator_object_active_local_editable_ex(struct bContext *C, const Object *ob);
 bool ED_operator_object_active_local_editable(struct bContext *C);
 bool ED_operator_object_active_editable_mesh(struct bContext *C);
 bool ED_operator_object_active_editable_font(struct bContext *C);

@@ -150,6 +150,7 @@ int ED_file_extension_icon(const char *path);
 
 void ED_file_read_bookmarks(void);
 
+void ED_file_change_dir_ex(struct bContext *C, struct bScreen *screen, struct ScrArea *area);
 void ED_file_change_dir(struct bContext *C);
 
 void ED_file_path_button(struct bScreen *screen,
@@ -199,7 +200,7 @@ void ED_fsmenu_set_category(struct FSMenu *fsmenu,
 
 int ED_fsmenu_get_nentries(struct FSMenu *fsmenu, FSMenuCategory category);
 
-struct FSMenuEntry *ED_fsmenu_get_entry(struct FSMenu *fsmenu, FSMenuCategory category, int index);
+struct FSMenuEntry *ED_fsmenu_get_entry(struct FSMenu *fsmenu, FSMenuCategory category, int idx);
 
 char *ED_fsmenu_entry_get_path(struct FSMenuEntry *fsentry);
 void ED_fsmenu_entry_set_path(struct FSMenuEntry *fsentry, const char *path);

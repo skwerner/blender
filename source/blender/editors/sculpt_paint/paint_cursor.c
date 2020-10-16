@@ -142,7 +142,7 @@ typedef struct LoadTexData {
   ViewContext *vc;
 
   MTex *mtex;
-  GLubyte *buffer;
+  uchar *buffer;
   bool col;
 
   struct ImagePool *pool;
@@ -160,7 +160,7 @@ static void load_tex_task_cb_ex(void *__restrict userdata,
   ViewContext *vc = data->vc;
 
   MTex *mtex = data->mtex;
-  GLubyte *buffer = data->buffer;
+  uchar *buffer = data->buffer;
   const bool col = data->col;
 
   struct ImagePool *pool = data->pool;
@@ -230,7 +230,7 @@ static void load_tex_task_cb_ex(void *__restrict userdata,
 
         /* Clamp to avoid precision overflow. */
         CLAMP(avg, 0.0f, 1.0f);
-        buffer[index] = 255 - (GLubyte)(255 * avg);
+        buffer[index] = 255 - (uchar)(255 * avg);
       }
     }
     else {
@@ -254,7 +254,7 @@ static int load_tex(Brush *br, ViewContext *vc, float zoom, bool col, bool prima
 
   MTex *mtex = (primary) ? &br->mtex : &br->mask_mtex;
   ePaintOverlayControlFlags overlay_flags = BKE_paint_get_overlay_flags();
-  GLubyte *buffer = NULL;
+  uchar *buffer = NULL;
 
   int size;
   bool refresh;
@@ -309,10 +309,10 @@ static int load_tex(Brush *br, ViewContext *vc, float zoom, bool col, bool prima
       target->old_col = col;
     }
     if (col) {
-      buffer = MEM_mallocN(sizeof(GLubyte) * size * size * 4, "load_tex");
+      buffer = MEM_mallocN(sizeof(uchar) * size * size * 4, "load_tex");
     }
     else {
-      buffer = MEM_mallocN(sizeof(GLubyte) * size * size, "load_tex");
+      buffer = MEM_mallocN(sizeof(uchar) * size * size, "load_tex");
     }
 
     pool = BKE_image_pool_new();
@@ -348,13 +348,12 @@ static int load_tex(Brush *br, ViewContext *vc, float zoom, bool col, bool prima
 
     if (!target->overlay_texture) {
       eGPUTextureFormat format = col ? GPU_RGBA8 : GPU_R8;
-      target->overlay_texture = GPU_texture_create_nD(
-          size, size, 0, 2, buffer, format, GPU_DATA_UNSIGNED_BYTE, 0, false, NULL);
+      target->overlay_texture = GPU_texture_create_2d(
+          "paint_cursor_overlay", size, size, 1, format, NULL);
+      GPU_texture_update(target->overlay_texture, GPU_DATA_UNSIGNED_BYTE, buffer);
 
       if (!col) {
-        GPU_texture_bind(target->overlay_texture, 0);
         GPU_texture_swizzle_set(target->overlay_texture, "rrrr");
-        GPU_texture_unbind(target->overlay_texture);
       }
     }
 
@@ -382,7 +381,7 @@ static void load_tex_cursor_task_cb(void *__restrict userdata,
   LoadTexData *data = userdata;
   Brush *br = data->br;
 
-  GLubyte *buffer = data->buffer;
+  uchar *buffer = data->buffer;
 
   const int size = data->size;
 
@@ -399,7 +398,7 @@ static void load_tex_cursor_task_cb(void *__restrict userdata,
       /* Falloff curve. */
       float avg = BKE_brush_curve_strength_clamped(br, len, 1.0f);
 
-      buffer[index] = (GLubyte)(255 * avg);
+      buffer[index] = (uchar)(255 * avg);
     }
     else {
       buffer[index] = 0;
@@ -412,7 +411,7 @@ static int load_tex_cursor(Brush *br, ViewContext *vc, float zoom)
   bool init;
 
   ePaintOverlayControlFlags overlay_flags = BKE_paint_get_overlay_flags();
-  GLubyte *buffer = NULL;
+  uchar *buffer = NULL;
 
   int size;
   const bool refresh = !cursor_snap.overlay_texture ||
@@ -453,7 +452,7 @@ static int load_tex_cursor(Brush *br, ViewContext *vc, float zoom)
 
       cursor_snap.size = size;
     }
-    buffer = MEM_mallocN(sizeof(GLubyte) * size * size, "load_tex");
+    buffer = MEM_mallocN(sizeof(uchar) * size * size, "load_tex");
 
     BKE_curvemapping_init(br->curve);
 
@@ -468,12 +467,11 @@ static int load_tex_cursor(Brush *br, ViewContext *vc, float zoom)
     BLI_task_parallel_range(0, size, &data, load_tex_cursor_task_cb, &settings);
 
     if (!cursor_snap.overlay_texture) {
-      cursor_snap.overlay_texture = GPU_texture_create_nD(
-          size, size, 0, 2, buffer, GPU_R8, GPU_DATA_UNSIGNED_BYTE, 0, false, NULL);
+      cursor_snap.overlay_texture = GPU_texture_create_2d(
+          "cursor_snap_overaly", size, size, 1, GPU_R8, NULL);
+      GPU_texture_update(cursor_snap.overlay_texture, GPU_DATA_UNSIGNED_BYTE, buffer);
 
-      GPU_texture_bind(cursor_snap.overlay_texture, 0);
       GPU_texture_swizzle_set(cursor_snap.overlay_texture, "rrrr");
-      GPU_texture_unbind(cursor_snap.overlay_texture);
     }
 
     if (init) {
@@ -913,7 +911,6 @@ static void paint_draw_curve_cursor(Brush *brush, ViewContext *vc)
   GPU_matrix_translate_2f(vc->region->winrct.xmin, vc->region->winrct.ymin);
 
   if (brush->paint_curve && brush->paint_curve->points) {
-    int i;
     PaintCurve *pc = brush->paint_curve;
     PaintCurvePoint *cp = pc->points;
 
@@ -930,7 +927,7 @@ static void paint_draw_curve_cursor(Brush *brush, ViewContext *vc)
     UI_GetThemeColorType4fv(TH_PAINT_CURVE_HANDLE, SPACE_VIEW3D, handle_col);
     UI_GetThemeColorType4fv(TH_PAINT_CURVE_PIVOT, SPACE_VIEW3D, pivot_col);
 
-    for (i = 0; i < pc->tot_points - 1; i++, cp++) {
+    for (int i = 0; i < pc->tot_points - 1; i++, cp++) {
       int j;
       PaintCurvePoint *cp_next = cp + 1;
       float data[(PAINT_CURVE_NUM_SEGMENTS + 1) * 2];
@@ -1093,7 +1090,7 @@ static void cursor_draw_point_with_symmetry(const uint gpuattr,
                                             Object *ob,
                                             const float radius)
 {
-  const char symm = sd->paint.symmetry_flags & PAINT_SYMM_AXIS_ALL;
+  const char symm = SCULPT_mesh_symmetry_xyz_get(ob);
   float location[3], symm_rot_mat[4][4];
 
   for (int i = 0; i <= symm; i++) {
@@ -1156,7 +1153,8 @@ static void sculpt_geometry_preview_lines_draw(const uint gpuattr,
   if (ss->preview_vert_index_count > 0) {
     immBegin(GPU_PRIM_LINES, ss->preview_vert_index_count);
     for (int i = 0; i < ss->preview_vert_index_count; i++) {
-      immVertex3fv(gpuattr, SCULPT_vertex_co_get(ss, ss->preview_vert_index_list[i]));
+      immVertex3fv(gpuattr,
+                   SCULPT_vertex_co_for_grab_active_get(ss, ss->preview_vert_index_list[i]));
     }
     immEnd();
   }
@@ -1574,7 +1572,14 @@ static void paint_cursor_draw_3d_view_brush_cursor_inactive(PaintCursorContext *
 
   /* Cursor location symmetry points. */
 
-  const float *active_vertex_co = SCULPT_active_vertex_co_get(pcontext->ss);
+  const float *active_vertex_co;
+  if (brush->sculpt_tool == SCULPT_TOOL_GRAB && brush->flag & BRUSH_GRAB_ACTIVE_VERTEX) {
+    active_vertex_co = SCULPT_vertex_co_for_grab_active_get(
+        pcontext->ss, SCULPT_active_vertex_get(pcontext->ss));
+  }
+  else {
+    active_vertex_co = SCULPT_active_vertex_co_get(pcontext->ss);
+  }
   if (len_v3v3(active_vertex_co, pcontext->location) < pcontext->radius) {
     immUniformColor3fvAlpha(pcontext->outline_col, pcontext->outline_alpha);
     cursor_draw_point_with_symmetry(pcontext->pos,
@@ -1658,7 +1663,7 @@ static void paint_cursor_draw_3d_view_brush_cursor_inactive(PaintCursorContext *
 
   /* Cloth brush local simulation areas. */
   if (brush->sculpt_tool == SCULPT_TOOL_CLOTH &&
-      brush->cloth_simulation_area_type == BRUSH_CLOTH_SIMULATION_AREA_LOCAL) {
+      brush->cloth_simulation_area_type != BRUSH_CLOTH_SIMULATION_AREA_GLOBAL) {
     const float white[3] = {1.0f, 1.0f, 1.0f};
     const float zero_v[3] = {0.0f};
     /* This functions sets its own drawing space in order to draw the simulation limits when the
@@ -1739,7 +1744,7 @@ static void paint_cursor_cursor_draw_3d_view_brush_cursor_active(PaintCursorCont
     else if (brush->cloth_force_falloff_type == BRUSH_CLOTH_FORCE_FALLOFF_RADIAL &&
              brush->cloth_simulation_area_type == BRUSH_CLOTH_SIMULATION_AREA_LOCAL) {
       /* Display the simulation limits if sculpting outside them. */
-      /* This does not makes much sense of plane fallof as the fallof is infinte or global. */
+      /* This does not makes much sense of plane falloff as the falloff is infinte or global. */
 
       if (len_v3v3(ss->cache->true_location, ss->cache->true_initial_location) >
           ss->cache->radius * (1.0f + brush->cloth_sim_limit)) {

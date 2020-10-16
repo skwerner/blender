@@ -33,6 +33,7 @@
 #include "render/shader.h"
 #include "render/svm.h"
 #include "render/tables.h"
+#include "render/volume.h"
 
 #include "util/util_foreach.h"
 #include "util/util_guarded_allocator.h"
@@ -65,6 +66,7 @@ DeviceScene::DeviceScene(Device *device)
       object_motion(device, "__object_motion", MEM_GLOBAL),
       object_flag(device, "__object_flag", MEM_GLOBAL),
       object_volume_step(device, "__object_volume_step", MEM_GLOBAL),
+      object_max_density(device, "__object_max_density", MEM_GLOBAL),
       camera_motion(device, "__camera_motion", MEM_GLOBAL),
       attributes_map(device, "__attributes_map", MEM_GLOBAL),
       attributes_float(device, "__attributes_float", MEM_GLOBAL),
@@ -94,19 +96,20 @@ Scene::Scene(const SceneParams &params_, Device *device)
       default_empty(NULL),
       device(device),
       dscene(device),
-      params(params_)
+      params(params_),
+      update_stats(NULL)
 {
   memset((void *)&dscene.data, 0, sizeof(dscene.data));
 
-  camera = new Camera();
-  dicing_camera = new Camera();
+  camera = create_node<Camera>();
+  dicing_camera = create_node<Camera>();
   lookup_tables = new LookupTables();
-  film = new Film();
-  background = new Background();
+  film = create_node<Film>();
+  background = create_node<Background>();
   light_manager = new LightManager();
   geometry_manager = new GeometryManager();
   object_manager = new ObjectManager();
-  integrator = new Integrator();
+  integrator = create_node<Integrator>();
   image_manager = new ImageManager(device->info);
   particle_system_manager = new ParticleSystemManager();
   bake_manager = new BakeManager();
@@ -187,6 +190,7 @@ void Scene::free_memory(bool final)
     delete particle_system_manager;
     delete image_manager;
     delete bake_manager;
+    delete update_stats;
   }
 }
 
@@ -196,6 +200,20 @@ void Scene::device_update(Device *device_, Progress &progress)
     device = device_;
 
   bool print_stats = need_data_update();
+
+  if (update_stats) {
+    update_stats->clear();
+  }
+
+  scoped_callback_timer timer([this, print_stats](double time) {
+    if (update_stats) {
+      update_stats->scene.times.add_entry({"device_update", time});
+
+      if (print_stats) {
+        printf("Update statistics:\n%s\n", update_stats->full_report().c_str());
+      }
+    }
+  });
 
   /* The order of updates is important, because there's dependencies between
    * the different managers, using data computed by previous managers.
@@ -268,7 +286,7 @@ void Scene::device_update(Device *device_, Progress &progress)
     return;
 
   progress.set_status("Updating Lookup Tables");
-  lookup_tables->device_update(device, &dscene);
+  lookup_tables->device_update(device, &dscene, this);
 
   if (progress.get_cancel() || device->have_error())
     return;
@@ -292,7 +310,7 @@ void Scene::device_update(Device *device_, Progress &progress)
     return;
 
   progress.set_status("Updating Lookup Tables");
-  lookup_tables->device_update(device, &dscene);
+  lookup_tables->device_update(device, &dscene, this);
 
   if (progress.get_cancel() || device->have_error())
     return;
@@ -401,6 +419,13 @@ void Scene::collect_statistics(RenderStats *stats)
 {
   geometry_manager->collect_statistics(this, stats);
   image_manager->collect_statistics(stats);
+}
+
+void Scene::enable_update_stats()
+{
+  if (!update_stats) {
+    update_stats = new SceneUpdateStats();
+  }
 }
 
 DeviceRequestedFeatures Scene::get_requested_device_features()
@@ -558,6 +583,129 @@ int Scene::get_max_closure_count()
   }
 
   return max_closure_global;
+}
+
+template<> Light *Scene::create_node<Light>()
+{
+  Light *node = new Light();
+  node->set_owner(this);
+  lights.push_back(node);
+  light_manager->tag_update(this);
+  return node;
+}
+
+template<> Mesh *Scene::create_node<Mesh>()
+{
+  Mesh *node = new Mesh();
+  node->set_owner(this);
+  geometry.push_back(node);
+  geometry_manager->tag_update(this);
+  return node;
+}
+
+template<> Hair *Scene::create_node<Hair>()
+{
+  Hair *node = new Hair();
+  node->set_owner(this);
+  geometry.push_back(node);
+  geometry_manager->tag_update(this);
+  return node;
+}
+
+template<> Volume *Scene::create_node<Volume>()
+{
+  Volume *node = new Volume();
+  node->set_owner(this);
+  geometry.push_back(node);
+  geometry_manager->tag_update(this);
+  return node;
+}
+
+template<> Object *Scene::create_node<Object>()
+{
+  Object *node = new Object();
+  node->set_owner(this);
+  objects.push_back(node);
+  object_manager->tag_update(this);
+  return node;
+}
+
+template<> ParticleSystem *Scene::create_node<ParticleSystem>()
+{
+  ParticleSystem *node = new ParticleSystem();
+  node->set_owner(this);
+  particle_systems.push_back(node);
+  particle_system_manager->tag_update(this);
+  return node;
+}
+
+template<> Shader *Scene::create_node<Shader>()
+{
+  Shader *node = new Shader();
+  node->set_owner(this);
+  shaders.push_back(node);
+  shader_manager->need_update = true;
+  return node;
+}
+
+template<typename T> void delete_node_from_array(vector<T> &nodes, T node)
+{
+  for (size_t i = 0; i < nodes.size(); ++i) {
+    if (nodes[i] == node) {
+      std::swap(nodes[i], nodes[nodes.size() - 1]);
+      break;
+    }
+  }
+
+  nodes.resize(nodes.size() - 1);
+  delete node;
+}
+
+template<> void Scene::delete_node_impl(Light *node)
+{
+  delete_node_from_array(lights, node);
+  light_manager->tag_update(this);
+}
+
+template<> void Scene::delete_node_impl(Mesh *node)
+{
+  delete_node_from_array(geometry, static_cast<Geometry *>(node));
+  geometry_manager->tag_update(this);
+}
+
+template<> void Scene::delete_node_impl(Hair *node)
+{
+  delete_node_from_array(geometry, static_cast<Geometry *>(node));
+  geometry_manager->tag_update(this);
+}
+
+template<> void Scene::delete_node_impl(Volume *node)
+{
+  delete_node_from_array(geometry, static_cast<Geometry *>(node));
+  geometry_manager->tag_update(this);
+}
+
+template<> void Scene::delete_node_impl(Geometry *node)
+{
+  delete_node_from_array(geometry, node);
+  geometry_manager->tag_update(this);
+}
+
+template<> void Scene::delete_node_impl(Object *node)
+{
+  delete_node_from_array(objects, node);
+  object_manager->tag_update(this);
+}
+
+template<> void Scene::delete_node_impl(ParticleSystem *node)
+{
+  delete_node_from_array(particle_systems, node);
+  particle_system_manager->tag_update(this);
+}
+
+template<> void Scene::delete_node_impl(Shader * /*node*/)
+{
+  /* don't delete unused shaders, not supported */
 }
 
 CCL_NAMESPACE_END

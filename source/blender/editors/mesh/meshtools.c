@@ -590,8 +590,9 @@ int ED_mesh_join_objects_exec(bContext *C, wmOperator *op)
   loopofs = 0;
   polyofs = 0;
 
-  /* inverse transform for all selected meshes in this object */
-  invert_m4_m4(imat, ob->obmat);
+  /* Inverse transform for all selected meshes in this object,
+   * See #object_join_exec for detailed comment on why the safe version is used. */
+  invert_m4_m4_safe_ortho(imat, ob->obmat);
 
   /* Add back active mesh first.
    * This allows to keep things similar as they were, as much as possible
@@ -741,6 +742,7 @@ int ED_mesh_join_objects_exec(bContext *C, wmOperator *op)
 
   DEG_id_tag_update(&scene->id, ID_RECALC_SELECT);
   WM_event_add_notifier(C, NC_SCENE | ND_OB_ACTIVE, scene);
+  WM_event_add_notifier(C, NC_SCENE | ND_LAYER_CONTENT, scene);
 
   return OPERATOR_FINISHED;
 }
@@ -889,7 +891,8 @@ void ED_mesh_mirror_topo_table_end(Object *UNUSED(ob))
   ED_mesh_mirrtopo_free(&mesh_topo_store);
 }
 
-static int ed_mesh_mirror_topo_table_update(Object *ob, Mesh *me_eval)
+/* Returns true on success. */
+static bool ed_mesh_mirror_topo_table_update(Object *ob, Mesh *me_eval)
 {
   Mesh *me_mirror;
   BMEditMesh *em_mirror;
@@ -898,7 +901,7 @@ static int ed_mesh_mirror_topo_table_update(Object *ob, Mesh *me_eval)
   if (ED_mesh_mirrtopo_recalc_check(em_mirror, me_mirror, &mesh_topo_store)) {
     ED_mesh_mirror_topo_table_begin(ob, me_eval);
   }
-  return 0;
+  return true;
 }
 
 /** \} */
@@ -919,7 +922,7 @@ static int mesh_get_x_mirror_vert_spatial(Object *ob, Mesh *me_eval, int index)
 
 static int mesh_get_x_mirror_vert_topo(Object *ob, Mesh *mesh, int index)
 {
-  if (ed_mesh_mirror_topo_table_update(ob, mesh) == -1) {
+  if (!ed_mesh_mirror_topo_table_update(ob, mesh)) {
     return -1;
   }
 
@@ -961,7 +964,7 @@ static BMVert *editbmesh_get_x_mirror_vert_topo(Object *ob,
                                                 int index)
 {
   intptr_t poinval;
-  if (ed_mesh_mirror_topo_table_update(ob, NULL) == -1) {
+  if (!ed_mesh_mirror_topo_table_update(ob, NULL)) {
     return NULL;
   }
 

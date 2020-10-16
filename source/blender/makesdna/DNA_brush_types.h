@@ -343,6 +343,7 @@ typedef enum eBrushClothDeformType {
   BRUSH_CLOTH_DEFORM_PINCH_PERPENDICULAR = 4,
   BRUSH_CLOTH_DEFORM_INFLATE = 5,
   BRUSH_CLOTH_DEFORM_EXPAND = 6,
+  BRUSH_CLOTH_DEFORM_SNAKE_HOOK = 7,
 } eBrushClothDeformType;
 
 typedef enum eBrushSmoothDeformType {
@@ -358,6 +359,7 @@ typedef enum eBrushClothForceFalloffType {
 typedef enum eBrushClothSimulationAreaType {
   BRUSH_CLOTH_SIMULATION_AREA_LOCAL = 0,
   BRUSH_CLOTH_SIMULATION_AREA_GLOBAL = 1,
+  BRUSH_CLOTH_SIMULATION_AREA_DYNAMIC = 2,
 } eBrushClothSimulationAreaType;
 
 typedef enum eBrushPoseDeformType {
@@ -773,6 +775,7 @@ typedef enum eBrushFlags2 {
   BRUSH_CLOTH_PIN_SIMULATION_BOUNDARY = (1 << 4),
   BRUSH_POSE_USE_LOCK_ROTATION = (1 << 5),
   BRUSH_CLOTH_USE_COLLISION = (1 << 6),
+  BRUSH_AREA_RADIUS_PRESSURE = (1 << 7),
 } eBrushFlags2;
 
 typedef enum {

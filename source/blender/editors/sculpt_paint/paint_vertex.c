@@ -217,12 +217,12 @@ static bool vertex_paint_poll_ex(bContext *C, bool check_tool)
       ARegion *region = CTX_wm_region(C);
       if (region->regiontype == RGN_TYPE_WINDOW) {
         if (!check_tool || WM_toolsystem_active_tool_is_brush(C)) {
-          return 1;
+          return true;
         }
       }
     }
   }
-  return 0;
+  return false;
 }
 
 bool vertex_paint_poll(bContext *C)
@@ -253,11 +253,11 @@ static bool weight_paint_poll_ex(bContext *C, bool check_tool)
     ARegion *region = CTX_wm_region(C);
     if (ELEM(region->regiontype, RGN_TYPE_WINDOW, RGN_TYPE_HUD)) {
       if (!check_tool || WM_toolsystem_active_tool_is_brush(C)) {
-        return 1;
+        return true;
       }
     }
   }
-  return 0;
+  return false;
 }
 
 bool weight_paint_poll(bContext *C)
@@ -765,7 +765,7 @@ static void do_weight_paint_vertex_single(
   MDeformWeight *dw_mirr;
 
   /* from now on we can check if mirrors enabled if this var is -1 and not bother with the flag */
-  if (me->editflag & ME_EDIT_MIRROR_X) {
+  if (me->editflag & ME_EDIT_VERTEX_GROUPS_X_SYMMETRY) {
     index_mirr = mesh_get_x_mirror_vert(ob, NULL, index, topology);
     vgroup_mirr = wpi->mirror.index;
 
@@ -883,7 +883,7 @@ static void do_weight_paint_vertex_single(
     dw->weight = weight;
 
     /* WATCH IT: take care of the ordering of applying mirror -> normalize,
-     * can give wrong results [#26193], least confusing if normalize is done last */
+     * can give wrong results T26193, least confusing if normalize is done last */
 
     /* apply mirror */
     if (index_mirr != -1) {
@@ -961,7 +961,7 @@ static void do_weight_paint_vertex_multi(
   float dw_rel_free, dw_rel_locked;
 
   /* from now on we can check if mirrors enabled if this var is -1 and not bother with the flag */
-  if (me->editflag & ME_EDIT_MIRROR_X) {
+  if (me->editflag & ME_EDIT_VERTEX_GROUPS_X_SYMMETRY) {
     index_mirr = mesh_get_x_mirror_vert(ob, NULL, index, topology);
 
     if (index_mirr != -1 && index_mirr != index) {
@@ -1376,50 +1376,8 @@ static int wpaint_mode_toggle_exec(bContext *C, wmOperator *op)
     BKE_paint_toolslots_brush_validate(bmain, &ts->wpaint->paint);
   }
 
-  /* When locked, it's almost impossible to select the pose-object
-   * then the mesh-object to enter weight paint mode.
-   * Even when the object mode is not locked this is inconvenient - so allow in either case.
-   *
-   * In this case move our pose object in/out of pose mode.
-   * This is in fits with the convention of selecting multiple objects and entering a mode.
-   */
-  {
-    VirtualModifierData virtualModifierData;
-    ModifierData *md = BKE_modifiers_get_virtual_modifierlist(ob, &virtualModifierData);
-    if (md != NULL) {
-      /* Can be NULL. */
-      View3D *v3d = CTX_wm_view3d(C);
-      ViewLayer *view_layer = CTX_data_view_layer(C);
-      for (; md; md = md->next) {
-        if (md->type == eModifierType_Armature) {
-          ArmatureModifierData *amd = (ArmatureModifierData *)md;
-          Object *ob_arm = amd->object;
-          if (ob_arm != NULL) {
-            const Base *base_arm = BKE_view_layer_base_find(view_layer, ob_arm);
-            if (base_arm && BASE_VISIBLE(v3d, base_arm)) {
-              if (is_mode_set) {
-                if ((ob_arm->mode & OB_MODE_POSE) != 0) {
-                  ED_object_posemode_exit_ex(bmain, ob_arm);
-                }
-              }
-              else {
-                /* Only check selected status when entering weight-paint mode
-                 * because we may have multiple armature objects.
-                 * Selecting one will de-select the other, which would leave it in pose-mode
-                 * when exiting weight paint mode. While usable, this looks like inconsistent
-                 * behavior from a user perspective. */
-                if (base_arm->flag & BASE_SELECTED) {
-                  if ((ob_arm->mode & OB_MODE_POSE) == 0) {
-                    ED_object_posemode_enter_ex(bmain, ob_arm);
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
+  /* Prepare armature posemode. */
+  ED_object_posemode_set_for_weight_paint(C, bmain, ob, is_mode_set);
 
   /* Weight-paint works by overriding colors in mesh,
    * so need to make sure we recalculate on enter and
@@ -1441,12 +1399,12 @@ static bool paint_mode_toggle_poll_test(bContext *C)
 {
   Object *ob = CTX_data_active_object(C);
   if (ob == NULL || ob->type != OB_MESH) {
-    return 0;
+    return false;
   }
   if (!ob->data || ID_IS_LINKED(ob->data)) {
-    return 0;
+    return false;
   }
-  return 1;
+  return true;
 }
 
 void PAINT_OT_weight_paint_toggle(wmOperatorType *ot)
@@ -1652,7 +1610,7 @@ static bool wpaint_stroke_test_start(bContext *C, wmOperator *op, const float mo
     int i;
     bDeformGroup *dg;
 
-    if (me->editflag & ME_EDIT_MIRROR_X) {
+    if (me->editflag & ME_EDIT_VERTEX_GROUPS_X_SYMMETRY) {
       BKE_object_defgroup_mirror_selection(
           ob, defbase_tot, defbase_sel, defbase_sel, &defbase_tot_sel);
     }
@@ -2215,7 +2173,8 @@ static void wpaint_paint_leaves(bContext *C,
 
   /* NOTE: current mirroring code cannot be run in parallel */
   TaskParallelSettings settings;
-  BKE_pbvh_parallel_range_settings(&settings, !(me->editflag & ME_EDIT_MIRROR_X), totnode);
+  const bool use_threading = ((me->editflag & ME_EDIT_VERTEX_GROUPS_X_SYMMETRY) == 0);
+  BKE_pbvh_parallel_range_settings(&settings, use_threading, totnode);
 
   switch ((eBrushWeightPaintTool)brush->weightpaint_tool) {
     case WPAINT_TOOL_AVERAGE:
@@ -2333,7 +2292,7 @@ static void wpaint_do_symmetrical_brush_actions(
   Mesh *me = ob->data;
   SculptSession *ss = ob->sculpt;
   StrokeCache *cache = ss->cache;
-  const char symm = wp->paint.symmetry_flags & PAINT_SYMM_AXIS_ALL;
+  const char symm = SCULPT_mesh_symmetry_xyz_get(ob);
   int i = 0;
 
   /* initial stroke */
@@ -2798,7 +2757,7 @@ static bool vpaint_stroke_test_start(bContext *C, struct wmOperator *op, const f
     memset(ob->sculpt->mode.vpaint.previous_color, 0, sizeof(uint) * me->totloop);
   }
 
-  return 1;
+  return true;
 }
 
 static void do_vpaint_brush_calc_average_color_cb_ex(void *__restrict userdata,
@@ -3353,7 +3312,7 @@ static void vpaint_do_symmetrical_brush_actions(
   Mesh *me = ob->data;
   SculptSession *ss = ob->sculpt;
   StrokeCache *cache = ss->cache;
-  const char symm = vp->paint.symmetry_flags & PAINT_SYMM_AXIS_ALL;
+  const char symm = SCULPT_mesh_symmetry_xyz_get(ob);
   int i = 0;
 
   /* initial stroke */

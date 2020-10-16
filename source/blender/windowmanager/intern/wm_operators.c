@@ -24,7 +24,6 @@
  * as well as some generic operators and shared operator properties.
  */
 
-#include <assert.h>
 #include <ctype.h>
 #include <errno.h>
 #include <float.h>
@@ -1408,7 +1407,7 @@ static uiBlock *wm_block_dialog_create(bContext *C, ARegion *region, void *userD
   /* clear so the OK button is left alone */
   UI_block_func_set(block, NULL, NULL, NULL);
 
-  /* new column so as not to interfere with custom layouts [#26436] */
+  /* new column so as not to interfere with custom layouts T26436. */
   {
     uiBlock *col_block;
     uiLayout *col;
@@ -2217,13 +2216,11 @@ static void radial_control_set_tex(RadialControl *rc)
                rc->use_secondary_tex,
                !ELEM(rc->subtype, PROP_NONE, PROP_PIXEL, PROP_DISTANCE)))) {
 
-        rc->texture = GPU_texture_create_nD(
-            ibuf->x, ibuf->y, 0, 2, ibuf->rect_float, GPU_R8, GPU_DATA_FLOAT, 0, false, NULL);
-        GPU_texture_filter_mode(rc->texture, true);
+        rc->texture = GPU_texture_create_2d(
+            "radial_control", ibuf->x, ibuf->y, 1, GPU_R8, ibuf->rect_float);
 
-        GPU_texture_bind(rc->texture, 0);
+        GPU_texture_filter_mode(rc->texture, true);
         GPU_texture_swizzle_set(rc->texture, "111r");
-        GPU_texture_unbind(rc->texture);
 
         MEM_freeN(ibuf->rect_float);
         MEM_freeN(ibuf);
@@ -3349,8 +3346,8 @@ static void previews_id_ensure(bContext *C, Scene *scene, ID *id)
   /* Only preview non-library datablocks, lib ones do not pertain to this .blend file!
    * Same goes for ID with no user. */
   if (!ID_IS_LINKED(id) && (id->us != 0)) {
-    UI_id_icon_render(C, scene, id, false, false);
-    UI_id_icon_render(C, scene, id, true, false);
+    UI_icon_render_id(C, scene, id, false, false);
+    UI_icon_render_id(C, scene, id, true, false);
   }
 }
 
@@ -3904,6 +3901,10 @@ static void gesture_box_modal_keymap(wmKeyConfig *keyconf)
   WM_modalkeymap_assign(keymap, "CLIP_OT_graph_select_box");
   WM_modalkeymap_assign(keymap, "MASK_OT_select_box");
   WM_modalkeymap_assign(keymap, "PAINT_OT_mask_box_gesture");
+  WM_modalkeymap_assign(keymap, "SCULPT_OT_face_set_box_gesture");
+  WM_modalkeymap_assign(keymap, "SCULPT_OT_trim_box_gesture");
+  WM_modalkeymap_assign(keymap, "PAINT_OT_mask_line_gesture");
+  WM_modalkeymap_assign(keymap, "SCULPT_OT_project_line_gesture");
   WM_modalkeymap_assign(keymap, "VIEW2D_OT_zoom_border");
   WM_modalkeymap_assign(keymap, "VIEW3D_OT_clip_border");
   WM_modalkeymap_assign(keymap, "VIEW3D_OT_render_border");
@@ -3991,6 +3992,12 @@ static const EnumPropertyItem *rna_id_itemf(bContext *UNUSED(C),
     if (local == false || !ID_IS_LINKED(id)) {
       item_tmp.identifier = item_tmp.name = id->name + 2;
       item_tmp.value = i++;
+
+      /* Show collection color tag icons in menus. */
+      if (GS(id->name) == ID_GR) {
+        item_tmp.icon = UI_icon_color_from_collection((Collection *)id);
+      }
+
       RNA_enum_item_add(&item, &totitem, &item_tmp);
     }
   }

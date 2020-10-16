@@ -36,8 +36,8 @@ struct BMesh;
 struct Brush;
 struct CurveMapping;
 struct Depsgraph;
-struct EnumPropertyItem;
 struct EdgeSet;
+struct EnumPropertyItem;
 struct GHash;
 struct GridPaintMask;
 struct ImagePool;
@@ -182,11 +182,6 @@ void BKE_paint_palette_set(struct Paint *p, struct Palette *palette);
 void BKE_paint_curve_set(struct Brush *br, struct PaintCurve *pc);
 void BKE_paint_curve_clamp_endpoint_add_index(struct PaintCurve *pc, const int add_index);
 
-void BKE_paint_data_warning(
-    struct ReportList *reports, bool uvs, bool mat, bool tex, bool stencil);
-bool BKE_paint_proj_mesh_data_check(
-    struct Scene *scene, struct Object *ob, bool *uvs, bool *mat, bool *tex, bool *stencil);
-
 /* testing face select mode
  * Texture paint could be removed since selected faces are not used
  * however hiding faces is useful */
@@ -203,6 +198,8 @@ bool paint_is_bmesh_face_hidden(struct BMFace *f);
 
 /* paint masks */
 float paint_grid_paint_mask(const struct GridPaintMask *gpm, uint level, uint x, uint y);
+
+void BKE_paint_face_set_overlay_color_get(const int face_set, const int seed, uchar r_color[4]);
 
 /* stroke related */
 bool paint_calculate_rake_rotation(struct UnifiedPaintSettings *ups,
@@ -259,6 +256,28 @@ typedef struct SculptPoseIKChain {
 
 /* Cloth Brush */
 
+/* Cloth Simulation. */
+typedef enum eSculptClothNodeSimState {
+  /* Constraints were not built for this node, so it can't be simulated. */
+  SCULPT_CLOTH_NODE_UNINITIALIZED,
+
+  /* There are constraints for the geometry in this node, but it should not be simulated. */
+  SCULPT_CLOTH_NODE_INACTIVE,
+
+  /* There are constraints for this node and they should be used by the solver. */
+  SCULPT_CLOTH_NODE_ACTIVE,
+} eSculptClothNodeSimState;
+
+typedef enum eSculptClothConstraintType {
+  /* Constraint that creates the structure of the cloth. */
+  SCULPT_CLOTH_CONSTRAINT_STRUCTURAL = 0,
+  /* Constraint that references the position of a vertex and a position in deformation_pos which
+     can be deformed by the tools. */
+  SCULPT_CLOTH_CONSTRAINT_DEFORMATION = 1,
+  /* Constarint that references the vertex position and its initial position. */
+  SCULPT_CLOTH_CONSTRAINT_SOFTBODY = 2,
+} eSculptClothConstraintType;
+
 typedef struct SculptClothLengthConstraint {
   /* Elements that are affected by the constraint. */
   /* Element a should always be a mesh vertex with the index stored in elem_index_a as it is always
@@ -274,6 +293,12 @@ typedef struct SculptClothLengthConstraint {
 
   float length;
   float strength;
+
+  /* Index in SculptClothSimulation.node_state of the node from where this constraint was created.
+   * This constraints will only be used by the solver if the state is active. */
+  int node;
+
+  eSculptClothConstraintType type;
 } SculptClothLengthConstraint;
 
 typedef struct SculptClothSimulation {
@@ -287,6 +312,7 @@ typedef struct SculptClothSimulation {
    * final positions of the simulated vertices are updated with constraints that use these points
    * as targets. */
   float (*deformation_pos)[3];
+  float *deformation_strength;
 
   float mass;
   float damping;
@@ -298,6 +324,11 @@ typedef struct SculptClothSimulation {
   float (*last_iteration_pos)[3];
 
   struct ListBase *collider_list;
+
+  int totnode;
+  /* PBVHNode pointer as a key, index in SculptClothSimulation.node_state as value. */
+  struct GHash *node_state_index;
+  eSculptClothNodeSimState *node_state;
 } SculptClothSimulation;
 
 typedef struct SculptPersistentBase {
@@ -572,6 +603,11 @@ void BKE_sculpt_bvh_update_from_ccg(struct PBVH *pbvh, struct SubdivCCG *subdiv_
 /* This ensure that all elements in the mesh (both vertices and grids) have their visibility
  * updated according to the face sets. */
 void BKE_sculpt_sync_face_set_visibility(struct Mesh *mesh, struct SubdivCCG *subdiv_ccg);
+
+/* Ensures that a Face Set data-layers exists. If it does not, it creates one respecting the
+ * visibility stored in the vertices of the mesh. If it does, it copies the visibility from the
+ * mesh to the Face Sets. */
+void BKE_sculpt_face_sets_ensure_from_base_mesh_visibility(struct Mesh *mesh);
 
 bool BKE_sculptsession_use_pbvh_draw(const struct Object *ob, const struct View3D *v3d);
 

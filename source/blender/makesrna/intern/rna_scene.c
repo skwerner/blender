@@ -44,6 +44,7 @@
 #include "BKE_armature.h"
 #include "BKE_editmesh.h"
 #include "BKE_paint.h"
+#include "BKE_volume.h"
 
 #include "ED_gpencil.h"
 #include "ED_object.h"
@@ -929,7 +930,7 @@ static const char *rna_Scene_statistics_string_get(Scene *scene,
                                                    ReportList *reports,
                                                    ViewLayer *view_layer)
 {
-  if (BKE_scene_find_from_view_layer(bmain, view_layer) != scene) {
+  if (!BKE_scene_has_view_layer(scene, view_layer)) {
     BKE_reportf(reports,
                 RPT_ERROR,
                 "View Layer '%s' not found in scene '%s'",
@@ -1888,6 +1889,10 @@ static void object_simplify_update(Object *ob)
     }
     FOREACH_COLLECTION_OBJECT_RECURSIVE_END;
   }
+
+  if (ob->type == OB_VOLUME) {
+    DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+  }
 }
 
 static void rna_Scene_use_simplify_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
@@ -2514,7 +2519,7 @@ static const EnumPropertyItem *rna_UnitSettings_itemf_wrapper(const int system,
 {
   const void *usys;
   int len;
-  bUnit_GetSystem(system, type, &usys, &len);
+  BKE_unit_system_get(system, type, &usys, &len);
 
   EnumPropertyItem *items = NULL;
   int totitem = 0;
@@ -2526,10 +2531,10 @@ static const EnumPropertyItem *rna_UnitSettings_itemf_wrapper(const int system,
   RNA_enum_item_add(&items, &totitem, &adaptive);
 
   for (int i = 0; i < len; i++) {
-    if (!bUnit_IsSuppressed(usys, i)) {
+    if (!BKE_unit_is_suppressed(usys, i)) {
       EnumPropertyItem tmp = {0};
-      tmp.identifier = bUnit_GetIdentifier(usys, i);
-      tmp.name = bUnit_GetNameDisplay(usys, i);
+      tmp.identifier = BKE_unit_identifier_get(usys, i);
+      tmp.name = BKE_unit_display_name_get(usys, i);
       tmp.value = i;
       RNA_enum_item_add(&items, &totitem, &tmp);
     }
@@ -2568,6 +2573,15 @@ const EnumPropertyItem *rna_UnitSettings_time_unit_itemf(bContext *UNUSED(C),
   return rna_UnitSettings_itemf_wrapper(units->system, B_UNIT_TIME, r_free);
 }
 
+const EnumPropertyItem *rna_UnitSettings_temperature_unit_itemf(bContext *UNUSED(C),
+                                                                PointerRNA *ptr,
+                                                                PropertyRNA *UNUSED(prop),
+                                                                bool *r_free)
+{
+  UnitSettings *units = ptr->data;
+  return rna_UnitSettings_itemf_wrapper(units->system, B_UNIT_TEMPERATURE, r_free);
+}
+
 static void rna_UnitSettings_system_update(Main *UNUSED(bmain),
                                            Scene *scene,
                                            PointerRNA *UNUSED(ptr))
@@ -2578,8 +2592,8 @@ static void rna_UnitSettings_system_update(Main *UNUSED(bmain),
     unit->mass_unit = USER_UNIT_ADAPTIVE;
   }
   else {
-    unit->length_unit = bUnit_GetBaseUnitOfType(unit->system, B_UNIT_LENGTH);
-    unit->mass_unit = bUnit_GetBaseUnitOfType(unit->system, B_UNIT_MASS);
+    unit->length_unit = BKE_unit_base_of_type_get(unit->system, B_UNIT_LENGTH);
+    unit->mass_unit = BKE_unit_base_of_type_get(unit->system, B_UNIT_MASS);
   }
 }
 
@@ -2629,6 +2643,12 @@ static void rna_def_gpencil_interpolate(BlenderRNA *brna)
   RNA_def_property_enum_funcs(prop, NULL, "rna_GPencilInterpolateSettings_type_set", NULL);
   RNA_def_property_ui_text(
       prop, "Type", "Interpolation method to use the next time 'Interpolate Sequence' is run");
+  RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
+
+  prop = RNA_def_property(srna, "step", PROP_INT, PROP_NONE);
+  RNA_def_property_range(prop, 1, MAXFRAME);
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+  RNA_def_property_ui_text(prop, "Step", "Number of frames between generated interpolated frames");
   RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
   /* easing */
@@ -3474,7 +3494,7 @@ static void rna_def_tool_settings(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "use_edge_path_live_unwrap", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "edge_mode_live_unwrap", 1);
-  RNA_def_property_ui_text(prop, "Live Unwrap", "Changing edges seam recalculates UV unwrap");
+  RNA_def_property_ui_text(prop, "Live Unwrap", "Changing edge seams recalculates UV unwrap");
 
   prop = RNA_def_property(srna, "normal_vector", PROP_FLOAT, PROP_XYZ);
   RNA_def_property_ui_text(prop, "Normal Vector", "Normal Vector used to copy, add or multiply");
@@ -3899,6 +3919,13 @@ static void rna_def_unit_settings(BlenderRNA *brna)
   RNA_def_property_enum_items(prop, DummyRNA_DEFAULT_items);
   RNA_def_property_enum_funcs(prop, NULL, NULL, "rna_UnitSettings_time_unit_itemf");
   RNA_def_property_ui_text(prop, "Time Unit", "Unit that will be used to display time values");
+  RNA_def_property_update(prop, NC_WINDOW, NULL);
+
+  prop = RNA_def_property(srna, "temperature_unit", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_items(prop, DummyRNA_DEFAULT_items);
+  RNA_def_property_enum_funcs(prop, NULL, NULL, "rna_UnitSettings_temperature_unit_itemf");
+  RNA_def_property_ui_text(
+      prop, "Temperature Unit", "Unit that will be used to display temperature values");
   RNA_def_property_update(prop, NC_WINDOW, NULL);
 }
 
@@ -5935,7 +5962,7 @@ static void rna_def_scene_render_data(BlenderRNA *brna)
   RNA_def_property_int_funcs(prop, "rna_RenderSettings_threads_get", NULL, NULL);
   RNA_def_property_ui_text(prop,
                            "Threads",
-                           "Number of CPU threads to use simultaneously while rendering "
+                           "Maximum number of CPU cores to use simultaneously while rendering "
                            "(for multi-core/CPU systems)");
   RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, NULL);
 
@@ -6449,6 +6476,12 @@ static void rna_def_scene_render_data(BlenderRNA *brna)
   RNA_def_property_float_sdna(prop, NULL, "simplify_particles_render");
   RNA_def_property_ui_text(
       prop, "Simplify Child Particles", "Global child particles percentage during rendering");
+  RNA_def_property_update(prop, 0, "rna_Scene_simplify_update");
+
+  prop = RNA_def_property(srna, "simplify_volumes", PROP_FLOAT, PROP_FACTOR);
+  RNA_def_property_range(prop, 0.0, 1.0f);
+  RNA_def_property_ui_text(
+      prop, "Simplify Volumes", "Resolution percentage of volume objects in viewport");
   RNA_def_property_update(prop, 0, "rna_Scene_simplify_update");
 
   /* Grease Pencil - Simplify Options */

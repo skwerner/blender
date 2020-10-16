@@ -204,6 +204,23 @@ const float *SCULPT_vertex_persistent_co_get(SculptSession *ss, int index)
   return SCULPT_vertex_co_get(ss, index);
 }
 
+const float *SCULPT_vertex_co_for_grab_active_get(SculptSession *ss, int index)
+{
+  /* Always grab active shape key if the sculpt happens on shapekey. */
+  if (ss->shapekey_active) {
+    const MVert *mverts = BKE_pbvh_get_verts(ss->pbvh);
+    return mverts[index].co;
+  }
+
+  /* Sculpting on the base mesh. */
+  if (ss->mvert) {
+    return ss->mvert[index].co;
+  }
+
+  /* Everything else, such as sculpting on multires. */
+  return SCULPT_vertex_co_get(ss, index);
+}
+
 void SCULPT_vertex_limit_surface_get(SculptSession *ss, int index, float r_co[3])
 {
   switch (BKE_pbvh_type(ss->pbvh)) {
@@ -286,6 +303,12 @@ float *SCULPT_brush_deform_target_vertex_co_get(SculptSession *ss,
       return ss->cache->cloth_sim->deformation_pos[iter->index];
   }
   return iter->co;
+}
+
+char SCULPT_mesh_symmetry_xyz_get(Object *object)
+{
+  const Mesh *mesh = BKE_mesh_from_object(object);
+  return mesh->symmetry;
 }
 
 /* Sculpt Face Sets and Visibility. */
@@ -1049,7 +1072,7 @@ void SCULPT_floodfill_add_initial_with_symmetry(
     Sculpt *sd, Object *ob, SculptSession *ss, SculptFloodFill *flood, int index, float radius)
 {
   /* Add active vertex and symmetric vertices to the queue. */
-  const char symm = sd->paint.symmetry_flags & PAINT_SYMM_AXIS_ALL;
+  const char symm = SCULPT_mesh_symmetry_xyz_get(ob);
   for (char i = 0; i <= symm; ++i) {
     if (SCULPT_is_symmetry_iteration_valid(i, symm)) {
       int v = -1;
@@ -1073,7 +1096,7 @@ void SCULPT_floodfill_add_active(
     Sculpt *sd, Object *ob, SculptSession *ss, SculptFloodFill *flood, float radius)
 {
   /* Add active vertex and symmetric vertices to the queue. */
-  const char symm = sd->paint.symmetry_flags & PAINT_SYMM_AXIS_ALL;
+  const char symm = SCULPT_mesh_symmetry_xyz_get(ob);
   for (char i = 0; i <= symm; ++i) {
     if (SCULPT_is_symmetry_iteration_valid(i, symm)) {
       int v = -1;
@@ -1661,9 +1684,6 @@ bool SCULPT_brush_test_cube(SculptBrushTest *test,
 {
   float side = M_SQRT1_2;
   float local_co[3];
-  float i_local[4][4];
-
-  invert_m4_m4(i_local, local);
 
   if (sculpt_brush_test_clipping(test, co)) {
     return false;
@@ -1771,10 +1791,10 @@ static bool sculpt_brush_test_cyl(SculptBrushTest *test,
 
     test->dist = dist;
 
-    return 1;
+    return true;
   }
 
-  return 0;
+  return false;
 }
 
 #endif
@@ -1915,6 +1935,9 @@ static void calc_area_normal_and_center_task_cb(void *__restrict userdata,
     if (ELEM(data->brush->sculpt_tool, SCULPT_TOOL_SCRAPE, SCULPT_TOOL_FILL) &&
         data->brush->area_radius_factor > 0.0f) {
       test_radius *= data->brush->area_radius_factor;
+      if (ss->cache && data->brush->flag2 & BRUSH_AREA_RADIUS_PRESSURE) {
+        test_radius *= ss->cache->pressure;
+      }
     }
     else {
       test_radius *= data->brush->normal_radius_factor;
@@ -2276,6 +2299,9 @@ static float brush_strength(const Sculpt *sd,
       if (brush->cloth_deform_type == BRUSH_CLOTH_DEFORM_GRAB) {
         /* Grab deform uses the same falloff as a regular grab brush. */
         return root_alpha * feather;
+      }
+      else if (brush->cloth_deform_type == BRUSH_CLOTH_DEFORM_SNAKE_HOOK) {
+        return root_alpha * feather * pressure * overlap;
       }
       else if (brush->cloth_deform_type == BRUSH_CLOTH_DEFORM_EXPAND) {
         /* Expand is more sensible to strength as it keeps expanding the cloth when sculpting over
@@ -5629,6 +5655,17 @@ static void do_brush_action(Sculpt *sd, Object *ob, Brush *brush, UnifiedPaintSe
       };
       BKE_pbvh_search_gather(ss->pbvh, SCULPT_search_sphere_cb, &data, &nodes, &totnode);
     }
+    if (brush->cloth_simulation_area_type == BRUSH_CLOTH_SIMULATION_AREA_DYNAMIC) {
+      SculptSearchSphereData data = {
+          .ss = ss,
+          .sd = sd,
+          .radius_squared = square_f(ss->cache->initial_radius * (1.0 + brush->cloth_sim_limit)),
+          .original = false,
+          .ignore_fully_ineffective = false,
+          .center = ss->cache->location,
+      };
+      BKE_pbvh_search_gather(ss->pbvh, SCULPT_search_sphere_cb, &data, &nodes, &totnode);
+    }
     else {
       /* Gobal simulation, get all nodes. */
       BKE_pbvh_search_gather(ss->pbvh, NULL, NULL, &nodes, &totnode);
@@ -5654,7 +5691,7 @@ static void do_brush_action(Sculpt *sd, Object *ob, Brush *brush, UnifiedPaintSe
       SCULPT_stroke_is_first_brush_step(ss->cache) && !ss->cache->alt_smooth) {
 
     /* Dynamic-topology does not support Face Sets data, so it can't store/restore it from undo. */
-    /* TODO (pablodp606): This check should be done in the undo code and not here, but the rest of
+    /* TODO(pablodp606): This check should be done in the undo code and not here, but the rest of
      * the sculpt code is not checking for unsupported undo types that may return a null node. */
     if (BKE_pbvh_type(ss->pbvh) != PBVH_BMESH) {
       SCULPT_undo_push_node(ob, NULL, SCULPT_UNDO_FACE_SETS);
@@ -5705,12 +5742,12 @@ static void do_brush_action(Sculpt *sd, Object *ob, Brush *brush, UnifiedPaintSe
 
     if (brush->deform_target == BRUSH_DEFORM_TARGET_CLOTH_SIM) {
       if (!ss->cache->cloth_sim) {
-        ss->cache->cloth_sim = SCULPT_cloth_brush_simulation_create(ss, brush, 1.0f, 0.0f, false);
+        ss->cache->cloth_sim = SCULPT_cloth_brush_simulation_create(ss, 1.0f, 0.0f, false, true);
         SCULPT_cloth_brush_simulation_init(ss, ss->cache->cloth_sim);
-        SCULPT_cloth_brush_build_nodes_constraints(
-            sd, ob, nodes, totnode, ss->cache->cloth_sim, ss->cache->location, FLT_MAX);
       }
       SCULPT_cloth_brush_store_simulation_state(ss, ss->cache->cloth_sim);
+      SCULPT_cloth_brush_ensure_nodes_constraints(
+          sd, ob, nodes, totnode, ss->cache->cloth_sim, ss->cache->location, FLT_MAX);
     }
 
     bool invert = ss->cache->pen_flip || ss->cache->invert || brush->flag & BRUSH_DIR_IN;
@@ -5853,6 +5890,7 @@ static void do_brush_action(Sculpt *sd, Object *ob, Brush *brush, UnifiedPaintSe
 
     if (brush->deform_target == BRUSH_DEFORM_TARGET_CLOTH_SIM) {
       if (SCULPT_stroke_is_main_symmetry_pass(ss->cache)) {
+        SCULPT_cloth_sim_activate_nodes(ss->cache->cloth_sim, nodes, totnode);
         SCULPT_cloth_brush_do_simulation_step(sd, ob, ss->cache->cloth_sim, nodes, totnode);
       }
     }
@@ -6235,7 +6273,7 @@ static void do_symmetrical_brush_actions(Sculpt *sd,
   Brush *brush = BKE_paint_brush(&sd->paint);
   SculptSession *ss = ob->sculpt;
   StrokeCache *cache = ss->cache;
-  const char symm = sd->paint.symmetry_flags & PAINT_SYMM_AXIS_ALL;
+  const char symm = SCULPT_mesh_symmetry_xyz_get(ob);
 
   float feather = calc_symmetry_feather(sd, ss->cache);
 
@@ -6634,13 +6672,19 @@ static float sculpt_brush_dynamic_size_get(Brush *brush, StrokeCache *cache, flo
  * generally used to create grab deformations. */
 static bool sculpt_needs_delta_from_anchored_origin(Brush *brush)
 {
-  return ELEM(brush->sculpt_tool,
-              SCULPT_TOOL_GRAB,
-              SCULPT_TOOL_POSE,
-              SCULPT_TOOL_BOUNDARY,
-              SCULPT_TOOL_THUMB,
-              SCULPT_TOOL_ELASTIC_DEFORM) ||
-         SCULPT_is_cloth_deform_brush(brush);
+  if (ELEM(brush->sculpt_tool,
+           SCULPT_TOOL_GRAB,
+           SCULPT_TOOL_POSE,
+           SCULPT_TOOL_BOUNDARY,
+           SCULPT_TOOL_THUMB,
+           SCULPT_TOOL_ELASTIC_DEFORM)) {
+    return true;
+  }
+  if (brush->sculpt_tool == SCULPT_TOOL_CLOTH &&
+      brush->cloth_deform_type == BRUSH_CLOTH_DEFORM_GRAB) {
+    return true;
+  }
+  return false;
 }
 
 /* In these brushes the grab delta is calculated from the previous stroke location, which is used
@@ -6648,7 +6692,7 @@ static bool sculpt_needs_delta_from_anchored_origin(Brush *brush)
 static bool sculpt_needs_delta_for_tip_orientation(Brush *brush)
 {
   if (brush->sculpt_tool == SCULPT_TOOL_CLOTH) {
-    return !SCULPT_is_cloth_deform_brush(brush);
+    return brush->cloth_deform_type != BRUSH_CLOTH_DEFORM_GRAB;
   }
   return ELEM(brush->sculpt_tool,
               SCULPT_TOOL_CLAY_STRIPS,
@@ -6688,13 +6732,16 @@ static void sculpt_update_brush_delta(UnifiedPaintSettings *ups, Object *ob, Bru
 
     if (SCULPT_stroke_is_first_brush_step_of_symmetry_pass(ss->cache)) {
       if (tool == SCULPT_TOOL_GRAB && brush->flag & BRUSH_GRAB_ACTIVE_VERTEX) {
-        copy_v3_v3(cache->orig_grab_location, SCULPT_active_vertex_co_get(ss));
+        copy_v3_v3(cache->orig_grab_location,
+                   SCULPT_vertex_co_for_grab_active_get(ss, SCULPT_active_vertex_get(ss)));
       }
       else {
         copy_v3_v3(cache->orig_grab_location, cache->true_location);
       }
     }
-    else if (tool == SCULPT_TOOL_SNAKE_HOOK) {
+    else if (tool == SCULPT_TOOL_SNAKE_HOOK ||
+             (tool == SCULPT_TOOL_CLOTH &&
+              brush->cloth_deform_type == BRUSH_CLOTH_DEFORM_SNAKE_HOOK)) {
       add_v3_v3(cache->true_location, cache->grab_delta);
     }
 
@@ -7440,7 +7487,7 @@ void SCULPT_flush_update_step(bContext *C, SculptUpdateType update_flags)
       BKE_pbvh_update_bounds(ss->pbvh, PBVH_UpdateBB);
       /* Update the object's bounding box too so that the object
        * doesn't get incorrectly clipped during drawing in
-       * draw_mesh_object(). [#33790] */
+       * draw_mesh_object(). T33790. */
       SCULPT_update_object_bounding_box(ob);
     }
 
@@ -8051,7 +8098,8 @@ static void sculpt_init_session(Depsgraph *depsgraph, Scene *scene, Object *ob)
 
   /* Update the Face Sets visibility with the vertex visibility changes that may have been done
    * outside Sculpt Mode */
-  SCULPT_visibility_sync_all_vertex_to_face_sets(ob->sculpt);
+  Mesh *mesh = ob->data;
+  BKE_sculpt_face_sets_ensure_from_base_mesh_visibility(mesh);
 }
 
 static int ed_object_sculptmode_flush_recalc_flag(Scene *scene,
@@ -8358,7 +8406,7 @@ void SCULPT_geometry_preview_lines_update(bContext *C, SculptSession *ss, float 
         totpoints++;
         if (!BLI_BITMAP_TEST(visited_vertices, to_v)) {
           BLI_BITMAP_ENABLE(visited_vertices, to_v);
-          const float *co = SCULPT_vertex_co_get(ss, to_v);
+          const float *co = SCULPT_vertex_co_for_grab_active_get(ss, to_v);
           if (len_squared_v3v3(brush_co, co) < radius * radius) {
             BLI_gsqueue_push(not_visited_vertices, &to_v);
           }
@@ -9145,6 +9193,11 @@ void ED_operatortypes_sculpt(void)
   WM_operatortype_append(SCULPT_OT_face_sets_init);
   WM_operatortype_append(SCULPT_OT_cloth_filter);
   WM_operatortype_append(SCULPT_OT_face_sets_edit);
+  WM_operatortype_append(SCULPT_OT_face_set_lasso_gesture);
+  WM_operatortype_append(SCULPT_OT_face_set_box_gesture);
+  WM_operatortype_append(SCULPT_OT_trim_box_gesture);
+  WM_operatortype_append(SCULPT_OT_trim_lasso_gesture);
+  WM_operatortype_append(SCULPT_OT_project_line_gesture);
 
   WM_operatortype_append(SCULPT_OT_sample_color);
   WM_operatortype_append(SCULPT_OT_loop_to_vertex_colors);

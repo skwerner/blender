@@ -57,9 +57,10 @@
 #  include "utfconv.h"
 #endif
 
-/***********************
- * Local declarations. *
- ***********************/
+/* -------------------------------------------------------------------- */
+/** \name Local Declarations
+ * \{ */
+
 /* Reading and writing of an in-memory TIFF file. */
 static tsize_t imb_tiff_ReadProc(thandle_t handle, tdata_t data, tsize_t n);
 static tsize_t imb_tiff_WriteProc(thandle_t handle, tdata_t data, tsize_t n);
@@ -69,17 +70,22 @@ static toff_t imb_tiff_SizeProc(thandle_t handle);
 static int imb_tiff_DummyMapProc(thandle_t fd, tdata_t *pbase, toff_t *psize);
 static void imb_tiff_DummyUnmapProc(thandle_t fd, tdata_t base, toff_t size);
 
-/* Structure for in-memory TIFF file. */
+/** Structure for in-memory TIFF file. */
 typedef struct ImbTIFFMemFile {
-  const unsigned char *mem; /* Location of first byte of TIFF file. */
-  toff_t offset;            /* Current offset within the file.      */
-  tsize_t size;             /* Size of the TIFF file.               */
+  /** Location of first byte of TIFF file. */
+  const unsigned char *mem;
+  /** Current offset within the file. */
+  toff_t offset;
+  /** Size of the TIFF file. */
+  tsize_t size;
 } ImbTIFFMemFile;
 #define IMB_TIFF_GET_MEMFILE(x) ((ImbTIFFMemFile *)(x))
 
-/*****************************
- * Function implementations. *
- *****************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Function Implementations
+ * \{ */
 
 static void imb_tiff_DummyUnmapProc(
     thandle_t fd,
@@ -111,10 +117,10 @@ static int imb_tiff_DummyMapProc(
  * Reads data from an in-memory TIFF file.
  *
  * \param handle: Handle of the TIFF file (pointer to #ImbTIFFMemFile).
- * \param data:   Buffer to contain data (treat as (void *)).
- * \param n:      Number of bytes to read.
+ * \param data: Buffer to contain data (treat as (void *)).
+ * \param n: Number of bytes to read.
  *
- * \return: Number of bytes actually read.
+ * \return Number of bytes actually read.
  *   0 = EOF.
  */
 static tsize_t imb_tiff_ReadProc(thandle_t handle, tdata_t data, tsize_t n)
@@ -174,16 +180,16 @@ static tsize_t imb_tiff_WriteProc(thandle_t handle, tdata_t data, tsize_t n)
 /**
  * Seeks to a new location in an in-memory TIFF file.
  *
- * \param handle: Handle of the TIFF file (pointer to ImbTIFFMemFile).
- * \param ofs:    Offset value (interpreted according to whence below).
+ * \param handle: Handle of the TIFF file (pointer to #ImbTIFFMemFile).
+ * \param ofs: Offset value (interpreted according to whence below).
  * \param whence: This can be one of three values:
  * SEEK_SET - The offset is set to ofs bytes.
  * SEEK_CUR - The offset is set to its current location plus ofs bytes.
  * SEEK_END - (This is unsupported and will return -1, indicating an
  *             error).
  *
- * \return: Resulting offset location within the file, measured in bytes from
- *          the beginning of the file.  (-1) indicates an error.
+ * \return Resulting offset location within the file, measured in bytes from
+ * the beginning of the file.  (-1) indicates an error.
  */
 static toff_t imb_tiff_SeekProc(thandle_t handle, toff_t ofs, int whence)
 {
@@ -226,9 +232,9 @@ static toff_t imb_tiff_SeekProc(thandle_t handle, toff_t ofs, int whence)
  *       are made to access the file after that point.  However, no such
  *       attempts should ever be made (in theory).
  *
- * \param handle: Handle of the TIFF file (pointer to ImbTIFFMemFile).
+ * \param handle: Handle of the TIFF file (pointer to #ImbTIFFMemFile).
  *
- * \return: 0
+ * \return 0
  */
 static int imb_tiff_CloseProc(thandle_t handle)
 {
@@ -252,7 +258,7 @@ static int imb_tiff_CloseProc(thandle_t handle)
 /**
  * Returns the size of an in-memory TIFF file in bytes.
  *
- * \return: Size of file (in bytes).
+ * \return Size of file (in bytes).
  */
 static toff_t imb_tiff_SizeProc(thandle_t handle)
 {
@@ -288,6 +294,12 @@ static TIFF *imb_tiff_client_open(ImbTIFFMemFile *memFile, const unsigned char *
                         imb_tiff_DummyUnmapProc);
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Load TIFF
+ * \{ */
+
 /**
  * Checks whether a given memory buffer contains a TIFF file.
  *
@@ -304,13 +316,13 @@ static TIFF *imb_tiff_client_open(ImbTIFFMemFile *memFile, const unsigned char *
  * hence my manual comparison. - Jonathan Merritt (lancelet) 4th Sept 2005.
  */
 #define IMB_TIFF_NCB 4 /* number of comparison bytes used */
-int imb_is_a_tiff(const unsigned char *mem)
+int imb_is_a_tiff(const unsigned char *buf)
 {
   const char big_endian[IMB_TIFF_NCB] = {0x4d, 0x4d, 0x00, 0x2a};
   const char lil_endian[IMB_TIFF_NCB] = {0x49, 0x49, 0x2a, 0x00};
 
-  return ((memcmp(big_endian, mem, IMB_TIFF_NCB) == 0) ||
-          (memcmp(lil_endian, mem, IMB_TIFF_NCB) == 0));
+  return ((memcmp(big_endian, buf, IMB_TIFF_NCB) == 0) ||
+          (memcmp(lil_endian, buf, IMB_TIFF_NCB) == 0));
 }
 
 static void scanline_contig_16bit(float *rectf,
@@ -539,12 +551,12 @@ void imb_inittiff(void)
 
 /**
  * Loads a TIFF file.
- * \param mem:   Memory containing the TIFF file.
- * \param size:  Size of the mem buffer.
+ * \param mem: Memory containing the TIFF file.
+ * \param size: Size of the mem buffer.
  * \param flags: If flags has IB_test set then the file is not actually loaded,
- *                but all other operations take place.
+ * but all other operations take place.
  *
- * \return: A newly allocated ImBuf structure if successful, otherwise NULL.
+ * \return A newly allocated #ImBuf structure if successful, otherwise NULL.
  */
 ImBuf *imb_loadtiff(const unsigned char *mem,
                     size_t size,
@@ -726,23 +738,29 @@ void imb_loadtiletiff(
   TIFFClose(image);
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Save TIFF
+ * \{ */
+
 /**
  * Saves a TIFF file.
  *
- * ImBuf structures with 1, 3 or 4 bytes per pixel (GRAY, RGB, RGBA
+ * #ImBuf structures with 1, 3 or 4 bytes per pixel (GRAY, RGB, RGBA
  * respectively) are accepted, and interpreted correctly.  Note that the TIFF
  * convention is to use pre-multiplied alpha, which can be achieved within
  * Blender by setting "Premul" alpha handling.  Other alpha conventions are
  * not strictly correct, but are permitted anyhow.
  *
- * \param ibuf:  Image buffer.
- * \param name:  Name of the TIFF file to create.
+ * \param ibuf: Image buffer.
+ * \param name: Name of the TIFF file to create.
  * \param flags: Currently largely ignored.
  *
- * \return: 1 if the function is successful, 0 on failure.
+ * \return 1 if the function is successful, 0 on failure.
  */
 
-int imb_savetiff(ImBuf *ibuf, const char *name, int flags)
+int imb_savetiff(ImBuf *ibuf, const char *filepath, int flags)
 {
   TIFF *image = NULL;
   uint16 samplesperpixel, bitspersample;
@@ -795,11 +813,11 @@ int imb_savetiff(ImBuf *ibuf, const char *name, int flags)
 
   /* create image as a file */
 #ifdef WIN32
-  wchar_t *wname = alloc_utf16_from_8(name, 0);
+  wchar_t *wname = alloc_utf16_from_8(filepath, 0);
   image = TIFFOpenW(wname, "w");
   free(wname);
 #else
-  image = TIFFOpen(name, "w");
+  image = TIFFOpen(filepath, "w");
 #endif
 
   if (image == NULL) {
@@ -958,3 +976,5 @@ int imb_savetiff(ImBuf *ibuf, const char *name, int flags)
   }
   return 1;
 }
+
+/** \} */

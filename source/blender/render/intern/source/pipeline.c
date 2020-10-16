@@ -36,6 +36,7 @@
 #include "DNA_particle_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_sequence_types.h"
+#include "DNA_space_types.h"
 #include "DNA_userdef_types.h"
 
 #include "MEM_guardedalloc.h"
@@ -265,9 +266,9 @@ static int render_imbuf_write_stamp_test(ReportList *reports,
   return ok;
 }
 
-void RE_FreeRenderResult(RenderResult *res)
+void RE_FreeRenderResult(RenderResult *rr)
 {
-  render_result_free(res);
+  render_result_free(rr);
 }
 
 float *RE_RenderLayerGetPass(volatile RenderLayer *rl, const char *name, const char *viewname)
@@ -1113,7 +1114,7 @@ void *RE_gl_context_get(Render *re)
 void *RE_gpu_context_get(Render *re)
 {
   if (re->gpu_context == NULL) {
-    re->gpu_context = GPU_context_create(0);
+    re->gpu_context = GPU_context_create(NULL);
   }
   return re->gpu_context;
 }
@@ -1502,8 +1503,14 @@ static void do_render_seq(Render *re)
   tot_views = BKE_scene_multiview_num_views_get(&re->r);
   ibuf_arr = MEM_mallocN(sizeof(ImBuf *) * tot_views, "Sequencer Views ImBufs");
 
-  BKE_sequencer_new_render_data(
-      re->main, re->pipeline_depsgraph, re->scene, re_x, re_y, 100, true, &context);
+  BKE_sequencer_new_render_data(re->main,
+                                re->pipeline_depsgraph,
+                                re->scene,
+                                re_x,
+                                re_y,
+                                SEQ_RENDER_SIZE_SCENE,
+                                true,
+                                &context);
 
   /* the renderresult gets destroyed during the rendering, so we first collect all ibufs
    * and then we populate the final renderesult */
@@ -1857,7 +1864,7 @@ static void update_physics_cache(Render *re,
   baker.bmain = re->main;
   baker.scene = scene;
   baker.view_layer = view_layer;
-  baker.depsgraph = BKE_scene_get_depsgraph(re->main, scene, view_layer, true);
+  baker.depsgraph = BKE_scene_ensure_depsgraph(re->main, scene, view_layer);
   baker.bake = 0;
   baker.render = 1;
   baker.anim_init = 1;

@@ -310,8 +310,7 @@ static void playanim_toscreen(
   CLAMP(offs_x, 0.0f, 1.0f);
   CLAMP(offs_y, 0.0f, 1.0f);
 
-  GPU_clear_color(0.1, 0.1, 0.1, 0.0);
-  GPU_clear(GPU_COLOR_BIT);
+  GPU_clear_color(0.1f, 0.1f, 0.1f, 0.0f);
 
   /* checkerboard for case alpha */
   if (ibuf->planes == 32) {
@@ -1293,7 +1292,6 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
   /* initialize OpenGL immediate mode */
   g_WS.gpu_context = GPU_context_create(g_WS.ghost_window);
   GPU_init();
-  immActivate();
 
   /* initialize the font */
   BLF_init();
@@ -1313,8 +1311,7 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
     maxwiny = ibuf->y * (1 + (maxwiny / ibuf->y));
   }
 
-  GPU_clear_color(0.1, 0.1, 0.1, 0.0);
-  GPU_clear(GPU_COLOR_BIT);
+  GPU_clear_color(0.1f, 0.1f, 0.1f, 0.0f);
 
   int win_x, win_y;
   playanim_window_get_size(&win_x, &win_y);
@@ -1580,8 +1577,6 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
    * but many areas could skip initialization too for anim play */
 
   GPU_shader_free_builtin_shaders();
-
-  immDeactivate();
 
   if (g_WS.gpu_context) {
     GPU_context_active_set(g_WS.gpu_context);

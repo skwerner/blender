@@ -39,7 +39,7 @@
 #include "BKE_image.h"
 #include "BKE_main.h"
 
-#include "GPU_extensions.h"
+#include "GPU_capabilities.h"
 #include "GPU_state.h"
 #include "GPU_texture.h"
 
@@ -48,6 +48,21 @@
 /* Prototypes. */
 static void gpu_free_unused_buffers(void);
 static void image_free_gpu(Image *ima, const bool immediate);
+
+/* Is the alpha of the `GPUTexture` for a given image/ibuf premultiplied. */
+bool BKE_image_has_gpu_texture_premultiplied_alpha(Image *image, ImBuf *ibuf)
+{
+  const bool type_is_premultiplied = (image == NULL) || ELEM(image->type,
+                                                             IMA_TYPE_R_RESULT,
+                                                             IMA_TYPE_COMPOSITE,
+                                                             IMA_TYPE_UV_TEST);
+  const bool store_premultiplied =
+      type_is_premultiplied ||
+      ((ibuf != NULL) &&
+       (ibuf->rect_float ? (image ? (image->alpha_mode != IMA_ALPHA_STRAIGHT) : false) :
+                           (image ? (image->alpha_mode == IMA_ALPHA_PREMUL) : true)));
+  return store_premultiplied;
+}
 
 /* -------------------------------------------------------------------- */
 /** \name UDIM gpu texture
@@ -95,7 +110,7 @@ static GPUTexture *gpu_texture_create_tile_mapping(Image *ima, const int multivi
     tile_info[3] = tile->runtime.tilearray_size[1] / array_h;
   }
 
-  GPUTexture *tex = GPU_texture_create_1d_array(width, 2, GPU_RGBA32F, data, NULL);
+  GPUTexture *tex = GPU_texture_create_1d_array(ima->id.name + 2, width, 2, 1, GPU_RGBA32F, data);
   GPU_texture_mipmap_mode(tex, false, false);
 
   MEM_freeN(data);
@@ -180,9 +195,7 @@ static GPUTexture *gpu_texture_create_tile_array(Image *ima, ImBuf *main_ibuf)
   const bool use_high_bitdepth = (ima->flag & IMA_HIGH_BITDEPTH);
   /* Create Texture without content. */
   GPUTexture *tex = IMB_touch_gpu_texture(
-      main_ibuf, arraywidth, arrayheight, arraylayers, use_high_bitdepth);
-
-  GPU_texture_bind(tex, 0);
+      ima->id.name + 2, main_ibuf, arraywidth, arrayheight, arraylayers, use_high_bitdepth);
 
   /* Upload each tile one by one. */
   LISTBASE_FOREACH (ImageTile *, tile, &ima->tiles) {
@@ -200,8 +213,7 @@ static GPUTexture *gpu_texture_create_tile_array(Image *ima, ImBuf *main_ibuf)
     ImBuf *ibuf = BKE_image_acquire_ibuf(ima, &iuser, NULL);
 
     if (ibuf) {
-      const bool store_premultiplied = ibuf->rect_float ? (ima->alpha_mode != IMA_ALPHA_STRAIGHT) :
-                                                          (ima->alpha_mode == IMA_ALPHA_PREMUL);
+      const bool store_premultiplied = BKE_image_has_gpu_texture_premultiplied_alpha(ima, ibuf);
       IMB_update_gpu_texture_sub(tex,
                                  ibuf,
                                  UNPACK2(tileoffset),
@@ -224,8 +236,6 @@ static GPUTexture *gpu_texture_create_tile_array(Image *ima, ImBuf *main_ibuf)
   else {
     GPU_texture_mipmap_mode(tex, false, true);
   }
-
-  GPU_texture_unbind(tex);
 
   return tex;
 }
@@ -251,6 +261,7 @@ static GPUTexture **get_image_gpu_texture_ptr(Image *ima,
 
 static GPUTexture *image_gpu_texture_error_create(eGPUTextureTarget textarget)
 {
+  fprintf(stderr, "GPUTexture: Blender Texture Not Loaded!\n");
   switch (textarget) {
     case TEXTARGET_2D_ARRAY:
       return GPU_texture_create_error(2, true);
@@ -275,6 +286,20 @@ static GPUTexture *image_get_gpu_texture(Image *ima,
    * context and might as well ensure we have as much space free as possible. */
   gpu_free_unused_buffers();
 
+  /* Free GPU textures when requesting a different render pass/layer.
+   * When `iuser` isn't set (texture painting single image mode) we assume that
+   * the current `pass` and `layer` should be 0. */
+  short requested_pass = iuser ? iuser->pass : 0;
+  short requested_layer = iuser ? iuser->layer : 0;
+  short requested_slot = ima->render_slot;
+  if (ima->gpu_pass != requested_pass || ima->gpu_layer != requested_layer ||
+      ima->gpu_slot != requested_slot) {
+    ima->gpu_pass = requested_pass;
+    ima->gpu_layer = requested_layer;
+    ima->gpu_slot = requested_slot;
+    ima->gpuflag |= IMA_GPU_REFRESH;
+  }
+
   /* currently, gpu refresh tagging is used by ima sequences */
   if (ima->gpuflag & IMA_GPU_REFRESH) {
     image_free_gpu(ima, true);
@@ -285,7 +310,10 @@ static GPUTexture *image_get_gpu_texture(Image *ima,
   BKE_image_tag_time(ima);
 
   /* Test if we already have a texture. */
-  GPUTexture **tex = get_image_gpu_texture_ptr(ima, textarget, iuser ? iuser->multiview_eye : 0);
+  const int current_view = iuser ? ((iuser->flag & IMA_SHOW_STEREO) != 0 ? iuser->multiview_eye :
+                                                                           iuser->view) :
+                                   0;
+  GPUTexture **tex = get_image_gpu_texture_ptr(ima, textarget, current_view);
   if (*tex) {
     return *tex;
   }
@@ -316,16 +344,16 @@ static GPUTexture *image_get_gpu_texture(Image *ima,
   }
   else {
     const bool use_high_bitdepth = (ima->flag & IMA_HIGH_BITDEPTH);
-    const bool store_premultiplied = ibuf_intern->rect_float ?
-                                         (ima ? (ima->alpha_mode != IMA_ALPHA_STRAIGHT) : false) :
-                                         (ima ? (ima->alpha_mode == IMA_ALPHA_PREMUL) : true);
+    const bool store_premultiplied = BKE_image_has_gpu_texture_premultiplied_alpha(ima,
+                                                                                   ibuf_intern);
 
-    *tex = IMB_create_gpu_texture(ibuf_intern, use_high_bitdepth, store_premultiplied);
+    *tex = IMB_create_gpu_texture(
+        ima->id.name + 2, ibuf_intern, use_high_bitdepth, store_premultiplied);
+
+    GPU_texture_wrap_mode(*tex, true, false);
 
     if (GPU_mipmap_enabled()) {
-      GPU_texture_bind(*tex, 0);
       GPU_texture_generate_mipmap(*tex);
-      GPU_texture_unbind(*tex);
       if (ima) {
         ima->gpuflag |= IMA_GPU_MIPMAP_COMPLETE;
       }
@@ -627,6 +655,7 @@ static void gpu_texture_update_from_ibuf(
   int tex_stride = ibuf->x;
   int tex_offset = ibuf->channels * (y * ibuf->x + x);
 
+  const bool store_premultiplied = BKE_image_has_gpu_texture_premultiplied_alpha(ima, ibuf);
   if (rect_float == NULL) {
     /* Byte pixels. */
     if (!IMB_colormanagement_space_is_data(ibuf->rect_colorspace)) {
@@ -643,15 +672,12 @@ static void gpu_texture_update_from_ibuf(
 
       /* Convert to scene linear with sRGB compression, and premultiplied for
        * correct texture interpolation. */
-      const bool store_premultiplied = (ima->alpha_mode == IMA_ALPHA_PREMUL);
       IMB_colormanagement_imbuf_to_byte_texture(
           rect, x, y, w, h, ibuf, compress_as_srgb, store_premultiplied);
     }
   }
   else {
     /* Float pixels. */
-    const bool store_premultiplied = (ima->alpha_mode != IMA_ALPHA_STRAIGHT);
-
     if (ibuf->channels != 4 || scaled || !store_premultiplied) {
       rect_float = (float *)MEM_mallocN(sizeof(float[4]) * w * h, __func__);
       if (rect_float == NULL) {
@@ -665,8 +691,6 @@ static void gpu_texture_update_from_ibuf(
           rect_float, x, y, w, h, ibuf, store_premultiplied);
     }
   }
-
-  GPU_texture_bind(tex, 0);
 
   if (scaled) {
     /* Slower update where we first have to scale the input pixels. */

@@ -178,7 +178,7 @@ static void hud_region_layout(const bContext *C, ARegion *region)
   }
 
   ScrArea *area = CTX_wm_area(C);
-  int size_y = region->sizey;
+  const int size_y = region->sizey;
 
   ED_region_panels_layout(C, region);
 
@@ -201,7 +201,7 @@ static void hud_region_layout(const bContext *C, ARegion *region)
     region->winrct.xmax = (region->winrct.xmin + region->winx) - 1;
     region->winrct.ymax = (region->winrct.ymin + region->winy) - 1;
 
-    UI_view2d_region_reinit(v2d, V2D_COMMONVIEW_PANELS_UI, region->winx, region->winy);
+    UI_view2d_region_reinit(v2d, V2D_COMMONVIEW_LIST, region->winx, region->winy);
 
     /* Weak, but needed to avoid glitches, especially with hi-dpi
      * (where resizing the view glitches often).
@@ -217,8 +217,7 @@ static void hud_region_draw(const bContext *C, ARegion *region)
 {
   UI_view2d_view_ortho(&region->v2d);
   wmOrtho2_region_pixelspace(region);
-  GPU_clear_color(0, 0, 0, 0.0f);
-  GPU_clear(GPU_COLOR_BIT);
+  GPU_clear_color(0.0f, 0.0f, 0.0f, 0.0f);
 
   if ((region->flag & RGN_FLAG_HIDDEN) == 0) {
     ui_draw_menu_back(NULL,
@@ -317,7 +316,7 @@ void ED_area_type_hud_ensure(bContext *C, ScrArea *area)
   }
 
   bool init = false;
-  bool was_hidden = region == NULL || region->visible == false;
+  const bool was_hidden = region == NULL || region->visible == false;
   ARegion *region_op = CTX_wm_region(C);
   BLI_assert((region_op == NULL) || (region_op->regiontype != RGN_TYPE_HUD));
   if (!last_redo_poll(C, region_op ? region_op->regiontype : -1)) {

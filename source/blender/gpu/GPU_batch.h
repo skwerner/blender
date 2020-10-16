@@ -28,7 +28,7 @@
 
 #include "BLI_utildefines.h"
 
-#include "GPU_element.h"
+#include "GPU_index_buffer.h"
 #include "GPU_shader.h"
 #include "GPU_vertex_buffer.h"
 
@@ -75,7 +75,7 @@ extern "C" {
 /**
  * IMPORTANT: Do not allocate manually as the real struct is bigger (i.e: GLBatch). This is only
  * the common and "public" part of the struct. Use the provided allocator.
- * TODO(fclem) Make the content of this struct hidden and expose getters/setters.
+ * TODO(fclem): Make the content of this struct hidden and expose getters/setters.
  **/
 typedef struct GPUBatch {
   /** verts[0] is required, others can be NULL */
@@ -96,12 +96,12 @@ GPUBatch *GPU_batch_calloc(void);
 GPUBatch *GPU_batch_create_ex(GPUPrimType prim,
                               GPUVertBuf *vert,
                               GPUIndexBuf *elem,
-                              eGPUBatchFlag own_flag);
+                              eGPUBatchFlag owns_flag);
 void GPU_batch_init_ex(GPUBatch *batch,
                        GPUPrimType prim,
                        GPUVertBuf *vert,
                        GPUIndexBuf *elem,
-                       eGPUBatchFlag own_flag);
+                       eGPUBatchFlag owns_flag);
 void GPU_batch_copy(GPUBatch *batch_dst, GPUBatch *batch_src);
 
 #define GPU_batch_create(prim, verts, elem) GPU_batch_create_ex(prim, verts, elem, 0)
@@ -128,7 +128,7 @@ void GPU_batch_program_set_builtin_with_config(GPUBatch *batch,
                                                eGPUShaderConfig sh_cfg);
 
 /* Will only work after setting the batch program. */
-/* TODO(fclem) Theses needs to be replaced by GPU_shader_uniform_* with explicit shader. */
+/* TODO(fclem): Theses needs to be replaced by GPU_shader_uniform_* with explicit shader. */
 #define GPU_batch_uniform_1i(batch, name, x) GPU_shader_uniform_1i((batch)->shader, name, x);
 #define GPU_batch_uniform_1b(batch, name, x) GPU_shader_uniform_1b((batch)->shader, name, x);
 #define GPU_batch_uniform_1f(batch, name, x) GPU_shader_uniform_1f((batch)->shader, name, x);
@@ -146,6 +146,8 @@ void GPU_batch_program_set_builtin_with_config(GPUBatch *batch,
   GPU_shader_uniform_4fv_array((batch)->shader, name, len, val);
 #define GPU_batch_uniform_mat4(batch, name, val) \
   GPU_shader_uniform_mat4((batch)->shader, name, val);
+#define GPU_batch_texture_bind(batch, name, tex) \
+  GPU_texture_bind(tex, GPU_shader_get_texture_binding((batch)->shader, name));
 
 void GPU_batch_draw(GPUBatch *batch);
 void GPU_batch_draw_range(GPUBatch *batch, int v_first, int v_count);
@@ -153,9 +155,6 @@ void GPU_batch_draw_instanced(GPUBatch *batch, int i_count);
 
 /* This does not bind/unbind shader and does not call GPU_matrix_bind() */
 void GPU_batch_draw_advanced(GPUBatch *, int v_first, int v_count, int i_first, int i_count);
-
-/* Does not even need batch */
-void GPU_draw_primitive(GPUPrimType, int v_count);
 
 #if 0 /* future plans */
 

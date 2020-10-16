@@ -28,6 +28,7 @@
 
 #include "BLT_translation.h"
 
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
@@ -131,14 +132,9 @@ static void initData(ModifierData *md)
 {
   WeightVGMixModifierData *wmd = (WeightVGMixModifierData *)md;
 
-  wmd->default_weight_a = 0.0f;
-  wmd->default_weight_b = 0.0f;
-  wmd->mix_mode = MOD_WVG_MIX_SET;
-  wmd->mix_set = MOD_WVG_SET_AND;
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(wmd, modifier));
 
-  wmd->mask_constant = 1.0f;
-  wmd->mask_tex_use_channel = MOD_WVG_MASK_TEX_USE_INT; /* Use intensity by default. */
-  wmd->mask_tex_mapping = MOD_DISP_MAP_LOCAL;
+  MEMCPY_STRUCT_AFTER(wmd, DNA_struct_default_get(WeightVGMixModifierData), modifier);
 }
 
 static void requiredDataMask(Object *UNUSED(ob),
@@ -168,19 +164,12 @@ static bool dependsOnTime(ModifierData *md)
   return false;
 }
 
-static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk, void *userData)
-{
-  WeightVGMixModifierData *wmd = (WeightVGMixModifierData *)md;
-  walk(userData, ob, &wmd->mask_tex_map_obj, IDWALK_CB_NOP);
-}
-
 static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   WeightVGMixModifierData *wmd = (WeightVGMixModifierData *)md;
 
   walk(userData, ob, (ID **)&wmd->mask_texture, IDWALK_CB_USER);
-
-  foreachObjectLink(md, ob, (ObjectWalkFunc)walk, userData);
+  walk(userData, ob, (ID **)&wmd->mask_tex_map_obj, IDWALK_CB_NOP);
 }
 
 static void foreachTexLink(ModifierData *md, Object *ob, TexWalkFunc walk, void *userData)
@@ -461,44 +450,41 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
   return mesh;
 }
 
-static void panel_draw(const bContext *C, Panel *panel)
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
   PointerRNA ob_ptr;
-  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
 
   uiLayoutSetPropSep(layout, true);
 
-  modifier_vgroup_ui(layout, &ptr, &ob_ptr, "vertex_group_a", "invert_vertex_group_a", NULL);
-  modifier_vgroup_ui(
-      layout, &ptr, &ob_ptr, "vertex_group_b", "invert_vertex_group_b", IFACE_("B"));
+  modifier_vgroup_ui(layout, ptr, &ob_ptr, "vertex_group_a", "invert_vertex_group_a", NULL);
+  modifier_vgroup_ui(layout, ptr, &ob_ptr, "vertex_group_b", "invert_vertex_group_b", IFACE_("B"));
 
   uiItemS(layout);
 
-  uiItemR(layout, &ptr, "default_weight_a", 0, NULL, ICON_NONE);
-  uiItemR(layout, &ptr, "default_weight_b", 0, IFACE_("B"), ICON_NONE);
+  uiItemR(layout, ptr, "default_weight_a", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "default_weight_b", 0, IFACE_("B"), ICON_NONE);
 
   uiItemS(layout);
 
-  uiItemR(layout, &ptr, "mix_set", 0, NULL, ICON_NONE);
-  uiItemR(layout, &ptr, "mix_mode", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "mix_set", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "mix_mode", 0, NULL, ICON_NONE);
 
-  uiItemR(layout, &ptr, "normalize", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "normalize", 0, NULL, ICON_NONE);
 
-  modifier_panel_end(layout, &ptr);
+  modifier_panel_end(layout, ptr);
 }
 
 static void influence_panel_draw(const bContext *C, Panel *panel)
 {
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
   PointerRNA ob_ptr;
-  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
 
-  weightvg_ui_common(C, &ob_ptr, &ptr, layout);
+  weightvg_ui_common(C, &ob_ptr, ptr, layout);
 }
 
 static void panelRegister(ARegionType *region_type)
@@ -513,9 +499,11 @@ ModifierTypeInfo modifierType_WeightVGMix = {
     /* name */ "VertexWeightMix",
     /* structName */ "WeightVGMixModifierData",
     /* structSize */ sizeof(WeightVGMixModifierData),
+    /* srna */ &RNA_VertexWeightMixModifier,
     /* type */ eModifierTypeType_NonGeometrical,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsMapping |
         eModifierTypeFlag_SupportsEditmode | eModifierTypeFlag_UsesPreview,
+    /* icon */ ICON_MOD_VERTEX_WEIGHT,
 
     /* copyData */ BKE_modifier_copydata_generic,
 
@@ -535,7 +523,6 @@ ModifierTypeInfo modifierType_WeightVGMix = {
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ dependsOnTime,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
     /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ foreachTexLink,
     /* freeRuntimeData */ NULL,

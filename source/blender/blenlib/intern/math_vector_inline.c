@@ -571,6 +571,13 @@ MINLINE void mul_v3_v3fl(float r[3], const float a[3], float f)
   r[2] = a[2] * f;
 }
 
+MINLINE void mul_v3_v3db_db(double r[3], const double a[3], double f)
+{
+  r[0] = a[0] * f;
+  r[1] = a[1] * f;
+  r[2] = a[2] * f;
+}
+
 MINLINE void mul_v2_v2(float r[2], const float a[2])
 {
   r[0] *= a[0];
@@ -988,6 +995,11 @@ MINLINE float len_squared_v3(const float v[3])
   return v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
 }
 
+MINLINE double len_squared_v3_db(const double v[3])
+{
+  return v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
+}
+
 MINLINE float len_manhattan_v2(const float v[2])
 {
   return fabsf(v[0]) + fabsf(v[1]);
@@ -1043,6 +1055,11 @@ MINLINE float len_v2v2_int(const int v1[2], const int v2[2])
 MINLINE float len_v3(const float a[3])
 {
   return sqrtf(dot_v3v3(a, a));
+}
+
+MINLINE double len_v3_db(const double a[3])
+{
+  return sqrt(dot_v3v3_db(a, a));
 }
 
 MINLINE float len_squared_v2v2(const float a[2], const float b[2])
@@ -1161,7 +1178,29 @@ MINLINE float normalize_v3_v3(float r[3], const float a[3])
   return normalize_v3_v3_length(r, a, 1.0f);
 }
 
-MINLINE double normalize_v3_length_d(double n[3], const double unit_length)
+MINLINE double normalize_v3_v3_length_db(double r[3], const double a[3], double const unit_length)
+{
+  double d = dot_v3v3_db(a, a);
+
+  /* a larger value causes normalize errors in a
+   * scaled down models with camera extreme close */
+  if (d > 1.0e-70) {
+    d = sqrt(d);
+    mul_v3_v3db_db(r, a, unit_length / d);
+  }
+  else {
+    zero_v3_db(r);
+    d = 0.0;
+  }
+
+  return d;
+}
+MINLINE double normalize_v3_v3_db(double r[3], const double a[3])
+{
+  return normalize_v3_v3_length_db(r, a, 1.0);
+}
+
+MINLINE double normalize_v3_length_db(double n[3], const double unit_length)
 {
   double d = n[0] * n[0] + n[1] * n[1] + n[2] * n[2];
 
@@ -1184,9 +1223,9 @@ MINLINE double normalize_v3_length_d(double n[3], const double unit_length)
 
   return d;
 }
-MINLINE double normalize_v3_d(double n[3])
+MINLINE double normalize_v3_db(double n[3])
 {
-  return normalize_v3_length_d(n, 1.0);
+  return normalize_v3_length_db(n, 1.0);
 }
 
 MINLINE float normalize_v3_length(float n[3], const float unit_length)
@@ -1274,6 +1313,16 @@ MINLINE bool equals_v2v2_int(const int v1[2], const int v2[2])
   return ((v1[0] == v2[0]) && (v1[1] == v2[1]));
 }
 
+MINLINE bool equals_v3v3_int(const int v1[3], const int v2[3])
+{
+  return ((v1[0] == v2[0]) && (v1[1] == v2[1]) && (v1[2] == v2[2]));
+}
+
+MINLINE bool equals_v4v4_int(const int v1[4], const int v2[4])
+{
+  return ((v1[0] == v2[0]) && (v1[1] == v2[1]) && (v1[2] == v2[2]) && (v1[3] == v2[3]));
+}
+
 MINLINE bool compare_v2v2(const float v1[2], const float v2[2], const float limit)
 {
   return (compare_ff(v1[0], v2[0], limit) && compare_ff(v1[1], v2[1], limit));
@@ -1326,6 +1375,24 @@ MINLINE bool compare_len_v3v3(const float v1[3], const float v2[3], const float 
   float d[3];
   sub_v3_v3v3(d, v1, v2);
   return (dot_v3v3(d, d) <= (limit * limit));
+}
+
+MINLINE bool compare_size_v3v3(const float v1[3], const float v2[3], const float limit)
+{
+  for (int i = 0; i < 3; i++) {
+    if (v2[i] == 0.0f) {
+      /* Catch division by zero. */
+      if (v1[i] != v2[i]) {
+        return false;
+      }
+    }
+    else {
+      if (fabsf(v1[i] / v2[i] - 1.0f) > limit) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 /** \name Vector Clamping

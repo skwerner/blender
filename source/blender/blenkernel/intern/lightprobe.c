@@ -30,6 +30,7 @@
 
 #include "BLI_utildefines.h"
 
+#include "BKE_anim_data.h"
 #include "BKE_idtype.h"
 #include "BKE_lib_id.h"
 #include "BKE_lib_query.h"
@@ -37,6 +38,8 @@
 #include "BKE_main.h"
 
 #include "BLT_translation.h"
+
+#include "BLO_read_write.h"
 
 static void lightprobe_init_data(ID *id)
 {
@@ -54,6 +57,33 @@ static void lightprobe_foreach_id(ID *id, LibraryForeachIDData *data)
   BKE_LIB_FOREACHID_PROCESS(data, probe->visibility_grp, IDWALK_CB_NOP);
 }
 
+static void lightprobe_blend_write(BlendWriter *writer, ID *id, const void *id_address)
+{
+  LightProbe *prb = (LightProbe *)id;
+  if (prb->id.us > 0 || BLO_write_is_undo(writer)) {
+    /* write LibData */
+    BLO_write_id_struct(writer, LightProbe, id_address, &prb->id);
+    BKE_id_blend_write(writer, &prb->id);
+
+    if (prb->adt) {
+      BKE_animdata_blend_write(writer, prb->adt);
+    }
+  }
+}
+
+static void lightprobe_blend_read_data(BlendDataReader *reader, ID *id)
+{
+  LightProbe *prb = (LightProbe *)id;
+  BLO_read_data_address(reader, &prb->adt);
+  BKE_animdata_blend_read_data(reader, prb->adt);
+}
+
+static void lightprobe_blend_read_lib(BlendLibReader *reader, ID *id)
+{
+  LightProbe *prb = (LightProbe *)id;
+  BLO_read_id_address(reader, prb->id.lib, &prb->visibility_grp);
+}
+
 IDTypeInfo IDType_ID_LP = {
     .id_code = ID_LP,
     .id_filter = FILTER_ID_LP,
@@ -69,6 +99,12 @@ IDTypeInfo IDType_ID_LP = {
     .free_data = NULL,
     .make_local = NULL,
     .foreach_id = lightprobe_foreach_id,
+    .foreach_cache = NULL,
+
+    .blend_write = lightprobe_blend_write,
+    .blend_read_data = lightprobe_blend_read_data,
+    .blend_read_lib = lightprobe_blend_read_lib,
+    .blend_read_expand = NULL,
 };
 
 void BKE_lightprobe_type_set(LightProbe *probe, const short lightprobe_type)

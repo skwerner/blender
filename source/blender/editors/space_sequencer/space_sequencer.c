@@ -21,6 +21,7 @@
  * \ingroup spseq
  */
 
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -304,7 +305,7 @@ static void sequencer_refresh(const bContext *C, ScrArea *area)
         /* Final check that both preview and main height are reasonable. */
         if (region_preview->sizey < 10 || region_main->sizey < 10 ||
             region_preview->sizey + region_main->sizey > height) {
-          region_preview->sizey = (int)(height * 0.4f + 0.5f);
+          region_preview->sizey = roundf(height * 0.4f);
           region_main->sizey = (int)(height - region_preview->sizey);
           view_changed = true;
         }
@@ -456,24 +457,26 @@ static void sequencer_dropboxes(void)
 extern const char *sequencer_context_dir[]; /* Quiet warning. */
 const char *sequencer_context_dir[] = {"edit_mask", NULL};
 
-static int sequencer_context(const bContext *C, const char *member, bContextDataResult *result)
+static int /*eContextResult*/ sequencer_context(const bContext *C,
+                                                const char *member,
+                                                bContextDataResult *result)
 {
   Scene *scene = CTX_data_scene(C);
 
   if (CTX_data_dir(member)) {
     CTX_data_dir_set(result, sequencer_context_dir);
 
-    return true;
+    return CTX_RESULT_OK;
   }
   if (CTX_data_equals(member, "edit_mask")) {
     Mask *mask = BKE_sequencer_mask_get(scene);
     if (mask) {
       CTX_data_id_pointer_set(result, &mask->id);
     }
-    return true;
+    return CTX_RESULT_OK;
   }
 
-  return false;
+  return CTX_RESULT_MEMBER_NOT_FOUND;
 }
 
 static void SEQUENCER_GGT_navigate(wmGizmoGroupType *gzgt)

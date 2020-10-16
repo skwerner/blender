@@ -32,7 +32,6 @@
  * For now it's not a priority, so leave as-is.
  */
 
-#include <assert.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
@@ -167,7 +166,6 @@ static void ui_tooltip_region_draw_cb(const bContext *UNUSED(C), ARegion *region
 
   float background_color[3];
   float tone_bg;
-  int i;
 
   wmOrtho2_region_pixelspace(region);
 
@@ -204,7 +202,7 @@ static void ui_tooltip_region_draw_cb(const bContext *UNUSED(C), ARegion *region
   bbox.xmin += 0.5f * pad_px; /* add padding to the text */
   bbox.ymax -= 0.25f * pad_px;
 
-  for (i = 0; i < data->fields_len; i++) {
+  for (int i = 0; i < data->fields_len; i++) {
     const uiTooltipField *field = &data->fields[i];
     const uiTooltipField *field_next = (i + 1) != data->fields_len ? &data->fields[i + 1] : NULL;
 
@@ -221,8 +219,8 @@ static void ui_tooltip_region_draw_cb(const bContext *UNUSED(C), ARegion *region
 
       /* offset to the end of the last line */
       if (field->text_suffix) {
-        float xofs = field->geom.x_pos;
-        float yofs = data->lineh * (field->geom.lines - 1);
+        const float xofs = field->geom.x_pos;
+        const float yofs = data->lineh * (field->geom.lines - 1);
         bbox.xmin += xofs;
         bbox.ymax -= yofs;
 
@@ -541,7 +539,7 @@ static uiTooltipData *ui_tooltip_data_from_tool(bContext *C, uiBut *but, bool is
     }
 
     if (shortcut == NULL) {
-      ePaintMode paint_mode = BKE_paintmode_get_active_from_context(C);
+      const ePaintMode paint_mode = BKE_paintmode_get_active_from_context(C);
       const char *tool_attr = BKE_paint_get_tool_prop_id_from_paintmode(paint_mode);
       if (tool_attr != NULL) {
         const EnumPropertyItem *items = BKE_paint_get_tool_enum_from_paintmode(paint_mode);
@@ -884,7 +882,7 @@ static uiTooltipData *ui_tooltip_data_from_button(bContext *C, uiBut *but)
   }
 
   if (but->rnaprop) {
-    int unit_type = UI_but_unit_type_get(but);
+    const int unit_type = UI_but_unit_type_get(but);
 
     if (unit_type == PROP_UNIT_ROTATION) {
       if (RNA_property_type(but->rnaprop) == PROP_FLOAT) {
@@ -1075,7 +1073,7 @@ static uiTooltipData *ui_tooltip_data_from_gizmo(bContext *C, wmGizmo *gz)
                                 NULL;
       if (gzop != NULL) {
         /* Description */
-        char *info = WM_operatortype_description(C, gzop->type, &gzop->ptr);
+        char *info = WM_operatortype_description_or_name(C, gzop->type, &gzop->ptr);
 
         if (info != NULL) {
           char *text = info;

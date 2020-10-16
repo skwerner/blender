@@ -50,7 +50,7 @@ def generate_from_enum_ex(
         attr,
         cursor='DEFAULT',
         tooldef_keywords={},
-        exclude_filter = {}
+        exclude_filter={}
 ):
     tool_defs = []
     for enum in type.bl_rna.properties[attr].enum_items_static:
@@ -787,7 +787,6 @@ class _defs_edit_mesh:
                 col.prop(props, "mark_seam", text="Seam")
                 col.prop(props, "mark_sharp", text="Sharp")
 
-
                 col = layout.column()
                 col.active = edge_bevel
                 col.prop(props, "miter_outer", text="Miter Outer")
@@ -1200,10 +1199,14 @@ class _defs_sculpt:
 
     @staticmethod
     def generate_from_brushes(context):
-        if bpy.context.preferences.experimental.use_sculpt_vertex_colors:
-            exclude_filter = {}
-        else:
+        exclude_filter = {}
+        # Use 'bpy.context' instead of 'context' since it can be None.
+        prefs = bpy.context.preferences
+        if not prefs.experimental.use_sculpt_vertex_colors:
             exclude_filter = {'PAINT', 'SMEAR'}
+
+        if not prefs.experimental.use_tools_missing_icons:
+            exclude_filter = {'PAINT', 'SMEAR', 'BOUNDARY', 'DISPLACEMENT_ERASER'}
 
         return generate_from_enum_ex(
             context,
@@ -1211,7 +1214,7 @@ class _defs_sculpt:
             icon_prefix="brush.sculpt.",
             type=bpy.types.Brush,
             attr="sculpt_tool",
-            exclude_filter = exclude_filter,
+            exclude_filter=exclude_filter,
         )
 
     @ToolDef.from_fn
@@ -1252,6 +1255,89 @@ class _defs_sculpt:
             widget=None,
             keymap=(),
             draw_settings=draw_settings,
+        )
+
+    @ToolDef.from_fn
+    def mask_line():
+        def draw_settings(_context, layout, tool):
+            props = tool.operator_properties("paint.mask_line_gesture")
+            layout.prop(props, "use_front_faces_only", expand=False)
+
+        return dict(
+            idname="builtin.line_mask",
+            label="Line Mask",
+            icon="ops.sculpt.line_mask",
+            widget=None,
+            keymap=(),
+            draw_settings=draw_settings,
+        )
+
+    @ToolDef.from_fn
+    def face_set_box():
+        def draw_settings(_context, layout, tool):
+            props = tool.operator_properties("sculpt.face_set_box_gesture")
+            layout.prop(props, "use_front_faces_only", expand=False)
+
+        return dict(
+            idname="builtin.box_face_set",
+            label="Box Face Set",
+            icon="ops.sculpt.border_face_set",
+            widget=None,
+            keymap=(),
+            draw_settings=draw_settings,
+        )
+
+    @ToolDef.from_fn
+    def face_set_lasso():
+        def draw_settings(_context, layout, tool):
+            props = tool.operator_properties("sculpt.face_set_lasso_gesture")
+            layout.prop(props, "use_front_faces_only", expand=False)
+
+        return dict(
+            idname="builtin.lasso_face_set",
+            label="Lasso Face Set",
+            icon="ops.sculpt.lasso_face_set",
+            widget=None,
+            keymap=(),
+            draw_settings=draw_settings,
+        )
+
+    @ToolDef.from_fn
+    def trim_box():
+        def draw_settings(_context, layout, tool):
+            props = tool.operator_properties("sculpt.trim_box_gesture")
+            layout.prop(props, "trim_mode", expand=False)
+        return dict(
+            idname="builtin.box_trim",
+            label="Box Trim",
+            icon="ops.sculpt.box_trim",
+            widget=None,
+            keymap=(),
+            draw_settings=draw_settings,
+        )
+
+    @ToolDef.from_fn
+    def trim_lasso():
+        def draw_settings(_context, layout, tool):
+            props = tool.operator_properties("sculpt.trim_lasso_gesture")
+            layout.prop(props, "trim_mode", expand=False)
+        return dict(
+            idname="builtin.lasso_trim",
+            label="Lasso Trim",
+            icon="ops.sculpt.lasso_trim",
+            widget=None,
+            keymap=(),
+            draw_settings=draw_settings,
+        )
+
+    @ToolDef.from_fn
+    def project_line():
+        return dict(
+            idname="builtin.line_project",
+            label="Line Project",
+            icon="ops.sculpt.line_project",
+            widget=None,
+            keymap=(),
         )
 
     @ToolDef.from_fn
@@ -2000,10 +2086,10 @@ class _defs_gpencil_edit:
     @ToolDef.from_fn
     def transform_fill():
         def draw_settings(context, layout, tool):
-                props = tool.operator_properties("gpencil.transform_fill")
-                row = layout.row()
-                row.use_property_split = False
-                row.prop(props, "mode", expand=True)
+            props = tool.operator_properties("gpencil.transform_fill")
+            row = layout.row()
+            row.use_property_split = False
+            row.prop(props, "mode", expand=True)
 
         return dict(
             idname="builtin.transform_fill",
@@ -2014,6 +2100,7 @@ class _defs_gpencil_edit:
             keymap=(),
             draw_settings=draw_settings,
         )
+
 
 class _defs_gpencil_sculpt:
 
@@ -2212,6 +2299,7 @@ class _defs_sequencer_select:
             widget=None,
             keymap="Sequencer Tool: Select",
         )
+
     @ToolDef.from_fn
     def box():
         def draw_settings(_context, layout, tool):
@@ -2597,6 +2685,48 @@ class VIEW3D_PT_tools_active(ToolSelectPanelHelper, Panel):
                 _defs_sculpt.mask_lasso,
             ),
             _defs_sculpt.hide_border,
+            lambda context: (
+                (_defs_sculpt.mask_line,)
+                if context is None or (
+                        context.preferences.view.show_developer_ui and
+                        context.preferences.experimental.use_tools_missing_icons)
+                else ()
+            ),
+            lambda context: (
+                (_defs_sculpt.face_set_box,)
+                if context is None or (
+                        context.preferences.view.show_developer_ui and
+                        context.preferences.experimental.use_tools_missing_icons)
+                else ()
+            ),
+            lambda context: (
+                (_defs_sculpt.face_set_lasso,)
+                if context is None or (
+                        context.preferences.view.show_developer_ui and
+                        context.preferences.experimental.use_tools_missing_icons)
+                else ()
+            ),
+            lambda context: (
+                (_defs_sculpt.trim_box,)
+                if context is None or (
+                        context.preferences.view.show_developer_ui and
+                        context.preferences.experimental.use_tools_missing_icons)
+                else ()
+            ),
+            lambda context: (
+                (_defs_sculpt.trim_lasso,)
+                if context is None or (
+                        context.preferences.view.show_developer_ui and
+                        context.preferences.experimental.use_tools_missing_icons)
+                else ()
+            ),
+            lambda context: (
+                (_defs_sculpt.project_line,)
+                if context is None or (
+                        context.preferences.view.show_developer_ui and
+                        context.preferences.experimental.use_tools_missing_icons)
+                else ()
+            ),
             None,
             _defs_sculpt.mesh_filter,
             _defs_sculpt.cloth_filter,
@@ -2604,7 +2734,8 @@ class VIEW3D_PT_tools_active(ToolSelectPanelHelper, Panel):
                 (_defs_sculpt.color_filter,)
                 if context is None or (
                         context.preferences.view.show_developer_ui and
-                        context.preferences.experimental.use_sculpt_vertex_colors)
+                        context.preferences.experimental.use_sculpt_vertex_colors and
+                        context.preferences.experimental.use_tools_missing_icons)
                 else ()
             ),
             None,
@@ -2612,11 +2743,18 @@ class VIEW3D_PT_tools_active(ToolSelectPanelHelper, Panel):
                 (_defs_sculpt.mask_by_color,)
                 if context is None or (
                         context.preferences.view.show_developer_ui and
-                        context.preferences.experimental.use_sculpt_vertex_colors)
+                        context.preferences.experimental.use_sculpt_vertex_colors and
+                        context.preferences.experimental.use_tools_missing_icons)
                 else ()
             ),
             None,
-            _defs_sculpt.face_set_edit,
+            lambda context: (
+                (_defs_sculpt.face_set_edit,)
+                if context is None or (
+                        context.preferences.view.show_developer_ui and
+                        context.preferences.experimental.use_tools_missing_icons)
+                else ()
+            ),
             None,
             _defs_transform.translate,
             _defs_transform.rotate,
@@ -2729,6 +2867,8 @@ class VIEW3D_PT_tools_active(ToolSelectPanelHelper, Panel):
             ),
         ],
     }
+
+
 class SEQUENCER_PT_tools_active(ToolSelectPanelHelper, Panel):
     bl_space_type = 'SEQUENCE_EDITOR'
     bl_region_type = 'TOOLS'

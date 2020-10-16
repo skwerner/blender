@@ -79,7 +79,6 @@ typedef struct TransSnap {
   bool project;
   bool snap_self;
   bool peel;
-  bool snap_spatial_grid;
   bool use_backface_culling;
   char status;
   /* Snapped Element Type (currently for objects only). */
@@ -165,7 +164,7 @@ typedef struct MouseInput {
    * to avoid jumping values when its toggled.
    *
    * This works well for scaling drag motion,
-   * but not for rotating around a point (rotaton needs its own custom accumulator)
+   * but not for rotating around a point (rotation needs its own custom accumulator)
    */
   bool use_virtual_mval;
   struct {
@@ -283,7 +282,7 @@ typedef struct TransInfo {
   short state;
   /** Current context/options for transform. */
   int options;
-  /** Init value for some transformations (and rotation angle). */
+  /** Initial value for some transformations (and rotation angle). */
   float val;
   void (*transform)(struct TransInfo *, const int[2]);
   /** Transform function pointer. */
@@ -320,7 +319,7 @@ typedef struct TransInfo {
   float snap[3];
   /** Spatial snapping gears(even when rotating, scaling... etc). */
   float snap_spatial[3];
-  /** Mouse side of the cfra, 'L', 'R' or 'B' */
+  /** Mouse side of the current frame, 'L', 'R' or 'B' */
   char frame_side;
 
   /** copy from G.vd, prevents feedback. */
@@ -576,6 +575,9 @@ enum {
   TFM_MODAL_PROPSIZE = 26,
   /* node editor insert offset (aka auto-offset) direction toggle */
   TFM_MODAL_INSERTOFS_TOGGLE_DIR = 27,
+
+  TFM_MODAL_AUTOCONSTRAINT = 28,
+  TFM_MODAL_AUTOCONSTRAINTPLANE = 29,
 };
 
 bool initTransform(struct bContext *C,
@@ -693,7 +695,7 @@ void transform_data_ext_rotate(TransData *td, float mat[3][3], bool use_drot);
 /*********************** Transform Orientations ******************************/
 short transform_orientation_matrix_get(struct bContext *C,
                                        TransInfo *t,
-                                       const short orientation,
+                                       short orientation,
                                        const float custom[3][3],
                                        float r_spacemtx[3][3]);
 const char *transform_orientations_spacename_get(TransInfo *t, const short orient_type);
@@ -721,6 +723,8 @@ enum {
 #define ORIENTATION_USE_PLANE(ty) ELEM(ty, ORIENTATION_NORMAL, ORIENTATION_EDGE, ORIENTATION_FACE)
 
 int getTransformOrientation_ex(const struct bContext *C,
+                               struct Object *ob,
+                               struct Object *obedit,
                                float normal[3],
                                float plane[3],
                                const short around);

@@ -22,6 +22,8 @@
  * \ingroup imbuf
  */
 
+#include <math.h>
+
 #include "BLI_math_color.h"
 #include "BLI_math_interp.h"
 #include "BLI_utildefines.h"
@@ -877,7 +879,7 @@ static void q_scale_float(
  * Should be comparable in speed to the ImBuf ..._fast functions at least
  * for byte-buffers.
  *
- * NOTE: disabled, due to unacceptable inaccuracy and quality loss, see bug #18609 (ton)
+ * NOTE: disabled, due to unacceptable inaccuracy and quality loss, see bug T18609 (ton)
  */
 static bool q_scale_linear_interpolation(struct ImBuf *ibuf, int newx, int newy)
 {
@@ -1000,10 +1002,10 @@ static ImBuf *scaledownx(struct ImBuf *ibuf, int newx)
         val[3] = rect[3];
         rect += 4;
 
-        newrect[0] = ((nval[0] + sample * val[0]) / add + 0.5f);
-        newrect[1] = ((nval[1] + sample * val[1]) / add + 0.5f);
-        newrect[2] = ((nval[2] + sample * val[2]) / add + 0.5f);
-        newrect[3] = ((nval[3] + sample * val[3]) / add + 0.5f);
+        newrect[0] = roundf((nval[0] + sample * val[0]) / add);
+        newrect[1] = roundf((nval[1] + sample * val[1]) / add);
+        newrect[2] = roundf((nval[2] + sample * val[2]) / add);
+        newrect[3] = roundf((nval[3] + sample * val[3]) / add);
 
         newrect += 4;
       }
@@ -1029,14 +1031,14 @@ static ImBuf *scaledownx(struct ImBuf *ibuf, int newx)
 
   if (do_rect) {
     // printf("%ld %ld\n", (uchar *)rect - ((uchar *)ibuf->rect), rect_size);
-    BLI_assert((uchar *)rect - ((uchar *)ibuf->rect) == rect_size); /* see bug [#26502] */
+    BLI_assert((uchar *)rect - ((uchar *)ibuf->rect) == rect_size); /* see bug T26502. */
     imb_freerectImBuf(ibuf);
     ibuf->mall |= IB_rect;
     ibuf->rect = (unsigned int *)_newrect;
   }
   if (do_float) {
     // printf("%ld %ld\n", rectf - ibuf->rect_float, rect_size);
-    BLI_assert((rectf - ibuf->rect_float) == rect_size); /* see bug [#26502] */
+    BLI_assert((rectf - ibuf->rect_float) == rect_size); /* see bug T26502. */
     imb_freerectfloatImBuf(ibuf);
     ibuf->mall |= IB_rectfloat;
     ibuf->rect_float = _newrectf;
@@ -1142,10 +1144,10 @@ static ImBuf *scaledowny(struct ImBuf *ibuf, int newy)
         val[3] = rect[3];
         rect += skipx;
 
-        newrect[0] = ((nval[0] + sample * val[0]) / add + 0.5f);
-        newrect[1] = ((nval[1] + sample * val[1]) / add + 0.5f);
-        newrect[2] = ((nval[2] + sample * val[2]) / add + 0.5f);
-        newrect[3] = ((nval[3] + sample * val[3]) / add + 0.5f);
+        newrect[0] = roundf((nval[0] + sample * val[0]) / add);
+        newrect[1] = roundf((nval[1] + sample * val[1]) / add);
+        newrect[2] = roundf((nval[2] + sample * val[2]) / add);
+        newrect[3] = roundf((nval[3] + sample * val[3]) / add);
 
         newrect += skipx;
       }
@@ -1171,14 +1173,14 @@ static ImBuf *scaledowny(struct ImBuf *ibuf, int newy)
 
   if (do_rect) {
     // printf("%ld %ld\n", (uchar *)rect - ((uchar *)ibuf->rect), rect_size);
-    BLI_assert((uchar *)rect - ((uchar *)ibuf->rect) == rect_size); /* see bug [#26502] */
+    BLI_assert((uchar *)rect - ((uchar *)ibuf->rect) == rect_size); /* see bug T26502. */
     imb_freerectImBuf(ibuf);
     ibuf->mall |= IB_rect;
     ibuf->rect = (unsigned int *)_newrect;
   }
   if (do_float) {
     // printf("%ld %ld\n", rectf - ibuf->rect_float, rect_size);
-    BLI_assert((rectf - ibuf->rect_float) == rect_size); /* see bug [#26502] */
+    BLI_assert((rectf - ibuf->rect_float) == rect_size); /* see bug T26502. */
     imb_freerectfloatImBuf(ibuf);
     ibuf->mall |= IB_rectfloat;
     ibuf->rect_float = (float *)_newrectf;
@@ -1573,8 +1575,8 @@ static void scalefast_Z_ImBuf(ImBuf *ibuf, int newx, int newy)
     return;
   }
 
-  stepx = (65536.0 * (ibuf->x - 1.0) / (newx - 1.0)) + 0.5;
-  stepy = (65536.0 * (ibuf->y - 1.0) / (newy - 1.0)) + 0.5;
+  stepx = round(65536.0 * (ibuf->x - 1.0) / (newx - 1.0));
+  stepy = round(65536.0 * (ibuf->y - 1.0) / (newy - 1.0));
   ofsy = 32768;
 
   newzbuf = _newzbuf;
@@ -1634,7 +1636,7 @@ bool IMB_scaleImBuf(struct ImBuf *ibuf, unsigned int newx, unsigned int newy)
   scalefast_Z_ImBuf(ibuf, newx, newy);
 
   /* try to scale common cases in a fast way */
-  /* disabled, quality loss is unacceptable, see report #18609  (ton) */
+  /* disabled, quality loss is unacceptable, see report T18609  (ton) */
   if (0 && q_scale_linear_interpolation(ibuf, newx, newy)) {
     return true;
   }
@@ -1713,8 +1715,8 @@ bool IMB_scalefastImBuf(struct ImBuf *ibuf, unsigned int newx, unsigned int newy
     newrectf = _newrectf;
   }
 
-  stepx = (65536.0 * (ibuf->x - 1.0) / (newx - 1.0)) + 0.5;
-  stepy = (65536.0 * (ibuf->y - 1.0) / (newy - 1.0)) + 0.5;
+  stepx = round(65536.0 * (ibuf->x - 1.0) / (newx - 1.0));
+  stepy = round(65536.0 * (ibuf->y - 1.0) / (newy - 1.0));
   ofsy = 32768;
 
   for (y = newy; y > 0; y--, ofsy += stepy) {

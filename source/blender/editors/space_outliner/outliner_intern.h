@@ -222,7 +222,6 @@ typedef enum TreeItemSelectAction {
   OL_ITEM_ACTIVATE = (1 << 2),    /* Activate the item */
   OL_ITEM_EXTEND = (1 << 3),      /* Extend the current selection */
   OL_ITEM_RECURSIVE = (1 << 4),   /* Select recursively */
-  OL_ITEM_TOGGLE_MODE = (1 << 5)  /* Temporary */
 } TreeItemSelectAction;
 
 /* outliner_tree.c ----------------------------------------------- */
@@ -277,18 +276,21 @@ eOLDrawState tree_element_active(struct bContext *C,
                                  const eOLSetState set,
                                  const bool handle_all_types);
 
+struct bPoseChannel *outliner_find_parent_bone(TreeElement *te, TreeElement **r_bone_te);
+
 void outliner_item_select(struct bContext *C,
                           struct SpaceOutliner *space_outliner,
                           struct TreeElement *te,
                           const short select_flag);
 
-void outliner_object_mode_toggle(struct bContext *C,
-                                 Scene *scene,
-                                 ViewLayer *view_layer,
-                                 Base *base);
-
 bool outliner_item_is_co_over_name_icons(const TreeElement *te, float view_co_x);
 bool outliner_item_is_co_within_close_toggle(const TreeElement *te, float view_co_x);
+bool outliner_is_co_within_mode_column(SpaceOutliner *space_outliner, const float view_mval[2]);
+
+void outliner_item_mode_toggle(struct bContext *C,
+                               TreeViewContext *tvc,
+                               TreeElement *te,
+                               const bool do_extend);
 
 /* outliner_edit.c ---------------------------------------------- */
 typedef void (*outliner_operation_fn)(struct bContext *C,
@@ -374,7 +376,10 @@ void item_object_mode_exit_fn(struct bContext *C,
 
 void outliner_set_coordinates(struct ARegion *region, struct SpaceOutliner *space_outliner);
 
-void outliner_item_openclose(TreeElement *te, bool open, bool toggle_all);
+void outliner_item_openclose(struct SpaceOutliner *space_outliner,
+                             TreeElement *te,
+                             bool open,
+                             bool toggle_all);
 
 /* outliner_dragdrop.c */
 void outliner_dropboxes(void);
@@ -384,6 +389,7 @@ void OUTLINER_OT_parent_drop(struct wmOperatorType *ot);
 void OUTLINER_OT_parent_clear(struct wmOperatorType *ot);
 void OUTLINER_OT_scene_drop(struct wmOperatorType *ot);
 void OUTLINER_OT_material_drop(struct wmOperatorType *ot);
+void OUTLINER_OT_datastack_drop(struct wmOperatorType *ot);
 void OUTLINER_OT_collection_drop(struct wmOperatorType *ot);
 
 /* ...................................................... */
@@ -482,6 +488,8 @@ void OUTLINER_OT_collection_disable_render(struct wmOperatorType *ot);
 void OUTLINER_OT_hide(struct wmOperatorType *ot);
 void OUTLINER_OT_unhide_all(struct wmOperatorType *ot);
 
+void OUTLINER_OT_collection_color_tag_set(struct wmOperatorType *ot);
+
 /* outliner_utils.c ---------------------------------------------- */
 
 void outliner_viewcontext_init(const struct bContext *C, TreeViewContext *tvc);
@@ -492,7 +500,7 @@ TreeElement *outliner_find_item_at_y(const SpaceOutliner *space_outliner,
 TreeElement *outliner_find_item_at_x_in_row(const SpaceOutliner *space_outliner,
                                             const TreeElement *parent_te,
                                             float view_co_x,
-                                            bool *multiple_objects);
+                                            bool *row_merged);
 TreeElement *outliner_find_tse(struct SpaceOutliner *space_outliner, const TreeStoreElem *tse);
 TreeElement *outliner_find_tree_element(ListBase *lb, const TreeStoreElem *store_elem);
 TreeElement *outliner_find_parent_element(ListBase *lb,

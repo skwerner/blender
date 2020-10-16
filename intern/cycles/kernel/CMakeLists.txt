@@ -1,3 +1,17 @@
+# Copyright 2011-2020 Blender Foundation
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 remove_extra_strict_flags()
 
 set(INC
@@ -428,6 +442,12 @@ if(WITH_CYCLES_CUDA_BINARIES)
       set(cuda_flags ${cuda_flags} -D __KERNEL_DEBUG__)
     endif()
 
+    if(WITH_NANOVDB)
+      set(cuda_flags ${cuda_flags}
+        -D WITH_NANOVDB
+        -I "${NANOVDB_INCLUDE_DIR}")
+    endif()
+
     if(WITH_CYCLES_CUBIN_COMPILER)
       string(SUBSTRING ${arch} 3 -1 CUDA_ARCH)
 
@@ -513,8 +533,14 @@ if(WITH_CYCLES_DEVICE_OPTIX AND WITH_CYCLES_CUDA_BINARIES)
       set(cuda_flags ${cuda_flags}
         -D __KERNEL_DEBUG__)
     endif()
-    if(WITH_CYCLES_CUBIN_COMPILER)
 
+    if(WITH_NANOVDB)
+      set(cuda_flags ${cuda_flags}
+        -D WITH_NANOVDB
+        -I "${NANOVDB_INCLUDE_DIR}")
+    endif()
+
+    if(WITH_CYCLES_CUBIN_COMPILER)
       # Needed to find libnvrtc-builtins.so. Can't do it from inside
       # cycles_cubin_cc since the env variable is read before main()
       if(APPLE)
@@ -695,3 +721,17 @@ delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_SVM_HEADERS}" ${CYCLES_INSTAL
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_GEOM_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/geom)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_UTIL_HEADERS}" ${CYCLES_INSTALL_PATH}/source/util)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_SPLIT_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/split)
+
+
+if(WITH_NANOVDB)
+  set(SRC_NANOVDB_HEADERS
+    nanovdb/NanoVDB.h
+    nanovdb/CNanoVDB.h
+  )
+  set(SRC_NANOVDB_UTIL_HEADERS
+    nanovdb/util/CSampleFromVoxels.h
+    nanovdb/util/SampleFromVoxels.h
+  )
+  delayed_install(${NANOVDB_INCLUDE_DIR} "${SRC_NANOVDB_HEADERS}" ${CYCLES_INSTALL_PATH}/source/nanovdb)
+  delayed_install(${NANOVDB_INCLUDE_DIR} "${SRC_NANOVDB_UTIL_HEADERS}" ${CYCLES_INSTALL_PATH}/source/nanovdb/util)
+endif()

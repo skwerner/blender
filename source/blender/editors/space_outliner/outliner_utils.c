@@ -30,12 +30,12 @@
 #include "DNA_screen_types.h"
 #include "DNA_space_types.h"
 
+#include "BKE_armature.h"
 #include "BKE_context.h"
 #include "BKE_layer.h"
 #include "BKE_object.h"
 #include "BKE_outliner_treehash.h"
 
-#include "ED_armature.h"
 #include "ED_outliner.h"
 #include "ED_screen.h"
 
@@ -113,7 +113,7 @@ TreeElement *outliner_find_item_at_y(const SpaceOutliner *space_outliner,
 
 static TreeElement *outliner_find_item_at_x_in_row_recursive(const TreeElement *parent_te,
                                                              float view_co_x,
-                                                             bool *r_merged)
+                                                             bool *row_merged)
 {
   TreeElement *child_te = parent_te->subtree.first;
 
@@ -125,13 +125,13 @@ static TreeElement *outliner_find_item_at_x_in_row_recursive(const TreeElement *
       return child_te;
     }
     if ((child_te->flag & TE_ICONROW_MERGED) && over_element) {
-      if (r_merged) {
-        *r_merged = true;
+      if (row_merged) {
+        *row_merged = true;
       }
       return child_te;
     }
 
-    TreeElement *te = outliner_find_item_at_x_in_row_recursive(child_te, view_co_x, r_merged);
+    TreeElement *te = outliner_find_item_at_x_in_row_recursive(child_te, view_co_x, row_merged);
     if (te != child_te) {
       return te;
     }
@@ -152,11 +152,11 @@ static TreeElement *outliner_find_item_at_x_in_row_recursive(const TreeElement *
 TreeElement *outliner_find_item_at_x_in_row(const SpaceOutliner *space_outliner,
                                             const TreeElement *parent_te,
                                             float view_co_x,
-                                            bool *r_merged)
+                                            bool *row_merged)
 {
   /* if parent_te is opened, it doesn't show children in row */
   if (!TSELEM_OPEN(TREESTORE(parent_te), space_outliner)) {
-    return outliner_find_item_at_x_in_row_recursive(parent_te, view_co_x, r_merged);
+    return outliner_find_item_at_x_in_row_recursive(parent_te, view_co_x, row_merged);
   }
 
   return (TreeElement *)parent_te;
@@ -165,12 +165,11 @@ TreeElement *outliner_find_item_at_x_in_row(const SpaceOutliner *space_outliner,
 /* Find specific item from the treestore */
 TreeElement *outliner_find_tree_element(ListBase *lb, const TreeStoreElem *store_elem)
 {
-  TreeElement *te, *tes;
-  for (te = lb->first; te; te = te->next) {
+  LISTBASE_FOREACH (TreeElement *, te, lb) {
     if (te->store_elem == store_elem) {
       return te;
     }
-    tes = outliner_find_tree_element(&te->subtree, store_elem);
+    TreeElement *tes = outliner_find_tree_element(&te->subtree, store_elem);
     if (tes) {
       return tes;
     }
@@ -183,8 +182,7 @@ TreeElement *outliner_find_parent_element(ListBase *lb,
                                           TreeElement *parent_te,
                                           const TreeElement *child_te)
 {
-  TreeElement *te;
-  for (te = lb->first; te; te = te->next) {
+  LISTBASE_FOREACH (TreeElement *, te, lb) {
     if (te == child_te) {
       return parent_te;
     }
@@ -360,6 +358,9 @@ float outliner_restrict_columns_width(const SpaceOutliner *space_outliner)
       num_columns = 3;
       break;
     case SO_VIEW_LAYER:
+      if (space_outliner->show_restrict_flags & SO_RESTRICT_ENABLE) {
+        num_columns++;
+      }
       if (space_outliner->show_restrict_flags & SO_RESTRICT_HOLDOUT) {
         num_columns++;
       }

@@ -26,6 +26,7 @@
 
 #include "BLT_translation.h"
 
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
@@ -150,11 +151,10 @@ enum {
 static void initData(ModifierData *md)
 {
   SurfaceDeformModifierData *smd = (SurfaceDeformModifierData *)md;
-  smd->target = NULL;
-  smd->verts = NULL;
-  smd->flags = 0;
-  smd->falloff = 4.0f;
-  smd->strength = 1.0f;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(smd, modifier));
+
+  MEMCPY_STRUCT_AFTER(smd, DNA_struct_default_get(SurfaceDeformModifierData), modifier);
 }
 
 static void requiredDataMask(Object *UNUSED(ob),
@@ -218,11 +218,11 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
   }
 }
 
-static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk, void *userData)
+static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   SurfaceDeformModifierData *smd = (SurfaceDeformModifierData *)md;
 
-  walk(userData, ob, &smd->target, IDWALK_NOP);
+  walk(userData, ob, (ID **)&smd->target, IDWALK_NOP);
 }
 
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
@@ -1397,29 +1397,28 @@ static bool isDisabled(const Scene *UNUSED(scene), ModifierData *md, bool UNUSED
          !(smd->verts != NULL && !(smd->flags & MOD_SDEF_BIND));
 }
 
-static void panel_draw(const bContext *C, Panel *panel)
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *col;
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
   PointerRNA ob_ptr;
-  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
 
-  PointerRNA target_ptr = RNA_pointer_get(&ptr, "target");
+  PointerRNA target_ptr = RNA_pointer_get(ptr, "target");
 
-  bool is_bound = RNA_boolean_get(&ptr, "is_bound");
+  bool is_bound = RNA_boolean_get(ptr, "is_bound");
 
   uiLayoutSetPropSep(layout, true);
 
   col = uiLayoutColumn(layout, false);
   uiLayoutSetActive(col, !is_bound);
-  uiItemR(col, &ptr, "target", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "target", 0, NULL, ICON_NONE);
 
-  uiItemR(col, &ptr, "falloff", 0, NULL, ICON_NONE);
-  uiItemR(col, &ptr, "strength", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "falloff", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "strength", 0, NULL, ICON_NONE);
 
-  modifier_vgroup_ui(layout, &ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
+  modifier_vgroup_ui(layout, ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
 
   uiItemS(layout);
 
@@ -1431,7 +1430,7 @@ static void panel_draw(const bContext *C, Panel *panel)
     uiLayoutSetActive(col, !RNA_pointer_is_null(&target_ptr));
     uiItemO(col, IFACE_("Bind"), ICON_NONE, "OBJECT_OT_surfacedeform_bind");
   }
-  modifier_panel_end(layout, &ptr);
+  modifier_panel_end(layout, ptr);
 }
 
 static void panelRegister(ARegionType *region_type)
@@ -1501,8 +1500,10 @@ ModifierTypeInfo modifierType_SurfaceDeform = {
     /* name */ "SurfaceDeform",
     /* structName */ "SurfaceDeformModifierData",
     /* structSize */ sizeof(SurfaceDeformModifierData),
+    /* srna */ &RNA_SurfaceDeformModifier,
     /* type */ eModifierTypeType_OnlyDeform,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsEditmode,
+    /* icon */ ICON_MOD_MESHDEFORM,
 
     /* copyData */ copyData,
 
@@ -1522,8 +1523,7 @@ ModifierTypeInfo modifierType_SurfaceDeform = {
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
     /* panelRegister */ panelRegister,

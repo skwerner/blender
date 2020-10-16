@@ -113,7 +113,7 @@ bool OVERLAY_armature_is_pose_mode(Object *ob, const DRWContextState *draw_ctx)
   }
 
   /* Armature parent is also handled by pose mode engine. */
-  if ((active_ob != NULL) && ((draw_ctx->object_mode & OB_MODE_WEIGHT_PAINT) != 0)) {
+  if ((active_ob != NULL) && (draw_ctx->object_mode & OB_MODE_ALL_WEIGHT_PAINT)) {
     if (ob == draw_ctx->object_pose) {
       return true;
     }
@@ -534,7 +534,7 @@ static void drw_shgroup_bone_custom_solid(ArmatureDrawContext *ctx,
                                           const float outline_color[4],
                                           Object *custom)
 {
-  /* TODO(fclem) arg... less than ideal but we never iter on this object
+  /* TODO(fclem): arg... less than ideal but we never iter on this object
    * to assure batch cache is valid. */
   drw_batch_cache_validate(custom);
 
@@ -568,7 +568,7 @@ static void drw_shgroup_bone_custom_solid(ArmatureDrawContext *ctx,
     DRW_buffer_add_entry_struct(buf, inst_data.mat);
   }
 
-  /* TODO(fclem) needs to be moved elsewhere. */
+  /* TODO(fclem): needs to be moved elsewhere. */
   drw_batch_cache_generate_requested_delayed(custom);
 }
 
@@ -577,7 +577,7 @@ static void drw_shgroup_bone_custom_wire(ArmatureDrawContext *ctx,
                                          const float color[4],
                                          Object *custom)
 {
-  /* TODO(fclem) arg... less than ideal but we never iter on this object
+  /* TODO(fclem): arg... less than ideal but we never iter on this object
    * to assure batch cache is valid. */
   drw_batch_cache_validate(custom);
 
@@ -592,7 +592,7 @@ static void drw_shgroup_bone_custom_wire(ArmatureDrawContext *ctx,
     DRW_buffer_add_entry_struct(buf, inst_data.mat);
   }
 
-  /* TODO(fclem) needs to be moved elsewhere. */
+  /* TODO(fclem): needs to be moved elsewhere. */
   drw_batch_cache_generate_requested_delayed(custom);
 }
 
@@ -2000,7 +2000,7 @@ static void draw_armature_pose(ArmatureDrawContext *ctx)
                   (scene->toolsettings->object_flag & SCE_OBJECT_MODE_LOCK) == 0) ||
                  /* Allow selection when in weight-paint mode
                   * (selection code ensures this wont become active). */
-                 ((draw_ctx->object_mode == OB_MODE_WEIGHT_PAINT) &&
+                 ((draw_ctx->object_mode & OB_MODE_ALL_WEIGHT_PAINT) &&
                   (draw_ctx->object_pose != NULL))))) &&
         DRW_state_is_select();
 
@@ -2011,7 +2011,7 @@ static void draw_armature_pose(ArmatureDrawContext *ctx)
   }
 
   /* In weight paint mode retrieve the vertex group lock status. */
-  if ((draw_ctx->object_mode == OB_MODE_WEIGHT_PAINT) && (draw_ctx->object_pose == ob) &&
+  if ((draw_ctx->object_mode & OB_MODE_ALL_WEIGHT_PAINT) && (draw_ctx->object_pose == ob) &&
       (draw_ctx->obact != NULL)) {
     draw_locked_weights = true;
 

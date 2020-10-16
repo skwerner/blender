@@ -4254,20 +4254,26 @@ short ANIM_channel_setting_get(bAnimContext *ac, bAnimListElem *ale, eAnimChanne
 #define ACF_SETTING_SET(sval, sflag, smode) \
   { \
     if (negflag) { \
-      if (smode == ACHANNEL_SETFLAG_INVERT) \
+      if (smode == ACHANNEL_SETFLAG_INVERT) { \
         (sval) ^= (sflag); \
-      else if (smode == ACHANNEL_SETFLAG_ADD) \
+      } \
+      else if (smode == ACHANNEL_SETFLAG_ADD) { \
         (sval) &= ~(sflag); \
-      else \
+      } \
+      else { \
         (sval) |= (sflag); \
+      } \
     } \
     else { \
-      if (smode == ACHANNEL_SETFLAG_INVERT) \
+      if (smode == ACHANNEL_SETFLAG_INVERT) { \
         (sval) ^= (sflag); \
-      else if (smode == ACHANNEL_SETFLAG_ADD) \
+      } \
+      else if (smode == ACHANNEL_SETFLAG_ADD) { \
         (sval) |= (sflag); \
-      else \
+      } \
+      else { \
         (sval) &= ~(sflag); \
+      } \
     } \
   } \
   (void)0
@@ -4406,7 +4412,7 @@ void ANIM_channel_draw(
   }
 
   /* step 4) draw special toggles  .................................
-   * - in Graph Editor, checkboxes for visibility in curves area
+   * - in Graph Editor, check-boxes for visibility in curves area
    * - in NLA Editor, glowing dots for solo/not solo...
    * - in Grease Pencil mode, color swatches for layer color
    */

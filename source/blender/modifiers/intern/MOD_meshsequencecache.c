@@ -26,6 +26,7 @@
 #include "BLT_translation.h"
 
 #include "DNA_cachefile_types.h"
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
@@ -64,15 +65,9 @@ static void initData(ModifierData *md)
 {
   MeshSeqCacheModifierData *mcmd = (MeshSeqCacheModifierData *)md;
 
-  mcmd->cache_file = NULL;
-  mcmd->object_path[0] = '\0';
-  mcmd->read_flag = MOD_MESHSEQ_READ_ALL;
-  mcmd->velocity_scale = 1.0f;
-  mcmd->vertex_velocities = NULL;
-  mcmd->num_vertices = 0;
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(mcmd, modifier));
 
-  mcmd->reader = NULL;
-  mcmd->reader_object_path[0] = '\0';
+  MEMCPY_STRUCT_AFTER(mcmd, DNA_struct_default_get(MeshSeqCacheModifierData), modifier);
 }
 
 static void copyData(const ModifierData *md, ModifierData *target, const int flag)
@@ -222,28 +217,28 @@ static void panel_draw(const bContext *C, Panel *panel)
 {
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
   PointerRNA ob_ptr;
-  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
 
-  PointerRNA cache_file_ptr = RNA_pointer_get(&ptr, "cache_file");
+  PointerRNA cache_file_ptr = RNA_pointer_get(ptr, "cache_file");
   bool has_cache_file = !RNA_pointer_is_null(&cache_file_ptr);
 
   uiLayoutSetPropSep(layout, true);
 
-  uiTemplateCacheFile(layout, C, &ptr, "cache_file");
+  uiTemplateCacheFile(layout, C, ptr, "cache_file");
 
   if (has_cache_file) {
-    uiItemPointerR(layout, &ptr, "object_path", &cache_file_ptr, "object_paths", NULL, ICON_NONE);
+    uiItemPointerR(layout, ptr, "object_path", &cache_file_ptr, "object_paths", NULL, ICON_NONE);
   }
 
   if (RNA_enum_get(&ob_ptr, "type") == OB_MESH) {
-    uiItemR(layout, &ptr, "read_data", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+    uiItemR(layout, ptr, "read_data", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+    uiItemR(layout, ptr, "use_vertex_interpolation", 0, NULL, ICON_NONE);
   }
 
-  uiItemR(layout, &ptr, "velocity_scale", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "velocity_scale", 0, NULL, ICON_NONE);
 
-  modifier_panel_end(layout, &ptr);
+  modifier_panel_end(layout, ptr);
 }
 
 static void panelRegister(ARegionType *region_type)
@@ -262,8 +257,10 @@ ModifierTypeInfo modifierType_MeshSequenceCache = {
     /* name */ "MeshSequenceCache",
     /* structName */ "MeshSeqCacheModifierData",
     /* structSize */ sizeof(MeshSeqCacheModifierData),
+    /* srna */ &RNA_MeshSequenceCacheModifier,
     /* type */ eModifierTypeType_Constructive,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_AcceptsCVs,
+    /* icon */ ICON_MOD_MESHDEFORM, /* TODO: Use correct icon. */
 
     /* copyData */ copyData,
 
@@ -283,7 +280,6 @@ ModifierTypeInfo modifierType_MeshSequenceCache = {
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ dependsOnTime,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ NULL,
     /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,

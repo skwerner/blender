@@ -198,6 +198,20 @@ void EEVEE_lookdev_cache_init(EEVEE_Data *vedata,
 
     DRWShadingGroup *grp = DRW_shgroup_create(shader, pass);
     axis_angle_to_mat3_single(g_data->studiolight_matrix, 'Z', shading->studiolight_rot_z);
+
+    float studiolight_matrix[3][3] = {{0.0f}};
+    if (shading->flag & V3D_SHADING_STUDIOLIGHT_VIEW_ROTATION) {
+      float view_matrix[4][4];
+      float view_rot_matrix[3][3];
+      float x_rot_matrix[3][3];
+      DRW_view_viewmat_get(NULL, view_matrix, false);
+      copy_m3_m4(view_rot_matrix, view_matrix);
+      axis_angle_to_mat3_single(x_rot_matrix, 'X', M_PI / 2.0f);
+      mul_m3_m3m3(view_rot_matrix, x_rot_matrix, view_rot_matrix);
+      mul_m3_m3m3(view_rot_matrix, g_data->studiolight_matrix, view_rot_matrix);
+      copy_m3_m3(studiolight_matrix, view_rot_matrix);
+    }
+
     DRW_shgroup_uniform_mat3(grp, "StudioLightMatrix", g_data->studiolight_matrix);
 
     if (probe_render) {
@@ -222,6 +236,8 @@ void EEVEE_lookdev_cache_init(EEVEE_Data *vedata,
 
     /* Do we need to recalc the lightprobes? */
     if (g_data->studiolight_index != sl->index ||
+        (shading->flag & V3D_SHADING_STUDIOLIGHT_VIEW_ROTATION &&
+         !equals_m3m3(g_data->studiolight_matrix, studiolight_matrix)) ||
         g_data->studiolight_rot_z != shading->studiolight_rot_z ||
         g_data->studiolight_intensity != shading->studiolight_intensity ||
         g_data->studiolight_cubemap_res != scene->eevee.gi_cubemap_resolution ||
@@ -229,6 +245,7 @@ void EEVEE_lookdev_cache_init(EEVEE_Data *vedata,
         g_data->studiolight_filter_quality != scene->eevee.gi_filter_quality) {
       stl->lookdev_lightcache->flag |= LIGHTCACHE_UPDATE_WORLD;
       g_data->studiolight_index = sl->index;
+      copy_m3_m3(g_data->studiolight_matrix, studiolight_matrix);
       g_data->studiolight_rot_z = shading->studiolight_rot_z;
       g_data->studiolight_intensity = shading->studiolight_intensity;
       g_data->studiolight_cubemap_res = scene->eevee.gi_cubemap_resolution;
@@ -275,7 +292,7 @@ void EEVEE_lookdev_draw(EEVEE_Data *vedata)
     common->ao_dist = 0.0f;
     common->ao_factor = 0.0f;
     common->ao_settings = 0.0f;
-    DRW_uniformbuffer_update(sldata->common_ubo, common);
+    GPU_uniformbuf_update(sldata->common_ubo, common);
 
     /* override matrices */
     float winmat[4][4], viewmat[4][4];
@@ -330,6 +347,8 @@ void EEVEE_lookdev_draw(EEVEE_Data *vedata)
                                  effects->sphere_size);
 
     DRW_draw_pass(psl->lookdev_glossy_pass);
+
+    GPU_framebuffer_viewport_reset(fb);
 
     DRW_stats_group_end();
 

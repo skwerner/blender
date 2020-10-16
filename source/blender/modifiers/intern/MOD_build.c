@@ -29,6 +29,7 @@
 #include "BLI_math_vector.h"
 #include "BLI_rand.h"
 
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
@@ -55,8 +56,9 @@ static void initData(ModifierData *md)
 {
   BuildModifierData *bmd = (BuildModifierData *)md;
 
-  bmd->start = 1.0;
-  bmd->length = 100.0;
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(bmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(bmd, DNA_struct_default_get(BuildModifierData), modifier);
 }
 
 static bool dependsOnTime(ModifierData *UNUSED(md))
@@ -284,43 +286,40 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, struct
   return result;
 }
 
-static void panel_draw(const bContext *C, Panel *panel)
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
 
   uiLayoutSetPropSep(layout, true);
 
-  uiItemR(layout, &ptr, "frame_start", 0, NULL, ICON_NONE);
-  uiItemR(layout, &ptr, "frame_duration", 0, NULL, ICON_NONE);
-  uiItemR(layout, &ptr, "use_reverse", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "frame_start", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "frame_duration", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "use_reverse", 0, NULL, ICON_NONE);
 
-  modifier_panel_end(layout, &ptr);
+  modifier_panel_end(layout, ptr);
 }
 
-static void random_panel_header_draw(const bContext *C, Panel *panel)
+static void random_panel_header_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
 
-  uiItemR(layout, &ptr, "use_random_order", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "use_random_order", 0, NULL, ICON_NONE);
 }
 
-static void random_panel_draw(const bContext *C, Panel *panel)
+static void random_panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
 
   uiLayoutSetPropSep(layout, true);
 
-  uiLayoutSetActive(layout, RNA_boolean_get(&ptr, "use_random_order"));
-  uiItemR(layout, &ptr, "seed", 0, NULL, ICON_NONE);
+  uiLayoutSetActive(layout, RNA_boolean_get(ptr, "use_random_order"));
+  uiItemR(layout, ptr, "seed", 0, NULL, ICON_NONE);
 }
 
 static void panelRegister(ARegionType *region_type)
@@ -334,8 +333,10 @@ ModifierTypeInfo modifierType_Build = {
     /* name */ "Build",
     /* structName */ "BuildModifierData",
     /* structSize */ sizeof(BuildModifierData),
+    /* srna */ &RNA_BuildModifier,
     /* type */ eModifierTypeType_Nonconstructive,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_AcceptsCVs,
+    /* icon */ ICON_MOD_BUILD,
 
     /* copyData */ BKE_modifier_copydata_generic,
 
@@ -355,7 +356,6 @@ ModifierTypeInfo modifierType_Build = {
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ dependsOnTime,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ NULL,
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,

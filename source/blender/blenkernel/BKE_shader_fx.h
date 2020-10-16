@@ -62,11 +62,6 @@ typedef enum {
   eShaderFxTypeFlag_NoUserAdd = (1 << 5),
 } ShaderFxTypeFlag;
 
-/* IMPORTANT! Keep ObjectWalkFunc and IDWalkFunc signatures compatible. */
-typedef void (*ShaderFxObjectWalkFunc)(void *userData,
-                                       struct Object *ob,
-                                       struct Object **obpoin,
-                                       int cb_flag);
 typedef void (*ShaderFxIDWalkFunc)(void *userData,
                                    struct Object *ob,
                                    struct ID **idpoin,
@@ -134,24 +129,12 @@ typedef struct ShaderFxTypeInfo {
    */
   bool (*dependsOnTime)(struct ShaderFxData *fx);
 
-  /* Should call the given walk function on with a pointer to each Object
-   * pointer that the effect data stores. This is used for linking on file
-   * load and for unlinking objects or forwarding object references.
-   *
-   * This function is optional.
-   */
-  void (*foreachObjectLink)(struct ShaderFxData *fx,
-                            struct Object *ob,
-                            ShaderFxObjectWalkFunc walk,
-                            void *userData);
-
   /* Should call the given walk function with a pointer to each ID
    * pointer (i.e. each data-block pointer) that the effect data
    * stores. This is used for linking on file load and for
    * unlinking data-blocks or forwarding data-block references.
    *
-   * This function is optional. If it is not present, foreachObjectLink
-   * will be used.
+   * This function is optional.
    */
   void (*foreachIDLink)(struct ShaderFxData *fx,
                         struct Object *ob,
@@ -167,7 +150,7 @@ typedef struct ShaderFxTypeInfo {
 /* Initialize  global data (type info and some common global storages). */
 void BKE_shaderfx_init(void);
 
-void BKE_shaderfxType_panel_id(ShaderFxType type, char *panel_id);
+void BKE_shaderfxType_panel_id(ShaderFxType type, char *r_idname);
 const ShaderFxTypeInfo *BKE_shaderfx_get_info(ShaderFxType type);
 struct ShaderFxData *BKE_shaderfx_new(int type);
 void BKE_shaderfx_free_ex(struct ShaderFxData *fx, const int flag);
@@ -181,6 +164,7 @@ void BKE_shaderfx_copydata(struct ShaderFxData *fx, struct ShaderFxData *target)
 void BKE_shaderfx_copydata_ex(struct ShaderFxData *fx,
                               struct ShaderFxData *target,
                               const int flag);
+void BKE_shaderfx_copy(struct ListBase *dst, const struct ListBase *src);
 void BKE_shaderfx_foreach_ID_link(struct Object *ob, ShaderFxIDWalkFunc walk, void *userData);
 
 bool BKE_shaderfx_has_gpencil(struct Object *ob);

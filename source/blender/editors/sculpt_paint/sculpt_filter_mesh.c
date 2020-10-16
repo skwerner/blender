@@ -97,6 +97,17 @@ void SCULPT_filter_to_object_space(float r_v[3], struct FilterCache *filter_cach
   }
 }
 
+void SCULPT_filter_zero_disabled_axis_components(float r_v[3], struct FilterCache *filter_cache)
+{
+  SCULPT_filter_to_orientation_space(r_v, filter_cache);
+  for (int axis = 0; axis < 3; axis++) {
+    if (!filter_cache->enabled_force_axis[axis]) {
+      r_v[axis] = 0.0f;
+    }
+  }
+  SCULPT_filter_to_object_space(r_v, filter_cache);
+}
+
 static void filter_cache_init_task_cb(void *__restrict userdata,
                                       const int i,
                                       const TaskParallelTLS *__restrict UNUSED(tls))
@@ -636,7 +647,7 @@ static int sculpt_mesh_filter_modal(bContext *C, wmOperator *op, const wmEvent *
     return OPERATOR_RUNNING_MODAL;
   }
 
-  float len = event->prevclickx - event->mval[0];
+  const float len = event->prevclickx - event->x;
   filter_strength = filter_strength * -len * 0.001f * UI_DPI_FAC;
 
   SCULPT_vertex_random_access_ensure(ss);

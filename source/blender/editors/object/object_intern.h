@@ -63,6 +63,7 @@ void OBJECT_OT_track_set(struct wmOperatorType *ot);
 void OBJECT_OT_track_clear(struct wmOperatorType *ot);
 void OBJECT_OT_make_local(struct wmOperatorType *ot);
 void OBJECT_OT_make_override_library(struct wmOperatorType *ot);
+void OBJECT_OT_convert_proxy_to_override(struct wmOperatorType *ot);
 void OBJECT_OT_make_single_user(struct wmOperatorType *ot);
 void OBJECT_OT_make_links_scene(struct wmOperatorType *ot);
 void OBJECT_OT_make_links_data(struct wmOperatorType *ot);
@@ -88,6 +89,8 @@ void OBJECT_OT_forcefield_toggle(struct wmOperatorType *ot);
 
 void OBJECT_OT_move_to_collection(struct wmOperatorType *ot);
 void OBJECT_OT_link_to_collection(struct wmOperatorType *ot);
+
+void OBJECT_OT_switch_object(struct wmOperatorType *ot);
 
 /* object_select.c */
 void OBJECT_OT_select_all(struct wmOperatorType *ot);
@@ -117,6 +120,7 @@ void OBJECT_OT_speaker_add(struct wmOperatorType *ot);
 void OBJECT_OT_hair_add(struct wmOperatorType *ot);
 void OBJECT_OT_pointcloud_add(struct wmOperatorType *ot);
 void OBJECT_OT_collection_instance_add(struct wmOperatorType *ot);
+void OBJECT_OT_data_instance_add(struct wmOperatorType *ot);
 
 void OBJECT_OT_duplicates_make_real(struct wmOperatorType *ot);
 void OBJECT_OT_duplicate(struct wmOperatorType *ot);

@@ -37,6 +37,10 @@ struct FModifier;
 struct AnimData;
 struct AnimationEvalContext;
 struct BezTriple;
+struct BlendDataReader;
+struct BlendExpander;
+struct BlendLibReader;
+struct BlendWriter;
 struct LibraryForeachIDData;
 struct PathResolvedRNA;
 struct PointerRNA;
@@ -263,13 +267,25 @@ typedef enum eFCU_Cycle_Type {
 
 eFCU_Cycle_Type BKE_fcurve_get_cycle_type(struct FCurve *fcu);
 
+/** Adjust Bezier handles of all three given BezTriples, so that `bezt` can be inserted between
+ * `prev` and `next` without changing the resulting curve shape.
+ *
+ * \param r_pdelta: return Y difference between `bezt` and the original curve value at its X
+ * position.
+ * \return Whether the split was succesful.
+ */
+bool BKE_bezt_subdivide_handles(struct BezTriple *bezt,
+                                struct BezTriple *prev,
+                                struct BezTriple *next,
+                                float *r_pdelta);
+
 /* -------- Curve Sanity --------  */
 
 void calchandles_fcurve(struct FCurve *fcu);
 void calchandles_fcurve_ex(struct FCurve *fcu, eBezTriple_Flag handle_sel_flag);
 void testhandles_fcurve(struct FCurve *fcu, eBezTriple_Flag sel_flag, const bool use_handle);
 void sort_time_fcurve(struct FCurve *fcu);
-short test_time_fcurve(struct FCurve *fcu);
+bool test_time_fcurve(struct FCurve *fcu);
 
 void correct_bezpart(const float v1[2], float v2[2], float v3[2], const float v4[2]);
 
@@ -310,6 +326,24 @@ float fcurve_samplingcb_evalcurve(struct FCurve *fcu, void *data, float evaltime
  */
 void fcurve_store_samples(
     struct FCurve *fcu, void *data, int start, int end, FcuSampleFunc sample_cb);
+
+/* ************* F-Curve .blend file API ******************** */
+
+void BKE_fmodifiers_blend_write(struct BlendWriter *writer, struct ListBase *fmodifiers);
+void BKE_fmodifiers_blend_read_data(struct BlendDataReader *reader,
+                                    ListBase *fmodifiers,
+                                    struct FCurve *curve);
+void BKE_fmodifiers_blend_read_lib(struct BlendLibReader *reader,
+                                   struct ID *id,
+                                   struct ListBase *fmodifiers);
+void BKE_fmodifiers_blend_read_expand(struct BlendExpander *expander, struct ListBase *fmodifiers);
+
+void BKE_fcurve_blend_write(struct BlendWriter *writer, struct ListBase *fcurves);
+void BKE_fcurve_blend_read_data(struct BlendDataReader *reader, struct ListBase *fcurves);
+void BKE_fcurve_blend_read_lib(struct BlendLibReader *reader,
+                               struct ID *id,
+                               struct ListBase *fcurves);
+void BKE_fcurve_blend_read_expand(struct BlendExpander *expander, struct ListBase *fcurves);
 
 #ifdef __cplusplus
 }

@@ -23,16 +23,24 @@
 #include "BLI_span.hh"
 
 #include "GPU_shader.h"
-#include "GPU_vertex_buffer.h"
 #include "gpu_shader_interface.hh"
+#include "gpu_vertex_buffer_private.hh"
 
 namespace blender {
 namespace gpu {
 
-class Shader : public GPUShader {
+/**
+ * Implementation of shader compilation and uniforms handling.
+ * Base class which is then specialized for each implementation (GL, VK, ...).
+ **/
+class Shader {
  public:
   /** Uniform & attribute locations for shader. */
-  ShaderInterface *interface;
+  ShaderInterface *interface = nullptr;
+
+ protected:
+  /** For debugging purpose. */
+  char name[64];
 
  public:
   Shader(const char *name);
@@ -56,9 +64,28 @@ class Shader : public GPUShader {
 
   virtual void vertformat_from_shader(GPUVertFormat *) const = 0;
 
+  inline const char *const name_get(void) const
+  {
+    return name;
+  };
+
  protected:
-  void print_errors(Span<const char *> sources, char *log);
+  void print_errors(Span<const char *> sources, char *log, const char *stage);
 };
+
+/* Syntacting suggar. */
+static inline GPUShader *wrap(Shader *vert)
+{
+  return reinterpret_cast<GPUShader *>(vert);
+}
+static inline Shader *unwrap(GPUShader *vert)
+{
+  return reinterpret_cast<Shader *>(vert);
+}
+static inline const Shader *unwrap(const GPUShader *vert)
+{
+  return reinterpret_cast<const Shader *>(vert);
+}
 
 }  // namespace gpu
 }  // namespace blender

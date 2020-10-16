@@ -26,6 +26,8 @@
 
 #include "RNA_types.h"
 
+#include "BKE_context.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -106,7 +108,7 @@ typedef struct SpaceType {
   void (*gizmos)(void);
 
   /* return context data */
-  int (*context)(const struct bContext *C, const char *member, struct bContextDataResult *result);
+  bContextDataCallback context;
 
   /* Used when we want to replace an ID by another (or NULL). */
   void (*id_remap)(struct ScrArea *area,
@@ -181,7 +183,7 @@ typedef struct ARegionType {
   void (*cursor)(struct wmWindow *win, struct ScrArea *area, struct ARegion *region);
 
   /* return context data */
-  int (*context)(const struct bContext *C, const char *member, struct bContextDataResult *result);
+  bContextDataCallback context;
 
   /* Is called whenever the current visible View2D's region changes.
    *
@@ -399,6 +401,11 @@ struct ARegion *BKE_screen_find_region_xy(struct bScreen *screen,
                                           int x,
                                           int y) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL(1);
 
+struct ARegion *BKE_screen_find_main_region_at_xy(struct bScreen *screen,
+                                                  const int space_type,
+                                                  const int x,
+                                                  const int y);
+
 struct ScrArea *BKE_screen_find_area_from_space(struct bScreen *screen,
                                                 struct SpaceLink *sl) ATTR_WARN_UNUSED_RESULT
     ATTR_NONNULL(1, 2);
@@ -431,7 +438,7 @@ void BKE_screen_foreach_id_screen_area(struct LibraryForeachIDData *data, struct
 void BKE_screen_free(struct bScreen *screen);
 void BKE_screen_area_map_free(struct ScrAreaMap *area_map) ATTR_NONNULL();
 
-struct ScrEdge *BKE_screen_find_edge(struct bScreen *screen,
+struct ScrEdge *BKE_screen_find_edge(const struct bScreen *screen,
                                      struct ScrVert *v1,
                                      struct ScrVert *v2);
 void BKE_screen_sort_scrvert(struct ScrVert **v1, struct ScrVert **v2);

@@ -124,6 +124,12 @@ IDTypeInfo IDType_ID_IP = {
     .free_data = ipo_free_data,
     .make_local = NULL,
     .foreach_id = NULL,
+    .foreach_cache = NULL,
+
+    .blend_write = NULL,
+    .blend_read_data = NULL,
+    .blend_read_lib = NULL,
+    .blend_read_expand = NULL,
 };
 
 /* *************************************************** */
@@ -2197,7 +2203,7 @@ void do_versions_ipos_to_animato(Main *bmain)
 
       AnimData *adt = BKE_animdata_add_id(id);
 
-      SEQ_BEGIN (ed, seq) {
+      SEQ_ALL_BEGIN (ed, seq) {
         IpoCurve *icu = (seq->ipo) ? seq->ipo->curve.first : NULL;
         short adrcode = SEQ_FAC1;
 
@@ -2238,7 +2244,7 @@ void do_versions_ipos_to_animato(Main *bmain)
         id_us_min(&seq->ipo->id);
         seq->ipo = NULL;
       }
-      SEQ_END;
+      SEQ_ALL_END;
     }
   }
 

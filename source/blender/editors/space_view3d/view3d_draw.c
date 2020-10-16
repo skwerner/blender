@@ -31,6 +31,7 @@
 #include "BLI_string_utils.h"
 #include "BLI_threads.h"
 
+#include "BKE_armature.h"
 #include "BKE_camera.h"
 #include "BKE_collection.h"
 #include "BKE_context.h"
@@ -62,7 +63,6 @@
 #include "DRW_engine.h"
 #include "DRW_select_buffer.h"
 
-#include "ED_armature.h"
 #include "ED_gpencil.h"
 #include "ED_info.h"
 #include "ED_keyframing.h"
@@ -168,7 +168,7 @@ void ED_view3d_update_viewmat(Depsgraph *depsgraph,
   /* calculate pixelsize factor once, is used for lights and obcenters */
   {
     /* note:  '1.0f / len_v3(v1)'  replaced  'len_v3(rv3d->viewmat[0])'
-     * because of float point precision problems at large values [#23908] */
+     * because of float point precision problems at large values T23908. */
     float v1[3], v2[3];
     float len_px, len_sc;
 
@@ -879,14 +879,14 @@ float ED_scene_grid_scale(const Scene *scene, const char **r_grid_unit)
     const void *usys;
     int len;
 
-    bUnit_GetSystem(scene->unit.system, B_UNIT_LENGTH, &usys, &len);
+    BKE_unit_system_get(scene->unit.system, B_UNIT_LENGTH, &usys, &len);
 
     if (usys) {
-      int i = bUnit_GetBaseUnit(usys);
+      int i = BKE_unit_base_get(usys);
       if (r_grid_unit) {
-        *r_grid_unit = bUnit_GetNameDisplay(usys, i);
+        *r_grid_unit = BKE_unit_display_name_get(usys, i);
       }
-      return (float)bUnit_GetScaler(usys, i) / scene->unit.scale_length;
+      return (float)BKE_unit_scalar_get(usys, i) / scene->unit.scale_length;
     }
   }
 
@@ -905,21 +905,22 @@ void ED_view3d_grid_steps(const Scene *scene,
                           float r_grid_steps[STEPS_LEN])
 {
   const void *usys;
-  int i, len;
-  bUnit_GetSystem(scene->unit.system, B_UNIT_LENGTH, &usys, &len);
+  int len;
+  BKE_unit_system_get(scene->unit.system, B_UNIT_LENGTH, &usys, &len);
   float grid_scale = v3d->grid;
   BLI_assert(STEPS_LEN >= len);
 
   if (usys) {
     if (rv3d->view == RV3D_VIEW_USER) {
       /* Skip steps */
-      len = bUnit_GetBaseUnit(usys) + 1;
+      len = BKE_unit_base_get(usys) + 1;
     }
 
     grid_scale /= scene->unit.scale_length;
 
+    int i;
     for (i = 0; i < len; i++) {
-      r_grid_steps[i] = (float)bUnit_GetScaler(usys, len - 1 - i) * grid_scale;
+      r_grid_steps[i] = (float)BKE_unit_scalar_get(usys, len - 1 - i) * grid_scale;
     }
     for (; i < STEPS_LEN; i++) {
       /* Fill last slots */
@@ -932,7 +933,7 @@ void ED_view3d_grid_steps(const Scene *scene,
       grid_scale /= powf(v3d->gridsubdiv, 3);
     }
     int subdiv = 1;
-    for (i = 0;; i++) {
+    for (int i = 0;; i++) {
       r_grid_steps[i] = grid_scale * subdiv;
 
       if (i == STEPS_LEN - 1) {
@@ -971,10 +972,10 @@ float ED_view3d_grid_view_scale(Scene *scene,
     if (r_grid_unit) {
       const void *usys;
       int len;
-      bUnit_GetSystem(scene->unit.system, B_UNIT_LENGTH, &usys, &len);
+      BKE_unit_system_get(scene->unit.system, B_UNIT_LENGTH, &usys, &len);
 
       if (usys) {
-        *r_grid_unit = bUnit_GetNameDisplay(usys, len - i - 1);
+        *r_grid_unit = BKE_unit_display_name_get(usys, len - i - 1);
       }
     }
   }
@@ -1064,7 +1065,7 @@ static void draw_rotation_guide(const RegionView3D *rv3d)
   float o[3];   /* center of rotation */
   float end[3]; /* endpoints for drawing */
 
-  GLubyte color[4] = {0, 108, 255, 255}; /* bright blue so it matches device LEDs */
+  uchar color[4] = {0, 108, 255, 255}; /* bright blue so it matches device LEDs */
 
   negate_v3_v3(o, rv3d->ofs);
 
@@ -2153,12 +2154,17 @@ static void view3d_opengl_read_Z_pixels(GPUViewport *viewport, rcti *rect, void 
 {
   DefaultTextureList *dtxl = (DefaultTextureList *)GPU_viewport_texture_list_get(viewport);
 
-  GPUFrameBuffer *tmp_fb = GPU_framebuffer_create();
+  GPUFrameBuffer *tmp_fb = GPU_framebuffer_create(__func__);
   GPU_framebuffer_texture_attach(tmp_fb, dtxl->depth, 0, 0);
   GPU_framebuffer_bind(tmp_fb);
 
-  GPU_framebuffer_read_depth(
-      tmp_fb, rect->xmin, rect->ymin, BLI_rcti_size_x(rect), BLI_rcti_size_y(rect), data);
+  GPU_framebuffer_read_depth(tmp_fb,
+                             rect->xmin,
+                             rect->ymin,
+                             BLI_rcti_size_x(rect),
+                             BLI_rcti_size_y(rect),
+                             GPU_DATA_FLOAT,
+                             data);
 
   GPU_framebuffer_restore();
   GPU_framebuffer_free(tmp_fb);
@@ -2252,7 +2258,7 @@ void view3d_update_depths_rect(ARegion *region, ViewDepths *d, rcti *rect)
   }
 }
 
-/* Note, with nouveau drivers the glReadPixels() is very slow. [#24339]. */
+/* Note, with nouveau drivers the glReadPixels() is very slow. T24339. */
 void ED_view3d_depth_update(ARegion *region)
 {
   RegionView3D *rv3d = region->regiondata;
@@ -2319,7 +2325,7 @@ void ED_view3d_draw_depth_gpencil(Depsgraph *depsgraph, Scene *scene, ARegion *r
   /* Setup view matrix. */
   ED_view3d_draw_setup_view(NULL, NULL, depsgraph, scene, region, v3d, NULL, NULL, NULL);
 
-  GPU_clear(GPU_DEPTH_BIT);
+  GPU_clear_depth(1.0f);
 
   GPU_depth_test(GPU_DEPTH_LESS_EQUAL);
 
@@ -2353,6 +2359,10 @@ void ED_view3d_datamask(const bContext *C,
   if ((CTX_data_mode_enum(C) == CTX_MODE_EDIT_MESH) &&
       (v3d->overlay.edit_flag & V3D_OVERLAY_EDIT_WEIGHT)) {
     r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
+  }
+  if ((CTX_data_mode_enum(C) == CTX_MODE_SCULPT)) {
+    r_cddata_masks->vmask |= CD_MASK_PAINT_MASK;
+    r_cddata_masks->pmask |= CD_MASK_SCULPT_FACE_SETS;
   }
 }
 

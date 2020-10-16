@@ -331,6 +331,16 @@ ccl_device_inline float object_volume_density(KernelGlobals *kg, int object)
   return kernel_tex_fetch(__objects, object).surface_area;
 }
 
+ccl_device_inline float object_volume_max_density(KernelGlobals *kg, int object)
+{
+  if (object == OBJECT_NONE) {
+    return kernel_data.integrator.volume_max_density;
+  }
+
+  float max_density = kernel_tex_fetch(__object_max_density, object);
+  return max_density > 0.0f ? max_density : kernel_data.integrator.volume_max_density;
+}
+
 ccl_device_inline float object_volume_step_size(KernelGlobals *kg, int object)
 {
   if (object == OBJECT_NONE) {

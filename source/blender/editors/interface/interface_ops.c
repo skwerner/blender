@@ -91,11 +91,11 @@ static bool copy_data_path_button_poll(bContext *C)
 
     if (path) {
       MEM_freeN(path);
-      return 1;
+      return true;
     }
   }
 
-  return 0;
+  return false;
 }
 
 static int copy_data_path_button_exec(bContext *C, wmOperator *op)
@@ -182,11 +182,11 @@ static bool copy_as_driver_button_poll(bContext *C)
 
     if (path) {
       MEM_freeN(path);
-      return 1;
+      return true;
     }
   }
 
-  return 0;
+  return false;
 }
 
 static int copy_as_driver_button_exec(bContext *C, wmOperator *op)
@@ -201,7 +201,7 @@ static int copy_as_driver_button_exec(bContext *C, wmOperator *op)
 
   if (ptr.owner_id && ptr.data && prop) {
     ID *id;
-    int dim = RNA_property_array_dimension(&ptr, prop, NULL);
+    const int dim = RNA_property_array_dimension(&ptr, prop, NULL);
     char *path = RNA_path_from_real_ID_to_property_index(bmain, &ptr, prop, dim, index, &id);
 
     if (path) {
@@ -378,7 +378,7 @@ static bool assign_default_button_poll(bContext *C)
   UI_context_active_but_prop_get(C, &ptr, &prop, &index);
 
   if (ptr.data && prop && RNA_property_editable(&ptr, prop)) {
-    PropertyType type = RNA_property_type(prop);
+    const PropertyType type = RNA_property_type(prop);
 
     return RNA_property_is_idprop(prop) && !RNA_property_array_check(prop) &&
            ELEM(type, PROP_INT, PROP_FLOAT);
@@ -1174,7 +1174,7 @@ bool ui_jump_to_target_button_poll(bContext *C)
 
 static int jump_to_target_button_exec(bContext *C, wmOperator *UNUSED(op))
 {
-  bool success = jump_to_target_button(C, false);
+  const bool success = jump_to_target_button(C, false);
 
   return (success) ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
 }

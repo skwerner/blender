@@ -864,6 +864,11 @@ void OpenCLDevice::load_preview_kernels()
 
 bool OpenCLDevice::wait_for_availability(const DeviceRequestedFeatures &requested_features)
 {
+  if (requested_features.use_baking) {
+    /* For baking, kernels have already been loaded in load_required_kernels(). */
+    return true;
+  }
+
   if (background) {
     load_kernel_task_pool.wait_work();
     use_preview_kernels = false;
@@ -1933,13 +1938,12 @@ void OpenCLDevice::bake(DeviceTask &task, RenderTile &rtile)
     kernel_set_args(kernel, start_arg_index, sample);
 
     enqueue_kernel(kernel, d_w, d_h);
+    clFinish(cqCommandQueue);
 
     rtile.sample = sample + 1;
 
     task.update_progress(&rtile, rtile.w * rtile.h);
   }
-
-  clFinish(cqCommandQueue);
 }
 
 static bool kernel_build_opencl_2(cl_device_id cdDevice)
@@ -2029,6 +2033,10 @@ string OpenCLDevice::kernel_build_options(const string *debug_src)
 
 #  ifdef WITH_CYCLES_DEBUG
   build_options += "-D__KERNEL_DEBUG__ ";
+#  endif
+
+#  ifdef WITH_NANOVDB
+  build_options += "-DWITH_NANOVDB ";
 #  endif
 
   return build_options;

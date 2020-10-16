@@ -26,6 +26,8 @@
 extern "C" {
 #endif
 
+struct BlendDataReader;
+struct BlendWriter;
 struct ColorManagedColorspaceSettings;
 struct ColorManagedDisplaySettings;
 struct ColorManagedViewSettings;
@@ -36,8 +38,6 @@ struct Histogram;
 struct ImBuf;
 struct Scopes;
 struct rctf;
-struct BlendWriter;
-struct BlendDataReader;
 
 void BKE_curvemapping_set_defaults(
     struct CurveMapping *cumap, int tot, float minx, float miny, float maxx, float maxy);
@@ -95,7 +95,7 @@ void BKE_curvemapping_evaluate_premulRGBF_ex(const struct CurveMapping *cumap,
 void BKE_curvemapping_evaluate_premulRGBF(const struct CurveMapping *cumap,
                                           float vecout[3],
                                           const float vecin[3]);
-int BKE_curvemapping_RGBA_does_something(const struct CurveMapping *cumap);
+bool BKE_curvemapping_RGBA_does_something(const struct CurveMapping *cumap);
 void BKE_curvemapping_table_RGBA(const struct CurveMapping *cumap, float **array, int *size);
 
 /* non-const, these modify the curve */

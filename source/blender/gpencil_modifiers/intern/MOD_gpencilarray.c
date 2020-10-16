@@ -325,136 +325,117 @@ static void updateDepsgraph(GpencilModifierData *md, const ModifierUpdateDepsgra
   DEG_add_object_relation(ctx->node, ctx->object, DEG_OB_COMP_TRANSFORM, "Array Modifier");
 }
 
-static void foreachObjectLink(GpencilModifierData *md,
-                              Object *ob,
-                              ObjectWalkFunc walk,
-                              void *userData)
-{
-  ArrayGpencilModifierData *mmd = (ArrayGpencilModifierData *)md;
-
-  walk(userData, ob, &mmd->object, IDWALK_CB_NOP);
-}
-
 static void foreachIDLink(GpencilModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   ArrayGpencilModifierData *mmd = (ArrayGpencilModifierData *)md;
 
   walk(userData, ob, (ID **)&mmd->material, IDWALK_CB_USER);
-
-  foreachObjectLink(md, ob, (ObjectWalkFunc)walk, userData);
+  walk(userData, ob, (ID **)&mmd->object, IDWALK_CB_NOP);
 }
 
-static void panel_draw(const bContext *C, Panel *panel)
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  gpencil_modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, NULL);
 
   uiLayoutSetPropSep(layout, true);
 
-  uiItemR(layout, &ptr, "count", 0, NULL, ICON_NONE);
-  uiItemR(layout, &ptr, "replace_material", 0, IFACE_("Material Override"), ICON_NONE);
+  uiItemR(layout, ptr, "count", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "replace_material", 0, IFACE_("Material Override"), ICON_NONE);
 
-  gpencil_modifier_panel_end(layout, &ptr);
+  gpencil_modifier_panel_end(layout, ptr);
 }
 
-static void relative_offset_header_draw(const bContext *C, Panel *panel)
+static void relative_offset_header_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  gpencil_modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, NULL);
 
-  uiItemR(layout, &ptr, "use_relative_offset", 0, IFACE_("Relative Offset"), ICON_NONE);
+  uiItemR(layout, ptr, "use_relative_offset", 0, IFACE_("Relative Offset"), ICON_NONE);
 }
 
-static void relative_offset_draw(const bContext *C, Panel *panel)
+static void relative_offset_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  gpencil_modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, NULL);
 
   uiLayoutSetPropSep(layout, true);
 
   uiLayout *col = uiLayoutColumn(layout, false);
 
-  uiLayoutSetActive(col, RNA_boolean_get(&ptr, "use_relative_offset"));
-  uiItemR(col, &ptr, "relative_offset", 0, IFACE_("Factor"), ICON_NONE);
+  uiLayoutSetActive(col, RNA_boolean_get(ptr, "use_relative_offset"));
+  uiItemR(col, ptr, "relative_offset", 0, IFACE_("Factor"), ICON_NONE);
 }
 
-static void constant_offset_header_draw(const bContext *C, Panel *panel)
+static void constant_offset_header_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  gpencil_modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, NULL);
 
-  uiItemR(layout, &ptr, "use_constant_offset", 0, IFACE_("Constant Offset"), ICON_NONE);
+  uiItemR(layout, ptr, "use_constant_offset", 0, IFACE_("Constant Offset"), ICON_NONE);
 }
 
-static void constant_offset_draw(const bContext *C, Panel *panel)
+static void constant_offset_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  gpencil_modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, NULL);
 
   uiLayoutSetPropSep(layout, true);
 
   uiLayout *col = uiLayoutColumn(layout, false);
 
-  uiLayoutSetActive(col, RNA_boolean_get(&ptr, "use_constant_offset"));
-  uiItemR(col, &ptr, "constant_offset", 0, IFACE_("Distance"), ICON_NONE);
+  uiLayoutSetActive(col, RNA_boolean_get(ptr, "use_constant_offset"));
+  uiItemR(col, ptr, "constant_offset", 0, IFACE_("Distance"), ICON_NONE);
 }
 
 /**
  * Object offset in a subpanel for consistency with the other offset types.
  */
-static void object_offset_header_draw(const bContext *C, Panel *panel)
+static void object_offset_header_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  gpencil_modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, NULL);
 
-  uiItemR(layout, &ptr, "use_object_offset", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "use_object_offset", 0, NULL, ICON_NONE);
 }
 
-static void object_offset_draw(const bContext *C, Panel *panel)
+static void object_offset_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  gpencil_modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, NULL);
 
   uiLayoutSetPropSep(layout, true);
 
   uiLayout *col = uiLayoutColumn(layout, false);
 
-  uiLayoutSetActive(col, RNA_boolean_get(&ptr, "use_object_offset"));
-  uiItemR(col, &ptr, "offset_object", 0, NULL, ICON_NONE);
+  uiLayoutSetActive(col, RNA_boolean_get(ptr, "use_object_offset"));
+  uiItemR(col, ptr, "offset_object", 0, NULL, ICON_NONE);
 }
 
-static void random_panel_draw(const bContext *C, Panel *panel)
+static void random_panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  gpencil_modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, NULL);
 
   uiLayoutSetPropSep(layout, true);
 
-  uiItemR(layout, &ptr, "random_offset", 0, IFACE_("Offset"), ICON_NONE);
-  uiItemR(layout, &ptr, "random_rotation", 0, IFACE_("Rotation"), ICON_NONE);
-  uiItemR(layout, &ptr, "random_scale", 0, IFACE_("Scale"), ICON_NONE);
-  uiItemR(layout, &ptr, "seed", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "random_offset", 0, IFACE_("Offset"), ICON_NONE);
+  uiItemR(layout, ptr, "random_rotation", 0, IFACE_("Rotation"), ICON_NONE);
+  uiItemR(layout, ptr, "random_scale", 0, IFACE_("Scale"), ICON_NONE);
+  uiItemR(layout, ptr, "seed", 0, NULL, ICON_NONE);
 }
 
-static void mask_panel_draw(const bContext *C, Panel *panel)
+static void mask_panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
-  gpencil_modifier_masking_panel_draw(C, panel, true, false);
+  gpencil_modifier_masking_panel_draw(panel, true, false);
 }
 
 static void panelRegister(ARegionType *region_type)
@@ -500,7 +481,6 @@ GpencilModifierTypeInfo modifierType_Gpencil_Array = {
     /* isDisabled */ NULL,
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
     /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* panelRegister */ panelRegister,

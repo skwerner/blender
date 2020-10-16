@@ -1020,6 +1020,25 @@ class USERPREF_PT_theme_bone_color_sets(ThemePanel, CenterAlignMixIn, Panel):
             flow.prop(ui, "show_colored_constraints")
 
 
+class USERPREF_PT_theme_collection_colors(ThemePanel, CenterAlignMixIn, Panel):
+    bl_label = "Collection Colors"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw_header(self, _context):
+        layout = self.layout
+
+        layout.label(icon='OUTLINER_COLLECTION')
+
+    def draw_centered(self, context, layout):
+        theme = context.preferences.themes[0]
+
+        layout.use_property_split = True
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+        for i, ui in enumerate(theme.collection_color, 1):
+            flow.prop(ui, "color", text=iface_(f"Color {i:d}"), translate=False)
+
+
 # Base class for dynamically defined theme-space panels.
 # This is not registered.
 class PreferenceThemeSpacePanel:
@@ -1653,6 +1672,7 @@ class USERPREF_PT_ndof_settings(Panel):
 # -----------------------------------------------------------------------------
 # Key-Map Editor Panels
 
+
 class KeymapPanel:
     bl_space_type = 'PREFERENCES'
     bl_region_type = 'WINDOW'
@@ -2139,6 +2159,7 @@ class ExperimentalPanel:
                 col = split.split()
                 col.operator("wm.url_open", text=task, icon='URL').url = self.url_prefix + task
 
+
 """
 # Example panel, leave it here so we always have a template to follow even
 # after the features are gone from the experimental panel.
@@ -2164,6 +2185,8 @@ class USERPREF_PT_experimental_new_features(ExperimentalPanel, Panel):
             context, (
                 ({"property": "use_new_particle_system"}, "T73324"),
                 ({"property": "use_sculpt_vertex_colors"}, "T71947"),
+                ({"property": "use_tools_missing_icons"}, "T80331"),
+                ({"property": "use_switch_object_operator"}, "T80402"),
             ),
         )
 
@@ -2193,6 +2216,7 @@ class USERPREF_PT_experimental_debugging(ExperimentalPanel, Panel):
             context, (
                 ({"property": "use_undo_legacy"}, "T60695"),
                 ({"property": "use_cycles_debug"}, None),
+                ({"property": "use_image_editor_legacy_drawing"}, "T67530"),
             ),
         )
 
@@ -2254,6 +2278,7 @@ classes = (
     USERPREF_PT_theme_interface_icons,
     USERPREF_PT_theme_text_style,
     USERPREF_PT_theme_bone_color_sets,
+    USERPREF_PT_theme_collection_colors,
 
     USERPREF_PT_file_paths_data,
     USERPREF_PT_file_paths_render,

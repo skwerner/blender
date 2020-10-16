@@ -12,9 +12,7 @@
 
 #include "DEG_depsgraph.h"
 
-namespace blender {
-namespace io {
-namespace alembic {
+namespace blender::io::alembic {
 
 class AlembicExportTest : public testing::Test {
  protected:
@@ -36,6 +34,8 @@ class AlembicExportTest : public testing::Test {
 
     bmain = BKE_main_new();
 
+    DEG_register_node_types();
+
     /* TODO(sergey): Pass scene layer somehow? */
     ViewLayer *view_layer = (ViewLayer *)scene.view_layers.first;
     depsgraph = DEG_graph_new(bmain, &scene, view_layer, DAG_EVAL_RENDER);
@@ -45,6 +45,7 @@ class AlembicExportTest : public testing::Test {
   {
     BKE_main_free(bmain);
     DEG_graph_free(depsgraph);
+    DEG_free_node_types();
     deleteArchive();
   }
 
@@ -156,6 +157,4 @@ TEST_F(AlembicExportTest, TimeSamples180degShutter)
   EXPECT_NEAR(32 + 0.15, frames[9], 1e-5);
 }
 
-}  // namespace alembic
-}  // namespace io
-}  // namespace blender
+}  // namespace blender::io::alembic

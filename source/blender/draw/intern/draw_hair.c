@@ -120,7 +120,7 @@ void DRW_hair_init(void)
     /* Create vbo immediately to bind to texture buffer. */
     GPU_vertbuf_use(g_dummy_vbo);
 
-    g_dummy_texture = GPU_texture_create_from_vertbuf(g_dummy_vbo);
+    g_dummy_texture = GPU_texture_create_from_vertbuf("hair_dummy_attr", g_dummy_vbo);
   }
 }
 
@@ -346,10 +346,10 @@ void DRW_hair_update(void)
       GPU_framebuffer_read_color(fb, 0, 0, width, height, 4, 0, GPU_DATA_FLOAT, data);
       /* Upload back to VBO. */
       GPU_vertbuf_use(pr_call->vbo);
-      glBufferSubData(GL_ARRAY_BUFFER,
-                      sizeof(float[4]) * g_tf_id_offset,
-                      sizeof(float[4]) * max_read_px_len,
-                      data);
+      GPU_vertbuf_update_sub(pr_call->vbo,
+                             sizeof(float[4]) * g_tf_id_offset,
+                             sizeof(float[4]) * max_read_px_len,
+                             data);
 
       g_tf_id_offset += max_read_px_len;
       pr_call->vert_len -= max_read_px_len;

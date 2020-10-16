@@ -20,6 +20,8 @@ def get_arguments(filepath, output_filepath):
         "-noaudio",
         "--factory-startup",
         "--enable-autoexec",
+        "--debug-memory",
+        "--debug-exit-on-error",
         filepath,
         "-E", "CYCLES",
         "-o", output_filepath,
@@ -40,6 +42,7 @@ def get_arguments(filepath, output_filepath):
         args.extend(["-f", "1"])
 
     return args
+
 
 def create_argparse():
     parser = argparse.ArgumentParser()

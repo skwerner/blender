@@ -284,7 +284,7 @@ static void viewops_data_alloc(bContext *C, wmOperator *op)
 }
 
 void view3d_orbit_apply_dyn_ofs(float r_ofs[3],
-                                const float ofs_init[3],
+                                const float ofs_old[3],
                                 const float viewquat_old[4],
                                 const float viewquat_new[4],
                                 const float dyn_ofs[3])
@@ -295,7 +295,7 @@ void view3d_orbit_apply_dyn_ofs(float r_ofs[3],
 
   invert_qt_normalized(q);
 
-  sub_v3_v3v3(r_ofs, ofs_init, dyn_ofs);
+  sub_v3_v3v3(r_ofs, ofs_old, dyn_ofs);
   mul_qt_v3(q, r_ofs);
   add_v3_v3(r_ofs, dyn_ofs);
 }
@@ -333,10 +333,9 @@ static bool view3d_orbit_calc_center(bContext *C, float r_dyn_ofs[3])
   else if (ob_act && (ob_act->mode & OB_MODE_EDIT) && (ob_act->type == OB_FONT)) {
     Curve *cu = ob_act_eval->data;
     EditFont *ef = cu->editfont;
-    int i;
 
     zero_v3(lastofs);
-    for (i = 0; i < 4; i++) {
+    for (int i = 0; i < 4; i++) {
       add_v2_v2(lastofs, ef->textcurs[i]);
     }
     mul_v2_fl(lastofs, 1.0f / 4.0f);
@@ -2789,6 +2788,25 @@ static bool view3d_object_skip_minmax(const View3D *v3d,
   return false;
 }
 
+static void view3d_object_calc_minmax(Depsgraph *depsgraph,
+                                      Scene *scene,
+                                      Object *ob_eval,
+                                      const bool only_center,
+                                      float min[3],
+                                      float max[3])
+{
+  /* Account for duplis. */
+  if (BKE_object_minmax_dupli(depsgraph, scene, ob_eval, min, max, false) == 0) {
+    /* Use if duplis aren't found. */
+    if (only_center) {
+      minmax_v3v3_v3(min, max, ob_eval->obmat[3]);
+    }
+    else {
+      BKE_object_minmax(ob_eval, min, max, false);
+    }
+  }
+}
+
 static void view3d_from_minmax(bContext *C,
                                View3D *v3d,
                                ARegion *region,
@@ -2902,7 +2920,7 @@ static int view3d_all_exec(bContext *C, wmOperator *op)
   View3D *v3d = CTX_wm_view3d(C);
   RegionView3D *rv3d = CTX_wm_region_view3d(C);
   Scene *scene = CTX_data_scene(C);
-  const Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewLayer *view_layer_eval = DEG_get_evaluated_view_layer(depsgraph);
   Base *base_eval;
   const bool use_all_regions = RNA_boolean_get(op->ptr, "use_all_regions");
@@ -2936,13 +2954,7 @@ static int view3d_all_exec(bContext *C, wmOperator *op)
       if (view3d_object_skip_minmax(v3d, rv3d, ob, skip_camera, &only_center)) {
         continue;
       }
-
-      if (only_center) {
-        minmax_v3v3_v3(min, max, base_eval->object->obmat[3]);
-      }
-      else {
-        BKE_object_minmax(base_eval->object, min, max, false);
-      }
+      view3d_object_calc_minmax(depsgraph, scene, base_eval->object, only_center, min, max);
       changed = true;
     }
   }
@@ -2961,7 +2973,7 @@ static int view3d_all_exec(bContext *C, wmOperator *op)
      * object, but in this case there is no change in the scene,
      * only the cursor so I choice a ED_region_tag like
      * view3d_smooth_view do for the center_cursor.
-     * See bug #22640
+     * See bug T22640.
      */
     return OPERATOR_FINISHED;
   }
@@ -3103,18 +3115,7 @@ static int viewselected_exec(bContext *C, wmOperator *op)
         if (view3d_object_skip_minmax(v3d, rv3d, ob, skip_camera, &only_center)) {
           continue;
         }
-
-        /* account for duplis */
-        if (BKE_object_minmax_dupli(depsgraph, scene, base_eval->object, min, max, false) == 0) {
-          /* use if duplis not found */
-          if (only_center) {
-            minmax_v3v3_v3(min, max, base_eval->object->obmat[3]);
-          }
-          else {
-            BKE_object_minmax(base_eval->object, min, max, false);
-          }
-        }
-
+        view3d_object_calc_minmax(depsgraph, scene, base_eval->object, only_center, min, max);
         ok = 1;
       }
     }
@@ -3950,8 +3951,9 @@ static int view_axis_exec(bContext *C, wmOperator *op)
     Object *obact = CTX_data_active_object(C);
     if (obact != NULL) {
       float twmat[3][3];
+      Object *obedit = CTX_data_edit_object(C);
       /* same as transform gizmo when normal is set */
-      ED_getTransformOrientationMatrix(C, twmat, V3D_AROUND_ACTIVE);
+      ED_getTransformOrientationMatrix(C, obact, obedit, V3D_AROUND_ACTIVE, twmat);
       align_quat = align_quat_buf;
       mat3_to_quat(align_quat, twmat);
       invert_qt_normalized(align_quat);
@@ -4877,11 +4879,10 @@ static void calc_local_clipping(float clip_local[6][4],
 {
   BoundBox clipbb_local;
   float imat[4][4];
-  int i;
 
   invert_m4_m4(imat, mat);
 
-  for (i = 0; i < 8; i++) {
+  for (int i = 0; i < 8; i++) {
     mul_v3_m4v3(clipbb_local.vec[i], imat, clipbb->vec[i]);
   }
 

@@ -38,7 +38,7 @@
 
 #include "DEG_depsgraph_query.h"
 
-#include "GPU_extensions.h"
+#include "GPU_capabilities.h"
 #include "GPU_framebuffer.h"
 #include "GPU_state.h"
 
@@ -574,7 +574,7 @@ void EEVEE_render_draw(EEVEE_Data *vedata, RenderEngine *engine, RenderLayer *rl
     /* Set ray type. */
     sldata->common_data.ray_type = EEVEE_RAY_CAMERA;
     sldata->common_data.ray_depth = 0.0f;
-    DRW_uniformbuffer_update(sldata->common_ubo, &sldata->common_data);
+    GPU_uniformbuf_update(sldata->common_ubo, &sldata->common_data);
 
     GPU_framebuffer_bind(fbl->main_fb);
     GPU_framebuffer_clear_color_depth_stencil(fbl->main_fb, clear_col, clear_depth, clear_stencil);

@@ -38,8 +38,6 @@
  *   #BLI_bvhtree_range_query
  */
 
-#include <assert.h>
-
 #include "MEM_guardedalloc.h"
 
 #include "BLI_alloca.h"
@@ -202,7 +200,7 @@ const float bvhtree_kdop_axes[13][3] = {
 };
 
 /* Used to correct the epsilon and thus match the overlap distance. */
-const float bvhtree_kdop_axes_length[13] = {
+static const float bvhtree_kdop_axes_length[13] = {
     1.0f,
     1.0f,
     1.0f,

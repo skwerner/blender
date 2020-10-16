@@ -56,6 +56,7 @@
 #include "RE_pipeline.h"
 
 #include "ED_node.h"
+#include "ED_paint.h"
 #include "ED_render.h"
 #include "ED_view3d.h"
 
@@ -194,7 +195,7 @@ void ED_render_engine_changed(Main *bmain, const bool update_scene_data)
     update_ctx.scene = scene;
     LISTBASE_FOREACH (ViewLayer *, view_layer, &scene->view_layers) {
       /* TDODO(sergey): Iterate over depsgraphs instead? */
-      update_ctx.depsgraph = BKE_scene_get_depsgraph(bmain, scene, view_layer, true);
+      update_ctx.depsgraph = BKE_scene_ensure_depsgraph(bmain, scene, view_layer);
       update_ctx.view_layer = view_layer;
       ED_render_id_flush_update(&update_ctx, &scene->id);
     }
@@ -282,7 +283,7 @@ static void scene_changed(Main *bmain, Scene *scene)
   for (ob = bmain->objects.first; ob; ob = ob->id.next) {
     if (ob->mode & OB_MODE_TEXTURE_PAINT) {
       BKE_texpaint_slots_refresh_object(scene, ob);
-      BKE_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
+      ED_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
     }
   }
 }

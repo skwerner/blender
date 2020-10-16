@@ -159,7 +159,7 @@ void DRW_shape_cache_free(void)
 GPUBatch *drw_cache_procedural_points_get(void)
 {
   if (!SHC.drw_procedural_verts) {
-    /* TODO(fclem) get rid of this dummy VBO. */
+    /* TODO(fclem): get rid of this dummy VBO. */
     GPUVertFormat format = {0};
     GPU_vertformat_attr_add(&format, "dummy", GPU_COMP_F32, 1, GPU_FETCH_FLOAT);
     GPUVertBuf *vbo = GPU_vertbuf_create_with_format(&format);
@@ -173,7 +173,7 @@ GPUBatch *drw_cache_procedural_points_get(void)
 GPUBatch *drw_cache_procedural_lines_get(void)
 {
   if (!SHC.drw_procedural_lines) {
-    /* TODO(fclem) get rid of this dummy VBO. */
+    /* TODO(fclem): get rid of this dummy VBO. */
     GPUVertFormat format = {0};
     GPU_vertformat_attr_add(&format, "dummy", GPU_COMP_F32, 1, GPU_FETCH_FLOAT);
     GPUVertBuf *vbo = GPU_vertbuf_create_with_format(&format);
@@ -187,7 +187,7 @@ GPUBatch *drw_cache_procedural_lines_get(void)
 GPUBatch *drw_cache_procedural_triangles_get(void)
 {
   if (!SHC.drw_procedural_tris) {
-    /* TODO(fclem) get rid of this dummy VBO. */
+    /* TODO(fclem): get rid of this dummy VBO. */
     GPUVertFormat format = {0};
     GPU_vertformat_attr_add(&format, "dummy", GPU_COMP_F32, 1, GPU_FETCH_FLOAT);
     GPUVertBuf *vbo = GPU_vertbuf_create_with_format(&format);
@@ -3277,6 +3277,12 @@ GPUBatch *DRW_cache_volume_face_wireframe_get(Object *ob)
 {
   BLI_assert(ob->type == OB_VOLUME);
   return DRW_volume_batch_cache_get_wireframes_face(ob->data);
+}
+
+GPUBatch *DRW_cache_volume_selection_surface_get(Object *ob)
+{
+  BLI_assert(ob->type == OB_VOLUME);
+  return DRW_volume_batch_cache_get_selection_surface(ob->data);
 }
 
 /** \} */

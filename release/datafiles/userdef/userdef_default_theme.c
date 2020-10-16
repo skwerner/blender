@@ -238,11 +238,11 @@ const bTheme U_theme_default = {
     .menu_shadow_fac = 0.3f,
     .menu_shadow_width = 4,
     .editor_outline = RGBA(0x1f1f1fff),
-    .icon_alpha = 1.0f,
-    .icon_saturation = 0.5f,
     .transparent_checker_primary = RGBA(0x333333ff),
     .transparent_checker_secondary = RGBA(0x262626ff),
     .transparent_checker_size = 8,
+    .icon_alpha = 1.0f,
+    .icon_saturation = 0.5f,
     .widget_text_cursor = RGBA(0x3399e6ff),
     .xaxis = RGBA(0xff3352ff),
     .yaxis = RGBA(0x8bdc00ff),
@@ -250,9 +250,9 @@ const bTheme U_theme_default = {
     .gizmo_hi = RGBA(0xffffffff),
     .gizmo_primary = RGBA(0xf5f14dff),
     .gizmo_secondary = RGBA(0x63ffffff),
+    .gizmo_view_align = RGBA(0xffffffff),
     .gizmo_a = RGBA(0x4da84dff),
     .gizmo_b = RGBA(0xa33535ff),
-    .gizmo_view_align = RGBA(0xffffffff),
     .icon_scene = RGBA(0xe6e6e6ff),
     .icon_collection = RGBA(0xf4f4f4ff),
     .icon_object = RGBA(0xee9e5dff),
@@ -262,6 +262,7 @@ const bTheme U_theme_default = {
     .icon_folder = RGBA(0xe3c16eff),
   },
   .space_properties = {
+    .match = RGBA(0x5680c2ff),
     .back = RGBA(0x42424200),
     .title = RGBA(0xd4d4d4ff),
     .text = RGBA(0xe6e6e6ff),
@@ -379,7 +380,7 @@ const bTheme U_theme_default = {
     .paint_curve_handle = RGBA(0x7fff7f7f),
   },
   .space_file = {
-    .back = RGBA(0x33333300),
+    .back = RGBA(0x28282800),
     .title = RGBA(0xffffffff),
     .text = RGBA(0xe6e6e6ff),
     .text_hi = RGBA(0xffffffff),
@@ -404,6 +405,7 @@ const bTheme U_theme_default = {
     .vertex_size = 3,
     .outline_width = 1,
     .facedot_size = 4,
+    .row_alternate = RGBA(0xffffff07),
   },
   .space_graph = {
     .back = RGBA(0x42424200),
@@ -710,10 +712,10 @@ const bTheme U_theme_default = {
     .preview_stitch_unstitchable = RGBA(0xff0000ff),
     .preview_stitch_active = RGBA(0xe1d2c323),
     .uv_shadow = RGBA(0x707070ff),
-    .uv_others = RGBA(0x606060ff),
     .paint_curve_pivot = RGBA(0xff7f7f7f),
     .paint_curve_handle = RGBA(0x7fff7f7f),
     .metadatatext = RGBA(0xffffffff),
+    .grid = RGBA(0x505050ff),
   },
   .space_text = {
     .back = RGBA(0x30303000),
@@ -810,6 +812,7 @@ const bTheme U_theme_default = {
       .sub_back = RGBA(0x0000003e),
     },
     .shade2 = RGBA(0x7f707064),
+    .grid = RGBA(0x23232300),
     .wire = RGBA(0x808080ff),
     .select = RGBA(0xed5700ff),
     .active = RGBA(0xffffffff),
@@ -922,6 +925,7 @@ const bTheme U_theme_default = {
       .back = RGBA(0x333333b3),
       .sub_back = RGBA(0x0000003e),
     },
+    .grid = RGBA(0x424242ff),
     .strip = RGBA(0x0c0a0a80),
     .strip_select = RGBA(0xff8c00ff),
     .cframe = RGBA(0x5680c2ff),
@@ -1099,6 +1103,32 @@ const bTheme U_theme_default = {
       .solid = RGBA(0x000000ff),
       .select = RGBA(0x000000ff),
       .active = RGBA(0x000000ff),
+    },
+  },
+  .collection_color = {
+    {
+      .color = RGBA(0xe4312bff),
+    },
+    {
+      .color = RGBA(0xef7e42ff),
+    },
+    {
+      .color = RGBA(0xe4dd52ff),
+    },
+    {
+      .color = RGBA(0x9ac546ff),
+    },
+    {
+      .color = RGBA(0x46bcc2ff),
+    },
+    {
+      .color = RGBA(0x8b65dcff),
+    },
+    {
+      .color = RGBA(0x999999ff),
+    },
+    {
+      .color = RGBA(0x06d4432ff),
     },
   },
 };

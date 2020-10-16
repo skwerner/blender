@@ -267,7 +267,7 @@ static void eevee_draw_scene(void *vedata)
     /* Set ray type. */
     sldata->common_data.ray_type = EEVEE_RAY_CAMERA;
     sldata->common_data.ray_depth = 0.0f;
-    DRW_uniformbuffer_update(sldata->common_ubo, &sldata->common_data);
+    GPU_uniformbuf_update(sldata->common_ubo, &sldata->common_data);
 
     GPU_framebuffer_bind(fbl->main_fb);
     eGPUFrameBufferBits clear_bits = GPU_DEPTH_BIT;
@@ -571,19 +571,10 @@ static void eevee_render_to_image(void *vedata,
 static void eevee_engine_free(void)
 {
   EEVEE_shaders_free();
-  EEVEE_bloom_free();
-  EEVEE_depth_of_field_free();
-  EEVEE_effects_free();
   EEVEE_lightprobes_free();
-  EEVEE_shadows_free();
   EEVEE_materials_free();
-  EEVEE_mist_free();
-  EEVEE_motion_blur_free();
   EEVEE_occlusion_free();
-  EEVEE_screen_raytrace_free();
-  EEVEE_subsurface_free();
   EEVEE_volumes_free();
-  EEVEE_renderpasses_free();
 }
 
 static const DrawEngineDataSize eevee_data_size = DRW_VIEWPORT_DATA_SIZE(EEVEE_Data);

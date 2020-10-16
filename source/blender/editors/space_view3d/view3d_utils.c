@@ -220,7 +220,7 @@ void view3d_region_operator_needs_opengl(wmWindow *UNUSED(win), ARegion *region)
 }
 
 /**
- * Use instead of: ``GPU_polygon_offset(rv3d->dist, ...)`` see bug [#37727]
+ * Use instead of: `GPU_polygon_offset(rv3d->dist, ...)` see bug T37727.
  */
 void ED_view3d_polygon_offset(const RegionView3D *rv3d, const float dist)
 {
@@ -1077,9 +1077,9 @@ static bool depth_segment_cb(int x, int y, void *userData)
 
   if (depth != FLT_MAX) {
     data->depth = depth;
-    return 0;
+    return false;
   }
-  return 1;
+  return true;
 }
 
 bool ED_view3d_autodist_depth_seg(

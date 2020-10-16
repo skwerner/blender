@@ -31,6 +31,7 @@
 
 #include "BLT_translation.h"
 
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_screen_types.h"
@@ -731,12 +732,10 @@ static void LaplacianDeformModifier_do(
 static void initData(ModifierData *md)
 {
   LaplacianDeformModifierData *lmd = (LaplacianDeformModifierData *)md;
-  lmd->anchor_grp_name[0] = '\0';
-  lmd->total_verts = 0;
-  lmd->repeat = 1;
-  lmd->vertexco = NULL;
-  lmd->cache_system = NULL;
-  lmd->flag = 0;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(lmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(lmd, DNA_struct_default_get(LaplacianDeformModifierData), modifier);
 }
 
 static void copyData(const ModifierData *md, ModifierData *target, const int flag)
@@ -822,23 +821,22 @@ static void freeData(ModifierData *md)
   lmd->total_verts = 0;
 }
 
-static void panel_draw(const bContext *C, Panel *panel)
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *row;
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
   PointerRNA ob_ptr;
-  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
 
-  bool is_bind = RNA_boolean_get(&ptr, "is_bind");
-  bool has_vertex_group = RNA_string_length(&ptr, "vertex_group") != 0;
+  bool is_bind = RNA_boolean_get(ptr, "is_bind");
+  bool has_vertex_group = RNA_string_length(ptr, "vertex_group") != 0;
 
   uiLayoutSetPropSep(layout, true);
 
-  uiItemR(layout, &ptr, "iterations", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "iterations", 0, NULL, ICON_NONE);
 
-  modifier_vgroup_ui(layout, &ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
+  modifier_vgroup_ui(layout, ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
 
   uiItemS(layout);
 
@@ -849,7 +847,7 @@ static void panel_draw(const bContext *C, Panel *panel)
           ICON_NONE,
           "OBJECT_OT_laplaciandeform_bind");
 
-  modifier_panel_end(layout, &ptr);
+  modifier_panel_end(layout, ptr);
 }
 
 static void panelRegister(ARegionType *region_type)
@@ -876,8 +874,10 @@ ModifierTypeInfo modifierType_LaplacianDeform = {
     /* name */ "LaplacianDeform",
     /* structName */ "LaplacianDeformModifierData",
     /* structSize */ sizeof(LaplacianDeformModifierData),
+    /* srna */ &RNA_LaplacianDeformModifier,
     /* type */ eModifierTypeType_OnlyDeform,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsEditmode,
+    /* icon */ ICON_MOD_MESHDEFORM,
     /* copyData */ copyData,
 
     /* deformVerts */ deformVerts,
@@ -896,7 +896,6 @@ ModifierTypeInfo modifierType_LaplacianDeform = {
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ NULL,
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,

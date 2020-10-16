@@ -47,6 +47,7 @@
 
 CCL_NAMESPACE_BEGIN
 
+DeviceTypeMask BlenderSession::device_override = DEVICE_MASK_ALL;
 bool BlenderSession::headless = false;
 int BlenderSession::num_resumable_chunks = 0;
 int BlenderSession::current_resumable_chunk = 0;
@@ -363,7 +364,8 @@ void BlenderSession::do_write_update_render_tile(RenderTile &rtile,
       PassType pass_type = BlenderSync::get_pass_type(b_pass);
       int components = b_pass.channels();
 
-      rtile.buffers->set_pass_rect(pass_type, components, (float *)b_pass.rect());
+      rtile.buffers->set_pass_rect(
+          pass_type, components, (float *)b_pass.rect(), rtile.num_samples);
     }
 
     end_render_result(b_engine, b_rr, false, false, false);
@@ -561,6 +563,10 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
     session->reset(buffer_params, effective_layer_samples);
 
     /* render */
+    if (!b_engine.is_preview() && background && print_render_stats) {
+      scene->enable_update_stats();
+    }
+
     session->start();
     session->wait();
 

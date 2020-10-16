@@ -23,8 +23,8 @@
 
 #pragma once
 
-struct bConstraint;
 struct Object;
+struct bConstraint;
 
 #define TRANSDATABASIC \
   /** Extra data (mirrored element pointer, in editmode mesh to BMVert) \
@@ -114,8 +114,8 @@ typedef struct TransData2D {
  * Also to unset temporary flags.
  */
 typedef struct TransDataCurveHandleFlags {
-  char ih1, ih2;
-  char *h1, *h2;
+  uint8_t ih1, ih2;
+  uint8_t *h1, *h2;
 } TransDataCurveHandleFlags;
 
 typedef struct TransData {

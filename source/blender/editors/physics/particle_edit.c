@@ -21,7 +21,6 @@
  * \ingroup edphys
  */
 
-#include <assert.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -403,7 +402,7 @@ void PE_hide_keys_time(Scene *scene, PTCacheEdit *edit, float cfra)
 static int pe_x_mirror(Object *ob)
 {
   if (ob->type == OB_MESH) {
-    return (((Mesh *)ob->data)->editflag & ME_EDIT_MIRROR_X);
+    return (((Mesh *)ob->data)->symmetry & ME_SYMMETRY_X);
   }
 
   return 0;
@@ -2254,8 +2253,6 @@ int PE_lasso_select(bContext *C, const int mcoords[][2], const int mcoords_len, 
   ARegion *region = CTX_wm_region(C);
   ParticleEditSettings *pset = PE_settings(scene);
   PTCacheEdit *edit = PE_get_current(depsgraph, scene, ob);
-  ParticleSystem *psys = edit->psys;
-  ParticleSystemModifierData *psmd_eval = edit->psmd_eval;
   POINT_P;
   KEY_K;
   float co[3], mat[4][4];
@@ -2276,6 +2273,8 @@ int PE_lasso_select(bContext *C, const int mcoords[][2], const int mcoords_len, 
     data.is_changed |= PE_deselect_all_visible_ex(edit);
   }
 
+  ParticleSystem *psys = edit->psys;
+  ParticleSystemModifierData *psmd_eval = edit->psmd_eval;
   LOOP_VISIBLE_POINTS {
     if (edit->psys && !(psys->flag & PSYS_GLOBAL_HAIR)) {
       psys_mat_hair_to_global(
@@ -3752,7 +3751,7 @@ static void brush_puff(PEData *data, int point_index, float mouse_distance)
         /* blend between the current and straight position */
         sub_v3_v3v3(dco, kco, co);
         madd_v3_v3fl(co, dco, fac);
-        /* keep the same distance from the root or we get glitches [#35406] */
+        /* keep the same distance from the root or we get glitches T35406. */
         dist_ensure_v3_v3fl(co, co_root, length_accum);
 
         /* re-use dco to compare before and after translation and add to the offset  */
@@ -3776,6 +3775,7 @@ static void brush_puff(PEData *data, int point_index, float mouse_distance)
 #else
           /* translate (not rotate) the rest of the hair if its not selected  */
           {
+/* NOLINTNEXTLINE: readability-redundant-preprocessor */
 #  if 0 /* kindof works but looks worse then what's below */
 
             /* Move the unselected point on a vector based on the

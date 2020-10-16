@@ -20,12 +20,14 @@
 #include "render/integrator.h"
 #include "render/mesh.h"
 #include "render/scene.h"
+#include "render/stats.h"
 #include "render/tables.h"
 
 #include "util/util_algorithm.h"
 #include "util/util_foreach.h"
 #include "util/util_math.h"
 #include "util/util_math_cdf.h"
+#include "util/util_time.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -253,6 +255,8 @@ void Pass::add(PassType type, vector<Pass> &passes, const char *name)
     case PASS_BAKE_PRIMITIVE:
     case PASS_BAKE_DIFFERENTIAL:
       pass.components = 4;
+      pass.exposure = false;
+      pass.filter = false;
       break;
     default:
       assert(false);
@@ -405,6 +409,12 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 {
   if (!need_update)
     return;
+
+  scoped_callback_timer timer([scene](double time) {
+    if (scene->update_stats) {
+      scene->update_stats->film.times.add_entry({"update", time});
+    }
+  });
 
   device_free(device, dscene, scene);
 

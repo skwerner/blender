@@ -40,10 +40,10 @@
 
 #include "BKE_material.h"
 
-#include "GPU_extensions.h"
+#include "GPU_capabilities.h"
 #include "GPU_material.h"
 #include "GPU_shader.h"
-#include "GPU_uniformbuffer.h"
+#include "GPU_uniform_buffer.h"
 #include "GPU_vertex_format.h"
 
 #include "BLI_sys_types.h" /* for intptr_t support */
@@ -421,7 +421,7 @@ static void codegen_call_functions(DynStr *ds, GPUNodeGraph *graph, GPUOutput *f
             ds, input->link->output->type, input->type, "tmp", input->link->output->id);
       }
       else if (input->source == GPU_SOURCE_BUILTIN) {
-        /* TODO(fclem) get rid of that. */
+        /* TODO(fclem): get rid of that. */
         if (input->builtin == GPU_INVERSE_VIEW_MATRIX) {
           BLI_dynstr_append(ds, "viewinv");
         }
@@ -527,7 +527,7 @@ static char *code_generate_fragment(GPUMaterial *material,
   if (builtins & GPU_BARYCENTRIC_TEXCO) {
     BLI_dynstr_append(ds, "  vec2 barytexco = barycentric_resolve(barycentricTexCo);\n");
   }
-  /* TODO(fclem) get rid of that. */
+  /* TODO(fclem): get rid of that. */
   if (builtins & GPU_VIEW_MATRIX) {
     BLI_dynstr_append(ds, "  #define viewmat ViewMatrix\n");
   }
@@ -686,7 +686,7 @@ static char *code_generate_vertex(GPUNodeGraph *graph,
   BLI_dynstr_append(ds, "#define USE_ATTR\n\n");
 
   BLI_dynstr_append(ds, vert_code);
-  BLI_dynstr_append(ds, "\n");
+  BLI_dynstr_append(ds, "\n\n");
 
   BLI_dynstr_append(ds, "void pass_attr(vec3 position, mat3 normalmat, mat4 modelmatinv) {\n");
 
@@ -755,15 +755,16 @@ static char *code_generate_geometry(GPUNodeGraph *graph,
 
   /* Generate varying assignments. */
   BLI_dynstr_append(ds, "#define USE_ATTR\n");
-  BLI_dynstr_append(ds, "void pass_attr(const int vert) {\n");
+  /* This needs to be a define. Some drivers don't like variable vert index inside dataAttrIn. */
+  BLI_dynstr_append(ds, "#define pass_attr(vert) {\\\n");
 
   if (builtins & GPU_BARYCENTRIC_TEXCO) {
-    BLI_dynstr_append(ds, "  dataAttrOut.barycentricTexCo = calc_barycentric_co(vert);\n");
+    BLI_dynstr_append(ds, "dataAttrOut.barycentricTexCo = calc_barycentric_co(vert);\\\n");
   }
 
   LISTBASE_FOREACH (GPUMaterialAttribute *, attr, &graph->attributes) {
     /* TODO let shader choose what to do depending on what the attribute is. */
-    BLI_dynstr_appendf(ds, "  dataAttrOut.var%d = dataAttrIn[vert].var%d;\n", attr->id, attr->id);
+    BLI_dynstr_appendf(ds, "dataAttrOut.var%d = dataAttrIn[vert].var%d;\\\n", attr->id, attr->id);
   }
   BLI_dynstr_append(ds, "}\n\n");
 

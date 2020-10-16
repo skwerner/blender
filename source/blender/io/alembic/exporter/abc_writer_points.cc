@@ -36,9 +36,7 @@
 #include "CLG_log.h"
 static CLG_LogRef LOG = {"io.alembic"};
 
-namespace blender {
-namespace io {
-namespace alembic {
+namespace blender::io::alembic {
 
 using Alembic::AbcGeom::kVertexScope;
 using Alembic::AbcGeom::OPoints;
@@ -55,9 +53,14 @@ void ABCPointsWriter::create_alembic_objects(const HierarchyContext * /*context*
   abc_points_schema_ = abc_points_.getSchema();
 }
 
-const Alembic::Abc::OObject ABCPointsWriter::get_alembic_object() const
+Alembic::Abc::OObject ABCPointsWriter::get_alembic_object() const
 {
   return abc_points_;
+}
+
+Alembic::Abc::OCompoundProperty ABCPointsWriter::abc_prop_for_custom_props()
+{
+  return abc_schema_prop_for_custom_props(abc_points_schema_);
 }
 
 bool ABCPointsWriter::is_supported(const HierarchyContext *context) const
@@ -143,6 +146,4 @@ void ABCPointsWriter::do_write(HierarchyContext &context)
   abc_points_schema_.set(sample);
 }
 
-}  // namespace alembic
-}  // namespace io
-}  // namespace blender
+}  // namespace blender::io::alembic

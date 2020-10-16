@@ -216,49 +216,37 @@ static void updateDepsgraph(GpencilModifierData *md, const ModifierUpdateDepsgra
   DEG_add_object_relation(ctx->node, ctx->object, DEG_OB_COMP_TRANSFORM, "Mirror Modifier");
 }
 
-static void foreachObjectLink(GpencilModifierData *md,
-                              Object *ob,
-                              ObjectWalkFunc walk,
-                              void *userData)
-{
-  MirrorGpencilModifierData *mmd = (MirrorGpencilModifierData *)md;
-
-  walk(userData, ob, &mmd->object, IDWALK_CB_NOP);
-}
-
 static void foreachIDLink(GpencilModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   MirrorGpencilModifierData *mmd = (MirrorGpencilModifierData *)md;
 
   walk(userData, ob, (ID **)&mmd->material, IDWALK_CB_USER);
-
-  foreachObjectLink(md, ob, (ObjectWalkFunc)walk, userData);
+  walk(userData, ob, (ID **)&mmd->object, IDWALK_CB_NOP);
 }
 
-static void panel_draw(const bContext *C, Panel *panel)
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *row;
   uiLayout *layout = panel->layout;
   int toggles_flag = UI_ITEM_R_TOGGLE | UI_ITEM_R_FORCE_BLANK_DECORATE;
 
-  PointerRNA ptr;
-  gpencil_modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, NULL);
 
   uiLayoutSetPropSep(layout, true);
 
   row = uiLayoutRowWithHeading(layout, true, IFACE_("Axis"));
-  uiItemR(row, &ptr, "x_axis", toggles_flag, NULL, ICON_NONE);
-  uiItemR(row, &ptr, "y_axis", toggles_flag, NULL, ICON_NONE);
-  uiItemR(row, &ptr, "z_axis", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, ptr, "use_axis_x", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, ptr, "use_axis_y", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, ptr, "use_axis_z", toggles_flag, NULL, ICON_NONE);
 
-  uiItemR(layout, &ptr, "object", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "object", 0, NULL, ICON_NONE);
 
-  gpencil_modifier_panel_end(layout, &ptr);
+  gpencil_modifier_panel_end(layout, ptr);
 }
 
-static void mask_panel_draw(const bContext *C, Panel *panel)
+static void mask_panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
-  gpencil_modifier_masking_panel_draw(C, panel, true, false);
+  gpencil_modifier_masking_panel_draw(panel, true, false);
 }
 
 static void panelRegister(ARegionType *region_type)
@@ -288,7 +276,6 @@ GpencilModifierTypeInfo modifierType_Gpencil_Mirror = {
     /* isDisabled */ isDisabled,
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
     /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* panelRegister */ panelRegister,

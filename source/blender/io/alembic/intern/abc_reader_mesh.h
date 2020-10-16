@@ -24,9 +24,7 @@
 
 struct Mesh;
 
-namespace blender {
-namespace io {
-namespace alembic {
+namespace blender::io::alembic {
 
 class AbcMeshReader : public AbcObjectReader {
   Alembic::AbcGeom::IPolyMeshSchema m_schema;
@@ -83,8 +81,6 @@ void read_mverts(MVert *mverts,
                  const Alembic::AbcGeom::P3fArraySamplePtr positions,
                  const Alembic::AbcGeom::N3fArraySamplePtr normals);
 
-CDStreamConfig get_config(struct Mesh *mesh);
+CDStreamConfig get_config(struct Mesh *mesh, bool use_vertex_interpolation);
 
-}  // namespace alembic
-}  // namespace io
-}  // namespace blender
+}  // namespace blender::io::alembic

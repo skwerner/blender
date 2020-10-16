@@ -37,7 +37,6 @@ FIND_PATH(EMBREE_INCLUDE_DIR
 
 SET(_embree_FIND_COMPONENTS
   embree3
-  embree_sse42
   embree_avx
   embree_avx2
   lexers
@@ -46,6 +45,15 @@ SET(_embree_FIND_COMPONENTS
   sys
   tasking
 )
+
+if((NOT APPLE) OR ("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "x86_64"))
+    # embree-aarch64 base library is mapped to sse4.2 namespace as minimal isa
+    # sse4.2 library needed only for x86 platforms
+  SET(_embree_FIND_COMPONENTS ${_embree_FIND_COMPONENTS}
+  embree_sse42
+  )
+endif()
+
 
 SET(_embree_LIBRARIES)
 FOREACH(COMPONENT ${_embree_FIND_COMPONENTS})

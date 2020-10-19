@@ -925,6 +925,8 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine &b_engine,
   params.reset_timeout = (double)get_float(cscene, "debug_reset_timeout");
   params.text_timeout = (double)get_float(cscene, "debug_text_timeout");
 
+  params.origin_offset = (!b_engine.is_preview()) && get_boolean(cscene, "origin_offset");
+
   /* progressive refine */
   BL::RenderSettings b_r = b_scene.render();
   params.progressive_refine = b_engine.is_preview() ||

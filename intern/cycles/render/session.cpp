@@ -925,6 +925,34 @@ bool Session::update_scene()
     cam->tag_update();
   }
 
+  /* Translate the scene that the camera is the origin.
+     See https://pharr.org/matt/blog/2018/03/02/rendering-in-camera-space.html */
+  if (params.origin_offset && params.background) {
+    float3 camera_location = transform_get_column(&scene->camera->matrix, 3);
+    Transform origin_offset = transform_translate(-camera_location);
+     /* Translate camera and its motion steps. */
+    scene->camera->matrix = origin_offset * scene->camera->matrix;
+    if (scene->camera->motion.size() > 0) {
+      for (int i = 0; i < scene->camera->motion.size(); i++) {
+         scene->camera->motion[i] = origin_offset * scene->camera->motion[i];
+      }
+    }
+    /* Translate all objects, including their motion steps. */
+    foreach (Object *object, scene->objects) {
+      object->tfm = origin_offset * object->tfm;
+      if (object->motion.size() > 0) {
+        for (int i = 0; i < object->motion.size(); i++) {
+          object->motion[i] = origin_offset * object->motion[i];
+        }
+      }
+    }
+    /* Translate lights. Cycles doesn't motion blur lights. */
+    foreach (Light *light, scene->lights) {
+      light->tfm = origin_offset * light->tfm;
+      light->co = transform_get_column(&light->tfm, 3);
+    }
+  }
+
   /* number of samples is needed by multi jittered
    * sampling pattern and by baking */
   Integrator *integrator = scene->integrator;

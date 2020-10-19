@@ -2239,6 +2239,8 @@ def draw_device(self, context):
         if engine.with_osl() and use_cpu(context):
             col.prop(cscene, "shading_system")
 
+        col.prop(cscene, "origin_offset")
+
 
 def draw_pause(self, context):
     layout = self.layout

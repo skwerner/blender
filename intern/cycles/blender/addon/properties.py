@@ -709,6 +709,12 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         default=False,
     )
 
+    origin_offset: BoolProperty(
+        name="Origin Offset",
+        description="Translate the scene so that the camera is at (0, 0, 0) to increase precision",
+        default=False,
+    )
+
     bake_type: EnumProperty(
         name="Bake Type",
         default='COMBINED',

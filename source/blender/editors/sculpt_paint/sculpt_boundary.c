@@ -74,6 +74,10 @@ static bool boundary_initial_vertex_floodfill_cb(
 {
   BoundaryInitialVertexFloodFillData *data = userdata;
 
+  if (!SCULPT_vertex_visible_get(ss, to_v)) {
+    return false;
+  }
+
   if (!is_duplicate) {
     data->floodfill_steps[to_v] = data->floodfill_steps[from_v] + 1;
   }
@@ -174,13 +178,19 @@ static bool sculpt_boundary_is_vertex_in_editable_boundary(SculptSession *ss,
                                                            const int initial_vertex)
 {
 
+  if (!SCULPT_vertex_visible_get(ss, initial_vertex)) {
+    return false;
+  }
+
   int neighbor_count = 0;
   int boundary_vertex_count = 0;
   SculptVertexNeighborIter ni;
   SCULPT_VERTEX_NEIGHBORS_ITER_BEGIN (ss, initial_vertex, ni) {
-    neighbor_count++;
-    if (SCULPT_vertex_is_boundary(ss, ni.index)) {
-      boundary_vertex_count++;
+    if (SCULPT_vertex_visible_get(ss, ni.index)) {
+      neighbor_count++;
+      if (SCULPT_vertex_is_boundary(ss, ni.index)) {
+        boundary_vertex_count++;
+      }
     }
   }
   SCULPT_VERTEX_NEIGHBORS_ITER_END(ni);
@@ -349,7 +359,9 @@ static void sculpt_boundary_edit_data_init(SculptSession *ss,
 
       SculptVertexNeighborIter ni;
       SCULPT_VERTEX_DUPLICATES_AND_NEIGHBORS_ITER_BEGIN (ss, from_v, ni) {
-        if (boundary->edit_info[ni.index].num_propagation_steps == BOUNDARY_STEPS_NONE) {
+        const bool is_visible = SCULPT_vertex_visible_get(ss, ni.index);
+        if (is_visible &&
+            boundary->edit_info[ni.index].num_propagation_steps == BOUNDARY_STEPS_NONE) {
           boundary->edit_info[ni.index].original_vertex =
               boundary->edit_info[from_v].original_vertex;
 
@@ -488,6 +500,10 @@ SculptBoundary *SCULPT_boundary_data_init(Object *object,
                                           const float radius)
 {
   SculptSession *ss = object->sculpt;
+
+  if (initial_vertex == BOUNDARY_VERTEX_NONE) {
+    return NULL;
+  }
 
   SCULPT_vertex_random_access_ensure(ss);
   SCULPT_boundary_info_ensure(object);
@@ -632,7 +648,7 @@ static void do_boundary_brush_bend_task_cb_ex(void *__restrict userdata,
   SculptSession *ss = data->ob->sculpt;
   const int symm_area = ss->cache->mirror_symmetry_pass;
   SculptBoundary *boundary = ss->cache->boundaries[symm_area];
-  const ePaintSymmetryFlags symm = data->sd->paint.symmetry_flags & PAINT_SYMM_AXIS_ALL;
+  const ePaintSymmetryFlags symm = SCULPT_mesh_symmetry_xyz_get(data->ob);
   const Brush *brush = data->brush;
 
   const float strength = ss->cache->bstrength;
@@ -683,7 +699,7 @@ static void do_boundary_brush_slide_task_cb_ex(void *__restrict userdata,
   SculptSession *ss = data->ob->sculpt;
   const int symm_area = ss->cache->mirror_symmetry_pass;
   SculptBoundary *boundary = ss->cache->boundaries[symm_area];
-  const ePaintSymmetryFlags symm = data->sd->paint.symmetry_flags & PAINT_SYMM_AXIS_ALL;
+  const ePaintSymmetryFlags symm = SCULPT_mesh_symmetry_xyz_get(data->ob);
   const Brush *brush = data->brush;
 
   const float strength = ss->cache->bstrength;
@@ -725,7 +741,7 @@ static void do_boundary_brush_inflate_task_cb_ex(void *__restrict userdata,
   SculptSession *ss = data->ob->sculpt;
   const int symm_area = ss->cache->mirror_symmetry_pass;
   SculptBoundary *boundary = ss->cache->boundaries[symm_area];
-  const ePaintSymmetryFlags symm = data->sd->paint.symmetry_flags & PAINT_SYMM_AXIS_ALL;
+  const ePaintSymmetryFlags symm = SCULPT_mesh_symmetry_xyz_get(data->ob);
   const Brush *brush = data->brush;
 
   const float strength = ss->cache->bstrength;
@@ -769,7 +785,7 @@ static void do_boundary_brush_grab_task_cb_ex(void *__restrict userdata,
   SculptSession *ss = data->ob->sculpt;
   const int symm_area = ss->cache->mirror_symmetry_pass;
   SculptBoundary *boundary = ss->cache->boundaries[symm_area];
-  const ePaintSymmetryFlags symm = data->sd->paint.symmetry_flags & PAINT_SYMM_AXIS_ALL;
+  const ePaintSymmetryFlags symm = SCULPT_mesh_symmetry_xyz_get(data->ob);
   const Brush *brush = data->brush;
 
   const float strength = ss->cache->bstrength;
@@ -809,7 +825,7 @@ static void do_boundary_brush_twist_task_cb_ex(void *__restrict userdata,
   SculptSession *ss = data->ob->sculpt;
   const int symm_area = ss->cache->mirror_symmetry_pass;
   SculptBoundary *boundary = ss->cache->boundaries[symm_area];
-  const ePaintSymmetryFlags symm = data->sd->paint.symmetry_flags & PAINT_SYMM_AXIS_ALL;
+  const ePaintSymmetryFlags symm = SCULPT_mesh_symmetry_xyz_get(data->ob);
   const Brush *brush = data->brush;
 
   const float strength = ss->cache->bstrength;

@@ -650,7 +650,7 @@ static void txt_add_object(bContext *C, TextLine *firstline, int totline, const 
   int a;
   const float rot[3] = {0.f, 0.f, 0.f};
 
-  obedit = BKE_object_add(bmain, scene, view_layer, OB_FONT, NULL);
+  obedit = BKE_object_add(bmain, view_layer, OB_FONT, NULL);
   base = view_layer->basact;
 
   /* seems to assume view align ? TODO - look into this, could be an operator option */
@@ -1766,7 +1766,7 @@ void FONT_OT_text_insert(wmOperatorType *ot)
       ot->srna,
       "accent",
       0,
-      "Accent mode",
+      "Accent Mode",
       "Next typed character will strike through previous, for special character input");
 }
 

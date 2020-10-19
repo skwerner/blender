@@ -37,6 +37,7 @@
 
 #include "BLT_translation.h"
 
+#include "DNA_defaults.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_object_types.h"
@@ -79,16 +80,10 @@ typedef struct tmpStrokes {
 static void initData(GpencilModifierData *md)
 {
   ArrayGpencilModifierData *gpmd = (ArrayGpencilModifierData *)md;
-  gpmd->count = 2;
-  gpmd->shift[0] = 1.0f;
-  gpmd->shift[1] = 0.0f;
-  gpmd->shift[2] = 0.0f;
-  zero_v3(gpmd->offset);
-  zero_v3(gpmd->rnd_scale);
-  gpmd->object = NULL;
-  gpmd->flag |= GP_ARRAY_USE_RELATIVE;
-  gpmd->seed = 1;
-  gpmd->material = NULL;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(gpmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(gpmd, DNA_struct_default_get(ArrayGpencilModifierData), modifier);
 
   /* Open the first subpanel too, because it's activated by default. */
   md->ui_expand_flag = (1 << 0) | (1 << 1);
@@ -325,23 +320,12 @@ static void updateDepsgraph(GpencilModifierData *md, const ModifierUpdateDepsgra
   DEG_add_object_relation(ctx->node, ctx->object, DEG_OB_COMP_TRANSFORM, "Array Modifier");
 }
 
-static void foreachObjectLink(GpencilModifierData *md,
-                              Object *ob,
-                              ObjectWalkFunc walk,
-                              void *userData)
-{
-  ArrayGpencilModifierData *mmd = (ArrayGpencilModifierData *)md;
-
-  walk(userData, ob, &mmd->object, IDWALK_CB_NOP);
-}
-
 static void foreachIDLink(GpencilModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   ArrayGpencilModifierData *mmd = (ArrayGpencilModifierData *)md;
 
   walk(userData, ob, (ID **)&mmd->material, IDWALK_CB_USER);
-
-  foreachObjectLink(md, ob, (ObjectWalkFunc)walk, userData);
+  walk(userData, ob, (ID **)&mmd->object, IDWALK_CB_NOP);
 }
 
 static void panel_draw(const bContext *UNUSED(C), Panel *panel)
@@ -492,7 +476,6 @@ GpencilModifierTypeInfo modifierType_Gpencil_Array = {
     /* isDisabled */ NULL,
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
     /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* panelRegister */ panelRegister,

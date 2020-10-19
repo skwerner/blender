@@ -165,7 +165,7 @@ static float dist_to_rect(const float co[2],
   return sqrtf(min_ffff(d1, d2, d3, d4));
 }
 
-/* Distance to quad defined by it's corners, corners are relative to pos */
+/* Distance to quad defined by its corners, corners are relative to pos */
 static float dist_to_crns(const float co[2], const float pos[2], const float crns[4][2])
 {
   float d1, d2, d3, d4;
@@ -546,9 +546,8 @@ static int box_select_exec(bContext *C, wmOperator *op)
   for (plane_track = plane_tracks_base->first; plane_track; plane_track = plane_track->next) {
     if ((plane_track->flag & PLANE_TRACK_HIDDEN) == 0) {
       MovieTrackingPlaneMarker *plane_marker = BKE_tracking_plane_marker_get(plane_track, framenr);
-      int i;
 
-      for (i = 0; i < 4; i++) {
+      for (int i = 0; i < 4; i++) {
         if (BLI_rctf_isect_pt_v(&rectf, plane_marker->corners[i])) {
           if (select) {
             plane_track->flag |= SELECT;
@@ -651,9 +650,8 @@ static int do_lasso_select_marker(bContext *C,
   for (plane_track = plane_tracks_base->first; plane_track; plane_track = plane_track->next) {
     if ((plane_track->flag & PLANE_TRACK_HIDDEN) == 0) {
       MovieTrackingPlaneMarker *plane_marker = BKE_tracking_plane_marker_get(plane_track, framenr);
-      int i;
 
-      for (i = 0; i < 4; i++) {
+      for (int i = 0; i < 4; i++) {
         float screen_co[2];
 
         /* marker in screen coords */
@@ -812,9 +810,8 @@ static int circle_select_exec(bContext *C, wmOperator *op)
   for (plane_track = plane_tracks_base->first; plane_track; plane_track = plane_track->next) {
     if ((plane_track->flag & PLANE_TRACK_HIDDEN) == 0) {
       MovieTrackingPlaneMarker *plane_marker = BKE_tracking_plane_marker_get(plane_track, framenr);
-      int i;
 
-      for (i = 0; i < 4; i++) {
+      for (int i = 0; i < 4; i++) {
         if (point_inside_ellipse(plane_marker->corners[i], offset, ellipse)) {
           if (select) {
             plane_track->flag |= SELECT;

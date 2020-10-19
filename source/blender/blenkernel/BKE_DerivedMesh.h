@@ -38,7 +38,7 @@
  * per-element attributes and interpolate them (e.g. uvs, vcols, vgroups, etc).
  *
  * Mesh is the "serialized" structure, used for storing object-mode mesh data
- * and also for saving stuff to disk.  It's interfaces are also what DerivedMesh
+ * and also for saving stuff to disk.  Its interfaces are also what DerivedMesh
  * uses to communicate with.
  *
  * CDDM is a little mesh library, that uses Mesh data structures in the backend.
@@ -215,7 +215,7 @@ struct DerivedMesh {
   void *(*getPolyDataArray)(DerivedMesh *dm, int type);
 
   /** Retrieves the base CustomData structures for
-   * verts/edges/tessfaces/loops/facdes*/
+   * verts/edges/tessfaces/loops/faces. */
   CustomData *(*getVertDataLayout)(DerivedMesh *dm);
   CustomData *(*getEdgeDataLayout)(DerivedMesh *dm);
   CustomData *(*getTessFaceDataLayout)(DerivedMesh *dm);

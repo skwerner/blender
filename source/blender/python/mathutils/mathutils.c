@@ -39,18 +39,7 @@ PyDoc_STRVAR(
     ".. note::\n"
     "\n"
     "   Classes, methods and attributes that accept vectors also accept other numeric sequences,\n"
-    "   such as tuples, lists."
-    "\n\n"
-    "Submodules:\n"
-    "\n"
-    ".. toctree::\n"
-    "   :maxdepth: 1\n"
-    "\n"
-    "   mathutils.geometry.rst\n"
-    "   mathutils.bvhtree.rst\n"
-    "   mathutils.kdtree.rst\n"
-    "   mathutils.interpolate.rst\n"
-    "   mathutils.noise.rst\n"
+    "   such as tuples, lists.\n"
     "\n"
     "The :mod:`mathutils` module provides the following classes:\n"
     "\n"
@@ -546,7 +535,7 @@ int EXPP_FloatsAreEqual(float af, float bf, int maxDiff)
   const int test = SIGNMASK(ai ^ bi);
   int diff, v1, v2;
 
-  assert((0 == test) || (0xFFFFFFFF == test));
+  BLI_assert((0 == test) || (0xFFFFFFFF == test));
   diff = (ai ^ (test & 0x7fffffff)) - bi;
   v1 = maxDiff + diff;
   v2 = maxDiff - diff;
@@ -738,7 +727,7 @@ void BaseMathObject_dealloc(BaseMathObject *self)
     BaseMathObject_clear(self);
   }
 
-  Py_TYPE(self)->tp_free(self);  // PyObject_DEL(self); // breaks subtypes
+  Py_TYPE(self)->tp_free(self);  // PyObject_DEL(self); /* breaks subtypes. */
 }
 
 /*----------------------------MODULE INIT-------------------------*/

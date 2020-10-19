@@ -33,14 +33,15 @@
 struct ARegion;
 struct ARegionType;
 struct PanelType;
+struct PointerRNA;
 struct Scene;
 struct SpaceLink;
 struct SpaceType;
 struct uiLayout;
+struct uiBlock;
 struct wmDrawBuffer;
 struct wmTimer;
 struct wmTooltipState;
-struct PointerRNA;
 
 /* TODO Doing this is quite ugly :)
  * Once the top-bar is merged bScreen should be refactored to use ScrAreaMap. */
@@ -94,7 +95,7 @@ typedef struct bScreen {
   /** If set, screen has timer handler added in window. */
   struct wmTimer *animtimer;
   /** Context callback. */
-  void *context;
+  void /*bContextDataCallback*/ *context;
 
   /** Runtime. */
   struct wmTooltipState *tool_tip;
@@ -143,6 +144,10 @@ typedef struct Panel_Runtime {
    * This avoids freeing the same pointer twice when panels are removed.
    */
   struct PointerRNA *custom_data_ptr;
+
+  /* Pointer to the panel's block. Useful when changes to panel #uiBlocks
+   * need some context from traversal of the panel "tree". */
+  struct uiBlock *block;
 } Panel_Runtime;
 
 /** The part from uiBlock that needs saved in file. */
@@ -687,6 +692,14 @@ enum {
   /** When the user sets the region is hidden,
    * needed for floating regions that may be hidden for other reasons. */
   RGN_FLAG_HIDDEN_BY_USER = (1 << 7),
+  /** Property search filter is active. */
+  RGN_FLAG_SEARCH_FILTER_ACTIVE = (1 << 8),
+  /**
+   * Update the expansion of the region's panels and switch contexts. Only Set
+   * temporarily when the search filter is updated and cleared at the end of the
+   * region's layout pass. so that expansion is still interactive,
+   */
+  RGN_FLAG_SEARCH_FILTER_UPDATE = (1 << 9),
 };
 
 /** #ARegion.do_draw */

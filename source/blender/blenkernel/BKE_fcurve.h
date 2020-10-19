@@ -37,6 +37,10 @@ struct FModifier;
 struct AnimData;
 struct AnimationEvalContext;
 struct BezTriple;
+struct BlendDataReader;
+struct BlendExpander;
+struct BlendLibReader;
+struct BlendWriter;
 struct LibraryForeachIDData;
 struct PathResolvedRNA;
 struct PointerRNA;
@@ -44,10 +48,6 @@ struct PropertyRNA;
 struct StructRNA;
 struct bAction;
 struct bContext;
-struct BlendWriter;
-struct BlendDataReader;
-struct BlendLibReader;
-struct BlendExpander;
 
 /* ************** Keyframe Tools ***************** */
 
@@ -56,8 +56,6 @@ typedef struct CfraElem {
   float cfra;
   int sel;
 } CfraElem;
-
-void bezt_add_to_cfra_elem(ListBase *lb, struct BezTriple *bezt);
 
 /* ************** F-Curve Modifiers *************** */
 
@@ -229,7 +227,10 @@ struct FCurve *BKE_fcurve_find_by_rna_context_ui(struct bContext *C,
 /* Binary search algorithm for finding where to 'insert' BezTriple with given frame number.
  * Returns the index to insert at (data already at that index will be offset if replace is 0)
  */
-int binarysearch_bezt_index(struct BezTriple array[], float frame, int arraylen, bool *r_replace);
+int BKE_fcurve_bezt_binarysearch_index(struct BezTriple array[],
+                                       float frame,
+                                       int arraylen,
+                                       bool *r_replace);
 
 /* get the time extents for F-Curve */
 bool BKE_fcurve_calc_range(
@@ -243,6 +244,9 @@ bool BKE_fcurve_calc_bounds(struct FCurve *fcu,
                             float *ymax,
                             const bool do_sel_only,
                             const bool include_handles);
+
+void BKE_fcurve_active_keyframe_set(struct FCurve *fcu, const struct BezTriple *active_bezt);
+int BKE_fcurve_active_keyframe_index(const struct FCurve *fcu);
 
 /* .............. */
 
@@ -267,6 +271,12 @@ typedef enum eFCU_Cycle_Type {
 
 eFCU_Cycle_Type BKE_fcurve_get_cycle_type(struct FCurve *fcu);
 
+/* Recompute handles to neatly subdivide the prev-next range at bezt. */
+bool BKE_fcurve_bezt_subdivide_handles(struct BezTriple *bezt,
+                                       struct BezTriple *prev,
+                                       struct BezTriple *next,
+                                       float *r_pdelta);
+
 /* -------- Curve Sanity --------  */
 
 void calchandles_fcurve(struct FCurve *fcu);
@@ -275,7 +285,7 @@ void testhandles_fcurve(struct FCurve *fcu, eBezTriple_Flag sel_flag, const bool
 void sort_time_fcurve(struct FCurve *fcu);
 bool test_time_fcurve(struct FCurve *fcu);
 
-void correct_bezpart(const float v1[2], float v2[2], float v3[2], const float v4[2]);
+void BKE_fcurve_correct_bezpart(const float v1[2], float v2[2], float v3[2], const float v4[2]);
 
 /* -------- Evaluation --------  */
 

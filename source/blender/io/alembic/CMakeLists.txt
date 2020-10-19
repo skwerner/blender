@@ -56,6 +56,7 @@ set(SRC
   intern/alembic_capi.cc
 
   exporter/abc_archive.cc
+  exporter/abc_custom_props.cc
   exporter/abc_export_capi.cc
   exporter/abc_hierarchy_iterator.cc
   exporter/abc_subdiv_disabler.cc
@@ -63,6 +64,7 @@ set(SRC
   exporter/abc_writer_camera.cc
   exporter/abc_writer_curves.cc
   exporter/abc_writer_hair.cc
+  exporter/abc_writer_instance.cc
   exporter/abc_writer_mball.cc
   exporter/abc_writer_mesh.cc
   exporter/abc_writer_nurbs.cc
@@ -83,12 +85,14 @@ set(SRC
   intern/abc_util.h
 
   exporter/abc_archive.h
+  exporter/abc_custom_props.h
   exporter/abc_hierarchy_iterator.h
   exporter/abc_subdiv_disabler.h
   exporter/abc_writer_abstract.h
   exporter/abc_writer_camera.h
   exporter/abc_writer_curves.h
   exporter/abc_writer_hair.h
+  exporter/abc_writer_instance.h
   exporter/abc_writer_mball.h
   exporter/abc_writer_mesh.h
   exporter/abc_writer_nurbs.h

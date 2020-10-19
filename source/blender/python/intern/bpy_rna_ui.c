@@ -17,7 +17,7 @@
 /** \file
  * \ingroup pythonintern
  *
- * This adds helpers to #uiLayout which can't be added easily to RNA it's self.
+ * This adds helpers to #uiLayout which can't be added easily to RNA itself.
  */
 
 #include <Python.h>
@@ -29,6 +29,7 @@
 #include "UI_interface.h"
 
 #include "bpy_rna.h"
+#include "bpy_rna_ui.h"
 
 PyDoc_STRVAR(bpy_rna_uilayout_introspect_doc,
              ".. method:: introspect()\n"

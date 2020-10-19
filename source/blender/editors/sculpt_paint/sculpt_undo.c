@@ -55,7 +55,7 @@
 #include "BKE_subsurf.h"
 #include "BKE_undo_system.h"
 
-// XXX: Ideally should be no direct call to such low level things.
+/* XXX: Ideally should be no direct call to such low level things. */
 #include "BKE_subdiv_eval.h"
 
 #include "DEG_depsgraph.h"
@@ -239,7 +239,7 @@ static bool sculpt_undo_restore_coords(bContext *C, Depsgraph *depsgraph, Sculpt
       /* Propagate new coords to keyblock. */
       SCULPT_vertcos_to_key(ob, ss->shapekey_active, vertCos);
 
-      /* PBVH uses it's own mvert array, so coords should be */
+      /* PBVH uses its own mvert array, so coords should be */
       /* propagated to PBVH here. */
       BKE_pbvh_vert_coords_apply(ss->pbvh, vertCos, ss->shapekey_active->totelem);
 
@@ -327,17 +327,14 @@ static bool sculpt_undo_restore_color(bContext *C, SculptUndoNode *unode)
   ViewLayer *view_layer = CTX_data_view_layer(C);
   Object *ob = OBACT(view_layer);
   SculptSession *ss = ob->sculpt;
-  MVert *mvert;
-  MPropCol *vcol;
-  int *index, i;
 
   if (unode->maxvert) {
     /* regular mesh restore */
-    index = unode->index;
-    mvert = ss->mvert;
-    vcol = ss->vcol;
+    int *index = unode->index;
+    MVert *mvert = ss->mvert;
+    MPropCol *vcol = ss->vcol;
 
-    for (i = 0; i < unode->totvert; i++) {
+    for (int i = 0; i < unode->totvert; i++) {
       copy_v4_v4(vcol[index[i]].color, unode->col[i]);
       mvert[index[i]].flag |= ME_VERT_PBVH_UPDATE;
     }
@@ -650,7 +647,7 @@ static void sculpt_undo_restore_list(bContext *C, Depsgraph *depsgraph, ListBase
 
       BKE_sculpt_update_object_for_edit(depsgraph, ob, true, need_mask, false);
 
-      SCULPT_visibility_sync_all_face_sets_to_vertices(ss);
+      SCULPT_visibility_sync_all_face_sets_to_vertices(ob);
 
       BKE_pbvh_update_vertex_data(ss->pbvh, PBVH_UpdateVisibility);
 
@@ -927,16 +924,14 @@ SculptUndoNode *SCULPT_undo_get_first_node()
 static void sculpt_undo_alloc_and_store_hidden(PBVH *pbvh, SculptUndoNode *unode)
 {
   PBVHNode *node = unode->node;
-  BLI_bitmap **grid_hidden;
-  int i, *grid_indices, totgrid;
+  BLI_bitmap **grid_hidden = BKE_pbvh_grid_hidden(pbvh);
 
-  grid_hidden = BKE_pbvh_grid_hidden(pbvh);
-
+  int *grid_indices, totgrid;
   BKE_pbvh_node_get_grids(pbvh, node, &grid_indices, &totgrid, NULL, NULL, NULL);
 
   unode->grid_hidden = MEM_callocN(sizeof(*unode->grid_hidden) * totgrid, "unode->grid_hidden");
 
-  for (i = 0; i < totgrid; i++) {
+  for (int i = 0; i < totgrid; i++) {
     if (grid_hidden[grid_indices[i]]) {
       unode->grid_hidden[i] = MEM_dupallocN(grid_hidden[grid_indices[i]]);
     }
@@ -1087,11 +1082,10 @@ static void sculpt_undo_store_hidden(Object *ob, SculptUndoNode *unode)
     MVert *mvert;
     const int *vert_indices;
     int allvert;
-    int i;
 
     BKE_pbvh_node_num_verts(pbvh, node, NULL, &allvert);
     BKE_pbvh_node_get_verts(pbvh, node, &vert_indices, &mvert);
-    for (i = 0; i < allvert; i++) {
+    for (int i = 0; i < allvert; i++) {
       BLI_BITMAP_SET(unode->vert_hidden, i, mvert[vert_indices[i]].flag & ME_HIDE);
     }
   }

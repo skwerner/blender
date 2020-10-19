@@ -29,6 +29,7 @@
 
 #include "BLT_translation.h"
 
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
@@ -514,7 +515,7 @@ static Mesh *normalEditModifier_do(NormalEditModifierData *enmd,
     /* We need to duplicate data here, otherwise setting custom normals
      * (which may also affect sharp edges) could
      * modify original mesh, see T43671. */
-    BKE_id_copy_ex(NULL, &mesh->id, (ID **)&result, LIB_ID_COPY_LOCALIZE);
+    result = (Mesh *)BKE_id_copy_ex(NULL, &mesh->id, NULL, LIB_ID_COPY_LOCALIZE);
   }
   else {
     result = mesh;
@@ -646,11 +647,9 @@ static void initData(ModifierData *md)
 {
   NormalEditModifierData *enmd = (NormalEditModifierData *)md;
 
-  enmd->mode = MOD_NORMALEDIT_MODE_RADIAL;
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(enmd, modifier));
 
-  enmd->mix_mode = MOD_NORMALEDIT_MIX_COPY;
-  enmd->mix_factor = 1.0f;
-  enmd->mix_limit = M_PI;
+  MEMCPY_STRUCT_AFTER(enmd, DNA_struct_default_get(NormalEditModifierData), modifier);
 }
 
 static void requiredDataMask(Object *UNUSED(ob),
@@ -672,11 +671,11 @@ static bool dependsOnNormals(ModifierData *UNUSED(md))
   return true;
 }
 
-static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk, void *userData)
+static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   NormalEditModifierData *enmd = (NormalEditModifierData *)md;
 
-  walk(userData, ob, &enmd->target, IDWALK_CB_NOP);
+  walk(userData, ob, (ID **)&enmd->target, IDWALK_CB_NOP);
 }
 
 static bool isDisabled(const struct Scene *UNUSED(scene),
@@ -782,9 +781,11 @@ ModifierTypeInfo modifierType_NormalEdit = {
     /* name */ "NormalEdit",
     /* structName */ "NormalEditModifierData",
     /* structSize */ sizeof(NormalEditModifierData),
+    /* srna */ &RNA_NormalEditModifier,
     /* type */ eModifierTypeType_Constructive,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsMapping |
         eModifierTypeFlag_SupportsEditmode | eModifierTypeFlag_EnableInEditmode,
+    /* icon */ ICON_MOD_NORMALEDIT,
 
     /* copyData */ BKE_modifier_copydata_generic,
 
@@ -804,8 +805,7 @@ ModifierTypeInfo modifierType_NormalEdit = {
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ dependsOnNormals,
-    /* foreachObjectLink */ foreachObjectLink,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
     /* panelRegister */ panelRegister,

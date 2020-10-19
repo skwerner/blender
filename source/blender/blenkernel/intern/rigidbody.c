@@ -509,7 +509,7 @@ static rbCollisionShape *rigidbody_validate_sim_shape_helper(RigidBodyWorld *rbw
    * - assume even distribution of mass around the Object's pivot
    *   (i.e. Object pivot is centralized in boundbox)
    */
-  // XXX: all dimensions are auto-determined now... later can add stored settings for this
+  /* XXX: all dimensions are auto-determined now... later can add stored settings for this */
   /* get object dimensions without scaling */
   bb = BKE_object_boundbox_get(ob);
   if (bb) {
@@ -636,7 +636,7 @@ static void rigidbody_validate_sim_shape(RigidBodyWorld *rbw, Object *ob, bool r
 /* --------------------- */
 
 /* helper function to calculate volume of rigidbody object */
-// TODO: allow a parameter to specify method used to calculate this?
+/* TODO: allow a parameter to specify method used to calculate this? */
 void BKE_rigidbody_calc_volume(Object *ob, float *r_vol)
 {
   RigidBodyOb *rbo = ob->rigidbody_object;
@@ -653,7 +653,7 @@ void BKE_rigidbody_calc_volume(Object *ob, float *r_vol)
    *   (i.e. Object pivot is centralized in boundbox)
    * - boundbox gives full width
    */
-  // XXX: all dimensions are auto-determined now... later can add stored settings for this
+  /* XXX: all dimensions are auto-determined now... later can add stored settings for this */
   BKE_object_dimensions_get(ob, size);
 
   if (ELEM(rbo->shape, RB_SHAPE_CAPSULE, RB_SHAPE_CYLINDER, RB_SHAPE_CONE)) {
@@ -708,6 +708,8 @@ void BKE_rigidbody_calc_volume(Object *ob, float *r_vol)
 
         if (totvert > 0 && tottri > 0) {
           BKE_mesh_calc_volume(mvert, totvert, lt, tottri, mloop, &volume, NULL);
+          const float volume_scale = mat4_to_volume_scale(ob->obmat);
+          volume *= fabsf(volume_scale);
         }
       }
       else {
@@ -740,7 +742,7 @@ void BKE_rigidbody_calc_center_of_mass(Object *ob, float r_center[3])
    *   (i.e. Object pivot is centralized in boundbox)
    * - boundbox gives full width
    */
-  // XXX: all dimensions are auto-determined now... later can add stored settings for this
+  /* XXX: all dimensions are auto-determined now... later can add stored settings for this */
   BKE_object_dimensions_get(ob, size);
 
   /* calculate volume as appropriate  */
@@ -1554,17 +1556,17 @@ void BKE_rigidbody_remove_object(Main *bmain, Scene *scene, Object *ob, const bo
       BKE_collection_object_add(bmain, scene->master_collection, ob);
     }
     BKE_collection_object_remove(bmain, rbw->group, ob, free_us);
+
+    /* flag cache as outdated */
+    BKE_rigidbody_cache_reset(rbw);
+    /* Reset cache as the object order probably changed after freeing the object. */
+    PTCacheID pid;
+    BKE_ptcache_id_from_rigidbody(&pid, NULL, rbw);
+    BKE_ptcache_id_reset(scene, &pid, PTCACHE_RESET_OUTDATED);
   }
 
   /* remove object's settings */
   BKE_rigidbody_free_object(ob, rbw);
-
-  /* flag cache as outdated */
-  BKE_rigidbody_cache_reset(rbw);
-  /* Reset cache as the object order probably changed after freeing the object. */
-  PTCacheID pid;
-  BKE_ptcache_id_from_rigidbody(&pid, NULL, rbw);
-  BKE_ptcache_id_reset(scene, &pid, PTCACHE_RESET_OUTDATED);
 
   /* Dependency graph update */
   DEG_relations_tag_update(bmain);
@@ -2032,7 +2034,7 @@ void BKE_rigidbody_sync_transforms(RigidBodyWorld *rbw, Object *ob, float ctime)
       !(ob->base_flag & BASE_SELECTED && G.moving & G_TRANSFORM_OBJ)) {
     float mat[4][4], size_mat[4][4], size[3];
 
-    normalize_qt(rbo->orn);  // RB_TODO investigate why quaternion isn't normalized at this point
+    normalize_qt(rbo->orn); /* RB_TODO investigate why quaternion isn't normalized at this point */
     quat_to_mat4(mat, rbo->orn);
     copy_v3_v3(mat[3], rbo->pos);
 
@@ -2198,7 +2200,7 @@ void BKE_rigidbody_do_simulation(Depsgraph *depsgraph, Scene *scene, float ctime
   }
 
   /* try to read from cache */
-  // RB_TODO deal with interpolated, old and baked results
+  /* RB_TODO deal with interpolated, old and baked results */
   bool can_simulate = (ctime == rbw->ltime + 1) && !(cache->flag & PTCACHE_BAKED);
 
   if (BKE_ptcache_read(&pid, ctime, can_simulate) == PTCACHE_READ_EXACT) {

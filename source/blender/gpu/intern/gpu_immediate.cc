@@ -39,26 +39,16 @@
 
 using namespace blender::gpu;
 
-static Immediate *imm = NULL;
-
-void immInit(void)
-{
-  /* TODO Remove */
-}
+static thread_local Immediate *imm = NULL;
 
 void immActivate(void)
 {
-  imm = GPU_context_active_get()->imm;
+  imm = Context::get()->imm;
 }
 
 void immDeactivate(void)
 {
   imm = NULL;
-}
-
-void immDestroy(void)
-{
-  /* TODO Remove */
 }
 
 GPUVertFormat *immVertexFormat(void)
@@ -72,6 +62,7 @@ void immBindShader(GPUShader *shader)
   BLI_assert(imm->shader == NULL);
 
   imm->shader = shader;
+  imm->builtin_shader_bound = GPU_SHADER_TEXT; /* Default value. */
 
   if (!imm->vertex_format.packed) {
     VertexFormat_pack(&imm->vertex_format);
@@ -87,6 +78,7 @@ void immBindBuiltinProgram(eGPUBuiltinShader shader_id)
 {
   GPUShader *shader = GPU_shader_get_builtin_shader(shader_id);
   immBindShader(shader);
+  imm->builtin_shader_bound = shader_id;
 }
 
 void immUnbindProgram(void)
@@ -132,10 +124,87 @@ static bool vertex_count_makes_sense_for_primitive(uint vertex_len, GPUPrimType 
 }
 #endif
 
+/* -------------------------------------------------------------------- */
+/** \name Wide line workaround
+ *
+ * Some systems do not support wide lines.
+ * We workaround this by using specialized shaders.
+ * \{ */
+
+static void wide_line_workaround_start(GPUPrimType prim_type)
+{
+  if (!ELEM(prim_type, GPU_PRIM_LINES, GPU_PRIM_LINE_STRIP, GPU_PRIM_LINE_LOOP)) {
+    return;
+  }
+
+  float line_width = GPU_line_width_get();
+
+  if (line_width == 1.0f) {
+    /* No need to change the shader. */
+    return;
+  }
+
+  eGPUBuiltinShader polyline_sh;
+  switch (imm->builtin_shader_bound) {
+    case GPU_SHADER_3D_CLIPPED_UNIFORM_COLOR:
+      polyline_sh = GPU_SHADER_3D_POLYLINE_CLIPPED_UNIFORM_COLOR;
+      break;
+    case GPU_SHADER_2D_UNIFORM_COLOR:
+    case GPU_SHADER_3D_UNIFORM_COLOR:
+      polyline_sh = GPU_SHADER_3D_POLYLINE_UNIFORM_COLOR;
+      break;
+    case GPU_SHADER_2D_FLAT_COLOR:
+    case GPU_SHADER_3D_FLAT_COLOR:
+      polyline_sh = GPU_SHADER_3D_POLYLINE_FLAT_COLOR;
+      break;
+    case GPU_SHADER_2D_SMOOTH_COLOR:
+    case GPU_SHADER_3D_SMOOTH_COLOR:
+      polyline_sh = GPU_SHADER_3D_POLYLINE_SMOOTH_COLOR;
+      break;
+    default:
+      /* Cannot replace the current shader with a polyline shader. */
+      return;
+  }
+
+  imm->prev_shader = imm->shader;
+
+  immUnbindProgram();
+
+  /* TODO(fclem): Don't use geometry shader and use quad instancing with double load. */
+  // GPU_vertformat_multiload_enable(imm->vertex_format, 2);
+
+  immBindBuiltinProgram(polyline_sh);
+
+  float viewport[4];
+  GPU_viewport_size_get_f(viewport);
+  immUniform2fv("viewportSize", &viewport[2]);
+  immUniform1f("lineWidth", line_width);
+
+  if (ELEM(polyline_sh,
+           GPU_SHADER_3D_POLYLINE_CLIPPED_UNIFORM_COLOR,
+           GPU_SHADER_3D_POLYLINE_UNIFORM_COLOR)) {
+    immUniformColor4fv(imm->uniform_color);
+  }
+}
+
+static void wide_line_workaround_end(void)
+{
+  if (imm->prev_shader) {
+    immUnbindProgram();
+
+    immBindShader(imm->prev_shader);
+    imm->prev_shader = NULL;
+  }
+}
+
+/** \} */
+
 void immBegin(GPUPrimType prim_type, uint vertex_len)
 {
   BLI_assert(imm->prim_type == GPU_PRIM_NONE); /* Make sure we haven't already begun. */
   BLI_assert(vertex_count_makes_sense_for_primitive(vertex_len, prim_type));
+
+  wide_line_workaround_start(prim_type);
 
   imm->prim_type = prim_type;
   imm->vertex_len = vertex_len;
@@ -165,7 +234,7 @@ GPUBatch *immBeginBatch(GPUPrimType prim_type, uint vertex_len)
   GPUVertBuf *verts = GPU_vertbuf_create_with_format(&imm->vertex_format);
   GPU_vertbuf_data_alloc(verts, vertex_len);
 
-  imm->vertex_data = verts->data;
+  imm->vertex_data = (uchar *)GPU_vertbuf_get_data(verts);
 
   imm->batch = GPU_batch_create_ex(prim_type, verts, NULL, GPU_BATCH_OWNS_VBO);
   imm->batch->flag |= GPU_BATCH_BUILDING;
@@ -196,7 +265,7 @@ void immEnd(void)
 
   if (imm->batch) {
     if (imm->vertex_idx < imm->vertex_len) {
-      GPU_vertbuf_data_resize(imm->batch->verts[0], imm->vertex_len);
+      GPU_vertbuf_data_resize(imm->batch->verts[0], imm->vertex_idx);
       /* TODO: resize only if vertex count is much smaller */
     }
     GPU_batch_set_shader(imm->batch, imm->shader);
@@ -211,6 +280,8 @@ void immEnd(void)
   imm->prim_type = GPU_PRIM_NONE;
   imm->strict_vertex_len = true;
   imm->vertex_data = NULL;
+
+  wide_line_workaround_end();
 }
 
 static void setAttrValueBit(uint attr_id)
@@ -426,7 +497,7 @@ static void immEndVertex(void) /* and move on to the next vertex */
         printf("copying %s from vertex %u to %u\n", a->name, imm->vertex_idx - 1, imm->vertex_idx);
 #endif
 
-        GLubyte *data = imm->vertex_data + a->offset;
+        uchar *data = imm->vertex_data + a->offset;
         memcpy(data, data - imm->vertex_format.stride, a->sz);
         /* TODO: consolidate copy of adjacent attributes */
       }
@@ -559,6 +630,8 @@ void immUniformColor4f(float r, float g, float b, float a)
   BLI_assert(uniform_loc != -1);
   float data[4] = {r, g, b, a};
   GPU_shader_uniform_vector(imm->shader, uniform_loc, 4, 1, data);
+  /* For wide Line workaround. */
+  copy_v4_v4(imm->uniform_color, data);
 }
 
 void immUniformColor4fv(const float rgba[4])

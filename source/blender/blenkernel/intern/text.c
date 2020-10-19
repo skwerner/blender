@@ -55,6 +55,8 @@
 #include "BKE_node.h"
 #include "BKE_text.h"
 
+#include "BLO_read_write.h"
+
 #ifdef WITH_PYTHON
 #  include "BPY_extern.h"
 #endif
@@ -167,6 +169,72 @@ static void text_free_data(ID *id)
 #endif
 }
 
+static void text_blend_write(BlendWriter *writer, ID *id, const void *id_address)
+{
+  Text *text = (Text *)id;
+
+  /* Note: we are clearing local temp data here, *not* the flag in the actual 'real' ID. */
+  if ((text->flags & TXT_ISMEM) && (text->flags & TXT_ISEXT)) {
+    text->flags &= ~TXT_ISEXT;
+  }
+
+  /* Clean up, important in undo case to reduce false detection of changed datablocks. */
+  text->compiled = NULL;
+
+  /* write LibData */
+  BLO_write_id_struct(writer, Text, id_address, &text->id);
+  BKE_id_blend_write(writer, &text->id);
+
+  if (text->filepath) {
+    BLO_write_string(writer, text->filepath);
+  }
+
+  if (!(text->flags & TXT_ISEXT)) {
+    /* now write the text data, in two steps for optimization in the readfunction */
+    LISTBASE_FOREACH (TextLine *, tmp, &text->lines) {
+      BLO_write_struct(writer, TextLine, tmp);
+    }
+
+    LISTBASE_FOREACH (TextLine *, tmp, &text->lines) {
+      BLO_write_raw(writer, tmp->len + 1, tmp->line);
+    }
+  }
+}
+
+static void text_blend_read_data(BlendDataReader *reader, ID *id)
+{
+  Text *text = (Text *)id;
+  BLO_read_data_address(reader, &text->filepath);
+
+  text->compiled = NULL;
+
+#if 0
+  if (text->flags & TXT_ISEXT) {
+    BKE_text_reload(text);
+  }
+  /* else { */
+#endif
+
+  BLO_read_list(reader, &text->lines);
+
+  BLO_read_data_address(reader, &text->curl);
+  BLO_read_data_address(reader, &text->sell);
+
+  LISTBASE_FOREACH (TextLine *, ln, &text->lines) {
+    BLO_read_data_address(reader, &ln->line);
+    ln->format = NULL;
+
+    if (ln->len != (int)strlen(ln->line)) {
+      printf("Error loading text, line lengths differ\n");
+      ln->len = strlen(ln->line);
+    }
+  }
+
+  text->flags = (text->flags) & ~TXT_ISEXT;
+
+  id_us_ensure_real(&text->id);
+}
+
 IDTypeInfo IDType_ID_TXT = {
     .id_code = ID_TXT,
     .id_filter = FILTER_ID_TXT,
@@ -175,7 +243,7 @@ IDTypeInfo IDType_ID_TXT = {
     .name = "Text",
     .name_plural = "texts",
     .translation_context = BLT_I18NCONTEXT_ID_TEXT,
-    .flags = 0,
+    .flags = IDTYPE_FLAGS_NO_ANIMDATA,
 
     .init_data = text_init_data,
     .copy_data = text_copy_data,
@@ -184,8 +252,8 @@ IDTypeInfo IDType_ID_TXT = {
     .foreach_id = NULL,
     .foreach_cache = NULL,
 
-    .blend_write = NULL,
-    .blend_read_data = NULL,
+    .blend_write = text_blend_write,
+    .blend_read_data = text_blend_read_data,
     .blend_read_lib = NULL,
     .blend_read_expand = NULL,
 };
@@ -219,11 +287,9 @@ Text *BKE_text_add(Main *bmain, const char *name)
 {
   Text *ta;
 
-  ta = BKE_libblock_alloc(bmain, ID_TXT, name, 0);
+  ta = BKE_id_new(bmain, ID_TXT, name);
   /* Texts always have 'real' user (see also read code). */
   id_us_ensure_real(&ta->id);
-
-  text_init_data(&ta->id);
 
   return ta;
 }
@@ -329,7 +395,7 @@ static void text_from_buf(Text *text, const unsigned char *buffer, const int len
    *   in this case content of such line would be used to fill text line buffer
    * - file is empty. in this case new line is needed to start editing from.
    * - last character in buffer is \n. in this case new line is needed to
-   *   deal with newline at end of file. (see [#28087]) (sergey) */
+   *   deal with newline at end of file. (see T28087) (sergey) */
   if (llen != 0 || lines_count == 0 || buffer[len - 1] == '\n') {
     TextLine *tmp;
 
@@ -446,13 +512,6 @@ Text *BKE_text_load_ex(Main *bmain, const char *file, const char *relpath, const
 Text *BKE_text_load(Main *bmain, const char *file, const char *relpath)
 {
   return BKE_text_load_ex(bmain, file, relpath, false);
-}
-
-Text *BKE_text_copy(Main *bmain, const Text *ta)
-{
-  Text *ta_copy;
-  BKE_id_copy(bmain, &ta->id, (ID **)&ta_copy);
-  return ta_copy;
 }
 
 void BKE_text_clear(Text *text) /* called directly from rna */
@@ -847,7 +906,7 @@ void txt_move_left(Text *text, const bool sel)
   }
   else {
     /* do nice left only if there are only spaces */
-    // TXT_TABSIZE hardcoded in DNA_text_types.h
+    /* #TXT_TABSIZE hard-coded in DNA_text_types.h */
     if (text->flags & TXT_TABSTOSPACES) {
       tabsize = txt_calc_tab_left(*linep, *charp);
     }
@@ -2262,7 +2321,7 @@ int txt_setcurr_tab_spaces(Text *text, int space)
     /* if we find a ':' on this line, then add a tab but not if it is:
      * 1) in a comment
      * 2) within an identifier
-     * 3) after the cursor (text->curc), i.e. when creating space before a function def [#25414]
+     * 3) after the cursor (text->curc), i.e. when creating space before a function def T25414.
      */
     int a;
     bool is_indent = false;

@@ -56,10 +56,12 @@ void BKE_libblock_free_data(ID *id, const bool do_id_user)
   if (id->properties) {
     IDP_FreePropertyContent_ex(id->properties, do_id_user);
     MEM_freeN(id->properties);
+    id->properties = NULL;
   }
 
   if (id->override_library) {
     BKE_lib_override_library_free(&id->override_library, do_id_user);
+    id->override_library = NULL;
   }
 
   BKE_animdata_free(id, do_id_user);
@@ -275,8 +277,8 @@ static void id_delete(Main *bmain, const bool do_tagged_deletion)
             BLI_remlink(lb, id);
             BLI_addtail(&tagged_deleted_ids, id);
             /* Do not tag as no_main now, we want to unlink it first (lower-level ID management
-             * code has some specific handling of 'nom main'
-             * IDs that would be a problem in that case). */
+             * code has some specific handling of 'no main' IDs that would be a problem in that
+             * case). */
             id->tag |= tag;
             keep_looping = true;
           }

@@ -28,6 +28,7 @@
 #include "DNA_mesh_types.h"
 #include "DNA_meta_types.h"
 #include "DNA_object_types.h"
+#include "DNA_pointcloud_types.h"
 #include "DNA_scene_types.h"
 
 #include "BLI_edgehash.h"
@@ -53,6 +54,8 @@
 #include "BKE_curve.h"
 /* -- */
 #include "BKE_object.h"
+/* -- */
+#include "BKE_pointcloud.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
@@ -314,7 +317,7 @@ int BKE_mesh_nurbs_displist_to_mdata(Object *ob,
   *r_allvert = mvert = MEM_calloc_arrayN(totvert, sizeof(MVert), "nurbs_init mvert");
   *r_alledge = medge = MEM_calloc_arrayN(totedge, sizeof(MEdge), "nurbs_init medge");
   *r_allloop = mloop = MEM_calloc_arrayN(
-      totpoly, sizeof(MLoop[4]), "nurbs_init mloop");  // totloop
+      totpoly, sizeof(MLoop[4]), "nurbs_init mloop"); /* totloop */
   *r_allpoly = mpoly = MEM_calloc_arrayN(totpoly, sizeof(MPoly), "nurbs_init mloop");
 
   if (r_alluv) {
@@ -400,9 +403,7 @@ int BKE_mesh_nurbs_displist_to_mdata(Object *ob,
         mpoly->mat_nr = dl->col;
 
         if (mloopuv) {
-          int i;
-
-          for (i = 0; i < 3; i++, mloopuv++) {
+          for (int i = 0; i < 3; i++, mloopuv++) {
             mloopuv->uv[0] = (mloop[i].v - startvert) / (float)(dl->nr - 1);
             mloopuv->uv[1] = 0.0f;
           }
@@ -464,7 +465,6 @@ int BKE_mesh_nurbs_displist_to_mdata(Object *ob,
           if (mloopuv) {
             int orco_sizeu = dl->nr - 1;
             int orco_sizev = dl->parts - 1;
-            int i;
 
             /* exception as handled in convertblender.c too */
             if (dl->flag & DL_CYCL_U) {
@@ -477,7 +477,7 @@ int BKE_mesh_nurbs_displist_to_mdata(Object *ob,
               orco_sizev++;
             }
 
-            for (i = 0; i < 4; i++, mloopuv++) {
+            for (int i = 0; i < 4; i++, mloopuv++) {
               /* find uv based on vertex index into grid array */
               int v = mloop[i].v - startvert;
 
@@ -906,6 +906,100 @@ void BKE_mesh_to_curve(Main *bmain, Depsgraph *depsgraph, Scene *UNUSED(scene), 
   }
 }
 
+void BKE_pointcloud_from_mesh(Mesh *me, PointCloud *pointcloud)
+{
+  BLI_assert(me != NULL);
+
+  pointcloud->totpoint = me->totvert;
+  CustomData_realloc(&pointcloud->pdata, pointcloud->totpoint);
+
+  /* Copy over all attributes. */
+  const CustomData_MeshMasks mask = {
+      .vmask = CD_MASK_PROP_ALL,
+  };
+  CustomData_merge(&me->vdata, &pointcloud->pdata, mask.vmask, CD_DUPLICATE, me->totvert);
+  BKE_pointcloud_update_customdata_pointers(pointcloud);
+  CustomData_update_typemap(&pointcloud->pdata);
+
+  MVert *mvert;
+  mvert = me->mvert;
+  for (int i = 0; i < me->totvert; i++, mvert++) {
+    copy_v3_v3(pointcloud->co[i], mvert->co);
+  }
+}
+
+void BKE_mesh_to_pointcloud(Main *bmain, Depsgraph *depsgraph, Scene *UNUSED(scene), Object *ob)
+{
+  BLI_assert(ob->type == OB_MESH);
+
+  Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
+  Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
+  Mesh *me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_eval, &CD_MASK_MESH);
+
+  PointCloud *pointcloud = BKE_pointcloud_add(bmain, ob->id.name + 2);
+
+  BKE_pointcloud_from_mesh(me_eval, pointcloud);
+
+  BKE_id_materials_copy(bmain, (ID *)ob->data, (ID *)pointcloud);
+
+  id_us_min(&((Mesh *)ob->data)->id);
+  ob->data = pointcloud;
+  ob->type = OB_POINTCLOUD;
+
+  BKE_object_free_derived_caches(ob);
+}
+
+void BKE_mesh_from_pointcloud(PointCloud *pointcloud, Mesh *me)
+{
+  BLI_assert(pointcloud != NULL);
+
+  me->totvert = pointcloud->totpoint;
+
+  /* Merge over all attributes. */
+  const CustomData_MeshMasks mask = {
+      .vmask = CD_MASK_PROP_ALL,
+  };
+  CustomData_merge(&pointcloud->pdata, &me->vdata, mask.vmask, CD_DUPLICATE, pointcloud->totpoint);
+
+  /* Convert the Position attribute to a mesh vertex. */
+  me->mvert = CustomData_add_layer(&me->vdata, CD_MVERT, CD_CALLOC, NULL, me->totvert);
+  CustomData_update_typemap(&me->vdata);
+
+  const int layer_idx = CustomData_get_named_layer_index(
+      &me->vdata, CD_PROP_FLOAT3, POINTCLOUD_ATTR_POSITION);
+  CustomDataLayer *pos_layer = &me->vdata.layers[layer_idx];
+  float(*positions)[3] = pos_layer->data;
+
+  MVert *mvert;
+  mvert = me->mvert;
+  for (int i = 0; i < me->totvert; i++, mvert++) {
+    copy_v3_v3(mvert->co, positions[i]);
+  }
+
+  /* Delete Position attribute since it is now in vertex coordinates. */
+  CustomData_free_layer(&me->vdata, CD_PROP_FLOAT3, me->totvert, layer_idx);
+}
+
+void BKE_pointcloud_to_mesh(Main *bmain, Depsgraph *depsgraph, Scene *UNUSED(scene), Object *ob)
+{
+  BLI_assert(ob->type == OB_POINTCLOUD);
+
+  Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
+  PointCloud *pointcloud_eval = (PointCloud *)ob_eval->runtime.data_eval;
+
+  Mesh *me = BKE_mesh_add(bmain, ob->id.name + 2);
+
+  BKE_mesh_from_pointcloud(pointcloud_eval, me);
+
+  BKE_id_materials_copy(bmain, (ID *)ob->data, (ID *)me);
+
+  id_us_min(&((PointCloud *)ob->data)->id);
+  ob->data = me;
+  ob->type = OB_MESH;
+
+  BKE_object_free_derived_caches(ob);
+}
+
 /* Create a temporary object to be used for nurbs-to-mesh conversion.
  *
  * This is more complex that it should be because BKE_mesh_from_nurbs_displist() will do more than
@@ -916,8 +1010,7 @@ static Object *object_for_curve_to_mesh_create(Object *object)
   Curve *curve = (Curve *)object->data;
 
   /* Create object itself. */
-  Object *temp_object;
-  BKE_id_copy_ex(NULL, &object->id, (ID **)&temp_object, LIB_ID_COPY_LOCALIZE);
+  Object *temp_object = (Object *)BKE_id_copy_ex(NULL, &object->id, NULL, LIB_ID_COPY_LOCALIZE);
 
   /* Remove all modifiers, since we don't want them to be applied. */
   BKE_object_free_modifiers(temp_object, LIB_ID_CREATE_NO_USER_REFCOUNT);
@@ -1083,11 +1176,8 @@ static Mesh *mesh_new_from_mesh(Object *object, Mesh *mesh)
    * add the data to 'mesh' so future calls to this function don't need to re-convert the data. */
   BKE_mesh_wrapper_ensure_mdata(mesh);
 
-  Mesh *mesh_result = NULL;
-  BKE_id_copy_ex(NULL,
-                 &mesh->id,
-                 (ID **)&mesh_result,
-                 LIB_ID_CREATE_NO_MAIN | LIB_ID_CREATE_NO_USER_REFCOUNT);
+  Mesh *mesh_result = (Mesh *)BKE_id_copy_ex(
+      NULL, &mesh->id, NULL, LIB_ID_CREATE_NO_MAIN | LIB_ID_CREATE_NO_USER_REFCOUNT);
   /* NOTE: Materials should already be copied. */
   /* Copy original mesh name. This is because edit meshes might not have one properly set name. */
   BLI_strncpy(mesh_result->id.name, ((ID *)object->data)->name, sizeof(mesh_result->id.name));
@@ -1313,16 +1403,16 @@ Mesh *BKE_mesh_create_derived_for_modifier(struct Depsgraph *depsgraph,
 {
   Mesh *me = ob_eval->runtime.data_orig ? ob_eval->runtime.data_orig : ob_eval->data;
   const ModifierTypeInfo *mti = BKE_modifier_get_info(md_eval->type);
-  Mesh *result;
+  Mesh *result = NULL;
   KeyBlock *kb;
   ModifierEvalContext mectx = {depsgraph, ob_eval, MOD_APPLY_TO_BASE_MESH};
 
   if (!(md_eval->mode & eModifierMode_Realtime)) {
-    return NULL;
+    return result;
   }
 
   if (mti->isDisabled && mti->isDisabled(scene, md_eval, 0)) {
-    return NULL;
+    return result;
   }
 
   if (build_shapekey_layers && me->key &&
@@ -1334,7 +1424,7 @@ Mesh *BKE_mesh_create_derived_for_modifier(struct Depsgraph *depsgraph,
     int numVerts;
     float(*deformedVerts)[3] = BKE_mesh_vert_coords_alloc(me, &numVerts);
 
-    BKE_id_copy_ex(NULL, &me->id, (ID **)&result, LIB_ID_COPY_LOCALIZE);
+    result = (Mesh *)BKE_id_copy_ex(NULL, &me->id, NULL, LIB_ID_COPY_LOCALIZE);
     mti->deformVerts(md_eval, &mectx, result, deformedVerts, numVerts);
     BKE_mesh_vert_coords_apply(result, deformedVerts);
 
@@ -1345,8 +1435,7 @@ Mesh *BKE_mesh_create_derived_for_modifier(struct Depsgraph *depsgraph,
     MEM_freeN(deformedVerts);
   }
   else {
-    Mesh *mesh_temp;
-    BKE_id_copy_ex(NULL, &me->id, (ID **)&mesh_temp, LIB_ID_COPY_LOCALIZE);
+    Mesh *mesh_temp = (Mesh *)BKE_id_copy_ex(NULL, &me->id, NULL, LIB_ID_COPY_LOCALIZE);
 
     if (build_shapekey_layers) {
       add_shapekey_layers(mesh_temp, me);

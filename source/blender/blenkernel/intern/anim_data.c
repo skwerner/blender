@@ -31,6 +31,7 @@
 #include "BKE_fcurve.h"
 #include "BKE_fcurve_driver.h"
 #include "BKE_global.h"
+#include "BKE_idtype.h"
 #include "BKE_lib_id.h"
 #include "BKE_lib_query.h"
 #include "BKE_main.h"
@@ -70,42 +71,11 @@ static CLG_LogRef LOG = {"bke.anim_sys"};
 /* Check if ID can have AnimData */
 bool id_type_can_have_animdata(const short id_type)
 {
-  /* Only some ID-blocks have this info for now */
-  /* TODO: finish adding this for the other blocktypes */
-  switch (id_type) {
-    /* has AnimData */
-    case ID_OB:
-    case ID_ME:
-    case ID_MB:
-    case ID_CU:
-    case ID_AR:
-    case ID_LT:
-    case ID_KE:
-    case ID_PA:
-    case ID_MA:
-    case ID_TE:
-    case ID_NT:
-    case ID_LA:
-    case ID_CA:
-    case ID_WO:
-    case ID_LS:
-    case ID_LP:
-    case ID_SPK:
-    case ID_SCE:
-    case ID_MC:
-    case ID_MSK:
-    case ID_GD:
-    case ID_CF:
-    case ID_HA:
-    case ID_PT:
-    case ID_VO:
-    case ID_SIM:
-      return true;
-
-    /* no AnimData */
-    default:
-      return false;
+  const IDTypeInfo *typeinfo = BKE_idtype_get_info_from_idcode(id_type);
+  if (typeinfo != NULL) {
+    return (typeinfo->flags & IDTYPE_FLAGS_NO_ANIMDATA) == 0;
   }
+  return false;
 }
 
 bool id_can_have_animdata(const ID *id)
@@ -167,62 +137,90 @@ AnimData *BKE_animdata_add_id(ID *id)
 /* Action Setter --------------------------------------- */
 
 /**
- * Called when user tries to change the active action of an AnimData block
+ * Called when user tries to change the active action of an #AnimData block
  * (via RNA, Outliner, etc.)
+ *
+ * \param reports: Can be NULL.
+ * \param id: The owner of the animation data
+ * \param act: The Action to set, or NULL to clear.
+ *
+ * \return true when the action was successfully updated, false otherwise.
  */
 bool BKE_animdata_set_action(ReportList *reports, ID *id, bAction *act)
 {
   AnimData *adt = BKE_animdata_from_id(id);
-  bool ok = false;
 
-  /* animdata validity check */
+  /* Animdata validity check. */
   if (adt == NULL) {
     BKE_report(reports, RPT_WARNING, "No AnimData to set action on");
-    return ok;
+    return false;
   }
 
-  /* active action is only editable when it is not a tweaking strip
-   * see rna_AnimData_action_editable() in rna_animation.c
-   */
-  if ((adt->flag & ADT_NLA_EDIT_ON) || (adt->actstrip) || (adt->tmpact)) {
-    /* cannot remove, otherwise things turn to custard */
+  if (adt->action == act) {
+    /* Don't bother reducing and increasing the user count when there is nothing changing. */
+    return true;
+  }
+
+  if (!BKE_animdata_action_editable(adt)) {
+    /* Cannot remove, otherwise things turn to custard. */
     BKE_report(reports, RPT_ERROR, "Cannot change action, as it is still being edited in NLA");
-    return ok;
+    return false;
   }
 
-  /* manage usercount for current action */
+  /* Reduce usercount for current action. */
   if (adt->action) {
     id_us_min((ID *)adt->action);
   }
 
-  /* assume that AnimData's action can in fact be edited... */
-  if (act) {
-    /* action must have same type as owner */
-    if (ELEM(act->idroot, 0, GS(id->name))) {
-      /* can set */
-      adt->action = act;
-      id_us_plus((ID *)adt->action);
-      ok = true;
-    }
-    else {
-      /* cannot set */
-      BKE_reportf(
-          reports,
-          RPT_ERROR,
-          "Could not set action '%s' onto ID '%s', as it does not have suitably rooted paths "
-          "for this purpose",
-          act->id.name + 2,
-          id->name);
-      /* ok = false; */
-    }
-  }
-  else {
-    /* just clearing the action... */
+  if (act == NULL) {
+    /* Just clearing the action. */
     adt->action = NULL;
-    ok = true;
+    return true;
   }
 
-  return ok;
+  /* Action must have same type as owner. */
+  if (!BKE_animdata_action_ensure_idroot(id, act)) {
+    /* Cannot set to this type. */
+    BKE_reportf(
+        reports,
+        RPT_ERROR,
+        "Could not set action '%s' onto ID '%s', as it does not have suitably rooted paths "
+        "for this purpose",
+        act->id.name + 2,
+        id->name);
+    return false;
+  }
+
+  adt->action = act;
+  id_us_plus((ID *)adt->action);
+
+  return true;
+}
+
+bool BKE_animdata_action_editable(const AnimData *adt)
+{
+  /* Active action is only editable when it is not a tweaking strip. */
+  const bool is_tweaking_strip = (adt->flag & ADT_NLA_EDIT_ON) || adt->actstrip != NULL ||
+                                 adt->tmpact != NULL;
+  return !is_tweaking_strip;
+}
+
+bool BKE_animdata_action_ensure_idroot(const ID *owner, bAction *action)
+{
+  const int idcode = GS(owner->name);
+
+  if (action == NULL) {
+    /* A NULL action is usable by any ID type. */
+    return true;
+  }
+
+  if (action->idroot == 0) {
+    /* First time this Action is assigned, lock it to this ID type. */
+    action->idroot = idcode;
+    return true;
+  }
+
+  return (action->idroot == idcode);
 }
 
 /* Freeing -------------------------------------------- */
@@ -329,10 +327,23 @@ AnimData *BKE_animdata_copy(Main *bmain, AnimData *adt, const int flag)
 
   /* make a copy of action - at worst, user has to delete copies... */
   if (do_action) {
+    /* Recursive copy of 'real' IDs is a bit hairy. Even if do not want to deal with usercount
+     *  when copying ID's data itself, we still need to do so with sub-IDs, since those will not be
+     * handled by later 'update usercounts of used IDs' code as used e.g. at end of
+     * BKE_id_copy_ex().
+     * So in case we do copy the ID and its sub-IDs in bmain, silence the 'no usercount' flag for
+     * the sub-IDs copying.
+     * Note: This is a bit weak, as usually when it comes to recursive ID copy. Should work for
+     * now, but we may have to revisit this at some point and add a proper extra flag to deal with
+     * that situation. Or refactor completely the way we handle such recursion, by flattening it
+     * e.g. */
+    const int id_copy_flag = (flag & LIB_ID_CREATE_NO_MAIN) == 0 ?
+                                 flag & ~LIB_ID_CREATE_NO_USER_REFCOUNT :
+                                 flag;
     BLI_assert(bmain != NULL);
     BLI_assert(dadt->action == NULL || dadt->action != dadt->tmpact);
-    BKE_id_copy_ex(bmain, (ID *)dadt->action, (ID **)&dadt->action, flag);
-    BKE_id_copy_ex(bmain, (ID *)dadt->tmpact, (ID **)&dadt->tmpact, flag);
+    dadt->action = (bAction *)BKE_id_copy_ex(bmain, (ID *)dadt->action, NULL, id_copy_flag);
+    dadt->tmpact = (bAction *)BKE_id_copy_ex(bmain, (ID *)dadt->tmpact, NULL, id_copy_flag);
   }
   else if (do_id_user) {
     id_us_plus((ID *)dadt->action);
@@ -386,13 +397,13 @@ static void animdata_copy_id_action(Main *bmain,
   if (adt) {
     if (adt->action && (do_linked_id || !ID_IS_LINKED(adt->action))) {
       id_us_min((ID *)adt->action);
-      adt->action = set_newid ? ID_NEW_SET(adt->action, BKE_action_copy(bmain, adt->action)) :
-                                BKE_action_copy(bmain, adt->action);
+      adt->action = set_newid ? ID_NEW_SET(adt->action, BKE_id_copy(bmain, &adt->action->id)) :
+                                BKE_id_copy(bmain, &adt->action->id);
     }
     if (adt->tmpact && (do_linked_id || !ID_IS_LINKED(adt->tmpact))) {
       id_us_min((ID *)adt->tmpact);
-      adt->tmpact = set_newid ? ID_NEW_SET(adt->tmpact, BKE_action_copy(bmain, adt->tmpact)) :
-                                BKE_action_copy(bmain, adt->tmpact);
+      adt->tmpact = set_newid ? ID_NEW_SET(adt->tmpact, BKE_id_copy(bmain, &adt->tmpact->id)) :
+                                BKE_id_copy(bmain, &adt->tmpact->id);
     }
   }
   bNodeTree *ntree = ntreeFromID(id);
@@ -441,8 +452,8 @@ void BKE_animdata_merge_copy(
   /* handle actions... */
   if (action_mode == ADT_MERGECOPY_SRC_COPY) {
     /* make a copy of the actions */
-    dst->action = BKE_action_copy(bmain, src->action);
-    dst->tmpact = BKE_action_copy(bmain, src->tmpact);
+    dst->action = (bAction *)BKE_id_copy(bmain, &src->action->id);
+    dst->tmpact = (bAction *)BKE_id_copy(bmain, &src->tmpact->id);
   }
   else if (action_mode == ADT_MERGECOPY_SRC_REF) {
     /* make a reference to it */
@@ -668,6 +679,7 @@ void BKE_animdata_transfer_by_basepath(Main *bmain, ID *srcID, ID *dstID, ListBa
      * and name it in a similar way so that it can be easily found again. */
     if (dstAdt->action == NULL) {
       dstAdt->action = BKE_action_add(bmain, srcAdt->action->id.name + 2);
+      BKE_animdata_action_ensure_idroot(dstID, dstAdt->action);
     }
     else if (dstAdt->action == srcAdt->action) {
       CLOG_WARN(&LOG,
@@ -680,6 +692,7 @@ void BKE_animdata_transfer_by_basepath(Main *bmain, ID *srcID, ID *dstID, ListBa
       /* TODO: review this... */
       id_us_min(&dstAdt->action->id);
       dstAdt->action = BKE_action_add(bmain, dstAdt->action->id.name + 2);
+      BKE_animdata_action_ensure_idroot(dstID, dstAdt->action);
     }
 
     /* loop over base paths, trying to fix for each one... */
@@ -1287,8 +1300,9 @@ void BKE_animdata_main_cb(Main *bmain, ID_AnimData_Edit_Callback func, void *use
 #define ANIMDATA_IDS_CB(first) \
   for (id = first; id; id = id->next) { \
     AnimData *adt = BKE_animdata_from_id(id); \
-    if (adt) \
+    if (adt) { \
       func(id, adt, user_data); \
+    } \
   } \
   (void)0
 
@@ -1299,11 +1313,13 @@ void BKE_animdata_main_cb(Main *bmain, ID_AnimData_Edit_Callback func, void *use
     NtId_Type *ntp = (NtId_Type *)id; \
     if (ntp->nodetree) { \
       AnimData *adt2 = BKE_animdata_from_id((ID *)ntp->nodetree); \
-      if (adt2) \
+      if (adt2) { \
         func(id, adt2, user_data); \
+      } \
     } \
-    if (adt) \
+    if (adt) { \
       func(id, adt, user_data); \
+    } \
   } \
   (void)0
 
@@ -1390,13 +1406,30 @@ void BKE_animdata_main_cb(Main *bmain, ID_AnimData_Edit_Callback func, void *use
  * NOTE: it is assumed that the structure we're replacing is <prefix><["><name><"]>
  *      i.e. pose.bones["Bone"]
  */
-/* TODO: use BKE_animdata_main_cb for looping over all data  */
 void BKE_animdata_fix_paths_rename_all(ID *ref_id,
                                        const char *prefix,
                                        const char *oldName,
                                        const char *newName)
 {
   Main *bmain = G.main; /* XXX UGLY! */
+  BKE_animdata_fix_paths_rename_all_ex(bmain, ref_id, prefix, oldName, newName, 0, 0, 1);
+}
+
+/* Fix all RNA-Paths throughout the database
+ * NOTE: it is assumed that the structure we're replacing is <prefix><["><name><"]>
+ *      i.e. pose.bones["Bone"]
+ */
+/* TODO: use BKE_animdata_main_cb for looping over all data  */
+void BKE_animdata_fix_paths_rename_all_ex(Main *bmain,
+                                          ID *ref_id,
+                                          const char *prefix,
+                                          const char *oldName,
+                                          const char *newName,
+                                          const int oldSubscript,
+                                          const int newSubscript,
+                                          const bool verify_paths)
+{
+
   ID *id;
 
   /* macro for less typing
@@ -1406,7 +1439,8 @@ void BKE_animdata_fix_paths_rename_all(ID *ref_id,
 #define RENAMEFIX_ANIM_IDS(first) \
   for (id = first; id; id = id->next) { \
     AnimData *adt = BKE_animdata_from_id(id); \
-    BKE_animdata_fix_paths_rename(id, adt, ref_id, prefix, oldName, newName, 0, 0, 1); \
+    BKE_animdata_fix_paths_rename( \
+        id, adt, ref_id, prefix, oldName, newName, oldSubscript, newSubscript, verify_paths); \
   } \
   (void)0
 
@@ -1417,10 +1451,18 @@ void BKE_animdata_fix_paths_rename_all(ID *ref_id,
     NtId_Type *ntp = (NtId_Type *)id; \
     if (ntp->nodetree) { \
       AnimData *adt2 = BKE_animdata_from_id((ID *)ntp->nodetree); \
-      BKE_animdata_fix_paths_rename( \
-          (ID *)ntp->nodetree, adt2, ref_id, prefix, oldName, newName, 0, 0, 1); \
+      BKE_animdata_fix_paths_rename((ID *)ntp->nodetree, \
+                                    adt2, \
+                                    ref_id, \
+                                    prefix, \
+                                    oldName, \
+                                    newName, \
+                                    oldSubscript, \
+                                    newSubscript, \
+                                    verify_paths); \
     } \
-    BKE_animdata_fix_paths_rename(id, adt, ref_id, prefix, oldName, newName, 0, 0, 1); \
+    BKE_animdata_fix_paths_rename( \
+        id, adt, ref_id, prefix, oldName, newName, oldSubscript, newSubscript, verify_paths); \
   } \
   (void)0
 
@@ -1511,14 +1553,14 @@ void BKE_animdata_blend_write(BlendWriter *writer, struct AnimData *adt)
   BKE_fcurve_blend_write(writer, &adt->drivers);
 
   /* write overrides */
-  // FIXME: are these needed?
+  /* FIXME: are these needed? */
   LISTBASE_FOREACH (AnimOverride *, aor, &adt->overrides) {
     /* overrides consist of base data + rna_path */
     BLO_write_struct(writer, AnimOverride, aor);
     BLO_write_string(writer, aor->rna_path);
   }
 
-  // TODO write the remaps (if they are needed)
+  /* TODO write the remaps (if they are needed) */
 
   /* write NLA data */
   BKE_nla_blend_write(writer, &adt->nla_tracks);
@@ -1537,7 +1579,7 @@ void BKE_animdata_blend_read_data(BlendDataReader *reader, AnimData *adt)
   adt->driver_array = NULL;
 
   /* link overrides */
-  // TODO...
+  /* TODO... */
 
   /* link NLA-data */
   BLO_read_list(reader, &adt->nla_tracks);
@@ -1545,10 +1587,10 @@ void BKE_animdata_blend_read_data(BlendDataReader *reader, AnimData *adt)
 
   /* relink active track/strip - even though strictly speaking this should only be used
    * if we're in 'tweaking mode', we need to be able to have this loaded back for
-   * undo, but also since users may not exit tweakmode before saving (#24535)
+   * undo, but also since users may not exit tweakmode before saving (T24535)
    */
-  // TODO: it's not really nice that anyone should be able to save the file in this
-  //      state, but it's going to be too hard to enforce this single case...
+  /* TODO: it's not really nice that anyone should be able to save the file in this
+   *       state, but it's going to be too hard to enforce this single case... */
   BLO_read_data_address(reader, &adt->act_track);
   BLO_read_data_address(reader, &adt->actstrip);
 }
@@ -1580,4 +1622,7 @@ void BKE_animdata_blend_read_expand(struct BlendExpander *expander, AnimData *ad
 
   /* drivers - assume that these F-Curves have driver data to be in this list... */
   BKE_fcurve_blend_read_expand(expander, &adt->drivers);
+
+  /* NLA data - referenced actions. */
+  BKE_nla_blend_read_expand(expander, &adt->nla_tracks);
 }

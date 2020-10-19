@@ -149,8 +149,8 @@ include(build_files/cmake/platform/platform_win32_bundle_crt.cmake)
 remove_cc_flag("/MDd" "/MD" "/Zi")
 
 if(WITH_WINDOWS_PDB)
-	set(PDB_INFO_OVERRIDE_FLAGS "/Z7")
-	set(PDB_INFO_OVERRIDE_LINKER_FLAGS "/DEBUG /OPT:REF /OPT:ICF /INCREMENTAL:NO")
+  set(PDB_INFO_OVERRIDE_FLAGS "/Z7")
+  set(PDB_INFO_OVERRIDE_LINKER_FLAGS "/DEBUG /OPT:REF /OPT:ICF /INCREMENTAL:NO")
 endif()
 
 if(MSVC_CLANG) # Clangs version of cl doesn't support all flags
@@ -535,6 +535,11 @@ if(WITH_OPENVDB)
   set(OPENVDB_DEFINITIONS -DNOMINMAX -D_USE_MATH_DEFINES)
 endif()
 
+if(WITH_NANOVDB)
+  set(NANOVDB ${LIBDIR}/nanoVDB)
+  set(NANOVDB_INCLUDE_DIR ${NANOVDB}/include)
+endif()
+
 if(WITH_OPENIMAGEDENOISE)
   set(OPENIMAGEDENOISE ${LIBDIR}/OpenImageDenoise)
   set(OPENIMAGEDENOISE_LIBPATH ${LIBDIR}/OpenImageDenoise/lib)
@@ -565,7 +570,7 @@ if(WITH_IMAGE_OPENJPEG)
 endif()
 
 if(WITH_OPENSUBDIV)
-  set(OPENSUBDIV_INCLUDE_DIR ${LIBDIR}/opensubdiv/include)
+  set(OPENSUBDIV_INCLUDE_DIRS ${LIBDIR}/opensubdiv/include)
   set(OPENSUBDIV_LIBPATH ${LIBDIR}/opensubdiv/lib)
   set(OPENSUBDIV_LIBRARIES
     optimized ${OPENSUBDIV_LIBPATH}/osdCPU.lib
@@ -715,14 +720,24 @@ if(WINDOWS_PYTHON_DEBUG)
     string(REPLACE "/" "\\" _group_path "${_source_path}")
     source_group("${_group_path}" FILES "${_source}")
   endforeach()
-  # Include the user scripts from the profile folder in the blender_python_user_scripts project.
-  set(USER_SCRIPTS_ROOT "$ENV{appdata}/blender foundation/blender/${BLENDER_VERSION}")
+  
+  # If the user scripts env var is set, include scripts from there otherwise
+  # include user scripts in the profile folder.
+  if(DEFINED ENV{BLENDER_USER_SCRIPTS})
+    message(STATUS "Including user scripts from environment BLENDER_USER_SCRIPTS=$ENV{BLENDER_USER_SCRIPTS}")
+    set(USER_SCRIPTS_ROOT "$ENV{BLENDER_USER_SCRIPTS}")
+  else()
+    message(STATUS "Including user scripts from the profile folder")
+    # Include the user scripts from the profile folder in the blender_python_user_scripts project.
+    set(USER_SCRIPTS_ROOT "$ENV{appdata}/blender foundation/blender/${BLENDER_VERSION}/scripts")
+  endif()
+  
   file(TO_CMAKE_PATH ${USER_SCRIPTS_ROOT} USER_SCRIPTS_ROOT)
-  FILE(GLOB_RECURSE inFiles "${USER_SCRIPTS_ROOT}/scripts/*.*" )
+  FILE(GLOB_RECURSE inFiles "${USER_SCRIPTS_ROOT}/*.*" )
   ADD_CUSTOM_TARGET(blender_python_user_scripts SOURCES ${inFiles})
   foreach(_source IN ITEMS ${inFiles})
     get_filename_component(_source_path "${_source}" PATH)
-    string(REPLACE "${USER_SCRIPTS_ROOT}/scripts" "" _source_path "${_source_path}")
+    string(REPLACE "${USER_SCRIPTS_ROOT}" "" _source_path "${_source_path}")
     string(REPLACE "/" "\\" _group_path "${_source_path}")
     source_group("${_group_path}" FILES "${_source}")
   endforeach()
@@ -759,4 +774,10 @@ if(WITH_GMP)
   set(GMP_LIBRARIES ${LIBDIR}/gmp/lib/libgmp-10.lib optimized ${LIBDIR}/gmp/lib/libgmpxx.lib debug ${LIBDIR}/gmp/lib/libgmpxx_d.lib)
   set(GMP_ROOT_DIR ${LIBDIR}/gmp)
   set(GMP_FOUND On)
+endif()
+
+if(WITH_POTRACE)
+  set(POTRACE_INCLUDE_DIRS ${LIBDIR}/potrace/include)
+  set(POTRACE_LIBRARIES ${LIBDIR}/potrace/lib/potrace.lib)
+  set(POTRACE_FOUND On)
 endif()

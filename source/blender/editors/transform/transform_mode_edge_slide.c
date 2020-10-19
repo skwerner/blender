@@ -389,7 +389,7 @@ static void calcEdgeSlide_mval_range(TransInfo *t,
         continue;
       }
 
-      /* This test is only relevant if object is not wire-drawn! See [#32068]. */
+      /* This test is only relevant if object is not wire-drawn! See T32068. */
       bool is_visible = !use_occlude_geometry ||
                         BMBVH_EdgeVisible(bmbvh, e, t->depsgraph, region, v3d, tc->obedit);
 
@@ -720,7 +720,7 @@ static EdgeSlideData *createEdgeSlideVerts_double_side(TransInfo *t, TransDataCo
       BMVert *v_prev;
       BMEdge *e_prev;
 
-      /* XXX, 'sv' will initialize multiple times, this is suspicious. see [#34024] */
+      /* XXX, 'sv' will initialize multiple times, this is suspicious. see T34024. */
       BLI_assert(v != NULL);
       BLI_assert(sv_table[BM_elem_index_get(v)] != INDEX_INVALID);
       sv = SV_FROM_VERT(v);
@@ -1555,11 +1555,10 @@ void initEdgeSlide_ex(
 
   t->idx_max = 0;
   t->num.idx_max = 0;
-  t->snap[0] = 0.0f;
-  t->snap[1] = 0.1f;
-  t->snap[2] = t->snap[1] * 0.1f;
+  t->snap[0] = 0.1f;
+  t->snap[1] = t->snap[0] * 0.1f;
 
-  copy_v3_fl(t->num.val_inc, t->snap[1]);
+  copy_v3_fl(t->num.val_inc, t->snap[0]);
   t->num.unit_sys = t->scene->unit.system;
   t->num.unit_type[0] = B_UNIT_NONE;
 

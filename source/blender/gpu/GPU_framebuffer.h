@@ -38,7 +38,7 @@ typedef enum eGPUFrameBufferBits {
   GPU_STENCIL_BIT = (1 << 2),
 } eGPUFrameBufferBits;
 
-ENUM_OPERATORS(eGPUFrameBufferBits)
+ENUM_OPERATORS(eGPUFrameBufferBits, GPU_STENCIL_BIT)
 
 #ifdef __cplusplus
 extern "C" {
@@ -54,10 +54,8 @@ typedef enum eGPUBackBuffer {
   GPU_BACKBUFFER_RIGHT,
 } eGPUBackBuffer;
 
-/** Opaque pointer hiding blender::gpu::FrameBuffer. */
-typedef struct GPUFrameBuffer {
-  void *dummy;
-} GPUFrameBuffer;
+/** Opaque type hiding blender::gpu::FrameBuffer. */
+typedef struct GPUFrameBuffer GPUFrameBuffer;
 
 typedef struct GPUOffScreen GPUOffScreen;
 
@@ -188,7 +186,8 @@ void GPU_framebuffer_clear(GPUFrameBuffer *fb,
 
 void GPU_framebuffer_multi_clear(GPUFrameBuffer *fb, const float (*clear_cols)[4]);
 
-void GPU_framebuffer_read_depth(GPUFrameBuffer *fb, int x, int y, int w, int h, float *data);
+void GPU_framebuffer_read_depth(
+    GPUFrameBuffer *fb, int x, int y, int w, int h, eGPUDataFormat format, void *data);
 void GPU_framebuffer_read_color(GPUFrameBuffer *fb,
                                 int x,
                                 int y,

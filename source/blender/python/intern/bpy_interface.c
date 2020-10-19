@@ -91,7 +91,7 @@ static int py_call_level = 0;
 /* Set by command line arguments before Python starts. */
 static bool py_use_system_env = false;
 
-// #define TIME_PY_RUN // simple python tests. prints on exit.
+// #define TIME_PY_RUN /* simple python tests. prints on exit. */
 
 #ifdef TIME_PY_RUN
 #  include "PIL_time.h"
@@ -111,8 +111,8 @@ void BPY_context_update(bContext *C)
     return;
   }
 
-  BPy_SetContext(C);
-  BPY_modules_update(C); /* can give really bad results if this isn't here */
+  BPY_context_set(C);
+  BPY_modules_update(); /* can give really bad results if this isn't here */
 }
 
 void bpy_context_set(bContext *C, PyGILState_STATE *gilstate)
@@ -155,13 +155,53 @@ void bpy_context_clear(bContext *UNUSED(C), const PyGILState_STATE *gilstate)
     /* XXX - Calling classes currently wont store the context :\,
      * cant set NULL because of this. but this is very flakey still. */
 #if 0
-    BPy_SetContext(NULL);
+    BPY_context_set(NULL);
 #endif
 
 #ifdef TIME_PY_RUN
     bpy_timer_run_tot += PIL_check_seconds_timer() - bpy_timer_run;
     bpy_timer_count++;
 #endif
+  }
+}
+
+/**
+ * Use for `CTX_*_set(..)` functions need to set values which are later read back as expected.
+ * In this case we don't want the Python context to override the values as it causes problems
+ * see T66256.
+ *
+ * \param dict_p: A pointer to #bContext.data.py_context so we can assign a new value.
+ * \param dict_orig: The value of #bContext.data.py_context_orig to check if we need to copy.
+ *
+ * \note Typically accessed via #BPY_context_dict_clear_members macro.
+ */
+void BPY_context_dict_clear_members_array(void **dict_p,
+                                          void *dict_orig,
+                                          const char *context_members[],
+                                          uint context_members_len)
+{
+  PyGILState_STATE gilstate;
+  const bool use_gil = !PyC_IsInterpreterActive();
+
+  if (use_gil) {
+    gilstate = PyGILState_Ensure();
+  }
+
+  /* Copy on write. */
+  if (*dict_p == dict_orig) {
+    *dict_p = PyDict_Copy(dict_orig);
+  }
+
+  PyObject *dict = *dict_p;
+  BLI_assert(PyDict_Check(dict));
+  for (uint i = 0; i < context_members_len; i++) {
+    if (PyDict_DelItemString(dict, context_members[i])) {
+      PyErr_Clear();
+    }
+  }
+
+  if (use_gil) {
+    PyGILState_Release(gilstate);
   }
 }
 
@@ -184,7 +224,10 @@ void BPY_text_free_code(Text *text)
   }
 }
 
-void BPY_modules_update(bContext *C)
+/**
+ * Needed so the #Main pointer in `bpy.data` doesn't become out of date.
+ */
+void BPY_modules_update(void)
 {
 #if 0 /* slow, this runs all the time poll, draw etc 100's of time a sec. */
   PyObject *mod = PyImport_ImportModuleLevel("bpy", NULL, NULL, NULL, 0);
@@ -194,14 +237,16 @@ void BPY_modules_update(bContext *C)
 
   /* refreshes the main struct */
   BPY_update_rna_module();
-  if (bpy_context_module) {
-    bpy_context_module->ptr.data = (void *)C;
-  }
+}
+
+bContext *BPY_context_get(void)
+{
+  return bpy_context_module->ptr.data;
 }
 
 void BPY_context_set(bContext *C)
 {
-  BPy_SetContext(C);
+  bpy_context_module->ptr.data = (void *)C;
 }
 
 #ifdef WITH_FLUID
@@ -255,7 +300,7 @@ static struct _inittab bpy_internal_modules[] = {
 };
 
 /* call BPY_context_set first */
-void BPY_python_start(int argc, const char **argv)
+void BPY_python_start(bContext *C, int argc, const char **argv)
 {
 #ifndef WITH_PYTHON_MODULE
   PyThreadState *py_tstate = NULL;
@@ -291,6 +336,7 @@ void BPY_python_start(int argc, const char **argv)
   Py_IgnoreEnvironmentFlag = !py_use_system_env;
   Py_NoUserSiteDirectory = !py_use_system_env;
 
+  /* Initialize Python (also acquires lock). */
   Py_Initialize();
 
   // PySys_SetArgv(argc, argv);  /* broken in py3, not a huge deal */
@@ -299,7 +345,7 @@ void BPY_python_start(int argc, const char **argv)
     int i;
     PyObject *py_argv = PyList_New(argc);
     for (i = 0; i < argc; i++) {
-      /* should fix bug #20021 - utf path name problems, by replacing
+      /* should fix bug T20021 - utf path name problems, by replacing
        * PyUnicode_FromString, with this one */
       PyList_SET_ITEM(py_argv, i, PyC_UnicodeFromByte(argv[i]));
     }
@@ -307,9 +353,6 @@ void BPY_python_start(int argc, const char **argv)
     PySys_SetObject("argv", py_argv);
     Py_DECREF(py_argv);
   }
-
-  /* Initialize thread support (also acquires lock) */
-  PyEval_InitThreads();
 
 #  ifdef WITH_FLUID
   /* Required to prevent assertion error, see:
@@ -349,7 +392,7 @@ void BPY_python_start(int argc, const char **argv)
 #endif
 
   /* bpy.* and lets us import it */
-  BPy_init_modules();
+  BPy_init_modules(C);
 
   pyrna_alloc_types();
 
@@ -627,7 +670,7 @@ static void bpy_module_delay_init(PyObject *bpy_proxy)
   const int argc = 1;
   const char *argv[2];
 
-  /* updating the module dict below will loose the reference to __file__ */
+  /* updating the module dict below will lose the reference to __file__ */
   PyObject *filename_obj = PyModule_GetFilenameObject(bpy_proxy);
 
   const char *filename_rel = _PyUnicode_AsString(filename_obj); /* can be relative */

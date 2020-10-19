@@ -474,7 +474,7 @@ OPENVDB_BLOSC_VERSION="1.5.0"
 OPENVDB_VERSION="7.0.0"
 OPENVDB_VERSION_SHORT="7.0"
 OPENVDB_VERSION_MIN="7.0"
-OPENVDB_VERSION_MAX="8.0"
+OPENVDB_VERSION_MAX="7.1"
 OPENVDB_FORCE_BUILD=false
 OPENVDB_FORCE_REBUILD=false
 OPENVDB_SKIP=false
@@ -512,7 +512,7 @@ EMBREE_FORCE_BUILD=false
 EMBREE_FORCE_REBUILD=false
 EMBREE_SKIP=false
 
-OIDN_VERSION="1.2.1"
+OIDN_VERSION="1.2.3"
 OIDN_VERSION_SHORT="1.2"
 OIDN_VERSION_MIN="1.2.0"
 OIDN_VERSION_MAX="1.3"
@@ -520,7 +520,7 @@ OIDN_FORCE_BUILD=false
 OIDN_FORCE_REBUILD=false
 OIDN_SKIP=false
 
-ISPC_VERSION="1.14.0"
+ISPC_VERSION="1.14.1"
 
 FFMPEG_VERSION="4.2.3"
 FFMPEG_VERSION_SHORT="4.2"
@@ -1087,7 +1087,7 @@ Those libraries should be available as packages in all recent distributions (opt
     * libjpeg, libpng, libtiff, [openjpeg2], [libopenal].
     * libx11, libxcursor, libxi, libxrandr, libxinerama (and other libx... as needed).
     * libsqlite3, libbz2, libssl, libfftw3, libxml2, libtinyxml, yasm, libyaml-cpp.
-    * libsdl2, libglew, [libgmp], [libglewmx], fontconfig.\""
+    * libsdl2, libglew, libpugixml, libpotrace, [libgmp], [libglewmx], fontconfig.\""
 
 DEPS_SPECIFIC_INFO="\"BUILDABLE DEPENDENCIES:
 
@@ -1259,13 +1259,16 @@ version_match() {
 # ----------------------------------------------------------------------------
 # Generic compile helpers
 
-prepare_opt() {
+prepare_inst() {
   INFO "Ensuring $INST exists and is writable by us"
   if [ ! $SUDO ]; then
     WARNING "--no-sudo enabled, might be impossible to create install dir..."
   fi
+
   if [ ! -d  $INST ]; then
-    $SUDO mkdir -p $INST
+    # Try to create normal user directory first to possibly avoid excessive
+    # system operations
+    mkdir -p $INST || $SUDO mkdir -p $INST
   fi
 
   if [ ! -w $INST ]; then
@@ -1366,7 +1369,7 @@ compile_Python() {
     # Rebuild dependencies as well!
     _update_deps_python
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       mkdir -p $SRC
@@ -1452,7 +1455,7 @@ compile_Numpy() {
     # Rebuild dependencies as well!
     _update_deps_numpy
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       mkdir -p $SRC
@@ -1541,7 +1544,7 @@ compile_Boost() {
     # Rebuild dependencies as well!
     _update_deps_boost
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       INFO "Downloading Boost-$BOOST_VERSION"
@@ -1635,7 +1638,7 @@ compile_TBB() {
     # Rebuild dependencies as well!
     _update_deps_tbb
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       INFO "Downloading TBB-$TBB_VERSION$TBB_VERSION_UPDATE"
@@ -1752,7 +1755,7 @@ compile_OCIO() {
     # Rebuild dependencies as well!
     _update_deps_ocio
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       INFO "Downloading OpenColorIO-$OCIO_VERSION"
@@ -1884,7 +1887,7 @@ compile_OPENEXR() {
     # Rebuild dependencies as well!
     _update_deps_openexr
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       INFO "Downloading OpenEXR-$OPENEXR_VERSION"
@@ -2010,7 +2013,7 @@ compile_OIIO() {
     # Rebuild dependencies as well!
     _update_deps_oiio
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       mkdir -p $SRC
@@ -2165,7 +2168,7 @@ compile_LLVM() {
     # Rebuild dependencies as well!
     _update_deps_llvm
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src -o true ]; then
       mkdir -p $SRC
@@ -2275,7 +2278,7 @@ compile_OSL() {
     # Rebuild dependencies as well!
     _update_deps_osl
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       mkdir -p $SRC
@@ -2419,7 +2422,7 @@ compile_OSD() {
     # Rebuild dependencies as well!
     _update_deps_osd
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       mkdir -p $SRC
@@ -2537,7 +2540,7 @@ compile_BLOSC() {
     # Rebuild dependencies as well!
     _update_deps_blosc
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       INFO "Downloading Blosc-$OPENVDB_BLOSC_VERSION"
@@ -2636,7 +2639,7 @@ compile_OPENVDB() {
     # Rebuild dependencies as well!
     _update_deps_openvdb
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src -o true ]; then
       mkdir -p $SRC
@@ -2751,7 +2754,7 @@ compile_ALEMBIC() {
     # Rebuild dependencies as well!
     _update_deps_alembic
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       mkdir -p $SRC
@@ -2856,7 +2859,7 @@ compile_USD() {
     # Rebuild dependencies as well!
     _update_deps_usd
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       mkdir -p $SRC
@@ -2955,7 +2958,7 @@ compile_OpenCOLLADA() {
     # Rebuild dependencies as well!
     _update_deps_collada
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       mkdir -p $SRC
@@ -3061,7 +3064,7 @@ compile_Embree() {
     # Rebuild dependencies as well!
     _update_deps_embree
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       mkdir -p $SRC
@@ -3171,7 +3174,7 @@ install_ISPC() {
     # Rebuild dependencies as well!
     _update_deps_ispc
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       mkdir -p $SRC
@@ -3250,7 +3253,7 @@ compile_OIDN() {
     # Rebuild dependencies as well!
     _update_deps_oidn
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       mkdir -p $SRC
@@ -3360,7 +3363,7 @@ compile_FFmpeg() {
     # Rebuild dependencies as well!
     _update_deps_ffmpeg
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       INFO "Downloading ffmpeg-$FFMPEG_VERSION"
@@ -3489,7 +3492,7 @@ compile_XR_OpenXR_SDK() {
     # Rebuild dependencies as well!
     _update_deps_xr_openxr_sdk
 
-    prepare_opt
+    prepare_inst
 
     if [ ! -d $_src ]; then
       mkdir -p $SRC
@@ -3659,7 +3662,7 @@ install_DEB() {
              libbz2-dev libncurses5-dev libssl-dev liblzma-dev libreadline-dev \
              libopenal-dev libglew-dev yasm $THEORA_DEV $VORBIS_DEV $OGG_DEV \
              libsdl2-dev libfftw3-dev patch bzip2 libxml2-dev libtinyxml-dev libjemalloc-dev \
-             libgmp-dev"
+             libgmp-dev libpugixml-dev libpotrace-dev"
              # libglewmx-dev  (broken in deb testing currently...)
 
   VORBIS_USE=true
@@ -4325,7 +4328,8 @@ install_RPM() {
              libX11-devel libXi-devel libXcursor-devel libXrandr-devel libXinerama-devel \
              wget ncurses-devel readline-devel $OPENJPEG_DEV openal-soft-devel \
              glew-devel yasm $THEORA_DEV $VORBIS_DEV $OGG_DEV patch \
-             libxml2-devel yaml-cpp-devel tinyxml-devel jemalloc-devel gmp-devel"
+             libxml2-devel yaml-cpp-devel tinyxml-devel jemalloc-devel \
+             gmp-devel pugixml-devel potrace-devel"
 
   OPENJPEG_USE=true
   VORBIS_USE=true
@@ -4901,7 +4905,7 @@ install_ARCH() {
   _packages="$BASE_DEVEL git cmake fontconfig \
              libxi libxcursor libxrandr libxinerama glew libpng libtiff wget openal \
              $OPENJPEG_DEV $VORBIS_DEV $OGG_DEV $THEORA_DEV yasm sdl2 fftw \
-             libxml2 yaml-cpp tinyxml python-requests jemalloc gmp"
+             libxml2 yaml-cpp tinyxml python-requests jemalloc gmp potrace pugixml"
 
   OPENJPEG_USE=true
   VORBIS_USE=true

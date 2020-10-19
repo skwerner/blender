@@ -646,10 +646,12 @@ PyObject *PyC_ExceptionBuffer(void)
     goto error_cleanup;
   }
 
-  Py_INCREF(stdout_backup);  // since these were borrowed we don't want them freed when replaced.
+  /* Since these were borrowed we don't want them freed when replaced. */
+  Py_INCREF(stdout_backup);
   Py_INCREF(stderr_backup);
 
-  PySys_SetObject("stdout", string_io);  // both of these are freed when restoring
+  /* Both of these are freed when restoring. */
+  PySys_SetObject("stdout", string_io);
   PySys_SetObject("stderr", string_io);
 
   PyErr_Restore(error_type, error_value, error_traceback);
@@ -887,7 +889,7 @@ void PyC_MainModule_Restore(PyObject *main_mod)
  * - Must be called before #Py_Initialize.
  * - Expects output of `BKE_appdir_folder_id(BLENDER_PYTHON, NULL)`.
  * - Note that the `PYTHONPATH` environment variable isn't reliable, see T31506.
-     Use #Py_SetPythonHome instead.
+ *   Use #Py_SetPythonHome instead.
  */
 void PyC_SetHomePath(const char *py_path_bundle)
 {
@@ -916,7 +918,7 @@ void PyC_SetHomePath(const char *py_path_bundle)
   {
     wchar_t py_path_bundle_wchar[1024];
 
-    /* Can't use this, on linux gives bug: #23018,
+    /* Can't use this, on linux gives bug: T23018,
      * TODO: try LANG="en_US.UTF-8" /usr/bin/blender, suggested 2008 */
     /* mbstowcs(py_path_bundle_wchar, py_path_bundle, FILE_MAXDIR); */
 

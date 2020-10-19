@@ -31,6 +31,7 @@
 
 #include "BLT_translation.h"
 
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
@@ -53,6 +54,15 @@
 
 #include "MOD_modifiertypes.h"
 #include "MOD_ui_common.h"
+
+static void initData(ModifierData *md)
+{
+  ScrewModifierData *ltmd = (ScrewModifierData *)md;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(ltmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(ltmd, DNA_struct_default_get(ScrewModifierData), modifier);
+}
 
 #include "BLI_strict_flags.h"
 
@@ -175,19 +185,6 @@ static Mesh *mesh_remove_doubles_on_axis(Mesh *result,
     MEM_freeN(full_doubles_map);
   }
   return result;
-}
-
-static void initData(ModifierData *md)
-{
-  ScrewModifierData *ltmd = (ScrewModifierData *)md;
-  ltmd->ob_axis = NULL;
-  ltmd->angle = (float)(M_PI * 2.0);
-  ltmd->axis = 2;
-  ltmd->flag = MOD_SCREW_SMOOTH_SHADING;
-  ltmd->steps = 16;
-  ltmd->render_steps = 16;
-  ltmd->iter = 1;
-  ltmd->merge_dist = 0.01f;
 }
 
 static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *meshData)
@@ -361,7 +358,7 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
   step_tot = ((step_tot + 1) * ltmd->iter) - (ltmd->iter - 1);
 
   /* Will the screw be closed?
-   * Note! smaller then `FLT_EPSILON * 100`
+   * Note! smaller than `FLT_EPSILON * 100`
    * gives problems with float precision so its never closed. */
   if (fabsf(screw_ofs) <= (FLT_EPSILON * 100.0f) &&
       fabsf(fabsf(angle) - ((float)M_PI * 2.0f)) <= (FLT_EPSILON * 100.0f) && step_tot > 3) {
@@ -1161,11 +1158,11 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
   }
 }
 
-static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk, void *userData)
+static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   ScrewModifierData *ltmd = (ScrewModifierData *)md;
 
-  walk(userData, ob, &ltmd->ob_axis, IDWALK_CB_NOP);
+  walk(userData, ob, (ID **)&ltmd->ob_axis, IDWALK_CB_NOP);
 }
 
 static void panel_draw(const bContext *UNUSED(C), Panel *panel)
@@ -1247,10 +1244,12 @@ ModifierTypeInfo modifierType_Screw = {
     /* name */ "Screw",
     /* structName */ "ScrewModifierData",
     /* structSize */ sizeof(ScrewModifierData),
+    /* srna */ &RNA_ScrewModifier,
     /* type */ eModifierTypeType_Constructive,
 
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_AcceptsCVs |
         eModifierTypeFlag_SupportsEditmode | eModifierTypeFlag_EnableInEditmode,
+    /* icon */ ICON_MOD_SCREW,
 
     /* copyData */ BKE_modifier_copydata_generic,
 
@@ -1270,8 +1269,7 @@ ModifierTypeInfo modifierType_Screw = {
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
     /* panelRegister */ panelRegister,

@@ -42,7 +42,7 @@ typedef enum eGPUTextureFormatFlag {
   GPU_FORMAT_DEPTH_STENCIL = (GPU_FORMAT_DEPTH | GPU_FORMAT_STENCIL),
 } eGPUTextureFormatFlag;
 
-ENUM_OPERATORS(eGPUTextureFormatFlag)
+ENUM_OPERATORS(eGPUTextureFormatFlag, GPU_FORMAT_DEPTH_STENCIL)
 
 typedef enum eGPUTextureType {
   GPU_TEXTURE_1D = (1 << 0),
@@ -57,7 +57,7 @@ typedef enum eGPUTextureType {
   GPU_TEXTURE_CUBE_ARRAY = (GPU_TEXTURE_CUBE | GPU_TEXTURE_ARRAY),
 } eGPUTextureType;
 
-ENUM_OPERATORS(eGPUTextureType)
+ENUM_OPERATORS(eGPUTextureType, GPU_TEXTURE_CUBE_ARRAY)
 
 #ifdef DEBUG
 #  define DEBUG_NAME_LEN 64
@@ -66,8 +66,12 @@ ENUM_OPERATORS(eGPUTextureType)
 #endif
 
 /* Maximum number of FBOs a texture can be attached to. */
-#define GPU_TEX_MAX_FBO_ATTACHED 13
+#define GPU_TEX_MAX_FBO_ATTACHED 16
 
+/**
+ * Implementation of Textures.
+ * Base class which is then specialized for each implementation (GL, VK, ...).
+ **/
 class Texture {
  public:
   /** Internal Sampler state. */
@@ -89,7 +93,7 @@ class Texture {
   eGPUTextureType type_;
 
   /** Number of mipmaps this texture has (Max miplvl). */
-  /* TODO(fclem) Should become immutable and the need for mipmaps should be specified upfront. */
+  /* TODO(fclem): Should become immutable and the need for mipmaps should be specified upfront. */
   int mipmaps_ = -1;
   /** For error checking */
   int mip_min_ = 0, mip_max_ = 0;
@@ -126,7 +130,7 @@ class Texture {
   virtual void update_sub(
       int mip, int offset[3], int extent[3], eGPUDataFormat format, const void *data) = 0;
 
-  /* TODO(fclem) Legacy. Should be removed at some point. */
+  /* TODO(fclem): Legacy. Should be removed at some point. */
   virtual uint gl_bindcode_get(void) const = 0;
 
   int width_get(void) const
@@ -240,6 +244,20 @@ class Texture {
   virtual bool init_internal(void) = 0;
   virtual bool init_internal(GPUVertBuf *vbo) = 0;
 };
+
+/* Syntacting suggar. */
+static inline GPUTexture *wrap(Texture *vert)
+{
+  return reinterpret_cast<GPUTexture *>(vert);
+}
+static inline Texture *unwrap(GPUTexture *vert)
+{
+  return reinterpret_cast<Texture *>(vert);
+}
+static inline const Texture *unwrap(const GPUTexture *vert)
+{
+  return reinterpret_cast<const Texture *>(vert);
+}
 
 #undef DEBUG_NAME_LEN
 

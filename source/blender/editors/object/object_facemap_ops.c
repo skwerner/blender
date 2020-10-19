@@ -136,10 +136,8 @@ static void object_fmap_remap_object_mode(Object *ob, const int *remap)
   Mesh *me = ob->data;
   if (CustomData_has_layer(&me->pdata, CD_FACEMAP)) {
     int *map = CustomData_get_layer(&me->pdata, CD_FACEMAP);
-    int i;
-
     if (map) {
-      for (i = 0; i < me->totpoly; i++) {
+      for (int i = 0; i < me->totpoly; i++) {
         if (map[i] != -1) {
           map[i] = remap[map[i]];
         }
@@ -321,7 +319,7 @@ static int face_map_remove_from_exec(bContext *C, wmOperator *UNUSED(op))
 void OBJECT_OT_face_map_remove_from(struct wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Remove From Face Map";
+  ot->name = "Remove from Face Map";
   ot->idname = "OBJECT_OT_face_map_remove_from";
   ot->description = "Remove faces from a face map";
 

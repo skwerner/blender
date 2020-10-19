@@ -47,6 +47,7 @@ struct IDOverrideLibrary;
 struct IDOverrideLibraryProperty;
 struct IDOverrideLibraryPropertyOperation;
 struct Main;
+struct Object;
 struct PointerRNA;
 struct PropertyRNA;
 struct Scene;
@@ -77,6 +78,10 @@ bool BKE_lib_override_library_create(struct Main *bmain,
                                      struct ViewLayer *view_layer,
                                      struct ID *id_root,
                                      struct ID *id_reference);
+bool BKE_lib_override_library_proxy_convert(struct Main *bmain,
+                                            struct Scene *scene,
+                                            struct ViewLayer *view_layer,
+                                            struct Object *ob_proxy);
 bool BKE_lib_override_library_resync(struct Main *bmain,
                                      struct Scene *scene,
                                      struct ViewLayer *view_layer,

@@ -16,6 +16,13 @@
 
 /** \file
  * \ingroup blenloader
+ *
+ * This file handles updating the `startup.blend`, this is used when reading old files.
+ *
+ * Unlike regular versioning this makes changes that ensure the startup file
+ * has brushes and other presets setup to take advantage of newer features.
+ *
+ * To update preference defaults see `userdef_default.c`.
  */
 
 #include "MEM_guardedalloc.h"
@@ -608,7 +615,7 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
      * when painting we want to use full color/weight always.
      *
      * Note that sculpt is an exception,
-     * it's values are overwritten by #BKE_brush_sculpt_reset below. */
+     * its values are overwritten by #BKE_brush_sculpt_reset below. */
     brush->alpha = 1.0;
 
     /* Enable antialiasing by default */

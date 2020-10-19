@@ -48,6 +48,7 @@
 #include "WM_toolsystem.h"
 #include "WM_types.h"
 
+#include "ED_buttons.h"
 #include "ED_screen.h"
 #include "ED_screen_types.h"
 #include "ED_space_api.h"
@@ -84,13 +85,11 @@ enum RegionEmbossSide {
 
 static void region_draw_emboss(const ARegion *region, const rcti *scirct, int sides)
 {
-  rcti rect;
-
   /* translate scissor rect to region space */
-  rect.xmin = scirct->xmin - region->winrct.xmin;
-  rect.ymin = scirct->ymin - region->winrct.ymin;
-  rect.xmax = scirct->xmax - region->winrct.xmin;
-  rect.ymax = scirct->ymax - region->winrct.ymin;
+  const rcti rect = {.xmin = scirct->xmin - region->winrct.xmin,
+                     .xmax = scirct->xmax - region->winrct.xmin,
+                     .ymin = scirct->ymin - region->winrct.ymin,
+                     .ymax = scirct->ymax - region->winrct.ymin};
 
   /* set transp line */
   GPU_blend(GPU_BLEND_ALPHA);
@@ -450,8 +449,25 @@ void ED_area_do_mgs_subscribe_for_tool_ui(
     struct wmMsgBus *mbus)
 {
   BLI_assert(region->regiontype == RGN_TYPE_UI);
+  const char *panel_category_tool = "Tool";
   const char *category = UI_panel_category_active_get(region, false);
-  if (category && STREQ(category, "Tool")) {
+
+  bool update_region = false;
+  if (category && STREQ(category, panel_category_tool)) {
+    update_region = true;
+  }
+  else {
+    /* Check if a tool category panel is pinned and visible in another category. */
+    LISTBASE_FOREACH (Panel *, panel, &region->panels) {
+      if (UI_panel_is_active(panel) && panel->flag & PNL_PIN &&
+          STREQ(panel->type->category, panel_category_tool)) {
+        update_region = true;
+        break;
+      }
+    }
+  }
+
+  if (update_region) {
     wmMsgSubscribeValue msg_sub_value_region_tag_redraw = {
         .owner = region,
         .user_data = region,
@@ -492,6 +508,9 @@ void ED_region_do_layout(bContext *C, ARegion *region)
 
   UI_SetTheme(area ? area->spacetype : 0, at->regionid);
   at->layout(C, region);
+
+  /* Clear temporary update flag. */
+  region->flag &= ~RGN_FLAG_SEARCH_FILTER_UPDATE;
 }
 
 /* only exported for WM */
@@ -531,7 +550,10 @@ void ED_region_do_draw(bContext *C, ARegion *region)
    * for drawing of borders/gestures etc */
   ED_region_pixelspace(region);
 
+  GPUFrameBuffer *fb = GPU_framebuffer_active_get();
+  GPU_framebuffer_bind(fb);
   ED_region_draw_cb_draw(C, region, REGION_DRAW_POST_PIXEL);
+  GPU_framebuffer_bind_no_srgb(fb);
 
   region_draw_azones(area, region);
 
@@ -736,6 +758,37 @@ void ED_area_tag_refresh(ScrArea *area)
 
 /* *************************************************************** */
 
+/**
+ * Returns the search string if the space type and region type support property search.
+ */
+const char *ED_area_region_search_filter_get(const ScrArea *area, const ARegion *region)
+{
+  /* Only the properties editor has a search string for now. */
+  if (area->spacetype == SPACE_PROPERTIES) {
+    SpaceProperties *sbuts = area->spacedata.first;
+    if (region->regiontype == RGN_TYPE_WINDOW) {
+      return ED_buttons_search_string_get(sbuts);
+    }
+  }
+
+  return NULL;
+}
+
+/**
+ * Set the temporary update flag for property search.
+ */
+void ED_region_search_filter_update(const ScrArea *area, ARegion *region)
+{
+  region->flag |= RGN_FLAG_SEARCH_FILTER_UPDATE;
+
+  const char *search_filter = ED_area_region_search_filter_get(area, region);
+  SET_FLAG_FROM_TEST(region->flag,
+                     region->regiontype == RGN_TYPE_WINDOW && search_filter[0] != '\0',
+                     RGN_FLAG_SEARCH_FILTER_ACTIVE);
+}
+
+/* *************************************************************** */
+
 /* use NULL to disable it */
 void ED_area_status_text(ScrArea *area, const char *str)
 {
@@ -796,8 +849,6 @@ void ED_workspace_status_text(bContext *C, const char *str)
 
 static void area_azone_init(wmWindow *win, const bScreen *screen, ScrArea *area)
 {
-  AZone *az;
-
   /* reinitialize entirely, regions and fullscreen add azones too */
   BLI_freelistN(&area->actionzones);
 
@@ -853,7 +904,7 @@ static void area_azone_init(wmWindow *win, const bScreen *screen, ScrArea *area)
 #endif
 
     /* set area action zones */
-    az = (AZone *)MEM_callocN(sizeof(AZone), "actionzone");
+    AZone *az = (AZone *)MEM_callocN(sizeof(AZone), "actionzone");
     BLI_addtail(&(area->actionzones), az);
     az->type = AZONE_AREA;
     az->x1 = coords[i][0];
@@ -866,13 +917,11 @@ static void area_azone_init(wmWindow *win, const bScreen *screen, ScrArea *area)
 
 static void fullscreen_azone_init(ScrArea *area, ARegion *region)
 {
-  AZone *az;
-
   if (ED_area_is_global(area) || (region->regiontype != RGN_TYPE_WINDOW)) {
     return;
   }
 
-  az = (AZone *)MEM_callocN(sizeof(AZone), "fullscreen action zone");
+  AZone *az = (AZone *)MEM_callocN(sizeof(AZone), "fullscreen action zone");
   BLI_addtail(&(area->actionzones), az);
   az->type = AZONE_FULLSCREEN;
   az->region = region;
@@ -929,13 +978,11 @@ static void region_azone_edge(AZone *az, ARegion *region)
 /* region already made zero sized, in shape of edge */
 static void region_azone_tab_plus(ScrArea *area, AZone *az, ARegion *region)
 {
-  int tot = 0, add;
-  /* Edge offset multiplied by the  */
-
   float edge_offset = 1.0f;
   const float tab_size_x = 0.7f * U.widget_unit;
   const float tab_size_y = 0.4f * U.widget_unit;
 
+  int tot = 0;
   LISTBASE_FOREACH (AZone *, azt, &area->actionzones) {
     if (azt->edge == az->edge) {
       tot++;
@@ -943,13 +990,14 @@ static void region_azone_tab_plus(ScrArea *area, AZone *az, ARegion *region)
   }
 
   switch (az->edge) {
-    case AE_TOP_TO_BOTTOMRIGHT:
-      add = (region->winrct.ymax == area->totrct.ymin) ? 1 : 0;
+    case AE_TOP_TO_BOTTOMRIGHT: {
+      int add = (region->winrct.ymax == area->totrct.ymin) ? 1 : 0;
       az->x1 = region->winrct.xmax - ((edge_offset + 1.0f) * tab_size_x);
       az->y1 = region->winrct.ymax - add;
       az->x2 = region->winrct.xmax - (edge_offset * tab_size_x);
       az->y2 = region->winrct.ymax - add + tab_size_y;
       break;
+    }
     case AE_BOTTOM_TO_TOPLEFT:
       az->x1 = region->winrct.xmax - ((edge_offset + 1.0f) * tab_size_x);
       az->y1 = region->winrct.ymin - tab_size_y;
@@ -992,14 +1040,13 @@ static void region_azone_edge_init(ScrArea *area,
                                    AZEdge edge,
                                    const bool is_fullscreen)
 {
-  AZone *az = NULL;
   const bool is_hidden = (region->flag & (RGN_FLAG_HIDDEN | RGN_FLAG_TOO_SMALL));
 
   if (!region_azone_edge_poll(region, is_fullscreen)) {
     return;
   }
 
-  az = (AZone *)MEM_callocN(sizeof(AZone), "actionzone");
+  AZone *az = (AZone *)MEM_callocN(sizeof(AZone), "actionzone");
   BLI_addtail(&(area->actionzones), az);
   az->type = AZONE_REGION;
   az->region = region;
@@ -1118,11 +1165,10 @@ static int rct_fits(const rcti *rect, char dir, int size)
 /* function checks if some overlapping region was defined before - on same place */
 static void region_overlap_fix(ScrArea *area, ARegion *region)
 {
-  ARegion *ar1;
-  const int align = RGN_ALIGN_ENUM_FROM_MASK(region->alignment);
-  int align1 = 0;
-
   /* find overlapping previous region on same place */
+  ARegion *ar1;
+  int align1 = 0;
+  const int align = RGN_ALIGN_ENUM_FROM_MASK(region->alignment);
   for (ar1 = region->prev; ar1; ar1 = ar1->prev) {
     if (ar1->flag & RGN_FLAG_HIDDEN) {
       continue;
@@ -1791,20 +1837,18 @@ static void ed_default_handlers(
 
 void ED_area_update_region_sizes(wmWindowManager *wm, wmWindow *win, ScrArea *area)
 {
-  rcti rect, overlap_rect;
-  rcti window_rect;
-
   if (!(area->flag & AREA_FLAG_REGION_SIZE_UPDATE)) {
     return;
   }
   const bScreen *screen = WM_window_get_active_screen(win);
 
+  rcti window_rect;
   WM_window_rect_calc(win, &window_rect);
   area_calc_totrct(area, &window_rect);
 
   /* region rect sizes */
-  rect = area->totrct;
-  overlap_rect = rect;
+  rcti rect = area->totrct;
+  rcti overlap_rect = rect;
   region_rect_recursive(area, area->regionbase.first, &rect, &overlap_rect, 0);
 
   /* Dynamically sized regions may have changed region sizes, so we have to force azone update. */
@@ -1832,12 +1876,12 @@ void ED_area_init(wmWindowManager *wm, wmWindow *win, ScrArea *area)
   WorkSpace *workspace = WM_window_get_active_workspace(win);
   const bScreen *screen = BKE_workspace_active_screen_get(win->workspace_hook);
   ViewLayer *view_layer = WM_window_get_active_view_layer(win);
-  rcti rect, overlap_rect;
-  rcti window_rect;
 
   if (ED_area_is_global(area) && (area->global->flag & GLOBAL_AREA_IS_HIDDEN)) {
     return;
   }
+
+  rcti window_rect;
   WM_window_rect_calc(win, &window_rect);
 
   /* set typedefinitions */
@@ -1856,8 +1900,8 @@ void ED_area_init(wmWindowManager *wm, wmWindow *win, ScrArea *area)
   area_calc_totrct(area, &window_rect);
 
   /* region rect sizes */
-  rect = area->totrct;
-  overlap_rect = rect;
+  rcti rect = area->totrct;
+  rcti overlap_rect = rect;
   region_rect_recursive(area, area->regionbase.first, &rect, &overlap_rect, 0);
   area->flag &= ~AREA_FLAG_REGION_SIZE_UPDATE;
 
@@ -1990,7 +2034,6 @@ void ED_region_toggle_hidden(bContext *C, ARegion *region)
  */
 void ED_area_data_copy(ScrArea *area_dst, ScrArea *area_src, const bool do_free)
 {
-  SpaceType *st;
   const char spacetype = area_dst->spacetype;
   const short flag_copy = HEADER_NO_PULLDOWN;
 
@@ -2009,13 +2052,13 @@ void ED_area_data_copy(ScrArea *area_dst, ScrArea *area_src, const bool do_free)
 
   /* regions */
   if (do_free) {
-    st = BKE_spacetype_from_id(spacetype);
+    SpaceType *st = BKE_spacetype_from_id(spacetype);
     LISTBASE_FOREACH (ARegion *, region, &area_dst->regionbase) {
       BKE_area_region_free(st, region);
     }
     BLI_freelistN(&area_dst->regionbase);
   }
-  st = BKE_spacetype_from_id(area_src->spacetype);
+  SpaceType *st = BKE_spacetype_from_id(area_src->spacetype);
   LISTBASE_FOREACH (ARegion *, region, &area_src->regionbase) {
     ARegion *newar = BKE_area_region_copy(st, region);
     BLI_addtail(&area_dst->regionbase, newar);
@@ -2302,7 +2345,6 @@ void ED_area_newspace(bContext *C, ScrArea *area, int type, const bool skip_regi
   wmWindow *win = CTX_wm_window(C);
 
   if (area->spacetype != type) {
-    SpaceType *st;
     SpaceLink *slold = area->spacedata.first;
     /* store area->type->exit callback */
     void *area_exit = area->type ? area->type->exit : NULL;
@@ -2337,7 +2379,7 @@ void ED_area_newspace(bContext *C, ScrArea *area, int type, const bool skip_regi
       area->type->exit = area_exit;
     }
 
-    st = BKE_spacetype_from_id(type);
+    SpaceType *st = BKE_spacetype_from_id(type);
 
     area->spacetype = type;
     area->type = st;
@@ -2558,7 +2600,8 @@ static void ed_panel_draw(const bContext *C,
                           Panel *panel,
                           int w,
                           int em,
-                          char *unique_panel_str)
+                          char *unique_panel_str,
+                          const char *search_filter)
 {
   const uiStyle *style = UI_style_get_dpi();
 
@@ -2575,10 +2618,13 @@ static void ed_panel_draw(const bContext *C,
   bool open;
   panel = UI_panel_begin(region, lb, block, pt, panel, &open);
 
+  const bool search_filter_active = search_filter != NULL && search_filter[0] != '\0';
+
   /* bad fixed values */
   int xco, yco, h = 0;
   int headerend = w - UI_UNIT_X;
 
+  UI_panel_header_buttons_begin(panel);
   if (pt->draw_header_preset && !(pt->flag & PNL_NO_HEADER)) {
     /* for preset menu */
     panel->layout = UI_block_layout(block,
@@ -2593,6 +2639,7 @@ static void ed_panel_draw(const bContext *C,
 
     pt->draw_header_preset(C, panel);
 
+    UI_block_apply_search_filter(block, search_filter);
     UI_block_layout_resolve(block, &xco, &yco);
     UI_block_translate(block, headerend - xco, 0);
     panel->layout = NULL;
@@ -2623,6 +2670,7 @@ static void ed_panel_draw(const bContext *C,
 
     pt->draw_header(C, panel);
 
+    UI_block_apply_search_filter(block, search_filter);
     UI_block_layout_resolve(block, &xco, &yco);
     panel->labelofs = xco - labelx;
     panel->layout = NULL;
@@ -2630,8 +2678,9 @@ static void ed_panel_draw(const bContext *C,
   else {
     panel->labelofs = 0;
   }
+  UI_panel_header_buttons_end(panel);
 
-  if (open) {
+  if (open || search_filter_active) {
     short panelContext;
 
     /* panel context can either be toolbar region or normal panels region */
@@ -2658,6 +2707,7 @@ static void ed_panel_draw(const bContext *C,
 
     pt->draw(C, panel);
 
+    UI_block_apply_search_filter(block, search_filter);
     UI_block_layout_resolve(block, &xco, &yco);
     panel->layout = NULL;
 
@@ -2669,18 +2719,101 @@ static void ed_panel_draw(const bContext *C,
   UI_block_end(C, block);
 
   /* Draw child panels. */
-  if (open) {
+  if (open || search_filter_active) {
     LISTBASE_FOREACH (LinkData *, link, &pt->children) {
       PanelType *child_pt = link->data;
       Panel *child_panel = UI_panel_find_by_type(&panel->children, child_pt);
 
       if (child_pt->draw && (!child_pt->poll || child_pt->poll(C, child_pt))) {
-        ed_panel_draw(C, region, &panel->children, child_pt, child_panel, w, em, unique_panel_str);
+        ed_panel_draw(C,
+                      region,
+                      &panel->children,
+                      child_pt,
+                      child_panel,
+                      w,
+                      em,
+                      unique_panel_str,
+                      search_filter);
       }
     }
   }
 
-  UI_panel_end(region, block, w, h, open);
+  UI_panel_end(panel, w, h);
+}
+
+/**
+ * Check whether a panel should be added to the region's panel layout.
+ */
+static bool panel_add_check(const bContext *C,
+                            const WorkSpace *workspace,
+                            const char *contexts[],
+                            const char *category_override,
+                            PanelType *panel_type)
+{
+  /* Only add top level panels. */
+  if (panel_type->parent) {
+    return false;
+  }
+  /* Check the category override first. */
+  if (category_override) {
+    if (!STREQ(panel_type->category, category_override)) {
+      return false;
+    }
+  }
+
+  /* Verify context. */
+  if (contexts != NULL && panel_type->context[0]) {
+    if (!streq_array_any(panel_type->context, contexts)) {
+      return false;
+    }
+  }
+
+  /* If we're tagged, only use compatible. */
+  if (panel_type->owner_id[0]) {
+    if (!BKE_workspace_owner_id_check(workspace, panel_type->owner_id)) {
+      return false;
+    }
+  }
+
+  if (LIKELY(panel_type->draw)) {
+    if (panel_type->poll && !panel_type->poll(C, panel_type)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+static bool region_uses_category_tabs(const ScrArea *area, const ARegion *region)
+{
+  /* XXX, should use some better check? */
+  /* For now also has hardcoded check for clip editor until it supports actual toolbar. */
+  return ((1 << region->regiontype) & RGN_TYPE_HAS_CATEGORY_MASK) ||
+         (region->regiontype == RGN_TYPE_TOOLS && area->spacetype == SPACE_CLIP);
+}
+
+static const char *region_panels_collect_categories(ARegion *region,
+                                                    LinkNode *panel_types_stack,
+                                                    bool *use_category_tabs)
+{
+  UI_panel_category_clear_all(region);
+
+  /* gather unique categories */
+  for (LinkNode *pt_link = panel_types_stack; pt_link; pt_link = pt_link->next) {
+    PanelType *pt = pt_link->link;
+    if (pt->category[0]) {
+      if (!UI_panel_category_find(region, pt->category)) {
+        UI_panel_category_add(region, pt->category);
+      }
+    }
+  }
+
+  if (UI_panel_category_is_visible(region)) {
+    return UI_panel_category_active_get(region, true);
+  }
+
+  *use_category_tabs = false;
+  return NULL;
 }
 
 /**
@@ -2698,29 +2831,7 @@ void ED_region_panels_layout_ex(const bContext *C,
   WorkSpace *workspace = CTX_wm_workspace(C);
   LinkNode *panel_types_stack = NULL;
   LISTBASE_FOREACH_BACKWARD (PanelType *, pt, paneltypes) {
-    /* Only draw top level panels. */
-    if (pt->parent) {
-      continue;
-    }
-
-    if (category_override) {
-      if (!STREQ(pt->category, category_override)) {
-        continue;
-      }
-    }
-
-    /* verify context */
-    if (contexts && pt->context[0] && !streq_array_any(pt->context, contexts)) {
-      continue;
-    }
-
-    /* If we're tagged, only use compatible. */
-    if (pt->owner_id[0] && BKE_workspace_owner_id_check(workspace, pt->owner_id) == false) {
-      continue;
-    }
-
-    /* draw panel */
-    if (pt->draw && (!pt->poll || pt->poll(C, pt))) {
+    if (panel_add_check(C, workspace, contexts, category_override, pt)) {
       BLI_linklist_prepend_alloca(&panel_types_stack, pt);
     }
   }
@@ -2729,14 +2840,8 @@ void ED_region_panels_layout_ex(const bContext *C,
 
   ScrArea *area = CTX_wm_area(C);
   View2D *v2d = &region->v2d;
-  int x, y, w, em;
 
-  /* XXX, should use some better check? */
-  /* For now also has hardcoded check for clip editor until it supports actual toolbar. */
-  bool use_category_tabs = (category_override == NULL) &&
-                           ((((1 << region->regiontype) & RGN_TYPE_HAS_CATEGORY_MASK) ||
-                             (region->regiontype == RGN_TYPE_TOOLS &&
-                              area->spacetype == SPACE_CLIP)));
+  bool use_category_tabs = (category_override == NULL) && region_uses_category_tabs(area, region);
   /* offset panels for small vertical tab area */
   const char *category = NULL;
   const int category_tabs_width = UI_PANEL_CATEGORY_MARGIN_WIDTH;
@@ -2752,35 +2857,23 @@ void ED_region_panels_layout_ex(const bContext *C,
 
   /* collect categories */
   if (use_category_tabs) {
-    UI_panel_category_clear_all(region);
-
-    /* gather unique categories */
-    for (LinkNode *pt_link = panel_types_stack; pt_link; pt_link = pt_link->next) {
-      PanelType *pt = pt_link->link;
-      if (pt->category[0]) {
-        if (!UI_panel_category_find(region, pt->category)) {
-          UI_panel_category_add(region, pt->category);
-        }
-      }
-    }
-
-    if (!UI_panel_category_is_visible(region)) {
-      use_category_tabs = false;
-    }
-    else {
-      category = UI_panel_category_active_get(region, true);
-      margin_x = category_tabs_width;
-    }
+    category = region_panels_collect_categories(region, panel_types_stack, &use_category_tabs);
+  }
+  if (use_category_tabs) {
+    margin_x = category_tabs_width;
   }
 
-  w = BLI_rctf_size_x(&v2d->cur);
-  em = (region->type->prefsizex) ? 10 : 20; /* works out to 10*UI_UNIT_X or 20*UI_UNIT_X */
+  const int w = BLI_rctf_size_x(&v2d->cur) - margin_x;
+  /* Works out to 10 * UI_UNIT_X or 20 * UI_UNIT_X. */
+  const int em = (region->type->prefsizex) ? 10 : 20;
 
-  w -= margin_x;
-  int w_box_panel = w - UI_PANEL_BOX_STYLE_MARGIN * 2.0f;
+  const int w_box_panel = w - UI_PANEL_BOX_STYLE_MARGIN * 2.0f;
 
   /* create panels */
   UI_panels_begin(C, region);
+
+  /* Get search string for property search. */
+  const char *search_filter = ED_area_region_search_filter_get(area, region);
 
   /* set view2d view matrix  - UI_block_begin() stores it */
   UI_view2d_view_ortho(v2d);
@@ -2813,7 +2906,8 @@ void ED_region_panels_layout_ex(const bContext *C,
                   panel,
                   (pt->flag & PNL_DRAW_BOX) ? w_box_panel : w,
                   em,
-                  NULL);
+                  NULL,
+                  search_filter);
   }
 
   /* Draw "polyinstantaited" panels that don't have a 1 to 1 correspondence with their types. */
@@ -2846,11 +2940,13 @@ void ED_region_panels_layout_ex(const bContext *C,
                     panel,
                     (panel->type->flag & PNL_DRAW_BOX) ? w_box_panel : w,
                     em,
-                    unique_panel_str);
+                    unique_panel_str,
+                    search_filter);
     }
   }
 
   /* align panels and return size */
+  int x, y;
   UI_panels_end(C, region, &x, &y);
 
   /* before setting the view */
@@ -2861,7 +2957,7 @@ void ED_region_panels_layout_ex(const bContext *C,
     Panel *panel = region->panels.last;
     if (panel != NULL) {
       const int size_dyn[2] = {
-          UI_UNIT_X * ((panel->flag & PNL_CLOSED) ? 8 : 14) / UI_DPI_FAC,
+          UI_UNIT_X * (UI_panel_is_closed(panel) ? 8 : 14) / UI_DPI_FAC,
           UI_panel_size_y(panel) / UI_DPI_FAC,
       };
       /* region size is layout based and needs to be updated */
@@ -2934,15 +3030,15 @@ void ED_region_panels_draw(const bContext *C, ARegion *region)
   }
 
   /* scrollers */
-  const rcti *mask = NULL;
-  rcti mask_buf;
+  bool use_mask = false;
+  rcti mask;
   if (region->runtime.category &&
       (RGN_ALIGN_ENUM_FROM_MASK(region->alignment) == RGN_ALIGN_RIGHT)) {
-    UI_view2d_mask_from_win(v2d, &mask_buf);
-    mask_buf.xmax -= UI_PANEL_CATEGORY_MARGIN_WIDTH;
-    mask = &mask_buf;
+    use_mask = true;
+    UI_view2d_mask_from_win(v2d, &mask);
+    mask.xmax -= UI_PANEL_CATEGORY_MARGIN_WIDTH;
   }
-  UI_view2d_scrollers_draw(v2d, mask);
+  UI_view2d_scrollers_draw(v2d, use_mask ? &mask : NULL);
 }
 
 void ED_region_panels_ex(const bContext *C, ARegion *region, const char *contexts[])
@@ -2961,20 +3057,158 @@ void ED_region_panels(const bContext *C, ARegion *region)
 
 void ED_region_panels_init(wmWindowManager *wm, ARegion *region)
 {
-  wmKeyMap *keymap;
-
   UI_view2d_region_reinit(&region->v2d, V2D_COMMONVIEW_PANELS_UI, region->winx, region->winy);
 
-  keymap = WM_keymap_ensure(wm->defaultconf, "View2D Buttons List", 0, 0);
+  wmKeyMap *keymap = WM_keymap_ensure(wm->defaultconf, "View2D Buttons List", 0, 0);
   WM_event_add_keymap_handler(&region->handlers, keymap);
+}
+
+/**
+ * Check whether any of the buttons generated by the \a panel_type's
+ * layout callbacks match the \a search_filter.
+ *
+ * \param panel: If non-NULL, use this instead of adding a new panel for the \a panel_type.
+ */
+static bool panel_property_search(const bContext *C,
+                                  ARegion *region,
+                                  const uiStyle *style,
+                                  Panel *panel,
+                                  PanelType *panel_type,
+                                  const char *search_filter)
+{
+  uiBlock *block = UI_block_begin(C, region, panel_type->idname, UI_EMBOSS);
+  UI_block_set_search_only(block, true);
+
+  if (panel == NULL) {
+    bool open; /* Dummy variable. */
+    panel = UI_panel_begin(region, &region->panels, block, panel_type, panel, &open);
+  }
+
+  /* Build the layouts. Because they are only used for search,
+   * they don't need any of the proper style or layout information. */
+  if (panel->type->draw_header_preset != NULL) {
+    panel->layout = UI_block_layout(
+        block, UI_LAYOUT_HORIZONTAL, UI_LAYOUT_HEADER, 0, 0, 0, 0, 0, style);
+    panel_type->draw_header_preset(C, panel);
+  }
+  if (panel->type->draw_header != NULL) {
+    panel->layout = UI_block_layout(
+        block, UI_LAYOUT_HORIZONTAL, UI_LAYOUT_HEADER, 0, 0, 0, 0, 0, style);
+    panel_type->draw_header(C, panel);
+  }
+  if (LIKELY(panel->type->draw != NULL)) {
+    panel->layout = UI_block_layout(
+        block, UI_LAYOUT_VERTICAL, UI_LAYOUT_PANEL, 0, 0, 0, 0, 0, style);
+    panel_type->draw(C, panel);
+  }
+
+  UI_block_layout_free(block);
+
+  /* We could check after each layout to increase the likelihood of returning early,
+   * but that probably wouldn't make much of a difference anyway. */
+  if (UI_block_apply_search_filter(block, search_filter)) {
+    return true;
+  }
+
+  LISTBASE_FOREACH (LinkData *, link, &panel_type->children) {
+    PanelType *panel_type_child = link->data;
+    if (!panel_type_child->poll || panel_type_child->poll(C, panel_type_child)) {
+      /* Search for the existing child panel here because it might be an instanced
+       * child panel with a custom data field that will be needed to build the layout. */
+      Panel *child_panel = UI_panel_find_by_type(&panel->children, panel_type_child);
+      if (panel_property_search(C, region, style, child_panel, panel_type_child, search_filter)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Build the same panel list as #ED_region_panels_layout_ex and checks whether any
+ * of the panels contain a search result based on the area / region's search filter.
+ */
+bool ED_region_property_search(const bContext *C,
+                               ARegion *region,
+                               ListBase *paneltypes,
+                               const char *contexts[],
+                               const char *category_override)
+{
+  ScrArea *area = CTX_wm_area(C);
+  WorkSpace *workspace = CTX_wm_workspace(C);
+  const uiStyle *style = UI_style_get_dpi();
+  const char *search_filter = ED_area_region_search_filter_get(area, region);
+
+  LinkNode *panel_types_stack = NULL;
+  LISTBASE_FOREACH_BACKWARD (PanelType *, pt, paneltypes) {
+    if (panel_add_check(C, workspace, contexts, category_override, pt)) {
+      BLI_linklist_prepend_alloca(&panel_types_stack, pt);
+    }
+  }
+
+  const char *category = NULL;
+  bool use_category_tabs = (category_override == NULL) && region_uses_category_tabs(area, region);
+  if (use_category_tabs) {
+    category = region_panels_collect_categories(region, panel_types_stack, &use_category_tabs);
+  }
+
+  /* Run property search for each panel, stopping if a result is found. */
+  bool has_result = true;
+  bool has_instanced_panel = false;
+  for (LinkNode *pt_link = panel_types_stack; pt_link; pt_link = pt_link->next) {
+    PanelType *panel_type = pt_link->link;
+    /* Note that these checks are duplicated from #ED_region_panels_layout_ex. */
+    if (panel_type->flag & PNL_INSTANCED) {
+      has_instanced_panel = true;
+      continue;
+    }
+
+    if (use_category_tabs) {
+      if (panel_type->category[0] && !STREQ(category, panel_type->category)) {
+        continue;
+      }
+    }
+
+    /* We start property search with an empty panel list, so there's
+     * no point in trying to find an existing panel with this type. */
+    has_result = panel_property_search(C, region, style, NULL, panel_type, search_filter);
+    if (has_result) {
+      break;
+    }
+  }
+
+  /* Run property search for instanced panels (created in the layout calls of previous panels). */
+  if (!has_result && has_instanced_panel) {
+    LISTBASE_FOREACH (Panel *, panel, &region->panels) {
+      /* Note that these checks are duplicated from #ED_region_panels_layout_ex. */
+      if (panel->type == NULL || !(panel->type->flag & PNL_INSTANCED)) {
+        continue;
+      }
+      if (use_category_tabs) {
+        if (panel->type->category[0] && !STREQ(category, panel->type->category)) {
+          continue;
+        }
+      }
+
+      has_result = panel_property_search(C, region, style, panel, panel->type, search_filter);
+      if (has_result) {
+        break;
+      }
+    }
+  }
+
+  /* Free the panels and blocks, as they are only used for search. */
+  UI_blocklist_free(C, &region->uiblocks);
+  UI_panels_free_instanced(C, region);
+  BKE_area_region_panels_free(&region->panels);
+
+  return has_result;
 }
 
 void ED_region_header_layout(const bContext *C, ARegion *region)
 {
   const uiStyle *style = UI_style_get_dpi();
-  uiBlock *block;
-  uiLayout *layout;
-  Header header = {NULL};
   bool region_layout_based = region->flag & RGN_FLAG_DYNAMIC_SIZE;
 
   /* Height of buttons and scaling needed to achieve it. */
@@ -3001,14 +3235,15 @@ void ED_region_header_layout(const bContext *C, ARegion *region)
       continue;
     }
 
-    block = UI_block_begin(C, region, ht->idname, UI_EMBOSS);
-    layout = UI_block_layout(
+    uiBlock *block = UI_block_begin(C, region, ht->idname, UI_EMBOSS);
+    uiLayout *layout = UI_block_layout(
         block, UI_LAYOUT_HORIZONTAL, UI_LAYOUT_HEADER, xco, yco, buttony, 1, 0, style);
 
     if (buttony_scale != 1.0f) {
       uiLayoutSetScaleY(layout, buttony_scale);
     }
 
+    Header header = {NULL};
     if (ht->draw) {
       header.type = ht;
       header.layout = layout;
@@ -3042,6 +3277,10 @@ void ED_region_header_layout(const bContext *C, ARegion *region)
     }
 
     UI_block_end(C, block);
+
+    /* In most cases there is only ever one header, it never makes sense to draw more than one
+     * header in the same region, this results in overlapping buttons, see: T60195. */
+    break;
   }
 
   if (!region_layout_based) {
@@ -3134,17 +3373,17 @@ ScrArea *ED_screen_areas_iter_first(const wmWindow *win, const bScreen *screen)
 }
 ScrArea *ED_screen_areas_iter_next(const bScreen *screen, const ScrArea *area)
 {
-  if (area->global) {
-    for (ScrArea *area_iter = area->next; area_iter; area_iter = area_iter->next) {
-      if ((area_iter->global->flag & GLOBAL_AREA_IS_HIDDEN) == 0) {
-        return area_iter;
-      }
-    }
-    /* No visible next global area found, start iterating over layout areas. */
-    return screen->areabase.first;
+  if (area->global == NULL) {
+    return area->next;
   }
 
-  return area->next;
+  for (ScrArea *area_iter = area->next; area_iter; area_iter = area_iter->next) {
+    if ((area_iter->global->flag & GLOBAL_AREA_IS_HIDDEN) == 0) {
+      return area_iter;
+    }
+  }
+  /* No visible next global area found, start iterating over layout areas. */
+  return screen->areabase.first;
 }
 
 /**
@@ -3301,10 +3540,7 @@ static void metadata_custom_draw_fields(const char *field, const char *value, vo
 static void metadata_draw_imbuf(ImBuf *ibuf, const rctf *rect, int fontid, const bool is_top)
 {
   char temp_str[MAX_METADATA_STR];
-  int line_width;
   int ofs_y = 0;
-  short i;
-  int len;
   const float height = BLF_height_max(fontid);
   const float margin = height / 8;
   const float vertical_offset = (height + margin);
@@ -3317,11 +3553,11 @@ static void metadata_draw_imbuf(ImBuf *ibuf, const rctf *rect, int fontid, const
   const float ymax = (rect->ymax - margin) - descender;
 
   if (is_top) {
-    for (i = 0; i < 4; i++) {
+    for (int i = 0; i < 4; i++) {
       /* first line */
       if (i == 0) {
         bool do_newline = false;
-        len = BLI_snprintf_rlen(temp_str, MAX_METADATA_STR, "%s: ", meta_data_list[0]);
+        int len = BLI_snprintf_rlen(temp_str, MAX_METADATA_STR, "%s: ", meta_data_list[0]);
         if (metadata_is_valid(ibuf, temp_str, 0, len)) {
           BLF_position(fontid, xmin, ymax - vertical_offset, 0.0f);
           BLF_draw(fontid, temp_str, BLF_DRAW_STR_DUMMY_MAX);
@@ -3330,7 +3566,7 @@ static void metadata_draw_imbuf(ImBuf *ibuf, const rctf *rect, int fontid, const
 
         len = BLI_snprintf_rlen(temp_str, MAX_METADATA_STR, "%s: ", meta_data_list[1]);
         if (metadata_is_valid(ibuf, temp_str, 1, len)) {
-          line_width = BLF_width(fontid, temp_str, BLF_DRAW_STR_DUMMY_MAX);
+          int line_width = BLF_width(fontid, temp_str, BLF_DRAW_STR_DUMMY_MAX);
           BLF_position(fontid, xmax - line_width, ymax - vertical_offset, 0.0f);
           BLF_draw(fontid, temp_str, BLF_DRAW_STR_DUMMY_MAX);
           do_newline = true;
@@ -3341,7 +3577,7 @@ static void metadata_draw_imbuf(ImBuf *ibuf, const rctf *rect, int fontid, const
         }
       } /* Strip */
       else if (i == 1 || i == 2) {
-        len = BLI_snprintf_rlen(temp_str, MAX_METADATA_STR, "%s: ", meta_data_list[i + 1]);
+        int len = BLI_snprintf_rlen(temp_str, MAX_METADATA_STR, "%s: ", meta_data_list[i + 1]);
         if (metadata_is_valid(ibuf, temp_str, i + 1, len)) {
           BLF_position(fontid, xmin, ymax - vertical_offset - ofs_y, 0.0f);
           BLF_draw(fontid, temp_str, BLF_DRAW_STR_DUMMY_MAX);
@@ -3349,7 +3585,7 @@ static void metadata_draw_imbuf(ImBuf *ibuf, const rctf *rect, int fontid, const
         }
       } /* Note (wrapped) */
       else if (i == 3) {
-        len = BLI_snprintf_rlen(temp_str, MAX_METADATA_STR, "%s: ", meta_data_list[i + 1]);
+        int len = BLI_snprintf_rlen(temp_str, MAX_METADATA_STR, "%s: ", meta_data_list[i + 1]);
         if (metadata_is_valid(ibuf, temp_str, i + 1, len)) {
           struct ResultBLF info;
           BLF_enable(fontid, BLF_WORD_WRAP);
@@ -3362,9 +3598,9 @@ static void metadata_draw_imbuf(ImBuf *ibuf, const rctf *rect, int fontid, const
         }
       }
       else {
-        len = BLI_snprintf_rlen(temp_str, MAX_METADATA_STR, "%s: ", meta_data_list[i + 1]);
+        int len = BLI_snprintf_rlen(temp_str, MAX_METADATA_STR, "%s: ", meta_data_list[i + 1]);
         if (metadata_is_valid(ibuf, temp_str, i + 1, len)) {
-          line_width = BLF_width(fontid, temp_str, BLF_DRAW_STR_DUMMY_MAX);
+          int line_width = BLF_width(fontid, temp_str, BLF_DRAW_STR_DUMMY_MAX);
           BLF_position(fontid, xmax - line_width, ymax - vertical_offset - ofs_y, 0.0f);
           BLF_draw(fontid, temp_str, BLF_DRAW_STR_DUMMY_MAX);
           ofs_y += vertical_offset;
@@ -3382,8 +3618,8 @@ static void metadata_draw_imbuf(ImBuf *ibuf, const rctf *rect, int fontid, const
     IMB_metadata_foreach(ibuf, metadata_custom_draw_fields, &ctx);
     int ofs_x = 0;
     ofs_y = ctx.current_y;
-    for (i = 5; i < 10; i++) {
-      len = BLI_snprintf_rlen(temp_str, MAX_METADATA_STR, "%s: ", meta_data_list[i]);
+    for (int i = 5; i < 10; i++) {
+      int len = BLI_snprintf_rlen(temp_str, MAX_METADATA_STR, "%s: ", meta_data_list[i]);
       if (metadata_is_valid(ibuf, temp_str, i, len)) {
         BLF_position(fontid, xmin + ofs_x, ymin + ofs_y, 0.0f);
         BLF_draw(fontid, temp_str, BLF_DRAW_STR_DUMMY_MAX);
@@ -3412,13 +3648,13 @@ static float metadata_box_height_get(ImBuf *ibuf, int fontid, const bool is_top)
   const float height = BLF_height_max(fontid);
   const float margin = (height / 8);
   char str[MAX_METADATA_STR] = "";
-  short i, count = 0;
+  short count = 0;
 
   if (is_top) {
     if (metadata_is_valid(ibuf, str, 0, 0) || metadata_is_valid(ibuf, str, 1, 0)) {
       count++;
     }
-    for (i = 2; i < 5; i++) {
+    for (int i = 2; i < 5; i++) {
       if (metadata_is_valid(ibuf, str, i, 0)) {
         if (i == 4) {
           struct {
@@ -3441,7 +3677,7 @@ static float metadata_box_height_get(ImBuf *ibuf, int fontid, const bool is_top)
     }
   }
   else {
-    for (i = 5; i < 10; i++) {
+    for (int i = 5; i < 10; i++) {
       if (metadata_is_valid(ibuf, str, i, 0)) {
         count = 1;
         break;
@@ -3465,8 +3701,6 @@ static float metadata_box_height_get(ImBuf *ibuf, int fontid, const bool is_top)
 void ED_region_image_metadata_draw(
     int x, int y, ImBuf *ibuf, const rctf *frame, float zoomx, float zoomy)
 {
-  float box_y;
-  rctf rect;
   const uiStyle *style = UI_style_get_dpi();
 
   if (!ibuf->metadata) {
@@ -3485,10 +3719,11 @@ void ED_region_image_metadata_draw(
   /* *** upper box*** */
 
   /* get needed box height */
-  box_y = metadata_box_height_get(ibuf, blf_mono_font, true);
+  float box_y = metadata_box_height_get(ibuf, blf_mono_font, true);
 
   if (box_y) {
     /* set up rect */
+    rctf rect;
     BLI_rctf_init(&rect, frame->xmin, frame->xmax, frame->ymax, frame->ymax + box_y);
     /* draw top box */
     GPUVertFormat *format = immVertexFormat();
@@ -3513,6 +3748,7 @@ void ED_region_image_metadata_draw(
 
   if (box_y) {
     /* set up box rect */
+    rctf rect;
     BLI_rctf_init(&rect, frame->xmin, frame->xmax, frame->ymin - box_y, frame->ymin);
     /* draw top box */
     GPUVertFormat *format = immVertexFormat();
@@ -3555,24 +3791,26 @@ void ED_region_image_metadata_panel_draw(ImBuf *ibuf, uiLayout *layout)
 
 void ED_region_grid_draw(ARegion *region, float zoomx, float zoomy, float x0, float y0)
 {
-  float gridsize, gridstep = 1.0f / 32.0f;
-  float fac, blendfac;
-  int x1, y1, x2, y2;
-
   /* the image is located inside (x0, y0), (x0+1, y0+1) as set by view2d */
+  int x1, y1, x2, y2;
   UI_view2d_view_to_region(&region->v2d, x0, y0, &x1, &y1);
   UI_view2d_view_to_region(&region->v2d, x0 + 1.0f, y0 + 1.0f, &x2, &y2);
 
   GPUVertFormat *format = immVertexFormat();
   uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
 
+  float gridcolor[4];
+  UI_GetThemeColor4fv(TH_GRID, gridcolor);
+
   immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
-  immUniformThemeColorShade(TH_BACK, 20);
+  /* To fake alpha-blending, color shading is reduced when alpha is nearing 0. */
+  immUniformThemeColorBlendShade(TH_BACK, TH_GRID, gridcolor[3], 20 * gridcolor[3]);
   immRectf(pos, x1, y1, x2, y2);
   immUnbindProgram();
 
   /* gridsize adapted to zoom level */
-  gridsize = 0.5f * (zoomx + zoomy);
+  float gridsize = 0.5f * (zoomx + zoomy);
+  float gridstep = 1.0f / 32.0f;
   if (gridsize <= 0.0f) {
     return;
   }
@@ -3590,7 +3828,7 @@ void ED_region_grid_draw(ARegion *region, float zoomx, float zoomy, float x0, fl
     }
   }
 
-  blendfac = 0.25f * gridsize - floorf(0.25f * gridsize);
+  float blendfac = 0.25f * gridsize - floorf(0.25f * gridsize);
   CLAMP(blendfac, 0.0f, 1.0f);
 
   int count_fine = 1.0f / gridstep;
@@ -3605,8 +3843,8 @@ void ED_region_grid_draw(ARegion *region, float zoomx, float zoomy, float x0, fl
     immBegin(GPU_PRIM_LINES, 4 * count_fine + 4 * count_large);
 
     float theme_color[3];
-    UI_GetThemeColorShade3fv(TH_BACK, (int)(20.0f * (1.0f - blendfac)), theme_color);
-    fac = 0.0f;
+    UI_GetThemeColorShade3fv(TH_GRID, (int)(20.0f * (1.0f - blendfac)), theme_color);
+    float fac = 0.0f;
 
     /* the fine resolution level */
     for (int i = 0; i < count_fine; i++) {
@@ -3622,7 +3860,7 @@ void ED_region_grid_draw(ARegion *region, float zoomx, float zoomy, float x0, fl
     }
 
     if (count_large > 0) {
-      UI_GetThemeColor3fv(TH_BACK, theme_color);
+      UI_GetThemeColor3fv(TH_GRID, theme_color);
       fac = 0.0f;
 
       /* the large resolution level */

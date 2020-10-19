@@ -43,9 +43,7 @@ using Alembic::AbcGeom::OCurvesSchema;
 using Alembic::AbcGeom::ON3fGeomParam;
 using Alembic::AbcGeom::OV2fGeomParam;
 
-namespace blender {
-namespace io {
-namespace alembic {
+namespace blender::io::alembic {
 
 ABCHairWriter::ABCHairWriter(const ABCWriterConstructorArgs &args)
     : ABCAbstractWriter(args), uv_warning_shown_(false)
@@ -62,6 +60,11 @@ void ABCHairWriter::create_alembic_objects(const HierarchyContext * /*context*/)
 Alembic::Abc::OObject ABCHairWriter::get_alembic_object() const
 {
   return abc_curves_;
+}
+
+Alembic::Abc::OCompoundProperty ABCHairWriter::abc_prop_for_custom_props()
+{
+  return abc_schema_prop_for_custom_props(abc_curves_schema_);
 }
 
 bool ABCHairWriter::check_is_animated(const HierarchyContext & /*context*/) const
@@ -306,6 +309,4 @@ void ABCHairWriter::write_hair_child_sample(const HierarchyContext &context,
   }
 }
 
-}  // namespace alembic
-}  // namespace io
-}  // namespace blender
+}  // namespace blender::io::alembic

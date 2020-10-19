@@ -71,14 +71,23 @@
 #define ANIMATION_TIME 0.30
 #define ANIMATION_INTERVAL 0.02
 
-#define PNL_LAST_ADDED 1
-#define PNL_ACTIVE 2
-#define PNL_WAS_ACTIVE 4
-#define PNL_ANIM_ALIGN 8
-#define PNL_NEW_ADDED 16
-#define PNL_FIRST 32
+typedef enum uiPanelRuntimeFlag {
+  PANEL_LAST_ADDED = (1 << 0),
+  PANEL_ACTIVE = (1 << 2),
+  PANEL_WAS_ACTIVE = (1 << 3),
+  PANEL_ANIM_ALIGN = (1 << 4),
+  PANEL_NEW_ADDED = (1 << 5),
+  PANEL_SEARCH_FILTER_MATCH = (1 << 7),
+  /**
+   * Use the status set by property search (#PANEL_SEARCH_FILTER_MATCH)
+   * instead of #PNL_CLOSED. Set to true on every property search update.
+   */
+  PANEL_USE_CLOSED_FROM_SEARCH = (1 << 8),
+  /** The Panel was before the start of the current / latest layout pass. */
+  PANEL_WAS_CLOSED = (1 << 9),
+} uiPanelRuntimeFlag;
 
-/* the state of the mouse position relative to the panel */
+/* The state of the mouse position relative to the panel. */
 typedef enum uiPanelMouseState {
   PANEL_MOUSE_OUTSIDE,        /** Mouse is not in the panel. */
   PANEL_MOUSE_INSIDE_CONTENT, /** Mouse is in the actual panel content. */
@@ -96,11 +105,11 @@ typedef enum uiHandlePanelState {
 typedef struct uiHandlePanelData {
   uiHandlePanelState state;
 
-  /* animation */
+  /* Animation. */
   wmTimer *animtimer;
   double starttime;
 
-  /* dragging */
+  /* Dragging. */
   bool is_drag_drop;
   int startx, starty;
   int startofsx, startofsy;
@@ -109,12 +118,15 @@ typedef struct uiHandlePanelData {
 } uiHandlePanelData;
 
 typedef struct PanelSort {
-  Panel *panel, *orig;
+  Panel *panel;
+  int new_offset_x;
+  int new_offset_y;
 } PanelSort;
 
+static void panel_set_expansion_from_list_data(const bContext *C, Panel *panel);
 static int get_panel_real_size_y(const Panel *panel);
 static void panel_activate_state(const bContext *C, Panel *panel, uiHandlePanelState state);
-static int compare_panel(const void *a1, const void *a2);
+static int compare_panel(const void *a, const void *b);
 static bool panel_type_context_poll(ARegion *region,
                                     const PanelType *panel_type,
                                     const char *context);
@@ -125,16 +137,26 @@ static bool panel_type_context_poll(ARegion *region,
 /** \name Local Functions
  * \{ */
 
-static void panel_title_color_get(bool show_background, uchar color[4])
+static void panel_title_color_get(const Panel *panel,
+                                  const bool show_background,
+                                  const bool region_search_filter_active,
+                                  uchar r_color[4])
 {
-  if (show_background) {
-    UI_GetThemeColor4ubv(TH_TITLE, color);
-  }
-  else {
+  if (!show_background) {
     /* Use menu colors for floating panels. */
     bTheme *btheme = UI_GetTheme();
     const uiWidgetColors *wcol = &btheme->tui.wcol_menu_back;
-    copy_v4_v4_uchar(color, (const uchar *)wcol->text);
+    copy_v4_v4_uchar(r_color, (const uchar *)wcol->text);
+    return;
+  }
+
+  const bool search_match = UI_panel_matches_search_filter(panel);
+
+  UI_GetThemeColor4ubv(TH_TITLE, r_color);
+  if (region_search_filter_active && !search_match) {
+    r_color[0] *= 0.5;
+    r_color[1] *= 0.5;
+    r_color[2] *= 0.5;
   }
 }
 
@@ -145,15 +167,21 @@ static bool panel_active_animation_changed(ListBase *lb,
   LISTBASE_FOREACH (Panel *, panel, lb) {
     /* Detect panel active flag changes. */
     if (!(panel->type && panel->type->parent)) {
-      if ((panel->runtime_flag & PNL_WAS_ACTIVE) && !(panel->runtime_flag & PNL_ACTIVE)) {
+      if ((panel->runtime_flag & PANEL_WAS_ACTIVE) && !(panel->runtime_flag & PANEL_ACTIVE)) {
         return true;
       }
-      if (!(panel->runtime_flag & PNL_WAS_ACTIVE) && (panel->runtime_flag & PNL_ACTIVE)) {
+      if (!(panel->runtime_flag & PANEL_WAS_ACTIVE) && (panel->runtime_flag & PANEL_ACTIVE)) {
         return true;
       }
     }
 
-    if ((panel->runtime_flag & PNL_ACTIVE) && !(panel->flag & PNL_CLOSED)) {
+    /* Detect changes in panel expansions. */
+    if ((bool)(panel->runtime_flag & PANEL_WAS_CLOSED) != UI_panel_is_closed(panel)) {
+      *r_panel_animation = panel;
+      return false;
+    }
+
+    if ((panel->runtime_flag & PANEL_ACTIVE) && !UI_panel_is_closed(panel)) {
       if (panel_active_animation_changed(&panel->children, r_panel_animation, r_no_animation)) {
         return true;
       }
@@ -170,8 +198,24 @@ static bool panel_active_animation_changed(ListBase *lb,
         *r_no_animation = true;
       }
     }
-    if ((panel->runtime_flag & PNL_ANIM_ALIGN) && !(*r_panel_animation)) {
+    if ((panel->runtime_flag & PANEL_ANIM_ALIGN) && !(*r_panel_animation)) {
       *r_panel_animation = panel;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * \return True if the properties editor switch tabs since the last layout pass.
+ */
+static bool properties_space_needs_realign(ScrArea *area, ARegion *region)
+{
+  if (area->spacetype == SPACE_PROPERTIES && region->regiontype == RGN_TYPE_WINDOW) {
+    SpaceProperties *sbuts = area->spacedata.first;
+
+    if (sbuts->mainbo != sbuts->mainb) {
+      return true;
     }
   }
 
@@ -182,17 +226,7 @@ static bool panels_need_realign(ScrArea *area, ARegion *region, Panel **r_panel_
 {
   *r_panel_animation = NULL;
 
-  if (area->spacetype == SPACE_PROPERTIES && region->regiontype == RGN_TYPE_WINDOW) {
-    SpaceProperties *sbuts = area->spacedata.first;
-
-    if (sbuts->mainbo != sbuts->mainb) {
-      return true;
-    }
-  }
-  else if (area->spacetype == SPACE_IMAGE && region->regiontype == RGN_TYPE_PREVIEW) {
-    return true;
-  }
-  else if (area->spacetype == SPACE_FILE && region->regiontype == RGN_TYPE_CHANNELS) {
+  if (properties_space_needs_realign(area, region)) {
     return true;
   }
 
@@ -220,22 +254,23 @@ static bool panels_need_realign(ScrArea *area, ARegion *region, Panel **r_panel_
 /** \name Functions for Instanced Panels
  * \{ */
 
-static Panel *UI_panel_add_instanced_ex(ARegion *region,
-                                        ListBase *panels,
-                                        PanelType *panel_type,
-                                        PointerRNA *custom_data)
+static Panel *panel_add_instanced(ARegion *region,
+                                  ListBase *panels,
+                                  PanelType *panel_type,
+                                  PointerRNA *custom_data)
 {
   Panel *panel = MEM_callocN(sizeof(Panel), "instanced panel");
   panel->type = panel_type;
   BLI_strncpy(panel->panelname, panel_type->idname, sizeof(panel->panelname));
 
   panel->runtime.custom_data_ptr = custom_data;
+  panel->runtime_flag |= PANEL_NEW_ADDED;
 
   /* Add the panel's children too. Although they aren't instanced panels, we can still use this
    * function to create them, as UI_panel_begin does other things we don't need to do. */
   LISTBASE_FOREACH (LinkData *, child, &panel_type->children) {
     PanelType *child_type = child->data;
-    UI_panel_add_instanced_ex(region, &panel->children, child_type, custom_data);
+    panel_add_instanced(region, &panel->children, child_type, custom_data);
   }
 
   /* Make sure the panel is added to the end of the display-order as well. This is needed for
@@ -257,10 +292,11 @@ static Panel *UI_panel_add_instanced_ex(ARegion *region,
 }
 
 /**
- * Called in situations where panels need to be added dynamically rather than having only one panel
- * corresponding to each #PanelType.
+ * Called in situations where panels need to be added dynamically rather than
+ * having only one panel corresponding to each #PanelType.
  */
-Panel *UI_panel_add_instanced(ARegion *region,
+Panel *UI_panel_add_instanced(const bContext *C,
+                              ARegion *region,
                               ListBase *panels,
                               char *panel_idname,
                               PointerRNA *custom_data)
@@ -275,7 +311,12 @@ Panel *UI_panel_add_instanced(ARegion *region,
     return NULL;
   }
 
-  return UI_panel_add_instanced_ex(region, panels, panel_type, custom_data);
+  Panel *new_panel = panel_add_instanced(region, panels, panel_type, custom_data);
+
+  /* Do this after #panel_add_instatnced so all subpanels are added. */
+  panel_set_expansion_from_list_data(C, new_panel);
+
+  return new_panel;
 }
 
 /**
@@ -290,7 +331,7 @@ void UI_list_panel_unique_str(Panel *panel, char *r_name)
 }
 
 /**
- * Free a panel and it's children. Custom data is shared by the panel and its children
+ * Free a panel and its children. Custom data is shared by the panel and its children
  * and is freed by #UI_panels_free_instanced.
  *
  * \note The only panels that should need to be deleted at runtime are panels with the
@@ -431,8 +472,7 @@ static void reorder_instanced_panel_list(bContext *C, ARegion *region, Panel *dr
     if (panel->type) {
       if (panel->type->flag & PNL_INSTANCED) {
         if (panel_type_context_poll(region, panel->type, context)) {
-          sort_index->panel = MEM_dupallocN(panel);
-          sort_index->orig = panel;
+          sort_index->panel = panel;
           sort_index++;
         }
       }
@@ -443,16 +483,11 @@ static void reorder_instanced_panel_list(bContext *C, ARegion *region, Panel *dr
   /* Find how many of those panels are above this panel. */
   int move_to_index = 0;
   for (; move_to_index < list_panels_len; move_to_index++) {
-    if (panel_sort[move_to_index].orig == drag_panel) {
+    if (panel_sort[move_to_index].panel == drag_panel) {
       break;
     }
   }
 
-  /* Free panel sort array. */
-  int i = 0;
-  for (sort_index = panel_sort; i < list_panels_len; i++, sort_index++) {
-    MEM_freeN(sort_index->panel);
-  }
   MEM_freeN(panel_sort);
 
   /* Set the bit to tell the interface to instanced the list. */
@@ -463,14 +498,15 @@ static void reorder_instanced_panel_list(bContext *C, ARegion *region, Panel *dr
 }
 
 /**
- * Recursive implementation for #UI_panel_set_expand_from_list_data.
+ * Recursive implementation for #panel_set_expansion_from_list_data.
  *
  * \return Whether the closed flag for the panel or any sub-panels changed.
  */
 static bool panel_set_expand_from_list_data_recursive(Panel *panel, short flag, short *flag_index)
 {
   const bool open = (flag & (1 << *flag_index));
-  bool changed = (open == (bool)(panel->flag & PNL_CLOSED));
+  bool changed = (open == UI_panel_is_closed(panel));
+
   SET_FLAG_FROM_TEST(panel->flag, !open, PNL_CLOSED);
 
   LISTBASE_FOREACH (Panel *, child, &panel->children) {
@@ -481,11 +517,10 @@ static bool panel_set_expand_from_list_data_recursive(Panel *panel, short flag, 
 }
 
 /**
- * Set the expansion of the panel and its sub-panels from the flag stored by the list data
- * corresponding to this panel. The flag has expansion stored in each bit in depth first
- * order.
+ * Set the expansion of the panel and its sub-panels from the flag stored in the
+ * corresponding list data. The flag has expansion stored in each bit in depth first order.
  */
-void UI_panel_set_expand_from_list_data(const bContext *C, Panel *panel)
+static void panel_set_expansion_from_list_data(const bContext *C, Panel *panel)
 {
   BLI_assert(panel->type != NULL);
   BLI_assert(panel->type->flag & PNL_INSTANCED);
@@ -500,6 +535,21 @@ void UI_panel_set_expand_from_list_data(const bContext *C, Panel *panel)
   /* Start panel animation if the open state was changed. */
   if (panel_set_expand_from_list_data_recursive(panel, expand_flag, &flag_index)) {
     panel_activate_state(C, panel, PANEL_STATE_ANIMATION);
+  }
+}
+
+/**
+ * Set expansion based on the data for instanced panels.
+ */
+static void region_panels_set_expansion_from_list_data(const bContext *C, ARegion *region)
+{
+  LISTBASE_FOREACH (Panel *, panel, &region->panels) {
+    if (panel->runtime_flag & PANEL_ACTIVE) {
+      PanelType *panel_type = panel->type;
+      if (panel_type != NULL && panel->type->flag & PNL_INSTANCED) {
+        panel_set_expansion_from_list_data(C, panel);
+      }
+    }
   }
 }
 
@@ -519,7 +569,7 @@ static void get_panel_expand_flag(Panel *panel, short *flag, short *flag_index)
 
 /**
  * Call the callback to store the panel and sub-panel expansion settings in the list item that
- * corresponds to this panel.
+ * corresponds to each instanced panel.
  *
  * \note This needs to iterate through all of the regions panels because the panel with changed
  * expansion could have been the sub-panel of a instanced panel, meaning it might not know
@@ -533,9 +583,9 @@ static void set_panels_list_data_expand_flag(const bContext *C, const ARegion *r
       continue;
     }
 
-    /* Check for #PNL_ACTIVE so we only set the expand flag for active panels. */
-    if (panel_type->flag & PNL_INSTANCED && panel->runtime_flag & PNL_ACTIVE) {
-      short expand_flag = 0; /* Initialize to quite complaining compiler, value not used. */
+    /* Check for #PANEL_ACTIVE so we only set the expand flag for active panels. */
+    if (panel_type->flag & PNL_INSTANCED && panel->runtime_flag & PANEL_ACTIVE) {
+      short expand_flag;
       short flag_index = 0;
       get_panel_expand_flag(panel, &expand_flag, &flag_index);
       if (panel->type->set_list_data_expand_flag) {
@@ -580,7 +630,7 @@ static void panels_collapse_all(ARegion *region, const Panel *from_panel)
   LISTBASE_FOREACH (Panel *, panel, &region->panels) {
     PanelType *pt = panel->type;
 
-    /* close panels with headers in the same context */
+    /* Close panels with headers in the same context. */
     if (pt && from_pt && !(pt->flag & PNL_NO_HEADER)) {
       if (!pt->context[0] || !from_pt->context[0] || STREQ(pt->context, from_pt->context)) {
         if ((panel->flag & PNL_PIN) || !category || !pt->category[0] ||
@@ -630,17 +680,14 @@ Panel *UI_panel_begin(
   const char *idname = pt->idname;
   const bool newpanel = (panel == NULL);
 
-  if (!newpanel) {
-    panel->type = pt;
-  }
-  else {
-    /* new panel */
+  if (newpanel) {
     panel = MEM_callocN(sizeof(Panel), "new panel");
     panel->type = pt;
     BLI_strncpy(panel->panelname, idname, sizeof(panel->panelname));
 
     if (pt->flag & PNL_DEFAULT_CLOSED) {
       panel->flag |= PNL_CLOSED;
+      panel->runtime_flag |= PANEL_WAS_CLOSED;
     }
 
     panel->ofsx = 0;
@@ -649,28 +696,23 @@ Panel *UI_panel_begin(
     panel->sizey = 0;
     panel->blocksizex = 0;
     panel->blocksizey = 0;
-    panel->runtime_flag |= PNL_NEW_ADDED;
+    panel->runtime_flag |= PANEL_NEW_ADDED;
 
     BLI_addtail(lb, panel);
   }
-
-  /* Do not allow closed panels without headers! Else user could get "disappeared" UI! */
-  if ((pt->flag & PNL_NO_HEADER) && (panel->flag & PNL_CLOSED)) {
-    panel->flag &= ~PNL_CLOSED;
-    /* Force update of panels' positions! */
-    panel->sizex = 0;
-    panel->sizey = 0;
-    panel->blocksizex = 0;
-    panel->blocksizey = 0;
+  else {
+    /* Panel already exists. */
+    panel->type = pt;
   }
+
+  panel->runtime.block = block;
 
   BLI_strncpy(panel->drawname, drawname, sizeof(panel->drawname));
 
-  /* if a new panel is added, we insert it right after the panel
-   * that was last added. this way new panels are inserted in the
-   * right place between versions */
+  /* If a new panel is added, we insert it right after the panel that was last added.
+   * This way new panels are inserted in the right place between versions. */
   for (panel_last = lb->first; panel_last; panel_last = panel_last->next) {
-    if (panel_last->runtime_flag & PNL_LAST_ADDED) {
+    if (panel_last->runtime_flag & PANEL_LAST_ADDED) {
       BLI_remlink(lb, panel);
       BLI_insertlinkafter(lb, panel_last, panel);
       break;
@@ -688,25 +730,66 @@ Panel *UI_panel_begin(
   }
 
   if (panel_last) {
-    panel_last->runtime_flag &= ~PNL_LAST_ADDED;
+    panel_last->runtime_flag &= ~PANEL_LAST_ADDED;
   }
 
-  /* assign to block */
+  /* Assign the new panel to the block. */
   block->panel = panel;
-  panel->runtime_flag |= PNL_ACTIVE | PNL_LAST_ADDED;
+  panel->runtime_flag |= PANEL_ACTIVE | PANEL_LAST_ADDED;
   if (region->alignment == RGN_ALIGN_FLOAT) {
     UI_block_theme_style_set(block, UI_BLOCK_THEME_STYLE_POPUP);
   }
 
   *r_open = false;
 
-  if (panel->flag & PNL_CLOSED) {
+  if (UI_panel_is_closed(panel)) {
     return panel;
   }
 
   *r_open = true;
 
   return panel;
+}
+
+/**
+ * Create the panel header button group, used to mark which buttons are part of
+ * panel headers for later panel search handling. Should be called before adding
+ * buttons for the panel's header layout.
+ */
+void UI_panel_header_buttons_begin(Panel *panel)
+{
+  uiBlock *block = panel->runtime.block;
+
+  ui_block_new_button_group(block, UI_BUTTON_GROUP_LOCK | UI_BUTTON_GROUP_PANEL_HEADER);
+}
+
+/**
+ * Allow new button groups to be created after the header group.
+ */
+void UI_panel_header_buttons_end(Panel *panel)
+{
+  uiBlock *block = panel->runtime.block;
+
+  /* There should always be the button group created in #UI_panel_header_buttons_begin. */
+  BLI_assert(!BLI_listbase_is_empty(&block->button_groups));
+
+  uiButtonGroup *button_group = block->button_groups.last;
+
+  button_group->flag &= ~UI_BUTTON_GROUP_LOCK;
+
+  /* Repurpose the first "header" button group if it is empty, in case the first button added to
+   * the panel doesn't add a new group (if the button is created directly rather than through an
+   * interface layout call). */
+  if (BLI_listbase_count(&block->button_groups) == 1 &&
+      BLI_listbase_is_empty(&button_group->buttons)) {
+    button_group->flag &= ~UI_BUTTON_GROUP_PANEL_HEADER;
+  }
+  else {
+    /* We should still always add a new button group. Although this results in many empty groups,
+     * without it, new buttons not protected with a #ui_block_new_button_group call would end up
+     * in the panel header group. */
+    ui_block_new_button_group(block, 0);
+  }
 }
 
 static float panel_region_offset_x_get(const ARegion *region)
@@ -717,28 +800,29 @@ static float panel_region_offset_x_get(const ARegion *region)
     }
   }
 
-  return 0;
+  return 0.0f;
 }
 
-void UI_panel_end(const ARegion *region, uiBlock *block, int width, int height, bool open)
+/**
+ * Starting from the "block size" set in #UI_panel_end, calculate the full size
+ * of the panel including the subpanel headers and buttons.
+ */
+static void panel_calculate_size_recursive(ARegion *region, Panel *panel)
 {
-  Panel *panel = block->panel;
+  int width = panel->blocksizex;
+  int height = panel->blocksizey;
 
-  /* Set panel size excluding children. */
-  panel->blocksizex = width;
-  panel->blocksizey = height;
-
-  /* Compute total panel size including children. */
-  LISTBASE_FOREACH (Panel *, pachild, &panel->children) {
-    if (pachild->runtime_flag & PNL_ACTIVE) {
-      width = max_ii(width, pachild->sizex);
-      height += get_panel_real_size_y(pachild);
+  LISTBASE_FOREACH (Panel *, child_panel, &panel->children) {
+    if (child_panel->runtime_flag & PANEL_ACTIVE) {
+      panel_calculate_size_recursive(region, child_panel);
+      width = max_ii(width, child_panel->sizex);
+      height += get_panel_real_size_y(child_panel);
     }
   }
 
   /* Update total panel size. */
-  if (panel->runtime_flag & PNL_NEW_ADDED) {
-    panel->runtime_flag &= ~PNL_NEW_ADDED;
+  if (panel->runtime_flag & PANEL_NEW_ADDED) {
+    panel->runtime_flag &= ~PANEL_NEW_ADDED;
     panel->sizex = width;
     panel->sizey = height;
   }
@@ -746,32 +830,40 @@ void UI_panel_end(const ARegion *region, uiBlock *block, int width, int height, 
     const int old_sizex = panel->sizex, old_sizey = panel->sizey;
     const int old_region_ofsx = panel->runtime.region_ofsx;
 
-    /* update width/height if non-zero */
+    /* Update width/height if non-zero. */
     if (width != 0) {
       panel->sizex = width;
     }
-    if (height != 0 || open) {
+    if (height != 0 || !UI_panel_is_closed(panel)) {
       panel->sizey = height;
     }
 
-    /* check if we need to do an animation */
+    /* Check if we need to do an animation. */
     if (panel->sizex != old_sizex || panel->sizey != old_sizey) {
-      panel->runtime_flag |= PNL_ANIM_ALIGN;
+      panel->runtime_flag |= PANEL_ANIM_ALIGN;
       panel->ofsy += old_sizey - panel->sizey;
     }
 
     panel->runtime.region_ofsx = panel_region_offset_x_get(region);
     if (old_region_ofsx != panel->runtime.region_ofsx) {
-      panel->runtime_flag |= PNL_ANIM_ALIGN;
+      panel->runtime_flag |= PANEL_ANIM_ALIGN;
     }
   }
+}
+
+void UI_panel_end(Panel *panel, int width, int height)
+{
+  /* Store the size of the buttons layout in the panel. The actual panel size
+   * (including subpanels) is calculated in #UI_panels_end. */
+  panel->blocksizex = width;
+  panel->blocksizey = height;
 }
 
 static void ui_offset_panel_block(uiBlock *block)
 {
   const uiStyle *style = UI_style_get_dpi();
 
-  /* compute bounds and offset */
+  /* Compute bounds and offset. */
   ui_block_bounds_calc(block);
 
   const int ofsy = block->panel->sizey - style->panelspace;
@@ -786,13 +878,176 @@ static void ui_offset_panel_block(uiBlock *block)
   block->rect.xmin = block->rect.ymin = 0.0;
 }
 
+void ui_panel_tag_search_filter_match(struct Panel *panel)
+{
+  panel->runtime_flag |= PANEL_SEARCH_FILTER_MATCH;
+}
+
+static void panel_matches_search_filter_recursive(const Panel *panel, bool *filter_matches)
+{
+  *filter_matches |= panel->runtime_flag & PANEL_SEARCH_FILTER_MATCH;
+
+  /* If the panel has no match we need to make sure that its children are too. */
+  if (!*filter_matches) {
+    LISTBASE_FOREACH (const Panel *, child_panel, &panel->children) {
+      panel_matches_search_filter_recursive(child_panel, filter_matches);
+    }
+  }
+}
+
+/**
+ * Find whether a panel or any of its sub-panels contain a property that matches the search filter,
+ * depending on the search process running in #UI_block_apply_search_filter earlier.
+ */
+bool UI_panel_matches_search_filter(const Panel *panel)
+{
+  bool search_filter_matches = false;
+  panel_matches_search_filter_recursive(panel, &search_filter_matches);
+  return search_filter_matches;
+}
+
+/**
+ * Set the flag telling the panel to use its search result status for
+ * its expansion. Also activate animation if that changes the expansion.
+ */
+static void panel_set_expansion_from_seach_filter_recursive(const bContext *C,
+                                                            Panel *panel,
+                                                            const bool use_search_closed,
+                                                            const bool use_animation)
+{
+  /* This has to run on inactive panels that may not have a type,
+   * but we can prevent running on headerless panels in some cases. */
+  if (panel->type == NULL || !(panel->type->flag & PNL_NO_HEADER)) {
+    SET_FLAG_FROM_TEST(panel->runtime_flag, use_search_closed, PANEL_USE_CLOSED_FROM_SEARCH);
+  }
+
+  LISTBASE_FOREACH (Panel *, child_panel, &panel->children) {
+    /* Don't check if the subpanel is active, otherwise the
+     * expansion won't be reset when the parent is closed. */
+    panel_set_expansion_from_seach_filter_recursive(
+        C, child_panel, use_search_closed, use_animation);
+  }
+}
+
+/**
+ * Set the flag telling every panel to override its expansion with its search result status.
+ */
+static void region_panels_set_expansion_from_seach_filter(const bContext *C,
+                                                          ARegion *region,
+                                                          const bool use_search_closed,
+                                                          const bool use_animation)
+{
+  LISTBASE_FOREACH (Panel *, panel, &region->panels) {
+    /* Checking if the panel is active is only an optimization, it would be fine to run this on
+     * inactive panels. */
+    if (panel->runtime_flag & PANEL_ACTIVE) {
+      panel_set_expansion_from_seach_filter_recursive(C, panel, use_search_closed, use_animation);
+    }
+  }
+  set_panels_list_data_expand_flag(C, region);
+}
+
+/**
+ * Hide buttons in invisible layouts, which are created because in order to search,
+ * buttons must be added for all panels, even panels that will end up closed.
+ */
+static void panel_remove_invisible_layouts_recursive(Panel *panel, const Panel *parent_panel)
+{
+  uiBlock *block = panel->runtime.block;
+  BLI_assert(block != NULL);
+  BLI_assert(block->active);
+  if (parent_panel != NULL && UI_panel_is_closed(parent_panel)) {
+    /* The parent panel is closed, so this panel can be completely removed. */
+    UI_block_set_search_only(block, true);
+    LISTBASE_FOREACH (uiBut *, but, &block->buttons) {
+      but->flag |= UI_HIDDEN;
+    }
+  }
+  else if (UI_panel_is_closed(panel)) {
+    /* If subpanels have no search results but the parent panel does, then the parent panel open
+     * and the subpanels will close. In that case there must be a way to hide the buttons in the
+     * panel but keep the header buttons. */
+    LISTBASE_FOREACH (uiButtonGroup *, button_group, &block->button_groups) {
+      if (button_group->flag & UI_BUTTON_GROUP_PANEL_HEADER) {
+        continue;
+      }
+      LISTBASE_FOREACH (LinkData *, link, &button_group->buttons) {
+        uiBut *but = link->data;
+        but->flag |= UI_HIDDEN;
+      }
+    }
+  }
+
+  LISTBASE_FOREACH (Panel *, child_panel, &panel->children) {
+    if (child_panel->runtime_flag & PANEL_ACTIVE) {
+      BLI_assert(child_panel->runtime.block != NULL);
+      panel_remove_invisible_layouts_recursive(child_panel, panel);
+    }
+  }
+}
+
+static void region_panels_remove_invisible_layouts(ARegion *region)
+{
+  LISTBASE_FOREACH (Panel *, panel, &region->panels) {
+    if (panel->runtime_flag & PANEL_ACTIVE) {
+      BLI_assert(panel->runtime.block != NULL);
+      panel_remove_invisible_layouts_recursive(panel, NULL);
+    }
+  }
+}
+
+/**
+ * Get the panel's expansion state, taking into account
+ * expansion set from property search if it applies.
+ */
+bool UI_panel_is_closed(const Panel *panel)
+{
+  /* Header-less panels can never be closed, otherwise they could disappear. */
+  if (panel->type && panel->type->flag & PNL_NO_HEADER) {
+    return false;
+  }
+
+  if (panel->runtime_flag & PANEL_USE_CLOSED_FROM_SEARCH) {
+    return !UI_panel_matches_search_filter(panel);
+  }
+
+  return panel->flag & PNL_CLOSED;
+}
+
+bool UI_panel_is_active(const Panel *panel)
+{
+  return panel->runtime_flag & PANEL_ACTIVE;
+}
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
 /** \name Drawing
  * \{ */
 
-/* triangle 'icon' for panel header */
+/**
+ * Draw panels, selected (panels currently being dragged) on top.
+ */
+void UI_panels_draw(const bContext *C, ARegion *region)
+{
+  /* Draw in reverse order, because #uiBlocks are added in reverse order
+   * and we need child panels to draw on top. */
+  LISTBASE_FOREACH_BACKWARD (uiBlock *, block, &region->uiblocks) {
+    if (block->active && block->panel && !(block->panel->flag & PNL_SELECT) &&
+        !UI_block_is_search_only(block)) {
+      UI_block_draw(C, block);
+    }
+  }
+
+  LISTBASE_FOREACH_BACKWARD (uiBlock *, block, &region->uiblocks) {
+    if (block->active && block->panel && (block->panel->flag & PNL_SELECT) &&
+        !UI_block_is_search_only(block)) {
+      UI_block_draw(C, block);
+    }
+  }
+}
+
+/* Triangle 'icon' for panel header. */
 void UI_draw_icon_tri(float x, float y, char dir, const float color[4])
 {
   const float f3 = 0.05 * U.widget_unit;
@@ -805,12 +1060,12 @@ void UI_draw_icon_tri(float x, float y, char dir, const float color[4])
   else if (dir == 't') {
     UI_draw_anti_tria(x - f5, y - f7, x + f5, y - f7, x, y + f3, color);
   }
-  else { /* 'v' = vertical, down */
+  else { /* 'v' = vertical, down. */
     UI_draw_anti_tria(x - f5, y + f3, x + f5, y + f3, x, y - f7, color);
   }
 }
 
-#define PNL_ICON UI_UNIT_X /* could be UI_UNIT_Y too */
+#define PNL_ICON UI_UNIT_X /* Could be UI_UNIT_Y too. */
 
 /* For button layout next to label. */
 void UI_panel_label_offset(uiBlock *block, int *r_x, int *r_y)
@@ -829,18 +1084,19 @@ void UI_panel_label_offset(uiBlock *block, int *r_x, int *r_y)
 static void ui_draw_aligned_panel_header(const uiStyle *style,
                                          const uiBlock *block,
                                          const rcti *rect,
-                                         const bool show_background)
+                                         const bool show_background,
+                                         const bool region_search_filter_active)
 {
   const Panel *panel = block->panel;
   const bool is_subpanel = (panel->type && panel->type->parent);
   const uiFontStyle *fontstyle = (is_subpanel) ? &style->widgetlabel : &style->paneltitle;
 
-  /* + 0.001f to avoid flirting with float inaccuracy */
+  /* + 0.001f to avoid flirting with float inaccuracy .*/
   const int pnl_icons = (panel->labelofs + (1.1f * PNL_ICON)) / block->aspect + 0.001f;
 
-  /* draw text label */
+  /* Draw text labels. */
   uchar col_title[4];
-  panel_title_color_get(show_background, col_title);
+  panel_title_color_get(panel, show_background, region_search_filter_active, col_title);
   col_title[3] = 255;
 
   rcti hrect = *rect;
@@ -856,13 +1112,14 @@ static void ui_draw_aligned_panel_header(const uiStyle *style,
 }
 
 /**
- * Panel integrated in buttons-window, tool/property lists etc
+ * Draw a panel integrated in buttons-window, tool/property lists etc.
  */
 void ui_draw_aligned_panel(const uiStyle *style,
                            const uiBlock *block,
                            const rcti *rect,
                            const bool show_pin,
-                           const bool show_background)
+                           const bool show_background,
+                           const bool region_search_filter_active)
 {
   const Panel *panel = block->panel;
   float color[4];
@@ -903,12 +1160,12 @@ void ui_draw_aligned_panel(const uiStyle *style,
     /* Expand the top a tiny bit to give header buttons equal size above and below. */
     rcti box_rect = {rect->xmin,
                      rect->xmax,
-                     (panel->flag & PNL_CLOSED) ? headrect.ymin : rect->ymin,
+                     UI_panel_is_closed(panel) ? headrect.ymin : rect->ymin,
                      headrect.ymax + U.pixelsize};
     ui_draw_box_opaque(&box_rect, UI_CNR_ALL);
 
     /* Mimic the border between aligned box widgets for the bottom of the header. */
-    if (!(panel->flag & PNL_CLOSED)) {
+    if (!UI_panel_is_closed(panel)) {
       immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
       GPU_blend(GPU_BLEND_ALPHA);
 
@@ -936,8 +1193,8 @@ void ui_draw_aligned_panel(const uiStyle *style,
     immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
     GPU_blend(GPU_BLEND_ALPHA);
 
-    /* draw with background color */
-    immUniformThemeColor(TH_PANEL_HEADER);
+    /* Draw with background color. */
+    immUniformThemeColor(UI_panel_matches_search_filter(panel) ? TH_MATCH : TH_PANEL_HEADER);
     immRectf(pos, minx, headrect.ymin, rect->xmax, y);
 
     immBegin(GPU_PRIM_LINES, 4);
@@ -957,7 +1214,7 @@ void ui_draw_aligned_panel(const uiStyle *style,
   /* draw optional pin icon */
   if (show_pin && (block->panel->flag & PNL_PIN)) {
     uchar col_title[4];
-    panel_title_color_get(show_background, col_title);
+    panel_title_color_get(panel, show_background, region_search_filter_active, col_title);
 
     GPU_blend(GPU_BLEND_ALPHA);
     UI_icon_draw_ex(headrect.xmax - ((PNL_ICON * 2.2f) / block->aspect),
@@ -971,12 +1228,13 @@ void ui_draw_aligned_panel(const uiStyle *style,
     GPU_blend(GPU_BLEND_NONE);
   }
 
-  /* horizontal title */
+  /* Draw the title. */
   rcti titlerect = headrect;
   if (is_subpanel) {
     titlerect.xmin += (0.7f * UI_UNIT_X) / block->aspect + 0.001f;
   }
-  ui_draw_aligned_panel_header(style, block, &titlerect, show_background);
+  ui_draw_aligned_panel_header(
+      style, block, &titlerect, show_background, region_search_filter_active);
 
   if (show_drag) {
     /* Make `itemrect` smaller. */
@@ -1004,7 +1262,7 @@ void ui_draw_aligned_panel(const uiStyle *style,
   }
 
   /* Draw panel backdrop. */
-  if (!(panel->flag & PNL_CLOSED)) {
+  if (!UI_panel_is_closed(panel)) {
     /* in some occasions, draw a border */
     if (panel->flag & PNL_SELECT && !is_subpanel) {
       float radius;
@@ -1062,7 +1320,7 @@ void ui_draw_aligned_panel(const uiStyle *style,
     immUnbindProgram();
   }
 
-  /* draw collapse icon */
+  /* Draw collapse icon. */
   {
     rctf itemrect = {.xmin = titlerect.xmin,
                      .xmax = itemrect.xmin + BLI_rcti_size_y(&titlerect),
@@ -1071,12 +1329,12 @@ void ui_draw_aligned_panel(const uiStyle *style,
     BLI_rctf_scale(&itemrect, 0.25f);
 
     uchar col_title[4];
-    panel_title_color_get(show_background, col_title);
+    panel_title_color_get(panel, show_background, region_search_filter_active, col_title);
     float tria_color[4];
     rgb_uchar_to_float(tria_color, col_title);
     tria_color[3] = 1.0f;
 
-    if (panel->flag & PNL_CLOSED) {
+    if (UI_panel_is_closed(panel)) {
       ui_draw_anti_tria_rect(&itemrect, 'h', tria_color);
     }
     else {
@@ -1091,137 +1349,14 @@ void ui_draw_aligned_panel(const uiStyle *style,
 /** \name Category Drawing (Tabs)
  * \{ */
 
-static void imm_buf_append(
-    float vbuf[][2], uchar cbuf[][3], float x, float y, const uchar col[3], int *index)
-{
-  ARRAY_SET_ITEMS(vbuf[*index], x, y);
-  ARRAY_SET_ITEMS(cbuf[*index], UNPACK3(col));
-  (*index)++;
-}
-
-/* based on UI_draw_roundbox, check on making a version which allows us to skip some sides */
-static void ui_panel_category_draw_tab(bool filled,
-                                       float minx,
-                                       float miny,
-                                       float maxx,
-                                       float maxy,
-                                       float rad,
-                                       const int roundboxtype,
-                                       const bool use_highlight,
-                                       const bool use_shadow,
-                                       const bool use_flip_x,
-                                       const uchar highlight_fade[3],
-                                       const uchar col[3])
-{
-  float vec[4][2] = {{0.195, 0.02}, {0.55, 0.169}, {0.831, 0.45}, {0.98, 0.805}};
-
-  /* Multiply `vec` by radius. */
-  for (int a = 0; a < 4; a++) {
-    mul_v2_fl(vec[a], rad);
-  }
-
-  uint vert_len = 0;
-  if (use_highlight) {
-    vert_len += (roundboxtype & UI_CNR_TOP_RIGHT) ? 6 : 1;
-    vert_len += (roundboxtype & UI_CNR_TOP_LEFT) ? 6 : 1;
-  }
-  if (use_highlight && !use_shadow) {
-    vert_len++;
-  }
-  else {
-    vert_len += (roundboxtype & UI_CNR_BOTTOM_RIGHT) ? 6 : 1;
-    vert_len += (roundboxtype & UI_CNR_BOTTOM_LEFT) ? 6 : 1;
-  }
-  /* Maximum size. */
-  float vbuf[24][2];
-  uchar cbuf[24][3];
-  int buf_index = 0;
-
-  /* start with corner right-top */
-  if (use_highlight) {
-    if (roundboxtype & UI_CNR_TOP_RIGHT) {
-      imm_buf_append(vbuf, cbuf, maxx, maxy - rad, col, &buf_index);
-      for (int a = 0; a < 4; a++) {
-        imm_buf_append(vbuf, cbuf, maxx - vec[a][1], maxy - rad + vec[a][0], col, &buf_index);
-      }
-      imm_buf_append(vbuf, cbuf, maxx - rad, maxy, col, &buf_index);
-    }
-    else {
-      imm_buf_append(vbuf, cbuf, maxx, maxy, col, &buf_index);
-    }
-
-    /* corner left-top */
-    if (roundboxtype & UI_CNR_TOP_LEFT) {
-      imm_buf_append(vbuf, cbuf, minx + rad, maxy, col, &buf_index);
-      for (int a = 0; a < 4; a++) {
-        imm_buf_append(vbuf, cbuf, minx + rad - vec[a][0], maxy - vec[a][1], col, &buf_index);
-      }
-      imm_buf_append(vbuf, cbuf, minx, maxy - rad, col, &buf_index);
-    }
-    else {
-      imm_buf_append(vbuf, cbuf, minx, maxy, col, &buf_index);
-    }
-  }
-
-  if (use_highlight && !use_shadow) {
-    imm_buf_append(
-        vbuf, cbuf, minx, miny + rad, highlight_fade ? col : highlight_fade, &buf_index);
-  }
-  else {
-    /* corner left-bottom */
-    if (roundboxtype & UI_CNR_BOTTOM_LEFT) {
-      imm_buf_append(vbuf, cbuf, minx, miny + rad, col, &buf_index);
-      for (int a = 0; a < 4; a++) {
-        imm_buf_append(vbuf, cbuf, minx + vec[a][1], miny + rad - vec[a][0], col, &buf_index);
-      }
-      imm_buf_append(vbuf, cbuf, minx + rad, miny, col, &buf_index);
-    }
-    else {
-      imm_buf_append(vbuf, cbuf, minx, miny, col, &buf_index);
-    }
-
-    /* corner right-bottom */
-    if (roundboxtype & UI_CNR_BOTTOM_RIGHT) {
-      imm_buf_append(vbuf, cbuf, maxx - rad, miny, col, &buf_index);
-      for (int a = 0; a < 4; a++) {
-        imm_buf_append(vbuf, cbuf, maxx - rad + vec[a][0], miny + vec[a][1], col, &buf_index);
-      }
-      imm_buf_append(vbuf, cbuf, maxx, miny + rad, col, &buf_index);
-    }
-    else {
-      imm_buf_append(vbuf, cbuf, maxx, miny, col, &buf_index);
-    }
-  }
-
-  if (use_flip_x) {
-    const float midx = (minx + maxx) / 2.0f;
-    for (int i = 0; i < buf_index; i++) {
-      vbuf[i][0] = midx - (vbuf[i][0] - midx);
-    }
-  }
-
-  GPUVertFormat *format = immVertexFormat();
-  const uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
-  uint color = GPU_vertformat_attr_add(
-      format, "color", GPU_COMP_U8, 3, GPU_FETCH_INT_TO_FLOAT_UNIT);
-
-  immBindBuiltinProgram(GPU_SHADER_2D_SMOOTH_COLOR);
-  immBegin(filled ? GPU_PRIM_TRI_FAN : GPU_PRIM_LINE_STRIP, vert_len);
-  for (int i = 0; i < buf_index; i++) {
-    immAttr3ubv(color, cbuf[i]);
-    immVertex2fv(pos, vbuf[i]);
-  }
-  immEnd();
-  immUnbindProgram();
-}
+#define TABS_PADDING_BETWEEN_FACTOR 4.0f
+#define TABS_PADDING_TEXT_FACTOR 6.0f
 
 /**
- * Draw vertical tabs on the left side of the region,
- * one tab per category.
+ * Draw vertical tabs on the left side of the region, one tab per category.
  */
 void UI_panel_category_draw_all(ARegion *region, const char *category_id_active)
 {
-  /* no tab outlines for */
   // #define USE_FLAT_INACTIVE
   const bool is_left = RGN_ALIGN_ENUM_FROM_MASK(region->alignment != RGN_ALIGN_RIGHT);
   View2D *v2d = &region->v2d;
@@ -1231,60 +1366,50 @@ void UI_panel_category_draw_all(ARegion *region, const char *category_id_active)
   short fstyle_points = fstyle->points;
   const float aspect = ((uiBlock *)region->uiblocks.first)->aspect;
   const float zoom = 1.0f / aspect;
-  const int px = max_ii(1, round_fl_to_int(U.pixelsize));
-  const int px_x_sign = is_left ? px : -px;
+  const int px = U.pixelsize;
   const int category_tabs_width = round_fl_to_int(UI_PANEL_CATEGORY_MARGIN_WIDTH * zoom);
   const float dpi_fac = UI_DPI_FAC;
-  /* padding of tabs around text */
-  const int tab_v_pad_text = round_fl_to_int((2 + ((px * 3) * dpi_fac)) * zoom);
-  /* padding between tabs */
-  const int tab_v_pad = round_fl_to_int((4 + (2 * px * dpi_fac)) * zoom);
-  const float tab_curve_radius = ((px * 3) * dpi_fac) * zoom;
-  /* We flip the tab drawing, so always use these flags. */
-  const int roundboxtype = UI_CNR_TOP_LEFT | UI_CNR_BOTTOM_LEFT;
+  /* Padding of tabs around text. */
+  const int tab_v_pad_text = round_fl_to_int(TABS_PADDING_TEXT_FACTOR * dpi_fac * zoom) + 2 * px;
+  /* Padding between tabs. */
+  const int tab_v_pad = round_fl_to_int(TABS_PADDING_BETWEEN_FACTOR * dpi_fac * zoom);
+  bTheme *btheme = UI_GetTheme();
+  const float tab_curve_radius = btheme->tui.wcol_tab.roundness * U.widget_unit * zoom;
+  const int roundboxtype = is_left ? (UI_CNR_TOP_LEFT | UI_CNR_BOTTOM_LEFT) :
+                                     (UI_CNR_TOP_RIGHT | UI_CNR_BOTTOM_RIGHT);
   bool is_alpha;
   bool do_scaletabs = false;
 #ifdef USE_FLAT_INACTIVE
   bool is_active_prev = false;
 #endif
   float scaletabs = 1.0f;
-  /* same for all tabs */
-  /* intentionally don't scale by 'px' */
+  /* Same for all tabs. */
+  /* Intentionally don't scale by 'px'. */
   const int rct_xmin = is_left ? v2d->mask.xmin + 3 : (v2d->mask.xmax - category_tabs_width);
   const int rct_xmax = is_left ? v2d->mask.xmin + category_tabs_width : (v2d->mask.xmax - 3);
   const int text_v_ofs = (rct_xmax - rct_xmin) * 0.3f;
 
   int y_ofs = tab_v_pad;
 
-  /* Primary theme colors */
+  /* Primary theme colors. */
   uchar theme_col_back[4];
   uchar theme_col_text[3];
   uchar theme_col_text_hi[3];
 
-  /* Tab colors */
+  /* Tab colors. */
   uchar theme_col_tab_bg[4];
-  uchar theme_col_tab_active[3];
-  uchar theme_col_tab_inactive[3];
-
-  /* Secondary theme colors */
-  uchar theme_col_tab_outline[3];
-  uchar theme_col_tab_divider[3]; /* line that divides tabs from the main region */
-  uchar theme_col_tab_highlight[3];
-  uchar theme_col_tab_highlight_inactive[3];
+  float theme_col_tab_active[4];
+  float theme_col_tab_inactive[4];
+  float theme_col_tab_outline[4];
 
   UI_GetThemeColor4ubv(TH_BACK, theme_col_back);
   UI_GetThemeColor3ubv(TH_TEXT, theme_col_text);
   UI_GetThemeColor3ubv(TH_TEXT_HI, theme_col_text_hi);
 
   UI_GetThemeColor4ubv(TH_TAB_BACK, theme_col_tab_bg);
-  UI_GetThemeColor3ubv(TH_TAB_ACTIVE, theme_col_tab_active);
-  UI_GetThemeColor3ubv(TH_TAB_INACTIVE, theme_col_tab_inactive);
-  UI_GetThemeColor3ubv(TH_TAB_OUTLINE, theme_col_tab_outline);
-
-  interp_v3_v3v3_uchar(theme_col_tab_divider, theme_col_back, theme_col_tab_outline, 0.3f);
-  interp_v3_v3v3_uchar(theme_col_tab_highlight, theme_col_back, theme_col_text_hi, 0.2f);
-  interp_v3_v3v3_uchar(
-      theme_col_tab_highlight_inactive, theme_col_tab_inactive, theme_col_text_hi, 0.12f);
+  UI_GetThemeColor4fv(TH_TAB_ACTIVE, theme_col_tab_active);
+  UI_GetThemeColor4fv(TH_TAB_INACTIVE, theme_col_tab_inactive);
+  UI_GetThemeColor4fv(TH_TAB_OUTLINE, theme_col_tab_outline);
 
   is_alpha = (region->overlap && (theme_col_back[3] != 255));
 
@@ -1306,7 +1431,6 @@ void UI_panel_category_draw_all(ARegion *region, const char *category_id_active)
 
   /* Calculate tab rectangle and check if we need to scale down. */
   LISTBASE_FOREACH (PanelCategoryDyn *, pc_dyn, &region->panels_category) {
-
     rcti *rct = &pc_dyn->rect;
     const char *category_id = pc_dyn->idname;
     const char *category_id_draw = IFACE_(category_id);
@@ -1333,14 +1457,14 @@ void UI_panel_category_draw_all(ARegion *region, const char *category_id_active)
     do_scaletabs = true;
   }
 
-  /* begin drawing */
+  /* Begin drawing. */
   GPU_line_smooth(true);
 
   uint pos = GPU_vertformat_attr_add(
       immVertexFormat(), "pos", GPU_COMP_I32, 2, GPU_FETCH_INT_TO_FLOAT);
   immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
 
-  /* draw the background */
+  /* Draw the background. */
   if (is_alpha) {
     GPU_blend(GPU_BLEND_ALPHA);
     immUniformColor4ubv(theme_col_tab_bg);
@@ -1364,11 +1488,6 @@ void UI_panel_category_draw_all(ARegion *region, const char *category_id_active)
 
   immUnbindProgram();
 
-  const int divider_xmin = is_left ? (v2d->mask.xmin + (category_tabs_width - px)) :
-                                     (v2d->mask.xmax - category_tabs_width) + px;
-  const int divider_xmax = is_left ? (v2d->mask.xmin + category_tabs_width) :
-                                     (v2d->mask.xmax - (category_tabs_width + px)) + px;
-
   LISTBASE_FOREACH (PanelCategoryDyn *, pc_dyn, &region->panels_category) {
     const rcti *rct = &pc_dyn->rect;
     const char *category_id = pc_dyn->idname;
@@ -1384,63 +1503,59 @@ void UI_panel_category_draw_all(ARegion *region, const char *category_id_active)
     GPU_blend(GPU_BLEND_ALPHA);
 
 #ifdef USE_FLAT_INACTIVE
+    /* Draw line between inactive tabs. */
+    if (is_active == false && is_active_prev == false && pc_dyn->prev) {
+      pos = GPU_vertformat_attr_add(
+          immVertexFormat(), "pos", GPU_COMP_I32, 2, GPU_FETCH_INT_TO_FLOAT);
+      immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+      immUniformColor3fvAlpha(theme_col_tab_outline, 0.3f);
+      immRecti(pos,
+               is_left ? v2d->mask.xmin + (category_tabs_width / 5) :
+                         v2d->mask.xmax - (category_tabs_width / 5),
+               rct->ymax + px,
+               is_left ? (v2d->mask.xmin + category_tabs_width) - (category_tabs_width / 5) :
+                         (v2d->mask.xmax - category_tabs_width) + (category_tabs_width / 5),
+               rct->ymax + (px * 3));
+      immUnbindProgram();
+    }
+
+    is_active_prev = is_active;
+
     if (is_active)
 #endif
     {
-      const bool use_flip_x = !is_left;
-      ui_panel_category_draw_tab(true,
-                                 rct->xmin,
-                                 rct->ymin,
-                                 rct->xmax,
-                                 rct->ymax,
-                                 tab_curve_radius - px,
-                                 roundboxtype,
-                                 true,
-                                 true,
-                                 use_flip_x,
-                                 NULL,
-                                 is_active ? theme_col_tab_active : theme_col_tab_inactive);
+      /* Draw filled rectangle and outline for tab. */
+      UI_draw_roundbox_corner_set(roundboxtype);
+      UI_draw_roundbox_4fv(true,
+                           rct->xmin,
+                           rct->ymin,
+                           rct->xmax,
+                           rct->ymax,
+                           tab_curve_radius,
+                           is_active ? theme_col_tab_active : theme_col_tab_inactive);
+      UI_draw_roundbox_4fv(false,
+                           rct->xmin,
+                           rct->ymin,
+                           rct->xmax,
+                           rct->ymax,
+                           tab_curve_radius,
+                           theme_col_tab_outline);
 
-      /* Tab outline */
-      ui_panel_category_draw_tab(false,
-                                 rct->xmin - px_x_sign,
-                                 rct->ymin - px,
-                                 rct->xmax - px_x_sign,
-                                 rct->ymax + px,
-                                 tab_curve_radius,
-                                 roundboxtype,
-                                 true,
-                                 true,
-                                 use_flip_x,
-                                 NULL,
-                                 theme_col_tab_outline);
-
-      /* Tab highlight (3d look) */
-      ui_panel_category_draw_tab(false,
-                                 rct->xmin,
-                                 rct->ymin,
-                                 rct->xmax,
-                                 rct->ymax,
-                                 tab_curve_radius,
-                                 roundboxtype,
-                                 true,
-                                 false,
-                                 use_flip_x,
-                                 is_active ? theme_col_back : theme_col_tab_inactive,
-                                 is_active ? theme_col_tab_highlight :
-                                             theme_col_tab_highlight_inactive);
-    }
-
-    /* Tab black-line. */
-    if (!is_active) {
+      /* Disguise the outline on one side to join the tab to the panel. */
       pos = GPU_vertformat_attr_add(
           immVertexFormat(), "pos", GPU_COMP_I32, 2, GPU_FETCH_INT_TO_FLOAT);
       immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
 
-      immUniformColor3ubv(theme_col_tab_divider);
-      immRecti(pos, divider_xmin, rct->ymin - tab_v_pad, divider_xmax, rct->ymax + tab_v_pad);
+      immUniformColor4fv(is_active ? theme_col_tab_active : theme_col_tab_inactive);
+      immRecti(pos,
+               is_left ? rct->xmax - px : rct->xmin,
+               rct->ymin + px,
+               is_left ? rct->xmax : rct->xmin + px,
+               rct->ymax - px);
       immUnbindProgram();
     }
+
+    /* Tab titles. */
 
     if (do_scaletabs) {
       category_draw_len = BLF_width_to_strlen(
@@ -1448,46 +1563,12 @@ void UI_panel_category_draw_all(ARegion *region, const char *category_id_active)
     }
 
     BLF_position(fontid, rct->xmax - text_v_ofs, rct->ymin + tab_v_pad_text, 0.0f);
-
-    /* Tab titles. */
-
-    /* Draw white shadow to give text more depth. */
     BLF_color3ubv(fontid, theme_col_text);
-
-    /* Main tab title. */
     BLF_draw(fontid, category_id_draw, category_draw_len);
 
     GPU_blend(GPU_BLEND_NONE);
 
-    /* Tab black-line remaining (last tab). */
-    pos = GPU_vertformat_attr_add(
-        immVertexFormat(), "pos", GPU_COMP_I32, 2, GPU_FETCH_INT_TO_FLOAT);
-    immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
-    if (pc_dyn->prev == NULL) {
-      immUniformColor3ubv(theme_col_tab_divider);
-      immRecti(pos, divider_xmin, rct->ymax + px, divider_xmax, v2d->mask.ymax);
-    }
-    if (pc_dyn->next == NULL) {
-      immUniformColor3ubv(theme_col_tab_divider);
-      immRecti(pos, divider_xmin, 0, divider_xmax, rct->ymin);
-    }
-
-#ifdef USE_FLAT_INACTIVE
-    /* Draw line between inactive tabs. */
-    if (is_active == false && is_active_prev == false && pc_dyn->prev) {
-      immUniformColor3ubv(theme_col_tab_divider);
-      immRecti(pos,
-               v2d->mask.xmin + (category_tabs_width / 5),
-               rct->ymax + px,
-               (v2d->mask.xmin + category_tabs_width) - (category_tabs_width / 5),
-               rct->ymax + (px * 3));
-    }
-
-    is_active_prev = is_active;
-#endif
-    immUnbindProgram();
-
-    /* not essential, but allows events to be handled right up until the region edge [#38171] */
+    /* Not essential, but allows events to be handled right up to the region edge (T38171). */
     if (is_left) {
       pc_dyn->rect.xmin = v2d->mask.xmin;
     }
@@ -1503,9 +1584,10 @@ void UI_panel_category_draw_all(ARegion *region, const char *category_id_active)
   if (fstyle->kerning == 1) {
     BLF_disable(fstyle->uifont_id, BLF_KERNING_DEFAULT);
   }
-
-#undef USE_FLAT_INACTIVE
 }
+
+#undef TABS_PADDING_BETWEEN_FACTOR
+#undef TABS_PADDING_TEXT_FACTOR
 
 /** \} */
 
@@ -1524,7 +1606,7 @@ static int get_panel_size_y(const Panel *panel)
 
 static int get_panel_real_size_y(const Panel *panel)
 {
-  const int sizey = (panel->flag & PNL_CLOSED) ? 0 : panel->sizey;
+  const int sizey = UI_panel_is_closed(panel) ? 0 : panel->sizey;
 
   if (panel->type && (panel->type->flag & PNL_NO_HEADER)) {
     return sizey;
@@ -1544,7 +1626,7 @@ int UI_panel_size_y(const Panel *panel)
  */
 static int get_panel_real_ofsy(Panel *panel)
 {
-  if (panel->flag & PNL_CLOSED) {
+  if (UI_panel_is_closed(panel)) {
     return panel->ofsy + panel->sizey;
   }
   return panel->ofsy;
@@ -1561,53 +1643,55 @@ bool UI_panel_is_dragging(const struct Panel *panel)
 }
 
 /**
- * \note about sorting;
- * the #Panel.sortorder has a lower value for new panels being added.
+ * \note about sorting:
+ * The #Panel.sortorder has a lower value for new panels being added.
  * however, that only works to insert a single panel, when more new panels get
  * added the coordinates of existing panels and the previously stored to-be-inserted
- * panels do not match for sorting
+ * panels do not match for sorting.
  */
 
-static int find_highest_panel(const void *a1, const void *a2)
+static int find_highest_panel(const void *a, const void *b)
 {
-  const PanelSort *ps1 = a1, *ps2 = a2;
+  const Panel *panel_a = ((PanelSort *)a)->panel;
+  const Panel *panel_b = ((PanelSort *)b)->panel;
 
-  /* stick uppermost header-less panels to the top of the region -
-   * prevent them from being sorted (multiple header-less panels have to be sorted though) */
-  if (ps1->panel->type->flag & PNL_NO_HEADER && ps2->panel->type->flag & PNL_NO_HEADER) {
+  /* Stick uppermost header-less panels to the top of the region -
+   * prevent them from being sorted (multiple header-less panels have to be sorted though). */
+  if (panel_a->type->flag & PNL_NO_HEADER && panel_b->type->flag & PNL_NO_HEADER) {
     /* Skip and check for `ofsy` and #Panel.sortorder below. */
   }
-  if (ps1->panel->type->flag & PNL_NO_HEADER) {
+  if (panel_a->type->flag & PNL_NO_HEADER) {
     return -1;
   }
-  if (ps2->panel->type->flag & PNL_NO_HEADER) {
+  if (panel_b->type->flag & PNL_NO_HEADER) {
     return 1;
   }
 
-  if (ps1->panel->ofsy + ps1->panel->sizey < ps2->panel->ofsy + ps2->panel->sizey) {
+  if (panel_a->ofsy + panel_a->sizey < panel_b->ofsy + panel_b->sizey) {
     return 1;
   }
-  if (ps1->panel->ofsy + ps1->panel->sizey > ps2->panel->ofsy + ps2->panel->sizey) {
+  if (panel_a->ofsy + panel_a->sizey > panel_b->ofsy + panel_b->sizey) {
     return -1;
   }
-  if (ps1->panel->sortorder > ps2->panel->sortorder) {
+  if (panel_a->sortorder > panel_b->sortorder) {
     return 1;
   }
-  if (ps1->panel->sortorder < ps2->panel->sortorder) {
+  if (panel_a->sortorder < panel_b->sortorder) {
     return -1;
   }
 
   return 0;
 }
 
-static int compare_panel(const void *a1, const void *a2)
+static int compare_panel(const void *a, const void *b)
 {
-  const PanelSort *ps1 = a1, *ps2 = a2;
+  const Panel *panel_a = ((PanelSort *)a)->panel;
+  const Panel *panel_b = ((PanelSort *)b)->panel;
 
-  if (ps1->panel->sortorder > ps2->panel->sortorder) {
+  if (panel_a->sortorder > panel_b->sortorder) {
     return 1;
   }
-  if (ps1->panel->sortorder < ps2->panel->sortorder) {
+  if (panel_a->sortorder < panel_b->sortorder) {
     return -1;
   }
 
@@ -1620,7 +1704,7 @@ static void align_sub_panels(Panel *panel)
   int ofsy = panel->ofsy + panel->sizey - panel->blocksizey;
 
   LISTBASE_FOREACH (Panel *, pachild, &panel->children) {
-    if (pachild->runtime_flag & PNL_ACTIVE) {
+    if (pachild->runtime_flag & PANEL_ACTIVE) {
       pachild->ofsx = panel->ofsx;
       pachild->ofsy = ofsy - get_panel_size_y(pachild);
       ofsy -= get_panel_real_size_y(pachild);
@@ -1632,104 +1716,103 @@ static void align_sub_panels(Panel *panel)
   }
 }
 
-/* this doesn't draw */
-/* returns 1 when it did something */
-static bool uiAlignPanelStep(ARegion *region, const float fac, const bool drag)
+/**
+ * Calculate the position and order of panels as they are opened, closed, and dragged.
+ */
+static bool uiAlignPanelStep(ARegion *region, const float factor, const bool drag)
 {
-  int i;
-
-  /* count active, not tabbed panels */
-  int tot = 0;
+  /* Count active panels. */
+  int active_panels_len = 0;
   LISTBASE_FOREACH (Panel *, panel, &region->panels) {
-    if (panel->runtime_flag & PNL_ACTIVE) {
-      tot++;
+    if (panel->runtime_flag & PANEL_ACTIVE) {
+      /* These panels should have types since they are currently displayed to the user. */
+      BLI_assert(panel->type != NULL);
+      active_panels_len++;
     }
   }
-
-  if (tot == 0) {
-    return 0;
+  if (active_panels_len == 0) {
+    return false;
   }
 
-  /* sort panels */
-  PanelSort *panelsort = MEM_callocN(tot * sizeof(PanelSort), "panelsort");
-
-  PanelSort *ps = panelsort;
-  LISTBASE_FOREACH (Panel *, panel, &region->panels) {
-    if (panel->runtime_flag & PNL_ACTIVE) {
-      ps->panel = MEM_dupallocN(panel);
-      ps->orig = panel;
-      ps++;
-    }
-  }
-
-  if (drag) {
-    /* While we are dragging, we sort on location and update #Panel.sortorder. */
-    qsort(panelsort, tot, sizeof(PanelSort), find_highest_panel);
-
-    for (ps = panelsort, i = 0; i < tot; i++, ps++) {
-      ps->orig->sortorder = i;
-    }
-  }
-  else {
-    /* Otherwise use #Panel.sortorder. */
-    qsort(panelsort, tot, sizeof(PanelSort), compare_panel);
-  }
-
-  /* No smart other default start location! This keeps switching f5/f6/etc compatible. */
-  ps = panelsort;
-  ps->panel->runtime.region_ofsx = panel_region_offset_x_get(region);
-  ps->panel->ofsx = 0;
-  ps->panel->ofsy = -get_panel_size_y(ps->panel);
-  ps->panel->ofsx += ps->panel->runtime.region_ofsx;
-
-  for (i = 0; i < tot - 1; i++, ps++) {
-    PanelSort *psnext = ps + 1;
-
-    const bool use_box = ps->panel->type && ps->panel->type->flag & PNL_DRAW_BOX;
-    const bool use_box_next = psnext->panel->type && psnext->panel->type->flag & PNL_DRAW_BOX;
-    psnext->panel->ofsx = ps->panel->ofsx;
-    psnext->panel->ofsy = get_panel_real_ofsy(ps->panel) - get_panel_size_y(psnext->panel);
-
-    /* Extra margin for box style panels. */
-    ps->panel->ofsx += (use_box) ? UI_PANEL_BOX_STYLE_MARGIN : 0.0f;
-    if (use_box || use_box_next) {
-      psnext->panel->ofsy -= UI_PANEL_BOX_STYLE_MARGIN;
-    }
-  }
-  /* Extra margin for the last panel if it's a box-style panel. */
-  if (panelsort[tot - 1].panel->type && panelsort[tot - 1].panel->type->flag & PNL_DRAW_BOX) {
-    panelsort[tot - 1].panel->ofsx += UI_PANEL_BOX_STYLE_MARGIN;
-  }
-
-  /* we interpolate */
-  bool changed = false;
-  ps = panelsort;
-  for (i = 0; i < tot; i++, ps++) {
-    if ((ps->panel->flag & PNL_SELECT) == 0) {
-      if ((ps->orig->ofsx != ps->panel->ofsx) || (ps->orig->ofsy != ps->panel->ofsy)) {
-        ps->orig->ofsx = round_fl_to_int(fac * (float)ps->panel->ofsx +
-                                         (1.0f - fac) * (float)ps->orig->ofsx);
-        ps->orig->ofsy = round_fl_to_int(fac * (float)ps->panel->ofsy +
-                                         (1.0f - fac) * (float)ps->orig->ofsy);
-        changed = true;
+  /* Sort panels. */
+  PanelSort *panel_sort = MEM_mallocN(sizeof(PanelSort) * active_panels_len, __func__);
+  {
+    PanelSort *ps = panel_sort;
+    LISTBASE_FOREACH (Panel *, panel, &region->panels) {
+      if (panel->runtime_flag & PANEL_ACTIVE) {
+        ps->panel = panel;
+        ps++;
       }
     }
   }
 
-  /* set locations for tabbed and sub panels */
+  if (drag) {
+    /* While dragging, sort based on location and update #Panel.sortorder. */
+    qsort(panel_sort, active_panels_len, sizeof(PanelSort), find_highest_panel);
+    for (int i = 0; i < active_panels_len; i++) {
+      panel_sort[i].panel->sortorder = i;
+    }
+  }
+  else {
+    /* Otherwise use #Panel.sortorder. */
+    qsort(panel_sort, active_panels_len, sizeof(PanelSort), compare_panel);
+  }
+
+  /* X offset. */
+  const int region_offset_x = panel_region_offset_x_get(region);
+  for (int i = 0; i < active_panels_len; i++) {
+    PanelSort *ps = &panel_sort[i];
+    const bool use_box = ps->panel->type->flag & PNL_DRAW_BOX;
+    ps->panel->runtime.region_ofsx = region_offset_x;
+    ps->new_offset_x = region_offset_x + ((use_box) ? UI_PANEL_BOX_STYLE_MARGIN : 0);
+  }
+
+  /* Y offset. */
+  for (int i = 0, y = 0; i < active_panels_len; i++) {
+    PanelSort *ps = &panel_sort[i];
+    y -= get_panel_real_size_y(ps->panel);
+
+    const bool use_box = ps->panel->type->flag & PNL_DRAW_BOX;
+    if (use_box) {
+      y -= UI_PANEL_BOX_STYLE_MARGIN;
+    }
+    ps->new_offset_y = y;
+    /* The header still draws offset by the size of closed panels, so apply the offset here. */
+    if (UI_panel_is_closed(ps->panel)) {
+      panel_sort[i].new_offset_y -= ps->panel->sizey;
+    }
+  }
+
+  /* Interpolate based on the input factor. */
+  bool changed = false;
+  for (int i = 0; i < active_panels_len; i++) {
+    PanelSort *ps = &panel_sort[i];
+    if (ps->panel->flag & PNL_SELECT) {
+      continue;
+    }
+
+    if (ps->new_offset_x != ps->panel->ofsx) {
+      const float x = interpf((float)ps->new_offset_x, (float)ps->panel->ofsx, factor);
+      ps->panel->ofsx = round_fl_to_int(x);
+      changed = true;
+    }
+    if (ps->new_offset_y != ps->panel->ofsy) {
+      const float y = interpf((float)ps->new_offset_y, (float)ps->panel->ofsy, factor);
+      ps->panel->ofsy = round_fl_to_int(y);
+      changed = true;
+    }
+  }
+
+  /* Set locations for tabbed and sub panels. */
   LISTBASE_FOREACH (Panel *, panel, &region->panels) {
-    if (panel->runtime_flag & PNL_ACTIVE) {
+    if (panel->runtime_flag & PANEL_ACTIVE) {
       if (panel->children.first) {
         align_sub_panels(panel);
       }
     }
   }
 
-  /* Free `panelsort` array. */
-  for (ps = panelsort, i = 0; i < tot; i++, ps++) {
-    MEM_freeN(ps->panel);
-  }
-  MEM_freeN(panelsort);
+  MEM_freeN(panel_sort);
 
   return changed;
 }
@@ -1739,9 +1822,9 @@ static void ui_panels_size(ARegion *region, int *r_x, int *r_y)
   int sizex = 0;
   int sizey = 0;
 
-  /* compute size taken up by panels, for setting in view2d */
+  /* Compute size taken up by panels, for setting in view2d. */
   LISTBASE_FOREACH (Panel *, panel, &region->panels) {
-    if (panel->runtime_flag & PNL_ACTIVE) {
+    if (panel->runtime_flag & PANEL_ACTIVE) {
       const int pa_sizex = panel->ofsx + panel->sizex;
       const int pa_sizey = get_panel_real_ofsy(panel);
 
@@ -1769,7 +1852,7 @@ static void ui_do_animate(bContext *C, Panel *panel)
   float fac = (PIL_check_seconds_timer() - data->starttime) / ANIMATION_TIME;
   fac = min_ff(sqrtf(fac), 1.0f);
 
-  /* for max 1 second, interpolate positions */
+  /* For max 1 second, interpolate positions. */
   if (uiAlignPanelStep(region, fac, false)) {
     ED_region_tag_redraw(region);
   }
@@ -1791,40 +1874,64 @@ static void ui_do_animate(bContext *C, Panel *panel)
   }
 }
 
-static void panel_list_clear_active(ListBase *lb)
+static void panels_layout_begin_clear_flags(ListBase *lb)
 {
-  /* set all panels as inactive, so that at the end we know
-   * which ones were used */
   LISTBASE_FOREACH (Panel *, panel, lb) {
-    if (panel->runtime_flag & PNL_ACTIVE) {
-      panel->runtime_flag = PNL_WAS_ACTIVE;
-    }
-    else {
-      panel->runtime_flag = 0;
-    }
+    /* Flags to copy over to the next layout pass. */
+    const short flag_copy = PANEL_USE_CLOSED_FROM_SEARCH;
 
-    panel_list_clear_active(&panel->children);
+    const bool was_active = panel->runtime_flag & PANEL_ACTIVE;
+    const bool was_closed = UI_panel_is_closed(panel);
+    panel->runtime_flag &= flag_copy;
+    SET_FLAG_FROM_TEST(panel->runtime_flag, was_active, PANEL_WAS_ACTIVE);
+    SET_FLAG_FROM_TEST(panel->runtime_flag, was_closed, PANEL_WAS_CLOSED);
+
+    panels_layout_begin_clear_flags(&panel->children);
   }
 }
 
 void UI_panels_begin(const bContext *UNUSED(C), ARegion *region)
 {
-  panel_list_clear_active(&region->panels);
+  /* Set all panels as inactive, so that at the end we know which ones were used. Also
+   * clear other flags so we know later that their values were set for the current redraw. */
+  panels_layout_begin_clear_flags(&region->panels);
 }
 
-/* only draws blocks with panels */
 void UI_panels_end(const bContext *C, ARegion *region, int *r_x, int *r_y)
 {
   ScrArea *area = CTX_wm_area(C);
 
-  /* offset contents */
+  region_panels_set_expansion_from_list_data(C, region);
+
+  const bool region_search_filter_active = region->flag & RGN_FLAG_SEARCH_FILTER_ACTIVE;
+
+  if (properties_space_needs_realign(area, region)) {
+    region_panels_set_expansion_from_seach_filter(C, region, region_search_filter_active, false);
+  }
+  else if (region->flag & RGN_FLAG_SEARCH_FILTER_UPDATE) {
+    region_panels_set_expansion_from_seach_filter(C, region, region_search_filter_active, true);
+  }
+
+  if (region->flag & RGN_FLAG_SEARCH_FILTER_ACTIVE) {
+    /* Clean up the extra panels and buttons created for searching. */
+    region_panels_remove_invisible_layouts(region);
+  }
+
+  LISTBASE_FOREACH (Panel *, panel, &region->panels) {
+    if (panel->runtime_flag & PANEL_ACTIVE) {
+      BLI_assert(panel->runtime.block != NULL);
+      panel_calculate_size_recursive(region, panel);
+    }
+  }
+
+  /* Offset contents. */
   LISTBASE_FOREACH (uiBlock *, block, &region->uiblocks) {
     if (block->active && block->panel) {
       ui_offset_panel_block(block);
     }
   }
 
-  /* re-align, possibly with animation */
+  /* Re-align, possibly with animation. */
   Panel *panel;
   if (panels_need_realign(area, region, &panel)) {
     if (panel) {
@@ -1835,55 +1942,8 @@ void UI_panels_end(const bContext *C, ARegion *region, int *r_x, int *r_y)
     }
   }
 
-  /* tag first panel */
-  Panel *panel_first = NULL;
-  LISTBASE_FOREACH (uiBlock *, block, &region->uiblocks) {
-    if (block->active && block->panel) {
-      if (!panel_first || block->panel->sortorder < panel_first->sortorder) {
-        panel_first = block->panel;
-      }
-    }
-  }
-
-  if (panel_first) {
-    panel_first->runtime_flag |= PNL_FIRST;
-  }
-
-  /* compute size taken up by panel */
+  /* Compute size taken up by panels. */
   ui_panels_size(region, r_x, r_y);
-}
-
-void UI_panels_draw(const bContext *C, ARegion *region)
-{
-  /* Draw panels, selected on top. Also in reverse order, because
-   * UI blocks are added in reverse order and we need child panels
-   * to draw on top. */
-  LISTBASE_FOREACH_BACKWARD (uiBlock *, block, &region->uiblocks) {
-    if (block->active && block->panel && !(block->panel->flag & PNL_SELECT)) {
-      UI_block_draw(C, block);
-    }
-  }
-
-  LISTBASE_FOREACH_BACKWARD (uiBlock *, block, &region->uiblocks) {
-    if (block->active && block->panel && (block->panel->flag & PNL_SELECT)) {
-      UI_block_draw(C, block);
-    }
-  }
-}
-
-void UI_panels_scale(ARegion *region, float new_width)
-{
-  LISTBASE_FOREACH (uiBlock *, block, &region->uiblocks) {
-    if (block->panel) {
-      const float fac = new_width / (float)block->panel->sizex;
-      block->panel->sizex = new_width;
-
-      LISTBASE_FOREACH (uiBut *, but, &block->buttons) {
-        but->rect.xmin *= fac;
-        but->rect.xmax *= fac;
-      }
-    }
-  }
 }
 
 /** \} */
@@ -1920,7 +1980,7 @@ static void ui_do_drag(const bContext *C, const wmEvent *event, Panel *panel)
     panel->ofsy = data->startofsy + dy;
   }
   else {
-    /* reset the panel snapping, to allow dragging away from snapped edges */
+    /* Reset the panel snapping, to allow dragging away from snapped edges. */
     panel->snap = PNL_SNAP_NONE;
 
     /* Add the movement of the view due to edge scrolling while dragging. */
@@ -1955,7 +2015,7 @@ static uiPanelMouseState ui_panel_mouse_state_get(const uiBlock *block,
     return PANEL_MOUSE_INSIDE_HEADER;
   }
 
-  if (!(panel->flag & PNL_CLOSED)) {
+  if (!UI_panel_is_closed(panel)) {
     if (IN_RANGE((float)my, block->rect.ymin, block->rect.ymax + PNL_HEADER)) {
       return PANEL_MOUSE_INSIDE_CONTENT;
     }
@@ -1991,10 +2051,10 @@ static void ui_panel_drag_collapse(const bContext *C,
     }
     const int oldflag = panel->flag;
 
-    /* lock axis */
+    /* Lock axis. */
     xy_b_block[0] = dragcol_data->xy_init[0];
 
-    /* use cursor coords in block space */
+    /* Use cursor coords in block space. */
     ui_window_to_block_fl(region, block, &xy_a_block[0], &xy_a_block[1]);
     ui_window_to_block_fl(region, block, &xy_b_block[0], &xy_b_block[1]);
 
@@ -2003,12 +2063,13 @@ static void ui_panel_drag_collapse(const bContext *C,
     rect.ymin = rect.ymax;
     rect.ymax = rect.ymin + PNL_HEADER;
 
-    /* touch all panels between last mouse coord and the current one */
+    /* Touch all panels between last mouse coordinate and the current one. */
     if (BLI_rctf_isect_segment(&rect, xy_a_block, xy_b_block)) {
       /* Force panel to open or close. */
+      panel->runtime_flag &= ~PANEL_USE_CLOSED_FROM_SEARCH;
       SET_FLAG_FROM_TEST(panel->flag, dragcol_data->was_first_open, PNL_CLOSED);
 
-      /* if panel->flag has changed this means a panel was opened/closed here */
+      /* If panel->flag has changed this means a panel was opened/closed here. */
       if (panel->flag != oldflag) {
         panel_activate_state(C, panel, PANEL_STATE_ANIMATION);
       }
@@ -2019,9 +2080,10 @@ static void ui_panel_drag_collapse(const bContext *C,
 }
 
 /**
- * Panel drag-collapse (modal handler)
- * Clicking and dragging over panels toggles their collapse state based on the panel that was first
- * dragged over. If it was open all affected panels incl the initial one are closed and vice versa.
+ * Panel drag-collapse (modal handler).
+ * Clicking and dragging over panels toggles their collapse state based on the panel
+ * that was first dragged over. If it was open all affected panels including the initial
+ * one are closed and vice versa.
  */
 static int ui_panel_drag_collapse_handler(bContext *C, const wmEvent *event, void *userdata)
 {
@@ -2037,7 +2099,7 @@ static int ui_panel_drag_collapse_handler(bContext *C, const wmEvent *event, voi
       break;
     case LEFTMOUSE:
       if (event->val == KM_RELEASE) {
-        /* done! */
+        /* Done! */
         WM_event_remove_ui_handler(&win->modalhandlers,
                                    ui_panel_drag_collapse_handler,
                                    ui_panel_drag_collapse_handler_remove,
@@ -2045,7 +2107,7 @@ static int ui_panel_drag_collapse_handler(bContext *C, const wmEvent *event, voi
                                    true);
         ui_panel_drag_collapse_handler_remove(C, dragcol_data);
       }
-      /* don't let any left-mouse event fall through! */
+      /* Don't let any left-mouse event fall through! */
       retval = WM_UI_HANDLER_BREAK;
       break;
   }
@@ -2074,7 +2136,7 @@ static void ui_panel_drag_collapse_handler_add(const bContext *C, const bool was
  * Supposing the block has a panel and isn't a menu, handle opening, closing, pinning, etc.
  * Code currently assumes layout style for location of widgets
  *
- * \param mx The mouse x coordinate, in panel space.
+ * \param mx: The mouse x coordinate, in panel space.
  */
 static void ui_handle_panel_header(const bContext *C,
                                    uiBlock *block,
@@ -2113,7 +2175,7 @@ static void ui_handle_panel_header(const bContext *C,
   if (ELEM(event_type, EVT_RETKEY, EVT_PADENTER, EVT_AKEY) || mx < expansion_area_xmax) {
     if (ctrl && !is_subpanel) {
       /* For parent panels, collapse all other panels or toggle children. */
-      if (panel->flag & PNL_CLOSED || BLI_listbase_is_empty(&panel->children)) {
+      if (UI_panel_is_closed(panel) || BLI_listbase_is_empty(&panel->children)) {
         panels_collapse_all(region, panel);
 
         /* Reset the view - we don't want to display a view without content. */
@@ -2124,12 +2186,12 @@ static void ui_handle_panel_header(const bContext *C,
          * of the sub-panels (based on the expansion of the first sub-panel). */
         Panel *first_child = panel->children.first;
         BLI_assert(first_child != NULL);
-        panel_set_flag_recursive(panel, PNL_CLOSED, !(first_child->flag & PNL_CLOSED));
+        panel_set_flag_recursive(panel, PNL_CLOSED, !UI_panel_is_closed(first_child));
         panel->flag |= PNL_CLOSED;
       }
     }
 
-    if (panel->flag & PNL_CLOSED) {
+    if (UI_panel_is_closed(panel)) {
       panel->flag &= ~PNL_CLOSED;
       /* Snap back up so full panel aligns with screen edge. */
       if (panel->snap & PNL_SNAP_BOTTOM) {
@@ -2181,7 +2243,7 @@ static void ui_handle_panel_header(const bContext *C,
 
 bool UI_panel_category_is_visible(const ARegion *region)
 {
-  /* more than one */
+  /* Check for more than one category. */
   return region->panels_category.first &&
          region->panels_category.first != region->panels_category.last;
 }
@@ -2218,9 +2280,9 @@ static void ui_panel_category_active_set(ARegion *region, const char *idname, bo
     BLI_addhead(lb, pc_act);
   }
 
-  /* Validate all active panels, we could do this on load,
-   * they are harmless - but we should remove somewhere.
-   * (add-ons could define own and gather cruft over time). */
+  /* Validate all active panels. We could do this on load, they are harmless -
+   * but we should remove them somewhere.
+   * (Add-ons could define panels and gather cruft over time). */
   {
     PanelCategoryStack *pc_act_next;
     /* intentionally skip first */
@@ -2290,7 +2352,7 @@ void UI_panel_category_add(ARegion *region, const char *name)
 
   BLI_strncpy(pc_dyn->idname, name, sizeof(pc_dyn->idname));
 
-  /* 'pc_dyn->rect' must be set on draw */
+  /* 'pc_dyn->rect' must be set on draw. */
 }
 
 void UI_panel_category_clear_all(ARegion *region)
@@ -2308,14 +2370,13 @@ static int ui_handle_panel_category_cycling(const wmEvent *event,
            (event->mval[0] < ((PanelCategoryDyn *)region->panels_category.first)->rect.xmax) :
            (event->mval[0] > ((PanelCategoryDyn *)region->panels_category.first)->rect.xmin));
 
-  /* if mouse is inside non-tab region, ctrl key is required */
+  /* If mouse is inside non-tab region, ctrl key is required. */
   if (is_mousewheel && !event->ctrl && !inside_tabregion) {
     return WM_UI_HANDLER_CONTINUE;
   }
 
   if (active_but && ui_but_supports_cycling(active_but)) {
-    /* skip - exception to make cycling buttons
-     * using ctrl+mousewheel work in tabbed regions */
+    /* Skip - exception to make cycling buttons using ctrl+mousewheel work in tabbed regions. */
   }
   else {
     const char *category = UI_panel_category_active_get(region, false);
@@ -2323,22 +2384,21 @@ static int ui_handle_panel_category_cycling(const wmEvent *event,
       PanelCategoryDyn *pc_dyn = UI_panel_category_find(region, category);
       if (LIKELY(pc_dyn)) {
         if (is_mousewheel) {
-          /* we can probably get rid of this and only allow ctrl+tabbing */
+          /* We can probably get rid of this and only allow ctrl-tabbing. */
           pc_dyn = (event->type == WHEELDOWNMOUSE) ? pc_dyn->next : pc_dyn->prev;
         }
         else {
           const bool backwards = event->shift;
           pc_dyn = backwards ? pc_dyn->prev : pc_dyn->next;
           if (!pc_dyn) {
-            /* proper cyclic behavior,
-             * back to first/last category (only used for ctrl+tab) */
+            /* Proper cyclic behavior, back to first/last category (only used for ctrl+tab). */
             pc_dyn = backwards ? region->panels_category.last : region->panels_category.first;
           }
         }
 
         if (pc_dyn) {
-          /* intentionally don't reset scroll in this case,
-           * this allows for quick browsing between tabs */
+          /* Intentionally don't reset scroll in this case,
+           * allowing for quick browsing between tabs. */
           UI_panel_category_active_set(region, pc_dyn->idname);
           ED_region_tag_redraw(region);
         }
@@ -2420,9 +2480,14 @@ int ui_handler_panel_region(bContext *C,
 
     const uiPanelMouseState mouse_state = ui_panel_mouse_state_get(block, panel, mx, my);
 
-    /* The panel collapse / expand key "A" is special as it takes priority over
-     * active button handling. */
-    if (ELEM(mouse_state, PANEL_MOUSE_INSIDE_CONTENT, PANEL_MOUSE_INSIDE_HEADER)) {
+    if (mouse_state != PANEL_MOUSE_OUTSIDE) {
+      /* Mark panels that have been interacted with so their expansion
+       * doesn't reset when property search finishes. */
+      SET_FLAG_FROM_TEST(panel->flag, UI_panel_is_closed(panel), PNL_CLOSED);
+      panel->runtime_flag &= ~PANEL_USE_CLOSED_FROM_SEARCH;
+
+      /* The panel collapse / expand key "A" is special as it takes priority over
+       * active button handling. */
       if (event->type == EVT_AKEY && !IS_EVENT_MOD(event, shift, ctrl, alt, oskey)) {
         retval = WM_UI_HANDLER_BREAK;
         ui_handle_panel_header(C, block, mx, event->type, event->ctrl, event->shift);
@@ -2517,13 +2582,13 @@ PointerRNA *UI_region_panel_custom_data_under_cursor(const bContext *C, const wm
 /** \name Window Level Modal Panel Interaction
  * \{ */
 
-/* note, this is modal handler and should not swallow events for animation */
+/* Note, this is modal handler and should not swallow events for animation. */
 static int ui_handler_panel(bContext *C, const wmEvent *event, void *userdata)
 {
   Panel *panel = userdata;
   uiHandlePanelData *data = panel->activedata;
 
-  /* verify if we can stop */
+  /* Verify if we can stop. */
   if (event->type == LEFTMOUSE && event->val == KM_RELEASE) {
     panel_activate_state(C, panel, PANEL_STATE_ANIMATION);
   }

@@ -149,18 +149,18 @@ void WM_cursor_set(wmWindow *win, int curs)
     curs = win->modalcursor;
   }
 
-  if (win->cursor == curs) {
-    return; /* Cursor is already set */
-  }
-
-  win->cursor = curs;
-
   if (curs == WM_CURSOR_NONE) {
     GHOST_SetCursorVisibility(win->ghostwin, 0);
     return;
   }
 
   GHOST_SetCursorVisibility(win->ghostwin, 1);
+
+  if (win->cursor == curs) {
+    return; /* Cursor is already set */
+  }
+
+  win->cursor = curs;
 
   if (curs < 0 || curs >= WM_CURSOR_NUM) {
     BLI_assert(!"Invalid cursor number");
@@ -302,7 +302,7 @@ void WM_cursor_grab_disable(wmWindow *win, const int mouse_ungrab_xy[2])
 
 static void wm_cursor_warp_relative(wmWindow *win, int x, int y)
 {
-  /* note: don't use wmEvent coords because of continuous grab [#36409] */
+  /* note: don't use wmEvent coords because of continuous grab T36409. */
   int cx, cy;
   wm_get_cursor_position(win, &cx, &cy);
   WM_cursor_warp(win, cx + x, cy + y);
@@ -353,7 +353,6 @@ void WM_cursor_time(wmWindow *win, int nr)
   };
   uchar mask[16][2];
   uchar bitmap[16][2] = {{0}};
-  int i, idx;
 
   if (win->lastcursor == 0) {
     win->lastcursor = win->cursor;
@@ -362,18 +361,20 @@ void WM_cursor_time(wmWindow *win, int nr)
   memset(&mask, 0xFF, sizeof(mask));
 
   /* print number bottom right justified */
-  for (idx = 3; nr && idx >= 0; idx--) {
+  for (int idx = 3; nr && idx >= 0; idx--) {
     const char *digit = number_bitmaps[nr % 10];
     int x = idx % 2;
     int y = idx / 2;
 
-    for (i = 0; i < 8; i++) {
+    for (int i = 0; i < 8; i++) {
       bitmap[i + y * 8][x] = digit[i];
     }
     nr /= 10;
   }
 
   window_set_custom_cursor(win, mask, bitmap, 7, 7);
+  /* Unset current cursor value so it's properly reset to wmWindow.lastcursor. */
+  win->cursor = 0;
 }
 
 /**
@@ -402,7 +403,7 @@ void WM_cursor_time(wmWindow *win, int nr)
 
 /**
  * Because defining a cursor mixes declarations and executable code
- * each cursor needs it's own scoping block or it would be split up
+ * each cursor needs its own scoping block or it would be split up
  * over several hundred lines of code.  To enforce/document this better
  * I define 2 pretty brain-dead macros so it's obvious what the extra "[]"
  * are for */

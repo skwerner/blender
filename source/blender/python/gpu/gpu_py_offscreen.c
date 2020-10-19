@@ -140,8 +140,8 @@ PyDoc_STRVAR(
     ".. method:: bind(save=True)\n"
     "\n"
     "   Bind the offscreen object.\n"
-    "   To make sure that the offscreen gets unbind whether an exception occurs or not, pack it "
-    "into a `with` statement.\n"
+    "   To make sure that the offscreen gets unbind whether an exception occurs or not,\n"
+    "   pack it into a `with` statement.\n"
     "\n"
     "   :arg save: Save the current OpenGL state, so that it can be restored when unbinding.\n"
     "   :type save: `bool`\n");
@@ -157,6 +157,7 @@ static PyObject *bpygpu_offscreen_bind(BPyGPUOffScreen *self, PyObject *args, Py
   }
 
   GPU_offscreen_bind(self->ofs, save);
+  GPU_apply_state();
 
   self->is_saved = save;
   Py_INCREF(self);
@@ -185,6 +186,7 @@ static PyObject *bpygpu_offscreen_unbind(BPyGPUOffScreen *self, PyObject *args, 
   }
 
   GPU_offscreen_unbind(self->ofs, restore);
+  GPU_apply_state();
   Py_RETURN_NONE;
 }
 

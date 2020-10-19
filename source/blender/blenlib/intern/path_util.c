@@ -22,7 +22,6 @@
  * \ingroup bli
  */
 
-#include <assert.h>
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1027,7 +1026,7 @@ bool BLI_path_abs(char *path, const char *basepath)
   if (!wasrelative && !BLI_path_is_abs(path)) {
     char *p = path;
     BLI_windows_get_default_root_dir(tmp);
-    // get rid of the slashes at the beginning of the path
+    /* Get rid of the slashes at the beginning of the path. */
     while (ELEM(*p, '\\', '/')) {
       p++;
     }
@@ -1299,6 +1298,11 @@ void BLI_setenv_if_new(const char *env, const char *val)
 
 /**
  * Get an env var, result has to be used immediately.
+ *
+ * On windows getenv gets its variables from a static copy of the environment variables taken at
+ * process start-up, causing it to not pick up on environment variables created during runtime.
+ * This function uses an alternative method to get environment variables that does pick up on
+ * runtime environment variables.
  */
 const char *BLI_getenv(const char *env)
 {

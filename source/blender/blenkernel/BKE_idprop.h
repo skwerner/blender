@@ -28,12 +28,12 @@
 extern "C" {
 #endif
 
+struct BlendDataReader;
+struct BlendExpander;
+struct BlendLibReader;
+struct BlendWriter;
 struct ID;
 struct IDProperty;
-struct BlendWriter;
-struct BlendDataReader;
-struct BlendLibReader;
-struct BlendExpander;
 
 typedef union IDPropertyTemplate {
   int i;
@@ -127,6 +127,7 @@ struct IDProperty *IDP_CopyProperty(const struct IDProperty *prop) ATTR_WARN_UNU
     ATTR_NONNULL();
 struct IDProperty *IDP_CopyProperty_ex(const struct IDProperty *prop,
                                        const int flag) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
+void IDP_CopyPropertyContent(IDProperty *dst, IDProperty *src) ATTR_NONNULL();
 
 bool IDP_EqualsProperties_ex(IDProperty *prop1,
                              IDProperty *prop2,

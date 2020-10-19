@@ -77,6 +77,10 @@ bool BKE_object_shaderfx_use_time(struct Object *ob, struct ShaderFxData *md);
 
 bool BKE_object_support_modifier_type_check(const struct Object *ob, int modifier_type);
 
+bool BKE_object_copy_modifier(struct Object *ob_dst,
+                              const struct Object *ob_src,
+                              struct ModifierData *md);
+bool BKE_object_copy_gpencil_modifier(struct Object *ob_dst, struct GpencilModifierData *md);
 void BKE_object_link_modifiers(struct Object *ob_dst, const struct Object *ob_src);
 void BKE_object_free_modifiers(struct Object *ob, const int flag);
 void BKE_object_free_shaderfx(struct Object *ob, const int flag);
@@ -112,10 +116,9 @@ int BKE_object_visibility(const struct Object *ob, const int dag_eval_mode);
 struct Object *BKE_object_add_only_object(struct Main *bmain, int type, const char *name)
     ATTR_NONNULL(1) ATTR_RETURNS_NONNULL;
 struct Object *BKE_object_add(struct Main *bmain,
-                              struct Scene *scene,
                               struct ViewLayer *view_layer,
                               int type,
-                              const char *name) ATTR_NONNULL(1, 2, 3) ATTR_RETURNS_NONNULL;
+                              const char *name) ATTR_NONNULL(1, 2) ATTR_RETURNS_NONNULL;
 struct Object *BKE_object_add_from(struct Main *bmain,
                                    struct Scene *scene,
                                    struct ViewLayer *view_layer,
@@ -133,7 +136,6 @@ void *BKE_object_obdata_add_from_type(struct Main *bmain, int type, const char *
     ATTR_NONNULL(1);
 int BKE_object_obdata_to_type(const struct ID *id) ATTR_NONNULL(1);
 
-struct Object *BKE_object_copy(struct Main *bmain, const struct Object *ob);
 bool BKE_object_is_libdata(const struct Object *ob);
 bool BKE_object_obdata_is_libdata(const struct Object *ob);
 
@@ -201,7 +203,7 @@ void BKE_object_where_is_calc_time(struct Depsgraph *depsgraph,
                                    float ctime);
 void BKE_object_where_is_calc_mat4(struct Object *ob, float r_obmat[4][4]);
 
-/* possibly belong in own moduke? */
+/* Possibly belong in own module? */
 struct BoundBox *BKE_boundbox_alloc_unit(void);
 void BKE_boundbox_init_from_minmax(struct BoundBox *bb, const float min[3], const float max[3]);
 void BKE_boundbox_calc_center_aabb(const struct BoundBox *bb, float r_cent[3]);

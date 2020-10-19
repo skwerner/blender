@@ -30,12 +30,12 @@
 #include "DNA_screen_types.h"
 #include "DNA_space_types.h"
 
+#include "BKE_armature.h"
 #include "BKE_context.h"
 #include "BKE_layer.h"
 #include "BKE_object.h"
 #include "BKE_outliner_treehash.h"
 
-#include "ED_armature.h"
 #include "ED_outliner.h"
 #include "ED_screen.h"
 
@@ -62,7 +62,7 @@ void outliner_viewcontext_init(const bContext *C, TreeViewContext *tvc)
     tvc->ob_edit = OBEDIT_FROM_OBACT(tvc->obact);
 
     if ((tvc->obact->type == OB_ARMATURE) ||
-        /* This could be made into it's own function. */
+        /* This could be made into its own function. */
         ((tvc->obact->type == OB_MESH) && tvc->obact->mode & OB_MODE_WEIGHT_PAINT)) {
       tvc->ob_pose = BKE_object_pose_armature_get(tvc->obact);
     }
@@ -165,12 +165,11 @@ TreeElement *outliner_find_item_at_x_in_row(const SpaceOutliner *space_outliner,
 /* Find specific item from the treestore */
 TreeElement *outliner_find_tree_element(ListBase *lb, const TreeStoreElem *store_elem)
 {
-  TreeElement *te, *tes;
-  for (te = lb->first; te; te = te->next) {
+  LISTBASE_FOREACH (TreeElement *, te, lb) {
     if (te->store_elem == store_elem) {
       return te;
     }
-    tes = outliner_find_tree_element(&te->subtree, store_elem);
+    TreeElement *tes = outliner_find_tree_element(&te->subtree, store_elem);
     if (tes) {
       return tes;
     }
@@ -183,8 +182,7 @@ TreeElement *outliner_find_parent_element(ListBase *lb,
                                           TreeElement *parent_te,
                                           const TreeElement *child_te)
 {
-  TreeElement *te;
-  for (te = lb->first; te; te = te->next) {
+  LISTBASE_FOREACH (TreeElement *, te, lb) {
     if (te == child_te) {
       return parent_te;
     }
@@ -360,6 +358,9 @@ float outliner_restrict_columns_width(const SpaceOutliner *space_outliner)
       num_columns = 3;
       break;
     case SO_VIEW_LAYER:
+      if (space_outliner->show_restrict_flags & SO_RESTRICT_ENABLE) {
+        num_columns++;
+      }
       if (space_outliner->show_restrict_flags & SO_RESTRICT_HOLDOUT) {
         num_columns++;
       }
@@ -428,6 +429,12 @@ bool outliner_item_is_co_over_name_icons(const TreeElement *te, float view_co_x)
   return outside_left && (view_co_x < te->xend);
 }
 
+/* Find if x coordinate is over element name. */
+bool outliner_item_is_co_over_name(const TreeElement *te, float view_co_x)
+{
+  return (view_co_x > (te->xs + UI_UNIT_X * 2)) && (view_co_x < te->xend);
+}
+
 /* Find if x coordinate is over element disclosure toggle */
 bool outliner_item_is_co_within_close_toggle(const TreeElement *te, float view_co_x)
 {
@@ -465,7 +472,7 @@ void outliner_tag_redraw_avoid_rebuild_on_open_change(const SpaceOutliner *space
                                                       ARegion *region)
 {
   /* Avoid rebuild if possible. */
-  if (outliner_mode_requires_always_rebuild(space_outliner)) {
+  if (outliner_requires_rebuild_on_open_change(space_outliner)) {
     ED_region_tag_redraw(region);
   }
   else {

@@ -56,6 +56,9 @@ struct bNodeTree;
 struct wmOperator;
 struct wmTimer;
 
+/* Defined in `buttons_intern.h`. */
+typedef struct SpaceProperties_Runtime SpaceProperties_Runtime;
+
 /* TODO 2.8: We don't write the global areas to files currently. Uncomment
  * define to enable writing (should become the default in a bit). */
 //#define WITH_GLOBAL_AREA_WRITING
@@ -159,6 +162,9 @@ typedef struct SpaceProperties {
   ID *pinid;
 
   void *texuser;
+
+  /* Doesn't necessarily need to be a pointer, but runtime structs are still written to files. */
+  struct SpaceProperties_Runtime *runtime;
 } SpaceProperties;
 
 /* button defines (deprecated) */
@@ -284,6 +290,7 @@ typedef enum eSpaceOutliner_Flag {
   /* SO_HIDE_KEYINGSETINFO = (1 << 3), */ /* UNUSED */
   SO_SKIP_SORT_ALPHA = (1 << 4),
   SO_SYNC_SELECT = (1 << 5),
+  SO_MODE_COLUMN = (1 << 6),
 } eSpaceOutliner_Flag;
 
 /* SpaceOutliner.filter */
@@ -624,13 +631,13 @@ typedef enum eSpaceSeq_Displays {
 
 /* SpaceSeq.render_size */
 typedef enum eSpaceSeq_Proxy_RenderSize {
-  SEQ_PROXY_RENDER_SIZE_NONE = -1,
-  SEQ_PROXY_RENDER_SIZE_SCENE = 0,
-  SEQ_PROXY_RENDER_SIZE_25 = 25,
-  SEQ_PROXY_RENDER_SIZE_50 = 50,
-  SEQ_PROXY_RENDER_SIZE_75 = 75,
-  SEQ_PROXY_RENDER_SIZE_100 = 99,
-  SEQ_PROXY_RENDER_SIZE_FULL = 100,
+  SEQ_RENDER_SIZE_NONE = -1,
+  SEQ_RENDER_SIZE_SCENE = 0,
+  SEQ_RENDER_SIZE_PROXY_25 = 25,
+  SEQ_RENDER_SIZE_PROXY_50 = 50,
+  SEQ_RENDER_SIZE_PROXY_75 = 75,
+  SEQ_RENDER_SIZE_PROXY_100 = 99,
+  SEQ_RENDER_SIZE_FULL = 100,
 } eSpaceSeq_Proxy_RenderSize;
 
 typedef struct MaskSpaceInfo {
@@ -801,8 +808,10 @@ typedef enum eFileSel_Action {
 } eFileSel_Action;
 
 /* sfile->params->flag */
-/* Note: short flag, also used as 16 lower bits of flags in link/append code
- *       (WM and BLO code area, see BLO_LibLinkFlags in BLO_readfile.h). */
+/**
+ * \note short flag, also used as 16 lower bits of flags in link/append code
+ * (WM and BLO code area, see #eBLOLibLinkFlags in BLO_readfile.h).
+ */
 typedef enum eFileSel_Params_Flag {
   FILE_PARAMS_FLAG_UNUSED_1 = (1 << 0), /* cleared */
   FILE_RELPATH = (1 << 1),
@@ -813,8 +822,8 @@ typedef enum eFileSel_Params_Flag {
   FILE_PARAMS_FLAG_UNUSED_6 = (1 << 6), /* cleared */
   FILE_DIRSEL_ONLY = (1 << 7),
   FILE_FILTER = (1 << 8),
-  FILE_PARAMS_FLAG_UNUSED_9 = (1 << 9), /* cleared */
-  FILE_GROUP_INSTANCE = (1 << 10),
+  FILE_OBDATA_INSTANCE = (1 << 9),
+  FILE_COLLECTION_INSTANCE = (1 << 10),
   FILE_SORT_INVERT = (1 << 11),
   FILE_HIDE_TOOL_PROPS = (1 << 12),
   FILE_CHECK_EXISTING = (1 << 13),
@@ -1024,6 +1033,12 @@ enum {
  * \{ */
 
 /* Image/UV Editor */
+
+typedef struct SpaceImageOverlay {
+  int flag;
+  char _pad[4];
+} SpaceImageOverlay;
+
 typedef struct SpaceImage {
   SpaceLink *next, *prev;
   /** Storage of regions for inactive spaces. */
@@ -1083,6 +1098,7 @@ typedef struct SpaceImage {
   int tile_grid_shape[2];
 
   MaskSpaceInfo mask_info;
+  SpaceImageOverlay overlay;
 } SpaceImage;
 
 /* SpaceImage.dt_uv */
@@ -1145,7 +1161,7 @@ typedef enum eSpaceImage_Flag {
   SI_PREVSPACE = (1 << 15),
   SI_FULLWINDOW = (1 << 16),
 
-  SI_FLAG_UNUSED_17 = (1 << 17), /* cleared */
+  SI_FLAG_UNUSED_17 = (1 << 17),
   SI_FLAG_UNUSED_18 = (1 << 18), /* cleared */
 
   /**
@@ -1167,6 +1183,10 @@ typedef enum eSpaceImage_Flag {
   SI_SHOW_G = (1 << 28),
   SI_SHOW_B = (1 << 29),
 } eSpaceImage_Flag;
+
+typedef enum eSpaceImageOverlay_Flag {
+  SI_OVERLAY_SHOW_OVERLAYS = (1 << 0),
+} eSpaceImageOverlay_Flag;
 
 /** \} */
 

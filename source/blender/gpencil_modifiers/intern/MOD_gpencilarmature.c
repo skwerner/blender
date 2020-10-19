@@ -31,6 +31,7 @@
 #include "BLT_translation.h"
 
 #include "DNA_armature_types.h"
+#include "DNA_defaults.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_meshdata_types.h"
@@ -68,8 +69,10 @@
 static void initData(GpencilModifierData *md)
 {
   ArmatureGpencilModifierData *gpmd = (ArmatureGpencilModifierData *)md;
-  gpmd->object = NULL;
-  gpmd->deformflag = ARM_DEF_VGROUP;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(gpmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(gpmd, DNA_struct_default_get(ArmatureGpencilModifierData), modifier);
 }
 
 static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
@@ -185,14 +188,11 @@ static void updateDepsgraph(GpencilModifierData *md, const ModifierUpdateDepsgra
   DEG_add_object_relation(ctx->node, ctx->object, DEG_OB_COMP_TRANSFORM, "Armature Modifier");
 }
 
-static void foreachObjectLink(GpencilModifierData *md,
-                              Object *ob,
-                              ObjectWalkFunc walk,
-                              void *userData)
+static void foreachIDLink(GpencilModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   ArmatureGpencilModifierData *mmd = (ArmatureGpencilModifierData *)md;
 
-  walk(userData, ob, &mmd->object, IDWALK_CB_NOP);
+  walk(userData, ob, (ID **)&mmd->object, IDWALK_CB_NOP);
 }
 
 static void panel_draw(const bContext *UNUSED(C), Panel *panel)
@@ -245,8 +245,7 @@ GpencilModifierTypeInfo modifierType_Gpencil_Armature = {
     /* isDisabled */ isDisabled,
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* panelRegister */ panelRegister,
 };

@@ -74,9 +74,7 @@
 EffectorWeights *BKE_effector_add_weights(Collection *collection)
 {
   EffectorWeights *weights = MEM_callocN(sizeof(EffectorWeights), "EffectorWeights");
-  int i;
-
-  for (i = 0; i < NUM_PFIELD_TYPES; i++) {
+  for (int i = 0; i < NUM_PFIELD_TYPES; i++) {
     weights->weight[i] = 1.0f;
   }
 
@@ -1053,9 +1051,6 @@ static void do_physical_effector(EffectorCache *eff,
     }
   }
 
-  if (point->ave) {
-    zero_v3(point->ave);
-  }
   if (pd->flag & PFIELD_DO_ROTATION && point->ave && point->rot) {
     float xvec[3] = {1.0f, 0.0f, 0.0f};
     float dave[3];

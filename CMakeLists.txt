@@ -44,8 +44,8 @@ endif()
 cmake_minimum_required(VERSION 3.10)
 include(CheckCXXSourceCompiles)
 
-# Prever LEGACY OpenGL to eb compatible with all the existing releases and
-# platforms which don't hare GLVND yet. Only do it if preference was not set
+# Prefer LEGACY OpenGL to be compatible with all the existing releases and
+# platforms which don't have GLVND yet. Only do it if preference was not set
 # externally.
 if(NOT DEFINED OpenGL_GL_PREFERENCE)
   set(OpenGL_GL_PREFERENCE "LEGACY")
@@ -129,7 +129,9 @@ enable_testing()
 
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/bin CACHE INTERNAL "" FORCE)
 set(LIBRARY_OUTPUT_PATH ${CMAKE_BINARY_DIR}/lib CACHE INTERNAL "" FORCE)
-if(MSVC)
+
+get_property(GENERATOR_IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if(GENERATOR_IS_MULTI_CONFIG)
   set(TESTS_OUTPUT_DIR ${EXECUTABLE_OUTPUT_PATH}/tests/$<CONFIG>/ CACHE INTERNAL "" FORCE)
 else()
   set(TESTS_OUTPUT_DIR ${EXECUTABLE_OUTPUT_PATH}/tests/ CACHE INTERNAL "" FORCE)
@@ -197,10 +199,12 @@ option(WITH_OPENIMAGEDENOISE   "Enable the OpenImageDenoise compositing node" ON
 
 option(WITH_OPENSUBDIV    "Enable OpenSubdiv for surface subdivision" ON)
 
+option(WITH_POTRACE       "Enable features relying on potrace" ON)
 option(WITH_OPENVDB       "Enable features relying on OpenVDB" ON)
 option(WITH_OPENVDB_BLOSC "Enable blosc compression for OpenVDB, only enable if OpenVDB was built with blosc support" ON)
 option(WITH_OPENVDB_3_ABI_COMPATIBLE "Assume OpenVDB library has been compiled with version 3 ABI compatibility" OFF)
 mark_as_advanced(WITH_OPENVDB_3_ABI_COMPATIBLE)
+option(WITH_NANOVDB       "Enable usage of NanoVDB data structure for accelerated rendering on the GPU" OFF)
 
 # GHOST Windowing Library Options
 option(WITH_GHOST_DEBUG   "Enable debugging output for the GHOST library" OFF)
@@ -220,8 +224,6 @@ endif()
 if(WITH_GHOST_X11)
   option(WITH_GHOST_XDND    "Enable drag'n'drop support on X11 using XDND protocol" ON)
 endif()
-
-option(WITH_GMP "Use the gmp library for more accurate booleans" OFF)
 
 # Misc...
 option(WITH_HEADLESS      "Build without graphical support (renderfarm, server mode only)" OFF)
@@ -378,7 +380,7 @@ option(WITH_CYCLES_CUDA_BINARIES    "Build Cycles CUDA binaries" OFF)
 option(WITH_CYCLES_CUBIN_COMPILER   "Build cubins with nvrtc based compiler instead of nvcc" OFF)
 option(WITH_CYCLES_CUDA_BUILD_SERIAL "Build cubins one after another (useful on machines with limited RAM)" OFF)
 mark_as_advanced(WITH_CYCLES_CUDA_BUILD_SERIAL)
-set(CYCLES_CUDA_BINARIES_ARCH sm_30 sm_35 sm_37 sm_50 sm_52 sm_60 sm_61 sm_70 sm_75 compute_75 CACHE STRING "CUDA architectures to build binaries for")
+set(CYCLES_CUDA_BINARIES_ARCH sm_30 sm_35 sm_37 sm_50 sm_52 sm_60 sm_61 sm_70 sm_75 sm_86 compute_75 CACHE STRING "CUDA architectures to build binaries for")
 mark_as_advanced(CYCLES_CUDA_BINARIES_ARCH)
 unset(PLATFORM_DEFAULT)
 option(WITH_CYCLES_LOGGING  "Build Cycles with logging support" ON)
@@ -440,8 +442,12 @@ if(WIN32)
 endif()
 
 # This should be turned off when Blender enter beta/rc/release
-option(WITH_EXPERIMENTAL_FEATURES "Enable experimental features (still need to enable them in the user preferences)" ON)
-mark_as_advanced(WITH_EXPERIMENTAL_FEATURES)
+if("${BLENDER_VERSION_CYCLE}" STREQUAL "release" OR
+   "${BLENDER_VERSION_CYCLE}" STREQUAL "rc")
+  set(WITH_EXPERIMENTAL_FEATURES OFF)
+else()
+  set(WITH_EXPERIMENTAL_FEATURES ON)
+endif()
 
 # Unit testsing
 option(WITH_GTESTS "Enable GTest unit testing" OFF)
@@ -513,9 +519,22 @@ if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang")
 -fno-sanitize=alignment \
 ")
 
-    if(NOT MSVC) # not all sanitizers are supported with clang-cl, these two however are very vocal about it
-      set(_asan_defaults "${_asan_defaults} -fsanitize=leak -fsanitize=object-size" )
+    if(MSVC)
+      # clang-cl doesn't support all sanitizers, but leak and object-size give errors/warnings.
+      set(_asan_defaults "${_asan_defaults}")
+    elseif(APPLE)
+      # AppleClang doesn't support all sanitizers, but leak gives error.
+      # Build type is not known for multi-config generator, so don't add object-size sanitizer.
+      if(CMAKE_BUILD_TYPE MATCHES "Debug" OR GENERATOR_IS_MULTI_CONFIG)
+        # Silence the warning that object-size is not effective in -O0.
+        set(_asan_defaults "${_asan_defaults}")
+      else()
+        set(_asan_defaults "${_asan_defaults} -fsanitize=object-size")
+      endif()
+    else()
+      set(_asan_defaults "${_asan_defaults} -fsanitize=leak -fsanitize=object-size")
     endif()
+
     set(COMPILER_ASAN_CFLAGS "${_asan_defaults}" CACHE STRING "C flags for address sanitizer")
     mark_as_advanced(COMPILER_ASAN_CFLAGS)
     set(COMPILER_ASAN_CXXFLAGS "${_asan_defaults}" CACHE STRING "C++ flags for address sanitizer")
@@ -523,16 +542,33 @@ if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang")
 
     unset(_asan_defaults)
 
-    if(NOT MSVC)
-      find_library(COMPILER_ASAN_LIBRARY asan ${CMAKE_C_IMPLICIT_LINK_DIRECTORIES})
-    else()
-      find_library(
-        COMPILER_ASAN_LIBRARY NAMES clang_rt.asan-x86_64
+    if(MSVC)
+        find_library(
+          COMPILER_ASAN_LIBRARY NAMES clang_rt.asan-x86_64
         PATHS
         [HKEY_LOCAL_MACHINE\\SOFTWARE\\Wow6432Node\\LLVM\\LLVM;]/lib/clang/7.0.0/lib/windows
         [HKEY_LOCAL_MACHINE\\SOFTWARE\\Wow6432Node\\LLVM\\LLVM;]/lib/clang/6.0.0/lib/windows
       )
+    elseif(APPLE)
+      execute_process(COMMAND ${CMAKE_CXX_COMPILER}
+        -print-file-name=lib
+        OUTPUT_VARIABLE CLANG_LIB_DIR
+      )
+      string(STRIP "${CLANG_LIB_DIR}" CLANG_LIB_DIR)
+      find_library(
+        COMPILER_ASAN_LIBRARY
+        NAMES
+          libclang_rt.asan_osx_dynamic.dylib
+        PATHS
+          "${CLANG_LIB_DIR}/darwin/"
+      )
+      unset(CLANG_LIB_DIR)
+    else()
+      find_library(
+        COMPILER_ASAN_LIBRARY asan ${CMAKE_C_IMPLICIT_LINK_DIRECTORIES}
+      )
     endif()
+
     mark_as_advanced(COMPILER_ASAN_LIBRARY)
   endif()
 endif()
@@ -671,6 +707,9 @@ set_and_warn_dependency(WITH_TBB WITH_USD               OFF)
 set_and_warn_dependency(WITH_TBB WITH_OPENIMAGEDENOISE  OFF)
 set_and_warn_dependency(WITH_TBB WITH_OPENVDB           OFF)
 set_and_warn_dependency(WITH_TBB WITH_MOD_FLUID         OFF)
+
+# NanoVDB requires OpenVDB to convert the data structure
+set_and_warn_dependency(WITH_OPENVDB WITH_NANOVDB       OFF)
 
 # OpenVDB uses 'half' type from OpenEXR & fails to link without OpenEXR enabled.
 set_and_warn_dependency(WITH_IMAGE_OPENEXR WITH_OPENVDB OFF)
@@ -821,11 +860,10 @@ set(CXX_WARNINGS)
 set(C_REMOVE_STRICT_FLAGS)
 set(CXX_REMOVE_STRICT_FLAGS)
 
-# libraries to link the binary with passed to target_link_libraries()
-# known as LLIBS to scons
+# Libraries to link to targets in setup_platform_linker_libs
 set(PLATFORM_LINKLIBS "")
 
-# Added to linker flags in setup_liblinks
+# Added to target linker flags in setup_platform_linker_flags
 # - CMAKE_EXE_LINKER_FLAGS
 # - CMAKE_EXE_LINKER_FLAGS_DEBUG
 set(PLATFORM_LINKFLAGS "")
@@ -833,15 +871,27 @@ set(PLATFORM_LINKFLAGS_DEBUG "")
 
 if(NOT CMAKE_BUILD_TYPE MATCHES "Release")
   if(WITH_COMPILER_ASAN)
-    set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${COMPILER_ASAN_CFLAGS}")
-    set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} ${COMPILER_ASAN_CFLAGS}")
+    if(NOT APPLE)
+      # Avoid passing address sanitizer compiler flags to `try_compile`.
+      # Since linker flags are not set, all compiler checks and `find_package`
+      # calls that rely on `try_compile` will fail.
+      # See CMP0066 also.
+      set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${COMPILER_ASAN_CFLAGS}")
+      set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} ${COMPILER_ASAN_CFLAGS}")
 
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${COMPILER_ASAN_CXXFLAGS}")
-    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} ${COMPILER_ASAN_CXXFLAGS}")
+      set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${COMPILER_ASAN_CXXFLAGS}")
+      set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} ${COMPILER_ASAN_CXXFLAGS}")
+    endif()
     if(MSVC)
       set(COMPILER_ASAN_LINKER_FLAGS "/FUNCTIONPADMIN:6")
     endif()
-    if(COMPILER_ASAN_LIBRARY)
+
+    if(APPLE AND COMPILER_ASAN_LIBRARY)
+      string(REPLACE " " ";" _list_COMPILER_ASAN_CFLAGS ${COMPILER_ASAN_CFLAGS})
+      add_compile_options("$<$<NOT:$<CONFIG:Release>>:${_list_COMPILER_ASAN_CFLAGS}>")
+      add_link_options("$<$<NOT:$<CONFIG:Release>>:-fno-omit-frame-pointer;-fsanitize=address>")
+      unset(_list_COMPILER_ASAN_CFLAGS)
+    elseif(COMPILER_ASAN_LIBRARY)
       set(PLATFORM_LINKLIBS "${PLATFORM_LINKLIBS};${COMPILER_ASAN_LIBRARY}")
       set(PLATFORM_LINKFLAGS "${COMPILER_ASAN_LIBRARY} ${COMPILER_ASAN_LINKER_FLAGS}")
       set(PLATFORM_LINKFLAGS_DEBUG "${COMPILER_ASAN_LIBRARY} ${COMPILER_ASAN_LINKER_FLAGS}")

@@ -155,8 +155,11 @@ enum {
   UI_BLOCK_RADIAL = 1 << 20,
   UI_BLOCK_POPOVER = 1 << 21,
   UI_BLOCK_POPOVER_ONCE = 1 << 22,
-  /** Always show keymaps, even for non-menus. */
+  /** Always show key-maps, even for non-menus. */
   UI_BLOCK_SHOW_SHORTCUT_ALWAYS = 1 << 23,
+  /** The block is only used during the search process and will not be drawn.
+   * Currently just for the case of a closed panel's sub-panel (and its sub-panels). */
+  UI_BLOCK_SEARCH_ONLY = 1 << 25,
 };
 
 /** #uiPopupBlockHandle.menuretval */
@@ -222,6 +225,12 @@ enum {
   /** RNA property of the button is overridden from linked reference data. */
   UI_BUT_OVERRIDEN = 1u << 31u,
 };
+
+/* Default font size for normal text. */
+#define UI_DEFAULT_TEXT_POINTS 11
+
+/* Larger size used for title text. */
+#define UI_DEFAULT_TITLE_POINTS 12
 
 #define UI_PANEL_WIDTH 340
 #define UI_COMPACT_PANEL_WIDTH 160
@@ -317,7 +326,7 @@ typedef enum {
   UI_BTYPE_BUT = 1 << 9,
   UI_BTYPE_ROW = 2 << 9,
   UI_BTYPE_TEXT = 3 << 9,
-  /** dropdown list */
+  /** Drop-down list. */
   UI_BTYPE_MENU = 4 << 9,
   UI_BTYPE_BUT_MENU = 5 << 9,
   /** number button */
@@ -671,6 +680,8 @@ enum {
 void UI_block_theme_style_set(uiBlock *block, char theme_style);
 char UI_block_emboss_get(uiBlock *block);
 void UI_block_emboss_set(uiBlock *block, char emboss);
+bool UI_block_is_search_only(const uiBlock *block);
+void UI_block_set_search_only(uiBlock *block, bool search_only);
 
 void UI_block_free(const struct bContext *C, uiBlock *block);
 void UI_blocklist_free(const struct bContext *C, struct ListBase *lb);
@@ -1678,12 +1689,16 @@ struct Panel *UI_panel_begin(struct ARegion *region,
                              struct PanelType *pt,
                              struct Panel *panel,
                              bool *r_open);
-void UI_panel_end(const struct ARegion *region, uiBlock *block, int width, int height, bool open);
+void UI_panel_header_buttons_begin(struct Panel *panel);
+void UI_panel_header_buttons_end(struct Panel *panel);
+void UI_panel_end(struct Panel *panel, int width, int height);
 
-void UI_panels_scale(struct ARegion *region, float new_width);
+bool UI_panel_is_closed(const struct Panel *panel);
+bool UI_panel_is_active(const struct Panel *panel);
 void UI_panel_label_offset(struct uiBlock *block, int *r_x, int *r_y);
 int UI_panel_size_y(const struct Panel *panel);
 bool UI_panel_is_dragging(const struct Panel *panel);
+bool UI_panel_matches_search_filter(const struct Panel *panel);
 
 bool UI_panel_category_is_visible(const struct ARegion *region);
 void UI_panel_category_add(struct ARegion *region, const char *name);
@@ -1710,7 +1725,8 @@ struct PointerRNA *UI_region_panel_custom_data_under_cursor(const struct bContex
 void UI_panel_custom_data_set(struct Panel *panel, struct PointerRNA *custom_data);
 
 /* Polyinstantiated panels for representing a list of data. */
-struct Panel *UI_panel_add_instanced(struct ARegion *region,
+struct Panel *UI_panel_add_instanced(const struct bContext *C,
+                                     struct ARegion *region,
                                      struct ListBase *panels,
                                      char *panel_idname,
                                      struct PointerRNA *custom_data);
@@ -1718,8 +1734,6 @@ void UI_panels_free_instanced(const struct bContext *C, struct ARegion *region);
 
 #define INSTANCED_PANEL_UNIQUE_STR_LEN 4
 void UI_list_panel_unique_str(struct Panel *panel, char *r_name);
-
-void UI_panel_set_expand_from_list_data(const struct bContext *C, struct Panel *panel);
 
 typedef void (*uiListPanelIDFromDataFunc)(void *data_link, char *r_idname);
 bool UI_panel_list_matches_data(struct ARegion *region,
@@ -1746,7 +1760,7 @@ void UI_popup_handlers_remove_all(struct bContext *C, struct ListBase *handlers)
  * be used to reinitialize some internal state if user preferences change. */
 
 void UI_init(void);
-void UI_init_userdef(struct Main *bmain);
+void UI_init_userdef(void);
 void UI_reinit_font(void);
 void UI_exit(void);
 
@@ -1861,6 +1875,9 @@ uiLayout *UI_block_layout(uiBlock *block,
                           const struct uiStyle *style);
 void UI_block_layout_set_current(uiBlock *block, uiLayout *layout);
 void UI_block_layout_resolve(uiBlock *block, int *r_x, int *r_y);
+void UI_block_layout_free(uiBlock *block);
+
+bool UI_block_apply_search_filter(uiBlock *block, const char *search_filter);
 
 void UI_region_message_subscribe(struct ARegion *region, struct wmMsgBus *mbus);
 
@@ -2414,6 +2431,8 @@ void uiItemTabsEnumR_prop(uiLayout *layout,
                           struct bContext *C,
                           struct PointerRNA *ptr,
                           PropertyRNA *prop,
+                          struct PointerRNA *ptr_highlight,
+                          PropertyRNA *prop_highlight,
                           bool icon_only);
 
 /* Only for testing, inspecting layouts. */

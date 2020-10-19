@@ -271,8 +271,8 @@ static float gpencil_brush_influence_calc(tGP_BrushEditData *gso,
   float distance = (float)len_v2v2_int(mval_i, co);
 
   /* Apply Brush curve. */
-  float brush_fallof = BKE_brush_curve_strength(brush, distance, (float)radius);
-  influence *= brush_fallof;
+  float brush_falloff = BKE_brush_curve_strength(brush, distance, (float)radius);
+  influence *= brush_falloff;
 
   /* apply multiframe falloff */
   influence *= gso->mf_falloff;
@@ -546,12 +546,11 @@ static void gpencil_brush_grab_apply_cached(tGP_BrushEditData *gso,
     return;
   }
 
-  int i;
   float inverse_diff_mat[4][4];
   invert_m4_m4(inverse_diff_mat, diff_mat);
 
   /* Apply dvec to all of the stored points */
-  for (i = 0; i < data->size; i++) {
+  for (int i = 0; i < data->size; i++) {
     bGPDspoint *pt = &gps->points[data->points[i]];
     float delta[3] = {0.0f};
 
@@ -761,7 +760,7 @@ static bool gpencil_brush_twist_apply(tGP_BrushEditData *gso,
     float rmat[3][3];
 
     /* Express position of point relative to cursor, ready to rotate */
-    // XXX: There is still some offset here, but it's close to working as expected...
+    /* XXX: There is still some offset here, but it's close to working as expected. */
     vec[0] = (float)(co[0] - gso->mval[0]);
     vec[1] = (float)(co[1] - gso->mval[1]);
 
@@ -779,7 +778,7 @@ static bool gpencil_brush_twist_apply(tGP_BrushEditData *gso,
       UI_view2d_region_to_view(v2d, vec[0], vec[1], &pt->x, &pt->y);
     }
     else {
-      // XXX
+      /* XXX */
       copy_v2_v2(&pt->x, vec);
     }
   }
@@ -1106,7 +1105,7 @@ static bool gpencil_sculpt_brush_apply_clone(bContext *C, tGP_BrushEditData *gso
       gpencil_brush_clone_adjust(gso);
     }
     else {
-      /* Continuous - Just keep pasting everytime we move */
+      /* Continuous - Just keep pasting every time we move. */
       /* TODO: The spacing of repeat should be controlled using a
        * "stepsize" or similar property? */
       gpencil_brush_clone_add(C, gso);
@@ -2126,7 +2125,7 @@ void GPENCIL_OT_sculpt_paint(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Stroke Sculpt";
   ot->idname = "GPENCIL_OT_sculpt_paint";
-  ot->description = "Apply tweaks to strokes by painting over the strokes";  // XXX
+  ot->description = "Apply tweaks to strokes by painting over the strokes"; /* XXX */
 
   /* api callbacks */
   ot->exec = gpencil_sculpt_brush_exec;

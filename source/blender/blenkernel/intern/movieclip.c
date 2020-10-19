@@ -35,6 +35,11 @@
 
 #include "MEM_guardedalloc.h"
 
+/* Allow using deprecated functionality for .blend file I/O. */
+#define DNA_DEPRECATED_ALLOW
+
+#include "DNA_defaults.h"
+
 #include "DNA_constraint_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_movieclip_types.h"
@@ -54,6 +59,7 @@
 
 #include "BLT_translation.h"
 
+#include "BKE_anim_data.h"
 #include "BKE_colortools.h"
 #include "BKE_global.h"
 #include "BKE_idtype.h"
@@ -74,11 +80,24 @@
 
 #include "GPU_texture.h"
 
+#include "BLO_read_write.h"
+
 #ifdef WITH_OPENEXR
 #  include "intern/openexr/openexr_multi.h"
 #endif
 
 static void free_buffers(MovieClip *clip);
+
+static void movie_clip_init_data(ID *id)
+{
+  MovieClip *movie_clip = (MovieClip *)id;
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(movie_clip, id));
+
+  MEMCPY_STRUCT_AFTER(movie_clip, DNA_struct_default_get(MovieClip), id);
+
+  BKE_tracking_settings_init(&movie_clip->tracking);
+  BKE_color_managed_colorspace_settings_init(&movie_clip->colorspace_settings);
+}
 
 static void movie_clip_copy_data(Main *UNUSED(bmain), ID *id_dst, const ID *id_src, const int flag)
 {
@@ -146,6 +165,179 @@ static void movie_clip_foreach_cache(ID *id,
   function_callback(id, &key, (void **)&movie_clip->tracking.camera.intrinsics, 0, user_data);
 }
 
+static void write_movieTracks(BlendWriter *writer, ListBase *tracks)
+{
+  MovieTrackingTrack *track;
+
+  track = tracks->first;
+  while (track) {
+    BLO_write_struct(writer, MovieTrackingTrack, track);
+
+    if (track->markers) {
+      BLO_write_struct_array(writer, MovieTrackingMarker, track->markersnr, track->markers);
+    }
+
+    track = track->next;
+  }
+}
+
+static void write_moviePlaneTracks(BlendWriter *writer, ListBase *plane_tracks_base)
+{
+  MovieTrackingPlaneTrack *plane_track;
+
+  for (plane_track = plane_tracks_base->first; plane_track; plane_track = plane_track->next) {
+    BLO_write_struct(writer, MovieTrackingPlaneTrack, plane_track);
+
+    BLO_write_pointer_array(writer, plane_track->point_tracksnr, plane_track->point_tracks);
+    BLO_write_struct_array(
+        writer, MovieTrackingPlaneMarker, plane_track->markersnr, plane_track->markers);
+  }
+}
+
+static void write_movieReconstruction(BlendWriter *writer,
+                                      MovieTrackingReconstruction *reconstruction)
+{
+  if (reconstruction->camnr) {
+    BLO_write_struct_array(
+        writer, MovieReconstructedCamera, reconstruction->camnr, reconstruction->cameras);
+  }
+}
+
+static void movieclip_blend_write(BlendWriter *writer, ID *id, const void *id_address)
+{
+  MovieClip *clip = (MovieClip *)id;
+  if (clip->id.us > 0 || BLO_write_is_undo(writer)) {
+    /* Clean up, important in undo case to reduce false detection of changed datablocks. */
+    clip->anim = NULL;
+    clip->tracking_context = NULL;
+    clip->tracking.stats = NULL;
+
+    MovieTracking *tracking = &clip->tracking;
+    MovieTrackingObject *object;
+
+    BLO_write_id_struct(writer, MovieClip, id_address, &clip->id);
+    BKE_id_blend_write(writer, &clip->id);
+
+    if (clip->adt) {
+      BKE_animdata_blend_write(writer, clip->adt);
+    }
+
+    write_movieTracks(writer, &tracking->tracks);
+    write_moviePlaneTracks(writer, &tracking->plane_tracks);
+    write_movieReconstruction(writer, &tracking->reconstruction);
+
+    object = tracking->objects.first;
+    while (object) {
+      BLO_write_struct(writer, MovieTrackingObject, object);
+
+      write_movieTracks(writer, &object->tracks);
+      write_moviePlaneTracks(writer, &object->plane_tracks);
+      write_movieReconstruction(writer, &object->reconstruction);
+
+      object = object->next;
+    }
+  }
+}
+
+static void direct_link_movieReconstruction(BlendDataReader *reader,
+                                            MovieTrackingReconstruction *reconstruction)
+{
+  BLO_read_data_address(reader, &reconstruction->cameras);
+}
+
+static void direct_link_movieTracks(BlendDataReader *reader, ListBase *tracksbase)
+{
+  BLO_read_list(reader, tracksbase);
+
+  LISTBASE_FOREACH (MovieTrackingTrack *, track, tracksbase) {
+    BLO_read_data_address(reader, &track->markers);
+  }
+}
+
+static void direct_link_moviePlaneTracks(BlendDataReader *reader, ListBase *plane_tracks_base)
+{
+  BLO_read_list(reader, plane_tracks_base);
+
+  LISTBASE_FOREACH (MovieTrackingPlaneTrack *, plane_track, plane_tracks_base) {
+    BLO_read_pointer_array(reader, (void **)&plane_track->point_tracks);
+    for (int i = 0; i < plane_track->point_tracksnr; i++) {
+      BLO_read_data_address(reader, &plane_track->point_tracks[i]);
+    }
+
+    BLO_read_data_address(reader, &plane_track->markers);
+  }
+}
+
+static void movieclip_blend_read_data(BlendDataReader *reader, ID *id)
+{
+  MovieClip *clip = (MovieClip *)id;
+  MovieTracking *tracking = &clip->tracking;
+
+  BLO_read_data_address(reader, &clip->adt);
+
+  direct_link_movieTracks(reader, &tracking->tracks);
+  direct_link_moviePlaneTracks(reader, &tracking->plane_tracks);
+  direct_link_movieReconstruction(reader, &tracking->reconstruction);
+
+  BLO_read_data_address(reader, &clip->tracking.act_track);
+  BLO_read_data_address(reader, &clip->tracking.act_plane_track);
+
+  clip->anim = NULL;
+  clip->tracking_context = NULL;
+  clip->tracking.stats = NULL;
+
+  /* TODO we could store those in undo cache storage as well, and preserve them instead of
+   * re-creating them... */
+  BLI_listbase_clear(&clip->runtime.gputextures);
+
+  /* Needed for proper versioning, will be NULL for all newer files anyway. */
+  BLO_read_data_address(reader, &clip->tracking.stabilization.rot_track);
+
+  clip->tracking.dopesheet.ok = 0;
+  BLI_listbase_clear(&clip->tracking.dopesheet.channels);
+  BLI_listbase_clear(&clip->tracking.dopesheet.coverage_segments);
+
+  BLO_read_list(reader, &tracking->objects);
+
+  LISTBASE_FOREACH (MovieTrackingObject *, object, &tracking->objects) {
+    direct_link_movieTracks(reader, &object->tracks);
+    direct_link_moviePlaneTracks(reader, &object->plane_tracks);
+    direct_link_movieReconstruction(reader, &object->reconstruction);
+  }
+}
+
+static void lib_link_movieTracks(BlendLibReader *reader, MovieClip *clip, ListBase *tracksbase)
+{
+  LISTBASE_FOREACH (MovieTrackingTrack *, track, tracksbase) {
+    BLO_read_id_address(reader, clip->id.lib, &track->gpd);
+  }
+}
+
+static void lib_link_moviePlaneTracks(BlendLibReader *reader,
+                                      MovieClip *clip,
+                                      ListBase *tracksbase)
+{
+  LISTBASE_FOREACH (MovieTrackingPlaneTrack *, plane_track, tracksbase) {
+    BLO_read_id_address(reader, clip->id.lib, &plane_track->image);
+  }
+}
+
+static void movieclip_blend_read_lib(BlendLibReader *reader, ID *id)
+{
+  MovieClip *clip = (MovieClip *)id;
+  MovieTracking *tracking = &clip->tracking;
+
+  BLO_read_id_address(reader, clip->id.lib, &clip->gpd);
+
+  lib_link_movieTracks(reader, clip, &tracking->tracks);
+  lib_link_moviePlaneTracks(reader, clip, &tracking->plane_tracks);
+
+  LISTBASE_FOREACH (MovieTrackingObject *, object, &tracking->objects) {
+    lib_link_movieTracks(reader, clip, &object->tracks);
+    lib_link_moviePlaneTracks(reader, clip, &object->plane_tracks);
+  }
+}
+
 IDTypeInfo IDType_ID_MC = {
     .id_code = ID_MC,
     .id_filter = FILTER_ID_MC,
@@ -156,16 +348,16 @@ IDTypeInfo IDType_ID_MC = {
     .translation_context = BLT_I18NCONTEXT_ID_MOVIECLIP,
     .flags = 0,
 
-    .init_data = NULL,
+    .init_data = movie_clip_init_data,
     .copy_data = movie_clip_copy_data,
     .free_data = movie_clip_free_data,
     .make_local = NULL,
     .foreach_id = movie_clip_foreach_id,
     .foreach_cache = movie_clip_foreach_cache,
 
-    .blend_write = NULL,
-    .blend_read_data = NULL,
-    .blend_read_lib = NULL,
+    .blend_write = movieclip_blend_write,
+    .blend_read_data = movieclip_blend_read_data,
+    .blend_read_lib = movieclip_blend_read_lib,
     .blend_read_expand = NULL,
 };
 
@@ -508,6 +700,8 @@ typedef struct MovieClipCache {
     float polynomial_k[3];
     float division_k[2];
     float nuke_k[2];
+    float brown_k[4];
+    float brown_p[2];
     short distortion_model;
     bool undistortion_used;
 
@@ -740,20 +934,7 @@ static MovieClip *movieclip_alloc(Main *bmain, const char *name)
 {
   MovieClip *clip;
 
-  clip = BKE_libblock_alloc(bmain, ID_MC, name, 0);
-
-  clip->aspx = clip->aspy = 1.0f;
-
-  BKE_tracking_settings_init(&clip->tracking);
-  BKE_color_managed_colorspace_settings_init(&clip->colorspace_settings);
-
-  clip->proxy.build_size_flag = IMB_PROXY_25;
-  clip->proxy.build_tc_flag = IMB_TC_RECORD_RUN | IMB_TC_FREE_RUN |
-                              IMB_TC_INTERPOLATED_REC_DATE_FREE_RUN | IMB_TC_RECORD_RUN_NO_GAPS;
-  clip->proxy.quality = 90;
-
-  clip->start_frame = 1;
-  clip->frame_offset = 0;
+  clip = BKE_id_new(bmain, ID_MC, name);
 
   return clip;
 }
@@ -955,7 +1136,15 @@ static bool check_undistortion_cache_flags(const MovieClip *clip)
   if (!equals_v2v2(&camera->division_k1, cache->postprocessed.division_k)) {
     return false;
   }
+
   if (!equals_v2v2(&camera->nuke_k1, cache->postprocessed.nuke_k)) {
+    return false;
+  }
+
+  if (!equals_v4v4(&camera->brown_k1, cache->postprocessed.brown_k)) {
+    return false;
+  }
+  if (!equals_v2v2(&camera->brown_p1, cache->postprocessed.brown_p)) {
     return false;
   }
 
@@ -1061,6 +1250,8 @@ static void put_postprocessed_frame_to_cache(
     copy_v3_v3(cache->postprocessed.polynomial_k, &camera->k1);
     copy_v2_v2(cache->postprocessed.division_k, &camera->division_k1);
     copy_v2_v2(cache->postprocessed.nuke_k, &camera->nuke_k1);
+    copy_v4_v4(cache->postprocessed.brown_k, &camera->brown_k1);
+    copy_v2_v2(cache->postprocessed.brown_p, &camera->brown_p1);
     cache->postprocessed.undistortion_used = true;
   }
   else {
@@ -1725,13 +1916,6 @@ void BKE_movieclip_build_proxy_frame_for_ibuf(MovieClip *clip,
       IMB_freeImBuf(tmpibuf);
     }
   }
-}
-
-MovieClip *BKE_movieclip_copy(Main *bmain, const MovieClip *clip)
-{
-  MovieClip *clip_copy;
-  BKE_id_copy(bmain, &clip->id, (ID **)&clip_copy);
-  return clip_copy;
 }
 
 float BKE_movieclip_remap_scene_to_clip_frame(const MovieClip *clip, float framenr)

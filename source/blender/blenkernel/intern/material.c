@@ -29,6 +29,9 @@
 
 #include "MEM_guardedalloc.h"
 
+/* Allow using deprecated functionality for .blend file I/O. */
+#define DNA_DEPRECATED_ALLOW
+
 #include "DNA_ID.h"
 #include "DNA_anim_types.h"
 #include "DNA_collection_types.h"
@@ -54,6 +57,7 @@
 
 #include "BLT_translation.h"
 
+#include "BKE_anim_data.h"
 #include "BKE_brush.h"
 #include "BKE_curve.h"
 #include "BKE_displist.h"
@@ -78,6 +82,8 @@
 
 #include "NOD_shader.h"
 
+#include "BLO_read_write.h"
+
 static CLG_LogRef LOG = {"bke.material"};
 
 static void material_init_data(ID *id)
@@ -94,12 +100,20 @@ static void material_copy_data(Main *bmain, ID *id_dst, const ID *id_src, const 
   Material *material_dst = (Material *)id_dst;
   const Material *material_src = (const Material *)id_src;
 
+  const bool is_localized = (flag & LIB_ID_CREATE_LOCAL) != 0;
   /* We always need allocation of our private ID data. */
   const int flag_private_id_data = flag & ~LIB_ID_CREATE_NO_ALLOCATE;
 
-  if (material_src->nodetree) {
-    BKE_id_copy_ex(
-        bmain, (ID *)material_src->nodetree, (ID **)&material_dst->nodetree, flag_private_id_data);
+  if (material_src->nodetree != NULL) {
+    if (is_localized) {
+      material_dst->nodetree = ntreeLocalize(material_src->nodetree);
+    }
+    else {
+      BKE_id_copy_ex(bmain,
+                     (ID *)material_src->nodetree,
+                     (ID **)&material_dst->nodetree,
+                     flag_private_id_data);
+    }
   }
 
   if ((flag & LIB_ID_COPY_NO_PREVIEW) == 0) {
@@ -110,7 +124,8 @@ static void material_copy_data(Main *bmain, ID *id_dst, const ID *id_src, const 
   }
 
   if (material_src->texpaintslot != NULL) {
-    material_dst->texpaintslot = MEM_dupallocN(material_src->texpaintslot);
+    /* TODO: Think we can also skip copying this data in the more generic `NO_MAIN` case? */
+    material_dst->texpaintslot = is_localized ? NULL : MEM_dupallocN(material_src->texpaintslot);
   }
 
   if (material_src->gp_style != NULL) {
@@ -160,6 +175,82 @@ static void material_foreach_id(ID *id, LibraryForeachIDData *data)
   }
 }
 
+static void material_blend_write(BlendWriter *writer, ID *id, const void *id_address)
+{
+  Material *ma = (Material *)id;
+  if (ma->id.us > 0 || BLO_write_is_undo(writer)) {
+    /* Clean up, important in undo case to reduce false detection of changed datablocks. */
+    ma->texpaintslot = NULL;
+    BLI_listbase_clear(&ma->gpumaterial);
+
+    /* write LibData */
+    BLO_write_id_struct(writer, Material, id_address, &ma->id);
+    BKE_id_blend_write(writer, &ma->id);
+
+    if (ma->adt) {
+      BKE_animdata_blend_write(writer, ma->adt);
+    }
+
+    /* nodetree is integral part of material, no libdata */
+    if (ma->nodetree) {
+      BLO_write_struct(writer, bNodeTree, ma->nodetree);
+      ntreeBlendWrite(writer, ma->nodetree);
+    }
+
+    BKE_previewimg_blend_write(writer, ma->preview);
+
+    /* grease pencil settings */
+    if (ma->gp_style) {
+      BLO_write_struct(writer, MaterialGPencilStyle, ma->gp_style);
+    }
+  }
+}
+
+static void material_blend_read_data(BlendDataReader *reader, ID *id)
+{
+  Material *ma = (Material *)id;
+  BLO_read_data_address(reader, &ma->adt);
+  BKE_animdata_blend_read_data(reader, ma->adt);
+
+  ma->texpaintslot = NULL;
+
+  BLO_read_data_address(reader, &ma->preview);
+  BKE_previewimg_blend_read(reader, ma->preview);
+
+  BLI_listbase_clear(&ma->gpumaterial);
+
+  BLO_read_data_address(reader, &ma->gp_style);
+}
+
+static void material_blend_read_lib(BlendLibReader *reader, ID *id)
+{
+  Material *ma = (Material *)id;
+  BLO_read_id_address(reader, ma->id.lib, &ma->ipo); /* XXX deprecated - old animation system */
+
+  /* relink grease pencil settings */
+  if (ma->gp_style != NULL) {
+    MaterialGPencilStyle *gp_style = ma->gp_style;
+    if (gp_style->sima != NULL) {
+      BLO_read_id_address(reader, ma->id.lib, &gp_style->sima);
+    }
+    if (gp_style->ima != NULL) {
+      BLO_read_id_address(reader, ma->id.lib, &gp_style->ima);
+    }
+  }
+}
+
+static void material_blend_read_expand(BlendExpander *expander, ID *id)
+{
+  Material *ma = (Material *)id;
+  BLO_expand(expander, ma->ipo); /* XXX deprecated - old animation system */
+
+  if (ma->gp_style) {
+    MaterialGPencilStyle *gp_style = ma->gp_style;
+    BLO_expand(expander, gp_style->sima);
+    BLO_expand(expander, gp_style->ima);
+  }
+}
+
 IDTypeInfo IDType_ID_MA = {
     .id_code = ID_MA,
     .id_filter = FILTER_ID_MA,
@@ -177,10 +268,10 @@ IDTypeInfo IDType_ID_MA = {
     .foreach_id = material_foreach_id,
     .foreach_cache = NULL,
 
-    .blend_write = NULL,
-    .blend_read_data = NULL,
-    .blend_read_lib = NULL,
-    .blend_read_expand = NULL,
+    .blend_write = material_blend_write,
+    .blend_read_data = material_blend_read_data,
+    .blend_read_lib = material_blend_read_lib,
+    .blend_read_expand = material_blend_read_expand,
 };
 
 void BKE_gpencil_material_attr_init(Material *ma)
@@ -206,9 +297,7 @@ Material *BKE_material_add(Main *bmain, const char *name)
 {
   Material *ma;
 
-  ma = BKE_libblock_alloc(bmain, ID_MA, name, 0);
-
-  material_init_data(&ma->id);
+  ma = BKE_id_new(bmain, ID_MA, name);
 
   return ma;
 }
@@ -224,48 +313,6 @@ Material *BKE_gpencil_material_add(Main *bmain, const char *name)
     BKE_gpencil_material_attr_init(ma);
   }
   return ma;
-}
-
-Material *BKE_material_copy(Main *bmain, const Material *ma)
-{
-  Material *ma_copy;
-  BKE_id_copy(bmain, &ma->id, (ID **)&ma_copy);
-  return ma_copy;
-}
-
-/* XXX (see above) material copy without adding to main dbase */
-Material *BKE_material_localize(Material *ma)
-{
-  /* TODO(bastien): Replace with something like:
-   *
-   *   Material *ma_copy;
-   *   BKE_id_copy_ex(bmain, &ma->id, (ID **)&ma_copy,
-   *                  LIB_ID_COPY_NO_MAIN | LIB_ID_COPY_NO_PREVIEW | LIB_ID_COPY_NO_USER_REFCOUNT,
-   *                  false);
-   *   return ma_copy;
-   *
-   * NOTE: Only possible once nested node trees are fully converted to that too. */
-
-  Material *man = BKE_libblock_copy_for_localize(&ma->id);
-
-  man->texpaintslot = NULL;
-  man->preview = NULL;
-
-  if (ma->nodetree != NULL) {
-    man->nodetree = ntreeLocalize(ma->nodetree);
-  }
-
-  if (ma->gp_style != NULL) {
-    man->gp_style = MEM_dupallocN(ma->gp_style);
-  }
-
-  BLI_listbase_clear(&man->gpumaterial);
-
-  /* TODO Duplicate Engine Settings and set runtime to NULL */
-
-  man->id.tag |= LIB_TAG_LOCALIZED;
-
-  return man;
 }
 
 Material ***BKE_object_material_array_p(Object *ob)
@@ -450,6 +497,27 @@ static void material_data_index_clear_id(ID *id)
       break;
     default:
       break;
+  }
+}
+
+void BKE_id_materials_copy(Main *bmain, ID *id_src, ID *id_dst)
+{
+  Material ***matar_src = BKE_id_material_array_p(id_src);
+  const short *materials_len_p_src = BKE_id_material_len_p(id_src);
+
+  Material ***matar_dst = BKE_id_material_array_p(id_dst);
+  short *materials_len_p_dst = BKE_id_material_len_p(id_dst);
+
+  *materials_len_p_dst = *materials_len_p_src;
+  if (*materials_len_p_src != 0) {
+    (*matar_dst) = MEM_dupallocN(*matar_src);
+
+    for (int a = 0; a < *materials_len_p_src; a++) {
+      id_us_plus((ID *)(*matar_dst)[a]);
+    }
+
+    DEG_id_tag_update(id_dst, ID_RECALC_COPY_ON_WRITE);
+    DEG_relations_tag_update(bmain);
   }
 }
 
@@ -1287,9 +1355,7 @@ void BKE_texpaint_slot_refresh_cache(Scene *scene, Material *ma)
 
 void BKE_texpaint_slots_refresh_object(Scene *scene, struct Object *ob)
 {
-  int i;
-
-  for (i = 1; i < ob->totcol + 1; i++) {
+  for (int i = 1; i < ob->totcol + 1; i++) {
     Material *ma = BKE_object_material_get(ob, i);
     BKE_texpaint_slot_refresh_cache(scene, ma);
   }

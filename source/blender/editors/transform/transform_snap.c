@@ -280,7 +280,7 @@ eRedrawFlag handleSnapping(TransInfo *t, const wmEvent *event)
 {
   eRedrawFlag status = TREDRAW_NOTHING;
 
-#if 0  // XXX need a proper selector for all snap mode
+#if 0 /* XXX need a proper selector for all snap mode */
   if (BIF_snappingSupported(t->obedit) && event->type == TABKEY && event->shift) {
     /* toggle snap and reinit */
     t->settings->snap_flag ^= SCE_SNAP;
@@ -370,7 +370,9 @@ void applyProject(TransInfo *t)
           }
         }
 
-        // XXX constraintTransLim(t, td);
+#if 0 /* TODO: sipport this? */
+         constraintTransLim(t, td);
+#endif
       }
     }
   }
@@ -384,7 +386,7 @@ void applyGridAbsolute(TransInfo *t)
     return;
   }
 
-  float grid_size = (t->modifiers & MOD_PRECISION) ? t->snap_spatial[2] : t->snap_spatial[1];
+  float grid_size = (t->modifiers & MOD_PRECISION) ? t->snap_spatial[1] : t->snap_spatial[0];
 
   /* early exit on unusable grid size */
   if (grid_size == 0.0f) {
@@ -447,8 +449,8 @@ void applySnapping(TransInfo *t, float *vec)
            activeSnap(t)) {
     double current = PIL_check_seconds_timer();
 
-    // Time base quirky code to go around findnearest slowness
-    /* !TODO! add exception for object mode, no need to slow it down then */
+    /* Time base quirky code to go around findnearest slowness */
+    /* TODO: add exception for object mode, no need to slow it down then. */
     if (current - t->tsnap.last >= 0.01) {
       t->tsnap.calcSnap(t, vec);
       t->tsnap.targetSnap(t);
@@ -464,6 +466,7 @@ void applySnapping(TransInfo *t, float *vec)
 void resetSnapping(TransInfo *t)
 {
   t->tsnap.status = 0;
+  t->tsnap.snapElem = 0;
   t->tsnap.align = false;
   t->tsnap.project = 0;
   t->tsnap.mode = 0;
@@ -830,7 +833,7 @@ static void CalcSnapGeometry(TransInfo *t, float *UNUSED(vec))
     float mval[2];
     bool found = false;
     short snap_elem = 0;
-    float dist_px = SNAP_MIN_DISTANCE;  // Use a user defined value here
+    float dist_px = SNAP_MIN_DISTANCE; /* Use a user defined value here. */
 
     mval[0] = t->mval[0];
     mval[1] = t->mval[1];
@@ -889,7 +892,7 @@ static void CalcSnapGeometry(TransInfo *t, float *UNUSED(vec))
   else if (t->spacetype == SPACE_NODE) {
     if (t->tsnap.mode & (SCE_SNAP_MODE_NODE_X | SCE_SNAP_MODE_NODE_Y)) {
       float loc[2];
-      float dist_px = SNAP_MIN_DISTANCE;  // Use a user defined value here
+      float dist_px = SNAP_MIN_DISTANCE; /* Use a user defined value here. */
       char node_border;
 
       if (snapNodesTransform(t, t->mval, loc, &dist_px, &node_border)) {
@@ -980,7 +983,7 @@ static void TargetSnapActive(TransInfo *t)
 
 static void TargetSnapMedian(TransInfo *t)
 {
-  // Only need to calculate once
+  /* Only need to calculate once. */
   if ((t->tsnap.status & TARGET_INIT) == 0) {
     int i_accum = 0;
 
@@ -1023,7 +1026,7 @@ static void TargetSnapMedian(TransInfo *t)
 
 static void TargetSnapClosest(TransInfo *t)
 {
-  // Only valid if a snap point has been selected
+  /* Only valid if a snap point has been selected. */
   if (t->tsnap.status & POINT_INIT) {
     float dist_closest = 0.0f;
     TransData *closest = NULL;
@@ -1369,7 +1372,7 @@ void snapFrameTransform(TransInfo *t,
       break;
     case SACTSNAP_MARKER:
       /* snap to nearest marker */
-      // TODO: need some more careful checks for where data comes from
+      /* TODO: need some more careful checks for where data comes from. */
       val = ED_markers_find_nearest_marker_time(&t->scene->markers, (float)val);
       break;
     case SACTSNAP_SECOND:
@@ -1412,12 +1415,12 @@ void snapSequenceBounds(TransInfo *t, const int mval[2])
   t->values[0] = frame_near - frame_snap;
 }
 
-static void snap_grid_apply_ex(
+static void snap_grid_apply(
     TransInfo *t, const int max_index, const float grid_dist, const float loc[3], float r_out[3])
 {
+  BLI_assert(max_index <= 2);
   const float *center_global = t->center_global;
   const float *asp = t->aspect;
-  bool use_local_axis = false;
 
   /* use a fallback for cursor selection,
    * this isn't useful as a global center for absolute grid snapping
@@ -1427,74 +1430,27 @@ static void snap_grid_apply_ex(
     center_global = cd->global;
   }
 
-  if (t->con.mode & (CON_AXIS0 | CON_AXIS1 | CON_AXIS2)) {
-    use_local_axis = true;
+  float in[3];
+  if (t->con.mode & CON_APPLY) {
+    BLI_assert(t->tsnap.snapElem == 0);
+    t->con.applyVec(t, NULL, NULL, loc, in);
+  }
+  else {
+    copy_v3_v3(in, loc);
   }
 
   for (int i = 0; i <= max_index; i++) {
-    /* do not let unconstrained axis jump to absolute grid increments */
-    if (!(t->con.mode & CON_APPLY) || t->con.mode & (CON_AXIS0 << i)) {
-      const float iter_fac = grid_dist * asp[i];
-
-      if (use_local_axis) {
-        float local_axis[3];
-        float pos_on_axis[3];
-
-        copy_v3_v3(local_axis, t->spacemtx[i]);
-        copy_v3_v3(pos_on_axis, t->spacemtx[i]);
-
-        /* amount of movement on axis from initial pos */
-        mul_v3_fl(pos_on_axis, loc[i]);
-
-        /* actual global position on axis */
-        add_v3_v3(pos_on_axis, center_global);
-
-        float min_dist = INFINITY;
-        for (int j = 0; j < 3; j++) {
-          if (fabs(local_axis[j]) < 0.01f) {
-            /* Ignore very small (normalized) axis changes */
-            continue;
-          }
-
-          /* closest point on grid */
-          float grid_p = iter_fac * roundf(pos_on_axis[j] / iter_fac);
-          float dist_p = fabs((grid_p - pos_on_axis[j]) / local_axis[j]);
-
-          /* The amount of distance needed to travel along the
-           * local axis to snap to the closest grid point */
-          /* in the global j axis direction */
-          float move_dist = (grid_p - center_global[j]) / local_axis[j];
-
-          if (dist_p < min_dist) {
-            min_dist = dist_p;
-            r_out[i] = move_dist;
-          }
-        }
-      }
-      else {
-        r_out[i] = iter_fac * roundf((loc[i] + center_global[i]) / iter_fac) - center_global[i];
-      }
-    }
+    const float iter_fac = grid_dist * asp[i];
+    r_out[i] = iter_fac * roundf((in[i] + center_global[i]) / iter_fac) - center_global[i];
   }
-}
-
-static void snap_grid_apply(TransInfo *t, int max_index, const float grid_dist, float *r_val)
-{
-  BLI_assert(t->tsnap.mode & SCE_SNAP_MODE_GRID);
-  BLI_assert(max_index <= 2);
-
-  /* Early bailing out if no need to snap */
-  if (grid_dist == 0.0f) {
-    return;
-  }
-
-  /* absolute snapping on grid based on global center.
-   * for now only 3d view (others can be added if we want) */
-  snap_grid_apply_ex(t, max_index, grid_dist, r_val, r_val);
 }
 
 bool transform_snap_grid(TransInfo *t, float *val)
 {
+  if (!activeSnap(t)) {
+    return false;
+  }
+
   if ((!(t->tsnap.mode & SCE_SNAP_MODE_GRID)) || validSnap(t)) {
     /* Don't do grid snapping if there is a valid snap point. */
     return false;
@@ -1508,10 +1464,15 @@ bool transform_snap_grid(TransInfo *t, float *val)
     return false;
   }
 
-  float grid_dist = activeSnap(t) ? (t->modifiers & MOD_PRECISION) ? t->snap[2] : t->snap[1] :
-                                    t->snap[0];
+  float grid_dist = (t->modifiers & MOD_PRECISION) ? t->snap[1] : t->snap[0];
 
-  snap_grid_apply(t, t->idx_max, grid_dist, val);
+  /* Early bailing out if no need to snap */
+  if (grid_dist == 0.0f) {
+    return false;
+  }
+
+  snap_grid_apply(t, t->idx_max, grid_dist, val, val);
+  t->tsnap.snapElem = SCE_SNAP_MODE_GRID;
   return true;
 }
 
@@ -1564,6 +1525,10 @@ static void snap_increment_apply(TransInfo *t,
 
 bool transform_snap_increment(TransInfo *t, float *val)
 {
+  if (!activeSnap(t)) {
+    return false;
+  }
+
   if (!(t->tsnap.mode & SCE_SNAP_MODE_INCREMENT) && !doForceIncrementSnap(t)) {
     return false;
   }
@@ -1574,8 +1539,7 @@ bool transform_snap_increment(TransInfo *t, float *val)
     return false;
   }
 
-  float increment_dist = activeSnap(t) ? (t->modifiers & MOD_PRECISION) ? t->snap[2] : t->snap[1] :
-                                         t->snap[0];
+  float increment_dist = (t->modifiers & MOD_PRECISION) ? t->snap[1] : t->snap[0];
 
   snap_increment_apply(t, t->idx_max, increment_dist, val);
   return true;

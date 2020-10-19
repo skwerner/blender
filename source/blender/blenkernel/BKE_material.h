@@ -53,8 +53,6 @@ void BKE_object_material_remap_calc(struct Object *ob_dst,
                                     short *remap_src_to_dst);
 struct Material *BKE_material_add(struct Main *bmain, const char *name);
 struct Material *BKE_gpencil_material_add(struct Main *bmain, const char *name);
-struct Material *BKE_material_copy(struct Main *bmain, const struct Material *ma);
-struct Material *BKE_material_localize(struct Material *ma);
 void BKE_gpencil_material_attr_init(struct Material *ma);
 
 /* UNUSED */
@@ -99,6 +97,7 @@ void BKE_texpaint_slots_refresh_object(struct Scene *scene, struct Object *ob);
 struct bNode *BKE_texpaint_slot_material_find_node(struct Material *ma, short texpaint_slot);
 
 /* rna api */
+void BKE_id_materials_copy(struct Main *bmain, struct ID *id_src, struct ID *id_dst);
 void BKE_id_material_resize(struct Main *bmain, struct ID *id, short totcol, bool do_id_user);
 void BKE_id_material_append(struct Main *bmain, struct ID *id, struct Material *ma);
 struct Material *BKE_id_material_pop(struct Main *bmain,

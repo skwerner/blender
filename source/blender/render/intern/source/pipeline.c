@@ -36,6 +36,7 @@
 #include "DNA_particle_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_sequence_types.h"
+#include "DNA_space_types.h"
 #include "DNA_userdef_types.h"
 
 #include "MEM_guardedalloc.h"
@@ -1113,7 +1114,7 @@ void *RE_gl_context_get(Render *re)
 void *RE_gpu_context_get(Render *re)
 {
   if (re->gpu_context == NULL) {
-    re->gpu_context = GPU_context_create(0);
+    re->gpu_context = GPU_context_create(NULL);
   }
   return re->gpu_context;
 }
@@ -1502,8 +1503,14 @@ static void do_render_seq(Render *re)
   tot_views = BKE_scene_multiview_num_views_get(&re->r);
   ibuf_arr = MEM_mallocN(sizeof(ImBuf *) * tot_views, "Sequencer Views ImBufs");
 
-  BKE_sequencer_new_render_data(
-      re->main, re->pipeline_depsgraph, re->scene, re_x, re_y, 100, true, &context);
+  BKE_sequencer_new_render_data(re->main,
+                                re->pipeline_depsgraph,
+                                re->scene,
+                                re_x,
+                                re_y,
+                                SEQ_RENDER_SIZE_SCENE,
+                                true,
+                                &context);
 
   /* the renderresult gets destroyed during the rendering, so we first collect all ibufs
    * and then we populate the final renderesult */

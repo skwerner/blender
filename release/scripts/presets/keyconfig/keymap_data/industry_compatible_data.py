@@ -462,7 +462,8 @@ def km_outliner(params):
 
     items.extend([
         ("outliner.item_rename", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'}, None),
-        ("outliner.item_rename", {"type": 'RET', "value": 'PRESS'}, None),
+        ("outliner.item_rename", {"type": 'RET', "value": 'PRESS'},
+         {"properties": [("use_active", True)]}),
         ("wm.search_menu", {"type": 'TAB', "value": 'PRESS'}, None),
         ("outliner.highlight_update", {"type": 'MOUSEMOVE', "value": 'ANY', "any": True}, None),
         ("outliner.item_activate", {"type": 'LEFTMOUSE', "value": 'CLICK'},
@@ -3936,7 +3937,7 @@ def km_transform_modal_map(_params):
         ("AUTOIK_CHAIN_LEN_DOWN", {"type": 'WHEELUPMOUSE', "value": 'PRESS', "shift": True}, None),
         ("INSERTOFS_TOGGLE_DIR", {"type": 'T', "value": 'PRESS'}, None),
         ("AUTOCONSTRAIN", {"type": 'MIDDLEMOUSE', "value": 'PRESS'}, None),
-        ("AUTOCONSTRAIN", {"type": 'MIDDLEMOUSE', "value": 'PRESS', "shift": True}, None),
+        ("AUTOCONSTRAINPLANE", {"type": 'MIDDLEMOUSE', "value": 'PRESS', "shift": True}, None),
     ])
 
     return keymap

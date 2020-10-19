@@ -24,7 +24,7 @@
 #include <ctype.h>
 #include <float.h>
 #include <math.h>
-#include <stddef.h>  //for offsetof
+#include <stddef.h> /* for offsetof */
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -100,6 +100,8 @@
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
 
+#include "UI_interface_icons.h"
+
 #include "CLG_log.h"
 
 /* for menu/popup icons etc etc*/
@@ -112,7 +114,7 @@
 #include "WM_toolsystem.h"
 #include "WM_types.h"
 
-#include "object_intern.h"  // own include
+#include "object_intern.h" /* own include */
 
 static CLG_LogRef LOG = {"ed.object.edit"};
 
@@ -194,11 +196,13 @@ Object **ED_object_array_in_mode_or_selected(bContext *C,
     /* When in a mode that supports multiple active objects, use "objects in mode"
      * instead of the object's selection. */
     if ((ob_active != NULL) && (ob_active->mode & (OB_MODE_EDIT | OB_MODE_POSE))) {
-      objects = BKE_view_layer_array_from_objects_in_mode(
-          view_layer,
-          v3d,
-          r_objects_len,
-          {.no_dup_data = true, .filter_fn = filter_fn, .filter_userdata = filter_user_data});
+      objects = BKE_view_layer_array_from_objects_in_mode(view_layer,
+                                                          v3d,
+                                                          r_objects_len,
+                                                          {.object_mode = ob_active->mode,
+                                                           .no_dup_data = true,
+                                                           .filter_fn = filter_fn,
+                                                           .filter_userdata = filter_user_data});
     }
     else {
       objects = BKE_view_layer_array_selected_objects(
@@ -253,6 +257,7 @@ static int object_hide_view_clear_exec(bContext *C, wmOperator *op)
   BKE_layer_collection_sync(scene, view_layer);
   DEG_id_tag_update(&scene->id, ID_RECALC_BASE_FLAGS);
   WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, scene);
+  WM_event_add_notifier(C, NC_SCENE | ND_OB_VISIBLE, scene);
 
   return OPERATOR_FINISHED;
 }
@@ -310,6 +315,7 @@ static int object_hide_view_set_exec(bContext *C, wmOperator *op)
   BKE_layer_collection_sync(scene, view_layer);
   DEG_id_tag_update(&scene->id, ID_RECALC_BASE_FLAGS);
   WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, scene);
+  WM_event_add_notifier(C, NC_SCENE | ND_OB_VISIBLE, scene);
 
   return OPERATOR_FINISHED;
 }
@@ -614,7 +620,7 @@ bool ED_object_editmode_exit_ex(Main *bmain, Scene *scene, Object *obedit, int f
 
   if (ED_object_editmode_load_ex(bmain, obedit, freedata) == false) {
     /* in rare cases (background mode) its possible active object
-     * is flagged for editmode, without 'obedit' being set [#35489] */
+     * is flagged for editmode, without 'obedit' being set T35489. */
     if (UNLIKELY(obedit && obedit->mode & OB_MODE_EDIT)) {
       obedit->mode &= ~OB_MODE_EDIT;
       /* Also happens when mesh is shared across multiple objects. [#T69834] */
@@ -769,14 +775,14 @@ bool ED_object_editmode_enter(bContext *C, int flag)
 
 static int editmode_toggle_exec(bContext *C, wmOperator *op)
 {
-  struct wmMsgBus *mbus = CTX_wm_message_bus(C);
-  const int mode_flag = OB_MODE_EDIT;
-  const bool is_mode_set = (CTX_data_edit_object(C) != NULL);
   Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
-  ViewLayer *view_layer = CTX_data_view_layer(C);
   View3D *v3d = CTX_wm_view3d(C);
+  ViewLayer *view_layer = CTX_data_view_layer(C);
   Object *obact = OBACT(view_layer);
+  const int mode_flag = OB_MODE_EDIT;
+  const bool is_mode_set = (obact->mode & mode_flag) != 0;
+  struct wmMsgBus *mbus = CTX_wm_message_bus(C);
 
   if (!is_mode_set) {
     if (!ED_object_mode_compat_set(C, obact, mode_flag, op->reports)) {
@@ -785,7 +791,7 @@ static int editmode_toggle_exec(bContext *C, wmOperator *op)
   }
 
   if (!is_mode_set) {
-    ED_object_editmode_enter(C, 0);
+    ED_object_editmode_enter_ex(bmain, scene, obact, 0);
     if (obact->mode & mode_flag) {
       FOREACH_SELECTED_OBJECT_BEGIN (view_layer, v3d, ob) {
         if ((ob != obact) && (ob->type == obact->type)) {
@@ -796,7 +802,8 @@ static int editmode_toggle_exec(bContext *C, wmOperator *op)
     }
   }
   else {
-    ED_object_editmode_exit(C, EM_FREEDATA);
+    ED_object_editmode_exit_ex(bmain, scene, obact, EM_FREEDATA);
+
     if ((obact->mode & mode_flag) == 0) {
       FOREACH_OBJECT_BEGIN (view_layer, ob) {
         if ((ob != obact) && (ob->type == obact->type)) {
@@ -859,6 +866,9 @@ void OBJECT_OT_editmode_toggle(wmOperatorType *ot)
 static int posemode_exec(bContext *C, wmOperator *op)
 {
   struct wmMsgBus *mbus = CTX_wm_message_bus(C);
+  struct Main *bmain = CTX_data_main(C);
+  Scene *scene = CTX_data_scene(C);
+  ViewLayer *view_layer = CTX_data_view_layer(C);
   Base *base = CTX_data_active_base(C);
 
   /* If the base is NULL it means we have an active object, but the object itself is hidden. */
@@ -880,16 +890,17 @@ static int posemode_exec(bContext *C, wmOperator *op)
     return OPERATOR_PASS_THROUGH;
   }
 
-  if (obact == CTX_data_edit_object(C)) {
-    ED_object_editmode_exit(C, EM_FREEDATA);
-    is_mode_set = false;
+  {
+    Object *obedit = OBEDIT_FROM_VIEW_LAYER(view_layer);
+    if (obact == obedit) {
+      ED_object_editmode_exit_ex(bmain, scene, obedit, EM_FREEDATA);
+      is_mode_set = false;
+    }
   }
 
   if (is_mode_set) {
     bool ok = ED_object_posemode_exit(C, obact);
     if (ok) {
-      struct Main *bmain = CTX_data_main(C);
-      ViewLayer *view_layer = CTX_data_view_layer(C);
       FOREACH_OBJECT_BEGIN (view_layer, ob) {
         if ((ob != obact) && (ob->type == OB_ARMATURE) && (ob->mode & mode_flag)) {
           ED_object_posemode_exit_ex(bmain, ob);
@@ -901,9 +912,7 @@ static int posemode_exec(bContext *C, wmOperator *op)
   else {
     bool ok = ED_object_posemode_enter(C, obact);
     if (ok) {
-      struct Main *bmain = CTX_data_main(C);
-      ViewLayer *view_layer = CTX_data_view_layer(C);
-      View3D *v3d = CTX_wm_view3d(C);
+      const View3D *v3d = CTX_wm_view3d(C);
       FOREACH_SELECTED_OBJECT_BEGIN (view_layer, v3d, ob) {
         if ((ob != obact) && (ob->type == OB_ARMATURE) && (ob->mode == OB_MODE_OBJECT) &&
             (!ID_IS_LINKED(ob))) {
@@ -1827,7 +1836,7 @@ static void move_to_collection_menus_free(MoveToCollectionData **menu)
   *menu = NULL;
 }
 
-static void move_to_collection_menu_create(bContext *UNUSED(C), uiLayout *layout, void *menu_v)
+static void move_to_collection_menu_create(bContext *C, uiLayout *layout, void *menu_v)
 {
   MoveToCollectionData *menu = menu_v;
   const char *name = BKE_collection_ui_name_get(menu->collection);
@@ -1843,7 +1852,11 @@ static void move_to_collection_menu_create(bContext *UNUSED(C), uiLayout *layout
 
   uiItemS(layout);
 
-  uiItemIntO(layout, name, ICON_SCENE_DATA, menu->ot->idname, "collection_index", menu->index);
+  Scene *scene = CTX_data_scene(C);
+  const int icon = (menu->collection == scene->master_collection) ?
+                       ICON_SCENE_DATA :
+                       UI_icon_color_from_collection(menu->collection);
+  uiItemIntO(layout, name, icon, menu->ot->idname, "collection_index", menu->index);
 
   for (MoveToCollectionData *submenu = menu->submenus.first; submenu != NULL;
        submenu = submenu->next) {
@@ -1853,17 +1866,18 @@ static void move_to_collection_menu_create(bContext *UNUSED(C), uiLayout *layout
 
 static void move_to_collection_menus_items(uiLayout *layout, MoveToCollectionData *menu)
 {
+  const int icon = UI_icon_color_from_collection(menu->collection);
+
   if (BLI_listbase_is_empty(&menu->submenus)) {
     uiItemIntO(layout,
                menu->collection->id.name + 2,
-               ICON_NONE,
+               icon,
                menu->ot->idname,
                "collection_index",
                menu->index);
   }
   else {
-    uiItemMenuF(
-        layout, menu->collection->id.name + 2, ICON_NONE, move_to_collection_menu_create, menu);
+    uiItemMenuF(layout, menu->collection->id.name + 2, icon, move_to_collection_menu_create, menu);
   }
 }
 

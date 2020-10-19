@@ -50,6 +50,7 @@ enum {
   OFFSET_K1,
   OFFSET_K2,
   OFFSET_K3,
+  OFFSET_K4,
   OFFSET_P1,
   OFFSET_P2,
 
@@ -135,6 +136,26 @@ void ApplyDistortionModelUsingIntrinsicsBlock(
         LOG(FATAL) << "Unsupported distortion model.";
         return;
       }
+
+    case DISTORTION_MODEL_BROWN:
+      {
+        const T& k1 = intrinsics_block[OFFSET_K1];
+        const T& k2 = intrinsics_block[OFFSET_K2];
+        const T& k3 = intrinsics_block[OFFSET_K3];
+        const T& k4 = intrinsics_block[OFFSET_K4];
+        const T& p1 = intrinsics_block[OFFSET_P1];
+        const T& p2 = intrinsics_block[OFFSET_P2];
+
+        ApplyBrownDistortionModel(focal_length,
+                                  focal_length,
+                                  principal_point_x,
+                                  principal_point_y,
+                                  k1, k2, k3, k4,
+                                  p1, p2,
+                                  normalized_x, normalized_y,
+                                  distorted_x, distorted_y);
+        return;
+      }
   }
 
   LOG(FATAL) << "Unknown distortion model.";
@@ -168,6 +189,7 @@ void InvertDistortionModelUsingIntrinsicsBlock(
   switch (invariant_intrinsics->GetDistortionModelType()) {
     case DISTORTION_MODEL_POLYNOMIAL:
     case DISTORTION_MODEL_DIVISION:
+    case DISTORTION_MODEL_BROWN:
       LOG(FATAL) << "Unsupported distortion model.";
       return;
 
@@ -206,7 +228,7 @@ void NormalizedToImageSpace(const T* const intrinsics_block,
 }
 
 // Cost functor which computes reprojection error of 3D point X on camera
-// defined by angle-axis rotation and it's translation (which are in the same
+// defined by angle-axis rotation and its translation (which are in the same
 // block due to optimization reasons).
 //
 // This functor can only be used for distortion models which have analytically
@@ -265,7 +287,7 @@ struct ReprojectionErrorApplyIntrinsics {
 };
 
 // Cost functor which computes reprojection error of 3D point X on camera
-// defined by angle-axis rotation and it's translation (which are in the same
+// defined by angle-axis rotation and its translation (which are in the same
 // block due to optimization reasons).
 //
 // This functor can only be used for distortion models which have analytically
@@ -369,37 +391,133 @@ void BundleIntrinsicsLogMessage(const int bundle_intrinsics) {
 // and faster minimization.
 void PackIntrinisicsIntoArray(const CameraIntrinsics &intrinsics,
                               double intrinsics_block[OFFSET_MAX]) {
+  // Pack common intrinsics part.
   intrinsics_block[OFFSET_FOCAL_LENGTH]       = intrinsics.focal_length();
   intrinsics_block[OFFSET_PRINCIPAL_POINT_X]  = intrinsics.principal_point_x();
   intrinsics_block[OFFSET_PRINCIPAL_POINT_Y]  = intrinsics.principal_point_y();
 
-  int num_distortion_parameters = intrinsics.num_distortion_parameters();
-  assert(num_distortion_parameters <= NUM_DISTORTION_COEFFICIENTS);
+  // Per-model intrinsics block.
+  //
+  // The goal here is to get named parameters from the intrinsics object and
+  // place them into well-defined position within the intrinsics block. This
+  // simplifies logic of marking parameters constant.
+  //
+  // TODO(sergey): The code is very much similar to what is goping on in the
+  // cost functors. With some templates and helper functions it will be
+  // possible to reduce level of duplication.
+  switch (intrinsics.GetDistortionModelType()) {
+    case DISTORTION_MODEL_POLYNOMIAL:
+      {
+        const PolynomialCameraIntrinsics& polynomial_intrinsics =
+            static_cast<const PolynomialCameraIntrinsics&>(intrinsics);
+        intrinsics_block[OFFSET_K1] = polynomial_intrinsics.k1();
+        intrinsics_block[OFFSET_K2] = polynomial_intrinsics.k2();
+        intrinsics_block[OFFSET_K3] = polynomial_intrinsics.k3();
+        intrinsics_block[OFFSET_P1] = polynomial_intrinsics.p1();
+        intrinsics_block[OFFSET_P2] = polynomial_intrinsics.p2();
+        return;
+      }
 
-  const double *distortion_parameters = intrinsics.distortion_parameters();
-  for (int i = 0; i < num_distortion_parameters; ++i) {
-    intrinsics_block[FIRST_DISTORTION_COEFFICIENT + i] =
-        distortion_parameters[i];
+    case DISTORTION_MODEL_DIVISION:
+      {
+        const DivisionCameraIntrinsics& division_intrinsics =
+            static_cast<const DivisionCameraIntrinsics&>(intrinsics);
+        intrinsics_block[OFFSET_K1] = division_intrinsics.k1();
+        intrinsics_block[OFFSET_K2] = division_intrinsics.k2();
+        return;
+      }
+
+    case DISTORTION_MODEL_NUKE:
+      {
+        const NukeCameraIntrinsics& nuke_intrinsics =
+            static_cast<const NukeCameraIntrinsics&>(intrinsics);
+        intrinsics_block[OFFSET_K1] = nuke_intrinsics.k1();
+        intrinsics_block[OFFSET_K2] = nuke_intrinsics.k2();
+        return;
+      }
+
+    case DISTORTION_MODEL_BROWN:
+      {
+        const BrownCameraIntrinsics& brown_intrinsics =
+            static_cast<const BrownCameraIntrinsics&>(intrinsics);
+        intrinsics_block[OFFSET_K1] = brown_intrinsics.k1();
+        intrinsics_block[OFFSET_K2] = brown_intrinsics.k2();
+        intrinsics_block[OFFSET_K3] = brown_intrinsics.k3();
+        intrinsics_block[OFFSET_K4] = brown_intrinsics.k4();
+        intrinsics_block[OFFSET_P1] = brown_intrinsics.p1();
+        intrinsics_block[OFFSET_P2] = brown_intrinsics.p2();
+        return;
+      }
   }
+
+  LOG(FATAL) << "Unknown distortion model.";
 }
 
 // Unpack intrinsics back from an array to an object.
 void UnpackIntrinsicsFromArray(const double intrinsics_block[OFFSET_MAX],
                                CameraIntrinsics *intrinsics) {
+  // Unpack common intrinsics part.
   intrinsics->SetFocalLength(intrinsics_block[OFFSET_FOCAL_LENGTH],
                              intrinsics_block[OFFSET_FOCAL_LENGTH]);
 
   intrinsics->SetPrincipalPoint(intrinsics_block[OFFSET_PRINCIPAL_POINT_X],
                                 intrinsics_block[OFFSET_PRINCIPAL_POINT_Y]);
 
-  int num_distortion_parameters = intrinsics->num_distortion_parameters();
-  assert(num_distortion_parameters <= NUM_DISTORTION_COEFFICIENTS);
+  // Per-model intrinsics block.
+  //
+  // The goal here is to get named parameters from the intrinsics object and
+  // place them into well-defined position within the intrinsics block. This
+  // simplifies logic of marking parameters constant.
+  //
+  // TODO(sergey): The code is very much similar to what is goping on in the
+  // cost functors. With some templates and helper functions it will be
+  // possible to reduce level of duplication.
+  switch (intrinsics->GetDistortionModelType()) {
+    case DISTORTION_MODEL_POLYNOMIAL:
+      {
+        PolynomialCameraIntrinsics* polynomial_intrinsics =
+            static_cast<PolynomialCameraIntrinsics*>(intrinsics);
+        polynomial_intrinsics->SetRadialDistortion(intrinsics_block[OFFSET_K1],
+                                                   intrinsics_block[OFFSET_K2],
+                                                   intrinsics_block[OFFSET_K3]);
+        polynomial_intrinsics->SetTangentialDistortion(
+            intrinsics_block[OFFSET_P1], intrinsics_block[OFFSET_P2]);
+        return;
+      }
 
-  double *distortion_parameters = intrinsics->distortion_parameters();
-  for (int i = 0; i < num_distortion_parameters; ++i) {
-    distortion_parameters[i] =
-        intrinsics_block[FIRST_DISTORTION_COEFFICIENT + i];
+    case DISTORTION_MODEL_DIVISION:
+      {
+        DivisionCameraIntrinsics* division_intrinsics =
+            static_cast<DivisionCameraIntrinsics*>(intrinsics);
+        division_intrinsics->SetDistortion(intrinsics_block[OFFSET_K1],
+                                           intrinsics_block[OFFSET_K2]);
+        return;
+      }
+
+    case DISTORTION_MODEL_NUKE:
+      {
+        NukeCameraIntrinsics* nuke_intrinsics =
+            static_cast<NukeCameraIntrinsics*>(intrinsics);
+        nuke_intrinsics->SetDistortion(intrinsics_block[OFFSET_K1],
+                                       intrinsics_block[OFFSET_K2]);
+        return;
+      }
+
+    case DISTORTION_MODEL_BROWN:
+      {
+        BrownCameraIntrinsics* brown_intrinsics =
+            static_cast<BrownCameraIntrinsics*>(intrinsics);
+        brown_intrinsics->SetRadialDistortion(intrinsics_block[OFFSET_K1],
+                                              intrinsics_block[OFFSET_K2],
+                                              intrinsics_block[OFFSET_K3],
+                                              intrinsics_block[OFFSET_K4]);
+        brown_intrinsics->SetTangentialDistortion(intrinsics_block[OFFSET_P1],
+                                                  intrinsics_block[OFFSET_P2]);
+        return;
+      }
   }
+
+  LOG(FATAL) << "Unknown distortion model.";
 }
 
 // Get a vector of camera's rotations denoted by angle axis
@@ -783,8 +901,9 @@ void EuclideanBundleCommonIntrinsics(
     MAYBE_SET_CONSTANT(BUNDLE_TANGENTIAL_P2,   OFFSET_P2);
 #undef MAYBE_SET_CONSTANT
 
-    // Always set K3 constant, it's not used at the moment.
+    // Always set K3 and K4 constant, it's not used at the moment.
     constant_intrinsics.push_back(OFFSET_K3);
+    constant_intrinsics.push_back(OFFSET_K4);
 
     ceres::SubsetParameterization *subset_parameterization =
       new ceres::SubsetParameterization(OFFSET_MAX, constant_intrinsics);

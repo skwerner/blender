@@ -278,6 +278,8 @@ typedef enum {
   DRW_UNIFORM_FLOAT_COPY,
   DRW_UNIFORM_TEXTURE,
   DRW_UNIFORM_TEXTURE_REF,
+  DRW_UNIFORM_IMAGE,
+  DRW_UNIFORM_IMAGE_REF,
   DRW_UNIFORM_BLOCK,
   DRW_UNIFORM_BLOCK_REF,
   DRW_UNIFORM_TFEEDBACK_TARGET,
@@ -415,7 +417,7 @@ struct DRWView {
  * In order to keep a cache friendly data structure,
  * we alloc most of our little data into chunks of multiple item.
  * Iteration, allocation and memory usage are better.
- * We loose a bit of memory by allocating more than what we need
+ * We lose a bit of memory by allocating more than what we need
  * but it's counterbalanced by not needing the linked-list pointers
  * for each item.
  **/
@@ -493,7 +495,7 @@ typedef struct DRWManager {
   struct Object *dupli_origin;
   /** Ghash containing original objects. */
   struct GHash *dupli_ghash;
-  /** TODO(fclem) try to remove usage of this. */
+  /** TODO(fclem): try to remove usage of this. */
   DRWInstanceData *object_instance_data[MAX_INSTANCE_DATA_SIZE];
   /* Array of dupli_data (one for each enabled engine) to handle duplis. */
   void **dupli_datas;
@@ -540,7 +542,7 @@ typedef struct DRWManager {
   DRWView *view_active;
   DRWView *view_previous;
   uint primary_view_ct;
-  /** TODO(fclem) Remove this. Only here to support
+  /** TODO(fclem): Remove this. Only here to support
    * shaders without common_view_lib.glsl */
   DRWViewUboStorage view_storage_cpy;
 
@@ -565,7 +567,7 @@ typedef struct DRWManager {
   GPUDrawList *draw_list;
 
   struct {
-    /* TODO(fclem) optimize: use chunks. */
+    /* TODO(fclem): optimize: use chunks. */
     DRWDebugLine *lines;
     DRWDebugSphere *spheres;
   } debug;

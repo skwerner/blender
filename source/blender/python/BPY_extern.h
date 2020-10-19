@@ -68,8 +68,7 @@ void BPY_thread_restore(BPy_ThreadStatePtr tstate);
   (void)0
 
 void BPY_text_free_code(struct Text *text);
-void BPY_modules_update(
-    struct bContext *C);  // XXX - annoying, need this for pointers that get out of date
+void BPY_modules_update(void);
 void BPY_modules_load_user(struct bContext *C);
 
 void BPY_app_handlers_reset(const short do_all);
@@ -87,6 +86,16 @@ int BPY_context_member_get(struct bContext *C,
                            struct bContextDataResult *result);
 void BPY_context_set(struct bContext *C);
 void BPY_context_update(struct bContext *C);
+
+#define BPY_context_dict_clear_members(C, ...) \
+  BPY_context_dict_clear_members_array(&((C)->data.py_context), \
+                                       (C)->data.py_context_orig, \
+                                       ((const char *[]){__VA_ARGS__}), \
+                                       VA_NARGS_COUNT(__VA_ARGS__))
+void BPY_context_dict_clear_members_array(void **dict_p,
+                                          void *dict_orig,
+                                          const char *context_members[],
+                                          uint context_members_len);
 
 void BPY_id_release(struct ID *id);
 

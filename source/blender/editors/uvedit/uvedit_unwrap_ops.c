@@ -261,7 +261,7 @@ static void construct_param_handle_face_add(ParamHandle *handle,
   key = (ParamKey)face_index;
 
   /* let parametrizer split the ngon, it can make better decisions
-   * about which split is best for unwrapping than scanfill */
+   * about which split is best for unwrapping than poly-fill. */
   BM_ITER_ELEM_INDEX (l, &liter, efa, BM_LOOPS_OF_FACE, i) {
     MLoopUV *luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
 
@@ -2017,7 +2017,7 @@ static int smart_project_exec(bContext *C, wmOperator *op)
   MemArena *arena = BLI_memarena_new(BLI_MEMARENA_STD_BUFSIZE, __func__);
 
   uint objects_len = 0;
-  Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data_with_uvs(
+  Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(
       view_layer, v3d, &objects_len);
 
   Object **objects_changed = MEM_mallocN(sizeof(*objects_changed) * objects_len, __func__);
@@ -2031,6 +2031,10 @@ static int smart_project_exec(bContext *C, wmOperator *op)
     Object *obedit = objects[ob_index];
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
     bool changed = false;
+
+    if (!ED_uvedit_ensure_uvs(obedit)) {
+      continue;
+    }
 
     const uint cd_loop_uv_offset = CustomData_get_offset(&em->bm->ldata, CD_MLOOPUV);
     ThickFace *thick_faces = MEM_mallocN(sizeof(*thick_faces) * em->bm->totface, __func__);
@@ -2380,7 +2384,7 @@ static bool uv_from_view_poll(bContext *C)
 void UV_OT_project_from_view(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Project From View";
+  ot->name = "Project from View";
   ot->idname = "UV_OT_project_from_view";
   ot->description = "Project the UV vertices of the mesh as seen in current 3D view";
 

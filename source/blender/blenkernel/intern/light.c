@@ -25,6 +25,9 @@
 
 #include "MEM_guardedalloc.h"
 
+/* Allow using deprecated functionality for .blend file I/O. */
+#define DNA_DEPRECATED_ALLOW
+
 #include "DNA_anim_types.h"
 #include "DNA_defaults.h"
 #include "DNA_light_types.h"
@@ -37,6 +40,7 @@
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
 
+#include "BKE_anim_data.h"
 #include "BKE_colortools.h"
 #include "BKE_icons.h"
 #include "BKE_idtype.h"
@@ -49,6 +53,8 @@
 #include "BLT_translation.h"
 
 #include "DEG_depsgraph.h"
+
+#include "BLO_read_write.h"
 
 static void light_init_data(ID *id)
 {
@@ -75,13 +81,21 @@ static void light_copy_data(Main *bmain, ID *id_dst, const ID *id_src, const int
 {
   Light *la_dst = (Light *)id_dst;
   const Light *la_src = (const Light *)id_src;
+
+  const bool is_localized = (flag & LIB_ID_CREATE_LOCAL) != 0;
   /* We always need allocation of our private ID data. */
   const int flag_private_id_data = flag & ~LIB_ID_CREATE_NO_ALLOCATE;
 
   la_dst->curfalloff = BKE_curvemapping_copy(la_src->curfalloff);
 
   if (la_src->nodetree) {
-    BKE_id_copy_ex(bmain, (ID *)la_src->nodetree, (ID **)&la_dst->nodetree, flag_private_id_data);
+    if (is_localized) {
+      la_dst->nodetree = ntreeLocalize(la_src->nodetree);
+    }
+    else {
+      BKE_id_copy_ex(
+          bmain, (ID *)la_src->nodetree, (ID **)&la_dst->nodetree, flag_private_id_data);
+    }
   }
 
   if ((flag & LIB_ID_COPY_NO_PREVIEW) == 0) {
@@ -119,6 +133,59 @@ static void light_foreach_id(ID *id, LibraryForeachIDData *data)
   }
 }
 
+static void light_blend_write(BlendWriter *writer, ID *id, const void *id_address)
+{
+  Light *la = (Light *)id;
+  if (la->id.us > 0 || BLO_write_is_undo(writer)) {
+    /* write LibData */
+    BLO_write_id_struct(writer, Light, id_address, &la->id);
+    BKE_id_blend_write(writer, &la->id);
+
+    if (la->adt) {
+      BKE_animdata_blend_write(writer, la->adt);
+    }
+
+    if (la->curfalloff) {
+      BKE_curvemapping_blend_write(writer, la->curfalloff);
+    }
+
+    /* Node-tree is integral part of lights, no libdata. */
+    if (la->nodetree) {
+      BLO_write_struct(writer, bNodeTree, la->nodetree);
+      ntreeBlendWrite(writer, la->nodetree);
+    }
+
+    BKE_previewimg_blend_write(writer, la->preview);
+  }
+}
+
+static void light_blend_read_data(BlendDataReader *reader, ID *id)
+{
+  Light *la = (Light *)id;
+  BLO_read_data_address(reader, &la->adt);
+  BKE_animdata_blend_read_data(reader, la->adt);
+
+  BLO_read_data_address(reader, &la->curfalloff);
+  if (la->curfalloff) {
+    BKE_curvemapping_blend_read(reader, la->curfalloff);
+  }
+
+  BLO_read_data_address(reader, &la->preview);
+  BKE_previewimg_blend_read(reader, la->preview);
+}
+
+static void light_blend_read_lib(BlendLibReader *reader, ID *id)
+{
+  Light *la = (Light *)id;
+  BLO_read_id_address(reader, la->id.lib, &la->ipo);  // XXX deprecated - old animation system
+}
+
+static void light_blend_read_expand(BlendExpander *expander, ID *id)
+{
+  Light *la = (Light *)id;
+  BLO_expand(expander, la->ipo);  // XXX deprecated - old animation system
+}
+
 IDTypeInfo IDType_ID_LA = {
     .id_code = ID_LA,
     .id_filter = FILTER_ID_LA,
@@ -136,55 +203,19 @@ IDTypeInfo IDType_ID_LA = {
     .foreach_id = light_foreach_id,
     .foreach_cache = NULL,
 
-    .blend_write = NULL,
-    .blend_read_data = NULL,
-    .blend_read_lib = NULL,
-    .blend_read_expand = NULL,
+    .blend_write = light_blend_write,
+    .blend_read_data = light_blend_read_data,
+    .blend_read_lib = light_blend_read_lib,
+    .blend_read_expand = light_blend_read_expand,
 };
 
 Light *BKE_light_add(Main *bmain, const char *name)
 {
   Light *la;
 
-  la = BKE_libblock_alloc(bmain, ID_LA, name, 0);
-
-  light_init_data(&la->id);
+  la = BKE_id_new(bmain, ID_LA, name);
 
   return la;
-}
-
-Light *BKE_light_copy(Main *bmain, const Light *la)
-{
-  Light *la_copy;
-  BKE_id_copy(bmain, &la->id, (ID **)&la_copy);
-  return la_copy;
-}
-
-Light *BKE_light_localize(Light *la)
-{
-  /* TODO(bastien): Replace with something like:
-   *
-   *   Light *la_copy;
-   *   BKE_id_copy_ex(bmain, &la->id, (ID **)&la_copy,
-   *                  LIB_ID_COPY_NO_MAIN | LIB_ID_COPY_NO_PREVIEW | LIB_ID_COPY_NO_USER_REFCOUNT,
-   *                  false);
-   *   return la_copy;
-   *
-   * NOTE: Only possible once nested node trees are fully converted to that too. */
-
-  Light *lan = BKE_libblock_copy_for_localize(&la->id);
-
-  lan->curfalloff = BKE_curvemapping_copy(la->curfalloff);
-
-  if (la->nodetree) {
-    lan->nodetree = ntreeLocalize(la->nodetree);
-  }
-
-  lan->preview = NULL;
-
-  lan->id.tag |= LIB_TAG_LOCALIZED;
-
-  return lan;
 }
 
 void BKE_light_eval(struct Depsgraph *depsgraph, Light *la)

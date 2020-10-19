@@ -29,6 +29,7 @@
 #include "BLT_translation.h"
 
 #include "DNA_armature_types.h"
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_object_types.h"
 #include "DNA_screen_types.h"
@@ -65,7 +66,9 @@ static void initData(ModifierData *md)
 {
   ArmatureModifierData *amd = (ArmatureModifierData *)md;
 
-  amd->deformflag = ARM_DEF_VGROUP;
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(amd, modifier));
+
+  MEMCPY_STRUCT_AFTER(amd, DNA_struct_default_get(ArmatureModifierData), modifier);
 }
 
 static void copyData(const ModifierData *md, ModifierData *target, const int flag)
@@ -101,11 +104,11 @@ static bool isDisabled(const struct Scene *UNUSED(scene),
   return !amd->object || amd->object->type != OB_ARMATURE;
 }
 
-static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk, void *userData)
+static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   ArmatureModifierData *amd = (ArmatureModifierData *)md;
 
-  walk(userData, ob, &amd->object, IDWALK_CB_NOP);
+  walk(userData, ob, (ID **)&amd->object, IDWALK_CB_NOP);
 }
 
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
@@ -278,9 +281,11 @@ ModifierTypeInfo modifierType_Armature = {
     /* name */ "Armature",
     /* structName */ "ArmatureModifierData",
     /* structSize */ sizeof(ArmatureModifierData),
+    /* srna */ &RNA_ArmatureModifier,
     /* type */ eModifierTypeType_OnlyDeform,
     /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsVertexCosOnly |
         eModifierTypeFlag_SupportsEditmode,
+    /* icon */ ICON_MOD_ARMATURE,
 
     /* copyData */ copyData,
 
@@ -300,8 +305,7 @@ ModifierTypeInfo modifierType_Armature = {
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
     /* panelRegister */ panelRegister,

@@ -75,121 +75,21 @@ typedef struct BendSpringRef {
  * External interface called by modifier.c clothModifier functions.
  *
  ******************************************************************************/
-/**
- * cloth_init - creates a new cloth simulation.
- *
- * 1. create object
- * 2. fill object with standard values or with the GUI settings if given
- */
-void cloth_init(ClothModifierData *clmd)
-{
-  /* Initialize our new data structure to reasonable values. */
-  clmd->sim_parms->gravity[0] = 0.0;
-  clmd->sim_parms->gravity[1] = 0.0;
-  clmd->sim_parms->gravity[2] = -9.81;
-  clmd->sim_parms->tension = 15.0;
-  clmd->sim_parms->max_tension = 15.0;
-  clmd->sim_parms->compression = 15.0;
-  clmd->sim_parms->max_compression = 15.0;
-  clmd->sim_parms->shear = 5.0;
-  clmd->sim_parms->max_shear = 5.0;
-  clmd->sim_parms->bending = 0.5;
-  clmd->sim_parms->max_bend = 0.5;
-  clmd->sim_parms->tension_damp = 5.0;
-  clmd->sim_parms->compression_damp = 5.0;
-  clmd->sim_parms->shear_damp = 5.0;
-  clmd->sim_parms->bending_damping = 0.5;
-  clmd->sim_parms->Cvi = 1.0;
-  clmd->sim_parms->mass = 0.3f;
-  clmd->sim_parms->stepsPerFrame = 5;
-  clmd->sim_parms->flags = 0;
-  clmd->sim_parms->solver_type = 0;
-  clmd->sim_parms->maxspringlen = 10;
-  clmd->sim_parms->vgroup_mass = 0;
-  clmd->sim_parms->vgroup_shrink = 0;
-
-  /* Min amount the fabric will shrink by 0.0 = no shrinking, 1.0 = shrink to nothing. */
-  clmd->sim_parms->shrink_min = 0.0f;
-
-  clmd->sim_parms->avg_spring_len = 0.0;
-  clmd->sim_parms->presets = 2;       /* cotton as start setting */
-  clmd->sim_parms->timescale = 1.0f;  /* speed factor, describes how fast cloth moves */
-  clmd->sim_parms->time_scale = 1.0f; /* multiplies cloth speed */
-  clmd->sim_parms->reset = 0;
-
-  clmd->coll_parms->self_friction = 5.0;
-  clmd->coll_parms->friction = 5.0;
-  clmd->coll_parms->loop_count = 2;
-  clmd->coll_parms->epsilon = 0.015f;
-  clmd->coll_parms->flags = CLOTH_COLLSETTINGS_FLAG_ENABLED;
-  clmd->coll_parms->collision_list = NULL;
-  clmd->coll_parms->selfepsilon = 0.015;
-  clmd->coll_parms->vgroup_selfcol = 0;
-
-  /* These defaults are copied from softbody.c's
-   * softbody_calc_forces() function.
-   */
-  clmd->sim_parms->eff_force_scale = 1000.0;
-  clmd->sim_parms->eff_wind_scale = 250.0;
-
-  /* Internal spring settings */
-  clmd->sim_parms->internal_spring_max_length = 0.0f;
-  clmd->sim_parms->internal_spring_max_diversion = M_PI / 4.0f;
-  clmd->sim_parms->internal_tension = 15.0f;
-  clmd->sim_parms->max_internal_tension = 15.0f;
-  clmd->sim_parms->internal_compression = 15.0f;
-  clmd->sim_parms->max_internal_compression = 15.0f;
-  clmd->sim_parms->vgroup_intern = 0;
-  clmd->sim_parms->flags |= CLOTH_SIMSETTINGS_FLAG_INTERNAL_SPRINGS_NORMAL;
-
-  /* Pressure settings */
-  clmd->sim_parms->uniform_pressure_force = 0.0f;
-  clmd->sim_parms->target_volume = 0.0f;
-  clmd->sim_parms->pressure_factor = 1.0f;
-  clmd->sim_parms->fluid_density = 0.0f;
-  clmd->sim_parms->vgroup_pressure = 0;
-
-  // also from softbodies
-  clmd->sim_parms->maxgoal = 1.0f;
-  clmd->sim_parms->mingoal = 0.0f;
-  clmd->sim_parms->defgoal = 0.0f;
-  clmd->sim_parms->goalspring = 1.0f;
-  clmd->sim_parms->goalfrict = 0.0f;
-  clmd->sim_parms->velocity_smooth = 0.0f;
-
-  clmd->sim_parms->voxel_cell_size = 0.1f;
-
-  clmd->sim_parms->bending_model = CLOTH_BENDING_ANGULAR;
-
-  if (!clmd->sim_parms->effector_weights) {
-    clmd->sim_parms->effector_weights = BKE_effector_add_weights(NULL);
-  }
-
-  if (clmd->point_cache) {
-    clmd->point_cache->step = 1;
-  }
-}
 
 static BVHTree *bvhtree_build_from_cloth(ClothModifierData *clmd, float epsilon)
 {
-  unsigned int i;
-  BVHTree *bvhtree;
-  Cloth *cloth;
-  ClothVertex *verts;
-  const MVertTri *vt;
-
   if (!clmd) {
     return NULL;
   }
 
-  cloth = clmd->clothObject;
+  Cloth *cloth = clmd->clothObject;
 
   if (!cloth) {
     return NULL;
   }
 
-  verts = cloth->verts;
-  vt = cloth->tri;
+  ClothVertex *verts = cloth->verts;
+  const MVertTri *vt = cloth->tri;
 
   /* in the moment, return zero if no faces there */
   if (!cloth->primitive_num) {
@@ -197,11 +97,11 @@ static BVHTree *bvhtree_build_from_cloth(ClothModifierData *clmd, float epsilon)
   }
 
   /* create quadtree with k=26 */
-  bvhtree = BLI_bvhtree_new(cloth->primitive_num, epsilon, 4, 26);
+  BVHTree *bvhtree = BLI_bvhtree_new(cloth->primitive_num, epsilon, 4, 26);
 
   /* fill tree */
   if (clmd->hairdata == NULL) {
-    for (i = 0; i < cloth->primitive_num; i++, vt++) {
+    for (int i = 0; i < cloth->primitive_num; i++, vt++) {
       float co[3][3];
 
       copy_v3_v3(co[0], verts[vt->tri[0]].xold);
@@ -214,7 +114,7 @@ static BVHTree *bvhtree_build_from_cloth(ClothModifierData *clmd, float epsilon)
   else {
     MEdge *edges = cloth->edges;
 
-    for (i = 0; i < cloth->primitive_num; i++) {
+    for (int i = 0; i < cloth->primitive_num; i++) {
       float co[2][3];
 
       copy_v3_v3(co[0], verts[edges[i].v1].xold);
@@ -316,7 +216,7 @@ void cloth_clear_cache(Object *ob, ClothModifierData *clmd, float framenr)
 
   BKE_ptcache_id_from_cloth(&pid, ob, clmd);
 
-  // don't do anything as long as we're in editmode!
+  /* don't do anything as long as we're in editmode! */
   if (pid.cache->edit && ob->mode & OB_MODE_PARTICLE_EDIT) {
     return;
   }
@@ -539,7 +439,7 @@ void cloth_free_modifier(ClothModifierData *clmd)
   if (cloth) {
     SIM_cloth_solver_free(clmd);
 
-    // Free the verts.
+    /* Free the verts. */
     if (cloth->verts != NULL) {
       MEM_freeN(cloth->verts);
     }
@@ -547,7 +447,7 @@ void cloth_free_modifier(ClothModifierData *clmd)
     cloth->verts = NULL;
     cloth->mvert_num = 0;
 
-    // Free the springs.
+    /* Free the springs. */
     if (cloth->springs != NULL) {
       LinkNode *search = cloth->springs;
       while (search) {
@@ -567,7 +467,7 @@ void cloth_free_modifier(ClothModifierData *clmd)
     cloth->springs = NULL;
     cloth->numsprings = 0;
 
-    // free BVH collision tree
+    /* free BVH collision tree */
     if (cloth->bvhtree) {
       BLI_bvhtree_free(cloth->bvhtree);
     }
@@ -576,7 +476,7 @@ void cloth_free_modifier(ClothModifierData *clmd)
       BLI_bvhtree_free(cloth->bvhselftree);
     }
 
-    // we save our faces for collision objects
+    /* we save our faces for collision objects */
     if (cloth->tri) {
       MEM_freeN(cloth->tri);
     }
@@ -621,7 +521,7 @@ void cloth_free_modifier_extern(ClothModifierData *clmd)
 
     SIM_cloth_solver_free(clmd);
 
-    // Free the verts.
+    /* Free the verts. */
     if (cloth->verts != NULL) {
       MEM_freeN(cloth->verts);
     }
@@ -629,7 +529,7 @@ void cloth_free_modifier_extern(ClothModifierData *clmd)
     cloth->verts = NULL;
     cloth->mvert_num = 0;
 
-    // Free the springs.
+    /* Free the springs. */
     if (cloth->springs != NULL) {
       LinkNode *search = cloth->springs;
       while (search) {
@@ -649,7 +549,7 @@ void cloth_free_modifier_extern(ClothModifierData *clmd)
     cloth->springs = NULL;
     cloth->numsprings = 0;
 
-    // free BVH collision tree
+    /* free BVH collision tree */
     if (cloth->bvhtree) {
       BLI_bvhtree_free(cloth->bvhtree);
     }
@@ -658,7 +558,7 @@ void cloth_free_modifier_extern(ClothModifierData *clmd)
       BLI_bvhtree_free(cloth->bvhselftree);
     }
 
-    // we save our faces for collision objects
+    /* we save our faces for collision objects */
     if (cloth->tri) {
       MEM_freeN(cloth->tri);
     }
@@ -755,8 +655,8 @@ static void cloth_apply_vgroup(ClothModifierData *clmd, Mesh *mesh)
 
             /* goalfac= 1.0f; */ /* UNUSED */
 
-            // Kicking goal factor to simplify things...who uses that anyway?
-            // ABS ( clmd->sim_parms->maxgoal - clmd->sim_parms->mingoal );
+            /* Kicking goal factor to simplify things...who uses that anyway? */
+            // ABS (clmd->sim_parms->maxgoal - clmd->sim_parms->mingoal);
 
             verts->goal = pow4f(verts->goal);
             if (verts->goal >= SOFTGOALSNAP) {
@@ -827,7 +727,7 @@ static bool cloth_from_object(
   float(*shapekey_rest)[3] = NULL;
   const float tnull[3] = {0, 0, 0};
 
-  // If we have a clothObject, free it.
+  /* If we have a clothObject, free it. */
   if (clmd->clothObject != NULL) {
     cloth_free_modifier(clmd);
     if (G.debug & G_DEBUG_SIMDATA) {
@@ -835,7 +735,7 @@ static bool cloth_from_object(
     }
   }
 
-  // Allocate a new cloth object.
+  /* Allocate a new cloth object. */
   clmd->clothObject = MEM_callocN(sizeof(Cloth), "cloth");
   if (clmd->clothObject) {
     clmd->clothObject->old_solver_type = 255;
@@ -846,14 +746,14 @@ static bool cloth_from_object(
     return false;
   }
 
-  // mesh input objects need Mesh
+  /* mesh input objects need Mesh */
   if (!mesh) {
     return false;
   }
 
   cloth_from_mesh(clmd, mesh);
 
-  // create springs
+  /* create springs */
   clmd->clothObject->springs = NULL;
   clmd->clothObject->numsprings = -1;
 
@@ -868,7 +768,7 @@ static bool cloth_from_object(
 
   verts = clmd->clothObject->verts;
 
-  // set initial values
+  /* set initial values */
   for (i = 0; i < mesh->totvert; i++, verts++) {
     if (first) {
       copy_v3_v3(verts->x, mvert[i].co);
@@ -908,8 +808,8 @@ static bool cloth_from_object(
     copy_v3_v3(verts->impulse, tnull);
   }
 
-  // apply / set vertex groups
-  // has to be happen before springs are build!
+  /* apply / set vertex groups */
+  /* has to be happen before springs are build! */
   cloth_apply_vgroup(clmd, mesh);
 
   if (!cloth_build_springs(clmd, mesh)) {
@@ -918,7 +818,7 @@ static bool cloth_from_object(
     return false;
   }
 
-  // init our solver
+  /* init our solver */
   SIM_cloth_solver_init(ob, clmd);
 
   if (!first) {
@@ -997,8 +897,7 @@ BLI_INLINE void spring_verts_ordered_set(ClothSpring *spring, int v0, int v1)
 static void cloth_free_edgelist(LinkNodePair *edgelist, unsigned int mvert_num)
 {
   if (edgelist) {
-    unsigned int i;
-    for (i = 0; i < mvert_num; i++) {
+    for (uint i = 0; i < mvert_num; i++) {
       BLI_linklist_free(edgelist[i].list, NULL);
     }
 
@@ -1572,13 +1471,13 @@ static bool cloth_build_springs(ClothModifierData *clmd, Mesh *mesh)
   const MEdge *medge = mesh->medge;
   const MPoly *mpoly = mesh->mpoly;
   const MLoop *mloop = mesh->mloop;
-  int index2 = 0;  // our second vertex index
+  int index2 = 0; /* our second vertex index */
   LinkNodePair *edgelist = NULL;
   EdgeSet *edgeset = NULL;
   LinkNode *search = NULL, *search2 = NULL;
   BendSpringRef *spring_ref = NULL;
 
-  // error handling
+  /* error handling */
   if (numedges == 0) {
     return false;
   }
@@ -1700,7 +1599,7 @@ static bool cloth_build_springs(ClothModifierData *clmd, Mesh *mesh)
     if (spring) {
       spring_verts_ordered_set(spring, medge[i].v1, medge[i].v2);
       if (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_SEW && medge[i].flag & ME_LOOSEEDGE) {
-        // handle sewing (loose edges will be pulled together)
+        /* handle sewing (loose edges will be pulled together) */
         spring->restlen = 0.0f;
         spring->lin_stiffness = 1.0f;
         spring->type = CLOTH_SPRING_TYPE_SEWING;

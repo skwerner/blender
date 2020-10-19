@@ -1020,6 +1020,25 @@ class USERPREF_PT_theme_bone_color_sets(ThemePanel, CenterAlignMixIn, Panel):
             flow.prop(ui, "show_colored_constraints")
 
 
+class USERPREF_PT_theme_collection_colors(ThemePanel, CenterAlignMixIn, Panel):
+    bl_label = "Collection Colors"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw_header(self, _context):
+        layout = self.layout
+
+        layout.label(icon='OUTLINER_COLLECTION')
+
+    def draw_centered(self, context, layout):
+        theme = context.preferences.themes[0]
+
+        layout.use_property_split = True
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+        for i, ui in enumerate(theme.collection_color, 1):
+            flow.prop(ui, "color", text=iface_("Color %d") % i, translate=False)
+
+
 # Base class for dynamically defined theme-space panels.
 # This is not registered.
 class PreferenceThemeSpacePanel:
@@ -1653,6 +1672,7 @@ class USERPREF_PT_ndof_settings(Panel):
 # -----------------------------------------------------------------------------
 # Key-Map Editor Panels
 
+
 class KeymapPanel:
     bl_space_type = 'PREFERENCES'
     bl_region_type = 'WINDOW'
@@ -1739,6 +1759,7 @@ class USERPREF_PT_addons(AddOnPanel, Panel):
 
         layout = self.layout
 
+        wm = context.window_manager
         prefs = context.preferences
         used_ext = {ext.module for ext in prefs.addons}
 
@@ -1764,16 +1785,16 @@ class USERPREF_PT_addons(AddOnPanel, Panel):
         split = layout.split(factor=0.6)
 
         row = split.row()
-        row.prop(context.window_manager, "addon_support", expand=True)
+        row.prop(wm, "addon_support", expand=True)
 
         row = split.row(align=True)
         row.operator("preferences.addon_install", icon='IMPORT', text="Install...")
         row.operator("preferences.addon_refresh", icon='FILE_REFRESH', text="Refresh")
 
         row = layout.row()
-        row.prop(context.preferences.view, "show_addons_enabled_only")
-        row.prop(context.window_manager, "addon_filter", text="")
-        row.prop(context.window_manager, "addon_search", text="", icon='VIEWZOOM')
+        row.prop(prefs.view, "show_addons_enabled_only")
+        row.prop(wm, "addon_filter", text="")
+        row.prop(wm, "addon_search", text="", icon='VIEWZOOM')
 
         col = layout.column()
 
@@ -1798,10 +1819,10 @@ class USERPREF_PT_addons(AddOnPanel, Panel):
                 "(see console for details)",
             )
 
-        show_enabled_only = context.preferences.view.show_addons_enabled_only
-        filter = context.window_manager.addon_filter
-        search = context.window_manager.addon_search.lower()
-        support = context.window_manager.addon_support
+        show_enabled_only = prefs.view.show_addons_enabled_only
+        filter = wm.addon_filter
+        search = wm.addon_search.lower()
+        support = wm.addon_support
 
         # initialized on demand
         user_addon_paths = []
@@ -2139,6 +2160,7 @@ class ExperimentalPanel:
                 col = split.split()
                 col.operator("wm.url_open", text=task, icon='URL').url = self.url_prefix + task
 
+
 """
 # Example panel, leave it here so we always have a template to follow even
 # after the features are gone from the experimental panel.
@@ -2164,6 +2186,9 @@ class USERPREF_PT_experimental_new_features(ExperimentalPanel, Panel):
             context, (
                 ({"property": "use_new_particle_system"}, "T73324"),
                 ({"property": "use_sculpt_vertex_colors"}, "T71947"),
+                ({"property": "use_tools_missing_icons"}, "T80331"),
+                ({"property": "use_switch_object_operator"}, "T80402"),
+                ({"property": "use_sculpt_tools_tilt"}, "T00000"),
             ),
         )
 
@@ -2193,6 +2218,7 @@ class USERPREF_PT_experimental_debugging(ExperimentalPanel, Panel):
             context, (
                 ({"property": "use_undo_legacy"}, "T60695"),
                 ({"property": "use_cycles_debug"}, None),
+                ({"property": "use_image_editor_legacy_drawing"}, "T67530"),
             ),
         )
 
@@ -2254,6 +2280,7 @@ classes = (
     USERPREF_PT_theme_interface_icons,
     USERPREF_PT_theme_text_style,
     USERPREF_PT_theme_bone_color_sets,
+    USERPREF_PT_theme_collection_colors,
 
     USERPREF_PT_file_paths_data,
     USERPREF_PT_file_paths_render,

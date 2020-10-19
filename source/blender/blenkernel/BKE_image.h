@@ -288,9 +288,6 @@ void BKE_image_packfiles_from_mem(struct ReportList *reports,
 /* prints memory statistics for images */
 void BKE_image_print_memlist(struct Main *bmain);
 
-/* empty image block, of similar type and filename */
-struct Image *BKE_image_copy(struct Main *bmain, const struct Image *ima);
-
 /* merge source into dest, and free source */
 void BKE_image_merge(struct Main *bmain, struct Image *dest, struct Image *source);
 
@@ -382,7 +379,7 @@ struct GPUTexture *BKE_image_get_gpu_tiles(struct Image *image,
 struct GPUTexture *BKE_image_get_gpu_tilemap(struct Image *image,
                                              struct ImageUser *iuser,
                                              struct ImBuf *ibuf);
-
+bool BKE_image_has_gpu_texture_premultiplied_alpha(struct Image *image, struct ImBuf *ibuf);
 void BKE_image_update_gputexture(
     struct Image *ima, struct ImageUser *iuser, int x, int y, int w, int h);
 void BKE_image_paint_set_mipmap(struct Main *bmain, bool mipmap);

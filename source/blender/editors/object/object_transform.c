@@ -242,7 +242,7 @@ static void object_clear_rot(Object *ob, const bool clear_delta)
         copy_v3_v3(ob->rot, eul);
       }
     }
-  }  // Duplicated in source/blender/editors/armature/editarmature.c
+  } /* Duplicated in source/blender/editors/armature/editarmature.c */
   else {
     if (ob->rotmode == ROT_MODE_QUAT) {
       unit_qt(ob->quat);
@@ -834,11 +834,10 @@ static int apply_objects_internal(bContext *C,
     }
     else if (ob->type == OB_FONT) {
       Curve *cu = ob->data;
-      int i;
 
       scale = mat3_to_scale(rsmat);
 
-      for (i = 0; i < cu->totbox; i++) {
+      for (int i = 0; i < cu->totbox; i++) {
         TextBox *tb = &cu->tb[i];
         tb->x *= scale;
         tb->y *= scale;

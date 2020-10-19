@@ -44,19 +44,12 @@
 
 #include "DEG_depsgraph_query.h"
 
-#include "GPU_extensions.h"
+#include "GPU_capabilities.h"
 #include "GPU_material.h"
 #include "GPU_texture.h"
 #include "eevee_private.h"
 
 static struct {
-  struct GPUShader *volumetric_clear_sh;
-  struct GPUShader *scatter_sh;
-  struct GPUShader *scatter_with_lights_sh;
-  struct GPUShader *volumetric_integration_sh;
-  struct GPUShader *volumetric_resolve_sh;
-  struct GPUShader *volumetric_accum_sh;
-
   GPUTexture *depth_src;
 
   GPUTexture *dummy_zero;
@@ -70,72 +63,8 @@ static struct {
   ListBase smoke_domains;
 } e_data = {NULL}; /* Engine data */
 
-extern char datatoc_bsdf_common_lib_glsl[];
-extern char datatoc_common_uniforms_lib_glsl[];
-extern char datatoc_common_view_lib_glsl[];
-extern char datatoc_octahedron_lib_glsl[];
-extern char datatoc_cubemap_lib_glsl[];
-extern char datatoc_irradiance_lib_glsl[];
-extern char datatoc_lights_lib_glsl[];
-extern char datatoc_volumetric_accum_frag_glsl[];
-extern char datatoc_volumetric_frag_glsl[];
-extern char datatoc_volumetric_geom_glsl[];
-extern char datatoc_volumetric_vert_glsl[];
-extern char datatoc_volumetric_resolve_frag_glsl[];
-extern char datatoc_volumetric_scatter_frag_glsl[];
-extern char datatoc_volumetric_integration_frag_glsl[];
-extern char datatoc_volumetric_lib_glsl[];
-extern char datatoc_common_fullscreen_vert_glsl[];
-
-#define USE_VOLUME_OPTI \
-  (GLEW_ARB_shader_image_load_store && GLEW_ARB_shading_language_420pack && \
-   !GPU_crappy_amd_driver())
-
-static void eevee_create_shader_volumes(void)
+static void eevee_create_textures_volumes(void)
 {
-  DRWShaderLibrary *lib = EEVEE_shader_lib_get();
-
-  e_data.volumetric_clear_sh = DRW_shader_create_with_shaderlib(datatoc_volumetric_vert_glsl,
-                                                                datatoc_volumetric_geom_glsl,
-                                                                datatoc_volumetric_frag_glsl,
-                                                                lib,
-                                                                SHADER_DEFINES
-                                                                "#define VOLUMETRICS\n"
-                                                                "#define CLEAR\n");
-
-  e_data.scatter_sh = DRW_shader_create_with_shaderlib(datatoc_volumetric_vert_glsl,
-                                                       datatoc_volumetric_geom_glsl,
-                                                       datatoc_volumetric_scatter_frag_glsl,
-                                                       lib,
-                                                       SHADER_DEFINES
-                                                       "#define VOLUMETRICS\n"
-                                                       "#define VOLUME_SHADOW\n");
-
-  e_data.scatter_with_lights_sh = DRW_shader_create_with_shaderlib(
-      datatoc_volumetric_vert_glsl,
-      datatoc_volumetric_geom_glsl,
-      datatoc_volumetric_scatter_frag_glsl,
-      lib,
-      SHADER_DEFINES
-      "#define VOLUMETRICS\n"
-      "#define VOLUME_LIGHTING\n"
-      "#define VOLUME_SHADOW\n");
-
-  e_data.volumetric_integration_sh = DRW_shader_create_with_shaderlib(
-      datatoc_volumetric_vert_glsl,
-      datatoc_volumetric_geom_glsl,
-      datatoc_volumetric_integration_frag_glsl,
-      lib,
-      USE_VOLUME_OPTI ? "#extension GL_ARB_shader_image_load_store: enable\n"
-                        "#extension GL_ARB_shading_language_420pack: enable\n"
-                        "#define USE_VOLUME_OPTI\n" SHADER_DEFINES :
-                        SHADER_DEFINES);
-
-  e_data.volumetric_resolve_sh = DRW_shader_create_fullscreen_with_shaderlib(
-      datatoc_volumetric_resolve_frag_glsl, lib, SHADER_DEFINES);
-  e_data.volumetric_accum_sh = DRW_shader_create_fullscreen_with_shaderlib(
-      datatoc_volumetric_accum_frag_glsl, lib, SHADER_DEFINES);
-
   const float zero[4] = {0.0f, 0.0f, 0.0f, 0.0f};
   e_data.dummy_zero = DRW_texture_create_3d(1, 1, 1, GPU_RGBA8, DRW_TEX_WRAP, zero);
 
@@ -312,9 +241,9 @@ void EEVEE_volumes_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
   Scene *scene = draw_ctx->scene;
   DRWShadingGroup *grp = NULL;
 
-  /* Shaders */
-  if (!e_data.scatter_sh) {
-    eevee_create_shader_volumes();
+  /* Textures */
+  if (!e_data.dummy_zero) {
+    eevee_create_textures_volumes();
   }
 
   /* Quick breakdown of the Volumetric rendering:
@@ -359,7 +288,7 @@ void EEVEE_volumes_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
 
     if (grp) {
       DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
-      /* TODO (fclem): remove those (need to clean the GLSL files). */
+      /* TODO(fclem): remove those (need to clean the GLSL files). */
       DRW_shgroup_uniform_block(grp, "grid_block", sldata->grid_ubo);
       DRW_shgroup_uniform_block(grp, "probe_block", sldata->probe_ubo);
       DRW_shgroup_uniform_block(grp, "planar_block", sldata->planar_ubo);
@@ -382,7 +311,7 @@ void EEVEE_volumes_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
 
   if (grp == NULL) {
     /* If no world or volume material is present just clear the buffer with this drawcall */
-    grp = DRW_shgroup_create(e_data.volumetric_clear_sh, psl->volumetric_world_ps);
+    grp = DRW_shgroup_create(EEVEE_shaders_volumes_clear_sh_get(), psl->volumetric_world_ps);
     DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
     DRW_shgroup_uniform_block(grp, "probe_block", sldata->probe_ubo);
     DRW_shgroup_uniform_block(grp, "light_block", sldata->light_ubo);
@@ -601,7 +530,7 @@ void EEVEE_volumes_cache_object_add(EEVEE_ViewLayerData *sldata,
 
   DRWShadingGroup *grp = DRW_shgroup_material_create(mat, vedata->psl->volumetric_objects_ps);
 
-  /* TODO(fclem) remove those "unnecessary" UBOs */
+  /* TODO(fclem): remove those "unnecessary" UBOs */
   DRW_shgroup_uniform_block(grp, "planar_block", sldata->planar_ubo);
   DRW_shgroup_uniform_block(grp, "probe_block", sldata->probe_ubo);
   DRW_shgroup_uniform_block(grp, "shadow_block", sldata->shadow_ubo);
@@ -644,7 +573,8 @@ void EEVEE_volumes_cache_finish(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
     struct GPUShader *sh;
 
     DRW_PASS_CREATE(psl->volumetric_scatter_ps, DRW_STATE_WRITE_COLOR);
-    sh = (common_data->vol_use_lights) ? e_data.scatter_with_lights_sh : e_data.scatter_sh;
+    sh = (common_data->vol_use_lights) ? EEVEE_shaders_volumes_scatter_with_lights_sh_get() :
+                                         EEVEE_shaders_volumes_scatter_sh_get();
     grp = DRW_shgroup_create(sh, psl->volumetric_scatter_ps);
     DRW_shgroup_uniform_texture_ref(grp, "irradianceGrid", &lcache->grid_tx.tex);
     DRW_shgroup_uniform_texture_ref(grp, "shadowCubeTexture", &sldata->shadow_cube_pool);
@@ -664,21 +594,28 @@ void EEVEE_volumes_cache_finish(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
     DRW_shgroup_call_procedural_triangles(grp, NULL, common_data->vol_tex_size[2]);
 
     DRW_PASS_CREATE(psl->volumetric_integration_ps, DRW_STATE_WRITE_COLOR);
-    grp = DRW_shgroup_create(e_data.volumetric_integration_sh, psl->volumetric_integration_ps);
+    grp = DRW_shgroup_create(EEVEE_shaders_volumes_integration_sh_get(),
+                             psl->volumetric_integration_ps);
     DRW_shgroup_uniform_texture_ref(grp, "volumeScattering", &txl->volume_scatter);
     DRW_shgroup_uniform_texture_ref(grp, "volumeExtinction", &txl->volume_transmit);
     DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
     DRW_shgroup_uniform_block(grp, "probe_block", sldata->probe_ubo);
     DRW_shgroup_uniform_block(grp, "renderpass_block", sldata->renderpass_ubo.combined);
+    if (USE_VOLUME_OPTI) {
+      DRW_shgroup_uniform_image_ref(grp, "finalScattering_img", &txl->volume_scatter_history);
+      DRW_shgroup_uniform_image_ref(grp, "finalTransmittance_img", &txl->volume_transmit_history);
+    }
 
     DRW_shgroup_call_procedural_triangles(
         grp, NULL, USE_VOLUME_OPTI ? 1 : common_data->vol_tex_size[2]);
 
     DRW_PASS_CREATE(psl->volumetric_resolve_ps, DRW_STATE_WRITE_COLOR | DRW_STATE_BLEND_CUSTOM);
-    grp = DRW_shgroup_create(e_data.volumetric_resolve_sh, psl->volumetric_resolve_ps);
+    grp = DRW_shgroup_create(EEVEE_shaders_volumes_resolve_sh_get(false),
+                             psl->volumetric_resolve_ps);
     DRW_shgroup_uniform_texture_ref(grp, "inScattering", &txl->volume_scatter);
     DRW_shgroup_uniform_texture_ref(grp, "inTransmittance", &txl->volume_transmit);
     DRW_shgroup_uniform_texture_ref(grp, "inSceneDepth", &e_data.depth_src);
+    DRW_shgroup_uniform_block(grp, "light_block", sldata->light_ubo);
     DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
     DRW_shgroup_uniform_block(grp, "probe_block", sldata->probe_ubo);
     DRW_shgroup_uniform_block(grp, "renderpass_block", sldata->renderpass_ubo.combined);
@@ -771,7 +708,7 @@ void EEVEE_volumes_compute(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
     DRW_stats_group_start("Volumetrics");
 
     /* We sample the shadow-maps using shadow sampler. We need to enable Comparison mode.
-     * TODO(fclem) avoid this by using sampler objects.*/
+     * TODO(fclem): avoid this by using sampler objects.*/
     GPU_texture_compare_mode(sldata->shadow_cube_pool, true);
     GPU_texture_compare_mode(sldata->shadow_cascade_pool, true);
 
@@ -783,15 +720,7 @@ void EEVEE_volumes_compute(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
     DRW_draw_pass(psl->volumetric_scatter_ps);
 
     if (USE_VOLUME_OPTI) {
-      int tex_scatter = GPU_texture_opengl_bindcode(txl->volume_scatter_history);
-      int tex_transmit = GPU_texture_opengl_bindcode(txl->volume_transmit_history);
-      /* TODO(fclem) Encapsulate these GL calls into DRWManager. */
-      glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
-      /* Subtlety here! we need to tell the GL that the texture is layered (GL_TRUE)
-       * in order to bind the full 3D texture and not just a 2D slice. */
-      glBindImageTexture(0, tex_scatter, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R11F_G11F_B10F);
-      glBindImageTexture(1, tex_transmit, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R11F_G11F_B10F);
-
+      /* Avoid feedback loop assert. */
       GPU_framebuffer_bind(fbl->volumetric_fb);
     }
     else {
@@ -799,13 +728,6 @@ void EEVEE_volumes_compute(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
     }
 
     DRW_draw_pass(psl->volumetric_integration_ps);
-
-    if (USE_VOLUME_OPTI) {
-      glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
-
-      glBindImageTexture(0, 0, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R11F_G11F_B10F);
-      glBindImageTexture(1, 0, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R11F_G11F_B10F);
-    }
 
     SWAP(struct GPUFrameBuffer *, fbl->volumetric_scat_fb, fbl->volumetric_integ_fb);
     SWAP(GPUTexture *, txl->volume_scatter, txl->volume_scatter_history);
@@ -831,6 +753,10 @@ void EEVEE_volumes_resolve(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *veda
   if ((effects->enabled_effects & EFFECT_VOLUMETRIC) != 0) {
     DefaultTextureList *dtxl = DRW_viewport_texture_list_get();
     e_data.depth_src = dtxl->depth;
+
+    if (USE_VOLUME_OPTI) {
+      GPU_memory_barrier(GPU_BARRIER_TEXTURE_FETCH);
+    }
 
     /* Apply for opaque geometry. */
     GPU_framebuffer_bind(fbl->main_color_fb);
@@ -859,13 +785,6 @@ void EEVEE_volumes_free(void)
   DRW_TEXTURE_FREE_SAFE(e_data.dummy_zero);
   DRW_TEXTURE_FREE_SAFE(e_data.dummy_one);
   DRW_TEXTURE_FREE_SAFE(e_data.dummy_flame);
-
-  DRW_SHADER_FREE_SAFE(e_data.volumetric_clear_sh);
-  DRW_SHADER_FREE_SAFE(e_data.scatter_sh);
-  DRW_SHADER_FREE_SAFE(e_data.scatter_with_lights_sh);
-  DRW_SHADER_FREE_SAFE(e_data.volumetric_integration_sh);
-  DRW_SHADER_FREE_SAFE(e_data.volumetric_resolve_sh);
-  DRW_SHADER_FREE_SAFE(e_data.volumetric_accum_sh);
 }
 
 /* -------------------------------------------------------------------- */
@@ -905,7 +824,7 @@ void EEVEE_volumes_output_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata, 
   DRW_PASS_CREATE(psl->volumetric_accum_ps, DRW_STATE_WRITE_COLOR | DRW_STATE_BLEND_ADD_FULL);
   DRWShadingGroup *grp = NULL;
   if ((effects->enabled_effects & EFFECT_VOLUMETRIC) != 0) {
-    grp = DRW_shgroup_create(e_data.volumetric_resolve_sh, psl->volumetric_accum_ps);
+    grp = DRW_shgroup_create(EEVEE_shaders_volumes_resolve_sh_get(true), psl->volumetric_accum_ps);
     DRW_shgroup_uniform_texture_ref(grp, "inScattering", &txl->volume_scatter);
     DRW_shgroup_uniform_texture_ref(grp, "inTransmittance", &txl->volume_transmit);
     DRW_shgroup_uniform_texture_ref(grp, "inSceneDepth", &e_data.depth_src);
@@ -915,7 +834,7 @@ void EEVEE_volumes_output_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata, 
   else {
     /* There is no volumetrics in the scene. Use a shader to fill the accum textures with a default
      * value. */
-    grp = DRW_shgroup_create(e_data.volumetric_accum_sh, psl->volumetric_accum_ps);
+    grp = DRW_shgroup_create(EEVEE_shaders_volumes_accum_sh_get(), psl->volumetric_accum_ps);
   }
   DRW_shgroup_call(grp, DRW_cache_fullscreen_quad_get(), NULL);
 }

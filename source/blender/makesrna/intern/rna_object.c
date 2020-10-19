@@ -223,36 +223,39 @@ const EnumPropertyItem rna_enum_lightprobes_type_items[] = {
 /* used for 2 enums */
 #define OBTYPE_CU_CURVE \
   { \
-    OB_CURVE, "CURVE", 0, "Curve", "" \
+    OB_CURVE, "CURVE", ICON_OUTLINER_OB_CURVE, "Curve", "" \
   }
 #define OBTYPE_CU_SURF \
   { \
-    OB_SURF, "SURFACE", 0, "Surface", "" \
+    OB_SURF, "SURFACE", ICON_OUTLINER_OB_SURFACE, "Surface", "" \
   }
 #define OBTYPE_CU_FONT \
   { \
-    OB_FONT, "FONT", 0, "Font", "" \
+    OB_FONT, "FONT", ICON_OUTLINER_OB_FONT, "Text", "" \
   }
 
 const EnumPropertyItem rna_enum_object_type_items[] = {
-    {OB_MESH, "MESH", 0, "Mesh", ""},
+    {OB_MESH, "MESH", ICON_OUTLINER_OB_MESH, "Mesh", ""},
     OBTYPE_CU_CURVE,
     OBTYPE_CU_SURF,
-    {OB_MBALL, "META", 0, "Meta", ""},
+    {OB_MBALL, "META", ICON_OUTLINER_OB_META, "Metaball", ""},
     OBTYPE_CU_FONT,
-    {OB_HAIR, "HAIR", 0, "Hair", ""},
-    {OB_POINTCLOUD, "POINTCLOUD", 0, "PointCloud", ""},
-    {OB_VOLUME, "VOLUME", 0, "Volume", ""},
+    {OB_HAIR, "HAIR", ICON_OUTLINER_OB_HAIR, "Hair", ""},
+    {OB_POINTCLOUD, "POINTCLOUD", ICON_OUTLINER_OB_POINTCLOUD, "Point Cloud", ""},
+    {OB_VOLUME, "VOLUME", ICON_OUTLINER_OB_VOLUME, "Volume", ""},
+    {OB_GPENCIL, "GPENCIL", ICON_OUTLINER_OB_GREASEPENCIL, "Grease Pencil", ""},
     {0, "", 0, NULL, NULL},
-    {OB_ARMATURE, "ARMATURE", 0, "Armature", ""},
-    {OB_LATTICE, "LATTICE", 0, "Lattice", ""},
-    {OB_EMPTY, "EMPTY", 0, "Empty", ""},
-    {OB_GPENCIL, "GPENCIL", 0, "GPencil", ""},
+    {OB_ARMATURE, "ARMATURE", ICON_OUTLINER_OB_ARMATURE, "Armature", ""},
+    {OB_LATTICE, "LATTICE", ICON_OUTLINER_OB_LATTICE, "Lattice", ""},
     {0, "", 0, NULL, NULL},
-    {OB_CAMERA, "CAMERA", 0, "Camera", ""},
-    {OB_LAMP, "LIGHT", 0, "Light", ""},
-    {OB_SPEAKER, "SPEAKER", 0, "Speaker", ""},
-    {OB_LIGHTPROBE, "LIGHT_PROBE", 0, "Probe", ""},
+    {OB_EMPTY, "EMPTY", ICON_OUTLINER_OB_EMPTY, "Empty", ""},
+    {0, "", 0, NULL, NULL},
+    {OB_LAMP, "LIGHT", ICON_OUTLINER_OB_LIGHT, "Light", ""},
+    {OB_LIGHTPROBE, "LIGHT_PROBE", ICON_OUTLINER_OB_LIGHTPROBE, "Light Probe", ""},
+    {0, "", 0, NULL, NULL},
+    {OB_CAMERA, "CAMERA", ICON_OUTLINER_OB_CAMERA, "Camera", ""},
+    {0, "", 0, NULL, NULL},
+    {OB_SPEAKER, "SPEAKER", ICON_OUTLINER_OB_SPEAKER, "Speaker", ""},
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -403,7 +406,7 @@ static void rna_Object_matrix_local_set(PointerRNA *ptr, const float values[16])
     copy_m4_m4(local_mat, (float(*)[4])values);
   }
 
-  /* Don't use compat so we get predictable rotation, and do not use parenting either,
+  /* Don't use compatible so we get predictable rotation, and do not use parenting either,
    * because it's a local matrix! */
   BKE_object_apply_mat4(ob, local_mat, false, false);
 }
@@ -738,9 +741,8 @@ static void rna_Object_dup_collection_set(PointerRNA *ptr,
   Object *ob = (Object *)ptr->data;
   Collection *grp = (Collection *)value.data;
 
-  /* must not let this be set if the object belongs in this group already,
-   * thus causing a cycle/infinite-recursion leading to crashes on load [#25298]
-   */
+  /* Must not let this be set if the object belongs in this group already,
+   * thus causing a cycle/infinite-recursion leading to crashes on load T25298. */
   if (BKE_collection_has_object_recursive(grp, ob) == 0) {
     if (ob->type == OB_EMPTY) {
       id_us_min(&ob->instance_collection->id);
@@ -1825,8 +1827,19 @@ static void rna_Object_boundbox_get(PointerRNA *ptr, float *values)
   }
 }
 
-static bDeformGroup *rna_Object_vgroup_new(Object *ob, Main *bmain, const char *name)
+static bDeformGroup *rna_Object_vgroup_new(Object *ob,
+                                           Main *bmain,
+                                           ReportList *reports,
+                                           const char *name)
 {
+  if (!OB_TYPE_SUPPORT_VGROUP(ob->type)) {
+    const char *ob_type_name = "Unknown";
+    RNA_enum_name_from_value(rna_enum_object_type_items, ob->type, &ob_type_name);
+    BKE_reportf(
+        reports, RPT_ERROR, "VertexGroups.new(): is not supported for '%s' objects", ob_type_name);
+    return NULL;
+  }
+
   bDeformGroup *defgroup = BKE_object_defgroup_add_name(ob, name);
 
   DEG_relations_tag_update(bmain);
@@ -2052,14 +2065,14 @@ static void rna_def_vertex_group(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Name", "Vertex group name");
   RNA_def_struct_name_property(srna, prop);
   RNA_def_property_string_funcs(prop, NULL, NULL, "rna_VertexGroup_name_set");
-  /* update data because modifiers may use [#24761] */
+  /* update data because modifiers may use T24761. */
   RNA_def_property_update(
       prop, NC_GEOM | ND_DATA | NA_RENAME, "rna_Object_internal_update_data_dependency");
 
   prop = RNA_def_property(srna, "lock_weight", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_ui_text(prop, "", "Maintain the relative weights for the group");
   RNA_def_property_boolean_sdna(prop, NULL, "flag", 0);
-  /* update data because modifiers may use [#24761] */
+  /* update data because modifiers may use T24761. */
   RNA_def_property_update(prop, NC_GEOM | ND_DATA | NA_RENAME, "rna_Object_internal_update_data");
 
   prop = RNA_def_property(srna, "index", PROP_INT, PROP_UNSIGNED);
@@ -2112,7 +2125,7 @@ static void rna_def_face_map(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Name", "Face map name");
   RNA_def_struct_name_property(srna, prop);
   RNA_def_property_string_funcs(prop, NULL, NULL, "rna_FaceMap_name_set");
-  /* update data because modifiers may use [#24761] */
+  /* update data because modifiers may use T24761. */
   RNA_def_property_update(prop, NC_GEOM | ND_DATA | NA_RENAME, "rna_Object_internal_update_data");
 
   prop = RNA_def_property(srna, "select", PROP_BOOLEAN, PROP_NONE);
@@ -2486,7 +2499,7 @@ static void rna_def_object_vertex_groups(BlenderRNA *brna, PropertyRNA *cprop)
 
   /* vertex groups */ /* add_vertex_group */
   func = RNA_def_function(srna, "new", "rna_Object_vgroup_new");
-  RNA_def_function_flag(func, FUNC_USE_MAIN);
+  RNA_def_function_flag(func, FUNC_USE_MAIN | FUNC_USE_REPORTS);
   RNA_def_function_ui_description(func, "Add vertex group to object");
   RNA_def_string(func, "name", "Group", 0, "", "Vertex group name"); /* optional */
   parm = RNA_def_pointer(func, "group", "VertexGroup", "", "New vertex group");

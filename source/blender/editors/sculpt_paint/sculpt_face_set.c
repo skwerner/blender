@@ -272,14 +272,14 @@ static EnumPropertyItem prop_sculpt_face_set_create_types[] = {
         SCULPT_FACE_SET_MASKED,
         "MASKED",
         0,
-        "Face Set From Masked",
+        "Face Set from Masked",
         "Create a new Face Set from the masked faces",
     },
     {
         SCULPT_FACE_SET_VISIBLE,
         "VISIBLE",
         0,
-        "Face Set From Visible",
+        "Face Set from Visible",
         "Create a new Face Set from the visible vertices",
     },
     {
@@ -293,7 +293,7 @@ static EnumPropertyItem prop_sculpt_face_set_create_types[] = {
         SCULPT_FACE_SET_SELECTION,
         "SELECTION",
         0,
-        "Face Set From Edit Mode Selection",
+        "Face Set from Edit Mode Selection",
         "Create an Face Set corresponding to the Edit Mode face selection",
     },
     {0, NULL, 0, NULL, NULL},
@@ -445,56 +445,56 @@ static EnumPropertyItem prop_sculpt_face_sets_init_types[] = {
         SCULPT_FACE_SETS_FROM_LOOSE_PARTS,
         "LOOSE_PARTS",
         0,
-        "Face Sets From Loose Parts",
+        "Face Sets from Loose Parts",
         "Create a Face Set per loose part in the mesh",
     },
     {
         SCULPT_FACE_SETS_FROM_MATERIALS,
         "MATERIALS",
         0,
-        "Face Sets From Material Slots",
+        "Face Sets from Material Slots",
         "Create a Face Set per Material Slot",
     },
     {
         SCULPT_FACE_SETS_FROM_NORMALS,
         "NORMALS",
         0,
-        "Face Sets From Mesh Normals",
+        "Face Sets from Mesh Normals",
         "Create Face Sets for Faces that have similar normal",
     },
     {
         SCULPT_FACE_SETS_FROM_UV_SEAMS,
         "UV_SEAMS",
         0,
-        "Face Sets From UV Seams",
+        "Face Sets from UV Seams",
         "Create Face Sets using UV Seams as boundaries",
     },
     {
         SCULPT_FACE_SETS_FROM_CREASES,
         "CREASES",
         0,
-        "Face Sets From Edge Creases",
+        "Face Sets from Edge Creases",
         "Create Face Sets using Edge Creases as boundaries",
     },
     {
         SCULPT_FACE_SETS_FROM_BEVEL_WEIGHT,
         "BEVEL_WEIGHT",
         0,
-        "Face Sets From Bevel Weight",
+        "Face Sets from Bevel Weight",
         "Create Face Sets using Bevel Weights as boundaries",
     },
     {
         SCULPT_FACE_SETS_FROM_SHARP_EDGES,
         "SHARP_EDGES",
         0,
-        "Face Sets From Sharp Edges",
+        "Face Sets from Sharp Edges",
         "Create Face Sets using Sharp Edges as boundaries",
     },
     {
         SCULPT_FACE_SETS_FROM_FACE_MAPS,
         "FACE_MAPS",
         0,
-        "Face Sets From Face Maps",
+        "Face Sets from Face Maps",
         "Create a Face Set per Face Map",
     },
     {0, NULL, 0, NULL, NULL},
@@ -720,7 +720,7 @@ static int sculpt_face_set_init_exec(bContext *C, wmOperator *op)
   SCULPT_undo_push_end();
 
   /* Sync face sets visibility and vertex visibility as now all Face Sets are visible. */
-  SCULPT_visibility_sync_all_face_sets_to_vertices(ss);
+  SCULPT_visibility_sync_all_face_sets_to_vertices(ob);
 
   for (int i = 0; i < totnode; i++) {
     BKE_pbvh_node_mark_update_visibility(nodes[i]);
@@ -889,12 +889,6 @@ static int sculpt_face_sets_change_visibility_exec(bContext *C, wmOperator *op)
   if (mode == SCULPT_FACE_SET_VISIBILITY_SHOW_ACTIVE) {
     SCULPT_face_sets_visibility_all_set(ss, false);
     SCULPT_face_set_visibility_set(ss, active_face_set, true);
-    for (int i = 0; i < tot_vert; i++) {
-      SCULPT_vertex_visible_set(ss,
-                                i,
-                                SCULPT_vertex_visible_get(ss, i) &&
-                                    SCULPT_vertex_has_face_set(ss, i, active_face_set));
-    }
   }
 
   if (mode == SCULPT_FACE_SET_VISIBILITY_HIDE_ACTIVE) {
@@ -918,7 +912,7 @@ static int sculpt_face_sets_change_visibility_exec(bContext *C, wmOperator *op)
   }
 
   /* Sync face sets visibility and vertex visibility. */
-  SCULPT_visibility_sync_all_face_sets_to_vertices(ss);
+  SCULPT_visibility_sync_all_face_sets_to_vertices(ob);
 
   SCULPT_undo_push_end();
 
@@ -929,10 +923,6 @@ static int sculpt_face_sets_change_visibility_exec(bContext *C, wmOperator *op)
   BKE_pbvh_update_vertex_data(ss->pbvh, PBVH_UpdateVisibility);
 
   MEM_SAFE_FREE(nodes);
-
-  if (BKE_pbvh_type(pbvh) == PBVH_FACES) {
-    BKE_mesh_flush_hidden_from_verts(ob->data);
-  }
 
   ED_region_tag_redraw(region);
   DEG_id_tag_update(&ob->id, ID_RECALC_SHADING);
@@ -1194,7 +1184,7 @@ static int sculpt_face_set_edit_invoke(bContext *C, wmOperator *op, const wmEven
   SCULPT_undo_push_end();
 
   /* Sync face sets visibility and vertex visibility as now all Face Sets are visible. */
-  SCULPT_visibility_sync_all_face_sets_to_vertices(ss);
+  SCULPT_visibility_sync_all_face_sets_to_vertices(ob);
 
   for (int i = 0; i < totnode; i++) {
     BKE_pbvh_node_mark_update_visibility(nodes[i]);

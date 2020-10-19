@@ -30,6 +30,7 @@
 
 #include "BLT_translation.h"
 
+#include "DNA_defaults.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_meshdata_types.h"
@@ -67,10 +68,10 @@
 static void initData(GpencilModifierData *md)
 {
   MirrorGpencilModifierData *gpmd = (MirrorGpencilModifierData *)md;
-  gpmd->pass_index = 0;
-  gpmd->material = NULL;
-  gpmd->object = NULL;
-  gpmd->flag |= GP_MIRROR_AXIS_X;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(gpmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(gpmd, DNA_struct_default_get(MirrorGpencilModifierData), modifier);
 }
 
 static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
@@ -216,23 +217,12 @@ static void updateDepsgraph(GpencilModifierData *md, const ModifierUpdateDepsgra
   DEG_add_object_relation(ctx->node, ctx->object, DEG_OB_COMP_TRANSFORM, "Mirror Modifier");
 }
 
-static void foreachObjectLink(GpencilModifierData *md,
-                              Object *ob,
-                              ObjectWalkFunc walk,
-                              void *userData)
-{
-  MirrorGpencilModifierData *mmd = (MirrorGpencilModifierData *)md;
-
-  walk(userData, ob, &mmd->object, IDWALK_CB_NOP);
-}
-
 static void foreachIDLink(GpencilModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   MirrorGpencilModifierData *mmd = (MirrorGpencilModifierData *)md;
 
   walk(userData, ob, (ID **)&mmd->material, IDWALK_CB_USER);
-
-  foreachObjectLink(md, ob, (ObjectWalkFunc)walk, userData);
+  walk(userData, ob, (ID **)&mmd->object, IDWALK_CB_NOP);
 }
 
 static void panel_draw(const bContext *UNUSED(C), Panel *panel)
@@ -246,9 +236,9 @@ static void panel_draw(const bContext *UNUSED(C), Panel *panel)
   uiLayoutSetPropSep(layout, true);
 
   row = uiLayoutRowWithHeading(layout, true, IFACE_("Axis"));
-  uiItemR(row, ptr, "x_axis", toggles_flag, NULL, ICON_NONE);
-  uiItemR(row, ptr, "y_axis", toggles_flag, NULL, ICON_NONE);
-  uiItemR(row, ptr, "z_axis", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, ptr, "use_axis_x", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, ptr, "use_axis_y", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, ptr, "use_axis_z", toggles_flag, NULL, ICON_NONE);
 
   uiItemR(layout, ptr, "object", 0, NULL, ICON_NONE);
 
@@ -287,7 +277,6 @@ GpencilModifierTypeInfo modifierType_Gpencil_Mirror = {
     /* isDisabled */ isDisabled,
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
     /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* panelRegister */ panelRegister,

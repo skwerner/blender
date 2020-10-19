@@ -29,6 +29,7 @@
 
 #include "BLT_translation.h"
 
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
@@ -68,13 +69,9 @@ static void initData(ModifierData *md)
 {
   MultiresModifierData *mmd = (MultiresModifierData *)md;
 
-  mmd->lvl = 0;
-  mmd->sculptlvl = 0;
-  mmd->renderlvl = 0;
-  mmd->totlvl = 0;
-  mmd->uv_smooth = SUBSURF_UV_SMOOTH_PRESERVE_CORNERS;
-  mmd->quality = 4;
-  mmd->flags |= (eMultiresModifierFlag_UseCrease | eMultiresModifierFlag_ControlEdges);
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(mmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(mmd, DNA_struct_default_get(MultiresModifierData), modifier);
 
   /* Open subdivision panels by default. */
   md->ui_expand_flag = (1 << 0) | (1 << 1);
@@ -205,6 +202,13 @@ static Mesh *multires_as_ccg(MultiresModifierData *mmd,
   }
   BKE_subdiv_displacement_attach_from_multires(subdiv, mesh, mmd);
   result = BKE_subdiv_to_ccg_mesh(subdiv, &ccg_settings, mesh);
+
+  /* NOTE: CCG becomes an owner of Subdiv descriptor, so can not share
+   * this pointer. Not sure if it's needed, but might have a second look
+   * on the ownership model here. */
+  MultiresRuntimeData *runtime_data = mmd->modifier.runtime;
+  runtime_data->subdiv = NULL;
+
   return result;
 }
 
@@ -221,7 +225,6 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
   if (subdiv_settings.level == 0) {
     return result;
   }
-  BKE_subdiv_settings_validate_for_mesh(&subdiv_settings, mesh);
   MultiresRuntimeData *runtime_data = multires_ensure_runtime(mmd);
   Subdiv *subdiv = subdiv_descriptor_ensure(mmd, &subdiv_settings, mesh);
   if (subdiv == NULL) {
@@ -261,10 +264,6 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
       sculpt_session->mpoly = NULL;
       sculpt_session->mloop = NULL;
     }
-    /* NOTE: CCG becomes an owner of Subdiv descriptor, so can not share
-     * this pointer. Not sure if it's needed, but might have a second look
-     * on the ownership model here. */
-    runtime_data->subdiv = NULL;
     // BKE_subdiv_stats_print(&subdiv->stats);
   }
   else {
@@ -293,7 +292,7 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
 }
 
 static void deformMatrices(ModifierData *md,
-                           const ModifierEvalContext *UNUSED(ctx),
+                           const ModifierEvalContext *ctx,
                            Mesh *mesh,
                            float (*vertex_cos)[3],
                            float (*deform_matrices)[3][3],
@@ -309,12 +308,19 @@ static void deformMatrices(ModifierData *md,
   (void)deform_matrices;
 
   MultiresModifierData *mmd = (MultiresModifierData *)md;
+
   SubdivSettings subdiv_settings;
   BKE_multires_subdiv_settings_init(&subdiv_settings, mmd);
   if (subdiv_settings.level == 0) {
     return;
   }
-  BKE_subdiv_settings_validate_for_mesh(&subdiv_settings, mesh);
+
+  SubdivToCCGSettings ccg_settings;
+  multires_ccg_settings_init(&ccg_settings, mmd, ctx, mesh);
+  if (ccg_settings.resolution < 3) {
+    return;
+  }
+
   MultiresRuntimeData *runtime_data = multires_ensure_runtime(mmd);
   Subdiv *subdiv = subdiv_descriptor_ensure(mmd, &subdiv_settings, mesh);
   if (subdiv == NULL) {
@@ -470,14 +476,15 @@ static void advanced_panel_draw(const bContext *UNUSED(C), Panel *panel)
 
   uiLayoutSetPropSep(layout, true);
 
-  uiLayoutSetEnabled(layout, !has_displacement);
+  uiLayoutSetActive(layout, !has_displacement);
 
   uiItemR(layout, ptr, "subdivision_type", 0, NULL, ICON_NONE);
   uiItemR(layout, ptr, "quality", 0, NULL, ICON_NONE);
 
   col = uiLayoutColumn(layout, false);
-  uiLayoutSetEnabled(col, true);
+  uiLayoutSetActive(col, true);
   uiItemR(col, ptr, "uv_smooth", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "boundary_smooth", 0, NULL, ICON_NONE);
 
   uiItemR(layout, ptr, "use_creases", 0, NULL, ICON_NONE);
   uiItemR(layout, ptr, "use_custom_normals", 0, NULL, ICON_NONE);
@@ -499,9 +506,11 @@ ModifierTypeInfo modifierType_Multires = {
     /* name */ "Multires",
     /* structName */ "MultiresModifierData",
     /* structSize */ sizeof(MultiresModifierData),
+    /* srna */ &RNA_MultiresModifier,
     /* type */ eModifierTypeType_Constructive,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsMapping |
         eModifierTypeFlag_RequiresOriginalData,
+    /* icon */ ICON_MOD_MULTIRES,
 
     /* copyData */ copyData,
 
@@ -521,7 +530,6 @@ ModifierTypeInfo modifierType_Multires = {
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ dependsOnNormals,
-    /* foreachObjectLink */ NULL,
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ freeRuntimeData,

@@ -159,24 +159,22 @@ static void wm_job_main_thread_yield(wmJob *wm_job)
  */
 static wmJob *wm_job_find(wmWindowManager *wm, void *owner, const int job_type)
 {
-  wmJob *wm_job;
-
   if (owner && job_type) {
-    for (wm_job = wm->jobs.first; wm_job; wm_job = wm_job->next) {
+    LISTBASE_FOREACH (wmJob *, wm_job, &wm->jobs) {
       if (wm_job->owner == owner && wm_job->job_type == job_type) {
         return wm_job;
       }
     }
   }
   else if (owner) {
-    for (wm_job = wm->jobs.first; wm_job; wm_job = wm_job->next) {
+    LISTBASE_FOREACH (wmJob *, wm_job, &wm->jobs) {
       if (wm_job->owner == owner) {
         return wm_job;
       }
     }
   }
   else if (job_type) {
-    for (wm_job = wm->jobs.first; wm_job; wm_job = wm_job->next) {
+    LISTBASE_FOREACH (wmJob *, wm_job, &wm->jobs) {
       if (wm_job->job_type == job_type) {
         return wm_job;
       }
@@ -443,7 +441,11 @@ static void wm_jobs_test_suspend_stop(wmWindowManager *wm, wmJob *test)
 
   /* Possible suspend ourselves, waiting for other jobs, or de-suspend. */
   test->suspended = suspend;
-  // if (suspend) printf("job suspended: %s\n", test->name);
+#if 0
+  if (suspend) {
+    printf("job suspended: %s\n", test->name);
+  }
+#endif
 }
 
 /**
@@ -679,8 +681,14 @@ void wm_jobs_timer(wmWindowManager *wm, wmTimer *wt)
           wm_job->run_customdata = NULL;
           wm_job->run_free = NULL;
 
-          // if (wm_job->stop) printf("job ready but stopped %s\n", wm_job->name);
-          // else printf("job finished %s\n", wm_job->name);
+#if 0
+          if (wm_job->stop) {
+            printf("job ready but stopped %s\n", wm_job->name);
+          }
+          else {
+            printf("job finished %s\n", wm_job->name);
+          }
+#endif
 
           if (G.debug & G_DEBUG_JOBS) {
             printf("Job '%s' finished in %f seconds\n",

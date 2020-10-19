@@ -59,7 +59,7 @@
 
 #include "UI_view2d.h"
 
-#include "nla_intern.h"  // own include
+#include "nla_intern.h" /* own include */
 
 /* *********************************************** */
 /* Operators for NLA channels-list which need to be different
@@ -103,7 +103,7 @@ static int mouse_nla_channels(
   }
 
   /* action to take depends on what channel we've got */
-  // WARNING: must keep this in sync with the equivalent function in anim_channels_edit.c
+  /* WARNING: must keep this in sync with the equivalent function in anim_channels_edit.c */
   switch (ale->type) {
     case ANIMTYPE_SCENE: {
       Scene *sce = (Scene *)ale->data;
@@ -204,7 +204,7 @@ static int mouse_nla_channels(
         }
         else {
           /* select AnimData block by itself */
-          ANIM_deselect_anim_channels(ac, ac->data, ac->datatype, 0, ACHANNEL_SETFLAG_CLEAR);
+          ANIM_anim_channels_select_set(ac, ACHANNEL_SETFLAG_CLEAR);
           ale->adt->flag |= ADT_UI_SELECTED;
         }
 
@@ -267,7 +267,7 @@ static int mouse_nla_channels(
         }
         else {
           /* select F-Curve by itself */
-          ANIM_deselect_anim_channels(ac, ac->data, ac->datatype, 0, ACHANNEL_SETFLAG_CLEAR);
+          ANIM_anim_channels_select_set(ac, ACHANNEL_SETFLAG_CLEAR);
           nlt->flag |= NLATRACK_SELECTED;
         }
 
@@ -329,7 +329,7 @@ static int mouse_nla_channels(
           }
           else {
             /* select AnimData block by itself */
-            ANIM_deselect_anim_channels(ac, ac->data, ac->datatype, 0, ACHANNEL_SETFLAG_CLEAR);
+            ANIM_anim_channels_select_set(ac, ACHANNEL_SETFLAG_CLEAR);
             adt->flag |= ADT_UI_SELECTED;
           }
 
@@ -427,7 +427,7 @@ void NLA_OT_channels_click(wmOperatorType *ot)
   ot->flag = OPTYPE_UNDO;
 
   /* props */
-  prop = RNA_def_boolean(ot->srna, "extend", 0, "Extend Select", "");  // SHIFTKEY
+  prop = RNA_def_boolean(ot->srna, "extend", 0, "Extend Select", ""); /* SHIFTKEY */
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
 
@@ -518,7 +518,12 @@ static int nlachannels_pushdown_exec(bContext *C, wmOperator *op)
   /* 'push-down' action - only usable when not in TweakMode */
   BKE_nla_action_pushdown(adt);
 
-  DEG_id_tag_update_ex(CTX_data_main(C), id, ID_RECALC_ANIMATION | ID_RECALC_COPY_ON_WRITE);
+  struct Main *bmain = CTX_data_main(C);
+  DEG_id_tag_update_ex(bmain, id, ID_RECALC_ANIMATION);
+
+  /* The action needs updating too, as FCurve modifiers are to be reevaluated. They won't extend
+   * beyond the NLA strip after pushing down to the NLA. */
+  DEG_id_tag_update_ex(bmain, &adt->action->id, ID_RECALC_ANIMATION);
 
   /* set notifier that things have changed */
   WM_event_add_notifier(C, NC_ANIMATION | ND_NLA_ACTCHANGE, NULL);

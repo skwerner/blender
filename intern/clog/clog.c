@@ -1,4 +1,4 @@
-/*
+﻿/*
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -188,7 +188,7 @@ static void clg_str_vappendf(CLogStringBuf *cstr, const char *fmt, va_list args)
     va_end(args_cpy);
 
     if (retval < 0) {
-      /* Some encoding error happened, not much we can do here, besides skipping/cancelling this
+      /* Some encoding error happened, not much we can do here, besides skipping/canceling this
        * message. */
       break;
     }
@@ -199,7 +199,7 @@ static void clg_str_vappendf(CLogStringBuf *cstr, const char *fmt, va_list args)
     }
     else {
       /* vsnprintf was not successful, due to lack of allocated space, retval contains expected
-       * length of the formated string, use it to allocate required amount of memory. */
+       * length of the formatted string, use it to allocate required amount of memory. */
       uint len_alloc = cstr->len + (uint)retval;
       if (len_alloc >= len_max) {
         /* Safe upper-limit, just in case... */
@@ -235,15 +235,11 @@ static void clg_color_table_init(bool use_color)
     clg_color_table[i] = "";
   }
   if (use_color) {
-#ifdef _WIN32
-    /* TODO */
-#else
     clg_color_table[COLOR_DEFAULT] = "\033[1;37m";
     clg_color_table[COLOR_RED] = "\033[1;31m";
     clg_color_table[COLOR_GREEN] = "\033[1;32m";
     clg_color_table[COLOR_YELLOW] = "\033[1;33m";
     clg_color_table[COLOR_RESET] = "\033[0m";
-#endif
   }
 }
 
@@ -295,7 +291,7 @@ static enum eCLogColor clg_severity_to_color(enum CLG_Severity severity)
  * \{ */
 
 /**
- * Filter the indentifier based on very basic globbing.
+ * Filter the identifier based on very basic globbing.
  * - `foo` exact match of `foo`.
  * - `foo.bar` exact match for `foo.bar`
  * - `foo.*` match for `foo` & `foo.bar` & `foo.bar.baz`
@@ -371,7 +367,7 @@ static void clg_ctx_fatal_action(CLogContext *ctx)
 
 static void clg_ctx_backtrace(CLogContext *ctx)
 {
-  /* Note: we avoid writing fo 'FILE', for backtrace we make an exception,
+  /* Note: we avoid writing to 'FILE', for back-trace we make an exception,
    * if necessary we could have a version of the callback that writes to file
    * descriptor all at once. */
   ctx->callbacks.backtrace_fn(ctx->output_file);
@@ -551,6 +547,14 @@ static void CLG_ctx_output_set(CLogContext *ctx, void *file_handle)
   ctx->output = fileno(ctx->output_file);
 #if defined(__unix__) || defined(__APPLE__)
   ctx->use_color = isatty(ctx->output);
+#elif defined(WIN32)
+  /* Windows Terminal supports color like the Linux terminals do while the standard console does
+   * not, the way to tell the two apart is to look at the `WT_SESSION` environment variable which
+   * will only be defined for Windows Terminal. */
+
+  /* #getenv is used here rather than #BLI_getenv since it would be a bad level call
+   * and there are no benefits for using it in this context. */
+  ctx->use_color = isatty(ctx->output) && getenv("WT_SESSION");
 #endif
 }
 
@@ -626,7 +630,6 @@ static CLogContext *CLG_ctx_init(void)
 #ifdef WITH_CLOG_PTHREADS
   pthread_mutex_init(&ctx->types_lock, NULL);
 #endif
-  ctx->use_color = true;
   ctx->default_type.level = 1;
   CLG_ctx_output_set(ctx, stdout);
 
@@ -726,7 +729,8 @@ void CLG_level_set(int level)
 
 /* -------------------------------------------------------------------- */
 /** \name Logging Reference API
- * Use to avoid lookups each time.
+ *
+ * Use to avoid look-ups each time.
  * \{ */
 
 void CLG_logref_init(CLG_LogRef *clg_ref)

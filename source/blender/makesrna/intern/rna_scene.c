@@ -44,11 +44,10 @@
 #include "BKE_armature.h"
 #include "BKE_editmesh.h"
 #include "BKE_paint.h"
+#include "BKE_volume.h"
 
 #include "ED_gpencil.h"
 #include "ED_object.h"
-
-#include "DRW_engine.h"
 
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
@@ -1888,6 +1887,10 @@ static void object_simplify_update(Object *ob)
     }
     FOREACH_COLLECTION_OBJECT_RECURSIVE_END;
   }
+
+  if (ob->type == OB_VOLUME) {
+    DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+  }
 }
 
 static void rna_Scene_use_simplify_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
@@ -2514,7 +2517,7 @@ static const EnumPropertyItem *rna_UnitSettings_itemf_wrapper(const int system,
 {
   const void *usys;
   int len;
-  bUnit_GetSystem(system, type, &usys, &len);
+  BKE_unit_system_get(system, type, &usys, &len);
 
   EnumPropertyItem *items = NULL;
   int totitem = 0;
@@ -2526,10 +2529,10 @@ static const EnumPropertyItem *rna_UnitSettings_itemf_wrapper(const int system,
   RNA_enum_item_add(&items, &totitem, &adaptive);
 
   for (int i = 0; i < len; i++) {
-    if (!bUnit_IsSuppressed(usys, i)) {
+    if (!BKE_unit_is_suppressed(usys, i)) {
       EnumPropertyItem tmp = {0};
-      tmp.identifier = bUnit_GetIdentifier(usys, i);
-      tmp.name = bUnit_GetNameDisplay(usys, i);
+      tmp.identifier = BKE_unit_identifier_get(usys, i);
+      tmp.name = BKE_unit_display_name_get(usys, i);
       tmp.value = i;
       RNA_enum_item_add(&items, &totitem, &tmp);
     }
@@ -2568,6 +2571,15 @@ const EnumPropertyItem *rna_UnitSettings_time_unit_itemf(bContext *UNUSED(C),
   return rna_UnitSettings_itemf_wrapper(units->system, B_UNIT_TIME, r_free);
 }
 
+const EnumPropertyItem *rna_UnitSettings_temperature_unit_itemf(bContext *UNUSED(C),
+                                                                PointerRNA *ptr,
+                                                                PropertyRNA *UNUSED(prop),
+                                                                bool *r_free)
+{
+  UnitSettings *units = ptr->data;
+  return rna_UnitSettings_itemf_wrapper(units->system, B_UNIT_TEMPERATURE, r_free);
+}
+
 static void rna_UnitSettings_system_update(Main *UNUSED(bmain),
                                            Scene *scene,
                                            PointerRNA *UNUSED(ptr))
@@ -2578,8 +2590,8 @@ static void rna_UnitSettings_system_update(Main *UNUSED(bmain),
     unit->mass_unit = USER_UNIT_ADAPTIVE;
   }
   else {
-    unit->length_unit = bUnit_GetBaseUnitOfType(unit->system, B_UNIT_LENGTH);
-    unit->mass_unit = bUnit_GetBaseUnitOfType(unit->system, B_UNIT_MASS);
+    unit->length_unit = BKE_unit_base_of_type_get(unit->system, B_UNIT_LENGTH);
+    unit->mass_unit = BKE_unit_base_of_type_get(unit->system, B_UNIT_MASS);
   }
 }
 
@@ -3480,7 +3492,7 @@ static void rna_def_tool_settings(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "use_edge_path_live_unwrap", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "edge_mode_live_unwrap", 1);
-  RNA_def_property_ui_text(prop, "Live Unwrap", "Changing edges seam recalculates UV unwrap");
+  RNA_def_property_ui_text(prop, "Live Unwrap", "Changing edge seams recalculates UV unwrap");
 
   prop = RNA_def_property(srna, "normal_vector", PROP_FLOAT, PROP_XYZ);
   RNA_def_property_ui_text(prop, "Normal Vector", "Normal Vector used to copy, add or multiply");
@@ -3905,6 +3917,13 @@ static void rna_def_unit_settings(BlenderRNA *brna)
   RNA_def_property_enum_items(prop, DummyRNA_DEFAULT_items);
   RNA_def_property_enum_funcs(prop, NULL, NULL, "rna_UnitSettings_time_unit_itemf");
   RNA_def_property_ui_text(prop, "Time Unit", "Unit that will be used to display time values");
+  RNA_def_property_update(prop, NC_WINDOW, NULL);
+
+  prop = RNA_def_property(srna, "temperature_unit", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_items(prop, DummyRNA_DEFAULT_items);
+  RNA_def_property_enum_funcs(prop, NULL, NULL, "rna_UnitSettings_temperature_unit_itemf");
+  RNA_def_property_ui_text(
+      prop, "Temperature Unit", "Unit that will be used to display temperature values");
   RNA_def_property_update(prop, NC_WINDOW, NULL);
 }
 
@@ -6457,6 +6476,12 @@ static void rna_def_scene_render_data(BlenderRNA *brna)
       prop, "Simplify Child Particles", "Global child particles percentage during rendering");
   RNA_def_property_update(prop, 0, "rna_Scene_simplify_update");
 
+  prop = RNA_def_property(srna, "simplify_volumes", PROP_FLOAT, PROP_FACTOR);
+  RNA_def_property_range(prop, 0.0, 1.0f);
+  RNA_def_property_ui_text(
+      prop, "Simplify Volumes", "Resolution percentage of volume objects in viewport");
+  RNA_def_property_update(prop, 0, "rna_Scene_simplify_update");
+
   /* Grease Pencil - Simplify Options */
   prop = RNA_def_property(srna, "simplify_gpencil", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "simplify_gpencil", SIMPLIFY_GPENCIL_ENABLE);
@@ -6823,6 +6848,17 @@ static void rna_def_scene_eevee(BlenderRNA *brna)
       {4, "4", 0, "4 px", ""},
       {8, "8", 0, "8 px", ""},
       {16, "16", 0, "16 px", ""},
+      {0, NULL, 0, NULL, NULL},
+  };
+
+  static const EnumPropertyItem eevee_motion_blur_position_items[] = {
+      {SCE_EEVEE_MB_START, "START", 0, "Start on Frame", "The shutter opens at the current frame"},
+      {SCE_EEVEE_MB_CENTER,
+       "CENTER",
+       0,
+       "Center on Frame",
+       "The shutter is open during the current frame"},
+      {SCE_EEVEE_MB_END, "END", 0, "End on Frame", "The shutter closes at the current frame"},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -7212,6 +7248,15 @@ static void rna_def_scene_eevee(BlenderRNA *brna)
                            "more steps means longer render time");
   RNA_def_property_range(prop, 1, INT_MAX);
   RNA_def_property_ui_range(prop, 1, 64, 1, -1);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
+  RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, NULL);
+
+  prop = RNA_def_property(srna, "motion_blur_position", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_items(prop, eevee_motion_blur_position_items);
+  RNA_def_property_ui_text(prop,
+                           "Motion Blur Position",
+                           "Offset for the shutter's time interval, "
+                           "allows to change the motion blur trails");
   RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, NULL);
 

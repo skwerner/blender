@@ -40,12 +40,16 @@
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
 
+/* Allow using deprecated functionality for .blend file I/O. */
+#define DNA_DEPRECATED_ALLOW
+
 #include "DNA_gpencil_types.h"
 #include "DNA_material_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_space_types.h"
 
 #include "BKE_action.h"
+#include "BKE_anim_data.h"
 #include "BKE_collection.h"
 #include "BKE_colortools.h"
 #include "BKE_deform.h"
@@ -63,6 +67,10 @@
 #include "BLI_math_color.h"
 
 #include "DEG_depsgraph_query.h"
+
+#include "BLO_read_write.h"
+
+#include "BKE_gpencil.h"
 
 static CLG_LogRef LOG = {"bke.gpencil"};
 
@@ -111,6 +119,154 @@ static void greasepencil_foreach_id(ID *id, LibraryForeachIDData *data)
   }
 }
 
+static void greasepencil_blend_write(BlendWriter *writer, ID *id, const void *id_address)
+{
+  bGPdata *gpd = (bGPdata *)id;
+  if (gpd->id.us > 0 || BLO_write_is_undo(writer)) {
+    /* Clean up, important in undo case to reduce false detection of changed data-blocks. */
+    /* XXX not sure why the whole run-time data is not cleared in reading code,
+     * for now mimicking it here. */
+    gpd->runtime.sbuffer = NULL;
+    gpd->runtime.sbuffer_used = 0;
+    gpd->runtime.sbuffer_size = 0;
+    gpd->runtime.tot_cp_points = 0;
+
+    /* write gpd data block to file */
+    BLO_write_id_struct(writer, bGPdata, id_address, &gpd->id);
+    BKE_id_blend_write(writer, &gpd->id);
+
+    if (gpd->adt) {
+      BKE_animdata_blend_write(writer, gpd->adt);
+    }
+
+    BLO_write_pointer_array(writer, gpd->totcol, gpd->mat);
+
+    /* write grease-pencil layers to file */
+    BLO_write_struct_list(writer, bGPDlayer, &gpd->layers);
+    LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
+      /* Write mask list. */
+      BLO_write_struct_list(writer, bGPDlayer_Mask, &gpl->mask_layers);
+      /* write this layer's frames to file */
+      BLO_write_struct_list(writer, bGPDframe, &gpl->frames);
+      LISTBASE_FOREACH (bGPDframe *, gpf, &gpl->frames) {
+        /* write strokes */
+        BLO_write_struct_list(writer, bGPDstroke, &gpf->strokes);
+        LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
+          BLO_write_struct_array(writer, bGPDspoint, gps->totpoints, gps->points);
+          BLO_write_struct_array(writer, bGPDtriangle, gps->tot_triangles, gps->triangles);
+          BKE_defvert_blend_write(writer, gps->totpoints, gps->dvert);
+        }
+      }
+    }
+  }
+}
+
+void BKE_gpencil_blend_read_data(BlendDataReader *reader, bGPdata *gpd)
+{
+  /* we must firstly have some grease-pencil data to link! */
+  if (gpd == NULL) {
+    return;
+  }
+
+  /* relink animdata */
+  BLO_read_data_address(reader, &gpd->adt);
+  BKE_animdata_blend_read_data(reader, gpd->adt);
+
+  /* Ensure full objectmode for linked grease pencil. */
+  if (gpd->id.lib != NULL) {
+    gpd->flag &= ~GP_DATA_STROKE_PAINTMODE;
+    gpd->flag &= ~GP_DATA_STROKE_EDITMODE;
+    gpd->flag &= ~GP_DATA_STROKE_SCULPTMODE;
+    gpd->flag &= ~GP_DATA_STROKE_WEIGHTMODE;
+    gpd->flag &= ~GP_DATA_STROKE_VERTEXMODE;
+  }
+
+  /* init stroke buffer */
+  gpd->runtime.sbuffer = NULL;
+  gpd->runtime.sbuffer_used = 0;
+  gpd->runtime.sbuffer_size = 0;
+  gpd->runtime.tot_cp_points = 0;
+
+  /* relink palettes (old palettes deprecated, only to convert old files) */
+  BLO_read_list(reader, &gpd->palettes);
+  if (gpd->palettes.first != NULL) {
+    LISTBASE_FOREACH (Palette *, palette, &gpd->palettes) {
+      BLO_read_list(reader, &palette->colors);
+    }
+  }
+
+  /* materials */
+  BLO_read_pointer_array(reader, (void **)&gpd->mat);
+
+  /* relink layers */
+  BLO_read_list(reader, &gpd->layers);
+
+  LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
+    /* relink frames */
+    BLO_read_list(reader, &gpl->frames);
+
+    BLO_read_data_address(reader, &gpl->actframe);
+
+    gpl->runtime.icon_id = 0;
+
+    /* Relink masks. */
+    BLO_read_list(reader, &gpl->mask_layers);
+
+    LISTBASE_FOREACH (bGPDframe *, gpf, &gpl->frames) {
+      /* relink strokes (and their points) */
+      BLO_read_list(reader, &gpf->strokes);
+
+      LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
+        /* relink stroke points array */
+        BLO_read_data_address(reader, &gps->points);
+        /* Relink geometry*/
+        BLO_read_data_address(reader, &gps->triangles);
+
+        /* relink weight data */
+        if (gps->dvert) {
+          BLO_read_data_address(reader, &gps->dvert);
+          BKE_defvert_blend_read(reader, gps->totpoints, gps->dvert);
+        }
+      }
+    }
+  }
+}
+
+static void greasepencil_blend_read_data(BlendDataReader *reader, ID *id)
+{
+  bGPdata *gpd = (bGPdata *)id;
+  BKE_gpencil_blend_read_data(reader, gpd);
+}
+
+static void greasepencil_blend_read_lib(BlendLibReader *reader, ID *id)
+{
+  bGPdata *gpd = (bGPdata *)id;
+
+  /* Relink all data-lock linked by GP data-lock */
+  /* Layers */
+  LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
+    /* Layer -> Parent References */
+    BLO_read_id_address(reader, gpd->id.lib, &gpl->parent);
+  }
+
+  /* materials */
+  for (int a = 0; a < gpd->totcol; a++) {
+    BLO_read_id_address(reader, gpd->id.lib, &gpd->mat[a]);
+  }
+}
+
+static void greasepencil_blend_read_expand(BlendExpander *expander, ID *id)
+{
+  bGPdata *gpd = (bGPdata *)id;
+  LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
+    BLO_expand(expander, gpl->parent);
+  }
+
+  for (int a = 0; a < gpd->totcol; a++) {
+    BLO_expand(expander, gpd->mat[a]);
+  }
+}
+
 IDTypeInfo IDType_ID_GD = {
     .id_code = ID_GD,
     .id_filter = FILTER_ID_GD,
@@ -128,10 +284,10 @@ IDTypeInfo IDType_ID_GD = {
     .foreach_id = greasepencil_foreach_id,
     .foreach_cache = NULL,
 
-    .blend_write = NULL,
-    .blend_read_data = NULL,
-    .blend_read_lib = NULL,
-    .blend_read_expand = NULL,
+    .blend_write = greasepencil_blend_write,
+    .blend_read_data = greasepencil_blend_read_data,
+    .blend_read_lib = greasepencil_blend_read_lib,
+    .blend_read_expand = greasepencil_blend_read_expand,
 };
 
 /* ************************************************** */
@@ -816,20 +972,6 @@ bGPDlayer *BKE_gpencil_layer_duplicate(const bGPDlayer *gpl_src)
 }
 
 /**
- * Standard API to make a copy of GP data-block, separate from copying its data.
- *
- * \param bmain: Main pointer
- * \param gpd: Grease pencil data-block
- * \return Pointer to new data-block
- */
-bGPdata *BKE_gpencil_copy(Main *bmain, const bGPdata *gpd)
-{
-  bGPdata *gpd_copy;
-  BKE_id_copy(bmain, &gpd->id, (ID **)&gpd_copy);
-  return gpd_copy;
-}
-
-/**
  * Make a copy of a given gpencil data-block.
  *
  * XXX: Should this be deprecated?
@@ -853,7 +995,7 @@ bGPdata *BKE_gpencil_data_duplicate(Main *bmain, const bGPdata *gpd_src, bool in
   }
   else {
     BLI_assert(bmain != NULL);
-    BKE_id_copy(bmain, &gpd_src->id, (ID **)&gpd_dst);
+    gpd_dst = (bGPdata *)BKE_id_copy(bmain, &gpd_src->id);
   }
 
   /* Copy internal data (layers, etc.) */
@@ -2407,6 +2549,12 @@ void BKE_gpencil_visible_stroke_iter(ViewLayer *view_layer,
     /* Use evaluated frame (with modifiers for active stroke)/ */
     act_gpf = gpl->actframe;
     if (act_gpf) {
+      /* If layer solo mode and Paint mode, only keyframes with data are displayed. */
+      if (GPENCIL_PAINT_MODE(gpd) && (gpl->flag & GP_LAYER_SOLO_MODE) &&
+          (act_gpf->framenum != cfra)) {
+        continue;
+      }
+
       act_gpf->runtime.onion_id = 0;
       if (layer_cb) {
         layer_cb(gpl, act_gpf, NULL, thunk);
@@ -2589,4 +2737,25 @@ void BKE_gpencil_update_layer_parent(const Depsgraph *depsgraph, Object *ob)
     }
   }
 }
+
+/**
+ * Find material by name prefix.
+ * \param ob: Object pointer
+ * \param name_prefix: Prefix name of the material
+ * \return  Index
+ */
+int BKE_gpencil_material_find_index_by_name_prefix(Object *ob, const char *name_prefix)
+{
+  const int name_prefix_len = strlen(name_prefix);
+  for (int i = 0; i < ob->totcol; i++) {
+    Material *ma = BKE_object_material_get(ob, i + 1);
+    if ((ma != NULL) && (ma->gp_style != NULL) &&
+        (STREQLEN(ma->id.name + 2, name_prefix, name_prefix_len))) {
+      return i;
+    }
+  }
+
+  return -1;
+}
+
 /** \} */

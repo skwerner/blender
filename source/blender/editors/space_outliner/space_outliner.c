@@ -102,18 +102,25 @@ static void outliner_main_region_free(ARegion *UNUSED(region))
 }
 
 static void outliner_main_region_listener(wmWindow *UNUSED(win),
-                                          ScrArea *UNUSED(area),
+                                          ScrArea *area,
                                           ARegion *region,
                                           wmNotifier *wmn,
                                           const Scene *UNUSED(scene))
 {
+  SpaceOutliner *space_outliner = area->spacedata.first;
+
   /* context changes */
   switch (wmn->category) {
     case NC_SCENE:
       switch (wmn->data) {
         case ND_OB_ACTIVE:
         case ND_OB_SELECT:
-          ED_region_tag_redraw_no_rebuild(region);
+          if (outliner_requires_rebuild_on_select_or_active_change(space_outliner)) {
+            ED_region_tag_redraw(region);
+          }
+          else {
+            ED_region_tag_redraw_no_rebuild(region);
+          }
           break;
         case ND_OB_VISIBLE:
         case ND_OB_RENDER:
@@ -314,7 +321,7 @@ static SpaceLink *outliner_create(const ScrArea *UNUSED(area), const Scene *UNUS
   space_outliner->show_restrict_flags = SO_RESTRICT_ENABLE | SO_RESTRICT_HIDE;
   space_outliner->outlinevis = SO_VIEW_LAYER;
   space_outliner->sync_select_dirty |= WM_OUTLINER_SYNC_SELECT_FROM_ALL;
-  space_outliner->flag |= SO_SYNC_SELECT;
+  space_outliner->flag = SO_SYNC_SELECT | SO_MODE_COLUMN;
 
   /* header */
   region = MEM_callocN(sizeof(ARegion), "header for outliner");

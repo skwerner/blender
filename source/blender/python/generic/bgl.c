@@ -27,11 +27,13 @@
 #include <Python.h>
 
 #include "BLI_utildefines.h"
-
-#include "GPU_glew.h"
 #include "MEM_guardedalloc.h"
 
+#include "GPU_state.h"
+
 #include "../generic/py_capi_utils.h"
+
+#include "glew-mx.h"
 
 #include "bgl.h"
 
@@ -1109,6 +1111,7 @@ static PyObject *Buffer_repr(Buffer *self)
     if (!PyArg_ParseTuple(args, arg_str arg_list, arg_ref arg_list)) { \
       return NULL; \
     } \
+    GPU_bgl_start(); \
     ret_set_##ret gl##funcname(arg_var arg_list); \
     ret_ret_##ret; \
   }

@@ -444,8 +444,8 @@ FCurve *BKE_fcurve_find_by_rna_context_ui(bContext *C,
         continue;
       }
 
-      // XXX: the logic here is duplicated with a function up above
-      /* animation takes priority over drivers */
+      /* XXX: the logic here is duplicated with a function up above
+       * animation takes priority over drivers. */
       if (adt->action && adt->action->curves.first) {
         fcu = BKE_fcurve_find(&adt->action->curves, path, rnaindex);
 
@@ -502,7 +502,7 @@ FCurve *BKE_fcurve_find_by_rna_context_ui(bContext *C,
  * with optional argument for precision required.
  * Returns the index to insert at (data already at that index will be offset if replace is 0)
  */
-static int binarysearch_bezt_index_ex(
+static int BKE_fcurve_bezt_binarysearch_index_ex(
     BezTriple array[], float frame, int arraylen, float threshold, bool *r_replace)
 {
   int start = 0, end = arraylen;
@@ -589,10 +589,14 @@ static int binarysearch_bezt_index_ex(
 /* Binary search algorithm for finding where to insert BezTriple. (for use by insert_bezt_fcurve)
  * Returns the index to insert at (data already at that index will be offset if replace is 0)
  */
-int binarysearch_bezt_index(BezTriple array[], float frame, int arraylen, bool *r_replace)
+int BKE_fcurve_bezt_binarysearch_index(BezTriple array[],
+                                       float frame,
+                                       int arraylen,
+                                       bool *r_replace)
 {
   /* this is just a wrapper which uses the default threshold */
-  return binarysearch_bezt_index_ex(array, frame, arraylen, BEZT_BINARYSEARCH_THRESH, r_replace);
+  return BKE_fcurve_bezt_binarysearch_index_ex(
+      array, frame, arraylen, BEZT_BINARYSEARCH_THRESH, r_replace);
 }
 
 /* ...................................... */
@@ -617,11 +621,10 @@ static short get_fcurve_end_keyframes(FCurve *fcu,
   /* only include selected items? */
   if (do_sel_only) {
     BezTriple *bezt;
-    unsigned int i;
 
     /* find first selected */
     bezt = fcu->bezt;
-    for (i = 0; i < fcu->totvert; bezt++, i++) {
+    for (int i = 0; i < fcu->totvert; bezt++, i++) {
       if (BEZT_ISSEL_ANY(bezt)) {
         *first = bezt;
         found = true;
@@ -631,7 +634,7 @@ static short get_fcurve_end_keyframes(FCurve *fcu,
 
     /* find last selected */
     bezt = ARRAY_LAST_ITEM(fcu->bezt, BezTriple, fcu->totvert);
-    for (i = 0; i < fcu->totvert; bezt--, i++) {
+    for (int i = 0; i < fcu->totvert; bezt--, i++) {
       if (BEZT_ISSEL_ANY(bezt)) {
         *last = bezt;
         found = true;
@@ -661,7 +664,6 @@ bool BKE_fcurve_calc_bounds(FCurve *fcu,
   float xminv = 999999999.0f, xmaxv = -999999999.0f;
   float yminv = 999999999.0f, ymaxv = -999999999.0f;
   bool foundvert = false;
-  unsigned int i;
 
   if (fcu->totvert) {
     if (fcu->bezt) {
@@ -689,6 +691,7 @@ bool BKE_fcurve_calc_bounds(FCurve *fcu,
       if (ymin || ymax) {
         BezTriple *bezt, *prevbezt = NULL;
 
+        int i;
         for (bezt = fcu->bezt, i = 0; i < fcu->totvert; prevbezt = bezt, bezt++, i++) {
           if ((do_sel_only == false) || BEZT_ISSEL_ANY(bezt)) {
             /* keyframe itself */
@@ -726,6 +729,7 @@ bool BKE_fcurve_calc_bounds(FCurve *fcu,
       /* only loop over keyframes to find extents for values if needed */
       if (ymin || ymax) {
         FPoint *fpt;
+        int i;
 
         for (fpt = fcu->fpt, i = 0; i < fcu->totvert; fpt++, i++) {
           if (fpt->vec[1] < yminv) {
@@ -830,6 +834,46 @@ bool BKE_fcurve_calc_range(
 /** \} */
 
 /* -------------------------------------------------------------------- */
+/** \name Active Keyframe
+ * \{ */
+
+/**
+ * Set the index that stores the FCurve's active keyframe, assuming that \a active_bezt
+ * is already part of `fcu->bezt`. If NULL, set active keyframe index to "none."
+ */
+void BKE_fcurve_active_keyframe_set(FCurve *fcu, const BezTriple *active_bezt)
+{
+  /* The active keyframe should always be selected. */
+  BLI_assert(active_bezt == NULL || (active_bezt->f2 & SELECT));
+  fcu->active_keyframe_index = (active_bezt == NULL) ? FCURVE_ACTIVE_KEYFRAME_NONE :
+                                                       active_bezt - fcu->bezt;
+}
+
+/**
+ * Get the active keyframe index, with sanity checks for point bounds.
+ */
+int BKE_fcurve_active_keyframe_index(const FCurve *fcu)
+{
+  const int active_keyframe_index = fcu->active_keyframe_index;
+
+  /* Array access boundary checks. */
+  if ((fcu->bezt == NULL) || (active_keyframe_index >= fcu->totvert) ||
+      (active_keyframe_index < 0)) {
+    return FCURVE_ACTIVE_KEYFRAME_NONE;
+  }
+
+  const BezTriple *active_bezt = &fcu->bezt[active_keyframe_index];
+  if ((active_bezt->f2 & SELECT) == 0) {
+    /* The active keyframe should always be selected. If it's not selected, it can't be active. */
+    return FCURVE_ACTIVE_KEYFRAME_NONE;
+  }
+
+  return active_keyframe_index;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
 /** \name Status Checks
  * \{ */
 
@@ -928,7 +972,7 @@ bool BKE_fcurve_is_keyframable(FCurve *fcu)
  * \{ */
 
 /* add a BezTriple to a column */
-void bezt_add_to_cfra_elem(ListBase *lb, BezTriple *bezt)
+static void UNUSED_FUNCTION(bezt_add_to_cfra_elem)(ListBase *lb, BezTriple *bezt)
 {
   CfraElem *ce, *cen;
 
@@ -1308,22 +1352,25 @@ bool test_time_fcurve(FCurve *fcu)
 /** \name F-Curve Calculations
  * \{ */
 
-/* The total length of the handles is not allowed to be more
+/* The length of each handle is not allowed to be more
  * than the horizontal distance between (v1-v4).
  * This is to prevent curve loops.
+ *
+ * This function is very similar to BKE_curve_correct_bezpart(), but allows a steeper tangent for
+ * more snappy animations. This is not desired for other areas in which curves are used, though.
  */
-void correct_bezpart(const float v1[2], float v2[2], float v3[2], const float v4[2])
+void BKE_fcurve_correct_bezpart(const float v1[2], float v2[2], float v3[2], const float v4[2])
 {
   float h1[2], h2[2], len1, len2, len, fac;
 
-  /* calculate handle deltas */
+  /* Calculate handle deltas. */
   h1[0] = v1[0] - v2[0];
   h1[1] = v1[1] - v2[1];
 
   h2[0] = v4[0] - v3[0];
   h2[1] = v4[1] - v3[1];
 
-  /* calculate distances:
+  /* Calculate distances:
    * - len  = span of time between keyframes
    * - len1 = length of handle of start key
    * - len2 = length of handle of end key
@@ -1332,35 +1379,33 @@ void correct_bezpart(const float v1[2], float v2[2], float v3[2], const float v4
   len1 = fabsf(h1[0]);
   len2 = fabsf(h2[0]);
 
-  /* if the handles have no length, no need to do any corrections */
+  /* If the handles have no length, no need to do any corrections. */
   if ((len1 + len2) == 0.0f) {
     return;
   }
 
-  /* the two handles cross over each other, so force them
-   * apart using the proportion they overlap
-   */
-  if ((len1 + len2) > len) {
-    fac = len / (len1 + len2);
-
+  /* To prevent looping or rewinding, handles cannot
+   * exceed the adjacent key-frames time position. */
+  if (len1 > len) {
+    fac = len / len1;
     v2[0] = (v1[0] - fac * h1[0]);
     v2[1] = (v1[1] - fac * h1[1]);
+  }
 
+  if (len2 > len) {
+    fac = len / len2;
     v3[0] = (v4[0] - fac * h2[0]);
     v3[1] = (v4[1] - fac * h2[1]);
   }
 }
 
-/* find root ('zero') */
-static int findzero(float x, float q0, float q1, float q2, float q3, float *o)
+/** Find roots of cubic equation (c0 x³ + c1 x² + c2 x + c3)
+ * \return number of roots in `o`.
+ * NOTE: it is up to the caller to allocate enough memory for `o`. */
+static int solve_cubic(double c0, double c1, double c2, double c3, float *o)
 {
-  double c0, c1, c2, c3, a, b, c, p, q, d, t, phi;
+  double a, b, c, p, q, d, t, phi;
   int nr = 0;
-
-  c0 = q0 - x;
-  c1 = 3.0f * (q1 - q0);
-  c2 = 3.0f * (q0 - 2.0f * q1 + q2);
-  c3 = q3 - q0 + 3.0f * (q1 - q2);
 
   if (c3 != 0.0) {
     a = c2 / c3;
@@ -1468,6 +1513,17 @@ static int findzero(float x, float q0, float q1, float q2, float q3, float *o)
   return 0;
 }
 
+/* Find root(s) ('zero') of a Bezier curve. */
+static int findzero(float x, float q0, float q1, float q2, float q3, float *o)
+{
+  const double c0 = q0 - x;
+  const double c1 = 3.0f * (q1 - q0);
+  const double c2 = 3.0f * (q0 - 2.0f * q1 + q2);
+  const double c3 = q3 - q0 + 3.0f * (q1 - q2);
+
+  return solve_cubic(c0, c1, c2, c3, o);
+}
+
 static void berekeny(float f1, float f2, float f3, float f4, float *o, int b)
 {
   float t, c0, c1, c2, c3;
@@ -1482,6 +1538,75 @@ static void berekeny(float f1, float f2, float f3, float f4, float *o, int b)
     t = o[a];
     o[a] = c0 + t * c1 + t * t * c2 + t * t * t * c3;
   }
+}
+
+/**
+ * Adjust Bezier handles of all three given BezTriples, so that `bezt` can be inserted between
+ * `prev` and `next` without changing the resulting curve shape.
+ *
+ * \param r_pdelta: return Y difference between `bezt` and the original curve value at its X
+ * position.
+ * \return Whether the split was successful.
+ */
+bool BKE_fcurve_bezt_subdivide_handles(struct BezTriple *bezt,
+                                       struct BezTriple *prev,
+                                       struct BezTriple *next,
+                                       float *r_pdelta)
+{
+  /* The four points that make up this section of the Bezier curve. */
+  const float *prev_coords = prev->vec[1];
+  float *prev_handle_right = prev->vec[2];
+  float *next_handle_left = next->vec[0];
+  const float *next_coords = next->vec[1];
+
+  float *new_handle_left = bezt->vec[0];
+  const float *new_coords = bezt->vec[1];
+  float *new_handle_right = bezt->vec[2];
+
+  if (new_coords[0] <= prev_coords[0] || new_coords[0] >= next_coords[0]) {
+    /* The new keyframe is outside the (prev_coords, next_coords) range. */
+    return false;
+  }
+
+  /* Apply evaluation-time limits and compute the effective curve. */
+  BKE_fcurve_correct_bezpart(prev_coords, prev_handle_right, next_handle_left, next_coords);
+  float roots[4];
+  if (!findzero(new_coords[0],
+                prev_coords[0],
+                prev_handle_right[0],
+                next_handle_left[0],
+                next_coords[0],
+                roots)) {
+    return false;
+  }
+
+  const float t = roots[0]; /* Percentage of the curve at which the split should occur. */
+  if (t <= 0.0f || t >= 1.0f) {
+    /* The split would occur outside the curve, which isn't possible. */
+    return false;
+  }
+
+  /* De Casteljau split, requires three iterations of splitting.
+   * See https://pomax.github.io/bezierinfo/#decasteljau */
+  float split1[3][2], split2[2][2], split3[2];
+  interp_v2_v2v2(split1[0], prev_coords, prev_handle_right, t);
+  interp_v2_v2v2(split1[1], prev_handle_right, next_handle_left, t);
+  interp_v2_v2v2(split1[2], next_handle_left, next_coords, t);
+  interp_v2_v2v2(split2[0], split1[0], split1[1], t);
+  interp_v2_v2v2(split2[1], split1[1], split1[2], t);
+  interp_v2_v2v2(split3, split2[0], split2[1], t);
+
+  /* Update the existing handles. */
+  copy_v2_v2(prev_handle_right, split1[0]);
+  copy_v2_v2(next_handle_left, split1[2]);
+
+  float diff_coords[2];
+  sub_v2_v2v2(diff_coords, new_coords, split3);
+  add_v2_v2v2(new_handle_left, split2[0], diff_coords);
+  add_v2_v2v2(new_handle_right, split2[1], diff_coords);
+
+  *r_pdelta = diff_coords[1];
+  return true;
 }
 
 /** \} */
@@ -1556,7 +1681,7 @@ static float fcurve_eval_keyframes_interpolate(FCurve *fcu, BezTriple *bezts, fl
    *   Weird errors, like selecting the wrong keyframe range (see T39207), occur.
    *   This lower bound was established in b888a32eee8147b028464336ad2404d8155c64dd.
    */
-  a = binarysearch_bezt_index_ex(bezts, evaltime, fcu->totvert, 0.0001, &exact);
+  a = BKE_fcurve_bezt_binarysearch_index_ex(bezts, evaltime, fcu->totvert, 0.0001, &exact);
   bezt = bezts + a;
 
   if (exact) {
@@ -1628,7 +1753,7 @@ static float fcurve_eval_keyframes_interpolate(FCurve *fcu, BezTriple *bezts, fl
         return v1[1];
       }
       /* adjust handles so that they don't overlap (forming a loop) */
-      correct_bezpart(v1, v2, v3, v4);
+      BKE_fcurve_correct_bezpart(v1, v2, v3, v4);
 
       /* try to get a value for this position - if failure, try another set of points */
       if (!findzero(evaltime, v1[0], v2[0], v3[0], v4[0], opl)) {
@@ -1937,7 +2062,7 @@ float evaluate_fcurve_driver(PathResolvedRNA *anim_rna,
        * XXX: additive is a bit more dicey; it really depends then if things are in range or not...
        */
       for (fcm = fcu->modifiers.first; fcm; fcm = fcm->next) {
-        /* if there are range-restrictions, we must definitely block [#36950] */
+        /* if there are range-restrictions, we must definitely block T36950. */
         if ((fcm->flag & FMODIFIER_FLAG_RANGERESTRICT) == 0 ||
             ((fcm->sfra <= evaltime) && (fcm->efra >= evaltime))) {
           /* Within range: here it probably doesn't matter,
@@ -2161,7 +2286,7 @@ void BKE_fcurve_blend_read_data(BlendDataReader *reader, ListBase *fcurves)
     /* group */
     BLO_read_data_address(reader, &fcu->grp);
 
-    /* clear disabled flag - allows disabled drivers to be tried again ([#32155]),
+    /* clear disabled flag - allows disabled drivers to be tried again (T32155),
      * but also means that another method for "reviving disabled F-Curves" exists
      */
     fcu->flag &= ~FCURVE_DISABLED;
@@ -2176,9 +2301,8 @@ void BKE_fcurve_blend_read_data(BlendDataReader *reader, ListBase *fcurves)
       driver->expr_comp = NULL;
       driver->expr_simple = NULL;
 
-      /* give the driver a fresh chance - the operating environment may be different now
-       * (addons, etc. may be different) so the driver namespace may be sane now [#32155]
-       */
+      /* Give the driver a fresh chance - the operating environment may be different now
+       * (addons, etc. may be different) so the driver namespace may be sane now T32155. */
       driver->flag &= ~DRIVER_FLAG_INVALID;
 
       /* relink variables, targets and their paths */

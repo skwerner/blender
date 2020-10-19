@@ -44,6 +44,7 @@
 #include "BLI_math.h"
 
 #include "BKE_action.h"
+#include "BKE_armature.h"
 #include "BKE_constraint.h"
 #include "BKE_context.h"
 #include "BKE_customdata.h"
@@ -58,7 +59,6 @@
 #include "BKE_object.h"
 #include "BKE_scene.h"
 
-#include "ED_armature.h"
 #include "ED_node.h"
 #include "ED_object.h"
 #include "ED_screen.h"
@@ -246,7 +246,7 @@ Mesh *bc_get_mesh_copy(BlenderContext &blender_context,
     tmpmesh = (Mesh *)ob->data;
   }
 
-  BKE_id_copy_ex(NULL, &tmpmesh->id, (ID **)&tmpmesh, LIB_ID_COPY_LOCALIZE);
+  tmpmesh = (Mesh *)BKE_id_copy_ex(NULL, &tmpmesh->id, NULL, LIB_ID_COPY_LOCALIZE);
 
   if (triangulate) {
     bc_triangulate_mesh(tmpmesh);
@@ -1326,13 +1326,34 @@ COLLADASW::ColorOrTexture bc_get_base_color(Material *ma)
 
 COLLADASW::ColorOrTexture bc_get_emission(Material *ma)
 {
-  Color default_color = {0, 0, 0, 1};
+  Color default_color = {0, 0, 0, 1}; /* default black */
   bNode *shader = bc_get_master_shader(ma);
-  if (ma->use_nodes && shader) {
-    return bc_get_cot_from_shader(shader, "Emission", default_color);
+  if (!(ma->use_nodes && shader)) {
+    return bc_get_cot(default_color);
   }
 
-  return bc_get_cot(default_color); /* default black */
+  double emission_strength = 0.0;
+  bc_get_float_from_shader(shader, emission_strength, "Emission Strength");
+  if (emission_strength == 0.0) {
+    return bc_get_cot(default_color);
+  }
+
+  COLLADASW::ColorOrTexture cot = bc_get_cot_from_shader(shader, "Emission", default_color);
+
+  /* If using texture, emission strength is not supported. */
+  COLLADASW::Color col = cot.getColor();
+  double final_color[3] = {col.getRed(), col.getGreen(), col.getBlue()};
+  mul_v3db_db(final_color, emission_strength);
+
+  /* Collada does not support HDR colors, so clamp to 1 keeping channels proportional. */
+  double max_color = fmax(fmax(final_color[0], final_color[1]), final_color[2]);
+  if (max_color > 1.0) {
+    mul_v3db_db(final_color, 1.0 / max_color);
+  }
+
+  cot.getColor().set(final_color[0], final_color[1], final_color[2], col.getAlpha());
+
+  return cot;
 }
 
 COLLADASW::ColorOrTexture bc_get_ambient(Material *ma)
@@ -1393,7 +1414,7 @@ double bc_get_reflectivity(Material *ma)
   return reflectivity;
 }
 
-double bc_get_float_from_shader(bNode *shader, double &val, std::string nodeid)
+bool bc_get_float_from_shader(bNode *shader, double &val, std::string nodeid)
 {
   bNodeSocket *socket = nodeFindSocket(shader, SOCK_IN, nodeid.c_str());
   if (socket) {

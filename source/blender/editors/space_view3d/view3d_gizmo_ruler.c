@@ -83,7 +83,7 @@ enum {
   RULERITEM_USE_ANGLE_ACTIVE = (1 << 1),
 };
 
-/* keep smaller then selection, since we may want click elsewhere without selecting a ruler */
+/* keep smaller than selection, since we may want click elsewhere without selecting a ruler */
 #define RULER_PICK_DIST 12.0f
 #define RULER_PICK_DIST_SQ (RULER_PICK_DIST * RULER_PICK_DIST)
 
@@ -179,7 +179,7 @@ static void ruler_item_as_string(
       BLI_snprintf(numstr, numstr_size, "%.*f°", prec, RAD2DEGF(ruler_angle));
     }
     else {
-      bUnit_AsString2(
+      BKE_unit_value_as_string(
           numstr, numstr_size, (double)ruler_angle, prec, B_UNIT_ROTATION, unit, false);
     }
   }
@@ -190,13 +190,13 @@ static void ruler_item_as_string(
       BLI_snprintf(numstr, numstr_size, "%.*f", prec, ruler_len);
     }
     else {
-      bUnit_AsString2(numstr,
-                      numstr_size,
-                      (double)(ruler_len * unit->scale_length),
-                      prec,
-                      B_UNIT_LENGTH,
-                      unit,
-                      false);
+      BKE_unit_value_as_string(numstr,
+                               numstr_size,
+                               (double)(ruler_len * unit->scale_length),
+                               prec,
+                               B_UNIT_LENGTH,
+                               unit,
+                               false);
     }
   }
 }

@@ -59,7 +59,7 @@ BLI_INLINE void madd_v3v3short_fl(float r[3], const short a[3], const float f)
 /** \name High Quality Normal Calculation Function
  * \{ */
 
-/* skip shell thickness for non-manifold edges, see [#35710] */
+/* skip shell thickness for non-manifold edges, see T35710. */
 #define USE_NONMANIFOLD_WORKAROUND
 
 /* *** derived mesh high quality normal calculation function  *** */
@@ -981,7 +981,7 @@ Mesh *MOD_solidify_extrude_modifyMesh(ModifierData *md, const ModifierEvalContex
     MEM_freeN(vert_nors);
   }
 
-  /* must recalculate normals with vgroups since they can displace unevenly [#26888] */
+  /* must recalculate normals with vgroups since they can displace unevenly T26888. */
   if ((mesh->runtime.cd_dirty_vert & CD_MASK_NORMAL) || do_rim || dvert) {
     result->runtime.cd_dirty_vert |= CD_MASK_NORMAL;
   }
@@ -1004,23 +1004,23 @@ Mesh *MOD_solidify_extrude_modifyMesh(ModifierData *md, const ModifierEvalContex
           &result->vdata, CD_MDEFORMVERT, CD_CALLOC, NULL, result->totvert);
     }
     /* Ultimate security check. */
-    if (!dvert) {
-      return result;
-    }
-    result->dvert = dvert;
+    if (dvert != NULL) {
+      result->dvert = dvert;
 
-    if (rim_defgrp_index != -1) {
-      for (uint i = 0; i < rimVerts; i++) {
-        BKE_defvert_ensure_index(&result->dvert[new_vert_arr[i]], rim_defgrp_index)->weight = 1.0f;
-        BKE_defvert_ensure_index(&result->dvert[(do_shell ? new_vert_arr[i] : i) + numVerts],
-                                 rim_defgrp_index)
-            ->weight = 1.0f;
+      if (rim_defgrp_index != -1) {
+        for (uint i = 0; i < rimVerts; i++) {
+          BKE_defvert_ensure_index(&result->dvert[new_vert_arr[i]], rim_defgrp_index)->weight =
+              1.0f;
+          BKE_defvert_ensure_index(&result->dvert[(do_shell ? new_vert_arr[i] : i) + numVerts],
+                                   rim_defgrp_index)
+              ->weight = 1.0f;
+        }
       }
-    }
 
-    if (shell_defgrp_index != -1) {
-      for (uint i = numVerts; i < result->totvert; i++) {
-        BKE_defvert_ensure_index(&result->dvert[i], shell_defgrp_index)->weight = 1.0f;
+      if (shell_defgrp_index != -1) {
+        for (uint i = numVerts; i < result->totvert; i++) {
+          BKE_defvert_ensure_index(&result->dvert[i], shell_defgrp_index)->weight = 1.0f;
+        }
       }
     }
   }

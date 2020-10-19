@@ -1071,8 +1071,8 @@ static void curve_calc_modifiers_post(Depsgraph *depsgraph,
 
       if (modified) {
         if (vertCos) {
-          Mesh *temp_mesh;
-          BKE_id_copy_ex(NULL, &modified->id, (ID **)&temp_mesh, LIB_ID_COPY_LOCALIZE);
+          Mesh *temp_mesh = (Mesh *)BKE_id_copy_ex(
+              NULL, &modified->id, NULL, LIB_ID_COPY_LOCALIZE);
           BKE_id_free(NULL, modified);
           modified = temp_mesh;
 
@@ -1115,8 +1115,7 @@ static void curve_calc_modifiers_post(Depsgraph *depsgraph,
 
   if (vertCos) {
     if (modified) {
-      Mesh *temp_mesh;
-      BKE_id_copy_ex(NULL, &modified->id, (ID **)&temp_mesh, LIB_ID_COPY_LOCALIZE);
+      Mesh *temp_mesh = (Mesh *)BKE_id_copy_ex(NULL, &modified->id, NULL, LIB_ID_COPY_LOCALIZE);
       BKE_id_free(NULL, modified);
       modified = temp_mesh;
 
@@ -1173,7 +1172,7 @@ static void curve_calc_modifiers_post(Depsgraph *depsgraph,
     }
   }
   else if (modified != NULL) {
-    /* Prety stupid to generate that whole mesh if it's unused, yet we have to free it. */
+    /* Pretty stupid to generate that whole mesh if it's unused, yet we have to free it. */
     BKE_id_free(NULL, modified);
   }
 }
@@ -1753,7 +1752,7 @@ static void do_makeDispListCurveTypes(Depsgraph *depsgraph,
                   rotateBevelPiece(cu, bevp, NULL, dlb, 0.0f, widfac, fac, &data);
                 }
 
-                if (cu->bevobj && (cu->flag & CU_FILL_CAPS) && !(nu->flagu & CU_NURB_CYCLIC)) {
+                if ((cu->flag & CU_FILL_CAPS) && !(nu->flagu & CU_NURB_CYCLIC)) {
                   if (a == 1) {
                     fillBevelCap(nu, dlb, cur_data - 3 * dlb->nr, &bottom_capbase);
                     copy_v3_v3(bottom_no, bevp->dir);

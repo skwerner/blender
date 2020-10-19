@@ -180,7 +180,7 @@ PyDoc_STRVAR(
     "   :type relative: bool\n");
 static PyObject *bpy_lib_load(PyObject *UNUSED(self), PyObject *args, PyObject *kw)
 {
-  Main *bmain = CTX_data_main(BPy_GetContext());
+  Main *bmain = CTX_data_main(BPY_context_get());
   BPy_Library *ret;
   const char *filename = NULL;
   bool is_rel = false, is_link = false;
@@ -319,7 +319,7 @@ static void bpy_lib_exit_warn_type(BPy_Library *self, PyObject *item)
 
 static PyObject *bpy_lib_exit(BPy_Library *self, PyObject *UNUSED(args))
 {
-  Main *bmain = CTX_data_main(BPy_GetContext());
+  Main *bmain = CTX_data_main(BPY_context_get());
   Main *mainl = NULL;
   const int err = 0;
   const bool do_append = ((self->flag & FILE_LINK) == 0);
@@ -327,7 +327,10 @@ static PyObject *bpy_lib_exit(BPy_Library *self, PyObject *UNUSED(args))
   BKE_main_id_tag_all(bmain, LIB_TAG_PRE_EXISTING, true);
 
   /* here appending/linking starts */
-  mainl = BLO_library_link_begin(bmain, &(self->blo_handle), self->relpath);
+  struct LibraryLink_Params liblink_params;
+  BLO_library_link_params_init(&liblink_params, bmain, self->flag);
+
+  mainl = BLO_library_link_begin(&(self->blo_handle), self->relpath, &liblink_params);
 
   {
     int idcode_step = 0, idcode;
@@ -350,7 +353,7 @@ static PyObject *bpy_lib_exit(BPy_Library *self, PyObject *UNUSED(args))
 
             if (item_idname) {
               ID *id = BLO_library_link_named_part(
-                  mainl, &(self->blo_handle), idcode, item_idname);
+                  mainl, &(self->blo_handle), idcode, item_idname, &liblink_params);
               if (id) {
 #ifdef USE_RNA_DATABLOCKS
                 /* swap name for pointer to the id */
@@ -394,7 +397,7 @@ static PyObject *bpy_lib_exit(BPy_Library *self, PyObject *UNUSED(args))
   }
 
   Library *lib = mainl->curlib; /* newly added lib, assign before append end */
-  BLO_library_link_end(mainl, &(self->blo_handle), self->flag, NULL, NULL, NULL, NULL);
+  BLO_library_link_end(mainl, &(self->blo_handle), &liblink_params);
   BLO_blendhandle_close(self->blo_handle);
   self->blo_handle = NULL;
 

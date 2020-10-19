@@ -85,7 +85,7 @@ typedef signed char eSign;
  * This is a single purpose KDTree based on BLI_kdtree with some modifications
  * to better suit polyfill2d.
  * - #KDTreeNode2D is kept small (only 16 bytes),
- *   by not storing coords in the nodes and using index values rather then pointers
+ *   by not storing coords in the nodes and using index values rather than pointers
  *   to reference neg/pos values.
  *
  * - #kdtree2d_isect_tri is the only function currently used.
@@ -719,7 +719,7 @@ static bool pf_ear_tip_check(PolyFill *pf, PolyIndex *pi_ear_tip)
        * the area sign will be positive if the point is strictly inside.
        * It will be 0 on the edge, which we want to include as well. */
 
-      /* note: check (v3, v1) first since it fails _far_ more often then the other 2 checks
+      /* note: check (v3, v1) first since it fails _far_ more often than the other 2 checks
        * (those fail equally).
        * It's logical - the chance is low that points exist on the
        * same side as the ear we're clipping off. */
@@ -907,6 +907,19 @@ void BLI_polyfill_calc(const float (*coords)[2],
                        const int coords_sign,
                        uint (*r_tris)[3])
 {
+  /* Fallback to heap memory for large allocations.
+   * Avoid running out of stack memory on systems with 512kb stack (macOS).
+   * This happens at around 13,000 points, use a much lower value to be safe. */
+  if (UNLIKELY(coords_tot > 8192)) {
+    /* The buffer size only accounts for the index allocation,
+     * worst case we do two allocations when concave, while we should try to be efficient,
+     * any caller that relies on this frequently should use #BLI_polyfill_calc_arena directly. */
+    MemArena *arena = BLI_memarena_new(sizeof(PolyIndex) * coords_tot, __func__);
+    BLI_polyfill_calc_arena(coords, coords_tot, coords_sign, r_tris, arena);
+    BLI_memarena_free(arena);
+    return;
+  }
+
   PolyFill pf;
   PolyIndex *indices = BLI_array_alloca(indices, coords_tot);
 

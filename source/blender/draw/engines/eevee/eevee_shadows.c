@@ -23,9 +23,6 @@
 #include "BLI_string_utils.h"
 #include "BLI_sys_types.h" /* bool */
 
-// #include "BLI_dynstr.h"
-// #include "BLI_rand.h"
-
 #include "BKE_object.h"
 
 #include "DEG_depsgraph_query.h"
@@ -33,15 +30,6 @@
 #include "eevee_private.h"
 
 #define SH_CASTER_ALLOC_CHUNK 32
-
-static struct {
-  struct GPUShader *shadow_sh;
-  struct GPUShader *shadow_accum_sh;
-} e_data = {NULL}; /* Engine data */
-
-extern char datatoc_shadow_vert_glsl[];
-extern char datatoc_shadow_frag_glsl[];
-extern char datatoc_shadow_accum_frag_glsl[];
 
 void eevee_contact_shadow_setup(const Light *la, EEVEE_Shadow *evsh)
 {
@@ -58,16 +46,6 @@ void EEVEE_shadows_init(EEVEE_ViewLayerData *sldata)
 
   const DRWContextState *draw_ctx = DRW_context_state_get();
   const Scene *scene_eval = DEG_get_evaluated_scene(draw_ctx->depsgraph);
-
-  if (!e_data.shadow_sh) {
-    DRWShaderLibrary *lib = EEVEE_shader_lib_get();
-
-    e_data.shadow_sh = DRW_shader_create_with_shaderlib(
-        datatoc_shadow_vert_glsl, NULL, datatoc_shadow_frag_glsl, lib, NULL);
-
-    e_data.shadow_accum_sh = DRW_shader_create_fullscreen_with_shaderlib(
-        datatoc_shadow_accum_frag_glsl, lib, SHADER_DEFINES);
-  }
 
   if (!sldata->lights) {
     sldata->lights = MEM_callocN(sizeof(EEVEE_LightsInfo), "EEVEE_LightsInfo");
@@ -140,7 +118,8 @@ void EEVEE_shadows_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
     DRWState state = DRW_STATE_WRITE_DEPTH | DRW_STATE_DEPTH_LESS_EQUAL | DRW_STATE_SHADOW_OFFSET;
     DRW_PASS_CREATE(psl->shadow_pass, state);
 
-    stl->g_data->shadow_shgrp = DRW_shgroup_create(e_data.shadow_sh, psl->shadow_pass);
+    stl->g_data->shadow_shgrp = DRW_shgroup_create(EEVEE_shaders_shadow_sh_get(),
+                                                   psl->shadow_pass);
   }
 }
 
@@ -163,7 +142,7 @@ void EEVEE_shadows_caster_register(EEVEE_ViewLayerData *sldata, Object *ob)
 
   if (ob->base_flag & BASE_FROM_DUPLI) {
     /* Duplis will always refresh the shadowmaps as if they were deleted each frame. */
-    /* TODO(fclem) fix this. */
+    /* TODO(fclem): fix this. */
     update = true;
   }
   else {
@@ -275,7 +254,7 @@ void EEVEE_shadows_update(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
     }
   }
 
-  /* TODO(fclem) This part can be slow, optimize it. */
+  /* TODO(fclem): This part can be slow, optimize it. */
   EEVEE_BoundBox *bbox = backbuffer->bbox;
   BoundSphere *bsphere = linfo->shadow_bounds;
   /* Search for deleted shadow casters or if shcaster WAS in shadow radius. */
@@ -403,7 +382,8 @@ void EEVEE_shadow_output_init(EEVEE_ViewLayerData *sldata,
   /* Create Pass and shgroup. */
   DRW_PASS_CREATE(psl->shadow_accum_pass,
                   DRW_STATE_WRITE_COLOR | DRW_STATE_DEPTH_ALWAYS | DRW_STATE_BLEND_ADD_FULL);
-  DRWShadingGroup *grp = DRW_shgroup_create(e_data.shadow_accum_sh, psl->shadow_accum_pass);
+  DRWShadingGroup *grp = DRW_shgroup_create(EEVEE_shaders_shadow_accum_sh_get(),
+                                            psl->shadow_accum_pass);
   DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &dtxl->depth);
   DRW_shgroup_uniform_texture(grp, "utilTex", EEVEE_materials_get_util_tex());
   DRW_shgroup_uniform_block(grp, "probe_block", sldata->probe_ubo);
@@ -434,9 +414,3 @@ void EEVEE_shadow_output_accumulate(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_D
 }
 
 /* \} */
-
-void EEVEE_shadows_free(void)
-{
-  DRW_SHADER_FREE_SAFE(e_data.shadow_sh);
-  DRW_SHADER_FREE_SAFE(e_data.shadow_accum_sh);
-}

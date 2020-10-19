@@ -46,9 +46,7 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
-namespace blender {
-namespace io {
-namespace usd {
+namespace blender::io::usd {
 
 struct ExportJobData {
   Main *bmain;
@@ -90,7 +88,7 @@ static void export_startjob(void *customdata,
   WM_set_locked_interface(data->wm, true);
   G.is_break = false;
 
-  // Construct the depsgraph for exporting.
+  /* Construct the depsgraph for exporting. */
   Scene *scene = DEG_get_input_scene(data->depsgraph);
   if (data->params.visible_objects_only) {
     DEG_graph_build_from_view_layer(data->depsgraph);
@@ -103,7 +101,7 @@ static void export_startjob(void *customdata,
   *progress = 0.0f;
   *do_update = true;
 
-  // For restoring the current frame after exporting animation is done.
+  /* For restoring the current frame after exporting animation is done. */
   const int orig_frame = CFRA;
 
   pxr::UsdStageRefPtr usd_stage = pxr::UsdStage::CreateNew(data->filename);
@@ -122,7 +120,7 @@ static void export_startjob(void *customdata,
   usd_stage->GetRootLayer()->SetDocumentation(std::string("Blender v") +
                                               BKE_blender_version_string());
 
-  // Set up the stage for animated data.
+  /* Set up the stage for animated data. */
   if (data->params.export_animation) {
     usd_stage->SetTimeCodesPerSecond(FPS);
     usd_stage->SetStartTimeCode(scene->r.sfra);
@@ -132,7 +130,7 @@ static void export_startjob(void *customdata,
   USDHierarchyIterator iter(data->depsgraph, usd_stage, data->params);
 
   if (data->params.export_animation) {
-    // Writing the animated frames is not 100% of the work, but it's our best guess.
+    /* Writing the animated frames is not 100% of the work, but it's our best guess. */
     float progress_per_frame = 1.0f / std::max(1, (scene->r.efra - scene->r.sfra + 1));
 
     for (float frame = scene->r.sfra; frame <= scene->r.efra; frame++) {
@@ -140,7 +138,7 @@ static void export_startjob(void *customdata,
         break;
       }
 
-      // Update the scene for the next frame to render.
+      /* Update the scene for the next frame to render. */
       scene->r.cfra = static_cast<int>(frame);
       scene->r.subframe = frame - scene->r.cfra;
       BKE_scene_graph_update_for_newframe(data->depsgraph);
@@ -153,14 +151,14 @@ static void export_startjob(void *customdata,
     }
   }
   else {
-    // If we're not animating, a single iteration over all objects is enough.
+    /* If we're not animating, a single iteration over all objects is enough. */
     iter.iterate_and_write();
   }
 
   iter.release_writers();
   usd_stage->GetRootLayer()->Save();
 
-  // Finish up by going back to the keyframe that was current before we started.
+  /* Finish up by going back to the keyframe that was current before we started. */
   if (CFRA != orig_frame) {
     CFRA = orig_frame;
     BKE_scene_graph_update_for_newframe(data->depsgraph);
@@ -185,9 +183,7 @@ static void export_endjob(void *customdata)
   WM_set_locked_interface(data->wm, false);
 }
 
-}  // namespace usd
-}  // namespace io
-}  // namespace blender
+}  // namespace blender::io::usd
 
 bool USD_export(bContext *C,
                 const char *filepath,

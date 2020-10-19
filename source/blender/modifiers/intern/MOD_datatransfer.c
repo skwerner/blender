@@ -122,10 +122,10 @@ static bool dependsOnNormals(ModifierData *md)
   return false;
 }
 
-static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk, void *userData)
+static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   DataTransferModifierData *dtmd = (DataTransferModifierData *)md;
-  walk(userData, ob, &dtmd->ob_source, IDWALK_CB_NOP);
+  walk(userData, ob, (ID **)&dtmd->ob_source, IDWALK_CB_NOP);
 }
 
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
@@ -198,7 +198,7 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
       (dtmd->data_types & DT_TYPES_AFFECT_MESH)) {
     /* We need to duplicate data here, otherwise setting custom normals, edges' sharpness, etc.,
      * could modify org mesh, see T43671. */
-    BKE_id_copy_ex(NULL, &me_mod->id, (ID **)&result, LIB_ID_COPY_LOCALIZE);
+    result = (Mesh *)BKE_id_copy_ex(NULL, &me_mod->id, NULL, LIB_ID_COPY_LOCALIZE);
   }
 
   BKE_reports_init(&reports, RPT_STORE);
@@ -470,9 +470,11 @@ ModifierTypeInfo modifierType_DataTransfer = {
     /* name */ "DataTransfer",
     /* structName */ "DataTransferModifierData",
     /* structSize */ sizeof(DataTransferModifierData),
+    /* srna */ &RNA_DataTransferModifier,
     /* type */ eModifierTypeType_NonGeometrical,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsMapping |
         eModifierTypeFlag_SupportsEditmode | eModifierTypeFlag_UsesPreview,
+    /* icon */ ICON_MOD_DATA_TRANSFER,
 
     /* copyData */ BKE_modifier_copydata_generic,
 
@@ -492,8 +494,7 @@ ModifierTypeInfo modifierType_DataTransfer = {
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ dependsOnNormals,
-    /* foreachObjectLink */ foreachObjectLink,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
     /* panelRegister */ panelRegister,

@@ -246,14 +246,13 @@ int BKE_lattice_index_flip(
 }
 
 void BKE_lattice_bitmap_from_flag(
-    Lattice *lt, BLI_bitmap *bitmap, const short flag, const bool clear, const bool respecthide)
+    Lattice *lt, BLI_bitmap *bitmap, const uint8_t flag, const bool clear, const bool respecthide)
 {
   const unsigned int tot = lt->pntsu * lt->pntsv * lt->pntsw;
-  unsigned int i;
   BPoint *bp;
 
   bp = lt->def;
-  for (i = 0; i < tot; i++, bp++) {
+  for (int i = 0; i < tot; i++, bp++) {
     if ((bp->f1 & flag) && (!respecthide || !bp->hide)) {
       BLI_BITMAP_ENABLE(bitmap, i);
     }
@@ -312,7 +311,7 @@ void BKE_lattice_resize(Lattice *lt, int uNew, int vNew, int wNew, Object *ltOb)
   calc_lat_fudu(lt->flag, vNew, &fv, &dv);
   calc_lat_fudu(lt->flag, wNew, &fw, &dw);
 
-  /* If old size is different then resolution changed in interface,
+  /* If old size is different than resolution changed in interface,
    * try to do clever reinit of points. Pretty simply idea, we just
    * deform new verts by old lattice, but scaling them to match old
    * size first.
@@ -395,18 +394,9 @@ Lattice *BKE_lattice_add(Main *bmain, const char *name)
 {
   Lattice *lt;
 
-  lt = BKE_libblock_alloc(bmain, ID_LT, name, 0);
-
-  lattice_init_data(&lt->id);
+  lt = BKE_id_new(bmain, ID_LT, name);
 
   return lt;
-}
-
-Lattice *BKE_lattice_copy(Main *bmain, const Lattice *lt)
-{
-  Lattice *lt_copy;
-  BKE_id_copy(bmain, &lt->id, (ID **)&lt_copy);
-  return lt_copy;
 }
 
 bool object_deform_mball(Object *ob, ListBase *dispbase)

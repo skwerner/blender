@@ -239,6 +239,10 @@ class OUTLINER_MT_collection(Menu):
         if space.display_mode == 'VIEW_LAYER':
             layout.separator()
             layout.menu("OUTLINER_MT_collection_view_layer", icon='RENDERLAYERS')
+            layout.separator()
+
+            row = layout.row(align=True)
+            row.operator_enum("outliner.collection_color_tag_set", "color", icon_only=True)
 
         layout.separator()
 
@@ -275,7 +279,6 @@ class OUTLINER_MT_object(Menu):
 
         space = context.space_data
         obj = context.active_object
-        object_mode = 'OBJECT' if obj is None else obj.mode
 
         layout.operator("outliner.id_copy", text="Copy", icon='COPYDOWN')
         layout.operator("outliner.id_paste", text="Paste", icon='PASTEDOWN')
@@ -292,16 +295,6 @@ class OUTLINER_MT_object(Menu):
         layout.operator("outliner.object_operation", text="Deselect").type = 'DESELECT'
 
         layout.separator()
-
-        if object_mode in {'EDIT', 'POSE'}:
-            name = bpy.types.Object.bl_rna.properties["mode"].enum_items[object_mode].name
-            layout.operator("outliner.object_operation",
-                            text=iface_("%s Set", i18n_contexts.operator_default) % name).type = 'OBJECT_MODE_ENTER'
-            layout.operator("outliner.object_operation",
-                            text=iface_("%s Clear", i18n_contexts.operator_default) % name).type = 'OBJECT_MODE_EXIT'
-            del name
-
-            layout.separator()
 
         if not (space.display_mode == 'VIEW_LAYER' and not space.use_filter_collection):
             layout.operator("outliner.id_operation", text="Unlink").type = 'UNLINK'
@@ -356,6 +349,10 @@ class OUTLINER_PT_filter(Panel):
 
         row = layout.row(align=True)
         row.prop(space, "use_sync_select", text="Sync Selection")
+        layout.separator()
+
+        row = layout.row(align=True)
+        row.prop(space, "show_mode_column", text="Show Mode Column")
         layout.separator()
 
         col = layout.column(align=True)

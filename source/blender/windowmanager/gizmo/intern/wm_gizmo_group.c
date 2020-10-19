@@ -444,7 +444,7 @@ static bool gizmo_tweak_start_and_finish(
       wmWindowManager *wm = CTX_wm_manager(C);
       wmOperator *op = WM_operator_last_redo(C);
 
-      /* We may want to enable this, for now the gizmo can manage it's own properties. */
+      /* We may want to enable this, for now the gizmo can manage its own properties. */
 #if 0
       IDP_MergeGroup(gzop->ptr.data, op->properties, false);
 #endif
@@ -633,7 +633,7 @@ void GIZMOGROUP_OT_gizmo_tweak(wmOperatorType *ot)
   ot->invoke = gizmo_tweak_invoke;
   ot->modal = gizmo_tweak_modal;
 
-  /* TODO(campbell) This causes problems tweaking settings for operators,
+  /* TODO(campbell): This causes problems tweaking settings for operators,
    * need to find a way to support this. */
 #if 0
   ot->flag = OPTYPE_UNDO;

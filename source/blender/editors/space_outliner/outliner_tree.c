@@ -61,6 +61,7 @@
 
 #include "BLT_translation.h"
 
+#include "BKE_armature.h"
 #include "BKE_fcurve_driver.h"
 #include "BKE_idtype.h"
 #include "BKE_layer.h"
@@ -73,7 +74,6 @@
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
 
-#include "ED_armature.h"
 #include "ED_screen.h"
 
 #include "WM_api.h"
@@ -94,6 +94,7 @@ static TreeElement *outliner_add_collection_recursive(SpaceOutliner *space_outli
                                                       Collection *collection,
                                                       TreeElement *ten);
 static void outliner_make_object_parent_hierarchy(ListBase *lb);
+static int outliner_exclude_filter_get(const SpaceOutliner *space_outliner);
 
 /* ********************************************************* */
 /* Persistent Data */
@@ -245,11 +246,19 @@ static TreeElement *outliner_add_element(SpaceOutliner *space_outliner,
 
 /* -------------------------------------------------------- */
 
+bool outliner_requires_rebuild_on_select_or_active_change(const SpaceOutliner *space_outliner)
+{
+  int exclude_flags = outliner_exclude_filter_get(space_outliner);
+  /* Need to rebuild tree to re-apply filter if select/active changed while filtering based on
+   * select/active. */
+  return exclude_flags & (SO_FILTER_OB_STATE_SELECTED | SO_FILTER_OB_STATE_ACTIVE);
+}
+
 /**
  * Check if a display mode needs a full rebuild if the open/collapsed state changes.
  * Element types in these modes don't actually add children if collapsed, so the rebuild is needed.
  */
-bool outliner_mode_requires_always_rebuild(const SpaceOutliner *space_outliner)
+bool outliner_requires_rebuild_on_open_change(const SpaceOutliner *space_outliner)
 {
   return ELEM(space_outliner->outlinevis, SO_DATA_API);
 }
@@ -1957,8 +1966,8 @@ static void outliner_sort(ListBase *lb)
     }
   }
 
-  for (te = lb->first; te; te = te->next) {
-    outliner_sort(&te->subtree);
+  LISTBASE_FOREACH (TreeElement *, te_iter, lb) {
+    outliner_sort(&te_iter->subtree);
   }
 }
 
@@ -2001,8 +2010,8 @@ static void outliner_collections_children_sort(ListBase *lb)
     }
   }
 
-  for (te = lb->first; te; te = te->next) {
-    outliner_collections_children_sort(&te->subtree);
+  LISTBASE_FOREACH (TreeElement *, te_iter, lb) {
+    outliner_collections_children_sort(&te_iter->subtree);
   }
 }
 
@@ -2164,7 +2173,7 @@ static void outliner_store_scrolling_position(SpaceOutliner *space_outliner,
   }
 }
 
-static int outliner_exclude_filter_get(SpaceOutliner *space_outliner)
+static int outliner_exclude_filter_get(const SpaceOutliner *space_outliner)
 {
   int exclude_filter = space_outliner->filter & ~SO_FILTER_OB_STATE;
 

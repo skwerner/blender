@@ -52,12 +52,19 @@ if(EXISTS ${LIBDIR})
   message(STATUS "Using pre-compiled LIBDIR: ${LIBDIR}")
 
   file(GLOB LIB_SUBDIRS ${LIBDIR}/*)
+  # Ignore Mesa software OpenGL libraries, they are not intended to be
+  # linked against but to optionally override at runtime.
+  list(REMOVE_ITEM LIB_SUBDIRS ${LIBDIR}/mesa)
   # NOTE: Make sure "proper" compiled zlib comes first before the one
   # which is a part of OpenCollada. They have different ABI, and we
   # do need to use the official one.
   set(CMAKE_PREFIX_PATH ${LIBDIR}/zlib ${LIB_SUBDIRS})
   set(WITH_STATIC_LIBS ON)
-  set(WITH_OPENMP_STATIC ON)
+  # OpenMP usually can't be statically linked into shared libraries,
+  # due to not being compiled with position independent code.
+  if(NOT WITH_PYTHON_MODULE)
+    set(WITH_OPENMP_STATIC ON)
+  endif()
   set(Boost_NO_BOOST_CMAKE ON)
   set(BOOST_ROOT ${LIBDIR}/boost)
   set(BOOST_LIBRARYDIR ${LIBDIR}/boost/lib)
@@ -257,6 +264,7 @@ endif()
 if(WITH_OPENVDB)
   find_package_wrapper(OpenVDB)
   find_package_wrapper(Blosc)
+
   if(NOT OPENVDB_FOUND)
     set(WITH_OPENVDB OFF)
     set(WITH_OPENVDB_BLOSC OFF)
@@ -264,6 +272,15 @@ if(WITH_OPENVDB)
   elseif(NOT BLOSC_FOUND)
     set(WITH_OPENVDB_BLOSC OFF)
     message(STATUS "Blosc not found, disabling it for OpenVBD")
+  endif()
+endif()
+
+if(WITH_NANOVDB)
+  find_package_wrapper(NanoVDB)
+
+  if(NOT NANOVDB_FOUND)
+    set(WITH_NANOVDB OFF)
+    message(STATUS "NanoVDB not found, disabling it")
   endif()
 endif()
 
@@ -427,15 +444,6 @@ if(WITH_TBB)
   find_package_wrapper(TBB)
 endif()
 
-if(WITH_GMP)
-  find_package(GMP)
-
-  if(NOT GMP_FOUND)
-    set(WITH_GMP OFF)
-    message(STATUS "GMP not found")
-  endif()
-endif()
-
 if(WITH_XR_OPENXR)
   find_package(XR_OpenXR_SDK)
   if(NOT XR_OPENXR_SDK_FOUND)
@@ -449,6 +457,14 @@ if(WITH_GMP)
   if(NOT GMP_FOUND)
     message(WARNING "GMP not found, disabling WITH_GMP")
     set(WITH_GMP OFF)
+  endif()
+endif()
+
+if(WITH_POTRACE)
+  find_package_wrapper(Potrace)
+  if(NOT POTRACE_FOUND)
+    message(WARNING "potrace not found, disabling WITH_POTRACE")
+    set(WITH_POTRACE OFF)
   endif()
 endif()
 

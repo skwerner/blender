@@ -140,7 +140,7 @@ void prepare_raycast(vec3 ray_origin,
 
 // #define GROUPED_FETCHES /* is still slower, need to see where is the bottleneck. */
 /* Return the hit position, and negate the z component (making it positive) if not hit occurred. */
-/* __ray_dir__ is the ray direction premultiplied by it's maximum length */
+/* __ray_dir__ is the ray direction premultiplied by its maximum length */
 vec3 raycast(int index,
              vec3 ray_origin,
              vec3 ray_dir,
@@ -258,7 +258,7 @@ float screen_border_mask(vec2 hit_co)
 {
   const float margin = 0.003;
   float atten = ssrBorderFac + margin; /* Screen percentage */
-  hit_co = smoothstep(margin, atten, hit_co) * (1 - smoothstep(1.0 - atten, 1.0 - margin, hit_co));
+  hit_co = smoothstep(0.0, atten, hit_co) * (1.0 - smoothstep(1.0 - atten, 1.0, hit_co));
 
   float screenfade = hit_co.x * hit_co.y;
 

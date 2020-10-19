@@ -213,14 +213,14 @@ void view3d_region_operator_needs_opengl(wmWindow *UNUSED(win), ARegion *region)
   else {
     RegionView3D *rv3d = region->regiondata;
 
-    wmViewport(&region->winrct);  // TODO: bad
+    wmViewport(&region->winrct); /* TODO: bad */
     GPU_matrix_projection_set(rv3d->winmat);
     GPU_matrix_set(rv3d->viewmat);
   }
 }
 
 /**
- * Use instead of: ``GPU_polygon_offset(rv3d->dist, ...)`` see bug [#37727]
+ * Use instead of: `GPU_polygon_offset(rv3d->dist, ...)` see bug T37727.
  */
 void ED_view3d_polygon_offset(const RegionView3D *rv3d, const float dist)
 {
@@ -1112,7 +1112,7 @@ bool ED_view3d_autodist_depth_seg(
 /* -------------------------------------------------------------------- */
 /** \name View Radius/Distance Utilities
  *
- * Use to calculate a distance to a point based on it's radius.
+ * Use to calculate a distance to a point based on its radius.
  * \{ */
 
 float ED_view3d_radius_to_dist_persp(const float angle, const float radius)

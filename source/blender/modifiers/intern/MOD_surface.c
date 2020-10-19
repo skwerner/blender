@@ -27,6 +27,7 @@
 
 #include "BLT_translation.h"
 
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
@@ -59,10 +60,9 @@ static void initData(ModifierData *md)
 {
   SurfaceModifierData *surmd = (SurfaceModifierData *)md;
 
-  surmd->bvhtree = NULL;
-  surmd->mesh = NULL;
-  surmd->x = NULL;
-  surmd->v = NULL;
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(surmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(surmd, DNA_struct_default_get(SurfaceModifierData), modifier);
 }
 
 static void copyData(const ModifierData *md_src, ModifierData *md_dst, const int flag)
@@ -126,7 +126,7 @@ static void deformVerts(ModifierData *md,
   if (mesh) {
     /* Not possible to use get_mesh() in this case as we'll modify its vertices
      * and get_mesh() would return 'mesh' directly. */
-    BKE_id_copy_ex(NULL, (ID *)mesh, (ID **)&surmd->mesh, LIB_ID_COPY_LOCALIZE);
+    surmd->mesh = (Mesh *)BKE_id_copy_ex(NULL, (ID *)mesh, NULL, LIB_ID_COPY_LOCALIZE);
   }
   else {
     surmd->mesh = MOD_deform_mesh_eval_get(ctx->object, NULL, NULL, NULL, numVerts, false, false);
@@ -226,9 +226,11 @@ ModifierTypeInfo modifierType_Surface = {
     /* name */ "Surface",
     /* structName */ "SurfaceModifierData",
     /* structSize */ sizeof(SurfaceModifierData),
+    /* srna */ &RNA_SurfaceModifier,
     /* type */ eModifierTypeType_OnlyDeform,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_AcceptsCVs |
         eModifierTypeFlag_NoUserAdd,
+    /* icon */ ICON_MOD_PHYSICS,
 
     /* copyData */ copyData,
 
@@ -248,7 +250,6 @@ ModifierTypeInfo modifierType_Surface = {
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ dependsOnTime,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ NULL,
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,

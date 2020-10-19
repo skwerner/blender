@@ -82,7 +82,6 @@ typedef struct CVKeyIndex {
 void BKE_curve_editfont_free(struct Curve *cu);
 void BKE_curve_init(struct Curve *cu, const short curve_type);
 struct Curve *BKE_curve_add(struct Main *bmain, const char *name, int type);
-struct Curve *BKE_curve_copy(struct Main *bmain, const struct Curve *cu);
 short BKE_curve_type_get(const struct Curve *cu);
 void BKE_curve_type_test(struct Object *ob);
 void BKE_curve_curve_dimension_update(struct Curve *cu);
@@ -159,6 +158,8 @@ void BKE_curve_rect_from_textbox(const struct Curve *cu,
                                  const struct TextBox *tb,
                                  struct rctf *r_rect);
 
+void BKE_curve_correct_bezpart(const float v1[2], float v2[2], float v3[2], const float v4[2]);
+
 /* ** Nurbs ** */
 
 bool BKE_nurbList_index_get_co(struct ListBase *editnurb, const int index, float r_co[3]);
@@ -171,11 +172,11 @@ void BKE_nurbList_duplicate(struct ListBase *lb1, const struct ListBase *lb2);
 void BKE_nurbList_handles_set(struct ListBase *editnurb, const char code);
 void BKE_nurbList_handles_recalculate(struct ListBase *editnurb,
                                       const bool calc_length,
-                                      const char flag);
+                                      const uint8_t flag);
 
-void BKE_nurbList_handles_autocalc(ListBase *editnurb, int flag);
-void BKE_nurbList_flag_set(ListBase *editnurb, short flag, bool set);
-bool BKE_nurbList_flag_set_from_flag(ListBase *editnurb, short from_flag, short flag);
+void BKE_nurbList_handles_autocalc(ListBase *editnurb, uint8_t flag);
+void BKE_nurbList_flag_set(ListBase *editnurb, uint8_t flag, bool set);
+bool BKE_nurbList_flag_set_from_flag(ListBase *editnurb, uint8_t from_flag, uint8_t flag);
 
 void BKE_nurb_free(struct Nurb *nu);
 struct Nurb *BKE_nurb_duplicate(const struct Nurb *nu);
@@ -260,7 +261,7 @@ void BKE_nurb_handle_calc_simple_auto(struct Nurb *nu, struct BezTriple *bezt);
 void BKE_nurb_handle_smooth_fcurve(struct BezTriple *bezt, int total, bool cyclic);
 
 void BKE_nurb_handles_calc(struct Nurb *nu);
-void BKE_nurb_handles_autocalc(struct Nurb *nu, int flag);
+void BKE_nurb_handles_autocalc(struct Nurb *nu, uint8_t flag);
 void BKE_nurb_bezt_handle_test(struct BezTriple *bezt,
                                const eBezTriple_Flag__Alias sel_flag,
                                const bool use_handle,

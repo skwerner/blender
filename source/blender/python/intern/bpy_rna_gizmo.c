@@ -433,14 +433,14 @@ static PyObject *bpy_gizmo_target_set_value(PyObject *UNUSED(self), PyObject *ar
                         "Gizmo target property array") == -1) {
           goto fail;
         }
-        WM_gizmo_target_property_float_set_array(BPy_GetContext(), gz, gz_prop, value);
+        WM_gizmo_target_property_float_set_array(BPY_context_get(), gz, gz_prop, value);
       }
       else {
         float value;
         if ((value = PyFloat_AsDouble(params.value)) == -1.0f && PyErr_Occurred()) {
           goto fail;
         }
-        WM_gizmo_target_property_float_set(BPy_GetContext(), gz, gz_prop, value);
+        WM_gizmo_target_property_float_set(BPY_context_get(), gz, gz_prop, value);
       }
       Py_RETURN_NONE;
     }
@@ -507,7 +507,7 @@ fail:
 
 /** \} */
 
-int BPY_rna_gizmo_module(PyObject *mod_par)
+bool BPY_rna_gizmo_module(PyObject *mod_par)
 {
   static PyMethodDef method_def_array[] = {
       /* Gizmo Target Property Define API */
@@ -541,5 +541,5 @@ int BPY_rna_gizmo_module(PyObject *mod_par)
     PyModule_AddObject(mod_par, name_prefix, func_inst);
   }
 
-  return 0;
+  return false;
 }

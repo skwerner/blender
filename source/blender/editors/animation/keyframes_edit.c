@@ -70,7 +70,7 @@
 /* This function is used to loop over BezTriples in the given F-Curve, applying a given
  * operation on them, and optionally applies an F-Curve validation function afterwards.
  */
-// TODO: make this function work on samples too...
+/* TODO: make this function work on samples too. */
 short ANIM_fcurve_keyframes_loop(KeyframeEditData *ked,
                                  FCurve *fcu,
                                  KeyframeEditFunc key_ok,
@@ -237,7 +237,7 @@ static short ob_keyframes_loop(KeyframeEditData *ked,
   ac.datatype = ANIMCONT_CHANNEL;
 
   /* get F-Curves to take keyframes from */
-  filter = ANIMFILTER_DATA_VISIBLE;  // curves only
+  filter = ANIMFILTER_DATA_VISIBLE; /* curves only */
   ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
 
   /* Loop through each F-Curve, applying the operation as required,
@@ -286,7 +286,7 @@ static short scene_keyframes_loop(KeyframeEditData *ked,
   ac.datatype = ANIMCONT_CHANNEL;
 
   /* get F-Curves to take keyframes from */
-  filter = ANIMFILTER_DATA_VISIBLE;  // curves only
+  filter = ANIMFILTER_DATA_VISIBLE; /* curves only */
   ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
 
   /* Loop through each F-Curve, applying the operation as required,
@@ -478,7 +478,7 @@ void ANIM_animdata_keyframe_callback(bAnimContext *ac,
 /* Keyframe Integrity Tools */
 
 /* Rearrange keyframes if some are out of order */
-// used to be recalc_*_ipos() where * was object or action
+/* used to be recalc_*_ipos() where * was object or action */
 void ANIM_editkeyframes_refresh(bAnimContext *ac)
 {
   ListBase anim_data = {NULL, NULL};
@@ -515,19 +515,21 @@ void ANIM_editkeyframes_refresh(bAnimContext *ac)
 #define KEYFRAME_OK_CHECKS(check) \
   { \
     CHECK_TYPE(ok, short); \
-    if (check(1)) \
+    if (check(1)) { \
       ok |= KEYFRAME_OK_KEY; \
-\
+    } \
     if (ked && (ked->iterflags & KEYFRAME_ITER_INCL_HANDLES)) { \
       /* Only act on visible items, so check handle visibility state. */ \
       const bool handles_visible = ((ked->iterflags & KEYFRAME_ITER_HANDLES_DEFAULT_INVISIBLE) ? \
                                         (BEZT_ISSEL_ANY(bezt)) : \
                                         true); \
       if (handles_visible) { \
-        if (check(0)) \
+        if (check(0)) { \
           ok |= KEYFRAME_OK_H1; \
-        if (check(2)) \
+        } \
+        if (check(2)) { \
           ok |= KEYFRAME_OK_H2; \
+        } \
       } \
     } \
   } \
@@ -832,7 +834,7 @@ void bezt_remap_times(KeyframeEditData *ked, BezTriple *bezt)
   const float scale = (rmap->newMax - rmap->newMin) / (rmap->oldMax - rmap->oldMin);
 
   /* perform transform on all three handles unless indicated otherwise */
-  // TODO: need to include some checks for that
+  /* TODO: need to include some checks for that */
 
   bezt->vec[0][0] = scale * (bezt->vec[0][0] - rmap->oldMin) + rmap->newMin;
   bezt->vec[1][0] = scale * (bezt->vec[1][0] - rmap->oldMin) + rmap->newMin;
@@ -943,26 +945,20 @@ KeyframeEditFunc ANIM_editkeyframes_snap(short mode)
 
 static void mirror_bezier_xaxis_ex(BezTriple *bezt, const float center)
 {
-  float diff;
-  int i;
-
-  for (i = 0; i < 3; i++) {
-    diff = (center - bezt->vec[i][0]);
+  for (int i = 0; i < 3; i++) {
+    float diff = (center - bezt->vec[i][0]);
     bezt->vec[i][0] = (center + diff);
   }
   swap_v3_v3(bezt->vec[0], bezt->vec[2]);
 
-  SWAP(char, bezt->h1, bezt->h2);
-  SWAP(char, bezt->f1, bezt->f3);
+  SWAP(uint8_t, bezt->h1, bezt->h2);
+  SWAP(uint8_t, bezt->f1, bezt->f3);
 }
 
 static void mirror_bezier_yaxis_ex(BezTriple *bezt, const float center)
 {
-  float diff;
-  int i;
-
-  for (i = 0; i < 3; i++) {
-    diff = (center - bezt->vec[i][1]);
+  for (int i = 0; i < 3; i++) {
+    float diff = (center - bezt->vec[i][1]);
     bezt->vec[i][1] = (center + diff);
   }
 }
@@ -1029,7 +1025,7 @@ static short mirror_bezier_value(KeyframeEditData *ked, BezTriple *bezt)
 }
 
 /* Note: for markers and 'value', the values to use must be supplied as the first float value */
-// calchandles_fcurve
+/* calchandles_fcurve */
 KeyframeEditFunc ANIM_editkeyframes_mirror(short mode)
 {
   switch (mode) {
@@ -1060,10 +1056,12 @@ KeyframeEditFunc ANIM_editkeyframes_mirror(short mode)
  */
 #define ENSURE_HANDLES_MATCH(bezt) \
   if (bezt->h1 != bezt->h2) { \
-    if (ELEM(bezt->h1, HD_ALIGN, HD_AUTO, HD_AUTO_ANIM)) \
+    if (ELEM(bezt->h1, HD_ALIGN, HD_AUTO, HD_AUTO_ANIM)) { \
       bezt->h1 = HD_FREE; \
-    if (ELEM(bezt->h2, HD_ALIGN, HD_AUTO, HD_AUTO_ANIM)) \
+    } \
+    if (ELEM(bezt->h2, HD_ALIGN, HD_AUTO, HD_AUTO_ANIM)) { \
       bezt->h2 = HD_FREE; \
+    } \
   } \
   (void)0
 
@@ -1130,9 +1128,12 @@ static short set_bezier_vector(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
   return 0;
 }
 
-/* Queries if the handle should be set to 'free' or 'align' */
-// NOTE: this was used for the 'toggle free/align' option
-//      currently this isn't used, but may be restored later
+/**
+ * Queries if the handle should be set to 'free' or 'align'.
+ *
+ * \note This was used for the 'toggle free/align' option
+ * currently this isn't used, but may be restored later.
+ */
 static short bezier_isfree(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
   if ((bezt->f1 & SELECT) && (bezt->h1)) {
@@ -1183,7 +1184,7 @@ static short set_bezier_free(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 }
 
 /* Set all selected Bezier Handles to a single type */
-// calchandles_fcurve
+/* calchandles_fcurve */
 KeyframeEditFunc ANIM_editkeyframes_handles(short mode)
 {
   switch (mode) {
@@ -1311,7 +1312,7 @@ static short set_bezt_sine(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 }
 
 /* Set the interpolation type of the selected BezTriples in each F-Curve to the specified one */
-// ANIM_editkeyframes_ipocurve_ipotype() !
+/* ANIM_editkeyframes_ipocurve_ipotype() ! */
 KeyframeEditFunc ANIM_editkeyframes_ipo(short mode)
 {
   switch (mode) {

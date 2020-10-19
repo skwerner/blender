@@ -33,9 +33,7 @@
 #include "CLG_log.h"
 static CLG_LogRef LOG = {"io.alembic"};
 
-namespace blender {
-namespace io {
-namespace alembic {
+namespace blender::io::alembic {
 
 using Alembic::Abc::OObject;
 using Alembic::AbcGeom::OXform;
@@ -55,12 +53,23 @@ void ABCTransformWriter::create_alembic_objects(const HierarchyContext * /*conte
   abc_xform_schema_ = abc_xform_.getSchema();
 }
 
+Alembic::Abc::OCompoundProperty ABCTransformWriter::abc_prop_for_custom_props()
+{
+  return abc_schema_prop_for_custom_props<OXformSchema>(abc_xform_schema_);
+}
+
+const IDProperty *ABCTransformWriter::get_id_properties(const HierarchyContext &context) const
+{
+  const Object *object = context.object;
+  return object->id.properties;
+}
+
 void ABCTransformWriter::do_write(HierarchyContext &context)
 {
-  float parent_relative_matrix[4][4];  // The object matrix relative to the parent.
+  float parent_relative_matrix[4][4]; /* The object matrix relative to the parent. */
   mul_m4_m4m4(parent_relative_matrix, context.parent_matrix_inv_world, context.matrix_world);
 
-  // After this, parent_relative_matrix uses Y=up.
+  /* After this, parent_relative_matrix uses Y=up. */
   copy_m44_axis_swap(parent_relative_matrix, parent_relative_matrix, ABC_YUP_FROM_ZUP);
 
   /* If the parent is a camera, undo its to-Maya rotation (see below). */
@@ -115,6 +124,4 @@ bool ABCTransformWriter::check_is_animated(const HierarchyContext &context) cons
   return BKE_object_moves_in_time(context.object, context.animation_check_include_parent);
 }
 
-}  // namespace alembic
-}  // namespace io
-}  // namespace blender
+}  // namespace blender::io::alembic

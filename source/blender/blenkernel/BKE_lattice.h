@@ -42,7 +42,6 @@ struct bGPDstroke;
 
 void BKE_lattice_resize(struct Lattice *lt, int u, int v, int w, struct Object *ltOb);
 struct Lattice *BKE_lattice_add(struct Main *bmain, const char *name);
-struct Lattice *BKE_lattice_copy(struct Main *bmain, const struct Lattice *lt);
 void calc_lat_fudu(int flag, int res, float *r_fu, float *r_du);
 
 bool object_deform_mball(struct Object *ob, struct ListBase *dispbase);
@@ -77,7 +76,7 @@ int BKE_lattice_index_flip(
     struct Lattice *lt, const int index, const bool flip_u, const bool flip_v, const bool flip_w);
 void BKE_lattice_bitmap_from_flag(struct Lattice *lt,
                                   unsigned int *bitmap,
-                                  const short flag,
+                                  const uint8_t flag,
                                   const bool clear,
                                   const bool respecthide);
 

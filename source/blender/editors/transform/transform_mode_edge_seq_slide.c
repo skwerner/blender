@@ -93,22 +93,29 @@ static void applySeqSlideValue(TransInfo *t, const float val[2])
 static void applySeqSlide(TransInfo *t, const int mval[2])
 {
   char str[UI_MAX_DRAW_STR];
+  float values_final[2] = {0.0f};
 
   snapSequenceBounds(t, mval);
-
-  if (t->con.mode & CON_APPLY) {
-    float tvec[3];
-    t->con.applyVec(t, NULL, NULL, t->values, tvec);
-    copy_v3_v3(t->values_final, tvec);
+  if (applyNumInput(&t->num, values_final)) {
+    if (t->con.mode & CON_APPLY) {
+      if (t->con.mode & CON_AXIS0) {
+        mul_v2_v2fl(values_final, t->spacemtx[0], values_final[0]);
+      }
+      else {
+        mul_v2_v2fl(values_final, t->spacemtx[1], values_final[0]);
+      }
+    }
+  }
+  else if (t->con.mode & CON_APPLY) {
+    t->con.applyVec(t, NULL, NULL, t->values, values_final);
   }
   else {
-    // transform_snap_increment(t, t->values);
-    applyNumInput(&t->num, t->values);
-    copy_v3_v3(t->values_final, t->values);
+    copy_v2_v2(values_final, t->values);
   }
 
-  t->values_final[0] = floorf(t->values_final[0] + 0.5f);
-  t->values_final[1] = floorf(t->values_final[1] + 0.5f);
+  values_final[0] = floorf(values_final[0] + 0.5f);
+  values_final[1] = floorf(values_final[1] + 0.5f);
+  copy_v2_v2(t->values_final, values_final);
 
   headerSeqSlide(t, t->values_final, str);
   applySeqSlideValue(t, t->values_final);
@@ -128,11 +135,10 @@ void initSeqSlide(TransInfo *t)
   t->num.flag = 0;
   t->num.idx_max = t->idx_max;
 
-  t->snap[0] = 0.0f;
-  t->snap[1] = floorf(t->scene->r.frs_sec / t->scene->r.frs_sec_base);
-  t->snap[2] = 10.0f;
+  t->snap[0] = floorf(t->scene->r.frs_sec / t->scene->r.frs_sec_base);
+  t->snap[1] = 10.0f;
 
-  copy_v3_fl(t->num.val_inc, t->snap[1]);
+  copy_v3_fl(t->num.val_inc, t->snap[0]);
   t->num.unit_sys = t->scene->unit.system;
   /* Would be nice to have a time handling in units as well
    * (supporting frames in addition to "natural" time...). */

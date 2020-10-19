@@ -141,7 +141,7 @@ bool ED_workspace_change(WorkSpace *workspace_new, bContext *C, wmWindowManager 
     return false;
   }
 
-  BKE_workspace_active_layout_set(win->workspace_hook, workspace_new, layout_new);
+  BKE_workspace_active_layout_set(win->workspace_hook, win->winid, workspace_new, layout_new);
   BKE_workspace_active_set(win->workspace_hook, workspace_new);
 
   /* update screen *after* changing workspace - which also causes the
@@ -385,7 +385,6 @@ static void workspace_append_button(uiLayout *layout,
                                     const Main *from_main)
 {
   const ID *id = (ID *)workspace;
-  PointerRNA opptr;
   const char *filepath = from_main->name;
 
   if (strlen(filepath) == 0) {
@@ -393,6 +392,8 @@ static void workspace_append_button(uiLayout *layout,
   }
 
   BLI_assert(STREQ(ot_append->idname, "WORKSPACE_OT_append_activate"));
+
+  PointerRNA opptr;
   uiItemFullO_ptr(
       layout, ot_append, workspace->id.name + 2, ICON_NONE, NULL, WM_OP_EXEC_DEFAULT, 0, &opptr);
   RNA_string_set(&opptr, "idname", id->name + 2);

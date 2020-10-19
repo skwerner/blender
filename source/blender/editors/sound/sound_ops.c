@@ -126,7 +126,7 @@ static int sound_open_exec(bContext *C, wmOperator *op)
   return OPERATOR_FINISHED;
 }
 
-#else  // WITH_AUDASPACE
+#else /* WITH_AUDASPACE */
 
 static int sound_open_exec(bContext *UNUSED(C), wmOperator *op)
 {
@@ -386,7 +386,9 @@ static int sound_mixdown_exec(bContext *C, wmOperator *op)
                                      specs,
                                      container,
                                      codec,
-                                     bitrate);
+                                     bitrate,
+                                     NULL,
+                                     NULL);
   }
   else {
     result = AUD_mixdown(scene_eval->sound_scene,
@@ -397,7 +399,9 @@ static int sound_mixdown_exec(bContext *C, wmOperator *op)
                          specs,
                          container,
                          codec,
-                         bitrate);
+                         bitrate,
+                         NULL,
+                         NULL);
   }
 
   BKE_sound_reset_scene_specs(scene_eval);
@@ -406,10 +410,10 @@ static int sound_mixdown_exec(bContext *C, wmOperator *op)
     BKE_report(op->reports, RPT_ERROR, result);
     return OPERATOR_CANCELLED;
   }
-#else   // WITH_AUDASPACE
+#else  /* WITH_AUDASPACE */
   (void)C;
   (void)op;
-#endif  // WITH_AUDASPACE
+#endif /* WITH_AUDASPACE */
   return OPERATOR_FINISHED;
 }
 
@@ -489,7 +493,7 @@ static bool sound_mixdown_check(bContext *UNUSED(C), wmOperator *op)
   return false;
 }
 
-#endif  // WITH_AUDASPACE
+#endif /* WITH_AUDASPACE */
 
 static int sound_mixdown_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
@@ -662,7 +666,7 @@ static void sound_mixdown_draw(bContext *C, wmOperator *op)
   uiDefAutoButsRNA(
       layout, &ptr, sound_mixdown_draw_check_prop, NULL, NULL, UI_BUT_LABEL_ALIGN_NONE, false);
 }
-#endif  // WITH_AUDASPACE
+#endif /* WITH_AUDASPACE */
 
 static void SOUND_OT_mixdown(wmOperatorType *ot)
 {
@@ -692,7 +696,7 @@ static void SOUND_OT_mixdown(wmOperatorType *ot)
       {0, NULL, 0, NULL, NULL},
   };
 
-#endif  // WITH_AUDASPACE
+#endif /* WITH_AUDASPACE */
 
   /* identifiers */
   ot->name = "Mixdown";
@@ -739,7 +743,7 @@ static void SOUND_OT_mixdown(wmOperatorType *ot)
                   0,
                   "Split channels",
                   "Each channel will be rendered into a mono file");
-#endif  // WITH_AUDASPACE
+#endif /* WITH_AUDASPACE */
 }
 
 /* ******************************************************* */

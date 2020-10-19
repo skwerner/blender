@@ -124,6 +124,7 @@ set(SRC
   intern/storage.c
   intern/string.c
   intern/string_cursor_utf8.c
+  intern/string_search.cc
   intern/string_utf8.c
   intern/string_utils.c
   intern/system.c
@@ -227,8 +228,8 @@ set(SRC
   BLI_math_geom.h
   BLI_math_inline.h
   BLI_math_interp.h
-  BLI_math_mpq.hh
   BLI_math_matrix.h
+  BLI_math_mpq.hh
   BLI_math_rotation.h
   BLI_math_solvers.h
   BLI_math_statistics.h
@@ -243,6 +244,7 @@ set(SRC
   BLI_mesh_intersect.hh
   BLI_mpq2.hh
   BLI_mpq3.hh
+  BLI_multi_value_map.hh
   BLI_noise.h
   BLI_path_util.h
   BLI_polyfill_2d.h
@@ -267,6 +269,7 @@ set(SRC
   BLI_string.h
   BLI_string_cursor_utf8.h
   BLI_string_ref.hh
+  BLI_string_search.h
   BLI_string_utf8.h
   BLI_string_utils.h
   BLI_sys_types.h
@@ -301,6 +304,7 @@ set(LIB
   extern_wcwidth
 
   ${FREETYPE_LIBRARY}
+  ${ZLIB_LIBRARIES}
 )
 
 if(WITH_MEM_VALGRIND)
@@ -411,6 +415,7 @@ if(WITH_GTESTS)
     tests/BLI_stack_cxx_test.cc
     tests/BLI_stack_test.cc
     tests/BLI_string_ref_test.cc
+    tests/BLI_string_search_test.cc
     tests/BLI_string_test.cc
     tests/BLI_string_utf8_test.cc
     tests/BLI_task_graph_test.cc
@@ -427,7 +432,7 @@ if(WITH_GTESTS)
     bf_blenlib
   )
   include(GTestTesting)
-  blender_add_test_lib(bf_blenlib_tests "${TEST_SRC}" "${INC};${TEST_INC}" "${INC_SYS}" "${LIB};${TEST_LIB}")
+  blender_add_test_executable(blenlib "${TEST_SRC}" "${INC};${TEST_INC}" "${INC_SYS}" "${LIB};${TEST_LIB}")
 
   add_subdirectory(tests/performance)
 endif()

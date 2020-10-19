@@ -136,50 +136,66 @@ extern "C" {
   (void)0
 #define DO_MIN(vec, min) \
   { \
-    if ((min)[0] > (vec)[0]) \
+    if ((min)[0] > (vec)[0]) { \
       (min)[0] = (vec)[0]; \
-    if ((min)[1] > (vec)[1]) \
+    } \
+    if ((min)[1] > (vec)[1]) { \
       (min)[1] = (vec)[1]; \
-    if ((min)[2] > (vec)[2]) \
+    } \
+    if ((min)[2] > (vec)[2]) { \
       (min)[2] = (vec)[2]; \
+    } \
   } \
   (void)0
 #define DO_MAX(vec, max) \
   { \
-    if ((max)[0] < (vec)[0]) \
+    if ((max)[0] < (vec)[0]) { \
       (max)[0] = (vec)[0]; \
-    if ((max)[1] < (vec)[1]) \
+    } \
+    if ((max)[1] < (vec)[1]) { \
       (max)[1] = (vec)[1]; \
-    if ((max)[2] < (vec)[2]) \
+    } \
+    if ((max)[2] < (vec)[2]) { \
       (max)[2] = (vec)[2]; \
+    } \
   } \
   (void)0
 #define DO_MINMAX(vec, min, max) \
   { \
-    if ((min)[0] > (vec)[0]) \
+    if ((min)[0] > (vec)[0]) { \
       (min)[0] = (vec)[0]; \
-    if ((min)[1] > (vec)[1]) \
+    } \
+    if ((min)[1] > (vec)[1]) { \
       (min)[1] = (vec)[1]; \
-    if ((min)[2] > (vec)[2]) \
+    } \
+    if ((min)[2] > (vec)[2]) { \
       (min)[2] = (vec)[2]; \
-    if ((max)[0] < (vec)[0]) \
+    } \
+    if ((max)[0] < (vec)[0]) { \
       (max)[0] = (vec)[0]; \
-    if ((max)[1] < (vec)[1]) \
+    } \
+    if ((max)[1] < (vec)[1]) { \
       (max)[1] = (vec)[1]; \
-    if ((max)[2] < (vec)[2]) \
+    } \
+    if ((max)[2] < (vec)[2]) { \
       (max)[2] = (vec)[2]; \
+    } \
   } \
   (void)0
 #define DO_MINMAX2(vec, min, max) \
   { \
-    if ((min)[0] > (vec)[0]) \
+    if ((min)[0] > (vec)[0]) { \
       (min)[0] = (vec)[0]; \
-    if ((min)[1] > (vec)[1]) \
+    } \
+    if ((min)[1] > (vec)[1]) { \
       (min)[1] = (vec)[1]; \
-    if ((max)[0] < (vec)[0]) \
+    } \
+    if ((max)[0] < (vec)[0]) { \
       (max)[0] = (vec)[0]; \
-    if ((max)[1] < (vec)[1]) \
+    } \
+    if ((max)[1] < (vec)[1]) { \
       (max)[1] = (vec)[1]; \
+    } \
   } \
   (void)0
 
@@ -330,24 +346,28 @@ extern "C" {
 
 #define CLAMP(a, b, c) \
   { \
-    if ((a) < (b)) \
+    if ((a) < (b)) { \
       (a) = (b); \
-    else if ((a) > (c)) \
+    } \
+    else if ((a) > (c)) { \
       (a) = (c); \
+    } \
   } \
   (void)0
 
 #define CLAMP_MAX(a, c) \
   { \
-    if ((a) > (c)) \
+    if ((a) > (c)) { \
       (a) = (c); \
+    } \
   } \
   (void)0
 
 #define CLAMP_MIN(a, b) \
   { \
-    if ((a) < (b)) \
+    if ((a) < (b)) { \
       (a) = (b); \
+    } \
   } \
   (void)0
 
@@ -762,7 +782,8 @@ extern bool BLI_memory_is_zero(const void *arr, const size_t arr_size);
 
 /* Useful to port C code using enums to C++ where enums are strongly typed.
  * To use after the enum declaration. */
-#  define ENUM_OPERATORS(_enum_type) \
+/* If any enumerator `C` is set to say `A|B`, then `C` would be the max enum value. */
+#  define ENUM_OPERATORS(_enum_type, _max_enum_value) \
     inline constexpr _enum_type operator|(_enum_type a, _enum_type b) \
     { \
       return static_cast<_enum_type>(static_cast<int>(a) | b); \
@@ -773,7 +794,7 @@ extern bool BLI_memory_is_zero(const void *arr, const size_t arr_size);
     } \
     inline constexpr _enum_type operator~(_enum_type a) \
     { \
-      return static_cast<_enum_type>(~static_cast<int>(a)); \
+      return static_cast<_enum_type>(~static_cast<int>(a) & (2 * _max_enum_value - 1)); \
     } \
     inline _enum_type &operator|=(_enum_type &a, _enum_type b) \
     { \
@@ -786,7 +807,7 @@ extern bool BLI_memory_is_zero(const void *arr, const size_t arr_size);
 
 #else
 /* Output nothing. */
-#  define ENUM_OPERATORS(_type)
+#  define ENUM_OPERATORS(_type, _max)
 #endif
 
 /** \} */

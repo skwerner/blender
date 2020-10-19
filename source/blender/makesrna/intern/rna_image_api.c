@@ -224,7 +224,7 @@ static int rna_Image_gl_load(Image *image, ReportList *reports, int frame)
 
   if (tex == NULL) {
     BKE_reportf(reports, RPT_ERROR, "Failed to load image texture '%s'", image->id.name + 2);
-    /* TODO(fclem) this error code makes no sense for vulkan. */
+    /* TODO(fclem): this error code makes no sense for vulkan. */
     return 0x0502; /* GL_INVALID_OPERATION */
   }
 
@@ -367,7 +367,7 @@ void RNA_api_image(StructRNA *srna)
                                   NULL,
                                   FILE_MAX,
                                   "File Path",
-                                  "The resulting filepath from the image and it's user");
+                                  "The resulting filepath from the image and its user");
   RNA_def_parameter_flags(parm, PROP_THICK_WRAP, 0); /* needed for string return value */
   RNA_def_function_output(func, parm);
 

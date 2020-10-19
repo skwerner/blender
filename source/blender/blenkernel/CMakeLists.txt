@@ -36,6 +36,7 @@ set(INC
   ../makesrna
   ../modifiers
   ../nodes
+  ../sequencer
   ../shader_fx
   ../simulation
   ../render/extern/include
@@ -57,7 +58,6 @@ set(INC
 )
 
 set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
   ${ZLIB_INCLUDE_DIRS}
 )
 
@@ -77,6 +77,7 @@ set(SRC
   intern/armature.c
   intern/armature_deform.c
   intern/armature_update.c
+  intern/attribute.c
   intern/autoexec.c
   intern/blender.c
   intern/blender_copybuffer.c
@@ -174,6 +175,7 @@ set(SRC
   intern/mesh_runtime.c
   intern/mesh_tangent.c
   intern/mesh_validate.c
+  intern/mesh_validate.cc
   intern/mesh_wrapper.c
   intern/modifier.c
   intern/movieclip.c
@@ -212,11 +214,6 @@ set(SRC
   intern/rigidbody.c
   intern/scene.c
   intern/screen.c
-  intern/seqcache.c
-  intern/seqeffects.c
-  intern/seqmodifier.c
-  intern/seqprefetch.c
-  intern/sequencer.c
   intern/shader_fx.c
   intern/shrinkwrap.c
   intern/simulation.cc
@@ -267,6 +264,7 @@ set(SRC
   BKE_animsys.h
   BKE_appdir.h
   BKE_armature.h
+  BKE_attribute.h
   BKE_autoexec.h
   BKE_blender.h
   BKE_blender_copybuffer.h
@@ -373,7 +371,6 @@ set(SRC
   BKE_rigidbody.h
   BKE_scene.h
   BKE_screen.h
-  BKE_sequencer.h
   BKE_sequencer_offscreen.h
   BKE_shader_fx.h
   BKE_shrinkwrap.h
@@ -455,7 +452,6 @@ if(WITH_BINRELOC)
   add_definitions(-DWITH_BINRELOC)
 endif()
 
-add_definitions(${GL_DEFINITIONS})
 
 if(WIN32)
   list(APPEND INC
@@ -693,6 +689,18 @@ endif()
 
 if(WITH_XR_OPENXR)
   add_definitions(-DWITH_XR_OPENXR)
+endif()
+
+if(WITH_TBB)
+  add_definitions(-DWITH_TBB)
+
+  list(APPEND INC_SYS
+    ${TBB_INCLUDE_DIRS}
+  )
+
+  list(APPEND LIB
+    ${TBB_LIBRARIES}
+  )
 endif()
 
 # # Warnings as errors, this is too strict!

@@ -44,12 +44,14 @@
 #include "BKE_keyconfig.h"
 #include "BKE_main.h"
 
-#include "BLO_readfile.h" /* Own include. */
+#include "BLO_readfile.h"
+
+#include "readfile.h" /* Own include. */
 
 #include "wm_event_types.h"
 
-/* Disallow access to global userdef. */
-#define U (_error_)
+/* For versioning we only ever want to manipulate preferences passed in. */
+#define U BLI_STATIC_ASSERT(false, "Global 'U' not allowed, only use arguments passed in!")
 
 static void do_versions_theme(const UserDef *userdef, bTheme *btheme)
 {
@@ -216,12 +218,35 @@ static void do_versions_theme(const UserDef *userdef, bTheme *btheme)
     FROM_DEFAULT_V4_UCHAR(tui.transparent_checker_secondary);
     btheme->tui.transparent_checker_size = U_theme_default.tui.transparent_checker_size;
   }
+  if (!USER_VERSION_ATLEAST(291, 2)) {
+    /* The new defaults for the file browser theme are the same as
+     * the outliner's, and it's less disruptive to just copy them. */
+    copy_v4_v4_uchar(btheme->space_file.back, btheme->space_outliner.back);
+    copy_v4_v4_uchar(btheme->space_file.row_alternate, btheme->space_outliner.row_alternate);
+
+    FROM_DEFAULT_V4_UCHAR(space_image.grid);
+  }
+
+  if (!USER_VERSION_ATLEAST(291, 3)) {
+    for (int i = 0; i < COLLECTION_COLOR_TOT; ++i) {
+      FROM_DEFAULT_V4_UCHAR(collection_color[i].color);
+    }
+
+    FROM_DEFAULT_V4_UCHAR(space_properties.match);
+
+    /* New grid theme color defaults are the same as the existing background colors,
+     * so they are copied to limit disruption. */
+    copy_v3_v3_uchar(btheme->space_clip.grid, btheme->space_clip.back);
+    btheme->space_clip.grid[3] = 255.0f;
+
+    copy_v3_v3_uchar(btheme->space_node.grid, btheme->space_node.back);
+  }
 
   /**
    * Versioning code until next subversion bump goes here.
    *
    * \note Be sure to check when bumping the version:
-   * - #BLO_version_defaults_userpref_blend in this file.
+   * - #blo_do_versions_userdef in this file.
    * - "versioning_{BLENDER_VERSION}.c"
    *
    * \note Keep this message at the bottom of the function.
@@ -229,10 +254,7 @@ static void do_versions_theme(const UserDef *userdef, bTheme *btheme)
   {
     /* Keep this block, even when empty. */
 
-    /* The new defaults for the file browser theme are the same as
-     * the outliner's, and it's less disruptive to just copy them. */
-    copy_v4_v4_uchar(btheme->space_file.back, btheme->space_outliner.back);
-    copy_v4_v4_uchar(btheme->space_file.row_alternate, btheme->space_outliner.row_alternate);
+    FROM_DEFAULT_V4_UCHAR(space_graph.vertex_active);
   }
 
 #undef FROM_DEFAULT_V4_UCHAR
@@ -285,10 +307,10 @@ static bool keymap_item_has_invalid_wm_context_data_path(wmKeyMapItem *kmi,
 }
 
 /* patching UserDef struct and Themes */
-void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
+void blo_do_versions_userdef(UserDef *userdef)
 {
-
-#define USER_VERSION_ATLEAST(ver, subver) MAIN_VERSION_ATLEAST(bmain, ver, subver)
+  /* #UserDef & #Main happen to have the same struct member. */
+#define USER_VERSION_ATLEAST(ver, subver) MAIN_VERSION_ATLEAST(userdef, ver, subver)
 
   /* the UserDef struct is not corrected with do_versions() .... ugh! */
   if (userdef->wheellinescroll == 0) {
@@ -510,9 +532,14 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
     }
   }
 
-  /* NOTE!! from now on use userdef->versionfile and userdef->subversionfile */
-#undef USER_VERSION_ATLEAST
-#define USER_VERSION_ATLEAST(ver, subver) MAIN_VERSION_ATLEAST(userdef, ver, subver)
+  if (!USER_VERSION_ATLEAST(269, 4)) {
+    userdef->walk_navigation.mouse_speed = 1.0f;
+    userdef->walk_navigation.walk_speed = 2.5f; /* m/s */
+    userdef->walk_navigation.walk_speed_factor = 5.0f;
+    userdef->walk_navigation.view_height = 1.6f;   /* m */
+    userdef->walk_navigation.jump_height = 0.4f;   /* m */
+    userdef->walk_navigation.teleport_time = 0.2f; /* s */
+  }
 
   if (!USER_VERSION_ATLEAST(271, 5)) {
     userdef->pie_menu_radius = 100;
@@ -581,6 +608,8 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
   if (!USER_VERSION_ATLEAST(280, 33)) {
     /* Enable GLTF addon by default. */
     BKE_addon_ensure(&userdef->addons, "io_scene_gltf2");
+
+    userdef->pressure_threshold_max = 1.0f;
   }
 
   if (!USER_VERSION_ATLEAST(280, 35)) {
@@ -806,9 +835,8 @@ void BLO_sanitize_experimental_features_userpref_blend(UserDef *userdef)
   if (BKE_blender_version_is_alpha()) {
     return;
   }
-  userdef->experimental.use_new_particle_system = false;
-  userdef->experimental.use_new_hair_type = false;
-  userdef->experimental.use_sculpt_vertex_colors = false;
+
+  MEMSET_STRUCT_AFTER(&userdef->experimental, 0, SANITIZE_AFTER_HERE);
 }
 
 #undef USER_LMOUSESELECT

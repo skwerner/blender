@@ -1539,7 +1539,7 @@ static void rna_def_color_balance(BlenderRNA *brna)
   srna = RNA_def_struct(brna, "SequenceColorBalanceData", NULL);
   RNA_def_struct_ui_text(srna,
                          "Sequence Color Balance Data",
-                         "Color balance parameters for a sequence strip and it's modifiers");
+                         "Color balance parameters for a sequence strip and its modifiers");
   RNA_def_struct_sdna(srna, "StripColorBalance");
 
   prop = RNA_def_property(srna, "lift", PROP_FLOAT, PROP_COLOR_GAMMA);
@@ -2819,7 +2819,7 @@ static void rna_def_speed_control(StructRNA *srna)
       prop, "Scale to Length", "Scale values from 0.0 to 1.0 to target sequence length");
   RNA_def_property_update(prop, NC_SCENE | ND_SEQUENCER, "rna_Sequence_invalidate_raw_update");
 
-  prop = RNA_def_property(srna, "frame_interpolation_mode", PROP_BOOLEAN, PROP_NONE);
+  prop = RNA_def_property(srna, "use_frame_interpolate", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flags", SEQ_SPEED_USE_INTERPOLATION);
   RNA_def_property_ui_text(
       prop, "Frame interpolation", "Do crossfade blending between current and next frame");

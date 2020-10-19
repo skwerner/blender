@@ -243,7 +243,7 @@ static int graphkeys_previewrange_exec(bContext *C, wmOperator *UNUSED(op))
   scene->r.pefra = round_fl_to_int(max);
 
   /* set notifier that things have changed */
-  // XXX err... there's nothing for frame ranges yet, but this should do fine too
+  /* XXX err... there's nothing for frame ranges yet, but this should do fine too */
   WM_event_add_notifier(C, NC_SCENE | ND_FRAME, ac.scene);
 
   return OPERATOR_FINISHED;
@@ -258,7 +258,7 @@ void GRAPH_OT_previewrange_set(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = graphkeys_previewrange_exec;
-  // XXX: unchecked poll to get fsamples working too, but makes modifier damage trickier...
+  /* XXX: unchecked poll to get fsamples working too, but makes modifier damage trickier. */
   ot->poll = ED_operator_graphedit_active;
 
   /* flags */
@@ -514,7 +514,7 @@ void GRAPH_OT_ghost_curves_create(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
-  // todo: add props for start/end frames
+  /* TODO: add props for start/end frames */
 }
 
 /* ******************** Clear Ghost-Curves Operator *********************** */
@@ -976,7 +976,7 @@ static short paste_graph_keys(bAnimContext *ac,
    * - First time we try to filter more strictly, allowing only selected channels
    *   to allow copying animation between channels
    * - Second time, we loosen things up if nothing was found the first time, allowing
-   *   users to just paste keyframes back into the original curve again [#31670]
+   *   users to just paste keyframes back into the original curve again T31670.
    */
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_CURVE_VISIBLE | ANIMFILTER_FOREDIT |
             ANIMFILTER_NODUPLIS);
@@ -1069,7 +1069,8 @@ void GRAPH_OT_paste(wmOperatorType *ot)
       "frame";
 
   /* api callbacks */
-  //  ot->invoke = WM_operator_props_popup; // better wait for graph redo panel
+
+  // ot->invoke = WM_operator_props_popup; /* better wait for graph redo panel */
   ot->exec = graphkeys_paste_exec;
   ot->poll = graphop_editable_keyframes_poll;
 
@@ -1292,7 +1293,7 @@ void GRAPH_OT_clean(wmOperatorType *ot)
   ot->description = "Simplify F-Curves by removing closely spaced keyframes";
 
   /* api callbacks */
-  // ot->invoke =  // XXX we need that number popup for this!
+  // ot->invoke = ???; /* XXX we need that number popup for this! */
   ot->exec = graphkeys_clean_exec;
   ot->poll = graphop_editable_keyframes_poll;
 
@@ -1828,7 +1829,7 @@ static int graphkeys_bake_exec(bContext *C, wmOperator *UNUSED(op))
   }
 
   /* for now, init start/end from preview-range extents */
-  // TODO: add properties for this
+  /* TODO: add properties for this */
   scene = ac.scene;
   start = PSFRA;
   end = PEFRA;
@@ -1837,7 +1838,7 @@ static int graphkeys_bake_exec(bContext *C, wmOperator *UNUSED(op))
   bake_graph_curves(&ac, start, end);
 
   /* set notifier that keyframes have changed */
-  // NOTE: some distinction between order/number of keyframes and type should be made?
+  /* NOTE: some distinction between order/number of keyframes and type should be made? */
   WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME | NA_EDITED, NULL);
 
   return OPERATOR_FINISHED;
@@ -1851,14 +1852,14 @@ void GRAPH_OT_bake(wmOperatorType *ot)
   ot->description = "Bake selected F-Curves to a set of sampled points defining a similar curve";
 
   /* api callbacks */
-  ot->invoke = WM_operator_confirm;  // FIXME...
+  ot->invoke = WM_operator_confirm; /* FIXME */
   ot->exec = graphkeys_bake_exec;
   ot->poll = graphop_selected_fcurve_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
-  // todo: add props for start/end frames
+  /* TODO: add props for start/end frames */
 }
 
 #ifdef WITH_AUDASPACE
@@ -1974,7 +1975,7 @@ static int graphkeys_sound_bake_exec(bContext *C, wmOperator *op)
   return OPERATOR_FINISHED;
 }
 
-#else  // WITH_AUDASPACE
+#else /* WITH_AUDASPACE */
 
 static int graphkeys_sound_bake_exec(bContext *UNUSED(C), wmOperator *op)
 {
@@ -1983,7 +1984,7 @@ static int graphkeys_sound_bake_exec(bContext *UNUSED(C), wmOperator *op)
   return OPERATOR_CANCELLED;
 }
 
-#endif  // WITH_AUDASPACE
+#endif /* WITH_AUDASPACE */
 
 static int graphkeys_sound_bake_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
@@ -2224,7 +2225,7 @@ static void setexpo_graph_keys(bAnimContext *ac, short mode)
       if (mode == MAKE_CYCLIC_EXPO) {
         /* only add if one doesn't exist */
         if (list_has_suitable_fmodifier(&fcu->modifiers, FMODIFIER_TYPE_CYCLES, -1) == 0) {
-          // TODO: add some more preset versions which set different extrapolation options?
+          /* TODO: add some more preset versions which set different extrapolation options? */
           add_fmodifier(&fcu->modifiers, FMODIFIER_TYPE_CYCLES, fcu);
         }
       }
@@ -2731,40 +2732,33 @@ static bool graphkeys_framejump_poll(bContext *C)
 {
   /* prevent changes during render */
   if (G.is_rendering) {
-    return 0;
+    return false;
   }
 
   return graphop_visible_keyframes_poll(C);
 }
 
-/* snap current-frame indicator to 'average time' of selected keyframe */
-static int graphkeys_framejump_exec(bContext *C, wmOperator *UNUSED(op))
+static KeyframeEditData sum_selected_keyframes(bAnimContext *ac)
 {
-  bAnimContext ac;
   ListBase anim_data = {NULL, NULL};
   bAnimListElem *ale;
   int filter;
   KeyframeEditData ked;
-
-  /* get editor data */
-  if (ANIM_animdata_get_context(C, &ac) == 0) {
-    return OPERATOR_CANCELLED;
-  }
 
   /* init edit data */
   memset(&ked, 0, sizeof(KeyframeEditData));
 
   /* loop over action data, averaging values */
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_CURVE_VISIBLE | ANIMFILTER_NODUPLIS);
-  ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
+  ANIM_animdata_filter(ac, &anim_data, filter, ac->data, ac->datatype);
 
   for (ale = anim_data.first; ale; ale = ale->next) {
-    AnimData *adt = ANIM_nla_mapping_get(&ac, ale);
-    short mapping_flag = ANIM_get_normalization_flags(&ac);
+    AnimData *adt = ANIM_nla_mapping_get(ac, ale);
+    short mapping_flag = ANIM_get_normalization_flags(ac);
     KeyframeEditData current_ked;
     float offset;
     float unit_scale = ANIM_unit_mapping_get_factor(
-        ac.scene, ale->id, ale->key_data, mapping_flag | ANIM_UNITCONV_ONLYKEYS, &offset);
+        ac->scene, ale->id, ale->key_data, mapping_flag | ANIM_UNITCONV_ONLYKEYS, &offset);
 
     memset(&current_ked, 0, sizeof(current_ked));
 
@@ -2785,24 +2779,43 @@ static int graphkeys_framejump_exec(bContext *C, wmOperator *UNUSED(op))
 
   ANIM_animdata_freelist(&anim_data);
 
-  /* set the new current frame and cursor values, based on the average time and value */
-  if (ked.i1) {
-    SpaceGraph *sipo = (SpaceGraph *)ac.sl;
-    Scene *scene = ac.scene;
+  return ked;
+}
 
-    /* take the average values, rounding to the nearest int as necessary for int results */
-    if (sipo->mode == SIPO_MODE_DRIVERS) {
-      /* Drivers Mode - Affects cursor (float) */
-      sipo->cursorTime = ked.f1 / (float)ked.i1;
-      sipo->cursorVal = ked.f2 / (float)ked.i1;
-    }
-    else {
-      /* Animation Mode - Affects current frame (int) */
-      CFRA = round_fl_to_int(ked.f1 / ked.i1);
-      SUBFRA = 0.f;
-      sipo->cursorVal = ked.f2 / (float)ked.i1;
-    }
+/* snap current-frame indicator to 'average time' of selected keyframe */
+static int graphkeys_framejump_exec(bContext *C, wmOperator *UNUSED(op))
+{
+  bAnimContext ac;
+
+  /* get editor data */
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
+    return OPERATOR_CANCELLED;
   }
+
+  const KeyframeEditData keyframe_sum = sum_selected_keyframes(&ac);
+  const float sum_time = keyframe_sum.f1;
+  const float sum_value = keyframe_sum.f2;
+  const int num_keyframes = keyframe_sum.i1;
+
+  if (num_keyframes == 0) {
+    return OPERATOR_FINISHED;
+  }
+
+  /* set the new current frame and cursor values, based on the average time and value */
+  SpaceGraph *sipo = (SpaceGraph *)ac.sl;
+  Scene *scene = ac.scene;
+
+  /* take the average values, rounding to the nearest int as necessary for int results */
+  if (sipo->mode == SIPO_MODE_DRIVERS) {
+    /* Drivers Mode - Affects cursor (float) */
+    sipo->cursorTime = sum_time / (float)num_keyframes;
+  }
+  else {
+    /* Animation Mode - Affects current frame (int) */
+    CFRA = round_fl_to_int(sum_time / num_keyframes);
+    SUBFRA = 0.f;
+  }
+  sipo->cursorVal = sum_value / (float)num_keyframes;
 
   /* set notifier that things have changed */
   WM_event_add_notifier(C, NC_SCENE | ND_FRAME, ac.scene);
@@ -2822,6 +2835,46 @@ void GRAPH_OT_frame_jump(wmOperatorType *ot)
   ot->poll = graphkeys_framejump_poll;
 
   /* flags */
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+}
+
+/* snap 2D cursor value to the average value of selected keyframe */
+static int graphkeys_snap_cursor_value_exec(bContext *C, wmOperator *UNUSED(op))
+{
+  bAnimContext ac;
+
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
+    return OPERATOR_CANCELLED;
+  }
+
+  const KeyframeEditData keyframe_sum = sum_selected_keyframes(&ac);
+  const float sum_value = keyframe_sum.f2;
+  const int num_keyframes = keyframe_sum.i1;
+
+  if (num_keyframes == 0) {
+    return OPERATOR_FINISHED;
+  }
+
+  SpaceGraph *sipo = (SpaceGraph *)ac.sl;
+  sipo->cursorVal = sum_value / (float)num_keyframes;
+  // WM_event_add_notifier(C, NC_SCENE | ND_FRAME, ac.scene);
+  ED_region_tag_redraw(CTX_wm_region(C));
+
+  return OPERATOR_FINISHED;
+}
+
+void GRAPH_OT_snap_cursor_value(wmOperatorType *ot)
+{
+  /* Identifiers. */
+  ot->name = "Snap Cursor Value to Selected";
+  ot->idname = "GRAPH_OT_snap_cursor_value";
+  ot->description = "Place the cursor value on the average value of selected keyframes";
+
+  /* API callbacks. */
+  ot->exec = graphkeys_snap_cursor_value_exec;
+  ot->poll = graphkeys_framejump_poll;
+
+  /* Flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
@@ -3249,8 +3302,8 @@ static int graph_fmodifier_add_exec(bContext *C, wmOperator *op)
   /* filter data */
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_FOREDIT | ANIMFILTER_NODUPLIS);
   if (RNA_boolean_get(op->ptr, "only_active")) {
-    filter |=
-        ANIMFILTER_ACTIVE;  // FIXME: enforce in this case only a single channel to get handled?
+    /* FIXME: enforce in this case only a single channel to get handled? */
+    filter |= ANIMFILTER_ACTIVE;
   }
   else {
     filter |= (ANIMFILTER_SEL | ANIMFILTER_CURVE_VISIBLE);
@@ -3620,7 +3673,7 @@ static bool graph_driver_delete_invalid_poll(bContext *C)
 
   /* firstly, check if in Graph Editor */
   if ((area == NULL) || (area->spacetype != SPACE_GRAPH)) {
-    return 0;
+    return false;
   }
 
   /* try to init Anim-Context stuff ourselves and check */

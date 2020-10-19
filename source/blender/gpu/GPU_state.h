@@ -33,7 +33,15 @@ typedef enum eGPUWriteMask {
   GPU_WRITE_COLOR = (GPU_WRITE_RED | GPU_WRITE_GREEN | GPU_WRITE_BLUE | GPU_WRITE_ALPHA),
 } eGPUWriteMask;
 
-ENUM_OPERATORS(eGPUWriteMask)
+ENUM_OPERATORS(eGPUWriteMask, GPU_WRITE_COLOR)
+
+typedef enum eGPUBarrier {
+  GPU_BARRIER_NONE = 0,
+  GPU_BARRIER_SHADER_IMAGE_ACCESS = (1 << 0),
+  GPU_BARRIER_TEXTURE_FETCH = (1 << 1),
+} eGPUBarrier;
+
+ENUM_OPERATORS(eGPUBarrier, GPU_BARRIER_TEXTURE_FETCH)
 
 /**
  * Defines the fixed pipeline blending equation.
@@ -128,7 +136,6 @@ void GPU_write_mask(eGPUWriteMask mask);
 void GPU_color_mask(bool r, bool g, bool b, bool a);
 void GPU_depth_mask(bool depth);
 bool GPU_depth_mask_get(void);
-void GPU_unpack_row_length_set(uint len);
 void GPU_shadow_offset(bool enable);
 void GPU_clip_distances(int distances_enabled);
 bool GPU_mipmap_enabled(void);
@@ -149,9 +156,17 @@ eGPUDepthTest GPU_depth_test_get(void);
 eGPUWriteMask GPU_write_mask_get(void);
 uint GPU_stencil_mask_get(void);
 eGPUStencilTest GPU_stencil_test_get(void);
+float GPU_line_width_get(void);
 
 void GPU_flush(void);
 void GPU_finish(void);
+void GPU_apply_state(void);
+
+void GPU_bgl_start(void);
+void GPU_bgl_end(void);
+bool GPU_bgl_get(void);
+
+void GPU_memory_barrier(eGPUBarrier barrier);
 
 #ifdef __cplusplus
 }

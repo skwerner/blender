@@ -90,8 +90,8 @@
 #  include "PIL_time.h"
 #endif
 
-// TODO(sergey): Find better approximation of the scheduled frames.
-// For really highres renders it might fail still.
+/* TODO(sergey): Find better approximation of the scheduled frames.
+ * For really highres renders it might fail still. */
 #define MAX_SCHEDULED_FRAMES 8
 
 typedef struct OGLRender {
@@ -520,6 +520,7 @@ static void screen_opengl_render_apply(const bContext *C, OGLRender *oglrender)
     ibuf->userflags |= IB_DISPLAY_BUFFER_INVALID;
   }
   BKE_image_release_ibuf(oglrender->ima, ibuf, lock);
+  oglrender->ima->gpuflag |= IMA_GPU_REFRESH;
 
   if (oglrender->write_still) {
     screen_opengl_render_write(oglrender);
@@ -545,7 +546,8 @@ static void gather_frames_to_render_for_adt(const OGLRender *oglrender, const An
     }
 
     bool found = false; /* Not interesting, we just want a starting point for the for-loop.*/
-    int key_index = binarysearch_bezt_index(fcu->bezt, frame_start, fcu->totvert, &found);
+    int key_index = BKE_fcurve_bezt_binarysearch_index(
+        fcu->bezt, frame_start, fcu->totvert, &found);
     for (; key_index < fcu->totvert; key_index++) {
       BezTriple *bezt = &fcu->bezt[key_index];
       /* The frame range to render uses integer frame numbers, and the frame

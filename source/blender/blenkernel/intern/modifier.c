@@ -177,9 +177,6 @@ void BKE_modifier_free_ex(ModifierData *md, const int flag)
     if (mti->foreachIDLink) {
       mti->foreachIDLink(md, NULL, modifier_free_data_id_us_cb, NULL);
     }
-    else if (mti->foreachObjectLink) {
-      mti->foreachObjectLink(md, NULL, (ObjectWalkFunc)modifier_free_data_id_us_cb, NULL);
-    }
   }
 
   if (mti->freeData) {
@@ -247,15 +244,12 @@ bool BKE_modifier_is_preview(ModifierData *md)
 
 ModifierData *BKE_modifiers_findby_type(Object *ob, ModifierType type)
 {
-  ModifierData *md = ob->modifiers.first;
-
-  for (; md; md = md->next) {
+  LISTBASE_FOREACH (ModifierData *, md, &ob->modifiers) {
     if (md->type == type) {
-      break;
+      return md;
     }
   }
-
-  return md;
+  return NULL;
 }
 
 ModifierData *BKE_modifiers_findby_name(Object *ob, const char *name)
@@ -265,55 +259,28 @@ ModifierData *BKE_modifiers_findby_name(Object *ob, const char *name)
 
 void BKE_modifiers_clear_errors(Object *ob)
 {
-  ModifierData *md = ob->modifiers.first;
-  /* int qRedraw = 0; */
-
-  for (; md; md = md->next) {
+  LISTBASE_FOREACH (ModifierData *, md, &ob->modifiers) {
     if (md->error) {
       MEM_freeN(md->error);
       md->error = NULL;
-
-      /* qRedraw = 1; */
-    }
-  }
-}
-
-void BKE_modifiers_foreach_object_link(Object *ob, ObjectWalkFunc walk, void *userData)
-{
-  ModifierData *md = ob->modifiers.first;
-
-  for (; md; md = md->next) {
-    const ModifierTypeInfo *mti = BKE_modifier_get_info(md->type);
-
-    if (mti->foreachObjectLink) {
-      mti->foreachObjectLink(md, ob, walk, userData);
     }
   }
 }
 
 void BKE_modifiers_foreach_ID_link(Object *ob, IDWalkFunc walk, void *userData)
 {
-  ModifierData *md = ob->modifiers.first;
-
-  for (; md; md = md->next) {
+  LISTBASE_FOREACH (ModifierData *, md, &ob->modifiers) {
     const ModifierTypeInfo *mti = BKE_modifier_get_info(md->type);
 
     if (mti->foreachIDLink) {
       mti->foreachIDLink(md, ob, walk, userData);
-    }
-    else if (mti->foreachObjectLink) {
-      /* each Object can masquerade as an ID, so this should be OK */
-      ObjectWalkFunc fp = (ObjectWalkFunc)walk;
-      mti->foreachObjectLink(md, ob, fp, userData);
     }
   }
 }
 
 void BKE_modifiers_foreach_tex_link(Object *ob, TexWalkFunc walk, void *userData)
 {
-  ModifierData *md = ob->modifiers.first;
-
-  for (; md; md = md->next) {
+  LISTBASE_FOREACH (ModifierData *, md, &ob->modifiers) {
     const ModifierTypeInfo *mti = BKE_modifier_get_info(md->type);
 
     if (mti->foreachTexLink) {
@@ -373,9 +340,6 @@ void BKE_modifier_copydata_ex(ModifierData *md, ModifierData *target, const int 
   if ((flag & LIB_ID_CREATE_NO_USER_REFCOUNT) == 0) {
     if (mti->foreachIDLink) {
       mti->foreachIDLink(target, NULL, modifier_copy_data_id_us_cb, NULL);
-    }
-    else if (mti->foreachObjectLink) {
-      mti->foreachObjectLink(target, NULL, (ObjectWalkFunc)modifier_copy_data_id_us_cb, NULL);
     }
   }
 
@@ -461,7 +425,6 @@ int BKE_modifiers_get_cage_index(struct Scene *scene,
   ModifierData *md = (is_virtual) ?
                          BKE_modifiers_get_virtual_modifierlist(ob, &virtualModifierData) :
                          ob->modifiers.first;
-  int i, cageIndex = -1;
 
   if (r_lastPossibleCageIndex) {
     /* ensure the value is initialized */
@@ -469,7 +432,8 @@ int BKE_modifiers_get_cage_index(struct Scene *scene,
   }
 
   /* Find the last modifier acting on the cage. */
-  for (i = 0; md; i++, md = md->next) {
+  int cageIndex = -1;
+  for (int i = 0; md; i++, md = md->next) {
     const ModifierTypeInfo *mti = BKE_modifier_get_info(md->type);
     bool supports_mapping;
 
@@ -962,7 +926,7 @@ const char *BKE_modifier_path_relbase(Main *bmain, Object *ob)
     return ID_BLEND_PATH(bmain, &ob->id);
   }
 
-  /* last resort, better then using "" which resolves to the current
+  /* last resort, better than using "" which resolves to the current
    * working directory */
   return BKE_tempdir_session();
 }
@@ -973,7 +937,7 @@ const char *BKE_modifier_path_relbase_from_global(Object *ob)
     return ID_BLEND_PATH_FROM_GLOBAL(&ob->id);
   }
 
-  /* last resort, better then using "" which resolves to the current
+  /* last resort, better than using "" which resolves to the current
    * working directory */
   return BKE_tempdir_session();
 }

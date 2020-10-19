@@ -30,6 +30,7 @@
 
 #include "BLT_translation.h"
 
+#include "DNA_defaults.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_meshdata_types.h"
@@ -87,15 +88,13 @@ struct GPHookData_cb {
 static void initData(GpencilModifierData *md)
 {
   HookGpencilModifierData *gpmd = (HookGpencilModifierData *)md;
-  gpmd->pass_index = 0;
-  gpmd->material = NULL;
-  gpmd->object = NULL;
-  gpmd->force = 0.5f;
-  gpmd->falloff_type = eGPHook_Falloff_Smooth;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(gpmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(gpmd, DNA_struct_default_get(HookGpencilModifierData), modifier);
+
   gpmd->curfalloff = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
-  if (gpmd->curfalloff) {
-    BKE_curvemapping_init(gpmd->curfalloff);
-  }
+  BKE_curvemapping_init(gpmd->curfalloff);
 }
 
 static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
@@ -113,7 +112,7 @@ static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
   tgmd->curfalloff = BKE_curvemapping_copy(gmd->curfalloff);
 }
 
-/* calculate factor of fallof */
+/* Calculate the factor of falloff. */
 static float gpencil_hook_falloff(const struct GPHookData_cb *tData, const float len_sq)
 {
   BLI_assert(tData->falloff_sq);
@@ -340,23 +339,12 @@ static void updateDepsgraph(GpencilModifierData *md, const ModifierUpdateDepsgra
   DEG_add_object_relation(ctx->node, ctx->object, DEG_OB_COMP_TRANSFORM, "Hook Modifier");
 }
 
-static void foreachObjectLink(GpencilModifierData *md,
-                              Object *ob,
-                              ObjectWalkFunc walk,
-                              void *userData)
-{
-  HookGpencilModifierData *mmd = (HookGpencilModifierData *)md;
-
-  walk(userData, ob, &mmd->object, IDWALK_CB_NOP);
-}
-
 static void foreachIDLink(GpencilModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   HookGpencilModifierData *mmd = (HookGpencilModifierData *)md;
 
   walk(userData, ob, (ID **)&mmd->material, IDWALK_CB_USER);
-
-  foreachObjectLink(md, ob, (ObjectWalkFunc)walk, userData);
+  walk(userData, ob, (ID **)&mmd->object, IDWALK_CB_NOP);
 }
 
 static void panel_draw(const bContext *UNUSED(C), Panel *panel)
@@ -451,7 +439,6 @@ GpencilModifierTypeInfo modifierType_Gpencil_Hook = {
     /* isDisabled */ isDisabled,
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
     /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* panelRegister */ panelRegister,

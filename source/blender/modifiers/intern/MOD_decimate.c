@@ -27,6 +27,7 @@
 
 #include "BLT_translation.h"
 
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
@@ -63,9 +64,9 @@ static void initData(ModifierData *md)
 {
   DecimateModifierData *dmd = (DecimateModifierData *)md;
 
-  dmd->percent = 1.0;
-  dmd->angle = DEG2RADF(5.0f);
-  dmd->defgrp_factor = 1.0;
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(dmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(dmd, DNA_struct_default_get(DecimateModifierData), modifier);
 }
 
 static void requiredDataMask(Object *UNUSED(ob),
@@ -234,13 +235,13 @@ static void panel_draw(const bContext *UNUSED(C), Panel *panel)
   PointerRNA ob_ptr;
   PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
 
-  uiLayoutSetPropSep(layout, true);
-
   int decimate_type = RNA_enum_get(ptr, "decimate_type");
   char count_info[32];
   snprintf(count_info, 32, "%s: %d", IFACE_("Face Count"), RNA_int_get(ptr, "face_count"));
 
-  uiItemR(layout, ptr, "decimate_type", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "decimate_type", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+
+  uiLayoutSetPropSep(layout, true);
 
   if (decimate_type == MOD_DECIM_MODE_COLLAPSE) {
     uiItemR(layout, ptr, "ratio", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
@@ -257,13 +258,18 @@ static void panel_draw(const bContext *UNUSED(C), Panel *panel)
     uiItemR(layout, ptr, "use_collapse_triangulate", 0, NULL, ICON_NONE);
 
     modifier_vgroup_ui(layout, ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
+    sub = uiLayoutRow(layout, true);
+    bool has_vertex_group = RNA_string_length(ptr, "vertex_group") != 0;
+    uiLayoutSetActive(sub, has_vertex_group);
+    uiItemR(sub, ptr, "vertex_group_factor", 0, NULL, ICON_NONE);
   }
   else if (decimate_type == MOD_DECIM_MODE_UNSUBDIV) {
     uiItemR(layout, ptr, "iterations", 0, NULL, ICON_NONE);
   }
   else { /* decimate_type == MOD_DECIM_MODE_DISSOLVE. */
     uiItemR(layout, ptr, "angle_limit", 0, NULL, ICON_NONE);
-    uiItemR(layout, ptr, "delimit", 0, NULL, ICON_NONE);
+    uiLayout *col = uiLayoutColumn(layout, false);
+    uiItemR(col, ptr, "delimit", 0, NULL, ICON_NONE);
     uiItemR(layout, ptr, "use_dissolve_boundaries", 0, NULL, ICON_NONE);
   }
   uiItemL(layout, count_info, ICON_NONE);
@@ -280,8 +286,10 @@ ModifierTypeInfo modifierType_Decimate = {
     /* name */ "Decimate",
     /* structName */ "DecimateModifierData",
     /* structSize */ sizeof(DecimateModifierData),
+    /* srna */ &RNA_DecimateModifier,
     /* type */ eModifierTypeType_Nonconstructive,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_AcceptsCVs,
+    /* icon */ ICON_MOD_DECIM,
 
     /* copyData */ BKE_modifier_copydata_generic,
 
@@ -301,7 +309,6 @@ ModifierTypeInfo modifierType_Decimate = {
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ NULL,
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,

@@ -54,8 +54,9 @@ typedef enum GPUAttachmentType : int {
    * the maximum number of COLOR attachments specified by glDrawBuffers. */
   GPU_FB_MAX_ATTACHMENT,
 
-  GPU_FB_MAX_COLOR_ATTACHMENT = (GPU_FB_MAX_ATTACHMENT - GPU_FB_COLOR_ATTACHMENT0),
 } GPUAttachmentType;
+
+#define GPU_FB_MAX_COLOR_ATTACHMENT (GPU_FB_MAX_ATTACHMENT - GPU_FB_COLOR_ATTACHMENT0)
 
 inline constexpr GPUAttachmentType operator-(GPUAttachmentType a, int b)
 {
@@ -208,6 +209,20 @@ class FrameBuffer {
     return attachments_[GPU_FB_COLOR_ATTACHMENT0 + slot].tex;
   };
 };
+
+/* Syntacting suggar. */
+static inline GPUFrameBuffer *wrap(FrameBuffer *vert)
+{
+  return reinterpret_cast<GPUFrameBuffer *>(vert);
+}
+static inline FrameBuffer *unwrap(GPUFrameBuffer *vert)
+{
+  return reinterpret_cast<FrameBuffer *>(vert);
+}
+static inline const FrameBuffer *unwrap(const GPUFrameBuffer *vert)
+{
+  return reinterpret_cast<const FrameBuffer *>(vert);
+}
 
 #undef DEBUG_NAME_LEN
 

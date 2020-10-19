@@ -21,7 +21,6 @@
  * \ingroup bke
  */
 
-#include <assert.h>
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -963,7 +962,6 @@ static BVHTree *bvhtree_from_mesh_faces_create_tree(float epsilon,
                                                     int faces_num_active)
 {
   BVHTree *tree = NULL;
-  int i;
 
   if (faces_num) {
     if (faces_mask) {
@@ -978,7 +976,7 @@ static BVHTree *bvhtree_from_mesh_faces_create_tree(float epsilon,
     tree = BLI_bvhtree_new(faces_num_active, epsilon, tree_type, axis);
     if (tree) {
       if (vert && face) {
-        for (i = 0; i < faces_num; i++) {
+        for (int i = 0; i < faces_num; i++) {
           float co[4][3];
           if (faces_mask && !BLI_BITMAP_TEST_BOOL(faces_mask, i)) {
             continue;

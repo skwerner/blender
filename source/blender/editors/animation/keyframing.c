@@ -162,7 +162,7 @@ bAction *ED_id_action_ensure(Main *bmain, ID *id)
      * so that users can't accidentally break actions by assigning them
      * to the wrong places
      */
-    adt->action->idroot = GS(id->name);
+    BKE_animdata_action_ensure_idroot(id, adt->action);
 
     /* Tag depsgraph to be rebuilt to include time dependency. */
     DEG_relations_tag_update(bmain);
@@ -407,7 +407,7 @@ int insert_bezt_fcurve(FCurve *fcu, const BezTriple *bezt, eInsertKeyFlags flag)
   /* are there already keyframes? */
   if (fcu->bezt) {
     bool replace;
-    i = binarysearch_bezt_index(fcu->bezt, bezt->vec[1][0], fcu->totvert, &replace);
+    i = BKE_fcurve_bezt_binarysearch_index(fcu->bezt, bezt->vec[1][0], fcu->totvert, &replace);
 
     /* replace an existing keyframe? */
     if (replace) {
@@ -462,8 +462,8 @@ int insert_bezt_fcurve(FCurve *fcu, const BezTriple *bezt, eInsertKeyFlags flag)
   /* no keyframes already, but can only add if...
    * 1) keyframing modes say that keyframes can only be replaced, so adding new ones won't know
    * 2) there are no samples on the curve
-   *    // NOTE: maybe we may want to allow this later when doing samples -> bezt conversions,
-   *    // but for now, having both is asking for trouble
+   *    NOTE: maybe we may want to allow this later when doing samples -> bezt conversions,
+   *    but for now, having both is asking for trouble
    */
   else if ((flag & INSERTKEY_REPLACE) == 0 && (fcu->fpt == NULL)) {
     /* create new keyframes array */
@@ -481,6 +481,57 @@ int insert_bezt_fcurve(FCurve *fcu, const BezTriple *bezt, eInsertKeyFlags flag)
    * detect where we added the BezTriple in the array
    */
   return i;
+}
+
+/** Update the FCurve to allow insertion of `bezt` without modifying the curve shape.
+ *
+ * Checks whether it is necessary to apply Bezier subdivision due to involvement of non-auto
+ * handles. If necessary, changes `bezt` handles from Auto to Aligned.
+ *
+ * \param bezt: key being inserted
+ * \param prev: keyframe before that key
+ * \param next: keyframe after that key
+ */
+static void subdivide_nonauto_handles(const FCurve *fcu,
+                                      BezTriple *bezt,
+                                      BezTriple *prev,
+                                      BezTriple *next)
+{
+  if (prev->ipo != BEZT_IPO_BEZ || bezt->ipo != BEZT_IPO_BEZ) {
+    return;
+  }
+
+  /* Don't change Vector handles, or completely auto regions. */
+  const bool bezt_auto = BEZT_IS_AUTOH(bezt) || (bezt->h1 == HD_VECT && bezt->h2 == HD_VECT);
+  const bool prev_auto = BEZT_IS_AUTOH(prev) || (prev->h2 == HD_VECT);
+  const bool next_auto = BEZT_IS_AUTOH(next) || (next->h1 == HD_VECT);
+  if (bezt_auto && prev_auto && next_auto) {
+    return;
+  }
+
+  /* Subdivide the curve. */
+  float delta;
+  if (!BKE_fcurve_bezt_subdivide_handles(bezt, prev, next, &delta)) {
+    return;
+  }
+
+  /* Decide when to force auto to manual. */
+  if (!BEZT_IS_AUTOH(bezt)) {
+    return;
+  }
+  if ((prev_auto || next_auto) && fcu->auto_smoothing == FCURVE_SMOOTH_CONT_ACCEL) {
+    const float hx = bezt->vec[1][0] - bezt->vec[0][0];
+    const float dx = bezt->vec[1][0] - prev->vec[1][0];
+
+    /* This mode always uses 1/3 of key distance for handle x size. */
+    const bool auto_works_well = fabsf(hx - dx / 3.0f) < 0.001f;
+    if (auto_works_well) {
+      return;
+    }
+  }
+
+  /* Turn off auto mode. */
+  bezt->h1 = bezt->h2 = HD_ALIGN;
 }
 
 /**
@@ -554,20 +605,13 @@ int insert_vert_fcurve(
 
   /* add temp beztriple to keyframes */
   a = insert_bezt_fcurve(fcu, &beztr, flag);
+  BKE_fcurve_active_keyframe_set(fcu, &fcu->bezt[a]);
 
   /* what if 'a' is a negative index?
    * for now, just exit to prevent any segfaults
    */
   if (a < 0) {
     return -1;
-  }
-
-  /* don't recalculate handles if fast is set
-   * - this is a hack to make importers faster
-   * - we may calculate twice (due to autohandle needing to be calculated twice)
-   */
-  if ((flag & INSERTKEY_FAST) == 0) {
-    calchandles_fcurve(fcu);
   }
 
   /* set handletype and interpolation */
@@ -586,15 +630,19 @@ int insert_vert_fcurve(
       else if (a < fcu->totvert - 1) {
         bezt->ipo = (bezt + 1)->ipo;
       }
-    }
 
-    /* don't recalculate handles if fast is set
-     * - this is a hack to make importers faster
-     * - we may calculate twice (due to autohandle needing to be calculated twice)
-     */
-    if ((flag & INSERTKEY_FAST) == 0) {
-      calchandles_fcurve(fcu);
+      if (0 < a && a < (fcu->totvert - 1) && (flag & INSERTKEY_OVERWRITE_FULL) == 0) {
+        subdivide_nonauto_handles(fcu, bezt, bezt - 1, bezt + 1);
+      }
     }
+  }
+
+  /* don't recalculate handles if fast is set
+   * - this is a hack to make importers faster
+   * - we may calculate twice (due to autohandle needing to be calculated twice)
+   */
+  if ((flag & INSERTKEY_FAST) == 0) {
+    calchandles_fcurve(fcu);
   }
 
   /* return the index at which the keyframe was added */
@@ -618,22 +666,19 @@ enum {
  */
 static short new_key_needed(FCurve *fcu, float cFrame, float nValue)
 {
-  BezTriple *bezt = NULL, *prev = NULL;
-  int totCount, i;
-  float valA = 0.0f, valB = 0.0f;
-
   /* safety checking */
   if (fcu == NULL) {
     return KEYNEEDED_JUSTADD;
   }
-  totCount = fcu->totvert;
+  int totCount = fcu->totvert;
   if (totCount == 0) {
     return KEYNEEDED_JUSTADD;
   }
 
   /* loop through checking if any are the same */
-  bezt = fcu->bezt;
-  for (i = 0; i < totCount; i++) {
+  BezTriple *bezt = fcu->bezt;
+  BezTriple *prev = NULL;
+  for (int i = 0; i < totCount; i++) {
     float prevPosi = 0.0f, prevVal = 0.0f;
     float beztPosi = 0.0f, beztVal = 0.0f;
 
@@ -712,8 +757,8 @@ static short new_key_needed(FCurve *fcu, float cFrame, float nValue)
    *    keyframe is not equal to last keyframe.
    */
   bezt = (fcu->bezt + (fcu->totvert - 1));
-  valA = bezt->vec[1][1];
-
+  float valA = bezt->vec[1][1];
+  float valB;
   if (prev) {
     valB = prev->vec[1][1];
   }
@@ -1560,7 +1605,7 @@ static bool delete_keyframe_fcurve(AnimData *adt, FCurve *fcu, float cfra)
   int i;
 
   /* try to find index of beztriple to get rid of */
-  i = binarysearch_bezt_index(fcu->bezt, cfra, fcu->totvert, &found);
+  i = BKE_fcurve_bezt_binarysearch_index(fcu->bezt, cfra, fcu->totvert, &found);
   if (found) {
     /* delete the key at the index (will sanity check + do recalc afterwards) */
     delete_fcurve_key(fcu, i, 1);
@@ -1829,7 +1874,7 @@ static int insert_key_exec(bContext *C, wmOperator *op)
   Object *obedit = CTX_data_edit_object(C);
   bool ob_edit_mode = false;
 
-  float cfra = (float)CFRA;  // XXX for now, don't bother about all the yucky offset crap
+  float cfra = (float)CFRA; /* XXX for now, don't bother about all the yucky offset crap */
   int num_channels;
 
   KeyingSet *ks = keyingset_get_from_op_with_error(op, op->type->prop, scene);
@@ -2012,7 +2057,7 @@ void ANIM_OT_keyframe_insert_menu(wmOperatorType *ot)
   /* confirm whether a keyframe was added by showing a popup
    * - by default, this is disabled so that if a menu is shown, this doesn't come up too
    */
-  // XXX should this just be always on?
+  /* XXX should this just be always on? */
   prop = RNA_def_boolean(ot->srna,
                          "confirm_success",
                          0,
@@ -2033,7 +2078,7 @@ void ANIM_OT_keyframe_insert_menu(wmOperatorType *ot)
 static int delete_key_exec(bContext *C, wmOperator *op)
 {
   Scene *scene = CTX_data_scene(C);
-  float cfra = (float)CFRA;  // XXX for now, don't bother about all the yucky offset crap
+  float cfra = (float)CFRA; /* XXX for now, don't bother about all the yucky offset crap */
   int num_channels;
 
   KeyingSet *ks = keyingset_get_from_op_with_error(op, op->type->prop, scene);
@@ -2563,7 +2608,7 @@ static int delete_key_button_exec(bContext *C, wmOperator *op)
   PropertyRNA *prop = NULL;
   Main *bmain = CTX_data_main(C);
   char *path;
-  float cfra = (float)CFRA;  // XXX for now, don't bother about all the yucky offset crap
+  float cfra = (float)CFRA; /* XXX for now, don't bother about all the yucky offset crap */
   bool changed = false;
   int index;
   const bool all = RNA_boolean_get(op->ptr, "all");
@@ -2603,7 +2648,7 @@ static int delete_key_button_exec(bContext *C, wmOperator *op)
           int i;
 
           /* try to find index of beztriple to get rid of */
-          i = binarysearch_bezt_index(fcu->bezt, cfra, fcu->totvert, &found);
+          i = BKE_fcurve_bezt_binarysearch_index(fcu->bezt, cfra, fcu->totvert, &found);
           if (found) {
             /* delete the key at the index (will sanity check + do recalc afterwards) */
             delete_fcurve_key(fcu, i, 1);
@@ -2735,7 +2780,7 @@ void ANIM_OT_keyframe_clear_button(wmOperatorType *ot)
 
 bool autokeyframe_cfra_can_key(const Scene *scene, ID *id)
 {
-  float cfra = (float)CFRA;  // XXX for now, this will do
+  float cfra = (float)CFRA; /* XXX for now, this will do */
 
   /* only filter if auto-key mode requires this */
   if (IS_AUTOKEY_ON(scene) == 0) {
@@ -2777,9 +2822,9 @@ bool fcurve_frame_has_keyframe(FCurve *fcu, float frame, short filter)
   /* we either include all regardless of muting, or only non-muted  */
   if ((filter & ANIMFILTER_KEYS_MUTED) || (fcu->flag & FCURVE_MUTED) == 0) {
     bool replace;
-    int i = binarysearch_bezt_index(fcu->bezt, frame, fcu->totvert, &replace);
+    int i = BKE_fcurve_bezt_binarysearch_index(fcu->bezt, frame, fcu->totvert, &replace);
 
-    /* binarysearch_bezt_index will set replace to be 0 or 1
+    /* BKE_fcurve_bezt_binarysearch_index will set replace to be 0 or 1
      * - obviously, 1 represents a match
      */
     if (replace) {
@@ -2935,7 +2980,7 @@ bool id_frame_has_keyframe(ID *id, float frame, short filter)
     case ID_OB: /* object */
       return object_frame_has_keyframe((Object *)id, frame, filter);
 #if 0
-    // XXX TODO... for now, just use 'normal' behavior
+    /* XXX TODO... for now, just use 'normal' behavior */
     case ID_SCE: /* scene */
       break;
 #endif

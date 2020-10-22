@@ -24,7 +24,6 @@
  * allocate and free of all library data
  */
 
-#include <assert.h>
 #include <ctype.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -74,6 +73,8 @@
 #include "DEG_depsgraph.h"
 
 #include "RNA_access.h"
+
+#include "BLO_read_write.h"
 
 #include "atomic_ops.h"
 
@@ -280,15 +281,15 @@ void id_us_min(ID *id)
     const int limit = ID_FAKE_USERS(id);
 
     if (id->us <= limit) {
-      CLOG_ERROR(&LOG,
-                 "ID user decrement error: %s (from '%s'): %d <= %d",
-                 id->name,
-                 id->lib ? id->lib->filepath_abs : "[Main]",
-                 id->us,
-                 limit);
       if (GS(id->name) != ID_IP) {
         /* Do not assert on deprecated ID types, we cannot really ensure that their ID refcounting
          * is valid... */
+        CLOG_ERROR(&LOG,
+                   "ID user decrement error: %s (from '%s'): %d <= %d",
+                   id->name,
+                   id->lib ? id->lib->filepath_abs : "[Main]",
+                   id->us,
+                   limit);
         BLI_assert(0);
       }
       id->us = limit;
@@ -337,13 +338,16 @@ static int lib_id_expand_local_cb(LibraryIDLinkCallbackData *cb_data)
   int const cb_flag = cb_data->cb_flag;
 
   if (cb_flag & IDWALK_CB_LOOPBACK) {
-    /* We should never have anything to do with loopback pointers here. */
+    /* We should never have anything to do with loop-back pointers here. */
     return IDWALK_RET_NOP;
   }
 
   if (cb_flag & IDWALK_CB_EMBEDDED) {
-    /* Embedded data-blocks need to be made fully local as well. */
-    if (*id_pointer != NULL) {
+    /* Embedded data-blocks need to be made fully local as well.
+     * Note however that in some cases (when owner ID had to be duplicated instead of being made
+     * local directly), its embedded IDs should also have already been duplicated, and hence be
+     * fully local here already. */
+    if (*id_pointer != NULL && ID_IS_LINKED(*id_pointer)) {
       BLI_assert(*id_pointer != id_self);
 
       lib_id_clear_library_data_ex(bmain, *id_pointer);
@@ -410,11 +414,11 @@ void BKE_lib_id_make_local_generic(Main *bmain, ID *id, const int flags)
       BKE_lib_id_expand_local(bmain, id);
     }
     else {
-      ID *id_new;
+      ID *id_new = BKE_id_copy(bmain, id);
 
       /* Should not fail in expected use cases,
        * but a few ID types cannot be copied (LIB, WM, SCR...). */
-      if (BKE_id_copy(bmain, id, &id_new)) {
+      if (id_new != NULL) {
         id_new->us = 0;
 
         /* setting newid is mandatory for complex make_lib_local logic... */
@@ -526,51 +530,55 @@ bool BKE_id_copy_is_allowed(const ID *id)
 /**
  * Generic entry point for copying a data-block (new API).
  *
- * \note Copy is only affecting given data-block
+ * \note Copy is generally only affecting the given data-block
  * (no ID used by copied one will be affected, besides usercount).
- * There is only one exception, if #LIB_ID_COPY_ACTIONS is defined,
- * actions used by animdata will be duplicated.
+ * There are exceptions though:
+ *  - Embedded IDs (root node trees and master collections) are always copied with their owner.
+ *  - If #LIB_ID_COPY_ACTIONS is defined, actions used by animdata will be duplicated.
+ *  - If #LIB_ID_COPY_SHAPEKEY is defined, shapekeys will be duplicated.
+ *  - If #LIB_ID_CREATE_LOCAL is defined, root node trees will be deep-duplicated recursively.
  *
  * \note Usercount of new copy is always set to 1.
  *
  * \param bmain: Main database, may be NULL only if LIB_ID_CREATE_NO_MAIN is specified.
  * \param id: Source data-block.
- * \param r_newid: Pointer to new (copied) ID pointer.
- * \param flag: Set of copy options, see DNA_ID.h enum for details
- * (leave to zero for default, full copy).
- * \return False when copying that ID type is not supported, true otherwise.
+ * \param r_newid: Pointer to new (copied) ID pointer, may be NULL. Used to allow copying into
+ *                 already allocated memory.
+ * \param flag: Set of copy options, see DNA_ID.h enum for details (leave to zero for default,
+ *              full copy).
+ * \return NULL when copying that ID type is not supported, the new copy otherwise.
  */
-bool BKE_id_copy_ex(Main *bmain, const ID *id, ID **r_newid, const int flag)
+ID *BKE_id_copy_ex(Main *bmain, const ID *id, ID **r_newid, const int flag)
 {
-  BLI_assert(r_newid != NULL);
+  ID *newid = (r_newid != NULL) ? *r_newid : NULL;
   /* Make sure destination pointer is all good. */
   if ((flag & LIB_ID_CREATE_NO_ALLOCATE) == 0) {
-    *r_newid = NULL;
+    newid = NULL;
   }
   else {
-    if (*r_newid != NULL) {
+    if (newid != NULL) {
       /* Allow some garbage non-initialized memory to go in, and clean it up here. */
       const size_t size = BKE_libblock_get_alloc_info(GS(id->name), NULL);
-      memset(*r_newid, 0, size);
+      memset(newid, 0, size);
     }
   }
 
   /* Early output is source is NULL. */
   if (id == NULL) {
-    return false;
+    return NULL;
   }
 
   const IDTypeInfo *idtype_info = BKE_idtype_get_info_from_id(id);
 
   if (idtype_info != NULL) {
     if ((idtype_info->flags & IDTYPE_FLAGS_NO_COPY) != 0) {
-      return false;
+      return NULL;
     }
 
-    BKE_libblock_copy_ex(bmain, id, r_newid, flag);
+    BKE_libblock_copy_ex(bmain, id, &newid, flag);
 
     if (idtype_info->copy_data != NULL) {
-      idtype_info->copy_data(bmain, *r_newid, id, flag);
+      idtype_info->copy_data(bmain, newid, id, flag);
     }
   }
   else {
@@ -580,31 +588,35 @@ bool BKE_id_copy_ex(Main *bmain, const ID *id, ID **r_newid, const int flag)
   /* Update ID refcount, remap pointers to self in new ID. */
   struct IDCopyLibManagementData data = {
       .id_src = id,
-      .id_dst = *r_newid,
+      .id_dst = newid,
       .flag = flag,
   };
-  BKE_library_foreach_ID_link(bmain, *r_newid, id_copy_libmanagement_cb, &data, IDWALK_NOP);
+  BKE_library_foreach_ID_link(bmain, newid, id_copy_libmanagement_cb, &data, IDWALK_NOP);
 
   /* Do not make new copy local in case we are copying outside of main...
    * XXX TODO: is this behavior OK, or should we need own flag to control that? */
   if ((flag & LIB_ID_CREATE_NO_MAIN) == 0) {
     BLI_assert((flag & LIB_ID_COPY_KEEP_LIB) == 0);
-    lib_id_copy_ensure_local(bmain, id, *r_newid);
+    lib_id_copy_ensure_local(bmain, id, newid);
   }
   else {
-    (*r_newid)->lib = id->lib;
+    newid->lib = id->lib;
   }
 
-  return true;
+  if (r_newid != NULL) {
+    *r_newid = newid;
+  }
+
+  return newid;
 }
 
 /**
  * Invokes the appropriate copy method for the block and returns the result in
  * newid, unless test. Returns true if the block can be copied.
  */
-bool BKE_id_copy(Main *bmain, const ID *id, ID **newid)
+ID *BKE_id_copy(Main *bmain, const ID *id)
 {
-  return BKE_id_copy_ex(bmain, id, newid, LIB_ID_COPY_DEFAULT);
+  return BKE_id_copy_ex(bmain, id, NULL, LIB_ID_COPY_DEFAULT);
 }
 
 /**
@@ -622,8 +634,7 @@ ID *BKE_id_copy_for_duplicate(Main *bmain, ID *id, const eDupli_ID_Flags duplica
       return id;
     }
 
-    ID *id_new;
-    BKE_id_copy(bmain, id, &id_new);
+    ID *id_new = BKE_id_copy(bmain, id);
     /* Copying add one user by default, need to get rid of that one. */
     id_us_min(id_new);
     ID_NEW_SET(id, id_new);
@@ -640,7 +651,7 @@ ID *BKE_id_copy_for_duplicate(Main *bmain, ID *id, const eDupli_ID_Flags duplica
 
     BKE_animdata_duplicate_id_action(bmain, id_new, duplicate_flags);
     if (key_new != NULL) {
-      BKE_animdata_duplicate_id_action(bmain, id_new, duplicate_flags);
+      BKE_animdata_duplicate_id_action(bmain, key_new, duplicate_flags);
     }
     /* Note that actions of embedded data (root nodetrees and master collections) are handled
      * by `BKE_animdata_duplicate_id_action` as well. */
@@ -725,7 +736,8 @@ bool id_single_user(bContext *C, ID *id, PointerRNA *ptr, PropertyRNA *prop)
     if (RNA_property_editable(ptr, prop)) {
       Main *bmain = CTX_data_main(C);
       /* copy animation actions too */
-      if (BKE_id_copy_ex(bmain, id, &newid, LIB_ID_COPY_DEFAULT | LIB_ID_COPY_ACTIONS) && newid) {
+      newid = BKE_id_copy_ex(bmain, id, NULL, LIB_ID_COPY_DEFAULT | LIB_ID_COPY_ACTIONS);
+      if (newid != NULL) {
         /* us is 1 by convention with new IDs, but RNA_property_pointer_set
          * will also increment it, decrement it here. */
         id_us_min(newid);
@@ -1031,6 +1043,8 @@ void *BKE_libblock_alloc_notest(short type)
 void *BKE_libblock_alloc(Main *bmain, short type, const char *name, const int flag)
 {
   BLI_assert((flag & LIB_ID_CREATE_NO_ALLOCATE) == 0);
+  BLI_assert((flag & LIB_ID_CREATE_NO_MAIN) != 0 || bmain != NULL);
+  BLI_assert((flag & LIB_ID_CREATE_NO_MAIN) != 0 || (flag & LIB_ID_CREATE_LOCAL) == 0);
 
   ID *id = BKE_libblock_alloc_notest(type);
 
@@ -1040,6 +1054,9 @@ void *BKE_libblock_alloc(Main *bmain, short type, const char *name, const int fl
     }
     if ((flag & LIB_ID_CREATE_NO_USER_REFCOUNT) != 0) {
       id->tag |= LIB_TAG_NO_USER_REFCOUNT;
+    }
+    if (flag & LIB_ID_CREATE_LOCAL) {
+      id->tag |= LIB_TAG_LOCALIZED;
     }
 
     id->icon_id = 0;
@@ -1176,6 +1193,7 @@ void BKE_libblock_copy_ex(Main *bmain, const ID *id, ID **r_newid, const int ori
 
   BLI_assert((flag & LIB_ID_CREATE_NO_MAIN) != 0 || bmain != NULL);
   BLI_assert((flag & LIB_ID_CREATE_NO_MAIN) != 0 || (flag & LIB_ID_CREATE_NO_ALLOCATE) == 0);
+  BLI_assert((flag & LIB_ID_CREATE_NO_MAIN) != 0 || (flag & LIB_ID_CREATE_LOCAL) == 0);
   if (!is_private_id_data) {
     /* When we are handling private ID data, we might still want to manage usercounts, even
      * though that ID data-block is actually outside of Main... */
@@ -2032,7 +2050,7 @@ void BKE_library_make_local(Main *bmain,
       /* Proxies only work when the proxified object is linked-in from a library. */
       if (ob->proxy->id.lib == NULL) {
         CLOG_WARN(&LOG,
-                  "proxy object %s will loose its link to %s, because the "
+                  "proxy object %s will lose its link to %s, because the "
                   "proxified object is local.",
                   id->newid->name,
                   ob->proxy->id.name);
@@ -2046,7 +2064,7 @@ void BKE_library_make_local(Main *bmain,
        * was not used locally would be a nasty bug! */
       if (is_local || is_lib) {
         CLOG_WARN(&LOG,
-                  "made-local proxy object %s will loose its link to %s, "
+                  "made-local proxy object %s will lose its link to %s, "
                   "because the linked-in proxy is referenced (is_local=%i, is_lib=%i).",
                   id->newid->name,
                   ob->proxy->id.name,
@@ -2203,13 +2221,12 @@ char *BKE_id_to_unique_string_key(const struct ID *id)
   if (id->lib == NULL) {
     return BLI_strdup(id->name);
   }
-  else {
-    /* Prefix with an ascii character in the range of 32..96 (visible)
-     * this ensures we can't have a library ID pair that collide.
-     * Where 'LIfooOBbarOBbaz' could be ('LIfoo, OBbarOBbaz') or ('LIfooOBbar', 'OBbaz'). */
-    const char ascii_len = strlen(id->lib->id.name + 2) + 32;
-    return BLI_sprintfN("%c%s%s", ascii_len, id->lib->id.name, id->name);
-  }
+
+  /* Prefix with an ascii character in the range of 32..96 (visible)
+   * this ensures we can't have a library ID pair that collide.
+   * Where 'LIfooOBbarOBbaz' could be ('LIfoo, OBbarOBbaz') or ('LIfooOBbar', 'OBbaz'). */
+  const char ascii_len = strlen(id->lib->id.name + 2) + 32;
+  return BLI_sprintfN("%c%s%s", ascii_len, id->lib->id.name, id->name);
 }
 
 void BKE_id_tag_set_atomic(ID *id, int tag)
@@ -2258,7 +2275,7 @@ static int id_order_compare(const void *a, const void *b)
     if (*order_a < *order_b) {
       return -1;
     }
-    else if (*order_a > *order_b) {
+    if (*order_a > *order_b) {
       return 1;
     }
   }
@@ -2325,5 +2342,32 @@ void BKE_id_reorder(const ListBase *lb, ID *id, ID *relative, bool after)
     }
 
     *id_order = relative_order - 1;
+  }
+}
+
+void BKE_id_blend_write(BlendWriter *writer, ID *id)
+{
+  /* ID_WM's id->properties are considered runtime only, and never written in .blend file. */
+  if (id->properties && !ELEM(GS(id->name), ID_WM)) {
+    IDP_BlendWrite(writer, id->properties);
+  }
+
+  if (id->override_library) {
+    BLO_write_struct(writer, IDOverrideLibrary, id->override_library);
+
+    BLO_write_struct_list(writer, IDOverrideLibraryProperty, &id->override_library->properties);
+    LISTBASE_FOREACH (IDOverrideLibraryProperty *, op, &id->override_library->properties) {
+      BLO_write_string(writer, op->rna_path);
+
+      BLO_write_struct_list(writer, IDOverrideLibraryPropertyOperation, &op->operations);
+      LISTBASE_FOREACH (IDOverrideLibraryPropertyOperation *, opop, &op->operations) {
+        if (opop->subitem_reference_name) {
+          BLO_write_string(writer, opop->subitem_reference_name);
+        }
+        if (opop->subitem_local_name) {
+          BLO_write_string(writer, opop->subitem_local_name);
+        }
+      }
+    }
   }
 }

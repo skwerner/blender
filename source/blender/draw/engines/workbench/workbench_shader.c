@@ -28,6 +28,8 @@
 #include "workbench_engine.h"
 #include "workbench_private.h"
 
+extern char datatoc_common_math_lib_glsl[];
+extern char datatoc_common_math_geom_lib_glsl[];
 extern char datatoc_common_hair_lib_glsl[];
 extern char datatoc_common_pointcloud_lib_glsl[];
 extern char datatoc_common_view_lib_glsl[];
@@ -109,7 +111,7 @@ static struct {
   struct GPUShader *aa_accum_sh;
   struct GPUShader *smaa_sh[3];
 
-  struct GPUShader *volume_sh[2][2][2][2];
+  struct GPUShader *volume_sh[2][2][3][2];
 
   struct DRWShaderLibrary *lib;
 } e_data = {{{{NULL}}}};
@@ -119,6 +121,8 @@ void workbench_shader_library_ensure(void)
   if (e_data.lib == NULL) {
     e_data.lib = DRW_shader_library_create();
     /* NOTE: Theses needs to be ordered by dependencies. */
+    DRW_SHADER_LIB_ADD(e_data.lib, common_math_lib);
+    DRW_SHADER_LIB_ADD(e_data.lib, common_math_geom_lib);
     DRW_SHADER_LIB_ADD(e_data.lib, common_hair_lib);
     DRW_SHADER_LIB_ADD(e_data.lib, common_view_lib);
     DRW_SHADER_LIB_ADD(e_data.lib, common_pointcloud_lib);
@@ -376,24 +380,26 @@ void workbench_shader_depth_of_field_get(GPUShader **prepare_sh,
                                          GPUShader **resolve_sh)
 {
   if (e_data.dof_prepare_sh == NULL) {
-    char *frag = BLI_string_joinN(datatoc_common_view_lib_glsl,
-                                  datatoc_workbench_effect_dof_frag_glsl);
-    e_data.dof_prepare_sh = DRW_shader_create_fullscreen(frag, "#define PREPARE\n");
-    e_data.dof_downsample_sh = DRW_shader_create_fullscreen(frag, "#define DOWNSAMPLE\n");
-#if 0 /* TODO(fclem) finish COC min_max optimization */
-    e_data.dof_flatten_v_sh = DRW_shader_create_fullscreen(frag,
-                                                           "#define FLATTEN_VERTICAL\n");
-    e_data.dof_flatten_h_sh = DRW_shader_create_fullscreen(frag,
-                                                           "#define FLATTEN_HORIZONTAL\n");
-    e_data.dof_dilate_v_sh = DRW_shader_create_fullscreen(frag,
-                                                          "#define DILATE_VERTICAL\n");
-    e_data.dof_dilate_h_sh = DRW_shader_create_fullscreen(frag,
-                                                          "#define DILATE_HORIZONTAL\n");
+    e_data.dof_prepare_sh = DRW_shader_create_fullscreen_with_shaderlib(
+        datatoc_workbench_effect_dof_frag_glsl, e_data.lib, "#define PREPARE\n");
+    e_data.dof_downsample_sh = DRW_shader_create_fullscreen_with_shaderlib(
+        datatoc_workbench_effect_dof_frag_glsl, e_data.lib, "#define DOWNSAMPLE\n");
+#if 0 /* TODO(fclem): finish COC min_max optimization */
+    e_data.dof_flatten_v_sh = DRW_shader_create_fullscreen_with_shaderlib(
+        datatoc_workbench_effect_dof_frag_glsl, e_data.lib, "#define FLATTEN_VERTICAL\n");
+    e_data.dof_flatten_h_sh = DRW_shader_create_fullscreen_with_shaderlib(
+        datatoc_workbench_effect_dof_frag_glsl, e_data.lib, "#define FLATTEN_HORIZONTAL\n");
+    e_data.dof_dilate_v_sh = DRW_shader_create_fullscreen_with_shaderlib(
+        datatoc_workbench_effect_dof_frag_glsl, e_data.lib, "#define DILATE_VERTICAL\n");
+    e_data.dof_dilate_h_sh = DRW_shader_create_fullscreen_with_shaderlib(
+        datatoc_workbench_effect_dof_frag_glsl, e_data.lib, "#define DILATE_HORIZONTAL\n");
 #endif
-    e_data.dof_blur1_sh = DRW_shader_create_fullscreen(frag, "#define BLUR1\n");
-    e_data.dof_blur2_sh = DRW_shader_create_fullscreen(frag, "#define BLUR2\n");
-    e_data.dof_resolve_sh = DRW_shader_create_fullscreen(frag, "#define RESOLVE\n");
-    MEM_freeN(frag);
+    e_data.dof_blur1_sh = DRW_shader_create_fullscreen_with_shaderlib(
+        datatoc_workbench_effect_dof_frag_glsl, e_data.lib, "#define BLUR1\n");
+    e_data.dof_blur2_sh = DRW_shader_create_fullscreen_with_shaderlib(
+        datatoc_workbench_effect_dof_frag_glsl, e_data.lib, "#define BLUR2\n");
+    e_data.dof_resolve_sh = DRW_shader_create_fullscreen_with_shaderlib(
+        datatoc_workbench_effect_dof_frag_glsl, e_data.lib, "#define RESOLVE\n");
   }
 
   *prepare_sh = e_data.dof_prepare_sh;
@@ -457,9 +463,12 @@ GPUShader *workbench_shader_antialiasing_get(int stage)
   return e_data.smaa_sh[stage];
 }
 
-GPUShader *workbench_shader_volume_get(bool slice, bool coba, bool cubic, bool smoke)
+GPUShader *workbench_shader_volume_get(bool slice,
+                                       bool coba,
+                                       eWORKBENCH_VolumeInterpType interp_type,
+                                       bool smoke)
 {
-  GPUShader **shader = &e_data.volume_sh[slice][coba][cubic][smoke];
+  GPUShader **shader = &e_data.volume_sh[slice][coba][interp_type][smoke];
 
   if (*shader == NULL) {
     DynStr *ds = BLI_dynstr_new();
@@ -470,8 +479,16 @@ GPUShader *workbench_shader_volume_get(bool slice, bool coba, bool cubic, bool s
     if (coba) {
       BLI_dynstr_append(ds, "#define USE_COBA\n");
     }
-    if (cubic) {
-      BLI_dynstr_append(ds, "#define USE_TRICUBIC\n");
+    switch (interp_type) {
+      case WORKBENCH_VOLUME_INTERP_LINEAR:
+        BLI_dynstr_append(ds, "#define USE_TRILINEAR\n");
+        break;
+      case WORKBENCH_VOLUME_INTERP_CUBIC:
+        BLI_dynstr_append(ds, "#define USE_TRICUBIC\n");
+        break;
+      case WORKBENCH_VOLUME_INTERP_CLOSEST:
+        BLI_dynstr_append(ds, "#define USE_CLOSEST\n");
+        break;
     }
     if (smoke) {
       BLI_dynstr_append(ds, "#define VOLUME_SMOKE\n");
@@ -504,11 +521,11 @@ void workbench_shader_free(void)
     struct GPUShader **sh_array = &e_data.transp_prepass_sh_cache[0][0][0][0];
     DRW_SHADER_FREE_SAFE(sh_array[j]);
   }
-  for (int j = 0; j < sizeof(e_data.opaque_composite_sh) / sizeof(void *); j++) {
+  for (int j = 0; j < ARRAY_SIZE(e_data.opaque_composite_sh); j++) {
     struct GPUShader **sh_array = &e_data.opaque_composite_sh[0];
     DRW_SHADER_FREE_SAFE(sh_array[j]);
   }
-  for (int j = 0; j < sizeof(e_data.shadow_depth_pass_sh) / sizeof(void *); j++) {
+  for (int j = 0; j < ARRAY_SIZE(e_data.shadow_depth_pass_sh); j++) {
     struct GPUShader **sh_array = &e_data.shadow_depth_pass_sh[0];
     DRW_SHADER_FREE_SAFE(sh_array[j]);
   }
@@ -520,7 +537,7 @@ void workbench_shader_free(void)
     struct GPUShader **sh_array = &e_data.cavity_sh[0][0];
     DRW_SHADER_FREE_SAFE(sh_array[j]);
   }
-  for (int j = 0; j < sizeof(e_data.smaa_sh) / sizeof(void *); j++) {
+  for (int j = 0; j < ARRAY_SIZE(e_data.smaa_sh); j++) {
     struct GPUShader **sh_array = &e_data.smaa_sh[0];
     DRW_SHADER_FREE_SAFE(sh_array[j]);
   }

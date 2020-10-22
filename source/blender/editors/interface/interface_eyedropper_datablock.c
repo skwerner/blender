@@ -117,7 +117,7 @@ static int datadropper_init(bContext *C, wmOperator *op)
    * because this struct has very short lifetime. */
   ddr->idcode_name = TIP_(BKE_idtype_idcode_to_name(ddr->idcode));
 
-  PointerRNA ptr = RNA_property_pointer_get(&ddr->ptr, ddr->prop);
+  const PointerRNA ptr = RNA_property_pointer_get(&ddr->ptr, ddr->prop);
   ddr->init_id = ptr.owner_id;
 
   return true;
@@ -355,12 +355,12 @@ static bool datadropper_poll(bContext *C)
       StructRNA *type = RNA_property_pointer_type(&ptr, prop);
       const short idcode = RNA_type_to_ID_code(type);
       if ((idcode == ID_OB) || OB_DATA_SUPPORT_ID(idcode)) {
-        return 1;
+        return true;
       }
     }
   }
 
-  return 0;
+  return false;
 }
 
 void UI_OT_eyedropper_id(wmOperatorType *ot)

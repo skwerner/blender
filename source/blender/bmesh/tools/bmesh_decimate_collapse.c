@@ -117,7 +117,7 @@ static void bm_decim_build_quadrics(BMesh *bm, Quadric *vquadrics)
       cross_v3_v3v3(edge_plane, edge_vector, f->no);
       copy_v3db_v3fl(edge_plane_db, edge_plane);
 
-      if (normalize_v3_d(edge_plane_db) > (double)FLT_EPSILON) {
+      if (normalize_v3_db(edge_plane_db) > (double)FLT_EPSILON) {
         Quadric q;
         float center[3];
 
@@ -137,7 +137,7 @@ static void bm_decim_build_quadrics(BMesh *bm, Quadric *vquadrics)
 static void bm_decim_calc_target_co_db(BMEdge *e, double optimize_co[3], const Quadric *vquadrics)
 {
   /* compute an edge contraction target for edge 'e'
-   * this is computed by summing it's vertices quadrics and
+   * this is computed by summing its vertices quadrics and
    * optimizing the result. */
   Quadric q;
 
@@ -202,7 +202,7 @@ static bool bm_edge_collapse_is_degenerate_flip(BMEdge *e, const float optimize_
         normal_tri_v3(cross_exist, v->co, co_prev, co_next);
         normal_tri_v3(cross_optim, optimize_co, co_prev, co_next);
 
-        /* use a small value rather then zero so we don't flip a face in multiple steps
+        /* use a small value rather than zero so we don't flip a face in multiple steps
          * (first making it zero area, then flipping again) */
         if (dot_v3v3(cross_exist, cross_optim) <= FLT_EPSILON) {
           // printf("no flip\n");
@@ -286,7 +286,7 @@ static void bm_decim_build_edge_cost_single(BMEdge *e,
   }
 
   /* note, 'cost' shouldn't be negative but happens sometimes with small values.
-   * this can cause faces that make up a flat surface to over-collapse, see [#37121] */
+   * this can cause faces that make up a flat surface to over-collapse, see T37121. */
   cost = fabsf(cost);
 
 #ifdef USE_TOPOLOGY_FALLBACK

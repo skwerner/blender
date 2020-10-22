@@ -41,9 +41,6 @@ set(INC
   ../../../intern/sky/include
 )
 
-set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
-)
 
 set(SRC
   composite/nodes/node_composite_alphaOver.c
@@ -136,6 +133,7 @@ set(SRC
   function/nodes/node_fn_float_compare.cc
   function/nodes/node_fn_group_instance_id.cc
   function/nodes/node_fn_object_transforms.cc
+  function/nodes/node_fn_random_float.cc
   function/nodes/node_fn_switch.cc
   function/node_function_util.cc
 
@@ -160,7 +158,7 @@ set(SRC
   shader/nodes/node_shader_bsdf_velvet.c
   shader/nodes/node_shader_bump.c
   shader/nodes/node_shader_camera.c
-  shader/nodes/node_shader_clamp.c
+  shader/nodes/node_shader_clamp.cc
   shader/nodes/node_shader_common.c
   shader/nodes/node_shader_curves.c
   shader/nodes/node_shader_displacement.c
@@ -233,18 +231,6 @@ set(SRC
   shader/node_shader_util.c
 
   simulation/nodes/node_sim_common.cc
-  simulation/nodes/node_sim_emit_particles.cc
-  simulation/nodes/node_sim_execute_condition.cc
-  simulation/nodes/node_sim_force.cc
-  simulation/nodes/node_sim_multi_execute.cc
-  simulation/nodes/node_sim_particle_attribute.cc
-  simulation/nodes/node_sim_particle_birth_event.cc
-  simulation/nodes/node_sim_particle_mesh_collision_event.cc
-  simulation/nodes/node_sim_particle_mesh_emitter.cc
-  simulation/nodes/node_sim_particle_simulation.cc
-  simulation/nodes/node_sim_particle_time_step_event.cc
-  simulation/nodes/node_sim_set_particle_attribute.cc
-  simulation/nodes/node_sim_simulation_time.cc
   simulation/node_simulation_tree.cc
   simulation/node_simulation_util.cc
 
@@ -278,6 +264,7 @@ set(SRC
   intern/node_common.c
   intern/node_exec.c
   intern/node_socket.cc
+  intern/node_tree_dependencies.cc
   intern/node_tree_multi_function.cc
   intern/node_tree_ref.cc
   intern/node_util.c
@@ -292,6 +279,7 @@ set(SRC
   NOD_composite.h
   NOD_derived_node_tree.hh
   NOD_function.h
+  NOD_node_tree_dependencies.hh
   NOD_node_tree_multi_function.hh
   NOD_node_tree_ref.hh
   NOD_shader.h
@@ -338,7 +326,6 @@ if(WITH_COMPOSITOR)
   add_definitions(-DWITH_COMPOSITOR)
 endif()
 
-add_definitions(${GL_DEFINITIONS})
 
 if(WITH_FREESTYLE)
   add_definitions(-DWITH_FREESTYLE)

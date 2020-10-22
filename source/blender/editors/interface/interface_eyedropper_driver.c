@@ -58,7 +58,7 @@ typedef struct DriverDropper {
   int index;
   bool is_undo;
 
-  // TODO: new target?
+  /* TODO: new target? */
 } DriverDropper;
 
 static bool driverdropper_init(bContext *C, wmOperator *op)
@@ -95,8 +95,8 @@ static void driverdropper_sample(bContext *C, wmOperator *op, const wmEvent *eve
   DriverDropper *ddr = (DriverDropper *)op->customdata;
   uiBut *but = eyedropper_get_property_button_under_mouse(C, event);
 
-  short mapping_type = RNA_enum_get(op->ptr, "mapping_type");
-  short flag = 0;
+  const short mapping_type = RNA_enum_get(op->ptr, "mapping_type");
+  const short flag = 0;
 
   /* we can only add a driver if we know what RNA property it corresponds to */
   if (but == NULL) {
@@ -105,7 +105,7 @@ static void driverdropper_sample(bContext *C, wmOperator *op, const wmEvent *eve
   /* Get paths for src... */
   PointerRNA *target_ptr = &but->rnapoin;
   PropertyRNA *target_prop = but->rnaprop;
-  int target_index = but->rnaindex;
+  const int target_index = but->rnaindex;
 
   char *target_path = RNA_path_from_ID_to_property(target_ptr, target_prop);
 
@@ -130,7 +130,7 @@ static void driverdropper_sample(bContext *C, wmOperator *op, const wmEvent *eve
       UI_context_update_anim_flag(C);
       DEG_relations_tag_update(CTX_data_main(C));
       DEG_id_tag_update(ddr->ptr.owner_id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
-      WM_event_add_notifier(C, NC_ANIMATION | ND_FCURVES_ORDER, NULL);  // XXX
+      WM_event_add_notifier(C, NC_ANIMATION | ND_FCURVES_ORDER, NULL); /* XXX */
     }
   }
 
@@ -207,9 +207,9 @@ static int driverdropper_exec(bContext *C, wmOperator *op)
 static bool driverdropper_poll(bContext *C)
 {
   if (!CTX_wm_window(C)) {
-    return 0;
+    return false;
   }
-  return 1;
+  return true;
 }
 
 void UI_OT_eyedropper_driver(wmOperatorType *ot)

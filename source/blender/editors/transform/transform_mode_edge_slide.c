@@ -389,7 +389,7 @@ static void calcEdgeSlide_mval_range(TransInfo *t,
         continue;
       }
 
-      /* This test is only relevant if object is not wire-drawn! See [#32068]. */
+      /* This test is only relevant if object is not wire-drawn! See T32068. */
       bool is_visible = !use_occlude_geometry ||
                         BMBVH_EdgeVisible(bmbvh, e, t->depsgraph, region, v3d, tc->obedit);
 
@@ -534,7 +534,7 @@ static EdgeSlideData *createEdgeSlideVerts_double_side(TransInfo *t, TransDataCo
   int sv_tot;
   int *sv_table; /* BMVert -> sv_array index */
   EdgeSlideData *sld = MEM_callocN(sizeof(*sld), "sld");
-  float mval[2] = {(float)t->mval[0], (float)t->mval[1]};
+  const float mval[2] = {(float)t->mval[0], (float)t->mval[1]};
   int numsel, i, loop_nr;
   bool use_occlude_geometry = false;
   View3D *v3d = NULL;
@@ -720,7 +720,7 @@ static EdgeSlideData *createEdgeSlideVerts_double_side(TransInfo *t, TransDataCo
       BMVert *v_prev;
       BMEdge *e_prev;
 
-      /* XXX, 'sv' will initialize multiple times, this is suspicious. see [#34024] */
+      /* XXX, 'sv' will initialize multiple times, this is suspicious. see T34024. */
       BLI_assert(v != NULL);
       BLI_assert(sv_table[BM_elem_index_get(v)] != INDEX_INVALID);
       sv = SV_FROM_VERT(v);
@@ -894,7 +894,7 @@ static EdgeSlideData *createEdgeSlideVerts_single_side(TransInfo *t, TransDataCo
   int sv_tot;
   int *sv_table; /* BMVert -> sv_array index */
   EdgeSlideData *sld = MEM_callocN(sizeof(*sld), "sld");
-  float mval[2] = {(float)t->mval[0], (float)t->mval[1]};
+  const float mval[2] = {(float)t->mval[0], (float)t->mval[1]};
   int loop_nr;
   bool use_occlude_geometry = false;
   View3D *v3d = NULL;
@@ -1147,11 +1147,9 @@ void drawEdgeSlide(TransInfo *t)
 
   const float line_size = UI_GetThemeValuef(TH_OUTLINE_WIDTH) + 0.5f;
 
-  GPU_depth_test(false);
+  GPU_depth_test(GPU_DEPTH_NONE);
 
-  GPU_blend(true);
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   GPU_matrix_push();
   GPU_matrix_mul(TRANS_DATA_CONTAINER_FIRST_OK(t)->obedit->obmat);
@@ -1266,9 +1264,9 @@ void drawEdgeSlide(TransInfo *t)
 
   GPU_matrix_pop();
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 
-  GPU_depth_test(true);
+  GPU_depth_test(GPU_DEPTH_LESS_EQUAL);
 }
 
 static void edge_slide_snap_apply(TransInfo *t, float *value)
@@ -1465,7 +1463,9 @@ static void applyEdgeSlide(TransInfo *t, const int UNUSED(mval[2]))
   final = t->values[0];
 
   applySnapping(t, &final);
-  snapGridIncrement(t, &final);
+  if (!validSnap(t)) {
+    transform_snap_increment(t, &final);
+  }
 
   /* only do this so out of range values are not displayed */
   if (is_constrained) {
@@ -1555,11 +1555,10 @@ void initEdgeSlide_ex(
 
   t->idx_max = 0;
   t->num.idx_max = 0;
-  t->snap[0] = 0.0f;
-  t->snap[1] = 0.1f;
-  t->snap[2] = t->snap[1] * 0.1f;
+  t->snap[0] = 0.1f;
+  t->snap[1] = t->snap[0] * 0.1f;
 
-  copy_v3_fl(t->num.val_inc, t->snap[1]);
+  copy_v3_fl(t->num.val_inc, t->snap[0]);
   t->num.unit_sys = t->scene->unit.system;
   t->num.unit_type[0] = B_UNIT_NONE;
 

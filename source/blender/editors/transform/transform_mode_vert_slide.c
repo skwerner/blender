@@ -126,7 +126,7 @@ static void calcVertSlideMouseActiveVert(struct TransInfo *t, const int mval[2])
 {
   /* Active object may have no selected vertices. */
   VertSlideData *sld = TRANS_DATA_CONTAINER_FIRST_OK(t)->custom.mode.data;
-  float mval_fl[2] = {UNPACK2(mval)};
+  const float mval_fl[2] = {UNPACK2(mval)};
   TransDataVertSlideVert *sv;
 
   /* set the vertex to use as a reference for the mouse direction 'curr_sv_index' */
@@ -153,8 +153,8 @@ static void calcVertSlideMouseActiveVert(struct TransInfo *t, const int mval[2])
 static void calcVertSlideMouseActiveEdges(struct TransInfo *t, const int mval[2])
 {
   VertSlideData *sld = TRANS_DATA_CONTAINER_FIRST_OK(t)->custom.mode.data;
-  float imval_fl[2] = {UNPACK2(t->mouse.imval)};
-  float mval_fl[2] = {UNPACK2(mval)};
+  const float imval_fl[2] = {UNPACK2(t->mouse.imval)};
+  const float mval_fl[2] = {UNPACK2(mval)};
 
   float dir[3];
   TransDataVertSlideVert *sv;
@@ -390,11 +390,9 @@ void drawVertSlide(TransInfo *t)
       const int alpha_shade = -160;
       int i;
 
-      GPU_depth_test(false);
+      GPU_depth_test(GPU_DEPTH_NONE);
 
-      GPU_blend(true);
-      GPU_blend_set_func_separate(
-          GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+      GPU_blend(GPU_BLEND_ALPHA);
 
       GPU_matrix_push();
       GPU_matrix_mul(TRANS_DATA_CONTAINER_FIRST_OK(t)->obedit->obmat);
@@ -487,7 +485,7 @@ void drawVertSlide(TransInfo *t)
 
       GPU_matrix_pop();
 
-      GPU_depth_test(true);
+      GPU_depth_test(GPU_DEPTH_LESS_EQUAL);
     }
   }
 }
@@ -589,7 +587,9 @@ static void applyVertSlide(TransInfo *t, const int UNUSED(mval[2]))
   final = t->values[0];
 
   applySnapping(t, &final);
-  snapGridIncrement(t, &final);
+  if (!validSnap(t)) {
+    transform_snap_increment(t, &final);
+  }
 
   /* only do this so out of range values are not displayed */
   if (is_constrained) {
@@ -675,11 +675,10 @@ void initVertSlide_ex(TransInfo *t, bool use_even, bool flipped, bool use_clamp)
 
   t->idx_max = 0;
   t->num.idx_max = 0;
-  t->snap[0] = 0.0f;
-  t->snap[1] = 0.1f;
-  t->snap[2] = t->snap[1] * 0.1f;
+  t->snap[0] = 0.1f;
+  t->snap[1] = t->snap[0] * 0.1f;
 
-  copy_v3_fl(t->num.val_inc, t->snap[1]);
+  copy_v3_fl(t->num.val_inc, t->snap[0]);
   t->num.unit_sys = t->scene->unit.system;
   t->num.unit_type[0] = B_UNIT_NONE;
 

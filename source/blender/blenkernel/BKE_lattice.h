@@ -42,7 +42,6 @@ struct bGPDstroke;
 
 void BKE_lattice_resize(struct Lattice *lt, int u, int v, int w, struct Object *ltOb);
 struct Lattice *BKE_lattice_add(struct Main *bmain, const char *name);
-struct Lattice *BKE_lattice_copy(struct Main *bmain, const struct Lattice *lt);
 void calc_lat_fudu(int flag, int res, float *r_fu, float *r_du);
 
 bool object_deform_mball(struct Object *ob, struct ListBase *dispbase);
@@ -58,7 +57,7 @@ void BKE_lattice_modifiers_calc(struct Depsgraph *depsgraph,
                                 struct Scene *scene,
                                 struct Object *ob);
 
-struct MDeformVert *BKE_lattice_deform_verts_get(const struct Object *lattice);
+struct MDeformVert *BKE_lattice_deform_verts_get(const struct Object *oblatt);
 struct BPoint *BKE_lattice_active_point_get(struct Lattice *lt);
 
 struct BoundBox *BKE_lattice_boundbox_get(struct Object *ob);
@@ -77,7 +76,7 @@ int BKE_lattice_index_flip(
     struct Lattice *lt, const int index, const bool flip_u, const bool flip_v, const bool flip_w);
 void BKE_lattice_bitmap_from_flag(struct Lattice *lt,
                                   unsigned int *bitmap,
-                                  const short flag,
+                                  const uint8_t flag,
                                   const bool clear,
                                   const bool respecthide);
 
@@ -115,7 +114,7 @@ void BKE_lattice_deform_coords(const struct Object *ob_lattice,
                                const int vert_coords_len,
                                const short flag,
                                const char *defgrp_name,
-                               float influence);
+                               float fac);
 
 void BKE_lattice_deform_coords_with_mesh(const struct Object *ob_lattice,
                                          const struct Object *ob_target,
@@ -123,7 +122,7 @@ void BKE_lattice_deform_coords_with_mesh(const struct Object *ob_lattice,
                                          const int vert_coords_len,
                                          const short flag,
                                          const char *defgrp_name,
-                                         const float influence,
+                                         const float fac,
                                          const struct Mesh *me_target);
 
 void BKE_lattice_deform_coords_with_editmesh(const struct Object *ob_lattice,
@@ -132,7 +131,7 @@ void BKE_lattice_deform_coords_with_editmesh(const struct Object *ob_lattice,
                                              const int vert_coords_len,
                                              const short flag,
                                              const char *defgrp_name,
-                                             const float influence,
+                                             const float fac,
                                              struct BMEditMesh *em_target);
 /** \} */
 

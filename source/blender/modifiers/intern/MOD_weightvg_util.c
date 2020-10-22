@@ -83,7 +83,7 @@ void weightvg_do_map(
   }
 
   if (cmap && falloff_type == MOD_WVG_MAPPING_CURVE) {
-    BKE_curvemapping_initialize(cmap);
+    BKE_curvemapping_init(cmap);
   }
 
   /* Map each weight (vertex) to its new value, accordingly to the chosen mode. */
@@ -249,9 +249,10 @@ void weightvg_do_mask(const ModifierEvalContext *ctx,
     /* For each weight (vertex), make the mix between org and new weights. */
     for (i = 0; i < num; i++) {
       int idx = indices ? indices[i] : i;
-      const float f = invert_vgroup_mask ?
-                          1.0f - BKE_defvert_find_weight(&dvert[idx], ref_didx) * fact :
-                          BKE_defvert_find_weight(&dvert[idx], ref_didx) * fact;
+      const float f = (invert_vgroup_mask ?
+                           (1.0f - BKE_defvert_find_weight(&dvert[idx], ref_didx)) :
+                           BKE_defvert_find_weight(&dvert[idx], ref_didx)) *
+                      fact;
       org_w[i] = (new_w[i] * f) + (org_w[i] * (1.0f - f));
       /* If that vertex is not in ref vgroup, assume null factor, and hence do nothing! */
     }

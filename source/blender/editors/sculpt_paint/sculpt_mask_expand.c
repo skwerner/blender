@@ -174,7 +174,7 @@ static int sculpt_mask_expand_modal(bContext *C, wmOperator *op, const wmEvent *
   ARegion *region = CTX_wm_region(C);
   float prevclick_f[2];
   copy_v2_v2(prevclick_f, op->customdata);
-  int prevclick[2] = {(int)prevclick_f[0], (int)prevclick_f[1]};
+  const int prevclick[2] = {(int)prevclick_f[0], (int)prevclick_f[1]};
   int len = (int)len_v2v2_int(prevclick, event->mval);
   len = abs(len);
   int mask_speed = RNA_int_get(op->ptr, "mask_speed");
@@ -188,8 +188,14 @@ static int sculpt_mask_expand_modal(bContext *C, wmOperator *op, const wmEvent *
     float mouse[2];
     mouse[0] = event->mval[0];
     mouse[1] = event->mval[1];
-    SCULPT_cursor_geometry_info_update(C, &sgi, mouse, false);
-    mask_expand_update_it = ss->filter_cache->mask_update_it[(int)SCULPT_active_vertex_get(ss)];
+    if (SCULPT_cursor_geometry_info_update(C, &sgi, mouse, false)) {
+      /* The cursor is over the mesh, get the update iteration from the updated active vertex. */
+      mask_expand_update_it = ss->filter_cache->mask_update_it[(int)SCULPT_active_vertex_get(ss)];
+    }
+    else {
+      /* When the cursor is outside the mesh, affect the entire connected component. */
+      mask_expand_update_it = ss->filter_cache->mask_update_last_it - 1;
+    }
   }
 
   if ((event->type == EVT_ESCKEY && event->val == KM_PRESS) ||
@@ -213,7 +219,7 @@ static int sculpt_mask_expand_modal(bContext *C, wmOperator *op, const wmEvent *
 
     /* Pivot position. */
     if (RNA_boolean_get(op->ptr, "update_pivot")) {
-      const char symm = sd->paint.symmetry_flags & PAINT_SYMM_AXIS_ALL;
+      const char symm = SCULPT_mesh_symmetry_xyz_get(ob);
       const float threshold = 0.2f;
       float avg[3];
       int total = 0;
@@ -357,9 +363,9 @@ static int sculpt_mask_expand_invoke(bContext *C, wmOperator *op, const wmEvent 
   mouse[0] = event->mval[0];
   mouse[1] = event->mval[1];
 
-  SCULPT_vertex_random_access_init(ss);
+  SCULPT_vertex_random_access_ensure(ss);
 
-  op->customdata = MEM_mallocN(2 * sizeof(float), "initial mouse position");
+  op->customdata = MEM_mallocN(sizeof(float[2]), "initial mouse position");
   copy_v2_v2(op->customdata, mouse);
 
   SCULPT_cursor_geometry_info_update(C, &sgi, mouse, false);

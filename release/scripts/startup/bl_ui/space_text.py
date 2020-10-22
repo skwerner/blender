@@ -177,7 +177,7 @@ class TEXT_PT_find(Panel):
 
         row = col.row(align=True)
         row.operator("text.replace")
-        row.operator("text.replace", text = "Replace all").all = True
+        row.operator("text.replace", text="Replace all").all = True
 
         layout.separator()
 
@@ -362,7 +362,7 @@ class TEXT_MT_format(Menu):
 
 
 class TEXT_MT_edit_to3d(Menu):
-    bl_label = "Text To 3D Object"
+    bl_label = "Text to 3D Object"
 
     def draw(self, _context):
         layout = self.layout

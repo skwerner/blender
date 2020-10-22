@@ -116,9 +116,6 @@ void BKE_shaderfx_free_ex(ShaderFxData *fx, const int flag)
     if (fxi->foreachIDLink) {
       fxi->foreachIDLink(fx, NULL, shaderfx_free_data_id_us_cb, NULL);
     }
-    else if (fxi->foreachObjectLink) {
-      fxi->foreachObjectLink(fx, NULL, (ShaderFxObjectWalkFunc)shaderfx_free_data_id_us_cb, NULL);
-    }
   }
 
   if (fxi->freeData) {
@@ -160,9 +157,8 @@ const ShaderFxTypeInfo *BKE_shaderfx_get_info(ShaderFxType type)
   if (type < NUM_SHADER_FX_TYPES && type > 0 && shader_fx_types[type]->name[0] != '\0') {
     return shader_fx_types[type];
   }
-  else {
-    return NULL;
-  }
+
+  return NULL;
 }
 
 /**
@@ -223,16 +219,25 @@ void BKE_shaderfx_copydata_ex(ShaderFxData *fx, ShaderFxData *target, const int 
     if (fxi->foreachIDLink) {
       fxi->foreachIDLink(target, NULL, shaderfx_copy_data_id_us_cb, NULL);
     }
-    else if (fxi->foreachObjectLink) {
-      fxi->foreachObjectLink(
-          target, NULL, (ShaderFxObjectWalkFunc)shaderfx_copy_data_id_us_cb, NULL);
-    }
   }
 }
 
 void BKE_shaderfx_copydata(ShaderFxData *fx, ShaderFxData *target)
 {
   BKE_shaderfx_copydata_ex(fx, target, 0);
+}
+
+void BKE_shaderfx_copy(ListBase *dst, const ListBase *src)
+{
+  ShaderFxData *fx;
+  ShaderFxData *srcfx;
+
+  BLI_listbase_clear(dst);
+  BLI_duplicatelist(dst, src);
+
+  for (srcfx = src->first, fx = dst->first; srcfx && fx; srcfx = srcfx->next, fx = fx->next) {
+    BKE_shaderfx_copydata(srcfx, fx);
+  }
 }
 
 ShaderFxData *BKE_shaderfx_findby_type(Object *ob, ShaderFxType type)
@@ -257,11 +262,6 @@ void BKE_shaderfx_foreach_ID_link(Object *ob, ShaderFxIDWalkFunc walk, void *use
 
     if (fxi->foreachIDLink) {
       fxi->foreachIDLink(fx, ob, walk, userData);
-    }
-    else if (fxi->foreachObjectLink) {
-      /* each Object can masquerade as an ID, so this should be OK */
-      ShaderFxObjectWalkFunc fp = (ShaderFxObjectWalkFunc)walk;
-      fxi->foreachObjectLink(fx, ob, fp, userData);
     }
   }
 }

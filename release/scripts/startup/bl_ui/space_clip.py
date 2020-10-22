@@ -423,7 +423,7 @@ class CLIP_PT_tracking_settings(CLIP_PT_tracking_panel, Panel):
 
         col.separator()
         col.operator("clip.track_settings_as_default",
-                     text="Copy From Active Track")
+                     text="Copy from Active Track")
 
 
 class CLIP_PT_tracking_settings_extras(CLIP_PT_tracking_panel, Panel):
@@ -879,6 +879,7 @@ class CLIP_PT_tracking_lens(Panel):
     bl_region_type = 'UI'
     bl_category = "Track"
     bl_label = "Lens"
+    bl_parent_id = 'CLIP_PT_tracking_camera'
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
@@ -922,6 +923,15 @@ class CLIP_PT_tracking_lens(Panel):
             col = layout.column(align=True)
             col.prop(camera, "nuke_k1")
             col.prop(camera, "nuke_k2")
+        elif camera.distortion_model == 'BROWN':
+            col = layout.column(align=True)
+            col.prop(camera, "brown_k1")
+            col.prop(camera, "brown_k2")
+            col.prop(camera, "brown_k3")
+            col.prop(camera, "brown_k4")
+            col.separator()
+            col.prop(camera, "brown_p1")
+            col.prop(camera, "brown_p2")
 
 
 class CLIP_PT_marker(CLIP_PT_tracking_panel, Panel):

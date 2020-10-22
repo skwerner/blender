@@ -143,10 +143,9 @@ void MOD_get_texture_coords(MappingInfoModifierData *dmd,
       MEM_freeN(done);
       return;
     }
-    else {
-      /* if there are no UVs, default to local */
-      texmapping = MOD_DISP_MAP_LOCAL;
-    }
+
+    /* if there are no UVs, default to local */
+    texmapping = MOD_DISP_MAP_LOCAL;
   }
 
   MVert *mv = mesh->mvert;
@@ -203,10 +202,10 @@ Mesh *MOD_deform_mesh_eval_get(Object *ob,
       /* TODO(sybren): after modifier conversion of DM to Mesh is done, check whether
        * we really need a copy here. Maybe the CoW ob->data can be directly used. */
       Mesh *mesh_prior_modifiers = BKE_object_get_pre_modified_mesh(ob);
-      BKE_id_copy_ex(NULL,
-                     &mesh_prior_modifiers->id,
-                     (ID **)&mesh,
-                     (LIB_ID_COPY_LOCALIZE | LIB_ID_COPY_CD_REFERENCE));
+      mesh = (Mesh *)BKE_id_copy_ex(NULL,
+                                    &mesh_prior_modifiers->id,
+                                    NULL,
+                                    (LIB_ID_COPY_LOCALIZE | LIB_ID_COPY_CD_REFERENCE));
       mesh->runtime.deformed_only = 1;
     }
 
@@ -230,7 +229,7 @@ Mesh *MOD_deform_mesh_eval_get(Object *ob,
      * that's properly generated for curves. */
     mesh = BKE_mesh_new_nomain_from_curve(ob);
 
-    /* Currently, that may not be the case everytime
+    /* Currently, that may not be the case every time
      * (texts e.g. tend to give issues,
      * also when deforming curve points instead of generated curve geometry... ). */
     if (mesh != NULL && mesh->totvert != num_verts) {
@@ -344,5 +343,8 @@ void modifier_type_init(ModifierTypeInfo *types[])
   INIT_TYPE(SurfaceDeform);
   INIT_TYPE(WeightedNormal);
   INIT_TYPE(Simulation);
+  INIT_TYPE(MeshToVolume);
+  INIT_TYPE(VolumeDisplace);
+  INIT_TYPE(VolumeToMesh);
 #undef INIT_TYPE
 }

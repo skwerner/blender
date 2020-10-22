@@ -38,6 +38,7 @@
 #include "bpy_rna_callback.h"
 #include "bpy_rna_id_collection.h"
 #include "bpy_rna_types_capi.h"
+#include "bpy_rna_ui.h"
 
 #include "../generic/py_capi_utils.h"
 
@@ -73,9 +74,20 @@ static struct PyMethodDef pyrna_blenddatalibraries_methods[] = {
 /** \} */
 
 /* -------------------------------------------------------------------- */
+/** \name UI Layout
+ * \{ */
+
+static struct PyMethodDef pyrna_uilayout_methods[] = {
+    {NULL, NULL, 0, NULL}, /* #BPY_rna_uilayout_introspect_method_def */
+    {NULL, NULL, 0, NULL},
+};
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
 /** \name Window Manager Clipboard Property
  *
- * Avoid using the RNA API because this value may change between checking it's length
+ * Avoid using the RNA API because this value may change between checking its length
  * and creating the buffer, causing writes past the allocated length.
  * \{ */
 
@@ -204,6 +216,11 @@ void BPY_rna_types_extend_capi(void)
       pyrna_blenddatalibraries_methods, BPY_library_load_method_def, BPY_library_write_method_def);
   BLI_assert(ARRAY_SIZE(pyrna_blenddatalibraries_methods) == 3);
   pyrna_struct_type_extend_capi(&RNA_BlendDataLibraries, pyrna_blenddatalibraries_methods, NULL);
+
+  /* uiLayout */
+  ARRAY_SET_ITEMS(pyrna_uilayout_methods, BPY_rna_uilayout_introspect_method_def);
+  BLI_assert(ARRAY_SIZE(pyrna_uilayout_methods) == 2);
+  pyrna_struct_type_extend_capi(&RNA_UILayout, pyrna_uilayout_methods, NULL);
 
   /* Space */
   pyrna_struct_type_extend_capi(&RNA_Space, pyrna_space_methods, NULL);

@@ -23,6 +23,7 @@
 #include "render/scene.h"
 #include "render/shader.h"
 #include "render/sobol.h"
+#include "render/stats.h"
 
 #include "kernel/kernel_types.h"
 
@@ -30,6 +31,7 @@
 #include "util/util_hash.h"
 #include "util/util_logging.h"
 #include "util/util_task.h"
+#include "util/util_time.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -111,6 +113,12 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
   if (!need_update)
     return;
 
+  scoped_callback_timer timer([scene](double time) {
+    if (scene->update_stats) {
+      scene->update_stats->integrator.times.add_entry({"device_update", time});
+    }
+  });
+
   device_free(device, dscene);
 
   KernelIntegrator *kintegrator = &dscene->data.integrator;
@@ -157,7 +165,7 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
 
   kintegrator->seed = hash_uint2(seed, 0);
 
-  kintegrator->use_ambient_occlusion = ((Pass::contains(scene->film->passes, PASS_AO)) ||
+  kintegrator->use_ambient_occlusion = ((Pass::contains(scene->passes, PASS_AO)) ||
                                         dscene->data.background.ao_factor != 0.0f);
 
   kintegrator->sample_clamp_direct = (sample_clamp_direct == 0.0f) ? FLT_MAX :

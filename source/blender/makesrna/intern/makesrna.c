@@ -161,7 +161,7 @@ static int replace_if_different(const char *tmpfile, const char *dep_files[])
    * assumes dep_files is in the same dir as makesrna.c, which is true for now. */
 
   if (1) {
-    /* first check if makesrna.c is newer then generated files
+    /* first check if makesrna.c is newer than generated files
      * for development on makesrna.c you may want to disable this */
     if (file_older(orgfile, __FILE__)) {
       REN_IF_DIFF;
@@ -171,11 +171,11 @@ static int replace_if_different(const char *tmpfile, const char *dep_files[])
       REN_IF_DIFF;
     }
 
-    /* now check if any files we depend on are newer then any generated files */
+    /* now check if any files we depend on are newer than any generated files */
     if (dep_files) {
       int pass;
       for (pass = 0; dep_files[pass]; pass++) {
-        char from_path[4096] = __FILE__;
+        const char from_path[4096] = __FILE__;
         char *p1, *p2;
 
         /* dir only */
@@ -239,10 +239,8 @@ static int replace_if_different(const char *tmpfile, const char *dep_files[])
   if (cmp) {
     REN_IF_DIFF;
   }
-  else {
-    remove(tmpfile);
-    return 0;
-  }
+  remove(tmpfile);
+  return 0;
 
 #undef REN_IF_DIFF
 }
@@ -254,7 +252,7 @@ static const char *rna_safe_id(const char *id)
   if (STREQ(id, "default")) {
     return "default_value";
   }
-  else if (STREQ(id, "operator")) {
+  if (STREQ(id, "operator")) {
     return "operator_value";
   }
   else if (STREQ(id, "new")) {
@@ -286,14 +284,14 @@ static int cmp_property(const void *a, const void *b)
   if (STREQ(propa->identifier, "rna_type")) {
     return -1;
   }
-  else if (STREQ(propb->identifier, "rna_type")) {
+  if (STREQ(propb->identifier, "rna_type")) {
     return 1;
   }
 
   if (STREQ(propa->identifier, "name")) {
     return -1;
   }
-  else if (STREQ(propb->identifier, "name")) {
+  if (STREQ(propb->identifier, "name")) {
     return 1;
   }
 
@@ -551,9 +549,7 @@ static const char *rna_parameter_type_name(PropertyRNA *parm)
       if (parm->flag_parameter & PARM_RNAPTR) {
         return "PointerRNA";
       }
-      else {
-        return rna_find_dna_type((const char *)pparm->type);
-      }
+      return rna_find_dna_type((const char *)pparm->type);
     }
     case PROP_COLLECTION: {
       return "CollectionListBase";
@@ -599,7 +595,7 @@ static void rna_float_print(FILE *f, float num)
   else if (num == FLT_MAX) {
     fprintf(f, "FLT_MAX");
   }
-  else if ((fabsf(num) < INT64_MAX) && ((int64_t)num == num)) {
+  else if ((fabsf(num) < (float)INT64_MAX) && ((int64_t)num == num)) {
     fprintf(f, "%.1ff", num);
   }
   else {
@@ -2270,9 +2266,7 @@ static const char *rna_parameter_type_cpp_name(PropertyRNA *prop)
 
     return (const char *)pprop->type;
   }
-  else {
-    return rna_parameter_type_name(prop);
-  }
+  return rna_parameter_type_name(prop);
 }
 
 static void rna_def_struct_function_prototype_cpp(FILE *f,
@@ -3199,14 +3193,14 @@ static const char *rna_property_subtypename(PropertySubType type)
       return "PROP_PASSWORD";
     case PROP_POWER:
       return "PROP_POWER";
+    case PROP_TEMPERATURE:
+      return "PROP_TEMPERATURE";
     default: {
       /* in case we don't have a type preset that includes the subtype */
       if (RNA_SUBTYPE_UNIT(type)) {
         return rna_property_subtypename(type & ~RNA_SUBTYPE_UNIT(type));
       }
-      else {
-        return "PROP_SUBTYPE_UNKNOWN";
-      }
+      return "PROP_SUBTYPE_UNKNOWN";
     }
   }
 }
@@ -3236,6 +3230,8 @@ static const char *rna_property_subtype_unit(PropertySubType type)
       return "PROP_UNIT_CAMERA";
     case PROP_UNIT_POWER:
       return "PROP_UNIT_POWER";
+    case PROP_UNIT_TEMPERATURE:
+      return "PROP_UNIT_TEMPERATURE";
     default:
       return "PROP_UNIT_UNKNOWN";
   }
@@ -3590,7 +3586,7 @@ static void rna_generate_struct_prototypes(FILE *f)
             if (found == 0) {
               fprintf(f, "struct %s;\n", struct_name);
 
-              if (all_structures >= sizeof(structures) / sizeof(structures[0])) {
+              if (all_structures >= ARRAY_SIZE(structures)) {
                 printf("Array size to store all structures names is too small\n");
                 exit(1);
               }
@@ -4272,6 +4268,7 @@ static RNAProcessItem PROCESS_ITEMS[] = {
     {"rna_animation.c", "rna_animation_api.c", RNA_def_animation},
     {"rna_animviz.c", NULL, RNA_def_animviz},
     {"rna_armature.c", "rna_armature_api.c", RNA_def_armature},
+    {"rna_attribute.c", NULL, RNA_def_attribute},
     {"rna_boid.c", NULL, RNA_def_boid},
     {"rna_brush.c", NULL, RNA_def_brush},
     {"rna_cachefile.c", NULL, RNA_def_cachefile},
@@ -4624,8 +4621,9 @@ static const char *cpp_classes =
     "            ++i; \\\n"
     "        } \\\n"
     "        sname##_##identifier##_end(&iter); \\\n"
-    "        if (!found) \\\n"
+    "        if (!found) { \\\n"
     "            memset(r_ptr, 0, sizeof(*r_ptr)); \\\n"
+    "        } \\\n"
     "        return found; \\\n"
     "    } \n"
     "#define COLLECTION_PROPERTY_LOOKUP_INT_true(sname, identifier) \\\n"
@@ -4633,8 +4631,9 @@ static const char *cpp_classes =
     "PointerRNA *r_ptr) \\\n"
     "    { \\\n"
     "        int found = sname##_##identifier##_lookup_int(ptr, key, r_ptr); \\\n"
-    "        if (!found) \\\n"
+    "        if (!found) { \\\n"
     "            memset(r_ptr, 0, sizeof(*r_ptr)); \\\n"
+    "        } \\\n"
     "        return found; \\\n"
     "    } \n"
     "#define COLLECTION_PROPERTY_LOOKUP_STRING_false(sname, identifier) \\\n"
@@ -4655,13 +4654,15 @@ static const char *cpp_classes =
     "                *r_ptr = iter.ptr; \\\n"
     "                found = 1; \\\n"
     "            } \\\n"
-    "            if (name_fixed != name) \\\n"
+    "            if (name_fixed != name) { \\\n"
     "                MEM_freeN((void *) name); \\\n"
+    "            } \\\n"
     "            sname##_##identifier##_next(&iter); \\\n"
     "        } \\\n"
     "        sname##_##identifier##_end(&iter); \\\n"
-    "        if (!found) \\\n"
+    "        if (!found) { \\\n"
     "            memset(r_ptr, 0, sizeof(*r_ptr)); \\\n"
+    "        } \\\n"
     "        return found; \\\n"
     "    } \n"
     "#define COLLECTION_PROPERTY_LOOKUP_STRING_true(sname, identifier) \\\n"
@@ -4669,8 +4670,9 @@ static const char *cpp_classes =
     "*key, PointerRNA *r_ptr) \\\n"
     "    { \\\n"
     "        int found = sname##_##identifier##_lookup_string(ptr, key, r_ptr); \\\n"
-    "        if (!found) \\\n"
+    "        if (!found) { \\\n"
     "            memset(r_ptr, 0, sizeof(*r_ptr)); \\\n"
+    "        } \\\n"
     "        return found; \\\n"
     "    } \n"
     "#define COLLECTION_PROPERTY(collection_funcs, type, sname, identifier, has_length, "
@@ -5153,7 +5155,7 @@ int main(int argc, char **argv)
 {
   int return_status = 0;
 
-  MEM_initialize_memleak_detection();
+  MEM_init_memleak_detection();
   MEM_set_error_callback(mem_error_cb);
 
   CLG_init();

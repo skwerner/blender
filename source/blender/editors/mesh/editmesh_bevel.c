@@ -158,13 +158,13 @@ static void edbm_bevel_update_status_text(bContext *C, wmOperator *op)
   }
   else {
     double offset_val = (double)RNA_float_get(op->ptr, "offset");
-    bUnit_AsString2(offset_str,
-                    NUM_STR_REP_LEN,
-                    offset_val * sce->unit.scale_length,
-                    3,
-                    B_UNIT_LENGTH,
-                    &sce->unit,
-                    true);
+    BKE_unit_value_as_string(offset_str,
+                             NUM_STR_REP_LEN,
+                             offset_val * sce->unit.scale_length,
+                             3,
+                             B_UNIT_LENGTH,
+                             &sce->unit,
+                             true);
   }
 
   prop = RNA_struct_find_property(op->ptr, "offset_type");
@@ -1158,12 +1158,12 @@ void MESH_OT_bevel(wmOperatorType *ot)
                 PROFILE_HARD_MIN,
                 1.0f);
 
-  prop = RNA_def_enum(ot->srna,
-                      "affect",
-                      prop_affect_items,
-                      BEVEL_AFFECT_EDGES,
-                      "Affect",
-                      "Affect Edges or Vertices");
+  RNA_def_enum(ot->srna,
+               "affect",
+               prop_affect_items,
+               BEVEL_AFFECT_EDGES,
+               "Affect",
+               "Affect Edges or Vertices");
 
   RNA_def_boolean(ot->srna,
                   "clamp_overlap",

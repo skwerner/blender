@@ -27,15 +27,23 @@
 
 #include "GPU_batch.h"
 #include "GPU_common.h"
-#include "GPU_shader_interface.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+typedef enum eGPUBackendType {
+  GPU_BACKEND_NONE = 0,
+  GPU_BACKEND_OPENGL,
+} eGPUBackendType;
+
+void GPU_backend_init(eGPUBackendType backend);
+void GPU_backend_exit(void);
+
+/** Opaque type hiding blender::gpu::Context. */
 typedef struct GPUContext GPUContext;
 
-GPUContext *GPU_context_create(GLuint default_framebuffer);
+GPUContext *GPU_context_create(void *ghost_window);
 void GPU_context_discard(GPUContext *);
 
 void GPU_context_active_set(GPUContext *);

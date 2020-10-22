@@ -213,14 +213,14 @@ void view3d_region_operator_needs_opengl(wmWindow *UNUSED(win), ARegion *region)
   else {
     RegionView3D *rv3d = region->regiondata;
 
-    wmViewport(&region->winrct);  // TODO: bad
+    wmViewport(&region->winrct); /* TODO: bad */
     GPU_matrix_projection_set(rv3d->winmat);
     GPU_matrix_set(rv3d->viewmat);
   }
 }
 
 /**
- * Use instead of: ``GPU_polygon_offset(rv3d->dist, ...)`` see bug [#37727]
+ * Use instead of: `GPU_polygon_offset(rv3d->dist, ...)` see bug T37727.
  */
 void ED_view3d_polygon_offset(const RegionView3D *rv3d, const float dist)
 {
@@ -1077,9 +1077,9 @@ static bool depth_segment_cb(int x, int y, void *userData)
 
   if (depth != FLT_MAX) {
     data->depth = depth;
-    return 0;
+    return false;
   }
-  return 1;
+  return true;
 }
 
 bool ED_view3d_autodist_depth_seg(
@@ -1112,7 +1112,7 @@ bool ED_view3d_autodist_depth_seg(
 /* -------------------------------------------------------------------- */
 /** \name View Radius/Distance Utilities
  *
- * Use to calculate a distance to a point based on it's radius.
+ * Use to calculate a distance to a point based on its radius.
  * \{ */
 
 float ED_view3d_radius_to_dist_persp(const float angle, const float radius)
@@ -1499,7 +1499,7 @@ void ED_view3d_from_m4(const float mat[4][4], float ofs[3], float quat[4], const
  */
 void ED_view3d_to_m4(float mat[4][4], const float ofs[3], const float quat[4], const float dist)
 {
-  float iviewquat[4] = {-quat[0], quat[1], quat[2], quat[3]};
+  const float iviewquat[4] = {-quat[0], quat[1], quat[2], quat[3]};
   float dvec[3] = {0.0f, 0.0f, dist};
 
   quat_to_mat4(mat, iviewquat);

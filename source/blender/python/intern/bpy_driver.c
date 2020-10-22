@@ -83,9 +83,8 @@ int bpy_pydriver_create_dict(void)
   if (d == NULL) {
     return -1;
   }
-  else {
-    bpy_pydriver_Dict = d;
-  }
+
+  bpy_pydriver_Dict = d;
 
   /* import some modules: builtins, bpy, math, (Blender.noise)*/
   PyDict_SetItemString(d, "__builtins__", PyEval_GetBuiltins());
@@ -229,7 +228,7 @@ static void bpy_pydriver_namespace_clear_self(void)
 void BPY_driver_reset(void)
 {
   PyGILState_STATE gilstate;
-  bool use_gil = true; /* !PyC_IsInterpreterActive(); */
+  const bool use_gil = true; /* !PyC_IsInterpreterActive(); */
 
   if (use_gil) {
     gilstate = PyGILState_Ensure();
@@ -267,7 +266,7 @@ static void pydriver_error(ChannelDriver *driver)
           "\nError in Driver: The following Python expression failed:\n\t'%s'\n\n",
           driver->expression);
 
-  // BPy_errors_to_report(NULL); // TODO - reports
+  // BPy_errors_to_report(NULL); /* TODO - reports */
   PyErr_Print();
   PyErr_Clear();
 }
@@ -411,8 +410,10 @@ static PyObject *bpy_pydriver_depsgraph_as_pyobject(struct Depsgraph *depsgraph)
   return pyrna_struct_CreatePyObject(&depsgraph_ptr);
 }
 
-/* Adds a variable 'depsgraph' to the driver variables. This can then be used to obtain evaluated
- * datablocks, and the current view layer and scene. See T75553. */
+/**
+ * Adds a variable 'depsgraph' to the driver variables. This can then be used to obtain evaluated
+ * data-blocks, and the current view layer and scene. See T75553.
+ */
 static void bpy_pydriver_namespace_add_depsgraph(PyObject *driver_vars,
                                                  struct Depsgraph *depsgraph)
 {
@@ -428,17 +429,18 @@ static void bpy_pydriver_namespace_add_depsgraph(PyObject *driver_vars,
   }
 }
 
-/* This evals py driver expressions, 'expr' is a Python expression that
- * should evaluate to a float number, which is returned.
+/**
+ * This evaluates Python driver expressions, `driver_orig->expression`
+ * is a Python expression that should evaluate to a float number, which is returned.
  *
  * (old)note: PyGILState_Ensure() isn't always called because python can call
  * the bake operator which intern starts a thread which calls scene update
- * which does a driver update. to avoid a deadlock check PyC_IsInterpreterActive()
- * if PyGILState_Ensure() is needed - see [#27683]
+ * which does a driver update. to avoid a deadlock check #PyC_IsInterpreterActive()
+ * if #PyGILState_Ensure() is needed, see T27683.
  *
- * (new)note: checking if python is running is not threadsafe [#28114]
+ * (new)note: checking if python is running is not thread-safe T28114
  * now release the GIL on python operator execution instead, using
- * PyEval_SaveThread() / PyEval_RestoreThread() so we don't lock up blender.
+ * #PyEval_SaveThread() / #PyEval_RestoreThread() so we don't lock up blender.
  *
  * For copy-on-write we always cache expressions and write errors in the
  * original driver, otherwise these would get freed while editing. Due to
@@ -492,7 +494,7 @@ float BPY_driver_exec(struct PathResolvedRNA *anim_rna,
   }
 
   /* needed since drivers are updated directly after undo where 'main' is
-   * re-allocated [#28807] */
+   * re-allocated T28807. */
   BPY_update_rna_module();
 
   /* init global dictionary for py-driver evaluation settings */
@@ -592,7 +594,7 @@ float BPY_driver_exec(struct PathResolvedRNA *anim_rna,
 #endif
     {
       /* try to get variable value */
-      float tval = driver_get_variable_value(driver, dvar);
+      const float tval = driver_get_variable_value(driver, dvar);
       driver_arg = PyFloat_FromDouble((double)tval);
     }
 
@@ -611,7 +613,7 @@ float BPY_driver_exec(struct PathResolvedRNA *anim_rna,
 
       fprintf(
           stderr, "\tBPY_driver_eval() - couldn't add variable '%s' to namespace\n", dvar->name);
-      // BPy_errors_to_report(NULL); // TODO - reports
+      // BPy_errors_to_report(NULL); /* TODO - reports */
       PyErr_Print();
       PyErr_Clear();
     }
@@ -677,11 +679,8 @@ float BPY_driver_exec(struct PathResolvedRNA *anim_rna,
   if (isfinite(result)) {
     return (float)result;
   }
-  else {
-    fprintf(stderr,
-            "\tBPY_driver_eval() - driver '%s' evaluates to '%f'\n",
-            driver->expression,
-            result);
-    return 0.0f;
-  }
+
+  fprintf(
+      stderr, "\tBPY_driver_eval() - driver '%s' evaluates to '%f'\n", driver->expression, result);
+  return 0.0f;
 }

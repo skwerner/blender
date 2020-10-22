@@ -83,7 +83,7 @@ void get_graph_keyframe_extents(struct bAnimContext *ac,
                                 float *xmax,
                                 float *ymin,
                                 float *ymax,
-                                const bool do_selected,
+                                const bool do_sel_only,
                                 const bool include_handles);
 
 void GRAPH_OT_previewrange_set(struct wmOperatorType *ot);
@@ -113,6 +113,7 @@ void GRAPH_OT_extrapolation_type(struct wmOperatorType *ot);
 void GRAPH_OT_easing_type(struct wmOperatorType *ot);
 
 void GRAPH_OT_frame_jump(struct wmOperatorType *ot);
+void GRAPH_OT_snap_cursor_value(struct wmOperatorType *ot);
 void GRAPH_OT_snap(struct wmOperatorType *ot);
 void GRAPH_OT_mirror(struct wmOperatorType *ot);
 

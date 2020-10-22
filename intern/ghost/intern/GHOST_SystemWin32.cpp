@@ -328,9 +328,9 @@ GHOST_IWindow *GHOST_SystemWin32::createWindow(const char *title,
  * Never explicitly delete the window, use #disposeContext() instead.
  * \return The new context (or 0 if creation failed).
  */
-GHOST_IContext *GHOST_SystemWin32::createOffscreenContext()
+GHOST_IContext *GHOST_SystemWin32::createOffscreenContext(GHOST_GLSettings glSettings)
 {
-  bool debug_context = false; /* TODO: inform as a parameter */
+  const bool debug_context = (glSettings.flags & GHOST_glDebugContext) != 0;
 
   GHOST_Context *context;
 
@@ -709,9 +709,12 @@ GHOST_TKey GHOST_SystemWin32::hardKey(RAWINPUT const &raw,
   return key;
 }
 
-//! note: this function can be extended to include other exotic cases as they arise.
-// This function was added in response to bug [#25715]
-// This is going to be a long list [T42426]
+/**
+ * \note this function can be extended to include other exotic cases as they arise.
+ *
+ * This function was added in response to bug T25715.
+ * This is going to be a long list T42426.
+ */
 GHOST_TKey GHOST_SystemWin32::processSpecialKey(short vKey, short scanCode) const
 {
   GHOST_TKey key = GHOST_kKeyUnknown;
@@ -1305,7 +1308,9 @@ LRESULT WINAPI GHOST_SystemWin32::s_wndProc(HWND hwnd, UINT msg, WPARAM wParam, 
 
   LRESULT lResult = 0;
   GHOST_SystemWin32 *system = (GHOST_SystemWin32 *)getSystem();
+#ifdef WITH_INPUT_IME
   GHOST_EventManager *eventManager = system->getEventManager();
+#endif
   GHOST_ASSERT(system, "GHOST_SystemWin32::s_wndProc(): system not initialized");
 
   if (hwnd) {

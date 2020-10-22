@@ -44,7 +44,7 @@ class RandomNumberGenerator {
   void seed(uint32_t seed)
   {
     constexpr uint64_t lowseed = 0x330E;
-    x_ = (((uint64_t)seed) << 16) | lowseed;
+    x_ = (static_cast<uint64_t>(seed) << 16) | lowseed;
   }
 
   void seed_random(uint32_t seed);
@@ -52,13 +52,22 @@ class RandomNumberGenerator {
   uint32_t get_uint32()
   {
     this->step();
-    return (uint32_t)(x_ >> 17);
+    return static_cast<uint32_t>(x_ >> 17);
   }
 
   int32_t get_int32()
   {
     this->step();
-    return (int32_t)(x_ >> 17);
+    return static_cast<int32_t>(x_ >> 17);
+  }
+
+  /**
+   * \return Random value (0..N), but never N.
+   */
+  int32_t get_int32(int32_t max_exclusive)
+  {
+    BLI_assert(max_exclusive > 0);
+    return this->get_int32() % max_exclusive;
   }
 
   /**
@@ -75,6 +84,35 @@ class RandomNumberGenerator {
   float get_float()
   {
     return (float)this->get_int32() / 0x80000000;
+  }
+
+  template<typename T> void shuffle(MutableSpan<T> values)
+  {
+    /* Cannot shuffle arrays of this size yet. */
+    BLI_assert(values.size() <= INT32_MAX);
+
+    for (int i = values.size() - 1; i >= 2; i--) {
+      int j = this->get_int32(i);
+      if (i != j) {
+        std::swap(values[i], values[j]);
+      }
+    }
+  }
+
+  /**
+   * Compute uniformly distributed barycentric coordinates.
+   */
+  float3 get_barycentric_coordinates()
+  {
+    float rand1 = this->get_float();
+    float rand2 = this->get_float();
+
+    if (rand1 + rand2 > 1.0f) {
+      rand1 = 1.0f - rand1;
+      rand2 = 1.0f - rand2;
+    }
+
+    return float3(rand1, rand2, 1.0f - rand1 - rand2);
   }
 
   float2 get_unit_float2();

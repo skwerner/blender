@@ -26,7 +26,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "GPU_glew.h"
 #include "GPU_select.h"
 
 #include "MEM_guardedalloc.h"
@@ -193,7 +192,7 @@ bool GPU_select_is_cached(void)
  */
 
 /**
- * Helper function, nothing special but avoids doing inline since hit's aren't sorted by depth
+ * Helper function, nothing special but avoids doing inline since hits aren't sorted by depth
  * and purpose of 4x buffer indices isn't so clear.
  *
  * Note that comparing depth as uint is fine.

@@ -84,16 +84,15 @@ static void updateDepsgraph(ModifierData *UNUSED(md), const ModifierUpdateDepsgr
   DEG_add_modifier_to_transform_relation(ctx->node, "SoftBody Modifier");
 }
 
-static void panel_draw(const bContext *C, Panel *panel)
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
 
   uiItemL(layout, IFACE_("Settings are inside the Physics tab"), ICON_NONE);
 
-  modifier_panel_end(layout, &ptr);
+  modifier_panel_end(layout, ptr);
 }
 
 static void panelRegister(ARegionType *region_type)
@@ -105,10 +104,12 @@ ModifierTypeInfo modifierType_Softbody = {
     /* name */ "Softbody",
     /* structName */ "SoftbodyModifierData",
     /* structSize */ sizeof(SoftbodyModifierData),
+    /* srna */ &RNA_SoftBodyModifier,
     /* type */ eModifierTypeType_OnlyDeform,
     /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsVertexCosOnly |
         eModifierTypeFlag_RequiresOriginalData | eModifierTypeFlag_Single |
         eModifierTypeFlag_UsesPointCache,
+    /* icon */ ICON_MOD_SOFT,
 
     /* copyData */ NULL,
 
@@ -128,7 +129,6 @@ ModifierTypeInfo modifierType_Softbody = {
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ dependsOnTime,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ NULL,
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,

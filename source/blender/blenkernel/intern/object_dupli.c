@@ -38,6 +38,7 @@
 #include "DNA_collection_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
+#include "DNA_pointcloud_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_vfont_types.h"
 
@@ -744,6 +745,68 @@ static const DupliGenerator gen_dupli_verts_font = {
 /** \} */
 
 /* -------------------------------------------------------------------- */
+/** \name Dupli-Vertices Implementation (#OB_DUPLIVERTS for #PointCloud)
+ * \{ */
+
+static void make_child_duplis_pointcloud(const DupliContext *ctx,
+                                         void *UNUSED(userdata),
+                                         Object *child)
+{
+  const Object *parent = ctx->object;
+  const PointCloud *pointcloud = parent->data;
+  const float(*co)[3] = pointcloud->co;
+  const float *radius = pointcloud->radius;
+  const float(*rotation)[4] = NULL; /* TODO: add optional rotation attribute. */
+  const float(*orco)[3] = NULL;     /* TODO: add optional texture coordinate attribute. */
+
+  /* Relative transform from parent to child space. */
+  float child_imat[4][4];
+  mul_m4_m4m4(child_imat, child->imat, parent->obmat);
+
+  for (int i = 0; i < pointcloud->totpoint; i++) {
+    /* Transform matrix from point position, radius and rotation. */
+    float quat[4] = {1.0f, 0.0f, 0.0f, 0.0f};
+    float size[3] = {1.0f, 1.0f, 1.0f};
+    if (radius) {
+      copy_v3_fl(size, radius[i]);
+    }
+    if (rotation) {
+      copy_v4_v4(quat, rotation[i]);
+    }
+
+    float space_mat[4][4];
+    loc_quat_size_to_mat4(space_mat, co[i], quat, size);
+
+    /* Make offset relative to child object using relative child transform,
+     * and apply object matrix after local vertex transform. */
+    mul_mat3_m4_v3(child_imat, space_mat[3]);
+
+    /* Create dupli object. */
+    float obmat[4][4];
+    mul_m4_m4m4(obmat, child->obmat, space_mat);
+    DupliObject *dob = make_dupli(ctx, child, obmat, i);
+    if (orco) {
+      copy_v3_v3(dob->orco, orco[i]);
+    }
+
+    /* Recursion. */
+    make_recursive_duplis(ctx, child, space_mat, i);
+  }
+}
+
+static void make_duplis_pointcloud(const DupliContext *ctx)
+{
+  make_child_duplis(ctx, NULL, make_child_duplis_pointcloud);
+}
+
+static const DupliGenerator gen_dupli_verts_pointcloud = {
+    OB_DUPLIVERTS,         /* type */
+    make_duplis_pointcloud /* make_duplis */
+};
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
 /** \name Dupli-Faces Implementation (#OB_DUPLIFACES)
  * \{ */
 
@@ -1017,7 +1080,9 @@ static void make_duplis_faces(const DupliContext *ctx)
         .vert_coords = vert_coords,
         .has_orco = (vert_coords != NULL),
         .has_uvs = (uv_idx != -1),
-        .cd_loop_uv_offset = CustomData_get_n_offset(&em->bm->ldata, CD_MLOOPUV, uv_idx),
+        .cd_loop_uv_offset = (uv_idx != -1) ?
+                                 CustomData_get_n_offset(&em->bm->ldata, CD_MLOOPUV, uv_idx) :
+                                 -1,
     };
     make_child_duplis(ctx, &fdd, make_child_duplis_faces_from_editmesh);
   }
@@ -1029,7 +1094,8 @@ static void make_duplis_faces(const DupliContext *ctx)
         .mpoly = me_eval->mpoly,
         .mloop = me_eval->mloop,
         .mvert = me_eval->mvert,
-        .mloopuv = CustomData_get_layer_n(&me_eval->ldata, CD_MLOOPUV, uv_idx),
+        .mloopuv = (uv_idx != -1) ? CustomData_get_layer_n(&me_eval->ldata, CD_MLOOPUV, uv_idx) :
+                                    NULL,
         .orco = CustomData_get_layer(&me_eval->vdata, CD_ORCO),
     };
     make_child_duplis(ctx, &fdd, make_child_duplis_faces_from_mesh);
@@ -1277,13 +1343,12 @@ static void make_duplis_particle_system(const DupliContext *ctx, ParticleSystem 
         if (psys_get_particle_state(&sim, a, &state, 0) == 0) {
           continue;
         }
-        else {
-          float tquat[4];
-          normalize_qt_qt(tquat, state.rot);
-          quat_to_mat4(pamat, tquat);
-          copy_v3_v3(pamat[3], state.co);
-          pamat[3][3] = 1.0f;
-        }
+
+        float tquat[4];
+        normalize_qt_qt(tquat, state.rot);
+        quat_to_mat4(pamat, tquat);
+        copy_v3_v3(pamat[3], state.co);
+        pamat[3][3] = 1.0f;
       }
 
       if (part->ren_as == PART_DRAW_GR && psys->part->draw & PART_DRAW_WHOLE_GR) {
@@ -1292,14 +1357,12 @@ static void make_duplis_particle_system(const DupliContext *ctx, ParticleSystem 
             part->instance_collection, object, mode) {
           copy_m4_m4(tmat, oblist[b]->obmat);
 
+          /* Apply collection instance offset. */
+          sub_v3_v3(tmat[3], part->instance_collection->instance_offset);
+
           /* Apply particle scale. */
           mul_mat3_m4_fl(tmat, size * scale);
           mul_v3_fl(tmat[3], size * scale);
-
-          /* Collection dupli-offset, should apply after everything else. */
-          if (!is_zero_v3(part->instance_collection->instance_offset)) {
-            sub_v3_v3(tmat[3], part->instance_collection->instance_offset);
-          }
 
           /* Individual particle transform. */
           mul_m4_m4m4(mat, pamat, tmat);
@@ -1423,12 +1486,15 @@ static const DupliGenerator *get_dupli_generator(const DupliContext *ctx)
   if (transflag & OB_DUPLIPARTS) {
     return &gen_dupli_particles;
   }
-  else if (transflag & OB_DUPLIVERTS) {
+  if (transflag & OB_DUPLIVERTS) {
     if (ctx->object->type == OB_MESH) {
       return &gen_dupli_verts;
     }
-    else if (ctx->object->type == OB_FONT) {
+    if (ctx->object->type == OB_FONT) {
       return &gen_dupli_verts_font;
+    }
+    if (ctx->object->type == OB_POINTCLOUD) {
+      return &gen_dupli_verts_pointcloud;
     }
   }
   else if (transflag & OB_DUPLIFACES) {

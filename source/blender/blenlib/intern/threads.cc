@@ -65,55 +65,60 @@ extern pthread_key_t gomp_tls_key;
 static void *thread_tls_data;
 #endif
 
-/* ********** basic thread control API ************
+/**
+ * Basic Thread Control API
+ * ========================
  *
  * Many thread cases have an X amount of jobs, and only an Y amount of
- * threads are useful (typically amount of cpus)
+ * threads are useful (typically amount of CPU's)
  *
  * This code can be used to start a maximum amount of 'thread slots', which
  * then can be filled in a loop with an idle timer.
  *
  * A sample loop can look like this (pseudo c);
  *
- *     ListBase lb;
- *     int maxthreads = 2;
- *     int cont = 1;
+ * \code{.c}
  *
- *     BLI_threadpool_init(&lb, do_something_func, maxthreads);
+ *   ListBase lb;
+ *   int max_threads = 2;
+ *   int cont = 1;
  *
- *     while (cont) {
- *         if (BLI_available_threads(&lb) && !(escape loop event)) {
- *             // get new job (data pointer)
- *             // tag job 'processed
- *             BLI_threadpool_insert(&lb, job);
- *         }
- *         else PIL_sleep_ms(50);
+ *   BLI_threadpool_init(&lb, do_something_func, max_threads);
  *
- *         // find if a job is ready, this the do_something_func() should write in job somewhere
- *         cont = 0;
- *         for (go over all jobs)
- *             if (job is ready) {
- *                 if (job was not removed) {
- *                     BLI_threadpool_remove(&lb, job); *                 }
- *             }
- *             else cont = 1; *         }
- *         // conditions to exit loop
- *         if (if escape loop event) {
- *             if (BLI_available_threadslots(&lb) == maxthreads) {
- *                 break;
- *             }
- *         }
+ *   while (cont) {
+ *     if (BLI_available_threads(&lb) && !(escape loop event)) {
+ *       // get new job (data pointer)
+ *       // tag job 'processed
+ *       BLI_threadpool_insert(&lb, job);
  *     }
+ *     else PIL_sleep_ms(50);
  *
- *     BLI_threadpool_end(&lb);
+ *     // Find if a job is ready, this the do_something_func() should write in job somewhere.
+ *     cont = 0;
+ *     for (go over all jobs)
+ *       if (job is ready) {
+ *         if (job was not removed) {
+ *           BLI_threadpool_remove(&lb, job);
+ *         }
+ *       }
+ *       else cont = 1;
+ *     }
+ *     // Conditions to exit loop.
+ *     if (if escape loop event) {
+ *       if (BLI_available_threadslots(&lb) == max_threads) {
+ *         break;
+ *       }
+ *     }
+ *   }
  *
- ************************************************ */
+ *   BLI_threadpool_end(&lb);
+ *
+ * \endcode
+ */
 static pthread_mutex_t _image_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t _image_draw_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t _viewer_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t _custom1_lock = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t _rcache_lock = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t _opengl_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t _nodes_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t _movieclip_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t _colormanage_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -309,7 +314,7 @@ int BLI_system_thread_count(void)
   if (num_threads_override != 0) {
     return num_threads_override;
   }
-  else if (LIKELY(t != -1)) {
+  if (LIKELY(t != -1)) {
     return t;
   }
 
@@ -361,10 +366,6 @@ static ThreadMutex *global_mutex_from_type(const int type)
       return &_viewer_lock;
     case LOCK_CUSTOM1:
       return &_custom1_lock;
-    case LOCK_RCACHE:
-      return &_rcache_lock;
-    case LOCK_OPENGL:
-      return &_opengl_lock;
     case LOCK_NODES:
       return &_nodes_lock;
     case LOCK_MOVIECLIP:
@@ -751,7 +752,7 @@ void *BLI_thread_queue_pop_timeout(ThreadQueue *queue, int ms)
     if (pthread_cond_timedwait(&queue->push_cond, &queue->mutex, &timeout) == ETIMEDOUT) {
       break;
     }
-    else if (PIL_check_seconds_timer() - t >= ms * 0.001) {
+    if (PIL_check_seconds_timer() - t >= ms * 0.001) {
       break;
     }
   }

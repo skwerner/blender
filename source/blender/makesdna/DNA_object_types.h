@@ -108,15 +108,6 @@ enum {
   BOUNDBOX_DIRTY = (1 << 1),
 };
 
-typedef struct LodLevel {
-  struct LodLevel *next, *prev;
-  struct Object *source;
-  int flags;
-  float distance;
-  char _pad0[4];
-  int obhysteresis;
-} LodLevel;
-
 struct CustomData_MeshMasks;
 
 /* Not saved in file! */
@@ -211,7 +202,7 @@ typedef struct Object {
   /** Old animation system, deprecated for 2.5. */
   struct Ipo *ipo DNA_DEPRECATED;
   /* struct Path *path; */
-  struct bAction *action DNA_DEPRECATED;  // XXX deprecated... old animation system
+  struct bAction *action DNA_DEPRECATED; /* XXX deprecated... old animation system */
   struct bAction *poselib;
   /** Pose data, armature objects only. */
   struct bPose *pose;
@@ -220,7 +211,7 @@ typedef struct Object {
 
   /** Grease Pencil data. */
   struct bGPdata *gpd
-      DNA_DEPRECATED;  // XXX deprecated... replaced by gpencil object, keep for readfile
+      DNA_DEPRECATED; /* XXX deprecated... replaced by gpencil object, keep for readfile */
 
   /** Settings for visualization of object-transform animation. */
   bAnimVizSettings avs;
@@ -228,8 +219,8 @@ typedef struct Object {
   bMotionPath *mpath;
   void *_pad0;
 
-  ListBase constraintChannels DNA_DEPRECATED;  // XXX deprecated... old animation system
-  ListBase effect DNA_DEPRECATED;              // XXX deprecated... keep for readfile
+  ListBase constraintChannels DNA_DEPRECATED; /* XXX deprecated... old animation system */
+  ListBase effect DNA_DEPRECATED;             /* XXX deprecated... keep for readfile */
   /** List of bDeformGroup (vertex groups) names and flag only. */
   ListBase defbase;
   /** List of ModifierData structures. */
@@ -361,8 +352,8 @@ typedef struct Object {
 
   /** Object constraints. */
   ListBase constraints;
-  ListBase nlastrips DNA_DEPRECATED;  // XXX deprecated... old animation system
-  ListBase hooks DNA_DEPRECATED;      // XXX deprecated... old animation system
+  ListBase nlastrips DNA_DEPRECATED; /* XXX deprecated... old animation system */
+  ListBase hooks DNA_DEPRECATED;     /* XXX deprecated... old animation system */
   /** Particle systems. */
   ListBase particlesystem;
 
@@ -375,7 +366,7 @@ typedef struct Object {
 
   /** If fluidsim enabled, store additional settings. */
   struct FluidsimSettings *fluidsimSettings
-      DNA_DEPRECATED;  // XXX deprecated... replaced by mantaflow, keep for readfile
+      DNA_DEPRECATED; /* XXX deprecated... replaced by mantaflow, keep for readfile */
 
   ListBase pc_ids;
 
@@ -392,10 +383,6 @@ typedef struct Object {
   char empty_image_depth;
   char empty_image_flag;
   char _pad8[5];
-
-  /** Contains data for levels of detail. */
-  ListBase lodlevels;
-  LodLevel *currentlod;
 
   struct PreviewImage *preview;
 
@@ -537,8 +524,6 @@ enum {
   OB_TRANSFLAG_UNUSED_12 = 1 << 12, /* cleared */
   /* runtime constraints disable */
   OB_NO_CONSTRAINTS = 1 << 13,
-  /* hack to work around particle issue */
-  OB_NO_PSYS_UPDATE = 1 << 14,
 
   OB_DUPLI = OB_DUPLIVERTS | OB_DUPLICOLLECTION | OB_DUPLIFACES | OB_DUPLIPARTS,
 };

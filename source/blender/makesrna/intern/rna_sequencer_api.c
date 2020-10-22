@@ -58,7 +58,7 @@ static void rna_Sequence_update_rnafunc(ID *id, Sequence *self, bool do_data)
 {
   if (do_data) {
     BKE_sequencer_update_changed_seq_and_deps((Scene *)id, self, true, true);
-    // new_tstripdata(self); // need 2.6x version of this.
+    // new_tstripdata(self); /* need 2.6x version of this. */
   }
   BKE_sequence_calc((Scene *)id, self);
   BKE_sequence_calc_disp((Scene *)id, self);
@@ -370,13 +370,14 @@ static void rna_Sequences_remove(
   Sequence *seq = seq_ptr->data;
   Scene *scene = (Scene *)id;
 
-  if (BLI_remlink_safe(&ed->seqbase, seq) == false) {
+  if (BLI_findindex(&ed->seqbase, seq) == -1) {
     BKE_reportf(
         reports, RPT_ERROR, "Sequence '%s' not in scene '%s'", seq->name + 2, scene->id.name + 2);
     return;
   }
 
-  BKE_sequence_free(scene, seq, true);
+  BKE_sequencer_flag_for_removal(scene, &ed->seqbase, seq);
+  BKE_sequencer_remove_flagged_sequences(scene, &ed->seqbase);
   RNA_POINTER_INVALIDATE(seq_ptr);
 
   DEG_relations_tag_update(bmain);

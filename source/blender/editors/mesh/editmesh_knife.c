@@ -258,7 +258,7 @@ static void knife_input_ray_segment(KnifeTool_OpData *kcd,
                                     const float mval[2],
                                     const float ofs,
                                     float r_origin[3],
-                                    float r_dest[3]);
+                                    float r_origin_ofs[3]);
 
 static bool knife_verts_edge_in_face(KnifeVert *v1, KnifeVert *v2, BMFace *f);
 
@@ -672,12 +672,10 @@ static int linehit_compare(const void *vlh1, const void *vlh2)
  */
 static void prepare_linehits_for_cut(KnifeTool_OpData *kcd)
 {
-  KnifeLineHit *linehits, *lhi, *lhj;
-  int i, j, n;
   bool is_double = false;
 
-  n = kcd->totlinehit;
-  linehits = kcd->linehits;
+  int n = kcd->totlinehit;
+  KnifeLineHit *linehits = kcd->linehits;
   if (n == 0) {
     return;
   }
@@ -688,11 +686,11 @@ static void prepare_linehits_for_cut(KnifeTool_OpData *kcd)
    * by a vertex hit that is very near. Mark such edge hits using
    * l == -1 and then do another pass to actually remove.
    * Also remove all but one of a series of vertex hits for the same vertex. */
-  for (i = 0; i < n; i++) {
-    lhi = &linehits[i];
+  for (int i = 0; i < n; i++) {
+    KnifeLineHit *lhi = &linehits[i];
     if (lhi->v) {
-      for (j = i - 1; j >= 0; j--) {
-        lhj = &linehits[j];
+      for (int j = i - 1; j >= 0; j--) {
+        KnifeLineHit *lhj = &linehits[j];
         if (!lhj->kfe || fabsf(lhi->l - lhj->l) > KNIFE_FLT_EPSBIG ||
             fabsf(lhi->m - lhj->m) > KNIFE_FLT_EPSBIG) {
           break;
@@ -703,8 +701,8 @@ static void prepare_linehits_for_cut(KnifeTool_OpData *kcd)
           is_double = true;
         }
       }
-      for (j = i + 1; j < n; j++) {
-        lhj = &linehits[j];
+      for (int j = i + 1; j < n; j++) {
+        KnifeLineHit *lhj = &linehits[j];
         if (fabsf(lhi->l - lhj->l) > KNIFE_FLT_EPSBIG ||
             fabsf(lhi->m - lhj->m) > KNIFE_FLT_EPSBIG) {
           break;
@@ -719,11 +717,11 @@ static void prepare_linehits_for_cut(KnifeTool_OpData *kcd)
 
   if (is_double) {
     /* delete-in-place loop: copying from pos j to pos i+1 */
-    i = 0;
-    j = 1;
+    int i = 0;
+    int j = 1;
     while (j < n) {
-      lhi = &linehits[i];
-      lhj = &linehits[j];
+      KnifeLineHit *lhi = &linehits[i];
+      KnifeLineHit *lhj = &linehits[j];
       if (lhj->l == -1.0f) {
         j++; /* skip copying this one */
       }
@@ -1051,7 +1049,7 @@ static void knife_init_colors(KnifeColors *colors)
 static void knifetool_draw(const bContext *UNUSED(C), ARegion *UNUSED(region), void *arg)
 {
   const KnifeTool_OpData *kcd = arg;
-  GPU_depth_test(false);
+  GPU_depth_test(GPU_DEPTH_NONE);
 
   GPU_matrix_push_projection();
   GPU_polygon_offset(1.0f, 1.0f);
@@ -1128,9 +1126,7 @@ static void knifetool_draw(const bContext *UNUSED(C), ARegion *UNUSED(region), v
     int i, snapped_verts_count, other_verts_count;
     float fcol[4];
 
-    GPU_blend(true);
-    GPU_blend_set_func_separate(
-        GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+    GPU_blend(GPU_BLEND_ALPHA);
 
     GPUVertBuf *vert = GPU_vertbuf_create_with_format(format);
     GPU_vertbuf_data_alloc(vert, kcd->totlinehit);
@@ -1147,16 +1143,13 @@ static void knifetool_draw(const bContext *UNUSED(C), ARegion *UNUSED(region), v
 
     GPUBatch *batch = GPU_batch_create_ex(GPU_PRIM_POINTS, vert, NULL, GPU_BATCH_OWNS_VBO);
     GPU_batch_program_set_builtin(batch, GPU_SHADER_3D_UNIFORM_COLOR);
-    GPU_batch_bind(batch);
 
     /* draw any snapped verts first */
     rgba_uchar_to_float(fcol, kcd->colors.point_a);
     GPU_batch_uniform_4fv(batch, "color", fcol);
-    GPU_matrix_bind(batch->interface);
-    GPU_shader_set_srgb_uniform(batch->interface);
     GPU_point_size(11);
     if (snapped_verts_count > 0) {
-      GPU_batch_draw_advanced(batch, 0, snapped_verts_count, 0, 0);
+      GPU_batch_draw_range(batch, 0, snapped_verts_count);
     }
 
     /* now draw the rest */
@@ -1164,13 +1157,12 @@ static void knifetool_draw(const bContext *UNUSED(C), ARegion *UNUSED(region), v
     GPU_batch_uniform_4fv(batch, "color", fcol);
     GPU_point_size(7);
     if (other_verts_count > 0) {
-      GPU_batch_draw_advanced(batch, snapped_verts_count, other_verts_count, 0, 0);
+      GPU_batch_draw_range(batch, snapped_verts_count, other_verts_count);
     }
 
-    GPU_batch_program_use_end(batch);
     GPU_batch_discard(batch);
 
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
   }
 
   if (kcd->totkedge > 0) {
@@ -1228,7 +1220,7 @@ static void knifetool_draw(const bContext *UNUSED(C), ARegion *UNUSED(region), v
   GPU_matrix_pop_projection();
 
   /* Reset default */
-  GPU_depth_test(true);
+  GPU_depth_test(GPU_DEPTH_LESS_EQUAL);
 }
 
 /**
@@ -1608,7 +1600,7 @@ static void knife_find_line_hits(KnifeTool_OpData *kcd)
    * can end up being ~2000 units apart with an orthogonal perspective.
    *
    * (from ED_view3d_win_to_segment_clipped() above)
-   * this gives precision error; rather then solving properly
+   * this gives precision error; rather than solving properly
    * (which may involve using doubles everywhere!),
    * limit the distance between these points */
   if (kcd->is_ortho && (kcd->vc.rv3d->persp != RV3D_CAMOB)) {
@@ -1628,9 +1620,9 @@ static void knife_find_line_hits(KnifeTool_OpData *kcd)
     plane_from_point_normal_v3(plane, v1, plane);
   }
 
-  /* First use bvh tree to find faces, knife edges, and knife verts that might
+  /* First use BVH tree to find faces, knife edges, and knife verts that might
    * intersect the cut plane with rays v1-v3 and v2-v4.
-   * This deduplicates the candidates before doing more expensive intersection tests. */
+   * This de-duplicates the candidates before doing more expensive intersection tests. */
 
   tree = BKE_bmbvh_tree_get(kcd->bmbvh);
   results = BLI_bvhtree_intersect_plane(tree, plane, &tot);
@@ -2632,7 +2624,7 @@ static void knifetool_update_mval(KnifeTool_OpData *kcd, const float mval[2])
 
 static void knifetool_update_mval_i(KnifeTool_OpData *kcd, const int mval_i[2])
 {
-  float mval[2] = {UNPACK2(mval_i)};
+  const float mval[2] = {UNPACK2(mval_i)};
   knifetool_update_mval(kcd, mval);
 }
 
@@ -3201,7 +3193,7 @@ void EDBM_mesh_knife(bContext *C, LinkNode *polys, bool use_tag, bool cut_throug
                 keep_search = true;
               }
               else {
-                /* don't loose time on this face again, set it as outside */
+                /* don't lose time on this face again, set it as outside */
                 F_ISECT_SET_OUTSIDE(f);
               }
             }

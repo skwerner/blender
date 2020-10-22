@@ -75,8 +75,8 @@ void ED_sculpt_init_transform(struct bContext *C)
 
   ss->pivot_rot[3] = 1.0f;
 
-  SCULPT_vertex_random_access_init(ss);
-  SCULPT_filter_cache_init(ob, sd, SCULPT_UNDO_COORDS);
+  SCULPT_vertex_random_access_ensure(ss);
+  SCULPT_filter_cache_init(C, ob, sd, SCULPT_UNDO_COORDS);
 }
 
 static void sculpt_transform_task_cb(void *__restrict userdata,
@@ -124,9 +124,9 @@ void ED_sculpt_update_modal_transform(struct bContext *C)
   Object *ob = CTX_data_active_object(C);
   SculptSession *ss = ob->sculpt;
   Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
-  const char symm = sd->paint.symmetry_flags & PAINT_SYMM_AXIS_ALL;
+  const char symm = SCULPT_mesh_symmetry_xyz_get(ob);
 
-  SCULPT_vertex_random_access_init(ss);
+  SCULPT_vertex_random_access_ensure(ss);
   BKE_sculpt_update_object_for_edit(depsgraph, ob, false, false, false);
 
   SculptThreadedTaskData data = {
@@ -243,12 +243,11 @@ static EnumPropertyItem prop_sculpt_pivot_position_types[] = {
 
 static int sculpt_set_pivot_position_exec(bContext *C, wmOperator *op)
 {
-  Sculpt *sd = CTX_data_tool_settings(C)->sculpt;
   Object *ob = CTX_data_active_object(C);
   SculptSession *ss = ob->sculpt;
   ARegion *region = CTX_wm_region(C);
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
-  const char symm = sd->paint.symmetry_flags & PAINT_SYMM_AXIS_ALL;
+  const char symm = SCULPT_mesh_symmetry_xyz_get(ob);
 
   int mode = RNA_enum_get(op->ptr, "mode");
 
@@ -325,6 +324,12 @@ static int sculpt_set_pivot_position_exec(bContext *C, wmOperator *op)
 
     MEM_SAFE_FREE(nodes);
   }
+
+  /* Update the viewport navigation rotation origin. */
+  UnifiedPaintSettings *ups = &CTX_data_tool_settings(C)->unified_paint_settings;
+  copy_v3_v3(ups->average_stroke_accum, ss->pivot_pos);
+  ups->average_stroke_counter = 1;
+  ups->last_stroke_valid = true;
 
   ED_region_tag_redraw(region);
   WM_event_add_notifier(C, NC_GEOM | ND_SELECT, ob->data);

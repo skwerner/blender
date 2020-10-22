@@ -50,6 +50,7 @@
 
 /* Own include. */
 #include "transform_convert.h"
+#include "transform_orientations.h"
 
 #define USE_FACE_SUBSTITUTE
 
@@ -507,7 +508,7 @@ static void editmesh_mirror_data_calc(BMEditMesh *em,
 
     index[a] = MEM_mallocN(totvert * sizeof(*index[a]), __func__);
     EDBM_verts_mirror_cache_begin_ex(
-        em, a, false, test_selected_only, use_topology, TRANSFORM_MAXDIST_MIRROR, index[a]);
+        em, a, false, test_selected_only, true, use_topology, TRANSFORM_MAXDIST_MIRROR, index[a]);
 
     flag = TD_MIRROR_X << a;
     BM_ITER_MESH_INDEX (eve, &iter, bm, BM_VERTS_OF_MESH, i) {
@@ -754,7 +755,8 @@ void createTransEditVerts(TransInfo *t)
     if (tc->use_mirror_axis_any) {
       bool use_topology = (me->editflag & ME_EDIT_MIRROR_TOPO) != 0;
       bool use_select = (t->flag & T_PROP_EDIT) == 0;
-      bool mirror_axis[3] = {tc->use_mirror_axis_x, tc->use_mirror_axis_y, tc->use_mirror_axis_z};
+      const bool mirror_axis[3] = {
+          tc->use_mirror_axis_x, tc->use_mirror_axis_y, tc->use_mirror_axis_z};
       editmesh_mirror_data_calc(em, use_select, use_topology, mirror_axis, &mirror_data);
 
       if (mirror_data.vert_map) {
@@ -1033,8 +1035,10 @@ static void mesh_customdatacorrect_free_cb(struct TransInfo *UNUSED(t),
 
 #  define FACE_SUBSTITUTE_INDEX INT_MIN
 
-/* Search for a neighboring face with area and preferably without selected vertex.
- * Used to replace arealess faces in customdata correction. */
+/**
+ * Search for a neighboring face with area and preferably without selected vertex.
+ * Used to replace area-less faces in custom-data correction.
+ */
 static BMFace *mesh_customdatacorrect_find_best_face_substitute(BMFace *f)
 {
   BMFace *best_face = NULL;
@@ -1172,8 +1176,9 @@ static void mesh_customdatacorrect_init_container_generic(TransDataContainer *UN
                                                   .use_toolflags = false,
                                               }));
 
-  /* We need to have matching custom-data. */
-  BM_mesh_copy_init_customdata(bm_origfaces, bm, NULL);
+  /* We need to have matching loop custom-data. */
+  BM_mesh_copy_init_customdata_all_layers(bm_origfaces, bm, BM_LOOP, NULL);
+
   tcld->origfaces = origfaces;
   tcld->bm_origfaces = bm_origfaces;
 
@@ -1293,6 +1298,9 @@ void mesh_customdatacorrect_init(TransInfo *t)
       use_merge_group = (t->settings->uvcalc_flag & UVCALC_TRANSFORM_CORRECT_KEEP_CONNECTED) != 0;
     }
   }
+  else {
+    return;
+  }
 
   FOREACH_TRANS_DATA_CONTAINER (t, tc) {
     mesh_customdatacorrect_init_container(tc, use_merge_group);
@@ -1351,9 +1359,6 @@ static void mesh_customdatacorrect_apply_vert(struct TransCustomDataLayer *tcld,
     /* only loop data, no vertex data since that contains shape keys,
      * and we do not want to mess up other shape keys */
     BM_loop_interp_from_face(bm, l, f_copy, false, false);
-
-    /* make sure face-attributes are correct (e.g. #MLoopUV, #MLoopCol) */
-    BM_elem_attrs_copy_ex(tcld->bm_origfaces, bm, f_copy, l->f, BM_ELEM_SELECT, CD_MASK_NORMAL);
 
     /* weight the loop */
     if (do_loop_weight) {
@@ -1507,8 +1512,6 @@ static void mesh_customdatacorrect_restore(struct TransInfo *t)
         BM_elem_attrs_copy(bm_copy, bm, l_copy, l_iter);
         l_copy = l_copy->next;
       } while ((l_iter = l_iter->next) != l_first);
-
-      BM_elem_attrs_copy_ex(bm_copy, bm, f_copy, f, BM_ELEM_SELECT, CD_MASK_NORMAL);
     }
   }
 }
@@ -1559,10 +1562,10 @@ static void transform_apply_to_mirror(TransInfo *t)
 
 void recalcData_mesh(TransInfo *t)
 {
-  bool is_cancelling = t->state == TRANS_CANCEL;
+  bool is_canceling = t->state == TRANS_CANCEL;
   /* mirror modifier clipping? */
-  if (!is_cancelling) {
-    /* apply clipping after so we never project past the clip plane [#25423] */
+  if (!is_canceling) {
+    /* apply clipping after so we never project past the clip plane T25423. */
     applyProject(t);
     clipMirrorModifier(t);
 
@@ -1591,13 +1594,12 @@ void recalcData_mesh(TransInfo *t)
 
 void special_aftertrans_update__mesh(bContext *UNUSED(C), TransInfo *t)
 {
-  const bool is_cancelling = (t->state == TRANS_CANCEL);
-  const bool use_automerge = !is_cancelling && (t->flag & (T_AUTOMERGE | T_AUTOSPLIT)) != 0;
+  const bool is_canceling = (t->state == TRANS_CANCEL);
+  const bool use_automerge = !is_canceling && (t->flag & (T_AUTOMERGE | T_AUTOSPLIT)) != 0;
 
-  if (!is_cancelling && ELEM(t->mode, TFM_EDGE_SLIDE, TFM_VERT_SLIDE)) {
-    /* Handle multires re-projection, done
-     * on transform completion since it's
-     * really slow -joeedh. */
+  if (!is_canceling && ELEM(t->mode, TFM_EDGE_SLIDE, TFM_VERT_SLIDE)) {
+    /* NOTE(joeedh): Handle multi-res re-projection,
+     * done on transform completion since it's really slow. */
     mesh_customdatacorrect_apply(t, true);
   }
 
@@ -1609,7 +1611,7 @@ void special_aftertrans_update__mesh(bContext *UNUSED(C), TransInfo *t)
       bool has_face_sel = (bm->totfacesel != 0);
 
       if (tc->use_mirror_axis_any) {
-        /* Rather then adjusting the selection (which the user would notice)
+        /* Rather than adjusting the selection (which the user would notice)
          * tag all mirrored verts, then auto-merge those. */
         BM_mesh_elem_hflag_disable_all(bm, BM_VERT, BM_ELEM_TAG, false);
 

@@ -475,63 +475,16 @@ texture_node_categories = [
     ]),
 ]
 
+
+def not_implemented_node(idname):
+    NodeType = getattr(bpy.types, idname)
+    name = NodeType.bl_rna.name
+    label = "%s (mockup)" % name
+    return NodeItem(idname, label=label)
+
+
 simulation_node_categories = [
     # Simulation Nodes
-    SimulationNodeCategory("SIM_OUTPUT", "Output", items=[
-        NodeItem("SimulationNodeParticleSimulation"),
-    ]),
-    SimulationNodeCategory("SIM_INPUTS", "Input", items=[
-        NodeItem("SimulationNodeTime"),
-        NodeItem("SimulationNodeParticleAttribute"),
-        NodeItem("FunctionNodeGroupInstanceID"),
-        NodeItem("ShaderNodeValue"),
-        NodeItem("FunctionNodeObjectTransforms"),
-    ]),
-    SimulationNodeCategory("SIM_EMITTERS", "Emitters", items=[
-        NodeItem("SimulationNodeParticleMeshEmitter"),
-        NodeItem("SimulationNodeEmitParticles"),
-    ]),
-    SimulationNodeCategory("SIM_EVENTS", "Events", items=[
-        NodeItem("SimulationNodeParticleBirthEvent"),
-        NodeItem("SimulationNodeParticleTimeStepEvent"),
-        NodeItem("SimulationNodeParticleMeshCollisionEvent"),
-    ]),
-    SimulationNodeCategory("SIM_FORCES", "Forces", items=[
-        NodeItem("SimulationNodeForce"),
-    ]),
-    SimulationNodeCategory("SIM_EXECUTE", "Execute", items=[
-        NodeItem("SimulationNodeSetParticleAttribute"),
-        NodeItem("SimulationNodeExecuteCondition"),
-        NodeItem("SimulationNodeMultiExecute"),
-    ]),
-    SimulationNodeCategory("SIM_NOISE", "Noise", items=[
-        NodeItem("ShaderNodeTexNoise"),
-        NodeItem("ShaderNodeTexWhiteNoise"),
-    ]),
-    SimulationNodeCategory("SIM_COLOR", "Color", items=[
-        NodeItem("ShaderNodeMixRGB"),
-        NodeItem("ShaderNodeInvert"),
-        NodeItem("ShaderNodeHueSaturation"),
-        NodeItem("ShaderNodeGamma"),
-        NodeItem("ShaderNodeBrightContrast"),
-    ]),
-    SimulationNodeCategory("SIM_CONVERTER", "Converter", items=[
-        NodeItem("ShaderNodeMapRange"),
-        NodeItem("ShaderNodeClamp"),
-        NodeItem("ShaderNodeMath"),
-        NodeItem("ShaderNodeValToRGB"),
-        NodeItem("ShaderNodeVectorMath"),
-        NodeItem("ShaderNodeSeparateRGB"),
-        NodeItem("ShaderNodeCombineRGB"),
-        NodeItem("ShaderNodeSeparateXYZ"),
-        NodeItem("ShaderNodeCombineXYZ"),
-        NodeItem("ShaderNodeSeparateHSV"),
-        NodeItem("ShaderNodeCombineHSV"),
-        NodeItem("FunctionNodeBooleanMath"),
-        NodeItem("FunctionNodeFloatCompare"),
-        NodeItem("FunctionNodeSwitch"),
-        NodeItem("FunctionNodeCombineStrings"),
-    ]),
     SimulationNodeCategory("SIM_GROUP", "Group", items=node_group_items),
     SimulationNodeCategory("SIM_LAYOUT", "Layout", items=[
         NodeItem("NodeFrame"),

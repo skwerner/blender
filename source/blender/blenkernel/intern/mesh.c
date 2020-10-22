@@ -23,6 +23,9 @@
 
 #include "MEM_guardedalloc.h"
 
+/* Allow using deprecated functionality for .blend file I/O. */
+#define DNA_DEPRECATED_ALLOW
+
 #include "DNA_defaults.h"
 #include "DNA_key_types.h"
 #include "DNA_material_types.h"
@@ -32,6 +35,7 @@
 
 #include "BLI_bitmap.h"
 #include "BLI_edgehash.h"
+#include "BLI_endian_switch.h"
 #include "BLI_ghash.h"
 #include "BLI_hash.h"
 #include "BLI_linklist.h"
@@ -43,6 +47,7 @@
 #include "BLT_translation.h"
 
 #include "BKE_anim_data.h"
+#include "BKE_deform.h"
 #include "BKE_editmesh.h"
 #include "BKE_global.h"
 #include "BKE_idtype.h"
@@ -62,6 +67,8 @@
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
+
+#include "BLO_read_write.h"
 
 static void mesh_clear_geometry(Mesh *mesh);
 static void mesh_tessface_clear_intern(Mesh *mesh, int free_customdata);
@@ -163,6 +170,192 @@ static void mesh_foreach_id(ID *id, LibraryForeachIDData *data)
   }
 }
 
+static void mesh_blend_write(BlendWriter *writer, ID *id, const void *id_address)
+{
+  Mesh *mesh = (Mesh *)id;
+  if (mesh->id.us > 0 || BLO_write_is_undo(writer)) {
+    /* cache only - don't write */
+    mesh->mface = NULL;
+    mesh->totface = 0;
+    memset(&mesh->fdata, 0, sizeof(mesh->fdata));
+    memset(&mesh->runtime, 0, sizeof(mesh->runtime));
+
+    CustomDataLayer *vlayers = NULL, vlayers_buff[CD_TEMP_CHUNK_SIZE];
+    CustomDataLayer *elayers = NULL, elayers_buff[CD_TEMP_CHUNK_SIZE];
+    CustomDataLayer *flayers = NULL, flayers_buff[CD_TEMP_CHUNK_SIZE];
+    CustomDataLayer *llayers = NULL, llayers_buff[CD_TEMP_CHUNK_SIZE];
+    CustomDataLayer *players = NULL, players_buff[CD_TEMP_CHUNK_SIZE];
+
+    CustomData_blend_write_prepare(&mesh->vdata, &vlayers, vlayers_buff, ARRAY_SIZE(vlayers_buff));
+    CustomData_blend_write_prepare(&mesh->edata, &elayers, elayers_buff, ARRAY_SIZE(elayers_buff));
+    flayers = flayers_buff;
+    CustomData_blend_write_prepare(&mesh->ldata, &llayers, llayers_buff, ARRAY_SIZE(llayers_buff));
+    CustomData_blend_write_prepare(&mesh->pdata, &players, players_buff, ARRAY_SIZE(players_buff));
+
+    BLO_write_id_struct(writer, Mesh, id_address, &mesh->id);
+    BKE_id_blend_write(writer, &mesh->id);
+
+    /* direct data */
+    if (mesh->adt) {
+      BKE_animdata_blend_write(writer, mesh->adt);
+    }
+
+    BLO_write_pointer_array(writer, mesh->totcol, mesh->mat);
+    BLO_write_raw(writer, sizeof(MSelect) * mesh->totselect, mesh->mselect);
+
+    CustomData_blend_write(
+        writer, &mesh->vdata, vlayers, mesh->totvert, CD_MASK_MESH.vmask, &mesh->id);
+    CustomData_blend_write(
+        writer, &mesh->edata, elayers, mesh->totedge, CD_MASK_MESH.emask, &mesh->id);
+    /* fdata is really a dummy - written so slots align */
+    CustomData_blend_write(
+        writer, &mesh->fdata, flayers, mesh->totface, CD_MASK_MESH.fmask, &mesh->id);
+    CustomData_blend_write(
+        writer, &mesh->ldata, llayers, mesh->totloop, CD_MASK_MESH.lmask, &mesh->id);
+    CustomData_blend_write(
+        writer, &mesh->pdata, players, mesh->totpoly, CD_MASK_MESH.pmask, &mesh->id);
+
+    /* Free temporary data */
+
+/* Free custom-data layers, when not assigned a buffer value. */
+#define CD_LAYERS_FREE(id) \
+  if (id && id != id##_buff) { \
+    MEM_freeN(id); \
+  } \
+  ((void)0)
+
+    CD_LAYERS_FREE(vlayers);
+    CD_LAYERS_FREE(elayers);
+    /* CD_LAYER_FREE(flayers); */ /* Never allocated. */
+    CD_LAYERS_FREE(llayers);
+    CD_LAYERS_FREE(players);
+
+#undef CD_LAYERS_FREE
+  }
+}
+
+static void mesh_blend_read_data(BlendDataReader *reader, ID *id)
+{
+  Mesh *mesh = (Mesh *)id;
+  BLO_read_pointer_array(reader, (void **)&mesh->mat);
+
+  BLO_read_data_address(reader, &mesh->mvert);
+  BLO_read_data_address(reader, &mesh->medge);
+  BLO_read_data_address(reader, &mesh->mface);
+  BLO_read_data_address(reader, &mesh->mloop);
+  BLO_read_data_address(reader, &mesh->mpoly);
+  BLO_read_data_address(reader, &mesh->tface);
+  BLO_read_data_address(reader, &mesh->mtface);
+  BLO_read_data_address(reader, &mesh->mcol);
+  BLO_read_data_address(reader, &mesh->dvert);
+  BLO_read_data_address(reader, &mesh->mloopcol);
+  BLO_read_data_address(reader, &mesh->mloopuv);
+  BLO_read_data_address(reader, &mesh->mselect);
+
+  /* animdata */
+  BLO_read_data_address(reader, &mesh->adt);
+  BKE_animdata_blend_read_data(reader, mesh->adt);
+
+  /* Normally BKE_defvert_blend_read should be called in CustomData_blend_read,
+   * but for backwards compatibility in do_versions to work we do it here. */
+  BKE_defvert_blend_read(reader, mesh->totvert, mesh->dvert);
+
+  CustomData_blend_read(reader, &mesh->vdata, mesh->totvert);
+  CustomData_blend_read(reader, &mesh->edata, mesh->totedge);
+  CustomData_blend_read(reader, &mesh->fdata, mesh->totface);
+  CustomData_blend_read(reader, &mesh->ldata, mesh->totloop);
+  CustomData_blend_read(reader, &mesh->pdata, mesh->totpoly);
+
+  mesh->texflag &= ~ME_AUTOSPACE_EVALUATED;
+  mesh->edit_mesh = NULL;
+  BKE_mesh_runtime_reset(mesh);
+
+  /* happens with old files */
+  if (mesh->mselect == NULL) {
+    mesh->totselect = 0;
+  }
+
+  /* Multires data */
+  BLO_read_data_address(reader, &mesh->mr);
+  if (mesh->mr) {
+    BLO_read_list(reader, &mesh->mr->levels);
+    MultiresLevel *lvl = mesh->mr->levels.first;
+
+    CustomData_blend_read(reader, &mesh->mr->vdata, lvl->totvert);
+    BKE_defvert_blend_read(
+        reader, lvl->totvert, CustomData_get(&mesh->mr->vdata, 0, CD_MDEFORMVERT));
+    CustomData_blend_read(reader, &mesh->mr->fdata, lvl->totface);
+
+    BLO_read_data_address(reader, &mesh->mr->edge_flags);
+    BLO_read_data_address(reader, &mesh->mr->edge_creases);
+
+    BLO_read_data_address(reader, &mesh->mr->verts);
+
+    /* If mesh has the same number of vertices as the
+     * highest multires level, load the current mesh verts
+     * into multires and discard the old data. Needed
+     * because some saved files either do not have a verts
+     * array, or the verts array contains out-of-date
+     * data. */
+    if (mesh->totvert == ((MultiresLevel *)mesh->mr->levels.last)->totvert) {
+      if (mesh->mr->verts) {
+        MEM_freeN(mesh->mr->verts);
+      }
+      mesh->mr->verts = MEM_dupallocN(mesh->mvert);
+    }
+
+    for (; lvl; lvl = lvl->next) {
+      BLO_read_data_address(reader, &lvl->verts);
+      BLO_read_data_address(reader, &lvl->faces);
+      BLO_read_data_address(reader, &lvl->edges);
+      BLO_read_data_address(reader, &lvl->colfaces);
+    }
+  }
+
+  /* if multires is present but has no valid vertex data,
+   * there's no way to recover it; silently remove multires */
+  if (mesh->mr && !mesh->mr->verts) {
+    multires_free(mesh->mr);
+    mesh->mr = NULL;
+  }
+
+  if ((BLO_read_requires_endian_switch(reader)) && mesh->tface) {
+    TFace *tf = mesh->tface;
+    for (int i = 0; i < mesh->totface; i++, tf++) {
+      BLI_endian_switch_uint32_array(tf->col, 4);
+    }
+  }
+}
+
+static void mesh_blend_read_lib(BlendLibReader *reader, ID *id)
+{
+  Mesh *me = (Mesh *)id;
+  /* this check added for python created meshes */
+  if (me->mat) {
+    for (int i = 0; i < me->totcol; i++) {
+      BLO_read_id_address(reader, me->id.lib, &me->mat[i]);
+    }
+  }
+  else {
+    me->totcol = 0;
+  }
+
+  BLO_read_id_address(reader, me->id.lib, &me->ipo);  // XXX: deprecated: old anim sys
+  BLO_read_id_address(reader, me->id.lib, &me->key);
+  BLO_read_id_address(reader, me->id.lib, &me->texcomesh);
+}
+
+static void mesh_read_expand(BlendExpander *expander, ID *id)
+{
+  Mesh *me = (Mesh *)id;
+  for (int a = 0; a < me->totcol; a++) {
+    BLO_expand(expander, me->mat[a]);
+  }
+
+  BLO_expand(expander, me->key);
+  BLO_expand(expander, me->texcomesh);
+}
+
 IDTypeInfo IDType_ID_ME = {
     .id_code = ID_ME,
     .id_filter = FILTER_ID_ME,
@@ -178,6 +371,12 @@ IDTypeInfo IDType_ID_ME = {
     .free_data = mesh_free_data,
     .make_local = NULL,
     .foreach_id = mesh_foreach_id,
+    .foreach_cache = NULL,
+
+    .blend_write = mesh_blend_write,
+    .blend_read_data = mesh_blend_read_data,
+    .blend_read_lib = mesh_blend_read_lib,
+    .blend_read_expand = mesh_read_expand,
 };
 
 enum {
@@ -453,7 +652,7 @@ static void mesh_ensure_tessellation_customdata(Mesh *me)
 {
   if (UNLIKELY((me->totface != 0) && (me->totpoly == 0))) {
     /* Pass, otherwise this function  clears 'mface' before
-     * versioning 'mface -> mpoly' code kicks in [#30583]
+     * versioning 'mface -> mpoly' code kicks in T30583.
      *
      * Callers could also check but safer to do here - campbell */
   }
@@ -472,7 +671,7 @@ static void mesh_ensure_tessellation_customdata(Mesh *me)
       /* TODO - add some --debug-mesh option */
       if (G.debug & G_DEBUG) {
         /* note: this warning may be un-called for if we are initializing the mesh for the
-         * first time from bmesh, rather then giving a warning about this we could be smarter
+         * first time from bmesh, rather than giving a warning about this we could be smarter
          * and check if there was any data to begin with, for now just print the warning with
          * some info to help troubleshoot what's going on - campbell */
         printf(
@@ -599,9 +798,8 @@ bool BKE_mesh_has_custom_loop_normals(Mesh *me)
   if (me->edit_mesh) {
     return CustomData_has_layer(&me->edit_mesh->bm->ldata, CD_CUSTOMLOOPNORMAL);
   }
-  else {
-    return CustomData_has_layer(&me->ldata, CD_CUSTOMLOOPNORMAL);
-  }
+
+  return CustomData_has_layer(&me->ldata, CD_CUSTOMLOOPNORMAL);
 }
 
 /** Free (or release) any data used by this mesh (does not free the mesh itself). */
@@ -662,9 +860,7 @@ Mesh *BKE_mesh_add(Main *bmain, const char *name)
 {
   Mesh *me;
 
-  me = BKE_libblock_alloc(bmain, ID_ME, name, 0);
-
-  mesh_init_data(&me->id);
+  me = BKE_id_new(bmain, ID_ME, name);
 
   return me;
 }
@@ -694,7 +890,7 @@ Mesh *BKE_mesh_new_nomain(
     int verts_len, int edges_len, int tessface_len, int loops_len, int polys_len)
 {
   Mesh *mesh = BKE_libblock_alloc(
-      NULL, ID_ME, BKE_idtype_idcode_to_name(ID_ME), LIB_ID_COPY_LOCALIZE);
+      NULL, ID_ME, BKE_idtype_idcode_to_name(ID_ME), LIB_ID_CREATE_LOCALIZE);
   BKE_libblock_init_empty(&mesh->id);
 
   /* don't use CustomData_reset(...); because we dont want to touch customdata */
@@ -729,6 +925,7 @@ void BKE_mesh_copy_settings(Mesh *me_dst, const Mesh *me_src)
   me_dst->remesh_mode = me_src->remesh_mode;
 
   me_dst->face_sets_color_seed = me_src->face_sets_color_seed;
+  me_dst->face_sets_color_default = me_src->face_sets_color_default;
 
   /* Copy texture space. */
   me_dst->texflag = me_src->texflag;
@@ -814,16 +1011,8 @@ Mesh *BKE_mesh_copy_for_eval(struct Mesh *source, bool reference)
     flags |= LIB_ID_COPY_CD_REFERENCE;
   }
 
-  Mesh *result;
-  BKE_id_copy_ex(NULL, &source->id, (ID **)&result, flags);
+  Mesh *result = (Mesh *)BKE_id_copy_ex(NULL, &source->id, NULL, flags);
   return result;
-}
-
-Mesh *BKE_mesh_copy(Main *bmain, const Mesh *me)
-{
-  Mesh *me_copy;
-  BKE_id_copy(bmain, &me->id, (ID **)&me_copy);
-  return me_copy;
 }
 
 BMesh *BKE_mesh_to_bmesh_ex(const Mesh *me,
@@ -1104,9 +1293,8 @@ Mesh *BKE_mesh_from_object(Object *ob)
   if (ob->type == OB_MESH) {
     return ob->data;
   }
-  else {
-    return NULL;
-  }
+
+  return NULL;
 }
 
 void BKE_mesh_assign_object(Main *bmain, Object *ob, Mesh *me)
@@ -1278,12 +1466,11 @@ int BKE_mesh_edge_other_vert(const MEdge *e, int v)
   if (e->v1 == v) {
     return e->v2;
   }
-  else if (e->v2 == v) {
+  if (e->v2 == v) {
     return e->v1;
   }
-  else {
-    return -1;
-  }
+
+  return -1;
 }
 
 /**
@@ -1316,8 +1503,11 @@ bool BKE_mesh_minmax(const Mesh *me, float r_min[3], float r_max[3])
 void BKE_mesh_transform(Mesh *me, const float mat[4][4], bool do_keys)
 {
   int i;
-  MVert *mvert = me->mvert;
-  float(*lnors)[3] = CustomData_get_layer(&me->ldata, CD_NORMAL);
+  MVert *mvert = CustomData_duplicate_referenced_layer(&me->vdata, CD_MVERT, me->totvert);
+  float(*lnors)[3] = CustomData_duplicate_referenced_layer(&me->ldata, CD_NORMAL, me->totloop);
+
+  /* If the referenced l;ayer has been re-allocated need to update pointers stored in the mesh. */
+  BKE_mesh_update_customdata_pointers(me, false);
 
   for (i = 0; i < me->totvert; i++, mvert++) {
     mul_m4_v3(mat, mvert->co);
@@ -1366,21 +1556,6 @@ void BKE_mesh_translate(Mesh *me, const float offset[3], const bool do_keys)
   }
 }
 
-void BKE_mesh_ensure_navmesh(Mesh *me)
-{
-  if (!CustomData_has_layer(&me->pdata, CD_RECAST)) {
-    int i;
-    int polys_len = me->totpoly;
-    int *recastData;
-    recastData = (int *)MEM_malloc_arrayN(polys_len, sizeof(int), __func__);
-    for (i = 0; i < polys_len; i++) {
-      recastData[i] = i + 1;
-    }
-    CustomData_add_layer_named(
-        &me->pdata, CD_RECAST, CD_ASSIGN, recastData, polys_len, "recastData");
-  }
-}
-
 void BKE_mesh_tessface_calc(Mesh *mesh)
 {
   mesh->totface = BKE_mesh_tessface_calc_ex(
@@ -1414,30 +1589,29 @@ void BKE_mesh_do_versions_cd_flag_init(Mesh *mesh)
   if (UNLIKELY(mesh->cd_flag)) {
     return;
   }
-  else {
-    MVert *mv;
-    MEdge *med;
-    int i;
 
-    for (mv = mesh->mvert, i = 0; i < mesh->totvert; mv++, i++) {
-      if (mv->bweight != 0) {
-        mesh->cd_flag |= ME_CDFLAG_VERT_BWEIGHT;
+  MVert *mv;
+  MEdge *med;
+  int i;
+
+  for (mv = mesh->mvert, i = 0; i < mesh->totvert; mv++, i++) {
+    if (mv->bweight != 0) {
+      mesh->cd_flag |= ME_CDFLAG_VERT_BWEIGHT;
+      break;
+    }
+  }
+
+  for (med = mesh->medge, i = 0; i < mesh->totedge; med++, i++) {
+    if (med->bweight != 0) {
+      mesh->cd_flag |= ME_CDFLAG_EDGE_BWEIGHT;
+      if (mesh->cd_flag & ME_CDFLAG_EDGE_CREASE) {
         break;
       }
     }
-
-    for (med = mesh->medge, i = 0; i < mesh->totedge; med++, i++) {
-      if (med->bweight != 0) {
-        mesh->cd_flag |= ME_CDFLAG_EDGE_BWEIGHT;
-        if (mesh->cd_flag & ME_CDFLAG_EDGE_CREASE) {
-          break;
-        }
-      }
-      if (med->crease != 0) {
-        mesh->cd_flag |= ME_CDFLAG_EDGE_CREASE;
-        if (mesh->cd_flag & ME_CDFLAG_EDGE_BWEIGHT) {
-          break;
-        }
+    if (med->crease != 0) {
+      mesh->cd_flag |= ME_CDFLAG_EDGE_CREASE;
+      if (mesh->cd_flag & ME_CDFLAG_EDGE_BWEIGHT) {
+        break;
       }
     }
   }

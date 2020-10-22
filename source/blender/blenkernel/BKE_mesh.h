@@ -22,8 +22,8 @@
  * \ingroup bke
  */
 
-/* defines BLI_INLINE */
-#include "BLI_compiler_compat.h"
+#include "BKE_mesh_types.h"
+#include "BLI_utildefines.h"
 
 struct BLI_Stack;
 struct BMEditMesh;
@@ -54,6 +54,7 @@ struct MemArena;
 struct Mesh;
 struct ModifierData;
 struct Object;
+struct PointCloud;
 struct Scene;
 
 #ifdef __cplusplus
@@ -98,7 +99,6 @@ void BKE_mesh_looptri_get_real_edges(const struct Mesh *mesh,
 void BKE_mesh_free(struct Mesh *me);
 void BKE_mesh_clear_geometry(struct Mesh *me);
 struct Mesh *BKE_mesh_add(struct Main *bmain, const char *name);
-struct Mesh *BKE_mesh_copy(struct Main *bmain, const struct Mesh *me);
 void BKE_mesh_copy_settings(struct Mesh *me_dst, const struct Mesh *me_src);
 void BKE_mesh_update_customdata_pointers(struct Mesh *me, const bool do_ensure_tess_cd);
 void BKE_mesh_ensure_skin_customdata(struct Mesh *me);
@@ -119,7 +119,7 @@ struct Mesh *BKE_mesh_new_nomain_from_template_ex(const struct Mesh *me_src,
                                                   int polys_len,
                                                   struct CustomData_MeshMasks mask);
 
-void BKE_mesh_eval_delete(struct Mesh *me_eval);
+void BKE_mesh_eval_delete(struct Mesh *mesh_eval);
 
 /* Performs copy for use during evaluation,
  * optional referencing original arrays to reduce memory. */
@@ -172,6 +172,16 @@ void BKE_mesh_to_curve(struct Main *bmain,
                        struct Depsgraph *depsgraph,
                        struct Scene *scene,
                        struct Object *ob);
+void BKE_pointcloud_from_mesh(struct Mesh *me, struct PointCloud *pointcloud);
+void BKE_mesh_to_pointcloud(struct Main *bmain,
+                            struct Depsgraph *depsgraph,
+                            struct Scene *scene,
+                            struct Object *ob);
+void BKE_mesh_from_pointcloud(struct PointCloud *pointcloud, struct Mesh *me);
+void BKE_pointcloud_to_mesh(struct Main *bmain,
+                            struct Depsgraph *depsgraph,
+                            struct Scene *scene,
+                            struct Object *ob);
 void BKE_mesh_material_index_remove(struct Mesh *me, short index);
 bool BKE_mesh_material_index_used(struct Mesh *me, short index);
 void BKE_mesh_material_index_clear(struct Mesh *me);
@@ -233,8 +243,6 @@ bool BKE_mesh_minmax(const struct Mesh *me, float r_min[3], float r_max[3]);
 void BKE_mesh_transform(struct Mesh *me, const float mat[4][4], bool do_keys);
 void BKE_mesh_translate(struct Mesh *me, const float offset[3], const bool do_keys);
 
-void BKE_mesh_ensure_navmesh(struct Mesh *me);
-
 void BKE_mesh_tessface_calc(struct Mesh *mesh);
 void BKE_mesh_tessface_ensure(struct Mesh *mesh);
 void BKE_mesh_tessface_clear(struct Mesh *mesh);
@@ -256,7 +264,7 @@ void BKE_mesh_vert_coords_apply_with_mat4(struct Mesh *mesh,
                                           const float (*vert_coords)[3],
                                           const float mat[4][4]);
 void BKE_mesh_vert_coords_apply(struct Mesh *mesh, const float (*vert_coords)[3]);
-void BKE_mesh_vert_normals_apply(struct Mesh *mesh, const short (*vertNormals)[3]);
+void BKE_mesh_vert_normals_apply(struct Mesh *mesh, const short (*vert_normals)[3]);
 
 /* *** mesh_evaluate.c *** */
 
@@ -504,7 +512,7 @@ void BKE_mesh_loops_to_mface_corners(struct CustomData *fdata,
                                      int findex,
                                      const int polyindex,
                                      const int mf_len,
-                                     const int numTex,
+                                     const int numUV,
                                      const int numCol,
                                      const bool hasPCol,
                                      const bool hasOrigSpace,
@@ -664,30 +672,22 @@ void BKE_mesh_strip_loose_edges(struct Mesh *me);
 
 void BKE_mesh_calc_edges_legacy(struct Mesh *me, const bool use_old);
 void BKE_mesh_calc_edges_loose(struct Mesh *mesh);
-void BKE_mesh_calc_edges(struct Mesh *mesh, bool update, const bool select);
+void BKE_mesh_calc_edges(struct Mesh *mesh, bool keep_existing_edges, const bool select_new_edges);
 void BKE_mesh_calc_edges_tessface(struct Mesh *mesh);
 
 /* In DerivedMesh.c */
 void BKE_mesh_wrapper_deferred_finalize(struct Mesh *me_eval,
-                                        const CustomData_MeshMasks *final_datamask);
+                                        const CustomData_MeshMasks *cd_mask_finalize);
 
 /* **** Depsgraph evaluation **** */
 
 void BKE_mesh_eval_geometry(struct Depsgraph *depsgraph, struct Mesh *mesh);
 
 /* Draw Cache */
-enum {
-  BKE_MESH_BATCH_DIRTY_ALL = 0,
-  BKE_MESH_BATCH_DIRTY_SELECT,
-  BKE_MESH_BATCH_DIRTY_SELECT_PAINT,
-  BKE_MESH_BATCH_DIRTY_SHADING,
-  BKE_MESH_BATCH_DIRTY_UVEDIT_ALL,
-  BKE_MESH_BATCH_DIRTY_UVEDIT_SELECT,
-};
-void BKE_mesh_batch_cache_dirty_tag(struct Mesh *me, int mode);
+void BKE_mesh_batch_cache_dirty_tag(struct Mesh *me, eMeshBatchDirtyMode mode);
 void BKE_mesh_batch_cache_free(struct Mesh *me);
 
-extern void (*BKE_mesh_batch_cache_dirty_tag_cb)(struct Mesh *me, int mode);
+extern void (*BKE_mesh_batch_cache_dirty_tag_cb)(struct Mesh *me, eMeshBatchDirtyMode mode);
 extern void (*BKE_mesh_batch_cache_free_cb)(struct Mesh *me);
 
 /* Inlines */

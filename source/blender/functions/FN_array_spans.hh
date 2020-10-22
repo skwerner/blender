@@ -20,7 +20,7 @@
  * \ingroup fn
  *
  * An ArraySpan is a span where every element contains an array (instead of a single element as is
- * the case in a normal span). It's main use case is to reference many small arrays.
+ * the case in a normal span). Its main use case is to reference many small arrays.
  */
 
 #include "FN_spans.hh"
@@ -157,7 +157,7 @@ class GVArraySpan : public VArraySpanBase<void> {
     this->type_ = &array.type();
     this->virtual_size_ = virtual_size;
     this->category_ = VArraySpanCategory::SingleArray;
-    this->data_.single_array.start = array.buffer();
+    this->data_.single_array.start = array.data();
     this->data_.single_array.size = array.size();
   }
 

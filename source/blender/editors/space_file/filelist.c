@@ -943,11 +943,9 @@ void filelist_init_icons(void)
 
 void filelist_free_icons(void)
 {
-  int i;
-
   BLI_assert(G.background == false);
 
-  for (i = 0; i < SPECIAL_IMG_MAX; i++) {
+  for (int i = 0; i < SPECIAL_IMG_MAX; i++) {
     IMB_freeImBuf(gSpecialFileImages[i]);
     gSpecialFileImages[i] = NULL;
   }
@@ -1106,7 +1104,7 @@ static int filelist_geticon_ex(FileDirEntry *file,
     return ICON_FILE_ARCHIVE;
   }
   if (typeflag & FILE_TYPE_BLENDERLIB) {
-    const int ret = UI_idcode_icon_get(file->blentype);
+    const int ret = UI_icon_from_idcode(file->blentype);
     if (ret != ICON_NONE) {
       return ret;
     }
@@ -1127,7 +1125,7 @@ static void parent_dir_until_exists_or_default_root(char *dir)
 {
   if (!BLI_path_parent_dir_until_exists(dir)) {
 #ifdef WIN32
-    get_default_root(dir);
+    BLI_windows_get_default_root_dir(dir);
 #else
     strcpy(dir, "/");
 #endif
@@ -2212,7 +2210,7 @@ static bool file_is_blend_backup(const char *str)
     }
   }
 
-  return (retval);
+  return retval;
 }
 
 /* TODO: Maybe we should move this to BLI?
@@ -2506,14 +2504,18 @@ static int filelist_readjob_list_dir(const char *root,
 
       /* Set initial file type and attributes. */
       entry->attributes = BLI_file_attributes(full_path);
-      if (S_ISDIR(files[i].s.st_mode)) {
+      if (S_ISDIR(files[i].s.st_mode)
+#ifdef __APPLE__
+          && !(ED_path_extension_type(full_path) & FILE_TYPE_APPLICATIONBUNDLE)
+#endif
+      ) {
         entry->typeflag = FILE_TYPE_DIR;
       }
 
       /* Is this a file that points to another file? */
       if (entry->attributes & FILE_ATTR_ALIAS) {
         entry->redirection_path = MEM_callocN(FILE_MAXDIR, __func__);
-        if (BLI_file_alias_target(entry->redirection_path, full_path)) {
+        if (BLI_file_alias_target(full_path, entry->redirection_path)) {
           if (BLI_is_dir(entry->redirection_path)) {
             entry->typeflag = FILE_TYPE_DIR;
             BLI_path_slash_ensure(entry->redirection_path);
@@ -2642,7 +2644,7 @@ static void filelist_readjob_main_recursive(Main *bmain, FileList *filelist)
   ListBase *lb;
   int a, fake, idcode, ok, totlib, totbl;
 
-  // filelist->type = FILE_MAIN; // XXX TODO: add modes to filebrowser
+  // filelist->type = FILE_MAIN; /* XXX TODO: add modes to filebrowser */
 
   BLI_assert(filelist->filelist.entries == NULL);
 

@@ -117,7 +117,7 @@ void createTransNlaData(bContext *C, TransInfo *t)
 
     /* only consider selected strips */
     for (strip = nlt->strips.first; strip; strip = strip->next) {
-      // TODO: we can make strips have handles later on...
+      /* TODO: we can make strips have handles later on. */
       /* transition strips can't get directly transformed */
       if (strip->type != NLASTRIP_TYPE_TRANSITION) {
         if (strip->flag & NLASTRIP_FLAG_SELECT) {
@@ -166,7 +166,7 @@ void createTransNlaData(bContext *C, TransInfo *t)
 
       /* only consider selected strips */
       for (strip = nlt->strips.first; strip; strip = strip->next) {
-        // TODO: we can make strips have handles later on...
+        /* TODO: we can make strips have handles later on. */
         /* transition strips can't get directly transformed */
         if (strip->type != NLASTRIP_TYPE_TRANSITION) {
           if (strip->flag & NLASTRIP_FLAG_SELECT) {
@@ -445,7 +445,7 @@ void recalcData_nla(TransInfo *t)
      * (e.g. for transition strips, the values are taken from the neighbors)
      *
      * NOTE: we write these twice to avoid truncation errors which can arise when
-     * moving the strips a large distance using numeric input [#33852]
+     * moving the strips a large distance using numeric input T33852.
      */
     RNA_pointer_create(NULL, &RNA_NlaStrip, strip, &strip_ptr);
 

@@ -41,10 +41,6 @@ static struct {
   float inverted_cdf[FILTER_CDF_TABLE_SIZE];
 } e_data = {false}; /* Engine data */
 
-extern char datatoc_common_uniforms_lib_glsl[];
-extern char datatoc_common_view_lib_glsl[];
-extern char datatoc_bsdf_common_lib_glsl[];
-
 static float UNUSED_FUNCTION(filter_box)(float UNUSED(x))
 {
   return 1.0f;
@@ -171,7 +167,7 @@ void EEVEE_temporal_sampling_update_matrices(EEVEE_Data *vedata)
 
   double ht_point[2];
   double ht_offset[2] = {0.0, 0.0};
-  uint ht_primes[2] = {2, 3};
+  const uint ht_primes[2] = {2, 3};
 
   BLI_halton_2d(ht_primes, ht_offset, effects->taa_current_sample - 1, ht_point);
 
@@ -247,8 +243,11 @@ int EEVEE_temporal_sampling_init(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data
     effects->taa_total_sample = first_sample_only ? 1 : scene_eval->eevee.taa_samples;
     MAX2(effects->taa_total_sample, 0);
 
-    DRW_view_persmat_get(NULL, persmat, false);
-    view_is_valid = view_is_valid && compare_m4m4(persmat, effects->prev_drw_persmat, FLT_MIN);
+    /* Motion blur steps could reset the sampling when camera is animated (see T79970). */
+    if (!DRW_state_is_scene_render()) {
+      DRW_view_persmat_get(NULL, persmat, false);
+      view_is_valid = view_is_valid && compare_m4m4(persmat, effects->prev_drw_persmat, FLT_MIN);
+    }
 
     /* Prevent ghosting from probe data. */
     view_is_valid = view_is_valid && (effects->prev_drw_support == DRW_state_draw_support()) &&

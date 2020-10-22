@@ -80,7 +80,7 @@ void BKE_mask_layer_rename(struct Mask *mask,
                            char *oldname,
                            char *newname);
 
-struct MaskLayer *BKE_mask_layer_copy(const struct MaskLayer *layer);
+struct MaskLayer *BKE_mask_layer_copy(const struct MaskLayer *masklay);
 void BKE_mask_layer_copy_list(struct ListBase *masklayers_new, const struct ListBase *masklayers);
 
 /* splines */
@@ -141,10 +141,6 @@ void BKE_mask_point_select_set_handle(struct MaskSplinePoint *point,
 
 /* general */
 struct Mask *BKE_mask_new(struct Main *bmain, const char *name);
-struct Mask *BKE_mask_copy_nolib(struct Mask *mask);
-struct Mask *BKE_mask_copy(struct Main *bmain, const struct Mask *mask);
-
-void BKE_mask_free(struct Mask *mask);
 
 void BKE_mask_coord_from_frame(float r_co[2], const float co[2], const float frame_size[2]);
 void BKE_mask_coord_from_movieclip(struct MovieClip *clip,

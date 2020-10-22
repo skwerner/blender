@@ -25,6 +25,7 @@
 
 #include "BLT_translation.h"
 
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
@@ -59,16 +60,16 @@ static void initData(ModifierData *md)
 {
   MirrorModifierData *mmd = (MirrorModifierData *)md;
 
-  mmd->flag |= (MOD_MIR_AXIS_X | MOD_MIR_VGROUP);
-  mmd->tolerance = 0.001;
-  mmd->mirror_ob = NULL;
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(mmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(mmd, DNA_struct_default_get(MirrorModifierData), modifier);
 }
 
-static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk, void *userData)
+static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   MirrorModifierData *mmd = (MirrorModifierData *)md;
 
-  walk(userData, ob, &mmd->mirror_ob, IDWALK_CB_NOP);
+  walk(userData, ob, (ID **)&mmd->mirror_ob, IDWALK_CB_NOP);
 }
 
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
@@ -124,60 +125,58 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
   return result;
 }
 
-static void panel_draw(const bContext *C, Panel *panel)
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *row, *col, *sub;
   uiLayout *layout = panel->layout;
   int toggles_flag = UI_ITEM_R_TOGGLE | UI_ITEM_R_FORCE_BLANK_DECORATE;
 
   PropertyRNA *prop;
-  PointerRNA ptr;
   PointerRNA ob_ptr;
-  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
 
   col = uiLayoutColumn(layout, false);
   uiLayoutSetPropSep(col, true);
 
-  prop = RNA_struct_find_property(&ptr, "use_axis");
+  prop = RNA_struct_find_property(ptr, "use_axis");
   row = uiLayoutRowWithHeading(col, true, IFACE_("Axis"));
-  uiItemFullR(row, &ptr, prop, 0, 0, toggles_flag, IFACE_("X"), ICON_NONE);
-  uiItemFullR(row, &ptr, prop, 1, 0, toggles_flag, IFACE_("Y"), ICON_NONE);
-  uiItemFullR(row, &ptr, prop, 2, 0, toggles_flag, IFACE_("Z"), ICON_NONE);
+  uiItemFullR(row, ptr, prop, 0, 0, toggles_flag, IFACE_("X"), ICON_NONE);
+  uiItemFullR(row, ptr, prop, 1, 0, toggles_flag, IFACE_("Y"), ICON_NONE);
+  uiItemFullR(row, ptr, prop, 2, 0, toggles_flag, IFACE_("Z"), ICON_NONE);
 
-  prop = RNA_struct_find_property(&ptr, "use_bisect_axis");
+  prop = RNA_struct_find_property(ptr, "use_bisect_axis");
   row = uiLayoutRowWithHeading(col, true, IFACE_("Bisect"));
-  uiItemFullR(row, &ptr, prop, 0, 0, toggles_flag, IFACE_("X"), ICON_NONE);
-  uiItemFullR(row, &ptr, prop, 1, 0, toggles_flag, IFACE_("Y"), ICON_NONE);
-  uiItemFullR(row, &ptr, prop, 2, 0, toggles_flag, IFACE_("Z"), ICON_NONE);
+  uiItemFullR(row, ptr, prop, 0, 0, toggles_flag, IFACE_("X"), ICON_NONE);
+  uiItemFullR(row, ptr, prop, 1, 0, toggles_flag, IFACE_("Y"), ICON_NONE);
+  uiItemFullR(row, ptr, prop, 2, 0, toggles_flag, IFACE_("Z"), ICON_NONE);
 
-  prop = RNA_struct_find_property(&ptr, "use_bisect_flip_axis");
+  prop = RNA_struct_find_property(ptr, "use_bisect_flip_axis");
   row = uiLayoutRowWithHeading(col, true, IFACE_("Flip"));
-  uiItemFullR(row, &ptr, prop, 0, 0, toggles_flag, IFACE_("X"), ICON_NONE);
-  uiItemFullR(row, &ptr, prop, 1, 0, toggles_flag, IFACE_("Y"), ICON_NONE);
-  uiItemFullR(row, &ptr, prop, 2, 0, toggles_flag, IFACE_("Z"), ICON_NONE);
+  uiItemFullR(row, ptr, prop, 0, 0, toggles_flag, IFACE_("X"), ICON_NONE);
+  uiItemFullR(row, ptr, prop, 1, 0, toggles_flag, IFACE_("Y"), ICON_NONE);
+  uiItemFullR(row, ptr, prop, 2, 0, toggles_flag, IFACE_("Z"), ICON_NONE);
 
   uiItemS(col);
 
-  uiItemR(col, &ptr, "mirror_object", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "mirror_object", 0, NULL, ICON_NONE);
 
-  uiItemR(col, &ptr, "use_clip", 0, IFACE_("Clipping"), ICON_NONE);
+  uiItemR(col, ptr, "use_clip", 0, IFACE_("Clipping"), ICON_NONE);
 
   row = uiLayoutRowWithHeading(col, true, IFACE_("Merge"));
-  uiItemR(row, &ptr, "use_mirror_merge", 0, "", ICON_NONE);
+  uiItemR(row, ptr, "use_mirror_merge", 0, "", ICON_NONE);
   sub = uiLayoutRow(row, true);
-  uiLayoutSetActive(sub, RNA_boolean_get(&ptr, "use_mirror_merge"));
-  uiItemR(sub, &ptr, "merge_threshold", 0, "", ICON_NONE);
+  uiLayoutSetActive(sub, RNA_boolean_get(ptr, "use_mirror_merge"));
+  uiItemR(sub, ptr, "merge_threshold", 0, "", ICON_NONE);
 
-  modifier_panel_end(layout, &ptr);
+  modifier_panel_end(layout, ptr);
 }
 
-static void data_panel_draw(const bContext *C, Panel *panel)
+static void data_panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *col, *row, *sub;
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
 
   uiLayoutSetPropSep(layout, true);
 
@@ -185,27 +184,27 @@ static void data_panel_draw(const bContext *C, Panel *panel)
   row = uiLayoutRowWithHeading(col, true, IFACE_("Mirror U"));
   uiLayoutSetPropDecorate(row, false);
   sub = uiLayoutRow(row, true);
-  uiItemR(sub, &ptr, "use_mirror_u", 0, "", ICON_NONE);
+  uiItemR(sub, ptr, "use_mirror_u", 0, "", ICON_NONE);
   sub = uiLayoutRow(sub, true);
-  uiLayoutSetActive(sub, RNA_boolean_get(&ptr, "use_mirror_u"));
-  uiItemR(sub, &ptr, "mirror_offset_u", UI_ITEM_R_SLIDER, "", ICON_NONE);
-  uiItemDecoratorR(row, &ptr, "mirror_offset_u", 0);
+  uiLayoutSetActive(sub, RNA_boolean_get(ptr, "use_mirror_u"));
+  uiItemR(sub, ptr, "mirror_offset_u", UI_ITEM_R_SLIDER, "", ICON_NONE);
+  uiItemDecoratorR(row, ptr, "mirror_offset_u", 0);
 
   row = uiLayoutRowWithHeading(col, true, IFACE_("V"));
   uiLayoutSetPropDecorate(row, false);
   sub = uiLayoutRow(row, true);
-  uiItemR(sub, &ptr, "use_mirror_v", 0, "", ICON_NONE);
+  uiItemR(sub, ptr, "use_mirror_v", 0, "", ICON_NONE);
   sub = uiLayoutRow(sub, true);
-  uiLayoutSetActive(sub, RNA_boolean_get(&ptr, "use_mirror_v"));
-  uiItemR(sub, &ptr, "mirror_offset_v", UI_ITEM_R_SLIDER, "", ICON_NONE);
-  uiItemDecoratorR(row, &ptr, "mirror_offset_v", 0);
+  uiLayoutSetActive(sub, RNA_boolean_get(ptr, "use_mirror_v"));
+  uiItemR(sub, ptr, "mirror_offset_v", UI_ITEM_R_SLIDER, "", ICON_NONE);
+  uiItemDecoratorR(row, ptr, "mirror_offset_v", 0);
 
   col = uiLayoutColumn(layout, true);
-  uiItemR(col, &ptr, "offset_u", UI_ITEM_R_SLIDER, IFACE_("Offset U"), ICON_NONE);
-  uiItemR(col, &ptr, "offset_v", UI_ITEM_R_SLIDER, IFACE_("V"), ICON_NONE);
+  uiItemR(col, ptr, "offset_u", UI_ITEM_R_SLIDER, IFACE_("Offset U"), ICON_NONE);
+  uiItemR(col, ptr, "offset_v", UI_ITEM_R_SLIDER, IFACE_("V"), ICON_NONE);
 
-  uiItemR(layout, &ptr, "use_mirror_vertex_groups", 0, IFACE_("Vertex Groups"), ICON_NONE);
-  uiItemR(layout, &ptr, "use_mirror_udim", 0, IFACE_("Flip UDIM"), ICON_NONE);
+  uiItemR(layout, ptr, "use_mirror_vertex_groups", 0, IFACE_("Vertex Groups"), ICON_NONE);
+  uiItemR(layout, ptr, "use_mirror_udim", 0, IFACE_("Flip UDIM"), ICON_NONE);
 }
 
 static void panelRegister(ARegionType *region_type)
@@ -218,12 +217,14 @@ ModifierTypeInfo modifierType_Mirror = {
     /* name */ "Mirror",
     /* structName */ "MirrorModifierData",
     /* structSize */ sizeof(MirrorModifierData),
+    /* srna */ &RNA_MirrorModifier,
     /* type */ eModifierTypeType_Constructive,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsMapping |
         eModifierTypeFlag_SupportsEditmode | eModifierTypeFlag_EnableInEditmode |
         eModifierTypeFlag_AcceptsCVs |
         /* this is only the case when 'MOD_MIR_VGROUP' is used */
         eModifierTypeFlag_UsesPreview,
+    /* icon */ ICON_MOD_MIRROR,
 
     /* copyData */ BKE_modifier_copydata_generic,
 
@@ -243,8 +244,7 @@ ModifierTypeInfo modifierType_Mirror = {
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
     /* panelRegister */ panelRegister,

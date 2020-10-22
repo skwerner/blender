@@ -35,7 +35,7 @@ import os.path, shutil, math, sys, gc, multiprocessing, platform, time\n\
 withMPBake = False # Bake files asynchronously\n\
 withMPSave = False # Save files asynchronously\n\
 isWindows = platform.system() != 'Darwin' and platform.system() != 'Linux'\n\
-# TODO (sebbas): Use this to simulate Windows multiprocessing (has default mode spawn)\n\
+# TODO(sebbas): Use this to simulate Windows multiprocessing (has default mode spawn)\n\
 #try:\n\
 #    multiprocessing.set_start_method('spawn')\n\
 #except:\n\
@@ -122,7 +122,6 @@ timePerFrame_s$ID$ = $TIME_PER_FRAME$\n\
 # In Blender fluid.c: frame_length = DT_DEFAULT * (25.0 / fps) * time_scale\n\
 # with DT_DEFAULT = 0.1\n\
 frameLength_s$ID$ = $FRAME_LENGTH$\n\
-frameLengthUnscaled_s$ID$  = frameLength_s$ID$ / timeScale_s$ID$\n\
 frameLengthRaw_s$ID$ = 0.1 * 25 # dt = 0.1 at 25 fps\n\
 \n\
 dt0_s$ID$          = $DT$\n\
@@ -149,23 +148,14 @@ mantaMsg('1 Blender length unit is ' + str(ratioResToBLength_s$ID$) + ' Mantaflo
 ratioBTimeToTimestep_s$ID$ = float(1) / float(frameLengthRaw_s$ID$) # the time within 1 blender time unit, see also fluid.c\n\
 mantaMsg('1 Blender time unit is ' + str(ratioBTimeToTimestep_s$ID$) + ' Mantaflow time units long.')\n\
 \n\
-ratioFrameToFramelength_s$ID$ = float(1) / float(frameLengthUnscaled_s$ID$ ) # the time within 1 frame\n\
-mantaMsg('frame / frameLength is ' + str(ratioFrameToFramelength_s$ID$) + ' Mantaflow time units long.')\n\
-\n\
 scaleAcceleration_s$ID$ = ratioResToBLength_s$ID$ * (ratioBTimeToTimestep_s$ID$**2)# [meters/btime^2] to [cells/timestep^2] (btime: sec, min, or h, ...)\n\
 mantaMsg('scaleAcceleration is ' + str(scaleAcceleration_s$ID$))\n\
-\n\
-scaleSpeedFrames_s$ID$ = ratioResToBLength_s$ID$ * ratioFrameToFramelength_s$ID$ # [blength/frame] to [cells/frameLength]\n\
-mantaMsg('scaleSpeed is ' + str(scaleSpeedFrames_s$ID$))\n\
-\n\
-scaleSpeedTime_s$ID$ = ratioResToBLength_s$ID$ * ratioBTimeToTimestep_s$ID$ # [blength/btime] to [cells/frameLength]\n\
-mantaMsg('scaleSpeedTime is ' + str(scaleSpeedTime_s$ID$))\n\
 \n\
 gravity_s$ID$ *= scaleAcceleration_s$ID$ # scale from world acceleration to cell based acceleration\n\
 \n\
 # OpenVDB options\n\
 vdbCompression_s$ID$ = $COMPRESSION_OPENVDB$\n\
-vdbPrecisionHalf_s$ID$ = $PRECISION_OPENVDB$\n\
+vdbPrecision_s$ID$ = $PRECISION_OPENVDB$\n\
 \n\
 # Cache file names\n\
 file_data_s$ID$ = '$NAME_DATA$'\n\
@@ -343,7 +333,6 @@ const std::string fluid_alloc_invel =
     "\n\
 mantaMsg('Allocating initial velocity data')\n\
 invelC_s$ID$  = s$ID$.create(VecGrid, name='$NAME_INVELC$')\n\
-invel_s$ID$   = s$ID$.create(MACGrid, name='$NAME_INVEL$')\n\
 x_invel_s$ID$ = s$ID$.create(RealGrid, name='$NAME_INVEL_X$')\n\
 y_invel_s$ID$ = s$ID$.create(RealGrid, name='$NAME_INVEL_Y$')\n\
 z_invel_s$ID$ = s$ID$.create(RealGrid, name='$NAME_INVEL_Z$')\n";
@@ -381,17 +370,10 @@ def fluid_pre_step_$ID$():\n\
         x_obvel_s$ID$.safeDivide(numObs_s$ID$)\n\
         y_obvel_s$ID$.safeDivide(numObs_s$ID$)\n\
         z_obvel_s$ID$.safeDivide(numObs_s$ID$)\n\
-        \n\
-        x_obvel_s$ID$.multConst(scaleSpeedFrames_s$ID$)\n\
-        y_obvel_s$ID$.multConst(scaleSpeedFrames_s$ID$)\n\
-        z_obvel_s$ID$.multConst(scaleSpeedFrames_s$ID$)\n\
         copyRealToVec3(sourceX=x_obvel_s$ID$, sourceY=y_obvel_s$ID$, sourceZ=z_obvel_s$ID$, target=obvelC_s$ID$)\n\
     \n\
     # translate invels (world space) to grid space\n\
     if using_invel_s$ID$:\n\
-        x_invel_s$ID$.multConst(scaleSpeedTime_s$ID$)\n\
-        y_invel_s$ID$.multConst(scaleSpeedTime_s$ID$)\n\
-        z_invel_s$ID$.multConst(scaleSpeedTime_s$ID$)\n\
         copyRealToVec3(sourceX=x_invel_s$ID$, sourceY=y_invel_s$ID$, sourceZ=z_invel_s$ID$, target=invelC_s$ID$)\n\
     \n\
     if using_guiding_s$ID$:\n\
@@ -401,9 +383,6 @@ def fluid_pre_step_$ID$():\n\
         velT_s$ID$.multConst(vec3(gamma_sg$ID$))\n\
     \n\
     # translate external forces (world space) to grid space\n\
-    x_force_s$ID$.multConst(scaleSpeedFrames_s$ID$)\n\
-    y_force_s$ID$.multConst(scaleSpeedFrames_s$ID$)\n\
-    z_force_s$ID$.multConst(scaleSpeedFrames_s$ID$)\n\
     copyRealToVec3(sourceX=x_force_s$ID$, sourceY=y_force_s$ID$, sourceZ=z_force_s$ID$, target=forces_s$ID$)\n\
     \n\
     # If obstacle has velocity, i.e. is a moving obstacle, switch to dynamic preconditioner\n\
@@ -418,19 +397,6 @@ const std::string fluid_post_step =
     "\n\
 def fluid_post_step_$ID$():\n\
     mantaMsg('Fluid post step')\n\
-    forces_s$ID$.clear()\n\
-    x_force_s$ID$.clear()\n\
-    y_force_s$ID$.clear()\n\
-    z_force_s$ID$.clear()\n\
-    \n\
-    if using_guiding_s$ID$:\n\
-        weightGuide_s$ID$.clear()\n\
-    if using_invel_s$ID$:\n\
-        x_invel_s$ID$.clear()\n\
-        y_invel_s$ID$.clear()\n\
-        z_invel_s$ID$.clear()\n\
-        invel_s$ID$.clear()\n\
-        invelC_s$ID$.clear()\n\
     \n\
     # Copy vel grid to reals grids (which Blender internal will in turn use for vel access)\n\
     copyVec3ToReal(source=vel_s$ID$, targetX=x_vel_s$ID$, targetY=y_vel_s$ID$, targetZ=z_vel_s$ID$)\n";
@@ -596,7 +562,7 @@ def bake_mesh_process_$ID$(framenr, format_data, format_mesh, path_mesh):\n\
     sm$ID$.timestep = frameLength_s$ID$ # no adaptive timestep for mesh\n\
     \n\
     #if using_smoke_s$ID$:\n\
-        # TODO (sebbas): Future update could include smoke mesh (vortex sheets)\n\
+        # TODO(sebbas): Future update could include smoke mesh (vortex sheets)\n\
     if using_liquid_s$ID$:\n\
         liquid_step_mesh_$ID$()\n\
         liquid_save_mesh_$ID$(path_mesh, framenr, format_mesh)\n\
@@ -620,7 +586,7 @@ def bake_particles_process_$ID$(framenr, format_particles, path_particles, resum
     sp$ID$.timestep = frameLength_s$ID$ # no adaptive timestep for particles\n\
     \n\
     #if using_smoke_s$ID$:\n\
-        # TODO (sebbas): Future update could include smoke particles (e.g. fire sparks)\n\
+        # TODO(sebbas): Future update could include smoke particles (e.g. fire sparks)\n\
     if using_liquid_s$ID$:\n\
         liquid_step_particles_$ID$()\n\
         liquid_save_particles_$ID$(path_particles, framenr, format_particles, resumable)\n\
@@ -640,10 +606,6 @@ def bake_guiding_process_$ID$(framenr, format_guiding, path_guiding, resumable):
     x_guidevel_s$ID$.safeDivide(numGuides_s$ID$)\n\
     y_guidevel_s$ID$.safeDivide(numGuides_s$ID$)\n\
     z_guidevel_s$ID$.safeDivide(numGuides_s$ID$)\n\
-    \n\
-    x_guidevel_s$ID$.multConst(scaleSpeedFrames_s$ID$)\n\
-    y_guidevel_s$ID$.multConst(scaleSpeedFrames_s$ID$)\n\
-    z_guidevel_s$ID$.multConst(scaleSpeedFrames_s$ID$)\n\
     copyRealToVec3(sourceX=x_guidevel_s$ID$, sourceY=y_guidevel_s$ID$, sourceZ=z_guidevel_s$ID$, target=guidevelC_s$ID$)\n\
     \n\
     mantaMsg('Extrapolating guiding velocity')\n\
@@ -732,7 +694,7 @@ def fluid_file_export_s$ID$(framenr, file_format, path, dict, file_name=None, mo
             file = os.path.join(path, file_name + '_' + framenr + file_format)\n\
             if not os.path.isfile(file) or mode_override:\n\
                 if file_format == '.vdb':\n\
-                    saveCombined = save(name=file, objects=list(dict.values()), worldSize=domainSize_s$ID$, skipDeletedParts=True, compression=vdbCompression_s$ID$, precisionHalf=vdbPrecisionHalf_s$ID$)\n\
+                    saveCombined = save(name=file, objects=list(dict.values()), worldSize=domainSize_s$ID$, skipDeletedParts=True, compression=vdbCompression_s$ID$, precision=vdbPrecision_s$ID$)\n\
                 elif file_format == '.bobj.gz' or file_format == '.obj':\n\
                     for name, object in dict.items():\n\
                         if not os.path.isfile(file) or mode_override:\n\
@@ -783,7 +745,7 @@ while current_frame_s$ID$ <= end_frame_s$ID$:\n\
     \n\
     # Load already simulated data from cache:\n\
     if loop_cnt < from_cache_cnt:\n\
-        load(current_frame_s$ID$, cache_resumable)\n\
+        load_data(current_frame_s$ID$, cache_resumable)\n\
     \n\
     # Otherwise simulate new data\n\
     else:\n\

@@ -36,10 +36,6 @@ set(INC
   ../../../../intern/guardedalloc
 )
 
-set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
-)
-
 set(SRC
   paint_cursor.c
   paint_curve.c
@@ -60,6 +56,7 @@ set(SRC
   paint_vertex_weight_utils.c
   sculpt.c
   sculpt_automasking.c
+  sculpt_boundary.c
   sculpt_cloth.c
   sculpt_detail.c
   sculpt_dyntopo.c
@@ -89,6 +86,5 @@ if(WITH_INTERNATIONAL)
   add_definitions(-DWITH_INTERNATIONAL)
 endif()
 
-add_definitions(${GL_DEFINITIONS})
 
 blender_add_lib(bf_editor_sculpt_paint "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

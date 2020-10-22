@@ -131,7 +131,7 @@ typedef struct ParticleData {
   /** Index to derived mesh data (face) to avoid slow lookups. */
   int num_dmcache;
 
-  /** Coordinates on face/edge number "num" and depth alon.g*/
+  /** Coordinates on face/edge number "num" and depth along. */
   float fuv[4], foffset;
   /* face normal for volume emission. */
 
@@ -272,7 +272,7 @@ typedef struct ParticleSettings {
 
   struct Collection *instance_collection;
   struct ListBase instance_weights;
-  struct Collection *force_group DNA_DEPRECATED;  // deprecated
+  struct Collection *force_group DNA_DEPRECATED; /* deprecated */
   struct Object *instance_object;
   struct Object *bb_ob;
   /** Old animation system, deprecated for 2.5. */

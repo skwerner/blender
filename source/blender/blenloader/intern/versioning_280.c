@@ -190,7 +190,7 @@ static void do_version_workspaces_create_from_screens(Main *bmain)
 static void do_version_area_change_space_to_space_action(ScrArea *area, const Scene *scene)
 {
   SpaceType *stype = BKE_spacetype_from_id(SPACE_ACTION);
-  SpaceAction *saction = (SpaceAction *)stype->new (area, scene);
+  SpaceAction *saction = (SpaceAction *)stype->create(area, scene);
   ARegion *region_channels;
 
   /* Properly free current regions */
@@ -241,7 +241,7 @@ static void do_version_workspaces_after_lib_link(Main *bmain)
       if (screen->temp) {
         /* We do not generate a new workspace for those screens...
          * still need to set some data in win. */
-        win->workspace_hook = BKE_workspace_instance_hook_create(bmain);
+        win->workspace_hook = BKE_workspace_instance_hook_create(bmain, win->winid);
         win->scene = screen->scene;
         /* Deprecated from now on! */
         win->screen = NULL;
@@ -254,10 +254,10 @@ static void do_version_workspaces_after_lib_link(Main *bmain)
       WorkSpaceLayout *layout = BKE_workspace_layout_find(workspace, win->screen);
       BLI_assert(layout != NULL);
 
-      win->workspace_hook = BKE_workspace_instance_hook_create(bmain);
+      win->workspace_hook = BKE_workspace_instance_hook_create(bmain, win->winid);
 
       BKE_workspace_active_set(win->workspace_hook, workspace);
-      BKE_workspace_active_layout_set(win->workspace_hook, workspace, layout);
+      BKE_workspace_active_layout_set(win->workspace_hook, win->winid, workspace, layout);
 
       /* Move scene and view layer to window. */
       Scene *scene = screen->scene;
@@ -890,7 +890,7 @@ static void do_versions_material_convert_legacy_blend_mode(bNodeTree *ntree, cha
       bNodeSocket *color_socket = nodeFindSocket(transp_node, SOCK_IN, "Color");
       bNodeSocket *transp_socket = nodeFindSocket(transp_node, SOCK_OUT, "BSDF");
 
-      /* If incomming link is from a closure socket, we need to convert it. */
+      /* If incoming link is from a closure socket, we need to convert it. */
       if (fromsock->type == SOCK_SHADER) {
         transp_node->locx = 0.33f * fromnode->locx + 0.66f * tonode->locx;
         transp_node->locy = 0.33f * fromnode->locy + 0.66f * tonode->locy;
@@ -978,7 +978,7 @@ static void do_version_curvemapping_walker(Main *bmain, void (*callback)(CurveMa
       }
     }
 
-    // toolsettings
+    /* toolsettings */
     ToolSettings *ts = scene->toolsettings;
     if (ts->vpaint) {
       callback(ts->vpaint->paint.cavity_curve);
@@ -1201,7 +1201,7 @@ static void do_version_fcurve_hide_viewport_fix(struct ID *UNUSED(id),
                                                 struct FCurve *fcu,
                                                 void *UNUSED(user_data))
 {
-  if (strcmp(fcu->rna_path, "hide")) {
+  if (fcu->rna_path == NULL || !STREQ(fcu->rna_path, "hide")) {
     return;
   }
 
@@ -1242,7 +1242,12 @@ void do_versions_after_linking_280(Main *bmain, ReportList *UNUSED(reports))
               break;
             }
           }
-          BLI_assert(collection_hidden != NULL);
+          if (collection_hidden == NULL) {
+            /* This should never happen (objects are always supposed to be instantiated in a
+             * scene), but it does sometimes, see e.g. T81168.
+             * Just put them in first hidden collection in those cases. */
+            collection_hidden = &hidden_collection_array[0];
+          }
 
           if (*collection_hidden == NULL) {
             char name[MAX_ID_NAME];
@@ -1282,20 +1287,20 @@ void do_versions_after_linking_280(Main *bmain, ReportList *UNUSED(reports))
       LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
         LISTBASE_FOREACH (SpaceLink *, space, &area->spacedata) {
           if (space->spacetype == SPACE_OUTLINER) {
-            SpaceOutliner *soutliner = (SpaceOutliner *)space;
+            SpaceOutliner *space_outliner = (SpaceOutliner *)space;
 
-            soutliner->outlinevis = SO_VIEW_LAYER;
+            space_outliner->outlinevis = SO_VIEW_LAYER;
 
             if (BLI_listbase_count_at_most(&layer->layer_collections, 2) == 1) {
-              if (soutliner->treestore == NULL) {
-                soutliner->treestore = BLI_mempool_create(
+              if (space_outliner->treestore == NULL) {
+                space_outliner->treestore = BLI_mempool_create(
                     sizeof(TreeStoreElem), 1, 512, BLI_MEMPOOL_ALLOW_ITER);
               }
 
               /* Create a tree store element for the collection. This is normally
                * done in check_persistent (outliner_tree.c), but we need to access
                * it here :/ (expand element if it's the only one) */
-              TreeStoreElem *tselem = BLI_mempool_calloc(soutliner->treestore);
+              TreeStoreElem *tselem = BLI_mempool_calloc(space_outliner->treestore);
               tselem->type = TSE_LAYER_COLLECTION;
               tselem->id = layer->layer_collections.first;
               tselem->nr = tselem->used = 0;
@@ -1660,7 +1665,7 @@ void do_versions_after_linking_280(Main *bmain, ReportList *UNUSED(reports))
       BKE_mesh_tessface_clear(me);
 
       /* Moved from do_versions because we need updated polygons for calculating normals. */
-      if (MAIN_VERSION_OLDER(bmain, 256, 6)) {
+      if (!MAIN_VERSION_ATLEAST(bmain, 256, 6)) {
         BKE_mesh_calc_normals(me);
       }
     }
@@ -1742,7 +1747,7 @@ void do_versions_after_linking_280(Main *bmain, ReportList *UNUSED(reports))
    *
    * \note Be sure to check when bumping the version:
    * - #blo_do_versions_280 in this file.
-   * - "versioning_userdef.c", #BLO_version_defaults_userpref_blend
+   * - "versioning_userdef.c", #blo_do_versions_userdef
    * - "versioning_userdef.c", #do_versions_theme
    *
    * \note Keep this message at the bottom of the function.
@@ -1792,6 +1797,7 @@ static void do_versions_seq_set_cache_defaults(Editing *ed)
   ed->recycle_max_cost = 10.0f;
 }
 
+/* NOLINTNEXTLINE: readability-function-size */
 void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
 {
   bool use_collection_compat_28 = true;
@@ -1958,7 +1964,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
           GP_Sculpt_Settings *gset = &scene->toolsettings->gp_sculpt;
           if ((gset) && (gset->cur_falloff == NULL)) {
             gset->cur_falloff = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
-            BKE_curvemapping_initialize(gset->cur_falloff);
+            BKE_curvemapping_init(gset->cur_falloff);
             BKE_curvemap_reset(gset->cur_falloff->cm,
                                &gset->cur_falloff->clipr,
                                CURVE_PRESET_GAUSS,
@@ -2024,15 +2030,15 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
         for (area = screen->areabase.first; area; area = area->next) {
           for (sl = area->spacedata.first; sl; sl = sl->next) {
             if (sl->spacetype == SPACE_OUTLINER) {
-              SpaceOutliner *so = (SpaceOutliner *)sl;
+              SpaceOutliner *space_outliner = (SpaceOutliner *)sl;
 
-              if (!ELEM(so->outlinevis,
+              if (!ELEM(space_outliner->outlinevis,
                         SO_SCENES,
                         SO_LIBRARIES,
                         SO_SEQUENCE,
                         SO_DATA_API,
                         SO_ID_ORPHANS)) {
-                so->outlinevis = SO_VIEW_LAYER;
+                space_outliner->outlinevis = SO_VIEW_LAYER;
               }
             }
           }
@@ -2412,9 +2418,9 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
         LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
           LISTBASE_FOREACH (SpaceLink *, sl, &area->spacedata) {
             if (sl->spacetype == SPACE_OUTLINER) {
-              SpaceOutliner *soops = (SpaceOutliner *)sl;
-              soops->filter_id_type = ID_GR;
-              soops->outlinevis = SO_VIEW_LAYER;
+              SpaceOutliner *space_outliner = (SpaceOutliner *)sl;
+              space_outliner->filter_id_type = ID_GR;
+              space_outliner->outlinevis = SO_VIEW_LAYER;
             }
           }
         }
@@ -2974,17 +2980,17 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
     for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
       UnitSettings *unit = &scene->unit;
       if (unit->system != USER_UNIT_NONE) {
-        unit->length_unit = bUnit_GetBaseUnitOfType(scene->unit.system, B_UNIT_LENGTH);
-        unit->mass_unit = bUnit_GetBaseUnitOfType(scene->unit.system, B_UNIT_MASS);
+        unit->length_unit = BKE_unit_base_of_type_get(scene->unit.system, B_UNIT_LENGTH);
+        unit->mass_unit = BKE_unit_base_of_type_get(scene->unit.system, B_UNIT_MASS);
       }
-      unit->time_unit = bUnit_GetBaseUnitOfType(USER_UNIT_NONE, B_UNIT_TIME);
+      unit->time_unit = BKE_unit_base_of_type_get(USER_UNIT_NONE, B_UNIT_TIME);
     }
 
     /* gpencil grid settings */
     for (bGPdata *gpd = bmain->gpencils.first; gpd; gpd = gpd->id.next) {
-      ARRAY_SET_ITEMS(gpd->grid.color, 0.5f, 0.5f, 0.5f);  // Color
-      ARRAY_SET_ITEMS(gpd->grid.scale, 1.0f, 1.0f);        // Scale
-      gpd->grid.lines = GP_DEFAULT_GRID_LINES;             // Number of lines
+      ARRAY_SET_ITEMS(gpd->grid.color, 0.5f, 0.5f, 0.5f); /* Color */
+      ARRAY_SET_ITEMS(gpd->grid.scale, 1.0f, 1.0f);       /* Scale */
+      gpd->grid.lines = GP_DEFAULT_GRID_LINES;            /* Number of lines */
     }
   }
 
@@ -3341,7 +3347,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
           LISTBASE_FOREACH (SpaceLink *, sl, &area->spacedata) {
             if (sl->spacetype == SPACE_VIEW3D) {
               View3D *v3d = (View3D *)sl;
-              memcpy(v3d->shading.lookdev_light, v3d->shading.studio_light, sizeof(char) * 256);
+              memcpy(v3d->shading.lookdev_light, v3d->shading.studio_light, sizeof(char[256]));
             }
           }
         }
@@ -3371,7 +3377,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
         GP_Sculpt_Settings *gset = &scene->toolsettings->gp_sculpt;
         if ((gset) && (gset->cur_primitive == NULL)) {
           gset->cur_primitive = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
-          BKE_curvemapping_initialize(gset->cur_primitive);
+          BKE_curvemapping_init(gset->cur_primitive);
           BKE_curvemap_reset(gset->cur_primitive->cm,
                              &gset->cur_primitive->clipr,
                              CURVE_PRESET_BELL,
@@ -3411,16 +3417,17 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
               break;
             }
             case SPACE_OUTLINER: {
-              SpaceOutliner *so = (SpaceOutliner *)sl;
-              so->filter &= ~(SO_FILTER_UNUSED_1 | SO_FILTER_UNUSED_5 | SO_FILTER_UNUSED_12);
-              so->storeflag &= ~(SO_TREESTORE_UNUSED_1);
+              SpaceOutliner *space_outliner = (SpaceOutliner *)sl;
+              space_outliner->filter &= ~(SO_FILTER_UNUSED_1 | SO_FILTER_UNUSED_5 |
+                                          SO_FILTER_UNUSED_12);
+              space_outliner->storeflag &= ~(SO_TREESTORE_UNUSED_1);
               break;
             }
             case SPACE_FILE: {
               SpaceFile *sfile = (SpaceFile *)sl;
               if (sfile->params) {
                 sfile->params->flag &= ~(FILE_PARAMS_FLAG_UNUSED_1 | FILE_PARAMS_FLAG_UNUSED_6 |
-                                         FILE_PARAMS_FLAG_UNUSED_9);
+                                         FILE_OBDATA_INSTANCE);
               }
               break;
             }
@@ -3461,7 +3468,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
 
       if (scene->ed) {
         Sequence *seq;
-        SEQ_BEGIN (scene->ed, seq) {
+        SEQ_ALL_BEGIN (scene->ed, seq) {
           seq->flag &= ~(SEQ_FLAG_UNUSED_6 | SEQ_FLAG_UNUSED_18 | SEQ_FLAG_UNUSED_19 |
                          SEQ_FLAG_UNUSED_21);
           if (seq->type == SEQ_TYPE_SPEED) {
@@ -3469,7 +3476,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
             s->flags &= ~(SEQ_SPEED_UNUSED_1);
           }
         }
-        SEQ_END;
+        SEQ_ALL_END;
       }
     }
 
@@ -4027,9 +4034,9 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
           if (sl->spacetype != SPACE_OUTLINER) {
             continue;
           }
-          SpaceOutliner *so = (SpaceOutliner *)sl;
-          so->filter &= ~SO_FLAG_UNUSED_1;
-          so->show_restrict_flags = SO_RESTRICT_ENABLE | SO_RESTRICT_HIDE;
+          SpaceOutliner *space_outliner = (SpaceOutliner *)sl;
+          space_outliner->filter &= ~SO_FLAG_UNUSED_1;
+          space_outliner->show_restrict_flags = SO_RESTRICT_ENABLE | SO_RESTRICT_HIDE;
         }
       }
     }
@@ -4161,9 +4168,9 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
           }
           /* Mark outliners as dirty for syncing and enable synced selection */
           if (sl->spacetype == SPACE_OUTLINER) {
-            SpaceOutliner *soutliner = (SpaceOutliner *)sl;
-            soutliner->sync_select_dirty |= WM_OUTLINER_SYNC_SELECT_FROM_ALL;
-            soutliner->flag |= SO_SYNC_SELECT;
+            SpaceOutliner *space_outliner = (SpaceOutliner *)sl;
+            space_outliner->sync_select_dirty |= WM_OUTLINER_SYNC_SELECT_FROM_ALL;
+            space_outliner->flag |= SO_SYNC_SELECT;
           }
         }
       }
@@ -4767,7 +4774,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
               if (mmd->curve_intensity == NULL) {
                 mmd->curve_intensity = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
                 if (mmd->curve_intensity) {
-                  BKE_curvemapping_initialize(mmd->curve_intensity);
+                  BKE_curvemapping_init(mmd->curve_intensity);
                 }
               }
               break;
@@ -4778,7 +4785,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
               if (mmd->curve_intensity == NULL) {
                 mmd->curve_intensity = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
                 if (mmd->curve_intensity) {
-                  BKE_curvemapping_initialize(mmd->curve_intensity);
+                  BKE_curvemapping_init(mmd->curve_intensity);
                 }
               }
               break;
@@ -4788,7 +4795,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
               if (mmd->curve_intensity == NULL) {
                 mmd->curve_intensity = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
                 if (mmd->curve_intensity) {
-                  BKE_curvemapping_initialize(mmd->curve_intensity);
+                  BKE_curvemapping_init(mmd->curve_intensity);
                 }
               }
               break;
@@ -4798,7 +4805,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
               if (mmd->curve_intensity == NULL) {
                 mmd->curve_intensity = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
                 if (mmd->curve_intensity) {
-                  BKE_curvemapping_initialize(mmd->curve_intensity);
+                  BKE_curvemapping_init(mmd->curve_intensity);
                 }
               }
               break;
@@ -4808,7 +4815,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
               if (mmd->curve_intensity == NULL) {
                 mmd->curve_intensity = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
                 if (mmd->curve_intensity) {
-                  BKE_curvemapping_initialize(mmd->curve_intensity);
+                  BKE_curvemapping_init(mmd->curve_intensity);
                 }
               }
               break;
@@ -5085,7 +5092,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
    *
    * \note Be sure to check when bumping the version:
    * - #do_versions_after_linking_280 in this file.
-   * - "versioning_userdef.c", #BLO_version_defaults_userpref_blend
+   * - "versioning_userdef.c", #blo_do_versions_userdef
    * - "versioning_userdef.c", #do_versions_theme
    *
    * \note Keep this message at the bottom of the function.

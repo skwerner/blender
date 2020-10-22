@@ -180,7 +180,7 @@ static int new_particle_settings_exec(bContext *C, wmOperator *UNUSED(op))
 
   /* add or copy particle setting */
   if (psys->part) {
-    part = BKE_particlesettings_copy(bmain, psys->part);
+    part = (ParticleSettings *)BKE_id_copy(bmain, &psys->part->id);
   }
   else {
     part = BKE_particlesettings_add(bmain, "ParticleSettings");
@@ -721,7 +721,7 @@ static bool remap_hair_emitter(Depsgraph *depsgraph,
   MVert *mvert;
   Mesh *mesh, *target_mesh;
   int numverts;
-  int i, k;
+  int k;
   float from_ob_imat[4][4], to_ob_imat[4][4];
   float from_imat[4][4], to_imat[4][4];
 
@@ -754,7 +754,7 @@ static bool remap_hair_emitter(Depsgraph *depsgraph,
     return false;
   }
   /* don't modify the original vertices */
-  BKE_id_copy_ex(NULL, &mesh->id, (ID **)&mesh, LIB_ID_COPY_LOCALIZE);
+  mesh = (Mesh *)BKE_id_copy_ex(NULL, &mesh->id, NULL, LIB_ID_COPY_LOCALIZE);
 
   /* BMESH_ONLY, deform dm may not have tessface */
   BKE_mesh_tessface_ensure(mesh);
@@ -763,7 +763,7 @@ static bool remap_hair_emitter(Depsgraph *depsgraph,
   mvert = mesh->mvert;
 
   /* convert to global coordinates */
-  for (i = 0; i < numverts; i++) {
+  for (int i = 0; i < numverts; i++) {
     mul_m4_v3(to_mat, mvert[i].co);
   }
 
@@ -780,6 +780,7 @@ static bool remap_hair_emitter(Depsgraph *depsgraph,
     return false;
   }
 
+  int i;
   for (i = 0, tpa = target_psys->particles, pa = psys->particles; i < target_psys->totpart;
        i++, tpa++, pa++) {
     float from_co[3];
@@ -1154,7 +1155,7 @@ static bool copy_particle_systems_to_object(const bContext *C,
 
     if (duplicate_settings) {
       id_us_min(&psys->part->id);
-      psys->part = BKE_particlesettings_copy(bmain, psys->part);
+      psys->part = (ParticleSettings *)BKE_id_copy(bmain, &psys->part->id);
     }
   }
   MEM_freeN(tmp_psys);

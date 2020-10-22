@@ -101,13 +101,12 @@ bool BKE_object_data_transfer_get_dttypes_capacity(const int dtdata_types,
                                                    bool *r_advanced_mixing,
                                                    bool *r_threshold)
 {
-  int i;
   bool ret = false;
 
   *r_advanced_mixing = false;
   *r_threshold = false;
 
-  for (i = 0; (i < DT_TYPE_MAX) && !(ret && *r_advanced_mixing && *r_threshold); i++) {
+  for (int i = 0; (i < DT_TYPE_MAX) && !(ret && *r_advanced_mixing && *r_threshold); i++) {
     const int dtdata_type = 1 << i;
 
     if (!(dtdata_types & dtdata_type)) {
@@ -451,9 +450,7 @@ static void data_transfer_interp_char(const CustomDataTransferLayerMap *laymap,
   float val_src = 0.0f;
   const float val_dst = (float)(*data_dst) / 255.0f;
 
-  int i;
-
-  for (i = count; i--;) {
+  for (int i = count; i--;) {
     val_src += ((float)(*data_src[i]) / 255.0f) * weights[i];
   }
 
@@ -961,7 +958,7 @@ static bool data_transfer_layersmapping_generate(ListBase *r_map,
       }
       return true;
     }
-    else if (cddata_type == CD_FAKE_BWEIGHT) {
+    if (cddata_type == CD_FAKE_BWEIGHT) {
       const size_t elem_size = sizeof(*((MVert *)NULL));
       const size_t data_size = sizeof(((MVert *)NULL)->bweight);
       const size_t data_offset = offsetof(MVert, bweight);
@@ -993,7 +990,7 @@ static bool data_transfer_layersmapping_generate(ListBase *r_map,
       }
       return true;
     }
-    else if (cddata_type == CD_FAKE_MDEFORMVERT) {
+    if (cddata_type == CD_FAKE_MDEFORMVERT) {
       bool ret;
 
       cd_src = &me_src->vdata;
@@ -1018,7 +1015,7 @@ static bool data_transfer_layersmapping_generate(ListBase *r_map,
       me_dst->dvert = CustomData_get_layer(&me_dst->vdata, CD_MDEFORMVERT);
       return ret;
     }
-    else if (cddata_type == CD_FAKE_SHAPEKEY) {
+    if (cddata_type == CD_FAKE_SHAPEKEY) {
       /* TODO: leaving shapekeys aside for now, quite specific case,
        * since we can't access them from MVert :/ */
       return false;
@@ -1049,7 +1046,7 @@ static bool data_transfer_layersmapping_generate(ListBase *r_map,
       }
       return true;
     }
-    else if (cddata_type == CD_FAKE_CREASE) {
+    if (cddata_type == CD_FAKE_CREASE) {
       const size_t elem_size = sizeof(*((MEdge *)NULL));
       const size_t data_size = sizeof(((MEdge *)NULL)->crease);
       const size_t data_offset = offsetof(MEdge, crease);
@@ -1081,7 +1078,7 @@ static bool data_transfer_layersmapping_generate(ListBase *r_map,
       }
       return true;
     }
-    else if (cddata_type == CD_FAKE_BWEIGHT) {
+    if (cddata_type == CD_FAKE_BWEIGHT) {
       const size_t elem_size = sizeof(*((MEdge *)NULL));
       const size_t data_size = sizeof(((MEdge *)NULL)->bweight);
       const size_t data_offset = offsetof(MEdge, bweight);
@@ -1113,7 +1110,7 @@ static bool data_transfer_layersmapping_generate(ListBase *r_map,
       }
       return true;
     }
-    else if (r_map && ELEM(cddata_type, CD_FAKE_SHARP, CD_FAKE_SEAM)) {
+    if (r_map && ELEM(cddata_type, CD_FAKE_SHARP, CD_FAKE_SEAM)) {
       const size_t elem_size = sizeof(*((MEdge *)NULL));
       const size_t data_size = sizeof(((MEdge *)NULL)->flag);
       const size_t data_offset = offsetof(MEdge, flag);
@@ -1136,9 +1133,8 @@ static bool data_transfer_layersmapping_generate(ListBase *r_map,
                                            interp_data);
       return true;
     }
-    else {
-      return false;
-    }
+
+    return false;
   }
   else if (elem_type == ME_LOOP) {
     if (cddata_type == CD_FAKE_UV) {
@@ -1176,9 +1172,8 @@ static bool data_transfer_layersmapping_generate(ListBase *r_map,
       }
       return true;
     }
-    else {
-      return false;
-    }
+
+    return false;
   }
   else if (elem_type == ME_POLY) {
     if (cddata_type == CD_FAKE_UV) {
@@ -1209,7 +1204,7 @@ static bool data_transfer_layersmapping_generate(ListBase *r_map,
       }
       return true;
     }
-    else if (r_map && cddata_type == CD_FAKE_SHARP) {
+    if (r_map && cddata_type == CD_FAKE_SHARP) {
       const size_t elem_size = sizeof(*((MPoly *)NULL));
       const size_t data_size = sizeof(((MPoly *)NULL)->flag);
       const size_t data_offset = offsetof(MPoly, flag);
@@ -1232,9 +1227,8 @@ static bool data_transfer_layersmapping_generate(ListBase *r_map,
                                            interp_data);
       return true;
     }
-    else {
-      return false;
-    }
+
+    return false;
   }
 
   return false;
@@ -1257,7 +1251,6 @@ void BKE_object_data_transfer_layout(struct Depsgraph *depsgraph,
 {
   Mesh *me_src;
   Mesh *me_dst;
-  int i;
 
   const bool use_create = true; /* We always create needed layers here. */
 
@@ -1275,7 +1268,7 @@ void BKE_object_data_transfer_layout(struct Depsgraph *depsgraph,
   }
 
   /* Check all possible data types. */
-  for (i = 0; i < DT_TYPE_MAX; i++) {
+  for (int i = 0; i < DT_TYPE_MAX; i++) {
     const int dtdata_type = 1 << i;
     int cddata_type;
     int fromlayers, tolayers, fromto_idx;
@@ -1413,7 +1406,6 @@ bool BKE_object_data_transfer_ex(struct Depsgraph *depsgraph,
   Mesh *me_src;
   /* Assumed always true if not using an evaluated mesh as destination. */
   bool dirty_nors_dst = true;
-  int i;
 
   MDeformVert *mdef = NULL;
   int vg_idx = -1;
@@ -1481,7 +1473,7 @@ bool BKE_object_data_transfer_ex(struct Depsgraph *depsgraph,
 
   /* Check all possible data types.
    * Note item mappings and dest mix weights are cached. */
-  for (i = 0; i < DT_TYPE_MAX; i++) {
+  for (int i = 0; i < DT_TYPE_MAX; i++) {
     const int dtdata_type = 1 << i;
     int cddata_type;
     int fromlayers, tolayers, fromto_idx;
@@ -1853,7 +1845,7 @@ bool BKE_object_data_transfer_ex(struct Depsgraph *depsgraph,
     data_transfer_dtdata_type_postprocess(ob_src, ob_dst, me_src, me_dst, dtdata_type, changed);
   }
 
-  for (i = 0; i < DATAMAX; i++) {
+  for (int i = 0; i < DATAMAX; i++) {
     BKE_mesh_remap_free(&geom_map[i]);
     MEM_SAFE_FREE(weights[i]);
   }

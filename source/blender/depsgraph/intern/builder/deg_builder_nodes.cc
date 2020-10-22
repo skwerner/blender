@@ -511,7 +511,7 @@ void DepsgraphNodeBuilder::build_collection(LayerCollection *from_layer_collecti
     }
     else if (from_layer_collection == nullptr && !id_node->is_collection_fully_expanded) {
       /* Initially collection was built from layer now, and was requested
-       * to not recurs into object. But now it's asked to recurs into all objects. */
+       * to not recurse into object. But now it's asked to recurse into all objects. */
     }
     else {
       return;
@@ -701,20 +701,20 @@ void DepsgraphNodeBuilder::build_object_flags(int base_index,
                                    is_from_set));
 }
 
-void DepsgraphNodeBuilder::build_object_proxy_from(Object *object, bool is_visible)
+void DepsgraphNodeBuilder::build_object_proxy_from(Object *object, bool is_object_visible)
 {
   if (object->proxy_from == nullptr) {
     return;
   }
-  build_object(-1, object->proxy_from, DEG_ID_LINKED_INDIRECTLY, is_visible);
+  build_object(-1, object->proxy_from, DEG_ID_LINKED_INDIRECTLY, is_object_visible);
 }
 
-void DepsgraphNodeBuilder::build_object_proxy_group(Object *object, bool is_visible)
+void DepsgraphNodeBuilder::build_object_proxy_group(Object *object, bool is_object_visible)
 {
   if (object->proxy_group == nullptr) {
     return;
   }
-  build_object(-1, object->proxy_group, DEG_ID_LINKED_INDIRECTLY, is_visible);
+  build_object(-1, object->proxy_group, DEG_ID_LINKED_INDIRECTLY, is_object_visible);
 }
 
 void DepsgraphNodeBuilder::build_object_instance_collection(Object *object, bool is_object_visible)
@@ -1126,6 +1126,14 @@ void DepsgraphNodeBuilder::build_rigidbody(Scene *scene)
       if (object->type != OB_MESH) {
         continue;
       }
+      if (object->rigidbody_object == nullptr) {
+        continue;
+      }
+
+      if (object->rigidbody_object->type == RBO_TYPE_PASSIVE) {
+        continue;
+      }
+
       /* Create operation for flushing results. */
       /* Object's transform component - where the rigidbody operation
        * lives. */
@@ -1466,6 +1474,18 @@ void DepsgraphNodeBuilder::build_light(Light *lamp)
                      function_bind(BKE_light_eval, _1, lamp_cow));
 }
 
+void DepsgraphNodeBuilder::build_nodetree_socket(bNodeSocket *socket)
+{
+  build_idproperties(socket->prop);
+
+  if (socket->type == SOCK_OBJECT) {
+    build_id((ID *)((bNodeSocketValueObject *)socket->default_value)->value);
+  }
+  else if (socket->type == SOCK_IMAGE) {
+    build_id((ID *)((bNodeSocketValueImage *)socket->default_value)->value);
+  }
+}
+
 void DepsgraphNodeBuilder::build_nodetree(bNodeTree *ntree)
 {
   if (ntree == nullptr) {
@@ -1494,10 +1514,10 @@ void DepsgraphNodeBuilder::build_nodetree(bNodeTree *ntree)
   LISTBASE_FOREACH (bNode *, bnode, &ntree->nodes) {
     build_idproperties(bnode->prop);
     LISTBASE_FOREACH (bNodeSocket *, socket, &bnode->inputs) {
-      build_idproperties(socket->prop);
+      build_nodetree_socket(socket);
     }
     LISTBASE_FOREACH (bNodeSocket *, socket, &bnode->outputs) {
-      build_idproperties(socket->prop);
+      build_nodetree_socket(socket);
     }
 
     ID *id = bnode->id;
@@ -1780,8 +1800,10 @@ void DepsgraphNodeBuilder::build_simulation(Simulation *simulation)
     return;
   }
   add_id_node(&simulation->id);
+  build_idproperties(simulation->id.properties);
   build_animdata(&simulation->id);
   build_parameters(&simulation->id);
+  build_nodetree(simulation->nodetree);
 
   Simulation *simulation_cow = get_cow_datablock(simulation);
   Scene *scene_cow = get_cow_datablock(scene_);
@@ -1808,7 +1830,7 @@ void DepsgraphNodeBuilder::build_scene_sequencer(Scene *scene)
                      function_bind(BKE_scene_eval_sequencer_sequences, _1, scene_cow));
   /* Make sure data for sequences is in the graph. */
   Sequence *seq;
-  SEQ_BEGIN (scene->ed, seq) {
+  SEQ_ALL_BEGIN (scene->ed, seq) {
     build_idproperties(seq->prop);
     if (seq->sound != nullptr) {
       build_sound(seq->sound);
@@ -1825,7 +1847,7 @@ void DepsgraphNodeBuilder::build_scene_sequencer(Scene *scene)
     }
     /* TODO(sergey): Movie clip, scene, camera, mask. */
   }
-  SEQ_END;
+  SEQ_ALL_END;
 }
 
 void DepsgraphNodeBuilder::build_scene_audio(Scene *scene)

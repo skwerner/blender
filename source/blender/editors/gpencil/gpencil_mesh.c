@@ -162,7 +162,7 @@ static int gpencil_bake_mesh_animation_exec(bContext *C, wmOperator *op)
   Object *ob_gpencil = NULL;
 
   ListBase list = {NULL, NULL};
-  const bool simple_material = gpencil_bake_ob_list(C, depsgraph, scene, &list);
+  gpencil_bake_ob_list(C, depsgraph, scene, &list);
 
   /* Cannot check this in poll because the active object changes. */
   if (list.first == NULL) {
@@ -196,7 +196,7 @@ static int gpencil_bake_mesh_animation_exec(bContext *C, wmOperator *op)
   bool newob = false;
   if (STREQ(target, "*NEW")) {
     ushort local_view_bits = (v3d && v3d->localvd) ? v3d->local_view_uuid : 0;
-    float loc[3] = {0.0f, 0.0f, 0.0f};
+    const float loc[3] = {0.0f, 0.0f, 0.0f};
     ob_gpencil = ED_gpencil_add_object(C, loc, local_view_bits);
     newob = true;
   }
@@ -246,7 +246,7 @@ static int gpencil_bake_mesh_animation_exec(bContext *C, wmOperator *op)
 
     /* Move scene to new frame. */
     CFRA = i;
-    BKE_scene_graph_update_for_newframe(depsgraph, bmain);
+    BKE_scene_graph_update_for_newframe(depsgraph);
 
     /* Loop all objects in the list. */
     LISTBASE_FOREACH (GpBakeOb *, elem, &list) {
@@ -264,8 +264,7 @@ static int gpencil_bake_mesh_animation_exec(bContext *C, wmOperator *op)
                                ob_eval->obmat,
                                frame_offset,
                                use_seams,
-                               use_faces,
-                               simple_material);
+                               use_faces);
 
       /* Reproject all untaged created strokes. */
       if (project_type != GP_REPROJECT_KEEP) {
@@ -287,7 +286,7 @@ static int gpencil_bake_mesh_animation_exec(bContext *C, wmOperator *op)
 
   /* Return scene frame state and DB to original state. */
   CFRA = oldframe;
-  BKE_scene_graph_update_for_newframe(depsgraph, bmain);
+  BKE_scene_graph_update_for_newframe(depsgraph);
 
   /* Remove unused materials. */
   int actcol = ob_gpencil->actcol;

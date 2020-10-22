@@ -119,6 +119,10 @@ static void color_filter_task_cb(void *__restrict userdata,
     float fade = vd.mask ? *vd.mask : 0.0f;
     fade = 1.0f - fade;
     fade *= data->filter_strength;
+    fade *= SCULPT_automasking_factor_get(ss->filter_cache->automasking, ss, vd.index);
+    if (fade == 0.0f) {
+      continue;
+    }
 
     copy_v3_v3(orig_color, orig_data.col);
 
@@ -127,7 +131,7 @@ static void color_filter_task_cb(void *__restrict userdata,
         float fill_color_rgba[4];
         copy_v3_v3(fill_color_rgba, data->filter_fill_color);
         fill_color_rgba[3] = 1.0f;
-        CLAMP(fade, 0.0f, 1.0f);
+        fade = clamp_f(fade, 0.0f, 1.0f);
         mul_v4_fl(fill_color_rgba, fade);
         blend_color_mix_float(final_color, orig_data.col, fill_color_rgba);
         break;
@@ -140,33 +144,28 @@ static void color_filter_task_cb(void *__restrict userdata,
         break;
       case COLOR_FILTER_SATURATION:
         rgb_to_hsv_v(orig_color, hsv_color);
-        hsv_color[1] = hsv_color[1] + fade;
-        CLAMP(hsv_color[1], 0.0f, 1.0f);
+        hsv_color[1] = clamp_f(hsv_color[1] + fade, 0.0f, 1.0f);
         hsv_to_rgb_v(hsv_color, final_color);
         break;
       case COLOR_FILTER_VALUE:
         rgb_to_hsv_v(orig_color, hsv_color);
-        hsv_color[2] = hsv_color[2] + fade;
-        CLAMP(hsv_color[2], 0.0f, 1.0f);
+        hsv_color[2] = clamp_f(hsv_color[2] + fade, 0.0f, 1.0f);
         hsv_to_rgb_v(hsv_color, final_color);
         break;
       case COLOR_FILTER_RED:
-        orig_color[0] = orig_color[0] + fade;
-        CLAMP(orig_color[0], 0.0f, 1.0f);
+        orig_color[0] = clamp_f(orig_color[0] + fade, 0.0f, 1.0f);
         copy_v3_v3(final_color, orig_color);
         break;
       case COLOR_FILTER_GREEN:
-        orig_color[1] = orig_color[1] + fade;
-        CLAMP(orig_color[1], 0.0f, 1.0f);
+        orig_color[1] = clamp_f(orig_color[1] + fade, 0.0f, 1.0f);
         copy_v3_v3(final_color, orig_color);
         break;
       case COLOR_FILTER_BLUE:
-        orig_color[2] = orig_color[2] + fade;
-        CLAMP(orig_color[2], 0.0f, 1.0f);
+        orig_color[2] = clamp_f(orig_color[2] + fade, 0.0f, 1.0f);
         copy_v3_v3(final_color, orig_color);
         break;
       case COLOR_FILTER_BRIGHTNESS:
-        CLAMP(fade, -1.0f, 1.0f);
+        fade = clamp_f(fade, -1.0f, 1.0f);
         brightness = fade;
         contrast = 0;
         delta = contrast / 2.0f;
@@ -174,12 +173,11 @@ static void color_filter_task_cb(void *__restrict userdata,
         delta *= -1;
         offset = gain * (brightness + delta);
         for (int i = 0; i < 3; i++) {
-          final_color[i] = gain * orig_color[i] + offset;
-          CLAMP(final_color[i], 0.0f, 1.0f);
+          final_color[i] = clamp_f(gain * orig_color[i] + offset, 0.0f, 1.0f);
         }
         break;
       case COLOR_FILTER_CONTRAST:
-        CLAMP(fade, -1.0f, 1.0f);
+        fade = clamp_f(fade, -1.0f, 1.0f);
         brightness = 0;
         contrast = fade;
         delta = contrast / 2.0f;
@@ -193,12 +191,11 @@ static void color_filter_task_cb(void *__restrict userdata,
           offset = gain * (brightness + delta);
         }
         for (int i = 0; i < 3; i++) {
-          final_color[i] = gain * orig_color[i] + offset;
-          CLAMP(final_color[i], 0.0f, 1.0f);
+          final_color[i] = clamp_f(gain * orig_color[i] + offset, 0.0f, 1.0f);
         }
         break;
       case COLOR_FILTER_SMOOTH: {
-        CLAMP(fade, -1.0f, 1.0f);
+        fade = clamp_f(fade, -1.0f, 1.0f);
         float smooth_color[4];
         SCULPT_neighbor_color_average(ss, smooth_color, vd.index);
         blend_color_interpolate_float(final_color, vd.col, smooth_color, fade);
@@ -235,7 +232,7 @@ static int sculpt_color_filter_modal(bContext *C, wmOperator *op, const wmEvent 
     return OPERATOR_RUNNING_MODAL;
   }
 
-  float len = event->prevclickx - event->mval[0];
+  const float len = event->prevclickx - event->x;
   filter_strength = filter_strength * -len * 0.001f;
 
   float fill_color[3];
@@ -262,13 +259,24 @@ static int sculpt_color_filter_modal(bContext *C, wmOperator *op, const wmEvent 
   return OPERATOR_RUNNING_MODAL;
 }
 
-static int sculpt_color_filter_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
+static int sculpt_color_filter_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
   Object *ob = CTX_data_active_object(C);
   Sculpt *sd = CTX_data_tool_settings(C)->sculpt;
   SculptSession *ss = ob->sculpt;
   int mode = RNA_enum_get(op->ptr, "type");
   PBVH *pbvh = ob->sculpt->pbvh;
+
+  const bool use_automasking = SCULPT_is_automasking_enabled(sd, ss, NULL);
+  if (use_automasking) {
+    /* Update the active face set manually as the paint cursor is not enabled when using the Mesh
+     * Filter Tool. */
+    float mouse[2];
+    SculptCursorGeometryInfo sgi;
+    mouse[0] = event->mval[0];
+    mouse[1] = event->mval[1];
+    SCULPT_cursor_geometry_info_update(C, &sgi, mouse, false);
+  }
 
   /* Disable for multires and dyntopo for now */
   if (!ss->pbvh) {
@@ -289,14 +297,17 @@ static int sculpt_color_filter_invoke(bContext *C, wmOperator *op, const wmEvent
   /* CTX_data_ensure_evaluated_depsgraph should be used at the end to include the updates of
    * earlier steps modifying the data. */
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
-  bool needs_pmap = mode == COLOR_FILTER_SMOOTH;
-  BKE_sculpt_update_object_for_edit(depsgraph, ob, needs_pmap, false, true);
+  const bool needs_topology_info = mode == COLOR_FILTER_SMOOTH || use_automasking;
+  BKE_sculpt_update_object_for_edit(depsgraph, ob, needs_topology_info, false, true);
 
-  if (BKE_pbvh_type(pbvh) == PBVH_FACES && needs_pmap && !ob->sculpt->pmap) {
+  if (BKE_pbvh_type(pbvh) == PBVH_FACES && needs_topology_info && !ob->sculpt->pmap) {
     return OPERATOR_CANCELLED;
   }
 
-  SCULPT_filter_cache_init(ob, sd, SCULPT_UNDO_COLOR);
+  SCULPT_filter_cache_init(C, ob, sd, SCULPT_UNDO_COLOR);
+  FilterCache *filter_cache = ss->filter_cache;
+  filter_cache->active_face_set = SCULPT_FACE_SET_NONE;
+  filter_cache->automasking = SCULPT_automasking_cache_init(sd, NULL, ob);
 
   WM_event_add_modal_handler(C, op);
   return OPERATOR_RUNNING_MODAL;
@@ -305,7 +316,7 @@ static int sculpt_color_filter_invoke(bContext *C, wmOperator *op, const wmEvent
 void SCULPT_OT_color_filter(struct wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Filter color";
+  ot->name = "Filter Color";
   ot->idname = "SCULPT_OT_color_filter";
   ot->description = "Applies a filter to modify the current sculpt vertex colors";
 

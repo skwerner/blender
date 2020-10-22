@@ -158,6 +158,7 @@ static void pointcloud_batch_cache_ensure_pos(Object *ob, PointCloudBatchCache *
   const bool has_radius = pointcloud->radius != NULL;
 
   static GPUVertFormat format = {0};
+  static GPUVertFormat format_no_radius = {0};
   static uint pos;
   if (format.attr_len == 0) {
     /* initialize vertex format */
@@ -167,18 +168,19 @@ static void pointcloud_batch_cache_ensure_pos(Object *ob, PointCloudBatchCache *
      * If the vertex shader has more components than the array provides, the extras are given
      * values from the vector (0, 0, 0, 1) for the missing XYZW components.
      */
-    int comp_len = has_radius ? 4 : 3;
-    pos = GPU_vertformat_attr_add(&format, "pos", GPU_COMP_F32, comp_len, GPU_FETCH_FLOAT);
+    pos = GPU_vertformat_attr_add(&format_no_radius, "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
+    pos = GPU_vertformat_attr_add(&format, "pos", GPU_COMP_F32, 4, GPU_FETCH_FLOAT);
   }
 
-  cache->pos = GPU_vertbuf_create_with_format(&format);
+  cache->pos = GPU_vertbuf_create_with_format(has_radius ? &format : &format_no_radius);
   GPU_vertbuf_data_alloc(cache->pos, pointcloud->totpoint);
 
   if (has_radius) {
-    float(*vbo_data)[4] = (float(*)[4])cache->pos->data;
+    float(*vbo_data)[4] = (float(*)[4])GPU_vertbuf_get_data(cache->pos);
     for (int i = 0; i < pointcloud->totpoint; i++) {
       copy_v3_v3(vbo_data[i], pointcloud->co[i]);
-      /* TODO(fclem) remove multiplication here. Here only for keeping the size correct for now. */
+      /* TODO(fclem): remove multiplication here.
+       * Here only for keeping the size correct for now. */
       vbo_data[i][3] = pointcloud->radius[i] * 100.0f;
     }
   }

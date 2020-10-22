@@ -31,6 +31,7 @@
 #include "BLT_translation.h"
 
 #include "DNA_armature_types.h"
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
@@ -44,12 +45,7 @@
 #include "BKE_lib_query.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
-
-/* SpaceType struct has a member called 'new' which obviously conflicts with C++
- * so temporarily redefining the new keyword to make it compile. */
-#define new extern_new
 #include "BKE_screen.h"
-#undef new
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -73,6 +69,15 @@ using blender::MutableSpan;
 using blender::Span;
 using blender::Vector;
 
+static void initData(ModifierData *md)
+{
+  MaskModifierData *mmd = (MaskModifierData *)md;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(mmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(mmd, DNA_struct_default_get(MaskModifierData), modifier);
+}
+
 static void requiredDataMask(Object *UNUSED(ob),
                              ModifierData *UNUSED(md),
                              CustomData_MeshMasks *r_cddata_masks)
@@ -80,15 +85,15 @@ static void requiredDataMask(Object *UNUSED(ob),
   r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
 }
 
-static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk, void *userData)
+static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
-  MaskModifierData *mmd = (MaskModifierData *)md;
-  walk(userData, ob, &mmd->ob_arm, IDWALK_CB_NOP);
+  MaskModifierData *mmd = reinterpret_cast<MaskModifierData *>(md);
+  walk(userData, ob, (ID **)&mmd->ob_arm, IDWALK_CB_NOP);
 }
 
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
 {
-  MaskModifierData *mmd = (MaskModifierData *)md;
+  MaskModifierData *mmd = reinterpret_cast<MaskModifierData *>(md);
   if (mmd->ob_arm) {
     bArmature *arm = (bArmature *)mmd->ob_arm->data;
     /* Tag relationship in depsgraph, but also on the armature. */
@@ -311,7 +316,7 @@ static void copy_masked_polys_to_new_mesh(const Mesh &src_mesh,
  */
 static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
-  MaskModifierData *mmd = (MaskModifierData *)md;
+  MaskModifierData *mmd = reinterpret_cast<MaskModifierData *>(md);
   Object *ob = ctx->object;
   const bool invert_mask = mmd->flag & MOD_MASK_INV;
 
@@ -393,7 +398,7 @@ static bool isDisabled(const struct Scene *UNUSED(scene),
                        ModifierData *md,
                        bool UNUSED(useRenderParams))
 {
-  MaskModifierData *mmd = (MaskModifierData *)md;
+  MaskModifierData *mmd = reinterpret_cast<MaskModifierData *>(md);
 
   /* The object type check is only needed here in case we have a placeholder
    * object assigned (because the library containing the armature is missing).
@@ -403,35 +408,34 @@ static bool isDisabled(const struct Scene *UNUSED(scene),
   return mmd->ob_arm && mmd->ob_arm->type != OB_ARMATURE;
 }
 
-static void panel_draw(const bContext *C, Panel *panel)
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *sub, *row;
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
   PointerRNA ob_ptr;
-  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
 
-  int mode = RNA_enum_get(&ptr, "mode");
+  int mode = RNA_enum_get(ptr, "mode");
 
-  uiItemR(layout, &ptr, "mode", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "mode", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
 
   uiLayoutSetPropSep(layout, true);
 
   if (mode == MOD_MASK_MODE_ARM) {
     row = uiLayoutRow(layout, true);
-    uiItemR(row, &ptr, "armature", 0, NULL, ICON_NONE);
+    uiItemR(row, ptr, "armature", 0, NULL, ICON_NONE);
     sub = uiLayoutRow(row, true);
     uiLayoutSetPropDecorate(sub, false);
-    uiItemR(sub, &ptr, "invert_vertex_group", 0, "", ICON_ARROW_LEFTRIGHT);
+    uiItemR(sub, ptr, "invert_vertex_group", 0, "", ICON_ARROW_LEFTRIGHT);
   }
   else if (mode == MOD_MASK_MODE_VGROUP) {
-    modifier_vgroup_ui(layout, &ptr, &ob_ptr, "vertex_group", "invert_vertex_group", nullptr);
+    modifier_vgroup_ui(layout, ptr, &ob_ptr, "vertex_group", "invert_vertex_group", nullptr);
   }
 
-  uiItemR(layout, &ptr, "threshold", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "threshold", 0, NULL, ICON_NONE);
 
-  modifier_panel_end(layout, &ptr);
+  modifier_panel_end(layout, ptr);
 }
 
 static void panelRegister(ARegionType *region_type)
@@ -443,10 +447,12 @@ ModifierTypeInfo modifierType_Mask = {
     /* name */ "Mask",
     /* structName */ "MaskModifierData",
     /* structSize */ sizeof(MaskModifierData),
+    /* srna */ &RNA_MaskModifier,
     /* type */ eModifierTypeType_Nonconstructive,
     /* flags */
     (ModifierTypeFlag)(eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsMapping |
                        eModifierTypeFlag_SupportsEditmode),
+    /* icon */ ICON_MOD_MASK,
 
     /* copyData */ BKE_modifier_copydata_generic,
 
@@ -459,15 +465,14 @@ ModifierTypeInfo modifierType_Mask = {
     /* modifyPointCloud */ NULL,
     /* modifyVolume */ NULL,
 
-    /* initData */ NULL,
+    /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,
     /* freeData */ NULL,
     /* isDisabled */ isDisabled,
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
     /* panelRegister */ panelRegister,

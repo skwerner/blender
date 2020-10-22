@@ -681,7 +681,7 @@ static void bm_isect_tri_tri(
     copy_v3_v3(t_scale[2], fv_b[2]->co);
     tri_v3_scale(UNPACK3(t_scale), 1.0f - s->epsilon.eps2x);
 
-    // second check for verts intersecting the triangle
+    /* second check for verts intersecting the triangle */
     for (i_a = 0; i_a < 3; i_a++) {
       if (BM_ELEM_API_FLAG_TEST(fv_a[i_a], VERT_VISIT_A)) {
         continue;
@@ -898,7 +898,7 @@ static int isect_bvhtree_point_v3(BVHTree *tree, const float **looptris, const f
       &z_buffer,
   };
   BVHTreeRayHit hit = {0};
-  float dir[3] = {1.0f, 0.0f, 0.0f};
+  const float dir[3] = {1.0f, 0.0f, 0.0f};
 
   /* Need to initialize hit even tho it's not used.
    * This is to make it so kd-tree believes we didn't intersect anything and

@@ -55,6 +55,7 @@
 
 #ifdef WITH_PYTHON
 #  include "BPY_extern.h"
+#  include "BPY_extern_run.h"
 #endif
 
 #include "text_format.h"
@@ -406,7 +407,7 @@ void TEXT_OT_open(wmOperatorType *ot)
                                  FILE_OPENFILE,
                                  WM_FILESEL_FILEPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);  // XXX TODO, relative_path
+                                 FILE_SORT_ALPHA); /* TODO: relative_path. */
   RNA_def_boolean(
       ot->srna, "internal", 0, "Make internal", "Make text file internal after loading");
 }
@@ -732,7 +733,7 @@ void TEXT_OT_save_as(wmOperatorType *ot)
                                  FILE_SAVE,
                                  WM_FILESEL_FILEPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);  // XXX TODO, relative_path
+                                 FILE_SORT_ALPHA); /* XXX TODO, relative_path. */
 }
 
 /** \} */
@@ -756,7 +757,7 @@ static int text_run_script(bContext *C, ReportList *reports)
   void *curl_prev = text->curl;
   int curc_prev = text->curc;
 
-  if (BPY_execute_text(C, text, reports, !is_live)) {
+  if (BPY_run_text(C, text, reports, !is_live)) {
     if (is_live) {
       /* for nice live updates */
       WM_event_add_notifier(C, NC_WINDOW | NA_EDITED, NULL);
@@ -1207,7 +1208,7 @@ static int text_line_break_exec(bContext *C, wmOperator *UNUSED(op))
 
   text_drawcache_tag_update(st, 0);
 
-  // double check tabs/spaces before splitting the line
+  /* Double check tabs/spaces before splitting the line. */
   curts = txt_setcurr_tab_spaces(text, space);
   ED_text_undo_push_init(C);
   txt_split_curline(text);
@@ -2587,7 +2588,7 @@ static void text_scroll_apply(bContext *C, wmOperator *op, const wmEvent *event)
 {
   SpaceText *st = CTX_wm_space_text(C);
   TextScroll *tsc = op->customdata;
-  int mval[2] = {event->x, event->y};
+  const int mval[2] = {event->x, event->y};
 
   text_update_character_width(st);
 
@@ -2913,9 +2914,9 @@ typedef struct SetSelection {
 
 static int flatten_width(SpaceText *st, const char *str)
 {
-  int i, total = 0;
+  int total = 0;
 
-  for (i = 0; str[i]; i += BLI_str_utf8_size_safe(str + i)) {
+  for (int i = 0; str[i]; i += BLI_str_utf8_size_safe(str + i)) {
     if (str[i] == '\t') {
       total += st->tabnumber - total % st->tabnumber;
     }
@@ -3462,7 +3463,8 @@ static int text_insert_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
   int ret;
 
-  // if (!RNA_struct_property_is_set(op->ptr, "text")) { /* always set from keymap XXX */
+  /* Note, the "text" property is always set from key-map,
+   * so we can't use #RNA_struct_property_is_set, check the length instead. */
   if (!RNA_string_length(op->ptr, "text")) {
     /* if alt/ctrl/super are pressed pass through except for utf8 character event
      * (when input method are used for utf8 inputs, the user may assign key event

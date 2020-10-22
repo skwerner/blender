@@ -59,6 +59,7 @@
 #include "BKE_font.h"
 #include "BKE_global.h"
 #include "BKE_icons.h"
+#include "BKE_image.h"
 #include "BKE_keyconfig.h"
 #include "BKE_lib_remap.h"
 #include "BKE_main.h"
@@ -84,6 +85,8 @@
 
 #ifdef WITH_PYTHON
 #  include "BPY_extern.h"
+#  include "BPY_extern_python.h"
+#  include "BPY_extern_run.h"
 #endif
 
 #include "GHOST_C-api.h"
@@ -120,7 +123,7 @@
 #include "UI_interface.h"
 #include "UI_resources.h"
 
-#include "GPU_draw.h"
+#include "GPU_context.h"
 #include "GPU_init_exit.h"
 #include "GPU_material.h"
 
@@ -171,7 +174,7 @@ void WM_init_state_start_with_console_set(bool value)
  */
 static bool opengl_is_init = false;
 
-void WM_init_opengl(Main *bmain)
+void WM_init_opengl(void)
 {
   /* must be called only once */
   BLI_assert(opengl_is_init == false);
@@ -185,13 +188,8 @@ void WM_init_opengl(Main *bmain)
   DRW_opengl_context_create();
 
   GPU_init();
-  GPU_set_mipmap(bmain, true);
-  GPU_set_linear_mipmap(true);
-  GPU_set_anisotropic(U.anisotropic_filter);
 
   GPU_pass_cache_init();
-
-  BKE_subdiv_init();
 
   opengl_is_init = true;
 }
@@ -205,13 +203,13 @@ static void sound_jack_sync_callback(Main *bmain, int mode, double time)
 
   wmWindowManager *wm = bmain->wm.first;
 
-  for (wmWindow *window = wm->windows.first; window != NULL; window = window->next) {
+  LISTBASE_FOREACH (wmWindow *, window, &wm->windows) {
     Scene *scene = WM_window_get_active_scene(window);
     if ((scene->audio.flag & AUDIO_SYNC) == 0) {
       continue;
     }
     ViewLayer *view_layer = WM_window_get_active_view_layer(window);
-    Depsgraph *depsgraph = BKE_scene_get_depsgraph(bmain, scene, view_layer, false);
+    Depsgraph *depsgraph = BKE_scene_get_depsgraph(scene, view_layer);
     if (depsgraph == NULL) {
       continue;
     }
@@ -315,7 +313,7 @@ void WM_init(bContext *C, int argc, const char **argv)
     /* sets 3D mouse deadzone */
     WM_ndof_deadzone_set(U.ndof_deadzone);
 #endif
-    WM_init_opengl(G_MAIN);
+    WM_init_opengl();
 
     if (!WM_platform_support_perform_checks()) {
       exit(-1);
@@ -323,6 +321,8 @@ void WM_init(bContext *C, int argc, const char **argv)
 
     UI_init();
   }
+
+  BKE_subdiv_init();
 
   ED_spacemacros_init();
 
@@ -335,9 +335,7 @@ void WM_init(bContext *C, int argc, const char **argv)
    * Will try fix when the crash can be repeated. - campbell. */
 
 #ifdef WITH_PYTHON
-  BPY_context_set(C); /* necessary evil */
-  BPY_python_start(argc, argv);
-
+  BPY_python_start(C, argc, argv);
   BPY_python_reset(C);
 #else
   (void)argc; /* unused */
@@ -350,8 +348,6 @@ void WM_init(bContext *C, int argc, const char **argv)
 
   BKE_material_copybuf_clear();
   ED_render_clear_mtex_copybuf();
-
-  // GPU_blend_set_func(GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
 
   wm_history_file_read();
 
@@ -483,8 +479,6 @@ void WM_exit_ex(bContext *C, const bool do_python)
   /* modal handlers are on window level freed, others too? */
   /* note; same code copied in wm_files.c */
   if (C && wm) {
-    wmWindow *win;
-
     if (!G.background) {
       struct MemFile *undo_memfile = wm->undo_stack ?
                                          ED_undosys_stack_memfile_get_active(wm->undo_stack) :
@@ -511,8 +505,7 @@ void WM_exit_ex(bContext *C, const bool do_python)
 
     WM_jobs_kill_all(wm);
 
-    for (win = wm->windows.first; win; win = win->next) {
-
+    LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
       CTX_wm_window_set(C, win); /* needed by operator close callbacks */
       WM_event_remove_handlers(C, &win->handlers);
       WM_event_remove_handlers(C, &win->modalhandlers);
@@ -527,6 +520,14 @@ void WM_exit_ex(bContext *C, const bool do_python)
       }
     }
   }
+
+#ifdef WITH_PYTHON
+  /* Without this, we there isn't a good way to manage false-positive resource leaks
+   * where a #PyObject references memory allocated with guarded-alloc, T71362.
+   *
+   * This allows add-ons to free resources when unregistered (which is good practice anyway). */
+  BPY_run_string_eval(C, (const char *[]){"addon_utils", NULL}, "addon_utils.disable_all()");
+#endif
 
   BLI_timer_free();
 
@@ -578,7 +579,7 @@ void WM_exit_ex(bContext *C, const bool do_python)
   BKE_subdiv_exit();
 
   if (opengl_is_init) {
-    GPU_free_unused_buffers();
+    BKE_image_free_unused_gpu_textures();
   }
 
   BKE_blender_free(); /* blender.c, does entire library and spacetypes */
@@ -636,6 +637,8 @@ void WM_exit_ex(bContext *C, const bool do_python)
   BKE_blender_userdef_data_free(&U, false);
 
   RNA_exit(); /* should be after BPY_python_end so struct python slots are cleared */
+
+  GPU_backend_exit();
 
   wm_ghost_exit();
 

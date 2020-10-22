@@ -36,6 +36,7 @@
 
 #include "BKE_context.h"
 #include "BKE_fcurve.h"
+#include "BKE_idprop.h"
 #include "BKE_layer.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
@@ -499,16 +500,14 @@ static void draw_marker(
 
   marker_color_get(marker, text_color, line_color);
 
-  GPU_blend(true);
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   draw_marker_line(line_color, xpos, UI_DPI_FAC * 20, region_height);
 
   int icon_id = marker_get_icon_id(marker, flag);
   UI_icon_draw(xpos - 0.55f * UI_DPI_ICON_SIZE, UI_DPI_FAC * 18, icon_id);
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 
   float name_y = UI_DPI_FAC * 18;
   /* Give an offset to the marker name when selected,
@@ -529,13 +528,11 @@ static void draw_markers_background(rctf *rect)
 
   immUniformColor4ubv(shade);
 
-  GPU_blend(true);
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   immRectf(pos, rect->xmin, rect->ymin, rect->xmax, rect->ymax);
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 
   immUnbindProgram();
 }
@@ -690,7 +687,7 @@ static int ed_marker_add_exec(bContext *C, wmOperator *UNUSED(op))
   marker = MEM_callocN(sizeof(TimeMarker), "TimeMarker");
   marker->flag = SELECT;
   marker->frame = frame;
-  BLI_snprintf(marker->name, sizeof(marker->name), "F_%02d", frame);  // XXX - temp code only
+  BLI_snprintf(marker->name, sizeof(marker->name), "F_%02d", frame); /* XXX - temp code only */
   BLI_addtail(markers, marker);
 
   WM_event_add_notifier(C, NC_SCENE | ND_MARKERS, NULL);
@@ -867,7 +864,9 @@ static void ed_marker_move_exit(bContext *C, wmOperator *op)
 
 static int ed_marker_move_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-  bool tweak = RNA_boolean_get(op->ptr, "tweak");
+  const bool tweak = RNA_struct_find_property(op->ptr, "tweak") &&
+                     RNA_boolean_get(op->ptr, "tweak");
+
   if (tweak) {
     ARegion *region = CTX_wm_region(C);
     View2D *v2d = &region->v2d;
@@ -1106,8 +1105,12 @@ static void ed_marker_duplicate_apply(bContext *C)
       newmarker->camera = marker->camera;
 #endif
 
+      if (marker->prop != NULL) {
+        newmarker->prop = IDP_CopyProperty(marker->prop);
+      }
+
       /* new marker is added to the beginning of list */
-      // FIXME: bad ordering!
+      /* FIXME: bad ordering! */
       BLI_addhead(markers, newmarker);
     }
   }
@@ -1267,7 +1270,7 @@ static int ed_marker_select(
   WM_event_add_notifier(C, NC_SCENE | ND_MARKERS, NULL);
   WM_event_add_notifier(C, NC_ANIMATION | ND_MARKERS, NULL);
 
-  /* allowing tweaks, but needs OPERATOR_FINISHED, otherwise renaming fails... [#25987] */
+  /* allowing tweaks, but needs OPERATOR_FINISHED, otherwise renaming fails, see T25987. */
   return ret_val | OPERATOR_PASS_THROUGH;
 }
 
@@ -1460,6 +1463,10 @@ static int ed_marker_delete_exec(bContext *C, wmOperator *UNUSED(op))
   for (marker = markers->first; marker; marker = nmarker) {
     nmarker = marker->next;
     if (marker->flag & SELECT) {
+      if (marker->prop != NULL) {
+        IDP_FreePropertyContent(marker->prop);
+        MEM_freeN(marker->prop);
+      }
       BLI_freelinkN(markers, marker);
       changed = true;
     }

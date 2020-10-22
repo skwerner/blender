@@ -73,7 +73,7 @@ typedef struct ULData {
    * around the connected fan are attached to an edge.
    *
    * In this case there is no need to detect contiguous loops,
-   * each isolated case is handled on it's own, no need to walk over selected edges.
+   * each isolated case is handled on its own, no need to walk over selected edges.
    *
    * \note This flag isn't flushed to other loops which could also have this enabled.
    * Currently it's not necessary since we can start off on any one of these loops,
@@ -538,23 +538,22 @@ static bool uv_rip_pairs_loop_change_sides_test(BMLoop *l_switch,
   if (count_a + count_b == 4) {
     return count_a > count_b;
   }
-  else {
-    const float angle_a_before = uv_rip_pairs_calc_uv_angle(
-        l_switch, side_a, aspect_y, cd_loop_uv_offset);
-    const float angle_b_before = uv_rip_pairs_calc_uv_angle(
-        l_target, side_b, aspect_y, cd_loop_uv_offset);
 
-    UL(l_switch)->side = side_b;
+  const float angle_a_before = uv_rip_pairs_calc_uv_angle(
+      l_switch, side_a, aspect_y, cd_loop_uv_offset);
+  const float angle_b_before = uv_rip_pairs_calc_uv_angle(
+      l_target, side_b, aspect_y, cd_loop_uv_offset);
 
-    const float angle_a_after = uv_rip_pairs_calc_uv_angle(
-        l_switch, side_a, aspect_y, cd_loop_uv_offset);
-    const float angle_b_after = uv_rip_pairs_calc_uv_angle(
-        l_target, side_b, aspect_y, cd_loop_uv_offset);
+  UL(l_switch)->side = side_b;
 
-    UL(l_switch)->side = side_a;
+  const float angle_a_after = uv_rip_pairs_calc_uv_angle(
+      l_switch, side_a, aspect_y, cd_loop_uv_offset);
+  const float angle_b_after = uv_rip_pairs_calc_uv_angle(
+      l_target, side_b, aspect_y, cd_loop_uv_offset);
 
-    return fabsf(angle_a_before - angle_b_before) > fabsf(angle_a_after - angle_b_after);
-  }
+  UL(l_switch)->side = side_a;
+
+  return fabsf(angle_a_before - angle_b_before) > fabsf(angle_a_after - angle_b_after);
 }
 
 /**

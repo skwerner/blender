@@ -33,7 +33,7 @@
 #include "DNA_mesh_types.h"
 #include "DNA_node_types.h"
 
-#include "GPU_uniformbuffer.h"
+#include "GPU_uniform_buffer.h"
 
 #include "ED_uvedit.h"
 
@@ -60,7 +60,7 @@ void workbench_material_ubo_data(WORKBENCH_PrivateData *wpd,
         hash = (hash * 13) ^ BLI_ghashutil_strhash_p_murmur(ob->id.lib->filepath);
       }
       float hue = BLI_hash_int_01(hash);
-      float hsv[3] = {hue, HSV_SATURATION, HSV_VALUE};
+      const float hsv[3] = {hue, HSV_SATURATION, HSV_VALUE};
       hsv_to_rgb_v(hsv, data->base_color);
       break;
     }
@@ -261,11 +261,11 @@ DRWShadingGroup *workbench_image_setup_ex(WORKBENCH_PrivateData *wpd,
 
   if (ima) {
     if (ima->source == IMA_SRC_TILED) {
-      tex = GPU_texture_from_blender(ima, iuser, NULL, GL_TEXTURE_2D_ARRAY);
-      tex_tile_data = GPU_texture_from_blender(ima, iuser, NULL, GL_TEXTURE_1D_ARRAY);
+      tex = BKE_image_get_gpu_tiles(ima, iuser, NULL);
+      tex_tile_data = BKE_image_get_gpu_tilemap(ima, iuser, NULL);
     }
     else {
-      tex = GPU_texture_from_blender(ima, iuser, NULL, GL_TEXTURE_2D);
+      tex = BKE_image_get_gpu_texture(ima, iuser, NULL);
     }
   }
 

@@ -130,6 +130,11 @@ enum {
    * Should only be used/be relevant for custom properties. */
   IDP_FLAG_OVERRIDABLE_LIBRARY = 1 << 0,
 
+  /** This collection item IDProp has been inserted in a local override.
+   * This is used by internal code to distinguish between library-originated items and
+   * local-inserted ones, as many operations are not allowed on the former. */
+  IDP_FLAG_OVERRIDELIBRARY_LOCAL = 1 << 1,
+
   /** This means the property is set but RNA will return false when checking
    * 'RNA_property_is_set', currently this is a runtime flag */
   IDP_FLAG_GHOST = 1 << 7,
@@ -441,7 +446,7 @@ typedef enum ID_Type {
   ID_HA = MAKE_ID2('H', 'A'),  /* Hair */
   ID_PT = MAKE_ID2('P', 'T'),  /* PointCloud */
   ID_VO = MAKE_ID2('V', 'O'),  /* Volume */
-  ID_SIM = MAKE_ID2('S', 'I'), /* Simulation */
+  ID_SIM = MAKE_ID2('S', 'I'), /* Simulation (currently unused) */
 } ID_Type;
 
 /* Only used as 'placeholder' in .blend files for directly linked data-blocks. */
@@ -511,8 +516,10 @@ typedef enum ID_Type {
    ((ID *)(_id))->newid->tag |= LIB_TAG_NEW, \
    (void *)((ID *)(_id))->newid)
 #define ID_NEW_REMAP(a) \
-  if ((a) && (a)->id.newid) \
-  (a) = (void *)(a)->id.newid
+  if ((a) && (a)->id.newid) { \
+    (a) = (void *)(a)->id.newid; \
+  } \
+  ((void)0)
 
 /** id->flag (persitent). */
 enum {
@@ -621,7 +628,7 @@ typedef enum IDRecalcFlag {
 
   /* ** Object geometry changed. **
    *
-   * When object of armature type gets tagged with this flag, it's pose is
+   * When object of armature type gets tagged with this flag, its pose is
    * re-evaluated.
    * When object of other type is tagged with this flag it makes the modifier
    * stack to be re-evaluated.
@@ -685,10 +692,6 @@ typedef enum IDRecalcFlag {
   ID_RECALC_AUDIO = (1 << 20),
 
   ID_RECALC_PARAMETERS = (1 << 21),
-
-  /* Makes it so everything what depends on time.
-   * Basically, the same what changing frame in a timeline will do. */
-  ID_RECALC_TIME = (1 << 22),
 
   /* Input has changed and datablock is to be reload from disk.
    * Applies to movie clips to inform that copy-on-written version is to be refreshed for the new

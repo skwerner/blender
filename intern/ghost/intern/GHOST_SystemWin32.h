@@ -142,7 +142,7 @@ class GHOST_SystemWin32 : public GHOST_System {
    * Never explicitly delete the window, use disposeContext() instead.
    * \return  The new context (or 0 if creation failed).
    */
-  GHOST_IContext *createOffscreenContext();
+  GHOST_IContext *createOffscreenContext(GHOST_GLSettings glSettings);
 
   /**
    * Dispose of a context.
@@ -354,7 +354,7 @@ class GHOST_SystemWin32 : public GHOST_System {
    * Process special keys (VK_OEM_*), to see if current key layout
    * gives us anything special, like ! on french AZERTY.
    * \param vKey      The virtual key from hardKey
-   * \param scanCode  The ScanCode of pressed key (simular to PS/2 Set 1)
+   * \param scanCode  The ScanCode of pressed key (similar to PS/2 Set 1)
    */
   GHOST_TKey processSpecialKey(short vKey, short scanCode) const;
 

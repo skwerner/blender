@@ -133,7 +133,9 @@ static void do_paint_brush_task_cb_ex(void *__restrict userdata,
   const int thread_id = BLI_task_parallel_thread_id(tls);
 
   float brush_color[4] = {0.0f, 0.0f, 0.0f, 1.0f};
-  copy_v3_v3(brush_color, BKE_brush_color_get(ss->scene, brush));
+  copy_v3_v3(brush_color,
+             ss->cache->invert ? BKE_brush_secondary_color_get(ss->scene, brush) :
+                                 BKE_brush_color_get(ss->scene, brush));
   IMB_colormanagement_srgb_to_scene_linear_v3(brush_color);
 
   BKE_pbvh_vertex_iter_begin(ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE)
@@ -255,7 +257,7 @@ void SCULPT_do_paint_brush(Sculpt *sd, Object *ob, PBVHNode **nodes, int totnode
     return;
   }
 
-  BKE_curvemapping_initialize(brush->curve);
+  BKE_curvemapping_init(brush->curve);
 
   float area_no[3];
   float mat[4][4];
@@ -327,7 +329,7 @@ void SCULPT_do_paint_brush(Sculpt *sd, Object *ob, PBVHNode **nodes, int totnode
 
     if (swptd.tot_samples > 0 && is_finite_v4(swptd.color)) {
       copy_v4_v4(wet_color, swptd.color);
-      mul_v4_fl(wet_color, 1.0f / (float)swptd.tot_samples);
+      mul_v4_fl(wet_color, 1.0f / swptd.tot_samples);
       CLAMP4(wet_color, 0.0f, 1.0f);
 
       if (ss->cache->first_time) {
@@ -461,14 +463,14 @@ void SCULPT_do_smear_brush(Sculpt *sd, Object *ob, PBVHNode **nodes, int totnode
 
   if (SCULPT_stroke_is_first_brush_step(ss->cache)) {
     if (!ss->cache->prev_colors) {
-      ss->cache->prev_colors = MEM_callocN(sizeof(float) * 4 * totvert, "prev colors");
+      ss->cache->prev_colors = MEM_callocN(sizeof(float[4]) * totvert, "prev colors");
       for (int i = 0; i < totvert; i++) {
         copy_v4_v4(ss->cache->prev_colors[i], SCULPT_vertex_color_get(ss, i));
       }
     }
   }
 
-  BKE_curvemapping_initialize(brush->curve);
+  BKE_curvemapping_init(brush->curve);
 
   SculptThreadedTaskData data = {
       .sd = sd,

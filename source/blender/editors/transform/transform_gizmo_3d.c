@@ -42,6 +42,7 @@
 #include "BLI_utildefines.h"
 
 #include "BKE_action.h"
+#include "BKE_armature.h"
 #include "BKE_context.h"
 #include "BKE_curve.h"
 #include "BKE_editmesh.h"
@@ -914,7 +915,7 @@ int ED_transform_calc_gizmo_stats(const bContext *C,
 
     /* selection center */
     if (totsel) {
-      mul_v3_fl(tbounds->center, 1.0f / (float)totsel);  // centroid!
+      mul_v3_fl(tbounds->center, 1.0f / (float)totsel); /* centroid! */
       mul_m4_v3(obedit->obmat, tbounds->center);
       mul_m4_v3(obedit->obmat, tbounds->min);
       mul_m4_v3(obedit->obmat, tbounds->max);
@@ -957,7 +958,7 @@ int ED_transform_calc_gizmo_stats(const bContext *C,
     MEM_freeN(objects);
 
     if (totsel) {
-      mul_v3_fl(tbounds->center, 1.0f / (float)totsel);  // centroid!
+      mul_v3_fl(tbounds->center, 1.0f / (float)totsel); /* centroid! */
       mul_m4_v3(ob->obmat, tbounds->center);
       mul_m4_v3(ob->obmat, tbounds->min);
       mul_m4_v3(ob->obmat, tbounds->max);
@@ -995,7 +996,7 @@ int ED_transform_calc_gizmo_stats(const bContext *C,
 
       /* selection center */
       if (totsel) {
-        mul_v3_fl(tbounds->center, 1.0f / (float)totsel);  // centroid!
+        mul_v3_fl(tbounds->center, 1.0f / (float)totsel); /* centroid! */
       }
     }
   }
@@ -1043,7 +1044,7 @@ int ED_transform_calc_gizmo_stats(const bContext *C,
 
     /* selection center */
     if (totsel) {
-      mul_v3_fl(tbounds->center, 1.0f / (float)totsel);  // centroid!
+      mul_v3_fl(tbounds->center, 1.0f / (float)totsel); /* centroid! */
     }
   }
 
@@ -1279,7 +1280,7 @@ void drawDial3d(const TransInfo *t)
     float mat_basis[4][4];
     float mat_final[4][4];
     float color[4];
-    float increment;
+    float increment = 0.0f;
     float line_with = GIZMO_AXIS_LINE_WIDTH + 1.0f;
     float scale = UI_DPI_FAC * U.gizmo_size;
 
@@ -1334,17 +1335,14 @@ void drawDial3d(const TransInfo *t)
 
     if (activeSnap(t) && (!transformModeUseSnap(t) ||
                           (t->tsnap.mode & (SCE_SNAP_MODE_INCREMENT | SCE_SNAP_MODE_GRID)))) {
-      increment = (t->modifiers & MOD_PRECISION) ? t->snap[2] : t->snap[1];
-    }
-    else {
-      increment = t->snap[0];
+      increment = (t->modifiers & MOD_PRECISION) ? t->snap[1] : t->snap[0];
     }
 
     BLI_assert(axis_idx >= MAN_AXIS_RANGE_ROT_START && axis_idx < MAN_AXIS_RANGE_ROT_END);
     gizmo_get_axis_color(axis_idx, NULL, color, color);
 
-    GPU_depth_test(false);
-    GPU_blend(true);
+    GPU_depth_test(GPU_DEPTH_NONE);
+    GPU_blend(GPU_BLEND_ALPHA);
     GPU_line_smooth(true);
 
     ED_gizmotypes_dial_3d_draw_util(mat_basis,
@@ -1359,8 +1357,8 @@ void drawDial3d(const TransInfo *t)
                                     });
 
     GPU_line_smooth(false);
-    GPU_depth_test(true);
-    GPU_blend(false);
+    GPU_depth_test(GPU_DEPTH_LESS_EQUAL);
+    GPU_blend(GPU_BLEND_NONE);
   }
 }
 
@@ -2053,7 +2051,7 @@ static void WIDGETGROUP_xform_cage_setup(const bContext *UNUSED(C), wmGizmoGroup
     for (int x = 0; x < 3; x++) {
       for (int y = 0; y < 3; y++) {
         for (int z = 0; z < 3; z++) {
-          bool constraint[3] = {x != 1, y != 1, z != 1};
+          const bool constraint[3] = {x != 1, y != 1, z != 1};
           ptr = WM_gizmo_operator_set(gz, i, ot_resize, NULL);
           if (prop_release_confirm == NULL) {
             prop_release_confirm = RNA_struct_find_property(ptr, "release_confirm");

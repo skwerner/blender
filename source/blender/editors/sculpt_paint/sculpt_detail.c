@@ -111,7 +111,7 @@ static int sculpt_detail_flood_fill_exec(bContext *C, wmOperator *UNUSED(op))
   for (int i = 0; i < totnodes; i++) {
     BKE_pbvh_node_mark_topology_update(nodes[i]);
   }
-  /* Get the bounding box, it's center and size. */
+  /* Get the bounding box, its center and size. */
   BKE_pbvh_bounding_box(ob->sculpt->pbvh, bb_min, bb_max);
   add_v3_v3v3(center, bb_min, bb_max);
   mul_v3_fl(center, 0.5f);
@@ -176,10 +176,10 @@ static void sample_detail_voxel(bContext *C, ViewContext *vc, int mx, int my)
 
   SculptSession *ss = ob->sculpt;
   SculptCursorGeometryInfo sgi;
-  SCULPT_vertex_random_access_init(ss);
+  SCULPT_vertex_random_access_ensure(ss);
 
   /* Update the active vertex. */
-  float mouse[2] = {mx, my};
+  const float mouse[2] = {mx, my};
   SCULPT_cursor_geometry_info_update(C, &sgi, mouse, false);
   BKE_sculpt_update_object_for_edit(depsgraph, ob, true, false, false);
 
@@ -219,7 +219,7 @@ static void sample_detail_dyntopo(bContext *C, ViewContext *vc, ARegion *region,
 
   SCULPT_stroke_modifiers_check(C, ob, brush);
 
-  float mouse[2] = {mx - region->winrct.xmin, my - region->winrct.ymin};
+  const float mouse[2] = {mx - region->winrct.xmin, my - region->winrct.ymin};
   float ray_start[3], ray_end[3], ray_normal[3];
   float depth = SCULPT_raycast_init(vc, mouse, ray_start, ray_end, ray_normal, false);
 
@@ -316,7 +316,7 @@ static int sculpt_sample_detail_size_modal(bContext *C, wmOperator *op, const wm
   switch (event->type) {
     case LEFTMOUSE:
       if (event->val == KM_PRESS) {
-        int ss_co[2] = {event->x, event->y};
+        const int ss_co[2] = {event->x, event->y};
 
         int mode = RNA_enum_get(op->ptr, "mode");
         sample_detail(C, ss_co[0], ss_co[1], mode);

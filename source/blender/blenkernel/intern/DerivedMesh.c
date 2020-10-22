@@ -80,11 +80,9 @@
 //#define USE_MODIFIER_VALIDATE
 
 #ifdef USE_MODIFIER_VALIDATE
-#  define ASSERT_IS_VALID_DM(dm) (BLI_assert((dm == NULL) || (DM_is_valid(dm) == true)))
 #  define ASSERT_IS_VALID_MESH(mesh) \
     (BLI_assert((mesh == NULL) || (BKE_mesh_is_valid(mesh) == true)))
 #else
-#  define ASSERT_IS_VALID_DM(dm)
 #  define ASSERT_IS_VALID_MESH(mesh)
 #endif
 
@@ -409,7 +407,7 @@ void DM_from_template(DerivedMesh *dm,
                       &CD_MASK_DERIVEDMESH);
 }
 
-int DM_release(DerivedMesh *dm)
+bool DM_release(DerivedMesh *dm)
 {
   if (dm->needsFree) {
     CustomData_free(&dm->vertData, dm->numVertData);
@@ -422,7 +420,7 @@ int DM_release(DerivedMesh *dm)
     dm->looptris.num = 0;
     dm->looptris.num_alloc = 0;
 
-    return 1;
+    return true;
   }
 
   CustomData_free_temporary(&dm->vertData, dm->numVertData);
@@ -431,7 +429,7 @@ int DM_release(DerivedMesh *dm)
   CustomData_free_temporary(&dm->loopData, dm->numLoopData);
   CustomData_free_temporary(&dm->polyData, dm->numPolyData);
 
-  return 0;
+  return false;
 }
 
 void DM_DupPolys(DerivedMesh *source, DerivedMesh *target)
@@ -671,7 +669,7 @@ static float (*get_editbmesh_orco_verts(BMEditMesh *em))[3]
   /* these may not really be the orco's, but it's only for preview.
    * could be solver better once, but isn't simple */
 
-  orco = MEM_malloc_arrayN(em->bm->totvert, sizeof(float) * 3, "BMEditMesh Orco");
+  orco = MEM_malloc_arrayN(em->bm->totvert, sizeof(float[3]), "BMEditMesh Orco");
 
   BM_ITER_MESH_INDEX (eve, &iter, em->bm, BM_VERTS_OF_MESH, i) {
     copy_v3_v3(orco[i], eve->co);
@@ -774,7 +772,7 @@ static void add_orco_mesh(Object *ob, BMEditMesh *em, Mesh *mesh, Mesh *mesh_orc
       layerorco = CustomData_get_layer(&mesh->vdata, layer);
     }
 
-    memcpy(layerorco, orco, sizeof(float) * 3 * totvert);
+    memcpy(layerorco, orco, sizeof(float[3]) * totvert);
     if (free) {
       MEM_freeN(orco);
     }
@@ -911,8 +909,7 @@ static void mesh_calc_modifiers(struct Depsgraph *depsgraph,
   const int required_mode = use_render ? eModifierMode_Render : eModifierMode_Realtime;
 
   /* Sculpt can skip certain modifiers. */
-  MultiresModifierData *mmd = get_multires_modifier(scene, ob, 0);
-  const bool has_multires = (mmd && mmd->sculptlvl != 0);
+  const bool has_multires = BKE_sculpt_multires_active(scene, ob) != NULL;
   bool multires_applied = false;
   const bool sculpt_mode = ob->mode & OB_MODE_SCULPT && ob->sculpt && !use_render;
   const bool sculpt_dyntopo = (sculpt_mode && ob->sculpt->bm) && !use_render;
@@ -1057,7 +1054,6 @@ static void mesh_calc_modifiers(struct Depsgraph *depsgraph,
         }
         continue;
       }
-      BKE_modifier_set_error(md, "Sculpt: Hide, Mask and optimized display disabled");
     }
 
     if (need_mapping && !BKE_modifier_supports_mapping(md)) {
@@ -1094,7 +1090,7 @@ static void mesh_calc_modifiers(struct Depsgraph *depsgraph,
         }
       }
       /* if this is not the last modifier in the stack then recalculate the normals
-       * to avoid giving bogus normals to the next modifier see: [#23673] */
+       * to avoid giving bogus normals to the next modifier see: T23673. */
       else if (isPrevDeform && mti->dependsOnNormals && mti->dependsOnNormals(md)) {
         if (mesh_final == NULL) {
           mesh_final = BKE_mesh_copy_for_eval(mesh_input, true);
@@ -1105,31 +1101,31 @@ static void mesh_calc_modifiers(struct Depsgraph *depsgraph,
       BKE_modifier_deform_verts(md, &mectx, mesh_final, deformed_verts, num_deformed_verts);
     }
     else {
-      have_non_onlydeform_modifiers_appled = true;
-
-      /* determine which data layers are needed by following modifiers */
-      CustomData_MeshMasks nextmask;
-      if (md_datamask->next) {
-        nextmask = md_datamask->next->mask;
-      }
-      else {
-        nextmask = final_datamask;
-      }
-
+      bool check_for_needs_mapping = false;
       /* apply vertex coordinates or build a Mesh as necessary */
-      if (mesh_final) {
-        if (deformed_verts) {
-          BKE_mesh_vert_coords_apply(mesh_final, deformed_verts);
+      if (mesh_final != NULL) {
+        if (have_non_onlydeform_modifiers_appled == false) {
+          /* If we only deformed, we won't have initialized #CD_ORIGINDEX.
+           * as this is the only part of the function that initializes mapping. */
+          check_for_needs_mapping = true;
         }
       }
       else {
         mesh_final = BKE_mesh_copy_for_eval(mesh_input, true);
         ASSERT_IS_VALID_MESH(mesh_final);
+        check_for_needs_mapping = true;
+      }
 
-        if (deformed_verts) {
-          BKE_mesh_vert_coords_apply(mesh_final, deformed_verts);
-        }
+      if (deformed_verts) {
+        BKE_mesh_vert_coords_apply(mesh_final, deformed_verts);
+      }
 
+      have_non_onlydeform_modifiers_appled = true;
+
+      /* determine which data layers are needed by following modifiers */
+      CustomData_MeshMasks nextmask = md_datamask->next ? md_datamask->next->mask : final_datamask;
+
+      if (check_for_needs_mapping) {
         /* Initialize original indices the first time we evaluate a
          * constructive modifier. Modifiers will then do mapping mostly
          * automatic by copying them through CustomData_copy_data along
@@ -1160,7 +1156,7 @@ static void mesh_calc_modifiers(struct Depsgraph *depsgraph,
 
       /* set the Mesh to only copy needed data */
       CustomData_MeshMasks mask = md_datamask->mask;
-      /* needMapping check here fixes bug [#28112], otherwise it's
+      /* needMapping check here fixes bug T28112, otherwise it's
        * possible that it won't be copied */
       CustomData_MeshMasks_update(&mask, &append_mask);
       if (need_mapping) {
@@ -1373,7 +1369,7 @@ float (*editbmesh_vert_coords_alloc(BMEditMesh *em, int *r_vert_len))[3]
 
   *r_vert_len = em->bm->totvert;
 
-  cos = MEM_malloc_arrayN(em->bm->totvert, 3 * sizeof(float), "vertexcos");
+  cos = MEM_malloc_arrayN(em->bm->totvert, sizeof(float[3]), "vertexcos");
 
   BM_ITER_MESH_INDEX (eve, &iter, em->bm, BM_VERTS_OF_MESH, i) {
     copy_v3_v3(cos[i], eve->co);
@@ -1492,8 +1488,10 @@ static void editbmesh_calc_modifiers(struct Depsgraph *depsgraph,
   /* Modifier evaluation modes. */
   const int required_mode = eModifierMode_Realtime | eModifierMode_Editmode;
 
+  const bool use_render = (DEG_get_mode(depsgraph) == DAG_EVAL_RENDER);
   /* Modifier evaluation contexts for different types of modifiers. */
-  const ModifierEvalContext mectx = {depsgraph, ob, MOD_APPLY_USECACHE};
+  ModifierApplyFlag apply_render = use_render ? MOD_APPLY_RENDER : 0;
+  const ModifierEvalContext mectx = {depsgraph, ob, MOD_APPLY_USECACHE | apply_render};
   const ModifierEvalContext mectx_orco = {depsgraph, ob, MOD_APPLY_ORCO};
 
   /* Get effective list of modifiers to execute. Some effects like shape keys
@@ -1812,6 +1810,12 @@ static void mesh_build_data(struct Depsgraph *depsgraph,
 
   BKE_object_boundbox_calc_from_mesh(ob, mesh_eval);
 
+  /* Make sure that drivers can target shapekey properties.
+   * Note that this causes a potential inconsistency, as the shapekey may have a
+   * different topology than the evaluated mesh. */
+  BLI_assert(mesh->key == NULL || DEG_is_evaluated_id(&mesh->key->id));
+  mesh_eval->key = mesh->key;
+
   if ((ob->mode & OB_MODE_ALL_SCULPT) && ob->sculpt) {
     if (DEG_is_active(depsgraph)) {
       BKE_sculpt_update_object_after_eval(depsgraph, ob);
@@ -1987,10 +1991,10 @@ Mesh *mesh_get_eval_deform(struct Depsgraph *depsgraph,
   return ob->runtime.mesh_deform_eval;
 }
 
-Mesh *mesh_create_eval_final_render(Depsgraph *depsgraph,
-                                    Scene *scene,
-                                    Object *ob,
-                                    const CustomData_MeshMasks *dataMask)
+Mesh *mesh_create_eval_final(Depsgraph *depsgraph,
+                             Scene *scene,
+                             Object *ob,
+                             const CustomData_MeshMasks *dataMask)
 {
   Mesh *final;
 
@@ -2008,26 +2012,6 @@ Mesh *mesh_create_eval_final_index_render(Depsgraph *depsgraph,
   Mesh *final;
 
   mesh_calc_modifiers(depsgraph, scene, ob, 1, false, dataMask, index, false, false, NULL, &final);
-
-  return final;
-}
-
-Mesh *mesh_create_eval_final_view(Depsgraph *depsgraph,
-                                  Scene *scene,
-                                  Object *ob,
-                                  const CustomData_MeshMasks *dataMask)
-{
-  Mesh *final;
-
-  /* XXX hack
-   * psys modifier updates particle state when called during dupli-list generation,
-   * which can lead to wrong transforms. This disables particle system modifier execution.
-   */
-  ob->transflag |= OB_NO_PSYS_UPDATE;
-
-  mesh_calc_modifiers(depsgraph, scene, ob, 1, false, dataMask, -1, false, false, NULL, &final);
-
-  ob->transflag &= ~OB_NO_PSYS_UPDATE;
 
   return final;
 }

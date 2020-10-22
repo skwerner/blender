@@ -27,57 +27,14 @@ typedef struct Simulation {
   ID id;
   struct AnimData *adt; /* animation data (must be immediately after id) */
 
+  /* This nodetree is embedded into the data block. */
   struct bNodeTree *nodetree;
 
-  int flag;
-  float current_frame;
-  float current_simulation_time;
+  uint32_t flag;
   char _pad[4];
-
-  /** List containing SimulationState objects. */
-  struct ListBase states;
-
-  /** List containing PersistentDataHandleItem objects. */
-  struct ListBase persistent_data_handles;
 } Simulation;
-
-typedef struct SimulationState {
-  struct SimulationState *next;
-  struct SimulationState *prev;
-
-  char *type;
-  char *name;
-} SimulationState;
-
-typedef struct ParticleSimulationState {
-  SimulationState head;
-
-  /** Contains the state of the particles at time Simulation->current_frame. */
-  int tot_particles;
-  int next_particle_id;
-  struct CustomData attributes;
-} ParticleSimulationState;
-
-typedef struct ParticleMeshEmitterSimulationState {
-  SimulationState head;
-
-  float last_birth_time;
-  char _pad[4];
-} ParticleMeshEmitterSimulationState;
-
-/** Stores a mapping between an integer handle and a corresponding ID data block. */
-typedef struct PersistentDataHandleItem {
-  struct PersistentDataHandleItem *next;
-  struct PersistentDataHandleItem *prev;
-  struct ID *id;
-  int handle;
-  char _pad[4];
-} PersistentDataHandleItem;
 
 /* Simulation.flag */
 enum {
   SIM_DS_EXPAND = (1 << 0),
 };
-
-#define SIM_TYPE_NAME_PARTICLE_SIMULATION "Particle Simulation"
-#define SIM_TYPE_NAME_PARTICLE_MESH_EMITTER "Particle Mesh Emitter"

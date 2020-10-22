@@ -31,7 +31,7 @@ struct float3 {
   {
   }
 
-  float3(const float (*ptr)[3]) : float3((const float *)ptr)
+  float3(const float (*ptr)[3]) : float3(static_cast<const float *>(ptr[0]))
   {
   }
 
@@ -62,11 +62,12 @@ struct float3 {
     return {a.x + b.x, a.y + b.y, a.z + b.z};
   }
 
-  void operator+=(const float3 &b)
+  float3 &operator+=(const float3 &b)
   {
     this->x += b.x;
     this->y += b.y;
     this->z += b.z;
+    return *this;
   }
 
   friend float3 operator-(const float3 &a, const float3 &b)
@@ -79,25 +80,28 @@ struct float3 {
     return {-a.x, -a.y, -a.z};
   }
 
-  void operator-=(const float3 &b)
+  float3 &operator-=(const float3 &b)
   {
     this->x -= b.x;
     this->y -= b.y;
     this->z -= b.z;
+    return *this;
   }
 
-  void operator*=(float scalar)
+  float3 &operator*=(float scalar)
   {
     this->x *= scalar;
     this->y *= scalar;
     this->z *= scalar;
+    return *this;
   }
 
-  void operator*=(const float3 &other)
+  float3 &operator*=(const float3 &other)
   {
     this->x *= other.x;
     this->y *= other.y;
     this->z *= other.z;
+    return *this;
   }
 
   friend float3 operator*(const float3 &a, const float3 &b)
@@ -142,6 +146,17 @@ struct float3 {
     return normalize_v3(*this);
   }
 
+  /**
+   * Normalizes the vector in place.
+   */
+  void normalize()
+  {
+    normalize_v3(*this);
+  }
+
+  /**
+   * Returns a normalized vector. The original vector is not changed.
+   */
   float3 normalized() const
   {
     float3 result;
@@ -189,9 +204,9 @@ struct float3 {
 
   uint64_t hash() const
   {
-    uint64_t x1 = *(uint32_t *)&x;
-    uint64_t x2 = *(uint32_t *)&y;
-    uint64_t x3 = *(uint32_t *)&z;
+    uint64_t x1 = *reinterpret_cast<const uint32_t *>(&x);
+    uint64_t x2 = *reinterpret_cast<const uint32_t *>(&y);
+    uint64_t x3 = *reinterpret_cast<const uint32_t *>(&z);
     return (x1 * 435109) ^ (x2 * 380867) ^ (x3 * 1059217);
   }
 
@@ -227,6 +242,11 @@ struct float3 {
   static float3 interpolate(const float3 &a, const float3 &b, float t)
   {
     return a * (1 - t) + b * t;
+  }
+
+  static float3 abs(const float3 &a)
+  {
+    return float3(fabsf(a.x), fabsf(a.y), fabsf(a.z));
   }
 };
 

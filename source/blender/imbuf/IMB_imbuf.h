@@ -89,6 +89,12 @@ struct Stereo3dFormat;
 
 /**
  *
+ * \attention defined in GPU_texture.h
+ */
+struct GPUTexture;
+
+/**
+ *
  * \attention Defined in allocimbuf.c
  */
 void IMB_init(void);
@@ -241,8 +247,8 @@ void IMB_rectclip(struct ImBuf *dbuf,
                   int *srcy,
                   int *width,
                   int *height);
-void IMB_rectcpy(struct ImBuf *drect,
-                 const struct ImBuf *srect,
+void IMB_rectcpy(struct ImBuf *dbuf,
+                 const struct ImBuf *sbuf,
                  int destx,
                  int desty,
                  int srcx,
@@ -254,7 +260,7 @@ void IMB_rectblend(struct ImBuf *dbuf,
                    const struct ImBuf *sbuf,
                    unsigned short *dmask,
                    const unsigned short *curvemask,
-                   const unsigned short *mmask,
+                   const unsigned short *texmask,
                    float mask_max,
                    int destx,
                    int desty,
@@ -271,7 +277,7 @@ void IMB_rectblend_threaded(struct ImBuf *dbuf,
                             const struct ImBuf *sbuf,
                             unsigned short *dmask,
                             const unsigned short *curvemask,
-                            const unsigned short *mmask,
+                            const unsigned short *texmask,
                             float mask_max,
                             int destx,
                             int desty,
@@ -588,15 +594,15 @@ void bilinear_interpolation(
     struct ImBuf *in, struct ImBuf *out, float u, float v, int xout, int yout);
 
 void bicubic_interpolation_color(
-    struct ImBuf *in, unsigned char col[4], float col_float[4], float u, float v);
+    struct ImBuf *in, unsigned char outI[4], float outF[4], float u, float v);
 void nearest_interpolation_color(
-    struct ImBuf *in, unsigned char col[4], float col_float[4], float u, float v);
+    struct ImBuf *in, unsigned char outI[4], float outF[4], float u, float v);
 void nearest_interpolation_color_wrap(
-    struct ImBuf *in, unsigned char col[4], float col_float[4], float u, float v);
+    struct ImBuf *in, unsigned char outI[4], float outF[4], float u, float v);
 void bilinear_interpolation_color(
-    struct ImBuf *in, unsigned char col[4], float col_float[4], float u, float v);
+    struct ImBuf *in, unsigned char outI[4], float outF[4], float u, float v);
 void bilinear_interpolation_color_wrap(
-    struct ImBuf *in, unsigned char col[4], float col_float[4], float u, float v);
+    struct ImBuf *in, unsigned char outI[4], float outF[4], float u, float v);
 
 void IMB_alpha_under_color_float(float *rect_float, int x, int y, float backcol[3]);
 void IMB_alpha_under_color_byte(unsigned char *rect, int x, int y, const float backcol[3]);
@@ -725,6 +731,26 @@ void IMB_processor_apply_threaded_scanlines(int total_scanlines,
 /* ffmpeg */
 void IMB_ffmpeg_init(void);
 const char *IMB_ffmpeg_last_error(void);
+
+/**
+ *
+ * \attention defined in util_gpu.c
+ */
+struct GPUTexture *IMB_create_gpu_texture(const char *name,
+                                          struct ImBuf *ibuf,
+                                          bool use_high_bitdepth,
+                                          bool use_premult);
+struct GPUTexture *IMB_touch_gpu_texture(
+    const char *name, struct ImBuf *ibuf, int w, int h, int layers, bool use_high_bitdepth);
+void IMB_update_gpu_texture_sub(struct GPUTexture *tex,
+                                struct ImBuf *ibuf,
+                                int x,
+                                int y,
+                                int z,
+                                int w,
+                                int h,
+                                bool use_high_bitdepth,
+                                bool use_premult);
 
 /**
  *

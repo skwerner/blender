@@ -18,6 +18,8 @@
  * \ingroup MEM
  */
 
+#include <cstdlib>
+
 #include "MEM_guardedalloc.h"
 #include "mallocn_intern.h"
 
@@ -28,10 +30,17 @@ char free_after_leak_detection_message[] =
     "error, use the 'construct on first use' idiom.";
 
 namespace {
+
+bool fail_on_memleak = false;
+bool ignore_memleak = false;
+
 class MemLeakPrinter {
  public:
   ~MemLeakPrinter()
   {
+    if (ignore_memleak) {
+      return;
+    }
     leak_detector_has_run = true;
     const uint leaked_blocks = MEM_get_memory_blocks_in_use();
     if (leaked_blocks == 0) {
@@ -42,11 +51,20 @@ class MemLeakPrinter {
            leaked_blocks,
            (double)mem_in_use / 1024 / 1024);
     MEM_printmemlist();
+
+    if (fail_on_memleak) {
+      /* There are many other ways to change the exit code to failure here:
+       * - Make the destructor noexcept(false) and throw an exception.
+       * - Call exit(EXIT_FAILURE).
+       * - Call terminate().
+       */
+      abort();
+    }
   }
 };
 }  // namespace
 
-void MEM_initialize_memleak_detection(void)
+void MEM_init_memleak_detection(void)
 {
   /**
    * This variable is constructed when this function is first called. This should happen as soon as
@@ -58,4 +76,14 @@ void MEM_initialize_memleak_detection(void)
    * this function has been called.
    */
   static MemLeakPrinter printer;
+}
+
+void MEM_use_memleak_detection(bool enabled)
+{
+  ignore_memleak = !enabled;
+}
+
+void MEM_enable_fail_on_memleak(void)
+{
+  fail_on_memleak = true;
 }

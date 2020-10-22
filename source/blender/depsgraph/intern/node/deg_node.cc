@@ -299,7 +299,7 @@ Node::~Node()
 {
   /* Free links. */
   /* NOTE: We only free incoming links. This is to avoid double-free of links
-   * when we're trying to free same link from both it's sides. We don't have
+   * when we're trying to free same link from both its sides. We don't have
    * dangling links so this is not a problem from memory leaks point of view. */
   for (Relation *rel : inlinks) {
     delete rel;
@@ -317,12 +317,11 @@ NodeClass Node::get_class() const
   if (type == NodeType::OPERATION) {
     return NodeClass::OPERATION;
   }
-  else if (type < NodeType::PARAMETERS) {
+  if (type < NodeType::PARAMETERS) {
     return NodeClass::GENERIC;
   }
-  else {
-    return NodeClass::COMPONENT;
-  }
+
+  return NodeClass::COMPONENT;
 }
 
 /*******************************************************************************

@@ -59,7 +59,7 @@ BLI_INLINE void madd_v3v3short_fl(float r[3], const short a[3], const float f)
 /** \name High Quality Normal Calculation Function
  * \{ */
 
-/* skip shell thickness for non-manifold edges, see [#35710] */
+/* skip shell thickness for non-manifold edges, see T35710. */
 #define USE_NONMANIFOLD_WORKAROUND
 
 /* *** derived mesh high quality normal calculation function  *** */
@@ -182,7 +182,7 @@ static void mesh_calc_hq_normal(Mesh *mesh, float (*poly_nors)[3], float (*r_ver
 /* -------------------------------------------------------------------- */
 /** \name Main Solidify Function
  * \{ */
-
+/* NOLINTNEXTLINE: readability-function-size */
 Mesh *MOD_solidify_extrude_modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   Mesh *result;
@@ -355,7 +355,7 @@ Mesh *MOD_solidify_extrude_modifyMesh(ModifierData *md, const ModifierEvalContex
   }
 
   if (smd->flag & MOD_SOLIDIFY_NORMAL_CALC) {
-    vert_nors = MEM_calloc_arrayN(numVerts, 3 * sizeof(float), "mod_solid_vno_hq");
+    vert_nors = MEM_calloc_arrayN(numVerts, sizeof(float[3]), "mod_solid_vno_hq");
     mesh_calc_hq_normal(mesh, poly_nors, vert_nors);
   }
 
@@ -726,13 +726,13 @@ Mesh *MOD_solidify_extrude_modifyMesh(ModifierData *md, const ModifierEvalContex
 #endif
     /* same as EM_solidify() in editmesh_lib.c */
     float *vert_angles = MEM_calloc_arrayN(
-        numVerts, 2 * sizeof(float), "mod_solid_pair"); /* 2 in 1 */
+        numVerts, sizeof(float[2]), "mod_solid_pair"); /* 2 in 1 */
     float *vert_accum = vert_angles + numVerts;
     uint vidx;
     uint i;
 
     if (vert_nors == NULL) {
-      vert_nors = MEM_malloc_arrayN(numVerts, 3 * sizeof(float), "mod_solid_vno");
+      vert_nors = MEM_malloc_arrayN(numVerts, sizeof(float[3]), "mod_solid_vno");
       for (i = 0, mv = mvert; i < numVerts; i++, mv++) {
         normal_short_to_float_v3(vert_nors[i], mv->no);
       }
@@ -981,7 +981,7 @@ Mesh *MOD_solidify_extrude_modifyMesh(ModifierData *md, const ModifierEvalContex
     MEM_freeN(vert_nors);
   }
 
-  /* must recalculate normals with vgroups since they can displace unevenly [#26888] */
+  /* must recalculate normals with vgroups since they can displace unevenly T26888. */
   if ((mesh->runtime.cd_dirty_vert & CD_MASK_NORMAL) || do_rim || dvert) {
     result->runtime.cd_dirty_vert |= CD_MASK_NORMAL;
   }
@@ -1004,23 +1004,23 @@ Mesh *MOD_solidify_extrude_modifyMesh(ModifierData *md, const ModifierEvalContex
           &result->vdata, CD_MDEFORMVERT, CD_CALLOC, NULL, result->totvert);
     }
     /* Ultimate security check. */
-    if (!dvert) {
-      return result;
-    }
-    result->dvert = dvert;
+    if (dvert != NULL) {
+      result->dvert = dvert;
 
-    if (rim_defgrp_index != -1) {
-      for (uint i = 0; i < rimVerts; i++) {
-        BKE_defvert_ensure_index(&result->dvert[new_vert_arr[i]], rim_defgrp_index)->weight = 1.0f;
-        BKE_defvert_ensure_index(&result->dvert[(do_shell ? new_vert_arr[i] : i) + numVerts],
-                                 rim_defgrp_index)
-            ->weight = 1.0f;
+      if (rim_defgrp_index != -1) {
+        for (uint i = 0; i < rimVerts; i++) {
+          BKE_defvert_ensure_index(&result->dvert[new_vert_arr[i]], rim_defgrp_index)->weight =
+              1.0f;
+          BKE_defvert_ensure_index(&result->dvert[(do_shell ? new_vert_arr[i] : i) + numVerts],
+                                   rim_defgrp_index)
+              ->weight = 1.0f;
+        }
       }
-    }
 
-    if (shell_defgrp_index != -1) {
-      for (uint i = numVerts; i < result->totvert; i++) {
-        BKE_defvert_ensure_index(&result->dvert[i], shell_defgrp_index)->weight = 1.0f;
+      if (shell_defgrp_index != -1) {
+        for (uint i = numVerts; i < result->totvert; i++) {
+          BKE_defvert_ensure_index(&result->dvert[i], shell_defgrp_index)->weight = 1.0f;
+        }
       }
     }
   }
@@ -1044,7 +1044,7 @@ Mesh *MOD_solidify_extrude_modifyMesh(ModifierData *md, const ModifierEvalContex
     const bool do_side_normals = !(result->runtime.cd_dirty_vert & CD_MASK_NORMAL);
     /* annoying to allocate these since we only need the edge verts, */
     float(*edge_vert_nos)[3] = do_side_normals ?
-                                   MEM_calloc_arrayN(numVerts, 3 * sizeof(float), __func__) :
+                                   MEM_calloc_arrayN(numVerts, sizeof(float[3]), __func__) :
                                    NULL;
     float nor[3];
 #endif

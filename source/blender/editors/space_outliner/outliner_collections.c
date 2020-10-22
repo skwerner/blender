@@ -142,10 +142,14 @@ TreeTraversalAction outliner_find_selected_objects(TreeElement *te, void *custom
  */
 void ED_outliner_selected_objects_get(const bContext *C, ListBase *objects)
 {
-  SpaceOutliner *soops = CTX_wm_space_outliner(C);
+  SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
   struct IDsSelectedData data = {{NULL}};
-  outliner_tree_traverse(
-      soops, &soops->tree, 0, TSE_SELECTED, outliner_find_selected_objects, &data);
+  outliner_tree_traverse(space_outliner,
+                         &space_outliner->tree,
+                         0,
+                         TSE_SELECTED,
+                         outliner_find_selected_objects,
+                         &data);
   LISTBASE_FOREACH (LinkData *, link, &data.selected_array) {
     TreeElement *ten_selected = (TreeElement *)link->data;
     Object *ob = (Object *)TREESTORE(ten_selected)->id;
@@ -162,14 +166,27 @@ void ED_outliner_selected_objects_get(const bContext *C, ListBase *objects)
 
 bool ED_outliner_collections_editor_poll(bContext *C)
 {
-  SpaceOutliner *so = CTX_wm_space_outliner(C);
-  return (so != NULL) && ELEM(so->outlinevis, SO_VIEW_LAYER, SO_SCENES, SO_LIBRARIES);
+  SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
+  return (space_outliner != NULL) &&
+         ELEM(space_outliner->outlinevis, SO_VIEW_LAYER, SO_SCENES, SO_LIBRARIES);
 }
 
 static bool outliner_view_layer_collections_editor_poll(bContext *C)
 {
-  SpaceOutliner *so = CTX_wm_space_outliner(C);
-  return (so != NULL) && (so->outlinevis == SO_VIEW_LAYER);
+  SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
+  return (space_outliner != NULL) && (space_outliner->outlinevis == SO_VIEW_LAYER);
+}
+
+static bool collection_edit_in_active_scene_poll(bContext *C)
+{
+  if (!ED_outliner_collections_editor_poll(C)) {
+    return false;
+  }
+  Scene *scene = CTX_data_scene(C);
+  if (ID_IS_LINKED(scene) || ID_IS_OVERRIDE_LIBRARY(scene)) {
+    return false;
+  }
+  return true;
 }
 
 /** \} */
@@ -203,7 +220,7 @@ static TreeTraversalAction collection_find_selected_to_add(TreeElement *te, void
 
 static int collection_new_exec(bContext *C, wmOperator *op)
 {
-  SpaceOutliner *soops = CTX_wm_space_outliner(C);
+  SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
   ARegion *region = CTX_wm_region(C);
   Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
@@ -215,10 +232,14 @@ static int collection_new_exec(bContext *C, wmOperator *op)
   };
 
   if (RNA_boolean_get(op->ptr, "nested")) {
-    outliner_build_tree(bmain, scene, view_layer, soops, region);
+    outliner_build_tree(bmain, scene, view_layer, space_outliner, region);
 
-    outliner_tree_traverse(
-        soops, &soops->tree, 0, TSE_SELECTED, collection_find_selected_to_add, &data);
+    outliner_tree_traverse(space_outliner,
+                           &space_outliner->tree,
+                           0,
+                           TSE_SELECTED,
+                           collection_find_selected_to_add,
+                           &data);
 
     if (data.error) {
       BKE_report(op->reports, RPT_ERROR, "More than one collection is selected");
@@ -226,12 +247,13 @@ static int collection_new_exec(bContext *C, wmOperator *op)
     }
   }
 
-  if (data.collection == NULL || ID_IS_LINKED(data.collection)) {
+  if (data.collection == NULL || ID_IS_LINKED(data.collection) ||
+      ID_IS_OVERRIDE_LIBRARY(data.collection)) {
     data.collection = scene->master_collection;
   }
 
-  if (ID_IS_LINKED(scene)) {
-    BKE_report(op->reports, RPT_ERROR, "Can't add a new collection to linked scene/collection");
+  if (ID_IS_LINKED(scene) || ID_IS_OVERRIDE_LIBRARY(scene)) {
+    BKE_report(op->reports, RPT_ERROR, "Can't add a new collection to linked/override scene");
     return OPERATOR_CANCELLED;
   }
 
@@ -240,7 +262,7 @@ static int collection_new_exec(bContext *C, wmOperator *op)
   DEG_id_tag_update(&data.collection->id, ID_RECALC_COPY_ON_WRITE);
   DEG_relations_tag_update(bmain);
 
-  outliner_cleanup_tree(soops);
+  outliner_cleanup_tree(space_outliner);
   WM_main_add_notifier(NC_SCENE | ND_LAYER, NULL);
   return OPERATOR_FINISHED;
 }
@@ -254,7 +276,7 @@ void OUTLINER_OT_collection_new(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = collection_new_exec;
-  ot->poll = ED_outliner_collections_editor_poll;
+  ot->poll = collection_edit_in_active_scene_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -273,7 +295,7 @@ void OUTLINER_OT_collection_new(wmOperatorType *ot)
 
 struct CollectionEditData {
   Scene *scene;
-  SpaceOutliner *soops;
+  SpaceOutliner *space_outliner;
   GSet *collections_to_edit;
 };
 
@@ -303,11 +325,11 @@ static TreeTraversalAction collection_find_data_to_edit(TreeElement *te, void *c
 void outliner_collection_delete(
     bContext *C, Main *bmain, Scene *scene, ReportList *reports, bool hierarchy)
 {
-  SpaceOutliner *soops = CTX_wm_space_outliner(C);
+  SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
 
   struct CollectionEditData data = {
       .scene = scene,
-      .soops = soops,
+      .space_outliner = space_outliner,
   };
 
   data.collections_to_edit = BLI_gset_ptr_new(__func__);
@@ -315,7 +337,7 @@ void outliner_collection_delete(
   /* We first walk over and find the Collections we actually want to delete
    * (ignoring duplicates). */
   outliner_tree_traverse(
-      soops, &soops->tree, 0, TSE_SELECTED, collection_find_data_to_edit, &data);
+      space_outliner, &space_outliner->tree, 0, TSE_SELECTED, collection_find_data_to_edit, &data);
 
   /* Effectively delete the collections. */
   GSetIterator collections_to_edit_iter;
@@ -398,7 +420,7 @@ void OUTLINER_OT_collection_hierarchy_delete(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = collection_hierarchy_delete_exec;
-  ot->poll = ED_outliner_collections_editor_poll;
+  ot->poll = collection_edit_in_active_scene_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -436,14 +458,18 @@ static TreeTraversalAction outliner_find_first_selected_layer_collection(TreeEle
 
 static LayerCollection *outliner_active_layer_collection(bContext *C)
 {
-  SpaceOutliner *soops = CTX_wm_space_outliner(C);
+  SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
 
   struct CollectionObjectsSelectData data = {
       .layer_collection = NULL,
   };
 
-  outliner_tree_traverse(
-      soops, &soops->tree, 0, TSE_SELECTED, outliner_find_first_selected_layer_collection, &data);
+  outliner_tree_traverse(space_outliner,
+                         &space_outliner->tree,
+                         0,
+                         TSE_SELECTED,
+                         outliner_find_first_selected_layer_collection,
+                         &data);
   return data.layer_collection;
 }
 
@@ -527,14 +553,18 @@ static TreeTraversalAction outliner_find_first_selected_collection(TreeElement *
 
 static TreeElement *outliner_active_collection(bContext *C)
 {
-  SpaceOutliner *soops = CTX_wm_space_outliner(C);
+  SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
 
   struct CollectionDuplicateData data = {
       .te = NULL,
   };
 
-  outliner_tree_traverse(
-      soops, &soops->tree, 0, TSE_SELECTED, outliner_find_first_selected_collection, &data);
+  outliner_tree_traverse(space_outliner,
+                         &space_outliner->tree,
+                         0,
+                         TSE_SELECTED,
+                         outliner_find_first_selected_collection,
+                         &data);
   return data.te;
 }
 
@@ -556,14 +586,15 @@ static int collection_duplicate_exec(bContext *C, wmOperator *op)
   /* We are allowed to duplicated linked collections (they will become local IDs then),
    * but we should not allow its parent to be a linked ID, ever.
    * This can happen when a whole scene is linked e.g. */
-  if (parent != NULL && ID_IS_LINKED(parent)) {
+  if (parent != NULL && (ID_IS_LINKED(parent) || ID_IS_OVERRIDE_LIBRARY(parent))) {
     Scene *scene = CTX_data_scene(C);
-    parent = ID_IS_LINKED(scene) ? NULL : scene->master_collection;
+    parent = (ID_IS_LINKED(scene) || ID_IS_OVERRIDE_LIBRARY(scene)) ? NULL :
+                                                                      scene->master_collection;
   }
   else if (parent != NULL && (parent->flag & COLLECTION_IS_MASTER) != 0) {
     Scene *scene = BKE_collection_master_scene_search(bmain, parent);
     BLI_assert(scene != NULL);
-    if (ID_IS_LINKED(scene)) {
+    if (ID_IS_LINKED(scene) || ID_IS_OVERRIDE_LIBRARY(scene)) {
       scene = CTX_data_scene(C);
       parent = ID_IS_LINKED(scene) ? NULL : scene->master_collection;
     }
@@ -635,15 +666,17 @@ static int collection_link_exec(bContext *C, wmOperator *op)
   Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
   Collection *active_collection = CTX_data_layer_collection(C)->collection;
-  SpaceOutliner *soops = CTX_wm_space_outliner(C);
+  SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
   struct CollectionEditData data = {
       .scene = scene,
-      .soops = soops,
+      .space_outliner = space_outliner,
   };
 
-  if (ID_IS_LINKED(active_collection) ||
-      ((active_collection->flag & COLLECTION_IS_MASTER) && ID_IS_LINKED(scene))) {
-    BKE_report(op->reports, RPT_ERROR, "Cannot add a collection to a linked collection/scene");
+  if ((ID_IS_LINKED(active_collection) || ID_IS_OVERRIDE_LIBRARY(active_collection)) ||
+      ((active_collection->flag & COLLECTION_IS_MASTER) &&
+       (ID_IS_LINKED(scene) || ID_IS_OVERRIDE_LIBRARY(scene)))) {
+    BKE_report(
+        op->reports, RPT_ERROR, "Cannot add a collection to a linked/override collection/scene");
     return OPERATOR_CANCELLED;
   }
 
@@ -651,7 +684,7 @@ static int collection_link_exec(bContext *C, wmOperator *op)
 
   /* We first walk over and find the Collections we actually want to link (ignoring duplicates). */
   outliner_tree_traverse(
-      soops, &soops->tree, 0, TSE_SELECTED, collection_find_data_to_edit, &data);
+      space_outliner, &space_outliner->tree, 0, TSE_SELECTED, collection_find_data_to_edit, &data);
 
   /* Effectively link the collections. */
   GSetIterator collections_to_edit_iter;
@@ -680,7 +713,7 @@ void OUTLINER_OT_collection_link(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = collection_link_exec;
-  ot->poll = ED_outliner_collections_editor_poll;
+  ot->poll = collection_edit_in_active_scene_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -697,10 +730,10 @@ static int collection_instance_exec(bContext *C, wmOperator *UNUSED(op))
   Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
-  SpaceOutliner *soops = CTX_wm_space_outliner(C);
+  SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
   struct CollectionEditData data = {
       .scene = scene,
-      .soops = soops,
+      .space_outliner = space_outliner,
   };
 
   data.collections_to_edit = BLI_gset_ptr_new(__func__);
@@ -708,7 +741,7 @@ static int collection_instance_exec(bContext *C, wmOperator *UNUSED(op))
   /* We first walk over and find the Collections we actually want to instance
    * (ignoring duplicates). */
   outliner_tree_traverse(
-      soops, &soops->tree, 0, TSE_SELECTED, collection_find_data_to_edit, &data);
+      space_outliner, &space_outliner->tree, 0, TSE_SELECTED, collection_find_data_to_edit, &data);
 
   /* Find an active collection to add to, that doesn't give dependency cycles. */
   LayerCollection *active_lc = BKE_layer_collection_get_active(view_layer);
@@ -751,7 +784,7 @@ void OUTLINER_OT_collection_instance(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = collection_instance_exec;
-  ot->poll = ED_outliner_collections_editor_poll;
+  ot->poll = collection_edit_in_active_scene_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -790,21 +823,25 @@ static TreeTraversalAction layer_collection_find_data_to_edit(TreeElement *te, v
 static bool collections_view_layer_poll(bContext *C, bool clear, int flag)
 {
   /* Poll function so the right click menu show current state of selected collections. */
-  SpaceOutliner *soops = CTX_wm_space_outliner(C);
-  if (!(soops && soops->outlinevis == SO_VIEW_LAYER)) {
+  SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
+  if (!(space_outliner && space_outliner->outlinevis == SO_VIEW_LAYER)) {
     return false;
   }
 
   Scene *scene = CTX_data_scene(C);
   struct CollectionEditData data = {
       .scene = scene,
-      .soops = soops,
+      .space_outliner = space_outliner,
   };
   data.collections_to_edit = BLI_gset_ptr_new(__func__);
   bool result = false;
 
-  outliner_tree_traverse(
-      soops, &soops->tree, 0, TSE_SELECTED, layer_collection_find_data_to_edit, &data);
+  outliner_tree_traverse(space_outliner,
+                         &space_outliner->tree,
+                         0,
+                         TSE_SELECTED,
+                         layer_collection_find_data_to_edit,
+                         &data);
 
   GSetIterator collections_to_edit_iter;
   GSET_ITER (collections_to_edit_iter, data.collections_to_edit) {
@@ -857,10 +894,10 @@ static int collection_view_layer_exec(bContext *C, wmOperator *op)
   Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
-  SpaceOutliner *soops = CTX_wm_space_outliner(C);
+  SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
   struct CollectionEditData data = {
       .scene = scene,
-      .soops = soops,
+      .space_outliner = space_outliner,
   };
   bool clear = strstr(op->idname, "clear") != NULL;
   int flag = strstr(op->idname, "holdout") ?
@@ -870,8 +907,12 @@ static int collection_view_layer_exec(bContext *C, wmOperator *op)
 
   data.collections_to_edit = BLI_gset_ptr_new(__func__);
 
-  outliner_tree_traverse(
-      soops, &soops->tree, 0, TSE_SELECTED, layer_collection_find_data_to_edit, &data);
+  outliner_tree_traverse(space_outliner,
+                         &space_outliner->tree,
+                         0,
+                         TSE_SELECTED,
+                         layer_collection_find_data_to_edit,
+                         &data);
 
   GSetIterator collections_to_edit_iter;
   GSET_ITER (collections_to_edit_iter, data.collections_to_edit) {
@@ -991,15 +1032,19 @@ static int collection_isolate_exec(bContext *C, wmOperator *op)
 {
   Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
-  SpaceOutliner *soops = CTX_wm_space_outliner(C);
+  SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
   const bool extend = RNA_boolean_get(op->ptr, "extend");
   struct CollectionEditData data = {
       .scene = scene,
-      .soops = soops,
+      .space_outliner = space_outliner,
   };
   data.collections_to_edit = BLI_gset_ptr_new(__func__);
-  outliner_tree_traverse(
-      soops, &soops->tree, 0, TSE_SELECTED, layer_collection_find_data_to_edit, &data);
+  outliner_tree_traverse(space_outliner,
+                         &space_outliner->tree,
+                         0,
+                         TSE_SELECTED,
+                         layer_collection_find_data_to_edit,
+                         &data);
 
   GSetIterator collections_to_edit_iter;
   GSET_ITER (collections_to_edit_iter, data.collections_to_edit) {
@@ -1083,17 +1128,21 @@ static int collection_visibility_exec(bContext *C, wmOperator *op)
 {
   Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
-  SpaceOutliner *soops = CTX_wm_space_outliner(C);
+  SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
   const bool is_inside = strstr(op->idname, "inside") != NULL;
   const bool show = strstr(op->idname, "show") != NULL;
   struct CollectionEditData data = {
       .scene = scene,
-      .soops = soops,
+      .space_outliner = space_outliner,
   };
   data.collections_to_edit = BLI_gset_ptr_new(__func__);
 
-  outliner_tree_traverse(
-      soops, &soops->tree, 0, TSE_SELECTED, layer_collection_find_data_to_edit, &data);
+  outliner_tree_traverse(space_outliner,
+                         &space_outliner->tree,
+                         0,
+                         TSE_SELECTED,
+                         layer_collection_find_data_to_edit,
+                         &data);
 
   GSetIterator collections_to_edit_iter;
   GSET_ITER (collections_to_edit_iter, data.collections_to_edit) {
@@ -1225,20 +1274,24 @@ static int collection_flag_exec(bContext *C, wmOperator *op)
 {
   Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
-  SpaceOutliner *soops = CTX_wm_space_outliner(C);
+  SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
   const bool is_render = strstr(op->idname, "render");
   const bool clear = strstr(op->idname, "show") || strstr(op->idname, "enable");
   int flag = is_render ? COLLECTION_RESTRICT_RENDER : COLLECTION_RESTRICT_VIEWPORT;
   struct CollectionEditData data = {
       .scene = scene,
-      .soops = soops,
+      .space_outliner = space_outliner,
   };
   data.collections_to_edit = BLI_gset_ptr_new(__func__);
-  const bool has_layer_collection = soops->outlinevis == SO_VIEW_LAYER;
+  const bool has_layer_collection = space_outliner->outlinevis == SO_VIEW_LAYER;
 
   if (has_layer_collection) {
-    outliner_tree_traverse(
-        soops, &soops->tree, 0, TSE_SELECTED, layer_collection_find_data_to_edit, &data);
+    outliner_tree_traverse(space_outliner,
+                           &space_outliner->tree,
+                           0,
+                           TSE_SELECTED,
+                           layer_collection_find_data_to_edit,
+                           &data);
     GSetIterator collections_to_edit_iter;
     GSET_ITER (collections_to_edit_iter, data.collections_to_edit) {
       LayerCollection *layer_collection = BLI_gsetIterator_getKey(&collections_to_edit_iter);
@@ -1261,11 +1314,18 @@ static int collection_flag_exec(bContext *C, wmOperator *op)
     BLI_gset_free(data.collections_to_edit, NULL);
   }
   else {
-    outliner_tree_traverse(
-        soops, &soops->tree, 0, TSE_SELECTED, collection_find_data_to_edit, &data);
+    outliner_tree_traverse(space_outliner,
+                           &space_outliner->tree,
+                           0,
+                           TSE_SELECTED,
+                           collection_find_data_to_edit,
+                           &data);
     GSetIterator collections_to_edit_iter;
     GSET_ITER (collections_to_edit_iter, data.collections_to_edit) {
       Collection *collection = BLI_gsetIterator_getKey(&collections_to_edit_iter);
+      if (ID_IS_LINKED(collection)) {
+        continue;
+      }
 
       if (clear) {
         collection->flag &= ~flag;
@@ -1351,7 +1411,7 @@ void OUTLINER_OT_collection_disable_render(wmOperatorType *ot)
 struct OutlinerHideEditData {
   Scene *scene;
   ViewLayer *view_layer;
-  SpaceOutliner *soops;
+  SpaceOutliner *space_outliner;
   GSet *collections_to_edit;
   GSet *bases_to_edit;
 };
@@ -1397,17 +1457,21 @@ static int outliner_hide_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
-  SpaceOutliner *soops = CTX_wm_space_outliner(C);
+  SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
   struct OutlinerHideEditData data = {
       .scene = scene,
       .view_layer = view_layer,
-      .soops = soops,
+      .space_outliner = space_outliner,
   };
   data.collections_to_edit = BLI_gset_ptr_new("outliner_hide_exec__collections_to_edit");
   data.bases_to_edit = BLI_gset_ptr_new("outliner_hide_exec__bases_to_edit");
 
-  outliner_tree_traverse(
-      soops, &soops->tree, 0, TSE_SELECTED, outliner_hide_find_data_to_edit, &data);
+  outliner_tree_traverse(space_outliner,
+                         &space_outliner->tree,
+                         0,
+                         TSE_SELECTED,
+                         outliner_hide_find_data_to_edit,
+                         &data);
 
   GSetIterator collections_to_edit_iter;
   GSET_ITER (collections_to_edit_iter, data.collections_to_edit) {
@@ -1481,6 +1545,69 @@ void OUTLINER_OT_unhide_all(wmOperatorType *ot)
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Collection Color Tags
+ * \{ */
+
+static int outliner_color_tag_set_exec(bContext *C, wmOperator *op)
+{
+  Scene *scene = CTX_data_scene(C);
+  SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
+  const short color_tag = RNA_enum_get(op->ptr, "color");
+
+  struct IDsSelectedData selected = {
+      .selected_array = {NULL, NULL},
+  };
+
+  outliner_tree_traverse(space_outliner,
+                         &space_outliner->tree,
+                         0,
+                         TSE_SELECTED,
+                         outliner_find_selected_collections,
+                         &selected);
+
+  LISTBASE_FOREACH (LinkData *, link, &selected.selected_array) {
+    TreeElement *te_selected = (TreeElement *)link->data;
+
+    Collection *collection = outliner_collection_from_tree_element(te_selected);
+    if (collection == scene->master_collection) {
+      continue;
+    }
+    if (ID_IS_LINKED(collection)) {
+      BKE_report(op->reports, RPT_WARNING, "Can't add a color tag to a linked collection");
+      continue;
+    }
+
+    collection->color_tag = color_tag;
+  };
+
+  BLI_freelistN(&selected.selected_array);
+
+  WM_event_add_notifier(C, NC_SCENE | ND_LAYER_CONTENT, NULL);
+
+  return OPERATOR_FINISHED;
+}
+
+void OUTLINER_OT_collection_color_tag_set(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Set Color Tag";
+  ot->idname = "OUTLINER_OT_collection_color_tag_set";
+  ot->description = "Set a color tag for the selected collections";
+
+  /* api callbacks */
+  ot->exec = outliner_color_tag_set_exec;
+  ot->poll = ED_outliner_collections_editor_poll;
+
+  /* flags */
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  RNA_def_enum(
+      ot->srna, "color", rna_enum_collection_color_items, COLLECTION_COLOR_NONE, "Color Tag", "");
 }
 
 /** \} */

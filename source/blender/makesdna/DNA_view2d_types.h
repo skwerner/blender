@@ -67,13 +67,6 @@ typedef struct View2D {
   /** Pivot point for transforms (rotate and scale). */
   short around;
 
-  /** Different offset per tab, for buttons. */
-  float *tab_offset;
-  /** Number of tabs stored. */
-  int tab_num;
-  /** Current tab. */
-  int tab_cur;
-
   /* Usually set externally (as in, not in view2d files). */
   /** Alpha of vertical and horizontal scrollbars (range is [0, 255]). */
   char alpha_vert, alpha_hor;
@@ -136,7 +129,7 @@ enum {
   /* apply pixel offsets on y-axis when setting view matrices */
   V2D_PIXELOFS_Y = (1 << 3),
   /* view settings need to be set still... */
-  V2D_IS_INITIALISED = (1 << 10),
+  V2D_IS_INIT = (1 << 10),
 };
 
 /* scroller flags for View2D (v2d->scroll) */

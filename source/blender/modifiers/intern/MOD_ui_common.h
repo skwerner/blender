@@ -30,8 +30,8 @@ extern "C" {
 #endif
 
 struct ARegionType;
-struct bContext;
 struct PanelType;
+struct bContext;
 struct uiLayout;
 typedef void (*PanelDrawFn)(const bContext *, struct Panel *);
 
@@ -46,10 +46,8 @@ void modifier_vgroup_ui(struct uiLayout *layout,
 
 void modifier_panel_end(struct uiLayout *layout, PointerRNA *ptr);
 
-void modifier_panel_get_property_pointers(const bContext *C,
-                                          struct Panel *panel,
-                                          struct PointerRNA *r_ob_ptr,
-                                          struct PointerRNA *r_ptr);
+struct PointerRNA *modifier_panel_get_property_pointers(struct Panel *panel,
+                                                        struct PointerRNA *r_ob_ptr);
 
 struct PanelType *modifier_panel_register(struct ARegionType *region_type,
                                           ModifierType type,

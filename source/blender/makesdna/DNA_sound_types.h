@@ -64,9 +64,9 @@ typedef struct bSound {
   short tags;
   char _pad[4];
 
-  /* unused currently
-  int type;
-  struct bSound *child_sound; */
+  /* Unused currently. */
+  // int type;
+  // struct bSound *child_sound;
 
   /**
    * The audaspace handle for cache.
@@ -80,7 +80,7 @@ typedef struct bSound {
 
   /**
    * The audaspace handle that should actually be played back.
-   * Should be cache if cache != NULL; otherwise it's handle
+   * Should be cache if cache != NULL; otherwise its handle
    */
   void *playback_handle;
 

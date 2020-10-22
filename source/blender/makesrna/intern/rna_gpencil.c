@@ -106,7 +106,7 @@ static const EnumPropertyItem rna_enum_keyframe_type_items[] = {
 };
 
 static const EnumPropertyItem rna_enum_onion_keyframe_type_items[] = {
-    {-1, "ALL", ICON_ACTION, "All Types", "Include all Keyframe types"},
+    {-1, "ALL", 0, "All", "Include all Keyframe types"},
     {BEZT_KEYTYPE_KEYFRAME,
      "KEYFRAME",
      ICON_KEYTYPE_KEYFRAME_VEC,
@@ -1200,7 +1200,7 @@ static void rna_def_gpencil_stroke(BlenderRNA *brna)
   RNA_def_property_update(prop, 0, "rna_GPencil_update");
 
   /* Cyclic: Draw a line from end to start point */
-  prop = RNA_def_property(srna, "draw_cyclic", PROP_BOOLEAN, PROP_NONE);
+  prop = RNA_def_property(srna, "use_cyclic", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_STROKE_CYCLIC);
   RNA_def_property_ui_text(prop, "Cyclic", "Enable cyclic drawing, closing the stroke");
   RNA_def_property_update(prop, 0, "rna_GPencil_update");

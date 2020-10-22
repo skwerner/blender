@@ -79,6 +79,15 @@ struct BMElem *EDBM_elem_from_selectmode(struct BMEditMesh *em,
 int EDBM_elem_to_index_any(struct BMEditMesh *em, struct BMElem *ele);
 struct BMElem *EDBM_elem_from_index_any(struct BMEditMesh *em, int index);
 
+int EDBM_elem_to_index_any_multi(struct ViewLayer *view_layer,
+                                 struct BMEditMesh *em,
+                                 struct BMElem *ele,
+                                 int *r_object_index);
+struct BMElem *EDBM_elem_from_index_any_multi(struct ViewLayer *view_layer,
+                                              int object_index,
+                                              int elem_index,
+                                              struct Object **r_obedit);
+
 bool edbm_extrude_edges_indiv(struct BMEditMesh *em,
                               struct wmOperator *op,
                               const char hflag,
@@ -253,6 +262,7 @@ void MESH_OT_mod_weighted_strength(struct wmOperatorType *ot);
 
 /* *** editmesh_mask_extract.c *** */
 void MESH_OT_paint_mask_extract(struct wmOperatorType *ot);
+void MESH_OT_face_set_extract(struct wmOperatorType *ot);
 void MESH_OT_paint_mask_slice(struct wmOperatorType *ot);
 
 struct wmKeyMap *point_normals_modal_keymap(wmKeyConfig *keyconf);

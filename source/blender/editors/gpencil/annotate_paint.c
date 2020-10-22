@@ -200,7 +200,7 @@ typedef struct tGPsdata {
 
 /* Macros for accessing sensitivity thresholds... */
 /* minimum number of pixels mouse should move before new point created */
-#define MIN_MANHATTEN_PX (U.gp_manhattendist)
+#define MIN_MANHATTAN_PX (U.gp_manhattandist)
 /* minimum length of new segment before new point can be added */
 #define MIN_EUCLIDEAN_PX (U.gp_euclideandist)
 
@@ -271,7 +271,7 @@ static void annotation_get_3d_reference(tGPsdata *p, float vec[3])
 /* Stroke Editing ---------------------------- */
 
 /* check if the current mouse position is suitable for adding a new point */
-static bool annotation_stroke_filtermval(tGPsdata *p, const float mval[2], float pmval[2])
+static bool annotation_stroke_filtermval(tGPsdata *p, const float mval[2], const float pmval[2])
 {
   int dx = (int)fabsf(mval[0] - pmval[0]);
   int dy = (int)fabsf(mval[1] - pmval[1]);
@@ -297,7 +297,7 @@ static bool annotation_stroke_filtermval(tGPsdata *p, const float mval[2], float
     return false;
   }
 
-  if ((dx > MIN_MANHATTEN_PX) && (dy > MIN_MANHATTEN_PX)) {
+  if ((dx > MIN_MANHATTAN_PX) && (dy > MIN_MANHATTAN_PX)) {
     return true;
   }
 
@@ -573,14 +573,14 @@ static short annotation_stroke_addpoint(tGPsdata *p,
         /* Arrow end corner. */
         if (gpd->runtime.sbuffer_sflag & GP_STROKE_USE_ARROW_END) {
           pt++;
-          float e_heading[2] = {start[0] - end[0], start[1] - end[1]};
+          const float e_heading[2] = {start[0] - end[0], start[1] - end[1]};
           /* Calculate points for ending arrow. */
           annotation_stroke_arrow_calc_points(
               pt, e_heading, end, gpd->runtime.arrow_end, gpd->runtime.arrow_end_style);
         }
         /* Arrow start corner. */
         if (gpd->runtime.sbuffer_sflag & GP_STROKE_USE_ARROW_START) {
-          float s_heading[2] = {end[0] - start[0], end[1] - start[1]};
+          const float s_heading[2] = {end[0] - start[0], end[1] - start[1]};
           /* Calculate points for starting arrow. */
           annotation_stroke_arrow_calc_points(
               NULL, s_heading, start, gpd->runtime.arrow_start, gpd->runtime.arrow_start_style);
@@ -603,7 +603,7 @@ static short annotation_stroke_addpoint(tGPsdata *p,
     /* store settings */
     copy_v2_v2(&pt->x, mval);
     pt->pressure = pressure;
-    /* unused for annotations, but initialise for easier conversions to GP Object */
+    /* Unused for annotations, but initialize for easier conversions to GP Object. */
     pt->strength = 1.0f;
 
     /* point time */
@@ -704,7 +704,7 @@ static void annotation_stroke_arrow_init_point(
     tGPsdata *p, tGPspoint *ptc, bGPDspoint *pt, const float co[8], const int co_idx)
 {
   /* Note: provided co_idx should be always pair number as it's [x1, y1, x2, y2, x3, y3]. */
-  float real_co[2] = {co[co_idx], co[co_idx + 1]};
+  const float real_co[2] = {co[co_idx], co[co_idx + 1]};
   copy_v2_v2(&ptc->x, real_co);
   annotation_stroke_convertcoords(p, &ptc->x, &pt->x, NULL);
   annotation_stroke_arrow_init_point_default(pt);
@@ -1119,7 +1119,6 @@ static void annotation_stroke_eraser_dostroke(tGPsdata *p,
   bGPDspoint *pt1, *pt2;
   int pc1[2] = {0};
   int pc2[2] = {0};
-  int i;
   int mval_i[2];
   round_v2i_v2fl(mval_i, mval);
 
@@ -1152,7 +1151,7 @@ static void annotation_stroke_eraser_dostroke(tGPsdata *p,
      * we don't miss anything, though things will be
      * slightly slower as a result
      */
-    for (i = 0; i < gps->totpoints; i++) {
+    for (int i = 0; i < gps->totpoints; i++) {
       bGPDspoint *pt = &gps->points[i];
       pt->flag &= ~GP_SPOINT_TAG;
     }
@@ -1161,7 +1160,7 @@ static void annotation_stroke_eraser_dostroke(tGPsdata *p,
      *   1) Thin out parts of the stroke under the brush
      *   2) Tag "too thin" parts for removal (in second pass)
      */
-    for (i = 0; (i + 1) < gps->totpoints; i++) {
+    for (int i = 0; (i + 1) < gps->totpoints; i++) {
       /* get points to work with */
       pt1 = gps->points + i;
       pt2 = gps->points + i + 1;
@@ -1700,9 +1699,7 @@ static void annotation_draw_eraser(bContext *UNUSED(C), int x, int y, void *p_pt
     immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
 
     GPU_line_smooth(true);
-    GPU_blend(true);
-    GPU_blend_set_func_separate(
-        GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+    GPU_blend(GPU_BLEND_ALPHA);
 
     immUniformColor4ub(255, 100, 100, 20);
     imm_draw_circle_fill_2d(shdr_pos, x, y, p->radius, 40);
@@ -1730,7 +1727,7 @@ static void annotation_draw_eraser(bContext *UNUSED(C), int x, int y, void *p_pt
 
     immUnbindProgram();
 
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
     GPU_line_smooth(false);
   }
 }
@@ -1768,7 +1765,7 @@ static void annotation_draw_stabilizer(bContext *C, int x, int y, void *p_ptr)
   uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
   immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
   GPU_line_smooth(true);
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
   GPU_line_width(1.25f);
   const float color[3] = {1.0f, 0.39f, 0.39f};
 
@@ -1793,7 +1790,7 @@ static void annotation_draw_stabilizer(bContext *C, int x, int y, void *p_ptr)
   immEnd();
 
   /* Returns back all GPU settings */
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
   GPU_line_smooth(false);
 
   immUnbindProgram();
@@ -2092,8 +2089,8 @@ static void annotation_draw_apply_event(
   }
   else {
     p->straight[0] = 0;
-    /* We were using shift while having permanent stabilization actived,
-       so activate the temp flag back again. */
+    /* We were using shift while having permanent stabilization active,
+     * so activate the temp flag back again. */
     if (p->flags & GP_PAINTFLAG_USE_STABILIZER) {
       if ((p->flags & GP_PAINTFLAG_USE_STABILIZER_TEMP) == 0) {
         annotation_draw_toggle_stabilizer_cursor(p, true);
@@ -2101,8 +2098,8 @@ static void annotation_draw_apply_event(
       }
     }
     /* We are using the temporal stabilizer flag atm,
-       but shift is not pressed as well as the permanent flag is not used,
-       so we don't need the cursor anymore. */
+     * but shift is not pressed as well as the permanent flag is not used,
+     * so we don't need the cursor anymore. */
     else if (p->flags & GP_PAINTFLAG_USE_STABILIZER_TEMP) {
       /* Reset temporal stabilizer flag and remove cursor. */
       p->flags &= ~GP_PAINTFLAG_USE_STABILIZER_TEMP;
@@ -2356,7 +2353,7 @@ static tGPsdata *annotation_stroke_begin(bContext *C, wmOperator *op)
   tGPsdata *p = op->customdata;
 
   /* we must check that we're still within the area that we're set up to work from
-   * otherwise we could crash (see bug #20586)
+   * otherwise we could crash (see bug T20586)
    */
   if (CTX_wm_area(C) != p->area) {
     printf("\t\t\tGP - wrong area execution abort!\n");
@@ -2470,8 +2467,8 @@ static int annotation_draw_modal(bContext *C, wmOperator *op, const wmEvent *eve
              EVT_UPARROWKEY,
              EVT_ZKEY)) {
       /* allow some keys:
-       *   - for frame changing [#33412]
-       *   - for undo (during sketching sessions)
+       *   - For frame changing T33412.
+       *   - For undo (during sketching sessions).
        */
     }
     else if (ELEM(event->type,
@@ -2523,7 +2520,7 @@ static int annotation_draw_modal(bContext *C, wmOperator *op, const wmEvent *eve
    *  - LEFTMOUSE  = standard drawing (all) / straight line drawing (all) / polyline (toolbox
    * only)
    *  - RIGHTMOUSE = polyline (hotkey) / eraser (all)
-   *    (Disabling RIGHTMOUSE case here results in bugs like [#32647])
+   *    (Disabling RIGHTMOUSE case here results in bugs like T32647)
    * also making sure we have a valid event value, to not exit too early
    */
   if (ELEM(event->type, LEFTMOUSE, RIGHTMOUSE) && (ELEM(event->val, KM_PRESS, KM_RELEASE))) {

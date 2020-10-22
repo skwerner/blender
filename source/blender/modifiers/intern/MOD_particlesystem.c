@@ -22,11 +22,13 @@
  */
 
 #include <stddef.h>
+#include <string.h>
 
 #include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
+#include "DNA_defaults.h"
 #include "DNA_material_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_screen_types.h"
@@ -54,10 +56,10 @@
 static void initData(ModifierData *md)
 {
   ParticleSystemModifierData *psmd = (ParticleSystemModifierData *)md;
-  psmd->psys = NULL;
-  psmd->mesh_final = NULL;
-  psmd->mesh_original = NULL;
-  psmd->totdmvert = psmd->totdmedge = psmd->totdmface = 0;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(psmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(psmd, DNA_struct_default_get(ParticleSystemModifierData), modifier);
 }
 static void freeData(ModifierData *md)
 {
@@ -219,7 +221,7 @@ static void deformVerts(ModifierData *md,
   psmd->totdmedge = psmd->mesh_final->totedge;
   psmd->totdmface = psmd->mesh_final->totface;
 
-  if (!(ctx->object->transflag & OB_NO_PSYS_UPDATE)) {
+  {
     struct Scene *scene = DEG_get_evaluated_scene(ctx->depsgraph);
     psmd->flag &= ~eParticleSystemFlag_psys_updated;
     particle_system_update(
@@ -260,16 +262,15 @@ static void deformVertsEM(ModifierData *md,
 }
 #endif
 
-static void panel_draw(const bContext *C, Panel *panel)
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
   PointerRNA ob_ptr;
-  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
 
   Object *ob = ob_ptr.data;
-  ModifierData *md = (ModifierData *)ptr.data;
+  ModifierData *md = (ModifierData *)ptr->data;
   ParticleSystem *psys = ((ParticleSystemModifierData *)md)->psys;
 
   uiItemL(layout, IFACE_("Settings are in the particle tab"), ICON_NONE);
@@ -289,7 +290,7 @@ static void panel_draw(const bContext *C, Panel *panel)
     }
   }
 
-  modifier_panel_end(layout, &ptr);
+  modifier_panel_end(layout, ptr);
 }
 
 static void panelRegister(ARegionType *region_type)
@@ -313,12 +314,14 @@ ModifierTypeInfo modifierType_ParticleSystem = {
     /* name */ "ParticleSystem",
     /* structName */ "ParticleSystemModifierData",
     /* structSize */ sizeof(ParticleSystemModifierData),
+    /* srna */ &RNA_ParticleSystemModifier,
     /* type */ eModifierTypeType_OnlyDeform,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsMapping |
         eModifierTypeFlag_UsesPointCache /* |
                           eModifierTypeFlag_SupportsEditmode |
                           eModifierTypeFlag_EnableInEditmode */
     ,
+    /* icon */ ICON_MOD_PARTICLES,
 
     /* copyData */ copyData,
 
@@ -338,7 +341,6 @@ ModifierTypeInfo modifierType_ParticleSystem = {
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ NULL,
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,

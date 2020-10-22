@@ -311,6 +311,9 @@ void BKE_subdiv_ccg_neighbor_coords_get(const SubdivCCG *subdiv_ccg,
                                         SubdivCCGNeighbors *r_neighbors);
 
 int BKE_subdiv_ccg_grid_to_face_index(const SubdivCCG *subdiv_ccg, const int grid_index);
+void BKE_subdiv_ccg_eval_limit_point(const SubdivCCG *subdiv_ccg,
+                                     const SubdivCCGCoord *coord,
+                                     float r_point[3]);
 
 typedef enum SubdivCCGAdjacencyType {
   SUBDIV_CCG_ADJACENT_NONE,
@@ -330,7 +333,7 @@ SubdivCCGAdjacencyType BKE_subdiv_ccg_coarse_mesh_adjacency_info_get(const Subdi
 
 /* Get array which is indexed by face index and contains index of a first grid of the face.
  *
- * The "ensure" version allocates the mapping if it's not know yet and stores it in the subdiv_ccg
+ * The "ensure" version allocates the mapping if it's not known yet and stores it in the subdiv_ccg
  * descriptor. This function is NOT safe for threading.
  *
  * The "get" version simply returns cached array. */

@@ -211,7 +211,7 @@ static float sb_time_scale(Object *ob)
  * will cause unwanted responses of the softbody system (which does inter frame calculations )
  * so first 'cure' would be: interpolate linear in time ..
  * Q: why do i write this?
- * A: because it happened once, that some eger coder 'streamlined' code to fail.
+ * A: because it happened once, that some eager coder 'streamlined' code to fail.
  * We DO linear interpolation for goals .. and i think we should do on animated properties as well
  */
 
@@ -230,7 +230,7 @@ static float _final_goal(Object *ob, BodyPoint *bp) /*jow_go_for2_5 */
       }
       f = sb->mingoal + bp->goal * fabsf(sb->maxgoal - sb->mingoal);
       f = pow(f, 4.0f);
-      return (f);
+      return f;
     }
   }
   CLOG_ERROR(&LOG, "sb or bp == NULL");
@@ -955,7 +955,7 @@ static void free_softbody_intern(SoftBody *sb)
  * (only needs the current particle position)
  *
  * it actually checks if the particle intrudes a short range force field generated
- * by the faces of the target object and returns a force to drive the particel out
+ * by the faces of the target object and returns a force to drive the particle out
  * the strength of the field grows exponentially if the particle is on the 'wrong' side of the face
  * 'wrong' side : projection to the face normal is negative (all referred to a vertex in the face)
  *
@@ -1051,7 +1051,7 @@ static int sb_detect_aabb_collisionCached(float UNUSED(force[3]),
 /* --- the aabb section*/
 
 /* +++ the face external section*/
-static int sb_detect_face_pointCached(float face_v1[3],
+static int sb_detect_face_pointCached(const float face_v1[3],
                                       const float face_v2[3],
                                       const float face_v3[3],
                                       float *damp,
@@ -1149,7 +1149,7 @@ static int sb_detect_face_pointCached(float face_v1[3],
   return deflected;
 }
 
-static int sb_detect_face_collisionCached(float face_v1[3],
+static int sb_detect_face_collisionCached(const float face_v1[3],
                                           const float face_v2[3],
                                           const float face_v3[3],
                                           float *damp,
@@ -1328,7 +1328,7 @@ static void scan_for_ext_face_forces(Object *ob, float timenow)
 
 /* +++ the spring external section*/
 
-static int sb_detect_edge_collisionCached(float edge_v1[3],
+static int sb_detect_edge_collisionCached(const float edge_v1[3],
                                           const float edge_v2[3],
                                           float *damp,
                                           float force[3],
@@ -1506,7 +1506,7 @@ static void _scan_for_ext_spring_forces(
             madd_v3_v3fl(bs->ext_force, vel, f * (1.0f - fabsf(dot_v3v3(vel, sp))));
           }
           else {
-            madd_v3_v3fl(bs->ext_force, vel, f);  // to keep compatible with 2.45 release files
+            madd_v3_v3fl(bs->ext_force, vel, f); /* to keep compatible with 2.45 release files */
           }
         }
         /* --- springs seeing wind */
@@ -1554,7 +1554,7 @@ static void sb_sfesf_threads_run(struct Depsgraph *depsgraph,
   for (i = 0; i < totthread; i++) {
     sb_threads[i].scene = scene;
     sb_threads[i].ob = ob;
-    sb_threads[i].forcetime = 0.0;  // not used here
+    sb_threads[i].forcetime = 0.0; /* not used here */
     sb_threads[i].timenow = timenow;
     sb_threads[i].ilast = left;
     left = left - dec;
@@ -1565,9 +1565,9 @@ static void sb_sfesf_threads_run(struct Depsgraph *depsgraph,
       sb_threads[i].ifirst = 0;
     }
     sb_threads[i].effectors = effectors;
-    sb_threads[i].do_deflector = false;  // not used here
-    sb_threads[i].fieldfactor = 0.0f;    // not used here
-    sb_threads[i].windfactor = 0.0f;     // not used here
+    sb_threads[i].do_deflector = false; /* not used here */
+    sb_threads[i].fieldfactor = 0.0f;   /* not used here */
+    sb_threads[i].windfactor = 0.0f;    /* not used here */
     sb_threads[i].nr = i;
     sb_threads[i].tot = totthread;
   }
@@ -1619,7 +1619,7 @@ static int choose_winner(
     case 3:
       copy_v3_v3(w, cc);
   }
-  return (winner);
+  return winner;
 }
 
 static int sb_detect_vertex_collisionCached(float opco[3],
@@ -1741,8 +1741,7 @@ static int sb_detect_vertex_collisionCached(float opco[3],
           cross_v3_v3v3(d_nvect, edge2, edge1);
           /* n_mag = */ /* UNUSED */ normalize_v3(d_nvect);
           facedist = dot_v3v3(dv1, d_nvect);
-          // so rules are
-          //
+          /* so rules are */
 
           if ((facedist > innerfacethickness) && (facedist < outerfacethickness)) {
             if (isect_point_tri_prism_v3(opco, nv1, nv2, nv3)) {
@@ -1781,7 +1780,7 @@ static int sb_detect_vertex_collisionCached(float opco[3],
     }
   } /* while () */
 
-  if (deflected == 1) {  // no face but 'outer' edge cylinder sees vert
+  if (deflected == 1) { /* no face but 'outer' edge cylinder sees vert */
     force_mag_norm = (float)exp(-ee * mindistedge);
     if (mindistedge > outerfacethickness * ff) {
       force_mag_norm = (float)force_mag_norm * fa * (mindistedge - outerfacethickness) *
@@ -1793,10 +1792,10 @@ static int sb_detect_vertex_collisionCached(float opco[3],
       *damp *= (1.0f - mindistedge / outerfacethickness);
     }
   }
-  if (deflected == 2) {  //  face inner detected
+  if (deflected == 2) { /* face inner detected */
     add_v3_v3(force, innerforceaccu);
   }
-  if (deflected == 3) {  //  face outer detected
+  if (deflected == 3) { /* face outer detected */
     add_v3_v3(force, outerforceaccu);
   }
 
@@ -1833,7 +1832,7 @@ static int sb_deflect_face(Object *ob,
   deflected = sb_detect_vertex_collisionCachedEx(
       s_actpos, facenormal, cf, force, ob, time, vel, intrusion);
 #endif
-  return (deflected);
+  return deflected;
 }
 
 /* hiding this for now .. but the jacobian may pop up on other tasks .. so i'd like to keep it */
@@ -1991,13 +1990,13 @@ static int _softbody_calc_forces_slice_in_a_thread(Scene *scene,
   }
   else {
     CLOG_ERROR(&LOG, "expected a SB here");
-    return (999);
+    return 999;
   }
 
   /* debugerin */
   if (sb->totpoint < ifirst) {
     printf("Aye 998");
-    return (998);
+    return 998;
   }
   /* debugerin */
 
@@ -3014,7 +3013,7 @@ static void curve_surf_to_softbody(Scene *scene, Object *ob)
        *
        * a: never ever make tangent handles (sub) and or (ob)ject to collision.
        * b: rather calculate them using some C2
-       *    (C2= continuous in second derivate -> no jump in bending ) condition.
+       *    (C2= continuous in second derivative -> no jump in bending ) condition.
        *
        * Not too hard to do, but needs some more code to care for;
        * some one may want look at it (JOW 2010/06/12). */
@@ -3209,17 +3208,16 @@ void sbObjectToSoftbody(Object *ob)
   free_softbody_intern(ob->soft);
 }
 
-static int object_has_edges(Object *ob)
+static bool object_has_edges(Object *ob)
 {
   if (ob->type == OB_MESH) {
     return ((Mesh *)ob->data)->totedge;
   }
-  else if (ob->type == OB_LATTICE) {
-    return 1;
+  if (ob->type == OB_LATTICE) {
+    return true;
   }
-  else {
-    return 0;
-  }
+
+  return false;
 }
 
 /* SB global visible functions */
@@ -3284,8 +3282,8 @@ void SB_estimate_transform(Object *ob, float lloc[3], float lrot[3][3], float ls
   if (!sb || !sb->bpoint) {
     return;
   }
-  opos = MEM_callocN((sb->totpoint) * 3 * sizeof(float), "SB_OPOS");
-  rpos = MEM_callocN((sb->totpoint) * 3 * sizeof(float), "SB_RPOS");
+  opos = MEM_callocN(sizeof(float[3]) * sb->totpoint, "SB_OPOS");
+  rpos = MEM_callocN(sizeof(float[3]) * sb->totpoint, "SB_RPOS");
   /* might filter vertex selection with a vertex group */
   for (a = 0, bp = sb->bpoint, rp = sb->scratch->Ref.ivert; a < sb->totpoint; a++, bp++, rp++) {
     copy_v3_v3(rpos[a], rp->pos);
@@ -3497,14 +3495,14 @@ static void softbody_step(
   }
   else if (sb->solver_ID == 2) {
     /* do semi "fake" implicit euler */
-    // removed
+    /* removed */
   } /*SOLVER SELECT*/
   else if (sb->solver_ID == 4) {
     /* do semi "fake" implicit euler */
   } /*SOLVER SELECT*/
   else if (sb->solver_ID == 3) {
     /* do "stupid" semi "fake" implicit euler */
-    // removed
+    /* removed */
 
   } /*SOLVER SELECT*/
   else {
@@ -3566,7 +3564,7 @@ void sbObjectStep(struct Depsgraph *depsgraph,
     BKE_ptcache_invalidate(cache);
     return;
   }
-  else if (framenr > endframe) {
+  if (framenr > endframe) {
     framenr = endframe;
   }
 
@@ -3634,7 +3632,7 @@ void sbObjectStep(struct Depsgraph *depsgraph,
 
     return;
   }
-  else if (cache_result == PTCACHE_READ_OLD) {
+  if (cache_result == PTCACHE_READ_OLD) {
     /* pass */
   }
   else if (/*ob->id.lib || */

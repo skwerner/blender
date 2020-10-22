@@ -7,9 +7,6 @@
 #  OPENCOLLADA_ROOT_DIR, The base directory to search for OpenCOLLADA.
 #                    This can also be an environment variable.
 #  OPENCOLLADA_FOUND, If false, do not try to use OpenCOLLADA.
-#
-# also defined, but not for general use are
-#  OPENCOLLADA_LIBRARY, where to find the OpenCOLLADA library.
 
 #=============================================================================
 # Copyright 2011 Blender Foundation.
@@ -132,7 +129,7 @@ FIND_PACKAGE_HANDLE_STANDARD_ARGS(OpenCOLLADA  DEFAULT_MSG
 IF(OPENCOLLADA_FOUND)
   SET(OPENCOLLADA_LIBRARIES ${_opencollada_LIBRARIES})
   SET(OPENCOLLADA_INCLUDE_DIRS ${_opencollada_INCLUDES})
-ENDIF(OPENCOLLADA_FOUND)
+ENDIF()
 
 UNSET(COMPONENT)
 UNSET(UPPERCOMPONENT)

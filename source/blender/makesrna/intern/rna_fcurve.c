@@ -588,15 +588,13 @@ static bool rna_FCurve_is_empty_get(PointerRNA *ptr)
   return BKE_fcurve_is_empty(fcu);
 }
 
-static void rna_tag_animation_update(Main *bmain, ID *id, bool flush)
+static void rna_tag_animation_update(Main *bmain, ID *id)
 {
-  /* Actually recalculate object properties, or just update COW. */
-  int tags = flush ? ID_RECALC_ANIMATION : ID_RECALC_ANIMATION_NO_FLUSH;
-
+  const int tags = ID_RECALC_ANIMATION;
   AnimData *adt = BKE_animdata_from_id(id);
 
   if (adt && adt->action) {
-    /* action is separate datablock, needs separate tag */
+    /* Action is separate datablock, needs separate tag. */
     DEG_id_tag_update_ex(bmain, &adt->action->id, tags);
   }
 
@@ -609,7 +607,7 @@ static void rna_FCurve_update_data_ex(ID *id, FCurve *fcu, Main *bmain)
   sort_time_fcurve(fcu);
   calchandles_fcurve(fcu);
 
-  rna_tag_animation_update(bmain, id, true);
+  rna_tag_animation_update(bmain, id);
 }
 
 /* RNA update callback for F-Curves after curve shape changes */
@@ -631,7 +629,7 @@ static void rna_FCurve_update_data_relations(Main *bmain,
  */
 static void rna_FCurve_update_eval(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
 {
-  rna_tag_animation_update(bmain, ptr->owner_id, true);
+  rna_tag_animation_update(bmain, ptr->owner_id);
 }
 
 static PointerRNA rna_FCurve_active_modifier_get(PointerRNA *ptr)
@@ -709,7 +707,7 @@ static void rna_FModifier_start_frame_range(PointerRNA *UNUSED(ptr),
   // FModifier *fcm = (FModifier *)ptr->data;
 
   /* Technically, "sfra <= efra" must hold; however, we can't strictly enforce that,
-   * or else it becomes tricky to adjust the range...  [#36844]
+   * or else it becomes tricky to adjust the range, see: T36844.
    *
    * NOTE: we do not set soft-limits on lower bounds, as it's too confusing when you
    *       can't easily use the slider to set things here
@@ -724,8 +722,7 @@ static void rna_FModifier_end_frame_range(
   FModifier *fcm = (FModifier *)ptr->data;
 
   /* Technically, "sfra <= efra" must hold; however, we can't strictly enforce that,
-   * or else it becomes tricky to adjust the range...  [#36844]
-   */
+   * or else it becomes tricky to adjust the range, see: T36844. */
   *min = MINAFRAMEF;
   *softmin = (fcm->flag & FMODIFIER_FLAG_RANGERESTRICT) ? fcm->sfra : MINAFRAMEF;
 
@@ -751,7 +748,7 @@ static void rna_FModifier_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *
     calchandles_fcurve(fcm->curve);
   }
 
-  rna_tag_animation_update(bmain, id, true);
+  rna_tag_animation_update(bmain, id);
 }
 
 static void rna_FModifier_verify_data_update(Main *bmain, Scene *scene, PointerRNA *ptr)
@@ -977,7 +974,7 @@ static BezTriple *rna_FKeyframe_points_insert(
       fcu, frame, value, (char)keyframe_type, flag | INSERTKEY_NO_USERPREF);
 
   if ((fcu->bezt) && (index >= 0)) {
-    rna_tag_animation_update(bmain, id, true);
+    rna_tag_animation_update(bmain, id);
 
     return fcu->bezt + index;
   }
@@ -1003,7 +1000,7 @@ static void rna_FKeyframe_points_add(ID *id, FCurve *fcu, Main *bmain, int tot)
       bezt++;
     }
 
-    rna_tag_animation_update(bmain, id, true);
+    rna_tag_animation_update(bmain, id);
   }
 }
 
@@ -1020,7 +1017,7 @@ static void rna_FKeyframe_points_remove(
   delete_fcurve_key(fcu, index, !do_fast);
   RNA_POINTER_INVALIDATE(bezt_ptr);
 
-  rna_tag_animation_update(bmain, id, true);
+  rna_tag_animation_update(bmain, id);
 }
 
 static FCM_EnvelopeData *rna_FModifierEnvelope_points_add(
@@ -1030,7 +1027,7 @@ static FCM_EnvelopeData *rna_FModifierEnvelope_points_add(
   FMod_Envelope *env = (FMod_Envelope *)fmod->data;
   int i;
 
-  rna_tag_animation_update(bmain, id, true);
+  rna_tag_animation_update(bmain, id);
 
   /* init template data */
   fed.min = -1.0f;
@@ -1082,7 +1079,7 @@ static void rna_FModifierEnvelope_points_remove(
     return;
   }
 
-  rna_tag_animation_update(bmain, id, true);
+  rna_tag_animation_update(bmain, id);
 
   if (env->totvert > 1) {
     /* move data after the removed point */
@@ -1109,7 +1106,7 @@ static void rna_FModifierEnvelope_points_remove(
 
 static void rna_Keyframe_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
 {
-  rna_tag_animation_update(bmain, ptr->owner_id, true);
+  rna_tag_animation_update(bmain, ptr->owner_id);
 }
 
 #else
@@ -1635,7 +1632,7 @@ static void rna_def_fmodifier(BlenderRNA *brna)
   /* TODO: setting this to true must ensure that all others in stack are turned off too... */
   prop = RNA_def_property(srna, "active", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", FMODIFIER_FLAG_ACTIVE);
-  RNA_def_property_ui_text(prop, "Active", "F-Curve Modifier is the one being edited ");
+  RNA_def_property_ui_text(prop, "Active", "F-Curve Modifier is the one being edited");
   RNA_def_property_boolean_funcs(prop, NULL, "rna_FModifier_active_set");
   RNA_def_property_update(prop, NC_ANIMATION | ND_KEYFRAME_PROP, "rna_FModifier_active_update");
   RNA_def_property_ui_icon(prop, ICON_RADIOBUT_OFF, 1);
@@ -2016,17 +2013,17 @@ static void rna_def_fkeyframe(BlenderRNA *brna)
 
   /* Boolean values */
   prop = RNA_def_property(srna, "select_left_handle", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "f1", 0);
+  RNA_def_property_boolean_sdna(prop, NULL, "f1", SELECT);
   RNA_def_property_ui_text(prop, "Handle 1 selected", "Left handle selection status");
   RNA_def_property_update(prop, NC_ANIMATION | ND_KEYFRAME | NA_SELECTED, NULL);
 
   prop = RNA_def_property(srna, "select_right_handle", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "f3", 0);
+  RNA_def_property_boolean_sdna(prop, NULL, "f3", SELECT);
   RNA_def_property_ui_text(prop, "Handle 2 selected", "Right handle selection status");
   RNA_def_property_update(prop, NC_ANIMATION | ND_KEYFRAME | NA_SELECTED, NULL);
 
   prop = RNA_def_property(srna, "select_control_point", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "f2", 0);
+  RNA_def_property_boolean_sdna(prop, NULL, "f2", SELECT);
   RNA_def_property_ui_text(prop, "Select", "Control point selection status");
   RNA_def_property_update(prop, NC_ANIMATION | ND_KEYFRAME | NA_SELECTED, NULL);
 

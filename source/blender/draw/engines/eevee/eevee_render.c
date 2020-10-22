@@ -38,7 +38,7 @@
 
 #include "DEG_depsgraph_query.h"
 
-#include "GPU_extensions.h"
+#include "GPU_capabilities.h"
 #include "GPU_framebuffer.h"
 #include "GPU_state.h"
 
@@ -93,8 +93,10 @@ bool EEVEE_render_init(EEVEE_Data *ved, RenderEngine *engine, struct Depsgraph *
     copy_v4_fl4(camtexcofac, 1.0f, 1.0f, 0.0f, 0.0f);
   }
 
-  int final_res[2] = {size_orig[0] + g_data->overscan_pixels * 2.0f,
-                      size_orig[1] + g_data->overscan_pixels * 2.0f};
+  const int final_res[2] = {
+      size_orig[0] + g_data->overscan_pixels * 2.0f,
+      size_orig[1] + g_data->overscan_pixels * 2.0f,
+  };
 
   int max_dim = max_ii(final_res[0], final_res[1]);
   if (max_dim > GPU_max_texture_size()) {
@@ -357,11 +359,6 @@ static void eevee_render_result_occlusion(RenderLayer *rl,
                                           EEVEE_Data *vedata,
                                           EEVEE_ViewLayerData *sldata)
 {
-  if ((vedata->stl->effects->enabled_effects & EFFECT_GTAO) == 0) {
-    /* AO is not enabled. */
-    return;
-  }
-
   if ((vedata->stl->g_data->render_passes & EEVEE_RENDER_PASS_AO) != 0) {
     EEVEE_renderpasses_postprocess(sldata, vedata, EEVEE_RENDER_PASS_AO);
     eevee_render_color_result(
@@ -527,10 +524,10 @@ void EEVEE_render_draw(EEVEE_Data *vedata, RenderEngine *engine, RenderLayer *rl
   }
 
   while (render_samples < tot_sample && !RE_engine_test_break(engine)) {
-    float clear_col[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    const float clear_col[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     float clear_depth = 1.0f;
     uint clear_stencil = 0x00;
-    uint primes[3] = {2, 3, 7};
+    const uint primes[3] = {2, 3, 7};
     double offset[3] = {0.0, 0.0, 0.0};
     double r[3];
 
@@ -577,7 +574,7 @@ void EEVEE_render_draw(EEVEE_Data *vedata, RenderEngine *engine, RenderLayer *rl
     /* Set ray type. */
     sldata->common_data.ray_type = EEVEE_RAY_CAMERA;
     sldata->common_data.ray_depth = 0.0f;
-    DRW_uniformbuffer_update(sldata->common_ubo, &sldata->common_data);
+    GPU_uniformbuf_update(sldata->common_ubo, &sldata->common_data);
 
     GPU_framebuffer_bind(fbl->main_fb);
     GPU_framebuffer_clear_color_depth_stencil(fbl->main_fb, clear_col, clear_depth, clear_stencil);

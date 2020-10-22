@@ -31,11 +31,13 @@
 #include "BLI_string_utils.h"
 #include "BLI_threads.h"
 
+#include "BKE_armature.h"
 #include "BKE_camera.h"
 #include "BKE_collection.h"
 #include "BKE_context.h"
 #include "BKE_customdata.h"
 #include "BKE_global.h"
+#include "BKE_image.h"
 #include "BKE_key.h"
 #include "BKE_layer.h"
 #include "BKE_main.h"
@@ -61,7 +63,6 @@
 #include "DRW_engine.h"
 #include "DRW_select_buffer.h"
 
-#include "ED_armature.h"
 #include "ED_gpencil.h"
 #include "ED_info.h"
 #include "ED_keyframing.h"
@@ -74,7 +75,6 @@
 
 #include "GPU_batch.h"
 #include "GPU_batch_presets.h"
-#include "GPU_draw.h"
 #include "GPU_framebuffer.h"
 #include "GPU_immediate.h"
 #include "GPU_immediate_util.h"
@@ -168,7 +168,7 @@ void ED_view3d_update_viewmat(Depsgraph *depsgraph,
   /* calculate pixelsize factor once, is used for lights and obcenters */
   {
     /* note:  '1.0f / len_v3(v1)'  replaced  'len_v3(rv3d->viewmat[0])'
-     * because of float point precision problems at large values [#23908] */
+     * because of float point precision problems at large values T23908. */
     float v1[3], v2[3];
     float len_px, len_sc;
 
@@ -588,9 +588,7 @@ static void drawviewborder(Scene *scene, Depsgraph *depsgraph, ARegion *region, 
       float alpha = 1.0f;
 
       if (ca->passepartalpha != 1.0f) {
-        GPU_blend_set_func_separate(
-            GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
-        GPU_blend(true);
+        GPU_blend(GPU_BLEND_ALPHA);
         alpha = ca->passepartalpha;
       }
 
@@ -609,7 +607,7 @@ static void drawviewborder(Scene *scene, Depsgraph *depsgraph, ARegion *region, 
         immRectf(shdr_pos, x1i, y1i, x2i, 0.0f);
       }
 
-      GPU_blend(false);
+      GPU_blend(GPU_BLEND_NONE);
     }
 
     immUniformThemeColor3(TH_BACK);
@@ -668,7 +666,7 @@ static void drawviewborder(Scene *scene, Depsgraph *depsgraph, ARegion *region, 
 
   /* safety border */
   if (ca) {
-    GPU_blend(true);
+    GPU_blend(GPU_BLEND_ALPHA);
     immUniformThemeColorAlpha(TH_VIEW_OVERLAY, 0.75f);
 
     if (ca->dtx & CAM_DTX_CENTER) {
@@ -780,7 +778,7 @@ static void drawviewborder(Scene *scene, Depsgraph *depsgraph, ARegion *region, 
       imm_draw_box_wire_2d(shdr_pos, rect.xmin, rect.ymin, rect.xmax, rect.ymax);
     }
 
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
   }
 
   immUnbindProgram();
@@ -881,14 +879,14 @@ float ED_scene_grid_scale(const Scene *scene, const char **r_grid_unit)
     const void *usys;
     int len;
 
-    bUnit_GetSystem(scene->unit.system, B_UNIT_LENGTH, &usys, &len);
+    BKE_unit_system_get(scene->unit.system, B_UNIT_LENGTH, &usys, &len);
 
     if (usys) {
-      int i = bUnit_GetBaseUnit(usys);
+      int i = BKE_unit_base_get(usys);
       if (r_grid_unit) {
-        *r_grid_unit = bUnit_GetNameDisplay(usys, i);
+        *r_grid_unit = BKE_unit_display_name_get(usys, i);
       }
-      return (float)bUnit_GetScaler(usys, i) / scene->unit.scale_length;
+      return (float)BKE_unit_scalar_get(usys, i) / scene->unit.scale_length;
     }
   }
 
@@ -907,21 +905,22 @@ void ED_view3d_grid_steps(const Scene *scene,
                           float r_grid_steps[STEPS_LEN])
 {
   const void *usys;
-  int i, len;
-  bUnit_GetSystem(scene->unit.system, B_UNIT_LENGTH, &usys, &len);
+  int len;
+  BKE_unit_system_get(scene->unit.system, B_UNIT_LENGTH, &usys, &len);
   float grid_scale = v3d->grid;
   BLI_assert(STEPS_LEN >= len);
 
   if (usys) {
     if (rv3d->view == RV3D_VIEW_USER) {
       /* Skip steps */
-      len = bUnit_GetBaseUnit(usys) + 1;
+      len = BKE_unit_base_get(usys) + 1;
     }
 
     grid_scale /= scene->unit.scale_length;
 
+    int i;
     for (i = 0; i < len; i++) {
-      r_grid_steps[i] = (float)bUnit_GetScaler(usys, len - 1 - i) * grid_scale;
+      r_grid_steps[i] = (float)BKE_unit_scalar_get(usys, len - 1 - i) * grid_scale;
     }
     for (; i < STEPS_LEN; i++) {
       /* Fill last slots */
@@ -934,7 +933,7 @@ void ED_view3d_grid_steps(const Scene *scene,
       grid_scale /= powf(v3d->gridsubdiv, 3);
     }
     int subdiv = 1;
-    for (i = 0;; i++) {
+    for (int i = 0;; i++) {
       r_grid_steps[i] = grid_scale * subdiv;
 
       if (i == STEPS_LEN - 1) {
@@ -973,10 +972,10 @@ float ED_view3d_grid_view_scale(Scene *scene,
     if (r_grid_unit) {
       const void *usys;
       int len;
-      bUnit_GetSystem(scene->unit.system, B_UNIT_LENGTH, &usys, &len);
+      BKE_unit_system_get(scene->unit.system, B_UNIT_LENGTH, &usys, &len);
 
       if (usys) {
-        *r_grid_unit = bUnit_GetNameDisplay(usys, len - i - 1);
+        *r_grid_unit = BKE_unit_display_name_get(usys, len - i - 1);
       }
     }
   }
@@ -1027,9 +1026,7 @@ static void draw_view_axis(RegionView3D *rv3d, const rcti *rect)
   /* draw axis lines */
   GPU_line_width(2.0f);
   GPU_line_smooth(true);
-  GPU_blend(true);
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   GPUVertFormat *format = immVertexFormat();
   uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
@@ -1068,13 +1065,11 @@ static void draw_rotation_guide(const RegionView3D *rv3d)
   float o[3];   /* center of rotation */
   float end[3]; /* endpoints for drawing */
 
-  GLubyte color[4] = {0, 108, 255, 255}; /* bright blue so it matches device LEDs */
+  uchar color[4] = {0, 108, 255, 255}; /* bright blue so it matches device LEDs */
 
   negate_v3_v3(o, rv3d->ofs);
 
-  GPU_blend(true);
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+  GPU_blend(GPU_BLEND_ALPHA);
   GPU_depth_mask(false); /* don't overwrite zbuf */
 
   GPUVertFormat *format = immVertexFormat();
@@ -1164,7 +1159,7 @@ static void draw_rotation_guide(const RegionView3D *rv3d)
   immEnd();
   immUnbindProgram();
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
   GPU_depth_mask(true);
 }
 #endif /* WITH_INPUT_NDOF */
@@ -1536,7 +1531,7 @@ void view3d_draw_region_info(const bContext *C, ARegion *region)
   else {
     switch ((eUserpref_MiniAxisType)U.mini_axis_type) {
       case USER_MINI_AXIS_TYPE_GIZMO:
-        /* The gizmo handles it's own drawing. */
+        /* The gizmo handles its own drawing. */
         break;
       case USER_MINI_AXIS_TYPE_MINIMAL:
         draw_view_axis(rv3d, rect);
@@ -1620,15 +1615,11 @@ void view3d_main_region_draw(const bContext *C, ARegion *region)
   view3d_draw_view(C, region);
 
   DRW_cache_free_old_batches(bmain);
-  GPU_free_images_old(bmain);
+  BKE_image_free_old_gputextures(bmain);
   GPU_pass_cache_garbage_collect();
 
-  /* XXX This is in order to draw UI batches with the DRW
-   * old context since we now use it for drawing the entire area. */
-  gpu_batch_presets_reset();
-
   /* No depth test for drawing action zones afterwards. */
-  GPU_depth_test(false);
+  GPU_depth_test(GPU_DEPTH_NONE);
 
   v3d->flag |= V3D_INVALID_BACKBUF;
 }
@@ -1710,7 +1701,7 @@ void ED_view3d_draw_offscreen(Depsgraph *depsgraph,
   {
     /* free images which can have changed on frame-change
      * warning! can be slow so only free animated images - campbell */
-    GPU_free_images_anim(G.main); /* XXX :((( */
+    BKE_image_free_anim_gputextures(G.main); /* XXX :((( */
   }
 
   GPU_matrix_push_projection();
@@ -1957,10 +1948,10 @@ ImBuf *ED_view3d_draw_offscreen_imbuf(Depsgraph *depsgraph,
                            NULL);
 
   if (ibuf->rect_float) {
-    GPU_offscreen_read_pixels(ofs, GL_FLOAT, ibuf->rect_float);
+    GPU_offscreen_read_pixels(ofs, GPU_DATA_FLOAT, ibuf->rect_float);
   }
   else if (ibuf->rect) {
-    GPU_offscreen_read_pixels(ofs, GL_UNSIGNED_BYTE, ibuf->rect);
+    GPU_offscreen_read_pixels(ofs, GPU_DATA_UNSIGNED_BYTE, ibuf->rect);
   }
 
   /* unbind */
@@ -2163,12 +2154,17 @@ static void view3d_opengl_read_Z_pixels(GPUViewport *viewport, rcti *rect, void 
 {
   DefaultTextureList *dtxl = (DefaultTextureList *)GPU_viewport_texture_list_get(viewport);
 
-  GPUFrameBuffer *tmp_fb = GPU_framebuffer_create();
+  GPUFrameBuffer *tmp_fb = GPU_framebuffer_create(__func__);
   GPU_framebuffer_texture_attach(tmp_fb, dtxl->depth, 0, 0);
   GPU_framebuffer_bind(tmp_fb);
 
-  GPU_framebuffer_read_depth(
-      tmp_fb, rect->xmin, rect->ymin, BLI_rcti_size_x(rect), BLI_rcti_size_y(rect), data);
+  GPU_framebuffer_read_depth(tmp_fb,
+                             rect->xmin,
+                             rect->ymin,
+                             BLI_rcti_size_x(rect),
+                             BLI_rcti_size_y(rect),
+                             GPU_DATA_FLOAT,
+                             data);
 
   GPU_framebuffer_restore();
   GPU_framebuffer_free(tmp_fb);
@@ -2262,7 +2258,7 @@ void view3d_update_depths_rect(ARegion *region, ViewDepths *d, rcti *rect)
   }
 }
 
-/* Note, with nouveau drivers the glReadPixels() is very slow. [#24339]. */
+/* Note, with nouveau drivers the glReadPixels() is very slow. T24339. */
 void ED_view3d_depth_update(ARegion *region)
 {
   RegionView3D *rv3d = region->regiondata;
@@ -2329,14 +2325,14 @@ void ED_view3d_draw_depth_gpencil(Depsgraph *depsgraph, Scene *scene, ARegion *r
   /* Setup view matrix. */
   ED_view3d_draw_setup_view(NULL, NULL, depsgraph, scene, region, v3d, NULL, NULL, NULL);
 
-  GPU_clear(GPU_DEPTH_BIT);
+  GPU_clear_depth(1.0f);
 
-  GPU_depth_test(true);
+  GPU_depth_test(GPU_DEPTH_LESS_EQUAL);
 
   GPUViewport *viewport = WM_draw_region_get_viewport(region);
   DRW_draw_depth_loop_gpencil(depsgraph, region, v3d, viewport);
 
-  GPU_depth_test(false);
+  GPU_depth_test(GPU_DEPTH_NONE);
 }
 
 /* *********************** customdata **************** */
@@ -2363,6 +2359,10 @@ void ED_view3d_datamask(const bContext *C,
   if ((CTX_data_mode_enum(C) == CTX_MODE_EDIT_MESH) &&
       (v3d->overlay.edit_flag & V3D_OVERLAY_EDIT_WEIGHT)) {
     r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
+  }
+  if ((CTX_data_mode_enum(C) == CTX_MODE_SCULPT)) {
+    r_cddata_masks->vmask |= CD_MASK_PAINT_MASK;
+    r_cddata_masks->pmask |= CD_MASK_SCULPT_FACE_SETS;
   }
 }
 

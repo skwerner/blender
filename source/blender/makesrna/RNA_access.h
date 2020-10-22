@@ -67,6 +67,8 @@ extern StructRNA RNA_ArmatureGpencilModifier;
 extern StructRNA RNA_ArmatureModifier;
 extern StructRNA RNA_ArrayGpencilModifier;
 extern StructRNA RNA_ArrayModifier;
+extern StructRNA RNA_Attribute;
+extern StructRNA RNA_AttributeGroup;
 extern StructRNA RNA_BackgroundImage;
 extern StructRNA RNA_BevelModifier;
 extern StructRNA RNA_BezierSplinePoint;
@@ -93,6 +95,8 @@ extern StructRNA RNA_BrushCapabilitiesVertexPaint;
 extern StructRNA RNA_BrushTextureSlot;
 extern StructRNA RNA_BuildGpencilModifier;
 extern StructRNA RNA_BuildModifier;
+extern StructRNA RNA_ByteColorAttribute;
+extern StructRNA RNA_ByteColorAttributeValue;
 extern StructRNA RNA_CacheFile;
 extern StructRNA RNA_Camera;
 extern StructRNA RNA_CameraDOFSettings;
@@ -247,6 +251,10 @@ extern StructRNA RNA_FaceMap;
 extern StructRNA RNA_FieldSettings;
 extern StructRNA RNA_FileBrowserFSMenuEntry;
 extern StructRNA RNA_FileSelectParams;
+extern StructRNA RNA_FloatAttribute;
+extern StructRNA RNA_FloatAttributeValue;
+extern StructRNA RNA_FloatColorAttribute;
+extern StructRNA RNA_FloatColorAttributeValue;
 extern StructRNA RNA_FloatProperty;
 extern StructRNA RNA_FloorConstraint;
 extern StructRNA RNA_FluidDomainSettings;
@@ -292,6 +300,8 @@ extern StructRNA RNA_ImagePreview;
 extern StructRNA RNA_ImageSequence;
 extern StructRNA RNA_ImageTexture;
 extern StructRNA RNA_ImageUser;
+extern StructRNA RNA_IntAttribute;
+extern StructRNA RNA_IntAttributeValue;
 extern StructRNA RNA_IntProperty;
 extern StructRNA RNA_Itasc;
 extern StructRNA RNA_Key;
@@ -379,6 +389,7 @@ extern StructRNA RNA_MaterialSlot;
 extern StructRNA RNA_Menu;
 extern StructRNA RNA_Mesh;
 extern StructRNA RNA_MeshCacheModifier;
+extern StructRNA RNA_MeshToVolumeModifier;
 extern StructRNA RNA_MeshColor;
 extern StructRNA RNA_MeshDeformModifier;
 extern StructRNA RNA_MeshEdge;
@@ -481,6 +492,7 @@ extern StructRNA RNA_PropertyGroup;
 extern StructRNA RNA_PropertyGroupItem;
 extern StructRNA RNA_PythonConstraint;
 extern StructRNA RNA_Region;
+extern StructRNA RNA_RemeshModifier;
 extern StructRNA RNA_RenderEngine;
 extern StructRNA RNA_RenderLayer;
 extern StructRNA RNA_RenderPass;
@@ -553,6 +565,9 @@ extern StructRNA RNA_ShrinkwrapModifier;
 extern StructRNA RNA_SimpleDeformModifier;
 extern StructRNA RNA_SimplifyGpencilModifier;
 extern StructRNA RNA_Simulation;
+#ifdef WITH_PARTICLE_NODES
+extern StructRNA RNA_SimulationModifier;
+#endif
 extern StructRNA RNA_SimulationNode;
 extern StructRNA RNA_SimulationNodeTree;
 extern StructRNA RNA_SkinModifier;
@@ -570,6 +585,7 @@ extern StructRNA RNA_SpaceDopeSheetEditor;
 extern StructRNA RNA_SpaceFileBrowser;
 extern StructRNA RNA_SpaceGraphEditor;
 extern StructRNA RNA_SpaceImageEditor;
+extern StructRNA RNA_SpaceImageOverlay;
 extern StructRNA RNA_SpaceInfo;
 extern StructRNA RNA_SpaceNLA;
 extern StructRNA RNA_SpaceNodeEditor;
@@ -588,6 +604,8 @@ extern StructRNA RNA_SplinePoint;
 extern StructRNA RNA_SpotLight;
 extern StructRNA RNA_Stereo3dDisplay;
 extern StructRNA RNA_StretchToConstraint;
+extern StructRNA RNA_StringAttribute;
+extern StructRNA RNA_StringAttributeValue;
 extern StructRNA RNA_StringProperty;
 extern StructRNA RNA_Struct;
 extern StructRNA RNA_StucciTexture;
@@ -633,6 +651,7 @@ extern StructRNA RNA_TextureNodeViewer;
 extern StructRNA RNA_TextureSlot;
 extern StructRNA RNA_Theme;
 extern StructRNA RNA_ThemeBoneColorSet;
+extern StructRNA RNA_ThemeCollectionColor;
 extern StructRNA RNA_ThemeConsole;
 extern StructRNA RNA_ThemeDopeSheet;
 extern StructRNA RNA_ThemeFileBrowser;
@@ -665,6 +684,7 @@ extern StructRNA RNA_TrackToConstraint;
 extern StructRNA RNA_TransformConstraint;
 extern StructRNA RNA_TransformOrientationSlot;
 extern StructRNA RNA_TransformSequence;
+extern StructRNA RNA_TriangulateModifier;
 extern StructRNA RNA_UILayout;
 extern StructRNA RNA_UIList;
 extern StructRNA RNA_UIPieMenu;
@@ -689,6 +709,8 @@ extern StructRNA RNA_View3DShading;
 extern StructRNA RNA_ViewLayer;
 extern StructRNA RNA_ViewLayerEEVEE;
 extern StructRNA RNA_Volume;
+extern StructRNA RNA_VolumeDisplaceModifier;
+extern StructRNA RNA_VolumeToMeshModifier;
 extern StructRNA RNA_VoronoiTexture;
 extern StructRNA RNA_WalkNavigation;
 extern StructRNA RNA_WarpModifier;
@@ -1016,6 +1038,8 @@ int RNA_property_collection_lookup_string(PointerRNA *ptr,
                                           PropertyRNA *prop,
                                           const char *key,
                                           PointerRNA *r_ptr);
+int RNA_property_collection_lookup_string_index(
+    PointerRNA *ptr, PropertyRNA *prop, const char *key, PointerRNA *r_ptr, int *r_index);
 int RNA_property_collection_assign_int(PointerRNA *ptr,
                                        PropertyRNA *prop,
                                        const int key,
@@ -1121,13 +1145,13 @@ char *RNA_path_from_real_ID_to_struct(struct Main *bmain, PointerRNA *ptr, struc
 char *RNA_path_from_ID_to_property(PointerRNA *ptr, PropertyRNA *prop);
 char *RNA_path_from_ID_to_property_index(PointerRNA *ptr,
                                          PropertyRNA *prop,
-                                         int array_dim,
+                                         int index_dim,
                                          int index);
 
 char *RNA_path_from_real_ID_to_property_index(struct Main *bmain,
                                               PointerRNA *ptr,
                                               PropertyRNA *prop,
-                                              int array_dim,
+                                              int index_dim,
                                               int index,
                                               struct ID **r_real_id);
 
@@ -1277,14 +1301,14 @@ char *RNA_pointer_as_string(struct bContext *C,
                             PointerRNA *ptr_prop);
 char *RNA_pointer_as_string_keywords_ex(struct bContext *C,
                                         PointerRNA *ptr,
-                                        const bool skip_optional_value,
+                                        const bool as_function,
                                         const bool all_args,
                                         const bool nested_args,
                                         const int max_prop_length,
                                         PropertyRNA *iterprop);
 char *RNA_pointer_as_string_keywords(struct bContext *C,
                                      PointerRNA *ptr,
-                                     const bool skip_optional_value,
+                                     const bool as_function,
                                      const bool all_args,
                                      const bool nested_args,
                                      const int max_prop_length);

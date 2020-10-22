@@ -21,7 +21,6 @@
  * \ingroup edphys
  */
 
-#include <assert.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -203,9 +202,10 @@ ParticleEditSettings *PE_settings(Scene *scene)
 
 static float pe_brush_size_get(const Scene *UNUSED(scene), ParticleBrushData *brush)
 {
-  // here we can enable unified brush size, needs more work...
-  // UnifiedPaintSettings *ups = &scene->toolsettings->unified_paint_settings;
-  // float size = (ups->flag & UNIFIED_PAINT_SIZE) ? ups->size : brush->size;
+#if 0 /* TODO: Here we can enable unified brush size, needs more work. */
+  UnifiedPaintSettings *ups = &scene->toolsettings->unified_paint_settings;
+  float size = (ups->flag & UNIFIED_PAINT_SIZE) ? ups->size : brush->size;
+#endif
 
   return brush->size;
 }
@@ -403,7 +403,7 @@ void PE_hide_keys_time(Scene *scene, PTCacheEdit *edit, float cfra)
 static int pe_x_mirror(Object *ob)
 {
   if (ob->type == OB_MESH) {
-    return (((Mesh *)ob->data)->editflag & ME_EDIT_MIRROR_X);
+    return (((Mesh *)ob->data)->symmetry & ME_SYMMETRY_X);
   }
 
   return 0;
@@ -1386,7 +1386,7 @@ void recalc_emitter_field(Depsgraph *UNUSED(depsgraph), Object *UNUSED(ob), Part
   totface = mesh->totface;
   /*totvert=dm->getNumVerts(dm);*/ /*UNUSED*/
 
-  edit->emitter_cosnos = MEM_callocN(totface * 6 * sizeof(float), "emitter cosnos");
+  edit->emitter_cosnos = MEM_callocN(sizeof(float[6]) * totface, "emitter cosnos");
 
   edit->emitter_field = BLI_kdtree_3d_new(totface);
 
@@ -2254,8 +2254,6 @@ int PE_lasso_select(bContext *C, const int mcoords[][2], const int mcoords_len, 
   ARegion *region = CTX_wm_region(C);
   ParticleEditSettings *pset = PE_settings(scene);
   PTCacheEdit *edit = PE_get_current(depsgraph, scene, ob);
-  ParticleSystem *psys = edit->psys;
-  ParticleSystemModifierData *psmd_eval = edit->psmd_eval;
   POINT_P;
   KEY_K;
   float co[3], mat[4][4];
@@ -2276,6 +2274,8 @@ int PE_lasso_select(bContext *C, const int mcoords[][2], const int mcoords_len, 
     data.is_changed |= PE_deselect_all_visible_ex(edit);
   }
 
+  ParticleSystem *psys = edit->psys;
+  ParticleSystemModifierData *psmd_eval = edit->psmd_eval;
   LOOP_VISIBLE_POINTS {
     if (edit->psys && !(psys->flag & PSYS_GLOBAL_HAIR)) {
       psys_mat_hair_to_global(
@@ -3213,11 +3213,11 @@ static void brush_drawcursor(bContext *C, int x, int y, void *UNUSED(customdata)
     immUniformColor4ub(255, 255, 255, 128);
 
     GPU_line_smooth(true);
-    GPU_blend(true);
+    GPU_blend(GPU_BLEND_ALPHA);
 
     imm_draw_circle_wire_2d(pos, (float)x, (float)y, pe_brush_size_get(scene, brush), 40);
 
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
     GPU_line_smooth(false);
 
     immUnbindProgram();
@@ -3752,7 +3752,7 @@ static void brush_puff(PEData *data, int point_index, float mouse_distance)
         /* blend between the current and straight position */
         sub_v3_v3v3(dco, kco, co);
         madd_v3_v3fl(co, dco, fac);
-        /* keep the same distance from the root or we get glitches [#35406] */
+        /* keep the same distance from the root or we get glitches T35406. */
         dist_ensure_v3_v3fl(co, co_root, length_accum);
 
         /* re-use dco to compare before and after translation and add to the offset  */
@@ -3776,7 +3776,8 @@ static void brush_puff(PEData *data, int point_index, float mouse_distance)
 #else
           /* translate (not rotate) the rest of the hair if its not selected  */
           {
-#  if 0 /* kindof works but looks worse then what's below */
+/* NOLINTNEXTLINE: readability-redundant-preprocessor */
+#  if 0 /* kindof works but looks worse than what's below */
 
             /* Move the unselected point on a vector based on the
              * hair direction and the offset */
@@ -4346,7 +4347,7 @@ static int brush_add(const bContext *C, PEData *data, short number)
       }
 
       pa->size = 1.0f;
-      initialize_particle(&sim, pa);
+      init_particle(&sim, pa);
       reset_particle(&sim, pa, 0.0, 1.0);
       point->flag |= PEP_EDIT_RECALC;
       if (pe_x_mirror(ob)) {
@@ -4560,7 +4561,7 @@ static void brush_edit_apply(bContext *C, wmOperator *op, PointerRNA *itemptr)
            (dx != 0 || dy != 0)) ||
       bedit->first) {
     PEData data = bedit->data;
-    data.context = C;  // TODO(mai): why isnt this set in bedit->data?
+    data.context = C; /* TODO(mai): why isnt this set in bedit->data? */
 
     view3d_operator_needs_opengl(C);
     selected = (short)count_selected_keys(scene, edit);
@@ -4783,7 +4784,7 @@ static void brush_edit_apply_event(bContext *C, wmOperator *op, const wmEvent *e
   RNA_collection_add(op->ptr, "stroke", &itemptr);
 
   RNA_float_set_array(&itemptr, "mouse", mouse);
-  RNA_boolean_set(&itemptr, "pen_flip", event->shift != false);  // XXX hardcoded
+  RNA_boolean_set(&itemptr, "pen_flip", event->shift != false); /* XXX hardcoded */
 
   /* apply */
   brush_edit_apply(C, op, &itemptr);
@@ -4807,7 +4808,7 @@ static int brush_edit_modal(bContext *C, wmOperator *op, const wmEvent *event)
   switch (event->type) {
     case LEFTMOUSE:
     case MIDDLEMOUSE:
-    case RIGHTMOUSE:  // XXX hardcoded
+    case RIGHTMOUSE: /* XXX hardcoded */
       if (event->val == KM_RELEASE) {
         brush_edit_exit(op);
         return OPERATOR_FINISHED;
@@ -5390,11 +5391,6 @@ static int clear_edited_exec(bContext *C, wmOperator *UNUSED(op))
   return OPERATOR_FINISHED;
 }
 
-static int clear_edited_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
-{
-  return WM_operator_confirm_message(C, op, "Lose changes done in particle mode? (no undo)");
-}
-
 void PARTICLE_OT_edited_clear(wmOperatorType *ot)
 {
   /* identifiers */
@@ -5405,7 +5401,6 @@ void PARTICLE_OT_edited_clear(wmOperatorType *ot)
   /* api callbacks */
   ot->exec = clear_edited_exec;
   ot->poll = particle_edit_toggle_poll;
-  ot->invoke = clear_edited_invoke;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;

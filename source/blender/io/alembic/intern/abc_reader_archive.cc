@@ -39,9 +39,7 @@ using Alembic::Abc::Exception;
 using Alembic::Abc::IArchive;
 using Alembic::Abc::kWrapExisting;
 
-namespace blender {
-namespace io {
-namespace alembic {
+namespace blender::io::alembic {
 
 static IArchive open_archive(const std::string &filename,
                              const std::vector<std::istream *> &input_streams)
@@ -63,7 +61,7 @@ static IArchive open_archive(const std::string &filename,
     else if (!the_file.read(header, sizeof(header))) {
       std::cerr << "Unable to read from " << filename << std::endl;
     }
-    else if (strncmp(header + 1, "HDF", 3)) {
+    else if (strncmp(header + 1, "HDF", 3) != 0) {
       std::cerr << filename << " has an unknown file format, unable to read." << std::endl;
     }
     else {
@@ -108,6 +106,4 @@ Alembic::Abc::IObject ArchiveReader::getTop()
   return m_archive.getTop();
 }
 
-}  // namespace alembic
-}  // namespace io
-}  // namespace blender
+}  // namespace blender::io::alembic

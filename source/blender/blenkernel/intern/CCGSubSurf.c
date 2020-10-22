@@ -22,7 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "BLI_sys_types.h"  // for intptr_t support
+#include "BLI_sys_types.h" /* for intptr_t support */
 #include "MEM_guardedalloc.h"
 
 #include "BLI_utildefines.h" /* for BLI_assert */
@@ -31,8 +31,6 @@
 #include "BKE_subsurf.h"
 #include "CCGSubSurf.h"
 #include "CCGSubSurf_intern.h"
-
-#include "GPU_glew.h"
 
 /***/
 
@@ -74,8 +72,7 @@ static CCGVert *_vert_new(CCGVertHDL vHDL, CCGSubSurf *ss)
 }
 static void _vert_remEdge(CCGVert *v, CCGEdge *e)
 {
-  int i;
-  for (i = 0; i < v->numEdges; i++) {
+  for (int i = 0; i < v->numEdges; i++) {
     if (v->edges[i] == e) {
       v->edges[i] = v->edges[--v->numEdges];
       break;
@@ -84,8 +81,7 @@ static void _vert_remEdge(CCGVert *v, CCGEdge *e)
 }
 static void _vert_remFace(CCGVert *v, CCGFace *f)
 {
-  int i;
-  for (i = 0; i < v->numFaces; i++) {
+  for (int i = 0; i < v->numFaces; i++) {
     if (v->faces[i] == f) {
       v->faces[i] = v->faces[--v->numFaces];
       break;
@@ -106,8 +102,7 @@ static void _vert_addFace(CCGVert *v, CCGFace *f, CCGSubSurf *ss)
 }
 static CCGEdge *_vert_findEdgeTo(const CCGVert *v, const CCGVert *vQ)
 {
-  int i;
-  for (i = 0; i < v->numEdges; i++) {
+  for (int i = 0; i < v->numEdges; i++) {
     CCGEdge *e = v->edges[v->numEdges - 1 - i];  // XXX, note reverse
     if ((e->v0 == v && e->v1 == vQ) || (e->v1 == v && e->v0 == vQ)) {
       return e;
@@ -157,8 +152,7 @@ static CCGEdge *_edge_new(CCGEdgeHDL eHDL, CCGVert *v0, CCGVert *v1, float creas
 }
 static void _edge_remFace(CCGEdge *e, CCGFace *f)
 {
-  int i;
-  for (i = 0; i < e->numFaces; i++) {
+  for (int i = 0; i < e->numFaces; i++) {
     if (e->faces[i] == f) {
       e->faces[i] = e->faces[--e->numFaces];
       break;
@@ -207,13 +201,12 @@ static CCGFace *_face_new(
       sizeof(CCGFace) + sizeof(CCGVert *) * numVerts + sizeof(CCGEdge *) * numVerts +
           ss->meshIFC.vertDataSize * num_face_data + ss->meshIFC.faceUserSize);
   byte *userData;
-  int i;
 
   f->numVerts = numVerts;
   f->fHDL = fHDL;
   f->flags = 0;
 
-  for (i = 0; i < numVerts; i++) {
+  for (int i = 0; i < numVerts; i++) {
     FACE_getVerts(f)[i] = verts[i];
     FACE_getEdges(f)[i] = edges[i];
     _vert_addFace(verts[i], f, ss);
@@ -715,8 +708,8 @@ CCGError ccgSubSurf_syncFace(
 
     if (f) {
       if (f->numVerts != numVerts ||
-          memcmp(FACE_getVerts(f), ss->tempVerts, sizeof(*ss->tempVerts) * numVerts) ||
-          memcmp(FACE_getEdges(f), ss->tempEdges, sizeof(*ss->tempEdges) * numVerts)) {
+          memcmp(FACE_getVerts(f), ss->tempVerts, sizeof(*ss->tempVerts) * numVerts) != 0 ||
+          memcmp(FACE_getEdges(f), ss->tempEdges, sizeof(*ss->tempEdges) * numVerts) != 0) {
         topologyChanged = 1;
       }
     }
@@ -786,8 +779,8 @@ CCGError ccgSubSurf_syncFace(
 
     if (f) {
       if (f->numVerts != numVerts ||
-          memcmp(FACE_getVerts(f), ss->tempVerts, sizeof(*ss->tempVerts) * numVerts) ||
-          memcmp(FACE_getEdges(f), ss->tempEdges, sizeof(*ss->tempEdges) * numVerts)) {
+          memcmp(FACE_getVerts(f), ss->tempVerts, sizeof(*ss->tempVerts) * numVerts) != 0 ||
+          memcmp(FACE_getEdges(f), ss->tempEdges, sizeof(*ss->tempEdges) * numVerts) != 0) {
         topologyChanged = 1;
       }
     }
@@ -1420,9 +1413,7 @@ CCGEdge *ccgSubSurf_getFaceEdge(CCGFace *f, int index)
 }
 int ccgSubSurf_getFaceEdgeIndex(CCGFace *f, CCGEdge *e)
 {
-  int i;
-
-  for (i = 0; i < f->numVerts; i++) {
+  for (int i = 0; i < f->numVerts; i++) {
     if (FACE_getEdges(f)[i] == e) {
       return i;
     }
@@ -1480,30 +1471,30 @@ void ccgVertIterator_next(CCGVertIterator *vi)
   ccg_ehashIterator_next((EHashIterator *)vi);
 }
 
-CCGEdge *ccgEdgeIterator_getCurrent(CCGEdgeIterator *vi)
+CCGEdge *ccgEdgeIterator_getCurrent(CCGEdgeIterator *ei)
 {
-  return (CCGEdge *)ccg_ehashIterator_getCurrent((EHashIterator *)vi);
+  return (CCGEdge *)ccg_ehashIterator_getCurrent((EHashIterator *)ei);
 }
-int ccgEdgeIterator_isStopped(CCGEdgeIterator *vi)
+int ccgEdgeIterator_isStopped(CCGEdgeIterator *ei)
 {
-  return ccg_ehashIterator_isStopped((EHashIterator *)vi);
+  return ccg_ehashIterator_isStopped((EHashIterator *)ei);
 }
-void ccgEdgeIterator_next(CCGEdgeIterator *vi)
+void ccgEdgeIterator_next(CCGEdgeIterator *ei)
 {
-  ccg_ehashIterator_next((EHashIterator *)vi);
+  ccg_ehashIterator_next((EHashIterator *)ei);
 }
 
-CCGFace *ccgFaceIterator_getCurrent(CCGFaceIterator *vi)
+CCGFace *ccgFaceIterator_getCurrent(CCGFaceIterator *fi)
 {
-  return (CCGFace *)ccg_ehashIterator_getCurrent((EHashIterator *)vi);
+  return (CCGFace *)ccg_ehashIterator_getCurrent((EHashIterator *)fi);
 }
-int ccgFaceIterator_isStopped(CCGFaceIterator *vi)
+int ccgFaceIterator_isStopped(CCGFaceIterator *fi)
 {
-  return ccg_ehashIterator_isStopped((EHashIterator *)vi);
+  return ccg_ehashIterator_isStopped((EHashIterator *)fi);
 }
-void ccgFaceIterator_next(CCGFaceIterator *vi)
+void ccgFaceIterator_next(CCGFaceIterator *fi)
 {
-  ccg_ehashIterator_next((EHashIterator *)vi);
+  ccg_ehashIterator_next((EHashIterator *)fi);
 }
 
 /*** Extern API final vert/edge/face interface ***/
@@ -1545,7 +1536,7 @@ void CCG_key(CCGKey *key, const CCGSubSurf *ss, int level)
   /* if normals are present, always the last three floats of an
    * element */
   if (key->has_normals) {
-    key->normal_offset = key->elem_size - sizeof(float) * 3;
+    key->normal_offset = key->elem_size - sizeof(float[3]);
   }
   else {
     key->normal_offset = -1;

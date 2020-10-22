@@ -44,8 +44,8 @@ struct MLoopCol;
 struct MLoopTri;
 struct MLoopUV;
 struct MPoly;
-struct MVert;
 struct MPropCol;
+struct MVert;
 struct Material;
 struct Mesh;
 struct Multires;
@@ -191,6 +191,9 @@ typedef struct Mesh {
   int totpoly, totloop;
   /* END BMESH ONLY */
 
+  int attributes_active_index;
+  int _pad3;
+
   /* the last selected vertex/edge/face are used for the active face however
    * this means the active face must always be selected, this is to keep track
    * of the last selected face and is similar to the old active face flag where
@@ -218,7 +221,9 @@ typedef struct Mesh {
   float remesh_voxel_adaptivity;
   char remesh_mode;
 
-  char _pad1[3];
+  char symmetry;
+
+  char _pad1[2];
 
   int face_sets_color_seed;
   /* Stores the initial Face Set to be rendered white. This way the overlay can be enabled by
@@ -262,7 +267,7 @@ enum {
 
 /* me->editflag */
 enum {
-  ME_EDIT_MIRROR_X = 1 << 0,
+  ME_EDIT_VERTEX_GROUPS_X_SYMMETRY = 1 << 0,
   ME_EDIT_MIRROR_Y = 1 << 1, /* unused so far */
   ME_EDIT_MIRROR_Z = 1 << 2, /* unused so far */
 
@@ -316,6 +321,13 @@ enum {
   ME_CC_SUBSURF = 0,
   ME_SIMPLE_SUBSURF = 1,
 };
+
+/* me->symmetry */
+typedef enum eMeshSymmetryType {
+  ME_SYMMETRY_X = 1 << 0,
+  ME_SYMMETRY_Y = 1 << 1,
+  ME_SYMMETRY_Z = 1 << 2,
+} eMeshSymmetryType;
 
 #define MESH_MAX_VERTS 2000000000L
 

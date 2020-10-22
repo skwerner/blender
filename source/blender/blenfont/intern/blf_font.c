@@ -113,13 +113,6 @@ static void blf_batch_draw_exit(void)
   GPU_BATCH_DISCARD_SAFE(g_batch.batch);
 }
 
-void blf_batch_draw_vao_clear(void)
-{
-  if (g_batch.batch) {
-    GPU_batch_vao_cache_clear(g_batch.batch);
-  }
-}
-
 void blf_batch_draw_begin(FontBLF *font)
 {
   if (g_batch.batch == NULL) {
@@ -226,9 +219,7 @@ void blf_batch_draw(void)
     return;
   }
 
-  GPU_blend(true);
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+  GPU_blend(GPU_BLEND_ALPHA);
 
 #ifndef BLF_STANDALONE
   /* We need to flush widget base first to ensure correct ordering. */
@@ -236,15 +227,16 @@ void blf_batch_draw(void)
 #endif
 
   GPUTexture *texture = blf_batch_cache_texture_load();
-  GPU_texture_bind(texture, 0);
   GPU_vertbuf_data_len_set(g_batch.verts, g_batch.glyph_len);
   GPU_vertbuf_use(g_batch.verts); /* send data */
 
   GPU_batch_program_set_builtin(g_batch.batch, GPU_SHADER_TEXT);
-  GPU_batch_uniform_1i(g_batch.batch, "glyph", 0);
+  GPU_batch_texture_bind(g_batch.batch, "glyph", texture);
   GPU_batch_draw(g_batch.batch);
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
+
+  GPU_texture_unbind(texture);
 
   /* restart to 1st vertex data pointers */
   GPU_vertbuf_attr_get_raw_data(g_batch.verts, g_batch.pos_loc, &g_batch.pos_step);
@@ -324,8 +316,7 @@ static GlyphBLF **blf_font_ensure_ascii_table(FontBLF *font, GlyphCacheBLF *gc)
   /* build ascii on demand */
   if (glyph_ascii_table['0'] == NULL) {
     GlyphBLF *g;
-    unsigned int i;
-    for (i = 0; i < 256; i++) {
+    for (uint i = 0; i < 256; i++) {
       g = blf_glyph_search(gc, i);
       if (!g) {
         FT_UInt glyph_index = FT_Get_Char_Index(font->face, i);

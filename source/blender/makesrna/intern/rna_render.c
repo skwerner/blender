@@ -27,7 +27,9 @@
 #include "BLI_path_util.h"
 #include "BLI_utildefines.h"
 
-#include "BPY_extern.h"
+#ifdef WITH_PYTHON
+#  include "BPY_extern.h"
+#endif
 
 #include "DEG_depsgraph.h"
 
@@ -100,7 +102,7 @@ const EnumPropertyItem rna_enum_bake_pass_type_items[] = {
 #  include "BKE_context.h"
 #  include "BKE_report.h"
 
-#  include "GPU_extensions.h"
+#  include "GPU_capabilities.h"
 #  include "GPU_shader.h"
 #  include "IMB_colormanagement.h"
 

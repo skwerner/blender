@@ -26,6 +26,7 @@
 #include "render/object.h"
 #include "render/scene.h"
 #include "render/shader.h"
+#include "render/stats.h"
 
 #include "util/util_foreach.h"
 #include "util/util_hash.h"
@@ -251,7 +252,7 @@ void LightManager::test_enabled_lights(Scene *scene)
 bool LightManager::object_usable_as_light(Object *object)
 {
   Geometry *geom = object->geometry;
-  if (geom->type != Geometry::MESH) {
+  if (geom->type != Geometry::MESH && geom->type != Geometry::VOLUME) {
     return false;
   }
   /* Skip objects with NaNs */
@@ -1303,6 +1304,12 @@ void LightManager::device_update(Device *device,
 {
   if (!need_update)
     return;
+
+  scoped_callback_timer timer([scene](double time) {
+    if (scene->update_stats) {
+      scene->update_stats->light.times.add_entry({"device_update", time});
+    }
+  });
 
   VLOG(1) << "Total " << scene->lights.size() << " lights.";
 

@@ -24,14 +24,16 @@
 
 struct DRWPass;
 struct DRWShadingGroup;
+struct FluidModifierData;
 struct GPUMaterial;
 struct ModifierData;
 struct Object;
 struct ParticleSystem;
+struct RegionView3D;
 struct ViewLayer;
 
 #define UBO_FIRST_COLOR colorWire
-#define UBO_LAST_COLOR colorFaceFront
+#define UBO_LAST_COLOR colorUVShadow
 
 /* Used as ubo but colors can be directly referenced as well */
 /* Keep in sync with: common_globals_lib.glsl (globalsBlock) */
@@ -139,6 +141,8 @@ typedef struct GlobalsUboStorage {
   float colorFaceBack[4];
   float colorFaceFront[4];
 
+  float colorUVShadow[4];
+
   /* NOTE! Put all color before UBO_LAST_COLOR */
   float screenVecs[2][4];                    /* padded as vec4  */
   float sizeViewport[2], sizeViewportInv[2]; /* packed as vec4 in glsl */
@@ -148,8 +152,7 @@ typedef struct GlobalsUboStorage {
   float sizeObjectCenter, sizeLightCenter, sizeLightCircle, sizeLightCircleShadow;
   float sizeVertex, sizeEdge, sizeEdgeFix, sizeFaceDot;
   float sizeChecker;
-
-  float pad_globalsBlock;
+  float sizeVertexGpencil;
 } GlobalsUboStorage;
 /* Keep in sync with globalsBlock in shaders */
 BLI_STATIC_ASSERT_ALIGN(GlobalsUboStorage, 16)
@@ -158,14 +161,14 @@ void DRW_globals_update(void);
 void DRW_globals_free(void);
 
 struct DRWView *DRW_view_create_with_zoffset(const struct DRWView *parent_view,
-                                             const RegionView3D *rv3d,
+                                             const struct RegionView3D *rv3d,
                                              float offset);
 
 int DRW_object_wire_theme_get(struct Object *ob, struct ViewLayer *view_layer, float **r_color);
 float *DRW_color_background_blend_get(int theme_id);
 
-bool DRW_object_is_flat(Object *ob, int *r_axis);
-bool DRW_object_axis_orthogonal_to_view(Object *ob, int axis);
+bool DRW_object_is_flat(struct Object *ob, int *r_axis);
+bool DRW_object_axis_orthogonal_to_view(struct Object *ob, int axis);
 
 /* draw_hair.c */
 
@@ -187,6 +190,18 @@ void DRW_hair_init(void);
 void DRW_hair_update(void);
 void DRW_hair_free(void);
 
+/* draw_fluid.c */
+
+/* Fluid simulation.  */
+void DRW_smoke_ensure(struct FluidModifierData *fmd, int highres);
+void DRW_smoke_ensure_coba_field(struct FluidModifierData *fmd);
+void DRW_smoke_ensure_velocity(struct FluidModifierData *fmd);
+void DRW_fluid_ensure_flags(struct FluidModifierData *fmd);
+void DRW_fluid_ensure_range_field(struct FluidModifierData *fmd);
+
+void DRW_smoke_free(struct FluidModifierData *fmd);
+void DRW_smoke_free_velocity(struct FluidModifierData *fmd);
+
 /* draw_common.c */
 struct DRW_Global {
   /** If needed, contains all global/Theme colors
@@ -194,11 +209,11 @@ struct DRW_Global {
    * Not needed for constant color. */
   GlobalsUboStorage block;
   /** Define "globalsBlock" uniform for 'block'.  */
-  struct GPUUniformBuffer *block_ubo;
+  struct GPUUniformBuf *block_ubo;
 
   struct GPUTexture *ramp;
   struct GPUTexture *weight_ramp;
 
-  struct GPUUniformBuffer *view_ubo;
+  struct GPUUniformBuf *view_ubo;
 };
 extern struct DRW_Global G_draw;

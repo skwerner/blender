@@ -77,32 +77,39 @@ class Array {
   /**
    * By default an empty array is created.
    */
-  Array()
+  Array(Allocator allocator = {}) noexcept : allocator_(allocator)
   {
     data_ = inline_buffer_;
     size_ = 0;
   }
 
-  /**
-   * Create a new array that contains copies of all values.
-   */
-  template<typename U, typename std::enable_if_t<std::is_convertible_v<U, T>> * = nullptr>
-  Array(Span<U> values, Allocator allocator = {}) : allocator_(allocator)
+  Array(NoExceptConstructor, Allocator allocator = {}) noexcept : Array(allocator)
   {
-    size_ = values.size();
-    data_ = this->get_buffer_for_size(values.size());
-    uninitialized_convert_n<U, T>(values.data(), size_, data_);
   }
 
   /**
    * Create a new array that contains copies of all values.
    */
   template<typename U, typename std::enable_if_t<std::is_convertible_v<U, T>> * = nullptr>
-  Array(const std::initializer_list<U> &values) : Array(Span<U>(values))
+  Array(Span<U> values, Allocator allocator = {}) : Array(NoExceptConstructor(), allocator)
+  {
+    const int64_t size = values.size();
+    data_ = this->get_buffer_for_size(size);
+    uninitialized_convert_n<U, T>(values.data(), size, data_);
+    size_ = size;
+  }
+
+  /**
+   * Create a new array that contains copies of all values.
+   */
+  template<typename U, typename std::enable_if_t<std::is_convertible_v<U, T>> * = nullptr>
+  Array(const std::initializer_list<U> &values, Allocator allocator = {})
+      : Array(Span<U>(values), allocator)
   {
   }
 
-  Array(const std::initializer_list<T> &values) : Array(Span<T>(values))
+  Array(const std::initializer_list<T> &values, Allocator allocator = {})
+      : Array(Span<T>(values), allocator)
   {
   }
 
@@ -114,23 +121,24 @@ class Array {
    * even for non-trivial types. This should not be the default though, because one can easily mess
    * up when dealing with uninitialized memory.
    */
-  explicit Array(int64_t size)
+  explicit Array(int64_t size, Allocator allocator = {}) : Array(NoExceptConstructor(), allocator)
   {
-    size_ = size;
     data_ = this->get_buffer_for_size(size);
     default_construct_n(data_, size);
+    size_ = size;
   }
 
   /**
    * Create a new array with the given size. All values will be initialized by copying the given
    * default.
    */
-  Array(int64_t size, const T &value)
+  Array(int64_t size, const T &value, Allocator allocator = {})
+      : Array(NoExceptConstructor(), allocator)
   {
     BLI_assert(size >= 0);
-    size_ = size;
     data_ = this->get_buffer_for_size(size);
-    uninitialized_fill_n(data_, size_, value);
+    uninitialized_fill_n(data_, size, value);
+    size_ = size;
   }
 
   /**
@@ -145,28 +153,28 @@ class Array {
    * Usage:
    *  Array<std::string> my_strings(10, NoInitialization());
    */
-  Array(int64_t size, NoInitialization)
+  Array(int64_t size, NoInitialization, Allocator allocator = {})
+      : Array(NoExceptConstructor(), allocator)
   {
     BLI_assert(size >= 0);
-    size_ = size;
     data_ = this->get_buffer_for_size(size);
+    size_ = size;
   }
 
   Array(const Array &other) : Array(other.as_span(), other.allocator_)
   {
   }
 
-  Array(Array &&other) noexcept : allocator_(other.allocator_)
+  Array(Array &&other) noexcept(std::is_nothrow_move_constructible_v<T>)
+      : Array(NoExceptConstructor(), other.allocator_)
   {
-    size_ = other.size_;
-
-    if (!other.uses_inline_buffer()) {
-      data_ = other.data_;
+    if (other.data_ == other.inline_buffer_) {
+      uninitialized_relocate_n(other.data_, other.size_, data_);
     }
     else {
-      data_ = this->get_buffer_for_size(size_);
-      uninitialized_relocate_n(other.data_, size_, data_);
+      data_ = other.data_;
     }
+    size_ = other.size_;
 
     other.data_ = other.inline_buffer_;
     other.size_ = 0;
@@ -175,31 +183,17 @@ class Array {
   ~Array()
   {
     destruct_n(data_, size_);
-    if (!this->uses_inline_buffer()) {
-      allocator_.deallocate((void *)data_);
-    }
+    this->deallocate_if_not_inline(data_);
   }
 
   Array &operator=(const Array &other)
   {
-    if (this == &other) {
-      return *this;
-    }
-
-    this->~Array();
-    new (this) Array(other);
-    return *this;
+    return copy_assign_container(*this, other);
   }
 
-  Array &operator=(Array &&other)
+  Array &operator=(Array &&other) noexcept(std::is_nothrow_move_constructible_v<T>)
   {
-    if (this == &other) {
-      return *this;
-    }
-
-    this->~Array();
-    new (this) Array(std::move(other));
-    return *this;
+    return move_assign_container(*this, std::move(other));
   }
 
   T &operator[](int64_t index)
@@ -273,6 +267,21 @@ class Array {
   }
 
   /**
+   * Return a reference to the last element in the array.
+   * This invokes undefined behavior when the array is empty.
+   */
+  const T &last() const
+  {
+    BLI_assert(size_ > 0);
+    return *(data_ + size_ - 1);
+  }
+  T &last()
+  {
+    BLI_assert(size_ > 0);
+    return *(data_ + size_ - 1);
+  }
+
+  /**
    * Get a pointer to the beginning of the array.
    */
   const T *data() const
@@ -288,7 +297,6 @@ class Array {
   {
     return data_;
   }
-
   const T *end() const
   {
     return data_ + size_;
@@ -298,10 +306,27 @@ class Array {
   {
     return data_;
   }
-
   T *end()
   {
     return data_ + size_;
+  }
+
+  std::reverse_iterator<T *> rbegin()
+  {
+    return std::reverse_iterator<T *>(this->end());
+  }
+  std::reverse_iterator<T *> rend()
+  {
+    return std::reverse_iterator<T *>(this->begin());
+  }
+
+  std::reverse_iterator<const T *> rbegin() const
+  {
+    return std::reverse_iterator<T *>(this->end());
+  }
+  std::reverse_iterator<const T *> rend() const
+  {
+    return std::reverse_iterator<T *>(this->begin());
   }
 
   /**
@@ -328,6 +353,10 @@ class Array {
   {
     return allocator_;
   }
+  const Allocator &allocator() const
+  {
+    return allocator_;
+  }
 
   /**
    * Get the value of the InlineBufferCapacity template argument. This is the number of elements
@@ -336,6 +365,37 @@ class Array {
   static int64_t inline_buffer_capacity()
   {
     return InlineBufferCapacity;
+  }
+
+  /**
+   * Destruct values and create a new array of the given size. The values in the new array are
+   * default constructed.
+   */
+  void reinitialize(const int64_t new_size)
+  {
+    BLI_assert(new_size >= 0);
+    int64_t old_size = size_;
+
+    destruct_n(data_, size_);
+    size_ = 0;
+
+    if (new_size <= old_size) {
+      default_construct_n(data_, new_size);
+    }
+    else {
+      T *new_data = this->get_buffer_for_size(new_size);
+      try {
+        default_construct_n(new_data, new_size);
+      }
+      catch (...) {
+        this->deallocate_if_not_inline(new_data);
+        throw;
+      }
+      this->deallocate_if_not_inline(data_);
+      data_ = new_data;
+    }
+
+    size_ = new_size;
   }
 
  private:
@@ -351,12 +411,15 @@ class Array {
 
   T *allocate(int64_t size)
   {
-    return (T *)allocator_.allocate((size_t)size * sizeof(T), alignof(T), AT);
+    return static_cast<T *>(
+        allocator_.allocate(static_cast<size_t>(size) * sizeof(T), alignof(T), AT));
   }
 
-  bool uses_inline_buffer() const
+  void deallocate_if_not_inline(T *ptr)
   {
-    return data_ == inline_buffer_;
+    if (ptr != inline_buffer_) {
+      allocator_.deallocate(ptr);
+    }
   }
 };
 

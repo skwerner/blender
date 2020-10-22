@@ -20,22 +20,14 @@
 
 #pragma once
 
-/* call this before running any of the functions below */
-void gpu_platform_init(void);
-void gpu_platform_exit(void);
-
-/* call this before running any of the functions below */
-void gpu_extensions_init(void);
-void gpu_extensions_exit(void);
-
-/* gpu_debug.c */
-void gpu_debug_init(void);
-void gpu_debug_exit(void);
-
-/* gpu_framebuffer.c */
-void gpu_framebuffer_module_init(void);
-void gpu_framebuffer_module_exit(void);
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* gpu_pbvh.c */
 void gpu_pbvh_init(void);
 void gpu_pbvh_exit(void);
+
+#ifdef __cplusplus
+}
+#endif

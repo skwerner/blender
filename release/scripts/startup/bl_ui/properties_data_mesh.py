@@ -69,7 +69,7 @@ class MESH_MT_shape_key_context_menu(Menu):
     def draw(self, _context):
         layout = self.layout
 
-        layout.operator("object.shape_key_add", icon='ADD', text="New Shape From Mix").from_mix = True
+        layout.operator("object.shape_key_add", icon='ADD', text="New Shape from Mix").from_mix = True
         layout.separator()
         layout.operator("object.shape_key_mirror", icon='ARROW_LEFTRIGHT').use_topology = False
         layout.operator("object.shape_key_mirror", text="Mirror Shape Key (Topology)").use_topology = True
@@ -478,7 +478,15 @@ class DATA_PT_sculpt_vertex_colors(MeshButtonsPanel, Panel):
         row = layout.row()
         col = row.column()
 
-        col.template_list("MESH_UL_vcols", "svcols", me, "sculpt_vertex_colors", me.sculpt_vertex_colors, "active_index", rows=2)
+        col.template_list(
+            "MESH_UL_vcols",
+            "svcols",
+            me,
+            "sculpt_vertex_colors",
+            me.sculpt_vertex_colors,
+            "active_index",
+            rows=2,
+        )
 
         col = row.column(align=True)
         col.operator("mesh.sculpt_vertex_color_add", icon='ADD', text="")

@@ -46,7 +46,7 @@ extern char datatoc_common_view_lib_glsl[];
 /* *********** LISTS *********** */
 
 /* GPUViewport.storage
- * Is freed everytime the viewport engine changes */
+ * Is freed every time the viewport engine changes. */
 typedef struct BASIC_StorageList {
   struct BASIC_PrivateData *g_data;
 } BASIC_StorageList;
@@ -159,7 +159,7 @@ static void basic_cache_populate(void *vedata, Object *ob)
 {
   BASIC_StorageList *stl = ((BASIC_Data *)vedata)->stl;
 
-  /* TODO(fclem) fix selection of smoke domains. */
+  /* TODO(fclem): fix selection of smoke domains. */
 
   if (!DRW_object_is_renderable(ob) || (ob->dt < OB_SOLID)) {
     return;

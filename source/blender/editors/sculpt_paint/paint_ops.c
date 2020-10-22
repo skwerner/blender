@@ -56,9 +56,8 @@
 #include "paint_intern.h"
 #include "sculpt_intern.h"
 
-#include <string.h>
-//#include <stdio.h>
 #include <stddef.h>
+#include <string.h>
 
 /* Brush operators */
 static int brush_add_exec(bContext *C, wmOperator *UNUSED(op))
@@ -70,7 +69,7 @@ static int brush_add_exec(bContext *C, wmOperator *UNUSED(op))
   ePaintMode mode = BKE_paintmode_get_active_from_context(C);
 
   if (br) {
-    br = BKE_brush_copy(bmain, br);
+    br = (Brush *)BKE_id_copy(bmain, &br->id);
   }
   else {
     br = BKE_brush_add(bmain, "Brush", BKE_paint_object_mode_from_paintmode(mode));
@@ -105,7 +104,7 @@ static int brush_add_gpencil_exec(bContext *C, wmOperator *UNUSED(op))
   Main *bmain = CTX_data_main(C);
 
   if (br) {
-    br = BKE_brush_copy(bmain, br);
+    br = (Brush *)BKE_id_copy(bmain, &br->id);
   }
   else {
     br = BKE_brush_add(bmain, "Brush", OB_MODE_PAINT_GPENCIL);
@@ -144,7 +143,7 @@ static int brush_scale_size_exec(bContext *C, wmOperator *op)
   float scalar = RNA_float_get(op->ptr, "scalar");
 
   if (brush) {
-    // pixel radius
+    /* pixel radius */
     {
       const int old_size = BKE_brush_size_get(scene, brush);
       int size = (int)(scalar * old_size);
@@ -161,11 +160,11 @@ static int brush_scale_size_exec(bContext *C, wmOperator *op)
       BKE_brush_size_set(scene, brush, size);
     }
 
-    // unprojected radius
+    /* unprojected radius */
     {
       float unprojected_radius = scalar * BKE_brush_unprojected_radius_get(scene, brush);
 
-      if (unprojected_radius < 0.001f) {  // XXX magic number
+      if (unprojected_radius < 0.001f) { /* XXX magic number */
         unprojected_radius = 0.001f;
       }
 
@@ -913,7 +912,7 @@ static int stencil_control_invoke(bContext *C, wmOperator *op, const wmEvent *ev
 {
   Paint *paint = BKE_paint_get_active_from_context(C);
   Brush *br = BKE_paint_brush(paint);
-  float mvalf[2] = {event->mval[0], event->mval[1]};
+  const float mvalf[2] = {event->mval[0], event->mval[1]};
   ARegion *region = CTX_wm_region(C);
   StencilControlData *scd;
   int mask = RNA_enum_get(op->ptr, "texmode");
@@ -968,7 +967,7 @@ static void stencil_control_calculate(StencilControlData *scd, const int mval[2]
 #define PIXEL_MARGIN 5
 
   float mdiff[2];
-  float mvalf[2] = {mval[0], mval[1]};
+  const float mvalf[2] = {mval[0], mval[1]};
   switch (scd->mode) {
     case STENCIL_TRANSLATE:
       sub_v2_v2v2(mdiff, mvalf, scd->init_mouse);
@@ -1356,6 +1355,8 @@ void ED_operatortypes_paint(void)
   /* paint masking */
   WM_operatortype_append(PAINT_OT_mask_flood_fill);
   WM_operatortype_append(PAINT_OT_mask_lasso_gesture);
+  WM_operatortype_append(PAINT_OT_mask_box_gesture);
+  WM_operatortype_append(PAINT_OT_mask_line_gesture);
 }
 
 void ED_keymap_paint(wmKeyConfig *keyconf)

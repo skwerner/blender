@@ -48,6 +48,7 @@
 
 #include "GPU_buffers.h"
 #include "GPU_material.h"
+#include "GPU_uniform_buffer.h"
 
 #include "intern/gpu_codegen.h"
 
@@ -85,27 +86,12 @@ static void draw_call_sort(DRWCommand *array, DRWCommand *array_tmp, int array_l
   memcpy(array, array_tmp, sizeof(*array) * array_len);
 }
 
-GPUUniformBuffer *DRW_uniformbuffer_create(int size, const void *data)
-{
-  return GPU_uniformbuffer_create(size, data, NULL);
-}
-
-void DRW_uniformbuffer_update(GPUUniformBuffer *ubo, const void *data)
-{
-  GPU_uniformbuffer_update(ubo, data);
-}
-
-void DRW_uniformbuffer_free(GPUUniformBuffer *ubo)
-{
-  GPU_uniformbuffer_free(ubo);
-}
-
 void drw_resource_buffer_finish(ViewportMemoryPool *vmempool)
 {
   int chunk_id = DRW_handle_chunk_get(&DST.resource_handle);
   int elem_id = DRW_handle_id_get(&DST.resource_handle);
   int ubo_len = 1 + chunk_id - ((elem_id == 0) ? 1 : 0);
-  size_t list_size = sizeof(GPUUniformBuffer *) * ubo_len;
+  size_t list_size = sizeof(GPUUniformBuf *) * ubo_len;
 
   /* TODO find a better system. currently a lot of obinfos UBO are going to be unused
    * if not rendering with Eevee. */
@@ -118,8 +104,8 @@ void drw_resource_buffer_finish(ViewportMemoryPool *vmempool)
 
   /* Remove unnecessary buffers */
   for (int i = ubo_len; i < vmempool->ubo_len; i++) {
-    GPU_uniformbuffer_free(vmempool->matrices_ubo[i]);
-    GPU_uniformbuffer_free(vmempool->obinfos_ubo[i]);
+    GPU_uniformbuf_free(vmempool->matrices_ubo[i]);
+    GPU_uniformbuf_free(vmempool->obinfos_ubo[i]);
   }
 
   if (ubo_len != vmempool->ubo_len) {
@@ -133,15 +119,13 @@ void drw_resource_buffer_finish(ViewportMemoryPool *vmempool)
     void *data_obmat = BLI_memblock_elem_get(vmempool->obmats, i, 0);
     void *data_infos = BLI_memblock_elem_get(vmempool->obinfos, i, 0);
     if (vmempool->matrices_ubo[i] == NULL) {
-      vmempool->matrices_ubo[i] = GPU_uniformbuffer_create(
-          sizeof(DRWObjectMatrix) * DRW_RESOURCE_CHUNK_LEN, data_obmat, NULL);
-      vmempool->obinfos_ubo[i] = GPU_uniformbuffer_create(
-          sizeof(DRWObjectInfos) * DRW_RESOURCE_CHUNK_LEN, data_infos, NULL);
+      vmempool->matrices_ubo[i] = GPU_uniformbuf_create(sizeof(DRWObjectMatrix) *
+                                                        DRW_RESOURCE_CHUNK_LEN);
+      vmempool->obinfos_ubo[i] = GPU_uniformbuf_create(sizeof(DRWObjectInfos) *
+                                                       DRW_RESOURCE_CHUNK_LEN);
     }
-    else {
-      GPU_uniformbuffer_update(vmempool->matrices_ubo[i], data_obmat);
-      GPU_uniformbuffer_update(vmempool->obinfos_ubo[i], data_infos);
-    }
+    GPU_uniformbuf_update(vmempool->matrices_ubo[i], data_obmat);
+    GPU_uniformbuf_update(vmempool->obinfos_ubo[i], data_infos);
   }
 
   /* Aligned alloc to avoid unaligned memcpy. */
@@ -210,15 +194,17 @@ static void drw_shgroup_uniform_create_ex(DRWShadingGroup *shgroup,
       memcpy(uni->fvalue, value, sizeof(float) * length);
       break;
     case DRW_UNIFORM_BLOCK:
-      uni->block = (GPUUniformBuffer *)value;
+      uni->block = (GPUUniformBuf *)value;
       break;
     case DRW_UNIFORM_BLOCK_REF:
-      uni->block_ref = (GPUUniformBuffer **)value;
+      uni->block_ref = (GPUUniformBuf **)value;
       break;
+    case DRW_UNIFORM_IMAGE:
     case DRW_UNIFORM_TEXTURE:
       uni->texture = (GPUTexture *)value;
       uni->sampler_state = sampler_state;
       break;
+    case DRW_UNIFORM_IMAGE_REF:
     case DRW_UNIFORM_TEXTURE_REF:
       uni->texture_ref = (GPUTexture **)value;
       uni->sampler_state = sampler_state;
@@ -277,18 +263,30 @@ void DRW_shgroup_uniform_texture_ref(DRWShadingGroup *shgroup, const char *name,
   DRW_shgroup_uniform_texture_ref_ex(shgroup, name, tex, GPU_SAMPLER_MAX);
 }
 
+void DRW_shgroup_uniform_image(DRWShadingGroup *shgroup, const char *name, const GPUTexture *tex)
+{
+  BLI_assert(tex != NULL);
+  int loc = GPU_shader_get_texture_binding(shgroup->shader, name);
+  drw_shgroup_uniform_create_ex(shgroup, loc, DRW_UNIFORM_IMAGE, tex, 0, 0, 1);
+}
+
+void DRW_shgroup_uniform_image_ref(DRWShadingGroup *shgroup, const char *name, GPUTexture **tex)
+{
+  BLI_assert(tex != NULL);
+  int loc = GPU_shader_get_texture_binding(shgroup->shader, name);
+  drw_shgroup_uniform_create_ex(shgroup, loc, DRW_UNIFORM_IMAGE_REF, tex, 0, 0, 1);
+}
+
 void DRW_shgroup_uniform_block(DRWShadingGroup *shgroup,
                                const char *name,
-                               const GPUUniformBuffer *ubo)
+                               const GPUUniformBuf *ubo)
 {
   BLI_assert(ubo != NULL);
   int loc = GPU_shader_get_uniform_block_binding(shgroup->shader, name);
   drw_shgroup_uniform_create_ex(shgroup, loc, DRW_UNIFORM_BLOCK, ubo, 0, 0, 1);
 }
 
-void DRW_shgroup_uniform_block_ref(DRWShadingGroup *shgroup,
-                                   const char *name,
-                                   GPUUniformBuffer **ubo)
+void DRW_shgroup_uniform_block_ref(DRWShadingGroup *shgroup, const char *name, GPUUniformBuf **ubo)
 {
   BLI_assert(ubo != NULL);
   int loc = GPU_shader_get_uniform_block_binding(shgroup->shader, name);
@@ -512,7 +510,7 @@ static void drw_call_obinfos_init(DRWObjectInfos *ob_infos, Object *ob)
   /* Random float value. */
   uint random = (DST.dupli_source) ?
                     DST.dupli_source->random_id :
-                    /* TODO(fclem) this is rather costly to do at runtime. Maybe we can
+                    /* TODO(fclem): this is rather costly to do at runtime. Maybe we can
                      * put it in ob->runtime and make depsgraph ensure it is up to date. */
                     BLI_hash_int_2d(BLI_hash_string(ob->id.name + 2), 0);
   ob_infos->ob_random = random * (1.0f / (float)0xFFFFFFFF);
@@ -582,7 +580,7 @@ uint32_t DRW_object_resource_id_get(Object *UNUSED(ob))
     /* Handle not yet allocated. Return next handle. */
     handle = DST.resource_handle;
   }
-  return handle & ~(1 << 31);
+  return handle & ~(1u << 31);
 }
 
 static DRWResourceHandle drw_resource_handle(DRWShadingGroup *shgroup,
@@ -594,28 +592,26 @@ static DRWResourceHandle drw_resource_handle(DRWShadingGroup *shgroup,
       DRWResourceHandle handle = 0;
       return handle;
     }
-    else {
-      return drw_resource_handle_new(obmat, NULL);
+
+    return drw_resource_handle_new(obmat, NULL);
+  }
+
+  if (DST.ob_handle == 0) {
+    DST.ob_handle = drw_resource_handle_new(obmat, ob);
+    DST.ob_state_obinfo_init = false;
+  }
+
+  if (shgroup->objectinfo) {
+    if (!DST.ob_state_obinfo_init) {
+      DST.ob_state_obinfo_init = true;
+      DRWObjectInfos *ob_infos = DRW_memblock_elem_from_handle(DST.vmempool->obinfos,
+                                                               &DST.ob_handle);
+
+      drw_call_obinfos_init(ob_infos, ob);
     }
   }
-  else {
-    if (DST.ob_handle == 0) {
-      DST.ob_handle = drw_resource_handle_new(obmat, ob);
-      DST.ob_state_obinfo_init = false;
-    }
 
-    if (shgroup->objectinfo) {
-      if (!DST.ob_state_obinfo_init) {
-        DST.ob_state_obinfo_init = true;
-        DRWObjectInfos *ob_infos = DRW_memblock_elem_from_handle(DST.vmempool->obinfos,
-                                                                 &DST.ob_handle);
-
-        drw_call_obinfos_init(ob_infos, ob);
-      }
-    }
-
-    return DST.ob_handle;
-  }
+  return DST.ob_handle;
 }
 
 static void command_type_set(uint64_t *command_type_bits, int index, eDRWCommandType type)
@@ -819,10 +815,10 @@ static void drw_shgroup_call_procedural_add_ex(DRWShadingGroup *shgroup,
   drw_command_draw_procedural(shgroup, geom, handle, vert_count);
 }
 
-void DRW_shgroup_call_procedural_points(DRWShadingGroup *shgroup, Object *ob, uint point_len)
+void DRW_shgroup_call_procedural_points(DRWShadingGroup *shgroup, Object *ob, uint point_count)
 {
   struct GPUBatch *geom = drw_cache_procedural_points_get();
-  drw_shgroup_call_procedural_add_ex(shgroup, geom, ob, point_len);
+  drw_shgroup_call_procedural_add_ex(shgroup, geom, ob, point_count);
 }
 
 void DRW_shgroup_call_procedural_lines(DRWShadingGroup *shgroup, Object *ob, uint line_count)
@@ -831,10 +827,10 @@ void DRW_shgroup_call_procedural_lines(DRWShadingGroup *shgroup, Object *ob, uin
   drw_shgroup_call_procedural_add_ex(shgroup, geom, ob, line_count * 2);
 }
 
-void DRW_shgroup_call_procedural_triangles(DRWShadingGroup *shgroup, Object *ob, uint tria_count)
+void DRW_shgroup_call_procedural_triangles(DRWShadingGroup *shgroup, Object *ob, uint tri_count)
 {
   struct GPUBatch *geom = drw_cache_procedural_triangles_get();
-  drw_shgroup_call_procedural_add_ex(shgroup, geom, ob, tria_count * 3);
+  drw_shgroup_call_procedural_add_ex(shgroup, geom, ob, tri_count * 3);
 }
 
 /* Should be removed */
@@ -1135,7 +1131,7 @@ DRWCallBuffer *DRW_shgroup_call_buffer_instance(DRWShadingGroup *shgroup,
 void DRW_buffer_add_entry_struct(DRWCallBuffer *callbuf, const void *data)
 {
   GPUVertBuf *buf = callbuf->buf;
-  const bool resize = (callbuf->count == buf->vertex_alloc);
+  const bool resize = (callbuf->count == GPU_vertbuf_get_vertex_alloc(buf));
 
   if (UNLIKELY(resize)) {
     GPU_vertbuf_data_resize(buf, callbuf->count + DRW_BUFFER_VERTS_CHUNK);
@@ -1156,9 +1152,9 @@ void DRW_buffer_add_entry_struct(DRWCallBuffer *callbuf, const void *data)
 void DRW_buffer_add_entry_array(DRWCallBuffer *callbuf, const void *attr[], uint attr_len)
 {
   GPUVertBuf *buf = callbuf->buf;
-  const bool resize = (callbuf->count == buf->vertex_alloc);
+  const bool resize = (callbuf->count == GPU_vertbuf_get_vertex_alloc(buf));
 
-  BLI_assert(attr_len == buf->format.attr_len);
+  BLI_assert(attr_len == GPU_vertbuf_get_format(buf)->attr_len);
   UNUSED_VARS_NDEBUG(attr_len);
 
   if (UNLIKELY(resize)) {
@@ -1292,13 +1288,10 @@ static DRWShadingGroup *drw_shgroup_material_create_ex(GPUPass *gpupass, DRWPass
 }
 
 static void drw_shgroup_material_texture(DRWShadingGroup *grp,
-                                         GPUMaterialTexture *tex,
+                                         GPUTexture *gputex,
                                          const char *name,
-                                         eGPUSamplerState state,
-                                         int textarget)
+                                         eGPUSamplerState state)
 {
-  GPUTexture *gputex = GPU_texture_from_blender(tex->ima, tex->iuser, NULL, textarget);
-
   DRW_shgroup_uniform_texture_ex(grp, name, gputex, state);
 
   GPUTexture **gputex_ref = BLI_memblock_alloc(DST.vmempool->images);
@@ -1314,15 +1307,16 @@ void DRW_shgroup_add_material_resources(DRWShadingGroup *grp, struct GPUMaterial
   LISTBASE_FOREACH (GPUMaterialTexture *, tex, &textures) {
     if (tex->ima) {
       /* Image */
+      GPUTexture *gputex;
       if (tex->tiled_mapping_name[0]) {
-        drw_shgroup_material_texture(
-            grp, tex, tex->sampler_name, tex->sampler_state, GL_TEXTURE_2D_ARRAY);
-        drw_shgroup_material_texture(
-            grp, tex, tex->tiled_mapping_name, tex->sampler_state, GL_TEXTURE_1D_ARRAY);
+        gputex = BKE_image_get_gpu_tiles(tex->ima, tex->iuser, NULL);
+        drw_shgroup_material_texture(grp, gputex, tex->sampler_name, tex->sampler_state);
+        gputex = BKE_image_get_gpu_tilemap(tex->ima, tex->iuser, NULL);
+        drw_shgroup_material_texture(grp, gputex, tex->tiled_mapping_name, tex->sampler_state);
       }
       else {
-        drw_shgroup_material_texture(
-            grp, tex, tex->sampler_name, tex->sampler_state, GL_TEXTURE_2D);
+        gputex = BKE_image_get_gpu_texture(tex->ima, tex->iuser, NULL);
+        drw_shgroup_material_texture(grp, gputex, tex->sampler_name, tex->sampler_state);
       }
     }
     else if (tex->colorband) {
@@ -1331,7 +1325,7 @@ void DRW_shgroup_add_material_resources(DRWShadingGroup *grp, struct GPUMaterial
     }
   }
 
-  GPUUniformBuffer *ubo = GPU_material_uniform_buffer_get(material);
+  GPUUniformBuf *ubo = GPU_material_uniform_buffer_get(material);
   if (ubo != NULL) {
     DRW_shgroup_uniform_block(grp, GPU_UBO_BLOCK_NAME, ubo);
   }
@@ -1778,7 +1772,7 @@ void DRW_view_update(DRWView *view,
                      const float (*culling_winmat)[4])
 {
   /* DO NOT UPDATE THE DEFAULT VIEW.
-   * Create subviews instead, or a copy. */
+   * Create sub-views instead, or a copy. */
   BLI_assert(view != DST.view_default);
   BLI_assert(view->parent == NULL);
 
@@ -1870,7 +1864,7 @@ void DRW_view_clip_planes_set(DRWView *view, float (*planes)[4], int plane_len)
   BLI_assert(plane_len <= MAX_CLIP_PLANES);
   view->clip_planes_len = plane_len;
   if (plane_len > 0) {
-    memcpy(view->storage.clipplanes, planes, sizeof(float) * 4 * plane_len);
+    memcpy(view->storage.clipplanes, planes, sizeof(float[4]) * plane_len);
   }
 }
 
@@ -1906,9 +1900,8 @@ float DRW_view_near_distance_get(const DRWView *view)
   if (DRW_view_is_persp_get(view)) {
     return -projmat[3][2] / (projmat[2][2] - 1.0f);
   }
-  else {
-    return -(projmat[3][2] + 1.0f) / projmat[2][2];
-  }
+
+  return -(projmat[3][2] + 1.0f) / projmat[2][2];
 }
 
 float DRW_view_far_distance_get(const DRWView *view)
@@ -1919,9 +1912,8 @@ float DRW_view_far_distance_get(const DRWView *view)
   if (DRW_view_is_persp_get(view)) {
     return -projmat[3][2] / (projmat[2][2] + 1.0f);
   }
-  else {
-    return -(projmat[3][2] - 1.0f) / projmat[2][2];
-  }
+
+  return -(projmat[3][2] - 1.0f) / projmat[2][2];
 }
 
 void DRW_view_viewmat_get(const DRWView *view, float mat[4][4], bool inverse)
@@ -1955,7 +1947,7 @@ DRWPass *DRW_pass_create(const char *name, DRWState state)
 {
   DRWPass *pass = BLI_memblock_alloc(DST.vmempool->passes);
   pass->state = state | DRW_STATE_PROGRAM_POINT_SIZE;
-  if (((G.debug_value > 20) && (G.debug_value < 30)) || (G.debug & G_DEBUG)) {
+  if (G.debug & G_DEBUG_GPU) {
     BLI_strncpy(pass->name, name, MAX_PASS_NAME);
   }
 
@@ -1970,6 +1962,8 @@ DRWPass *DRW_pass_create(const char *name, DRWState state)
   return pass;
 }
 
+/* Create an instance of the original pass that will execute the same drawcalls but with its own
+ * DRWState. */
 DRWPass *DRW_pass_create_instance(const char *name, DRWPass *original, DRWState state)
 {
   DRWPass *pass = DRW_pass_create(name, state);
@@ -1988,27 +1982,16 @@ void DRW_pass_link(DRWPass *first, DRWPass *second)
 
 bool DRW_pass_is_empty(DRWPass *pass)
 {
+  if (pass->original) {
+    return DRW_pass_is_empty(pass->original);
+  }
+
   LISTBASE_FOREACH (DRWShadingGroup *, shgroup, &pass->shgroups) {
     if (!DRW_shgroup_is_empty(shgroup)) {
       return false;
     }
   }
   return true;
-}
-
-void DRW_pass_state_set(DRWPass *pass, DRWState state)
-{
-  pass->state = state | DRW_STATE_PROGRAM_POINT_SIZE;
-}
-
-void DRW_pass_state_add(DRWPass *pass, DRWState state)
-{
-  pass->state |= state;
-}
-
-void DRW_pass_state_remove(DRWPass *pass, DRWState state)
-{
-  pass->state &= ~state;
 }
 
 void DRW_pass_foreach_shgroup(DRWPass *pass,
@@ -2028,18 +2011,16 @@ static int pass_shgroup_dist_sort(const void *a, const void *b)
   if (shgrp_a->z_sorting.distance < shgrp_b->z_sorting.distance) {
     return 1;
   }
-  else if (shgrp_a->z_sorting.distance > shgrp_b->z_sorting.distance) {
+  if (shgrp_a->z_sorting.distance > shgrp_b->z_sorting.distance) {
     return -1;
   }
-  else {
-    /* If distances are the same, keep original order. */
-    if (shgrp_a->z_sorting.original_index > shgrp_b->z_sorting.original_index) {
-      return -1;
-    }
-    else {
-      return 0;
-    }
+
+  /* If distances are the same, keep original order. */
+  if (shgrp_a->z_sorting.original_index > shgrp_b->z_sorting.original_index) {
+    return -1;
   }
+
+  return 0;
 }
 
 /* ------------------ Shading group sorting --------------------- */

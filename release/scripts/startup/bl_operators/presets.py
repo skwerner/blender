@@ -195,7 +195,7 @@ class AddPresetBase:
 
             # Do not remove bundled presets
             if is_path_builtin(filepath):
-                self.report({'WARNING'}, "You can't remove the default presets")
+                self.report({'WARNING'}, "Unable to remove default presets")
                 return {'CANCELLED'}
 
             try:
@@ -388,12 +388,12 @@ class AddPresetFluid(AddPresetBase, Operator):
 
     preset_defines = [
         "fluid = bpy.context.fluid"
-        ]
+    ]
 
     preset_values = [
         "fluid.domain_settings.viscosity_base",
         "fluid.domain_settings.viscosity_exponent",
-        ]
+    ]
 
     preset_subdir = "fluid"
 
@@ -686,7 +686,6 @@ class AddPresetGpencilMaterial(AddPresetBase, Operator):
         "gpcolor.texture_offset",
         "gpcolor.texture_scale",
         "gpcolor.texture_angle",
-        "gpcolor.texture_opacity",
         "gpcolor.texture_clamp",
         "gpcolor.mix_factor",
         "gpcolor.show_stroke",

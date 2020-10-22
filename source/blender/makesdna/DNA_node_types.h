@@ -155,10 +155,6 @@ typedef enum eNodeSocketDatatype {
   SOCK_STRING = 7,
   SOCK_OBJECT = 8,
   SOCK_IMAGE = 9,
-  SOCK_EMITTERS = 10,
-  SOCK_EVENTS = 11,
-  SOCK_FORCES = 12,
-  SOCK_CONTROL_FLOW = 13,
 } eNodeSocketDatatype;
 
 /* socket shape */
@@ -1356,7 +1352,7 @@ enum {
 /* subsurface */
 enum {
 #ifdef DNA_DEPRECATED_ALLOW
-  SHD_SUBSURFACE_COMPATIBLE = 0,  // Deprecated
+  SHD_SUBSURFACE_COMPATIBLE = 0, /* Deprecated */
 #endif
   SHD_SUBSURFACE_CUBIC = 1,
   SHD_SUBSURFACE_GAUSSIAN = 2,

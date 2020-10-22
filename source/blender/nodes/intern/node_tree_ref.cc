@@ -79,7 +79,7 @@ NodeTreeRef::NodeTreeRef(bNodeTree *btree) : btree_(btree)
 
   for (NodeRef *node : nodes_by_id_) {
     const bNodeType *nodetype = node->bnode_->typeinfo;
-    nodes_by_type_.lookup_or_add_default(nodetype).append(node);
+    nodes_by_type_.add(nodetype, node);
   }
 }
 
@@ -101,9 +101,9 @@ InputSocketRef &NodeTreeRef::find_input_socket(Map<bNode *, NodeRef *> &node_map
                                                bNodeSocket *bsocket)
 {
   NodeRef *node = node_mapping.lookup(bnode);
-  for (SocketRef *socket : node->inputs_) {
+  for (InputSocketRef *socket : node->inputs_) {
     if (socket->bsocket_ == bsocket) {
-      return *(InputSocketRef *)socket;
+      return *socket;
     }
   }
   BLI_assert(false);
@@ -115,9 +115,9 @@ OutputSocketRef &NodeTreeRef::find_output_socket(Map<bNode *, NodeRef *> &node_m
                                                  bNodeSocket *bsocket)
 {
   NodeRef *node = node_mapping.lookup(bnode);
-  for (SocketRef *socket : node->outputs_) {
+  for (OutputSocketRef *socket : node->outputs_) {
     if (socket->bsocket_ == bsocket) {
-      return *(OutputSocketRef *)socket;
+      return *socket;
     }
   }
   BLI_assert(false);

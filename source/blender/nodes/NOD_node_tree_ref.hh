@@ -46,6 +46,7 @@
 #include "BLI_array.hh"
 #include "BLI_linear_allocator.hh"
 #include "BLI_map.hh"
+#include "BLI_multi_value_map.hh"
 #include "BLI_string_ref.hh"
 #include "BLI_timeit.hh"
 #include "BLI_utility_mixins.hh"
@@ -161,7 +162,7 @@ class NodeTreeRef : NonCopyable, NonMovable {
   Vector<SocketRef *> sockets_by_id_;
   Vector<InputSocketRef *> input_sockets_;
   Vector<OutputSocketRef *> output_sockets_;
-  Map<const bNodeType *, Vector<NodeRef *>> nodes_by_type_;
+  MultiValueMap<const bNodeType *, NodeRef *> nodes_by_type_;
 
  public:
   NodeTreeRef(bNodeTree *btree);
@@ -247,13 +248,13 @@ inline const SocketRef &SocketRef::as_base() const
 inline const InputSocketRef &SocketRef::as_input() const
 {
   BLI_assert(this->is_input());
-  return *(const InputSocketRef *)this;
+  return static_cast<const InputSocketRef &>(*this);
 }
 
 inline const OutputSocketRef &SocketRef::as_output() const
 {
   BLI_assert(this->is_output());
-  return *(const OutputSocketRef *)this;
+  return static_cast<const OutputSocketRef &>(*this);
 }
 
 inline PointerRNA *SocketRef::rna() const
@@ -410,13 +411,7 @@ inline Span<const NodeRef *> NodeTreeRef::nodes_by_type(StringRefNull idname) co
 
 inline Span<const NodeRef *> NodeTreeRef::nodes_by_type(const bNodeType *nodetype) const
 {
-  const Vector<NodeRef *> *nodes = nodes_by_type_.lookup_ptr(nodetype);
-  if (nodes == nullptr) {
-    return {};
-  }
-  else {
-    return *nodes;
-  }
+  return nodes_by_type_.lookup(nodetype);
 }
 
 inline Span<const SocketRef *> NodeTreeRef::sockets() const

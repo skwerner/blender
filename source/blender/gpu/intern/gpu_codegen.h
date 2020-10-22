@@ -25,6 +25,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct GPUMaterial;
 struct GPUNodeGraph;
 struct GPUOutput;
@@ -61,3 +65,7 @@ void GPU_pass_release(GPUPass *pass);
 
 void gpu_codegen_init(void);
 void gpu_codegen_exit(void);
+
+#ifdef __cplusplus
+}
+#endif

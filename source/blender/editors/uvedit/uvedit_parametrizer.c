@@ -43,29 +43,13 @@
 
 /* Utils */
 
-#if 0
-#  define param_assert(condition)
-#  define param_warning(message)
-#  define param_test_equals_ptr(condition)
-#  define param_test_equals_int(condition)
-#else
-#  define param_assert(condition) \
-    if (!(condition)) { /*printf("Assertion %s:%d\n", __FILE__, __LINE__); abort();*/ \
-    } \
-    (void)0
-#  define param_warning(message) \
-    {/*printf("Warning %s:%d: %s\n", __FILE__, __LINE__, message);*/}(void)0
-#  if 0
-#    define param_test_equals_ptr(str, a, b) \
-      if (a != b) { /*printf("Equals %s => %p != %p\n", str, a, b);*/ \
-      } \
-      (void)0
-#    define param_test_equals_int(str, a, b) \
-      if (a != b) { /*printf("Equals %s => %d != %d\n", str, a, b);*/ \
-      } \
-      (void)0
-#  endif
-#endif
+#define param_assert(condition) \
+  if (!(condition)) { /*printf("Assertion %s:%d\n", __FILE__, __LINE__); abort();*/ \
+  } \
+  (void)0
+#define param_warning(message) \
+  {/*printf("Warning %s:%d: %s\n", __FILE__, __LINE__, message);*/}(void)0
+
 typedef enum PBool {
   P_TRUE = 1,
   P_FALSE = 0,
@@ -511,7 +495,7 @@ static void p_chart_uv_translate(PChart *chart, const float trans[2])
   }
 }
 
-static void p_chart_uv_transform(PChart *chart, float mat[2][2])
+static void p_chart_uv_transform(PChart *chart, const float mat[2][2])
 {
   PVert *v;
 
@@ -1247,17 +1231,16 @@ static PFace *p_face_add_fill(PChart *chart, PVert *v1, PVert *v2, PVert *v3)
 
 static PBool p_quad_split_direction(PHandle *handle, float **co, PHashKey *vkeys)
 {
-  /* slight bias to prefer one edge over the other in case they are equal, so
+  /* Slight bias to prefer one edge over the other in case they are equal, so
    * that in symmetric models we choose the same split direction instead of
-   * depending on floating point errors to decide */
+   * depending on floating point errors to decide. */
   float bias = 1.0f + 1e-6f;
   float fac = len_v3v3(co[0], co[2]) * bias - len_v3v3(co[1], co[3]);
   PBool dir = (fac <= 0.0f);
 
-  /* the face exists check is there because of a special case: when
-   * two quads share three vertices, they can each be split into two
-   * triangles, resulting in two identical triangles. for example in
-   * suzanne's nose. */
+  /* The face exists check is there because of a special case:
+   * when two quads share three vertices, they can each be split into two triangles,
+   * resulting in two identical triangles. For example in Suzanne's nose. */
   if (dir) {
     if (p_face_exists(handle, vkeys, 0, 1, 2) || p_face_exists(handle, vkeys, 0, 2, 3)) {
       return !dir;
@@ -1512,10 +1495,10 @@ static void p_polygon_kernel_center(float (*points)[2], int npoints, float *cent
   float(*oldpoints)[2], (*newpoints)[2], *p1, *p2;
 
   size = npoints * 3;
-  oldpoints = MEM_mallocN(sizeof(float) * 2 * size, "PPolygonOldPoints");
-  newpoints = MEM_mallocN(sizeof(float) * 2 * size, "PPolygonNewPoints");
+  oldpoints = MEM_mallocN(sizeof(float[2]) * size, "PPolygonOldPoints");
+  newpoints = MEM_mallocN(sizeof(float[2]) * size, "PPolygonNewPoints");
 
-  memcpy(oldpoints, points, sizeof(float) * 2 * npoints);
+  memcpy(oldpoints, points, sizeof(float[2]) * npoints);
 
   for (i = 0; i < npoints; i++) {
     p1 = points[i];
@@ -1524,7 +1507,7 @@ static void p_polygon_kernel_center(float (*points)[2], int npoints, float *cent
 
     if (nnewpoints == 0) {
       /* degenerate case, use center of original polygon */
-      memcpy(oldpoints, points, sizeof(float) * 2 * npoints);
+      memcpy(oldpoints, points, sizeof(float[2]) * npoints);
       nnewpoints = npoints;
       break;
     }
@@ -1542,10 +1525,10 @@ static void p_polygon_kernel_center(float (*points)[2], int npoints, float *cent
     if (nnewpoints * 2 > size) {
       size *= 2;
       MEM_freeN(oldpoints);
-      oldpoints = MEM_mallocN(sizeof(float) * 2 * size, "oldpoints");
-      memcpy(oldpoints, newpoints, sizeof(float) * 2 * nnewpoints);
+      oldpoints = MEM_mallocN(sizeof(float[2]) * size, "oldpoints");
+      memcpy(oldpoints, newpoints, sizeof(float[2]) * nnewpoints);
       MEM_freeN(newpoints);
-      newpoints = MEM_mallocN(sizeof(float) * 2 * size, "newpoints");
+      newpoints = MEM_mallocN(sizeof(float[2]) * size, "newpoints");
     }
     else {
       float(*sw_points)[2] = oldpoints;
@@ -1701,7 +1684,7 @@ static void p_vert_harmonic_insert(PVert *v)
       npoints++;
     }
 
-    points = MEM_mallocN(sizeof(float) * 2 * npoints, "PHarmonicPoints");
+    points = MEM_mallocN(sizeof(float[2]) * npoints, "PHarmonicPoints");
 
     e = v->edge;
     i = 0;
@@ -2441,7 +2424,7 @@ static void p_abf_setup_system(PAbfSystem *sys)
 
   sys->bAlpha = (float *)MEM_mallocN(sizeof(float) * sys->nangles, "ABFbalpha");
   sys->bTriangle = (float *)MEM_mallocN(sizeof(float) * sys->nfaces, "ABFbtriangle");
-  sys->bInterior = (float *)MEM_mallocN(sizeof(float) * 2 * sys->ninterior, "ABFbinterior");
+  sys->bInterior = (float *)MEM_mallocN(sizeof(float[2]) * sys->ninterior, "ABFbinterior");
 
   sys->lambdaTriangle = (float *)MEM_callocN(sizeof(float) * sys->nfaces, "ABFlambdatri");
   sys->lambdaPlanar = (float *)MEM_callocN(sizeof(float) * sys->ninterior, "ABFlamdaplane");

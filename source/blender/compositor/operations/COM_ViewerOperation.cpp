@@ -190,7 +190,7 @@ void ViewerOperation::updateImage(rcti *rect)
                                     rect->ymin,
                                     rect->xmax,
                                     rect->ymax);
-
+  this->m_image->gpuflag |= IMA_GPU_REFRESH;
   this->updateDraw();
 }
 
@@ -199,7 +199,6 @@ CompositorPriority ViewerOperation::getRenderPriority() const
   if (this->isActiveViewerOutput()) {
     return COM_PRIORITY_HIGH;
   }
-  else {
-    return COM_PRIORITY_LOW;
-  }
+
+  return COM_PRIORITY_LOW;
 }

@@ -677,7 +677,7 @@ void ED_view3d_lock_clear(struct View3D *v3d);
 
 float ED_view3d_offset_distance(const float mat[4][4],
                                 const float ofs[3],
-                                const float dist_fallback);
+                                const float fallback_dist);
 void ED_view3d_distance_set(struct RegionView3D *rv3d, const float dist);
 bool ED_view3d_distance_set_from_location(struct RegionView3D *rv3d,
                                           const float dist_co[3],
@@ -697,17 +697,6 @@ float ED_view3d_grid_view_scale(struct Scene *scene,
                                 const char **r_grid_unit);
 
 void ED_scene_draw_fps(const struct Scene *scene, int xoffset, int *yoffset);
-
-/* view matrix properties utilities */
-/* unused */
-#if 0
-void ED_view3d_operator_properties_viewmat(struct wmOperatorType *ot);
-void ED_view3d_operator_properties_viewmat_set(struct bContext *C, struct wmOperator *op);
-void ED_view3d_operator_properties_viewmat_get(struct wmOperator *op,
-                                               int *winx,
-                                               int *winy,
-                                               float persmat[4][4]);
-#endif
 
 /* render */
 void ED_view3d_stop_render_preview(struct wmWindowManager *wm, struct ARegion *region);

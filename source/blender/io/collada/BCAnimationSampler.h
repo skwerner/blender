@@ -40,7 +40,8 @@ class BCAnimation {
   BCAnimation(bContext *C, Object *ob) : mContext(C)
   {
     Main *bmain = CTX_data_main(mContext);
-    reference = BKE_object_copy(bmain, ob);
+    reference = (Object *)BKE_id_copy(bmain, &ob->id);
+    id_us_min(&reference->id);
   }
 
   ~BCAnimation()
@@ -92,8 +93,8 @@ class BCSampleFrame {
   const BCMatrix *get_sample_matrix(Object *ob) const;
   const BCMatrix *get_sample_matrix(Object *ob, Bone *bone) const;
 
-  const bool has_sample_for(Object *ob) const;
-  const bool has_sample_for(Object *ob, Bone *bone) const;
+  bool has_sample_for(Object *ob) const;
+  bool has_sample_for(Object *ob, Bone *bone) const;
 };
 
 typedef std::map<int, BCSampleFrame> BCSampleFrameMap;
@@ -133,15 +134,15 @@ class BCSampleFrameContainer {
   }
 
   BCSample &add(Object *ob, int frame_index);
-  BCSampleFrame *get_frame(int frame_index);  // returns NULL if frame does not exist
+  BCSampleFrame *get_frame(int frame_index); /* returns NULL if frame does not exist */
 
-  const int get_frames(std::vector<int> &frames) const;
-  const int get_frames(Object *ob, BCFrames &frames) const;
-  const int get_frames(Object *ob, Bone *bone, BCFrames &frames) const;
+  int get_frames(std::vector<int> &frames) const;
+  int get_frames(Object *ob, BCFrames &frames) const;
+  int get_frames(Object *ob, Bone *bone, BCFrames &frames) const;
 
-  const int get_samples(Object *ob, BCFrameSampleMap &samples) const;
-  const int get_matrices(Object *ob, BCMatrixSampleMap &matrices) const;
-  const int get_matrices(Object *ob, Bone *bone, BCMatrixSampleMap &bones) const;
+  int get_samples(Object *ob, BCFrameSampleMap &samples) const;
+  int get_matrices(Object *ob, BCMatrixSampleMap &samples) const;
+  int get_matrices(Object *ob, Bone *bone, BCMatrixSampleMap &samples) const;
 };
 
 class BCAnimationSampler {
@@ -168,7 +169,7 @@ class BCAnimationSampler {
       BCAnimation &animation, float *ref, float *val, std::string data_path, int length);
 
  public:
-  BCAnimationSampler(BCExportSettings &export_settings, BCObjectSet &animated_subset);
+  BCAnimationSampler(BCExportSettings &export_settings, BCObjectSet &object_set);
   ~BCAnimationSampler();
 
   void add_object(Object *ob);

@@ -92,7 +92,7 @@ static GHashKey *_ghashutil_keyalloc(const void *msgctxt, const void *msgid)
 static uint _ghashutil_keyhash(const void *ptr)
 {
   const GHashKey *key = ptr;
-  uint hash = BLI_ghashutil_strhash(key->msgctxt);
+  const uint hash = BLI_ghashutil_strhash(key->msgctxt);
   return hash ^ BLI_ghashutil_strhash(key->msgid);
 }
 
@@ -896,7 +896,7 @@ PyObject *BPY_app_translations_struct(void)
 
   /* prevent user from creating new instances */
   BlenderAppTranslationsType.tp_new = NULL;
-  /* without this we can't do set(sys.modules) [#29635] */
+  /* without this we can't do set(sys.modules) T29635. */
   BlenderAppTranslationsType.tp_hash = (hashfunc)_Py_HashPointer;
 
   return ret;

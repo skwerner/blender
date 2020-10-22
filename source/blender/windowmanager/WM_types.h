@@ -329,7 +329,10 @@ typedef struct wmNotifier {
 #define ND_RENDER_OPTIONS (4 << 16)
 #define ND_NODES (5 << 16)
 #define ND_SEQUENCER (6 << 16)
+/* Note: If an object was added, removed, merged/joined, ..., it is not enough to notify with
+ * this. This affects the layer so also send a layer change notifier (e.g. ND_LAYER_CONTENT)! */
 #define ND_OB_ACTIVE (7 << 16)
+/* See comment on ND_OB_ACTIVE. */
 #define ND_OB_SELECT (8 << 16)
 #define ND_OB_VISIBLE (9 << 16)
 #define ND_OB_RENDER (10 << 16)
@@ -438,7 +441,10 @@ typedef struct wmNotifier {
 
 /* subtype 3d view editing */
 #define NS_VIEW3D_GPU (16 << 8)
-#define NS_VIEW3D_SHADING (16 << 9)
+#define NS_VIEW3D_SHADING (17 << 8)
+
+/* subtype layer editing */
+#define NS_LAYER_COLLECTION (24 << 8)
 
 /* action classification */
 #define NOTE_ACTION (0x000000FF)
@@ -448,7 +454,8 @@ typedef struct wmNotifier {
 #define NA_REMOVED 4
 #define NA_RENAME 5
 #define NA_SELECTED 6
-#define NA_PAINTING 7
+#define NA_ACTIVATED 7
+#define NA_PAINTING 8
 
 /* ************** Gesture Manager data ************** */
 
@@ -478,6 +485,8 @@ typedef struct wmGesture {
   /** optional, maximum amount of points stored. */
   int points_alloc;
   int modal_state;
+  /** optional, draw the active side of the straightline gesture. */
+  bool draw_active_side;
 
   /**
    * For modal operators which may be running idle, waiting for an event to activate the gesture.
@@ -489,6 +498,11 @@ typedef struct wmGesture {
   uint is_active_prev : 1;
   /** Use for gestures that support both immediate or delayed activation. */
   uint wait_for_input : 1;
+  /** Use for gestures that can be moved, like box selection */
+  uint move : 1;
+  /** For gestures that support snapping, stores if snapping is enabled using the modal keymap
+   * toggle. */
+  uint use_snap : 1;
 
   /**
    * customdata
@@ -813,6 +827,7 @@ typedef void (*wmPaintCursorDraw)(struct bContext *C, int, int, void *customdata
 #define WM_DRAG_NAME 3
 #define WM_DRAG_VALUE 4
 #define WM_DRAG_COLOR 5
+#define WM_DRAG_DATASTACK 6
 
 typedef enum wmDragFlags {
   WM_DRAG_NOP = 0,

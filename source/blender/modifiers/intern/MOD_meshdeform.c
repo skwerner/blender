@@ -28,6 +28,7 @@
 
 #include "BLT_translation.h"
 
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
@@ -37,7 +38,6 @@
 #include "BKE_context.h"
 #include "BKE_deform.h"
 #include "BKE_editmesh.h"
-#include "BKE_global.h"
 #include "BKE_lib_id.h"
 #include "BKE_lib_query.h"
 #include "BKE_mesh.h"
@@ -69,7 +69,9 @@ static void initData(ModifierData *md)
 {
   MeshDeformModifierData *mmd = (MeshDeformModifierData *)md;
 
-  mmd->gridsize = 5;
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(mmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(mmd, DNA_struct_default_get(MeshDeformModifierData), modifier);
 }
 
 static void freeData(ModifierData *md)
@@ -161,11 +163,11 @@ static bool isDisabled(const struct Scene *UNUSED(scene),
   return !mmd->object || mmd->object->type != OB_MESH;
 }
 
-static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk, void *userData)
+static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   MeshDeformModifierData *mmd = (MeshDeformModifierData *)md;
 
-  walk(userData, ob, &mmd->object, IDWALK_CB_NOP);
+  walk(userData, ob, (ID **)&mmd->object, IDWALK_CB_NOP);
 }
 
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
@@ -332,12 +334,7 @@ static void meshdeform_vert_task(void *__restrict userdata,
   if (totweight > 0.0f) {
     mul_v3_fl(co, fac / totweight);
     mul_m3_v3(data->icagemat, co);
-    if (G.debug_value != 527) {
-      add_v3_v3(vertexCos[iter], co);
-    }
-    else {
-      copy_v3_v3(vertexCos[iter], co);
-    }
+    add_v3_v3(vertexCos[iter], co);
   }
 }
 
@@ -353,9 +350,8 @@ static void meshdeformModifier_do(ModifierData *md,
   Mesh *cagemesh;
   MDeformVert *dvert = NULL;
   float imat[4][4], cagemat[4][4], iobmat[4][4], icagemat[3][3], cmat[4][4];
-  float co[3], (*dco)[3] = NULL, (*bindcagecos)[3];
+  float(*dco)[3] = NULL, (*bindcagecos)[3];
   int a, totvert, totcagevert, defgrp_index;
-  float(*cagecos)[3] = NULL;
   MeshdeformUserdata data;
 
   static int recursive_bind_sentinel = 0;
@@ -406,7 +402,7 @@ static void meshdeformModifier_do(ModifierData *md,
 
   /* verify we have compatible weights */
   totvert = numVerts;
-  totcagevert = cagemesh->totvert;
+  totcagevert = BKE_mesh_wrapper_vert_len(cagemesh);
 
   if (mmd->totvert != totvert) {
     BKE_modifier_set_error(md, "Vertices changed from %d to %d", mmd->totvert, totvert);
@@ -422,27 +418,22 @@ static void meshdeformModifier_do(ModifierData *md,
     goto finally;
   }
 
-  /* setup deformation data */
-  cagecos = BKE_mesh_vert_coords_alloc(cagemesh, NULL);
-  bindcagecos = (float(*)[3])mmd->bindcagecos;
-
   /* We allocate 1 element extra to make it possible to
    * load the values to SSE registers, which are float4.
    */
   dco = MEM_calloc_arrayN((totcagevert + 1), sizeof(*dco), "MDefDco");
   zero_v3(dco[totcagevert]);
+
+  /* setup deformation data */
+  BKE_mesh_wrapper_vert_coords_copy(cagemesh, dco, totcagevert);
+  bindcagecos = (float(*)[3])mmd->bindcagecos;
+
   for (a = 0; a < totcagevert; a++) {
     /* get cage vertex in world space with binding transform */
-    copy_v3_v3(co, cagecos[a]);
-
-    if (G.debug_value != 527) {
-      mul_m4_v3(mmd->bindmat, co);
-      /* compute difference with world space bind coord */
-      sub_v3_v3v3(dco[a], co, bindcagecos[a]);
-    }
-    else {
-      copy_v3_v3(dco[a], co);
-    }
+    float co[3];
+    mul_v3_m4v3(co, mmd->bindmat, dco[a]);
+    /* compute difference with world space bind coord */
+    sub_v3_v3v3(dco[a], co, bindcagecos[a]);
   }
 
   MOD_get_vgroup(ob, mesh, mmd->defgrp_name, &dvert, &defgrp_index);
@@ -464,7 +455,6 @@ static void meshdeformModifier_do(ModifierData *md,
 
 finally:
   MEM_SAFE_FREE(dco);
-  MEM_SAFE_FREE(cagecos);
 }
 
 static void deformVerts(ModifierData *md,
@@ -573,36 +563,35 @@ void BKE_modifier_mdef_compact_influences(ModifierData *md)
   mmd->bindweights = NULL;
 }
 
-static void panel_draw(const bContext *C, Panel *panel)
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *col;
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
   PointerRNA ob_ptr;
-  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
 
-  bool is_bound = RNA_boolean_get(&ptr, "is_bound");
+  bool is_bound = RNA_boolean_get(ptr, "is_bound");
 
   uiLayoutSetPropSep(layout, true);
 
   col = uiLayoutColumn(layout, true);
   uiLayoutSetEnabled(col, !is_bound);
-  uiItemR(col, &ptr, "object", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "object", 0, NULL, ICON_NONE);
 
-  modifier_vgroup_ui(layout, &ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
+  modifier_vgroup_ui(layout, ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
 
   col = uiLayoutColumn(layout, false);
   uiLayoutSetEnabled(col, !is_bound);
-  uiItemR(col, &ptr, "precision", 0, NULL, ICON_NONE);
-  uiItemR(col, &ptr, "use_dynamic_bind", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "precision", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "use_dynamic_bind", 0, NULL, ICON_NONE);
 
   uiItemO(layout,
           is_bound ? IFACE_("Unbind") : IFACE_("Bind"),
           ICON_NONE,
           "OBJECT_OT_meshdeform_bind");
 
-  modifier_panel_end(layout, &ptr);
+  modifier_panel_end(layout, ptr);
 }
 
 static void panelRegister(ARegionType *region_type)
@@ -643,9 +632,11 @@ ModifierTypeInfo modifierType_MeshDeform = {
     /* name */ "MeshDeform",
     /* structName */ "MeshDeformModifierData",
     /* structSize */ sizeof(MeshDeformModifierData),
+    /* srna */ &RNA_MeshDeformModifier,
     /* type */ eModifierTypeType_OnlyDeform,
     /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsVertexCosOnly |
         eModifierTypeFlag_SupportsEditmode,
+    /* icon */ ICON_MOD_MESHDEFORM,
 
     /* copyData */ copyData,
 
@@ -665,8 +656,7 @@ ModifierTypeInfo modifierType_MeshDeform = {
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
     /* panelRegister */ panelRegister,

@@ -600,12 +600,15 @@ void ED_operatortypes_gpencil(void)
   WM_operatortype_append(GPENCIL_OT_frame_duplicate);
   WM_operatortype_append(GPENCIL_OT_frame_clean_fill);
   WM_operatortype_append(GPENCIL_OT_frame_clean_loose);
+  WM_operatortype_append(GPENCIL_OT_frame_clean_duplicate);
 
   WM_operatortype_append(GPENCIL_OT_convert);
   WM_operatortype_append(GPENCIL_OT_bake_mesh_animation);
 
   WM_operatortype_append(GPENCIL_OT_image_to_grease_pencil);
-
+#ifdef WITH_POTRACE
+  WM_operatortype_append(GPENCIL_OT_trace_image);
+#endif
   WM_operatortype_append(GPENCIL_OT_stroke_arrange);
   WM_operatortype_append(GPENCIL_OT_stroke_change_color);
   WM_operatortype_append(GPENCIL_OT_material_lock_unused);
@@ -664,7 +667,11 @@ void ED_operatortypes_gpencil(void)
   WM_operatortype_append(GPENCIL_OT_interpolate_reverse);
 
   /* Primitives */
-  WM_operatortype_append(GPENCIL_OT_primitive);
+  WM_operatortype_append(GPENCIL_OT_primitive_box);
+  WM_operatortype_append(GPENCIL_OT_primitive_line);
+  WM_operatortype_append(GPENCIL_OT_primitive_polyline);
+  WM_operatortype_append(GPENCIL_OT_primitive_circle);
+  WM_operatortype_append(GPENCIL_OT_primitive_curve);
 
   /* convert old 2.7 files to 2.8 */
   WM_operatortype_append(GPENCIL_OT_convert_old_files);

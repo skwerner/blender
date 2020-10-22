@@ -28,6 +28,8 @@ extern "C" {
  * \brief support for deformation groups and hooks.
  */
 
+struct BlendDataReader;
+struct BlendWriter;
 struct ListBase;
 struct MDeformVert;
 struct MEdge;
@@ -37,7 +39,7 @@ struct Object;
 struct bDeformGroup;
 
 struct bDeformGroup *BKE_object_defgroup_new(struct Object *ob, const char *name);
-void BKE_defgroup_copy_list(struct ListBase *lb1, const struct ListBase *lb2);
+void BKE_defgroup_copy_list(struct ListBase *outbase, const struct ListBase *inbase);
 struct bDeformGroup *BKE_defgroup_duplicate(const struct bDeformGroup *ingroup);
 struct bDeformGroup *BKE_object_defgroup_find_name(const struct Object *ob, const char *name);
 int *BKE_object_defgroup_flip_map(const struct Object *ob,
@@ -161,6 +163,11 @@ void BKE_defvert_extract_vgroup_to_polyweights(struct MDeformVert *dvert,
                                                const bool invert_vgroup);
 
 void BKE_defvert_weight_to_rgb(float r_rgb[3], const float weight);
+
+void BKE_defvert_blend_write(struct BlendWriter *writer, int count, struct MDeformVert *dvlist);
+void BKE_defvert_blend_read(struct BlendDataReader *reader,
+                            int count,
+                            struct MDeformVert *mdverts);
 
 #ifdef __cplusplus
 }

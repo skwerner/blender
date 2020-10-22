@@ -23,8 +23,6 @@
 
 #pragma once
 
-#include "GPU_glew.h"
-
 struct GPUOffScreen;
 struct GPUTexture;
 struct GPUViewport;

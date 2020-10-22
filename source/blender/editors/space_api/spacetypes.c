@@ -33,6 +33,8 @@
 #include "BKE_context.h"
 #include "BKE_screen.h"
 
+#include "GPU_state.h"
+
 #include "UI_interface.h"
 #include "UI_view2d.h"
 
@@ -41,6 +43,7 @@
 #include "ED_clip.h"
 #include "ED_curve.h"
 #include "ED_fileselect.h"
+#include "ED_geometry.h"
 #include "ED_gizmo_library.h"
 #include "ED_gpencil.h"
 #include "ED_lattice.h"
@@ -106,6 +109,7 @@ void ED_spacetypes_init(void)
   ED_operatortypes_object();
   ED_operatortypes_lattice();
   ED_operatortypes_mesh();
+  ED_operatortypes_geometry();
   ED_operatortypes_sculpt();
   ED_operatortypes_uvedit();
   ED_operatortypes_paint();
@@ -267,11 +271,17 @@ void ED_region_draw_cb_exit(ARegionType *art, void *handle)
 void ED_region_draw_cb_draw(const bContext *C, ARegion *region, int type)
 {
   RegionDrawCB *rdc;
+  bool has_drawn_something = false;
 
   for (rdc = region->type->drawcalls.first; rdc; rdc = rdc->next) {
     if (rdc->type == type) {
       rdc->draw(C, region, rdc->customdata);
+      has_drawn_something = true;
     }
+  }
+  if (has_drawn_something) {
+    /* This is needed until we get rid of BGL which can change the states we are tracking. */
+    GPU_bgl_end();
   }
 }
 
@@ -280,7 +290,7 @@ void ED_region_draw_cb_draw(const bContext *C, ARegion *region, int type)
 void ED_spacetype_xxx(void);
 
 /* allocate and init some vars */
-static SpaceLink *xxx_new(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
+static SpaceLink *xxx_create(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
 {
   return NULL;
 }
@@ -324,7 +334,7 @@ void ED_spacetype_xxx(void)
 
   st.spaceid = SPACE_VIEW3D;
 
-  st.new = xxx_new;
+  st.create = xxx_create;
   st.free = xxx_free;
   st.init = xxx_init;
   st.duplicate = xxx_duplicate;

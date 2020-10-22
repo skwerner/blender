@@ -44,10 +44,6 @@ set(INC
   ../../../intern/guardedalloc
 )
 
-set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
-)
-
 set(SRC
   intern/draw_cache.c
   intern/draw_cache_extract_mesh.c
@@ -64,6 +60,7 @@ set(SRC
   intern/draw_color_management.c
   intern/draw_common.c
   intern/draw_debug.c
+  intern/draw_fluid.c
   intern/draw_hair.c
   intern/draw_instance_data.c
   intern/draw_manager.c
@@ -76,6 +73,8 @@ set(SRC
   intern/draw_select_buffer.c
   intern/draw_view.c
   engines/basic/basic_engine.c
+  engines/image/image_engine.c
+  engines/image/image_shader.c
   engines/eevee/eevee_bloom.c
   engines/eevee/eevee_data.c
   engines/eevee/eevee_depth_of_field.c
@@ -131,9 +130,11 @@ set(SRC
   engines/overlay/overlay_edit_curve.c
   engines/overlay/overlay_edit_mesh.c
   engines/overlay/overlay_edit_text.c
+  engines/overlay/overlay_edit_uv.c
   engines/overlay/overlay_engine.c
   engines/overlay/overlay_extra.c
   engines/overlay/overlay_facing.c
+  engines/overlay/overlay_fade.c
   engines/overlay/overlay_gpencil.c
   engines/overlay/overlay_grid.c
   engines/overlay/overlay_image.c
@@ -145,6 +146,7 @@ set(SRC
   engines/overlay/overlay_particle.c
   engines/overlay/overlay_sculpt.c
   engines/overlay/overlay_shader.c
+  engines/overlay/overlay_volume.c
   engines/overlay/overlay_wireframe.c
 
   DRW_engine.h
@@ -162,6 +164,7 @@ set(SRC
   intern/draw_instance_data.h
   intern/draw_manager.h
   intern/draw_manager_profiling.h
+  intern/draw_manager_testing.h
   intern/draw_manager_text.h
   intern/draw_view.h
   intern/smaa_textures.h
@@ -171,6 +174,8 @@ set(SRC
   engines/eevee/eevee_lut.h
   engines/eevee/eevee_private.h
   engines/external/external_engine.h
+  engines/image/image_engine.h
+  engines/image/image_private.h
   engines/workbench/workbench_engine.h
   engines/workbench/workbench_private.h
   engines/select/select_engine.h
@@ -186,10 +191,10 @@ set(LIB
 )
 
 data_to_c_simple(engines/eevee/shaders/ambient_occlusion_lib.glsl SRC)
-data_to_c_simple(engines/eevee/shaders/default_frag.glsl SRC)
-data_to_c_simple(engines/eevee/shaders/default_world_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/background_vert.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/closure_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/common_uniforms_lib.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/common_utiltex_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/lights_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/lightprobe_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/lightprobe_filter_glossy_frag.glsl SRC)
@@ -204,8 +209,8 @@ data_to_c_simple(engines/eevee/shaders/lightprobe_grid_display_vert.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/lightprobe_grid_fill_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/lightprobe_planar_display_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/lightprobe_planar_display_vert.glsl SRC)
-data_to_c_simple(engines/eevee/shaders/lit_surface_frag.glsl SRC)
-data_to_c_simple(engines/eevee/shaders/lit_surface_vert.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/lookdev_world_frag.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/closure_lit_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/effect_bloom_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/effect_dof_vert.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/effect_dof_frag.glsl SRC)
@@ -229,7 +234,6 @@ data_to_c_simple(engines/eevee/shaders/object_motion_vert.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/prepass_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/prepass_vert.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/shadow_accum_frag.glsl SRC)
-
 data_to_c_simple(engines/eevee/shaders/shadow_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/shadow_vert.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/bsdf_lut_frag.glsl SRC)
@@ -240,9 +244,14 @@ data_to_c_simple(engines/eevee/shaders/octahedron_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/cubemap_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/bsdf_sampling_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/raytrace_lib.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/renderpass_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/renderpass_postprocess_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/ltc_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/ssr_lib.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/surface_frag.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/surface_geom.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/surface_lib.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/surface_vert.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/update_noise_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/volumetric_accum_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/volumetric_lib.glsl SRC)
@@ -288,6 +297,8 @@ data_to_c_simple(intern/shaders/common_globals_lib.glsl SRC)
 data_to_c_simple(intern/shaders/common_pointcloud_lib.glsl SRC)
 data_to_c_simple(intern/shaders/common_hair_lib.glsl SRC)
 data_to_c_simple(intern/shaders/common_hair_refine_vert.glsl SRC)
+data_to_c_simple(intern/shaders/common_math_lib.glsl SRC)
+data_to_c_simple(intern/shaders/common_math_geom_lib.glsl SRC)
 data_to_c_simple(intern/shaders/common_view_lib.glsl SRC)
 data_to_c_simple(intern/shaders/common_fxaa_lib.glsl SRC)
 data_to_c_simple(intern/shaders/common_smaa_lib.glsl SRC)
@@ -311,6 +322,7 @@ data_to_c_simple(engines/basic/shaders/conservative_depth_geom.glsl SRC)
 data_to_c_simple(engines/basic/shaders/depth_vert.glsl SRC)
 data_to_c_simple(engines/basic/shaders/depth_frag.glsl SRC)
 
+data_to_c_simple(engines/overlay/shaders/common_overlay_lib.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/antialiasing_frag.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/antialiasing_vert.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/armature_dof_vert.glsl SRC)
@@ -354,6 +366,15 @@ data_to_c_simple(engines/overlay/shaders/edit_mesh_skin_root_vert.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/edit_mesh_vert.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/edit_particle_strand_vert.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/edit_particle_point_vert.glsl SRC)
+data_to_c_simple(engines/overlay/shaders/edit_uv_edges_vert.glsl SRC)
+data_to_c_simple(engines/overlay/shaders/edit_uv_edges_geom.glsl SRC)
+data_to_c_simple(engines/overlay/shaders/edit_uv_edges_frag.glsl SRC)
+data_to_c_simple(engines/overlay/shaders/edit_uv_verts_vert.glsl SRC)
+data_to_c_simple(engines/overlay/shaders/edit_uv_verts_frag.glsl SRC)
+data_to_c_simple(engines/overlay/shaders/edit_uv_faces_vert.glsl SRC)
+data_to_c_simple(engines/overlay/shaders/edit_uv_face_dots_vert.glsl SRC)
+data_to_c_simple(engines/overlay/shaders/edit_uv_stretching_vert.glsl SRC)
+data_to_c_simple(engines/overlay/shaders/edit_uv_tiled_image_borders_vert.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/extra_frag.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/extra_vert.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/extra_groundline_vert.glsl SRC)
@@ -390,12 +411,23 @@ data_to_c_simple(engines/overlay/shaders/particle_frag.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/sculpt_mask_vert.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/sculpt_mask_frag.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/volume_velocity_vert.glsl SRC)
+data_to_c_simple(engines/overlay/shaders/volume_gridlines_vert.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/wireframe_vert.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/wireframe_frag.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/xray_fade_frag.glsl SRC)
 
+data_to_c_simple(engines/image/shaders/engine_image_frag.glsl SRC)
+data_to_c_simple(engines/image/shaders/engine_image_vert.glsl SRC)
+
 list(APPEND INC
 )
+
+if(WITH_MOD_FLUID)
+  list(APPEND INC
+    ../../../intern/mantaflow/extern
+  )
+  add_definitions(-DWITH_FLUID)
+endif()
 
 if(WITH_FREESTYLE)
   add_definitions(-DWITH_FREESTYLE)
@@ -405,6 +437,27 @@ if(WITH_XR_OPENXR)
   add_definitions(-DWITH_XR_OPENXR)
 endif()
 
-add_definitions(${GL_DEFINITIONS})
+if(WITH_GTESTS)
+  if(WITH_OPENGL_DRAW_TESTS)
+    add_definitions(-DWITH_OPENGL_DRAW_TESTS)
+  endif()
+endif()
+
 
 blender_add_lib(bf_draw "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
+
+if(WITH_GTESTS)
+  if(WITH_OPENGL_DRAW_TESTS)
+    set(TEST_SRC
+      tests/shaders_test.cc
+    )
+    set(TEST_INC
+      "../../../intern/ghost/"
+      "../gpu/tests/"
+    )
+    set(TEST_LIB
+    )
+    include(GTestTesting)
+    blender_add_test_lib(bf_draw_tests "${TEST_SRC}" "${INC};${TEST_INC}" "${INC_SYS}" "${LIB};${TEST_LIB}")
+  endif()
+endif()

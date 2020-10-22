@@ -65,8 +65,6 @@ const EnumPropertyItem rna_enum_uilist_layout_type_items[] = {
 
 #ifdef RNA_RUNTIME
 
-#  include <assert.h>
-
 #  include "MEM_guardedalloc.h"
 
 #  include "RNA_access.h"
@@ -403,6 +401,21 @@ static StructRNA *rna_Panel_refine(PointerRNA *ptr)
 {
   Panel *menu = (Panel *)ptr->data;
   return (menu->type && menu->type->rna_ext.srna) ? menu->type->rna_ext.srna : &RNA_Panel;
+}
+
+static StructRNA *rna_Panel_custom_data_typef(PointerRNA *ptr)
+{
+  Panel *panel = (Panel *)ptr->data;
+
+  return UI_panel_custom_data_get(panel)->type;
+}
+
+static PointerRNA rna_Panel_custom_data_get(PointerRNA *ptr)
+{
+  Panel *panel = (Panel *)ptr->data;
+
+  /* Because the panel custom data is general we can't refine the pointer type here. */
+  return *UI_panel_custom_data_get(panel);
 }
 
 /* UIList */
@@ -978,7 +991,7 @@ static void rna_Menu_bl_description_set(PointerRNA *ptr, const char *value)
     BLI_strncpy(str, value, RNA_DYN_DESCR_MAX); /* utf8 already ensured */
   }
   else {
-    assert(!"setting the bl_description on a non-builtin menu");
+    BLI_assert(!"setting the bl_description on a non-builtin menu");
   }
 }
 
@@ -1347,9 +1360,12 @@ static void rna_def_panel(BlenderRNA *brna)
   RNA_def_property_string_sdna(prop, NULL, "drawname");
   RNA_def_property_ui_text(prop, "Text", "XXX todo");
 
-  prop = RNA_def_int(
-      srna, "list_panel_index", 0, 0, INT_MAX, "Instanced Panel Data Index", "", 0, INT_MAX);
-  RNA_def_property_int_sdna(prop, NULL, "runtime.list_index");
+  prop = RNA_def_property(srna, "custom_data", PROP_POINTER, PROP_NONE);
+  RNA_def_property_struct_type(prop, "Constraint");
+  RNA_def_property_pointer_sdna(prop, NULL, "runtime.custom_data_ptr");
+  RNA_def_property_pointer_funcs(
+      prop, "rna_Panel_custom_data_get", NULL, "rna_Panel_custom_data_typef", NULL);
+  RNA_def_property_ui_text(prop, "Custom Data", "Panel Data");
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
 
   /* registration */

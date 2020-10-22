@@ -28,6 +28,10 @@
 extern "C" {
 #endif
 
+struct BlendDataReader;
+struct BlendExpander;
+struct BlendLibReader;
+struct BlendWriter;
 struct ID;
 struct IDProperty;
 
@@ -123,6 +127,7 @@ struct IDProperty *IDP_CopyProperty(const struct IDProperty *prop) ATTR_WARN_UNU
     ATTR_NONNULL();
 struct IDProperty *IDP_CopyProperty_ex(const struct IDProperty *prop,
                                        const int flag) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
+void IDP_CopyPropertyContent(IDProperty *dst, IDProperty *src) ATTR_NONNULL();
 
 bool IDP_EqualsProperties_ex(IDProperty *prop1,
                              IDProperty *prop2,
@@ -195,6 +200,14 @@ void IDP_repr_fn(const IDProperty *prop,
                  void (*str_append_fn)(void *user_data, const char *str, uint str_len),
                  void *user_data);
 void IDP_print(const struct IDProperty *prop);
+
+void IDP_BlendWrite(struct BlendWriter *writer, const struct IDProperty *prop);
+void IDP_BlendReadData_impl(struct BlendDataReader *reader,
+                            IDProperty **prop,
+                            const char *caller_func_id);
+#define IDP_BlendDataRead(reader, prop) IDP_BlendReadData_impl(reader, prop, __func__)
+void IDP_BlendReadLib(struct BlendLibReader *reader, IDProperty *prop);
+void IDP_BlendReadExpand(struct BlendExpander *expander, IDProperty *prop);
 
 #ifdef __cplusplus
 }

@@ -347,7 +347,7 @@ void copy_particle_key(struct ParticleKey *to, struct ParticleKey *from, int tim
 void psys_emitter_customdata_mask(struct ParticleSystem *psys,
                                   struct CustomData_MeshMasks *r_cddata_masks);
 void psys_particle_on_emitter(struct ParticleSystemModifierData *psmd,
-                              int distr,
+                              int from,
                               int index,
                               int index_dmcache,
                               float fuv[4],
@@ -370,8 +370,6 @@ struct ModifierData *object_copy_particle_system(struct Main *bmain,
                                                  const struct ParticleSystem *psys_orig);
 void object_remove_particle_system(struct Main *bmain, struct Scene *scene, struct Object *ob);
 struct ParticleSettings *BKE_particlesettings_add(struct Main *bmain, const char *name);
-struct ParticleSettings *BKE_particlesettings_copy(struct Main *bmain,
-                                                   const struct ParticleSettings *part);
 void psys_reset(struct ParticleSystem *psys, int mode);
 
 void psys_find_parents(struct ParticleSimulationData *sim, const bool use_render_params);
@@ -395,7 +393,7 @@ int do_guides(struct Depsgraph *depsgraph,
               struct ParticleSettings *part,
               struct ListBase *effectors,
               ParticleKey *state,
-              int pa_num,
+              int index,
               float time);
 void precalc_guides(struct ParticleSimulationData *sim, struct ListBase *effectors);
 float psys_get_timestep(struct ParticleSimulationData *sim);
@@ -579,7 +577,7 @@ void psys_particle_on_dm(struct Mesh *mesh_final,
 
 /* particle_system.c */
 void distribute_particles(struct ParticleSimulationData *sim, int from);
-void initialize_particle(struct ParticleSimulationData *sim, struct ParticleData *pa);
+void init_particle(struct ParticleSimulationData *sim, struct ParticleData *pa);
 void psys_calc_dmcache(struct Object *ob,
                        struct Mesh *mesh_final,
                        struct Mesh *mesh_original,

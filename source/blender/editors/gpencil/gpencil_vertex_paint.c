@@ -231,8 +231,8 @@ static float brush_influence_calc(tGP_BrushVertexpaintData *gso, const int radiu
   float distance = (float)len_v2v2_int(mval_i, co);
 
   /* Apply Brush curve. */
-  float brush_fallof = BKE_brush_curve_strength(brush, distance, (float)radius);
-  influence *= brush_fallof;
+  float brush_falloff = BKE_brush_curve_strength(brush, distance, (float)radius);
+  influence *= brush_falloff;
 
   /* apply multiframe falloff */
   influence *= gso->mf_falloff;
@@ -646,7 +646,7 @@ static bool brush_smear_apply(tGP_BrushVertexpaintData *gso,
     inf *= gso->pressure;
   }
 
-  /* Calc distance from initial sample location and add a fallof effect. */
+  /* Calc distance from initial sample location and add a falloff effect. */
   int mval_i[2];
   round_v2i_v2fl(mval_i, gso->mval);
   float distance = (float)len_v2v2_int(mval_i, gso->grid_sample);
@@ -727,7 +727,7 @@ static bool gpencil_vertexpaint_brush_init(bContext *C, wmOperator *op)
 
   gso->brush = paint->brush;
   srgb_to_linearrgb_v3_v3(gso->linear_color, gso->brush->rgb);
-  BKE_curvemapping_initialize(gso->brush->curve);
+  BKE_curvemapping_init(gso->brush->curve);
 
   gso->is_painting = false;
   gso->first = true;
@@ -759,7 +759,7 @@ static bool gpencil_vertexpaint_brush_init(bContext *C, wmOperator *op)
   /* Init multi-edit falloff curve data before doing anything,
    * so we won't have to do it again later. */
   if (gso->is_multiframe) {
-    BKE_curvemapping_initialize(ts->gp_sculpt.cur_falloff);
+    BKE_curvemapping_init(ts->gp_sculpt.cur_falloff);
   }
 
   /* Setup space conversions. */

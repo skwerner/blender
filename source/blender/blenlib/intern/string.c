@@ -87,7 +87,7 @@ char *BLI_strdupcat(const char *__restrict str1, const char *__restrict str2)
   str = MEM_mallocN(str1_len + str2_len, "strdupcat");
   s = str;
 
-  memcpy(s, str1, str1_len);
+  memcpy(s, str1, str1_len); /* NOLINT: bugprone-not-null-terminated-result */
   s += str1_len;
   memcpy(s, str2, str2_len);
 
@@ -394,9 +394,7 @@ char *BLI_str_quoted_substrN(const char *__restrict str, const char *__restrict 
       if (LIKELY(*(endMatch - 1) != '\\')) {
         break;
       }
-      else {
-        endMatch++;
-      }
+      endMatch++;
     }
 
     if (endMatch) {
@@ -470,11 +468,9 @@ char *BLI_str_replaceN(const char *__restrict str,
 
     return str_new;
   }
-  else {
-    /* Just create a new copy of the entire string - we avoid going through the assembly buffer
-     * for what should be a bit more efficiency. */
-    return BLI_strdup(str);
-  }
+  /* Just create a new copy of the entire string - we avoid going through the assembly buffer
+   * for what should be a bit more efficiency. */
+  return BLI_strdup(str);
 }
 
 /**
@@ -518,7 +514,7 @@ char *BLI_strcasestr(const char *s, const char *find)
     do {
       do {
         if ((sc = *s++) == 0) {
-          return (NULL);
+          return NULL;
         }
         sc = tolower(sc);
       } while (sc != c);
@@ -526,6 +522,39 @@ char *BLI_strcasestr(const char *s, const char *find)
     s--;
   }
   return ((char *)s);
+}
+
+int BLI_string_max_possible_word_count(const int str_len)
+{
+  return (str_len / 2) + 1;
+}
+
+bool BLI_string_has_word_prefix(const char *haystack, const char *needle, size_t needle_len)
+{
+  const char *match = BLI_strncasestr(haystack, needle, needle_len);
+  if (match) {
+    if ((match == haystack) || (*(match - 1) == ' ') || ispunct(*(match - 1))) {
+      return true;
+    }
+    return BLI_string_has_word_prefix(match + 1, needle, needle_len);
+  }
+  return false;
+}
+
+bool BLI_string_all_words_matched(const char *name,
+                                  const char *str,
+                                  int (*words)[2],
+                                  const int words_len)
+{
+  int index;
+  for (index = 0; index < words_len; index++) {
+    if (!BLI_string_has_word_prefix(name, str + words[index][0], (size_t)words[index][1])) {
+      break;
+    }
+  }
+  const bool all_words_matched = (index == words_len);
+
+  return all_words_matched;
 }
 
 /**
@@ -574,10 +603,10 @@ int BLI_strcasecmp(const char *s1, const char *s2)
     if (c1 < c2) {
       return -1;
     }
-    else if (c1 > c2) {
+    if (c1 > c2) {
       return 1;
     }
-    else if (c1 == 0) {
+    if (c1 == 0) {
       break;
     }
   }
@@ -597,10 +626,10 @@ int BLI_strncasecmp(const char *s1, const char *s2, size_t len)
     if (c1 < c2) {
       return -1;
     }
-    else if (c1 > c2) {
+    if (c1 > c2) {
       return 1;
     }
-    else if (c1 == 0) {
+    if (c1 == 0) {
       break;
     }
   }
@@ -627,15 +656,13 @@ static int left_number_strcmp(const char *s1, const char *s2, int *tiebreaker)
     if (isdigit(*(p1 + numdigit)) && isdigit(*(p2 + numdigit))) {
       continue;
     }
-    else if (isdigit(*(p1 + numdigit))) {
+    if (isdigit(*(p1 + numdigit))) {
       return 1; /* s2 is bigger */
     }
-    else if (isdigit(*(p2 + numdigit))) {
+    if (isdigit(*(p2 + numdigit))) {
       return -1; /* s1 is bigger */
     }
-    else {
-      break;
-    }
+    break;
   }
 
   /* same number of digits, compare size of number */
@@ -759,14 +786,14 @@ int BLI_strcmp_ignore_pad(const char *str1, const char *str2, const char pad)
   if (str1_len == str2_len) {
     return strncmp(str1, str2, str2_len);
   }
-  else if (str1_len > str2_len) {
+  if (str1_len > str2_len) {
     int ret = strncmp(str1, str2, str2_len);
     if (ret == 0) {
       ret = 1;
     }
     return ret;
   }
-  else {
+  {
     int ret = strncmp(str1, str2, str1_len);
     if (ret == 0) {
       ret = -1;

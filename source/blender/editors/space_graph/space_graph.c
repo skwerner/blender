@@ -60,11 +60,11 @@
 #include "UI_resources.h"
 #include "UI_view2d.h"
 
-#include "graph_intern.h"  // own include
+#include "graph_intern.h" /* own include */
 
 /* ******************** default callbacks for ipo space ***************** */
 
-static SpaceLink *graph_new(const ScrArea *UNUSED(area), const Scene *scene)
+static SpaceLink *graph_create(const ScrArea *UNUSED(area), const Scene *scene)
 {
   ARegion *region;
   SpaceGraph *sipo;
@@ -163,7 +163,7 @@ static void graph_init(struct wmWindowManager *wm, ScrArea *area)
   /* force immediate init of any invalid F-Curve colors */
   /* XXX: but, don't do SIPO_TEMP_NEEDCHANSYNC (i.e. channel select state sync)
    * as this is run on each region resize; setting this here will cause selection
-   * state to be lost on area/region resizing. [#35744]
+   * state to be lost on area/region resizing. T35744.
    */
   ED_area_tag_refresh(area);
 }
@@ -200,12 +200,9 @@ static void graph_main_region_draw(const bContext *C, ARegion *region)
   Scene *scene = CTX_data_scene(C);
   bAnimContext ac;
   View2D *v2d = &region->v2d;
-  float col[3];
 
   /* clear and setup matrix */
-  UI_GetThemeColor3fv(TH_BACK, col);
-  GPU_clear_color(col[0], col[1], col[2], 1.0f);
-  GPU_clear(GPU_COLOR_BIT);
+  UI_ThemeClearColor(TH_BACK);
 
   UI_view2d_view_ortho(v2d);
 
@@ -249,7 +246,7 @@ static void graph_main_region_draw(const bContext *C, ARegion *region)
 
       /* Draw a green line to indicate the cursor value */
       immUniformThemeColorShadeAlpha(TH_CFRAME, -10, -50);
-      GPU_blend(true);
+      GPU_blend(GPU_BLEND_ALPHA);
       GPU_line_width(2.0);
 
       immBegin(GPU_PRIM_LINES, 2);
@@ -257,7 +254,7 @@ static void graph_main_region_draw(const bContext *C, ARegion *region)
       immVertex2f(pos, v2d->cur.xmax, y);
       immEnd();
 
-      GPU_blend(false);
+      GPU_blend(GPU_BLEND_NONE);
     }
 
     /* current frame or vertical component of vertical component of the cursor */
@@ -268,7 +265,7 @@ static void graph_main_region_draw(const bContext *C, ARegion *region)
       /* to help differentiate this from the current frame,
        * draw slightly darker like the horizontal one */
       immUniformThemeColorShadeAlpha(TH_CFRAME, -40, -50);
-      GPU_blend(true);
+      GPU_blend(GPU_BLEND_ALPHA);
       GPU_line_width(2.0);
 
       immBegin(GPU_PRIM_LINES, 2);
@@ -276,7 +273,7 @@ static void graph_main_region_draw(const bContext *C, ARegion *region)
       immVertex2f(pos, x, v2d->cur.ymax);
       immEnd();
 
-      GPU_blend(false);
+      GPU_blend(GPU_BLEND_NONE);
     }
 
     immUnbindProgram();
@@ -320,7 +317,7 @@ static void graph_main_region_draw_overlay(const bContext *C, ARegion *region)
   ED_time_scrub_draw_current_frame(region, scene, sipo->flag & SIPO_DRAWTIME, draw_vert_line);
 
   /* scrollers */
-  // FIXME: args for scrollers depend on the type of data being shown...
+  /* FIXME: args for scrollers depend on the type of data being shown. */
   UI_view2d_scrollers_draw(v2d, NULL);
 
   /* scale numbers */
@@ -358,12 +355,9 @@ static void graph_channel_region_draw(const bContext *C, ARegion *region)
 {
   bAnimContext ac;
   View2D *v2d = &region->v2d;
-  float col[3];
 
   /* clear and setup matrix */
-  UI_GetThemeColor3fv(TH_BACK, col);
-  GPU_clear_color(col[0], col[1], col[2], 1.0f);
-  GPU_clear(GPU_COLOR_BIT);
+  UI_ThemeClearColor(TH_BACK);
 
   UI_view2d_view_ortho(v2d);
 
@@ -621,10 +615,13 @@ static void graph_listener(wmWindow *UNUSED(win),
       }
       break;
 
-      // XXX: restore the case below if not enough updates occur...
-      // default:
-      //  if (wmn->data == ND_KEYS)
-      //      ED_area_tag_redraw(area);
+#if 0 /* XXX: restore the case below if not enough updates occur... */
+    default: {
+      if (wmn->data == ND_KEYS) {
+        ED_area_tag_redraw(area);
+      }
+    }
+#endif
   }
 }
 
@@ -769,7 +766,7 @@ static void graph_refresh(const bContext *C, ScrArea *area)
   }
 
   /* region updates? */
-  // XXX re-sizing y-extents of tot should go here?
+  /* XXX re-sizing y-extents of tot should go here? */
 
   /* Update the state of the animchannels in response to changes from the data they represent
    * NOTE: the temp flag is used to indicate when this needs to be done,
@@ -838,7 +835,7 @@ void ED_spacetype_ipo(void)
   st->spaceid = SPACE_GRAPH;
   strncpy(st->name, "Graph", BKE_ST_MAXNAME);
 
-  st->new = graph_new;
+  st->create = graph_create;
   st->free = graph_free;
   st->init = graph_init;
   st->duplicate = graph_duplicate;

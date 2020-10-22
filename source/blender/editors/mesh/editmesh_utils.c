@@ -38,6 +38,7 @@
 #include "BKE_editmesh.h"
 #include "BKE_editmesh_bvh.h"
 #include "BKE_global.h"
+#include "BKE_layer.h"
 #include "BKE_main.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_mapping.h"
@@ -523,7 +524,7 @@ void EDBM_flag_enable_all(BMEditMesh *em, const char hflag)
  * \{ */
 
 /**
- * Return a new UVVertMap from the editmesh
+ * Return a new #UvVertMap from the edit-mesh.
  */
 UvVertMap *BM_uv_vert_map_create(BMesh *bm, const bool use_select, const bool use_winding)
 {
@@ -1059,6 +1060,7 @@ static BMVert *cache_mirr_intptr_as_bmvert(const intptr_t *index_lookup, int ind
  * \param em: Editmesh.
  * \param use_self: Allow a vertex to point to its self (middle verts).
  * \param use_select: Restrict to selected verts.
+ * \param respecthide: Skip hidden vertices.
  * \param use_topology: Use topology mirror.
  * \param maxdist: Distance for close point test.
  * \param r_index: Optional array to write into, as an alternative to a customdata layer
@@ -1068,6 +1070,7 @@ void EDBM_verts_mirror_cache_begin_ex(BMEditMesh *em,
                                       const int axis,
                                       const bool use_self,
                                       const bool use_select,
+                                      const bool respecthide,
                                       /* extra args */
                                       const bool use_topology,
                                       float maxdist,
@@ -1110,6 +1113,10 @@ void EDBM_verts_mirror_cache_begin_ex(BMEditMesh *em,
   else {
     tree = BLI_kdtree_3d_new(bm->totvert);
     BM_ITER_MESH_INDEX (v, &iter, bm, BM_VERTS_OF_MESH, i) {
+      if (respecthide && BM_elem_flag_test(v, BM_ELEM_HIDDEN)) {
+        continue;
+      }
+
       BLI_kdtree_3d_insert(tree, i, v->co);
     }
     BLI_kdtree_3d_balance(tree);
@@ -1118,44 +1125,45 @@ void EDBM_verts_mirror_cache_begin_ex(BMEditMesh *em,
 #define VERT_INTPTR(_v, _i) (r_index ? &r_index[_i] : BM_ELEM_CD_GET_VOID_P(_v, cd_vmirr_offset))
 
   BM_ITER_MESH_INDEX (v, &iter, bm, BM_VERTS_OF_MESH, i) {
-    BLI_assert(BM_elem_index_get(v) == i);
+    if (respecthide && BM_elem_flag_test(v, BM_ELEM_HIDDEN)) {
+      continue;
+    }
 
-    /* temporary for testing, check for selection */
     if (use_select && !BM_elem_flag_test(v, BM_ELEM_SELECT)) {
-      /* do nothing */
+      continue;
+    }
+
+    BLI_assert(BM_elem_index_get(v) == i);
+    BMVert *v_mirr;
+    int *idx = VERT_INTPTR(v, i);
+
+    if (use_topology) {
+      v_mirr = cache_mirr_intptr_as_bmvert(mesh_topo_store.index_lookup, i);
     }
     else {
-      BMVert *v_mirr;
-      int *idx = VERT_INTPTR(v, i);
+      int i_mirr;
+      float co[3];
+      copy_v3_v3(co, v->co);
+      co[axis] *= -1.0f;
 
-      if (use_topology) {
-        v_mirr = cache_mirr_intptr_as_bmvert(mesh_topo_store.index_lookup, i);
-      }
-      else {
-        int i_mirr;
-        float co[3];
-        copy_v3_v3(co, v->co);
-        co[axis] *= -1.0f;
-
-        v_mirr = NULL;
-        i_mirr = BLI_kdtree_3d_find_nearest(tree, co, NULL);
-        if (i_mirr != -1) {
-          BMVert *v_test = BM_vert_at_index(bm, i_mirr);
-          if (len_squared_v3v3(co, v_test->co) < maxdist_sq) {
-            v_mirr = v_test;
-          }
+      v_mirr = NULL;
+      i_mirr = BLI_kdtree_3d_find_nearest(tree, co, NULL);
+      if (i_mirr != -1) {
+        BMVert *v_test = BM_vert_at_index(bm, i_mirr);
+        if (len_squared_v3v3(co, v_test->co) < maxdist_sq) {
+          v_mirr = v_test;
         }
       }
+    }
 
-      if (v_mirr && (use_self || (v_mirr != v))) {
-        const int i_mirr = BM_elem_index_get(v_mirr);
-        *idx = i_mirr;
-        idx = VERT_INTPTR(v_mirr, i_mirr);
-        *idx = i;
-      }
-      else {
-        *idx = -1;
-      }
+    if (v_mirr && (use_self || (v_mirr != v))) {
+      const int i_mirr = BM_elem_index_get(v_mirr);
+      *idx = i_mirr;
+      idx = VERT_INTPTR(v_mirr, i_mirr);
+      *idx = i;
+    }
+    else {
+      *idx = -1;
     }
   }
 
@@ -1173,12 +1181,14 @@ void EDBM_verts_mirror_cache_begin(BMEditMesh *em,
                                    const int axis,
                                    const bool use_self,
                                    const bool use_select,
+                                   const bool respecthide,
                                    const bool use_topology)
 {
   EDBM_verts_mirror_cache_begin_ex(em,
                                    axis,
                                    use_self,
                                    use_select,
+                                   respecthide,
                                    /* extra args */
                                    use_topology,
                                    BM_SEARCH_MAXDIST_MIRR,
@@ -1449,7 +1459,7 @@ void EDBM_update_generic(Mesh *mesh, const bool do_tessellation, const bool is_d
     BM_lnorspace_invalidate(em->bm, false);
     em->bm->spacearr_dirty &= ~BM_SPACEARR_BMO_SET;
   }
-  /* don't keep stale derivedMesh data around, see: [#38872] */
+  /* don't keep stale derivedMesh data around, see: T38872. */
   BKE_editmesh_free_derivedmesh(em);
 
 #ifdef DEBUG
@@ -1545,6 +1555,48 @@ BMElem *EDBM_elem_from_index_any(BMEditMesh *em, int index)
     return (BMElem *)BM_face_at_index_find_or_table(bm, index);
   }
 
+  return NULL;
+}
+
+int EDBM_elem_to_index_any_multi(ViewLayer *view_layer,
+                                 BMEditMesh *em,
+                                 BMElem *ele,
+                                 int *r_object_index)
+{
+  uint bases_len;
+  int elem_index = -1;
+  *r_object_index = -1;
+  Base **bases = BKE_view_layer_array_from_bases_in_edit_mode(view_layer, NULL, &bases_len);
+  for (uint base_index = 0; base_index < bases_len; base_index++) {
+    Base *base_iter = bases[base_index];
+    if (BKE_editmesh_from_object(base_iter->object) == em) {
+      *r_object_index = base_index;
+      elem_index = EDBM_elem_to_index_any(em, ele);
+      break;
+    }
+  }
+  MEM_freeN(bases);
+  return elem_index;
+}
+
+BMElem *EDBM_elem_from_index_any_multi(ViewLayer *view_layer,
+                                       int object_index,
+                                       int elem_index,
+                                       Object **r_obedit)
+{
+  uint bases_len;
+  Base **bases = BKE_view_layer_array_from_bases_in_edit_mode(view_layer, NULL, &bases_len);
+  *r_obedit = NULL;
+  Object *obedit = ((uint)object_index < bases_len) ? bases[object_index]->object : NULL;
+  MEM_freeN(bases);
+  if (obedit != NULL) {
+    BMEditMesh *em = BKE_editmesh_from_object(obedit);
+    BMElem *ele = EDBM_elem_from_index_any(em, elem_index);
+    if (ele != NULL) {
+      *r_obedit = obedit;
+      return ele;
+    }
+  }
   return NULL;
 }
 

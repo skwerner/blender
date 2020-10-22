@@ -200,7 +200,6 @@ static void gpencil_calc_points_factor(bContext *C,
                                        tGPencilPointCache *src_array)
 {
   bGPDspoint *pt;
-  int i;
   int idx = 0;
 
   /* create selected point array an fill it */
@@ -214,6 +213,7 @@ static void gpencil_calc_points_factor(bContext *C,
     }
     LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
       if (gps->flag & GP_STROKE_SELECT) {
+        int i;
         for (i = 0, pt = gps->points; i < gps->totpoints; i++, pt++) {
           if (clear_stroke) {
             pt->flag |= GP_SPOINT_TAG;
@@ -252,7 +252,7 @@ static void gpencil_calc_points_factor(bContext *C,
 
   /* calc center */
   float center[2] = {0.0f, 0.0f};
-  for (i = 0; i < totpoints; i++) {
+  for (int i = 0; i < totpoints; i++) {
     center[0] += points2d[i][0];
     center[1] += points2d[i][1];
   }
@@ -261,7 +261,7 @@ static void gpencil_calc_points_factor(bContext *C,
   /* calc angle and distance to center for each point */
   const float axis[2] = {1.0f, 0.0f};
   float v1[3];
-  for (i = 0; i < totpoints; i++) {
+  for (int i = 0; i < totpoints; i++) {
     float ln = len_v2v2(center, points2d[i]);
     sub_v2_v2v2(v1, points2d[i], center);
     float angle = angle_signed_v2v2(axis, v1);
@@ -337,10 +337,9 @@ static void gpencil_get_extremes(
     tGPencilPointCache *src_array, int totpoints, bGPDstroke *gps_filter, float *start, float *end)
 {
   tGPencilPointCache *array_pt = NULL;
-  int i;
 
   /* find first point */
-  for (i = 0; i < totpoints; i++) {
+  for (int i = 0; i < totpoints; i++) {
     array_pt = &src_array[i];
     if (gps_filter == array_pt->gps) {
       copy_v3_v3(start, &array_pt->x);
@@ -348,7 +347,7 @@ static void gpencil_get_extremes(
     }
   }
   /* find last point */
-  for (i = totpoints - 1; i >= 0; i--) {
+  for (int i = totpoints - 1; i >= 0; i--) {
     array_pt = &src_array[i];
     if (gps_filter == array_pt->gps) {
       copy_v3_v3(end, &array_pt->x);
@@ -584,42 +583,14 @@ static int gpencil_stroke_merge_material_exec(bContext *C, wmOperator *op)
   const float val_threshold = RNA_float_get(op->ptr, "val_threshold");
 
   /* Review materials. */
-  GHash *mat_table = BLI_ghash_int_new(__func__);
-
   short *totcol = BKE_object_material_len_p(ob);
   if (totcol == 0) {
     return OPERATOR_CANCELLED;
   }
 
-  bool changed = BKE_gpencil_merge_materials_table_get(
-      ob, hue_threshold, sat_threshold, val_threshold, mat_table);
-
-  int removed = BLI_ghash_len(mat_table);
-
-  /* Update stroke material index. */
-  if (changed) {
-    CTX_DATA_BEGIN (C, bGPDlayer *, gpl, editable_gpencil_layers) {
-      LISTBASE_FOREACH (bGPDframe *, gpf, &gpl->frames) {
-        LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
-          if (ED_gpencil_stroke_can_use(C, gps) == false) {
-            continue;
-          }
-          if (ED_gpencil_stroke_color_use(ob, gpl, gps) == false) {
-            continue;
-          }
-
-          if (BLI_ghash_haskey(mat_table, POINTER_FROM_INT(gps->mat_nr))) {
-            int *idx = BLI_ghash_lookup(mat_table, POINTER_FROM_INT(gps->mat_nr));
-            gps->mat_nr = POINTER_AS_INT(idx);
-          }
-        }
-      }
-    }
-    CTX_DATA_END;
-  }
-
-  /* Free hash memory. */
-  BLI_ghash_free(mat_table, NULL, NULL);
+  int removed;
+  bool changed = BKE_gpencil_merge_materials(
+      ob, hue_threshold, sat_threshold, val_threshold, &removed);
 
   /* notifiers */
   if (changed) {

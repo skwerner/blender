@@ -62,6 +62,7 @@ wmGesture *WM_gesture_new(wmWindow *window, const ARegion *region, const wmEvent
   gesture->winrct = region->winrct;
   gesture->user_data.use_free = true; /* Free if userdata is set. */
   gesture->modal_state = GESTURE_MODAL_NOP;
+  gesture->move = false;
 
   if (ELEM(type,
            WM_GESTURE_RECT,
@@ -199,9 +200,60 @@ int wm_gesture_evaluate(wmGesture *gesture, const wmEvent *event)
 
 /* ******************* gesture draw ******************* */
 
+static void wm_gesture_draw_line_active_side(rcti *rect)
+{
+  GPUVertFormat *format = immVertexFormat();
+  uint shdr_pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+  uint shdr_col = GPU_vertformat_attr_add(format, "color", GPU_COMP_F32, 4, GPU_FETCH_FLOAT);
+
+  GPU_blend(GPU_BLEND_ALPHA);
+  immBindBuiltinProgram(GPU_SHADER_2D_SMOOTH_COLOR);
+
+  const float gradient_length = 150.0f * U.pixelsize;
+  float line_dir[2];
+  float gradient_dir[2];
+  float gradient_point[2][2];
+
+  const float line_start[2] = {rect->xmin, rect->ymin};
+  const float line_end[2] = {rect->xmax, rect->ymax};
+  const float color_line_gradient_start[4] = {0.2f, 0.2f, 0.2f, 0.4f};
+  const float color_line_gradient_end[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+
+  sub_v2_v2v2(line_dir, line_end, line_start);
+  normalize_v2(line_dir);
+  ortho_v2_v2(gradient_dir, line_dir);
+  mul_v2_fl(gradient_dir, -1.0f);
+  mul_v2_fl(gradient_dir, gradient_length);
+  add_v2_v2v2(gradient_point[0], line_start, gradient_dir);
+  add_v2_v2v2(gradient_point[1], line_end, gradient_dir);
+
+  immBegin(GPU_PRIM_TRIS, 6);
+  immAttr4f(shdr_col, UNPACK4(color_line_gradient_start));
+  immVertex2f(shdr_pos, line_start[0], line_start[1]);
+  immAttr4f(shdr_col, UNPACK4(color_line_gradient_start));
+  immVertex2f(shdr_pos, line_end[0], line_end[1]);
+  immAttr4f(shdr_col, UNPACK4(color_line_gradient_end));
+  immVertex2f(shdr_pos, gradient_point[1][0], gradient_point[1][1]);
+
+  immAttr4f(shdr_col, UNPACK4(color_line_gradient_start));
+  immVertex2f(shdr_pos, line_start[0], line_start[1]);
+  immAttr4f(shdr_col, UNPACK4(color_line_gradient_end));
+  immVertex2f(shdr_pos, gradient_point[1][0], gradient_point[1][1]);
+  immAttr4f(shdr_col, UNPACK4(color_line_gradient_end));
+  immVertex2f(shdr_pos, gradient_point[0][0], gradient_point[0][1]);
+  immEnd();
+
+  immUnbindProgram();
+  GPU_blend(GPU_BLEND_NONE);
+}
+
 static void wm_gesture_draw_line(wmGesture *gt)
 {
   rcti *rect = (rcti *)gt->customdata;
+
+  if (gt->draw_active_side) {
+    wm_gesture_draw_line_active_side(rect);
+  }
 
   uint shdr_pos = GPU_vertformat_attr_add(
       immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
@@ -236,7 +288,7 @@ static void wm_gesture_draw_rect(wmGesture *gt)
   uint shdr_pos = GPU_vertformat_attr_add(
       immVertexFormat(), "pos", GPU_COMP_I32, 2, GPU_FETCH_INT_TO_FLOAT);
 
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
   immUniformColor4f(1.0f, 1.0f, 1.0f, 0.05f);
@@ -245,7 +297,7 @@ static void wm_gesture_draw_rect(wmGesture *gt)
 
   immUnbindProgram();
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 
   shdr_pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
 
@@ -274,7 +326,7 @@ static void wm_gesture_draw_circle(wmGesture *gt)
 {
   rcti *rect = (rcti *)gt->customdata;
 
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   const uint shdr_pos = GPU_vertformat_attr_add(
       immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
@@ -286,7 +338,7 @@ static void wm_gesture_draw_circle(wmGesture *gt)
 
   immUnbindProgram();
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 
   immBindBuiltinProgram(GPU_SHADER_2D_LINE_DASHED_UNIFORM_COLOR);
 
@@ -324,7 +376,7 @@ static void draw_filled_lasso(wmGesture *gt)
   int(*mcoords)[2] = MEM_mallocN(sizeof(*mcoords) * (mcoords_len + 1), __func__);
   int i;
   rcti rect;
-  float red[4] = {1.0f, 0.0f, 0.0f, 0.0f};
+  const float red[4] = {1.0f, 0.0f, 0.0f, 0.0f};
 
   for (i = 0; i < mcoords_len; i++, lasso += 2) {
     mcoords[i][0] = lasso[0];
@@ -353,34 +405,21 @@ static void draw_filled_lasso(wmGesture *gt)
                                   draw_filled_lasso_px_cb,
                                   &lasso_fill_data);
 
-    /* Additive Blending */
-    GPU_blend(true);
-    GPU_blend_set_func(GPU_ONE, GPU_ONE);
+    GPU_blend(GPU_BLEND_ADDITIVE_PREMULT);
 
     IMMDrawPixelsTexState state = immDrawPixelsTexSetup(GPU_SHADER_2D_IMAGE_SHUFFLE_COLOR);
     GPU_shader_bind(state.shader);
     GPU_shader_uniform_vector(
         state.shader, GPU_shader_get_uniform(state.shader, "shuffle"), 4, 1, red);
 
-    immDrawPixelsTex(&state,
-                     rect.xmin,
-                     rect.ymin,
-                     w,
-                     h,
-                     GL_RED,
-                     GL_UNSIGNED_BYTE,
-                     GL_NEAREST,
-                     pixel_buf,
-                     1.0f,
-                     1.0f,
-                     NULL);
+    immDrawPixelsTex(
+        &state, rect.xmin, rect.ymin, w, h, GPU_R8, false, pixel_buf, 1.0f, 1.0f, NULL);
 
     GPU_shader_unbind();
 
     MEM_freeN(pixel_buf);
 
-    GPU_blend(false);
-    GPU_blend_set_func(GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA);
+    GPU_blend(GPU_BLEND_NONE);
   }
 
   MEM_freeN(mcoords);

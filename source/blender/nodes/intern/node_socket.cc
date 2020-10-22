@@ -549,19 +549,6 @@ static bNodeSocketType *make_socket_type_virtual(void)
   return stype;
 }
 
-static bNodeSocketType *make_socket_type_effector(int type)
-{
-  bNodeSocketType *stype = make_standard_socket_type(type, PROP_NONE);
-  stype->input_link_limit = 0xFFF;
-  return stype;
-}
-
-static bNodeSocketType *make_socket_type_control_flow(int type)
-{
-  bNodeSocketType *stype = make_standard_socket_type(type, PROP_NONE);
-  return stype;
-}
-
 static bNodeSocketType *make_socket_type_bool()
 {
   bNodeSocketType *socktype = make_standard_socket_type(SOCK_BOOLEAN, PROP_NONE);
@@ -634,10 +621,10 @@ static bNodeSocketType *make_socket_type_string()
 
 class ObjectSocketMultiFunction : public blender::fn::MultiFunction {
  private:
-  const Object *object_;
+  Object *object_;
 
  public:
-  ObjectSocketMultiFunction(const Object *object) : object_(object)
+  ObjectSocketMultiFunction(Object *object) : object_(object)
   {
     blender::fn::MFSignatureBuilder signature = this->get_builder("Object Socket");
     signature.depends_on_context();
@@ -679,7 +666,7 @@ static bNodeSocketType *make_socket_type_object()
     return blender::fn::MFDataType::ForSingle<blender::bke::PersistentObjectHandle>();
   };
   socktype->expand_in_mf_network = [](blender::nodes::SocketMFNetworkBuilder &builder) {
-    const Object *object = builder.socket_default_value<bNodeSocketValueObject>()->value;
+    Object *object = builder.socket_default_value<bNodeSocketValueObject>()->value;
     builder.construct_generator_fn<ObjectSocketMultiFunction>(object);
   };
   return socktype;
@@ -720,12 +707,6 @@ void register_standard_node_socket_types(void)
   nodeRegisterSocketType(make_socket_type_object());
 
   nodeRegisterSocketType(make_standard_socket_type(SOCK_IMAGE, PROP_NONE));
-
-  nodeRegisterSocketType(make_socket_type_effector(SOCK_EMITTERS));
-  nodeRegisterSocketType(make_socket_type_effector(SOCK_EVENTS));
-  nodeRegisterSocketType(make_socket_type_effector(SOCK_FORCES));
-
-  nodeRegisterSocketType(make_socket_type_control_flow(SOCK_CONTROL_FLOW));
 
   nodeRegisterSocketType(make_socket_type_virtual());
 }

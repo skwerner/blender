@@ -24,6 +24,8 @@
 #include "render/mesh.h"
 #include "render/particles.h"
 #include "render/scene.h"
+#include "render/stats.h"
+#include "render/volume.h"
 
 #include "util/util_foreach.h"
 #include "util/util_logging.h"
@@ -270,7 +272,7 @@ uint Object::visibility_for_tracing() const
 
 float Object::compute_volume_step_size() const
 {
-  if (geometry->type != Geometry::MESH) {
+  if (geometry->type != Geometry::MESH && geometry->type != Geometry::VOLUME) {
     return FLT_MAX;
   }
 
@@ -299,37 +301,41 @@ float Object::compute_volume_step_size() const
   /* Compute step size from voxel grids. */
   float step_size = FLT_MAX;
 
-  foreach (Attribute &attr, mesh->attributes.attributes) {
-    if (attr.element == ATTR_ELEMENT_VOXEL) {
-      ImageHandle &handle = attr.data_voxel();
-      const ImageMetaData &metadata = handle.metadata();
-      if (metadata.width == 0 || metadata.height == 0 || metadata.depth == 0) {
-        continue;
-      }
+  if (geometry->type == Geometry::VOLUME) {
+    Volume *volume = static_cast<Volume *>(geometry);
 
-      /* User specified step size. */
-      float voxel_step_size = mesh->volume_step_size;
-
-      if (voxel_step_size == 0.0f) {
-        /* Auto detect step size. */
-        float3 size = make_float3(
-            1.0f / metadata.width, 1.0f / metadata.height, 1.0f / metadata.depth);
-
-        /* Step size is transformed from voxel to world space. */
-        Transform voxel_tfm = tfm;
-        if (metadata.use_transform_3d) {
-          voxel_tfm = tfm * transform_inverse(metadata.transform_3d);
+    foreach (Attribute &attr, volume->attributes.attributes) {
+      if (attr.element == ATTR_ELEMENT_VOXEL) {
+        ImageHandle &handle = attr.data_voxel();
+        const ImageMetaData &metadata = handle.metadata();
+        if (metadata.width == 0 || metadata.height == 0 || metadata.depth == 0) {
+          continue;
         }
-        voxel_step_size = min3(fabs(transform_direction(&voxel_tfm, size)));
-      }
-      else if (mesh->volume_object_space) {
-        /* User specified step size in object space. */
-        float3 size = make_float3(voxel_step_size, voxel_step_size, voxel_step_size);
-        voxel_step_size = min3(fabs(transform_direction(&tfm, size)));
-      }
 
-      if (voxel_step_size > 0.0f) {
-        step_size = fminf(voxel_step_size, step_size);
+        /* User specified step size. */
+        float voxel_step_size = volume->step_size;
+
+        if (voxel_step_size == 0.0f) {
+          /* Auto detect step size. */
+          float3 size = make_float3(
+              1.0f / metadata.width, 1.0f / metadata.height, 1.0f / metadata.depth);
+
+          /* Step size is transformed from voxel to world space. */
+          Transform voxel_tfm = tfm;
+          if (metadata.use_transform_3d) {
+            voxel_tfm = tfm * transform_inverse(metadata.transform_3d);
+          }
+          voxel_step_size = min3(fabs(transform_direction(&voxel_tfm, size)));
+        }
+        else if (volume->object_space) {
+          /* User specified step size in object space. */
+          float3 size = make_float3(voxel_step_size, voxel_step_size, voxel_step_size);
+          voxel_step_size = min3(fabs(transform_direction(&tfm, size)));
+        }
+
+        if (voxel_step_size > 0.0f) {
+          step_size = fminf(voxel_step_size, step_size);
+        }
       }
     }
   }
@@ -365,14 +371,14 @@ static float object_surface_area(UpdateObjectTransformState *state,
                                  const Transform &tfm,
                                  Geometry *geom)
 {
-  if (geom->type != Geometry::MESH) {
+  if (geom->type != Geometry::MESH && geom->type != Geometry::VOLUME) {
     return 0.0f;
   }
 
   Mesh *mesh = static_cast<Mesh *>(geom);
-  if (mesh->has_volume) {
+  if (mesh->has_volume || geom->type == Geometry::VOLUME) {
     /* Volume density automatically adjust to object scale. */
-    if (mesh->volume_object_space) {
+    if (geom->type == Geometry::VOLUME && static_cast<Volume *>(geom)->object_space) {
       const float3 unit = normalize(make_float3(1.0f, 1.0f, 1.0f));
       return 1.0f / len(transform_direction(&tfm, unit));
     }
@@ -527,7 +533,9 @@ void ObjectManager::device_update_object_transform(UpdateObjectTransformState *s
   kobject.dupli_uv[1] = ob->dupli_uv[1];
   int totalsteps = geom->motion_steps;
   kobject.numsteps = (totalsteps - 1) / 2;
-  kobject.numverts = (geom->type == Geometry::MESH) ? static_cast<Mesh *>(geom)->verts.size() : 0;
+  kobject.numverts = (geom->type == Geometry::MESH || geom->type == Geometry::VOLUME) ?
+                         static_cast<Mesh *>(geom)->verts.size() :
+                         0;
   kobject.patch_map_offset = 0;
   kobject.attribute_map_offset = 0;
   uint32_t hash_name = util_murmur_hash3(ob->name.c_str(), ob->name.length(), 0);
@@ -636,15 +644,32 @@ void ObjectManager::device_update(Device *device,
   if (scene->objects.size() == 0)
     return;
 
-  /* Assign object IDs. */
-  int index = 0;
-  foreach (Object *object, scene->objects) {
-    object->index = index++;
+  {
+    /* Assign object IDs. */
+    scoped_callback_timer timer([scene](double time) {
+      if (scene->update_stats) {
+        scene->update_stats->object.times.add_entry({"device_update (assign index)", time});
+      }
+    });
+
+    int index = 0;
+    foreach (Object *object, scene->objects) {
+      object->index = index++;
+    }
   }
 
-  /* set object transform matrices, before applying static transforms */
-  progress.set_status("Updating Objects", "Copying Transformations to device");
-  device_update_transforms(dscene, scene, progress);
+  {
+    /* set object transform matrices, before applying static transforms */
+    scoped_callback_timer timer([scene](double time) {
+      if (scene->update_stats) {
+        scene->update_stats->object.times.add_entry(
+            {"device_update (copy objects to device)", time});
+      }
+    });
+
+    progress.set_status("Updating Objects", "Copying Transformations to device");
+    device_update_transforms(dscene, scene, progress);
+  }
 
   if (progress.get_cancel())
     return;
@@ -652,6 +677,13 @@ void ObjectManager::device_update(Device *device,
   /* prepare for static BVH building */
   /* todo: do before to support getting object level coords? */
   if (scene->params.bvh_type == SceneParams::BVH_STATIC) {
+    scoped_callback_timer timer([scene](double time) {
+      if (scene->update_stats) {
+        scene->update_stats->object.times.add_entry(
+            {"device_update (apply static transforms)", time});
+      }
+    });
+
     progress.set_status("Updating Objects", "Applying Static Transformations");
     apply_static_transforms(dscene, scene, progress);
   }
@@ -662,6 +694,12 @@ void ObjectManager::device_update_flags(
 {
   if (!need_update && !need_flags_update)
     return;
+
+  scoped_callback_timer timer([scene](double time) {
+    if (scene->update_stats) {
+      scene->update_stats->object.times.add_entry({"device_update_flags", time});
+    }
+  });
 
   need_update = false;
   need_flags_update = false;
@@ -819,7 +857,7 @@ void ObjectManager::apply_static_transforms(DeviceScene *dscene, Scene *scene, P
     bool apply = (geometry_users[geom] == 1) && !geom->has_surface_bssrdf &&
                  !geom->has_true_displacement();
 
-    if (geom->type == Geometry::MESH) {
+    if (geom->type == Geometry::MESH || geom->type == Geometry::VOLUME) {
       Mesh *mesh = static_cast<Mesh *>(geom);
       apply = apply && mesh->subdivision_type == Mesh::SUBDIVISION_NONE;
     }

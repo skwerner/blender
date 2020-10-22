@@ -110,7 +110,7 @@ void EDBM_select_mirrored(BMEditMesh *em,
     }
   }
 
-  EDBM_verts_mirror_cache_begin(em, axis, true, true, use_topology);
+  EDBM_verts_mirror_cache_begin(em, axis, true, true, false, use_topology);
 
   if (!extend) {
     EDBM_flag_disable_all(em, BM_ELEM_SELECT);
@@ -205,7 +205,7 @@ static BMElem *edbm_select_id_bm_elem_get(Base **bases, const uint sel_id, uint 
 /* -------------------------------------------------------------------- */
 /** \name Find Nearest Vert/Edge/Face
  *
- * \note Screen-space manhatten distances are used here,
+ * \note Screen-space manhattan distances are used here,
  * since its faster and good enough for the purpose of selection.
  *
  * \note \a dist_bias is used so we can bias against selected items.
@@ -415,7 +415,7 @@ struct NearestEdgeUserData_Hit {
   int index;
   BMEdge *edge;
 
-  /* edges only, un-biased manhatten distance to which ever edge we pick
+  /* edges only, un-biased manhattan distance to which ever edge we pick
    * (not used for choosing) */
   float dist_center;
 };
@@ -1423,15 +1423,13 @@ void MESH_OT_select_mode(wmOperatorType *ot)
 static void walker_select_count(BMEditMesh *em,
                                 int walkercode,
                                 void *start,
-                                const bool select,
-                                const bool select_mix,
-                                int *r_totsel,
-                                int *r_totunsel)
+                                int r_count_by_select[2])
 {
   BMesh *bm = em->bm;
   BMElem *ele;
   BMWalker walker;
-  int tot[2] = {0, 0};
+
+  r_count_by_select[0] = r_count_by_select[1] = 0;
 
   BMW_init(&walker,
            bm,
@@ -1443,16 +1441,14 @@ static void walker_select_count(BMEditMesh *em,
            BMW_NIL_LAY);
 
   for (ele = BMW_begin(&walker, start); ele; ele = BMW_step(&walker)) {
-    tot[(BM_elem_flag_test_bool(ele, BM_ELEM_SELECT) != select)] += 1;
+    r_count_by_select[BM_elem_flag_test(ele, BM_ELEM_SELECT) ? 1 : 0] += 1;
 
-    if (!select_mix && tot[0] && tot[1]) {
-      tot[0] = tot[1] = -1;
+    /* Early exit when mixed (could be optional if needed. */
+    if (r_count_by_select[0] && r_count_by_select[1]) {
+      r_count_by_select[0] = r_count_by_select[1] = -1;
       break;
     }
   }
-
-  *r_totsel = tot[0];
-  *r_totunsel = tot[1];
 
   BMW_end(&walker);
 }
@@ -1590,18 +1586,18 @@ static void mouse_mesh_loop_edge(
 {
   bool edge_boundary = false;
 
-  /* cycle between BMW_EDGELOOP / BMW_EDGEBOUNDARY  */
+  /* Cycle between BMW_EDGELOOP / BMW_EDGEBOUNDARY. */
   if (select_cycle && BM_edge_is_boundary(eed)) {
-    int tot[2];
+    int count_by_select[2];
 
-    /* if the loops selected toggle the boundaries */
-    walker_select_count(em, BMW_EDGELOOP, eed, select, false, &tot[0], &tot[1]);
-    if (tot[select] == 0) {
+    /* If the loops selected toggle the boundaries. */
+    walker_select_count(em, BMW_EDGELOOP, eed, count_by_select);
+    if (count_by_select[!select] == 0) {
       edge_boundary = true;
 
-      /* if the boundaries selected, toggle back to the loop */
-      walker_select_count(em, BMW_EDGEBOUNDARY, eed, select, false, &tot[0], &tot[1]);
-      if (tot[select] == 0) {
+      /* If the boundaries selected, toggle back to the loop. */
+      walker_select_count(em, BMW_EDGEBOUNDARY, eed, count_by_select);
+      if (count_by_select[!select] == 0) {
         edge_boundary = false;
       }
     }
@@ -2691,8 +2687,8 @@ bool EDBM_selectmode_disable_multi(struct bContext *C,
  *
  * Overview of the algorithm:
  * - Groups faces surrounded by edges with 3+ faces using them.
- * - Calculates a cost of each face group comparing it's angle with the faces
- *   connected to it's non-manifold edges.
+ * - Calculates a cost of each face group comparing its angle with the faces
+ *   connected to its non-manifold edges.
  * - Mark the face group as interior, and mark connected face groups for recalculation.
  * - Continue to remove the face groups with the highest 'cost'.
  *
@@ -3576,13 +3572,17 @@ static int edbm_select_linked_pick_invoke(bContext *C, wmOperator *op, const wmE
 
   edbm_select_linked_pick_ex(em, ele, sel, delimit);
 
-  /* to support redo */
-  BM_mesh_elem_index_ensure(bm, ele->head.htype);
-  index = EDBM_elem_to_index_any(em, ele);
-
-  /* TODO(MULTI_EDIT), index doesn't know which object,
-   * index selections isn't very common. */
-  RNA_int_set(op->ptr, "index", index);
+  /* To support redo. */
+  {
+    /* Note that the `base_index` can't be used as the index depends on the view-port
+     * which might not be available on redo. */
+    BM_mesh_elem_index_ensure(bm, ele->head.htype);
+    int object_index;
+    index = EDBM_elem_to_index_any_multi(vc.view_layer, em, ele, &object_index);
+    BLI_assert(object_index >= 0);
+    RNA_int_set(op->ptr, "object_index", object_index);
+    RNA_int_set(op->ptr, "index", index);
+  }
 
   DEG_id_tag_update(basact->object->data, ID_RECALC_SELECT);
   WM_event_add_notifier(C, NC_GEOM | ND_SELECT, basact->object->data);
@@ -3593,18 +3593,22 @@ static int edbm_select_linked_pick_invoke(bContext *C, wmOperator *op, const wmE
 
 static int edbm_select_linked_pick_exec(bContext *C, wmOperator *op)
 {
-  Object *obedit = CTX_data_edit_object(C);
-  BMEditMesh *em = BKE_editmesh_from_object(obedit);
-  BMesh *bm = em->bm;
-  int index;
-  const bool sel = !RNA_boolean_get(op->ptr, "deselect");
+  Object *obedit = NULL;
+  BMElem *ele;
 
-  index = RNA_int_get(op->ptr, "index");
-  if (index < 0 || index >= (bm->totvert + bm->totedge + bm->totface)) {
+  {
+    ViewLayer *view_layer = CTX_data_view_layer(C);
+    const int object_index = RNA_int_get(op->ptr, "object_index");
+    const int index = RNA_int_get(op->ptr, "index");
+    ele = EDBM_elem_from_index_any_multi(view_layer, object_index, index, &obedit);
+  }
+
+  if (ele == NULL) {
     return OPERATOR_CANCELLED;
   }
 
-  BMElem *ele = EDBM_elem_from_index_any(em, index);
+  BMEditMesh *em = BKE_editmesh_from_object(obedit);
+  const bool sel = !RNA_boolean_get(op->ptr, "deselect");
 
 #ifdef USE_LINKED_SELECT_DEFAULT_HACK
   int delimit = select_linked_delimit_default_from_op(op, em->selectmode);
@@ -3649,6 +3653,8 @@ void MESH_OT_select_linked_pick(wmOperatorType *ot)
 #endif
 
   /* use for redo */
+  prop = RNA_def_int(ot->srna, "object_index", -1, -1, INT_MAX, "", "", 0, INT_MAX);
+  RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
   prop = RNA_def_int(ot->srna, "index", -1, -1, INT_MAX, "", "", 0, INT_MAX);
   RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
 }
@@ -5044,7 +5050,7 @@ static int verg_radial(const void *va, const void *vb)
 }
 
 /**
- * This function leaves faces tagged which are apart of the new region.
+ * This function leaves faces tagged which are a part of the new region.
  *
  * \note faces already tagged are ignored, to avoid finding the same regions twice:
  * important when we have regions with equal face counts, see: T40309

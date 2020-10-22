@@ -27,6 +27,7 @@
 extern "C" {
 #endif
 
+struct BlendDataReader;
 struct Brush;
 struct CurveMapping;
 struct Depsgraph;
@@ -112,8 +113,6 @@ struct bGPDlayer *BKE_gpencil_layer_duplicate(const struct bGPDlayer *gpl_src);
 void BKE_gpencil_frame_copy_strokes(struct bGPDframe *gpf_src, struct bGPDframe *gpf_dst);
 struct bGPDstroke *BKE_gpencil_stroke_duplicate(struct bGPDstroke *gps_src, const bool dup_points);
 
-struct bGPdata *BKE_gpencil_copy(struct Main *bmain, const struct bGPdata *gpd);
-
 struct bGPdata *BKE_gpencil_data_duplicate(struct Main *bmain,
                                            const struct bGPdata *gpd,
                                            bool internal_copy);
@@ -131,6 +130,11 @@ bool BKE_gpencil_merge_materials_table_get(struct Object *ob,
                                            const float sat_threshold,
                                            const float val_threshold,
                                            struct GHash *r_mat_table);
+bool BKE_gpencil_merge_materials(struct Object *ob,
+                                 const float hue_threshold,
+                                 const float sat_threshold,
+                                 const float val_threshold,
+                                 int *r_removed);
 
 /* statistics functions */
 void BKE_gpencil_stats_update(struct bGPdata *gpd);
@@ -275,6 +279,10 @@ void BKE_gpencil_parent_matrix_get(const struct Depsgraph *depsgraph,
                                    float diff_mat[4][4]);
 
 void BKE_gpencil_update_layer_parent(const struct Depsgraph *depsgraph, struct Object *ob);
+
+int BKE_gpencil_material_find_index_by_name_prefix(struct Object *ob, const char *name_prefix);
+
+void BKE_gpencil_blend_read_data(struct BlendDataReader *reader, struct bGPdata *gpd);
 
 #ifdef __cplusplus
 }

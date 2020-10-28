@@ -301,6 +301,14 @@ set(OIDN_VERSION 1.2.3)
 set(OIDN_URI https://github.com/OpenImageDenoise/oidn/releases/download/v${OIDN_VERSION}/oidn-${OIDN_VERSION}.src.tar.gz)
 set(OIDN_HASH 1f11466c2c3efc27faba5ec7078d12b2)
 
+set(RKCOMMON_VERSION 1.4.1)
+set(RKCOMMON_URI https://github.com/ospray/rkcommon/archive/v${RKCOMMON_VERSION}.tar.gz)
+set(RKCOMMON_HASH c982b355f27899c36cc2a8d4ca88b924)
+
+set(OPENVKL_VERSION 0.11.0)
+set(OPENVKL_URI https://github.com/openvkl/openvkl/archive/v${OPENVKL_VERSION}.tar.gz)
+set(OPENVKL_HASH 252980f79c3097599b2d8e643f9c5b8f)
+
 set(LIBGLU_VERSION 9.0.1)
 set(LIBGLU_URI ftp://ftp.freedesktop.org/pub/mesa/glu/glu-${LIBGLU_VERSION}.tar.xz)
 set(LIBGLU_HASH 151aef599b8259efe9acd599c96ea2a3)

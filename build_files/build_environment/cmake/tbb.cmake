@@ -26,13 +26,12 @@ if(WIN32)
   set(TBB_STATIC_LIBRARY Off)
 else()
   set(TBB_EXTRA_ARGS
-    -DTBB_BUILD_SHARED=Off
+    -DTBB_BUILD_SHARED=On
     -DTBB_BUILD_TBBMALLOC=On
     -DTBB_BUILD_TBBMALLOC_PROXY=Off
-    -DTBB_BUILD_STATIC=On
+    -DTBB_BUILD_STATIC=Off
   )
-  set(TBB_LIBRARY tbb_static)
-  set(TBB_STATIC_LIBRARY On)
+  set(TBB_STATIC_LIBRARY Off)
 endif()
 
 # CMake script for TBB from https://github.com/wjakob/tbb/blob/master/CMakeLists.txt

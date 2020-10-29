@@ -452,12 +452,14 @@ void graphedit_operatortypes(void)
   WM_operatortype_append(GRAPH_OT_snap);
   WM_operatortype_append(GRAPH_OT_mirror);
   WM_operatortype_append(GRAPH_OT_frame_jump);
+  WM_operatortype_append(GRAPH_OT_snap_cursor_value);
   WM_operatortype_append(GRAPH_OT_handle_type);
   WM_operatortype_append(GRAPH_OT_interpolation_type);
   WM_operatortype_append(GRAPH_OT_extrapolation_type);
   WM_operatortype_append(GRAPH_OT_easing_type);
   WM_operatortype_append(GRAPH_OT_sample);
   WM_operatortype_append(GRAPH_OT_bake);
+  WM_operatortype_append(GRAPH_OT_unbake);
   WM_operatortype_append(GRAPH_OT_sound_bake);
   WM_operatortype_append(GRAPH_OT_smooth);
   WM_operatortype_append(GRAPH_OT_clean);

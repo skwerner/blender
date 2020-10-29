@@ -53,6 +53,13 @@ find_package(ZLIB REQUIRED)
 find_package(BZip2 REQUIRED)
 list(APPEND ZLIB_LIBRARIES ${BZIP2_LIBRARIES})
 
+if(WITH_OPENAL)
+  find_package(OpenAL)
+  if(NOT OPENAL_FOUND)
+    set(WITH_OPENAL OFF)
+  endif()
+endif()
+
 if(NOT DEFINED LIBDIR)
   set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/darwin)
   # Prefer lib directory paths
@@ -70,15 +77,6 @@ endif()
 
 if(EXISTS ${LIBDIR})
   without_system_libs_begin()
-endif()
-
-if(WITH_OPENAL)
-  find_package(OpenAL)
-  if(OPENAL_FOUND)
-    set(WITH_OPENAL ON)
-  else()
-    set(WITH_OPENAL OFF)
-  endif()
 endif()
 
 if(WITH_ALEMBIC)
@@ -196,7 +194,7 @@ if(SYSTEMSTUBS_LIBRARY)
   list(APPEND PLATFORM_LINKLIBS SystemStubs)
 endif()
 
-set(PLATFORM_CFLAGS "${PLATFORM_CFLAGS} -pipe -funsigned-char")
+set(PLATFORM_CFLAGS "${PLATFORM_CFLAGS} -pipe -funsigned-char -fno-strict-aliasing")
 set(PLATFORM_LINKFLAGS
   "-fexceptions -framework CoreServices -framework Foundation -framework IOKit -framework AppKit -framework Cocoa -framework Carbon -framework AudioUnit -framework AudioToolbox -framework CoreAudio -framework Metal -framework QuartzCore"
 )
@@ -227,16 +225,20 @@ if(WITH_SDL)
   set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -framework ForceFeedback")
 endif()
 
-# Use CMP0074 for our benefit. Stop CMake from searching libraries in one
-# place and headers in another.
 set(PNG_ROOT ${LIBDIR}/png)
 find_package(PNG REQUIRED)
 
 set(JPEG_ROOT ${LIBDIR}/jpeg)
 find_package(JPEG REQUIRED)
 
-set(TIFF_ROOT ${LIBDIR}/tiff)
-find_package(TIFF REQUIRED)
+if(WITH_IMAGE_TIFF)
+  set(TIFF_ROOT ${LIBDIR}/tiff)
+  find_package(TIFF)
+  if(NOT TIFF_FOUND)
+    message(WARNING "TIFF not found, disabling WITH_IMAGE_TIFF")
+    set(WITH_IMAGE_TIFF OFF)
+  endif()
+endif()
 
 if(WITH_BOOST)
   set(Boost_NO_BOOST_CMAKE ON)
@@ -332,7 +334,10 @@ endif()
 
 if(WITH_CYCLES_EMBREE)
   find_package(Embree 3.8.0 REQUIRED)
-  set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -Xlinker -stack_size -Xlinker 0x100000")
+  # Increase stack size for Embree, only works for executables.
+  if(NOT WITH_PYTHON_MODULE)
+    set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -Xlinker -stack_size -Xlinker 0x100000")
+  endif()
 
   # Embree static library linking can mix up SSE and AVX symbols, causing
   # crashes on macOS systems with older CPUs that don't have AVX. Using
@@ -422,8 +427,8 @@ endif()
 
 set(EXETYPE MACOSX_BUNDLE)
 
-set(CMAKE_C_FLAGS_DEBUG "-fno-strict-aliasing -g")
-set(CMAKE_CXX_FLAGS_DEBUG "-fno-strict-aliasing -g")
+set(CMAKE_C_FLAGS_DEBUG "-g")
+set(CMAKE_CXX_FLAGS_DEBUG "-g")
 if(CMAKE_OSX_ARCHITECTURES MATCHES "x86_64" OR CMAKE_OSX_ARCHITECTURES MATCHES "i386")
   set(CMAKE_CXX_FLAGS_RELEASE "-O2 -mdynamic-no-pic -msse -msse2 -msse3 -mssse3")
   set(CMAKE_C_FLAGS_RELEASE "-O2 -mdynamic-no-pic  -msse -msse2 -msse3 -mssse3")
@@ -432,8 +437,8 @@ if(CMAKE_OSX_ARCHITECTURES MATCHES "x86_64" OR CMAKE_OSX_ARCHITECTURES MATCHES "
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -ftree-vectorize  -fvariable-expansion-in-unroller")
   endif()
 else()
-  set(CMAKE_C_FLAGS_RELEASE "-O2 -mdynamic-no-pic -fno-strict-aliasing")
-  set(CMAKE_CXX_FLAGS_RELEASE "-O2 -mdynamic-no-pic -fno-strict-aliasing")
+  set(CMAKE_C_FLAGS_RELEASE "-O2 -mdynamic-no-pic")
+  set(CMAKE_CXX_FLAGS_RELEASE "-O2 -mdynamic-no-pic")
 endif()
 
 if(${XCODE_VERSION} VERSION_EQUAL 5 OR ${XCODE_VERSION} VERSION_GREATER 5)

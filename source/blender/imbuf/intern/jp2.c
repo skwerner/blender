@@ -126,6 +126,7 @@ static void info_callback(const char *msg, void *client_data)
   } \
   (void)0
 
+/* -------------------------------------------------------------------- */
 /** \name Buffer Stream
  * \{ */
 
@@ -217,6 +218,7 @@ static opj_stream_t *opj_stream_create_from_buffer(struct BufInfo *p_file,
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name File Stream
  * \{ */
 
@@ -362,7 +364,7 @@ static ImBuf *imb_load_jp2_stream(opj_stream_t *stream,
   }
 
   struct ImBuf *ibuf = NULL;
-  bool use_float = false; /* for precision higher then 8 use float */
+  bool use_float = false; /* for precision higher than 8 use float */
   bool use_alpha = false;
 
   long signed_offsets[4] = {0, 0, 0, 0};

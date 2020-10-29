@@ -338,6 +338,7 @@ void BKE_tracking_settings_init(MovieTracking *tracking)
   tracking->settings.default_weight = 1.0f;
   tracking->settings.dist = 1;
   tracking->settings.object_distance = 1;
+  tracking->settings.refine_camera_intrinsics = REFINE_NO_INTRINSICS;
 
   tracking->stabilization.scaleinf = 1.0f;
   tracking->stabilization.anchor_frame = 1;
@@ -1492,7 +1493,7 @@ MovieTrackingPlaneTrack *BKE_tracking_plane_track_add(MovieTracking *tracking,
 
   BKE_tracking_plane_marker_insert(plane_track, &plane_marker);
 
-  /* Put new plane track to the list, ensure it's name is unique. */
+  /* Put new plane track to the list, ensure its name is unique. */
   BLI_addtail(plane_tracks_base, plane_track);
   BKE_tracking_plane_track_unique_name(plane_tracks_base, plane_track);
 

@@ -22,9 +22,8 @@
  * \ingroup bke
  */
 
-/* defines BLI_INLINE */
 #include "BKE_mesh_types.h"
-#include "BLI_compiler_compat.h"
+#include "BLI_utildefines.h"
 
 struct BLI_Stack;
 struct BMEditMesh;
@@ -178,7 +177,7 @@ void BKE_mesh_to_pointcloud(struct Main *bmain,
                             struct Depsgraph *depsgraph,
                             struct Scene *scene,
                             struct Object *ob);
-void BKE_mesh_from_pointcloud(struct PointCloud *pointcloud, struct Mesh *me);
+void BKE_mesh_from_pointcloud(const struct PointCloud *pointcloud, struct Mesh *me);
 void BKE_pointcloud_to_mesh(struct Main *bmain,
                             struct Depsgraph *depsgraph,
                             struct Scene *scene,

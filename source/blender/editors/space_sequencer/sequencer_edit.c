@@ -97,11 +97,11 @@ EnumPropertyItem sequencer_prop_effect_types[] = {
 #define SEQ_SIDE_MOUSE -1
 
 EnumPropertyItem prop_side_types[] = {
-    {SEQ_SIDE_MOUSE, "MOUSE", 0, "Mouse position", ""},
+    {SEQ_SIDE_MOUSE, "MOUSE", 0, "Mouse Position", ""},
     {SEQ_SIDE_LEFT, "LEFT", 0, "Left", ""},
     {SEQ_SIDE_RIGHT, "RIGHT", 0, "Right", ""},
     {SEQ_SIDE_BOTH, "BOTH", 0, "Both", ""},
-    {SEQ_SIDE_NO_CHANGE, "NO_CHANGE", 0, "No change", ""},
+    {SEQ_SIDE_NO_CHANGE, "NO_CHANGE", 0, "No Change", ""},
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -2134,7 +2134,7 @@ static int sequencer_reassign_inputs_exec(bContext *C, wmOperator *op)
   Sequence *seq1, *seq2, *seq3, *last_seq = BKE_sequencer_active_get(scene);
   const char *error_msg;
 
-  if (BKE_sequence_effect_get_num_inputs(last_seq->type) != 0) {
+  if (BKE_sequence_effect_get_num_inputs(last_seq->type) == 0) {
     BKE_report(op->reports, RPT_ERROR, "Cannot reassign inputs: strip has no inputs");
     return OPERATOR_CANCELLED;
   }

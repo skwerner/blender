@@ -38,7 +38,7 @@
  * per-element attributes and interpolate them (e.g. uvs, vcols, vgroups, etc).
  *
  * Mesh is the "serialized" structure, used for storing object-mode mesh data
- * and also for saving stuff to disk.  It's interfaces are also what DerivedMesh
+ * and also for saving stuff to disk.  Its interfaces are also what DerivedMesh
  * uses to communicate with.
  *
  * CDDM is a little mesh library, that uses Mesh data structures in the backend.
@@ -364,6 +364,7 @@ struct Mesh *editbmesh_get_eval_cage_and_final(struct Depsgraph *depsgraph,
 
 float (*editbmesh_vert_coords_alloc(struct BMEditMesh *em, int *r_vert_len))[3];
 bool editbmesh_modifier_is_enabled(struct Scene *scene,
+                                   const struct Object *ob,
                                    struct ModifierData *md,
                                    bool has_prev_mesh);
 void makeDerivedMesh(struct Depsgraph *depsgraph,

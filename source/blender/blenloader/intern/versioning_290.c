@@ -30,6 +30,7 @@
 #include "DNA_brush_types.h"
 #include "DNA_cachefile_types.h"
 #include "DNA_constraint_types.h"
+#include "DNA_fluid_types.h"
 #include "DNA_genfile.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
@@ -38,10 +39,12 @@
 #include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
+#include "DNA_particle_types.h"
 #include "DNA_pointcloud_types.h"
 #include "DNA_rigidbody_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_shader_fx_types.h"
+#include "DNA_tracking_types.h"
 #include "DNA_workspace_types.h"
 
 #include "BKE_animsys.h"
@@ -51,6 +54,7 @@
 #include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_mesh.h"
+#include "BKE_multires.h"
 #include "BKE_node.h"
 
 #include "MEM_guardedalloc.h"
@@ -244,7 +248,7 @@ void do_versions_after_linking_290(Main *bmain, ReportList *UNUSED(reports))
      * To play safe we move all the inputs beyond 18 to their rightful new place.
      * In case users are doing unexpected things with not-really supported keyframeable channels.
      *
-     * The for loop for the input ids is at the top level otherwise we loose the animation
+     * The for loop for the input ids is at the top level otherwise we lose the animation
      * keyframe data.
      * */
     for (int input_id = 21; input_id >= 18; input_id--) {
@@ -257,18 +261,34 @@ void do_versions_after_linking_290(Main *bmain, ReportList *UNUSED(reports))
 
             const size_t node_name_length = strlen(node->name);
             const size_t node_name_escaped_max_length = (node_name_length * 2);
-            char *node_name_escaped = BLI_array_alloca(node_name_escaped,
-                                                       node_name_escaped_max_length + 1);
+            char *node_name_escaped = MEM_mallocN(node_name_escaped_max_length + 1,
+                                                  "escaped name");
             BLI_strescape(node_name_escaped, node->name, node_name_escaped_max_length);
             char *rna_path_prefix = BLI_sprintfN("nodes[\"%s\"].inputs", node_name_escaped);
 
             BKE_animdata_fix_paths_rename_all_ex(
                 bmain, id, rna_path_prefix, NULL, NULL, input_id, input_id + 1, false);
             MEM_freeN(rna_path_prefix);
+            MEM_freeN(node_name_escaped);
           }
         }
       }
       FOREACH_NODETREE_END;
+    }
+  }
+
+  /* Convert all Multires displacement to Catmull-Clark subdivision limit surface. */
+  if (!MAIN_VERSION_ATLEAST(bmain, 292, 1)) {
+    LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
+      ModifierData *md;
+      for (md = ob->modifiers.first; md; md = md->next) {
+        if (md->type == eModifierType_Multires) {
+          MultiresModifierData *mmd = (MultiresModifierData *)md;
+          if (mmd->simple) {
+            multires_do_versions_simple_to_catmull_clark(ob, mmd);
+          }
+        }
+      }
     }
   }
 
@@ -702,14 +722,12 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
     }
 
     /* Solver and Collections for Boolean. */
-    if (!DNA_struct_elem_find(fd->filesdna, "BooleanModifierData", "char", "solver")) {
-      for (Object *object = bmain->objects.first; object != NULL; object = object->id.next) {
-        LISTBASE_FOREACH (ModifierData *, md, &object->modifiers) {
-          if (md->type == eModifierType_Boolean) {
-            BooleanModifierData *bmd = (BooleanModifierData *)md;
-            bmd->solver = eBooleanModifierSolver_Fast;
-            bmd->flag = eBooleanModifierFlag_Object;
-          }
+    for (Object *object = bmain->objects.first; object != NULL; object = object->id.next) {
+      LISTBASE_FOREACH (ModifierData *, md, &object->modifiers) {
+        if (md->type == eModifierType_Boolean) {
+          BooleanModifierData *bmd = (BooleanModifierData *)md;
+          bmd->solver = eBooleanModifierSolver_Fast;
+          bmd->flag = eBooleanModifierFlag_Object;
         }
       }
     }
@@ -763,6 +781,25 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
         }
         else {
           curve->bevel_mode = CU_BEV_MODE_ROUND;
+        }
+      }
+    }
+
+    /* Ensure that new viewport display fields are initialized correctly. */
+    LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
+      LISTBASE_FOREACH (ModifierData *, md, &ob->modifiers) {
+        if (md->type == eModifierType_Fluid) {
+          FluidModifierData *fmd = (FluidModifierData *)md;
+          if (fmd->domain != NULL) {
+            if (!fmd->domain->coba_field && fmd->domain->type == FLUID_DOMAIN_TYPE_LIQUID) {
+              fmd->domain->coba_field = FLUID_DOMAIN_FIELD_PHI;
+            }
+            fmd->domain->grid_scale = 1.0;
+            fmd->domain->gridlines_upper_bound = 1.0;
+            fmd->domain->vector_scale_with_magnitude = true;
+            const float grid_lines[4] = {1.0, 0.0, 0.0, 1.0};
+            copy_v4_v4(fmd->domain->gridlines_range_color, grid_lines);
+          }
         }
       }
     }
@@ -851,6 +888,73 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
             }
           }
         }
+      }
+    }
+
+    /* Ensure that particle systems generated by fluid modifier have correct phystype. */
+    LISTBASE_FOREACH (ParticleSettings *, part, &bmain->particles) {
+      if (ELEM(
+              part->type, PART_FLUID_FLIP, PART_FLUID_SPRAY, PART_FLUID_BUBBLE, PART_FLUID_FOAM)) {
+        part->phystype = PART_PHYS_NO;
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 291, 9)) {
+    /* Remove options of legacy UV/Image editor */
+    for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+      LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+        LISTBASE_FOREACH (SpaceLink *, sl, &area->spacedata) {
+          switch (sl->spacetype) {
+            case SPACE_IMAGE: {
+              SpaceImage *sima = (SpaceImage *)sl;
+              sima->flag &= ~(SI_FLAG_UNUSED_20);
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    if (!DNA_struct_elem_find(fd->filesdna, "FluidModifierData", "float", "fractions_distance")) {
+      LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
+        LISTBASE_FOREACH (ModifierData *, md, &ob->modifiers) {
+          if (md->type == eModifierType_Fluid) {
+            FluidModifierData *fmd = (FluidModifierData *)md;
+            if (fmd->domain) {
+              fmd->domain->fractions_distance = 0.5;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 292, 1)) {
+    {
+      const int LEGACY_REFINE_RADIAL_DISTORTION_K1 = (1 << 2);
+
+      LISTBASE_FOREACH (MovieClip *, clip, &bmain->movieclips) {
+        MovieTracking *tracking = &clip->tracking;
+        MovieTrackingSettings *settings = &tracking->settings;
+        int new_refine_camera_intrinsics = 0;
+
+        if (settings->refine_camera_intrinsics & REFINE_FOCAL_LENGTH) {
+          new_refine_camera_intrinsics |= REFINE_FOCAL_LENGTH;
+        }
+
+        if (settings->refine_camera_intrinsics & REFINE_PRINCIPAL_POINT) {
+          new_refine_camera_intrinsics |= REFINE_PRINCIPAL_POINT;
+        }
+
+        /* The end goal is to enable radial distorion refinement if either K1 or K2 were set for
+         * refinement. It is enough to only check for L1 it was not possible to refine K2 without
+         * K1. */
+        if (settings->refine_camera_intrinsics & LEGACY_REFINE_RADIAL_DISTORTION_K1) {
+          new_refine_camera_intrinsics |= REFINE_RADIAL_DISTORTION;
+        }
+
+        settings->refine_camera_intrinsics = new_refine_camera_intrinsics;
       }
     }
   }

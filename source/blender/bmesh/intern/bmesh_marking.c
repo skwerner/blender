@@ -66,6 +66,7 @@ static void recount_totsels(BMesh *bm)
   }
 }
 
+/* -------------------------------------------------------------------- */
 /** \name BMesh helper functions for selection & hide flushing.
  * \{ */
 
@@ -163,7 +164,7 @@ static bool bm_edge_is_face_visible_any(const BMEdge *e)
  * Remove isolated selected elements when in a mode doesn't support them.
  * eg: in edge-mode a selected vertex must be connected to a selected edge.
  *
- * \note this could be made apart of #BM_mesh_select_mode_flush_ex
+ * \note this could be made a part of #BM_mesh_select_mode_flush_ex
  */
 void BM_mesh_select_mode_clean_ex(BMesh *bm, const short selectmode)
 {
@@ -540,7 +541,8 @@ void BM_face_select_set(BMesh *bm, BMFace *f, const bool select)
   }
 }
 
-/** \name Non flushing versions element selection.
+/* -------------------------------------------------------------------- */
+/** \name Non Flushing Versions Element Selection
  * \{ */
 
 void BM_edge_select_set_noflush(BMesh *bm, BMEdge *e, const bool select)

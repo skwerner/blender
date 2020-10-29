@@ -1433,7 +1433,7 @@ static int ui_drag_toggle_but_pushed_state(bContext *C, uiBut *but)
       return but->pushed_state_func(C, but->pushed_state_arg);
     }
     /* Assume icon identifies a unique state, for buttons that
-     * work though functions callbacks and don't have an boolean
+     * work through functions callbacks and don't have an boolean
      * value that indicates the state. */
     return but->icon + but->iconadd;
   }
@@ -7693,6 +7693,7 @@ static int ui_do_button(bContext *C, uiBlock *block, uiBut *but, const wmEvent *
   }
 
 #ifdef USE_DRAG_MULTINUM
+  data = but->active;
   if (data) {
     if (ELEM(event->type, MOUSEMOVE, INBETWEEN_MOUSEMOVE) ||
         /* if we started dragging, progress on any event */
@@ -8546,6 +8547,7 @@ void ui_but_activate_event(bContext *C, ARegion *region, uiBut *but)
   wm_event_init_from_window(win, &event);
   event.type = EVT_BUT_OPEN;
   event.val = KM_PRESS;
+  event.is_repeat = false;
   event.customdata = but;
   event.customdatafree = false;
 

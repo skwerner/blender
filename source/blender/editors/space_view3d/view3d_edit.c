@@ -842,7 +842,7 @@ static void viewrotate_apply(ViewOpsData *vod, const int event_xy[2])
      * This works by blending two horizons:
      * - Rotated-horizon: `cross_v3_v3v3(xaxis, zvec_global, m_inv[2])`
      *   When only this is used, this turntable rotation works - but it's side-ways
-     *   (as if the entire turn-table has been placed on it's side)
+     *   (as if the entire turn-table has been placed on its side)
      *   While there is no gimble lock, it's also awkward to use.
      * - Un-rotated-horizon: `m_inv[0]`
      *   When only this is used, the turntable rotation can have gimbal lock.
@@ -2763,7 +2763,7 @@ void VIEW3D_OT_dolly(wmOperatorType *ot)
 /* -------------------------------------------------------------------- */
 /** \name View All Operator
  *
- * Move & Zoom the view to fit all of it's contents.
+ * Move & Zoom the view to fit all of its contents.
  * \{ */
 
 static bool view3d_object_skip_minmax(const View3D *v3d,
@@ -3635,6 +3635,17 @@ static int view3d_zoom_border_exec(bContext *C, wmOperator *op)
     MEM_SAFE_FREE(depth_temp.depths);
   }
 
+  /* Resize border to the same ratio as the window. */
+  {
+    const float region_aspect = (float)region->winx / (float)region->winy;
+    if (((float)BLI_rcti_size_x(&rect) / (float)BLI_rcti_size_y(&rect)) < region_aspect) {
+      BLI_rcti_resize_x(&rect, (int)(BLI_rcti_size_y(&rect) * region_aspect));
+    }
+    else {
+      BLI_rcti_resize_y(&rect, (int)(BLI_rcti_size_x(&rect) / region_aspect));
+    }
+  }
+
   cent[0] = (((float)rect.xmin) + ((float)rect.xmax)) / 2;
   cent[1] = (((float)rect.ymin) + ((float)rect.ymax)) / 2;
 
@@ -3656,6 +3667,9 @@ static int view3d_zoom_border_exec(bContext *C, wmOperator *op)
     negate_v3_v3(new_ofs, p);
 
     new_dist = len_v3(dvec);
+
+    /* Account for the lens, without this a narrow lens zooms in too close. */
+    new_dist *= (v3d->lens / DEFAULT_SENSOR_WIDTH);
 
     /* ignore dist_range min */
     dist_range[0] = v3d->clip_start * 1.5f;
@@ -3896,6 +3910,7 @@ static void axis_set_view(bContext *C,
                           region,
                           smooth_viewtx,
                           &(const V3D_SmoothParams){
+                              .camera_old = camera_eval,
                               .ofs = ofs,
                               .quat = quat,
                               .dist = &dist,

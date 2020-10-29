@@ -178,7 +178,7 @@ typedef struct MovieTrackingTrack {
   /* Weight of this track.
    *
    * Weight defines how much the track affects on the final reconstruction,
-   * usually gets animated in a way so when track has just appeared it's
+   * usually gets animated in a way so when track has just appeared its
    * weight is zero and then it gets faded up.
    *
    * Used to prevent jumps of the camera when tracks are appearing or
@@ -288,8 +288,7 @@ typedef struct MovieTrackingSettings {
   int reconstruction_flag;
 
   /* which camera intrinsics to refine. uses on the REFINE_* flags */
-  short refine_camera_intrinsics;
-  char _pad2[2];
+  int refine_camera_intrinsics;
 
   /* ** tool settings ** */
 
@@ -551,10 +550,12 @@ enum {
 
 /* MovieTrackingSettings->refine_camera_intrinsics */
 enum {
+  REFINE_NO_INTRINSICS = (0),
+
   REFINE_FOCAL_LENGTH = (1 << 0),
   REFINE_PRINCIPAL_POINT = (1 << 1),
-  REFINE_RADIAL_DISTORTION_K1 = (1 << 2),
-  REFINE_RADIAL_DISTORTION_K2 = (1 << 4),
+  REFINE_RADIAL_DISTORTION = (1 << 2),
+  REFINE_TANGENTIAL_DISTORTION = (1 << 3),
 };
 
 /* MovieTrackingStrabilization->flag */

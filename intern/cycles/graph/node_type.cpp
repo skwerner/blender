@@ -102,7 +102,11 @@ size_t SocketType::max_size()
 
 void *SocketType::zero_default_value()
 {
+#ifdef __KERNEL_SSE_OR_NEON__
+  static Transform zero_transform = {float4(_mm_setzero_ps()), float4(_mm_setzero_ps()), float4(_mm_setzero_ps())};
+#else
   static Transform zero_transform = {{0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}};
+#endif
   return &zero_transform;
 }
 

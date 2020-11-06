@@ -241,7 +241,7 @@ ccl_device_inline float __uint_as_float(uint i)
 
 ccl_device_inline int4 __float4_as_int4(float4 f)
 {
-#  ifdef __KERNEL_SSE__
+#  ifdef __KERNEL_SSE_OR_NEON__
   return int4(_mm_castps_si128(f.m128));
 #  else
   return make_int4(
@@ -251,7 +251,7 @@ ccl_device_inline int4 __float4_as_int4(float4 f)
 
 ccl_device_inline float4 __int4_as_float4(int4 i)
 {
-#  ifdef __KERNEL_SSE__
+#  ifdef __KERNEL_SSE_OR_NEON__
   return float4(_mm_castsi128_ps(i.m128));
 #  else
   return make_float4(

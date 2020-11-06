@@ -17,7 +17,7 @@
 
 #if (defined(WITH_KERNEL_SSE2)) || (defined(WITH_KERNEL_NATIVE) && defined(__SSE2__))
 
-#  define __KERNEL_SSE2__
+#  define __KERNEL_SSE2_OR_NEON__
 #  include "util/util_simd.h"
 
 CCL_NAMESPACE_BEGIN

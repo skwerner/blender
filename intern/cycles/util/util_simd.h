@@ -37,6 +37,8 @@
 #      include <x86intrin.h>
 #    endif
 
+
+
 #  else
 
 /* MinGW64 has conflicting declarations for these SSE headers in <windows.h>.
@@ -53,9 +55,13 @@
 #    define SIMD_SET_FLUSH_TO_ZERO
 #  endif
 
+#ifdef __KERNEL_NEON__
+#include <util/util_sse_to_neon.h>
+#endif
+
 CCL_NAMESPACE_BEGIN
 
-#  ifdef __KERNEL_SSE2__
+#  if defined(__KERNEL_SSE2_OR_NEON__)
 
 extern const __m128 _mm_lookupmask_ps[16];
 
@@ -162,6 +168,8 @@ __forceinline size_t __popcnt(size_t in)
   return _mm_popcnt_u64(in);
 }
 #      endif
+
+
 
 __forceinline int __bsf(int v)
 {
@@ -312,6 +320,8 @@ __forceinline size_t __bscf(size_t &v)
 
 #    else /* _WIN32 */
 
+#ifndef __KERNEL_NEON__
+
 __forceinline unsigned int __popcnt(unsigned int in)
 {
   int r = 0;
@@ -399,6 +409,38 @@ __forceinline size_t __btr(size_t v, size_t i)
   return r;
 }
 
+#else       // neon
+
+__forceinline unsigned int __bsf(const uint64_t x)
+{
+    
+    for (int i=0;i<64;i++)
+    {
+        if (x & (1UL<<i)) return i;
+    }
+    return 64;
+}
+
+__forceinline unsigned int __bsr(const uint64_t x)
+{
+    
+    for (int i=0;i<64;i++)
+    {
+        if (x & (1UL<<(63-i))) return (63-i);
+    }
+    return 64;
+}
+
+
+__forceinline uint64_t __btc(const uint64_t x, int bit)
+{
+    uint64_t mask = 1UL<<bit;
+    return x & (~mask);
+}
+
+
+#endif
+
 __forceinline int bitscan(int v)
 {
 #      if defined(__KERNEL_AVX2__)
@@ -478,6 +520,9 @@ __forceinline size_t __bscf(size_t &v)
 
 #    endif /* _WIN32 */
 
+
+
+
 /* Test __KERNEL_SSE41__ for MSVC which does not define __SSE4_1__, and test
  * __SSE4_1__ to avoid OpenImageIO conflicts with our emulation macros on other
  * platforms when compiling code outside the kernel. */
@@ -532,6 +577,7 @@ __forceinline __m128i _mm_max_epi32_emu(__m128i value, __m128i input)
   return _mm_blendv_epi8(value, input, _mm_cmplt_epi32(value, input));
 }
 
+#ifndef __KERNEL_NEON__
 #      undef _mm_extract_epi32
 #      define _mm_extract_epi32 _mm_extract_epi32_emu
 __forceinline int _mm_extract_epi32_emu(__m128i input, const int index)
@@ -550,6 +596,8 @@ __forceinline int _mm_extract_epi32_emu(__m128i input, const int index)
       return 0;
   }
 }
+#endif
+
 
 #      undef _mm_insert_epi32
 #      define _mm_insert_epi32 _mm_insert_epi32_emu
@@ -621,10 +669,26 @@ ccl_device_inline int __bsr(int value)
   return bit;
 }
 
-#  endif /* __KERNEL_SSE2__ */
+__forceinline unsigned int __bscf(unsigned int &v)
+{
+    unsigned int i = bitscan(v);
+    v &= v - 1;
+    return i;
+}
+
+
+__forceinline unsigned int __bscf(int &v)
+{
+    int i = bitscan(v);
+    v &= v - 1;
+    return i;
+}
+
+
+#  endif /* __KERNEL_SSE2_OR_NEON__ */
 
 /* quiet unused define warnings */
-#  if defined(__KERNEL_SSE2__) || defined(__KERNEL_SSE3__) || defined(__KERNEL_SSSE3__) || \
+#  if defined(__KERNEL_SSE2_OR_NEON__) || defined(__KERNEL_SSE3__) || defined(__KERNEL_SSSE3__) || \
       defined(__KERNEL_SSE41__) || defined(__KERNEL_AVX__) || defined(__KERNEL_AVX2__)
 /* do nothing */
 #  endif

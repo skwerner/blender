@@ -20,7 +20,7 @@
 #include "util/util_math.h"
 #include "util/util_types.h"
 
-#ifdef __KERNEL_SSE2__
+#ifdef __KERNEL_SSE2_OR_NEON__
 #  include "util/util_simd.h"
 #endif
 
@@ -79,7 +79,7 @@ ccl_device_inline void float4_store_half(half *h, float4 f, float scale)
 
 ccl_device_inline void float4_store_half(half *h, float4 f, float scale)
 {
-#    ifndef __KERNEL_SSE2__
+#    ifndef __KERNEL_SSE2_OR_NEON__
   for (int i = 0; i < 4; i++) {
     /* optimized float to half for pixels:
      * assumes no negative, no nan, no inf, and sets denormal to 0 */

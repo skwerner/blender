@@ -90,7 +90,7 @@ template<typename T> struct texture {
   }
 #endif
 
-#ifdef __KERNEL_SSE2__
+#ifdef __KERNEL_SSE2_OR_NEON__
   ccl_always_inline ssef fetch_ssef(int index)
   {
     kernel_assert(index >= 0 && index < width);
@@ -119,7 +119,7 @@ template<typename T> struct texture {
 
 #define kernel_data (kg->__data)
 
-#ifdef __KERNEL_SSE2__
+#ifdef __KERNEL_SSE2_OR_NEON__
 typedef vector3<sseb> sse3b;
 typedef vector3<ssef> sse3f;
 typedef vector3<ssei> sse3i;

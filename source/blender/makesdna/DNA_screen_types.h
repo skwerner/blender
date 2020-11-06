@@ -37,8 +37,8 @@ struct PointerRNA;
 struct Scene;
 struct SpaceLink;
 struct SpaceType;
-struct uiLayout;
 struct uiBlock;
+struct uiLayout;
 struct wmDrawBuffer;
 struct wmTimer;
 struct wmTooltipState;
@@ -170,9 +170,8 @@ typedef struct Panel {
   /** Panel size excluding children. */
   int blocksizex, blocksizey;
   short labelofs;
-  char _pad[4];
   short flag, runtime_flag;
-  short snap;
+  char _pad[6];
   /** Panels are aligned according to increasing sort-order. */
   int sortorder;
   /** Runtime for panel manipulation. */
@@ -182,6 +181,34 @@ typedef struct Panel {
 
   Panel_Runtime runtime;
 } Panel;
+
+/**
+ * Used for passing expansion between instanced panel data and the panels themselves.
+ * There are 16 defines because the expansion data is typically stored in a short.
+ *
+ * \note Expansion for instanced panels is stored in depth first order. For example, the value of
+ * UI_SUBPANEL_DATA_EXPAND_2 correspond to mean the expansion of the second subpanel or the first
+ * subpanel's first subpanel.
+ */
+typedef enum uiPanelDataExpansion {
+  UI_PANEL_DATA_EXPAND_ROOT = (1 << 0),
+  UI_SUBPANEL_DATA_EXPAND_1 = (1 << 1),
+  UI_SUBPANEL_DATA_EXPAND_2 = (1 << 2),
+  UI_SUBPANEL_DATA_EXPAND_3 = (1 << 3),
+  UI_SUBPANEL_DATA_EXPAND_4 = (1 << 4),
+  UI_SUBPANEL_DATA_EXPAND_5 = (1 << 5),
+  UI_SUBPANEL_DATA_EXPAND_6 = (1 << 6),
+  UI_SUBPANEL_DATA_EXPAND_7 = (1 << 7),
+  UI_SUBPANEL_DATA_EXPAND_8 = (1 << 8),
+  UI_SUBPANEL_DATA_EXPAND_9 = (1 << 9),
+  UI_SUBPANEL_DATA_EXPAND_10 = (1 << 10),
+  UI_SUBPANEL_DATA_EXPAND_11 = (1 << 11),
+  UI_SUBPANEL_DATA_EXPAND_12 = (1 << 12),
+  UI_SUBPANEL_DATA_EXPAND_13 = (1 << 13),
+  UI_SUBPANEL_DATA_EXPAND_14 = (1 << 14),
+  UI_SUBPANEL_DATA_EXPAND_15 = (1 << 15),
+  UI_SUBPANEL_DATA_EXPAND_16 = (1 << 16),
+} uiPanelDataExpansion;
 
 /**
  * Notes on Panel Categories:
@@ -294,10 +321,6 @@ typedef struct uiPreview {
   char _pad1[6];
 } uiPreview;
 
-/* These two lines with # tell makesdna this struct can be excluded.
- * Should be: #ifndef WITH_GLOBAL_AREA_WRITING */
-#
-#
 typedef struct ScrGlobalAreaData {
   /* Global areas have a non-dynamic size. That means, changing the window
    * size doesn't affect their size at all. However, they can still be
@@ -547,15 +570,6 @@ enum {
   /** The panel has been drag-drop reordered and the instanced panel list needs to be rebuilt. */
   PNL_INSTANCED_LIST_ORDER_CHANGED = (1 << 7),
 };
-
-/** #Panel.snap - for snapping to screen edges */
-#define PNL_SNAP_NONE 0
-/* #define PNL_SNAP_TOP     1 */
-/* #define PNL_SNAP_RIGHT       2 */
-#define PNL_SNAP_BOTTOM 4
-/* #define PNL_SNAP_LEFT        8 */
-
-/* #define PNL_SNAP_DIST        9.0 */
 
 /* paneltype flag */
 enum {

@@ -123,7 +123,6 @@
 #include "BKE_pointcloud.h"
 #include "BKE_rigidbody.h"
 #include "BKE_scene.h"
-#include "BKE_sequencer.h"
 #include "BKE_shader_fx.h"
 #include "BKE_softbody.h"
 #include "BKE_speaker.h"
@@ -135,6 +134,8 @@
 #include "DEG_depsgraph_query.h"
 
 #include "DRW_engine.h"
+
+#include "SEQ_sequencer.h"
 
 #ifdef WITH_PYTHON
 #  include "BPY_extern.h"
@@ -537,6 +538,8 @@ IDTypeInfo IDType_ID_OB = {
     .blend_read_data = NULL,
     .blend_read_lib = NULL,
     .blend_read_expand = NULL,
+
+    .blend_read_undo_preserve = NULL,
 };
 
 void BKE_object_workob_clear(Object *workob)

@@ -45,6 +45,8 @@ struct ParticleSystemModifierData;
 
 struct BVHTreeRay;
 struct BVHTreeRayHit;
+struct BlendDataReader;
+struct BlendLibReader;
 struct CustomData_MeshMasks;
 struct Depsgraph;
 struct EdgeHash;
@@ -261,7 +263,7 @@ extern unsigned int PSYS_FRAND_SEED_OFFSET[PSYS_FRAND_COUNT];
 extern unsigned int PSYS_FRAND_SEED_MULTIPLIER[PSYS_FRAND_COUNT];
 extern float PSYS_FRAND_BASE[PSYS_FRAND_COUNT];
 
-void psys_init_rng(void);
+void BKE_particle_init_rng(void);
 
 BLI_INLINE float psys_frand(ParticleSystem *psys, unsigned int seed)
 {
@@ -624,6 +626,13 @@ void BKE_particle_batch_cache_free(struct ParticleSystem *psys);
 
 extern void (*BKE_particle_batch_cache_dirty_tag_cb)(struct ParticleSystem *psys, int mode);
 extern void (*BKE_particle_batch_cache_free_cb)(struct ParticleSystem *psys);
+
+/* .blend file I/O */
+void BKE_particle_partdeflect_blend_read_data(struct BlendDataReader *reader,
+                                              struct PartDeflect *pd);
+void BKE_particle_partdeflect_blend_read_lib(struct BlendLibReader *reader,
+                                             struct ID *id,
+                                             struct PartDeflect *pd);
 
 #ifdef __cplusplus
 }

@@ -964,7 +964,11 @@ static uiBut *ui_item_with_label(uiLayout *layout,
   UI_block_layout_set_current(block, layout);
 
   /* Only add new row if more than 1 item will be added. */
-  if (name[0] || use_prop_decorate) {
+  if (name[0]
+#ifdef UI_PROP_DECORATE
+      || use_prop_decorate
+#endif
+  ) {
     /* Also avoid setting 'align' if possible. Set the space to zero instead as aligning a large
      * number of labels can end up aligning thousands of buttons when displaying key-map search (a
      * heavy operation), see: T78636. */
@@ -972,8 +976,8 @@ static uiBut *ui_item_with_label(uiLayout *layout,
     sub->space = 0;
   }
 
-#ifdef UI_PROP_DECORATE
   if (name[0]) {
+#ifdef UI_PROP_DECORATE
     if (use_prop_sep) {
       layout_prop_decorate = uiItemL_respect_property_split(layout, name, 0);
     }
@@ -998,7 +1002,7 @@ static uiBut *ui_item_with_label(uiLayout *layout,
   const PropertySubType subtype = RNA_property_subtype(prop);
 
   uiBut *but;
-  if (subtype == PROP_FILEPATH || subtype == PROP_DIRPATH) {
+  if (ELEM(subtype, PROP_FILEPATH, PROP_DIRPATH)) {
     UI_block_layout_set_current(block, uiLayoutRow(sub, true));
     but = uiDefAutoButR(block, ptr, prop, index, "", icon, x, y, prop_but_width - UI_UNIT_X, h);
 
@@ -1882,7 +1886,7 @@ static void ui_item_rna_size(uiLayout *layout,
     else if (type == PROP_ENUM && !icon_only) {
       w += UI_UNIT_X / 4;
     }
-    else if (type == PROP_FLOAT || type == PROP_INT) {
+    else if (ELEM(type, PROP_FLOAT, PROP_INT)) {
       w += UI_UNIT_X * 3;
     }
   }
@@ -2291,7 +2295,7 @@ void uiItemFullR(uiLayout *layout,
     ui_item_enum_expand(layout, block, ptr, prop, name, h, icon_only);
   }
   /* property with separate label */
-  else if (type == PROP_ENUM || type == PROP_STRING || type == PROP_POINTER) {
+  else if (ELEM(type, PROP_ENUM, PROP_STRING, PROP_POINTER)) {
     but = ui_item_with_label(layout, block, name, icon, ptr, prop, index, 0, 0, w, h, flag);
     but = ui_but_add_search(but, ptr, prop, NULL, NULL);
 
@@ -5476,7 +5480,7 @@ uiLayout *UI_block_layout(uiBlock *block,
   layout->context = NULL;
   layout->emboss = UI_EMBOSS_UNDEFINED;
 
-  if (type == UI_LAYOUT_MENU || type == UI_LAYOUT_PIEMENU) {
+  if (ELEM(type, UI_LAYOUT_MENU, UI_LAYOUT_PIEMENU)) {
     layout->space = 0;
   }
 

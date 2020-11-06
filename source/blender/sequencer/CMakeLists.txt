@@ -40,14 +40,18 @@ set(INC_SYS
 )
 
 set(SRC
-  BKE_sequencer.h
+  SEQ_sequencer.h
 
-  intern/sequencer.c
-  intern/sequencer.h
-  intern/image_cache.c
   intern/effects.c
+  intern/image_cache.c
   intern/modifier.c
   intern/prefetch.c
+  intern/proxy.c
+  intern/proxy.h
+  intern/render.c
+  intern/render.h
+  intern/sequencer.c
+  intern/sequencer.h
 )
 
 set(LIB

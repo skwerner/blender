@@ -162,7 +162,8 @@ typedef enum {
 } GHOST_TDrawingContextType;
 
 typedef enum {
-  GHOST_kButtonMaskLeft = 0,
+  GHOST_kButtonMaskNone,
+  GHOST_kButtonMaskLeft,
   GHOST_kButtonMaskMiddle,
   GHOST_kButtonMaskRight,
   GHOST_kButtonMaskButton4,
@@ -584,8 +585,8 @@ typedef int GHOST_TEmbedderWindowID;
 
 /**
  * A timer task callback routine.
- * \param task The timer task object.
- * \param time The current time.
+ * \param task: The timer task object.
+ * \param time: The current time.
  */
 #ifdef __cplusplus
 class GHOST_ITimerTask;

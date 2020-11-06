@@ -68,11 +68,12 @@
 #include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_nla.h"
-#include "BKE_sequencer.h"
 
 #include "CLG_log.h"
 
 #include "MEM_guardedalloc.h"
+
+#include "SEQ_sequencer.h"
 
 #ifdef WIN32
 #  include "BLI_math_base.h" /* M_PI */
@@ -131,6 +132,8 @@ IDTypeInfo IDType_ID_IP = {
     .blend_read_data = NULL,
     .blend_read_lib = NULL,
     .blend_read_expand = NULL,
+
+    .blend_read_undo_preserve = NULL,
 };
 
 /* *************************************************** */

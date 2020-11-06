@@ -70,7 +70,6 @@
 #include "BKE_pointcache.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
-#include "BKE_sequencer.h"
 #include "BKE_sound.h"
 #include "BKE_writeavi.h" /* <------ should be replaced once with generic movie module */
 
@@ -88,6 +87,8 @@
 #include "RE_engine.h"
 #include "RE_pipeline.h"
 #include "RE_render_ext.h"
+
+#include "SEQ_sequencer.h"
 
 #include "../../../windowmanager/WM_api.h"    /* XXX */
 #include "../../../windowmanager/wm_window.h" /* XXX */
@@ -188,6 +189,10 @@ static int default_break(void *UNUSED(arg))
 
 static void stats_background(void *UNUSED(arg), RenderStats *rs)
 {
+  if (rs->infostr == NULL) {
+    return;
+  }
+
   uintptr_t mem_in_use, peak_memory;
   float megs_used_memory, megs_peak_memory;
   char info_time_str[32];
@@ -208,17 +213,7 @@ static void stats_background(void *UNUSED(arg), RenderStats *rs)
       info_time_str, sizeof(info_time_str), PIL_check_seconds_timer() - rs->starttime);
   fprintf(stdout, TIP_("| Time:%s | "), info_time_str);
 
-  if (rs->infostr) {
-    fprintf(stdout, "%s", rs->infostr);
-  }
-  else {
-    fprintf(stdout,
-            TIP_("Sce: %s Ve:%d Fa:%d La:%d"),
-            rs->scene_name,
-            rs->totvert,
-            rs->totface,
-            rs->totlamp);
-  }
+  fprintf(stdout, "%s", rs->infostr);
 
   /* Flush stdout to be sure python callbacks are printing stuff after blender. */
   fflush(stdout);
@@ -1503,27 +1498,27 @@ static void do_render_seq(Render *re)
   tot_views = BKE_scene_multiview_num_views_get(&re->r);
   ibuf_arr = MEM_mallocN(sizeof(ImBuf *) * tot_views, "Sequencer Views ImBufs");
 
-  BKE_sequencer_new_render_data(re->main,
-                                re->pipeline_depsgraph,
-                                re->scene,
-                                re_x,
-                                re_y,
-                                SEQ_RENDER_SIZE_SCENE,
-                                true,
-                                &context);
+  SEQ_render_new_render_data(re->main,
+                             re->pipeline_depsgraph,
+                             re->scene,
+                             re_x,
+                             re_y,
+                             SEQ_RENDER_SIZE_SCENE,
+                             true,
+                             &context);
 
   /* the renderresult gets destroyed during the rendering, so we first collect all ibufs
    * and then we populate the final renderesult */
 
   for (view_id = 0; view_id < tot_views; view_id++) {
     context.view_id = view_id;
-    out = BKE_sequencer_give_ibuf(&context, cfra, 0);
+    out = SEQ_render_give_ibuf(&context, cfra, 0);
 
     if (out) {
       ibuf_arr[view_id] = IMB_dupImBuf(out);
       IMB_metadata_copy(ibuf_arr[view_id], out);
       IMB_freeImBuf(out);
-      BKE_sequencer_imbuf_from_sequencer_space(re->pipeline_scene_eval, ibuf_arr[view_id]);
+      SEQ_render_imbuf_from_sequencer_space(re->pipeline_scene_eval, ibuf_arr[view_id]);
     }
     else {
       ibuf_arr[view_id] = NULL;

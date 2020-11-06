@@ -1550,7 +1550,7 @@ static int filter_plane_side(const double3 &p,
   }
   double supremum = double3::dot(abs_p + abs_plane_p, abs_plane_no);
   double err_bound = supremum * index_plane_side * DBL_EPSILON;
-  if (d > err_bound) {
+  if (fabs(d) > err_bound) {
     return d > 0 ? 1 : -1;
   }
   return 0;
@@ -2771,7 +2771,7 @@ static CDT_data calc_cluster_subdivided(const CoplanarClusterInfo &clinfo,
         std::pair<int, int> key = canon_int_pair(t, t_other);
         if (itt_map.contains(key)) {
           ITT_value itt = itt_map.lookup(key);
-          if (itt.kind != INONE && itt.kind != ICOPLANAR) {
+          if (!ELEM(itt.kind, INONE, ICOPLANAR)) {
             itts.append(itt);
             if (dbg_level > 0) {
               std::cout << "  itt = " << itt << "\n";

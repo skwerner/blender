@@ -46,11 +46,10 @@
 
 #include "BKE_image.h"
 
-#include "RE_render_ext.h"
-#include "RE_shader_ext.h"
+#include "RE_texture.h"
 
 #include "render_types.h"
-#include "texture.h"
+#include "texture_common.h"
 
 static void boxsample(ImBuf *ibuf,
                       float minx,

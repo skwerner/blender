@@ -30,12 +30,13 @@
 struct Depsgraph;
 struct ImagePool;
 struct MTex;
+struct Tex;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* render_texture.c */
+/* texture_procedural.c */
 bool RE_texture_evaluate(const struct MTex *mtex,
                          const float vec[3],
                          const int thread,
@@ -53,10 +54,10 @@ float texture_value_blend(float tex, float out, float fact, float facg, int blen
 void RE_texture_rng_init(void);
 void RE_texture_rng_exit(void);
 
-/* imagetexture.c */
+/* texture_image.c */
 void ibuf_sample(struct ImBuf *ibuf, float fx, float fy, float dx, float dy, float result[4]);
 
-/* pointdensity.c */
+/* texture_pointdensity.c */
 struct PointDensity;
 
 void RE_point_density_cache(struct Depsgraph *depsgraph, struct PointDensity *pd);
@@ -74,6 +75,46 @@ void RE_point_density_sample(struct Depsgraph *depsgraph,
 void RE_point_density_free(struct PointDensity *pd);
 
 void RE_point_density_fix_linking(void);
+
+/* texture_procedural.c */
+
+/* Texture evaluation result.
+ * Note; tr tg tb ta has to remain in this order for array access. */
+typedef struct TexResult {
+  float tin, tr, tg, tb, ta;
+  int talpha;
+  float *nor;
+} TexResult;
+
+/* This one uses nodes. */
+int multitex_ext(struct Tex *tex,
+                 float texvec[3],
+                 float dxt[3],
+                 float dyt[3],
+                 int osatex,
+                 struct TexResult *texres,
+                 const short thread,
+                 struct ImagePool *pool,
+                 bool scene_color_manage,
+                 const bool skip_load_image);
+/* Nodes disabled. */
+int multitex_ext_safe(struct Tex *tex,
+                      const float texvec[3],
+                      struct TexResult *texres,
+                      struct ImagePool *pool,
+                      bool scene_color_manage,
+                      const bool skip_load_image);
+/* Only for internal node usage. */
+int multitex_nodes(struct Tex *tex,
+                   const float texvec[3],
+                   float dxt[3],
+                   float dyt[3],
+                   int osatex,
+                   struct TexResult *texres,
+                   const short thread,
+                   short which_output,
+                   struct MTex *mtex,
+                   struct ImagePool *pool);
 
 #ifdef __cplusplus
 }

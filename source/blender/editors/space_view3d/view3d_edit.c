@@ -998,7 +998,7 @@ static int viewrotate_invoke(bContext *C, wmOperator *op, const wmEvent *event)
     int event_xy[2];
 
     if (event->type == MOUSEPAN) {
-      if (U.uiflag2 & USER_TRACKPAD_NATURAL) {
+      if (event->is_direction_inverted) {
         event_xy[0] = 2 * event->x - event->prevx;
         event_xy[1] = 2 * event->y - event->prevy;
       }
@@ -2978,6 +2978,11 @@ static int view3d_all_exec(bContext *C, wmOperator *op)
     return OPERATOR_FINISHED;
   }
 
+  if (RV3D_CLIPPING_ENABLED(v3d, rv3d)) {
+    /* This is an approximation, see function documentation for details. */
+    ED_view3d_clipping_clamp_minmax(rv3d, min, max);
+  }
+
   if (use_all_regions) {
     view3d_from_minmax_multi(C, v3d, min, max, true, smooth_viewtx);
   }
@@ -3123,6 +3128,11 @@ static int viewselected_exec(bContext *C, wmOperator *op)
 
   if (ok == 0) {
     return OPERATOR_FINISHED;
+  }
+
+  if (RV3D_CLIPPING_ENABLED(v3d, rv3d)) {
+    /* This is an approximation, see function documentation for details. */
+    ED_view3d_clipping_clamp_minmax(rv3d, min, max);
   }
 
   if (use_all_regions) {

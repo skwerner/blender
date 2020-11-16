@@ -576,6 +576,12 @@ class USERPREF_PT_system_sound(SystemPanel, CenterAlignMixIn, Panel):
 class USERPREF_PT_system_cycles_devices(SystemPanel, CenterAlignMixIn, Panel):
     bl_label = "Cycles Render Devices"
 
+    @classmethod
+    def poll(cls, context):
+        # No GPU rendering on macOS currently.
+        import sys
+        return bpy.app.build_options.cycles and sys.platform != "darwin"
+
     def draw_centered(self, context, layout):
         prefs = context.preferences
 
@@ -2182,6 +2188,7 @@ class USERPREF_PT_experimental_new_features(ExperimentalPanel, Panel):
                 ({"property": "use_sculpt_vertex_colors"}, "T71947"),
                 ({"property": "use_switch_object_operator"}, "T80402"),
                 ({"property": "use_sculpt_tools_tilt"}, "T00000"),
+                ({"property": "use_object_add_tool"}, "T57210"),
             ),
         )
 

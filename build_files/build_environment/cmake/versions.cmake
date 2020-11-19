@@ -323,6 +323,8 @@ set(ISPC_VERSION v1.14.1)
 set(ISPC_URI https://github.com/ispc/ispc/archive/${ISPC_VERSION}.tar.gz)
 set(ISPC_HASH 968fbc8dfd16a60ba4e32d2e0e03ea7a)
 
+set(SSE2NEON_GIT https://github.com/DLTcollab/sse2neon.git)
+
 set(GMP_VERSION 6.2.0)
 set(GMP_URI https://gmplib.org/download/gmp/gmp-${GMP_VERSION}.tar.xz)
 set(GMP_HASH a325e3f09e6d91e62101e59f9bda3ec1)

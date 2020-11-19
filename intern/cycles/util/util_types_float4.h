@@ -28,7 +28,7 @@ struct int4;
 
 struct ccl_try_align(16) float4
 {
-#  ifdef __KERNEL_SSE__
+#  ifdef __KERNEL_SSE_OR_NEON__
   union {
     __m128 m128;
     struct {

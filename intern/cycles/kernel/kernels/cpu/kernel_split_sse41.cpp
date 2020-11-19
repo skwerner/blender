@@ -31,6 +31,7 @@
 #    define __KERNEL_SSE3__
 #    define __KERNEL_SSSE3__
 #    define __KERNEL_SSE41__
+#    include "util/util_kernel_isa.h"
 #  endif
 #endif /* WITH_CYCLES_OPTIMIZED_KERNEL_SSE41 */
 

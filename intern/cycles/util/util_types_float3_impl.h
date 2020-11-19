@@ -28,7 +28,7 @@
 CCL_NAMESPACE_BEGIN
 
 #ifndef __KERNEL_GPU__
-#  ifdef __KERNEL_SSE__
+#  ifdef __KERNEL_SSE_OR_NEON__
 __forceinline float3::float3()
 {
 }
@@ -74,7 +74,7 @@ __forceinline float &float3::operator[](int i)
 
 ccl_device_inline float3 make_float3(float f)
 {
-#  ifdef __KERNEL_SSE__
+#  ifdef __KERNEL_SSE_OR_NEON__
   float3 a(_mm_set1_ps(f));
 #  else
   float3 a = {f, f, f, f};
@@ -84,7 +84,7 @@ ccl_device_inline float3 make_float3(float f)
 
 ccl_device_inline float3 make_float3(float x, float y, float z)
 {
-#  ifdef __KERNEL_SSE__
+#  ifdef __KERNEL_SSE_OR_NEON__
   float3 a(_mm_set_ps(0.0f, z, y, x));
 #  else
   float3 a = {x, y, z, 0.0f};

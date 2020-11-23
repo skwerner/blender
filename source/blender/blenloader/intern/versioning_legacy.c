@@ -24,11 +24,11 @@
 #include <limits.h>
 
 #ifndef WIN32
-#  include <unistd.h>  // for read close
+#  include <unistd.h> /* for read close */
 #else
 #  include "BLI_winstuff.h"
 #  include "winsock2.h"
-#  include <io.h>   // for open close read
+#  include <io.h>   /* for open close read */
 #  include <zlib.h> /* odd include order-issue */
 #endif
 
@@ -72,12 +72,14 @@
 #include "BKE_deform.h"
 #include "BKE_fcurve.h"
 #include "BKE_lattice.h"
-#include "BKE_main.h"  // for Main
-#include "BKE_mesh.h"  // for ME_ defines (patching)
+#include "BKE_main.h" /* for Main */
+#include "BKE_mesh.h" /* for ME_ defines (patching) */
 #include "BKE_modifier.h"
+#include "BKE_object.h"
 #include "BKE_particle.h"
 #include "BKE_pointcache.h"
-#include "BKE_sequencer.h"
+
+#include "SEQ_sequencer.h"
 
 #include "NOD_socket.h"
 
@@ -460,20 +462,6 @@ static void do_version_constraints_245(ListBase *lb)
   }
 }
 
-PartEff *blo_do_version_give_parteff_245(Object *ob)
-{
-  PartEff *paf;
-
-  paf = ob->effect.first;
-  while (paf) {
-    if (paf->type == EFF_PARTICLE) {
-      return paf;
-    }
-    paf = paf->next;
-  }
-  return NULL;
-}
-
 /* NOTE: this version patch is intended for versions < 2.52.2,
  * but was initially introduced in 2.27 already. */
 void blo_do_version_old_trackto_to_constraints(Object *ob)
@@ -717,7 +705,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     Object *ob = bmain->objects.first;
     PartEff *paf;
     while (ob) {
-      paf = blo_do_version_give_parteff_245(ob);
+      paf = BKE_object_do_version_give_parteff_245(ob);
       if (paf) {
         if (paf->staticstep == 0) {
           paf->staticstep = 5;
@@ -886,7 +874,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
 
     for (sce = bmain->scenes.first; sce; sce = sce->id.next) {
-      sce->r.stereomode = 1;  // no stereo
+      sce->r.stereomode = 1; /* no stereo */
     }
 
     /* some oldfile patch, moved from set_func_space */
@@ -1252,7 +1240,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
       ed = sce->ed;
       if (ed) {
         SEQ_ALL_BEGIN (sce->ed, seq) {
-          if (seq->type == SEQ_TYPE_IMAGE || seq->type == SEQ_TYPE_MOVIE) {
+          if (ELEM(seq->type, SEQ_TYPE_IMAGE, SEQ_TYPE_MOVIE)) {
             seq->alpha_mode = SEQ_ALPHA_STRAIGHT;
           }
         }
@@ -1475,7 +1463,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
         }
       }
 
-      paf = blo_do_version_give_parteff_245(ob);
+      paf = BKE_object_do_version_give_parteff_245(ob);
       if (paf) {
         if (paf->disp == 0) {
           paf->disp = 100;
@@ -1959,7 +1947,6 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     Light *la;
     Material *ma;
     ParticleSettings *part;
-    Mesh *me;
     bNodeTree *ntree;
     Tex *tex;
     ModifierData *md;
@@ -2074,23 +2061,6 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
       }
     }
 
-    /* Copy over old per-level multires vertex data
-     * into a single vertex array in struct Multires */
-    for (me = bmain->meshes.first; me; me = me->id.next) {
-      if (me->mr && !me->mr->verts) {
-        MultiresLevel *lvl = me->mr->levels.last;
-        if (lvl) {
-          me->mr->verts = lvl->verts;
-          lvl->verts = NULL;
-          /* Don't need the other vert arrays */
-          for (lvl = lvl->prev; lvl; lvl = lvl->prev) {
-            MEM_freeN(lvl->verts);
-            lvl->verts = NULL;
-          }
-        }
-      }
-    }
-
     if (bmain->versionfile != 245 || bmain->subversionfile < 1) {
       for (la = bmain->lights.first; la; la = la->id.next) {
         la->falloff_type = LA_FALLOFF_INVLINEAR;
@@ -2150,7 +2120,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 2)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 2)) {
     Image *ima;
 
     /* initialize 1:1 Aspect */
@@ -2159,7 +2129,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 4)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 4)) {
     bArmature *arm;
     ModifierData *md;
     Object *ob;
@@ -2177,8 +2147,8 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 5)) {
-    /* foreground color needs to be something other then black */
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 5)) {
+    /* foreground color needs to be something other than black */
     Scene *sce;
     for (sce = bmain->scenes.first; sce; sce = sce->id.next) {
       sce->r.fg_stamp[0] = sce->r.fg_stamp[1] = sce->r.fg_stamp[2] = 0.8f;
@@ -2187,7 +2157,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 6)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 6)) {
     Scene *sce;
     /* fix frs_sec_base */
     for (sce = bmain->scenes.first; sce; sce = sce->id.next) {
@@ -2197,7 +2167,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 7)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 7)) {
     Object *ob;
     bPoseChannel *pchan;
 
@@ -2227,7 +2197,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 8)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 8)) {
     Scene *sce;
     Object *ob;
     PartEff *paf = NULL;
@@ -2250,7 +2220,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
       }
 
       /* convert old particles to new system */
-      if ((paf = blo_do_version_give_parteff_245(ob))) {
+      if ((paf = BKE_object_do_version_give_parteff_245(ob))) {
         ParticleSystem *psys;
         ModifierData *md;
         ParticleSystemModifierData *psmd;
@@ -2394,7 +2364,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 10)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 10)) {
     Object *ob;
 
     /* dupliface scale */
@@ -2403,7 +2373,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 11)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 11)) {
     Object *ob;
     bActionStrip *strip;
 
@@ -2437,7 +2407,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 14)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 14)) {
     Scene *sce;
     Sequence *seq;
 
@@ -2452,7 +2422,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
   }
 
   /* fix broken group lengths in id properties */
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 15)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 15)) {
     idproperties_fix_group_lengths(bmain->scenes);
     idproperties_fix_group_lengths(bmain->libraries);
     idproperties_fix_group_lengths(bmain->objects);
@@ -2481,7 +2451,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
   }
 
   /* convert fluids to modifier */
-  if (bmain->versionfile < 246 || (bmain->versionfile == 246 && bmain->subversionfile < 1)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 246, 1)) {
     Object *ob;
 
     for (ob = bmain->objects.first; ob; ob = ob->id.next) {
@@ -2502,7 +2472,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if (bmain->versionfile < 246 || (bmain->versionfile == 246 && bmain->subversionfile < 1)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 246, 1)) {
     Object *ob;
     for (ob = bmain->objects.first; ob; ob = ob->id.next) {
       if (ob->pd && (ob->pd->forcefield == PFIELD_WIND)) {
@@ -2512,7 +2482,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
   }
 
   /* set the curve radius interpolation to 2.47 default - easy */
-  if (bmain->versionfile < 247 || (bmain->versionfile == 247 && bmain->subversionfile < 6)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 247, 6)) {
     Curve *cu;
     Nurb *nu;
 
@@ -2532,7 +2502,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if (bmain->versionfile < 248 || (bmain->versionfile == 248 && bmain->subversionfile < 2)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 248, 2)) {
     Scene *sce;
 
     /* Note, these will need to be added for painting */
@@ -2542,7 +2512,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if (bmain->versionfile < 248 || (bmain->versionfile == 248 && bmain->subversionfile < 3)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 248, 3)) {
     bScreen *screen;
 
     /* adjust default settings for Animation Editors */

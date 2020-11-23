@@ -21,13 +21,11 @@
  * \ingroup edanimation
  */
 
-/* User-Interface Stuff for F-Modifiers:
- * This file defines the (C-Coded) templates + editing callbacks needed
- * by the interface stuff or F-Modifiers, as used by F-Curves in the Graph Editor,
- * and NLA-Strips in the NLA Editor.
+/**
+ * User Interface for F-Modifiers
  *
- * Copy/Paste Buffer for F-Modifiers:
- * For now, this is also defined in this file so that it can be shared between the
+ * This file defines templates and some editing callbacks needed by the interface for
+ * F-Modifiers, as used by F-Curves in the Graph Editor and NLA-Strips in the NLA Editor.
  */
 
 #include <string.h>
@@ -61,7 +59,7 @@
 /* ********************************************** */
 /* UI STUFF */
 
-// XXX! --------------------------------
+/* XXX! -------------------------------- */
 /* Temporary definition for limits of float number buttons
  * (FLT_MAX tends to infinity with old system). */
 #define UI_FLT_MAX 10000.0f
@@ -499,7 +497,7 @@ static void draw_modifier__fn_generator(uiLayout *layout,
   uiItemR(col, &ptr, "function_type", 0, "", ICON_NONE);
   uiItemR(col, &ptr, "use_additive", UI_ITEM_R_TOGGLE, NULL, ICON_NONE);
 
-  col = uiLayoutColumn(layout, false);  // no grouping for now
+  col = uiLayoutColumn(layout, false); /* no grouping for now */
   uiItemR(col, &ptr, "amplitude", 0, NULL, ICON_NONE);
   uiItemR(col, &ptr, "phase_multiplier", 0, NULL, ICON_NONE);
   uiItemR(col, &ptr, "phase_offset", 0, NULL, ICON_NONE);
@@ -580,7 +578,7 @@ static void fmod_envelope_addpoint_cb(bContext *C, void *fcm_dv, void *UNUSED(ar
   /* init template data */
   fed.min = -1.0f;
   fed.max = 1.0f;
-  fed.time = (float)scene->r.cfra;  // XXX make this int for ease of use?
+  fed.time = (float)scene->r.cfra; /* XXX make this int for ease of use? */
   fed.f1 = fed.f2 = 0;
 
   /* check that no data exists for the current frame... */
@@ -625,7 +623,7 @@ static void fmod_envelope_addpoint_cb(bContext *C, void *fcm_dv, void *UNUSED(ar
 }
 
 /* callback to remove envelope data point */
-// TODO: should we have a separate file for things like this?
+/* TODO: should we have a separate file for things like this? */
 static void fmod_envelope_deletepoint_cb(bContext *UNUSED(C), void *fcm_dv, void *ind_v)
 {
   FMod_Envelope *env = (FMod_Envelope *)fcm_dv;
@@ -914,7 +912,7 @@ void ANIM_uiTemplate_fmodifier_draw(uiLayout *layout,
     box = uiLayoutBox(layout);
 
     row = uiLayoutRow(box, false);
-    block = uiLayoutGetBlock(row);  // err...
+    block = uiLayoutGetBlock(row); /* err... */
 
     /* left-align -------------------------------------------- */
     sub = uiLayoutRow(row, true);
@@ -1008,7 +1006,7 @@ void ANIM_uiTemplate_fmodifier_draw(uiLayout *layout,
     }
 
     /* one last panel below this: FModifier range */
-    // TODO: experiment with placement of this
+    /* TODO: experiment with placement of this */
     {
       box = uiLayoutBox(layout);
 
@@ -1047,8 +1045,12 @@ void ANIM_uiTemplate_fmodifier_draw(uiLayout *layout,
   }
 }
 
-/* ********************************************** */
-/* COPY/PASTE BUFFER STUFF */
+/* -------------------------------------------------------------------- */
+/** \name Copy / Paste Buffer Code
+ *
+ * For now, this is also defined in this file so that it can be shared between the graph editor
+ * and the NLA editor.
+ * \{ */
 
 /* Copy/Paste Buffer itself (list of FModifier 's) */
 static ListBase fmodifier_copypaste_buf = {NULL, NULL};
@@ -1139,4 +1141,4 @@ bool ANIM_fmodifiers_paste_from_buf(ListBase *modifiers, bool replace, FCurve *c
   return ok;
 }
 
-/* ********************************************** */
+/** \} */

@@ -18,6 +18,9 @@
  * \ingroup bke
  */
 
+/* Allow using deprecated functionality for .blend file I/O. */
+#define DNA_DEPRECATED_ALLOW
+
 #include <string.h>
 
 #include "BLI_listbase.h"
@@ -55,6 +58,8 @@
 #include "DRW_engine.h"
 
 #include "MEM_guardedalloc.h"
+
+#include "BLO_read_write.h"
 
 /* Set of flags which are dependent on a collection settings. */
 static const short g_base_collection_flags = (BASE_VISIBLE_DEPSGRAPH | BASE_VISIBLE_VIEWLAYER |
@@ -362,7 +367,13 @@ static void view_layer_bases_hash_create(ViewLayer *view_layer)
 
       LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
         if (base->object) {
-          BLI_ghash_insert(hash, base->object, base);
+          /* Some processes, like ID remapping, may lead to having several bases with the same
+           * object. So just take the first one here, and ignore all others
+           * (#BKE_layer_collection_sync will clean this up anyway). */
+          void **val_pp;
+          if (!BLI_ghash_ensure_p(hash, base->object, &val_pp)) {
+            *val_pp = base;
+          }
         }
       }
 
@@ -1445,12 +1456,9 @@ static LayerCollection *find_layer_collection_by_scene_collection(LayerCollectio
 LayerCollection *BKE_layer_collection_first_from_scene_collection(ViewLayer *view_layer,
                                                                   const Collection *collection)
 {
-  for (LayerCollection *layer_collection = view_layer->layer_collections.first;
-       layer_collection != NULL;
-       layer_collection = layer_collection->next) {
+  LISTBASE_FOREACH (LayerCollection *, layer_collection, &view_layer->layer_collections) {
     LayerCollection *found = find_layer_collection_by_scene_collection(layer_collection,
                                                                        collection);
-
     if (found != NULL) {
       return found;
     }
@@ -1631,18 +1639,19 @@ void BKE_view_layer_selected_editable_objects_iterator_begin(BLI_Iterator *iter,
   objects_iterator_begin(iter, data_in, BASE_VISIBLE_DEPSGRAPH | BASE_SELECTED);
   if (iter->valid) {
     if (BKE_object_is_libdata((Object *)iter->current) == false) {
-      // First object is valid (selectable and not libdata) -> all good.
+      /* First object is valid (selectable and not libdata) -> all good. */
       return;
     }
 
-    // Object is selectable but not editable -> search for another one.
+    /* Object is selectable but not editable -> search for another one. */
     BKE_view_layer_selected_editable_objects_iterator_next(iter);
   }
 }
 
 void BKE_view_layer_selected_editable_objects_iterator_next(BLI_Iterator *iter)
 {
-  // Search while there are objects and the one we have is not editable (editable = not libdata).
+  /* Search while there are objects and the one we have is not editable (editable = not libdata).
+   */
   do {
     objects_iterator_next(iter, BASE_VISIBLE_DEPSGRAPH | BASE_SELECTED);
   } while (iter->valid && BKE_object_is_libdata((Object *)iter->current) != false);
@@ -1828,4 +1837,118 @@ void BKE_layer_eval_view_layer_indexed(struct Depsgraph *depsgraph,
   ViewLayer *view_layer = BLI_findlink(&scene->view_layers, view_layer_index);
   BLI_assert(view_layer != NULL);
   layer_eval_view_layer(depsgraph, scene, view_layer);
+}
+
+static void write_layer_collections(BlendWriter *writer, ListBase *lb)
+{
+  LISTBASE_FOREACH (LayerCollection *, lc, lb) {
+    BLO_write_struct(writer, LayerCollection, lc);
+
+    write_layer_collections(writer, &lc->layer_collections);
+  }
+}
+
+void BKE_view_layer_blend_write(BlendWriter *writer, ViewLayer *view_layer)
+{
+  BLO_write_struct(writer, ViewLayer, view_layer);
+  BLO_write_struct_list(writer, Base, &view_layer->object_bases);
+
+  if (view_layer->id_properties) {
+    IDP_BlendWrite(writer, view_layer->id_properties);
+  }
+
+  LISTBASE_FOREACH (FreestyleModuleConfig *, fmc, &view_layer->freestyle_config.modules) {
+    BLO_write_struct(writer, FreestyleModuleConfig, fmc);
+  }
+
+  LISTBASE_FOREACH (FreestyleLineSet *, fls, &view_layer->freestyle_config.linesets) {
+    BLO_write_struct(writer, FreestyleLineSet, fls);
+  }
+  write_layer_collections(writer, &view_layer->layer_collections);
+}
+
+static void direct_link_layer_collections(BlendDataReader *reader, ListBase *lb, bool master)
+{
+  BLO_read_list(reader, lb);
+  LISTBASE_FOREACH (LayerCollection *, lc, lb) {
+#ifdef USE_COLLECTION_COMPAT_28
+    BLO_read_data_address(reader, &lc->scene_collection);
+#endif
+
+    /* Master collection is not a real data-lock. */
+    if (master) {
+      BLO_read_data_address(reader, &lc->collection);
+    }
+
+    direct_link_layer_collections(reader, &lc->layer_collections, false);
+  }
+}
+
+void BKE_view_layer_blend_read_data(BlendDataReader *reader, ViewLayer *view_layer)
+{
+  view_layer->stats = NULL;
+  BLO_read_list(reader, &view_layer->object_bases);
+  BLO_read_data_address(reader, &view_layer->basact);
+
+  direct_link_layer_collections(reader, &view_layer->layer_collections, true);
+  BLO_read_data_address(reader, &view_layer->active_collection);
+
+  BLO_read_data_address(reader, &view_layer->id_properties);
+  IDP_BlendDataRead(reader, &view_layer->id_properties);
+
+  BLO_read_list(reader, &(view_layer->freestyle_config.modules));
+  BLO_read_list(reader, &(view_layer->freestyle_config.linesets));
+
+  BLI_listbase_clear(&view_layer->drawdata);
+  view_layer->object_bases_array = NULL;
+  view_layer->object_bases_hash = NULL;
+}
+
+static void lib_link_layer_collection(BlendLibReader *reader,
+                                      Library *lib,
+                                      LayerCollection *layer_collection,
+                                      bool master)
+{
+  /* Master collection is not a real data-lock. */
+  if (!master) {
+    BLO_read_id_address(reader, lib, &layer_collection->collection);
+  }
+
+  LISTBASE_FOREACH (
+      LayerCollection *, layer_collection_nested, &layer_collection->layer_collections) {
+    lib_link_layer_collection(reader, lib, layer_collection_nested, false);
+  }
+}
+
+void BKE_view_layer_blend_read_lib(BlendLibReader *reader, Library *lib, ViewLayer *view_layer)
+{
+  LISTBASE_FOREACH (FreestyleModuleConfig *, fmc, &view_layer->freestyle_config.modules) {
+    BLO_read_id_address(reader, lib, &fmc->script);
+  }
+
+  LISTBASE_FOREACH (FreestyleLineSet *, fls, &view_layer->freestyle_config.linesets) {
+    BLO_read_id_address(reader, lib, &fls->linestyle);
+    BLO_read_id_address(reader, lib, &fls->group);
+  }
+
+  LISTBASE_FOREACH_MUTABLE (Base *, base, &view_layer->object_bases) {
+    /* we only bump the use count for the collection objects */
+    BLO_read_id_address(reader, lib, &base->object);
+
+    if (base->object == NULL) {
+      /* Free in case linked object got lost. */
+      BLI_freelinkN(&view_layer->object_bases, base);
+      if (view_layer->basact == base) {
+        view_layer->basact = NULL;
+      }
+    }
+  }
+
+  LISTBASE_FOREACH (LayerCollection *, layer_collection, &view_layer->layer_collections) {
+    lib_link_layer_collection(reader, lib, layer_collection, true);
+  }
+
+  BLO_read_id_address(reader, lib, &view_layer->mat_override);
+
+  IDP_BlendReadLib(reader, view_layer->id_properties);
 }

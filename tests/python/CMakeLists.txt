@@ -43,7 +43,9 @@ function(add_blender_test testname)
 
   # Don't fail tests on leaks since these often happen in external libraries
   # that we can't fix.
-  set_tests_properties(${testname} PROPERTIES ENVIRONMENT LSAN_OPTIONS=exitcode=0)
+  set_tests_properties(${testname} PROPERTIES ENVIRONMENT
+    LSAN_OPTIONS=exitcode=0:$ENV{LSAN_OPTIONS}
+  )
 endfunction()
 
 # Run Python script outside Blender.
@@ -56,7 +58,9 @@ function(add_python_test testname testscript)
     NAME ${testname}
     COMMAND ${TEST_PYTHON_EXE} ${testscript} ${ARGN}
   )
-  set_tests_properties(${testname} PROPERTIES ENVIRONMENT LSAN_OPTIONS=exitcode=0)
+  set_tests_properties(${testname} PROPERTIES ENVIRONMENT
+    LSAN_OPTIONS=exitcode=0:$ENV{LSAN_OPTIONS}
+  )
 endfunction()
 
 # ------------------------------------------------------------------------------
@@ -694,6 +698,30 @@ if(WITH_CODEC_FFMPEG)
     --testdir "${TEST_SRC_DIR}/ffmpeg"
   )
 endif()
+
+
+# ------------------------------------------------------------------------------
+# SEQUENCER RENDER TESTS
+
+if(NOT OPENIMAGEIO_IDIFF)
+  MESSAGE(STATUS "Disabling sequencer render tests because OIIO idiff does not exist")
+else()
+  set(render_tests
+    transform
+  )
+
+  foreach(render_test ${render_tests})
+    add_python_test(
+      sequencer_render_${render_test}
+      ${CMAKE_CURRENT_LIST_DIR}/sequencer_render_tests.py
+      -blender "${TEST_BLENDER_EXE}"
+      -testdir "${TEST_SRC_DIR}/sequence_editing/${render_test}"
+      -idiff "${OPENIMAGEIO_IDIFF}"
+      -outdir "${TEST_OUT_DIR}/sequence_editing"
+    )
+  endforeach()
+endif()
+
 
 add_subdirectory(collada)
 

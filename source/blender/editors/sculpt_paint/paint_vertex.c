@@ -372,7 +372,7 @@ static float wpaint_blend(const VPaint *wp,
   if (do_flip) {
     switch (blend) {
       case IMB_BLEND_MIX:
-        paintval = 1.f - paintval;
+        paintval = 1.0f - paintval;
         break;
       case IMB_BLEND_ADD:
         blend = IMB_BLEND_SUB;
@@ -964,7 +964,7 @@ static void do_weight_paint_vertex_multi(
   if (me->editflag & ME_EDIT_VERTEX_GROUPS_X_SYMMETRY) {
     index_mirr = mesh_get_x_mirror_vert(ob, NULL, index, topology);
 
-    if (index_mirr != -1 && index_mirr != index) {
+    if (!ELEM(index_mirr, -1, index)) {
       dv_mirr = &me->dvert[index_mirr];
     }
     else {
@@ -2296,6 +2296,7 @@ static void wpaint_do_symmetrical_brush_actions(
   int i = 0;
 
   /* initial stroke */
+  cache->mirror_symmetry_pass = 0;
   wpaint_do_paint(C, ob, wp, sd, wpd, wpi, me, brush, 0, 'X', 0, 0);
   wpaint_do_radial_symmetry(C, ob, wp, sd, wpd, wpi, me, brush, 0, 'X');
   wpaint_do_radial_symmetry(C, ob, wp, sd, wpd, wpi, me, brush, 0, 'Y');
@@ -2797,7 +2798,7 @@ static void do_vpaint_brush_calc_average_color_cb_ex(void *__restrict userdata,
         const MVert *mv = &data->me->mvert[v_index];
         if (!use_vert_sel || mv->flag & SELECT) {
           accum->len += gmap->vert_to_loop[v_index].count;
-          /* if a vertex is within the brush region, then add it's color to the blend. */
+          /* if a vertex is within the brush region, then add its color to the blend. */
           for (int j = 0; j < gmap->vert_to_loop[v_index].count; j++) {
             const int l_index = gmap->vert_to_loop[v_index].indices[j];
             col = (char *)(&lcol[l_index]);
@@ -3316,6 +3317,7 @@ static void vpaint_do_symmetrical_brush_actions(
   int i = 0;
 
   /* initial stroke */
+  cache->mirror_symmetry_pass = 0;
   vpaint_do_paint(C, sd, vp, vpd, ob, me, brush, i, 'X', 0, 0);
   vpaint_do_radial_symmetry(C, sd, vp, vpd, ob, me, brush, i, 'X');
   vpaint_do_radial_symmetry(C, sd, vp, vpd, ob, me, brush, i, 'Y');

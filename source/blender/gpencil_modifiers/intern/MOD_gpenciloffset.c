@@ -30,6 +30,7 @@
 
 #include "BLT_translation.h"
 
+#include "DNA_defaults.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_meshdata_types.h"
@@ -60,11 +61,10 @@
 static void initData(GpencilModifierData *md)
 {
   OffsetGpencilModifierData *gpmd = (OffsetGpencilModifierData *)md;
-  gpmd->pass_index = 0;
-  gpmd->material = NULL;
-  ARRAY_SET_ITEMS(gpmd->loc, 0.0f, 0.0f, 0.0f);
-  ARRAY_SET_ITEMS(gpmd->rot, 0.0f, 0.0f, 0.0f);
-  ARRAY_SET_ITEMS(gpmd->scale, 0.0f, 0.0f, 0.0f);
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(gpmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(gpmd, DNA_struct_default_get(OffsetGpencilModifierData), modifier);
 }
 
 static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
@@ -100,6 +100,7 @@ static void deformStroke(GpencilModifierData *md,
                                       mmd->flag & GP_OFFSET_INVERT_MATERIAL)) {
     return;
   }
+  bGPdata *gpd = ob->data;
 
   for (int i = 0; i < gps->totpoints; i++) {
     bGPDspoint *pt = &gps->points[i];
@@ -125,7 +126,7 @@ static void deformStroke(GpencilModifierData *md,
     mul_m4_v3(mat, &pt->x);
   }
   /* Calc geometry data. */
-  BKE_gpencil_stroke_geometry_update(gps);
+  BKE_gpencil_stroke_geometry_update(gpd, gps);
 }
 
 static void bakeModifier(struct Main *UNUSED(bmain),

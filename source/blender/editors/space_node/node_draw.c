@@ -1275,7 +1275,7 @@ static void node_draw_basis(const bContext *C,
                         showname,
                         (int)(rct->xmin + NODE_MARGIN_X),
                         (int)(rct->ymax - NODE_DY),
-                        (short)(iconofs - rct->xmin - 18.0f),
+                        (short)(iconofs - rct->xmin - (18.0f * U.dpi_fac)),
                         (short)NODE_DY,
                         NULL,
                         0,
@@ -1288,7 +1288,7 @@ static void node_draw_basis(const bContext *C,
   }
 
   /* body */
-  if (!nodeIsRegistered(node)) {
+  if (nodeTypeUndefined(node)) {
     /* use warning color to indicate undefined types */
     UI_GetThemeColor4fv(TH_REDALERT, color);
   }
@@ -1456,7 +1456,7 @@ static void node_draw_hidden(const bContext *C,
                         showname,
                         round_fl_to_int(rct->xmin + NODE_MARGIN_X),
                         round_fl_to_int(centy - NODE_DY * 0.5f),
-                        (short)(BLI_rctf_size_x(rct) - 18.0f - 12.0f),
+                        (short)(BLI_rctf_size_x(rct) - ((18.0f + 12.0f) * U.dpi_fac)),
                         (short)NODE_DY,
                         NULL,
                         0,

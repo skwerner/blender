@@ -51,7 +51,7 @@
 #include "BKE_icons.h"
 #include "BKE_studiolight.h"
 
-#include "BLI_sys_types.h"  // for intptr_t support
+#include "BLI_sys_types.h" /* for intptr_t support */
 
 #include "GPU_texture.h"
 
@@ -899,8 +899,10 @@ struct Icon_Geom *BKE_icon_geom_from_file(const char *filename)
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name Studio Light Icon
  * \{ */
+
 int BKE_icon_ensure_studio_light(struct StudioLight *sl, int id_type)
 {
   int icon_id = get_next_free_id();

@@ -27,9 +27,9 @@
 #include "DNA_curve_types.h"
 #include "DNA_texture_types.h" /* for MTex */
 
-//#ifndef MAX_MTEX // XXX Not used?
-//#define MAX_MTEX  18
-//#endif
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct CurveMapping;
 struct Image;
@@ -187,7 +187,7 @@ typedef enum eGPBrush_Presets {
   GP_BRUSH_PRESET_DRAW_WEIGHT = 300,
 } eGPBrush_Presets;
 
-/* BrushGpencilSettings->gp_flag */
+/* BrushGpencilSettings->flag */
 typedef enum eGPDbrush_Flag {
   /* brush use pressure */
   GP_BRUSH_USE_PRESSURE = (1 << 0),
@@ -392,6 +392,7 @@ typedef enum eBrushBoundaryDeformType {
   BRUSH_BOUNDARY_DEFORM_INFLATE = 2,
   BRUSH_BOUNDARY_DEFORM_GRAB = 3,
   BRUSH_BOUNDARY_DEFORM_TWIST = 4,
+  BRUSH_BOUNDARY_DEFORM_SMOOTH = 5,
 } eBrushBushBoundaryDeformType;
 
 typedef enum eBrushBoundaryFalloffType {
@@ -572,9 +573,11 @@ typedef struct Brush {
   char gpencil_sculpt_tool;
   /** Active grease pencil weight tool. */
   char gpencil_weight_tool;
-  char _pad1[2];
+  char _pad1[6];
 
   float autosmooth_factor;
+
+  float tilt_strength_factor;
 
   float topology_rake_factor;
 
@@ -776,6 +779,7 @@ typedef enum eBrushFlags2 {
   BRUSH_POSE_USE_LOCK_ROTATION = (1 << 5),
   BRUSH_CLOTH_USE_COLLISION = (1 << 6),
   BRUSH_AREA_RADIUS_PRESSURE = (1 << 7),
+  BRUSH_GRAB_SILHOUETTE = (1 << 8),
 } eBrushFlags2;
 
 typedef enum {
@@ -871,6 +875,7 @@ typedef enum eBrushUVSculptTool {
         SCULPT_TOOL_DRAW_SHARP, \
         SCULPT_TOOL_SLIDE_RELAX, \
         SCULPT_TOOL_ELASTIC_DEFORM, \
+        SCULPT_TOOL_BOUNDARY, \
         SCULPT_TOOL_POSE, \
         SCULPT_TOOL_DRAW_FACE_SETS, \
         SCULPT_TOOL_PAINT, \
@@ -979,3 +984,7 @@ enum {
 
 #define MAX_BRUSH_PIXEL_RADIUS 500
 #define GP_MAX_BRUSH_PIXEL_RADIUS 1000
+
+#ifdef __cplusplus
+}
+#endif

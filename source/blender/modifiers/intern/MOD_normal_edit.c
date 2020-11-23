@@ -476,7 +476,15 @@ static bool is_valid_target(NormalEditModifierData *enmd)
   if ((enmd->mode == MOD_NORMALEDIT_MODE_DIRECTIONAL) && enmd->target) {
     return true;
   }
-  BKE_modifier_set_error((ModifierData *)enmd, "Invalid target settings");
+  return false;
+}
+
+static bool is_valid_target_with_error(const Object *ob, NormalEditModifierData *enmd)
+{
+  if (is_valid_target(enmd)) {
+    return true;
+  }
+  BKE_modifier_set_error(ob, (ModifierData *)enmd, "Invalid target settings");
   return false;
 }
 
@@ -491,7 +499,7 @@ static Mesh *normalEditModifier_do(NormalEditModifierData *enmd,
                                     (enmd->mix_limit == (float)M_PI));
 
   /* Do not run that modifier at all if autosmooth is disabled! */
-  if (!is_valid_target(enmd) || mesh->totloop == 0) {
+  if (!is_valid_target_with_error(ctx->object, enmd) || mesh->totloop == 0) {
     return mesh;
   }
 
@@ -506,7 +514,8 @@ static Mesh *normalEditModifier_do(NormalEditModifierData *enmd,
   if (!(((Mesh *)ob->data)->flag & ME_AUTOSMOOTH))
 #endif
   {
-    BKE_modifier_set_error((ModifierData *)enmd, "Enable 'Auto Smooth' in Object Data Properties");
+    BKE_modifier_set_error(
+        ob, (ModifierData *)enmd, "Enable 'Auto Smooth' in Object Data Properties");
     return mesh;
   }
 
@@ -515,7 +524,7 @@ static Mesh *normalEditModifier_do(NormalEditModifierData *enmd,
     /* We need to duplicate data here, otherwise setting custom normals
      * (which may also affect sharp edges) could
      * modify original mesh, see T43671. */
-    BKE_id_copy_ex(NULL, &mesh->id, (ID **)&result, LIB_ID_COPY_LOCALIZE);
+    result = (Mesh *)BKE_id_copy_ex(NULL, &mesh->id, NULL, LIB_ID_COPY_LOCALIZE);
   }
   else {
     result = mesh;

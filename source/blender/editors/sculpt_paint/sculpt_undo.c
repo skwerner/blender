@@ -55,7 +55,7 @@
 #include "BKE_subsurf.h"
 #include "BKE_undo_system.h"
 
-// XXX: Ideally should be no direct call to such low level things.
+/* XXX: Ideally should be no direct call to such low level things. */
 #include "BKE_subdiv_eval.h"
 
 #include "DEG_depsgraph.h"
@@ -239,7 +239,7 @@ static bool sculpt_undo_restore_coords(bContext *C, Depsgraph *depsgraph, Sculpt
       /* Propagate new coords to keyblock. */
       SCULPT_vertcos_to_key(ob, ss->shapekey_active, vertCos);
 
-      /* PBVH uses it's own mvert array, so coords should be */
+      /* PBVH uses its own mvert array, so coords should be */
       /* propagated to PBVH here. */
       BKE_pbvh_vert_coords_apply(ss->pbvh, vertCos, ss->shapekey_active->totelem);
 
@@ -647,7 +647,7 @@ static void sculpt_undo_restore_list(bContext *C, Depsgraph *depsgraph, ListBase
 
       BKE_sculpt_update_object_for_edit(depsgraph, ob, true, need_mask, false);
 
-      SCULPT_visibility_sync_all_face_sets_to_vertices(ss);
+      SCULPT_visibility_sync_all_face_sets_to_vertices(ob);
 
       BKE_pbvh_update_vertex_data(ss->pbvh, PBVH_UpdateVisibility);
 
@@ -1334,9 +1334,16 @@ SculptUndoNode *SCULPT_undo_push_node(Object *ob, PBVHNode *node, SculptUndoType
   return unode;
 }
 
-void SCULPT_undo_push_begin(const char *name)
+void SCULPT_undo_push_begin(Object *ob, const char *name)
 {
   UndoStack *ustack = ED_undo_stack_get();
+
+  if (ob != NULL) {
+    /* If possible, we need to tag the object and its geometry data as 'changed in the future' in
+     * the previous undo step if it's a memfile one. */
+    ED_undosys_stack_memfile_id_changed_tag(ustack, &ob->id);
+    ED_undosys_stack_memfile_id_changed_tag(ustack, ob->data);
+  }
 
   /* Special case, we never read from this. */
   bContext *C = NULL;
@@ -1477,8 +1484,6 @@ static void sculpt_undosys_step_decode(
   {
     Scene *scene = CTX_data_scene(C);
     ViewLayer *view_layer = CTX_data_view_layer(C);
-    /* Sculpt needs evaluated state. */
-    BKE_scene_view_layer_graph_evaluated_ensure(bmain, scene, view_layer);
     Object *ob = OBACT(view_layer);
     if (ob && (ob->type == OB_MESH)) {
       if (ob->mode & OB_MODE_SCULPT) {
@@ -1486,6 +1491,12 @@ static void sculpt_undosys_step_decode(
       }
       else {
         ED_object_mode_generic_exit(bmain, depsgraph, scene, ob);
+
+        /* Sculpt needs evaluated state.
+         * Note: needs to be done here, as #ED_object_mode_generic_exit will usually invalidate
+         * (some) evaluated data. */
+        BKE_scene_graph_evaluated_ensure(depsgraph, bmain);
+
         Mesh *me = ob->data;
         /* Don't add sculpt topology undo steps when reading back undo state.
          * The undo steps must enter/exit for us. */
@@ -1521,7 +1532,7 @@ static void sculpt_undosys_step_free(UndoStep *us_p)
 
 void ED_sculpt_undo_geometry_begin(struct Object *ob, const char *name)
 {
-  SCULPT_undo_push_begin(name);
+  SCULPT_undo_push_begin(ob, name);
   SCULPT_undo_push_node(ob, NULL, SCULPT_UNDO_GEOMETRY);
 }
 
@@ -1634,7 +1645,7 @@ void ED_sculpt_undo_push_multires_mesh_begin(bContext *C, const char *str)
 
   Object *object = CTX_data_active_object(C);
 
-  SCULPT_undo_push_begin(str);
+  SCULPT_undo_push_begin(object, str);
 
   SculptUndoNode *geometry_unode = SCULPT_undo_push_node(object, NULL, SCULPT_UNDO_GEOMETRY);
   geometry_unode->geometry_clear_pbvh = false;

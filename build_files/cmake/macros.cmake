@@ -60,6 +60,19 @@ function(list_assert_duplicates
   unset(_len_after)
 endfunction()
 
+# Adds a native path separator to the end of the path:
+#
+# - 'example' -> 'example/'
+# - '/example///' -> '/example/'
+#
+macro(path_ensure_trailing_slash
+  path_new path_input
+  )
+  file(TO_NATIVE_PATH "/" _path_sep)
+  string(REGEX REPLACE "[${_path_sep}]+$" "" ${path_new} ${path_input})
+  set(${path_new} "${${path_new}}${_path_sep}")
+  unset(_path_sep)
+endmacro()
 
 # foo_bar.spam --> foo_barMySuffix.spam
 macro(file_suffix
@@ -183,7 +196,7 @@ function(blender_user_header_search_paths
     foreach(_INC ${includes})
       get_filename_component(_ABS_INC ${_INC} ABSOLUTE)
       # _ALL_INCS is a space-separated string of file paths in quotes.
-      set(_ALL_INCS "${_ALL_INCS} \"${_ABS_INC}\"")
+      string(APPEND _ALL_INCS " \"${_ABS_INC}\"")
     endforeach()
     set_target_properties(${name} PROPERTIES XCODE_ATTRIBUTE_USER_HEADER_SEARCH_PATHS "${_ALL_INCS}")
   endif()
@@ -250,11 +263,11 @@ macro(add_cc_flags_custom_test
   string(TOUPPER ${name} _name_upper)
   if(DEFINED CMAKE_C_FLAGS_${_name_upper})
     message(STATUS "Using custom CFLAGS: CMAKE_C_FLAGS_${_name_upper} in \"${CMAKE_CURRENT_SOURCE_DIR}\"")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_${_name_upper}}" ${ARGV1})
+    string(APPEND CMAKE_C_FLAGS " ${CMAKE_C_FLAGS_${_name_upper}}" ${ARGV1})
   endif()
   if(DEFINED CMAKE_CXX_FLAGS_${_name_upper})
     message(STATUS "Using custom CXXFLAGS: CMAKE_CXX_FLAGS_${_name_upper} in \"${CMAKE_CURRENT_SOURCE_DIR}\"")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${_name_upper}}" ${ARGV1})
+    string(APPEND CMAKE_CXX_FLAGS " ${CMAKE_CXX_FLAGS_${_name_upper}}" ${ARGV1})
   endif()
   unset(_name_upper)
 
@@ -302,14 +315,14 @@ function(blender_add_lib__impl
   #
   # What this code does it traverses library_deps and extracts information about whether
   # library is to provided as general, debug or optimized. This is a little state machine which
-  # keeps track of whiuch build type library is to provided for:
+  # keeps track of which build type library is to provided for:
   #
   # - If "debug" or "optimized" word is found, the next element in the list is expected to be
   #   a library which will be passed to target_link_libraries() under corresponding build type.
   #
   # - If there is no "debug" or "optimized" used library is specified for all build types.
   #
-  # NOTE: If separated libraries for debug and release ar eneeded every library is the list are
+  # NOTE: If separated libraries for debug and release are needed every library is the list are
   # to be prefixed explicitly.
   #
   #  Use: "optimized libfoo optimized libbar debug libfoo_d debug libbar_d"
@@ -477,8 +490,8 @@ function(SETUP_LIBDIRS)
 
   # NOTE: For all new libraries, use absolute library paths.
   # This should eventually be phased out.
-
-  if(NOT MSVC)
+  # APPLE plaform uses full paths for linking libraries, and avoids link_directories.
+  if(NOT MSVC AND NOT APPLE)
     link_directories(${JPEG_LIBPATH} ${PNG_LIBPATH} ${ZLIB_LIBPATH} ${FREETYPE_LIBPATH})
 
     if(WITH_PYTHON)  #  AND NOT WITH_PYTHON_MODULE  # WIN32 needs
@@ -675,14 +688,14 @@ endmacro()
 macro(add_c_flag
   flag)
 
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${flag}")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flag}")
+  string(APPEND CMAKE_C_FLAGS " ${flag}")
+  string(APPEND CMAKE_CXX_FLAGS " ${flag}")
 endmacro()
 
 macro(add_cxx_flag
   flag)
 
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flag}")
+  string(APPEND CMAKE_CXX_FLAGS " ${flag}")
 endmacro()
 
 macro(remove_strict_flags)
@@ -1241,8 +1254,16 @@ endmacro()
 
 macro(without_system_libs_begin)
   set(CMAKE_IGNORE_PATH "${CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES};${CMAKE_SYSTEM_INCLUDE_PATH};${CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES};${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES}")
+  if(APPLE)
+    # Avoid searching for headers in frameworks (like Mono), and libraries in LIBDIR.
+    set(CMAKE_FIND_FRAMEWORK NEVER)
+  endif()
 endmacro()
 
 macro(without_system_libs_end)
   unset(CMAKE_IGNORE_PATH)
+  if(APPLE)
+    # FIRST is the default.
+    set(CMAKE_FIND_FRAMEWORK FIRST)
+  endif()
 endmacro()

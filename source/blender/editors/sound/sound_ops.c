@@ -46,12 +46,13 @@
 #include "BKE_packedFile.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
-#include "BKE_sequencer.h"
 #include "BKE_sound.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
+
+#include "SEQ_sequencer.h"
 
 #include "UI_interface.h"
 
@@ -126,7 +127,7 @@ static int sound_open_exec(bContext *C, wmOperator *op)
   return OPERATOR_FINISHED;
 }
 
-#else  // WITH_AUDASPACE
+#else /* WITH_AUDASPACE */
 
 static int sound_open_exec(bContext *UNUSED(C), wmOperator *op)
 {
@@ -170,7 +171,7 @@ static void SOUND_OT_open(wmOperatorType *ot)
                                  FILE_OPENFILE,
                                  WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
   RNA_def_boolean(ot->srna, "cache", false, "Cache", "Cache the sound in memory");
   RNA_def_boolean(ot->srna, "mono", false, "Mono", "Merge all the sound's channels into one");
 }
@@ -197,7 +198,7 @@ static void SOUND_OT_open_mono(wmOperatorType *ot)
                                  FILE_OPENFILE,
                                  WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
   RNA_def_boolean(ot->srna, "cache", false, "Cache", "Cache the sound in memory");
   RNA_def_boolean(ot->srna, "mono", true, "Mono", "Mixdown the sound to mono");
 }
@@ -410,10 +411,10 @@ static int sound_mixdown_exec(bContext *C, wmOperator *op)
     BKE_report(op->reports, RPT_ERROR, result);
     return OPERATOR_CANCELLED;
   }
-#else   // WITH_AUDASPACE
+#else  /* WITH_AUDASPACE */
   (void)C;
   (void)op;
-#endif  // WITH_AUDASPACE
+#endif /* WITH_AUDASPACE */
   return OPERATOR_FINISHED;
 }
 
@@ -493,7 +494,7 @@ static bool sound_mixdown_check(bContext *UNUSED(C), wmOperator *op)
   return false;
 }
 
-#endif  // WITH_AUDASPACE
+#endif /* WITH_AUDASPACE */
 
 static int sound_mixdown_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
@@ -511,8 +512,7 @@ static bool sound_mixdown_draw_check_prop(PointerRNA *UNUSED(ptr),
                                           void *UNUSED(user_data))
 {
   const char *prop_id = RNA_property_identifier(prop);
-  return !(STREQ(prop_id, "filepath") || STREQ(prop_id, "directory") ||
-           STREQ(prop_id, "filename"));
+  return !(STR_ELEM(prop_id, "filepath", "directory", "filename"));
 }
 
 static void sound_mixdown_draw(bContext *C, wmOperator *op)
@@ -666,7 +666,7 @@ static void sound_mixdown_draw(bContext *C, wmOperator *op)
   uiDefAutoButsRNA(
       layout, &ptr, sound_mixdown_draw_check_prop, NULL, NULL, UI_BUT_LABEL_ALIGN_NONE, false);
 }
-#endif  // WITH_AUDASPACE
+#endif /* WITH_AUDASPACE */
 
 static void SOUND_OT_mixdown(wmOperatorType *ot)
 {
@@ -696,7 +696,7 @@ static void SOUND_OT_mixdown(wmOperatorType *ot)
       {0, NULL, 0, NULL, NULL},
   };
 
-#endif  // WITH_AUDASPACE
+#endif /* WITH_AUDASPACE */
 
   /* identifiers */
   ot->name = "Mixdown";
@@ -721,7 +721,7 @@ static void SOUND_OT_mixdown(wmOperatorType *ot)
                                  FILE_SAVE,
                                  WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH | WM_FILESEL_SHOW_PROPS,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 #ifdef WITH_AUDASPACE
   RNA_def_int(
       ot->srna,
@@ -743,7 +743,7 @@ static void SOUND_OT_mixdown(wmOperatorType *ot)
                   0,
                   "Split channels",
                   "Each channel will be rendered into a mono file");
-#endif  // WITH_AUDASPACE
+#endif /* WITH_AUDASPACE */
 }
 
 /* ******************************************************* */

@@ -25,6 +25,7 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "DNA_defaults.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_object_types.h"
@@ -74,14 +75,11 @@
 
 static void initData(GpencilModifierData *md)
 {
-  MultiplyGpencilModifierData *mmd = (MultiplyGpencilModifierData *)md;
-  mmd->duplications = 3;
-  mmd->distance = 0.1f;
-  mmd->split_angle = DEG2RADF(1.0f);
-  mmd->fading_center = 0.5f;
-  mmd->fading_thickness = 0.5f;
-  mmd->fading_opacity = 0.5f;
-  mmd->material = NULL;
+  MultiplyGpencilModifierData *gpmd = (MultiplyGpencilModifierData *)md;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(gpmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(gpmd, DNA_struct_default_get(MultiplyGpencilModifierData), modifier);
 }
 
 static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
@@ -131,6 +129,7 @@ static void duplicateStroke(Object *ob,
                             float fading_thickness,
                             float fading_opacity)
 {
+  bGPdata *gpd = ob->data;
   int i;
   bGPDstroke *new_gps = NULL;
   float stroke_normal[3];
@@ -174,7 +173,7 @@ static void duplicateStroke(Object *ob,
    * to be processed, since we duplicate its data. */
   for (i = count - 1; i >= 0; i--) {
     if (i != 0) {
-      new_gps = BKE_gpencil_stroke_duplicate(gps, true);
+      new_gps = BKE_gpencil_stroke_duplicate(gps, true, true);
       BLI_addtail(results, new_gps);
     }
     else {
@@ -201,7 +200,7 @@ static void duplicateStroke(Object *ob,
   }
   /* Calc geometry data. */
   if (new_gps != NULL) {
-    BKE_gpencil_stroke_geometry_update(new_gps);
+    BKE_gpencil_stroke_geometry_update(gpd, new_gps);
   }
   MEM_freeN(t1_array);
   MEM_freeN(t2_array);

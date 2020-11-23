@@ -28,6 +28,10 @@
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* match-moving data */
 
 struct Image;
@@ -178,7 +182,7 @@ typedef struct MovieTrackingTrack {
   /* Weight of this track.
    *
    * Weight defines how much the track affects on the final reconstruction,
-   * usually gets animated in a way so when track has just appeared it's
+   * usually gets animated in a way so when track has just appeared its
    * weight is zero and then it gets faded up.
    *
    * Used to prevent jumps of the camera when tracks are appearing or
@@ -255,9 +259,9 @@ typedef struct MovieTrackingSettings {
   short default_algorithm_flag;
   /** Minimal correlation which is still treated as successful tracking. */
   float default_minimum_correlation;
-  /** Size of pattern area for new tracks. */
+  /** Size of pattern area for new tracks, measured in pixels. */
   short default_pattern_size;
-  /** Size of search area for new tracks. */
+  /** Size of search area for new tracks, measured in pixels. */
   short default_search_size;
   /** Number of frames to be tracked during single tracking session
    * (if TRACKING_FRAMES_LIMIT is set). */
@@ -288,8 +292,7 @@ typedef struct MovieTrackingSettings {
   int reconstruction_flag;
 
   /* which camera intrinsics to refine. uses on the REFINE_* flags */
-  short refine_camera_intrinsics;
-  char _pad2[2];
+  int refine_camera_intrinsics;
 
   /* ** tool settings ** */
 
@@ -551,10 +554,12 @@ enum {
 
 /* MovieTrackingSettings->refine_camera_intrinsics */
 enum {
+  REFINE_NO_INTRINSICS = (0),
+
   REFINE_FOCAL_LENGTH = (1 << 0),
   REFINE_PRINCIPAL_POINT = (1 << 1),
-  REFINE_RADIAL_DISTORTION_K1 = (1 << 2),
-  REFINE_RADIAL_DISTORTION_K2 = (1 << 4),
+  REFINE_RADIAL_DISTORTION = (1 << 2),
+  REFINE_TANGENTIAL_DISTORTION = (1 << 3),
 };
 
 /* MovieTrackingStrabilization->flag */
@@ -623,3 +628,7 @@ enum {
   PLANE_TRACK_LOCKED = (1 << 2),
   PLANE_TRACK_AUTOKEY = (1 << 3),
 };
+
+#ifdef __cplusplus
+}
+#endif

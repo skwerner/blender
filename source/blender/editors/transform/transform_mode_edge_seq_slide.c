@@ -42,9 +42,7 @@
 #include "transform_snap.h"
 
 /* -------------------------------------------------------------------- */
-/* Transform (Sequencer Slide) */
-
-/** \name Transform Sequencer Slide
+/** \name Transform (Sequencer Slide)
  * \{ */
 
 static void headerSeqSlide(TransInfo *t, const float val[2], char str[UI_MAX_DRAW_STR])
@@ -135,11 +133,10 @@ void initSeqSlide(TransInfo *t)
   t->num.flag = 0;
   t->num.idx_max = t->idx_max;
 
-  t->snap[0] = 0.0f;
-  t->snap[1] = floorf(t->scene->r.frs_sec / t->scene->r.frs_sec_base);
-  t->snap[2] = 10.0f;
+  t->snap[0] = floorf(t->scene->r.frs_sec / t->scene->r.frs_sec_base);
+  t->snap[1] = 10.0f;
 
-  copy_v3_fl(t->num.val_inc, t->snap[1]);
+  copy_v3_fl(t->num.val_inc, t->snap[0]);
   t->num.unit_sys = t->scene->unit.system;
   /* Would be nice to have a time handling in units as well
    * (supporting frames in addition to "natural" time...). */

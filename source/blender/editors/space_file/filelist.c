@@ -294,9 +294,6 @@ enum {
 typedef struct FileList {
   FileDirEntryArr filelist;
 
-  short prv_w;
-  short prv_h;
-
   short flags;
 
   short sort;
@@ -586,7 +583,7 @@ static int compare_extension(void *user_data, const void *a1, const void *a2)
 
 void filelist_sort(struct FileList *filelist)
 {
-  if ((filelist->flags & FL_NEED_SORTING) && (filelist->sort != FILE_SORT_NONE)) {
+  if (filelist->flags & FL_NEED_SORTING) {
     void *sort_cb = NULL;
 
     switch (filelist->sort) {
@@ -602,7 +599,7 @@ void filelist_sort(struct FileList *filelist)
       case FILE_SORT_EXTENSION:
         sort_cb = compare_extension;
         break;
-      case FILE_SORT_NONE: /* Should never reach this point! */
+      case FILE_SORT_DEFAULT:
       default:
         BLI_assert(0);
         break;
@@ -951,12 +948,6 @@ void filelist_free_icons(void)
   }
 }
 
-void filelist_imgsize(struct FileList *filelist, short w, short h)
-{
-  filelist->prv_w = w;
-  filelist->prv_h = h;
-}
-
 static FileDirEntry *filelist_geticon_get_file(struct FileList *filelist, const int index)
 {
   BLI_assert(G.background == false);
@@ -1303,6 +1294,8 @@ static void filelist_cache_preview_runf(TaskPool *__restrict pool, void *taskdat
   }
 
   IMB_thumb_path_lock(preview->path);
+  /* Always generate biggest preview size for now, it's simpler and avoids having to re-generate in
+   * case user switch to a bigger preview size. */
   preview->img = IMB_thumb_manage(preview->path, THB_LARGE, source);
   IMB_thumb_path_unlock(preview->path);
 
@@ -1569,7 +1562,6 @@ void filelist_free(struct FileList *filelist)
   memset(&filelist->filter_data, 0, sizeof(filelist->filter_data));
 
   filelist->flags &= ~(FL_NEED_SORTING | FL_NEED_FILTERING);
-  filelist->sort = FILE_SORT_NONE;
 }
 
 void filelist_freelib(struct FileList *filelist)
@@ -2504,14 +2496,18 @@ static int filelist_readjob_list_dir(const char *root,
 
       /* Set initial file type and attributes. */
       entry->attributes = BLI_file_attributes(full_path);
-      if (S_ISDIR(files[i].s.st_mode)) {
+      if (S_ISDIR(files[i].s.st_mode)
+#ifdef __APPLE__
+          && !(ED_path_extension_type(full_path) & FILE_TYPE_APPLICATIONBUNDLE)
+#endif
+      ) {
         entry->typeflag = FILE_TYPE_DIR;
       }
 
       /* Is this a file that points to another file? */
       if (entry->attributes & FILE_ATTR_ALIAS) {
         entry->redirection_path = MEM_callocN(FILE_MAXDIR, __func__);
-        if (BLI_file_alias_target(entry->redirection_path, full_path)) {
+        if (BLI_file_alias_target(full_path, entry->redirection_path)) {
           if (BLI_is_dir(entry->redirection_path)) {
             entry->typeflag = FILE_TYPE_DIR;
             BLI_path_slash_ensure(entry->redirection_path);
@@ -2640,7 +2636,7 @@ static void filelist_readjob_main_recursive(Main *bmain, FileList *filelist)
   ListBase *lb;
   int a, fake, idcode, ok, totlib, totbl;
 
-  // filelist->type = FILE_MAIN; // XXX TODO: add modes to filebrowser
+  // filelist->type = FILE_MAIN; /* XXX TODO: add modes to filebrowser */
 
   BLI_assert(filelist->filelist.entries == NULL);
 

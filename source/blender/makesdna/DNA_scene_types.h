@@ -28,6 +28,10 @@
 /* XXX, temp feature - campbell */
 #define DURIAN_CAMERA_SWITCH
 
+/* check for cyclic set-scene,
+ * libs can cause this case which is normally prevented, see (T#####) */
+#define USE_SETSCENE_CHECK
+
 #include "DNA_ID.h"
 #include "DNA_collection_types.h"
 #include "DNA_color_types.h" /* color management */
@@ -182,8 +186,8 @@ typedef struct FFMpegCodecData {
 /* Audio */
 
 typedef struct AudioData {
-  int mixrate;  // 2.5: now in FFMpegCodecData: audio_mixrate
-  float main;   // 2.5: now in FFMpegCodecData: audio_volume
+  int mixrate; /* 2.5: now in FFMpegCodecData: audio_mixrate */
+  float main;  /* 2.5: now in FFMpegCodecData: audio_volume */
   float speed_of_sound;
   float doppler_factor;
   int distance_model;
@@ -622,7 +626,7 @@ typedef struct RenderData {
   /** Frames to jump during render/playback. */
   int frame_step;
 
-  /** Standalone player stereo settings */  //  XXX deprecated since .2.5
+  /** Standalone player stereo settings */ /* XXX deprecated since .2.5 */
   short stereomode DNA_DEPRECATED;
 
   /** For the dimensions presets menu. */
@@ -862,7 +866,7 @@ typedef struct PaintToolSlot {
 typedef struct Paint {
   struct Brush *brush;
 
-  /* Each tool has it's own active brush,
+  /* Each tool has its own active brush,
    * The currently active tool is defined by the current 'brush'. */
   struct PaintToolSlot *tool_slots;
   int tool_slots_len;
@@ -1086,7 +1090,7 @@ typedef struct GP_Sculpt_Settings {
   int lock_axis;
   /** Threshold for intersections */
   float isect_threshold;
-  char _pad_[4];
+  char _pad[4];
   /** Multiframe edit falloff effect by frame. */
   struct CurveMapping *cur_falloff;
   /** Curve used for primitive tools. */
@@ -1635,8 +1639,10 @@ typedef struct SceneEEVEE {
   int motion_blur_samples DNA_DEPRECATED;
   int motion_blur_max;
   int motion_blur_steps;
+  int motion_blur_position;
   float motion_blur_shutter;
   float motion_blur_depth_scale;
+  char _pad0[4];
 
   int shadow_method DNA_DEPRECATED;
   int shadow_cube_size;
@@ -2181,7 +2187,7 @@ typedef enum eSculptFlags {
 
   SCULPT_FLAG_UNUSED_7 = (1 << 7), /* cleared */
   SCULPT_ONLY_DEFORM = (1 << 8),
-  // SCULPT_SHOW_DIFFUSE = (1 << 9), // deprecated
+  // SCULPT_SHOW_DIFFUSE = (1 << 9), /* deprecated */
 
   /* If set, the mesh will be drawn with smooth-shading in
    * dynamic-topology mode */
@@ -2201,7 +2207,7 @@ typedef enum eSculptFlags {
   SCULPT_HIDE_MASK = (1 << 15),
 
   /* Don't display face sets in viewport. */
-  SCULPT_HIDE_FACE_SETS = (1 << 16),
+  SCULPT_HIDE_FACE_SETS = (1 << 17),
 } eSculptFlags;
 
 /* ImagePaintSettings.mode */
@@ -2218,8 +2224,8 @@ enum {
 
 /* ImagePaintSettings.flag */
 #define IMAGEPAINT_DRAWING (1 << 0)
-// #define IMAGEPAINT_DRAW_TOOL         (1 << 1) // deprecated
-// #define IMAGEPAINT_DRAW_TOOL_DRAWING (1 << 2) // deprecated
+// #define IMAGEPAINT_DRAW_TOOL         (1 << 1) /* deprecated */
+// #define IMAGEPAINT_DRAW_TOOL_DRAWING (1 << 2) /* deprecated */
 
 /* projection painting only */
 /* ImagePaintSettings.flag */
@@ -2269,6 +2275,8 @@ typedef enum eGPencil_Flags {
   GP_TOOL_FLAG_THUMBNAIL_LIST = (1 << 3),
   /* Generate wheight data for new strokes */
   GP_TOOL_FLAG_CREATE_WEIGHTS = (1 << 4),
+  /* Automerge with last stroke */
+  GP_TOOL_FLAG_AUTOMERGE_STROKE = (1 << 5),
 } eGPencil_Flags;
 
 /* scene->r.simplify_gpencil */
@@ -2403,6 +2411,13 @@ enum {
   SHADOW_ESM = 1,
   /* SHADOW_VSM = 2, */        /* UNUSED */
   /* SHADOW_METHOD_MAX = 3, */ /* UNUSED */
+};
+
+/* SceneEEVEE->motion_blur_position */
+enum {
+  SCE_EEVEE_MB_CENTER = 0,
+  SCE_EEVEE_MB_START = 1,
+  SCE_EEVEE_MB_END = 2,
 };
 
 /* SceneDisplay->render_aa, SceneDisplay->viewport_aa */

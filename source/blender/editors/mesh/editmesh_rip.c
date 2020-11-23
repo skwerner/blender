@@ -130,7 +130,7 @@ static float edbm_rip_edge_side_measure(
    * from edge midpoint to face center.  offset edge midpoint
    * by a small amount along this vector. */
 
-  /* rather then the face center, get the middle of
+  /* rather than the face center, get the middle of
    * both edge verts connected to this one */
   v1_other = BM_face_other_vert_loop(e_l->f, e->v2, e->v1)->v;
   v2_other = BM_face_other_vert_loop(e_l->f, e->v1, e->v2)->v;
@@ -146,7 +146,7 @@ static float edbm_rip_edge_side_measure(
   sub_v2_v2v2(vec, cent, mid);
   normalize_v2_length(vec, 0.01f);
 
-  /* rather then adding to both verts, subtract from the mouse */
+  /* rather than adding to both verts, subtract from the mouse */
   sub_v2_v2v2(fmval_tweak, fmval, vec);
 
   score = len_v2v2(e_v1_co, e_v2_co);
@@ -880,6 +880,7 @@ static int edbm_rip_invoke__edge(bContext *C, const wmEvent *event, Object *obed
   BMLoop *l;
   BMEdge *e_best;
   BMVert *v;
+  const int totvert_orig = bm->totvert;
   const int totedge_orig = bm->totedge;
   float projectMat[4][4], fmval[3] = {event->mval[0], event->mval[1]};
 
@@ -904,7 +905,7 @@ static int edbm_rip_invoke__edge(bContext *C, const wmEvent *event, Object *obed
     BM_ITER_ELEM (e, &eiter, v, BM_EDGES_OF_VERT) {
 
       if (!BM_edge_is_wire(e) && !BM_elem_flag_test(e, BM_ELEM_HIDDEN)) {
-        /* important to check selection rather then tag here
+        /* important to check selection rather than tag here
          * else we get feedback loop */
         if (BM_elem_flag_test(e, BM_ELEM_SELECT)) {
           e_best = e;
@@ -988,7 +989,7 @@ static int edbm_rip_invoke__edge(bContext *C, const wmEvent *event, Object *obed
     MEM_freeN(fill_uloop_pairs);
   }
 
-  if (totedge_orig == bm->totedge) {
+  if ((totvert_orig == bm->totvert) && (totedge_orig == bm->totedge)) {
     return OPERATOR_CANCELLED;
   }
 
@@ -1042,7 +1043,7 @@ static int edbm_rip_invoke(bContext *C, wmOperator *op, const wmEvent *event)
     error_disconnected_vertices = false;
 
     /* note on selection:
-     * When calling edge split we operate on tagged edges rather then selected
+     * When calling edge split we operate on tagged edges rather than selected
      * this is important because the edges to operate on are extended by one,
      * but the selection is left alone.
      *

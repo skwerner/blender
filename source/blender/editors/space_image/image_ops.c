@@ -519,7 +519,7 @@ enum {
 
 static int image_view_zoom_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-  if (event->type == MOUSEZOOM || event->type == MOUSEPAN) {
+  if (ELEM(event->type, MOUSEZOOM, MOUSEPAN)) {
     SpaceImage *sima = CTX_wm_space_image(C);
     ARegion *region = CTX_wm_region(C);
     float delta, factor, location[2];
@@ -1436,8 +1436,7 @@ static bool image_open_draw_check_prop(PointerRNA *UNUSED(ptr),
 {
   const char *prop_id = RNA_property_identifier(prop);
 
-  return !(STREQ(prop_id, "filepath") || STREQ(prop_id, "directory") ||
-           STREQ(prop_id, "filename"));
+  return !(STR_ELEM(prop_id, "filepath", "directory", "filename"));
 }
 
 static void image_open_draw(bContext *UNUSED(C), wmOperator *op)
@@ -1486,7 +1485,7 @@ void IMAGE_OT_open(wmOperatorType *ot)
                                  WM_FILESEL_FILEPATH | WM_FILESEL_DIRECTORY | WM_FILESEL_FILES |
                                      WM_FILESEL_RELPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 
   RNA_def_boolean(
       ot->srna,
@@ -1570,7 +1569,7 @@ static int image_replace_exec(bContext *C, wmOperator *op)
 
   RNA_string_get(op->ptr, "filepath", str);
 
-  /* we cant do much if the str is longer then FILE_MAX :/ */
+  /* we cant do much if the str is longer than FILE_MAX :/ */
   BLI_strncpy(sima->image->filepath, str, sizeof(sima->image->filepath));
 
   if (sima->image->source == IMA_SRC_GENERATED) {
@@ -1638,7 +1637,7 @@ void IMAGE_OT_replace(wmOperatorType *ot)
                                  FILE_OPENFILE,
                                  WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 }
 
 /** \} */
@@ -2038,7 +2037,7 @@ void IMAGE_OT_save_as(wmOperatorType *ot)
                                  FILE_SAVE,
                                  WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH | WM_FILESEL_SHOW_PROPS,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 }
 
 /** \} */
@@ -2047,36 +2046,17 @@ void IMAGE_OT_save_as(wmOperatorType *ot)
 /** \name Save Image Operator
  * \{ */
 
-static bool image_file_path_saveable(bContext *C, Image *ima, ImageUser *iuser)
+/**
+ * \param iuser: Image user or NULL when called outside the image space.
+ */
+static bool image_file_format_writable(Image *ima, ImageUser *iuser)
 {
-  /* Can always repack images. */
-  if (BKE_image_has_packedfile(ima)) {
-    return true;
-  }
-
-  /* Test for valid filepath. */
   void *lock;
   ImBuf *ibuf = BKE_image_acquire_ibuf(ima, iuser, &lock);
   bool ret = false;
 
-  if (ibuf) {
-    Main *bmain = CTX_data_main(C);
-    char name[FILE_MAX];
-    BLI_strncpy(name, ibuf->name, FILE_MAX);
-    BLI_path_abs(name, BKE_main_blendfile_path(bmain));
-
-    if (BLI_exists(name) == false) {
-      CTX_wm_operator_poll_msg_set(C, "image file not found");
-    }
-    else if (!BLI_file_is_writable(name)) {
-      CTX_wm_operator_poll_msg_set(C, "image path can't be written to");
-    }
-    else if (!BKE_image_buffer_format_writable(ibuf)) {
-      CTX_wm_operator_poll_msg_set(C, "image format is read-only");
-    }
-    else {
-      ret = true;
-    }
+  if (ibuf && BKE_image_buffer_format_writable(ibuf)) {
+    ret = true;
   }
 
   BKE_image_release_ibuf(ima, ibuf, lock);
@@ -2090,16 +2070,12 @@ static bool image_save_poll(bContext *C)
     return false;
   }
 
-  Image *ima = image_from_context(C);
-  ImageUser *iuser = image_user_from_context(C);
+  /* Check if there is a valid file path and image format we can write
+   * outside of the 'poll' so we can show a report with a pop-up. */
 
-  /* Images without a filepath will go to save as. */
-  if (!BKE_image_has_filepath(ima)) {
-    return true;
-  }
-
-  /* Check if there is a valid file path and image format we can write. */
-  return image_file_path_saveable(C, ima, iuser);
+  /* Can always repack images.
+   * Images without a filepath will go to "Save As". */
+  return true;
 }
 
 static int image_save_exec(bContext *C, wmOperator *op)
@@ -2114,6 +2090,8 @@ static int image_save_exec(bContext *C, wmOperator *op)
   if (BKE_image_has_packedfile(image)) {
     /* Save packed files to memory. */
     BKE_image_memorypack(image);
+    /* Report since this can be called from key shortcuts. */
+    BKE_reportf(op->reports, RPT_INFO, "Packed to memory image \"%s\"", image->filepath);
     return OPERATOR_FINISHED;
   }
 
@@ -2123,16 +2101,15 @@ static int image_save_exec(bContext *C, wmOperator *op)
   }
   image_save_options_from_op(bmain, &opts, op, NULL);
 
-  if (BLI_exists(opts.filepath) && BLI_file_is_writable(opts.filepath)) {
-    if (save_image_op(bmain, image, iuser, op, &opts)) {
-      /* report since this can be called from key-shortcuts */
-      BKE_reportf(op->reports, RPT_INFO, "Saved Image '%s'", opts.filepath);
-      ok = true;
-    }
-  }
-  else {
+  /* Check if file write permission is ok. */
+  if (BLI_exists(opts.filepath) && !BLI_file_is_writable(opts.filepath)) {
     BKE_reportf(
-        op->reports, RPT_ERROR, "Cannot save image, path '%s' is not writable", opts.filepath);
+        op->reports, RPT_ERROR, "Cannot save image, path \"%s\" is not writable", opts.filepath);
+  }
+  else if (save_image_op(bmain, image, iuser, op, &opts)) {
+    /* Report since this can be called from key shortcuts. */
+    BKE_reportf(op->reports, RPT_INFO, "Saved image \"%s\"", opts.filepath);
+    ok = true;
   }
 
   BKE_color_managed_view_settings_free(&opts.im_format.view_settings);
@@ -2147,8 +2124,11 @@ static int image_save_exec(bContext *C, wmOperator *op)
 static int image_save_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
 {
   Image *ima = image_from_context(C);
+  ImageUser *iuser = image_user_from_context(C);
 
-  if (!BKE_image_has_packedfile(ima) && !BKE_image_has_filepath(ima)) {
+  /* Not writable formats or images without a file-path will go to "Save As". */
+  if (!BKE_image_has_packedfile(ima) &&
+      (!BKE_image_has_filepath(ima) || !image_file_format_writable(ima, iuser))) {
     WM_operator_name_call(C, "IMAGE_OT_save_as", WM_OP_INVOKE_DEFAULT, NULL);
     return OPERATOR_CANCELLED;
   }
@@ -3057,8 +3037,12 @@ void IMAGE_OT_unpack(wmOperatorType *ot)
  * \{ */
 
 /* Returns color in linear space, matching ED_space_node_color_sample(). */
-bool ED_space_image_color_sample(SpaceImage *sima, ARegion *region, int mval[2], float r_col[3])
+bool ED_space_image_color_sample(
+    SpaceImage *sima, ARegion *region, int mval[2], float r_col[3], bool *r_is_data)
 {
+  if (r_is_data) {
+    *r_is_data = false;
+  }
   if (sima->image == NULL) {
     return false;
   }
@@ -3094,6 +3078,10 @@ bool ED_space_image_color_sample(SpaceImage *sima, ARegion *region, int mval[2],
       IMB_colormanagement_colorspace_to_scene_linear_v3(r_col, ibuf->rect_colorspace);
       ret = true;
     }
+  }
+
+  if (r_is_data) {
+    *r_is_data = (ibuf->colormanage_flag & IMB_COLORMANAGE_IS_DATA) != 0;
   }
 
   ED_space_image_release_buffer(sima, ibuf, lock);
@@ -3689,29 +3677,16 @@ static bool do_fill_tile(PointerRNA *ptr, Image *ima, ImageTile *tile)
 
 static void draw_fill_tile(PointerRNA *ptr, uiLayout *layout)
 {
-  uiLayout *split, *col[2];
+  uiLayoutSetPropSep(layout, true);
+  uiLayoutSetPropDecorate(layout, false);
 
-  split = uiLayoutSplit(layout, 0.5f, false);
-  col[0] = uiLayoutColumn(split, false);
-  col[1] = uiLayoutColumn(split, false);
-
-  uiItemL(col[0], IFACE_("Color"), ICON_NONE);
-  uiItemR(col[1], ptr, "color", 0, "", ICON_NONE);
-
-  uiItemL(col[0], IFACE_("Width"), ICON_NONE);
-  uiItemR(col[1], ptr, "width", 0, "", ICON_NONE);
-
-  uiItemL(col[0], IFACE_("Height"), ICON_NONE);
-  uiItemR(col[1], ptr, "height", 0, "", ICON_NONE);
-
-  uiItemL(col[0], "", ICON_NONE);
-  uiItemR(col[1], ptr, "alpha", 0, NULL, ICON_NONE);
-
-  uiItemL(col[0], IFACE_("Generated Type"), ICON_NONE);
-  uiItemR(col[1], ptr, "generated_type", 0, "", ICON_NONE);
-
-  uiItemL(col[0], "", ICON_NONE);
-  uiItemR(col[1], ptr, "float", 0, NULL, ICON_NONE);
+  uiLayout *col = uiLayoutColumn(layout, false);
+  uiItemR(col, ptr, "color", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "width", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "height", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "alpha", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "generated_type", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "float", 0, NULL, ICON_NONE);
 }
 
 static void tile_fill_init(PointerRNA *ptr, Image *ima, ImageTile *tile)
@@ -3833,30 +3808,24 @@ static int tile_add_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(ev
   RNA_int_set(op->ptr, "count", 1);
   RNA_string_set(op->ptr, "label", "");
 
-  return WM_operator_props_dialog_popup(C, op, 10 * UI_UNIT_X);
+  return WM_operator_props_dialog_popup(C, op, 300);
 }
 
 static void tile_add_draw(bContext *UNUSED(C), wmOperator *op)
 {
-  uiLayout *split, *col[2];
+  uiLayout *col;
   uiLayout *layout = op->layout;
   PointerRNA ptr;
 
   RNA_pointer_create(NULL, op->type->srna, op->properties, &ptr);
 
-  split = uiLayoutSplit(layout, 0.5f, false);
-  col[0] = uiLayoutColumn(split, false);
-  col[1] = uiLayoutColumn(split, false);
+  uiLayoutSetPropSep(layout, true);
+  uiLayoutSetPropDecorate(layout, false);
 
-  uiItemL(col[0], IFACE_("Number"), ICON_NONE);
-  uiItemR(col[1], &ptr, "number", 0, "", ICON_NONE);
-
-  uiItemL(col[0], IFACE_("Count"), ICON_NONE);
-  uiItemR(col[1], &ptr, "count", 0, "", ICON_NONE);
-
-  uiItemL(col[0], IFACE_("Label"), ICON_NONE);
-  uiItemR(col[1], &ptr, "label", 0, "", ICON_NONE);
-
+  col = uiLayoutColumn(layout, false);
+  uiItemR(col, &ptr, "number", 0, NULL, ICON_NONE);
+  uiItemR(col, &ptr, "count", 0, NULL, ICON_NONE);
+  uiItemR(col, &ptr, "label", 0, NULL, ICON_NONE);
   uiItemR(layout, &ptr, "fill", 0, NULL, ICON_NONE);
 
   if (RNA_boolean_get(&ptr, "fill")) {
@@ -3867,7 +3836,7 @@ static void tile_add_draw(bContext *UNUSED(C), wmOperator *op)
 void IMAGE_OT_tile_add(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Add tile";
+  ot->name = "Add Tile";
   ot->description = "Adds a tile to the image";
   ot->idname = "IMAGE_OT_tile_add";
 
@@ -3928,7 +3897,7 @@ static int tile_remove_exec(bContext *C, wmOperator *UNUSED(op))
 void IMAGE_OT_tile_remove(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Remove tile";
+  ot->name = "Remove Tile";
   ot->description = "Removes a tile from the image";
   ot->idname = "IMAGE_OT_tile_remove";
 
@@ -3975,7 +3944,7 @@ static int tile_fill_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(e
 {
   tile_fill_init(op->ptr, CTX_data_edit_image(C), NULL);
 
-  return WM_operator_props_dialog_popup(C, op, 15 * UI_UNIT_X);
+  return WM_operator_props_dialog_popup(C, op, 300);
 }
 
 static void tile_fill_draw(bContext *UNUSED(C), wmOperator *op)

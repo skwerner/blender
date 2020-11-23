@@ -39,11 +39,7 @@ isWindows = platform.system() != 'Darwin' and platform.system() != 'Linux'\n\
 #try:\n\
 #    multiprocessing.set_start_method('spawn')\n\
 #except:\n\
-#    pass\n\
-\n\
-bpy = sys.modules.get('bpy')\n\
-if bpy is not None:\n\
-    sys.executable = bpy.app.binary_path_python\n";
+#    pass\n";
 
 //////////////////////////////////////////////////////////////////////
 // DEBUG
@@ -122,7 +118,7 @@ timePerFrame_s$ID$ = $TIME_PER_FRAME$\n\
 # In Blender fluid.c: frame_length = DT_DEFAULT * (25.0 / fps) * time_scale\n\
 # with DT_DEFAULT = 0.1\n\
 frameLength_s$ID$ = $FRAME_LENGTH$\n\
-frameLengthUnscaled_s$ID$  = frameLength_s$ID$ / timeScale_s$ID$\n\
+frameLengthUnscaled_s$ID$ = frameLength_s$ID$ / timeScale_s$ID$\n\
 frameLengthRaw_s$ID$ = 0.1 * 25 # dt = 0.1 at 25 fps\n\
 \n\
 dt0_s$ID$          = $DT$\n\
@@ -158,14 +154,11 @@ mantaMsg('scaleAcceleration is ' + str(scaleAcceleration_s$ID$))\n\
 scaleSpeedFrames_s$ID$ = ratioResToBLength_s$ID$ * ratioFrameToFramelength_s$ID$ # [blength/frame] to [cells/frameLength]\n\
 mantaMsg('scaleSpeed is ' + str(scaleSpeedFrames_s$ID$))\n\
 \n\
-scaleSpeedTime_s$ID$ = ratioResToBLength_s$ID$ * ratioBTimeToTimestep_s$ID$ # [blength/btime] to [cells/frameLength]\n\
-mantaMsg('scaleSpeedTime is ' + str(scaleSpeedTime_s$ID$))\n\
-\n\
 gravity_s$ID$ *= scaleAcceleration_s$ID$ # scale from world acceleration to cell based acceleration\n\
 \n\
 # OpenVDB options\n\
 vdbCompression_s$ID$ = $COMPRESSION_OPENVDB$\n\
-vdbPrecisionHalf_s$ID$ = $PRECISION_OPENVDB$\n\
+vdbPrecision_s$ID$ = $PRECISION_OPENVDB$\n\
 \n\
 # Cache file names\n\
 file_data_s$ID$ = '$NAME_DATA$'\n\
@@ -374,23 +367,14 @@ def fluid_pre_step_$ID$():\n\
     \n\
     # Main vel grid is copied in adapt time step function\n\
     \n\
-    # translate obvels (world space) to grid space\n\
     if using_obstacle_s$ID$:\n\
         # Average out velocities from multiple obstacle objects at one cell\n\
         x_obvel_s$ID$.safeDivide(numObs_s$ID$)\n\
         y_obvel_s$ID$.safeDivide(numObs_s$ID$)\n\
         z_obvel_s$ID$.safeDivide(numObs_s$ID$)\n\
-        \n\
-        x_obvel_s$ID$.multConst(scaleSpeedFrames_s$ID$)\n\
-        y_obvel_s$ID$.multConst(scaleSpeedFrames_s$ID$)\n\
-        z_obvel_s$ID$.multConst(scaleSpeedFrames_s$ID$)\n\
         copyRealToVec3(sourceX=x_obvel_s$ID$, sourceY=y_obvel_s$ID$, sourceZ=z_obvel_s$ID$, target=obvelC_s$ID$)\n\
     \n\
-    # translate invels (world space) to grid space\n\
     if using_invel_s$ID$:\n\
-        x_invel_s$ID$.multConst(scaleSpeedTime_s$ID$)\n\
-        y_invel_s$ID$.multConst(scaleSpeedTime_s$ID$)\n\
-        z_invel_s$ID$.multConst(scaleSpeedTime_s$ID$)\n\
         copyRealToVec3(sourceX=x_invel_s$ID$, sourceY=y_invel_s$ID$, sourceZ=z_invel_s$ID$, target=invelC_s$ID$)\n\
     \n\
     if using_guiding_s$ID$:\n\
@@ -399,7 +383,6 @@ def fluid_pre_step_$ID$():\n\
         interpolateMACGrid(source=guidevel_sg$ID$, target=velT_s$ID$)\n\
         velT_s$ID$.multConst(vec3(gamma_sg$ID$))\n\
     \n\
-    # translate external forces (world space) to grid space\n\
     x_force_s$ID$.multConst(scaleSpeedFrames_s$ID$)\n\
     y_force_s$ID$.multConst(scaleSpeedFrames_s$ID$)\n\
     z_force_s$ID$.multConst(scaleSpeedFrames_s$ID$)\n\
@@ -626,10 +609,6 @@ def bake_guiding_process_$ID$(framenr, format_guiding, path_guiding, resumable):
     x_guidevel_s$ID$.safeDivide(numGuides_s$ID$)\n\
     y_guidevel_s$ID$.safeDivide(numGuides_s$ID$)\n\
     z_guidevel_s$ID$.safeDivide(numGuides_s$ID$)\n\
-    \n\
-    x_guidevel_s$ID$.multConst(scaleSpeedFrames_s$ID$)\n\
-    y_guidevel_s$ID$.multConst(scaleSpeedFrames_s$ID$)\n\
-    z_guidevel_s$ID$.multConst(scaleSpeedFrames_s$ID$)\n\
     copyRealToVec3(sourceX=x_guidevel_s$ID$, sourceY=y_guidevel_s$ID$, sourceZ=z_guidevel_s$ID$, target=guidevelC_s$ID$)\n\
     \n\
     mantaMsg('Extrapolating guiding velocity')\n\
@@ -718,7 +697,7 @@ def fluid_file_export_s$ID$(framenr, file_format, path, dict, file_name=None, mo
             file = os.path.join(path, file_name + '_' + framenr + file_format)\n\
             if not os.path.isfile(file) or mode_override:\n\
                 if file_format == '.vdb':\n\
-                    saveCombined = save(name=file, objects=list(dict.values()), worldSize=domainSize_s$ID$, skipDeletedParts=True, compression=vdbCompression_s$ID$, precisionHalf=vdbPrecisionHalf_s$ID$)\n\
+                    saveCombined = save(name=file, objects=list(dict.values()), worldSize=domainSize_s$ID$, skipDeletedParts=True, compression=vdbCompression_s$ID$, precision=vdbPrecision_s$ID$)\n\
                 elif file_format == '.bobj.gz' or file_format == '.obj':\n\
                     for name, object in dict.items():\n\
                         if not os.path.isfile(file) or mode_override:\n\

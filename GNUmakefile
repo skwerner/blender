@@ -89,7 +89,7 @@ Spell Checkers
    * check_spelling_osl:    Check for spelling errors (OSL only).
    * check_spelling_py:     Check for spelling errors (Python only).
 
-   Note that spell checkers can tak a 'CHECK_SPELLING_CACHE' filepath argument,
+   Note that spell checkers can take a 'CHECK_SPELLING_CACHE' filepath argument,
    so re-running does not need to re-check unchanged files.
 
    Example:
@@ -517,7 +517,7 @@ doc_py: .FORCE
 	ASAN_OPTIONS=halt_on_error=0 \
 	$(BLENDER_BIN) --background -noaudio --factory-startup \
 		--python doc/python_api/sphinx_doc_gen.py
-	cd doc/python_api ; sphinx-build -b html sphinx-in sphinx-out
+	sphinx-build -b html -j $(NPROCS) doc/python_api/sphinx-in doc/python_api/sphinx-out
 	@echo "docs written into: '$(BLENDER_DIR)/doc/python_api/sphinx-out/index.html'"
 
 doc_doxy: .FORCE

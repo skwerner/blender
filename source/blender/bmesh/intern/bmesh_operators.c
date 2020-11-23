@@ -368,7 +368,7 @@ void _bmo_slot_copy(BMOpSlot slot_args_src[BMO_OP_MAX_SLOTS],
 /*
  * BMESH OPSTACK SET XXX
  *
- * Sets the value of a slot depending on it's type
+ * Sets the value of a slot depending on its type
  */
 
 void BMO_slot_float_set(BMOpSlot slot_args[BMO_OP_MAX_SLOTS], const char *slot_name, const float f)
@@ -963,7 +963,7 @@ void BMO_slot_buffer_from_single(BMOperator *op, BMOpSlot *slot, BMHeader *ele)
   BMO_ASSERT_SLOT_IN_OP(slot, op);
   BLI_assert(slot->slot_type == BMO_OP_SLOT_ELEMENT_BUF);
   BLI_assert(slot->slot_subtype.elem & BMO_OP_SLOT_SUBTYPE_ELEM_IS_SINGLE);
-  BLI_assert(slot->len == 0 || slot->len == 1);
+  BLI_assert(ELEM(slot->len, 0, 1));
 
   BLI_assert(slot->slot_subtype.elem & ele->htype);
 
@@ -979,7 +979,7 @@ void BMO_slot_buffer_from_array(BMOperator *op,
 {
   BMO_ASSERT_SLOT_IN_OP(slot, op);
   BLI_assert(slot->slot_type == BMO_OP_SLOT_ELEMENT_BUF);
-  BLI_assert(slot->len == 0 || slot->len == ele_buffer_len);
+  BLI_assert(ELEM(slot->len, 0, ele_buffer_len));
 
   if (slot->data.buf == NULL) {
     slot->data.buf = BLI_memarena_alloc(op->arena, sizeof(*slot->data.buf) * ele_buffer_len);
@@ -993,7 +993,7 @@ void *BMO_slot_buffer_get_single(BMOpSlot *slot)
 {
   BLI_assert(slot->slot_type == BMO_OP_SLOT_ELEMENT_BUF);
   BLI_assert(slot->slot_subtype.elem & BMO_OP_SLOT_SUBTYPE_ELEM_IS_SINGLE);
-  BLI_assert(slot->len == 0 || slot->len == 1);
+  BLI_assert(ELEM(slot->len, 0, 1));
 
   return slot->len ? (BMHeader *)slot->data.buf[0] : NULL;
 }

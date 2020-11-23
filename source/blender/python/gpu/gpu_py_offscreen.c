@@ -140,8 +140,8 @@ PyDoc_STRVAR(
     ".. method:: bind(save=True)\n"
     "\n"
     "   Bind the offscreen object.\n"
-    "   To make sure that the offscreen gets unbind whether an exception occurs or not, pack it "
-    "into a `with` statement.\n"
+    "   To make sure that the offscreen gets unbind whether an exception occurs or not,\n"
+    "   pack it into a `with` statement.\n"
     "\n"
     "   :arg save: Save the current OpenGL state, so that it can be restored when unbinding.\n"
     "   :type save: `bool`\n");
@@ -220,7 +220,6 @@ static PyObject *bpygpu_offscreen_draw_view3d(BPyGPUOffScreen *self,
   struct ViewLayer *view_layer;
   View3D *v3d;
   ARegion *region;
-  struct RV3DMatrixStore *rv3d_mats;
 
   BPY_GPU_OFFSCREEN_CHECK_OBJ(self);
 
@@ -250,8 +249,6 @@ static PyObject *bpygpu_offscreen_draw_view3d(BPyGPUOffScreen *self,
 
   depsgraph = BKE_scene_ensure_depsgraph(G_MAIN, scene, view_layer);
 
-  rv3d_mats = ED_view3d_mats_rv3d_backup(region->regiondata);
-
   GPU_offscreen_bind(self->ofs, true);
 
   ED_view3d_draw_offscreen(depsgraph,
@@ -265,16 +262,12 @@ static PyObject *bpygpu_offscreen_draw_view3d(BPyGPUOffScreen *self,
                            (float(*)[4])py_mat_projection->matrix,
                            true,
                            true,
-                           true,
                            "",
                            false,
                            self->ofs,
                            NULL);
 
   GPU_offscreen_unbind(self->ofs, true);
-
-  ED_view3d_mats_rv3d_restore(region->regiondata, rv3d_mats);
-  MEM_freeN(rv3d_mats);
 
   Py_RETURN_NONE;
 }

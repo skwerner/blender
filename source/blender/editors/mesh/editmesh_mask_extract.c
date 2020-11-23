@@ -107,7 +107,7 @@ static int geometry_extract_apply(bContext *C,
   BKE_sculpt_mask_layers_ensure(ob, NULL);
 
   Mesh *mesh = ob->data;
-  Mesh *new_mesh = BKE_mesh_copy(bmain, mesh);
+  Mesh *new_mesh = (Mesh *)BKE_id_copy(bmain, &mesh->id);
 
   const BMAllocTemplate allocsize = BMALLOC_TEMPLATE_FROM_ME(new_mesh);
   BMesh *bm;
@@ -224,6 +224,8 @@ static int geometry_extract_apply(bContext *C,
 
   /* Remove the mask from the new object so it can be sculpted directly after extracting. */
   CustomData_free_layers(&new_ob_mesh->vdata, CD_PAINT_MASK, new_ob_mesh->totvert);
+
+  BKE_mesh_copy_settings(new_ob_mesh, mesh);
 
   if (params->apply_shrinkwrap) {
     BKE_shrinkwrap_mesh_nearest_surface_deform(C, new_ob, ob);
@@ -346,7 +348,7 @@ void MESH_OT_paint_mask_extract(wmOperatorType *ot)
   ot->invoke = paint_mask_extract_invoke;
   ot->exec = paint_mask_extract_exec;
 
-  ot->flag = OPTYPE_REGISTER;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   RNA_def_float(
       ot->srna,
@@ -406,7 +408,7 @@ static int face_set_extract_modal(bContext *C, wmOperator *op, const wmEvent *ev
         return geometry_extract_apply(C, op, geometry_extract_tag_face_set, &params);
       }
       break;
-
+    case EVT_ESCKEY:
     case RIGHTMOUSE: {
       WM_cursor_modal_restore(CTX_wm_window(C));
       ED_workspace_status_text(C, NULL);
@@ -430,7 +432,7 @@ void MESH_OT_face_set_extract(wmOperatorType *ot)
   ot->invoke = face_set_extract_invoke;
   ot->modal = face_set_extract_modal;
 
-  ot->flag = OPTYPE_REGISTER;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   geometry_extract_props(ot->srna);
 }
@@ -494,7 +496,7 @@ static int paint_mask_slice_exec(bContext *C, wmOperator *op)
   BKE_sculpt_mask_layers_ensure(ob, NULL);
 
   Mesh *mesh = ob->data;
-  Mesh *new_mesh = BKE_mesh_copy(bmain, mesh);
+  Mesh *new_mesh = (Mesh *)BKE_id_copy(bmain, &mesh->id);
 
   if (ob->mode == OB_MODE_SCULPT) {
     ED_sculpt_undo_geometry_begin(ob, "mask slice");
@@ -530,7 +532,7 @@ static int paint_mask_slice_exec(bContext *C, wmOperator *op)
     }
     Object *new_ob = ED_object_add_type(
         C, OB_MESH, NULL, ob->loc, ob->rot, false, local_view_bits);
-    Mesh *new_ob_mesh = BKE_mesh_copy(bmain, mesh);
+    Mesh *new_ob_mesh = (Mesh *)BKE_id_copy(bmain, &mesh->id);
 
     const BMAllocTemplate allocsize_new_ob = BMALLOC_TEMPLATE_FROM_ME(new_ob_mesh);
     bm = BM_mesh_create(&allocsize_new_ob,
@@ -556,8 +558,12 @@ static int paint_mask_slice_exec(bContext *C, wmOperator *op)
                                              mesh);
     BM_mesh_free(bm);
 
+    /* Remove the mask from the new object so it can be sculpted directly after slicing. */
+    CustomData_free_layers(&new_ob_mesh->vdata, CD_PAINT_MASK, new_ob_mesh->totvert);
+
     BKE_mesh_nomain_to_mesh(new_ob_mesh, new_ob->data, new_ob, &CD_MASK_MESH, true);
     BKE_mesh_calc_normals(new_ob->data);
+    BKE_mesh_copy_settings(new_ob->data, mesh);
     WM_event_add_notifier(C, NC_OBJECT | ND_MODIFIER, new_ob);
     BKE_mesh_batch_cache_dirty_tag(new_ob->data, BKE_MESH_BATCH_DIRTY_ALL);
     DEG_relations_tag_update(bmain);
@@ -598,7 +604,7 @@ void MESH_OT_paint_mask_slice(wmOperatorType *ot)
   ot->poll = geometry_extract_poll;
   ot->exec = paint_mask_slice_exec;
 
-  ot->flag = OPTYPE_REGISTER;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   RNA_def_float(
       ot->srna,

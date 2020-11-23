@@ -67,6 +67,7 @@ struct Heap {
   } nodes;
 };
 
+/* -------------------------------------------------------------------- */
 /** \name Internal Functions
  * \{ */
 
@@ -146,6 +147,7 @@ static void heap_up(Heap *heap, uint i)
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name Internal Memory Management
  * \{ */
 
@@ -187,6 +189,7 @@ static void heap_node_free(Heap *heap, HeapNode *node)
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name Public Heap API
  * \{ */
 
@@ -330,7 +333,7 @@ float BLI_heap_top_value(const Heap *heap)
 }
 
 /**
- * Pop the top node off the heap and return it's pointer.
+ * Pop the top node off the heap and return its pointer.
  */
 void *BLI_heap_pop_min(Heap *heap)
 {

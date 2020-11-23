@@ -45,7 +45,8 @@ class USERPREF_HT_header(Header):
             # Show '*' to let users know the preferences have been modified.
             layout.operator(
                 "wm.save_userpref",
-                text="Save Preferences" + (" *" if prefs.is_dirty else ""),
+                text=iface_("Save Preferences") + (" *" if prefs.is_dirty else ""),
+                translate=False,
             )
 
     def draw(self, context):
@@ -270,7 +271,7 @@ class USERPREF_PT_interface_editors(InterfacePanel, CenterAlignMixIn, Panel):
 
 
 class USERPREF_PT_interface_temporary_windows(InterfacePanel, CenterAlignMixIn, Panel):
-    bl_label = "Temporary Windows"
+    bl_label = "Temporary Editors"
     bl_parent_id = "USERPREF_PT_interface_editors"
     bl_options = {'DEFAULT_CLOSED'}
 
@@ -279,7 +280,7 @@ class USERPREF_PT_interface_temporary_windows(InterfacePanel, CenterAlignMixIn, 
         view = prefs.view
 
         col = layout.column()
-        col.prop(view, "render_display_type", text="Render in")
+        col.prop(view, "render_display_type", text="Render In")
         col.prop(view, "filebrowser_display_type", text="File Browser")
 
 
@@ -373,8 +374,8 @@ class USERPREF_PT_edit_objects_new(EditingPanel, CenterAlignMixIn, Panel):
 
         flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
 
-        flow.prop(edit, "material_link", text="Link Materials to")
-        flow.prop(edit, "object_align", text="Align to")
+        flow.prop(edit, "material_link", text="Link Materials To")
+        flow.prop(edit, "object_align", text="Align To")
         flow.prop(edit, "use_enter_edit_mode", text="Enter Edit Mode")
         flow.prop(edit, "collection_instance_empty_size", text="Instance Empty Size")
 
@@ -479,7 +480,7 @@ class USERPREF_PT_edit_misc(EditingPanel, CenterAlignMixIn, Panel):
 
         col = layout.column()
         col.prop(edit, "sculpt_paint_overlay_color", text="Sculpt Overlay Color")
-        col.prop(edit, "node_margin", text="Node Auto-offset Margin")
+        col.prop(edit, "node_margin", text="Node Auto-Offset Margin")
 
 
 # -----------------------------------------------------------------------------
@@ -542,6 +543,7 @@ class USERPREF_PT_animation_fcurves(AnimationPanel, CenterAlignMixIn, Panel):
         flow.prop(edit, "keyframe_new_interpolation_type", text="Default Interpolation")
         flow.prop(edit, "keyframe_new_handle_type", text="Default Handles")
         flow.prop(edit, "use_insertkey_xyz_to_rgb", text="XYZ to RGB")
+        flow.prop(edit, "use_anim_channel_group_colors")
 
 
 # -----------------------------------------------------------------------------
@@ -573,6 +575,12 @@ class USERPREF_PT_system_sound(SystemPanel, CenterAlignMixIn, Panel):
 
 class USERPREF_PT_system_cycles_devices(SystemPanel, CenterAlignMixIn, Panel):
     bl_label = "Cycles Render Devices"
+
+    @classmethod
+    def poll(cls, context):
+        # No GPU rendering on macOS currently.
+        import sys
+        return bpy.app.build_options.cycles and sys.platform != "darwin"
 
     def draw_centered(self, context, layout):
         prefs = context.preferences
@@ -1036,7 +1044,7 @@ class USERPREF_PT_theme_collection_colors(ThemePanel, CenterAlignMixIn, Panel):
 
         flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
         for i, ui in enumerate(theme.collection_color, 1):
-            flow.prop(ui, "color", text=iface_(f"Color {i:d}"), translate=False)
+            flow.prop(ui, "color", text=iface_("Color %d") % i, translate=False)
 
 
 # Base class for dynamically defined theme-space panels.
@@ -1348,7 +1356,7 @@ class USERPREF_PT_saveload_blend(SaveLoadPanel, CenterAlignMixIn, Panel):
         col.prop(view, "use_save_prompt")
         col.prop(paths, "use_save_preview_images")
 
-        col = layout.column(heading="Default to")
+        col = layout.column(heading="Default To")
         col.prop(paths, "use_relative_paths")
         col.prop(paths, "use_file_compression")
         col.prop(paths, "use_load_ui")
@@ -1377,7 +1385,7 @@ class USERPREF_PT_saveload_blend_autosave(SaveLoadPanel, CenterAlignMixIn, Panel
 
         col = layout.column()
         col.active = paths.use_auto_save_temporary_files
-        col.prop(paths, "auto_save_time", text="Timer (mins)")
+        col.prop(paths, "auto_save_time", text="Timer (Minutes)")
 
 
 class USERPREF_PT_saveload_file_browser(SaveLoadPanel, CenterAlignMixIn, Panel):
@@ -1487,7 +1495,6 @@ class USERPREF_PT_navigation_orbit(NavigationPanel, CenterAlignMixIn, Panel):
     bl_label = "Orbit & Pan"
 
     def draw_centered(self, context, layout):
-        import sys
         prefs = context.preferences
         inputs = prefs.inputs
         view = prefs.view
@@ -1502,9 +1509,6 @@ class USERPREF_PT_navigation_orbit(NavigationPanel, CenterAlignMixIn, Panel):
         col.prop(inputs, "use_rotate_around_active")
 
         col.separator()
-
-        if sys.platform == "darwin":
-            col.prop(inputs, "use_trackpad_natural", text="Natural Trackpad Direction")
 
         col = layout.column(heading="Auto")
         col.prop(inputs, "use_auto_perspective", text="Perspective")
@@ -1546,9 +1550,6 @@ class USERPREF_PT_navigation_fly_walk(NavigationPanel, CenterAlignMixIn, Panel):
         inputs = prefs.inputs
 
         layout.row().prop(inputs, "navigation_mode", expand=True)
-
-        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
-        flow.prop(inputs, "use_camera_lock_parent")
 
 
 class USERPREF_PT_navigation_fly_walk_navigation(NavigationPanel, CenterAlignMixIn, Panel):
@@ -1759,6 +1760,7 @@ class USERPREF_PT_addons(AddOnPanel, Panel):
 
         layout = self.layout
 
+        wm = context.window_manager
         prefs = context.preferences
         used_ext = {ext.module for ext in prefs.addons}
 
@@ -1784,16 +1786,16 @@ class USERPREF_PT_addons(AddOnPanel, Panel):
         split = layout.split(factor=0.6)
 
         row = split.row()
-        row.prop(context.window_manager, "addon_support", expand=True)
+        row.prop(wm, "addon_support", expand=True)
 
         row = split.row(align=True)
         row.operator("preferences.addon_install", icon='IMPORT', text="Install...")
         row.operator("preferences.addon_refresh", icon='FILE_REFRESH', text="Refresh")
 
         row = layout.row()
-        row.prop(context.preferences.view, "show_addons_enabled_only")
-        row.prop(context.window_manager, "addon_filter", text="")
-        row.prop(context.window_manager, "addon_search", text="", icon='VIEWZOOM')
+        row.prop(prefs.view, "show_addons_enabled_only")
+        row.prop(wm, "addon_filter", text="")
+        row.prop(wm, "addon_search", text="", icon='VIEWZOOM')
 
         col = layout.column()
 
@@ -1818,10 +1820,10 @@ class USERPREF_PT_addons(AddOnPanel, Panel):
                 "(see console for details)",
             )
 
-        show_enabled_only = context.preferences.view.show_addons_enabled_only
-        filter = context.window_manager.addon_filter
-        search = context.window_manager.addon_search.lower()
-        support = context.window_manager.addon_support
+        show_enabled_only = prefs.view.show_addons_enabled_only
+        filter = wm.addon_filter
+        search = wm.addon_search.lower()
+        support = wm.addon_support
 
         # initialized on demand
         user_addon_paths = []
@@ -2183,10 +2185,10 @@ class USERPREF_PT_experimental_new_features(ExperimentalPanel, Panel):
     def draw(self, context):
         self._draw_items(
             context, (
-                ({"property": "use_new_particle_system"}, "T73324"),
                 ({"property": "use_sculpt_vertex_colors"}, "T71947"),
-                ({"property": "use_tools_missing_icons"}, "T80331"),
                 ({"property": "use_switch_object_operator"}, "T80402"),
+                ({"property": "use_sculpt_tools_tilt"}, "T00000"),
+                ({"property": "use_object_add_tool"}, "T57210"),
             ),
         )
 
@@ -2198,6 +2200,8 @@ class USERPREF_PT_experimental_prototypes(ExperimentalPanel, Panel):
         self._draw_items(
             context, (
                 ({"property": "use_new_hair_type"}, "T68981"),
+                ({"property": "use_new_point_cloud_type"}, "T75717"),
+                ({"property": "use_new_geometry_nodes"}, "project/profile/121"),
             ),
         )
 
@@ -2216,7 +2220,6 @@ class USERPREF_PT_experimental_debugging(ExperimentalPanel, Panel):
             context, (
                 ({"property": "use_undo_legacy"}, "T60695"),
                 ({"property": "use_cycles_debug"}, None),
-                ({"property": "use_image_editor_legacy_drawing"}, "T67530"),
             ),
         )
 

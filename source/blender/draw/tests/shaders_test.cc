@@ -240,6 +240,7 @@ TEST_F(DrawTest, overlay_glsl_shaders)
     EXPECT_NE(OVERLAY_shader_edit_uv_stretching_area_get(), nullptr);
     EXPECT_NE(OVERLAY_shader_edit_uv_stretching_angle_get(), nullptr);
     EXPECT_NE(OVERLAY_shader_edit_uv_tiled_image_borders_get(), nullptr);
+    EXPECT_NE(OVERLAY_shader_edit_uv_stencil_image(), nullptr);
     EXPECT_NE(OVERLAY_shader_extra(false), nullptr);
     EXPECT_NE(OVERLAY_shader_extra(true), nullptr);
     EXPECT_NE(OVERLAY_shader_extra_groundline(), nullptr);
@@ -340,7 +341,8 @@ TEST_F(DrawTest, eevee_glsl_shaders_static)
   EXPECT_NE(EEVEE_shaders_volumes_scatter_sh_get(), nullptr);
   EXPECT_NE(EEVEE_shaders_volumes_scatter_with_lights_sh_get(), nullptr);
   EXPECT_NE(EEVEE_shaders_volumes_integration_sh_get(), nullptr);
-  EXPECT_NE(EEVEE_shaders_volumes_resolve_sh_get(), nullptr);
+  EXPECT_NE(EEVEE_shaders_volumes_resolve_sh_get(false), nullptr);
+  EXPECT_NE(EEVEE_shaders_volumes_resolve_sh_get(true), nullptr);
   EXPECT_NE(EEVEE_shaders_volumes_accum_sh_get(), nullptr);
   EXPECT_NE(EEVEE_shaders_studiolight_probe_sh_get(), nullptr);
   EXPECT_NE(EEVEE_shaders_studiolight_background_sh_get(), nullptr);

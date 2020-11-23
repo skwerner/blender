@@ -51,7 +51,8 @@
 #include "RNA_access.h"
 
 #include "MEM_guardedalloc.h"
-#include "RE_shader_ext.h"
+
+#include "RE_texture.h"
 
 #include "MOD_modifiertypes.h"
 #include "MOD_ui_common.h"
@@ -62,7 +63,7 @@
 
 static void initData(ModifierData *md)
 {
-  WaveModifierData *wmd = (WaveModifierData *)md;  // whadya know, moved here from Iraq
+  WaveModifierData *wmd = (WaveModifierData *)md;
 
   BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(wmd, modifier));
 

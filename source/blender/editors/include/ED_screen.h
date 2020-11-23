@@ -92,6 +92,11 @@ void ED_region_panels_layout_ex(const struct bContext *C,
                                 struct ListBase *paneltypes,
                                 const char *contexts[],
                                 const char *category_override);
+bool ED_region_property_search(const struct bContext *C,
+                               struct ARegion *region,
+                               struct ListBase *paneltypes,
+                               const char *contexts[],
+                               const char *category_override);
 
 void ED_region_panels_layout(const struct bContext *C, struct ARegion *region);
 void ED_region_panels_draw(const struct bContext *C, struct ARegion *region);
@@ -194,6 +199,7 @@ int ED_region_global_size_y(void);
 void ED_area_update_region_sizes(struct wmWindowManager *wm,
                                  struct wmWindow *win,
                                  struct ScrArea *area);
+bool ED_area_has_shared_border(struct ScrArea *a, struct ScrArea *b);
 
 ScrArea *ED_screen_areas_iter_first(const struct wmWindow *win, const bScreen *screen);
 ScrArea *ED_screen_areas_iter_next(const bScreen *screen, const ScrArea *area);

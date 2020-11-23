@@ -1266,7 +1266,7 @@ static int edbm_select_similar_region_exec(bContext *C, wmOperator *op)
 
   groups_array = MEM_mallocN(sizeof(*groups_array) * bm->totfacesel, __func__);
   group_tot = BM_mesh_calc_face_groups(
-      bm, groups_array, &group_index, NULL, NULL, BM_ELEM_SELECT, BM_VERT);
+      bm, groups_array, &group_index, NULL, NULL, NULL, BM_ELEM_SELECT, BM_VERT);
 
   BM_mesh_elem_table_ensure(bm, BM_FACE);
 
@@ -2687,8 +2687,8 @@ bool EDBM_selectmode_disable_multi(struct bContext *C,
  *
  * Overview of the algorithm:
  * - Groups faces surrounded by edges with 3+ faces using them.
- * - Calculates a cost of each face group comparing it's angle with the faces
- *   connected to it's non-manifold edges.
+ * - Calculates a cost of each face group comparing its angle with the faces
+ *   connected to its non-manifold edges.
  * - Mark the face group as interior, and mark connected face groups for recalculation.
  * - Continue to remove the face groups with the highest 'cost'.
  *
@@ -2822,7 +2822,7 @@ bool EDBM_select_interior_faces(BMEditMesh *em)
 
   fgroup_array = MEM_mallocN(sizeof(*fgroup_array) * bm->totface, __func__);
   fgroup_len = BM_mesh_calc_face_groups(
-      bm, fgroup_array, &fgroup_index, bm_interior_loop_filter_fn, NULL, 0, BM_EDGE);
+      bm, fgroup_array, &fgroup_index, bm_interior_loop_filter_fn, NULL, NULL, 0, BM_EDGE);
 
   int *fgroup_recalc_stack = MEM_mallocN(sizeof(*fgroup_recalc_stack) * fgroup_len, __func__);
   STACK_DECLARE(fgroup_recalc_stack);
@@ -3572,13 +3572,17 @@ static int edbm_select_linked_pick_invoke(bContext *C, wmOperator *op, const wmE
 
   edbm_select_linked_pick_ex(em, ele, sel, delimit);
 
-  /* to support redo */
-  BM_mesh_elem_index_ensure(bm, ele->head.htype);
-  index = EDBM_elem_to_index_any(em, ele);
-
-  /* TODO(MULTI_EDIT), index doesn't know which object,
-   * index selections isn't very common. */
-  RNA_int_set(op->ptr, "index", index);
+  /* To support redo. */
+  {
+    /* Note that the `base_index` can't be used as the index depends on the view-port
+     * which might not be available on redo. */
+    BM_mesh_elem_index_ensure(bm, ele->head.htype);
+    int object_index;
+    index = EDBM_elem_to_index_any_multi(vc.view_layer, em, ele, &object_index);
+    BLI_assert(object_index >= 0);
+    RNA_int_set(op->ptr, "object_index", object_index);
+    RNA_int_set(op->ptr, "index", index);
+  }
 
   DEG_id_tag_update(basact->object->data, ID_RECALC_SELECT);
   WM_event_add_notifier(C, NC_GEOM | ND_SELECT, basact->object->data);
@@ -3589,18 +3593,22 @@ static int edbm_select_linked_pick_invoke(bContext *C, wmOperator *op, const wmE
 
 static int edbm_select_linked_pick_exec(bContext *C, wmOperator *op)
 {
-  Object *obedit = CTX_data_edit_object(C);
-  BMEditMesh *em = BKE_editmesh_from_object(obedit);
-  BMesh *bm = em->bm;
-  int index;
-  const bool sel = !RNA_boolean_get(op->ptr, "deselect");
+  Object *obedit = NULL;
+  BMElem *ele;
 
-  index = RNA_int_get(op->ptr, "index");
-  if (index < 0 || index >= (bm->totvert + bm->totedge + bm->totface)) {
+  {
+    ViewLayer *view_layer = CTX_data_view_layer(C);
+    const int object_index = RNA_int_get(op->ptr, "object_index");
+    const int index = RNA_int_get(op->ptr, "index");
+    ele = EDBM_elem_from_index_any_multi(view_layer, object_index, index, &obedit);
+  }
+
+  if (ele == NULL) {
     return OPERATOR_CANCELLED;
   }
 
-  BMElem *ele = EDBM_elem_from_index_any(em, index);
+  BMEditMesh *em = BKE_editmesh_from_object(obedit);
+  const bool sel = !RNA_boolean_get(op->ptr, "deselect");
 
 #ifdef USE_LINKED_SELECT_DEFAULT_HACK
   int delimit = select_linked_delimit_default_from_op(op, em->selectmode);
@@ -3645,6 +3653,8 @@ void MESH_OT_select_linked_pick(wmOperatorType *ot)
 #endif
 
   /* use for redo */
+  prop = RNA_def_int(ot->srna, "object_index", -1, -1, INT_MAX, "", "", 0, INT_MAX);
+  RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
   prop = RNA_def_int(ot->srna, "index", -1, -1, INT_MAX, "", "", 0, INT_MAX);
   RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
 }
@@ -5040,7 +5050,7 @@ static int verg_radial(const void *va, const void *vb)
 }
 
 /**
- * This function leaves faces tagged which are apart of the new region.
+ * This function leaves faces tagged which are a part of the new region.
  *
  * \note faces already tagged are ignored, to avoid finding the same regions twice:
  * important when we have regions with equal face counts, see: T40309

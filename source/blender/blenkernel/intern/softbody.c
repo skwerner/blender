@@ -1063,7 +1063,7 @@ static int sb_detect_face_pointCached(const float face_v1[3],
   GHash *hash;
   GHashIterator *ihash;
   float nv1[3], edge1[3], edge2[3], d_nvect[3], aabbmin[3], aabbmax[3];
-  float facedist, outerfacethickness, tune = 10.f;
+  float facedist, outerfacethickness, tune = 10.0f;
   int a, deflected = 0;
 
   aabbmin[0] = min_fff(face_v1[0], face_v2[0], face_v3[0]);
@@ -1506,7 +1506,7 @@ static void _scan_for_ext_spring_forces(
             madd_v3_v3fl(bs->ext_force, vel, f * (1.0f - fabsf(dot_v3v3(vel, sp))));
           }
           else {
-            madd_v3_v3fl(bs->ext_force, vel, f);  // to keep compatible with 2.45 release files
+            madd_v3_v3fl(bs->ext_force, vel, f); /* to keep compatible with 2.45 release files */
           }
         }
         /* --- springs seeing wind */
@@ -1554,7 +1554,7 @@ static void sb_sfesf_threads_run(struct Depsgraph *depsgraph,
   for (i = 0; i < totthread; i++) {
     sb_threads[i].scene = scene;
     sb_threads[i].ob = ob;
-    sb_threads[i].forcetime = 0.0;  // not used here
+    sb_threads[i].forcetime = 0.0; /* not used here */
     sb_threads[i].timenow = timenow;
     sb_threads[i].ilast = left;
     left = left - dec;
@@ -1565,9 +1565,9 @@ static void sb_sfesf_threads_run(struct Depsgraph *depsgraph,
       sb_threads[i].ifirst = 0;
     }
     sb_threads[i].effectors = effectors;
-    sb_threads[i].do_deflector = false;  // not used here
-    sb_threads[i].fieldfactor = 0.0f;    // not used here
-    sb_threads[i].windfactor = 0.0f;     // not used here
+    sb_threads[i].do_deflector = false; /* not used here */
+    sb_threads[i].fieldfactor = 0.0f;   /* not used here */
+    sb_threads[i].windfactor = 0.0f;    /* not used here */
     sb_threads[i].nr = i;
     sb_threads[i].tot = totthread;
   }
@@ -1741,8 +1741,7 @@ static int sb_detect_vertex_collisionCached(float opco[3],
           cross_v3_v3v3(d_nvect, edge2, edge1);
           /* n_mag = */ /* UNUSED */ normalize_v3(d_nvect);
           facedist = dot_v3v3(dv1, d_nvect);
-          // so rules are
-          //
+          /* so rules are */
 
           if ((facedist > innerfacethickness) && (facedist < outerfacethickness)) {
             if (isect_point_tri_prism_v3(opco, nv1, nv2, nv3)) {
@@ -1781,7 +1780,7 @@ static int sb_detect_vertex_collisionCached(float opco[3],
     }
   } /* while () */
 
-  if (deflected == 1) {  // no face but 'outer' edge cylinder sees vert
+  if (deflected == 1) { /* no face but 'outer' edge cylinder sees vert */
     force_mag_norm = (float)exp(-ee * mindistedge);
     if (mindistedge > outerfacethickness * ff) {
       force_mag_norm = (float)force_mag_norm * fa * (mindistedge - outerfacethickness) *
@@ -1793,10 +1792,10 @@ static int sb_detect_vertex_collisionCached(float opco[3],
       *damp *= (1.0f - mindistedge / outerfacethickness);
     }
   }
-  if (deflected == 2) {  //  face inner detected
+  if (deflected == 2) { /* face inner detected */
     add_v3_v3(force, innerforceaccu);
   }
-  if (deflected == 3) {  //  face outer detected
+  if (deflected == 3) { /* face outer detected */
     add_v3_v3(force, outerforceaccu);
   }
 
@@ -2033,7 +2032,7 @@ static int _softbody_calc_forces_slice_in_a_thread(Scene *scene,
           attached = 0;
           for (b = obp->nofsprings; b > 0; b--) {
             bs = sb->bspring + obp->springs[b - 1];
-            if ((ilast - bb == bs->v2) || (ilast - bb == bs->v1)) {
+            if (ELEM(ilast - bb, bs->v2, bs->v1)) {
               attached = 1;
               continue;
             }
@@ -2798,8 +2797,8 @@ static void reference_to_scratch(Object *ob)
   SoftBody *sb = ob->soft;
   ReferenceVert *rp;
   BodyPoint *bp;
-  float accu_pos[3] = {0.f, 0.f, 0.f};
-  float accu_mass = 0.f;
+  float accu_pos[3] = {0.0f, 0.0f, 0.0f};
+  float accu_mass = 0.0f;
   int a;
 
   sb->scratch->Ref.ivert = MEM_mallocN(sizeof(ReferenceVert) * sb->totpoint, "SB_Reference");
@@ -3322,7 +3321,7 @@ static void softbody_reset(Object *ob, SoftBody *sb, float (*vertexCos)[3], int 
     bp->vec[0] = bp->vec[1] = bp->vec[2] = 0.0f;
 
     /* the bp->prev*'s are for rolling back from a canceled try to propagate in time
-     * adaptive step size algo in a nutshell:
+     * adaptive step size algorithm in a nutshell:
      * 1.  set scheduled time step to new dtime
      * 2.  try to advance the scheduled time step, being optimistic execute it
      * 3.  check for success
@@ -3496,14 +3495,14 @@ static void softbody_step(
   }
   else if (sb->solver_ID == 2) {
     /* do semi "fake" implicit euler */
-    // removed
+    /* removed */
   } /*SOLVER SELECT*/
   else if (sb->solver_ID == 4) {
     /* do semi "fake" implicit euler */
   } /*SOLVER SELECT*/
   else if (sb->solver_ID == 3) {
     /* do "stupid" semi "fake" implicit euler */
-    // removed
+    /* removed */
 
   } /*SOLVER SELECT*/
   else {

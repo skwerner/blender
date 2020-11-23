@@ -31,7 +31,7 @@ set(INC
   ../editors/include
   ../makesdna
   ../makesrna
-  ../render/extern/include
+  ../render
   ../windowmanager
   ../../../intern/eigen
   ../../../intern/guardedalloc
@@ -101,6 +101,8 @@ set(SRC
   intern/MOD_util.c
   intern/MOD_uvproject.c
   intern/MOD_uvwarp.c
+  intern/MOD_volume_displace.cc
+  intern/MOD_volume_to_mesh.cc
   intern/MOD_warp.c
   intern/MOD_wave.c
   intern/MOD_weighted_normal.c
@@ -193,7 +195,8 @@ if(WITH_OPENVDB)
 endif()
 
 if(WITH_EXPERIMENTAL_FEATURES)
-  add_definitions(-DWITH_PARTICLE_NODES)
+  add_definitions(-DWITH_GEOMETRY_NODES)
+  add_definitions(-DWITH_POINT_CLOUD)
   add_definitions(-DWITH_HAIR_NODES)
 endif()
 

@@ -52,14 +52,14 @@ NODE_ABSTRACT_DEFINE(Geometry)
 
   SOCKET_UINT(motion_steps, "Motion Steps", 3);
   SOCKET_BOOLEAN(use_motion_blur, "Use Motion Blur", false);
+  SOCKET_NODE_ARRAY(used_shaders, "Shaders", &Shader::node_type);
 
   return type;
 }
 
 Geometry::Geometry(const NodeType *node_type, const Type type)
-    : Node(node_type), type(type), attributes(this, ATTR_PRIM_GEOMETRY)
+    : Node(node_type), geometry_type(type), attributes(this, ATTR_PRIM_GEOMETRY)
 {
-  need_update = true;
   need_update_rebuild = false;
 
   transform_applied = false;
@@ -81,9 +81,11 @@ Geometry::~Geometry()
   delete bvh;
 }
 
-void Geometry::clear()
+void Geometry::clear(bool preserve_shaders)
 {
-  used_shaders.clear();
+  if (!preserve_shaders)
+    used_shaders.clear();
+
   transform_applied = false;
   transform_negative_scaled = false;
   transform_normal = transform_identity();
@@ -97,9 +99,11 @@ bool Geometry::need_attribute(Scene *scene, AttributeStandard std)
   if (scene->need_global_attribute(std))
     return true;
 
-  foreach (Shader *shader, used_shaders)
+  foreach (Node *node, used_shaders) {
+    Shader *shader = static_cast<Shader *>(node);
     if (shader->attributes.find(std))
       return true;
+  }
 
   return false;
 }
@@ -109,11 +113,25 @@ bool Geometry::need_attribute(Scene * /*scene*/, ustring name)
   if (name == ustring())
     return false;
 
-  foreach (Shader *shader, used_shaders)
+  foreach (Node *node, used_shaders) {
+    Shader *shader = static_cast<Shader *>(node);
     if (shader->attributes.find(name))
       return true;
+  }
 
   return false;
+}
+
+AttributeRequestSet Geometry::needed_attributes()
+{
+  AttributeRequestSet result;
+
+  foreach (Node *node, used_shaders) {
+    Shader *shader = static_cast<Shader *>(node);
+    result.add(shader->attributes);
+  }
+
+  return result;
 }
 
 float Geometry::motion_time(int step) const
@@ -159,8 +177,9 @@ bool Geometry::is_instanced() const
 
 bool Geometry::has_true_displacement() const
 {
-  foreach (Shader *shader, used_shaders) {
-    if (shader->has_displacement && shader->displacement_method != DISPLACE_BUMP) {
+  foreach (Node *node, used_shaders) {
+    Shader *shader = static_cast<Shader *>(node);
+    if (shader->has_displacement && shader->get_displacement_method() != DISPLACE_BUMP) {
       return true;
     }
   }
@@ -186,7 +205,7 @@ void Geometry::compute_bvh(
       msg += string_printf("%s %u/%u", name.c_str(), (uint)(n + 1), (uint)total);
 
     Object object;
-    object.geometry = this;
+    object.set_geometry(this);
 
     vector<Geometry *> geometry;
     geometry.push_back(this);
@@ -220,7 +239,7 @@ void Geometry::compute_bvh(
     }
   }
 
-  need_update = false;
+  clear_modified();
   need_update_rebuild = false;
 }
 
@@ -242,16 +261,18 @@ bool Geometry::has_voxel_attributes() const
 
 void Geometry::tag_update(Scene *scene, bool rebuild)
 {
-  need_update = true;
+  tag_modified();
 
   if (rebuild) {
     need_update_rebuild = true;
     scene->light_manager->need_update = true;
   }
   else {
-    foreach (Shader *shader, used_shaders)
+    foreach (Node *node, used_shaders) {
+      Shader *shader = static_cast<Shader *>(node);
       if (shader->has_surface_emission)
         scene->light_manager->need_update = true;
+    }
   }
 
   scene->geometry_manager->need_update = true;
@@ -305,15 +326,12 @@ void GeometryManager::update_osl_attributes(Device *device,
     }
 
     /* find geometry attributes */
-    size_t j;
-
-    for (j = 0; j < scene->geometry.size(); j++)
-      if (scene->geometry[j] == object->geometry)
-        break;
+    size_t j = object->geometry->index;
+    assert(j < scene->geometry.size() && scene->geometry[j] == object->geometry);
 
     AttributeRequestSet &attributes = geom_attributes[j];
 
-    /* set object attributes */
+    /* set mesh attributes */
     foreach (AttributeRequest &req, attributes.requests) {
       OSLGlobals::Attribute osl_attr;
 
@@ -375,10 +393,68 @@ void GeometryManager::update_osl_attributes(Device *device,
 #endif
 }
 
+/* Generate a normal attribute map entry from an attribute descriptor. */
+static void emit_attribute_map_entry(
+    uint4 *attr_map, int index, uint id, TypeDesc type, const AttributeDescriptor &desc)
+{
+  attr_map[index].x = id;
+  attr_map[index].y = desc.element;
+  attr_map[index].z = as_uint(desc.offset);
+
+  if (type == TypeDesc::TypeFloat)
+    attr_map[index].w = NODE_ATTR_FLOAT;
+  else if (type == TypeDesc::TypeMatrix)
+    attr_map[index].w = NODE_ATTR_MATRIX;
+  else if (type == TypeFloat2)
+    attr_map[index].w = NODE_ATTR_FLOAT2;
+  else if (type == TypeFloat4)
+    attr_map[index].w = NODE_ATTR_FLOAT4;
+  else if (type == TypeRGBA)
+    attr_map[index].w = NODE_ATTR_RGBA;
+  else
+    attr_map[index].w = NODE_ATTR_FLOAT3;
+
+  attr_map[index].w |= desc.flags << 8;
+}
+
+/* Generate an attribute map end marker, optionally including a link to another map.
+ * Links are used to connect object attribute maps to mesh attribute maps. */
+static void emit_attribute_map_terminator(uint4 *attr_map, int index, bool chain, uint chain_link)
+{
+  for (int j = 0; j < ATTR_PRIM_TYPES; j++) {
+    attr_map[index + j].x = ATTR_STD_NONE;
+    attr_map[index + j].y = chain;                      /* link is valid flag */
+    attr_map[index + j].z = chain ? chain_link + j : 0; /* link to the correct sub-entry */
+    attr_map[index + j].w = 0;
+  }
+}
+
+/* Generate all necessary attribute map entries from the attribute request. */
+static void emit_attribute_mapping(
+    uint4 *attr_map, int index, Scene *scene, AttributeRequest &req, Geometry *geom)
+{
+  uint id;
+
+  if (req.std == ATTR_STD_NONE)
+    id = scene->shader_manager->get_attribute_id(req.name);
+  else
+    id = scene->shader_manager->get_attribute_id(req.std);
+
+  emit_attribute_map_entry(attr_map, index, id, req.type, req.desc);
+
+  if (geom->is_mesh()) {
+    Mesh *mesh = static_cast<Mesh *>(geom);
+    if (mesh->get_num_subd_faces()) {
+      emit_attribute_map_entry(attr_map, index + 1, id, req.subd_type, req.subd_desc);
+    }
+  }
+}
+
 void GeometryManager::update_svm_attributes(Device *,
                                             DeviceScene *dscene,
                                             Scene *scene,
-                                            vector<AttributeRequestSet> &geom_attributes)
+                                            vector<AttributeRequestSet> &geom_attributes,
+                                            vector<AttributeRequestSet> &object_attributes)
 {
   /* for SVM, the attributes_map table is used to lookup the offset of an
    * attribute, based on a unique shader attribute id. */
@@ -392,6 +468,19 @@ void GeometryManager::update_svm_attributes(Device *,
     attr_map_size += (geom_attributes[i].size() + 1) * ATTR_PRIM_TYPES;
   }
 
+  for (size_t i = 0; i < scene->objects.size(); i++) {
+    Object *object = scene->objects[i];
+
+    /* only allocate a table for the object if it actually has attributes */
+    if (object_attributes[i].size() == 0) {
+      object->attr_map_offset = 0;
+    }
+    else {
+      object->attr_map_offset = attr_map_size;
+      attr_map_size += (object_attributes[i].size() + 1) * ATTR_PRIM_TYPES;
+    }
+  }
+
   if (attr_map_size == 0)
     return;
 
@@ -403,69 +492,31 @@ void GeometryManager::update_svm_attributes(Device *,
     Geometry *geom = scene->geometry[i];
     AttributeRequestSet &attributes = geom_attributes[i];
 
-    /* set object attributes */
+    /* set geometry attributes */
     int index = geom->attr_map_offset;
 
     foreach (AttributeRequest &req, attributes.requests) {
-      uint id;
-
-      if (req.std == ATTR_STD_NONE)
-        id = scene->shader_manager->get_attribute_id(req.name);
-      else
-        id = scene->shader_manager->get_attribute_id(req.std);
-
-      attr_map[index].x = id;
-      attr_map[index].y = req.desc.element;
-      attr_map[index].z = as_uint(req.desc.offset);
-
-      if (req.type == TypeDesc::TypeFloat)
-        attr_map[index].w = NODE_ATTR_FLOAT;
-      else if (req.type == TypeDesc::TypeMatrix)
-        attr_map[index].w = NODE_ATTR_MATRIX;
-      else if (req.type == TypeFloat2)
-        attr_map[index].w = NODE_ATTR_FLOAT2;
-      else if (req.type == TypeRGBA)
-        attr_map[index].w = NODE_ATTR_RGBA;
-      else
-        attr_map[index].w = NODE_ATTR_FLOAT3;
-
-      attr_map[index].w |= req.desc.flags << 8;
-
-      index++;
-
-      if (geom->type == Geometry::MESH) {
-        Mesh *mesh = static_cast<Mesh *>(geom);
-        if (mesh->subd_faces.size()) {
-          attr_map[index].x = id;
-          attr_map[index].y = req.subd_desc.element;
-          attr_map[index].z = as_uint(req.subd_desc.offset);
-
-          if (req.subd_type == TypeDesc::TypeFloat)
-            attr_map[index].w = NODE_ATTR_FLOAT;
-          else if (req.subd_type == TypeDesc::TypeMatrix)
-            attr_map[index].w = NODE_ATTR_MATRIX;
-          else if (req.subd_type == TypeFloat2)
-            attr_map[index].w = NODE_ATTR_FLOAT2;
-          else if (req.subd_type == TypeRGBA)
-            attr_map[index].w = NODE_ATTR_RGBA;
-          else
-            attr_map[index].w = NODE_ATTR_FLOAT3;
-
-          attr_map[index].w |= req.subd_desc.flags << 8;
-        }
-      }
-
-      index++;
+      emit_attribute_mapping(attr_map, index, scene, req, geom);
+      index += ATTR_PRIM_TYPES;
     }
 
-    /* terminator */
-    for (int j = 0; j < ATTR_PRIM_TYPES; j++) {
-      attr_map[index].x = ATTR_STD_NONE;
-      attr_map[index].y = 0;
-      attr_map[index].z = 0;
-      attr_map[index].w = 0;
+    emit_attribute_map_terminator(attr_map, index, false, 0);
+  }
 
-      index++;
+  for (size_t i = 0; i < scene->objects.size(); i++) {
+    Object *object = scene->objects[i];
+    AttributeRequestSet &attributes = object_attributes[i];
+
+    /* set object attributes */
+    if (attributes.size() > 0) {
+      int index = object->attr_map_offset;
+
+      foreach (AttributeRequest &req, attributes.requests) {
+        emit_attribute_mapping(attr_map, index, scene, req, object->geometry);
+        index += ATTR_PRIM_TYPES;
+      }
+
+      emit_attribute_map_terminator(attr_map, index, true, object->geometry->attr_map_offset);
     }
   }
 
@@ -505,19 +556,19 @@ static void update_attribute_element_size(Geometry *geom,
   }
 }
 
-static void update_attribute_element_offset(Geometry *geom,
-                                            device_vector<float> &attr_float,
-                                            size_t &attr_float_offset,
-                                            device_vector<float2> &attr_float2,
-                                            size_t &attr_float2_offset,
-                                            device_vector<float4> &attr_float3,
-                                            size_t &attr_float3_offset,
-                                            device_vector<uchar4> &attr_uchar4,
-                                            size_t &attr_uchar4_offset,
-                                            Attribute *mattr,
-                                            AttributePrimitive prim,
-                                            TypeDesc &type,
-                                            AttributeDescriptor &desc)
+void GeometryManager::update_attribute_element_offset(Geometry *geom,
+                                                      device_vector<float> &attr_float,
+                                                      size_t &attr_float_offset,
+                                                      device_vector<float2> &attr_float2,
+                                                      size_t &attr_float2_offset,
+                                                      device_vector<float4> &attr_float3,
+                                                      size_t &attr_float3_offset,
+                                                      device_vector<uchar4> &attr_uchar4,
+                                                      size_t &attr_uchar4_offset,
+                                                      Attribute *mattr,
+                                                      AttributePrimitive prim,
+                                                      TypeDesc &type,
+                                                      AttributeDescriptor &desc)
 {
   if (mattr) {
     /* store element and type */
@@ -589,7 +640,7 @@ static void update_attribute_element_offset(Geometry *geom,
 
     /* mesh vertex/curve index is global, not per object, so we sneak
      * a correction for that in here */
-    if (geom->type == Geometry::MESH) {
+    if (geom->is_mesh()) {
       Mesh *mesh = static_cast<Mesh *>(geom);
       if (mesh->subdivision_type == Mesh::SUBDIVISION_CATMULL_CLARK &&
           desc.flags & ATTR_SUBDIVIDED) {
@@ -613,7 +664,7 @@ static void update_attribute_element_offset(Geometry *geom,
           offset -= mesh->corner_offset;
       }
     }
-    else if (geom->type == Geometry::HAIR) {
+    else if (geom->is_hair()) {
       Hair *hair = static_cast<Hair *>(geom);
       if (element == ATTR_ELEMENT_CURVE)
         offset -= hair->prim_offset;
@@ -645,10 +696,45 @@ void GeometryManager::device_update_attributes(Device *device,
   for (size_t i = 0; i < scene->geometry.size(); i++) {
     Geometry *geom = scene->geometry[i];
 
+    geom->index = i;
     scene->need_global_attributes(geom_attributes[i]);
 
-    foreach (Shader *shader, geom->used_shaders) {
+    foreach (Node *node, geom->get_used_shaders()) {
+      Shader *shader = static_cast<Shader *>(node);
       geom_attributes[i].add(shader->attributes);
+    }
+  }
+
+  /* convert object attributes to use the same data structures as geometry ones */
+  vector<AttributeRequestSet> object_attributes(scene->objects.size());
+  vector<AttributeSet> object_attribute_values;
+
+  object_attribute_values.reserve(scene->objects.size());
+
+  for (size_t i = 0; i < scene->objects.size(); i++) {
+    Object *object = scene->objects[i];
+    Geometry *geom = object->geometry;
+    size_t geom_idx = geom->index;
+
+    assert(geom_idx < scene->geometry.size() && scene->geometry[geom_idx] == geom);
+
+    object_attribute_values.push_back(AttributeSet(geom, ATTR_PRIM_GEOMETRY));
+
+    AttributeRequestSet &geom_requests = geom_attributes[geom_idx];
+    AttributeRequestSet &attributes = object_attributes[i];
+    AttributeSet &values = object_attribute_values[i];
+
+    for (size_t j = 0; j < object->attributes.size(); j++) {
+      ParamValue &param = object->attributes[j];
+
+      /* add attributes that are requested and not already handled by the mesh */
+      if (geom_requests.find(param.name()) && !geom->attributes.find(param.name())) {
+        attributes.add(param.name());
+
+        Attribute *attr = values.add(param.name(), param.type(), ATTR_ELEMENT_OBJECT);
+        assert(param.datasize() == attr->buffer.size());
+        memcpy(attr->buffer.data(), param.data(), param.datasize());
+      }
     }
   }
 
@@ -663,6 +749,7 @@ void GeometryManager::device_update_attributes(Device *device,
   size_t attr_float2_size = 0;
   size_t attr_float3_size = 0;
   size_t attr_uchar4_size = 0;
+
   for (size_t i = 0; i < scene->geometry.size(); i++) {
     Geometry *geom = scene->geometry[i];
     AttributeRequestSet &attributes = geom_attributes[i];
@@ -677,7 +764,7 @@ void GeometryManager::device_update_attributes(Device *device,
                                     &attr_float3_size,
                                     &attr_uchar4_size);
 
-      if (geom->type == Geometry::MESH) {
+      if (geom->is_mesh()) {
         Mesh *mesh = static_cast<Mesh *>(geom);
         Attribute *subd_attr = mesh->subd_attributes.find(req);
 
@@ -689,6 +776,20 @@ void GeometryManager::device_update_attributes(Device *device,
                                       &attr_float3_size,
                                       &attr_uchar4_size);
       }
+    }
+  }
+
+  for (size_t i = 0; i < scene->objects.size(); i++) {
+    Object *object = scene->objects[i];
+
+    foreach (Attribute &attr, object_attribute_values[i].attributes) {
+      update_attribute_element_size(object->geometry,
+                                    &attr,
+                                    ATTR_PRIM_GEOMETRY,
+                                    &attr_float_size,
+                                    &attr_float2_size,
+                                    &attr_float3_size,
+                                    &attr_uchar4_size);
     }
   }
 
@@ -725,7 +826,7 @@ void GeometryManager::device_update_attributes(Device *device,
                                       req.type,
                                       req.desc);
 
-      if (geom->type == Geometry::MESH) {
+      if (geom->is_mesh()) {
         Mesh *mesh = static_cast<Mesh *>(geom);
         Attribute *subd_attr = mesh->subd_attributes.find(req);
 
@@ -749,11 +850,42 @@ void GeometryManager::device_update_attributes(Device *device,
     }
   }
 
+  for (size_t i = 0; i < scene->objects.size(); i++) {
+    Object *object = scene->objects[i];
+    AttributeRequestSet &attributes = object_attributes[i];
+    AttributeSet &values = object_attribute_values[i];
+
+    foreach (AttributeRequest &req, attributes.requests) {
+      Attribute *attr = values.find(req);
+
+      update_attribute_element_offset(object->geometry,
+                                      dscene->attributes_float,
+                                      attr_float_offset,
+                                      dscene->attributes_float2,
+                                      attr_float2_offset,
+                                      dscene->attributes_float3,
+                                      attr_float3_offset,
+                                      dscene->attributes_uchar4,
+                                      attr_uchar4_offset,
+                                      attr,
+                                      ATTR_PRIM_GEOMETRY,
+                                      req.type,
+                                      req.desc);
+
+      /* object attributes don't care about subdivision */
+      req.subd_type = req.type;
+      req.subd_desc = req.desc;
+
+      if (progress.get_cancel())
+        return;
+    }
+  }
+
   /* create attribute lookup maps */
   if (scene->shader_manager->use_osl())
     update_osl_attributes(device, scene, geom_attributes);
 
-  update_svm_attributes(device, dscene, scene, geom_attributes);
+  update_svm_attributes(device, dscene, scene, geom_attributes, object_attributes);
 
   if (progress.get_cancel())
     return;
@@ -797,7 +929,7 @@ void GeometryManager::mesh_calc_offset(Scene *scene)
   size_t optix_prim_size = 0;
 
   foreach (Geometry *geom, scene->geometry) {
-    if (geom->type == Geometry::MESH || geom->type == Geometry::VOLUME) {
+    if (geom->geometry_type == Geometry::MESH || geom->geometry_type == Geometry::VOLUME) {
       Mesh *mesh = static_cast<Mesh *>(geom);
 
       mesh->vert_offset = vert_size;
@@ -810,8 +942,8 @@ void GeometryManager::mesh_calc_offset(Scene *scene)
       vert_size += mesh->verts.size();
       tri_size += mesh->num_triangles();
 
-      if (mesh->subd_faces.size()) {
-        Mesh::SubdFace &last = mesh->subd_faces[mesh->subd_faces.size() - 1];
+      if (mesh->get_num_subd_faces()) {
+        Mesh::SubdFace last = mesh->get_subd_face(mesh->get_num_subd_faces() - 1);
         patch_size += (last.ptex_offset + last.num_ptex_faces()) * 8;
 
         /* patch tables are stored in same array so include them in patch_size */
@@ -821,19 +953,19 @@ void GeometryManager::mesh_calc_offset(Scene *scene)
         }
       }
 
-      face_size += mesh->subd_faces.size();
+      face_size += mesh->get_num_subd_faces();
       corner_size += mesh->subd_face_corners.size();
 
       mesh->optix_prim_offset = optix_prim_size;
       optix_prim_size += mesh->num_triangles();
     }
-    else if (geom->type == Geometry::HAIR) {
+    else if (geom->is_hair()) {
       Hair *hair = static_cast<Hair *>(geom);
 
       hair->curvekey_offset = curve_key_size;
       hair->prim_offset = curve_size;
 
-      curve_key_size += hair->curve_keys.size();
+      curve_key_size += hair->get_curve_keys().size();
       curve_size += hair->num_curves();
 
       hair->optix_prim_offset = optix_prim_size;
@@ -855,14 +987,14 @@ void GeometryManager::device_update_mesh(
   size_t patch_size = 0;
 
   foreach (Geometry *geom, scene->geometry) {
-    if (geom->type == Geometry::MESH || geom->type == Geometry::VOLUME) {
+    if (geom->geometry_type == Geometry::MESH || geom->geometry_type == Geometry::VOLUME) {
       Mesh *mesh = static_cast<Mesh *>(geom);
 
       vert_size += mesh->verts.size();
       tri_size += mesh->num_triangles();
 
-      if (mesh->subd_faces.size()) {
-        Mesh::SubdFace &last = mesh->subd_faces[mesh->subd_faces.size() - 1];
+      if (mesh->get_num_subd_faces()) {
+        Mesh::SubdFace last = mesh->get_subd_face(mesh->get_num_subd_faces() - 1);
         patch_size += (last.ptex_offset + last.num_ptex_faces()) * 8;
 
         /* patch tables are stored in same array so include them in patch_size */
@@ -872,10 +1004,10 @@ void GeometryManager::device_update_mesh(
         }
       }
     }
-    else if (geom->type == Geometry::HAIR) {
+    else if (geom->is_hair()) {
       Hair *hair = static_cast<Hair *>(geom);
 
-      curve_key_size += hair->curve_keys.size();
+      curve_key_size += hair->get_curve_keys().size();
       curve_size += hair->num_curves();
     }
   }
@@ -889,7 +1021,7 @@ void GeometryManager::device_update_mesh(
      * really use same semantic of arrays.
      */
     foreach (Geometry *geom, scene->geometry) {
-      if (geom->type == Geometry::MESH || geom->type == Geometry::VOLUME) {
+      if (geom->geometry_type == Geometry::MESH || geom->geometry_type == Geometry::VOLUME) {
         Mesh *mesh = static_cast<Mesh *>(geom);
         for (size_t i = 0; i < mesh->num_triangles(); ++i) {
           tri_prim_index[i + mesh->prim_offset] = 3 * (i + mesh->prim_offset);
@@ -917,7 +1049,7 @@ void GeometryManager::device_update_mesh(
     float2 *tri_patch_uv = dscene->tri_patch_uv.alloc(vert_size);
 
     foreach (Geometry *geom, scene->geometry) {
-      if (geom->type == Geometry::MESH || geom->type == Geometry::VOLUME) {
+      if (geom->geometry_type == Geometry::MESH || geom->geometry_type == Geometry::VOLUME) {
         Mesh *mesh = static_cast<Mesh *>(geom);
         mesh->pack_shaders(scene, &tri_shader[mesh->prim_offset]);
         mesh->pack_normals(&vnormal[mesh->vert_offset]);
@@ -949,7 +1081,7 @@ void GeometryManager::device_update_mesh(
     float4 *curves = dscene->curves.alloc(curve_size);
 
     foreach (Geometry *geom, scene->geometry) {
-      if (geom->type == Geometry::HAIR) {
+      if (geom->is_hair()) {
         Hair *hair = static_cast<Hair *>(geom);
         hair->pack_curves(scene,
                           &curve_keys[hair->curvekey_offset],
@@ -970,7 +1102,7 @@ void GeometryManager::device_update_mesh(
     uint *patch_data = dscene->patches.alloc(patch_size);
 
     foreach (Geometry *geom, scene->geometry) {
-      if (geom->type == Geometry::MESH) {
+      if (geom->is_mesh()) {
         Mesh *mesh = static_cast<Mesh *>(geom);
         mesh->pack_patches(&patch_data[mesh->patch_offset],
                            mesh->vert_offset,
@@ -993,7 +1125,7 @@ void GeometryManager::device_update_mesh(
   if (for_displacement) {
     float4 *prim_tri_verts = dscene->prim_tri_verts.alloc(tri_size * 3);
     foreach (Geometry *geom, scene->geometry) {
-      if (geom->type == Geometry::MESH || geom->type == Geometry::VOLUME) {
+      if (geom->geometry_type == Geometry::MESH || geom->geometry_type == Geometry::VOLUME) {
         Mesh *mesh = static_cast<Mesh *>(geom);
         for (size_t i = 0; i < mesh->num_triangles(); ++i) {
           Mesh::Triangle t = mesh->get_triangle(i);
@@ -1120,7 +1252,8 @@ void GeometryManager::device_update_preprocess(Device *device, Scene *scene, Pro
   foreach (Geometry *geom, scene->geometry) {
     geom->has_volume = false;
 
-    foreach (const Shader *shader, geom->used_shaders) {
+    foreach (Node *node, geom->get_used_shaders()) {
+      Shader *shader = static_cast<Shader *>(node);
       if (shader->has_volume) {
         geom->has_volume = true;
       }
@@ -1129,7 +1262,10 @@ void GeometryManager::device_update_preprocess(Device *device, Scene *scene, Pro
       }
     }
 
-    if (need_update && geom->type == Geometry::VOLUME) {
+    /* Re-create volume mesh if we will rebuild or refit the BVH. Note we
+     * should only do it in that case, otherwise the BVH and mesh can go
+     * out of sync. */
+    if (geom->is_modified() && geom->geometry_type == Geometry::VOLUME) {
       /* Create volume meshes if there is voxel data. */
       if (!volume_images_updated) {
         progress.set_status("Updating Meshes Volume Bounds");
@@ -1141,7 +1277,7 @@ void GeometryManager::device_update_preprocess(Device *device, Scene *scene, Pro
       create_volume_mesh(volume, progress);
     }
 
-    if (geom->type == Geometry::HAIR) {
+    if (geom->is_hair()) {
       /* Set curve shape, still a global scene setting for now. */
       Hair *hair = static_cast<Hair *>(geom);
       hair->curve_shape = scene->params.hair_shape;
@@ -1160,9 +1296,10 @@ void GeometryManager::device_update_displacement_images(Device *device,
   ImageManager *image_manager = scene->image_manager;
   set<int> bump_images;
   foreach (Geometry *geom, scene->geometry) {
-    if (geom->need_update) {
-      foreach (Shader *shader, geom->used_shaders) {
-        if (!shader->has_displacement || shader->displacement_method == DISPLACE_BUMP) {
+    if (geom->is_modified()) {
+      foreach (Node *node, geom->get_used_shaders()) {
+        Shader *shader = static_cast<Shader *>(node);
+        if (!shader->has_displacement || shader->get_displacement_method() == DISPLACE_BUMP) {
           continue;
         }
         foreach (ShaderNode *node, shader->graph->nodes) {
@@ -1196,7 +1333,7 @@ void GeometryManager::device_update_volume_images(Device *device, Scene *scene, 
   set<int> volume_images;
 
   foreach (Geometry *geom, scene->geometry) {
-    if (!geom->need_update) {
+    if (!geom->is_modified()) {
       continue;
     }
 
@@ -1245,12 +1382,14 @@ void GeometryManager::device_update(Device *device,
     });
 
     foreach (Geometry *geom, scene->geometry) {
-      foreach (Shader *shader, geom->used_shaders) {
+      foreach (Node *node, geom->get_used_shaders()) {
+        Shader *shader = static_cast<Shader *>(node);
         if (shader->need_update_geometry)
-          geom->need_update = true;
+          geom->tag_modified();
       }
 
-      if (geom->need_update && (geom->type == Geometry::MESH || geom->type == Geometry::VOLUME)) {
+      if (geom->is_modified() &&
+          (geom->geometry_type == Geometry::MESH || geom->geometry_type == Geometry::VOLUME)) {
         Mesh *mesh = static_cast<Mesh *>(geom);
 
         /* Update normals. */
@@ -1262,8 +1401,7 @@ void GeometryManager::device_update(Device *device,
         }
 
         /* Test if we need tessellation. */
-        if (mesh->subdivision_type != Mesh::SUBDIVISION_NONE && mesh->num_subd_verts == 0 &&
-            mesh->subd_params) {
+        if (mesh->need_tesselation()) {
           total_tess_needed++;
         }
 
@@ -1272,10 +1410,15 @@ void GeometryManager::device_update(Device *device,
           true_displacement_used = true;
         }
 
-        if (progress.get_cancel())
+        if (progress.get_cancel()) {
           return;
+        }
       }
     }
+  }
+
+  if (progress.get_cancel()) {
+    return;
   }
 
   /* Tessellate meshes that are using subdivision */
@@ -1288,17 +1431,18 @@ void GeometryManager::device_update(Device *device,
     });
 
     Camera *dicing_camera = scene->dicing_camera;
+    dicing_camera->set_screen_size_and_resolution(
+        dicing_camera->get_full_width(), dicing_camera->get_full_height(), 1);
     dicing_camera->update(scene);
 
     size_t i = 0;
     foreach (Geometry *geom, scene->geometry) {
-      if (!(geom->need_update && geom->type == Geometry::MESH)) {
+      if (!(geom->is_modified() && geom->is_mesh())) {
         continue;
       }
 
       Mesh *mesh = static_cast<Mesh *>(geom);
-      if (mesh->subdivision_type != Mesh::SUBDIVISION_NONE && mesh->num_subd_verts == 0 &&
-          mesh->subd_params) {
+      if (mesh->need_tesselation()) {
         string msg = "Tessellating ";
         if (mesh->name == "")
           msg += string_printf("%u/%u", (uint)(i + 1), (uint)total_tess_needed);
@@ -1314,9 +1458,14 @@ void GeometryManager::device_update(Device *device,
 
         i++;
 
-        if (progress.get_cancel())
+        if (progress.get_cancel()) {
           return;
+        }
       }
+    }
+
+    if (progress.get_cancel()) {
+      return;
     }
   }
 
@@ -1347,8 +1496,9 @@ void GeometryManager::device_update(Device *device,
     });
     device_update_mesh(device, dscene, scene, true, progress);
   }
-  if (progress.get_cancel())
+  if (progress.get_cancel()) {
     return;
+  }
 
   {
     scoped_callback_timer timer([scene](double time) {
@@ -1357,8 +1507,9 @@ void GeometryManager::device_update(Device *device,
       }
     });
     device_update_attributes(device, dscene, scene, progress);
-    if (progress.get_cancel())
+    if (progress.get_cancel()) {
       return;
+    }
   }
 
   /* Update displacement. */
@@ -1375,8 +1526,8 @@ void GeometryManager::device_update(Device *device,
     });
 
     foreach (Geometry *geom, scene->geometry) {
-      if (geom->need_update) {
-        if (geom->type == Geometry::MESH) {
+      if (geom->is_modified()) {
+        if (geom->is_mesh()) {
           Mesh *mesh = static_cast<Mesh *>(geom);
           if (displace(device, dscene, scene, mesh, progress)) {
             displacement_done = true;
@@ -1388,9 +1539,14 @@ void GeometryManager::device_update(Device *device,
         }
       }
 
-      if (progress.get_cancel())
+      if (progress.get_cancel()) {
         return;
+      }
     }
+  }
+
+  if (progress.get_cancel()) {
+    return;
   }
 
   /* Device re-update after displacement. */
@@ -1404,8 +1560,9 @@ void GeometryManager::device_update(Device *device,
     device_free(device, dscene);
 
     device_update_attributes(device, dscene, scene, progress);
-    if (progress.get_cancel())
+    if (progress.get_cancel()) {
       return;
+    }
   }
 
   {
@@ -1418,7 +1575,7 @@ void GeometryManager::device_update(Device *device,
 
     size_t i = 0;
     foreach (Geometry *geom, scene->geometry) {
-      if (geom->need_update) {
+      if (geom->is_modified()) {
         pool.push(function_bind(
             &Geometry::compute_bvh, geom, device, dscene, &scene->params, &progress, i, num_bvh));
         if (geom->need_build_bvh(bvh_layout)) {
@@ -1452,8 +1609,9 @@ void GeometryManager::device_update(Device *device,
     }
   }
 
-  if (progress.get_cancel())
+  if (progress.get_cancel()) {
     return;
+  }
 
   {
     scoped_callback_timer timer([scene](double time) {
@@ -1462,8 +1620,9 @@ void GeometryManager::device_update(Device *device,
       }
     });
     device_update_bvh(device, dscene, scene, progress);
-    if (progress.get_cancel())
+    if (progress.get_cancel()) {
       return;
+    }
   }
 
   {
@@ -1474,8 +1633,9 @@ void GeometryManager::device_update(Device *device,
       }
     });
     device_update_mesh(device, dscene, scene, false, progress);
-    if (progress.get_cancel())
+    if (progress.get_cancel()) {
       return;
+    }
   }
 
   need_update = false;

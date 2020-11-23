@@ -32,6 +32,7 @@
 namespace libmv {
 
 class CameraIntrinsics;
+class PackedIntrinsics;
 
 namespace internal {
 
@@ -146,10 +147,6 @@ class CameraIntrinsics {
   double principal_point_x() const { return K_(0, 2); }
   double principal_point_y() const { return K_(1, 2); }
 
-  virtual int num_distortion_parameters() const = 0;
-  virtual double *distortion_parameters() = 0;
-  virtual const double *distortion_parameters() const = 0;
-
   // Set the image size in pixels.
   // Image is the size of image camera intrinsics were calibrated with.
   void SetImageSize(int width, int height);
@@ -196,6 +193,9 @@ class CameraIntrinsics {
                                 double image_y,
                                 double *normalized_x,
                                 double *normalized_y) const = 0;
+
+  virtual void Pack(PackedIntrinsics* packed_intrinsics) const;
+  virtual void Unpack(const PackedIntrinsics& packed_intrinsics);
 
   // Distort an image using the current camera instrinsics
   //
@@ -281,7 +281,6 @@ class PolynomialCameraIntrinsics : public CameraIntrinsics {
     OFFSET_K1,
     OFFSET_K2,
     OFFSET_K3,
-    OFFSET_K4,  // Unused, needed to map properly with all deform parameters defined in bundle.cc.
     OFFSET_P1,
     OFFSET_P2,
 
@@ -293,13 +292,9 @@ class PolynomialCameraIntrinsics : public CameraIntrinsics {
   PolynomialCameraIntrinsics();
   PolynomialCameraIntrinsics(const PolynomialCameraIntrinsics &from);
 
-  DistortionModelType GetDistortionModelType() const {
+  DistortionModelType GetDistortionModelType() const override {
     return DISTORTION_MODEL_POLYNOMIAL;
   }
-
-  int num_distortion_parameters() const { return NUM_PARAMETERS; }
-  double *distortion_parameters() { return parameters_; };
-  const double *distortion_parameters() const { return parameters_; };
 
   double k1() const { return parameters_[OFFSET_K1]; }
   double k2() const { return parameters_[OFFSET_K2]; }
@@ -321,7 +316,7 @@ class PolynomialCameraIntrinsics : public CameraIntrinsics {
   void ApplyIntrinsics(double normalized_x,
                        double normalized_y,
                        double *image_x,
-                       double *image_y) const;
+                       double *image_y) const override;
 
   // Invert camera intrinsics on the image point to get normalized coordinates.
   //
@@ -330,7 +325,10 @@ class PolynomialCameraIntrinsics : public CameraIntrinsics {
   void InvertIntrinsics(double image_x,
                         double image_y,
                         double *normalized_x,
-                        double *normalized_y) const;
+                        double *normalized_y) const override;
+
+  virtual void Pack(PackedIntrinsics* packed_intrinsics) const override;
+  virtual void Unpack(const PackedIntrinsics& packed_intrinsics) override;
 
  private:
   // OpenCV's distortion model with third order polynomial radial distortion
@@ -356,13 +354,9 @@ class DivisionCameraIntrinsics : public CameraIntrinsics {
   DivisionCameraIntrinsics();
   DivisionCameraIntrinsics(const DivisionCameraIntrinsics &from);
 
-  DistortionModelType GetDistortionModelType() const {
+  DistortionModelType GetDistortionModelType() const override {
     return DISTORTION_MODEL_DIVISION;
   }
-
-  int num_distortion_parameters() const { return NUM_PARAMETERS; }
-  double *distortion_parameters() { return parameters_; };
-  const double *distortion_parameters() const { return parameters_; };
 
   double k1() const { return parameters_[OFFSET_K1]; }
   double k2() const { return parameters_[OFFSET_K2]; }
@@ -378,7 +372,7 @@ class DivisionCameraIntrinsics : public CameraIntrinsics {
   void ApplyIntrinsics(double normalized_x,
                        double normalized_y,
                        double *image_x,
-                       double *image_y) const;
+                       double *image_y) const override;
 
   // Invert camera intrinsics on the image point to get normalized coordinates.
   //
@@ -387,7 +381,10 @@ class DivisionCameraIntrinsics : public CameraIntrinsics {
   void InvertIntrinsics(double image_x,
                         double image_y,
                         double *normalized_x,
-                        double *normalized_y) const;
+                        double *normalized_y) const override;
+
+  virtual void Pack(PackedIntrinsics* packed_intrinsics) const override;
+  virtual void Unpack(const PackedIntrinsics& packed_intrinsics) override;
 
  private:
   // Double-parameter division distortion model.
@@ -410,13 +407,9 @@ class NukeCameraIntrinsics : public CameraIntrinsics {
   NukeCameraIntrinsics();
   NukeCameraIntrinsics(const NukeCameraIntrinsics &from);
 
-  DistortionModelType GetDistortionModelType() const {
+  DistortionModelType GetDistortionModelType() const override {
     return DISTORTION_MODEL_NUKE;
   }
-
-  int num_distortion_parameters() const { return NUM_PARAMETERS; }
-  double *distortion_parameters() { return parameters_; };
-  const double *distortion_parameters() const { return parameters_; };
 
   double k1() const { return parameters_[OFFSET_K1]; }
   double k2() const { return parameters_[OFFSET_K2]; }
@@ -432,7 +425,7 @@ class NukeCameraIntrinsics : public CameraIntrinsics {
   void ApplyIntrinsics(double normalized_x,
                        double normalized_y,
                        double *image_x,
-                       double *image_y) const;
+                       double *image_y) const override;
 
   // Invert camera intrinsics on the image point to get normalized coordinates.
   //
@@ -441,7 +434,10 @@ class NukeCameraIntrinsics : public CameraIntrinsics {
   void InvertIntrinsics(double image_x,
                         double image_y,
                         double *normalized_x,
-                        double *normalized_y) const;
+                        double *normalized_y) const override;
+
+  virtual void Pack(PackedIntrinsics* packed_intrinsics) const override;
+  virtual void Unpack(const PackedIntrinsics& packed_intrinsics) override;
 
  private:
   // Double-parameter division distortion model.
@@ -468,13 +464,9 @@ class BrownCameraIntrinsics : public CameraIntrinsics {
   BrownCameraIntrinsics();
   BrownCameraIntrinsics(const BrownCameraIntrinsics &from);
 
-  DistortionModelType GetDistortionModelType() const {
+  DistortionModelType GetDistortionModelType() const override {
     return DISTORTION_MODEL_BROWN;
   }
-
-  int num_distortion_parameters() const { return NUM_PARAMETERS; }
-  double *distortion_parameters() { return parameters_; };
-  const double *distortion_parameters() const { return parameters_; };
 
   double k1() const { return parameters_[OFFSET_K1]; }
   double k2() const { return parameters_[OFFSET_K2]; }
@@ -497,7 +489,7 @@ class BrownCameraIntrinsics : public CameraIntrinsics {
   void ApplyIntrinsics(double normalized_x,
                        double normalized_y,
                        double *image_x,
-                       double *image_y) const;
+                       double *image_y) const override;
 
   // Invert camera intrinsics on the image point to get normalized coordinates.
   //
@@ -506,7 +498,10 @@ class BrownCameraIntrinsics : public CameraIntrinsics {
   void InvertIntrinsics(double image_x,
                         double image_y,
                         double *normalized_x,
-                        double *normalized_y) const;
+                        double *normalized_y) const override;
+
+  virtual void Pack(PackedIntrinsics* packed_intrinsics) const override;
+  virtual void Unpack(const PackedIntrinsics& packed_intrinsics) override;
 
  private:
   double parameters_[NUM_PARAMETERS];

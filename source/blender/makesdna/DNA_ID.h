@@ -305,6 +305,7 @@ typedef struct ID {
   /**
    * Only set for data-blocks which are coming from copy-on-write, points to
    * the original version of it.
+   * Also used temporarily during memfile undo to keep a reference to old ID when found.
    */
   struct ID *orig_id;
 
@@ -446,7 +447,7 @@ typedef enum ID_Type {
   ID_HA = MAKE_ID2('H', 'A'),  /* Hair */
   ID_PT = MAKE_ID2('P', 'T'),  /* PointCloud */
   ID_VO = MAKE_ID2('V', 'O'),  /* Volume */
-  ID_SIM = MAKE_ID2('S', 'I'), /* Simulation */
+  ID_SIM = MAKE_ID2('S', 'I'), /* Simulation (currently unused) */
 } ID_Type;
 
 /* Only used as 'placeholder' in .blend files for directly linked data-blocks. */
@@ -628,7 +629,7 @@ typedef enum IDRecalcFlag {
 
   /* ** Object geometry changed. **
    *
-   * When object of armature type gets tagged with this flag, it's pose is
+   * When object of armature type gets tagged with this flag, its pose is
    * re-evaluated.
    * When object of other type is tagged with this flag it makes the modifier
    * stack to be re-evaluated.

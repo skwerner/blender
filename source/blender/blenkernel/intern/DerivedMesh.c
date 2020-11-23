@@ -1021,7 +1021,7 @@ static void mesh_calc_modifiers(struct Depsgraph *depsgraph,
 
     if ((mti->flags & eModifierTypeFlag_RequiresOriginalData) &&
         have_non_onlydeform_modifiers_appled) {
-      BKE_modifier_set_error(md, "Modifier requires original data, bad stack position");
+      BKE_modifier_set_error(ob, md, "Modifier requires original data, bad stack position");
       continue;
     }
 
@@ -1047,10 +1047,10 @@ static void mesh_calc_modifiers(struct Depsgraph *depsgraph,
 
       if (unsupported) {
         if (sculpt_dyntopo) {
-          BKE_modifier_set_error(md, "Not supported in dyntopo");
+          BKE_modifier_set_error(ob, md, "Not supported in dyntopo");
         }
         else {
-          BKE_modifier_set_error(md, "Not supported in sculpt mode");
+          BKE_modifier_set_error(ob, md, "Not supported in sculpt mode");
         }
         continue;
       }
@@ -1378,7 +1378,10 @@ float (*editbmesh_vert_coords_alloc(BMEditMesh *em, int *r_vert_len))[3]
   return cos;
 }
 
-bool editbmesh_modifier_is_enabled(Scene *scene, ModifierData *md, bool has_prev_mesh)
+bool editbmesh_modifier_is_enabled(Scene *scene,
+                                   const Object *ob,
+                                   ModifierData *md,
+                                   bool has_prev_mesh)
 {
   const ModifierTypeInfo *mti = BKE_modifier_get_info(md->type);
   const int required_mode = eModifierMode_Realtime | eModifierMode_Editmode;
@@ -1388,7 +1391,7 @@ bool editbmesh_modifier_is_enabled(Scene *scene, ModifierData *md, bool has_prev
   }
 
   if ((mti->flags & eModifierTypeFlag_RequiresOriginalData) && has_prev_mesh) {
-    BKE_modifier_set_error(md, "Modifier requires original data, bad stack position");
+    BKE_modifier_set_error(ob, md, "Modifier requires original data, bad stack position");
     return false;
   }
 
@@ -1488,8 +1491,10 @@ static void editbmesh_calc_modifiers(struct Depsgraph *depsgraph,
   /* Modifier evaluation modes. */
   const int required_mode = eModifierMode_Realtime | eModifierMode_Editmode;
 
+  const bool use_render = (DEG_get_mode(depsgraph) == DAG_EVAL_RENDER);
   /* Modifier evaluation contexts for different types of modifiers. */
-  const ModifierEvalContext mectx = {depsgraph, ob, MOD_APPLY_USECACHE};
+  ModifierApplyFlag apply_render = use_render ? MOD_APPLY_RENDER : 0;
+  const ModifierEvalContext mectx = {depsgraph, ob, MOD_APPLY_USECACHE | apply_render};
   const ModifierEvalContext mectx_orco = {depsgraph, ob, MOD_APPLY_ORCO};
 
   /* Get effective list of modifiers to execute. Some effects like shape keys
@@ -1520,7 +1525,7 @@ static void editbmesh_calc_modifiers(struct Depsgraph *depsgraph,
   for (int i = 0; md; i++, md = md->next, md_datamask = md_datamask->next) {
     const ModifierTypeInfo *mti = BKE_modifier_get_info(md->type);
 
-    if (!editbmesh_modifier_is_enabled(scene, md, mesh_final != NULL)) {
+    if (!editbmesh_modifier_is_enabled(scene, ob, md, mesh_final != NULL)) {
       continue;
     }
 
@@ -2185,7 +2190,7 @@ static void mesh_init_origspace(Mesh *mesh)
   for (i = 0; i < numpoly; i++, mp++) {
     OrigSpaceLoop *lof = lof_array + mp->loopstart;
 
-    if (mp->totloop == 3 || mp->totloop == 4) {
+    if (ELEM(mp->totloop, 3, 4)) {
       for (j = 0; j < mp->totloop; j++, lof++) {
         copy_v2_v2(lof->uv, default_osf[j]);
       }

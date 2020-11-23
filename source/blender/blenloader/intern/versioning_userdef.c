@@ -242,6 +242,10 @@ static void do_versions_theme(const UserDef *userdef, bTheme *btheme)
     copy_v3_v3_uchar(btheme->space_node.grid, btheme->space_node.back);
   }
 
+  if (!USER_VERSION_ATLEAST(291, 9)) {
+    FROM_DEFAULT_V4_UCHAR(space_graph.vertex_active);
+  }
+
   /**
    * Versioning code until next subversion bump goes here.
    *
@@ -253,6 +257,9 @@ static void do_versions_theme(const UserDef *userdef, bTheme *btheme)
    */
   {
     /* Keep this block, even when empty. */
+    for (int i = 0; i < COLLECTION_COLOR_TOT; ++i) {
+      FROM_DEFAULT_V4_UCHAR(collection_color[i].color);
+    }
   }
 
 #undef FROM_DEFAULT_V4_UCHAR
@@ -796,6 +803,18 @@ void blo_do_versions_userdef(UserDef *userdef)
     }
   }
 
+  if (!USER_VERSION_ATLEAST(292, 3)) {
+    if (userdef->pixelsize == 0.0f) {
+      userdef->pixelsize = 1.0f;
+    }
+    /* Clear old userdef flag for "Camera Parent Lock". */
+    userdef->uiflag &= ~USER_UIFLAG_UNUSED_3;
+  }
+
+  if (!USER_VERSION_ATLEAST(292, 4)) {
+    userdef->animation_flag = USER_ANIM_SHOW_CHANNEL_GROUP_COLORS;
+  }
+
   /**
    * Versioning code until next subversion bump goes here.
    *
@@ -807,10 +826,6 @@ void blo_do_versions_userdef(UserDef *userdef)
    */
   {
     /* Keep this block, even when empty. */
-  }
-
-  if (userdef->pixelsize == 0.0f) {
-    userdef->pixelsize = 1.0f;
   }
 
   LISTBASE_FOREACH (bTheme *, btheme, &userdef->themes) {

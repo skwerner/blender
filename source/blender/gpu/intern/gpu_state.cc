@@ -167,7 +167,8 @@ void GPU_depth_range(float near, float far)
 
 void GPU_line_width(float width)
 {
-  SET_MUTABLE_STATE(line_width, width * PIXELSIZE);
+  width = max_ff(1.0f, width * PIXELSIZE);
+  SET_MUTABLE_STATE(line_width, width);
 }
 
 void GPU_point_size(float size)
@@ -259,7 +260,7 @@ eGPUStencilTest GPU_stencil_test_get()
 }
 
 /* NOTE: Already premultiplied by U.pixelsize. */
-float GPU_line_width_get(void)
+float GPU_line_width_get()
 {
   GPUStateMutable &state = Context::get()->state_manager->mutable_state;
   return state.line_width;
@@ -284,13 +285,13 @@ void GPU_viewport_size_get_i(int coords[4])
   Context::get()->active_fb->viewport_get(coords);
 }
 
-bool GPU_depth_mask_get(void)
+bool GPU_depth_mask_get()
 {
   GPUState &state = Context::get()->state_manager->state;
   return (state.write_mask & GPU_WRITE_DEPTH) != 0;
 }
 
-bool GPU_mipmap_enabled(void)
+bool GPU_mipmap_enabled()
 {
   /* TODO(fclem): this used to be a userdef option. */
   return true;
@@ -302,25 +303,65 @@ bool GPU_mipmap_enabled(void)
 /** \name Context Utils
  * \{ */
 
-void GPU_flush(void)
+void GPU_flush()
 {
   Context::get()->flush();
 }
 
-void GPU_finish(void)
+void GPU_finish()
 {
   Context::get()->finish();
 }
 
-void GPU_apply_state(void)
+void GPU_apply_state()
 {
   Context::get()->state_manager->apply_state();
 }
 
-/* Will set all the states regardless of the current ones. */
-void GPU_force_state(void)
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name BGL workaround
+ *
+ * bgl makes direct GL calls that makes our state tracking out of date.
+ * This flag make it so that the pyGPU calls will not override the state set by
+ * bgl functions.
+ * \{ */
+
+void GPU_bgl_start()
 {
-  Context::get()->state_manager->force_state();
+  Context *ctx = Context::get();
+  if (!(ctx && ctx->state_manager)) {
+    return;
+  }
+  StateManager &state_manager = *(Context::get()->state_manager);
+  if (state_manager.use_bgl == false) {
+    /* Expected by many addons (see T80169, T81289).
+     * This will reset the blend function. */
+    GPU_blend(GPU_BLEND_NONE);
+    state_manager.apply_state();
+    state_manager.use_bgl = true;
+  }
+}
+
+/* Just turn off the bgl safeguard system. Can be called even without GPU_bgl_start. */
+void GPU_bgl_end()
+{
+  Context *ctx = Context::get();
+  if (!(ctx && ctx->state_manager)) {
+    return;
+  }
+  StateManager &state_manager = *ctx->state_manager;
+  if (state_manager.use_bgl == true) {
+    state_manager.use_bgl = false;
+    /* Resync state tracking. */
+    state_manager.force_state();
+  }
+}
+
+bool GPU_bgl_get()
+{
+  return Context::get()->state_manager->use_bgl;
 }
 
 /** \} */
@@ -340,7 +381,7 @@ void GPU_memory_barrier(eGPUBarrier barrier)
 /** \name Default State
  * \{ */
 
-StateManager::StateManager(void)
+StateManager::StateManager()
 {
   /* Set default state. */
   state.write_mask = GPU_WRITE_COLOR;
@@ -353,8 +394,9 @@ StateManager::StateManager(void)
   state.logic_op_xor = false;
   state.invert_facing = false;
   state.shadow_bias = false;
-  state.polygon_smooth = false;
   state.clip_distances = 0;
+  state.polygon_smooth = false;
+  state.line_smooth = false;
 
   mutable_state.depth_range[0] = 0.0f;
   mutable_state.depth_range[1] = 1.0f;

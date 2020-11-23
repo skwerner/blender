@@ -55,7 +55,7 @@
 /* Prototypes for internal functions.
  */
 static void cloth_to_object(Object *ob, ClothModifierData *clmd, float (*vertexCos)[3]);
-static void cloth_from_mesh(ClothModifierData *clmd, Mesh *mesh);
+static void cloth_from_mesh(ClothModifierData *clmd, const Object *ob, Mesh *mesh);
 static bool cloth_from_object(
     Object *ob, ClothModifierData *clmd, Mesh *mesh, float framenr, int first);
 static void cloth_update_springs(ClothModifierData *clmd);
@@ -216,7 +216,7 @@ void cloth_clear_cache(Object *ob, ClothModifierData *clmd, float framenr)
 
   BKE_ptcache_id_from_cloth(&pid, ob, clmd);
 
-  // don't do anything as long as we're in editmode!
+  /* don't do anything as long as we're in editmode! */
   if (pid.cache->edit && ob->mode & OB_MODE_PARTICLE_EDIT) {
     return;
   }
@@ -234,13 +234,13 @@ static bool do_init_cloth(Object *ob, ClothModifierData *clmd, Mesh *result, int
   if (clmd->clothObject == NULL) {
     if (!cloth_from_object(ob, clmd, result, framenr, 1)) {
       BKE_ptcache_invalidate(cache);
-      BKE_modifier_set_error(&(clmd->modifier), "Can't initialize cloth");
+      BKE_modifier_set_error(ob, &(clmd->modifier), "Can't initialize cloth");
       return false;
     }
 
     if (clmd->clothObject == NULL) {
       BKE_ptcache_invalidate(cache);
-      BKE_modifier_set_error(&(clmd->modifier), "Null cloth object");
+      BKE_modifier_set_error(ob, &(clmd->modifier), "Null cloth object");
       return false;
     }
 
@@ -439,7 +439,7 @@ void cloth_free_modifier(ClothModifierData *clmd)
   if (cloth) {
     SIM_cloth_solver_free(clmd);
 
-    // Free the verts.
+    /* Free the verts. */
     if (cloth->verts != NULL) {
       MEM_freeN(cloth->verts);
     }
@@ -447,7 +447,7 @@ void cloth_free_modifier(ClothModifierData *clmd)
     cloth->verts = NULL;
     cloth->mvert_num = 0;
 
-    // Free the springs.
+    /* Free the springs. */
     if (cloth->springs != NULL) {
       LinkNode *search = cloth->springs;
       while (search) {
@@ -467,7 +467,7 @@ void cloth_free_modifier(ClothModifierData *clmd)
     cloth->springs = NULL;
     cloth->numsprings = 0;
 
-    // free BVH collision tree
+    /* free BVH collision tree */
     if (cloth->bvhtree) {
       BLI_bvhtree_free(cloth->bvhtree);
     }
@@ -476,7 +476,7 @@ void cloth_free_modifier(ClothModifierData *clmd)
       BLI_bvhtree_free(cloth->bvhselftree);
     }
 
-    // we save our faces for collision objects
+    /* we save our faces for collision objects */
     if (cloth->tri) {
       MEM_freeN(cloth->tri);
     }
@@ -521,7 +521,7 @@ void cloth_free_modifier_extern(ClothModifierData *clmd)
 
     SIM_cloth_solver_free(clmd);
 
-    // Free the verts.
+    /* Free the verts. */
     if (cloth->verts != NULL) {
       MEM_freeN(cloth->verts);
     }
@@ -529,7 +529,7 @@ void cloth_free_modifier_extern(ClothModifierData *clmd)
     cloth->verts = NULL;
     cloth->mvert_num = 0;
 
-    // Free the springs.
+    /* Free the springs. */
     if (cloth->springs != NULL) {
       LinkNode *search = cloth->springs;
       while (search) {
@@ -549,7 +549,7 @@ void cloth_free_modifier_extern(ClothModifierData *clmd)
     cloth->springs = NULL;
     cloth->numsprings = 0;
 
-    // free BVH collision tree
+    /* free BVH collision tree */
     if (cloth->bvhtree) {
       BLI_bvhtree_free(cloth->bvhtree);
     }
@@ -558,7 +558,7 @@ void cloth_free_modifier_extern(ClothModifierData *clmd)
       BLI_bvhtree_free(cloth->bvhselftree);
     }
 
-    // we save our faces for collision objects
+    /* we save our faces for collision objects */
     if (cloth->tri) {
       MEM_freeN(cloth->tri);
     }
@@ -655,8 +655,8 @@ static void cloth_apply_vgroup(ClothModifierData *clmd, Mesh *mesh)
 
             /* goalfac= 1.0f; */ /* UNUSED */
 
-            // Kicking goal factor to simplify things...who uses that anyway?
-            // ABS ( clmd->sim_parms->maxgoal - clmd->sim_parms->mingoal );
+            /* Kicking goal factor to simplify things...who uses that anyway? */
+            // ABS (clmd->sim_parms->maxgoal - clmd->sim_parms->mingoal);
 
             verts->goal = pow4f(verts->goal);
             if (verts->goal >= SOFTGOALSNAP) {
@@ -727,7 +727,7 @@ static bool cloth_from_object(
   float(*shapekey_rest)[3] = NULL;
   const float tnull[3] = {0, 0, 0};
 
-  // If we have a clothObject, free it.
+  /* If we have a clothObject, free it. */
   if (clmd->clothObject != NULL) {
     cloth_free_modifier(clmd);
     if (G.debug & G_DEBUG_SIMDATA) {
@@ -735,25 +735,25 @@ static bool cloth_from_object(
     }
   }
 
-  // Allocate a new cloth object.
+  /* Allocate a new cloth object. */
   clmd->clothObject = MEM_callocN(sizeof(Cloth), "cloth");
   if (clmd->clothObject) {
     clmd->clothObject->old_solver_type = 255;
     clmd->clothObject->edgeset = NULL;
   }
   else {
-    BKE_modifier_set_error(&(clmd->modifier), "Out of memory on allocating clmd->clothObject");
+    BKE_modifier_set_error(ob, &(clmd->modifier), "Out of memory on allocating clmd->clothObject");
     return false;
   }
 
-  // mesh input objects need Mesh
+  /* mesh input objects need Mesh */
   if (!mesh) {
     return false;
   }
 
-  cloth_from_mesh(clmd, mesh);
+  cloth_from_mesh(clmd, ob, mesh);
 
-  // create springs
+  /* create springs */
   clmd->clothObject->springs = NULL;
   clmd->clothObject->numsprings = -1;
 
@@ -768,7 +768,7 @@ static bool cloth_from_object(
 
   verts = clmd->clothObject->verts;
 
-  // set initial values
+  /* set initial values */
   for (i = 0; i < mesh->totvert; i++, verts++) {
     if (first) {
       copy_v3_v3(verts->x, mvert[i].co);
@@ -808,17 +808,17 @@ static bool cloth_from_object(
     copy_v3_v3(verts->impulse, tnull);
   }
 
-  // apply / set vertex groups
-  // has to be happen before springs are build!
+  /* apply / set vertex groups */
+  /* has to be happen before springs are build! */
   cloth_apply_vgroup(clmd, mesh);
 
   if (!cloth_build_springs(clmd, mesh)) {
     cloth_free_modifier(clmd);
-    BKE_modifier_set_error(&(clmd->modifier), "Cannot build springs");
+    BKE_modifier_set_error(ob, &(clmd->modifier), "Cannot build springs");
     return false;
   }
 
-  // init our solver
+  /* init our solver */
   SIM_cloth_solver_init(ob, clmd);
 
   if (!first) {
@@ -831,7 +831,7 @@ static bool cloth_from_object(
   return true;
 }
 
-static void cloth_from_mesh(ClothModifierData *clmd, Mesh *mesh)
+static void cloth_from_mesh(ClothModifierData *clmd, const Object *ob, Mesh *mesh)
 {
   const MLoop *mloop = mesh->mloop;
   const MLoopTri *looptri = BKE_mesh_runtime_looptri_ensure(mesh);
@@ -844,8 +844,8 @@ static void cloth_from_mesh(ClothModifierData *clmd, Mesh *mesh)
                                          "clothVertex");
   if (clmd->clothObject->verts == NULL) {
     cloth_free_modifier(clmd);
-    BKE_modifier_set_error(&(clmd->modifier),
-                           "Out of memory on allocating clmd->clothObject->verts");
+    BKE_modifier_set_error(
+        ob, &(clmd->modifier), "Out of memory on allocating clmd->clothObject->verts");
     printf("cloth_free_modifier clmd->clothObject->verts\n");
     return;
   }
@@ -861,8 +861,8 @@ static void cloth_from_mesh(ClothModifierData *clmd, Mesh *mesh)
   clmd->clothObject->tri = MEM_mallocN(sizeof(MVertTri) * looptri_num, "clothLoopTris");
   if (clmd->clothObject->tri == NULL) {
     cloth_free_modifier(clmd);
-    BKE_modifier_set_error(&(clmd->modifier),
-                           "Out of memory on allocating clmd->clothObject->looptri");
+    BKE_modifier_set_error(
+        ob, &(clmd->modifier), "Out of memory on allocating clmd->clothObject->looptri");
     printf("cloth_free_modifier clmd->clothObject->looptri\n");
     return;
   }
@@ -1471,13 +1471,13 @@ static bool cloth_build_springs(ClothModifierData *clmd, Mesh *mesh)
   const MEdge *medge = mesh->medge;
   const MPoly *mpoly = mesh->mpoly;
   const MLoop *mloop = mesh->mloop;
-  int index2 = 0;  // our second vertex index
+  int index2 = 0; /* our second vertex index */
   LinkNodePair *edgelist = NULL;
   EdgeSet *edgeset = NULL;
   LinkNode *search = NULL, *search2 = NULL;
   BendSpringRef *spring_ref = NULL;
 
-  // error handling
+  /* error handling */
   if (numedges == 0) {
     return false;
   }
@@ -1599,7 +1599,7 @@ static bool cloth_build_springs(ClothModifierData *clmd, Mesh *mesh)
     if (spring) {
       spring_verts_ordered_set(spring, medge[i].v1, medge[i].v2);
       if (clmd->sim_parms->flags & CLOTH_SIMSETTINGS_FLAG_SEW && medge[i].flag & ME_LOOSEEDGE) {
-        // handle sewing (loose edges will be pulled together)
+        /* handle sewing (loose edges will be pulled together) */
         spring->restlen = 0.0f;
         spring->lin_stiffness = 1.0f;
         spring->type = CLOTH_SPRING_TYPE_SEWING;

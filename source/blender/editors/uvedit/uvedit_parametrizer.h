@@ -20,7 +20,7 @@
  * \ingroup eduv
  */
 
-#include "BLI_sys_types.h"  // for intptr_t support
+#include "BLI_sys_types.h" /* for intptr_t support */
 
 #ifdef __cplusplus
 extern "C" {
@@ -59,14 +59,14 @@ void param_face_add(ParamHandle *handle,
 
 void param_edge_set_seam(ParamHandle *handle, ParamKey *vkeys);
 
-void param_construct_end(ParamHandle *handle, ParamBool fill, ParamBool impl);
+void param_construct_end(ParamHandle *handle, ParamBool fill, ParamBool topology_from_uvs);
 void param_delete(ParamHandle *handle);
 
 /* Least Squares Conformal Maps:
  * -----------------------------
  * - charts with less than two pinned vertices are assigned 2 pins
  * - lscm is divided in three steps:
- * - begin: compute matrix and it's factorization (expensive)
+ * - begin: compute matrix and its factorization (expensive)
  * - solve using pinned coordinates (cheap)
  * - end: clean up
  * - uv coordinates are allowed to change within begin/end, for

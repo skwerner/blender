@@ -525,7 +525,7 @@ static uiTooltipData *ui_tooltip_data_from_tool(bContext *C, uiBut *but, bool is
      *
      * - Direct access to the tool (as if the toolbar button is pressed).
      * - The key is bound to a brush type (not the exact brush name).
-     * - The key is assigned to the operator it's self
+     * - The key is assigned to the operator itself
      *   (bypassing the tool, executing the operator).
      *
      * Either way case it's useful to show the shortcut.
@@ -800,7 +800,7 @@ static uiTooltipData *ui_tooltip_data_from_button(bContext *C, uiBut *but)
                                                .style = UI_TIP_STYLE_HEADER,
                                                .color_id = UI_TIP_LC_NORMAL,
                                            });
-    field->text = BLI_sprintfN("%s.", but_label.strinfo);
+    field->text = BLI_sprintfN("%s", but_label.strinfo);
   }
 
   /* Tip */

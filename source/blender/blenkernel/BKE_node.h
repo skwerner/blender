@@ -501,7 +501,7 @@ void ntreeInterfaceTypeUpdate(struct bNodeTree *ntree);
 struct bNodeType *nodeTypeFind(const char *idname);
 void nodeRegisterType(struct bNodeType *ntype);
 void nodeUnregisterType(struct bNodeType *ntype);
-bool nodeIsRegistered(struct bNode *node);
+bool nodeTypeUndefined(struct bNode *node);
 struct GHashIterator *nodeTypeGetIterator(void);
 
 /* helper macros for iterating over node types */
@@ -880,8 +880,7 @@ void BKE_node_tree_unlink_id(ID *id, struct bNodeTree *ntree);
  * } FOREACH_NODETREE_END;
  * \endcode
  *
- * \{
- */
+ * \{ */
 
 /* should be an opaque type, only for internal use by BKE_node_tree_iter_*** */
 struct NodeTreeIterStore {
@@ -1324,27 +1323,6 @@ int ntreeTexExecTree(struct bNodeTree *ntree,
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name Simulation Nodes
- * \{ */
-
-#define SIM_NODE_PARTICLE_SIMULATION 1000
-#define SIM_NODE_FORCE 1001
-#define SIM_NODE_SET_PARTICLE_ATTRIBUTE 1002
-#define SIM_NODE_PARTICLE_BIRTH_EVENT 1003
-#define SIM_NODE_PARTICLE_TIME_STEP_EVENT 1004
-#define SIM_NODE_EXECUTE_CONDITION 1005
-#define SIM_NODE_MULTI_EXECUTE 1006
-#define SIM_NODE_PARTICLE_MESH_EMITTER 1007
-#define SIM_NODE_PARTICLE_MESH_COLLISION_EVENT 1008
-#define SIM_NODE_EMIT_PARTICLES 1009
-#define SIM_NODE_TIME 1010
-#define SIM_NODE_PARTICLE_ATTRIBUTE 1011
-#define SIM_NODE_AGE_REACHED_EVENT 1012
-#define SIM_NODE_KILL_PARTICLE 1013
-
-/** \} */
-
-/* -------------------------------------------------------------------- */
 /** \name Function Nodes
  * \{ */
 
@@ -1358,8 +1336,8 @@ int ntreeTexExecTree(struct bNodeTree *ntree,
 
 /** \} */
 
-void init_nodesystem(void);
-void free_nodesystem(void);
+void BKE_node_system_init(void);
+void BKE_node_system_exit(void);
 
 /* -------------------------------------------------------------------- */
 /* evaluation support, */

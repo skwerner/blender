@@ -82,7 +82,6 @@ typedef struct CVKeyIndex {
 void BKE_curve_editfont_free(struct Curve *cu);
 void BKE_curve_init(struct Curve *cu, const short curve_type);
 struct Curve *BKE_curve_add(struct Main *bmain, const char *name, int type);
-struct Curve *BKE_curve_copy(struct Main *bmain, const struct Curve *cu);
 short BKE_curve_type_get(const struct Curve *cu);
 void BKE_curve_type_test(struct Object *ob);
 void BKE_curve_curve_dimension_update(struct Curve *cu);
@@ -158,6 +157,8 @@ void BKE_curve_forward_diff_tangent_bezier(
 void BKE_curve_rect_from_textbox(const struct Curve *cu,
                                  const struct TextBox *tb,
                                  struct rctf *r_rect);
+
+void BKE_curve_correct_bezpart(const float v1[2], float v2[2], float v3[2], const float v4[2]);
 
 /* ** Nurbs ** */
 

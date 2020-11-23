@@ -771,7 +771,7 @@ static ImBuf *create_mono_icon_with_border(ImBuf *buf,
           const int asy = MAX2(by - blur_size, 0);
           const int aey = MIN2(by + blur_size + 1, icon_height);
 
-          // blur alpha channel
+          /* blur alpha channel */
           const int write_offset = by * (ICON_GRID_W + 2 * ICON_MONO_BORDER_OUTSET) + bx;
           float alpha_accum = 0.0;
           uint alpha_samples = 0;
@@ -908,7 +908,7 @@ void UI_icons_reload_internal_textures(void)
 
 static void init_internal_icons(void)
 {
-#  if 0  // temp disabled
+#  if 0 /* temp disabled */
   if ((btheme != NULL) && btheme->tui.iconfile[0]) {
     char *icondir = BKE_appdir_folder_id(BLENDER_DATAFILES, "icons");
     char iconfilestr[FILE_MAX];
@@ -1299,7 +1299,7 @@ static void ui_studiolight_free_function(StudioLight *sl, void *data)
     return;
   }
 
-  // get icons_id, get icons and kill wm jobs
+  /* get icons_id, get icons and kill wm jobs */
   if (sl->icon_id_radiance) {
     ui_studiolight_kill_icon_preview_job(wm, sl->icon_id_radiance);
   }
@@ -2263,9 +2263,9 @@ int UI_icon_from_idcode(const int idcode)
     case ID_CU:
       return ICON_CURVE_DATA;
     case ID_GD:
-      return ICON_GREASEPENCIL;
+      return ICON_OUTLINER_DATA_GREASEPENCIL;
     case ID_GR:
-      return ICON_GROUP;
+      return ICON_OUTLINER_COLLECTION;
     case ID_IM:
       return ICON_IMAGE_DATA;
     case ID_LA:

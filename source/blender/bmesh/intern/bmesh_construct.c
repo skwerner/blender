@@ -99,7 +99,7 @@ static void bm_loop_attrs_copy(
  * If \a no_double is true, then a check is done to see if a face
  * with these vertices already exists and returns it instead.
  *
- * If a pointer to an example face is provided, it's custom data
+ * If a pointer to an example face is provided, its custom data
  * and properties will be copied to the new face.
  *
  * \note The winding of the face is determined by the order
@@ -335,7 +335,7 @@ BMFace *BM_face_create_ngon_verts(BMesh *bm,
         /* we want to use the reverse winding to the existing order */
         BM_edge_ordered_verts(edge_arr[i], &test_v2, &test_v1);
         winding[(vert_arr[i_prev] == test_v2)]++;
-        BLI_assert(vert_arr[i_prev] == test_v2 || vert_arr[i_prev] == test_v1);
+        BLI_assert(ELEM(vert_arr[i_prev], test_v2, test_v1));
       }
     }
 
@@ -604,6 +604,48 @@ void BM_mesh_copy_init_customdata(BMesh *bm_dst, BMesh *bm_src, const BMAllocTem
   CustomData_bmesh_init_pool(&bm_dst->edata, allocsize->totedge, BM_EDGE);
   CustomData_bmesh_init_pool(&bm_dst->ldata, allocsize->totloop, BM_LOOP);
   CustomData_bmesh_init_pool(&bm_dst->pdata, allocsize->totface, BM_FACE);
+}
+
+/**
+ * Similar to #BM_mesh_copy_init_customdata but copies all layers ignoring
+ * flags like #CD_FLAG_NOCOPY.
+ *
+ * \param bm_dst: BMesh whose custom-data layers will be added.
+ * \param bm_src: BMesh whose custom-data layers will be copied.
+ * \param htype: Specifies which custom-data layers will be initiated.
+ * \param allocsize: Initialize the the memory-pool before use (may be an estimate).
+ */
+void BM_mesh_copy_init_customdata_all_layers(BMesh *bm_dst,
+                                             BMesh *bm_src,
+                                             const char htype,
+                                             const BMAllocTemplate *allocsize)
+{
+  if (allocsize == NULL) {
+    allocsize = &bm_mesh_allocsize_default;
+  }
+
+  const char htypes[4] = {BM_VERT, BM_EDGE, BM_LOOP, BM_FACE};
+  BLI_assert(((&bm_dst->vdata + 1) == &bm_dst->edata) &&
+             ((&bm_dst->vdata + 2) == &bm_dst->ldata) && ((&bm_dst->vdata + 3) == &bm_dst->pdata));
+
+  BLI_assert(((&allocsize->totvert + 1) == &allocsize->totedge) &&
+             ((&allocsize->totvert + 2) == &allocsize->totloop) &&
+             ((&allocsize->totvert + 3) == &allocsize->totface));
+
+  for (int i = 0; i < 4; i++) {
+    if (!(htypes[i] & htype)) {
+      continue;
+    }
+    CustomData *dst = &bm_dst->vdata + i;
+    CustomData *src = &bm_src->vdata + i;
+    const int size = *(&allocsize->totvert + i);
+
+    for (int l = 0; l < src->totlayer; l++) {
+      CustomData_add_layer_named(
+          dst, src->layers[l].type, CD_CALLOC, NULL, 0, src->layers[l].name);
+    }
+    CustomData_bmesh_init_pool(dst, size, htypes[i]);
+  }
 }
 
 BMesh *BM_mesh_copy(BMesh *bm_old)

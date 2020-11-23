@@ -55,7 +55,7 @@ typedef enum eGPUBatchFlag {
 
   /** Has been initialized. At least one VBO is set. */
   GPU_BATCH_INIT = (1 << 16),
-  /** Batch is initialized but it's VBOs are still being populated. (optional) */
+  /** Batch is initialized but its VBOs are still being populated. (optional) */
   GPU_BATCH_BUILDING = (1 << 16),
   /** Cached data need to be rebuild. (VAO, PSO, ...) */
   GPU_BATCH_DIRTY = (1 << 17),
@@ -66,7 +66,7 @@ typedef enum eGPUBatchFlag {
 BLI_STATIC_ASSERT(GPU_BATCH_OWNS_INDEX < GPU_BATCH_INIT,
                   "eGPUBatchFlag: Error: status flags are shadowed by the ownership bits!")
 
-ENUM_OPERATORS(eGPUBatchFlag)
+ENUM_OPERATORS(eGPUBatchFlag, GPU_BATCH_DIRTY)
 
 #ifdef __cplusplus
 extern "C" {

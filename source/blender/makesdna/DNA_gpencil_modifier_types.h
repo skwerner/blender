@@ -23,6 +23,10 @@
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct LatticeDeformData;
 
 /* WARNING ALERT! TYPEDEF VALUES ARE WRITTEN IN FILES! SO DO NOT CHANGE!
@@ -57,7 +61,9 @@ typedef enum GpencilModifierMode {
   eGpencilModifierMode_Realtime = (1 << 0),
   eGpencilModifierMode_Render = (1 << 1),
   eGpencilModifierMode_Editmode = (1 << 2),
+#ifdef DNA_DEPRECATED_ALLOW
   eGpencilModifierMode_Expanded_DEPRECATED = (1 << 3),
+#endif
   eGpencilModifierMode_Virtual = (1 << 4),
 } GpencilModifierMode;
 
@@ -70,8 +76,9 @@ typedef struct GpencilModifierData {
   struct GpencilModifierData *next, *prev;
 
   int type, mode;
-  int stackindex;
+  char _pad0[4];
   short flag;
+  /* An "expand" bit for each of the modifier's (sub)panels (uiPanelDataExpansion). */
   short ui_expand_flag;
   /** MAX_NAME. */
   char name[64];
@@ -682,7 +689,6 @@ typedef struct MultiplyGpencilModifierData {
   int flag;
   /** Custom index for passes. */
   int layer_pass;
-  char _pad[4];
 
   int flags;
 
@@ -695,14 +701,10 @@ typedef struct MultiplyGpencilModifierData {
   float fading_thickness;
   float fading_opacity;
 
-  /* in rad not deg */
-  float split_angle;
-
-  /* char _pad[4]; */
 } MultiplyGpencilModifierData;
 
 typedef enum eMultiplyGpencil_Flag {
-  GP_MULTIPLY_ENABLE_ANGLE_SPLITTING = (1 << 1),
+  /* GP_MULTIPLY_ENABLE_ANGLE_SPLITTING = (1 << 1),  Deprecated. */
   GP_MULTIPLY_ENABLE_FADING = (1 << 2),
 } eMultiplyGpencil_Flag;
 
@@ -778,6 +780,9 @@ typedef struct TextureGpencilModifierData {
   /** Texture fit options. */
   short fit_method;
   short mode;
+  /** Dot texture rotation */
+  float alignment_rotation;
+  char _pad[4];
 } TextureGpencilModifierData;
 
 typedef enum eTextureGpencil_Flag {
@@ -800,3 +805,7 @@ typedef enum eTextureGpencil_Mode {
   FILL = 1,
   STROKE_AND_FILL = 2,
 } eTextureGpencil_Mode;
+
+#ifdef __cplusplus
+}
+#endif

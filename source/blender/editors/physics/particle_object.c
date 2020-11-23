@@ -180,7 +180,7 @@ static int new_particle_settings_exec(bContext *C, wmOperator *UNUSED(op))
 
   /* add or copy particle setting */
   if (psys->part) {
-    part = BKE_particlesettings_copy(bmain, psys->part);
+    part = (ParticleSettings *)BKE_id_copy(bmain, &psys->part->id);
   }
   else {
     part = BKE_particlesettings_add(bmain, "ParticleSettings");
@@ -691,7 +691,7 @@ void PARTICLE_OT_disconnect_hair(wmOperatorType *ot)
   ot->flag = OPTYPE_UNDO;
 
   RNA_def_boolean(
-      ot->srna, "all", 0, "All hair", "Disconnect all hair systems from the emitter mesh");
+      ot->srna, "all", 0, "All Hair", "Disconnect all hair systems from the emitter mesh");
 }
 
 /* from/to_world_space : whether from/to particles are in world or hair space
@@ -754,7 +754,7 @@ static bool remap_hair_emitter(Depsgraph *depsgraph,
     return false;
   }
   /* don't modify the original vertices */
-  BKE_id_copy_ex(NULL, &mesh->id, (ID **)&mesh, LIB_ID_COPY_LOCALIZE);
+  mesh = (Mesh *)BKE_id_copy_ex(NULL, &mesh->id, NULL, LIB_ID_COPY_LOCALIZE);
 
   /* BMESH_ONLY, deform dm may not have tessface */
   BKE_mesh_tessface_ensure(mesh);
@@ -981,7 +981,7 @@ void PARTICLE_OT_connect_hair(wmOperatorType *ot)
   /* No REGISTER, redo does not work due to missing update, see T47750. */
   ot->flag = OPTYPE_UNDO;
 
-  RNA_def_boolean(ot->srna, "all", 0, "All hair", "Connect all hair systems to the emitter mesh");
+  RNA_def_boolean(ot->srna, "all", 0, "All Hair", "Connect all hair systems to the emitter mesh");
 }
 
 /************************ particle system copy operator *********************/
@@ -1155,7 +1155,7 @@ static bool copy_particle_systems_to_object(const bContext *C,
 
     if (duplicate_settings) {
       id_us_min(&psys->part->id);
-      psys->part = BKE_particlesettings_copy(bmain, psys->part);
+      psys->part = (ParticleSettings *)BKE_id_copy(bmain, &psys->part->id);
     }
   }
   MEM_freeN(tmp_psys);

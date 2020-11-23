@@ -112,22 +112,15 @@ IDTypeInfo IDType_ID_SPK = {
     .blend_read_data = speaker_blend_read_data,
     .blend_read_lib = speaker_blend_read_lib,
     .blend_read_expand = speaker_blend_read_expand,
+
+    .blend_read_undo_preserve = NULL,
 };
 
 void *BKE_speaker_add(Main *bmain, const char *name)
 {
   Speaker *spk;
 
-  spk = BKE_libblock_alloc(bmain, ID_SPK, name, 0);
-
-  speaker_init_data(&spk->id);
+  spk = BKE_id_new(bmain, ID_SPK, name);
 
   return spk;
-}
-
-Speaker *BKE_speaker_copy(Main *bmain, const Speaker *spk)
-{
-  Speaker *spk_copy;
-  BKE_id_copy(bmain, &spk->id, (ID **)&spk_copy);
-  return spk_copy;
 }

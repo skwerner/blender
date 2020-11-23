@@ -29,6 +29,10 @@
 #include "DNA_texture_types.h"
 #include "DNA_vec_types.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct AnimData;
 struct ID;
 struct Image;
@@ -155,10 +159,6 @@ typedef enum eNodeSocketDatatype {
   SOCK_STRING = 7,
   SOCK_OBJECT = 8,
   SOCK_IMAGE = 9,
-  SOCK_EMITTERS = 10,
-  SOCK_EVENTS = 11,
-  SOCK_FORCES = 12,
-  SOCK_CONTROL_FLOW = 13,
 } eNodeSocketDatatype;
 
 /* socket shape */
@@ -927,6 +927,8 @@ typedef struct NodeTexMagic {
 
 typedef struct NodeShaderAttribute {
   char name[64];
+  int type;
+  char _pad[4];
 } NodeShaderAttribute;
 
 typedef struct NodeShaderVectTransform {
@@ -1095,6 +1097,13 @@ typedef struct NodeDenoise {
 #define SHD_VECT_TRANSFORM_SPACE_WORLD 0
 #define SHD_VECT_TRANSFORM_SPACE_OBJECT 1
 #define SHD_VECT_TRANSFORM_SPACE_CAMERA 2
+
+/* attribute */
+enum {
+  SHD_ATTRIBUTE_GEOMETRY = 0,
+  SHD_ATTRIBUTE_OBJECT = 1,
+  SHD_ATTRIBUTE_INSTANCER = 2,
+};
 
 /* toon modes */
 #define SHD_TOON_DIFFUSE 0
@@ -1356,7 +1365,7 @@ enum {
 /* subsurface */
 enum {
 #ifdef DNA_DEPRECATED_ALLOW
-  SHD_SUBSURFACE_COMPATIBLE = 0,  // Deprecated
+  SHD_SUBSURFACE_COMPATIBLE = 0, /* Deprecated */
 #endif
   SHD_SUBSURFACE_CUBIC = 1,
   SHD_SUBSURFACE_GAUSSIAN = 2,
@@ -1438,3 +1447,7 @@ typedef enum NodeSimInputTimeType {
   NODE_SIM_INPUT_SIMULATION_TIME = 0,
   NODE_SIM_INPUT_SCENE_TIME = 1,
 } NodeSimInputTimeType;
+
+#ifdef __cplusplus
+}
+#endif

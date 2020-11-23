@@ -49,8 +49,6 @@
 #include "ED_gpencil.h"
 #include "ED_object.h"
 
-#include "DRW_engine.h"
-
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
 
@@ -381,7 +379,7 @@ const EnumPropertyItem rna_enum_image_type_items[] = {
     {R_IMF_IMTYPE_FFMPEG,
      "FFMPEG",
      ICON_FILE_MOVIE,
-     "FFmpeg video",
+     "FFmpeg Video",
      "The most versatile way to output video files"},
 #endif
     {0, NULL, 0, NULL, NULL},
@@ -682,7 +680,6 @@ const EnumPropertyItem rna_enum_transform_orientation_items[] = {
 #  include "BKE_pointcache.h"
 #  include "BKE_scene.h"
 #  include "BKE_screen.h"
-#  include "BKE_sequencer.h"
 #  include "BKE_unit.h"
 
 #  include "ED_image.h"
@@ -695,6 +692,8 @@ const EnumPropertyItem rna_enum_transform_orientation_items[] = {
 
 #  include "DEG_depsgraph_build.h"
 #  include "DEG_depsgraph_query.h"
+
+#  include "SEQ_sequencer.h"
 
 #  ifdef WITH_FREESTYLE
 #    include "FRS_freestyle.h"
@@ -1159,7 +1158,7 @@ static int rna_RenderSettings_stereoViews_skip(CollectionPropertyIterator *iter,
   ListBaseIterator *internal = &iter->internal.listbase;
   SceneRenderView *srv = (SceneRenderView *)internal->link;
 
-  if ((STREQ(srv->name, STEREO_LEFT_NAME)) || (STREQ(srv->name, STEREO_RIGHT_NAME))) {
+  if (STR_ELEM(srv->name, STEREO_LEFT_NAME, STEREO_RIGHT_NAME)) {
     return 0;
   }
 
@@ -2795,7 +2794,8 @@ static void rna_def_view3d_cursor(BlenderRNA *brna)
   prop = RNA_def_property(srna, "matrix", PROP_FLOAT, PROP_MATRIX);
   RNA_def_property_multi_array(prop, 2, rna_matrix_dimsize_4x4);
   RNA_def_property_flag(prop, PROP_THICK_WRAP); /* no reference to original data */
-  RNA_def_property_ui_text(prop, "Transform Matrix", "Matrix combining loc/rot of the cursor");
+  RNA_def_property_ui_text(
+      prop, "Transform Matrix", "Matrix combining location and rotation of the cursor");
   RNA_def_property_float_funcs(
       prop, "rna_View3DCursor_matrix_get", "rna_View3DCursor_matrix_set", NULL);
 }
@@ -2866,13 +2866,13 @@ static void rna_def_tool_settings(BlenderRNA *brna)
   };
 
   static const EnumPropertyItem gpencil_stroke_snap_items[] = {
-      {0, "NONE", 0, "All points", "Snap to all points"},
+      {0, "NONE", 0, "All Points", "Snap to all points"},
       {GP_PROJECT_DEPTH_STROKE_ENDPOINTS,
        "ENDS",
        0,
-       "End points",
+       "End Points",
        "Snap to first and last points and interpolate"},
-      {GP_PROJECT_DEPTH_STROKE_FIRST, "FIRST", 0, "First point", "Snap to first point"},
+      {GP_PROJECT_DEPTH_STROKE_FIRST, "FIRST", 0, "First Point", "Snap to first point"},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -3272,6 +3272,16 @@ static void rna_def_tool_settings(BlenderRNA *brna)
                            "current vertex group and weight, "
                            "if no vertex group selected, weight is not added");
   RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
+
+  prop = RNA_def_property(srna, "use_gpencil_automerge_strokes", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "gpencil_flags", GP_TOOL_FLAG_AUTOMERGE_STROKE);
+  RNA_def_property_boolean_default(prop, false);
+  RNA_def_property_ui_icon(prop, ICON_AUTOMERGE_OFF, 1);
+  RNA_def_property_ui_text(
+      prop,
+      "Automerge",
+      "Join by distance last drawn stroke with previous strokes in the active layer");
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 
   prop = RNA_def_property(srna, "gpencil_sculpt", PROP_POINTER, PROP_NONE);
   RNA_def_property_pointer_sdna(prop, NULL, "gp_sculpt");
@@ -5512,12 +5522,12 @@ static void rna_def_scene_ffmpeg_settings(BlenderRNA *brna)
        "Constant Bitrate",
        "Configure constant bit rate, rather than constant output quality"},
       {FFM_CRF_LOSSLESS, "LOSSLESS", 0, "Lossless", ""},
-      {FFM_CRF_PERC_LOSSLESS, "PERC_LOSSLESS", 0, "Perceptually lossless", ""},
-      {FFM_CRF_HIGH, "HIGH", 0, "High quality", ""},
-      {FFM_CRF_MEDIUM, "MEDIUM", 0, "Medium quality", ""},
-      {FFM_CRF_LOW, "LOW", 0, "Low quality", ""},
-      {FFM_CRF_VERYLOW, "VERYLOW", 0, "Very low quality", ""},
-      {FFM_CRF_LOWEST, "LOWEST", 0, "Lowest quality", ""},
+      {FFM_CRF_PERC_LOSSLESS, "PERC_LOSSLESS", 0, "Perceptually Lossless", ""},
+      {FFM_CRF_HIGH, "HIGH", 0, "High Quality", ""},
+      {FFM_CRF_MEDIUM, "MEDIUM", 0, "Medium Quality", ""},
+      {FFM_CRF_LOW, "LOW", 0, "Low Quality", ""},
+      {FFM_CRF_VERYLOW, "VERYLOW", 0, "Very Low Quality", ""},
+      {FFM_CRF_LOWEST, "LOWEST", 0, "Lowest Quality", ""},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -5740,7 +5750,7 @@ static void rna_def_scene_render_data(BlenderRNA *brna)
       {0,
        "AUTO",
        0,
-       "Auto-detect",
+       "Auto-Detect",
        "Automatically determine the number of threads, based on CPUs"},
       {R_FIXED_THREADS, "FIXED", 0, "Fixed", "Manually determine the number of threads"},
       {0, NULL, 0, NULL, NULL},
@@ -6539,7 +6549,7 @@ static void rna_def_scene_render_data(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "line_thickness", PROP_FLOAT, PROP_PIXEL);
   RNA_def_property_float_sdna(prop, NULL, "unit_line_thickness");
-  RNA_def_property_range(prop, 0.f, 10000.f);
+  RNA_def_property_range(prop, 0.0f, 10000.0f);
   RNA_def_property_ui_text(prop, "Line Thickness", "Line thickness in pixels");
   RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, "rna_Scene_freestyle_update");
 
@@ -6850,6 +6860,17 @@ static void rna_def_scene_eevee(BlenderRNA *brna)
       {4, "4", 0, "4 px", ""},
       {8, "8", 0, "8 px", ""},
       {16, "16", 0, "16 px", ""},
+      {0, NULL, 0, NULL, NULL},
+  };
+
+  static const EnumPropertyItem eevee_motion_blur_position_items[] = {
+      {SCE_EEVEE_MB_START, "START", 0, "Start on Frame", "The shutter opens at the current frame"},
+      {SCE_EEVEE_MB_CENTER,
+       "CENTER",
+       0,
+       "Center on Frame",
+       "The shutter is open during the current frame"},
+      {SCE_EEVEE_MB_END, "END", 0, "End on Frame", "The shutter closes at the current frame"},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -7242,6 +7263,15 @@ static void rna_def_scene_eevee(BlenderRNA *brna)
   RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, NULL);
 
+  prop = RNA_def_property(srna, "motion_blur_position", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_items(prop, eevee_motion_blur_position_items);
+  RNA_def_property_ui_text(prop,
+                           "Motion Blur Position",
+                           "Offset for the shutter's time interval, "
+                           "allows to change the motion blur trails");
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
+  RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, NULL);
+
   /* Shadows */
   prop = RNA_def_property(srna, "shadow_cube_size", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_items(prop, eevee_shadow_size_items);
@@ -7341,9 +7371,9 @@ void RNA_def_scene(BlenderRNA *brna)
   };
 
   static const EnumPropertyItem sync_mode_items[] = {
-      {0, "NONE", 0, "No Sync", "Do not sync, play every frame"},
+      {0, "NONE", 0, "Play Every Frame", "Do not sync, play every frame"},
       {SCE_FRAME_DROP, "FRAME_DROP", 0, "Frame Dropping", "Drop frames if playback is too slow"},
-      {AUDIO_SYNC, "AUDIO_SYNC", 0, "AV-sync", "Sync to audio playback, dropping frames"},
+      {AUDIO_SYNC, "AUDIO_SYNC", 0, "Sync to Audio", "Sync to audio playback, dropping frames"},
       {0, NULL, 0, NULL, NULL},
   };
 

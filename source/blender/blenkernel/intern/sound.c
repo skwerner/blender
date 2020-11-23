@@ -60,13 +60,14 @@
 #include "BKE_main.h"
 #include "BKE_packedFile.h"
 #include "BKE_scene.h"
-#include "BKE_sequencer.h"
 #include "BKE_sound.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
 
 #include "BLO_read_write.h"
+
+#include "SEQ_sequencer.h"
 
 static void sound_free_audio(bSound *sound);
 
@@ -180,13 +181,13 @@ static void sound_blend_read_lib(BlendLibReader *reader, ID *id)
 {
   bSound *sound = (bSound *)id;
   BLO_read_id_address(
-      reader, sound->id.lib, &sound->ipo);  // XXX deprecated - old animation system
+      reader, sound->id.lib, &sound->ipo); /* XXX deprecated - old animation system */
 }
 
 static void sound_blend_read_expand(BlendExpander *expander, ID *id)
 {
   bSound *snd = (bSound *)id;
-  BLO_expand(expander, snd->ipo);  // XXX deprecated - old animation system
+  BLO_expand(expander, snd->ipo); /* XXX deprecated - old animation system */
 }
 
 IDTypeInfo IDType_ID_SO = {
@@ -197,7 +198,7 @@ IDTypeInfo IDType_ID_SO = {
     .name = "Sound",
     .name_plural = "sounds",
     .translation_context = BLT_I18NCONTEXT_ID_SOUND,
-    .flags = 0,
+    .flags = IDTYPE_FLAGS_NO_ANIMDATA,
 
     /* A fuzzy case, think NULLified content is OK here... */
     .init_data = NULL,
@@ -211,6 +212,8 @@ IDTypeInfo IDType_ID_SO = {
     .blend_read_data = sound_blend_read_data,
     .blend_read_lib = sound_blend_read_lib,
     .blend_read_expand = sound_blend_read_expand,
+
+    .blend_read_undo_preserve = NULL,
 };
 
 #ifdef WITH_AUDASPACE
@@ -229,7 +232,7 @@ BLI_INLINE void sound_verify_evaluated_id(const ID *id)
    *
    * Data-blocks which are covered by a copy-on-write system of dependency graph will have
    * LIB_TAG_COPIED_ON_WRITE tag set on them. But if some of data-blocks during its evaluation
-   * decides to re-allocate it's nested one (for example, object evaluation could re-allocate mesh
+   * decides to re-allocate its nested one (for example, object evaluation could re-allocate mesh
    * when evaluating modifier stack). Such data-blocks will have
    * LIB_TAG_COPIED_ON_WRITE_EVAL_RESULT tag set on them.
    *
@@ -957,7 +960,7 @@ double BKE_sound_sync_scene(Scene *scene)
 {
   sound_verify_evaluated_id(&scene->id);
 
-  // Ugly: Blender doesn't like it when the animation is played back during rendering
+  /* Ugly: Blender doesn't like it when the animation is played back during rendering */
   if (G.is_rendering) {
     return NAN_FLT;
   }
@@ -976,12 +979,12 @@ int BKE_sound_scene_playing(Scene *scene)
 {
   sound_verify_evaluated_id(&scene->id);
 
-  // Ugly: Blender doesn't like it when the animation is played back during rendering
+  /* Ugly: Blender doesn't like it when the animation is played back during rendering */
   if (G.is_rendering) {
     return -1;
   }
 
-  // in case of a "Null" audio device, we have no playback information
+  /* In case of a "Null" audio device, we have no playback information. */
   if (AUD_Device_getRate(sound_device) == AUD_RATE_INVALID) {
     return -1;
   }
@@ -1320,7 +1323,10 @@ int BKE_sound_scene_playing(Scene *UNUSED(scene))
 {
   return -1;
 }
-void BKE_sound_read_waveform(Main *bmain, bSound *sound, short *stop)
+void BKE_sound_read_waveform(Main *bmain,
+                             bSound *sound,
+                             /* NOLINTNEXTLINE: readability-non-const-parameter. */
+                             short *stop)
 {
   UNUSED_VARS(sound, stop, bmain);
 }

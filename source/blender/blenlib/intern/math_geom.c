@@ -1418,7 +1418,7 @@ int isect_seg_seg_v2_lambda_mu_db(const double v1[2],
 
 /**
  * \param l1, l2: Coordinates (point of line).
- * \param sp, r:  Coordinate and radius (sphere).
+ * \param sp, r: Coordinate and radius (sphere).
  * \return r_p1, r_p2: Intersection coordinates.
  *
  * \note The order of assignment for intersection points (\a r_p1, \a r_p2) is predictable,
@@ -2295,6 +2295,81 @@ bool isect_plane_plane_v3(const float plane_a[4],
   }
 
   return false;
+}
+
+/**
+ * Intersect all planes, calling `callback_fn` for each point that intersects
+ * 3 of the planes that isn't outside any of the other planes.
+ *
+ * This can be thought of as calculating a convex-hull from an array of planes.
+ *
+ * \param eps_coplanar: Epsilon for testing if two planes are aligned (co-planar).
+ * \param eps_isect: Epsilon for testing of a point is behind any of the planes.
+ *
+ * \warning As complexity is a little under `O(N^3)`, this is only suitable for small arrays.
+ *
+ * \note This function could be optimized by some spatial structure.
+ */
+bool isect_planes_v3_fn(
+    const float planes[][4],
+    const int planes_len,
+    const float eps_coplanar,
+    const float eps_isect,
+    void (*callback_fn)(const float co[3], int i, int j, int k, void *user_data),
+    void *user_data)
+{
+  bool found = false;
+
+  float n1n2[3], n2n3[3], n3n1[3];
+
+  for (int i = 0; i < planes_len; i++) {
+    const float *n1 = planes[i];
+    for (int j = i + 1; j < planes_len; j++) {
+      const float *n2 = planes[j];
+      cross_v3_v3v3(n1n2, n1, n2);
+      if (len_squared_v3(n1n2) <= eps_coplanar) {
+        continue;
+      }
+      for (int k = j + 1; k < planes_len; k++) {
+        const float *n3 = planes[k];
+        cross_v3_v3v3(n2n3, n2, n3);
+        if (len_squared_v3(n2n3) <= eps_coplanar) {
+          continue;
+        }
+
+        cross_v3_v3v3(n3n1, n3, n1);
+        if (len_squared_v3(n3n1) <= eps_coplanar) {
+          continue;
+        }
+        const float quotient = -dot_v3v3(n1, n2n3);
+        if (fabsf(quotient) < eps_coplanar) {
+          continue;
+        }
+        const float co_test[3] = {
+            ((n2n3[0] * n1[3]) + (n3n1[0] * n2[3]) + (n1n2[0] * n3[3])) / quotient,
+            ((n2n3[1] * n1[3]) + (n3n1[1] * n2[3]) + (n1n2[1] * n3[3])) / quotient,
+            ((n2n3[2] * n1[3]) + (n3n1[2] * n2[3]) + (n1n2[2] * n3[3])) / quotient,
+        };
+        int i_test;
+        for (i_test = 0; i_test < planes_len; i_test++) {
+          const float *np_test = planes[i_test];
+          if (((dot_v3v3(np_test, co_test) + np_test[3]) > eps_isect)) {
+            /* For low epsilon values the point could intersect it's own plane. */
+            if (!ELEM(i_test, i, j, k)) {
+              break;
+            }
+          }
+        }
+
+        if (i_test == planes_len) { /* ok */
+          callback_fn(co_test, i, j, k, user_data);
+          found = true;
+        }
+      }
+    }
+  }
+
+  return found;
 }
 
 /**
@@ -3408,7 +3483,7 @@ float line_plane_factor_v3(const float plane_co[3],
 
 /**
  * Ensure the distance between these points is no greater than 'dist'.
- * If it is, scale then both into the center.
+ * If it is, scale them both into the center.
  */
 void limit_dist_v3(float v1[3], float v2[3], const float dist)
 {
@@ -4181,6 +4256,7 @@ int interp_sparse_array(float *array, const int list_size, const float skipval)
   return 1;
 }
 
+/* -------------------------------------------------------------------- */
 /** \name interp_weights_poly_v2, v3
  * \{ */
 
@@ -4474,7 +4550,7 @@ void interp_cubic_v3(float x[3],
  *
  * Compute coordinates (u, v) for point \a st with respect to triangle (\a st0, \a st1, \a st2)
  *
- * \note same basic result as #barycentric_weights_v2, see it's comment for details.
+ * \note same basic result as #barycentric_weights_v2, see its comment for details.
  */
 void resolve_tri_uv_v2(
     float r_uv[2], const float st[2], const float st0[2], const float st1[2], const float st2[2])
@@ -5461,7 +5537,7 @@ void vcloud_estimate_transform_v3(const int list_size,
       /* build 'projection' matrix */
       for (a = 0; a < list_size; a++) {
         sub_v3_v3v3(va, rpos[a], accu_rcom);
-        /* mul_v3_fl(va, bp->mass);  mass needs renormalzation here ?? */
+        /* mul_v3_fl(va, bp->mass);  mass needs re-normalization here ?? */
         sub_v3_v3v3(vb, pos[a], accu_com);
         /* mul_v3_fl(va, rp->mass); */
         m[0][0] += va[0] * vb[0];
@@ -5495,11 +5571,11 @@ void vcloud_estimate_transform_v3(const int list_size,
       stunt[0] = q[0][0];
       stunt[1] = q[1][1];
       stunt[2] = q[2][2];
-      /* renormalizing for numeric stability */
-      mul_m3_fl(q, 1.f / len_v3(stunt));
+      /* Re-normalizing for numeric stability. */
+      mul_m3_fl(q, 1.0f / len_v3(stunt));
 
-      /* this is pretty much Polardecompose 'inline' the algo based on Higham's thesis */
-      /* without the far case ... but seems to work here pretty neat                   */
+      /* This is pretty much Polar-decompose 'inline' the algorithm based on Higham's thesis
+       * without the far case ... but seems to work here pretty neat. */
       odet = 0.0f;
       ndet = determinant_m3_array(q);
       while ((odet - ndet) * (odet - ndet) > eps && i < imax) {

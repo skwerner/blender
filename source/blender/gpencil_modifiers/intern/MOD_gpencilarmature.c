@@ -31,6 +31,7 @@
 #include "BLT_translation.h"
 
 #include "DNA_armature_types.h"
+#include "DNA_defaults.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_meshdata_types.h"
@@ -68,8 +69,10 @@
 static void initData(GpencilModifierData *md)
 {
   ArmatureGpencilModifierData *gpmd = (ArmatureGpencilModifierData *)md;
-  gpmd->object = NULL;
-  gpmd->deformflag = ARM_DEF_VGROUP;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(gpmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(gpmd, DNA_struct_default_get(ArmatureGpencilModifierData), modifier);
 }
 
 static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
@@ -122,10 +125,11 @@ static void deformStroke(GpencilModifierData *md,
   if (!mmd->object) {
     return;
   }
+  bGPdata *gpd = ob->data;
 
   gpencil_deform_verts(mmd, ob, gps);
   /* Calc geometry data. */
-  BKE_gpencil_stroke_geometry_update(gps);
+  BKE_gpencil_stroke_geometry_update(gpd, gps);
 }
 
 static void bakeModifier(Main *UNUSED(bmain),
@@ -212,7 +216,7 @@ static void panel_draw(const bContext *UNUSED(C), Panel *panel)
   uiLayoutSetPropDecorate(sub, false);
   uiItemR(sub, ptr, "invert_vertex_group", 0, "", ICON_ARROW_LEFTRIGHT);
 
-  col = uiLayoutColumnWithHeading(layout, true, IFACE_("Bind to"));
+  col = uiLayoutColumnWithHeading(layout, true, IFACE_("Bind To"));
   uiItemR(col, ptr, "use_vertex_groups", 0, IFACE_("Vertex Groups"), ICON_NONE);
   uiItemR(col, ptr, "use_bone_envelopes", 0, IFACE_("Bone Envelopes"), ICON_NONE);
 

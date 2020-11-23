@@ -1693,7 +1693,7 @@ static int selectbuffer_ret_hits_5(uint *buffer,
  * Checks three selection levels and compare.
  *
  * \param do_nearest_xray_if_supported: When set, read in hits that don't stop
- * at the nearest surface. The hit's must still be ordered by depth.
+ * at the nearest surface. The hits must still be ordered by depth.
  * Needed so we can step to the next, non-active object when it's already selected, see: T76445.
  */
 static int mixed_bones_object_selectbuffer(ViewContext *vc,
@@ -2299,7 +2299,7 @@ static bool ed_object_select_pick(bContext *C,
       /* Set special modes for grease pencil
        * The grease pencil modes are not real modes, but a hack to make the interface
        * consistent, so need some tricks to keep UI synchronized */
-      // XXX: This stuff needs reviewing (Aligorith)
+      /* XXX: This stuff needs reviewing (Aligorith) */
       if (false && (((oldbasact) && oldbasact->object->type == OB_GPENCIL) ||
                     (basact->object->type == OB_GPENCIL))) {
         /* set cursor */

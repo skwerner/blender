@@ -54,7 +54,6 @@
 #include "BKE_main.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
-#include "BKE_sequencer.h"
 #include "BKE_writeavi.h"
 
 #include "DEG_depsgraph.h"
@@ -78,6 +77,8 @@
 #include "RNA_access.h"
 #include "RNA_define.h"
 
+#include "SEQ_sequencer.h"
+
 #include "GPU_framebuffer.h"
 #include "GPU_matrix.h"
 
@@ -90,8 +91,8 @@
 #  include "PIL_time.h"
 #endif
 
-// TODO(sergey): Find better approximation of the scheduled frames.
-// For really highres renders it might fail still.
+/* TODO(sergey): Find better approximation of the scheduled frames.
+ * For really highres renders it might fail still. */
 #define MAX_SCHEDULED_FRAMES 8
 
 typedef struct OGLRender {
@@ -488,19 +489,19 @@ static void screen_opengl_render_apply(const bContext *C, OGLRender *oglrender)
     SpaceSeq *sseq = oglrender->sseq;
     int chanshown = sseq ? sseq->chanshown : 0;
 
-    BKE_sequencer_new_render_data(oglrender->bmain,
-                                  oglrender->depsgraph,
-                                  scene,
-                                  oglrender->sizex,
-                                  oglrender->sizey,
-                                  100,
-                                  false,
-                                  &context);
+    SEQ_render_new_render_data(oglrender->bmain,
+                               oglrender->depsgraph,
+                               scene,
+                               oglrender->sizex,
+                               oglrender->sizey,
+                               SEQ_RENDER_SIZE_SCENE,
+                               false,
+                               &context);
 
     for (view_id = 0; view_id < oglrender->views_len; view_id++) {
       context.view_id = view_id;
       context.gpu_offscreen = oglrender->ofs;
-      oglrender->seq_data.ibufs_arr[view_id] = BKE_sequencer_give_ibuf(&context, CFRA, chanshown);
+      oglrender->seq_data.ibufs_arr[view_id] = SEQ_render_give_ibuf(&context, CFRA, chanshown);
     }
   }
 
@@ -546,7 +547,8 @@ static void gather_frames_to_render_for_adt(const OGLRender *oglrender, const An
     }
 
     bool found = false; /* Not interesting, we just want a starting point for the for-loop.*/
-    int key_index = binarysearch_bezt_index(fcu->bezt, frame_start, fcu->totvert, &found);
+    int key_index = BKE_fcurve_bezt_binarysearch_index(
+        fcu->bezt, frame_start, fcu->totvert, &found);
     for (; key_index < fcu->totvert; key_index++) {
       BezTriple *bezt = &fcu->bezt[key_index];
       /* The frame range to render uses integer frame numbers, and the frame

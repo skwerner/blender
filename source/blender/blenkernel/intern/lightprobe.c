@@ -105,6 +105,8 @@ IDTypeInfo IDType_ID_LP = {
     .blend_read_data = lightprobe_blend_read_data,
     .blend_read_lib = lightprobe_blend_read_lib,
     .blend_read_expand = NULL,
+
+    .blend_read_undo_preserve = NULL,
 };
 
 void BKE_lightprobe_type_set(LightProbe *probe, const short lightprobe_type)
@@ -135,16 +137,7 @@ void *BKE_lightprobe_add(Main *bmain, const char *name)
 {
   LightProbe *probe;
 
-  probe = BKE_libblock_alloc(bmain, ID_LP, name, 0);
-
-  lightprobe_init_data(&probe->id);
+  probe = BKE_id_new(bmain, ID_LP, name);
 
   return probe;
-}
-
-LightProbe *BKE_lightprobe_copy(Main *bmain, const LightProbe *probe)
-{
-  LightProbe *probe_copy;
-  BKE_id_copy(bmain, &probe->id, (ID **)&probe_copy);
-  return probe_copy;
 }

@@ -162,7 +162,8 @@ typedef enum {
 } GHOST_TDrawingContextType;
 
 typedef enum {
-  GHOST_kButtonMaskLeft = 0,
+  GHOST_kButtonMaskNone,
+  GHOST_kButtonMaskLeft,
   GHOST_kButtonMaskMiddle,
   GHOST_kButtonMaskRight,
   GHOST_kButtonMaskButton4,
@@ -469,6 +470,8 @@ typedef struct {
   GHOST_TInt32 deltaX;
   /** The y-delta (currently only for scroll subtype) of the trackpad event */
   GHOST_TInt32 deltaY;
+  /** The delta is inverted from the device due to system preferences. */
+  char isDirectionInverted;
 } GHOST_TEventTrackpadData;
 
 typedef enum {
@@ -584,8 +587,8 @@ typedef int GHOST_TEmbedderWindowID;
 
 /**
  * A timer task callback routine.
- * \param task The timer task object.
- * \param time The current time.
+ * \param task: The timer task object.
+ * \param time: The current time.
  */
 #ifdef __cplusplus
 class GHOST_ITimerTask;

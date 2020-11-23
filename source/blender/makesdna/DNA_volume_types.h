@@ -22,6 +22,10 @@
 
 #include "DNA_ID.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct PackedFile;
 struct VolumeGridVector;
 
@@ -31,7 +35,9 @@ typedef struct Volume_Runtime {
 
   /* Current frame in sequence for evaluated volume */
   int frame;
-  int _pad;
+
+  /* Default simplify level for volume grids loaded from files. */
+  int default_simplify_level;
 } Volume_Runtime;
 
 typedef struct VolumeDisplay {
@@ -146,3 +152,7 @@ typedef enum SliceAxis {
 
 /* Only one material supported currently. */
 #define VOLUME_MATERIAL_NR 1
+
+#ifdef __cplusplus
+}
+#endif

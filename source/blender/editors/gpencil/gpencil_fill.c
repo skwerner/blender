@@ -269,36 +269,38 @@ static void gpencil_draw_datablock(tGPDfill *tgpf, const float ink[4])
       continue;
     }
 
-    /* Decide if layer is included or not depending of the layer mode. */
+    /* Decide if the strokes of layers are included or not depending on the layer mode.
+     * Cannot skip the layer because it can use boundary strokes and must be used. */
+    bool skip = false;
     const int gpl_index = BLI_findindex(&gpd->layers, gpl);
     switch (brush_settings->fill_layer_mode) {
       case GP_FILL_GPLMODE_ACTIVE: {
         if (gpl_index != gpl_active_index) {
-          continue;
+          skip = true;
         }
         break;
       }
       case GP_FILL_GPLMODE_ABOVE: {
         if (gpl_index != gpl_active_index + 1) {
-          continue;
+          skip = true;
         }
         break;
       }
       case GP_FILL_GPLMODE_BELOW: {
         if (gpl_index != gpl_active_index - 1) {
-          continue;
+          skip = true;
         }
         break;
       }
       case GP_FILL_GPLMODE_ALL_ABOVE: {
         if (gpl_index <= gpl_active_index) {
-          continue;
+          skip = true;
         }
         break;
       }
       case GP_FILL_GPLMODE_ALL_BELOW: {
         if (gpl_index >= gpl_active_index) {
-          continue;
+          skip = true;
         }
         break;
       }
@@ -338,6 +340,11 @@ static void gpencil_draw_datablock(tGPDfill *tgpf, const float ink[4])
         continue;
       }
 
+      /* If the layer must be skipped, but the stroke is not boundary, skip stroke. */
+      if ((skip) && ((gps->flag & GP_STROKE_NOFILL) == 0)) {
+        continue;
+      }
+
       tgpw.gps = gps;
       tgpw.gpl = gpl;
       tgpw.gpf = gpf;
@@ -352,14 +359,12 @@ static void gpencil_draw_datablock(tGPDfill *tgpf, const float ink[4])
       tgpw.custonion = true;
 
       /* normal strokes */
-      if ((tgpf->fill_draw_mode == GP_FILL_DMODE_STROKE) ||
-          (tgpf->fill_draw_mode == GP_FILL_DMODE_BOTH)) {
+      if (ELEM(tgpf->fill_draw_mode, GP_FILL_DMODE_STROKE, GP_FILL_DMODE_BOTH)) {
         ED_gpencil_draw_fill(&tgpw);
       }
 
       /* 3D Lines with basic shapes and invisible lines */
-      if ((tgpf->fill_draw_mode == GP_FILL_DMODE_CONTROL) ||
-          (tgpf->fill_draw_mode == GP_FILL_DMODE_BOTH)) {
+      if (ELEM(tgpf->fill_draw_mode, GP_FILL_DMODE_CONTROL, GP_FILL_DMODE_BOTH)) {
         gpencil_draw_basic_stroke(tgpf,
                                   gps,
                                   tgpw.diff_mat,
@@ -1269,7 +1274,7 @@ static void gpencil_stroke_from_buffer(tGPDfill *tgpf)
     for (int i = 0; i < gps->totpoints; i++) {
       BKE_gpencil_stroke_smooth(gps, i, smoothfac - reduce);
     }
-    reduce += 0.25f;  // reduce the factor
+    reduce += 0.25f; /* reduce the factor */
   }
 
   /* if axis locked, reproject to plane locked */
@@ -1294,11 +1299,11 @@ static void gpencil_stroke_from_buffer(tGPDfill *tgpf)
 
   /* simplify stroke */
   for (int b = 0; b < tgpf->fill_simplylvl; b++) {
-    BKE_gpencil_stroke_simplify_fixed(gps);
+    BKE_gpencil_stroke_simplify_fixed(tgpf->gpd, gps);
   }
 
   /* Calc geometry data. */
-  BKE_gpencil_stroke_geometry_update(gps);
+  BKE_gpencil_stroke_geometry_update(tgpf->gpd, gps);
 }
 
 /* ----------------------- */

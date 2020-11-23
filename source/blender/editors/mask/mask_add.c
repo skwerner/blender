@@ -202,7 +202,7 @@ static void finSelectedSplinePoint(MaskLayer *mask_layer,
       MaskSplinePoint *cur_point = &cur_spline->points[i];
 
       if (MASKPOINT_ISSEL_ANY(cur_point)) {
-        if (*spline != NULL && *spline != cur_spline) {
+        if (!ELEM(*spline, NULL, cur_spline)) {
           *spline = NULL;
           *point = NULL;
           return;
@@ -311,7 +311,7 @@ static bool add_vertex_extrude(const bContext *C,
   float tangent_point[2];
   float tangent_co[2];
   bool do_cyclic_correct = false;
-  bool do_prev; /* use prev point rather then next?? */
+  bool do_prev; /* use prev point rather than next?? */
 
   if (!mask_layer) {
     return false;

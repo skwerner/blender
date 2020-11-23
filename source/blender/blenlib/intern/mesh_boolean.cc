@@ -428,7 +428,9 @@ class Cell {
                                         BoolOpType bool_optype)
   {
     std::copy(from_cell.winding().begin(), from_cell.winding().end(), winding_.begin());
-    winding_[shape] += delta;
+    if (shape >= 0) {
+      winding_[shape] += delta;
+    }
     winding_assigned_ = true;
     in_output_volume_ = apply_bool_op(bool_optype, winding_);
   }
@@ -749,7 +751,7 @@ static PatchesInfo find_patches(const IMesh &tm, const TriMeshTopology &tmtopo)
     if (dbg_level > 1) {
       std::cout << "\ntriangle map\n";
       for (int t : tm.face_index_range()) {
-        std::cout << t << ": patch " << pinfo.tri_patch(t) << "\n";
+        std::cout << t << ": " << tm.face(t) << " patch " << pinfo.tri_patch(t) << "\n";
       }
     }
     std::cout << "\npatch-patch incidences\n";
@@ -2068,7 +2070,7 @@ static bool apply_bool_op(BoolOpType bool_optype, const Array<int> &winding)
         return true;
       }
       for (int i = 1; i < nw; ++i) {
-        if (winding[i] == 1) {
+        if (winding[i] >= 1) {
           return false;
         }
       }
@@ -2851,7 +2853,7 @@ static bool dissolve_leaves_valid_bmesh(FaceMergeState *fms,
    * saying which faces a vertex touches. */
   for (int a_v_index = 0; ok && a_v_index < alen; ++a_v_index) {
     const Vert *a_v = mf_left.vert[a_v_index];
-    if (a_v != me.v1 && a_v != me.v2) {
+    if (!ELEM(a_v, me.v1, me.v2)) {
       for (int b_v_index = 0; b_v_index < blen; ++b_v_index) {
         const Vert *b_v = mf_right.vert[b_v_index];
         if (a_v == b_v) {
@@ -3113,16 +3115,8 @@ static Array<bool> find_dissolve_verts(IMesh &imesh_out, int *r_count_dissolve)
       const std::pair<const Vert *, const Vert *> &nbrs = neighbors[v_out];
       if (nbrs.first != nullptr) {
         BLI_assert(nbrs.second != nullptr);
-        const mpq3 &co1 = nbrs.first->co_exact;
-        const mpq3 &co2 = nbrs.second->co_exact;
-        const mpq3 &co = imesh_out.vert(v_out)->co_exact;
-        mpq3 dir1 = co - co1;
-        mpq3 dir2 = co2 - co;
-        mpq3 cross = mpq3::cross(dir1, dir2);
-        if (cross[0] == 0 && cross[1] == 0 && cross[2] == 0) {
-          dissolve[v_out] = true;
-          ++count;
-        }
+        dissolve[v_out] = true;
+        ++count;
       }
     }
   }
@@ -3141,6 +3135,7 @@ static void dissolve_verts(IMesh *imesh, const Array<bool> dissolve, IMeshArena 
 {
   constexpr int inline_face_size = 100;
   Vector<bool, inline_face_size> face_pos_erase;
+  bool any_faces_erased = false;
   for (int f : imesh->face_index_range()) {
     const Face &face = *imesh->face(f);
     face_pos_erase.clear();
@@ -3157,10 +3152,13 @@ static void dissolve_verts(IMesh *imesh, const Array<bool> dissolve, IMeshArena 
       }
     }
     if (num_erase > 0) {
-      imesh->erase_face_positions(f, face_pos_erase, arena);
+      any_faces_erased |= imesh->erase_face_positions(f, face_pos_erase, arena);
     }
   }
   imesh->set_dirty_verts();
+  if (any_faces_erased) {
+    imesh->remove_null_faces();
+  }
 }
 
 /**
@@ -3382,6 +3380,10 @@ IMesh boolean_mesh(IMesh &imesh,
   IMesh ans = polymesh_from_trimesh_with_dissolve(tm_out, imesh, arena);
   if (dbg_level > 0) {
     std::cout << "boolean_mesh output:\n" << ans;
+    if (dbg_level > 2) {
+      ans.populate_vert();
+      dump_test_spec(ans);
+    }
   }
   return ans;
 }

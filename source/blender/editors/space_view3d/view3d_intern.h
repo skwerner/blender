@@ -170,10 +170,16 @@ bool ED_view3d_boundbox_clip_ex(const RegionView3D *rv3d,
                                 float obmat[4][4]);
 bool ED_view3d_boundbox_clip(RegionView3D *rv3d, const struct BoundBox *bb);
 
+/**
+ * Parameters for setting the new view-port state.
+ *
+ * Each of the struct members may be NULL to signify they aren't to be adjusted.
+ */
 typedef struct V3D_SmoothParams {
   struct Object *camera_old, *camera;
   const float *ofs, *quat, *dist, *lens;
-  /* alternate rotation center (ofs = must be NULL) */
+
+  /** Alternate rotation center, when set `ofs` must be NULL. */
   const float *dyn_ofs;
 } V3D_SmoothParams;
 
@@ -222,8 +228,7 @@ void view3d_buttons_register(struct ARegionType *art);
 struct View3DCameraControl *ED_view3d_cameracontrol_acquire(struct Depsgraph *depsgraph,
                                                             Scene *scene,
                                                             View3D *v3d,
-                                                            RegionView3D *rv3d,
-                                                            const bool use_parent_root);
+                                                            RegionView3D *rv3d);
 void ED_view3d_cameracontrol_update(struct View3DCameraControl *vctrl,
                                     const bool use_autokey,
                                     struct bContext *C,

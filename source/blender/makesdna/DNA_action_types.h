@@ -697,7 +697,7 @@ typedef enum eAction_Flags {
 typedef struct bDopeSheet {
   /** Currently ID_SCE (for Dopesheet), and ID_SC (for Grease Pencil). */
   ID *source;
-  /** Cache for channels (only initialized when pinned). */  // XXX not used!
+  /** Cache for channels (only initialized when pinned). */ /* XXX not used! */
   ListBase chanbase;
 
   /** Object group for option to only include objects that belong to this Collection. */
@@ -796,6 +796,8 @@ typedef enum eDopeSheet_Flag {
   ADS_FLAG_FUZZY_NAMES = (1 << 2),
   /** do not sort datablocks (mostly objects) by name (NOTE: potentially expensive operation) */
   ADS_FLAG_NO_DB_SORT = (1 << 3),
+  /** Invert the search filter */
+  ADS_FLAG_INVERT_FILTER = (1 << 4),
 } eDopeSheet_Flag;
 
 typedef struct SpaceAction_Runtime {
@@ -847,7 +849,7 @@ typedef enum eSAction_Flag {
   /* draw time in seconds instead of time in frames */
   SACTION_DRAWTIME = (1 << 2),
   /* don't filter action channels according to visibility */
-  // SACTION_NOHIDE = (1 << 3), // XXX deprecated... old animation system
+  // SACTION_NOHIDE = (1 << 3), /* XXX deprecated... old animation systems. */
   /* don't kill overlapping keyframes after transform */
   SACTION_NOTRANSKEYCULL = (1 << 4),
   /* don't include keyframes that are out of view */
@@ -855,7 +857,7 @@ typedef enum eSAction_Flag {
   /* show pose-markers (local to action) in Action Editor mode  */
   SACTION_POSEMARKERS_SHOW = (1 << 6),
   /* don't draw action channels using group colors (where applicable) */
-  SACTION_NODRAWGCOLORS = (1 << 7),
+  /* SACTION_NODRAWGCOLORS = (1 << 7), DEPRECATED */
   /* SACTION_NODRAWCFRANUM = (1 << 8), DEPRECATED */
   /* don't perform realtime updates */
   SACTION_NOREALTIMEUPDATES = (1 << 10),

@@ -446,7 +446,7 @@ static void constraintSizeLim(TransInfo *t, TransData *td)
      */
     if ((td->flag & TD_SINGLESIZE) && !(t->con.mode & CON_APPLY)) {
       /* scale val and reset size */
-      return;  // TODO: fix this case
+      return; /* TODO: fix this case */
     }
 
     /* Reset val if SINGLESIZE but using a constraint */
@@ -505,7 +505,7 @@ static void constraintSizeLim(TransInfo *t, TransData *td)
     /* copy results from cob->matrix */
     if ((td->flag & TD_SINGLESIZE) && !(t->con.mode & CON_APPLY)) {
       /* scale val and reset size */
-      return;  // TODO: fix this case
+      return; /* TODO: fix this case. */
     }
 
     /* Reset val if SINGLESIZE but using a constraint */
@@ -520,9 +520,7 @@ static void constraintSizeLim(TransInfo *t, TransData *td)
 }
 
 /* -------------------------------------------------------------------- */
-/* Transform (Rotation Utils) */
-
-/** \name Transform Rotation Utils
+/** \name Transform (Rotation Utils)
  * \{ */
 /* Used by Transform Rotation and Transform Normal Rotation */
 void headerRotation(TransInfo *t, char str[UI_MAX_DRAW_STR], float final)
@@ -534,13 +532,17 @@ void headerRotation(TransInfo *t, char str[UI_MAX_DRAW_STR], float final)
 
     outputNumInput(&(t->num), c, &t->scene->unit);
 
-    ofs += BLI_snprintf(
-        str + ofs, UI_MAX_DRAW_STR - ofs, TIP_("Rot: %s %s %s"), &c[0], t->con.text, t->proptext);
+    ofs += BLI_snprintf(str + ofs,
+                        UI_MAX_DRAW_STR - ofs,
+                        TIP_("Rotation: %s %s %s"),
+                        &c[0],
+                        t->con.text,
+                        t->proptext);
   }
   else {
     ofs += BLI_snprintf(str + ofs,
                         UI_MAX_DRAW_STR - ofs,
-                        TIP_("Rot: %.2f%s %s"),
+                        TIP_("Rotation: %.2f%s %s"),
                         RAD2DEGF(final),
                         t->con.text,
                         t->proptext);
@@ -605,7 +607,7 @@ void ElementRotation_ex(TransInfo *t,
 
     if (td->flag & TD_USEQUAT) {
       mul_m3_series(fmat, td->smtx, mat, td->mtx);
-      mat3_to_quat(quat, fmat);  // Actual transform
+      mat3_to_quat(quat, fmat); /* Actual transform */
 
       if (td->ext->quat) {
         mul_qt_qtqt(td->ext->quat, quat, td->ext->iquat);
@@ -628,31 +630,31 @@ void ElementRotation_ex(TransInfo *t,
    * has been computed, it has to be converted back into the bone's space.
    */
   else if (t->flag & T_POSE) {
-    // Extract and invert armature object matrix
+    /* Extract and invert armature object matrix */
 
     if ((td->flag & TD_NO_LOC) == 0) {
       sub_v3_v3v3(vec, td->center, center);
 
-      mul_m3_v3(tc->mat3, vec);   // To Global space
-      mul_m3_v3(mat, vec);        // Applying rotation
-      mul_m3_v3(tc->imat3, vec);  // To Local space
+      mul_m3_v3(tc->mat3, vec);  /* To Global space. */
+      mul_m3_v3(mat, vec);       /* Applying rotation. */
+      mul_m3_v3(tc->imat3, vec); /* To Local space. */
 
       add_v3_v3(vec, center);
       /* vec now is the location where the object has to be */
 
-      sub_v3_v3v3(vec, vec, td->center);  // Translation needed from the initial location
+      sub_v3_v3v3(vec, vec, td->center); /* Translation needed from the initial location */
 
       /* special exception, see TD_PBONE_LOCAL_MTX definition comments */
       if (td->flag & TD_PBONE_LOCAL_MTX_P) {
         /* do nothing */
       }
       else if (td->flag & TD_PBONE_LOCAL_MTX_C) {
-        mul_m3_v3(tc->mat3, vec);         // To Global space
-        mul_m3_v3(td->ext->l_smtx, vec);  // To Pose space (Local Location)
+        mul_m3_v3(tc->mat3, vec);        /* To Global space. */
+        mul_m3_v3(td->ext->l_smtx, vec); /* To Pose space (Local Location). */
       }
       else {
-        mul_m3_v3(tc->mat3, vec);  // To Global space
-        mul_m3_v3(td->smtx, vec);  // To Pose space
+        mul_m3_v3(tc->mat3, vec); /* To Global space. */
+        mul_m3_v3(td->smtx, vec); /* To Pose space. */
       }
 
       protectedTransBits(td->protectflag, vec);
@@ -738,13 +740,13 @@ void ElementRotation_ex(TransInfo *t,
     constraintTransLim(t, td);
 
     /* rotation */
-    if ((t->flag & T_V3D_ALIGN) == 0) {  // align mode doesn't rotate objects itself
+    if ((t->flag & T_V3D_ALIGN) == 0) { /* Align mode doesn't rotate objects itself. */
       /* euler or quaternion? */
       if ((td->ext->rotOrder == ROT_MODE_QUAT) || (td->flag & TD_USEQUAT)) {
         /* can be called for texture space translate for example, then opt out */
         if (td->ext->quat) {
           mul_m3_series(fmat, td->smtx, mat, td->mtx);
-          mat3_to_quat(quat, fmat);  // Actual transform
+          mat3_to_quat(quat, fmat); /* Actual transform */
 
           mul_qt_qtqt(td->ext->quat, quat, td->ext->iquat);
           /* this function works on end result */
@@ -758,7 +760,7 @@ void ElementRotation_ex(TransInfo *t,
         axis_angle_to_quat(iquat, td->ext->irotAxis, td->ext->irotAngle);
 
         mul_m3_series(fmat, td->smtx, mat, td->mtx);
-        mat3_to_quat(quat, fmat);  // Actual transform
+        mat3_to_quat(quat, fmat); /* Actual transform */
         mul_qt_qtqt(tquat, quat, iquat);
 
         quat_to_axis_angle(td->ext->rotAxis, td->ext->rotAngle, tquat);
@@ -815,9 +817,7 @@ void ElementRotation(
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/* Transform (Resize Utils) */
-
-/** \name Transform Resize Utils
+/** \name Transform (Resize Utils)
  * \{ */
 void headerResize(TransInfo *t, const float vec[3], char str[UI_MAX_DRAW_STR])
 {
@@ -1040,15 +1040,15 @@ void ElementResize(TransInfo *t, TransDataContainer *tc, TransData *td, float ma
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/* Transform (Frame Utils) */
-
-/** \name Transform Frame Utils
+/** \name Transform (Frame Utils)
  * \{ */
 
-/* This function returns the snapping 'mode' for Animation Editors only
+/**
+ * This function returns the snapping 'mode' for Animation Editors only.
  * We cannot use the standard snapping due to NLA-strip scaling complexities.
+ *
+ * TODO: these modifier checks should be key-mappable.
  */
-// XXX these modifier checks should be keymappable
 short getAnimEdit_SnapMode(TransInfo *t)
 {
   short autosnap = SACTSNAP_OFF;

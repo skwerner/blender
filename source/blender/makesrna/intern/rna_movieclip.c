@@ -46,10 +46,10 @@
 
 #  include "ED_clip.h"
 
-#  include "BKE_sequencer.h"
-
 #  include "DNA_screen_types.h"
 #  include "DNA_space_types.h"
+
+#  include "SEQ_sequencer.h"
 
 static void rna_MovieClip_reload_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
 {
@@ -410,7 +410,7 @@ static void rna_def_movieclip(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop,
       "Frame Offset",
-      "Offset of footage first frame relative to it's file name "
+      "Offset of footage first frame relative to its file name "
       "(affects only how footage is loading, does not change data associated with a clip)");
   RNA_def_property_update(prop, NC_MOVIECLIP | ND_DISPLAY, "rna_MovieClip_reload_update");
 

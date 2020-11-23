@@ -639,7 +639,7 @@ void BLI_path_rel(char *file, const char *relfile)
     }
 
     /* don't copy the slash at the beginning */
-    r += BLI_strcpy_rlen(r, q + 1);
+    r += BLI_strncpy_rlen(r, q + 1, FILE_MAX - (r - res));
 
 #ifdef WIN32
     BLI_str_replace_char(res + 2, '/', '\\');
@@ -1026,7 +1026,7 @@ bool BLI_path_abs(char *path, const char *basepath)
   if (!wasrelative && !BLI_path_is_abs(path)) {
     char *p = path;
     BLI_windows_get_default_root_dir(tmp);
-    // get rid of the slashes at the beginning of the path
+    /* Get rid of the slashes at the beginning of the path. */
     while (ELEM(*p, '\\', '/')) {
       p++;
     }

@@ -76,6 +76,44 @@ static CLG_LogRef LOG = {"ed.undo"};
  * Non-operator undo editor functions.
  * \{ */
 
+/**
+ * Run from the main event loop, basic checks that undo is left in a correct state.
+ */
+bool ED_undo_is_state_valid(bContext *C)
+{
+  wmWindowManager *wm = CTX_wm_manager(C);
+
+  /* Currently only checks matching begin/end calls. */
+  if (wm->undo_stack == NULL) {
+    /* No undo stack is valid, nothing to do. */
+    return true;
+  }
+  if (wm->undo_stack->group_level != 0) {
+    /* If this fails #ED_undo_grouped_begin, #ED_undo_grouped_end calls don't match. */
+    return false;
+  }
+  if (wm->undo_stack->step_active != NULL) {
+    if (wm->undo_stack->step_active->skip == true) {
+      /* Skip is only allowed between begin/end calls,
+       * a state that should never happen in main event loop. */
+      return false;
+    }
+  }
+  return true;
+}
+
+void ED_undo_group_begin(bContext *C)
+{
+  wmWindowManager *wm = CTX_wm_manager(C);
+  BKE_undosys_stack_group_begin(wm->undo_stack);
+}
+
+void ED_undo_group_end(bContext *C)
+{
+  wmWindowManager *wm = CTX_wm_manager(C);
+  BKE_undosys_stack_group_end(wm->undo_stack);
+}
+
 void ED_undo_push(bContext *C, const char *str)
 {
   CLOG_INFO(&LOG, 1, "name='%s'", str);
@@ -364,7 +402,7 @@ bool ED_undo_is_legacy_compatible_for_property(struct bContext *C, ID *id)
     if (obact != NULL) {
       if (obact->mode & OB_MODE_ALL_PAINT) {
         /* Don't store property changes when painting
-         * (only do undo pushes on brush strokes which each paint operator handles on it's own). */
+         * (only do undo pushes on brush strokes which each paint operator handles on its own). */
         CLOG_INFO(&LOG, 1, "skipping undo for paint-mode");
         return false;
       }

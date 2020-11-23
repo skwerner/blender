@@ -531,7 +531,7 @@ struct uiBlock {
   void *evil_C;
 
   /** unit system, used a lot for numeric buttons so include here
-   * rather then fetching through the scene every time. */
+   * rather than fetching through the scene every time. */
   struct UnitSettings *unit;
   /** \note only accessed by color picker templates. */
   ColorPickerData color_pickers;
@@ -618,8 +618,6 @@ extern uiBut *ui_but_drag_multi_edit_get(uiBut *but);
 
 void ui_def_but_icon(uiBut *but, const int icon, const int flag);
 void ui_def_but_icon_clear(uiBut *but);
-
-extern void ui_but_default_set(struct bContext *C, const bool all, const bool use_afterfunc);
 
 void ui_but_extra_operator_icons_free(uiBut *but);
 
@@ -945,7 +943,7 @@ typedef struct uiWidgetBaseParameters {
   /* We pack alpha check and discard factor in alpha_discard.
    * If the value is negative then we do alpha check.
    * The absolute value itself is the discard factor.
-   * Initialize value to 1.0.f if you don't want discard */
+   * Initialize value to 1.0f if you don't want discard. */
   float alpha_discard;
   float tria_type;
   float _pad[3];
@@ -997,8 +995,9 @@ void ui_draw_preview_item(
 
 #define UI_TEXT_MARGIN_X 0.4f
 #define UI_POPUP_MARGIN (UI_DPI_FAC * 12)
-/* margin at top of screen for popups */
-#define UI_POPUP_MENU_TOP (int)(8 * UI_DPI_FAC)
+/* Margin at top of screen for popups. Note this value must be sufficient
+   to draw a popover arrow to avoid cropping it. */
+#define UI_POPUP_MENU_TOP (int)(10 * UI_DPI_FAC)
 
 #define UI_PIXEL_AA_JITTER 8
 extern const float ui_pixel_jitter[UI_PIXEL_AA_JITTER][2];
@@ -1089,6 +1088,9 @@ uiBut *ui_but_find_rect_over(const struct ARegion *region,
 uiBut *ui_list_find_mouse_over_ex(struct ARegion *region, int x, int y) ATTR_WARN_UNUSED_RESULT;
 
 bool ui_but_contains_password(const uiBut *but) ATTR_WARN_UNUSED_RESULT;
+
+size_t ui_but_drawstr_len_without_sep_char(const uiBut *but);
+size_t ui_but_tip_len_only_first_line(const uiBut *but);
 
 uiBut *ui_but_prev(uiBut *but) ATTR_WARN_UNUSED_RESULT;
 uiBut *ui_but_next(uiBut *but) ATTR_WARN_UNUSED_RESULT;

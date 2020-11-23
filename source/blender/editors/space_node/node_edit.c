@@ -108,7 +108,7 @@ static void compo_tag_output_nodes(bNodeTree *nodetree, int recalc_flags)
         node->flag |= NODE_DO_OUTPUT_RECALC;
       }
     }
-    else if (node->type == CMP_NODE_VIEWER || node->type == CMP_NODE_SPLITVIEWER) {
+    else if (ELEM(node->type, CMP_NODE_VIEWER, CMP_NODE_SPLITVIEWER)) {
       if (recalc_flags & COM_RECALC_VIEWER) {
         node->flag |= NODE_DO_OUTPUT_RECALC;
       }
@@ -773,12 +773,12 @@ void ED_node_set_active(Main *bmain, bNodeTree *ntree, bNode *node, bool *r_acti
       }
     }
     else if (ntree->type == NTREE_TEXTURE) {
-      // XXX
+      /* XXX */
 #if 0
       if (node->id) {
-        // XXX BIF_preview_changed(-1);
-        // allqueue(REDRAWBUTSSHADING, 1);
-        // allqueue(REDRAWIPO, 0);
+        BIF_preview_changed(-1);
+        allqueue(REDRAWBUTSSHADING, 1);
+        allqueue(REDRAWIPO, 0);
       }
 #endif
     }
@@ -1378,7 +1378,7 @@ void ED_node_select_all(ListBase *lb, int action)
 }
 
 /* ******************************** */
-// XXX some code needing updating to operators...
+/* XXX some code needing updating to operators. */
 
 /* goes over all scenes, reads render layers */
 static int node_read_viewlayers_exec(bContext *C, wmOperator *UNUSED(op))
@@ -2724,7 +2724,7 @@ void NODE_OT_viewer_border(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   /* properties */
-  WM_operator_properties_gesture_box_select(ot);
+  WM_operator_properties_gesture_box(ot);
 }
 
 static int clear_viewer_border_exec(bContext *C, wmOperator *UNUSED(op))

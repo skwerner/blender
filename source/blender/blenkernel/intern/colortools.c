@@ -715,7 +715,8 @@ static void curvemap_make_table(const CurveMapping *cumap, CurveMap *cuma)
   float *point = allpoints;
 
   for (int a = 0; a < cuma->totpoint - 1; a++, point += 2 * CM_RESOL) {
-    correct_bezpart(bezt[a].vec[1], bezt[a].vec[2], bezt[a + 1].vec[0], bezt[a + 1].vec[1]);
+    BKE_curve_correct_bezpart(
+        bezt[a].vec[1], bezt[a].vec[2], bezt[a + 1].vec[0], bezt[a + 1].vec[1]);
     BKE_curve_forward_diff_bezier(bezt[a].vec[1][0],
                                   bezt[a].vec[2][0],
                                   bezt[a + 1].vec[0][0],
@@ -1256,7 +1257,7 @@ void BKE_curvemapping_blend_read(BlendDataReader *reader, CurveMapping *cumap)
 
 /* ***************** Histogram **************** */
 
-#define INV_255 (1.f / 255.f)
+#define INV_255 (1.0f / 255.0f)
 
 BLI_INLINE int get_bin_float(float f)
 {
@@ -1569,8 +1570,8 @@ void BKE_scopes_update(Scopes *scopes,
     return;
   }
 
-  if (scopes->hist.ymax == 0.f) {
-    scopes->hist.ymax = 1.f;
+  if (scopes->hist.ymax == 0.0f) {
+    scopes->hist.ymax = 1.0f;
   }
 
   /* hmmmm */
@@ -1815,6 +1816,24 @@ void BKE_color_managed_view_settings_free(ColorManagedViewSettings *settings)
   if (settings->curve_mapping) {
     BKE_curvemapping_free(settings->curve_mapping);
     settings->curve_mapping = NULL;
+  }
+}
+
+void BKE_color_managed_view_settings_blend_write(BlendWriter *writer,
+                                                 ColorManagedViewSettings *settings)
+{
+  if (settings->curve_mapping) {
+    BKE_curvemapping_blend_write(writer, settings->curve_mapping);
+  }
+}
+
+void BKE_color_managed_view_settings_blend_read_data(BlendDataReader *reader,
+                                                     ColorManagedViewSettings *settings)
+{
+  BLO_read_data_address(reader, &settings->curve_mapping);
+
+  if (settings->curve_mapping) {
+    BKE_curvemapping_blend_read(reader, settings->curve_mapping);
   }
 }
 

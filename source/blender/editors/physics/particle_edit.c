@@ -202,9 +202,10 @@ ParticleEditSettings *PE_settings(Scene *scene)
 
 static float pe_brush_size_get(const Scene *UNUSED(scene), ParticleBrushData *brush)
 {
-  // here we can enable unified brush size, needs more work...
-  // UnifiedPaintSettings *ups = &scene->toolsettings->unified_paint_settings;
-  // float size = (ups->flag & UNIFIED_PAINT_SIZE) ? ups->size : brush->size;
+#if 0 /* TODO: Here we can enable unified brush size, needs more work. */
+  UnifiedPaintSettings *ups = &scene->toolsettings->unified_paint_settings;
+  float size = (ups->flag & UNIFIED_PAINT_SIZE) ? ups->size : brush->size;
+#endif
 
   return brush->size;
 }
@@ -3776,7 +3777,7 @@ static void brush_puff(PEData *data, int point_index, float mouse_distance)
           /* translate (not rotate) the rest of the hair if its not selected  */
           {
 /* NOLINTNEXTLINE: readability-redundant-preprocessor */
-#  if 0 /* kindof works but looks worse then what's below */
+#  if 0 /* kindof works but looks worse than what's below */
 
             /* Move the unselected point on a vector based on the
              * hair direction and the offset */
@@ -4437,7 +4438,7 @@ static int brush_add(const bContext *C, PEData *data, short number)
         for (k = 0, hkey = pa->hair; k < pset->totaddkey; k++, hkey++) {
           madd_v3_v3v3fl(hkey->co, pa->state.co, pa->state.vel, k * framestep * timestep);
           hkey->time += k * framestep;
-          hkey->weight = 1.f - (float)k / (float)(pset->totaddkey - 1);
+          hkey->weight = 1.0f - (float)k / (float)(pset->totaddkey - 1);
         }
       }
       for (k = 0, hkey = pa->hair; k < pset->totaddkey; k++, hkey++) {
@@ -4560,7 +4561,7 @@ static void brush_edit_apply(bContext *C, wmOperator *op, PointerRNA *itemptr)
            (dx != 0 || dy != 0)) ||
       bedit->first) {
     PEData data = bedit->data;
-    data.context = C;  // TODO(mai): why isnt this set in bedit->data?
+    data.context = C; /* TODO(mai): why isnt this set in bedit->data? */
 
     view3d_operator_needs_opengl(C);
     selected = (short)count_selected_keys(scene, edit);
@@ -4783,7 +4784,7 @@ static void brush_edit_apply_event(bContext *C, wmOperator *op, const wmEvent *e
   RNA_collection_add(op->ptr, "stroke", &itemptr);
 
   RNA_float_set_array(&itemptr, "mouse", mouse);
-  RNA_boolean_set(&itemptr, "pen_flip", event->shift != false);  // XXX hardcoded
+  RNA_boolean_set(&itemptr, "pen_flip", event->shift != false); /* XXX hardcoded */
 
   /* apply */
   brush_edit_apply(C, op, &itemptr);
@@ -4807,7 +4808,7 @@ static int brush_edit_modal(bContext *C, wmOperator *op, const wmEvent *event)
   switch (event->type) {
     case LEFTMOUSE:
     case MIDDLEMOUSE:
-    case RIGHTMOUSE:  // XXX hardcoded
+    case RIGHTMOUSE: /* XXX hardcoded */
       if (event->val == KM_RELEASE) {
         brush_edit_exit(op);
         return OPERATOR_FINISHED;
@@ -5199,7 +5200,8 @@ void PE_create_particle_edit(
 
       for (pm = cache->mem_cache.first; pm; pm = pm->next) {
         LOOP_POINTS {
-          if (BKE_ptcache_mem_pointers_seek(p, pm) == 0) {
+          void *cur[BPHYS_TOT_DATA];
+          if (BKE_ptcache_mem_pointers_seek(p, pm, cur) == 0) {
             continue;
           }
 
@@ -5211,12 +5213,12 @@ void PE_create_particle_edit(
             key = point->keys + point->totkey;
           }
 
-          key->co = pm->cur[BPHYS_DATA_LOCATION];
-          key->vel = pm->cur[BPHYS_DATA_VELOCITY];
-          key->rot = pm->cur[BPHYS_DATA_ROTATION];
+          key->co = cur[BPHYS_DATA_LOCATION];
+          key->vel = cur[BPHYS_DATA_VELOCITY];
+          key->rot = cur[BPHYS_DATA_ROTATION];
           key->ftime = (float)pm->frame;
           key->time = &key->ftime;
-          BKE_ptcache_mem_pointers_incr(pm);
+          BKE_ptcache_mem_pointers_incr(cur);
 
           point->totkey++;
         }
@@ -5390,11 +5392,6 @@ static int clear_edited_exec(bContext *C, wmOperator *UNUSED(op))
   return OPERATOR_FINISHED;
 }
 
-static int clear_edited_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
-{
-  return WM_operator_confirm_message(C, op, "Lose changes done in particle mode? (no undo)");
-}
-
 void PARTICLE_OT_edited_clear(wmOperatorType *ot)
 {
   /* identifiers */
@@ -5405,7 +5402,6 @@ void PARTICLE_OT_edited_clear(wmOperatorType *ot)
   /* api callbacks */
   ot->exec = clear_edited_exec;
   ot->poll = particle_edit_toggle_poll;
-  ot->invoke = clear_edited_invoke;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;

@@ -80,6 +80,11 @@
 #define USE_MATHUTILS
 #define USE_STRING_COERCE
 
+/* Unfortunately Python needs to hold a global reference to the context.
+ * If we remove this is means `bpy.context` won't be usable from some parts of the code:
+ * `bpy.app.handler` callbacks for example.
+ * Even though this is arguably "correct", it's going to cause problems for existing scripts,
+ * so accept having this for the time being. */
 BPy_StructRNA *bpy_context_module = NULL; /* for fast access */
 
 static PyObject *pyrna_struct_Subtype(PointerRNA *ptr);
@@ -457,7 +462,7 @@ static int mathutils_rna_vector_set(BaseMathObject *bmo, int subtype)
 
   RNA_property_float_set_array(&self->ptr, self->prop, bmo->data);
   if (RNA_property_update_check(self->prop)) {
-    RNA_property_update(BPy_GetContext(), &self->ptr, self->prop);
+    RNA_property_update(BPY_context_get(), &self->ptr, self->prop);
   }
 
   /* Euler order exception. */
@@ -468,7 +473,7 @@ static int mathutils_rna_vector_set(BaseMathObject *bmo, int subtype)
     if (order != eul->order) {
       RNA_property_enum_set(&self->ptr, prop_eul_order, eul->order);
       if (RNA_property_update_check(prop_eul_order)) {
-        RNA_property_update(BPy_GetContext(), &self->ptr, prop_eul_order);
+        RNA_property_update(BPY_context_get(), &self->ptr, prop_eul_order);
       }
     }
   }
@@ -517,7 +522,7 @@ static int mathutils_rna_vector_set_index(BaseMathObject *bmo, int UNUSED(subtyp
   RNA_property_float_set_index(&self->ptr, self->prop, index, bmo->data[index]);
 
   if (RNA_property_update_check(self->prop)) {
-    RNA_property_update(BPy_GetContext(), &self->ptr, self->prop);
+    RNA_property_update(BPY_context_get(), &self->ptr, self->prop);
   }
 
   return 0;
@@ -576,7 +581,7 @@ static int mathutils_rna_matrix_set(BaseMathObject *bmo, int UNUSED(subtype))
   RNA_property_float_set_array(&self->ptr, self->prop, bmo->data);
 
   if (RNA_property_update_check(self->prop)) {
-    RNA_property_update(BPy_GetContext(), &self->ptr, self->prop);
+    RNA_property_update(BPY_context_get(), &self->ptr, self->prop);
   }
   return 0;
 }
@@ -722,7 +727,7 @@ PyObject *pyrna_math_object_from_array(PointerRNA *ptr, PropertyRNA *prop)
           }
           else {
             /* Order will be updated from callback on use. */
-            // TODO, get order from RNA
+            /* TODO, get order from RNA. */
             PyObject *eul_cb = Euler_CreatePyObject_cb(
                 ret, EULER_ORDER_XYZ, mathutils_rna_array_cb_index, MATHUTILS_CB_SUBTYPE_EUL);
             Py_DECREF(ret); /* The euler owns 'ret' now. */
@@ -1229,7 +1234,7 @@ static const char *pyrna_enum_as_string(PointerRNA *ptr, PropertyRNA *prop)
   const char *result;
   bool free = false;
 
-  RNA_property_enum_items(BPy_GetContext(), ptr, prop, &item, NULL, &free);
+  RNA_property_enum_items(BPY_context_get(), ptr, prop, &item, NULL, &free);
   if (item) {
     result = BPy_enum_as_string(item);
   }
@@ -1257,7 +1262,7 @@ static int pyrna_string_to_enum(
     return -1;
   }
 
-  if (!RNA_property_enum_value(BPy_GetContext(), ptr, prop, param, r_value)) {
+  if (!RNA_property_enum_value(BPY_context_get(), ptr, prop, param, r_value)) {
     const char *enum_str = pyrna_enum_as_string(ptr, prop);
     PyErr_Format(PyExc_TypeError,
                  "%.200s enum \"%.200s\" not found in (%s)",
@@ -1399,7 +1404,7 @@ static int pyrna_prop_to_enum_bitfield(
     return -1;
   }
 
-  RNA_property_enum_items(BPy_GetContext(), ptr, prop, &item, NULL, &free);
+  RNA_property_enum_items(BPY_context_get(), ptr, prop, &item, NULL, &free);
 
   if (item) {
     ret = pyrna_set_to_enum_bitfield(item, value, r_value, error_prefix);
@@ -1451,7 +1456,7 @@ static PyObject *pyrna_enum_to_py(PointerRNA *ptr, PropertyRNA *prop, int val)
 
     ret = PySet_New(NULL);
 
-    if (RNA_property_enum_bitflag_identifiers(BPy_GetContext(), ptr, prop, val, identifier)) {
+    if (RNA_property_enum_bitflag_identifiers(BPY_context_get(), ptr, prop, val, identifier)) {
       int index;
 
       for (index = 0; identifier[index]; index++) {
@@ -1463,7 +1468,7 @@ static PyObject *pyrna_enum_to_py(PointerRNA *ptr, PropertyRNA *prop, int val)
   }
   else {
     const char *identifier;
-    if (RNA_property_enum_identifier(BPy_GetContext(), ptr, prop, val, &identifier)) {
+    if (RNA_property_enum_identifier(BPY_context_get(), ptr, prop, val, &identifier)) {
       ret = PyUnicode_FromString(identifier);
     }
     else {
@@ -1985,7 +1990,7 @@ static int pyrna_py_to_prop(
           }
         }
 
-        /* Another exception, allow to pass a collection as an RNA property. */
+        /* Another exception, allow passing a collection as an RNA property. */
         if (Py_TYPE(value) == &pyrna_prop_collection_Type) { /* Ok to ignore idprop collections. */
           PointerRNA c_ptr;
           BPy_PropertyRNA *value_prop = (BPy_PropertyRNA *)value;
@@ -2212,7 +2217,7 @@ static int pyrna_py_to_prop(
 
   /* Run RNA property functions. */
   if (RNA_property_update_check(prop)) {
-    RNA_property_update(BPy_GetContext(), ptr, prop);
+    RNA_property_update(BPY_context_get(), ptr, prop);
   }
 
   return 0;
@@ -2288,7 +2293,7 @@ static int pyrna_py_to_prop_array_index(BPy_PropertyArrayRNA *self, int index, P
 
   /* Run RNA property functions. */
   if (RNA_property_update_check(prop)) {
-    RNA_property_update(BPy_GetContext(), ptr, prop);
+    RNA_property_update(BPY_context_get(), ptr, prop);
   }
 
   return ret;
@@ -3292,7 +3297,7 @@ static int pyrna_prop_array_ass_subscript(BPy_PropertyArrayRNA *self,
 
   if (ret != -1) {
     if (RNA_property_update_check(self->prop)) {
-      RNA_property_update(BPy_GetContext(), &self->ptr, self->prop);
+      RNA_property_update(BPY_context_get(), &self->ptr, self->prop);
     }
   }
 
@@ -3599,20 +3604,30 @@ static PyObject *pyrna_struct_values(BPy_PropertyRNA *self)
 }
 
 PyDoc_STRVAR(pyrna_struct_is_property_set_doc,
-             ".. method:: is_property_set(property)\n"
+             ".. method:: is_property_set(property, ghost=True)\n"
              "\n"
              "   Check if a property is set, use for testing operator properties.\n"
              "\n"
+             "   :arg ghost: Used for operators that re-run with previous settings.\n"
+             "      In this case the property is not marked as set,\n"
+             "      yet the value from the previous execution is used.\n"
+             "\n"
+             "      In rare cases you may want to set this option to false.\n"
+             "\n"
+             "   :type ghost: boolean\n"
              "   :return: True when the property has been set.\n"
              "   :rtype: boolean\n");
-static PyObject *pyrna_struct_is_property_set(BPy_StructRNA *self, PyObject *args)
+static PyObject *pyrna_struct_is_property_set(BPy_StructRNA *self, PyObject *args, PyObject *kw)
 {
   PropertyRNA *prop;
   const char *name;
+  bool use_ghost = true;
 
   PYRNA_STRUCT_CHECK_OBJ(self);
 
-  if (!PyArg_ParseTuple(args, "s:is_property_set", &name)) {
+  static const char *_keywords[] = {"", "ghost", NULL};
+  static _PyArg_Parser _parser = {"s|$O&:is_property_set", _keywords, 0};
+  if (!_PyArg_ParseTupleAndKeywordsFast(args, kw, &_parser, &name, PyC_ParseBool, &use_ghost)) {
     return NULL;
   }
 
@@ -3624,7 +3639,7 @@ static PyObject *pyrna_struct_is_property_set(BPy_StructRNA *self, PyObject *arg
     return NULL;
   }
 
-  return PyBool_FromLong(RNA_property_is_set(&self->ptr, prop));
+  return PyBool_FromLong(RNA_property_is_set_ex(&self->ptr, prop, use_ghost));
 }
 
 PyDoc_STRVAR(pyrna_struct_property_unset_doc,
@@ -3962,7 +3977,7 @@ PyDoc_STRVAR(pyrna_prop_update_doc,
              "      however in rare cases it's useful to call explicitly.\n");
 static PyObject *pyrna_prop_update(BPy_PropertyRNA *self)
 {
-  RNA_property_update(BPy_GetContext(), &self->ptr, self->prop);
+  RNA_property_update(BPY_context_get(), &self->ptr, self->prop);
   Py_RETURN_NONE;
 }
 
@@ -4839,7 +4854,7 @@ static PyObject *pyrna_prop_collection_items(BPy_PropertyRNA *self)
         }
       }
       else {
-        /* A bit strange, but better then returning an empty list. */
+        /* A bit strange, but better than returning an empty list. */
         PyTuple_SET_ITEM(item, 0, PyLong_FromLong(i));
       }
       PyTuple_SET_ITEM(item, 1, pyrna_struct_CreatePyObject(&itemptr));
@@ -5416,7 +5431,7 @@ static PyObject *pyprop_array_foreach_getset(BPy_PropertyArrayRNA *self,
   /* Get/set both take the same args currently. */
   PyObject *seq;
 
-  if (prop_type != PROP_INT && prop_type != PROP_FLOAT) {
+  if (!ELEM(prop_type, PROP_INT, PROP_FLOAT)) {
     PyErr_Format(PyExc_TypeError, "foreach_get/set available only for int and float");
     return NULL;
   }
@@ -5649,7 +5664,7 @@ static struct PyMethodDef pyrna_struct_methods[] = {
 
     {"is_property_set",
      (PyCFunction)pyrna_struct_is_property_set,
-     METH_VARARGS,
+     METH_VARARGS | METH_KEYWORDS,
      pyrna_struct_is_property_set_doc},
     {"property_unset",
      (PyCFunction)pyrna_struct_property_unset,
@@ -6048,7 +6063,7 @@ static PyObject *pyrna_func_call(BPy_FunctionRNA *self, PyObject *args, PyObject
 
   /* enable this so all strings are copied and freed after calling.
    * this exposes bugs where the pointer to the string is held and re-used */
-  // #define DEBUG_STRING_FREE
+  /* #define DEBUG_STRING_FREE */
 
 #ifdef DEBUG_STRING_FREE
   PyObject *string_free_ls = PyList_New(0);
@@ -6214,7 +6229,7 @@ static PyObject *pyrna_func_call(BPy_FunctionRNA *self, PyObject *args, PyObject
 
   /* Check if we gave args that don't exist in the function
    * Printing the error is slow, but it should only happen when developing.
-   * The "if" below is quick check to make sure less keyword args were passed then we gave.
+   * The "if" below is quick check to make sure less keyword args were passed than we gave.
    * (Don't overwrite the error if we have one,
    * otherwise can skip important messages and confuse with args).
    */
@@ -6294,7 +6309,7 @@ static PyObject *pyrna_func_call(BPy_FunctionRNA *self, PyObject *args, PyObject
   if (err == 0) {
     /* Call function. */
     ReportList reports;
-    bContext *C = BPy_GetContext();
+    bContext *C = BPY_context_get();
 
     BKE_reports_init(&reports, RPT_STORE);
     RNA_function_call(C, &reports, self_ptr, self_func, &parms);
@@ -6388,10 +6403,14 @@ PyTypeObject pyrna_struct_meta_idprop_Type = {
 
     0, /* tp_itemsize */
     /* methods */
-    NULL,            /* tp_dealloc */
-    (printfunc)NULL, /* printfunc tp_print; */
-    NULL,            /* getattrfunc tp_getattr; */
-    NULL,            /* setattrfunc tp_setattr; */
+    NULL, /* tp_dealloc */
+#if PY_VERSION_HEX >= 0x03080000
+    0, /* tp_vectorcall_offset */
+#else
+    (printfunc)NULL, /* printfunc tp_print */
+#endif
+    NULL, /* getattrfunc tp_getattr; */
+    NULL, /* setattrfunc tp_setattr; */
     NULL,
     /* tp_compare */ /* deprecated in Python 3.0! */
     NULL,            /* tp_repr */
@@ -6441,7 +6460,7 @@ PyTypeObject pyrna_struct_meta_idprop_Type = {
 #if defined(_MSC_VER)
     NULL, /* defer assignment */
 #else
-    &PyType_Type, /* struct _typeobject *tp_base; */
+    &PyType_Type,    /* struct _typeobject *tp_base; */
 #endif
     NULL, /* PyObject *tp_dict; */
     NULL, /* descrgetfunc tp_descr_get; */
@@ -6470,9 +6489,13 @@ PyTypeObject pyrna_struct_Type = {
     0,                                           /* tp_itemsize */
     /* methods */
     (destructor)pyrna_struct_dealloc, /* tp_dealloc */
-    (printfunc)NULL,                  /* printfunc tp_print; */
-    NULL,                             /* getattrfunc tp_getattr; */
-    NULL,                             /* setattrfunc tp_setattr; */
+#if PY_VERSION_HEX >= 0x03080000
+    0, /* tp_vectorcall_offset */
+#else
+    (printfunc)NULL, /* printfunc tp_print */
+#endif
+    NULL, /* getattrfunc tp_getattr; */
+    NULL, /* setattrfunc tp_setattr; */
     NULL,
     /* tp_compare */             /* DEPRECATED in Python 3.0! */
     (reprfunc)pyrna_struct_repr, /* tp_repr */
@@ -6506,7 +6529,7 @@ PyTypeObject pyrna_struct_Type = {
     /* delete references to contained objects */
     (inquiry)pyrna_struct_clear, /* inquiry tp_clear; */
 #else
-    NULL,         /* traverseproc tp_traverse; */
+    NULL,            /* traverseproc tp_traverse; */
 
     /* delete references to contained objects */
     NULL, /* inquiry tp_clear; */
@@ -6559,9 +6582,13 @@ PyTypeObject pyrna_prop_Type = {
     0,                                         /* tp_itemsize */
     /* methods */
     (destructor)pyrna_prop_dealloc, /* tp_dealloc */
-    (printfunc)NULL,                /* printfunc tp_print; */
-    NULL,                           /* getattrfunc tp_getattr; */
-    NULL,                           /* setattrfunc tp_setattr; */
+#if PY_VERSION_HEX >= 0x03080000
+    0, /* tp_vectorcall_offset */
+#else
+    (printfunc)NULL, /* printfunc tp_print */
+#endif
+    NULL, /* getattrfunc tp_getattr; */
+    NULL, /* setattrfunc tp_setattr; */
     NULL,
     /* tp_compare */           /* DEPRECATED in Python 3.0! */
     (reprfunc)pyrna_prop_repr, /* tp_repr */
@@ -6643,9 +6670,13 @@ PyTypeObject pyrna_prop_array_Type = {
     0,                                               /* tp_itemsize */
     /* methods */
     (destructor)pyrna_prop_array_dealloc, /* tp_dealloc */
-    (printfunc)NULL,                      /* printfunc tp_print; */
-    NULL,                                 /* getattrfunc tp_getattr; */
-    NULL,                                 /* setattrfunc tp_setattr; */
+#if PY_VERSION_HEX >= 0x03080000
+    0, /* tp_vectorcall_offset */
+#else
+    (printfunc)NULL, /* printfunc tp_print */
+#endif
+    NULL, /* getattrfunc tp_getattr; */
+    NULL, /* setattrfunc tp_setattr; */
     NULL,
     /* tp_compare */                 /* DEPRECATED in Python 3.0! */
     (reprfunc)pyrna_prop_array_repr, /* tp_repr */
@@ -6726,9 +6757,13 @@ PyTypeObject pyrna_prop_collection_Type = {
     0,                                                    /* tp_itemsize */
     /* methods */
     (destructor)pyrna_prop_dealloc, /* tp_dealloc */
-    (printfunc)NULL,                /* printfunc tp_print; */
-    NULL,                           /* getattrfunc tp_getattr; */
-    NULL,                           /* setattrfunc tp_setattr; */
+#if PY_VERSION_HEX >= 0x03080000
+    0, /* tp_vectorcall_offset */
+#else
+    (printfunc)NULL, /* printfunc tp_print */
+#endif
+    NULL, /* getattrfunc tp_getattr; */
+    NULL, /* setattrfunc tp_setattr; */
     NULL,
     /* tp_compare */ /* DEPRECATED in Python 3.0! */
     NULL,
@@ -6812,9 +6847,13 @@ static PyTypeObject pyrna_prop_collection_idprop_Type = {
     0,                                                           /* tp_itemsize */
     /* methods */
     (destructor)pyrna_prop_dealloc, /* tp_dealloc */
-    (printfunc)NULL,                /* printfunc tp_print; */
-    NULL,                           /* getattrfunc tp_getattr; */
-    NULL,                           /* setattrfunc tp_setattr; */
+#if PY_VERSION_HEX >= 0x03080000
+    0, /* tp_vectorcall_offset */
+#else
+    (printfunc)NULL, /* printfunc tp_print */
+#endif
+    NULL, /* getattrfunc tp_getattr; */
+    NULL, /* setattrfunc tp_setattr; */
     NULL,
     /* tp_compare */ /* DEPRECATED in Python 3.0! */
     NULL,
@@ -6897,10 +6936,14 @@ PyTypeObject pyrna_func_Type = {
     sizeof(BPy_FunctionRNA),                   /* tp_basicsize */
     0,                                         /* tp_itemsize */
     /* methods */
-    NULL,            /* tp_dealloc */
-    (printfunc)NULL, /* printfunc tp_print; */
-    NULL,            /* getattrfunc tp_getattr; */
-    NULL,            /* setattrfunc tp_setattr; */
+    NULL, /* tp_dealloc */
+#if PY_VERSION_HEX >= 0x03080000
+    0, /* tp_vectorcall_offset */
+#else
+    (printfunc)NULL, /* printfunc tp_print */
+#endif
+    NULL, /* getattrfunc tp_getattr; */
+    NULL, /* setattrfunc tp_setattr; */
     NULL,
     /* tp_compare */           /* DEPRECATED in Python 3.0! */
     (reprfunc)pyrna_func_repr, /* tp_repr */
@@ -6994,9 +7037,13 @@ static PyTypeObject pyrna_prop_collection_iter_Type = {
     0,                                                         /* tp_itemsize */
     /* methods */
     (destructor)pyrna_prop_collection_iter_dealloc, /* tp_dealloc */
-    (printfunc)NULL,                                /* printfunc tp_print; */
-    NULL,                                           /* getattrfunc tp_getattr; */
-    NULL,                                           /* setattrfunc tp_setattr; */
+#  if PY_VERSION_HEX >= 0x03080000
+    0, /* tp_vectorcall_offset */
+#  else
+    (printfunc)NULL,         /* printfunc tp_print */
+#  endif
+    NULL, /* getattrfunc tp_getattr; */
+    NULL, /* setattrfunc tp_setattr; */
     NULL,
     /* tp_compare */ /* DEPRECATED in Python 3.0! */
     NULL,
@@ -8103,18 +8150,11 @@ static int bpy_class_validate_recursive(PointerRNA *dummyptr,
   for (link = lb->first; link; link = link->next) {
     FunctionRNA *func = (FunctionRNA *)link;
     const int flag = RNA_function_flag(func);
-    /* TODO(campbell): this is used for classmethod's too,
-     * even though class methods should have 'FUNC_USE_SELF_TYPE' set, see Operator.poll for eg.
-     * Keep this as-is since it's working, but we should be using
-     * 'FUNC_USE_SELF_TYPE' for many functions. */
-    const bool is_staticmethod = (flag & FUNC_NO_SELF) && !(flag & FUNC_USE_SELF_TYPE);
-
     if (!(flag & FUNC_REGISTER)) {
       continue;
     }
 
     item = PyObject_GetAttrString(py_class, RNA_function_identifier(func));
-
     have_function[i] = (item != NULL);
     i++;
 
@@ -8127,80 +8167,89 @@ static int bpy_class_validate_recursive(PointerRNA *dummyptr,
                      RNA_function_identifier(func));
         return -1;
       }
-
       PyErr_Clear();
+
+      continue;
+    }
+
+    /* TODO(campbell): this is used for classmethod's too,
+     * even though class methods should have 'FUNC_USE_SELF_TYPE' set, see Operator.poll for eg.
+     * Keep this as-is since it's working, but we should be using
+     * 'FUNC_USE_SELF_TYPE' for many functions. */
+    const bool is_staticmethod = (flag & FUNC_NO_SELF) && !(flag & FUNC_USE_SELF_TYPE);
+
+    /* Store original so we can decrement its reference before returning. */
+    PyObject *item_orig = item;
+
+    if (is_staticmethod) {
+      if (PyMethod_Check(item) == 0) {
+        PyErr_Format(PyExc_TypeError,
+                     "expected %.200s, %.200s class \"%.200s\" "
+                     "attribute to be a static/class method, not a %.200s",
+                     class_type,
+                     py_class_name,
+                     RNA_function_identifier(func),
+                     Py_TYPE(item)->tp_name);
+        Py_DECREF(item_orig);
+        return -1;
+      }
+      item = ((PyMethodObject *)item)->im_func;
     }
     else {
-      /* No need to keep a ref, the class owns it
-       * (technically we should keep a reference, but...). */
-      Py_DECREF(item);
-
-      if (is_staticmethod) {
-        if (PyMethod_Check(item) == 0) {
-          PyErr_Format(PyExc_TypeError,
-                       "expected %.200s, %.200s class \"%.200s\" "
-                       "attribute to be a static/class method, not a %.200s",
-                       class_type,
-                       py_class_name,
-                       RNA_function_identifier(func),
-                       Py_TYPE(item)->tp_name);
-          return -1;
-        }
-        item = ((PyMethodObject *)item)->im_func;
-      }
-      else {
-        if (PyFunction_Check(item) == 0) {
-          PyErr_Format(PyExc_TypeError,
-                       "expected %.200s, %.200s class \"%.200s\" "
-                       "attribute to be a function, not a %.200s",
-                       class_type,
-                       py_class_name,
-                       RNA_function_identifier(func),
-                       Py_TYPE(item)->tp_name);
-          return -1;
-        }
-      }
-
-      func_arg_count = rna_function_arg_count(func, &func_arg_min_count);
-
-      if (func_arg_count >= 0) { /* -1 if we don't care. */
-        arg_count = ((PyCodeObject *)PyFunction_GET_CODE(item))->co_argcount;
-
-        /* note, the number of args we check for and the number of args we give to
-         * '@staticmethods' are different (quirk of Python),
-         * this is why rna_function_arg_count() doesn't return the value -1*/
-        if (is_staticmethod) {
-          func_arg_count++;
-          func_arg_min_count++;
-        }
-
-        if (arg_count < func_arg_min_count || arg_count > func_arg_count) {
-          if (func_arg_min_count != func_arg_count) {
-            PyErr_Format(
-                PyExc_ValueError,
-                "expected %.200s, %.200s class \"%.200s\" function to have between %d and %d "
-                "args, found %d",
-                class_type,
-                py_class_name,
-                RNA_function_identifier(func),
-                func_arg_count,
-                func_arg_min_count,
-                arg_count);
-          }
-          else {
-            PyErr_Format(
-                PyExc_ValueError,
-                "expected %.200s, %.200s class \"%.200s\" function to have %d args, found %d",
-                class_type,
-                py_class_name,
-                RNA_function_identifier(func),
-                func_arg_count,
-                arg_count);
-          }
-          return -1;
-        }
+      if (PyFunction_Check(item) == 0) {
+        PyErr_Format(PyExc_TypeError,
+                     "expected %.200s, %.200s class \"%.200s\" "
+                     "attribute to be a function, not a %.200s",
+                     class_type,
+                     py_class_name,
+                     RNA_function_identifier(func),
+                     Py_TYPE(item)->tp_name);
+        Py_DECREF(item_orig);
+        return -1;
       }
     }
+
+    func_arg_count = rna_function_arg_count(func, &func_arg_min_count);
+
+    if (func_arg_count >= 0) { /* -1 if we don't care. */
+      arg_count = ((PyCodeObject *)PyFunction_GET_CODE(item))->co_argcount;
+
+      /* note, the number of args we check for and the number of args we give to
+       * '@staticmethods' are different (quirk of Python),
+       * this is why rna_function_arg_count() doesn't return the value -1*/
+      if (is_staticmethod) {
+        func_arg_count++;
+        func_arg_min_count++;
+      }
+
+      if (arg_count < func_arg_min_count || arg_count > func_arg_count) {
+        if (func_arg_min_count != func_arg_count) {
+          PyErr_Format(
+              PyExc_ValueError,
+              "expected %.200s, %.200s class \"%.200s\" function to have between %d and %d "
+              "args, found %d",
+              class_type,
+              py_class_name,
+              RNA_function_identifier(func),
+              func_arg_count,
+              func_arg_min_count,
+              arg_count);
+        }
+        else {
+          PyErr_Format(
+              PyExc_ValueError,
+              "expected %.200s, %.200s class \"%.200s\" function to have %d args, found %d",
+              class_type,
+              py_class_name,
+              RNA_function_identifier(func),
+              func_arg_count,
+              arg_count);
+        }
+        Py_DECREF(item_orig);
+        return -1;
+      }
+    }
+    Py_DECREF(item_orig);
   }
 
   /* Verify properties. */
@@ -8313,7 +8362,7 @@ static int bpy_class_call(bContext *C, PointerRNA *ptr, FunctionRNA *func, Param
   /* XXX, this is needed because render engine calls without a context
    * this should be supported at some point, but at the moment it's not! */
   if (C == NULL) {
-    C = BPy_GetContext();
+    C = BPY_context_get();
   }
 
   /* Annoying! We need to check if the screen gets set to NULL which is a
@@ -8782,7 +8831,7 @@ static PyObject *pyrna_register_class(PyObject *UNUSED(self), PyObject *py_class
   }
 
   /* Get the context, so register callback can do necessary refreshes. */
-  C = BPy_GetContext();
+  C = BPY_context_get();
 
   /* Call the register callback with reports & identifier. */
   BKE_reports_init(&reports, RPT_STORE);
@@ -8820,7 +8869,10 @@ static PyObject *pyrna_register_class(PyObject *UNUSED(self), PyObject *py_class
   /* Old srna still references us, keep the check in case registering somehow can free it. */
   if (RNA_struct_py_type_get(srna)) {
     RNA_struct_py_type_set(srna, NULL);
-    // Py_DECREF(py_class); /* Should be able to do this XXX since the old RNA adds a new ref. */
+#if 0
+    /* Should be able to do this XXX since the old RNA adds a new ref. */
+    Py_DECREF(py_class);
+#endif
   }
 
   /* Can't use this because it returns a dict proxy
@@ -8990,7 +9042,7 @@ static PyObject *pyrna_unregister_class(PyObject *UNUSED(self), PyObject *py_cla
   }
 
   /* Get the context, so register callback can do necessary refreshes. */
-  C = BPy_GetContext();
+  C = BPY_context_get();
 
   /* Call unregister. */
   unreg(CTX_data_main(C), srna); /* Calls bpy_class_free, this decref's py_class. */

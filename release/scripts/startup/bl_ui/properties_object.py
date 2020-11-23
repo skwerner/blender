@@ -141,6 +141,7 @@ class OBJECT_PT_relations(ObjectButtonsPanel, Panel):
         if parent and ob.parent_type == 'BONE' and parent.type == 'ARMATURE':
             sub.prop_search(ob, "parent_bone", parent.data, "bones")
         sub.active = (parent is not None)
+        sub.prop(ob, "use_camera_lock_parent")
 
         col.separator()
 
@@ -364,7 +365,7 @@ class OBJECT_PT_visibility(ObjectButtonsPanel, Panel):
 
         layout.prop(ob, "hide_select", text="Selectable", toggle=False, invert_checkbox=True)
 
-        col = layout.column(heading="Show in")
+        col = layout.column(heading="Show In")
         col.prop(ob, "hide_viewport", text="Viewports", toggle=False, invert_checkbox=True)
         col.prop(ob, "hide_render", text="Renders", toggle=False, invert_checkbox=True)
 

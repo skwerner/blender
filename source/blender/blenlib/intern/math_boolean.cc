@@ -123,7 +123,7 @@ namespace robust_pred {
  * Since this is C++, an instantiated singleton class is used to make
  * sure that #exactinit() is called once.
  * (Because it's undefined when this is called in initialization of all modules,
- other modules shouldn't use these functions in initialization.)
+ * other modules shouldn't use these functions in initialization.)
  */
 
 void exactinit();
@@ -470,7 +470,7 @@ void exactinit()
     }
     every_other = !every_other;
     check = 1.0 + epsilon;
-  } while ((check != 1.0) && (check != lastcheck));
+  } while (!ELEM(check, 1.0, lastcheck));
   splitter += 1.0;
 
   /* Error bounds for orientation and #incircle tests. */

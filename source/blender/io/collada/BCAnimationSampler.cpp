@@ -17,7 +17,7 @@
  * All rights reserved.
  */
 
-#include <algorithm>  // std::find
+#include <algorithm> /* std::find */
 #include <map>
 #include <vector>
 
@@ -92,7 +92,7 @@ static void get_sample_frames(BCFrameSet &sample_frames,
   sample_frames.clear();
 
   if (sampling_rate < 1) {
-    return;  // no sample frames in this case
+    return; /* no sample frames in this case */
   }
 
   float sfra = scene->r.sfra;
@@ -116,7 +116,7 @@ static bool is_object_keyframe(Object *ob, int frame_index)
 static void add_keyframes_from(bAction *action, BCFrameSet &frameset)
 {
   if (action) {
-    FCurve *fcu = NULL;
+    FCurve *fcu = nullptr;
     for (fcu = (FCurve *)action->curves.first; fcu; fcu = fcu->next) {
       BezTriple *bezt = fcu->bezt;
       for (int i = 0; i < fcu->totvert; bezt++, i++) {
@@ -237,7 +237,7 @@ bool BCAnimationSampler::is_animated_by_constraint(Object *ob,
 {
   bConstraint *con;
   for (con = (bConstraint *)conlist->first; con; con = con->next) {
-    ListBase targets = {NULL, NULL};
+    ListBase targets = {nullptr, nullptr};
 
     const bConstraintTypeInfo *cti = BKE_constraint_typeinfo_get(con);
 
@@ -468,7 +468,7 @@ void BCAnimationSampler::initialize_curves(BCAnimationCurveMap &curves, Object *
   }
 
   /* Add curves on Object->data actions */
-  action = NULL;
+  action = nullptr;
   if (ob->type == OB_CAMERA) {
     action = bc_getSceneCameraAction(ob);
     object_type = BC_ANIMATION_TYPE_CAMERA;
@@ -520,7 +520,7 @@ const BCSample *BCSampleFrame::get_sample(Object *ob) const
 {
   BCSampleMap::const_iterator it = sampleMap.find(ob);
   if (it == sampleMap.end()) {
-    return NULL;
+    return nullptr;
   }
   return it->second;
 }
@@ -529,7 +529,7 @@ const BCMatrix *BCSampleFrame::get_sample_matrix(Object *ob) const
 {
   BCSampleMap::const_iterator it = sampleMap.find(ob);
   if (it == sampleMap.end()) {
-    return NULL;
+    return nullptr;
   }
   BCSample *sample = it->second;
   return &sample->get_matrix();
@@ -540,7 +540,7 @@ const BCMatrix *BCSampleFrame::get_sample_matrix(Object *ob, Bone *bone) const
 {
   BCSampleMap::const_iterator it = sampleMap.find(ob);
   if (it == sampleMap.end()) {
-    return NULL;
+    return nullptr;
   }
 
   BCSample *sample = it->second;
@@ -577,14 +577,14 @@ BCSample &BCSampleFrameContainer::add(Object *ob, int frame_index)
 BCSampleFrame *BCSampleFrameContainer::get_frame(int frame_index)
 {
   BCSampleFrameMap::iterator it = sample_frames.find(frame_index);
-  BCSampleFrame *frame = (it == sample_frames.end()) ? NULL : &it->second;
+  BCSampleFrame *frame = (it == sample_frames.end()) ? nullptr : &it->second;
   return frame;
 }
 
 /* Return a list of all frames that need to be sampled */
 int BCSampleFrameContainer::get_frames(std::vector<int> &frames) const
 {
-  frames.clear();  // safety;
+  frames.clear(); /* safety; */
   BCSampleFrameMap::const_iterator it;
   for (it = sample_frames.begin(); it != sample_frames.end(); ++it) {
     frames.push_back(it->first);
@@ -594,7 +594,7 @@ int BCSampleFrameContainer::get_frames(std::vector<int> &frames) const
 
 int BCSampleFrameContainer::get_frames(Object *ob, BCFrames &frames) const
 {
-  frames.clear();  // safety;
+  frames.clear(); /* safety; */
   BCSampleFrameMap::const_iterator it;
   for (it = sample_frames.begin(); it != sample_frames.end(); ++it) {
     const BCSampleFrame &frame = it->second;
@@ -607,7 +607,7 @@ int BCSampleFrameContainer::get_frames(Object *ob, BCFrames &frames) const
 
 int BCSampleFrameContainer::get_frames(Object *ob, Bone *bone, BCFrames &frames) const
 {
-  frames.clear();  // safety;
+  frames.clear(); /* safety; */
   BCSampleFrameMap::const_iterator it;
   for (it = sample_frames.begin(); it != sample_frames.end(); ++it) {
     const BCSampleFrame &frame = it->second;
@@ -620,7 +620,7 @@ int BCSampleFrameContainer::get_frames(Object *ob, Bone *bone, BCFrames &frames)
 
 int BCSampleFrameContainer::get_samples(Object *ob, BCFrameSampleMap &samples) const
 {
-  samples.clear();  // safety;
+  samples.clear(); /* safety; */
   BCSampleFrameMap::const_iterator it;
   for (it = sample_frames.begin(); it != sample_frames.end(); ++it) {
     const BCSampleFrame &frame = it->second;
@@ -634,7 +634,7 @@ int BCSampleFrameContainer::get_samples(Object *ob, BCFrameSampleMap &samples) c
 
 int BCSampleFrameContainer::get_matrices(Object *ob, BCMatrixSampleMap &samples) const
 {
-  samples.clear();  // safety;
+  samples.clear(); /* safety; */
   BCSampleFrameMap::const_iterator it;
   for (it = sample_frames.begin(); it != sample_frames.end(); ++it) {
     const BCSampleFrame &frame = it->second;
@@ -648,7 +648,7 @@ int BCSampleFrameContainer::get_matrices(Object *ob, BCMatrixSampleMap &samples)
 
 int BCSampleFrameContainer::get_matrices(Object *ob, Bone *bone, BCMatrixSampleMap &samples) const
 {
-  samples.clear();  // safety;
+  samples.clear(); /* safety; */
   BCSampleFrameMap::const_iterator it;
   for (it = sample_frames.begin(); it != sample_frames.end(); ++it) {
     const BCSampleFrame &frame = it->second;

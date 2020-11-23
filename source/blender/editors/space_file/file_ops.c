@@ -1351,18 +1351,17 @@ static int file_column_sort_ui_context_invoke(bContext *C,
     if (column_type != COLUMN_NONE) {
       const FileAttributeColumn *column = &sfile->layout->attribute_columns[column_type];
 
-      if (column->sort_type != FILE_SORT_NONE) {
-        if (sfile->params->sort == column->sort_type) {
-          /* Already sorting by selected column -> toggle sort invert (three state logic). */
-          sfile->params->flag ^= FILE_SORT_INVERT;
-        }
-        else {
-          sfile->params->sort = column->sort_type;
-          sfile->params->flag &= ~FILE_SORT_INVERT;
-        }
-
-        WM_event_add_notifier(C, NC_SPACE | ND_SPACE_FILE_PARAMS, NULL);
+      BLI_assert(column->sort_type != FILE_SORT_DEFAULT);
+      if (sfile->params->sort == column->sort_type) {
+        /* Already sorting by selected column -> toggle sort invert (three state logic). */
+        sfile->params->flag ^= FILE_SORT_INVERT;
       }
+      else {
+        sfile->params->sort = column->sort_type;
+        sfile->params->flag &= ~FILE_SORT_INVERT;
+      }
+
+      WM_event_add_notifier(C, NC_SPACE | ND_SPACE_FILE_PARAMS, NULL);
     }
   }
 
@@ -1877,7 +1876,7 @@ static int file_next_exec(bContext *C, wmOperator *UNUSED(unused))
     folderlist_pushdir(sfile->folders_prev, sfile->params->dir);
     folderlist_popdir(sfile->folders_next, sfile->params->dir);
 
-    // update folders_prev so we can check for it in folderlist_clear_next()
+    /* update folders_prev so we can check for it in #folderlist_clear_next() */
     folderlist_pushdir(sfile->folders_prev, sfile->params->dir);
 
     ED_file_change_dir(C);
@@ -2415,7 +2414,8 @@ void file_directory_enter_handle(bContext *C, void *UNUSED(arg_unused), void *UN
         WM_operator_properties_create_ptr(&ptr, ot);
         RNA_string_set(&ptr, "directory", sfile->params->dir);
         RNA_boolean_set(&ptr, "open", true);
-        /* Enable confirmation prompt, else it's too easy to accidentaly create new directories. */
+        /* Enable confirmation prompt, else it's too easy
+         * to accidentally create new directories. */
         RNA_boolean_set(&ptr, "confirm", true);
 
         if (lastdir) {

@@ -654,7 +654,7 @@ static void rna_Armature_bones_next(CollectionPropertyIterator *iter)
   iter->valid = (internal->link != NULL);
 }
 
-/* not essential, but much faster then the default lookup function */
+/* not essential, but much faster than the default lookup function */
 static int rna_Armature_bones_lookup_string(PointerRNA *ptr, const char *key, PointerRNA *r_ptr)
 {
   bArmature *arm = (bArmature *)ptr->data;
@@ -1336,7 +1336,7 @@ static void rna_def_edit_bone(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop,
       "Editbone Matrix",
-      "Matrix combining loc/rot of the bone (head position, direction and roll), "
+      "Matrix combining location and rotation of the bone (head position, direction and roll), "
       "in armature space (does not include/support bone's length/size)");
   RNA_def_property_float_funcs(prop, "rna_EditBone_matrix_get", "rna_EditBone_matrix_set", NULL);
 

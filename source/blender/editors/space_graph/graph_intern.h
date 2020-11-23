@@ -103,6 +103,7 @@ void GRAPH_OT_clean(struct wmOperatorType *ot);
 void GRAPH_OT_decimate(struct wmOperatorType *ot);
 void GRAPH_OT_sample(struct wmOperatorType *ot);
 void GRAPH_OT_bake(struct wmOperatorType *ot);
+void GRAPH_OT_unbake(struct wmOperatorType *ot);
 void GRAPH_OT_sound_bake(struct wmOperatorType *ot);
 void GRAPH_OT_smooth(struct wmOperatorType *ot);
 void GRAPH_OT_euler_filter(struct wmOperatorType *ot);
@@ -113,6 +114,7 @@ void GRAPH_OT_extrapolation_type(struct wmOperatorType *ot);
 void GRAPH_OT_easing_type(struct wmOperatorType *ot);
 
 void GRAPH_OT_frame_jump(struct wmOperatorType *ot);
+void GRAPH_OT_snap_cursor_value(struct wmOperatorType *ot);
 void GRAPH_OT_snap(struct wmOperatorType *ot);
 void GRAPH_OT_mirror(struct wmOperatorType *ot);
 

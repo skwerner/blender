@@ -407,7 +407,7 @@ int ED_mesh_join_objects_exec(bContext *C, wmOperator *op)
   me = (Mesh *)ob->data;
   key = me->key;
 
-  if (totvert == 0 || totvert == me->totvert) {
+  if (ELEM(totvert, 0, me->totvert)) {
     BKE_report(op->reports, RPT_WARNING, "No mesh data to join");
     return OPERATOR_CANCELLED;
   }
@@ -445,7 +445,7 @@ int ED_mesh_join_objects_exec(bContext *C, wmOperator *op)
    */
   if (key) {
     /* make a duplicate copy that will only be used here... (must remember to free it!) */
-    nkey = BKE_key_copy(bmain, key);
+    nkey = (Key *)BKE_id_copy(bmain, &key->id);
 
     /* for all keys in old block, clear data-arrays */
     for (kb = key->block.first; kb; kb = kb->next) {

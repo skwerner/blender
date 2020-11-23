@@ -66,6 +66,7 @@ static void OVERLAY_engine_init(void *vedata)
   pd->is_image_editor = sima != NULL;
 
   if (pd->is_image_editor) {
+    pd->hide_overlays = (sima->overlay.flag & SI_OVERLAY_SHOW_OVERLAYS) == 0;
     pd->clipping_state = 0;
     OVERLAY_grid_init(data);
     OVERLAY_edit_uv_init(data);
@@ -89,6 +90,7 @@ static void OVERLAY_engine_init(void *vedata)
                        V3D_OVERLAY_HIDE_BONES | V3D_OVERLAY_HIDE_OBJECT_XTRAS |
                        V3D_OVERLAY_HIDE_OBJECT_ORIGINS;
     pd->overlay.wireframe_threshold = v3d->overlay.wireframe_threshold;
+    pd->overlay.wireframe_opacity = v3d->overlay.wireframe_opacity;
   }
 
   if (v3d->shading.type == OB_WIRE) {
@@ -508,6 +510,11 @@ static void OVERLAY_draw_scene(void *vedata)
   OVERLAY_FramebufferList *fbl = data->fbl;
   DefaultFramebufferList *dfbl = DRW_viewport_framebuffer_list_get();
 
+  /* Needs to be done first as it modifies the scene color and depth buffer. */
+  if (!pd->is_image_editor) {
+    OVERLAY_image_scene_background_draw(vedata);
+  }
+
   if (DRW_state_is_fbo()) {
     const float clear_col[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     GPU_framebuffer_bind(dfbl->overlay_only_fb);
@@ -546,6 +553,12 @@ static void OVERLAY_draw_scene(void *vedata)
   OVERLAY_fade_draw(vedata);
   OVERLAY_facing_draw(vedata);
   OVERLAY_extra_blend_draw(vedata);
+  OVERLAY_volume_draw(vedata);
+
+  if (pd->ctx_mode == CTX_MODE_SCULPT) {
+    /* Sculpt overlays are drawn here to avoid artifacts with wireframe opacity. */
+    OVERLAY_sculpt_draw(vedata);
+  }
 
   if (DRW_state_is_fbo()) {
     GPU_framebuffer_bind(fbl->overlay_line_fb);
@@ -556,7 +569,6 @@ static void OVERLAY_draw_scene(void *vedata)
   OVERLAY_particle_draw(vedata);
   OVERLAY_metaball_draw(vedata);
   OVERLAY_gpencil_draw(vedata);
-  OVERLAY_volume_draw(vedata);
   OVERLAY_extra_draw(vedata);
 
   if (DRW_state_is_fbo()) {
@@ -625,9 +637,6 @@ static void OVERLAY_draw_scene(void *vedata)
       break;
     case CTX_MODE_PARTICLE:
       OVERLAY_edit_particle_draw(vedata);
-      break;
-    case CTX_MODE_SCULPT:
-      OVERLAY_sculpt_draw(vedata);
       break;
     case CTX_MODE_EDIT_GPENCIL:
     case CTX_MODE_PAINT_GPENCIL:

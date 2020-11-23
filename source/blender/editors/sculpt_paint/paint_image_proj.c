@@ -467,7 +467,7 @@ typedef struct ProjPixel {
   /* Only used when the airbrush is disabled.
    * Store the max mask value to avoid painting over an area with a lower opacity
    * with an advantage that we can avoid touching the pixel at all, if the
-   * new mask value is lower then mask_accum */
+   * new mask value is lower than mask_accum */
   ushort *mask_accum;
 
   /* horrible hack, store tile valid flag pointer here to re-validate tiles
@@ -1789,7 +1789,7 @@ static float project_paint_uvpixel_mask(const ProjPaintState *ps,
 
 static int project_paint_pixel_sizeof(const short tool)
 {
-  if ((tool == PAINT_TOOL_CLONE) || (tool == PAINT_TOOL_SMEAR)) {
+  if (ELEM(tool, PAINT_TOOL_CLONE, PAINT_TOOL_SMEAR)) {
     return sizeof(ProjPixelClone);
   }
   return sizeof(ProjPixel);
@@ -2254,7 +2254,7 @@ static bool project_bucket_isect_circle(const float cent[2],
   /* Would normally to a simple intersection test,
    * however we know the bounds of these 2 already intersect so we only need to test
    * if the center is inside the vertical or horizontal bounds on either axis,
-   * this is even less work then an intersection test.
+   * this is even less work than an intersection test.
    */
 #if 0
   if (BLI_rctf_isect_pt_v(bucket_bounds, cent)) {
@@ -2660,7 +2660,7 @@ static void project_bucket_clip_face(const bool is_ortho,
      *
      * There are a number of ways this could be done, currently it just collects all
      * intersecting verts, and line intersections, then sorts them clockwise, this is
-     * a lot easier then evaluating the geometry to do a correct clipping on both shapes.
+     * a lot easier than evaluating the geometry to do a correct clipping on both shapes.
      */
 
     /* Add a bunch of points, we know must make up the convex hull
@@ -2765,7 +2765,7 @@ static void project_bucket_clip_face(const bool is_ortho,
 
     /* Collect angles for every point around the center point */
 
-#if 0 /* uses a few more cycles then the above loop */
+#if 0 /* uses a few more cycles than the above loop */
     for (int i = 0; i < (*tot); i++) {
       isectVCosSS[i][2] = angle_2d_clockwise(up, cent, isectVCosSS[i]);
     }
@@ -3054,9 +3054,9 @@ static void project_paint_face_init(const ProjPaintState *ps,
   lt_uv_pxoffset[2][1] = lt_tri_uv[2][1] - yhalfpx;
 
   {
-    uv1co = lt_uv_pxoffset[0];  // was lt_tri_uv[i1];
-    uv2co = lt_uv_pxoffset[1];  // was lt_tri_uv[i2];
-    uv3co = lt_uv_pxoffset[2];  // was lt_tri_uv[i3];
+    uv1co = lt_uv_pxoffset[0]; /* was lt_tri_uv[i1]; */
+    uv2co = lt_uv_pxoffset[1]; /* was lt_tri_uv[i2]; */
+    uv3co = lt_uv_pxoffset[2]; /* was lt_tri_uv[i3]; */
 
     v1coSS = ps->screenCoords[lt_vtri[0]];
     v2coSS = ps->screenCoords[lt_vtri[1]];
@@ -3248,7 +3248,7 @@ static void project_paint_face_init(const ProjPaintState *ps,
       vCoSS[1] = ps->screenCoords[lt_vtri[1]];
       vCoSS[2] = ps->screenCoords[lt_vtri[2]];
 
-      /* PROJ_FACE_SCALE_SEAM must be slightly less then 1.0f */
+      /* PROJ_FACE_SCALE_SEAM must be slightly less than 1.0f */
       if (is_ortho) {
         scale_tri(insetCos, vCoSS, PROJ_FACE_SCALE_SEAM);
       }
@@ -3414,7 +3414,7 @@ static void project_paint_face_init(const ProjPaintState *ps,
   }
 #else
   UNUSED_VARS(vCo, threaded);
-#endif  // PROJ_DEBUG_NOSEAMBLEED
+#endif /* PROJ_DEBUG_NOSEAMBLEED */
 }
 
 /**
@@ -4221,7 +4221,7 @@ static bool project_paint_winclip(const ProjPaintState *ps, const ProjPaintFaceC
            (coSS->v1[1] > ps->screenMax[1] && coSS->v2[1] > ps->screenMax[1] &&
             coSS->v3[1] > ps->screenMax[1])));
 }
-#endif  // PROJ_DEBUG_WINCLIP
+#endif /* PROJ_DEBUG_WINCLIP */
 
 typedef struct PrepareImageEntry {
   struct PrepareImageEntry *next, *prev;
@@ -4719,7 +4719,12 @@ static bool project_bucket_iter_init(ProjPaintState *ps, const float mval_f[2])
     const float radius = ps->brush_size;
 
     /* so we don't have a bucket bounds that is way too small to paint into */
-    // if (radius < 1.0f) radius = 1.0f; // this doesn't work yet :/
+#if 0
+    /* This doesn't work yet. */
+    if (radius < 1.0f) {
+      radius = 1.0f;
+    }
+#endif
 
     min_brush[0] = mval_f[0] - radius;
     min_brush[1] = mval_f[1] - radius;
@@ -4890,7 +4895,7 @@ static void do_projectpaint_soften_f(ProjPaintState *ps,
   BlurKernel *kernel = ps->blurkernel;
   float *rgba = projPixel->newColor.f;
 
-  /* rather then painting, accumulate surrounding colors */
+  /* rather than painting, accumulate surrounding colors */
   zero_v4(rgba);
 
   for (yk = 0; yk < kernel->side; yk++) {
@@ -4951,7 +4956,7 @@ static void do_projectpaint_soften(ProjPaintState *ps,
   /* convert to byte after */
   float rgba[4];
 
-  /* rather then painting, accumulate surrounding colors */
+  /* rather than painting, accumulate surrounding colors */
   zero_v4(rgba);
 
   for (yk = 0; yk < kernel->side; yk++) {
@@ -6280,7 +6285,7 @@ static int texture_paint_image_from_view_exec(bContext *C, wmOperator *op)
     array += sizeof(rv3d->viewmat) / sizeof(float);
     is_ortho = ED_view3d_clip_range_get(depsgraph, v3d, rv3d, &array[0], &array[1], true);
     /* using float for a bool is dodgy but since its an extra member in the array...
-     * easier then adding a single bool prop */
+     * easier than adding a single bool prop */
     array[2] = is_ortho ? 1.0f : 0.0f;
 
     IDP_AddToGroup(idgroup, view_data);

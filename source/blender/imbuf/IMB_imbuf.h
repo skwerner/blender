@@ -466,27 +466,29 @@ void IMB_scaleImBuf_threaded(struct ImBuf *ibuf, unsigned int newx, unsigned int
  *
  * \attention Defined in writeimage.c
  */
-short IMB_saveiff(struct ImBuf *ibuf, const char *filepath, int flags);
+bool IMB_saveiff(struct ImBuf *ibuf, const char *filepath, int flags);
 bool IMB_prepare_write_ImBuf(const bool isfloat, struct ImBuf *ibuf);
 
 /**
  *
  * \attention Defined in util.c
  */
-bool IMB_ispic(const char *name);
-int IMB_ispic_type(const char *name);
+bool IMB_ispic(const char *filepath);
+bool IMB_ispic_type_matches(const char *filepath, int filetype);
+int IMB_ispic_type_from_memory(const unsigned char *buf, const size_t buf_size);
+int IMB_ispic_type(const char *filepath);
 
 /**
  *
  * \attention Defined in util.c
  */
-bool IMB_isanim(const char *name);
+bool IMB_isanim(const char *filepath);
 
 /**
  *
  * \attention Defined in util.c
  */
-int imb_get_anim_type(const char *name);
+int imb_get_anim_type(const char *filepath);
 
 /**
  *
@@ -684,6 +686,8 @@ void IMB_rectfill_area(struct ImBuf *ibuf,
                        int x2,
                        int y2,
                        struct ColorManagedDisplay *display);
+void IMB_rectfill_area_replace(
+    const struct ImBuf *ibuf, const float col[4], int x1, int y1, int x2, int y2);
 void IMB_rectfill_alpha(struct ImBuf *ibuf, const float value);
 
 /* This should not be here, really,

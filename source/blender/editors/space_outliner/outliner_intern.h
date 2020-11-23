@@ -25,6 +25,10 @@
 
 #include "RNA_types.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* internal exports only */
 
 struct ARegion;
@@ -41,6 +45,13 @@ struct bContext;
 struct bPoseChannel;
 struct wmKeyConfig;
 struct wmOperatorType;
+
+typedef struct SpaceOutliner_Runtime {
+  /**
+   * Internal C++ object to create and manage the tree for a specific display type (View Layers,
+   * Scenes, Blender File, etc.). */
+  struct TreeDisplay *tree_display;
+} SpaceOutliner_Runtime;
 
 typedef enum TreeElementInsertType {
   TE_INSERT_BEFORE,
@@ -236,7 +247,9 @@ void outliner_build_tree(struct Main *mainvar,
                          struct SpaceOutliner *space_outliner,
                          struct ARegion *region);
 
-bool outliner_mode_requires_always_rebuild(const struct SpaceOutliner *space_outliner);
+bool outliner_requires_rebuild_on_select_or_active_change(
+    const struct SpaceOutliner *space_outliner);
+bool outliner_requires_rebuild_on_open_change(const struct SpaceOutliner *space_outliner);
 
 typedef struct IDsSelectedData {
   struct ListBase selected_array;
@@ -248,6 +261,8 @@ TreeTraversalAction outliner_find_selected_objects(struct TreeElement *te, void 
 /* outliner_draw.c ---------------------------------------------- */
 
 void draw_outliner(const struct bContext *C);
+
+void outliner_tree_dimensions(struct SpaceOutliner *space_outliner, int *r_width, int *r_height);
 
 TreeElementIcon tree_element_get_icon(TreeStoreElem *tselem, TreeElement *te);
 
@@ -284,6 +299,7 @@ void outliner_item_select(struct bContext *C,
                           const short select_flag);
 
 bool outliner_item_is_co_over_name_icons(const TreeElement *te, float view_co_x);
+bool outliner_item_is_co_over_name(const TreeElement *te, float view_co_x);
 bool outliner_item_is_co_within_close_toggle(const TreeElement *te, float view_co_x);
 bool outliner_is_co_within_mode_column(SpaceOutliner *space_outliner, const float view_mval[2]);
 
@@ -522,10 +538,16 @@ bool outliner_tree_traverse(const SpaceOutliner *space_outliner,
 float outliner_restrict_columns_width(const struct SpaceOutliner *space_outliner);
 TreeElement *outliner_find_element_with_flag(const ListBase *lb, short flag);
 bool outliner_is_element_visible(const TreeElement *te);
-void outliner_scroll_view(struct ARegion *region, int delta_y);
+void outliner_scroll_view(struct SpaceOutliner *space_outliner,
+                          struct ARegion *region,
+                          int delta_y);
 void outliner_tag_redraw_avoid_rebuild_on_open_change(const struct SpaceOutliner *space_outliner,
                                                       struct ARegion *region);
 
 /* outliner_sync.c ---------------------------------------------- */
 
 void outliner_sync_selection(const struct bContext *C, struct SpaceOutliner *space_outliner);
+
+#ifdef __cplusplus
+}
+#endif

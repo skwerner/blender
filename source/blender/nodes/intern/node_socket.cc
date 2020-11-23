@@ -135,7 +135,7 @@ static void verify_socket_template_list(bNodeTree *ntree,
   bNodeSocketTemplate *stemp;
 
   /* no inputs anymore? */
-  if (stemp_first == NULL) {
+  if (stemp_first == nullptr) {
     for (sock = (bNodeSocket *)socklist->first; sock; sock = nextsock) {
       nextsock = sock->next;
       nodeRemoveSocket(ntree, node, sock);
@@ -266,7 +266,7 @@ void node_socket_init_default_value(bNodeSocket *sock)
     case SOCK_OBJECT: {
       bNodeSocketValueObject *dval = (bNodeSocketValueObject *)MEM_callocN(
           sizeof(bNodeSocketValueObject), "node socket value object");
-      dval->value = NULL;
+      dval->value = nullptr;
 
       sock->default_value = dval;
       break;
@@ -274,7 +274,7 @@ void node_socket_init_default_value(bNodeSocket *sock)
     case SOCK_IMAGE: {
       bNodeSocketValueImage *dval = (bNodeSocketValueImage *)MEM_callocN(
           sizeof(bNodeSocketValueImage), "node socket value image");
-      dval->value = NULL;
+      dval->value = nullptr;
 
       sock->default_value = dval;
       break;
@@ -490,13 +490,13 @@ static bNodeSocketType *make_standard_socket_type(int type, int subtype)
   /* set the RNA type
    * uses the exact same identifier as the socket type idname */
   srna = stype->ext_socket.srna = RNA_struct_find(socket_idname);
-  BLI_assert(srna != NULL);
+  BLI_assert(srna != nullptr);
   /* associate the RNA type with the socket type */
   RNA_struct_blender_type_set(srna, stype);
 
   /* set the interface RNA type */
   srna = stype->ext_interface.srna = RNA_struct_find(interface_idname);
-  BLI_assert(srna != NULL);
+  BLI_assert(srna != nullptr);
   /* associate the RNA type with the socket type */
   RNA_struct_blender_type_set(srna, stype);
 
@@ -520,7 +520,7 @@ static bNodeSocketType *make_standard_socket_type(int type, int subtype)
 
 extern "C" void ED_init_node_socket_type_virtual(bNodeSocketType *);
 
-static bNodeSocketType *make_socket_type_virtual(void)
+static bNodeSocketType *make_socket_type_virtual()
 {
   const char *socket_idname = "NodeSocketVirtual";
   bNodeSocketType *stype;
@@ -533,7 +533,7 @@ static bNodeSocketType *make_socket_type_virtual(void)
   /* set the RNA type
    * uses the exact same identifier as the socket type idname */
   srna = stype->ext_socket.srna = RNA_struct_find(socket_idname);
-  BLI_assert(srna != NULL);
+  BLI_assert(srna != nullptr);
   /* associate the RNA type with the socket type */
   RNA_struct_blender_type_set(srna, stype);
 
@@ -543,22 +543,9 @@ static bNodeSocketType *make_socket_type_virtual(void)
   ED_init_node_socket_type_virtual(stype);
 
   stype->use_link_limits_of_type = true;
-  stype->input_link_limit = 1;
-  stype->output_link_limit = 1;
-
-  return stype;
-}
-
-static bNodeSocketType *make_socket_type_effector(int type)
-{
-  bNodeSocketType *stype = make_standard_socket_type(type, PROP_NONE);
   stype->input_link_limit = 0xFFF;
-  return stype;
-}
+  stype->output_link_limit = 0xFFF;
 
-static bNodeSocketType *make_socket_type_control_flow(int type)
-{
-  bNodeSocketType *stype = make_standard_socket_type(type, PROP_NONE);
   return stype;
 }
 
@@ -720,12 +707,6 @@ void register_standard_node_socket_types(void)
   nodeRegisterSocketType(make_socket_type_object());
 
   nodeRegisterSocketType(make_standard_socket_type(SOCK_IMAGE, PROP_NONE));
-
-  nodeRegisterSocketType(make_socket_type_effector(SOCK_EMITTERS));
-  nodeRegisterSocketType(make_socket_type_effector(SOCK_EVENTS));
-  nodeRegisterSocketType(make_socket_type_effector(SOCK_FORCES));
-
-  nodeRegisterSocketType(make_socket_type_control_flow(SOCK_CONTROL_FLOW));
 
   nodeRegisterSocketType(make_socket_type_virtual());
 }

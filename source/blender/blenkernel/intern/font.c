@@ -155,7 +155,7 @@ IDTypeInfo IDType_ID_VF = {
     .name = "Font",
     .name_plural = "fonts",
     .translation_context = BLT_I18NCONTEXT_ID_VFONT,
-    .flags = 0,
+    .flags = IDTYPE_FLAGS_NO_ANIMDATA,
 
     .init_data = vfont_init_data,
     .copy_data = vfont_copy_data,
@@ -168,6 +168,8 @@ IDTypeInfo IDType_ID_VF = {
     .blend_read_data = vfont_blend_read_data,
     .blend_read_lib = NULL,
     .blend_read_expand = NULL,
+
+    .blend_read_undo_preserve = NULL,
 };
 
 /***************************** VFont *******************************/
@@ -947,7 +949,7 @@ static bool vfont_to_curve(Object *ob,
       //      CLOG_WARN(&LOG, "linewidth exceeded: %c%c%c...", mem[i], mem[i+1], mem[i+2]);
       for (j = i; j && (mem[j] != '\n') && (chartransdata[j].dobreak == 0); j--) {
         bool dobreak = false;
-        if (mem[j] == ' ' || mem[j] == '-') {
+        if (ELEM(mem[j], ' ', '-')) {
           ct -= (i - (j - 1));
           cnr -= (i - (j - 1));
           if (mem[j] == ' ') {

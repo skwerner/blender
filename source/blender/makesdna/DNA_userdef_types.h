@@ -275,7 +275,8 @@ typedef struct ThemeSpace {
   unsigned char wire[4], wire_edit[4], select[4];
   unsigned char lamp[4], speaker[4], empty[4], camera[4];
   unsigned char active[4], group[4], group_active[4], transform[4];
-  unsigned char vertex[4], vertex_select[4], vertex_bevel[4], vertex_unreferenced[4];
+  unsigned char vertex[4], vertex_select[4], vertex_active[4], vertex_bevel[4],
+      vertex_unreferenced[4];
   unsigned char edge[4], edge_select[4];
   unsigned char edge_seam[4], edge_sharp[4], edge_facesel[4], edge_crease[4], edge_bevel[4];
   /** Solid faces. */
@@ -321,10 +322,10 @@ typedef struct ThemeSpace {
   unsigned char grid_levels;
 
   /* syntax for textwindow and nodes */
-  unsigned char syntaxl[4], syntaxs[4];  // in nodespace used for backdrop matte
-  unsigned char syntaxb[4], syntaxn[4];  // in nodespace used for color input
-  unsigned char syntaxv[4], syntaxc[4];  // in nodespace used for converter group
-  unsigned char syntaxd[4], syntaxr[4];  // in nodespace used for distort
+  unsigned char syntaxl[4], syntaxs[4]; /* in nodespace used for backdrop matte */
+  unsigned char syntaxb[4], syntaxn[4]; /* in nodespace used for color input */
+  unsigned char syntaxv[4], syntaxc[4]; /* in nodespace used for converter group */
+  unsigned char syntaxd[4], syntaxr[4]; /* in nodespace used for distort */
 
   unsigned char line_numbers[4];
   char _pad6[3];
@@ -357,7 +358,7 @@ typedef struct ThemeSpace {
   unsigned char path_before[4], path_after[4];
   unsigned char path_keyframe_before[4], path_keyframe_after[4];
   unsigned char camera_path[4];
-  unsigned char _pad1[2];
+  unsigned char _pad1[6];
 
   unsigned char gp_vertex_size;
   unsigned char gp_vertex[4], gp_vertex_select[4];
@@ -588,6 +589,7 @@ typedef struct WalkNavigation {
 } WalkNavigation;
 
 typedef struct UserDef_Runtime {
+  /** Mark as changed so the preferences are saved on exit. */
   char is_dirty;
   char _pad0[7];
 } UserDef_Runtime;
@@ -625,16 +627,18 @@ typedef struct UserDef_Experimental {
   /* Debug options, always available. */
   char use_undo_legacy;
   char use_cycles_debug;
-  char use_image_editor_legacy_drawing;
   char SANITIZE_AFTER_HERE;
   /* The following options are automatically sanitized (set to 0)
    * when the release cycle is not alpha. */
-  char use_new_particle_system;
+  char use_new_geometry_nodes;
   char use_new_hair_type;
+  char use_new_point_cloud_type;
   char use_sculpt_vertex_colors;
-  char use_tools_missing_icons;
   char use_switch_object_operator;
-  char _pad[7];
+  char use_sculpt_tools_tilt;
+  char use_object_add_tool;
+  char _pad[6];
+  /** `makesdna` does not allow empty structs. */
 } UserDef_Experimental;
 
 #define USER_EXPERIMENTAL_TEST(userdef, member) \
@@ -823,12 +827,12 @@ typedef struct UserDef {
   short autokey_mode;
   /** Flags for autokeying. */
   short autokey_flag;
+  /** Flags for animation. */
+  short animation_flag;
 
   /** Options for text rendering. */
   char text_render;
   char navigation_mode;
-
-  char _pad9[2];
 
   /** Turn-table rotation amount per-pixel in radians. Scaled with DPI. */
   float view_rotate_sensitivity_turntable;
@@ -1043,7 +1047,7 @@ typedef enum eUserpref_UI_Flag {
   USER_HIDE_DOT = (1 << 16),
   USER_SHOW_GIZMO_NAVIGATE = (1 << 17),
   USER_SHOW_VIEWPORTNAME = (1 << 18),
-  USER_CAM_LOCK_NO_PARENT = (1 << 19),
+  USER_UIFLAG_UNUSED_3 = (1 << 19), /* Cleared. */
   USER_ZOOM_TO_MOUSEPOS = (1 << 20),
   USER_SHOW_FPS = (1 << 21),
   USER_UIFLAG_UNUSED_22 = (1 << 22), /* cleared */
@@ -1070,7 +1074,7 @@ typedef enum eUserpref_UI_Flag {
 typedef enum eUserpref_UI_Flag2 {
   USER_UIFLAG2_UNUSED_0 = (1 << 0), /* cleared */
   USER_REGION_OVERLAP = (1 << 1),
-  USER_TRACKPAD_NATURAL = (1 << 2),
+  USER_UIFLAG2_UNUSED_2 = (1 << 2),
   USER_UIFLAG2_UNUSED_3 = (1 << 3), /* dirty */
 } eUserpref_UI_Flag2;
 
@@ -1143,6 +1147,15 @@ typedef enum eAutokey_Flag {
   AUTOKEY_FLAG_CYCLEAWARE = (1 << 8),
   ANIMRECORD_FLAG_WITHNLA = (1 << 10),
 } eAutokey_Flag;
+
+/**
+ * Animation flags
+ * #UserDef.animation_flag, used for animation flags that aren't covered by more specific flags
+ * (like eAutokey_Flag).
+ */
+typedef enum eUserpref_Anim_Flags {
+  USER_ANIM_SHOW_CHANNEL_GROUP_COLORS = (1 << 0),
+} eUserpref_Anim_Flags;
 
 /** #UserDef.transopts */
 typedef enum eUserpref_Translation_Flags {

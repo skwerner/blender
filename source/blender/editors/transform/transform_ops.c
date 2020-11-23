@@ -414,9 +414,9 @@ static int transform_modal(bContext *C, wmOperator *op, const wmEvent *event)
   const enum TfmMode mode_prev = t->mode;
 
 #if defined(WITH_INPUT_NDOF) && 0
-  // stable 2D mouse coords map to different 3D coords while the 3D mouse is active
-  // in other words, 2D deltas are no longer good enough!
-  // disable until individual 'transformers' behave better
+  /* Stable 2D mouse coords map to different 3D coords while the 3D mouse is active
+   * in other words, 2D deltas are no longer good enough!
+   * disable until individual 'transformers' behave better. */
 
   if (event->type == NDOF_MOTION) {
     return OPERATOR_PASS_THROUGH;
@@ -520,7 +520,7 @@ static int transform_invoke(bContext *C, wmOperator *op, const wmEvent *event)
   /* add temp handler */
   WM_event_add_modal_handler(C, op);
 
-  op->flag |= OP_IS_MODAL_GRAB_CURSOR;  // XXX maybe we want this with the gizmo only?
+  op->flag |= OP_IS_MODAL_GRAB_CURSOR; /* XXX maybe we want this with the gizmo only? */
 
   /* Use when modal input has some transformation to begin with. */
   TransInfo *t = op->customdata;
@@ -541,7 +541,7 @@ static bool transform_poll_property(const bContext *UNUSED(C),
   {
     /* Hide orientation axis if no constraints are set, since it wont be used. */
     PropertyRNA *prop_con = RNA_struct_find_property(op->ptr, "orient_type");
-    if (prop_con != NULL && (prop_con != prop)) {
+    if (!ELEM(prop_con, NULL, prop)) {
       if (STRPREFIX(prop_id, "constraint")) {
 
         /* Special case: show constraint axis if we don't have values,
@@ -825,6 +825,17 @@ static void TRANSFORM_OT_trackball(struct wmOperatorType *ot)
   Transform_Properties(ot, P_PROPORTIONAL | P_MIRROR | P_SNAP | P_GPENCIL_EDIT | P_CENTER);
 }
 
+/* Similar to #transform_shear_poll. */
+static bool transform_rotate_poll(bContext *C)
+{
+  if (!ED_operator_screenactive(C)) {
+    return false;
+  }
+
+  ScrArea *area = CTX_wm_area(C);
+  return area && !ELEM(area->spacetype, SPACE_ACTION);
+}
+
 static void TRANSFORM_OT_rotate(struct wmOperatorType *ot)
 {
   /* identifiers */
@@ -838,7 +849,7 @@ static void TRANSFORM_OT_rotate(struct wmOperatorType *ot)
   ot->exec = transform_exec;
   ot->modal = transform_modal;
   ot->cancel = transform_cancel;
-  ot->poll = ED_operator_screenactive;
+  ot->poll = transform_rotate_poll;
   ot->poll_property = transform_poll_property;
 
   RNA_def_float_rotation(
@@ -888,7 +899,7 @@ static void TRANSFORM_OT_bend(struct wmOperatorType *ot)
 
   /* api callbacks */
   ot->invoke = transform_invoke;
-  // ot->exec   = transform_exec;  // unsupported
+  // ot->exec = transform_exec; /* unsupported */
   ot->modal = transform_modal;
   ot->cancel = transform_cancel;
   ot->poll = ED_operator_region_view3d_active;
@@ -902,6 +913,7 @@ static void TRANSFORM_OT_bend(struct wmOperatorType *ot)
   Transform_Properties(ot, P_PROPORTIONAL | P_MIRROR | P_SNAP | P_GPENCIL_EDIT | P_CENTER);
 }
 
+/* Similar to #transform_rotate_poll. */
 static bool transform_shear_poll(bContext *C)
 {
   if (!ED_operator_screenactive(C)) {
@@ -1301,7 +1313,7 @@ static int transform_from_gizmo_invoke(bContext *C,
 static void TRANSFORM_OT_from_gizmo(struct wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Transform From Gizmo";
+  ot->name = "Transform from Gizmo";
   ot->description = "Transform selected items by mode type";
   ot->idname = "TRANSFORM_OT_from_gizmo";
   ot->flag = 0;

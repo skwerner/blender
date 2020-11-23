@@ -28,12 +28,12 @@ class Volume : public Mesh {
 
   Volume();
 
-  float clipping;
-  float step_size;
-  float max_density;
-  bool object_space;
+  NODE_SOCKET_API(float, clipping)
+  NODE_SOCKET_API(float, step_size)
+  NODE_SOCKET_API(float, max_density)
+  NODE_SOCKET_API(bool, object_space)
 
-  virtual void clear() override;
+  virtual void clear(bool preserve_shaders = false) override;
 };
 
 CCL_NAMESPACE_END

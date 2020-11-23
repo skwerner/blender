@@ -235,7 +235,8 @@ static int rna_Image_file_format_get(PointerRNA *ptr)
 {
   Image *image = (Image *)ptr->data;
   ImBuf *ibuf = BKE_image_acquire_ibuf(image, NULL, NULL);
-  int imtype = BKE_image_ftype_to_imtype(ibuf ? ibuf->ftype : 0, ibuf ? &ibuf->foptions : NULL);
+  int imtype = BKE_image_ftype_to_imtype(ibuf ? ibuf->ftype : IMB_FTYPE_NONE,
+                                         ibuf ? &ibuf->foptions : NULL);
 
   BKE_image_release_ibuf(image, ibuf, NULL);
 
@@ -1034,7 +1035,7 @@ static void rna_def_image(BlenderRNA *brna)
   RNA_def_property_float_sdna(prop, NULL, "aspx");
   RNA_def_property_array(prop, 2);
   RNA_def_property_range(prop, 0.1f, FLT_MAX);
-  RNA_def_property_ui_range(prop, 0.1f, 5000.f, 1, 2);
+  RNA_def_property_ui_range(prop, 0.1f, 5000.0f, 1, 2);
   RNA_def_property_ui_text(
       prop, "Display Aspect", "Display Aspect for this image, does not affect rendering");
   RNA_def_property_update(prop, NC_IMAGE | ND_DISPLAY, NULL);

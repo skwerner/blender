@@ -37,9 +37,12 @@
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_meshdata_types.h"
+#include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
 
+#include "BKE_colortools.h"
 #include "BKE_gpencil.h"
 #include "BKE_gpencil_geom.h"
 #include "BKE_gpencil_modifier.h"
@@ -53,6 +56,8 @@
 #include "DEG_depsgraph_query.h"
 
 #include "MOD_gpencil_modifiertypes.h"
+
+#include "BLO_read_write.h"
 
 #include "CLG_log.h"
 
@@ -411,6 +416,11 @@ void BKE_gpencil_modifierType_panel_id(GpencilModifierType type, char *r_idname)
   strcat(r_idname, mti->name);
 }
 
+void BKE_gpencil_modifier_panel_expand(GpencilModifierData *md)
+{
+  md->ui_expand_flag |= UI_PANEL_DATA_EXPAND_ROOT;
+}
+
 /**
  * Generic grease pencil modifier copy data.
  * \param md_src: Source modifier data
@@ -660,10 +670,9 @@ static void gpencil_copy_activeframe_to_eval(
 
 static bGPdata *gpencil_copy_for_eval(bGPdata *gpd)
 {
-  int flags = LIB_ID_COPY_LOCALIZE;
+  const int flags = LIB_ID_COPY_LOCALIZE;
 
-  bGPdata *result;
-  BKE_id_copy_ex(NULL, &gpd->id, (ID **)&result, flags);
+  bGPdata *result = (bGPdata *)BKE_id_copy_ex(NULL, &gpd->id, NULL, flags);
   return result;
 }
 
@@ -689,7 +698,9 @@ void BKE_gpencil_prepare_eval_data(Depsgraph *depsgraph, Scene *scene, Object *o
   }
 
   const bool is_multiedit = (bool)GPENCIL_MULTIEDIT_SESSIONS_ON(gpd_eval);
-  const bool do_modifiers = (bool)((!is_multiedit) && (ob->greasepencil_modifiers.first != NULL) &&
+  const bool is_curve_edit = (bool)GPENCIL_CURVE_EDIT_SESSIONS_ON(gpd_eval);
+  const bool do_modifiers = (bool)((!is_multiedit) && (!is_curve_edit) &&
+                                   (ob->greasepencil_modifiers.first != NULL) &&
                                    (!GPENCIL_SIMPLIFY_MODIF(scene)));
   if ((!do_modifiers) && (!do_parent)) {
     return;
@@ -725,8 +736,10 @@ void BKE_gpencil_modifiers_calc(Depsgraph *depsgraph, Scene *scene, Object *ob)
   bGPdata *gpd = (bGPdata *)ob->data;
   const bool is_edit = GPENCIL_ANY_EDIT_MODE(gpd);
   const bool is_multiedit = (bool)GPENCIL_MULTIEDIT_SESSIONS_ON(gpd);
+  const bool is_curve_edit = (bool)GPENCIL_CURVE_EDIT_SESSIONS_ON(gpd);
   const bool is_render = (bool)(DEG_get_mode(depsgraph) == DAG_EVAL_RENDER);
-  const bool do_modifiers = (bool)((!is_multiedit) && (ob->greasepencil_modifiers.first != NULL) &&
+  const bool do_modifiers = (bool)((!is_multiedit) && (!is_curve_edit) &&
+                                   (ob->greasepencil_modifiers.first != NULL) &&
                                    (!GPENCIL_SIMPLIFY_MODIF(scene)));
   if (!do_modifiers) {
     return;
@@ -771,4 +784,160 @@ void BKE_gpencil_modifiers_calc(Depsgraph *depsgraph, Scene *scene, Object *ob)
 
   /* Clear any lattice data. */
   BKE_gpencil_lattice_clear(ob);
+}
+
+void BKE_gpencil_modifier_blend_write(BlendWriter *writer, ListBase *modbase)
+{
+  if (modbase == NULL) {
+    return;
+  }
+
+  LISTBASE_FOREACH (GpencilModifierData *, md, modbase) {
+    const GpencilModifierTypeInfo *mti = BKE_gpencil_modifier_get_info(md->type);
+    if (mti == NULL) {
+      return;
+    }
+
+    BLO_write_struct_by_name(writer, mti->struct_name, md);
+
+    if (md->type == eGpencilModifierType_Thick) {
+      ThickGpencilModifierData *gpmd = (ThickGpencilModifierData *)md;
+
+      if (gpmd->curve_thickness) {
+        BKE_curvemapping_blend_write(writer, gpmd->curve_thickness);
+      }
+    }
+    else if (md->type == eGpencilModifierType_Noise) {
+      NoiseGpencilModifierData *gpmd = (NoiseGpencilModifierData *)md;
+
+      if (gpmd->curve_intensity) {
+        BKE_curvemapping_blend_write(writer, gpmd->curve_intensity);
+      }
+    }
+    else if (md->type == eGpencilModifierType_Hook) {
+      HookGpencilModifierData *gpmd = (HookGpencilModifierData *)md;
+
+      if (gpmd->curfalloff) {
+        BKE_curvemapping_blend_write(writer, gpmd->curfalloff);
+      }
+    }
+    else if (md->type == eGpencilModifierType_Tint) {
+      TintGpencilModifierData *gpmd = (TintGpencilModifierData *)md;
+      if (gpmd->colorband) {
+        BLO_write_struct(writer, ColorBand, gpmd->colorband);
+      }
+      if (gpmd->curve_intensity) {
+        BKE_curvemapping_blend_write(writer, gpmd->curve_intensity);
+      }
+    }
+    else if (md->type == eGpencilModifierType_Smooth) {
+      SmoothGpencilModifierData *gpmd = (SmoothGpencilModifierData *)md;
+      if (gpmd->curve_intensity) {
+        BKE_curvemapping_blend_write(writer, gpmd->curve_intensity);
+      }
+    }
+    else if (md->type == eGpencilModifierType_Color) {
+      ColorGpencilModifierData *gpmd = (ColorGpencilModifierData *)md;
+      if (gpmd->curve_intensity) {
+        BKE_curvemapping_blend_write(writer, gpmd->curve_intensity);
+      }
+    }
+    else if (md->type == eGpencilModifierType_Opacity) {
+      OpacityGpencilModifierData *gpmd = (OpacityGpencilModifierData *)md;
+      if (gpmd->curve_intensity) {
+        BKE_curvemapping_blend_write(writer, gpmd->curve_intensity);
+      }
+    }
+  }
+}
+
+void BKE_gpencil_modifier_blend_read_data(BlendDataReader *reader, ListBase *lb)
+{
+  BLO_read_list(reader, lb);
+
+  LISTBASE_FOREACH (GpencilModifierData *, md, lb) {
+    md->error = NULL;
+
+    /* if modifiers disappear, or for upward compatibility */
+    if (NULL == BKE_gpencil_modifier_get_info(md->type)) {
+      md->type = eModifierType_None;
+    }
+
+    if (md->type == eGpencilModifierType_Lattice) {
+      LatticeGpencilModifierData *gpmd = (LatticeGpencilModifierData *)md;
+      gpmd->cache_data = NULL;
+    }
+    else if (md->type == eGpencilModifierType_Hook) {
+      HookGpencilModifierData *hmd = (HookGpencilModifierData *)md;
+
+      BLO_read_data_address(reader, &hmd->curfalloff);
+      if (hmd->curfalloff) {
+        BKE_curvemapping_blend_read(reader, hmd->curfalloff);
+      }
+    }
+    else if (md->type == eGpencilModifierType_Noise) {
+      NoiseGpencilModifierData *gpmd = (NoiseGpencilModifierData *)md;
+
+      BLO_read_data_address(reader, &gpmd->curve_intensity);
+      if (gpmd->curve_intensity) {
+        BKE_curvemapping_blend_read(reader, gpmd->curve_intensity);
+        /* initialize the curve. Maybe this could be moved to modififer logic */
+        BKE_curvemapping_init(gpmd->curve_intensity);
+      }
+    }
+    else if (md->type == eGpencilModifierType_Thick) {
+      ThickGpencilModifierData *gpmd = (ThickGpencilModifierData *)md;
+
+      BLO_read_data_address(reader, &gpmd->curve_thickness);
+      if (gpmd->curve_thickness) {
+        BKE_curvemapping_blend_read(reader, gpmd->curve_thickness);
+        BKE_curvemapping_init(gpmd->curve_thickness);
+      }
+    }
+    else if (md->type == eGpencilModifierType_Tint) {
+      TintGpencilModifierData *gpmd = (TintGpencilModifierData *)md;
+      BLO_read_data_address(reader, &gpmd->colorband);
+      BLO_read_data_address(reader, &gpmd->curve_intensity);
+      if (gpmd->curve_intensity) {
+        BKE_curvemapping_blend_read(reader, gpmd->curve_intensity);
+        BKE_curvemapping_init(gpmd->curve_intensity);
+      }
+    }
+    else if (md->type == eGpencilModifierType_Smooth) {
+      SmoothGpencilModifierData *gpmd = (SmoothGpencilModifierData *)md;
+      BLO_read_data_address(reader, &gpmd->curve_intensity);
+      if (gpmd->curve_intensity) {
+        BKE_curvemapping_blend_read(reader, gpmd->curve_intensity);
+        BKE_curvemapping_init(gpmd->curve_intensity);
+      }
+    }
+    else if (md->type == eGpencilModifierType_Color) {
+      ColorGpencilModifierData *gpmd = (ColorGpencilModifierData *)md;
+      BLO_read_data_address(reader, &gpmd->curve_intensity);
+      if (gpmd->curve_intensity) {
+        BKE_curvemapping_blend_read(reader, gpmd->curve_intensity);
+        BKE_curvemapping_init(gpmd->curve_intensity);
+      }
+    }
+    else if (md->type == eGpencilModifierType_Opacity) {
+      OpacityGpencilModifierData *gpmd = (OpacityGpencilModifierData *)md;
+      BLO_read_data_address(reader, &gpmd->curve_intensity);
+      if (gpmd->curve_intensity) {
+        BKE_curvemapping_blend_read(reader, gpmd->curve_intensity);
+        BKE_curvemapping_init(gpmd->curve_intensity);
+      }
+    }
+  }
+}
+
+void BKE_gpencil_modifier_blend_read_lib(BlendLibReader *reader, Object *ob)
+{
+  BKE_gpencil_modifiers_foreach_ID_link(ob, BKE_object_modifiers_lib_link_common, reader);
+
+  /* If linking from a library, clear 'local' library override flag. */
+  if (ob->id.lib != NULL) {
+    LISTBASE_FOREACH (GpencilModifierData *, mod, &ob->greasepencil_modifiers) {
+      mod->flag &= ~eGpencilModifierFlag_OverrideLibrary_Local;
+    }
+  }
 }

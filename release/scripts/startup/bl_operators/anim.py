@@ -247,6 +247,11 @@ class NLA_OT_bake(Operator):
         "(useful for baking only part of bones in an armature)",
         default=False,
     )
+    clean_curves: BoolProperty(
+        name="Clean Curves",
+        description="After baking curves, remove redundant keys",
+        default=False,
+    )
     bake_types: EnumProperty(
         name="Bake Data",
         description="Which data's transformations to bake",
@@ -282,7 +287,7 @@ class NLA_OT_bake(Operator):
             do_visual_keying=self.visual_keying,
             do_constraint_clear=self.clear_constraints,
             do_parents_clear=self.clear_parents,
-            do_clean=True,
+            do_clean=self.clean_curves,
         )
 
         if not any(actions):
@@ -348,7 +353,7 @@ class UpdateAnimatedTransformConstraint(Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     use_convert_to_radians: BoolProperty(
-        name="Convert To Radians",
+        name="Convert to Radians",
         description="Convert fcurves/drivers affecting rotations to radians (Warning: use this only once!)",
         default=True,
     )

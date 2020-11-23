@@ -54,9 +54,10 @@
 #include "BKE_context.h"
 #include "BKE_image.h"
 #include "BKE_main.h"
-#include "BKE_sequencer.h"
 
 #include "RNA_define.h"
+
+#include "SEQ_sequencer.h"
 
 #include <ocio_capi.h>
 
@@ -1620,7 +1621,7 @@ static void display_buffer_apply_get_linear_buffer(DisplayBufferThread *handle,
   }
   else if (handle->float_colorspace) {
     /* currently float is non-linear only in sequencer, which is working
-     * in it's own color space even to handle float buffers.
+     * in its own color space even to handle float buffers.
      * This color space is the same for byte and float images.
      * Need to convert float buffer to linear space before applying display transform
      */
@@ -2615,7 +2616,6 @@ ImBuf *IMB_colormanagement_imbuf_for_write(ImBuf *ibuf,
 
   if (do_colormanagement) {
     bool make_byte = false;
-    const ImFileType *type;
 
     /* for proper check whether byte buffer is required by a format or not
      * should be pretty safe since this image buffer is supposed to be used for
@@ -2628,13 +2628,10 @@ ImBuf *IMB_colormanagement_imbuf_for_write(ImBuf *ibuf,
      * we need to allocate byte buffer and store color managed
      * image there
      */
-    for (type = IMB_FILE_TYPES; type < IMB_FILE_TYPES_LAST; type++) {
-      if (type->save && type->ftype(type, colormanaged_ibuf)) {
-        if ((type->flag & IM_FTYPE_FLOAT) == 0) {
-          make_byte = true;
-        }
-
-        break;
+    const ImFileType *type = IMB_file_type_from_ibuf(colormanaged_ibuf);
+    if (type != NULL) {
+      if ((type->save != NULL) && (type->flag & IM_FTYPE_FLOAT) == 0) {
+        make_byte = true;
       }
     }
 
@@ -3237,14 +3234,11 @@ void IMB_colormanagement_colorspace_from_ibuf_ftype(
   }
 
   /* Get color space from file type. */
-  const ImFileType *type;
-
-  for (type = IMB_FILE_TYPES; type < IMB_FILE_TYPES_LAST; type++) {
-    if (type->save && type->ftype(type, ibuf)) {
-      const char *role_colorspace;
-
-      role_colorspace = IMB_colormanagement_role_colorspace_name_get(type->default_save_role);
-
+  const ImFileType *type = IMB_file_type_from_ibuf(ibuf);
+  if (type != NULL) {
+    if (type->save != NULL) {
+      const char *role_colorspace = IMB_colormanagement_role_colorspace_name_get(
+          type->default_save_role);
       BLI_strncpy(colorspace_settings->name, role_colorspace, sizeof(colorspace_settings->name));
     }
   }
@@ -4044,7 +4038,7 @@ static void curve_mapping_to_ocio_settings(CurveMapping *curve_mapping,
   copy_v3_v3(curve_mapping_settings->black, curve_mapping->black);
   copy_v3_v3(curve_mapping_settings->bwmul, curve_mapping->bwmul);
 
-  curve_mapping_settings->cache_id = (size_t)curve_mapping;
+  curve_mapping_settings->cache_id = (size_t)curve_mapping + curve_mapping->changed_timestamp;
 }
 
 static void update_glsl_display_processor(const ColorManagedViewSettings *view_settings,

@@ -48,7 +48,7 @@
  * - Small buffer optimization is enabled by default, if the key is not too large.
  * - The methods `add_new` and `remove_contained` should be used instead of `add` and `remove`
  *   whenever appropriate. Assumptions and intention are described better this way.
- * - Look-ups can be performed using types other than Key without conversion. For that use the
+ * - Lookups can be performed using types other than Key without conversion. For that use the
  *   methods ending with `_as`. The template parameters Hash and #IsEqual have to support the other
  *   key type. This can greatly improve performance when the set contains strings.
  * - The default constructor is cheap, even when a large #InlineBufferCapacity is used. A large
@@ -348,6 +348,23 @@ class Set {
   template<typename ForwardKey> const Key *lookup_key_ptr_as(const ForwardKey &key) const
   {
     return this->lookup_key_ptr__impl(key, hash_(key));
+  }
+
+  /**
+   * Returns the key in the set that compares equal to the given key. If it does not exist, the key
+   * is newly added.
+   */
+  const Key &lookup_key_or_add(const Key &key)
+  {
+    return this->lookup_key_or_add_as(key);
+  }
+  const Key &lookup_key_or_add(Key &&key)
+  {
+    return this->lookup_key_or_add_as(std::move(key));
+  }
+  template<typename ForwardKey> const Key &lookup_key_or_add_as(ForwardKey &&key)
+  {
+    return this->lookup_key_or_add__impl(std::forward<ForwardKey>(key), hash_(key));
   }
 
   /**
@@ -729,6 +746,22 @@ class Set {
         slot.remove();
         removed_slots_++;
         return;
+      }
+    }
+    SET_SLOT_PROBING_END();
+  }
+
+  template<typename ForwardKey>
+  const Key &lookup_key_or_add__impl(ForwardKey &&key, const uint64_t hash)
+  {
+    SET_SLOT_PROBING_BEGIN (hash, slot) {
+      if (slot.contains(key, is_equal_, hash)) {
+        return *slot.key();
+      }
+      if (slot.is_empty()) {
+        slot.occupy(std::forward<ForwardKey>(key), hash);
+        occupied_and_removed_slots_++;
+        return *slot.key();
       }
     }
     SET_SLOT_PROBING_END();

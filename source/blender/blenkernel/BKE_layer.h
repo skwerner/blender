@@ -34,6 +34,9 @@ extern "C" {
 #define TODO_LAYER           /* generic todo */
 
 struct Base;
+struct BlendDataReader;
+struct BlendLibReader;
+struct BlendWriter;
 struct Collection;
 struct Depsgraph;
 struct LayerCollection;
@@ -146,6 +149,14 @@ void BKE_base_eval_flags(struct Base *base);
 void BKE_layer_eval_view_layer_indexed(struct Depsgraph *depsgraph,
                                        struct Scene *scene,
                                        int view_layer_index);
+
+/* .blend file I/O */
+
+void BKE_view_layer_blend_write(struct BlendWriter *writer, struct ViewLayer *view_layer);
+void BKE_view_layer_blend_read_data(struct BlendDataReader *reader, struct ViewLayer *view_layer);
+void BKE_view_layer_blend_read_lib(struct BlendLibReader *reader,
+                                   struct Library *lib,
+                                   struct ViewLayer *view_layer);
 
 /* iterators */
 
@@ -365,6 +376,9 @@ struct Object **BKE_view_layer_array_selected_objects_params(
     const struct View3D *v3d,
     uint *r_len,
     const struct ObjectsInViewLayerParams *params);
+
+struct Object *BKE_view_layer_non_active_selected_object(struct ViewLayer *view_layer,
+                                                         const struct View3D *v3d);
 
 #define BKE_view_layer_array_selected_objects(view_layer, v3d, r_len, ...) \
   BKE_view_layer_array_selected_objects_params( \

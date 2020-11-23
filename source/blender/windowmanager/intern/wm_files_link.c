@@ -598,7 +598,7 @@ void WM_OT_link(wmOperatorType *ot)
                                  WM_FILESEL_FILEPATH | WM_FILESEL_DIRECTORY | WM_FILESEL_FILENAME |
                                      WM_FILESEL_RELPATH | WM_FILESEL_FILES | WM_FILESEL_SHOW_PROPS,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 
   wm_link_append_properties_common(ot, true);
 }
@@ -622,7 +622,7 @@ void WM_OT_append(wmOperatorType *ot)
                                  WM_FILESEL_FILEPATH | WM_FILESEL_DIRECTORY | WM_FILESEL_FILENAME |
                                      WM_FILESEL_FILES | WM_FILESEL_SHOW_PROPS,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 
   wm_link_append_properties_common(ot, false);
   RNA_def_boolean(ot->srna,
@@ -890,6 +890,9 @@ static void lib_relocate_do(Main *bmain,
     ID *new_id = item->new_id;
 
     lib_relocate_do_remap(bmain, old_id, new_id, reports, do_reload, remap_flags);
+    if (new_id == NULL) {
+      continue;
+    }
     /* Usual special code for ShapeKeys snowflakes... */
     Key **old_key_p = BKE_key_from_id_p(old_id);
     if (old_key_p == NULL) {
@@ -1057,6 +1060,15 @@ static int wm_lib_relocate_exec_do(bContext *C, wmOperator *op, bool do_reload)
       return OPERATOR_CANCELLED;
     }
 
+    if (BLI_path_cmp(BKE_main_blendfile_path(bmain), path) == 0) {
+      BKE_reportf(op->reports,
+                  RPT_ERROR_INVALID_INPUT,
+                  "Cannot relocate library '%s' to current blend file '%s'",
+                  lib->id.name,
+                  path);
+      return OPERATOR_CANCELLED;
+    }
+
     if (BLI_path_cmp(lib->filepath_abs, path) == 0) {
 #ifdef PRINT_DEBUG
       printf("We are supposed to reload '%s' lib (%d)...\n", lib->filepath, lib->id.us);
@@ -1160,7 +1172,7 @@ void WM_OT_lib_relocate(wmOperatorType *ot)
                                  WM_FILESEL_FILEPATH | WM_FILESEL_DIRECTORY | WM_FILESEL_FILENAME |
                                      WM_FILESEL_FILES | WM_FILESEL_RELPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 }
 
 static int wm_lib_reload_exec(bContext *C, wmOperator *op)
@@ -1190,7 +1202,7 @@ void WM_OT_lib_reload(wmOperatorType *ot)
                                  WM_FILESEL_FILEPATH | WM_FILESEL_DIRECTORY | WM_FILESEL_FILENAME |
                                      WM_FILESEL_RELPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 }
 
 /** \} */

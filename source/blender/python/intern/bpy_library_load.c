@@ -92,9 +92,13 @@ static PyTypeObject bpy_lib_Type = {
     0,                                        /* tp_itemsize */
     /* methods */
     (destructor)bpy_lib_dealloc, /* tp_dealloc */
-    (printfunc)NULL,             /* printfunc tp_print; */
-    NULL,                        /* getattrfunc tp_getattr; */
-    NULL,                        /* setattrfunc tp_setattr; */
+#if PY_VERSION_HEX >= 0x03080000
+    0, /* tp_vectorcall_offset */
+#else
+    (printfunc)NULL, /* printfunc tp_print */
+#endif
+    NULL, /* getattrfunc tp_getattr; */
+    NULL, /* setattrfunc tp_setattr; */
     NULL,
     /* tp_compare */ /* DEPRECATED in python 3.0! */
     NULL,            /* tp_repr */
@@ -180,7 +184,7 @@ PyDoc_STRVAR(
     "   :type relative: bool\n");
 static PyObject *bpy_lib_load(PyObject *UNUSED(self), PyObject *args, PyObject *kw)
 {
-  Main *bmain = CTX_data_main(BPy_GetContext());
+  Main *bmain = CTX_data_main(BPY_context_get());
   BPy_Library *ret;
   const char *filename = NULL;
   bool is_rel = false, is_link = false;
@@ -319,7 +323,7 @@ static void bpy_lib_exit_warn_type(BPy_Library *self, PyObject *item)
 
 static PyObject *bpy_lib_exit(BPy_Library *self, PyObject *UNUSED(args))
 {
-  Main *bmain = CTX_data_main(BPy_GetContext());
+  Main *bmain = CTX_data_main(BPY_context_get());
   Main *mainl = NULL;
   const int err = 0;
   const bool do_append = ((self->flag & FILE_LINK) == 0);

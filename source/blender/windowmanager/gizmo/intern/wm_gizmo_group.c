@@ -344,6 +344,7 @@ bool wm_gizmogroup_is_any_selected(const wmGizmoGroup *gzgroup)
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name Gizmo operators
  *
  * Basic operators for gizmo interaction with user configurable keymaps.
@@ -444,7 +445,7 @@ static bool gizmo_tweak_start_and_finish(
       wmWindowManager *wm = CTX_wm_manager(C);
       wmOperator *op = WM_operator_last_redo(C);
 
-      /* We may want to enable this, for now the gizmo can manage it's own properties. */
+      /* We may want to enable this, for now the gizmo can manage its own properties. */
 #if 0
       IDP_MergeGroup(gzop->ptr.data, op->properties, false);
 #endif

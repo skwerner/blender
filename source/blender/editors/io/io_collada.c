@@ -222,12 +222,12 @@ static int wm_collada_export_exec(bContext *C, wmOperator *op)
   export_settings.keep_smooth_curves = keep_smooth_curves != 0;
 
   if (export_animation_type != BC_ANIMATION_EXPORT_SAMPLES) {
-    // When curves are exported then we can not export as matrix
+    /* When curves are exported then we can not export as matrix. */
     export_settings.animation_transformation_type = BC_TRANSFORMATION_TYPE_DECOMPOSED;
   }
 
   if (export_settings.animation_transformation_type != BC_TRANSFORMATION_TYPE_DECOMPOSED) {
-    // Can not export smooth curves when Matrix export is enabled.
+    /* Can not export smooth curves when Matrix export is enabled. */
     export_settings.keep_smooth_curves = false;
   }
 
@@ -507,7 +507,7 @@ void WM_OT_collada_export(wmOperatorType *ot)
                                  FILE_SAVE,
                                  WM_FILESEL_FILEPATH | WM_FILESEL_SHOW_PROPS,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 
   RNA_def_enum(func,
                "prop_bc_export_ui_section",
@@ -828,7 +828,7 @@ void WM_OT_collada_import(wmOperatorType *ot)
                                  FILE_OPENFILE,
                                  WM_FILESEL_FILEPATH | WM_FILESEL_SHOW_PROPS,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 
   RNA_def_boolean(ot->srna,
                   "import_units",

@@ -38,6 +38,8 @@
 /* Allow using deprecated functionality for .blend file I/O. */
 #define DNA_DEPRECATED_ALLOW
 
+#include "DNA_defaults.h"
+
 #include "DNA_constraint_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_movieclip_types.h"
@@ -85,6 +87,17 @@
 #endif
 
 static void free_buffers(MovieClip *clip);
+
+static void movie_clip_init_data(ID *id)
+{
+  MovieClip *movie_clip = (MovieClip *)id;
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(movie_clip, id));
+
+  MEMCPY_STRUCT_AFTER(movie_clip, DNA_struct_default_get(MovieClip), id);
+
+  BKE_tracking_settings_init(&movie_clip->tracking);
+  BKE_color_managed_colorspace_settings_init(&movie_clip->colorspace_settings);
+}
 
 static void movie_clip_copy_data(Main *UNUSED(bmain), ID *id_dst, const ID *id_src, const int flag)
 {
@@ -261,6 +274,7 @@ static void movieclip_blend_read_data(BlendDataReader *reader, ID *id)
   MovieTracking *tracking = &clip->tracking;
 
   BLO_read_data_address(reader, &clip->adt);
+  BKE_animdata_blend_read_data(reader, clip->adt);
 
   direct_link_movieTracks(reader, &tracking->tracks);
   direct_link_moviePlaneTracks(reader, &tracking->plane_tracks);
@@ -335,7 +349,7 @@ IDTypeInfo IDType_ID_MC = {
     .translation_context = BLT_I18NCONTEXT_ID_MOVIECLIP,
     .flags = 0,
 
-    .init_data = NULL,
+    .init_data = movie_clip_init_data,
     .copy_data = movie_clip_copy_data,
     .free_data = movie_clip_free_data,
     .make_local = NULL,
@@ -346,6 +360,8 @@ IDTypeInfo IDType_ID_MC = {
     .blend_read_data = movieclip_blend_read_data,
     .blend_read_lib = movieclip_blend_read_lib,
     .blend_read_expand = NULL,
+
+    .blend_read_undo_preserve = NULL,
 };
 
 /*********************** movieclip buffer loaders *************************/
@@ -506,7 +522,7 @@ static void movieclip_convert_multilayer_add_pass(void *UNUSED(layer),
     MEM_freeN(rect);
     return;
   }
-  if (STREQ(pass_name, RE_PASSNAME_COMBINED) || STREQ(chan_id, "RGBA") || STREQ(chan_id, "RGB")) {
+  if (STREQ(pass_name, RE_PASSNAME_COMBINED) || STR_ELEM(chan_id, "RGBA", "RGB")) {
     ctx->combined_pass = rect;
     ctx->num_combined_channels = num_channels;
   }
@@ -921,20 +937,7 @@ static MovieClip *movieclip_alloc(Main *bmain, const char *name)
 {
   MovieClip *clip;
 
-  clip = BKE_libblock_alloc(bmain, ID_MC, name, 0);
-
-  clip->aspx = clip->aspy = 1.0f;
-
-  BKE_tracking_settings_init(&clip->tracking);
-  BKE_color_managed_colorspace_settings_init(&clip->colorspace_settings);
-
-  clip->proxy.build_size_flag = IMB_PROXY_25;
-  clip->proxy.build_tc_flag = IMB_TC_RECORD_RUN | IMB_TC_FREE_RUN |
-                              IMB_TC_INTERPOLATED_REC_DATE_FREE_RUN | IMB_TC_RECORD_RUN_NO_GAPS;
-  clip->proxy.quality = 90;
-
-  clip->start_frame = 1;
-  clip->frame_offset = 0;
+  clip = BKE_id_new(bmain, ID_MC, name);
 
   return clip;
 }
@@ -1916,13 +1919,6 @@ void BKE_movieclip_build_proxy_frame_for_ibuf(MovieClip *clip,
       IMB_freeImBuf(tmpibuf);
     }
   }
-}
-
-MovieClip *BKE_movieclip_copy(Main *bmain, const MovieClip *clip)
-{
-  MovieClip *clip_copy;
-  BKE_id_copy(bmain, &clip->id, (ID **)&clip_copy);
-  return clip_copy;
 }
 
 float BKE_movieclip_remap_scene_to_clip_frame(const MovieClip *clip, float framenr)

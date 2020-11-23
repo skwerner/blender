@@ -349,8 +349,8 @@ typedef struct PaintOperation {
 bool paint_use_opacity_masking(Brush *brush)
 {
   return ((brush->flag & BRUSH_AIRBRUSH) || (brush->flag & BRUSH_DRAG_DOT) ||
-                  (brush->flag & BRUSH_ANCHORED) || (brush->imagepaint_tool == PAINT_TOOL_SMEAR) ||
-                  (brush->imagepaint_tool == PAINT_TOOL_SOFTEN) ||
+                  (brush->flag & BRUSH_ANCHORED) ||
+                  (ELEM(brush->imagepaint_tool, PAINT_TOOL_SMEAR, PAINT_TOOL_SOFTEN)) ||
                   (brush->imagepaint_tool == PAINT_TOOL_FILL) ||
                   (brush->flag & BRUSH_USE_GRADIENT) ||
                   (brush->mtex.tex && !ELEM(brush->mtex.brush_map_mode,
@@ -882,7 +882,7 @@ static int grab_clone_modal(bContext *C, wmOperator *op, const wmEvent *event)
   switch (event->type) {
     case LEFTMOUSE:
     case MIDDLEMOUSE:
-    case RIGHTMOUSE:  // XXX hardcoded
+    case RIGHTMOUSE: /* XXX hardcoded */
       MEM_freeN(op->customdata);
       return OPERATOR_FINISHED;
     case MOUSEMOVE:

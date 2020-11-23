@@ -37,6 +37,7 @@
 
 #include "BLT_translation.h"
 
+#include "DNA_defaults.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_object_types.h"
@@ -79,19 +80,13 @@ typedef struct tmpStrokes {
 static void initData(GpencilModifierData *md)
 {
   ArrayGpencilModifierData *gpmd = (ArrayGpencilModifierData *)md;
-  gpmd->count = 2;
-  gpmd->shift[0] = 1.0f;
-  gpmd->shift[1] = 0.0f;
-  gpmd->shift[2] = 0.0f;
-  zero_v3(gpmd->offset);
-  zero_v3(gpmd->rnd_scale);
-  gpmd->object = NULL;
-  gpmd->flag |= GP_ARRAY_USE_RELATIVE;
-  gpmd->seed = 1;
-  gpmd->material = NULL;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(gpmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(gpmd, DNA_struct_default_get(ArrayGpencilModifierData), modifier);
 
   /* Open the first subpanel too, because it's activated by default. */
-  md->ui_expand_flag = (1 << 0) | (1 << 1);
+  md->ui_expand_flag = UI_PANEL_DATA_EXPAND_ROOT | UI_SUBPANEL_DATA_EXPAND_1;
 }
 
 static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
@@ -260,7 +255,7 @@ static void generate_geometry(GpencilModifierData *md,
       /* Duplicate original strokes to create this instance. */
       LISTBASE_FOREACH_BACKWARD (tmpStrokes *, iter, &stroke_cache) {
         /* Duplicate stroke */
-        bGPDstroke *gps_dst = BKE_gpencil_stroke_duplicate(iter->gps, true);
+        bGPDstroke *gps_dst = BKE_gpencil_stroke_duplicate(iter->gps, true, true);
 
         /* Move points */
         for (int i = 0; i < iter->gps->totpoints; i++) {

@@ -243,7 +243,7 @@ IDTypeInfo IDType_ID_TXT = {
     .name = "Text",
     .name_plural = "texts",
     .translation_context = BLT_I18NCONTEXT_ID_TEXT,
-    .flags = 0,
+    .flags = IDTYPE_FLAGS_NO_ANIMDATA,
 
     .init_data = text_init_data,
     .copy_data = text_copy_data,
@@ -256,6 +256,8 @@ IDTypeInfo IDType_ID_TXT = {
     .blend_read_data = text_blend_read_data,
     .blend_read_lib = NULL,
     .blend_read_expand = NULL,
+
+    .blend_read_undo_preserve = NULL,
 };
 
 /** \} */
@@ -287,11 +289,9 @@ Text *BKE_text_add(Main *bmain, const char *name)
 {
   Text *ta;
 
-  ta = BKE_libblock_alloc(bmain, ID_TXT, name, 0);
+  ta = BKE_id_new(bmain, ID_TXT, name);
   /* Texts always have 'real' user (see also read code). */
   id_us_ensure_real(&ta->id);
-
-  text_init_data(&ta->id);
 
   return ta;
 }
@@ -514,13 +514,6 @@ Text *BKE_text_load_ex(Main *bmain, const char *file, const char *relpath, const
 Text *BKE_text_load(Main *bmain, const char *file, const char *relpath)
 {
   return BKE_text_load_ex(bmain, file, relpath, false);
-}
-
-Text *BKE_text_copy(Main *bmain, const Text *ta)
-{
-  Text *ta_copy;
-  BKE_id_copy(bmain, &ta->id, (ID **)&ta_copy);
-  return ta_copy;
 }
 
 void BKE_text_clear(Text *text) /* called directly from rna */
@@ -915,7 +908,7 @@ void txt_move_left(Text *text, const bool sel)
   }
   else {
     /* do nice left only if there are only spaces */
-    // TXT_TABSIZE hardcoded in DNA_text_types.h
+    /* #TXT_TABSIZE hard-coded in DNA_text_types.h */
     if (text->flags & TXT_TABSTOSPACES) {
       tabsize = txt_calc_tab_left(*linep, *charp);
     }
@@ -2342,7 +2335,7 @@ int txt_setcurr_tab_spaces(Text *text, int space)
       if (ch == ':') {
         is_indent = 1;
       }
-      else if (ch != ' ' && ch != '\t') {
+      else if (!ELEM(ch, ' ', '\t')) {
         is_indent = 0;
       }
     }
@@ -2468,7 +2461,7 @@ int text_check_identifier_nodigit_unicode(const unsigned int ch)
 
 bool text_check_whitespace(const char ch)
 {
-  if (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n') {
+  if (ELEM(ch, ' ', '\t', '\r', '\n')) {
     return true;
   }
   return false;

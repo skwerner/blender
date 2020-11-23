@@ -293,7 +293,7 @@ static int view_pan_modal(bContext *C, wmOperator *op, const wmEvent *event)
       }
 #endif
     default:
-      if (event->type == vpd->invoke_event || event->type == EVT_ESCKEY) {
+      if (ELEM(event->type, vpd->invoke_event, EVT_ESCKEY)) {
         if (event->val == KM_RELEASE) {
           /* calculate overall delta mouse-movement for redo */
           RNA_int_set(op->ptr, "deltax", (vpd->startx - vpd->lastx));
@@ -1059,6 +1059,7 @@ static int view_zoomout_invoke(bContext *C, wmOperator *op, const wmEvent *event
     /* store initial mouse position (in view space) */
     UI_view2d_region_to_view(
         &region->v2d, event->mval[0], event->mval[1], &vzd->mx_2d, &vzd->my_2d);
+    vzd->zoom_to_mouse_pos = true;
   }
 
   return view_zoomout_exec(C, op);
@@ -1121,8 +1122,9 @@ static void view_zoomdrag_apply(bContext *C, wmOperator *op)
     dy *= -1;
   }
 
-  /* continuous zoom shouldn't move that fast... */
-  if (U.viewzoom == USER_ZOOM_CONT) {  // XXX store this setting as RNA prop?
+  /* Check if the 'timer' is initialized, as zooming with the trackpad
+   * never uses the "Continuous" zoom method, and the 'timer' is not initialized. */
+  if ((U.viewzoom == USER_ZOOM_CONT) && vzd->timer) { /* XXX store this setting as RNA prop? */
     const double time = PIL_check_seconds_timer();
     const float time_step = (float)(time - vzd->timer_lastdraw);
 
@@ -1231,10 +1233,15 @@ static int view_zoomdrag_invoke(bContext *C, wmOperator *op, const wmEvent *even
   v2d = vzd->v2d;
 
   if (U.uiflag & USER_ZOOM_TO_MOUSEPOS) {
+    ARegion *region = CTX_wm_region(C);
+
+    /* Store initial mouse position (in view space). */
+    UI_view2d_region_to_view(
+        &region->v2d, event->mval[0], event->mval[1], &vzd->mx_2d, &vzd->my_2d);
     vzd->zoom_to_mouse_pos = true;
   }
 
-  if (event->type == MOUSEZOOM || event->type == MOUSEPAN) {
+  if (ELEM(event->type, MOUSEZOOM, MOUSEPAN)) {
     float dx, dy, fac;
 
     vzd->lastx = event->prevx;
@@ -1276,14 +1283,6 @@ static int view_zoomdrag_invoke(bContext *C, wmOperator *op, const wmEvent *even
 
   /* for modal exit test */
   vzd->invoke_event = event->type;
-
-  if (U.uiflag & USER_ZOOM_TO_MOUSEPOS) {
-    ARegion *region = CTX_wm_region(C);
-
-    /* store initial mouse position (in view space) */
-    UI_view2d_region_to_view(
-        &region->v2d, event->mval[0], event->mval[1], &vzd->mx_2d, &vzd->my_2d);
-  }
 
   if (v2d->keepofs & V2D_LOCKOFS_X) {
     WM_cursor_modal_set(window, WM_CURSOR_NS_SCROLL);
@@ -1406,7 +1405,7 @@ static int view_zoomdrag_modal(bContext *C, wmOperator *op, const wmEvent *event
      * - Continuous zoom only depends on distance of mouse
      *   to starting point to determine rate of change.
      */
-    if (U.viewzoom != USER_ZOOM_CONT) {  // XXX store this setting as RNA prop?
+    if (U.viewzoom != USER_ZOOM_CONT) { /* XXX store this setting as RNA prop? */
       vzd->lastx = event->x;
       vzd->lasty = event->y;
     }
@@ -1414,7 +1413,7 @@ static int view_zoomdrag_modal(bContext *C, wmOperator *op, const wmEvent *event
     /* apply zooming */
     view_zoomdrag_apply(C, op);
   }
-  else if (event->type == vzd->invoke_event || event->type == EVT_ESCKEY) {
+  else if (ELEM(event->type, vzd->invoke_event, EVT_ESCKEY)) {
     if (event->val == KM_RELEASE) {
 
       /* for redo, store the overall deltas - need to respect zoom-locks here... */

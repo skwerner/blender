@@ -128,7 +128,7 @@ void OVERLAY_extra_cache_init(OVERLAY_Data *vedata)
       cb->empty_plain_axes = BUF_INSTANCE(grp_sub, format, DRW_cache_plain_axes_get());
       cb->empty_single_arrow = BUF_INSTANCE(grp_sub, format, DRW_cache_single_arrow_get());
       cb->empty_sphere = BUF_INSTANCE(grp_sub, format, DRW_cache_empty_sphere_get());
-      cb->empty_sphere_solid = BUF_INSTANCE(grp_sub, format, DRW_cache_sphere_get());
+      cb->empty_sphere_solid = BUF_INSTANCE(grp_sub, format, DRW_cache_sphere_get(DRW_LOD_LOW));
       cb->field_cone_limit = BUF_INSTANCE(grp_sub, format, DRW_cache_field_cone_limit_get());
       cb->field_curve = BUF_INSTANCE(grp_sub, format, DRW_cache_field_curve_get());
       cb->field_force = BUF_INSTANCE(grp_sub, format, DRW_cache_field_force_get());
@@ -1586,10 +1586,13 @@ void OVERLAY_extra_cache_populate(OVERLAY_Data *vedata, Object *ob)
   const bool draw_xform = draw_ctx->object_mode == OB_MODE_OBJECT &&
                           (scene->toolsettings->transform_flag & SCE_XFORM_DATA_ORIGIN) &&
                           (ob->base_flag & BASE_SELECTED) && !is_select_mode;
+  /* Don't show fluid domain overlay extras outside of cache range. */
   const bool draw_volume = !from_dupli &&
                            (md = BKE_modifiers_findby_type(ob, eModifierType_Fluid)) &&
                            (BKE_modifier_is_enabled(scene, md, eModifierMode_Realtime)) &&
-                           (((FluidModifierData *)md)->domain != NULL);
+                           (((FluidModifierData *)md)->domain != NULL) &&
+                           (CFRA >= (((FluidModifierData *)md)->domain->cache_frame_start)) &&
+                           (CFRA <= (((FluidModifierData *)md)->domain->cache_frame_end));
 
   float *color;
   int theme_id = DRW_object_wire_theme_get(ob, view_layer, &color);

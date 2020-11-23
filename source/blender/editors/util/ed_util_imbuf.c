@@ -30,7 +30,6 @@
 #include "BKE_image.h"
 #include "BKE_main.h"
 #include "BKE_screen.h"
-#include "BKE_sequencer.h"
 
 #include "ED_image.h"
 #include "ED_screen.h"
@@ -42,6 +41,8 @@
 #include "IMB_colormanagement.h"
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
+
+#include "SEQ_sequencer.h"
 
 #include "UI_view2d.h"
 
@@ -273,7 +274,7 @@ static void image_sample_apply(bContext *C, wmOperator *op, const wmEvent *event
       }
     }
 
-    // XXX node curve integration ..
+    /* XXX node curve integration. */
 #if 0
     {
       ScrArea *sa, *cur = curarea;
@@ -369,7 +370,7 @@ static void sequencer_sample_apply(bContext *C, wmOperator *op, const wmEvent *e
 
       /* sequencer's image buffers are in non-linear space, need to make them linear */
       copy_v4_v4(info->linearcol, info->colf);
-      BKE_sequencer_pixel_from_sequencer_space_v4(scene, info->linearcol);
+      SEQ_render_pixel_from_sequencer_space_v4(scene, info->linearcol);
 
       info->color_manage = true;
     }
@@ -512,7 +513,7 @@ int ED_imbuf_sample_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
   switch (event->type) {
     case LEFTMOUSE:
-    case RIGHTMOUSE:  // XXX hardcoded
+    case RIGHTMOUSE: /* XXX hardcoded */
       if (event->val == KM_RELEASE) {
         ED_imbuf_sample_exit(C, op);
         return OPERATOR_CANCELLED;

@@ -27,6 +27,10 @@
 #include "DNA_boid_types.h"
 #include "DNA_defs.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct AnimData;
 
 typedef struct HairKey {
@@ -272,7 +276,7 @@ typedef struct ParticleSettings {
 
   struct Collection *instance_collection;
   struct ListBase instance_weights;
-  struct Collection *force_group DNA_DEPRECATED;  // deprecated
+  struct Collection *force_group DNA_DEPRECATED; /* deprecated */
   struct Object *instance_object;
   struct Object *bb_ob;
   /** Old animation system, deprecated for 2.5. */
@@ -690,3 +694,7 @@ typedef enum eParticleTextureInfluence {
   PAMAP_CHILD = (PAMAP_CLUMP | PAMAP_KINK_FREQ | PAMAP_KINK_AMP | PAMAP_ROUGH | PAMAP_LENGTH |
                  PAMAP_TWIST),
 } eParticleTextureInfluence;
+
+#ifdef __cplusplus
+}
+#endif

@@ -61,6 +61,7 @@
 
 #include "transform.h"
 #include "transform_mode.h"
+#include "transform_orientations.h"
 #include "transform_snap.h"
 
 /* ************************** Functions *************************** */
@@ -269,9 +270,6 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 
   t->data_len_all = 0;
 
-  t->val = 0.0f;
-
-  zero_v3(t->vec);
   zero_v3(t->center_global);
 
   unit_m3(t->mat);
@@ -389,7 +387,7 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
   }
   else if (t->spacetype == SPACE_IMAGE) {
     SpaceImage *sima = area->spacedata.first;
-    // XXX for now, get View2D from the active region
+    /* XXX for now, get View2D from the active region. */
     t->view = &region->v2d;
     t->around = sima->around;
 
@@ -408,7 +406,7 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
     /* image not in uv edit, nor in mask mode, can happen for some tools */
   }
   else if (t->spacetype == SPACE_NODE) {
-    // XXX for now, get View2D from the active region
+    /* XXX for now, get View2D from the active region. */
     t->view = &region->v2d;
     t->around = V3D_AROUND_CENTER_BOUNDS;
   }
@@ -431,9 +429,9 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
   }
   else {
     if (region) {
-      // XXX for now, get View2D  from the active region
+      /* XXX for now, get View2D  from the active region */
       t->view = &region->v2d;
-      // XXX for now, the center point is the midpoint of the data
+      /* XXX for now, the center point is the midpoint of the data */
     }
     else {
       t->view = NULL;
@@ -479,9 +477,7 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
       if (t_values_set_is_array) {
         /* For operators whose `t->values` is array, set constraint so that the
          * orientation is more intuitive in the Redo Panel. */
-        for (int i = 3; i--;) {
-          constraint_axis[i] |= t->values[i] != 0.0f;
-        }
+        constraint_axis[0] = constraint_axis[1] = constraint_axis[2] = true;
       }
       else if (use_orient_axis) {
         constraint_axis[t->orient_axis] = true;
@@ -510,7 +506,6 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
     short orient_types[3];
     float custom_matrix[3][3];
 
-    short orient_type_default = V3D_ORIENT_GLOBAL;
     short orient_type_scene = V3D_ORIENT_GLOBAL;
     short orient_type_set = V3D_ORIENT_GLOBAL;
     short orient_type_matrix_set = -1;
@@ -524,6 +519,8 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
       }
     }
 
+    short orient_type_default = orient_type_scene;
+
     if (op && (prop = RNA_struct_find_property(op->ptr, "orient_axis_ortho"))) {
       t->orient_axis_ortho = RNA_property_enum_get(op->ptr, prop);
     }
@@ -531,17 +528,15 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
     if (op && ((prop = RNA_struct_find_property(op->ptr, "orient_type")) &&
                RNA_property_is_set(op->ptr, prop))) {
       orient_type_set = RNA_property_enum_get(op->ptr, prop);
-      if (orient_type_set >= V3D_ORIENT_CUSTOM) {
-        if (orient_type_set >= V3D_ORIENT_CUSTOM + BIF_countTransformOrientation(C)) {
-          orient_type_set = V3D_ORIENT_GLOBAL;
-        }
+      if (orient_type_set >= V3D_ORIENT_CUSTOM + BIF_countTransformOrientation(C)) {
+        orient_type_set = V3D_ORIENT_GLOBAL;
       }
 
       /* Change the default orientation to be used when redoing. */
       orient_type_default = orient_type_set;
     }
     else if (t->con.mode & CON_APPLY) {
-      orient_type_set = orient_type_default = orient_type_scene;
+      orient_type_set = orient_type_scene;
     }
     else {
       if (orient_type_set == orient_type_scene) {
@@ -718,7 +713,7 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
     }
   }
 
-  // Mirror is not supported with PET, turn it off.
+  /* Mirror is not supported with PET, turn it off. */
 #if 0
   if (t->flag & T_PROP_EDIT) {
     t->flag &= ~T_MIRROR;
@@ -805,7 +800,7 @@ void postTrans(bContext *C, TransInfo *t)
   if (t->data_len_all != 0) {
     FOREACH_TRANS_DATA_CONTAINER (t, tc) {
       /* free data malloced per trans-data */
-      if (ELEM(t->obedit_type, OB_CURVE, OB_SURF) || (t->spacetype == SPACE_GRAPH)) {
+      if (ELEM(t->obedit_type, OB_CURVE, OB_SURF, OB_GPENCIL) || (t->spacetype == SPACE_GRAPH)) {
         TransData *td = tc->data;
         for (int a = 0; a < tc->data_len; a++, td++) {
           if (td->flag & TD_BEZTRIPLE) {

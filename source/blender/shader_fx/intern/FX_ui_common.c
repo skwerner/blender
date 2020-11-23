@@ -17,9 +17,8 @@
  * \ingroup modifiers
  */
 
-#include <string.h>
-
 #include "BLI_listbase.h"
+#include "BLI_string.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -193,10 +192,10 @@ PanelType *shaderfx_panel_register(ARegionType *region_type, ShaderFxType type, 
 
   PanelType *panel_type = MEM_callocN(sizeof(PanelType), panel_idname);
 
-  strcpy(panel_type->idname, panel_idname);
-  strcpy(panel_type->label, "");
-  strcpy(panel_type->context, "shaderfx");
-  strcpy(panel_type->translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA);
+  BLI_strncpy(panel_type->idname, panel_idname, BKE_ST_MAXNAME);
+  BLI_strncpy(panel_type->label, "", BKE_ST_MAXNAME);
+  BLI_strncpy(panel_type->context, "shaderfx", BKE_ST_MAXNAME);
+  BLI_strncpy(panel_type->translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA, BKE_ST_MAXNAME);
 
   panel_type->draw_header = shaderfx_panel_header;
   panel_type->draw = draw;
@@ -204,7 +203,7 @@ PanelType *shaderfx_panel_register(ARegionType *region_type, ShaderFxType type, 
 
   /* Give the panel the special flag that says it was built here and corresponds to a
    * shader effect rather than a PanelType. */
-  panel_type->flag = PNL_LAYOUT_HEADER_EXPAND | PNL_DRAW_BOX | PNL_INSTANCED;
+  panel_type->flag = PANEL_TYPE_HEADER_EXPAND | PANEL_TYPE_DRAW_BOX | PANEL_TYPE_INSTANCED;
   panel_type->reorder = shaderfx_reorder;
   panel_type->get_list_data_expand_flag = get_shaderfx_expand_flag;
   panel_type->set_list_data_expand_flag = set_shaderfx_expand_flag;
@@ -229,24 +228,22 @@ PanelType *shaderfx_subpanel_register(ARegionType *region_type,
 {
   /* Create the subpanel's ID name. */
   char panel_idname[BKE_ST_MAXNAME];
-  strcpy(panel_idname, parent->idname);
-  strcat(panel_idname, "_");
-  strcat(panel_idname, name);
+  BLI_snprintf(panel_idname, BKE_ST_MAXNAME, "%s_%s", parent->idname, name);
 
   PanelType *panel_type = MEM_callocN(sizeof(PanelType), panel_idname);
 
-  strcpy(panel_type->idname, panel_idname);
-  strcpy(panel_type->label, label);
-  strcpy(panel_type->context, "shaderfx");
-  strcpy(panel_type->translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA);
+  BLI_strncpy(panel_type->idname, panel_idname, BKE_ST_MAXNAME);
+  BLI_strncpy(panel_type->label, label, BKE_ST_MAXNAME);
+  BLI_strncpy(panel_type->context, "shaderfx", BKE_ST_MAXNAME);
+  BLI_strncpy(panel_type->translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA, BKE_ST_MAXNAME);
 
   panel_type->draw_header = draw_header;
   panel_type->draw = draw;
   panel_type->poll = shaderfx_ui_poll;
-  panel_type->flag = (PNL_DEFAULT_CLOSED | PNL_DRAW_BOX);
+  panel_type->flag = (PANEL_TYPE_DEFAULT_CLOSED | PANEL_TYPE_DRAW_BOX);
 
   BLI_assert(parent != NULL);
-  strcpy(panel_type->parent_id, parent->idname);
+  BLI_strncpy(panel_type->parent_id, parent->idname, BKE_ST_MAXNAME);
   panel_type->parent = parent;
   BLI_addtail(&parent->children, BLI_genericNodeN(panel_type));
   BLI_addtail(&region_type->paneltypes, panel_type);

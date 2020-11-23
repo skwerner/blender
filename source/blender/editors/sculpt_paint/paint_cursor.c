@@ -1265,7 +1265,13 @@ static bool paint_cursor_context_init(bContext *C,
   pcontext->scene = CTX_data_scene(C);
   pcontext->ups = &pcontext->scene->toolsettings->unified_paint_settings;
   pcontext->paint = BKE_paint_get_active_from_context(C);
+  if (pcontext->paint == NULL) {
+    return false;
+  }
   pcontext->brush = BKE_paint_brush(pcontext->paint);
+  if (pcontext->brush == NULL) {
+    return false;
+  }
   pcontext->mode = BKE_paintmode_get_active_from_context(C);
 
   ED_view3d_viewcontext_init(C, &pcontext->vc, pcontext->depsgraph);
@@ -1303,6 +1309,11 @@ static bool paint_cursor_context_init(bContext *C,
 
   Object *active_object = pcontext->vc.obact;
   pcontext->ss = active_object ? active_object->sculpt : NULL;
+
+  if (pcontext->ss && pcontext->ss->draw_faded_cursor) {
+    pcontext->outline_alpha = 0.3f;
+    copy_v3_fl(pcontext->outline_col, 0.8f);
+  }
 
   pcontext->is_stroke_active = pcontext->ups->stroke_active;
 

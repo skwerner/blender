@@ -28,6 +28,10 @@
 #include "DNA_listBase.h"
 #include "DNA_vec_types.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define MAXTEXTBOX 256 /* used in readfile.c and editfont.c */
 
 struct AnimData;
@@ -519,6 +523,10 @@ typedef enum eBezTriple_KeyframeType {
        (bezt)->f2 & SELECT : \
        BEZT_ISSEL_ANY(bezt))
 
+#define BEZT_ISSEL_IDX(bezt, i) \
+  ((i == 0 && (bezt)->f1 & SELECT) || (i == 1 && (bezt)->f2 & SELECT) || \
+   (i == 2 && (bezt)->f3 & SELECT))
+
 #define BEZT_SEL_ALL(bezt) \
   { \
     (bezt)->f1 |= SELECT; \
@@ -531,6 +539,49 @@ typedef enum eBezTriple_KeyframeType {
     (bezt)->f1 &= ~SELECT; \
     (bezt)->f2 &= ~SELECT; \
     (bezt)->f3 &= ~SELECT; \
+  } \
+  ((void)0)
+#define BEZT_SEL_INVERT(bezt) \
+  { \
+    (bezt)->f1 ^= SELECT; \
+    (bezt)->f2 ^= SELECT; \
+    (bezt)->f3 ^= SELECT; \
+  } \
+  ((void)0)
+
+#define BEZT_SEL_IDX(bezt, i) \
+  { \
+    switch (i) { \
+      case 0: \
+        (bezt)->f1 |= SELECT; \
+        break; \
+      case 1: \
+        (bezt)->f2 |= SELECT; \
+        break; \
+      case 2: \
+        (bezt)->f3 |= SELECT; \
+        break; \
+      default: \
+        break; \
+    } \
+  } \
+  ((void)0)
+
+#define BEZT_DESEL_IDX(bezt, i) \
+  { \
+    switch (i) { \
+      case 0: \
+        (bezt)->f1 &= ~SELECT; \
+        break; \
+      case 1: \
+        (bezt)->f2 &= ~SELECT; \
+        break; \
+      case 2: \
+        (bezt)->f3 &= ~SELECT; \
+        break; \
+      default: \
+        break; \
+    } \
   } \
   ((void)0)
 
@@ -559,3 +610,7 @@ enum {
 
 /* indicates point has been seen during surface duplication */
 #define SURF_SEEN 4
+
+#ifdef __cplusplus
+}
+#endif

@@ -30,6 +30,7 @@
 
 #include "BLT_translation.h"
 
+#include "DNA_defaults.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_meshdata_types.h"
@@ -67,10 +68,10 @@
 static void initData(GpencilModifierData *md)
 {
   MirrorGpencilModifierData *gpmd = (MirrorGpencilModifierData *)md;
-  gpmd->pass_index = 0;
-  gpmd->material = NULL;
-  gpmd->object = NULL;
-  gpmd->flag |= GP_MIRROR_AXIS_X;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(gpmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(gpmd, DNA_struct_default_get(MirrorGpencilModifierData), modifier);
 }
 
 static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
@@ -150,7 +151,7 @@ static void generate_geometry(GpencilModifierData *md, Object *ob, bGPDlayer *gp
                                            mmd->flag & GP_MIRROR_INVERT_PASS,
                                            mmd->flag & GP_MIRROR_INVERT_LAYERPASS,
                                            mmd->flag & GP_MIRROR_INVERT_MATERIAL)) {
-          gps_new = BKE_gpencil_stroke_duplicate(gps, true);
+          gps_new = BKE_gpencil_stroke_duplicate(gps, true, true);
           update_position(ob, mmd, gps_new, xi);
           BLI_addtail(&gpf->strokes, gps_new);
         }

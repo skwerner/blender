@@ -24,7 +24,7 @@
 #include <ctype.h>
 #include <float.h>
 #include <math.h>
-#include <stddef.h>  //for offsetof
+#include <stddef.h> /* for offsetof */
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -114,7 +114,7 @@
 #include "WM_toolsystem.h"
 #include "WM_types.h"
 
-#include "object_intern.h"  // own include
+#include "object_intern.h" /* own include */
 
 static CLG_LogRef LOG = {"ed.object.edit"};
 
@@ -163,13 +163,32 @@ Object **ED_object_array_in_mode_or_selected(bContext *C,
   ScrArea *area = CTX_wm_area(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
   Object *ob_active = OBACT(view_layer);
+  ID *id_pin = NULL;
+  const bool use_objects_in_mode = (ob_active != NULL) &&
+                                   (ob_active->mode & (OB_MODE_EDIT | OB_MODE_POSE));
+  const char space_type = area ? area->spacetype : SPACE_EMPTY;
   Object **objects;
 
   Object *ob = NULL;
   bool use_ob = true;
-  if (area && (area->spacetype == SPACE_PROPERTIES)) {
-    /* May return pinned object. */
-    ob = ED_object_context(C);
+
+  if (space_type == SPACE_PROPERTIES) {
+    SpaceProperties *sbuts = area->spacedata.first;
+    id_pin = sbuts->pinid;
+  }
+
+  if (id_pin && (GS(id_pin->name) == ID_OB)) {
+    /* Pinned data takes priority, in this case ignore selection & other objects in the mode. */
+    ob = (Object *)id_pin;
+  }
+  else if ((space_type == SPACE_PROPERTIES) && (use_objects_in_mode == false)) {
+    /* When using the space-properties, we don't want to use the entire selection
+     * as the current active object may not be selected.
+     *
+     * This is not the case when we're in a mode that supports multi-mode editing,
+     * since the active object and all other objects in the mode will be included
+     * irrespective of selection. */
+    ob = ob_active;
   }
   else if (ob_active && (ob_active->mode &
                          (OB_MODE_ALL_PAINT | OB_MODE_ALL_SCULPT | OB_MODE_ALL_PAINT_GPENCIL))) {
@@ -192,10 +211,10 @@ Object **ED_object_array_in_mode_or_selected(bContext *C,
     }
   }
   else {
-    const View3D *v3d = (area && area->spacetype == SPACE_VIEW3D) ? area->spacedata.first : NULL;
+    const View3D *v3d = (space_type == SPACE_VIEW3D) ? area->spacedata.first : NULL;
     /* When in a mode that supports multiple active objects, use "objects in mode"
      * instead of the object's selection. */
-    if ((ob_active != NULL) && (ob_active->mode & (OB_MODE_EDIT | OB_MODE_POSE))) {
+    if (use_objects_in_mode) {
       objects = BKE_view_layer_array_from_objects_in_mode(view_layer,
                                                           v3d,
                                                           r_objects_len,
@@ -257,6 +276,7 @@ static int object_hide_view_clear_exec(bContext *C, wmOperator *op)
   BKE_layer_collection_sync(scene, view_layer);
   DEG_id_tag_update(&scene->id, ID_RECALC_BASE_FLAGS);
   WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, scene);
+  WM_event_add_notifier(C, NC_SCENE | ND_OB_VISIBLE, scene);
 
   return OPERATOR_FINISHED;
 }
@@ -314,6 +334,7 @@ static int object_hide_view_set_exec(bContext *C, wmOperator *op)
   BKE_layer_collection_sync(scene, view_layer);
   DEG_id_tag_update(&scene->id, ID_RECALC_BASE_FLAGS);
   WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, scene);
+  WM_event_add_notifier(C, NC_SCENE | ND_OB_VISIBLE, scene);
 
   return OPERATOR_FINISHED;
 }
@@ -430,7 +451,7 @@ static int object_hide_collection_invoke(bContext *C, wmOperator *op, const wmEv
 
   /* Open popup menu. */
   const char *title = CTX_IFACE_(op->type->translation_context, op->type->name);
-  uiPopupMenu *pup = UI_popup_menu_begin(C, title, ICON_GROUP);
+  uiPopupMenu *pup = UI_popup_menu_begin(C, title, ICON_OUTLINER_COLLECTION);
   uiLayout *layout = UI_popup_menu_layout(pup);
 
   ED_collection_hide_menu_draw(C, layout);
@@ -740,7 +761,7 @@ bool ED_object_editmode_enter_ex(Main *bmain, Scene *scene, Object *ob, int flag
 
     WM_main_add_notifier(NC_SCENE | ND_MODE | NS_EDITMODE_LATTICE, scene);
   }
-  else if (ob->type == OB_SURF || ob->type == OB_CURVE) {
+  else if (ELEM(ob->type, OB_SURF, OB_CURVE)) {
     ok = 1;
     ED_curve_editnurb_make(ob);
 

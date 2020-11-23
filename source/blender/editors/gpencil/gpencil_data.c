@@ -580,7 +580,7 @@ static int gpencil_layer_duplicate_object_exec(bContext *C, wmOperator *op)
     LISTBASE_FOREACH (bGPDstroke *, gps_src, &gpf_src->strokes) {
 
       /* Make copy of source stroke. */
-      bGPDstroke *gps_dst = BKE_gpencil_stroke_duplicate(gps_src, true);
+      bGPDstroke *gps_dst = BKE_gpencil_stroke_duplicate(gps_src, true, true);
 
       /* Check if material is in destination object,
        * otherwise add the slot with the material. */
@@ -1316,59 +1316,59 @@ void GPENCIL_OT_layer_isolate(wmOperatorType *ot)
 static int gpencil_merge_layer_exec(bContext *C, wmOperator *op)
 {
   bGPdata *gpd = ED_gpencil_data_get_active(C);
-  bGPDlayer *gpl_next = BKE_gpencil_layer_active_get(gpd);
-  bGPDlayer *gpl_current = gpl_next->prev;
+  bGPDlayer *gpl_src = BKE_gpencil_layer_active_get(gpd);
+  bGPDlayer *gpl_dst = gpl_src->prev;
 
-  if (ELEM(NULL, gpd, gpl_current, gpl_next)) {
+  if (ELEM(NULL, gpd, gpl_dst, gpl_src)) {
     BKE_report(op->reports, RPT_ERROR, "No layers to merge");
     return OPERATOR_CANCELLED;
   }
 
-  /* Collect frames of gpl_current in hash table to avoid O(n^2) lookups */
-  GHash *gh_frames_cur = BLI_ghash_int_new_ex(__func__, 64);
-  LISTBASE_FOREACH (bGPDframe *, gpf, &gpl_current->frames) {
-    BLI_ghash_insert(gh_frames_cur, POINTER_FROM_INT(gpf->framenum), gpf);
+  /* Collect frames of gpl_dst in hash table to avoid O(n^2) lookups. */
+  GHash *gh_frames_dst = BLI_ghash_int_new_ex(__func__, 64);
+  LISTBASE_FOREACH (bGPDframe *, gpf_dst, &gpl_dst->frames) {
+    BLI_ghash_insert(gh_frames_dst, POINTER_FROM_INT(gpf_dst->framenum), gpf_dst);
   }
 
-  /* read all frames from next layer and add any missing in current layer */
-  LISTBASE_FOREACH (bGPDframe *, gpf, &gpl_next->frames) {
-    /* try to find frame in current layer */
-    bGPDframe *frame = BLI_ghash_lookup(gh_frames_cur, POINTER_FROM_INT(gpf->framenum));
-    if (!frame) {
-      bGPDframe *actframe = BKE_gpencil_layer_frame_get(
-          gpl_current, gpf->framenum, GP_GETFRAME_USE_PREV);
-      frame = BKE_gpencil_frame_addnew(gpl_current, gpf->framenum);
-      /* duplicate strokes of current active frame */
-      if (actframe) {
-        BKE_gpencil_frame_copy_strokes(actframe, frame);
+  /* Read all frames from merge layer and add any missing in destination layer. */
+  LISTBASE_FOREACH (bGPDframe *, gpf_src, &gpl_src->frames) {
+    /* Try to find frame in destination layer hash table. */
+    bGPDframe *gpf_dst = BLI_ghash_lookup(gh_frames_dst, POINTER_FROM_INT(gpf_src->framenum));
+    if (!gpf_dst) {
+      gpf_dst = BKE_gpencil_frame_addnew(gpl_dst, gpf_src->framenum);
+      /* Duplicate strokes into destination frame. */
+      if (gpf_dst) {
+        BKE_gpencil_frame_copy_strokes(gpf_src, gpf_dst);
       }
     }
-    /* add to tail all strokes */
-    BLI_movelisttolist(&frame->strokes, &gpf->strokes);
+    else {
+      /* Add to tail all strokes. */
+      BLI_movelisttolist(&gpf_dst->strokes, &gpf_src->strokes);
+    }
   }
 
   /* Add Masks to destination layer. */
-  LISTBASE_FOREACH (bGPDlayer_Mask *, mask, &gpl_next->mask_layers) {
+  LISTBASE_FOREACH (bGPDlayer_Mask *, mask, &gpl_src->mask_layers) {
     /* Don't add merged layers or missing layer names. */
-    if (!BKE_gpencil_layer_named_get(gpd, mask->name) || STREQ(mask->name, gpl_next->info) ||
-        STREQ(mask->name, gpl_current->info)) {
+    if (!BKE_gpencil_layer_named_get(gpd, mask->name) || STREQ(mask->name, gpl_src->info) ||
+        STREQ(mask->name, gpl_dst->info)) {
       continue;
     }
-    if (!BKE_gpencil_layer_mask_named_get(gpl_current, mask->name)) {
+    if (!BKE_gpencil_layer_mask_named_get(gpl_dst, mask->name)) {
       bGPDlayer_Mask *mask_new = MEM_dupallocN(mask);
-      BLI_addtail(&gpl_current->mask_layers, mask_new);
-      gpl_current->act_mask++;
+      BLI_addtail(&gpl_dst->mask_layers, mask_new);
+      gpl_dst->act_mask++;
     }
   }
   /* Set destination layer as active. */
-  BKE_gpencil_layer_active_set(gpd, gpl_current);
+  BKE_gpencil_layer_active_set(gpd, gpl_dst);
 
   /* Now delete next layer */
-  BKE_gpencil_layer_delete(gpd, gpl_next);
-  BLI_ghash_free(gh_frames_cur, NULL, NULL);
+  BKE_gpencil_layer_delete(gpd, gpl_src);
+  BLI_ghash_free(gh_frames_dst, NULL, NULL);
 
   /* Reorder masking. */
-  BKE_gpencil_layer_mask_sort(gpd, gpl_current);
+  BKE_gpencil_layer_mask_sort(gpd, gpl_dst);
 
   /* notifiers */
   DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
@@ -1531,6 +1531,7 @@ static int gpencil_stroke_arrange_exec(bContext *C, wmOperator *op)
   const int direction = RNA_enum_get(op->ptr, "direction");
   const bool is_multiedit = (bool)GPENCIL_MULTIEDIT_SESSIONS_ON(gpd);
 
+  bool changed = false;
   CTX_DATA_BEGIN (C, bGPDlayer *, gpl, editable_gpencil_layers) {
     /* temp listbase to store selected strokes */
     ListBase selected = {NULL};
@@ -1557,14 +1558,14 @@ static int gpencil_stroke_arrange_exec(bContext *C, wmOperator *op)
               continue;
             }
             /* some stroke is already at front*/
-            if ((direction == GP_STROKE_MOVE_TOP) || (direction == GP_STROKE_MOVE_UP)) {
+            if (ELEM(direction, GP_STROKE_MOVE_TOP, GP_STROKE_MOVE_UP)) {
               if (gps == gpf->strokes.last) {
                 gpf_lock = true;
                 continue;
               }
             }
             /* some stroke is already at botom */
-            if ((direction == GP_STROKE_MOVE_BOTTOM) || (direction == GP_STROKE_MOVE_DOWN)) {
+            if (ELEM(direction, GP_STROKE_MOVE_BOTTOM, GP_STROKE_MOVE_DOWN)) {
               if (gps == gpf->strokes.first) {
                 gpf_lock = true;
                 continue;
@@ -1589,7 +1590,7 @@ static int gpencil_stroke_arrange_exec(bContext *C, wmOperator *op)
               break;
             /* Bring Forward */
             case GP_STROKE_MOVE_UP:
-              for (LinkData *link = selected.last; link; link = link->prev) {
+              LISTBASE_FOREACH_BACKWARD (LinkData *, link, &selected) {
                 gps = link->data;
                 BLI_listbase_link_move(&gpf->strokes, gps, 1);
               }
@@ -1603,7 +1604,7 @@ static int gpencil_stroke_arrange_exec(bContext *C, wmOperator *op)
               break;
             /* Send to Back */
             case GP_STROKE_MOVE_BOTTOM:
-              for (LinkData *link = selected.last; link; link = link->prev) {
+              LISTBASE_FOREACH_BACKWARD (LinkData *, link, &selected) {
                 gps = link->data;
                 BLI_remlink(&gpf->strokes, gps);
                 BLI_addhead(&gpf->strokes, gps);
@@ -1612,6 +1613,7 @@ static int gpencil_stroke_arrange_exec(bContext *C, wmOperator *op)
             default:
               BLI_assert(0);
               break;
+              changed = true;
           }
         }
         BLI_freelistN(&selected);
@@ -1625,9 +1627,11 @@ static int gpencil_stroke_arrange_exec(bContext *C, wmOperator *op)
   }
   CTX_DATA_END;
 
-  /* notifiers */
-  DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
-  WM_event_add_notifier(C, NC_GPENCIL | ND_DATA | NA_EDITED, NULL);
+  if (changed) {
+    /* notifiers */
+    DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
+    WM_event_add_notifier(C, NC_GPENCIL | ND_DATA | NA_EDITED, NULL);
+  }
 
   return OPERATOR_FINISHED;
 }
@@ -1693,6 +1697,7 @@ static int gpencil_stroke_change_color_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
+  bool changed = false;
   /* loop all strokes */
   CTX_DATA_BEGIN (C, bGPDlayer *, gpl, editable_gpencil_layers) {
     bGPDframe *init_gpf = (is_multiedit) ? gpl->frames.first : gpl->actframe;
@@ -1717,6 +1722,8 @@ static int gpencil_stroke_change_color_exec(bContext *C, wmOperator *op)
 
             /* assign new color */
             gps->mat_nr = idx;
+
+            changed = true;
           }
         }
       }
@@ -1728,9 +1735,11 @@ static int gpencil_stroke_change_color_exec(bContext *C, wmOperator *op)
   }
   CTX_DATA_END;
 
-  /* notifiers */
-  DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
-  WM_event_add_notifier(C, NC_GPENCIL | ND_DATA | NA_EDITED, NULL);
+  if (changed) {
+    /* notifiers */
+    DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
+    WM_event_add_notifier(C, NC_GPENCIL | ND_DATA | NA_EDITED, NULL);
+  }
 
   return OPERATOR_FINISHED;
 }
@@ -1757,9 +1766,7 @@ void GPENCIL_OT_stroke_change_color(wmOperatorType *ot)
 static int gpencil_material_lock_unsused_exec(bContext *C, wmOperator *UNUSED(op))
 {
   bGPdata *gpd = ED_gpencil_data_get_active(C);
-
   Object *ob = CTX_data_active_object(C);
-
   short *totcol = BKE_object_material_len_p(ob);
 
   /* sanity checks */
@@ -1776,6 +1783,7 @@ static int gpencil_material_lock_unsused_exec(bContext *C, wmOperator *UNUSED(op
     }
   }
 
+  bool changed = false;
   /* loop all selected strokes and unlock any color */
   LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
     /* only editable and visible layers are considered */
@@ -1793,19 +1801,24 @@ static int gpencil_material_lock_unsused_exec(bContext *C, wmOperator *UNUSED(op
             tmp_ma->gp_style->flag &= ~GP_MATERIAL_LOCKED;
             DEG_id_tag_update(&tmp_ma->id, ID_RECALC_COPY_ON_WRITE);
           }
+
+          changed = true;
         }
       }
     }
   }
-  /* updates */
-  DEG_id_tag_update(&gpd->id, ID_RECALC_GEOMETRY);
 
-  /* copy on write tag is needed, or else no refresh happens */
-  DEG_id_tag_update(&gpd->id, ID_RECALC_COPY_ON_WRITE);
+  if (changed) {
+    /* updates */
+    DEG_id_tag_update(&gpd->id, ID_RECALC_GEOMETRY);
 
-  /* notifiers */
-  DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
-  WM_event_add_notifier(C, NC_GPENCIL | ND_DATA | NA_EDITED, NULL);
+    /* copy on write tag is needed, or else no refresh happens */
+    DEG_id_tag_update(&gpd->id, ID_RECALC_COPY_ON_WRITE);
+
+    /* notifiers */
+    DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
+    WM_event_add_notifier(C, NC_GPENCIL | ND_DATA | NA_EDITED, NULL);
+  }
 
   return OPERATOR_FINISHED;
 }
@@ -3035,7 +3048,7 @@ static int gpencil_material_isolate_exec(bContext *C, wmOperator *op)
   for (short i = 0; i < *totcol; i++) {
     ma = BKE_gpencil_material(ob, i + 1);
     /* Skip if this is the active one */
-    if ((ma == NULL) || (ma == active_ma)) {
+    if (ELEM(ma, NULL, active_ma)) {
       continue;
     }
 
@@ -3476,7 +3489,6 @@ static int gpencil_set_active_material_exec(bContext *C, wmOperator *op)
 {
   Object *ob = CTX_data_active_object(C);
   bGPdata *gpd = ED_gpencil_data_get_active(C);
-  bool changed = false;
 
   /* Sanity checks. */
   if (gpd == NULL) {
@@ -3484,6 +3496,7 @@ static int gpencil_set_active_material_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
+  bool changed = false;
   /* Loop all selected strokes. */
   GP_EDITABLE_STROKES_BEGIN (gpstroke_iter, C, gpl, gps) {
     if (gps->flag & GP_STROKE_SELECT) {

@@ -33,6 +33,9 @@ struct ListBase;
 struct ModifierUpdateDepsgraphContext;
 struct Object;
 struct ShaderFxData;
+struct BlendWriter;
+struct BlendDataReader;
+struct BlendLibReader;
 
 #define SHADER_FX_ACTIVE(_fx, _is_render) \
   ((((_fx)->mode & eShaderFxMode_Realtime) && (_is_render == false)) || \
@@ -151,6 +154,7 @@ typedef struct ShaderFxTypeInfo {
 void BKE_shaderfx_init(void);
 
 void BKE_shaderfxType_panel_id(ShaderFxType type, char *r_idname);
+void BKE_shaderfx_panel_expand(struct ShaderFxData *fx);
 const ShaderFxTypeInfo *BKE_shaderfx_get_info(ShaderFxType type);
 struct ShaderFxData *BKE_shaderfx_new(int type);
 void BKE_shaderfx_free_ex(struct ShaderFxData *fx, const int flag);
@@ -168,6 +172,10 @@ void BKE_shaderfx_copy(struct ListBase *dst, const struct ListBase *src);
 void BKE_shaderfx_foreach_ID_link(struct Object *ob, ShaderFxIDWalkFunc walk, void *userData);
 
 bool BKE_shaderfx_has_gpencil(struct Object *ob);
+
+void BKE_shaderfx_blend_write(struct BlendWriter *writer, struct ListBase *fxbase);
+void BKE_shaderfx_blend_read_data(struct BlendDataReader *reader, struct ListBase *lb);
+void BKE_shaderfx_blend_read_lib(struct BlendLibReader *reader, struct Object *ob);
 
 #ifdef __cplusplus
 }

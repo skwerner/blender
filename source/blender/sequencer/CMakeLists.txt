@@ -20,18 +20,23 @@
 
 set(INC
   .
+  intern
   ../blenkernel
   ../blenlib
+  ../blenloader
   ../blentranslation
   ../depsgraph
   ../imbuf
   ../makesdna
   ../makesrna
-  ../render/extern/include
+  ../render
   ../blenfont
   ../windowmanager
   ../../../intern/atomic
   ../../../intern/guardedalloc
+
+  # dna_type_offsets.h
+  ${CMAKE_CURRENT_BINARY_DIR}/../makesdna/intern
 )
 
 set(INC_SYS
@@ -39,13 +44,35 @@ set(INC_SYS
 )
 
 set(SRC
-  BKE_sequencer.h
+  SEQ_sequencer.h
 
-  intern/sequencer.c
-  intern/image_cache.c
+  intern/clipboard.c
   intern/effects.c
+  intern/effects.h
+  intern/image_cache.c
+  intern/image_cache.h
+  intern/iterator.c
   intern/modifier.c
+  intern/multiview.c
+  intern/multiview.h
   intern/prefetch.c
+  intern/prefetch.h
+  intern/proxy.c
+  intern/proxy.h
+  intern/render.c
+  intern/render.h
+  intern/sequencer.c
+  intern/sequencer.h
+  intern/sound.c
+  intern/strip_add.c
+  intern/strip_edit.c
+  intern/strip_relations.c
+  intern/strip_select.c
+  intern/strip_time.c
+  intern/strip_time.h
+  intern/strip_transform.c
+  intern/utils.c
+  intern/utils.h
 )
 
 set(LIB
@@ -66,3 +93,6 @@ if(WITH_AUDASPACE)
 endif()
 
 blender_add_lib(bf_sequencer "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
+
+# Needed so we can use dna_type_offsets.h.
+add_dependencies(bf_sequencer bf_dna)

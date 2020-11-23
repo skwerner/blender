@@ -98,7 +98,8 @@
 
 #include "PIL_time.h"
 
-// #define USE_OP_RESET_BUT  // we may want to make this optional, disable for now.
+/* we may want to make this optional, disable for now. */
+// #define USE_OP_RESET_BUT
 
 /* defines for templateID/TemplateSearch */
 #define TEMPLATE_SEARCH_TEXTBUT_WIDTH (UI_UNIT_X * 6)
@@ -1229,7 +1230,7 @@ static void template_ID_tabs(const bContext *C,
 
   LISTBASE_FOREACH (LinkData *, link, &ordered) {
     ID *id = link->data;
-    const int name_width = UI_fontstyle_string_width(&style->widgetlabel, id->name + 2);
+    const int name_width = UI_fontstyle_string_width(&style->widget, id->name + 2);
     const int but_width = name_width + UI_UNIT_X;
 
     uiButTab *tab = (uiButTab *)uiDefButR_prop(block,
@@ -1930,7 +1931,7 @@ void uiTemplateModifiers(uiLayout *UNUSED(layout), bContext *C)
       }
 
       /* Move to the next instanced panel corresponding to the next modifier. */
-      while ((panel->type == NULL) || !(panel->type->flag & PNL_INSTANCED)) {
+      while ((panel->type == NULL) || !(panel->type->flag & PANEL_TYPE_INSTANCED)) {
         panel = panel->next;
         BLI_assert(panel != NULL); /* There shouldn't be fewer panels than modifiers with UIs. */
       }
@@ -2095,7 +2096,7 @@ void uiTemplateConstraints(uiLayout *UNUSED(layout), bContext *C, bool use_bone_
       }
 
       /* Move to the next instanced panel corresponding to the next constraint. */
-      while ((panel->type == NULL) || !(panel->type->flag & PNL_INSTANCED)) {
+      while ((panel->type == NULL) || !(panel->type->flag & PANEL_TYPE_INSTANCED)) {
         panel = panel->next;
         BLI_assert(panel != NULL); /* There shouldn't be fewer panels than constraint panels. */
       }
@@ -2165,7 +2166,7 @@ void uiTemplateGpencilModifiers(uiLayout *UNUSED(layout), bContext *C)
       }
 
       /* Move to the next instanced panel corresponding to the next modifier. */
-      while ((panel->type == NULL) || !(panel->type->flag & PNL_INSTANCED)) {
+      while ((panel->type == NULL) || !(panel->type->flag & PANEL_TYPE_INSTANCED)) {
         panel = panel->next;
         BLI_assert(panel != NULL); /* There shouldn't be fewer panels than modifiers with UIs. */
       }
@@ -2236,7 +2237,7 @@ void uiTemplateShaderFx(uiLayout *UNUSED(layout), bContext *C)
       }
 
       /* Move to the next instanced panel corresponding to the next modifier. */
-      while ((panel->type == NULL) || !(panel->type->flag & PNL_INSTANCED)) {
+      while ((panel->type == NULL) || !(panel->type->flag & PANEL_TYPE_INSTANCED)) {
         panel = panel->next;
         BLI_assert(panel != NULL); /* There shouldn't be fewer panels than modifiers with UIs. */
       }
@@ -2966,7 +2967,7 @@ static void rna_update_cb(bContext *C, void *arg_cb, void *UNUSED(arg))
   RNAUpdateCb *cb = (RNAUpdateCb *)arg_cb;
 
   /* we call update here on the pointer property, this way the
-   * owner of the curve mapping can still define it's own update
+   * owner of the curve mapping can still define its own update
    * and notifier, even if the CurveMapping struct is shared. */
   RNA_property_update(C, &cb->ptr, cb->prop);
 }
@@ -3303,7 +3304,6 @@ static void colorband_buttons_layout(uiLayout *layout,
       row = uiLayoutRow(split, false);
       uiItemR(row, &ptr, "position", 0, IFACE_("Pos"), ICON_NONE);
       bt = block->buttons.last;
-      bt->a1 = 1.0f; /* gives a bit more precision for modifying position */
       UI_but_func_set(bt, colorband_update_cb, bt, coba);
 
       row = uiLayoutRow(layout, false);
@@ -3335,7 +3335,6 @@ static void colorband_buttons_layout(uiLayout *layout,
       row = uiLayoutRow(subsplit, false);
       uiItemR(row, &ptr, "position", UI_ITEM_R_SLIDER, IFACE_("Pos"), ICON_NONE);
       bt = block->buttons.last;
-      bt->a1 = 1.0f; /* gives a bit more precision for modifying position */
       UI_but_func_set(bt, colorband_update_cb, bt, coba);
 
       row = uiLayoutRow(split, false);
@@ -4970,7 +4969,7 @@ static void CurveProfile_buttons_layout(uiLayout *layout, PointerRNA *ptr, RNAUp
       selection_y = &point->h2_loc[1];
     }
   }
-  if (i == 0 || i == profile->path_len - 1) {
+  if (ELEM(i, 0, profile->path_len - 1)) {
     point_last_or_first = true;
   }
 
@@ -5329,7 +5328,7 @@ static void ui_template_palette_menu(bContext *UNUSED(C), uiLayout *layout, void
 {
   uiLayout *row;
 
-  uiItemL(layout, IFACE_("Sort by:"), ICON_NONE);
+  uiItemL(layout, IFACE_("Sort By:"), ICON_NONE);
   row = uiLayoutRow(layout, false);
   uiItemEnumO_value(row, IFACE_("Hue"), ICON_NONE, "PALETTE_OT_sort", "type", 1);
   row = uiLayoutRow(layout, false);
@@ -5641,7 +5640,7 @@ static void uilist_draw_filter_default(struct uiList *ui_list,
           "use_filter_invert",
           UI_ITEM_R_TOGGLE | UI_ITEM_R_ICON_ONLY,
           "",
-          (ui_list->filter_flag & UILST_FLT_EXCLUDE) ? ICON_ZOOM_OUT : ICON_ZOOM_IN);
+          ICON_ARROW_LEFTRIGHT);
 
   if ((ui_list->filter_sort_flag & UILST_FLT_SORT_LOCK) == 0) {
     subrow = uiLayoutRow(row, true);

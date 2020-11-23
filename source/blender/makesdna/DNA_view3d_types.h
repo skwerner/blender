@@ -39,6 +39,10 @@ struct wmTimer;
 #include "DNA_object_types.h"
 #include "DNA_view3d_enums.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct RegionView3D {
 
   /** GL_PROJECTION matrix. */
@@ -223,6 +227,7 @@ typedef struct View3DOverlay {
 
   /** Other settings. */
   float wireframe_threshold;
+  float wireframe_opacity;
 
   /** Grease pencil settings. */
   float gpencil_paper_opacity;
@@ -233,7 +238,6 @@ typedef struct View3DOverlay {
   float gpencil_vertex_paint_opacity;
   /** Handles display type for curves. */
   int handle_display;
-  char _pad[4];
 } View3DOverlay;
 
 /* View3DOverlay->handle_display */
@@ -635,3 +639,7 @@ enum {
 /** #BKE_screen_view3d_zoom_to_fac() values above */
 #define RV3D_CAMZOOM_MIN_FACTOR 0.1657359312880714853f
 #define RV3D_CAMZOOM_MAX_FACTOR 44.9852813742385702928f
+
+#ifdef __cplusplus
+}
+#endif

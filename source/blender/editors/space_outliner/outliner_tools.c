@@ -65,7 +65,6 @@
 #include "BKE_report.h"
 #include "BKE_scene.h"
 #include "BKE_screen.h"
-#include "BKE_sequencer.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
@@ -88,6 +87,8 @@
 #include "RNA_access.h"
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
+
+#include "SEQ_sequencer.h"
 
 #include "outliner_intern.h"
 
@@ -729,6 +730,9 @@ static void id_local_fn(bContext *C,
     else {
       BKE_main_id_clear_newpoins(bmain);
     }
+  }
+  else if (ID_IS_OVERRIDE_LIBRARY_REAL(tselem->id)) {
+    BKE_lib_override_library_free(&tselem->id->override_library, true);
   }
 }
 
@@ -1791,7 +1795,7 @@ static bool outliner_id_operation_item_poll(bContext *C,
         return true;
       }
       /* TODO(dalai): enable in the few cases where this can be supported
-      (i.e., when we have a valid parent for the tselem). */
+       * (i.e., when we have a valid parent for the tselem). */
       return false;
   }
 

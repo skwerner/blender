@@ -70,6 +70,9 @@ typedef struct SDefAdjacencyArray {
   uint num; /* Careful, this is twice the number of polygons (avoids an extra loop) */
 } SDefAdjacencyArray;
 
+/**
+ * Polygons per edge (only 2, any more will exit calculation).
+ */
 typedef struct SDefEdgePolys {
   uint polys[2], num;
 } SDefEdgePolys;
@@ -83,37 +86,67 @@ typedef struct SDefBindCalcData {
   const MPoly *const mpoly;
   const MEdge *const medge;
   const MLoop *const mloop;
+  /** Coordinates to bind to, transformed into local space (compatible with `vertexCos`). */
   float (*const targetCos)[3];
+  /** Coordinates to bind (reference to the modifiers input argument). */
   float (*const vertexCos)[3];
   float imat[4][4];
   const float falloff;
   int success;
 } SDefBindCalcData;
 
+/**
+ * This represents the relationship between a point (a source coordinate)
+ * and the face-corner it's being bound to (from the target mesh).
+ *
+ * \note Some of these values could be de-duplicated however these are only
+ * needed once when running bind, so optimizing this structure isn't a priority.
+ */
 typedef struct SDefBindPoly {
+  /** Coordinates copied directly from the modifiers inptut. */
   float (*coords)[3];
+  /** Coordinates projected into 2D space using `normal`. */
   float (*coords_v2)[2];
+  /** The point being queried projected into 2D space using `normal`. */
   float point_v2[2];
   float weight_angular;
   float weight_dist_proj;
   float weight_dist;
   float weight;
   float scales[2];
+  /** Center of `coords` */
   float centroid[3];
+  /** Center of `coords_v2` */
   float centroid_v2[2];
+  /**
+   * The calculated normal of coords (could be shared between faces).
+   */
   float normal[3];
   float cent_edgemid_vecs_v2[2][2];
+  /**
+   * The unsigned angle of this face-corner in `[0.0 .. PI]` range,
+   * where a small value is a thin corner. PI is is a straight line.
+   * Take care dividing by this value as it can approach zero.
+   */
   float edgemid_angle;
   float point_edgemid_angles[2];
   float corner_edgemid_angles[2];
   float dominant_angle_weight;
+  /** Index of the input polygon. */
   uint index;
+  /** Number of vertices in this face. */
   uint numverts;
+  /**
+   * This polygons loop-start.
+   * \note that we could look this up from the polygon.
+   */
   uint loopstart;
   uint edge_inds[2];
   uint edge_vert_inds[2];
+  /** The index of this corner in the face (starting at zero). */
   uint corner_ind;
   uint dominant_edge;
+  /** When true `point_v2` is inside `coords_v2`. */
   bool inside;
 } SDefBindPoly;
 
@@ -256,7 +289,7 @@ static int buildAdjacencyMap(const MPoly *poly,
 {
   const MLoop *loop;
 
-  /* Fing polygons adjacent to edges */
+  /* Find polygons adjacent to edges. */
   for (int i = 0; i < numpoly; i++, poly++) {
     loop = &mloop[poly->loopstart];
 
@@ -424,15 +457,9 @@ static void freeBindData(SDefBindWeightData *const bwdata)
   MEM_freeN(bwdata);
 }
 
-BLI_INLINE float computeAngularWeight(const float point_angle, const float edgemid_angle)
+BLI_INLINE float computeAngularWeight(const float point_angle)
 {
-  float weight;
-
-  weight = point_angle;
-  weight /= edgemid_angle;
-  weight *= M_PI_2;
-
-  return sinf(weight);
+  return sinf(point_angle * M_PI_2);
 }
 
 BLI_INLINE SDefBindWeightData *computeBindWeights(SDefBindCalcData *const data,
@@ -472,7 +499,7 @@ BLI_INLINE SDefBindWeightData *computeBindWeights(SDefBindCalcData *const data,
   bwdata->bind_polys = bpoly;
 
   /* Loop over all adjacent edges,
-   * and build the SDefBindPoly data for each poly adjacent to those. */
+   * and build the #SDefBindPoly data for each poly adjacent to those. */
   for (vedge = vert_edges; vedge; vedge = vedge->next) {
     uint edge_ind = vedge->index;
 
@@ -481,7 +508,7 @@ BLI_INLINE SDefBindWeightData *computeBindWeights(SDefBindCalcData *const data,
         bpoly = bwdata->bind_polys;
 
         for (int j = 0; j < bwdata->numpoly; bpoly++, j++) {
-          /* If coords isn't allocated, we have reached the first uninitialized bpoly */
+          /* If coords isn't allocated, we have reached the first uninitialized `bpoly`. */
           if ((bpoly->index == edge_polys[edge_ind].polys[i]) || (!bpoly->coords)) {
             break;
           }
@@ -536,7 +563,7 @@ BLI_INLINE SDefBindWeightData *computeBindWeights(SDefBindCalcData *const data,
           }
         }
 
-        /* Compute poly's parametric data */
+        /* Compute polygons parametric data. */
         mid_v3_v3_array(bpoly->centroid, bpoly->coords, poly->totloop);
         normal_poly_v3(bpoly->normal, bpoly->coords, poly->totloop);
 
@@ -546,7 +573,7 @@ BLI_INLINE SDefBindWeightData *computeBindWeights(SDefBindCalcData *const data,
         cross_v3_v3v3(axis, bpoly->normal, world);
         normalize_v3(axis);
 
-        /* Map coords onto 2d normal plane */
+        /* Map coords onto 2d normal plane. */
         map_to_plane_axis_angle_v2_v3v3fl(bpoly->point_v2, point_co, axis, angle);
 
         zero_v2(bpoly->centroid_v2);
@@ -601,7 +628,7 @@ BLI_INLINE SDefBindWeightData *computeBindWeights(SDefBindCalcData *const data,
         bpoly->corner_edgemid_angles[1] = angle_normalized_v2v2(tmp_vec_v2,
                                                                 bpoly->cent_edgemid_vecs_v2[1]);
 
-        /* Check for inifnite weights, and compute angular data otherwise */
+        /* Check for infinite weights, and compute angular data otherwise. */
         if (bpoly->weight_dist < FLT_EPSILON) {
           inf_weight_flags |= MOD_SDEF_INFINITE_WEIGHT_DIST_PROJ;
           inf_weight_flags |= MOD_SDEF_INFINITE_WEIGHT_DIST;
@@ -658,15 +685,12 @@ BLI_INLINE SDefBindWeightData *computeBindWeights(SDefBindCalcData *const data,
 
       /* Compute angular weight component */
       if (epolys->num == 1) {
-        ang_weights[0] = computeAngularWeight(bpolys[0]->point_edgemid_angles[edge_on_poly[0]],
-                                              bpolys[0]->edgemid_angle);
+        ang_weights[0] = computeAngularWeight(bpolys[0]->point_edgemid_angles[edge_on_poly[0]]);
         bpolys[0]->weight_angular *= ang_weights[0] * ang_weights[0];
       }
       else if (epolys->num == 2) {
-        ang_weights[0] = computeAngularWeight(bpolys[0]->point_edgemid_angles[edge_on_poly[0]],
-                                              bpolys[0]->edgemid_angle);
-        ang_weights[1] = computeAngularWeight(bpolys[1]->point_edgemid_angles[edge_on_poly[1]],
-                                              bpolys[1]->edgemid_angle);
+        ang_weights[0] = computeAngularWeight(bpolys[0]->point_edgemid_angles[edge_on_poly[0]]);
+        ang_weights[1] = computeAngularWeight(bpolys[1]->point_edgemid_angles[edge_on_poly[1]]);
 
         bpolys[0]->weight_angular *= ang_weights[0] * ang_weights[1];
         bpolys[1]->weight_angular *= ang_weights[0] * ang_weights[1];
@@ -674,10 +698,10 @@ BLI_INLINE SDefBindWeightData *computeBindWeights(SDefBindCalcData *const data,
     }
   }
 
-  /* Compute scalings and falloff.
-   * Scale all weights if no infinite weight is found,
-   * scale only unprojected weight if projected weight is infinite,
-   * scale none if both are infinite. */
+  /* Compute scaling and falloff:
+   * - Scale all weights if no infinite weight is found.
+   * - Scale only un-projected weight if projected weight is infinite.
+   * - Scale none if both are infinite. */
   if (!inf_weight_flags) {
     bpoly = bwdata->bind_polys;
 
@@ -707,9 +731,14 @@ BLI_INLINE SDefBindWeightData *computeBindWeights(SDefBindCalcData *const data,
       bpoly->dominant_angle_weight = sinf(bpoly->dominant_angle_weight * M_PI_2);
 
       /* Compute quadratic angular scale interpolation weight */
-      scale_weight = bpoly->point_edgemid_angles[bpoly->dominant_edge] / bpoly->edgemid_angle;
-      scale_weight /= scale_weight +
-                      (bpoly->point_edgemid_angles[!bpoly->dominant_edge] / bpoly->edgemid_angle);
+      {
+        const float edge_angle_a = bpoly->point_edgemid_angles[bpoly->dominant_edge];
+        const float edge_angle_b = bpoly->point_edgemid_angles[!bpoly->dominant_edge];
+        /* Clamp so skinny faces with near zero `edgemid_angle`
+         * won't cause numeric problems. see T81988. */
+        scale_weight = edge_angle_a / max_ff(edge_angle_a, bpoly->edgemid_angle);
+        scale_weight /= scale_weight + (edge_angle_b / max_ff(edge_angle_b, bpoly->edgemid_angle));
+      }
 
       sqr = scale_weight * scale_weight;
       inv_sqr = 1.0f - scale_weight;
@@ -775,6 +804,11 @@ BLI_INLINE SDefBindWeightData *computeBindWeights(SDefBindCalcData *const data,
     else {
       bpoly->weight = 1.0f / bpoly->weight_angular / bpoly->weight_dist_proj / bpoly->weight_dist;
     }
+
+    /* Apply after other kinds of scaling so the faces corner angle is always
+     * scaled in a uniform way, preventing heavily sub-divided triangle fans
+     * from having a lop-sided influence on the weighting, see T81988. */
+    bpoly->weight *= bpoly->edgemid_angle / M_PI;
 
     tot_weight += bpoly->weight;
   }
@@ -891,7 +925,7 @@ static void bindVert(void *__restrict userdata,
         interp_weights_poly_v2(
             sdbind->vert_weights, bpoly->coords_v2, bpoly->numverts, bpoly->point_v2);
 
-        /* Reproject vert based on weights and original poly verts,
+        /* Re-project vert based on weights and original poly verts,
          * to reintroduce poly non-planarity */
         zero_v3(point_co_proj);
         for (int j = 0; j < bpoly->numverts; j++, loop++) {
@@ -1009,7 +1043,8 @@ static void bindVert(void *__restrict userdata,
   freeBindData(bwdata);
 }
 
-static bool surfacedeformBind(SurfaceDeformModifierData *smd_orig,
+static bool surfacedeformBind(Object *ob,
+                              SurfaceDeformModifierData *smd_orig,
                               SurfaceDeformModifierData *smd_eval,
                               float (*vertexCos)[3],
                               uint numverts,
@@ -1030,20 +1065,20 @@ static bool surfacedeformBind(SurfaceDeformModifierData *smd_orig,
 
   vert_edges = MEM_calloc_arrayN(tnumverts, sizeof(*vert_edges), "SDefVertEdgeMap");
   if (vert_edges == NULL) {
-    BKE_modifier_set_error((ModifierData *)smd_eval, "Out of memory");
+    BKE_modifier_set_error(ob, (ModifierData *)smd_eval, "Out of memory");
     return false;
   }
 
   adj_array = MEM_malloc_arrayN(tnumedges, 2 * sizeof(*adj_array), "SDefVertEdge");
   if (adj_array == NULL) {
-    BKE_modifier_set_error((ModifierData *)smd_eval, "Out of memory");
+    BKE_modifier_set_error(ob, (ModifierData *)smd_eval, "Out of memory");
     MEM_freeN(vert_edges);
     return false;
   }
 
   edge_polys = MEM_calloc_arrayN(tnumedges, sizeof(*edge_polys), "SDefEdgeFaceMap");
   if (edge_polys == NULL) {
-    BKE_modifier_set_error((ModifierData *)smd_eval, "Out of memory");
+    BKE_modifier_set_error(ob, (ModifierData *)smd_eval, "Out of memory");
     MEM_freeN(vert_edges);
     MEM_freeN(adj_array);
     return false;
@@ -1051,14 +1086,14 @@ static bool surfacedeformBind(SurfaceDeformModifierData *smd_orig,
 
   smd_orig->verts = MEM_malloc_arrayN(numverts, sizeof(*smd_orig->verts), "SDefBindVerts");
   if (smd_orig->verts == NULL) {
-    BKE_modifier_set_error((ModifierData *)smd_eval, "Out of memory");
+    BKE_modifier_set_error(ob, (ModifierData *)smd_eval, "Out of memory");
     freeAdjacencyMap(vert_edges, adj_array, edge_polys);
     return false;
   }
 
   BKE_bvhtree_from_mesh_get(&treeData, target, BVHTREE_FROM_LOOPTRI, 2);
   if (treeData.tree == NULL) {
-    BKE_modifier_set_error((ModifierData *)smd_eval, "Out of memory");
+    BKE_modifier_set_error(ob, (ModifierData *)smd_eval, "Out of memory");
     freeAdjacencyMap(vert_edges, adj_array, edge_polys);
     MEM_freeN(smd_orig->verts);
     smd_orig->verts = NULL;
@@ -1069,8 +1104,8 @@ static bool surfacedeformBind(SurfaceDeformModifierData *smd_orig,
       mpoly, medge, mloop, tnumpoly, tnumedges, vert_edges, adj_array, edge_polys);
 
   if (adj_result == MOD_SDEF_BIND_RESULT_NONMANY_ERR) {
-    BKE_modifier_set_error((ModifierData *)smd_eval,
-                           "Target has edges with more than two polygons");
+    BKE_modifier_set_error(
+        ob, (ModifierData *)smd_eval, "Target has edges with more than two polygons");
     freeAdjacencyMap(vert_edges, adj_array, edge_polys);
     free_bvhtree_from_mesh(&treeData);
     MEM_freeN(smd_orig->verts);
@@ -1097,7 +1132,7 @@ static bool surfacedeformBind(SurfaceDeformModifierData *smd_orig,
   };
 
   if (data.targetCos == NULL) {
-    BKE_modifier_set_error((ModifierData *)smd_eval, "Out of memory");
+    BKE_modifier_set_error(ob, (ModifierData *)smd_eval, "Out of memory");
     freeData((ModifierData *)smd_orig);
     return false;
   }
@@ -1116,20 +1151,20 @@ static bool surfacedeformBind(SurfaceDeformModifierData *smd_orig,
   MEM_freeN(data.targetCos);
 
   if (data.success == MOD_SDEF_BIND_RESULT_MEM_ERR) {
-    BKE_modifier_set_error((ModifierData *)smd_eval, "Out of memory");
+    BKE_modifier_set_error(ob, (ModifierData *)smd_eval, "Out of memory");
     freeData((ModifierData *)smd_orig);
   }
   else if (data.success == MOD_SDEF_BIND_RESULT_NONMANY_ERR) {
-    BKE_modifier_set_error((ModifierData *)smd_eval,
-                           "Target has edges with more than two polygons");
+    BKE_modifier_set_error(
+        ob, (ModifierData *)smd_eval, "Target has edges with more than two polygons");
     freeData((ModifierData *)smd_orig);
   }
   else if (data.success == MOD_SDEF_BIND_RESULT_CONCAVE_ERR) {
-    BKE_modifier_set_error((ModifierData *)smd_eval, "Target contains concave polygons");
+    BKE_modifier_set_error(ob, (ModifierData *)smd_eval, "Target contains concave polygons");
     freeData((ModifierData *)smd_orig);
   }
   else if (data.success == MOD_SDEF_BIND_RESULT_OVERLAP_ERR) {
-    BKE_modifier_set_error((ModifierData *)smd_eval, "Target contains overlapping vertices");
+    BKE_modifier_set_error(ob, (ModifierData *)smd_eval, "Target contains overlapping vertices");
     freeData((ModifierData *)smd_orig);
   }
   else if (data.success == MOD_SDEF_BIND_RESULT_GENERIC_ERR) {
@@ -1137,7 +1172,7 @@ static bool surfacedeformBind(SurfaceDeformModifierData *smd_orig,
      * to explain this with a reasonably sized message.
      * Though it shouldn't really matter all that much,
      * because this is very unlikely to occur */
-    BKE_modifier_set_error((ModifierData *)smd_eval, "Target contains invalid polygons");
+    BKE_modifier_set_error(ob, (ModifierData *)smd_eval, "Target contains invalid polygons");
     freeData((ModifierData *)smd_orig);
   }
 
@@ -1234,7 +1269,7 @@ static void surfacedeformModifier_do(ModifierData *md,
   if (!(smd->flags & MOD_SDEF_BIND)) {
     if (smd->verts != NULL) {
       if (!DEG_is_active(ctx->depsgraph)) {
-        BKE_modifier_set_error(md, "Attempt to bind from inactive dependency graph");
+        BKE_modifier_set_error(ob, md, "Attempt to bind from inactive dependency graph");
         return;
       }
       ModifierData *md_orig = BKE_modifier_get_original(md);
@@ -1246,7 +1281,7 @@ static void surfacedeformModifier_do(ModifierData *md,
   Object *ob_target = smd->target;
   target = BKE_modifier_get_evaluated_mesh_from_evaluated_object(ob_target, false);
   if (!target) {
-    BKE_modifier_set_error(md, "No valid target mesh");
+    BKE_modifier_set_error(ob, md, "No valid target mesh");
     return;
   }
 
@@ -1256,7 +1291,7 @@ static void surfacedeformModifier_do(ModifierData *md,
   /* If not bound, execute bind. */
   if (smd->verts == NULL) {
     if (!DEG_is_active(ctx->depsgraph)) {
-      BKE_modifier_set_error(md, "Attempt to unbind from inactive dependency graph");
+      BKE_modifier_set_error(ob, md, "Attempt to unbind from inactive dependency graph");
       return;
     }
 
@@ -1270,7 +1305,7 @@ static void surfacedeformModifier_do(ModifierData *md,
     /* Avoid converting edit-mesh data, binding is an exception. */
     BKE_mesh_wrapper_ensure_mdata(target);
 
-    if (!surfacedeformBind(smd_orig, smd, vertexCos, numverts, tnumpoly, tnumverts, target)) {
+    if (!surfacedeformBind(ob, smd_orig, smd, vertexCos, numverts, tnumpoly, tnumverts, target)) {
       smd->flags &= ~MOD_SDEF_BIND;
     }
     /* Early abort, this is binding 'call', no need to perform whole evaluation. */
@@ -1279,17 +1314,17 @@ static void surfacedeformModifier_do(ModifierData *md,
 
   /* Poly count checks */
   if (smd->numverts != numverts) {
-    BKE_modifier_set_error(md, "Vertices changed from %u to %u", smd->numverts, numverts);
+    BKE_modifier_set_error(ob, md, "Vertices changed from %u to %u", smd->numverts, numverts);
     return;
   }
   if (smd->numpoly != tnumpoly) {
-    BKE_modifier_set_error(md, "Target polygons changed from %u to %u", smd->numpoly, tnumpoly);
+    BKE_modifier_set_error(
+        ob, md, "Target polygons changed from %u to %u", smd->numpoly, tnumpoly);
     return;
   }
 
-  /* Early out if modifier would not affect input at all - still *after* the sanity checks (and
-   * potential binding) above.
-   */
+  /* Early out if modifier would not affect input at all - still *after* the sanity checks
+   * (and potential binding) above. */
   if (smd->strength == 0.0f) {
     return;
   }
@@ -1453,8 +1488,7 @@ static void blendWrite(BlendWriter *writer, const ModifierData *md)
           BLO_write_uint32_array(
               writer, smd->verts[i].binds[j].numverts, smd->verts[i].binds[j].vert_inds);
 
-          if (smd->verts[i].binds[j].mode == MOD_SDEF_MODE_CENTROID ||
-              smd->verts[i].binds[j].mode == MOD_SDEF_MODE_LOOPTRI) {
+          if (ELEM(smd->verts[i].binds[j].mode, MOD_SDEF_MODE_CENTROID, MOD_SDEF_MODE_LOOPTRI)) {
             BLO_write_float3_array(writer, 1, smd->verts[i].binds[j].vert_weights);
           }
           else {
@@ -1482,8 +1516,7 @@ static void blendRead(BlendDataReader *reader, ModifierData *md)
           BLO_read_uint32_array(
               reader, smd->verts[i].binds[j].numverts, &smd->verts[i].binds[j].vert_inds);
 
-          if (smd->verts[i].binds[j].mode == MOD_SDEF_MODE_CENTROID ||
-              smd->verts[i].binds[j].mode == MOD_SDEF_MODE_LOOPTRI) {
+          if (ELEM(smd->verts[i].binds[j].mode, MOD_SDEF_MODE_CENTROID, MOD_SDEF_MODE_LOOPTRI)) {
             BLO_read_float3_array(reader, 1, &smd->verts[i].binds[j].vert_weights);
           }
           else {

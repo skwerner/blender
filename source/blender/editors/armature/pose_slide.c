@@ -480,7 +480,7 @@ static void pose_slide_apply_props(tPoseSlideOp *pso,
             float tval = (float)RNA_property_boolean_get(&ptr, prop);
             pose_slide_apply_val(pso, fcu, pfl->ob, &tval);
             RNA_property_boolean_set(
-                &ptr, prop, (int)tval);  // XXX: do we need threshold clamping here?
+                &ptr, prop, (int)tval); /* XXX: do we need threshold clamping here? */
             break;
           }
           case PROP_ENUM: {
@@ -681,14 +681,14 @@ static void pose_slide_rest_pose_apply(bContext *C, tPoseSlideOp *pso)
 
     if (ELEM(pso->channels, PS_TFM_ALL, PS_TFM_BBONE_SHAPE) && (pchan->flag & POSE_BBONE_SHAPE)) {
       /* bbone properties - they all start a "bbone_" prefix */
-      // TODO Not implemented
+      /* TODO Not implemented */
       // pose_slide_apply_props(pso, pfl, "bbone_");
     }
 
     if (ELEM(pso->channels, PS_TFM_ALL, PS_TFM_PROPS) && (pfl->oldprops)) {
       /* Not strictly a transform, but custom properties contribute
        * to the pose produced in many rigs (e.g. the facial rigs used in Sintel). */
-      // TODO Not implemented
+      /* TODO Not implemented */
       // pose_slide_apply_props(pso, pfl, "[\""); /* dummy " for texteditor bugs */
     }
   }
@@ -790,7 +790,7 @@ static void pose_slide_reset(tPoseSlideOp *pso)
 /* ------------------------------------ */
 
 /* draw percentage indicator in header */
-// TODO: Include hints about locks here...
+/* TODO: Include hints about locks here... */
 static void pose_slide_draw_status(tPoseSlideOp *pso)
 {
   char status_str[UI_MAX_DRAW_STR];
@@ -961,7 +961,7 @@ static int pose_slide_invoke_common(bContext *C, wmOperator *op, tPoseSlideOp *p
 
   /* initial apply for operator... */
   /* TODO: need to calculate percentage for initial round too... */
-  if (pso->mode != POSESLIDE_PUSH_REST && pso->mode != POSESLIDE_RELAX_REST) {
+  if (!ELEM(pso->mode, POSESLIDE_PUSH_REST, POSESLIDE_RELAX_REST)) {
     pose_slide_apply(C, pso);
   }
   else {
@@ -1200,7 +1200,7 @@ static int pose_slide_modal(bContext *C, wmOperator *op, const wmEvent *event)
     pose_slide_reset(pso);
 
     /* apply... */
-    if (pso->mode != POSESLIDE_PUSH_REST && pso->mode != POSESLIDE_RELAX_REST) {
+    if (!ELEM(pso->mode, POSESLIDE_PUSH_REST, POSESLIDE_RELAX_REST)) {
       pose_slide_apply(C, pso);
     }
     else {
@@ -1223,7 +1223,7 @@ static void pose_slide_cancel(bContext *UNUSED(C), wmOperator *op)
 static int pose_slide_exec_common(bContext *C, wmOperator *op, tPoseSlideOp *pso)
 {
   /* settings should have been set up ok for applying, so just apply! */
-  if (pso->mode != POSESLIDE_PUSH_REST && pso->mode != POSESLIDE_RELAX_REST) {
+  if (!ELEM(pso->mode, POSESLIDE_PUSH_REST, POSESLIDE_RELAX_REST)) {
     pose_slide_apply(C, pso);
   }
   else {
@@ -1802,7 +1802,7 @@ static void pose_propagate_fcurve(
    * - if only doing selected keyframes, start from the first one
    */
   if (mode != POSE_PROPAGATE_SELECTED_KEYS) {
-    match = binarysearch_bezt_index(fcu->bezt, startFrame, fcu->totvert, &keyExists);
+    match = BKE_fcurve_bezt_binarysearch_index(fcu->bezt, startFrame, fcu->totvert, &keyExists);
 
     if (fcu->bezt[match].vec[1][0] < startFrame) {
       i = match + 1;

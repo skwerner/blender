@@ -459,7 +459,6 @@ static void rna_def_modifier_gpencilnoise(BlenderRNA *brna)
   RNA_def_property_float_sdna(prop, NULL, "factor");
   RNA_def_property_range(prop, 0.0, FLT_MAX);
   RNA_def_property_ui_range(prop, 0.0, 1.0, 0.1, 2);
-  RNA_def_property_float_default(prop, 0.5f);
   RNA_def_property_ui_text(prop, "Offset Factor", "Amount of noise to apply");
   RNA_def_property_update(prop, 0, "rna_GpencilModifier_update");
 
@@ -467,7 +466,6 @@ static void rna_def_modifier_gpencilnoise(BlenderRNA *brna)
   RNA_def_property_float_sdna(prop, NULL, "factor_strength");
   RNA_def_property_range(prop, 0.0, FLT_MAX);
   RNA_def_property_ui_range(prop, 0.0, 1.0, 0.1, 2);
-  RNA_def_property_float_default(prop, 0.5f);
   RNA_def_property_ui_text(prop, "Strength Factor", "Amount of noise to apply to opacity");
   RNA_def_property_update(prop, 0, "rna_GpencilModifier_update");
 
@@ -475,7 +473,6 @@ static void rna_def_modifier_gpencilnoise(BlenderRNA *brna)
   RNA_def_property_float_sdna(prop, NULL, "factor_thickness");
   RNA_def_property_range(prop, 0.0, FLT_MAX);
   RNA_def_property_ui_range(prop, 0.0, 1.0, 0.1, 2);
-  RNA_def_property_float_default(prop, 0.5f);
   RNA_def_property_ui_text(prop, "Thickness Factor", "Amount of noise to apply to thickness");
   RNA_def_property_update(prop, 0, "rna_GpencilModifier_update");
 
@@ -483,7 +480,6 @@ static void rna_def_modifier_gpencilnoise(BlenderRNA *brna)
   RNA_def_property_float_sdna(prop, NULL, "factor_uvs");
   RNA_def_property_range(prop, 0.0, FLT_MAX);
   RNA_def_property_ui_range(prop, 0.0, 1.0, 0.1, 2);
-  RNA_def_property_float_default(prop, 0.5f);
   RNA_def_property_ui_text(prop, "UV Factor", "Amount of noise to apply uv rotation");
   RNA_def_property_update(prop, 0, "rna_GpencilModifier_update");
 
@@ -887,7 +883,6 @@ static void rna_def_modifier_gpencilthick(BlenderRNA *brna)
   RNA_def_property_float_sdna(prop, NULL, "thickness_fac");
   RNA_def_property_range(prop, 0.0, FLT_MAX);
   RNA_def_property_ui_range(prop, 0.0, 10.0, 0.1, 3);
-  RNA_def_property_float_default(prop, 1.0f);
   RNA_def_property_ui_text(prop, "Thickness Factor", "Factor to multiply the thickness with");
   RNA_def_property_update(prop, 0, "rna_GpencilModifier_update");
 
@@ -1218,7 +1213,6 @@ static void rna_def_modifier_gpenciltime(BlenderRNA *brna)
   RNA_def_property_int_sdna(prop, NULL, "sfra");
   RNA_def_property_int_funcs(prop, NULL, "rna_TimeModifier_start_frame_set", NULL);
   RNA_def_property_range(prop, MINFRAME, MAXFRAME);
-  RNA_def_property_int_default(prop, 1);
   RNA_def_property_ui_text(prop, "Start Frame", "First frame of the range");
   RNA_def_property_update(prop, 0, "rna_GpencilModifier_update");
 
@@ -1227,7 +1221,6 @@ static void rna_def_modifier_gpenciltime(BlenderRNA *brna)
   RNA_def_property_int_sdna(prop, NULL, "efra");
   RNA_def_property_int_funcs(prop, NULL, "rna_TimeModifier_end_frame_set", NULL);
   RNA_def_property_range(prop, MINFRAME, MAXFRAME);
-  RNA_def_property_int_default(prop, 250);
   RNA_def_property_ui_text(prop, "End Frame", "Final frame of the range");
   RNA_def_property_update(prop, 0, "rna_GpencilModifier_update");
 
@@ -1273,7 +1266,6 @@ static void rna_def_modifier_gpencilcolor(BlenderRNA *brna)
   prop = RNA_def_property(srna, "hue", PROP_FLOAT, PROP_NONE);
   RNA_def_property_range(prop, 0.0, 1.0);
   RNA_def_property_ui_range(prop, 0.0, 1.0, 0.1, 3);
-  RNA_def_property_float_default(prop, 0.5);
   RNA_def_property_float_sdna(prop, NULL, "hsv[0]");
   RNA_def_property_ui_text(prop, "Hue", "Color Hue");
   RNA_def_property_update(prop, 0, "rna_GpencilModifier_update");
@@ -1281,7 +1273,6 @@ static void rna_def_modifier_gpencilcolor(BlenderRNA *brna)
   prop = RNA_def_property(srna, "saturation", PROP_FLOAT, PROP_NONE);
   RNA_def_property_range(prop, 0.0, FLT_MAX);
   RNA_def_property_ui_range(prop, 0.0, 2.0, 0.1, 3);
-  RNA_def_property_float_default(prop, 1.0);
   RNA_def_property_float_sdna(prop, NULL, "hsv[1]");
   RNA_def_property_ui_text(prop, "Saturation", "Color Saturation");
   RNA_def_property_update(prop, 0, "rna_GpencilModifier_update");
@@ -1289,7 +1280,6 @@ static void rna_def_modifier_gpencilcolor(BlenderRNA *brna)
   prop = RNA_def_property(srna, "value", PROP_FLOAT, PROP_NONE);
   RNA_def_property_range(prop, 0.0, FLT_MAX);
   RNA_def_property_ui_range(prop, 0.0, 2.0, 0.1, 3);
-  RNA_def_property_float_default(prop, 1.0);
   RNA_def_property_float_sdna(prop, NULL, "hsv[2]");
   RNA_def_property_ui_text(prop, "Value", "Color Value");
   RNA_def_property_update(prop, 0, "rna_GpencilModifier_update");
@@ -1382,7 +1372,6 @@ static void rna_def_modifier_gpencilopacity(BlenderRNA *brna)
   RNA_def_property_float_sdna(prop, NULL, "hardeness");
   RNA_def_property_range(prop, 0.0, FLT_MAX);
   RNA_def_property_ui_range(prop, 0.0, FLT_MAX, 0.1, 2);
-  RNA_def_property_float_default(prop, 1.0f);
   RNA_def_property_ui_text(prop, "Hardness", "Factor of stroke hardness");
   RNA_def_property_update(prop, 0, "rna_GpencilModifier_update");
 
@@ -2120,20 +2109,9 @@ static void rna_def_modifier_gpencilmultiply(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Inverse Pass", "Inverse filter");
   RNA_def_property_update(prop, 0, "rna_GpencilModifier_update");
 
-  prop = RNA_def_property(srna, "enable_angle_splitting", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "flags", GP_MULTIPLY_ENABLE_ANGLE_SPLITTING);
-  RNA_def_property_ui_text(prop, "Angle Splitting", "Enable angle splitting");
-  RNA_def_property_update(prop, 0, "rna_GpencilModifier_update");
-
   prop = RNA_def_property(srna, "use_fade", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flags", GP_MULTIPLY_ENABLE_FADING);
   RNA_def_property_ui_text(prop, "Fade", "Fade the stroke thickness for each generated stroke");
-  RNA_def_property_update(prop, 0, "rna_GpencilModifier_update");
-
-  prop = RNA_def_property(srna, "split_angle", PROP_FLOAT, PROP_ANGLE);
-  RNA_def_property_range(prop, 0, M_PI);
-  RNA_def_property_ui_range(prop, 0, M_PI, 10, 2);
-  RNA_def_property_ui_text(prop, "Angle", "Split angle for segments");
   RNA_def_property_update(prop, 0, "rna_GpencilModifier_update");
 
   prop = RNA_def_property(srna, "duplicates", PROP_INT, PROP_NONE);
@@ -2156,19 +2134,16 @@ static void rna_def_modifier_gpencilmultiply(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "fading_thickness", PROP_FLOAT, PROP_NONE);
   RNA_def_property_range(prop, 0, 1);
-  RNA_def_property_float_default(prop, 0.5);
   RNA_def_property_ui_text(prop, "Thickness", "Fade influence of stroke's thickness");
   RNA_def_property_update(prop, 0, "rna_GpencilModifier_update");
 
   prop = RNA_def_property(srna, "fading_opacity", PROP_FLOAT, PROP_NONE);
   RNA_def_property_range(prop, 0, 1);
-  RNA_def_property_float_default(prop, 0.5);
   RNA_def_property_ui_text(prop, "Opacity", "Fade influence of stroke's opacity");
   RNA_def_property_update(prop, 0, "rna_GpencilModifier_update");
 
   prop = RNA_def_property(srna, "fading_center", PROP_FLOAT, PROP_FACTOR);
   RNA_def_property_range(prop, 0, 1);
-  RNA_def_property_float_default(prop, 0.5);
   RNA_def_property_ui_text(prop, "Center", "Fade center");
   RNA_def_property_update(prop, 0, "rna_GpencilModifier_update");
 }
@@ -2267,7 +2242,6 @@ static void rna_def_modifier_gpenciltexture(BlenderRNA *brna)
   RNA_def_property_float_sdna(prop, NULL, "uv_offset");
   RNA_def_property_range(prop, -FLT_MAX, FLT_MAX);
   RNA_def_property_ui_range(prop, -100.0, 100.0, 0.1, 3);
-  RNA_def_property_float_default(prop, 0.0f);
   RNA_def_property_ui_text(prop, "UV Offset", "Offset value to add to stroke UVs");
   RNA_def_property_update(prop, 0, "rna_GpencilModifier_update");
 
@@ -2275,8 +2249,17 @@ static void rna_def_modifier_gpenciltexture(BlenderRNA *brna)
   RNA_def_property_float_sdna(prop, NULL, "uv_scale");
   RNA_def_property_range(prop, 0.0, FLT_MAX);
   RNA_def_property_ui_range(prop, 0.0, 100.0, 0.1, 3);
-  RNA_def_property_float_default(prop, 1.0f);
   RNA_def_property_ui_text(prop, "UV Scale", "Factor to scale the UVs");
+  RNA_def_property_update(prop, 0, "rna_GpencilModifier_update");
+
+  /* Rotation of Dot Texture. */
+  prop = RNA_def_property(srna, "alignment_rotation", PROP_FLOAT, PROP_ANGLE);
+  RNA_def_property_float_sdna(prop, NULL, "alignment_rotation");
+  RNA_def_property_float_default(prop, 0.0f);
+  RNA_def_property_range(prop, -DEG2RADF(90.0f), DEG2RADF(90.0f));
+  RNA_def_property_ui_range(prop, -DEG2RADF(90.0f), DEG2RADF(90.0f), 10, 3);
+  RNA_def_property_ui_text(
+      prop, "Rotation", "Additional rotation applied to dots and square strokes");
   RNA_def_property_update(prop, 0, "rna_GpencilModifier_update");
 
   prop = RNA_def_property(srna, "fill_rotation", PROP_FLOAT, PROP_ANGLE);

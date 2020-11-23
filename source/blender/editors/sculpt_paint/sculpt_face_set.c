@@ -110,7 +110,10 @@ int ED_sculpt_face_sets_active_update_and_get(bContext *C, Object *ob, const flo
   }
 
   SculptCursorGeometryInfo gi;
-  SCULPT_cursor_geometry_info_update(C, &gi, mval, false);
+  if (!SCULPT_cursor_geometry_info_update(C, &gi, mval, false)) {
+    return SCULPT_FACE_SET_NONE;
+  }
+
   return SCULPT_active_face_set_get(ss);
 }
 
@@ -132,6 +135,8 @@ static void do_draw_face_sets_brush_task_cb_ex(void *__restrict userdata,
       ss, &test, data->brush->falloff_shape);
   const int thread_id = BLI_task_parallel_thread_id(tls);
 
+  MVert *mvert = SCULPT_mesh_deformed_mverts_get(ss);
+
   BKE_pbvh_vertex_iter_begin(ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE)
   {
     if (BKE_pbvh_type(ss->pbvh) == PBVH_FACES) {
@@ -140,7 +145,7 @@ static void do_draw_face_sets_brush_task_cb_ex(void *__restrict userdata,
         const MPoly *p = &ss->mpoly[vert_map->indices[j]];
 
         float poly_center[3];
-        BKE_mesh_calc_poly_center(p, &ss->mloop[p->loopstart], ss->mvert, poly_center);
+        BKE_mesh_calc_poly_center(p, &ss->mloop[p->loopstart], mvert, poly_center);
 
         if (sculpt_brush_test_sq_fn(&test, poly_center)) {
           const float fade = bstrength * SCULPT_brush_strength_factor(ss,
@@ -272,14 +277,14 @@ static EnumPropertyItem prop_sculpt_face_set_create_types[] = {
         SCULPT_FACE_SET_MASKED,
         "MASKED",
         0,
-        "Face Set From Masked",
+        "Face Set from Masked",
         "Create a new Face Set from the masked faces",
     },
     {
         SCULPT_FACE_SET_VISIBLE,
         "VISIBLE",
         0,
-        "Face Set From Visible",
+        "Face Set from Visible",
         "Create a new Face Set from the visible vertices",
     },
     {
@@ -293,7 +298,7 @@ static EnumPropertyItem prop_sculpt_face_set_create_types[] = {
         SCULPT_FACE_SET_SELECTION,
         "SELECTION",
         0,
-        "Face Set From Edit Mode Selection",
+        "Face Set from Edit Mode Selection",
         "Create an Face Set corresponding to the Edit Mode face selection",
     },
     {0, NULL, 0, NULL, NULL},
@@ -303,7 +308,6 @@ static int sculpt_face_set_create_exec(bContext *C, wmOperator *op)
 {
   Object *ob = CTX_data_active_object(C);
   SculptSession *ss = ob->sculpt;
-  ARegion *region = CTX_wm_region(C);
   Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
 
   const int mode = RNA_enum_get(op->ptr, "mode");
@@ -327,7 +331,7 @@ static int sculpt_face_set_create_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
-  SCULPT_undo_push_begin("face set change");
+  SCULPT_undo_push_begin(ob, "face set change");
   SCULPT_undo_push_node(ob, nodes[0], SCULPT_UNDO_FACE_SETS);
 
   const int next_face_set = SCULPT_face_set_next_available_get(ss);
@@ -406,8 +410,7 @@ static int sculpt_face_set_create_exec(bContext *C, wmOperator *op)
 
   SCULPT_undo_push_end();
 
-  ED_region_tag_redraw(region);
-  WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
+  SCULPT_tag_update_overlays(C);
 
   return OPERATOR_FINISHED;
 }
@@ -445,56 +448,56 @@ static EnumPropertyItem prop_sculpt_face_sets_init_types[] = {
         SCULPT_FACE_SETS_FROM_LOOSE_PARTS,
         "LOOSE_PARTS",
         0,
-        "Face Sets From Loose Parts",
+        "Face Sets from Loose Parts",
         "Create a Face Set per loose part in the mesh",
     },
     {
         SCULPT_FACE_SETS_FROM_MATERIALS,
         "MATERIALS",
         0,
-        "Face Sets From Material Slots",
+        "Face Sets from Material Slots",
         "Create a Face Set per Material Slot",
     },
     {
         SCULPT_FACE_SETS_FROM_NORMALS,
         "NORMALS",
         0,
-        "Face Sets From Mesh Normals",
+        "Face Sets from Mesh Normals",
         "Create Face Sets for Faces that have similar normal",
     },
     {
         SCULPT_FACE_SETS_FROM_UV_SEAMS,
         "UV_SEAMS",
         0,
-        "Face Sets From UV Seams",
+        "Face Sets from UV Seams",
         "Create Face Sets using UV Seams as boundaries",
     },
     {
         SCULPT_FACE_SETS_FROM_CREASES,
         "CREASES",
         0,
-        "Face Sets From Edge Creases",
+        "Face Sets from Edge Creases",
         "Create Face Sets using Edge Creases as boundaries",
     },
     {
         SCULPT_FACE_SETS_FROM_BEVEL_WEIGHT,
         "BEVEL_WEIGHT",
         0,
-        "Face Sets From Bevel Weight",
+        "Face Sets from Bevel Weight",
         "Create Face Sets using Bevel Weights as boundaries",
     },
     {
         SCULPT_FACE_SETS_FROM_SHARP_EDGES,
         "SHARP_EDGES",
         0,
-        "Face Sets From Sharp Edges",
+        "Face Sets from Sharp Edges",
         "Create Face Sets using Sharp Edges as boundaries",
     },
     {
         SCULPT_FACE_SETS_FROM_FACE_MAPS,
         "FACE_MAPS",
         0,
-        "Face Sets From Face Maps",
+        "Face Sets from Face Maps",
         "Create a Face Set per Face Map",
     },
     {0, NULL, 0, NULL, NULL},
@@ -664,7 +667,6 @@ static int sculpt_face_set_init_exec(bContext *C, wmOperator *op)
 {
   Object *ob = CTX_data_active_object(C);
   SculptSession *ss = ob->sculpt;
-  ARegion *region = CTX_wm_region(C);
   Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
 
   const int mode = RNA_enum_get(op->ptr, "mode");
@@ -685,7 +687,7 @@ static int sculpt_face_set_init_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
-  SCULPT_undo_push_begin("face set change");
+  SCULPT_undo_push_begin(ob, "face set change");
   SCULPT_undo_push_node(ob, nodes[0], SCULPT_UNDO_FACE_SETS);
 
   const float threshold = RNA_float_get(op->ptr, "threshold");
@@ -720,7 +722,7 @@ static int sculpt_face_set_init_exec(bContext *C, wmOperator *op)
   SCULPT_undo_push_end();
 
   /* Sync face sets visibility and vertex visibility as now all Face Sets are visible. */
-  SCULPT_visibility_sync_all_face_sets_to_vertices(ss);
+  SCULPT_visibility_sync_all_face_sets_to_vertices(ob);
 
   for (int i = 0; i < totnode; i++) {
     BKE_pbvh_node_mark_update_visibility(nodes[i]);
@@ -734,13 +736,7 @@ static int sculpt_face_set_init_exec(bContext *C, wmOperator *op)
     BKE_mesh_flush_hidden_from_verts(ob->data);
   }
 
-  ED_region_tag_redraw(region);
-  DEG_id_tag_update(&ob->id, ID_RECALC_SHADING);
-
-  View3D *v3d = CTX_wm_view3d(C);
-  if (!BKE_sculptsession_use_pbvh_draw(ob, v3d)) {
-    DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
-  }
+  SCULPT_tag_update_overlays(C);
 
   return OPERATOR_FINISHED;
 }
@@ -823,7 +819,6 @@ static int sculpt_face_sets_change_visibility_exec(bContext *C, wmOperator *op)
 {
   Object *ob = CTX_data_active_object(C);
   SculptSession *ss = ob->sculpt;
-  ARegion *region = CTX_wm_region(C);
   Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
 
   /* Dyntopo not supported. */
@@ -837,7 +832,7 @@ static int sculpt_face_sets_change_visibility_exec(bContext *C, wmOperator *op)
   const int mode = RNA_enum_get(op->ptr, "mode");
   const int active_face_set = SCULPT_active_face_set_get(ss);
 
-  SCULPT_undo_push_begin("Hide area");
+  SCULPT_undo_push_begin(ob, "Hide area");
 
   PBVH *pbvh = ob->sculpt->pbvh;
   PBVHNode **nodes;
@@ -889,12 +884,6 @@ static int sculpt_face_sets_change_visibility_exec(bContext *C, wmOperator *op)
   if (mode == SCULPT_FACE_SET_VISIBILITY_SHOW_ACTIVE) {
     SCULPT_face_sets_visibility_all_set(ss, false);
     SCULPT_face_set_visibility_set(ss, active_face_set, true);
-    for (int i = 0; i < tot_vert; i++) {
-      SCULPT_vertex_visible_set(ss,
-                                i,
-                                SCULPT_vertex_visible_get(ss, i) &&
-                                    SCULPT_vertex_has_face_set(ss, i, active_face_set));
-    }
   }
 
   if (mode == SCULPT_FACE_SET_VISIBILITY_HIDE_ACTIVE) {
@@ -918,7 +907,7 @@ static int sculpt_face_sets_change_visibility_exec(bContext *C, wmOperator *op)
   }
 
   /* Sync face sets visibility and vertex visibility. */
-  SCULPT_visibility_sync_all_face_sets_to_vertices(ss);
+  SCULPT_visibility_sync_all_face_sets_to_vertices(ob);
 
   SCULPT_undo_push_end();
 
@@ -934,13 +923,8 @@ static int sculpt_face_sets_change_visibility_exec(bContext *C, wmOperator *op)
     BKE_mesh_flush_hidden_from_verts(ob->data);
   }
 
-  ED_region_tag_redraw(region);
-  DEG_id_tag_update(&ob->id, ID_RECALC_SHADING);
+  SCULPT_tag_update_overlays(C);
 
-  View3D *v3d = CTX_wm_view3d(C);
-  if (!BKE_sculptsession_use_pbvh_draw(ob, v3d)) {
-    DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
-  }
   return OPERATOR_FINISHED;
 }
 
@@ -990,7 +974,6 @@ static int sculpt_face_sets_randomize_colors_exec(bContext *C, wmOperator *UNUSE
 
   Object *ob = CTX_data_active_object(C);
   SculptSession *ss = ob->sculpt;
-  ARegion *region = CTX_wm_region(C);
 
   /* Dyntopo not supported. */
   if (BKE_pbvh_type(ss->pbvh) == PBVH_BMESH) {
@@ -1018,13 +1001,7 @@ static int sculpt_face_sets_randomize_colors_exec(bContext *C, wmOperator *UNUSE
 
   MEM_SAFE_FREE(nodes);
 
-  View3D *v3d = CTX_wm_view3d(C);
-  if (!BKE_sculptsession_use_pbvh_draw(ob, v3d)) {
-    DEG_id_tag_update(&ob->id, ID_RECALC_SHADING);
-  }
-
-  ED_region_tag_redraw(region);
-  WM_event_add_notifier(C, NC_GEOM | ND_DATA, ob->data);
+  SCULPT_tag_update_overlays(C);
 
   return OPERATOR_FINISHED;
 }
@@ -1046,6 +1023,7 @@ void SCULPT_OT_face_sets_randomize_colors(wmOperatorType *ot)
 typedef enum eSculptFaceSetEditMode {
   SCULPT_FACE_SET_EDIT_GROW = 0,
   SCULPT_FACE_SET_EDIT_SHRINK = 1,
+  SCULPT_FACE_SET_EDIT_DELETE_GEOMETRY = 2,
 } eSculptFaceSetEditMode;
 
 static EnumPropertyItem prop_sculpt_face_sets_edit_types[] = {
@@ -1062,6 +1040,13 @@ static EnumPropertyItem prop_sculpt_face_sets_edit_types[] = {
         0,
         "Shrink Face Set",
         "Shrinks the Face Sets boundary by one face based on mesh topology",
+    },
+    {
+        SCULPT_FACE_SET_EDIT_DELETE_GEOMETRY,
+        "DELETE_GEOMETRY",
+        0,
+        "Delete Geometry",
+        "Deletes the faces that are assigned to the Face Set",
     },
     {0, NULL, 0, NULL, NULL},
 };
@@ -1124,6 +1109,78 @@ static void sculpt_face_set_shrink(Object *ob,
   }
 }
 
+static bool check_single_face_set(SculptSession *ss, int *face_sets, const bool check_visible_only)
+{
+
+  int first_face_set = SCULPT_FACE_SET_NONE;
+  if (check_visible_only) {
+    for (int f = 0; f < ss->totfaces; f++) {
+      if (face_sets[f] > 0) {
+        first_face_set = face_sets[f];
+        break;
+      }
+    }
+  }
+  else {
+    first_face_set = abs(face_sets[0]);
+  }
+
+  if (first_face_set == SCULPT_FACE_SET_NONE) {
+    return true;
+  }
+
+  for (int f = 0; f < ss->totfaces; f++) {
+    const int face_set_id = check_visible_only ? face_sets[f] : abs(face_sets[f]);
+    if (face_set_id != first_face_set) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static void sculpt_face_set_delete_geometry(Object *ob,
+                                            SculptSession *ss,
+                                            const int active_face_set_id,
+                                            const bool modify_hidden)
+{
+
+  Mesh *mesh = ob->data;
+  const BMAllocTemplate allocsize = BMALLOC_TEMPLATE_FROM_ME(mesh);
+  BMesh *bm = BM_mesh_create(&allocsize,
+                             &((struct BMeshCreateParams){
+                                 .use_toolflags = true,
+                             }));
+
+  BM_mesh_bm_from_me(bm,
+                     mesh,
+                     (&(struct BMeshFromMeshParams){
+                         .calc_face_normal = true,
+                     }));
+
+  BM_mesh_elem_table_init(bm, BM_FACE);
+  BM_mesh_elem_table_ensure(bm, BM_FACE);
+  BM_mesh_elem_hflag_disable_all(bm, BM_VERT | BM_EDGE | BM_FACE, BM_ELEM_TAG, false);
+  BMIter iter;
+  BMFace *f;
+  BM_ITER_MESH (f, &iter, bm, BM_FACES_OF_MESH) {
+    const int face_index = BM_elem_index_get(f);
+    const int face_set_id = modify_hidden ? abs(ss->face_sets[face_index]) :
+                                            ss->face_sets[face_index];
+    BM_elem_flag_set(f, BM_ELEM_TAG, face_set_id == active_face_set_id);
+  }
+  BM_mesh_delete_hflag_context(bm, BM_ELEM_TAG, DEL_FACES);
+  BM_mesh_elem_hflag_disable_all(bm, BM_VERT | BM_EDGE | BM_FACE, BM_ELEM_TAG, false);
+
+  BM_mesh_bm_to_me(NULL,
+                   bm,
+                   ob->data,
+                   (&(struct BMeshToMeshParams){
+                       .calc_object_remap = false,
+                   }));
+
+  BM_mesh_free(bm);
+}
+
 static void sculpt_face_set_apply_edit(Object *ob,
                                        const int active_face_set_id,
                                        const int mode,
@@ -1131,36 +1188,115 @@ static void sculpt_face_set_apply_edit(Object *ob,
 {
   SculptSession *ss = ob->sculpt;
 
-  int *prev_face_sets = MEM_dupallocN(ss->face_sets);
-
   switch (mode) {
-    case SCULPT_FACE_SET_EDIT_GROW:
+    case SCULPT_FACE_SET_EDIT_GROW: {
+      int *prev_face_sets = MEM_dupallocN(ss->face_sets);
       sculpt_face_set_grow(ob, ss, prev_face_sets, active_face_set_id, modify_hidden);
+      MEM_SAFE_FREE(prev_face_sets);
       break;
-    case SCULPT_FACE_SET_EDIT_SHRINK:
+    }
+    case SCULPT_FACE_SET_EDIT_SHRINK: {
+      int *prev_face_sets = MEM_dupallocN(ss->face_sets);
       sculpt_face_set_shrink(ob, ss, prev_face_sets, active_face_set_id, modify_hidden);
+      MEM_SAFE_FREE(prev_face_sets);
+      break;
+    }
+    case SCULPT_FACE_SET_EDIT_DELETE_GEOMETRY:
+      sculpt_face_set_delete_geometry(ob, ss, active_face_set_id, modify_hidden);
       break;
   }
+}
 
-  MEM_SAFE_FREE(prev_face_sets);
+static bool sculpt_face_set_edit_is_operation_valid(SculptSession *ss,
+                                                    const eSculptFaceSetEditMode mode,
+                                                    const bool modify_hidden)
+{
+  if (BKE_pbvh_type(ss->pbvh) == PBVH_BMESH) {
+    /* Dyntopo is not supported. */
+    return false;
+  }
+
+  if (mode == SCULPT_FACE_SET_EDIT_DELETE_GEOMETRY) {
+    if (BKE_pbvh_type(ss->pbvh) == PBVH_GRIDS) {
+      /* Modification of base mesh geometry requires special remapping of multires displacement,
+       * which does not happen here.
+       * Disable delete operation. It can be supported in the future by doing similar displacement
+       * data remapping as what happens in the mesh edit mode. */
+      return false;
+    }
+    if (check_single_face_set(ss, ss->face_sets, !modify_hidden)) {
+      /* Cancel the operator if the mesh only contains one Face Set to avoid deleting the
+       * entire object. */
+      return false;
+    }
+  }
+  return true;
+}
+
+static void sculpt_face_set_edit_modify_geometry(bContext *C,
+                                                 Object *ob,
+                                                 const int active_face_set,
+                                                 const eSculptFaceSetEditMode mode,
+                                                 const bool modify_hidden)
+{
+  ED_sculpt_undo_geometry_begin(ob, "edit face set delete geometry");
+  sculpt_face_set_apply_edit(ob, abs(active_face_set), mode, modify_hidden);
+  ED_sculpt_undo_geometry_end(ob);
+  BKE_mesh_batch_cache_dirty_tag(ob->data, BKE_MESH_BATCH_DIRTY_ALL);
+  DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+  WM_event_add_notifier(C, NC_GEOM | ND_DATA, ob->data);
+}
+
+static void face_set_edit_do_post_visibility_updates(Object *ob, PBVHNode **nodes, int totnode)
+{
+  SculptSession *ss = ob->sculpt;
+  PBVH *pbvh = ss->pbvh;
+
+  /* Sync face sets visibility and vertex visibility as now all Face Sets are visible. */
+  SCULPT_visibility_sync_all_face_sets_to_vertices(ob);
+
+  for (int i = 0; i < totnode; i++) {
+    BKE_pbvh_node_mark_update_visibility(nodes[i]);
+  }
+
+  BKE_pbvh_update_vertex_data(ss->pbvh, PBVH_UpdateVisibility);
+
+  if (BKE_pbvh_type(pbvh) == PBVH_FACES) {
+    BKE_mesh_flush_hidden_from_verts(ob->data);
+  }
+}
+
+static void sculpt_face_set_edit_modify_face_sets(Object *ob,
+                                                  const int active_face_set,
+                                                  const eSculptFaceSetEditMode mode,
+                                                  const bool modify_hidden)
+{
+  PBVH *pbvh = ob->sculpt->pbvh;
+  PBVHNode **nodes;
+  int totnode;
+  BKE_pbvh_search_gather(pbvh, NULL, NULL, &nodes, &totnode);
+
+  if (!nodes) {
+    return;
+  }
+  SCULPT_undo_push_begin(ob, "face set edit");
+  SCULPT_undo_push_node(ob, nodes[0], SCULPT_UNDO_FACE_SETS);
+  sculpt_face_set_apply_edit(ob, abs(active_face_set), mode, modify_hidden);
+  SCULPT_undo_push_end();
+  face_set_edit_do_post_visibility_updates(ob, nodes, totnode);
+  MEM_freeN(nodes);
 }
 
 static int sculpt_face_set_edit_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
   Object *ob = CTX_data_active_object(C);
   SculptSession *ss = ob->sculpt;
-  ARegion *region = CTX_wm_region(C);
   Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
 
   const int mode = RNA_enum_get(op->ptr, "mode");
+  const bool modify_hidden = RNA_boolean_get(op->ptr, "modify_hidden");
 
-  /* Dyntopo not supported. */
-  if (BKE_pbvh_type(ss->pbvh) == PBVH_BMESH) {
-    return OPERATOR_CANCELLED;
-  }
-
-  /* Ignore other events to avoid repeated operations. */
-  if (event->val != KM_PRESS) {
+  if (!sculpt_face_set_edit_is_operation_valid(ss, mode, modify_hidden)) {
     return OPERATOR_CANCELLED;
   }
 
@@ -1169,52 +1305,21 @@ static int sculpt_face_set_edit_invoke(bContext *C, wmOperator *op, const wmEven
   /* Update the current active Face Set and Vertex as the operator can be used directly from the
    * tool without brush cursor. */
   SculptCursorGeometryInfo sgi;
-  float mouse[2];
-  mouse[0] = event->mval[0];
-  mouse[1] = event->mval[1];
+  const float mouse[2] = {event->mval[0], event->mval[1]};
   SCULPT_cursor_geometry_info_update(C, &sgi, mouse, false);
-
-  PBVH *pbvh = ob->sculpt->pbvh;
-  PBVHNode **nodes;
-  int totnode;
-  BKE_pbvh_search_gather(pbvh, NULL, NULL, &nodes, &totnode);
-
-  if (!nodes) {
-    return OPERATOR_CANCELLED;
-  }
-
-  SCULPT_undo_push_begin("face set edit");
-  SCULPT_undo_push_node(ob, nodes[0], SCULPT_UNDO_FACE_SETS);
-
   const int active_face_set = SCULPT_active_face_set_get(ss);
-  const bool modify_hidden = RNA_boolean_get(op->ptr, "modify_hidden");
 
-  sculpt_face_set_apply_edit(ob, abs(active_face_set), mode, modify_hidden);
-
-  SCULPT_undo_push_end();
-
-  /* Sync face sets visibility and vertex visibility as now all Face Sets are visible. */
-  SCULPT_visibility_sync_all_face_sets_to_vertices(ss);
-
-  for (int i = 0; i < totnode; i++) {
-    BKE_pbvh_node_mark_update_visibility(nodes[i]);
+  switch (mode) {
+    case SCULPT_FACE_SET_EDIT_DELETE_GEOMETRY:
+      sculpt_face_set_edit_modify_geometry(C, ob, active_face_set, mode, modify_hidden);
+      break;
+    case SCULPT_FACE_SET_EDIT_GROW:
+    case SCULPT_FACE_SET_EDIT_SHRINK:
+      sculpt_face_set_edit_modify_face_sets(ob, active_face_set, mode, modify_hidden);
+      break;
   }
 
-  BKE_pbvh_update_vertex_data(ss->pbvh, PBVH_UpdateVisibility);
-
-  MEM_SAFE_FREE(nodes);
-
-  if (BKE_pbvh_type(pbvh) == PBVH_FACES) {
-    BKE_mesh_flush_hidden_from_verts(ob->data);
-  }
-
-  ED_region_tag_redraw(region);
-  DEG_id_tag_update(&ob->id, ID_RECALC_SHADING);
-
-  View3D *v3d = CTX_wm_view3d(C);
-  if (!BKE_sculptsession_use_pbvh_draw(ob, v3d)) {
-    DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
-  }
+  SCULPT_tag_update_overlays(C);
 
   return OPERATOR_FINISHED;
 }

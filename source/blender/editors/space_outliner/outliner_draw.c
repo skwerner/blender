@@ -109,7 +109,7 @@ static void outliner_tree_dimensions_impl(SpaceOutliner *space_outliner,
   }
 }
 
-static void outliner_tree_dimensions(SpaceOutliner *space_outliner, int *r_width, int *r_height)
+void outliner_tree_dimensions(SpaceOutliner *space_outliner, int *r_width, int *r_height)
 {
   *r_width = 0;
   *r_height = 0;
@@ -1935,8 +1935,14 @@ static void outliner_mode_toggle_fn(bContext *C, void *tselem_poin, void *UNUSED
     return;
   }
 
+  /* Check that the the item is actually an object. */
+  BLI_assert(tselem->id != NULL && GS(tselem->id->name) == ID_OB);
+
+  Object *ob = (Object *)tselem->id;
+  const bool object_data_shared = (ob->data == tvc.obact->data);
+
   wmWindow *win = CTX_wm_window(C);
-  const bool do_extend = win->eventstate->ctrl != 0;
+  const bool do_extend = win->eventstate->ctrl != 0 && !object_data_shared;
   outliner_item_mode_toggle(C, &tvc, te, do_extend);
 }
 
@@ -1947,60 +1953,71 @@ static void outliner_draw_mode_column_toggle(uiBlock *block,
                                              TreeStoreElem *tselem,
                                              const bool lock_object_modes)
 {
-  const int active_mode = tvc->obact->mode;
-  bool draw_active_icon = true;
+  if (tselem->type != 0 || te->idcode != ID_OB) {
+    return;
+  }
 
-  if (tselem->type == 0 && te->idcode == ID_OB) {
-    Object *ob = (Object *)tselem->id;
+  Object *ob = (Object *)tselem->id;
+  Object *ob_active = tvc->obact;
 
-    /* When not locking object modes, objects can remain in non-object modes. For modes that do not
-     * allow multi-object editing, these other objects should still show be viewed as not in the
-     * mode. Otherwise multiple objects show the same mode icon in the outliner even though only
-     * one object is actually editable in the mode. */
-    if (!lock_object_modes && ob != tvc->obact && !(tvc->ob_edit || tvc->ob_pose)) {
-      draw_active_icon = false;
-    }
+  /* Not all objects support particle systems. */
+  if (ob_active->mode == OB_MODE_PARTICLE_EDIT && !psys_get_current(ob)) {
+    return;
+  }
 
-    if (ob->type == tvc->obact->type) {
-      int icon;
-      const char *tip;
+  /* Only for objects with the same type. */
+  if (ob->type != ob_active->type) {
+    return;
+  }
 
-      if (draw_active_icon && ob->mode == tvc->obact->mode) {
-        icon = UI_icon_from_object_mode(active_mode);
-        tip = TIP_("Remove from the current mode");
-      }
-      else {
-        /* Not all objects support particle systems */
-        if (active_mode == OB_MODE_PARTICLE_EDIT && !psys_get_current(ob)) {
-          return;
-        }
-        icon = ICON_DOT;
-        tip = TIP_(
-            "Change the object in the current mode\n"
-            "* Ctrl to add to the current mode");
-      }
+  bool draw_active_icon = ob->mode == ob_active->mode;
 
-      uiBut *but = uiDefIconBut(block,
-                                UI_BTYPE_ICON_TOGGLE,
-                                0,
-                                icon,
-                                0,
-                                te->ys,
-                                UI_UNIT_X,
-                                UI_UNIT_Y,
-                                NULL,
-                                0.0,
-                                0.0,
-                                0.0,
-                                0.0,
-                                tip);
-      UI_but_func_set(but, outliner_mode_toggle_fn, tselem, NULL);
-      UI_but_flag_enable(but, UI_BUT_DRAG_LOCK);
+  /* When not locking object modes, objects can remain in non-object modes. For modes that do not
+   * allow multi-object editing, these other objects should still show be viewed as not in the
+   * mode. Otherwise multiple objects show the same mode icon in the outliner even though only
+   * one object is actually editable in the mode. */
+  if (!lock_object_modes && ob != ob_active && !(tvc->ob_edit || tvc->ob_pose)) {
+    draw_active_icon = false;
+  }
 
-      if (ID_IS_LINKED(&ob->id)) {
-        UI_but_disable(but, TIP_("Can't edit external library data"));
-      }
-    }
+  const bool object_data_shared = (ob->data == ob_active->data);
+  draw_active_icon = draw_active_icon || object_data_shared;
+
+  int icon;
+  const char *tip;
+  if (draw_active_icon) {
+    icon = UI_icon_from_object_mode(ob_active->mode);
+    tip = object_data_shared ? TIP_("Change the object in the current mode") :
+                               TIP_("Remove from the current mode");
+  }
+  else {
+    icon = ICON_DOT;
+    tip = TIP_(
+        "Change the object in the current mode\n"
+        "* Ctrl to add to the current mode");
+  }
+
+  uiBut *but = uiDefIconBut(block,
+                            UI_BTYPE_ICON_TOGGLE,
+                            0,
+                            icon,
+                            0,
+                            te->ys,
+                            UI_UNIT_X,
+                            UI_UNIT_Y,
+                            NULL,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            tip);
+  UI_but_func_set(but, outliner_mode_toggle_fn, tselem, NULL);
+  UI_but_flag_enable(but, UI_BUT_DRAG_LOCK);
+  /* Mode toggling handles it's own undo state because undo steps need to be grouped. */
+  UI_but_flag_disable(but, UI_BUT_UNDO);
+
+  if (ID_IS_LINKED(&ob->id)) {
+    UI_but_disable(but, TIP_("Can't edit external library data"));
   }
 }
 
@@ -2517,7 +2534,7 @@ TreeElementIcon tree_element_get_icon(TreeStoreElem *tselem, TreeElement *te)
           data.icon = ICON_SCRIPT;
           break;
         case ID_GR:
-          data.icon = ICON_GROUP;
+          data.icon = ICON_OUTLINER_COLLECTION;
           break;
         case ID_HA:
           data.icon = ICON_OUTLINER_DATA_HAIR;
@@ -2915,9 +2932,9 @@ static void outliner_set_coord_tree_element(TreeElement *te, int startx, int sta
 
   /* closed items may be displayed in row of parent, don't change their coordinate! */
   if ((te->flag & TE_ICONROW) == 0 && (te->flag & TE_ICONROW_MERGED) == 0) {
-    /* store coord and continue, we need coordinates for elements outside view too */
-    te->xs = startx;
-    te->ys = starty;
+    te->xs = 0;
+    te->ys = 0;
+    te->xend = 0;
   }
 
   for (ten = te->subtree.first; ten; ten = ten->next) {
@@ -3261,6 +3278,7 @@ static void outliner_draw_hierarchy_lines(SpaceOutliner *space_outliner,
   UI_GetThemeColorBlend3ubv(TH_BACK, TH_TEXT, 0.4f, col);
   col[3] = 255;
 
+  GPU_line_width(1.0f);
   GPU_blend(GPU_BLEND_ALPHA);
   outliner_draw_hierarchy_lines_recursive(pos, space_outliner, lb, startx, col, false, starty);
   GPU_blend(GPU_BLEND_NONE);

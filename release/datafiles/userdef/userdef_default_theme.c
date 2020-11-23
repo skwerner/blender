@@ -45,7 +45,7 @@ const bTheme U_theme_default = {
       .outline = RGBA(0x373737ff),
       .inner = RGBA(0x313131ff),
       .inner_sel = RGBA(0x5680c2ff),
-      .item = RGBA(0xffffff8f),
+      .item = RGBA(0xe6e6e6cc),
       .text = RGBA(0xe6e6e6ff),
       .text_sel = RGBA(0xffffffff),
       .roundness = 0.2f,
@@ -124,7 +124,7 @@ const bTheme U_theme_default = {
       .outline = RGBA(0x444444ff),
       .inner = RGBA(0x2c2c2cff),
       .inner_sel = RGBA(0x696e76ff),
-      .item = RGBA(0xe6e6e6ff),
+      .item = RGBA(0xd9d9d9ff),
       .text = RGBA(0xd9d9d9ff),
       .text_sel = RGBA(0xffffffff),
       .shadetop = 10,
@@ -234,7 +234,7 @@ const bTheme U_theme_default = {
       .inner_changed_sel = RGBA(0xd26400ff),
       .blend = 0.5f,
     },
-    .widget_emboss = RGBA(0x00000005),
+    .widget_emboss = RGBA(0x00000026),
     .menu_shadow_fac = 0.3f,
     .menu_shadow_width = 4,
     .editor_outline = RGBA(0x1f1f1fff),
@@ -262,7 +262,6 @@ const bTheme U_theme_default = {
     .icon_folder = RGBA(0xe3c16eff),
   },
   .space_properties = {
-    .match = RGBA(0x5680c2ff),
     .back = RGBA(0x42424200),
     .title = RGBA(0xd4d4d4ff),
     .text = RGBA(0xe6e6e6ff),
@@ -287,6 +286,7 @@ const bTheme U_theme_default = {
     .vertex_size = 3,
     .outline_width = 1,
     .facedot_size = 4,
+    .match = RGBA(0x5680c2ff),
   },
   .space_view3d = {
     .back = RGBA(0x393939ff),
@@ -439,6 +439,7 @@ const bTheme U_theme_default = {
     .group_active = RGBA(0x368024ff),
     .vertex = RGBA(0x000000ff),
     .vertex_select = RGBA(0xff8500ff),
+    .vertex_active = RGBA(0xffffffff),
     .cframe = RGBA(0x5680c2ff),
     .time_scrub_background = RGBA(0x292929e6),
     .time_marker_line = RGBA(0x00000060),
@@ -684,6 +685,7 @@ const bTheme U_theme_default = {
       .back = RGBA(0x333333b3),
       .sub_back = RGBA(0x0000003e),
     },
+    .grid = RGBA(0x505050ff),
     .wire_edit = RGBA(0xc0c0c0ff),
     .vertex_select = RGBA(0xff8500ff),
     .edge_select = RGBA(0xff8500ff),
@@ -715,7 +717,6 @@ const bTheme U_theme_default = {
     .paint_curve_pivot = RGBA(0xff7f7f7f),
     .paint_curve_handle = RGBA(0x7fff7f7f),
     .metadatatext = RGBA(0xffffffff),
-    .grid = RGBA(0x505050ff),
   },
   .space_text = {
     .back = RGBA(0x30303000),
@@ -1107,28 +1108,28 @@ const bTheme U_theme_default = {
   },
   .collection_color = {
     {
-      .color = RGBA(0xe4312bff),
+      .color = RGBA(0xe2605bff),
     },
     {
-      .color = RGBA(0xef7e42ff),
+      .color = RGBA(0xf1a355ff),
     },
     {
-      .color = RGBA(0xe4dd52ff),
+      .color = RGBA(0xf1dc55ff),
     },
     {
-      .color = RGBA(0x9ac546ff),
+      .color = RGBA(0x7bcc7bff),
     },
     {
-      .color = RGBA(0x46bcc2ff),
+      .color = RGBA(0x5db6eaff),
     },
     {
-      .color = RGBA(0x8b65dcff),
+      .color = RGBA(0x8d59daff),
     },
     {
-      .color = RGBA(0x999999ff),
+      .color = RGBA(0xc673b8ff),
     },
     {
-      .color = RGBA(0x06d4432ff),
+      .color = RGBA(0x7a5441ff),
     },
   },
 };

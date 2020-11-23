@@ -91,6 +91,8 @@ struct RigidBodyWorld;
 struct Scene;
 struct SoftBody;
 struct ViewLayer;
+struct BlendWriter;
+struct BlendDataReader;
 
 /* temp structure for read/write */
 typedef struct PTCacheData {
@@ -167,7 +169,7 @@ typedef struct PTCacheID {
    * (the cfra parameter is just for using same function pointer with totwrite). */
   int (*totpoint)(void *calldata, int cfra);
   /* report error if number of points does not match */
-  void (*error)(void *calldata, const char *message);
+  void (*error)(const struct ID *owner_id, void *calldata, const char *message);
   /* number of points written for current cache frame */
   int (*totwrite)(void *calldata, int cfra);
 
@@ -322,9 +324,11 @@ int BKE_ptcache_data_size(int data_type);
 int BKE_ptcache_mem_index_find(struct PTCacheMem *pm, unsigned int index);
 
 /* Memory cache read/write helpers. */
-void BKE_ptcache_mem_pointers_init(struct PTCacheMem *pm);
-void BKE_ptcache_mem_pointers_incr(struct PTCacheMem *pm);
-int BKE_ptcache_mem_pointers_seek(int point_index, struct PTCacheMem *pm);
+void BKE_ptcache_mem_pointers_init(struct PTCacheMem *pm, void *cur[BPHYS_TOT_DATA]);
+void BKE_ptcache_mem_pointers_incr(void *cur[BPHYS_TOT_DATA]);
+int BKE_ptcache_mem_pointers_seek(int point_index,
+                                  struct PTCacheMem *pm,
+                                  void *cur[BPHYS_TOT_DATA]);
 
 /* Main cache reading call. */
 int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old);
@@ -373,6 +377,14 @@ void BKE_ptcache_validate(struct PointCache *cache, int framenr);
 
 /* Set correct flags after unsuccessful simulation step */
 void BKE_ptcache_invalidate(struct PointCache *cache);
+
+/********************** .blend File I/O *********************/
+
+void BKE_ptcache_blend_write(struct BlendWriter *writer, struct ListBase *ptcaches);
+void BKE_ptcache_blend_read_data(struct BlendDataReader *reader,
+                                 struct ListBase *ptcaches,
+                                 struct PointCache **ocache,
+                                 int force_disk);
 
 #ifdef __cplusplus
 }

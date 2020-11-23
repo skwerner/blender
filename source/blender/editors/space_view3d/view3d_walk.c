@@ -337,7 +337,7 @@ static void drawWalkPixel(const struct bContext *UNUSED(C), ARegion *region, voi
 
   immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
 
-  immUniformThemeColor3(TH_VIEW_OVERLAY);
+  immUniformThemeColorAlpha(TH_VIEW_OVERLAY, 1.0f);
 
   immBegin(GPU_PRIM_LINES, 8);
 
@@ -473,8 +473,8 @@ enum {
 };
 
 /* keep the previous speed until user changes userpreferences */
-static float base_speed = -1.f;
-static float userdef_speed = -1.f;
+static float base_speed = -1.0f;
+static float userdef_speed = -1.0f;
 
 static bool initWalkInfo(bContext *C, WalkInfo *walk, wmOperator *op)
 {
@@ -521,8 +521,9 @@ static bool initWalkInfo(bContext *C, WalkInfo *walk, wmOperator *op)
   walk->speed = 0.0f;
   walk->is_fast = false;
   walk->is_slow = false;
-  walk->grid = (walk->scene->unit.system == USER_UNIT_NONE) ? 1.f :
-                                                              1.f / walk->scene->unit.scale_length;
+  walk->grid = (walk->scene->unit.system == USER_UNIT_NONE) ?
+                   1.0f :
+                   1.0f / walk->scene->unit.scale_length;
 
   /* user preference settings */
   walk->teleport.duration = U.walk_navigation.teleport_time;
@@ -585,11 +586,7 @@ static bool initWalkInfo(bContext *C, WalkInfo *walk, wmOperator *op)
       walk->scene, 0, walk->region, walk->v3d);
 
   walk->v3d_camera_control = ED_view3d_cameracontrol_acquire(
-      walk->depsgraph,
-      walk->scene,
-      walk->v3d,
-      walk->rv3d,
-      (U.uiflag & USER_CAM_LOCK_NO_PARENT) == 0);
+      walk->depsgraph, walk->scene, walk->v3d, walk->rv3d);
 
   /* center the mouse */
   walk->center_mval[0] = walk->region->winx * 0.5f;
@@ -1450,7 +1447,7 @@ static int walk_modal(bContext *C, wmOperator *op, const wmEvent *event)
       WM_event_add_notifier(C, NC_OBJECT | ND_TRANSFORM, walk_object);
     }
 
-    // too frequent, commented with NDOF_WALK_DRAW_TOOMUCH for now
+    /* too frequent, commented with NDOF_WALK_DRAW_TOOMUCH for now */
     // puts("redraw!");
     ED_region_tag_redraw(CTX_wm_region(C));
   }

@@ -27,7 +27,9 @@
 #include "BLI_path_util.h"
 #include "BLI_utildefines.h"
 
-#include "BPY_extern.h"
+#ifdef WITH_PYTHON
+#  include "BPY_extern.h"
+#endif
 
 #include "DEG_depsgraph.h"
 
@@ -296,6 +298,7 @@ static void rna_RenderEngine_unregister(Main *bmain, StructRNA *type)
     return;
   }
 
+  RE_FreeAllPersistentData();
   RNA_struct_free_extension(type, &et->rna_ext);
   RNA_struct_free(&BLENDER_RNA, type);
   BLI_freelinkN(&R_engines, et);

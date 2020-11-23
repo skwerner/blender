@@ -76,7 +76,7 @@
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
 
-#include "clip_intern.h"  // own include
+#include "clip_intern.h" /* own include */
 
 /* -------------------------------------------------------------------- */
 /** \name View Navigation Utilities
@@ -329,7 +329,7 @@ void CLIP_OT_open(wmOperatorType *ot)
                                  FILE_OPENFILE,
                                  WM_FILESEL_RELPATH | WM_FILESEL_FILES | WM_FILESEL_DIRECTORY,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 }
 
 /** \} */
@@ -616,7 +616,7 @@ static int view_zoom_exec(bContext *C, wmOperator *op)
 
 static int view_zoom_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-  if (event->type == MOUSEZOOM || event->type == MOUSEPAN) {
+  if (ELEM(event->type, MOUSEZOOM, MOUSEPAN)) {
     float delta, factor;
 
     delta = event->prevx - event->x + event->prevy - event->y;

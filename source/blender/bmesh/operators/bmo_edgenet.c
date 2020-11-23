@@ -52,7 +52,7 @@ void bmo_edgenet_fill_exec(BMesh *bm, BMOperator *op)
   BMO_slot_buffer_hflag_enable(bm, op->slots_in, "edges", BM_EDGE, BM_ELEM_TAG, false);
 
   BM_mesh_elem_hflag_disable_all(bm, BM_FACE, BM_ELEM_TAG, false);
-  BM_mesh_edgenet(bm, true, true);  // TODO, sides
+  BM_mesh_edgenet(bm, true, true); /* TODO, sides */
 
   BMO_slot_buffer_from_enabled_hflag(bm, op, op->slots_out, "faces.out", BM_FACE, BM_ELEM_TAG);
 
@@ -117,7 +117,7 @@ void bmo_edgenet_prepare_exec(BMesh *bm, BMOperator *op)
   BMO_slot_buffer_flag_enable(bm, op->slots_in, "edges", BM_EDGE, EDGE_MARK);
 
   /* validate that each edge has at most one other tagged edge in the
-   * disk cycle around each of it's vertices */
+   * disk cycle around each of its vertices */
   BMO_ITER (e, &siter, op->slots_in, "edges", BM_EDGE) {
     for (i = 0; i < 2; i++) {
       count = BMO_iter_elem_count_flag(bm, BM_EDGES_OF_VERT, (i ? e->v2 : e->v1), EDGE_MARK, true);

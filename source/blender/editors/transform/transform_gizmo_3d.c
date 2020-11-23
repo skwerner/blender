@@ -565,6 +565,9 @@ static bool test_rotmode_euler(short rotmode)
   return (ELEM(rotmode, ROT_MODE_AXISANGLE, ROT_MODE_QUAT)) ? 0 : 1;
 }
 
+/**
+ * Return false when no gimbal for selection.
+ */
 bool gimbal_axis(Object *ob, float gmat[3][3])
 {
   if (ob->mode & OB_MODE_POSE) {
@@ -650,6 +653,7 @@ int ED_transform_calc_gizmo_stats(const bContext *C,
   Object *ob = OBACT(view_layer);
   bGPdata *gpd = CTX_data_gpencil_data(C);
   const bool is_gp_edit = GPENCIL_ANY_MODE(gpd);
+  const bool is_curve_edit = GPENCIL_CURVE_EDIT_SESSIONS_ON(gpd);
   int a, totsel = 0;
 
   const int pivot_point = scene->toolsettings->transform_pivot_point;
@@ -708,16 +712,39 @@ int ED_transform_calc_gizmo_stats(const bContext *C,
             continue;
           }
 
-          /* we're only interested in selected points here... */
-          if (gps->flag & GP_STROKE_SELECT) {
-            bGPDspoint *pt;
-            int i;
+          if (is_curve_edit) {
+            if (gps->editcurve == NULL) {
+              continue;
+            }
 
-            /* Change selection status of all points, then make the stroke match */
-            for (i = 0, pt = gps->points; i < gps->totpoints; i++, pt++) {
-              if (pt->flag & GP_SPOINT_SELECT) {
-                calc_tw_center_with_matrix(tbounds, &pt->x, use_mat_local, diff_mat);
-                totsel++;
+            bGPDcurve *gpc = gps->editcurve;
+            if (gpc->flag & GP_CURVE_SELECT) {
+              for (uint32_t i = 0; i < gpc->tot_curve_points; i++) {
+                bGPDcurve_point *gpc_pt = &gpc->curve_points[i];
+                BezTriple *bezt = &gpc_pt->bezt;
+                if (gpc_pt->flag & GP_CURVE_POINT_SELECT) {
+                  for (uint32_t j = 0; j < 3; j++) {
+                    if (BEZT_ISSEL_IDX(bezt, j)) {
+                      calc_tw_center_with_matrix(tbounds, bezt->vec[j], use_mat_local, diff_mat);
+                      totsel++;
+                    }
+                  }
+                }
+              }
+            }
+          }
+          else {
+            /* we're only interested in selected points here... */
+            if (gps->flag & GP_STROKE_SELECT) {
+              bGPDspoint *pt;
+              int i;
+
+              /* Change selection status of all points, then make the stroke match */
+              for (i = 0, pt = gps->points; i < gps->totpoints; i++, pt++) {
+                if (pt->flag & GP_SPOINT_SELECT) {
+                  calc_tw_center_with_matrix(tbounds, &pt->x, use_mat_local, diff_mat);
+                  totsel++;
+                }
               }
             }
           }
@@ -915,7 +942,7 @@ int ED_transform_calc_gizmo_stats(const bContext *C,
 
     /* selection center */
     if (totsel) {
-      mul_v3_fl(tbounds->center, 1.0f / (float)totsel);  // centroid!
+      mul_v3_fl(tbounds->center, 1.0f / (float)totsel); /* centroid! */
       mul_m4_v3(obedit->obmat, tbounds->center);
       mul_m4_v3(obedit->obmat, tbounds->min);
       mul_m4_v3(obedit->obmat, tbounds->max);
@@ -958,7 +985,7 @@ int ED_transform_calc_gizmo_stats(const bContext *C,
     MEM_freeN(objects);
 
     if (totsel) {
-      mul_v3_fl(tbounds->center, 1.0f / (float)totsel);  // centroid!
+      mul_v3_fl(tbounds->center, 1.0f / (float)totsel); /* centroid! */
       mul_m4_v3(ob->obmat, tbounds->center);
       mul_m4_v3(ob->obmat, tbounds->min);
       mul_m4_v3(ob->obmat, tbounds->max);
@@ -996,7 +1023,7 @@ int ED_transform_calc_gizmo_stats(const bContext *C,
 
       /* selection center */
       if (totsel) {
-        mul_v3_fl(tbounds->center, 1.0f / (float)totsel);  // centroid!
+        mul_v3_fl(tbounds->center, 1.0f / (float)totsel); /* centroid! */
       }
     }
   }
@@ -1044,7 +1071,7 @@ int ED_transform_calc_gizmo_stats(const bContext *C,
 
     /* selection center */
     if (totsel) {
-      mul_v3_fl(tbounds->center, 1.0f / (float)totsel);  // centroid!
+      mul_v3_fl(tbounds->center, 1.0f / (float)totsel); /* centroid! */
     }
   }
 
@@ -1280,7 +1307,7 @@ void drawDial3d(const TransInfo *t)
     float mat_basis[4][4];
     float mat_final[4][4];
     float color[4];
-    float increment;
+    float increment = 0.0f;
     float line_with = GIZMO_AXIS_LINE_WIDTH + 1.0f;
     float scale = UI_DPI_FAC * U.gizmo_size;
 
@@ -1335,10 +1362,7 @@ void drawDial3d(const TransInfo *t)
 
     if (activeSnap(t) && (!transformModeUseSnap(t) ||
                           (t->tsnap.mode & (SCE_SNAP_MODE_INCREMENT | SCE_SNAP_MODE_GRID)))) {
-      increment = (t->modifiers & MOD_PRECISION) ? t->snap[2] : t->snap[1];
-    }
-    else {
-      increment = t->snap[0];
+      increment = (t->modifiers & MOD_PRECISION) ? t->snap[1] : t->snap[0];
     }
 
     BLI_assert(axis_idx >= MAN_AXIS_RANGE_ROT_START && axis_idx < MAN_AXIS_RANGE_ROT_END);

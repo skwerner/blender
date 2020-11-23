@@ -317,7 +317,7 @@ int BKE_mesh_nurbs_displist_to_mdata(Object *ob,
   *r_allvert = mvert = MEM_calloc_arrayN(totvert, sizeof(MVert), "nurbs_init mvert");
   *r_alledge = medge = MEM_calloc_arrayN(totedge, sizeof(MEdge), "nurbs_init medge");
   *r_allloop = mloop = MEM_calloc_arrayN(
-      totpoly, sizeof(MLoop[4]), "nurbs_init mloop");  // totloop
+      totpoly, sizeof(MLoop[4]), "nurbs_init mloop"); /* totloop */
   *r_allpoly = mpoly = MEM_calloc_arrayN(totpoly, sizeof(MPoly), "nurbs_init mloop");
 
   if (r_alluv) {
@@ -949,7 +949,7 @@ void BKE_mesh_to_pointcloud(Main *bmain, Depsgraph *depsgraph, Scene *UNUSED(sce
   BKE_object_free_derived_caches(ob);
 }
 
-void BKE_mesh_from_pointcloud(PointCloud *pointcloud, Mesh *me)
+void BKE_mesh_from_pointcloud(const PointCloud *pointcloud, Mesh *me)
 {
   BLI_assert(pointcloud != NULL);
 
@@ -978,6 +978,14 @@ void BKE_mesh_from_pointcloud(PointCloud *pointcloud, Mesh *me)
 
   /* Delete Position attribute since it is now in vertex coordinates. */
   CustomData_free_layer(&me->vdata, CD_PROP_FLOAT3, me->totvert, layer_idx);
+}
+
+void BKE_mesh_edges_set_draw_render(Mesh *mesh)
+{
+  MEdge *med = mesh->medge;
+  for (int i = 0; i < mesh->totedge; i++, med++) {
+    med->flag |= ME_EDGEDRAW | ME_EDGERENDER;
+  }
 }
 
 void BKE_pointcloud_to_mesh(Main *bmain, Depsgraph *depsgraph, Scene *UNUSED(scene), Object *ob)
@@ -1010,8 +1018,7 @@ static Object *object_for_curve_to_mesh_create(Object *object)
   Curve *curve = (Curve *)object->data;
 
   /* Create object itself. */
-  Object *temp_object;
-  BKE_id_copy_ex(NULL, &object->id, (ID **)&temp_object, LIB_ID_COPY_LOCALIZE);
+  Object *temp_object = (Object *)BKE_id_copy_ex(NULL, &object->id, NULL, LIB_ID_COPY_LOCALIZE);
 
   /* Remove all modifiers, since we don't want them to be applied. */
   BKE_object_free_modifiers(temp_object, LIB_ID_CREATE_NO_USER_REFCOUNT);
@@ -1177,11 +1184,8 @@ static Mesh *mesh_new_from_mesh(Object *object, Mesh *mesh)
    * add the data to 'mesh' so future calls to this function don't need to re-convert the data. */
   BKE_mesh_wrapper_ensure_mdata(mesh);
 
-  Mesh *mesh_result = NULL;
-  BKE_id_copy_ex(NULL,
-                 &mesh->id,
-                 (ID **)&mesh_result,
-                 LIB_ID_CREATE_NO_MAIN | LIB_ID_CREATE_NO_USER_REFCOUNT);
+  Mesh *mesh_result = (Mesh *)BKE_id_copy_ex(
+      NULL, &mesh->id, NULL, LIB_ID_CREATE_NO_MAIN | LIB_ID_CREATE_NO_USER_REFCOUNT);
   /* NOTE: Materials should already be copied. */
   /* Copy original mesh name. This is because edit meshes might not have one properly set name. */
   BLI_strncpy(mesh_result->id.name, ((ID *)object->data)->name, sizeof(mesh_result->id.name));
@@ -1407,16 +1411,16 @@ Mesh *BKE_mesh_create_derived_for_modifier(struct Depsgraph *depsgraph,
 {
   Mesh *me = ob_eval->runtime.data_orig ? ob_eval->runtime.data_orig : ob_eval->data;
   const ModifierTypeInfo *mti = BKE_modifier_get_info(md_eval->type);
-  Mesh *result;
+  Mesh *result = NULL;
   KeyBlock *kb;
   ModifierEvalContext mectx = {depsgraph, ob_eval, MOD_APPLY_TO_BASE_MESH};
 
   if (!(md_eval->mode & eModifierMode_Realtime)) {
-    return NULL;
+    return result;
   }
 
   if (mti->isDisabled && mti->isDisabled(scene, md_eval, 0)) {
-    return NULL;
+    return result;
   }
 
   if (build_shapekey_layers && me->key &&
@@ -1428,7 +1432,7 @@ Mesh *BKE_mesh_create_derived_for_modifier(struct Depsgraph *depsgraph,
     int numVerts;
     float(*deformedVerts)[3] = BKE_mesh_vert_coords_alloc(me, &numVerts);
 
-    BKE_id_copy_ex(NULL, &me->id, (ID **)&result, LIB_ID_COPY_LOCALIZE);
+    result = (Mesh *)BKE_id_copy_ex(NULL, &me->id, NULL, LIB_ID_COPY_LOCALIZE);
     mti->deformVerts(md_eval, &mectx, result, deformedVerts, numVerts);
     BKE_mesh_vert_coords_apply(result, deformedVerts);
 
@@ -1439,8 +1443,7 @@ Mesh *BKE_mesh_create_derived_for_modifier(struct Depsgraph *depsgraph,
     MEM_freeN(deformedVerts);
   }
   else {
-    Mesh *mesh_temp;
-    BKE_id_copy_ex(NULL, &me->id, (ID **)&mesh_temp, LIB_ID_COPY_LOCALIZE);
+    Mesh *mesh_temp = (Mesh *)BKE_id_copy_ex(NULL, &me->id, NULL, LIB_ID_COPY_LOCALIZE);
 
     if (build_shapekey_layers) {
       add_shapekey_layers(mesh_temp, me);
@@ -1661,6 +1664,11 @@ void BKE_mesh_nomain_to_mesh(Mesh *mesh_src,
   MEM_SAFE_FREE(tmp.mselect);
   tmp.totselect = 0;
   tmp.texflag &= ~ME_AUTOSPACE_EVALUATED;
+
+  /* Clear any run-time data.
+   * Even though this mesh wont typically have run-time data, the Python API can for e.g.
+   * create loop-triangle cache here, which is confusing when left in the mesh, see: T81136. */
+  BKE_mesh_runtime_clear_geometry(&tmp);
 
   /* skip the listbase */
   MEMCPY_STRUCT_AFTER(mesh_dst, &tmp, id.prev);

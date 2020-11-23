@@ -734,6 +734,7 @@ typedef struct EEVEE_EffectsInfo {
   float prev_persmat[4][4];
   /* Lookdev */
   int sphere_size;
+  eDRWLevelOfDetail sphere_lod;
   int anchor[2];
   struct DRWView *lookdev_view;
   /* Bloom */
@@ -1119,7 +1120,7 @@ struct GPUShader *EEVEE_shaders_volumes_clear_sh_get(void);
 struct GPUShader *EEVEE_shaders_volumes_scatter_sh_get(void);
 struct GPUShader *EEVEE_shaders_volumes_scatter_with_lights_sh_get(void);
 struct GPUShader *EEVEE_shaders_volumes_integration_sh_get(void);
-struct GPUShader *EEVEE_shaders_volumes_resolve_sh_get(void);
+struct GPUShader *EEVEE_shaders_volumes_resolve_sh_get(bool accum);
 struct GPUShader *EEVEE_shaders_volumes_accum_sh_get(void);
 struct GPUShader *EEVEE_shaders_ggx_lut_sh_get(void);
 struct GPUShader *EEVEE_shaders_ggx_refraction_lut_sh_get(void);
@@ -1357,6 +1358,7 @@ void EEVEE_render_update_passes(struct RenderEngine *engine,
                                 struct ViewLayer *view_layer);
 
 /** eevee_lookdev.c */
+void EEVEE_lookdev_init(EEVEE_Data *vedata);
 void EEVEE_lookdev_cache_init(EEVEE_Data *vedata,
                               EEVEE_ViewLayerData *sldata,
                               DRWPass *pass,

@@ -90,8 +90,9 @@
 #include "BKE_modifier.h"
 #include "BKE_object.h"
 #include "BKE_pointcache.h"
-#include "BKE_sequencer.h"
 #include "BKE_sound.h"
+
+#include "SEQ_sequencer.h"
 
 #include "intern/builder/deg_builder.h"
 #include "intern/builder/deg_builder_nodes.h"
@@ -100,8 +101,7 @@
 #include "intern/node/deg_node.h"
 #include "intern/node/deg_node_id.h"
 
-namespace blender {
-namespace deg {
+namespace blender::deg {
 
 #define DEBUG_PRINT \
   if (G.debug & G_DEBUG_DEPSGRAPH_EVAL) \
@@ -301,8 +301,10 @@ bool id_copy_inplace_no_main(const ID *id, ID *newid)
   id_for_copy = nested_id_hack_get_discarded_pointers(&id_hack_storage, id);
 #endif
 
-  bool result = BKE_id_copy_ex(
-      nullptr, (ID *)id_for_copy, &newid, (LIB_ID_COPY_LOCALIZE | LIB_ID_CREATE_NO_ALLOCATE));
+  bool result = (BKE_id_copy_ex(nullptr,
+                                (ID *)id_for_copy,
+                                &newid,
+                                LIB_ID_COPY_LOCALIZE | LIB_ID_CREATE_NO_ALLOCATE) != nullptr);
 
 #ifdef NESTED_ID_NASTY_WORKAROUND
   if (result) {
@@ -328,8 +330,10 @@ bool scene_copy_inplace_no_main(const Scene *scene, Scene *new_scene)
   id_for_copy = nested_id_hack_get_discarded_pointers(&id_hack_storage, &scene->id);
 #endif
 
-  bool result = BKE_id_copy_ex(
-      nullptr, id_for_copy, (ID **)&new_scene, LIB_ID_COPY_LOCALIZE | LIB_ID_CREATE_NO_ALLOCATE);
+  bool result = (BKE_id_copy_ex(nullptr,
+                                id_for_copy,
+                                (ID **)&new_scene,
+                                LIB_ID_COPY_LOCALIZE | LIB_ID_CREATE_NO_ALLOCATE) != nullptr);
 
 #ifdef NESTED_ID_NASTY_WORKAROUND
   if (result) {
@@ -762,7 +766,7 @@ void update_proxy_pointers_after_copy(const Depsgraph *depsgraph,
   }
 }
 
-/* Do some special treatment of data transfer from original ID to it's
+/* Do some special treatment of data transfer from original ID to its
  * CoW complementary part.
  *
  * Only use for the newly created CoW data-blocks. */
@@ -1039,7 +1043,7 @@ void discard_edit_mode_pointers(ID *id_cow)
 
 /* Free content of the CoW data-block
  * Notes:
- * - Does not recurs into nested ID data-blocks.
+ * - Does not recurse into nested ID data-blocks.
  * - Does not free data-block itself. */
 void deg_free_copy_on_write_datablock(ID *id_cow)
 {
@@ -1122,5 +1126,4 @@ bool deg_copy_on_write_is_needed(const ID_Type id_type)
   return ID_TYPE_IS_COW(id_type);
 }
 
-}  // namespace deg
-}  // namespace blender
+}  // namespace blender::deg

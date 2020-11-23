@@ -95,6 +95,7 @@ void WM_operatortype_iter(GHashIterator *ghi)
   BLI_ghashIterator_init(ghi, global_ops_hash);
 }
 
+/* -------------------------------------------------------------------- */
 /** \name Operator Type Append
  * \{ */
 
@@ -324,13 +325,11 @@ static int wm_macro_end(wmOperator *op, int retval)
 /* macro exec only runs exec calls */
 static int wm_macro_exec(bContext *C, wmOperator *op)
 {
-  wmOperator *opm;
   int retval = OPERATOR_FINISHED;
 
   wm_macro_start(op);
 
-  for (opm = op->macro.first; opm; opm = opm->next) {
-
+  LISTBASE_FOREACH (wmOperator *, opm, &op->macro) {
     if (opm->type->exec) {
       retval = opm->type->exec(C, opm);
       OPERATOR_RETVAL_CHECK(retval);

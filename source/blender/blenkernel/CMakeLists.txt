@@ -39,7 +39,7 @@ set(INC
   ../sequencer
   ../shader_fx
   ../simulation
-  ../render/extern/include
+  ../render
   ../../../intern/ghost
   ../../../intern/glew-mx
   ../../../intern/guardedalloc
@@ -175,6 +175,7 @@ set(SRC
   intern/mesh_runtime.c
   intern/mesh_tangent.c
   intern/mesh_validate.c
+  intern/mesh_validate.cc
   intern/mesh_wrapper.c
   intern/modifier.c
   intern/movieclip.c
@@ -188,6 +189,7 @@ set(SRC
   intern/multires_reshape_vertcos.c
   intern/multires_subdiv.c
   intern/multires_unsubdivide.c
+  intern/multires_versioning.c
   intern/nla.c
   intern/node.c
   intern/object.c
@@ -208,7 +210,7 @@ set(SRC
   intern/pbvh.c
   intern/pbvh_bmesh.c
   intern/pointcache.c
-  intern/pointcloud.c
+  intern/pointcloud.cc
   intern/report.c
   intern/rigidbody.c
   intern/scene.c
@@ -690,9 +692,21 @@ if(WITH_XR_OPENXR)
   add_definitions(-DWITH_XR_OPENXR)
 endif()
 
+if(WITH_TBB)
+  add_definitions(-DWITH_TBB)
+
+  list(APPEND INC_SYS
+    ${TBB_INCLUDE_DIRS}
+  )
+
+  list(APPEND LIB
+    ${TBB_LIBRARIES}
+  )
+endif()
+
 # # Warnings as errors, this is too strict!
 # if(MSVC)
-#    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /WX")
+#    string(APPEND CMAKE_C_FLAGS " /WX")
 # endif()
 
 blender_add_lib(bf_blenkernel "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
@@ -705,6 +719,8 @@ if(WITH_GTESTS)
   set(TEST_SRC
     intern/armature_test.cc
     intern/fcurve_test.cc
+    intern/lattice_deform_test.cc
+    intern/tracking_test.cc
   )
   set(TEST_INC
     ../editors/include

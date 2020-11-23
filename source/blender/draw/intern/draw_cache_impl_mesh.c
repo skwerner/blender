@@ -51,6 +51,8 @@
 #include "BKE_mesh_tangent.h"
 #include "BKE_modifier.h"
 #include "BKE_object_deform.h"
+#include "BKE_paint.h"
+#include "BKE_pbvh.h"
 
 #include "atomic_ops.h"
 
@@ -496,6 +498,8 @@ static void mesh_batch_cache_init(Mesh *me)
 
   cache->mat_len = mesh_render_mat_len_get(me);
   cache->surface_per_mat = MEM_callocN(sizeof(*cache->surface_per_mat) * cache->mat_len, __func__);
+  cache->final.tris_per_mat = MEM_callocN(sizeof(*cache->final.tris_per_mat) * cache->mat_len,
+                                          __func__);
 
   cache->is_dirty = false;
   cache->batch_ready = 0;
@@ -536,20 +540,16 @@ static void mesh_batch_cache_request_surface_batches(MeshBatchCache *cache)
 {
   mesh_batch_cache_add_request(cache, MBC_SURFACE);
   DRW_batch_request(&cache->batch.surface);
-  if (cache->surface_per_mat) {
-    for (int i = 0; i < cache->mat_len; i++) {
-      DRW_batch_request(&cache->surface_per_mat[i]);
-    }
+  for (int i = 0; i < cache->mat_len; i++) {
+    DRW_batch_request(&cache->surface_per_mat[i]);
   }
 }
 
 static void mesh_batch_cache_discard_surface_batches(MeshBatchCache *cache)
 {
   GPU_BATCH_DISCARD_SAFE(cache->batch.surface);
-  if (cache->surface_per_mat) {
-    for (int i = 0; i < cache->mat_len; i++) {
-      GPU_BATCH_DISCARD_SAFE(cache->surface_per_mat[i]);
-    }
+  for (int i = 0; i < cache->mat_len; i++) {
+    GPU_BATCH_DISCARD_SAFE(cache->surface_per_mat[i]);
   }
   cache->batch_ready &= ~MBC_SURFACE;
 }
@@ -565,10 +565,6 @@ static void mesh_batch_cache_discard_shaded_tri(MeshBatchCache *cache)
   }
   mesh_batch_cache_discard_surface_batches(cache);
   mesh_cd_layers_type_clear(&cache->cd_used);
-
-  MEM_SAFE_FREE(cache->surface_per_mat);
-
-  cache->mat_len = 0;
 }
 
 static void mesh_batch_cache_discard_uvedit(MeshBatchCache *cache)
@@ -626,7 +622,7 @@ static void mesh_batch_cache_discard_uvedit_select(MeshBatchCache *cache)
   cache->batch_ready &= ~MBC_EDITUV;
 }
 
-void DRW_mesh_batch_cache_dirty_tag(Mesh *me, int mode)
+void DRW_mesh_batch_cache_dirty_tag(Mesh *me, eMeshBatchDirtyMode mode)
 {
   MeshBatchCache *cache = me->runtime.batch_cache;
   if (cache == NULL) {
@@ -712,17 +708,23 @@ static void mesh_batch_cache_clear(Mesh *me)
       GPU_INDEXBUF_DISCARD_SAFE(ibos[i]);
     }
   }
+
+  for (int i = 0; i < cache->mat_len; i++) {
+    GPU_INDEXBUF_DISCARD_SAFE(cache->final.tris_per_mat[i]);
+  }
+  MEM_SAFE_FREE(cache->final.tris_per_mat);
+
   for (int i = 0; i < sizeof(cache->batch) / sizeof(void *); i++) {
     GPUBatch **batch = (GPUBatch **)&cache->batch;
     GPU_BATCH_DISCARD_SAFE(batch[i]);
   }
 
   mesh_batch_cache_discard_shaded_tri(cache);
-
   mesh_batch_cache_discard_uvedit(cache);
+  MEM_SAFE_FREE(cache->surface_per_mat);
+  cache->mat_len = 0;
 
   cache->batch_ready = 0;
-
   drw_mesh_weight_state_clear(&cache->weight_state);
 }
 
@@ -1176,7 +1178,6 @@ void DRW_mesh_batch_cache_create_requested(struct TaskGraph *task_graph,
                                            const bool use_hide)
 {
   BLI_assert(task_graph);
-  GPUIndexBuf **saved_elem_ranges = NULL;
   const ToolSettings *ts = NULL;
   if (scene) {
     ts = scene->toolsettings;
@@ -1262,17 +1263,6 @@ void DRW_mesh_batch_cache_create_requested(struct TaskGraph *task_graph,
           GPU_VERTBUF_DISCARD_SAFE(mbuffercache->vbo.vcol);
         }
       }
-      /* XXX save element buffer to avoid recreating them.
-       * This is only if the cd_needed changes so it is ok to keep them.*/
-      if (cache->surface_per_mat[0] && cache->surface_per_mat[0]->elem) {
-        saved_elem_ranges = MEM_callocN(sizeof(saved_elem_ranges) * cache->mat_len, __func__);
-        for (int i = 0; i < cache->mat_len; i++) {
-          saved_elem_ranges[i] = cache->surface_per_mat[i]->elem;
-          /* Avoid deletion as the batch is owner. */
-          cache->surface_per_mat[i]->elem = NULL;
-          cache->surface_per_mat[i]->flag &= ~GPU_BATCH_OWNS_INDEX;
-        }
-      }
       /* We can't discard batches at this point as they have been
        * referenced for drawing. Just clear them in place. */
       for (int i = 0; i < cache->mat_len; i++) {
@@ -1320,6 +1310,17 @@ void DRW_mesh_batch_cache_create_requested(struct TaskGraph *task_graph,
     drw_mesh_batch_cache_check_available(task_graph, me);
 #endif
     return;
+  }
+
+  /* TODO(pablodp606): This always updates the sculpt normals for regular drawing (non-PBVH).
+   * This makes tools that sample the surface per step get wrong normals until a redraw happens.
+   * Normal updates should be part of the brush loop and only run during the stroke when the
+   * brush needs to sample the surface. The drawing code should only update the normals
+   * per redraw when smooth shading is enabled. */
+  const bool do_update_sculpt_normals = ob->sculpt && ob->sculpt->pbvh;
+  if (do_update_sculpt_normals) {
+    Mesh *mesh = ob->data;
+    BKE_pbvh_update_normals(ob->sculpt->pbvh, mesh->runtime.subdiv_ccg);
   }
 
   cache->batch_ready |= batch_requested;
@@ -1397,13 +1398,7 @@ void DRW_mesh_batch_cache_create_requested(struct TaskGraph *task_graph,
   /* Per Material */
   for (int i = 0; i < cache->mat_len; i++) {
     if (DRW_batch_requested(cache->surface_per_mat[i], GPU_PRIM_TRIS)) {
-      if (saved_elem_ranges && saved_elem_ranges[i]) {
-        /* XXX assign old element buffer range (it did not change).*/
-        GPU_batch_elembuf_set(cache->surface_per_mat[i], saved_elem_ranges[i], true);
-      }
-      else {
-        DRW_ibo_request(cache->surface_per_mat[i], &mbufcache->ibo.tris);
-      }
+      DRW_ibo_request(cache->surface_per_mat[i], &mbufcache->tris_per_mat[i]);
       /* Order matters. First ones override latest VBO's attributes. */
       DRW_vbo_request(cache->surface_per_mat[i], &mbufcache->vbo.lnor);
       DRW_vbo_request(cache->surface_per_mat[i], &mbufcache->vbo.pos_nor);
@@ -1421,8 +1416,6 @@ void DRW_mesh_batch_cache_create_requested(struct TaskGraph *task_graph,
       }
     }
   }
-
-  MEM_SAFE_FREE(saved_elem_ranges);
 
   mbufcache = (do_cage) ? &cache->cage : &cache->final;
 

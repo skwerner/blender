@@ -201,6 +201,8 @@ IDTypeInfo IDType_ID_CA = {
     .blend_read_data = camera_blend_read_data,
     .blend_read_lib = camera_blend_read_lib,
     .blend_read_expand = camera_blend_read_expand,
+
+    .blend_read_undo_preserve = NULL,
 };
 
 /** \} */
@@ -213,18 +215,9 @@ void *BKE_camera_add(Main *bmain, const char *name)
 {
   Camera *cam;
 
-  cam = BKE_libblock_alloc(bmain, ID_CA, name, 0);
-
-  camera_init_data(&cam->id);
+  cam = BKE_id_new(bmain, ID_CA, name);
 
   return cam;
-}
-
-Camera *BKE_camera_copy(Main *bmain, const Camera *cam)
-{
-  Camera *cam_copy;
-  BKE_id_copy(bmain, &cam->id, (ID **)&cam_copy);
-  return cam_copy;
 }
 
 /* get the camera's dof value, takes the dof object into account */

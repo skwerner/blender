@@ -66,7 +66,7 @@ void RNA_def_struct_flag(StructRNA *srna, int flag);
 void RNA_def_struct_clear_flag(StructRNA *srna, int flag);
 void RNA_def_struct_property_tags(StructRNA *srna, const EnumPropertyItem *prop_tag_defines);
 void RNA_def_struct_refine_func(StructRNA *srna, const char *refine);
-void RNA_def_struct_idprops_func(StructRNA *srna, const char *refine);
+void RNA_def_struct_idprops_func(StructRNA *srna, const char *idproperties);
 void RNA_def_struct_register_funcs(StructRNA *srna,
                                    const char *reg,
                                    const char *unreg,
@@ -372,7 +372,9 @@ void RNA_def_property_enum_items(PropertyRNA *prop, const EnumPropertyItem *item
 void RNA_def_property_enum_native_type(PropertyRNA *prop, const char *native_enum_type);
 void RNA_def_property_string_maxlength(PropertyRNA *prop, int maxlength);
 void RNA_def_property_struct_type(PropertyRNA *prop, const char *type);
-void RNA_def_property_struct_runtime(PropertyRNA *prop, StructRNA *type);
+void RNA_def_property_struct_runtime(StructOrFunctionRNA *cont,
+                                     PropertyRNA *prop,
+                                     StructRNA *type);
 
 void RNA_def_property_boolean_default(PropertyRNA *prop, bool value);
 void RNA_def_property_boolean_array_default(PropertyRNA *prop, const bool *array);

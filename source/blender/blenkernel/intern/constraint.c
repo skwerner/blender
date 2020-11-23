@@ -21,6 +21,9 @@
  * \ingroup bke
  */
 
+/* Allow using deprecated functionality for .blend file I/O. */
+#define DNA_DEPRECATED_ALLOW
+
 #include <float.h>
 #include <math.h>
 #include <stddef.h>
@@ -45,6 +48,7 @@
 #include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
+#include "DNA_screen_types.h"
 
 #include "DNA_lattice_types.h"
 #include "DNA_movieclip_types.h"
@@ -78,6 +82,8 @@
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
+
+#include "BLO_read_write.h"
 
 #include "CLG_log.h"
 
@@ -744,7 +750,7 @@ static void default_get_tarmat_full_bbone(struct Depsgraph *UNUSED(depsgraph),
  * (Hopefully all compilers will be happy with the lines with just a space on them.
  * Those are really just to help this code easier to read).
  */
-// TODO: cope with getting rotation order...
+/* TODO: cope with getting rotation order... */
 #define SINGLETARGET_GET_TARS(con, datatar, datasubtarget, ct, list) \
   { \
     ct = MEM_callocN(sizeof(bConstraintTarget), "tempConstraintTarget"); \
@@ -779,7 +785,7 @@ static void default_get_tarmat_full_bbone(struct Depsgraph *UNUSED(depsgraph),
  * (Hopefully all compilers will be happy with the lines with just a space on them. Those are
  *  really just to help this code easier to read)
  */
-// TODO: cope with getting rotation order...
+/* TODO: cope with getting rotation order... */
 #define SINGLETARGETNS_GET_TARS(con, datatar, ct, list) \
   { \
     ct = MEM_callocN(sizeof(bConstraintTarget), "tempConstraintTarget"); \
@@ -2257,10 +2263,9 @@ static int pycon_get_tars(bConstraint *con, ListBase *list)
 static void pycon_id_looper(bConstraint *con, ConstraintIDFunc func, void *userdata)
 {
   bPythonConstraint *data = con->data;
-  bConstraintTarget *ct;
 
   /* targets */
-  for (ct = data->targets.first; ct; ct = ct->next) {
+  LISTBASE_FOREACH (bConstraintTarget *, ct, &data->targets) {
     func(con, (ID **)&ct->tar, false, userdata);
   }
 
@@ -2375,10 +2380,9 @@ static int armdef_get_tars(bConstraint *con, ListBase *list)
 static void armdef_id_looper(bConstraint *con, ConstraintIDFunc func, void *userdata)
 {
   bArmatureConstraint *data = con->data;
-  bConstraintTarget *ct;
 
   /* Target list. */
-  for (ct = data->targets.first; ct; ct = ct->next) {
+  LISTBASE_FOREACH (bConstraintTarget *, ct, &data->targets) {
     func(con, (ID **)&ct->tar, false, userdata);
   }
 }
@@ -4340,7 +4344,7 @@ static void damptrack_do_transform(float matrix[4][4], const float tarvec_in[3],
      * we may have destroyed that in the process of multiplying the matrix
      */
     unit_m4(tmat);
-    mul_m4_m3m4(tmat, rmat, matrix);  // m1, m3, m2
+    mul_m4_m3m4(tmat, rmat, matrix); /* m1, m3, m2 */
 
     copy_m4_m4(matrix, tmat);
     copy_v3_v3(matrix[3], obloc);
@@ -4577,7 +4581,7 @@ static bConstraintTypeInfo CTI_PIVOT = {
     pivotcon_id_looper,       /* id looper */
     NULL,                     /* copy data */
     NULL,
-    /* new data */       // XXX: might be needed to get 'normal' pivot behavior...
+    /* new data */       /* XXX: might be needed to get 'normal' pivot behavior... */
     pivotcon_get_tars,   /* get constraint targets */
     pivotcon_flush_tars, /* flush constraint targets */
     default_get_tarmat,  /* get target matrix */
@@ -5364,10 +5368,8 @@ void BKE_constraint_free_data(bConstraint *con)
 /* Free all constraints from a constraint-stack */
 void BKE_constraints_free_ex(ListBase *list, bool do_id_user)
 {
-  bConstraint *con;
-
   /* Free constraint data and also any extra data */
-  for (con = list->first; con; con = con->next) {
+  LISTBASE_FOREACH (bConstraint *, con, list) {
     BKE_constraint_free_data_ex(con, do_id_user);
   }
 
@@ -5406,6 +5408,11 @@ bool BKE_constraint_remove_ex(ListBase *list, Object *ob, bConstraint *con, bool
   return false;
 }
 
+void BKE_constraint_panel_expand(bConstraint *con)
+{
+  con->ui_expand_flag |= UI_PANEL_DATA_EXPAND_ROOT;
+}
+
 /* ......... */
 
 /* Creates a new constraint, initializes its data, and returns it */
@@ -5421,10 +5428,10 @@ static bConstraint *add_new_constraint_internal(const char *name, short type)
   con->enforce = 1.0f;
 
   /* Only open the main panel when constraints are created, not the sub-panels. */
-  con->ui_expand_flag = (1 << 0);
+  con->ui_expand_flag = UI_PANEL_DATA_EXPAND_ROOT;
   if (ELEM(type, CONSTRAINT_TYPE_ACTION, CONSTRAINT_TYPE_SPLINEIK)) {
     /* Expand the two sub-panels in the cases where the main panel barely has any properties. */
-    con->ui_expand_flag |= (1 << 1) | (1 << 2);
+    con->ui_expand_flag |= UI_SUBPANEL_DATA_EXPAND_1 | UI_SUBPANEL_DATA_EXPAND_2;
   }
 
   /* Determine a basic name, and info */
@@ -5543,9 +5550,7 @@ bConstraint *BKE_constraint_add_for_object(Object *ob, const char *name, short t
 /* Run the given callback on all ID-blocks in list of constraints */
 void BKE_constraints_id_loop(ListBase *conlist, ConstraintIDFunc func, void *userdata)
 {
-  bConstraint *con;
-
-  for (con = conlist->first; con; con = con->next) {
+  LISTBASE_FOREACH (bConstraint *, con, conlist) {
     const bConstraintTypeInfo *cti = BKE_constraint_typeinfo_get(con);
 
     if (cti) {
@@ -5675,11 +5680,10 @@ bConstraint *BKE_constraints_find_name(ListBase *list, const char *name)
 /* finds the 'active' constraint in a constraint stack */
 bConstraint *BKE_constraints_active_get(ListBase *list)
 {
-  bConstraint *con;
 
   /* search for the first constraint with the 'active' flag set */
   if (list) {
-    for (con = list->first; con; con = con->next) {
+    LISTBASE_FOREACH (bConstraint *, con, list) {
       if (con->flag & CONSTRAINT_ACTIVE) {
         return con;
       }
@@ -5693,15 +5697,14 @@ bConstraint *BKE_constraints_active_get(ListBase *list)
 /* Set the given constraint as the active one (clearing all the others) */
 void BKE_constraints_active_set(ListBase *list, bConstraint *con)
 {
-  bConstraint *c;
 
   if (list) {
-    for (c = list->first; c; c = c->next) {
-      if (c == con) {
-        c->flag |= CONSTRAINT_ACTIVE;
+    LISTBASE_FOREACH (bConstraint *, con_iter, list) {
+      if (con_iter == con) {
+        con_iter->flag |= CONSTRAINT_ACTIVE;
       }
       else {
-        c->flag &= ~CONSTRAINT_ACTIVE;
+        con_iter->flag &= ~CONSTRAINT_ACTIVE;
       }
     }
   }
@@ -6077,6 +6080,177 @@ void BKE_constraints_solve(struct Depsgraph *depsgraph,
       float solution[4][4];
       copy_m4_m4(solution, cob->matrix);
       interp_m4_m4m4(cob->matrix, oldmat, solution, enf);
+    }
+  }
+}
+
+void BKE_constraint_blend_write(BlendWriter *writer, ListBase *conlist)
+{
+  LISTBASE_FOREACH (bConstraint *, con, conlist) {
+    const bConstraintTypeInfo *cti = BKE_constraint_typeinfo_get(con);
+
+    /* Write the specific data */
+    if (cti && con->data) {
+      /* firstly, just write the plain con->data struct */
+      BLO_write_struct_by_name(writer, cti->structName, con->data);
+
+      /* do any constraint specific stuff */
+      switch (con->type) {
+        case CONSTRAINT_TYPE_PYTHON: {
+          bPythonConstraint *data = con->data;
+
+          /* write targets */
+          LISTBASE_FOREACH (bConstraintTarget *, ct, &data->targets) {
+            BLO_write_struct(writer, bConstraintTarget, ct);
+          }
+
+          /* Write ID Properties -- and copy this comment EXACTLY for easy finding
+           * of library blocks that implement this.*/
+          IDP_BlendWrite(writer, data->prop);
+
+          break;
+        }
+        case CONSTRAINT_TYPE_ARMATURE: {
+          bArmatureConstraint *data = con->data;
+
+          /* write targets */
+          LISTBASE_FOREACH (bConstraintTarget *, ct, &data->targets) {
+            BLO_write_struct(writer, bConstraintTarget, ct);
+          }
+
+          break;
+        }
+        case CONSTRAINT_TYPE_SPLINEIK: {
+          bSplineIKConstraint *data = con->data;
+
+          /* write points array */
+          BLO_write_float_array(writer, data->numpoints, data->points);
+
+          break;
+        }
+      }
+    }
+
+    /* Write the constraint */
+    BLO_write_struct(writer, bConstraint, con);
+  }
+}
+
+void BKE_constraint_blend_read_data(BlendDataReader *reader, ListBase *lb)
+{
+  BLO_read_list(reader, lb);
+  LISTBASE_FOREACH (bConstraint *, con, lb) {
+    BLO_read_data_address(reader, &con->data);
+
+    switch (con->type) {
+      case CONSTRAINT_TYPE_PYTHON: {
+        bPythonConstraint *data = con->data;
+
+        BLO_read_list(reader, &data->targets);
+
+        BLO_read_data_address(reader, &data->prop);
+        IDP_BlendDataRead(reader, &data->prop);
+        break;
+      }
+      case CONSTRAINT_TYPE_ARMATURE: {
+        bArmatureConstraint *data = con->data;
+
+        BLO_read_list(reader, &data->targets);
+
+        break;
+      }
+      case CONSTRAINT_TYPE_SPLINEIK: {
+        bSplineIKConstraint *data = con->data;
+
+        BLO_read_data_address(reader, &data->points);
+        break;
+      }
+      case CONSTRAINT_TYPE_KINEMATIC: {
+        bKinematicConstraint *data = con->data;
+
+        con->lin_error = 0.0f;
+        con->rot_error = 0.0f;
+
+        /* version patch for runtime flag, was not cleared in some case */
+        data->flag &= ~CONSTRAINT_IK_AUTO;
+        break;
+      }
+      case CONSTRAINT_TYPE_CHILDOF: {
+        /* XXX version patch, in older code this flag wasn't always set, and is inherent to type */
+        if (con->ownspace == CONSTRAINT_SPACE_POSE) {
+          con->flag |= CONSTRAINT_SPACEONCE;
+        }
+        break;
+      }
+      case CONSTRAINT_TYPE_TRANSFORM_CACHE: {
+        bTransformCacheConstraint *data = con->data;
+        data->reader = NULL;
+        data->reader_object_path[0] = '\0';
+      }
+    }
+  }
+}
+
+/* temp struct used to transport needed info to lib_link_constraint_cb() */
+typedef struct tConstraintLinkData {
+  BlendLibReader *reader;
+  ID *id;
+} tConstraintLinkData;
+/* callback function used to relink constraint ID-links */
+static void lib_link_constraint_cb(bConstraint *UNUSED(con),
+                                   ID **idpoin,
+                                   bool UNUSED(is_reference),
+                                   void *userdata)
+{
+  tConstraintLinkData *cld = (tConstraintLinkData *)userdata;
+  BLO_read_id_address(cld->reader, cld->id->lib, idpoin);
+}
+
+void BKE_constraint_blend_read_lib(BlendLibReader *reader, ID *id, ListBase *conlist)
+{
+  tConstraintLinkData cld;
+
+  /* legacy fixes */
+  LISTBASE_FOREACH (bConstraint *, con, conlist) {
+    /* patch for error introduced by changing constraints (dunno how) */
+    /* if con->data type changes, dna cannot resolve the pointer! (ton) */
+    if (con->data == NULL) {
+      con->type = CONSTRAINT_TYPE_NULL;
+    }
+    /* own ipo, all constraints have it */
+    BLO_read_id_address(reader, id->lib, &con->ipo); /* XXX deprecated - old animation system */
+
+    /* If linking from a library, clear 'local' library override flag. */
+    if (id->lib != NULL) {
+      con->flag &= ~CONSTRAINT_OVERRIDE_LIBRARY_LOCAL;
+    }
+  }
+
+  /* relink all ID-blocks used by the constraints */
+  cld.reader = reader;
+  cld.id = id;
+
+  BKE_constraints_id_loop(conlist, lib_link_constraint_cb, &cld);
+}
+
+/* callback function used to expand constraint ID-links */
+static void expand_constraint_cb(bConstraint *UNUSED(con),
+                                 ID **idpoin,
+                                 bool UNUSED(is_reference),
+                                 void *userdata)
+{
+  BlendExpander *expander = userdata;
+  BLO_expand(expander, *idpoin);
+}
+
+void BKE_constraint_blend_read_expand(BlendExpander *expander, ListBase *lb)
+{
+  BKE_constraints_id_loop(lb, expand_constraint_cb, expander);
+
+  /* deprecated manual expansion stuff */
+  LISTBASE_FOREACH (bConstraint *, curcon, lb) {
+    if (curcon->ipo) {
+      BLO_expand(expander, curcon->ipo); /* XXX deprecated - old animation system */
     }
   }
 }

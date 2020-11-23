@@ -40,9 +40,7 @@
 #include "transform_snap.h"
 
 /* -------------------------------------------------------------------- */
-/* Transform (EditBone Roll) */
-
-/** \name Transform EditBone Roll
+/** \name Transform (EditBone Roll)
  * \{ */
 
 static void applyBoneRoll(TransInfo *t, const int UNUSED(mval[2]))
@@ -97,11 +95,10 @@ void initBoneRoll(TransInfo *t)
 
   t->idx_max = 0;
   t->num.idx_max = 0;
-  t->snap[0] = 0.0f;
-  t->snap[1] = DEG2RAD(5.0);
-  t->snap[2] = DEG2RAD(1.0);
+  t->snap[0] = DEG2RAD(5.0);
+  t->snap[1] = DEG2RAD(1.0);
 
-  copy_v3_fl(t->num.val_inc, t->snap[1]);
+  copy_v3_fl(t->num.val_inc, t->snap[0]);
   t->num.unit_sys = t->scene->unit.system;
   t->num.unit_use_radians = (t->scene->unit.system_rotation == USER_UNIT_ROT_RADIANS);
   t->num.unit_type[0] = B_UNIT_ROTATION;

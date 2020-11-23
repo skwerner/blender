@@ -35,7 +35,8 @@
 
 #include "BKE_context.h"
 #include "BKE_global.h"
-#include "BKE_sequencer.h"
+
+#include "SEQ_sequencer.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -159,24 +160,22 @@ static void wm_job_main_thread_yield(wmJob *wm_job)
  */
 static wmJob *wm_job_find(wmWindowManager *wm, void *owner, const int job_type)
 {
-  wmJob *wm_job;
-
   if (owner && job_type) {
-    for (wm_job = wm->jobs.first; wm_job; wm_job = wm_job->next) {
+    LISTBASE_FOREACH (wmJob *, wm_job, &wm->jobs) {
       if (wm_job->owner == owner && wm_job->job_type == job_type) {
         return wm_job;
       }
     }
   }
   else if (owner) {
-    for (wm_job = wm->jobs.first; wm_job; wm_job = wm_job->next) {
+    LISTBASE_FOREACH (wmJob *, wm_job, &wm->jobs) {
       if (wm_job->owner == owner) {
         return wm_job;
       }
     }
   }
   else if (job_type) {
-    for (wm_job = wm->jobs.first; wm_job; wm_job = wm_job->next) {
+    LISTBASE_FOREACH (wmJob *, wm_job, &wm->jobs) {
       if (wm_job->job_type == job_type) {
         return wm_job;
       }
@@ -228,7 +227,7 @@ bool WM_jobs_test(wmWindowManager *wm, void *owner, int job_type)
   /* job can be running or about to run (suspended) */
   for (wm_job = wm->jobs.first; wm_job; wm_job = wm_job->next) {
     if (wm_job->owner == owner) {
-      if (job_type == WM_JOB_TYPE_ANY || (wm_job->job_type == job_type)) {
+      if (ELEM(job_type, WM_JOB_TYPE_ANY, wm_job->job_type)) {
         if (wm_job->running || wm_job->suspended) {
           return true;
         }
@@ -252,7 +251,7 @@ float WM_jobs_progress(wmWindowManager *wm, void *owner)
 
 static void wm_jobs_update_progress_bars(wmWindowManager *wm)
 {
-  float total_progress = 0.f;
+  float total_progress = 0.0f;
   float jobs_progress = 0;
 
   LISTBASE_FOREACH (wmJob *, wm_job, &wm->jobs) {
@@ -443,7 +442,11 @@ static void wm_jobs_test_suspend_stop(wmWindowManager *wm, wmJob *test)
 
   /* Possible suspend ourselves, waiting for other jobs, or de-suspend. */
   test->suspended = suspend;
-  // if (suspend) printf("job suspended: %s\n", test->name);
+#if 0
+  if (suspend) {
+    printf("job suspended: %s\n", test->name);
+  }
+#endif
 }
 
 /**
@@ -584,7 +587,7 @@ void WM_jobs_kill_type(struct wmWindowManager *wm, void *owner, int job_type)
     next_job = wm_job->next;
 
     if (!owner || wm_job->owner == owner) {
-      if (job_type == WM_JOB_TYPE_ANY || wm_job->job_type == job_type) {
+      if (ELEM(job_type, WM_JOB_TYPE_ANY, wm_job->job_type)) {
         wm_jobs_kill_job(wm, wm_job);
       }
     }
@@ -679,8 +682,14 @@ void wm_jobs_timer(wmWindowManager *wm, wmTimer *wt)
           wm_job->run_customdata = NULL;
           wm_job->run_free = NULL;
 
-          // if (wm_job->stop) printf("job ready but stopped %s\n", wm_job->name);
-          // else printf("job finished %s\n", wm_job->name);
+#if 0
+          if (wm_job->stop) {
+            printf("job ready but stopped %s\n", wm_job->name);
+          }
+          else {
+            printf("job finished %s\n", wm_job->name);
+          }
+#endif
 
           if (G.debug & G_DEBUG_JOBS) {
             printf("Job '%s' finished in %f seconds\n",

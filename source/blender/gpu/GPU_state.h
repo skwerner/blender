@@ -33,7 +33,7 @@ typedef enum eGPUWriteMask {
   GPU_WRITE_COLOR = (GPU_WRITE_RED | GPU_WRITE_GREEN | GPU_WRITE_BLUE | GPU_WRITE_ALPHA),
 } eGPUWriteMask;
 
-ENUM_OPERATORS(eGPUWriteMask)
+ENUM_OPERATORS(eGPUWriteMask, GPU_WRITE_COLOR)
 
 typedef enum eGPUBarrier {
   GPU_BARRIER_NONE = 0,
@@ -41,7 +41,7 @@ typedef enum eGPUBarrier {
   GPU_BARRIER_TEXTURE_FETCH = (1 << 1),
 } eGPUBarrier;
 
-ENUM_OPERATORS(eGPUBarrier)
+ENUM_OPERATORS(eGPUBarrier, GPU_BARRIER_TEXTURE_FETCH)
 
 /**
  * Defines the fixed pipeline blending equation.
@@ -71,6 +71,7 @@ typedef enum eGPUBlend {
   /** Custom blend parameters using dual source blending : SRC0 + SRC1 * DST
    * NOTE: Can only be used with _ONE_ Draw Buffer and shader needs to be specialized. */
   GPU_BLEND_CUSTOM,
+  GPU_BLEND_ALPHA_UNDER_PREMUL,
 } eGPUBlend;
 
 typedef enum eGPUDepthTest {
@@ -161,7 +162,10 @@ float GPU_line_width_get(void);
 void GPU_flush(void);
 void GPU_finish(void);
 void GPU_apply_state(void);
-void GPU_force_state(void);
+
+void GPU_bgl_start(void);
+void GPU_bgl_end(void);
+bool GPU_bgl_get(void);
 
 void GPU_memory_barrier(eGPUBarrier barrier);
 

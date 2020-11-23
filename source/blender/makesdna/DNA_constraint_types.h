@@ -28,6 +28,10 @@
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct Action;
 struct Ipo;
 struct Text;
@@ -60,7 +64,7 @@ typedef struct bConstraint {
   /** Constraint name, MAX_NAME. */
   char name[64];
 
-  /* Flag for panel and subpanel closed / open state in the UI. */
+  /* An "expand" bit for each of the constraint's (sub)panels (uiPanelDataExpansion). */
   short ui_expand_flag;
 
   /** Amount of influence exherted by constraint (0.0-1.0). */
@@ -690,8 +694,10 @@ typedef enum eBConstraint_Types {
 /* flag 0x20 (1 << 5) was used to indicate that a constraint was evaluated
  *                  using a 'local' hack for posebones only. */
 typedef enum eBConstraint_Flags {
+#ifdef DNA_DEPRECATED_ALLOW
   /* Expansion for old box constraint layouts. Just for versioning. */
   CONSTRAINT_EXPAND_DEPRECATED = (1 << 0),
+#endif
   /* pre-check for illegal object name or bone name */
   CONSTRAINT_DISABLE = (1 << 2),
   /* to indicate which Ipo should be shown, maybe for 3d access later too */
@@ -1170,3 +1176,7 @@ typedef enum eStretchTo_Flags {
 #define CONSTRAINT_RB_CONETWIST 4
 #define CONSTRAINT_RB_VEHICLE 11
 #define CONSTRAINT_RB_GENERIC6DOF 12
+
+#ifdef __cplusplus
+}
+#endif

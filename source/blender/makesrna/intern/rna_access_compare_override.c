@@ -26,6 +26,7 @@
 #include "DNA_constraint_types.h"
 #include "DNA_key_types.h"
 #include "DNA_modifier_types.h"
+#include "DNA_object_types.h"
 
 #include "BLI_listbase.h"
 #include "BLI_string.h"
@@ -37,6 +38,7 @@
 #  include "PIL_time_utildefines.h"
 #endif
 
+#include "BKE_armature.h"
 #include "BKE_idprop.h"
 #include "BKE_lib_override.h"
 #include "BKE_main.h"
@@ -80,11 +82,9 @@ bool RNA_property_overridable_get(PointerRNA *ptr, PropertyRNA *prop)
     return !(prop->flag_override & PROPOVERRIDE_NO_COMPARISON) &&
            (prop->flag_override & PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   }
-  else {
-    /* If this is a real 'pure' IDProp (aka custom property), we want to use the IDProp flag. */
-    IDProperty *idprop = (IDProperty *)prop;
-    return (idprop->flag & IDP_FLAG_OVERRIDABLE_LIBRARY) != 0;
-  }
+  /* If this is a real 'pure' IDProp (aka custom property), we want to use the IDProp flag. */
+  IDProperty *idprop = (IDProperty *)prop;
+  return (idprop->flag & IDP_FLAG_OVERRIDABLE_LIBRARY) != 0;
 }
 
 /* Should only be used for custom properties */
@@ -124,14 +124,14 @@ bool RNA_property_comparable(PointerRNA *UNUSED(ptr), PropertyRNA *prop)
 }
 
 static bool rna_property_override_operation_apply(Main *bmain,
-                                                  PointerRNA *ptr_local,
-                                                  PointerRNA *ptr_override,
+                                                  PointerRNA *ptr_dst,
+                                                  PointerRNA *ptr_src,
                                                   PointerRNA *ptr_storage,
-                                                  PropertyRNA *prop_local,
-                                                  PropertyRNA *prop_override,
+                                                  PropertyRNA *prop_dst,
+                                                  PropertyRNA *prop_src,
                                                   PropertyRNA *prop_storage,
-                                                  PointerRNA *ptr_item_local,
-                                                  PointerRNA *ptr_item_override,
+                                                  PointerRNA *ptr_item_dst,
+                                                  PointerRNA *ptr_item_src,
                                                   PointerRNA *ptr_item_storage,
                                                   IDOverrideLibraryPropertyOperation *opop);
 
@@ -208,10 +208,10 @@ bool RNA_struct_equals(Main *bmain, PointerRNA *ptr_a, PointerRNA *ptr_b, eRNACo
   if (ptr_a == NULL && ptr_b == NULL) {
     return true;
   }
-  else if (ptr_a == NULL || ptr_b == NULL) {
+  if (ptr_a == NULL || ptr_b == NULL) {
     return false;
   }
-  else if (ptr_a->type != ptr_b->type) {
+  if (ptr_a->type != ptr_b->type) {
     return false;
   }
 
@@ -594,6 +594,27 @@ bool RNA_struct_override_matches(Main *bmain,
     _timeit_time_global = PIL_check_seconds_timer();
   }
 #endif
+
+  if (ptr_local->owner_id == ptr_local->data && GS(ptr_local->owner_id->name) == ID_OB) {
+    /* Our beloved pose's bone cross-data pointers. Usually, depsgraph evaluation would
+     * ensure this is valid, but in some situations (like hidden collections etc.) this won't
+     * be the case, so we need to take care of this ourselves.
+     *
+     * Note: Typically callers of this function (from BKE_lib_override area) will already have
+     * ensured this. However, studio is still reporting sporadic, unreproducible crashes due to
+     * invalid pose data, so think there are still some cases where some armatures are somehow
+     * missing updates (possibly due to dependencies?). Since calling this function on same ID
+     * several time is almost free, and safe even in a threaded context as long as it has been done
+     * at least once first outside of threaded processing, we do it another time here. */
+    Object *ob_local = (Object *)ptr_local->owner_id;
+    if (ob_local->type == OB_ARMATURE) {
+      Object *ob_reference = (Object *)ptr_local->owner_id->override_library->reference;
+      BLI_assert(ob_local->data != NULL);
+      BLI_assert(ob_reference->data != NULL);
+      BKE_pose_ensure(bmain, ob_local, ob_local->data, true);
+      BKE_pose_ensure(bmain, ob_reference, ob_reference->data, true);
+    }
+  }
 
   iterprop = RNA_struct_iterator_property(ptr_local->type);
 
@@ -1160,6 +1181,10 @@ IDOverrideLibraryProperty *RNA_property_override_property_get(Main *bmain,
   ID *id;
   char *rna_path;
 
+  if (r_created != NULL) {
+    *r_created = false;
+  }
+
   if ((rna_path = rna_property_override_property_real_id_owner(bmain, ptr, prop, &id)) != NULL) {
     IDOverrideLibraryProperty *op = BKE_lib_override_library_property_get(
         id->override_library, rna_path, r_created);
@@ -1198,6 +1223,10 @@ IDOverrideLibraryPropertyOperation *RNA_property_override_property_operation_get
     bool *r_strict,
     bool *r_created)
 {
+  if (r_created != NULL) {
+    *r_created = false;
+  }
+
   IDOverrideLibraryProperty *op = RNA_property_override_property_get(bmain, ptr, prop, NULL);
 
   if (!op) {

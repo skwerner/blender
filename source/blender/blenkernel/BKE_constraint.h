@@ -31,6 +31,10 @@ struct Scene;
 struct bConstraint;
 struct bConstraintTarget;
 struct bPoseChannel;
+struct BlendWriter;
+struct BlendDataReader;
+struct BlendLibReader;
+struct BlendExpander;
 
 /* ---------------------------------------------------------------------------- */
 #ifdef __cplusplus
@@ -183,6 +187,8 @@ bool BKE_constraint_remove_ex(ListBase *list,
                               bool clear_dep);
 bool BKE_constraint_remove(ListBase *list, struct bConstraint *con);
 
+void BKE_constraint_panel_expand(struct bConstraint *con);
+
 /* Constraints + Proxies function prototypes */
 void BKE_constraints_proxylocal_extract(struct ListBase *dst, struct ListBase *src);
 bool BKE_constraints_proxylocked_owner(struct Object *ob, struct bPoseChannel *pchan);
@@ -219,6 +225,13 @@ void BKE_constraints_solve(struct Depsgraph *depsgraph,
                            struct ListBase *conlist,
                            struct bConstraintOb *cob,
                            float ctime);
+
+void BKE_constraint_blend_write(struct BlendWriter *writer, struct ListBase *conlist);
+void BKE_constraint_blend_read_data(struct BlendDataReader *reader, struct ListBase *lb);
+void BKE_constraint_blend_read_lib(struct BlendLibReader *reader,
+                                   struct ID *id,
+                                   struct ListBase *conlist);
+void BKE_constraint_blend_read_expand(struct BlendExpander *expander, struct ListBase *lb);
 
 #ifdef __cplusplus
 }

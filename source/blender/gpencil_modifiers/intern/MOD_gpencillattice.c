@@ -22,12 +22,14 @@
  */
 
 #include <stdio.h>
+#include <string.h> /* For #MEMCPY_STRUCT_AFTER. */
 
 #include "BLI_listbase.h"
 #include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
+#include "DNA_defaults.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_meshdata_types.h"
@@ -65,11 +67,10 @@
 static void initData(GpencilModifierData *md)
 {
   LatticeGpencilModifierData *gpmd = (LatticeGpencilModifierData *)md;
-  gpmd->pass_index = 0;
-  gpmd->material = NULL;
-  gpmd->object = NULL;
-  gpmd->cache_data = NULL;
-  gpmd->strength = 1.0f;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(gpmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(gpmd, DNA_struct_default_get(LatticeGpencilModifierData), modifier);
 }
 
 static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
@@ -84,6 +85,7 @@ static void deformStroke(GpencilModifierData *md,
                          bGPDframe *UNUSED(gpf),
                          bGPDstroke *gps)
 {
+  bGPdata *gpd = ob->data;
   LatticeGpencilModifierData *mmd = (LatticeGpencilModifierData *)md;
   const int def_nr = BKE_object_defgroup_name_index(ob, mmd->vgname);
 
@@ -120,7 +122,7 @@ static void deformStroke(GpencilModifierData *md,
         (struct LatticeDeformData *)mmd->cache_data, &pt->x, mmd->strength * weight);
   }
   /* Calc geometry data. */
-  BKE_gpencil_stroke_geometry_update(gps);
+  BKE_gpencil_stroke_geometry_update(gpd, gps);
 }
 
 /* FIXME: Ideally we be doing this on a copy of the main depsgraph

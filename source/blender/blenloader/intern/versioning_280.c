@@ -93,10 +93,11 @@
 #include "BKE_report.h"
 #include "BKE_rigidbody.h"
 #include "BKE_screen.h"
-#include "BKE_sequencer.h"
 #include "BKE_studiolight.h"
 #include "BKE_unit.h"
 #include "BKE_workspace.h"
+
+#include "SEQ_sequencer.h"
 
 /* Only for IMB_BlendMode */
 #include "IMB_imbuf.h"
@@ -890,7 +891,7 @@ static void do_versions_material_convert_legacy_blend_mode(bNodeTree *ntree, cha
       bNodeSocket *color_socket = nodeFindSocket(transp_node, SOCK_IN, "Color");
       bNodeSocket *transp_socket = nodeFindSocket(transp_node, SOCK_OUT, "BSDF");
 
-      /* If incomming link is from a closure socket, we need to convert it. */
+      /* If incoming link is from a closure socket, we need to convert it. */
       if (fromsock->type == SOCK_SHADER) {
         transp_node->locx = 0.33f * fromnode->locx + 0.66f * tonode->locx;
         transp_node->locy = 0.33f * fromnode->locy + 0.66f * tonode->locy;
@@ -978,7 +979,7 @@ static void do_version_curvemapping_walker(Main *bmain, void (*callback)(CurveMa
       }
     }
 
-    // toolsettings
+    /* toolsettings */
     ToolSettings *ts = scene->toolsettings;
     if (ts->vpaint) {
       callback(ts->vpaint->paint.cavity_curve);
@@ -1201,7 +1202,7 @@ static void do_version_fcurve_hide_viewport_fix(struct ID *UNUSED(id),
                                                 struct FCurve *fcu,
                                                 void *UNUSED(user_data))
 {
-  if (!STREQ(fcu->rna_path, "hide")) {
+  if (fcu->rna_path == NULL || !STREQ(fcu->rna_path, "hide")) {
     return;
   }
 
@@ -1665,7 +1666,7 @@ void do_versions_after_linking_280(Main *bmain, ReportList *UNUSED(reports))
       BKE_mesh_tessface_clear(me);
 
       /* Moved from do_versions because we need updated polygons for calculating normals. */
-      if (MAIN_VERSION_OLDER(bmain, 256, 6)) {
+      if (!MAIN_VERSION_ATLEAST(bmain, 256, 6)) {
         BKE_mesh_calc_normals(me);
       }
     }
@@ -2099,7 +2100,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
   if (!MAIN_VERSION_ATLEAST(bmain, 280, 8)) {
     /* Blender Internal removal */
     for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
-      if (STREQ(scene->r.engine, "BLENDER_RENDER") || STREQ(scene->r.engine, "BLENDER_GAME")) {
+      if (STR_ELEM(scene->r.engine, "BLENDER_RENDER", "BLENDER_GAME")) {
         BLI_strncpy(scene->r.engine, RE_engine_id_BLENDER_EEVEE, sizeof(scene->r.engine));
       }
 
@@ -2988,9 +2989,9 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
 
     /* gpencil grid settings */
     for (bGPdata *gpd = bmain->gpencils.first; gpd; gpd = gpd->id.next) {
-      ARRAY_SET_ITEMS(gpd->grid.color, 0.5f, 0.5f, 0.5f);  // Color
-      ARRAY_SET_ITEMS(gpd->grid.scale, 1.0f, 1.0f);        // Scale
-      gpd->grid.lines = GP_DEFAULT_GRID_LINES;             // Number of lines
+      ARRAY_SET_ITEMS(gpd->grid.color, 0.5f, 0.5f, 0.5f); /* Color */
+      ARRAY_SET_ITEMS(gpd->grid.scale, 1.0f, 1.0f);       /* Scale */
+      gpd->grid.lines = GP_DEFAULT_GRID_LINES;            /* Number of lines */
     }
   }
 
@@ -3419,7 +3420,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
             case SPACE_OUTLINER: {
               SpaceOutliner *space_outliner = (SpaceOutliner *)sl;
               space_outliner->filter &= ~(SO_FILTER_UNUSED_1 | SO_FILTER_UNUSED_5 |
-                                          SO_FILTER_UNUSED_12);
+                                          SO_FILTER_OB_STATE_SELECTABLE);
               space_outliner->storeflag &= ~(SO_TREESTORE_UNUSED_1);
               break;
             }
@@ -3493,7 +3494,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
 
     for (Object *ob = bmain->objects.first; ob; ob = ob->id.next) {
       ob->flag &= ~(OB_FLAG_UNUSED_11 | OB_FLAG_UNUSED_12);
-      ob->transflag &= ~(OB_TRANSFLAG_UNUSED_0 | OB_TRANSFLAG_UNUSED_1);
+      ob->transflag &= ~(OB_TRANSFORM_ADJUST_ROOT_PARENT_FOR_VIEW_LOCK | OB_TRANSFLAG_UNUSED_1);
       ob->shapeflag &= ~OB_SHAPE_FLAG_UNUSED_1;
     }
 
@@ -3662,8 +3663,8 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
         }
       }
 
-      ob->transflag &= ~(OB_TRANSFLAG_UNUSED_0 | OB_TRANSFLAG_UNUSED_1 | OB_TRANSFLAG_UNUSED_3 |
-                         OB_TRANSFLAG_UNUSED_6 | OB_TRANSFLAG_UNUSED_12);
+      ob->transflag &= ~(OB_TRANSFORM_ADJUST_ROOT_PARENT_FOR_VIEW_LOCK | OB_TRANSFLAG_UNUSED_1 |
+                         OB_TRANSFLAG_UNUSED_3 | OB_TRANSFLAG_UNUSED_6 | OB_TRANSFLAG_UNUSED_12);
 
       ob->nlaflag &= ~(OB_ADS_UNUSED_1 | OB_ADS_UNUSED_2);
     }
@@ -4078,8 +4079,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
       if (STREQ(view_settings->view_transform, "Default")) {
         STRNCPY(view_settings->view_transform, "Standard");
       }
-      else if (STREQ(view_settings->view_transform, "RRT") ||
-               STREQ(view_settings->view_transform, "Film")) {
+      else if (STR_ELEM(view_settings->view_transform, "RRT", "Film")) {
         STRNCPY(view_settings->view_transform, "Filmic");
       }
       else if (STREQ(view_settings->view_transform, "Log")) {
@@ -4871,7 +4871,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
               gps->fill_opacity_fac = 1.0f;
 
               /* Calc geometry data because in old versions this data was not saved. */
-              BKE_gpencil_stroke_geometry_update(gps);
+              BKE_gpencil_stroke_geometry_update(gpd, gps);
 
               srgb_to_linearrgb_v4(gps->vert_color_fill, gps->vert_color_fill);
               int i;

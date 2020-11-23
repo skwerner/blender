@@ -343,6 +343,14 @@ static void rna_def_volume_grids(BlenderRNA *brna, PropertyRNA *cprop)
 
   func = RNA_def_function(srna, "unload", "BKE_volume_unload");
   RNA_def_function_ui_description(func, "Unload all grid and voxel data from memory");
+
+  func = RNA_def_function(srna, "save", "BKE_volume_save");
+  RNA_def_function_ui_description(func, "Save grids and metadata to file");
+  RNA_def_function_flag(func, FUNC_USE_MAIN | FUNC_USE_REPORTS);
+  parm = RNA_def_string_file_path(func, "filepath", NULL, 0, "", "File path to save to");
+  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
+  parm = RNA_def_boolean(func, "success", 0, "", "True if grid list was successfully loaded");
+  RNA_def_function_return(func, parm);
 }
 
 static void rna_def_volume_display(BlenderRNA *brna)
@@ -442,6 +450,7 @@ static void rna_def_volume_display(BlenderRNA *brna)
   prop = RNA_def_property(srna, "slice_axis", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_items(prop, axis_slice_position_items);
   RNA_def_property_ui_text(prop, "Axis", "");
+  RNA_def_property_update(prop, 0, "rna_Volume_update_display");
 
   prop = RNA_def_property(srna, "slice_depth", PROP_FLOAT, PROP_FACTOR);
   RNA_def_property_range(prop, 0.0, 1.0);

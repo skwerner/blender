@@ -30,6 +30,10 @@
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct AnimData;
 struct Ipo;
 
@@ -107,7 +111,7 @@ typedef struct Key {
   char _pad2;
 
   /** Only used when (Key->type == KEY_NORMAL), this value is used as a time slider,
-   * rather then using the scenes time, this value can be animated to give greater control */
+   * rather than using the scene's time, this value can be animated to give greater control */
   float ctime;
 
   /**
@@ -158,3 +162,7 @@ enum {
 
 #define KEYELEM_ELEM_LEN_BEZTRIPLE 4
 #define KEYELEM_FLOAT_LEN_BEZTRIPLE (KEYELEM_ELEM_LEN_BEZTRIPLE * KEYELEM_ELEM_SIZE_CURVE)
+
+#ifdef __cplusplus
+}
+#endif

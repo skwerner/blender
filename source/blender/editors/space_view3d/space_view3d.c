@@ -153,7 +153,7 @@ bool ED_view3d_area_user_region(const ScrArea *area, const View3D *v3d, ARegion 
       rv3d = region->regiondata;
       if ((rv3d->viewlock & RV3D_LOCK_ROTATION) == 0) {
         region_unlock = region;
-        if (rv3d->persp == RV3D_PERSP || rv3d->persp == RV3D_CAMOB) {
+        if (ELEM(rv3d->persp, RV3D_PERSP, RV3D_CAMOB)) {
           region_unlock_user = region;
           break;
         }
@@ -468,7 +468,7 @@ static ID *view3d_drop_id_in_main_region_poll_id(bContext *C,
 {
   ScrArea *area = CTX_wm_area(C);
   if (ED_region_overlap_isect_any_xy(area, &event->x)) {
-    return false;
+    return NULL;
   }
   return WM_drag_ID(drag, id_type);
 }

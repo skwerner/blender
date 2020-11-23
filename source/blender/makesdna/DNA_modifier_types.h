@@ -96,6 +96,8 @@ typedef enum ModifierType {
   eModifierType_Fluid = 56,
   eModifierType_Simulation = 57,
   eModifierType_MeshToVolume = 58,
+  eModifierType_VolumeDisplace = 59,
+  eModifierType_VolumeToMesh = 60,
   NUM_MODIFIER_TYPES,
 } ModifierType;
 
@@ -104,8 +106,10 @@ typedef enum ModifierMode {
   eModifierMode_Render = (1 << 1),
   eModifierMode_Editmode = (1 << 2),
   eModifierMode_OnCage = (1 << 3),
-  /* Old modifier box expansion, just for versioning. */
+#ifdef DNA_DEPRECATED_ALLOW
+  /** Old modifier box expansion, just for versioning. */
   eModifierMode_Expanded_DEPRECATED = (1 << 4),
+#endif
   eModifierMode_Virtual = (1 << 5),
   eModifierMode_ApplyOnSpline = (1 << 6),
   eModifierMode_DisableTemporary = (1u << 31),
@@ -115,9 +119,9 @@ typedef struct ModifierData {
   struct ModifierData *next, *prev;
 
   int type, mode;
-  int stackindex;
+  char _pad0[4];
   short flag;
-  /* An "expand" bit for each of the modifier's (sub)panels. */
+  /* An "expand" bit for each of the modifier's (sub)panels (uiPanelDataExpansion). */
   short ui_expand_flag;
   /** MAX_NAME. */
   char name[64];
@@ -1045,7 +1049,8 @@ typedef struct MultiresModifierData {
   ModifierData modifier;
 
   char lvl, sculptlvl, renderlvl, totlvl;
-  char simple, flags, _pad[2];
+  char simple DNA_DEPRECATED;
+  char flags, _pad[2];
   short quality;
   short uv_smooth;
   short boundary_smooth;
@@ -2217,9 +2222,6 @@ enum {
 
 typedef struct SimulationModifierData {
   ModifierData modifier;
-
-  struct Simulation *simulation;
-  char *data_path;
 } SimulationModifierData;
 
 typedef struct MeshToVolumeModifierData {
@@ -2254,6 +2256,58 @@ typedef enum MeshToVolumeModifierResolutionMode {
   MESH_TO_VOLUME_RESOLUTION_MODE_VOXEL_AMOUNT = 0,
   MESH_TO_VOLUME_RESOLUTION_MODE_VOXEL_SIZE = 1,
 } MeshToVolumeModifierResolutionMode;
+
+typedef struct VolumeDisplaceModifierData {
+  ModifierData modifier;
+
+  struct Tex *texture;
+  struct Object *texture_map_object;
+  int texture_map_mode;
+
+  float strength;
+  float texture_mid_level[3];
+  float texture_sample_radius;
+} VolumeDisplaceModifierData;
+
+/* VolumeDisplaceModifierData->texture_map_mode */
+enum {
+  MOD_VOLUME_DISPLACE_MAP_LOCAL = 0,
+  MOD_VOLUME_DISPLACE_MAP_GLOBAL = 1,
+  MOD_VOLUME_DISPLACE_MAP_OBJECT = 2,
+};
+
+typedef struct VolumeToMeshModifierData {
+  ModifierData modifier;
+
+  /** This is the volume object that is supposed to be converted to a mesh. */
+  struct Object *object;
+
+  float threshold;
+  float adaptivity;
+
+  /** VolumeToMeshFlag */
+  uint32_t flag;
+
+  /** VolumeToMeshResolutionMode */
+  int resolution_mode;
+  float voxel_size;
+  int voxel_amount;
+
+  /** MAX_NAME */
+  char grid_name[64];
+} VolumeToMeshModifierData;
+
+/** VolumeToMeshModifierData->resolution_mode */
+typedef enum VolumeToMeshResolutionMode {
+  VOLUME_TO_MESH_RESOLUTION_MODE_GRID = 0,
+  VOLUME_TO_MESH_RESOLUTION_MODE_VOXEL_AMOUNT = 1,
+  VOLUME_TO_MESH_RESOLUTION_MODE_VOXEL_SIZE = 2,
+} VolumeToMeshResolutionMode;
+
+/** VolumeToMeshModifierData->flag */
+typedef enum VolumeToMeshFlag {
+  VOLUME_TO_MESH_USE_SMOOTH_SHADE = 1 << 0,
+} VolumeToMeshFlag;
 
 #ifdef __cplusplus
 }

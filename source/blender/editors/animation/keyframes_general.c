@@ -117,6 +117,9 @@ bool delete_fcurve_keys(FCurve *fcu)
   /* Delete selected BezTriples */
   for (int i = 0; i < fcu->totvert; i++) {
     if (fcu->bezt[i].f2 & SELECT) {
+      if (i == fcu->active_keyframe_index) {
+        BKE_fcurve_active_keyframe_set(fcu, NULL);
+      }
       memmove(&fcu->bezt[i], &fcu->bezt[i + 1], sizeof(BezTriple) * (fcu->totvert - i - 1));
       fcu->totvert--;
       i--;
@@ -387,7 +390,7 @@ static void decimate_fcurve_segment(FCurve *fcu,
   BKE_curve_decimate_bezt_array(&fcu->bezt[bezt_segment_start_idx],
                                 bezt_segment_len,
                                 12, /* The actual resolution displayed in the viewport is dynamic
-                                       so we just pick a value that preserves the curve shape. */
+                                     * so we just pick a value that preserves the curve shape. */
                                 false,
                                 SELECT,
                                 BEZT_FLAG_TEMP_TAG,
@@ -482,7 +485,7 @@ typedef struct tSmooth_Bezt {
 } tSmooth_Bezt;
 
 /* Use a weighted moving-means method to reduce intensity of fluctuations */
-// TODO: introduce scaling factor for weighting falloff
+/* TODO: introduce scaling factor for weighting falloff */
 void smooth_fcurve(FCurve *fcu)
 {
   int totSel = 0;

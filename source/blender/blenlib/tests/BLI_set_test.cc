@@ -221,10 +221,10 @@ TEST(set, OftenAddRemoveContained)
 TEST(set, UniquePtrValues)
 {
   Set<std::unique_ptr<int>> set;
-  set.add_new(std::unique_ptr<int>(new int()));
-  auto value1 = std::unique_ptr<int>(new int());
+  set.add_new(std::make_unique<int>());
+  auto value1 = std::make_unique<int>();
   set.add_new(std::move(value1));
-  set.add(std::unique_ptr<int>(new int()));
+  set.add(std::make_unique<int>());
 
   EXPECT_EQ(set.size(), 3);
 }
@@ -451,6 +451,20 @@ TEST(set, LookupKeyPtr)
   EXPECT_EQ(set.lookup_key_ptr({1, 50})->attached_data, 10);
   EXPECT_EQ(set.lookup_key_ptr({2, 50})->attached_data, 20);
   EXPECT_EQ(set.lookup_key_ptr({3, 50}), nullptr);
+}
+
+TEST(set, LookupKeyOrAdd)
+{
+  Set<MyKeyType> set;
+  set.add({1, 10});
+  set.add({2, 20});
+  EXPECT_EQ(set.size(), 2);
+  EXPECT_EQ(set.lookup_key_or_add({2, 40}).attached_data, 20);
+  EXPECT_EQ(set.size(), 2);
+  EXPECT_EQ(set.lookup_key_or_add({3, 40}).attached_data, 40);
+  EXPECT_EQ(set.size(), 3);
+  EXPECT_EQ(set.lookup_key_or_add({3, 60}).attached_data, 40);
+  EXPECT_EQ(set.size(), 3);
 }
 
 TEST(set, StringViewKeys)

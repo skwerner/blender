@@ -123,6 +123,10 @@ typedef struct PaintStroke {
   float zoom_2d;
   int pen_flip;
 
+  /* Tilt, as read from the event. */
+  float x_tilt;
+  float y_tilt;
+
   /* line constraint */
   bool constrain_line;
   float constrained_pos[2];
@@ -617,9 +621,14 @@ static void paint_brush_stroke_add_step(bContext *C,
     RNA_collection_add(op->ptr, "stroke", &itemptr);
     RNA_float_set(&itemptr, "size", ups->pixel_radius);
     RNA_float_set_array(&itemptr, "location", location);
+    /* Mouse coordinates modified by the stroke type options. */
     RNA_float_set_array(&itemptr, "mouse", mouse_out);
+    /* Original mouse coordinates. */
+    RNA_float_set_array(&itemptr, "mouse_event", mouse_in);
     RNA_boolean_set(&itemptr, "pen_flip", stroke->pen_flip);
     RNA_float_set(&itemptr, "pressure", pressure);
+    RNA_float_set(&itemptr, "x_tilt", stroke->x_tilt);
+    RNA_float_set(&itemptr, "y_tilt", stroke->y_tilt);
 
     stroke->update_step(C, stroke, &itemptr);
 
@@ -683,7 +692,7 @@ static float paint_space_stroke_spacing(bContext *C,
     }
   }
   else {
-    /* brushes can have a minimum size of 1.0 but with pressure it can be smaller then a pixel
+    /* brushes can have a minimum size of 1.0 but with pressure it can be smaller than a pixel
      * causing very high step sizes, hanging blender T32381. */
     size_clamp = max_ff(1.0f, size);
   }
@@ -698,8 +707,8 @@ static float paint_space_stroke_spacing(bContext *C,
   if (SCULPT_is_cloth_deform_brush(brush)) {
     /* The spacing in tools that use the cloth solver should not be affected by the brush radius to
      * avoid affecting the simulation update rate when changing the radius of the brush.
-     With a value of 100 and the brush default of 10 for spacing, a simulation step runs every 2
-     pixels movement of the cursor. */
+     * With a value of 100 and the brush default of 10 for spacing, a simulation step runs every 2
+     * pixels movement of the cursor. */
     size_clamp = 100.0f;
   }
 
@@ -708,7 +717,7 @@ static float paint_space_stroke_spacing(bContext *C,
   spacing *= stroke->zoom_2d;
 
   if (paint_stroke_use_scene_spacing(brush, mode)) {
-    return max_ff(0.001f, size_clamp * spacing / 50.f);
+    return max_ff(0.001f, size_clamp * spacing / 50.0f);
   }
   return max_ff(stroke->zoom_2d, size_clamp * spacing / 50.0f);
 }
@@ -1382,6 +1391,12 @@ int paint_stroke_modal(bContext *C, wmOperator *op, const wmEvent *event)
 
   paint_stroke_add_sample(p, stroke, event->mval[0], event->mval[1], pressure);
   paint_stroke_sample_average(stroke, &sample_average);
+
+  /* Tilt. */
+  if (WM_event_is_tablet(event)) {
+    stroke->x_tilt = event->tablet.x_tilt;
+    stroke->y_tilt = event->tablet.y_tilt;
+  }
 
 #ifdef WITH_INPUT_NDOF
   /* let NDOF motion pass through to the 3D view so we can paint and rotate simultaneously!

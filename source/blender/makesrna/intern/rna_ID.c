@@ -52,7 +52,7 @@ const EnumPropertyItem rna_enum_id_type_items[] = {
     {ID_CU, "CURVE", ICON_CURVE_DATA, "Curve", ""},
     {ID_VF, "FONT", ICON_FONT_DATA, "Font", ""},
     {ID_GD, "GREASEPENCIL", ICON_GREASEPENCIL, "Grease Pencil", ""},
-    {ID_GR, "COLLECTION", ICON_GROUP, "Collection", ""},
+    {ID_GR, "COLLECTION", ICON_OUTLINER_COLLECTION, "Collection", ""},
     {ID_IM, "IMAGE", ICON_IMAGE_DATA, "Image", ""},
     {ID_KE, "KEY", ICON_SHAPEKEY_DATA, "Key", ""},
     {ID_LA, "LIGHT", ICON_LIGHT_DATA, "Light", ""},
@@ -289,7 +289,7 @@ short RNA_type_to_ID_code(const StructRNA *type)
   if (base_type == &RNA_PaintCurve) {
     return ID_PC;
   }
-#  ifdef WITH_PARTICLE_NODES
+#  ifdef WITH_POINT_CLOUD
   if (base_type == &RNA_PointCloud) {
     return ID_PT;
   }
@@ -303,7 +303,7 @@ short RNA_type_to_ID_code(const StructRNA *type)
   if (base_type == &RNA_Screen) {
     return ID_SCR;
   }
-#  ifdef WITH_PARTICLE_NODES
+#  ifdef WITH_GEOMETRY_NODES
   if (base_type == &RNA_Simulation) {
     return ID_SIM;
   }
@@ -399,7 +399,7 @@ StructRNA *ID_code_to_RNA_type(short idcode)
     case ID_PC:
       return &RNA_PaintCurve;
     case ID_PT:
-#  ifdef WITH_PARTICLE_NODES
+#  ifdef WITH_POINT_CLOUD
       return &RNA_PointCloud;
 #  else
       return &RNA_ID;
@@ -411,7 +411,7 @@ StructRNA *ID_code_to_RNA_type(short idcode)
     case ID_SCR:
       return &RNA_Screen;
     case ID_SIM:
-#  ifdef WITH_PARTICLE_NODES
+#  ifdef WITH_GEOMETRY_NODES
       return &RNA_Simulation;
 #  else
       return &RNA_ID;
@@ -523,16 +523,12 @@ static ID *rna_ID_evaluated_get(ID *id, struct Depsgraph *depsgraph)
 
 static ID *rna_ID_copy(ID *id, Main *bmain)
 {
-  ID *newid;
+  ID *newid = BKE_id_copy(bmain, id);
 
-  if (BKE_id_copy(bmain, id, &newid)) {
-    if (newid != NULL) {
-      id_us_min(newid);
-    }
-    return newid;
+  if (newid != NULL) {
+    id_us_min(newid);
   }
-
-  return NULL;
+  return newid;
 }
 
 static ID *rna_ID_override_create(ID *id, Main *bmain, bool remap_local_usages)
@@ -1314,7 +1310,7 @@ static void rna_def_ID_override_library_property_operation(BlenderRNA *brna)
        "MANDATORY",
        0,
        "Mandatory",
-       "For templates, prevents the user from removing pre-defined operation (NOT USED)"},
+       "For templates, prevents the user from removing predefined operation (NOT USED)"},
       {IDOVERRIDE_LIBRARY_FLAG_LOCKED,
        "LOCKED",
        0,

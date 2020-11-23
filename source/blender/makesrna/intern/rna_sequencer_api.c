@@ -46,11 +46,12 @@
 #  include "BKE_movieclip.h"
 
 #  include "BKE_report.h"
-#  include "BKE_sequencer.h"
 #  include "BKE_sound.h"
 
 #  include "IMB_imbuf.h"
 #  include "IMB_imbuf_types.h"
+
+#  include "SEQ_sequencer.h"
 
 #  include "WM_api.h"
 
@@ -58,7 +59,7 @@ static void rna_Sequence_update_rnafunc(ID *id, Sequence *self, bool do_data)
 {
   if (do_data) {
     BKE_sequencer_update_changed_seq_and_deps((Scene *)id, self, true, true);
-    // new_tstripdata(self); // need 2.6x version of this.
+    // new_tstripdata(self); /* need 2.6x version of this. */
   }
   BKE_sequence_calc((Scene *)id, self);
   BKE_sequence_calc_disp((Scene *)id, self);
@@ -88,11 +89,13 @@ static Sequence *alloc_generic_sequence(
 
   Strip *strip = seq->strip;
 
-  if (file) {
+  /* Don't allocate StripElem for clip, mask and scene types. This struct is not handled in
+   * seq_dupli() function. */
+  if (file && !ELEM(type, SEQ_TYPE_MOVIECLIP, SEQ_TYPE_MASK, SEQ_TYPE_SCENE)) {
     strip->stripdata = se = MEM_callocN(sizeof(StripElem), "stripelem");
     BLI_split_dirfile(file, strip->dir, se->name, sizeof(strip->dir), sizeof(se->name));
 
-    BKE_sequence_init_colorspace(seq);
+    SEQ_render_init_colorspace(seq);
   }
   else {
     strip->stripdata = NULL;
@@ -476,7 +479,7 @@ void RNA_api_sequence_strip(StructRNA *srna)
   RNA_def_function_ui_description(func, "Update the strip dimensions");
   parm = RNA_def_boolean(func, "data", false, "Data", "Update strip data");
 
-  func = RNA_def_function(srna, "strip_elem_from_frame", "BKE_sequencer_give_stripelem");
+  func = RNA_def_function(srna, "strip_elem_from_frame", "SEQ_render_give_stripelem");
   RNA_def_function_ui_description(func, "Return the strip element from a given frame or None");
   parm = RNA_def_int(func,
                      "frame",

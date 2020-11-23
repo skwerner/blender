@@ -36,6 +36,7 @@
 
 /* Own include. */
 #include "transform_convert.h"
+#include "transform_orientations.h"
 
 /* -------------------------------------------------------------------- */
 /** \name Curve/Surfaces Transform Creation
@@ -405,7 +406,7 @@ void createTransCurveVerts(TransInfo *t)
               }
               td->ext = NULL;
 
-              if (t->mode == TFM_CURVE_SHRINKFATTEN || t->mode == TFM_RESIZE) {
+              if (ELEM(t->mode, TFM_CURVE_SHRINKFATTEN, TFM_RESIZE)) {
                 td->val = &(bp->radius);
                 td->ival = bp->radius;
               }

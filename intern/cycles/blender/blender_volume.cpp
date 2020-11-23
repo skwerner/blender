@@ -202,7 +202,7 @@ static void sync_smoke_volume(Scene *scene, BL::Object &b_ob, Volume *volume, fl
       continue;
     }
 
-    volume->clipping = b_domain.clipping();
+    volume->set_clipping(b_domain.clipping());
 
     Attribute *attr = volume->attributes.add(std);
 
@@ -242,13 +242,6 @@ class BlenderVolumeLoader : public VDBImageLoader {
 #endif
   }
 
-  bool equals(const ImageLoader &other) const override
-  {
-    /* TODO: detect multiple volume datablocks with the same filepath. */
-    const BlenderVolumeLoader &other_loader = (const BlenderVolumeLoader &)other;
-    return b_volume == other_loader.b_volume && grid_name == other_loader.grid_name;
-  }
-
   BL::Volume b_volume;
 };
 
@@ -262,9 +255,9 @@ static void sync_volume_object(BL::BlendData &b_data,
 
   BL::VolumeRender b_render(b_volume.render());
 
-  volume->clipping = b_render.clipping();
-  volume->step_size = b_render.step_size();
-  volume->object_space = (b_render.space() == BL::VolumeRender::space_OBJECT);
+  volume->set_clipping(b_render.clipping());
+  volume->set_step_size(b_render.step_size());
+  volume->set_object_space((b_render.space() == BL::VolumeRender::space_OBJECT));
 
   /* Find grid with matching name. */
   BL::Volume::grids_iterator b_grid_iter;
@@ -307,27 +300,9 @@ static void sync_volume_object(BL::BlendData &b_data,
   }
 }
 
-/* If the voxel attributes change, we need to rebuild the bounding mesh. */
-static vector<int> get_voxel_image_slots(Mesh *mesh)
+void BlenderSync::sync_volume(BL::Object &b_ob, Volume *volume)
 {
-  vector<int> slots;
-  for (const Attribute &attr : mesh->attributes.attributes) {
-    if (attr.element == ATTR_ELEMENT_VOXEL) {
-      slots.push_back(attr.data_voxel().svm_slot());
-    }
-  }
-
-  return slots;
-}
-
-void BlenderSync::sync_volume(BL::Object &b_ob,
-                              Volume *volume,
-                              const vector<Shader *> &used_shaders)
-{
-  vector<int> old_voxel_slots = get_voxel_image_slots(volume);
-
-  volume->clear();
-  volume->used_shaders = used_shaders;
+  volume->clear(true);
 
   if (view_layer.use_volumes) {
     if (b_ob.type() == BL::Object::type_VOLUME) {
@@ -342,8 +317,7 @@ void BlenderSync::sync_volume(BL::Object &b_ob,
   }
 
   /* Tag update. */
-  bool rebuild = (old_voxel_slots != get_voxel_image_slots(volume));
-  volume->tag_update(scene, rebuild);
+  volume->tag_update(scene, true);
 }
 
 CCL_NAMESPACE_END

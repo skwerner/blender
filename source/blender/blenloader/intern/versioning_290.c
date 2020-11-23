@@ -20,6 +20,7 @@
 /* allow readfile to use deprecated functionality */
 #define DNA_DEPRECATED_ALLOW
 
+#include "BLI_alloca.h"
 #include "BLI_listbase.h"
 #include "BLI_math.h"
 #include "BLI_string.h"
@@ -29,6 +30,7 @@
 #include "DNA_brush_types.h"
 #include "DNA_cachefile_types.h"
 #include "DNA_constraint_types.h"
+#include "DNA_fluid_types.h"
 #include "DNA_genfile.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
@@ -37,27 +39,175 @@
 #include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
+#include "DNA_particle_types.h"
 #include "DNA_pointcloud_types.h"
 #include "DNA_rigidbody_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_shader_fx_types.h"
+#include "DNA_space_types.h"
+#include "DNA_tracking_types.h"
 #include "DNA_workspace_types.h"
 
+#include "BKE_animsys.h"
 #include "BKE_collection.h"
 #include "BKE_colortools.h"
+#include "BKE_fcurve.h"
 #include "BKE_gpencil.h"
 #include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_mesh.h"
+#include "BKE_multires.h"
 #include "BKE_node.h"
 
 #include "MEM_guardedalloc.h"
+
+#include "RNA_access.h"
+
+#include "SEQ_sequencer.h"
 
 #include "BLO_readfile.h"
 #include "readfile.h"
 
 /* Make preferences read-only, use versioning_userdef.c. */
 #define U (*((const UserDef *)&U))
+
+/* image_size is width or height depending what RNA property is converted - X or Y. */
+static void seq_convert_transform_animation(const Scene *scene,
+                                            const char *path,
+                                            const int image_size)
+{
+  if (scene->adt == NULL || scene->adt->action == NULL) {
+    return;
+  }
+
+  FCurve *fcu = BKE_fcurve_find(&scene->adt->action->curves, path, 0);
+  if (fcu != NULL && !BKE_fcurve_is_empty(fcu)) {
+    BezTriple *bezt = fcu->bezt;
+    for (int i = 0; i < fcu->totvert; i++, bezt++) {
+      /* Same math as with old_image_center_*, but simplified. */
+      bezt->vec[1][1] = image_size / 2 + bezt->vec[1][1] - scene->r.xsch / 2;
+    }
+  }
+}
+
+static void seq_convert_transform_crop(const Scene *scene,
+                                       Sequence *seq,
+                                       const eSpaceSeq_Proxy_RenderSize render_size)
+{
+  StripCrop *c = seq->strip->crop;
+  StripTransform *t = seq->strip->transform;
+  int old_image_center_x = scene->r.xsch / 2;
+  int old_image_center_y = scene->r.ysch / 2;
+  int image_size_x = scene->r.xsch;
+  int image_size_y = scene->r.ysch;
+
+  /* Hardcoded legacy bit-flags which has been removed. */
+  const uint32_t use_transform_flag = (1 << 16);
+  const uint32_t use_crop_flag = (1 << 17);
+
+  const StripElem *s_elem = SEQ_render_give_stripelem(seq, seq->start);
+  if (s_elem != NULL) {
+    image_size_x = s_elem->orig_width;
+    image_size_y = s_elem->orig_height;
+
+    if (SEQ_can_use_proxy(seq, SEQ_rendersize_to_proxysize(render_size))) {
+      image_size_x /= SEQ_rendersize_to_scale_factor(render_size);
+      image_size_y /= SEQ_rendersize_to_scale_factor(render_size);
+    }
+  }
+
+  /* Default scale. */
+  if (t->scale_x == 0.0f && t->scale_y == 0.0f) {
+    t->scale_x = 1.0f;
+    t->scale_y = 1.0f;
+  }
+
+  /* Clear crop if it was unused. This must happen before converting values. */
+  if ((seq->flag & use_crop_flag) == 0) {
+    c->bottom = c->top = c->left = c->right = 0;
+  }
+
+  if ((seq->flag & use_transform_flag) == 0) {
+    t->xofs = t->yofs = 0;
+
+    /* Reverse scale to fit for strips not using offset. */
+    float project_aspect = (float)scene->r.xsch / (float)scene->r.ysch;
+    float image_aspect = (float)image_size_x / (float)image_size_y;
+    if (project_aspect > image_aspect) {
+      t->scale_x = project_aspect / image_aspect;
+    }
+    else {
+      t->scale_y = image_aspect / project_aspect;
+    }
+  }
+
+  if ((seq->flag & use_crop_flag) != 0 && (seq->flag & use_transform_flag) == 0) {
+    /* Calculate image offset. */
+    float s_x = scene->r.xsch / image_size_x;
+    float s_y = scene->r.ysch / image_size_y;
+    old_image_center_x += c->right * s_x - c->left * s_x;
+    old_image_center_y += c->top * s_y - c->bottom * s_y;
+
+    /* Convert crop to scale. */
+    int cropped_image_size_x = image_size_x - c->right - c->left;
+    int cropped_image_size_y = image_size_y - c->top - c->bottom;
+    c->bottom = c->top = c->left = c->right = 0;
+    t->scale_x *= (float)image_size_x / (float)cropped_image_size_x;
+    t->scale_y *= (float)image_size_y / (float)cropped_image_size_y;
+  }
+
+  if ((seq->flag & use_transform_flag) != 0) {
+    /* Convert image offset. */
+    old_image_center_x = image_size_x / 2 - c->left + t->xofs;
+    old_image_center_y = image_size_y / 2 - c->bottom + t->yofs;
+
+    /* Preserve original image size. */
+    t->scale_x = t->scale_y = MAX2((float)image_size_x / (float)scene->r.xsch,
+                                   (float)image_size_y / (float)scene->r.ysch);
+
+    /* Convert crop. */
+    if ((seq->flag & use_crop_flag) != 0) {
+      c->top /= t->scale_x;
+      c->bottom /= t->scale_x;
+      c->left /= t->scale_x;
+      c->right /= t->scale_x;
+    }
+  }
+
+  t->xofs = old_image_center_x - scene->r.xsch / 2;
+  t->yofs = old_image_center_y - scene->r.ysch / 2;
+
+  /* Convert offset animation, but only if crop is not used. */
+  if ((seq->flag & use_transform_flag) != 0 && (seq->flag & use_crop_flag) == 0) {
+    char name_esc[(sizeof(seq->name) - 2) * 2], *path;
+    BLI_strescape(name_esc, seq->name + 2, sizeof(name_esc));
+
+    path = BLI_sprintfN("sequence_editor.sequences_all[\"%s\"].transform.offset_x", name_esc);
+    seq_convert_transform_animation(scene, path, image_size_x);
+    MEM_freeN(path);
+    path = BLI_sprintfN("sequence_editor.sequences_all[\"%s\"].transform.offset_y", name_esc);
+    seq_convert_transform_animation(scene, path, image_size_y);
+    MEM_freeN(path);
+  }
+
+  seq->flag &= ~use_transform_flag;
+  seq->flag &= ~use_crop_flag;
+}
+
+static void seq_convert_transform_crop_lb(const Scene *scene,
+                                          const ListBase *lb,
+                                          const eSpaceSeq_Proxy_RenderSize render_size)
+{
+
+  LISTBASE_FOREACH (Sequence *, seq, lb) {
+    if (seq->type != SEQ_TYPE_SOUND_RAM) {
+      seq_convert_transform_crop(scene, seq, render_size);
+    }
+    if (seq->type == SEQ_TYPE_META) {
+      seq_convert_transform_crop_lb(scene, &seq->seqbase, render_size);
+    }
+  }
+}
 
 void do_versions_after_linking_290(Main *bmain, ReportList *UNUSED(reports))
 {
@@ -225,6 +375,88 @@ void do_versions_after_linking_290(Main *bmain, ReportList *UNUSED(reports))
             "WARNING: Cycle detected in collection '%s', fixed as best as possible.\n"
             "You may have to reconstruct your View Layers...\n",
             collection->id.name);
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 291, 8)) {
+    /**
+     * Make sure Emission Alpha fcurve and drivers is properly mapped after the Emission Strength
+     * got introduced.
+     * */
+
+    /**
+     * Effectively we are replacing the (animation of) node socket input 18 with 19.
+     * Emission Strength is the new socket input 18, pushing Emission Alpha to input 19.
+     *
+     * To play safe we move all the inputs beyond 18 to their rightful new place.
+     * In case users are doing unexpected things with not-really supported keyframeable channels.
+     *
+     * The for loop for the input ids is at the top level otherwise we lose the animation
+     * keyframe data.
+     * */
+    for (int input_id = 21; input_id >= 18; input_id--) {
+      FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
+        if (ntree->type == NTREE_SHADER) {
+          LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+            if (node->type != SH_NODE_BSDF_PRINCIPLED) {
+              continue;
+            }
+
+            const size_t node_name_length = strlen(node->name);
+            const size_t node_name_escaped_max_length = (node_name_length * 2);
+            char *node_name_escaped = MEM_mallocN(node_name_escaped_max_length + 1,
+                                                  "escaped name");
+            BLI_strescape(node_name_escaped, node->name, node_name_escaped_max_length);
+            char *rna_path_prefix = BLI_sprintfN("nodes[\"%s\"].inputs", node_name_escaped);
+
+            BKE_animdata_fix_paths_rename_all_ex(
+                bmain, id, rna_path_prefix, NULL, NULL, input_id, input_id + 1, false);
+            MEM_freeN(rna_path_prefix);
+            MEM_freeN(node_name_escaped);
+          }
+        }
+      }
+      FOREACH_NODETREE_END;
+    }
+  }
+
+  /* Convert all Multires displacement to Catmull-Clark subdivision limit surface. */
+  if (!MAIN_VERSION_ATLEAST(bmain, 292, 1)) {
+    LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
+      ModifierData *md;
+      for (md = ob->modifiers.first; md; md = md->next) {
+        if (md->type == eModifierType_Multires) {
+          MultiresModifierData *mmd = (MultiresModifierData *)md;
+          if (mmd->simple) {
+            multires_do_versions_simple_to_catmull_clark(ob, mmd);
+          }
+        }
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 292, 2)) {
+
+    eSpaceSeq_Proxy_RenderSize render_size = 100;
+
+    for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+      LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+        LISTBASE_FOREACH (SpaceLink *, sl, &area->spacedata) {
+          switch (sl->spacetype) {
+            case SPACE_SEQ: {
+              SpaceSeq *sseq = (SpaceSeq *)sl;
+              render_size = sseq->render_size;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+      if (scene->ed != NULL) {
+        seq_convert_transform_crop_lb(scene, &scene->ed->seqbase, render_size);
       }
     }
   }
@@ -659,14 +891,12 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
     }
 
     /* Solver and Collections for Boolean. */
-    if (!DNA_struct_elem_find(fd->filesdna, "BooleanModifierData", "char", "solver")) {
-      for (Object *object = bmain->objects.first; object != NULL; object = object->id.next) {
-        LISTBASE_FOREACH (ModifierData *, md, &object->modifiers) {
-          if (md->type == eModifierType_Boolean) {
-            BooleanModifierData *bmd = (BooleanModifierData *)md;
-            bmd->solver = eBooleanModifierSolver_Fast;
-            bmd->flag = eBooleanModifierFlag_Object;
-          }
+    for (Object *object = bmain->objects.first; object != NULL; object = object->id.next) {
+      LISTBASE_FOREACH (ModifierData *, md, &object->modifiers) {
+        if (md->type == eModifierType_Boolean) {
+          BooleanModifierData *bmd = (BooleanModifierData *)md;
+          bmd->solver = eBooleanModifierSolver_Fast;
+          bmd->flag = eBooleanModifierFlag_Object;
         }
       }
     }
@@ -723,6 +953,25 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
         }
       }
     }
+
+    /* Ensure that new viewport display fields are initialized correctly. */
+    LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
+      LISTBASE_FOREACH (ModifierData *, md, &ob->modifiers) {
+        if (md->type == eModifierType_Fluid) {
+          FluidModifierData *fmd = (FluidModifierData *)md;
+          if (fmd->domain != NULL) {
+            if (!fmd->domain->coba_field && fmd->domain->type == FLUID_DOMAIN_TYPE_LIQUID) {
+              fmd->domain->coba_field = FLUID_DOMAIN_FIELD_PHI;
+            }
+            fmd->domain->grid_scale = 1.0;
+            fmd->domain->gridlines_upper_bound = 1.0;
+            fmd->domain->vector_scale_with_magnitude = true;
+            const float grid_lines[4] = {1.0, 0.0, 0.0, 1.0};
+            copy_v4_v4(fmd->domain->gridlines_range_color, grid_lines);
+          }
+        }
+      }
+    }
   }
 
   if (!MAIN_VERSION_ATLEAST(bmain, 291, 6)) {
@@ -769,17 +1018,7 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
     }
   }
 
-  /**
-   * Versioning code until next subversion bump goes here.
-   *
-   * \note Be sure to check when bumping the version:
-   * - "versioning_userdef.c", #blo_do_versions_userdef
-   * - "versioning_userdef.c", #do_versions_theme
-   *
-   * \note Keep this message at the bottom of the function.
-   */
-  {
-    /* Keep this block, even when empty. */
+  if (!MAIN_VERSION_ATLEAST(bmain, 291, 8)) {
     if (!DNA_struct_elem_find(fd->filesdna, "WorkSpaceDataRelation", "int", "parentid")) {
       LISTBASE_FOREACH (WorkSpace *, workspace, &bmain->workspaces) {
         LISTBASE_FOREACH_MUTABLE (
@@ -802,6 +1041,142 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
           }
           if (relation->parentid == 0) {
             BLI_freelinkN(&workspace->hook_layout_relations, relation);
+          }
+        }
+      }
+    }
+
+    /* UV/Image show overlay option. */
+    if (!DNA_struct_find(fd->filesdna, "SpaceImageOverlay")) {
+      LISTBASE_FOREACH (bScreen *, screen, &bmain->screens) {
+        LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+          LISTBASE_FOREACH (SpaceLink *, space, &area->spacedata) {
+            if (space->spacetype == SPACE_IMAGE) {
+              SpaceImage *sima = (SpaceImage *)space;
+              sima->overlay.flag = SI_OVERLAY_SHOW_OVERLAYS;
+            }
+          }
+        }
+      }
+    }
+
+    /* Ensure that particle systems generated by fluid modifier have correct phystype. */
+    LISTBASE_FOREACH (ParticleSettings *, part, &bmain->particles) {
+      if (ELEM(
+              part->type, PART_FLUID_FLIP, PART_FLUID_SPRAY, PART_FLUID_BUBBLE, PART_FLUID_FOAM)) {
+        part->phystype = PART_PHYS_NO;
+      }
+    }
+    /* Init grease pencil default curve resolution. */
+    if (!DNA_struct_elem_find(fd->filesdna, "bGPdata", "int", "curve_edit_resolution")) {
+      LISTBASE_FOREACH (bGPdata *, gpd, &bmain->gpencils) {
+        gpd->curve_edit_resolution = GP_DEFAULT_CURVE_RESOLUTION;
+        gpd->flag |= GP_DATA_CURVE_ADAPTIVE_RESOLUTION;
+      }
+    }
+    /* Init grease pencil curve editing error threshold. */
+    if (!DNA_struct_elem_find(fd->filesdna, "bGPdata", "float", "curve_edit_threshold")) {
+      LISTBASE_FOREACH (bGPdata *, gpd, &bmain->gpencils) {
+        gpd->curve_edit_threshold = GP_DEFAULT_CURVE_ERROR;
+        gpd->curve_edit_corner_angle = GP_DEFAULT_CURVE_EDIT_CORNER_ANGLE;
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 291, 9)) {
+    /* Remove options of legacy UV/Image editor */
+    for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+      LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+        LISTBASE_FOREACH (SpaceLink *, sl, &area->spacedata) {
+          switch (sl->spacetype) {
+            case SPACE_IMAGE: {
+              SpaceImage *sima = (SpaceImage *)sl;
+              sima->flag &= ~(SI_FLAG_UNUSED_20);
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    if (!DNA_struct_elem_find(fd->filesdna, "FluidModifierData", "float", "fractions_distance")) {
+      LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
+        LISTBASE_FOREACH (ModifierData *, md, &ob->modifiers) {
+          if (md->type == eModifierType_Fluid) {
+            FluidModifierData *fmd = (FluidModifierData *)md;
+            if (fmd->domain) {
+              fmd->domain->fractions_distance = 0.5;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 292, 1)) {
+    {
+      const int LEGACY_REFINE_RADIAL_DISTORTION_K1 = (1 << 2);
+
+      LISTBASE_FOREACH (MovieClip *, clip, &bmain->movieclips) {
+        MovieTracking *tracking = &clip->tracking;
+        MovieTrackingSettings *settings = &tracking->settings;
+        int new_refine_camera_intrinsics = 0;
+
+        if (settings->refine_camera_intrinsics & REFINE_FOCAL_LENGTH) {
+          new_refine_camera_intrinsics |= REFINE_FOCAL_LENGTH;
+        }
+
+        if (settings->refine_camera_intrinsics & REFINE_PRINCIPAL_POINT) {
+          new_refine_camera_intrinsics |= REFINE_PRINCIPAL_POINT;
+        }
+
+        /* The end goal is to enable radial distortion refinement if either K1 or K2 were set for
+         * refinement. It is enough to only check for L1 it was not possible to refine K2 without
+         * K1. */
+        if (settings->refine_camera_intrinsics & LEGACY_REFINE_RADIAL_DISTORTION_K1) {
+          new_refine_camera_intrinsics |= REFINE_RADIAL_DISTORTION;
+        }
+
+        settings->refine_camera_intrinsics = new_refine_camera_intrinsics;
+      }
+    }
+  }
+
+  /**
+   * Versioning code until next subversion bump goes here.
+   *
+   * \note Be sure to check when bumping the version:
+   * - "versioning_userdef.c", #blo_do_versions_userdef
+   * - "versioning_userdef.c", #do_versions_theme
+   *
+   * \note Keep this message at the bottom of the function.
+   */
+  {
+    /* Keep this block, even when empty. */
+    /* Initialize the opacity of the overlay wireframe */
+    if (!DNA_struct_elem_find(fd->filesdna, "View3DOverlay", "float", "wireframe_opacity")) {
+      for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+        LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+          LISTBASE_FOREACH (SpaceLink *, sl, &area->spacedata) {
+            if (sl->spacetype == SPACE_VIEW3D) {
+              View3D *v3d = (View3D *)sl;
+              v3d->overlay.wireframe_opacity = 1.0f;
+            }
+          }
+        }
+      }
+    }
+
+    /* Replace object hidden filter with inverted object visible filter.  */
+    LISTBASE_FOREACH (bScreen *, screen, &bmain->screens) {
+      LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+        LISTBASE_FOREACH (SpaceLink *, space, &area->spacedata) {
+          if (space->spacetype == SPACE_OUTLINER) {
+            SpaceOutliner *space_outliner = (SpaceOutliner *)space;
+            if (space_outliner->filter_state == SO_FILTER_OB_HIDDEN) {
+              space_outliner->filter_state = SO_FILTER_OB_VISIBLE;
+              space_outliner->filter |= SO_FILTER_OB_STATE_INVERSE;
+            }
           }
         }
       }

@@ -198,7 +198,6 @@ void DRW_draw_cursor(void)
 }
 
 /* -------------------------------------------------------------------- */
-
 /** \name 2D Cursor
  * \{ */
 
@@ -208,11 +207,14 @@ static bool is_cursor_visible_2d(const DRWContextState *draw_ctx)
   if (space_data == NULL) {
     return false;
   }
-  if (space_data->spacetype == SPACE_IMAGE) {
-    SpaceImage *sima = (SpaceImage *)draw_ctx->space_data;
-    return sima->mode == SI_MODE_UV;
+  if (space_data->spacetype != SPACE_IMAGE) {
+    return false;
   }
-  return false;
+  SpaceImage *sima = (SpaceImage *)space_data;
+  if (sima->mode != SI_MODE_UV) {
+    return false;
+  }
+  return (sima->overlay.flag & SI_OVERLAY_SHOW_OVERLAYS) != 0;
 }
 
 void DRW_draw_cursor_2d(void)

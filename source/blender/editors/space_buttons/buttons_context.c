@@ -56,6 +56,7 @@
 
 #include "RNA_access.h"
 
+#include "ED_buttons.h"
 #include "ED_physics.h"
 #include "ED_screen.h"
 
@@ -64,7 +65,7 @@
 
 #include "WM_api.h"
 
-#include "buttons_intern.h"  // own include
+#include "buttons_intern.h" /* own include */
 
 static int set_pointer_type(ButsContextPath *path, bContextDataResult *result, StructRNA *type)
 {
@@ -73,11 +74,11 @@ static int set_pointer_type(ButsContextPath *path, bContextDataResult *result, S
 
     if (RNA_struct_is_a(ptr->type, type)) {
       CTX_data_pointer_set(result, ptr->owner_id, ptr->type, ptr->data);
-      return 1;
+      return CTX_RESULT_OK;
     }
   }
 
-  return 0;
+  return CTX_RESULT_MEMBER_NOT_FOUND;
 }
 
 static PointerRNA *get_pointer_type(ButsContextPath *path, StructRNA *type)
@@ -244,7 +245,7 @@ static bool buttons_context_path_data(ButsContextPath *path, int type)
     return true;
   }
 #endif
-#ifdef WITH_PARTICLE_NODES
+#ifdef WITH_POINT_CLOUD
   if (RNA_struct_is_a(ptr->type, &RNA_PointCloud) && (type == -1 || type == OB_POINTCLOUD)) {
     return true;
   }
@@ -512,11 +513,11 @@ static bool buttons_context_linestyle_pinnable(const bContext *C, ViewLayer *vie
 }
 #endif
 
-static bool buttons_context_path(const bContext *C, ButsContextPath *path, int mainb, int flag)
+static bool buttons_context_path(
+    const bContext *C, SpaceProperties *sbuts, ButsContextPath *path, int mainb, int flag)
 {
   /* Note we don't use CTX_data here, instead we get it from the window.
    * Otherwise there is a loop reading the context that we are setting. */
-  SpaceProperties *sbuts = CTX_wm_space_properties(C);
   wmWindow *window = CTX_wm_window(C);
   Scene *scene = WM_window_get_active_scene(window);
   ViewLayer *view_layer = WM_window_get_active_view_layer(window);
@@ -660,14 +661,14 @@ void buttons_context_compute(const bContext *C, SpaceProperties *sbuts)
   int flag = 0;
 
   /* Set scene path. */
-  buttons_context_path(C, path, BCONTEXT_SCENE, pflag);
+  buttons_context_path(C, sbuts, path, BCONTEXT_SCENE, pflag);
 
   buttons_texture_context_compute(C, sbuts);
 
   /* for each context, see if we can compute a valid path to it, if
    * this is the case, we know we have to display the button */
   for (int i = 0; i < BCONTEXT_TOT; i++) {
-    if (buttons_context_path(C, path, i, pflag)) {
+    if (buttons_context_path(C, sbuts, path, i, pflag)) {
       flag |= (1 << i);
 
       /* setting icon for data context */
@@ -713,7 +714,7 @@ void buttons_context_compute(const bContext *C, SpaceProperties *sbuts)
     }
   }
 
-  buttons_context_path(C, path, sbuts->mainb, pflag);
+  buttons_context_path(C, sbuts, path, sbuts->mainb, pflag);
 
   if (!(flag & (1 << sbuts->mainb))) {
     if (flag & (1 << BCONTEXT_OBJECT)) {
@@ -732,6 +733,39 @@ void buttons_context_compute(const bContext *C, SpaceProperties *sbuts)
   }
 
   sbuts->pathflag = flag;
+}
+
+static bool is_pointer_in_path(ButsContextPath *path, PointerRNA *ptr)
+{
+  for (int i = 0; i < path->len; ++i) {
+    if (ptr->owner_id == path->ptr[i].owner_id) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void ED_buttons_set_context(const bContext *C, PointerRNA *ptr, const int context)
+{
+  ScrArea *active_area = CTX_wm_area(C);
+  bScreen *screen = CTX_wm_screen(C);
+
+  LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+    /* Only update for properties editors that are visible and share a border. */
+    if (area->spacetype != SPACE_PROPERTIES) {
+      continue;
+    }
+    if (!ED_area_has_shared_border(active_area, area)) {
+      continue;
+    }
+
+    SpaceProperties *sbuts = (SpaceProperties *)area->spacedata.first;
+    ButsContextPath path;
+    if (buttons_context_path(C, sbuts, &path, context, 0) && is_pointer_in_path(&path, ptr)) {
+      sbuts->mainbuser = context;
+      sbuts->mainb = sbuts->mainbuser;
+    }
+  }
 }
 
 /************************* Context Callback ************************/
@@ -773,7 +807,7 @@ const char *buttons_context_dir[] = {
 #ifdef WITH_HAIR_NODES
     "hair",
 #endif
-#ifdef WITH_PARTICLE_NODES
+#ifdef WITH_POINT_CLOUD
     "pointcloud",
 #endif
     "volume",
@@ -862,7 +896,7 @@ int /*eContextResult*/ buttons_context(const bContext *C,
     return CTX_RESULT_OK;
   }
 #endif
-#ifdef WITH_PARTICLE_NODES
+#ifdef WITH_POINT_CLOUD
   if (CTX_data_equals(member, "pointcloud")) {
     set_pointer_type(path, result, &RNA_PointCloud);
     return CTX_RESULT_OK;
@@ -880,6 +914,10 @@ int /*eContextResult*/ buttons_context(const bContext *C,
     ButsContextTexture *ct = sbuts->texuser;
 
     if (ct) {
+      if (ct->texture == NULL) {
+        return CTX_RESULT_NO_DATA;
+      }
+
       CTX_data_pointer_set(result, &ct->texture->id, &RNA_Texture, ct->texture);
     }
 
@@ -907,7 +945,7 @@ int /*eContextResult*/ buttons_context(const bContext *C,
     ButsContextTexture *ct = sbuts->texuser;
 
     if (!ct) {
-      return -1;
+      return CTX_RESULT_NO_DATA;
     }
 
     if (ct->user && ct->user->ptr.data) {
@@ -921,7 +959,7 @@ int /*eContextResult*/ buttons_context(const bContext *C,
     ButsContextTexture *ct = sbuts->texuser;
 
     if (!ct) {
-      return -1;
+      return CTX_RESULT_NO_DATA;
     }
 
     if (ct->user && ct->user->ptr.data) {
@@ -958,7 +996,7 @@ int /*eContextResult*/ buttons_context(const bContext *C,
       }
     }
     else if (ct) {
-      return 0; /* new shading system */
+      return CTX_RESULT_MEMBER_NOT_FOUND; /* new shading system */
     }
     else if ((ptr = get_pointer_type(path, &RNA_FreestyleLineStyle))) {
       FreestyleLineStyle *ls = ptr->data;
@@ -1159,6 +1197,15 @@ static void buttons_panel_context_draw(const bContext *C, Panel *panel)
 
     first = false;
   }
+
+  uiLayout *pin_row = uiLayoutRow(row, false);
+  uiLayoutSetAlignment(pin_row, UI_LAYOUT_ALIGN_RIGHT);
+  uiItemSpacer(pin_row);
+  uiLayoutSetEmboss(pin_row, UI_EMBOSS_NONE);
+  uiItemO(pin_row,
+          "",
+          (sbuts->flag & SB_PIN_CONTEXT) ? ICON_PINNED : ICON_UNPINNED,
+          "BUTTONS_OT_toggle_pin");
 }
 
 void buttons_context_register(ARegionType *art)
@@ -1169,7 +1216,7 @@ void buttons_context_register(ARegionType *art)
   strcpy(pt->translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA);
   pt->poll = buttons_panel_context_poll;
   pt->draw = buttons_panel_context_draw;
-  pt->flag = PNL_NO_HEADER;
+  pt->flag = PANEL_TYPE_NO_HEADER | PANEL_TYPE_NO_SEARCH;
   BLI_addtail(&art->paneltypes, pt);
 }
 

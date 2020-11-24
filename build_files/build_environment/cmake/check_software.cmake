@@ -42,8 +42,8 @@ if(UNIX)
   endforeach()
 
   if(APPLE)
-    if(NOT EXISTS "/usr/local/opt/bison/bin/bison")
-      set(_software_missing "${_software_missing} bison")
+    if(NOT EXISTS "/usr/local/opt/bison/bin/bison" AND NOT EXISTS "/opt/homebrew/opt/bison/bin/bison")
+      string(APPEND _software_missing " bison")
     endif()
   endif()
 

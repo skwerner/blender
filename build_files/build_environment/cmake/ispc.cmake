@@ -25,9 +25,15 @@ if(WIN32)
 elseif(APPLE)
   # Use bison installed via Homebrew.
   # The one which comes which Xcode toolset is too old.
-  set(ISPC_EXTRA_ARGS_APPLE
-    -DBISON_EXECUTABLE=/usr/local/opt/bison/bin/bison
-  )
+  if(EXISTS "/usr/local/opt/bison/bin/bison")
+    set(ISPC_EXTRA_ARGS_APPLE
+      -DBISON_EXECUTABLE=/usr/local/opt/bison/bin/bison
+    )
+  else()
+    set(ISPC_EXTRA_ARGS_APPLE
+      -DBISON_EXECUTABLE=/opt/homebrew/opt/bison/bin/bison
+    )
+  endif()
 elseif(UNIX)
   set(ISPC_EXTRA_ARGS_UNIX
     -DCMAKE_C_COMPILER=${LIBDIR}/clang/bin/clang

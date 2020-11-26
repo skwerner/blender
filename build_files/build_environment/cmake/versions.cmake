@@ -291,13 +291,13 @@ set(SQLITE_VERSION 3.31.1)
 set(SQLITE_URI https://www.sqlite.org/2018/sqlite-src-3240000.zip)
 set(SQLITE_HASH fb558c49ee21a837713c4f1e7e413309aabdd9c7)
 
-set(EMBREE_VERSION 3.12.1)
+set(EMBREE_VERSION 3.12.0)
 set(EMBREE_URI https://github.com/embree/embree/archive/v${EMBREE_VERSION}.zip)
 set(EMBREE_HASH 4bbe29e7eaa46417efc75fc5f1e8eb87)
 
 set(EMBREE_AARCH64_VERSION ${EMBREE_VERSION})
-set(EMBREE_AARCH64_URI https://github.com/lighttransport/embree-aarch64/archive/v${EMBREE_AARCH64_VERSION}-aarch64.tar.gz)
-set(EMBREE_AARCH64_HASH c75eca5c2cb156ffd99939e9291a1e55)
+set(EMBREE_AARCH64_GIT_URI https://github.com/lighttransport/embree-aarch64.git)
+set(EMBREE_AARCH64_GIT_TAG c5a14bf345bc975ed0ca94ed8295827c9455710c)
 
 set(USD_VERSION 20.05)
 set(USD_URI https://github.com/PixarAnimationStudios/USD/archive/v${USD_VERSION}.tar.gz)

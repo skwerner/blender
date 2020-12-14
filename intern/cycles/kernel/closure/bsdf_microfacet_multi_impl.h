@@ -80,7 +80,7 @@ ccl_device_forceinline float3 MF_FUNCTION_FULL_NAME(mf_eval)(float3 wi,
   const float G2 = 1.0f / (1.0f - (lambda_r + 1.0f) + shadowing_lambda);
   float val = G2 * 0.25f / wi.z;
   if (alpha.x == alpha.y)
-    val *= D_ggx(wh, alpha.x);
+    val *= D_ggx(isfinite(wh.z) ? wh.z : 0.0f, alpha.x);
   else
     val *= D_ggx_aniso(wh, alpha);
   eval = make_float3(val, val, val);
@@ -206,9 +206,9 @@ ccl_device_forceinline float3 MF_FUNCTION_FULL_NAME(mf_sample)(float3 wi,
   bool outside = true;
 
   float F0 = fresnel_dielectric_cos(1.0f, eta);
-  if (use_fresnel) {
-    throughput = interpolate_fresnel_color(wi, normalize(wi + wr), eta, F0, cspec0);
-  }
+//  if (use_fresnel) {
+//    throughput = interpolate_fresnel_color(wi, normalize(wi + wr), eta, F0, cspec0);
+//  }
 
   int order;
   for (order = 0; order < 10; order++) {

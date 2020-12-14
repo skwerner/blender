@@ -256,6 +256,8 @@ ccl_device_inline float3 cross(const float3 &a, const float3 &b)
 
 ccl_device_inline float3 normalize(const float3 &a)
 {
+  float x = 1.0f / len(a);
+  assert(isfinite(x));
 #  if defined(__KERNEL_SSE41__) && defined(__KERNEL_SSE__)
   __m128 norm = _mm_sqrt_ps(_mm_dp_ps(a.m128, a.m128, 0x7F));
   return float3(_mm_div_ps(a.m128, norm));
@@ -386,12 +388,14 @@ ccl_device_inline float3 normalize_len(const float3 a, float *t)
 {
   *t = len(a);
   float x = 1.0f / *t;
+  assert(isfinite(x));
   return a * x;
 }
 
 ccl_device_inline float3 safe_normalize(const float3 a)
 {
   float t = len(a);
+  assert(t > 0.0f);
   return (t != 0.0f) ? a * (1.0f / t) : a;
 }
 

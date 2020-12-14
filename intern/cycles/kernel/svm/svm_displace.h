@@ -27,6 +27,10 @@ ccl_device void svm_node_set_bump(KernelGlobals *kg, ShaderData *sd, float *stac
 
   float3 normal_in = stack_valid(normal_offset) ? stack_load_float3(stack, normal_offset) : sd->N;
 
+  if (is_zero(normal_in)) {
+    normal_in = sd->Ng;
+  }
+
   float3 dPdx = sd->dP.dx;
   float3 dPdy = sd->dP.dy;
 
@@ -69,6 +73,9 @@ ccl_device void svm_node_set_bump(KernelGlobals *kg, ShaderData *sd, float *stac
   }
   else {
     normal_out = normalize(strength * normal_out + (1.0f - strength) * normal_in);
+    if (is_zero(normal_out)) {
+      normal_out = normal_in;
+    }
   }
 
   if (use_object_space) {

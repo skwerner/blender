@@ -119,6 +119,8 @@ ccl_device_noinline_cpu bool direct_emission(KernelGlobals *kg,
   float3 light_eval = direct_emissive_eval(
       kg, emission_sd, ls, state, -ls->D, dD, ls->t, sd->time);
 
+  kernel_assert(isfinite(ls->t));
+
   if (is_zero(light_eval))
     return false;
 

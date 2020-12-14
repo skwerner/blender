@@ -523,6 +523,7 @@ ccl_device float3 bsdf_microfacet_ggx_eval_transmit(const ShaderClosure *sc,
 
   /* compute half-vector of the refraction (eq. 16) */
   float3 ht = -(m_eta * omega_in + I);
+  kernel_assert(len(ht) > 0.0f);
   float3 Ht = normalize(ht);
   float cosHO = dot(Ht, I);
   float cosHI = dot(Ht, omega_in);
@@ -533,15 +534,20 @@ ccl_device float3 bsdf_microfacet_ggx_eval_transmit(const ShaderClosure *sc,
   float alpha2 = alpha_x * alpha_y;
   float cosThetaM = dot(N, Ht);
   float cosThetaM2 = cosThetaM * cosThetaM;
+  kernel_assert(cosThetaM2 > 0.0f);
   float tanThetaM2 = (1 - cosThetaM2) / cosThetaM2;
   float cosThetaM4 = cosThetaM2 * cosThetaM2;
   D = alpha2 / (M_PI_F * cosThetaM4 * (alpha2 + tanThetaM2) * (alpha2 + tanThetaM2));
+
+  kernel_assert(isfinite(D));
 
   /* eq. 34: now calculate G1(i,m) and G1(o,m) */
   G1o = 2 / (1 + safe_sqrtf(1 + alpha2 * (1 - cosNO * cosNO) / (cosNO * cosNO)));
   G1i = 2 / (1 + safe_sqrtf(1 + alpha2 * (1 - cosNI * cosNI) / (cosNI * cosNI)));
 
   float G = G1o * G1i;
+
+  kernel_assert(isfinite(G));
 
   /* probability */
   float Ht2 = dot(ht, ht);
@@ -552,6 +558,8 @@ ccl_device float3 bsdf_microfacet_ggx_eval_transmit(const ShaderClosure *sc,
   /* out = fabsf(cosHI * cosHO) * (m_eta * m_eta) * G * D / (cosNO * Ht2)
    * pdf = pm * (m_eta * m_eta) * fabsf(cosHI) / Ht2 */
   float common = D * (m_eta * m_eta) / (cosNO * Ht2);
+
+  kernel_assert(isfinite(common));
   float out = G * fabsf(cosHI * cosHO) * common;
   *pdf = G1o * fabsf(cosHO * cosHI) * common;
 

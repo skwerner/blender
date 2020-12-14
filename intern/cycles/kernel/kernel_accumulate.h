@@ -28,6 +28,7 @@ ccl_device_inline void bsdf_eval_init(BsdfEval *eval,
                                       float3 value,
                                       int use_light_pass)
 {
+  kernel_assert(isfinite3_safe(value));
 #ifdef __PASSES__
   eval->use_light_pass = use_light_pass;
 
@@ -64,6 +65,7 @@ ccl_device_inline void bsdf_eval_accum(BsdfEval *eval,
                                        float3 value,
                                        float mis_weight)
 {
+  kernel_assert(isfinite3_safe(value));
 #ifdef __SHADOW_TRICKS__
   eval->sum_no_mis += value;
 #endif
@@ -104,6 +106,7 @@ ccl_device_inline bool bsdf_eval_is_zero(BsdfEval *eval)
 
 ccl_device_inline void bsdf_eval_mis(BsdfEval *eval, float value)
 {
+  kernel_assert(isfinite(value));
 #ifdef __PASSES__
   if (eval->use_light_pass) {
     eval->diffuse *= value;
@@ -151,6 +154,10 @@ ccl_device_inline void bsdf_eval_mul3(BsdfEval *eval, float3 value)
 
 ccl_device_inline float3 bsdf_eval_sum(const BsdfEval *eval)
 {
+  kernel_assert(isfinite3_safe(eval->diffuse));
+  kernel_assert(isfinite3_safe(eval->glossy));
+  kernel_assert(isfinite3_safe(eval->transmission));
+  kernel_assert(isfinite3_safe(eval->volume));
 #ifdef __PASSES__
   if (eval->use_light_pass) {
     return eval->diffuse + eval->glossy + eval->transmission + eval->volume;
@@ -244,11 +251,19 @@ ccl_device_inline void path_radiance_bsdf_bounce(KernelGlobals *kg,
 {
   float inverse_pdf = 1.0f / bsdf_pdf;
 
+  kernel_assert(isfinite(inverse_pdf));
+
+  kernel_assert(isfinite3_safe(bsdf_eval->diffuse));
+  kernel_assert(isfinite3_safe(bsdf_eval->glossy));
+  kernel_assert(isfinite3_safe(bsdf_eval->transmission));
+  kernel_assert(isfinite3_safe(bsdf_eval->volume));
+
 #ifdef __PASSES__
   if (kernel_data.film.use_light_pass) {
     if (bounce == 0 && !(bsdf_label & LABEL_TRANSPARENT)) {
       /* first on directly visible surface */
       float3 value = *throughput * inverse_pdf;
+      kernel_assert(isfinite3_safe(value));
 
       L_state->diffuse = bsdf_eval->diffuse * value;
       L_state->glossy = bsdf_eval->glossy * value;
@@ -422,6 +437,8 @@ ccl_device_inline void path_radiance_accum_light(KernelGlobals *kg,
 
   float3 shaded_throughput = throughput * shadow;
 
+   kernel_assert(isfinite3_safe(shaded_throughput));
+
 #ifdef __PASSES__
   if (L->use_light_pass) {
     /* Compute the clamping based on the total contribution.
@@ -538,6 +555,8 @@ ccl_device_inline void path_radiance_accum_shadowcatcher(PathRadiance *L,
 ccl_device_inline void path_radiance_sum_indirect(PathRadiance *L)
 {
 #ifdef __PASSES__
+  kernel_assert(isfinite3_safe(L->indirect));
+
   /* this division is a bit ugly, but means we only have to keep track of
    * only a single throughput further along the path, here we recover just
    * the indirect path that is not influenced by any particular BSDF type */
@@ -726,6 +745,8 @@ ccl_device_inline void path_radiance_split_denoising(KernelGlobals *kg,
 
 ccl_device_inline void path_radiance_accum_sample(PathRadiance *L, PathRadiance *L_sample)
 {
+  kernel_assert(isfinite3_safe(L_sample->indirect_diffuse));
+
 #ifdef __SPLIT_KERNEL__
 #  define safe_float3_add(f, v) \
     do { \

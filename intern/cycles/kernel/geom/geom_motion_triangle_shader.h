@@ -73,11 +73,14 @@ ccl_device_noinline void motion_triangle_shader_setup(
   /* Compute face normal. */
   float3 Ng;
   if (sd->object_flag & SD_OBJECT_NEGATIVE_SCALE_APPLIED) {
-    Ng = normalize(cross(verts[2] - verts[0], verts[1] - verts[0]));
+    Ng = cross(verts[2] - verts[0], verts[1] - verts[0]);
   }
   else {
-    Ng = normalize(cross(verts[1] - verts[0], verts[2] - verts[0]));
+    Ng = cross(verts[1] - verts[0], verts[2] - verts[0]);
   }
+
+  Ng = is_zero(Ng) ? make_float3(1.0f, 0.0f, 0.0f) : normalize(Ng);
+
   sd->Ng = Ng;
   sd->N = Ng;
   /* Compute derivatives of P w.r.t. uv. */

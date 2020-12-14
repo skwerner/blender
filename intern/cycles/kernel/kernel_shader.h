@@ -87,6 +87,7 @@ ccl_device_noinline
   if (sd->type & PRIMITIVE_ALL_CURVE) {
     /* curve */
     curve_shader_setup(kg, sd, isect, ray);
+    kernel_assert(isfinite3_safe(sd->P));
   }
   else
 #endif
@@ -97,6 +98,7 @@ ccl_device_noinline
 
     /* vectors */
     sd->P = triangle_refine(kg, sd, isect, ray);
+    kernel_assert(isfinite3_safe(sd->P));
     sd->Ng = Ng;
     sd->N = Ng;
 
@@ -112,6 +114,7 @@ ccl_device_noinline
   else {
     /* motion triangle */
     motion_triangle_shader_setup(kg, sd, isect, ray, false);
+    kernel_assert(isfinite3_safe(sd->P));
   }
 
   sd->I = -ray->D;
@@ -590,6 +593,7 @@ ccl_device_inline void _shader_bsdf_multi_eval_branched(KernelGlobals *kg,
 {
   for (int i = 0; i < sd->num_closure; i++) {
     const ShaderClosure *sc = &sd->closure[i];
+    kernel_assert(isfinite3_safe(sc->weight));
     if (CLOSURE_IS_BSDF(sc->type)) {
       float bsdf_pdf = 0.0f;
       float3 eval = bsdf_eval(kg, sd, sc, omega_in, &bsdf_pdf);

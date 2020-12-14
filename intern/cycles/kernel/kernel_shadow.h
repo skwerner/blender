@@ -67,6 +67,7 @@ ccl_device_forceinline bool shadow_handle_transparent_isect(KernelGlobals *kg,
   }
 #endif
   /* Setup shader data at surface. */
+  kernel_assert(isfinite3_safe(shadow_sd->P));
   shader_setup_from_ray(kg, shadow_sd, isect, ray);
   /* Attenuation from transparent surface. */
   if (!(shadow_sd->flag & SD_HAS_ONLY_VOLUME)) {
@@ -153,7 +154,9 @@ ccl_device bool shadow_blocked_transparent_all_loop(KernelGlobals *kg,
    * surface hits.
    */
   uint num_hits;
+  kernel_assert(isfinite(ray->t));
   const bool blocked = scene_intersect_shadow_all(kg, ray, hits, visibility, max_hits, &num_hits);
+  kernel_assert(isfinite(ray->t));
 #    ifdef __VOLUME__
 #      ifdef __KERNEL_OPTIX__
   VolumeState &volume_state = kg->volume_state;
@@ -178,6 +181,7 @@ ccl_device bool shadow_blocked_transparent_all_loop(KernelGlobals *kg,
 #    endif
     sort_intersections(hits, num_hits);
     for (int hit = 0; hit < num_hits; hit++, isect++) {
+      kernel_assert(isfinite(ray->t));
       /* Adjust intersection distance for moving ray forward. */
       float new_t = isect->t;
       isect->t -= last_t;
@@ -200,6 +204,7 @@ ccl_device bool shadow_blocked_transparent_all_loop(KernelGlobals *kg,
                                           &throughput)) {
         return true;
       }
+      kernel_assert(isfinite(ray->t));
       /* Move ray forward. */
       ray->P = shadow_sd->P;
       if (ray->t != FLT_MAX) {

@@ -682,6 +682,8 @@ ccl_device_inline
     }
   }
 
+  kernel_assert(isfinite3_safe(eval));
+
   return eval;
 }
 

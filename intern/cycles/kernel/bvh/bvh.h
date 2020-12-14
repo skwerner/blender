@@ -579,6 +579,20 @@ ccl_device_inline float3 ray_offset(float3 P, float3 Ng)
     res.z = __uint_as_float(iz);
   }
 
+  /* Ensure that the offset is indeed in the direction of the normal.*/
+  float3 diff = res - P;
+  #if 0
+  float3 angle = diff * Ng;
+  kernel_assert(angle.x >= 0.0f && angle.y >= 0.0f && angle.z >= 0.0f);
+  float mag = max3(angle);
+  #else
+  float3 angle;
+  angle.x = safe_divide(diff.x, Ng.x);
+  angle.y = safe_divide(diff.y, Ng.y);
+  angle.z = safe_divide(diff.z, Ng.z);
+  float mag = max3(angle);
+  res = P + Ng * mag;
+  #endif
   return res;
 #else
   const float epsilon_f = 1e-4f;

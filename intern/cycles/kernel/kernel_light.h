@@ -144,7 +144,8 @@ ccl_device_inline bool lamp_light_sample(
       ls->v = dot(inplane, axisv) * (1.0f / dot(axisv, axisv)) + 0.5f;
 
       ls->Ng = D;
-      ls->D = normalize_len(ls->P - P, &ls->t);
+      ls->t = len(ls->P - P);
+      ls->D = ls->t > FLT_EPSILON ? ((ls->P - P) / ls->t) : ls->Ng;
 
       ls->eval_fac = 0.25f * invarea;
       if (is_round) {

@@ -129,6 +129,9 @@ void WM_windows_scene_data_sync(const ListBase *win_lb, struct Scene *scene) ATT
 struct Scene *WM_windows_scene_get_from_screen(const struct wmWindowManager *wm,
                                                const struct bScreen *screen)
     ATTR_NONNULL() ATTR_WARN_UNUSED_RESULT;
+struct ViewLayer *WM_windows_view_layer_get_from_screen(const struct wmWindowManager *wm,
+                                                        const struct bScreen *screen)
+    ATTR_NONNULL() ATTR_WARN_UNUSED_RESULT;
 struct WorkSpace *WM_windows_workspace_get_from_screen(const wmWindowManager *wm,
                                                        const struct bScreen *screen)
     ATTR_NONNULL() ATTR_WARN_UNUSED_RESULT;
@@ -668,6 +671,7 @@ struct wmDrag *WM_event_start_drag(
     struct bContext *C, int icon, int type, void *poin, double value, unsigned int flags);
 void WM_event_drag_image(struct wmDrag *, struct ImBuf *, float scale, int sx, int sy);
 void WM_drag_free(struct wmDrag *drag);
+void WM_drag_data_free(int dragtype, void *poin);
 void WM_drag_free_list(struct ListBase *lb);
 
 struct wmDropBox *WM_dropbox_add(
@@ -678,9 +682,12 @@ struct wmDropBox *WM_dropbox_add(
 ListBase *WM_dropboxmap_find(const char *idname, int spaceid, int regionid);
 
 /* ID drag and drop */
-void WM_drag_add_ID(struct wmDrag *drag, struct ID *id, struct ID *from_parent);
-struct ID *WM_drag_ID(const struct wmDrag *drag, short idcode);
-struct ID *WM_drag_ID_from_event(const struct wmEvent *event, short idcode);
+void WM_drag_add_local_ID(struct wmDrag *drag, struct ID *id, struct ID *from_parent);
+struct ID *WM_drag_get_local_ID(const struct wmDrag *drag, short idcode);
+struct ID *WM_drag_get_local_ID_from_event(const struct wmEvent *event, short idcode);
+
+struct wmDragAsset *WM_drag_get_asset_data(const struct wmDrag *drag, int idcode);
+struct ID *WM_drag_get_local_ID_or_import_from_asset(const struct wmDrag *drag, int idcode);
 
 /* Set OpenGL viewport and scissor */
 void wmViewport(const struct rcti *winrct);

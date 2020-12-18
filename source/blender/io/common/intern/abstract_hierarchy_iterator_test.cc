@@ -36,7 +36,7 @@ namespace {
 
 /* Mapping from ID.name to set of export hierarchy path. Duplicated objects can be exported
  * multiple times with different export paths, hence the set. */
-typedef std::map<std::string, std::set<std::string>> used_writers;
+using used_writers = std::map<std::string, std::set<std::string>>;
 
 class TestHierarchyWriter : public AbstractHierarchyWriter {
  public:
@@ -73,7 +73,7 @@ class TestingHierarchyIterator : public AbstractHierarchyIterator {
   explicit TestingHierarchyIterator(Depsgraph *depsgraph) : AbstractHierarchyIterator(depsgraph)
   {
   }
-  virtual ~TestingHierarchyIterator()
+  ~TestingHierarchyIterator() override
   {
     release_writers();
   }
@@ -106,13 +106,13 @@ class AbstractHierarchyIteratorTest : public BlendfileLoadingBaseTest {
  protected:
   TestingHierarchyIterator *iterator;
 
-  virtual void SetUp()
+  void SetUp() override
   {
     BlendfileLoadingBaseTest::SetUp();
     iterator = nullptr;
   }
 
-  virtual void TearDown()
+  void TearDown() override
   {
     iterator_free();
     BlendfileLoadingBaseTest::TearDown();

@@ -38,6 +38,7 @@
 #include "DNA_collection_types.h"
 #include "DNA_constraint_types.h"
 #include "DNA_defaults.h"
+#include "DNA_dynamicpaint_types.h"
 #include "DNA_effect_types.h"
 #include "DNA_fluid_types.h"
 #include "DNA_gpencil_modifier_types.h"
@@ -94,6 +95,7 @@
 #include "BKE_fcurve.h"
 #include "BKE_fcurve_driver.h"
 #include "BKE_font.h"
+#include "BKE_geometry_set.h"
 #include "BKE_global.h"
 #include "BKE_gpencil.h"
 #include "BKE_gpencil_geom.h"
@@ -1273,6 +1275,46 @@ void BKE_object_modifier_gpencil_hook_reset(Object *ob, HookGpencilModifierData 
   }
 }
 
+/**
+ * Set the object's active modifier.
+ *
+ * \param md: If NULL, only clear the active modifier, otherwise
+ * it must be in the #Object.modifiers list.
+ */
+void BKE_object_modifier_set_active(Object *ob, ModifierData *md)
+{
+  LISTBASE_FOREACH (ModifierData *, md_iter, &ob->modifiers) {
+    md_iter->flag &= ~eModifierFlag_Active;
+  }
+
+  if (md != NULL) {
+    BLI_assert(BLI_findindex(&ob->modifiers, md) != -1);
+    md->flag |= eModifierFlag_Active;
+  }
+}
+
+ModifierData *BKE_object_active_modifier(const Object *ob)
+{
+  /* In debug mode, check for only one active modifier. */
+#ifndef NDEBUG
+  int active_count = 0;
+  LISTBASE_FOREACH (ModifierData *, md, &ob->modifiers) {
+    if (md->flag & eModifierFlag_Active) {
+      active_count++;
+    }
+  }
+  BLI_assert(ELEM(active_count, 0, 1));
+#endif
+
+  LISTBASE_FOREACH (ModifierData *, md, &ob->modifiers) {
+    if (md->flag & eModifierFlag_Active) {
+      return md;
+    }
+  }
+
+  return NULL;
+}
+
 bool BKE_object_support_modifier_type_check(const Object *ob, int modifier_type)
 {
   const ModifierTypeInfo *mti;
@@ -1284,8 +1326,7 @@ bool BKE_object_support_modifier_type_check(const Object *ob, int modifier_type)
     return (mti->modifyHair != NULL) || (mti->flags & eModifierTypeFlag_AcceptsVertexCosOnly);
   }
   if (ob->type == OB_POINTCLOUD) {
-    return (mti->modifyPointCloud != NULL) ||
-           (mti->flags & eModifierTypeFlag_AcceptsVertexCosOnly);
+    return (mti->modifyGeometrySet != NULL);
   }
   if (ob->type == OB_VOLUME) {
     return (mti->modifyVolume != NULL);
@@ -1507,6 +1548,9 @@ void BKE_object_eval_assign_data(Object *object_eval, ID *data_eval, bool is_own
       object_eval->data = data_eval;
     }
   }
+
+  /* Is set separately currently. */
+  object_eval->runtime.geometry_set_eval = NULL;
 }
 
 /**
@@ -1550,6 +1594,11 @@ void BKE_object_free_derived_caches(Object *ob)
   if (ob->runtime.gpd_eval != NULL) {
     BKE_gpencil_eval_delete(ob->runtime.gpd_eval);
     ob->runtime.gpd_eval = NULL;
+  }
+
+  if (ob->runtime.geometry_set_eval != NULL) {
+    BKE_geometry_set_free(ob->runtime.geometry_set_eval);
+    ob->runtime.geometry_set_eval = NULL;
   }
 }
 
@@ -1768,6 +1817,10 @@ int BKE_object_visibility(const Object *ob, const int dag_eval_mode)
     visibility |= OB_VISIBLE_INSTANCES | OB_VISIBLE_PARTICLES;
   }
   else if (ob->transflag & OB_DUPLI) {
+    visibility |= OB_VISIBLE_INSTANCES;
+  }
+
+  if (ob->runtime.geometry_set_eval != NULL) {
     visibility |= OB_VISIBLE_INSTANCES;
   }
 
@@ -2156,7 +2209,9 @@ ParticleSystem *BKE_object_copy_particlesystem(ParticleSystem *psys, const int f
   BLI_listbase_clear(&psysn->childcachebufs);
 
   if (flag & LIB_ID_CREATE_NO_MAIN) {
-    BLI_assert((psys->flag & PSYS_SHARED_CACHES) == 0);
+    /* XXX Disabled, fails when evaluating depsgraph after copying ID with no main for preview
+     * creation. */
+    // BLI_assert((psys->flag & PSYS_SHARED_CACHES) == 0);
     psysn->flag |= PSYS_SHARED_CACHES;
     BLI_assert(psysn->pointcache != NULL);
   }
@@ -3473,7 +3528,11 @@ void BKE_object_workob_calc_parent(Depsgraph *depsgraph, Scene *scene, Object *o
   workob->par2 = ob->par2;
   workob->par3 = ob->par3;
 
-  workob->constraints = ob->constraints;
+  /* The effects of constraints should NOT be included in the parent-inverse matrix. Constraints
+   * are supposed to be applied after the object's local loc/rot/scale. If the (inverted) effect of
+   * constraints would be included in the parent inverse matrix, these would be applied before the
+   * object's local loc/rot/scale instead of after. For example, a "Copy Rotation" constraint would
+   * rotate the object's local translation as well. See T82156. */
 
   BLI_strncpy(workob->parsubstr, ob->parsubstr, sizeof(workob->parsubstr));
 
@@ -4876,6 +4935,7 @@ void BKE_object_runtime_reset_on_copy(Object *object, const int UNUSED(flag))
   runtime->mesh_deform_eval = NULL;
   runtime->curve_cache = NULL;
   runtime->object_as_temp_mesh = NULL;
+  runtime->geometry_set_eval = NULL;
 }
 
 /**
@@ -5160,8 +5220,11 @@ bool BKE_object_modifier_use_time(Object *ob, ModifierData *md)
     AnimData *adt = ob->adt;
     FCurve *fcu;
 
-    char pattern[MAX_NAME + 16];
-    BLI_snprintf(pattern, sizeof(pattern), "modifiers[\"%s\"]", md->name);
+    char md_name_esc[sizeof(md->name) * 2];
+    BLI_str_escape(md_name_esc, md->name, sizeof(md_name_esc));
+
+    char pattern[sizeof(md_name_esc) + 16];
+    BLI_snprintf(pattern, sizeof(pattern), "modifiers[\"%s\"]", md_name_esc);
 
     /* action - check for F-Curves with paths containing 'modifiers[' */
     if (adt->action) {
@@ -5203,8 +5266,11 @@ bool BKE_object_modifier_gpencil_use_time(Object *ob, GpencilModifierData *md)
     AnimData *adt = ob->adt;
     FCurve *fcu;
 
-    char pattern[MAX_NAME + 32];
-    BLI_snprintf(pattern, sizeof(pattern), "grease_pencil_modifiers[\"%s\"]", md->name);
+    char md_name_esc[sizeof(md->name) * 2];
+    BLI_str_escape(md_name_esc, md->name, sizeof(md_name_esc));
+
+    char pattern[sizeof(md_name_esc) + 32];
+    BLI_snprintf(pattern, sizeof(pattern), "grease_pencil_modifiers[\"%s\"]", md_name_esc);
 
     /* action - check for F-Curves with paths containing 'grease_pencil_modifiers[' */
     if (adt->action) {
@@ -5238,8 +5304,11 @@ bool BKE_object_shaderfx_use_time(Object *ob, ShaderFxData *fx)
     AnimData *adt = ob->adt;
     FCurve *fcu;
 
-    char pattern[MAX_NAME + 32];
-    BLI_snprintf(pattern, sizeof(pattern), "shader_effects[\"%s\"]", fx->name);
+    char fx_name_esc[sizeof(fx->name) * 2];
+    BLI_str_escape(fx_name_esc, fx->name, sizeof(fx_name_esc));
+
+    char pattern[sizeof(fx_name_esc) + 32];
+    BLI_snprintf(pattern, sizeof(pattern), "shader_effects[\"%s\"]", fx_name_esc);
 
     /* action - check for F-Curves with paths containing string[' */
     if (adt->action) {

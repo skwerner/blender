@@ -338,8 +338,6 @@ static int text_open_exec(bContext *C, wmOperator *op)
   RNA_string_get(op->ptr, "filepath", str);
 
   text = BKE_text_load_ex(bmain, str, BKE_main_blendfile_path(bmain), internal);
-  /* Texts have no user by default... Only the 'real' user flag. */
-  id_us_min(&text->id);
 
   if (!text) {
     if (op->customdata) {
@@ -2590,7 +2588,7 @@ static int text_scroll_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
-  txt_screen_skip(st, region, lines * U.wheellinescroll);
+  txt_screen_skip(st, region, lines * 3);
 
   ED_area_tag_redraw(CTX_wm_area(C));
 

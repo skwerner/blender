@@ -141,6 +141,10 @@ static bool drw_draw_show_annotation(void)
       SpaceImage *sima = (SpaceImage *)DST.draw_ctx.space_data;
       return (sima->flag & SI_SHOW_GPENCIL) != 0;
     }
+    case SPACE_NODE:
+      /* Don't draw the annotation for the node editor. Annotations are handled by space_image as
+       * the draw manager is only used to draw the background. */
+      return false;
     default:
       BLI_assert("");
       return false;
@@ -348,6 +352,14 @@ static void drw_viewport_colormanagement_set(void)
                                        0;
     if (display_color_channel && image && (image->source != IMA_SRC_GENERATED) &&
         ((image->flag & IMA_VIEW_AS_RENDER) != 0)) {
+      use_render_settings = true;
+    }
+  }
+  else if (DST.draw_ctx.space_data && DST.draw_ctx.space_data->spacetype == SPACE_NODE) {
+    SpaceNode *snode = (SpaceNode *)DST.draw_ctx.space_data;
+    const eSpaceImage_Flag display_channels_mode = snode->flag;
+    const bool display_color_channel = (display_channels_mode & (SI_SHOW_ALPHA)) == 0;
+    if (display_color_channel) {
       use_render_settings = true;
     }
   }
@@ -1243,6 +1255,14 @@ static void drw_engines_enable_editors(void)
     use_drw_engine(&draw_engine_image_type);
     use_drw_engine(&draw_engine_overlay_type);
   }
+  else if (space_data->spacetype == SPACE_NODE) {
+    /* Only enable when drawing the space image backdrop. */
+    SpaceNode *snode = (SpaceNode *)space_data;
+    if ((snode->flag & SNODE_BACKDRAW) != 0) {
+      use_drw_engine(&draw_engine_image_type);
+      use_drw_engine(&draw_engine_overlay_type);
+    }
+  }
 }
 
 static void drw_engines_enable(ViewLayer *UNUSED(view_layer),
@@ -1492,10 +1512,10 @@ void DRW_draw_view(const bContext *C)
   }
   else {
     Depsgraph *depsgraph = CTX_data_expect_evaluated_depsgraph(C);
-    ARegion *ar = CTX_wm_region(C);
-    GPUViewport *viewport = WM_draw_region_get_bound_viewport(ar);
+    ARegion *region = CTX_wm_region(C);
+    GPUViewport *viewport = WM_draw_region_get_bound_viewport(region);
     drw_state_prepare_clean_for_draw(&DST);
-    DRW_draw_render_loop_2d_ex(depsgraph, ar, viewport, C);
+    DRW_draw_render_loop_2d_ex(depsgraph, region, viewport, C);
   }
 }
 
@@ -1998,7 +2018,8 @@ void DRW_custom_pipeline(DrawEngineType *draw_engine_type,
 #endif
 }
 
-/* Used when the render engine want to redo another cache populate inside the same render frame. */
+/* Used when the render engine want to redo another cache populate inside the same render frame.
+ */
 void DRW_cache_restart(void)
 {
   /* Save viewport size. */
@@ -2050,8 +2071,9 @@ void DRW_draw_render_loop_2d_ex(struct Depsgraph *depsgraph,
 
   /* TODO(jbakker): Only populate when editor needs to draw object.
    * for the image editor this is when showing UV's.*/
-  const bool do_populate_loop = true;
+  const bool do_populate_loop = (DST.draw_ctx.space_data->spacetype == SPACE_IMAGE);
   const bool do_annotations = drw_draw_show_annotation();
+  const bool do_draw_gizmos = (DST.draw_ctx.space_data->spacetype != SPACE_IMAGE);
 
   /* Get list of enabled engines */
   drw_engines_enable_editors();
@@ -2143,7 +2165,7 @@ void DRW_draw_render_loop_2d_ex(struct Depsgraph *depsgraph,
   DRW_draw_cursor_2d();
   ED_region_pixelspace(DST.draw_ctx.region);
 
-  {
+  if (do_draw_gizmos) {
     GPU_depth_test(GPU_DEPTH_NONE);
     DRW_draw_gizmo_2d();
   }
@@ -2397,11 +2419,7 @@ void DRW_draw_select_loop(struct Depsgraph *depsgraph,
             }
           }
 
-          /* This relies on dupli instances being after their instancing object. */
-          if ((ob->base_flag & BASE_FROM_DUPLI) == 0) {
-            Object *ob_orig = DEG_get_original_object(ob);
-            DRW_select_load_id(ob_orig->runtime.select_id);
-          }
+          DRW_select_load_id(ob->runtime.select_id);
           DST.dupli_parent = data_.dupli_parent;
           DST.dupli_source = data_.dupli_object_current;
           drw_duplidata_load(DST.dupli_source);

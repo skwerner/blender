@@ -23,6 +23,7 @@
 #include "DNA_brush_types.h"
 #include "DNA_defaults.h"
 #include "DNA_gpencil_types.h"
+#include "DNA_material_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
@@ -446,6 +447,7 @@ static void brush_defaults(Brush *brush)
   FROM_DEFAULT(topology_rake_factor);
   FROM_DEFAULT(crease_pinch_factor);
   FROM_DEFAULT(normal_radius_factor);
+  FROM_DEFAULT(wet_paint_radius_factor);
   FROM_DEFAULT(area_radius_factor);
   FROM_DEFAULT(disconnected_distance_max);
   FROM_DEFAULT(sculpt_plane);
@@ -1832,6 +1834,14 @@ void BKE_brush_sculpt_reset(Brush *br)
       br->flag &= ~BRUSH_SPACE_ATTEN;
       br->curve_preset = BRUSH_CURVE_SPHERE;
       break;
+    case SCULPT_TOOL_DISPLACEMENT_SMEAR:
+      br->alpha = 1.0f;
+      br->spacing = 5;
+      br->hardness = 0.7f;
+      br->flag &= ~BRUSH_ALPHA_PRESSURE;
+      br->flag &= ~BRUSH_SPACE_ATTEN;
+      br->curve_preset = BRUSH_CURVE_SMOOTHER;
+      break;
     default:
       break;
   }
@@ -1896,6 +1906,7 @@ void BKE_brush_sculpt_reset(Brush *br)
     case SCULPT_TOOL_MASK:
     case SCULPT_TOOL_DRAW_FACE_SETS:
     case SCULPT_TOOL_DISPLACEMENT_ERASER:
+    case SCULPT_TOOL_DISPLACEMENT_SMEAR:
       br->add_col[0] = 0.75f;
       br->add_col[1] = 0.75f;
       br->add_col[2] = 0.75f;

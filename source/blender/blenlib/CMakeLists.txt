@@ -203,6 +203,7 @@ set(SRC
   BLI_heap_simple.h
   BLI_index_mask.hh
   BLI_index_range.hh
+  BLI_inplace_priority_queue.hh
   BLI_iterator.h
   BLI_jitter_2d.h
   BLI_kdopbvh.h
@@ -279,6 +280,7 @@ set(SRC
   BLI_timecode.h
   BLI_timeit.hh
   BLI_timer.h
+  BLI_user_counter.hh
   BLI_utildefines.h
   BLI_utildefines_iter.h
   BLI_utildefines_stack.h
@@ -389,6 +391,7 @@ if(WITH_GTESTS)
     tests/BLI_heap_test.cc
     tests/BLI_index_mask_test.cc
     tests/BLI_index_range_test.cc
+    tests/BLI_inplace_priority_queue_test.cc
     tests/BLI_kdopbvh_test.cc
     tests/BLI_linear_allocator_test.cc
     tests/BLI_linklist_lockfree_test.cc
@@ -400,6 +403,8 @@ if(WITH_GTESTS)
     tests/BLI_math_color_test.cc
     tests/BLI_math_geom_test.cc
     tests/BLI_math_matrix_test.cc
+    tests/BLI_math_rotation_test.cc
+    tests/BLI_math_solvers_test.cc
     tests/BLI_math_vector_test.cc
     tests/BLI_memiter_test.cc
     tests/BLI_memory_utils_test.cc

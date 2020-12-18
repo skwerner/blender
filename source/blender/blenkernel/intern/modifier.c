@@ -38,6 +38,7 @@
 
 #include "DNA_armature_types.h"
 #include "DNA_cloth_types.h"
+#include "DNA_dynamicpaint_types.h"
 #include "DNA_fluid_types.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_mesh_types.h"
@@ -210,6 +211,26 @@ void BKE_modifier_free_ex(ModifierData *md, const int flag)
 void BKE_modifier_free(ModifierData *md)
 {
   BKE_modifier_free_ex(md, 0);
+}
+
+/**
+ * Use instead of `BLI_remlink` when the object's active modifier should change.
+ */
+void BKE_modifier_remove_from_list(Object *ob, ModifierData *md)
+{
+  BLI_assert(BLI_findindex(&ob->modifiers, md) != -1);
+
+  if (md->flag & eModifierFlag_Active) {
+    /* Prefer the previous modifier but use the next if this modifier is the first in the list. */
+    if (md->next != NULL) {
+      BKE_object_modifier_set_active(ob, md->next);
+    }
+    else if (md->prev != NULL) {
+      BKE_object_modifier_set_active(ob, md->prev);
+    }
+  }
+
+  BLI_remlink(&ob->modifiers, md);
 }
 
 void BKE_modifier_session_uuid_generate(ModifierData *md)
@@ -552,6 +573,18 @@ bool BKE_modifier_is_enabled(const struct Scene *scene, ModifierData *md, int re
   }
 
   return true;
+}
+
+/**
+ * Check whether given modifier is not local (i.e. from linked data) when the object is a library
+ * override.
+ *
+ * \param md: May be NULL, in which case we consider it as a non-local modifier case.
+ */
+bool BKE_modifier_is_nonlocal_in_liboverride(const Object *ob, const ModifierData *md)
+{
+  return (ID_IS_OVERRIDE_LIBRARY(ob) &&
+          (md == NULL || (md->flag & eModifierFlag_OverrideLibrary_Local) == 0));
 }
 
 CDMaskLink *BKE_modifier_calc_data_masks(struct Scene *scene,

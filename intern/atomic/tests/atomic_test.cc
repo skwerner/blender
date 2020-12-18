@@ -14,11 +14,6 @@
 #  endif
 #endif
 
-/* NOTE: it is suboptimal to duplicate same check as in API, but this check is
- * planned to be removed, making it so 64bit intrinsics are available on 32bit
- * platforms. */
-#if (LG_SIZEOF_PTR == 8 || LG_SIZEOF_INT == 8)
-
 /* -------------------------------------------------------------------- */
 /** \name 64 bit unsigned int atomics
  * \{ */
@@ -283,8 +278,6 @@ TEST(atomic, atomic_cas_int64)
 }
 
 /** \} */
-
-#endif
 
 /* -------------------------------------------------------------------- */
 /** \name 32 bit unsigned int atomics
@@ -565,6 +558,39 @@ TEST(atomic, atomic_fetch_and_and_int32)
 }
 
 /** \} */
+
+/** \name 16 bit signed int atomics
+ * \{ */
+
+TEST(atomic, atomic_fetch_and_or_int16)
+{
+  {
+    int16_t value = 12;
+    EXPECT_EQ(atomic_fetch_and_or_int16(&value, 5), 12);
+    EXPECT_EQ(value, 13);
+  }
+
+  {
+    int16_t value = 0x1234;
+    EXPECT_EQ(atomic_fetch_and_or_int16(&value, -0x5678), 0x1234);
+    EXPECT_EQ(value, -0x4444);
+  }
+}
+
+TEST(atomic, atomic_fetch_and_and_int16)
+{
+  {
+    int16_t value = 12;
+    EXPECT_EQ(atomic_fetch_and_and_int16(&value, 5), 12);
+    EXPECT_EQ(value, 4);
+  }
+
+  {
+    int16_t value = 0x1234;
+    EXPECT_EQ(atomic_fetch_and_and_int16(&value, -0x789A), 0x1234);
+    EXPECT_EQ(value, 0x224);
+  }
+}
 
 /** \name 8 bit unsigned int atomics
  * \{ */

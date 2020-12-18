@@ -51,7 +51,6 @@ struct View3D;
 struct View3DShading;
 struct WorkSpace;
 struct bContext;
-struct bContextDataResult;
 struct bScreen;
 struct uiLayout;
 struct uiList;
@@ -234,6 +233,8 @@ typedef struct PanelType {
   char category[BKE_ST_MAXNAME];  /* for category tabs */
   char owner_id[BKE_ST_MAXNAME];  /* for work-spaces to selectively show. */
   char parent_id[BKE_ST_MAXNAME]; /* parent idname for sub-panels */
+  /** Boolean property identifier of the panel custom data. Used to draw a highlighted border. */
+  char active_property[BKE_ST_MAXNAME];
   short space_type;
   short region_type;
   /* For popovers, 0 for default. */

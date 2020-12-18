@@ -49,6 +49,7 @@
 #include "BKE_linestyle.h"
 #include "BKE_material.h"
 #include "BKE_modifier.h"
+#include "BKE_object.h"
 #include "BKE_paint.h"
 #include "BKE_particle.h"
 #include "BKE_screen.h"
@@ -274,16 +275,22 @@ static bool buttons_context_path_modifier(ButsContextPath *path)
   if (buttons_context_path_object(path)) {
     Object *ob = path->ptr[path->len - 1].data;
 
-    if (ob && ELEM(ob->type,
-                   OB_MESH,
-                   OB_CURVE,
-                   OB_FONT,
-                   OB_SURF,
-                   OB_LATTICE,
-                   OB_GPENCIL,
-                   OB_HAIR,
-                   OB_POINTCLOUD,
-                   OB_VOLUME)) {
+    if (ELEM(ob->type,
+             OB_MESH,
+             OB_CURVE,
+             OB_FONT,
+             OB_SURF,
+             OB_LATTICE,
+             OB_GPENCIL,
+             OB_HAIR,
+             OB_POINTCLOUD,
+             OB_VOLUME)) {
+      ModifierData *md = BKE_object_active_modifier(ob);
+      if (md != NULL) {
+        RNA_pointer_create(&ob->id, &RNA_Modifier, md, &path->ptr[path->len]);
+        path->len++;
+      }
+
       return true;
     }
   }
@@ -819,6 +826,11 @@ int /*eContextResult*/ buttons_context(const bContext *C,
                                        bContextDataResult *result)
 {
   SpaceProperties *sbuts = CTX_wm_space_properties(C);
+  if (sbuts && sbuts->path == NULL) {
+    /* path is cleared for SCREEN_OT_redo_last, when global undo does a file-read which clears the
+     * path (see lib_link_workspace_layout_restore). */
+    buttons_context_compute(C, sbuts);
+  }
   ButsContextPath *path = sbuts ? sbuts->path : NULL;
 
   if (!path) {
@@ -940,6 +952,17 @@ int /*eContextResult*/ buttons_context(const bContext *C,
     }
 
     return CTX_RESULT_OK;
+  }
+  if (CTX_data_equals(member, "modifier")) {
+    PointerRNA *ptr = get_pointer_type(path, &RNA_Modifier);
+
+    if (ptr != NULL && !RNA_pointer_is_null(ptr)) {
+      Object *ob = (Object *)ptr->owner_id;
+      ModifierData *md = ptr->data;
+      CTX_data_pointer_set(result, &ob->id, &RNA_Modifier, md);
+      return CTX_RESULT_OK;
+    }
+    return CTX_RESULT_NO_DATA;
   }
   if (CTX_data_equals(member, "texture_user")) {
     ButsContextTexture *ct = sbuts->texuser;

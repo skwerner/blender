@@ -222,7 +222,7 @@ typedef struct ViewOpsData {
   /** Current state. */
   struct {
     /** Working copy of #RegionView3D.viewquat, needed for rotation calculation
-     * so we can apply snap to the view-port while keeping the unsnapped rotation
+     * so we can apply snap to the 3D Viewport while keeping the unsnapped rotation
      * here to use when snap is disabled and for continued calculation. */
     float viewquat[4];
   } curr;
@@ -4708,7 +4708,7 @@ static int viewpersportho_exec(bContext *C, wmOperator *UNUSED(op))
 void VIEW3D_OT_view_persportho(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "View Persp/Ortho";
+  ot->name = "View Perspective/Orthographic";
   ot->description = "Switch the current view from perspective/orthographic projection";
   ot->idname = "VIEW3D_OT_view_persportho";
 

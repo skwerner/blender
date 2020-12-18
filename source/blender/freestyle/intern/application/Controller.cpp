@@ -22,7 +22,7 @@ extern "C" {
 #include <Python.h>
 }
 
-#include <float.h>
+#include <cfloat>
 #include <fstream>
 #include <string>
 
@@ -1067,7 +1067,7 @@ void Controller::displayDensityCurves(int x, int y)
   }
 
   unsigned int i, j;
-  typedef vector<Vec3r> densityCurve;
+  using densityCurve = vector<Vec3r>;
   vector<densityCurve> curves(svm->getNumberOfOrientations() + 1);
   vector<densityCurve> curvesDirection(svm->getNumberOfPyramidLevels());
 

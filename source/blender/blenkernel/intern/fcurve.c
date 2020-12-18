@@ -884,6 +884,14 @@ int BKE_fcurve_active_keyframe_index(const FCurve *fcu)
 
 /** \} */
 
+void BKE_fcurve_keyframe_move_value_with_handles(struct BezTriple *keyframe, const float new_value)
+{
+  const float value_delta = new_value - keyframe->vec[1][1];
+  keyframe->vec[0][1] += value_delta;
+  keyframe->vec[1][1] = new_value;
+  keyframe->vec[2][1] += value_delta;
+}
+
 /* -------------------------------------------------------------------- */
 /** \name Status Checks
  * \{ */
@@ -1277,14 +1285,14 @@ void calchandles_fcurve_ex(FCurve *fcu, eBezTriple_Flag handle_sel_flag)
         if (fcu->extend == FCURVE_EXTRAPOLATE_CONSTANT) {
           bezt->vec[0][1] = bezt->vec[2][1] = bezt->vec[1][1];
           /* Remember that these keyframes are special, they don't need to be adjusted. */
-          bezt->f5 = HD_AUTOTYPE_SPECIAL;
+          bezt->auto_handle_type = HD_AUTOTYPE_LOCKED_FINAL;
         }
       }
     }
 
     /* Avoid total smoothing failure on duplicate keyframes (can happen during grab). */
     if (prev && prev->vec[1][0] >= bezt->vec[1][0]) {
-      prev->f5 = bezt->f5 = HD_AUTOTYPE_SPECIAL;
+      prev->auto_handle_type = bezt->auto_handle_type = HD_AUTOTYPE_LOCKED_FINAL;
     }
 
     /* Advance pointers for next iteration. */
@@ -1301,10 +1309,11 @@ void calchandles_fcurve_ex(FCurve *fcu, eBezTriple_Flag handle_sel_flag)
   }
 
   /* If cyclic extrapolation and Auto Clamp has triggered, ensure it is symmetric. */
-  if (cycle && (first->f5 != HD_AUTOTYPE_NORMAL || last->f5 != HD_AUTOTYPE_NORMAL)) {
+  if (cycle && (first->auto_handle_type != HD_AUTOTYPE_NORMAL ||
+                last->auto_handle_type != HD_AUTOTYPE_NORMAL)) {
     first->vec[0][1] = first->vec[2][1] = first->vec[1][1];
     last->vec[0][1] = last->vec[2][1] = last->vec[1][1];
-    first->f5 = last->f5 = HD_AUTOTYPE_SPECIAL;
+    first->auto_handle_type = last->auto_handle_type = HD_AUTOTYPE_LOCKED_FINAL;
   }
 
   /* Do a second pass for auto handle: compute the handle to have 0 acceleration step. */

@@ -47,6 +47,7 @@
 #include "BKE_editmesh.h"
 #include "BKE_editmesh_cache.h"
 #include "BKE_font.h"
+#include "BKE_geometry_set.h"
 #include "BKE_global.h"
 #include "BKE_idprop.h"
 #include "BKE_lattice.h"
@@ -807,6 +808,77 @@ static const DupliGenerator gen_dupli_verts_pointcloud = {
 /** \} */
 
 /* -------------------------------------------------------------------- */
+/** \name Instances Geometry Component Implementation
+ * \{ */
+
+static void make_duplis_instances_component(const DupliContext *ctx)
+{
+  float(*positions)[3];
+  float(*rotations)[3];
+  float(*scales)[3];
+  InstancedData *instanced_data;
+  const int amount = BKE_geometry_set_instances(
+      ctx->object->runtime.geometry_set_eval, &positions, &rotations, &scales, &instanced_data);
+
+  for (int i = 0; i < amount; i++) {
+    InstancedData *data = &instanced_data[i];
+
+    float scale_matrix[4][4];
+    size_to_mat4(scale_matrix, scales[i]);
+    float rotation_matrix[4][4];
+    eul_to_mat4(rotation_matrix, rotations[i]);
+    float instance_offset_matrix[4][4];
+    mul_m4_m4m4(instance_offset_matrix, rotation_matrix, scale_matrix);
+    copy_v3_v3(instance_offset_matrix[3], positions[i]);
+
+    if (data->type == INSTANCE_DATA_TYPE_OBJECT) {
+      Object *object = data->data.object;
+      if (object != NULL) {
+        float matrix[4][4];
+        mul_m4_m4m4(matrix, ctx->object->obmat, instance_offset_matrix);
+        make_dupli(ctx, object, matrix, i);
+
+        float space_matrix[4][4];
+        mul_m4_m4m4(space_matrix, instance_offset_matrix, object->imat);
+        mul_m4_m4_pre(space_matrix, ctx->object->obmat);
+        make_recursive_duplis(ctx, object, space_matrix, i);
+      }
+    }
+    else if (data->type == INSTANCE_DATA_TYPE_COLLECTION) {
+      Collection *collection = data->data.collection;
+      if (collection != NULL) {
+        float collection_matrix[4][4];
+        unit_m4(collection_matrix);
+        sub_v3_v3(collection_matrix[3], collection->instance_offset);
+        mul_m4_m4_pre(collection_matrix, instance_offset_matrix);
+        mul_m4_m4_pre(collection_matrix, ctx->object->obmat);
+
+        eEvaluationMode mode = DEG_get_mode(ctx->depsgraph);
+        FOREACH_COLLECTION_VISIBLE_OBJECT_RECURSIVE_BEGIN (collection, object, mode) {
+          if (object == ctx->object) {
+            continue;
+          }
+
+          float instance_matrix[4][4];
+          mul_m4_m4m4(instance_matrix, collection_matrix, object->obmat);
+
+          make_dupli(ctx, object, instance_matrix, i);
+          make_recursive_duplis(ctx, object, collection_matrix, i);
+        }
+        FOREACH_COLLECTION_VISIBLE_OBJECT_RECURSIVE_END;
+      }
+    }
+  }
+}
+
+static const DupliGenerator gen_dupli_instances_component = {
+    0,
+    make_duplis_instances_component,
+};
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
 /** \name Dupli-Faces Implementation (#OB_DUPLIFACES)
  * \{ */
 
@@ -1473,7 +1545,7 @@ static const DupliGenerator *get_dupli_generator(const DupliContext *ctx)
   int transflag = ctx->object->transflag;
   int restrictflag = ctx->object->restrictflag;
 
-  if ((transflag & OB_DUPLI) == 0) {
+  if ((transflag & OB_DUPLI) == 0 && ctx->object->runtime.geometry_set_eval == NULL) {
     return NULL;
   }
 
@@ -1481,6 +1553,12 @@ static const DupliGenerator *get_dupli_generator(const DupliContext *ctx)
   if (DEG_get_mode(ctx->depsgraph) == DAG_EVAL_RENDER ? (restrictflag & OB_RESTRICT_RENDER) :
                                                         (restrictflag & OB_RESTRICT_VIEWPORT)) {
     return NULL;
+  }
+
+  if (ctx->object->runtime.geometry_set_eval != NULL) {
+    if (BKE_geometry_set_has_instances(ctx->object->runtime.geometry_set_eval)) {
+      return &gen_dupli_instances_component;
+    }
   }
 
   if (transflag & OB_DUPLIPARTS) {

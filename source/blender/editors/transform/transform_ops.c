@@ -717,7 +717,7 @@ void Transform_Properties(struct wmOperatorType *ot, int flags)
                            "use_automerge_and_split",
                            0,
                            "Auto Merge & Split",
-                           "Forces the use of Auto Merge & Split");
+                           "Forces the use of Auto Merge and Split");
     RNA_def_property_flag(prop, PROP_HIDDEN);
   }
 }
@@ -1040,8 +1040,7 @@ static void TRANSFORM_OT_mirror(struct wmOperatorType *ot)
   ot->poll = ED_operator_screenactive;
   ot->poll_property = transform_poll_property;
 
-  Transform_Properties(
-      ot, P_ORIENT_MATRIX | P_CONSTRAINT | P_PROPORTIONAL | P_GPENCIL_EDIT | P_CENTER);
+  Transform_Properties(ot, P_ORIENT_MATRIX | P_CONSTRAINT | P_GPENCIL_EDIT | P_CENTER);
 }
 
 static void TRANSFORM_OT_bbone_resize(struct wmOperatorType *ot)

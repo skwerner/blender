@@ -198,7 +198,7 @@ class ANIM_OT_keying_set_export(Operator):
 
 
 class NLA_OT_bake(Operator):
-    """Bake all selected objects loc/scale/rotation animation to an action"""
+    """Bake all selected objects location/scale/rotation animation to an action"""
     bl_idname = "nla.bake"
     bl_label = "Bake Action"
     bl_options = {'REGISTER', 'UNDO'}
@@ -307,7 +307,7 @@ class NLA_OT_bake(Operator):
 
 
 class ClearUselessActions(Operator):
-    """Mark actions with no F-Curves for deletion after save & reload of """ \
+    """Mark actions with no F-Curves for deletion after save and reload of """ \
         """file preserving \"action libraries\""""
     bl_idname = "anim.clear_useless_actions"
     bl_label = "Clear Useless Actions"
@@ -429,9 +429,22 @@ class UpdateAnimatedTransformConstraint(Operator):
         return {'FINISHED'}
 
 
+class ANIM_OT_show_group_colors_deprecated(Operator):
+    """This option moved to Preferences > Animation"""
+
+    bl_idname = "anim.show_group_colors_deprecated"
+    bl_label = "Show Group Colors"
+    bl_options = {'REGISTER'}
+
+    @classmethod
+    def poll(cls, context) -> bool:
+        return False
+
+
 classes = (
     ANIM_OT_keying_set_export,
     NLA_OT_bake,
     ClearUselessActions,
     UpdateAnimatedTransformConstraint,
+    ANIM_OT_show_group_colors_deprecated,
 )

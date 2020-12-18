@@ -49,6 +49,7 @@
 #include "BKE_gpencil.h"
 #include "BKE_lib_id.h"
 #include "BKE_mask.h"
+#include "BKE_nla.h"
 #include "BKE_scene.h"
 
 #include "DEG_depsgraph.h"
@@ -1063,18 +1064,27 @@ static void rearrange_animchannels_filter_visible(ListBase *anim_data_visible,
                                                   eAnim_ChannelType type)
 {
   ListBase anim_data = {NULL, NULL};
-  bAnimListElem *ale, *ale_next;
-  int filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_LIST_CHANNELS);
+  eAnimFilter_Flags filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE |
+                              ANIMFILTER_LIST_CHANNELS);
 
   /* get all visible channels */
   ANIM_animdata_filter(ac, &anim_data, filter, ac->data, ac->datatype);
 
   /* now, only keep the ones that are of the types we are interested in */
-  for (ale = anim_data.first; ale; ale = ale_next) {
-    ale_next = ale->next;
-
+  LISTBASE_FOREACH_MUTABLE (bAnimListElem *, ale, &anim_data) {
     if (ale->type != type) {
       BLI_freelinkN(&anim_data, ale);
+      continue;
+    }
+
+    if (type == ANIMTYPE_NLATRACK) {
+      NlaTrack *nlt = (NlaTrack *)ale->data;
+
+      if (BKE_nlatrack_is_nonlocal_in_liboverride(ale->id, nlt)) {
+        /* No re-arrangement of non-local tracks of override data. */
+        BLI_freelinkN(&anim_data, ale);
+        continue;
+      }
     }
   }
 
@@ -1146,6 +1156,7 @@ static void rearrange_nla_channels(bAnimContext *ac, AnimData *adt, eRearrangeAn
 {
   AnimChanRearrangeFp rearrange_func;
   ListBase anim_data_visible = {NULL, NULL};
+  const bool is_liboverride = ID_IS_OVERRIDE_LIBRARY(ac->obact);
 
   /* hack: invert mode so that functions will work in right order */
   mode *= -1;
@@ -1156,12 +1167,43 @@ static void rearrange_nla_channels(bAnimContext *ac, AnimData *adt, eRearrangeAn
     return;
   }
 
+  /* In liboverride case, we need to extract non-local NLA tracks from current anim data before we
+   * can perform the move, and add then back afterwards. It's the only way to prevent them from
+   * being affected by the reordering.
+   *
+   * Note that both override apply code for NLA tracks collection, and NLA editing code, are
+   * responsible to ensure that non-local tracks always remain first in the list. */
+  ListBase extracted_nonlocal_nla_tracks = {NULL, NULL};
+  if (is_liboverride) {
+    NlaTrack *nla_track;
+    for (nla_track = adt->nla_tracks.first; nla_track != NULL; nla_track = nla_track->next) {
+      if (!BKE_nlatrack_is_nonlocal_in_liboverride(&ac->obact->id, nla_track)) {
+        break;
+      }
+    }
+    if (nla_track != NULL && nla_track->prev != NULL) {
+      extracted_nonlocal_nla_tracks.first = adt->nla_tracks.first;
+      extracted_nonlocal_nla_tracks.last = nla_track->prev;
+      adt->nla_tracks.first = nla_track;
+      nla_track->prev->next = NULL;
+      nla_track->prev = NULL;
+    }
+  }
+
   /* Filter visible data. */
   rearrange_animchannels_filter_visible(&anim_data_visible, ac, ANIMTYPE_NLATRACK);
 
   /* perform rearranging on tracks list */
   rearrange_animchannel_islands(
       &adt->nla_tracks, rearrange_func, mode, ANIMTYPE_NLATRACK, &anim_data_visible);
+
+  /* Add back non-local NLA tracks at the begining of the animation data's list. */
+  if (!BLI_listbase_is_empty(&extracted_nonlocal_nla_tracks)) {
+    BLI_assert(is_liboverride);
+    ((NlaTrack *)extracted_nonlocal_nla_tracks.last)->next = adt->nla_tracks.first;
+    ((NlaTrack *)adt->nla_tracks.first)->prev = extracted_nonlocal_nla_tracks.last;
+    adt->nla_tracks.first = extracted_nonlocal_nla_tracks.first;
+  }
 
   /* free temp data */
   BLI_freelistN(&anim_data_visible);
@@ -1205,7 +1247,6 @@ static void rearrange_driver_channels(bAnimContext *ac,
 /* make sure all action-channels belong to a group (and clear action's list) */
 static void split_groups_action_temp(bAction *act, bActionGroup *tgrp)
 {
-  bActionGroup *agrp;
   FCurve *fcu;
 
   if (act == NULL) {
@@ -1213,16 +1254,30 @@ static void split_groups_action_temp(bAction *act, bActionGroup *tgrp)
   }
 
   /* Separate F-Curves into lists per group */
-  for (agrp = act->groups.first; agrp; agrp = agrp->next) {
-    if (agrp->channels.first) {
-      fcu = agrp->channels.last;
-      act->curves.first = fcu->next;
+  LISTBASE_FOREACH (bActionGroup *, agrp, &act->groups) {
+    FCurve *const group_fcurves_first = agrp->channels.first;
+    FCurve *const group_fcurves_last = agrp->channels.last;
+    if (group_fcurves_first == NULL) {
+      /* Empty group. */
+      continue;
+    }
 
-      fcu = agrp->channels.first;
-      fcu->prev = NULL;
+    if (group_fcurves_first == act->curves.first) {
+      /* First of the action curves, update the start of the action curves. */
+      BLI_assert(group_fcurves_first->prev == NULL);
+      act->curves.first = group_fcurves_last->next;
+    }
+    else {
+      group_fcurves_first->prev->next = group_fcurves_last->next;
+    }
 
-      fcu = agrp->channels.last;
-      fcu->next = NULL;
+    if (group_fcurves_last == act->curves.last) {
+      /* Last of the action curves, update the end of the action curves. */
+      BLI_assert(group_fcurves_last->next == NULL);
+      act->curves.last = group_fcurves_first->prev;
+    }
+    else {
+      group_fcurves_last->next->prev = group_fcurves_first->prev;
     }
   }
 
@@ -1263,12 +1318,10 @@ static void join_groups_action_temp(bAction *act)
   bActionGroup *agrp;
 
   for (agrp = act->groups.first; agrp; agrp = agrp->next) {
-    ListBase tempGroup;
-
     /* add list of channels to action's channels */
-    tempGroup = agrp->channels;
+    const ListBase group_channels = agrp->channels;
     BLI_movelisttolist(&act->curves, &agrp->channels);
-    agrp->channels = tempGroup;
+    agrp->channels = group_channels;
 
     /* clear moved flag */
     agrp->flag &= ~AGRP_MOVED;
@@ -1278,16 +1331,24 @@ static void join_groups_action_temp(bAction *act)
      * - remove from list (but don't free as it's on the stack!)
      */
     if (agrp->flag & AGRP_TEMP) {
-      FCurve *fcu;
-
-      for (fcu = agrp->channels.first; fcu; fcu = fcu->next) {
+      LISTBASE_FOREACH (FCurve *, fcu, &agrp->channels) {
         fcu->grp = NULL;
+        if (fcu == agrp->channels.last) {
+          break;
+        }
       }
 
       BLI_remlink(&act->groups, agrp);
       break;
     }
   }
+
+  /* BLI_movelisttolist() doesn't touch first->prev and last->next pointers in its "dst" list.
+   * Ensure that after the reshuffling the list is properly terminated. */
+  FCurve *act_fcurves_first = act->curves.first;
+  act_fcurves_first->prev = NULL;
+  FCurve *act_fcurves_last = act->curves.last;
+  act_fcurves_last->next = NULL;
 }
 
 /* Change the order of anim-channels within action
@@ -2683,11 +2744,7 @@ static int animchannels_box_select_exec(bContext *C, wmOperator *op)
   WM_operator_properties_border_to_rcti(op, &rect);
 
   if (!extend) {
-    printf("\n\n\n\033[92mBox-selecting channels without extend!\033[0m\n");
     ANIM_anim_channels_select_set(&ac, ACHANNEL_SETFLAG_CLEAR);
-  }
-  else {
-    printf("\n\n\n\033[91mBox-selecting channels WITH extend!\033[0m\n");
   }
 
   if (select) {

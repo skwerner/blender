@@ -3574,7 +3574,7 @@ static int edbm_select_linked_pick_invoke(bContext *C, wmOperator *op, const wmE
 
   /* To support redo. */
   {
-    /* Note that the `base_index` can't be used as the index depends on the view-port
+    /* Note that the `base_index` can't be used as the index depends on the 3D Viewport
      * which might not be available on redo. */
     BM_mesh_elem_index_ensure(bm, ele->head.htype);
     int object_index;
@@ -4552,7 +4552,8 @@ void MESH_OT_select_non_manifold(wmOperatorType *ot)
   /* edges */
   RNA_def_boolean(ot->srna, "use_wire", true, "Wire", "Wire edges");
   RNA_def_boolean(ot->srna, "use_boundary", true, "Boundaries", "Boundary edges");
-  RNA_def_boolean(ot->srna, "use_multi_face", true, "Multiple Faces", "Edges shared by 3+ faces");
+  RNA_def_boolean(
+      ot->srna, "use_multi_face", true, "Multiple Faces", "Edges shared by more than two faces");
   RNA_def_boolean(ot->srna,
                   "use_non_contiguous",
                   true,

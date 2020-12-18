@@ -95,7 +95,6 @@ static void panel_draw(const bContext *UNUSED(C), Panel *panel)
   VolumeToMeshModifierData *vmmd = static_cast<VolumeToMeshModifierData *>(ptr->data);
 
   uiLayoutSetPropSep(layout, true);
-  uiLayoutSetPropDecorate(layout, false);
 
   {
     uiLayout *col = uiLayoutColumn(layout, false);
@@ -336,7 +335,7 @@ ModifierTypeInfo modifierType_VolumeToMesh = {
     /* deformMatricesEM */ nullptr,
     /* modifyMesh */ modifyMesh,
     /* modifyHair */ nullptr,
-    /* modifyPointCloud */ nullptr,
+    /* modifyGeometrySet */ nullptr,
     /* modifyVolume */ nullptr,
 
     /* initData */ initData,

@@ -448,7 +448,7 @@ static void mesh_filter_task_cb(void *__restrict userdata,
         mul_v3_v3fl(disp, ss->filter_cache->detail_directions[vd.index], -fabsf(fade));
       } break;
       case MESH_FILTER_ERASE_DISPLACEMENT: {
-        fade = clamp_f(fade, 0.0f, 1.0f);
+        fade = clamp_f(fade, -1.0f, 1.0f);
         sub_v3_v3v3(disp, ss->filter_cache->limit_surface_co[vd.index], orig_co);
         mul_v3_fl(disp, fade);
         break;
@@ -771,15 +771,15 @@ void SCULPT_OT_mesh_filter(struct wmOperatorType *ot)
                "type",
                prop_mesh_filter_types,
                MESH_FILTER_INFLATE,
-               "Filter type",
+               "Filter Type",
                "Operation that is going to be applied to the mesh");
   RNA_def_float(
-      ot->srna, "strength", 1.0f, -10.0f, 10.0f, "Strength", "Filter Strength", -10.0f, 10.0f);
+      ot->srna, "strength", 1.0f, -10.0f, 10.0f, "Strength", "Filter strength", -10.0f, 10.0f);
   RNA_def_enum_flag(ot->srna,
                     "deform_axis",
                     prop_mesh_filter_deform_axis_items,
                     MESH_FILTER_DEFORM_X | MESH_FILTER_DEFORM_Y | MESH_FILTER_DEFORM_Z,
-                    "Deform axis",
+                    "Deform Axis",
                     "Apply the deformation in the selected axis");
   RNA_def_enum(ot->srna,
                "orientation",

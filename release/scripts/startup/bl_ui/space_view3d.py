@@ -870,13 +870,15 @@ class VIEW3D_MT_editor_menus(Menu):
 
         if gp_edit:
             if obj and obj.mode == 'PAINT_GPENCIL':
-                layout.menu("VIEW3D_MT_paint_gpencil")
+                layout.menu("VIEW3D_MT_draw_gpencil")
             elif obj and obj.mode == 'EDIT_GPENCIL':
                 layout.menu("VIEW3D_MT_edit_gpencil")
                 layout.menu("VIEW3D_MT_edit_gpencil_stroke")
                 layout.menu("VIEW3D_MT_edit_gpencil_point")
             elif obj and obj.mode == 'WEIGHT_GPENCIL':
                 layout.menu("VIEW3D_MT_weight_gpencil")
+            if obj and obj.mode == 'VERTEX_GPENCIL':
+                layout.menu("VIEW3D_MT_paint_gpencil")
 
         elif edit_object:
             layout.menu("VIEW3D_MT_edit_%s" % edit_object.type.lower())
@@ -1818,6 +1820,21 @@ class VIEW3D_MT_select_edit_armature(Menu):
 
         layout.operator_menu_enum("armature.select_similar", "type", text="Similar")
         layout.operator("object.select_pattern", text="Select Pattern...")
+
+
+class VIEW3D_MT_paint_gpencil(Menu):
+    bl_label = "Paint"
+
+    def draw(self, context):
+        layout = self.layout
+
+        layout.operator("gpencil.vertex_color_set", text="Set Vertex Colors")
+        layout.operator("gpencil.stroke_reset_vertex_color")
+        layout.separator()
+        layout.operator("gpencil.vertex_color_invert", text="Invert")
+        layout.operator("gpencil.vertex_color_levels", text="Levels")
+        layout.operator("gpencil.vertex_color_hsv", text="Hue Saturation Value")
+        layout.operator("gpencil.vertex_color_brightness_contrast", text="Bright/Contrast")
 
 
 class VIEW3D_MT_select_gpencil(Menu):
@@ -4853,7 +4870,7 @@ class VIEW3D_MT_gpencil_simplify(Menu):
         layout.operator("gpencil.stroke_sample", text="Sample")
 
 
-class VIEW3D_MT_paint_gpencil(Menu):
+class VIEW3D_MT_draw_gpencil(Menu):
     bl_label = "Draw"
 
     def draw(self, _context):
@@ -5032,22 +5049,6 @@ class VIEW3D_MT_weight_gpencil(Menu):
         layout.separator()
 
         layout.menu("VIEW3D_MT_gpencil_autoweights")
-
-
-class VIEW3D_MT_vertex_gpencil(Menu):
-    bl_label = "Paint"
-
-    def draw(self, _context):
-        layout = self.layout
-        layout.operator("gpencil.vertex_color_set", text="Set Vertex Colors")
-        layout.separator()
-        layout.operator("gpencil.vertex_color_invert", text="Invert")
-        layout.operator("gpencil.vertex_color_levels", text="Levels")
-        layout.operator("gpencil.vertex_color_hsv", text="Hue Saturation Value")
-        layout.operator("gpencil.vertex_color_brightness_contrast", text="Bright/Contrast")
-
-        layout.separator()
-        layout.menu("VIEW3D_MT_join_palette")
 
 
 class VIEW3D_MT_gpencil_animation(Menu):
@@ -5304,6 +5305,7 @@ class VIEW3D_MT_sculpt_mask_edit_pie(Menu):
         op = pie.operator("sculpt.mask_filter", text='Decrease Contrast')
         op.filter_type = 'CONTRAST_DECREASE'
         op.auto_iteration_count = False
+
 
 class VIEW3D_MT_sculpt_automasking_pie(Menu):
     bl_label = "Automasking"
@@ -7588,6 +7590,7 @@ classes = (
     VIEW3D_MT_edit_mesh_split,
     VIEW3D_MT_edit_mesh_showhide,
     VIEW3D_MT_paint_gpencil,
+    VIEW3D_MT_draw_gpencil,
     VIEW3D_MT_assign_material,
     VIEW3D_MT_edit_gpencil,
     VIEW3D_MT_edit_gpencil_stroke,
@@ -7595,7 +7598,6 @@ classes = (
     VIEW3D_MT_edit_gpencil_delete,
     VIEW3D_MT_edit_gpencil_showhide,
     VIEW3D_MT_weight_gpencil,
-    VIEW3D_MT_vertex_gpencil,
     VIEW3D_MT_gpencil_animation,
     VIEW3D_MT_gpencil_simplify,
     VIEW3D_MT_gpencil_copy_layer,

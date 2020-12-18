@@ -20,9 +20,9 @@
  * \brief from "Graphics Gems", Academic Press, 1990
  */
 
+#include <cmath>
+#include <cstdio>
 #include <cstdlib>  // for malloc and free
-#include <math.h>
-#include <stdio.h>
 
 #include "FitCurve.h"
 
@@ -30,7 +30,7 @@ using namespace std;
 
 namespace Freestyle {
 
-typedef Vector2 *BezierCurve;
+using BezierCurve = Vector2 *;
 
 /* Forward declarations */
 static double *Reparameterize(Vector2 *d, int first, int last, double *u, BezierCurve bezCurve);

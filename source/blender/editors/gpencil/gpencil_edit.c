@@ -41,6 +41,7 @@
 
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
+#include "DNA_material_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
@@ -3577,7 +3578,7 @@ static int gpencil_stroke_join_exec(bContext *C, wmOperator *op)
         if (tot_strokes == max_join_strokes) {
           BKE_reportf(op->reports,
                       RPT_WARNING,
-                      "Too many strokes selected. Only joined first %d strokes.",
+                      "Too many strokes selected, only joined first %d strokes",
                       max_join_strokes);
           break;
         }
@@ -5205,5 +5206,4 @@ void GPENCIL_OT_stroke_merge_by_distance(wmOperatorType *ot)
       ot->srna, "use_unselected", 0, "Unselected", "Use whole stroke, not only selected points");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
-
 /** \} */

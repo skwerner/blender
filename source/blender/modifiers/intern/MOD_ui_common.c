@@ -307,10 +307,16 @@ static void modifier_panel_header(const bContext *C, Panel *panel)
 
   /* Modifier Icon. */
   sub = uiLayoutRow(layout, true);
+  uiLayoutSetEmboss(sub, UI_EMBOSS_NONE);
   if (mti->isDisabled && mti->isDisabled(scene, md, 0)) {
     uiLayoutSetRedAlert(sub, true);
   }
-  uiItemL(sub, "", RNA_struct_ui_icon(ptr->type));
+  uiItemStringO(sub,
+                "",
+                RNA_struct_ui_icon(ptr->type),
+                "OBJECT_OT_modifier_set_active",
+                "modifier",
+                md->name);
 
   row = uiLayoutRow(layout, true);
 
@@ -409,6 +415,7 @@ PanelType *modifier_panel_register(ARegionType *region_type, ModifierType type, 
   BLI_strncpy(panel_type->label, "", BKE_ST_MAXNAME);
   BLI_strncpy(panel_type->context, "modifier", BKE_ST_MAXNAME);
   BLI_strncpy(panel_type->translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA, BKE_ST_MAXNAME);
+  BLI_strncpy(panel_type->active_property, "is_active", BKE_ST_MAXNAME);
 
   panel_type->draw_header = modifier_panel_header;
   panel_type->draw = draw;

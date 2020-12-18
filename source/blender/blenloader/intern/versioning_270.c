@@ -64,6 +64,7 @@
 #include "BKE_scene.h"
 #include "BKE_screen.h"
 #include "BKE_tracking.h"
+#include "DNA_material_types.h"
 
 #include "SEQ_sequencer.h"
 
@@ -245,13 +246,13 @@ static void do_version_action_editor_properties_region(ListBase *regionbase)
     }
     if (region->regiontype == RGN_TYPE_WINDOW) {
       /* add new region here */
-      ARegion *arnew = MEM_callocN(sizeof(ARegion), "buttons for action");
+      ARegion *region_new = MEM_callocN(sizeof(ARegion), "buttons for action");
 
-      BLI_insertlinkbefore(regionbase, region, arnew);
+      BLI_insertlinkbefore(regionbase, region, region_new);
 
-      arnew->regiontype = RGN_TYPE_UI;
-      arnew->alignment = RGN_ALIGN_RIGHT;
-      arnew->flag = RGN_FLAG_HIDDEN;
+      region_new->regiontype = RGN_TYPE_UI;
+      region_new->alignment = RGN_ALIGN_RIGHT;
+      region_new->flag = RGN_FLAG_HIDDEN;
 
       return;
     }
@@ -301,7 +302,9 @@ static void do_version_hue_sat_node(bNodeTree *ntree, bNode *node)
   /* Take care of possible animation. */
   AnimData *adt = BKE_animdata_from_id(&ntree->id);
   if (adt != NULL && adt->action != NULL) {
-    const char *prefix = BLI_sprintfN("nodes[\"%s\"]", node->name);
+    char node_name_esc[sizeof(node->name) * 2];
+    BLI_str_escape(node_name_esc, node->name, sizeof(node_name_esc));
+    const char *prefix = BLI_sprintfN("nodes[\"%s\"]", node_name_esc);
     for (FCurve *fcu = adt->action->curves.first; fcu != NULL; fcu = fcu->next) {
       if (STRPREFIX(fcu->rna_path, prefix)) {
         anim_change_prop_name(fcu, prefix, "color_hue", "inputs[1].default_value");

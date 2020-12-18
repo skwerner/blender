@@ -16,7 +16,7 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#include <string.h>
+#include <cstring>
 
 #include "MEM_guardedalloc.h"
 
@@ -141,7 +141,7 @@ void VectorBlurOperation::generateVectorBlur(float *data,
 
 /* ****************** Spans ******************************* */
 /* span fill in method, is also used to localize data for zbuffering */
-typedef struct ZSpan {
+struct ZSpan {
   /* range for clipping */
   int rectx, recty;
 
@@ -157,8 +157,7 @@ typedef struct ZSpan {
   int *rectz;
   DrawBufPixel *rectdraw;
   float clipcrop;
-
-} ZSpan;
+};
 
 /* each zbuffer has coordinates transformed to local rect coordinates, so we can simply clip */
 void zbuf_alloc_span(ZSpan *zspan, int rectx, int recty, float clipcrop)
@@ -294,10 +293,10 @@ static void zbuf_add_to_span(ZSpan *zspan, const float v1[2], const float v2[2])
 
 /* ******************** VECBLUR ACCUM BUF ************************* */
 
-typedef struct DrawBufPixel {
+struct DrawBufPixel {
   const float *colpoin;
   float alpha;
-} DrawBufPixel;
+};
 
 static void zbuf_fill_in_rgba(
     ZSpan *zspan, DrawBufPixel *col, float *v1, float *v2, float *v3, float *v4)

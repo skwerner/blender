@@ -649,8 +649,6 @@ static eContextResult screen_ctx_selected_editable_sequences(const bContext *C,
 }
 static eContextResult screen_ctx_selected_nla_strips(const bContext *C, bContextDataResult *result)
 {
-  wmWindow *win = CTX_wm_window(C);
-  Scene *scene = WM_window_get_active_scene(win);
   bAnimContext ac;
   if (ANIM_animdata_get_context(C, &ac) != 0) {
     ListBase anim_data = {NULL, NULL};
@@ -663,7 +661,7 @@ static eContextResult screen_ctx_selected_nla_strips(const bContext *C, bContext
       NlaTrack *nlt = (NlaTrack *)ale->data;
       LISTBASE_FOREACH (NlaStrip *, strip, &nlt->strips) {
         if (strip->flag & NLASTRIP_FLAG_SELECT) {
-          CTX_data_list_add(result, &scene->id, &RNA_NlaStrip, strip);
+          CTX_data_list_add(result, ale->id, &RNA_NlaStrip, strip);
         }
       }
     }
@@ -1004,6 +1002,11 @@ static eContextResult screen_ctx_selected_editable_keyframes(const bContext *C,
       }
 
       fcurve = (FCurve *)ale->data;
+      if (fcurve->bezt == NULL) {
+        /* Skip baked FCurves. */
+        continue;
+      }
+
       for (i = 0, bezt = fcurve->bezt; i < fcurve->totvert; i++, bezt++) {
         if ((bezt->f2 & SELECT) == 0) {
           continue;

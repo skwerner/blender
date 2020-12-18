@@ -94,7 +94,7 @@ typedef enum ModifierType {
   eModifierType_WeightedNormal = 54,
   eModifierType_Weld = 55,
   eModifierType_Fluid = 56,
-  eModifierType_Simulation = 57,
+  eModifierType_Nodes = 57,
   eModifierType_MeshToVolume = 58,
   eModifierType_VolumeDisplace = 59,
   eModifierType_VolumeToMesh = 60,
@@ -143,6 +143,11 @@ typedef enum {
   eModifierFlag_OverrideLibrary_Local = (1 << 0),
   /* This modifier does not own its caches, but instead shares them with another modifier. */
   eModifierFlag_SharedCaches = (1 << 1),
+  /**
+   * This modifier is the object's active modifier. Used for context in the node editor.
+   * Only one modifier on an object should have this flag set.
+   */
+  eModifierFlag_Active = (1 << 2),
 } ModifierFlag;
 
 /* not a real modifier */
@@ -1584,6 +1589,10 @@ typedef struct WeightVGProximityModifierData {
   /** Name of vertex group to modify/weight. MAX_VGROUP_NAME. */
   char defgrp_name[64];
 
+  /* Mapping stuff. */
+  /** The custom mapping curve!. */
+  struct CurveMapping *cmap_curve;
+
   /* Proximity modes. */
   int proximity_mode;
   int proximity_flags;
@@ -1995,13 +2004,20 @@ typedef struct WeldModifierData {
   /* Name of vertex group to use to mask, MAX_VGROUP_NAME. */
   char defgrp_name[64];
 
-  short flag;
+  char mode;
+  char flag;
   char _pad[2];
 } WeldModifierData;
 
 /* WeldModifierData->flag */
 enum {
   MOD_WELD_INVERT_VGROUP = (1 << 0),
+};
+
+/* #WeldModifierData.mode */
+enum {
+  MOD_WELD_MODE_ALL = 0,
+  MOD_WELD_MODE_CONNECTED = 1,
 };
 
 typedef struct DataTransferModifierData {
@@ -2220,9 +2236,16 @@ enum {
 #define MOD_MESHSEQ_READ_ALL \
   (MOD_MESHSEQ_READ_VERT | MOD_MESHSEQ_READ_POLY | MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR)
 
-typedef struct SimulationModifierData {
+typedef struct NodesModifierSettings {
+  /* This stores data that is passed into the node group. */
+  struct IDProperty *properties;
+} NodesModifierSettings;
+
+typedef struct NodesModifierData {
   ModifierData modifier;
-} SimulationModifierData;
+  struct bNodeTree *node_group;
+  struct NodesModifierSettings settings;
+} NodesModifierData;
 
 typedef struct MeshToVolumeModifierData {
   ModifierData modifier;

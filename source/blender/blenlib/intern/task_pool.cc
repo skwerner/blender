@@ -20,8 +20,8 @@
  * Task pool to run tasks in parallel.
  */
 
+#include <cstdlib>
 #include <memory>
-#include <stdlib.h>
 #include <utility>
 
 #include "MEM_guardedalloc.h"
@@ -149,13 +149,13 @@ class TBBTaskGroup : public tbb::task_group {
 
 /* Task Pool */
 
-typedef enum TaskPoolType {
+enum TaskPoolType {
   TASK_POOL_TBB,
   TASK_POOL_TBB_SUSPENDED,
   TASK_POOL_NO_THREADS,
   TASK_POOL_BACKGROUND,
   TASK_POOL_BACKGROUND_SERIAL,
-} TaskPoolType;
+};
 
 struct TaskPool {
   TaskPoolType type;

@@ -572,9 +572,7 @@ wmOperatorTypeMacro *WM_operatortype_macro_define(wmOperatorType *ot, const char
 
 static void wm_operatortype_free_macro(wmOperatorType *ot)
 {
-  wmOperatorTypeMacro *otmacro;
-
-  for (otmacro = ot->macro.first; otmacro; otmacro = otmacro->next) {
+  LISTBASE_FOREACH (wmOperatorTypeMacro *, otmacro, &ot->macro) {
     if (otmacro->ptr) {
       WM_operator_properties_free(otmacro->ptr);
       MEM_freeN(otmacro->ptr);
@@ -598,7 +596,7 @@ char *WM_operatortype_description(struct bContext *C,
                                   struct wmOperatorType *ot,
                                   struct PointerRNA *properties)
 {
-  if (ot->get_description && properties) {
+  if (C && ot->get_description && properties) {
     char *description = ot->get_description(C, ot, properties);
 
     if (description) {

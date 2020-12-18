@@ -165,13 +165,14 @@ typedef struct MovieTrackingTrack {
   short frames_limit;
   /** Margin from frame boundaries. */
   short margin;
-  /** Re-adjust every N frames. */
+  /** Denotes which frame is used for the reference during tracking.
+   * An enumerator of `eTrackFrameMatch`. */
   short pattern_match;
 
   /* tracking parameters */
   /** Model of the motion for this track. */
   short motion_model;
-  /** Flags for the tracking algorithm (use brute, use esm, use pyramid, etc. */
+  /** Flags for the tracking algorithm (use brute, use ESM, use pyramid, etc. */
   int algorithm_flag;
   /** Minimal correlation which is still treated as successful tracking. */
   float minimum_correlation;
@@ -223,7 +224,7 @@ typedef struct MovieTrackingPlaneTrack {
   char name[64];
 
   /**
-   * Array of point tracks used to define this pla.ne.
+   * Array of point tracks used to define this plane.
    * Each element is a pointer to MovieTrackingTrack.
    */
   MovieTrackingTrack **point_tracks;
@@ -255,7 +256,7 @@ typedef struct MovieTrackingSettings {
   /* ** default tracker settings */
   /** Model of the motion for this track. */
   short default_motion_model;
-  /** Flags for the tracking algorithm (use brute, use esm, use pyramid, etc. */
+  /** Flags for the tracking algorithm (use brute, use ESM, use pyramid, etc. */
   short default_algorithm_flag;
   /** Minimal correlation which is still treated as successful tracking. */
   float default_minimum_correlation;
@@ -268,7 +269,8 @@ typedef struct MovieTrackingSettings {
   short default_frames_limit;
   /** Margin from frame boundaries. */
   short default_margin;
-  /** Re-adjust every N frames. */
+  /** Denotes which frame is used for the reference during tracking.
+   * An enumerator of `eTrackFrameMatch`. */
   short default_pattern_match;
   /** Default flags like color channels used by default. */
   short default_flag;
@@ -365,7 +367,7 @@ typedef struct MovieTrackingObject {
   /** Name of tracking object, MAX_NAME. */
   char name[64];
   int flag;
-  /** Scale of object solution in amera space. */
+  /** Scale of object solution in camera space. */
   float scale;
 
   /** List of tracks use to tracking this object. */
@@ -518,11 +520,11 @@ enum {
   TRACK_ALGORITHM_FLAG_USE_MASK = (1 << 3),
 };
 
-/* MovieTrackingTrack->adjframes */
-enum {
+/* MovieTrackingTrack->pattern_match */
+typedef enum eTrackFrameMatch {
   TRACK_MATCH_KEYFRAME = 0,
-  TRACK_MATCH_PREVFRAME = 1,
-};
+  TRACK_MATCH_PREVIOS_FRAME = 1,
+} eTrackFrameMatch;
 
 /* MovieTrackingSettings->flag */
 enum {
@@ -562,7 +564,7 @@ enum {
   REFINE_TANGENTIAL_DISTORTION = (1 << 3),
 };
 
-/* MovieTrackingStrabilization->flag */
+/* MovieTrackingStabilization->flag */
 enum {
   TRACKING_2D_STABILIZATION = (1 << 0),
   TRACKING_AUTOSCALE = (1 << 1),
@@ -571,7 +573,7 @@ enum {
   TRACKING_SHOW_STAB_TRACKS = (1 << 5),
 };
 
-/* MovieTrackingStrabilization->filter */
+/* MovieTrackingStabilization->filter */
 enum {
   TRACKING_FILTER_NEAREST = 0,
   TRACKING_FILTER_BILINEAR = 1,

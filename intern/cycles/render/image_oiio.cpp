@@ -212,6 +212,8 @@ bool OIIOImageLoader::load_pixels(const ImageMetaData &metadata,
     case IMAGE_DATA_TYPE_FLOAT4:
       oiio_load_pixels<TypeDesc::FLOAT, float>(metadata, in, (float *)pixels);
       break;
+    case IMAGE_DATA_TYPE_NANOVDB_FLOAT:
+    case IMAGE_DATA_TYPE_NANOVDB_FLOAT3:
     case IMAGE_DATA_NUM_TYPES:
       break;
   }
@@ -236,11 +238,10 @@ bool OIIOImageLoader::equals(const ImageLoader &other) const
   return filepath == other_loader.filepath;
 }
 
-
 bool OIIOImageLoader::make_tx(const string &filename,
-                           const string &outputfilename,
-                           const ustring &colorspace,
-                           ExtensionType extension)
+                              const string &outputfilename,
+                              const ustring &colorspace,
+                              ExtensionType extension)
 {
   ImageSpec config;
   config.attribute("maketx:filtername", "lanczos3");
@@ -279,10 +280,10 @@ bool OIIOImageLoader::make_tx(const string &filename,
 }
 
 bool OIIOImageLoader::get_tx(const ustring &colorspace,
-                          const ExtensionType &extension,
-                          Progress *progress,
-                          bool auto_convert,
-                          const char *cache_path)
+                             const ExtensionType &extension,
+                             Progress *progress,
+                             bool auto_convert,
+                             const char *cache_path)
 {
   if (!path_exists(osl_filepath().c_str())) {
     return false;

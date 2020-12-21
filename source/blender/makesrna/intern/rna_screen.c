@@ -231,7 +231,7 @@ static int rna_Area_ui_type_get(PointerRNA *ptr)
    * the area type is changing.
    * So manually do the lookup in those cases, but do not actually change area->type
    * since that prevents a proper exit when the area type is changing.
-   * Logic copied from `ED_area_initialize()`.*/
+   * Logic copied from `ED_area_init()`.*/
   SpaceType *type = area->type;
   if (type == NULL || area_changing) {
     type = BKE_spacetype_from_id(area_type);
@@ -270,6 +270,8 @@ static void rna_Area_ui_type_update(bContext *C, PointerRNA *ptr)
     st->space_subtype_set(area, area->butspacetype_subtype);
   }
   area->butspacetype_subtype = 0;
+
+  ED_area_tag_refresh(area);
 }
 
 static void rna_View2D_region_to_view(struct View2D *v2d, float x, float y, float result[2])
@@ -288,9 +290,11 @@ static void rna_View2D_view_to_region(
   }
 }
 
-static const char *rna_Screen_statusbar_info_get(struct bScreen *screen, Main *bmain, bContext *C)
+static const char *rna_Screen_statusbar_info_get(struct bScreen *UNUSED(screen),
+                                                 Main *bmain,
+                                                 bContext *C)
 {
-  return ED_info_statusbar_string(bmain, screen, C);
+  return ED_info_statusbar_string(bmain, CTX_data_scene(C), CTX_data_view_layer(C));
 }
 
 #else
@@ -367,7 +371,7 @@ static void rna_def_area(BlenderRNA *brna)
   RNA_def_property_update(prop, 0, "rna_Area_type_update");
 
   prop = RNA_def_property(srna, "ui_type", PROP_ENUM, PROP_NONE);
-  RNA_def_property_enum_items(prop, DummyRNA_NULL_items); /* infact dummy */
+  RNA_def_property_enum_items(prop, DummyRNA_NULL_items); /* in fact dummy */
   RNA_def_property_enum_default(prop, SPACE_VIEW3D << 16);
   RNA_def_property_enum_funcs(
       prop, "rna_Area_ui_type_get", "rna_Area_ui_type_set", "rna_Area_ui_type_itemf");
@@ -584,7 +588,7 @@ static void rna_def_screen(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "show_statusbar", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_negative_sdna(prop, NULL, "flag", SCREEN_COLLAPSE_STATUSBAR);
-  RNA_def_property_ui_text(prop, "Show Status Bar", "Show Status Bar");
+  RNA_def_property_ui_text(prop, "Show Status Bar", "Show status bar");
   RNA_def_property_update(prop, 0, "rna_Screen_bar_update");
 
   func = RNA_def_function(srna, "statusbar_info", "rna_Screen_statusbar_info_get");

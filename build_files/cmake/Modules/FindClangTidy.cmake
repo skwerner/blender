@@ -17,12 +17,8 @@
 #=============================================================================
 # Copyright 2020 Blender Foundation.
 #
-# Distributed under the OSI-approved BSD License (the "License");
-# see accompanying file Copyright.txt for details.
-#
-# This software is distributed WITHOUT ANY WARRANTY; without even the
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-# See the License for more information.
+# Distributed under the OSI-approved BSD 3-Clause License,
+# see accompanying file BSD-3-Clause-license.txt for details.
 #=============================================================================
 
 # If CLANG_TIDY_ROOT_DIR was defined in the environment, use it.
@@ -47,7 +43,10 @@ find_program(CLANG_TIDY_EXECUTABLE
     ${_clang_tidy_SEARCH_DIRS}
 )
 
-if(CLANG_TIDY_EXECUTABLE)
+if(CLANG_TIDY_EXECUTABLE AND NOT EXISTS ${CLANG_TIDY_EXECUTABLE})
+  message(WARNING "Cached or directly specified Clang-Tidy executable does not exist.")
+  set(CLANG_TIDY_FOUND FALSE)
+elseif(CLANG_TIDY_EXECUTABLE)
   # Mark clang-tidy as found.
   set(CLANG_TIDY_FOUND TRUE)
 

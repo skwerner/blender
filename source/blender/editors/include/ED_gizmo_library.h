@@ -19,11 +19,10 @@
  *
  * \name Generic Gizmos.
  *
- * This is exposes pre-defined gizmos for re-use.
+ * This is exposes predefined gizmos for re-use.
  */
 
-#ifndef __ED_GIZMO_LIBRARY_H__
-#define __ED_GIZMO_LIBRARY_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -43,13 +42,13 @@ void ED_gizmotypes_blank_3d(void);
 void ED_gizmotypes_snap_3d(void);
 
 struct ARegion;
-struct bContext;
 struct Depsgraph;
 struct Object;
 struct SnapObjectContext;
-struct wmWindowManager;
 struct View3D;
+struct bContext;
 struct wmGizmo;
+struct wmWindowManager;
 
 /* -------------------------------------------------------------------- */
 /* Shape Presets
@@ -278,5 +277,3 @@ short ED_gizmotypes_snap_3d_update(struct wmGizmo *gz,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_GIZMO_LIBRARY_H__ */

@@ -161,7 +161,7 @@ static char *rna_ShaderFx_path(PointerRNA *ptr)
   ShaderFxData *gmd = ptr->data;
   char name_esc[sizeof(gmd->name) * 2];
 
-  BLI_strescape(name_esc, gmd->name, sizeof(name_esc));
+  BLI_str_escape(name_esc, gmd->name, sizeof(name_esc));
   return BLI_sprintfN("shader_effects[\"%s\"]", name_esc);
 }
 
@@ -338,7 +338,7 @@ static void rna_def_shader_fx_pixel(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "use_antialiasing", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_negative_sdna(prop, NULL, "flag", FX_PIXEL_FILTER_NEAREST);
-  RNA_def_property_ui_text(prop, "Antialiasing", "Antialiase pixels");
+  RNA_def_property_ui_text(prop, "Antialiasing", "Antialias pixels");
   RNA_def_property_update(prop, NC_OBJECT | ND_SHADERFX, "rna_ShaderFx_update");
 }
 

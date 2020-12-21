@@ -26,16 +26,16 @@ namespace Freestyle {
 NodeGroup *ViewMapTesselator::Tesselate(ViewMap *iViewMap)
 {
   if (iViewMap->ViewEdges().empty()) {
-    return NULL;
+    return nullptr;
   }
 
   const vector<ViewEdge *> &viewedges = iViewMap->ViewEdges();
   return Tesselate(viewedges.begin(), viewedges.end());
 }
 
-NodeGroup *ViewMapTesselator::Tesselate(WShape *UNUSED(shape))
+NodeGroup *ViewMapTesselator::Tesselate(WShape *UNUSED(iWShape))
 {
-  return NULL;
+  return nullptr;
 }
 
 } /* namespace Freestyle */

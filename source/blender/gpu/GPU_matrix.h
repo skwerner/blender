@@ -21,8 +21,7 @@
  * \ingroup gpu
  */
 
-#ifndef __GPU_MATRIX_H__
-#define __GPU_MATRIX_H__
+#pragma once
 
 #include "BLI_sys_types.h"
 
@@ -30,7 +29,7 @@
 extern "C" {
 #endif
 
-struct GPUShaderInterface;
+struct GPUShader;
 
 void GPU_matrix_reset(void); /* to Identity transform & empty stack */
 
@@ -148,7 +147,7 @@ const float (*GPU_matrix_normal_get(float m[3][3]))[3];
 const float (*GPU_matrix_normal_inverse_get(float m[3][3]))[3];
 
 /* set uniform values for currently bound shader */
-void GPU_matrix_bind(const struct GPUShaderInterface *);
+void GPU_matrix_bind(struct GPUShader *shader);
 bool GPU_matrix_dirty_get(void); /* since last bind */
 
 /* own working polygon offset */
@@ -236,5 +235,3 @@ int GPU_matrix_stack_level_get_projection(void);
  * however we need to check these limits in code that calls into these API's. */
 #define GPU_MATRIX_ORTHO_CLIP_NEAR_DEFAULT (-100)
 #define GPU_MATRIX_ORTHO_CLIP_FAR_DEFAULT (100)
-
-#endif /* __GPU_MATRIX_H__ */

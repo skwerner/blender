@@ -39,9 +39,9 @@
 #include "intern/bmesh_private.h"
 
 /* -------------------------------------------------------------------- */
-/* Face Split Edge-Net */
-
-/** \name BM_face_split_edgenet and helper functions.
+/** \name Face Split Edge-Net
+ *
+ * #BM_face_split_edgenet and helper functions.
  *
  * \note Don't use #BM_edge_is_wire or #BM_edge_is_boundary
  * since we need to take flagged faces into account.
@@ -51,9 +51,9 @@
 
 /* Note: All these flags _must_ be cleared on exit */
 
-/* face is apart of the edge-net (including the original face we're splitting) */
+/* face is a part of the edge-net (including the original face we're splitting) */
 #define FACE_NET _FLAG_WALK
-/* edge is apart of the edge-net we're filling */
+/* edge is a part of the edge-net we're filling */
 #define EDGE_NET _FLAG_WALK
 /* tag verts we've visit */
 #define VERT_VISIT _FLAG_WALK
@@ -494,7 +494,7 @@ bool BM_face_split_edgenet(BMesh *bm,
   }
 
   /* These arrays used to be stack memory, however they can be
-   * large for single faces with complex edgenets, see: T65980. */
+   * large for single faces with complex edge-nets, see: T65980. */
 
   /* over-alloc (probably 2-4 is only used in most cases), for the biggest-fan */
   edge_order = MEM_mallocN(sizeof(*edge_order) * edge_order_len, __func__);
@@ -521,7 +521,7 @@ bool BM_face_split_edgenet(BMesh *bm,
 
   /* Note: 'VERT_IN_QUEUE' is often not needed at all,
    * however in rare cases verts are added multiple times to the queue,
-   * that on it's own is harmless but in _very_ rare cases,
+   * that on its own is harmless but in _very_ rare cases,
    * the queue will overflow its maximum size,
    * so we better be strict about this! see: T51539 */
 
@@ -702,9 +702,9 @@ bool BM_face_split_edgenet(BMesh *bm,
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/* Face Split Edge-Net Connect Islands */
-
-/** \name BM_face_split_edgenet_connect_islands and helper functions.
+/** \name Face Split Edge-Net Connect Islands
+ *
+ * #BM_face_split_edgenet_connect_islands and helper functions.
  *
  * Connect isolated mesh 'islands' so they form legal regions from which we can create faces.
  *
@@ -1650,8 +1650,8 @@ finally:
     {
       struct TempVertPair *tvp = temp_vert_pairs.list;
       do {
-        /* we must _never_ create connections here
-         * (inface the islands can't have a connection at all) */
+        /* We must _never_ create connections here
+         * (in case the islands can't have a connection at all). */
         BLI_assert(BM_edge_exists(tvp->v_orig, tvp->v_temp) == NULL);
       } while ((tvp = tvp->next));
     }
@@ -1667,7 +1667,7 @@ finally:
     } while ((tvp = tvp->next));
 
     /* Remove edges which have become doubles since splicing vertices together,
-     * its less trouble then detecting future-doubles on edge-creation. */
+     * its less trouble than detecting future-doubles on edge-creation. */
     for (uint i = edge_net_init_len; i < edge_net_new_len; i++) {
       while (BM_edge_find_double(edge_net_new[i])) {
         BM_edge_kill(bm, edge_net_new[i]);

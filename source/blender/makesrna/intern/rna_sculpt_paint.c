@@ -124,6 +124,7 @@ const EnumPropertyItem rna_enum_symmetrize_direction_items[] = {
 #  include "DEG_depsgraph.h"
 
 #  include "ED_gpencil.h"
+#  include "ED_paint.h"
 #  include "ED_particle.h"
 
 static void rna_GPencil_update(Main *UNUSED(bmain), Scene *scene, PointerRNA *UNUSED(ptr))
@@ -228,7 +229,7 @@ static const EnumPropertyItem *rna_ParticleEdit_tool_itemf(bContext *C,
 #  else
   /* use this rather than PE_get_current() - because the editing cache is
    * dependent on the cache being updated which can happen after this UI
-   * draws causing a glitch [#28883] */
+   * draws causing a glitch T28883. */
   ParticleSystem *psys = psys_get_current(ob);
 #  endif
 
@@ -483,7 +484,7 @@ static void rna_ImaPaint_mode_update(bContext *C, PointerRNA *UNUSED(ptr))
 
     /* We assume that changing the current mode will invalidate the uv layers
      * so we need to refresh display. */
-    BKE_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
+    ED_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
     WM_main_add_notifier(NC_OBJECT | ND_DRAW, NULL);
   }
 }
@@ -495,7 +496,7 @@ static void rna_ImaPaint_stencil_update(bContext *C, PointerRNA *UNUSED(ptr))
   Object *ob = OBACT(view_layer);
 
   if (ob && ob->type == OB_MESH) {
-    BKE_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
+    ED_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
     WM_main_add_notifier(NC_OBJECT | ND_DRAW, NULL);
   }
 }
@@ -527,7 +528,7 @@ static void rna_ImaPaint_canvas_update(bContext *C, PointerRNA *UNUSED(ptr))
   }
 
   if (ob && ob->type == OB_MESH) {
-    BKE_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
+    ED_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
     WM_main_add_notifier(NC_OBJECT | ND_DRAW, NULL);
   }
 }
@@ -1150,7 +1151,7 @@ static void rna_def_particle_edit(BlenderRNA *brna)
 
   static const EnumPropertyItem edit_type_items[] = {
       {PE_TYPE_PARTICLES, "PARTICLES", 0, "Particles", ""},
-      {PE_TYPE_SOFTBODY, "SOFT_BODY", 0, "Soft body", ""},
+      {PE_TYPE_SOFTBODY, "SOFT_BODY", 0, "Soft Body", ""},
       {PE_TYPE_CLOTH, "CLOTH", 0, "Cloth", ""},
       {0, NULL, 0, NULL, NULL},
   };

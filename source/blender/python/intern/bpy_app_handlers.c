@@ -118,22 +118,20 @@ static PyObject *bpy_app_handlers_persistent_new(PyTypeObject *UNUSED(type),
                       "get the dictionary from the function passed");
       return NULL;
     }
-    else {
-      /* set id */
-      if (*dict_ptr == NULL) {
-        *dict_ptr = PyDict_New();
-      }
 
-      PyDict_SetItemString(*dict_ptr, PERMINENT_CB_ID, Py_None);
+    /* set id */
+    if (*dict_ptr == NULL) {
+      *dict_ptr = PyDict_New();
     }
+
+    PyDict_SetItemString(*dict_ptr, PERMINENT_CB_ID, Py_None);
 
     Py_INCREF(value);
     return value;
   }
-  else {
-    PyErr_SetString(PyExc_ValueError, "bpy.app.handlers.persistent expected a function");
-    return NULL;
-  }
+
+  PyErr_SetString(PyExc_ValueError, "bpy.app.handlers.persistent expected a function");
+  return NULL;
 }
 
 /* dummy type because decorators can't be PyCFunctions */
@@ -234,7 +232,7 @@ PyObject *BPY_app_handlers_struct(void)
   BlenderAppCbType.tp_init = NULL;
   BlenderAppCbType.tp_new = NULL;
   BlenderAppCbType.tp_hash = (hashfunc)
-      _Py_HashPointer; /* without this we can't do set(sys.modules) [#29635] */
+      _Py_HashPointer; /* without this we can't do set(sys.modules) T29635. */
 
   /* assign the C callbacks */
   if (ret) {
@@ -320,7 +318,7 @@ void bpy_app_generic_callback(struct Main *UNUSED(main),
 {
   PyObject *cb_list = py_cb_array[POINTER_AS_INT(arg)];
   if (PyList_GET_SIZE(cb_list) > 0) {
-    PyGILState_STATE gilstate = PyGILState_Ensure();
+    const PyGILState_STATE gilstate = PyGILState_Ensure();
 
     const int num_arguments = 2;
     PyObject *args_all = PyTuple_New(num_arguments); /* save python creating each call */

@@ -45,7 +45,6 @@
 #include "intern/node/deg_node_id.h"
 #include "intern/node/deg_node_operation.h"
 
-struct Base;
 struct CacheFile;
 struct Camera;
 struct Collection;
@@ -78,6 +77,7 @@ struct bAction;
 struct bArmature;
 struct bConstraint;
 struct bGPdata;
+struct bNodeSocket;
 struct bNodeTree;
 struct bPoseChannel;
 struct bSound;
@@ -194,7 +194,7 @@ class DepsgraphRelationBuilder : public DepsgraphBuilder {
   void add_modifier_to_transform_relation(const DepsNodeHandle *handle, const char *description);
 
   void add_customdata_mask(Object *object, const DEGCustomDataMeshMasks &customdata_masks);
-  void add_special_eval_flag(ID *object, uint32_t flag);
+  void add_special_eval_flag(ID *id, uint32_t flag);
 
   virtual void build_id(ID *id);
 
@@ -240,6 +240,7 @@ class DepsgraphRelationBuilder : public DepsgraphBuilder {
                                                OperationNode *operation_from,
                                                ListBase *strips);
   virtual void build_animdata_drivers(ID *id);
+  virtual void build_animdata_force(ID *id);
   virtual void build_animation_images(ID *id);
   virtual void build_action(bAction *action);
   virtual void build_driver(ID *id, FCurve *fcurve);
@@ -275,6 +276,7 @@ class DepsgraphRelationBuilder : public DepsgraphBuilder {
   virtual void build_camera(Camera *camera);
   virtual void build_light(Light *lamp);
   virtual void build_nodetree(bNodeTree *ntree);
+  virtual void build_nodetree_socket(bNodeSocket *socket);
   virtual void build_material(Material *ma);
   virtual void build_materials(Material **materials, int num_materials);
   virtual void build_freestyle_lineset(FreestyleLineSet *fls);

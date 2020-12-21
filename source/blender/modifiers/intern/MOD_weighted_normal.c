@@ -26,6 +26,7 @@
 
 #include "BLT_translation.h"
 
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
@@ -573,12 +574,13 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
   if (!(((Mesh *)ob->data)->flag & ME_AUTOSMOOTH))
 #endif
   {
-    BKE_modifier_set_error((ModifierData *)wnmd, "Enable 'Auto Smooth' in Object Data Properties");
+    BKE_modifier_set_error(
+        ctx->object, (ModifierData *)wnmd, "Enable 'Auto Smooth' in Object Data Properties");
     return mesh;
   }
 
   Mesh *result;
-  BKE_id_copy_ex(NULL, &mesh->id, (ID **)&result, LIB_ID_COPY_LOCALIZE);
+  result = (Mesh *)BKE_id_copy_ex(NULL, &mesh->id, NULL, LIB_ID_COPY_LOCALIZE);
 
   const int numVerts = result->totvert;
   const int numEdges = result->totedge;
@@ -677,16 +679,19 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
 
   /* Currently Modifier stack assumes there is no poly normal data passed around... */
   CustomData_free_layers(pdata, CD_NORMAL, numPolys);
+
+  result->runtime.is_original = false;
+
   return result;
 }
 
 static void initData(ModifierData *md)
 {
   WeightedNormalModifierData *wnmd = (WeightedNormalModifierData *)md;
-  wnmd->mode = MOD_WEIGHTEDNORMAL_MODE_FACE;
-  wnmd->weight = 50;
-  wnmd->thresh = 1e-2f;
-  wnmd->flag = 0;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(wnmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(wnmd, DNA_struct_default_get(WeightedNormalModifierData), modifier);
 }
 
 static void requiredDataMask(Object *UNUSED(ob),
@@ -711,29 +716,28 @@ static bool dependsOnNormals(ModifierData *UNUSED(md))
   return true;
 }
 
-static void panel_draw(const bContext *C, Panel *panel)
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *col;
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
   PointerRNA ob_ptr;
-  modifier_panel_get_property_pointers(C, panel, &ob_ptr, &ptr);
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
 
   uiLayoutSetPropSep(layout, true);
 
-  uiItemR(layout, &ptr, "mode", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "mode", 0, NULL, ICON_NONE);
 
-  uiItemR(layout, &ptr, "weight", 0, IFACE_("Weight"), ICON_NONE);
-  uiItemR(layout, &ptr, "thresh", 0, IFACE_("Threshold"), ICON_NONE);
+  uiItemR(layout, ptr, "weight", 0, IFACE_("Weight"), ICON_NONE);
+  uiItemR(layout, ptr, "thresh", 0, IFACE_("Threshold"), ICON_NONE);
 
   col = uiLayoutColumn(layout, false);
-  uiItemR(col, &ptr, "keep_sharp", 0, NULL, ICON_NONE);
-  uiItemR(col, &ptr, "face_influence", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "keep_sharp", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "use_face_influence", 0, NULL, ICON_NONE);
 
-  modifier_vgroup_ui(layout, &ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
+  modifier_vgroup_ui(layout, ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
 
-  modifier_panel_end(layout, &ptr);
+  modifier_panel_end(layout, ptr);
 }
 
 static void panelRegister(ARegionType *region_type)
@@ -745,9 +749,11 @@ ModifierTypeInfo modifierType_WeightedNormal = {
     /* name */ "WeightedNormal",
     /* structName */ "WeightedNormalModifierData",
     /* structSize */ sizeof(WeightedNormalModifierData),
+    /* srna */ &RNA_WeightedNormalModifier,
     /* type */ eModifierTypeType_Constructive,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsMapping |
         eModifierTypeFlag_SupportsEditmode | eModifierTypeFlag_EnableInEditmode,
+    /* icon */ ICON_MOD_VERTEX_WEIGHT,
 
     /* copyData */ BKE_modifier_copydata_generic,
 
@@ -757,7 +763,7 @@ ModifierTypeInfo modifierType_WeightedNormal = {
     /* deformMatricesEM */ NULL,
     /* modifyMesh */ modifyMesh,
     /* modifyHair */ NULL,
-    /* modifyPointCloud */ NULL,
+    /* modifyGeometrySet */ NULL,
     /* modifyVolume */ NULL,
 
     /* initData */ initData,
@@ -767,7 +773,6 @@ ModifierTypeInfo modifierType_WeightedNormal = {
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ dependsOnNormals,
-    /* foreachObjectLink */ NULL,
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,

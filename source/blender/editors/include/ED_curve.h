@@ -21,8 +21,7 @@
  * \ingroup editors
  */
 
-#ifndef __ED_CURVE_H__
-#define __ED_CURVE_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -85,7 +84,7 @@ void ED_curve_editfont_load(struct Object *obedit);
 void ED_curve_editfont_make(struct Object *obedit);
 void ED_curve_editfont_free(struct Object *obedit);
 
-void ED_text_to_object(struct bContext *C, struct Text *text, const bool split_lines);
+void ED_text_to_object(struct bContext *C, const struct Text *text, const bool split_lines);
 
 void ED_curve_beztcpy(struct EditNurb *editnurb,
                       struct BezTriple *dst,
@@ -111,5 +110,3 @@ void printknots(struct Object *obedit);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_CURVE_H__ */

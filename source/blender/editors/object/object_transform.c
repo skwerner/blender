@@ -242,7 +242,7 @@ static void object_clear_rot(Object *ob, const bool clear_delta)
         copy_v3_v3(ob->rot, eul);
       }
     }
-  }  // Duplicated in source/blender/editors/armature/editarmature.c
+  } /* Duplicated in source/blender/editors/armature/editarmature.c */
   else {
     if (ob->rotmode == ROT_MODE_QUAT) {
       unit_qt(ob->quat);
@@ -565,7 +565,7 @@ static void append_sorted_object_parent_hierarchy(Object *root_object,
                                                   Object **sorted_objects,
                                                   int *object_index)
 {
-  if (object->parent != NULL && object->parent != root_object) {
+  if (!ELEM(object->parent, NULL, root_object)) {
     append_sorted_object_parent_hierarchy(
         root_object, object->parent, sorted_objects, object_index);
   }
@@ -834,11 +834,10 @@ static int apply_objects_internal(bContext *C,
     }
     else if (ob->type == OB_FONT) {
       Curve *cu = ob->data;
-      int i;
 
       scale = mat3_to_scale(rsmat);
 
-      for (i = 0; i < cu->totbox; i++) {
+      for (int i = 0; i < cu->totbox; i++) {
         TextBox *tb = &cu->tb[i];
         tb->x *= scale;
         tb->y *= scale;
@@ -1375,7 +1374,7 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
           if (centermode == ORIGIN_TO_CURSOR) {
             copy_v3_v3(gpcenter, cursor);
           }
-          if ((centermode == ORIGIN_TO_GEOMETRY) || (centermode == ORIGIN_TO_CURSOR)) {
+          if (ELEM(centermode, ORIGIN_TO_GEOMETRY, ORIGIN_TO_CURSOR)) {
             bGPDspoint *pt;
             float imat[3][3], bmat[3][3];
             float offset_global[3];
@@ -1907,7 +1906,7 @@ static int object_transform_axis_target_modal(bContext *C, wmOperator *op, const
               for (int x = -ofs; x <= ofs; x += ofs / 2) {
                 for (int y = -ofs; y <= ofs; y += ofs / 2) {
                   if (x != 0 && y != 0) {
-                    int mval_ofs[2] = {event->mval[0] + x, event->mval[1] + y};
+                    const int mval_ofs[2] = {event->mval[0] + x, event->mval[1] + y};
                     float n[3];
                     if (ED_view3d_depth_read_cached_normal(&xfd->vc, mval_ofs, n)) {
                       add_v3_v3(normal, n);

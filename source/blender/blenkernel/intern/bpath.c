@@ -27,7 +27,6 @@
 
 #include <sys/stat.h>
 
-#include <assert.h>
 #include <string.h>
 
 /* path/file handling stuff */
@@ -74,11 +73,12 @@
 #include "BKE_main.h"
 #include "BKE_node.h"
 #include "BKE_report.h"
-#include "BKE_sequencer.h"
 
 #include "BKE_bpath.h" /* own include */
 
 #include "CLG_log.h"
+
+#include "SEQ_sequencer.h"
 
 #ifndef _MSC_VER
 #  include "BLI_strict_flags.h"
@@ -165,7 +165,7 @@ void BKE_bpath_relative_rebase(Main *bmain,
                                ReportList *reports)
 {
   BPathRebase_Data data = {NULL};
-  const int flag = BKE_BPATH_TRAVERSE_SKIP_LIBRARY;
+  const int flag = (BKE_BPATH_TRAVERSE_SKIP_LIBRARY | BKE_BPATH_TRAVERSE_SKIP_MULTIFILE);
 
   BLI_assert(basedir_src[0] != '\0');
   BLI_assert(basedir_dst[0] != '\0');
@@ -703,7 +703,7 @@ void BKE_bpath_traverse_id(
       if (scene->ed) {
         Sequence *seq;
 
-        SEQ_BEGIN (scene->ed, seq) {
+        SEQ_ALL_BEGIN (scene->ed, seq) {
           if (SEQ_HAS_PATH(seq)) {
             StripElem *se = seq->strip->stripdata;
 
@@ -732,7 +732,7 @@ void BKE_bpath_traverse_id(
             }
           }
         }
-        SEQ_END;
+        SEQ_ALL_END;
       }
       break;
     }

@@ -25,9 +25,9 @@
 
 #include "intern/builder/deg_builder_relations.h"
 
+#include <cstdio>
+#include <cstdlib>
 #include <cstring> /* required for STREQ later on. */
-#include <stdio.h>
-#include <stdlib.h>
 
 #include "MEM_guardedalloc.h"
 
@@ -58,8 +58,7 @@
 #include "intern/depsgraph_relation.h"
 #include "intern/depsgraph_type.h"
 
-namespace blender {
-namespace deg {
+namespace blender::deg {
 
 /* IK Solver Eval Steps */
 void DepsgraphRelationBuilder::build_ik_pose(Object *object,
@@ -348,7 +347,7 @@ void DepsgraphRelationBuilder::build_rig(Object *object)
   // root_map.print_debug();
   if (pose_depends_on_local_transform) {
     /* TODO(sergey): Once partial updates are possible use relation between
-     * object transform and solver itself in it's build function. */
+     * object transform and solver itself in its build function. */
     ComponentKey pose_key(&object->id, NodeType::EVAL_POSE);
     ComponentKey local_transform_key(&object->id, NodeType::TRANSFORM);
     add_relation(local_transform_key, pose_key, "Local Transforms");
@@ -477,7 +476,7 @@ void DepsgraphRelationBuilder::build_proxy_rig(Object *object)
     add_relation(bone_ready_key, bone_done_key, "Ready -> Done");
     add_relation(bone_done_key, pose_cleanup_key, "Bone Done -> Pose Cleanup");
     add_relation(bone_done_key, pose_done_key, "Bone Done -> Pose Done", RELATION_FLAG_GODMODE);
-    /* Make sure bone in the proxy is not done before it's FROM is done. */
+    /* Make sure bone in the proxy is not done before its FROM is done. */
     if (check_pchan_has_bbone(object, pchan)) {
       OperationKey from_bone_segments_key(
           &proxy_from->id, NodeType::BONE, pchan->name, OperationCode::BONE_SEGMENTS);
@@ -510,5 +509,4 @@ void DepsgraphRelationBuilder::build_proxy_rig(Object *object)
   }
 }
 
-}  // namespace deg
-}  // namespace blender
+}  // namespace blender::deg

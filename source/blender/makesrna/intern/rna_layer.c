@@ -29,8 +29,6 @@
 
 #include "RE_engine.h"
 
-#include "DRW_engine.h"
-
 #include "WM_api.h"
 #include "WM_types.h"
 
@@ -117,7 +115,7 @@ static char *rna_ViewLayer_path(PointerRNA *ptr)
   ViewLayer *srl = (ViewLayer *)ptr->data;
   char name_esc[sizeof(srl->name) * 2];
 
-  BLI_strescape(name_esc, srl->name, sizeof(name_esc));
+  BLI_str_escape(name_esc, srl->name, sizeof(name_esc));
   return BLI_sprintfN("view_layers[\"%s\"]", name_esc);
 }
 
@@ -154,6 +152,18 @@ static void rna_ViewLayer_update_render_passes(ID *id)
   if (scene->nodetree) {
     ntreeCompositUpdateRLayers(scene->nodetree);
   }
+
+  RenderEngineType *engine_type = RE_engines_find(scene->r.engine);
+  if (engine_type->update_render_passes) {
+    RenderEngine *engine = RE_engine_create(engine_type);
+    if (engine) {
+      LISTBASE_FOREACH (ViewLayer *, view_layer, &scene->view_layers) {
+        BKE_view_layer_verify_aov(engine, scene, view_layer);
+      }
+    }
+    RE_engine_free(engine);
+    engine = NULL;
+  }
 }
 
 static PointerRNA rna_ViewLayer_objects_get(CollectionPropertyIterator *iter)
@@ -184,10 +194,7 @@ static PointerRNA rna_ViewLayer_depsgraph_get(PointerRNA *ptr)
   if (GS(id->name) == ID_SCE) {
     Scene *scene = (Scene *)id;
     ViewLayer *view_layer = (ViewLayer *)ptr->data;
-    // NOTE: We don't allocate new depsgraph here, so the bmain is ignored. So it's easier to pass
-    // NULL.
-    // Still weak though.
-    Depsgraph *depsgraph = BKE_scene_get_depsgraph(NULL, scene, view_layer, false);
+    Depsgraph *depsgraph = BKE_scene_get_depsgraph(scene, view_layer);
     return rna_pointer_inherit_refine(ptr, &RNA_Depsgraph, depsgraph);
   }
   return PointerRNA_NULL;
@@ -206,7 +213,7 @@ static void rna_ViewLayer_update_tagged(ID *id_ptr,
                                         ReportList *reports)
 {
   Scene *scene = (Scene *)id_ptr;
-  Depsgraph *depsgraph = BKE_scene_get_depsgraph(bmain, scene, view_layer, true);
+  Depsgraph *depsgraph = BKE_scene_ensure_depsgraph(bmain, scene, view_layer);
 
   if (DEG_is_evaluating(depsgraph)) {
     BKE_report(reports, RPT_ERROR, "Dependency graph update requested during evaluation");
@@ -312,6 +319,15 @@ static void rna_LayerCollection_exclude_update(Main *bmain, Scene *UNUSED(scene)
   BKE_layer_collection_sync(scene, view_layer);
 
   DEG_id_tag_update(&scene->id, ID_RECALC_BASE_FLAGS);
+  if (!exclude) {
+    /* We need to update animation of objects added back to the scene through enabling this view
+     * layer. */
+    FOREACH_OBJECT_BEGIN (view_layer, ob) {
+      DEG_id_tag_update(&ob->id, ID_RECALC_ANIMATION);
+    }
+    FOREACH_OBJECT_END;
+  }
+
   DEG_relations_tag_update(bmain);
   WM_main_add_notifier(NC_SCENE | ND_LAYER_CONTENT, NULL);
   if (exclude) {
@@ -352,7 +368,7 @@ static void rna_def_layer_collection(BlenderRNA *brna)
 
   srna = RNA_def_struct(brna, "LayerCollection", NULL);
   RNA_def_struct_ui_text(srna, "Layer Collection", "Layer collection");
-  RNA_def_struct_ui_icon(srna, ICON_GROUP);
+  RNA_def_struct_ui_icon(srna, ICON_OUTLINER_COLLECTION);
 
   prop = RNA_def_property(srna, "collection", PROP_POINTER, PROP_NONE);
   RNA_def_property_flag(prop, PROP_NEVER_NULL);

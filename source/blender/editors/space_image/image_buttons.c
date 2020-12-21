@@ -725,9 +725,6 @@ static void uiblock_layer_pass_buttons(uiLayout *layout,
   }
 }
 
-// XXX HACK!
-// static int packdummy=0;
-
 typedef struct RNAUpdateCb {
   PointerRNA ptr;
   PropertyRNA *prop;
@@ -743,7 +740,7 @@ static void rna_update_cb(bContext *C, void *arg_cb, void *UNUSED(arg))
   cb->iuser->ok = 1;
 
   /* we call update here on the pointer property, this way the
-   * owner of the image pointer can still define it's own update
+   * owner of the image pointer can still define its own update
    * and notifier */
   RNA_property_update(C, &cb->ptr, cb->prop);
 }
@@ -809,7 +806,8 @@ void uiTemplateImage(uiLayout *layout,
                  C,
                  ptr,
                  propname,
-                 ima ? NULL : "IMAGE_OT_new",
+                 "IMAGE_OT_new",
+                 NULL,
                  "IMAGE_OT_open",
                  NULL,
                  UI_TEMPLATE_ID_FILTER_ALL,
@@ -1323,6 +1321,6 @@ void image_buttons_register(ARegionType *art)
   pt->order = 10;
   pt->poll = metadata_panel_context_poll;
   pt->draw = metadata_panel_context_draw;
-  pt->flag |= PNL_DEFAULT_CLOSED;
+  pt->flag |= PANEL_TYPE_DEFAULT_CLOSED;
   BLI_addtail(&art->paneltypes, pt);
 }

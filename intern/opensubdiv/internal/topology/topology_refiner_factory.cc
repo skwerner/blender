@@ -70,7 +70,7 @@ inline bool TopologyRefinerFactory<TopologyRefinerData>::resizeComponentTopology
   // not see any edges, which will indicate to it that winding and edges are to
   // be reconstructed).
   //
-  // NOTE: it is a possible usecase when user code does not need crease at all
+  // NOTE: it is a possible use case when user code does not need crease at all
   // (which is the only real reason why converter would want to provide edges in
   // the case of partial topology specification). So it might be so getNumEdges
   // callback is nullptr.
@@ -250,7 +250,7 @@ inline bool TopologyRefinerFactory<TopologyRefinerData>::assignComponentTags(
       base_mesh_topology->setVertexSharpness(vertex_index, sharpness);
     }
 
-    // If it's vertex where 2 non-manifold edges meet adjust vertex sharpness to
+    // If its vertex where 2 non-manifold edges meet adjust vertex sharpness to
     // the edges.
     // This way having a plane with all 4 edges set to be sharp produces sharp
     // corners in the subdivided result.

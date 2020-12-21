@@ -55,7 +55,6 @@ const UserDef U_default = {
     .timecode_style = USER_TIMECODE_MINIMAL,
     .versions = 1,
     .dbl_click_time = 350,
-    .wheellinescroll = 3,
     .mini_axis_type = USER_MINI_AXIS_TYPE_GIZMO,
     .uiflag = (USER_FILTERFILEEXTS | USER_DRAWVIEWINFO | USER_PLAINMENUS |
                USER_LOCK_CURSOR_ADJUST | USER_DEPTH_CURSOR | USER_AUTOPERSP | USER_GLOBALUNDO |
@@ -109,7 +108,7 @@ const UserDef U_default = {
     .keyconfigstr = "blender",
     .undosteps = 32,
     .undomemory = 0,
-    .gp_manhattendist = 1,
+    .gp_manhattandist = 1,
     .gp_euclideandist = 2,
     .gp_eraser = 25,
     .gp_settings = 0,
@@ -218,7 +217,7 @@ const UserDef U_default = {
             .flag = FILE_HIDE_DOT,
             .filter_id = FILTER_ID_ALL,
 
-            .temp_win_sizex = 1020,
+            .temp_win_sizex = 1060,
             .temp_win_sizey = 600,
         },
 

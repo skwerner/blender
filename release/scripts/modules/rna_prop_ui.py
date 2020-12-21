@@ -49,7 +49,7 @@ def rna_idprop_ui_del(item):
 
 
 def rna_idprop_quote_path(prop):
-    return "[\"%s\"]" % prop.replace("\"", "\\\"")
+    return "[\"%s\"]" % bpy.utils.escape_identifier(prop)
 
 
 def rna_idprop_ui_prop_update(item, prop):
@@ -282,10 +282,10 @@ def draw(layout, context, context_member, property_type, use_edit=True):
 
         if use_edit:
             split = box.split(factor=0.75)
-            row = split.row(align=True)
+            row = split.row()
         else:
             split = box.split(factor=1.00)
-            row = split.row(align=True)
+            row = split.row()
 
         row.alignment = 'RIGHT'
 
@@ -309,13 +309,15 @@ def draw(layout, context, context_member, property_type, use_edit=True):
             # Do not allow editing of overridden properties (we cannot use a poll function of the operators here
             # since they's have no access to the specific property...).
             row.enabled = not(is_lib_override and key in rna_item.id_data.override_library.reference)
-            if not is_rna:
+            if is_rna:
+                row.label(text="API Defined")
+            elif is_lib_override:
+                row.label(text="Library Override")
+            else:
                 props = row.operator("wm.properties_edit", text="Edit")
                 assign_props(props, val_draw, key)
                 props = row.operator("wm.properties_remove", text="", icon='REMOVE')
                 assign_props(props, val_draw, key)
-            else:
-                row.label(text="API Defined")
 
     del flow
 

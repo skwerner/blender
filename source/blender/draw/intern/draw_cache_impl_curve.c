@@ -307,7 +307,7 @@ static int curve_render_data_normal_len_get(const CurveRenderData *rdata)
   return rdata->normal.len;
 }
 
-static void curve_cd_calc_used_gpu_layers(int *cd_layers,
+static void curve_cd_calc_used_gpu_layers(CustomDataMask *cd_layers,
                                           struct GPUMaterial **gpumat_array,
                                           int gpumat_array_len)
 {
@@ -334,16 +334,16 @@ static void curve_cd_calc_used_gpu_layers(int *cd_layers,
 
       switch (type) {
         case CD_MTFACE:
-          *cd_layers |= CD_MLOOPUV;
+          *cd_layers |= CD_MASK_MLOOPUV;
           break;
         case CD_TANGENT:
-          *cd_layers |= CD_TANGENT;
+          *cd_layers |= CD_MASK_TANGENT;
           break;
         case CD_MCOL:
           /* Curve object don't have Color data. */
           break;
         case CD_ORCO:
-          *cd_layers |= CD_ORCO;
+          *cd_layers |= CD_MASK_ORCO;
           break;
       }
     }
@@ -397,7 +397,7 @@ typedef struct CurveBatchCache {
   GPUIndexBuf **surf_per_mat_tris;
   GPUBatch **surf_per_mat;
   int mat_len;
-  int cd_used, cd_needed;
+  CustomDataMask cd_used, cd_needed;
 
   /* settings to determine if cache is invalid */
   bool is_dirty;
@@ -686,15 +686,15 @@ static void curve_create_edit_curves_nor(CurveRenderData *rdata, GPUVertBuf *vbo
   BLI_assert(vbo_len_used == verts_len_capacity);
 }
 
-static char beztriple_vflag_get(CurveRenderData *rdata,
-                                char flag,
-                                char col_id,
-                                int v_idx,
-                                int nu_id,
-                                bool handle_point,
-                                const bool handle_selected)
+static uint8_t beztriple_vflag_get(CurveRenderData *rdata,
+                                   uint8_t flag,
+                                   uint8_t col_id,
+                                   int v_idx,
+                                   int nu_id,
+                                   bool handle_point,
+                                   const bool handle_selected)
 {
-  char vflag = 0;
+  uint8_t vflag = 0;
   SET_FLAG_FROM_TEST(vflag, (flag & SELECT), VFLAG_VERT_SELECTED);
   SET_FLAG_FROM_TEST(vflag, (v_idx == rdata->actvert && nu_id == rdata->actnu), VFLAG_VERT_ACTIVE);
   SET_FLAG_FROM_TEST(vflag, (nu_id == rdata->actnu), ACTIVE_NURB);
@@ -707,9 +707,9 @@ static char beztriple_vflag_get(CurveRenderData *rdata,
   return vflag;
 }
 
-static char bpoint_vflag_get(CurveRenderData *rdata, char flag, int v_idx, int nu_id, int u)
+static uint8_t bpoint_vflag_get(CurveRenderData *rdata, uint8_t flag, int v_idx, int nu_id, int u)
 {
-  char vflag = 0;
+  uint8_t vflag = 0;
   SET_FLAG_FROM_TEST(vflag, (flag & SELECT), VFLAG_VERT_SELECTED);
   SET_FLAG_FROM_TEST(vflag, (v_idx == rdata->actvert && nu_id == rdata->actnu), VFLAG_VERT_ACTIVE);
   SET_FLAG_FROM_TEST(vflag, (nu_id == rdata->actnu), ACTIVE_NURB);
@@ -783,7 +783,7 @@ static void curve_create_edit_data_and_handles(CurveRenderData *rdata,
           GPU_indexbuf_add_line_verts(elbp_lines, vbo_len_used + 1, vbo_len_used + 2);
         }
         if (vbo_data) {
-          const char vflag[3] = {
+          const uint8_t vflag[3] = {
               beztriple_vflag_get(rdata, bezt->f1, bezt->h1, a, nu_id, true, handle_selected),
               beztriple_vflag_get(rdata, bezt->f2, bezt->h1, a, nu_id, false, handle_selected),
               beztriple_vflag_get(rdata, bezt->f3, bezt->h2, a, nu_id, true, handle_selected),
@@ -824,7 +824,7 @@ static void curve_create_edit_data_and_handles(CurveRenderData *rdata,
           }
         }
         if (vbo_data) {
-          char vflag = bpoint_vflag_get(rdata, bp->f1, a, nu_id, u);
+          uint8_t vflag = bpoint_vflag_get(rdata, bp->f1, a, nu_id, u);
           GPU_vertbuf_attr_set(vbo_data, attr_id.data, vbo_len_used, &vflag);
         }
         if (vbo_pos) {
@@ -998,10 +998,10 @@ void DRW_curve_batch_cache_create_requested(Object *ob)
       if (cache->mat_len > 1) {
         DRW_ibo_request(cache->surf_per_mat[i], &cache->surf_per_mat_tris[i]);
       }
-      if (cache->cd_used & CD_MLOOPUV) {
+      if (cache->cd_used & CD_MASK_MLOOPUV) {
         DRW_vbo_request(cache->surf_per_mat[i], &cache->ordered.loop_uv);
       }
-      if (cache->cd_used & CD_TANGENT) {
+      if (cache->cd_used & CD_MASK_TANGENT) {
         DRW_vbo_request(cache->surf_per_mat[i], &cache->ordered.loop_tan);
       }
       DRW_vbo_request(cache->surf_per_mat[i], &cache->ordered.loop_pos_nor);

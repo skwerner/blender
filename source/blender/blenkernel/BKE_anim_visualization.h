@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
  */
-#ifndef __BKE_ANIM_VISUALIZATION_H__
-#define __BKE_ANIM_VISUALIZATION_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -27,6 +26,8 @@
 extern "C" {
 #endif
 
+struct BlendDataReader;
+struct BlendWriter;
 struct Object;
 struct ReportList;
 struct Scene;
@@ -49,8 +50,9 @@ struct bMotionPath *animviz_verify_motionpaths(struct ReportList *reports,
                                                struct Object *ob,
                                                struct bPoseChannel *pchan);
 
+void animviz_motionpath_blend_write(struct BlendWriter *writer, struct bMotionPath *mpath);
+void animviz_motionpath_blend_read_data(struct BlendDataReader *reader, struct bMotionPath *mpath);
+
 #ifdef __cplusplus
 }
-#endif
-
 #endif

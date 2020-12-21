@@ -68,15 +68,12 @@
 #include "DEG_depsgraph_physics.h"
 #include "DEG_depsgraph_query.h"
 
-#include "RE_render_ext.h"
-#include "RE_shader_ext.h"
+#include "RE_texture.h"
 
 EffectorWeights *BKE_effector_add_weights(Collection *collection)
 {
   EffectorWeights *weights = MEM_callocN(sizeof(EffectorWeights), "EffectorWeights");
-  int i;
-
-  for (i = 0; i < NUM_PFIELD_TYPES; i++) {
+  for (int i = 0; i < NUM_PFIELD_TYPES; i++) {
     weights->weight[i] = 1.0f;
   }
 
@@ -313,10 +310,10 @@ ListBase *BKE_effectors_create(Depsgraph *depsgraph,
       if (ob == ob_src) {
         continue;
       }
-      else if (weights->weight[ob->pd->forcefield] == 0.0f) {
+      if (weights->weight[ob->pd->forcefield] == 0.0f) {
         continue;
       }
-      else if (ob->pd->shape == PFIELD_SHAPE_POINTS && BKE_object_get_evaluated_mesh(ob) == NULL) {
+      if (ob->pd->shape == PFIELD_SHAPE_POINTS && BKE_object_get_evaluated_mesh(ob) == NULL) {
         continue;
       }
 
@@ -701,8 +698,8 @@ int get_effector_data(EffectorCache *eff,
       copy_v3_v3(efd->loc, state.co);
 
       /* rather than use the velocity use rotated x-axis (defaults to velocity) */
-      efd->nor[0] = 1.f;
-      efd->nor[1] = efd->nor[2] = 0.f;
+      efd->nor[0] = 1.0f;
+      efd->nor[1] = efd->nor[2] = 0.0f;
       mul_qt_v3(state.rot, efd->nor);
 
       if (real_velocity) {
@@ -1011,9 +1008,12 @@ static void do_physical_effector(EffectorCache *eff,
       else {
         add_v3_v3v3(temp, efd->vec_to_point2, efd->nor2);
       }
-      force[0] = -1.0f + 2.0f * BLI_gTurbulence(pd->f_size, temp[0], temp[1], temp[2], 2, 0, 2);
-      force[1] = -1.0f + 2.0f * BLI_gTurbulence(pd->f_size, temp[1], temp[2], temp[0], 2, 0, 2);
-      force[2] = -1.0f + 2.0f * BLI_gTurbulence(pd->f_size, temp[2], temp[0], temp[1], 2, 0, 2);
+      force[0] = -1.0f + 2.0f * BLI_noise_generic_turbulence(
+                                    pd->f_size, temp[0], temp[1], temp[2], 2, 0, 2);
+      force[1] = -1.0f + 2.0f * BLI_noise_generic_turbulence(
+                                    pd->f_size, temp[1], temp[2], temp[0], 2, 0, 2);
+      force[2] = -1.0f + 2.0f * BLI_noise_generic_turbulence(
+                                    pd->f_size, temp[2], temp[0], temp[1], 2, 0, 2);
       mul_v3_fl(force, strength * efd->falloff);
       break;
     case PFIELD_DRAG:
@@ -1053,9 +1053,6 @@ static void do_physical_effector(EffectorCache *eff,
     }
   }
 
-  if (point->ave) {
-    zero_v3(point->ave);
-  }
   if (pd->flag & PFIELD_DO_ROTATION && point->ave && point->rot) {
     float xvec[3] = {1.0f, 0.0f, 0.0f};
     float dave[3];
@@ -1207,9 +1204,9 @@ static bool debug_element_compare(const void *a, const void *b)
   const SimDebugElement *elem2 = b;
 
   if (elem1->hash == elem2->hash) {
-    return 0;
+    return false;
   }
-  return 1;
+  return true;
 }
 
 static void debug_element_free(void *val)

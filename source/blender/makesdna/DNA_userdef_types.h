@@ -21,8 +21,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_USERDEF_TYPES_H__
-#define __DNA_USERDEF_TYPES_H__
+#pragma once
 
 #include "DNA_listBase.h"
 #include "DNA_texture_types.h" /* ColorBand */
@@ -276,7 +275,8 @@ typedef struct ThemeSpace {
   unsigned char wire[4], wire_edit[4], select[4];
   unsigned char lamp[4], speaker[4], empty[4], camera[4];
   unsigned char active[4], group[4], group_active[4], transform[4];
-  unsigned char vertex[4], vertex_select[4], vertex_bevel[4], vertex_unreferenced[4];
+  unsigned char vertex[4], vertex_select[4], vertex_active[4], vertex_bevel[4],
+      vertex_unreferenced[4];
   unsigned char edge[4], edge_select[4];
   unsigned char edge_seam[4], edge_sharp[4], edge_facesel[4], edge_crease[4], edge_bevel[4];
   /** Solid faces. */
@@ -322,18 +322,19 @@ typedef struct ThemeSpace {
   unsigned char grid_levels;
 
   /* syntax for textwindow and nodes */
-  unsigned char syntaxl[4], syntaxs[4];  // in nodespace used for backdrop matte
-  unsigned char syntaxb[4], syntaxn[4];  // in nodespace used for color input
-  unsigned char syntaxv[4], syntaxc[4];  // in nodespace used for converter group
-  unsigned char syntaxd[4], syntaxr[4];  // in nodespace used for distort
+  unsigned char syntaxl[4], syntaxs[4]; /* in nodespace used for backdrop matte */
+  unsigned char syntaxb[4], syntaxn[4]; /* in nodespace used for color input */
+  unsigned char syntaxv[4], syntaxc[4]; /* in nodespace used for converter group */
+  unsigned char syntaxd[4], syntaxr[4]; /* in nodespace used for distort */
 
   unsigned char line_numbers[4];
-  char _pad6[7];
+  char _pad6[3];
 
   unsigned char nodeclass_output[4], nodeclass_filter[4];
   unsigned char nodeclass_vector[4], nodeclass_texture[4];
   unsigned char nodeclass_shader[4], nodeclass_script[4];
   unsigned char nodeclass_pattern[4], nodeclass_layout[4];
+  unsigned char nodeclass_geometry[4], nodeclass_attribute[4];
 
   /** For sequence editor. */
   unsigned char movie[4], movieclip[4], mask[4], image[4], scene[4], audio[4];
@@ -358,7 +359,7 @@ typedef struct ThemeSpace {
   unsigned char path_before[4], path_after[4];
   unsigned char path_keyframe_before[4], path_keyframe_after[4];
   unsigned char camera_path[4];
-  unsigned char _pad1[2];
+  unsigned char _pad1[6];
 
   unsigned char gp_vertex_size;
   unsigned char gp_vertex[4], gp_vertex_select[4];
@@ -373,8 +374,6 @@ typedef struct ThemeSpace {
 
   /** Two uses, for uvs with modifier applied on mesh and uvs during painting. */
   unsigned char uv_shadow[4];
-  /** Uvs of other objects. */
-  unsigned char uv_others[4];
 
   /** Outliner - filter match. */
   unsigned char match[4];
@@ -456,6 +455,10 @@ typedef enum eWireColor_Flags {
   /* TH_WIRECOLOR_TEXTCOLS = (1 << 1), */ /* UNUSED */
 } eWireColor_Flags;
 
+typedef struct ThemeCollectionColor {
+  unsigned char color[4];
+} ThemeCollectionColor;
+
 /**
  * A theme.
  *
@@ -493,6 +496,9 @@ typedef struct bTheme {
   /* 20 sets of bone colors for this theme */
   ThemeWireColor tarm[20];
   /*ThemeWireColor tobj[20];*/
+
+  /* See COLLECTION_COLOR_TOT for the number of collection colors. */
+  ThemeCollectionColor collection_color[8];
 
   int active_theme_area;
   char _pad0[4];
@@ -563,6 +569,13 @@ enum {
   USER_MENU_TYPE_PROP = 4,
 };
 
+typedef struct bUserAssetLibrary {
+  struct bUserAssetLibrary *next, *prev;
+
+  char name[64];   /* MAX_NAME */
+  char path[1024]; /* FILE_MAX */
+} bUserAssetLibrary;
+
 typedef struct SolidLight {
   int flag;
   float smooth;
@@ -584,6 +597,7 @@ typedef struct WalkNavigation {
 } WalkNavigation;
 
 typedef struct UserDef_Runtime {
+  /** Mark as changed so the preferences are saved on exit. */
   char is_dirty;
   char _pad0[7];
 } UserDef_Runtime;
@@ -618,13 +632,20 @@ typedef struct UserDef_FileSpaceData {
 } UserDef_FileSpaceData;
 
 typedef struct UserDef_Experimental {
+  /* Debug options, always available. */
   char use_undo_legacy;
-  char use_new_particle_system;
-  char use_new_hair_type;
   char use_cycles_debug;
+  char SANITIZE_AFTER_HERE;
+  /* The following options are automatically sanitized (set to 0)
+   * when the release cycle is not alpha. */
+  char use_new_hair_type;
+  char use_new_point_cloud_type;
   char use_sculpt_vertex_colors;
+  char use_switch_object_operator;
+  char use_sculpt_tools_tilt;
+  char use_object_add_tool;
+  char _pad[7];
   /** `makesdna` does not allow empty structs. */
-  char _pad[3];
 } UserDef_Experimental;
 
 #define USER_EXPERIMENTAL_TEST(userdef, member) \
@@ -669,8 +690,7 @@ typedef struct UserDef {
   short versions;
   short dbl_click_time;
 
-  char _pad0[2];
-  char wheellinescroll;
+  char _pad0[3];
   char mini_axis_type;
   /** #eUserpref_UI_Flag. */
   int uiflag;
@@ -690,16 +710,17 @@ typedef struct UserDef {
   int audioformat;
   int audiochannels;
 
-  /** Setting for UI scale. */
+  /** Setting for UI scale (fractional), before screen DPI has been applied. */
   float ui_scale;
   /** Setting for UI line width. */
   int ui_line_width;
   /** Runtime, full DPI divided by `pixelsize`. */
   int dpi;
-  /** Runtime, multiplier to scale UI elements based on DPI. */
+  /** Runtime, multiplier to scale UI elements based on DPI (fractional). */
   float dpi_fac;
+  /** Runtime, `1.0 / dpi_fac` */
   float inv_dpi_fac;
-  /** Runtime, line width and point size based on DPI. */
+  /** Runtime, calculated from line-width and point-size based on DPI (rounded to int). */
   float pixelsize;
   /** Deprecated, for forward compatibility. */
   int virtual_pixel;
@@ -726,6 +747,8 @@ typedef struct UserDef {
   struct ListBase autoexec_paths;
   /** #bUserMenu. */
   struct ListBase user_menus;
+  /** #bUserAssetLibrary */
+  struct ListBase asset_libraries;
 
   char keyconfigstr[64];
 
@@ -733,7 +756,7 @@ typedef struct UserDef {
   char _pad1[2];
   int undomemory;
   float gpu_viewport_quality DNA_DEPRECATED;
-  short gp_manhattendist, gp_euclideandist, gp_eraser;
+  short gp_manhattandist, gp_euclideandist, gp_eraser;
   /** #eGP_UserdefSettings. */
   short gp_settings;
   char _pad13[4];
@@ -812,12 +835,12 @@ typedef struct UserDef {
   short autokey_mode;
   /** Flags for autokeying. */
   short autokey_flag;
+  /** Flags for animation. */
+  short animation_flag;
 
   /** Options for text rendering. */
   char text_render;
   char navigation_mode;
-
-  char _pad9[2];
 
   /** Turn-table rotation amount per-pixel in radians. Scaled with DPI. */
   float view_rotate_sensitivity_turntable;
@@ -978,8 +1001,9 @@ typedef enum ePathCompare_Flag {
 /* Helper macro for checking frame clamping */
 #define FRAMENUMBER_MIN_CLAMP(cfra) \
   { \
-    if ((U.flag & USER_NONEGFRAMES) && (cfra < 0)) \
+    if ((U.flag & USER_NONEGFRAMES) && (cfra < 0)) { \
       cfra = 0; \
+    } \
   } \
   (void)0
 
@@ -1031,7 +1055,7 @@ typedef enum eUserpref_UI_Flag {
   USER_HIDE_DOT = (1 << 16),
   USER_SHOW_GIZMO_NAVIGATE = (1 << 17),
   USER_SHOW_VIEWPORTNAME = (1 << 18),
-  USER_CAM_LOCK_NO_PARENT = (1 << 19),
+  USER_UIFLAG_UNUSED_3 = (1 << 19), /* Cleared. */
   USER_ZOOM_TO_MOUSEPOS = (1 << 20),
   USER_SHOW_FPS = (1 << 21),
   USER_UIFLAG_UNUSED_22 = (1 << 22), /* cleared */
@@ -1058,7 +1082,7 @@ typedef enum eUserpref_UI_Flag {
 typedef enum eUserpref_UI_Flag2 {
   USER_UIFLAG2_UNUSED_0 = (1 << 0), /* cleared */
   USER_REGION_OVERLAP = (1 << 1),
-  USER_TRACKPAD_NATURAL = (1 << 2),
+  USER_UIFLAG2_UNUSED_2 = (1 << 2),
   USER_UIFLAG2_UNUSED_3 = (1 << 3), /* dirty */
 } eUserpref_UI_Flag2;
 
@@ -1131,6 +1155,15 @@ typedef enum eAutokey_Flag {
   AUTOKEY_FLAG_CYCLEAWARE = (1 << 8),
   ANIMRECORD_FLAG_WITHNLA = (1 << 10),
 } eAutokey_Flag;
+
+/**
+ * Animation flags
+ * #UserDef.animation_flag, used for animation flags that aren't covered by more specific flags
+ * (like eAutokey_Flag).
+ */
+typedef enum eUserpref_Anim_Flags {
+  USER_ANIM_SHOW_CHANNEL_GROUP_COLORS = (1 << 0),
+} eUserpref_Anim_Flags;
 
 /** #UserDef.transopts */
 typedef enum eUserpref_Translation_Flags {
@@ -1338,6 +1371,4 @@ enum {
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

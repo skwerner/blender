@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BMESH_MESH_H__
-#define __BMESH_MESH_H__
+#pragma once
 
 /** \file
  * \ingroup bmesh
@@ -49,7 +48,7 @@ void BM_verts_calc_normal_vcos(BMesh *bm,
 void BM_loops_calc_normal_vcos(BMesh *bm,
                                const float (*vcos)[3],
                                const float (*vnos)[3],
-                               const float (*pnos)[3],
+                               const float (*fnos)[3],
                                const bool use_split_normals,
                                const float split_angle,
                                float (*r_lnos)[3],
@@ -82,7 +81,7 @@ void bmesh_edit_begin(BMesh *bm, const BMOpTypeFlag type_flag);
 void bmesh_edit_end(BMesh *bm, const BMOpTypeFlag type_flag);
 
 void BM_mesh_elem_index_ensure_ex(BMesh *bm, const char htype, int elem_offset[4]);
-void BM_mesh_elem_index_ensure(BMesh *bm, const char hflag);
+void BM_mesh_elem_index_ensure(BMesh *bm, const char htype);
 void BM_mesh_elem_index_validate(
     BMesh *bm, const char *location, const char *func, const char *msg_a, const char *msg_b);
 
@@ -165,11 +164,9 @@ extern const BMAllocTemplate bm_mesh_chunksize_default;
   VA_NARGS_CALL_OVERLOAD(_VA_BMALLOC_TEMPLATE_FROM_ME_, __VA_ARGS__)
 
 /* Vertex coords access. */
-void BM_mesh_vert_coords_get(BMesh *bm, float (*orco)[3]);
+void BM_mesh_vert_coords_get(BMesh *bm, float (*vert_coords)[3]);
 float (*BM_mesh_vert_coords_alloc(BMesh *bm, int *r_vert_len))[3];
-void BM_mesh_vert_coords_apply(BMesh *bm, const float (*orco)[3]);
+void BM_mesh_vert_coords_apply(BMesh *bm, const float (*vert_coords)[3]);
 void BM_mesh_vert_coords_apply_with_mat4(BMesh *bm,
                                          const float (*vert_coords)[3],
                                          const float mat[4][4]);
-
-#endif /* __BMESH_MESH_H__ */

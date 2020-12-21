@@ -216,8 +216,13 @@ static void rna_uiItemMenuEnumR(uiLayout *layout,
   uiItemMenuEnumR_prop(layout, ptr, prop, name, icon);
 }
 
-static void rna_uiItemTabsEnumR(
-    uiLayout *layout, bContext *C, struct PointerRNA *ptr, const char *propname, bool icon_only)
+static void rna_uiItemTabsEnumR(uiLayout *layout,
+                                bContext *C,
+                                struct PointerRNA *ptr,
+                                const char *propname,
+                                struct PointerRNA *ptr_highlight,
+                                const char *propname_highlight,
+                                bool icon_only)
 {
   PropertyRNA *prop = RNA_struct_find_property(ptr, propname);
 
@@ -230,7 +235,31 @@ static void rna_uiItemTabsEnumR(
     return;
   }
 
-  uiItemTabsEnumR_prop(layout, C, ptr, prop, icon_only);
+  /* Get the highlight property used to gray out some of the tabs. */
+  PropertyRNA *prop_highlight = NULL;
+  if (!RNA_pointer_is_null(ptr_highlight)) {
+    prop_highlight = RNA_struct_find_property(ptr_highlight, propname_highlight);
+    if (!prop_highlight) {
+      RNA_warning("property not found: %s.%s",
+                  RNA_struct_identifier(ptr_highlight->type),
+                  propname_highlight);
+      return;
+    }
+    if (RNA_property_type(prop_highlight) != PROP_BOOLEAN) {
+      RNA_warning("property is not a boolean: %s.%s",
+                  RNA_struct_identifier(ptr_highlight->type),
+                  propname_highlight);
+      return;
+    }
+    if (!RNA_property_array_check(prop_highlight)) {
+      RNA_warning("property is not an array: %s.%s",
+                  RNA_struct_identifier(ptr_highlight->type),
+                  propname_highlight);
+      return;
+    }
+  }
+
+  uiItemTabsEnumR_prop(layout, C, ptr, prop, ptr_highlight, prop_highlight, icon_only);
 }
 
 static void rna_uiItemEnumR_string(uiLayout *layout,
@@ -346,6 +375,15 @@ static PointerRNA rna_uiItemOMenuHold(uiLayout *layout,
   return opptr;
 }
 
+static void rna_uiItemsEnumO(uiLayout *layout,
+                             const char *opname,
+                             const char *propname,
+                             const bool icon_only)
+{
+  int flag = icon_only ? UI_ITEM_R_ICON_ONLY : 0;
+  uiItemsFullEnumO(layout, opname, propname, NULL, uiLayoutGetOperatorContext(layout), flag);
+}
+
 static void rna_uiItemMenuEnumO(uiLayout *layout,
                                 bContext *C,
                                 const char *opname,
@@ -442,6 +480,7 @@ static void rna_uiTemplateID(uiLayout *layout,
                              PointerRNA *ptr,
                              const char *propname,
                              const char *newop,
+                             const char *duplicateop,
                              const char *openop,
                              const char *unlinkop,
                              int filter,
@@ -460,7 +499,8 @@ static void rna_uiTemplateID(uiLayout *layout,
   /* Get translated name (label). */
   name = rna_translate_ui_text(name, text_ctxt, NULL, prop, translate);
 
-  uiTemplateID(layout, C, ptr, propname, newop, openop, unlinkop, filter, live_icon, name);
+  uiTemplateID(
+      layout, C, ptr, propname, newop, duplicateop, openop, unlinkop, filter, live_icon, name);
 }
 
 static void rna_uiTemplateAnyID(uiLayout *layout,
@@ -548,7 +588,7 @@ static uiLayout *rna_uiLayoutColumnWithHeading(
 
 static int rna_ui_get_rnaptr_icon(bContext *C, PointerRNA *ptr_icon)
 {
-  return UI_rnaptr_icon_get(C, ptr_icon, RNA_struct_ui_icon(ptr_icon->type), false);
+  return UI_icon_from_rnaptr(C, ptr_icon, RNA_struct_ui_icon(ptr_icon->type), false);
 }
 
 static const char *rna_ui_get_enum_name(bContext *C,
@@ -920,6 +960,11 @@ void RNA_api_ui_layout(StructRNA *srna)
   func = RNA_def_function(srna, "prop_tabs_enum", "rna_uiItemTabsEnumR");
   RNA_def_function_flag(func, FUNC_USE_CONTEXT);
   api_ui_item_rna_common(func);
+  parm = RNA_def_pointer(
+      func, "data_highlight", "AnyType", "", "Data from which to take highlight property");
+  RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_RNAPTR);
+  parm = RNA_def_string(
+      func, "property_highlight", NULL, 0, "", "Identifier of highlight property in data");
   RNA_def_boolean(func, "icon_only", false, "", "Draw only icons in tabs, no text");
 
   func = RNA_def_function(srna, "prop_enum", "rna_uiItemEnumR_string");
@@ -972,11 +1017,12 @@ void RNA_api_ui_layout(StructRNA *srna)
                                     "Item. Places a button into the layout to call an Operator");
   }
 
-  func = RNA_def_function(srna, "operator_enum", "uiItemsEnumO");
+  func = RNA_def_function(srna, "operator_enum", "rna_uiItemsEnumO");
   parm = RNA_def_string(func, "operator", NULL, 0, "", "Identifier of the operator");
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
   parm = RNA_def_string(func, "property", NULL, 0, "", "Identifier of property in operator");
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
+  RNA_def_boolean(func, "icon_only", false, "", "Draw only icons in buttons, no text");
 
   func = RNA_def_function(srna, "operator_menu_enum", "rna_uiItemMenuEnumO");
   RNA_def_function_flag(func, FUNC_USE_CONTEXT);
@@ -1112,8 +1158,11 @@ void RNA_api_ui_layout(StructRNA *srna)
   api_ui_item_rna_common(func);
   RNA_def_string(func, "new", NULL, 0, "", "Operator identifier to create a new ID block");
   RNA_def_string(
+      func, "duplicate", NULL, 0, "", "Operator identifier to duplicate the selected ID block");
+  RNA_def_string(
       func, "open", NULL, 0, "", "Operator identifier to open a file for creating a new ID block");
-  RNA_def_string(func, "unlink", NULL, 0, "", "Operator identifier to unlink the ID block");
+  RNA_def_string(
+      func, "unlink", NULL, 0, "", "Operator identifier to unlink the selected ID block");
   RNA_def_enum(func,
                "filter",
                id_template_filter_items,

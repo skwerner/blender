@@ -21,8 +21,9 @@
  * \ingroup editorui
  */
 
-#ifndef __BIF_GLUTIL_H__
-#define __BIF_GLUTIL_H__
+#pragma once
+
+#include "GPU_texture.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -66,21 +67,19 @@ void immDrawPixelsTex(IMMDrawPixelsTexState *state,
                       float y,
                       int img_w,
                       int img_h,
-                      int format,
-                      int type,
-                      int zoomfilter,
+                      eGPUTextureFormat gpu_format,
+                      bool use_filter,
                       void *rect,
                       float xzoom,
                       float yzoom,
-                      float color[4]);
+                      const float color[4]);
 void immDrawPixelsTex_clipping(IMMDrawPixelsTexState *state,
                                float x,
                                float y,
                                int img_w,
                                int img_h,
-                               int format,
-                               int type,
-                               int zoomfilter,
+                               eGPUTextureFormat gpu_format,
+                               bool use_filter,
                                void *rect,
                                float clip_min_x,
                                float clip_min_y,
@@ -88,29 +87,27 @@ void immDrawPixelsTex_clipping(IMMDrawPixelsTexState *state,
                                float clip_max_y,
                                float xzoom,
                                float yzoom,
-                               float color[4]);
+                               const float color[4]);
 void immDrawPixelsTexScaled(IMMDrawPixelsTexState *state,
                             float x,
                             float y,
                             int img_w,
                             int img_h,
-                            int format,
-                            int type,
-                            int zoomfilter,
+                            eGPUTextureFormat gpu_format,
+                            bool use_filter,
                             void *rect,
                             float scaleX,
                             float scaleY,
                             float xzoom,
                             float yzoom,
-                            float color[4]);
+                            const float color[4]);
 void immDrawPixelsTexScaled_clipping(IMMDrawPixelsTexState *state,
                                      float x,
                                      float y,
                                      int img_w,
                                      int img_h,
-                                     int format,
-                                     int type,
-                                     int zoomfilter,
+                                     eGPUTextureFormat gpu_format,
+                                     bool use_filter,
                                      void *rect,
                                      float scaleX,
                                      float scaleY,
@@ -120,7 +117,7 @@ void immDrawPixelsTexScaled_clipping(IMMDrawPixelsTexState *state,
                                      float clip_max_y,
                                      float xzoom,
                                      float yzoom,
-                                     float color[4]);
+                                     const float color[4]);
 
 /* Image buffer drawing functions, with display transform
  *
@@ -133,7 +130,7 @@ void immDrawPixelsTexScaled_clipping(IMMDrawPixelsTexState *state,
 void ED_draw_imbuf(struct ImBuf *ibuf,
                    float x,
                    float y,
-                   int zoomfilter,
+                   bool use_filter,
                    struct ColorManagedViewSettings *view_settings,
                    struct ColorManagedDisplaySettings *display_settings,
                    float zoom_x,
@@ -141,7 +138,7 @@ void ED_draw_imbuf(struct ImBuf *ibuf,
 void ED_draw_imbuf_clipping(struct ImBuf *ibuf,
                             float x,
                             float y,
-                            int zoomfilter,
+                            bool use_filter,
                             struct ColorManagedViewSettings *view_settings,
                             struct ColorManagedDisplaySettings *display_settings,
                             float clip_min_x,
@@ -155,14 +152,14 @@ void ED_draw_imbuf_ctx(const struct bContext *C,
                        struct ImBuf *ibuf,
                        float x,
                        float y,
-                       int zoomfilter,
+                       bool use_filter,
                        float zoom_x,
                        float zoom_y);
 void ED_draw_imbuf_ctx_clipping(const struct bContext *C,
                                 struct ImBuf *ibuf,
                                 float x,
                                 float y,
-                                int zoomfilter,
+                                bool use_filter,
                                 float clip_min_x,
                                 float clip_min_y,
                                 float clip_max_x,
@@ -177,5 +174,3 @@ void immDrawBorderCorners(unsigned int pos, const struct rcti *border, float zoo
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BIF_GLUTIL_H__ */

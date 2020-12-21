@@ -44,9 +44,7 @@ using Alembic::AbcGeom::INuPatch;
 using Alembic::AbcGeom::INuPatchSchema;
 using Alembic::AbcGeom::IObject;
 
-namespace blender {
-namespace io {
-namespace alembic {
+namespace blender::io::alembic {
 
 AbcNurbsReader::AbcNurbsReader(const IObject &object, ImportSettings &settings)
     : AbcObjectReader(object, settings)
@@ -199,7 +197,7 @@ void AbcNurbsReader::getNurbsPatches(const IObject &obj)
   if (num_children == 0) {
     INuPatch abc_nurb(obj, kWrapExisting);
     INuPatchSchema schem = abc_nurb.getSchema();
-    m_schemas.push_back(std::pair<INuPatchSchema, IObject>(schem, obj));
+    m_schemas.emplace_back(schem, obj);
     return;
   }
 
@@ -220,13 +218,11 @@ void AbcNurbsReader::getNurbsPatches(const IObject &obj)
     if (INuPatch::matches(md) && ok) {
       INuPatch abc_nurb(child, kWrapExisting);
       INuPatchSchema schem = abc_nurb.getSchema();
-      m_schemas.push_back(std::pair<INuPatchSchema, IObject>(schem, child));
+      m_schemas.emplace_back(schem, child);
     }
 
     getNurbsPatches(child);
   }
 }
 
-}  // namespace alembic
-}  // namespace io
-}  // namespace blender
+}  // namespace blender::io::alembic

@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_FLUID_H__
-#define __BKE_FLUID_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -94,6 +93,7 @@ void BKE_fluid_flow_type_set(struct Object *object, struct FluidFlowSettings *se
 void BKE_fluid_effector_type_set(struct Object *object,
                                  struct FluidEffectorSettings *settings,
                                  int type);
+void BKE_fluid_fields_sanitize(struct FluidDomainSettings *settings);
 void BKE_fluid_flow_behavior_set(struct Object *object,
                                  struct FluidFlowSettings *settings,
                                  int behavior);
@@ -101,5 +101,3 @@ void BKE_fluid_flow_behavior_set(struct Object *object,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_FLUID_H__ */

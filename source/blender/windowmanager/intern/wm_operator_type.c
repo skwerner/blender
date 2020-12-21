@@ -95,6 +95,7 @@ void WM_operatortype_iter(GHashIterator *ghi)
   BLI_ghashIterator_init(ghi, global_ops_hash);
 }
 
+/* -------------------------------------------------------------------- */
 /** \name Operator Type Append
  * \{ */
 
@@ -324,13 +325,11 @@ static int wm_macro_end(wmOperator *op, int retval)
 /* macro exec only runs exec calls */
 static int wm_macro_exec(bContext *C, wmOperator *op)
 {
-  wmOperator *opm;
   int retval = OPERATOR_FINISHED;
 
   wm_macro_start(op);
 
-  for (opm = op->macro.first; opm; opm = opm->next) {
-
+  LISTBASE_FOREACH (wmOperator *, opm, &op->macro) {
     if (opm->type->exec) {
       retval = opm->type->exec(C, opm);
       OPERATOR_RETVAL_CHECK(retval);
@@ -401,7 +400,7 @@ static int wm_macro_modal(bContext *C, wmOperator *op, const wmEvent *event)
     retval = opm->type->modal(C, opm, event);
     OPERATOR_RETVAL_CHECK(retval);
 
-    /* if we're halfway through using a tool and cancel it, clear the options [#37149] */
+    /* if we're halfway through using a tool and cancel it, clear the options T37149. */
     if (retval & OPERATOR_CANCELLED) {
       WM_operator_properties_clear(opm->ptr);
     }
@@ -573,9 +572,7 @@ wmOperatorTypeMacro *WM_operatortype_macro_define(wmOperatorType *ot, const char
 
 static void wm_operatortype_free_macro(wmOperatorType *ot)
 {
-  wmOperatorTypeMacro *otmacro;
-
-  for (otmacro = ot->macro.first; otmacro; otmacro = otmacro->next) {
+  LISTBASE_FOREACH (wmOperatorTypeMacro *, otmacro, &ot->macro) {
     if (otmacro->ptr) {
       WM_operator_properties_free(otmacro->ptr);
       MEM_freeN(otmacro->ptr);
@@ -599,31 +596,39 @@ char *WM_operatortype_description(struct bContext *C,
                                   struct wmOperatorType *ot,
                                   struct PointerRNA *properties)
 {
-  if (ot->get_description && properties) {
+  if (C && ot->get_description && properties) {
     char *description = ot->get_description(C, ot, properties);
 
     if (description) {
       if (description[0]) {
         return description;
       }
-      else {
-        MEM_freeN(description);
-      }
+      MEM_freeN(description);
     }
   }
 
   const char *info = RNA_struct_ui_description(ot->srna);
-
-  if (!(info && info[0])) {
-    info = RNA_struct_ui_name(ot->srna);
-  }
-
   if (info && info[0]) {
     return BLI_strdup(info);
   }
-  else {
-    return NULL;
+  return NULL;
+}
+
+/**
+ * Use when we want a label, preferring the description.
+ */
+char *WM_operatortype_description_or_name(struct bContext *C,
+                                          struct wmOperatorType *ot,
+                                          struct PointerRNA *properties)
+{
+  char *text = WM_operatortype_description(C, ot, properties);
+  if (text == NULL) {
+    const char *text_orig = WM_operatortype_name(ot, properties);
+    if (text_orig != NULL) {
+      text = BLI_strdup(text_orig);
+    }
   }
+  return text;
 }
 
 /** \} */

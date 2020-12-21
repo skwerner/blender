@@ -21,19 +21,18 @@
  * \ingroup editors
  */
 
-#ifndef __ED_UVEDIT_H__
-#define __ED_UVEDIT_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+struct ARegion;
 struct ARegionType;
 struct BMEditMesh;
 struct BMFace;
 struct BMLoop;
 struct BMesh;
-struct Depsgraph;
 struct Image;
 struct ImageUser;
 struct Main;
@@ -121,7 +120,6 @@ void uvedit_face_select_set_with_sticky(const struct SpaceImage *sima,
                                         struct BMFace *efa,
                                         const bool select,
                                         const bool do_history,
-                                        const float limit[2],
                                         const int cd_loop_uv_offset);
 void uvedit_face_select_set(const struct Scene *scene,
                             struct BMEditMesh *em,
@@ -145,7 +143,6 @@ void uvedit_edge_select_set_with_sticky(const struct SpaceImage *sima,
                                         struct BMLoop *l,
                                         const bool select,
                                         const bool do_history,
-                                        const float limit[2],
                                         const uint cd_loop_uv_offset);
 void uvedit_edge_select_set(const struct Scene *scene,
                             struct BMEditMesh *em,
@@ -169,7 +166,6 @@ void uvedit_uv_select_set_with_sticky(const struct SpaceImage *sima,
                                       struct BMLoop *l,
                                       const bool select,
                                       const bool do_history,
-                                      const float limit[2],
                                       const uint cd_loop_uv_offset);
 void uvedit_uv_select_set(const struct Scene *scene,
                           struct BMEditMesh *em,
@@ -220,6 +216,11 @@ struct BMLoop *ED_uvedit_active_vert_loop_get(struct BMesh *bm);
 void ED_uvedit_active_edge_loop_set(struct BMesh *bm, struct BMLoop *l);
 struct BMLoop *ED_uvedit_active_edge_loop_get(struct BMesh *bm);
 
+char ED_uvedit_select_mode_get(const struct Scene *scene);
+void ED_uvedit_select_sync_flush(const struct ToolSettings *ts,
+                                 struct BMEditMesh *em,
+                                 const bool select);
+
 /* uvedit_unwrap_ops.c */
 void ED_uvedit_live_unwrap_begin(struct Scene *scene, struct Object *obedit);
 void ED_uvedit_live_unwrap_re_solve(void);
@@ -230,18 +231,25 @@ void ED_uvedit_add_simple_uvs(struct Main *bmain, const struct Scene *scene, str
 
 /* uvedit_draw.c */
 void ED_image_draw_cursor(struct ARegion *region, const float cursor[2]);
-void ED_uvedit_draw_main(struct SpaceImage *sima,
-                         const struct Scene *scene,
-                         struct ViewLayer *view_layer,
-                         struct Object *obedit,
-                         struct Object *obact,
-                         struct Depsgraph *depsgraph);
 
 /* uvedit_buttons.c */
 void ED_uvedit_buttons_register(struct ARegionType *art);
 
+/* uvedit_islands.c */
+struct UVPackIsland_Params {
+  uint rotate : 1;
+  /** -1 not to align to axis, otherwise 0,1 for X,Y. */
+  int rotate_align_axis : 2;
+  uint only_selected_uvs : 1;
+  uint only_selected_faces : 1;
+  uint use_seams : 1;
+  uint correct_aspect : 1;
+};
+void ED_uvedit_pack_islands_multi(const struct Scene *scene,
+                                  Object **objects,
+                                  const uint objects_len,
+                                  const struct UVPackIsland_Params *params);
+
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_UVEDIT_H__ */

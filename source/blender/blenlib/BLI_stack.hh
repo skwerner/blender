@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLI_STACK_HH__
-#define __BLI_STACK_HH__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -118,7 +117,7 @@ class Stack {
   /**
    * Initialize an empty stack. No heap allocation is done.
    */
-  Stack(Allocator allocator = {}) : allocator_(allocator)
+  Stack(Allocator allocator = {}) noexcept : allocator_(allocator)
   {
     inline_chunk_.below = nullptr;
     inline_chunk_.above = nullptr;
@@ -130,11 +129,15 @@ class Stack {
     size_ = 0;
   }
 
+  Stack(NoExceptConstructor, Allocator allocator = {}) noexcept : Stack(allocator)
+  {
+  }
+
   /**
    * Create a new stack that contains the given elements. The values are pushed to the stack in
    * the order they are in the array.
    */
-  Stack(Span<T> values) : Stack()
+  Stack(Span<T> values, Allocator allocator = {}) : Stack(NoExceptConstructor(), allocator)
   {
     this->push_multiple(values);
   }
@@ -148,11 +151,12 @@ class Stack {
    *  assert(stack.pop() == 6);
    *  assert(stack.pop() == 5);
    */
-  Stack(const std::initializer_list<T> &values) : Stack(Span<T>(values))
+  Stack(const std::initializer_list<T> &values, Allocator allocator = {})
+      : Stack(Span<T>(values), allocator)
   {
   }
 
-  Stack(const Stack &other) : Stack(other.allocator_)
+  Stack(const Stack &other) : Stack(NoExceptConstructor(), other.allocator_)
   {
     for (const Chunk *chunk = &other.inline_chunk_; chunk; chunk = chunk->above) {
       const T *begin = chunk->begin;
@@ -161,7 +165,8 @@ class Stack {
     }
   }
 
-  Stack(Stack &&other) noexcept : Stack(other.allocator_)
+  Stack(Stack &&other) noexcept(std::is_nothrow_move_constructible_v<T>)
+      : Stack(NoExceptConstructor(), other.allocator_)
   {
     uninitialized_relocate_n<T>(
         other.inline_buffer_, std::min(other.size_, InlineBufferCapacity), inline_buffer_);
@@ -198,28 +203,14 @@ class Stack {
     }
   }
 
-  Stack &operator=(const Stack &stack)
+  Stack &operator=(const Stack &other)
   {
-    if (this == &stack) {
-      return *this;
-    }
-
-    this->~Stack();
-    new (this) Stack(stack);
-
-    return *this;
+    return copy_assign_container(*this, other);
   }
 
-  Stack &operator=(Stack &&stack)
+  Stack &operator=(Stack &&other)
   {
-    if (this == &stack) {
-      return *this;
-    }
-
-    this->~Stack();
-    new (this) Stack(std::move(stack));
-
-    return *this;
+    return move_assign_container(*this, std::move(other));
   }
 
   /**
@@ -227,21 +218,26 @@ class Stack {
    */
   void push(const T &value)
   {
-    if (top_ == top_chunk_->capacity_end) {
-      this->activate_next_chunk(1);
-    }
-    new (top_) T(value);
-    top_++;
-    size_++;
+    this->push_as(value);
   }
   void push(T &&value)
+  {
+    this->push_as(std::move(value));
+  }
+  template<typename ForwardT> void push_as(ForwardT &&value)
   {
     if (top_ == top_chunk_->capacity_end) {
       this->activate_next_chunk(1);
     }
-    new (top_) T(std::move(value));
-    top_++;
-    size_++;
+    try {
+      new (top_) T(std::forward<ForwardT>(value));
+      top_++;
+      size_++;
+    }
+    catch (...) {
+      this->move_top_pointer_back_to_below_chunk();
+      throw;
+    }
   }
 
   /**
@@ -251,8 +247,8 @@ class Stack {
   T pop()
   {
     BLI_assert(size_ > 0);
+    T value = std::move(*(top_ - 1));
     top_--;
-    T value = std::move(*top_);
     top_->~T();
     size_--;
 
@@ -297,13 +293,18 @@ class Stack {
 
       const int64_t remaining_capacity = top_chunk_->capacity_end - top_;
       const int64_t amount = std::min(remaining_values.size(), remaining_capacity);
-      uninitialized_copy_n(remaining_values.data(), amount, top_);
+      try {
+        uninitialized_copy_n(remaining_values.data(), amount, top_);
+      }
+      catch (...) {
+        this->move_top_pointer_back_to_below_chunk();
+        throw;
+      }
       top_ += amount;
+      size_ += amount;
 
       remaining_values = remaining_values.drop_front(amount);
     }
-
-    size_ += values.size();
   }
 
   /**
@@ -333,6 +334,15 @@ class Stack {
     top_ = top_chunk_->begin;
   }
 
+  /* This should only be called by unit tests. */
+  bool is_invariant_maintained() const
+  {
+    if (size_ == 0) {
+      return top_ == inline_chunk_.begin;
+    }
+    return top_ > top_chunk_->begin;
+  }
+
  private:
   /**
    * Changes top_chunk_ to point to a new chunk that is above the current one. The new chunk might
@@ -351,11 +361,12 @@ class Stack {
       void *buffer = allocator_.allocate(
           sizeof(Chunk) + sizeof(T) * new_capacity + alignof(T), alignof(Chunk), AT);
       void *chunk_buffer = buffer;
-      void *data_buffer = (void *)(((uintptr_t)buffer + sizeof(Chunk) + alignof(T) - 1) &
-                                   ~(alignof(T) - 1));
+      void *data_buffer = reinterpret_cast<void *>(
+          (reinterpret_cast<uintptr_t>(buffer) + sizeof(Chunk) + alignof(T) - 1) &
+          ~(alignof(T) - 1));
 
       Chunk *new_chunk = new (chunk_buffer) Chunk();
-      new_chunk->begin = (T *)data_buffer;
+      new_chunk->begin = static_cast<T *>(data_buffer);
       new_chunk->capacity_end = new_chunk->begin + new_capacity;
       new_chunk->above = nullptr;
       new_chunk->below = top_chunk_;
@@ -363,6 +374,18 @@ class Stack {
     }
     top_chunk_ = top_chunk_->above;
     top_ = top_chunk_->begin;
+  }
+
+  void move_top_pointer_back_to_below_chunk()
+  {
+    /* This makes sure that the invariant stays intact after a failed push. */
+    if (size_ == 0) {
+      top_ = inline_chunk_.begin;
+    }
+    else if (top_ == top_chunk_->begin) {
+      top_chunk_ = top_chunk_->below;
+      top_ = top_chunk_->capacity_end;
+    }
   }
 
   void destruct_all_elements()
@@ -386,5 +409,3 @@ template<typename T, int64_t InlineBufferCapacity = default_inline_buffer_capaci
 using RawStack = Stack<T, InlineBufferCapacity, RawAllocator>;
 
 } /* namespace blender */
-
-#endif /* __BLI_STACK_HH__ */

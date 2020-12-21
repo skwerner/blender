@@ -33,8 +33,7 @@
 #include "intern/depsgraph.h"
 #include "intern/depsgraph_relation.h"
 
-namespace blender {
-namespace deg {
+namespace blender::deg {
 
 /* -------------------------------------------------- */
 
@@ -96,7 +95,7 @@ void deg_graph_transitive_reduction(Depsgraph *graph)
          * need modifying. */
         continue;
       }
-      else if (rel->from->custom_flags & OP_REACHABLE) {
+      if (rel->from->custom_flags & OP_REACHABLE) {
         relations_to_remove.append(rel);
       }
     }
@@ -110,5 +109,4 @@ void deg_graph_transitive_reduction(Depsgraph *graph)
   DEG_DEBUG_PRINTF((::Depsgraph *)graph, BUILD, "Removed %d relations\n", num_removed_relations);
 }
 
-}  // namespace deg
-}  // namespace blender
+}  // namespace blender::deg

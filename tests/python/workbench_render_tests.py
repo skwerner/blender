@@ -39,6 +39,8 @@ def get_arguments(filepath, output_filepath):
         "-noaudio",
         "--factory-startup",
         "--enable-autoexec",
+        "--debug-memory",
+        "--debug-exit-on-error",
         filepath,
         "-E", "BLENDER_WORKBENCH",
         "-P",
@@ -70,7 +72,7 @@ def main():
     report = render_report.Report("Workbench", output_dir, idiff)
     report.set_pixelated(True)
     report.set_reference_dir("workbench_renders")
-    report.set_compare_engines('workbench', 'eevee')
+    report.set_compare_engine('eevee')
     ok = report.run(test_dir, blender, get_arguments, batch=True)
 
     sys.exit(not ok)

@@ -25,10 +25,24 @@
 #include "BLI_utildefines.h"
 
 #include "RNA_define.h"
+#include "RNA_enum_types.h"
 
 #include "rna_internal.h"
 
 #include "WM_types.h"
+
+const EnumPropertyItem rna_enum_collection_color_items[] = {
+    {COLLECTION_COLOR_NONE, "NONE", ICON_X, "None", "Assign no color tag to the collection"},
+    {COLLECTION_COLOR_01, "COLOR_01", ICON_COLLECTION_COLOR_01, "Color 01", ""},
+    {COLLECTION_COLOR_02, "COLOR_02", ICON_COLLECTION_COLOR_02, "Color 02", ""},
+    {COLLECTION_COLOR_03, "COLOR_03", ICON_COLLECTION_COLOR_03, "Color 03", ""},
+    {COLLECTION_COLOR_04, "COLOR_04", ICON_COLLECTION_COLOR_04, "Color 04", ""},
+    {COLLECTION_COLOR_05, "COLOR_05", ICON_COLLECTION_COLOR_05, "Color 05", ""},
+    {COLLECTION_COLOR_06, "COLOR_06", ICON_COLLECTION_COLOR_06, "Color 06", ""},
+    {COLLECTION_COLOR_07, "COLOR_07", ICON_COLLECTION_COLOR_07, "Color 07", ""},
+    {COLLECTION_COLOR_08, "COLOR_08", ICON_COLLECTION_COLOR_08, "Color 08", ""},
+    {0, NULL, 0, NULL, NULL},
+};
 
 #ifdef RNA_RUNTIME
 
@@ -154,12 +168,16 @@ static bool rna_Collection_objects_override_apply(Main *bmain,
   Collection *coll_dst = (Collection *)ptr_dst->owner_id;
 
   if (ptr_item_dst->type == NULL || ptr_item_src->type == NULL) {
-    BLI_assert(0 && "invalid source or destination object.");
+    //    BLI_assert(0 && "invalid source or destination object.");
     return false;
   }
 
   Object *ob_dst = ptr_item_dst->data;
   Object *ob_src = ptr_item_src->data;
+
+  if (ob_src == ob_dst) {
+    return true;
+  }
 
   CollectionObject *cob_dst = BLI_findptr(
       &coll_dst->gobject, ob_dst, offsetof(CollectionObject, ob));
@@ -257,7 +275,7 @@ static bool rna_Collection_children_override_apply(Main *bmain,
   Collection *coll_dst = (Collection *)ptr_dst->owner_id;
 
   if (ptr_item_dst->type == NULL || ptr_item_src->type == NULL) {
-    BLI_assert(0 && "invalid source or destination sub-collection.");
+    /* This can happen when reference and overrides differ, just ignore then. */
     return false;
   }
 
@@ -326,6 +344,31 @@ static void rna_Collection_flag_update(Main *bmain, Scene *scene, PointerRNA *pt
   WM_main_add_notifier(NC_SCENE | ND_OB_SELECT, scene);
 }
 
+static int rna_Collection_color_tag_get(struct PointerRNA *ptr)
+{
+  Collection *collection = (Collection *)ptr->data;
+
+  return collection->color_tag;
+}
+
+static void rna_Collection_color_tag_set(struct PointerRNA *ptr, int value)
+{
+  Collection *collection = (Collection *)ptr->data;
+
+  if (collection->flag & COLLECTION_IS_MASTER) {
+    return;
+  }
+
+  collection->color_tag = value;
+}
+
+static void rna_Collection_color_tag_update(Main *UNUSED(bmain),
+                                            Scene *scene,
+                                            PointerRNA *UNUSED(ptr))
+{
+  WM_main_add_notifier(NC_SCENE | ND_LAYER_CONTENT, scene);
+}
+
 #else
 
 /* collection.objects */
@@ -389,7 +432,7 @@ void RNA_def_collections(BlenderRNA *brna)
 
   srna = RNA_def_struct(brna, "Collection", "ID");
   RNA_def_struct_ui_text(srna, "Collection", "Collection of Object data-blocks");
-  RNA_def_struct_ui_icon(srna, ICON_GROUP);
+  RNA_def_struct_ui_icon(srna, ICON_OUTLINER_COLLECTION);
   /* This is done on save/load in readfile.c,
    * removed if no objects are in the collection and not in a scene. */
   RNA_def_struct_clear_flag(srna, STRUCT_ID_REFCOUNT);
@@ -473,6 +516,14 @@ void RNA_def_collections(BlenderRNA *brna)
   RNA_def_property_ui_icon(prop, ICON_RESTRICT_RENDER_OFF, -1);
   RNA_def_property_ui_text(prop, "Disable in Renders", "Globally disable in renders");
   RNA_def_property_update(prop, NC_SCENE | ND_LAYER_CONTENT, "rna_Collection_flag_update");
+
+  prop = RNA_def_property(srna, "color_tag", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_sdna(prop, NULL, "color_tag");
+  RNA_def_property_enum_funcs(
+      prop, "rna_Collection_color_tag_get", "rna_Collection_color_tag_set", NULL);
+  RNA_def_property_enum_items(prop, rna_enum_collection_color_items);
+  RNA_def_property_ui_text(prop, "Collection Color", "Color tag for a collection");
+  RNA_def_property_update(prop, NC_SCENE | ND_LAYER_CONTENT, "rna_Collection_color_tag_update");
 
   RNA_define_lib_overridable(false);
 }

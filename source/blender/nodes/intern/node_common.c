@@ -47,7 +47,9 @@ enum {
   REFINE_BACKWARD = 1 << 1,
 };
 
-/**** Group ****/
+/* -------------------------------------------------------------------- */
+/** \name Node Group
+ * \{ */
 
 bNodeSocket *node_group_find_input_socket(bNode *groupnode, const char *identifier)
 {
@@ -84,13 +86,11 @@ bool node_group_poll_instance(bNode *node, bNodeTree *nodetree)
     if (grouptree) {
       return nodeGroupPoll(nodetree, grouptree);
     }
-    else {
-      return true; /* without a linked node tree, group node is always ok */
-    }
+
+    return true; /* without a linked node tree, group node is always ok */
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 int nodeGroupPoll(bNodeTree *nodetree, bNodeTree *grouptree)
@@ -131,6 +131,9 @@ static bNodeSocket *group_verify_socket(
   }
   if (sock) {
     strcpy(sock->name, iosock->name);
+
+    const int mask = SOCK_HIDE_VALUE;
+    sock->flag = (sock->flag & ~mask) | (iosock->flag & mask);
 
     if (iosock->typeinfo->interface_verify_socket) {
       iosock->typeinfo->interface_verify_socket(ntree, iosock, gnode, sock, "interface");
@@ -185,6 +188,10 @@ void node_group_update(struct bNodeTree *ntree, struct bNode *node)
   if (node->id == NULL) {
     nodeRemoveAllSockets(ntree, node);
   }
+  else if ((ID_IS_LINKED(node->id) && (node->id->tag & LIB_TAG_MISSING))) {
+    /* Missing datablock, leave sockets unchanged so that when it comes back
+     * the links remain valid. */
+  }
   else {
     bNodeTree *ngroup = (bNodeTree *)node->id;
     group_verify_socket_list(ntree, node, &ngroup->inputs, &node->inputs, SOCK_IN);
@@ -192,7 +199,11 @@ void node_group_update(struct bNodeTree *ntree, struct bNode *node)
   }
 }
 
-/**** FRAME ****/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Node Frame
+ * \{ */
 
 static void node_frame_init(bNodeTree *UNUSED(ntree), bNode *node)
 {
@@ -218,7 +229,11 @@ void register_node_type_frame(void)
   nodeRegisterType(ntype);
 }
 
-/* **************** REROUTE ******************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Node Re-Route
+ * \{ */
 
 /* simple, only a single input and output here */
 static void node_reroute_update_internal_links(bNodeTree *ntree, bNode *node)
@@ -402,7 +417,11 @@ void BKE_node_tree_unlink_id(ID *id, struct bNodeTree *ntree)
   }
 }
 
-/**** GROUP_INPUT / GROUP_OUTPUT ****/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Node #GROUP_INPUT / #GROUP_OUTPUT
+ * \{ */
 
 static void node_group_input_init(bNodeTree *ntree, bNode *node)
 {
@@ -598,3 +617,5 @@ void register_node_type_group_output(void)
 
   nodeRegisterType(ntype);
 }
+
+/** \} */

@@ -21,8 +21,7 @@
  * \ingroup editors
  */
 
-#ifndef __ED_MESH_H__
-#define __ED_MESH_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -60,6 +59,7 @@ void EDBM_verts_mirror_cache_begin_ex(struct BMEditMesh *em,
                                       const int axis,
                                       const bool use_self,
                                       const bool use_select,
+                                      const bool respecthide,
                                       const bool use_topology,
                                       float maxdist,
                                       int *r_index);
@@ -67,7 +67,8 @@ void EDBM_verts_mirror_cache_begin(struct BMEditMesh *em,
                                    const int axis,
                                    const bool use_self,
                                    const bool use_select,
-                                   const bool use_toplogy);
+                                   const bool respecthide,
+                                   const bool use_topology);
 void EDBM_verts_mirror_apply(struct BMEditMesh *em, const int sel_from, const int sel_to);
 struct BMVert *EDBM_verts_mirror_get(struct BMEditMesh *em, struct BMVert *v);
 struct BMEdge *EDBM_verts_mirror_get_edge(struct BMEditMesh *em, struct BMEdge *e);
@@ -110,7 +111,7 @@ struct UvElementMap *BM_uv_element_map_create(struct BMesh *bm,
                                               const bool uv_selected,
                                               const bool use_winding,
                                               const bool do_islands);
-void BM_uv_element_map_free(struct UvElementMap *vmap);
+void BM_uv_element_map_free(struct UvElementMap *element_map);
 struct UvElement *BM_uv_element_get(struct UvElementMap *map,
                                     struct BMFace *efa,
                                     struct BMLoop *l);
@@ -123,7 +124,6 @@ struct BMFace *EDBM_uv_active_face_get(struct BMEditMesh *em,
 void BM_uv_vert_map_free(struct UvVertMap *vmap);
 struct UvMapVert *BM_uv_vert_map_at_index(struct UvVertMap *vmap, unsigned int v);
 struct UvVertMap *BM_uv_vert_map_create(struct BMesh *bm,
-                                        const float limit[2],
                                         const bool use_select,
                                         const bool use_winding);
 
@@ -518,5 +518,3 @@ void EDBM_mesh_elem_index_ensure_multi(struct Object **objects,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_MESH_H__ */

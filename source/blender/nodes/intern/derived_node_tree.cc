@@ -30,7 +30,10 @@ static const NodeTreeRef &get_tree_ref(NodeTreeRefMap &node_tree_refs, bNodeTree
 
 DerivedNodeTree::DerivedNodeTree(bNodeTree *btree, NodeTreeRefMap &node_tree_refs) : btree_(btree)
 {
+  BLI_assert(btree != nullptr);
+
   const NodeTreeRef &main_tree_ref = get_tree_ref(node_tree_refs, btree);
+  used_node_tree_refs_.add_new(&main_tree_ref);
 
   Vector<DNode *> all_nodes;
   Vector<DGroupInput *> all_group_inputs;
@@ -38,6 +41,7 @@ DerivedNodeTree::DerivedNodeTree(bNodeTree *btree, NodeTreeRefMap &node_tree_ref
 
   this->insert_nodes_and_links_in_id_order(main_tree_ref, nullptr, all_nodes);
   this->expand_groups(all_nodes, all_group_inputs, all_parent_nodes, node_tree_refs);
+  this->relink_and_remove_muted_nodes(all_nodes);
   this->remove_expanded_group_interfaces(all_nodes);
   this->remove_unused_group_inputs(all_group_inputs);
   this->store_in_this_and_init_ids(
@@ -59,9 +63,10 @@ BLI_NOINLINE void DerivedNodeTree::insert_nodes_and_links_in_id_order(const Node
   /* Insert links. */
   for (const NodeRef *node_ref : tree_ref.nodes()) {
     for (const InputSocketRef *to_socket_ref : node_ref->inputs()) {
-      DInputSocket *to_socket = (DInputSocket *)sockets_map[to_socket_ref->id()];
+      DInputSocket *to_socket = static_cast<DInputSocket *>(sockets_map[to_socket_ref->id()]);
       for (const OutputSocketRef *from_socket_ref : to_socket_ref->linked_sockets()) {
-        DOutputSocket *from_socket = (DOutputSocket *)sockets_map[from_socket_ref->id()];
+        DOutputSocket *from_socket = static_cast<DOutputSocket *>(
+            sockets_map[from_socket_ref->id()]);
         to_socket->linked_sockets_.append(from_socket);
         from_socket->linked_sockets_.append(to_socket);
       }
@@ -116,7 +121,11 @@ BLI_NOINLINE void DerivedNodeTree::expand_groups(Vector<DNode *> &all_nodes,
   for (int i = 0; i < all_nodes.size(); i++) {
     DNode &node = *all_nodes[i];
     if (node.node_ref_->is_group_node()) {
-      this->expand_group_node(node, all_nodes, all_group_inputs, all_parent_nodes, node_tree_refs);
+      /* Muted nodes are relinked in a separate step. */
+      if (!node.node_ref_->is_muted()) {
+        this->expand_group_node(
+            node, all_nodes, all_group_inputs, all_parent_nodes, node_tree_refs);
+      }
     }
   }
 }
@@ -130,12 +139,13 @@ BLI_NOINLINE void DerivedNodeTree::expand_group_node(DNode &group_node,
   const NodeRef &group_node_ref = *group_node.node_ref_;
   BLI_assert(group_node_ref.is_group_node());
 
-  bNodeTree *btree = (bNodeTree *)group_node_ref.bnode()->id;
+  bNodeTree *btree = reinterpret_cast<bNodeTree *>(group_node_ref.bnode()->id);
   if (btree == nullptr) {
     return;
   }
 
   const NodeTreeRef &group_ref = get_tree_ref(node_tree_refs, btree);
+  used_node_tree_refs_.add(&group_ref);
 
   DParentNode &parent = *allocator_.construct<DParentNode>();
   parent.id_ = all_parent_nodes.append_and_get_index(&parent);
@@ -296,6 +306,83 @@ BLI_NOINLINE void DerivedNodeTree::remove_unused_group_inputs(
   }
 }
 
+BLI_NOINLINE void DerivedNodeTree::relink_and_remove_muted_nodes(Vector<DNode *> &all_nodes)
+{
+  int index = 0;
+  while (index < all_nodes.size()) {
+    DNode &node = *all_nodes[index];
+    const NodeRef &node_ref = *node.node_ref_;
+    if (node_ref.is_muted()) {
+      this->relink_muted_node(node);
+      all_nodes.remove_and_reorder(index);
+      node.destruct_with_sockets();
+    }
+    else {
+      index++;
+    }
+  }
+}
+
+BLI_NOINLINE void DerivedNodeTree::relink_muted_node(DNode &node)
+{
+  const bNode &bnode = *node.bnode();
+  LISTBASE_FOREACH (const bNodeLink *, internal_link, &bnode.internal_links) {
+    BLI_assert(internal_link->fromnode == &bnode);
+    BLI_assert(internal_link->tonode == &bnode);
+    bNodeSocket *input_bsocket = internal_link->fromsock;
+    bNodeSocket *output_bsocket = internal_link->tosock;
+
+    /* Find internally linked sockets. */
+    DInputSocket *input_socket = nullptr;
+    DOutputSocket *output_socket = nullptr;
+    for (DInputSocket *socket : node.inputs_) {
+      if (socket->bsocket() == input_bsocket) {
+        input_socket = socket;
+        break;
+      }
+    }
+    for (DOutputSocket *socket : node.outputs_) {
+      if (socket->bsocket() == output_bsocket) {
+        output_socket = socket;
+        break;
+      }
+    }
+    BLI_assert(input_socket != nullptr);
+    BLI_assert(output_socket != nullptr);
+
+    /* Link sockets connected to the input to sockets that are connected to the internally linked
+     * output. */
+    for (DInputSocket *to_socket : output_socket->linked_sockets_) {
+      for (DOutputSocket *from_socket : input_socket->linked_sockets_) {
+        from_socket->linked_sockets_.append_non_duplicates(to_socket);
+        to_socket->linked_sockets_.append_non_duplicates(from_socket);
+      }
+      for (DGroupInput *group_input : input_socket->linked_group_inputs_) {
+        group_input->linked_sockets_.append_non_duplicates(to_socket);
+        to_socket->linked_group_inputs_.append_non_duplicates(group_input);
+      }
+    }
+  }
+
+  /* Remove remaining links from muted node. */
+  for (DInputSocket *to_socket : node.inputs_) {
+    for (DOutputSocket *from_socket : to_socket->linked_sockets_) {
+      from_socket->linked_sockets_.remove_first_occurrence_and_reorder(to_socket);
+    }
+    for (DGroupInput *from_group_input : to_socket->linked_group_inputs_) {
+      from_group_input->linked_sockets_.remove_first_occurrence_and_reorder(to_socket);
+    }
+    to_socket->linked_sockets_.clear();
+    to_socket->linked_group_inputs_.clear();
+  }
+  for (DOutputSocket *from_socket : node.outputs_) {
+    for (DInputSocket *to_socket : from_socket->linked_sockets_) {
+      to_socket->linked_sockets_.remove_first_occurrence_and_reorder(from_socket);
+    }
+    from_socket->linked_sockets_.clear();
+  }
+}
+
 void DNode::destruct_with_sockets()
 {
   for (DInputSocket *socket : inputs_) {
@@ -321,7 +408,7 @@ BLI_NOINLINE void DerivedNodeTree::store_in_this_and_init_ids(
     node->id_ = node_index;
 
     const bNodeType *nodetype = node->node_ref_->bnode()->typeinfo;
-    nodes_by_type_.lookup_or_add_default(nodetype).append(node);
+    nodes_by_type_.add(nodetype, node);
 
     for (DInputSocket *socket : node->inputs_) {
       socket->id_ = sockets_by_id_.append_and_get_index(socket);
@@ -357,6 +444,16 @@ DerivedNodeTree::~DerivedNodeTree()
   }
 }
 
+bool DerivedNodeTree::has_link_cycles() const
+{
+  for (const NodeTreeRef *tree : used_node_tree_refs_) {
+    if (tree->has_link_cycles()) {
+      return true;
+    }
+  }
+  return false;
+}
+
 static dot::Cluster *get_cluster_for_parent(dot::DirectedGraph &graph,
                                             Map<const DParentNode *, dot::Cluster *> &clusters,
                                             const DParentNode *parent)
@@ -366,7 +463,7 @@ static dot::Cluster *get_cluster_for_parent(dot::DirectedGraph &graph,
   }
   return clusters.lookup_or_add_cb(parent, [&]() {
     dot::Cluster *parent_cluster = get_cluster_for_parent(graph, clusters, parent->parent());
-    bNodeTree *btree = (bNodeTree *)parent->node_ref().bnode()->id;
+    bNodeTree *btree = reinterpret_cast<bNodeTree *>(parent->node_ref().bnode()->id);
     dot::Cluster *new_cluster = &graph.new_cluster(parent->node_ref().name() + " / " +
                                                    StringRef(btree->id.name + 2));
     new_cluster->set_parent_cluster(parent_cluster);

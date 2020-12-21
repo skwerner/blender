@@ -77,11 +77,10 @@ bool OccluderSource::next()
         valid = false;
         return false;
       }
-      else {
-        vector<WFace *> &wFaces = (*currentShape)->GetFaceList();
-        currentFace = wFaces.begin();
-        facesEnd = wFaces.end();
-      }
+
+      vector<WFace *> &wFaces = (*currentShape)->GetFaceList();
+      currentFace = wFaces.begin();
+      facesEnd = wFaces.end();
     }
     buildCachedPolygon();
     return true;
@@ -98,7 +97,7 @@ bool OccluderSource::isValid()
 
 WFace *OccluderSource::getWFace()
 {
-  return valid ? *currentFace : NULL;
+  return valid ? *currentFace : nullptr;
 }
 
 Polygon3r OccluderSource::getCameraSpacePolygon()

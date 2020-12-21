@@ -227,22 +227,6 @@ void uvedit_live_unwrap_update(SpaceImage *sima, Scene *scene, Object *obedit)
 /** \name Geometric Utilities
  * \{ */
 
-void uv_poly_center(BMFace *f, float r_cent[2], const int cd_loop_uv_offset)
-{
-  BMLoop *l;
-  MLoopUV *luv;
-  BMIter liter;
-
-  zero_v2(r_cent);
-
-  BM_ITER_ELEM (l, &liter, f, BM_LOOPS_OF_FACE) {
-    luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
-    add_v2_v2(r_cent, luv->uv);
-  }
-
-  mul_v2_fl(r_cent, 1.0f / (float)f->len);
-}
-
 void uv_poly_copy_aspect(float uv_orig[][2], float uv[][2], float aspx, float aspy, int len)
 {
   int i;
@@ -1828,7 +1812,7 @@ static void UV_OT_cursor_set(wmOperatorType *ot)
                        -FLT_MAX,
                        FLT_MAX,
                        "Location",
-                       "Cursor location in normalized (0.0-1.0) coordinates",
+                       "Cursor location in normalized (0.0 to 1.0) coordinates",
                        -10.0f,
                        10.0f);
 }
@@ -1843,7 +1827,6 @@ static int uv_seams_from_islands_exec(bContext *C, wmOperator *op)
 {
   Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
-  const float limit[2] = {STD_UV_CONNECT_LIMIT, STD_UV_CONNECT_LIMIT};
   const bool mark_seams = RNA_boolean_get(op->ptr, "mark_seams");
   const bool mark_sharp = RNA_boolean_get(op->ptr, "mark_sharp");
   bool changed_multi = false;
@@ -1884,23 +1867,10 @@ static int uv_seams_from_islands_exec(bContext *C, wmOperator *op)
           continue;
         }
 
-        const MLoopUV *luv_curr = BM_ELEM_CD_GET_VOID_P(l_iter, cd_loop_uv_offset);
-        const MLoopUV *luv_next = BM_ELEM_CD_GET_VOID_P(l_iter->next, cd_loop_uv_offset);
-
         bool mark = false;
         BMLoop *l_other = l_iter->radial_next;
         do {
-          const MLoopUV *luv_other_curr = BM_ELEM_CD_GET_VOID_P(l_other, cd_loop_uv_offset);
-          const MLoopUV *luv_other_next = BM_ELEM_CD_GET_VOID_P(l_other->next, cd_loop_uv_offset);
-          if (l_iter->v != l_other->v) {
-            SWAP(const MLoopUV *, luv_other_curr, luv_other_next);
-          }
-
-          if (!compare_ff(luv_curr->uv[0], luv_other_curr->uv[0], limit[0]) ||
-              !compare_ff(luv_curr->uv[1], luv_other_curr->uv[1], limit[1]) ||
-
-              !compare_ff(luv_next->uv[0], luv_other_next->uv[0], limit[0]) ||
-              !compare_ff(luv_next->uv[1], luv_other_next->uv[1], limit[1])) {
+          if (!BM_loop_uv_share_edge_check(l_iter, l_other, cd_loop_uv_offset)) {
             mark = true;
             break;
           }
@@ -1932,7 +1902,7 @@ static int uv_seams_from_islands_exec(bContext *C, wmOperator *op)
 static void UV_OT_seams_from_islands(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Seams From Islands";
+  ot->name = "Seams from Islands";
   ot->description = "Set mesh seams according to island setup in the UV editor";
   ot->idname = "UV_OT_seams_from_islands";
 
@@ -2108,6 +2078,7 @@ void ED_operatortypes_uvedit(void)
   WM_operatortype_append(UV_OT_reset);
   WM_operatortype_append(UV_OT_sphere_project);
   WM_operatortype_append(UV_OT_unwrap);
+  WM_operatortype_append(UV_OT_smart_project);
 
   WM_operatortype_append(UV_OT_reveal);
   WM_operatortype_append(UV_OT_hide);
@@ -2122,7 +2093,7 @@ void ED_operatormacros_uvedit(void)
 
   ot = WM_operatortype_append_macro("UV_OT_rip_move",
                                     "UV Rip Move",
-                                    "unstitch UV's and move the result",
+                                    "Unstitch UV's and move the result",
                                     OPTYPE_UNDO | OPTYPE_REGISTER);
   WM_operatortype_macro_define(ot, "UV_OT_rip");
   otmacro = WM_operatortype_macro_define(ot, "TRANSFORM_OT_translate");

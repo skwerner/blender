@@ -55,8 +55,12 @@ if(WITH_GTESTS)
     intern/hierarchy_context_order_test.cc
     intern/object_identifier_test.cc
   )
+  set(TEST_INC
+    ../../blenloader
+  )
   set(TEST_LIB
-    bf_blenloader_test
+    bf_blenloader_tests
+    bf_io_common
   )
   include(GTestTesting)
   blender_add_test_lib(bf_io_common_tests "${TEST_SRC}" "${INC};${TEST_INC}" "${INC_SYS}" "${LIB};${TEST_LIB}")

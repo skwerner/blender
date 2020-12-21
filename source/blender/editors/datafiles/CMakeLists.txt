@@ -638,11 +638,13 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   brush.particle.smooth
   brush.particle.weight
   brush.sculpt.blob
+  brush.sculpt.boundary
   brush.sculpt.clay
   brush.sculpt.clay_strips
   brush.sculpt.clay_thumb
   brush.sculpt.cloth
   brush.sculpt.crease
+  brush.sculpt.displacement_eraser
   brush.sculpt.draw
   brush.sculpt.draw_face_sets
   brush.sculpt.draw_sharp
@@ -742,9 +744,17 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   ops.pose.breakdowner
   ops.pose.push
   ops.pose.relax
+  ops.sculpt.border_face_set
   ops.sculpt.border_hide
   ops.sculpt.border_mask
+  ops.sculpt.box_trim
+  ops.sculpt.cloth_filter
+  ops.sculpt.face_set_edit
+  ops.sculpt.lasso_face_set
   ops.sculpt.lasso_mask
+  ops.sculpt.lasso_trim
+  ops.sculpt.line_mask
+  ops.sculpt.line_project
   ops.sculpt.mesh_filter
   ops.sequencer.blade
   ops.transform.bone_envelope
@@ -781,6 +791,7 @@ if(WITH_BLENDER)
     # images
     data_to_c_simple(../../../../release/datafiles/splash.png SRC)
     data_to_c_simple(../../../../release/datafiles/alert_icons.png SRC)
+    data_to_c_simple(../../../../release/datafiles/blender_logo.png SRC)
     # XXX These are handy, but give nasty "false changes" in svn :/
     # svg_to_png(../../../../release/datafiles/blender_icons.svg
     #            ../../../../release/datafiles/blender_icons16.png

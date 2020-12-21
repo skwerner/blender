@@ -18,7 +18,7 @@
  */
 #include "abc_subdiv_disabler.h"
 
-#include <stdio.h>
+#include <cstdio>
 
 #include "BLI_listbase.h"
 
@@ -32,9 +32,7 @@
 
 #include "BKE_modifier.h"
 
-namespace blender {
-namespace io {
-namespace alembic {
+namespace blender::io::alembic {
 
 SubdivModifierDisabler::SubdivModifierDisabler(Depsgraph *depsgraph) : depsgraph_(depsgraph)
 {
@@ -94,7 +92,7 @@ ModifierData *SubdivModifierDisabler::get_subdiv_modifier(Scene *scene, Object *
     }
 
     /* mesh is not a subsurf. break */
-    if ((md->type != eModifierType_Displace) && (md->type != eModifierType_ParticleSystem)) {
+    if (!ELEM(md->type, eModifierType_Displace, eModifierType_ParticleSystem)) {
       return nullptr;
     }
   }
@@ -102,6 +100,4 @@ ModifierData *SubdivModifierDisabler::get_subdiv_modifier(Scene *scene, Object *
   return nullptr;
 }
 
-}  // namespace alembic
-}  // namespace io
-}  // namespace blender
+}  // namespace blender::io::alembic

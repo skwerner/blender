@@ -21,8 +21,7 @@
  * \ingroup editors
  */
 
-#ifndef __ED_NODE_H__
-#define __ED_NODE_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -97,7 +96,7 @@ void ED_node_set_tree_type(struct SpaceNode *snode, struct bNodeTreeType *typein
 bool ED_node_is_compositor(struct SpaceNode *snode);
 bool ED_node_is_shader(struct SpaceNode *snode);
 bool ED_node_is_texture(struct SpaceNode *snode);
-bool ED_node_is_simulation(struct SpaceNode *snode);
+bool ED_node_is_geometry(struct SpaceNode *snode);
 
 void ED_node_shader_default(const struct bContext *C, struct ID *id);
 void ED_node_composit_default(const struct bContext *C, struct Scene *scene);
@@ -127,5 +126,3 @@ bool ED_space_node_color_sample(struct Main *bmain,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_NODE_H__ */

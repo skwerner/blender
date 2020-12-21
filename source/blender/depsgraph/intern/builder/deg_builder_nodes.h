@@ -60,6 +60,7 @@ struct bAction;
 struct bArmature;
 struct bConstraint;
 struct bGPdata;
+struct bNodeSocket;
 struct bNodeTree;
 struct bPoseChannel;
 struct bSound;
@@ -211,6 +212,7 @@ class DepsgraphNodeBuilder : public DepsgraphBuilder {
   virtual void build_camera(Camera *camera);
   virtual void build_light(Light *lamp);
   virtual void build_nodetree(bNodeTree *ntree);
+  virtual void build_nodetree_socket(bNodeSocket *socket);
   virtual void build_material(Material *ma);
   virtual void build_materials(Material **materials, int num_materials);
   virtual void build_freestyle_lineset(FreestyleLineSet *fls);

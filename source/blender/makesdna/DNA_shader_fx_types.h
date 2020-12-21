@@ -18,11 +18,14 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_SHADER_FX_TYPES_H__
-#define __DNA_SHADER_FX_TYPES_H__
+#pragma once
 
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct DRWShadingGroup;
 
@@ -50,7 +53,9 @@ typedef enum ShaderFxMode {
   eShaderFxMode_Realtime = (1 << 0),
   eShaderFxMode_Render = (1 << 1),
   eShaderFxMode_Editmode = (1 << 2),
+#ifdef DNA_DEPRECATED_ALLOW
   eShaderFxMode_Expanded_DEPRECATED = (1 << 3),
+#endif
 } ShaderFxMode;
 
 typedef enum {
@@ -62,9 +67,9 @@ typedef struct ShaderFxData {
   struct ShaderFxData *next, *prev;
 
   int type, mode;
-  int stackindex;
+  char _pad0[4];
   short flag;
-  /* Expansion for shader effect panels and sub-panels. */
+  /* An "expand" bit for each of the constraint's (sub)panels (uiPanelDataExpansion). */
   short ui_expand_flag;
   /** MAX_NAME. */
   char name[64];
@@ -250,4 +255,7 @@ typedef struct WaveShaderFxData {
   char _pad[4];
   ShaderFxData_Runtime runtime;
 } WaveShaderFxData;
-#endif /* __DNA_SHADER_FX_TYPES_H__ */
+
+#ifdef __cplusplus
+}
+#endif

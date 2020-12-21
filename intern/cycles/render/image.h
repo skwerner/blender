@@ -39,6 +39,7 @@ class Progress;
 class RenderStats;
 class Scene;
 class ColorSpaceProcessor;
+class VDBImageLoader;
 
 /* Image Parameters */
 class ImageParams {
@@ -76,6 +77,7 @@ class ImageMetaData {
   /* Set by ImageLoader.load_metadata(). */
   int channels;
   size_t width, height, depth;
+  size_t byte_size;
   ImageDataType type;
 
   /* Optional color space, defaults to raw. */
@@ -124,6 +126,8 @@ class ImageLoader {
   virtual bool equals(const ImageLoader &other) const = 0;
   static bool equals(const ImageLoader *a, const ImageLoader *b);
 
+  virtual bool is_vdb_loader() const;
+
   /* Work around for no RTTI. */
 };
 
@@ -149,6 +153,8 @@ class ImageHandle {
   int svm_slot(const int tile_index = 0) const;
   device_texture *image_memory(const int tile_index = 0) const;
 
+  VDBImageLoader *vdb_loader(const int tile_index = 0) const;
+
  protected:
   vector<int> tile_slots;
   ImageManager *manager;
@@ -168,8 +174,8 @@ class ImageManager {
   ImageHandle add_image(const string &filename, const ImageParams &params);
   ImageHandle add_image(const string &filename,
                         const ImageParams &params,
-                        const vector<int> &tiles);
-  ImageHandle add_image(ImageLoader *loader, const ImageParams &params);
+                        const array<int> &tiles);
+  ImageHandle add_image(ImageLoader *loader, const ImageParams &params, const bool builtin = true);
 
   void device_update(Device *device, Scene *scene, Progress &progress);
   void device_update_slot(Device *device, Scene *scene, int slot, Progress *progress);
@@ -225,7 +231,7 @@ class ImageManager {
 
   void device_load_image(Device *device, Scene *scene, int slot, Progress *progress);
   void device_free_image(Device *device, int slot);
-  
+
   friend class ImageHandle;
 };
 

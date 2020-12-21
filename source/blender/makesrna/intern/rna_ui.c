@@ -26,6 +26,7 @@
 #include "BLT_translation.h"
 
 #include "BKE_idprop.h"
+#include "BKE_screen.h"
 
 #include "BLI_listbase.h"
 
@@ -64,8 +65,6 @@ const EnumPropertyItem rna_enum_uilist_layout_type_items[] = {
 };
 
 #ifdef RNA_RUNTIME
-
-#  include <assert.h>
 
 #  include "MEM_guardedalloc.h"
 
@@ -182,6 +181,17 @@ static void panel_draw_header_preset(const bContext *C, Panel *panel)
   RNA_parameter_list_free(&list);
 }
 
+static void panel_type_clear_recursive(Panel *panel, const PanelType *type)
+{
+  if (panel->type == type) {
+    panel->type = NULL;
+  }
+
+  LISTBASE_FOREACH (Panel *, child_panel, &panel->children) {
+    panel_type_clear_recursive(child_panel, type);
+  }
+}
+
 static void rna_Panel_unregister(Main *bmain, StructRNA *type)
 {
   ARegionType *art;
@@ -222,9 +232,7 @@ static void rna_Panel_unregister(Main *bmain, StructRNA *type)
           LISTBASE_FOREACH (ARegion *, region, regionbase) {
             if (region->type == art) {
               LISTBASE_FOREACH (Panel *, panel, &region->panels) {
-                if (panel->type == pt) {
-                  panel->type = NULL;
-                }
+                panel_type_clear_recursive(panel, pt);
               }
             }
             /* The unregistered panel might have had a template that added instanced panels,
@@ -368,7 +376,7 @@ static StructRNA *rna_Panel_register(Main *bmain,
 
   for (; pt_iter; pt_iter = pt_iter->prev) {
     /* No header has priority. */
-    if ((pt->flag & PNL_NO_HEADER) && !(pt_iter->flag & PNL_NO_HEADER)) {
+    if ((pt->flag & PANEL_TYPE_NO_HEADER) && !(pt_iter->flag & PANEL_TYPE_NO_HEADER)) {
       continue;
     }
     if (pt_iter->order <= pt->order) {
@@ -403,6 +411,21 @@ static StructRNA *rna_Panel_refine(PointerRNA *ptr)
 {
   Panel *menu = (Panel *)ptr->data;
   return (menu->type && menu->type->rna_ext.srna) ? menu->type->rna_ext.srna : &RNA_Panel;
+}
+
+static StructRNA *rna_Panel_custom_data_typef(PointerRNA *ptr)
+{
+  Panel *panel = (Panel *)ptr->data;
+
+  return UI_panel_custom_data_get(panel)->type;
+}
+
+static PointerRNA rna_Panel_custom_data_get(PointerRNA *ptr)
+{
+  Panel *panel = (Panel *)ptr->data;
+
+  /* Because the panel custom data is general we can't refine the pointer type here. */
+  return *UI_panel_custom_data_get(panel);
 }
 
 /* UIList */
@@ -978,7 +1001,7 @@ static void rna_Menu_bl_description_set(PointerRNA *ptr, const char *value)
     BLI_strncpy(str, value, RNA_DYN_DESCR_MAX); /* utf8 already ensured */
   }
   else {
-    assert(!"setting the bl_description on a non-builtin menu");
+    BLI_assert(!"setting the bl_description on a non-builtin menu");
   }
 }
 
@@ -1277,29 +1300,29 @@ static void rna_def_panel(BlenderRNA *brna)
   FunctionRNA *func;
 
   static const EnumPropertyItem panel_flag_items[] = {
-      {PNL_DEFAULT_CLOSED,
+      {PANEL_TYPE_DEFAULT_CLOSED,
        "DEFAULT_CLOSED",
        0,
        "Default Closed",
        "Defines if the panel has to be open or collapsed at the time of its creation"},
-      {PNL_NO_HEADER,
+      {PANEL_TYPE_NO_HEADER,
        "HIDE_HEADER",
        0,
        "Hide Header",
        "If set to False, the panel shows a header, which contains a clickable "
        "arrow to collapse the panel and the label (see bl_label)"},
-      {PNL_INSTANCED,
+      {PANEL_TYPE_INSTANCED,
        "INSTANCED",
        0,
        "Instanced Panel",
        "Multiple panels with this type can be used as part of a list depending on data external "
        "to the UI. Used to create panels for the modifiers and other stacks"},
-      {PNL_LAYOUT_HEADER_EXPAND,
+      {PANEL_TYPE_HEADER_EXPAND,
        "HEADER_LAYOUT_EXPAND",
        0,
        "Expand Header Layout",
        "Allow buttons in the header to stretch and shrink to fill the entire layout width"},
-      {PNL_DRAW_BOX, "DRAW_BOX", 0, "Box Style", "Draw panel with the box widget theme"},
+      {PANEL_TYPE_DRAW_BOX, "DRAW_BOX", 0, "Box Style", "Draw panel with the box widget theme"},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -1347,9 +1370,12 @@ static void rna_def_panel(BlenderRNA *brna)
   RNA_def_property_string_sdna(prop, NULL, "drawname");
   RNA_def_property_ui_text(prop, "Text", "XXX todo");
 
-  prop = RNA_def_int(
-      srna, "list_panel_index", 0, 0, INT_MAX, "Instanced Panel Data Index", "", 0, INT_MAX);
-  RNA_def_property_int_sdna(prop, NULL, "runtime.list_index");
+  prop = RNA_def_property(srna, "custom_data", PROP_POINTER, PROP_NONE);
+  RNA_def_property_struct_type(prop, "Constraint");
+  RNA_def_property_pointer_sdna(prop, NULL, "runtime.custom_data_ptr");
+  RNA_def_property_pointer_funcs(
+      prop, "rna_Panel_custom_data_get", NULL, "rna_Panel_custom_data_typef", NULL);
+  RNA_def_property_ui_text(prop, "Custom Data", "Panel Data");
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
 
   /* registration */

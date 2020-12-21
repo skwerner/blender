@@ -97,7 +97,7 @@ static float light_shape_power_get(const Light *la, const EEVEE_Light *evli)
       power *= 4.0f / M_PI;
     }
   }
-  else if (la->type == LA_SPOT || la->type == LA_LOCAL) {
+  else if (ELEM(la->type, LA_SPOT, LA_LOCAL)) {
     power = 1.0f / (4.0f * evli->radius * evli->radius * M_PI * M_PI); /* 1/(4*r²*Pi²) */
 
     /* for point lights (a.k.a radius == 0.0) */
@@ -214,5 +214,5 @@ void EEVEE_lights_cache_finish(EEVEE_ViewLayerData *sldata, EEVEE_Data *UNUSED(v
 
   sldata->common_data.la_num_light = linfo->num_light;
 
-  DRW_uniformbuffer_update(sldata->light_ubo, &linfo->light_data);
+  GPU_uniformbuf_update(sldata->light_ubo, &linfo->light_data);
 }

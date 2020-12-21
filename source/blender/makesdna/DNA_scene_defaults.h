@@ -18,8 +18,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_SCENE_DEFAULTS_H__
-#define __DNA_SCENE_DEFAULTS_H__
+#pragma once
 
 #include "DNA_view3d_defaults.h"
 
@@ -129,6 +128,7 @@
  \
     .simplify_subsurf = 6, \
     .simplify_particles = 1.0f, \
+    .simplify_volumes = 1.0f, \
  \
     .border.xmin = 0.0f, \
     .border.ymin = 0.0f, \
@@ -365,5 +365,3 @@
   }
 
 /* clang-format off */
-
-#endif  /* __DNA_SCENE_DEFAULTS_H__ */

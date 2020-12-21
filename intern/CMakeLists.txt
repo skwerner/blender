@@ -19,6 +19,7 @@
 # ***** END GPL LICENSE BLOCK *****
 
 # add_subdirectory(atomic)  # header only
+add_subdirectory(atomic)
 add_subdirectory(clog)
 add_subdirectory(ghost)
 add_subdirectory(guardedalloc)
@@ -75,6 +76,10 @@ endif()
 
 if(WITH_QUADRIFLOW)
   add_subdirectory(quadriflow)
+endif()
+
+if(WITH_CODEC_FFMPEG)
+  add_subdirectory(ffmpeg)
 endif()
 
 if(UNIX AND NOT APPLE)

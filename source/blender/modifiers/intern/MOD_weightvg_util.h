@@ -21,8 +21,7 @@
  * \ingroup modifiers
  */
 
-#ifndef __MOD_WEIGHTVG_UTIL_H__
-#define __MOD_WEIGHTVG_UTIL_H__
+#pragma once
 
 struct CurveMapping;
 struct MDeformVert;
@@ -56,7 +55,7 @@ struct uiLayout;
 
 void weightvg_do_map(int num,
                      float *new_w,
-                     short mode,
+                     short falloff_type,
                      const bool do_invert,
                      struct CurveMapping *cmap,
                      struct RNG *rng);
@@ -92,4 +91,3 @@ void weightvg_update_vg(struct MDeformVert *dvert,
                         const bool do_normalize);
 
 void weightvg_ui_common(const bContext *C, PointerRNA *ob_ptr, PointerRNA *ptr, uiLayout *layout);
-#endif /* __MOD_WEIGHTVG_UTIL_H__ */

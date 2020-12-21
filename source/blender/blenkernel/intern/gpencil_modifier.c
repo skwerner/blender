@@ -33,12 +33,16 @@
 
 #include "BLT_translation.h"
 
+#include "DNA_armature_types.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_meshdata_types.h"
+#include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
 
+#include "BKE_colortools.h"
 #include "BKE_gpencil.h"
 #include "BKE_gpencil_geom.h"
 #include "BKE_gpencil_modifier.h"
@@ -53,10 +57,16 @@
 
 #include "MOD_gpencil_modifiertypes.h"
 
+#include "BLO_read_write.h"
+
 #include "CLG_log.h"
 
 static CLG_LogRef LOG = {"bke.gpencil_modifier"};
 static GpencilModifierTypeInfo *modifier_gpencil_types[NUM_GREASEPENCIL_MODIFIER_TYPES] = {NULL};
+#if 0
+/* Note that GPencil actually does not support these atm, but might do in the future. */
+static GpencilVirtualModifierData virtualModifierCommonData;
+#endif
 
 /* Lattice Modifier ---------------------------------- */
 /* Usually, evaluation of the lattice modifier is self-contained.
@@ -109,6 +119,34 @@ void BKE_gpencil_lattice_clear(Object *ob)
 
 /* *************************************************** */
 /* Modifier Methods - Evaluation Loops, etc. */
+
+/* This is to include things that are not modifiers in the evaluation of the modifier stack, for
+ * example parenting to an armature or lattice without having a real modifier. */
+GpencilModifierData *BKE_gpencil_modifiers_get_virtual_modifierlist(
+    const Object *ob, GpencilVirtualModifierData *UNUSED(virtualModifierData))
+{
+  GpencilModifierData *md = ob->greasepencil_modifiers.first;
+
+#if 0
+  /* Note that GPencil actually does not support these atm, but might do in the future. */
+  *virtualModifierData = virtualModifierCommonData;
+  if (ob->parent) {
+    if (ob->parent->type == OB_ARMATURE && ob->partype == PARSKEL) {
+      virtualModifierData->amd.object = ob->parent;
+      virtualModifierData->amd.modifier.next = md;
+      virtualModifierData->amd.deformflag = ((bArmature *)(ob->parent->data))->deformflag;
+      md = &virtualModifierData->amd.modifier;
+    }
+    else if (ob->parent->type == OB_LATTICE && ob->partype == PARSKEL) {
+      virtualModifierData->lmd.object = ob->parent;
+      virtualModifierData->lmd.modifier.next = md;
+      md = &virtualModifierData->lmd.modifier;
+    }
+  }
+#endif
+
+  return md;
+}
 
 /**
  * Check if object has grease pencil Geometry modifiers.
@@ -229,6 +267,22 @@ void BKE_gpencil_modifier_init(void)
 {
   /* Initialize modifier types */
   gpencil_modifier_type_init(modifier_gpencil_types); /* MOD_gpencil_util.c */
+
+#if 0
+  /* Note that GPencil actually does not support these atm, but might do in the future. */
+  /* Initialize global cmmon storage used for virtual modifier list */
+  GpencilModifierData *md;
+  md = BKE_gpencil_modifier_new(eGpencilModifierType_Armature);
+  virtualModifierCommonData.amd = *((ArmatureGpencilModifierData *)md);
+  BKE_gpencil_modifier_free(md);
+
+  md = BKE_gpencil_modifier_new(eGpencilModifierType_Lattice);
+  virtualModifierCommonData.lmd = *((LatticeGpencilModifierData *)md);
+  BKE_gpencil_modifier_free(md);
+
+  virtualModifierCommonData.amd.modifier.mode |= eGpencilModifierMode_Virtual;
+  virtualModifierCommonData.lmd.modifier.mode |= eGpencilModifierMode_Virtual;
+#endif
 }
 
 /**
@@ -283,10 +337,6 @@ void BKE_gpencil_modifier_free_ex(GpencilModifierData *md, const int flag)
   if ((flag & LIB_ID_CREATE_NO_USER_REFCOUNT) == 0) {
     if (mti->foreachIDLink) {
       mti->foreachIDLink(md, NULL, modifier_free_data_id_us_cb, NULL);
-    }
-    else if (mti->foreachObjectLink) {
-      mti->foreachObjectLink(
-          md, NULL, (GreasePencilObjectWalkFunc)modifier_free_data_id_us_cb, NULL);
     }
   }
 
@@ -348,9 +398,8 @@ const GpencilModifierTypeInfo *BKE_gpencil_modifier_get_info(GpencilModifierType
       modifier_gpencil_types[type]->name[0] != '\0') {
     return modifier_gpencil_types[type];
   }
-  else {
-    return NULL;
-  }
+
+  return NULL;
 }
 
 /**
@@ -365,6 +414,11 @@ void BKE_gpencil_modifierType_panel_id(GpencilModifierType type, char *r_idname)
 
   strcpy(r_idname, GPENCIL_MODIFIER_TYPE_PANEL_PREFIX);
   strcat(r_idname, mti->name);
+}
+
+void BKE_gpencil_modifier_panel_expand(GpencilModifierData *md)
+{
+  md->ui_expand_flag |= UI_PANEL_DATA_EXPAND_ROOT;
 }
 
 /**
@@ -425,10 +479,6 @@ void BKE_gpencil_modifier_copydata_ex(GpencilModifierData *md,
     if (mti->foreachIDLink) {
       mti->foreachIDLink(target, NULL, gpencil_modifier_copy_data_id_us_cb, NULL);
     }
-    else if (mti->foreachObjectLink) {
-      mti->foreachObjectLink(
-          target, NULL, (GreasePencilObjectWalkFunc)gpencil_modifier_copy_data_id_us_cb, NULL);
-    }
   }
 }
 
@@ -481,6 +531,19 @@ void BKE_gpencil_modifier_set_error(GpencilModifierData *md, const char *_format
 }
 
 /**
+ * Check whether given modifier is not local (i.e. from linked data) when the object is a library
+ * override.
+ *
+ * \param gmd: May be NULL, in which case we consider it as a non-local modifier case.
+ */
+bool BKE_gpencil_modifier_is_nonlocal_in_liboverride(const Object *ob,
+                                                     const GpencilModifierData *gmd)
+{
+  return (ID_IS_OVERRIDE_LIBRARY(ob) &&
+          (gmd == NULL || (gmd->flag & eGpencilModifierFlag_OverrideLibrary_Local) == 0));
+}
+
+/**
  * Link grease pencil modifier related IDs.
  * \param ob: Grease pencil object
  * \param walk: Walk option
@@ -495,11 +558,6 @@ void BKE_gpencil_modifiers_foreach_ID_link(Object *ob, GreasePencilIDWalkFunc wa
 
     if (mti->foreachIDLink) {
       mti->foreachIDLink(md, ob, walk, userData);
-    }
-    else if (mti->foreachObjectLink) {
-      /* each Object can masquerade as an ID, so this should be OK */
-      GreasePencilObjectWalkFunc fp = (GreasePencilObjectWalkFunc)walk;
-      mti->foreachObjectLink(md, ob, fp, userData);
     }
   }
 }
@@ -625,10 +683,9 @@ static void gpencil_copy_activeframe_to_eval(
 
 static bGPdata *gpencil_copy_for_eval(bGPdata *gpd)
 {
-  int flags = LIB_ID_COPY_LOCALIZE;
+  const int flags = LIB_ID_COPY_LOCALIZE;
 
-  bGPdata *result;
-  BKE_id_copy_ex(NULL, &gpd->id, (ID **)&result, flags);
+  bGPdata *result = (bGPdata *)BKE_id_copy_ex(NULL, &gpd->id, NULL, flags);
   return result;
 }
 
@@ -654,7 +711,9 @@ void BKE_gpencil_prepare_eval_data(Depsgraph *depsgraph, Scene *scene, Object *o
   }
 
   const bool is_multiedit = (bool)GPENCIL_MULTIEDIT_SESSIONS_ON(gpd_eval);
-  const bool do_modifiers = (bool)((!is_multiedit) && (ob->greasepencil_modifiers.first != NULL) &&
+  const bool is_curve_edit = (bool)GPENCIL_CURVE_EDIT_SESSIONS_ON(gpd_eval);
+  const bool do_modifiers = (bool)((!is_multiedit) && (!is_curve_edit) &&
+                                   (ob->greasepencil_modifiers.first != NULL) &&
                                    (!GPENCIL_SIMPLIFY_MODIF(scene)));
   if ((!do_modifiers) && (!do_parent)) {
     return;
@@ -690,8 +749,10 @@ void BKE_gpencil_modifiers_calc(Depsgraph *depsgraph, Scene *scene, Object *ob)
   bGPdata *gpd = (bGPdata *)ob->data;
   const bool is_edit = GPENCIL_ANY_EDIT_MODE(gpd);
   const bool is_multiedit = (bool)GPENCIL_MULTIEDIT_SESSIONS_ON(gpd);
+  const bool is_curve_edit = (bool)GPENCIL_CURVE_EDIT_SESSIONS_ON(gpd);
   const bool is_render = (bool)(DEG_get_mode(depsgraph) == DAG_EVAL_RENDER);
-  const bool do_modifiers = (bool)((!is_multiedit) && (ob->greasepencil_modifiers.first != NULL) &&
+  const bool do_modifiers = (bool)((!is_multiedit) && (!is_curve_edit) &&
+                                   (ob->greasepencil_modifiers.first != NULL) &&
                                    (!GPENCIL_SIMPLIFY_MODIF(scene)));
   if (!do_modifiers) {
     return;
@@ -736,4 +797,160 @@ void BKE_gpencil_modifiers_calc(Depsgraph *depsgraph, Scene *scene, Object *ob)
 
   /* Clear any lattice data. */
   BKE_gpencil_lattice_clear(ob);
+}
+
+void BKE_gpencil_modifier_blend_write(BlendWriter *writer, ListBase *modbase)
+{
+  if (modbase == NULL) {
+    return;
+  }
+
+  LISTBASE_FOREACH (GpencilModifierData *, md, modbase) {
+    const GpencilModifierTypeInfo *mti = BKE_gpencil_modifier_get_info(md->type);
+    if (mti == NULL) {
+      return;
+    }
+
+    BLO_write_struct_by_name(writer, mti->struct_name, md);
+
+    if (md->type == eGpencilModifierType_Thick) {
+      ThickGpencilModifierData *gpmd = (ThickGpencilModifierData *)md;
+
+      if (gpmd->curve_thickness) {
+        BKE_curvemapping_blend_write(writer, gpmd->curve_thickness);
+      }
+    }
+    else if (md->type == eGpencilModifierType_Noise) {
+      NoiseGpencilModifierData *gpmd = (NoiseGpencilModifierData *)md;
+
+      if (gpmd->curve_intensity) {
+        BKE_curvemapping_blend_write(writer, gpmd->curve_intensity);
+      }
+    }
+    else if (md->type == eGpencilModifierType_Hook) {
+      HookGpencilModifierData *gpmd = (HookGpencilModifierData *)md;
+
+      if (gpmd->curfalloff) {
+        BKE_curvemapping_blend_write(writer, gpmd->curfalloff);
+      }
+    }
+    else if (md->type == eGpencilModifierType_Tint) {
+      TintGpencilModifierData *gpmd = (TintGpencilModifierData *)md;
+      if (gpmd->colorband) {
+        BLO_write_struct(writer, ColorBand, gpmd->colorband);
+      }
+      if (gpmd->curve_intensity) {
+        BKE_curvemapping_blend_write(writer, gpmd->curve_intensity);
+      }
+    }
+    else if (md->type == eGpencilModifierType_Smooth) {
+      SmoothGpencilModifierData *gpmd = (SmoothGpencilModifierData *)md;
+      if (gpmd->curve_intensity) {
+        BKE_curvemapping_blend_write(writer, gpmd->curve_intensity);
+      }
+    }
+    else if (md->type == eGpencilModifierType_Color) {
+      ColorGpencilModifierData *gpmd = (ColorGpencilModifierData *)md;
+      if (gpmd->curve_intensity) {
+        BKE_curvemapping_blend_write(writer, gpmd->curve_intensity);
+      }
+    }
+    else if (md->type == eGpencilModifierType_Opacity) {
+      OpacityGpencilModifierData *gpmd = (OpacityGpencilModifierData *)md;
+      if (gpmd->curve_intensity) {
+        BKE_curvemapping_blend_write(writer, gpmd->curve_intensity);
+      }
+    }
+  }
+}
+
+void BKE_gpencil_modifier_blend_read_data(BlendDataReader *reader, ListBase *lb)
+{
+  BLO_read_list(reader, lb);
+
+  LISTBASE_FOREACH (GpencilModifierData *, md, lb) {
+    md->error = NULL;
+
+    /* if modifiers disappear, or for upward compatibility */
+    if (NULL == BKE_gpencil_modifier_get_info(md->type)) {
+      md->type = eModifierType_None;
+    }
+
+    if (md->type == eGpencilModifierType_Lattice) {
+      LatticeGpencilModifierData *gpmd = (LatticeGpencilModifierData *)md;
+      gpmd->cache_data = NULL;
+    }
+    else if (md->type == eGpencilModifierType_Hook) {
+      HookGpencilModifierData *hmd = (HookGpencilModifierData *)md;
+
+      BLO_read_data_address(reader, &hmd->curfalloff);
+      if (hmd->curfalloff) {
+        BKE_curvemapping_blend_read(reader, hmd->curfalloff);
+      }
+    }
+    else if (md->type == eGpencilModifierType_Noise) {
+      NoiseGpencilModifierData *gpmd = (NoiseGpencilModifierData *)md;
+
+      BLO_read_data_address(reader, &gpmd->curve_intensity);
+      if (gpmd->curve_intensity) {
+        BKE_curvemapping_blend_read(reader, gpmd->curve_intensity);
+        /* initialize the curve. Maybe this could be moved to modififer logic */
+        BKE_curvemapping_init(gpmd->curve_intensity);
+      }
+    }
+    else if (md->type == eGpencilModifierType_Thick) {
+      ThickGpencilModifierData *gpmd = (ThickGpencilModifierData *)md;
+
+      BLO_read_data_address(reader, &gpmd->curve_thickness);
+      if (gpmd->curve_thickness) {
+        BKE_curvemapping_blend_read(reader, gpmd->curve_thickness);
+        BKE_curvemapping_init(gpmd->curve_thickness);
+      }
+    }
+    else if (md->type == eGpencilModifierType_Tint) {
+      TintGpencilModifierData *gpmd = (TintGpencilModifierData *)md;
+      BLO_read_data_address(reader, &gpmd->colorband);
+      BLO_read_data_address(reader, &gpmd->curve_intensity);
+      if (gpmd->curve_intensity) {
+        BKE_curvemapping_blend_read(reader, gpmd->curve_intensity);
+        BKE_curvemapping_init(gpmd->curve_intensity);
+      }
+    }
+    else if (md->type == eGpencilModifierType_Smooth) {
+      SmoothGpencilModifierData *gpmd = (SmoothGpencilModifierData *)md;
+      BLO_read_data_address(reader, &gpmd->curve_intensity);
+      if (gpmd->curve_intensity) {
+        BKE_curvemapping_blend_read(reader, gpmd->curve_intensity);
+        BKE_curvemapping_init(gpmd->curve_intensity);
+      }
+    }
+    else if (md->type == eGpencilModifierType_Color) {
+      ColorGpencilModifierData *gpmd = (ColorGpencilModifierData *)md;
+      BLO_read_data_address(reader, &gpmd->curve_intensity);
+      if (gpmd->curve_intensity) {
+        BKE_curvemapping_blend_read(reader, gpmd->curve_intensity);
+        BKE_curvemapping_init(gpmd->curve_intensity);
+      }
+    }
+    else if (md->type == eGpencilModifierType_Opacity) {
+      OpacityGpencilModifierData *gpmd = (OpacityGpencilModifierData *)md;
+      BLO_read_data_address(reader, &gpmd->curve_intensity);
+      if (gpmd->curve_intensity) {
+        BKE_curvemapping_blend_read(reader, gpmd->curve_intensity);
+        BKE_curvemapping_init(gpmd->curve_intensity);
+      }
+    }
+  }
+}
+
+void BKE_gpencil_modifier_blend_read_lib(BlendLibReader *reader, Object *ob)
+{
+  BKE_gpencil_modifiers_foreach_ID_link(ob, BKE_object_modifiers_lib_link_common, reader);
+
+  /* If linking from a library, clear 'local' library override flag. */
+  if (ob->id.lib != NULL) {
+    LISTBASE_FOREACH (GpencilModifierData *, mod, &ob->greasepencil_modifiers) {
+      mod->flag &= ~eGpencilModifierFlag_OverrideLibrary_Local;
+    }
+  }
 }

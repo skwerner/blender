@@ -20,8 +20,7 @@
  * \ingroup draw
  */
 
-#ifndef __DRAW_CACHE_H__
-#define __DRAW_CACHE_H__
+#pragma once
 
 struct GPUBatch;
 struct GPUMaterial;
@@ -33,8 +32,16 @@ struct Volume;
 struct VolumeGrid;
 struct bGPDstroke;
 
+/* Shape resolution level of detail */
+typedef enum eDRWLevelOfDetail {
+  DRW_LOD_LOW = 0,
+  DRW_LOD_MEDIUM = 1,
+  DRW_LOD_HIGH = 2,
+
+  DRW_LOD_MAX, /* Max number of level of detail */
+} eDRWLevelOfDetail;
+
 void DRW_shape_cache_free(void);
-void DRW_shape_cache_reset(void);
 
 /* 3D cursor */
 struct GPUBatch *DRW_cache_cursor_get(bool crosshair_lines);
@@ -46,8 +53,9 @@ struct GPUBatch *DRW_cache_fullscreen_quad_get(void);
 struct GPUBatch *DRW_cache_quad_get(void);
 struct GPUBatch *DRW_cache_quad_wires_get(void);
 struct GPUBatch *DRW_cache_cube_get(void);
-struct GPUBatch *DRW_cache_sphere_get(void);
 struct GPUBatch *DRW_cache_normal_arrow_get(void);
+
+struct GPUBatch *DRW_cache_sphere_get(const eDRWLevelOfDetail level_of_detail);
 
 /* Dummy VBOs */
 struct GPUBatch *DRW_gpencil_dummy_buffer_get(void);
@@ -238,12 +246,15 @@ typedef struct DRWVolumeGrid {
 
 DRWVolumeGrid *DRW_volume_batch_cache_get_grid(struct Volume *volume, struct VolumeGrid *grid);
 struct GPUBatch *DRW_cache_volume_face_wireframe_get(struct Object *ob);
+struct GPUBatch *DRW_cache_volume_selection_surface_get(struct Object *ob);
 
 /* GPencil */
 struct GPUBatch *DRW_cache_gpencil_strokes_get(struct Object *ob, int cfra);
 struct GPUBatch *DRW_cache_gpencil_fills_get(struct Object *ob, int cfra);
 struct GPUBatch *DRW_cache_gpencil_edit_lines_get(struct Object *ob, int cfra);
 struct GPUBatch *DRW_cache_gpencil_edit_points_get(struct Object *ob, int cfra);
+struct GPUBatch *DRW_cache_gpencil_edit_curve_handles_get(struct Object *ob, int cfra);
+struct GPUBatch *DRW_cache_gpencil_edit_curve_points_get(struct Object *ob, int cfra);
 struct GPUBatch *DRW_cache_gpencil_sbuffer_stroke_get(struct Object *ob);
 struct GPUBatch *DRW_cache_gpencil_sbuffer_fill_get(struct Object *ob);
 
@@ -251,5 +262,3 @@ struct GPUBatch *DRW_cache_gpencil_face_wireframe_get(struct Object *ob);
 
 struct bGPDstroke *DRW_cache_gpencil_sbuffer_stroke_data_get(struct Object *ob);
 void DRW_cache_gpencil_sbuffer_clear(struct Object *ob);
-
-#endif /* __DRAW_CACHE_H__ */

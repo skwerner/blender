@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BMESH_OPERATORS_H__
-#define __BMESH_OPERATORS_H__
+#pragma once
 
 /** \file
  * \ingroup bmesh
@@ -139,6 +138,12 @@ enum {
   BEVEL_VMESH_CUTOFF,
 };
 
+/* Bevel affect option. */
+enum {
+  BEVEL_AFFECT_VERTICES = 0,
+  BEVEL_AFFECT_EDGES = 1,
+};
+
 /* Normal Face Strength values */
 enum {
   FACE_STRENGTH_WEAK = -16384,
@@ -187,5 +192,3 @@ void BM_mesh_calc_uvs_cone(BMesh *bm,
 void BM_mesh_calc_uvs_cube(BMesh *bm, const short oflag);
 
 #include "intern/bmesh_operator_api_inline.h"
-
-#endif /* __BMESH_OPERATORS_H__ */

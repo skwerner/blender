@@ -32,6 +32,7 @@
 namespace libmv {
 
 class CameraIntrinsics;
+class PackedIntrinsics;
 
 namespace internal {
 
@@ -146,10 +147,6 @@ class CameraIntrinsics {
   double principal_point_x() const { return K_(0, 2); }
   double principal_point_y() const { return K_(1, 2); }
 
-  virtual int num_distortion_parameters() const = 0;
-  virtual double *distortion_parameters() = 0;
-  virtual const double *distortion_parameters() const = 0;
-
   // Set the image size in pixels.
   // Image is the size of image camera intrinsics were calibrated with.
   void SetImageSize(int width, int height);
@@ -196,6 +193,9 @@ class CameraIntrinsics {
                                 double image_y,
                                 double *normalized_x,
                                 double *normalized_y) const = 0;
+
+  virtual void Pack(PackedIntrinsics* packed_intrinsics) const;
+  virtual void Unpack(const PackedIntrinsics& packed_intrinsics);
 
   // Distort an image using the current camera instrinsics
   //
@@ -292,13 +292,9 @@ class PolynomialCameraIntrinsics : public CameraIntrinsics {
   PolynomialCameraIntrinsics();
   PolynomialCameraIntrinsics(const PolynomialCameraIntrinsics &from);
 
-  DistortionModelType GetDistortionModelType() const {
+  DistortionModelType GetDistortionModelType() const override {
     return DISTORTION_MODEL_POLYNOMIAL;
   }
-
-  int num_distortion_parameters() const { return NUM_PARAMETERS; }
-  double *distortion_parameters() { return parameters_; };
-  const double *distortion_parameters() const { return parameters_; };
 
   double k1() const { return parameters_[OFFSET_K1]; }
   double k2() const { return parameters_[OFFSET_K2]; }
@@ -320,7 +316,7 @@ class PolynomialCameraIntrinsics : public CameraIntrinsics {
   void ApplyIntrinsics(double normalized_x,
                        double normalized_y,
                        double *image_x,
-                       double *image_y) const;
+                       double *image_y) const override;
 
   // Invert camera intrinsics on the image point to get normalized coordinates.
   //
@@ -329,7 +325,10 @@ class PolynomialCameraIntrinsics : public CameraIntrinsics {
   void InvertIntrinsics(double image_x,
                         double image_y,
                         double *normalized_x,
-                        double *normalized_y) const;
+                        double *normalized_y) const override;
+
+  virtual void Pack(PackedIntrinsics* packed_intrinsics) const override;
+  virtual void Unpack(const PackedIntrinsics& packed_intrinsics) override;
 
  private:
   // OpenCV's distortion model with third order polynomial radial distortion
@@ -355,13 +354,9 @@ class DivisionCameraIntrinsics : public CameraIntrinsics {
   DivisionCameraIntrinsics();
   DivisionCameraIntrinsics(const DivisionCameraIntrinsics &from);
 
-  DistortionModelType GetDistortionModelType() const {
+  DistortionModelType GetDistortionModelType() const override {
     return DISTORTION_MODEL_DIVISION;
   }
-
-  int num_distortion_parameters() const { return NUM_PARAMETERS; }
-  double *distortion_parameters() { return parameters_; };
-  const double *distortion_parameters() const { return parameters_; };
 
   double k1() const { return parameters_[OFFSET_K1]; }
   double k2() const { return parameters_[OFFSET_K2]; }
@@ -377,7 +372,7 @@ class DivisionCameraIntrinsics : public CameraIntrinsics {
   void ApplyIntrinsics(double normalized_x,
                        double normalized_y,
                        double *image_x,
-                       double *image_y) const;
+                       double *image_y) const override;
 
   // Invert camera intrinsics on the image point to get normalized coordinates.
   //
@@ -386,7 +381,10 @@ class DivisionCameraIntrinsics : public CameraIntrinsics {
   void InvertIntrinsics(double image_x,
                         double image_y,
                         double *normalized_x,
-                        double *normalized_y) const;
+                        double *normalized_y) const override;
+
+  virtual void Pack(PackedIntrinsics* packed_intrinsics) const override;
+  virtual void Unpack(const PackedIntrinsics& packed_intrinsics) override;
 
  private:
   // Double-parameter division distortion model.
@@ -409,13 +407,9 @@ class NukeCameraIntrinsics : public CameraIntrinsics {
   NukeCameraIntrinsics();
   NukeCameraIntrinsics(const NukeCameraIntrinsics &from);
 
-  DistortionModelType GetDistortionModelType() const {
+  DistortionModelType GetDistortionModelType() const override {
     return DISTORTION_MODEL_NUKE;
   }
-
-  int num_distortion_parameters() const { return NUM_PARAMETERS; }
-  double *distortion_parameters() { return parameters_; };
-  const double *distortion_parameters() const { return parameters_; };
 
   double k1() const { return parameters_[OFFSET_K1]; }
   double k2() const { return parameters_[OFFSET_K2]; }
@@ -431,7 +425,7 @@ class NukeCameraIntrinsics : public CameraIntrinsics {
   void ApplyIntrinsics(double normalized_x,
                        double normalized_y,
                        double *image_x,
-                       double *image_y) const;
+                       double *image_y) const override;
 
   // Invert camera intrinsics on the image point to get normalized coordinates.
   //
@@ -440,12 +434,79 @@ class NukeCameraIntrinsics : public CameraIntrinsics {
   void InvertIntrinsics(double image_x,
                         double image_y,
                         double *normalized_x,
-                        double *normalized_y) const;
+                        double *normalized_y) const override;
+
+  virtual void Pack(PackedIntrinsics* packed_intrinsics) const override;
+  virtual void Unpack(const PackedIntrinsics& packed_intrinsics) override;
 
  private:
   // Double-parameter division distortion model.
   double parameters_[NUM_PARAMETERS];
 };
+
+class BrownCameraIntrinsics : public CameraIntrinsics {
+ public:
+  // This constants defines an offset of corresponding coefficients
+  // in the parameters_ array.
+  enum {
+    OFFSET_K1,
+    OFFSET_K2,
+    OFFSET_K3,
+    OFFSET_K4,
+    OFFSET_P1,
+    OFFSET_P2,
+
+    // This defines the size of array which we need to have in order
+    // to store all the coefficients.
+    NUM_PARAMETERS,
+  };
+
+  BrownCameraIntrinsics();
+  BrownCameraIntrinsics(const BrownCameraIntrinsics &from);
+
+  DistortionModelType GetDistortionModelType() const override {
+    return DISTORTION_MODEL_BROWN;
+  }
+
+  double k1() const { return parameters_[OFFSET_K1]; }
+  double k2() const { return parameters_[OFFSET_K2]; }
+  double k3() const { return parameters_[OFFSET_K3]; }
+  double k4() const { return parameters_[OFFSET_K4]; }
+  double p1() const { return parameters_[OFFSET_P1]; }
+  double p2() const { return parameters_[OFFSET_P2]; }
+
+  // Set radial distortion coeffcients.
+  void SetRadialDistortion(double k1, double k2, double k3, double k4);
+
+  // Set tangential distortion coeffcients.
+  void SetTangentialDistortion(double p1, double p2);
+
+  // Apply camera intrinsics to the normalized point to get image coordinates.
+  //
+  // This applies the lens distortion to a point which is in normalized
+  // camera coordinates (i.e. the principal point is at (0, 0)) to get image
+  // coordinates in pixels.
+  void ApplyIntrinsics(double normalized_x,
+                       double normalized_y,
+                       double *image_x,
+                       double *image_y) const override;
+
+  // Invert camera intrinsics on the image point to get normalized coordinates.
+  //
+  // This reverses the effect of lens distortion on a point which is in image
+  // coordinates to get normalized camera coordinates.
+  void InvertIntrinsics(double image_x,
+                        double image_y,
+                        double *normalized_x,
+                        double *normalized_y) const override;
+
+  virtual void Pack(PackedIntrinsics* packed_intrinsics) const override;
+  virtual void Unpack(const PackedIntrinsics& packed_intrinsics) override;
+
+ private:
+  double parameters_[NUM_PARAMETERS];
+};
+
 
 /// A human-readable representation of the camera intrinsic parameters.
 std::ostream& operator <<(std::ostream &os,

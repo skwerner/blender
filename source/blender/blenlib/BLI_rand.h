@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BLI_RAND_H__
-#define __BLI_RAND_H__
+#pragma once
 
 #include "BLI_compiler_attrs.h"
 #include "BLI_sys_types.h"
@@ -61,6 +60,12 @@ void BLI_rng_get_tri_sample_float_v2(struct RNG *rng,
                                      const float v2[2],
                                      const float v3[2],
                                      float r_pt[2]) ATTR_NONNULL();
+void BLI_rng_get_tri_sample_float_v3(RNG *rng,
+                                     const float v1[3],
+                                     const float v2[3],
+                                     const float v3[3],
+                                     float r_pt[3]) ATTR_NONNULL();
+
 void BLI_rng_shuffle_array(struct RNG *rng,
                            void *data,
                            unsigned int elem_size_i,
@@ -116,5 +121,3 @@ void BLI_hammersley_2d_sequence(unsigned int n, double *r);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLI_RAND_H__ */

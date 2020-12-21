@@ -24,6 +24,7 @@
 #include "render/osl.h"
 #include "render/scene.h"
 #include "render/shader.h"
+#include "render/stats.h"
 
 #ifdef WITH_OSL
 
@@ -71,9 +72,9 @@ OSLShaderManager::~OSLShaderManager()
 void OSLShaderManager::free_memory()
 {
 #  ifdef OSL_HAS_BLENDER_CLEANUP_FIX
-  /* There is a problem with llvm+osl: The order global destructors across
+  /* There is a problem with LLVM+OSL: The order global destructors across
    * different compilation units run cannot be guaranteed, on windows this means
-   * that the llvm destructors run before the osl destructors, causing a crash
+   * that the LLVM destructors run before the osl destructors, causing a crash
    * when the process exits. the OSL in svn has a special cleanup hack to
    * sidestep this behavior */
   OSL::pvt::LLVM_Util::Cleanup();
@@ -93,6 +94,12 @@ void OSLShaderManager::device_update(Device *device,
 {
   if (!need_update)
     return;
+
+  scoped_callback_timer timer([scene](double time) {
+    if (scene->update_stats) {
+      scene->update_stats->osl.times.add_entry({"device_update", time});
+    }
+  });
 
   VLOG(1) << "Total " << scene->shaders.size() << " shaders.";
 
@@ -120,7 +127,7 @@ void OSLShaderManager::device_update(Device *device,
     compiler.background = (shader == background_shader);
     compiler.compile(og, shader);
 
-    if (shader->use_mis && shader->has_surface_emission)
+    if (shader->get_use_mis() && shader->has_surface_emission)
       scene->light_manager->need_update = true;
   }
 
@@ -134,7 +141,7 @@ void OSLShaderManager::device_update(Device *device,
   og->use = true;
 
   foreach (Shader *shader, scene->shaders)
-    shader->need_update = false;
+    shader->clear_modified();
 
   need_update = false;
 
@@ -400,7 +407,8 @@ const char *OSLShaderManager::shader_load_bytecode(const string &hash, const str
 
 /* This is a static function to avoid RTTI link errors with only this
  * file being compiled without RTTI to match OSL and LLVM libraries. */
-OSLNode *OSLShaderManager::osl_node(ShaderManager *manager,
+OSLNode *OSLShaderManager::osl_node(ShaderGraph *graph,
+                                    ShaderManager *manager,
                                     const std::string &filepath,
                                     const std::string &bytecode_hash,
                                     const std::string &bytecode)
@@ -443,7 +451,7 @@ OSLNode *OSLShaderManager::osl_node(ShaderManager *manager,
   }
 
   /* create node */
-  OSLNode *node = OSLNode::create(num_inputs);
+  OSLNode *node = OSLNode::create(graph, num_inputs);
 
   /* add new sockets from parameters */
   set<void *> used_sockets;
@@ -1073,18 +1081,18 @@ OSL::ShaderGroupRef OSLCompiler::compile_type(Shader *shader, ShaderGraph *graph
 
 void OSLCompiler::compile(OSLGlobals *og, Shader *shader)
 {
-  if (shader->need_update) {
+  if (shader->is_modified()) {
     ShaderGraph *graph = shader->graph;
     ShaderNode *output = (graph) ? graph->output() : NULL;
 
-    bool has_bump = (shader->displacement_method != DISPLACE_TRUE) &&
+    bool has_bump = (shader->get_displacement_method() != DISPLACE_TRUE) &&
                     output->input("Surface")->link && output->input("Displacement")->link;
 
     /* finalize */
     shader->graph->finalize(scene,
                             has_bump,
                             shader->has_integrator_dependency,
-                            shader->displacement_method == DISPLACE_BOTH);
+                            shader->get_displacement_method() == DISPLACE_BOTH);
 
     current_shader = shader;
 

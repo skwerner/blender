@@ -228,8 +228,8 @@ static void rna_def_volume_grid(BlenderRNA *brna)
       {VOLUME_GRID_BOOLEAN, "BOOLEAN", 0, "Boolean", "Boolean"},
       {VOLUME_GRID_FLOAT, "FLOAT", 0, "Float", "Single precision float"},
       {VOLUME_GRID_DOUBLE, "DOUBLE", 0, "Double", "Double precision"},
-      {VOLUME_GRID_INT, "INT", 0, "Integer", "32 bit integer"},
-      {VOLUME_GRID_INT64, "INT64", 0, "Integer 64 bit", "64 bit integer"},
+      {VOLUME_GRID_INT, "INT", 0, "Integer", "32-bit integer"},
+      {VOLUME_GRID_INT64, "INT64", 0, "Integer 64-bit", "64-bit integer"},
       {VOLUME_GRID_MASK, "MASK", 0, "Mask", "No data, boolean mask of active voxels"},
       {VOLUME_GRID_STRING, "STRING", 0, "String", "Text string"},
       {VOLUME_GRID_VECTOR_FLOAT, "VECTOR_FLOAT", 0, "Float Vector", "3D float vector"},
@@ -343,6 +343,14 @@ static void rna_def_volume_grids(BlenderRNA *brna, PropertyRNA *cprop)
 
   func = RNA_def_function(srna, "unload", "BKE_volume_unload");
   RNA_def_function_ui_description(func, "Unload all grid and voxel data from memory");
+
+  func = RNA_def_function(srna, "save", "BKE_volume_save");
+  RNA_def_function_ui_description(func, "Save grids and metadata to file");
+  RNA_def_function_flag(func, FUNC_USE_MAIN | FUNC_USE_REPORTS);
+  parm = RNA_def_string_file_path(func, "filepath", NULL, 0, "", "File path to save to");
+  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
+  parm = RNA_def_boolean(func, "success", 0, "", "True if grid list was successfully loaded");
+  RNA_def_function_return(func, parm);
 }
 
 static void rna_def_volume_display(BlenderRNA *brna)
@@ -395,6 +403,29 @@ static void rna_def_volume_display(BlenderRNA *brna)
       {0, NULL, 0, NULL, NULL},
   };
 
+  static const EnumPropertyItem interpolation_method_items[] = {
+      {VOLUME_DISPLAY_INTERP_LINEAR, "LINEAR", 0, "Linear", "Good smoothness and speed"},
+      {VOLUME_DISPLAY_INTERP_CUBIC,
+       "CUBIC",
+       0,
+       "Cubic",
+       "Smoothed high quality interpolation, but slower"},
+      {VOLUME_DISPLAY_INTERP_CLOSEST, "CLOSEST", 0, "Closest", "No interpolation"},
+      {0, NULL, 0, NULL, NULL},
+  };
+
+  static const EnumPropertyItem axis_slice_position_items[] = {
+      {VOLUME_SLICE_AXIS_AUTO,
+       "AUTO",
+       0,
+       "Auto",
+       "Adjust slice direction according to the view direction"},
+      {VOLUME_SLICE_AXIS_X, "X", 0, "X", "Slice along the X axis"},
+      {VOLUME_SLICE_AXIS_Y, "Y", 0, "Y", "Slice along the Y axis"},
+      {VOLUME_SLICE_AXIS_Z, "Z", 0, "Z", "Slice along the Z axis"},
+      {0, NULL, 0, NULL, NULL},
+  };
+
   prop = RNA_def_property(srna, "wireframe_type", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_items(prop, wireframe_type_items);
   RNA_def_property_ui_text(prop, "Wireframe", "Type of wireframe display");
@@ -403,6 +434,28 @@ static void rna_def_volume_display(BlenderRNA *brna)
   prop = RNA_def_property(srna, "wireframe_detail", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_items(prop, wireframe_detail_items);
   RNA_def_property_ui_text(prop, "Wireframe Detail", "Amount of detail for wireframe display");
+  RNA_def_property_update(prop, 0, "rna_Volume_update_display");
+
+  prop = RNA_def_property(srna, "interpolation_method", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_items(prop, interpolation_method_items);
+  RNA_def_property_ui_text(
+      prop, "Interpolation", "Interpolation method to use for volumes in solid mode");
+  RNA_def_property_update(prop, 0, "rna_Volume_update_display");
+
+  prop = RNA_def_property(srna, "use_slice", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "axis_slice_method", VOLUME_AXIS_SLICE_SINGLE);
+  RNA_def_property_ui_text(prop, "Slice", "Perform a single slice of the domain object");
+  RNA_def_property_update(prop, 0, "rna_Volume_update_display");
+
+  prop = RNA_def_property(srna, "slice_axis", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_items(prop, axis_slice_position_items);
+  RNA_def_property_ui_text(prop, "Axis", "");
+  RNA_def_property_update(prop, 0, "rna_Volume_update_display");
+
+  prop = RNA_def_property(srna, "slice_depth", PROP_FLOAT, PROP_FACTOR);
+  RNA_def_property_range(prop, 0.0, 1.0);
+  RNA_def_property_ui_range(prop, 0.0, 1.0, 0.1, 3);
+  RNA_def_property_ui_text(prop, "Position", "Position of the slice");
   RNA_def_property_update(prop, 0, "rna_Volume_update_display");
 }
 

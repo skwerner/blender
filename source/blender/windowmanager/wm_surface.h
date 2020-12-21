@@ -22,10 +22,13 @@
  * Container to manage painting in an offscreen context.
  */
 
-#ifndef __WM_SURFACE_H__
-#define __WM_SURFACE_H__
+#pragma once
 
 struct bContext;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct wmSurface {
   struct wmSurface *next, *prev;
@@ -59,4 +62,6 @@ void wm_surface_clear_drawable(void);
 void wm_surface_set_drawable(wmSurface *surface, bool activate);
 void wm_surface_reset_drawable(void);
 
-#endif /* __WM_SURFACE_H__ */
+#ifdef __cplusplus
+}
+#endif

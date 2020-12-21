@@ -52,7 +52,7 @@ static void imb_handle_alpha(ImBuf *ibuf,
   if (colorspace) {
     if (ibuf->rect != NULL && ibuf->rect_float == NULL) {
       /* byte buffer is never internally converted to some standard space,
-       * store pointer to it's color space descriptor instead
+       * store pointer to its color space descriptor instead
        */
       ibuf->rect_colorspace = colormanage_colorspace_get_named(effective_colorspace);
     }
@@ -282,7 +282,6 @@ ImBuf *IMB_testiffname(const char *filepath, int flags)
 
 static void imb_loadtilefile(ImBuf *ibuf, int file, int tx, int ty, unsigned int *rect)
 {
-  const ImFileType *type;
   unsigned char *mem;
   size_t size;
 
@@ -301,8 +300,9 @@ static void imb_loadtilefile(ImBuf *ibuf, int file, int tx, int ty, unsigned int
     return;
   }
 
-  for (type = IMB_FILE_TYPES; type < IMB_FILE_TYPES_LAST; type++) {
-    if (type->load_tile && type->ftype(type, ibuf)) {
+  const ImFileType *type = IMB_file_type_from_ibuf(ibuf);
+  if (type != NULL) {
+    if (type->load_tile != NULL) {
       type->load_tile(ibuf, mem, size, tx, ty, rect);
     }
   }

@@ -34,6 +34,7 @@
 #include "DNA_shader_fx_types.h"
 
 #include "BLI_listbase.h"
+#include "BLI_string.h"
 #include "BLI_string_utf8.h"
 #include "BLI_utildefines.h"
 
@@ -234,7 +235,30 @@ bool ED_object_shaderfx_move_to_index(ReportList *reports,
     }
   }
 
+  DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+  WM_main_add_notifier(NC_OBJECT | ND_SHADERFX, ob);
+
   return true;
+}
+
+void ED_object_shaderfx_link(Object *dst, Object *src)
+{
+  BLI_freelistN(&dst->shader_fx);
+  BKE_shaderfx_copy(&dst->shader_fx, &src->shader_fx);
+
+  DEG_id_tag_update(&dst->id, ID_RECALC_GEOMETRY);
+  WM_main_add_notifier(NC_OBJECT | ND_SHADERFX, dst);
+}
+
+void ED_object_shaderfx_copy(Object *dst, ShaderFxData *fx)
+{
+  ShaderFxData *nfx = BKE_shaderfx_new(fx->type);
+  BLI_strncpy(nfx->name, fx->name, sizeof(nfx->name));
+  BKE_shaderfx_copydata(fx, nfx);
+  BLI_addtail(&dst->shader_fx, nfx);
+
+  DEG_id_tag_update(&dst->id, ID_RECALC_GEOMETRY);
+  WM_main_add_notifier(NC_OBJECT | ND_SHADERFX, dst);
 }
 
 /************************ add effect operator *********************/
@@ -332,23 +356,26 @@ static bool edit_shaderfx_poll_generic(bContext *C, StructRNA *rna_type, int obt
 {
   PointerRNA ptr = CTX_data_pointer_get_type(C, "shaderfx", rna_type);
   Object *ob = (ptr.owner_id) ? (Object *)ptr.owner_id : ED_object_active_context(C);
+  ShaderFxData *fx = ptr.data; /* May be NULL. */
 
   if (!ob || ID_IS_LINKED(ob)) {
-    return 0;
+    return false;
   }
   if (obtype_flag && ((1 << ob->type) & obtype_flag) == 0) {
-    return 0;
+    return false;
   }
   if (ptr.owner_id && ID_IS_LINKED(ptr.owner_id)) {
-    return 0;
+    return false;
   }
 
   if (ID_IS_OVERRIDE_LIBRARY(ob)) {
-    CTX_wm_operator_poll_msg_set(C, "Cannot edit shaderfxs coming from library override");
-    return (((ShaderFxData *)ptr.data)->flag & eShaderFxFlag_OverrideLibrary_Local) != 0;
+    if ((fx == NULL) || (fx->flag & eShaderFxFlag_OverrideLibrary_Local) == 0) {
+      CTX_wm_operator_poll_msg_set(C, "Cannot edit shaderfxs coming from library override");
+      return false;
+    }
   }
 
-  return 1;
+  return true;
 }
 
 static bool edit_shaderfx_poll(bContext *C)
@@ -583,9 +610,6 @@ static int shaderfx_move_to_index_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
-  DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
-  WM_event_add_notifier(C, NC_OBJECT | ND_SHADERFX, ob);
-
   return OPERATOR_FINISHED;
 }
 
@@ -615,4 +639,58 @@ void OBJECT_OT_shaderfx_move_to_index(wmOperatorType *ot)
   edit_shaderfx_properties(ot);
   RNA_def_int(
       ot->srna, "index", 0, 0, INT_MAX, "Index", "The index to move the effect to", 0, INT_MAX);
+}
+
+/************************ copy shader operator *********************/
+
+static int shaderfx_copy_exec(bContext *C, wmOperator *op)
+{
+  Object *ob = ED_object_active_context(C);
+  ShaderFxData *fx = edit_shaderfx_property_get(op, ob, 0);
+
+  ShaderFxData *nfx = BKE_shaderfx_new(fx->type);
+  if (!nfx) {
+    return OPERATOR_CANCELLED;
+  }
+
+  BLI_strncpy(nfx->name, fx->name, sizeof(nfx->name));
+  /* Make sure effect data has unique name. */
+  BKE_shaderfx_unique_name(&ob->shader_fx, nfx);
+
+  BKE_shaderfx_copydata(fx, nfx);
+  BLI_insertlinkafter(&ob->shader_fx, fx, nfx);
+
+  DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+  WM_main_add_notifier(NC_OBJECT | ND_SHADERFX, ob);
+
+  return OPERATOR_FINISHED;
+}
+
+static int shaderfx_copy_invoke(bContext *C, wmOperator *op, const wmEvent *event)
+{
+  int retval;
+  if (edit_shaderfx_invoke_properties(C, op, event, &retval)) {
+    return shaderfx_copy_exec(C, op);
+  }
+  return retval;
+}
+
+static bool shaderfx_copy_poll(bContext *C)
+{
+  return edit_shaderfx_poll_generic(C, &RNA_ShaderFx, 0);
+}
+
+void OBJECT_OT_shaderfx_copy(wmOperatorType *ot)
+{
+  ot->name = "Copy Effect";
+  ot->description = "Duplicate effect at the same position in the stack";
+  ot->idname = "OBJECT_OT_shaderfx_copy";
+
+  ot->invoke = shaderfx_copy_invoke;
+  ot->exec = shaderfx_copy_exec;
+  ot->poll = shaderfx_copy_poll;
+
+  /* flags */
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
+  edit_shaderfx_properties(ot);
 }

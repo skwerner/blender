@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __RNA_DEFINE_H__
-#define __RNA_DEFINE_H__
+#pragma once
 
 /** \file
  * \ingroup RNA
@@ -67,7 +66,7 @@ void RNA_def_struct_flag(StructRNA *srna, int flag);
 void RNA_def_struct_clear_flag(StructRNA *srna, int flag);
 void RNA_def_struct_property_tags(StructRNA *srna, const EnumPropertyItem *prop_tag_defines);
 void RNA_def_struct_refine_func(StructRNA *srna, const char *refine);
-void RNA_def_struct_idprops_func(StructRNA *srna, const char *refine);
+void RNA_def_struct_idprops_func(StructRNA *srna, const char *idproperties);
 void RNA_def_struct_register_funcs(StructRNA *srna,
                                    const char *reg,
                                    const char *unreg,
@@ -373,7 +372,9 @@ void RNA_def_property_enum_items(PropertyRNA *prop, const EnumPropertyItem *item
 void RNA_def_property_enum_native_type(PropertyRNA *prop, const char *native_enum_type);
 void RNA_def_property_string_maxlength(PropertyRNA *prop, int maxlength);
 void RNA_def_property_struct_type(PropertyRNA *prop, const char *type);
-void RNA_def_property_struct_runtime(PropertyRNA *prop, StructRNA *type);
+void RNA_def_property_struct_runtime(StructOrFunctionRNA *cont,
+                                     PropertyRNA *prop,
+                                     StructRNA *type);
 
 void RNA_def_property_boolean_default(PropertyRNA *prop, bool value);
 void RNA_def_property_boolean_array_default(PropertyRNA *prop, const bool *array);
@@ -510,7 +511,8 @@ int RNA_def_property_free_identifier(StructOrFunctionRNA *cont_, const char *ide
 const char *RNA_property_typename(PropertyType type);
 #define IS_DNATYPE_FLOAT_COMPAT(_str) (strcmp(_str, "float") == 0 || strcmp(_str, "double") == 0)
 #define IS_DNATYPE_INT_COMPAT(_str) \
-  (strcmp(_str, "int") == 0 || strcmp(_str, "short") == 0 || strcmp(_str, "char") == 0)
+  (strcmp(_str, "int") == 0 || strcmp(_str, "short") == 0 || strcmp(_str, "char") == 0 || \
+   strcmp(_str, "uchar") == 0 || strcmp(_str, "ushort") == 0)
 #define IS_DNATYPE_BOOLEAN_COMPAT(_str) \
   (IS_DNATYPE_INT_COMPAT(_str) || strcmp(_str, "int64_t") == 0 || strcmp(_str, "uint64_t") == 0)
 
@@ -531,5 +533,3 @@ extern const float rna_default_scale_3d[3];
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __RNA_DEFINE_H__ */

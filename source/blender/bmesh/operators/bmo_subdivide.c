@@ -111,7 +111,7 @@ typedef struct SubDPattern {
 #define ELE_INNER 8
 #define ELE_SPLIT 16
 
-/* see bug [#32665], 0.00005 means a we get face splits at a little under 1.0 degrees */
+/* see bug T32665, 0.00005 means a we get face splits at a little under 1.0 degrees */
 #define FLT_FACE_SPLIT_EPSILON 0.00005f
 
 /*
@@ -338,9 +338,9 @@ static void alter_co(BMVert *v,
     add_v3_v3v3(co2, v->co, params->fractal_ofs);
     mul_v3_fl(co2, 10.0f);
 
-    tvec[0] = fac * (BLI_gTurbulence(1.0, co2[0], co2[1], co2[2], 15, 0, 2) - 0.5f);
-    tvec[1] = fac * (BLI_gTurbulence(1.0, co2[1], co2[0], co2[2], 15, 0, 2) - 0.5f);
-    tvec[2] = fac * (BLI_gTurbulence(1.0, co2[1], co2[2], co2[0], 15, 0, 2) - 0.5f);
+    tvec[0] = fac * (BLI_noise_generic_turbulence(1.0, co2[0], co2[1], co2[2], 15, 0, 2) - 0.5f);
+    tvec[1] = fac * (BLI_noise_generic_turbulence(1.0, co2[1], co2[0], co2[2], 15, 0, 2) - 0.5f);
+    tvec[2] = fac * (BLI_noise_generic_turbulence(1.0, co2[1], co2[2], co2[0], 15, 0, 2) - 0.5f);
 
     /* add displacement */
     madd_v3_v3fl(co, normal, tvec[0]);
@@ -1214,7 +1214,7 @@ void bmo_subdivide_edges_exec(BMesh *bm, BMOperator *op)
       for (j = 0; j < numcuts; j++) {
         bool ok = true;
 
-        /* Check for special case: [#32500]
+        /* Check for special case, see: T32500.
          * This edge pair could be used by more than one face,
          * in this case it used to (2.63), split both faces along the same verts
          * while it could be calculated which face should do the split,

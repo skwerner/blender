@@ -42,11 +42,11 @@
 #include "UI_view2d.h"
 
 #include "GPU_framebuffer.h"
-#include "console_intern.h"  // own include
+#include "console_intern.h" /* own include */
 
 /* ******************** default callbacks for console space ***************** */
 
-static SpaceLink *console_new(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
+static SpaceLink *console_create(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
 {
   ARegion *region;
   SpaceConsole *sconsole;
@@ -164,12 +164,12 @@ static bool id_drop_poll(bContext *UNUSED(C),
                          const wmEvent *UNUSED(event),
                          const char **UNUSED(tooltip))
 {
-  return WM_drag_ID(drag, 0) != NULL;
+  return WM_drag_get_local_ID(drag, 0) != NULL;
 }
 
 static void id_drop_copy(wmDrag *drag, wmDropBox *drop)
 {
-  ID *id = WM_drag_ID(drag, 0);
+  ID *id = WM_drag_get_local_ID(drag, 0);
 
   /* copy drag path to properties */
   char *text = RNA_path_full_ID_py(G_MAIN, id);
@@ -215,7 +215,6 @@ static void console_main_region_draw(const bContext *C, ARegion *region)
 
   /* clear and setup matrix */
   UI_ThemeClearColor(TH_BACK);
-  GPU_clear(GPU_COLOR_BIT);
 
   /* worlks best with no view2d matrix set */
   UI_view2d_view_ortho(v2d);
@@ -312,7 +311,7 @@ void ED_spacetype_console(void)
   st->spaceid = SPACE_CONSOLE;
   strncpy(st->name, "Console", BKE_ST_MAXNAME);
 
-  st->new = console_new;
+  st->create = console_create;
   st->free = console_free;
   st->init = console_init;
   st->duplicate = console_duplicate;

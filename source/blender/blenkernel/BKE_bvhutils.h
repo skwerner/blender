@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) 2006 by NaN Holding BV.
  * All rights reserved.
  */
-#ifndef __BKE_BVHUTILS_H__
-#define __BKE_BVHUTILS_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -131,7 +130,7 @@ BVHTree *bvhtree_from_editmesh_verts_ex(BVHTreeFromEditMesh *data,
 
 BVHTree *bvhtree_from_mesh_verts_ex(struct BVHTreeFromMesh *data,
                                     const struct MVert *vert,
-                                    const int numVerts,
+                                    const int verts_num,
                                     const bool vert_allocated,
                                     const BLI_bitmap *mask,
                                     int verts_num_active,
@@ -178,7 +177,7 @@ BVHTree *bvhtree_from_mesh_faces_ex(struct BVHTreeFromMesh *data,
                                     const int numFaces,
                                     const bool face_allocated,
                                     const BLI_bitmap *mask,
-                                    int numFaces_active,
+                                    int faces_num_active,
                                     float epsilon,
                                     int tree_type,
                                     int axis,
@@ -262,6 +261,4 @@ void bvhcache_free(struct BVHCache *bvh_cache);
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

@@ -53,8 +53,7 @@
  *     posix-compliant.
  */
 
-#ifndef __IMB_IMBUF_H__
-#define __IMB_IMBUF_H__
+#pragma once
 
 /* for bool */
 #include "../blenlib/BLI_sys_types.h"
@@ -87,6 +86,12 @@ struct GSet;
  */
 struct ImageFormatData;
 struct Stereo3dFormat;
+
+/**
+ *
+ * \attention defined in GPU_texture.h
+ */
+struct GPUTexture;
 
 /**
  *
@@ -242,8 +247,8 @@ void IMB_rectclip(struct ImBuf *dbuf,
                   int *srcy,
                   int *width,
                   int *height);
-void IMB_rectcpy(struct ImBuf *drect,
-                 const struct ImBuf *srect,
+void IMB_rectcpy(struct ImBuf *dbuf,
+                 const struct ImBuf *sbuf,
                  int destx,
                  int desty,
                  int srcx,
@@ -255,7 +260,7 @@ void IMB_rectblend(struct ImBuf *dbuf,
                    const struct ImBuf *sbuf,
                    unsigned short *dmask,
                    const unsigned short *curvemask,
-                   const unsigned short *mmask,
+                   const unsigned short *texmask,
                    float mask_max,
                    int destx,
                    int desty,
@@ -272,7 +277,7 @@ void IMB_rectblend_threaded(struct ImBuf *dbuf,
                             const struct ImBuf *sbuf,
                             unsigned short *dmask,
                             const unsigned short *curvemask,
-                            const unsigned short *mmask,
+                            const unsigned short *texmask,
                             float mask_max,
                             int destx,
                             int desty,
@@ -377,6 +382,8 @@ bool IMB_anim_can_produce_frames(const struct anim *anim);
 int ismovie(const char *filepath);
 void IMB_anim_set_preseek(struct anim *anim, int preseek);
 int IMB_anim_get_preseek(struct anim *anim);
+int IMB_anim_get_image_width(struct anim *anim);
+int IMB_anim_get_image_height(struct anim *anim);
 
 /**
  *
@@ -461,27 +468,29 @@ void IMB_scaleImBuf_threaded(struct ImBuf *ibuf, unsigned int newx, unsigned int
  *
  * \attention Defined in writeimage.c
  */
-short IMB_saveiff(struct ImBuf *ibuf, const char *filepath, int flags);
+bool IMB_saveiff(struct ImBuf *ibuf, const char *filepath, int flags);
 bool IMB_prepare_write_ImBuf(const bool isfloat, struct ImBuf *ibuf);
 
 /**
  *
  * \attention Defined in util.c
  */
-bool IMB_ispic(const char *name);
-int IMB_ispic_type(const char *name);
+bool IMB_ispic(const char *filepath);
+bool IMB_ispic_type_matches(const char *filepath, int filetype);
+int IMB_ispic_type_from_memory(const unsigned char *buf, const size_t buf_size);
+int IMB_ispic_type(const char *filepath);
 
 /**
  *
  * \attention Defined in util.c
  */
-bool IMB_isanim(const char *name);
+bool IMB_isanim(const char *filepath);
 
 /**
  *
  * \attention Defined in util.c
  */
-int imb_get_anim_type(const char *name);
+int imb_get_anim_type(const char *filepath);
 
 /**
  *
@@ -589,15 +598,15 @@ void bilinear_interpolation(
     struct ImBuf *in, struct ImBuf *out, float u, float v, int xout, int yout);
 
 void bicubic_interpolation_color(
-    struct ImBuf *in, unsigned char col[4], float col_float[4], float u, float v);
+    struct ImBuf *in, unsigned char outI[4], float outF[4], float u, float v);
 void nearest_interpolation_color(
-    struct ImBuf *in, unsigned char col[4], float col_float[4], float u, float v);
+    struct ImBuf *in, unsigned char outI[4], float outF[4], float u, float v);
 void nearest_interpolation_color_wrap(
-    struct ImBuf *in, unsigned char col[4], float col_float[4], float u, float v);
+    struct ImBuf *in, unsigned char outI[4], float outF[4], float u, float v);
 void bilinear_interpolation_color(
-    struct ImBuf *in, unsigned char col[4], float col_float[4], float u, float v);
+    struct ImBuf *in, unsigned char outI[4], float outF[4], float u, float v);
 void bilinear_interpolation_color_wrap(
-    struct ImBuf *in, unsigned char col[4], float col_float[4], float u, float v);
+    struct ImBuf *in, unsigned char outI[4], float outF[4], float u, float v);
 
 void IMB_alpha_under_color_float(float *rect_float, int x, int y, float backcol[3]);
 void IMB_alpha_under_color_byte(unsigned char *rect, int x, int y, const float backcol[3]);
@@ -679,6 +688,8 @@ void IMB_rectfill_area(struct ImBuf *ibuf,
                        int x2,
                        int y2,
                        struct ColorManagedDisplay *display);
+void IMB_rectfill_area_replace(
+    const struct ImBuf *ibuf, const float col[4], int x1, int y1, int x2, int y2);
 void IMB_rectfill_alpha(struct ImBuf *ibuf, const float value);
 
 /* This should not be here, really,
@@ -729,6 +740,26 @@ const char *IMB_ffmpeg_last_error(void);
 
 /**
  *
+ * \attention defined in util_gpu.c
+ */
+struct GPUTexture *IMB_create_gpu_texture(const char *name,
+                                          struct ImBuf *ibuf,
+                                          bool use_high_bitdepth,
+                                          bool use_premult);
+struct GPUTexture *IMB_touch_gpu_texture(
+    const char *name, struct ImBuf *ibuf, int w, int h, int layers, bool use_high_bitdepth);
+void IMB_update_gpu_texture_sub(struct GPUTexture *tex,
+                                struct ImBuf *ibuf,
+                                int x,
+                                int y,
+                                int z,
+                                int w,
+                                int h,
+                                bool use_high_bitdepth,
+                                bool use_premult);
+
+/**
+ *
  * \attention defined in stereoimbuf.c
  */
 void IMB_stereo3d_write_dimensions(const char mode,
@@ -765,6 +796,4 @@ void IMB_ImBufFromStereo3d(struct Stereo3dFormat *s3d,
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

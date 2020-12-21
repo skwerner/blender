@@ -53,7 +53,7 @@
 
 /* ******************** default callbacks for info space ***************** */
 
-static SpaceLink *info_new(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
+static SpaceLink *info_create(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
 {
   ARegion *region;
   SpaceInfo *sinfo;
@@ -142,7 +142,6 @@ static void info_main_region_draw(const bContext *C, ARegion *region)
 
   /* clear and setup matrix */
   UI_ThemeClearColor(TH_BACK);
-  GPU_clear(GPU_COLOR_BIT);
 
   /* quick way to avoid drawing if not bug enough */
   if (region->winy < 16) {
@@ -287,7 +286,7 @@ void ED_spacetype_info(void)
   st->spaceid = SPACE_INFO;
   strncpy(st->name, "Info", BKE_ST_MAXNAME);
 
-  st->new = info_new;
+  st->create = info_create;
   st->free = info_free;
   st->init = info_init;
   st->duplicate = info_duplicate;

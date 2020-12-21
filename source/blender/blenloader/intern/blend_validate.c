@@ -23,7 +23,7 @@
  * \note Does not *fix* anything, only reports found errors.
  */
 
-#include <string.h>  // for strrchr strncmp strstr
+#include <string.h> /* for strrchr strncmp strstr */
 
 #include "BLI_utildefines.h"
 
@@ -148,7 +148,7 @@ bool BLO_main_validate_libraries(Main *bmain, ReportList *reports)
         }
       }
 
-      BLI_linklist_free(names, free);
+      BLI_linklist_freeN(names);
     }
 
     BLO_blendhandle_close(bh);

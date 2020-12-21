@@ -96,9 +96,7 @@ char *BLI_current_working_dir(char *dir, const size_t maxncpy)
       memcpy(dir, pwd, srclen + 1);
       return dir;
     }
-    else {
-      return NULL;
-    }
+    return NULL;
   }
   return getcwd(dir, maxncpy);
 #endif
@@ -290,11 +288,11 @@ eFileAttributes BLI_file_attributes(const char *path)
 
 /* Return alias/shortcut file target. Apple version is defined in storage_apple.mm */
 #ifndef __APPLE__
-bool BLI_file_alias_target(
-    /* This parameter can only be const on non-windows platforms.
-     * NOLINTNEXTLINE: readability-non-const-parameter. */
-    char target[FILE_MAXDIR],
-    const char *filepath)
+bool BLI_file_alias_target(const char *filepath,
+                           /* This parameter can only be `const` on Linux since
+                            * redirections are not supported there.
+                            * NOLINTNEXTLINE: readability-non-const-parameter. */
+                           char r_targetpath[FILE_MAXDIR])
 {
 #  ifdef WIN32
   if (!BLI_path_extension_check(filepath, ".lnk")) {
@@ -320,7 +318,7 @@ bool BLI_file_alias_target(
             wchar_t target_utf16[FILE_MAXDIR] = {0};
             hr = Shortcut->lpVtbl->GetPath(Shortcut, target_utf16, FILE_MAXDIR, NULL, 0);
             if (SUCCEEDED(hr)) {
-              success = (conv_utf_16_to_8(target_utf16, target, FILE_MAXDIR) == 0);
+              success = (conv_utf_16_to_8(target_utf16, r_targetpath, FILE_MAXDIR) == 0);
             }
           }
           PersistFile->lpVtbl->Release(PersistFile);
@@ -330,9 +328,9 @@ bool BLI_file_alias_target(
     Shortcut->lpVtbl->Release(Shortcut);
   }
 
-  return (success && target[0]);
+  return (success && r_targetpath[0]);
 #  else
-  UNUSED_VARS(target, filepath);
+  UNUSED_VARS(r_targetpath, filepath);
   /* File-based redirection not supported. */
   return false;
 #  endif
@@ -343,11 +341,11 @@ bool BLI_file_alias_target(
  * Returns the st_mode from stat-ing the specified path name, or 0 if stat fails
  * (most likely doesn't exist or no access).
  */
-int BLI_exists(const char *name)
+int BLI_exists(const char *path)
 {
 #if defined(WIN32)
   BLI_stat_t st;
-  wchar_t *tmp_16 = alloc_utf16_from_8(name, 1);
+  wchar_t *tmp_16 = alloc_utf16_from_8(path, 1);
   int len, res;
 
   len = wcslen(tmp_16);
@@ -373,12 +371,12 @@ int BLI_exists(const char *name)
 
   free(tmp_16);
   if (res == -1) {
-    return (0);
+    return 0;
   }
 #else
   struct stat st;
-  BLI_assert(!BLI_path_is_rel(name));
-  if (stat(name, &st)) {
+  BLI_assert(!BLI_path_is_rel(path));
+  if (stat(path, &st)) {
     return (0);
   }
 #endif
@@ -584,9 +582,9 @@ void *BLI_file_read_text_as_mem_with_newline_as_nil(const char *filepath,
 /**
  * Reads the contents of a text file and returns the lines in a linked list.
  */
-LinkNode *BLI_file_read_as_lines(const char *name)
+LinkNode *BLI_file_read_as_lines(const char *filepath)
 {
-  FILE *fp = BLI_fopen(name, "r");
+  FILE *fp = BLI_fopen(filepath, "r");
   LinkNodePair lines = {NULL, NULL};
   char *buf;
   size_t size;
@@ -638,7 +636,7 @@ void BLI_file_free_lines(LinkNode *lines)
   BLI_linklist_freeN(lines);
 }
 
-/** is file1 older then file2 */
+/** is file1 older than file2 */
 bool BLI_file_older(const char *file1, const char *file2)
 {
 #ifdef WIN32

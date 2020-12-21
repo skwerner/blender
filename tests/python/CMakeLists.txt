@@ -43,7 +43,9 @@ function(add_blender_test testname)
 
   # Don't fail tests on leaks since these often happen in external libraries
   # that we can't fix.
-  set_tests_properties(${testname} PROPERTIES ENVIRONMENT LSAN_OPTIONS=exitcode=0)
+  set_tests_properties(${testname} PROPERTIES ENVIRONMENT
+    LSAN_OPTIONS=exitcode=0:$ENV{LSAN_OPTIONS}
+  )
 endfunction()
 
 # Run Python script outside Blender.
@@ -56,7 +58,9 @@ function(add_python_test testname testscript)
     NAME ${testname}
     COMMAND ${TEST_PYTHON_EXE} ${testscript} ${ARGN}
   )
-  set_tests_properties(${testname} PROPERTIES ENVIRONMENT LSAN_OPTIONS=exitcode=0)
+  set_tests_properties(${testname} PROPERTIES ENVIRONMENT
+    LSAN_OPTIONS=exitcode=0:$ENV{LSAN_OPTIONS}
+  )
 endfunction()
 
 # ------------------------------------------------------------------------------
@@ -201,6 +205,48 @@ add_blender_test(
 )
 
 add_blender_test(
+  physics_dynamic_paint
+  ${TEST_SRC_DIR}/physics/dynamic_paint_test.blend
+  --python ${TEST_PYTHON_DIR}/physics_dynamic_paint.py
+  --
+  --run-all-tests
+)
+
+add_blender_test(
+  deform_modifiers
+  ${TEST_SRC_DIR}/modeling/deform_modifiers.blend
+  --python ${TEST_PYTHON_DIR}/deform_modifiers.py
+  --
+  --run-all-tests
+)
+
+add_blender_test(
+  physics_ocean
+  ${TEST_SRC_DIR}/physics/ocean_test.blend
+  --python ${TEST_PYTHON_DIR}/physics_ocean.py
+  --
+  --run-all-tests
+)
+
+
+add_blender_test(
+  physics_particle_system
+  ${TEST_SRC_DIR}/physics/physics_particle_test.blend
+  --python ${TEST_PYTHON_DIR}/physics_particle_system.py
+  --
+  --run-all-tests
+)
+
+# Particle Instance disabling currently broken in master
+# add_blender_test(
+#   physics_particle_instance
+#   ${TEST_SRC_DIR}/physics/physics_particle_instance.blend
+#   --python ${TEST_PYTHON_DIR}/physics_particle_instance.py
+#   --
+#   --run-all-tests
+# )
+
+add_blender_test(
   constraints
   --python ${CMAKE_CURRENT_LIST_DIR}/bl_constraints.py
   --
@@ -215,6 +261,15 @@ add_blender_test(
   --python ${TEST_PYTHON_DIR}/operators.py
   --
   --run-all-tests
+)
+
+# ------------------------------------------------------------------------------
+# ANIMATION TESTS
+add_blender_test(
+  bl_animation_fcurves
+  --python ${CMAKE_CURRENT_LIST_DIR}/bl_animation_fcurves.py
+  --
+  --testdir "${TEST_SRC_DIR}/animation"
 )
 
 # ------------------------------------------------------------------------------
@@ -337,7 +392,7 @@ add_blender_test(
   --python ${CMAKE_CURRENT_LIST_DIR}/bl_test.py --
   --run={'FINISHED'}&bpy.ops.export_mesh.ply\(filepath='${TEST_OUT_DIR}/io_tests/export_ply_vertices.ply'\)
   --md5_source=${TEST_OUT_DIR}/io_tests/export_ply_vertices.ply
-  --md5=37faba0aa2014451b27f951afa92f870 --md5_method=FILE
+  --md5=ee6ce2e69c1d9a7418ff0548f6338f70 --md5_method=FILE
 )
 
 
@@ -585,20 +640,28 @@ if(WITH_CYCLES OR WITH_OPENGL_RENDER_TESTS)
       list(APPEND render_tests grease_pencil)
     endif()
 
+    # Cycles
     if(WITH_CYCLES)
-      foreach(render_test bake;${render_tests})
-        add_python_test(
-          cycles_${render_test}
-          ${CMAKE_CURRENT_LIST_DIR}/cycles_render_tests.py
-          -blender "${TEST_BLENDER_EXE}"
-          -testdir "${TEST_SRC_DIR}/render/${render_test}"
-          -idiff "${OPENIMAGEIO_IDIFF}"
-          -outdir "${TEST_OUT_DIR}/cycles"
-        )
+      foreach(_cycles_device ${CYCLES_TEST_DEVICES})
+        string(TOLOWER "${_cycles_device}" _cycles_device_lower)
+        set(_cycles_render_tests bake;${render_tests};osl)
+
+        foreach(render_test ${_cycles_render_tests})
+          add_python_test(
+            cycles_${render_test}_${_cycles_device_lower}
+            ${CMAKE_CURRENT_LIST_DIR}/cycles_render_tests.py
+            -blender "${TEST_BLENDER_EXE}"
+            -testdir "${TEST_SRC_DIR}/render/${render_test}"
+            -idiff "${OPENIMAGEIO_IDIFF}"
+            -outdir "${TEST_OUT_DIR}/cycles"
+            -device ${_cycles_device}
+          )
+        endforeach()
       endforeach()
     endif()
 
     if(WITH_OPENGL_RENDER_TESTS)
+      # Eevee
       foreach(render_test ${render_tests})
         add_python_test(
           eevee_${render_test}_test
@@ -611,6 +674,7 @@ if(WITH_CYCLES OR WITH_OPENGL_RENDER_TESTS)
       endforeach()
 
       foreach(render_test ${render_tests})
+        # Workbench
         add_python_test(
           workbench_${render_test}_test
           ${CMAKE_CURRENT_LIST_DIR}/workbench_render_tests.py
@@ -662,8 +726,8 @@ if(WITH_ALEMBIC)
   get_filename_component(ALEMBIC_ROOT_DIR ${real_include_dir} DIRECTORY)
 
   add_python_test(
-    alembic_tests
-    ${CMAKE_CURRENT_LIST_DIR}/alembic_tests.py
+    alembic_export_tests
+    ${CMAKE_CURRENT_LIST_DIR}/alembic_export_tests.py
     --blender "${TEST_BLENDER_EXE}"
     --testdir "${TEST_SRC_DIR}/alembic"
     --alembic-root "${ALEMBIC_ROOT_DIR}"
@@ -685,6 +749,30 @@ if(WITH_CODEC_FFMPEG)
     --testdir "${TEST_SRC_DIR}/ffmpeg"
   )
 endif()
+
+
+# ------------------------------------------------------------------------------
+# SEQUENCER RENDER TESTS
+
+if(NOT OPENIMAGEIO_IDIFF)
+  MESSAGE(STATUS "Disabling sequencer render tests because OIIO idiff does not exist")
+else()
+  set(render_tests
+    transform
+  )
+
+  foreach(render_test ${render_tests})
+    add_python_test(
+      sequencer_render_${render_test}
+      ${CMAKE_CURRENT_LIST_DIR}/sequencer_render_tests.py
+      -blender "${TEST_BLENDER_EXE}"
+      -testdir "${TEST_SRC_DIR}/sequence_editing/${render_test}"
+      -idiff "${OPENIMAGEIO_IDIFF}"
+      -outdir "${TEST_OUT_DIR}/sequence_editing"
+    )
+  endforeach()
+endif()
+
 
 add_subdirectory(collada)
 

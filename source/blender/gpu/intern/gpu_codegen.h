@@ -23,15 +23,15 @@
  * Generate shader code from the intermediate node graph.
  */
 
-#ifndef __GPU_CODEGEN_H__
-#define __GPU_CODEGEN_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct GPUMaterial;
 struct GPUNodeGraph;
-struct GPUOutput;
 struct GPUShader;
-struct GSet;
-struct ListBase;
 
 typedef struct GPUPass {
   struct GPUPass *next;
@@ -43,11 +43,6 @@ typedef struct GPUPass {
   char *defines;
   uint refcount; /* Orphaned GPUPasses gets freed by the garbage collector. */
   uint32_t hash; /* Identity hash generated from all GLSL code. */
-  struct {
-    char *content;
-    uint format;
-    int len;
-  } binary;
   bool compiled; /* Did we already tried to compile the attached GPUShader. */
 } GPUPass;
 
@@ -68,4 +63,6 @@ void GPU_pass_release(GPUPass *pass);
 void gpu_codegen_init(void);
 void gpu_codegen_exit(void);
 
-#endif /* __GPU_CODEGEN_H__ */
+#ifdef __cplusplus
+}
+#endif

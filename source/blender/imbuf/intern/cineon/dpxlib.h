@@ -22,8 +22,9 @@
  * DPX image file format library definitions.
  */
 
-#ifndef __DPXLIB_H__
-#define __DPXLIB_H__
+#pragma once
+
+#include <math.h>
 
 #include "logImageCore.h"
 
@@ -35,7 +36,8 @@ extern "C" {
 #define DPX_UNDEFINED_U8 0xFF
 #define DPX_UNDEFINED_U16 0xFFFF
 #define DPX_UNDEFINED_U32 0xFFFFFFFF
-#define DPX_UNDEFINED_R32 0xFFFFFFFF
+#define DPX_UNDEFINED_R32 NAN
+#define IS_DPX_UNDEFINED_R32(x) isnan(x)
 #define DPX_UNDEFINED_CHAR 0
 
 typedef struct {
@@ -160,5 +162,3 @@ LogImageFile *dpxCreate(const char *filename,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __DPXLIB_H__ */

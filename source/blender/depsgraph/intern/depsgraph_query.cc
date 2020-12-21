@@ -25,12 +25,12 @@
 
 #include "MEM_guardedalloc.h"
 
-#include <string.h>  // XXX: memcpy
+#include <cstring> /* XXX: memcpy */
 
 #include "BLI_listbase.h"
 #include "BLI_utildefines.h"
 
-#include "BKE_action.h"  // XXX: BKE_pose_channel_find_name
+#include "BKE_action.h" /* XXX: BKE_pose_channel_find_name */
 #include "BKE_customdata.h"
 #include "BKE_idtype.h"
 #include "BKE_main.h"
@@ -61,6 +61,12 @@ struct ViewLayer *DEG_get_input_view_layer(const Depsgraph *graph)
   return deg_graph->view_layer;
 }
 
+struct Main *DEG_get_bmain(const Depsgraph *graph)
+{
+  const deg::Depsgraph *deg_graph = reinterpret_cast<const deg::Depsgraph *>(graph);
+  return deg_graph->bmain;
+}
+
 eEvaluationMode DEG_get_mode(const Depsgraph *graph)
 {
   const deg::Depsgraph *deg_graph = reinterpret_cast<const deg::Depsgraph *>(graph);
@@ -84,8 +90,8 @@ bool DEG_id_type_any_updated(const Depsgraph *graph)
   const deg::Depsgraph *deg_graph = reinterpret_cast<const deg::Depsgraph *>(graph);
 
   /* Loop over all ID types. */
-  for (int id_type_index = 0; id_type_index < MAX_LIBARRAY; id_type_index++) {
-    if (deg_graph->id_type_updated[id_type_index]) {
+  for (char id_type_index : deg_graph->id_type_updated) {
+    if (id_type_index) {
       return true;
     }
   }

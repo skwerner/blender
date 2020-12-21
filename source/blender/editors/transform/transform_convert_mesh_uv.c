@@ -92,7 +92,7 @@ static void UVsToTransData(const float aspect[2],
  */
 static void uv_set_connectivity_distance(BMesh *bm, float *dists, const float aspect[2])
 {
-  /* Mostly copied from editmesh_set_connectivity_distance. */
+  /* Mostly copied from #editmesh_set_connectivity_distance. */
   BLI_LINKSTACK_DECLARE(queue, BMLoop *);
 
   /* Any BM_ELEM_TAG'd loop is added to 'queue_next', this makes sure that we don't add things
@@ -110,7 +110,7 @@ static void uv_set_connectivity_distance(BMesh *bm, float *dists, const float as
   BM_mesh_elem_index_ensure(bm, BM_LOOP);
 
   BM_ITER_MESH (f, &fiter, bm, BM_FACES_OF_MESH) {
-    /* Visable faces was tagged in createTransUVs. */
+    /* Visible faces was tagged in #createTransUVs. */
     if (!BM_elem_flag_test(f, BM_ELEM_TAG)) {
       continue;
     }
@@ -178,9 +178,6 @@ static void uv_set_connectivity_distance(BMesh *bm, float *dists, const float as
           continue;
         }
 
-        float connected_uv[2];
-        float uvdiff[2];
-
         bool other_vert_sel, connected_vert_sel;
 
         other_vert_sel = luv_other->flag & MLOOPUV_VERTSEL;
@@ -189,23 +186,19 @@ static void uv_set_connectivity_distance(BMesh *bm, float *dists, const float as
           if (l_connected == l_other) {
             continue;
           }
-          /* Visable faces was tagged in createTransUVs. */
+          /* Visible faces was tagged in #createTransUVs. */
           if (!BM_elem_flag_test(l_connected->f, BM_ELEM_TAG)) {
             continue;
           }
 
           MLoopUV *luv_connected = BM_ELEM_CD_GET_VOID_P(l_connected, cd_loop_uv_offset);
           connected_vert_sel = luv_connected->flag & MLOOPUV_VERTSEL;
-          copy_v2_v2(connected_uv, luv_connected->uv);
-          mul_v2_v2(connected_uv, aspect);
 
-          sub_v2_v2v2(uvdiff, connected_uv, other_uv);
           /* Check if this loop is connected in UV space.
            * If the uv loops share the same selection state (if not, they are not connected as
            * they have been ripped or other edit commands have separated them). */
           bool connected = other_vert_sel == connected_vert_sel &&
-                           fabsf(uvdiff[0]) < STD_UV_CONNECT_LIMIT &&
-                           fabsf(uvdiff[1]) < STD_UV_CONNECT_LIMIT;
+                           equals_v2v2(luv_other->uv, luv_connected->uv);
           if (!connected) {
             continue;
           }
@@ -240,7 +233,7 @@ static void uv_set_connectivity_distance(BMesh *bm, float *dists, const float as
 #ifndef NDEBUG
   /* Check that we didn't leave any loops tagged */
   BM_ITER_MESH (f, &fiter, bm, BM_FACES_OF_MESH) {
-    /* Visable faces was tagged in createTransUVs. */
+    /* Visible faces was tagged in #createTransUVs. */
     if (!BM_elem_flag_test(f, BM_ELEM_TAG)) {
       continue;
     }
@@ -308,6 +301,9 @@ void createTransUVs(bContext *C, TransInfo *t)
 
       BM_elem_flag_enable(efa, BM_ELEM_TAG);
       BM_ITER_ELEM (l, &liter, efa, BM_LOOPS_OF_FACE) {
+        /* Make sure that the loop element flag is cleared for when we use it in
+         * uv_set_connectivity_distance later. */
+        BM_elem_flag_disable(l, BM_ELEM_TAG);
         if (uvedit_uv_select_test(scene, l, cd_loop_uv_offset)) {
           countsel++;
 
@@ -328,6 +324,8 @@ void createTransUVs(bContext *C, TransInfo *t)
         }
       }
     }
+
+    float *prop_dists = NULL;
 
     /* Support other objects using PET to adjust these, unless connected is enabled. */
     if (((is_prop_edit && !is_prop_connected) ? count : countsel) == 0) {
@@ -355,8 +353,6 @@ void createTransUVs(bContext *C, TransInfo *t)
 
     td = tc->data;
     td2d = tc->data_2d;
-
-    float *prop_dists = NULL;
 
     if (is_prop_connected) {
       prop_dists = MEM_callocN(em->bm->totloop * sizeof(float), "TransObPropDists(UV Editing)");
@@ -404,7 +400,7 @@ void createTransUVs(bContext *C, TransInfo *t)
 
   finally:
     if (is_prop_connected) {
-      MEM_freeN(prop_dists);
+      MEM_SAFE_FREE(prop_dists);
     }
     if (is_island_center) {
       BM_uv_element_map_free(elementmap);

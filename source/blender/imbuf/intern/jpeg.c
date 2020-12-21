@@ -33,6 +33,8 @@
 
 #include "BKE_idprop.h"
 
+#include "DNA_ID.h" /* ID property definitions. */
+
 #include "IMB_filetype.h"
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
@@ -57,12 +59,13 @@ static ImBuf *ibJpegImageFromCinfo(struct jpeg_decompress_struct *cinfo, int fla
 static const uchar jpeg_default_quality = 75;
 static uchar ibuf_quality;
 
-int imb_is_a_jpeg(const unsigned char *mem)
+bool imb_is_a_jpeg(const unsigned char *mem, const size_t size)
 {
-  if ((mem[0] == 0xFF) && (mem[1] == 0xD8)) {
-    return 1;
+  const char magic[2] = {0xFF, 0xD8};
+  if (size < sizeof(magic)) {
+    return false;
   }
-  return 0;
+  return memcmp(mem, magic, sizeof(magic)) == 0;
 }
 
 /*----------------------------------------------------------
@@ -246,7 +249,7 @@ static boolean handle_app1(j_decompress_ptr cinfo)
       INPUT_BYTE(cinfo, neogeo[i], return false);
     }
     length = 0;
-    if (STREQLEN(neogeo, "NeoGeo", 6)) {
+    if (STRPREFIX(neogeo, "NeoGeo")) {
       struct NeoGeo_Word *neogeo_word = (struct NeoGeo_Word *)(neogeo + 6);
       ibuf_quality = neogeo_word->quality;
     }
@@ -362,7 +365,7 @@ static ImBuf *ibJpegImageFromCinfo(struct jpeg_decompress_struct *cinfo, int fla
          * That is why we need split it to the
          * common key/value here.
          */
-        if (!STREQLEN(str, "Blender", 7)) {
+        if (!STRPREFIX(str, "Blender")) {
           /*
            * Maybe the file have text that
            * we don't know "what it's", in that
@@ -417,7 +420,7 @@ static ImBuf *ibJpegImageFromCinfo(struct jpeg_decompress_struct *cinfo, int fla
     }
   }
 
-  return (ibuf);
+  return ibuf;
 }
 
 ImBuf *imb_load_jpeg(const unsigned char *buffer,
@@ -429,7 +432,7 @@ ImBuf *imb_load_jpeg(const unsigned char *buffer,
   struct my_error_mgr jerr;
   ImBuf *ibuf;
 
-  if (!imb_is_a_jpeg(buffer)) {
+  if (!imb_is_a_jpeg(buffer, size)) {
     return NULL;
   }
 
@@ -452,7 +455,7 @@ ImBuf *imb_load_jpeg(const unsigned char *buffer,
 
   ibuf = ibJpegImageFromCinfo(cinfo, flags);
 
-  return (ibuf);
+  return ibuf;
 }
 
 static void write_jpeg(struct jpeg_compress_struct *cinfo, struct ImBuf *ibuf)
@@ -479,7 +482,7 @@ static void write_jpeg(struct jpeg_compress_struct *cinfo, struct ImBuf *ibuf)
     for (prop = ibuf->metadata->data.group.first; prop; prop = prop->next) {
       if (prop->type == IDP_STRING) {
         int text_len;
-        if (!strcmp(prop->name, "None")) {
+        if (STREQ(prop->name, "None")) {
           jpeg_write_marker(cinfo, JPEG_COM, (JOCTET *)IDP_String(prop), prop->len + 1);
         }
 
@@ -605,10 +608,10 @@ static int init_jpeg(FILE *outfile, struct jpeg_compress_struct *cinfo, struct I
   cinfo->dct_method = JDCT_FLOAT;
   jpeg_set_quality(cinfo, quality, true);
 
-  return (0);
+  return 0;
 }
 
-static int save_stdjpeg(const char *name, struct ImBuf *ibuf)
+static bool save_stdjpeg(const char *name, struct ImBuf *ibuf)
 {
   FILE *outfile;
   struct jpeg_compress_struct _cinfo, *cinfo = &_cinfo;
@@ -642,9 +645,9 @@ static int save_stdjpeg(const char *name, struct ImBuf *ibuf)
   return 1;
 }
 
-int imb_savejpeg(struct ImBuf *ibuf, const char *name, int flags)
+bool imb_savejpeg(struct ImBuf *ibuf, const char *filepath, int flags)
 {
 
   ibuf->flags = flags;
-  return save_stdjpeg(name, ibuf);
+  return save_stdjpeg(filepath, ibuf);
 }

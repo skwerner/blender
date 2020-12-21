@@ -68,11 +68,11 @@ struct Depsgraph {
 
   TimeSourceNode *add_time_source();
   TimeSourceNode *find_time_source() const;
+  void tag_time_source();
 
   IDNode *find_id_node(const ID *id) const;
   IDNode *add_id_node(ID *id, ID *id_cow_hint = nullptr);
   void clear_id_nodes();
-  void clear_id_nodes_conditional(const std::function<bool(ID_Type id_type)> &filter);
 
   /* Add new relationship between two nodes. */
   Relation *add_new_relation(Node *from, Node *to, const char *description, int flags = 0);
@@ -120,10 +120,6 @@ struct Depsgraph {
 
   /* Nodes which have been tagged as "directly modified". */
   Set<OperationNode *> entry_tags;
-
-  /* Special entry tag for time source. Allows to tag invisible dependency graphs for update when
-   * scene frame changes, so then when dependency graph becomes visible it is on a proper state. */
-  bool need_update_time;
 
   /* Convenience Data ................... */
 

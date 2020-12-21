@@ -21,16 +21,17 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_WINDOWMANAGER_TYPES_H__
-#define __DNA_WINDOWMANAGER_TYPES_H__
+#pragma once
 
 #include "DNA_listBase.h"
-#include "DNA_screen_types.h"
-#include "DNA_userdef_types.h"
-#include "DNA_vec_types.h"
-#include "DNA_xr_types.h"
+#include "DNA_screen_types.h" /* for #ScrAreaMap */
+#include "DNA_xr_types.h"     /* for #XrSessionSettings */
 
 #include "DNA_ID.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* defined here: */
 struct wmWindow;
@@ -198,8 +199,8 @@ typedef struct wmWindowManager {
 
 /* wmWindowManager.initialized */
 enum {
-  WM_WINDOW_IS_INITIALIZED = (1 << 0),
-  WM_KEYCONFIG_IS_INITIALIZED = (1 << 1),
+  WM_WINDOW_IS_INIT = (1 << 0),
+  WM_KEYCONFIG_IS_INIT = (1 << 1),
 };
 
 /* wmWindowManager.outliner_sync_select_dirty */
@@ -287,8 +288,8 @@ typedef struct wmWindow {
   /** Internal for wm_operators.c. */
   struct wmGesture *tweak;
 
-  /* Input Method Editor data - complex character input (esp. for asian character input)
-   * Currently WIN32, runtime-only data */
+  /* Input Method Editor data - complex character input (especially for Asian character input)
+   * Currently WIN32, runtime-only data. */
   struct wmIMEData *ime_data;
 
   /** All events (ghost level events were handled). */
@@ -384,6 +385,19 @@ enum {
   KMI_EXPANDED = (1 << 1),
   KMI_USER_MODIFIED = (1 << 2),
   KMI_UPDATE = (1 << 3),
+  /**
+   * When set, ignore events with #wmEvent.is_repeat enabled.
+   *
+   * \note this flag isn't cleared when editing/loading the key-map items,
+   * so it may be set in cases which don't make sense (modifier-keys or mouse-motion for example).
+   *
+   * Knowing if an event may repeat is something set at the operating-systems event handling level
+   * so rely on #wmEvent.is_repeat being false non keyboard events instead of checking if this
+   * flag makes sense.
+   *
+   * Only used when: `ISKEYBOARD(kmi->type) || (kmi->type == KM_TEXTINPUT)`
+   * as mouse, 3d-mouse, timer... etc never repeat.
+   */
   KMI_REPEAT_IGNORE = (1 << 4),
 };
 
@@ -558,4 +572,6 @@ enum {
   OP_IS_MODAL_CURSOR_REGION = (1 << 3),
 };
 
-#endif /* __DNA_WINDOWMANAGER_TYPES_H__ */
+#ifdef __cplusplus
+}
+#endif

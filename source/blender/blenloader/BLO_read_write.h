@@ -38,20 +38,24 @@
  * necessary.
  */
 
-#ifndef __BLO_READ_WRITE_H__
-#define __BLO_READ_WRITE_H__
+#pragma once
 
 /* for SDNA_TYPE_FROM_STRUCT() macro */
 #include "dna_type_offsets.h"
+
+#include "DNA_windowmanager_types.h" /* for ReportType */
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-typedef struct BlendWriter BlendWriter;
 typedef struct BlendDataReader BlendDataReader;
-typedef struct BlendLibReader BlendLibReader;
 typedef struct BlendExpander BlendExpander;
+typedef struct BlendLibReader BlendLibReader;
+typedef struct BlendWriter BlendWriter;
+
+struct Main;
+struct ReportList;
 
 /* Blend Write API
  * ===============
@@ -107,6 +111,14 @@ void BLO_write_struct_at_address_by_id(BlendWriter *writer,
   BLO_write_struct_at_address_by_id( \
       writer, BLO_get_struct_id(writer, struct_name), address, data_ptr)
 
+/* Write single struct at address and specify a filecode. */
+void BLO_write_struct_at_address_by_id_with_filecode(
+    BlendWriter *writer, int filecode, int struct_id, const void *address, const void *data_ptr);
+#define BLO_write_struct_at_address_with_filecode( \
+    writer, filecode, struct_name, address, data_ptr) \
+  BLO_write_struct_at_address_by_id_with_filecode( \
+      writer, filecode, BLO_get_struct_id(writer, struct_name), address, data_ptr)
+
 /* Write struct array. */
 void BLO_write_struct_array_by_name(BlendWriter *writer,
                                     const char *struct_name,
@@ -144,12 +156,13 @@ void blo_write_id_struct(BlendWriter *writer,
   blo_write_id_struct(writer, BLO_get_struct_id(writer, struct_name), id_address, id)
 
 /* Write raw data. */
-void BLO_write_raw(BlendWriter *writer, int size_in_bytes, const void *data_ptr);
-void BLO_write_int32_array(BlendWriter *writer, int size, const int32_t *data_ptr);
-void BLO_write_uint32_array(BlendWriter *writer, int size, const uint32_t *data_ptr);
-void BLO_write_float_array(BlendWriter *writer, int size, const float *data_ptr);
-void BLO_write_float3_array(BlendWriter *writer, int size, const float *data_ptr);
-void BLO_write_pointer_array(BlendWriter *writer, int size, const void *data_ptr);
+void BLO_write_raw(BlendWriter *writer, size_t size_in_bytes, const void *data_ptr);
+void BLO_write_int32_array(BlendWriter *writer, uint num, const int32_t *data_ptr);
+void BLO_write_uint32_array(BlendWriter *writer, uint num, const uint32_t *data_ptr);
+void BLO_write_float_array(BlendWriter *writer, uint num, const float *data_ptr);
+void BLO_write_double_array(BlendWriter *writer, uint num, const double *data_ptr);
+void BLO_write_float3_array(BlendWriter *writer, uint num, const float *data_ptr);
+void BLO_write_pointer_array(BlendWriter *writer, uint num, const void *data_ptr);
 void BLO_write_string(BlendWriter *writer, const char *data_ptr);
 
 /* Misc. */
@@ -178,9 +191,13 @@ bool BLO_write_is_undo(BlendWriter *writer);
  */
 
 void *BLO_read_get_new_data_address(BlendDataReader *reader, const void *old_address);
+void *BLO_read_get_new_data_address_no_us(BlendDataReader *reader, const void *old_address);
+void *BLO_read_get_new_packed_address(BlendDataReader *reader, const void *old_address);
 
 #define BLO_read_data_address(reader, ptr_p) \
   *((void **)ptr_p) = BLO_read_get_new_data_address((reader), *(ptr_p))
+#define BLO_read_packed_address(reader, ptr_p) \
+  *((void **)ptr_p) = BLO_read_get_new_packed_address((reader), *(ptr_p))
 
 typedef void (*BlendReadListFn)(BlendDataReader *reader, void *data);
 void BLO_read_list_cb(BlendDataReader *reader, struct ListBase *list, BlendReadListFn callback);
@@ -196,6 +213,10 @@ void BLO_read_pointer_array(BlendDataReader *reader, void **ptr_p);
 
 /* Misc. */
 bool BLO_read_requires_endian_switch(BlendDataReader *reader);
+bool BLO_read_data_is_undo(BlendDataReader *reader);
+void BLO_read_data_globmap_add(BlendDataReader *reader, void *oldaddr, void *newaddr);
+void BLO_read_glob_list(BlendDataReader *reader, struct ListBase *list);
+struct ReportList *BLO_read_data_reports(BlendDataReader *reader);
 
 /* Blend Read Lib API
  * ===================
@@ -207,7 +228,12 @@ bool BLO_read_requires_endian_switch(BlendDataReader *reader);
 ID *BLO_read_get_new_id_address(BlendLibReader *reader, struct Library *lib, struct ID *id);
 
 #define BLO_read_id_address(reader, lib, id_ptr_p) \
-  *(id_ptr_p) = (void *)BLO_read_get_new_id_address((reader), (lib), (ID *)*(id_ptr_p))
+  *((void **)id_ptr_p) = (void *)BLO_read_get_new_id_address((reader), (lib), (ID *)*(id_ptr_p))
+
+/* Misc. */
+bool BLO_read_lib_is_undo(BlendLibReader *reader);
+struct Main *BLO_read_lib_get_main(BlendLibReader *reader);
+struct ReportList *BLO_read_lib_reports(BlendLibReader *reader);
 
 /* Blend Expand API
  * ===================
@@ -220,8 +246,13 @@ void BLO_expand_id(BlendExpander *expander, struct ID *id);
 
 #define BLO_expand(expander, id) BLO_expand_id(expander, (struct ID *)id)
 
+/* Report API
+ * ===================
+ */
+
+void BLO_reportf_wrap(struct ReportList *reports, ReportType type, const char *format, ...)
+    ATTR_PRINTF_FORMAT(3, 4);
+
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLO_READ_WRITE_H__ */

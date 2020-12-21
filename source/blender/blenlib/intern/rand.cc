@@ -21,10 +21,10 @@
  * \ingroup bli
  */
 
-#include <math.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
+#include <cmath>
+#include <cstdlib>
+#include <cstring>
+#include <ctime>
 
 #include "MEM_guardedalloc.h"
 
@@ -93,7 +93,7 @@ void BLI_rng_srandom(RNG *rng, unsigned int seed)
 
 void BLI_rng_get_char_n(RNG *rng, char *bytes, size_t bytes_len)
 {
-  rng->rng.get_bytes(blender::MutableSpan(bytes, (int64_t)bytes_len));
+  rng->rng.get_bytes(blender::MutableSpan(bytes, static_cast<int64_t>(bytes_len)));
 }
 
 int BLI_rng_get_int(RNG *rng)
@@ -139,6 +139,12 @@ void BLI_rng_get_tri_sample_float_v2(
     RNG *rng, const float v1[2], const float v2[2], const float v3[2], float r_pt[2])
 {
   copy_v2_v2(r_pt, rng->rng.get_triangle_sample(v1, v2, v3));
+}
+
+void BLI_rng_get_tri_sample_float_v3(
+    RNG *rng, const float v1[3], const float v2[3], const float v3[3], float r_pt[3])
+{
+  copy_v3_v3(r_pt, rng->rng.get_triangle_sample_3d(v1, v2, v3));
 }
 
 void BLI_rng_shuffle_array(RNG *rng, void *data, unsigned int elem_size_i, unsigned int elem_tot)
@@ -425,10 +431,29 @@ float2 RandomNumberGenerator::get_triangle_sample(float2 v1, float2 v2, float2 v
   return sample;
 }
 
+float3 RandomNumberGenerator::get_triangle_sample_3d(float3 v1, float3 v2, float3 v3)
+{
+  float u = this->get_float();
+  float v = this->get_float();
+
+  if (u + v > 1.0f) {
+    u = 1.0f - u;
+    v = 1.0f - v;
+  }
+
+  float3 side_u = v2 - v1;
+  float3 side_v = v3 - v1;
+
+  float3 sample = v1;
+  sample += side_u * u;
+  sample += side_v * v;
+  return sample;
+}
+
 void RandomNumberGenerator::get_bytes(MutableSpan<char> r_bytes)
 {
   constexpr int64_t mask_bytes = 2;
-  constexpr int64_t rand_stride = (int64_t)sizeof(x_) - mask_bytes;
+  constexpr int64_t rand_stride = static_cast<int64_t>(sizeof(x_)) - mask_bytes;
 
   int64_t last_len = 0;
   int64_t trim_len = r_bytes.size();

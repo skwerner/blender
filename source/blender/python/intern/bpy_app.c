@@ -82,6 +82,7 @@ static PyTypeObject BlenderAppType;
 
 static PyStructSequence_Field app_info_fields[] = {
     {"version", "The Blender version as a tuple of 3 numbers. eg. (2, 83, 1)"},
+    {"version_file", "The blend file version, compatible with ``bpy.data.version``"},
     {"version_string", "The Blender version formatted as a string"},
     {"version_cycle", "The release status of this build alpha/beta/rc/release"},
     {"version_char", "Deprecated, always an empty string"},
@@ -126,17 +127,7 @@ static PyStructSequence_Field app_info_fields[] = {
 };
 
 PyDoc_STRVAR(bpy_app_doc,
-             "This module contains application values that remain unchanged during runtime.\n"
-             "\n"
-             "Submodules:\n"
-             "\n"
-             ".. toctree::\n"
-             "   :maxdepth: 1\n"
-             "\n"
-             "   bpy.app.handlers.rst\n"
-             "   bpy.app.icons.rst\n"
-             "   bpy.app.timers.rst\n"
-             "   bpy.app.translations.rst\n");
+             "This module contains application values that remain unchanged during runtime.");
 
 static PyStructSequence_Desc app_info_desc = {
     "bpy.app",       /* name */
@@ -161,6 +152,8 @@ static PyObject *make_app_info(void)
 
   SetObjItem(
       PyC_Tuple_Pack_I32(BLENDER_VERSION / 100, BLENDER_VERSION % 100, BLENDER_VERSION_PATCH));
+  SetObjItem(PyC_Tuple_Pack_I32(
+      BLENDER_FILE_VERSION / 100, BLENDER_FILE_VERSION % 100, BLENDER_FILE_SUBVERSION));
   SetStrItem(BKE_blender_version_string());
 
   SetStrItem(STRINGIFY(BLENDER_VERSION_CYCLE));
@@ -170,7 +163,7 @@ static PyObject *make_app_info(void)
   SetObjItem(PyBool_FromLong(G.factory_startup));
 
   /* build info, use bytes since we can't assume _any_ encoding:
-   * see patch [#30154] for issue */
+   * see patch T30154 for issue */
 #ifdef BUILD_DATE
   SetBytesItem(build_date);
   SetBytesItem(build_time);
@@ -302,36 +295,13 @@ static int bpy_app_global_flag_set__only_disable(PyObject *UNUSED(self),
   return bpy_app_global_flag_set(NULL, value, closure);
 }
 
-#define BROKEN_BINARY_PATH_PYTHON_HACK
-
 PyDoc_STRVAR(bpy_app_binary_path_python_doc,
-             "String, the path to the python executable (read-only)");
-static PyObject *bpy_app_binary_path_python_get(PyObject *self, void *UNUSED(closure))
+             "String, the path to the python executable (read-only). "
+             "Deprecated! Use ``sys.executable`` instead.");
+static PyObject *bpy_app_binary_path_python_get(PyObject *UNUSED(self), void *UNUSED(closure))
 {
-  /* refcount is held in BlenderAppType.tp_dict */
-  static PyObject *ret = NULL;
-
-  if (ret == NULL) {
-    /* only run once */
-    char fullpath[1024];
-    BKE_appdir_program_python_search(
-        fullpath, sizeof(fullpath), PY_MAJOR_VERSION, PY_MINOR_VERSION);
-    ret = PyC_UnicodeFromByte(fullpath);
-#ifdef BROKEN_BINARY_PATH_PYTHON_HACK
-    Py_INCREF(ret);
-    UNUSED_VARS(self);
-#else
-    PyDict_SetItem(
-        BlenderAppType.tp_dict,
-        /* XXX BAAAADDDDDD! self is not a PyDescr at all! it's bpy.app!!! */ PyDescr_NAME(self),
-        ret);
-#endif
-  }
-  else {
-    Py_INCREF(ret);
-  }
-
-  return ret;
+  PyErr_Warn(PyExc_RuntimeWarning, "Use 'sys.executable' instead of 'binary_path_python'!");
+  return Py_INCREF_RET(PySys_GetObject("executable"));
 }
 
 PyDoc_STRVAR(bpy_app_debug_value_doc,
@@ -343,7 +313,7 @@ static PyObject *bpy_app_debug_value_get(PyObject *UNUSED(self), void *UNUSED(cl
 
 static int bpy_app_debug_value_set(PyObject *UNUSED(self), PyObject *value, void *UNUSED(closure))
 {
-  short param = PyC_Long_AsI16(value);
+  const short param = PyC_Long_AsI16(value);
 
   if (param == -1 && PyErr_Occurred()) {
     PyC_Err_SetString_Prefix(PyExc_TypeError,
@@ -383,7 +353,7 @@ PyDoc_STRVAR(bpy_app_preview_render_size_doc,
              "Reference size for icon/preview renders (read-only)");
 static PyObject *bpy_app_preview_render_size_get(PyObject *UNUSED(self), void *closure)
 {
-  return PyLong_FromLong((long)UI_preview_render_size(POINTER_AS_INT(closure)));
+  return PyLong_FromLong((long)UI_icon_preview_to_render_size(POINTER_AS_INT(closure)));
 }
 
 static PyObject *bpy_app_autoexec_fail_message_get(PyObject *UNUSED(self), void *UNUSED(closure))
@@ -532,7 +502,7 @@ PyObject *BPY_app_struct(void)
   BlenderAppType.tp_init = NULL;
   BlenderAppType.tp_new = NULL;
   BlenderAppType.tp_hash = (hashfunc)
-      _Py_HashPointer; /* without this we can't do set(sys.modules) [#29635] */
+      _Py_HashPointer; /* without this we can't do set(sys.modules) T29635. */
 
   /* kindof a hack ontop of PyStructSequence */
   py_struct_seq_getset_init();

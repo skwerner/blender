@@ -41,6 +41,7 @@
 #include "BLT_translation.h"
 
 #include "DNA_gpencil_types.h"
+#include "DNA_material_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
@@ -271,8 +272,8 @@ static float gpencil_brush_influence_calc(tGP_BrushEditData *gso,
   float distance = (float)len_v2v2_int(mval_i, co);
 
   /* Apply Brush curve. */
-  float brush_fallof = BKE_brush_curve_strength(brush, distance, (float)radius);
-  influence *= brush_fallof;
+  float brush_falloff = BKE_brush_curve_strength(brush, distance, (float)radius);
+  influence *= brush_falloff;
 
   /* apply multiframe falloff */
   influence *= gso->mf_falloff;
@@ -303,7 +304,7 @@ static void gpencil_update_geometry(bGPdata *gpd)
 
       LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
         if (gps->flag & GP_STROKE_TAG) {
-          BKE_gpencil_stroke_geometry_update(gps);
+          BKE_gpencil_stroke_geometry_update(gpd, gps);
           gps->flag &= ~GP_STROKE_TAG;
         }
       }
@@ -444,7 +445,9 @@ typedef struct tGPSB_Grab_StrokeData {
   int size;
 } tGPSB_Grab_StrokeData;
 
-/* initialise custom data for handling this stroke */
+/**
+ * Initialize custom data for handling this stroke.
+ */
 static void gpencil_brush_grab_stroke_init(tGP_BrushEditData *gso, bGPDstroke *gps)
 {
   tGPSB_Grab_StrokeData *data = NULL;
@@ -544,12 +547,11 @@ static void gpencil_brush_grab_apply_cached(tGP_BrushEditData *gso,
     return;
   }
 
-  int i;
   float inverse_diff_mat[4][4];
   invert_m4_m4(inverse_diff_mat, diff_mat);
 
   /* Apply dvec to all of the stored points */
-  for (i = 0; i < data->size; i++) {
+  for (int i = 0; i < data->size; i++) {
     bGPDspoint *pt = &gps->points[data->points[i]];
     float delta[3] = {0.0f};
 
@@ -759,7 +761,7 @@ static bool gpencil_brush_twist_apply(tGP_BrushEditData *gso,
     float rmat[3][3];
 
     /* Express position of point relative to cursor, ready to rotate */
-    // XXX: There is still some offset here, but it's close to working as expected...
+    /* XXX: There is still some offset here, but it's close to working as expected. */
     vec[0] = (float)(co[0] - gso->mval[0]);
     vec[1] = (float)(co[1] - gso->mval[1]);
 
@@ -777,7 +779,7 @@ static bool gpencil_brush_twist_apply(tGP_BrushEditData *gso,
       UI_view2d_region_to_view(v2d, vec[0], vec[1], &pt->x, &pt->y);
     }
     else {
-      // XXX
+      /* XXX */
       copy_v2_v2(&pt->x, vec);
     }
   }
@@ -910,13 +912,13 @@ typedef struct tGPSB_CloneBrushData {
   GHash *new_colors;
 } tGPSB_CloneBrushData;
 
-/* Initialise "clone" brush data */
+/* Initialize "clone" brush data. */
 static void gpencil_brush_clone_init(bContext *C, tGP_BrushEditData *gso)
 {
   tGPSB_CloneBrushData *data;
   bGPDstroke *gps;
 
-  /* init custom data */
+  /* Initialize custom-data. */
   gso->customdata = data = MEM_callocN(sizeof(tGPSB_CloneBrushData), "CloneBrushData");
 
   /* compute midpoint of strokes on clipboard */
@@ -1020,7 +1022,7 @@ static void gpencil_brush_clone_add(bContext *C, tGP_BrushEditData *gso)
       bGPDframe *gpf = BKE_gpencil_layer_frame_get(gpl, CFRA, GP_GETFRAME_ADD_NEW);
 
       /* Make a new stroke */
-      new_stroke = BKE_gpencil_stroke_duplicate(gps, true);
+      new_stroke = BKE_gpencil_stroke_duplicate(gps, true, true);
 
       new_stroke->next = new_stroke->prev = NULL;
       BLI_addtail(&gpf->strokes, new_stroke);
@@ -1104,7 +1106,7 @@ static bool gpencil_sculpt_brush_apply_clone(bContext *C, tGP_BrushEditData *gso
       gpencil_brush_clone_adjust(gso);
     }
     else {
-      /* Continuous - Just keep pasting everytime we move */
+      /* Continuous - Just keep pasting every time we move. */
       /* TODO: The spacing of repeat should be controlled using a
        * "stepsize" or similar property? */
       gpencil_brush_clone_add(C, gso);
@@ -1188,7 +1190,7 @@ static bool gpencil_sculpt_brush_init(bContext *C, wmOperator *op)
 
   Paint *paint = &ts->gp_sculptpaint->paint;
   gso->brush = paint->brush;
-  BKE_curvemapping_initialize(gso->brush->curve);
+  BKE_curvemapping_init(gso->brush->curve);
 
   /* save mask */
   gso->mask = ts->gpencil_selectmode_sculpt;
@@ -1200,10 +1202,10 @@ static bool gpencil_sculpt_brush_init(bContext *C, wmOperator *op)
   /* Init multi-edit falloff curve data before doing anything,
    * so we won't have to do it again later. */
   if (gso->is_multiframe) {
-    BKE_curvemapping_initialize(ts->gp_sculpt.cur_falloff);
+    BKE_curvemapping_init(ts->gp_sculpt.cur_falloff);
   }
 
-  /* initialise custom data for brushes */
+  /* Initialize custom data for brushes. */
   char tool = gso->brush->gpencil_sculpt_tool;
   switch (tool) {
     case GPSCULPT_TOOL_CLONE: {
@@ -1229,13 +1231,13 @@ static bool gpencil_sculpt_brush_init(bContext *C, wmOperator *op)
         op->customdata = NULL;
         return false;
       }
-      /* initialise customdata */
+      /* Initialize custom-data. */
       gpencil_brush_clone_init(C, gso);
       break;
     }
 
     case GPSCULPT_TOOL_GRAB: {
-      /* initialise the cache needed for this brush */
+      /* Initialize the cache needed for this brush. */
       gso->stroke_customdata = BLI_ghash_ptr_new("GP Grab Brush - Strokes Hash");
       break;
     }
@@ -1573,6 +1575,7 @@ static bool gpencil_sculpt_brush_do_frame(bContext *C,
   bool changed = false;
   bool redo_geom = false;
   Object *ob = gso->object;
+  bGPdata *gpd = ob->data;
   char tool = gso->brush->gpencil_sculpt_tool;
 
   LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
@@ -1671,7 +1674,7 @@ static bool gpencil_sculpt_brush_do_frame(bContext *C,
         MaterialGPencilStyle *gp_style = BKE_gpencil_material_settings(ob, gps->mat_nr + 1);
         /* Update active frame now, only if material has fill. */
         if (gp_style->flag & GP_MATERIAL_FILL_SHOW) {
-          BKE_gpencil_stroke_geometry_update(gps_active);
+          BKE_gpencil_stroke_geometry_update(gpd, gps_active);
         }
         else {
           gpencil_recalc_geometry_tag(gps_active);
@@ -1924,7 +1927,7 @@ static int gpencil_sculpt_brush_invoke(bContext *C, wmOperator *op, const wmEven
 
   /* the operator cannot work while play animation */
   if (is_playing) {
-    BKE_report(op->reports, RPT_ERROR, "Cannot sculpt while play animation");
+    BKE_report(op->reports, RPT_ERROR, "Cannot sculpt while animation is playing");
 
     return OPERATOR_CANCELLED;
   }
@@ -1936,7 +1939,7 @@ static int gpencil_sculpt_brush_invoke(bContext *C, wmOperator *op, const wmEven
 
   gso = op->customdata;
 
-  /* initialise type-specific data (used for the entire session) */
+  /* Initialize type-specific data (used for the entire session). */
   char tool = gso->brush->gpencil_sculpt_tool;
   switch (tool) {
     /* Brushes requiring timer... */
@@ -2124,7 +2127,7 @@ void GPENCIL_OT_sculpt_paint(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Stroke Sculpt";
   ot->idname = "GPENCIL_OT_sculpt_paint";
-  ot->description = "Apply tweaks to strokes by painting over the strokes";  // XXX
+  ot->description = "Apply tweaks to strokes by painting over the strokes"; /* XXX */
 
   /* api callbacks */
   ot->exec = gpencil_sculpt_brush_exec;

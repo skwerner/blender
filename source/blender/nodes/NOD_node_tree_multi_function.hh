@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __NOD_NODE_TREE_FUNCTION_HH__
-#define __NOD_NODE_TREE_FUNCTION_HH__
+#pragma once
 
 /** \file
  * \ingroup nodes
@@ -27,20 +26,11 @@
 #include "FN_multi_function_network.hh"
 
 #include "NOD_derived_node_tree.hh"
+#include "NOD_type_callbacks.hh"
 
 #include "BLI_resource_collector.hh"
 
 namespace blender::nodes {
-
-/* Maybe this should be moved to BKE_node.h. */
-inline bool is_multi_function_data_socket(const bNodeSocket *bsocket)
-{
-  if (bsocket->typeinfo->get_mf_data_type != nullptr) {
-    BLI_assert(bsocket->typeinfo->expand_in_mf_network != nullptr);
-    return true;
-  }
-  return false;
-}
 
 /**
  * A MFNetworkTreeMap maps various components of a DerivedNodeTree to components of a
@@ -127,8 +117,20 @@ class MFNetworkTreeMap {
 
   void add_try_match(const DNode &dnode, fn::MFNode &node)
   {
-    this->add_try_match(dnode.inputs(), node.inputs());
-    this->add_try_match(dnode.outputs(), node.outputs());
+    this->add_try_match(dnode.inputs().cast<const DSocket *>(),
+                        node.inputs().cast<fn::MFSocket *>());
+    this->add_try_match(dnode.outputs().cast<const DSocket *>(),
+                        node.outputs().cast<fn::MFSocket *>());
+  }
+
+  void add_try_match(Span<const DInputSocket *> dsockets, Span<fn::MFInputSocket *> sockets)
+  {
+    this->add_try_match(dsockets.cast<const DSocket *>(), sockets.cast<fn::MFSocket *>());
+  }
+
+  void add_try_match(Span<const DOutputSocket *> dsockets, Span<fn::MFOutputSocket *> sockets)
+  {
+    this->add_try_match(dsockets.cast<const DSocket *>(), sockets.cast<fn::MFSocket *>());
   }
 
   void add_try_match(Span<const DSocket *> dsockets, Span<fn::MFSocket *> sockets)
@@ -138,7 +140,7 @@ class MFNetworkTreeMap {
       if (!dsocket->is_available()) {
         continue;
       }
-      if (!is_multi_function_data_socket(dsocket->bsocket())) {
+      if (!socket_is_mf_data_socket(*dsocket->bsocket()->typeinfo)) {
         continue;
       }
       fn::MFSocket *socket = sockets[used_sockets];
@@ -251,19 +253,17 @@ class MFNetworkBuilderBase {
  */
 class SocketMFNetworkBuilder : public MFNetworkBuilderBase {
  private:
-  const DSocket *dsocket_ = nullptr;
-  const DGroupInput *group_input_ = nullptr;
   bNodeSocket *bsocket_;
   fn::MFOutputSocket *built_socket_ = nullptr;
 
  public:
   SocketMFNetworkBuilder(CommonMFNetworkBuilderData &common, const DSocket &dsocket)
-      : MFNetworkBuilderBase(common), dsocket_(&dsocket), bsocket_(dsocket.bsocket())
+      : MFNetworkBuilderBase(common), bsocket_(dsocket.bsocket())
   {
   }
 
   SocketMFNetworkBuilder(CommonMFNetworkBuilderData &common, const DGroupInput &group_input)
-      : MFNetworkBuilderBase(common), group_input_(&group_input), bsocket_(group_input.bsocket())
+      : MFNetworkBuilderBase(common), bsocket_(group_input.bsocket())
   {
   }
 
@@ -280,7 +280,7 @@ class SocketMFNetworkBuilder : public MFNetworkBuilderBase {
    */
   template<typename T> T *socket_default_value()
   {
-    return (T *)bsocket_->default_value;
+    return static_cast<T *>(bsocket_->default_value);
   }
 
   /**
@@ -288,7 +288,17 @@ class SocketMFNetworkBuilder : public MFNetworkBuilderBase {
    */
   template<typename T> void set_constant_value(T value)
   {
-    const fn::MultiFunction &fn = this->construct_fn<fn::CustomMF_Constant<T>>(std::move(value));
+    this->construct_generator_fn<fn::CustomMF_Constant<T>>(std::move(value));
+  }
+  void set_constant_value(const CPPType &type, const void *value)
+  {
+    /* The value has live as long as the generated mf network. */
+    this->construct_generator_fn<fn::CustomMF_GenericConstant>(type, value);
+  }
+
+  template<typename T, typename... Args> void construct_generator_fn(Args &&... args)
+  {
+    const fn::MultiFunction &fn = this->construct_fn<T>(std::forward<Args>(args)...);
     this->set_generator_fn(fn);
   }
 
@@ -383,6 +393,37 @@ MFNetworkTreeMap insert_node_tree_into_mf_network(fn::MFNetwork &network,
                                                   const DerivedNodeTree &tree,
                                                   ResourceCollector &resources);
 
-}  // namespace blender::nodes
+using MultiFunctionByNode = Map<const DNode *, const fn::MultiFunction *>;
+MultiFunctionByNode get_multi_function_per_node(const DerivedNodeTree &tree,
+                                                ResourceCollector &resources);
 
-#endif /* __NOD_NODE_TREE_FUNCTION_HH__ */
+class DataTypeConversions {
+ private:
+  Map<std::pair<fn::MFDataType, fn::MFDataType>, const fn::MultiFunction *> conversions_;
+
+ public:
+  void add(fn::MFDataType from_type, fn::MFDataType to_type, const fn::MultiFunction &fn)
+  {
+    conversions_.add_new({from_type, to_type}, &fn);
+  }
+
+  const fn::MultiFunction *get_conversion(fn::MFDataType from, fn::MFDataType to) const
+  {
+    return conversions_.lookup_default({from, to}, nullptr);
+  }
+
+  bool is_convertible(const CPPType &from_type, const CPPType &to_type) const
+  {
+    return conversions_.contains(
+        {fn::MFDataType::ForSingle(from_type), fn::MFDataType::ForSingle(to_type)});
+  }
+
+  void convert(const CPPType &from_type,
+               const CPPType &to_type,
+               const void *from_value,
+               void *to_value) const;
+};
+
+const DataTypeConversions &get_implicit_type_conversions();
+
+}  // namespace blender::nodes

@@ -22,12 +22,14 @@
  */
 
 #include <stdio.h>
+#include <string.h> /* For #MEMCPY_STRUCT_AFTER. */
 
 #include "BLI_listbase.h"
 #include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
+#include "DNA_defaults.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_object_types.h"
@@ -56,12 +58,10 @@
 static void initData(GpencilModifierData *md)
 {
   SimplifyGpencilModifierData *gpmd = (SimplifyGpencilModifierData *)md;
-  gpmd->pass_index = 0;
-  gpmd->step = 1;
-  gpmd->factor = 0.0f;
-  gpmd->length = 0.1f;
-  gpmd->distance = 0.1f;
-  gpmd->material = NULL;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(gpmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(gpmd, DNA_struct_default_get(SimplifyGpencilModifierData), modifier);
 }
 
 static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
@@ -92,26 +92,26 @@ static void deformStroke(GpencilModifierData *md,
                                       mmd->flag & GP_SIMPLIFY_INVERT_MATERIAL)) {
     return;
   }
-
+  bGPdata *gpd = ob->data;
   /* Select simplification mode. */
   switch (mmd->mode) {
     case GP_SIMPLIFY_FIXED: {
       for (int i = 0; i < mmd->step; i++) {
-        BKE_gpencil_stroke_simplify_fixed(gps);
+        BKE_gpencil_stroke_simplify_fixed(gpd, gps);
       }
       break;
     }
     case GP_SIMPLIFY_ADAPTIVE: {
       /* simplify stroke using Ramer-Douglas-Peucker algorithm */
-      BKE_gpencil_stroke_simplify_adaptive(gps, mmd->factor);
+      BKE_gpencil_stroke_simplify_adaptive(gpd, gps, mmd->factor);
       break;
     }
     case GP_SIMPLIFY_SAMPLE: {
-      BKE_gpencil_stroke_sample(gps, mmd->length, false);
+      BKE_gpencil_stroke_sample(gpd, gps, mmd->length, false);
       break;
     }
     case GP_SIMPLIFY_MERGE: {
-      BKE_gpencil_stroke_merge_distance(gpf, gps, mmd->distance, true);
+      BKE_gpencil_stroke_merge_distance(gpd, gpf, gps, mmd->distance, true);
       break;
     }
     default:
@@ -142,38 +142,37 @@ static void foreachIDLink(GpencilModifierData *md, Object *ob, IDWalkFunc walk, 
   walk(userData, ob, (ID **)&mmd->material, IDWALK_CB_USER);
 }
 
-static void panel_draw(const bContext *C, Panel *panel)
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *layout = panel->layout;
 
-  PointerRNA ptr;
-  gpencil_modifier_panel_get_property_pointers(C, panel, NULL, &ptr);
+  PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, NULL);
 
-  int mode = RNA_enum_get(&ptr, "mode");
+  int mode = RNA_enum_get(ptr, "mode");
 
   uiLayoutSetPropSep(layout, true);
 
-  uiItemR(layout, &ptr, "mode", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "mode", 0, NULL, ICON_NONE);
 
   if (mode == GP_SIMPLIFY_FIXED) {
-    uiItemR(layout, &ptr, "step", 0, NULL, ICON_NONE);
+    uiItemR(layout, ptr, "step", 0, NULL, ICON_NONE);
   }
   else if (mode == GP_SIMPLIFY_ADAPTIVE) {
-    uiItemR(layout, &ptr, "factor", 0, NULL, ICON_NONE);
+    uiItemR(layout, ptr, "factor", 0, NULL, ICON_NONE);
   }
   else if (mode == GP_SIMPLIFY_SAMPLE) {
-    uiItemR(layout, &ptr, "length", 0, NULL, ICON_NONE);
+    uiItemR(layout, ptr, "length", 0, NULL, ICON_NONE);
   }
   else if (mode == GP_SIMPLIFY_MERGE) {
-    uiItemR(layout, &ptr, "distance", 0, NULL, ICON_NONE);
+    uiItemR(layout, ptr, "distance", 0, NULL, ICON_NONE);
   }
 
-  gpencil_modifier_panel_end(layout, &ptr);
+  gpencil_modifier_panel_end(layout, ptr);
 }
 
-static void mask_panel_draw(const bContext *C, Panel *panel)
+static void mask_panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
-  gpencil_modifier_masking_panel_draw(C, panel, true, false);
+  gpencil_modifier_masking_panel_draw(panel, true, false);
 }
 
 static void panelRegister(ARegionType *region_type)
@@ -203,7 +202,6 @@ GpencilModifierTypeInfo modifierType_Gpencil_Simplify = {
     /* isDisabled */ NULL,
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ NULL,
-    /* foreachObjectLink */ NULL,
     /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* panelRegister */ panelRegister,

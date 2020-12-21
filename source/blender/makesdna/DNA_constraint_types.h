@@ -22,12 +22,15 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_CONSTRAINT_TYPES_H__
-#define __DNA_CONSTRAINT_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct Action;
 struct Ipo;
@@ -58,11 +61,16 @@ typedef struct bConstraint {
   /** Space that target should be evaluated in (only used if 1 target). */
   char tarspace;
 
+  /* An "expand" bit for each of the constraint's (sub)panels (uiPanelDataExpansion). */
+  short ui_expand_flag;
+
+  /** Object to use as target for Custom Space of owner. */
+  struct Object *space_object;
+  /** Subtarget for Custom Space of owner - pchan or vgroup name, MAX_ID_NAME-2. */
+  char space_subtarget[64];
+
   /** Constraint name, MAX_NAME. */
   char name[64];
-
-  /* Flag for panel and subpanel closed / open state in the UI. */
-  short ui_expand_flag;
 
   /** Amount of influence exherted by constraint (0.0-1.0). */
   float enforce;
@@ -338,7 +346,8 @@ typedef struct bActionConstraint {
   float max;
   int flag;
   char mix_mode;
-  char _pad[7];
+  char _pad[3];
+  float eval_time; /* Only used when flag ACTCON_USE_EVAL_TIME is set. */
   struct bAction *act;
   /** MAX_ID_NAME-2. */
   char subtarget[64];
@@ -690,8 +699,10 @@ typedef enum eBConstraint_Types {
 /* flag 0x20 (1 << 5) was used to indicate that a constraint was evaluated
  *                  using a 'local' hack for posebones only. */
 typedef enum eBConstraint_Flags {
+#ifdef DNA_DEPRECATED_ALLOW
   /* Expansion for old box constraint layouts. Just for versioning. */
   CONSTRAINT_EXPAND_DEPRECATED = (1 << 0),
+#endif
   /* pre-check for illegal object name or bone name */
   CONSTRAINT_DISABLE = (1 << 2),
   /* to indicate which Ipo should be shown, maybe for 3d access later too */
@@ -716,6 +727,8 @@ typedef enum eBConstraint_Flags {
 typedef enum eBConstraint_SpaceTypes {
   /** Default for all - worldspace. */
   CONSTRAINT_SPACE_WORLD = 0,
+  /** For all - custom space. */
+  CONSTRAINT_SPACE_CUSTOM = 5,
   /**
    * For objects (relative to parent/without parent influence),
    * for bones (along normals of bone, without parent/rest-positions).
@@ -861,6 +874,8 @@ typedef enum eSameVolume_Mode {
 typedef enum eActionConstraint_Flags {
   /* Bones use "object" part of target action, instead of "same bone name" part */
   ACTCON_BONE_USE_OBJECT_ACTION = (1 << 0),
+  /* Ignore the transform of 'tar' and use 'eval_time' instead: */
+  ACTCON_USE_EVAL_TIME = (1 << 1),
 } eActionConstraint_Flags;
 
 /* bActionConstraint.mix_mode */
@@ -1169,4 +1184,6 @@ typedef enum eStretchTo_Flags {
 #define CONSTRAINT_RB_VEHICLE 11
 #define CONSTRAINT_RB_GENERIC6DOF 12
 
+#ifdef __cplusplus
+}
 #endif

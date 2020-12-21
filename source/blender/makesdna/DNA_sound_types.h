@@ -20,11 +20,14 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_SOUND_TYPES_H__
-#define __DNA_SOUND_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_defs.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct Ipo;
 struct PackedFile;
@@ -65,9 +68,9 @@ typedef struct bSound {
   short tags;
   char _pad[4];
 
-  /* unused currently
-  int type;
-  struct bSound *child_sound; */
+  /* Unused currently. */
+  // int type;
+  // struct bSound *child_sound;
 
   /**
    * The audaspace handle for cache.
@@ -81,7 +84,7 @@ typedef struct bSound {
 
   /**
    * The audaspace handle that should actually be played back.
-   * Should be cache if cache != NULL; otherwise it's handle
+   * Should be cache if cache != NULL; otherwise its handle
    */
   void *playback_handle;
 
@@ -118,4 +121,6 @@ enum {
   SOUND_TAGS_WAVEFORM_LOADING = (1 << 6),
 };
 
-#endif /* __DNA_SOUND_TYPES_H__ */
+#ifdef __cplusplus
+}
+#endif

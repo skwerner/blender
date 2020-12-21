@@ -21,8 +21,7 @@
  * \ingroup editors
  */
 
-#ifndef __ED_TRANSFORM_H__
-#define __ED_TRANSFORM_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,7 +32,6 @@ extern "C" {
 struct Object;
 struct bContext;
 struct wmKeyConfig;
-struct wmMsgBus;
 struct wmOperatorType;
 
 void ED_keymap_transform(struct wmKeyConfig *keyconf);
@@ -109,7 +107,6 @@ bool calculateTransformCenter(struct bContext *C,
 
 struct Object;
 struct Scene;
-struct wmGizmoGroup;
 struct wmGizmoGroupType;
 
 /* UNUSED */
@@ -120,7 +117,7 @@ struct TransformOrientation;
 struct bContext;
 
 void BIF_clearTransformOrientation(struct bContext *C);
-void BIF_removeTransformOrientation(struct bContext *C, struct TransformOrientation *ts);
+void BIF_removeTransformOrientation(struct bContext *C, struct TransformOrientation *target);
 void BIF_removeTransformOrientationIndex(struct bContext *C, int index);
 bool BIF_createTransformOrientation(struct bContext *C,
                                     struct ReportList *reports,
@@ -128,11 +125,13 @@ bool BIF_createTransformOrientation(struct bContext *C,
                                     const bool use_view,
                                     const bool activate,
                                     const bool overwrite);
-void BIF_selectTransformOrientation(struct bContext *C, struct TransformOrientation *ts);
+void BIF_selectTransformOrientation(struct bContext *C, struct TransformOrientation *target);
 
 void ED_getTransformOrientationMatrix(const struct bContext *C,
-                                      float orientation_mat[3][3],
-                                      const short around);
+                                      struct Object *ob,
+                                      struct Object *obedit,
+                                      const short around,
+                                      float r_orientation_mat[3][3]);
 
 int BIF_countTransformOrientation(const struct bContext *C);
 
@@ -215,5 +214,3 @@ int ED_transform_calc_gizmo_stats(const struct bContext *C,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_TRANSFORM_H__ */

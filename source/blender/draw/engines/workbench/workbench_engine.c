@@ -64,7 +64,7 @@ void workbench_engine_init(void *ved)
   workbench_update_world_ubo(wpd);
 
   if (txl->dummy_image_tx == NULL) {
-    float fpixel[4] = {1.0f, 0.0f, 1.0f, 1.0f};
+    const float fpixel[4] = {1.0f, 0.0f, 1.0f, 1.0f};
     txl->dummy_image_tx = DRW_texture_create_2d(1, 1, GPU_RGBA8, 0, fpixel);
   }
   wpd->dummy_image_tx = txl->dummy_image_tx;
@@ -98,7 +98,7 @@ void workbench_cache_init(void *ved)
   workbench_volume_cache_init(vedata);
 }
 
-/* TODO(fclem) DRW_cache_object_surface_material_get needs a refactor to allow passing NULL
+/* TODO(fclem): DRW_cache_object_surface_material_get needs a refactor to allow passing NULL
  * instead of gpumat_array. Avoiding all this boilerplate code. */
 static struct GPUBatch **workbench_object_surface_material_get(Object *ob)
 {
@@ -114,7 +114,7 @@ static void workbench_cache_sculpt_populate(WORKBENCH_PrivateData *wpd,
                                             eV3DShadingColorType color_type)
 {
   const bool use_single_drawcall = !ELEM(color_type, V3D_SHADING_MATERIAL_COLOR);
-  BLI_assert(wpd->shading.color_type != V3D_SHADING_TEXTURE_COLOR);
+  BLI_assert(color_type != V3D_SHADING_TEXTURE_COLOR);
 
   if (use_single_drawcall) {
     DRWShadingGroup *grp = workbench_material_setup(wpd, ob, 0, color_type, NULL);
@@ -309,6 +309,11 @@ static eV3DShadingColorType workbench_color_type_get(WORKBENCH_PrivateData *wpd,
     }
   }
 
+  if (is_sculpt_pbvh && color_type == V3D_SHADING_TEXTURE_COLOR) {
+    /* Force use of material color for sculpt. */
+    color_type = V3D_SHADING_MATERIAL_COLOR;
+  }
+
   if (r_draw_shadow) {
     *r_draw_shadow = (ob->dtx & OB_DRAW_NO_SHADOW_CAST) == 0 && SHADOW_ENABLED(wpd);
     /* Currently unsupported in sculpt mode. We could revert to the slow
@@ -362,9 +367,11 @@ void workbench_cache_populate(void *ved, Object *ob)
     ModifierData *md = BKE_modifiers_findby_type(ob, eModifierType_Fluid);
     if (md && BKE_modifier_is_enabled(wpd->scene, md, eModifierMode_Realtime)) {
       FluidModifierData *fmd = (FluidModifierData *)md;
-      if (fmd->domain && fmd->domain->type == FLUID_DOMAIN_TYPE_GAS) {
+      if (fmd->domain) {
         workbench_volume_cache_populate(vedata, wpd->scene, ob, md, V3D_SHADING_SINGLE_COLOR);
-        return; /* Do not draw solid in this case. */
+        if (fmd->domain->type == FLUID_DOMAIN_TYPE_GAS) {
+          return; /* Do not draw solid in this case. */
+        }
       }
     }
   }
@@ -415,7 +422,7 @@ void workbench_cache_finish(void *ved)
   WORKBENCH_FramebufferList *fbl = vedata->fbl;
   WORKBENCH_PrivateData *wpd = stl->wpd;
 
-  /* TODO(fclem) Only do this when really needed. */
+  /* TODO(fclem): Only do this when really needed. */
   {
     /* HACK we allocate the in front depth here to avoid the overhead when if is not needed. */
     DefaultFramebufferList *dfbl = DRW_viewport_framebuffer_list_get();
@@ -480,8 +487,8 @@ void workbench_draw_sample(void *ved)
   WORKBENCH_PrivateData *wpd = vedata->stl->wpd;
   WORKBENCH_PassList *psl = vedata->psl;
   DefaultFramebufferList *dfbl = DRW_viewport_framebuffer_list_get();
-  float clear_col[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-  float clear_col_with_alpha[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+  const float clear_col[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+  const float clear_col_with_alpha[4] = {0.0f, 0.0f, 0.0f, 1.0f};
 
   const bool do_render = workbench_antialiasing_setup(vedata);
   const bool xray_is_visible = wpd->shading.xray_alpha > 0.0f;

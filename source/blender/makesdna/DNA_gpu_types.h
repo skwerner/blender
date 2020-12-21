@@ -21,8 +21,11 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_GPU_TYPES_H__
-#define __DNA_GPU_TYPES_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* Keep for 'Camera' versioning. */
 /** Properties for dof effect. */
@@ -38,4 +41,6 @@ typedef struct GPUDOFSettings {
   int high_quality;
 } GPUDOFSettings;
 
-#endif /* __DNA_GPU_TYPES_H__ */
+#ifdef __cplusplus
+}
+#endif

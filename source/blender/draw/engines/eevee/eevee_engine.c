@@ -32,6 +32,8 @@
 
 #include "DNA_world_types.h"
 
+#include "IMB_imbuf.h"
+
 #include "eevee_private.h"
 
 #include "eevee_engine.h" /* own include */
@@ -78,11 +80,6 @@ static void eevee_engine_init(void *ved)
 
   GPU_framebuffer_ensure_config(&fbl->main_color_fb,
                                 {GPU_ATTACHMENT_NONE, GPU_ATTACHMENT_TEXTURE(txl->color)});
-
-  if (sldata->common_ubo == NULL) {
-    sldata->common_ubo = DRW_uniformbuffer_create(sizeof(sldata->common_data),
-                                                  &sldata->common_data);
-  }
 
   /* `EEVEE_renderpasses_init` will set the active render passes used by `EEVEE_effects_init`.
    * `EEVEE_effects_init` needs to go second for TAA. */
@@ -220,10 +217,10 @@ static void eevee_draw_scene(void *vedata)
   }
 
   while (loop_len--) {
-    float clear_col[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    const float clear_col[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     float clear_depth = 1.0f;
     uint clear_stencil = 0x0;
-    uint primes[3] = {2, 3, 7};
+    const uint primes[3] = {2, 3, 7};
     double offset[3] = {0.0, 0.0, 0.0};
     double r[3];
 
@@ -270,7 +267,7 @@ static void eevee_draw_scene(void *vedata)
     /* Set ray type. */
     sldata->common_data.ray_type = EEVEE_RAY_CAMERA;
     sldata->common_data.ray_depth = 0.0f;
-    DRW_uniformbuffer_update(sldata->common_ubo, &sldata->common_data);
+    GPU_uniformbuf_update(sldata->common_ubo, &sldata->common_data);
 
     GPU_framebuffer_bind(fbl->main_fb);
     eGPUFrameBufferBits clear_bits = GPU_DEPTH_BIT;
@@ -404,7 +401,7 @@ static void eevee_id_world_update(void *vedata, World *wo)
   EEVEE_StorageList *stl = ((EEVEE_Data *)vedata)->stl;
   LightCache *lcache = stl->g_data->light_cache;
 
-  if (lcache == NULL || lcache == stl->lookdev_lightcache) {
+  if (ELEM(lcache, NULL, stl->lookdev_lightcache)) {
     /* Avoid Lookdev viewport clearing the update flag (see T67741). */
     return;
   }
@@ -459,12 +456,31 @@ static void eevee_render_to_image(void *vedata,
   }
   EEVEE_PrivateData *g_data = ved->stl->g_data;
 
-  int steps = max_ii(1, scene->eevee.motion_blur_steps);
-  int time_steps_tot = (do_motion_blur) ? steps : 1;
+  EEVEE_render_modules_init(vedata, engine, depsgraph);
+
+  int initial_frame = CFRA;
+  float initial_subframe = SUBFRA;
+  float shuttertime = (do_motion_blur) ? scene->eevee.motion_blur_shutter : 0.0f;
+  int time_steps_tot = (do_motion_blur) ? max_ii(1, scene->eevee.motion_blur_steps) : 1;
   g_data->render_tot_samples = divide_ceil_u(scene->eevee.taa_render_samples, time_steps_tot);
-  /* Centered on frame for now. */
-  float time = CFRA - scene->eevee.motion_blur_shutter / 2.0f;
-  float time_step = scene->eevee.motion_blur_shutter / time_steps_tot;
+  /* Compute start time. The motion blur will cover `[time ...time + shuttertime]`. */
+  float time = initial_frame + initial_subframe;
+  switch (scene->eevee.motion_blur_position) {
+    case SCE_EEVEE_MB_START:
+      /* No offset. */
+      break;
+    case SCE_EEVEE_MB_CENTER:
+      time -= shuttertime * 0.5f;
+      break;
+    case SCE_EEVEE_MB_END:
+      time -= shuttertime;
+      break;
+    default:
+      BLI_assert(!"Invalid motion blur position enum!");
+      break;
+  }
+
+  float time_step = shuttertime / time_steps_tot;
   for (int i = 0; i < time_steps_tot && !RE_engine_test_break(engine); i++) {
     float time_prev = time;
     float time_curr = time + time_step * 0.5f;
@@ -480,9 +496,10 @@ static void eevee_render_to_image(void *vedata,
       }
       else {
         EEVEE_motion_blur_step_set(ved, MB_PREV);
-        RE_engine_frame_set(engine, floorf(time_prev), fractf(time_prev));
+        DRW_render_set_time(engine, depsgraph, floorf(time_prev), fractf(time_prev));
+        EEVEE_render_modules_init(vedata, engine, depsgraph);
+        sldata = EEVEE_view_layer_data_ensure();
 
-        EEVEE_render_view_sync(vedata, engine, depsgraph);
         EEVEE_render_cache_init(sldata, vedata);
 
         DRW_render_object_iter(vedata, engine, depsgraph, EEVEE_render_cache);
@@ -496,9 +513,10 @@ static void eevee_render_to_image(void *vedata,
     /* Next motion step. */
     if (do_motion_blur_fx) {
       EEVEE_motion_blur_step_set(ved, MB_NEXT);
-      RE_engine_frame_set(engine, floorf(time_next), fractf(time_next));
+      DRW_render_set_time(engine, depsgraph, floorf(time_next), fractf(time_next));
+      EEVEE_render_modules_init(vedata, engine, depsgraph);
+      sldata = EEVEE_view_layer_data_ensure();
 
-      EEVEE_render_view_sync(vedata, engine, depsgraph);
       EEVEE_render_cache_init(sldata, vedata);
 
       DRW_render_object_iter(vedata, engine, depsgraph, EEVEE_render_cache);
@@ -512,10 +530,11 @@ static void eevee_render_to_image(void *vedata,
     {
       if (do_motion_blur) {
         EEVEE_motion_blur_step_set(ved, MB_CURR);
-        RE_engine_frame_set(engine, floorf(time_curr), fractf(time_curr));
+        DRW_render_set_time(engine, depsgraph, floorf(time_curr), fractf(time_curr));
+        EEVEE_render_modules_init(vedata, engine, depsgraph);
+        sldata = EEVEE_view_layer_data_ensure();
       }
 
-      EEVEE_render_view_sync(vedata, engine, depsgraph);
       EEVEE_render_cache_init(sldata, vedata);
 
       DRW_render_object_iter(vedata, engine, depsgraph, EEVEE_render_cache);
@@ -551,6 +570,8 @@ static void eevee_render_to_image(void *vedata,
   EEVEE_motion_blur_data_free(&ved->stl->effects->motion_blur);
 
   if (RE_engine_test_break(engine)) {
+    /* Cryptomatte buffers are freed during render_read_result */
+    EEVEE_cryptomatte_free(vedata);
     return;
   }
 
@@ -558,24 +579,20 @@ static void eevee_render_to_image(void *vedata,
 
   /* Restore original viewport size. */
   DRW_render_viewport_size_set((int[2]){g_data->size_orig[0], g_data->size_orig[1]});
+
+  if (CFRA != initial_frame || SUBFRA != initial_subframe) {
+    /* Restore original frame number. This is because the render pipeline expects it. */
+    RE_engine_frame_set(engine, initial_frame, initial_subframe);
+  }
 }
 
 static void eevee_engine_free(void)
 {
   EEVEE_shaders_free();
-  EEVEE_bloom_free();
-  EEVEE_depth_of_field_free();
-  EEVEE_effects_free();
   EEVEE_lightprobes_free();
-  EEVEE_shadows_free();
   EEVEE_materials_free();
-  EEVEE_mist_free();
-  EEVEE_motion_blur_free();
   EEVEE_occlusion_free();
-  EEVEE_screen_raytrace_free();
-  EEVEE_subsurface_free();
   EEVEE_volumes_free();
-  EEVEE_renderpasses_free();
 }
 
 static const DrawEngineDataSize eevee_data_size = DRW_VIEWPORT_DATA_SIZE(EEVEE_Data);

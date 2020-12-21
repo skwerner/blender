@@ -120,6 +120,9 @@ set(LLVM_HASH 31eb9ce73dd2a0f8dcab8319fb03f8fc)
 set(CLANG_URI https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/clang-${LLVM_VERSION}.src.tar.xz)
 set(CLANG_HASH 13468e4a44940efef1b75e8641752f90)
 
+set(CLANG_TOOLS_URI https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/clang-tools-extra-${LLVM_VERSION}.src.tar.xz)
+set(CLANG_TOOLS_HASH c76293870b564c6a7968622b475b7646)
+
 set(OPENMP_URI https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/openmp-${LLVM_VERSION}.src.tar.xz)
 set(OPENMP_HASH 6eade16057edbdecb3c4eef9daa2bfcf)
 
@@ -146,8 +149,12 @@ set(TBB_URI https://github.com/oneapi-src/oneTBB/archive/${TBB_VERSION}.tar.gz)
 set(TBB_HASH 26263622e9187212ec240dcf01b66207)
 
 set(OPENVDB_VERSION 7.0.0)
-set(OPENVDB_URI https://github.com/dreamworksanimation/openvdb/archive/v${OPENVDB_VERSION}.tar.gz)
+set(OPENVDB_URI https://github.com/AcademySoftwareFoundation/openvdb/archive/v${OPENVDB_VERSION}.tar.gz)
 set(OPENVDB_HASH fd6c4f168282f7e0e494d290cd531fa8)
+
+set(NANOVDB_GIT_UID e62f7a0bf1e27397223c61ddeaaf57edf111b77f)
+set(NANOVDB_URI https://github.com/AcademySoftwareFoundation/openvdb/archive/${NANOVDB_GIT_UID}.tar.gz)
+set(NANOVDB_HASH 90919510bc6ccd630fedc56f748cb199)
 
 set(IDNA_VERSION 2.9)
 set(CHARDET_VERSION 3.0.4)
@@ -293,9 +300,9 @@ set(USD_VERSION 20.05)
 set(USD_URI https://github.com/PixarAnimationStudios/USD/archive/v${USD_VERSION}.tar.gz)
 set(USD_HASH 6d679e739e7f65725d9c029e37dda9fc)
 
-set(OIDN_VERSION 1.2.1)
+set(OIDN_VERSION 1.2.3)
 set(OIDN_URI https://github.com/OpenImageDenoise/oidn/releases/download/v${OIDN_VERSION}/oidn-${OIDN_VERSION}.src.tar.gz)
-set(OIDN_HASH cbebc1a25eb6de62af3a59e943063608)
+set(OIDN_HASH 1f11466c2c3efc27faba5ec7078d12b2)
 
 set(LIBGLU_VERSION 9.0.1)
 set(LIBGLU_URI ftp://ftp.freedesktop.org/pub/mesa/glu/glu-${LIBGLU_VERSION}.tar.xz)
@@ -312,6 +319,15 @@ set(NASM_HASH f4fd1329b1713e1ccd34b2fc121c4bcd278c9f91cc4cb205ae8fcd2e4728dd14)
 set(XR_OPENXR_SDK_VERSION 1.0.8)
 set(XR_OPENXR_SDK_URI https://github.com/KhronosGroup/OpenXR-SDK/archive/release-${XR_OPENXR_SDK_VERSION}.tar.gz)
 set(XR_OPENXR_SDK_HASH c6de63d2e0f9029aa58dfa97cad8ce07)
-set(ISPC_VERSION v1.13.0)
+
+set(ISPC_VERSION v1.14.1)
 set(ISPC_URI https://github.com/ispc/ispc/archive/${ISPC_VERSION}.tar.gz)
-set(ISPC_HASH 4bf5e8d0020c4b9980faa702c1a6f25f)
+set(ISPC_HASH 968fbc8dfd16a60ba4e32d2e0e03ea7a)
+
+set(GMP_VERSION 6.2.0)
+set(GMP_URI https://gmplib.org/download/gmp/gmp-${GMP_VERSION}.tar.xz)
+set(GMP_HASH a325e3f09e6d91e62101e59f9bda3ec1)
+
+set(POTRACE_VERSION 1.16)
+set(POTRACE_URI http://potrace.sourceforge.net/download/${POTRACE_VERSION}/potrace-${POTRACE_VERSION}.tar.gz)
+set(POTRACE_HASH 5f0bd87ddd9a620b0c4e65652ef93d69)

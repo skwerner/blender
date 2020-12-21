@@ -16,14 +16,11 @@
  * The Original Code is Copyright (C) 2019 Blender Foundation.
  * All rights reserved.
  */
-#ifndef __USD_WRITER_LIGHT_H__
-#define __USD_WRITER_LIGHT_H__
+#pragma once
 
 #include "usd_writer_abstract.h"
 
-namespace blender {
-namespace io {
-namespace usd {
+namespace blender::io::usd {
 
 class USDLightWriter : public USDAbstractWriter {
  public:
@@ -34,8 +31,4 @@ class USDLightWriter : public USDAbstractWriter {
   virtual void do_write(HierarchyContext &context) override;
 };
 
-}  // namespace usd
-}  // namespace io
-}  // namespace blender
-
-#endif /* __USD_WRITER_LIGHT_H__ */
+}  // namespace blender::io::usd

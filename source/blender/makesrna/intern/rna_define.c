@@ -87,7 +87,7 @@ static struct {
  */
 static bool debugSRNA_defaults = false;
 
-static void print_defult_info(const PropertyDefRNA *dp)
+static void print_default_info(const PropertyDefRNA *dp)
 {
   fprintf(stderr,
           "dna_type=%s, dna_offset=%d, dna_struct=%s, dna_name=%s, id=%s\n",
@@ -457,8 +457,7 @@ static int rna_find_sdna_member(SDNA *sdna,
                                 int *offset)
 {
   const char *dnaname;
-  const short *sp;
-  int a, b, structnr, totmember, cmp;
+  int b, structnr, cmp;
 
   if (!DefRNA.preprocess) {
     CLOG_ERROR(&LOG, "only during preprocessing.");
@@ -474,17 +473,15 @@ static int rna_find_sdna_member(SDNA *sdna,
     return 0;
   }
 
-  sp = sdna->structs[structnr];
-  totmember = sp[1];
-  sp += 2;
-
-  for (a = 0; a < totmember; a++, sp += 2) {
-    const int size = DNA_elem_size_nr(sdna, sp[0], sp[1]);
-    dnaname = sdna->alias.names[sp[1]];
+  const SDNA_Struct *struct_info = sdna->structs[structnr];
+  for (int a = 0; a < struct_info->members_len; a++) {
+    const SDNA_StructMember *member = &struct_info->members[a];
+    const int size = DNA_elem_size_nr(sdna, member->type, member->name);
+    dnaname = sdna->alias.names[member->name];
     cmp = rna_member_cmp(dnaname, membername);
 
     if (cmp == 1) {
-      smember->type = sdna->alias.types[sp[0]];
+      smember->type = sdna->alias.types[member->type];
       smember->name = dnaname;
       smember->offset = *offset;
       smember->size = size;
@@ -503,7 +500,7 @@ static int rna_find_sdna_member(SDNA *sdna,
 
       return 1;
     }
-    else if (cmp == 2) {
+    if (cmp == 2) {
       smember->type = "";
       smember->name = dnaname;
       smember->offset = *offset;
@@ -512,11 +509,11 @@ static int rna_find_sdna_member(SDNA *sdna,
       smember->arraylength = 0;
 
       membername = strstr(membername, ".") + strlen(".");
-      rna_find_sdna_member(sdna, sdna->alias.types[sp[0]], membername, smember, offset);
+      rna_find_sdna_member(sdna, sdna->alias.types[member->type], membername, smember, offset);
 
       return 1;
     }
-    else if (cmp == 3) {
+    if (cmp == 3) {
       smember->type = "";
       smember->name = dnaname;
       smember->offset = *offset;
@@ -528,7 +525,7 @@ static int rna_find_sdna_member(SDNA *sdna,
         *offset = -1;
       }
       membername = strstr(membername, "->") + strlen("->");
-      rna_find_sdna_member(sdna, sdna->alias.types[sp[0]], membername, smember, offset);
+      rna_find_sdna_member(sdna, sdna->alias.types[member->type], membername, smember, offset);
 
       return 1;
     }
@@ -1306,7 +1303,7 @@ PropertyRNA *RNA_def_property(StructOrFunctionRNA *cont_,
     rna_addtail(&dcont->properties, dprop);
   }
   else {
-#ifdef DEBUG
+#ifndef NDEBUG
     char error[512];
     if (rna_validate_identifier(identifier, error, true) == 0) {
       CLOG_ERROR(&LOG,
@@ -1410,7 +1407,7 @@ PropertyRNA *RNA_def_property(StructOrFunctionRNA *cont_,
   /* a priori not raw editable */
   prop->rawtype = -1;
 
-  if (type != PROP_COLLECTION && type != PROP_POINTER) {
+  if (!ELEM(type, PROP_COLLECTION, PROP_POINTER)) {
     prop->flag = PROP_EDITABLE;
 
     if (type != PROP_STRING) {
@@ -1815,8 +1812,9 @@ void RNA_def_property_struct_type(PropertyRNA *prop, const char *type)
   }
 }
 
-void RNA_def_property_struct_runtime(PropertyRNA *prop, StructRNA *type)
+void RNA_def_property_struct_runtime(StructOrFunctionRNA *cont, PropertyRNA *prop, StructRNA *type)
 {
+  /* Never valid when defined from python. */
   StructRNA *srna = DefRNA.laststruct;
 
   if (DefRNA.preprocess) {
@@ -1824,10 +1822,25 @@ void RNA_def_property_struct_runtime(PropertyRNA *prop, StructRNA *type)
     return;
   }
 
+  const bool is_id_type = (type->flag & STRUCT_ID) != 0;
+
   switch (prop->type) {
     case PROP_POINTER: {
       PointerPropertyRNA *pprop = (PointerPropertyRNA *)prop;
       pprop->type = type;
+
+      /* Check between `cont` and `srna` is mandatory, since when defined from python
+       * `DefRNA.laststruct` is not valid.
+       * This is not an issue as bpy code already checks for this case on its own. */
+      if (cont == srna && (srna->flag & STRUCT_NO_DATABLOCK_IDPROPERTIES) != 0 && is_id_type) {
+        CLOG_ERROR(&LOG,
+                   "\"%s.%s\", this struct type (probably an Operator, Keymap or UserPreference) "
+                   "does not accept ID pointer properties.",
+                   CONTAINER_RNA_ID(cont),
+                   prop->identifier);
+        DefRNA.error = true;
+        return;
+      }
 
       if (type && (type->flag & STRUCT_ID_REFCOUNT)) {
         prop->flag |= PROP_ID_REFCOUNT;
@@ -1841,10 +1854,16 @@ void RNA_def_property_struct_runtime(PropertyRNA *prop, StructRNA *type)
       break;
     }
     default:
-      CLOG_ERROR(
-          &LOG, "\"%s.%s\", invalid type for struct type.", srna->identifier, prop->identifier);
+      CLOG_ERROR(&LOG,
+                 "\"%s.%s\", invalid type for struct type.",
+                 CONTAINER_RNA_ID(cont),
+                 prop->identifier);
       DefRNA.error = true;
-      break;
+      return;
+  }
+
+  if (is_id_type) {
+    prop->flag |= PROP_PTR_NO_OWNERSHIP;
   }
 }
 
@@ -1888,7 +1907,7 @@ void RNA_def_property_enum_items(PropertyRNA *prop, const EnumPropertyItem *item
             DefRNA.error = true;
             break;
           }
-          else if (item[i].value == eprop->defaultvalue) {
+          if (item[i].value == eprop->defaultvalue) {
             defaultfound = 1;
           }
         }
@@ -2185,7 +2204,7 @@ static PropertyDefRNA *rna_def_property_sdna(PropertyRNA *prop,
     if (DefRNA.silent) {
       return NULL;
     }
-    else if (!DefRNA.verify) {
+    if (!DefRNA.verify) {
       /* some basic values to survive even with sdna info */
       dp->dnastructname = structname;
       dp->dnaname = propname;
@@ -2198,15 +2217,13 @@ static PropertyDefRNA *rna_def_property_sdna(PropertyRNA *prop,
       dp->dnaoffset = smember.offset;
       return dp;
     }
-    else {
-      CLOG_ERROR(&LOG,
-                 "\"%s.%s\" (identifier \"%s\") not found. Struct must be in DNA.",
-                 structname,
-                 propname,
-                 prop->identifier);
-      DefRNA.error = true;
-      return NULL;
-    }
+    CLOG_ERROR(&LOG,
+               "\"%s.%s\" (identifier \"%s\") not found. Struct must be in DNA.",
+               structname,
+               propname,
+               prop->identifier);
+    DefRNA.error = true;
+    return NULL;
   }
 
   if (smember.arraylength > 1) {
@@ -2310,7 +2327,7 @@ void RNA_def_property_boolean_sdna(PropertyRNA *prop,
 
               if (debugSRNA_defaults) {
                 fprintf(stderr, "value=%d, ", bprop->defaultvalue);
-                print_defult_info(dp);
+                print_default_info(dp);
               }
             }
           }
@@ -2448,7 +2465,7 @@ void RNA_def_property_int_sdna(PropertyRNA *prop, const char *structname, const 
                   fprintf(stderr, "%d, ", iprop->defaultarray[i]);
                 }
                 fprintf(stderr, "), ");
-                print_defult_info(dp);
+                print_default_info(dp);
               }
             }
           }
@@ -2475,7 +2492,7 @@ void RNA_def_property_int_sdna(PropertyRNA *prop, const char *structname, const 
             if (has_default) {
               if (debugSRNA_defaults) {
                 fprintf(stderr, "value=%d, ", iprop->defaultvalue);
-                print_defult_info(dp);
+                print_default_info(dp);
               }
             }
           }
@@ -2559,7 +2576,7 @@ void RNA_def_property_float_sdna(PropertyRNA *prop, const char *structname, cons
                   fprintf(stderr, "%g, ", fprop->defaultarray[i]);
                 }
                 fprintf(stderr, "), ");
-                print_defult_info(dp);
+                print_default_info(dp);
               }
             }
           }
@@ -2581,7 +2598,7 @@ void RNA_def_property_float_sdna(PropertyRNA *prop, const char *structname, cons
             if (has_default) {
               if (debugSRNA_defaults) {
                 fprintf(stderr, "value=%g, ", fprop->defaultvalue);
-                print_defult_info(dp);
+                print_default_info(dp);
               }
             }
           }
@@ -2650,7 +2667,7 @@ void RNA_def_property_enum_sdna(PropertyRNA *prop, const char *structname, const
           if (has_default) {
             if (debugSRNA_defaults) {
               fprintf(stderr, "value=%d, ", eprop->defaultvalue);
-              print_defult_info(dp);
+              print_default_info(dp);
             }
           }
         }
@@ -2724,7 +2741,7 @@ void RNA_def_property_string_sdna(PropertyRNA *prop, const char *structname, con
 
           if (debugSRNA_defaults) {
             fprintf(stderr, "value=\"%s\", ", sprop->defaultvalue);
-            print_defult_info(dp);
+            print_default_info(dp);
           }
         }
       }
@@ -3441,6 +3458,13 @@ void RNA_def_property_collection_funcs(PropertyRNA *prop,
 
 void RNA_def_property_srna(PropertyRNA *prop, const char *type)
 {
+  char error[512];
+  if (rna_validate_identifier(type, error, false) == 0) {
+    CLOG_ERROR(&LOG, "struct identifier \"%s\" error - %s", type, error);
+    DefRNA.error = true;
+    return;
+  }
+
   prop->srna = (StructRNA *)type;
 }
 
@@ -4145,7 +4169,7 @@ PropertyRNA *RNA_def_pointer_runtime(StructOrFunctionRNA *cont_,
   PropertyRNA *prop;
 
   prop = RNA_def_property(cont, identifier, PROP_POINTER, PROP_NONE);
-  RNA_def_property_struct_runtime(prop, type);
+  RNA_def_property_struct_runtime(cont, prop, type);
   if ((type->flag & STRUCT_ID) != 0) {
     prop->flag |= PROP_EDITABLE;
   }
@@ -4180,7 +4204,7 @@ PropertyRNA *RNA_def_collection_runtime(StructOrFunctionRNA *cont_,
   PropertyRNA *prop;
 
   prop = RNA_def_property(cont, identifier, PROP_COLLECTION, PROP_NONE);
-  RNA_def_property_struct_runtime(prop, type);
+  RNA_def_property_struct_runtime(cont, prop, type);
   RNA_def_property_ui_text(prop, ui_name, ui_description);
 
   return prop;
@@ -4272,7 +4296,7 @@ void RNA_def_function_return(FunctionRNA *func, PropertyRNA *ret)
                ret->identifier);
     return;
   }
-  else if (ret->arraydimension) {
+  if (ret->arraydimension) {
     CLOG_ERROR(&LOG,
                "\"%s.%s\", arrays are not allowed as strict returns, "
                "use RNA_def_function_output instead.",
@@ -4360,13 +4384,10 @@ int rna_parameter_size(PropertyRNA *parm)
           if (parm->flag & PROP_THICK_WRAP) {
             return sizeof(PointerRNA);
           }
-          else {
-            return sizeof(PointerRNA *);
-          }
+          return sizeof(PointerRNA *);
         }
-        else {
-          return sizeof(void *);
-        }
+        return sizeof(void *);
+
 #endif
       }
       case PROP_COLLECTION:
@@ -4384,7 +4405,7 @@ void RNA_enum_item_add(EnumPropertyItem **items, int *totitem, const EnumPropert
   int tot = *totitem;
 
   if (tot == 0) {
-    *items = MEM_callocN(sizeof(EnumPropertyItem) * 8, __func__);
+    *items = MEM_callocN(sizeof(EnumPropertyItem[8]), __func__);
   }
   else if (tot >= 8 && (tot & (tot - 1)) == 0) {
     /* power of two > 8 */

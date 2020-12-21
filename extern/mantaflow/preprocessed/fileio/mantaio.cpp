@@ -51,7 +51,7 @@ static PyObject *_W_0(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     FluidSolver *parent = _args.obtainParent();
     bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
     pbPreparePlugin(parent, "load", !noTiming);
-    PyObject *_retval = 0;
+    PyObject *_retval = nullptr;
     {
       ArgLocker _lock;
       const string &name = _args.get<string>("name", 0, &_lock);
@@ -82,8 +82,17 @@ int save(const string &name,
          float worldSize = 1.0,
          bool skipDeletedParts = false,
          int compression = COMPRESSION_ZIP,
-         bool precisionHalf = true)
+         bool precisionHalf = true,
+         int precision = PRECISION_HALF,
+         float clip = 1e-4,
+         const Grid<Real> *clipGrid = nullptr)
 {
+
+  if (!precisionHalf) {
+    debMsg("Warning: precisionHalf argument is deprecated. Please use precision level instead", 0);
+    precision = PRECISION_HALF;  // for backwards compatibility
+  }
+
   if (name.find_last_of('.') == string::npos)
     errMsg("file '" + name + "' does not have an extension");
   string ext = name.substr(name.find_last_of('.'));
@@ -96,7 +105,7 @@ int save(const string &name,
     return writeGridsVol(name, &objects);
   if (ext == ".vdb")
     return writeObjectsVDB(
-        name, &objects, worldSize, skipDeletedParts, compression, precisionHalf);
+        name, &objects, worldSize, skipDeletedParts, compression, precision, clip, clipGrid);
   else if (ext == ".npz")
     return writeGridsNumpy(name, &objects);
   else if (ext == ".txt")
@@ -112,7 +121,7 @@ static PyObject *_W_1(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     FluidSolver *parent = _args.obtainParent();
     bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
     pbPreparePlugin(parent, "save", !noTiming);
-    PyObject *_retval = 0;
+    PyObject *_retval = nullptr;
     {
       ArgLocker _lock;
       const string &name = _args.get<string>("name", 0, &_lock);
@@ -122,7 +131,18 @@ static PyObject *_W_1(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
       bool skipDeletedParts = _args.getOpt<bool>("skipDeletedParts", 3, false, &_lock);
       int compression = _args.getOpt<int>("compression", 4, COMPRESSION_ZIP, &_lock);
       bool precisionHalf = _args.getOpt<bool>("precisionHalf", 5, true, &_lock);
-      _retval = toPy(save(name, objects, worldSize, skipDeletedParts, compression, precisionHalf));
+      int precision = _args.getOpt<int>("precision", 6, PRECISION_HALF, &_lock);
+      float clip = _args.getOpt<float>("clip", 7, 1e-4, &_lock);
+      const Grid<Real> *clipGrid = _args.getPtrOpt<Grid<Real>>("clipGrid", 8, nullptr, &_lock);
+      _retval = toPy(save(name,
+                          objects,
+                          worldSize,
+                          skipDeletedParts,
+                          compression,
+                          precisionHalf,
+                          precision,
+                          clip,
+                          clipGrid));
       _args.check();
     }
     pbFinalizePlugin(parent, "save", !noTiming);

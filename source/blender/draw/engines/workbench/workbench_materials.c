@@ -33,7 +33,7 @@
 #include "DNA_mesh_types.h"
 #include "DNA_node_types.h"
 
-#include "GPU_uniformbuffer.h"
+#include "GPU_uniform_buffer.h"
 
 #include "ED_uvedit.h"
 
@@ -60,7 +60,7 @@ void workbench_material_ubo_data(WORKBENCH_PrivateData *wpd,
         hash = (hash * 13) ^ BLI_ghashutil_strhash_p_murmur(ob->id.lib->filepath);
       }
       float hue = BLI_hash_int_01(hash);
-      float hsv[3] = {hue, HSV_SATURATION, HSV_VALUE};
+      const float hsv[3] = {hue, HSV_SATURATION, HSV_VALUE};
       hsv_to_rgb_v(hsv, data->base_color);
       break;
     }
@@ -168,7 +168,7 @@ DRWShadingGroup *workbench_material_setup_ex(WORKBENCH_PrivateData *wpd,
   Image *ima = NULL;
   ImageUser *iuser = NULL;
   eGPUSamplerState sampler;
-  const bool infront = (ob->dtx & OB_DRAWXRAY) != 0;
+  const bool infront = (ob->dtx & OB_DRAW_IN_FRONT) != 0;
 
   if (color_type == V3D_SHADING_TEXTURE_COLOR) {
     workbench_material_get_image(ob, mat_nr, &ima, &iuser, &sampler);
@@ -231,15 +231,15 @@ DRWShadingGroup *workbench_material_setup_ex(WORKBENCH_PrivateData *wpd,
       workbench_material_ubo_data(wpd, ob, NULL, &wpd->material_ubo_data_curr[mat_id], color_type);
 
       const bool transp = wpd->shading.xray_alpha < 1.0f || ob->color[3] < 1.0f;
-      DRWShadingGroup *grp = wpd->prepass[transp][infront][datatype].common_shgrp;
+      DRWShadingGroup **grp = &wpd->prepass[transp][infront][datatype].common_shgrp;
       if (resource_changed) {
-        grp = DRW_shgroup_create_sub(grp);
-        DRW_shgroup_uniform_block(grp, "material_block", wpd->material_ubo_curr);
+        *grp = DRW_shgroup_create_sub(*grp);
+        DRW_shgroup_uniform_block(*grp, "material_block", wpd->material_ubo_curr);
       }
       if (r_transp && transp) {
         *r_transp = true;
       }
-      return grp;
+      return *grp;
     }
   }
 }
@@ -261,11 +261,11 @@ DRWShadingGroup *workbench_image_setup_ex(WORKBENCH_PrivateData *wpd,
 
   if (ima) {
     if (ima->source == IMA_SRC_TILED) {
-      tex = GPU_texture_from_blender(ima, iuser, NULL, GL_TEXTURE_2D_ARRAY);
-      tex_tile_data = GPU_texture_from_blender(ima, iuser, NULL, GL_TEXTURE_1D_ARRAY);
+      tex = BKE_image_get_gpu_tiles(ima, iuser, NULL);
+      tex_tile_data = BKE_image_get_gpu_tilemap(ima, iuser, NULL);
     }
     else {
-      tex = GPU_texture_from_blender(ima, iuser, NULL, GL_TEXTURE_2D);
+      tex = BKE_image_get_gpu_texture(ima, iuser, NULL);
     }
   }
 
@@ -273,7 +273,7 @@ DRWShadingGroup *workbench_image_setup_ex(WORKBENCH_PrivateData *wpd,
     tex = wpd->dummy_image_tx;
   }
 
-  const bool infront = (ob->dtx & OB_DRAWXRAY) != 0;
+  const bool infront = (ob->dtx & OB_DRAW_IN_FRONT) != 0;
   const bool transp = wpd->shading.xray_alpha < 1.0f;
   WORKBENCH_Prepass *prepass = &wpd->prepass[transp][infront][datatype];
 

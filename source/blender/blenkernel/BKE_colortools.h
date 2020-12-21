@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) 2006 Blender Foundation.
  * All rights reserved.
  */
-#ifndef __BKE_COLORTOOLS_H__
-#define __BKE_COLORTOOLS_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -27,6 +26,8 @@
 extern "C" {
 #endif
 
+struct BlendDataReader;
+struct BlendWriter;
 struct ColorManagedColorspaceSettings;
 struct ColorManagedDisplaySettings;
 struct ColorManagedViewSettings;
@@ -37,8 +38,6 @@ struct Histogram;
 struct ImBuf;
 struct Scopes;
 struct rctf;
-struct BlendWriter;
-struct BlendDataReader;
 
 void BKE_curvemapping_set_defaults(
     struct CurveMapping *cumap, int tot, float minx, float miny, float maxx, float maxy);
@@ -70,7 +69,7 @@ void BKE_curvemapping_changed(struct CurveMapping *cumap, const bool rem_doubles
 void BKE_curvemapping_changed_all(struct CurveMapping *cumap);
 
 /* call before _all_ evaluation functions */
-void BKE_curvemapping_initialize(struct CurveMapping *cumap);
+void BKE_curvemapping_init(struct CurveMapping *cumap);
 
 /* keep these (const CurveMap) - to help with thread safety */
 /* single curve, no table check */
@@ -96,7 +95,7 @@ void BKE_curvemapping_evaluate_premulRGBF_ex(const struct CurveMapping *cumap,
 void BKE_curvemapping_evaluate_premulRGBF(const struct CurveMapping *cumap,
                                           float vecout[3],
                                           const float vecin[3]);
-int BKE_curvemapping_RGBA_does_something(const struct CurveMapping *cumap);
+bool BKE_curvemapping_RGBA_does_something(const struct CurveMapping *cumap);
 void BKE_curvemapping_table_RGBA(const struct CurveMapping *cumap, float **array, int *size);
 
 /* non-const, these modify the curve */
@@ -140,6 +139,11 @@ void BKE_color_managed_view_settings_copy(struct ColorManagedViewSettings *new_s
                                           const struct ColorManagedViewSettings *settings);
 void BKE_color_managed_view_settings_free(struct ColorManagedViewSettings *settings);
 
+void BKE_color_managed_view_settings_blend_write(struct BlendWriter *writer,
+                                                 struct ColorManagedViewSettings *settings);
+void BKE_color_managed_view_settings_blend_read_data(struct BlendDataReader *reader,
+                                                     struct ColorManagedViewSettings *settings);
+
 void BKE_color_managed_colorspace_settings_init(
     struct ColorManagedColorspaceSettings *colorspace_settings);
 void BKE_color_managed_colorspace_settings_copy(
@@ -151,6 +155,4 @@ bool BKE_color_managed_colorspace_settings_equals(
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

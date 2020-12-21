@@ -36,6 +36,7 @@
 
 #include "GPU_matrix.h"
 #include "GPU_shader.h"
+#include "GPU_state.h"
 #include "GPU_viewport.h"
 
 #include "external_engine.h" /* own include */
@@ -52,7 +53,7 @@ extern char datatoc_common_view_lib_glsl[];
 /* *********** LISTS *********** */
 
 /* GPUViewport.storage
- * Is freed everytime the viewport engine changes */
+ * Is freed every time the viewport engine changes. */
 typedef struct EXTERNAL_Storage {
   int dummy;
 } EXTERNAL_Storage;
@@ -243,6 +244,8 @@ static void external_draw_scene_do(void *vedata)
   type = rv3d->render_engine->type;
   type->view_draw(rv3d->render_engine, draw_ctx->evil_C, draw_ctx->depsgraph);
 
+  GPU_bgl_end();
+
   GPU_matrix_pop();
   GPU_matrix_pop_projection();
 
@@ -268,9 +271,9 @@ static void external_draw_scene(void *vedata)
    * OpenGL render is used for quick preview (thumbnails or sequencer preview)
    * where using the rendering engine to preview doesn't make so much sense. */
   if (draw_ctx->evil_C) {
-    float clear_col[4] = {0, 0, 0, 0};
+    const float clear_col[4] = {0, 0, 0, 0};
     /* This is to keep compatibility with external engine. */
-    /* TODO(fclem) remove it eventually. */
+    /* TODO(fclem): remove it eventually. */
     GPU_framebuffer_bind(dfbl->default_fb);
     GPU_framebuffer_clear_color(dfbl->default_fb, clear_col);
 

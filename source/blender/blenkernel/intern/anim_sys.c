@@ -69,6 +69,8 @@
 
 #include "RNA_access.h"
 
+#include "BLO_read_write.h"
+
 #include "nla_private.h"
 
 #include "atomic_ops.h"
@@ -305,6 +307,55 @@ void BKE_keyingsets_free(ListBase *list)
     ksn = ks->next;
     BKE_keyingset_free(ks);
     BLI_freelinkN(list, ks);
+  }
+}
+
+void BKE_keyingsets_blend_write(BlendWriter *writer, ListBase *list)
+{
+  LISTBASE_FOREACH (KeyingSet *, ks, list) {
+    /* KeyingSet */
+    BLO_write_struct(writer, KeyingSet, ks);
+
+    /* Paths */
+    LISTBASE_FOREACH (KS_Path *, ksp, &ks->paths) {
+      /* Path */
+      BLO_write_struct(writer, KS_Path, ksp);
+
+      if (ksp->rna_path) {
+        BLO_write_string(writer, ksp->rna_path);
+      }
+    }
+  }
+}
+
+void BKE_keyingsets_blend_read_data(BlendDataReader *reader, ListBase *list)
+{
+  LISTBASE_FOREACH (KeyingSet *, ks, list) {
+    /* paths */
+    BLO_read_list(reader, &ks->paths);
+
+    LISTBASE_FOREACH (KS_Path *, ksp, &ks->paths) {
+      /* rna path */
+      BLO_read_data_address(reader, &ksp->rna_path);
+    }
+  }
+}
+
+void BKE_keyingsets_blend_read_lib(BlendLibReader *reader, ID *id, ListBase *list)
+{
+  LISTBASE_FOREACH (KeyingSet *, ks, list) {
+    LISTBASE_FOREACH (KS_Path *, ksp, &ks->paths) {
+      BLO_read_id_address(reader, id->lib, &ksp->id);
+    }
+  }
+}
+
+void BKE_keyingsets_blend_read_expand(BlendExpander *expander, ListBase *list)
+{
+  LISTBASE_FOREACH (KeyingSet *, ks, list) {
+    LISTBASE_FOREACH (KS_Path *, ksp, &ks->paths) {
+      BLO_expand(expander, ksp->id);
+    }
   }
 }
 
@@ -1138,7 +1189,7 @@ static void nlaeval_free(NlaEvalData *nlaeval)
 
 /* ---------------------- */
 
-static int nlaevalchan_validate_index(NlaEvalChannel *nec, int index)
+static int nlaevalchan_validate_index(const NlaEvalChannel *nec, int index)
 {
   if (nec->is_array) {
     if (index >= 0 && index < nec->base_snapshot.length) {
@@ -1150,7 +1201,29 @@ static int nlaevalchan_validate_index(NlaEvalChannel *nec, int index)
   return 0;
 }
 
-/* Initialise default values for NlaEvalChannel from the property data. */
+static bool nlaevalchan_validate_index_ex(const NlaEvalChannel *nec, const int array_index)
+{
+  /** Although array_index comes from fcurve, that doesn't necessarily mean the property has that
+   * many elements. */
+  const int index = nlaevalchan_validate_index(nec, array_index);
+
+  if (index < 0) {
+    if (G.debug & G_DEBUG) {
+      ID *id = nec->key.ptr.owner_id;
+      CLOG_WARN(&LOG,
+                "Animation: Invalid array index. ID = '%s',  '%s[%d]', array length is %d",
+                id ? (id->name + 2) : "<No ID>",
+                nec->rna_path,
+                array_index,
+                nec->base_snapshot.length);
+    }
+
+    return false;
+  }
+  return true;
+}
+
+/* Initialize default values for NlaEvalChannel from the property data. */
 static void nlaevalchan_get_default_values(NlaEvalChannel *nec, float *r_values)
 {
   PointerRNA *ptr = &nec->key.ptr;
@@ -1351,7 +1424,7 @@ static NlaEvalChannel *nlaevalchan_verify(PointerRNA *ptr, NlaEvalData *nlaeval,
 /* accumulate the old and new values of a channel according to mode and influence */
 static float nla_blend_value(int blendmode, float old_value, float value, float inf)
 {
-  /* optimisation: no need to try applying if there is no influence */
+  /* Optimization: no need to try applying if there is no influence. */
   if (IS_EQF(inf, 0.0f)) {
     return old_value;
   }
@@ -1392,7 +1465,7 @@ static float nla_blend_value(int blendmode, float old_value, float value, float 
 static float nla_combine_value(
     int mix_mode, float base_value, float old_value, float value, float inf)
 {
-  /* optimisation: no need to try applying if there is no influence */
+  /* Optimization: no need to try applying if there is no influence. */
   if (IS_EQF(inf, 0.0f)) {
     return old_value;
   }
@@ -1404,7 +1477,7 @@ static float nla_combine_value(
       return old_value + (value - base_value) * inf;
 
     case NEC_MIX_MULTIPLY:
-      if (base_value == 0.0f) {
+      if (IS_EQF(base_value, 0.0f)) {
         base_value = 1.0f;
       }
       return old_value * powf(value / base_value, inf);
@@ -1420,6 +1493,11 @@ static float nla_combine_value(
 static bool nla_invert_blend_value(
     int blend_mode, float old_value, float target_value, float influence, float *r_value)
 {
+  /** No solution if strip had 0 influence. */
+  if (IS_EQF(influence, 0.0f)) {
+    return false;
+  }
+
   switch (blend_mode) {
     case NLASTRIP_MODE_ADD:
       *r_value = (target_value - old_value) / influence;
@@ -1430,9 +1508,9 @@ static bool nla_invert_blend_value(
       return true;
 
     case NLASTRIP_MODE_MULTIPLY:
-      if (old_value == 0.0f) {
+      if (IS_EQF(old_value, 0.0f)) {
         /* Resolve 0/0 to 1. */
-        if (target_value == 0.0f) {
+        if (IS_EQF(target_value, 0.0f)) {
           *r_value = 1.0f;
           return true;
         }
@@ -1463,6 +1541,11 @@ static bool nla_invert_combine_value(int mix_mode,
                                      float influence,
                                      float *r_value)
 {
+  /* No solution if strip had no influence. */
+  if (IS_EQF(influence, 0.0f)) {
+    return false;
+  }
+
   switch (mix_mode) {
     case NEC_MIX_ADD:
     case NEC_MIX_AXIS_ANGLE:
@@ -1470,12 +1553,12 @@ static bool nla_invert_combine_value(int mix_mode,
       return true;
 
     case NEC_MIX_MULTIPLY:
-      if (base_value == 0.0f) {
+      if (IS_EQF(base_value, 0.0f)) {
         base_value = 1.0f;
       }
-      if (old_value == 0.0f) {
+      if (IS_EQF(old_value, 0.0f)) {
         /* Resolve 0/0 to 1. */
-        if (target_value == 0.0f) {
+        if (IS_EQF(target_value, 0.0f)) {
           *r_value = base_value;
           return true;
         }
@@ -1509,11 +1592,14 @@ static void nla_combine_quaternion(const float old_values[4],
 }
 
 /* invert accumulation of quaternion channels for Combine mode according to influence */
-static void nla_invert_combine_quaternion(const float old_values[4],
+static bool nla_invert_combine_quaternion(const float old_values[4],
                                           const float values[4],
                                           float influence,
                                           float result[4])
 {
+  if (IS_EQF(influence, 0.0f)) {
+    return false;
+  }
   float tmp_old[4], tmp_new[4];
 
   normalize_qt_qt(tmp_old, old_values);
@@ -1522,6 +1608,8 @@ static void nla_invert_combine_quaternion(const float old_values[4],
 
   mul_qt_qtqt(result, tmp_old, tmp_new);
   pow_qt_fl_normalized(result, 1.0f / influence);
+
+  return true;
 }
 
 /* Data about the current blend mode. */
@@ -1561,19 +1649,7 @@ static bool nlaeval_blend_value(NlaBlendData *blend,
     return false;
   }
 
-  int index = nlaevalchan_validate_index(nec, array_index);
-
-  if (index < 0) {
-    if (G.debug & G_DEBUG) {
-      ID *id = nec->key.ptr.owner_id;
-      CLOG_WARN(&LOG,
-                "Animato: Invalid array index. ID = '%s',  '%s[%d]', array length is %d",
-                id ? (id->name + 2) : "<No ID>",
-                nec->rna_path,
-                array_index,
-                nec->base_snapshot.length);
-    }
-
+  if (!nlaevalchan_validate_index_ex(nec, array_index)) {
     return false;
   }
 
@@ -1582,21 +1658,21 @@ static bool nlaeval_blend_value(NlaBlendData *blend,
     BLI_bitmap_set_all(nec->valid.ptr, true, 4);
   }
   else {
-    BLI_BITMAP_ENABLE(nec->valid.ptr, index);
+    BLI_BITMAP_ENABLE(nec->valid.ptr, array_index);
   }
 
   NlaEvalChannelSnapshot *nec_snapshot = nlaeval_snapshot_ensure_channel(blend->snapshot, nec);
-  float *p_value = &nec_snapshot->values[index];
+  float *p_value = &nec_snapshot->values[array_index];
 
   if (blend->mode == NLASTRIP_MODE_COMBINE) {
     /* Quaternion blending is deferred until all sub-channel values are known. */
     if (nec->mix_mode == NEC_MIX_QUATERNION) {
       NlaEvalChannelSnapshot *blend_snapshot = nlaevalchan_queue_blend(blend, nec);
 
-      blend_snapshot->values[index] = value;
+      blend_snapshot->values[array_index] = value;
     }
     else {
-      float base_value = nec->base_snapshot.values[index];
+      float base_value = nec->base_snapshot.values[array_index];
 
       *p_value = nla_combine_value(nec->mix_mode, base_value, *p_value, value, blend->influence);
     }
@@ -1870,6 +1946,7 @@ static void nlastrip_evaluate_transition(PointerRNA *ptr,
   /* first strip */
   tmp_nes.strip_mode = NES_TIME_TRANSITION_START;
   tmp_nes.strip = s1;
+  tmp_nes.strip_time = s1->strip_time;
   nlaeval_snapshot_init(&snapshot1, channels, snapshot);
   nlastrip_evaluate(
       ptr, channels, &tmp_modifiers, &tmp_nes, &snapshot1, anim_eval_context, flush_to_original);
@@ -1877,6 +1954,7 @@ static void nlastrip_evaluate_transition(PointerRNA *ptr,
   /* second strip */
   tmp_nes.strip_mode = NES_TIME_TRANSITION_END;
   tmp_nes.strip = s2;
+  tmp_nes.strip_time = s2->strip_time;
   nlaeval_snapshot_init(&snapshot2, channels, snapshot);
   nlastrip_evaluate(
       ptr, channels, &tmp_modifiers, &tmp_nes, &snapshot2, anim_eval_context, flush_to_original);
@@ -1904,7 +1982,7 @@ static void nlastrip_evaluate_meta(PointerRNA *ptr,
 
   /* meta-strip was calculated normally to have some time to be evaluated at
    * and here we 'look inside' the meta strip, treating it as a decorated window to
-   * it's child strips, which get evaluated as if they were some tracks on a strip
+   * its child strips, which get evaluated as if they were some tracks on a strip
    * (but with some extra modifiers to apply).
    *
    * NOTE: keep this in sync with animsys_evaluate_nla()
@@ -2192,7 +2270,15 @@ static bool animsys_evaluate_nla(NlaEvalData *echannels,
       if (is_inplace_tweak) {
         /* edit active action in-place according to its active strip, so copy the data  */
         memcpy(dummy_strip, adt->actstrip, sizeof(NlaStrip));
+        /* Prevents nla eval from considering active strip's adj strips.
+         * For user, this means entering tweak mode on a strip ignores evaluating adjacent strips
+         * in the same track. */
         dummy_strip->next = dummy_strip->prev = NULL;
+
+        /* If tweaked strip is syncing action length, then evaluate using action length. */
+        if (dummy_strip->flag & NLASTRIP_FLAG_SYNC_LENGTH) {
+          BKE_nlastrip_recalculate_bounds_sync_action(dummy_strip);
+        }
       }
       else {
         /* set settings of dummy NLA strip from AnimData settings */
@@ -2237,9 +2323,11 @@ static bool animsys_evaluate_nla(NlaEvalData *echannels,
       /* If computing the context for keyframing, store data there instead of the list. */
       else {
         /* The extend mode here effectively controls
-         * whether it is possible to key-frame beyond the ends. */
-        dummy_strip->extendmode = is_inplace_tweak ? NLASTRIP_EXTEND_NOTHING :
-                                                     NLASTRIP_EXTEND_HOLD;
+         * whether it is possible to key-frame beyond the ends.*/
+        dummy_strip->extendmode = (is_inplace_tweak &&
+                                   !(dummy_strip->flag & NLASTRIP_FLAG_SYNC_LENGTH)) ?
+                                      NLASTRIP_EXTEND_NOTHING :
+                                      NLASTRIP_EXTEND_HOLD;
 
         r_context->eval_strip = nes = nlastrips_ctime_get_strip(
             NULL, &dummy_trackslist, -1, anim_eval_context, flush_to_original);
@@ -2439,7 +2527,9 @@ bool BKE_animsys_nla_remap_keyframe_values(struct NlaKeyframingContext *context,
 
       *r_force_all = true;
 
-      nla_invert_combine_quaternion(old_values, values, influence, values);
+      if (!nla_invert_combine_quaternion(old_values, values, influence, values)) {
+        return false;
+      }
     }
     else {
       float *base_values = nec->base_snapshot.values;
@@ -2860,7 +2950,7 @@ void BKE_animsys_eval_driver(Depsgraph *depsgraph, ID *id, int driver_index, FCu
 
       /* set error-flag if evaluation failed */
       if (ok == 0) {
-        CLOG_ERROR(&LOG, "invalid driver - %s[%d]", fcu->rna_path, fcu->array_index);
+        CLOG_WARN(&LOG, "invalid driver - %s[%d]", fcu->rna_path, fcu->array_index);
         driver_orig->flag |= DRIVER_FLAG_INVALID;
       }
     }

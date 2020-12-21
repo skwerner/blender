@@ -38,9 +38,7 @@
 
 #include "PIL_time.h"
 
-namespace blender {
-namespace io {
-namespace alembic {
+namespace blender::io::alembic {
 
 std::string get_id_name(const Object *const ob)
 {
@@ -134,7 +132,7 @@ bool has_property(const Alembic::Abc::ICompoundProperty &prop, const std::string
     return false;
   }
 
-  return prop.getPropertyHeader(name) != NULL;
+  return prop.getPropertyHeader(name) != nullptr;
 }
 
 typedef std::pair<Alembic::AbcCoreAbstract::index_t, float> index_time_pair_t;
@@ -175,7 +173,7 @@ float get_weight_and_index(float time,
 
 AbcObjectReader *create_reader(const Alembic::AbcGeom::IObject &object, ImportSettings &settings)
 {
-  AbcObjectReader *reader = NULL;
+  AbcObjectReader *reader = nullptr;
 
   const Alembic::AbcGeom::MetaData &md = object.getMetaData();
 
@@ -261,6 +259,4 @@ std::ostream &operator<<(std::ostream &os, const SimpleLogger &logger)
   return os;
 }
 
-}  // namespace alembic
-}  // namespace io
-}  // namespace blender
+}  // namespace blender::io::alembic

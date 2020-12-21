@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_TRACKING_H__
-#define __BKE_TRACKING_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -77,6 +76,8 @@ void BKE_tracking_clipboard_paste_tracks(struct MovieTracking *tracking,
                                          struct MovieTrackingObject *object);
 
 /* **** Track **** */
+struct MovieTrackingTrack *BKE_tracking_track_add_empty(struct MovieTracking *tracking,
+                                                        struct ListBase *tracks_list);
 struct MovieTrackingTrack *BKE_tracking_track_add(struct MovieTracking *tracking,
                                                   struct ListBase *tracksbase,
                                                   float x,
@@ -293,7 +294,7 @@ void BKE_tracking_max_distortion_delta_across_bound(struct MovieTracking *tracki
 /* **** Image sampling **** */
 struct ImBuf *BKE_tracking_sample_pattern(int frame_width,
                                           int frame_height,
-                                          struct ImBuf *struct_ibuf,
+                                          struct ImBuf *search_ib,
                                           struct MovieTrackingTrack *track,
                                           struct MovieTrackingMarker *marker,
                                           bool from_anchor,
@@ -325,8 +326,7 @@ void BKE_tracking_refine_marker(struct MovieClip *clip,
 
 struct AutoTrackContext *BKE_autotrack_context_new(struct MovieClip *clip,
                                                    struct MovieClipUser *user,
-                                                   const bool backwards,
-                                                   const bool sequence);
+                                                   const bool is_backwards);
 bool BKE_autotrack_context_step(struct AutoTrackContext *context);
 void BKE_autotrack_context_sync(struct AutoTrackContext *context);
 void BKE_autotrack_context_sync_user(struct AutoTrackContext *context, struct MovieClipUser *user);
@@ -377,7 +377,7 @@ void BKE_tracking_reconstruction_scale(struct MovieTracking *tracking, float sca
 /* **** Feature detection **** */
 void BKE_tracking_detect_fast(struct MovieTracking *tracking,
                               struct ListBase *tracksbase,
-                              struct ImBuf *imbuf,
+                              struct ImBuf *ibuf,
                               int framenr,
                               int margin,
                               int min_trackness,
@@ -492,6 +492,4 @@ void BKE_tracking_get_rna_path_prefix_for_plane_track(
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

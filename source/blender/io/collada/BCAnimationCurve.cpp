@@ -22,7 +22,7 @@
 BCAnimationCurve::BCAnimationCurve()
 {
   this->curve_key.set_object_type(BC_ANIMATION_TYPE_OBJECT);
-  this->fcurve = NULL;
+  this->fcurve = nullptr;
   this->curve_is_local_copy = false;
 }
 
@@ -53,7 +53,7 @@ BCAnimationCurve::BCAnimationCurve(BCCurveKey key, Object *ob, FCurve *fcu)
 BCAnimationCurve::BCAnimationCurve(const BCCurveKey &key, Object *ob)
 {
   this->curve_key = key;
-  this->fcurve = NULL;
+  this->fcurve = nullptr;
   this->curve_is_local_copy = false;
   init_pointer_rna(ob);
 }
@@ -120,16 +120,16 @@ BCAnimationCurve::~BCAnimationCurve()
   if (curve_is_local_copy && fcurve) {
     // fprintf(stderr, "removed fcurve %s\n", fcurve->rna_path);
     delete_fcurve(fcurve);
-    this->fcurve = NULL;
+    this->fcurve = nullptr;
   }
 }
 
-const bool BCAnimationCurve::is_of_animation_type(BC_animation_type type) const
+bool BCAnimationCurve::is_of_animation_type(BC_animation_type type) const
 {
   return curve_key.get_animation_type() == type;
 }
 
-const std::string BCAnimationCurve::get_channel_target() const
+std::string BCAnimationCurve::get_channel_target() const
 {
   const std::string path = curve_key.get_path();
 
@@ -139,13 +139,13 @@ const std::string BCAnimationCurve::get_channel_target() const
   return bc_string_after(path, ".");
 }
 
-const std::string BCAnimationCurve::get_channel_type() const
+std::string BCAnimationCurve::get_channel_type() const
 {
   const std::string channel = get_channel_target();
   return bc_string_after(channel, ".");
 }
 
-const std::string BCAnimationCurve::get_channel_posebone() const
+std::string BCAnimationCurve::get_channel_posebone() const
 {
   const std::string channel = get_channel_target();
   std::string pose_bone_name = bc_string_before(channel, ".");
@@ -159,7 +159,7 @@ const std::string BCAnimationCurve::get_channel_posebone() const
   return pose_bone_name;
 }
 
-const std::string BCAnimationCurve::get_animation_name(Object *ob) const
+std::string BCAnimationCurve::get_animation_name(Object *ob) const
 {
   std::string name;
 
@@ -169,12 +169,18 @@ const std::string BCAnimationCurve::get_animation_name(Object *ob) const
     } break;
 
     case BC_ANIMATION_TYPE_BONE: {
-      if (fcurve == NULL || fcurve->rna_path == NULL) {
+      if (fcurve == nullptr || fcurve->rna_path == nullptr) {
         name = "";
       }
       else {
-        const char *boneName = BLI_str_quoted_substrN(fcurve->rna_path, "pose.bones[");
-        name = (boneName) ? id_name(ob) + "_" + std::string(boneName) : "";
+        char *boneName = BLI_str_quoted_substrN(fcurve->rna_path, "pose.bones[");
+        if (boneName) {
+          name = id_name(ob) + "_" + std::string(boneName);
+          MEM_freeN(boneName);
+        }
+        else {
+          name = "";
+        }
       }
     } break;
 
@@ -201,36 +207,36 @@ const std::string BCAnimationCurve::get_animation_name(Object *ob) const
   return name;
 }
 
-const int BCAnimationCurve::get_channel_index() const
+int BCAnimationCurve::get_channel_index() const
 {
   return curve_key.get_array_index();
 }
 
-const int BCAnimationCurve::get_subindex() const
+int BCAnimationCurve::get_subindex() const
 {
   return curve_key.get_subindex();
 }
 
-const std::string BCAnimationCurve::get_rna_path() const
+std::string BCAnimationCurve::get_rna_path() const
 {
   return curve_key.get_path();
 }
 
-const int BCAnimationCurve::sample_count() const
+int BCAnimationCurve::sample_count() const
 {
-  if (fcurve == NULL) {
+  if (fcurve == nullptr) {
     return 0;
   }
   return fcurve->totvert;
 }
 
-const int BCAnimationCurve::closest_index_above(const float sample_frame, const int start_at) const
+int BCAnimationCurve::closest_index_above(const float sample_frame, const int start_at) const
 {
-  if (fcurve == NULL) {
+  if (fcurve == nullptr) {
     return -1;
   }
 
-  const int cframe = fcurve->bezt[start_at].vec[1][0];  // inaccurate!
+  const int cframe = fcurve->bezt[start_at].vec[1][0]; /* inaccurate! */
 
   if (fabs(cframe - sample_frame) < 0.00001) {
     return start_at;
@@ -238,9 +244,9 @@ const int BCAnimationCurve::closest_index_above(const float sample_frame, const 
   return (fcurve->totvert > start_at + 1) ? start_at + 1 : start_at;
 }
 
-const int BCAnimationCurve::closest_index_below(const float sample_frame) const
+int BCAnimationCurve::closest_index_below(const float sample_frame) const
 {
-  if (fcurve == NULL) {
+  if (fcurve == nullptr) {
     return -1;
   }
 
@@ -252,7 +258,7 @@ const int BCAnimationCurve::closest_index_below(const float sample_frame) const
   for (int fcu_index = 0; fcu_index < fcurve->totvert; fcu_index++) {
     upper_index = fcu_index;
 
-    const int cframe = fcurve->bezt[fcu_index].vec[1][0];  // inaccurate!
+    const int cframe = fcurve->bezt[fcu_index].vec[1][0]; /* inaccurate! */
     if (cframe <= sample_frame) {
       lower_frame = cframe;
       lower_index = fcu_index;
@@ -271,7 +277,7 @@ const int BCAnimationCurve::closest_index_below(const float sample_frame) const
   return (fraction < 0.5) ? lower_index : upper_index;
 }
 
-const int BCAnimationCurve::get_interpolation_type(float sample_frame) const
+int BCAnimationCurve::get_interpolation_type(float sample_frame) const
 {
   const int index = closest_index_below(sample_frame);
   if (index < 0) {
@@ -280,7 +286,7 @@ const int BCAnimationCurve::get_interpolation_type(float sample_frame) const
   return fcurve->bezt[index].ipo;
 }
 
-const FCurve *BCAnimationCurve::get_fcurve() const
+FCurve *BCAnimationCurve::get_fcurve() const
 {
   return fcurve;
 }
@@ -304,14 +310,14 @@ FCurve *BCAnimationCurve::get_edit_fcurve()
 
 void BCAnimationCurve::clean_handles()
 {
-  if (fcurve == NULL) {
+  if (fcurve == nullptr) {
     fcurve = get_edit_fcurve();
   }
 
   /* Keep old bezt data for copy)*/
   BezTriple *old_bezts = fcurve->bezt;
   int totvert = fcurve->totvert;
-  fcurve->bezt = NULL;
+  fcurve->bezt = nullptr;
   fcurve->totvert = 0;
 
   for (int i = 0; i < totvert; i++) {
@@ -329,25 +335,25 @@ void BCAnimationCurve::clean_handles()
   }
 }
 
-const bool BCAnimationCurve::is_transform_curve() const
+bool BCAnimationCurve::is_transform_curve() const
 {
   std::string channel_type = this->get_channel_type();
   return (is_rotation_curve() || channel_type == "scale" || channel_type == "location");
 }
 
-const bool BCAnimationCurve::is_rotation_curve() const
+bool BCAnimationCurve::is_rotation_curve() const
 {
   std::string channel_type = this->get_channel_type();
   return (channel_type == "rotation" || channel_type == "rotation_euler" ||
           channel_type == "rotation_quaternion");
 }
 
-const float BCAnimationCurve::get_value(const float frame)
+float BCAnimationCurve::get_value(const float frame)
 {
   if (fcurve) {
     return evaluate_fcurve(fcurve, frame);
   }
-  return 0;  // TODO: handle case where neither sample nor fcu exist
+  return 0; /* TODO: handle case where neither sample nor fcu exist */
 }
 
 void BCAnimationCurve::update_range(float val)
@@ -492,7 +498,7 @@ bool BCAnimationCurve::add_value_from_rna(const int frame_index)
 void BCAnimationCurve::get_value_map(BCValueMap &value_map)
 {
   value_map.clear();
-  if (fcurve == NULL) {
+  if (fcurve == nullptr) {
     return;
   }
 
@@ -533,7 +539,7 @@ bool BCAnimationCurve::is_animated()
 
 bool BCAnimationCurve::is_keyframe(int frame)
 {
-  if (this->fcurve == NULL) {
+  if (this->fcurve == nullptr) {
     return false;
   }
 
@@ -559,9 +565,8 @@ inline bool operator<(const BCAnimationCurve &lhs, const BCAnimationCurve &rhs)
     const int rha = rhs.get_channel_index();
     return lha < rha;
   }
-  else {
-    return lhtgt < rhtgt;
-  }
+
+  return lhtgt < rhtgt;
 }
 
 BCCurveKey::BCCurveKey()
@@ -591,22 +596,22 @@ void BCCurveKey::operator=(const BCCurveKey &other)
   this->curve_subindex = other.curve_subindex;
 }
 
-const std::string BCCurveKey::get_full_path() const
+std::string BCCurveKey::get_full_path() const
 {
   return this->rna_path + '[' + std::to_string(this->curve_array_index) + ']';
 }
 
-const std::string BCCurveKey::get_path() const
+std::string BCCurveKey::get_path() const
 {
   return this->rna_path;
 }
 
-const int BCCurveKey::get_array_index() const
+int BCCurveKey::get_array_index() const
 {
   return this->curve_array_index;
 }
 
-const int BCCurveKey::get_subindex() const
+int BCCurveKey::get_subindex() const
 {
   return this->curve_subindex;
 }
@@ -616,12 +621,12 @@ void BCCurveKey::set_object_type(BC_animation_type object_type)
   this->key_type = object_type;
 }
 
-const BC_animation_type BCCurveKey::get_animation_type() const
+BC_animation_type BCCurveKey::get_animation_type() const
 {
   return this->key_type;
 }
 
-const bool BCCurveKey::operator<(const BCCurveKey &other) const
+bool BCCurveKey::operator<(const BCCurveKey &other) const
 {
   /* needed for using this class as key in maps and sets */
   if (this->key_type != other.key_type) {
@@ -643,22 +648,22 @@ BCBezTriple::BCBezTriple(BezTriple &bezt) : bezt(bezt)
 {
 }
 
-const float BCBezTriple::get_frame() const
+float BCBezTriple::get_frame() const
 {
   return bezt.vec[1][0];
 }
 
-const float BCBezTriple::get_time(Scene *scene) const
+float BCBezTriple::get_time(Scene *scene) const
 {
   return FRA2TIME(bezt.vec[1][0]);
 }
 
-const float BCBezTriple::get_value() const
+float BCBezTriple::get_value() const
 {
   return bezt.vec[1][1];
 }
 
-const float BCBezTriple::get_angle() const
+float BCBezTriple::get_angle() const
 {
   return RAD2DEGF(get_value());
 }

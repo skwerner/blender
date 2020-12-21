@@ -71,6 +71,8 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(OBJECT_OT_paths_range_update);
   WM_operatortype_append(OBJECT_OT_forcefield_toggle);
 
+  WM_operatortype_append(OBJECT_OT_switch_object);
+
   WM_operatortype_append(OBJECT_OT_parent_set);
   WM_operatortype_append(OBJECT_OT_parent_no_inverse_set);
   WM_operatortype_append(OBJECT_OT_parent_clear);
@@ -79,6 +81,7 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(OBJECT_OT_track_clear);
   WM_operatortype_append(OBJECT_OT_make_local);
   WM_operatortype_append(OBJECT_OT_make_override_library);
+  WM_operatortype_append(OBJECT_OT_convert_proxy_to_override);
   WM_operatortype_append(OBJECT_OT_make_single_user);
   WM_operatortype_append(OBJECT_OT_make_links_scene);
   WM_operatortype_append(OBJECT_OT_make_links_data);
@@ -117,6 +120,7 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(OBJECT_OT_add_named);
   WM_operatortype_append(OBJECT_OT_effector_add);
   WM_operatortype_append(OBJECT_OT_collection_instance_add);
+  WM_operatortype_append(OBJECT_OT_data_instance_add);
   WM_operatortype_append(OBJECT_OT_metaball_add);
   WM_operatortype_append(OBJECT_OT_duplicates_make_real);
   WM_operatortype_append(OBJECT_OT_duplicate);
@@ -133,6 +137,7 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(OBJECT_OT_modifier_apply_as_shapekey);
   WM_operatortype_append(OBJECT_OT_modifier_convert);
   WM_operatortype_append(OBJECT_OT_modifier_copy);
+  WM_operatortype_append(OBJECT_OT_modifier_set_active);
   WM_operatortype_append(OBJECT_OT_multires_subdivide);
   WM_operatortype_append(OBJECT_OT_multires_reshape);
   WM_operatortype_append(OBJECT_OT_multires_higher_levels_delete);
@@ -161,6 +166,7 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(OBJECT_OT_shaderfx_move_up);
   WM_operatortype_append(OBJECT_OT_shaderfx_move_down);
   WM_operatortype_append(OBJECT_OT_shaderfx_move_to_index);
+  WM_operatortype_append(OBJECT_OT_shaderfx_copy);
 
   WM_operatortype_append(OBJECT_OT_correctivesmooth_bind);
   WM_operatortype_append(OBJECT_OT_meshdeform_bind);

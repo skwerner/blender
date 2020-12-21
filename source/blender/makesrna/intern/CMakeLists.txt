@@ -20,7 +20,7 @@
 
 if(CMAKE_COMPILER_IS_GNUCC)
   # add here so we fail early.
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror=implicit-function-declaration")
+  string(APPEND CMAKE_C_FLAGS " -Werror=implicit-function-declaration")
 endif()
 
 # files rna_access.c rna_define.c makesrna.c intentionally excluded.
@@ -30,6 +30,8 @@ set(DEFSRC
   rna_animation.c
   rna_animviz.c
   rna_armature.c
+  rna_attribute.c
+  rna_asset.c
   rna_boid.c
   rna_brush.c
   rna_cachefile.c
@@ -47,7 +49,6 @@ set(DEFSRC
   rna_fluid.c
   rna_gpencil.c
   rna_gpencil_modifier.c
-  rna_hair.c
   rna_image.c
   rna_key.c
   rna_lattice.c
@@ -69,7 +70,6 @@ set(DEFSRC
   rna_packedfile.c
   rna_palette.c
   rna_particle.c
-  rna_pointcloud.c
   rna_pose.c
   rna_render.c
   rna_rigidbody.c
@@ -79,7 +79,6 @@ set(DEFSRC
   rna_sculpt_paint.c
   rna_sequencer.c
   rna_shader_fx.c
-  rna_simulation.c
   rna_sound.c
   rna_space.c
   rna_speaker.c
@@ -98,6 +97,17 @@ set(DEFSRC
   rna_world.c
   rna_xr.c
 )
+
+if(WITH_EXPERIMENTAL_FEATURES)
+  add_definitions(-DWITH_GEOMETRY_NODES)
+  add_definitions(-DWITH_POINT_CLOUD)
+  add_definitions(-DWITH_HAIR_NODES)
+  list(APPEND DEFSRC
+    rna_hair.c
+    rna_pointcloud.c
+    rna_simulation.c
+  )
+endif()
 
 set(APISRC
   rna_action_api.c
@@ -142,7 +152,7 @@ if(CMAKE_COMPILER_IS_GNUCC OR (CMAKE_C_COMPILER_ID MATCHES "Clang"))
   set(GENSRC_CFLAGS "-Wno-missing-prototypes")
 endif()
 if(CMAKE_C_COMPILER_ID MATCHES "Clang")
-  set(GENSRC_CFLAGS "${GENSRC_CFLAGS} -Wno-missing-variable-declarations")
+  string(APPEND GENSRC_CFLAGS " -Wno-missing-variable-declarations")
 endif()
 
 if(GENSRC_CFLAGS)
@@ -175,6 +185,7 @@ set(SRC
   ${DEFSRC}
   ${APISRC}
   ../../../../intern/clog/clog.c
+  ../../../../intern/guardedalloc/intern/leak_detector.cc
   ../../../../intern/guardedalloc/intern/mallocn.c
   ../../../../intern/guardedalloc/intern/mallocn_guarded_impl.c
   ../../../../intern/guardedalloc/intern/mallocn_lockfree_impl.c
@@ -344,6 +355,10 @@ if(WITH_XR_OPENXR)
   add_definitions(-DWITH_XR_OPENXR)
 endif()
 
+if(WITH_GMP)
+  add_definitions(-DWITH_GMP)
+endif()
+
 # Build makesrna executable
 blender_include_dirs(
   .
@@ -359,11 +374,13 @@ blender_include_dirs(
   ../../ikplugin
   ../../imbuf
   ../../makesdna
+  ../../modifiers
   ../../nodes/
+  ../../sequencer
   ../../simulation
   ../../windowmanager
   ../../editors/include
-  ../../render/extern/include
+  ../../render
   ../../../../intern/cycles/blender
   ../../../../intern/atomic
   ../../../../intern/glew-mx
@@ -372,14 +389,10 @@ blender_include_dirs(
   ../../../../intern/mantaflow/extern
 )
 
-blender_include_dirs_sys(
-  "${GLEW_INCLUDE_PATH}"
-)
-
 add_cc_flags_custom_test(makesrna)
-setup_platform_linker_flags()
 
 add_executable(makesrna ${SRC} ${SRC_RNA_INC} ${SRC_DNA_INC})
+setup_platform_linker_flags(makesrna)
 
 target_link_libraries(makesrna bf_dna)
 target_link_libraries(makesrna bf_dna_blenlib)
@@ -415,6 +428,7 @@ set(LIB
 
   bf_editor_animation
   bf_editor_armature
+  bf_editor_asset
   bf_editor_curve
   bf_editor_gizmo_library
   bf_editor_gpencil
@@ -430,7 +444,6 @@ set(LIB
   bf_editor_undo
 )
 
-add_definitions(${GL_DEFINITIONS})
 
 blender_add_lib(bf_rna "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
 

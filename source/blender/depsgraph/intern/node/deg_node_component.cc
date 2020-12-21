@@ -23,8 +23,8 @@
 
 #include "intern/node/deg_node_component.h"
 
+#include <cstdio>
 #include <cstring> /* required for STREQ later on. */
-#include <stdio.h>
 
 #include "BLI_ghash.h"
 #include "BLI_hash.hh"
@@ -38,8 +38,7 @@
 #include "intern/node/deg_node_id.h"
 #include "intern/node/deg_node_operation.h"
 
-namespace blender {
-namespace deg {
+namespace blender::deg {
 
 /* *********** */
 /* Outer Nodes */
@@ -251,7 +250,7 @@ OperationNode *ComponentNode::get_entry_operation()
   if (entry_operation) {
     return entry_operation;
   }
-  else if (operations_map != nullptr && operations_map->size() == 1) {
+  if (operations_map != nullptr && operations_map->size() == 1) {
     OperationNode *op_node = nullptr;
     /* TODO(sergey): This is somewhat slow. */
     for (OperationNode *tmp : operations_map->values()) {
@@ -261,7 +260,7 @@ OperationNode *ComponentNode::get_entry_operation()
     entry_operation = op_node;
     return op_node;
   }
-  else if (operations.size() == 1) {
+  if (operations.size() == 1) {
     return operations[0];
   }
   return nullptr;
@@ -272,7 +271,7 @@ OperationNode *ComponentNode::get_exit_operation()
   if (exit_operation) {
     return exit_operation;
   }
-  else if (operations_map != nullptr && operations_map->size() == 1) {
+  if (operations_map != nullptr && operations_map->size() == 1) {
     OperationNode *op_node = nullptr;
     /* TODO(sergey): This is somewhat slow. */
     for (OperationNode *tmp : operations_map->values()) {
@@ -282,7 +281,7 @@ OperationNode *ComponentNode::get_exit_operation()
     exit_operation = op_node;
     return op_node;
   }
-  else if (operations.size() == 1) {
+  if (operations.size() == 1) {
     return operations[0];
   }
   return nullptr;
@@ -376,5 +375,4 @@ void deg_register_component_depsnodes()
   register_node_typeinfo(&DNTI_SIMULATION);
 }
 
-}  // namespace deg
-}  // namespace blender
+}  // namespace blender::deg

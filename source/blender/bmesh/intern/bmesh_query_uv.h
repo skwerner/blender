@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BMESH_QUERY_UV_H__
-#define __BMESH_QUERY_UV_H__
+#pragma once
 
 /** \file
  * \ingroup bmesh
@@ -32,9 +31,14 @@ void BM_face_uv_calc_center_median_weighted(const BMFace *f,
                                             const float aspect[2],
                                             const int cd_loop_uv_offset,
                                             float r_cent[2]) ATTR_NONNULL();
+void BM_face_uv_calc_center_median(const BMFace *f, const int cd_loop_uv_offset, float r_cent[2])
+    ATTR_NONNULL();
 
 float BM_face_uv_calc_cross(const BMFace *f, const int cd_loop_uv_offset) ATTR_WARN_UNUSED_RESULT
     ATTR_NONNULL();
+
+void BM_face_uv_minmax(const BMFace *f, float min[2], float max[2], const int cd_loop_uv_offset);
+void BM_face_uv_transform(BMFace *f, const float matrix[2][2], const int cd_loop_uv_offset);
 
 bool BM_loop_uv_share_edge_check_with_limit(BMLoop *l_a,
                                             BMLoop *l_b,
@@ -54,5 +58,3 @@ bool BM_loop_uv_share_vert_check(BMLoop *l_a,
                                  BMLoop *l_b,
                                  const int cd_loop_uv_offset) ATTR_WARN_UNUSED_RESULT
     ATTR_NONNULL();
-
-#endif /* __BMESH_QUERY_UV_H__ */

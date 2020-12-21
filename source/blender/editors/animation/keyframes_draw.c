@@ -692,7 +692,7 @@ static void draw_keylist(View2D *v2d,
   const float smaller_sz = 0.35f * icon_sz;
   const float ipo_sz = 0.1f * icon_sz;
 
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   /* locked channels are less strongly shown, as feedback for locked channels in DopeSheet */
   /* TODO: allow this opacity factor to be themed? */
@@ -848,7 +848,7 @@ static void draw_keylist(View2D *v2d,
     }
   }
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 }
 
 /* *************************** Channel Drawing Funcs *************************** */
@@ -1071,7 +1071,7 @@ void scene_to_keylist(bDopeSheet *ads, Scene *sce, DLRBT_Tree *keys, int saction
   ac.datatype = ANIMCONT_CHANNEL;
 
   /* get F-Curves to take keyframes from */
-  filter = ANIMFILTER_DATA_VISIBLE;  // curves only
+  filter = ANIMFILTER_DATA_VISIBLE; /* curves only */
   ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
 
   /* loop through each F-Curve, grabbing the keyframes */
@@ -1109,7 +1109,7 @@ void ob_to_keylist(bDopeSheet *ads, Object *ob, DLRBT_Tree *keys, int saction_fl
   ac.datatype = ANIMCONT_CHANNEL;
 
   /* get F-Curves to take keyframes from */
-  filter = ANIMFILTER_DATA_VISIBLE;  // curves only
+  filter = ANIMFILTER_DATA_VISIBLE; /* curves only */
   ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
 
   /* loop through each F-Curve, grabbing the keyframes */
@@ -1143,7 +1143,7 @@ void cachefile_to_keylist(bDopeSheet *ads,
 
   /* get F-Curves to take keyframes from */
   ListBase anim_data = {NULL, NULL};
-  int filter = ANIMFILTER_DATA_VISIBLE;  // curves only
+  int filter = ANIMFILTER_DATA_VISIBLE; /* curves only */
   ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
 
   /* loop through each F-Curve, grabbing the keyframes */

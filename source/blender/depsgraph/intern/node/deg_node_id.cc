@@ -23,8 +23,8 @@
 
 #include "intern/node/deg_node_id.h"
 
+#include <cstdio>
 #include <cstring> /* required for STREQ later on. */
-#include <stdio.h>
 
 #include "BLI_string.h"
 #include "BLI_utildefines.h"
@@ -41,8 +41,7 @@
 #include "intern/node/deg_node_factory.h"
 #include "intern/node/deg_node_time.h"
 
-namespace blender {
-namespace deg {
+namespace blender::deg {
 
 const char *linkedStateAsString(eDepsNode_LinkedState_Type linked_state)
 {
@@ -137,7 +136,7 @@ void IDNode::destroy()
   }
 
   /* Free memory used by this CoW ID. */
-  if (id_cow != id_orig && id_cow != nullptr) {
+  if (!ELEM(id_cow, id_orig, nullptr)) {
     deg_free_copy_on_write_datablock(id_cow);
     MEM_freeN(id_cow);
     id_cow = nullptr;
@@ -213,5 +212,4 @@ IDComponentsMask IDNode::get_visible_components_mask() const
   return result;
 }
 
-}  // namespace deg
-}  // namespace blender
+}  // namespace blender::deg

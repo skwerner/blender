@@ -36,8 +36,6 @@
 #include "bmesh.h"
 #include "pbvh_intern.h"
 
-#include <assert.h>
-
 /* Avoid skinny faces */
 #define USE_EDGEQUEUE_EVEN_SUBDIV
 #ifdef USE_EDGEQUEUE_EVEN_SUBDIV
@@ -65,6 +63,7 @@
 static void pbvh_bmesh_verify(PBVH *pbvh);
 #endif
 
+/* -------------------------------------------------------------------- */
 /** \name BMesh Utility API
  *
  * Use some local functions which assume triangles.
@@ -184,14 +183,13 @@ static BMVert *bm_vert_hash_lookup_chain(GHash *deleted_verts, BMVert *v)
       /* not remapped*/
       return v;
     }
-    else if (*v_next_p == NULL) {
+    if (*v_next_p == NULL) {
       /* removed and not remapped */
       return NULL;
     }
-    else {
-      /* remapped */
-      v = *v_next_p;
-    }
+
+    /* remapped */
+    v = *v_next_p;
   }
 }
 
@@ -1738,9 +1736,8 @@ static void pbvh_bmesh_node_limit_ensure_fast(
           candidate = i_iter;
           break;
         }
-        else {
-          num_child2++;
-        }
+
+        num_child2++;
       }
 
       if (candidate != -1) {

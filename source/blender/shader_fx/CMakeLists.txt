@@ -31,7 +31,7 @@ set(INC
   ../editors/include
   ../makesdna
   ../makesrna
-  ../render/extern/include
+  ../render
   ../windowmanager
   ../../../intern/eigen
   ../../../intern/guardedalloc
@@ -67,6 +67,5 @@ if(WITH_INTERNATIONAL)
   add_definitions(-DWITH_INTERNATIONAL)
 endif()
 
-add_definitions(${GL_DEFINITIONS})
 
 blender_add_lib(bf_shader_fx "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

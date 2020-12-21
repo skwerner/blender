@@ -28,6 +28,7 @@
 
 #include "BLI_blenlib.h"
 #include "BLI_math.h"
+#include "BLI_string.h"
 #include "BLI_utildefines.h"
 
 #include "BKE_context.h"
@@ -85,7 +86,7 @@ static const EnumPropertyItem DT_layer_items[] = {
      "Transfer Freestyle edge mark"},
     {0, "", 0, "Face Corner Data", ""},
     {DT_TYPE_LNOR, "CUSTOM_NORMAL", 0, "Custom Normals", "Transfer custom normals"},
-    {DT_TYPE_VCOL, "VCOL", 0, "VCol", "Vertex (face corners) colors"},
+    {DT_TYPE_VCOL, "VCOL", 0, "Vertex Colors", "Vertex (face corners) colors"},
     {DT_TYPE_UV, "UV", 0, "UVs", "Transfer UV layers"},
     {0, "", 0, "Face Data", ""},
     {DT_TYPE_SHARP_FACE, "SMOOTH", 0, "Smooth", "Transfer flat/smooth mark"},
@@ -153,21 +154,18 @@ static const EnumPropertyItem *dt_layers_select_src_itemf(bContext *C,
     Object *ob_src = CTX_data_active_object(C);
 
     if (ob_src) {
-      Mesh *me_eval;
-      int num_data, i;
-
       Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
       Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
       Object *ob_src_eval = DEG_get_evaluated_object(depsgraph, ob_src);
 
       CustomData_MeshMasks cddata_masks = CD_MASK_BAREMESH;
       cddata_masks.lmask |= CD_MASK_MLOOPUV;
-      me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_src_eval, &cddata_masks);
-      num_data = CustomData_number_of_layers(&me_eval->ldata, CD_MLOOPUV);
+      Mesh *me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_src_eval, &cddata_masks);
+      int num_data = CustomData_number_of_layers(&me_eval->ldata, CD_MLOOPUV);
 
       RNA_enum_item_add_separator(&item, &totitem);
 
-      for (i = 0; i < num_data; i++) {
+      for (int i = 0; i < num_data; i++) {
         tmp_item.value = i;
         tmp_item.identifier = tmp_item.name = CustomData_get_layer_name(
             &me_eval->ldata, CD_MLOOPUV, i);
@@ -179,21 +177,18 @@ static const EnumPropertyItem *dt_layers_select_src_itemf(bContext *C,
     Object *ob_src = CTX_data_active_object(C);
 
     if (ob_src) {
-      Mesh *me_eval;
-      int num_data, i;
-
       Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
       Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
       Object *ob_src_eval = DEG_get_evaluated_object(depsgraph, ob_src);
 
       CustomData_MeshMasks cddata_masks = CD_MASK_BAREMESH;
       cddata_masks.lmask |= CD_MASK_MLOOPCOL;
-      me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_src_eval, &cddata_masks);
-      num_data = CustomData_number_of_layers(&me_eval->ldata, CD_MLOOPCOL);
+      Mesh *me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_src_eval, &cddata_masks);
+      int num_data = CustomData_number_of_layers(&me_eval->ldata, CD_MLOOPCOL);
 
       RNA_enum_item_add_separator(&item, &totitem);
 
-      for (i = 0; i < num_data; i++) {
+      for (int i = 0; i < num_data; i++) {
         tmp_item.value = i;
         tmp_item.identifier = tmp_item.name = CustomData_get_layer_name(
             &me_eval->ldata, CD_MLOOPCOL, i);
@@ -420,8 +415,8 @@ static int data_transfer_exec(bContext *C, wmOperator *op)
   const float ray_radius = RNA_float_get(op->ptr, "ray_radius");
   const float islands_precision = RNA_float_get(op->ptr, "islands_precision");
 
-  const int layers_src = RNA_enum_get(op->ptr, "layers_select_src");
-  const int layers_dst = RNA_enum_get(op->ptr, "layers_select_dst");
+  int layers_src = RNA_enum_get(op->ptr, "layers_select_src");
+  int layers_dst = RNA_enum_get(op->ptr, "layers_select_dst");
   int layers_select_src[DT_MULTILAYER_INDEX_MAX] = {0};
   int layers_select_dst[DT_MULTILAYER_INDEX_MAX] = {0};
   const int fromto_idx = BKE_object_data_transfer_dttype_to_srcdst_index(data_type);
@@ -445,6 +440,10 @@ static int data_transfer_exec(bContext *C, wmOperator *op)
   if (reverse_transfer && (ID_IS_LINKED(ob_src->data) || ID_IS_OVERRIDE_LIBRARY(ob_src->data))) {
     /* Do not transfer to linked or override data, not supported. */
     return OPERATOR_CANCELLED;
+  }
+
+  if (reverse_transfer) {
+    SWAP(int, layers_src, layers_dst);
   }
 
   if (fromto_idx != DT_MULTILAYER_INDEX_INVALID) {
@@ -508,13 +507,15 @@ static int data_transfer_exec(bContext *C, wmOperator *op)
 
   BLI_freelistN(&ctx_objects);
 
-  WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, NULL);
+  if (changed) {
+    DEG_relations_tag_update(CTX_data_main(C));
+    WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, NULL);
+  }
 
 #if 0 /* TODO */
   /* Note: issue with that is that if canceled, operator cannot be redone... Nasty in our case. */
   return changed ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
 #else
-  (void)changed;
   return OPERATOR_FINISHED;
 #endif
 }
@@ -562,32 +563,45 @@ static bool data_transfer_poll_property(const bContext *UNUSED(C),
     return false;
   }
 
-  if (STREQ(prop_id, "use_object_transform") && use_auto_transform) {
-    return false;
+  if (STREQ(prop_id, "use_object_transform")) {
+    if (use_auto_transform) {
+      return false;
+    }
   }
-  if (STREQ(prop_id, "max_distance") && !use_max_distance) {
-    return false;
+  else if (STREQ(prop_id, "max_distance")) {
+    if (!use_max_distance) {
+      return false;
+    }
   }
-  if (STREQ(prop_id, "islands_precision") && !DT_DATATYPE_IS_LOOP(data_type)) {
-    return false;
+  else if (STREQ(prop_id, "islands_precision")) {
+    if (!DT_DATATYPE_IS_LOOP(data_type)) {
+      return false;
+    }
   }
-
-  if (STREQ(prop_id, "vert_mapping") && !DT_DATATYPE_IS_VERT(data_type)) {
-    return false;
+  else if (STREQ(prop_id, "vert_mapping")) {
+    if (!DT_DATATYPE_IS_VERT(data_type)) {
+      return false;
+    }
   }
-  if (STREQ(prop_id, "edge_mapping") && !DT_DATATYPE_IS_EDGE(data_type)) {
-    return false;
+  else if (STREQ(prop_id, "edge_mapping")) {
+    if (!DT_DATATYPE_IS_EDGE(data_type)) {
+      return false;
+    }
   }
-  if (STREQ(prop_id, "loop_mapping") && !DT_DATATYPE_IS_LOOP(data_type)) {
-    return false;
+  else if (STREQ(prop_id, "loop_mapping")) {
+    if (!DT_DATATYPE_IS_LOOP(data_type)) {
+      return false;
+    }
   }
-  if (STREQ(prop_id, "poly_mapping") && !DT_DATATYPE_IS_POLY(data_type)) {
-    return false;
+  else if (STREQ(prop_id, "poly_mapping")) {
+    if (!DT_DATATYPE_IS_POLY(data_type)) {
+      return false;
+    }
   }
-
-  if ((STREQ(prop_id, "layers_select_src") || STREQ(prop_id, "layers_select_dst")) &&
-      !DT_DATATYPE_IS_MULTILAYERS(data_type)) {
-    return false;
+  else if (STR_ELEM(prop_id, "layers_select_src", "layers_select_dst")) {
+    if (!DT_DATATYPE_IS_MULTILAYERS(data_type)) {
+      return false;
+    }
   }
 
   /* Else, show it! */
@@ -760,7 +774,7 @@ void OBJECT_OT_data_transfer(wmOperatorType *ot)
 
 static bool datalayout_transfer_poll(bContext *C)
 {
-  return (edit_modifier_poll_generic(C, &RNA_DataTransferModifier, (1 << OB_MESH), true) ||
+  return (edit_modifier_poll_generic(C, &RNA_DataTransferModifier, (1 << OB_MESH), true, false) ||
           data_transfer_poll(C));
 }
 
@@ -850,7 +864,7 @@ static int datalayout_transfer_exec(bContext *C, wmOperator *op)
 
 static int datalayout_transfer_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-  if (edit_modifier_invoke_properties(C, op, NULL, NULL)) {
+  if (edit_modifier_invoke_properties(C, op)) {
     return datalayout_transfer_exec(C, op);
   }
   return WM_menu_invoke(C, op, event);

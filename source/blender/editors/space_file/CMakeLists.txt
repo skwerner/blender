@@ -26,15 +26,11 @@ set(INC
   ../../imbuf
   ../../makesdna
   ../../makesrna
-  ../../render/extern/include
+  ../../render
   ../../windowmanager
   ../../../../intern/atomic
   ../../../../intern/glew-mx
   ../../../../intern/guardedalloc
-)
-
-set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
 )
 
 set(SRC
@@ -95,7 +91,6 @@ if(WITH_INTERNATIONAL)
   add_definitions(-DWITH_INTERNATIONAL)
 endif()
 
-add_definitions(${GL_DEFINITIONS})
 
 if(WITH_FREESTYLE)
   add_definitions(-DWITH_FREESTYLE)

@@ -16,16 +16,13 @@
  * The Original Code is Copyright (C) 2019 Blender Foundation.
  * All rights reserved.
  */
-#ifndef __USD_WRITER_TRANSFORM_H__
-#define __USD_WRITER_TRANSFORM_H__
+#pragma once
 
 #include "usd_writer_abstract.h"
 
 #include <pxr/usd/usdGeom/xform.h>
 
-namespace blender {
-namespace io {
-namespace usd {
+namespace blender::io::usd {
 
 class USDTransformWriter : public USDAbstractWriter {
  private:
@@ -39,8 +36,4 @@ class USDTransformWriter : public USDAbstractWriter {
   bool check_is_animated(const HierarchyContext &context) const override;
 };
 
-}  // namespace usd
-}  // namespace io
-}  // namespace blender
-
-#endif /* __USD_WRITER_TRANSFORM_H__ */
+}  // namespace blender::io::usd

@@ -19,11 +19,11 @@
 #include "COM_GlareBaseOperation.h"
 #include "BLI_math.h"
 
-GlareBaseOperation::GlareBaseOperation() : SingleThreadedOperation()
+GlareBaseOperation::GlareBaseOperation()
 {
   this->addInputSocket(COM_DT_COLOR);
   this->addOutputSocket(COM_DT_COLOR);
-  this->m_settings = NULL;
+  this->m_settings = nullptr;
 }
 void GlareBaseOperation::initExecution()
 {
@@ -33,7 +33,7 @@ void GlareBaseOperation::initExecution()
 
 void GlareBaseOperation::deinitExecution()
 {
-  this->m_inputProgram = NULL;
+  this->m_inputProgram = nullptr;
   SingleThreadedOperation::deinitExecution();
 }
 
@@ -58,12 +58,11 @@ bool GlareBaseOperation::determineDependingAreaOfInterest(rcti * /*input*/,
   if (isCached()) {
     return false;
   }
-  else {
-    rcti newInput;
-    newInput.xmax = this->getWidth();
-    newInput.xmin = 0;
-    newInput.ymax = this->getHeight();
-    newInput.ymin = 0;
-    return NodeOperation::determineDependingAreaOfInterest(&newInput, readOperation, output);
-  }
+
+  rcti newInput;
+  newInput.xmax = this->getWidth();
+  newInput.xmin = 0;
+  newInput.ymax = this->getHeight();
+  newInput.ymin = 0;
+  return NodeOperation::determineDependingAreaOfInterest(&newInput, readOperation, output);
 }

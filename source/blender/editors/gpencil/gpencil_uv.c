@@ -182,7 +182,7 @@ static bool gpencil_uv_transform_init(bContext *C, wmOperator *op)
   if (i > 0) {
     mul_v3_fl(center, 1.0f / i);
     /* Create arrays to save all transformations. */
-    opdata->array_loc = MEM_calloc_arrayN(i, 2 * sizeof(float), __func__);
+    opdata->array_loc = MEM_calloc_arrayN(i, sizeof(float[2]), __func__);
     opdata->array_rot = MEM_calloc_arrayN(i, sizeof(float), __func__);
     opdata->array_scale = MEM_calloc_arrayN(i, sizeof(float), __func__);
     i = 0;
@@ -273,7 +273,7 @@ static bool gpencil_uv_transform_calc(bContext *C, wmOperator *op)
         changed = true;
 
         /* Calc geometry data. */
-        BKE_gpencil_stroke_geometry_update(gps);
+        BKE_gpencil_stroke_geometry_update(gpd, gps);
         i++;
       }
     }
@@ -291,7 +291,7 @@ static bool gpencil_uv_transform_calc(bContext *C, wmOperator *op)
           gps->uv_rotation = opdata->array_rot[i] - uv_rotation;
 
           /* Calc geometry data. */
-          BKE_gpencil_stroke_geometry_update(gps);
+          BKE_gpencil_stroke_geometry_update(gpd, gps);
           i++;
         }
       }
@@ -316,7 +316,7 @@ static bool gpencil_uv_transform_calc(bContext *C, wmOperator *op)
         if (gps->flag & GP_STROKE_SELECT) {
           gps->uv_scale = opdata->array_scale[i] + scale;
           /* Calc geometry data. */
-          BKE_gpencil_stroke_geometry_update(gps);
+          BKE_gpencil_stroke_geometry_update(gpd, gps);
           i++;
         }
       }
@@ -502,17 +502,17 @@ static int gpencil_reset_transform_fill_exec(bContext *C, wmOperator *op)
   /* Loop all selected strokes and reset. */
   GP_EDITABLE_STROKES_BEGIN (gpstroke_iter, C, gpl, gps) {
     if (gps->flag & GP_STROKE_SELECT) {
-      if ((mode == GP_UV_TRANSLATE) || (mode == GP_UV_ALL)) {
+      if (ELEM(mode, GP_UV_TRANSLATE, GP_UV_ALL)) {
         zero_v2(gps->uv_translation);
       }
-      if ((mode == GP_UV_ROTATE) || (mode == GP_UV_ALL)) {
+      if (ELEM(mode, GP_UV_ROTATE, GP_UV_ALL)) {
         gps->uv_rotation = 0.0f;
       }
-      if ((mode == GP_UV_SCALE) || (mode == GP_UV_ALL)) {
+      if (ELEM(mode, GP_UV_SCALE, GP_UV_ALL)) {
         gps->uv_scale = 1.0f;
       }
       /* Calc geometry data. */
-      BKE_gpencil_stroke_geometry_update(gps);
+      BKE_gpencil_stroke_geometry_update(gpd, gps);
       changed = true;
     }
   }

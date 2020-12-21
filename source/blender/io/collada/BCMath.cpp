@@ -67,7 +67,8 @@ BCMatrix::BCMatrix(BC_global_forward_axis global_forward_axis, BC_global_up_axis
   mat3_from_axis_conversion(
       BC_DEFAULT_FORWARD, BC_DEFAULT_UP, global_forward_axis, global_up_axis, mrot);
 
-  transpose_m3(mrot);  // TODO: Verify that mat3_from_axis_conversion() returns a transposed matrix
+  transpose_m3(
+      mrot); /* TODO: Verify that mat3_from_axis_conversion() returns a transposed matrix */
   copy_m4_m3(mat, mrot);
   set_transform(mat);
 }
@@ -143,10 +144,10 @@ void BCMatrix::set_transform(Matrix &mat)
   quat_to_eul(this->rot, this->q);
 }
 
-void BCMatrix::copy(Matrix &out, Matrix &in)
+void BCMatrix::copy(Matrix &r, Matrix &a)
 {
   /* destination comes first: */
-  memcpy(out, in, sizeof(Matrix));
+  memcpy(r, a, sizeof(Matrix));
 }
 
 void BCMatrix::transpose(Matrix &mat)
@@ -156,20 +157,20 @@ void BCMatrix::transpose(Matrix &mat)
 
 void BCMatrix::sanitize(Matrix &mat, int precision)
 {
-  for (int i = 0; i < 4; i++) {
-    for (int j = 0; j < 4; j++) {
-      double val = (double)mat[i][j];
+  for (auto &row : mat) {
+    for (float &cell : row) {
+      double val = (double)cell;
       val = double_round(val, precision);
-      mat[i][j] = (float)val;
+      cell = (float)val;
     }
   }
 }
 
 void BCMatrix::sanitize(DMatrix &mat, int precision)
 {
-  for (int i = 0; i < 4; i++) {
-    for (int j = 0; j < 4; j++) {
-      mat[i][j] = double_round(mat[i][j], precision);
+  for (auto &row : mat) {
+    for (double &cell : row) {
+      cell = double_round(cell, precision);
     }
   }
 }
@@ -216,7 +217,7 @@ void BCMatrix::get_matrix(Matrix &mat,
   }
 }
 
-const bool BCMatrix::in_range(const BCMatrix &other, float distance) const
+bool BCMatrix::in_range(const BCMatrix &other, float distance) const
 {
   for (int i = 0; i < 4; i++) {
     for (int j = 0; j < 4; j++) {

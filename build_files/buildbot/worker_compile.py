@@ -23,8 +23,9 @@ import shutil
 
 import buildbot_utils
 
+
 def get_cmake_options(builder):
-    post_install_script = os.path.join(
+    codesign_script = os.path.join(
         builder.blender_dir, 'build_files', 'buildbot', 'worker_codesign.cmake')
 
     config_file = "build_files/cmake/config/blender_release.cmake"
@@ -36,17 +37,31 @@ def get_cmake_options(builder):
         options.append('-DCMAKE_OSX_DEPLOYMENT_TARGET=10.9')
     elif builder.platform == 'win':
         options.extend(['-G', 'Visual Studio 16 2019', '-A', 'x64'])
-        options.extend(['-DPOSTINSTALL_SCRIPT:PATH=' + post_install_script])
+        if builder.codesign:
+            options.extend(['-DPOSTINSTALL_SCRIPT:PATH=' + codesign_script])
     elif builder.platform == 'linux':
         config_file = "build_files/buildbot/config/blender_linux.cmake"
 
     optix_sdk_dir = os.path.join(builder.blender_dir, '..', '..', 'NVIDIA-Optix-SDK')
     options.append('-DOPTIX_ROOT_DIR:PATH=' + optix_sdk_dir)
 
+    # Workaround to build sm_30 kernels with CUDA 10, since CUDA 11 no longer supports that architecture
+    if builder.platform == 'win':
+        options.append('-DCUDA10_TOOLKIT_ROOT_DIR:PATH=C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v10.1')
+        options.append('-DCUDA10_NVCC_EXECUTABLE:FILEPATH=C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v10.1/bin/nvcc.exe')
+        options.append('-DCUDA11_TOOLKIT_ROOT_DIR:PATH=C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.1')
+        options.append('-DCUDA11_NVCC_EXECUTABLE:FILEPATH=C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.1/bin/nvcc.exe')
+    elif builder.platform == 'linux':
+        options.append('-DCUDA10_TOOLKIT_ROOT_DIR:PATH=/usr/local/cuda-10.1')
+        options.append('-DCUDA10_NVCC_EXECUTABLE:FILEPATH=/usr/local/cuda-10.1/bin/nvcc')
+        options.append('-DCUDA11_TOOLKIT_ROOT_DIR:PATH=/usr/local/cuda-11.1')
+        options.append('-DCUDA11_NVCC_EXECUTABLE:FILEPATH=/usr/local/cuda-11.1/bin/nvcc')
+
     options.append("-C" + os.path.join(builder.blender_dir, config_file))
     options.append("-DCMAKE_INSTALL_PREFIX=%s" % (builder.install_dir))
 
     return options
+
 
 def update_git(builder):
     # Do extra git fetch because not all platform/git/buildbot combinations
@@ -56,6 +71,7 @@ def update_git(builder):
     print("Fetching remotes")
     command = ['git', 'fetch', '--all']
     buildbot_utils.call(builder.command_prefix + command)
+
 
 def clean_directories(builder):
     # Make sure no garbage remained from the previous run
@@ -72,6 +88,7 @@ def clean_directories(builder):
             print("Removing {}" . format(buildinfo))
             os.remove(full_path)
 
+
 def cmake_configure(builder):
     # CMake configuration
     os.chdir(builder.build_dir)
@@ -85,6 +102,7 @@ def cmake_configure(builder):
     cmake_options = get_cmake_options(builder)
     command = ['cmake', builder.blender_dir] + cmake_options
     buildbot_utils.call(builder.command_prefix + command)
+
 
 def cmake_build(builder):
     # CMake build
@@ -107,6 +125,7 @@ def cmake_build(builder):
 
     print("CMake build:")
     buildbot_utils.call(builder.command_prefix + command)
+
 
 if __name__ == "__main__":
     builder = buildbot_utils.create_builder_from_arguments()

@@ -14,14 +14,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FN_MULTI_FUNCTION_SIGNATURE_HH__
-#define __FN_MULTI_FUNCTION_SIGNATURE_HH__
+#pragma once
 
 /** \file
  * \ingroup fn
  *
  * The signature of a multi-function contains the functions name and expected parameters. New
- * signatures should be build using the MFSignatureBuilder class.
+ * signatures should be build using the #MFSignatureBuilder class.
  */
 
 #include "FN_multi_function_param_type.hh"
@@ -32,10 +31,10 @@ namespace blender::fn {
 
 struct MFSignature {
   std::string function_name;
-  /* Use RawAllocator so that a MultiFunction can have static storage duration. */
-  RawVector<std::string> param_names;
-  RawVector<MFParamType> param_types;
-  RawVector<int> param_data_indices;
+  Vector<std::string> param_names;
+  Vector<MFParamType> param_types;
+  Vector<int> param_data_indices;
+  bool depends_on_context = false;
 
   int data_index(int param_index) const
   {
@@ -59,7 +58,7 @@ class MFSignatureBuilder {
     BLI_assert(data.param_data_indices.is_empty());
   }
 
-  /* Input Param Types */
+  /* Input Parameter Types */
 
   template<typename T> void single_input(StringRef name)
   {
@@ -92,7 +91,7 @@ class MFSignatureBuilder {
     }
   }
 
-  /* Output Param Types */
+  /* Output Parameter Types */
 
   template<typename T> void single_output(StringRef name)
   {
@@ -125,7 +124,7 @@ class MFSignatureBuilder {
     }
   }
 
-  /* Mutable Param Types */
+  /* Mutable Parameter Types */
 
   template<typename T> void single_mutable(StringRef name)
   {
@@ -157,8 +156,15 @@ class MFSignatureBuilder {
         break;
     }
   }
+
+  /* Context */
+
+  /** This indicates that the function accesses the context. This disables optimizations that
+   * depend on the fact that the function always performers the same operation. */
+  void depends_on_context()
+  {
+    data_.depends_on_context = true;
+  }
 };
 
 }  // namespace blender::fn
-
-#endif /* __FN_MULTI_FUNCTION_SIGNATURE_HH__ */

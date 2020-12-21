@@ -48,9 +48,10 @@
 #include "BKE_pointcache.h"
 #include "BKE_simulation.h"
 
+#include "NOD_geometry.h"
 #include "NOD_node_tree_multi_function.hh"
-#include "NOD_simulation.h"
 
+#include "BLI_map.hh"
 #include "BLT_translation.h"
 
 #include "FN_attributes_ref.hh"
@@ -60,7 +61,7 @@
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
 
-#include "SIM_simulation_update.hh"
+#include "BLO_read_write.h"
 
 static void simulation_init_data(ID *id)
 {
@@ -69,14 +70,14 @@ static void simulation_init_data(ID *id)
 
   MEMCPY_STRUCT_AFTER(simulation, DNA_struct_default_get(Simulation), id);
 
-  bNodeTree *ntree = ntreeAddTree(nullptr, "Simulation Nodetree", ntreeType_Simulation->idname);
+  bNodeTree *ntree = ntreeAddTree(nullptr, "Geometry Nodetree", ntreeType_Geometry->idname);
   simulation->nodetree = ntree;
 }
 
 static void simulation_copy_data(Main *bmain, ID *id_dst, const ID *id_src, const int flag)
 {
   Simulation *simulation_dst = (Simulation *)id_dst;
-  Simulation *simulation_src = (Simulation *)id_src;
+  const Simulation *simulation_src = (const Simulation *)id_src;
 
   /* We always need allocation of our private ID data. */
   const int flag_private_id_data = flag & ~LIB_ID_CREATE_NO_ALLOCATE;
@@ -86,73 +87,6 @@ static void simulation_copy_data(Main *bmain, ID *id_dst, const ID *id_src, cons
                    (ID *)simulation_src->nodetree,
                    (ID **)&simulation_dst->nodetree,
                    flag_private_id_data);
-  }
-
-  BLI_listbase_clear(&simulation_dst->states);
-}
-
-static void free_simulation_state_head(SimulationState *state)
-{
-  MEM_freeN(state->name);
-}
-
-static void free_particle_simulation_state(ParticleSimulationState *state)
-{
-  free_simulation_state_head(&state->head);
-  CustomData_free(&state->attributes, state->tot_particles);
-  BKE_ptcache_free_list(&state->ptcaches);
-  MEM_freeN(state);
-}
-
-SimulationState *BKE_simulation_state_add(Simulation *simulation,
-                                          eSimulationStateType type,
-                                          const char *name)
-{
-  BLI_assert(simulation != nullptr);
-  BLI_assert(name != nullptr);
-
-  bool is_cow_simulation = DEG_is_evaluated_id(&simulation->id);
-
-  switch (type) {
-    case SIM_STATE_TYPE_PARTICLES: {
-      ParticleSimulationState *state = (ParticleSimulationState *)MEM_callocN(sizeof(*state), AT);
-      state->head.type = SIM_STATE_TYPE_PARTICLES;
-      state->head.name = BLI_strdup(name);
-      CustomData_reset(&state->attributes);
-
-      if (!is_cow_simulation) {
-        state->point_cache = BKE_ptcache_add(&state->ptcaches);
-      }
-
-      BLI_addtail(&simulation->states, state);
-      return &state->head;
-    }
-  }
-
-  BLI_assert(false);
-  return nullptr;
-}
-
-void BKE_simulation_state_remove(Simulation *simulation, SimulationState *state)
-{
-  BLI_assert(simulation != nullptr);
-  BLI_assert(state != nullptr);
-  BLI_assert(BLI_findindex(&simulation->states, state) >= 0);
-
-  BLI_remlink(&simulation->states, state);
-  switch ((eSimulationStateType)state->type) {
-    case SIM_STATE_TYPE_PARTICLES: {
-      free_particle_simulation_state((ParticleSimulationState *)state);
-      break;
-    }
-  }
-}
-
-void BKE_simulation_state_remove_all(Simulation *simulation)
-{
-  BLI_assert(simulation != nullptr);
-  while (!BLI_listbase_is_empty(&simulation->states)) {
-    BKE_simulation_state_remove(simulation, (SimulationState *)simulation->states.first);
   }
 }
 
@@ -167,8 +101,6 @@ static void simulation_free_data(ID *id)
     MEM_freeN(simulation->nodetree);
     simulation->nodetree = nullptr;
   }
-
-  BKE_simulation_state_remove_all(simulation);
 }
 
 static void simulation_foreach_id(ID *id, LibraryForeachIDData *data)
@@ -178,6 +110,44 @@ static void simulation_foreach_id(ID *id, LibraryForeachIDData *data)
     /* nodetree **are owned by IDs**, treat them as mere sub-data and not real ID! */
     BKE_library_foreach_ID_embedded(data, (ID **)&simulation->nodetree);
   }
+}
+
+static void simulation_blend_write(BlendWriter *writer, ID *id, const void *id_address)
+{
+  Simulation *simulation = (Simulation *)id;
+  if (simulation->id.us > 0 || BLO_write_is_undo(writer)) {
+    BLO_write_id_struct(writer, Simulation, id_address, &simulation->id);
+    BKE_id_blend_write(writer, &simulation->id);
+
+    if (simulation->adt) {
+      BKE_animdata_blend_write(writer, simulation->adt);
+    }
+
+    /* nodetree is integral part of simulation, no libdata */
+    if (simulation->nodetree) {
+      BLO_write_struct(writer, bNodeTree, simulation->nodetree);
+      ntreeBlendWrite(writer, simulation->nodetree);
+    }
+  }
+}
+
+static void simulation_blend_read_data(BlendDataReader *reader, ID *id)
+{
+  Simulation *simulation = (Simulation *)id;
+  BLO_read_data_address(reader, &simulation->adt);
+  BKE_animdata_blend_read_data(reader, simulation->adt);
+}
+
+static void simulation_blend_read_lib(BlendLibReader *reader, ID *id)
+{
+  Simulation *simulation = (Simulation *)id;
+  UNUSED_VARS(simulation, reader);
+}
+
+static void simulation_blend_read_expand(BlendExpander *expander, ID *id)
+{
+  Simulation *simulation = (Simulation *)id;
+  UNUSED_VARS(simulation, expander);
 }
 
 IDTypeInfo IDType_ID_SIM = {
@@ -195,18 +165,24 @@ IDTypeInfo IDType_ID_SIM = {
     /* free_data */ simulation_free_data,
     /* make_local */ nullptr,
     /* foreach_id */ simulation_foreach_id,
+    /* foreach_cache */ nullptr,
+
+    /* blend_write */ simulation_blend_write,
+    /* blend_read_data */ simulation_blend_read_data,
+    /* blend_read_lib */ simulation_blend_read_lib,
+    /* blend_read_expand */ simulation_blend_read_expand,
+
+    /* blend_read_undo_preserve */ nullptr,
 };
 
 void *BKE_simulation_add(Main *bmain, const char *name)
 {
-  Simulation *simulation = (Simulation *)BKE_libblock_alloc(bmain, ID_SIM, name, 0);
-
-  simulation_init_data(&simulation->id);
-
+  Simulation *simulation = (Simulation *)BKE_id_new(bmain, ID_SIM, name);
   return simulation;
 }
 
-void BKE_simulation_data_update(Depsgraph *depsgraph, Scene *scene, Simulation *simulation)
+void BKE_simulation_data_update(Depsgraph *UNUSED(depsgraph),
+                                Scene *UNUSED(scene),
+                                Simulation *UNUSED(simulation))
 {
-  blender::sim::update_simulation_in_depsgraph(depsgraph, scene, simulation);
 }

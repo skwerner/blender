@@ -83,10 +83,9 @@ static int lattice_render_verts_len_get(Lattice *lt)
   if ((lt->flag & LT_OUTSIDE) == 0) {
     return vert_len_calc(u, v, w);
   }
-  else {
-    /* TODO remove internal coords */
-    return vert_len_calc(u, v, w);
-  }
+
+  /* TODO remove internal coords */
+  return vert_len_calc(u, v, w);
 }
 
 static int lattice_render_edges_len_get(Lattice *lt)
@@ -102,10 +101,9 @@ static int lattice_render_edges_len_get(Lattice *lt)
   if ((lt->flag & LT_OUTSIDE) == 0) {
     return edge_len_calc(u, v, w);
   }
-  else {
-    /* TODO remove internal coords */
-    return edge_len_calc(u, v, w);
-  }
+
+  /* TODO remove internal coords */
+  return edge_len_calc(u, v, w);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -252,12 +250,11 @@ static bool lattice_batch_cache_valid(Lattice *lt)
   if (cache->is_dirty) {
     return false;
   }
-  else {
-    if ((cache->dims.u_len != lt->pntsu) || (cache->dims.v_len != lt->pntsv) ||
-        (cache->dims.w_len != lt->pntsw) ||
-        ((cache->show_only_outside != ((lt->flag & LT_OUTSIDE) != 0)))) {
-      return false;
-    }
+
+  if ((cache->dims.u_len != lt->pntsu) || (cache->dims.v_len != lt->pntsv) ||
+      (cache->dims.w_len != lt->pntsw) ||
+      ((cache->show_only_outside != ((lt->flag & LT_OUTSIDE) != 0)))) {
+    return false;
   }
 
   return true;
@@ -392,11 +389,11 @@ static GPUIndexBuf *lattice_batch_cache_get_edges(LatticeRenderData *rdata,
 #define LATT_INDEX(u, v, w) ((((w)*rdata->dims.v_len + (v)) * rdata->dims.u_len) + (u))
 
     for (int w = 0; w < rdata->dims.w_len; w++) {
-      int wxt = (w == 0 || w == rdata->dims.w_len - 1);
+      int wxt = (ELEM(w, 0, rdata->dims.w_len - 1));
       for (int v = 0; v < rdata->dims.v_len; v++) {
-        int vxt = (v == 0 || v == rdata->dims.v_len - 1);
+        int vxt = (ELEM(v, 0, rdata->dims.v_len - 1));
         for (int u = 0; u < rdata->dims.u_len; u++) {
-          int uxt = (u == 0 || u == rdata->dims.u_len - 1);
+          int uxt = (ELEM(u, 0, rdata->dims.u_len - 1));
 
           if (w && ((uxt || vxt) || !rdata->show_only_outside)) {
             GPU_indexbuf_add_line_verts(&elb, LATT_INDEX(u, v, w - 1), LATT_INDEX(u, v, w));

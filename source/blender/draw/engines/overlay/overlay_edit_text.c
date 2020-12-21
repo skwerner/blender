@@ -74,7 +74,7 @@ void OVERLAY_edit_text_cache_init(OVERLAY_Data *vedata)
 
 /* Use 2D quad corners to create a matrix that set
  * a [-1..1] quad at the right position. */
-static void v2_quad_corners_to_mat4(float corners[4][2], float r_mat[4][4])
+static void v2_quad_corners_to_mat4(const float corners[4][2], float r_mat[4][4])
 {
   unit_m4(r_mat);
   sub_v2_v2v2(r_mat[0], corners[1], corners[0]);
@@ -182,7 +182,7 @@ void OVERLAY_edit_text_cache_populate(OVERLAY_Data *vedata, Object *ob)
   OVERLAY_PrivateData *pd = vedata->stl->pd;
   Curve *cu = ob->data;
   struct GPUBatch *geom;
-  bool do_in_front = (ob->dtx & OB_DRAWXRAY) != 0;
+  bool do_in_front = (ob->dtx & OB_DRAW_IN_FRONT) != 0;
 
   bool has_surface = (cu->flag & (CU_FRONT | CU_BACK)) || cu->ext1 != 0.0f || cu->ext2 != 0.0f;
   if ((cu->flag & CU_FAST) || !has_surface) {

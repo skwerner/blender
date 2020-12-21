@@ -7,12 +7,22 @@ struct gpMaterial {
   vec4 fill_uv_rot_scale;
   vec4 fill_uv_offset;
   /* Put float/int at the end to avoid padding error */
-  float stroke_texture_mix;
-  float stroke_u_scale;
-  float fill_texture_mix;
-  int flag;
+  /* Some drivers are completely messing the alignment or the fetches here.
+   * We are forced to pack these into vec4 otherwise we only get 0.0 as value. */
+  vec4 gp_mat_packed_1;
+  // float stroke_texture_mix;
+  // float stroke_u_scale;
+  // float fill_texture_mix;
+  // int gp_flag;
   /* Please ensure 16 byte alignment (multiple of vec4). */
 };
+
+#define MATERIAL(m) materials[m + gpMaterialOffset]
+
+#define stroke_texture_mix gp_mat_packed_1.x
+#define stroke_u_scale gp_mat_packed_1.y
+#define fill_texture_mix gp_mat_packed_1.z
+#define GP_FLAG(m) floatBitsToInt(MATERIAL(m).gp_mat_packed_1.w)
 
 /* flag */
 #define GP_STROKE_ALIGNMENT_STROKE 1
@@ -24,6 +34,8 @@ struct gpMaterial {
 #define GP_STROKE_TEXTURE_STENCIL (1 << 4)
 #define GP_STROKE_TEXTURE_PREMUL (1 << 5)
 #define GP_STROKE_DOTS (1 << 6)
+#define GP_STROKE_HOLDOUT (1 << 7)
+#define GP_FILL_HOLDOUT (1 << 8)
 #define GP_FILL_TEXTURE_USE (1 << 10)
 #define GP_FILL_TEXTURE_PREMUL (1 << 11)
 #define GP_FILL_TEXTURE_CLIP (1 << 12)
@@ -34,7 +46,7 @@ struct gpMaterial {
 
 /* Multiline defines can crash blender with certain GPU drivers. */
 /* clang-format off */
-#define GP_FILL_FLAGS (GP_FILL_TEXTURE_USE | GP_FILL_TEXTURE_PREMUL | GP_FILL_TEXTURE_CLIP | GP_FILL_GRADIENT_USE | GP_FILL_GRADIENT_RADIAL)
+#define GP_FILL_FLAGS (GP_FILL_TEXTURE_USE | GP_FILL_TEXTURE_PREMUL | GP_FILL_TEXTURE_CLIP | GP_FILL_GRADIENT_USE | GP_FILL_GRADIENT_RADIAL | GP_FILL_HOLDOUT)
 /* clang-format on */
 
 #define GP_FLAG_TEST(flag, val) (((flag) & (val)) != 0)
@@ -197,7 +209,6 @@ uniform int gpMaterialOffset;
 uniform float thicknessScale;
 uniform float thicknessWorldScale;
 #define thicknessIsScreenSpace (thicknessWorldScale < 0.0)
-#define MATERIAL(m) materials[m + gpMaterialOffset]
 
 #ifdef GPU_VERTEX_SHADER
 
@@ -371,8 +382,8 @@ void stroke_vertex()
 
 #  ifdef GP_MATERIAL_BUFFER_LEN
   if (m != -1) {
-    is_dot = GP_FLAG_TEST(MATERIAL(m).flag, GP_STROKE_ALIGNMENT);
-    is_squares = !GP_FLAG_TEST(MATERIAL(m).flag, GP_STROKE_DOTS);
+    is_dot = GP_FLAG_TEST(GP_FLAG(m), GP_STROKE_ALIGNMENT);
+    is_squares = !GP_FLAG_TEST(GP_FLAG(m), GP_STROKE_DOTS);
   }
 #  endif
 
@@ -424,7 +435,7 @@ void stroke_vertex()
 
   if (is_dot) {
 #  ifdef GP_MATERIAL_BUFFER_LEN
-    int alignement = MATERIAL(m).flag & GP_STROKE_ALIGNMENT;
+    int alignement = GP_FLAG(m) & GP_STROKE_ALIGNMENT;
 #  endif
 
     vec2 x_axis;
@@ -449,6 +460,14 @@ void stroke_vertex()
     float rot_sin = sqrt(max(0.0, 1.0 - uv_rot * uv_rot)) * sign(uv_rot);
     float rot_cos = abs(uv_rot);
     x_axis = mat2(rot_cos, -rot_sin, rot_sin, rot_cos) * x_axis;
+
+#  ifdef GP_MATERIAL_BUFFER_LEN
+    if (is_dot) {
+      float alignment_cos = MATERIAL(m).fill_uv_offset.z;
+      float alignment_sin = MATERIAL(m).fill_uv_offset.w;
+      x_axis = mat2(alignment_cos, -alignment_sin, alignment_sin, alignment_cos) * x_axis;
+    }
+#  endif
 
     vec2 y_axis = rotate_90deg(x_axis);
 
@@ -487,7 +506,7 @@ void stroke_vertex()
 
     vec2 screen_ofs = miter * y;
 
-    /* Reminder: we packed the cap flag into the sign of stength and thickness sign. */
+    /* Reminder: we packed the cap flag into the sign of strength and thickness sign. */
     if ((is_stroke_start && strength1 > 0.0) || (is_stroke_end && thickness1 > 0.0) ||
         (miter_break && !is_stroke_start && !is_stroke_end)) {
       screen_ofs += line * x;
@@ -507,9 +526,14 @@ void stroke_vertex()
   vec4 stroke_col = MATERIAL(m).stroke_color;
   float mix_tex = MATERIAL(m).stroke_texture_mix;
 
+  /* Special case: We don't use vertex color if material Holdout. */
+  if (GP_FLAG_TEST(GP_FLAG(m), GP_STROKE_HOLDOUT)) {
+    vert_col = vec4(0.0);
+  }
+
   color_output(stroke_col, vert_col, vert_strength * small_line_opacity, mix_tex);
 
-  matFlag = MATERIAL(m).flag & ~GP_FILL_FLAGS;
+  matFlag = GP_FLAG(m) & ~GP_FILL_FLAGS;
 #  endif
 
   if (strokeOrder3d) {
@@ -517,7 +541,7 @@ void stroke_vertex()
     depth = -1.0;
   }
 #  ifdef GP_MATERIAL_BUFFER_LEN
-  else if (GP_FLAG_TEST(MATERIAL(m).flag, GP_STROKE_OVERLAP)) {
+  else if (GP_FLAG_TEST(GP_FLAG(m), GP_STROKE_OVERLAP)) {
     /* Use the index of the point as depth.
      * This means the stroke can overlap itself. */
     depth = (point_id1 + strokeIndexOffset + 1.0) * 0.0000002;
@@ -548,7 +572,7 @@ void fill_vertex()
   float mix_tex = MATERIAL(m).fill_texture_mix;
 
   /* Special case: We don't modulate alpha in gradient mode. */
-  if (GP_FLAG_TEST(MATERIAL(m).flag, GP_FILL_GRADIENT_USE)) {
+  if (GP_FLAG_TEST(GP_FLAG(m), GP_FILL_GRADIENT_USE)) {
     fill_col.a = 1.0;
   }
 
@@ -556,6 +580,11 @@ void fill_vertex()
   vec4 fcol_decode = vec4(fcol1.rgb, floor(fcol1.a / 10.0));
   float fill_opacity = fcol1.a - (fcol_decode.a * 10);
   fcol_decode.a /= 10000.0;
+
+  /* Special case: We don't use vertex color if material Holdout. */
+  if (GP_FLAG_TEST(GP_FLAG(m), GP_FILL_HOLDOUT)) {
+    fcol_decode = vec4(0.0);
+  }
 
   /* Apply opacity. */
   fill_col.a *= fill_opacity;
@@ -568,7 +597,7 @@ void fill_vertex()
 
   color_output(fill_col, fcol_decode, 1.0, mix_tex);
 
-  matFlag = MATERIAL(m).flag & GP_FILL_FLAGS;
+  matFlag = GP_FLAG(m) & GP_FILL_FLAGS;
   matFlag |= m << GP_MATID_SHIFT;
 
   vec2 loc = MATERIAL(m).fill_uv_offset.xy;

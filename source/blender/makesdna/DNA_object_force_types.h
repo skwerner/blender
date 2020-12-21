@@ -21,8 +21,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_OBJECT_FORCE_TYPES_H__
-#define __DNA_OBJECT_FORCE_TYPES_H__
+#pragma once
 
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
@@ -55,7 +54,7 @@ typedef enum ePFieldType {
   PFIELD_LENNARDJ = 9,
   /** Defines predator / goal for boids. */
   PFIELD_BOID = 10,
-  /** Force defined by BLI_gTurbulence. */
+  /** Force defined by BLI_noise_generic_turbulence. */
   PFIELD_TURBULENCE = 11,
   /** Linear & quadratic drag. */
   PFIELD_DRAG = 12,
@@ -409,5 +408,3 @@ typedef struct SoftBody {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __DNA_OBJECT_FORCE_TYPES_H__ */

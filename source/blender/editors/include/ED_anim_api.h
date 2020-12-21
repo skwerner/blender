@@ -21,8 +21,7 @@
  * \ingroup editors
  */
 
-#ifndef __ED_ANIM_API_H__
-#define __ED_ANIM_API_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -333,7 +332,7 @@ typedef enum eAnimFilter_Flags {
 } eAnimFilter_Flags;
 
 /* ---------- Flag Checking Macros ------------ */
-// xxx check on all of these flags again...
+/* XXX check on all of these flags again. */
 
 /* Dopesheet only */
 /* 'Scene' channels */
@@ -508,7 +507,7 @@ typedef enum eAnimChannels_SetFlag {
   ACHANNEL_SETFLAG_ADD = 1,
   /** on->off, off->on */
   ACHANNEL_SETFLAG_INVERT = 2,
-  /** some on -> all off // all on */
+  /** some on -> all off / all on */
   ACHANNEL_SETFLAG_TOGGLE = 3,
 } eAnimChannels_SetFlag;
 
@@ -621,9 +620,11 @@ void ANIM_flush_setting_anim_channels(bAnimContext *ac,
                                       eAnimChannel_Settings setting,
                                       eAnimChannels_SetFlag mode);
 
-/* Deselect all animation channels */
-void ANIM_deselect_anim_channels(
-    bAnimContext *ac, void *data, eAnimCont_Types datatype, bool test, eAnimChannels_SetFlag sel);
+/* Select or deselect animation channels */
+void ANIM_anim_channels_select_set(bAnimContext *ac, eAnimChannels_SetFlag sel);
+
+/* Toggle selection of animation channels */
+void ANIM_anim_channels_select_toggle(bAnimContext *ac);
 
 /* Set the 'active' channel of type channel_type, in the given action */
 void ANIM_set_active_channel(bAnimContext *ac,
@@ -731,7 +732,7 @@ void ANIM_nla_mapping_apply_fcurve(struct AnimData *adt,
 /* ..... */
 
 /* Perform auto-blending/extend refreshes after some operations */
-// NOTE: defined in space_nla/nla_edit.c, not in animation/
+/* NOTE: defined in space_nla/nla_edit.c, not in animation/ */
 void ED_nla_postop_refresh(bAnimContext *ac);
 
 /* ------------- Unit Conversion Mappings ------------- */
@@ -880,5 +881,3 @@ void animviz_get_object_motionpaths(struct Object *ob, ListBase *targets);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_ANIM_API_H__ */

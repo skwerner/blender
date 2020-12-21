@@ -31,6 +31,17 @@ if(MSVC_CLANG AND WITH_OPENMP AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS "9.0.1
   remove_cc_flag("-fopenmp")
 endif()
 
+# Exporting functions from the blender binary gives linker warnings on Apple arm64 systems.
+# For now and until Apple arm64 is officially supported, these will just be silenced here.
+# TODO (sebbas): Check if official arm64 devices give linker warnings without this block.
+
+if(APPLE AND ("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64"))
+  if(CMAKE_COMPILER_IS_GNUCXX OR "${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
+    string(APPEND CMAKE_C_FLAGS " -fvisibility=hidden")
+    string(APPEND CMAKE_CXX_FLAGS " -fvisibility=hidden")
+  endif()
+endif()
+
 set(MANTAVERSION "0.13")
 
 add_definitions(-DWITH_FLUID=1)
@@ -64,7 +75,6 @@ endif()
 
 if(WITH_OPENVDB)
   add_definitions(-DOPENVDB=1)
-  add_definitions(-DOPENVDB_STATICLIB)
 endif()
 
 if(WITH_OPENVDB_BLOSC)
@@ -75,7 +85,7 @@ if(WIN32)
   add_definitions(-D_USE_MATH_DEFINES)
 endif()
 
-if(WITH_MANTA_NUMPY AND WITH_PYTHON_INSTALL_NUMPY)
+if(WITH_MANTA_NUMPY AND WITH_PYTHON_NUMPY)
   add_definitions(-DNUMPY=1)
 endif()
 
@@ -99,7 +109,7 @@ set(INC_SYS
   ${ZLIB_INCLUDE_DIRS}
 )
 
-if(WITH_MANTA_NUMPY AND WITH_PYTHON_INSTALL_NUMPY)
+if(WITH_MANTA_NUMPY AND WITH_PYTHON_NUMPY)
   list(APPEND INC_SYS
     ${PYTHON_NUMPY_INCLUDE_DIRS}
   )
@@ -245,8 +255,7 @@ if(WITH_MANTA_DEPENDENCIES)
     ${MANTA_DEP}/cnpy/cnpy.h
   )
 endif()
-
-if(WITH_MANTA_NUMPY AND WITH_PYTHON_INSTALL_NUMPY)
+if(WITH_MANTA_NUMPY AND WITH_PYTHON_NUMPY)
   list(APPEND SRC
     ${MANTA_PP}/plugin/numpyconvert.cpp
     ${MANTA_PP}/plugin/tfplugins.cpp

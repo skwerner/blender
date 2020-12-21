@@ -90,7 +90,7 @@ ccl_device float4 svm_image_texture(KernelGlobals *kg,
   }
   else
 #endif
-  r = kernel_tex_image_interp(kg, id, x, y);
+    r = kernel_tex_image_interp(kg, id, x, y);
   const float alpha = r.w;
 
   if ((flags & NODE_IMAGE_ALPHA_UNASSOCIATE) && alpha != 1.0f && alpha != 0.0f) {
@@ -219,7 +219,8 @@ ccl_device void svm_node_tex_image(
     stack_store_float(stack, alpha_offset, f.w);
 }
 
-ccl_device void svm_node_tex_image_box(KernelGlobals *kg, ShaderData *sd, int path_flag, float *stack, uint4 node)
+ccl_device void svm_node_tex_image_box(
+    KernelGlobals *kg, ShaderData *sd, int path_flag, float *stack, uint4 node)
 {
   /* get object space normal */
   float3 N = sd->N;

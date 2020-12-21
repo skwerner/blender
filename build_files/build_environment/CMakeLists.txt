@@ -30,11 +30,11 @@
 #   build_deps 2015 x64 / build_deps 2015 x86
 #
 # MAC OS X USAGE:
-#   Install with homebrew: brew install cmake autoconf automake libtool yasm nasm bison
+#   Install with homebrew: brew install autoconf automake bison cmake libtool pkg-config yasm
 #   Run "make deps" from main Blender directory
 #
 # LINUX USAGE:
-#   Install compiler cmake autoconf automake libtool yasm nasm tcl
+#   Install compiler cmake autoconf automake libtool yasm tcl
 #   Run "make deps" from main Blender directory
 #
 ####################################################################################################
@@ -57,7 +57,6 @@ include(cmake/zlib.cmake)
 include(cmake/openal.cmake)
 include(cmake/png.cmake)
 include(cmake/jpeg.cmake)
-include(cmake/boost.cmake)
 include(cmake/blosc.cmake)
 include(cmake/pthreads.cmake)
 include(cmake/openexr.cmake)
@@ -76,6 +75,8 @@ include(cmake/llvm.cmake)
 include(cmake/clang.cmake)
 if(APPLE)
   include(cmake/openmp.cmake)
+endif()
+if(UNIX)
   include(cmake/nasm.cmake)
 endif()
 include(cmake/openimageio.cmake)
@@ -84,16 +85,16 @@ include(cmake/flexbison.cmake)
 include(cmake/osl.cmake)
 include(cmake/tbb.cmake)
 include(cmake/openvdb.cmake)
+include(cmake/nanovdb.cmake)
 include(cmake/python.cmake)
 include(cmake/python_site_packages.cmake)
 include(cmake/package_python.cmake)
 include(cmake/numpy.cmake)
 include(cmake/usd.cmake)
-if(UNIX)
-  # Rely on PugiXML compiled with OpenImageIO
-else()
-  include(cmake/pugixml.cmake)
-endif()
+include(cmake/potrace.cmake)
+# Boost needs to be included after python.cmake due to the PYTHON_BINARY variable being needed.
+include(cmake/boost.cmake)
+include(cmake/pugixml.cmake)
 if((NOT APPLE) OR ("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "x86_64"))
   include(cmake/ispc.cmake)
   include(cmake/openimagedenoise.cmake)
@@ -113,10 +114,10 @@ if(WIN32)
   include(cmake/yamlcpp.cmake)
   # LCMS is an OCIO dep, but only if you build the apps, leaving it here for convenience
   # include(cmake/lcms.cmake)
-
 endif()
 
 if(NOT WIN32 OR ENABLE_MINGW64)
+  include(cmake/gmp.cmake)
   include(cmake/openjpeg.cmake)
   if(NOT WIN32 OR BUILD_MODE STREQUAL Release)
     if(WIN32)

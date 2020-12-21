@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_AUTOPTR_HELPER_H__
-#define __FREESTYLE_AUTOPTR_HELPER_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -28,6 +27,8 @@ namespace Freestyle {
 
 template<typename T> class AutoPtr : public std::unique_ptr<T> {
  public:
+  using std::unique_ptr<T>::unique_ptr;
+
   AutoPtr() : std::unique_ptr<T>()
   {
   }
@@ -43,9 +44,9 @@ template<typename T> class AutoPtr : public std::unique_ptr<T> {
     other.release();
   }
 
+  using std::unique_ptr<T>::operator=;
+
   template<typename X> AutoPtr &operator=(AutoPtr<X> &other) = delete;
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_AUTOPTR_HELPER_H__

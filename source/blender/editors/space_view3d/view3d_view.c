@@ -22,6 +22,7 @@
  */
 
 #include "DNA_camera_types.h"
+#include "DNA_gpencil_modifier_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
@@ -37,6 +38,7 @@
 #include "BKE_camera.h"
 #include "BKE_context.h"
 #include "BKE_global.h"
+#include "BKE_gpencil_modifier.h"
 #include "BKE_idprop.h"
 #include "BKE_layer.h"
 #include "BKE_main.h"
@@ -50,7 +52,6 @@
 
 #include "UI_resources.h"
 
-#include "GPU_glew.h"
 #include "GPU_matrix.h"
 #include "GPU_select.h"
 #include "GPU_state.h"
@@ -191,8 +192,10 @@ void ED_view3d_smooth_view_ex(
 
   if (sview->camera) {
     Object *ob_camera_eval = DEG_get_evaluated_object(depsgraph, sview->camera);
-    sms.dst.dist = ED_view3d_offset_distance(
-        ob_camera_eval->obmat, sview->ofs, VIEW3D_DIST_FALLBACK);
+    if (sview->ofs != NULL) {
+      sms.dst.dist = ED_view3d_offset_distance(
+          ob_camera_eval->obmat, sview->ofs, VIEW3D_DIST_FALLBACK);
+    }
     ED_view3d_from_object(ob_camera_eval, sms.dst.ofs, sms.dst.quat, &sms.dst.dist, &sms.dst.lens);
     sms.to_camera = true; /* restore view3d values in end */
   }
@@ -223,15 +226,16 @@ void ED_view3d_smooth_view_ex(
       /* original values */
       if (sview->camera_old) {
         Object *ob_camera_old_eval = DEG_get_evaluated_object(depsgraph, sview->camera_old);
-        sms.src.dist = ED_view3d_offset_distance(ob_camera_old_eval->obmat, rv3d->ofs, 0.0f);
-        /* this */
+        if (sview->ofs != NULL) {
+          sms.src.dist = ED_view3d_offset_distance(ob_camera_old_eval->obmat, sview->ofs, 0.0f);
+        }
         ED_view3d_from_object(
             ob_camera_old_eval, sms.src.ofs, sms.src.quat, &sms.src.dist, &sms.src.lens);
       }
       /* grid draw as floor */
       if ((RV3D_LOCK_FLAGS(rv3d) & RV3D_LOCK_ROTATION) == 0) {
         /* use existing if exists, means multiple calls to smooth view
-         * wont loose the original 'view' setting */
+         * wont lose the original 'view' setting */
         rv3d->view = RV3D_VIEW_USER;
       }
 
@@ -497,13 +501,13 @@ static bool view3d_camera_to_view_poll(bContext *C)
     if (v3d && v3d->camera && !ID_IS_LINKED(v3d->camera)) {
       if (rv3d && (RV3D_LOCK_FLAGS(rv3d) & RV3D_LOCK_ANY_TRANSFORM) == 0) {
         if (rv3d->persp != RV3D_CAMOB) {
-          return 1;
+          return true;
         }
       }
     }
   }
 
-  return 0;
+  return false;
 }
 
 void VIEW3D_OT_camera_to_view(wmOperatorType *ot)
@@ -531,40 +535,18 @@ void VIEW3D_OT_camera_to_view(wmOperatorType *ot)
  * meant to take into account vertex/bone selection for eg. */
 static int view3d_camera_to_view_selected_exec(bContext *C, wmOperator *op)
 {
+  Main *bmain = CTX_data_main(C);
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Scene *scene = CTX_data_scene(C);
   View3D *v3d = CTX_wm_view3d(C); /* can be NULL */
   Object *camera_ob = v3d ? v3d->camera : scene->camera;
-  Object *camera_ob_eval = DEG_get_evaluated_object(depsgraph, camera_ob);
 
-  float r_co[3]; /* the new location to apply */
-  float r_scale; /* only for ortho cameras */
-
-  if (camera_ob_eval == NULL) {
+  if (camera_ob == NULL) {
     BKE_report(op->reports, RPT_ERROR, "No active camera");
     return OPERATOR_CANCELLED;
   }
 
-  /* this function does all the important stuff */
-  if (BKE_camera_view_frame_fit_to_scene(depsgraph, scene, camera_ob_eval, r_co, &r_scale)) {
-    ObjectTfmProtectedChannels obtfm;
-    float obmat_new[4][4];
-
-    if ((camera_ob_eval->type == OB_CAMERA) &&
-        (((Camera *)camera_ob_eval->data)->type == CAM_ORTHO)) {
-      ((Camera *)camera_ob->data)->ortho_scale = r_scale;
-    }
-
-    copy_m4_m4(obmat_new, camera_ob_eval->obmat);
-    copy_v3_v3(obmat_new[3], r_co);
-
-    /* only touch location */
-    BKE_object_tfm_protected_backup(camera_ob, &obtfm);
-    BKE_object_apply_mat4(camera_ob, obmat_new, true, true);
-    BKE_object_tfm_protected_restore(camera_ob, &obtfm, OB_LOCK_SCALE | OB_LOCK_ROT4D);
-
-    /* notifiers */
-    DEG_id_tag_update(&camera_ob->id, ID_RECALC_TRANSFORM);
+  if (ED_view3d_camera_to_view_selected(bmain, depsgraph, scene, camera_ob)) {
     WM_event_add_notifier(C, NC_OBJECT | ND_TRANSFORM, camera_ob);
     return OPERATOR_FINISHED;
   }
@@ -950,7 +932,7 @@ static bool drw_select_loop_pass(eDRWSelectStage stage, void *user_data)
 eV3DSelectObjectFilter ED_view3d_select_filter_from_mode(const Scene *scene, const Object *obact)
 {
   if (scene->toolsettings->object_flag & SCE_OBJECT_MODE_LOCK) {
-    if (obact && (obact->mode & OB_MODE_WEIGHT_PAINT) &&
+    if (obact && (obact->mode & OB_MODE_ALL_WEIGHT_PAINT) &&
         BKE_object_pose_armature_get((Object *)obact)) {
       return VIEW3D_SELECT_FILTER_WPAINT_POSE_MODE_LOCK;
     }
@@ -1018,10 +1000,10 @@ int view3d_opengl_select(ViewContext *vc,
   }
 
   if (is_pick_select) {
-    if (is_pick_select && select_mode == VIEW3D_SELECT_PICK_NEAREST) {
+    if (select_mode == VIEW3D_SELECT_PICK_NEAREST) {
       gpu_select_mode = GPU_SELECT_PICK_NEAREST;
     }
-    else if (is_pick_select && select_mode == VIEW3D_SELECT_PICK_ALL) {
+    else if (select_mode == VIEW3D_SELECT_PICK_ALL) {
       gpu_select_mode = GPU_SELECT_PICK_ALL;
     }
     else {
@@ -1054,18 +1036,33 @@ int view3d_opengl_select(ViewContext *vc,
     }
     case VIEW3D_SELECT_FILTER_WPAINT_POSE_MODE_LOCK: {
       Object *obact = vc->obact;
-      BLI_assert(obact && (obact->mode & OB_MODE_WEIGHT_PAINT));
-
+      BLI_assert(obact && (obact->mode & OB_MODE_ALL_WEIGHT_PAINT));
       /* While this uses 'alloca' in a loop (which we typically avoid),
        * the number of items is nearly always 1, maybe 2..3 in rare cases. */
       LinkNode *ob_pose_list = NULL;
-      VirtualModifierData virtualModifierData;
-      const ModifierData *md = BKE_modifiers_get_virtual_modifierlist(obact, &virtualModifierData);
-      for (; md; md = md->next) {
-        if (md->type == eModifierType_Armature) {
-          ArmatureModifierData *amd = (ArmatureModifierData *)md;
-          if (amd->object && (amd->object->mode & OB_MODE_POSE)) {
-            BLI_linklist_prepend_alloca(&ob_pose_list, amd->object);
+      if (obact->type == OB_GPENCIL) {
+        GpencilVirtualModifierData virtualModifierData;
+        const GpencilModifierData *md = BKE_gpencil_modifiers_get_virtual_modifierlist(
+            obact, &virtualModifierData);
+        for (; md; md = md->next) {
+          if (md->type == eGpencilModifierType_Armature) {
+            ArmatureGpencilModifierData *agmd = (ArmatureGpencilModifierData *)md;
+            if (agmd->object && (agmd->object->mode & OB_MODE_POSE)) {
+              BLI_linklist_prepend_alloca(&ob_pose_list, agmd->object);
+            }
+          }
+        }
+      }
+      else {
+        VirtualModifierData virtualModifierData;
+        const ModifierData *md = BKE_modifiers_get_virtual_modifierlist(obact,
+                                                                        &virtualModifierData);
+        for (; md; md = md->next) {
+          if (md->type == eModifierType_Armature) {
+            ArmatureModifierData *amd = (ArmatureModifierData *)md;
+            if (amd->object && (amd->object->mode & OB_MODE_POSE)) {
+              BLI_linklist_prepend_alloca(&ob_pose_list, amd->object);
+            }
           }
         }
       }
@@ -1081,7 +1078,7 @@ int view3d_opengl_select(ViewContext *vc,
   UI_Theme_Store(&theme_state);
   UI_SetTheme(SPACE_VIEW3D, RGN_TYPE_WINDOW);
 
-  /* Re-use cache (rect must be smaller then the cached)
+  /* Re-use cache (rect must be smaller than the cached)
    * other context is assumed to be unchanged */
   if (GPU_select_is_cached()) {
     GPU_select_begin(buffer, bufsize, &rect, gpu_select_mode, 0);
@@ -1101,7 +1098,7 @@ int view3d_opengl_select(ViewContext *vc,
       wm, vc->win, depsgraph, scene, region, v3d, vc->rv3d->viewmat, NULL, &rect);
 
   if (!XRAY_ACTIVE(v3d)) {
-    GPU_depth_test(true);
+    GPU_depth_test(GPU_DEPTH_LESS_EQUAL);
   }
 
   /* If in xray mode, we select the wires in priority. */
@@ -1166,7 +1163,7 @@ int view3d_opengl_select(ViewContext *vc,
       wm, vc->win, depsgraph, scene, region, v3d, vc->rv3d->viewmat, NULL, NULL);
 
   if (!XRAY_ACTIVE(v3d)) {
-    GPU_depth_test(false);
+    GPU_depth_test(GPU_DEPTH_NONE);
   }
 
   DRW_opengl_context_disable();
@@ -1213,7 +1210,7 @@ static uint free_localview_bit(Main *bmain)
 
   ushort local_view_bits = 0;
 
-  /* sometimes we loose a localview: when an area is closed */
+  /* sometimes we lose a localview: when an area is closed */
   /* check all areas: which localviews are in use? */
   for (screen = bmain->screens.first; screen; screen = screen->id.next) {
     for (area = screen->areabase.first; area; area = area->next) {
@@ -1733,6 +1730,8 @@ void ED_view3d_xr_shading_update(wmWindowManager *wm, const View3D *v3d, const S
 {
   if (v3d->runtime.flag & V3D_RUNTIME_XR_SESSION_ROOT) {
     View3DShading *xr_shading = &wm->xr.session_settings.shading;
+    /* Flags that shouldn't be overridden by the 3D View shading. */
+    const int flag_copy = V3D_SHADING_WORLD_ORIENTATION;
 
     BLI_assert(WM_xr_session_exists(&wm->xr));
 
@@ -1750,7 +1749,9 @@ void ED_view3d_xr_shading_update(wmWindowManager *wm, const View3D *v3d, const S
     }
 
     /* Copy shading from View3D to VR view. */
+    const int old_xr_shading_flag = xr_shading->flag;
     *xr_shading = v3d->shading;
+    xr_shading->flag = (xr_shading->flag & ~flag_copy) | (old_xr_shading_flag & flag_copy);
     if (v3d->shading.prop) {
       xr_shading->prop = IDP_CopyProperty(xr_shading->prop);
     }
@@ -1762,8 +1763,8 @@ bool ED_view3d_is_region_xr_mirror_active(const wmWindowManager *wm,
                                           const ARegion *region)
 {
   return (v3d->flag & V3D_XR_SESSION_MIRROR) &&
-         /* The free region (e.g. the camera region in quad-view) is always the last in the list
-            base. We don't want any other to be affected. */
+         /* The free region (e.g. the camera region in quad-view) is always
+          * the last in the list base. We don't want any other to be affected. */
          !region->next &&  //
          WM_xr_session_is_ready(&wm->xr);
 }

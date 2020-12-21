@@ -17,8 +17,7 @@
  * All rights reserved.
  * */
 
-#ifndef __BLI_MATH_STATISTICS_H__
-#define __BLI_MATH_STATISTICS_H__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -40,7 +39,7 @@ extern "C" {
 
 void BLI_covariance_m_vn_ex(const int n,
                             const float *cos_vn,
-                            const int nbr_cos_v3,
+                            const int nbr_cos_vn,
                             const float *center,
                             const bool use_sample_correction,
                             float *r_covmat);
@@ -57,5 +56,3 @@ void BLI_covariance_m3_v3n(const float (*cos_v3)[3],
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLI_MATH_STATISTICS_H__ */

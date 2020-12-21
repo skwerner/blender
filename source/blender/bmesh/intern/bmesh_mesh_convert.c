@@ -22,7 +22,7 @@
  * \section bm_mesh_conv_shapekey Converting Shape Keys
  *
  * When converting to/from a Mesh/BMesh you can optionally pass a shape key to edit.
- * This has the effect of editing the shape key-block rather then the original mesh vertex coords
+ * This has the effect of editing the shape key-block rather than the original mesh vertex coords
  * (although additional geometry is still allowed and uses fallback locations on converting).
  *
  * While this works for any mesh/bmesh this is made use of by entering and exiting edit-mode.
@@ -89,6 +89,8 @@
 
 #include "BKE_key.h"
 #include "BKE_main.h"
+
+#include "DEG_depsgraph_query.h"
 
 #include "bmesh.h"
 #include "intern/bmesh_private.h" /* For element checking. */
@@ -231,7 +233,13 @@ void BM_mesh_bm_from_me(BMesh *bm, const Mesh *me, const struct BMeshFromMeshPar
 
   /* -------------------------------------------------------------------- */
   /* Shape Key */
-  int tot_shape_keys = me->key ? BLI_listbase_count(&me->key->block) : 0;
+  int tot_shape_keys = 0;
+  if (me->key != NULL && DEG_is_original_id(&me->id)) {
+    /* Evaluated meshes can be topologically inconsistent with their shape keys.
+     * Shape keys are also already integrated into the state of the evaluated
+     * mesh, so considering them here would kind of apply them twice. */
+    tot_shape_keys = BLI_listbase_count(&me->key->block);
+  }
   if (is_new == false) {
     tot_shape_keys = min_ii(tot_shape_keys, CustomData_number_of_layers(&bm->vdata, CD_SHAPEKEY));
   }
@@ -239,7 +247,7 @@ void BM_mesh_bm_from_me(BMesh *bm, const Mesh *me, const struct BMeshFromMeshPar
                                           BLI_array_alloca(shape_key_table, tot_shape_keys) :
                                           NULL;
 
-  if ((params->active_shapekey != 0) && (me->key != NULL)) {
+  if ((params->active_shapekey != 0) && tot_shape_keys > 0) {
     actkey = BLI_findlink(&me->key->block, params->active_shapekey - 1);
   }
   else {
@@ -298,7 +306,8 @@ void BM_mesh_bm_from_me(BMesh *bm, const Mesh *me, const struct BMeshFromMeshPar
   const int cd_vert_bweight_offset = CustomData_get_offset(&bm->vdata, CD_BWEIGHT);
   const int cd_edge_bweight_offset = CustomData_get_offset(&bm->edata, CD_BWEIGHT);
   const int cd_edge_crease_offset = CustomData_get_offset(&bm->edata, CD_CREASE);
-  const int cd_shape_key_offset = me->key ? CustomData_get_offset(&bm->vdata, CD_SHAPEKEY) : -1;
+  const int cd_shape_key_offset = tot_shape_keys ? CustomData_get_offset(&bm->vdata, CD_SHAPEKEY) :
+                                                   -1;
   const int cd_shape_keyindex_offset = is_new && (tot_shape_keys || params->add_key_index) ?
                                            CustomData_get_offset(&bm->vdata, CD_SHAPE_KEYINDEX) :
                                            -1;
@@ -820,7 +829,6 @@ void BM_mesh_bm_to_me(Main *bmain, BMesh *bm, Mesh *me, const struct BMeshToMesh
 
     /* Go through and find any shape-key custom-data layers
      * that might not have corresponding KeyBlocks, and add them if necessary. */
-    j = 0;
     for (i = 0; i < bm->vdata.totlayer; i++) {
       if (bm->vdata.layers[i].type != CD_SHAPEKEY) {
         continue;
@@ -836,8 +844,6 @@ void BM_mesh_bm_to_me(Main *bmain, BMesh *bm, Mesh *me, const struct BMeshToMesh
         currkey = BKE_keyblock_add(me->key, bm->vdata.layers[i].name);
         currkey->uid = bm->vdata.layers[i].uid;
       }
-
-      j++;
     }
 
     /* Editing the base key should update others. */
@@ -860,7 +866,7 @@ void BM_mesh_bm_to_me(Main *bmain, BMesh *bm, Mesh *me, const struct BMeshToMesh
       if (act_is_basis) {
         const float(*fp)[3] = actkey->data;
 
-        ofs = MEM_callocN(sizeof(float) * 3 * bm->totvert, "currkey->data");
+        ofs = MEM_callocN(sizeof(float[3]) * bm->totvert, "currkey->data");
         mvert = me->mvert;
         BM_ITER_MESH_INDEX (eve, &iter, bm, BM_VERTS_OF_MESH, i) {
           const int keyi = BM_ELEM_CD_GET_INT(eve, cd_shape_keyindex_offset);
@@ -884,19 +890,17 @@ void BM_mesh_bm_to_me(Main *bmain, BMesh *bm, Mesh *me, const struct BMeshToMesh
     }
 
     for (currkey = me->key->block.first; currkey; currkey = currkey->next) {
-      const bool apply_offset = (ofs && (currkey != actkey) &&
-                                 (bm->shapenr - 1 == currkey->relative));
-      int cd_shape_offset;
       int keyi;
       const float(*ofs_pt)[3] = ofs;
       float *newkey, (*oldkey)[3], *fp;
 
-      j = bm_to_mesh_shape_layer_index_from_kb(bm, currkey);
-      cd_shape_offset = CustomData_get_n_offset(&bm->vdata, CD_SHAPEKEY, j);
-      if (cd_shape_offset < 0) {
-        /* The target Mesh has more shapekeys than the BMesh. */
-        continue;
-      }
+      const int currkey_uuid = bm_to_mesh_shape_layer_index_from_kb(bm, currkey);
+      const int cd_shape_offset = (currkey_uuid == -1) ? -1 :
+                                                         CustomData_get_n_offset(&bm->vdata,
+                                                                                 CD_SHAPEKEY,
+                                                                                 currkey_uuid);
+      const bool apply_offset = (cd_shape_offset != -1) && (ofs != NULL) && (currkey != actkey) &&
+                                (bm->shapenr - 1 == currkey->relative);
 
       fp = newkey = MEM_callocN(me->key->elemsize * bm->totvert, "currkey->data");
       oldkey = currkey->data;
@@ -918,7 +922,7 @@ void BM_mesh_bm_to_me(Main *bmain, BMesh *bm, Mesh *me, const struct BMeshToMesh
             }
           }
         }
-        else if (j != -1) {
+        else if (cd_shape_offset != -1) {
           /* In most cases this runs. */
           copy_v3_v3(fp, BM_ELEM_CD_GET_VOID_P(eve, cd_shape_offset));
         }
@@ -1092,7 +1096,7 @@ void BM_mesh_bm_to_me_for_eval(BMesh *bm, Mesh *me, const CustomData_MeshMasks *
     med->flag = BM_edge_flag_to_mflag(eed);
 
     /* Handle this differently to editmode switching,
-     * only enable draw for single user edges rather then calculating angle. */
+     * only enable draw for single user edges rather than calculating angle. */
     if ((med->flag & ME_EDGEDRAW) == 0) {
       if (eed->l && eed->l == eed->l->radial_next) {
         med->flag |= ME_EDGEDRAW;

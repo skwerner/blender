@@ -69,8 +69,7 @@
 // catch usage of invalid state.
 #undef INVALIDATE_ON_FLUSH
 
-namespace blender {
-namespace deg {
+namespace blender::deg {
 
 enum {
   ID_STATE_NONE = 0,
@@ -83,7 +82,7 @@ enum {
   COMPONENT_STATE_DONE = 2,
 };
 
-typedef deque<OperationNode *> FlushQueue;
+using FlushQueue = deque<OperationNode *>;
 
 namespace {
 
@@ -145,8 +144,7 @@ inline void flush_handle_component_node(IDNode *id_node,
    * special component where we don't want all operations to be tagged.
    *
    * TODO(sergey): Make this a more generic solution. */
-  if (comp_node->type != NodeType::PARTICLE_SETTINGS &&
-      comp_node->type != NodeType::PARTICLE_SYSTEM) {
+  if (!ELEM(comp_node->type, NodeType::PARTICLE_SETTINGS, NodeType::PARTICLE_SYSTEM)) {
     for (OperationNode *op : comp_node->operations) {
       op->flag |= DEPSOP_FLAG_NEEDS_UPDATE;
     }
@@ -351,19 +349,15 @@ void invalidate_tagged_evaluated_data(Depsgraph *graph)
 /* Flush updates from tagged nodes outwards until all affected nodes
  * are tagged.
  */
-void deg_graph_flush_updates(Main *bmain, Depsgraph *graph)
+void deg_graph_flush_updates(Depsgraph *graph)
 {
   /* Sanity checks. */
-  BLI_assert(bmain != nullptr);
   BLI_assert(graph != nullptr);
+  Main *bmain = graph->bmain;
+
+  graph->time_source->flush_update_tag(graph);
+
   /* Nothing to update, early out. */
-  if (graph->need_update_time) {
-    const Scene *scene_orig = graph->scene;
-    const float ctime = BKE_scene_frame_get(scene_orig);
-    TimeSourceNode *time_source = graph->find_time_source();
-    graph->ctime = ctime;
-    time_source->tag_update(graph, DEG_UPDATE_SOURCE_TIME);
-  }
   if (graph->entry_tags.is_empty()) {
     return;
   }
@@ -411,7 +405,8 @@ void deg_graph_clear_tags(Depsgraph *graph)
   }
   /* Clear any entry tags which haven't been flushed. */
   graph->entry_tags.clear();
+
+  graph->time_source->tagged_for_update = false;
 }
 
-}  // namespace deg
-}  // namespace blender
+}  // namespace blender::deg

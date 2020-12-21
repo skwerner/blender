@@ -193,13 +193,13 @@ static void depthdropper_depth_sample_pt(
 
           *r_depth = len_v3v3(view_co, co_align);
 
-          bUnit_AsString2(ddr->name,
-                          sizeof(ddr->name),
-                          (double)*r_depth,
-                          4,
-                          B_UNIT_LENGTH,
-                          &scene->unit,
-                          false);
+          BKE_unit_value_as_string(ddr->name,
+                                   sizeof(ddr->name),
+                                   (double)*r_depth,
+                                   4,
+                                   B_UNIT_LENGTH,
+                                   &scene->unit,
+                                   false);
         }
         else {
           BLI_strncpy(ddr->name, "Nothing under cursor", sizeof(ddr->name));
@@ -351,7 +351,7 @@ static bool depthdropper_poll(bContext *C)
     if ((RNA_property_type(prop) == PROP_FLOAT) &&
         (RNA_property_subtype(prop) & PROP_UNIT_LENGTH) &&
         (RNA_property_array_check(prop) == false)) {
-      return 1;
+      return true;
     }
   }
   else {
@@ -359,12 +359,12 @@ static bool depthdropper_poll(bContext *C)
     if (rv3d && rv3d->persp == RV3D_CAMOB) {
       View3D *v3d = CTX_wm_view3d(C);
       if (v3d->camera && v3d->camera->data && !ID_IS_LINKED(v3d->camera->data)) {
-        return 1;
+        return true;
       }
     }
   }
 
-  return 0;
+  return false;
 }
 
 void UI_OT_eyedropper_depth(wmOperatorType *ot)

@@ -21,16 +21,13 @@
  * \ingroup bke
  */
 
-#ifndef __BKE_INTERN_MULTIRES_UNSUBDIVIDE_H__
-#define __BKE_INTERN_MULTIRES_UNSUBDIVIDE_H__
+#pragma once
 
 #include "BLI_sys_types.h"
 
 struct BMesh;
-struct Depsgraph;
 struct Mesh;
 struct MultiresModifierData;
-struct Object;
 
 typedef struct MultiresUnsubdivideGrid {
   /* For sanity checks. */
@@ -90,5 +87,3 @@ void multires_unsubdivide_context_free(MultiresUnsubdivideContext *context);
 
 /* Rebuilds all subdivision to the level 0 base mesh. */
 bool multires_unsubdivide_to_basemesh(MultiresUnsubdivideContext *context);
-
-#endif /* __BKE_INTERN_MULTIRES_UNSUBDIVIDE_H__ */

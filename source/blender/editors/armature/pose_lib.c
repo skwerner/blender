@@ -113,7 +113,7 @@ static int poselib_get_free_index(bAction *act)
 
   /* As poses are not stored in chronological order, we must iterate over this list
    * a few times until we don't make any new discoveries (mostly about the lower bound).
-   * Prevents problems with deleting then trying to add new poses [#27412]
+   * Prevents problems with deleting then trying to add new poses T27412.
    */
   do {
     changed = false;
@@ -1856,7 +1856,7 @@ void POSELIB_OT_browse_interactive(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING;
 
   /* properties */
-  // TODO: make the pose_index into a proper enum instead of a cryptic int...
+  /* TODO: make the pose_index into a proper enum instead of a cryptic int. */
   ot->prop = RNA_def_int(
       ot->srna,
       "pose_index",
@@ -1868,7 +1868,7 @@ void POSELIB_OT_browse_interactive(wmOperatorType *ot)
       0,
       INT_MAX);
 
-  // XXX: percentage vs factor?
+  /* XXX: percentage vs factor? */
   /* not used yet */
 #if 0
   RNA_def_float_factor(ot->srna,

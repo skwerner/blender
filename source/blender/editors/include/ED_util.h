@@ -21,8 +21,7 @@
  * \ingroup editors
  */
 
-#ifndef __ED_UTIL_H__
-#define __ED_UTIL_H__
+#pragma once
 
 #include "BLI_compiler_attrs.h"
 
@@ -53,7 +52,10 @@ void ED_spacedata_id_remap(struct ScrArea *area,
                            struct ID *old_id,
                            struct ID *new_id);
 
-void ED_OT_flush_edits(struct wmOperatorType *ot);
+void ED_OT_lib_id_load_custom_preview(struct wmOperatorType *ot);
+void ED_OT_lib_id_generate_preview(struct wmOperatorType *ot);
+
+void ED_operatortypes_edutils(void);
 
 /* ************** XXX OLD CRUFT WARNING ************* */
 
@@ -71,5 +73,3 @@ void unpack_menu(struct bContext *C,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_UTIL_H__ */

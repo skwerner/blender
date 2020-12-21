@@ -21,11 +21,10 @@
  * \ingroup edtransform
  */
 
-#ifndef __TRANSFORM_DATA_H__
-#define __TRANSFORM_DATA_H__
+#pragma once
 
-struct bConstraint;
 struct Object;
+struct bConstraint;
 
 #define TRANSDATABASIC \
   /** Extra data (mirrored element pointer, in editmode mesh to BMVert) \
@@ -54,10 +53,12 @@ typedef struct TransDataMirror {
 typedef struct TransDataExtension {
   /** Initial object drot. */
   float drot[3];
-  // /* Initial object drotAngle,    TODO: not yet implemented */
-  // float drotAngle;
-  // /* Initial object drotAxis, TODO: not yet implemented */
-  // float drotAxis[3];
+#if 0 /* TODO: not yet implemented */
+  /* Initial object drotAngle */
+  float drotAngle;
+  /* Initial object drotAxis */
+  float drotAxis[3];
+#endif
   /** Initial object delta quat. */
   float dquat[4];
   /** Initial object delta scale. */
@@ -115,8 +116,8 @@ typedef struct TransData2D {
  * Also to unset temporary flags.
  */
 typedef struct TransDataCurveHandleFlags {
-  char ih1, ih2;
-  char *h1, *h2;
+  uint8_t ih1, ih2;
+  uint8_t *h1, *h2;
 } TransDataCurveHandleFlags;
 
 typedef struct TransData {
@@ -193,5 +194,3 @@ enum {
 /* Hard min/max for proportional size. */
 #define T_PROP_SIZE_MIN 1e-6f
 #define T_PROP_SIZE_MAX 1e12f
-
-#endif

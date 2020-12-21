@@ -13,8 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
-#ifndef __BKE_GPENCIL_MODIFIER_H__
-#define __BKE_GPENCIL_MODIFIER_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -28,6 +27,9 @@ extern "C" {
 #endif
 
 struct ARegionType;
+struct BlendDataReader;
+struct BlendLibReader;
+struct BlendWriter;
 struct Depsgraph;
 struct GpencilModifierData;
 struct ID;
@@ -83,11 +85,6 @@ typedef enum {
   eGpencilModifierTypeFlag_NoApply = (1 << 6),
 } GpencilModifierTypeFlag;
 
-/* IMPORTANT! Keep ObjectWalkFunc and IDWalkFunc signatures compatible. */
-typedef void (*GreasePencilObjectWalkFunc)(void *userData,
-                                           struct Object *ob,
-                                           struct Object **obpoin,
-                                           int cb_flag);
 typedef void (*GreasePencilIDWalkFunc)(void *userData,
                                        struct Object *ob,
                                        struct ID **idpoin,
@@ -220,25 +217,12 @@ typedef struct GpencilModifierTypeInfo {
   bool (*dependsOnTime)(struct GpencilModifierData *md);
 
   /**
-   * Should call the given walk function on with a pointer to each Object
-   * pointer that the modifier data stores. This is used for linking on file
-   * load and for unlinking objects or forwarding object references.
-   *
-   * This function is optional.
-   */
-  void (*foreachObjectLink)(struct GpencilModifierData *md,
-                            struct Object *ob,
-                            GreasePencilObjectWalkFunc walk,
-                            void *userData);
-
-  /**
    * Should call the given walk function with a pointer to each ID
    * pointer (i.e. each data-block pointer) that the modifier data
    * stores. This is used for linking on file load and for
    * unlinking data-blocks or forwarding data-block references.
    *
-   * This function is optional. If it is not present, foreachObjectLink
-   * will be used.
+   * This function is optional.
    */
   void (*foreachIDLink)(struct GpencilModifierData *md,
                         struct Object *ob,
@@ -268,6 +252,7 @@ typedef struct GpencilModifierTypeInfo {
 void BKE_gpencil_modifier_init(void);
 
 void BKE_gpencil_modifierType_panel_id(GpencilModifierType type, char *r_idname);
+void BKE_gpencil_modifier_panel_expand(struct GpencilModifierData *md);
 const GpencilModifierTypeInfo *BKE_gpencil_modifier_get_info(GpencilModifierType type);
 struct GpencilModifierData *BKE_gpencil_modifier_new(int type);
 void BKE_gpencil_modifier_free_ex(struct GpencilModifierData *md, const int flag);
@@ -293,6 +278,17 @@ void BKE_gpencil_modifiers_foreach_tex_link(struct Object *ob,
                                             GreasePencilTexWalkFunc walk,
                                             void *userData);
 
+bool BKE_gpencil_modifier_is_nonlocal_in_liboverride(const struct Object *ob,
+                                                     const struct GpencilModifierData *gmd);
+
+typedef struct GpencilVirtualModifierData {
+  ArmatureGpencilModifierData amd;
+  LatticeGpencilModifierData lmd;
+} GpencilVirtualModifierData;
+
+struct GpencilModifierData *BKE_gpencil_modifiers_get_virtual_modifierlist(
+    const struct Object *ob, struct GpencilVirtualModifierData *data);
+
 bool BKE_gpencil_has_geometry_modifiers(struct Object *ob);
 bool BKE_gpencil_has_time_modifiers(struct Object *ob);
 bool BKE_gpencil_has_transform_modifiers(struct Object *ob);
@@ -313,8 +309,10 @@ struct bGPDframe *BKE_gpencil_frame_retime_get(struct Depsgraph *depsgraph,
                                                struct Object *ob,
                                                struct bGPDlayer *gpl);
 
+void BKE_gpencil_modifier_blend_write(struct BlendWriter *writer, struct ListBase *modbase);
+void BKE_gpencil_modifier_blend_read_data(struct BlendDataReader *reader, struct ListBase *lb);
+void BKE_gpencil_modifier_blend_read_lib(struct BlendLibReader *reader, struct Object *ob);
+
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_GPENCIL_MODIFIER_H__ */

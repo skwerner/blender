@@ -31,6 +31,7 @@ from bpy.props import (
     IntProperty,
     StringProperty,
 )
+from bpy.app.translations import pgettext_iface as iface_
 
 # FIXME, we need a way to detect key repeat events.
 # unfortunately checking event previous values isn't reliable.
@@ -1146,10 +1147,11 @@ rna_default = StringProperty(
     maxlen=1024,
 )
 
-rna_property = StringProperty(
+rna_custom_property = StringProperty(
     name="Property Name",
     description="Property name edit",
-    maxlen=1024,
+    # Match `MAX_IDPROP_NAME - 1` in Blender's source.
+    maxlen=63,
 )
 
 rna_min = FloatProperty(
@@ -1195,7 +1197,7 @@ class WM_OT_properties_edit(Operator):
     bl_options = {'REGISTER', 'INTERNAL'}
 
     data_path: rna_path
-    property: rna_property
+    property: rna_custom_property
     value: rna_value
     default: rna_default
     min: rna_min
@@ -1236,7 +1238,7 @@ class WM_OT_properties_edit(Operator):
     def get_value_eval(self):
         try:
             value_eval = eval(self.value)
-            # assert else None -> None, not "None", see [#33431]
+            # assert else None -> None, not "None", see T33431.
             assert(type(value_eval) in {str, float, int, bool, tuple, list})
         except:
             value_eval = self.value
@@ -1246,7 +1248,7 @@ class WM_OT_properties_edit(Operator):
     def get_default_eval(self):
         try:
             default_eval = eval(self.default)
-            # assert else None -> None, not "None", see [#33431]
+            # assert else None -> None, not "None", see T33431.
             assert(type(default_eval) in {str, float, int, bool, tuple, list})
         except:
             default_eval = self.default
@@ -1264,6 +1266,7 @@ class WM_OT_properties_edit(Operator):
 
         data_path = self.data_path
         prop = self.property
+        prop_escape = bpy.utils.escape_identifier(prop)
 
         prop_old = getattr(self, "_last_prop", [None])[0]
 
@@ -1276,21 +1279,19 @@ class WM_OT_properties_edit(Operator):
 
         # First remove
         item = eval("context.%s" % data_path)
+
+        if (item.id_data and item.id_data.override_library and item.id_data.override_library.reference):
+            self.report({'ERROR'}, "Cannot edit properties from override data")
+            return {'CANCELLED'}
+
         prop_type_old = type(item[prop_old])
 
         rna_idprop_ui_prop_clear(item, prop_old)
-        exec_str = "del item[%r]" % prop_old
-        # print(exec_str)
-        exec(exec_str)
+        del item[prop_old]
 
         # Reassign
-        exec_str = "item[%r] = %s" % (prop, repr(value_eval))
-        # print(exec_str)
-        exec(exec_str)
-
-        exec_str = "item.property_overridable_library_set('[\"%s\"]', %s)" % (prop, self.is_overridable_library)
-        exec(exec_str)
-
+        item[prop] = value_eval
+        item.property_overridable_library_set('["%s"]' % prop_escape, self.is_overridable_library)
         rna_idprop_ui_prop_update(item, prop)
 
         self._last_prop[:] = [prop]
@@ -1323,7 +1324,7 @@ class WM_OT_properties_edit(Operator):
 
         # If we have changed the type of the property, update its potential anim curves!
         if prop_type_old != prop_type_new:
-            data_path = '["%s"]' % bpy.utils.escape_identifier(prop)
+            data_path = '["%s"]' % prop_escape
             done = set()
 
             def _update(fcurves):
@@ -1349,8 +1350,8 @@ class WM_OT_properties_edit(Operator):
                     for nt in adt.nla_tracks:
                         _update_strips(nt.strips)
 
-        # otherwise existing buttons which reference freed
-        # memory may crash blender [#26510]
+        # Otherwise existing buttons which reference freed
+        # memory may crash Blender T26510.
         # context.area.tag_redraw()
         for win in context.window_manager.windows:
             for area in win.screen.areas:
@@ -1365,19 +1366,26 @@ class WM_OT_properties_edit(Operator):
             rna_idprop_value_item_type
         )
 
+        prop = self.property
+        prop_escape = bpy.utils.escape_identifier(prop)
+
         data_path = self.data_path
 
         if not data_path:
             self.report({'ERROR'}, "Data path not set")
             return {'CANCELLED'}
 
-        self._last_prop = [self.property]
+        self._last_prop = [prop]
 
         item = eval("context.%s" % data_path)
 
+        if (item.id_data and item.id_data.override_library and item.id_data.override_library.reference):
+            self.report({'ERROR'}, "Cannot edit properties from override data")
+            return {'CANCELLED'}
+
         # retrieve overridable static
-        exec_str = "item.is_property_overridable_library('[\"%s\"]')" % (self.property)
-        self.is_overridable_library = bool(eval(exec_str))
+        is_overridable = item.is_property_overridable_library('["%s"]' % prop_escape)
+        self.is_overridable_library = bool(is_overridable)
 
         # default default value
         prop_type, is_array = rna_idprop_value_item_type(self.get_value_eval())
@@ -1387,7 +1395,7 @@ class WM_OT_properties_edit(Operator):
             self.default = ""
 
         # setup defaults
-        prop_ui = rna_idprop_ui_prop_get(item, self.property, False)  # don't create
+        prop_ui = rna_idprop_ui_prop_get(item, prop, False)  # don't create
         if prop_ui:
             self.min = prop_ui.get("min", -1000000000)
             self.max = prop_ui.get("max", 1000000000)
@@ -1498,6 +1506,10 @@ class WM_OT_properties_add(Operator):
         data_path = self.data_path
         item = eval("context.%s" % data_path)
 
+        if (item.id_data and item.id_data.override_library and item.id_data.override_library.reference):
+            self.report({'ERROR'}, "Cannot add properties to override data")
+            return {'CANCELLED'}
+
         def unique_name(names):
             prop = "prop"
             prop_new = prop
@@ -1541,7 +1553,7 @@ class WM_OT_properties_remove(Operator):
     bl_options = {'UNDO', 'INTERNAL'}
 
     data_path: rna_path
-    property: rna_property
+    property: rna_custom_property
 
     def execute(self, context):
         from rna_prop_ui import (
@@ -1550,6 +1562,11 @@ class WM_OT_properties_remove(Operator):
         )
         data_path = self.data_path
         item = eval("context.%s" % data_path)
+
+        if (item.id_data and item.id_data.override_library and item.id_data.override_library.reference):
+            self.report({'ERROR'}, "Cannot remove properties from override data")
+            return {'CANCELLED'}
+
         prop = self.property
         rna_idprop_ui_prop_update(item, prop)
         del item[prop]
@@ -1649,7 +1666,7 @@ class WM_OT_owner_disable(Operator):
 class WM_OT_tool_set_by_id(Operator):
     """Set the tool by name (for keymaps)"""
     bl_idname = "wm.tool_set_by_id"
-    bl_label = "Set Tool By Name"
+    bl_label = "Set Tool by Name"
 
     name: StringProperty(
         name="Identifier",
@@ -1707,7 +1724,7 @@ class WM_OT_tool_set_by_id(Operator):
 class WM_OT_tool_set_by_index(Operator):
     """Set the tool by index (for keymaps)"""
     bl_idname = "wm.tool_set_by_index"
-    bl_label = "Set Tool By Index"
+    bl_label = "Set Tool by Index"
     index: IntProperty(
         name="Index in toolbar",
         default=0,
@@ -2280,32 +2297,57 @@ class WM_OT_batch_rename(Operator):
 
         layout = self.layout
 
-        split = layout.split(factor=0.5)
-        split.label(text="Data Type:")
+        split = layout.split(align=True)
+        split.row(align=True).prop(self, "data_source", expand=True)
         split.prop(self, "data_type", text="")
-
-        split = layout.split(factor=0.5)
-        split.label(text="Rename %d %s:" % (len(self._data[0]), self._data[2]))
-        split.row().prop(self, "data_source", expand=True)
 
         for action in self.actions:
             box = layout.box()
+            split = box.split(factor=0.87)
 
-            row = box.row(align=True)
+            # Column 1: main content.
+            col = split.column()
+
+            # Label's width.
+            fac = 0.25
+
+            # Row 1: type.
+            row = col.split(factor=fac)
+            row.alignment = 'RIGHT'
+            row.label(text="Type")
             row.prop(action, "type", text="")
-            row.prop(action, "op_add", text="", icon='ADD')
-            row.prop(action, "op_remove", text="", icon='REMOVE')
 
             ty = action.type
             if ty == 'SET':
-                box.prop(action, "set_method")
-                box.prop(action, "set_name")
-            elif ty == 'STRIP':
-                box.row().prop(action, "strip_chars")
-                box.row().prop(action, "strip_part")
-            elif ty == 'REPLACE':
+                # Row 2: method.
+                row = col.split(factor=fac)
+                row.alignment = 'RIGHT'
+                row.label(text="Method")
+                row.row().prop(action, "set_method", expand=True)
 
-                row = box.row(align=True)
+                # Row 3: name.
+                row = col.split(factor=fac)
+                row.alignment = 'RIGHT'
+                row.label(text="Name")
+                row.prop(action, "set_name", text="")
+
+            elif ty == 'STRIP':
+                # Row 2: chars.
+                row = col.split(factor=fac)
+                row.alignment = 'RIGHT'
+                row.label(text="Characters")
+                row.row().prop(action, "strip_chars")
+
+                # Row 3: part.
+                row = col.split(factor=fac)
+                row.alignment = 'RIGHT'
+                row.label(text="Strip From")
+                row.row().prop(action, "strip_part")
+
+            elif ty == 'REPLACE':
+                # Row 2: find.
+                row = col.split(factor=fac)
+
                 re_error_src = None
                 if action.use_replace_regex_src:
                     try:
@@ -2313,13 +2355,24 @@ class WM_OT_batch_rename(Operator):
                     except Exception as ex:
                         re_error_src = str(ex)
                         row.alert = True
-                row.prop(action, "replace_src")
-                row.prop(action, "use_replace_regex_src", text="", icon='SORTBYEXT')
+
+                row.alignment = 'RIGHT'
+                row.label(text="Find")
+                sub = row.row(align=True)
+                sub.prop(action, "replace_src", text="")
+                sub.prop(action, "use_replace_regex_src", text="", icon='SORTBYEXT')
+
+                # Row.
                 if re_error_src is not None:
-                    box.label(text=re_error_src)
+                    row = col.split(factor=fac)
+                    row.label(text="")
+                    row.alert = True
+                    row.label(text=re_error_src)
+
+                # Row 3: replace.
+                row = col.split(factor=fac)
 
                 re_error_dst = None
-                row = box.row(align=True)
                 if action.use_replace_regex_src:
                     if action.use_replace_regex_dst:
                         if re_error_src is None:
@@ -2329,17 +2382,39 @@ class WM_OT_batch_rename(Operator):
                                 re_error_dst = str(ex)
                                 row.alert = True
 
-                row.prop(action, "replace_dst")
-                rowsub = row.row(align=True)
-                rowsub.active = action.use_replace_regex_src
-                rowsub.prop(action, "use_replace_regex_dst", text="", icon='SORTBYEXT')
-                if re_error_dst is not None:
-                    box.label(text=re_error_dst)
+                row.alignment = 'RIGHT'
+                row.label(text="Replace")
+                sub = row.row(align=True)
+                sub.prop(action, "replace_dst", text="")
+                subsub = sub.row(align=True)
+                subsub.active = action.use_replace_regex_src
+                subsub.prop(action, "use_replace_regex_dst", text="", icon='SORTBYEXT')
 
-                row = box.row()
+                # Row.
+                if re_error_dst is not None:
+                    row = col.split(factor=fac)
+                    row.label(text="")
+                    row.alert = True
+                    row.label(text=re_error_dst)
+
+                # Row 4: case.
+                row = col.split(factor=fac)
+                row.label(text="")
                 row.prop(action, "replace_match_case")
+
             elif ty == 'CASE':
-                box.row().prop(action, "case_method", expand=True)
+                # Row 2: method.
+                row = col.split(factor=fac)
+                row.alignment = 'RIGHT'
+                row.label(text="Convert To")
+                row.row().prop(action, "case_method", expand=True)
+
+            # Column 2: add-remove.
+            row = split.split(align=True)
+            row.prop(action, "op_remove", text="", icon='REMOVE')
+            row.prop(action, "op_add", text="", icon='ADD')
+
+        layout.label(text="Rename %d %s" % (len(self._data[0]), self._data[2]))
 
     def check(self, context):
         changed = False
@@ -2573,26 +2648,28 @@ class WM_MT_splash_about(Menu):
         layout = self.layout
         layout.operator_context = 'EXEC_DEFAULT'
 
-        layout.label(text="Blender is free software")
-        layout.label(text="Licensed under the GNU General Public License")
-        layout.separator()
-        layout.separator()
+        split = layout.split(factor=0.65)
 
-        split = layout.split()
-        split.emboss = 'PULLDOWN_MENU'
-        split.scale_y = 1.3
+        col = split.column(align=True)
+        col.scale_y = 0.8
+        col.label(text=bpy.app.version_string, translate=False)
+        col.separator(factor=2.5)
+        col.label(text=iface_("Date: %s %s") % (bpy.app.build_commit_date.decode('utf-8', 'replace'),
+                                                bpy.app.build_commit_time.decode('utf-8', 'replace')), translate=False)
+        col.label(text=iface_("Hash: %s") % bpy.app.build_hash.decode('ascii'), translate=False)
+        col.label(text=iface_("Branch: %s") % bpy.app.build_branch.decode('utf-8', 'replace'), translate=False)
+        col.separator(factor=2.0)
+        col.label(text="Blender is free software")
+        col.label(text="Licensed under the GNU General Public License")
 
-        col1 = split.column()
-
-        col1.operator("wm.url_open_preset", text="Release Notes", icon='URL').type = 'RELEASE_NOTES'
-        col1.operator("wm.url_open_preset", text="Credits", icon='URL').type = 'CREDITS'
-        col1.operator("wm.url_open", text="License", icon='URL').url = "https://www.blender.org/about/license/"
-
-        col2 = split.column()
-
-        col2.operator("wm.url_open_preset", text="Blender Website", icon='URL').type = 'BLENDER'
-        col2.operator("wm.url_open", text="Blender Store", icon='URL').url = "https://store.blender.org"
-        col2.operator("wm.url_open_preset", text="Development Fund", icon='FUND').type = 'FUND'
+        col = split.column(align=True)
+        col.emboss = 'PULLDOWN_MENU'
+        col.operator("wm.url_open_preset", text="Release Notes", icon='URL').type = 'RELEASE_NOTES'
+        col.operator("wm.url_open_preset", text="Credits", icon='URL').type = 'CREDITS'
+        col.operator("wm.url_open", text="License", icon='URL').url = "https://www.blender.org/about/license/"
+        col.operator("wm.url_open_preset", text="Blender Website", icon='URL').type = 'BLENDER'
+        col.operator("wm.url_open", text="Blender Store", icon='URL').url = "https://store.blender.org"
+        col.operator("wm.url_open_preset", text="Development Fund", icon='FUND').type = 'FUND'
 
 
 class WM_OT_drop_blend_file(Operator):

@@ -172,7 +172,7 @@ static void HC_relaxation_iteration_uv(BMEditMesh *em,
 
   for (i = 0; i < sculptdata->totalUniqueUvs; i++) {
     copy_v2_v2(diff, tmp_uvdata[i].sum_co);
-    mul_v2_fl(diff, 1.f / tmp_uvdata[i].ncounter);
+    mul_v2_fl(diff, 1.0f / tmp_uvdata[i].ncounter);
     copy_v2_v2(tmp_uvdata[i].p, diff);
 
     tmp_uvdata[i].b[0] = diff[0] - sculptdata->uv[i].uv[0];
@@ -260,7 +260,7 @@ static void laplacian_relaxation_iteration_uv(BMEditMesh *em,
    * here it is not needed since we translate along the UV plane always. */
   for (i = 0; i < sculptdata->totalUniqueUvs; i++) {
     copy_v2_v2(tmp_uvdata[i].p, tmp_uvdata[i].sum_co);
-    mul_v2_fl(tmp_uvdata[i].p, 1.f / tmp_uvdata[i].ncounter);
+    mul_v2_fl(tmp_uvdata[i].p, 1.0f / tmp_uvdata[i].ncounter);
   }
 
   for (i = 0; i < sculptdata->totalUniqueUvs; i++) {
@@ -472,9 +472,9 @@ static bool uv_edge_compare(const void *a, const void *b)
   const UvEdge *edge2 = b;
 
   if ((edge1->uv1 == edge2->uv1) && (edge1->uv2 == edge2->uv2)) {
-    return 0;
+    return false;
   }
-  return 1;
+  return true;
 }
 
 static UvSculptData *uv_sculpt_stroke_init(bContext *C, wmOperator *op, const wmEvent *event)
@@ -488,7 +488,7 @@ static UvSculptData *uv_sculpt_stroke_init(bContext *C, wmOperator *op, const wm
 
   op->customdata = data;
 
-  BKE_curvemapping_initialize(ts->uvsculpt->paint.brush->curve);
+  BKE_curvemapping_init(ts->uvsculpt->paint.brush->curve);
 
   if (data) {
     int counter = 0, i;

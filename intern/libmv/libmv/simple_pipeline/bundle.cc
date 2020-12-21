@@ -35,32 +35,9 @@
 #include "libmv/simple_pipeline/reconstruction.h"
 #include "libmv/simple_pipeline/tracks.h"
 #include "libmv/simple_pipeline/distortion_models.h"
+#include "libmv/simple_pipeline/packed_intrinsics.h"
 
 namespace libmv {
-
-// The intrinsics need to get combined into a single parameter block; use these
-// enums to index instead of numeric constants.
-enum {
-  // Camera calibration values.
-  OFFSET_FOCAL_LENGTH,
-  OFFSET_PRINCIPAL_POINT_X,
-  OFFSET_PRINCIPAL_POINT_Y,
-
-  // Distortion model coefficients.
-  OFFSET_K1,
-  OFFSET_K2,
-  OFFSET_K3,
-  OFFSET_P1,
-  OFFSET_P2,
-
-  // Maximal possible offset.
-  OFFSET_MAX,
-};
-
-#define FIRST_DISTORTION_COEFFICIENT OFFSET_K1
-#define LAST_DISTORTION_COEFFICIENT OFFSET_P2
-#define NUM_DISTORTION_COEFFICIENTS  \
-  (LAST_DISTORTION_COEFFICIENT - FIRST_DISTORTION_COEFFICIENT + 1)
 
 namespace {
 
@@ -89,20 +66,23 @@ void ApplyDistortionModelUsingIntrinsicsBlock(
     const T& normalized_x, const T& normalized_y,
     T* distorted_x, T* distorted_y) {
   // Unpack the intrinsics.
-  const T& focal_length      = intrinsics_block[OFFSET_FOCAL_LENGTH];
-  const T& principal_point_x = intrinsics_block[OFFSET_PRINCIPAL_POINT_X];
-  const T& principal_point_y = intrinsics_block[OFFSET_PRINCIPAL_POINT_Y];
+  const T& focal_length =
+      intrinsics_block[PackedIntrinsics::OFFSET_FOCAL_LENGTH];
+  const T& principal_point_x =
+      intrinsics_block[PackedIntrinsics::OFFSET_PRINCIPAL_POINT_X];
+  const T& principal_point_y =
+      intrinsics_block[PackedIntrinsics::OFFSET_PRINCIPAL_POINT_Y];
 
   // TODO(keir): Do early bailouts for zero distortion; these are expensive
   // jet operations.
   switch (invariant_intrinsics->GetDistortionModelType()) {
     case DISTORTION_MODEL_POLYNOMIAL:
       {
-        const T& k1 = intrinsics_block[OFFSET_K1];
-        const T& k2 = intrinsics_block[OFFSET_K2];
-        const T& k3 = intrinsics_block[OFFSET_K3];
-        const T& p1 = intrinsics_block[OFFSET_P1];
-        const T& p2 = intrinsics_block[OFFSET_P2];
+        const T& k1 = intrinsics_block[PackedIntrinsics::OFFSET_K1];
+        const T& k2 = intrinsics_block[PackedIntrinsics::OFFSET_K2];
+        const T& k3 = intrinsics_block[PackedIntrinsics::OFFSET_K3];
+        const T& p1 = intrinsics_block[PackedIntrinsics::OFFSET_P1];
+        const T& p2 = intrinsics_block[PackedIntrinsics::OFFSET_P2];
 
         ApplyPolynomialDistortionModel(focal_length,
                                        focal_length,
@@ -117,8 +97,8 @@ void ApplyDistortionModelUsingIntrinsicsBlock(
 
     case DISTORTION_MODEL_DIVISION:
       {
-        const T& k1 = intrinsics_block[OFFSET_K1];
-        const T& k2 = intrinsics_block[OFFSET_K2];
+        const T& k1 = intrinsics_block[PackedIntrinsics::OFFSET_K1];
+        const T& k2 = intrinsics_block[PackedIntrinsics::OFFSET_K2];
 
         ApplyDivisionDistortionModel(focal_length,
                                      focal_length,
@@ -133,6 +113,26 @@ void ApplyDistortionModelUsingIntrinsicsBlock(
     case DISTORTION_MODEL_NUKE:
       {
         LOG(FATAL) << "Unsupported distortion model.";
+        return;
+      }
+
+    case DISTORTION_MODEL_BROWN:
+      {
+        const T& k1 = intrinsics_block[PackedIntrinsics::OFFSET_K1];
+        const T& k2 = intrinsics_block[PackedIntrinsics::OFFSET_K2];
+        const T& k3 = intrinsics_block[PackedIntrinsics::OFFSET_K3];
+        const T& k4 = intrinsics_block[PackedIntrinsics::OFFSET_K4];
+        const T& p1 = intrinsics_block[PackedIntrinsics::OFFSET_P1];
+        const T& p2 = intrinsics_block[PackedIntrinsics::OFFSET_P2];
+
+        ApplyBrownDistortionModel(focal_length,
+                                  focal_length,
+                                  principal_point_x,
+                                  principal_point_y,
+                                  k1, k2, k3, k4,
+                                  p1, p2,
+                                  normalized_x, normalized_y,
+                                  distorted_x, distorted_y);
         return;
       }
   }
@@ -159,22 +159,26 @@ void InvertDistortionModelUsingIntrinsicsBlock(
     const T& image_x, const T& image_y,
     T* normalized_x, T* normalized_y) {
   // Unpack the intrinsics.
-  const T& focal_length      = intrinsics_block[OFFSET_FOCAL_LENGTH];
-  const T& principal_point_x = intrinsics_block[OFFSET_PRINCIPAL_POINT_X];
-  const T& principal_point_y = intrinsics_block[OFFSET_PRINCIPAL_POINT_Y];
+  const T& focal_length =
+      intrinsics_block[PackedIntrinsics::OFFSET_FOCAL_LENGTH];
+  const T& principal_point_x =
+      intrinsics_block[PackedIntrinsics::OFFSET_PRINCIPAL_POINT_X];
+  const T& principal_point_y =
+      intrinsics_block[PackedIntrinsics::OFFSET_PRINCIPAL_POINT_Y];
 
   // TODO(keir): Do early bailouts for zero distortion; these are expensive
   // jet operations.
   switch (invariant_intrinsics->GetDistortionModelType()) {
     case DISTORTION_MODEL_POLYNOMIAL:
     case DISTORTION_MODEL_DIVISION:
+    case DISTORTION_MODEL_BROWN:
       LOG(FATAL) << "Unsupported distortion model.";
       return;
 
     case DISTORTION_MODEL_NUKE:
       {
-        const T& k1 = intrinsics_block[OFFSET_K1];
-        const T& k2 = intrinsics_block[OFFSET_K2];
+        const T& k1 = intrinsics_block[PackedIntrinsics::OFFSET_K1];
+        const T& k2 = intrinsics_block[PackedIntrinsics::OFFSET_K2];
 
         InvertNukeDistortionModel(focal_length,
                                   focal_length,
@@ -197,16 +201,19 @@ void NormalizedToImageSpace(const T* const intrinsics_block,
                             const T& normalized_x, const T& normalized_y,
                             T* image_x, T* image_y) {
   // Unpack the intrinsics.
-  const T& focal_length      = intrinsics_block[OFFSET_FOCAL_LENGTH];
-  const T& principal_point_x = intrinsics_block[OFFSET_PRINCIPAL_POINT_X];
-  const T& principal_point_y = intrinsics_block[OFFSET_PRINCIPAL_POINT_Y];
+  const T& focal_length =
+      intrinsics_block[PackedIntrinsics::OFFSET_FOCAL_LENGTH];
+  const T& principal_point_x =
+      intrinsics_block[PackedIntrinsics::OFFSET_PRINCIPAL_POINT_X];
+  const T& principal_point_y =
+      intrinsics_block[PackedIntrinsics::OFFSET_PRINCIPAL_POINT_Y];
 
   *image_x = normalized_x * focal_length + principal_point_x;
   *image_y = normalized_y * focal_length + principal_point_y;
 }
 
 // Cost functor which computes reprojection error of 3D point X on camera
-// defined by angle-axis rotation and it's translation (which are in the same
+// defined by angle-axis rotation and its translation (which are in the same
 // block due to optimization reasons).
 //
 // This functor can only be used for distortion models which have analytically
@@ -265,7 +272,7 @@ struct ReprojectionErrorApplyIntrinsics {
 };
 
 // Cost functor which computes reprojection error of 3D point X on camera
-// defined by angle-axis rotation and it's translation (which are in the same
+// defined by angle-axis rotation and its translation (which are in the same
 // block due to optimization reasons).
 //
 // This functor can only be used for distortion models which have analytically
@@ -288,9 +295,12 @@ struct ReprojectionErrorInvertIntrinsics {
                   const T* const X,    // Point coordinates 3x1.
                   T* residuals) const {
     // Unpack the intrinsics.
-    const T& focal_length      = intrinsics[OFFSET_FOCAL_LENGTH];
-    const T& principal_point_x = intrinsics[OFFSET_PRINCIPAL_POINT_X];
-    const T& principal_point_y = intrinsics[OFFSET_PRINCIPAL_POINT_Y];
+    const T& focal_length =
+        intrinsics[PackedIntrinsics::OFFSET_FOCAL_LENGTH];
+    const T& principal_point_x =
+        intrinsics[PackedIntrinsics::OFFSET_PRINCIPAL_POINT_X];
+    const T& principal_point_y =
+        intrinsics[PackedIntrinsics::OFFSET_PRINCIPAL_POINT_Y];
 
     // Compute projective coordinates: x = RX + t.
     T x[3];
@@ -358,47 +368,12 @@ void BundleIntrinsicsLogMessage(const int bundle_intrinsics) {
     APPEND_BUNDLING_INTRINSICS("px, py", BUNDLE_PRINCIPAL_POINT);
     APPEND_BUNDLING_INTRINSICS("k1",     BUNDLE_RADIAL_K1);
     APPEND_BUNDLING_INTRINSICS("k2",     BUNDLE_RADIAL_K2);
+    APPEND_BUNDLING_INTRINSICS("k3",     BUNDLE_RADIAL_K3);
+    APPEND_BUNDLING_INTRINSICS("k4",     BUNDLE_RADIAL_K4);
     APPEND_BUNDLING_INTRINSICS("p1",     BUNDLE_TANGENTIAL_P1);
     APPEND_BUNDLING_INTRINSICS("p2",     BUNDLE_TANGENTIAL_P2);
 
     LOG(INFO) << "Bundling " << bundling_message << ".";
-  }
-}
-
-// Pack intrinsics from object to an array for easier
-// and faster minimization.
-void PackIntrinisicsIntoArray(const CameraIntrinsics &intrinsics,
-                              double intrinsics_block[OFFSET_MAX]) {
-  intrinsics_block[OFFSET_FOCAL_LENGTH]       = intrinsics.focal_length();
-  intrinsics_block[OFFSET_PRINCIPAL_POINT_X]  = intrinsics.principal_point_x();
-  intrinsics_block[OFFSET_PRINCIPAL_POINT_Y]  = intrinsics.principal_point_y();
-
-  int num_distortion_parameters = intrinsics.num_distortion_parameters();
-  assert(num_distortion_parameters <= NUM_DISTORTION_COEFFICIENTS);
-
-  const double *distortion_parameters = intrinsics.distortion_parameters();
-  for (int i = 0; i < num_distortion_parameters; ++i) {
-    intrinsics_block[FIRST_DISTORTION_COEFFICIENT + i] =
-        distortion_parameters[i];
-  }
-}
-
-// Unpack intrinsics back from an array to an object.
-void UnpackIntrinsicsFromArray(const double intrinsics_block[OFFSET_MAX],
-                               CameraIntrinsics *intrinsics) {
-  intrinsics->SetFocalLength(intrinsics_block[OFFSET_FOCAL_LENGTH],
-                             intrinsics_block[OFFSET_FOCAL_LENGTH]);
-
-  intrinsics->SetPrincipalPoint(intrinsics_block[OFFSET_PRINCIPAL_POINT_X],
-                                intrinsics_block[OFFSET_PRINCIPAL_POINT_Y]);
-
-  int num_distortion_parameters = intrinsics->num_distortion_parameters();
-  assert(num_distortion_parameters <= NUM_DISTORTION_COEFFICIENTS);
-
-  double *distortion_parameters = intrinsics->distortion_parameters();
-  for (int i = 0; i < num_distortion_parameters; ++i) {
-    distortion_parameters[i] =
-        intrinsics_block[FIRST_DISTORTION_COEFFICIENT + i];
   }
 }
 
@@ -538,12 +513,12 @@ template<typename CostFunction>
 void AddResidualBlockToProblemImpl(const CameraIntrinsics *invariant_intrinsics,
                                    double observed_x, double observed_y,
                                    double weight,
-                                   double intrinsics_block[OFFSET_MAX],
+                                   double *intrinsics_block,
                                    double *camera_R_t,
                                    EuclideanPoint *point,
                                    ceres::Problem* problem) {
   problem->AddResidualBlock(new ceres::AutoDiffCostFunction<
-      CostFunction, 2, OFFSET_MAX, 6, 3>(
+      CostFunction, 2, PackedIntrinsics::NUM_PARAMETERS, 6, 3>(
           new CostFunction(
               invariant_intrinsics,
               observed_x, observed_y,
@@ -557,7 +532,7 @@ void AddResidualBlockToProblemImpl(const CameraIntrinsics *invariant_intrinsics,
 void AddResidualBlockToProblem(const CameraIntrinsics *invariant_intrinsics,
                                const Marker &marker,
                                double marker_weight,
-                               double intrinsics_block[OFFSET_MAX],
+                               double* intrinsics_block,
                                double *camera_R_t,
                                EuclideanPoint *point,
                                ceres::Problem* problem) {
@@ -594,7 +569,7 @@ void AddResidualBlockToProblem(const CameraIntrinsics *invariant_intrinsics,
 void EuclideanBundlePointsOnly(const CameraIntrinsics *invariant_intrinsics,
                                const vector<Marker> &markers,
                                map<int, Vec6> &all_cameras_R_t,
-                               double intrinsics_block[OFFSET_MAX],
+                               double* intrinsics_block,
                                EuclideanReconstruction *reconstruction) {
   ceres::Problem::Options problem_options;
   ceres::Problem problem(problem_options);
@@ -674,11 +649,11 @@ void EuclideanBundleCommonIntrinsics(
   // N-th element denotes whether track N is a constant zero-weighted track.
   vector<bool> zero_weight_tracks_flags(tracks.MaxTrack() + 1, true);
 
-  // Residual blocks with 10 parameters are unwieldly with Ceres, so pack the
-  // intrinsics into a single block and rely on local parameterizations to
-  // control which intrinsics are allowed to vary.
-  double intrinsics_block[OFFSET_MAX];
-  PackIntrinisicsIntoArray(*intrinsics, intrinsics_block);
+  // Pack all intrinsics parameters into a single block and rely on local
+  // parameterizations to control which intrinsics are allowed to vary.
+  PackedIntrinsics packed_intrinsics;
+  intrinsics->Pack(&packed_intrinsics);
+  double* intrinsics_block = packed_intrinsics.GetParametersBlock();
 
   // Convert cameras rotations to angle axis and merge with translation
   // into single parameter block for maximal minimization speed.
@@ -771,25 +746,31 @@ void EuclideanBundleCommonIntrinsics(
 
     std::vector<int> constant_intrinsics;
 #define MAYBE_SET_CONSTANT(bundle_enum, offset) \
-    if (!(bundle_intrinsics & bundle_enum)) { \
+    if (!(bundle_intrinsics & bundle_enum) || \
+        !packed_intrinsics.IsParameterDefined(offset)) { \
       constant_intrinsics.push_back(offset); \
     }
-    MAYBE_SET_CONSTANT(BUNDLE_FOCAL_LENGTH,    OFFSET_FOCAL_LENGTH);
-    MAYBE_SET_CONSTANT(BUNDLE_PRINCIPAL_POINT, OFFSET_PRINCIPAL_POINT_X);
-    MAYBE_SET_CONSTANT(BUNDLE_PRINCIPAL_POINT, OFFSET_PRINCIPAL_POINT_Y);
-    MAYBE_SET_CONSTANT(BUNDLE_RADIAL_K1,       OFFSET_K1);
-    MAYBE_SET_CONSTANT(BUNDLE_RADIAL_K2,       OFFSET_K2);
-    MAYBE_SET_CONSTANT(BUNDLE_TANGENTIAL_P1,   OFFSET_P1);
-    MAYBE_SET_CONSTANT(BUNDLE_TANGENTIAL_P2,   OFFSET_P2);
+    MAYBE_SET_CONSTANT(BUNDLE_FOCAL_LENGTH,
+                       PackedIntrinsics::OFFSET_FOCAL_LENGTH);
+    MAYBE_SET_CONSTANT(BUNDLE_PRINCIPAL_POINT,
+                       PackedIntrinsics::OFFSET_PRINCIPAL_POINT_X);
+    MAYBE_SET_CONSTANT(BUNDLE_PRINCIPAL_POINT,
+                       PackedIntrinsics::OFFSET_PRINCIPAL_POINT_Y);
+    MAYBE_SET_CONSTANT(BUNDLE_RADIAL_K1,       PackedIntrinsics::OFFSET_K1);
+    MAYBE_SET_CONSTANT(BUNDLE_RADIAL_K2,       PackedIntrinsics::OFFSET_K2);
+    MAYBE_SET_CONSTANT(BUNDLE_RADIAL_K3,       PackedIntrinsics::OFFSET_K3);
+    MAYBE_SET_CONSTANT(BUNDLE_RADIAL_K4,       PackedIntrinsics::OFFSET_K4);
+    MAYBE_SET_CONSTANT(BUNDLE_TANGENTIAL_P1,   PackedIntrinsics::OFFSET_P1);
+    MAYBE_SET_CONSTANT(BUNDLE_TANGENTIAL_P2,   PackedIntrinsics::OFFSET_P2);
 #undef MAYBE_SET_CONSTANT
 
-    // Always set K3 constant, it's not used at the moment.
-    constant_intrinsics.push_back(OFFSET_K3);
+    if (!constant_intrinsics.empty()) {
+      ceres::SubsetParameterization *subset_parameterization =
+        new ceres::SubsetParameterization(PackedIntrinsics::NUM_PARAMETERS,
+                                          constant_intrinsics);
 
-    ceres::SubsetParameterization *subset_parameterization =
-      new ceres::SubsetParameterization(OFFSET_MAX, constant_intrinsics);
-
-    problem.SetParameterization(intrinsics_block, subset_parameterization);
+      problem.SetParameterization(intrinsics_block, subset_parameterization);
+    }
   }
 
   // Configure the solver.
@@ -812,8 +793,9 @@ void EuclideanBundleCommonIntrinsics(
   UnpackCamerasRotationAndTranslation(all_cameras_R_t, reconstruction);
 
   // Copy intrinsics back.
-  if (bundle_intrinsics != BUNDLE_NO_INTRINSICS)
-    UnpackIntrinsicsFromArray(intrinsics_block, intrinsics);
+  if (bundle_intrinsics != BUNDLE_NO_INTRINSICS) {
+    intrinsics->Unpack(packed_intrinsics);
+  }
 
   LG << "Final intrinsics: " << *intrinsics;
 

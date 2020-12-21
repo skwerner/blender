@@ -18,8 +18,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_VIEW3D_DEFAULTS_H__
-#define __DNA_VIEW3D_DEFAULTS_H__
+#pragma once
 
 /* Struct members on own line. */
 /* clang-format off */
@@ -52,7 +51,9 @@
 #define _DNA_DEFAULT_View3DOverlay \
   { \
     .wireframe_threshold = 1.0f, \
+    .wireframe_opacity = 1.0f, \
     .xray_alpha_bone = 0.5f, \
+    .fade_alpha = 0.40f, \
     .texture_paint_mode_opacity = 1.0f, \
     .weight_paint_mode_opacity = 1.0f, \
     .vertex_paint_mode_opacity = 1.0f, \
@@ -114,5 +115,3 @@
 /** \} */
 
 /* clang-format on */
-
-#endif /* __DNA_VIEW3D_DEFAULTS_H__ */

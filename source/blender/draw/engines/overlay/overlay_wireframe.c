@@ -62,6 +62,7 @@ void OVERLAY_wireframe_cache_init(OVERLAY_Data *vedata)
   View3DShading *shading = &draw_ctx->v3d->shading;
 
   pd->shdata.wire_step_param = pd->overlay.wireframe_threshold - 254.0f / 255.0f;
+  pd->shdata.wire_opacity = pd->overlay.wireframe_opacity;
 
   bool is_wire_shmode = (shading->type == OB_WIRE);
   bool is_material_shmode = (shading->type > OB_SOLID);
@@ -95,6 +96,7 @@ void OVERLAY_wireframe_cache_init(OVERLAY_Data *vedata)
       DRW_shgroup_uniform_block(grp, "globalsBlock", G_draw.block_ubo);
       DRW_shgroup_uniform_texture_ref(grp, "depthTex", depth_tx);
       DRW_shgroup_uniform_float_copy(grp, "wireStepParam", pd->shdata.wire_step_param);
+      DRW_shgroup_uniform_float_copy(grp, "wireOpacity", pd->shdata.wire_opacity);
       DRW_shgroup_uniform_bool_copy(grp, "useColoring", use_coloring);
       DRW_shgroup_uniform_bool_copy(grp, "isTransform", (G.moving & G_TRANSFORM_OBJ) != 0);
       DRW_shgroup_uniform_bool_copy(grp, "isObjectColor", is_object_color);
@@ -131,7 +133,7 @@ void OVERLAY_wireframe_cache_init(OVERLAY_Data *vedata)
 static void wireframe_hair_cache_populate(OVERLAY_Data *vedata, Object *ob, ParticleSystem *psys)
 {
   OVERLAY_PrivateData *pd = vedata->stl->pd;
-  const bool is_xray = (ob->dtx & OB_DRAWXRAY) != 0;
+  const bool is_xray = (ob->dtx & OB_DRAW_IN_FRONT) != 0;
 
   Object *dupli_parent = DRW_object_get_dupli_parent(ob);
   DupliObject *dupli_object = DRW_object_get_dupli(ob);
@@ -167,7 +169,7 @@ void OVERLAY_wireframe_cache_populate(OVERLAY_Data *vedata,
   OVERLAY_PrivateData *pd = vedata->stl->pd;
   const DRWContextState *draw_ctx = DRW_context_state_get();
   const bool all_wires = (ob->dtx & OB_DRAW_ALL_EDGES) != 0;
-  const bool is_xray = (ob->dtx & OB_DRAWXRAY) != 0;
+  const bool is_xray = (ob->dtx & OB_DRAW_IN_FRONT) != 0;
   const bool is_mesh = ob->type == OB_MESH;
   const bool is_mesh_verts_only = is_mesh && (((Mesh *)ob->data)->totedge == 0 &&
                                               ((Mesh *)ob->data)->totvert > 0);
@@ -286,7 +288,7 @@ void OVERLAY_wireframe_cache_populate(OVERLAY_Data *vedata,
       }
 
       if (ob->type == OB_GPENCIL) {
-        /* TODO (fclem) Make GPencil objects have correct boundbox. */
+        /* TODO(fclem): Make GPencil objects have correct bound-box. */
         DRW_shgroup_call_no_cull(shgrp, geom, ob);
       }
       else if (use_sculpt_pbvh) {

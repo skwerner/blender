@@ -51,6 +51,11 @@
 #include "BKE_sound.h"
 #include "BKE_volume.h"
 
+#include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
+
+#include "BLO_read_write.h"
+
 int BKE_packedfile_seek(PackedFile *pf, int offset, int whence)
 {
   int oldseek = -1, seek = 0;
@@ -80,7 +85,7 @@ int BKE_packedfile_seek(PackedFile *pf, int offset, int whence)
     pf->seek = seek;
   }
 
-  return (oldseek);
+  return oldseek;
 }
 
 void BKE_packedfile_rewind(PackedFile *pf)
@@ -108,7 +113,7 @@ int BKE_packedfile_read(PackedFile *pf, void *data, int size)
     size = -1;
   }
 
-  return (size);
+  return size;
 }
 
 int BKE_packedfile_count_all(Main *bmain)
@@ -234,7 +239,7 @@ PackedFile *BKE_packedfile_new(ReportList *reports, const char *filename, const 
 
   // XXX waitcursor(0);
 
-  return (pf);
+  return pf;
 }
 
 /* no libraries for now */
@@ -365,7 +370,7 @@ int BKE_packedfile_write_to_file(ReportList *reports,
   if (guimode) {
   }  // XXX waitcursor(0);
 
-  return (ret_value);
+  return ret_value;
 }
 
 /**
@@ -415,11 +420,10 @@ enum ePF_FileCompare BKE_packedfile_compare_to_file(const char *ref_file_name,
           ret_val = PF_CMP_DIFFERS;
           break;
         }
-        else {
-          if (memcmp(buf, ((char *)pf->data) + i, len)) {
-            ret_val = PF_CMP_DIFFERS;
-            break;
-          }
+
+        if (memcmp(buf, ((char *)pf->data) + i, len) != 0) {
+          ret_val = PF_CMP_DIFFERS;
+          break;
         }
       }
 
@@ -427,7 +431,7 @@ enum ePF_FileCompare BKE_packedfile_compare_to_file(const char *ref_file_name,
     }
   }
 
-  return (ret_val);
+  return ret_val;
 }
 
 /**
@@ -516,15 +520,30 @@ static void unpack_generate_paths(const char *name,
                                   size_t abspathlen,
                                   size_t relpathlen)
 {
+  const short id_type = GS(id->name);
   char tempname[FILE_MAX];
   char tempdir[FILE_MAXDIR];
 
   BLI_split_dirfile(name, tempdir, tempname, sizeof(tempdir), sizeof(tempname));
 
   if (tempname[0] == '\0') {
-    /* Note: we do not have any real way to re-create extension out of data... */
+    /* Note: we generally do not have any real way to re-create extension out of data. */
     BLI_strncpy(tempname, id->name + 2, sizeof(tempname));
     printf("%s\n", tempname);
+
+    /* For images we can add the file extension based on the file magic. */
+    if (id_type == ID_IM) {
+      ImagePackedFile *imapf = ((Image *)id)->packedfiles.last;
+      if (imapf != NULL && imapf->packedfile != NULL) {
+        const PackedFile *pf = imapf->packedfile;
+        enum eImbFileType ftype = IMB_ispic_type_from_memory((const uchar *)pf->data, pf->size);
+        if (ftype != IMB_FTYPE_NONE) {
+          const int imtype = BKE_image_ftype_to_imtype(ftype, NULL);
+          BKE_image_path_ensure_ext_from_imtype(tempname, imtype);
+        }
+      }
+    }
+
     BLI_filename_make_safe(tempname);
     printf("%s\n", tempname);
   }
@@ -534,7 +553,7 @@ static void unpack_generate_paths(const char *name,
     BLI_strncpy(tempdir, "//", sizeof(tempdir));
   }
 
-  switch (GS(id->name)) {
+  switch (id_type) {
     case ID_VF:
       BLI_snprintf(r_relpath, relpathlen, "//fonts/%s", tempname);
       break;
@@ -580,7 +599,7 @@ int BKE_packedfile_unpack_vfont(Main *bmain,
     }
   }
 
-  return (ret_value);
+  return ret_value;
 }
 
 int BKE_packedfile_unpack_sound(Main *bmain,
@@ -610,7 +629,7 @@ int BKE_packedfile_unpack_sound(Main *bmain,
     }
   }
 
-  return (ret_value);
+  return ret_value;
 }
 
 int BKE_packedfile_unpack_image(Main *bmain,
@@ -663,7 +682,7 @@ int BKE_packedfile_unpack_image(Main *bmain,
     BKE_image_signal(bmain, ima, NULL, IMA_SIGNAL_RELOAD);
   }
 
-  return (ret_value);
+  return ret_value;
 }
 
 int BKE_packedfile_unpack_volume(Main *bmain,
@@ -693,7 +712,7 @@ int BKE_packedfile_unpack_volume(Main *bmain,
     }
   }
 
-  return (ret_value);
+  return ret_value;
 }
 
 int BKE_packedfile_unpack_all_libraries(Main *bmain, ReportList *reports)
@@ -724,7 +743,7 @@ int BKE_packedfile_unpack_all_libraries(Main *bmain, ReportList *reports)
     }
   }
 
-  return (ret_value);
+  return ret_value;
 }
 
 void BKE_packedfile_pack_all_libraries(Main *bmain, ReportList *reports)
@@ -851,5 +870,31 @@ void BKE_packedfile_id_unpack(Main *bmain, ID *id, ReportList *reports, enum ePF
     }
     default:
       break;
+  }
+}
+
+void BKE_packedfile_blend_write(BlendWriter *writer, PackedFile *pf)
+{
+  if (pf == NULL) {
+    return;
+  }
+  BLO_write_struct(writer, PackedFile, pf);
+  BLO_write_raw(writer, pf->size, pf->data);
+}
+
+void BKE_packedfile_blend_read(BlendDataReader *reader, PackedFile **pf_p)
+{
+  BLO_read_packed_address(reader, pf_p);
+  PackedFile *pf = *pf_p;
+  if (pf == NULL) {
+    return;
+  }
+
+  BLO_read_packed_address(reader, &pf->data);
+  if (pf->data == NULL) {
+    /* We cannot allow a PackedFile with a NULL data field,
+     * the whole code assumes this is not possible. See T70315. */
+    printf("%s: NULL packedfile data, cleaning up...\n", __func__);
+    MEM_SAFE_FREE(pf);
   }
 }

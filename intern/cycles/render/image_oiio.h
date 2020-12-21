@@ -46,9 +46,9 @@ class OIIOImageLoader : public ImageLoader {
               const char *cache_path);
 
   static bool make_tx(const string &filename,
-               const string &outputfilename,
-               const ustring &colorspace,
-               ExtensionType extension);
+                      const string &outputfilename,
+                      const ustring &colorspace,
+                      ExtensionType extension);
 
  protected:
   ustring filepath;

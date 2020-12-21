@@ -30,12 +30,12 @@
 
 #include "graph/node.h"
 
+#include "kernel/kernel_oiio_globals.h"
 #include "util/util_map.h"
 #include "util/util_param.h"
 #include "util/util_string.h"
 #include "util/util_thread.h"
 #include "util/util_types.h"
-#include "kernel/kernel_oiio_globals.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -84,22 +84,25 @@ class Shader : public Node {
  public:
   NODE_DECLARE
 
-  int pass_id;
-
   /* shader graph */
   ShaderGraph *graph;
 
+  NODE_SOCKET_API(int, pass_id)
+
   /* sampling */
-  bool use_mis;
-  bool use_transparent_shadow;
-  bool heterogeneous_volume;
-  VolumeSampling volume_sampling_method;
-  int volume_interpolation_method;
-  float volume_step_rate;
+  NODE_SOCKET_API(bool, use_mis)
+  NODE_SOCKET_API(bool, use_transparent_shadow)
+  NODE_SOCKET_API(bool, heterogeneous_volume)
+  NODE_SOCKET_API(VolumeSampling, volume_sampling_method)
+  NODE_SOCKET_API(int, volume_interpolation_method)
+  NODE_SOCKET_API(float, volume_step_rate)
+
+  /* displacement */
+  NODE_SOCKET_API(DisplacementMethod, displacement_method)
+
   float prev_volume_step_rate;
 
   /* synchronization */
-  bool need_update;
   bool need_update_geometry;
 
   /* If the shader has only volume components, the surface is assumed to
@@ -107,7 +110,7 @@ class Shader : public Node {
    * However, graph optimization might remove the volume subgraph, but
    * since the user connected something to the volume output the surface
    * should still be transparent.
-   * Therefore, has_volume_connected stores whether some volume subtree
+   * Therefore, has_volume_connected stores whether some volume sub-tree
    * was connected before optimization. */
   bool has_volume_connected;
 
@@ -124,9 +127,6 @@ class Shader : public Node {
   bool has_volume_spatial_varying;
   bool has_volume_attribute_dependency;
   bool has_integrator_dependency;
-
-  /* displacement */
-  DisplacementMethod displacement_method;
 
   /* requested mesh attributes */
   AttributeRequestSet attributes;
@@ -228,7 +228,7 @@ class ShaderManager {
   void texture_system_free();
 
   OIIO::TextureSystem *ts;
-  
+
   float3 xyz_to_r;
   float3 xyz_to_g;
   float3 xyz_to_b;

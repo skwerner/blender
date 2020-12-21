@@ -18,17 +18,17 @@
 
 #include "COM_CompositorContext.h"
 #include "COM_defines.h"
-#include <stdio.h>
+#include <cstdio>
 
 CompositorContext::CompositorContext()
 {
-  this->m_scene = NULL;
-  this->m_rd = NULL;
+  this->m_scene = nullptr;
+  this->m_rd = nullptr;
   this->m_quality = COM_QUALITY_HIGH;
   this->m_hasActiveOpenCLDevices = false;
   this->m_fastCalculation = false;
-  this->m_viewSettings = NULL;
-  this->m_displaySettings = NULL;
+  this->m_viewSettings = nullptr;
+  this->m_displaySettings = nullptr;
 }
 
 int CompositorContext::getFramenumber() const
@@ -36,7 +36,6 @@ int CompositorContext::getFramenumber() const
   if (this->m_rd) {
     return this->m_rd->cfra;
   }
-  else {
-    return -1; /* this should never happen */
-  }
+
+  return -1; /* this should never happen */
 }

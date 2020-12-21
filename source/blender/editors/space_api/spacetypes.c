@@ -33,18 +33,21 @@
 #include "BKE_context.h"
 #include "BKE_screen.h"
 
+#include "GPU_state.h"
+
 #include "UI_interface.h"
 #include "UI_view2d.h"
 
 #include "ED_anim_api.h"
 #include "ED_armature.h"
+#include "ED_asset.h"
 #include "ED_clip.h"
 #include "ED_curve.h"
 #include "ED_fileselect.h"
+#include "ED_geometry.h"
 #include "ED_gizmo_library.h"
 #include "ED_gpencil.h"
 #include "ED_lattice.h"
-#include "ED_logic.h"
 #include "ED_markers.h"
 #include "ED_mask.h"
 #include "ED_mball.h"
@@ -62,6 +65,7 @@
 #include "ED_space_api.h"
 #include "ED_transform.h"
 #include "ED_userpref.h"
+#include "ED_util.h"
 #include "ED_uvedit.h"
 
 #include "io_ops.h"
@@ -103,10 +107,12 @@ void ED_spacetypes_init(void)
   ED_operatortypes_screen();
   ED_operatortypes_anim();
   ED_operatortypes_animchannels();
+  ED_operatortypes_asset();
   ED_operatortypes_gpencil();
   ED_operatortypes_object();
   ED_operatortypes_lattice();
   ED_operatortypes_mesh();
+  ED_operatortypes_geometry();
   ED_operatortypes_sculpt();
   ED_operatortypes_uvedit();
   ED_operatortypes_paint();
@@ -119,6 +125,7 @@ void ED_spacetypes_init(void)
   ED_operatortypes_render();
   ED_operatortypes_mask();
   ED_operatortypes_io();
+  ED_operatortypes_edutils();
 
   ED_operatortypes_view2d();
   ED_operatortypes_ui();
@@ -272,6 +279,9 @@ void ED_region_draw_cb_draw(const bContext *C, ARegion *region, int type)
   for (rdc = region->type->drawcalls.first; rdc; rdc = rdc->next) {
     if (rdc->type == type) {
       rdc->draw(C, region, rdc->customdata);
+
+      /* This is needed until we get rid of BGL which can change the states we are tracking. */
+      GPU_bgl_end();
     }
   }
 }
@@ -281,7 +291,7 @@ void ED_region_draw_cb_draw(const bContext *C, ARegion *region, int type)
 void ED_spacetype_xxx(void);
 
 /* allocate and init some vars */
-static SpaceLink *xxx_new(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
+static SpaceLink *xxx_create(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
 {
   return NULL;
 }
@@ -325,7 +335,7 @@ void ED_spacetype_xxx(void)
 
   st.spaceid = SPACE_VIEW3D;
 
-  st.new = xxx_new;
+  st.create = xxx_create;
   st.free = xxx_free;
   st.init = xxx_init;
   st.duplicate = xxx_duplicate;

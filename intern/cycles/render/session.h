@@ -146,6 +146,7 @@ class Session {
   ~Session();
 
   void start();
+  void cancel();
   bool draw(BufferParams &params, DeviceDrawParams &draw_params);
   void wait();
 
@@ -157,7 +158,6 @@ class Session {
   void set_denoising_start_sample(int sample);
 
   bool update_scene();
-  bool load_kernels(bool lock_scene = true);
 
   void device_free();
 
@@ -194,6 +194,8 @@ class Session {
 
   bool render_need_denoise(bool &delayed);
 
+  bool steal_tile(RenderTile &tile, Device *tile_device, thread_scoped_lock &tile_lock);
+  bool get_tile_stolen();
   bool acquire_tile(RenderTile &tile, Device *tile_device, uint tile_types);
   void update_tile_sample(RenderTile &tile);
   void release_tile(RenderTile &tile, const bool need_denoise);
@@ -218,26 +220,24 @@ class Session {
   thread_mutex buffers_mutex;
   thread_mutex display_mutex;
   thread_condition_variable denoising_cond;
-
-  bool kernels_loaded;
-  DeviceRequestedFeatures loaded_kernel_features;
+  thread_condition_variable tile_steal_cond;
 
   double reset_time;
   double last_update_time;
   double last_display_time;
 
+  RenderTile stolen_tile;
+  typedef enum {
+    NOT_STEALING,     /* There currently is no tile stealing in progress. */
+    WAITING_FOR_TILE, /* A device is waiting for another device to release a tile. */
+    RELEASING_TILE,   /* A device has releasing a stealable tile. */
+    GOT_TILE /* A device has released a stealable tile, which is now stored in stolen_tile. */
+  } TileStealingState;
+  std::atomic<TileStealingState> tile_stealing_state;
+  int stealable_tiles;
+
   /* progressive refine */
   bool update_progressive_refine(bool cancel);
-
-  DeviceRequestedFeatures get_requested_device_features();
-
-  /* ** Split kernel routines ** */
-
-  /* Maximumnumber of closure during session lifetime. */
-  int max_closure_global;
-
-  /* Get maximum number of closures to be used in kernel. */
-  int get_max_closure_count();
 };
 
 CCL_NAMESPACE_END

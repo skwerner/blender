@@ -43,9 +43,7 @@
 #include "transform_snap.h"
 
 /* -------------------------------------------------------------------- */
-/* Transform (Animation Translation) */
-
-/** \name Transform Animation Translation
+/** \name Transform (Animation Translation)
  * \{ */
 
 static void headerTimeTranslate(TransInfo *t, char str[UI_MAX_DRAW_STR])
@@ -155,10 +153,9 @@ void initTimeTranslate(TransInfo *t)
   t->num.idx_max = t->idx_max;
 
   /* initialize snap like for everything else */
-  t->snap[0] = 0.0f;
-  t->snap[1] = t->snap[2] = 1.0f;
+  t->snap[0] = t->snap[1] = 1.0f;
 
-  copy_v3_fl(t->num.val_inc, t->snap[1]);
+  copy_v3_fl(t->num.val_inc, t->snap[0]);
   t->num.unit_sys = t->scene->unit.system;
   /* No time unit supporting frames currently... */
   t->num.unit_type[0] = B_UNIT_NONE;

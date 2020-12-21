@@ -70,6 +70,11 @@ def _configure_argument_parser():
     parser.add_argument("--cycles-print-stats",
                         help="Print rendering statistics to stderr",
                         action='store_true')
+    parser.add_argument("--cycles-device",
+                        help="Set the device to use for Cycles, overriding user preferences and the scene setting."
+                             "Valid options are 'CPU', 'CUDA', 'OPTIX' or 'OPENCL'."
+                             "Additionally, you can append '+CPU' to any GPU type for hybrid rendering.",
+                        default=None)
     return parser
 
 
@@ -101,6 +106,10 @@ def _parse_command_line():
     if args.cycles_print_stats:
         import _cycles
         _cycles.enable_print_stats()
+
+    if args.cycles_device:
+        import _cycles
+        _cycles.set_device_override(args.cycles_device)
 
 
 def init():
@@ -150,8 +159,7 @@ def create(engine, data, region=None, v3d=None, rv3d=None, preview_osl=False):
         screen = screen or rv3d.id_data.as_pointer()
         rv3d = rv3d.as_pointer()
 
-    engine.session = _cycles.create(
-            engine.as_pointer(), prefs, data, screen, region, v3d, rv3d, preview_osl)
+    engine.session = _cycles.create(engine.as_pointer(), prefs, data, screen, region, v3d, rv3d, preview_osl)
 
 
 def free(engine):
@@ -224,6 +232,7 @@ def system_info():
     import _cycles
     return _cycles.system_info()
 
+
 def list_render_passes(scene, srl):
     # Builtin Blender passes.
     yield ("Combined", "RGBA", 'COLOR')
@@ -261,14 +270,14 @@ def list_render_passes(scene, srl):
     if crl.use_pass_volume_indirect:           yield ("VolumeInd",                     "RGB", 'COLOR')
 
     # Cryptomatte passes.
-    crypto_depth = (crl.pass_crypto_depth + 1) // 2
-    if crl.use_pass_crypto_object:
+    crypto_depth = (srl.pass_cryptomatte_depth + 1) // 2
+    if srl.use_pass_cryptomatte_object:
         for i in range(0, crypto_depth):
             yield ("CryptoObject" + '{:02d}'.format(i), "RGBA", 'COLOR')
-    if crl.use_pass_crypto_material:
+    if srl.use_pass_cryptomatte_material:
         for i in range(0, crypto_depth):
             yield ("CryptoMaterial" + '{:02d}'.format(i), "RGBA", 'COLOR')
-    if srl.cycles.use_pass_crypto_asset:
+    if srl.use_pass_cryptomatte_asset:
         for i in range(0, crypto_depth):
             yield ("CryptoAsset" + '{:02d}'.format(i), "RGBA", 'COLOR')
 
@@ -298,6 +307,7 @@ def list_render_passes(scene, srl):
         else:
             yield (aov.name, "RGBA", 'COLOR')
 
+
 def register_passes(engine, scene, view_layer):
     # Detect duplicate render pass names, first one wins.
     listed = set()
@@ -305,6 +315,7 @@ def register_passes(engine, scene, view_layer):
         if name not in listed:
             engine.register_pass(scene, view_layer, name, len(channelids), channelids, channeltype)
             listed.add(name)
+
 
 def detect_conflicting_passes(scene, view_layer):
     # Detect conflicting render pass names for UI.

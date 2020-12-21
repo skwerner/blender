@@ -66,9 +66,7 @@ using Alembic::AbcGeom::OSubDSchema;
 using Alembic::AbcGeom::OV2fGeomParam;
 using Alembic::AbcGeom::UInt32ArraySample;
 
-namespace blender {
-namespace io {
-namespace alembic {
+namespace blender::io::alembic {
 
 /* NOTE: Alembic's polygon winding order is clockwise, to match with Renderman. */
 
@@ -119,12 +117,20 @@ ABCGenericMeshWriter::~ABCGenericMeshWriter()
 {
 }
 
-const Alembic::Abc::OObject ABCGenericMeshWriter::get_alembic_object() const
+Alembic::Abc::OObject ABCGenericMeshWriter::get_alembic_object() const
 {
   if (is_subd_) {
     return abc_subdiv_;
   }
   return abc_poly_mesh_;
+}
+
+Alembic::Abc::OCompoundProperty ABCGenericMeshWriter::abc_prop_for_custom_props()
+{
+  if (is_subd_) {
+    return abc_schema_prop_for_custom_props(abc_subdiv_schema_);
+  }
+  return abc_schema_prop_for_custom_props(abc_poly_mesh_schema_);
 }
 
 bool ABCGenericMeshWriter::export_as_subdivision_surface(Object *ob_eval) const
@@ -159,27 +165,10 @@ ModifierData *ABCGenericMeshWriter::get_liquid_sim_modifier(Scene *scene, Object
 
 bool ABCGenericMeshWriter::is_supported(const HierarchyContext *context) const
 {
-  Object *object = context->object;
-  bool is_dupli = context->duplicator != nullptr;
-  int base_flag;
-
-  if (is_dupli) {
-    /* Construct the object's base flags from its dupli-parent, just like is done in
-     * deg_objects_dupli_iterator_next(). Without this, the visibility check below will fail. Doing
-     * this here, instead of a more suitable location in AbstractHierarchyIterator, prevents
-     * copying the Object for every dupli. */
-    base_flag = object->base_flag;
-    object->base_flag = context->duplicator->base_flag | BASE_FROM_DUPLI;
+  if (args_.export_params->visible_objects_only) {
+    return context->is_object_visible(DAG_EVAL_RENDER);
   }
-
-  int visibility = BKE_object_visibility(
-      object, DAG_EVAL_RENDER /* TODO(Sybren): add evaluation mode to export options? */);
-
-  if (is_dupli) {
-    object->base_flag = base_flag;
-  }
-
-  return (visibility & OB_VISIBLE_SELF) != 0;
+  return true;
 }
 
 void ABCGenericMeshWriter::do_write(HierarchyContext &context)
@@ -568,6 +557,4 @@ Mesh *ABCMeshWriter::get_export_mesh(Object *object_eval, bool & /*r_needsfree*/
   return BKE_object_get_evaluated_mesh(object_eval);
 }
 
-}  // namespace alembic
-}  // namespace io
-}  // namespace blender
+}  // namespace blender::io::alembic

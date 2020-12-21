@@ -18,60 +18,31 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_SIMULATION_TYPES_H__
-#define __DNA_SIMULATION_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_customdata_types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct Simulation {
   ID id;
   struct AnimData *adt; /* animation data (must be immediately after id) */
 
+  /* This nodetree is embedded into the data block. */
   struct bNodeTree *nodetree;
 
-  int flag;
-  float current_frame;
-  float current_simulation_time;
+  uint32_t flag;
   char _pad[4];
-
-  /** List containing SimulationState objects. */
-  struct ListBase states;
 } Simulation;
-
-typedef struct SimulationState {
-  struct SimulationState *next;
-  struct SimulationState *prev;
-
-  /** eSimulationStateType */
-  int type;
-  int _pad;
-
-  char *name;
-} SimulationState;
-
-typedef struct ParticleSimulationState {
-  SimulationState head;
-
-  /** Contains the state of the particles at time Simulation->current_frame. */
-  int tot_particles;
-  int next_particle_id;
-  struct CustomData attributes;
-
-  /** Caches the state of the particles over time. The cache only exists on the original data
-   * block, not on cow copies. */
-  struct PointCache *point_cache;
-  struct ListBase ptcaches;
-} ParticleSimulationState;
 
 /* Simulation.flag */
 enum {
   SIM_DS_EXPAND = (1 << 0),
 };
 
-/* SimulationCache.type */
-typedef enum eSimulationStateType {
-  SIM_STATE_TYPE_PARTICLES = 0,
-} eSimulationStateType;
-
-#endif /* __DNA_SIMULATION_TYPES_H__ */
+#ifdef __cplusplus
+}
+#endif

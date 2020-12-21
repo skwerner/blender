@@ -21,6 +21,8 @@
  * \ingroup imbuf
  */
 
+#include <math.h>
+
 #include "BLI_fileops.h"
 #include "BLI_utildefines.h"
 
@@ -70,43 +72,43 @@ typedef struct BMPHEADER {
    CHECK_HEADER_FIELD(_mem, "CI") || CHECK_HEADER_FIELD(_mem, "CP") || \
    CHECK_HEADER_FIELD(_mem, "IC") || CHECK_HEADER_FIELD(_mem, "PT"))
 
-static int checkbmp(const uchar *mem)
+static bool checkbmp(const uchar *mem, const size_t size)
 {
+  if (size < BMP_FILEHEADER_SIZE) {
+    return false;
+  }
 
-  int ret_val = 0;
+  if (!CHECK_HEADER_FIELD_BMP(mem)) {
+    return false;
+  }
+
+  bool ok = false;
   BMPINFOHEADER bmi;
   uint u;
 
-  if (mem) {
-    if (CHECK_HEADER_FIELD_BMP(mem)) {
-      /* skip fileheader */
-      mem += BMP_FILEHEADER_SIZE;
-    }
-    else {
-      return 0;
-    }
+  /* skip fileheader */
+  mem += BMP_FILEHEADER_SIZE;
 
-    /* for systems where an int needs to be 4 bytes aligned */
-    memcpy(&bmi, mem, sizeof(bmi));
+  /* for systems where an int needs to be 4 bytes aligned */
+  memcpy(&bmi, mem, sizeof(bmi));
 
-    u = LITTLE_LONG(bmi.biSize);
-    /* we only support uncompressed images for now. */
-    if (u >= sizeof(BMPINFOHEADER)) {
-      if (bmi.biCompression == 0) {
-        u = LITTLE_SHORT(bmi.biBitCount);
-        if (u > 0 && u <= 32) {
-          ret_val = 1;
-        }
+  u = LITTLE_LONG(bmi.biSize);
+  /* we only support uncompressed images for now. */
+  if (u >= sizeof(BMPINFOHEADER)) {
+    if (bmi.biCompression == 0) {
+      u = LITTLE_SHORT(bmi.biBitCount);
+      if (u > 0 && u <= 32) {
+        ok = true;
       }
     }
   }
 
-  return (ret_val);
+  return ok;
 }
 
-int imb_is_a_bmp(const uchar *buf)
+bool imb_is_a_bmp(const uchar *buf, size_t size)
 {
-  return checkbmp(buf);
+  return checkbmp(buf, size);
 }
 
 ImBuf *imb_bmp_decode(const uchar *mem, size_t size, int flags, char colorspace[IM_MAX_SPACE])
@@ -122,8 +124,8 @@ ImBuf *imb_bmp_decode(const uchar *mem, size_t size, int flags, char colorspace[
 
   (void)size; /* unused */
 
-  if (checkbmp(mem) == 0) {
-    return (NULL);
+  if (checkbmp(mem, size) == 0) {
+    return NULL;
   }
 
   colorspace_set_default_role(colorspace, IM_MAX_SPACE, COLOR_ROLE_DEFAULT_BYTE);
@@ -272,7 +274,7 @@ ImBuf *imb_bmp_decode(const uchar *mem, size_t size, int flags, char colorspace[
     ibuf->ftype = IMB_FTYPE_BMP;
   }
 
-  return (ibuf);
+  return ibuf;
 }
 
 #undef CHECK_HEADER_FIELD_BMP
@@ -294,18 +296,18 @@ static int putShortLSB(ushort us, FILE *ofile)
 }
 
 /* Found write info at http://users.ece.gatech.edu/~slabaugh/personal/c/bitmapUnix.c */
-int imb_savebmp(ImBuf *ibuf, const char *name, int UNUSED(flags))
+bool imb_savebmp(ImBuf *ibuf, const char *filepath, int UNUSED(flags))
 {
   BMPINFOHEADER infoheader;
 
   const size_t bytes_per_pixel = (ibuf->planes + 7) >> 3;
-  BLI_assert(bytes_per_pixel == 1 || bytes_per_pixel == 3);
+  BLI_assert(ELEM(bytes_per_pixel, 1, 3));
 
   const size_t pad_bytes_per_scanline = (4 - ibuf->x * bytes_per_pixel % 4) % 4;
   const size_t bytesize = (ibuf->x * bytes_per_pixel + pad_bytes_per_scanline) * ibuf->y;
 
   const uchar *data = (const uchar *)ibuf->rect;
-  FILE *ofile = BLI_fopen(name, "wb");
+  FILE *ofile = BLI_fopen(filepath, "wb");
   if (ofile == NULL) {
     return 0;
   }
@@ -327,8 +329,8 @@ int imb_savebmp(ImBuf *ibuf, const char *name, int UNUSED(flags))
   putShortLSB(is_grayscale ? 8 : 24, ofile);
   putIntLSB(0, ofile);
   putIntLSB(bytesize, ofile);
-  putIntLSB((int)(ibuf->ppm[0] + 0.5), ofile);
-  putIntLSB((int)(ibuf->ppm[1] + 0.5), ofile);
+  putIntLSB(round(ibuf->ppm[0]), ofile);
+  putIntLSB(round(ibuf->ppm[1]), ofile);
   putIntLSB(0, ofile);
   putIntLSB(0, ofile);
 

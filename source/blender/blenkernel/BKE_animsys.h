@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_ANIMSYS_H__
-#define __BKE_ANIMSYS_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -31,6 +30,10 @@ extern "C" {
 #endif
 
 struct AnimData;
+struct BlendDataReader;
+struct BlendExpander;
+struct BlendLibReader;
+struct BlendWriter;
 struct Depsgraph;
 struct FCurve;
 struct ID;
@@ -42,8 +45,6 @@ struct NlaKeyframingContext;
 struct PathResolvedRNA;
 struct PointerRNA;
 struct PropertyRNA;
-struct ReportList;
-struct Scene;
 struct bAction;
 struct bActionGroup;
 struct bContext;
@@ -102,6 +103,13 @@ void BKE_keyingset_free(struct KeyingSet *ks);
 /* Free all the KeyingSets in the given list */
 void BKE_keyingsets_free(struct ListBase *list);
 
+void BKE_keyingsets_blend_write(struct BlendWriter *writer, struct ListBase *list);
+void BKE_keyingsets_blend_read_data(struct BlendDataReader *reader, struct ListBase *list);
+void BKE_keyingsets_blend_read_lib(struct BlendLibReader *reader,
+                                   struct ID *id,
+                                   struct ListBase *list);
+void BKE_keyingsets_blend_read_expand(struct BlendExpander *expander, struct ListBase *list);
+
 /* ************************************* */
 /* Path Fixing API */
 
@@ -142,22 +150,33 @@ void BKE_animdata_fix_paths_rename_all(struct ID *ref_id,
                                        const char *oldName,
                                        const char *newName);
 
+/* Fix all the paths for the entire bmain with extra parameters. */
+void BKE_animdata_fix_paths_rename_all_ex(struct Main *bmain,
+                                          struct ID *ref_id,
+                                          const char *prefix,
+                                          const char *oldName,
+                                          const char *newName,
+                                          const int oldSubscript,
+                                          const int newSubscript,
+                                          const bool verify_paths);
+
 /* Fix the path after removing elements that are not ID (e.g., node).
  * Return true if any animation data was affected. */
 bool BKE_animdata_fix_paths_remove(struct ID *id, const char *path);
 
 /* -------------------------------------- */
 
-/* Move animation data from src to destination if it's paths are based on basepaths */
-void BKE_animdata_separate_by_basepath(struct Main *bmain,
+typedef struct AnimationBasePathChange {
+  struct AnimationBasePathChange *next, *prev;
+  const char *src_basepath;
+  const char *dst_basepath;
+} AnimationBasePathChange;
+
+/* Move animation data from src to destination if its paths are based on basepaths */
+void BKE_animdata_transfer_by_basepath(struct Main *bmain,
                                        struct ID *srcID,
                                        struct ID *dstID,
                                        struct ListBase *basepaths);
-
-/* Move F-Curves from src to destination if it's path is based on basepath */
-void action_move_fcurves_by_basepath(struct bAction *srcAct,
-                                     struct bAction *dstAct,
-                                     const char basepath[]);
 
 char *BKE_animdata_driver_path_hack(struct bContext *C,
                                     struct PointerRNA *ptr,
@@ -275,5 +294,3 @@ void BKE_animsys_update_driver_array(struct ID *id);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_ANIMSYS_H__*/

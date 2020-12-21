@@ -72,7 +72,6 @@
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
 
-#include "GPU_draw.h"
 #include "GPU_immediate.h"
 #include "GPU_immediate_util.h"
 #include "GPU_matrix.h"
@@ -87,7 +86,7 @@
 
 #include "BLF_api.h"
 
-#include "object_intern.h"  // own include
+#include "object_intern.h" /* own include */
 
 /* TODO(sebpa): unstable, can lead to unrecoverable errors. */
 // #define USE_MESH_CURVATURE
@@ -295,7 +294,7 @@ static void voxel_size_edit_draw(const bContext *UNUSED(C), ARegion *UNUSED(ar),
 {
   VoxelSizeEditCustomData *cd = arg;
 
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
   GPU_line_smooth(true);
 
   uint pos3d = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
@@ -364,16 +363,16 @@ static void voxel_size_edit_draw(const bContext *UNUSED(C), ARegion *UNUSED(ar),
 
   GPU_matrix_pop();
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
   GPU_line_smooth(false);
 }
 
 static void voxel_size_edit_cancel(bContext *C, wmOperator *op)
 {
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   VoxelSizeEditCustomData *cd = op->customdata;
 
-  ED_region_draw_cb_exit(ar->type, cd->draw_handle);
+  ED_region_draw_cb_exit(region->type, cd->draw_handle);
 
   MEM_freeN(op->customdata);
 
@@ -382,7 +381,7 @@ static void voxel_size_edit_cancel(bContext *C, wmOperator *op)
 
 static int voxel_size_edit_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   VoxelSizeEditCustomData *cd = op->customdata;
   Object *active_object = cd->active_object;
   Mesh *mesh = (Mesh *)active_object->data;
@@ -391,7 +390,7 @@ static int voxel_size_edit_modal(bContext *C, wmOperator *op, const wmEvent *eve
   if ((event->type == EVT_ESCKEY && event->val == KM_PRESS) ||
       (event->type == RIGHTMOUSE && event->val == KM_PRESS)) {
     voxel_size_edit_cancel(C, op);
-    ED_region_tag_redraw(ar);
+    ED_region_tag_redraw(region);
     return OPERATOR_FINISHED;
   }
 
@@ -399,15 +398,15 @@ static int voxel_size_edit_modal(bContext *C, wmOperator *op, const wmEvent *eve
   if ((event->type == LEFTMOUSE && event->val == KM_RELEASE) ||
       (event->type == EVT_RETKEY && event->val == KM_PRESS) ||
       (event->type == EVT_PADENTER && event->val == KM_PRESS)) {
-    ED_region_draw_cb_exit(ar->type, cd->draw_handle);
+    ED_region_draw_cb_exit(region->type, cd->draw_handle);
     mesh->remesh_voxel_size = cd->voxel_size;
     MEM_freeN(op->customdata);
-    ED_region_tag_redraw(ar);
+    ED_region_tag_redraw(region);
     ED_workspace_status_text(C, NULL);
     return OPERATOR_FINISHED;
   }
 
-  float mval[2] = {event->mval[0], event->mval[1]};
+  const float mval[2] = {event->mval[0], event->mval[1]};
 
   float d = cd->init_mval[0] - mval[0];
 
@@ -444,13 +443,13 @@ static int voxel_size_edit_modal(bContext *C, wmOperator *op, const wmEvent *eve
 
   cd->voxel_size = clamp_f(cd->voxel_size, 0.0001f, 1.0f);
 
-  ED_region_tag_redraw(ar);
+  ED_region_tag_redraw(region);
   return OPERATOR_RUNNING_MODAL;
 }
 
 static int voxel_size_edit_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   Object *active_object = CTX_data_active_object(C);
   Mesh *mesh = (Mesh *)active_object->data;
 
@@ -459,7 +458,7 @@ static int voxel_size_edit_invoke(bContext *C, wmOperator *op, const wmEvent *ev
 
   /* Initial operator Custom Data setup. */
   cd->draw_handle = ED_region_draw_cb_activate(
-      ar->type, voxel_size_edit_draw, cd, REGION_DRAW_POST_VIEW);
+      region->type, voxel_size_edit_draw, cd, REGION_DRAW_POST_VIEW);
   cd->active_object = active_object;
   cd->init_mval[0] = event->mval[0];
   cd->init_mval[1] = event->mval[1];
@@ -471,7 +470,7 @@ static int voxel_size_edit_invoke(bContext *C, wmOperator *op, const wmEvent *ev
   BoundBox *bb = BKE_mesh_boundbox_get(cd->active_object);
 
   /* Indices of the Bounding Box faces. */
-  int BB_faces[6][4] = {
+  const int BB_faces[6][4] = {
       {3, 0, 4, 7},
       {1, 2, 6, 5},
       {3, 2, 1, 0},
@@ -526,7 +525,7 @@ static int voxel_size_edit_invoke(bContext *C, wmOperator *op, const wmEvent *ev
   float d_a[3], d_b[3];
   float d_a_proj[2], d_b_proj[2];
   float preview_plane_proj[4][3];
-  float y_axis_proj[2] = {0.0f, 1.0f};
+  const float y_axis_proj[2] = {0.0f, 1.0f};
 
   mid_v3_v3v3(text_pos, cd->preview_plane[0], cd->preview_plane[2]);
 
@@ -534,7 +533,7 @@ static int voxel_size_edit_invoke(bContext *C, wmOperator *op, const wmEvent *ev
   for (int i = 0; i < 4; i++) {
     float preview_plane_world_space[3];
     mul_v3_m4v3(preview_plane_world_space, active_object->obmat, cd->preview_plane[i]);
-    ED_view3d_project(ar, preview_plane_world_space, preview_plane_proj[i]);
+    ED_view3d_project(region, preview_plane_world_space, preview_plane_proj[i]);
   }
 
   /* Get the initial X and Y axis of the basis from the edges of the Bounding Box face. */
@@ -590,7 +589,7 @@ static int voxel_size_edit_invoke(bContext *C, wmOperator *op, const wmEvent *ev
 
   WM_event_add_modal_handler(C, op);
 
-  ED_region_tag_redraw(ar);
+  ED_region_tag_redraw(region);
 
   const char *status_str = TIP_(
       "Move the mouse to change the voxel size. LMB: confirm size, ESC/RMB: cancel");
@@ -648,7 +647,7 @@ typedef struct QuadriFlowJob {
 
   int target_faces;
   int seed;
-  bool use_paint_symmetry;
+  bool use_mesh_symmetry;
   eSymmetryAxes symmetry_axes;
 
   bool use_preserve_sharp;
@@ -850,7 +849,7 @@ static void quadriflow_start_job(void *customdata, short *stop, short *do_update
       qj->target_faces,
       qj->seed,
       qj->use_preserve_sharp,
-      (qj->use_preserve_boundary || qj->use_paint_symmetry),
+      (qj->use_preserve_boundary || qj->use_mesh_symmetry),
 #ifdef USE_MESH_CURVATURE
       qj->use_mesh_curvature,
 #else
@@ -886,7 +885,7 @@ static void quadriflow_start_job(void *customdata, short *stop, short *do_update
   BKE_mesh_nomain_to_mesh(new_mesh, mesh, ob, &CD_MASK_MESH, true);
 
   if (qj->smooth_normals) {
-    if (qj->use_paint_symmetry) {
+    if (qj->use_mesh_symmetry) {
       BKE_mesh_calc_normals(ob->data);
     }
     BKE_mesh_smooth_flag_set(ob->data, true);
@@ -940,7 +939,7 @@ static int quadriflow_remesh_exec(bContext *C, wmOperator *op)
   job->target_faces = RNA_int_get(op->ptr, "target_faces");
   job->seed = RNA_int_get(op->ptr, "seed");
 
-  job->use_paint_symmetry = RNA_boolean_get(op->ptr, "use_paint_symmetry");
+  job->use_mesh_symmetry = RNA_boolean_get(op->ptr, "use_mesh_symmetry");
 
   job->use_preserve_sharp = RNA_boolean_get(op->ptr, "use_preserve_sharp");
   job->use_preserve_boundary = RNA_boolean_get(op->ptr, "use_preserve_boundary");
@@ -953,9 +952,10 @@ static int quadriflow_remesh_exec(bContext *C, wmOperator *op)
   job->smooth_normals = RNA_boolean_get(op->ptr, "smooth_normals");
 
   /* Update the target face count if symmetry is enabled */
-  Sculpt *sd = CTX_data_tool_settings(C)->sculpt;
-  if (sd && job->use_paint_symmetry) {
-    job->symmetry_axes = (eSymmetryAxes)(sd->paint.symmetry_flags & PAINT_SYMM_AXIS_ALL);
+  Object *ob = CTX_data_active_object(C);
+  if (ob && job->use_mesh_symmetry) {
+    Mesh *mesh = BKE_mesh_from_object(ob);
+    job->symmetry_axes = (eSymmetryAxes)mesh->symmetry;
     for (char i = 0; i < 3; i++) {
       eSymmetryAxes symm_it = (eSymmetryAxes)(1 << i);
       if (job->symmetry_axes & symm_it) {
@@ -964,7 +964,7 @@ static int quadriflow_remesh_exec(bContext *C, wmOperator *op)
     }
   }
   else {
-    job->use_paint_symmetry = false;
+    job->use_mesh_symmetry = false;
     job->symmetry_axes = 0;
   }
 
@@ -1105,10 +1105,10 @@ void OBJECT_OT_quadriflow_remesh(wmOperatorType *ot)
 
   /* properties */
   RNA_def_boolean(ot->srna,
-                  "use_paint_symmetry",
+                  "use_mesh_symmetry",
                   true,
-                  "Use Paint Symmetry",
-                  "Generates a symmetrical mesh using the paint symmetry configuration");
+                  "Use Mesh Symmetry",
+                  "Generates a symmetrical mesh using the mesh symmetry configuration");
 
   RNA_def_boolean(ot->srna,
                   "use_preserve_sharp",

@@ -22,8 +22,7 @@
  * \brief Object is a sort of wrapper for general info.
  */
 
-#ifndef __DNA_OBJECT_TYPES_H__
-#define __DNA_OBJECT_TYPES_H__
+#pragma once
 
 #include "DNA_object_enums.h"
 
@@ -39,9 +38,8 @@ extern "C" {
 
 struct AnimData;
 struct BoundBox;
-struct DerivedMesh;
 struct FluidsimSettings;
-struct GpencilBatchCache;
+struct GeometrySet;
 struct Ipo;
 struct Material;
 struct Mesh;
@@ -109,15 +107,6 @@ enum {
   BOUNDBOX_DIRTY = (1 << 1),
 };
 
-typedef struct LodLevel {
-  struct LodLevel *next, *prev;
-  struct Object *source;
-  int flags;
-  float distance;
-  char _pad0[4];
-  int obhysteresis;
-} LodLevel;
-
 struct CustomData_MeshMasks;
 
 /* Not saved in file! */
@@ -136,7 +125,10 @@ typedef struct Object_Runtime {
   /** Only used for drawing the parent/child help-line. */
   float parent_display_origin[3];
 
-  /** Selection id of this object; only available in the original object */
+  /**
+   * Selection id of this object. It might differ between an evaluated and its original object,
+   * when the object is being instanced.
+   */
   int select_id;
   char _pad1[3];
 
@@ -156,10 +148,20 @@ typedef struct Object_Runtime {
    */
   struct ID *data_orig;
   /**
-   * Object data structure created during object evaluation.
-   * It has all modifiers applied.
+   * Object data structure created during object evaluation. It has all modifiers applied.
+   * The type is determined by the type of the original object. For example, for mesh and curve
+   * objects, this is a mesh. For a volume object, this is a volume.
    */
   struct ID *data_eval;
+
+  /**
+   * Objects can evaluate to a geometry set instead of a single ID. In those cases, the evaluated
+   * geometry set will be stored here. An ID of the correct type is still stored in #data_eval.
+   * #geometry_set_eval might reference the ID pointed to by #data_eval as well, but does not own
+   * the data.
+   */
+  struct GeometrySet *geometry_set_eval;
+
   /**
    * Mesh structure created during object evaluation.
    * It has deformation only modifiers applied on it.
@@ -212,7 +214,7 @@ typedef struct Object {
   /** Old animation system, deprecated for 2.5. */
   struct Ipo *ipo DNA_DEPRECATED;
   /* struct Path *path; */
-  struct bAction *action DNA_DEPRECATED;  // XXX deprecated... old animation system
+  struct bAction *action DNA_DEPRECATED; /* XXX deprecated... old animation system */
   struct bAction *poselib;
   /** Pose data, armature objects only. */
   struct bPose *pose;
@@ -221,7 +223,7 @@ typedef struct Object {
 
   /** Grease Pencil data. */
   struct bGPdata *gpd
-      DNA_DEPRECATED;  // XXX deprecated... replaced by gpencil object, keep for readfile
+      DNA_DEPRECATED; /* XXX deprecated... replaced by gpencil object, keep for readfile */
 
   /** Settings for visualization of object-transform animation. */
   bAnimVizSettings avs;
@@ -229,8 +231,8 @@ typedef struct Object {
   bMotionPath *mpath;
   void *_pad0;
 
-  ListBase constraintChannels DNA_DEPRECATED;  // XXX deprecated... old animation system
-  ListBase effect DNA_DEPRECATED;              // XXX deprecated... keep for readfile
+  ListBase constraintChannels DNA_DEPRECATED; /* XXX deprecated... old animation system */
+  ListBase effect DNA_DEPRECATED;             /* XXX deprecated... keep for readfile */
   /** List of bDeformGroup (vertex groups) names and flag only. */
   ListBase defbase;
   /** List of ModifierData structures. */
@@ -362,8 +364,8 @@ typedef struct Object {
 
   /** Object constraints. */
   ListBase constraints;
-  ListBase nlastrips DNA_DEPRECATED;  // XXX deprecated... old animation system
-  ListBase hooks DNA_DEPRECATED;      // XXX deprecated... old animation system
+  ListBase nlastrips DNA_DEPRECATED; /* XXX deprecated... old animation system */
+  ListBase hooks DNA_DEPRECATED;     /* XXX deprecated... old animation system */
   /** Particle systems. */
   ListBase particlesystem;
 
@@ -376,7 +378,7 @@ typedef struct Object {
 
   /** If fluidsim enabled, store additional settings. */
   struct FluidsimSettings *fluidsimSettings
-      DNA_DEPRECATED;  // XXX deprecated... replaced by mantaflow, keep for readfile
+      DNA_DEPRECATED; /* XXX deprecated... replaced by mantaflow, keep for readfile */
 
   ListBase pc_ids;
 
@@ -393,10 +395,6 @@ typedef struct Object {
   char empty_image_depth;
   char empty_image_flag;
   char _pad8[5];
-
-  /** Contains data for levels of detail. */
-  ListBase lodlevels;
-  LodLevel *currentlod;
 
   struct PreviewImage *preview;
 
@@ -433,6 +431,8 @@ typedef struct ObHook {
 
 /* used many places... should be specialized  */
 #define SELECT 1
+
+#define OBJECT_ACTIVE_MODIFIER_NONE -1
 
 /* type */
 enum {
@@ -495,19 +495,19 @@ enum {
         ID_VO))
 
 #define OB_DATA_SUPPORT_ID_CASE \
-ID_ME: \
-case ID_CU: \
-case ID_MB: \
-case ID_LA: \
-case ID_SPK: \
-case ID_LP: \
-case ID_CA: \
-case ID_LT: \
-case ID_GD: \
-case ID_AR: \
-case ID_HA: \
-case ID_PT: \
-case ID_VO
+  ID_ME: \
+  case ID_CU: \
+  case ID_MB: \
+  case ID_LA: \
+  case ID_SPK: \
+  case ID_LP: \
+  case ID_CA: \
+  case ID_LT: \
+  case ID_GD: \
+  case ID_AR: \
+  case ID_HA: \
+  case ID_PT: \
+  case ID_VO
 
 /* partype: first 4 bits: type */
 enum {
@@ -522,7 +522,7 @@ enum {
 
 /* (short) transflag */
 enum {
-  OB_TRANSFLAG_UNUSED_0 = 1 << 0, /* cleared */
+  OB_TRANSFORM_ADJUST_ROOT_PARENT_FOR_VIEW_LOCK = 1 << 0,
   OB_TRANSFLAG_UNUSED_1 = 1 << 1, /* cleared */
   OB_NEG_SCALE = 1 << 2,
   OB_TRANSFLAG_UNUSED_3 = 1 << 3, /* cleared */
@@ -538,8 +538,6 @@ enum {
   OB_TRANSFLAG_UNUSED_12 = 1 << 12, /* cleared */
   /* runtime constraints disable */
   OB_NO_CONSTRAINTS = 1 << 13,
-  /* hack to work around particle issue */
-  OB_NO_PSYS_UPDATE = 1 << 14,
 
   OB_DUPLI = OB_DUPLIVERTS | OB_DUPLICOLLECTION | OB_DUPLIFACES | OB_DUPLIPARTS,
 };
@@ -564,7 +562,7 @@ enum {
   /* for solid+wire display */
   OB_DRAWWIRE = 1 << 5,
   /* for overdraw s*/
-  OB_DRAWXRAY = 1 << 6,
+  OB_DRAW_IN_FRONT = 1 << 6,
   /* enable transparent draw */
   OB_DRAWTRANSP = 1 << 7,
   OB_DRAW_ALL_EDGES = 1 << 8, /* only for meshes currently */
@@ -714,6 +712,4 @@ enum {
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

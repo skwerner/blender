@@ -50,6 +50,7 @@
 
 /* Own include. */
 #include "transform_convert.h"
+#include "transform_orientations.h"
 
 /* -------------------------------------------------------------------- */
 /** \name Object Mode Custom Data
@@ -183,8 +184,7 @@ static void ObjectToTransData(TransInfo *t, TransData *td, Object *ob)
   }
 
   /* axismtx has the real orientation */
-  copy_m3_m4(td->axismtx, ob->obmat);
-  normalize_m3(td->axismtx);
+  transform_orientations_create_from_axis(td->axismtx, UNPACK3(ob->obmat));
 
   td->con = ob->constraints.first;
 
@@ -225,7 +225,7 @@ static void ObjectToTransData(TransInfo *t, TransData *td, Object *ob)
   copy_m4_m4(ob->obmat, object_eval->obmat);
   /* Only copy negative scale flag, this is the only flag which is modified by
    * the BKE_object_where_is_calc(). The rest of the flags we need to keep,
-   * otherwise we might loose dupli flags  (see T61787). */
+   * otherwise we might lose dupli flags  (see T61787). */
   ob->transflag &= ~OB_NEG_SCALE;
   ob->transflag |= (object_eval->transflag & OB_NEG_SCALE);
 
@@ -251,8 +251,11 @@ static void ObjectToTransData(TransInfo *t, TransData *td, Object *ob)
 
     td->ext->irotAngle = ob->rotAngle;
     copy_v3_v3(td->ext->irotAxis, ob->rotAxis);
-    // td->ext->drotAngle = ob->drotAngle;          // XXX, not implemented
-    // copy_v3_v3(td->ext->drotAxis, ob->drotAxis); // XXX, not implemented
+    /* XXX, not implemented. */
+#if 0
+    td->ext->drotAngle = ob->drotAngle;
+    copy_v3_v3(td->ext->drotAxis, ob->drotAxis);
+#endif
   }
   else {
     td->ext->rot = NULL;
@@ -346,7 +349,7 @@ static void set_trans_object_base_flags(TransInfo *t)
   ViewLayer *view_layer = t->view_layer;
   View3D *v3d = t->view;
   Scene *scene = t->scene;
-  Depsgraph *depsgraph = BKE_scene_get_depsgraph(bmain, scene, view_layer, true);
+  Depsgraph *depsgraph = BKE_scene_ensure_depsgraph(bmain, scene, view_layer);
   /* NOTE: if Base selected and has parent selected:
    *   base->flag_legacy = BA_WAS_SEL
    */
@@ -357,7 +360,7 @@ static void set_trans_object_base_flags(TransInfo *t)
   /* Makes sure base flags and object flags are identical. */
   BKE_scene_base_flag_to_objects(t->view_layer);
   /* Make sure depsgraph is here. */
-  DEG_graph_relations_update(depsgraph, bmain, scene, view_layer);
+  DEG_graph_relations_update(depsgraph);
   /* Clear all flags we need. It will be used to detect dependencies. */
   trans_object_base_deps_flag_prepare(view_layer);
   /* Traverse all bases and set all possible flags. */
@@ -421,7 +424,7 @@ static int count_proportional_objects(TransInfo *t)
   View3D *v3d = t->view;
   struct Main *bmain = CTX_data_main(t->context);
   Scene *scene = t->scene;
-  Depsgraph *depsgraph = BKE_scene_get_depsgraph(bmain, scene, view_layer, true);
+  Depsgraph *depsgraph = BKE_scene_ensure_depsgraph(bmain, scene, view_layer);
   /* Clear all flags we need. It will be used to detect dependencies. */
   trans_object_base_deps_flag_prepare(view_layer);
   /* Rotations around local centers are allowed to propagate, so we take all objects. */
@@ -726,7 +729,7 @@ void createTransTexspace(TransInfo *t)
 
   ob = OBACT(view_layer);
 
-  if (ob == NULL) {  // Shouldn't logically happen, but still...
+  if (ob == NULL) { /* Shouldn't logically happen, but still. */
     return;
   }
 
@@ -788,7 +791,7 @@ static void autokeyframe_object(
   ID *id = &ob->id;
   FCurve *fcu;
 
-  // TODO: this should probably be done per channel instead...
+  /* TODO: this should probably be done per channel instead. */
   if (autokeyframe_cfra_can_key(scene, id)) {
     ReportList *reports = CTX_wm_reports(C);
     ToolSettings *ts = scene->toolsettings;

@@ -42,6 +42,7 @@
 
 #include "BLT_translation.h"
 
+#include "BKE_armature.h"
 #include "BKE_blender_version.h"
 #include "BKE_context.h"
 #include "BKE_curve.h"
@@ -54,24 +55,24 @@
 #include "BKE_object.h"
 #include "BKE_paint.h"
 #include "BKE_particle.h"
+#include "BKE_pbvh.h"
 #include "BKE_scene.h"
 #include "BKE_subdiv_ccg.h"
 
 #include "DEG_depsgraph_query.h"
 
-#include "ED_armature.h"
 #include "ED_info.h"
 
 #include "UI_resources.h"
 
-#include "GPU_extensions.h"
+#include "GPU_capabilities.h"
 
 #define MAX_INFO_NUM_LEN 16
 
 typedef struct SceneStats {
-  uint64_t totvert, totvertsel;
+  uint64_t totvert, totvertsel, totvertsculpt;
   uint64_t totedge, totedgesel;
-  uint64_t totface, totfacesel;
+  uint64_t totface, totfacesel, totfacesculpt;
   uint64_t totbone, totbonesel;
   uint64_t totobj, totobjsel;
   uint64_t totlamp, totlampsel;
@@ -81,9 +82,9 @@ typedef struct SceneStats {
 
 typedef struct SceneStatsFmt {
   /* Totals */
-  char totvert[MAX_INFO_NUM_LEN], totvertsel[MAX_INFO_NUM_LEN];
+  char totvert[MAX_INFO_NUM_LEN], totvertsel[MAX_INFO_NUM_LEN], totvertsculpt[MAX_INFO_NUM_LEN];
   char totface[MAX_INFO_NUM_LEN], totfacesel[MAX_INFO_NUM_LEN];
-  char totedge[MAX_INFO_NUM_LEN], totedgesel[MAX_INFO_NUM_LEN];
+  char totedge[MAX_INFO_NUM_LEN], totedgesel[MAX_INFO_NUM_LEN], totfacesculpt[MAX_INFO_NUM_LEN];
   char totbone[MAX_INFO_NUM_LEN], totbonesel[MAX_INFO_NUM_LEN];
   char totobj[MAX_INFO_NUM_LEN], totobjsel[MAX_INFO_NUM_LEN];
   char totlamp[MAX_INFO_NUM_LEN], totlampsel[MAX_INFO_NUM_LEN];
@@ -252,7 +253,7 @@ static void stats_object_edit(Object *obedit, SceneStats *stats)
         stats->totbonesel++;
       }
 
-      /* if this is a connected child and it's parent is being moved, remove our root */
+      /* if this is a connected child and its parent is being moved, remove our root */
       if ((ebo->flag & BONE_CONNECTED) && (ebo->flag & BONE_ROOTSEL) && ebo->parent &&
           (ebo->parent->flag & BONE_TIPSEL)) {
         stats->totvertsel--;
@@ -350,15 +351,38 @@ static void stats_object_pose(Object *ob, SceneStats *stats)
   }
 }
 
-static void stats_object_sculpt_dynamic_topology(Object *ob, SceneStats *stats)
+static bool stats_is_object_dynamic_topology_sculpt(Object *ob)
 {
-  stats->totvert = ob->sculpt->bm->totvert;
-  stats->tottri = ob->sculpt->bm->totface;
+  if (ob == NULL) {
+    return false;
+  }
+  const eObjectMode object_mode = ob->mode;
+  return ((object_mode & OB_MODE_SCULPT) && ob->sculpt && ob->sculpt->bm);
 }
 
-static bool stats_is_object_dynamic_topology_sculpt(Object *ob, const eObjectMode object_mode)
+static void stats_object_sculpt(Object *ob, SceneStats *stats)
 {
-  return (ob && (object_mode & OB_MODE_SCULPT) && ob->sculpt && ob->sculpt->bm);
+
+  SculptSession *ss = ob->sculpt;
+
+  if (!ss) {
+    return;
+  }
+
+  switch (BKE_pbvh_type(ss->pbvh)) {
+    case PBVH_FACES:
+      stats->totvertsculpt = ss->totvert;
+      stats->totfacesculpt = ss->totfaces;
+      break;
+    case PBVH_BMESH:
+      stats->totvertsculpt = ob->sculpt->bm->totvert;
+      stats->tottri = ob->sculpt->bm->totface;
+      break;
+    case PBVH_GRIDS:
+      stats->totvertsculpt = BKE_pbvh_get_grid_num_vertices(ss->pbvh);
+      stats->totfacesculpt = BKE_pbvh_get_grid_num_faces(ss->pbvh);
+      break;
+  }
 }
 
 /* Statistics displayed in info header. Called regularly on scene changes. */
@@ -385,9 +409,9 @@ static void stats_update(Depsgraph *depsgraph, ViewLayer *view_layer)
     /* Pose Mode */
     stats_object_pose(ob, &stats);
   }
-  else if (ob && stats_is_object_dynamic_topology_sculpt(ob, ob->mode)) {
-    /* Dynamic-topology sculpt mode */
-    stats_object_sculpt_dynamic_topology(ob, &stats);
+  else if (stats_is_object_dynamic_topology_sculpt(ob)) {
+    /* Dynamic topology. Do not count all vertices, dynamic topology stats are initialized later as
+     * part of sculpt stats. */
   }
   else {
     /* Objects */
@@ -397,6 +421,12 @@ static void stats_update(Depsgraph *depsgraph, ViewLayer *view_layer)
     }
     DEG_OBJECT_ITER_FOR_RENDER_ENGINE_END;
     BLI_gset_free(objects_gset, NULL);
+  }
+
+  if (ob && (ob->mode & OB_MODE_SCULPT)) {
+    /* Sculpt Mode. When dynamic topology is not enabled both sculpt stats and scene stats are
+     * collected. */
+    stats_object_sculpt(ob, &stats);
   }
 
   if (!view_layer->stats) {
@@ -426,7 +456,7 @@ static bool format_stats(Main *bmain,
     if (wm->is_interface_locked) {
       return false;
     }
-    Depsgraph *depsgraph = BKE_scene_get_depsgraph(bmain, scene, view_layer, true);
+    Depsgraph *depsgraph = BKE_scene_ensure_depsgraph(bmain, scene, view_layer);
     stats_update(depsgraph, view_layer);
   }
 
@@ -437,12 +467,14 @@ static bool format_stats(Main *bmain,
 
   SCENE_STATS_FMT_INT(totvert);
   SCENE_STATS_FMT_INT(totvertsel);
+  SCENE_STATS_FMT_INT(totvertsculpt);
 
   SCENE_STATS_FMT_INT(totedge);
   SCENE_STATS_FMT_INT(totedgesel);
 
   SCENE_STATS_FMT_INT(totface);
   SCENE_STATS_FMT_INT(totfacesel);
+  SCENE_STATS_FMT_INT(totfacesculpt);
 
   SCENE_STATS_FMT_INT(totbone);
   SCENE_STATS_FMT_INT(totbonesel);
@@ -503,7 +535,7 @@ static void get_stats_string(
     else if (obedit->type == OB_ARMATURE) {
       *ofs += BLI_snprintf(info + *ofs,
                            len - *ofs,
-                           TIP_("Verts:%s/%s | Bones:%s/%s"),
+                           TIP_("Joints:%s/%s | Bones:%s/%s"),
                            stats_fmt->totvertsel,
                            stats_fmt->totvert,
                            stats_fmt->totbonesel,
@@ -527,12 +559,23 @@ static void get_stats_string(
                          stats_fmt->totgpstroke,
                          stats_fmt->totgppoint);
   }
-  else if (stats_is_object_dynamic_topology_sculpt(ob, object_mode)) {
-    *ofs += BLI_snprintf(info + *ofs,
-                         len - *ofs,
-                         TIP_("Verts:%s | Tris:%s"),
-                         stats_fmt->totvert,
-                         stats_fmt->tottri);
+  else if (ob && (object_mode & OB_MODE_SCULPT)) {
+    if (stats_is_object_dynamic_topology_sculpt(ob)) {
+      *ofs += BLI_snprintf(info + *ofs,
+                           len - *ofs,
+                           TIP_("Verts:%s | Tris:%s"),
+                           stats_fmt->totvert,
+                           stats_fmt->tottri);
+    }
+    else {
+      *ofs += BLI_snprintf(info + *ofs,
+                           len - *ofs,
+                           TIP_("Verts:%s/%s | Faces:%s/%s"),
+                           stats_fmt->totvertsculpt,
+                           stats_fmt->totvert,
+                           stats_fmt->totfacesculpt,
+                           stats_fmt->totface);
+    }
   }
   else {
     *ofs += BLI_snprintf(info + *ofs,
@@ -547,19 +590,20 @@ static void get_stats_string(
       info + *ofs, len - *ofs, TIP_(" | Objects:%s/%s"), stats_fmt->totobjsel, stats_fmt->totobj);
 }
 
-const char *ED_info_statusbar_string(Main *bmain, bScreen *screen, bContext *C)
+static const char *info_statusbar_string(Main *bmain,
+                                         Scene *scene,
+                                         ViewLayer *view_layer,
+                                         char statusbar_flag)
 {
   char formatted_mem[15];
   size_t ofs = 0;
-  char *info = screen->statusbar_info;
-  int len = sizeof(screen->statusbar_info);
+  static char info[256];
+  int len = sizeof(info);
 
   info[0] = '\0';
 
   /* Scene statistics. */
-  if (U.statusbar_flag & STATUSBAR_SHOW_STATS) {
-    ViewLayer *view_layer = CTX_data_view_layer(C);
-    Scene *scene = CTX_data_scene(C);
+  if (statusbar_flag & STATUSBAR_SHOW_STATS) {
     SceneStatsFmt stats_fmt;
     if (format_stats(bmain, scene, view_layer, &stats_fmt)) {
       get_stats_string(info + ofs, len, &ofs, view_layer, &stats_fmt);
@@ -567,7 +611,7 @@ const char *ED_info_statusbar_string(Main *bmain, bScreen *screen, bContext *C)
   }
 
   /* Memory status. */
-  if (U.statusbar_flag & STATUSBAR_SHOW_MEMORY) {
+  if (statusbar_flag & STATUSBAR_SHOW_MEMORY) {
     if (info[0]) {
       ofs += BLI_snprintf(info + ofs, len - ofs, " | ");
     }
@@ -577,7 +621,7 @@ const char *ED_info_statusbar_string(Main *bmain, bScreen *screen, bContext *C)
   }
 
   /* GPU VRAM status. */
-  if ((U.statusbar_flag & STATUSBAR_SHOW_VRAM) && (GPU_mem_stats_supported())) {
+  if ((statusbar_flag & STATUSBAR_SHOW_VRAM) && (GPU_mem_stats_supported())) {
     int gpu_free_mem_kb, gpu_tot_mem_kb;
     GPU_mem_stats_get(&gpu_tot_mem_kb, &gpu_free_mem_kb);
     float gpu_total_gb = gpu_tot_mem_kb / 1048576.0f;
@@ -599,7 +643,7 @@ const char *ED_info_statusbar_string(Main *bmain, bScreen *screen, bContext *C)
   }
 
   /* Blender version. */
-  if (U.statusbar_flag & STATUSBAR_SHOW_VERSION) {
+  if (statusbar_flag & STATUSBAR_SHOW_VERSION) {
     if (info[0]) {
       ofs += BLI_snprintf(info + ofs, len - ofs, " | ");
     }
@@ -607,6 +651,20 @@ const char *ED_info_statusbar_string(Main *bmain, bScreen *screen, bContext *C)
   }
 
   return info;
+}
+
+const char *ED_info_statusbar_string(Main *bmain, Scene *scene, ViewLayer *view_layer)
+{
+  return info_statusbar_string(bmain, scene, view_layer, U.statusbar_flag);
+}
+
+const char *ED_info_statistics_string(Main *bmain, Scene *scene, ViewLayer *view_layer)
+{
+  const eUserpref_StatusBar_Flag statistics_status_bar_flag = STATUSBAR_SHOW_STATS |
+                                                              STATUSBAR_SHOW_MEMORY |
+                                                              STATUSBAR_SHOW_VERSION;
+
+  return info_statusbar_string(bmain, scene, view_layer, statistics_status_bar_flag);
 }
 
 static void stats_row(int col1,
@@ -649,6 +707,7 @@ void ED_info_draw_stats(
     EDGES,
     FACES,
     TRIS,
+    JOINTS,
     BONES,
     LAYERS,
     FRAMES,
@@ -663,6 +722,7 @@ void ED_info_draw_stats(
   STRNCPY(labels[EDGES], IFACE_("Edges"));
   STRNCPY(labels[FACES], IFACE_("Faces"));
   STRNCPY(labels[TRIS], IFACE_("Triangles"));
+  STRNCPY(labels[JOINTS], IFACE_("Joints"));
   STRNCPY(labels[BONES], IFACE_("Bones"));
   STRNCPY(labels[LAYERS], IFACE_("Layers"));
   STRNCPY(labels[FRAMES], IFACE_("Frames"));
@@ -694,7 +754,7 @@ void ED_info_draw_stats(
       stats_row(col1, labels[TRIS], col2, stats_fmt.tottri, NULL, y, height);
     }
     else if (obedit->type == OB_ARMATURE) {
-      stats_row(col1, labels[VERTS], col2, stats_fmt.totvertsel, stats_fmt.totvert, y, height);
+      stats_row(col1, labels[JOINTS], col2, stats_fmt.totvertsel, stats_fmt.totvert, y, height);
       stats_row(col1, labels[BONES], col2, stats_fmt.totbonesel, stats_fmt.totbone, y, height);
     }
     else {
@@ -710,9 +770,15 @@ void ED_info_draw_stats(
     stats_row(col1, labels[STROKES], col2, stats_fmt.totgpstroke, NULL, y, height);
     stats_row(col1, labels[POINTS], col2, stats_fmt.totgppoint, NULL, y, height);
   }
-  else if (stats_is_object_dynamic_topology_sculpt(ob, object_mode)) {
-    stats_row(col1, labels[VERTS], col2, stats_fmt.totvert, NULL, y, height);
-    stats_row(col1, labels[TRIS], col2, stats_fmt.tottri, NULL, y, height);
+  else if (ob && (object_mode & OB_MODE_SCULPT)) {
+    if (stats_is_object_dynamic_topology_sculpt(ob)) {
+      stats_row(col1, labels[VERTS], col2, stats_fmt.totvertsculpt, NULL, y, height);
+      stats_row(col1, labels[TRIS], col2, stats_fmt.tottri, NULL, y, height);
+    }
+    else {
+      stats_row(col1, labels[VERTS], col2, stats_fmt.totvertsculpt, stats_fmt.totvert, y, height);
+      stats_row(col1, labels[FACES], col2, stats_fmt.totfacesculpt, stats_fmt.totface, y, height);
+    }
   }
   else {
     stats_row(col1, labels[VERTS], col2, stats_fmt.totvert, NULL, y, height);

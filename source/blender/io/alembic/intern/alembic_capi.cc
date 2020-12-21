@@ -22,6 +22,7 @@
 
 #include <Alembic/AbcMaterial/IMaterial.h>
 
+#include "abc_axis_conversion.h"
 #include "abc_reader_archive.h"
 #include "abc_reader_camera.h"
 #include "abc_reader_curves.h"
@@ -34,6 +35,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "DNA_cachefile_types.h"
+#include "DNA_collection_types.h"
 #include "DNA_curve_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
@@ -47,17 +49,12 @@
 #include "BKE_lib_id.h"
 #include "BKE_object.h"
 #include "BKE_scene.h"
+#include "BKE_screen.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
 
 #include "ED_undo.h"
-
-/* SpaceType struct has a member called 'new' which obviously conflicts with C++
- * so temporarily redefining the new keyword to make it compile. */
-#define new extern_new
-#include "BKE_screen.h"
-#undef new
 
 #include "BLI_compiler_compat.h"
 #include "BLI_fileops.h"
@@ -70,7 +67,10 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
+using Alembic::Abc::IV3fArrayProperty;
 using Alembic::Abc::ObjectHeader;
+using Alembic::Abc::PropertyHeader;
+using Alembic::Abc::V3fArraySamplePtr;
 using Alembic::AbcGeom::ICamera;
 using Alembic::AbcGeom::ICurves;
 using Alembic::AbcGeom::IFaceSet;
@@ -79,9 +79,11 @@ using Alembic::AbcGeom::INuPatch;
 using Alembic::AbcGeom::IObject;
 using Alembic::AbcGeom::IPoints;
 using Alembic::AbcGeom::IPolyMesh;
+using Alembic::AbcGeom::IPolyMeshSchema;
 using Alembic::AbcGeom::ISampleSelector;
 using Alembic::AbcGeom::ISubD;
 using Alembic::AbcGeom::IXform;
+using Alembic::AbcGeom::kWrapExisting;
 using Alembic::AbcGeom::MetaData;
 using Alembic::AbcMaterial::IMaterial;
 
@@ -166,7 +168,7 @@ AbcArchiveHandle *ABC_create_handle(struct Main *bmain,
 
   if (!archive->valid()) {
     delete archive;
-    return NULL;
+    return nullptr;
   }
 
   if (object_paths) {
@@ -238,7 +240,7 @@ static std::pair<bool, AbcObjectReader *> visit_object(
 
   if (!object.valid()) {
     std::cerr << "  - " << full_name << ": object is invalid, skipping it and all its children.\n";
-    return std::make_pair(false, static_cast<AbcObjectReader *>(NULL));
+    return std::make_pair(false, static_cast<AbcObjectReader *>(nullptr));
   }
 
   /* The interpretation of data by the children determine the role of this
@@ -260,7 +262,7 @@ static std::pair<bool, AbcObjectReader *> visit_object(
     bool child_claims_this_object = child_result.first;
     AbcObjectReader *child_reader = child_result.second;
 
-    if (child_reader == NULL) {
+    if (child_reader == nullptr) {
       BLI_assert(!child_claims_this_object);
     }
     else {
@@ -276,7 +278,7 @@ static std::pair<bool, AbcObjectReader *> visit_object(
   }
   BLI_assert(children_claiming_this_object == claiming_child_readers.size());
 
-  AbcObjectReader *reader = NULL;
+  AbcObjectReader *reader = nullptr;
   const MetaData &md = object.getMetaData();
   bool parent_is_part_of_this_object = false;
 
@@ -543,8 +545,8 @@ static void import_startjob(void *user_data, short *stop, short *do_update, floa
     const AbcObjectReader *parent_reader = reader->parent_reader;
     Object *ob = reader->object();
 
-    if (parent_reader == NULL || !reader->inherits_xform()) {
-      ob->parent = NULL;
+    if (parent_reader == nullptr || !reader->inherits_xform()) {
+      ob->parent = nullptr;
     }
     else {
       ob->parent = parent_reader->object();
@@ -582,7 +584,7 @@ static void import_endjob(void *user_data)
 
       /* It's possible that cancellation occurred between the creation of
        * the reader and the creation of the Blender object. */
-      if (ob == NULL) {
+      if (ob == nullptr) {
         continue;
       }
 
@@ -684,7 +686,7 @@ bool ABC_import(bContext *C,
   job->settings.validate_meshes = validate_meshes;
   job->error_code = ABC_NO_ERROR;
   job->was_cancelled = false;
-  job->archive = NULL;
+  job->archive = nullptr;
   job->is_background_job = as_background_job;
 
   G.is_break = false;
@@ -701,14 +703,14 @@ bool ABC_import(bContext *C,
     /* setup job */
     WM_jobs_customdata_set(wm_job, job, import_freejob);
     WM_jobs_timer(wm_job, 0.1, NC_SCENE | ND_FRAME, NC_SCENE | ND_FRAME);
-    WM_jobs_callbacks(wm_job, import_startjob, NULL, NULL, import_endjob);
+    WM_jobs_callbacks(wm_job, import_startjob, nullptr, nullptr, import_endjob);
 
     WM_jobs_start(CTX_wm_manager(C), wm_job);
   }
   else {
     /* Fake a job context, so that we don't need NULL pointer checks while importing. */
     short stop = 0, do_update = 0;
-    float progress = 0.f;
+    float progress = 0.0f;
 
     import_startjob(job, &stop, &do_update, &progress);
     import_endjob(job);
@@ -761,13 +763,13 @@ static AbcObjectReader *get_abc_reader(CacheReader *reader, Object *ob, const ch
 
   if (!iobject.valid()) {
     *err_str = "Invalid object: verify object path";
-    return NULL;
+    return nullptr;
   }
 
   const ObjectHeader &header = iobject.getHeader();
   if (!abc_reader->accepts_object_type(header, ob, err_str)) {
     /* err_str is set by acceptsObjectType() */
-    return NULL;
+    return nullptr;
   }
 
   return abc_reader;
@@ -788,8 +790,8 @@ Mesh *ABC_read_mesh(CacheReader *reader,
                     int read_flag)
 {
   AbcObjectReader *abc_reader = get_abc_reader(reader, ob, err_str);
-  if (abc_reader == NULL) {
-    return NULL;
+  if (abc_reader == nullptr) {
+    return nullptr;
   }
 
   ISampleSelector sample_sel = sample_selector_for_time(time);
@@ -800,7 +802,7 @@ bool ABC_mesh_topology_changed(
     CacheReader *reader, Object *ob, Mesh *existing_mesh, const float time, const char **err_str)
 {
   AbcObjectReader *abc_reader = get_abc_reader(reader, ob, err_str);
-  if (abc_reader == NULL) {
+  if (abc_reader == nullptr) {
     return false;
   }
 
@@ -850,12 +852,145 @@ CacheReader *CacheReader_open_alembic_object(AbcArchiveHandle *handle,
 
   ImportSettings settings;
   AbcObjectReader *abc_reader = create_reader(iobject, settings);
-  if (abc_reader == NULL) {
+  if (abc_reader == nullptr) {
     /* This object is not supported */
-    return NULL;
+    return nullptr;
   }
   abc_reader->object(object);
   abc_reader->incref();
 
   return reinterpret_cast<CacheReader *>(abc_reader);
+}
+
+/* ************************************************************************** */
+
+static const PropertyHeader *get_property_header(const IPolyMeshSchema &schema, const char *name)
+{
+  const PropertyHeader *prop_header = schema.getPropertyHeader(name);
+
+  if (prop_header) {
+    return prop_header;
+  }
+
+  ICompoundProperty prop = schema.getArbGeomParams();
+
+  if (!has_property(prop, name)) {
+    return nullptr;
+  }
+
+  return prop.getPropertyHeader(name);
+}
+
+bool ABC_has_vec3_array_property_named(struct CacheReader *reader, const char *name)
+{
+  AbcObjectReader *abc_reader = reinterpret_cast<AbcObjectReader *>(reader);
+
+  if (!abc_reader) {
+    return false;
+  }
+
+  IObject iobject = abc_reader->iobject();
+
+  if (!iobject.valid()) {
+    return false;
+  }
+
+  const ObjectHeader &header = iobject.getHeader();
+
+  if (!IPolyMesh::matches(header)) {
+    return false;
+  }
+
+  IPolyMesh mesh(iobject, kWrapExisting);
+  IPolyMeshSchema schema = mesh.getSchema();
+
+  const PropertyHeader *prop_header = get_property_header(schema, name);
+
+  if (!prop_header) {
+    return false;
+  }
+
+  return IV3fArrayProperty::matches(prop_header->getMetaData());
+}
+
+static V3fArraySamplePtr get_velocity_prop(const IPolyMeshSchema &schema,
+                                           const ISampleSelector &iss,
+                                           const std::string &name)
+{
+  const PropertyHeader *prop_header = schema.getPropertyHeader(name);
+
+  if (prop_header) {
+    const IV3fArrayProperty &velocity_prop = IV3fArrayProperty(schema, name, 0);
+    return velocity_prop.getValue(iss);
+  }
+
+  ICompoundProperty prop = schema.getArbGeomParams();
+
+  if (!has_property(prop, name)) {
+    return V3fArraySamplePtr();
+  }
+
+  const IV3fArrayProperty &velocity_prop = IV3fArrayProperty(prop, name, 0);
+
+  if (velocity_prop) {
+    return velocity_prop.getValue(iss);
+  }
+
+  return V3fArraySamplePtr();
+}
+
+int ABC_read_velocity_cache(CacheReader *reader,
+                            const char *velocity_name,
+                            const float time,
+                            float velocity_scale,
+                            int num_vertices,
+                            float *r_vertex_velocities)
+{
+  AbcObjectReader *abc_reader = reinterpret_cast<AbcObjectReader *>(reader);
+
+  if (!abc_reader) {
+    return -1;
+  }
+
+  IObject iobject = abc_reader->iobject();
+
+  if (!iobject.valid()) {
+    return -1;
+  }
+
+  const ObjectHeader &header = iobject.getHeader();
+
+  if (!IPolyMesh::matches(header)) {
+    return -1;
+  }
+
+  IPolyMesh mesh(iobject, kWrapExisting);
+  IPolyMeshSchema schema = mesh.getSchema();
+  ISampleSelector sample_sel(time);
+  const IPolyMeshSchema::Sample sample = schema.getValue(sample_sel);
+
+  V3fArraySamplePtr velocities = get_velocity_prop(schema, sample_sel, velocity_name);
+
+  if (!velocities) {
+    return -1;
+  }
+
+  float vel[3];
+
+  int num_velocity_vectors = static_cast<int>(velocities->size());
+
+  if (num_velocity_vectors != num_vertices) {
+    return -1;
+  }
+
+  for (size_t i = 0; i < velocities->size(); ++i) {
+    const Imath::V3f &vel_in = (*velocities)[i];
+    copy_zup_from_yup(vel, vel_in.getValue());
+
+    mul_v3_fl(vel, velocity_scale);
+
+    copy_v3_v3(r_vertex_velocities + i * 3, vel);
+  }
+
+  return num_vertices;
 }

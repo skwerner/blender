@@ -31,6 +31,8 @@
 #  include "openvdb/openvdb.h"
 #  include <openvdb/points/PointConversion.h>
 #  include <openvdb/points/PointCount.h>
+#  include <openvdb/tools/Clip.h>
+#  include <openvdb/tools/Dense.h>
 #endif
 
 #define POSITION_NAME "P"
@@ -45,22 +47,36 @@ namespace Manta {
 template<class GridType, class T> void importVDB(typename GridType::Ptr from, Grid<T> *to)
 {
   using ValueT = typename GridType::ValueType;
-  typename GridType::Accessor accessor = from->getAccessor();
 
-  FOR_IJK(*to)
-  {
-    openvdb::Coord xyz(i, j, k);
-    ValueT vdbValue = accessor.getValue(xyz);
-    T toMantaValue;
-    convertFrom(vdbValue, &toMantaValue);
-    to->set(i, j, k, toMantaValue);
+  // Check if current grid is to be read as a sparse grid, active voxels (only) will be copied
+  if (to->saveSparse()) {
+    to->clear();  // Ensure that destination grid is empty before writing
+    for (typename GridType::ValueOnCIter iter = from->cbeginValueOn(); iter.test(); ++iter) {
+      ValueT vdbValue = *iter;
+      openvdb::Coord coord = iter.getCoord();
+      T toMantaValue;
+      convertFrom(vdbValue, &toMantaValue);
+      to->set(coord.x(), coord.y(), coord.z(), toMantaValue);
+    }
+  }
+  // When importing all grid cells, using a grid accessor is usually faster than a value iterator
+  else {
+    typename GridType::Accessor accessor = from->getAccessor();
+    FOR_IJK(*to)
+    {
+      openvdb::Coord xyz(i, j, k);
+      ValueT vdbValue = accessor.getValue(xyz);
+      T toMantaValue;
+      convertFrom(vdbValue, &toMantaValue);
+      to->set(i, j, k, toMantaValue);
+    }
   }
 }
 
 template<class VDBType, class T>
 void importVDB(VDBType vdbValue, ParticleDataImpl<T> *to, int index, float voxelSize)
 {
-  (void)voxelSize;  // Unused
+  unusedParameter(voxelSize);  // Unused for now
   T toMantaValue;
   convertFrom(vdbValue, &toMantaValue);
   to->set(index, toMantaValue);
@@ -165,27 +181,51 @@ static void setGridOptions(typename GridType::Ptr grid,
                            string name,
                            openvdb::GridClass cls,
                            float voxelSize,
-                           bool precisionHalf)
+                           int precision)
 {
   grid->setTransform(openvdb::math::Transform::createLinearTransform(voxelSize));
   grid->setGridClass(cls);
   grid->setName(name);
-  grid->setSaveFloatAsHalf(precisionHalf);
+  grid->setSaveFloatAsHalf(precision == PRECISION_MINI || precision == PRECISION_HALF);
 }
 
-template<class T, class GridType> typename GridType::Ptr exportVDB(Grid<T> *from)
+template<class T, class GridType>
+typename GridType::Ptr exportVDB(Grid<T> *from, float clip, openvdb::FloatGrid::Ptr clipGrid)
 {
   using ValueT = typename GridType::ValueType;
-  typename GridType::Ptr to = GridType::create();
-  typename GridType::Accessor accessor = to->getAccessor();
+  typename GridType::Ptr to = GridType::create(ValueT(0));
 
-  FOR_IJK(*from)
-  {
-    openvdb::Coord xyz(i, j, k);
-    T fromMantaValue = (*from)(i, j, k);
-    ValueT vdbValue;
-    convertTo(&vdbValue, fromMantaValue);
-    accessor.setValue(xyz, vdbValue);
+  // Copy data from grid by creating a vdb dense structure and then copying that into a vdb grid
+  // This is the fastest way to copy data for both dense and sparse grids -> if (true)
+  if (true) {
+    ValueT *data = (ValueT *)from->getData();
+    openvdb::math::CoordBBox bbox(
+        openvdb::Coord(0),
+        openvdb::Coord(from->getSizeX() - 1, from->getSizeY() - 1, from->getSizeZ() - 1));
+    openvdb::tools::Dense<ValueT, openvdb::tools::MemoryLayout::LayoutXYZ> dense(bbox, data);
+
+    // Trick: Set clip value to very small / negative value in order to copy all values of dense
+    // grids
+    float tmpClip = (from->saveSparse()) ? clip : -std::numeric_limits<Real>::max();
+    // Copy from dense to sparse grid structure considering clip value
+    openvdb::tools::copyFromDense(dense, *to, ValueT(tmpClip));
+
+    // If present, use clip grid to trim down current vdb grid even more
+    if (from->saveSparse() && clipGrid && !clipGrid->empty()) {
+      to = openvdb::tools::clip(*to, *clipGrid);
+    }
+  }
+  // Alternatively, reading all grid cells with an accessor (slightly slower) is possible like this
+  else {
+    typename GridType::Accessor accessor = to->getAccessor();
+    FOR_IJK(*from)
+    {
+      openvdb::Coord xyz(i, j, k);
+      T fromMantaValue = (*from)(i, j, k);
+      ValueT vdbValue;
+      convertTo(&vdbValue, fromMantaValue);
+      accessor.setValue(xyz, vdbValue);
+    }
   }
   return to;
 }
@@ -194,7 +234,8 @@ template<class MantaType, class VDBType>
 void exportVDB(ParticleDataImpl<MantaType> *from,
                openvdb::points::PointDataGrid::Ptr to,
                openvdb::tools::PointIndexGrid::Ptr pIndex,
-               bool skipDeletedParts)
+               bool skipDeletedParts,
+               int precision)
 {
   std::vector<VDBType> vdbValues;
   std::string name = from->getName();
@@ -212,8 +253,21 @@ void exportVDB(ParticleDataImpl<MantaType> *from,
     vdbValues.push_back(vdbValue);
   }
 
-  openvdb::NamePair attribute =
-      openvdb::points::TypedAttributeArray<VDBType, openvdb::points::NullCodec>::attributeType();
+  // Use custom codec for precision of the attribute
+  openvdb::NamePair attribute;
+  if (precision == PRECISION_FULL) {
+    attribute =
+        openvdb::points::TypedAttributeArray<VDBType, openvdb::points::NullCodec>::attributeType();
+  }
+  else if (precision == PRECISION_HALF ||
+           precision == PRECISION_MINI) {  // Mini uses same precision as half for now
+    attribute =
+        openvdb::points::TypedAttributeArray<VDBType,
+                                             openvdb::points::TruncateCodec>::attributeType();
+  }
+  else {
+    errMsg("exportVDB: invalid precision level");
+  }
   openvdb::points::appendAttribute(to->tree(), name, attribute);
 
   // Create a wrapper around the vdb values vector.
@@ -229,7 +283,8 @@ void exportVDB(ParticleDataImpl<MantaType> *from,
 openvdb::points::PointDataGrid::Ptr exportVDB(BasicParticleSystem *from,
                                               std::vector<ParticleDataBase *> &fromPData,
                                               bool skipDeletedParts,
-                                              float voxelSize)
+                                              float voxelSize,
+                                              int precision)
 {
   std::vector<openvdb::Vec3s> positions;
   std::vector<int> flags;
@@ -257,16 +312,34 @@ openvdb::points::PointDataGrid::Ptr exportVDB(BasicParticleSystem *from,
       openvdb::tools::createPointIndexGrid<openvdb::tools::PointIndexGrid>(positionsWrapper,
                                                                            *transform);
 
-  // TODO (sebbas): Use custom codec for attributes?
-  // using Codec = openvdb::points::FixedPointCodec</*1-byte=*/false, openvdb::points::UnitRange>;
-  openvdb::points::PointDataGrid::Ptr to =
-      openvdb::points::createPointDataGrid<openvdb::points::NullCodec /*Codec*/,
-                                           openvdb::points::PointDataGrid>(
-          *pointIndexGrid, positionsWrapper, *transform);
+  openvdb::points::PointDataGrid::Ptr to;
+  openvdb::NamePair flagAttribute;
 
-  openvdb::NamePair flagAttribute =
-      openvdb::points::TypedAttributeArray<int,
-                                           openvdb::points::NullCodec /*Codec*/>::attributeType();
+  using CodecNull = openvdb::points::NullCodec;
+  using CodecTrunc = openvdb::points::TruncateCodec;
+  using CodecFixPoint = openvdb::points::FixedPointCodec<true, openvdb::points::PositionRange>;
+
+  // Use custom codec for precision of the particle position and the flag attribute
+  if (precision == PRECISION_FULL) {
+    to = openvdb::points::createPointDataGrid<CodecNull, openvdb::points::PointDataGrid>(
+        *pointIndexGrid, positionsWrapper, *transform);
+    flagAttribute = openvdb::points::TypedAttributeArray<int, CodecNull>::attributeType();
+  }
+  else if (precision == PRECISION_HALF) {
+    to = openvdb::points::createPointDataGrid<CodecTrunc, openvdb::points::PointDataGrid>(
+        *pointIndexGrid, positionsWrapper, *transform);
+    flagAttribute = openvdb::points::TypedAttributeArray<int, CodecTrunc>::attributeType();
+  }
+  else if (precision == PRECISION_MINI) {
+    to = openvdb::points::createPointDataGrid<CodecFixPoint, openvdb::points::PointDataGrid>(
+        *pointIndexGrid, positionsWrapper, *transform);
+    flagAttribute = openvdb::points::TypedAttributeArray<int, CodecTrunc>::
+        attributeType();  // Use 16 bit trunc for flag for now
+  }
+  else {
+    errMsg("exportVDB: invalid precision level");
+  }
+
   openvdb::points::appendAttribute(to->tree(), FLAG_NAME, flagAttribute);
   // Create a wrapper around the flag vector.
   openvdb::points::PointAttributeVector<int> flagWrapper(flags);
@@ -281,17 +354,17 @@ openvdb::points::PointDataGrid::Ptr exportVDB(BasicParticleSystem *from,
     if (pdb->getType() == ParticleDataBase::TypeInt) {
       debMsg("Writing int particle data '" << pdb->getName() << "'", 1);
       ParticleDataImpl<int> *pdi = dynamic_cast<ParticleDataImpl<int> *>(pdb);
-      exportVDB<int, int>(pdi, to, pointIndexGrid, skipDeletedParts);
+      exportVDB<int, int>(pdi, to, pointIndexGrid, skipDeletedParts, precision);
     }
     else if (pdb->getType() == ParticleDataBase::TypeReal) {
       debMsg("Writing real particle data '" << pdb->getName() << "'", 1);
       ParticleDataImpl<Real> *pdi = dynamic_cast<ParticleDataImpl<Real> *>(pdb);
-      exportVDB<Real, float>(pdi, to, pointIndexGrid, skipDeletedParts);
+      exportVDB<Real, float>(pdi, to, pointIndexGrid, skipDeletedParts, precision);
     }
     else if (pdb->getType() == ParticleDataBase::TypeVec3) {
       debMsg("Writing Vec3 particle data '" << pdb->getName() << "'", 1);
       ParticleDataImpl<Vec3> *pdi = dynamic_cast<ParticleDataImpl<Vec3> *>(pdb);
-      exportVDB<Vec3, openvdb::Vec3s>(pdi, to, pointIndexGrid, skipDeletedParts);
+      exportVDB<Vec3, openvdb::Vec3s>(pdi, to, pointIndexGrid, skipDeletedParts, precision);
     }
     else {
       errMsg("exportVDB: unknown ParticleDataBase type");
@@ -302,8 +375,10 @@ openvdb::points::PointDataGrid::Ptr exportVDB(BasicParticleSystem *from,
 
 static void registerCustomCodecs()
 {
-  using Codec = openvdb::points::FixedPointCodec</*1-byte=*/false, openvdb::points::UnitRange>;
-  openvdb::points::TypedAttributeArray<int, Codec>::registerType();
+  openvdb::points::TypedAttributeArray<int, openvdb::points::TruncateCodec>::registerType();
+  openvdb::points::TypedAttributeArray<float, openvdb::points::TruncateCodec>::registerType();
+  openvdb::points::TypedAttributeArray<openvdb::Vec3s,
+                                       openvdb::points::TruncateCodec>::registerType();
 }
 
 int writeObjectsVDB(const string &filename,
@@ -311,17 +386,31 @@ int writeObjectsVDB(const string &filename,
                     float worldSize,
                     bool skipDeletedParts,
                     int compression,
-                    bool precisionHalf)
+                    int precision,
+                    float clip,
+                    const Grid<Real> *clipGrid)
 {
   openvdb::initialize();
   openvdb::io::File file(filename);
   openvdb::GridPtrVec gridsVDB;
 
-  // TODO (sebbas): Use custom codec for flag attribute?
-  // Register codecs one, this makes sure custom attributes can be read
-  // registerCustomCodecs();
+  // Register custom codecs, this makes sure custom attributes can be read
+  registerCustomCodecs();
 
   std::vector<ParticleDataBase *> pdbBuffer;
+
+  // Convert given clip grid to vdb clip grid
+  openvdb::FloatGrid::Ptr vdbClipGrid = nullptr;
+  if (clipGrid) {
+    vdbClipGrid = openvdb::FloatGrid::create();
+    Real *data = (Real *)clipGrid->getData();
+    openvdb::math::CoordBBox bbox(openvdb::Coord(0),
+                                  openvdb::Coord(clipGrid->getSizeX() - 1,
+                                                 clipGrid->getSizeY() - 1,
+                                                 clipGrid->getSizeZ() - 1));
+    openvdb::tools::Dense<float, openvdb::tools::MemoryLayout::LayoutXYZ> dense(bbox, data);
+    openvdb::tools::copyFromDense(dense, *vdbClipGrid, clip);
+  }
 
   for (std::vector<PbClass *>::iterator iter = objects->begin(); iter != objects->end(); ++iter) {
     openvdb::GridClass gClass = openvdb::GRID_UNKNOWN;
@@ -334,10 +423,14 @@ int writeObjectsVDB(const string &filename,
 
     if (GridBase *mantaGrid = dynamic_cast<GridBase *>(*iter)) {
 
+      if (clipGrid) {
+        assertMsg(clipGrid->getSize() == mantaGrid->getSize(),
+                  "writeObjectsVDB: Clip grid and exported grid must have the same size");
+      }
       if (mantaGrid->getType() & GridBase::TypeInt) {
         debMsg("Writing int grid '" << mantaGrid->getName() << "' to vdb file " << filename, 1);
         Grid<int> *mantaIntGrid = (Grid<int> *)mantaGrid;
-        vdbGrid = exportVDB<int, openvdb::Int32Grid>(mantaIntGrid);
+        vdbGrid = exportVDB<int, openvdb::Int32Grid>(mantaIntGrid, clip, vdbClipGrid);
         gridsVDB.push_back(vdbGrid);
       }
       else if (mantaGrid->getType() & GridBase::TypeReal) {
@@ -345,7 +438,9 @@ int writeObjectsVDB(const string &filename,
         gClass = (mantaGrid->getType() & GridBase::TypeLevelset) ? openvdb::GRID_LEVEL_SET :
                                                                    openvdb::GRID_FOG_VOLUME;
         Grid<Real> *mantaRealGrid = (Grid<Real> *)mantaGrid;
-        vdbGrid = exportVDB<Real, openvdb::FloatGrid>(mantaRealGrid);
+        // Only supply clip grid if real grid is not equal to the clip grid
+        openvdb::FloatGrid::Ptr tmpClipGrid = (mantaRealGrid == clipGrid) ? nullptr : vdbClipGrid;
+        vdbGrid = exportVDB<Real, openvdb::FloatGrid>(mantaRealGrid, clip, tmpClipGrid);
         gridsVDB.push_back(vdbGrid);
       }
       else if (mantaGrid->getType() & GridBase::TypeVec3) {
@@ -353,7 +448,7 @@ int writeObjectsVDB(const string &filename,
         gClass = (mantaGrid->getType() & GridBase::TypeMAC) ? openvdb::GRID_STAGGERED :
                                                               openvdb::GRID_UNKNOWN;
         Grid<Vec3> *mantaVec3Grid = (Grid<Vec3> *)mantaGrid;
-        vdbGrid = exportVDB<Vec3, openvdb::Vec3SGrid>(mantaVec3Grid);
+        vdbGrid = exportVDB<Vec3, openvdb::Vec3SGrid>(mantaVec3Grid, clip, vdbClipGrid);
         gridsVDB.push_back(vdbGrid);
       }
       else {
@@ -365,7 +460,7 @@ int writeObjectsVDB(const string &filename,
       debMsg("Writing particle system '" << mantaPP->getName()
                                          << "' (and buffered pData) to vdb file " << filename,
              1);
-      vdbGrid = exportVDB(mantaPP, pdbBuffer, skipDeletedParts, voxelSize);
+      vdbGrid = exportVDB(mantaPP, pdbBuffer, skipDeletedParts, voxelSize, precision);
       gridsVDB.push_back(vdbGrid);
       pdbBuffer.clear();
     }
@@ -382,7 +477,7 @@ int writeObjectsVDB(const string &filename,
 
     // Set additional grid attributes, e.g. name, grid class, compression level, etc.
     if (vdbGrid) {
-      setGridOptions<openvdb::GridBase>(vdbGrid, objectName, gClass, voxelSize, precisionHalf);
+      setGridOptions<openvdb::GridBase>(vdbGrid, objectName, gClass, voxelSize, precision);
     }
   }
 
@@ -405,6 +500,7 @@ int writeObjectsVDB(const string &filename,
         vdb_flags = openvdb::io::COMPRESS_NONE;
         break;
       }
+      default:
       case COMPRESSION_ZIP: {
         vdb_flags |= openvdb::io::COMPRESS_ZIP;
         break;
@@ -433,18 +529,18 @@ int readObjectsVDB(const string &filename, std::vector<PbClass *> *objects, floa
   openvdb::io::File file(filename);
   openvdb::GridPtrVec gridsVDB;
 
-  // TODO (sebbas): Use custom codec for flag attribute?
-  // Register codecs one, this makes sure custom attributes can be read
-  // registerCustomCodecs();
+  // Register custom codecs, this makes sure custom attributes can be read
+  registerCustomCodecs();
 
   try {
     file.setCopyMaxBytes(0);
     file.open();
     gridsVDB = *(file.getGrids());
     openvdb::MetaMap::Ptr metadata = file.getMetadata();
-    (void)metadata;  // Unused for now
+    unusedParameter(metadata);  // Unused for now
   }
   catch (const openvdb::IoError &e) {
+    unusedParameter(e);  // Unused for now
     debMsg("readObjectsVDB: Could not open vdb file " << filename, 1);
     file.close();
     return 0;
@@ -492,27 +588,36 @@ int readObjectsVDB(const string &filename, std::vector<PbClass *> *objects, floa
       if (GridBase *mantaGrid = dynamic_cast<GridBase *>(*iter)) {
 
         if (mantaGrid->getType() & GridBase::TypeInt) {
+          openvdb::Int32Grid::Ptr vdbIntGrid = openvdb::gridPtrCast<openvdb::Int32Grid>(vdbGrid);
+          if (!vdbIntGrid)
+            continue;  // Sanity check: Cast can fail if onlyGrid is true but object count > 1
+
+          Grid<int> *mantaIntGrid = (Grid<int> *)mantaGrid;
           debMsg("Reading into grid '" << mantaGrid->getName() << "' from int grid '"
                                        << vdbGrid->getName() << "' in vdb file " << filename,
                  1);
-          openvdb::Int32Grid::Ptr vdbIntGrid = openvdb::gridPtrCast<openvdb::Int32Grid>(vdbGrid);
-          Grid<int> *mantaIntGrid = (Grid<int> *)mantaGrid;
           importVDB<openvdb::Int32Grid, int>(vdbIntGrid, mantaIntGrid);
         }
         else if (mantaGrid->getType() & GridBase::TypeReal) {
+          openvdb::FloatGrid::Ptr vdbFloatGrid = openvdb::gridPtrCast<openvdb::FloatGrid>(vdbGrid);
+          if (!vdbFloatGrid)
+            continue;  // Sanity check: Cast can fail if onlyGrid is true but object count > 1
+
+          Grid<Real> *mantaRealGrid = (Grid<Real> *)mantaGrid;
           debMsg("Reading into grid '" << mantaGrid->getName() << "' from real grid '"
                                        << vdbGrid->getName() << "' in vdb file " << filename,
                  1);
-          openvdb::FloatGrid::Ptr vdbFloatGrid = openvdb::gridPtrCast<openvdb::FloatGrid>(vdbGrid);
-          Grid<Real> *mantaRealGrid = (Grid<Real> *)mantaGrid;
           importVDB<openvdb::FloatGrid, Real>(vdbFloatGrid, mantaRealGrid);
         }
         else if (mantaGrid->getType() & GridBase::TypeVec3) {
+          openvdb::Vec3SGrid::Ptr vdbVec3Grid = openvdb::gridPtrCast<openvdb::Vec3SGrid>(vdbGrid);
+          if (!vdbVec3Grid)
+            continue;  // Sanity check: Cast can fail if onlyGrid is true but object count > 1
+
+          Grid<Vec3> *mantaVec3Grid = (Grid<Vec3> *)mantaGrid;
           debMsg("Reading into grid '" << mantaGrid->getName() << "' from vec3 grid '"
                                        << vdbGrid->getName() << "' in vdb file " << filename,
                  1);
-          openvdb::Vec3SGrid::Ptr vdbVec3Grid = openvdb::gridPtrCast<openvdb::Vec3SGrid>(vdbGrid);
-          Grid<Vec3> *mantaVec3Grid = (Grid<Vec3> *)mantaGrid;
           importVDB<openvdb::Vec3SGrid, Vec3>(vdbVec3Grid, mantaVec3Grid);
         }
         else {
@@ -521,12 +626,15 @@ int readObjectsVDB(const string &filename, std::vector<PbClass *> *objects, floa
         }
       }
       else if (BasicParticleSystem *mantaPP = dynamic_cast<BasicParticleSystem *>(*iter)) {
+        openvdb::points::PointDataGrid::Ptr vdbPointGrid =
+            openvdb::gridPtrCast<openvdb::points::PointDataGrid>(vdbGrid);
+        if (!vdbPointGrid)
+          continue;  // Sanity check: Cast can fail if onlyGrid is true but objects > 1
+
         debMsg("Reading into particle system '" << mantaPP->getName() << "' from particle system '"
                                                 << vdbGrid->getName() << "' in vdb file "
                                                 << filename,
                1);
-        openvdb::points::PointDataGrid::Ptr vdbPointGrid =
-            openvdb::gridPtrCast<openvdb::points::PointDataGrid>(vdbGrid);
         importVDB(vdbPointGrid, mantaPP, pdbBuffer, voxelSize);
         pdbBuffer.clear();
       }
@@ -573,26 +681,33 @@ template void importVDB<openvdb::Int32Grid, int>(openvdb::Int32Grid::Ptr from, G
 template void importVDB<openvdb::FloatGrid, Real>(openvdb::FloatGrid::Ptr from, Grid<Real> *to);
 template void importVDB<openvdb::Vec3SGrid, Vec3>(openvdb::Vec3SGrid::Ptr from, Grid<Vec3> *to);
 
-template openvdb::Int32Grid::Ptr exportVDB<int, openvdb::Int32Grid>(Grid<int> *from);
-template openvdb::FloatGrid::Ptr exportVDB<Real, openvdb::FloatGrid>(Grid<Real> *from);
-template openvdb::Vec3SGrid::Ptr exportVDB<Vec3, openvdb::Vec3SGrid>(Grid<Vec3> *from);
+template openvdb::Int32Grid::Ptr exportVDB<int, openvdb::Int32Grid>(
+    Grid<int> *from, float clip = 1e-4, openvdb::FloatGrid::Ptr clipGrid = nullptr);
+template openvdb::FloatGrid::Ptr exportVDB<Real, openvdb::FloatGrid>(
+    Grid<Real> *from, float clip = 1e-4, openvdb::FloatGrid::Ptr clipGrid = nullptr);
+template openvdb::Vec3SGrid::Ptr exportVDB<Vec3, openvdb::Vec3SGrid>(
+    Grid<Vec3> *from, float clip = 1e-4, openvdb::FloatGrid::Ptr clipGrid = nullptr);
 
 openvdb::points::PointDataGrid::Ptr exportVDB(BasicParticleSystem *from,
                                               std::vector<ParticleDataBase *> &fromPData,
                                               bool skipDeletedParts = false,
-                                              float voxelSize = 1.0);
+                                              float voxelSize = 1.0,
+                                              int precision = PRECISION_HALF);
 template void exportVDB<int, int>(ParticleDataImpl<int> *from,
                                   openvdb::points::PointDataGrid::Ptr to,
                                   openvdb::tools::PointIndexGrid::Ptr pIndex,
-                                  bool skipDeletedParts = false);
+                                  bool skipDeletedParts = false,
+                                  int precision = PRECISION_HALF);
 template void exportVDB<Real, float>(ParticleDataImpl<Real> *from,
                                      openvdb::points::PointDataGrid::Ptr to,
                                      openvdb::tools::PointIndexGrid::Ptr pIndex,
-                                     bool skipDeletedParts = false);
+                                     bool skipDeletedParts = false,
+                                     int precision = PRECISION_HALF);
 template void exportVDB<Vec3, openvdb::Vec3s>(ParticleDataImpl<Vec3> *from,
                                               openvdb::points::PointDataGrid::Ptr to,
                                               openvdb::tools::PointIndexGrid::Ptr pIndex,
-                                              bool skipDeletedParts = false);
+                                              bool skipDeletedParts = false,
+                                              int precision = PRECISION_HALF);
 
 #else
 
@@ -601,7 +716,9 @@ int writeObjectsVDB(const string &filename,
                     float worldSize,
                     bool skipDeletedParts,
                     int compression,
-                    bool precisionHalf)
+                    int precision,
+                    float clip,
+                    const Grid<Real> *clipGrid)
 {
   errMsg("Cannot save to .vdb file. Mantaflow has not been built with OpenVDB support.");
   return 0;

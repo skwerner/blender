@@ -74,7 +74,7 @@ static int gpu_shader_valtorgb(GPUMaterial *mat,
   float *array, layer;
   int size;
 
-  /* Common / easy case optimisation. */
+  /* Common / easy case optimization. */
   if ((coba->tot <= 2) && (coba->color_mode == COLBAND_BLEND_RGB)) {
     float mul_bias[2];
     switch (coba->ipotype) {
@@ -121,9 +121,8 @@ static int gpu_shader_valtorgb(GPUMaterial *mat,
   if (coba->ipotype == COLBAND_INTERP_CONSTANT) {
     return GPU_stack_link(mat, node, "valtorgb_nearest", in, out, tex, GPU_constant(&layer));
   }
-  else {
-    return GPU_stack_link(mat, node, "valtorgb", in, out, tex, GPU_constant(&layer));
-  }
+
+  return GPU_stack_link(mat, node, "valtorgb", in, out, tex, GPU_constant(&layer));
 }
 
 class ColorBandFunction : public blender::fn::MultiFunction {
@@ -173,7 +172,7 @@ void register_node_type_sh_valtorgb(void)
   node_type_init(&ntype, node_shader_init_valtorgb);
   node_type_size_preset(&ntype, NODE_SIZE_LARGE);
   node_type_storage(&ntype, "ColorBand", node_free_standard_storage, node_copy_standard_storage);
-  node_type_exec(&ntype, NULL, NULL, node_shader_exec_valtorgb);
+  node_type_exec(&ntype, nullptr, nullptr, node_shader_exec_valtorgb);
   node_type_gpu(&ntype, gpu_shader_valtorgb);
   ntype.expand_in_mf_network = sh_node_valtorgb_expand_in_mf_network;
 
@@ -216,7 +215,7 @@ void register_node_type_sh_rgbtobw(void)
 
   sh_node_type_base(&ntype, SH_NODE_RGBTOBW, "RGB to BW", NODE_CLASS_CONVERTOR, 0);
   node_type_socket_templates(&ntype, sh_node_rgbtobw_in, sh_node_rgbtobw_out);
-  node_type_exec(&ntype, NULL, NULL, node_shader_exec_rgbtobw);
+  node_type_exec(&ntype, nullptr, nullptr, node_shader_exec_rgbtobw);
   node_type_gpu(&ntype, gpu_shader_rgbtobw);
 
   nodeRegisterType(&ntype);

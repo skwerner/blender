@@ -17,25 +17,26 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_CURVEPROFILE_H__
-#define __BKE_CURVEPROFILE_H__
+#pragma once
 
 /** \file
  * \ingroup bke
  */
 
+#include "DNA_curveprofile_types.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-struct BlendWriter;
 struct BlendDataReader;
+struct BlendWriter;
 struct CurveProfile;
 struct CurveProfilePoint;
 
 void BKE_curveprofile_set_defaults(struct CurveProfile *profile);
 
-struct CurveProfile *BKE_curveprofile_add(int preset);
+struct CurveProfile *BKE_curveprofile_add(eCurveProfilePresets preset);
 
 void BKE_curveprofile_free_data(struct CurveProfile *profile);
 
@@ -68,11 +69,11 @@ void BKE_curveprofile_reverse(struct CurveProfile *profile);
 void BKE_curveprofile_reset(struct CurveProfile *profile);
 
 void BKE_curveprofile_create_samples(struct CurveProfile *profile,
-                                     int segments_len,
+                                     int n_segments,
                                      bool sample_straight_edges,
                                      struct CurveProfilePoint *r_samples);
 
-void BKE_curveprofile_initialize(struct CurveProfile *profile, short segments_len);
+void BKE_curveprofile_init(struct CurveProfile *profile, short segments_len);
 
 /* Called for a complete update of the widget after modifications */
 enum {
@@ -86,7 +87,7 @@ void BKE_curveprofile_update(struct CurveProfile *profile, const int update_flag
 float BKE_curveprofile_total_length(const struct CurveProfile *profile);
 
 void BKE_curveprofile_create_samples_even_spacing(struct CurveProfile *profile,
-                                                  int segments_len,
+                                                  int n_segments,
                                                   struct CurveProfilePoint *r_samples);
 
 /* Length portion is the fraction of the total path length where we want the location */
@@ -100,6 +101,4 @@ void BKE_curveprofile_blend_read(struct BlendDataReader *reader, struct CurvePro
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

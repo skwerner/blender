@@ -228,9 +228,9 @@ void AnimationExporter::export_matrix_animation(Object *ob, BCAnimationSampler &
     if (keep_flat_curves || is_animated) {
       bAction *action = bc_getSceneObjectAction(ob);
       std::string name = encode_xml(id_name(ob));
-      std::string action_name = (action == NULL) ? name + "-action" : id_name(action);
+      std::string action_name = (action == nullptr) ? name + "-action" : id_name(action);
       std::string channel_type = "transform";
-      std::string axis = "";
+      std::string axis;
       std::string id = bc_get_action_id(action_name, name, channel_type, axis);
 
       std::string target = translate_id(name) + '/' + channel_type;
@@ -290,7 +290,7 @@ BCAnimationCurve *AnimationExporter::get_modified_export_curve(Object *ob,
                                                                BCAnimationCurveMap &curves)
 {
   std::string channel_type = curve.get_channel_type();
-  BCAnimationCurve *mcurve = NULL;
+  BCAnimationCurve *mcurve = nullptr;
   if (channel_type == "lens") {
 
     /* Create an xfov curve */
@@ -302,7 +302,7 @@ BCAnimationCurve *AnimationExporter::get_modified_export_curve(Object *ob,
     BCValueMap lens_values;
     curve.get_value_map(lens_values);
 
-    BCAnimationCurve *sensor_curve = NULL;
+    BCAnimationCurve *sensor_curve = nullptr;
     BCCurveKey sensor_key(BC_ANIMATION_TYPE_CAMERA, "sensor_width", 0);
     BCAnimationCurveMap::iterator cit = curves.find(sensor_key);
     if (cit != curves.end()) {
@@ -395,15 +395,15 @@ bool AnimationExporter::is_bone_deform_group(Bone *bone)
     return true;
   }
   /* Check child bones */
-  else {
-    for (Bone *child = (Bone *)bone->childbase.first; child; child = child->next) {
-      /* loop through all the children until deform bone is found, and then return */
-      is_def = is_bone_deform_group(child);
-      if (is_def) {
-        return true;
-      }
+
+  for (Bone *child = (Bone *)bone->childbase.first; child; child = child->next) {
+    /* loop through all the children until deform bone is found, and then return */
+    is_def = is_bone_deform_group(child);
+    if (is_def) {
+      return true;
     }
   }
+
   /* no deform bone found in children also */
   return false;
 }
@@ -771,7 +771,7 @@ std::string AnimationExporter::collada_linear_interpolation_source(int tot,
   return source_id;
 }
 
-const std::string AnimationExporter::get_collada_name(std::string channel_type) const
+std::string AnimationExporter::get_collada_name(std::string channel_type) const
 {
   /*
    * Translation table to map FCurve animation types to Collada animation.
@@ -840,12 +840,11 @@ std::string AnimationExporter::get_collada_sid(const BCAnimationCurve &curve,
     if (is_angle) {
       return tm_name + std::string(axis_name) + ".ANGLE";
     }
-    else if (!axis_name.empty()) {
+    if (!axis_name.empty()) {
       return tm_name + "." + std::string(axis_name);
     }
-    else {
-      return tm_name;
-    }
+
+    return tm_name;
   }
 
   return tm_name;

@@ -19,8 +19,7 @@
  * Declaration of GHOST_WindowSDL class.
  */
 
-#ifndef __GHOST_WINDOWSDL_H__
-#define __GHOST_WINDOWSDL_H__
+#pragma once
 
 #include "GHOST_SystemSDL.h"
 #include "GHOST_Window.h"
@@ -86,7 +85,7 @@ class GHOST_WindowSDL : public GHOST_Window {
 
  protected:
   /**
-   * \param type  The type of rendering context create.
+   * \param type: The type of rendering context create.
    * \return Indication of success.
    */
   GHOST_Context *newDrawingContext(GHOST_TDrawingContextType type);
@@ -149,5 +148,3 @@ class GHOST_WindowSDL : public GHOST_Window {
 
   GHOST_TUns16 getDPIHint();
 };
-
-#endif  // __GHOST_WINDOWSDL_H__

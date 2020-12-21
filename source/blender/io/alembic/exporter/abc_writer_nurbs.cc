@@ -31,9 +31,7 @@
 #include "CLG_log.h"
 static CLG_LogRef LOG = {"io.alembic"};
 
-namespace blender {
-namespace io {
-namespace alembic {
+namespace blender::io::alembic {
 
 using Alembic::Abc::OObject;
 using Alembic::AbcGeom::FloatArraySample;
@@ -70,7 +68,7 @@ void ABCNurbsWriter::create_alembic_objects(const HierarchyContext *context)
   }
 }
 
-const OObject ABCNurbsWriter::get_alembic_object() const
+OObject ABCNurbsWriter::get_alembic_object() const
 {
   if (abc_nurbs_.empty()) {
     return OObject();
@@ -80,11 +78,22 @@ const OObject ABCNurbsWriter::get_alembic_object() const
   return abc_nurbs_[0];
 }
 
+Alembic::Abc::OCompoundProperty ABCNurbsWriter::abc_prop_for_custom_props()
+{
+  if (abc_nurbs_.empty()) {
+    return Alembic::Abc::OCompoundProperty();
+  }
+
+  /* A single NURBS object in Blender is expanded to multiple curves in Alembic.
+   * Just store the custom properties on the first one for simplicity. */
+  return abc_schema_prop_for_custom_props(abc_nurbs_schemas_[0]);
+}
+
 bool ABCNurbsWriter::check_is_animated(const HierarchyContext &context) const
 {
   /* Check if object has shape keys. */
   Curve *cu = static_cast<Curve *>(context.object->data);
-  return (cu->key != NULL);
+  return (cu->key != nullptr);
 }
 
 bool ABCNurbsWriter::is_supported(const HierarchyContext *context) const
@@ -117,7 +126,7 @@ void ABCNurbsWriter::do_write(HierarchyContext &context)
   Curve *curve = static_cast<Curve *>(context.object->data);
   ListBase *nulb;
 
-  if (context.object->runtime.curve_cache->deformed_nurbs.first != NULL) {
+  if (context.object->runtime.curve_cache->deformed_nurbs.first != nullptr) {
     nulb = &context.object->runtime.curve_cache->deformed_nurbs;
   }
   else {
@@ -181,6 +190,4 @@ void ABCNurbsWriter::do_write(HierarchyContext &context)
   }
 }
 
-}  // namespace alembic
-}  // namespace io
-}  // namespace blender
+}  // namespace blender::io::alembic

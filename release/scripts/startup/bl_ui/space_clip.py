@@ -423,7 +423,7 @@ class CLIP_PT_tracking_settings(CLIP_PT_tracking_panel, Panel):
 
         col.separator()
         col.operator("clip.track_settings_as_default",
-                     text="Copy From Active Track")
+                     text="Copy from Active Track")
 
 
 class CLIP_PT_tracking_settings_extras(CLIP_PT_tracking_panel, Panel):
@@ -532,6 +532,7 @@ class CLIP_PT_tools_solve(CLIP_PT_tracking_panel, Panel):
         tracking = clip.tracking
         settings = tracking.settings
         tracking_object = tracking.objects.active
+        camera = clip.tracking.camera
 
         col = layout.column()
         col.prop(settings, "use_tripod_solver", text="Tripod")
@@ -545,9 +546,16 @@ class CLIP_PT_tools_solve(CLIP_PT_tracking_panel, Panel):
         col.prop(tracking_object, "keyframe_a")
         col.prop(tracking_object, "keyframe_b")
 
-        col = layout.column()
+        col = layout.column(heading="Refine", align=True)
         col.active = tracking_object.is_camera
-        col.prop(settings, "refine_intrinsics", text="Refine")
+        col.prop(settings, "refine_intrinsics_focal_length", text="Focal Length")
+        col.prop(settings, "refine_intrinsics_principal_point", text="Optical Center")
+
+        col.prop(settings, "refine_intrinsics_radial_distortion", text="Radial Distortion")
+
+        row = col.row()
+        row.active = (camera.distortion_model == 'BROWN')
+        row.prop(settings, "refine_intrinsics_tangential_distortion", text="Tangential Distortion")
 
         col = layout.column(align=True)
         col.scale_y = 2.0
@@ -560,7 +568,7 @@ class CLIP_PT_tools_solve(CLIP_PT_tracking_panel, Panel):
 class CLIP_PT_tools_cleanup(CLIP_PT_tracking_panel, Panel):
     bl_space_type = 'CLIP_EDITOR'
     bl_region_type = 'TOOLS'
-    bl_label = "Clean up"
+    bl_label = "Clean Up"
     bl_options = {'DEFAULT_CLOSED'}
     bl_category = "Solve"
 
@@ -869,16 +877,13 @@ class CLIP_PT_tracking_camera(Panel):
         col.prop(clip.tracking.camera, "sensor_width", text="Sensor Width")
         col.prop(clip.tracking.camera, "pixel_aspect", text="Pixel Aspect")
 
-        col = layout.column()
-        col.prop(clip.tracking.camera, "principal", text="Optical Center")
-        col.operator("clip.set_center_principal", text="Set Center")
-
 
 class CLIP_PT_tracking_lens(Panel):
     bl_space_type = 'CLIP_EDITOR'
     bl_region_type = 'UI'
     bl_category = "Track"
     bl_label = "Lens"
+    bl_parent_id = 'CLIP_PT_tracking_camera'
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
@@ -908,6 +913,10 @@ class CLIP_PT_tracking_lens(Panel):
         col.prop(camera, "units", text="Units")
 
         col = layout.column()
+        col.prop(clip.tracking.camera, "principal", text="Optical Center")
+        col.operator("clip.set_center_principal", text="Set Center")
+
+        col = layout.column()
         col.prop(camera, "distortion_model", text="Lens Distortion")
         if camera.distortion_model == 'POLYNOMIAL':
             col = layout.column(align=True)
@@ -922,6 +931,15 @@ class CLIP_PT_tracking_lens(Panel):
             col = layout.column(align=True)
             col.prop(camera, "nuke_k1")
             col.prop(camera, "nuke_k2")
+        elif camera.distortion_model == 'BROWN':
+            col = layout.column(align=True)
+            col.prop(camera, "brown_k1")
+            col.prop(camera, "brown_k2")
+            col.prop(camera, "brown_k3")
+            col.prop(camera, "brown_k4")
+            col.separator()
+            col.prop(camera, "brown_p1")
+            col.prop(camera, "brown_p2")
 
 
 class CLIP_PT_marker(CLIP_PT_tracking_panel, Panel):
@@ -990,9 +1008,9 @@ class CLIP_PT_stabilization(CLIP_PT_reconstruction_panel, Panel):
         row.prop(stab, "show_tracks_expanded", text="", emboss=False)
 
         if not stab.show_tracks_expanded:
-            row.label(text="Tracks For Stabilization")
+            row.label(text="Tracks for Stabilization")
         else:
-            row.label(text="Tracks For Location")
+            row.label(text="Tracks for Location")
             row = box.row()
             row.template_list("UI_UL_list", "stabilization_tracks", stab, "tracks",
                               stab, "active_track_index", rows=2)
@@ -1008,7 +1026,7 @@ class CLIP_PT_stabilization(CLIP_PT_reconstruction_panel, Panel):
             # Usually we don't hide things from interface, but here every pixel of
             # vertical space is precious.
             if stab.use_stabilize_rotation:
-                box.label(text="Tracks For Rotation / Scale")
+                box.label(text="Tracks for Rotation/Scale")
                 row = box.row()
                 row.template_list("UI_UL_list", "stabilization_rotation_tracks",
                                   stab, "rotation_tracks",

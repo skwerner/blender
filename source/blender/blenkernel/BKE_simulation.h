@@ -14,10 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BKE_SIMULATION_H__
-#define __BKE_SIMULATION_H__
-
-#include "DNA_simulation_types.h"
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -26,6 +23,7 @@ extern "C" {
 struct Depsgraph;
 struct Main;
 struct Scene;
+struct Simulation;
 
 void *BKE_simulation_add(struct Main *bmain, const char *name);
 
@@ -33,14 +31,6 @@ void BKE_simulation_data_update(struct Depsgraph *depsgraph,
                                 struct Scene *scene,
                                 struct Simulation *simulation);
 
-SimulationState *BKE_simulation_state_add(Simulation *simulation,
-                                          eSimulationStateType type,
-                                          const char *name);
-void BKE_simulation_state_remove(Simulation *simulation, SimulationState *state);
-void BKE_simulation_state_remove_all(Simulation *simulation);
-
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_SIMULATION_H__ */

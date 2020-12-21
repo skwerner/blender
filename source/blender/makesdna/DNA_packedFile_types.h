@@ -21,8 +21,11 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_PACKEDFILE_TYPES_H__
-#define __DNA_PACKEDFILE_TYPES_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct PackedFile {
   int size;
@@ -30,4 +33,6 @@ typedef struct PackedFile {
   void *data;
 } PackedFile;
 
-#endif /* PACKEDFILE_TYPES_H */
+#ifdef __cplusplus
+}
+#endif

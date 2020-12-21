@@ -57,13 +57,11 @@
 
 namespace deg = blender::deg;
 
-namespace blender {
-namespace deg {
+namespace blender::deg {
 
 Depsgraph::Depsgraph(Main *bmain, Scene *scene, ViewLayer *view_layer, eEvaluationMode mode)
     : time_source(nullptr),
       need_update(true),
-      need_update_time(false),
       bmain(bmain),
       scene(scene),
       view_layer(view_layer),
@@ -78,6 +76,8 @@ Depsgraph::Depsgraph(Main *bmain, Scene *scene, ViewLayer *view_layer, eEvaluati
   memset(id_type_updated, 0, sizeof(id_type_updated));
   memset(id_type_exist, 0, sizeof(id_type_exist));
   memset(physics_relations, 0, sizeof(physics_relations));
+
+  add_time_source();
 }
 
 Depsgraph::~Depsgraph()
@@ -101,6 +101,11 @@ TimeSourceNode *Depsgraph::add_time_source()
 TimeSourceNode *Depsgraph::find_time_source() const
 {
   return time_source;
+}
+
+void Depsgraph::tag_time_source()
+{
+  time_source->tag_update(this, DEG_UPDATE_SOURCE_TIME);
 }
 
 IDNode *Depsgraph::find_id_node(const ID *id) const
@@ -128,9 +133,10 @@ IDNode *Depsgraph::add_id_node(ID *id, ID *id_cow_hint)
   return id_node;
 }
 
-void Depsgraph::clear_id_nodes_conditional(const std::function<bool(ID_Type id_type)> &filter)
+template<typename FilterFunc>
+static void clear_id_nodes_conditional(Depsgraph::IDDepsNodes *id_nodes, const FilterFunc &filter)
 {
-  for (IDNode *id_node : id_nodes) {
+  for (IDNode *id_node : *id_nodes) {
     if (id_node->id_cow == nullptr) {
       /* This means builder "stole" ownership of the copy-on-written
        * datablock for her own dirty needs. */
@@ -151,8 +157,8 @@ void Depsgraph::clear_id_nodes()
   /* Free memory used by ID nodes. */
 
   /* Stupid workaround to ensure we free IDs in a proper order. */
-  clear_id_nodes_conditional([](ID_Type id_type) { return id_type == ID_SCE; });
-  clear_id_nodes_conditional([](ID_Type id_type) { return id_type != ID_PA; });
+  clear_id_nodes_conditional(&id_nodes, [](ID_Type id_type) { return id_type == ID_SCE; });
+  clear_id_nodes_conditional(&id_nodes, [](ID_Type id_type) { return id_type != ID_PA; });
 
   for (IDNode *id_node : id_nodes) {
     delete id_node;
@@ -257,8 +263,7 @@ ID *Depsgraph::get_cow_id(const ID *id_orig) const
   return id_node->id_cow;
 }
 
-}  // namespace deg
-}  // namespace blender
+}  // namespace blender::deg
 
 /* **************** */
 /* Public Graph API */
@@ -281,7 +286,7 @@ void DEG_graph_replace_owners(struct Depsgraph *depsgraph,
   deg::Depsgraph *deg_graph = reinterpret_cast<deg::Depsgraph *>(depsgraph);
 
   const bool do_update_register = deg_graph->bmain != bmain;
-  if (do_update_register && deg_graph->bmain != NULL) {
+  if (do_update_register && deg_graph->bmain != nullptr) {
     deg::unregister_graph(deg_graph);
   }
 

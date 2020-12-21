@@ -47,7 +47,7 @@
 
 bool ControllerExporter::is_skinned_mesh(Object *ob)
 {
-  return bc_get_assigned_armature(ob) != NULL;
+  return bc_get_assigned_armature(ob) != nullptr;
 }
 
 void ControllerExporter::write_bone_URLs(COLLADASW::InstanceController &ins,
@@ -175,7 +175,7 @@ void ControllerExporter::export_skin_controller(Object *ob, Object *ob_arm)
   bool use_instantiation = this->export_settings.get_use_object_instantiation();
   Mesh *me;
 
-  if (((Mesh *)ob->data)->dvert == NULL) {
+  if (((Mesh *)ob->data)->dvert == nullptr) {
     return;
   }
 
@@ -245,9 +245,9 @@ void ControllerExporter::export_skin_controller(Object *ob, Object *ob_arm)
       if (sumw > 0.0f) {
         float invsumw = 1.0f / sumw;
         vcounts.push_back(jw.size());
-        for (std::map<int, float>::iterator m = jw.begin(); m != jw.end(); ++m) {
-          joints.push_back((*m).first);
-          weights.push_back(invsumw * (*m).second);
+        for (auto &index_and_weight : jw) {
+          joints.push_back(index_and_weight.first);
+          weights.push_back(invsumw * index_and_weight.second);
         }
       }
       else {
@@ -272,7 +272,7 @@ void ControllerExporter::export_skin_controller(Object *ob, Object *ob_arm)
   add_joints_element(&ob->defbase, joints_source_id, inv_bind_mat_source_id);
   add_vertex_weights_element(weights_source_id, joints_source_id, vcounts, joints);
 
-  BKE_id_free(NULL, me);
+  BKE_id_free(nullptr, me);
 
   closeSkin();
   closeController();
@@ -305,14 +305,14 @@ void ControllerExporter::export_morph_controller(Object *ob, Key *key)
   COLLADASW::InputList &input = targets.getInputList();
 
   input.push_back(COLLADASW::Input(
-      COLLADASW::InputSemantic::MORPH_TARGET,  // constant declared in COLLADASWInputList.h
+      COLLADASW::InputSemantic::MORPH_TARGET, /* constant declared in COLLADASWInputList.h */
       COLLADASW::URI(COLLADABU::Utils::EMPTY_STRING, targets_id)));
   input.push_back(
       COLLADASW::Input(COLLADASW::InputSemantic::MORPH_WEIGHT,
                        COLLADASW::URI(COLLADABU::Utils::EMPTY_STRING, morph_weights_id)));
   targets.add();
 
-  BKE_id_free(NULL, me);
+  BKE_id_free(nullptr, me);
 
   /* support for animations
    * can also try the base element and param alternative */
@@ -400,7 +400,7 @@ void ControllerExporter::add_joints_element(ListBase *defbase,
   COLLADASW::InputList &input = joints.getInputList();
 
   input.push_back(COLLADASW::Input(
-      COLLADASW::InputSemantic::JOINT,  // constant declared in COLLADASWInputList.h
+      COLLADASW::InputSemantic::JOINT, /* constant declared in COLLADASWInputList.h */
       COLLADASW::URI(COLLADABU::Utils::EMPTY_STRING, joints_source_id)));
   input.push_back(
       COLLADASW::Input(COLLADASW::InputSemantic::BINDMATRIX,
@@ -415,7 +415,7 @@ void ControllerExporter::add_bind_shape_mat(Object *ob)
   BKE_object_matrix_local_get(ob, f_obmat);
 
   if (export_settings.get_apply_global_orientation()) {
-    // do nothing, rotation is going to be applied to the Data
+    /* do nothing, rotation is going to be applied to the Data */
   }
   else {
     bc_add_global_transform(f_obmat, export_settings.get_global_transform());
@@ -530,7 +530,7 @@ std::string ControllerExporter::add_inv_bind_mats_source(Object *ob_arm,
           float loc[3];
           float rot[3] = {0, 0, 0};
           float scale[3];
-          bc_decompose(bind_mat, loc, NULL, NULL, scale);
+          bc_decompose(bind_mat, loc, nullptr, nullptr, scale);
 
           /* Only translations, no rotation vs armature */
           loc_eulO_size_to_mat4(bind_mat, loc, rot, scale, 6);
@@ -571,12 +571,12 @@ std::string ControllerExporter::add_inv_bind_mats_source(Object *ob_arm,
 Bone *ControllerExporter::get_bone_from_defgroup(Object *ob_arm, bDeformGroup *def)
 {
   bPoseChannel *pchan = BKE_pose_channel_find_name(ob_arm->pose, def->name);
-  return pchan ? pchan->bone : NULL;
+  return pchan ? pchan->bone : nullptr;
 }
 
 bool ControllerExporter::is_bone_defgroup(Object *ob_arm, bDeformGroup *def)
 {
-  return get_bone_from_defgroup(ob_arm, def) != NULL;
+  return get_bone_from_defgroup(ob_arm, def) != nullptr;
 }
 
 std::string ControllerExporter::add_weights_source(Mesh *me,
@@ -596,8 +596,8 @@ std::string ControllerExporter::add_weights_source(Mesh *me,
 
   source.prepareToAppendValues();
 
-  for (std::list<float>::const_iterator i = weights.begin(); i != weights.end(); ++i) {
-    source.appendValues(*i);
+  for (float weight : weights) {
+    source.appendValues(weight);
   }
 
   source.finish();
@@ -615,7 +615,7 @@ void ControllerExporter::add_vertex_weights_element(const std::string &weights_s
 
   int offset = 0;
   input.push_back(COLLADASW::Input(
-      COLLADASW::InputSemantic::JOINT,  // constant declared in COLLADASWInputList.h
+      COLLADASW::InputSemantic::JOINT, /* constant declared in COLLADASWInputList.h */
       COLLADASW::URI(COLLADABU::Utils::EMPTY_STRING, joints_source_id),
       offset++));
   input.push_back(
@@ -638,8 +638,8 @@ void ControllerExporter::add_vertex_weights_element(const std::string &weights_s
 
   /* write deformer index - weight index pairs */
   int weight_index = 0;
-  for (std::list<int>::const_iterator i = joints.begin(); i != joints.end(); ++i) {
-    weightselem.appendValues(*i, weight_index++);
+  for (int joint_index : joints) {
+    weightselem.appendValues(joint_index, weight_index++);
   }
 
   weightselem.finish();

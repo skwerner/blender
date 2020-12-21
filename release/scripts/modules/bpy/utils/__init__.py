@@ -26,6 +26,7 @@ not associated with blenders internal data.
 __all__ = (
     "blend_paths",
     "escape_identifier",
+    "unescape_identifier",
     "keyconfig_init",
     "keyconfig_set",
     "load_scripts",
@@ -60,6 +61,7 @@ from _bpy import (
     _utils_units as units,
     blend_paths,
     escape_identifier,
+    unescape_identifier,
     register_class,
     resource_path,
     script_paths as _bpy_script_paths,
@@ -283,6 +285,8 @@ def load_scripts(reload_scripts=False, refresh_scripts=False):
     del _initialize
 
     if reload_scripts:
+        _bpy.context.window_manager.tag_script_reload()
+
         import gc
         print("gc.collect() -> %d" % gc.collect())
 
@@ -844,7 +848,6 @@ def register_tool(tool_cls, *, after=None, separator=False, group=False):
     if group:
         # Create a new group
         tool_converted = (tool_converted,)
-
 
     tool_def_insert = (
         (None, tool_converted) if separator else

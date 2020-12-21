@@ -23,7 +23,7 @@
  * \ingroup GHOST
  */
 
-#include <X11/XKBlib.h> /* allow detectable autorepeate */
+#include <X11/XKBlib.h> /* Allow detectable auto-repeate. */
 #include <X11/Xatom.h>
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
@@ -86,7 +86,7 @@
 #  define USE_XINPUT_HOTPLUG
 #endif
 
-/* see [#34039] Fix Alt key glitch on Unity desktop */
+/* see T34039 Fix Alt key glitch on Unity desktop */
 #define USE_UNITY_WORKAROUND
 
 /* Fix 'shortcut' part of keyboard reading code only ever using first defined keymap
@@ -130,10 +130,9 @@ GHOST_SystemX11::GHOST_SystemX11() : GHOST_System(), m_xkb_descr(NULL), m_start_
 #endif
 
 #if defined(WITH_X11_XINPUT) && defined(X_HAVE_UTF8_STRING)
-  /* note -- don't open connection to XIM server here, because the locale
-   * has to be set before opening the connection but setlocale() has not
-   * been called yet.  the connection will be opened after entering
-   * the event loop. */
+  /* NOTE: Don't open connection to XIM server here, because the locale has to be
+   * set before opening the connection but `setlocale()` has not been called yet.
+   * the connection will be opened after entering the event loop. */
   m_xim = NULL;
 #endif
 
@@ -175,7 +174,8 @@ GHOST_SystemX11::GHOST_SystemX11() : GHOST_System(), m_xkb_descr(NULL), m_start_
 #undef GHOST_INTERN_ATOM_IF_EXISTS
 #undef GHOST_INTERN_ATOM
 
-  m_last_warp = 0;
+  m_last_warp_x = 0;
+  m_last_warp_y = 0;
   m_last_release_keycode = 0;
   m_last_release_time = 0;
 
@@ -188,7 +188,7 @@ GHOST_SystemX11::GHOST_SystemX11() : GHOST_System(), m_xkb_descr(NULL), m_start_
   /* Taking care not to overflow the tv.tv_sec * 1000 */
   m_start_time = GHOST_TUns64(tv.tv_sec) * 1000 + tv.tv_usec / 1000;
 
-  /* use detectable autorepeate, mac and windows also do this */
+  /* Use detectable auto-repeate, mac and windows also do this. */
   int use_xkb;
   int xkb_opcode, xkb_event, xkb_error;
   int xkb_major = XkbMajorVersion, xkb_minor = XkbMinorVersion;
@@ -324,19 +324,19 @@ void GHOST_SystemX11::getAllDisplayDimensions(GHOST_TUns32 &width, GHOST_TUns32 
 /**
  * Create a new window.
  * The new window is added to the list of windows managed.
- * Never explicitly delete the window, use disposeWindow() instead.
- * \param   title   The name of the window
+ * Never explicitly delete the window, use #disposeWindow() instead.
+ * \param title: The name of the window
  * (displayed in the title bar of the window if the OS supports it).
- * \param   left    The coordinate of the left edge of the window.
- * \param   top     The coordinate of the top edge of the window.
- * \param   width   The width the window.
- * \param   height  The height the window.
- * \param   state   The state of the window when opened.
- * \param   type    The type of drawing context installed in this window.
+ * \param left: The coordinate of the left edge of the window.
+ * \param top: The coordinate of the top edge of the window.
+ * \param width: The width the window.
+ * \param height: The height the window.
+ * \param state: The state of the window when opened.
+ * \param type: The type of drawing context installed in this window.
  * \param glSettings: Misc OpenGL settings.
- * \param exclusive: Use to show the window ontop and ignore others (used fullscreen).
- * \param   parentWindow    Parent window
- * \return  The new window (or 0 if creation failed).
+ * \param exclusive: Use to show the window on top and ignore others (used full-screen).
+ * \param parentWindow: Parent window.
+ * \return The new window (or 0 if creation failed).
  */
 GHOST_IWindow *GHOST_SystemX11::createWindow(const char *title,
                                              GHOST_TInt32 left,
@@ -392,9 +392,9 @@ GHOST_IWindow *GHOST_SystemX11::createWindow(const char *title,
 /**
  * Create a new offscreen context.
  * Never explicitly delete the context, use disposeContext() instead.
- * \return  The new context (or 0 if creation failed).
+ * \return The new context (or 0 if creation failed).
  */
-GHOST_IContext *GHOST_SystemX11::createOffscreenContext()
+GHOST_IContext *GHOST_SystemX11::createOffscreenContext(GHOST_GLSettings glSettings)
 {
   // During development:
   //   try 4.x compatibility profile
@@ -405,6 +405,8 @@ GHOST_IContext *GHOST_SystemX11::createOffscreenContext()
   //   try 4.x core profile
   //   try 3.3 core profile
   //   no fallbacks
+
+  const bool debug_context = (glSettings.flags & GHOST_glDebugContext) != 0;
 
 #if defined(WITH_GL_PROFILE_CORE)
   {
@@ -446,7 +448,7 @@ GHOST_IContext *GHOST_SystemX11::createOffscreenContext()
                                    4,
                                    minor,
                                    GHOST_OPENGL_EGL_CONTEXT_FLAGS |
-                                       (false ? EGL_CONTEXT_OPENGL_DEBUG_BIT_KHR : 0),
+                                       (debug_context ? EGL_CONTEXT_OPENGL_DEBUG_BIT_KHR : 0),
                                    GHOST_OPENGL_EGL_RESET_NOTIFICATION_STRATEGY,
                                    EGL_OPENGL_API);
 #else
@@ -458,7 +460,7 @@ GHOST_IContext *GHOST_SystemX11::createOffscreenContext()
                                    4,
                                    minor,
                                    GHOST_OPENGL_GLX_CONTEXT_FLAGS |
-                                       (false ? GLX_CONTEXT_DEBUG_BIT_ARB : 0),
+                                       (debug_context ? GLX_CONTEXT_DEBUG_BIT_ARB : 0),
                                    GHOST_OPENGL_GLX_RESET_NOTIFICATION_STRATEGY);
 #endif
 
@@ -476,7 +478,7 @@ GHOST_IContext *GHOST_SystemX11::createOffscreenContext()
                                  3,
                                  3,
                                  GHOST_OPENGL_EGL_CONTEXT_FLAGS |
-                                     (false ? EGL_CONTEXT_OPENGL_DEBUG_BIT_KHR : 0),
+                                     (debug_context ? EGL_CONTEXT_OPENGL_DEBUG_BIT_KHR : 0),
                                  GHOST_OPENGL_EGL_RESET_NOTIFICATION_STRATEGY,
                                  EGL_OPENGL_API);
 #else
@@ -488,7 +490,7 @@ GHOST_IContext *GHOST_SystemX11::createOffscreenContext()
                                  3,
                                  3,
                                  GHOST_OPENGL_GLX_CONTEXT_FLAGS |
-                                     (false ? GLX_CONTEXT_DEBUG_BIT_ARB : 0),
+                                     (debug_context ? GLX_CONTEXT_DEBUG_BIT_ARB : 0),
                                  GHOST_OPENGL_GLX_RESET_NOTIFICATION_STRATEGY);
 #endif
 
@@ -502,8 +504,8 @@ GHOST_IContext *GHOST_SystemX11::createOffscreenContext()
 
 /**
  * Dispose of a context.
- * \param   context Pointer to the context to be disposed.
- * \return  Indication of success.
+ * \param context: Pointer to the context to be disposed.
+ * \return Indication of success.
  */
 GHOST_TSuccess GHOST_SystemX11::disposeContext(GHOST_IContext *context)
 {
@@ -979,17 +981,24 @@ void GHOST_SystemX11::processEvent(XEvent *xe)
         window->getCursorGrabAccum(x_accum, y_accum);
 
         if (x_new != xme.x_root || y_new != xme.y_root) {
-          if (xme.time > m_last_warp) {
-            /* when wrapping we don't need to add an event because the
-             * setCursorPosition call will cause a new event after */
-            setCursorPosition(x_new, y_new); /* wrap */
-            window->setCursorGrabAccum(x_accum + (xme.x_root - x_new),
-                                       y_accum + (xme.y_root - y_new));
-            m_last_warp = lastEventTime(xme.time);
+          /* Use time of last event to avoid wrapping several times on the 'same' actual wrap.
+           * Note that we need to deal with X and Y separately as those might wrap at the same time
+           * but still in two different events (corner case, see T74918).
+           * We also have to add a few extra milliseconds of 'padding', as sometimes we get two
+           * close events that will generate extra wrap on the same axis within those few
+           * milliseconds. */
+          if (x_new != xme.x_root && xme.time > m_last_warp_x) {
+            x_accum += (xme.x_root - x_new);
+            m_last_warp_x = lastEventTime(xme.time) + 25;
           }
-          else {
-            setCursorPosition(x_new, y_new); /* wrap but don't accumulate */
+          if (y_new != xme.y_root && xme.time > m_last_warp_y) {
+            y_accum += (xme.y_root - y_new);
+            m_last_warp_y = lastEventTime(xme.time) + 25;
           }
+          window->setCursorGrabAccum(x_accum, y_accum);
+          /* When wrapping we don't need to add an event because the
+           * #setCursorPosition call will cause a new event after. */
+          setCursorPosition(x_new, y_new); /* wrap */
         }
         else {
           g_event = new GHOST_EventCursor(getMilliSeconds(),
@@ -1041,7 +1050,7 @@ void GHOST_SystemX11::processEvent(XEvent *xe)
        *       is unmodified (or anyone swapping the keys with xmodmap).
        *
        *     - XLookupKeysym seems to always use first defined keymap (see T47228), which generates
-       *       keycodes unusable by ghost_key_from_keysym for non-latin-compatible keymaps.
+       *       keycodes unusable by ghost_key_from_keysym for non-Latin-compatible keymaps.
        *
        * To address this, we:
        *
@@ -1951,7 +1960,7 @@ void GHOST_SystemX11::getClipboard_xcout(const XEvent *evt,
   switch (*context) {
     /* There is no context, do an XConvertSelection() */
     case XCLIB_XCOUT_NONE:
-      /* Initialise return length to 0 */
+      /* Initialize return length to 0. */
       if (*len > 0) {
         free(*txt);
         *len = 0;
@@ -2169,7 +2178,7 @@ GHOST_TUns8 *GHOST_SystemX11::getClipboard(bool selection) const
     }
   }
   else if (owner == None)
-    return (NULL);
+    return NULL;
 
   /* Restore events so copy doesn't swallow other event types (keyboard/mouse). */
   vector<XEvent> restore_events;
@@ -2237,7 +2246,7 @@ GHOST_TUns8 *GHOST_SystemX11::getClipboard(bool selection) const
 
     return tmp_data;
   }
-  return (NULL);
+  return NULL;
 }
 
 void GHOST_SystemX11::putClipboard(GHOST_TInt8 *buffer, bool selection) const
@@ -2274,6 +2283,7 @@ void GHOST_SystemX11::putClipboard(GHOST_TInt8 *buffer, bool selection) const
   }
 }
 
+/* -------------------------------------------------------------------- */
 /** \name Message Box
  * \{ */
 class DialogData {

@@ -23,20 +23,16 @@
  * Intermediate node graph for generating GLSL shaders.
  */
 
-#ifndef __GPU_NODE_GRAPH_H__
-#define __GPU_NODE_GRAPH_H__
+#pragma once
 
 #include "DNA_customdata_types.h"
 #include "DNA_listBase.h"
 
-#include "GPU_glew.h"
 #include "GPU_material.h"
 #include "GPU_shader.h"
 
 struct GPUNode;
 struct GPUOutput;
-struct GPUShader;
-struct GPUVertAttrLayers;
 struct ListBase;
 
 typedef enum eGPUDataSource {
@@ -44,6 +40,7 @@ typedef enum eGPUDataSource {
   GPU_SOURCE_CONSTANT,
   GPU_SOURCE_UNIFORM,
   GPU_SOURCE_ATTR,
+  GPU_SOURCE_UNIFORM_ATTR,
   GPU_SOURCE_BUILTIN,
   GPU_SOURCE_STRUCT,
   GPU_SOURCE_TEX,
@@ -55,6 +52,7 @@ typedef enum eGPUDataSource {
 typedef enum {
   GPU_NODE_LINK_NONE = 0,
   GPU_NODE_LINK_ATTR,
+  GPU_NODE_LINK_UNIFORM_ATTR,
   GPU_NODE_LINK_BUILTIN,
   GPU_NODE_LINK_COLORBAND,
   GPU_NODE_LINK_CONSTANT,
@@ -98,6 +96,8 @@ struct GPUNodeLink {
     struct GPUOutput *output;
     /* GPU_NODE_LINK_ATTR */
     struct GPUMaterialAttribute *attr;
+    /* GPU_NODE_LINK_UNIFORM_ATTR */
+    struct GPUUniformAttr *uniform_attr;
     /* GPU_NODE_LINK_IMAGE_BLENDER */
     struct GPUMaterialTexture *texture;
   };
@@ -132,27 +132,41 @@ typedef struct GPUInput {
     struct GPUMaterialTexture *texture;
     /* GPU_SOURCE_ATTR */
     struct GPUMaterialAttribute *attr;
+    /* GPU_SOURCE_UNIFORM_ATTR */
+    struct GPUUniformAttr *uniform_attr;
     /* GPU_SOURCE_VOLUME_GRID | GPU_SOURCE_VOLUME_GRID_TRANSFORM */
     struct GPUMaterialVolumeGrid *volume_grid;
   };
 } GPUInput;
 
+typedef struct GPUNodeGraphOutputLink {
+  struct GPUNodeGraphOutputLink *next, *prev;
+  int hash;
+  GPUNodeLink *outlink;
+} GPUNodeGraphOutputLink;
+
 typedef struct GPUNodeGraph {
   /* Nodes */
   ListBase nodes;
 
-  /* Output. */
+  /* Main Output. */
   GPUNodeLink *outlink;
+  /* List of GPUNodeGraphOutputLink */
+  ListBase outlink_aovs;
 
   /* Requested attributes and textures. */
   ListBase attributes;
   ListBase textures;
   ListBase volume_grids;
+
+  /* The list of uniform attributes. */
+  GPUUniformAttrList uniform_attrs;
 } GPUNodeGraph;
 
 /* Node Graph */
 
 void gpu_node_graph_prune_unused(GPUNodeGraph *graph);
+void gpu_node_graph_finalize_uniform_attrs(GPUNodeGraph *graph);
 void gpu_node_graph_free_nodes(GPUNodeGraph *graph);
 void gpu_node_graph_free(GPUNodeGraph *graph);
 
@@ -165,5 +179,3 @@ struct GPUTexture **gpu_material_ramp_texture_row_set(struct GPUMaterial *mat,
                                                       float *row);
 
 struct GSet *gpu_material_used_libraries(struct GPUMaterial *material);
-
-#endif /* __GPU_NODE_GRAPH_H__ */

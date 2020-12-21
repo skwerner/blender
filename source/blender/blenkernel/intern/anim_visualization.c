@@ -34,6 +34,8 @@
 
 #include "GPU_batch.h"
 
+#include "BLO_read_write.h"
+
 /* ******************************************************************** */
 /* Animation Visualization */
 
@@ -169,7 +171,7 @@ bMotionPath *animviz_verify_motionpaths(ReportList *reports,
   }
 
   /* if there is already a motionpath, just return that,
-   * provided it's settings are ok (saves extra free+alloc)
+   * provided its settings are ok (saves extra free+alloc)
    */
   if (*dst != NULL) {
     int expected_length = avs->path_ef - avs->path_sf;
@@ -223,4 +225,33 @@ bMotionPath *animviz_verify_motionpaths(ReportList *reports,
 
   /* return it */
   return mpath;
+}
+
+void animviz_motionpath_blend_write(BlendWriter *writer, bMotionPath *mpath)
+{
+  /* sanity checks */
+  if (mpath == NULL) {
+    return;
+  }
+
+  /* firstly, just write the motionpath struct */
+  BLO_write_struct(writer, bMotionPath, mpath);
+
+  /* now write the array of data */
+  BLO_write_struct_array(writer, bMotionPathVert, mpath->length, mpath->points);
+}
+
+void animviz_motionpath_blend_read_data(BlendDataReader *reader, bMotionPath *mpath)
+{
+  /* sanity check */
+  if (mpath == NULL) {
+    return;
+  }
+
+  /* relink points cache */
+  BLO_read_data_address(reader, &mpath->points);
+
+  mpath->points_vbo = NULL;
+  mpath->batch_line = NULL;
+  mpath->batch_points = NULL;
 }

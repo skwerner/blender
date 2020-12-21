@@ -36,17 +36,20 @@ set(INC
   ../makesdna
   ../makesrna
   ../nodes
-  ../render/extern/include
+  ../render
+  ../sequencer
   ../../../intern/clog
   ../../../intern/ghost
   ../../../intern/glew-mx
   ../../../intern/guardedalloc
   ../../../intern/memutil
+
+  # for writefile.c: dna_type_offsets.h
+  ${CMAKE_BINARY_DIR}/source/blender/makesdna/intern
 )
 
 set(INC_SYS
   ${ZLIB_INCLUDE_DIRS}
-  ${GLEW_INCLUDE_PATH}
 )
 
 set(SRC
@@ -117,6 +120,7 @@ set(SRC
 
 set(LIB
   bf_editor_screen
+  bf_sequencer
 )
 
 if(WITH_AUDASPACE)
@@ -131,7 +135,9 @@ if(WITH_AUDASPACE)
   )
 endif()
 
-add_definitions(${GL_DEFINITIONS})
+if(WITH_CYCLES)
+  add_definitions(-DWITH_CYCLES)
+endif()
 
 if(WITH_INTERNATIONAL)
   add_definitions(-DWITH_INTERNATIONAL)
@@ -203,3 +209,6 @@ if(WITH_XR_OPENXR)
 endif()
 
 blender_add_lib_nolist(bf_windowmanager "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
+
+# Needed so we can use dna_type_offsets.h for defaults initialization.
+add_dependencies(bf_windowmanager bf_dna)

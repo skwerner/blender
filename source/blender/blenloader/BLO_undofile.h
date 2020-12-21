@@ -18,21 +18,20 @@
  * external writefile function prototypes
  */
 
-#ifndef __BLO_UNDOFILE_H__
-#define __BLO_UNDOFILE_H__
+#pragma once
 
 /** \file
  * \ingroup blenloader
  */
 
-struct Scene;
 struct GHash;
+struct Scene;
 
 typedef struct {
   void *next, *prev;
   const char *buf;
   /** Size in bytes. */
-  unsigned int size;
+  size_t size;
   /** When true, this chunk doesn't own the memory, it's shared with a previous #MemFileChunk */
   bool is_identical;
   /** When true, this chunk is also identical to the one in the next step (used by undo code to
@@ -73,7 +72,7 @@ void BLO_memfile_write_init(MemFileWriteData *mem_data,
                             MemFile *reference_memfile);
 void BLO_memfile_write_finalize(MemFileWriteData *mem_data);
 
-void BLO_memfile_chunk_add(MemFileWriteData *mem_data, const char *buf, unsigned int size);
+void BLO_memfile_chunk_add(MemFileWriteData *mem_data, const char *buf, size_t size);
 
 /* exports */
 extern void BLO_memfile_free(MemFile *memfile);
@@ -85,5 +84,3 @@ extern struct Main *BLO_memfile_main_get(struct MemFile *memfile,
                                          struct Main *bmain,
                                          struct Scene **r_scene);
 extern bool BLO_memfile_write_file(struct MemFile *memfile, const char *filename);
-
-#endif /* __BLO_UNDOFILE_H__ */

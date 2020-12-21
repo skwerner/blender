@@ -41,6 +41,7 @@ using_mesh_s$ID$       = $USING_MESH$\n\
 using_final_mesh_s$ID$ = $USING_IMPROVED_MESH$\n\
 using_fractions_s$ID$  = $USING_FRACTIONS$\n\
 fracThreshold_s$ID$    = $FRACTIONS_THRESHOLD$\n\
+fracDistance_s$ID$     = $FRACTIONS_DISTANCE$\n\
 flipRatio_s$ID$        = $FLIP_RATIO$\n\
 concaveUpper_s$ID$     = $MESH_CONCAVE_UPPER$\n\
 concaveLower_s$ID$     = $MESH_CONCAVE_LOWER$\n\
@@ -48,7 +49,9 @@ meshRadiusFactor_s$ID$ = $MESH_PARTICLE_RADIUS$\n\
 smoothenPos_s$ID$      = $MESH_SMOOTHEN_POS$\n\
 smoothenNeg_s$ID$      = $MESH_SMOOTHEN_NEG$\n\
 randomness_s$ID$       = $PARTICLE_RANDOMNESS$\n\
-surfaceTension_s$ID$   = $LIQUID_SURFACE_TENSION$\n";
+surfaceTension_s$ID$   = $LIQUID_SURFACE_TENSION$\n\
+maxSysParticles_s$ID$  = $PP_PARTICLE_MAXIMUM$\n\
+using_apic_s$ID$       = $USING_APIC$\n";
 
 const std::string liquid_variables_particles =
     "\n\
@@ -88,6 +91,14 @@ curvature_s$ID$  = None\n\
 \n\
 pp_s$ID$         = s$ID$.create(BasicParticleSystem, name='$NAME_PARTS$')\n\
 pVel_pp$ID$      = pp_s$ID$.create(PdataVec3, name='$NAME_PARTSVELOCITY$')\n\
+\n\
+pCx_pp$ID$       = None\n\
+pCy_pp$ID$       = None\n\
+pCz_pp$ID$       = None\n\
+if using_apic_s$ID$:\n\
+    pCx_pp$ID$   = pp_s$ID$.create(PdataVec3)\n\
+    pCy_pp$ID$   = pp_s$ID$.create(PdataVec3)\n\
+    pCz_pp$ID$   = pp_s$ID$.create(PdataVec3)\n\
 \n\
 # Acceleration data for particle nbs\n\
 pindex_s$ID$     = s$ID$.create(ParticleIndexSystem, name='$NAME_PINDEX$')\n\
@@ -176,16 +187,22 @@ def liquid_adaptive_step_$ID$(framenr):\n\
     flags_s$ID$.initDomain(boundaryWidth=1 if using_fractions_s$ID$ else 0, phiWalls=phiObs_s$ID$, outflow=boundConditions_s$ID$)\n\
     \n\
     if using_obstacle_s$ID$:\n\
+        mantaMsg('Extrapolating object velocity')\n\
+        # ensure velocities inside of obs object, slightly add obvels outside of obs object\n\
+        # extrapolate with phiObsIn before joining (static) phiObsSIn grid to prevent flows into static obs\n\
+        extrapolateVec3Simple(vel=obvelC_s$ID$, phi=phiObsIn_s$ID$, distance=6, inside=True)\n\
+        extrapolateVec3Simple(vel=obvelC_s$ID$, phi=phiObsIn_s$ID$, distance=3, inside=False)\n\
+        resampleVec3ToMac(source=obvelC_s$ID$, target=obvel_s$ID$)\n\
+        \n\
         mantaMsg('Initializing obstacle levelset')\n\
         phiObsIn_s$ID$.join(phiObsSIn_s$ID$) # Join static obstacle map\n\
-        phiObsIn_s$ID$.fillHoles(maxDepth=int(res_s$ID$), boundaryWidth=1)\n\
+        phiObsIn_s$ID$.floodFill(boundaryWidth=1)\n\
         extrapolateLsSimple(phi=phiObsIn_s$ID$, distance=6, inside=True)\n\
         extrapolateLsSimple(phi=phiObsIn_s$ID$, distance=3, inside=False)\n\
         phiObs_s$ID$.join(phiObsIn_s$ID$)\n\
         \n\
-        # Using boundaryWidth=2 to not search beginning from walls (just a performance optimization)\n\
         # Additional sanity check: fill holes in phiObs which can result after joining with phiObsIn\n\
-        phiObs_s$ID$.fillHoles(maxDepth=int(res_s$ID$), boundaryWidth=2 if using_fractions_s$ID$ else 1)\n\
+        phiObs_s$ID$.floodFill(boundaryWidth=2 if using_fractions_s$ID$ else 1)\n\
         extrapolateLsSimple(phi=phiObs_s$ID$, distance=6, inside=True)\n\
         extrapolateLsSimple(phi=phiObs_s$ID$, distance=3)\n\
     \n\
@@ -204,18 +221,19 @@ def liquid_adaptive_step_$ID$(framenr):\n\
     setObstacleFlags(flags=flags_s$ID$, phiObs=phiObs_s$ID$, phiOut=phiOut_s$ID$, fractions=fractions_s$ID$, phiIn=phiIn_s$ID$)\n\
     \n\
     if using_obstacle_s$ID$:\n\
-        # TODO (sebbas): Enable flags check again, currently produces unstable particle behavior\n\
+        # TODO(sebbas): Enable flags check again, currently produces unstable particle behavior\n\
         phi_s$ID$.subtract(o=phiObsIn_s$ID$) #, flags=flags_s$ID$, subtractType=FlagObstacle)\n\
     \n\
     # add initial velocity: set invel as source grid to ensure const vels in inflow region, sampling makes use of this\n\
     if using_invel_s$ID$:\n\
         extrapolateVec3Simple(vel=invelC_s$ID$, phi=phiIn_s$ID$, distance=6, inside=True)\n\
-        resampleVec3ToMac(source=invelC_s$ID$, target=invel_s$ID$)\n\
-        pVel_pp$ID$.setSource(grid=invel_s$ID$, isMAC=True)\n\
+        # Using cell centered invels, a false isMAC flag ensures correct interpolation\n\
+        pVel_pp$ID$.setSource(grid=invelC_s$ID$, isMAC=False)\n\
     # reset pvel grid source before sampling new particles - ensures that new particles are initialized with 0 velocity\n\
     else:\n\
         pVel_pp$ID$.setSource(grid=None, isMAC=False)\n\
     \n\
+    pp_s$ID$.maxParticles = maxSysParticles_s$ID$ # remember, 0 means no particle cap\n\
     sampleLevelsetWithParticles(phi=phiIn_s$ID$, flags=flags_s$ID$, parts=pp_s$ID$, discretization=particleNumber_s$ID$, randomness=randomness_s$ID$)\n\
     flags_s$ID$.updateFromLevelset(phi_s$ID$)\n\
     \n\
@@ -235,11 +253,16 @@ def liquid_step_$ID$():\n\
     pp_s$ID$.advectInGrid(flags=flags_s$ID$, vel=vel_s$ID$, integrationMode=IntRK4, deleteInObstacle=deleteInObstacle_s$ID$, stopInObstacle=False, skipNew=True)\n\
     \n\
     mantaMsg('Pushing particles out of obstacles')\n\
+    if using_obstacle_s$ID$ and using_fractions_s$ID$ and fracDistance_s$ID$ > 0:\n\
+        # Optional: Increase distance between fluid and obstacles (only obstacles, not borders)\n\
+        pushOutofObs(parts=pp_s$ID$, flags=flags_s$ID$, phiObs=phiObsIn_s$ID$, thresh=fracDistance_s$ID$)\n\
     pushOutofObs(parts=pp_s$ID$, flags=flags_s$ID$, phiObs=phiObs_s$ID$)\n\
     \n\
     # save original states for later (used during mesh / secondary particle creation)\n\
-    phiTmp_s$ID$.copyFrom(phi_s$ID$)\n\
-    velTmp_s$ID$.copyFrom(vel_s$ID$)\n\
+    # but only save the state at the beginning of an adaptive frame\n\
+    if not s$ID$.timePerFrame:\n\
+        phiTmp_s$ID$.copyFrom(phi_s$ID$)\n\
+        velTmp_s$ID$.copyFrom(vel_s$ID$)\n\
     \n\
     mantaMsg('Advecting phi')\n\
     advectSemiLagrange(flags=flags_s$ID$, vel=vel_s$ID$, grid=phi_s$ID$, order=1) # first order is usually enough\n\
@@ -261,8 +284,12 @@ def liquid_step_$ID$():\n\
         resetOutflow(flags=flags_s$ID$, phi=phi_s$ID$, parts=pp_s$ID$, index=gpi_s$ID$, indexSys=pindex_s$ID$)\n\
     flags_s$ID$.updateFromLevelset(phi_s$ID$)\n\
     \n\
-    # combine particles velocities with advected grid velocities\n\
-    mapPartsToMAC(vel=velParts_s$ID$, flags=flags_s$ID$, velOld=velOld_s$ID$, parts=pp_s$ID$, partVel=pVel_pp$ID$, weight=mapWeights_s$ID$)\n\
+    # combine particle velocities with advected grid velocities\n\
+    if using_apic_s$ID$:\n\
+        apicMapPartsToMAC(flags=flags_s$ID$, vel=vel_s$ID$, parts=pp_s$ID$, partVel=pVel_pp$ID$, cpx=pCx_pp$ID$, cpy=pCy_pp$ID$, cpz=pCz_pp$ID$)\n\
+    else:\n\
+        mapPartsToMAC(vel=velParts_s$ID$, flags=flags_s$ID$, velOld=velOld_s$ID$, parts=pp_s$ID$, partVel=pVel_pp$ID$, weight=mapWeights_s$ID$)\n\
+    \n\
     extrapolateMACFromWeight(vel=velParts_s$ID$, distance=2, weight=mapWeights_s$ID$)\n\
     combineGridVel(vel=velParts_s$ID$, weight=mapWeights_s$ID$, combineVel=vel_s$ID$, phi=phi_s$ID$, narrowBand=combineBandWidth_s$ID$, thresh=0)\n\
     velOld_s$ID$.copyFrom(vel_s$ID$)\n\
@@ -272,13 +299,6 @@ def liquid_step_$ID$():\n\
     \n\
     mantaMsg('Adding external forces')\n\
     addForceField(flags=flags_s$ID$, vel=vel_s$ID$, force=forces_s$ID$)\n\
-    \n\
-    if using_obstacle_s$ID$:\n\
-        mantaMsg('Extrapolating object velocity')\n\
-        # ensure velocities inside of obs object, slightly add obvels outside of obs object\n\
-        extrapolateVec3Simple(vel=obvelC_s$ID$, phi=phiObsIn_s$ID$, distance=6, inside=True)\n\
-        extrapolateVec3Simple(vel=obvelC_s$ID$, phi=phiObsIn_s$ID$, distance=3, inside=False)\n\
-        resampleVec3ToMac(source=obvelC_s$ID$, target=obvel_s$ID$)\n\
     \n\
     extrapolateMACSimple(flags=flags_s$ID$, vel=vel_s$ID$, distance=2, intoObs=True if using_fractions_s$ID$ else False)\n\
     \n\
@@ -301,7 +321,7 @@ def liquid_step_$ID$():\n\
         PD_fluid_guiding(vel=vel_s$ID$, velT=velT_s$ID$, flags=flags_s$ID$, phi=phi_s$ID$, curv=curvature_s$ID$, surfTens=surfaceTension_s$ID$, fractions=fractions_s$ID$, weight=weightGuide_s$ID$, blurRadius=beta_sg$ID$, pressure=pressure_s$ID$, tau=tau_sg$ID$, sigma=sigma_sg$ID$, theta=theta_sg$ID$, zeroPressureFixing=domainClosed_s$ID$)\n\
     else:\n\
         mantaMsg('Pressure')\n\
-        solvePressure(flags=flags_s$ID$, vel=vel_s$ID$, pressure=pressure_s$ID$, phi=phi_s$ID$, curv=curvature_s$ID$, surfTens=surfaceTension_s$ID$, fractions=fractions_s$ID$, obvel=obvel_s$ID$ if using_fractions_s$ID$ else None, zeroPressureFixing=domainClosed_s$ID$)\n\
+        solvePressure(flags=flags_s$ID$, vel=vel_s$ID$, pressure=pressure_s$ID$, curv=curvature_s$ID$, surfTens=surfaceTension_s$ID$, fractions=fractions_s$ID$, obvel=obvel_s$ID$ if using_fractions_s$ID$ else None, zeroPressureFixing=domainClosed_s$ID$)\n\
     \n\
     extrapolateMACSimple(flags=flags_s$ID$, vel=vel_s$ID$, distance=4, intoObs=True if using_fractions_s$ID$ else False)\n\
     setWallBcs(flags=flags_s$ID$, vel=vel_s$ID$, obvel=None if using_fractions_s$ID$ else obvel_s$ID$, phiObs=phiObs_s$ID$, fractions=fractions_s$ID$)\n\
@@ -312,7 +332,11 @@ def liquid_step_$ID$():\n\
     # set source grids for resampling, used in adjustNumber!\n\
     pVel_pp$ID$.setSource(grid=vel_s$ID$, isMAC=True)\n\
     adjustNumber(parts=pp_s$ID$, vel=vel_s$ID$, flags=flags_s$ID$, minParticles=minParticles_s$ID$, maxParticles=maxParticles_s$ID$, phi=phi_s$ID$, exclude=phiObs_s$ID$, radiusFactor=radiusFactor_s$ID$, narrowBand=adjustedNarrowBandWidth_s$ID$)\n\
-    flipVelocityUpdate(vel=vel_s$ID$, velOld=velOld_s$ID$, flags=flags_s$ID$, parts=pp_s$ID$, partVel=pVel_pp$ID$, flipRatio=flipRatio_s$ID$)\n";
+    \n\
+    if using_apic_s$ID$:\n\
+        apicMapMACGridToParts(partVel=pVel_pp$ID$, cpx=pCx_pp$ID$, cpy=pCy_pp$ID$, cpz=pCz_pp$ID$, parts=pp_s$ID$, vel=vel_s$ID$, flags=flags_s$ID$)\n\
+    else:\n\
+        flipVelocityUpdate(vel=vel_s$ID$, velOld=velOld_s$ID$, flags=flags_s$ID$, parts=pp_s$ID$, partVel=pVel_pp$ID$, flipRatio=flipRatio_s$ID$)\n";
 
 const std::string liquid_step_mesh =
     "\n\
@@ -474,10 +498,10 @@ def liquid_save_particles_$ID$(path, framenr, file_format, resumable):\n\
 const std::string liquid_standalone =
     "\n\
 # Helper function to call cache load functions\n\
-def load(frame, cache_resumable):\n\
+def load_data(frame, cache_resumable):\n\
     liquid_load_data_$ID$(os.path.join(cache_dir, 'data'), frame, file_format_data, cache_resumable)\n\
     if using_sndparts_s$ID$:\n\
-        liquid_load_particles_$ID$(os.path.join(cache_dir, 'particles'), frame, file_format_particles, cache_resumable)\n\
+        liquid_load_particles_$ID$(os.path.join(cache_dir, 'particles'), frame, file_format_data, cache_resumable)\n\
     if using_mesh_s$ID$:\n\
         liquid_load_mesh_$ID$(os.path.join(cache_dir, 'mesh'), frame, file_format_mesh)\n\
     if using_guiding_s$ID$:\n\

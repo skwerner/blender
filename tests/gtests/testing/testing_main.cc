@@ -19,6 +19,8 @@
 
 #include "testing/testing.h"
 
+#include "MEM_guardedalloc.h"
+
 DEFINE_string(test_assets_dir, "", "lib/tests directory from SVN containing the test assets.");
 DEFINE_string(test_release_dir, "", "bin/{blender version} directory of the current build.");
 
@@ -46,6 +48,9 @@ const std::string &flags_test_release_dir()
 
 int main(int argc, char **argv)
 {
+  MEM_use_guarded_allocator();
+  MEM_init_memleak_detection();
+  MEM_enable_fail_on_memleak();
   testing::InitGoogleTest(&argc, argv);
   BLENDER_GFLAGS_NAMESPACE::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging(argv[0]);

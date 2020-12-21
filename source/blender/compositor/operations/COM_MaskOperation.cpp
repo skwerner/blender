@@ -23,12 +23,13 @@
 #include "BLI_listbase.h"
 #include "BLI_math.h"
 
+#include "BKE_lib_id.h"
 #include "BKE_mask.h"
 
-MaskOperation::MaskOperation() : NodeOperation()
+MaskOperation::MaskOperation()
 {
   this->addOutputSocket(COM_DT_VALUE);
-  this->m_mask = NULL;
+  this->m_mask = nullptr;
   this->m_maskWidth = 0;
   this->m_maskHeight = 0;
   this->m_maskWidthInv = 0.0f;
@@ -41,7 +42,7 @@ MaskOperation::MaskOperation() : NodeOperation()
 
 void MaskOperation::initExecution()
 {
-  if (this->m_mask && this->m_rasterMaskHandles[0] == NULL) {
+  if (this->m_mask && this->m_rasterMaskHandles[0] == nullptr) {
     if (this->m_rasterMaskHandleTot == 1) {
       this->m_rasterMaskHandles[0] = BKE_maskrasterize_handle_new();
 
@@ -59,9 +60,8 @@ void MaskOperation::initExecution()
       const float frame_step = (this->m_frame_shutter * 2.0f) / this->m_rasterMaskHandleTot;
       float frame_iter = frame;
 
-      Mask *mask_temp;
-
-      mask_temp = BKE_mask_copy_nolib(this->m_mask);
+      Mask *mask_temp = (Mask *)BKE_id_copy_ex(
+          nullptr, &this->m_mask->id, nullptr, LIB_ID_COPY_LOCALIZE | LIB_ID_COPY_NO_ANIMDATA);
 
       /* trick so we can get unkeyed edits to display */
       {
@@ -92,8 +92,7 @@ void MaskOperation::initExecution()
         frame_iter += frame_step;
       }
 
-      BKE_mask_free(mask_temp);
-      MEM_freeN(mask_temp);
+      BKE_id_free(nullptr, &mask_temp->id);
     }
   }
 }
@@ -103,7 +102,7 @@ void MaskOperation::deinitExecution()
   for (unsigned int i = 0; i < this->m_rasterMaskHandleTot; i++) {
     if (this->m_rasterMaskHandles[i]) {
       BKE_maskrasterize_handle_free(this->m_rasterMaskHandles[i]);
-      this->m_rasterMaskHandles[i] = NULL;
+      this->m_rasterMaskHandles[i] = nullptr;
     }
   }
 }

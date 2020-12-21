@@ -520,7 +520,7 @@ class BUILTIN_KSI_WholeCharacter(KeyingSetInfo):
             # for now, just add all of 'em
             prop_rna = type(bone).bl_rna.properties.get(prop, None)
             if prop_rna is None:
-                prop_path = '["%s"]' % prop
+                prop_path = '["%s"]' % bpy.utils.escape_identifier(prop)
                 try:
                     rna_property = bone.path_resolve(prop_path, False)
                 except ValueError as ex:
@@ -539,7 +539,7 @@ class BUILTIN_KSI_WholeCharacterSelected(KeyingSetInfo):
     """Insert a keyframe for all properties that are likely to get animated in a character rig """ \
     """(only selected bones)"""
     bl_idname = ANIM_KS_WHOLE_CHARACTER_SELECTED_ID
-    bl_label = "Whole Character (Selected bones only)"
+    bl_label = "Whole Character (Selected Bones Only)"
 
     # iterator - all bones regardless of selection
     def iterator(ksi, context, ks):

@@ -14,8 +14,10 @@
  * limitations under the License.
  */
 
-#include "render/hair.h"
+#include "bvh/bvh.h"
+
 #include "render/curves.h"
+#include "render/hair.h"
 #include "render/scene.h"
 
 CCL_NAMESPACE_BEGIN
@@ -321,9 +323,9 @@ void Hair::reserve_curves(int numcurves, int numkeys)
   attributes.resize(true);
 }
 
-void Hair::clear()
+void Hair::clear(bool preserve_shaders)
 {
-  Geometry::clear();
+  Geometry::clear(preserve_shaders);
 
   curve_keys.clear();
   curve_radius.clear();
@@ -337,12 +339,18 @@ void Hair::add_curve_key(float3 co, float radius)
 {
   curve_keys.push_back_reserved(co);
   curve_radius.push_back_reserved(radius);
+
+  tag_curve_keys_modified();
+  tag_curve_radius_modified();
 }
 
 void Hair::add_curve(int first_key, int shader)
 {
   curve_first_key.push_back_reserved(first_key);
   curve_shader.push_back_reserved(shader);
+
+  tag_curve_first_key_modified();
+  tag_curve_shader_modified();
 }
 
 void Hair::copy_center_to_motion_step(const int motion_step)
@@ -474,14 +482,46 @@ void Hair::pack_curves(Scene *scene,
   for (size_t i = 0; i < curve_num; i++) {
     Curve curve = get_curve(i);
     int shader_id = curve_shader[i];
-    Shader *shader = (shader_id < used_shaders.size()) ? used_shaders[shader_id] :
-                                                         scene->default_surface;
+    Shader *shader = (shader_id < used_shaders.size()) ?
+                         static_cast<Shader *>(used_shaders[shader_id]) :
+                         scene->default_surface;
     shader_id = scene->shader_manager->get_shader_id(shader, false);
 
     curve_data[i] = make_float4(__int_as_float(curve.first_key + curvekey_offset),
                                 __int_as_float(curve.num_keys),
                                 __int_as_float(shader_id),
                                 0.0f);
+  }
+}
+
+void Hair::pack_primitives(PackedBVH &pack, int object, uint visibility)
+{
+  if (curve_first_key.empty())
+    return;
+
+  const size_t num_prims = num_segments();
+  pack.prim_tri_index.reserve(pack.prim_tri_index.size() + num_prims);
+  pack.prim_type.reserve(pack.prim_type.size() + num_prims);
+  pack.prim_visibility.reserve(pack.prim_visibility.size() + num_prims);
+  pack.prim_index.reserve(pack.prim_index.size() + num_prims);
+  pack.prim_object.reserve(pack.prim_object.size() + num_prims);
+  // 'pack.prim_time' is unused by Embree and OptiX
+
+  uint type = has_motion_blur() ?
+                  ((curve_shape == CURVE_RIBBON) ? PRIMITIVE_MOTION_CURVE_RIBBON :
+                                                   PRIMITIVE_MOTION_CURVE_THICK) :
+                  ((curve_shape == CURVE_RIBBON) ? PRIMITIVE_CURVE_RIBBON : PRIMITIVE_CURVE_THICK);
+
+  for (size_t j = 0; j < num_curves(); ++j) {
+    Curve curve = get_curve(j);
+    for (size_t k = 0; k < curve.num_segments(); ++k) {
+      pack.prim_tri_index.push_back_reserved(-1);
+      pack.prim_type.push_back_reserved(PRIMITIVE_PACK_SEGMENT(type, k));
+      pack.prim_visibility.push_back_reserved(visibility);
+      // Each curve segment points back to its curve index
+      pack.prim_index.push_back_reserved(j + prim_offset);
+      pack.prim_object.push_back_reserved(object);
+    }
   }
 }
 

@@ -43,8 +43,6 @@
 /** \name Mesh Runtime Struct Utils
  * \{ */
 
-static ThreadRWMutex loops_cache_lock = PTHREAD_RWLOCK_INITIALIZER;
-
 /**
  * Default values defined at read time.
  */
@@ -53,7 +51,6 @@ void BKE_mesh_runtime_reset(Mesh *mesh)
   memset(&mesh->runtime, 0, sizeof(mesh->runtime));
   mesh->runtime.eval_mutex = MEM_mallocN(sizeof(ThreadMutex), "mesh runtime eval_mutex");
   BLI_mutex_init(mesh->runtime.eval_mutex);
-  mesh->runtime.bvh_cache = NULL;
 }
 
 /* Clear all pointers which we don't want to be shared on copying the datablock.
@@ -159,23 +156,21 @@ const MLoopTri *BKE_mesh_runtime_looptri_ensure(Mesh *mesh)
 {
   MLoopTri *looptri;
 
-  BLI_rw_mutex_lock(&loops_cache_lock, THREAD_LOCK_READ);
+  ThreadMutex *mesh_eval_mutex = (ThreadMutex *)mesh->runtime.eval_mutex;
+  BLI_mutex_lock(mesh_eval_mutex);
+
   looptri = mesh->runtime.looptris.array;
-  BLI_rw_mutex_unlock(&loops_cache_lock);
 
   if (looptri != NULL) {
     BLI_assert(BKE_mesh_runtime_looptri_len(mesh) == mesh->runtime.looptris.len);
   }
   else {
-    BLI_rw_mutex_lock(&loops_cache_lock, THREAD_LOCK_WRITE);
-    /* We need to ensure array is still NULL inside mutex-protected code,
-     * some other thread might have already recomputed those looptris. */
-    if (mesh->runtime.looptris.array == NULL) {
-      BKE_mesh_runtime_looptri_recalc(mesh);
-    }
+    BKE_mesh_runtime_looptri_recalc(mesh);
     looptri = mesh->runtime.looptris.array;
-    BLI_rw_mutex_unlock(&loops_cache_lock);
   }
+
+  BLI_mutex_unlock(mesh_eval_mutex);
+
   return looptri;
 }
 
@@ -253,10 +248,10 @@ void BKE_mesh_runtime_clear_geometry(Mesh *mesh)
  * \{ */
 
 /* Draw Engine */
-void (*BKE_mesh_batch_cache_dirty_tag_cb)(Mesh *me, int mode) = NULL;
+void (*BKE_mesh_batch_cache_dirty_tag_cb)(Mesh *me, eMeshBatchDirtyMode mode) = NULL;
 void (*BKE_mesh_batch_cache_free_cb)(Mesh *me) = NULL;
 
-void BKE_mesh_batch_cache_dirty_tag(Mesh *me, int mode)
+void BKE_mesh_batch_cache_dirty_tag(Mesh *me, eMeshBatchDirtyMode mode)
 {
   if (me->runtime.batch_cache) {
     BKE_mesh_batch_cache_dirty_tag_cb(me, mode);
@@ -271,6 +266,7 @@ void BKE_mesh_batch_cache_free(Mesh *me)
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name Mesh runtime debug helpers.
  * \{ */
 /* evaluated mesh info printing function,

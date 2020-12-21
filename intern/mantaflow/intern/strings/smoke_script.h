@@ -81,11 +81,11 @@ using_fire_s$ID$ = True\n";
 const std::string smoke_alloc =
     "\n\
 mantaMsg('Smoke alloc')\n\
-shadow_s$ID$     = s$ID$.create(RealGrid, name='$NAME_SHADOW$')\n\
-emission_s$ID$   = s$ID$.create(RealGrid, name='$NAME_EMISSION$')\n\
+shadow_s$ID$     = s$ID$.create(RealGrid, name='$NAME_SHADOW$', sparse=False)\n\
+emission_s$ID$   = s$ID$.create(RealGrid, name='$NAME_EMISSION$', sparse=True)\n\
 emissionIn_s$ID$ = s$ID$.create(RealGrid, name='$NAME_EMISSIONIN$')\n\
-density_s$ID$    = s$ID$.create(RealGrid, name='$NAME_DENSITY$')\n\
-densityIn_s$ID$  = s$ID$.create(RealGrid, name='$NAME_DENSITYIN$')\n\
+density_s$ID$    = s$ID$.create(RealGrid, name='$NAME_DENSITY$', sparse=True)\n\
+densityIn_s$ID$  = s$ID$.create(RealGrid, name='$NAME_DENSITYIN$', sparse=True)\n\
 heat_s$ID$       = None # allocated dynamically\n\
 heatIn_s$ID$     = None\n\
 flame_s$ID$      = None\n\
@@ -111,7 +111,7 @@ const std::string smoke_alloc_noise =
     "\n\
 mantaMsg('Smoke alloc noise')\n\
 vel_sn$ID$        = sn$ID$.create(MACGrid, name='$NAME_VELOCITY_NOISE$')\n\
-density_sn$ID$    = sn$ID$.create(RealGrid, name='$NAME_DENSITY_NOISE$')\n\
+density_sn$ID$    = sn$ID$.create(RealGrid, name='$NAME_DENSITY_NOISE$', sparse=True)\n\
 phiIn_sn$ID$      = sn$ID$.create(LevelsetGrid, name='$NAME_PHIIN_NOISE$')\n\
 phiOut_sn$ID$     = sn$ID$.create(LevelsetGrid, name='$NAME_PHIOUT_NOISE$')\n\
 phiObs_sn$ID$     = sn$ID$.create(LevelsetGrid, name='$NAME_PHIOBS_NOISE$')\n\
@@ -135,8 +135,8 @@ color_b_sn$ID$    = None\n\
 wltnoise_sn$ID$   = sn$ID$.create(NoiseField, fixedSeed=265, loadFromFile=True)\n\
 \n\
 mantaMsg('Initializing UV Grids')\n\
-uvGrid0_s$ID$ = s$ID$.create(VecGrid, name='$NAME_UV0$')\n\
-uvGrid1_s$ID$ = s$ID$.create(VecGrid, name='$NAME_UV1$')\n\
+uvGrid0_s$ID$ = s$ID$.create(VecGrid, name='$NAME_UV0$', sparse=False)\n\
+uvGrid1_s$ID$ = s$ID$.create(VecGrid, name='$NAME_UV1$', sparse=False)\n\
 resetUvGrid(target=uvGrid0_s$ID$, offset=uvs_offset_s$ID$)\n\
 resetUvGrid(target=uvGrid1_s$ID$, offset=uvs_offset_s$ID$)\n\
 \n\
@@ -145,8 +145,8 @@ copyVec3ToReal(source=uvGrid0_s$ID$, targetX=texture_u_s$ID$, targetY=texture_v_
 copyVec3ToReal(source=uvGrid1_s$ID$, targetX=texture_u2_s$ID$, targetY=texture_v2_s$ID$, targetZ=texture_w2_s$ID$)\n\
 \n\
 # Keep track of important objects in dict to load them later on\n\
-smoke_noise_dict_final_s$ID$ = dict(density_noise=density_sn$ID$)\n\
-smoke_noise_dict_resume_s$ID$ = dict(uv0_noise=uvGrid0_s$ID$, uv1_noise=uvGrid1_s$ID$)\n";
+smoke_noise_dict_final_s$ID$ = { 'density_noise' : density_sn$ID$ }\n\
+smoke_noise_dict_resume_s$ID$ = { 'uv0_noise' : uvGrid0_s$ID$, 'uv1_noise' : uvGrid1_s$ID$ }\n";
 
 //////////////////////////////////////////////////////////////////////
 // ADDITIONAL GRIDS
@@ -160,12 +160,12 @@ if 'color_g_s$ID$' in globals(): del color_g_s$ID$\n\
 if 'color_b_s$ID$' in globals(): del color_b_s$ID$\n\
 \n\
 mantaMsg('Allocating colors')\n\
-color_r_s$ID$    = s$ID$.create(RealGrid, name='$NAME_COLORR$')\n\
-color_g_s$ID$    = s$ID$.create(RealGrid, name='$NAME_COLORG$')\n\
-color_b_s$ID$    = s$ID$.create(RealGrid, name='$NAME_COLORB$')\n\
-color_r_in_s$ID$ = s$ID$.create(RealGrid, name='$NAME_COLORRIN$')\n\
-color_g_in_s$ID$ = s$ID$.create(RealGrid, name='$NAME_COLORGIN$')\n\
-color_b_in_s$ID$ = s$ID$.create(RealGrid, name='$NAME_COLORBIN$')\n\
+color_r_s$ID$    = s$ID$.create(RealGrid, name='$NAME_COLORR$', sparse=True)\n\
+color_g_s$ID$    = s$ID$.create(RealGrid, name='$NAME_COLORG$', sparse=True)\n\
+color_b_s$ID$    = s$ID$.create(RealGrid, name='$NAME_COLORB$', sparse=True)\n\
+color_r_in_s$ID$ = s$ID$.create(RealGrid, name='$NAME_COLORRIN$', sparse=True)\n\
+color_g_in_s$ID$ = s$ID$.create(RealGrid, name='$NAME_COLORGIN$', sparse=True)\n\
+color_b_in_s$ID$ = s$ID$.create(RealGrid, name='$NAME_COLORBIN$', sparse=True)\n\
 \n\
 # Add objects to dict to load them later on\n\
 if 'smoke_data_dict_final_s$ID$' in globals():\n\
@@ -181,9 +181,9 @@ if 'color_g_sn$ID$' in globals(): del color_g_sn$ID$\n\
 if 'color_b_sn$ID$' in globals(): del color_b_sn$ID$\n\
 \n\
 mantaMsg('Allocating colors noise')\n\
-color_r_sn$ID$ = sn$ID$.create(RealGrid, name='$NAME_COLORR_NOISE$')\n\
-color_g_sn$ID$ = sn$ID$.create(RealGrid, name='$NAME_COLORG_NOISE$')\n\
-color_b_sn$ID$ = sn$ID$.create(RealGrid, name='$NAME_COLORB_NOISE$')\n\
+color_r_sn$ID$ = sn$ID$.create(RealGrid, name='$NAME_COLORR_NOISE$', sparse=True)\n\
+color_g_sn$ID$ = sn$ID$.create(RealGrid, name='$NAME_COLORG_NOISE$', sparse=True)\n\
+color_b_sn$ID$ = sn$ID$.create(RealGrid, name='$NAME_COLORB_NOISE$', sparse=True)\n\
 \n\
 # Add objects to dict to load them later on\n\
 if 'smoke_noise_dict_final_s$ID$' in globals():\n\
@@ -216,8 +216,8 @@ if 'heat_s$ID$' in globals(): del heat_s$ID$\n\
 if 'heatIn_s$ID$' in globals(): del heatIn_s$ID$\n\
 \n\
 mantaMsg('Allocating heat')\n\
-heat_s$ID$   = s$ID$.create(RealGrid, name='$NAME_TEMPERATURE$')\n\
-heatIn_s$ID$ = s$ID$.create(RealGrid, name='$NAME_TEMPERATUREIN$')\n\
+heat_s$ID$   = s$ID$.create(RealGrid, name='$NAME_TEMPERATURE$', sparse=True)\n\
+heatIn_s$ID$ = s$ID$.create(RealGrid, name='$NAME_TEMPERATUREIN$', sparse=True)\n\
 \n\
 # Add objects to dict to load them later on\n\
 if 'smoke_data_dict_final_s$ID$' in globals():\n\
@@ -235,11 +235,11 @@ if 'fuelIn_s$ID$' in globals(): del fuelIn_s$ID$\n\
 if 'reactIn_s$ID$' in globals(): del reactIn_s$ID$\n\
 \n\
 mantaMsg('Allocating fire')\n\
-flame_s$ID$   = s$ID$.create(RealGrid, name='$NAME_FLAME$')\n\
-fuel_s$ID$    = s$ID$.create(RealGrid, name='$NAME_FUEL$')\n\
-react_s$ID$   = s$ID$.create(RealGrid, name='$NAME_REACT$')\n\
-fuelIn_s$ID$  = s$ID$.create(RealGrid, name='$NAME_FUELIN$')\n\
-reactIn_s$ID$ = s$ID$.create(RealGrid, name='$NAME_REACTIN$')\n\
+flame_s$ID$   = s$ID$.create(RealGrid, name='$NAME_FLAME$', sparse=True)\n\
+fuel_s$ID$    = s$ID$.create(RealGrid, name='$NAME_FUEL$', sparse=True)\n\
+react_s$ID$   = s$ID$.create(RealGrid, name='$NAME_REACT$', sparse=True)\n\
+fuelIn_s$ID$  = s$ID$.create(RealGrid, name='$NAME_FUELIN$', sparse=True)\n\
+reactIn_s$ID$ = s$ID$.create(RealGrid, name='$NAME_REACTIN$', sparse=True)\n\
 \n\
 # Add objects to dict to load them later on\n\
 if 'smoke_data_dict_final_s$ID$' in globals():\n\
@@ -255,9 +255,9 @@ if 'fuel_sn$ID$' in globals(): del fuel_sn$ID$\n\
 if 'react_sn$ID$' in globals(): del react_sn$ID$\n\
 \n\
 mantaMsg('Allocating fire noise')\n\
-flame_sn$ID$ = sn$ID$.create(RealGrid, name='$NAME_FLAME_NOISE$')\n\
-fuel_sn$ID$  = sn$ID$.create(RealGrid, name='$NAME_FUEL_NOISE$')\n\
-react_sn$ID$ = sn$ID$.create(RealGrid, name='$NAME_REACT_NOISE$')\n\
+flame_sn$ID$ = sn$ID$.create(RealGrid, name='$NAME_FLAME_NOISE$', sparse=True)\n\
+fuel_sn$ID$  = sn$ID$.create(RealGrid, name='$NAME_FUEL_NOISE$', sparse=True)\n\
+react_sn$ID$ = sn$ID$.create(RealGrid, name='$NAME_REACT_NOISE$', sparse=True)\n\
 \n\
 # Add objects to dict to load them later on\n\
 if 'smoke_noise_dict_final_s$ID$' in globals():\n\
@@ -280,16 +280,22 @@ def smoke_adaptive_step_$ID$(framenr):\n\
     flags_s$ID$.initDomain(boundaryWidth=0, phiWalls=phiObs_s$ID$, outflow=boundConditions_s$ID$)\n\
     \n\
     if using_obstacle_s$ID$:\n\
+        mantaMsg('Extrapolating object velocity')\n\
+        # ensure velocities inside of obs object, slightly add obvels outside of obs object\n\
+        # extrapolate with phiObsIn before joining (static) phiObsSIn grid to prevent flows into static obs\n\
+        extrapolateVec3Simple(vel=obvelC_s$ID$, phi=phiObsIn_s$ID$, distance=6, inside=True)\n\
+        extrapolateVec3Simple(vel=obvelC_s$ID$, phi=phiObsIn_s$ID$, distance=3, inside=False)\n\
+        resampleVec3ToMac(source=obvelC_s$ID$, target=obvel_s$ID$)\n\
+        \n\
         mantaMsg('Initializing obstacle levelset')\n\
         phiObsIn_s$ID$.join(phiObsSIn_s$ID$) # Join static obstacle map\n\
-        phiObsIn_s$ID$.fillHoles(maxDepth=int(res_s$ID$), boundaryWidth=1)\n\
+        phiObsIn_s$ID$.floodFill(boundaryWidth=1)\n\
         extrapolateLsSimple(phi=phiObsIn_s$ID$, distance=6, inside=True)\n\
         extrapolateLsSimple(phi=phiObsIn_s$ID$, distance=3, inside=False)\n\
         phiObs_s$ID$.join(phiObsIn_s$ID$)\n\
         \n\
-        # Using boundaryWidth=2 to not search beginning from walls (just a performance optimization)\n\
         # Additional sanity check: fill holes in phiObs which can result after joining with phiObsIn\n\
-        phiObs_s$ID$.fillHoles(maxDepth=int(res_s$ID$), boundaryWidth=1)\n\
+        phiObs_s$ID$.floodFill(boundaryWidth=1)\n\
         extrapolateLsSimple(phi=phiObs_s$ID$, distance=6, inside=True)\n\
         extrapolateLsSimple(phi=phiObs_s$ID$, distance=3, inside=False)\n\
     \n\
@@ -386,21 +392,14 @@ def smoke_step_$ID$():\n\
     mantaMsg('Adding forces')\n\
     addForceField(flags=flags_s$ID$, vel=vel_s$ID$, force=forces_s$ID$)\n\
     \n\
-    if using_obstacle_s$ID$:\n\
-        mantaMsg('Extrapolating object velocity')\n\
-        # ensure velocities inside of obs object, slightly add obvels outside of obs object\n\
-        extrapolateVec3Simple(vel=obvelC_s$ID$, phi=phiObsIn_s$ID$, distance=6, inside=True)\n\
-        extrapolateVec3Simple(vel=obvelC_s$ID$, phi=phiObsIn_s$ID$, distance=3, inside=False)\n\
-        resampleVec3ToMac(source=obvelC_s$ID$, target=obvel_s$ID$)\n\
-    \n\
     # Cells inside obstacle should not contain any density, fire, etc.\n\
     if deleteInObstacle_s$ID$:\n\
         resetInObstacle(flags=flags_s$ID$, density=density_s$ID$, vel=vel_s$ID$, heat=heat_s$ID$, fuel=fuel_s$ID$, flame=flame_s$ID$, red=color_r_s$ID$, green=color_g_s$ID$, blue=color_b_s$ID$)\n\
     \n\
     # add initial velocity\n\
     if using_invel_s$ID$:\n\
-        resampleVec3ToMac(source=invelC_s$ID$, target=invel_s$ID$)\n\
-        setInitialVelocity(flags=flags_s$ID$, vel=vel_s$ID$, invel=invel_s$ID$)\n\
+        # Using cell centered invels, will be converted to MAC within the function\n\
+        setInitialVelocity(flags=flags_s$ID$, vel=vel_s$ID$, invel=invelC_s$ID$)\n\
     \n\
     mantaMsg('Walls')\n\
     setWallBcs(flags=flags_s$ID$, vel=vel_s$ID$, obvel=obvel_s$ID$ if using_obstacle_s$ID$ else None)\n\
@@ -576,7 +575,7 @@ def smoke_save_data_$ID$(path, framenr, file_format, resumable):\n\
     start_time = time.time()\n\
     dict = { **fluid_data_dict_final_s$ID$, **fluid_data_dict_resume_s$ID$, **smoke_data_dict_final_s$ID$, **smoke_data_dict_resume_s$ID$ } if resumable else { **fluid_data_dict_final_s$ID$, **smoke_data_dict_final_s$ID$ } \n\
     if not withMPSave or isWindows:\n\
-        fluid_file_export_s$ID$(dict=dict, path=path, framenr=framenr, file_format=file_format, file_name=file_data_s$ID$)\n\
+        fluid_file_export_s$ID$(dict=dict, path=path, framenr=framenr, file_format=file_format, file_name=file_data_s$ID$, clipGrid=density_s$ID$)\n\
     else:\n\
         fluid_cache_multiprocessing_start_$ID$(function=fluid_file_export_s$ID$, file_name=file_data_s$ID$, framenr=framenr, format_data=file_format, path_data=path, dict=dict, do_join=False)\n\
     mantaMsg('--- Save: %s seconds ---' % (time.time() - start_time))\n";
@@ -587,7 +586,7 @@ def smoke_save_noise_$ID$(path, framenr, file_format, resumable):\n\
     mantaMsg('Smoke save noise')\n\
     dict = { **smoke_noise_dict_final_s$ID$, **smoke_noise_dict_resume_s$ID$ } if resumable else { **smoke_noise_dict_final_s$ID$ } \n\
     if not withMPSave or isWindows:\n\
-        fluid_file_export_s$ID$(dict=dict, framenr=framenr, file_format=file_format, path=path, file_name=file_noise_s$ID$)\n\
+        fluid_file_export_s$ID$(dict=dict, framenr=framenr, file_format=file_format, path=path, file_name=file_noise_s$ID$, clipGrid=density_sn$ID$)\n\
     else:\n\
         fluid_cache_multiprocessing_start_$ID$(function=fluid_file_export_s$ID$, file_name=file_noise_s$ID$, framenr=framenr, format_data=file_format, path_data=path, dict=dict, do_join=False)\n";
 
@@ -598,10 +597,10 @@ def smoke_save_noise_$ID$(path, framenr, file_format, resumable):\n\
 const std::string smoke_standalone =
     "\n\
 # Helper function to call cache load functions\n\
-def load(frame, cache_resumable):\n\
+def load_data(frame, cache_resumable):\n\
     smoke_load_data_$ID$(os.path.join(cache_dir, 'data'), frame, file_format_data, cache_resumable)\n\
     if using_noise_s$ID$:\n\
-        smoke_load_noise_$ID$(os.path.join(cache_dir, 'noise'), frame, file_format_noise, cache_resumable)\n\
+        smoke_load_noise_$ID$(os.path.join(cache_dir, 'noise'), frame, file_format_data, cache_resumable)\n\
     if using_guiding_s$ID$:\n\
         fluid_load_guiding_$ID$(os.path.join(cache_dir, 'guiding'), frame, file_format_data)\n\
 \n\

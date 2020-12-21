@@ -18,7 +18,7 @@
  */
 
 /** \file
- * \ingroup bph
+ * \ingroup sim
  */
 
 #include "MEM_guardedalloc.h"
@@ -68,20 +68,20 @@ BLI_INLINE int hair_grid_size(const int res[3])
   return res[0] * res[1] * res[2];
 }
 
-typedef struct HairGridVert {
+struct HairGridVert {
   int samples;
   float velocity[3];
   float density;
 
   float velocity_smooth[3];
-} HairGridVert;
+};
 
-typedef struct HairGrid {
+struct HairGrid {
   HairGridVert *verts;
   int res[3];
   float gmin[3], gmax[3];
   float cellsize, inv_cellsize;
-} HairGrid;
+};
 
 #define HAIR_GRID_INDEX_AXIS(vec, res, gmin, scale, axis) \
   (min_ii(max_ii((int)((vec[axis] - gmin[axis]) * scale), 0), res[axis] - 2))
@@ -224,7 +224,7 @@ void SIM_hair_volume_vertex_grid_forces(HairGrid *grid,
                         x,
                         &gdensity,
                         gvelocity,
-                        NULL,
+                        nullptr,
                         ggrad,
                         gvelgrad);
 
@@ -710,9 +710,8 @@ BLI_INLINE float hair_volume_density_divergence(float density,
   if (density > density_threshold && density > target_density) {
     return strength * logf(target_density / density);
   }
-  else {
-    return 0.0f;
-  }
+
+  return 0.0f;
 }
 
 bool SIM_hair_volume_solve_divergence(HairGrid *grid,
@@ -1030,14 +1029,13 @@ bool SIM_hair_volume_solve_divergence(HairGrid *grid,
 
     return true;
   }
-  else {
-    /* Clear result in case of error */
-    for (i = 0, vert = grid->verts; i < num_cells; i++, vert++) {
-      zero_v3(vert->velocity_smooth);
-    }
 
-    return false;
+  /* Clear result in case of error */
+  for (i = 0, vert = grid->verts; i < num_cells; i++, vert++) {
+    zero_v3(vert->velocity_smooth);
   }
+
+  return false;
 }
 
 #if 0 /* XXX weighting is incorrect, disabled for now */

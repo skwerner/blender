@@ -1214,7 +1214,7 @@ static void cb_mlooptri_edges_get(const int index, int v_index[3], const BVHTree
   const MLoopTri *lt = &data->looptri[index];
   for (int j = 2, j_next = 0; j_next < 3; j = j_next++) {
     const MEdge *ed = &medge[mloop[lt->tri[j]].e];
-    uint tri_edge[2] = {mloop[lt->tri[j]].v, mloop[lt->tri[j_next]].v};
+    const uint tri_edge[2] = {mloop[lt->tri[j]].v, mloop[lt->tri[j_next]].v};
     if (ELEM(ed->v1, tri_edge[0], tri_edge[1]) && ELEM(ed->v2, tri_edge[0], tri_edge[1])) {
       // printf("real edge found\n");
       v_index[j] = mloop[lt->tri[j]].e;
@@ -1276,7 +1276,7 @@ static bool test_projected_edge_dist(const struct DistProjectedAABBPrecalc *prec
                                      float r_co[3])
 {
   float near_co[3], lambda;
-  if (!isect_ray_seg_v3(precalc->ray_origin, precalc->ray_direction, va, vb, &lambda)) {
+  if (!isect_ray_line_v3(precalc->ray_origin, precalc->ray_direction, va, vb, &lambda)) {
     copy_v3_v3(near_co, va);
   }
   else {
@@ -1302,11 +1302,11 @@ static bool test_projected_edge_dist(const struct DistProjectedAABBPrecalc *prec
  * \{ */
 
 typedef void (*Nearest2DGetVertCoCallback)(const int index, const float **co, void *data);
-typedef void (*Nearest2DGetEdgeVertsCallback)(const int index, int v_index[2], void *data);
-typedef void (*Nearest2DGetTriVertsCallback)(const int index, int v_index[3], void *data);
+typedef void (*Nearest2DGetEdgeVertsCallback)(const int index, const int v_index[2], void *data);
+typedef void (*Nearest2DGetTriVertsCallback)(const int index, const int v_index[3], void *data);
 /* Equal the previous one */
-typedef void (*Nearest2DGetTriEdgesCallback)(const int index, int e_index[3], void *data);
-typedef void (*Nearest2DCopyVertNoCallback)(const int index, float r_no[3], void *data);
+typedef void (*Nearest2DGetTriEdgesCallback)(const int index, const int e_index[3], void *data);
+typedef void (*Nearest2DCopyVertNoCallback)(const int index, const float r_no[3], void *data);
 
 typedef struct Nearest2dUserData {
   void *userdata;
@@ -1668,11 +1668,11 @@ static short snap_mesh_edge_verts_mixed(SnapObjectContext *sctx,
   };
 
   float lambda;
-  if (!isect_ray_seg_v3(neasrest_precalc.ray_origin,
-                        neasrest_precalc.ray_direction,
-                        v_pair[0],
-                        v_pair[1],
-                        &lambda)) {
+  if (!isect_ray_line_v3(neasrest_precalc.ray_origin,
+                         neasrest_precalc.ray_direction,
+                         v_pair[0],
+                         v_pair[1],
+                         &lambda)) {
     /* do nothing */
   }
   else {

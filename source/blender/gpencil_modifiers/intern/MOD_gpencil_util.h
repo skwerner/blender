@@ -21,12 +21,9 @@
  * \ingroup modifiers
  */
 
-#ifndef __MOD_GPENCIL_UTIL_H__
-#define __MOD_GPENCIL_UTIL_H__
+#pragma once
 
-struct GHash;
 struct MDeformVert;
-struct Main;
 struct Material;
 struct Object;
 struct bGPDlayer;
@@ -46,5 +43,3 @@ bool is_stroke_affected_by_modifier(struct Object *ob,
                                     const bool inv4);
 
 float get_modifier_point_weight(struct MDeformVert *dvert, bool inverse, int def_nr);
-
-#endif /* __MOD_GPENCIL_UTIL_H__ */

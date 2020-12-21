@@ -195,9 +195,9 @@ static void arrow_draw_intern(ArrowGizmo3D *arrow, const bool select, const bool
 
   GPU_matrix_push();
   GPU_matrix_mul(matrix_final);
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
   arrow_draw_geom(arrow, select, color);
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 
   GPU_matrix_pop();
 
@@ -207,9 +207,9 @@ static void arrow_draw_intern(ArrowGizmo3D *arrow, const bool select, const bool
     GPU_matrix_push();
     GPU_matrix_mul(inter->init_matrix_final);
 
-    GPU_blend(true);
+    GPU_blend(GPU_BLEND_ALPHA);
     arrow_draw_geom(arrow, select, (const float[4]){0.5f, 0.5f, 0.5f, 0.5f});
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
 
     GPU_matrix_pop();
   }
@@ -239,7 +239,7 @@ static int gizmo_arrow_test_select(bContext *UNUSED(C), wmGizmo *gz, const int m
   WM_gizmo_calc_matrix_final(gz, matrix_final);
 
   /* Arrow in pixel space. */
-  float arrow_start[2] = {matrix_final[3][0], matrix_final[3][1]};
+  const float arrow_start[2] = {matrix_final[3][0], matrix_final[3][1]};
   float arrow_end[2];
   {
     float co[3] = {0, 0, arrow_length};

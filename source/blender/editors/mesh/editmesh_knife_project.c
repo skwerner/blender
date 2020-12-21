@@ -164,7 +164,7 @@ void MESH_OT_knife_project(wmOperatorType *ot)
   /* description */
   ot->name = "Knife Project";
   ot->idname = "MESH_OT_knife_project";
-  ot->description = "Use other objects outlines & boundaries to project knife cuts";
+  ot->description = "Use other objects outlines and boundaries to project knife cuts";
 
   /* callbacks */
   ot->exec = knifeproject_exec;
@@ -177,6 +177,6 @@ void MESH_OT_knife_project(wmOperatorType *ot)
   RNA_def_boolean(ot->srna,
                   "cut_through",
                   false,
-                  "Cut through",
+                  "Cut Through",
                   "Cut through all faces, not just visible ones");
 }

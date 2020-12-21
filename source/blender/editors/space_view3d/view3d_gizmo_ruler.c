@@ -83,7 +83,7 @@ enum {
   RULERITEM_USE_ANGLE_ACTIVE = (1 << 1),
 };
 
-/* keep smaller then selection, since we may want click elsewhere without selecting a ruler */
+/* keep smaller than selection, since we may want click elsewhere without selecting a ruler */
 #define RULER_PICK_DIST 12.0f
 #define RULER_PICK_DIST_SQ (RULER_PICK_DIST * RULER_PICK_DIST)
 
@@ -179,7 +179,7 @@ static void ruler_item_as_string(
       BLI_snprintf(numstr, numstr_size, "%.*f°", prec, RAD2DEGF(ruler_angle));
     }
     else {
-      bUnit_AsString2(
+      BKE_unit_value_as_string(
           numstr, numstr_size, (double)ruler_angle, prec, B_UNIT_ROTATION, unit, false);
     }
   }
@@ -190,13 +190,13 @@ static void ruler_item_as_string(
       BLI_snprintf(numstr, numstr_size, "%.*f", prec, ruler_len);
     }
     else {
-      bUnit_AsString2(numstr,
-                      numstr_size,
-                      (double)(ruler_len * unit->scale_length),
-                      prec,
-                      B_UNIT_LENGTH,
-                      unit,
-                      false);
+      BKE_unit_value_as_string(numstr,
+                               numstr_size,
+                               (double)(ruler_len * unit->scale_length),
+                               prec,
+                               B_UNIT_LENGTH,
+                               unit,
+                               false);
     }
   }
 }
@@ -315,8 +315,6 @@ static bool view3d_ruler_item_mousemove(struct Depsgraph *depsgraph,
   const float eps_bias = 0.0002f;
   float dist_px = MVAL_MAX_PX_DIST * U.pixelsize; /* snap dist */
 
-  WM_gizmo_set_flag(snap_gizmo, WM_GIZMO_HIDDEN, true);
-
   if (ruler_item) {
     RulerInteraction *inter = ruler_item->gz.interaction_data;
     float *co = ruler_item->co[inter->co_index];
@@ -388,12 +386,8 @@ static bool view3d_ruler_item_mousemove(struct Depsgraph *depsgraph,
             snap_gizmo->ptr, ruler_info->snap_data.prop_prevpoint, prev_point);
       }
 
-      short snap_elem = ED_gizmotypes_snap_3d_update(
+      ED_gizmotypes_snap_3d_update(
           snap_gizmo, depsgraph, ruler_info->region, v3d, ruler_info->wm, mval_fl, co, NULL);
-
-      if (snap_elem) {
-        WM_gizmo_set_flag(snap_gizmo, WM_GIZMO_HIDDEN, false);
-      }
     }
     return true;
   }
@@ -607,7 +601,7 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
   GPU_matrix_projection_set(rv3d->winmat);
   GPU_matrix_set(rv3d->viewmat);
 
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   const uint shdr_pos_3d = GPU_vertformat_attr_add(
       immVertexFormat(), "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
@@ -735,7 +729,7 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
       rot_90_vec_b[1] = dir_ruler[0];
       normalize_v2(rot_90_vec_b);
 
-      GPU_blend(true);
+      GPU_blend(GPU_BLEND_ALPHA);
 
       if (proj_ok[1] && is_act && (ruler_item->flag & RULERITEM_USE_ANGLE_ACTIVE)) {
         GPU_line_width(3.0f);
@@ -781,7 +775,7 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
         immEnd();
       }
 
-      GPU_blend(false);
+      GPU_blend(GPU_BLEND_NONE);
     }
 
     /* text */
@@ -800,13 +794,13 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
     /* draw text (bg) */
     if (proj_ok[1]) {
       immUniformColor4fv(color_back);
-      GPU_blend(true);
+      GPU_blend(GPU_BLEND_ALPHA);
       immRectf(shdr_pos_2d,
                posit[0] - bg_margin,
                posit[1] - bg_margin,
                posit[0] + bg_margin + numstr_size[0],
                posit[1] + bg_margin + numstr_size[1]);
-      GPU_blend(false);
+      GPU_blend(GPU_BLEND_NONE);
     }
 
     immUnbindProgram();
@@ -831,7 +825,7 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
 
       normalize_v2(rot_90_vec);
 
-      GPU_blend(true);
+      GPU_blend(GPU_BLEND_ALPHA);
 
       immUniformColor3ubv(color_wire);
 
@@ -855,7 +849,7 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
         immEnd();
       }
 
-      GPU_blend(false);
+      GPU_blend(GPU_BLEND_NONE);
     }
 
     /* text */
@@ -877,13 +871,13 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
     /* draw text (bg) */
     if (proj_ok[0] && proj_ok[2]) {
       immUniformColor4fv(color_back);
-      GPU_blend(true);
+      GPU_blend(GPU_BLEND_ALPHA);
       immRectf(shdr_pos_2d,
                posit[0] - bg_margin,
                posit[1] - bg_margin,
                posit[0] + bg_margin + numstr_size[0],
                posit[1] + bg_margin + numstr_size[1]);
-      GPU_blend(false);
+      GPU_blend(GPU_BLEND_NONE);
     }
 
     immUnbindProgram();
@@ -909,7 +903,7 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
 static int gizmo_ruler_test_select(bContext *UNUSED(C), wmGizmo *gz, const int mval[2])
 {
   RulerItem *ruler_item_pick = (RulerItem *)gz;
-  float mval_fl[2] = {UNPACK2(mval)};
+  const float mval_fl[2] = {UNPACK2(mval)};
   int co_index;
 
   /* select and drag */
@@ -1074,7 +1068,6 @@ static void gizmo_ruler_exit(bContext *C, wmGizmo *gz, const bool cancel)
 
   if (!cancel) {
     if (ruler_info->state == RULER_STATE_DRAG) {
-      WM_gizmo_set_flag(ruler_info->snap_data.gizmo, WM_GIZMO_HIDDEN, false);
       RNA_property_unset(ruler_info->snap_data.gizmo->ptr, ruler_info->snap_data.prop_prevpoint);
       ruler_state_set(ruler_info, RULER_STATE_NORMAL);
     }

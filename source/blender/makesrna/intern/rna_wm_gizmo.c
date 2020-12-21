@@ -45,8 +45,6 @@
 
 #ifdef RNA_RUNTIME
 
-#  include <assert.h>
-
 #  include "BLI_string_utils.h"
 
 #  include "WM_api.h"
@@ -62,6 +60,8 @@
 #  include "BKE_workspace.h"
 
 #  include "MEM_guardedalloc.h"
+
+#  include "GPU_state.h"
 
 #  ifdef WITH_PYTHON
 #    include "BPY_extern.h"
@@ -86,6 +86,8 @@ static void rna_gizmo_draw_cb(const struct bContext *C, struct wmGizmo *gz)
   RNA_parameter_set_lookup(&list, "context", &C);
   gzgroup->type->rna_ext.call((bContext *)C, &gz_ptr, func, &list);
   RNA_parameter_list_free(&list);
+  /* This callback may have called bgl functions. */
+  GPU_bgl_end();
 }
 
 static void rna_gizmo_draw_select_cb(const struct bContext *C, struct wmGizmo *gz, int select_id)
@@ -103,6 +105,8 @@ static void rna_gizmo_draw_select_cb(const struct bContext *C, struct wmGizmo *g
   RNA_parameter_set_lookup(&list, "select_id", &select_id);
   gzgroup->type->rna_ext.call((bContext *)C, &gz_ptr, func, &list);
   RNA_parameter_list_free(&list);
+  /* This callback may have called bgl functions. */
+  GPU_bgl_end();
 }
 
 static int rna_gizmo_test_select_cb(struct bContext *C, struct wmGizmo *gz, const int location[2])
@@ -240,7 +244,7 @@ static void rna_Gizmo_bl_idname_set(PointerRNA *ptr, const char *value)
     BLI_strncpy(str, value, MAX_NAME); /* utf8 already ensured */
   }
   else {
-    assert(!"setting the bl_idname on a non-builtin operator");
+    BLI_assert(!"setting the bl_idname on a non-builtin operator");
   }
 }
 
@@ -398,7 +402,7 @@ RNA_GIZMO_GENERIC_FLAG_RW_DEF(flag_use_draw_hover, flag, WM_GIZMO_DRAW_HOVER);
 RNA_GIZMO_GENERIC_FLAG_RW_DEF(flag_use_draw_modal, flag, WM_GIZMO_DRAW_MODAL);
 RNA_GIZMO_GENERIC_FLAG_RW_DEF(flag_use_draw_value, flag, WM_GIZMO_DRAW_VALUE);
 RNA_GIZMO_GENERIC_FLAG_RW_DEF(flag_use_draw_offset_scale, flag, WM_GIZMO_DRAW_OFFSET_SCALE);
-RNA_GIZMO_GENERIC_FLAG_NEG_RW_DEF(flag_use_draw_scale, flag, WM_GIZMO_DRAW_OFFSET_SCALE);
+RNA_GIZMO_GENERIC_FLAG_NEG_RW_DEF(flag_use_draw_scale, flag, WM_GIZMO_DRAW_NO_SCALE);
 RNA_GIZMO_GENERIC_FLAG_RW_DEF(flag_hide, flag, WM_GIZMO_HIDDEN);
 RNA_GIZMO_GENERIC_FLAG_RW_DEF(flag_hide_select, flag, WM_GIZMO_HIDDEN_SELECT);
 RNA_GIZMO_GENERIC_FLAG_RW_DEF(flag_hide_keymap, flag, WM_GIZMO_HIDDEN_KEYMAP);
@@ -554,6 +558,7 @@ static StructRNA *rna_Gizmo_refine(PointerRNA *mnp_ptr)
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name Gizmo Group API
  * \{ */
 
@@ -632,7 +637,7 @@ static void rna_GizmoGroup_bl_idname_set(PointerRNA *ptr, const char *value)
     BLI_strncpy(str, value, MAX_NAME); /* utf8 already ensured */
   }
   else {
-    assert(!"setting the bl_idname on a non-builtin operator");
+    BLI_assert(!"setting the bl_idname on a non-builtin operator");
   }
 }
 
@@ -644,7 +649,7 @@ static void rna_GizmoGroup_bl_label_set(PointerRNA *ptr, const char *value)
     BLI_strncpy(str, value, MAX_NAME); /* utf8 already ensured */
   }
   else {
-    assert(!"setting the bl_label on a non-builtin operator");
+    BLI_assert(!"setting the bl_label on a non-builtin operator");
   }
 }
 

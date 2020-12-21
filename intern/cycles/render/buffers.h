@@ -92,7 +92,7 @@ class RenderBuffers {
       const string &name, float exposure, int sample, int components, float *pixels);
   bool get_denoising_pass_rect(
       int offset, float exposure, int sample, int components, float *pixels);
-  bool set_pass_rect(PassType type, int components, float *pixels);
+  bool set_pass_rect(PassType type, int components, float *pixels, int samples);
 };
 
 /* Display Buffer
@@ -145,6 +145,9 @@ class RenderTile {
 
   device_ptr buffer;
   int device_size;
+
+  typedef enum { NO_STEALING = 0, CAN_BE_STOLEN = 1, WAS_STOLEN = 2 } StealingState;
+  StealingState stealing_state;
 
   RenderBuffers *buffers;
 

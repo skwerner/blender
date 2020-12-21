@@ -33,6 +33,7 @@
 
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
+#include "DNA_material_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
@@ -180,9 +181,8 @@ float get_modifier_point_weight(MDeformVert *dvert, bool inverse, int def_nr)
     if (inverse == 1) {
       return 1.0f;
     }
-    else {
-      return -1.0f;
-    }
+
+    return -1.0f;
   }
 
   return weight;

@@ -23,11 +23,14 @@
  * and arbitrary text data to store in blend files.
  */
 
-#ifndef __DNA_TEXT_TYPES_H__
-#define __DNA_TEXT_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_listBase.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct TextLine {
   struct TextLine *next, *prev;
@@ -86,4 +89,6 @@ enum {
   TXT_TABSTOSPACES = 1 << 10,
 };
 
-#endif /* __DNA_TEXT_TYPES_H__ */
+#ifdef __cplusplus
+}
+#endif

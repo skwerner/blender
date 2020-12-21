@@ -20,12 +20,14 @@
 #include "render/integrator.h"
 #include "render/mesh.h"
 #include "render/scene.h"
+#include "render/stats.h"
 #include "render/tables.h"
 
 #include "util/util_algorithm.h"
 #include "util/util_foreach.h"
 #include "util/util_math.h"
 #include "util/util_math_cdf.h"
+#include "util/util_time.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -36,6 +38,66 @@ static bool compare_pass_order(const Pass &a, const Pass &b)
   if (a.components == b.components)
     return (a.type < b.type);
   return (a.components > b.components);
+}
+
+static NodeEnum *get_pass_type_enum()
+{
+  static NodeEnum pass_type_enum;
+  pass_type_enum.insert("combined", PASS_COMBINED);
+  pass_type_enum.insert("depth", PASS_DEPTH);
+  pass_type_enum.insert("normal", PASS_NORMAL);
+  pass_type_enum.insert("uv", PASS_UV);
+  pass_type_enum.insert("object_id", PASS_OBJECT_ID);
+  pass_type_enum.insert("material_id", PASS_MATERIAL_ID);
+  pass_type_enum.insert("motion", PASS_MOTION);
+  pass_type_enum.insert("motion_weight", PASS_MOTION_WEIGHT);
+#ifdef __KERNEL_DEBUG__
+  pass_type_enum.insert("traversed_nodes", PASS_BVH_TRAVERSED_NODES);
+  pass_type_enum.insert("traverse_instances", PASS_BVH_TRAVERSED_INSTANCES);
+  pass_type_enum.insert("bvh_intersections", PASS_BVH_INTERSECTIONS);
+  pass_type_enum.insert("ray_bounces", PASS_RAY_BOUNCES);
+#endif
+  pass_type_enum.insert("render_time", PASS_RENDER_TIME);
+  pass_type_enum.insert("cryptomatte", PASS_CRYPTOMATTE);
+  pass_type_enum.insert("aov_color", PASS_AOV_COLOR);
+  pass_type_enum.insert("aov_value", PASS_AOV_VALUE);
+  pass_type_enum.insert("adaptive_aux_buffer", PASS_ADAPTIVE_AUX_BUFFER);
+  pass_type_enum.insert("sample_count", PASS_SAMPLE_COUNT);
+  pass_type_enum.insert("mist", PASS_MIST);
+  pass_type_enum.insert("emission", PASS_EMISSION);
+  pass_type_enum.insert("background", PASS_BACKGROUND);
+  pass_type_enum.insert("ambient_occlusion", PASS_AO);
+  pass_type_enum.insert("shadow", PASS_SHADOW);
+  pass_type_enum.insert("diffuse_direct", PASS_DIFFUSE_DIRECT);
+  pass_type_enum.insert("diffuse_indirect", PASS_DIFFUSE_INDIRECT);
+  pass_type_enum.insert("diffuse_color", PASS_DIFFUSE_COLOR);
+  pass_type_enum.insert("glossy_direct", PASS_GLOSSY_DIRECT);
+  pass_type_enum.insert("glossy_indirect", PASS_GLOSSY_INDIRECT);
+  pass_type_enum.insert("glossy_color", PASS_GLOSSY_COLOR);
+  pass_type_enum.insert("transmission_direct", PASS_TRANSMISSION_DIRECT);
+  pass_type_enum.insert("transmission_indirect", PASS_TRANSMISSION_INDIRECT);
+  pass_type_enum.insert("transmission_color", PASS_TRANSMISSION_COLOR);
+  pass_type_enum.insert("volume_direct", PASS_VOLUME_DIRECT);
+  pass_type_enum.insert("volume_indirect", PASS_VOLUME_INDIRECT);
+  pass_type_enum.insert("bake_primitive", PASS_BAKE_PRIMITIVE);
+  pass_type_enum.insert("bake_differential", PASS_BAKE_DIFFERENTIAL);
+
+  return &pass_type_enum;
+}
+
+NODE_DEFINE(Pass)
+{
+  NodeType *type = NodeType::add("pass", create);
+
+  NodeEnum *pass_type_enum = get_pass_type_enum();
+  SOCKET_ENUM(type, "Type", *pass_type_enum, PASS_COMBINED);
+  SOCKET_STRING(name, "Name", ustring());
+
+  return type;
+}
+
+Pass::Pass() : Node(node_type)
+{
 }
 
 void Pass::add(PassType type, vector<Pass> &passes, const char *name)
@@ -199,6 +261,8 @@ void Pass::add(PassType type, vector<Pass> &passes, const char *name)
     case PASS_BAKE_PRIMITIVE:
     case PASS_BAKE_DIFFERENTIAL:
       pass.components = 4;
+      pass.exposure = false;
+      pass.filter = false;
       break;
     default:
       assert(false);
@@ -325,29 +389,51 @@ NODE_DEFINE(Film)
   SOCKET_INT(denoising_flags, "Denoising Flags", 0);
   SOCKET_BOOLEAN(use_adaptive_sampling, "Use Adaptive Sampling", false);
 
+  SOCKET_BOOLEAN(use_light_visibility, "Use Light Visibility", false);
+
+  NodeEnum *pass_type_enum = get_pass_type_enum();
+  SOCKET_ENUM(display_pass, "Display Pass", *pass_type_enum, PASS_COMBINED);
+
+  static NodeEnum cryptomatte_passes_enum;
+  cryptomatte_passes_enum.insert("none", CRYPT_NONE);
+  cryptomatte_passes_enum.insert("object", CRYPT_OBJECT);
+  cryptomatte_passes_enum.insert("material", CRYPT_MATERIAL);
+  cryptomatte_passes_enum.insert("asset", CRYPT_ASSET);
+  cryptomatte_passes_enum.insert("accurate", CRYPT_ACCURATE);
+  SOCKET_ENUM(cryptomatte_passes, "Cryptomatte Passes", cryptomatte_passes_enum, CRYPT_NONE);
+
+  SOCKET_INT(cryptomatte_depth, "Cryptomatte Depth", 0);
+
   return type;
 }
 
 Film::Film() : Node(node_type)
 {
-  Pass::add(PASS_COMBINED, passes);
-
   use_light_visibility = false;
   filter_table_offset = TABLE_OFFSET_INVALID;
   cryptomatte_passes = CRYPT_NONE;
   display_pass = PASS_COMBINED;
-
-  need_update = true;
 }
 
 Film::~Film()
 {
 }
 
+void Film::add_default(Scene *scene)
+{
+  Pass::add(PASS_COMBINED, scene->passes);
+}
+
 void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 {
-  if (!need_update)
+  if (!is_modified())
     return;
+
+  scoped_callback_timer timer([scene](double time) {
+    if (scene->update_stats) {
+      scene->update_stats->film.times.add_entry({"update", time});
+    }
+  });
 
   device_free(device, dscene, scene);
 
@@ -371,8 +457,8 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 
   bool have_cryptomatte = false;
 
-  for (size_t i = 0; i < passes.size(); i++) {
-    Pass &pass = passes[i];
+  for (size_t i = 0; i < scene->passes.size(); i++) {
+    Pass &pass = scene->passes[i];
 
     if (pass.type == PASS_NONE) {
       continue;
@@ -591,7 +677,7 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
   denoising_data_offset = kfilm->pass_denoising_data;
   denoising_clean_offset = kfilm->pass_denoising_clean;
 
-  need_update = false;
+  clear_modified();
 }
 
 void Film::device_free(Device * /*device*/, DeviceScene * /*dscene*/, Scene *scene)
@@ -599,40 +685,30 @@ void Film::device_free(Device * /*device*/, DeviceScene * /*dscene*/, Scene *sce
   scene->lookup_tables->remove_table(&filter_table_offset);
 }
 
-bool Film::modified(const Film &film)
-{
-  return !Node::equals(film) || !Pass::equals(passes, film.passes);
-}
-
 void Film::tag_passes_update(Scene *scene, const vector<Pass> &passes_, bool update_passes)
 {
-  if (Pass::contains(passes, PASS_UV) != Pass::contains(passes_, PASS_UV)) {
+  if (Pass::contains(scene->passes, PASS_UV) != Pass::contains(passes_, PASS_UV)) {
     scene->geometry_manager->tag_update(scene);
 
     foreach (Shader *shader, scene->shaders)
       shader->need_update_geometry = true;
   }
-  else if (Pass::contains(passes, PASS_MOTION) != Pass::contains(passes_, PASS_MOTION)) {
+  else if (Pass::contains(scene->passes, PASS_MOTION) != Pass::contains(passes_, PASS_MOTION)) {
     scene->geometry_manager->tag_update(scene);
   }
-  else if (Pass::contains(passes, PASS_AO) != Pass::contains(passes_, PASS_AO)) {
+  else if (Pass::contains(scene->passes, PASS_AO) != Pass::contains(passes_, PASS_AO)) {
     scene->integrator->tag_update(scene);
   }
 
   if (update_passes) {
-    passes = passes_;
+    scene->passes = passes_;
   }
 }
 
-void Film::tag_update(Scene * /*scene*/)
-{
-  need_update = true;
-}
-
-int Film::get_aov_offset(string name, bool &is_color)
+int Film::get_aov_offset(Scene *scene, string name, bool &is_color)
 {
   int num_color = 0, num_value = 0;
-  foreach (const Pass &pass, passes) {
+  foreach (const Pass &pass, scene->passes) {
     if (pass.type == PASS_AOV_COLOR) {
       num_color++;
     }
@@ -650,6 +726,26 @@ int Film::get_aov_offset(string name, bool &is_color)
   }
 
   return -1;
+}
+
+int Film::get_pass_stride() const
+{
+  return pass_stride;
+}
+
+int Film::get_denoising_data_offset() const
+{
+  return denoising_data_offset;
+}
+
+int Film::get_denoising_clean_offset() const
+{
+  return denoising_clean_offset;
+}
+
+size_t Film::get_filter_table_offset() const
+{
+  return filter_table_offset;
 }
 
 CCL_NAMESPACE_END

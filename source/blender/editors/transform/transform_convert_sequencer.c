@@ -29,9 +29,10 @@
 
 #include "BKE_context.h"
 #include "BKE_report.h"
-#include "BKE_sequencer.h"
 
 #include "ED_markers.h"
+
+#include "SEQ_sequencer.h"
 
 #include "UI_view2d.h"
 
@@ -381,7 +382,7 @@ static void freeSeqData(TransInfo *t, TransDataContainer *tc, TransCustomData *c
 
     if (!(t->state == TRANS_CANCEL)) {
 
-#if 0  // default 2.4 behavior
+#if 0 /* Default 2.4 behavior. */
 
       /* flush to 2d vector from internally used 3d vector */
       for (a = 0; a < t->total; a++, td++) {
@@ -393,7 +394,7 @@ static void freeSeqData(TransInfo *t, TransDataContainer *tc, TransCustomData *c
         seq_prev = seq;
       }
 
-#else  // durian hack
+#else /* durian hack */
       {
         int overlap = 0;
 
@@ -629,7 +630,7 @@ void createTransSeqData(TransInfo *t)
  * \{ */
 
 /* commented _only_ because the meta may have animation data which
- * needs moving too [#28158] */
+ * needs moving too T28158. */
 
 #define SEQ_TX_NESTED_METAS
 
@@ -739,7 +740,7 @@ static void flushTransSeq(TransInfo *t)
   if (ELEM(t->mode, TFM_SEQ_SLIDE, TFM_TIME_TRANSLATE)) {
     /* Special annoying case here, need to calc metas with TFM_TIME_EXTEND only */
 
-    /* calc all meta's then effects [#27953] */
+    /* calc all meta's then effects T27953. */
     for (seq = seqbasep->first; seq; seq = seq->next) {
       if (seq->type == SEQ_TYPE_META && seq->flag & SELECT) {
         BKE_sequence_calc(t->scene, seq);

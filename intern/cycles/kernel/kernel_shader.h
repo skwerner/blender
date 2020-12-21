@@ -253,11 +253,11 @@ ccl_device_inline
 #  ifdef __DPDU__
     object_dir_transform_auto(kg, sd, &sd->dPdu);
     object_dir_transform_auto(kg, sd, &sd->dPdv);
-#    endif
-#    ifdef __DNDU__
+#  endif
+#  ifdef __DNDU__
     object_dir_transform(kg, sd, &sd->dNdx);
     object_dir_transform(kg, sd, &sd->dNdy);
-#    endif
+#  endif
   }
 
   /* backfacing test */

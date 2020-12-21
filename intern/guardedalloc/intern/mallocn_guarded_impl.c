@@ -24,6 +24,7 @@
  */
 
 #include <stdarg.h>
+#include <stddef.h> /* offsetof */
 #include <stdlib.h>
 #include <string.h> /* memcpy */
 #include <sys/types.h>
@@ -153,7 +154,7 @@ static const char *check_memlist(MemHead *memh);
 #define MEMTAG3 MAKE_ID('O', 'C', 'K', '!')
 #define MEMFREE MAKE_ID('F', 'R', 'E', 'E')
 
-#define MEMNEXT(x) ((MemHead *)(((char *)x) - ((char *)&(((MemHead *)0)->next))))
+#define MEMNEXT(x) ((MemHead *)(((char *)x) - offsetof(MemHead, next)))
 
 /* --------------------------------------------------------------------- */
 /* vars                                                                  */
@@ -249,9 +250,8 @@ size_t MEM_guarded_allocN_len(const void *vmemh)
     memh--;
     return memh->len;
   }
-  else {
-    return 0;
-  }
+
+  return 0;
 }
 
 void *MEM_guarded_dupallocN(const void *vmemh)
@@ -611,12 +611,11 @@ static int compare_len(const void *p1, const void *p2)
   if (pb1->len < pb2->len) {
     return 1;
   }
-  else if (pb1->len == pb2->len) {
+  if (pb1->len == pb2->len) {
     return 0;
   }
-  else {
-    return -1;
-  }
+
+  return -1;
 }
 
 void MEM_guarded_printmemlist_stats(void)
@@ -682,7 +681,7 @@ void MEM_guarded_printmemlist_stats(void)
     if (a == b) {
       continue;
     }
-    else if (strcmp(printblock[a].name, printblock[b].name) == 0) {
+    if (strcmp(printblock[a].name, printblock[b].name) == 0) {
       printblock[b].len += printblock[a].len;
       printblock[b].items++;
     }
@@ -897,6 +896,10 @@ void MEM_guarded_freeN(void *vmemh)
   if ((memh->tag1 == MEMTAG1) && (memh->tag2 == MEMTAG2) && ((memh->len & 0x3) == 0)) {
     memt = (MemTail *)(((char *)memh) + sizeof(MemHead) + memh->len);
     if (memt->tag3 == MEMTAG3) {
+
+      if (leak_detector_has_run) {
+        MemorY_ErroR(memh->name, free_after_leak_detection_message);
+      }
 
       memh->tag1 = MEMFREE;
       memh->tag2 = MEMFREE;
@@ -1158,7 +1161,7 @@ static const char *check_memlist(MemHead *memh)
     return ("Additional error in header");
   }
 
-  return (name);
+  return name;
 }
 
 size_t MEM_guarded_get_peak_memory(void)
@@ -1209,8 +1212,7 @@ const char *MEM_guarded_name_ptr(void *vmemh)
     memh--;
     return memh->name;
   }
-  else {
-    return "MEM_guarded_name_ptr(NULL)";
-  }
+
+  return "MEM_guarded_name_ptr(NULL)";
 }
 #endif /* NDEBUG */

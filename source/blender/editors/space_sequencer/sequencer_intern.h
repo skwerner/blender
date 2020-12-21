@@ -21,8 +21,7 @@
  * \ingroup spseq
  */
 
-#ifndef __SEQUENCER_INTERN_H__
-#define __SEQUENCER_INTERN_H__
+#pragma once
 
 #include "DNA_sequence_types.h"
 #include "RNA_access.h"
@@ -48,7 +47,7 @@ void sequencer_draw_preview(const struct bContext *C,
                             struct Scene *scene,
                             struct ARegion *region,
                             struct SpaceSeq *sseq,
-                            int cfra,
+                            int timeline_frame,
                             int offset,
                             bool draw_overlay,
                             bool draw_backdrop);
@@ -61,17 +60,17 @@ float sequence_handle_size_get_clamped(struct Sequence *seq, const float pixelx)
 /* void seq_reset_imageofs(struct SpaceSeq *sseq); */
 
 struct ImBuf *sequencer_ibuf_get(struct Main *bmain,
+                                 struct ARegion *region,
                                  struct Depsgraph *depsgraph,
                                  struct Scene *scene,
                                  struct SpaceSeq *sseq,
-                                 int cfra,
+                                 int timeline_frame,
                                  int frame_ofs,
                                  const char *viewname);
 
 /* sequencer_edit.c */
 struct View2D;
 void seq_rectf(struct Sequence *seq, struct rctf *rectf);
-void boundbox_seq(struct Scene *scene, struct rctf *rect);
 struct Sequence *find_nearest_seq(struct Scene *scene,
                                   struct View2D *v2d,
                                   int *hand,
@@ -145,6 +144,8 @@ void SEQUENCER_OT_enable_proxies(struct wmOperatorType *ot);
 void SEQUENCER_OT_export_subtitles(struct wmOperatorType *ot);
 
 void SEQUENCER_OT_set_range_to_strips(struct wmOperatorType *ot);
+void SEQUENCER_OT_strip_transform_clear(struct wmOperatorType *ot);
+void SEQUENCER_OT_strip_transform_fit(struct wmOperatorType *ot);
 
 /* sequencer_select.c */
 void SEQUENCER_OT_select_all(struct wmOperatorType *ot);
@@ -208,5 +209,3 @@ int sequencer_image_seq_get_minmax_frame(struct wmOperator *op,
                                          int *r_numdigits);
 void sequencer_image_seq_reserve_frames(
     struct wmOperator *op, struct StripElem *se, int len, int minframe, int numdigits);
-
-#endif /* __SEQUENCER_INTERN_H__ */

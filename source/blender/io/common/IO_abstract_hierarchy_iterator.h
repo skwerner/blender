@@ -33,25 +33,23 @@
  * Selections like "selected only" or "no hair systems" are left to concrete subclasses.
  */
 
-#ifndef __ABSTRACT_HIERARCHY_ITERATOR_H__
-#define __ABSTRACT_HIERARCHY_ITERATOR_H__
+#pragma once
 
 #include "IO_dupli_persistent_id.hh"
+
+#include "DEG_depsgraph.h"
 
 #include <map>
 #include <set>
 #include <string>
 
-struct Base;
 struct Depsgraph;
 struct DupliObject;
 struct ID;
 struct Object;
 struct ParticleSystem;
-struct ViewLayer;
 
-namespace blender {
-namespace io {
+namespace blender::io {
 
 class AbstractHierarchyWriter;
 class DupliParentFinder;
@@ -86,9 +84,9 @@ struct HierarchyContext {
   bool animation_check_include_parent;
 
   /*********** Determined during writer creation: ***************/
-  float parent_matrix_inv_world[4][4];  // Inverse of the parent's world matrix.
-  std::string export_path;          // Hierarchical path, such as "/grandparent/parent/objectname".
-  ParticleSystem *particle_system;  // Only set for particle/hair writers.
+  float parent_matrix_inv_world[4][4]; /* Inverse of the parent's world matrix. */
+  std::string export_path; /* Hierarchical path, such as "/grandparent/parent/objectname". */
+  ParticleSystem *particle_system; /* Only set for particle/hair writers. */
 
   /* Hierarchical path of the object this object is duplicating; only set when this object should
    * be stored as a reference to its original. It can happen that the original is not part of the
@@ -112,6 +110,8 @@ struct HierarchyContext {
   bool is_instance() const;
   void mark_as_instance_of(const std::string &reference_export_path);
   void mark_as_not_instanced();
+
+  bool is_object_visible(const enum eEvaluationMode evaluation_mode) const;
 };
 
 /* Abstract writer for objects. Create concrete subclasses to write to USD, Alembic, etc.
@@ -125,11 +125,18 @@ class AbstractHierarchyWriter {
  public:
   virtual ~AbstractHierarchyWriter();
   virtual void write(HierarchyContext &context) = 0;
-  // TODO(Sybren): add function like absent() that's called when a writer was previously created,
-  // but wasn't used while exporting the current frame (for example, a particle-instanced mesh of
-  // which the particle is no longer alive).
+  /* TODO(Sybren): add function like absent() that's called when a writer was previously created,
+   * but wasn't used while exporting the current frame (for example, a particle-instanced mesh of
+   * which the particle is no longer alive). */
  protected:
+  /* Return true if the data written by this writer changes over time.
+   * Note that this function assumes this is an object data writer. Transform writers should not
+   * call this but implement their own logic. */
   virtual bool check_is_animated(const HierarchyContext &context) const;
+
+  /* Helper functions for animation checks. */
+  static bool check_has_physics(const HierarchyContext &context);
+  static bool check_has_deforming_physics(const HierarchyContext &context);
 };
 
 /* Determines which subset of the writers actually gets to write. */
@@ -340,13 +347,10 @@ class AbstractHierarchyIterator {
   virtual AbstractHierarchyWriter *create_particle_writer(const HierarchyContext *context) = 0;
 
   /* Called by release_writers() to free what the create_XXX_writer() functions allocated. */
-  virtual void delete_object_writer(AbstractHierarchyWriter *writer) = 0;
+  virtual void release_writer(AbstractHierarchyWriter *writer) = 0;
 
   AbstractHierarchyWriter *get_writer(const std::string &export_path) const;
   ExportChildren &graph_children(const HierarchyContext *parent_context);
 };
 
-}  // namespace io
-}  // namespace blender
-
-#endif /* __ABSTRACT_HIERARCHY_ITERATOR_H__ */
+}  // namespace blender::io

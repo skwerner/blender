@@ -22,11 +22,11 @@ CCL_NAMESPACE_BEGIN
 /* === GGX Microfacet distribution functions === */
 
 /* Isotropic GGX microfacet distribution */
-ccl_device_forceinline float D_ggx(float3 wm, float alpha)
+ccl_device_forceinline float D_ggx(float cos_theta_m, float alpha)
 {
-  wm.z *= wm.z;
+  cos_theta_m *= cos_theta_m;
   alpha *= alpha;
-  float tmp = (1.0f - wm.z) + alpha * wm.z;
+  float tmp = (1.0f - cos_theta_m) + alpha * cos_theta_m;
   return alpha / max(M_PI_F * tmp * tmp, 1e-7f);
 }
 
@@ -129,7 +129,7 @@ ccl_device_forceinline float3 mf_eval_phase_glossy(const float3 w,
 
   float phase = max(0.0f, dotW_WH) * 0.25f / max(pArea * dotW_WH, 1e-7f);
   if (alpha.x == alpha.y)
-    phase *= D_ggx(wh, alpha.x);
+    phase *= D_ggx(wh.z, alpha.x);
   else
     phase *= D_ggx_aniso(wh, alpha);
 
@@ -171,7 +171,7 @@ ccl_device_forceinline float3 mf_eval_phase_glass(const float3 w,
       return make_float3(0.0f, 0.0f, 0.0f);
 
     const float dotW_WH = dot(-w, wh);
-    v = fresnel_dielectric_cos(dotW_WH, eta) * max(0.0f, dotW_WH) * D_ggx(wh, alpha.x) * 0.25f /
+    v = fresnel_dielectric_cos(dotW_WH, eta) * max(0.0f, dotW_WH) * D_ggx(wh.z, alpha.x) * 0.25f /
         (pArea * dotW_WH);
   }
   else {
@@ -184,7 +184,7 @@ ccl_device_forceinline float3 mf_eval_phase_glass(const float3 w,
 
     float temp = dotW_WH + eta * dotWO_WH;
     v = (1.0f - fresnel_dielectric_cos(dotW_WH, eta)) * max(0.0f, dotW_WH) * max(0.0f, -dotWO_WH) *
-        D_ggx(wh, alpha.x) / (pArea * temp * temp);
+        D_ggx(wh.z, alpha.x) / (pArea * temp * temp);
   }
 
   return make_float3(v, v, v);
@@ -295,7 +295,8 @@ ccl_device_inline float mf_ggx_transmission_albedo(float a, float ior)
 
 ccl_device_forceinline float mf_ggx_pdf(const float3 wi, const float3 wo, const float alpha)
 {
-  float D = D_ggx(normalize(wi + wo), alpha);
+  float3 wm = wi + wo;
+  float D = D_ggx(wm.z != 0.0f ? normalize(wm).z : 0.0f, alpha);
   float lambda = mf_lambda(wi, make_float2(alpha, alpha));
   float singlescatter = 0.25f * D / max((1.0f + lambda) * wi.z, 1e-7f);
 
@@ -330,7 +331,7 @@ ccl_device_forceinline float mf_glass_pdf(const float3 wi,
     wh = -wh;
   float3 r_wi = (wi.z < 0.0f) ? -wi : wi;
   float lambda = mf_lambda(r_wi, make_float2(alpha, alpha));
-  float D = D_ggx(wh, alpha);
+  float D = D_ggx(wh.z, alpha);
   float fresnel = fresnel_dielectric_cos(dot(r_wi, wh), eta);
 
   float multiscatter = fabsf(wo.z * M_1_PI_F);

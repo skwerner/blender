@@ -533,9 +533,14 @@ ccl_device float3 bsdf_microfacet_ggx_eval_transmit(const ShaderClosure *sc,
   float alpha2 = alpha_x * alpha_y;
   float cosThetaM = dot(N, Ht);
   float cosThetaM2 = cosThetaM * cosThetaM;
-  float tanThetaM2 = (1 - cosThetaM2) / cosThetaM2;
-  float cosThetaM4 = cosThetaM2 * cosThetaM2;
-  D = alpha2 / (M_PI_F * cosThetaM4 * (alpha2 + tanThetaM2) * (alpha2 + tanThetaM2));
+  if (LIKELY(cosThetaM2 > FLT_EPSILON)) {
+    float tanThetaM2 = (1 - cosThetaM2) / cosThetaM2;
+    float cosThetaM4 = cosThetaM2 * cosThetaM2;
+    D = alpha2 / (M_PI_F * cosThetaM4 * (alpha2 + tanThetaM2) * (alpha2 + tanThetaM2));
+  }
+  else {
+    D = 0.0f;
+  }
 
   /* eq. 34: now calculate G1(i,m) and G1(o,m) */
   G1o = 2 / (1 + safe_sqrtf(1 + alpha2 * (1 - cosNO * cosNO) / (cosNO * cosNO)));

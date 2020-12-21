@@ -62,13 +62,16 @@ ccl_device_inline float3 motion_triangle_refine(
   const float3 e2 = verts[1] - verts[2];
   const float3 s1 = cross(D, e2);
 
-  const float invdivisor = 1.0f / dot(s1, e1);
-  const float3 d = P - verts[2];
-  const float3 s2 = cross(d, e1);
-  float rt = dot(e2, s2) * invdivisor;
+  const float divisor = dot(s1, e1);
+  if (fabsf(divisor) > FLT_EPSILON) {
+    const float invdivisor = 1.0f / divisor;
+    const float3 d = P - verts[2];
+    const float3 s2 = cross(d, e1);
+    float rt = dot(e2, s2) * invdivisor;
 
-  /* Compute refined position. */
-  P = P + D * rt;
+    /* Compute refined position. */
+    P = P + D * rt;
+  }
 
   if (isect->object != OBJECT_NONE) {
 #  ifdef __OBJECT_MOTION__
@@ -131,12 +134,15 @@ ccl_device_inline
   const float3 e2 = verts[1] - verts[2];
   const float3 s1 = cross(D, e2);
 
-  const float invdivisor = 1.0f / dot(s1, e1);
-  const float3 d = P - verts[2];
-  const float3 s2 = cross(d, e1);
-  float rt = dot(e2, s2) * invdivisor;
+  const float divisor = dot(s1, e1);
+  if (fabsf(divisor) > FLT_EPSILON) {
+    const float invdivisor = 1.0f / divisor;
+    const float3 d = P - verts[2];
+    const float3 s2 = cross(d, e1);
+    float rt = dot(e2, s2) * invdivisor;
 
-  P = P + D * rt;
+    P = P + D * rt;
+  }
 
   if (isect->object != OBJECT_NONE) {
 #      ifdef __OBJECT_MOTION__

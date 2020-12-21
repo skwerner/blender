@@ -80,7 +80,7 @@ ccl_device_forceinline float3 MF_FUNCTION_FULL_NAME(mf_eval)(float3 wi,
   const float G2 = 1.0f / (1.0f - (lambda_r + 1.0f) + shadowing_lambda);
   float val = G2 * 0.25f / wi.z;
   if (alpha.x == alpha.y)
-    val *= D_ggx(wh, alpha.x);
+    val *= D_ggx(wh.z, alpha.x);
   else
     val *= D_ggx_aniso(wh, alpha);
   eval = make_float3(val, val, val);

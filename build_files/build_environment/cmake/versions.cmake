@@ -120,6 +120,9 @@ set(LLVM_HASH 31eb9ce73dd2a0f8dcab8319fb03f8fc)
 set(CLANG_URI https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/clang-${LLVM_VERSION}.src.tar.xz)
 set(CLANG_HASH 13468e4a44940efef1b75e8641752f90)
 
+set(CLANG_TOOLS_URI https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/clang-tools-extra-${LLVM_VERSION}.src.tar.xz)
+set(CLANG_TOOLS_HASH c76293870b564c6a7968622b475b7646)
+
 set(OPENMP_URI https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/openmp-${LLVM_VERSION}.src.tar.xz)
 set(OPENMP_HASH 6eade16057edbdecb3c4eef9daa2bfcf)
 
@@ -145,15 +148,13 @@ set(TBB_VERSION 2019_U9)
 set(TBB_URI https://github.com/oneapi-src/oneTBB/archive/${TBB_VERSION}.tar.gz)
 set(TBB_HASH 26263622e9187212ec240dcf01b66207)
 
-if(WITH_NANOVDB)
-  set(OPENVDB_GIT_UID e62f7a0bf1e27397223c61ddeaaf57edf111b77f)
-  set(OPENVDB_URI https://github.com/AcademySoftwareFoundation/openvdb/archive/${OPENVDB_GIT_UID}.tar.gz)
-  set(OPENVDB_HASH 90919510bc6ccd630fedc56f748cb199)
-else()
-  set(OPENVDB_VERSION 7.0.0)
-  set(OPENVDB_URI https://github.com/AcademySoftwareFoundation/openvdb/archive/v${OPENVDB_VERSION}.tar.gz)
-  set(OPENVDB_HASH fd6c4f168282f7e0e494d290cd531fa8)
-endif()
+set(OPENVDB_VERSION 7.0.0)
+set(OPENVDB_URI https://github.com/AcademySoftwareFoundation/openvdb/archive/v${OPENVDB_VERSION}.tar.gz)
+set(OPENVDB_HASH fd6c4f168282f7e0e494d290cd531fa8)
+
+set(NANOVDB_GIT_UID e62f7a0bf1e27397223c61ddeaaf57edf111b77f)
+set(NANOVDB_URI https://github.com/AcademySoftwareFoundation/openvdb/archive/${NANOVDB_GIT_UID}.tar.gz)
+set(NANOVDB_HASH 90919510bc6ccd630fedc56f748cb199)
 
 set(IDNA_VERSION 2.9)
 set(CHARDET_VERSION 3.0.4)

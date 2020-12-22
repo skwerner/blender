@@ -41,7 +41,7 @@ extern "C" {
 //-------------------MODULE INITIALIZATION--------------------------------
 int Operators_Init(PyObject *module)
 {
-  if (module == NULL) {
+  if (module == nullptr) {
     return -1;
   }
 
@@ -78,29 +78,30 @@ PyDoc_STRVAR(Operators_select_doc,
 
 static PyObject *Operators_select(BPy_Operators * /*self*/, PyObject *args, PyObject *kwds)
 {
-  static const char *kwlist[] = {"pred", NULL};
-  PyObject *obj = 0;
+  static const char *kwlist[] = {"pred", nullptr};
+  PyObject *obj = nullptr;
 
   if (!PyArg_ParseTupleAndKeywords(
           args, kwds, "O!", (char **)kwlist, &UnaryPredicate1D_Type, &obj)) {
-    return NULL;
+    return nullptr;
   }
   if (!((BPy_UnaryPredicate1D *)obj)->up1D) {
     PyErr_SetString(PyExc_TypeError,
                     "Operators.select(): 1st argument: invalid UnaryPredicate1D object");
-    return NULL;
+    return nullptr;
   }
   if (Operators::select(*(((BPy_UnaryPredicate1D *)obj)->up1D)) < 0) {
     if (!PyErr_Occurred()) {
       PyErr_SetString(PyExc_RuntimeError, "Operators.select() failed");
     }
-    return NULL;
+    return nullptr;
   }
   Py_RETURN_NONE;
 }
 
 PyDoc_STRVAR(Operators_chain_doc,
              ".. staticmethod:: chain(it, pred, modifier)\n"
+             "                  chain(it, pred)\n"
              "\n"
              "   Builds a set of chains from the current set of ViewEdges.  Each\n"
              "   ViewEdge of the current list starts a new chain.  The chaining\n"
@@ -116,33 +117,14 @@ PyDoc_STRVAR(Operators_chain_doc,
              "   :type pred: :class:`UnaryPredicate1D`\n"
              "   :arg modifier: A function that takes a ViewEdge as argument and\n"
              "      that is used to modify the processed ViewEdge state (the\n"
-             "      timestamp incrementation is a typical illustration of such a\n"
-             "      modifier).\n"
-             "   :type modifier: :class:`UnaryFunction1DVoid`\n"
-             "\n"
-             ".. staticmethod:: chain(it, pred)\n"
-             "\n"
-             "   Builds a set of chains from the current set of ViewEdges.  Each\n"
-             "   ViewEdge of the current list starts a new chain.  The chaining\n"
-             "   operator then iterates over the ViewEdges of the ViewMap using the\n"
-             "   user specified iterator.  This operator only iterates using the\n"
-             "   increment operator and is therefore unidirectional.  This chaining\n"
-             "   operator is different from the previous one because it doesn't take\n"
-             "   any modifier as argument.  Indeed, the time stamp (insuring that a\n"
-             "   ViewEdge is processed one time) is automatically managed in this\n"
-             "   case.\n"
-             "\n"
-             "   :arg it: The iterator on the ViewEdges of the ViewMap. It contains\n"
-             "      the chaining rule. \n"
-             "   :type it: :class:`ViewEdgeIterator`\n"
-             "   :arg pred: The predicate on the ViewEdge that expresses the\n"
-             "      stopping condition.\n"
-             "   :type pred: :class:`UnaryPredicate1D`");
+             "      timestamp incrementation is a typical illustration of such a modifier).\n"
+             "      If this argument is not given, the time stamp is automatically managed.\n"
+             "   :type modifier: :class:`UnaryFunction1DVoid`\n");
 
 static PyObject *Operators_chain(BPy_Operators * /*self*/, PyObject *args, PyObject *kwds)
 {
-  static const char *kwlist[] = {"it", "pred", "modifier", NULL};
-  PyObject *obj1 = 0, *obj2 = 0, *obj3 = 0;
+  static const char *kwlist[] = {"it", "pred", "modifier", nullptr};
+  PyObject *obj1 = nullptr, *obj2 = nullptr, *obj3 = nullptr;
 
   if (!PyArg_ParseTupleAndKeywords(args,
                                    kwds,
@@ -154,17 +136,17 @@ static PyObject *Operators_chain(BPy_Operators * /*self*/, PyObject *args, PyObj
                                    &obj2,
                                    &UnaryFunction1DVoid_Type,
                                    &obj3)) {
-    return NULL;
+    return nullptr;
   }
   if (!((BPy_ChainingIterator *)obj1)->c_it) {
     PyErr_SetString(PyExc_TypeError,
                     "Operators.chain(): 1st argument: invalid ChainingIterator object");
-    return NULL;
+    return nullptr;
   }
   if (!((BPy_UnaryPredicate1D *)obj2)->up1D) {
     PyErr_SetString(PyExc_TypeError,
                     "Operators.chain(): 2nd argument: invalid UnaryPredicate1D object");
-    return NULL;
+    return nullptr;
   }
   if (!obj3) {
     if (Operators::chain(*(((BPy_ChainingIterator *)obj1)->c_it),
@@ -172,14 +154,14 @@ static PyObject *Operators_chain(BPy_Operators * /*self*/, PyObject *args, PyObj
       if (!PyErr_Occurred()) {
         PyErr_SetString(PyExc_RuntimeError, "Operators.chain() failed");
       }
-      return NULL;
+      return nullptr;
     }
   }
   else {
     if (!((BPy_UnaryFunction1DVoid *)obj3)->uf1D_void) {
       PyErr_SetString(PyExc_TypeError,
                       "Operators.chain(): 3rd argument: invalid UnaryFunction1DVoid object");
-      return NULL;
+      return nullptr;
     }
     if (Operators::chain(*(((BPy_ChainingIterator *)obj1)->c_it),
                          *(((BPy_UnaryPredicate1D *)obj2)->up1D),
@@ -187,7 +169,7 @@ static PyObject *Operators_chain(BPy_Operators * /*self*/, PyObject *args, PyObj
       if (!PyErr_Occurred()) {
         PyErr_SetString(PyExc_RuntimeError, "Operators.chain() failed");
       }
-      return NULL;
+      return nullptr;
     }
   }
   Py_RETURN_NONE;
@@ -195,6 +177,7 @@ static PyObject *Operators_chain(BPy_Operators * /*self*/, PyObject *args, PyObj
 
 PyDoc_STRVAR(Operators_bidirectional_chain_doc,
              ".. staticmethod:: bidirectional_chain(it, pred)\n"
+             "                  bidirectional_chain(it)\n"
              "\n"
              "   Builds a set of chains from the current set of ViewEdges.  Each\n"
              "   ViewEdge of the current list potentially starts a new chain.  The\n"
@@ -211,37 +194,17 @@ PyDoc_STRVAR(Operators_bidirectional_chain_doc,
              "   :arg it: The ChainingIterator on the ViewEdges of the ViewMap.  It\n"
              "      contains the chaining rule.\n"
              "   :type it: :class:`ChainingIterator`\n"
-             "   :arg pred: The predicate on the ViewEdge that expresses the\n"
-             "      stopping condition.\n"
-             "   :type pred: :class:`UnaryPredicate1D`\n"
-             "\n"
-             ".. staticmethod:: bidirectional_chain(it)\n"
-             "\n"
-             "   The only difference with the above bidirectional chaining algorithm\n"
-             "   is that we don't need to pass a stopping criterion.  This might be\n"
-             "   desirable when the stopping criterion is already contained in the\n"
-             "   iterator definition.  Builds a set of chains from the current set of\n"
-             "   ViewEdges.  Each ViewEdge of the current list potentially starts a new\n"
-             "   chain.  The chaining operator then iterates over the ViewEdges of the\n"
-             "   ViewMap using the user specified iterator.  This operator iterates\n"
-             "   both using the increment and decrement operators and is therefore\n"
-             "   bidirectional.  This operator works with a ChainingIterator which\n"
-             "   contains the chaining rules.  It is this last one which can be told to\n"
-             "   chain only edges that belong to the selection or not to process twice\n"
-             "   a ViewEdge during the chaining.  Each time a ViewEdge is added to a\n"
-             "   chain, its chaining time stamp is incremented.  This allows you to\n"
-             "   keep track of the number of chains to which a ViewEdge belongs to.\n"
-             "\n"
-             "   :arg it: The ChainingIterator on the ViewEdges of the ViewMap.  It\n"
-             "      contains the chaining rule.\n"
-             "   :type it: :class:`ChainingIterator`");
+             "   :arg pred: The predicate on the ViewEdge that expresses the stopping condition.\n"
+             "      This parameter is optional, you make not want to pass a stopping criterion\n"
+             "      when the stopping criterion is already contained in the iterator definition.\n"
+             "   :type pred: :class:`UnaryPredicate1D`\n");
 
 static PyObject *Operators_bidirectional_chain(BPy_Operators * /*self*/,
                                                PyObject *args,
                                                PyObject *kwds)
 {
-  static const char *kwlist[] = {"it", "pred", NULL};
-  PyObject *obj1 = 0, *obj2 = 0;
+  static const char *kwlist[] = {"it", "pred", nullptr};
+  PyObject *obj1 = nullptr, *obj2 = nullptr;
 
   if (!PyArg_ParseTupleAndKeywords(args,
                                    kwds,
@@ -251,20 +214,20 @@ static PyObject *Operators_bidirectional_chain(BPy_Operators * /*self*/,
                                    &obj1,
                                    &UnaryPredicate1D_Type,
                                    &obj2)) {
-    return NULL;
+    return nullptr;
   }
   if (!((BPy_ChainingIterator *)obj1)->c_it) {
     PyErr_SetString(
         PyExc_TypeError,
         "Operators.bidirectional_chain(): 1st argument: invalid ChainingIterator object");
-    return NULL;
+    return nullptr;
   }
   if (!obj2) {
     if (Operators::bidirectionalChain(*(((BPy_ChainingIterator *)obj1)->c_it)) < 0) {
       if (!PyErr_Occurred()) {
         PyErr_SetString(PyExc_RuntimeError, "Operators.bidirectional_chain() failed");
       }
-      return NULL;
+      return nullptr;
     }
   }
   else {
@@ -272,14 +235,14 @@ static PyObject *Operators_bidirectional_chain(BPy_Operators * /*self*/,
       PyErr_SetString(
           PyExc_TypeError,
           "Operators.bidirectional_chain(): 2nd argument: invalid UnaryPredicate1D object");
-      return NULL;
+      return nullptr;
     }
     if (Operators::bidirectionalChain(*(((BPy_ChainingIterator *)obj1)->c_it),
                                       *(((BPy_UnaryPredicate1D *)obj2)->up1D)) < 0) {
       if (!PyErr_Occurred()) {
         PyErr_SetString(PyExc_RuntimeError, "Operators.bidirectional_chain() failed");
       }
-      return NULL;
+      return nullptr;
     }
   }
   Py_RETURN_NONE;
@@ -287,52 +250,42 @@ static PyObject *Operators_bidirectional_chain(BPy_Operators * /*self*/,
 
 PyDoc_STRVAR(Operators_sequential_split_doc,
              ".. staticmethod:: sequential_split(starting_pred, stopping_pred, sampling=0.0)\n"
+             "                  sequential_split(pred, sampling=0.0)\n"
              "\n"
              "   Splits each chain of the current set of chains in a sequential way.\n"
              "   The points of each chain are processed (with a specified sampling)\n"
-             "   sequentially. Each time a user specified starting condition is\n"
-             "   verified, a new chain begins and ends as soon as a user-defined\n"
-             "   stopping predicate is verified. This allows chains overlapping rather\n"
-             "   than chains partitioning. The first point of the initial chain is the\n"
+             "   sequentially. The first point of the initial chain is the\n"
              "   first point of one of the resulting chains. The splitting ends when\n"
              "   no more chain can start.\n"
              "\n"
+             "   .. tip::\n"
+             "\n"
+             "      By specifiying a starting and stopping predicate allows\n"
+             "      the chains to overlapp rather than chains partitioning.\n"
+             "\n"
              "   :arg starting_pred: The predicate on a point that expresses the\n"
-             "      starting condition.\n"
+             "      starting condition. Each time this condition is verified, a new chain begins\n"
              "   :type starting_pred: :class:`UnaryPredicate0D`\n"
              "   :arg stopping_pred: The predicate on a point that expresses the\n"
-             "      stopping condition.\n"
+             "      stopping condition. The chain ends as soon as this predicate is verified.\n"
              "   :type stopping_pred: :class:`UnaryPredicate0D`\n"
+             "   :arg pred: The predicate on a point that expresses the splitting condition.\n"
+             "      Each time the condition is verified, the chain is split into two chains.\n"
+             "      The resulting set of chains is a partition of the initial chain\n"
+             "   :type pred: :class:`UnaryPredicate0D`\n"
              "   :arg sampling: The resolution used to sample the chain for the\n"
              "      predicates evaluation. (The chain is not actually resampled;\n"
              "      a virtual point only progresses along the curve using this\n"
              "      resolution.)\n"
-             "   :type sampling: float\n"
-             "\n"
-             ".. staticmethod:: sequential_split(pred, sampling=0.0)\n"
-             "\n"
-             "   Splits each chain of the current set of chains in a sequential way.\n"
-             "   The points of each chain are processed (with a specified sampling)\n"
-             "   sequentially and each time a user specified condition is verified,\n"
-             "   the chain is split into two chains.  The resulting set of chains is a\n"
-             "   partition of the initial chain\n"
-             "\n"
-             "   :arg pred: The predicate on a point that expresses the splitting\n"
-             "      condition.\n"
-             "   :type pred: :class:`UnaryPredicate0D`\n"
-             "   :arg sampling: The resolution used to sample the chain for the\n"
-             "      predicate evaluation. (The chain is not actually resampled; a\n"
-             "      virtual point only progresses along the curve using this\n"
-             "      resolution.)\n"
-             "   :type sampling: float");
+             "   :type sampling: float\n");
 
 static PyObject *Operators_sequential_split(BPy_Operators * /*self*/,
                                             PyObject *args,
                                             PyObject *kwds)
 {
-  static const char *kwlist_1[] = {"starting_pred", "stopping_pred", "sampling", NULL};
-  static const char *kwlist_2[] = {"pred", "sampling", NULL};
-  PyObject *obj1 = 0, *obj2 = 0;
+  static const char *kwlist_1[] = {"starting_pred", "stopping_pred", "sampling", nullptr};
+  static const char *kwlist_2[] = {"pred", "sampling", nullptr};
+  PyObject *obj1 = nullptr, *obj2 = nullptr;
   float f = 0.0f;
 
   if (PyArg_ParseTupleAndKeywords(args,
@@ -348,13 +301,13 @@ static PyObject *Operators_sequential_split(BPy_Operators * /*self*/,
       PyErr_SetString(
           PyExc_TypeError,
           "Operators.sequential_split(): 1st argument: invalid UnaryPredicate0D object");
-      return NULL;
+      return nullptr;
     }
     if (!((BPy_UnaryPredicate0D *)obj2)->up0D) {
       PyErr_SetString(
           PyExc_TypeError,
           "Operators.sequential_split(): 2nd argument: invalid UnaryPredicate0D object");
-      return NULL;
+      return nullptr;
     }
     if (Operators::sequentialSplit(*(((BPy_UnaryPredicate0D *)obj1)->up0D),
                                    *(((BPy_UnaryPredicate0D *)obj2)->up0D),
@@ -362,7 +315,7 @@ static PyObject *Operators_sequential_split(BPy_Operators * /*self*/,
       if (!PyErr_Occurred()) {
         PyErr_SetString(PyExc_RuntimeError, "Operators.sequential_split() failed");
       }
-      return NULL;
+      return nullptr;
     }
   }
   else if ((void)PyErr_Clear(),
@@ -373,85 +326,65 @@ static PyObject *Operators_sequential_split(BPy_Operators * /*self*/,
       PyErr_SetString(
           PyExc_TypeError,
           "Operators.sequential_split(): 1st argument: invalid UnaryPredicate0D object");
-      return NULL;
+      return nullptr;
     }
     if (Operators::sequentialSplit(*(((BPy_UnaryPredicate0D *)obj1)->up0D), f) < 0) {
       if (!PyErr_Occurred()) {
         PyErr_SetString(PyExc_RuntimeError, "Operators.sequential_split() failed");
       }
-      return NULL;
+      return nullptr;
     }
   }
   else {
     PyErr_SetString(PyExc_TypeError, "invalid argument(s)");
-    return NULL;
+    return nullptr;
   }
   Py_RETURN_NONE;
 }
 
-PyDoc_STRVAR(Operators_recursive_split_doc,
-             ".. staticmethod:: recursive_split(func, pred_1d, sampling=0.0)\n"
-             "\n"
-             "   Splits the current set of chains in a recursive way.  We process the\n"
-             "   points of each chain (with a specified sampling) to find the point\n"
-             "   minimizing a specified function.  The chain is split in two at this\n"
-             "   point and the two new chains are processed in the same way.  The\n"
-             "   recursivity level is controlled through a predicate 1D that expresses\n"
-             "   a stopping condition on the chain that is about to be processed.\n"
-             "\n"
-             "   :arg func: The Unary Function evaluated at each point of the chain.\n"
-             "     The splitting point is the point minimizing this function.\n"
-             "   :type func: :class:`UnaryFunction0DDouble`\n"
-             "   :arg pred_1d: The Unary Predicate expressing the recursivity stopping\n"
-             "      condition.  This predicate is evaluated for each curve before it\n"
-             "      actually gets split.  If pred_1d(chain) is true, the curve won't be\n"
-             "      split anymore.\n"
-             "   :type pred_1d: :class:`UnaryPredicate1D`\n"
-             "   :arg sampling: The resolution used to sample the chain for the\n"
-             "      predicates evaluation. (The chain is not actually resampled, a\n"
-             "      virtual point only progresses along the curve using this\n"
-             "      resolution.)\n"
-             "   :type sampling: float\n"
-             "\n"
-             ".. staticmethod:: recursive_split(func, pred_0d, pred_1d, sampling=0.0)\n"
-             "\n"
-             "   Splits the current set of chains in a recursive way.  We process the\n"
-             "   points of each chain (with a specified sampling) to find the point\n"
-             "   minimizing a specified function.  The chain is split in two at this\n"
-             "   point and the two new chains are processed in the same way.  The user\n"
-             "   can specify a 0D predicate to make a first selection on the points\n"
-             "   that can potentially be split.  A point that doesn't verify the 0D\n"
-             "   predicate won't be candidate in realizing the min.  The recursivity\n"
-             "   level is controlled through a predicate 1D that expresses a stopping\n"
-             "   condition on the chain that is about to be processed.\n"
-             "\n"
-             "   :arg func: The Unary Function evaluated at each point of the chain.\n"
-             "      The splitting point is the point minimizing this function.\n"
-             "   :type func: :class:`UnaryFunction0DDouble`\n"
-             "   :arg pred_0d: The Unary Predicate 0D used to select the candidate\n"
-             "      points where the split can occur.  For example, it is very likely\n"
-             "      that would rather have your chain splitting around its middle\n"
-             "      point than around one of its extremities.  A 0D predicate working\n"
-             "      on the curvilinear abscissa allows to add this kind of constraints.\n"
-             "   :type pred_0d: :class:`UnaryPredicate0D`\n"
-             "   :arg pred_1d: The Unary Predicate expressing the recursivity stopping\n"
-             "      condition. This predicate is evaluated for each curve before it\n"
-             "      actually gets split.  If pred_1d(chain) is true, the curve won't be\n"
-             "      split anymore.\n"
-             "   :type pred_1d: :class:`UnaryPredicate1D`\n"
-             "   :arg sampling: The resolution used to sample the chain for the\n"
-             "      predicates evaluation. (The chain is not actually resampled; a\n"
-             "      virtual point only progresses along the curve using this\n"
-             "      resolution.)\n"
-             "   :type sampling: float");
+PyDoc_STRVAR(
+    Operators_recursive_split_doc,
+    ".. staticmethod:: recursive_split(func, pred_1d, sampling=0.0)\n"
+    "                  recursive_split(func, pred_0d, pred_1d, sampling=0.0)\n"
+    "\n"
+    "   Splits the current set of chains in a recursive way.  We process the\n"
+    "   points of each chain (with a specified sampling) to find the point\n"
+    "   minimizing a specified function. The chain is split in two at this\n"
+    "   point and the two new chains are processed in the same way. The\n"
+    "   recursivity level is controlled through a predicate 1D that expresses\n"
+    "   a stopping condition on the chain that is about to be processed.\n"
+    "\n"
+    "   The user can also specify a 0D predicate to make a first selection on the points\n"
+    "   that can potentially be split. A point that doesn't verify the 0D\n"
+    "   predicate won't be candidate in realizing the min.\n"
+    "\n"
+    "   :arg func: The Unary Function evaluated at each point of the chain.\n"
+    "     The splitting point is the point minimizing this function.\n"
+    "   :type func: :class:`UnaryFunction0DDouble`\n"
+    "   :arg pred_0d: The Unary Predicate 0D used to select the candidate\n"
+    "      points where the split can occur.  For example, it is very likely\n"
+    "      that would rather have your chain splitting around its middle\n"
+    "      point than around one of its extremities.  A 0D predicate working\n"
+    "      on the curvilinear abscissa allows to add this kind of constraints.\n"
+    "   :type pred_0d: :class:`UnaryPredicate0D`\n"
+    "   :arg pred_1d: The Unary Predicate expressing the recursivity stopping\n"
+    "      condition.  This predicate is evaluated for each curve before it\n"
+    "      actually gets split.  If pred_1d(chain) is true, the curve won't be\n"
+    "      split anymore.\n"
+    "   :type pred_1d: :class:`UnaryPredicate1D`\n"
+    "   :arg sampling: The resolution used to sample the chain for the\n"
+    "      predicates evaluation. (The chain is not actually resampled; a\n"
+    "      virtual point only progresses along the curve using this\n"
+    "      resolution.)\n"
+    "   :type sampling: float\n");
 
 static PyObject *Operators_recursive_split(BPy_Operators * /*self*/,
                                            PyObject *args,
                                            PyObject *kwds)
 {
-  static const char *kwlist_1[] = {"func", "pred_1d", "sampling", NULL};
-  static const char *kwlist_2[] = {"func", "pred_0d", "pred_1d", "sampling", NULL};
-  PyObject *obj1 = 0, *obj2 = 0, *obj3 = 0;
+  static const char *kwlist_1[] = {"func", "pred_1d", "sampling", nullptr};
+  static const char *kwlist_2[] = {"func", "pred_0d", "pred_1d", "sampling", nullptr};
+  PyObject *obj1 = nullptr, *obj2 = nullptr, *obj3 = nullptr;
   float f = 0.0f;
 
   if (PyArg_ParseTupleAndKeywords(args,
@@ -467,13 +400,13 @@ static PyObject *Operators_recursive_split(BPy_Operators * /*self*/,
       PyErr_SetString(
           PyExc_TypeError,
           "Operators.recursive_split(): 1st argument: invalid UnaryFunction0DDouble object");
-      return NULL;
+      return nullptr;
     }
     if (!((BPy_UnaryPredicate1D *)obj2)->up1D) {
       PyErr_SetString(
           PyExc_TypeError,
           "Operators.recursive_split(): 2nd argument: invalid UnaryPredicate1D object");
-      return NULL;
+      return nullptr;
     }
     if (Operators::recursiveSplit(*(((BPy_UnaryFunction0DDouble *)obj1)->uf0D_double),
                                   *(((BPy_UnaryPredicate1D *)obj2)->up1D),
@@ -481,7 +414,7 @@ static PyObject *Operators_recursive_split(BPy_Operators * /*self*/,
       if (!PyErr_Occurred()) {
         PyErr_SetString(PyExc_RuntimeError, "Operators.recursive_split() failed");
       }
-      return NULL;
+      return nullptr;
     }
   }
   else if ((void)PyErr_Clear(),
@@ -501,19 +434,19 @@ static PyObject *Operators_recursive_split(BPy_Operators * /*self*/,
       PyErr_SetString(
           PyExc_TypeError,
           "Operators.recursive_split(): 1st argument: invalid UnaryFunction0DDouble object");
-      return NULL;
+      return nullptr;
     }
     if (!((BPy_UnaryPredicate0D *)obj2)->up0D) {
       PyErr_SetString(
           PyExc_TypeError,
           "Operators.recursive_split(): 2nd argument: invalid UnaryPredicate0D object");
-      return NULL;
+      return nullptr;
     }
     if (!((BPy_UnaryPredicate1D *)obj3)->up1D) {
       PyErr_SetString(
           PyExc_TypeError,
           "Operators.recursive_split(): 3rd argument: invalid UnaryPredicate1D object");
-      return NULL;
+      return nullptr;
     }
     if (Operators::recursiveSplit(*(((BPy_UnaryFunction0DDouble *)obj1)->uf0D_double),
                                   *(((BPy_UnaryPredicate0D *)obj2)->up0D),
@@ -522,12 +455,12 @@ static PyObject *Operators_recursive_split(BPy_Operators * /*self*/,
       if (!PyErr_Occurred()) {
         PyErr_SetString(PyExc_RuntimeError, "Operators.recursive_split() failed");
       }
-      return NULL;
+      return nullptr;
     }
   }
   else {
     PyErr_SetString(PyExc_TypeError, "invalid argument(s)");
-    return NULL;
+    return nullptr;
   }
   Py_RETURN_NONE;
 }
@@ -543,23 +476,23 @@ PyDoc_STRVAR(Operators_sort_doc,
 
 static PyObject *Operators_sort(BPy_Operators * /*self*/, PyObject *args, PyObject *kwds)
 {
-  static const char *kwlist[] = {"pred", NULL};
-  PyObject *obj = 0;
+  static const char *kwlist[] = {"pred", nullptr};
+  PyObject *obj = nullptr;
 
   if (!PyArg_ParseTupleAndKeywords(
           args, kwds, "O!", (char **)kwlist, &BinaryPredicate1D_Type, &obj)) {
-    return NULL;
+    return nullptr;
   }
   if (!((BPy_BinaryPredicate1D *)obj)->bp1D) {
     PyErr_SetString(PyExc_TypeError,
                     "Operators.sort(): 1st argument: invalid BinaryPredicate1D object");
-    return NULL;
+    return nullptr;
   }
   if (Operators::sort(*(((BPy_BinaryPredicate1D *)obj)->bp1D)) < 0) {
     if (!PyErr_Occurred()) {
       PyErr_SetString(PyExc_RuntimeError, "Operators.sort() failed");
     }
-    return NULL;
+    return nullptr;
   }
   Py_RETURN_NONE;
 }
@@ -578,8 +511,8 @@ PyDoc_STRVAR(Operators_create_doc,
 
 static PyObject *Operators_create(BPy_Operators * /*self*/, PyObject *args, PyObject *kwds)
 {
-  static const char *kwlist[] = {"pred", "shaders", NULL};
-  PyObject *obj1 = 0, *obj2 = 0;
+  static const char *kwlist[] = {"pred", "shaders", nullptr};
+  PyObject *obj1 = nullptr, *obj2 = nullptr;
 
   if (!PyArg_ParseTupleAndKeywords(args,
                                    kwds,
@@ -589,12 +522,12 @@ static PyObject *Operators_create(BPy_Operators * /*self*/, PyObject *args, PyOb
                                    &obj1,
                                    &PyList_Type,
                                    &obj2)) {
-    return NULL;
+    return nullptr;
   }
   if (!((BPy_UnaryPredicate1D *)obj1)->up1D) {
     PyErr_SetString(PyExc_TypeError,
                     "Operators.create(): 1st argument: invalid UnaryPredicate1D object");
-    return NULL;
+    return nullptr;
   }
   vector<StrokeShader *> shaders;
   shaders.reserve(PyList_Size(obj2));
@@ -603,7 +536,7 @@ static PyObject *Operators_create(BPy_Operators * /*self*/, PyObject *args, PyOb
     if (!BPy_StrokeShader_Check(py_ss)) {
       PyErr_SetString(PyExc_TypeError,
                       "Operators.create(): 2nd argument must be a list of StrokeShader objects");
-      return NULL;
+      return nullptr;
     }
     StrokeShader *shader = ((BPy_StrokeShader *)py_ss)->ss;
     if (!shader) {
@@ -612,7 +545,7 @@ static PyObject *Operators_create(BPy_Operators * /*self*/, PyObject *args, PyOb
          << " of the shaders list is invalid likely due to missing call of "
             "StrokeShader.__init__()";
       PyErr_SetString(PyExc_TypeError, ss.str().c_str());
-      return NULL;
+      return nullptr;
     }
     shaders.push_back(shader);
   }
@@ -620,7 +553,7 @@ static PyObject *Operators_create(BPy_Operators * /*self*/, PyObject *args, PyOb
     if (!PyErr_Occurred()) {
       PyErr_SetString(PyExc_RuntimeError, "Operators.create() failed");
     }
-    return NULL;
+    return nullptr;
   }
   Py_RETURN_NONE;
 }
@@ -636,15 +569,15 @@ PyDoc_STRVAR(Operators_reset_doc,
 
 static PyObject *Operators_reset(BPy_Operators * /*self*/, PyObject *args, PyObject *kwds)
 {
-  static const char *kwlist[] = {"delete_strokes", NULL};
-  PyObject *obj1 = 0;
+  static const char *kwlist[] = {"delete_strokes", nullptr};
+  PyObject *obj1 = nullptr;
   if (PyArg_ParseTupleAndKeywords(args, kwds, "|O!", (char **)kwlist, &PyBool_Type, &obj1)) {
     // true is the default
     Operators::reset(obj1 ? bool_from_PyBool(obj1) : true);
   }
   else {
     PyErr_SetString(PyExc_RuntimeError, "Operators.reset() failed");
-    return NULL;
+    return nullptr;
   }
   Py_RETURN_NONE;
 }
@@ -663,15 +596,15 @@ static PyObject *Operators_get_viewedge_from_index(BPy_Operators * /*self*/,
                                                    PyObject *args,
                                                    PyObject *kwds)
 {
-  static const char *kwlist[] = {"i", NULL};
+  static const char *kwlist[] = {"i", nullptr};
   unsigned int i;
 
   if (!PyArg_ParseTupleAndKeywords(args, kwds, "I", (char **)kwlist, &i)) {
-    return NULL;
+    return nullptr;
   }
   if (i >= Operators::getViewEdgesSize()) {
     PyErr_SetString(PyExc_IndexError, "index out of range");
-    return NULL;
+    return nullptr;
   }
   return BPy_ViewEdge_from_ViewEdge(*(Operators::getViewEdgeFromIndex(i)));
 }
@@ -690,15 +623,15 @@ static PyObject *Operators_get_chain_from_index(BPy_Operators * /*self*/,
                                                 PyObject *args,
                                                 PyObject *kwds)
 {
-  static const char *kwlist[] = {"i", NULL};
+  static const char *kwlist[] = {"i", nullptr};
   unsigned int i;
 
   if (!PyArg_ParseTupleAndKeywords(args, kwds, "I", (char **)kwlist, &i)) {
-    return NULL;
+    return nullptr;
   }
   if (i >= Operators::getChainsSize()) {
     PyErr_SetString(PyExc_IndexError, "index out of range");
-    return NULL;
+    return nullptr;
   }
   return BPy_Chain_from_Chain(*(Operators::getChainFromIndex(i)));
 }
@@ -717,15 +650,15 @@ static PyObject *Operators_get_stroke_from_index(BPy_Operators * /*self*/,
                                                  PyObject *args,
                                                  PyObject *kwds)
 {
-  static const char *kwlist[] = {"i", NULL};
+  static const char *kwlist[] = {"i", nullptr};
   unsigned int i;
 
   if (!PyArg_ParseTupleAndKeywords(args, kwds, "I", (char **)kwlist, &i)) {
-    return NULL;
+    return nullptr;
   }
   if (i >= Operators::getStrokesSize()) {
     PyErr_SetString(PyExc_IndexError, "index out of range");
-    return NULL;
+    return nullptr;
   }
   return BPy_Stroke_from_Stroke(*(Operators::getStrokeFromIndex(i)));
 }
@@ -827,49 +760,53 @@ static PyMethodDef BPy_Operators_methods[] = {
      (PyCFunction)Operators_get_strokes_size,
      METH_NOARGS | METH_STATIC,
      Operators_get_strokes_size_doc},
-    {NULL, NULL, 0, NULL},
+    {nullptr, nullptr, 0, nullptr},
 };
 
 /*-----------------------BPy_Operators type definition ------------------------------*/
 
 PyTypeObject Operators_Type = {
-    PyVarObject_HEAD_INIT(NULL, 0) "Operators", /* tp_name */
-    sizeof(BPy_Operators),                      /* tp_basicsize */
-    0,                                          /* tp_itemsize */
-    (destructor)Operators_dealloc,              /* tp_dealloc */
-    0,                                          /* tp_print */
-    0,                                          /* tp_getattr */
-    0,                                          /* tp_setattr */
-    0,                                          /* tp_reserved */
-    0,                                          /* tp_repr */
-    0,                                          /* tp_as_number */
-    0,                                          /* tp_as_sequence */
-    0,                                          /* tp_as_mapping */
-    0,                                          /* tp_hash  */
-    0,                                          /* tp_call */
-    0,                                          /* tp_str */
-    0,                                          /* tp_getattro */
-    0,                                          /* tp_setattro */
-    0,                                          /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT,                         /* tp_flags */
-    Operators_doc,                              /* tp_doc */
-    0,                                          /* tp_traverse */
-    0,                                          /* tp_clear */
-    0,                                          /* tp_richcompare */
-    0,                                          /* tp_weaklistoffset */
-    0,                                          /* tp_iter */
-    0,                                          /* tp_iternext */
-    BPy_Operators_methods,                      /* tp_methods */
-    0,                                          /* tp_members */
-    0,                                          /* tp_getset */
-    0,                                          /* tp_base */
-    0,                                          /* tp_dict */
-    0,                                          /* tp_descr_get */
-    0,                                          /* tp_descr_set */
-    0,                                          /* tp_dictoffset */
-    0,                                          /* tp_init */
-    0,                                          /* tp_alloc */
-    PyType_GenericNew,                          /* tp_new */
+    PyVarObject_HEAD_INIT(nullptr, 0) "Operators", /* tp_name */
+    sizeof(BPy_Operators),                         /* tp_basicsize */
+    0,                                             /* tp_itemsize */
+    (destructor)Operators_dealloc,                 /* tp_dealloc */
+#if PY_VERSION_HEX >= 0x03080000
+    0, /* tp_vectorcall_offset */
+#else
+    nullptr, /* tp_print */
+#endif
+    nullptr,               /* tp_getattr */
+    nullptr,               /* tp_setattr */
+    nullptr,               /* tp_reserved */
+    nullptr,               /* tp_repr */
+    nullptr,               /* tp_as_number */
+    nullptr,               /* tp_as_sequence */
+    nullptr,               /* tp_as_mapping */
+    nullptr,               /* tp_hash  */
+    nullptr,               /* tp_call */
+    nullptr,               /* tp_str */
+    nullptr,               /* tp_getattro */
+    nullptr,               /* tp_setattro */
+    nullptr,               /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT,    /* tp_flags */
+    Operators_doc,         /* tp_doc */
+    nullptr,               /* tp_traverse */
+    nullptr,               /* tp_clear */
+    nullptr,               /* tp_richcompare */
+    0,                     /* tp_weaklistoffset */
+    nullptr,               /* tp_iter */
+    nullptr,               /* tp_iternext */
+    BPy_Operators_methods, /* tp_methods */
+    nullptr,               /* tp_members */
+    nullptr,               /* tp_getset */
+    nullptr,               /* tp_base */
+    nullptr,               /* tp_dict */
+    nullptr,               /* tp_descr_get */
+    nullptr,               /* tp_descr_set */
+    0,                     /* tp_dictoffset */
+    nullptr,               /* tp_init */
+    nullptr,               /* tp_alloc */
+    PyType_GenericNew,     /* tp_new */
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////

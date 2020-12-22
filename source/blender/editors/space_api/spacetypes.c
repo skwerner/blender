@@ -40,6 +40,7 @@
 
 #include "ED_anim_api.h"
 #include "ED_armature.h"
+#include "ED_asset.h"
 #include "ED_clip.h"
 #include "ED_curve.h"
 #include "ED_fileselect.h"
@@ -64,6 +65,7 @@
 #include "ED_space_api.h"
 #include "ED_transform.h"
 #include "ED_userpref.h"
+#include "ED_util.h"
 #include "ED_uvedit.h"
 
 #include "io_ops.h"
@@ -105,6 +107,7 @@ void ED_spacetypes_init(void)
   ED_operatortypes_screen();
   ED_operatortypes_anim();
   ED_operatortypes_animchannels();
+  ED_operatortypes_asset();
   ED_operatortypes_gpencil();
   ED_operatortypes_object();
   ED_operatortypes_lattice();
@@ -122,6 +125,7 @@ void ED_spacetypes_init(void)
   ED_operatortypes_render();
   ED_operatortypes_mask();
   ED_operatortypes_io();
+  ED_operatortypes_edutils();
 
   ED_operatortypes_view2d();
   ED_operatortypes_ui();
@@ -271,17 +275,14 @@ void ED_region_draw_cb_exit(ARegionType *art, void *handle)
 void ED_region_draw_cb_draw(const bContext *C, ARegion *region, int type)
 {
   RegionDrawCB *rdc;
-  bool has_drawn_something = false;
 
   for (rdc = region->type->drawcalls.first; rdc; rdc = rdc->next) {
     if (rdc->type == type) {
       rdc->draw(C, region, rdc->customdata);
-      has_drawn_something = true;
+
+      /* This is needed until we get rid of BGL which can change the states we are tracking. */
+      GPU_bgl_end();
     }
-  }
-  if (has_drawn_something) {
-    /* This is needed until we get rid of BGL which can change the states we are tracking. */
-    GPU_bgl_end();
   }
 }
 

@@ -27,6 +27,7 @@ extern "C" {
 #endif
 
 struct SpaceProperties;
+struct bContext;
 
 int ED_buttons_tabs_list(struct SpaceProperties *sbuts, short *context_tabs_array);
 bool ED_buttons_tab_has_search_result(struct SpaceProperties *sbuts, const int index);
@@ -34,6 +35,8 @@ bool ED_buttons_tab_has_search_result(struct SpaceProperties *sbuts, const int i
 void ED_buttons_search_string_set(struct SpaceProperties *sbuts, const char *value);
 int ED_buttons_search_string_length(struct SpaceProperties *sbuts);
 const char *ED_buttons_search_string_get(struct SpaceProperties *sbuts);
+
+void ED_buttons_set_context(const struct bContext *C, PointerRNA *ptr, const int context);
 
 #ifdef __cplusplus
 }

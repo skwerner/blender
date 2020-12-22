@@ -55,7 +55,7 @@
 #include "MOD_ui_common.h"
 #include "MOD_util.h"
 #include "MOD_weightvg_util.h"
-#include "RE_shader_ext.h" /* Texture masking. */
+#include "RE_texture.h" /* Texture masking. */
 
 /* Maps new_w weights in place, using either one of the predefined functions, or a custom curve.
  * Return values are in new_w.
@@ -363,6 +363,7 @@ void weightvg_ui_common(const bContext *C, PointerRNA *ob_ptr, PointerRNA *ptr, 
                  ptr,
                  "mask_texture",
                  "texture.new",
+                 "texture.duplicate",
                  NULL,
                  NULL,
                  0,

@@ -199,6 +199,7 @@ int ED_region_global_size_y(void);
 void ED_area_update_region_sizes(struct wmWindowManager *wm,
                                  struct wmWindow *win,
                                  struct ScrArea *area);
+bool ED_area_has_shared_border(struct ScrArea *a, struct ScrArea *b);
 
 ScrArea *ED_screen_areas_iter_first(const struct wmWindow *win, const bScreen *screen);
 ScrArea *ED_screen_areas_iter_next(const bScreen *screen, const ScrArea *area);
@@ -238,6 +239,7 @@ void ED_screen_restore_temp_type(struct bContext *C, ScrArea *area);
 ScrArea *ED_screen_full_newspace(struct bContext *C, ScrArea *area, int type);
 void ED_screen_full_prevspace(struct bContext *C, ScrArea *area);
 void ED_screen_full_restore(struct bContext *C, ScrArea *area);
+ScrArea *ED_screen_state_maximized_create(struct bContext *C);
 struct ScrArea *ED_screen_state_toggle(struct bContext *C,
                                        struct wmWindow *win,
                                        struct ScrArea *area,

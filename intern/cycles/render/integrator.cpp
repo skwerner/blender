@@ -101,7 +101,6 @@ NODE_DEFINE(Integrator)
 
 Integrator::Integrator() : Node(node_type)
 {
-  need_update = true;
 }
 
 Integrator::~Integrator()
@@ -110,7 +109,7 @@ Integrator::~Integrator()
 
 void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 {
-  if (!need_update)
+  if (!is_modified())
     return;
 
   scoped_callback_timer timer([scene](double time) {
@@ -149,7 +148,7 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
   kintegrator->transparent_shadows = false;
   foreach (Shader *shader, scene->shaders) {
     /* keep this in sync with SD_HAS_TRANSPARENT_SHADOW in shader.cpp */
-    if ((shader->has_surface_transparent && shader->use_transparent_shadow) ||
+    if ((shader->has_surface_transparent && shader->get_use_transparent_shadow()) ||
         shader->has_volume) {
       kintegrator->transparent_shadows = true;
       break;
@@ -232,7 +231,7 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
 
   if (method == BRANCHED_PATH) {
     foreach (Light *light, scene->lights)
-      max_samples = max(max_samples, light->samples);
+      max_samples = max(max_samples, light->get_samples());
 
     max_samples = max(max_samples,
                       max(diffuse_samples, max(glossy_samples, transmission_samples)));
@@ -270,17 +269,12 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
     dscene->sample_pattern_lut.copy_to_device();
   }
 
-  need_update = false;
+  clear_modified();
 }
 
 void Integrator::device_free(Device *, DeviceScene *dscene)
 {
   dscene->sample_pattern_lut.free();
-}
-
-bool Integrator::modified(const Integrator &integrator)
-{
-  return !Node::equals(integrator);
 }
 
 void Integrator::tag_update(Scene *scene)
@@ -291,7 +285,7 @@ void Integrator::tag_update(Scene *scene)
       break;
     }
   }
-  need_update = true;
+  tag_modified();
 }
 
 CCL_NAMESPACE_END

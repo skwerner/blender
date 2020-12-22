@@ -27,6 +27,9 @@ extern "C" {
 #endif
 
 struct ARegionType;
+struct BlendDataReader;
+struct BlendLibReader;
+struct BlendWriter;
 struct Depsgraph;
 struct GpencilModifierData;
 struct ID;
@@ -249,6 +252,7 @@ typedef struct GpencilModifierTypeInfo {
 void BKE_gpencil_modifier_init(void);
 
 void BKE_gpencil_modifierType_panel_id(GpencilModifierType type, char *r_idname);
+void BKE_gpencil_modifier_panel_expand(struct GpencilModifierData *md);
 const GpencilModifierTypeInfo *BKE_gpencil_modifier_get_info(GpencilModifierType type);
 struct GpencilModifierData *BKE_gpencil_modifier_new(int type);
 void BKE_gpencil_modifier_free_ex(struct GpencilModifierData *md, const int flag);
@@ -273,6 +277,9 @@ void BKE_gpencil_modifiers_foreach_ID_link(struct Object *ob,
 void BKE_gpencil_modifiers_foreach_tex_link(struct Object *ob,
                                             GreasePencilTexWalkFunc walk,
                                             void *userData);
+
+bool BKE_gpencil_modifier_is_nonlocal_in_liboverride(const struct Object *ob,
+                                                     const struct GpencilModifierData *gmd);
 
 typedef struct GpencilVirtualModifierData {
   ArmatureGpencilModifierData amd;
@@ -301,6 +308,10 @@ struct bGPDframe *BKE_gpencil_frame_retime_get(struct Depsgraph *depsgraph,
                                                struct Scene *scene,
                                                struct Object *ob,
                                                struct bGPDlayer *gpl);
+
+void BKE_gpencil_modifier_blend_write(struct BlendWriter *writer, struct ListBase *modbase);
+void BKE_gpencil_modifier_blend_read_data(struct BlendDataReader *reader, struct ListBase *lb);
+void BKE_gpencil_modifier_blend_read_lib(struct BlendLibReader *reader, struct Object *ob);
 
 #ifdef __cplusplus
 }

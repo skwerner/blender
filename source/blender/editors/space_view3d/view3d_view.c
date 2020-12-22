@@ -192,8 +192,10 @@ void ED_view3d_smooth_view_ex(
 
   if (sview->camera) {
     Object *ob_camera_eval = DEG_get_evaluated_object(depsgraph, sview->camera);
-    sms.dst.dist = ED_view3d_offset_distance(
-        ob_camera_eval->obmat, sview->ofs, VIEW3D_DIST_FALLBACK);
+    if (sview->ofs != NULL) {
+      sms.dst.dist = ED_view3d_offset_distance(
+          ob_camera_eval->obmat, sview->ofs, VIEW3D_DIST_FALLBACK);
+    }
     ED_view3d_from_object(ob_camera_eval, sms.dst.ofs, sms.dst.quat, &sms.dst.dist, &sms.dst.lens);
     sms.to_camera = true; /* restore view3d values in end */
   }
@@ -224,8 +226,9 @@ void ED_view3d_smooth_view_ex(
       /* original values */
       if (sview->camera_old) {
         Object *ob_camera_old_eval = DEG_get_evaluated_object(depsgraph, sview->camera_old);
-        sms.src.dist = ED_view3d_offset_distance(ob_camera_old_eval->obmat, rv3d->ofs, 0.0f);
-        /* this */
+        if (sview->ofs != NULL) {
+          sms.src.dist = ED_view3d_offset_distance(ob_camera_old_eval->obmat, sview->ofs, 0.0f);
+        }
         ED_view3d_from_object(
             ob_camera_old_eval, sms.src.ofs, sms.src.quat, &sms.src.dist, &sms.src.lens);
       }
@@ -532,40 +535,18 @@ void VIEW3D_OT_camera_to_view(wmOperatorType *ot)
  * meant to take into account vertex/bone selection for eg. */
 static int view3d_camera_to_view_selected_exec(bContext *C, wmOperator *op)
 {
+  Main *bmain = CTX_data_main(C);
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Scene *scene = CTX_data_scene(C);
   View3D *v3d = CTX_wm_view3d(C); /* can be NULL */
   Object *camera_ob = v3d ? v3d->camera : scene->camera;
-  Object *camera_ob_eval = DEG_get_evaluated_object(depsgraph, camera_ob);
 
-  float r_co[3]; /* the new location to apply */
-  float r_scale; /* only for ortho cameras */
-
-  if (camera_ob_eval == NULL) {
+  if (camera_ob == NULL) {
     BKE_report(op->reports, RPT_ERROR, "No active camera");
     return OPERATOR_CANCELLED;
   }
 
-  /* this function does all the important stuff */
-  if (BKE_camera_view_frame_fit_to_scene(depsgraph, scene, camera_ob_eval, r_co, &r_scale)) {
-    ObjectTfmProtectedChannels obtfm;
-    float obmat_new[4][4];
-
-    if ((camera_ob_eval->type == OB_CAMERA) &&
-        (((Camera *)camera_ob_eval->data)->type == CAM_ORTHO)) {
-      ((Camera *)camera_ob->data)->ortho_scale = r_scale;
-    }
-
-    copy_m4_m4(obmat_new, camera_ob_eval->obmat);
-    copy_v3_v3(obmat_new[3], r_co);
-
-    /* only touch location */
-    BKE_object_tfm_protected_backup(camera_ob, &obtfm);
-    BKE_object_apply_mat4(camera_ob, obmat_new, true, true);
-    BKE_object_tfm_protected_restore(camera_ob, &obtfm, OB_LOCK_SCALE | OB_LOCK_ROT4D);
-
-    /* notifiers */
-    DEG_id_tag_update(&camera_ob->id, ID_RECALC_TRANSFORM);
+  if (ED_view3d_camera_to_view_selected(bmain, depsgraph, scene, camera_ob)) {
     WM_event_add_notifier(C, NC_OBJECT | ND_TRANSFORM, camera_ob);
     return OPERATOR_FINISHED;
   }

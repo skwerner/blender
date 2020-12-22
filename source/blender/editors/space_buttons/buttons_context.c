@@ -49,6 +49,7 @@
 #include "BKE_linestyle.h"
 #include "BKE_material.h"
 #include "BKE_modifier.h"
+#include "BKE_object.h"
 #include "BKE_paint.h"
 #include "BKE_particle.h"
 #include "BKE_screen.h"
@@ -56,6 +57,7 @@
 
 #include "RNA_access.h"
 
+#include "ED_buttons.h"
 #include "ED_physics.h"
 #include "ED_screen.h"
 
@@ -244,7 +246,7 @@ static bool buttons_context_path_data(ButsContextPath *path, int type)
     return true;
   }
 #endif
-#ifdef WITH_PARTICLE_NODES
+#ifdef WITH_POINT_CLOUD
   if (RNA_struct_is_a(ptr->type, &RNA_PointCloud) && (type == -1 || type == OB_POINTCLOUD)) {
     return true;
   }
@@ -273,16 +275,22 @@ static bool buttons_context_path_modifier(ButsContextPath *path)
   if (buttons_context_path_object(path)) {
     Object *ob = path->ptr[path->len - 1].data;
 
-    if (ob && ELEM(ob->type,
-                   OB_MESH,
-                   OB_CURVE,
-                   OB_FONT,
-                   OB_SURF,
-                   OB_LATTICE,
-                   OB_GPENCIL,
-                   OB_HAIR,
-                   OB_POINTCLOUD,
-                   OB_VOLUME)) {
+    if (ELEM(ob->type,
+             OB_MESH,
+             OB_CURVE,
+             OB_FONT,
+             OB_SURF,
+             OB_LATTICE,
+             OB_GPENCIL,
+             OB_HAIR,
+             OB_POINTCLOUD,
+             OB_VOLUME)) {
+      ModifierData *md = BKE_object_active_modifier(ob);
+      if (md != NULL) {
+        RNA_pointer_create(&ob->id, &RNA_Modifier, md, &path->ptr[path->len]);
+        path->len++;
+      }
+
       return true;
     }
   }
@@ -512,11 +520,11 @@ static bool buttons_context_linestyle_pinnable(const bContext *C, ViewLayer *vie
 }
 #endif
 
-static bool buttons_context_path(const bContext *C, ButsContextPath *path, int mainb, int flag)
+static bool buttons_context_path(
+    const bContext *C, SpaceProperties *sbuts, ButsContextPath *path, int mainb, int flag)
 {
   /* Note we don't use CTX_data here, instead we get it from the window.
    * Otherwise there is a loop reading the context that we are setting. */
-  SpaceProperties *sbuts = CTX_wm_space_properties(C);
   wmWindow *window = CTX_wm_window(C);
   Scene *scene = WM_window_get_active_scene(window);
   ViewLayer *view_layer = WM_window_get_active_view_layer(window);
@@ -660,14 +668,14 @@ void buttons_context_compute(const bContext *C, SpaceProperties *sbuts)
   int flag = 0;
 
   /* Set scene path. */
-  buttons_context_path(C, path, BCONTEXT_SCENE, pflag);
+  buttons_context_path(C, sbuts, path, BCONTEXT_SCENE, pflag);
 
   buttons_texture_context_compute(C, sbuts);
 
   /* for each context, see if we can compute a valid path to it, if
    * this is the case, we know we have to display the button */
   for (int i = 0; i < BCONTEXT_TOT; i++) {
-    if (buttons_context_path(C, path, i, pflag)) {
+    if (buttons_context_path(C, sbuts, path, i, pflag)) {
       flag |= (1 << i);
 
       /* setting icon for data context */
@@ -713,7 +721,7 @@ void buttons_context_compute(const bContext *C, SpaceProperties *sbuts)
     }
   }
 
-  buttons_context_path(C, path, sbuts->mainb, pflag);
+  buttons_context_path(C, sbuts, path, sbuts->mainb, pflag);
 
   if (!(flag & (1 << sbuts->mainb))) {
     if (flag & (1 << BCONTEXT_OBJECT)) {
@@ -732,6 +740,39 @@ void buttons_context_compute(const bContext *C, SpaceProperties *sbuts)
   }
 
   sbuts->pathflag = flag;
+}
+
+static bool is_pointer_in_path(ButsContextPath *path, PointerRNA *ptr)
+{
+  for (int i = 0; i < path->len; ++i) {
+    if (ptr->owner_id == path->ptr[i].owner_id) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void ED_buttons_set_context(const bContext *C, PointerRNA *ptr, const int context)
+{
+  ScrArea *active_area = CTX_wm_area(C);
+  bScreen *screen = CTX_wm_screen(C);
+
+  LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+    /* Only update for properties editors that are visible and share a border. */
+    if (area->spacetype != SPACE_PROPERTIES) {
+      continue;
+    }
+    if (!ED_area_has_shared_border(active_area, area)) {
+      continue;
+    }
+
+    SpaceProperties *sbuts = (SpaceProperties *)area->spacedata.first;
+    ButsContextPath path;
+    if (buttons_context_path(C, sbuts, &path, context, 0) && is_pointer_in_path(&path, ptr)) {
+      sbuts->mainbuser = context;
+      sbuts->mainb = sbuts->mainbuser;
+    }
+  }
 }
 
 /************************* Context Callback ************************/
@@ -773,7 +814,7 @@ const char *buttons_context_dir[] = {
 #ifdef WITH_HAIR_NODES
     "hair",
 #endif
-#ifdef WITH_PARTICLE_NODES
+#ifdef WITH_POINT_CLOUD
     "pointcloud",
 #endif
     "volume",
@@ -785,6 +826,11 @@ int /*eContextResult*/ buttons_context(const bContext *C,
                                        bContextDataResult *result)
 {
   SpaceProperties *sbuts = CTX_wm_space_properties(C);
+  if (sbuts && sbuts->path == NULL) {
+    /* path is cleared for SCREEN_OT_redo_last, when global undo does a file-read which clears the
+     * path (see lib_link_workspace_layout_restore). */
+    buttons_context_compute(C, sbuts);
+  }
   ButsContextPath *path = sbuts ? sbuts->path : NULL;
 
   if (!path) {
@@ -862,7 +908,7 @@ int /*eContextResult*/ buttons_context(const bContext *C,
     return CTX_RESULT_OK;
   }
 #endif
-#ifdef WITH_PARTICLE_NODES
+#ifdef WITH_POINT_CLOUD
   if (CTX_data_equals(member, "pointcloud")) {
     set_pointer_type(path, result, &RNA_PointCloud);
     return CTX_RESULT_OK;
@@ -906,6 +952,17 @@ int /*eContextResult*/ buttons_context(const bContext *C,
     }
 
     return CTX_RESULT_OK;
+  }
+  if (CTX_data_equals(member, "modifier")) {
+    PointerRNA *ptr = get_pointer_type(path, &RNA_Modifier);
+
+    if (ptr != NULL && !RNA_pointer_is_null(ptr)) {
+      Object *ob = (Object *)ptr->owner_id;
+      ModifierData *md = ptr->data;
+      CTX_data_pointer_set(result, &ob->id, &RNA_Modifier, md);
+      return CTX_RESULT_OK;
+    }
+    return CTX_RESULT_NO_DATA;
   }
   if (CTX_data_equals(member, "texture_user")) {
     ButsContextTexture *ct = sbuts->texuser;
@@ -1163,6 +1220,15 @@ static void buttons_panel_context_draw(const bContext *C, Panel *panel)
 
     first = false;
   }
+
+  uiLayout *pin_row = uiLayoutRow(row, false);
+  uiLayoutSetAlignment(pin_row, UI_LAYOUT_ALIGN_RIGHT);
+  uiItemSpacer(pin_row);
+  uiLayoutSetEmboss(pin_row, UI_EMBOSS_NONE);
+  uiItemO(pin_row,
+          "",
+          (sbuts->flag & SB_PIN_CONTEXT) ? ICON_PINNED : ICON_UNPINNED,
+          "BUTTONS_OT_toggle_pin");
 }
 
 void buttons_context_register(ARegionType *art)
@@ -1173,7 +1239,7 @@ void buttons_context_register(ARegionType *art)
   strcpy(pt->translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA);
   pt->poll = buttons_panel_context_poll;
   pt->draw = buttons_panel_context_draw;
-  pt->flag = PNL_NO_HEADER;
+  pt->flag = PANEL_TYPE_NO_HEADER | PANEL_TYPE_NO_SEARCH;
   BLI_addtail(&art->paneltypes, pt);
 }
 

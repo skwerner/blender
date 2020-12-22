@@ -48,6 +48,7 @@ enum DeviceType {
   DEVICE_NETWORK,
   DEVICE_MULTI,
   DEVICE_OPTIX,
+  DEVICE_DUMMY,
 };
 
 enum DeviceTypeMask {
@@ -87,6 +88,7 @@ class DeviceInfo {
   int cpu_threads;
   vector<DeviceInfo> multi_devices;
   vector<DeviceInfo> denoising_devices;
+  string error_msg;
 
   DeviceInfo()
   {
@@ -371,12 +373,6 @@ class Device {
     return NULL;
   }
 
-  /* Device specific pointer for BVH creation. Currently only used by Embree. */
-  virtual void *bvh_device() const
-  {
-    return NULL;
-  }
-
   /* load/compile kernels, must be called before adding tasks */
   virtual bool load_kernels(const DeviceRequestedFeatures & /*requested_features*/)
   {
@@ -425,10 +421,7 @@ class Device {
                            const DeviceDrawParams &draw_params);
 
   /* acceleration structure building */
-  virtual bool build_optix_bvh(BVH *)
-  {
-    return false;
-  }
+  virtual void build_bvh(BVH *bvh, Progress &progress, bool refit);
 
 #ifdef WITH_NETWORK
   /* networking */
@@ -471,6 +464,7 @@ class Device {
   static string string_from_type(DeviceType type);
   static vector<DeviceType> available_types();
   static vector<DeviceInfo> available_devices(uint device_type_mask = DEVICE_MASK_ALL);
+  static DeviceInfo dummy_device(const string &error_msg = "");
   static string device_capabilities(uint device_type_mask = DEVICE_MASK_ALL);
   static DeviceInfo get_multi_device(const vector<DeviceInfo> &subdevices,
                                      int threads,

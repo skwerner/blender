@@ -248,6 +248,10 @@ bool BKE_fcurve_calc_bounds(struct FCurve *fcu,
 void BKE_fcurve_active_keyframe_set(struct FCurve *fcu, const struct BezTriple *active_bezt);
 int BKE_fcurve_active_keyframe_index(const struct FCurve *fcu);
 
+/* Move the indexed keyframe to the given value, and move the handles with it to ensure the slope
+ * remains the same. */
+void BKE_fcurve_keyframe_move_value_with_handles(struct BezTriple *keyframe, float new_value);
+
 /* .............. */
 
 /* Are keyframes on F-Curve of any use (to final result, and to show in editors)? */
@@ -324,6 +328,9 @@ float fcurve_samplingcb_evalcurve(struct FCurve *fcu, void *data, float evaltime
  */
 void fcurve_store_samples(
     struct FCurve *fcu, void *data, int start, int end, FcuSampleFunc sample_cb);
+
+/* Convert baked/sampled fcurves into bezt/regular fcurves. */
+void fcurve_samples_to_keyframes(struct FCurve *fcu, const int start, const int end);
 
 /* ************* F-Curve .blend file API ******************** */
 

@@ -20,8 +20,8 @@
  * Task pool to run tasks in parallel.
  */
 
+#include <cstdlib>
 #include <memory>
-#include <stdlib.h>
 #include <utility>
 
 #include "MEM_guardedalloc.h"
@@ -83,11 +83,11 @@ class Task {
         free_taskdata(other.free_taskdata),
         freedata(other.freedata)
   {
-    other.pool = NULL;
-    other.run = NULL;
-    other.taskdata = NULL;
+    other.pool = nullptr;
+    other.run = nullptr;
+    other.taskdata = nullptr;
     other.free_taskdata = false;
-    other.freedata = NULL;
+    other.freedata = nullptr;
   }
 
 #if defined(WITH_TBB) && TBB_INTERFACE_VERSION_MAJOR < 10
@@ -149,13 +149,13 @@ class TBBTaskGroup : public tbb::task_group {
 
 /* Task Pool */
 
-typedef enum TaskPoolType {
+enum TaskPoolType {
   TASK_POOL_TBB,
   TASK_POOL_TBB_SUSPENDED,
   TASK_POOL_NO_THREADS,
   TASK_POOL_BACKGROUND,
   TASK_POOL_BACKGROUND_SERIAL,
-} TaskPoolType;
+};
 
 struct TaskPool {
   TaskPoolType type;
@@ -302,7 +302,7 @@ static void *background_task_run(void *userdata)
     task->~Task();
     MEM_freeN(task);
   }
-  return NULL;
+  return nullptr;
 }
 
 static void background_task_pool_create(TaskPool *pool)

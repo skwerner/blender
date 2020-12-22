@@ -60,17 +60,29 @@ if(WITH_OPENAL)
   endif()
 endif()
 
+if(WITH_JACK)
+  find_library(JACK_FRAMEWORK
+    NAMES jackmp
+  )
+  if(NOT JACK_FRAMEWORK)
+    set(WITH_JACK OFF)
+  else()
+    set(JACK_INCLUDE_DIRS ${JACK_FRAMEWORK}/headers)
+  endif()
+endif()
+
 if(NOT DEFINED LIBDIR)
   set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/darwin)
-  # Prefer lib directory paths
-  file(GLOB LIB_SUBDIRS ${LIBDIR}/*)
-  set(CMAKE_PREFIX_PATH ${LIB_SUBDIRS})
 else()
   message(STATUS "Using pre-compiled LIBDIR: ${LIBDIR}")
 endif()
 if(NOT EXISTS "${LIBDIR}/")
   message(FATAL_ERROR "Mac OSX requires pre-compiled libs at: '${LIBDIR}'")
 endif()
+
+# Prefer lib directory paths
+file(GLOB LIB_SUBDIRS ${LIBDIR}/*)
+set(CMAKE_PREFIX_PATH ${LIB_SUBDIRS})
 
 # -------------------------------------------------------------------------
 # Find precompiled libraries, and avoid system or user-installed ones.
@@ -92,17 +104,6 @@ endif()
 
 if(WITH_OPENSUBDIV)
   find_package(OpenSubdiv)
-endif()
-
-if(WITH_JACK)
-  find_library(JACK_FRAMEWORK
-    NAMES jackmp
-  )
-  if(NOT JACK_FRAMEWORK)
-    set(WITH_JACK OFF)
-  else()
-    set(JACK_INCLUDE_DIRS ${JACK_FRAMEWORK}/headers)
-  endif()
 endif()
 
 if(WITH_CODEC_SNDFILE)
@@ -194,7 +195,7 @@ if(SYSTEMSTUBS_LIBRARY)
   list(APPEND PLATFORM_LINKLIBS SystemStubs)
 endif()
 
-set(PLATFORM_CFLAGS "${PLATFORM_CFLAGS} -pipe -funsigned-char")
+string(APPEND PLATFORM_CFLAGS " -pipe -funsigned-char -fno-strict-aliasing")
 set(PLATFORM_LINKFLAGS
   "-fexceptions -framework CoreServices -framework Foundation -framework IOKit -framework AppKit -framework Cocoa -framework Carbon -framework AudioUnit -framework AudioToolbox -framework CoreAudio -framework Metal -framework QuartzCore"
 )
@@ -202,12 +203,12 @@ set(PLATFORM_LINKFLAGS
 list(APPEND PLATFORM_LINKLIBS c++)
 
 if(WITH_JACK)
-  set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -F/Library/Frameworks -weak_framework jackmp")
+  string(APPEND PLATFORM_LINKFLAGS " -F/Library/Frameworks -weak_framework jackmp")
 endif()
 
 if(WITH_PYTHON_MODULE OR WITH_PYTHON_FRAMEWORK)
   # force cmake to link right framework
-  set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} /Library/Frameworks/Python.framework/Versions/${PYTHON_VERSION}/Python")
+  string(APPEND PLATFORM_LINKFLAGS " /Library/Frameworks/Python.framework/Versions/${PYTHON_VERSION}/Python")
 endif()
 
 if(WITH_OPENCOLLADA)
@@ -222,7 +223,7 @@ if(WITH_SDL)
   find_package(SDL2)
   set(SDL_INCLUDE_DIR ${SDL2_INCLUDE_DIRS})
   set(SDL_LIBRARY ${SDL2_LIBRARIES})
-  set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -framework ForceFeedback")
+  string(APPEND PLATFORM_LINKFLAGS " -framework ForceFeedback")
 endif()
 
 set(PNG_ROOT ${LIBDIR}/png)
@@ -266,7 +267,15 @@ if(WITH_BOOST)
 endif()
 
 if(WITH_INTERNATIONAL OR WITH_CODEC_FFMPEG)
-  set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -liconv") # boost_locale and ffmpeg needs it !
+  string(APPEND PLATFORM_LINKFLAGS " -liconv") # boost_locale and ffmpeg needs it !
+endif()
+
+if(WITH_PUGIXML)
+  find_package(PugiXML)
+  if(NOT PUGIXML_FOUND)
+    message(WARNING "PugiXML not found, disabling WITH_PUGIXML")
+    set(WITH_PUGIXML OFF)
+  endif()
 endif()
 
 if(WITH_OPENIMAGEIO)
@@ -335,7 +344,10 @@ endif()
 
 if(WITH_CYCLES_EMBREE)
   find_package(Embree 3.8.0 REQUIRED)
-  set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -Xlinker -stack_size -Xlinker 0x100000")
+  # Increase stack size for Embree, only works for executables.
+  if(NOT WITH_PYTHON_MODULE)
+    string(APPEND PLATFORM_LINKFLAGS " -Wl,-stack_size,0x100000")
+  endif()
 
   # Embree static library linking can mix up SSE and AVX symbols, causing
   # crashes on macOS systems with older CPUs that don't have AVX. Using
@@ -378,7 +390,7 @@ if(WITH_OPENMP)
     set(OPENMP_FOUND ON)
     set(OpenMP_C_FLAGS "-Xclang -fopenmp -I'${LIBDIR}/openmp/include'")
     set(OpenMP_CXX_FLAGS "-Xclang -fopenmp -I'${LIBDIR}/openmp/include'")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L'${LIBDIR}/openmp/lib' -lomp")
+    string(APPEND CMAKE_EXE_LINKER_FLAGS " -L'${LIBDIR}/openmp/lib' -lomp")
 
     # Copy libomp.dylib to allow executables like datatoc and tests to work.
     # `@executable_path/../Resources/lib/` is a default dylib search path.
@@ -425,33 +437,33 @@ endif()
 
 set(EXETYPE MACOSX_BUNDLE)
 
-set(CMAKE_C_FLAGS_DEBUG "-fno-strict-aliasing -g")
-set(CMAKE_CXX_FLAGS_DEBUG "-fno-strict-aliasing -g")
+set(CMAKE_C_FLAGS_DEBUG "-g")
+set(CMAKE_CXX_FLAGS_DEBUG "-g")
 if(CMAKE_OSX_ARCHITECTURES MATCHES "x86_64" OR CMAKE_OSX_ARCHITECTURES MATCHES "i386")
   set(CMAKE_CXX_FLAGS_RELEASE "-O2 -mdynamic-no-pic -msse -msse2 -msse3 -mssse3")
   set(CMAKE_C_FLAGS_RELEASE "-O2 -mdynamic-no-pic  -msse -msse2 -msse3 -mssse3")
   if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
-    set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -ftree-vectorize  -fvariable-expansion-in-unroller")
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -ftree-vectorize  -fvariable-expansion-in-unroller")
+    string(APPEND CMAKE_C_FLAGS_RELEASE " -ftree-vectorize  -fvariable-expansion-in-unroller")
+    string(APPEND CMAKE_CXX_FLAGS_RELEASE " -ftree-vectorize  -fvariable-expansion-in-unroller")
   endif()
 else()
-  set(CMAKE_C_FLAGS_RELEASE "-O2 -mdynamic-no-pic -fno-strict-aliasing")
-  set(CMAKE_CXX_FLAGS_RELEASE "-O2 -mdynamic-no-pic -fno-strict-aliasing")
+  set(CMAKE_C_FLAGS_RELEASE "-O2 -mdynamic-no-pic")
+  set(CMAKE_CXX_FLAGS_RELEASE "-O2 -mdynamic-no-pic")
 endif()
 
 if(${XCODE_VERSION} VERSION_EQUAL 5 OR ${XCODE_VERSION} VERSION_GREATER 5)
   # Xcode 5 is always using CLANG, which has too low template depth of 128 for libmv
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ftemplate-depth=1024")
+  string(APPEND CMAKE_CXX_FLAGS " -ftemplate-depth=1024")
 endif()
 
 # Avoid conflicts with Luxrender, and other plug-ins that may use the same
 # libraries as Blender with a different version or build options.
-set(PLATFORM_LINKFLAGS
-  "${PLATFORM_LINKFLAGS} -Xlinker -unexported_symbols_list -Xlinker '${CMAKE_SOURCE_DIR}/source/creator/osx_locals.map'"
+string(APPEND PLATFORM_LINKFLAGS
+  " -Wl,-unexported_symbols_list,'${CMAKE_SOURCE_DIR}/source/creator/osx_locals.map'"
 )
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
-set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -stdlib=libc++")
+string(APPEND CMAKE_CXX_FLAGS " -stdlib=libc++")
+string(APPEND PLATFORM_LINKFLAGS " -stdlib=libc++")
 
 # Suppress ranlib "has no symbols" warnings (workaround for T48250)
 set(CMAKE_C_ARCHIVE_CREATE   "<CMAKE_AR> Scr <TARGET> <LINK_FLAGS> <OBJECTS>")

@@ -164,21 +164,21 @@ static void autokeyframe_pose(
           /* only if bone name matches too...
            * NOTE: this will do constraints too, but those are ok to do here too?
            */
-          if (pchanName && STREQ(pchanName, pchan->name)) {
-            insert_keyframe(bmain,
-                            reports,
-                            id,
-                            act,
-                            ((fcu->grp) ? (fcu->grp->name) : (NULL)),
-                            fcu->rna_path,
-                            fcu->array_index,
-                            &anim_eval_context,
-                            ts->keyframe_type,
-                            &nla_cache,
-                            flag);
-          }
-
           if (pchanName) {
+            if (STREQ(pchanName, pchan->name)) {
+              insert_keyframe(bmain,
+                              reports,
+                              id,
+                              act,
+                              ((fcu->grp) ? (fcu->grp->name) : (NULL)),
+                              fcu->rna_path,
+                              fcu->array_index,
+                              &anim_eval_context,
+                              ts->keyframe_type,
+                              &nla_cache,
+                              flag);
+            }
+
             MEM_freeN(pchanName);
           }
         }
@@ -1504,7 +1504,7 @@ static void bone_children_clear_transflag(int mode, short around, ListBase *lb)
     if ((bone->flag & BONE_HINGE) && (bone->flag & BONE_CONNECTED)) {
       bone->flag |= BONE_HINGE_CHILD_TRANSFORM;
     }
-    else if ((bone->flag & BONE_TRANSFORM) && (mode == TFM_ROTATION || mode == TFM_TRACKBALL) &&
+    else if ((bone->flag & BONE_TRANSFORM) && (ELEM(mode, TFM_ROTATION, TFM_TRACKBALL)) &&
              (around == V3D_AROUND_LOCAL_ORIGINS)) {
       bone->flag |= BONE_TRANSFORM_CHILD;
     }

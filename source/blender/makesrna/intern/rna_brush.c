@@ -22,6 +22,7 @@
 
 #include "DNA_brush_types.h"
 #include "DNA_gpencil_types.h"
+#include "DNA_material_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_texture_types.h"
@@ -79,6 +80,27 @@ static const EnumPropertyItem sculpt_stroke_method_items[] = {
     {0, NULL, 0, NULL, NULL},
 };
 
+static const EnumPropertyItem rna_enum_brush_texture_slot_map_all_mode_items[] = {
+    {MTEX_MAP_MODE_VIEW, "VIEW_PLANE", 0, "View Plane", ""},
+    {MTEX_MAP_MODE_AREA, "AREA_PLANE", 0, "Area Plane", ""},
+    {MTEX_MAP_MODE_TILED, "TILED", 0, "Tiled", ""},
+    {MTEX_MAP_MODE_3D, "3D", 0, "3D", ""},
+    {MTEX_MAP_MODE_RANDOM, "RANDOM", 0, "Random", ""},
+    {MTEX_MAP_MODE_STENCIL, "STENCIL", 0, "Stencil", ""},
+    {0, NULL, 0, NULL, NULL},
+};
+
+#ifdef RNA_RUNTIME
+static const EnumPropertyItem rna_enum_brush_texture_slot_map_texture_mode_items[] = {
+    {MTEX_MAP_MODE_VIEW, "VIEW_PLANE", 0, "View Plane", ""},
+    {MTEX_MAP_MODE_TILED, "TILED", 0, "Tiled", ""},
+    {MTEX_MAP_MODE_3D, "3D", 0, "3D", ""},
+    {MTEX_MAP_MODE_RANDOM, "RANDOM", 0, "Random", ""},
+    {MTEX_MAP_MODE_STENCIL, "STENCIL", 0, "Stencil", ""},
+    {0, NULL, 0, NULL, NULL},
+};
+#endif
+
 /* clang-format off */
 const EnumPropertyItem rna_enum_brush_sculpt_tool_items[] = {
     {SCULPT_TOOL_DRAW, "DRAW", ICON_BRUSH_SCULPT_DRAW, "Draw", ""},
@@ -112,6 +134,7 @@ const EnumPropertyItem rna_enum_brush_sculpt_tool_items[] = {
     {SCULPT_TOOL_SIMPLIFY, "SIMPLIFY", ICON_BRUSH_DATA, "Simplify", ""},
     {SCULPT_TOOL_MASK, "MASK", ICON_BRUSH_MASK, "Mask", ""},
     {SCULPT_TOOL_DISPLACEMENT_ERASER, "DISPLACEMENT_ERASER", ICON_BRUSH_SCULPT_DRAW, "Multires Displacement Eraser", ""},
+    {SCULPT_TOOL_DISPLACEMENT_SMEAR, "DISPLACEMENT_SMEAR", ICON_BRUSH_SCULPT_DRAW, "Multires Displacement Smear", ""},
     {SCULPT_TOOL_PAINT, "PAINT", ICON_BRUSH_SCULPT_DRAW, "Paint", ""},
     {SCULPT_TOOL_SMEAR, "SMEAR", ICON_BRUSH_SCULPT_DRAW, "Smear", ""},
     {SCULPT_TOOL_DRAW_FACE_SETS, "DRAW_FACE_SETS", ICON_BRUSH_MASK, "Draw Face Sets", ""},
@@ -765,10 +788,6 @@ static const EnumPropertyItem *rna_Brush_direction_itemf(bContext *C,
 {
   ePaintMode mode = BKE_paintmode_get_active_from_context(C);
 
-  static const EnumPropertyItem prop_default_items[] = {
-      {0, NULL, 0, NULL, NULL},
-  };
-
   /* sculpt mode */
   static const EnumPropertyItem prop_flatten_contrast_items[] = {
       {BRUSH_DIR_IN, "CONTRAST", ICON_ADD, "Contrast", "Subtract effect of brush"},
@@ -828,10 +847,10 @@ static const EnumPropertyItem *rna_Brush_direction_itemf(bContext *C,
               return prop_direction_items;
 
             case BRUSH_MASK_SMOOTH:
-              return prop_default_items;
+              return DummyRNA_DEFAULT_items;
 
             default:
-              return prop_default_items;
+              return DummyRNA_DEFAULT_items;
           }
 
         case SCULPT_TOOL_FLATTEN:
@@ -850,7 +869,7 @@ static const EnumPropertyItem *rna_Brush_direction_itemf(bContext *C,
           return prop_inflate_deflate_items;
 
         default:
-          return prop_default_items;
+          return DummyRNA_DEFAULT_items;
       }
 
     case PAINT_MODE_TEXTURE_2D:
@@ -860,11 +879,11 @@ static const EnumPropertyItem *rna_Brush_direction_itemf(bContext *C,
           return prop_soften_sharpen_items;
 
         default:
-          return prop_default_items;
+          return DummyRNA_DEFAULT_items;
       }
 
     default:
-      return prop_default_items;
+      return DummyRNA_DEFAULT_items;
   }
 }
 
@@ -1015,31 +1034,34 @@ static void rna_GPencilBrush_pin_mode_update(bContext *C, PointerRNA *ptr)
   }
 }
 
+static const EnumPropertyItem *rna_BrushTextureSlot_map_mode_itemf(bContext *C,
+                                                                   PointerRNA *UNUSED(ptr),
+                                                                   PropertyRNA *UNUSED(prop),
+                                                                   bool *UNUSED(r_free))
+{
+
+  if (C == NULL) {
+    return rna_enum_brush_texture_slot_map_all_mode_items;
+  }
+
+#  define rna_enum_brush_texture_slot_map_sculpt_mode_items \
+    rna_enum_brush_texture_slot_map_all_mode_items;
+
+  const ePaintMode mode = BKE_paintmode_get_active_from_context(C);
+  if (mode == PAINT_MODE_SCULPT) {
+    return rna_enum_brush_texture_slot_map_sculpt_mode_items;
+  }
+  return rna_enum_brush_texture_slot_map_texture_mode_items;
+
+#  undef rna_enum_brush_texture_slot_map_sculpt_mode_items
+}
+
 #else
 
 static void rna_def_brush_texture_slot(BlenderRNA *brna)
 {
   StructRNA *srna;
   PropertyRNA *prop;
-
-  static const EnumPropertyItem prop_map_mode_items[] = {
-      {MTEX_MAP_MODE_VIEW, "VIEW_PLANE", 0, "View Plane", ""},
-      {MTEX_MAP_MODE_AREA, "AREA_PLANE", 0, "Area Plane", ""},
-      {MTEX_MAP_MODE_TILED, "TILED", 0, "Tiled", ""},
-      {MTEX_MAP_MODE_3D, "3D", 0, "3D", ""},
-      {MTEX_MAP_MODE_RANDOM, "RANDOM", 0, "Random", ""},
-      {MTEX_MAP_MODE_STENCIL, "STENCIL", 0, "Stencil", ""},
-      {0, NULL, 0, NULL, NULL},
-  };
-
-  static const EnumPropertyItem prop_tex_paint_map_mode_items[] = {
-      {MTEX_MAP_MODE_VIEW, "VIEW_PLANE", 0, "View Plane", ""},
-      {MTEX_MAP_MODE_TILED, "TILED", 0, "Tiled", ""},
-      {MTEX_MAP_MODE_3D, "3D", 0, "3D", ""},
-      {MTEX_MAP_MODE_RANDOM, "RANDOM", 0, "Random", ""},
-      {MTEX_MAP_MODE_STENCIL, "STENCIL", 0, "Stencil", ""},
-      {0, NULL, 0, NULL, NULL},
-  };
 
   static const EnumPropertyItem prop_mask_paint_map_mode_items[] = {
       {MTEX_MAP_MODE_VIEW, "VIEW_PLANE", 0, "View Plane", ""},
@@ -1069,14 +1091,8 @@ static void rna_def_brush_texture_slot(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "map_mode", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, NULL, "brush_map_mode");
-  RNA_def_property_enum_items(prop, prop_map_mode_items);
-  RNA_def_property_ui_text(prop, "Mode", "");
-  RNA_def_property_flag(prop, PROP_CONTEXT_UPDATE);
-  RNA_def_property_update(prop, 0, "rna_TextureSlot_update");
-
-  prop = RNA_def_property(srna, "tex_paint_map_mode", PROP_ENUM, PROP_NONE);
-  RNA_def_property_enum_sdna(prop, NULL, "brush_map_mode");
-  RNA_def_property_enum_items(prop, prop_tex_paint_map_mode_items);
+  RNA_def_property_enum_items(prop, rna_enum_brush_texture_slot_map_all_mode_items);
+  RNA_def_property_enum_funcs(prop, NULL, NULL, "rna_BrushTextureSlot_map_mode_itemf");
   RNA_def_property_ui_text(prop, "Mode", "");
   RNA_def_property_flag(prop, PROP_CONTEXT_UPDATE);
   RNA_def_property_update(prop, 0, "rna_TextureSlot_update");
@@ -2058,6 +2074,20 @@ static void rna_def_brush(BlenderRNA *brna)
       {0, NULL, 0, NULL, NULL},
   };
 
+  static const EnumPropertyItem brush_snake_hook_deform_type_items[] = {
+      {BRUSH_SNAKE_HOOK_DEFORM_FALLOFF,
+       "FALLOFF",
+       0,
+       "Radius Falloff",
+       "Applies the brush falloff in the tip of the brush"},
+      {BRUSH_SNAKE_HOOK_DEFORM_ELASTIC,
+       "ELASTIC",
+       0,
+       "Elastic",
+       "Modifies the entire mesh using elastic deform"},
+      {0, NULL, 0, NULL, NULL},
+  };
+
   static const EnumPropertyItem brush_cloth_deform_type_items[] = {
       {BRUSH_CLOTH_DEFORM_DRAG, "DRAG", 0, "Drag", ""},
       {BRUSH_CLOTH_DEFORM_PUSH, "PUSH", 0, "Push", ""},
@@ -2292,6 +2322,11 @@ static void rna_def_brush(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "elastic_deform_type", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_items(prop, brush_elastic_deform_type_items);
+  RNA_def_property_ui_text(prop, "Deformation", "Deformation type that is used in the brush");
+  RNA_def_property_update(prop, 0, "rna_Brush_update");
+
+  prop = RNA_def_property(srna, "snake_hook_deform_type", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_items(prop, brush_snake_hook_deform_type_items);
   RNA_def_property_ui_text(prop, "Deformation", "Deformation type that is used in the brush");
   RNA_def_property_update(prop, 0, "rna_Brush_update");
 
@@ -2840,6 +2875,16 @@ static void rna_def_brush(BlenderRNA *brna)
                            "used to sample the area center");
   RNA_def_property_update(prop, 0, "rna_Brush_update");
 
+  prop = RNA_def_property(srna, "wet_paint_radius_factor", PROP_FLOAT, PROP_FACTOR);
+  RNA_def_property_float_sdna(prop, NULL, "wet_paint_radius_factor");
+  RNA_def_property_range(prop, 0.0f, 2.0f);
+  RNA_def_property_ui_range(prop, 0.0f, 2.0f, 0.001, 3);
+  RNA_def_property_ui_text(prop,
+                           "Wet Paint Radius",
+                           "Ratio between the brush radius and the radius that is going to be "
+                           "used to sample the color to blend in wet paint");
+  RNA_def_property_update(prop, 0, "rna_Brush_update");
+
   prop = RNA_def_property(srna, "stencil_pos", PROP_FLOAT, PROP_XYZ);
   RNA_def_property_float_sdna(prop, NULL, "stencil_pos");
   RNA_def_property_array(prop, 2);
@@ -2966,6 +3011,12 @@ static void rna_def_brush(BlenderRNA *brna)
       prop,
       "Grab Active Vertex",
       "Apply the maximum grab strength to the active vertex instead of the cursor location");
+  RNA_def_property_update(prop, 0, "rna_Brush_update");
+
+  prop = RNA_def_property(srna, "use_grab_silhouette", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flag2", BRUSH_GRAB_SILHOUETTE);
+  RNA_def_property_ui_text(
+      prop, "Grab Silhouette", "Grabs trying to automask the silhouette of the object");
   RNA_def_property_update(prop, 0, "rna_Brush_update");
 
   prop = RNA_def_property(srna, "use_paint_antialiasing", PROP_BOOLEAN, PROP_NONE);

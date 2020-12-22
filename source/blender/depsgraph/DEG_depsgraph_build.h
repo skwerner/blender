@@ -39,7 +39,6 @@ struct Main;
 struct Object;
 struct Scene;
 struct Simulation;
-struct ViewLayer;
 struct bNodeTree;
 
 #include "BLI_sys_types.h"
@@ -141,6 +140,9 @@ void DEG_add_object_relation(struct DepsNodeHandle *node_handle,
 void DEG_add_simulation_relation(struct DepsNodeHandle *node_handle,
                                  struct Simulation *simulation,
                                  const char *description);
+void DEG_add_node_tree_relation(struct DepsNodeHandle *node_handle,
+                                struct bNodeTree *node_tree,
+                                const char *description);
 void DEG_add_bone_relation(struct DepsNodeHandle *handle,
                            struct Object *object,
                            const char *bone_name,

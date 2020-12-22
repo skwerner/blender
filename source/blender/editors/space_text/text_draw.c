@@ -285,7 +285,7 @@ void wrap_offset(
           end += max;
           chop = 1;
         }
-        else if (ch == ' ' || ch == '-') {
+        else if (ELEM(ch, ' ', '-')) {
           end = i + 1;
           chop = 0;
           if (linep == linein && i >= cursin) {
@@ -362,7 +362,7 @@ void wrap_offset_in_line(
         end += max;
         chop = 1;
       }
-      else if (ch == ' ' || ch == '-') {
+      else if (ELEM(ch, ' ', '-')) {
         end = i + 1;
         chop = 0;
         if (i >= cursin) {
@@ -483,7 +483,7 @@ static int text_draw_wrapped(const SpaceText *st,
         break;
       }
     }
-    else if (str[mi] == ' ' || str[mi] == '-') {
+    else if (ELEM(str[mi], ' ', '-')) {
       wrap = i + 1;
       mend = mi + 1;
     }
@@ -820,7 +820,7 @@ int text_get_visible_lines(const SpaceText *st, ARegion *region, const char *str
         start = MIN2(end, i);
         end += max;
       }
-      else if (ch == ' ' || ch == '-') {
+      else if (ELEM(ch, ' ', '-')) {
         end = i + 1;
       }
 
@@ -886,7 +886,7 @@ static void calc_text_rcts(SpaceText *st, ARegion *region, rcti *scroll, rcti *b
   scroll->ymin = pix_top_margin;
   scroll->ymax = pix_available;
 
-  /* when re-sizing a view-port with the bar at the bottom to a greater height
+  /* when re-sizing a 2D Viewport with the bar at the bottom to a greater height
    * more blank lines will be added */
   if (ltexth + blank_lines < st->top + st->runtime.viewlines) {
     blank_lines = st->top + st->runtime.viewlines - ltexth;

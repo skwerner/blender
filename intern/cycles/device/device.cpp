@@ -17,6 +17,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "bvh/bvh2.h"
+
 #include "device/device.h"
 #include "device/device_intern.h"
 
@@ -364,6 +366,19 @@ void Device::draw_pixels(device_memory &rgba,
   }
 }
 
+void Device::build_bvh(BVH *bvh, Progress &progress, bool refit)
+{
+  assert(bvh->params.bvh_layout == BVH_LAYOUT_BVH2);
+
+  BVH2 *const bvh2 = static_cast<BVH2 *>(bvh);
+  if (refit) {
+    bvh2->refit(progress);
+  }
+  else {
+    bvh2->build(progress, &stats);
+  }
+}
+
 Device *Device::create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background)
 {
 #ifdef WITH_MULTI
@@ -375,7 +390,7 @@ Device *Device::create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool 
   }
 #endif
 
-  Device *device;
+  Device *device = NULL;
 
   switch (info.type) {
     case DEVICE_CPU:
@@ -385,16 +400,12 @@ Device *Device::create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool 
     case DEVICE_CUDA:
       if (device_cuda_init())
         device = device_cuda_create(info, stats, profiler, background);
-      else
-        device = NULL;
       break;
 #endif
 #ifdef WITH_OPTIX
     case DEVICE_OPTIX:
       if (device_optix_init())
         device = device_optix_create(info, stats, profiler, background);
-      else
-        device = NULL;
       break;
 #endif
 #ifdef WITH_NETWORK
@@ -406,12 +417,14 @@ Device *Device::create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool 
     case DEVICE_OPENCL:
       if (device_opencl_init())
         device = device_opencl_create(info, stats, profiler, background);
-      else
-        device = NULL;
       break;
 #endif
     default:
-      return NULL;
+      break;
+  }
+
+  if (device == NULL) {
+    device = device_dummy_create(info, stats, profiler, background);
   }
 
   return device;
@@ -547,6 +560,14 @@ vector<DeviceInfo> Device::available_devices(uint mask)
 #endif
 
   return devices;
+}
+
+DeviceInfo Device::dummy_device(const string &error_msg)
+{
+  DeviceInfo info;
+  info.type = DEVICE_DUMMY;
+  info.error_msg = error_msg;
+  return info;
 }
 
 string Device::device_capabilities(uint mask)

@@ -42,6 +42,7 @@
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
+#include "DNA_object_force_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_texture_types.h"
@@ -76,9 +77,7 @@
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
 
-/* to read material/texture color */
-#include "RE_render_ext.h"
-#include "RE_shader_ext.h"
+#include "RE_texture.h"
 
 #include "atomic_ops.h"
 
@@ -123,7 +122,7 @@ static int neighStraightY[8] = {0, 1, 0, -1, 1, 1, -1, -1};
 /* paint effect default movement per frame in global units */
 #define EFF_MOVEMENT_PER_FRAME 0.05f
 /* initial wave time factor */
-#define WAVE_TIME_FAC (1.0f / 24.f)
+#define WAVE_TIME_FAC (1.0f / 24.0f)
 #define CANVAS_REL_SIZE 5.0f
 /* drying limits */
 #define MIN_WETNESS 0.001f
@@ -762,7 +761,7 @@ static void surfaceGenerateGrid(struct DynamicPaintSurface *surface)
     sub_v3_v3v3(dim, grid->grid_bounds.max, grid->grid_bounds.min);
     copy_v3_v3(td, dim);
     copy_v3_v3(bData->dim, dim);
-    min_dim = max_fff(td[0], td[1], td[2]) / 1000.f;
+    min_dim = max_fff(td[0], td[1], td[2]) / 1000.0f;
 
     /* deactivate zero axises */
     for (i = 0; i < 3; i++) {
@@ -2700,7 +2699,7 @@ static void dynamic_paint_find_island_border(const DynamicPaintCreateUVSurfaceDa
 
     const int final_tri_index = tempPoints[final_index].tri_index;
     /* If found pixel still lies on wrong face ( mesh has smaller than pixel sized faces) */
-    if (final_tri_index != target_tri && final_tri_index != -1) {
+    if (!ELEM(final_tri_index, target_tri, -1)) {
       /* Check if it's close enough to likely touch the intended triangle. Any triangle
        * becomes thinner than a pixel at its vertices, so robustness requires some margin. */
       const float final_pt[2] = {((final_index % w) + 0.5f) / w, ((final_index / w) + 0.5f) / h};
@@ -3034,7 +3033,7 @@ int dynamicPaint_createUVSurface(Scene *scene,
                     n_pos++;
                   }
                 }
-                else if (n_target == ON_MESH_EDGE || n_target == OUT_OF_TEXTURE) {
+                else if (ELEM(n_target, ON_MESH_EDGE, OUT_OF_TEXTURE)) {
                   ed->flags[final_index[index]] |= ADJ_ON_MESH_EDGE;
                 }
               }
@@ -3736,7 +3735,7 @@ static bool meshBrush_boundsIntersect(Bounds3D *b1,
   if (brush->collision == MOD_DPAINT_COL_VOLUME) {
     return boundsIntersect(b1, b2);
   }
-  if (brush->collision == MOD_DPAINT_COL_DIST || brush->collision == MOD_DPAINT_COL_VOLDIST) {
+  if (ELEM(brush->collision, MOD_DPAINT_COL_DIST, MOD_DPAINT_COL_VOLDIST)) {
     return boundsIntersectDist(b1, b2, brush_radius);
   }
   return true;
@@ -4710,8 +4709,7 @@ static void dynamic_paint_paint_single_point_cb_ex(void *__restrict userdata,
   }
 
   /* Smooth range or color ramp */
-  if (brush->proximity_falloff == MOD_DPAINT_PRFALL_SMOOTH ||
-      brush->proximity_falloff == MOD_DPAINT_PRFALL_RAMP) {
+  if (ELEM(brush->proximity_falloff, MOD_DPAINT_PRFALL_SMOOTH, MOD_DPAINT_PRFALL_RAMP)) {
     strength = 1.0f - distance / brush_radius;
     CLAMP(strength, 0.0f, 1.0f);
   }
@@ -5116,7 +5114,7 @@ static void dynamic_paint_prepare_effect_cb(void *__restrict userdata,
     madd_v3_v3fl(forc,
                  scene->physics_settings.gravity,
                  surface->effector_weights->global_gravity * surface->effector_weights->weight[0] /
-                     10.f);
+                     10.0f);
   }
 
   /* add surface point velocity and acceleration if enabled */

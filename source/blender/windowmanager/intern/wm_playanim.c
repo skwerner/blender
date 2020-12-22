@@ -1274,7 +1274,7 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
     g_WS.ghost_system = GHOST_CreateSystem();
     GHOST_AddEventConsumer(g_WS.ghost_system, consumer);
 
-    playanim_window_open("Blender:Anim", start_x, start_y, ibuf->x, ibuf->y);
+    playanim_window_open("Blender Animation Player", start_x, start_y, ibuf->x, ibuf->y);
   }
 
   GHOST_GetMainDisplayDimensions(g_WS.ghost_system, &maxwinx, &maxwiny);
@@ -1391,7 +1391,7 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
     while (ps.picture) {
       int hasevent;
 #ifndef USE_IMB_CACHE
-      if (ibuf != NULL && ibuf->ftype == 0) {
+      if (ibuf != NULL && ibuf->ftype == IMB_FTYPE_NONE) {
         IMB_freeImBuf(ibuf);
       }
 #endif

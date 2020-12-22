@@ -56,11 +56,13 @@ extern const EnumPropertyItem rna_enum_mesh_select_mode_items[];
 extern const EnumPropertyItem rna_enum_mesh_select_mode_uv_items[];
 extern const EnumPropertyItem rna_enum_mesh_delimit_mode_items[];
 extern const EnumPropertyItem rna_enum_space_graph_mode_items[];
+extern const EnumPropertyItem rna_enum_space_file_browse_mode_items[];
 extern const EnumPropertyItem rna_enum_space_sequencer_view_type_items[];
 extern const EnumPropertyItem rna_enum_space_type_items[];
 extern const EnumPropertyItem rna_enum_space_image_mode_items[];
 extern const EnumPropertyItem rna_enum_space_image_mode_all_items[];
 extern const EnumPropertyItem rna_enum_space_action_mode_items[];
+extern const EnumPropertyItem rna_enum_fileselect_params_sort_items[];
 extern const EnumPropertyItem rna_enum_region_type_items[];
 extern const EnumPropertyItem rna_enum_object_modifier_type_items[];
 extern const EnumPropertyItem rna_enum_constraint_type_items[];
@@ -189,8 +191,6 @@ extern const EnumPropertyItem rna_enum_property_unit_items[];
 extern const EnumPropertyItem rna_enum_shading_type_items[];
 
 extern const EnumPropertyItem rna_enum_navigation_mode_items[];
-
-extern const EnumPropertyItem rna_enum_file_sort_items[];
 
 extern const EnumPropertyItem rna_enum_node_socket_in_out_items[];
 

@@ -848,7 +848,7 @@ void ED_view3d_draw_depth(Depsgraph *depsgraph, ARegion *region, View3D *v3d, bo
   /* get surface depth without bias */
   rv3d->rflag |= RV3D_ZOFFSET_DISABLED;
 
-  /* Needed in cases the view-port isn't already setup. */
+  /* Needed in cases the 3D Viewport isn't already setup. */
   WM_draw_region_viewport_ensure(region, SPACE_VIEW3D);
   WM_draw_region_viewport_bind(region);
 
@@ -949,15 +949,16 @@ void ED_view3d_grid_steps(const Scene *scene,
  * Currently the simulation is only done when RV3D_VIEW_IS_AXIS. */
 float ED_view3d_grid_view_scale(Scene *scene,
                                 View3D *v3d,
-                                RegionView3D *rv3d,
+                                ARegion *region,
                                 const char **r_grid_unit)
 {
   float grid_scale;
+  RegionView3D *rv3d = region->regiondata;
   if (!rv3d->is_persp && RV3D_VIEW_IS_AXIS(rv3d->view)) {
     /* Decrease the distance between grid snap points depending on zoom. */
     /* `0.38` was a value visually obtained in order to get a snap distance
      * that matches previous versions Blender.*/
-    float min_dist = 0.38f * (rv3d->dist / v3d->lens);
+    float min_dist = 16.0f / (region->sizex * rv3d->winmat[0][0]);
     float grid_steps[STEPS_LEN];
     ED_view3d_grid_steps(scene, v3d, rv3d, grid_steps);
     /* Skip last item, in case the 'mid_dist' is greater than the largest unit. */
@@ -1468,12 +1469,13 @@ static void draw_selected_name(
 }
 
 static void draw_grid_unit_name(
-    Scene *scene, RegionView3D *rv3d, View3D *v3d, int xoffset, int *yoffset)
+    Scene *scene, ARegion *region, View3D *v3d, int xoffset, int *yoffset)
 {
+  RegionView3D *rv3d = region->regiondata;
   if (!rv3d->is_persp && RV3D_VIEW_IS_AXIS(rv3d->view)) {
     const char *grid_unit = NULL;
     int font_id = BLF_default();
-    ED_view3d_grid_view_scale(scene, v3d, rv3d, &grid_unit);
+    ED_view3d_grid_view_scale(scene, v3d, region, &grid_unit);
 
     if (grid_unit) {
       char numstr[32] = "";
@@ -1558,7 +1560,7 @@ void view3d_draw_region_info(const bContext *C, ARegion *region)
 
     if (v3d->gridflag & (V3D_SHOW_FLOOR | V3D_SHOW_X | V3D_SHOW_Y | V3D_SHOW_Z)) {
       /* draw below the viewport name */
-      draw_grid_unit_name(scene, rv3d, v3d, xoffset, &yoffset);
+      draw_grid_unit_name(scene, region, v3d, xoffset, &yoffset);
     }
 
     DRW_draw_region_engine_info(xoffset, &yoffset, VIEW3D_OVERLAY_LINEHEIGHT);
@@ -1664,8 +1666,7 @@ void ED_view3d_draw_offscreen(Depsgraph *depsgraph,
                               const float viewmat[4][4],
                               const float winmat[4][4],
                               bool is_image_render,
-                              bool do_sky,
-                              bool UNUSED(is_persp),
+                              bool draw_background,
                               const char *viewname,
                               const bool do_color_management,
                               GPUOffScreen *ofs,
@@ -1674,11 +1675,37 @@ void ED_view3d_draw_offscreen(Depsgraph *depsgraph,
   RegionView3D *rv3d = region->regiondata;
   RenderEngineType *engine_type = ED_view3d_engine_type(scene, drawtype);
 
-  /* set temporary new size */
-  int bwinx = region->winx;
-  int bwiny = region->winy;
-  rcti brect = region->winrct;
+  /* Store `orig` variables. */
+  struct {
+    struct bThemeState theme_state;
 
+    /* #View3D */
+    eDrawType v3d_shading_type;
+
+    /* #Region */
+    int region_winx, region_winy;
+    rcti region_winrct;
+
+    /* #RegionView3D */
+    /**
+     * Needed so the value won't be left overwritten,
+     * Without this the #wmPaintCursor can't use the pixel size & view matrices for drawing.
+     */
+    struct RV3DMatrixStore *rv3d_mats;
+  } orig = {
+      .v3d_shading_type = v3d->shading.type,
+
+      .region_winx = region->winx,
+      .region_winy = region->winy,
+      .region_winrct = region->winrct,
+
+      .rv3d_mats = ED_view3d_mats_rv3d_backup(region->regiondata),
+  };
+
+  UI_Theme_Store(&orig.theme_state);
+  UI_SetTheme(SPACE_VIEW3D, RGN_TYPE_WINDOW);
+
+  /* Set temporary new size. */
   region->winx = winx;
   region->winy = winy;
   region->winrct.xmin = 0;
@@ -1686,17 +1713,12 @@ void ED_view3d_draw_offscreen(Depsgraph *depsgraph,
   region->winrct.xmax = winx;
   region->winrct.ymax = winy;
 
-  struct bThemeState theme_state;
-  UI_Theme_Store(&theme_state);
-  UI_SetTheme(SPACE_VIEW3D, RGN_TYPE_WINDOW);
-
-  /* set flags */
-  G.f |= G_FLAG_RENDER_VIEWPORT;
-
   /* There are too many functions inside the draw manager that check the shading type,
    * so use a temporary override instead. */
-  const eDrawType drawtype_orig = v3d->shading.type;
   v3d->shading.type = drawtype;
+
+  /* Set flags. */
+  G.f |= G_FLAG_RENDER_VIEWPORT;
 
   {
     /* free images which can have changed on frame-change
@@ -1723,22 +1745,25 @@ void ED_view3d_draw_offscreen(Depsgraph *depsgraph,
                                  region,
                                  v3d,
                                  is_image_render,
-                                 do_sky,
+                                 draw_background,
                                  do_color_management,
                                  ofs,
                                  viewport);
-
-  /* restore size */
-  region->winx = bwinx;
-  region->winy = bwiny;
-  region->winrct = brect;
-
   GPU_matrix_pop_projection();
   GPU_matrix_pop();
 
-  UI_Theme_Restore(&theme_state);
+  /* Restore all `orig` members. */
+  region->winx = orig.region_winx;
+  region->winy = orig.region_winy;
+  region->winrct = orig.region_winrct;
 
-  v3d->shading.type = drawtype_orig;
+  ED_view3d_mats_rv3d_restore(region->regiondata, orig.rv3d_mats);
+  MEM_freeN(orig.rv3d_mats);
+
+  UI_Theme_Restore(&orig.theme_state);
+
+  v3d->shading.type = orig.v3d_shading_type;
+
   G.f &= ~G_FLAG_RENDER_VIEWPORT;
 }
 
@@ -1758,8 +1783,7 @@ void ED_view3d_draw_offscreen_simple(Depsgraph *depsgraph,
                                      float clip_start,
                                      float clip_end,
                                      bool is_image_render,
-                                     bool do_sky,
-                                     bool is_persp,
+                                     bool draw_background,
                                      const char *viewname,
                                      const bool do_color_management,
                                      GPUOffScreen *ofs,
@@ -1822,8 +1846,7 @@ void ED_view3d_draw_offscreen_simple(Depsgraph *depsgraph,
                            viewmat,
                            winmat,
                            is_image_render,
-                           do_sky,
-                           is_persp,
+                           draw_background,
                            viewname,
                            do_color_management,
                            ofs,
@@ -1941,7 +1964,6 @@ ImBuf *ED_view3d_draw_offscreen_imbuf(Depsgraph *depsgraph,
                            winmat,
                            true,
                            draw_sky,
-                           !is_ortho,
                            viewname,
                            do_color_management,
                            ofs,

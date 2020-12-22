@@ -1465,7 +1465,7 @@ class IMAGE_PT_overlay(Panel):
     bl_ui_units_x = 13
 
     def draw(self, context):
-      pass
+        pass
 
 
 class IMAGE_PT_overlay_uv_edit(Panel):
@@ -1496,7 +1496,6 @@ class IMAGE_PT_overlay_uv_edit(Panel):
         subrow.prop(uvedit, "display_stretch_type", text="")
 
 
-
 class IMAGE_PT_overlay_uv_edit_geometry(Panel):
     bl_space_type = 'IMAGE_EDITOR'
     bl_region_type = 'HEADER'
@@ -1521,15 +1520,12 @@ class IMAGE_PT_overlay_uv_edit_geometry(Panel):
         col = layout.column()
         col.prop(uvedit, "uv_opacity")
         col.prop(uvedit, "edge_display_type", text="")
-        if context.preferences.experimental.use_image_editor_legacy_drawing:
-          col.prop(uvedit, "show_smooth_edges", text="Smooth")
         col.prop(uvedit, "show_modified_edges", text="Modified Edges")
 
         # Faces
         row = col.row()
         row.active = not uvedit.show_stretch
         row.prop(uvedit, "show_faces", text="Faces")
-
 
 
 class IMAGE_PT_overlay_texture_paint(Panel):

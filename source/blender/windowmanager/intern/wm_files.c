@@ -115,7 +115,6 @@
 #include "GHOST_Path-api.h"
 
 #include "UI_interface.h"
-#include "UI_interface_icons.h"
 #include "UI_resources.h"
 #include "UI_view2d.h"
 
@@ -178,22 +177,17 @@ bool wm_file_or_image_is_modified(const Main *bmain, const wmWindowManager *wm)
  */
 static void wm_window_match_init(bContext *C, ListBase *wmlist)
 {
-  wmWindowManager *wm;
-  wmWindow *win, *active_win;
-
   *wmlist = G_MAIN->wm;
   BLI_listbase_clear(&G_MAIN->wm);
 
-  active_win = CTX_wm_window(C);
+  wmWindow *active_win = CTX_wm_window(C);
 
   /* first wrap up running stuff */
   /* code copied from wm_init_exit.c */
-  for (wm = wmlist->first; wm; wm = wm->id.next) {
-
+  LISTBASE_FOREACH (wmWindowManager *, wm, wmlist) {
     WM_jobs_kill_all(wm);
 
-    for (win = wm->windows.first; win; win = win->next) {
-
+    LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
       CTX_wm_window_set(C, win); /* needed by operator close callbacks */
       WM_event_remove_handlers(C, &win->handlers);
       WM_event_remove_handlers(C, &win->modalhandlers);
@@ -519,11 +513,9 @@ void WM_file_autoexec_init(const char *filepath)
 void wm_file_read_report(bContext *C, Main *bmain)
 {
   ReportList *reports = NULL;
-  Scene *sce;
-
-  for (sce = bmain->scenes.first; sce; sce = sce->id.next) {
-    if (sce->r.engine[0] &&
-        BLI_findstring(&R_engines, sce->r.engine, offsetof(RenderEngineType, idname)) == NULL) {
+  LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+    if (scene->r.engine[0] &&
+        BLI_findstring(&R_engines, scene->r.engine, offsetof(RenderEngineType, idname)) == NULL) {
       if (reports == NULL) {
         reports = CTX_wm_reports(C);
       }
@@ -532,8 +524,8 @@ void wm_file_read_report(bContext *C, Main *bmain)
                   RPT_ERROR,
                   "Engine '%s' not available for scene '%s' (an add-on may need to be installed "
                   "or enabled)",
-                  sce->r.engine,
-                  sce->id.name + 2);
+                  scene->r.engine,
+                  scene->id.name + 2);
     }
   }
 
@@ -1136,7 +1128,7 @@ void wm_homefile_read(bContext *C,
   if (use_userdef) {
     /* Clear keymaps because the current default keymap may have been initialized
      * from user preferences, which have been reset. */
-    for (wmWindowManager *wm = bmain->wm.first; wm; wm = wm->id.next) {
+    LISTBASE_FOREACH (wmWindowManager *, wm, &bmain->wm) {
       if (wm->defaultconf) {
         wm->defaultconf->flag &= ~KEYCONF_INIT_DEFAULT;
       }
@@ -1236,8 +1228,7 @@ static void wm_history_file_write(void)
 
   fp = BLI_fopen(name, "w");
   if (fp) {
-    struct RecentFile *recent;
-    for (recent = G.recent_files.first; recent; recent = recent->next) {
+    LISTBASE_FOREACH (RecentFile *, recent, &G.recent_files) {
       fprintf(fp, "%s\n", recent->filepath);
     }
     fclose(fp);
@@ -1430,7 +1421,6 @@ static bool wm_file_write(bContext *C,
                           ReportList *reports)
 {
   Main *bmain = CTX_data_main(C);
-  Library *li;
   int len;
   int ok = false;
   BlendThumbnail *thumb, *main_thumb;
@@ -1459,7 +1449,7 @@ static bool wm_file_write(bContext *C,
    * its handy for scripts to save to a predefined name without blender editing it */
 
   /* send the OnSave event */
-  for (li = bmain->libraries.first; li; li = li->id.next) {
+  LISTBASE_FOREACH (Library *, li, &bmain->libraries) {
     if (BLI_path_cmp(li->filepath_abs, filepath) == 0) {
       BKE_reportf(reports, RPT_ERROR, "Cannot overwrite used library '%.240s'", filepath);
       return ok;
@@ -2482,7 +2472,7 @@ void WM_OT_open_mainfile(wmOperatorType *ot)
                                  FILE_OPENFILE,
                                  WM_FILESEL_FILEPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 
   RNA_def_boolean(
       ot->srna, "load_ui", true, "Load UI", "Load user interface setup in the .blend file");
@@ -2785,6 +2775,25 @@ static bool blend_save_check(bContext *UNUSED(C), wmOperator *op)
   return false;
 }
 
+static const char *wm_save_as_mainfile_get_name(wmOperatorType *ot, PointerRNA *ptr)
+{
+  if (RNA_boolean_get(ptr, "copy")) {
+    return CTX_IFACE_(ot->translation_context, "Save Copy");
+  }
+  return NULL;
+}
+
+static char *wm_save_as_mainfile_get_description(bContext *UNUSED(C),
+                                                 wmOperatorType *UNUSED(ot),
+                                                 PointerRNA *ptr)
+{
+  if (RNA_boolean_get(ptr, "copy")) {
+    return BLI_strdup(
+        "Save the current file in the desired location but do not make the saved file active");
+  }
+  return NULL;
+}
+
 void WM_OT_save_as_mainfile(wmOperatorType *ot)
 {
   PropertyRNA *prop;
@@ -2795,6 +2804,8 @@ void WM_OT_save_as_mainfile(wmOperatorType *ot)
 
   ot->invoke = wm_save_as_mainfile_invoke;
   ot->exec = wm_save_as_mainfile_exec;
+  ot->get_name = wm_save_as_mainfile_get_name;
+  ot->get_description = wm_save_as_mainfile_get_description;
   ot->check = blend_save_check;
   /* omit window poll so this can work in background mode */
 
@@ -2804,7 +2815,7 @@ void WM_OT_save_as_mainfile(wmOperatorType *ot)
                                  FILE_SAVE,
                                  WM_FILESEL_FILEPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
   RNA_def_boolean(ot->srna, "compress", false, "Compress", "Write compressed .blend file");
   RNA_def_boolean(ot->srna,
                   "relative_remap",
@@ -2874,7 +2885,7 @@ void WM_OT_save_mainfile(wmOperatorType *ot)
                                  FILE_SAVE,
                                  WM_FILESEL_FILEPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
   RNA_def_boolean(ot->srna, "compress", false, "Compress", "Write compressed .blend file");
   RNA_def_boolean(ot->srna,
                   "relative_remap",
@@ -2948,30 +2959,25 @@ static uiBlock *block_create_autorun_warning(struct bContext *C,
                                              void *UNUSED(arg1))
 {
   wmWindowManager *wm = CTX_wm_manager(C);
-  const uiStyle *style = UI_style_get_dpi();
-  const int text_points_max = MAX2(style->widget.points, style->widgetlabel.points);
-  const int dialog_width = text_points_max * 44 * U.dpi_fac;
 
   uiBlock *block = UI_block_begin(C, region, "autorun_warning_popup", UI_EMBOSS);
-
   UI_block_flag_enable(
       block, UI_BLOCK_KEEP_OPEN | UI_BLOCK_LOOP | UI_BLOCK_NO_WIN_CLIP | UI_BLOCK_NUMSELECT);
   UI_block_theme_style_set(block, UI_BLOCK_THEME_STYLE_POPUP);
   UI_block_emboss_set(block, UI_EMBOSS);
 
-  uiLayout *layout = UI_block_layout(
-      block, UI_LAYOUT_VERTICAL, UI_LAYOUT_PANEL, 10, 2, dialog_width, 0, 0, style);
+  uiLayout *layout = uiItemsAlertBox(block, 44, ALERT_ICON_ERROR);
 
-  /* Text and some vertical space */
+  /* Title and explanation text. */
   uiLayout *col = uiLayoutColumn(layout, true);
   uiItemL_ex(col,
              TIP_("For security reasons, automatic execution of Python scripts "
                   "in this file was disabled:"),
-             ICON_ERROR,
+             ICON_NONE,
              true,
              false);
-  uiItemL_ex(col, G.autoexec_fail, ICON_BLANK1, false, true);
-  uiItemL(col, TIP_("This may lead to unexpected behavior"), ICON_BLANK1);
+  uiItemL_ex(col, G.autoexec_fail, ICON_NONE, false, true);
+  uiItemL(col, TIP_("This may lead to unexpected behavior"), ICON_NONE);
 
   uiItemS(layout);
 
@@ -2984,7 +2990,7 @@ static uiBlock *block_create_autorun_warning(struct bContext *C,
           TIP_("Permanently allow execution of scripts"),
           ICON_NONE);
 
-  uiItemS(layout);
+  uiItemS_ex(layout, 3.0f);
 
   /* Buttons */
   uiBut *but;
@@ -3185,33 +3191,13 @@ static uiBlock *block_create__close_file_dialog(struct bContext *C,
 {
   wmGenericCallback *post_action = (wmGenericCallback *)arg1;
   Main *bmain = CTX_data_main(C);
-  const uiStyle *style = UI_style_get_dpi();
-  const short icon_size = 64 * U.dpi_fac;
-  const int text_points_max = MAX2(style->widget.points, style->widgetlabel.points);
-  const int dialog_width = icon_size + (text_points_max * 34 * U.dpi_fac);
-
-  /* Calculate icon column factor. */
-  const float split_factor = (float)icon_size / (float)(dialog_width - style->columnspace);
 
   uiBlock *block = UI_block_begin(C, region, close_file_dialog_name, UI_EMBOSS);
-
   UI_block_flag_enable(
       block, UI_BLOCK_KEEP_OPEN | UI_BLOCK_LOOP | UI_BLOCK_NO_WIN_CLIP | UI_BLOCK_NUMSELECT);
   UI_block_theme_style_set(block, UI_BLOCK_THEME_STYLE_POPUP);
-  UI_block_emboss_set(block, UI_EMBOSS);
 
-  uiLayout *block_layout = UI_block_layout(
-      block, UI_LAYOUT_VERTICAL, UI_LAYOUT_PANEL, 0, 0, dialog_width, 0, 0, style);
-
-  /* Split layout to put alert icon on left side. */
-  uiLayout *split_block = uiLayoutSplit(block_layout, split_factor, false);
-
-  /* Alert Icon. */
-  uiLayout *layout = uiLayoutColumn(split_block, false);
-  uiDefButAlert(block, ALERT_ICON_QUESTION, 0, 0, 0, icon_size);
-
-  /* The rest of the content on the right. */
-  layout = uiLayoutColumn(split_block, false);
+  uiLayout *layout = uiItemsAlertBox(block, 34, ALERT_ICON_QUESTION);
 
   /* Title. */
   uiItemL_ex(layout, TIP_("Save changes before closing?"), ICON_NONE, true, false);
@@ -3221,10 +3207,9 @@ static uiBlock *block_create__close_file_dialog(struct bContext *C,
   char filename[FILE_MAX];
   if (blendfile_pathpath[0] != '\0') {
     BLI_split_file_part(blendfile_pathpath, filename, sizeof(filename));
-    BLI_path_extension_replace(filename, sizeof(filename), "");
   }
   else {
-    STRNCPY(filename, IFACE_("Untitled"));
+    STRNCPY(filename, IFACE_("untitled.blend"));
   }
   uiItemL(layout, filename, ICON_NONE);
 
@@ -3236,7 +3221,7 @@ static uiBlock *block_create__close_file_dialog(struct bContext *C,
   LISTBASE_FOREACH (Report *, report, &reports.list) {
     uiLayout *row = uiLayoutColumn(layout, false);
     uiLayoutSetScaleY(row, 0.6f);
-    uiItemS_ex(row, 1.2f);
+    uiItemS(row);
 
     /* Error messages created in ED_image_save_all_modified_info() can be long,
      * but are made to separate into two parts at first colon between text and paths.
@@ -3259,12 +3244,8 @@ static uiBlock *block_create__close_file_dialog(struct bContext *C,
   /* Modified Images Checkbox. */
   if (modified_images_count > 0) {
     char message[64];
-    BLI_snprintf(message,
-                 sizeof(message),
-                 (modified_images_count == 1) ? "Save %u modified image" :
-                                                "Save %u modified images",
-                 modified_images_count);
-    uiItemS_ex(layout, 2.0f);
+    BLI_snprintf(message, sizeof(message), "Save %u modified image(s)", modified_images_count);
+    uiItemS(layout);
     uiDefButBitC(block,
                  UI_BTYPE_CHECKBOX,
                  1,
@@ -3284,7 +3265,7 @@ static uiBlock *block_create__close_file_dialog(struct bContext *C,
 
   BKE_reports_clear(&reports);
 
-  uiItemS_ex(layout, 1.0f);
+  uiItemS_ex(layout, modified_images_count > 0 ? 2.0f : 4.0f);
 
   /* Buttons. */
 #ifdef _WIN32
@@ -3296,11 +3277,8 @@ static uiBlock *block_create__close_file_dialog(struct bContext *C,
   if (windows_layout) {
     /* Windows standard layout. */
 
-    uiLayout *split = uiLayoutSplit(block_layout, 0.174f, true);
+    uiLayout *split = uiLayoutSplit(layout, 0.0f, true);
     uiLayoutSetScaleY(split, 1.2f);
-
-    uiLayoutColumn(split, false);
-    uiItemS(layout);
 
     uiLayoutColumn(split, false);
     wm_block_file_close_save_button(block, post_action);
@@ -3314,21 +3292,16 @@ static uiBlock *block_create__close_file_dialog(struct bContext *C,
   else {
     /* Non-Windows layout (macOS and Linux). */
 
-    uiLayout *split = uiLayoutSplit(block_layout, 0.167f, true);
+    uiLayout *split = uiLayoutSplit(layout, 0.3f, true);
     uiLayoutSetScaleY(split, 1.2f);
 
-    layout = uiLayoutColumn(split, false);
-    uiItemS(layout);
-
-    /* Split button area into two sections: 40/60. */
-    uiLayout *split_left = uiLayoutSplit(split, 0.40f, true);
-
-    /* First button uses 75% of left side (30% of original). */
-    uiLayoutSplit(split_left, 0.75f, true);
+    uiLayoutColumn(split, false);
     wm_block_file_close_discard_button(block, post_action);
 
-    /* The right side is split 50/50 (each 30% of original). */
-    uiLayout *split_right = uiLayoutSplit(split_left, 0.50f, true);
+    uiLayout *split_right = uiLayoutSplit(split, 0.1f, true);
+
+    uiLayoutColumn(split_right, false);
+    /* Empty space. */
 
     uiLayoutColumn(split_right, false);
     wm_block_file_close_cancel_button(block, post_action);

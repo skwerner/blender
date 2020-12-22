@@ -26,7 +26,6 @@
 #include "BLI_utildefines.h"
 
 struct BLI_Stack;
-struct BMEditMesh;
 struct BMesh;
 struct BMeshCreateParams;
 struct BMeshFromMeshParams;
@@ -177,7 +176,7 @@ void BKE_mesh_to_pointcloud(struct Main *bmain,
                             struct Depsgraph *depsgraph,
                             struct Scene *scene,
                             struct Object *ob);
-void BKE_mesh_from_pointcloud(struct PointCloud *pointcloud, struct Mesh *me);
+void BKE_mesh_from_pointcloud(const struct PointCloud *pointcloud, struct Mesh *me);
 void BKE_pointcloud_to_mesh(struct Main *bmain,
                             struct Depsgraph *depsgraph,
                             struct Scene *scene,
@@ -187,6 +186,9 @@ bool BKE_mesh_material_index_used(struct Mesh *me, short index);
 void BKE_mesh_material_index_clear(struct Mesh *me);
 void BKE_mesh_material_remap(struct Mesh *me, const unsigned int *remap, unsigned int remap_len);
 void BKE_mesh_smooth_flag_set(struct Mesh *me, const bool use_smooth);
+
+/* Needed after converting a mesh with subsurf optimal display to mesh. */
+void BKE_mesh_edges_set_draw_render(struct Mesh *me);
 
 const char *BKE_mesh_cmp(struct Mesh *me1, struct Mesh *me2, float thresh);
 
@@ -675,7 +677,7 @@ void BKE_mesh_calc_edges_loose(struct Mesh *mesh);
 void BKE_mesh_calc_edges(struct Mesh *mesh, bool keep_existing_edges, const bool select_new_edges);
 void BKE_mesh_calc_edges_tessface(struct Mesh *mesh);
 
-/* In DerivedMesh.c */
+/* In DerivedMesh.cc */
 void BKE_mesh_wrapper_deferred_finalize(struct Mesh *me_eval,
                                         const CustomData_MeshMasks *cd_mask_finalize);
 

@@ -139,6 +139,7 @@ static const char *includefiles[] = {
     "DNA_volume_types.h",
     "DNA_simulation_types.h",
     "DNA_pointcache_types.h",
+    "DNA_asset_types.h",
 
     /* see comment above before editing! */
 
@@ -742,7 +743,7 @@ static int convert_include(const char *filename)
               break;
             }
 
-            if (*md1 == ',' || *md1 == ' ') {
+            if (ELEM(*md1, ',', ' ')) {
               *md1 = 0;
             }
             md1++;
@@ -1439,7 +1440,7 @@ int main(int argc, char **argv)
 {
   int return_status = 0;
 
-  if (argc != 4 && argc != 5) {
+  if (!ELEM(argc, 4, 5)) {
     printf("Usage: %s dna.c dna_struct_offsets.h [base directory]\n", argv[0]);
     return_status = 1;
   }
@@ -1533,6 +1534,7 @@ int main(int argc, char **argv)
 #include "DNA_action_types.h"
 #include "DNA_anim_types.h"
 #include "DNA_armature_types.h"
+#include "DNA_asset_types.h"
 #include "DNA_boid_types.h"
 #include "DNA_brush_types.h"
 #include "DNA_cachefile_types.h"

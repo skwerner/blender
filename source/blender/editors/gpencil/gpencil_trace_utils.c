@@ -294,7 +294,7 @@ void ED_gpencil_trace_data_to_strokes(Main *bmain,
     n = path->curve.n;
     tag = path->curve.tag;
     c = path->curve.c;
-    int mat_idx = path->sign == '+' ? 0 : 1;
+    int mat_idx = path->sign == '+' ? mat_fill_idx : mat_mask_idx;
     /* Create a new stroke. */
     bGPDstroke *gps = BKE_gpencil_stroke_add(gpf, mat_idx, 0, thickness, false);
     /* Last point that is equals to start point. */
@@ -352,13 +352,14 @@ void ED_gpencil_trace_data_to_strokes(Main *bmain,
      * long stroke. Here the length is checked and removed if the length is too big. */
     float length = BKE_gpencil_stroke_length(gps, true);
     if (length <= MAX_LENGTH) {
+      bGPdata *gpd = ob->data;
       if (sample > 0.0f) {
         /* Resample stroke. Don't need to call to BKE_gpencil_stroke_geometry_update() because
          * the sample function already call that. */
-        BKE_gpencil_stroke_sample(gps, sample, false);
+        BKE_gpencil_stroke_sample(gpd, gps, sample, false);
       }
       else {
-        BKE_gpencil_stroke_geometry_update(gps);
+        BKE_gpencil_stroke_geometry_update(gpd, gps);
       }
     }
     else {

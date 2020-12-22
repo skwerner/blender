@@ -23,7 +23,7 @@
  * \ingroup GHOST
  */
 
-#include <X11/XKBlib.h> /* allow detectable autorepeate */
+#include <X11/XKBlib.h> /* Allow detectable auto-repeate. */
 #include <X11/Xatom.h>
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
@@ -130,10 +130,9 @@ GHOST_SystemX11::GHOST_SystemX11() : GHOST_System(), m_xkb_descr(NULL), m_start_
 #endif
 
 #if defined(WITH_X11_XINPUT) && defined(X_HAVE_UTF8_STRING)
-  /* note -- don't open connection to XIM server here, because the locale
-   * has to be set before opening the connection but setlocale() has not
-   * been called yet.  the connection will be opened after entering
-   * the event loop. */
+  /* NOTE: Don't open connection to XIM server here, because the locale has to be
+   * set before opening the connection but `setlocale()` has not been called yet.
+   * the connection will be opened after entering the event loop. */
   m_xim = NULL;
 #endif
 
@@ -189,7 +188,7 @@ GHOST_SystemX11::GHOST_SystemX11() : GHOST_System(), m_xkb_descr(NULL), m_start_
   /* Taking care not to overflow the tv.tv_sec * 1000 */
   m_start_time = GHOST_TUns64(tv.tv_sec) * 1000 + tv.tv_usec / 1000;
 
-  /* use detectable autorepeate, mac and windows also do this */
+  /* Use detectable auto-repeate, mac and windows also do this. */
   int use_xkb;
   int xkb_opcode, xkb_event, xkb_error;
   int xkb_major = XkbMajorVersion, xkb_minor = XkbMinorVersion;
@@ -325,19 +324,19 @@ void GHOST_SystemX11::getAllDisplayDimensions(GHOST_TUns32 &width, GHOST_TUns32 
 /**
  * Create a new window.
  * The new window is added to the list of windows managed.
- * Never explicitly delete the window, use disposeWindow() instead.
- * \param   title   The name of the window
+ * Never explicitly delete the window, use #disposeWindow() instead.
+ * \param title: The name of the window
  * (displayed in the title bar of the window if the OS supports it).
- * \param   left    The coordinate of the left edge of the window.
- * \param   top     The coordinate of the top edge of the window.
- * \param   width   The width the window.
- * \param   height  The height the window.
- * \param   state   The state of the window when opened.
- * \param   type    The type of drawing context installed in this window.
+ * \param left: The coordinate of the left edge of the window.
+ * \param top: The coordinate of the top edge of the window.
+ * \param width: The width the window.
+ * \param height: The height the window.
+ * \param state: The state of the window when opened.
+ * \param type: The type of drawing context installed in this window.
  * \param glSettings: Misc OpenGL settings.
- * \param exclusive: Use to show the window ontop and ignore others (used fullscreen).
- * \param   parentWindow    Parent window
- * \return  The new window (or 0 if creation failed).
+ * \param exclusive: Use to show the window on top and ignore others (used full-screen).
+ * \param parentWindow: Parent window.
+ * \return The new window (or 0 if creation failed).
  */
 GHOST_IWindow *GHOST_SystemX11::createWindow(const char *title,
                                              GHOST_TInt32 left,
@@ -393,7 +392,7 @@ GHOST_IWindow *GHOST_SystemX11::createWindow(const char *title,
 /**
  * Create a new offscreen context.
  * Never explicitly delete the context, use disposeContext() instead.
- * \return  The new context (or 0 if creation failed).
+ * \return The new context (or 0 if creation failed).
  */
 GHOST_IContext *GHOST_SystemX11::createOffscreenContext(GHOST_GLSettings glSettings)
 {
@@ -505,8 +504,8 @@ GHOST_IContext *GHOST_SystemX11::createOffscreenContext(GHOST_GLSettings glSetti
 
 /**
  * Dispose of a context.
- * \param   context Pointer to the context to be disposed.
- * \return  Indication of success.
+ * \param context: Pointer to the context to be disposed.
+ * \return Indication of success.
  */
 GHOST_TSuccess GHOST_SystemX11::disposeContext(GHOST_IContext *context)
 {
@@ -2284,6 +2283,7 @@ void GHOST_SystemX11::putClipboard(GHOST_TInt8 *buffer, bool selection) const
   }
 }
 
+/* -------------------------------------------------------------------- */
 /** \name Message Box
  * \{ */
 class DialogData {

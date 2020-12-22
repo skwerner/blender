@@ -338,7 +338,7 @@ static int file_browse_invoke(bContext *C, wmOperator *op, const wmEvent *event)
         is_relative = BLI_path_is_rel(str);
       }
 
-      if (UNLIKELY(ptr.data == &U)) {
+      if (UNLIKELY(ptr.data == &U || is_userdef)) {
         is_relative = false;
       }
 
@@ -378,7 +378,7 @@ void BUTTONS_OT_file_browse(wmOperatorType *ot)
                                  FILE_OPENFILE,
                                  WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 }
 
 /* Second operator, only difference from BUTTONS_OT_file_browse is WM_FILESEL_DIRECTORY. */
@@ -405,7 +405,7 @@ void BUTTONS_OT_directory_browse(wmOperatorType *ot)
                                  FILE_OPENFILE,
                                  WM_FILESEL_DIRECTORY | WM_FILESEL_RELPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 }
 
 /** \} */

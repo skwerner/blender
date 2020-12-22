@@ -228,7 +228,7 @@ static void protectedAxisAngleBits(
   }
 }
 
-static void protectedSizeBits(short protectflag, float size[3])
+void protectedSizeBits(short protectflag, float size[3])
 {
   if (protectflag & OB_LOCK_SCALEX) {
     size[0] = 1.0f;
@@ -431,7 +431,7 @@ static void constraintRotLim(TransInfo *UNUSED(t), TransData *td)
   }
 }
 
-static void constraintSizeLim(TransInfo *t, TransData *td)
+void constraintSizeLim(TransInfo *t, TransData *td)
 {
   if (td->con && td->ext) {
     const bConstraintTypeInfo *cti = BKE_constraint_typeinfo_from_type(CONSTRAINT_TYPE_SIZELIMIT);
@@ -520,9 +520,7 @@ static void constraintSizeLim(TransInfo *t, TransData *td)
 }
 
 /* -------------------------------------------------------------------- */
-/* Transform (Rotation Utils) */
-
-/** \name Transform Rotation Utils
+/** \name Transform (Rotation Utils)
  * \{ */
 /* Used by Transform Rotation and Transform Normal Rotation */
 void headerRotation(TransInfo *t, char str[UI_MAX_DRAW_STR], float final)
@@ -534,13 +532,17 @@ void headerRotation(TransInfo *t, char str[UI_MAX_DRAW_STR], float final)
 
     outputNumInput(&(t->num), c, &t->scene->unit);
 
-    ofs += BLI_snprintf(
-        str + ofs, UI_MAX_DRAW_STR - ofs, TIP_("Rot: %s %s %s"), &c[0], t->con.text, t->proptext);
+    ofs += BLI_snprintf(str + ofs,
+                        UI_MAX_DRAW_STR - ofs,
+                        TIP_("Rotation: %s %s %s"),
+                        &c[0],
+                        t->con.text,
+                        t->proptext);
   }
   else {
     ofs += BLI_snprintf(str + ofs,
                         UI_MAX_DRAW_STR - ofs,
-                        TIP_("Rot: %.2f%s %s"),
+                        TIP_("Rotation: %.2f%s %s"),
                         RAD2DEGF(final),
                         t->con.text,
                         t->proptext);
@@ -815,9 +817,7 @@ void ElementRotation(
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/* Transform (Resize Utils) */
-
-/** \name Transform Resize Utils
+/** \name Transform (Resize Utils)
  * \{ */
 void headerResize(TransInfo *t, const float vec[3], char str[UI_MAX_DRAW_STR])
 {
@@ -1040,9 +1040,7 @@ void ElementResize(TransInfo *t, TransDataContainer *tc, TransData *td, float ma
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/* Transform (Frame Utils) */
-
-/** \name Transform Frame Utils
+/** \name Transform (Frame Utils)
  * \{ */
 
 /**

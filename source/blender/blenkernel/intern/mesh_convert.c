@@ -949,7 +949,7 @@ void BKE_mesh_to_pointcloud(Main *bmain, Depsgraph *depsgraph, Scene *UNUSED(sce
   BKE_object_free_derived_caches(ob);
 }
 
-void BKE_mesh_from_pointcloud(PointCloud *pointcloud, Mesh *me)
+void BKE_mesh_from_pointcloud(const PointCloud *pointcloud, Mesh *me)
 {
   BLI_assert(pointcloud != NULL);
 
@@ -978,6 +978,14 @@ void BKE_mesh_from_pointcloud(PointCloud *pointcloud, Mesh *me)
 
   /* Delete Position attribute since it is now in vertex coordinates. */
   CustomData_free_layer(&me->vdata, CD_PROP_FLOAT3, me->totvert, layer_idx);
+}
+
+void BKE_mesh_edges_set_draw_render(Mesh *mesh)
+{
+  MEdge *med = mesh->medge;
+  for (int i = 0; i < mesh->totedge; i++, med++) {
+    med->flag |= ME_EDGEDRAW | ME_EDGERENDER;
+  }
 }
 
 void BKE_pointcloud_to_mesh(Main *bmain, Depsgraph *depsgraph, Scene *UNUSED(scene), Object *ob)
@@ -1452,7 +1460,7 @@ Mesh *BKE_mesh_create_derived_for_modifier(struct Depsgraph *depsgraph,
   return result;
 }
 
-/* This is a Mesh-based copy of the same function in DerivedMesh.c */
+/* This is a Mesh-based copy of the same function in DerivedMesh.cc */
 static void shapekey_layers_to_keyblocks(Mesh *mesh_src, Mesh *mesh_dst, int actshape_uid)
 {
   KeyBlock *kb;
@@ -1656,6 +1664,11 @@ void BKE_mesh_nomain_to_mesh(Mesh *mesh_src,
   MEM_SAFE_FREE(tmp.mselect);
   tmp.totselect = 0;
   tmp.texflag &= ~ME_AUTOSPACE_EVALUATED;
+
+  /* Clear any run-time data.
+   * Even though this mesh wont typically have run-time data, the Python API can for e.g.
+   * create loop-triangle cache here, which is confusing when left in the mesh, see: T81136. */
+  BKE_mesh_runtime_clear_geometry(&tmp);
 
   /* skip the listbase */
   MEMCPY_STRUCT_AFTER(mesh_dst, &tmp, id.prev);

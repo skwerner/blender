@@ -62,9 +62,7 @@ const EnumPropertyItem rna_enum_property_type_items[] = {
     {0, NULL, 0, NULL, NULL},
 };
 
-/* XXX Keep in sync with bpy_props.c's property_subtype_xxx_items ???
- *     Currently it is not...
- */
+/* Keep in sync with RNA_types.h PropertySubType and bpy_props.c's property_subtype_xxx_items */
 const EnumPropertyItem rna_enum_property_subtype_items[] = {
     {PROP_NONE, "NONE", 0, "None", ""},
 
@@ -72,6 +70,7 @@ const EnumPropertyItem rna_enum_property_subtype_items[] = {
     {PROP_FILEPATH, "FILEPATH", 0, "File Path", ""},
     {PROP_DIRPATH, "DIRPATH", 0, "Directory Path", ""},
     {PROP_FILENAME, "FILENAME", 0, "File Name", ""},
+    {PROP_BYTESTRING, "BYTESTRING", 0, "Byte String", ""},
     {PROP_PASSWORD, "PASSWORD", 0, "Password", "A string that is displayed hidden ('********')"},
 
     /* numbers */
@@ -83,6 +82,8 @@ const EnumPropertyItem rna_enum_property_subtype_items[] = {
     {PROP_TIME, "TIME", 0, "Time", ""},
     {PROP_DISTANCE, "DISTANCE", 0, "Distance", ""},
     {PROP_DISTANCE_CAMERA, "DISTANCE_CAMERA", 0, "Camera Distance", ""},
+    {PROP_POWER, "POWER", 0, "Power", ""},
+    {PROP_TEMPERATURE, "TEMPERATURE", 0, "Temperature", ""},
 
     /* number arrays */
     {PROP_COLOR, "COLOR", 0, "Color", ""},
@@ -1359,7 +1360,7 @@ static int rna_property_override_diff_propptr(Main *bmain,
           BLI_assert(STREQ(rna_itemname_a, rna_itemname_b));
 
           char esc_item_name[RNA_PATH_BUFFSIZE];
-          const size_t esc_item_name_len = BLI_strescape(
+          const size_t esc_item_name_len = BLI_str_escape(
               esc_item_name, rna_itemname_a, RNA_PATH_BUFFSIZE);
           extended_rna_path_len = rna_path_len + 2 + esc_item_name_len + 2;
           if (extended_rna_path_len >= RNA_PATH_BUFFSIZE) {
@@ -1857,7 +1858,7 @@ int rna_property_override_diff_default(Main *bmain,
                 is_id,
                 is_valid_for_diffing,
                 is_valid_for_insertion,
-                (RNA_property_override_flag(prop_a) & PROPOVERRIDE_LIBRARY_INSERTION) != 0,
+                use_collection_insertion,
                 do_create);
           }
 #  endif
@@ -1878,7 +1879,7 @@ int rna_property_override_diff_default(Main *bmain,
             BKE_lib_override_library_property_operation_get(op,
                                                             IDOVERRIDE_LIBRARY_OP_INSERT_AFTER,
                                                             NULL,
-                                                            prev_propname_a,
+                                                            no_prop_name ? NULL : prev_propname_a,
                                                             -1,
                                                             idx_a - 1,
                                                             true,
@@ -2597,7 +2598,6 @@ bool rna_property_override_apply_default(Main *UNUSED(bmain),
           IDP_CopyPropertyContent(item_idprop_dst, item_idprop_src);
 
           return RNA_property_collection_move(ptr_dst, prop_dst, item_index_added, item_index_dst);
-          break;
         }
         default:
           BLI_assert(0 && "Unsupported RNA override operation on collection");
@@ -2720,30 +2720,6 @@ static void rna_def_property(BlenderRNA *brna)
 {
   StructRNA *srna;
   PropertyRNA *prop;
-  static const EnumPropertyItem subtype_items[] = {
-      {PROP_NONE, "NONE", 0, "None", ""},
-      {PROP_FILEPATH, "FILE_PATH", 0, "File Path", ""},
-      {PROP_DIRPATH, "DIR_PATH", 0, "Directory Path", ""},
-      {PROP_PIXEL, "PIXEL", 0, "Pixel", ""},
-      {PROP_UNSIGNED, "UNSIGNED", 0, "Unsigned Number", ""},
-      {PROP_PERCENTAGE, "PERCENTAGE", 0, "Percentage", ""},
-      {PROP_FACTOR, "FACTOR", 0, "Factor", ""},
-      {PROP_ANGLE, "ANGLE", 0, "Angle", ""},
-      {PROP_TIME, "TIME", 0, "Time", ""},
-      {PROP_DISTANCE, "DISTANCE", 0, "Distance", ""},
-      {PROP_COLOR, "COLOR", 0, "Color", ""},
-      {PROP_TRANSLATION, "TRANSLATION", 0, "Translation", ""},
-      {PROP_DIRECTION, "DIRECTION", 0, "Direction", ""},
-      {PROP_MATRIX, "MATRIX", 0, "Matrix", ""},
-      {PROP_EULER, "EULER", 0, "Euler", ""},
-      {PROP_QUATERNION, "QUATERNION", 0, "Quaternion", ""},
-      {PROP_XYZ, "XYZ", 0, "XYZ", ""},
-      {PROP_COLOR_GAMMA, "COLOR_GAMMA", 0, "Gamma Corrected Color", ""},
-      {PROP_COORDS, "COORDINATES", 0, "Vector Coordinates", ""},
-      {PROP_LAYER, "LAYER", 0, "Layer", ""},
-      {PROP_LAYER_MEMBER, "LAYER_MEMBERSHIP", 0, "Layer Membership", ""},
-      {0, NULL, 0, NULL, NULL},
-  };
   EnumPropertyItem dummy_prop_tags[] = {
       {0, NULL, 0, NULL, NULL},
   };
@@ -2788,7 +2764,7 @@ static void rna_def_property(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "subtype", PROP_ENUM, PROP_NONE);
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-  RNA_def_property_enum_items(prop, subtype_items);
+  RNA_def_property_enum_items(prop, rna_enum_property_subtype_items);
   RNA_def_property_enum_funcs(prop, "rna_Property_subtype_get", NULL, NULL);
   RNA_def_property_ui_text(prop, "Subtype", "Semantic interpretation of the property");
 
@@ -3100,7 +3076,7 @@ static void rna_def_string_property(StructRNA *srna)
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
   RNA_def_property_string_funcs(
       prop, "rna_StringProperty_default_get", "rna_StringProperty_default_length", NULL);
-  RNA_def_property_ui_text(prop, "Default", "string default value");
+  RNA_def_property_ui_text(prop, "Default", "String default value");
 
   prop = RNA_def_property(srna, "length_max", PROP_INT, PROP_UNSIGNED);
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);

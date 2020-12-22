@@ -51,6 +51,8 @@
 #include "BKE_mesh_tangent.h"
 #include "BKE_modifier.h"
 #include "BKE_object_deform.h"
+#include "BKE_paint.h"
+#include "BKE_pbvh.h"
 
 #include "atomic_ops.h"
 
@@ -496,10 +498,8 @@ static void mesh_batch_cache_init(Mesh *me)
 
   cache->mat_len = mesh_render_mat_len_get(me);
   cache->surface_per_mat = MEM_callocN(sizeof(*cache->surface_per_mat) * cache->mat_len, __func__);
-  FOREACH_MESH_BUFFER_CACHE (cache, mbufcache) {
-    mbufcache->tris_per_mat = MEM_callocN(sizeof(*mbufcache->tris_per_mat) * cache->mat_len,
+  cache->final.tris_per_mat = MEM_callocN(sizeof(*cache->final.tris_per_mat) * cache->mat_len,
                                           __func__);
-  }
 
   cache->is_dirty = false;
   cache->batch_ready = 0;
@@ -707,16 +707,13 @@ static void mesh_batch_cache_clear(Mesh *me)
     for (int i = 0; i < sizeof(mbufcache->ibo) / sizeof(void *); i++) {
       GPU_INDEXBUF_DISCARD_SAFE(ibos[i]);
     }
-
-    BLI_assert((mbufcache->tris_per_mat != NULL) || (cache->mat_len == 0));
-    BLI_assert((mbufcache->tris_per_mat != NULL) && (cache->mat_len > 0));
-    if (mbufcache->tris_per_mat) {
-      for (int i = 0; i < cache->mat_len; i++) {
-        GPU_INDEXBUF_DISCARD_SAFE(mbufcache->tris_per_mat[i]);
-      }
-      MEM_SAFE_FREE(mbufcache->tris_per_mat);
-    }
   }
+
+  for (int i = 0; i < cache->mat_len; i++) {
+    GPU_INDEXBUF_DISCARD_SAFE(cache->final.tris_per_mat[i]);
+  }
+  MEM_SAFE_FREE(cache->final.tris_per_mat);
+
   for (int i = 0; i < sizeof(cache->batch) / sizeof(void *); i++) {
     GPUBatch **batch = (GPUBatch **)&cache->batch;
     GPU_BATCH_DISCARD_SAFE(batch[i]);
@@ -1313,6 +1310,17 @@ void DRW_mesh_batch_cache_create_requested(struct TaskGraph *task_graph,
     drw_mesh_batch_cache_check_available(task_graph, me);
 #endif
     return;
+  }
+
+  /* TODO(pablodp606): This always updates the sculpt normals for regular drawing (non-PBVH).
+   * This makes tools that sample the surface per step get wrong normals until a redraw happens.
+   * Normal updates should be part of the brush loop and only run during the stroke when the
+   * brush needs to sample the surface. The drawing code should only update the normals
+   * per redraw when smooth shading is enabled. */
+  const bool do_update_sculpt_normals = ob->sculpt && ob->sculpt->pbvh;
+  if (do_update_sculpt_normals) {
+    Mesh *mesh = ob->data;
+    BKE_pbvh_update_normals(ob->sculpt->pbvh, mesh->runtime.subdiv_ccg);
   }
 
   cache->batch_ready |= batch_requested;

@@ -51,7 +51,8 @@
 #include "RNA_access.h"
 
 #include "MEM_guardedalloc.h"
-#include "RE_shader_ext.h"
+
+#include "RE_texture.h"
 
 #include "MOD_modifiertypes.h"
 #include "MOD_ui_common.h"
@@ -435,7 +436,17 @@ static void texture_panel_draw(const bContext *C, Panel *panel)
 
   int texture_coords = RNA_enum_get(ptr, "texture_coords");
 
-  uiTemplateID(layout, C, ptr, "texture", "texture.new", NULL, NULL, 0, ICON_NONE, NULL);
+  uiTemplateID(layout,
+               C,
+               ptr,
+               "texture",
+               "texture.new",
+               "texture.duplicate",
+               NULL,
+               NULL,
+               0,
+               ICON_NONE,
+               NULL);
 
   uiLayoutSetPropSep(layout, true);
 
@@ -490,7 +501,7 @@ ModifierTypeInfo modifierType_Wave = {
     /* deformMatricesEM */ NULL,
     /* modifyMesh */ NULL,
     /* modifyHair */ NULL,
-    /* modifyPointCloud */ NULL,
+    /* modifyGeometrySet */ NULL,
     /* modifyVolume */ NULL,
 
     /* initData */ initData,

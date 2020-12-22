@@ -29,6 +29,7 @@
 #include "DNA_anim_types.h"
 #include "DNA_brush_types.h"
 #include "DNA_cachefile_types.h"
+#include "DNA_collection_types.h"
 #include "DNA_constraint_types.h"
 #include "DNA_fluid_types.h"
 #include "DNA_genfile.h"
@@ -44,24 +45,273 @@
 #include "DNA_rigidbody_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_shader_fx_types.h"
+#include "DNA_space_types.h"
+#include "DNA_tracking_types.h"
 #include "DNA_workspace_types.h"
 
 #include "BKE_animsys.h"
+#include "BKE_armature.h"
 #include "BKE_collection.h"
 #include "BKE_colortools.h"
+#include "BKE_cryptomatte.h"
+#include "BKE_fcurve.h"
 #include "BKE_gpencil.h"
 #include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_mesh.h"
+#include "BKE_multires.h"
 #include "BKE_node.h"
 
 #include "MEM_guardedalloc.h"
+
+#include "RNA_access.h"
+
+#include "SEQ_sequencer.h"
 
 #include "BLO_readfile.h"
 #include "readfile.h"
 
 /* Make preferences read-only, use versioning_userdef.c. */
 #define U (*((const UserDef *)&U))
+
+static eSpaceSeq_Proxy_RenderSize get_sequencer_render_size(Main *bmain)
+{
+  eSpaceSeq_Proxy_RenderSize render_size = 100;
+
+  for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+    LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+      LISTBASE_FOREACH (SpaceLink *, sl, &area->spacedata) {
+        switch (sl->spacetype) {
+          case SPACE_SEQ: {
+            SpaceSeq *sseq = (SpaceSeq *)sl;
+            if (sseq->mainb == SEQ_DRAW_IMG_IMBUF) {
+              render_size = sseq->render_size;
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return render_size;
+}
+
+/* image_size is width or height depending what RNA property is converted - X or Y. */
+static void seq_convert_transform_animation(const Scene *scene,
+                                            const char *path,
+                                            const int image_size)
+{
+  if (scene->adt == NULL || scene->adt->action == NULL) {
+    return;
+  }
+
+  FCurve *fcu = BKE_fcurve_find(&scene->adt->action->curves, path, 0);
+  if (fcu != NULL && !BKE_fcurve_is_empty(fcu)) {
+    BezTriple *bezt = fcu->bezt;
+    for (int i = 0; i < fcu->totvert; i++, bezt++) {
+      /* Same math as with old_image_center_*, but simplified. */
+      bezt->vec[1][1] = image_size / 2 + bezt->vec[1][1] - scene->r.xsch / 2;
+    }
+  }
+}
+
+static void seq_convert_transform_crop(const Scene *scene,
+                                       Sequence *seq,
+                                       const eSpaceSeq_Proxy_RenderSize render_size)
+{
+  StripCrop *c = seq->strip->crop;
+  StripTransform *t = seq->strip->transform;
+  int old_image_center_x = scene->r.xsch / 2;
+  int old_image_center_y = scene->r.ysch / 2;
+  int image_size_x = scene->r.xsch;
+  int image_size_y = scene->r.ysch;
+
+  /* Hardcoded legacy bit-flags which has been removed. */
+  const uint32_t use_transform_flag = (1 << 16);
+  const uint32_t use_crop_flag = (1 << 17);
+
+  const StripElem *s_elem = SEQ_render_give_stripelem(seq, seq->start);
+  if (s_elem != NULL) {
+    image_size_x = s_elem->orig_width;
+    image_size_y = s_elem->orig_height;
+
+    if (SEQ_can_use_proxy(seq, SEQ_rendersize_to_proxysize(render_size))) {
+      image_size_x /= SEQ_rendersize_to_scale_factor(render_size);
+      image_size_y /= SEQ_rendersize_to_scale_factor(render_size);
+    }
+  }
+
+  /* Default scale. */
+  if (t->scale_x == 0.0f && t->scale_y == 0.0f) {
+    t->scale_x = 1.0f;
+    t->scale_y = 1.0f;
+  }
+
+  /* Clear crop if it was unused. This must happen before converting values. */
+  if ((seq->flag & use_crop_flag) == 0) {
+    c->bottom = c->top = c->left = c->right = 0;
+  }
+
+  if ((seq->flag & use_transform_flag) == 0) {
+    t->xofs = t->yofs = 0;
+
+    /* Reverse scale to fit for strips not using offset. */
+    float project_aspect = (float)scene->r.xsch / (float)scene->r.ysch;
+    float image_aspect = (float)image_size_x / (float)image_size_y;
+    if (project_aspect > image_aspect) {
+      t->scale_x = project_aspect / image_aspect;
+    }
+    else {
+      t->scale_y = image_aspect / project_aspect;
+    }
+  }
+
+  if ((seq->flag & use_crop_flag) != 0 && (seq->flag & use_transform_flag) == 0) {
+    /* Calculate image offset. */
+    float s_x = scene->r.xsch / image_size_x;
+    float s_y = scene->r.ysch / image_size_y;
+    old_image_center_x += c->right * s_x - c->left * s_x;
+    old_image_center_y += c->top * s_y - c->bottom * s_y;
+
+    /* Convert crop to scale. */
+    int cropped_image_size_x = image_size_x - c->right - c->left;
+    int cropped_image_size_y = image_size_y - c->top - c->bottom;
+    c->bottom = c->top = c->left = c->right = 0;
+    t->scale_x *= (float)image_size_x / (float)cropped_image_size_x;
+    t->scale_y *= (float)image_size_y / (float)cropped_image_size_y;
+  }
+
+  if ((seq->flag & use_transform_flag) != 0) {
+    /* Convert image offset. */
+    old_image_center_x = image_size_x / 2 - c->left + t->xofs;
+    old_image_center_y = image_size_y / 2 - c->bottom + t->yofs;
+
+    /* Preserve original image size. */
+    t->scale_x = t->scale_y = MAX2((float)image_size_x / (float)scene->r.xsch,
+                                   (float)image_size_y / (float)scene->r.ysch);
+
+    /* Convert crop. */
+    if ((seq->flag & use_crop_flag) != 0) {
+      c->top /= t->scale_x;
+      c->bottom /= t->scale_x;
+      c->left /= t->scale_x;
+      c->right /= t->scale_x;
+    }
+  }
+
+  t->xofs = old_image_center_x - scene->r.xsch / 2;
+  t->yofs = old_image_center_y - scene->r.ysch / 2;
+
+  /* Convert offset animation, but only if crop is not used. */
+  if ((seq->flag & use_transform_flag) != 0 && (seq->flag & use_crop_flag) == 0) {
+    char name_esc[(sizeof(seq->name) - 2) * 2], *path;
+    BLI_str_escape(name_esc, seq->name + 2, sizeof(name_esc));
+
+    path = BLI_sprintfN("sequence_editor.sequences_all[\"%s\"].transform.offset_x", name_esc);
+    seq_convert_transform_animation(scene, path, image_size_x);
+    MEM_freeN(path);
+    path = BLI_sprintfN("sequence_editor.sequences_all[\"%s\"].transform.offset_y", name_esc);
+    seq_convert_transform_animation(scene, path, image_size_y);
+    MEM_freeN(path);
+  }
+
+  seq->flag &= ~use_transform_flag;
+  seq->flag &= ~use_crop_flag;
+}
+
+static void seq_convert_transform_crop_lb(const Scene *scene,
+                                          const ListBase *lb,
+                                          const eSpaceSeq_Proxy_RenderSize render_size)
+{
+
+  LISTBASE_FOREACH (Sequence *, seq, lb) {
+    if (seq->type != SEQ_TYPE_SOUND_RAM) {
+      seq_convert_transform_crop(scene, seq, render_size);
+    }
+    if (seq->type == SEQ_TYPE_META) {
+      seq_convert_transform_crop_lb(scene, &seq->seqbase, render_size);
+    }
+  }
+}
+
+static void seq_convert_transform_animation_2(const Scene *scene,
+                                              const char *path,
+                                              const float scale_to_fit_factor)
+{
+  if (scene->adt == NULL || scene->adt->action == NULL) {
+    return;
+  }
+
+  FCurve *fcu = BKE_fcurve_find(&scene->adt->action->curves, path, 0);
+  if (fcu != NULL && !BKE_fcurve_is_empty(fcu)) {
+    BezTriple *bezt = fcu->bezt;
+    for (int i = 0; i < fcu->totvert; i++, bezt++) {
+      /* Same math as with old_image_center_*, but simplified. */
+      bezt->vec[1][1] *= scale_to_fit_factor;
+    }
+  }
+}
+
+static void seq_convert_transform_crop_2(const Scene *scene,
+                                         Sequence *seq,
+                                         const eSpaceSeq_Proxy_RenderSize render_size)
+{
+  const StripElem *s_elem = SEQ_render_give_stripelem(seq, seq->start);
+  if (s_elem == NULL) {
+    return;
+  }
+
+  StripCrop *c = seq->strip->crop;
+  StripTransform *t = seq->strip->transform;
+  int image_size_x = s_elem->orig_width;
+  int image_size_y = s_elem->orig_height;
+
+  if (SEQ_can_use_proxy(seq, SEQ_rendersize_to_proxysize(render_size))) {
+    image_size_x /= SEQ_rendersize_to_scale_factor(render_size);
+    image_size_y /= SEQ_rendersize_to_scale_factor(render_size);
+  }
+
+  /* Calculate scale factor, so image fits in preview area with original aspect ratio. */
+  const float scale_to_fit_factor = MIN2((float)scene->r.xsch / (float)image_size_x,
+                                         (float)scene->r.ysch / (float)image_size_y);
+  t->scale_x *= scale_to_fit_factor;
+  t->scale_y *= scale_to_fit_factor;
+  c->top /= scale_to_fit_factor;
+  c->bottom /= scale_to_fit_factor;
+  c->left /= scale_to_fit_factor;
+  c->right /= scale_to_fit_factor;
+
+  char name_esc[(sizeof(seq->name) - 2) * 2], *path;
+  BLI_str_escape(name_esc, seq->name + 2, sizeof(name_esc));
+  path = BLI_sprintfN("sequence_editor.sequences_all[\"%s\"].crop.min_x", name_esc);
+  seq_convert_transform_animation_2(scene, path, 1 / scale_to_fit_factor);
+  MEM_freeN(path);
+  path = BLI_sprintfN("sequence_editor.sequences_all[\"%s\"].crop.max_x", name_esc);
+  seq_convert_transform_animation_2(scene, path, 1 / scale_to_fit_factor);
+  MEM_freeN(path);
+  path = BLI_sprintfN("sequence_editor.sequences_all[\"%s\"].crop.min_y", name_esc);
+  seq_convert_transform_animation_2(scene, path, 1 / scale_to_fit_factor);
+  MEM_freeN(path);
+  path = BLI_sprintfN("sequence_editor.sequences_all[\"%s\"].crop.max_x", name_esc);
+  seq_convert_transform_animation_2(scene, path, 1 / scale_to_fit_factor);
+  MEM_freeN(path);
+}
+
+static void seq_convert_transform_crop_lb_2(const Scene *scene,
+                                            const ListBase *lb,
+                                            const eSpaceSeq_Proxy_RenderSize render_size)
+{
+
+  LISTBASE_FOREACH (Sequence *, seq, lb) {
+    if (seq->type != SEQ_TYPE_SOUND_RAM) {
+      seq_convert_transform_crop_2(scene, seq, render_size);
+    }
+    if (seq->type == SEQ_TYPE_META) {
+      seq_convert_transform_crop_lb_2(scene, &seq->seqbase, render_size);
+    }
+  }
+}
 
 void do_versions_after_linking_290(Main *bmain, ReportList *UNUSED(reports))
 {
@@ -261,7 +511,7 @@ void do_versions_after_linking_290(Main *bmain, ReportList *UNUSED(reports))
             const size_t node_name_escaped_max_length = (node_name_length * 2);
             char *node_name_escaped = MEM_mallocN(node_name_escaped_max_length + 1,
                                                   "escaped name");
-            BLI_strescape(node_name_escaped, node->name, node_name_escaped_max_length);
+            BLI_str_escape(node_name_escaped, node->name, node_name_escaped_max_length);
             char *rna_path_prefix = BLI_sprintfN("nodes[\"%s\"].inputs", node_name_escaped);
 
             BKE_animdata_fix_paths_rename_all_ex(
@@ -272,6 +522,56 @@ void do_versions_after_linking_290(Main *bmain, ReportList *UNUSED(reports))
         }
       }
       FOREACH_NODETREE_END;
+    }
+  }
+
+  /* Convert all Multires displacement to Catmull-Clark subdivision limit surface. */
+  if (!MAIN_VERSION_ATLEAST(bmain, 292, 1)) {
+    LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
+      ModifierData *md;
+      for (md = ob->modifiers.first; md; md = md->next) {
+        if (md->type == eModifierType_Multires) {
+          MultiresModifierData *mmd = (MultiresModifierData *)md;
+          if (mmd->simple) {
+            multires_do_versions_simple_to_catmull_clark(ob, mmd);
+          }
+        }
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 292, 2)) {
+
+    eSpaceSeq_Proxy_RenderSize render_size = get_sequencer_render_size(bmain);
+
+    LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+      if (scene->ed != NULL) {
+        seq_convert_transform_crop_lb(scene, &scene->ed->seqbase, render_size);
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 292, 8)) {
+    /* Systematically rebuild posebones to ensure consistent ordering matching the one of bones in
+     * Armature obdata. */
+    LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
+      if (ob->type == OB_ARMATURE) {
+        BKE_pose_rebuild(bmain, ob, ob->data, true);
+      }
+    }
+
+    /* Wet Paint Radius Factor */
+    for (Brush *br = bmain->brushes.first; br; br = br->id.next) {
+      if (br->ob_mode & OB_MODE_SCULPT && br->wet_paint_radius_factor == 0.0f) {
+        br->wet_paint_radius_factor = 1.0f;
+      }
+    }
+
+    eSpaceSeq_Proxy_RenderSize render_size = get_sequencer_render_size(bmain);
+    LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+      if (scene->ed != NULL) {
+        seq_convert_transform_crop_lb_2(scene, &scene->ed->seqbase, render_size);
+      }
     }
   }
 
@@ -286,7 +586,6 @@ void do_versions_after_linking_290(Main *bmain, ReportList *UNUSED(reports))
    * \note Keep this message at the bottom of the function.
    */
   {
-
     /* Keep this block, even when empty. */
   }
 }
@@ -321,6 +620,20 @@ static void do_versions_point_attributes(CustomData *pdata)
     else if (layer->type == CD_RADIUS) {
       STRNCPY(layer->name, "Radius");
       layer->type = CD_PROP_FLOAT;
+    }
+  }
+}
+
+static void do_versions_point_attribute_names(CustomData *pdata)
+{
+  /* Change from capital initial letter to lower case (T82693). */
+  for (int i = 0; i < pdata->totlayer; i++) {
+    CustomDataLayer *layer = &pdata->layers[i];
+    if (layer->type == CD_PROP_FLOAT3 && STREQ(layer->name, "Position")) {
+      STRNCPY(layer->name, "position");
+    }
+    else if (layer->type == CD_PROP_FLOAT && STREQ(layer->name, "Radius")) {
+      STRNCPY(layer->name, "radius");
     }
   }
 }
@@ -373,6 +686,7 @@ static void do_versions_291_fcurve_handles_limit(FCurve *fcu)
   }
 }
 
+/* NOLINTNEXTLINE: readability-function-size */
 void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
 {
   UNUSED_VARS(fd);
@@ -705,14 +1019,12 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
     }
 
     /* Solver and Collections for Boolean. */
-    if (!DNA_struct_elem_find(fd->filesdna, "BooleanModifierData", "char", "solver")) {
-      for (Object *object = bmain->objects.first; object != NULL; object = object->id.next) {
-        LISTBASE_FOREACH (ModifierData *, md, &object->modifiers) {
-          if (md->type == eModifierType_Boolean) {
-            BooleanModifierData *bmd = (BooleanModifierData *)md;
-            bmd->solver = eBooleanModifierSolver_Fast;
-            bmd->flag = eBooleanModifierFlag_Object;
-          }
+    for (Object *object = bmain->objects.first; object != NULL; object = object->id.next) {
+      LISTBASE_FOREACH (ModifierData *, md, &object->modifiers) {
+        if (md->type == eModifierType_Boolean) {
+          BooleanModifierData *bmd = (BooleanModifierData *)md;
+          bmd->solver = eBooleanModifierSolver_Fast;
+          bmd->flag = eBooleanModifierFlag_Object;
         }
       }
     }
@@ -883,6 +1195,227 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
         part->phystype = PART_PHYS_NO;
       }
     }
+    /* Init grease pencil default curve resolution. */
+    if (!DNA_struct_elem_find(fd->filesdna, "bGPdata", "int", "curve_edit_resolution")) {
+      LISTBASE_FOREACH (bGPdata *, gpd, &bmain->gpencils) {
+        gpd->curve_edit_resolution = GP_DEFAULT_CURVE_RESOLUTION;
+        gpd->flag |= GP_DATA_CURVE_ADAPTIVE_RESOLUTION;
+      }
+    }
+    /* Init grease pencil curve editing error threshold. */
+    if (!DNA_struct_elem_find(fd->filesdna, "bGPdata", "float", "curve_edit_threshold")) {
+      LISTBASE_FOREACH (bGPdata *, gpd, &bmain->gpencils) {
+        gpd->curve_edit_threshold = GP_DEFAULT_CURVE_ERROR;
+        gpd->curve_edit_corner_angle = GP_DEFAULT_CURVE_EDIT_CORNER_ANGLE;
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 291, 9)) {
+    /* Remove options of legacy UV/Image editor */
+    for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+      LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+        LISTBASE_FOREACH (SpaceLink *, sl, &area->spacedata) {
+          switch (sl->spacetype) {
+            case SPACE_IMAGE: {
+              SpaceImage *sima = (SpaceImage *)sl;
+              sima->flag &= ~(SI_FLAG_UNUSED_20);
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    if (!DNA_struct_elem_find(fd->filesdna, "FluidModifierData", "float", "fractions_distance")) {
+      LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
+        LISTBASE_FOREACH (ModifierData *, md, &ob->modifiers) {
+          if (md->type == eModifierType_Fluid) {
+            FluidModifierData *fmd = (FluidModifierData *)md;
+            if (fmd->domain) {
+              fmd->domain->fractions_distance = 0.5;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 292, 1)) {
+    {
+      const int LEGACY_REFINE_RADIAL_DISTORTION_K1 = (1 << 2);
+
+      LISTBASE_FOREACH (MovieClip *, clip, &bmain->movieclips) {
+        MovieTracking *tracking = &clip->tracking;
+        MovieTrackingSettings *settings = &tracking->settings;
+        int new_refine_camera_intrinsics = 0;
+
+        if (settings->refine_camera_intrinsics & REFINE_FOCAL_LENGTH) {
+          new_refine_camera_intrinsics |= REFINE_FOCAL_LENGTH;
+        }
+
+        if (settings->refine_camera_intrinsics & REFINE_PRINCIPAL_POINT) {
+          new_refine_camera_intrinsics |= REFINE_PRINCIPAL_POINT;
+        }
+
+        /* The end goal is to enable radial distortion refinement if either K1 or K2 were set for
+         * refinement. It is enough to only check for L1 it was not possible to refine K2 without
+         * K1. */
+        if (settings->refine_camera_intrinsics & LEGACY_REFINE_RADIAL_DISTORTION_K1) {
+          new_refine_camera_intrinsics |= REFINE_RADIAL_DISTORTION;
+        }
+
+        settings->refine_camera_intrinsics = new_refine_camera_intrinsics;
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 292, 5)) {
+    /* Initialize the opacity of the overlay wireframe */
+    if (!DNA_struct_elem_find(fd->filesdna, "View3DOverlay", "float", "wireframe_opacity")) {
+      for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+        LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+          LISTBASE_FOREACH (SpaceLink *, sl, &area->spacedata) {
+            if (sl->spacetype == SPACE_VIEW3D) {
+              View3D *v3d = (View3D *)sl;
+              v3d->overlay.wireframe_opacity = 1.0f;
+            }
+          }
+        }
+      }
+    }
+
+    /* Replace object hidden filter with inverted object visible filter.  */
+    LISTBASE_FOREACH (bScreen *, screen, &bmain->screens) {
+      LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+        LISTBASE_FOREACH (SpaceLink *, space, &area->spacedata) {
+          if (space->spacetype == SPACE_OUTLINER) {
+            SpaceOutliner *space_outliner = (SpaceOutliner *)space;
+            if (space_outliner->filter_state == SO_FILTER_OB_HIDDEN) {
+              space_outliner->filter_state = SO_FILTER_OB_VISIBLE;
+              space_outliner->filter |= SO_FILTER_OB_STATE_INVERSE;
+            }
+          }
+        }
+      }
+    }
+
+    LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
+      LISTBASE_FOREACH (ModifierData *, md, &ob->modifiers) {
+        if (md->type == eModifierType_WeightVGProximity) {
+          WeightVGProximityModifierData *wmd = (WeightVGProximityModifierData *)md;
+          if (wmd->cmap_curve == NULL) {
+            wmd->cmap_curve = BKE_curvemapping_add(1, 0.0, 0.0, 1.0, 1.0);
+            BKE_curvemapping_init(wmd->cmap_curve);
+          }
+        }
+      }
+    }
+
+    /* Hair and PointCloud attributes names. */
+    LISTBASE_FOREACH (Hair *, hair, &bmain->hairs) {
+      do_versions_point_attribute_names(&hair->pdata);
+    }
+    LISTBASE_FOREACH (PointCloud *, pointcloud, &bmain->pointclouds) {
+      do_versions_point_attribute_names(&pointcloud->pdata);
+    }
+
+    /* Cryptomatte render pass */
+    if (!DNA_struct_elem_find(fd->filesdna, "ViewLayer", "short", "cryptomatte_levels")) {
+      LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+        LISTBASE_FOREACH (ViewLayer *, view_layer, &scene->view_layers) {
+          view_layer->cryptomatte_levels = 6;
+          view_layer->cryptomatte_flag = VIEW_LAYER_CRYPTOMATTE_ACCURATE;
+        }
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 292, 7)) {
+    /* Make all IDProperties used as interface of geometry node trees overridable. */
+    LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
+      LISTBASE_FOREACH (ModifierData *, md, &ob->modifiers) {
+        if (md->type == eModifierType_Nodes) {
+          NodesModifierData *nmd = (NodesModifierData *)md;
+          IDProperty *nmd_properties = nmd->settings.properties;
+
+          BLI_assert(nmd_properties->type == IDP_GROUP);
+          LISTBASE_FOREACH (IDProperty *, nmd_socket_idprop, &nmd_properties->data.group) {
+            nmd_socket_idprop->flag |= IDP_FLAG_OVERRIDABLE_LIBRARY;
+          }
+        }
+      }
+    }
+
+    /* EEVEE/Cycles Volumes consistency */
+    for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
+      /* Remove Volume Transmittance render pass from each view layer. */
+      LISTBASE_FOREACH (ViewLayer *, view_layer, &scene->view_layers) {
+        view_layer->eevee.render_passes &= ~EEVEE_RENDER_PASS_UNUSED_8;
+      }
+
+      /* Rename Renderlayer Socket `VolumeScatterCol` to `VolumeDir` */
+      if (scene->nodetree) {
+        LISTBASE_FOREACH (bNode *, node, &scene->nodetree->nodes) {
+          if (node->type == CMP_NODE_R_LAYERS) {
+            LISTBASE_FOREACH (bNodeSocket *, output_socket, &node->outputs) {
+              const char *volume_scatter = "VolumeScatterCol";
+              if (STREQLEN(output_socket->name, volume_scatter, MAX_NAME)) {
+                BLI_strncpy(output_socket->name, RE_PASSNAME_VOLUME_LIGHT, MAX_NAME);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    /* Convert `NodeCryptomatte->storage->matte_id` to `NodeCryptomatte->storage->entries` */
+    if (!DNA_struct_find(fd->filesdna, "CryptomatteEntry")) {
+      LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+        if (scene->nodetree) {
+          LISTBASE_FOREACH (bNode *, node, &scene->nodetree->nodes) {
+            if (node->type == CMP_NODE_CRYPTOMATTE) {
+              NodeCryptomatte *storage = (NodeCryptomatte *)node->storage;
+              char *matte_id = storage->matte_id;
+              if (matte_id == NULL || strlen(storage->matte_id) == 0) {
+                continue;
+              }
+              BKE_cryptomatte_matte_id_to_entries(NULL, storage, storage->matte_id);
+              MEM_SAFE_FREE(storage->matte_id);
+            }
+          }
+        }
+      }
+    }
+
+    /* Overlay elements in the sequencer. */
+    LISTBASE_FOREACH (bScreen *, screen, &bmain->screens) {
+      LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+        LISTBASE_FOREACH (SpaceLink *, sl, &area->spacedata) {
+          if (sl->spacetype == SPACE_SEQ) {
+            SpaceSeq *sseq = (SpaceSeq *)sl;
+            sseq->flag |= (SEQ_SHOW_STRIP_OVERLAY | SEQ_SHOW_STRIP_NAME | SEQ_SHOW_STRIP_SOURCE |
+                           SEQ_SHOW_STRIP_DURATION);
+          }
+        }
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 292, 8)) {
+    LISTBASE_FOREACH (bNodeTree *, ntree, &bmain->nodetrees) {
+      LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+        if (STREQ(node->idname, "GeometryNodeRandomAttribute")) {
+          STRNCPY(node->idname, "GeometryNodeAttributeRandomize");
+        }
+      }
+    }
+
+    LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+      if (scene->ed != NULL) {
+        scene->toolsettings->sequencer_tool_settings = SEQ_tool_settings_init();
+      }
+    }
   }
 
   /**
@@ -896,33 +1429,26 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
    */
   {
     /* Keep this block, even when empty. */
-  }
 
-  /* Remove options of legacy UV/Image editor */
-  for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
-    LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
-      LISTBASE_FOREACH (SpaceLink *, sl, &area->spacedata) {
-        switch (sl->spacetype) {
-          case SPACE_IMAGE: {
-            SpaceImage *sima = (SpaceImage *)sl;
-            sima->flag &= ~(SI_FLAG_UNUSED_20);
-            break;
+    FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
+      if (ntree->type == NTREE_GEOMETRY) {
+        LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+          if (node->type == GEO_NODE_ATTRIBUTE_MATH && node->storage == NULL) {
+            const int old_use_attibute_a = (1 << 0);
+            const int old_use_attibute_b = (1 << 1);
+            NodeAttributeMath *data = MEM_callocN(sizeof(NodeAttributeMath), "NodeAttributeMath");
+            data->operation = NODE_MATH_ADD;
+            data->input_type_a = (node->custom2 & old_use_attibute_a) ?
+                                     GEO_NODE_ATTRIBUTE_INPUT_ATTRIBUTE :
+                                     GEO_NODE_ATTRIBUTE_INPUT_FLOAT;
+            data->input_type_b = (node->custom2 & old_use_attibute_b) ?
+                                     GEO_NODE_ATTRIBUTE_INPUT_ATTRIBUTE :
+                                     GEO_NODE_ATTRIBUTE_INPUT_FLOAT;
+            node->storage = data;
           }
         }
       }
     }
-  }
-
-  if (!DNA_struct_elem_find(fd->filesdna, "FluidModifierData", "float", "fractions_distance")) {
-    LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
-      LISTBASE_FOREACH (ModifierData *, md, &ob->modifiers) {
-        if (md->type == eModifierType_Fluid) {
-          FluidModifierData *fmd = (FluidModifierData *)md;
-          if (fmd->domain) {
-            fmd->domain->fractions_distance = 0.5;
-          }
-        }
-      }
-    }
+    FOREACH_NODETREE_END;
   }
 }

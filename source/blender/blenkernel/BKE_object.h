@@ -77,6 +77,10 @@ bool BKE_object_shaderfx_use_time(struct Object *ob, struct ShaderFxData *md);
 
 bool BKE_object_support_modifier_type_check(const struct Object *ob, int modifier_type);
 
+/* Active modifier. */
+void BKE_object_modifier_set_active(struct Object *ob, struct ModifierData *md);
+struct ModifierData *BKE_object_active_modifier(const struct Object *ob);
+
 bool BKE_object_copy_modifier(struct Object *ob_dst,
                               const struct Object *ob_src,
                               struct ModifierData *md);
@@ -191,6 +195,8 @@ struct Base **BKE_object_pose_base_array_get(struct ViewLayer *view_layer,
                                              unsigned int *r_bases_len);
 
 void BKE_object_get_parent_matrix(struct Object *ob, struct Object *par, float r_parentmat[4][4]);
+
+/* Compute object world transform and store it in ob->obmat. */
 void BKE_object_where_is_calc(struct Depsgraph *depsgraph, struct Scene *scene, struct Object *ob);
 void BKE_object_where_is_calc_ex(struct Depsgraph *depsgraph,
                                  struct Scene *scene,
@@ -413,6 +419,14 @@ struct Mesh *BKE_object_to_mesh(struct Depsgraph *depsgraph,
 void BKE_object_to_mesh_clear(struct Object *object);
 
 void BKE_object_check_uuids_unique_and_report(const struct Object *object);
+
+void BKE_object_modifiers_lib_link_common(void *userData,
+                                          struct Object *ob,
+                                          struct ID **idpoin,
+                                          int cb_flag);
+
+struct PartEff;
+struct PartEff *BKE_object_do_version_give_parteff_245(struct Object *ob);
 
 #ifdef __cplusplus
 }

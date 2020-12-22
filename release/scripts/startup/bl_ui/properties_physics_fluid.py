@@ -196,7 +196,7 @@ class PHYSICS_PT_settings(PhysicButtonsPanel, Panel):
             col = flow.column()
             if PhysicButtonsPanel.poll_gas_domain(context):
                 col.prop(domain, "clipping", text="Empty Space")
-            col.prop(domain, "delete_in_obstacle", text="Delete In Obstacle")
+            col.prop(domain, "delete_in_obstacle", text="Delete in Obstacle")
 
             if domain.cache_type == 'MODULAR':
                 col.separator()
@@ -486,7 +486,8 @@ class PHYSICS_PT_liquid(PhysicButtonsPanel, Panel):
 
         col = flow.column()
         col.prop(domain, "simulation_method", expand=False)
-        col.prop(domain, "flip_ratio", text="FLIP Ratio")
+        if domain.simulation_method == 'FLIP':
+            col.prop(domain, "flip_ratio", text="FLIP Ratio")
         col.prop(domain, "sys_particle_maximum", text="System Maximum")
         col = col.column(align=True)
         col.prop(domain, "particle_radius", text="Particle Radius")

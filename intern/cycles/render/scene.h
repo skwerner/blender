@@ -38,6 +38,7 @@ CCL_NAMESPACE_BEGIN
 
 class AttributeRequestSet;
 class Background;
+class BVH;
 class Camera;
 class Device;
 class DeviceInfo;
@@ -228,6 +229,7 @@ class Scene : public NodeOwner {
   string name;
 
   /* data */
+  BVH *bvh;
   Camera *camera;
   Camera *dicing_camera;
   LookupTables *lookup_tables;
@@ -330,6 +332,18 @@ class Scene : public NodeOwner {
     (void)owner;
   }
 
+  /* Remove all nodes in the set from the appropriate data arrays, and tag the
+   * specific managers for an update. This assumes that the scene owns the nodes.
+   */
+  template<typename T> void delete_nodes(const set<T *> &nodes)
+  {
+    delete_nodes(nodes, this);
+  }
+
+  /* Same as above, but specify the actual owner of all the nodes in the set.
+   */
+  template<typename T> void delete_nodes(const set<T *> &nodes, const NodeOwner *owner);
+
  protected:
   /* Check if some heavy data worth logging was updated.
    * Mainly used to suppress extra annoying logging.
@@ -388,6 +402,16 @@ template<> void Scene::delete_node_impl(Object *node);
 template<> void Scene::delete_node_impl(ParticleSystem *node);
 
 template<> void Scene::delete_node_impl(Shader *node);
+
+template<> void Scene::delete_nodes(const set<Light *> &nodes, const NodeOwner *owner);
+
+template<> void Scene::delete_nodes(const set<Geometry *> &nodes, const NodeOwner *owner);
+
+template<> void Scene::delete_nodes(const set<Object *> &nodes, const NodeOwner *owner);
+
+template<> void Scene::delete_nodes(const set<ParticleSystem *> &nodes, const NodeOwner *owner);
+
+template<> void Scene::delete_nodes(const set<Shader *> &nodes, const NodeOwner *owner);
 
 CCL_NAMESPACE_END
 

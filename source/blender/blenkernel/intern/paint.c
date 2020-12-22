@@ -125,6 +125,16 @@ static void palette_blend_read_data(BlendDataReader *reader, ID *id)
   BLO_read_list(reader, &palette->colors);
 }
 
+static void palette_undo_preserve(BlendLibReader *UNUSED(reader), ID *id_new, ID *id_old)
+{
+  /* Whole Palette is preserved accross undo's, and it has no extra pointer, simple. */
+  /* Note: We do not care about potential internal references to self here, Palette has none. */
+  /* Note: We do not swap IDProperties, as dealing with potential ID pointers in those would be
+   *       fairly delicate. */
+  BKE_lib_id_swap(NULL, id_new, id_old);
+  SWAP(IDProperty *, id_new->properties, id_old->properties);
+}
+
 IDTypeInfo IDType_ID_PAL = {
     .id_code = ID_PAL,
     .id_filter = FILTER_ID_PAL,
@@ -146,6 +156,8 @@ IDTypeInfo IDType_ID_PAL = {
     .blend_read_data = palette_blend_read_data,
     .blend_read_lib = NULL,
     .blend_read_expand = NULL,
+
+    .blend_read_undo_preserve = palette_undo_preserve,
 };
 
 static void paint_curve_copy_data(Main *UNUSED(bmain),
@@ -207,6 +219,8 @@ IDTypeInfo IDType_ID_PC = {
     .blend_read_data = paint_curve_blend_read_data,
     .blend_read_lib = NULL,
     .blend_read_expand = NULL,
+
+    .blend_read_undo_preserve = NULL,
 };
 
 const char PAINT_CURSOR_SCULPT[3] = {255, 100, 100};
@@ -1162,6 +1176,56 @@ void BKE_paint_stroke_get_average(Scene *scene, Object *ob, float stroke[3])
   }
 }
 
+void BKE_paint_blend_write(BlendWriter *writer, Paint *p)
+{
+  if (p->cavity_curve) {
+    BKE_curvemapping_blend_write(writer, p->cavity_curve);
+  }
+  BLO_write_struct_array(writer, PaintToolSlot, p->tool_slots_len, p->tool_slots);
+}
+
+void BKE_paint_blend_read_data(BlendDataReader *reader, const Scene *scene, Paint *p)
+{
+  if (p->num_input_samples < 1) {
+    p->num_input_samples = 1;
+  }
+
+  BLO_read_data_address(reader, &p->cavity_curve);
+  if (p->cavity_curve) {
+    BKE_curvemapping_blend_read(reader, p->cavity_curve);
+  }
+  else {
+    BKE_paint_cavity_curve_preset(p, CURVE_PRESET_LINE);
+  }
+
+  BLO_read_data_address(reader, &p->tool_slots);
+
+  /* Workaround for invalid data written in older versions. */
+  const size_t expected_size = sizeof(PaintToolSlot) * p->tool_slots_len;
+  if (p->tool_slots && MEM_allocN_len(p->tool_slots) < expected_size) {
+    MEM_freeN(p->tool_slots);
+    p->tool_slots = MEM_callocN(expected_size, "PaintToolSlot");
+  }
+
+  BKE_paint_runtime_init(scene->toolsettings, p);
+}
+
+void BKE_paint_blend_read_lib(BlendLibReader *reader, Scene *sce, Paint *p)
+{
+  if (p) {
+    BLO_read_id_address(reader, sce->id.lib, &p->brush);
+    for (int i = 0; i < p->tool_slots_len; i++) {
+      if (p->tool_slots[i].brush != NULL) {
+        BLO_read_id_address(reader, sce->id.lib, &p->tool_slots[i].brush);
+      }
+    }
+    BLO_read_id_address(reader, sce->id.lib, &p->palette);
+    p->paint_cursor = NULL;
+
+    BKE_paint_runtime_init(sce->toolsettings, p);
+  }
+}
+
 /* returns non-zero if any of the face's vertices
  * are hidden, zero otherwise */
 bool paint_is_face_hidden(const MLoopTri *lt, const MVert *mvert, const MLoop *mloop)
@@ -1734,16 +1798,15 @@ void BKE_sculpt_color_layer_create_if_needed(struct Object *object)
   DEG_id_tag_update(&orig_me->id, ID_RECALC_GEOMETRY);
 }
 
+/** \warning Expects a fully evaluated depsgraph. */
 void BKE_sculpt_update_object_for_edit(
     Depsgraph *depsgraph, Object *ob_orig, bool need_pmap, bool need_mask, bool need_colors)
 {
-  /* Update from sculpt operators and undo, to update sculpt session
-   * and PBVH after edits. */
-  Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
-  Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob_orig);
-  Mesh *me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_eval, &CD_MASK_BAREMESH);
-
   BLI_assert(ob_orig == DEG_get_original_object(ob_orig));
+
+  Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob_orig);
+  Mesh *me_eval = BKE_object_get_evaluated_mesh(ob_eval);
+  BLI_assert(me_eval != NULL);
 
   sculpt_update_object(depsgraph, ob_orig, me_eval, need_pmap, need_mask, need_colors);
 }

@@ -139,8 +139,6 @@ CCL_NAMESPACE_BEGIN
 #ifdef __KERNEL_OPTIX__
 #  undef __BAKING__
 #  undef __BRANCHED_PATH__
-/* TODO(pmours): Cannot use optixTrace in non-inlined functions */
-#  undef __SHADER_RAYTRACE__
 #endif /* __KERNEL_OPTIX__ */
 
 #ifdef __KERNEL_OPENCL__
@@ -743,18 +741,18 @@ typedef enum AttributePrimitive {
 } AttributePrimitive;
 
 typedef enum AttributeElement {
-  ATTR_ELEMENT_NONE,
-  ATTR_ELEMENT_OBJECT,
-  ATTR_ELEMENT_MESH,
-  ATTR_ELEMENT_FACE,
-  ATTR_ELEMENT_VERTEX,
-  ATTR_ELEMENT_VERTEX_MOTION,
-  ATTR_ELEMENT_CORNER,
-  ATTR_ELEMENT_CORNER_BYTE,
-  ATTR_ELEMENT_CURVE,
-  ATTR_ELEMENT_CURVE_KEY,
-  ATTR_ELEMENT_CURVE_KEY_MOTION,
-  ATTR_ELEMENT_VOXEL
+  ATTR_ELEMENT_NONE = 0,
+  ATTR_ELEMENT_OBJECT = (1 << 0),
+  ATTR_ELEMENT_MESH = (1 << 1),
+  ATTR_ELEMENT_FACE = (1 << 2),
+  ATTR_ELEMENT_VERTEX = (1 << 3),
+  ATTR_ELEMENT_VERTEX_MOTION = (1 << 4),
+  ATTR_ELEMENT_CORNER = (1 << 5),
+  ATTR_ELEMENT_CORNER_BYTE = (1 << 6),
+  ATTR_ELEMENT_CURVE = (1 << 7),
+  ATTR_ELEMENT_CURVE_KEY = (1 << 8),
+  ATTR_ELEMENT_CURVE_KEY_MOTION = (1 << 9),
+  ATTR_ELEMENT_VOXEL = (1 << 10)
 } AttributeElement;
 
 typedef enum AttributeStandard {
@@ -1424,10 +1422,12 @@ typedef enum KernelBVHLayout {
   BVH_LAYOUT_BVH2 = (1 << 0),
   BVH_LAYOUT_EMBREE = (1 << 1),
   BVH_LAYOUT_OPTIX = (1 << 2),
+  BVH_LAYOUT_MULTI_OPTIX = (1 << 3),
+  BVH_LAYOUT_MULTI_OPTIX_EMBREE = (1 << 4),
 
   /* Default BVH layout to use for CPU. */
   BVH_LAYOUT_AUTO = BVH_LAYOUT_EMBREE,
-  BVH_LAYOUT_ALL = (unsigned int)(~0u),
+  BVH_LAYOUT_ALL = BVH_LAYOUT_BVH2 | BVH_LAYOUT_EMBREE | BVH_LAYOUT_OPTIX,
 } KernelBVHLayout;
 
 typedef struct KernelBVH {

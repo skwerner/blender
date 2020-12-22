@@ -27,8 +27,8 @@
 #include "gpu_shader_private.hh"
 #include "gpu_vertex_format_private.h"
 
-#include <stddef.h>
-#include <string.h>
+#include <cstddef>
+#include <cstring>
 
 #include "BLI_ghash.h"
 #include "BLI_string.h"
@@ -262,13 +262,12 @@ void GPU_vertformat_attr_rename(GPUVertFormat *format, int attr_id, const char *
 /* Encode 8 original bytes into 11 safe bytes. */
 static void safe_bytes(char out[11], const char data[8])
 {
-  char safe_chars[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_";
+  char safe_chars[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
   uint64_t in = *(uint64_t *)data;
   for (int i = 0; i < 11; i++) {
-    /* Encoding in base63 */
-    out[i] = safe_chars[in % 63lu];
-    in /= 63lu;
+    out[i] = safe_chars[in % 62lu];
+    in /= 62lu;
   }
 }
 

@@ -330,7 +330,7 @@ class StrokePanel(BrushPanel):
         col.separator()
 
         if brush.use_anchor:
-            col.prop(brush, "use_edge_to_edge", text="Edge To Edge")
+            col.prop(brush, "use_edge_to_edge", text="Edge to Edge")
 
         if brush.use_airbrush:
             col.prop(brush, "rate", text="Rate", slider=True)
@@ -550,7 +550,6 @@ def brush_settings(layout, context, brush, popover=False):
         if context.preferences.experimental.use_sculpt_tools_tilt and capabilities.has_tilt:
             layout.prop(brush, "tilt_strength_factor", slider=True)
 
-
         row = layout.row(align=True)
         row.prop(brush, "hardness", slider=True)
         row.prop(brush, "invert_hardness_pressure", text="")
@@ -643,6 +642,11 @@ def brush_settings(layout, context, brush, popover=False):
             layout.prop(brush, "elastic_deform_volume_preservation", slider=True)
             layout.separator()
 
+        elif sculpt_tool == 'SNAKE_HOOK':
+            layout.separator()
+            layout.prop(brush, "snake_hook_deform_type")
+            layout.separator()
+
         elif sculpt_tool == 'POSE':
             layout.separator()
             layout.prop(brush, "deform_target")
@@ -698,6 +702,7 @@ def brush_settings(layout, context, brush, popover=False):
 
         elif sculpt_tool == 'GRAB':
             layout.prop(brush, "use_grab_active_vertex")
+            layout.prop(brush, "use_grab_silhouette")
 
         elif sculpt_tool == 'PAINT':
             row = layout.row(align=True)
@@ -714,6 +719,9 @@ def brush_settings(layout, context, brush, popover=False):
             row.prop(brush, "wet_persistence")
             row.prop(brush, "invert_wet_persistence_pressure", text="")
             row.prop(brush, "use_wet_persistence_pressure", text="")
+
+            row = layout.row(align=True)
+            row.prop(brush, "wet_paint_radius_factor")
 
             row = layout.row(align=True)
             row.prop(brush, "density")
@@ -755,6 +763,10 @@ def brush_settings(layout, context, brush, popover=False):
                 col.prop(brush, "surface_smooth_shape_preservation")
                 col.prop(brush, "surface_smooth_current_vertex")
                 col.prop(brush, "surface_smooth_iterations")
+
+        elif sculpt_tool == 'DISPLACEMENT_SMEAR':
+            col = layout.column()
+            col.prop(brush, "smear_deform_type")
 
         elif sculpt_tool == 'MASK':
             layout.row().prop(brush, "mask_tool", expand=True)
@@ -1023,10 +1035,7 @@ def brush_texture_settings(layout, brush, sculpt):
     layout.use_property_decorate = False
 
     # map_mode
-    if sculpt:
-        layout.prop(tex_slot, "map_mode", text="Mapping")
-    else:
-        layout.prop(tex_slot, "tex_paint_map_mode", text="Mapping")
+    layout.prop(tex_slot, "map_mode", text="Mapping")
 
     layout.separator()
 
@@ -1188,6 +1197,7 @@ def brush_basic_gpencil_paint_settings(layout, context, brush, *, compact=False)
         row.prop(brush, "size", text="Radius")
         row.prop(gp_settings, "use_pressure", text="", icon='STYLUS_PRESSURE')
         row.prop(gp_settings, "use_occlude_eraser", text="", icon='XRAY')
+        row.prop(gp_settings, "use_default_eraser", text="")
 
         row = layout.row(align=True)
         row.prop(gp_settings, "eraser_mode", expand=True)

@@ -1665,7 +1665,7 @@ static int actkeys_framejump_exec(bContext *C, wmOperator *UNUSED(op))
   if (ked.i1) {
     Scene *scene = ac.scene;
     CFRA = round_fl_to_int(ked.f1 / ked.i1);
-    SUBFRA = 0.f;
+    SUBFRA = 0.0f;
   }
 
   /* set notifier that things have changed */
@@ -1696,23 +1696,23 @@ static const EnumPropertyItem prop_actkeys_snap_types[] = {
     {ACTKEYS_SNAP_CFRA,
      "CFRA",
      0,
-     "Current Frame",
+     "Selection to Current Frame",
      "Snap selected keyframes to the current frame"},
     {ACTKEYS_SNAP_NEAREST_FRAME,
      "NEAREST_FRAME",
      0,
-     "Nearest Frame",
+     "Selection to Nearest Frame",
      "Snap selected keyframes to the nearest (whole) frame (use to fix accidental sub-frame "
      "offsets)"},
     {ACTKEYS_SNAP_NEAREST_SECOND,
      "NEAREST_SECOND",
      0,
-     "Nearest Second",
+     "Selection to Nearest Second",
      "Snap selected keyframes to the nearest second"},
     {ACTKEYS_SNAP_NEAREST_MARKER,
      "NEAREST_MARKER",
      0,
-     "Nearest Marker",
+     "Selection to Nearest Marker",
      "Snap selected keyframes to the nearest marker"},
     {0, NULL, 0, NULL, NULL},
 };
@@ -1827,7 +1827,7 @@ static const EnumPropertyItem prop_actkeys_mirror_types[] = {
     {ACTKEYS_MIRROR_XAXIS,
      "XAXIS",
      0,
-     "By Values Over Value=0",
+     "By Values Over Zero Value",
      "Flip values of selected keyframes (i.e. negative values become positive, and vice versa)"},
     {ACTKEYS_MIRROR_MARKER,
      "MARKER",

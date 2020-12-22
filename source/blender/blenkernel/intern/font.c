@@ -125,10 +125,16 @@ static void vfont_free_data(ID *id)
 static void vfont_blend_write(BlendWriter *writer, ID *id, const void *id_address)
 {
   VFont *vf = (VFont *)id;
-  if (vf->id.us > 0 || BLO_write_is_undo(writer)) {
+  const bool is_undo = BLO_write_is_undo(writer);
+  if (vf->id.us > 0 || is_undo) {
     /* Clean up, important in undo case to reduce false detection of changed datablocks. */
     vf->data = NULL;
     vf->temp_pf = NULL;
+
+    /* Do not store packed files in case this is a library override ID. */
+    if (ID_IS_OVERRIDE_LIBRARY(vf) && !is_undo) {
+      vf->packedfile = NULL;
+    }
 
     /* write LibData */
     BLO_write_id_struct(writer, VFont, id_address, &vf->id);
@@ -168,6 +174,8 @@ IDTypeInfo IDType_ID_VF = {
     .blend_read_data = vfont_blend_read_data,
     .blend_read_lib = NULL,
     .blend_read_expand = NULL,
+
+    .blend_read_undo_preserve = NULL,
 };
 
 /***************************** VFont *******************************/
@@ -947,7 +955,7 @@ static bool vfont_to_curve(Object *ob,
       //      CLOG_WARN(&LOG, "linewidth exceeded: %c%c%c...", mem[i], mem[i+1], mem[i+2]);
       for (j = i; j && (mem[j] != '\n') && (chartransdata[j].dobreak == 0); j--) {
         bool dobreak = false;
-        if (mem[j] == ' ' || mem[j] == '-') {
+        if (ELEM(mem[j], ' ', '-')) {
           ct -= (i - (j - 1));
           cnr -= (i - (j - 1));
           if (mem[j] == ' ') {

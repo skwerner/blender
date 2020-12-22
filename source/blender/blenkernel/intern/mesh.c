@@ -173,24 +173,53 @@ static void mesh_foreach_id(ID *id, LibraryForeachIDData *data)
 static void mesh_blend_write(BlendWriter *writer, ID *id, const void *id_address)
 {
   Mesh *mesh = (Mesh *)id;
-  if (mesh->id.us > 0 || BLO_write_is_undo(writer)) {
-    /* cache only - don't write */
-    mesh->mface = NULL;
-    mesh->totface = 0;
-    memset(&mesh->fdata, 0, sizeof(mesh->fdata));
-    memset(&mesh->runtime, 0, sizeof(mesh->runtime));
-
+  const bool is_undo = BLO_write_is_undo(writer);
+  if (mesh->id.us > 0 || is_undo) {
     CustomDataLayer *vlayers = NULL, vlayers_buff[CD_TEMP_CHUNK_SIZE];
     CustomDataLayer *elayers = NULL, elayers_buff[CD_TEMP_CHUNK_SIZE];
     CustomDataLayer *flayers = NULL, flayers_buff[CD_TEMP_CHUNK_SIZE];
     CustomDataLayer *llayers = NULL, llayers_buff[CD_TEMP_CHUNK_SIZE];
     CustomDataLayer *players = NULL, players_buff[CD_TEMP_CHUNK_SIZE];
 
-    CustomData_blend_write_prepare(&mesh->vdata, &vlayers, vlayers_buff, ARRAY_SIZE(vlayers_buff));
-    CustomData_blend_write_prepare(&mesh->edata, &elayers, elayers_buff, ARRAY_SIZE(elayers_buff));
+    /* cache only - don't write */
+    mesh->mface = NULL;
+    mesh->totface = 0;
+    memset(&mesh->fdata, 0, sizeof(mesh->fdata));
+    memset(&mesh->runtime, 0, sizeof(mesh->runtime));
     flayers = flayers_buff;
-    CustomData_blend_write_prepare(&mesh->ldata, &llayers, llayers_buff, ARRAY_SIZE(llayers_buff));
-    CustomData_blend_write_prepare(&mesh->pdata, &players, players_buff, ARRAY_SIZE(players_buff));
+
+    /* Do not store actual geometry data in case this is a library override ID. */
+    if (ID_IS_OVERRIDE_LIBRARY(mesh) && !is_undo) {
+      mesh->mvert = NULL;
+      mesh->totvert = 0;
+      memset(&mesh->vdata, 0, sizeof(mesh->vdata));
+      vlayers = vlayers_buff;
+
+      mesh->medge = NULL;
+      mesh->totedge = 0;
+      memset(&mesh->edata, 0, sizeof(mesh->edata));
+      elayers = elayers_buff;
+
+      mesh->mloop = NULL;
+      mesh->totloop = 0;
+      memset(&mesh->ldata, 0, sizeof(mesh->ldata));
+      llayers = llayers_buff;
+
+      mesh->mpoly = NULL;
+      mesh->totpoly = 0;
+      memset(&mesh->pdata, 0, sizeof(mesh->pdata));
+      players = players_buff;
+    }
+    else {
+      CustomData_blend_write_prepare(
+          &mesh->vdata, &vlayers, vlayers_buff, ARRAY_SIZE(vlayers_buff));
+      CustomData_blend_write_prepare(
+          &mesh->edata, &elayers, elayers_buff, ARRAY_SIZE(elayers_buff));
+      CustomData_blend_write_prepare(
+          &mesh->ldata, &llayers, llayers_buff, ARRAY_SIZE(llayers_buff));
+      CustomData_blend_write_prepare(
+          &mesh->pdata, &players, players_buff, ARRAY_SIZE(players_buff));
+    }
 
     BLO_write_id_struct(writer, Mesh, id_address, &mesh->id);
     BKE_id_blend_write(writer, &mesh->id);
@@ -275,50 +304,6 @@ static void mesh_blend_read_data(BlendDataReader *reader, ID *id)
     mesh->totselect = 0;
   }
 
-  /* Multires data */
-  BLO_read_data_address(reader, &mesh->mr);
-  if (mesh->mr) {
-    BLO_read_list(reader, &mesh->mr->levels);
-    MultiresLevel *lvl = mesh->mr->levels.first;
-
-    CustomData_blend_read(reader, &mesh->mr->vdata, lvl->totvert);
-    BKE_defvert_blend_read(
-        reader, lvl->totvert, CustomData_get(&mesh->mr->vdata, 0, CD_MDEFORMVERT));
-    CustomData_blend_read(reader, &mesh->mr->fdata, lvl->totface);
-
-    BLO_read_data_address(reader, &mesh->mr->edge_flags);
-    BLO_read_data_address(reader, &mesh->mr->edge_creases);
-
-    BLO_read_data_address(reader, &mesh->mr->verts);
-
-    /* If mesh has the same number of vertices as the
-     * highest multires level, load the current mesh verts
-     * into multires and discard the old data. Needed
-     * because some saved files either do not have a verts
-     * array, or the verts array contains out-of-date
-     * data. */
-    if (mesh->totvert == ((MultiresLevel *)mesh->mr->levels.last)->totvert) {
-      if (mesh->mr->verts) {
-        MEM_freeN(mesh->mr->verts);
-      }
-      mesh->mr->verts = MEM_dupallocN(mesh->mvert);
-    }
-
-    for (; lvl; lvl = lvl->next) {
-      BLO_read_data_address(reader, &lvl->verts);
-      BLO_read_data_address(reader, &lvl->faces);
-      BLO_read_data_address(reader, &lvl->edges);
-      BLO_read_data_address(reader, &lvl->colfaces);
-    }
-  }
-
-  /* if multires is present but has no valid vertex data,
-   * there's no way to recover it; silently remove multires */
-  if (mesh->mr && !mesh->mr->verts) {
-    multires_free(mesh->mr);
-    mesh->mr = NULL;
-  }
-
   if ((BLO_read_requires_endian_switch(reader)) && mesh->tface) {
     TFace *tf = mesh->tface;
     for (int i = 0; i < mesh->totface; i++, tf++) {
@@ -377,6 +362,8 @@ IDTypeInfo IDType_ID_ME = {
     .blend_read_data = mesh_blend_read_data,
     .blend_read_lib = mesh_blend_read_lib,
     .blend_read_expand = mesh_read_expand,
+
+    .blend_read_undo_preserve = NULL,
 };
 
 enum {
@@ -923,6 +910,7 @@ void BKE_mesh_copy_settings(Mesh *me_dst, const Mesh *me_src)
   me_dst->remesh_voxel_size = me_src->remesh_voxel_size;
   me_dst->remesh_voxel_adaptivity = me_src->remesh_voxel_adaptivity;
   me_dst->remesh_mode = me_src->remesh_mode;
+  me_dst->symmetry = me_src->symmetry;
 
   me_dst->face_sets_color_seed = me_src->face_sets_color_seed;
   me_dst->face_sets_color_default = me_src->face_sets_color_default;
@@ -1539,8 +1527,11 @@ void BKE_mesh_transform(Mesh *me, const float mat[4][4], bool do_keys)
 
 void BKE_mesh_translate(Mesh *me, const float offset[3], const bool do_keys)
 {
+  MVert *mvert = CustomData_duplicate_referenced_layer(&me->vdata, CD_MVERT, me->totvert);
+  /* If the referenced layer has been re-allocated need to update pointers stored in the mesh. */
+  BKE_mesh_update_customdata_pointers(me, false);
+
   int i = me->totvert;
-  MVert *mvert;
   for (mvert = me->mvert; i--; mvert++) {
     add_v3_v3(mvert->co, offset);
   }

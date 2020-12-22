@@ -28,7 +28,6 @@
 #include "DNA_scene_types.h"
 
 #include "BKE_context.h"
-#include "BKE_sequencer.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -38,6 +37,8 @@
 #include "UI_view2d.h"
 
 #include "RNA_define.h"
+
+#include "SEQ_sequencer.h"
 
 /* For menu, popup, icons, etc. */
 #include "ED_anim_api.h"
@@ -86,8 +87,10 @@ static int sequencer_view_all_exec(bContext *C, wmOperator *op)
   rctf box;
 
   const int smooth_viewtx = WM_operator_smooth_viewtx_get(op);
+  Scene *scene = CTX_data_scene(C);
+  const Editing *ed = BKE_sequencer_editing_get(scene, false);
 
-  boundbox_seq(CTX_data_scene(C), &box);
+  SEQ_timeline_boundbox(scene, SEQ_active_seqbase_get(ed), &box);
   UI_view2d_smooth_view(C, region, &box, smooth_viewtx);
   return OPERATOR_FINISHED;
 }

@@ -241,8 +241,8 @@ class TIME_PT_playback(TimelinePanelButtons, Panel):
         screen = context.screen
         scene = context.scene
 
-        col = layout.column()
-        col.prop(scene, "sync_mode", text="Audio")
+        layout.prop(scene, "sync_mode", text="Sync")
+        col = layout.column(heading="Audio")
         col.prop(scene, "use_audio_scrub", text="Scrubbing")
         col.prop(scene, "use_audio", text="Mute")
 
@@ -296,6 +296,7 @@ class TIME_PT_keyframing_settings(TimelinePanelButtons, Panel):
         col = layout.column(align=True)
         col.label(text="New Keyframe Type")
         col.prop(tool_settings, "keyframe_type", text="")
+
 
 class TIME_PT_auto_keyframing(TimelinePanelButtons, Panel):
     bl_label = "Auto Keyframing"

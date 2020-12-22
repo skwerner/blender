@@ -256,6 +256,8 @@ IDTypeInfo IDType_ID_TXT = {
     .blend_read_data = text_blend_read_data,
     .blend_read_lib = NULL,
     .blend_read_expand = NULL,
+
+    .blend_read_undo_preserve = NULL,
 };
 
 /** \} */
@@ -457,6 +459,14 @@ bool BKE_text_reload(Text *text)
   return true;
 }
 
+/**
+ * Load a text file.
+ *
+ * \param is_internal: If \a true, this text data-block only exists in memory,
+ * not as a file on disk.
+ *
+ * \note text data-blocks have no user by default, only the 'real user' flag.
+ */
 Text *BKE_text_load_ex(Main *bmain, const char *file, const char *relpath, const bool is_internal)
 {
   unsigned char *buffer;
@@ -476,8 +486,9 @@ Text *BKE_text_load_ex(Main *bmain, const char *file, const char *relpath, const
   }
 
   ta = BKE_libblock_alloc(bmain, ID_TXT, BLI_path_basename(filepath_abs), 0);
-  /* Texts always have 'real' user (see also read code). */
+  /* Texts have no user by default... Only the 'real' user flag. */
   id_us_ensure_real(&ta->id);
+  id_us_min(&ta->id);
 
   BLI_listbase_clear(&ta->lines);
   ta->curl = ta->sell = NULL;
@@ -509,6 +520,10 @@ Text *BKE_text_load_ex(Main *bmain, const char *file, const char *relpath, const
   return ta;
 }
 
+/** Load a text file.
+ *
+ * \note Text data-blocks have no user by default, only the 'real user' flag.
+ */
 Text *BKE_text_load(Main *bmain, const char *file, const char *relpath)
 {
   return BKE_text_load_ex(bmain, file, relpath, false);
@@ -2333,7 +2348,7 @@ int txt_setcurr_tab_spaces(Text *text, int space)
       if (ch == ':') {
         is_indent = 1;
       }
-      else if (ch != ' ' && ch != '\t') {
+      else if (!ELEM(ch, ' ', '\t')) {
         is_indent = 0;
       }
     }
@@ -2459,7 +2474,7 @@ int text_check_identifier_nodigit_unicode(const unsigned int ch)
 
 bool text_check_whitespace(const char ch)
 {
-  if (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n') {
+  if (ELEM(ch, ' ', '\t', '\r', '\n')) {
     return true;
   }
   return false;

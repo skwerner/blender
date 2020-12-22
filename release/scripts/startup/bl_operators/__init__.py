@@ -27,10 +27,12 @@ if "bpy" in locals():
 _modules = [
     "add_mesh_torus",
     "anim",
+    "assets",
     "clip",
     "console",
     "constraint",
     "file",
+    "geometry_nodes",
     "image",
     "mesh",
     "node",
@@ -42,13 +44,11 @@ _modules = [
     "rigidbody",
     "screen_play_rendered_anim",
     "sequencer",
-    "simulation",
     "userpref",
     "uvcalc_follow_active",
     "uvcalc_lightmap",
     "vertexpaint_dirt",
     "view3d",
-    "gpencil_mesh_bake",
     "wm",
 ]
 

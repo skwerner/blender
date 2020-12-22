@@ -1618,6 +1618,7 @@ static int object_speaker_add_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
   Object *ob = ED_object_add_type(C, OB_SPEAKER, NULL, loc, rot, false, local_view_bits);
+  const bool is_liboverride = ID_IS_OVERRIDE_LIBRARY(ob);
 
   /* to make it easier to start using this immediately in NLA, a default sound clip is created
    * ready to be moved around to retime the sound and/or make new sound clips
@@ -1625,13 +1626,13 @@ static int object_speaker_add_exec(bContext *C, wmOperator *op)
   {
     /* create new data for NLA hierarchy */
     AnimData *adt = BKE_animdata_add_id(&ob->id);
-    NlaTrack *nlt = BKE_nlatrack_add(adt, NULL);
+    NlaTrack *nlt = BKE_nlatrack_add(adt, NULL, is_liboverride);
     NlaStrip *strip = BKE_nla_add_soundstrip(bmain, scene, ob->data);
     strip->start = CFRA;
     strip->end += strip->start;
 
     /* hook them up */
-    BKE_nlatrack_add_strip(nlt, strip);
+    BKE_nlatrack_add_strip(nlt, strip, is_liboverride);
 
     /* auto-name the strip, and give the track an interesting name  */
     BLI_strncpy(nlt->name, DATA_("SoundTrack"), sizeof(nlt->name));
@@ -1713,7 +1714,7 @@ void OBJECT_OT_hair_add(wmOperatorType *ot)
 
 static bool object_pointcloud_add_poll(bContext *C)
 {
-  if (!U.experimental.use_new_particle_system) {
+  if (!U.experimental.use_new_point_cloud_type) {
     return false;
   }
   return ED_operator_objectmode(C);
@@ -2318,7 +2319,7 @@ static const EnumPropertyItem convert_target_items[] = {
      "MESH",
      ICON_OUTLINER_OB_MESH,
      "Mesh",
-#ifdef WITH_PARTICLE_NODES
+#ifdef WITH_POINT_CLOUD
      "Mesh from Curve, Surface, Metaball, Text, or Pointcloud objects"},
 #else
      "Mesh from Curve, Surface, Metaball, or Text objects"},
@@ -2328,7 +2329,7 @@ static const EnumPropertyItem convert_target_items[] = {
      ICON_OUTLINER_OB_GREASEPENCIL,
      "Grease Pencil",
      "Grease Pencil from Curve or Mesh objects"},
-#ifdef WITH_PARTICLE_NODES
+#ifdef WITH_POINT_CLOUD
     {OB_POINTCLOUD,
      "POINTCLOUD",
      ICON_OUTLINER_OB_POINTCLOUD,
@@ -2686,6 +2687,8 @@ static int object_convert_exec(bContext *C, wmOperator *op)
       Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
       Mesh *me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_eval, &CD_MASK_MESH);
       me_eval = BKE_mesh_copy_for_eval(me_eval, false);
+      /* Full (edge-angle based) draw calculation should ideally be performed. */
+      BKE_mesh_edges_set_draw_render(me_eval);
       BKE_mesh_nomain_to_mesh(me_eval, newob->data, newob, &CD_MASK_MESH, true);
       BKE_object_free_modifiers(newob, 0); /* after derivedmesh calls! */
     }
@@ -2930,7 +2933,7 @@ static int object_convert_exec(bContext *C, wmOperator *op)
     /* Remove curves and meshes converted to Grease Pencil object. */
     if (gpencilConverted) {
       FOREACH_SCENE_OBJECT_BEGIN (scene, ob_delete) {
-        if ((ob_delete->type == OB_CURVE) || (ob_delete->type == OB_MESH)) {
+        if (ELEM(ob_delete->type, OB_CURVE, OB_MESH)) {
           if (ob_delete->flag & OB_DONE) {
             ED_object_base_free_and_unlink(bmain, scene, ob_delete);
           }

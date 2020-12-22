@@ -284,7 +284,9 @@ static void constraint_snap_plane_to_edge(const TransInfo *t, const float plane[
  * Snap to the nearest point between the snap point and the line that
  * intersects the face plane with the constraint plane.
  */
-static void constraint_snap_plane_to_face(const TransInfo *t, const float plane[4], float r_out[3])
+static void UNUSED_FUNCTION(constraint_snap_plane_to_face(const TransInfo *t,
+                                                          const float plane[4],
+                                                          float r_out[3]))
 {
   float face_plane[4], isect_orig[3], isect_dir[3];
   const float *face_snap_point = t->tsnap.snapPoint;
@@ -406,7 +408,8 @@ static void applyAxisConstraintVec(
             constraint_snap_plane_to_edge(t, plane, out);
           }
           else if (is_snap_to_face) {
-            constraint_snap_plane_to_face(t, plane, out);
+            /* Disabled, as it has not proven to be really useful. (See T82386). */
+            // constraint_snap_plane_to_face(t, plane, out);
           }
           else {
             /* View alignment correction. */
@@ -1122,16 +1125,6 @@ int constraintModeToIndex(const TransInfo *t)
     default:
       return -1;
   }
-}
-
-char constraintModeToChar(const TransInfo *t)
-{
-  int index = constraintModeToIndex(t);
-  if (index == -1) {
-    return '\0';
-  }
-  BLI_assert((uint)index < 3);
-  return 'X' + index;
 }
 
 bool isLockConstraint(TransInfo *t)

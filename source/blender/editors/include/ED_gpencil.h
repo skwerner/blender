@@ -51,7 +51,6 @@ struct ScrArea;
 struct SnapObjectContext;
 struct ToolSettings;
 struct View3D;
-struct ViewLayer;
 struct bContext;
 
 struct Material;
@@ -62,6 +61,8 @@ struct bAnimContext;
 
 struct wmKeyConfig;
 struct wmOperator;
+
+#define GPENCIL_MINIMUM_JOIN_DIST 20.0f
 
 /* Reproject stroke modes. */
 typedef enum eGP_ReprojectModes {
@@ -78,6 +79,12 @@ typedef enum eGP_ReprojectModes {
   /* Keep equals (used in some operators) */
   GP_REPROJECT_KEEP,
 } eGP_ReprojectModes;
+
+/* Target object modes. */
+typedef enum eGP_TargetObjectMode {
+  GP_TARGET_OB_NEW = 0,
+  GP_TARGET_OB_SELECTED = 1,
+} eGP_TargetObjectMode;
 
 /* ------------- Grease-Pencil Runtime Data ---------------- */
 
@@ -308,7 +315,8 @@ void ED_gpencil_update_color_uv(struct Main *bmain, struct Material *mat);
  * 2 - Hit in point B
  * 3 - Hit in point A and B
  */
-int ED_gpencil_select_stroke_segment(struct bGPDlayer *gpl,
+int ED_gpencil_select_stroke_segment(struct bGPdata *gpd,
+                                     struct bGPDlayer *gpl,
                                      struct bGPDstroke *gps,
                                      struct bGPDspoint *pt,
                                      bool select,
@@ -318,6 +326,7 @@ int ED_gpencil_select_stroke_segment(struct bGPDlayer *gpl,
                                      float r_hitb[3]);
 
 void ED_gpencil_select_toggle_all(struct bContext *C, int action);
+void ED_gpencil_select_curve_toggle_all(struct bContext *C, int action);
 
 /* Ensure stroke sbuffer size is enough */
 struct tGPspoint *ED_gpencil_sbuffer_ensure(struct tGPspoint *buffer_array,
@@ -357,6 +366,22 @@ bool ED_gpencil_stroke_point_is_inside(struct bGPDstroke *gps,
                                        struct GP_SpaceConversion *gsc,
                                        int mouse[2],
                                        const float diff_mat[4][4]);
+
+struct bGPDstroke *ED_gpencil_stroke_nearest_to_ends(struct bContext *C,
+                                                     struct GP_SpaceConversion *gsc,
+                                                     struct bGPDlayer *gpl,
+                                                     struct bGPDframe *gpf,
+                                                     struct bGPDstroke *gps,
+                                                     const float radius,
+                                                     int *r_index);
+
+struct bGPDstroke *ED_gpencil_stroke_join_and_trim(struct bGPdata *gpd,
+                                                   struct bGPDframe *gpf,
+                                                   struct bGPDstroke *gps,
+                                                   struct bGPDstroke *gps_dst,
+                                                   const int pt_index);
+
+void ED_gpencil_stroke_close_by_distance(struct bGPDstroke *gps, const float threshold);
 
 #ifdef __cplusplus
 }

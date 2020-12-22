@@ -309,7 +309,7 @@ static void graphedit_activekey_left_handle_coord_cb(bContext *C, void *fcu_ptr,
   /* perform normal updates NOW */
   graphedit_activekey_handles_cb(C, fcu_ptr, bezt_ptr);
 
-  /* restore selection state so that no-one notices this hack */
+  /* restore selection state so that no one notices this hack */
   bezt->f1 = f1;
   bezt->f3 = f3;
 }
@@ -331,7 +331,7 @@ static void graphedit_activekey_right_handle_coord_cb(bContext *C, void *fcu_ptr
   /* perform normal updates NOW */
   graphedit_activekey_handles_cb(C, fcu_ptr, bezt_ptr);
 
-  /* restore selection state so that no-one notices this hack */
+  /* restore selection state so that no one notices this hack */
   bezt->f1 = f1;
   bezt->f3 = f3;
 }
@@ -423,13 +423,14 @@ static void graph_panel_key_properties(const bContext *C, Panel *panel)
                       but_max_width,
                       UI_UNIT_Y,
                       &bezt_ptr,
-                      "co",
+                      "co_ui",
                       0,
                       0,
                       0,
                       0,
                       0,
                       NULL);
+      UI_but_func_set(but, graphedit_activekey_update_cb, fcu, bezt);
 
       uiItemL_respect_property_split(col, IFACE_("Value"), ICON_NONE);
       but = uiDefButR(block,
@@ -441,7 +442,7 @@ static void graph_panel_key_properties(const bContext *C, Panel *panel)
                       but_max_width,
                       UI_UNIT_Y,
                       &bezt_ptr,
-                      "co",
+                      "co_ui",
                       1,
                       0,
                       0,
@@ -450,8 +451,6 @@ static void graph_panel_key_properties(const bContext *C, Panel *panel)
                       NULL);
       UI_but_func_set(but, graphedit_activekey_update_cb, fcu, bezt);
       UI_but_unit_type_set(but, unit);
-
-      UI_but_func_set(but, graphedit_activekey_update_cb, fcu, bezt);
     }
 
     /* previous handle - only if previous was Bezier interpolation */

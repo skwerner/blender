@@ -86,7 +86,7 @@ static void initData(GpencilModifierData *md)
   MEMCPY_STRUCT_AFTER(gpmd, DNA_struct_default_get(ArrayGpencilModifierData), modifier);
 
   /* Open the first subpanel too, because it's activated by default. */
-  md->ui_expand_flag = (1 << 0) | (1 << 1);
+  md->ui_expand_flag = UI_PANEL_DATA_EXPAND_ROOT | UI_SUBPANEL_DATA_EXPAND_1;
 }
 
 static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
@@ -237,9 +237,17 @@ static void generate_geometry(GpencilModifierData *md,
         /* To ensure a nice distribution, we use halton sequence and offset using the seed. */
         BLI_halton_3d(primes, offset, x, r);
 
-        for (int i = 0; i < 3; i++) {
-          rand[j][i] = fmodf(r[i] * 2.0 - 1.0 + rand_offset, 1.0f);
-          rand[j][i] = fmodf(sin(rand[j][i] * 12.9898 + j * 78.233) * 43758.5453, 1.0f);
+        if ((mmd->flag & GP_ARRAY_UNIFORM_RANDOM_SCALE) && j == 2) {
+          float rand_value;
+          rand_value = fmodf(r[0] * 2.0 - 1.0 + rand_offset, 1.0f);
+          rand_value = fmodf(sin(rand_value * 12.9898 + j * 78.233) * 43758.5453, 1.0f);
+          copy_v3_fl(rand[j], rand_value);
+        }
+        else {
+          for (int i = 0; i < 3; i++) {
+            rand[j][i] = fmodf(r[i] * 2.0 - 1.0 + rand_offset, 1.0f);
+            rand[j][i] = fmodf(sin(rand[j][i] * 12.9898 + j * 78.233) * 43758.5453, 1.0f);
+          }
         }
       }
       /* Calculate Random matrix. */
@@ -255,7 +263,7 @@ static void generate_geometry(GpencilModifierData *md,
       /* Duplicate original strokes to create this instance. */
       LISTBASE_FOREACH_BACKWARD (tmpStrokes *, iter, &stroke_cache) {
         /* Duplicate stroke */
-        bGPDstroke *gps_dst = BKE_gpencil_stroke_duplicate(iter->gps, true);
+        bGPDstroke *gps_dst = BKE_gpencil_stroke_duplicate(iter->gps, true, true);
 
         /* Move points */
         for (int i = 0; i < iter->gps->totpoints; i++) {
@@ -425,6 +433,7 @@ static void random_panel_draw(const bContext *UNUSED(C), Panel *panel)
   uiItemR(layout, ptr, "random_offset", 0, IFACE_("Offset"), ICON_NONE);
   uiItemR(layout, ptr, "random_rotation", 0, IFACE_("Rotation"), ICON_NONE);
   uiItemR(layout, ptr, "random_scale", 0, IFACE_("Scale"), ICON_NONE);
+  uiItemR(layout, ptr, "use_uniform_random_scale", 0, NULL, ICON_NONE);
   uiItemR(layout, ptr, "seed", 0, NULL, ICON_NONE);
 }
 

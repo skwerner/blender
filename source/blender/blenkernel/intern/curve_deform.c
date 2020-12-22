@@ -163,16 +163,33 @@ static bool calc_curve_deform(
   if (is_neg_axis) {
     index = axis - 3;
     if (cu->flag & CU_STRETCH) {
-      fac = -(co[index] - cd->dmax[index]) / (cd->dmax[index] - cd->dmin[index]);
+      const float divisor = cd->dmax[index] - cd->dmin[index];
+      if (LIKELY(divisor > FLT_EPSILON)) {
+        fac = -(co[index] - cd->dmax[index]) / divisor;
+      }
+      else {
+        fac = 0.0f;
+      }
     }
     else {
-      fac = -(co[index] - cd->dmax[index]) / (ob_curve->runtime.curve_cache->path->totdist);
+      if (LIKELY(ob_curve->runtime.curve_cache->path->totdist > FLT_EPSILON)) {
+        fac = -(co[index] - cd->dmax[index]) / (ob_curve->runtime.curve_cache->path->totdist);
+      }
+      else {
+        fac = 0.0f;
+      }
     }
   }
   else {
     index = axis;
     if (cu->flag & CU_STRETCH) {
-      fac = (co[index] - cd->dmin[index]) / (cd->dmax[index] - cd->dmin[index]);
+      const float divisor = cd->dmax[index] - cd->dmin[index];
+      if (LIKELY(divisor > FLT_EPSILON)) {
+        fac = (co[index] - cd->dmin[index]) / divisor;
+      }
+      else {
+        fac = 0.0f;
+      }
     }
     else {
       if (LIKELY(ob_curve->runtime.curve_cache->path->totdist > FLT_EPSILON)) {
@@ -222,10 +239,10 @@ static bool calc_curve_deform(
 
     /* zero the axis which is not used,
      * the big block of text above now applies to these 3 lines */
-    quat_apply_track(
-        quat,
-        axis,
-        (axis == 0 || axis == 2) ? 1 : 0); /* up flag is a dummy, set so no rotation is done */
+    quat_apply_track(quat,
+                     axis,
+                     (ELEM(axis, 0, 2)) ? 1 :
+                                          0); /* up flag is a dummy, set so no rotation is done */
     vec_apply_track(cent, axis);
     cent[index] = 0.0f;
 

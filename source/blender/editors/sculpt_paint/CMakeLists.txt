@@ -28,10 +28,11 @@ set(INC
   ../../imbuf
   ../../makesdna
   ../../makesrna
-  ../../render/extern/include
+  ../../render
   ../../windowmanager
   ../../../../intern/atomic
   ../../../../intern/clog
+  ../../../../intern/eigen
   ../../../../intern/glew-mx
   ../../../../intern/guardedalloc
 )

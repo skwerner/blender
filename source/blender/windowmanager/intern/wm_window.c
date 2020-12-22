@@ -1301,6 +1301,7 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr C_void_ptr
         event.type = MOUSEMOVE;
         event.prevx = event.x;
         event.prevy = event.y;
+        event.is_repeat = false;
 
         wm_event_add(win, &event);
 
@@ -1432,6 +1433,7 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr C_void_ptr
         event.type = MOUSEMOVE;
         event.prevx = event.x;
         event.prevy = event.y;
+        event.is_repeat = false;
 
         /* No context change! C->wm->windrawable is drawable, or for area queues. */
         wm->winactive = win;
@@ -1568,6 +1570,7 @@ static int wm_window_timer(const bContext *C)
         event.type = wt->event_type;
         event.val = KM_NOTHING;
         event.keymodifier = 0;
+        event.is_repeat = false;
         event.custom = EVT_DATA_TIMER;
         event.customdata = wt;
         wm_event_add(win, &event);
@@ -1764,7 +1767,7 @@ static char *wm_clipboard_text_get_ex(bool selection, int *r_len, bool firstline
   if (firstline) {
     /* will return an over-alloc'ed value in the case there are newlines */
     for (char *p = buf; *p; p++) {
-      if ((*p != '\n') && (*p != '\r')) {
+      if (!ELEM(*p, '\n', '\r')) {
         *(p2++) = *p;
       }
       else {
@@ -2252,6 +2255,17 @@ Scene *WM_windows_scene_get_from_screen(const wmWindowManager *wm, const bScreen
   LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
     if (WM_window_get_active_screen(win) == screen) {
       return WM_window_get_active_scene(win);
+    }
+  }
+
+  return NULL;
+}
+
+ViewLayer *WM_windows_view_layer_get_from_screen(const wmWindowManager *wm, const bScreen *screen)
+{
+  LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
+    if (WM_window_get_active_screen(win) == screen) {
+      return WM_window_get_active_view_layer(win);
     }
   }
 

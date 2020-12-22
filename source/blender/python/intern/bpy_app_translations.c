@@ -420,9 +420,9 @@ static BLT_i18n_contexts_descriptor _contexts[] = BLT_I18NCONTEXTS_DESC;
 static PyStructSequence_Field app_translations_contexts_fields[ARRAY_SIZE(_contexts)] = {{NULL}};
 
 static PyStructSequence_Desc app_translations_contexts_desc = {
-    "bpy.app.translations.contexts",                                  /* name */
-    "This named tuple contains all pre-defined translation contexts", /* doc */
-    app_translations_contexts_fields,                                 /* fields */
+    "bpy.app.translations.contexts",                                 /* name */
+    "This named tuple contains all predefined translation contexts", /* doc */
+    app_translations_contexts_fields,                                /* fields */
     ARRAY_SIZE(app_translations_contexts_fields) - 1,
 };
 
@@ -464,7 +464,7 @@ static PyObject *app_translations_contexts_make(void)
  * \{ */
 
 PyDoc_STRVAR(app_translations_contexts_doc,
-             "A named tuple containing all pre-defined translation contexts.\n"
+             "A named tuple containing all predefined translation contexts.\n"
              "\n"
              ".. warning::\n"
              "   Never use a (new) context starting with \"" BLT_I18NCONTEXT_DEFAULT_BPYRNA
@@ -794,10 +794,14 @@ static PyTypeObject BlenderAppTranslationsType = {
     0, /* tp_itemsize */
     /* methods */
     /* No destructor, this is a singleton! */
-    NULL,            /* tp_dealloc */
-    (printfunc)NULL, /* printfunc tp_print; */
-    NULL,            /* getattrfunc tp_getattr; */
-    NULL,            /* setattrfunc tp_setattr; */
+    NULL, /* tp_dealloc */
+#if PY_VERSION_HEX >= 0x03080000
+    0, /* tp_vectorcall_offset */
+#else
+    (printfunc)NULL, /* printfunc tp_print */
+#endif
+    NULL, /* getattrfunc tp_getattr; */
+    NULL, /* setattrfunc tp_setattr; */
     NULL,
     /* tp_compare */ /* DEPRECATED in python 3.0! */
     NULL,            /* tp_repr */

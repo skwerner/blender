@@ -1550,10 +1550,10 @@ enum {
 
 static const EnumPropertyItem prop_similar_types[] = {
     {SIMEDBONE_CHILDREN, "CHILDREN", 0, "Children", ""},
-    {SIMEDBONE_CHILDREN_IMMEDIATE, "CHILDREN_IMMEDIATE", 0, "Immediate children", ""},
+    {SIMEDBONE_CHILDREN_IMMEDIATE, "CHILDREN_IMMEDIATE", 0, "Immediate Children", ""},
     {SIMEDBONE_SIBLINGS, "SIBLINGS", 0, "Siblings", ""},
     {SIMEDBONE_LENGTH, "LENGTH", 0, "Length", ""},
-    {SIMEDBONE_DIRECTION, "DIRECTION", 0, "Direction (Y axis)", ""},
+    {SIMEDBONE_DIRECTION, "DIRECTION", 0, "Direction (Y Axis)", ""},
     {SIMEDBONE_PREFIX, "PREFIX", 0, "Prefix", ""},
     {SIMEDBONE_SUFFIX, "SUFFIX", 0, "Suffix", ""},
     {SIMEDBONE_LAYER, "LAYER", 0, "Layer", ""},
@@ -1806,11 +1806,11 @@ static void select_similar_data_pchan(bContext *C, const size_t bytes_size, cons
 
 static void is_ancestor(EditBone *bone, EditBone *ancestor)
 {
-  if (bone->temp.ebone == ancestor || bone->temp.ebone == NULL) {
+  if (ELEM(bone->temp.ebone, ancestor, NULL)) {
     return;
   }
 
-  if (bone->temp.ebone->temp.ebone != NULL && bone->temp.ebone->temp.ebone != ancestor) {
+  if (!ELEM(bone->temp.ebone->temp.ebone, NULL, ancestor)) {
     is_ancestor(bone->temp.ebone, ancestor);
   }
 

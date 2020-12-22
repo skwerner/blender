@@ -438,7 +438,6 @@
     .sculptlvl = 0, \
     .renderlvl = 0, \
     .totlvl = 0, \
-    .simple = 0, \
     .flags = eMultiresModifierFlag_UseCrease | eMultiresModifierFlag_ControlEdges, \
     .uv_smooth = SUBSURF_UV_SMOOTH_PRESERVE_CORNERS, \
     .quality = 4, \
@@ -504,8 +503,8 @@
     .random_position = 0.0f, \
     .rotation = 0.0f, \
     .random_rotation = 0.0f, \
-    .particle_offset = 1.0f, \
-    .particle_amount = 0.0f, \
+    .particle_offset = 0.0f, \
+    .particle_amount = 1.0f, \
     .index_layer_name = "", \
     .value_layer_name = "", \
   }
@@ -574,7 +573,7 @@
     .flag = 0, \
   }
 
-#define _DNA_DEFAULT_SimulationModifierData \
+#define _DNA_DEFAULT_NodesModifierData \
   { 0 }
 
 #define _DNA_DEFAULT_SkinModifierData \
@@ -802,6 +801,7 @@
 #define _DNA_DEFAULT_WeldModifierData \
   { \
     .merge_dist = 0.001f, \
+    .mode = MOD_WELD_MODE_ALL, \
     .defgrp_name = "", \
   }
 

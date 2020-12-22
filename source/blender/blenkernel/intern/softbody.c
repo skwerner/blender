@@ -52,6 +52,7 @@
 #include "DNA_lattice_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
+#include "DNA_object_force_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
@@ -1063,7 +1064,7 @@ static int sb_detect_face_pointCached(const float face_v1[3],
   GHash *hash;
   GHashIterator *ihash;
   float nv1[3], edge1[3], edge2[3], d_nvect[3], aabbmin[3], aabbmax[3];
-  float facedist, outerfacethickness, tune = 10.f;
+  float facedist, outerfacethickness, tune = 10.0f;
   int a, deflected = 0;
 
   aabbmin[0] = min_fff(face_v1[0], face_v2[0], face_v3[0]);
@@ -2032,7 +2033,7 @@ static int _softbody_calc_forces_slice_in_a_thread(Scene *scene,
           attached = 0;
           for (b = obp->nofsprings; b > 0; b--) {
             bs = sb->bspring + obp->springs[b - 1];
-            if ((ilast - bb == bs->v2) || (ilast - bb == bs->v1)) {
+            if (ELEM(ilast - bb, bs->v2, bs->v1)) {
               attached = 1;
               continue;
             }
@@ -2797,8 +2798,8 @@ static void reference_to_scratch(Object *ob)
   SoftBody *sb = ob->soft;
   ReferenceVert *rp;
   BodyPoint *bp;
-  float accu_pos[3] = {0.f, 0.f, 0.f};
-  float accu_mass = 0.f;
+  float accu_pos[3] = {0.0f, 0.0f, 0.0f};
+  float accu_mass = 0.0f;
   int a;
 
   sb->scratch->Ref.ivert = MEM_mallocN(sizeof(ReferenceVert) * sb->totpoint, "SB_Reference");
@@ -3321,7 +3322,7 @@ static void softbody_reset(Object *ob, SoftBody *sb, float (*vertexCos)[3], int 
     bp->vec[0] = bp->vec[1] = bp->vec[2] = 0.0f;
 
     /* the bp->prev*'s are for rolling back from a canceled try to propagate in time
-     * adaptive step size algo in a nutshell:
+     * adaptive step size algorithm in a nutshell:
      * 1.  set scheduled time step to new dtime
      * 2.  try to advance the scheduled time step, being optimistic execute it
      * 3.  check for success

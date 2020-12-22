@@ -124,6 +124,59 @@ PointerRNA *shaderfx_panel_get_property_pointers(Panel *panel, PointerRNA *r_ob_
 
 #define ERROR_LIBDATA_MESSAGE TIP_("External library data")
 
+static void gpencil_shaderfx_ops_extra_draw(bContext *C, uiLayout *layout, void *fx_v)
+{
+  PointerRNA op_ptr;
+  uiLayout *row;
+  ShaderFxData *fx = (ShaderFxData *)fx_v;
+
+  PointerRNA ptr;
+  Object *ob = ED_object_active_context(C);
+  RNA_pointer_create(&ob->id, &RNA_ShaderFx, fx, &ptr);
+  uiLayoutSetContextPointer(layout, "shaderfx", &ptr);
+  uiLayoutSetOperatorContext(layout, WM_OP_INVOKE_DEFAULT);
+
+  uiLayoutSetUnitsX(layout, 4.0f);
+
+  /* Duplicate. */
+  uiItemO(layout,
+          CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Duplicate"),
+          ICON_DUPLICATE,
+          "OBJECT_OT_shaderfx_copy");
+
+  uiItemS(layout);
+
+  /* Move to first. */
+  row = uiLayoutColumn(layout, false);
+  uiItemFullO(row,
+              "OBJECT_OT_shaderfx_move_to_index",
+              IFACE_("Move to First"),
+              ICON_TRIA_UP,
+              NULL,
+              WM_OP_INVOKE_DEFAULT,
+              0,
+              &op_ptr);
+  RNA_int_set(&op_ptr, "index", 0);
+  if (!fx->prev) {
+    uiLayoutSetEnabled(row, false);
+  }
+
+  /* Move to last. */
+  row = uiLayoutColumn(layout, false);
+  uiItemFullO(row,
+              "OBJECT_OT_shaderfx_move_to_index",
+              IFACE_("Move to Last"),
+              ICON_TRIA_DOWN,
+              NULL,
+              WM_OP_INVOKE_DEFAULT,
+              0,
+              &op_ptr);
+  RNA_int_set(&op_ptr, "index", BLI_listbase_count(&ob->shader_fx) - 1);
+  if (!fx->next) {
+    uiLayoutSetEnabled(row, false);
+  }
+}
+
 static void shaderfx_panel_header(const bContext *UNUSED(C), Panel *panel)
 {
   uiLayout *layout = panel->layout;
@@ -158,6 +211,9 @@ static void shaderfx_panel_header(const bContext *UNUSED(C), Panel *panel)
   }
   uiItemR(row, ptr, "show_viewport", 0, "", ICON_NONE);
   uiItemR(row, ptr, "show_render", 0, "", ICON_NONE);
+
+  /* Extra operators. */
+  uiItemMenuF(row, "", ICON_DOWNARROW_HLT, gpencil_shaderfx_ops_extra_draw, fx);
 
   row = uiLayoutRow(row, false);
   uiLayoutSetEmboss(row, UI_EMBOSS_NONE);
@@ -203,7 +259,7 @@ PanelType *shaderfx_panel_register(ARegionType *region_type, ShaderFxType type, 
 
   /* Give the panel the special flag that says it was built here and corresponds to a
    * shader effect rather than a PanelType. */
-  panel_type->flag = PNL_LAYOUT_HEADER_EXPAND | PNL_DRAW_BOX | PNL_INSTANCED;
+  panel_type->flag = PANEL_TYPE_HEADER_EXPAND | PANEL_TYPE_DRAW_BOX | PANEL_TYPE_INSTANCED;
   panel_type->reorder = shaderfx_reorder;
   panel_type->get_list_data_expand_flag = get_shaderfx_expand_flag;
   panel_type->set_list_data_expand_flag = set_shaderfx_expand_flag;
@@ -240,7 +296,7 @@ PanelType *shaderfx_subpanel_register(ARegionType *region_type,
   panel_type->draw_header = draw_header;
   panel_type->draw = draw;
   panel_type->poll = shaderfx_ui_poll;
-  panel_type->flag = (PNL_DEFAULT_CLOSED | PNL_DRAW_BOX);
+  panel_type->flag = (PANEL_TYPE_DEFAULT_CLOSED | PANEL_TYPE_DRAW_BOX);
 
   BLI_assert(parent != NULL);
   BLI_strncpy(panel_type->parent_id, parent->idname, BKE_ST_MAXNAME);

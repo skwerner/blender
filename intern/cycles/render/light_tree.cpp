@@ -44,11 +44,11 @@ LightTree::LightTree(const vector<Primitive> &prims_,
     /* put background and distant lights into their own arrays */
     if (prim.prim_id < 0) {
       const Light *lamp = scene->lights[prim.lamp_id];
-      if (lamp->type == LIGHT_DISTANT) {
+      if (lamp->get_light_type() == LIGHT_DISTANT) {
         distant_lights.push_back(prim);
         continue;
       }
-      else if (lamp->type == LIGHT_BACKGROUND) {
+      else if (lamp->get_light_type() == LIGHT_BACKGROUND) {
         background_lights.push_back(prim);
         continue;
       }
@@ -141,19 +141,20 @@ BoundBox LightTree::compute_bbox(const Primitive &prim)
   if (prim.prim_id >= 0) {
     /* extract bounding box from emissive triangle */
     const Object *object = scene->objects[prim.object_id];
-    const Mesh *mesh = (Mesh *)object->geometry;
+    const Mesh *mesh = (Mesh *)object->get_geometry();
     const int triangle_id = prim.prim_id - mesh->prim_offset;
     const Mesh::Triangle triangle = mesh->get_triangle(triangle_id);
 
-    float3 p0 = mesh->verts[triangle.v[0]];
-    float3 p1 = mesh->verts[triangle.v[1]];
-    float3 p2 = mesh->verts[triangle.v[2]];
+    const array<float3> &verts = mesh->get_verts();
+    float3 p0 = verts[triangle.v[0]];
+    float3 p1 = verts[triangle.v[1]];
+    float3 p2 = verts[triangle.v[2]];
 
     /* instanced mesh lights have not applied their transform at this point.
      * in this case, these points have to be transformed to get the proper
      * spatial bound. */
     if (!mesh->transform_applied) {
-      const Transform &tfm = object->tfm;
+      const Transform &tfm = object->get_tfm();
       p0 = transform_point(&tfm, p0);
       p1 = transform_point(&tfm, p1);
       p2 = transform_point(&tfm, p2);
@@ -166,15 +167,15 @@ BoundBox LightTree::compute_bbox(const Primitive &prim)
   else {
     /* extract bounding box from lamp based on light type */
     Light *lamp = scene->lights[prim.lamp_id];
-    if (lamp->type == LIGHT_POINT || lamp->type == LIGHT_SPOT) {
-      float radius = lamp->size;
-      bbox.grow(lamp->co + make_float3(radius));
-      bbox.grow(lamp->co - make_float3(radius));
+    if (lamp->get_light_type() == LIGHT_POINT || lamp->get_light_type() == LIGHT_SPOT) {
+      float radius = lamp->get_size();
+      bbox.grow(lamp->get_co() + make_float3(radius));
+      bbox.grow(lamp->get_co() - make_float3(radius));
     }
-    else if (lamp->type == LIGHT_AREA) {
-      const float3 center = lamp->co;
-      const float3 half_axisu = 0.5f * lamp->axisu * (lamp->sizeu * lamp->size);
-      const float3 half_axisv = 0.5f * lamp->axisv * (lamp->sizev * lamp->size);
+    else if (lamp->get_light_type() == LIGHT_AREA) {
+      const float3 center = lamp->get_co();
+      const float3 half_axisu = 0.5f * lamp->get_axisu() * (lamp->get_sizeu() * lamp->get_size());
+      const float3 half_axisv = 0.5f * lamp->get_axisv() * (lamp->get_sizev() * lamp->get_size());
       const float3 p0 = center - half_axisu - half_axisv;
       const float3 p1 = center - half_axisu + half_axisv;
       const float3 p2 = center + half_axisu - half_axisv;
@@ -200,16 +201,18 @@ Orientation LightTree::compute_bcone(const Primitive &prim)
   if (prim.prim_id >= 0) {
     /* extract bounding cone from emissive triangle */
     const Object *object = scene->objects[prim.object_id];
-    const Mesh *mesh = (Mesh *)object->geometry;
+    const Mesh *mesh = (Mesh *)object->get_geometry();
     const int triangle_id = prim.prim_id - mesh->prim_offset;
     const Mesh::Triangle triangle = mesh->get_triangle(triangle_id);
 
-    float3 p0 = mesh->verts[triangle.v[0]];
-    float3 p1 = mesh->verts[triangle.v[1]];
-    float3 p2 = mesh->verts[triangle.v[2]];
+    const array<float3> &verts = mesh->get_verts();
+    
+    float3 p0 = verts[triangle.v[0]];
+    float3 p1 = verts[triangle.v[1]];
+    float3 p2 = verts[triangle.v[2]];
 
     if (!mesh->transform_applied) {
-      const Transform &tfm = object->tfm;
+      const Transform &tfm = object->get_tfm();
       p0 = transform_point(&tfm, p0);
       p1 = transform_point(&tfm, p1);
       p2 = transform_point(&tfm, p2);
@@ -228,16 +231,16 @@ Orientation LightTree::compute_bcone(const Primitive &prim)
   }
   else {
     Light *lamp = scene->lights[prim.lamp_id];
-    bcone.axis = lamp->dir / len(lamp->dir);
-    if (lamp->type == LIGHT_POINT) {
+    bcone.axis = lamp->get_dir() / len(lamp->get_dir());
+    if (lamp->get_light_type() == LIGHT_POINT) {
       bcone.theta_o = M_PI_F;
       bcone.theta_e = M_PI_2_F;
     }
-    else if (lamp->type == LIGHT_SPOT) {
+    else if (lamp->get_light_type() == LIGHT_SPOT) {
       bcone.theta_o = 0;
-      bcone.theta_e = lamp->spot_angle * 0.5f;
+      bcone.theta_e = lamp->get_spot_angle() * 0.5f;
     }
-    else if (lamp->type == LIGHT_AREA) {
+    else if (lamp->get_light_type() == LIGHT_AREA) {
       bcone.theta_o = 0;
       bcone.theta_e = M_PI_2_F;
     }
@@ -254,11 +257,11 @@ float LightTree::compute_energy(const Primitive &prim)
   if (prim.prim_id >= 0) {
     /* extract shader from emissive triangle */
     const Object *object = scene->objects[prim.object_id];
-    const Mesh *mesh = (Mesh *)object->geometry;
+    const Mesh *mesh = (Mesh *)object->get_geometry();
     const int triangle_id = prim.prim_id - mesh->prim_offset;
 
-    int shader_index = mesh->shader[triangle_id];
-    shader = mesh->used_shaders.at(shader_index);
+    int shader_index = mesh->get_shader()[triangle_id];
+    shader = static_cast<Shader *>(mesh->get_used_shaders()[shader_index]);
 
     /* get emission from shader */
     bool is_constant_emission = shader->is_constant_emission(&emission);
@@ -266,7 +269,7 @@ float LightTree::compute_energy(const Primitive &prim)
       emission = make_float3(1.0f);
     }
 
-    const Transform &tfm = scene->objects[prim.object_id]->tfm;
+    const Transform &tfm = scene->objects[prim.object_id]->get_tfm();
     float area = mesh->compute_triangle_area(triangle_id, tfm);
 
     emission *= area * 4;
@@ -274,16 +277,16 @@ float LightTree::compute_energy(const Primitive &prim)
   else {
     const Light *light = scene->lights[prim.lamp_id];
 
-    emission = light->strength;
+    emission = light->get_strength();
 
     /* calculate the max emission in a single direction. */
-    if (light->type == LIGHT_POINT) {
+    if (light->get_light_type() == LIGHT_POINT) {
       emission /= M_PI_F;
     }
-    else if (light->type == LIGHT_SPOT) {
+    else if (light->get_light_type() == LIGHT_SPOT) {
       emission /= M_PI_F;
     }
-    else if (light->type == LIGHT_AREA) {
+    else if (light->get_light_type() == LIGHT_AREA) {
     }
     else {
       /* LIGHT_DISTANT and LIGHT_BACKGROUND are handled separately */

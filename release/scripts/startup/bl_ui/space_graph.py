@@ -18,6 +18,7 @@
 
 # <pep8 compliant>
 
+import bpy
 from bpy.types import Header, Menu, Panel
 from bl_ui.space_dopesheet import (
     DopesheetFilterPopoverBase,
@@ -119,7 +120,10 @@ class GRAPH_MT_view(Menu):
         layout.prop(st, "use_realtime_update")
         layout.prop(st, "show_cursor")
         layout.prop(st, "show_sliders")
-        layout.prop(st, "show_group_colors")
+
+        if bpy.app.version < (2, 93):
+            layout.operator("anim.show_group_colors_deprecated", icon='CHECKBOX_HLT')
+
         layout.prop(st, "use_auto_merge_keyframes")
 
         if st.mode != 'DRIVERS':
@@ -301,6 +305,7 @@ class GRAPH_MT_key(Menu):
         layout.operator("graph.smooth")
         layout.operator("graph.sample")
         layout.operator("graph.bake")
+        layout.operator("graph.unbake")
 
         layout.separator()
         layout.operator("graph.euler_filter", text="Discontinuity (Euler) Filter")

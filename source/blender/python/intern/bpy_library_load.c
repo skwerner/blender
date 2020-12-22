@@ -44,6 +44,8 @@
 
 #include "BLO_readfile.h"
 
+#include "MEM_guardedalloc.h"
+
 #include "bpy_capi_utils.h"
 #include "bpy_library.h"
 
@@ -92,9 +94,13 @@ static PyTypeObject bpy_lib_Type = {
     0,                                        /* tp_itemsize */
     /* methods */
     (destructor)bpy_lib_dealloc, /* tp_dealloc */
-    (printfunc)NULL,             /* printfunc tp_print; */
-    NULL,                        /* getattrfunc tp_getattr; */
-    NULL,                        /* setattrfunc tp_setattr; */
+#if PY_VERSION_HEX >= 0x03080000
+    0, /* tp_vectorcall_offset */
+#else
+    (printfunc)NULL, /* printfunc tp_print */
+#endif
+    NULL, /* getattrfunc tp_getattr; */
+    NULL, /* setattrfunc tp_setattr; */
     NULL,
     /* tp_compare */ /* DEPRECATED in python 3.0! */
     NULL,            /* tp_repr */
@@ -221,7 +227,7 @@ static PyObject *_bpy_names(BPy_Library *self, int blocktype)
       PyList_SET_ITEM(list, counter, PyUnicode_FromString((char *)l->link));
       counter++;
     }
-    BLI_linklist_free(names, free); /* free linklist *and* each node's data */
+    BLI_linklist_freeN(names); /* free linklist *and* each node's data */
   }
 
   return list;

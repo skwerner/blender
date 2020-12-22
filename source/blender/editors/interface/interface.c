@@ -64,6 +64,7 @@
 
 #include "UI_interface.h"
 #include "UI_interface_icons.h"
+#include "UI_view2d.h"
 
 #include "IMB_imbuf.h"
 
@@ -286,11 +287,12 @@ static void ui_update_flexible_spacing(const ARegion *region, uiBlock *block)
     }
   }
 
+  const float view_scale_x = UI_view2d_scale_get_x(&region->v2d);
   const float segment_width = region_width / (float)sepr_flex_len;
   float offset = 0, remaining_space = region_width - buttons_width;
   i = 0;
   LISTBASE_FOREACH (uiBut *, but, &block->buttons) {
-    BLI_rctf_translate(&but->rect, offset, 0);
+    BLI_rctf_translate(&but->rect, offset / view_scale_x, 0);
     if (but->type == UI_BTYPE_SEPR_SPACER) {
       /* How much the next block overlap with the current segment */
       int overlap = ((i == sepr_flex_len - 1) ? buttons_width - spacers_pos[i] :
@@ -463,7 +465,7 @@ void ui_block_bounds_calc(uiBlock *block)
 
   /* hardcoded exception... but that one is annoying with larger safety */
   uiBut *bt = block->buttons.first;
-  int xof = (bt && STREQLEN(bt->str, "ERROR", 5)) ? 10 : 40;
+  int xof = ((bt && STRPREFIX(bt->str, "ERROR")) ? 10 : 40) * U.dpi_fac;
 
   block->safety.xmin = block->rect.xmin - xof;
   block->safety.ymin = block->rect.ymin - xof;
@@ -702,10 +704,10 @@ static bool ui_but_equals_old(const uiBut *but, const uiBut *oldbut)
   if (but->funcN != oldbut->funcN) {
     return false;
   }
-  if (oldbut->func_arg1 != oldbut && but->func_arg1 != oldbut->func_arg1) {
+  if (!ELEM(oldbut->func_arg1, oldbut, but->func_arg1)) {
     return false;
   }
-  if (oldbut->func_arg2 != oldbut && but->func_arg2 != oldbut->func_arg2) {
+  if (!ELEM(oldbut->func_arg2, oldbut, but->func_arg2)) {
     return false;
   }
   if (!but->funcN && ((but->poin != oldbut->poin && (uiBut *)oldbut->poin != oldbut) ||
@@ -772,6 +774,95 @@ static void ui_but_extra_icons_update_from_old_but(const uiBut *new_but, const u
 }
 
 /**
+ * Update pointers and other information in the old active button based on new information in the
+ * corresponding new button from the current layout pass.
+ *
+ * \param oldbut: The button from the last layout pass that will be moved to the new block.
+ * \param but: The newly added button with much of the up to date information, to be feed later.
+ *
+ * \note #uiBut has ownership of many of its pointers. When the button is freed all these
+ * pointers are freed as well, so ownership has to be moved out of \a but in order to free it.
+ */
+static void ui_but_update_old_active_from_new(uiBut *oldbut, uiBut *but)
+{
+  BLI_assert(oldbut->active);
+
+  /* flags from the buttons we want to refresh, may want to add more here... */
+  const int flag_copy = UI_BUT_REDALERT | UI_HAS_ICON;
+  const int drawflag_copy = 0; /* None currently. */
+
+  /* still stuff needs to be copied */
+  oldbut->rect = but->rect;
+  oldbut->context = but->context; /* set by Layout */
+
+  /* drawing */
+  oldbut->icon = but->icon;
+  oldbut->iconadd = but->iconadd;
+  oldbut->alignnr = but->alignnr;
+
+  /* typically the same pointers, but not on undo/redo */
+  /* XXX some menu buttons store button itself in but->poin. Ugly */
+  if (oldbut->poin != (char *)oldbut) {
+    SWAP(char *, oldbut->poin, but->poin);
+    SWAP(void *, oldbut->func_argN, but->func_argN);
+  }
+
+  /* Move tooltip from new to old. */
+  SWAP(uiButToolTipFunc, oldbut->tip_func, but->tip_func);
+  SWAP(void *, oldbut->tip_argN, but->tip_argN);
+
+  oldbut->flag = (oldbut->flag & ~flag_copy) | (but->flag & flag_copy);
+  oldbut->drawflag = (oldbut->drawflag & ~drawflag_copy) | (but->drawflag & drawflag_copy);
+
+  ui_but_extra_icons_update_from_old_but(but, oldbut);
+  SWAP(ListBase, but->extra_op_icons, oldbut->extra_op_icons);
+
+  if (oldbut->type == UI_BTYPE_SEARCH_MENU) {
+    uiButSearch *search_oldbut = (uiButSearch *)oldbut, *search_but = (uiButSearch *)but;
+
+    SWAP(uiButSearchArgFreeFn, search_oldbut->arg_free_fn, search_but->arg_free_fn);
+    SWAP(void *, search_oldbut->arg, search_but->arg);
+  }
+
+  /* copy hardmin for list rows to prevent 'sticking' highlight to mouse position
+   * when scrolling without moving mouse (see T28432) */
+  if (ELEM(oldbut->type, UI_BTYPE_ROW, UI_BTYPE_LISTROW)) {
+    oldbut->hardmax = but->hardmax;
+  }
+
+  if (oldbut->type == UI_BTYPE_PROGRESS_BAR) {
+    uiButProgressbar *progress_oldbut = (uiButProgressbar *)oldbut;
+    uiButProgressbar *progress_but = (uiButProgressbar *)but;
+    progress_oldbut->progress = progress_but->progress;
+  }
+
+  /* move/copy string from the new button to the old */
+  /* needed for alt+mouse wheel over enums */
+  if (but->str != but->strdata) {
+    if (oldbut->str != oldbut->strdata) {
+      SWAP(char *, but->str, oldbut->str);
+    }
+    else {
+      oldbut->str = but->str;
+      but->str = but->strdata;
+    }
+  }
+  else {
+    if (oldbut->str != oldbut->strdata) {
+      MEM_freeN(oldbut->str);
+      oldbut->str = oldbut->strdata;
+    }
+    BLI_strncpy(oldbut->strdata, but->strdata, sizeof(oldbut->strdata));
+  }
+
+  if (but->dragpoin && (but->dragflag & UI_BUT_DRAGPOIN_FREE)) {
+    SWAP(void *, but->dragpoin, oldbut->dragpoin);
+  }
+
+  /* note: if layout hasn't been applied yet, it uses old button pointers... */
+}
+
+/**
  * \return true when \a but_p is set (only done for active buttons).
  */
 static bool ui_but_update_from_old_block(const bContext *C,
@@ -779,138 +870,53 @@ static bool ui_but_update_from_old_block(const bContext *C,
                                          uiBut **but_p,
                                          uiBut **but_old_p)
 {
-  const int drawflag_copy = 0; /* None currently. */
-
   uiBlock *oldblock = block->oldblock;
-  uiBut *oldbut = NULL, *but = *but_p;
-  bool found_active = false;
+  uiBut *but = *but_p;
 
 #if 0
-  /* simple/stupid - search every time */
-  oldbut = ui_but_find_old(oldblock, but);
-  (void)but_old_p;
+  /* Simple method - search every time. Keep this for easy testing of the "fast path." */
+  uiBut *oldbut = ui_but_find_old(oldblock, but);
+  UNUSED_VARS(but_old_p);
 #else
   BLI_assert(*but_old_p == NULL || BLI_findindex(&oldblock->buttons, *but_old_p) != -1);
 
-  /* Fast-path - avoid loop-in-loop, calling #ui_but_find_old
-   * as long as old/new buttons are aligned. */
+  /* As long as old and new buttons are aligned, avoid loop-in-loop (calling #ui_but_find_old). */
+  uiBut *oldbut;
   if (LIKELY(*but_old_p && ui_but_equals_old(but, *but_old_p))) {
     oldbut = *but_old_p;
   }
   else {
-    /* fallback to block search */
+    /* Fallback to block search. */
     oldbut = ui_but_find_old(oldblock, but);
   }
   (*but_old_p) = oldbut ? oldbut->next : NULL;
 #endif
 
+  bool found_active = false;
+
   if (!oldbut) {
-    return found_active;
+    return false;
   }
 
   if (oldbut->active) {
-    /* flags from the buttons we want to refresh, may want to add more here... */
-    const int flag_copy = UI_BUT_REDALERT | UI_HAS_ICON;
-
-    found_active = true;
-
-#if 0
-    but->flag = oldbut->flag;
-    but->active = oldbut->active;
-    but->pos = oldbut->pos;
-    but->ofs = oldbut->ofs;
-    but->editstr = oldbut->editstr;
-    but->editval = oldbut->editval;
-    but->editvec = oldbut->editvec;
-    but->selsta = oldbut->selsta;
-    but->selend = oldbut->selend;
-    but->softmin = oldbut->softmin;
-    but->softmax = oldbut->softmax;
-    oldbut->active = NULL;
-#endif
-
-    /* move button over from oldblock to new block */
+    /* Move button over from oldblock to new block. */
     BLI_remlink(&oldblock->buttons, oldbut);
     BLI_insertlinkafter(&block->buttons, but, oldbut);
+    /* Add the old button to the button groups in the new block. */
+    ui_button_group_replace_but_ptr(block, but, oldbut);
     oldbut->block = block;
     *but_p = oldbut;
 
-    /* still stuff needs to be copied */
-    oldbut->rect = but->rect;
-    oldbut->context = but->context; /* set by Layout */
-
-    /* drawing */
-    oldbut->icon = but->icon;
-    oldbut->iconadd = but->iconadd;
-    oldbut->alignnr = but->alignnr;
-
-    /* typically the same pointers, but not on undo/redo */
-    /* XXX some menu buttons store button itself in but->poin. Ugly */
-    if (oldbut->poin != (char *)oldbut) {
-      SWAP(char *, oldbut->poin, but->poin);
-      SWAP(void *, oldbut->func_argN, but->func_argN);
-    }
-
-    /* Move tooltip from new to old. */
-    SWAP(uiButToolTipFunc, oldbut->tip_func, but->tip_func);
-    SWAP(void *, oldbut->tip_argN, but->tip_argN);
-
-    oldbut->flag = (oldbut->flag & ~flag_copy) | (but->flag & flag_copy);
-    oldbut->drawflag = (oldbut->drawflag & ~drawflag_copy) | (but->drawflag & drawflag_copy);
-
-    ui_but_extra_icons_update_from_old_but(but, oldbut);
-    SWAP(ListBase, but->extra_op_icons, oldbut->extra_op_icons);
-
-    if (oldbut->type == UI_BTYPE_SEARCH_MENU) {
-      uiButSearch *search_oldbut = (uiButSearch *)oldbut, *search_but = (uiButSearch *)but;
-
-      SWAP(uiButSearchArgFreeFn, search_oldbut->arg_free_fn, search_but->arg_free_fn);
-      SWAP(void *, search_oldbut->arg, search_but->arg);
-    }
-
-    /* copy hardmin for list rows to prevent 'sticking' highlight to mouse position
-     * when scrolling without moving mouse (see T28432) */
-    if (ELEM(oldbut->type, UI_BTYPE_ROW, UI_BTYPE_LISTROW)) {
-      oldbut->hardmax = but->hardmax;
-    }
-
-    if (oldbut->type == UI_BTYPE_PROGRESS_BAR) {
-      uiButProgressbar *progress_oldbut = (uiButProgressbar *)oldbut;
-      uiButProgressbar *progress_but = (uiButProgressbar *)but;
-      progress_oldbut->progress = progress_but->progress;
-    }
+    ui_but_update_old_active_from_new(oldbut, but);
 
     if (!BLI_listbase_is_empty(&block->butstore)) {
       UI_butstore_register_update(block, oldbut, but);
     }
 
-    /* move/copy string from the new button to the old */
-    /* needed for alt+mouse wheel over enums */
-    if (but->str != but->strdata) {
-      if (oldbut->str != oldbut->strdata) {
-        SWAP(char *, but->str, oldbut->str);
-      }
-      else {
-        oldbut->str = but->str;
-        but->str = but->strdata;
-      }
-    }
-    else {
-      if (oldbut->str != oldbut->strdata) {
-        MEM_freeN(oldbut->str);
-        oldbut->str = oldbut->strdata;
-      }
-      BLI_strncpy(oldbut->strdata, but->strdata, sizeof(oldbut->strdata));
-    }
-
-    if (but->dragpoin && (but->dragflag & UI_BUT_DRAGPOIN_FREE)) {
-      SWAP(void *, but->dragpoin, oldbut->dragpoin);
-    }
-
     BLI_remlink(&block->buttons, but);
     ui_but_free(C, but);
 
-    /* note: if layout hasn't been applied yet, it uses old button pointers... */
+    found_active = true;
   }
   else {
     const int flag_copy = UI_BUT_DRAG_MULTI;
@@ -926,9 +932,11 @@ static bool ui_but_update_from_old_block(const bContext *C,
   return found_active;
 }
 
-/* needed for temporarily rename buttons, such as in outliner or file-select,
- * they should keep calling uiDefButs to keep them alive */
-/* returns 0 when button removed */
+/**
+ * Needed for temporarily rename buttons, such as in outliner or file-select,
+ * they should keep calling #uiDefBut to keep them alive.
+ * \return false when button removed.
+ */
 bool UI_but_active_only_ex(
     const bContext *C, ARegion *region, uiBlock *block, uiBut *but, const bool remove_on_failure)
 {
@@ -1159,16 +1167,21 @@ void ui_but_add_shortcut(uiBut *but, const char *shortcut_str, const bool do_str
  * \{ */
 
 static bool ui_but_event_operator_string_from_operator(const bContext *C,
-                                                       uiBut *but,
+                                                       wmOperatorCallParams *op_call_params,
                                                        char *buf,
                                                        const size_t buf_len)
 {
-  BLI_assert(but->optype != NULL);
+  BLI_assert(op_call_params->optype != NULL);
   bool found = false;
-  IDProperty *prop = (but->opptr) ? but->opptr->data : NULL;
+  IDProperty *prop = (op_call_params->opptr) ? op_call_params->opptr->data : NULL;
 
-  if (WM_key_event_operator_string(
-          C, but->optype->idname, but->opcontext, prop, true, buf, buf_len)) {
+  if (WM_key_event_operator_string(C,
+                                   op_call_params->optype->idname,
+                                   op_call_params->opcontext,
+                                   prop,
+                                   true,
+                                   buf,
+                                   buf_len)) {
     found = true;
   }
   return found;
@@ -1245,15 +1258,22 @@ static bool ui_but_event_operator_string_from_panel(const bContext *C,
   return found;
 }
 
-static bool ui_but_event_operator_string(const bContext *C,
-                                         uiBut *but,
-                                         char *buf,
-                                         const size_t buf_len)
+static bool ui_but_event_operator_string(
+    const bContext *C, uiBut *but, uiButExtraOpIcon *extra_icon, char *buf, const size_t buf_len)
 {
   bool found = false;
+  wmOperatorType *extra_icon_optype = UI_but_extra_operator_icon_optype_get(extra_icon);
 
-  if (but->optype != NULL) {
-    found = ui_but_event_operator_string_from_operator(C, but, buf, buf_len);
+  if (extra_icon_optype) {
+    found = ui_but_event_operator_string_from_operator(C, extra_icon->optype_params, buf, buf_len);
+  }
+  else if (but->optype != NULL) {
+    found = ui_but_event_operator_string_from_operator(
+        C,
+        &(wmOperatorCallParams){
+            .optype = but->optype, .opptr = but->opptr, .opcontext = but->opcontext},
+        buf,
+        buf_len);
   }
   else if (UI_but_menutype_get(but) != NULL) {
     found = ui_but_event_operator_string_from_menu(C, but, buf, buf_len);
@@ -1556,7 +1576,7 @@ static void ui_menu_block_set_keymaps(const bContext *C, uiBlock *block)
         continue;
       }
 
-      if (ui_but_event_operator_string(C, but, buf, sizeof(buf))) {
+      if (ui_but_event_operator_string(C, but, NULL, buf, sizeof(buf))) {
         ui_but_add_shortcut(but, buf, false);
       }
       else if (ui_but_event_property_operator_string(C, but, buf, sizeof(buf))) {
@@ -1579,6 +1599,7 @@ void ui_but_override_flag(Main *bmain, uiBut *but)
   }
 }
 
+/* -------------------------------------------------------------------- */
 /** \name Button Extra Operator Icons
  *
  * Extra icons are shown on the right hand side of buttons. They can be clicked to invoke custom
@@ -1596,12 +1617,12 @@ typedef enum PredefinedExtraOpIconType {
   PREDEFINED_EXTRA_OP_ICON_EYEDROPPER,
 } PredefinedExtraOpIconType;
 
-static PointerRNA *ui_but_extra_operator_icon_add_ptr(uiBut *but,
-                                                      wmOperatorType *optype,
-                                                      short opcontext,
-                                                      int icon)
+static uiButExtraOpIcon *ui_but_extra_operator_icon_add_ptr(uiBut *but,
+                                                            wmOperatorType *optype,
+                                                            short opcontext,
+                                                            int icon)
 {
-  uiButExtraOpIcon *extra_op_icon = MEM_mallocN(sizeof(*extra_op_icon), __func__);
+  uiButExtraOpIcon *extra_op_icon = MEM_callocN(sizeof(*extra_op_icon), __func__);
 
   extra_op_icon->icon = (BIFIconID)icon;
   extra_op_icon->optype_params = MEM_callocN(sizeof(*extra_op_icon->optype_params),
@@ -1616,13 +1637,15 @@ static PointerRNA *ui_but_extra_operator_icon_add_ptr(uiBut *but,
 
   BLI_addtail(&but->extra_op_icons, extra_op_icon);
 
-  return extra_op_icon->optype_params->opptr;
+  return extra_op_icon;
 }
 
 static void ui_but_extra_operator_icon_free(uiButExtraOpIcon *extra_icon)
 {
-  WM_operator_properties_free(extra_icon->optype_params->opptr);
-  MEM_freeN(extra_icon->optype_params->opptr);
+  if (extra_icon->optype_params->opptr) {
+    WM_operator_properties_free(extra_icon->optype_params->opptr);
+    MEM_freeN(extra_icon->optype_params->opptr);
+  }
   MEM_freeN(extra_icon->optype_params);
   MEM_freeN(extra_icon);
 }
@@ -1635,18 +1658,25 @@ void ui_but_extra_operator_icons_free(uiBut *but)
   BLI_listbase_clear(&but->extra_op_icons);
 }
 
-PointerRNA *UI_but_extra_operator_icon_add(uiBut *but,
-                                           const char *opname,
-                                           short opcontext,
-                                           int icon)
+uiButExtraOpIcon *UI_but_extra_operator_icon_add(uiBut *but,
+                                                 const char *opname,
+                                                 short opcontext,
+                                                 int icon)
 {
   wmOperatorType *optype = WM_operatortype_find(opname, false);
 
-  if (optype) {
-    return ui_but_extra_operator_icon_add_ptr(but, optype, opcontext, icon);
-  }
+  BLI_assert(optype);
+  return ui_but_extra_operator_icon_add_ptr(but, optype, opcontext, icon);
+}
 
-  return NULL;
+PointerRNA *UI_but_extra_operator_icon_opptr_get(uiButExtraOpIcon *extra_icon)
+{
+  return extra_icon->optype_params->opptr;
+}
+
+wmOperatorType *UI_but_extra_operator_icon_optype_get(uiButExtraOpIcon *extra_icon)
+{
+  return extra_icon ? extra_icon->optype_params->optype : NULL;
 }
 
 static bool ui_but_icon_extra_is_visible_text_clear(const uiBut *but)
@@ -1990,7 +2020,7 @@ void UI_block_draw(const bContext *C, uiBlock *block)
   else if (block->panel) {
     bool show_background = region->alignment != RGN_ALIGN_FLOAT;
     if (show_background) {
-      if (block->panel->type && (block->panel->type->flag & PNL_NO_HEADER)) {
+      if (block->panel->type && (block->panel->type->flag & PANEL_TYPE_NO_HEADER)) {
         if (region->regiontype == RGN_TYPE_TOOLS) {
           /* We never want a background around active tools. */
           show_background = false;
@@ -3343,7 +3373,7 @@ static void ui_but_free(const bContext *C, uiBut *but)
   }
 
   if (but->dragpoin && (but->dragflag & UI_BUT_DRAGPOIN_FREE)) {
-    MEM_freeN(but->dragpoin);
+    WM_drag_data_free(but->dragtype, but->dragpoin);
   }
   ui_but_extra_operator_icons_free(but);
 
@@ -4062,6 +4092,11 @@ static uiBut *ui_def_but(uiBlock *block,
   }
 #endif
 
+  /* Always keep text in radio-buttons (expanded enums) center aligned. */
+  if (ELEM(but->type, UI_BTYPE_ROW)) {
+    but->drawflag &= ~UI_BUT_TEXT_LEFT;
+  }
+
   but->drawflag |= (block->flag & UI_BUT_ALIGN);
 
   if (block->lock == true) {
@@ -4249,8 +4284,8 @@ static void ui_def_but_rna__menu(bContext *UNUSED(C), uiLayout *layout, void *bu
                    0,
                    "");
         }
-        uiItemS(column);
       }
+      uiItemS(column);
     }
     else {
       if (item->icon) {
@@ -4536,6 +4571,15 @@ static uiBut *ui_def_but_rna(uiBlock *block,
   const char *info;
   if (but->rnapoin.data && !RNA_property_editable_info(&but->rnapoin, prop, &info)) {
     UI_but_disable(but, info);
+  }
+
+  if (proptype == PROP_POINTER) {
+    /* If the button shows an ID, automatically set it as focused in context so operators can
+     * access it.*/
+    const PointerRNA pptr = RNA_property_pointer_get(ptr, prop);
+    if (pptr.data && RNA_struct_is_ID(pptr.type)) {
+      but->context = CTX_store_add(&block->contexts, "id", &pptr);
+    }
   }
 
   if (but->flag & UI_BUT_UNDO && (ui_but_is_rna_undo(but) == false)) {
@@ -6075,17 +6119,42 @@ void UI_but_drag_set_id(uiBut *but, ID *id)
 {
   but->dragtype = WM_DRAG_ID;
   if ((but->dragflag & UI_BUT_DRAGPOIN_FREE)) {
-    MEM_SAFE_FREE(but->dragpoin);
+    WM_drag_data_free(but->dragtype, but->dragpoin);
     but->dragflag &= ~UI_BUT_DRAGPOIN_FREE;
   }
   but->dragpoin = (void *)id;
+}
+
+void UI_but_drag_set_asset(uiBut *but,
+                           const char *name,
+                           const char *path,
+                           int id_type,
+                           int icon,
+                           struct ImBuf *imb,
+                           float scale)
+{
+  wmDragAsset *asset_drag = MEM_mallocN(sizeof(*asset_drag), "wmDragAsset");
+
+  BLI_strncpy(asset_drag->name, name, sizeof(asset_drag->name));
+  asset_drag->path = path;
+  asset_drag->id_type = id_type;
+
+  but->dragtype = WM_DRAG_ASSET;
+  ui_def_but_icon(but, icon, 0); /* no flag UI_HAS_ICON, so icon doesn't draw in button */
+  if ((but->dragflag & UI_BUT_DRAGPOIN_FREE)) {
+    WM_drag_data_free(but->dragtype, but->dragpoin);
+  }
+  but->dragpoin = asset_drag;
+  but->dragflag |= UI_BUT_DRAGPOIN_FREE;
+  but->imb = imb;
+  but->imb_scale = scale;
 }
 
 void UI_but_drag_set_rna(uiBut *but, PointerRNA *ptr)
 {
   but->dragtype = WM_DRAG_RNA;
   if ((but->dragflag & UI_BUT_DRAGPOIN_FREE)) {
-    MEM_SAFE_FREE(but->dragpoin);
+    WM_drag_data_free(but->dragtype, but->dragpoin);
     but->dragflag &= ~UI_BUT_DRAGPOIN_FREE;
   }
   but->dragpoin = (void *)ptr;
@@ -6095,7 +6164,7 @@ void UI_but_drag_set_path(uiBut *but, const char *path, const bool use_free)
 {
   but->dragtype = WM_DRAG_PATH;
   if ((but->dragflag & UI_BUT_DRAGPOIN_FREE)) {
-    MEM_SAFE_FREE(but->dragpoin);
+    WM_drag_data_free(but->dragtype, but->dragpoin);
     but->dragflag &= ~UI_BUT_DRAGPOIN_FREE;
   }
   but->dragpoin = (void *)path;
@@ -6108,7 +6177,7 @@ void UI_but_drag_set_name(uiBut *but, const char *name)
 {
   but->dragtype = WM_DRAG_NAME;
   if ((but->dragflag & UI_BUT_DRAGPOIN_FREE)) {
-    MEM_SAFE_FREE(but->dragpoin);
+    WM_drag_data_free(but->dragtype, but->dragpoin);
     but->dragflag &= ~UI_BUT_DRAGPOIN_FREE;
   }
   but->dragpoin = (void *)name;
@@ -6126,7 +6195,7 @@ void UI_but_drag_set_image(
   but->dragtype = WM_DRAG_PATH;
   ui_def_but_icon(but, icon, 0); /* no flag UI_HAS_ICON, so icon doesn't draw in button */
   if ((but->dragflag & UI_BUT_DRAGPOIN_FREE)) {
-    MEM_SAFE_FREE(but->dragpoin);
+    WM_drag_data_free(but->dragtype, but->dragpoin);
     but->dragflag &= ~UI_BUT_DRAGPOIN_FREE;
   }
   but->dragpoin = (void *)path;
@@ -6757,6 +6826,7 @@ void UI_but_focus_on_enter_event(wmWindow *win, uiBut *but)
 
   event.type = EVT_BUT_OPEN;
   event.val = KM_PRESS;
+  event.is_repeat = false;
   event.customdata = but;
   event.customdatafree = false;
 
@@ -6769,7 +6839,7 @@ void UI_but_func_hold_set(uiBut *but, uiButHandleHoldFunc func, void *argN)
   but->hold_argN = argN;
 }
 
-void UI_but_string_info_get(bContext *C, uiBut *but, ...)
+void UI_but_string_info_get(bContext *C, uiBut *but, uiButExtraOpIcon *extra_icon, ...)
 {
   va_list args;
   uiStringInfo *si;
@@ -6778,13 +6848,19 @@ void UI_but_string_info_get(bContext *C, uiBut *but, ...)
   int totitems;
   bool free_items = false;
 
-  va_start(args, but);
+  wmOperatorType *extra_icon_optype = UI_but_extra_operator_icon_optype_get(extra_icon);
+  wmOperatorType *optype = extra_icon ? extra_icon_optype : but->optype;
+
+  /* Don't query RNA data when the extra-icon overrides the button. */
+  PropertyRNA *rnaprop = extra_icon ? NULL : but->rnaprop;
+
+  va_start(args, extra_icon);
   while ((si = (uiStringInfo *)va_arg(args, void *))) {
-    int type = si->type;
+    uiStringInfoType type = si->type;
     char *tmp = NULL;
 
     if (type == BUT_GET_LABEL) {
-      if (but->str && but->str[0]) {
+      if (but->str && but->str[0] && !extra_icon) {
         const char *str_sep;
         size_t str_len;
 
@@ -6814,16 +6890,16 @@ void UI_but_string_info_get(bContext *C, uiBut *but, ...)
     }
 
     if (type == BUT_GET_RNAPROP_IDENTIFIER) {
-      if (but->rnaprop) {
-        tmp = BLI_strdup(RNA_property_identifier(but->rnaprop));
+      if (rnaprop) {
+        tmp = BLI_strdup(RNA_property_identifier(rnaprop));
       }
     }
     else if (type == BUT_GET_RNASTRUCT_IDENTIFIER) {
-      if (but->rnaprop && but->rnapoin.data) {
+      if (rnaprop && but->rnapoin.data) {
         tmp = BLI_strdup(RNA_struct_identifier(but->rnapoin.type));
       }
-      else if (but->optype) {
-        tmp = BLI_strdup(but->optype->idname);
+      else if (optype) {
+        tmp = BLI_strdup(optype->idname);
       }
       else if (ELEM(but->type, UI_BTYPE_MENU, UI_BTYPE_PULLDOWN)) {
         MenuType *mt = UI_but_menutype_get(but);
@@ -6839,23 +6915,25 @@ void UI_but_string_info_get(bContext *C, uiBut *but, ...)
       }
     }
     else if (ELEM(type, BUT_GET_RNA_LABEL, BUT_GET_RNA_TIP)) {
-      if (but->rnaprop) {
+      if (rnaprop) {
         if (type == BUT_GET_RNA_LABEL) {
-          tmp = BLI_strdup(RNA_property_ui_name(but->rnaprop));
+          tmp = BLI_strdup(RNA_property_ui_name(rnaprop));
         }
         else {
-          const char *t = RNA_property_ui_description(but->rnaprop);
+          const char *t = RNA_property_ui_description(rnaprop);
           if (t && t[0]) {
             tmp = BLI_strdup(t);
           }
         }
       }
-      else if (but->optype) {
+      else if (optype) {
+        PointerRNA *opptr = extra_icon_optype ? UI_but_extra_operator_icon_opptr_get(extra_icon) :
+                                                but->opptr;
         if (type == BUT_GET_RNA_LABEL) {
-          tmp = BLI_strdup(WM_operatortype_name(but->optype, but->opptr));
+          tmp = BLI_strdup(WM_operatortype_name(optype, opptr));
         }
         else {
-          tmp = WM_operatortype_description(C, but->optype, but->opptr);
+          tmp = WM_operatortype_description(C, optype, opptr);
         }
       }
       else if (ELEM(but->type, UI_BTYPE_MENU, UI_BTYPE_PULLDOWN, UI_BTYPE_POPOVER)) {
@@ -6907,11 +6985,11 @@ void UI_but_string_info_get(bContext *C, uiBut *but, ...)
     }
     else if (type == BUT_GET_RNA_LABEL_CONTEXT) {
       const char *_tmp = BLT_I18NCONTEXT_DEFAULT;
-      if (but->rnaprop) {
-        _tmp = RNA_property_translation_context(but->rnaprop);
+      if (rnaprop) {
+        _tmp = RNA_property_translation_context(rnaprop);
       }
-      else if (but->optype) {
-        _tmp = RNA_struct_translation_context(but->optype->srna);
+      else if (optype) {
+        _tmp = RNA_struct_translation_context(optype->srna);
       }
       else if (ELEM(but->type, UI_BTYPE_MENU, UI_BTYPE_PULLDOWN)) {
         MenuType *mt = UI_but_menutype_get(but);
@@ -6930,16 +7008,16 @@ void UI_but_string_info_get(bContext *C, uiBut *but, ...)
       int value = 0;
 
       /* get the enum property... */
-      if (but->rnaprop && RNA_property_type(but->rnaprop) == PROP_ENUM) {
+      if (rnaprop && RNA_property_type(rnaprop) == PROP_ENUM) {
         /* enum property */
         ptr = &but->rnapoin;
-        prop = but->rnaprop;
+        prop = rnaprop;
         value = (ELEM(but->type, UI_BTYPE_ROW, UI_BTYPE_TAB)) ? (int)but->hardmax :
                                                                 (int)ui_but_value_get(but);
       }
-      else if (but->optype) {
-        PointerRNA *opptr = UI_but_operator_ptr_get(but);
-        wmOperatorType *ot = but->optype;
+      else if (optype) {
+        PointerRNA *opptr = extra_icon_optype ? UI_but_extra_operator_icon_opptr_get(extra_icon) :
+                                                UI_but_operator_ptr_get(but);
 
         /* so the context is passed to itemf functions */
         WM_operator_properties_sanitize(opptr, false);
@@ -6949,11 +7027,11 @@ void UI_but_string_info_get(bContext *C, uiBut *but, ...)
          * operator menus in the Anim Editors will show tooltips for the different
          * operations instead of the meaningless generic operator tooltip
          */
-        if (ot->prop && RNA_property_type(ot->prop) == PROP_ENUM) {
-          if (RNA_struct_contains_property(opptr, ot->prop)) {
+        if (optype->prop && RNA_property_type(optype->prop) == PROP_ENUM) {
+          if (RNA_struct_contains_property(opptr, optype->prop)) {
             ptr = opptr;
-            prop = ot->prop;
-            value = RNA_property_enum_get(opptr, ot->prop);
+            prop = optype->prop;
+            value = RNA_property_enum_get(opptr, optype->prop);
           }
         }
       }
@@ -6986,7 +7064,7 @@ void UI_but_string_info_get(bContext *C, uiBut *but, ...)
     else if (type == BUT_GET_OP_KEYMAP) {
       if (!ui_block_is_menu(but->block)) {
         char buf[128];
-        if (ui_but_event_operator_string(C, but, buf, sizeof(buf))) {
+        if (ui_but_event_operator_string(C, but, extra_icon, buf, sizeof(buf))) {
           tmp = BLI_strdup(buf);
         }
       }

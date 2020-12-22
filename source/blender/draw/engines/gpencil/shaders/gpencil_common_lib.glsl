@@ -461,6 +461,14 @@ void stroke_vertex()
     float rot_cos = abs(uv_rot);
     x_axis = mat2(rot_cos, -rot_sin, rot_sin, rot_cos) * x_axis;
 
+#  ifdef GP_MATERIAL_BUFFER_LEN
+    if (is_dot) {
+      float alignment_cos = MATERIAL(m).fill_uv_offset.z;
+      float alignment_sin = MATERIAL(m).fill_uv_offset.w;
+      x_axis = mat2(alignment_cos, -alignment_sin, alignment_sin, alignment_cos) * x_axis;
+    }
+#  endif
+
     vec2 y_axis = rotate_90deg(x_axis);
 
     strokeAspect = decode_aspect(aspect1);
@@ -518,6 +526,11 @@ void stroke_vertex()
   vec4 stroke_col = MATERIAL(m).stroke_color;
   float mix_tex = MATERIAL(m).stroke_texture_mix;
 
+  /* Special case: We don't use vertex color if material Holdout. */
+  if (GP_FLAG_TEST(GP_FLAG(m), GP_STROKE_HOLDOUT)) {
+    vert_col = vec4(0.0);
+  }
+
   color_output(stroke_col, vert_col, vert_strength * small_line_opacity, mix_tex);
 
   matFlag = GP_FLAG(m) & ~GP_FILL_FLAGS;
@@ -567,6 +580,11 @@ void fill_vertex()
   vec4 fcol_decode = vec4(fcol1.rgb, floor(fcol1.a / 10.0));
   float fill_opacity = fcol1.a - (fcol_decode.a * 10);
   fcol_decode.a /= 10000.0;
+
+  /* Special case: We don't use vertex color if material Holdout. */
+  if (GP_FLAG_TEST(GP_FLAG(m), GP_FILL_HOLDOUT)) {
+    fcol_decode = vec4(0.0);
+  }
 
   /* Apply opacity. */
   fill_col.a *= fill_opacity;

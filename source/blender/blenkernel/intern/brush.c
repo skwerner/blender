@@ -23,6 +23,7 @@
 #include "DNA_brush_types.h"
 #include "DNA_defaults.h"
 #include "DNA_gpencil_types.h"
+#include "DNA_material_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
@@ -50,7 +51,7 @@
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
 
-#include "RE_render_ext.h" /* RE_texture_evaluate */
+#include "RE_texture.h" /* RE_texture_evaluate */
 
 #include "BLO_read_write.h"
 
@@ -355,6 +356,37 @@ static void brush_blend_read_expand(BlendExpander *expander, ID *id)
   }
 }
 
+static int brush_undo_preserve_cb(LibraryIDLinkCallbackData *cb_data)
+{
+  BlendLibReader *reader = cb_data->user_data;
+  ID *id_old = *cb_data->id_pointer;
+  /* Old data has not been remapped to new values of the pointers, if we want to keep the old
+   * pointer here we need its new address. */
+  ID *id_old_new = id_old != NULL ? BLO_read_get_new_id_address(reader, id_old->lib, id_old) :
+                                    NULL;
+  BLI_assert(id_old_new == NULL || ELEM(id_old, id_old_new, id_old_new->orig_id));
+  if (cb_data->cb_flag & IDWALK_CB_USER) {
+    id_us_plus_no_lib(id_old_new);
+    id_us_min(id_old);
+  }
+  *cb_data->id_pointer = id_old_new;
+  return IDWALK_RET_NOP;
+}
+
+static void brush_undo_preserve(BlendLibReader *reader, ID *id_new, ID *id_old)
+{
+  /* Whole Brush is preserved accross undo's. */
+  BKE_lib_id_swap(NULL, id_new, id_old);
+
+  /* `id_new` now has content from `id_old`, we need to ensure those old ID pointers are valid.
+   * Note: Since we want to re-use all old pointers here, code is much simpler than for Scene. */
+  BKE_library_foreach_ID_link(NULL, id_new, brush_undo_preserve_cb, reader, IDWALK_NOP);
+
+  /* Note: We do not swap IDProperties, as dealing with potential ID pointers in those would be
+   *       fairly delicate. */
+  SWAP(IDProperty *, id_new->properties, id_old->properties);
+}
+
 IDTypeInfo IDType_ID_BR = {
     .id_code = ID_BR,
     .id_filter = FILTER_ID_BR,
@@ -376,6 +408,8 @@ IDTypeInfo IDType_ID_BR = {
     .blend_read_data = brush_blend_read_data,
     .blend_read_lib = brush_blend_read_lib,
     .blend_read_expand = brush_blend_read_expand,
+
+    .blend_read_undo_preserve = brush_undo_preserve,
 };
 
 static RNG *brush_rng;
@@ -413,6 +447,7 @@ static void brush_defaults(Brush *brush)
   FROM_DEFAULT(topology_rake_factor);
   FROM_DEFAULT(crease_pinch_factor);
   FROM_DEFAULT(normal_radius_factor);
+  FROM_DEFAULT(wet_paint_radius_factor);
   FROM_DEFAULT(area_radius_factor);
   FROM_DEFAULT(disconnected_distance_max);
   FROM_DEFAULT(sculpt_plane);
@@ -1707,11 +1742,10 @@ void BKE_brush_sculpt_reset(Brush *br)
     case SCULPT_TOOL_SCRAPE:
     case SCULPT_TOOL_FILL:
       br->alpha = 0.7f;
-      br->area_radius_factor = 1.0f;
+      br->area_radius_factor = 0.5f;
       br->spacing = 7;
       br->flag |= BRUSH_ACCUMULATE;
       br->flag |= BRUSH_INVERT_TO_SCRAPE_FILL;
-      br->flag2 |= BRUSH_AREA_RADIUS_PRESSURE;
       break;
     case SCULPT_TOOL_ROTATE:
       br->alpha = 1.0;
@@ -1800,6 +1834,14 @@ void BKE_brush_sculpt_reset(Brush *br)
       br->flag &= ~BRUSH_SPACE_ATTEN;
       br->curve_preset = BRUSH_CURVE_SPHERE;
       break;
+    case SCULPT_TOOL_DISPLACEMENT_SMEAR:
+      br->alpha = 1.0f;
+      br->spacing = 5;
+      br->hardness = 0.7f;
+      br->flag &= ~BRUSH_ALPHA_PRESSURE;
+      br->flag &= ~BRUSH_SPACE_ATTEN;
+      br->curve_preset = BRUSH_CURVE_SMOOTHER;
+      break;
     default:
       break;
   }
@@ -1864,6 +1906,7 @@ void BKE_brush_sculpt_reset(Brush *br)
     case SCULPT_TOOL_MASK:
     case SCULPT_TOOL_DRAW_FACE_SETS:
     case SCULPT_TOOL_DISPLACEMENT_ERASER:
+    case SCULPT_TOOL_DISPLACEMENT_SMEAR:
       br->add_col[0] = 0.75f;
       br->add_col[1] = 0.75f;
       br->add_col[2] = 0.75f;

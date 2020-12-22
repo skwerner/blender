@@ -37,6 +37,7 @@
 /* all types are needed here, in order to do memory operations */
 #include "DNA_ID.h"
 #include "DNA_anim_types.h"
+#include "DNA_collection_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_key_types.h"
 #include "DNA_node_types.h"
@@ -55,6 +56,7 @@
 
 #include "BKE_anim_data.h"
 #include "BKE_armature.h"
+#include "BKE_asset.h"
 #include "BKE_bpath.h"
 #include "BKE_context.h"
 #include "BKE_global.h"
@@ -101,6 +103,15 @@ IDTypeInfo IDType_ID_LINK_PLACEHOLDER = {
     .copy_data = NULL,
     .free_data = NULL,
     .make_local = NULL,
+    .foreach_id = NULL,
+    .foreach_cache = NULL,
+
+    .blend_write = NULL,
+    .blend_read_data = NULL,
+    .blend_read_lib = NULL,
+    .blend_read_expand = NULL,
+
+    .blend_read_undo_preserve = NULL,
 };
 
 /* GS reads the memory pointed at in a specific ordering.
@@ -1322,7 +1333,7 @@ void id_sort_by_name(ListBase *lb, ID *id, ID *id_sorting_hint)
   BLI_remlink(lb, id);
 
   /* Check if we can actually insert id before or after id_sorting_hint, if given. */
-  if (id_sorting_hint != NULL && id_sorting_hint != id) {
+  if (!ELEM(id_sorting_hint, NULL, id)) {
     BLI_assert(BLI_findindex(lb, id_sorting_hint) >= 0);
 
     ID *id_sorting_hint_next = id_sorting_hint->next;
@@ -1560,7 +1571,7 @@ static bool check_for_dupid(ListBase *lb, ID *id, char *name, ID **r_id_sorting_
       char base_name_test[MAX_ID_NAME - 2];
       int number_test;
       if ((id != id_test) && !ID_IS_LINKED(id_test) && (name[0] == id_test->name[2]) &&
-          (id_test->name[base_name_len + 2] == '.' || id_test->name[base_name_len + 2] == '\0') &&
+          (ELEM(id_test->name[base_name_len + 2], '.', '\0')) &&
           STREQLEN(name, id_test->name + 2, base_name_len) &&
           (BLI_split_name_num(base_name_test, &number_test, id_test->name + 2, '.') ==
            base_name_len)) {
@@ -1884,6 +1895,11 @@ void BKE_library_make_local(Main *bmain,
       if (id->lib == NULL) {
         id->tag &= ~(LIB_TAG_EXTERN | LIB_TAG_INDIRECT | LIB_TAG_NEW);
         id->flag &= ~LIB_INDIRECT_WEAK_LINK;
+        if (ID_IS_OVERRIDE_LIBRARY_REAL(id) &&
+            ELEM(lib, NULL, id->override_library->reference->lib) &&
+            ((untagged_only == false) || !(id->tag & LIB_TAG_PRE_EXISTING))) {
+          BKE_lib_override_library_free(&id->override_library, true);
+        }
       }
       /* The check on the fourth line (LIB_TAG_PRE_EXISTING) is done so it's possible to tag data
        * you don't want to be made local, used for appending data,
@@ -2250,6 +2266,12 @@ bool BKE_id_is_in_global_main(ID *id)
   return (id == NULL || BLI_findindex(which_libbase(G_MAIN, GS(id->name)), id) != -1);
 }
 
+bool BKE_id_can_be_asset(const ID *id)
+{
+  return !ID_IS_LINKED(id) && !ID_IS_OVERRIDE_LIBRARY(id) &&
+         BKE_idtype_idcode_is_linkable(GS(id->name));
+}
+
 /************************* Datablock order in UI **************************/
 
 static int *id_order_get(ID *id)
@@ -2347,6 +2369,10 @@ void BKE_id_reorder(const ListBase *lb, ID *id, ID *relative, bool after)
 
 void BKE_id_blend_write(BlendWriter *writer, ID *id)
 {
+  if (id->asset_data) {
+    BKE_asset_metadata_write(writer, id->asset_data);
+  }
+
   /* ID_WM's id->properties are considered runtime only, and never written in .blend file. */
   if (id->properties && !ELEM(GS(id->name), ID_WM)) {
     IDP_BlendWrite(writer, id->properties);

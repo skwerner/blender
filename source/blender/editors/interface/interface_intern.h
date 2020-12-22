@@ -62,9 +62,9 @@ struct wmTimer;
 #define UI_MENU_SUBMENU_PADDING (6 * UI_DPI_FAC)
 
 /* menu scrolling */
-#define UI_MENU_SCROLL_ARROW 12
-#define UI_MENU_SCROLL_MOUSE (UI_MENU_SCROLL_ARROW + 2)
-#define UI_MENU_SCROLL_PAD 4
+#define UI_MENU_SCROLL_ARROW (12 * UI_DPI_FAC)
+#define UI_MENU_SCROLL_MOUSE (UI_MENU_SCROLL_ARROW + 2 * UI_DPI_FAC)
+#define UI_MENU_SCROLL_PAD (4 * UI_DPI_FAC)
 
 /* panel limits */
 #define UI_PANEL_MINX 100
@@ -378,11 +378,20 @@ typedef struct uiButExtraOpIcon {
 
 typedef struct ColorPicker {
   struct ColorPicker *next, *prev;
-  /** Color data, may be HSV or HSL. */
-  float color_data[3];
-  /** Initial color data (detect changes). */
-  float color_data_init[3];
+
+  /** Color in HSV or HSL, in color picking color space. Used for HSV cube,
+   * circle and slider widgets. The color picking space is perceptually
+   * linear for intuitive editing. */
+  float hsv_perceptual[3];
+  /** Initial color data (to detect changes). */
+  float hsv_perceptual_init[3];
   bool is_init;
+
+  /** HSV or HSL color in scene linear color space value used for number
+   * buttons. This is scene linear so that there is a clear correspondence
+   * to the scene linear RGB values. */
+  float hsv_scene_linear[3];
+
   /** Cubic saturation for the color wheel. */
   bool use_color_cubic;
   bool use_color_lock;
@@ -734,15 +743,14 @@ struct uiPopupBlockHandle {
 /* exposed as public API in UI_interface.h */
 
 /* interface_region_color_picker.c */
-void ui_rgb_to_color_picker_compat_v(const float rgb[3], float r_cp[3]);
-void ui_rgb_to_color_picker_v(const float rgb[3], float r_cp[3]);
-void ui_color_picker_to_rgb_v(const float r_cp[3], float rgb[3]);
-void ui_color_picker_to_rgb(float r_cp0, float r_cp1, float r_cp2, float *r, float *g, float *b);
+void ui_color_picker_rgb_to_hsv_compat(const float rgb[3], float r_cp[3]);
+void ui_color_picker_rgb_to_hsv(const float rgb[3], float r_cp[3]);
+void ui_color_picker_hsv_to_rgb(const float r_cp[3], float rgb[3]);
 
 bool ui_but_is_color_gamma(uiBut *but);
 
-void ui_scene_linear_to_color_picker_space(uiBut *but, float rgb[3]);
-void ui_color_picker_to_scene_linear_space(uiBut *but, float rgb[3]);
+void ui_scene_linear_to_perceptual_space(uiBut *but, float rgb[3]);
+void ui_perceptual_to_scene_linear_space(uiBut *but, float rgb[3]);
 
 uiBlock *ui_block_func_COLOR(struct bContext *C, uiPopupBlockHandle *handle, void *arg_but);
 ColorPicker *ui_block_colorpicker_create(struct uiBlock *block);
@@ -943,7 +951,7 @@ typedef struct uiWidgetBaseParameters {
   /* We pack alpha check and discard factor in alpha_discard.
    * If the value is negative then we do alpha check.
    * The absolute value itself is the discard factor.
-   * Initialize value to 1.0.f if you don't want discard */
+   * Initialize value to 1.0f if you don't want discard. */
   float alpha_discard;
   float tria_type;
   float _pad[3];
@@ -995,8 +1003,9 @@ void ui_draw_preview_item(
 
 #define UI_TEXT_MARGIN_X 0.4f
 #define UI_POPUP_MARGIN (UI_DPI_FAC * 12)
-/* margin at top of screen for popups */
-#define UI_POPUP_MENU_TOP (int)(8 * UI_DPI_FAC)
+/* Margin at top of screen for popups. Note this value must be sufficient
+   to draw a popover arrow to avoid cropping it. */
+#define UI_POPUP_MENU_TOP (int)(10 * UI_DPI_FAC)
 
 #define UI_PIXEL_AA_JITTER 8
 extern const float ui_pixel_jitter[UI_PIXEL_AA_JITTER][2];
@@ -1087,6 +1096,9 @@ uiBut *ui_but_find_rect_over(const struct ARegion *region,
 uiBut *ui_list_find_mouse_over_ex(struct ARegion *region, int x, int y) ATTR_WARN_UNUSED_RESULT;
 
 bool ui_but_contains_password(const uiBut *but) ATTR_WARN_UNUSED_RESULT;
+
+size_t ui_but_drawstr_len_without_sep_char(const uiBut *but);
+size_t ui_but_tip_len_only_first_line(const uiBut *but);
 
 uiBut *ui_but_prev(uiBut *but) ATTR_WARN_UNUSED_RESULT;
 uiBut *ui_but_next(uiBut *but) ATTR_WARN_UNUSED_RESULT;

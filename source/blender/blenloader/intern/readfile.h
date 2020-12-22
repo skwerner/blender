@@ -34,16 +34,13 @@
 #include "zlib.h"
 
 struct BLOCacheStorage;
-struct GSet;
 struct IDNameLib_Map;
 struct Key;
 struct MemFile;
 struct Object;
 struct OldNewMap;
-struct PartEff;
 struct ReportList;
 struct UserDef;
-struct View3D;
 
 typedef struct IDNameLib_Map IDNameLib_Map;
 
@@ -112,6 +109,9 @@ typedef struct FileData {
   int fileversion;
   /** Used to retrieve ID names from (bhead+1). */
   int id_name_offs;
+  /** Used to retrieve asset data from (bhead+1). NOTE: This may not be available in old files,
+   * will be -1 then! */
+  int id_asset_data_offs;
   /** For do_versions patching. */
   int globalf, fileflags;
 
@@ -159,6 +159,8 @@ void blo_end_packed_pointer_map(FileData *fd, struct Main *oldmain);
 void blo_add_library_pointer_map(ListBase *old_mainlist, FileData *fd);
 void blo_make_old_idmap_from_main(FileData *fd, struct Main *bmain);
 
+BHead *blo_read_asset_data_block(FileData *fd, BHead *bhead, struct AssetMetaData **r_asset_data);
+
 void blo_cache_storage_init(FileData *fd, struct Main *bmain);
 void blo_cache_storage_old_bmain_clear(FileData *fd, struct Main *bmain_old);
 void blo_cache_storage_end(FileData *fd);
@@ -170,11 +172,9 @@ BHead *blo_bhead_next(FileData *fd, BHead *thisblock);
 BHead *blo_bhead_prev(FileData *fd, BHead *thisblock);
 
 const char *blo_bhead_id_name(const FileData *fd, const BHead *bhead);
+struct AssetMetaData *blo_bhead_id_asset_data_address(const FileData *fd, const BHead *bhead);
 
 /* do versions stuff */
-
-void blo_reportf_wrap(struct ReportList *reports, ReportType type, const char *format, ...)
-    ATTR_PRINTF_FORMAT(3, 4);
 
 void blo_do_versions_dna(struct SDNA *sdna, const int versionfile, const int subversionfile);
 
@@ -185,9 +185,7 @@ void blo_do_versions_oldnewmap_insert(struct OldNewMap *onm,
 void *blo_do_versions_newlibadr(struct FileData *fd, const void *lib, const void *adr);
 void *blo_do_versions_newlibadr_us(struct FileData *fd, const void *lib, const void *adr);
 
-struct PartEff *blo_do_version_give_parteff_245(struct Object *ob);
 void blo_do_version_old_trackto_to_constraints(struct Object *ob);
-void blo_do_versions_view3d_split_250(struct View3D *v3d, struct ListBase *regions);
 void blo_do_versions_key_uidgen(struct Key *key);
 
 void blo_do_versions_userdef(struct UserDef *userdef);

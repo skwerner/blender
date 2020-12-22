@@ -37,7 +37,6 @@
 #include "BKE_main.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
-#include "BKE_sequencer.h"
 
 #include "UI_view2d.h"
 
@@ -55,6 +54,8 @@
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
+
+#include "SEQ_sequencer.h"
 
 #include "anim_intern.h"
 
@@ -502,7 +503,7 @@ static void ANIM_OT_previewrange_clear(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Clear Preview Range";
   ot->idname = "ANIM_OT_previewrange_clear";
-  ot->description = "Clear Preview Range";
+  ot->description = "Clear preview range";
 
   /* api callbacks */
   ot->exec = previewrange_clear_exec;

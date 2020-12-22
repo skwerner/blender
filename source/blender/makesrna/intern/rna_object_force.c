@@ -21,6 +21,7 @@
 #include <stdlib.h>
 
 #include "DNA_cloth_types.h"
+#include "DNA_dynamicpaint_types.h"
 #include "DNA_fluid_types.h"
 #include "DNA_object_force_types.h"
 #include "DNA_object_types.h"
@@ -154,7 +155,7 @@ static char *rna_PointCache_path(PointerRNA *ptr)
     }
 
     char name_esc[sizeof(md->name) * 2];
-    BLI_strescape(name_esc, md->name, sizeof(name_esc));
+    BLI_str_escape(name_esc, md->name, sizeof(name_esc));
 
     switch (md->type) {
       case eModifierType_ParticleSystem: {
@@ -171,7 +172,7 @@ static char *rna_PointCache_path(PointerRNA *ptr)
           for (; surface; surface = surface->next) {
             if (surface->pointcache == cache) {
               char name_surface_esc[sizeof(surface->name) * 2];
-              BLI_strescape(name_surface_esc, surface->name, sizeof(name_surface_esc));
+              BLI_str_escape(name_surface_esc, surface->name, sizeof(name_surface_esc));
               return BLI_sprintfN(
                   "modifiers[\"%s\"].canvas_settings.canvas_surfaces[\"%s\"].point_cache",
                   name_esc,
@@ -197,7 +198,6 @@ static char *rna_PointCache_path(PointerRNA *ptr)
       }
       default: {
         return BLI_sprintfN("modifiers[\"%s\"].point_cache", name_esc);
-        break;
       }
     }
   }
@@ -437,7 +437,7 @@ static char *rna_CollisionSettings_path(PointerRNA *UNUSED(ptr))
   if (md) {
     char name_esc[sizeof(md->name) * 2];
 
-    BLI_strescape(name_esc, md->name, sizeof(name_esc));
+    BLI_str_escape(name_esc, md->name, sizeof(name_esc));
     return BLI_sprintfN("modifiers[\"%s\"].settings", name_esc);
   }
   else {
@@ -609,7 +609,7 @@ static char *rna_SoftBodySettings_path(PointerRNA *ptr)
   ModifierData *md = (ModifierData *)BKE_modifiers_findby_type(ob, eModifierType_Softbody);
   char name_esc[sizeof(md->name) * 2];
 
-  BLI_strescape(name_esc, md->name, sizeof(name_esc));
+  BLI_str_escape(name_esc, md->name, sizeof(name_esc));
   return BLI_sprintfN("modifiers[\"%s\"].settings", name_esc);
 }
 
@@ -798,7 +798,7 @@ static char *rna_EffectorWeight_path(PointerRNA *ptr)
       /* no pointer from modifier data to actual softbody storage, would be good to add */
       if (ob->soft->effector_weights == ew) {
         char name_esc[sizeof(md->name) * 2];
-        BLI_strescape(name_esc, md->name, sizeof(name_esc));
+        BLI_str_escape(name_esc, md->name, sizeof(name_esc));
         return BLI_sprintfN("modifiers[\"%s\"].settings.effector_weights", name_esc);
       }
     }
@@ -809,18 +809,19 @@ static char *rna_EffectorWeight_path(PointerRNA *ptr)
       ClothModifierData *cmd = (ClothModifierData *)md;
       if (cmd->sim_parms->effector_weights == ew) {
         char name_esc[sizeof(md->name) * 2];
-        BLI_strescape(name_esc, md->name, sizeof(name_esc));
+        BLI_str_escape(name_esc, md->name, sizeof(name_esc));
         return BLI_sprintfN("modifiers[\"%s\"].settings.effector_weights", name_esc);
       }
     }
 
-    /* check smoke modifier */
+    /* check fluid modifier */
     md = (ModifierData *)BKE_modifiers_findby_type(ob, eModifierType_Fluid);
     if (md) {
       FluidModifierData *fmd = (FluidModifierData *)md;
-      if (fmd->domain->effector_weights == ew) {
+      if (fmd->type == MOD_FLUID_TYPE_DOMAIN && fmd->domain &&
+          fmd->domain->effector_weights == ew) {
         char name_esc[sizeof(md->name) * 2];
-        BLI_strescape(name_esc, md->name, sizeof(name_esc));
+        BLI_str_escape(name_esc, md->name, sizeof(name_esc));
         return BLI_sprintfN("modifiers[\"%s\"].domain_settings.effector_weights", name_esc);
       }
     }
@@ -838,8 +839,8 @@ static char *rna_EffectorWeight_path(PointerRNA *ptr)
             char name_esc[sizeof(md->name) * 2];
             char name_esc_surface[sizeof(surface->name) * 2];
 
-            BLI_strescape(name_esc, md->name, sizeof(name_esc));
-            BLI_strescape(name_esc_surface, surface->name, sizeof(name_esc_surface));
+            BLI_str_escape(name_esc, md->name, sizeof(name_esc));
+            BLI_str_escape(name_esc_surface, surface->name, sizeof(name_esc_surface));
             return BLI_sprintfN(
                 "modifiers[\"%s\"].canvas_settings.canvas_surfaces[\"%s\"]"
                 ".effector_weights",
@@ -944,6 +945,8 @@ static void rna_def_pointcache_common(StructRNA *srna)
 
   RNA_def_struct_path_func(srna, "rna_PointCache_path");
 
+  RNA_define_lib_overridable(true);
+
   prop = RNA_def_property(srna, "frame_start", PROP_INT, PROP_TIME);
   RNA_def_property_int_sdna(prop, NULL, "startframe");
   RNA_def_property_range(prop, -MAXFRAME, MAXFRAME);
@@ -1038,6 +1041,8 @@ static void rna_def_pointcache_common(StructRNA *srna)
       "Use this file's path for the disk cache when library linked into another file "
       "(for local bakes per scene file, disable this option)");
   RNA_def_property_update(prop, NC_OBJECT, "rna_Cache_idname_change");
+
+  RNA_define_lib_overridable(false);
 }
 
 static void rna_def_ptcache_point_caches(BlenderRNA *brna, PropertyRNA *cprop)
@@ -1099,6 +1104,7 @@ static void rna_def_pointcache_active(BlenderRNA *brna)
                                     NULL);
   RNA_def_property_struct_type(prop, "PointCacheItem");
   RNA_def_property_ui_text(prop, "Point Cache List", "");
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   rna_def_ptcache_point_caches(brna, prop);
 }
 
@@ -1481,10 +1487,11 @@ static void rna_def_field(BlenderRNA *brna)
   prop = RNA_def_property(srna, "texture_mode", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, NULL, "tex_mode");
   RNA_def_property_enum_items(prop, texture_items);
-  RNA_def_property_ui_text(prop,
-                           "Texture Mode",
-                           "How the texture effect is calculated (RGB & Curl need a RGB texture, "
-                           "else Gradient will be used instead)");
+  RNA_def_property_ui_text(
+      prop,
+      "Texture Mode",
+      "How the texture effect is calculated (RGB and Curl need a RGB texture, "
+      "else Gradient will be used instead)");
   RNA_def_property_update(prop, 0, "rna_FieldSettings_update");
 
   prop = RNA_def_property(srna, "z_direction", PROP_ENUM, PROP_NONE);
@@ -2031,7 +2038,8 @@ static void rna_def_softbody(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "use_estimate_matrix", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "solverflags", SBSO_ESTIMATEIPO);
-  RNA_def_property_ui_text(prop, "Estimate Matrix", "Estimate matrix... split to COM, ROT, SCALE");
+  RNA_def_property_ui_text(
+      prop, "Estimate Transforms", "Store the estimated transforms in the soft body settings");
 
   /***********************************************************************************/
   /* these are not exactly settings, but reading calculated results*/
@@ -2047,7 +2055,7 @@ static void rna_def_softbody(BlenderRNA *brna)
   prop = RNA_def_property(srna, "rotation_estimate", PROP_FLOAT, PROP_MATRIX);
   RNA_def_property_float_sdna(prop, NULL, "lrot");
   RNA_def_property_multi_array(prop, 2, rna_matrix_dimsize_3x3);
-  RNA_def_property_ui_text(prop, "Rot Matrix", "Estimated rotation matrix");
+  RNA_def_property_ui_text(prop, "Rotation Matrix", "Estimated rotation matrix");
 
   prop = RNA_def_property(srna, "scale_estimate", PROP_FLOAT, PROP_MATRIX);
   RNA_def_property_float_sdna(prop, NULL, "lscale");

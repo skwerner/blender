@@ -245,7 +245,7 @@ static char *rna_Bone_path(PointerRNA *ptr)
   Bone *bone = (Bone *)ptr->data;
   char name_esc[sizeof(bone->name) * 2];
 
-  BLI_strescape(name_esc, bone->name, sizeof(name_esc));
+  BLI_str_escape(name_esc, bone->name, sizeof(name_esc));
 
   /* special exception for trying to get the path where ID-block is Object
    * - this will be assumed to be from a Pose Bone...
@@ -1336,7 +1336,7 @@ static void rna_def_edit_bone(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop,
       "Editbone Matrix",
-      "Matrix combining loc/rot of the bone (head position, direction and roll), "
+      "Matrix combining location and rotation of the bone (head position, direction and roll), "
       "in armature space (does not include/support bone's length/size)");
   RNA_def_property_float_funcs(prop, "rna_EditBone_matrix_get", "rna_EditBone_matrix_set", NULL);
 

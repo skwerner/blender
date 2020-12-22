@@ -39,7 +39,7 @@ class GPENCIL_MT_material_context_menu(Menu):
         layout.separator()
 
         layout.operator("gpencil.material_lock_all", icon='LOCKED', text="Lock All")
-        layout.operator("gpencil.material_unlock_all", icon='UNLOCKED', text="UnLock All")
+        layout.operator("gpencil.material_unlock_all", icon='UNLOCKED', text="Unlock All")
 
         layout.operator("gpencil.material_lock_unused", text="Lock Unselected")
         layout.operator("gpencil.lock_layer", text="Lock Unused")
@@ -165,6 +165,7 @@ class MATERIAL_PT_gpencil_strokecolor(GPMaterialButtonsPanel, Panel):
 
             if gpcolor.mode in {'DOTS', 'BOX'}:
                 col.prop(gpcolor, "alignment_mode")
+                col.prop(gpcolor, "alignment_rotation")
 
             if gpcolor.mode == 'LINE':
                 col.prop(gpcolor, "use_overlap_strokes")

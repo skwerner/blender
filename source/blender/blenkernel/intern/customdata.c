@@ -751,6 +751,7 @@ static void layerCopyValue_mloopcol(const void *source,
     m2->r = m1->r;
     m2->g = m1->g;
     m2->b = m1->b;
+    m2->a = m1->a;
   }
   else { /* Modes that support 'real' mix factor. */
     unsigned char src[4] = {m1->r, m1->g, m1->b, m1->a};
@@ -771,13 +772,14 @@ static void layerCopyValue_mloopcol(const void *source,
     else {
       memcpy(tmp_col, src, sizeof(tmp_col));
     }
+
     blend_color_interpolate_byte(dst, dst, tmp_col, mixfactor);
 
     m2->r = (char)dst[0];
     m2->g = (char)dst[1];
     m2->b = (char)dst[2];
+    m2->a = (char)dst[3];
   }
-  m2->a = m1->a;
 }
 
 static bool layerEqual_mloopcol(const void *data1, const void *data2)
@@ -1281,7 +1283,7 @@ static void layerCopyValue_propcol(const void *source,
         return; /* Do Nothing! */
       }
     }
-    copy_v3_v3(m2->color, m1->color);
+    copy_v4_v4(m2->color, m1->color);
   }
   else { /* Modes that support 'real' mix factor. */
     if (mixmode == CDT_MIX_MIX) {
@@ -1301,9 +1303,8 @@ static void layerCopyValue_propcol(const void *source,
     }
     blend_color_interpolate_float(m2->color, m2->color, tmp_col, mixfactor);
 
-    copy_v3_v3(m2->color, m1->color);
+    copy_v4_v4(m2->color, m1->color);
   }
-  m2->color[3] = m1->color[3];
 }
 
 static bool layerEqual_propcol(const void *data1, const void *data2)
@@ -1836,6 +1837,21 @@ static const LayerTypeInfo LAYERTYPEINFO[CD_NUMTYPES] = {
      layerMultiply_propfloat2,
      NULL,
      layerAdd_propfloat2},
+    /* 50: CD_PROP_POOL */
+    {sizeof(bool),
+     "bool",
+     1,
+     N_("Boolean"),
+     NULL,
+     NULL,
+     NULL,
+     NULL,
+     NULL,
+     NULL,
+     NULL,
+     NULL,
+     NULL,
+     NULL},
 };
 
 static const char *LAYERTYPENAMES[CD_NUMTYPES] = {
@@ -1891,6 +1907,7 @@ static const char *LAYERTYPENAMES[CD_NUMTYPES] = {
     "CDPropCol",
     "CDPropFloat3",
     "CDPropFloat2",
+    "CDPropBoolean",
 };
 
 const CustomData_MeshMasks CD_MASK_BAREMESH = {
@@ -2508,7 +2525,7 @@ static CustomDataLayer *customData_add_layer__internal(CustomData *data,
     return &data->layers[CustomData_get_layer_index(data, type)];
   }
 
-  if ((alloctype == CD_ASSIGN) || (alloctype == CD_REFERENCE)) {
+  if (ELEM(alloctype, CD_ASSIGN, CD_REFERENCE)) {
     newlayerdata = layerdata;
   }
   else if (totelem > 0 && typeInfo->size > 0) {
@@ -2996,7 +3013,7 @@ void CustomData_free_elem(CustomData *data, int index, int count)
 /**
  * Interpolate given custom data source items into a single destination one.
  *
- * \param src_indices Indices of every source items to interpolate into the destination one.
+ * \param src_indices: Indices of every source items to interpolate into the destination one.
  * \param weights: The weight to apply to each source value individually. If NULL, they will be
  * averaged.
  * \param sub_weights: The weights of sub-items, only used to affect each corners of a

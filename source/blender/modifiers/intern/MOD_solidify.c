@@ -29,6 +29,7 @@
 
 #include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
+#include "DNA_object_types.h"
 #include "DNA_screen_types.h"
 
 #include "BKE_context.h"
@@ -230,8 +231,9 @@ static void vertex_group_panel_draw(const bContext *UNUSED(C), Panel *panel)
   uiLayoutSetPropSep(layout, true);
 
   col = uiLayoutColumn(layout, false);
-  uiItemPointerR(col, ptr, "shell_vertex_group", &ob_ptr, "vertex_groups", "Shell", ICON_NONE);
-  uiItemPointerR(col, ptr, "rim_vertex_group", &ob_ptr, "vertex_groups", "Rim", ICON_NONE);
+  uiItemPointerR(
+      col, ptr, "shell_vertex_group", &ob_ptr, "vertex_groups", IFACE_("Shell"), ICON_NONE);
+  uiItemPointerR(col, ptr, "rim_vertex_group", &ob_ptr, "vertex_groups", IFACE_("Rim"), ICON_NONE);
 }
 
 static void panelRegister(ARegionType *region_type)
@@ -273,7 +275,7 @@ ModifierTypeInfo modifierType_Solidify = {
     /* deformMatricesEM */ NULL,
     /* modifyMesh */ modifyMesh,
     /* modifyHair */ NULL,
-    /* modifyPointCloud */ NULL,
+    /* modifyGeometrySet */ NULL,
     /* modifyVolume */ NULL,
 
     /* initData */ initData,

@@ -72,7 +72,7 @@
 #include "IMB_imbuf.h" /* For #IMB_init. */
 
 #include "RE_engine.h"
-#include "RE_render_ext.h"
+#include "RE_texture.h"
 
 #include "ED_datafiles.h"
 
@@ -163,7 +163,7 @@ static void callback_main_atexit(void *user_data)
   struct CreatorAtExitData *app_init_data = user_data;
 
   if (app_init_data->ba) {
-    BLI_argsFree(app_init_data->ba);
+    BLI_args_destroy(app_init_data->ba);
     app_init_data->ba = NULL;
   }
 
@@ -293,7 +293,7 @@ int main(int argc,
         MEM_use_guarded_allocator();
         break;
       }
-      else if (STREQ(argv[i], "--")) {
+      if (STREQ(argv[i], "--")) {
         break;
       }
     }
@@ -349,7 +349,7 @@ int main(int argc,
 
 #if defined(__APPLE__) && !defined(WITH_PYTHON_MODULE) && !defined(WITH_HEADLESS)
   /* Patch to ignore argument finder gives us (PID?) */
-  if (argc == 2 && STREQLEN(argv[1], "-psn_", 5)) {
+  if (argc == 2 && STRPREFIX(argv[1], "-psn_")) {
     extern int GHOST_HACK_getFirstFile(char buf[]);
     static char firstfilebuf[512];
 
@@ -392,7 +392,7 @@ int main(int argc,
 
   /* First test for background-mode (#Global.background) */
 #ifndef WITH_PYTHON_MODULE
-  ba = BLI_argsInit(argc, (const char **)argv); /* skip binary path */
+  ba = BLI_args_create(argc, (const char **)argv); /* skip binary path */
 
   /* Ensure we free on early exit. */
   app_init_data.ba = ba;
@@ -403,35 +403,42 @@ int main(int argc,
    * (such as '--version' & '--help') don't report leaks. */
   MEM_use_memleak_detection(false);
 
-  BLI_argsParse(ba, 1, NULL, NULL);
-
-  main_signal_setup();
+  /* Parse environment handling arguments. */
+  BLI_args_parse(ba, ARG_PASS_ENVIRONMENT, NULL, NULL);
 
 #else
   /* Using preferences or user startup makes no sense for #WITH_PYTHON_MODULE. */
   G.factory_startup = true;
 #endif
 
-  /* After parsing the first level of arguments as `--env-*` impact BKE_appdir behavior. */
+  /* After parsing #ARG_PASS_ENVIRONMENT such as `--env-*`,
+   * since they impact `BKE_appdir` behavior. */
   BKE_appdir_init();
 
   /* After parsing number of threads argument. */
   BLI_task_scheduler_init();
 
-  /* After parsing `--env-system-datafiles` which control where paths are searched
-   * (color-management) uses BKE_appdir to initialize. */
+  /* Initialize sub-systems that use `BKE_appdir.h`. */
   IMB_init();
 
+#ifndef WITH_PYTHON_MODULE
+  /* First test for background-mode (#Global.background) */
+  BLI_args_parse(ba, ARG_PASS_SETTINGS, NULL, NULL);
+
+  main_signal_setup();
+#endif
+
 #ifdef WITH_FFMPEG
+  /* Keep after #ARG_PASS_SETTINGS since debug flags are checked. */
   IMB_ffmpeg_init();
 #endif
 
-  /* After level 1 arguments, this is so #WM_main_playanim skips #RNA_init. */
+  /* After #ARG_PASS_SETTINGS arguments, this is so #WM_main_playanim skips #RNA_init. */
   RNA_init();
 
   RE_engines_init();
-  init_nodesystem();
-  psys_init_rng();
+  BKE_node_system_init();
+  BKE_particle_init_rng();
   /* End second initialization. */
 
 #if defined(WITH_PYTHON_MODULE) || defined(WITH_HEADLESS)
@@ -452,20 +459,15 @@ int main(int argc,
 
   BKE_materials_init();
 
+#ifndef WITH_PYTHON_MODULE
   if (G.background == 0) {
-#ifndef WITH_PYTHON_MODULE
-    BLI_argsParse(ba, 2, NULL, NULL);
-    BLI_argsParse(ba, 3, NULL, NULL);
-#endif
-    WM_init(C, argc, (const char **)argv);
+    BLI_args_parse(ba, ARG_PASS_SETTINGS_GUI, NULL, NULL);
   }
-  else {
-#ifndef WITH_PYTHON_MODULE
-    BLI_argsParse(ba, 3, NULL, NULL);
+  BLI_args_parse(ba, ARG_PASS_SETTINGS_FORCE, NULL, NULL);
 #endif
 
-    WM_init(C, argc, (const char **)argv);
-  }
+  WM_init(C, argc, (const char **)argv);
+
 #ifndef WITH_PYTHON
   printf(
       "\n* WARNING * - Blender compiled without Python!\n"
@@ -483,6 +485,7 @@ int main(int argc,
 
   /* OK we are ready for it */
 #ifndef WITH_PYTHON_MODULE
+  /* Handles #ARG_PASS_FINAL. */
   main_args_setup_post(C, ba);
 #endif
 

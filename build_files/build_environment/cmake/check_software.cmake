@@ -42,8 +42,14 @@ if(UNIX)
   endforeach()
 
   if(APPLE)
-    if(NOT EXISTS "/usr/local/opt/bison/bin/bison")
-      set(_software_missing "${_software_missing} bison")
+    # Homebrew has different default locations for ARM and Intel macOS.
+    if("${CMAKE_HOST_SYSTEM_PROCESSOR}" STREQUAL "arm64")
+      set(HOMEBREW_LOCATION "/opt/homebrew")
+    else()
+      set(HOMEBREW_LOCATION "/usr/local")
+    endif()
+    if(NOT EXISTS "${HOMEBREW_LOCATION}/opt/bison/bin/bison")
+      string(APPEND _software_missing " bison")
     endif()
   endif()
 

@@ -47,9 +47,7 @@
 #include "transform_snap.h"
 
 /* -------------------------------------------------------------------- */
-/* Transform (Bend) */
-
-/** \name Transform Bend
+/** \name Transform (Bend)
  * \{ */
 
 struct BendCustomData {
@@ -277,8 +275,6 @@ void initBend(TransInfo *t)
     calculateCenterCursor(t, t->center_global);
   }
   calculateCenterLocal(t, t->center_global);
-
-  t->val = 0.0f;
 
   data = MEM_callocN(sizeof(*data), __func__);
 

@@ -806,7 +806,8 @@ void uiTemplateImage(uiLayout *layout,
                  C,
                  ptr,
                  propname,
-                 ima ? NULL : "IMAGE_OT_new",
+                 "IMAGE_OT_new",
+                 NULL,
                  "IMAGE_OT_open",
                  NULL,
                  UI_TEMPLATE_ID_FILTER_ALL,
@@ -1320,6 +1321,6 @@ void image_buttons_register(ARegionType *art)
   pt->order = 10;
   pt->poll = metadata_panel_context_poll;
   pt->draw = metadata_panel_context_draw;
-  pt->flag |= PNL_DEFAULT_CLOSED;
+  pt->flag |= PANEL_TYPE_DEFAULT_CLOSED;
   BLI_addtail(&art->paneltypes, pt);
 }

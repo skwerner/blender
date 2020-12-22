@@ -23,9 +23,12 @@
 #include "MEM_guardedalloc.h"
 
 #include "DNA_ID.h"
+#include "DNA_anim_types.h"
 #include "DNA_constraint_types.h"
+#include "DNA_gpencil_modifier_types.h"
 #include "DNA_key_types.h"
 #include "DNA_modifier_types.h"
+#include "DNA_object_types.h"
 
 #include "BLI_listbase.h"
 #include "BLI_string.h"
@@ -37,6 +40,7 @@
 #  include "PIL_time_utildefines.h"
 #endif
 
+#include "BKE_armature.h"
 #include "BKE_idprop.h"
 #include "BKE_lib_override.h"
 #include "BKE_main.h"
@@ -72,6 +76,18 @@ bool RNA_property_overridable_get(PointerRNA *ptr, PropertyRNA *prop)
     else if (RNA_struct_is_a(ptr->type, &RNA_Modifier)) {
       ModifierData *mod = ptr->data;
       if (mod->flag & eModifierFlag_OverrideLibrary_Local) {
+        return true;
+      }
+    }
+    else if (RNA_struct_is_a(ptr->type, &RNA_GpencilModifier)) {
+      GpencilModifierData *gp_mod = ptr->data;
+      if (gp_mod->flag & eGpencilModifierFlag_OverrideLibrary_Local) {
+        return true;
+      }
+    }
+    else if (RNA_struct_is_a(ptr->type, &RNA_NlaTrack)) {
+      NlaTrack *nla_track = ptr->data;
+      if (nla_track->flag & NLATRACK_OVERRIDELIBRARY_LOCAL) {
         return true;
       }
     }
@@ -209,7 +225,7 @@ bool RNA_struct_equals(Main *bmain, PointerRNA *ptr_a, PointerRNA *ptr_b, eRNACo
   if (ptr_a == NULL || ptr_b == NULL) {
     return false;
   }
-  else if (ptr_a->type != ptr_b->type) {
+  if (ptr_a->type != ptr_b->type) {
     return false;
   }
 
@@ -592,6 +608,27 @@ bool RNA_struct_override_matches(Main *bmain,
     _timeit_time_global = PIL_check_seconds_timer();
   }
 #endif
+
+  if (ptr_local->owner_id == ptr_local->data && GS(ptr_local->owner_id->name) == ID_OB) {
+    /* Our beloved pose's bone cross-data pointers. Usually, depsgraph evaluation would
+     * ensure this is valid, but in some situations (like hidden collections etc.) this won't
+     * be the case, so we need to take care of this ourselves.
+     *
+     * Note: Typically callers of this function (from BKE_lib_override area) will already have
+     * ensured this. However, studio is still reporting sporadic, unreproducible crashes due to
+     * invalid pose data, so think there are still some cases where some armatures are somehow
+     * missing updates (possibly due to dependencies?). Since calling this function on same ID
+     * several time is almost free, and safe even in a threaded context as long as it has been done
+     * at least once first outside of threaded processing, we do it another time here. */
+    Object *ob_local = (Object *)ptr_local->owner_id;
+    if (ob_local->type == OB_ARMATURE) {
+      Object *ob_reference = (Object *)ptr_local->owner_id->override_library->reference;
+      BLI_assert(ob_local->data != NULL);
+      BLI_assert(ob_reference->data != NULL);
+      BKE_pose_ensure(bmain, ob_local, ob_local->data, true);
+      BKE_pose_ensure(bmain, ob_reference, ob_reference->data, true);
+    }
+  }
 
   iterprop = RNA_struct_iterator_property(ptr_local->type);
 

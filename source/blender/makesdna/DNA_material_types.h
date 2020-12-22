@@ -27,6 +27,10 @@
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef MAX_MTEX
 #  define MAX_MTEX 18
 #endif
@@ -99,7 +103,8 @@ typedef struct MaterialGPencilStyle {
   float mix_stroke_factor;
   /** Mode used to align Dots and Boxes with stroke drawing path and object rotation */
   int alignment_mode;
-  char _pad[4];
+  /** Rotation for texture for Dots and Squares. */
+  float alignment_rotation;
 } MaterialGPencilStyle;
 
 /* MaterialGPencilStyle->flag */
@@ -358,3 +363,7 @@ enum {
   GP_MATERIAL_FOLLOW_OBJ = 1,
   GP_MATERIAL_FOLLOW_FIXED = 2,
 };
+
+#ifdef __cplusplus
+}
+#endif

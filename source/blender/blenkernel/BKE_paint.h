@@ -25,6 +25,7 @@
 
 #include "BLI_bitmap.h"
 #include "BLI_utildefines.h"
+#include "DNA_brush_enums.h"
 #include "DNA_object_enums.h"
 
 #ifdef __cplusplus
@@ -33,6 +34,9 @@ extern "C" {
 
 struct BMFace;
 struct BMesh;
+struct BlendDataReader;
+struct BlendLibReader;
+struct BlendWriter;
 struct Brush;
 struct CurveMapping;
 struct Depsgraph;
@@ -54,7 +58,6 @@ struct Paint;
 struct PaintCurve;
 struct Palette;
 struct PaletteColor;
-struct ReportList;
 struct Scene;
 struct StrokeCache;
 struct SubdivCCG;
@@ -66,8 +69,6 @@ struct ViewLayer;
 struct bContext;
 struct bToolRef;
 struct tPaletteColorHSV;
-
-enum eOverlayFlags;
 
 extern const char PAINT_CURSOR_SCULPT[3];
 extern const char PAINT_CURSOR_VERTEX_PAINT[3];
@@ -216,6 +217,15 @@ void BKE_paint_toolslots_brush_update_ex(struct Paint *paint, struct Brush *brus
 void BKE_paint_toolslots_brush_update(struct Paint *paint);
 void BKE_paint_toolslots_brush_validate(struct Main *bmain, struct Paint *paint);
 struct Brush *BKE_paint_toolslots_brush_get(struct Paint *paint, int slot_index);
+
+/* .blend I/O */
+void BKE_paint_blend_write(struct BlendWriter *writer, struct Paint *paint);
+void BKE_paint_blend_read_data(struct BlendDataReader *reader,
+                               const struct Scene *scene,
+                               struct Paint *paint);
+void BKE_paint_blend_read_lib(struct BlendLibReader *reader,
+                              struct Scene *scene,
+                              struct Paint *paint);
 
 #define SCULPT_FACE_SET_NONE 0
 
@@ -505,6 +515,9 @@ typedef struct SculptSession {
   int active_face_index;
   int active_grid_index;
 
+  /* When active, the cursor draws with faded colors, indicating that there is an action enabled.
+   */
+  bool draw_faded_cursor;
   float cursor_radius;
   float cursor_location[3];
   float cursor_normal[3];
@@ -514,6 +527,7 @@ typedef struct SculptSession {
   /* For Sculpt trimming gesture tools, initial raycast data from the position of the mouse when
    * the gesture starts (intersection with the surface and if they ray hit the surface or not). */
   float gesture_initial_location[3];
+  float gesture_initial_normal[3];
   bool gesture_initial_hit;
 
   /* TODO(jbakker): Replace rv3d adn v3d with ViewContext */
@@ -547,6 +561,10 @@ typedef struct SculptSession {
   float init_pivot_pos[3];
   float init_pivot_rot[4];
   float init_pivot_scale[3];
+
+  float prev_pivot_pos[3];
+  float prev_pivot_rot[4];
+  float prev_pivot_scale[3];
 
   union {
     struct {

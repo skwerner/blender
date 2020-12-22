@@ -8,6 +8,7 @@
 #include "BLI_timeit.hh"
 #include "BLI_vector.hh"
 #include "testing/testing.h"
+#include <memory>
 
 namespace blender::tests {
 
@@ -295,6 +296,24 @@ TEST(map, AddOrModify)
   EXPECT_EQ(map.lookup(1), 15.0f);
 }
 
+TEST(map, AddOrModifyReference)
+{
+  Map<int, std::unique_ptr<int>> map;
+  auto create_func = [](std::unique_ptr<int> *value) -> int & {
+    new (value) std::unique_ptr<int>(new int{10});
+    return **value;
+  };
+  auto modify_func = [](std::unique_ptr<int> *value) -> int & {
+    **value += 5;
+    return **value;
+  };
+  EXPECT_EQ(map.add_or_modify(1, create_func, modify_func), 10);
+  int &a = map.add_or_modify(1, create_func, modify_func);
+  EXPECT_EQ(a, 15);
+  a = 100;
+  EXPECT_EQ(*map.lookup(1), 100);
+}
+
 TEST(map, AddOverwrite)
 {
   Map<int, float> map;
@@ -401,9 +420,9 @@ TEST(map, Clear)
 
 TEST(map, UniquePtrValue)
 {
-  auto value1 = std::unique_ptr<int>(new int());
-  auto value2 = std::unique_ptr<int>(new int());
-  auto value3 = std::unique_ptr<int>(new int());
+  auto value1 = std::make_unique<int>();
+  auto value2 = std::make_unique<int>();
+  auto value3 = std::make_unique<int>();
 
   int *value1_ptr = value1.get();
 
@@ -411,12 +430,12 @@ TEST(map, UniquePtrValue)
   map.add_new(1, std::move(value1));
   map.add(2, std::move(value2));
   map.add_overwrite(3, std::move(value3));
-  map.lookup_or_add_cb(4, []() { return std::unique_ptr<int>(new int()); });
-  map.add_new(5, std::unique_ptr<int>(new int()));
-  map.add(6, std::unique_ptr<int>(new int()));
-  map.add_overwrite(7, std::unique_ptr<int>(new int()));
-  map.lookup_or_add(8, std::unique_ptr<int>(new int()));
-  map.pop_default(9, std::unique_ptr<int>(new int()));
+  map.lookup_or_add_cb(4, []() { return std::make_unique<int>(); });
+  map.add_new(5, std::make_unique<int>());
+  map.add(6, std::make_unique<int>());
+  map.add_overwrite(7, std::make_unique<int>());
+  map.lookup_or_add(8, std::make_unique<int>());
+  map.pop_default(9, std::make_unique<int>());
 
   EXPECT_EQ(map.lookup(1).get(), value1_ptr);
   EXPECT_EQ(map.lookup_ptr(100), nullptr);

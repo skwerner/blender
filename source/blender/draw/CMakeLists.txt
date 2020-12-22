@@ -25,6 +25,7 @@ set(INC
   ../blenfont
   ../blenkernel
   ../blenlib
+  ../blenloader
   ../blentranslation
   ../bmesh
   ../depsgraph
@@ -35,13 +36,16 @@ set(INC
   ../makesdna
   ../makesrna
   ../nodes
-  ../render/extern/include
-  ../render/intern/include
+  ../render
+  ../render/intern
   ../windowmanager
 
   ../../../intern/atomic
   ../../../intern/glew-mx
   ../../../intern/guardedalloc
+
+  # dna_type_offsets.h
+  ${CMAKE_CURRENT_BINARY_DIR}/../makesdna/intern
 )
 
 set(SRC
@@ -76,6 +80,7 @@ set(SRC
   engines/image/image_engine.c
   engines/image/image_shader.c
   engines/eevee/eevee_bloom.c
+  engines/eevee/eevee_cryptomatte.c
   engines/eevee/eevee_data.c
   engines/eevee/eevee_depth_of_field.c
   engines/eevee/eevee_effects.c
@@ -246,6 +251,7 @@ data_to_c_simple(engines/eevee/shaders/bsdf_sampling_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/raytrace_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/renderpass_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/renderpass_postprocess_frag.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/cryptomatte_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/ltc_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/ssr_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/surface_frag.glsl SRC)
@@ -373,6 +379,7 @@ data_to_c_simple(engines/overlay/shaders/edit_uv_verts_vert.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/edit_uv_verts_frag.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/edit_uv_faces_vert.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/edit_uv_face_dots_vert.glsl SRC)
+data_to_c_simple(engines/overlay/shaders/edit_uv_stencil_image_vert.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/edit_uv_stretching_vert.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/edit_uv_tiled_image_borders_vert.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/extra_frag.glsl SRC)
@@ -445,6 +452,9 @@ endif()
 
 
 blender_add_lib(bf_draw "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
+
+# Needed so we can use dna_type_offsets.h for defaults initialization.
+add_dependencies(bf_draw bf_dna)
 
 if(WITH_GTESTS)
   if(WITH_OPENGL_DRAW_TESTS)

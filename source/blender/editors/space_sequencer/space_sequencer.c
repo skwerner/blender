@@ -38,7 +38,6 @@
 #include "BKE_global.h"
 #include "BKE_lib_id.h"
 #include "BKE_screen.h"
-#include "BKE_sequencer.h"
 #include "BKE_sequencer_offscreen.h"
 
 #include "ED_screen.h"
@@ -51,6 +50,8 @@
 #include "WM_types.h"
 
 #include "RNA_access.h"
+
+#include "SEQ_sequencer.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -98,7 +99,8 @@ static SpaceLink *sequencer_create(const ScrArea *UNUSED(area), const Scene *sce
   sseq->view = SEQ_VIEW_SEQUENCE;
   sseq->mainb = SEQ_DRAW_IMG_IMBUF;
   sseq->flag = SEQ_SHOW_GPENCIL | SEQ_USE_ALPHA | SEQ_SHOW_MARKERS | SEQ_SHOW_FCURVES |
-               SEQ_ZOOM_TO_FIT;
+               SEQ_ZOOM_TO_FIT | SEQ_SHOW_STRIP_OVERLAY | SEQ_SHOW_STRIP_NAME |
+               SEQ_SHOW_STRIP_SOURCE | SEQ_SHOW_STRIP_DURATION;
 
   /* Tool header. */
   region = MEM_callocN(sizeof(ARegion), "tool header for sequencer");
@@ -705,7 +707,8 @@ static void sequencer_preview_region_draw(const bContext *C, ARegion *region)
   SpaceSeq *sseq = area->spacedata.first;
   Scene *scene = CTX_data_scene(C);
   wmWindowManager *wm = CTX_wm_manager(C);
-  const bool draw_overlay = (scene->ed && (scene->ed->over_flag & SEQ_EDIT_OVERLAY_SHOW));
+  const bool draw_overlay = (scene->ed && (scene->ed->over_flag & SEQ_EDIT_OVERLAY_SHOW) &&
+                             (sseq->flag & SEQ_SHOW_STRIP_OVERLAY));
 
   /* XXX temp fix for wrong setting in sseq->mainb */
   if (sseq->mainb == SEQ_DRAW_SEQUENCE) {

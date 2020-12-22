@@ -38,7 +38,7 @@ namespace blender::gpu {
 /** \name Platform
  * \{ */
 
-void GLBackend::platform_init(void)
+void GLBackend::platform_init()
 {
   BLI_assert(!GPG.initialized);
   GPG.initialized = true;
@@ -130,12 +130,32 @@ void GLBackend::platform_init(void)
         GPG.support_level = GPU_SUPPORT_LEVEL_LIMITED;
       }
     }
+
+    /* Driver 20.11.2/3 fixes a lot of issues for the Navi cards, but introduces new ones
+     * for Polaris based cards cards. The viewport has glitches but doesn't crash.
+     * See T82856,T83574.  */
+    if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_WIN, GPU_DRIVER_OFFICIAL) &&
+        (strstr(version, " 20.11.2 ") || strstr(version, " 20.11.3 "))) {
+      if (strstr(renderer, "Radeon RX 460 ") || strstr(renderer, "Radeon RX 470 ") ||
+          strstr(renderer, "Radeon RX 480 ") || strstr(renderer, "Radeon RX 490 ") ||
+          strstr(renderer, "Radeon RX 560 ") || strstr(renderer, "Radeon RX 570 ") ||
+          strstr(renderer, "Radeon RX 580 ") || strstr(renderer, "Radeon RX 590 ")) {
+        GPG.support_level = GPU_SUPPORT_LEVEL_LIMITED;
+      }
+    }
+    if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_UNIX, GPU_DRIVER_ANY)) {
+      /* Platform seems to work when SB backend is disabled. This can be done
+       * by adding the environment variable `R600_DEBUG=nosb`. */
+      if (strstr(renderer, "AMD CEDAR")) {
+        GPG.support_level = GPU_SUPPORT_LEVEL_LIMITED;
+      }
+    }
   }
   GPG.create_key(GPG.support_level, vendor, renderer, version);
   GPG.create_gpu_name(vendor, renderer, version);
 }
 
-void GLBackend::platform_exit(void)
+void GLBackend::platform_exit()
 {
   BLI_assert(GPG.initialized);
   GPG.clear();
@@ -147,7 +167,7 @@ void GLBackend::platform_exit(void)
 /** \name Capabilities
  * \{ */
 
-static bool detect_mip_render_workaround(void)
+static bool detect_mip_render_workaround()
 {
   int cube_size = 2;
   float clear_color[4] = {1.0f, 0.5f, 0.0f, 0.0f};
@@ -192,7 +212,7 @@ static bool detect_mip_render_workaround(void)
   return enable_workaround;
 }
 
-static void detect_workarounds(void)
+static void detect_workarounds()
 {
   const char *vendor = (const char *)glGetString(GL_VENDOR);
   const char *renderer = (const char *)glGetString(GL_RENDERER);
@@ -227,10 +247,6 @@ static void detect_workarounds(void)
     return;
   }
 
-  /* Some Intel drivers have issues with using mips as framebuffer targets if
-   * GL_TEXTURE_MAX_LEVEL is higher than the target mip.
-   * Only check at the end after all other workarounds because this uses the drawing code. */
-  GCaps.mip_render_workaround = detect_mip_render_workaround();
   /* Limit support for GLEW_ARB_base_instance to OpenGL 4.0 and higher. NVIDIA Quadro FX 4800
    * (TeraScale) report that they support GLEW_ARB_base_instance, but the driver does not support
    * GLEW_ARB_draw_indirect as it has an OpenGL3 context what also matches the minimum needed
@@ -251,6 +267,7 @@ static void detect_workarounds(void)
       (strstr(version, "4.5.13399") || strstr(version, "4.5.13417") ||
        strstr(version, "4.5.13422"))) {
     GLContext::unused_fb_slot_workaround = true;
+    GCaps.mip_render_workaround = true;
     GCaps.shader_image_load_store_support = false;
     GCaps.broken_amd_driver = true;
   }
@@ -342,6 +359,13 @@ static void detect_workarounds(void)
     }
   }
 
+  /* Some Intel drivers have issues with using mips as framebuffer targets if
+   * GL_TEXTURE_MAX_LEVEL is higher than the target mip.
+   * Only check at the end after all other workarounds because this uses the drawing code.
+   * Also after device/driver flags to avoid the check that causes pre GCN Radeon to crash. */
+  if (GCaps.mip_render_workaround == false) {
+    GCaps.mip_render_workaround = detect_mip_render_workaround();
+  }
   /* Disable multidraw if the base instance cannot be read. */
   if (GLContext::shader_draw_parameters_support == false) {
     GLContext::multi_draw_indirect_support = false;
@@ -376,7 +400,7 @@ bool GLContext::debug_layer_workaround = false;
 bool GLContext::unused_fb_slot_workaround = false;
 float GLContext::derivative_signs[2] = {1.0f, 1.0f};
 
-void GLBackend::capabilities_init(void)
+void GLBackend::capabilities_init()
 {
   BLI_assert(GLEW_VERSION_3_3);
   /* Common Capabilities. */

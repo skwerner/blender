@@ -80,12 +80,12 @@ static EnumPropertyItem prop_mask_filter_types[] = {
     {MASK_FILTER_CONTRAST_INCREASE,
      "CONTRAST_INCREASE",
      0,
-     "Increase contrast",
+     "Increase Contrast",
      "Increase the contrast of the paint mask"},
     {MASK_FILTER_CONTRAST_DECREASE,
      "CONTRAST_DECREASE",
      0,
-     "Decrease contrast",
+     "Decrease Contrast",
      "Decrease the contrast of the paint mask"},
     {0, NULL, 0, NULL, NULL},
 };
@@ -192,7 +192,6 @@ static void mask_filter_task_cb(void *__restrict userdata,
 
 static int sculpt_mask_filter_exec(bContext *C, wmOperator *op)
 {
-  ARegion *region = CTX_wm_region(C);
   Object *ob = CTX_data_active_object(C);
   SculptSession *ss = ob->sculpt;
   Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
@@ -213,7 +212,7 @@ static int sculpt_mask_filter_exec(bContext *C, wmOperator *op)
   int num_verts = SCULPT_vertex_count_get(ss);
 
   BKE_pbvh_search_gather(pbvh, NULL, NULL, &nodes, &totnode);
-  SCULPT_undo_push_begin("Mask filter");
+  SCULPT_undo_push_begin(ob, "Mask filter");
 
   for (int i = 0; i < totnode; i++) {
     SCULPT_undo_push_node(ob, nodes[i], SCULPT_UNDO_MASK);
@@ -259,8 +258,8 @@ static int sculpt_mask_filter_exec(bContext *C, wmOperator *op)
 
   SCULPT_undo_push_end();
 
-  ED_region_tag_redraw(region);
-  WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
+  SCULPT_tag_update_overlays(C);
+
   return OPERATOR_FINISHED;
 }
 
@@ -441,7 +440,7 @@ static int sculpt_dirty_mask_exec(bContext *C, wmOperator *op)
   }
 
   BKE_pbvh_search_gather(pbvh, NULL, NULL, &nodes, &totnode);
-  SCULPT_undo_push_begin("Dirty Mask");
+  SCULPT_undo_push_begin(ob, "Dirty Mask");
 
   for (int i = 0; i < totnode; i++) {
     SCULPT_undo_push_node(ob, nodes[i], SCULPT_UNDO_MASK);

@@ -48,7 +48,6 @@ bool VDBImageLoader::load_metadata(ImageMetaData &metadata)
 
   /* Set dimensions. */
   openvdb::Coord dim = bbox.dim();
-  openvdb::Coord min = bbox.min();
   metadata.width = dim.x();
   metadata.height = dim.y();
   metadata.depth = dim.z();
@@ -144,8 +143,13 @@ bool VDBImageLoader::load_metadata(ImageMetaData &metadata)
     }
   }
 
+#  ifdef WITH_NANOVDB
+  Transform texture_to_index = transform_identity();
+#  else
+  openvdb::Coord min = bbox.min();
   Transform texture_to_index = transform_translate(min.x(), min.y(), min.z()) *
                                transform_scale(dim.x(), dim.y(), dim.z());
+#  endif
 
   metadata.transform_3d = transform_inverse(index_to_object * texture_to_index);
   metadata.use_transform_3d = true;
@@ -159,10 +163,10 @@ bool VDBImageLoader::load_metadata(ImageMetaData &metadata)
 
 bool VDBImageLoader::load_pixels(const ImageMetaData &, void *pixels, const size_t, const bool)
 {
-#if defined(WITH_NANOVDB)
+#ifdef WITH_OPENVDB
+#  ifdef WITH_NANOVDB
   memcpy(pixels, nanogrid.data(), nanogrid.size());
-  return true;
-#elif defined(WITH_OPENVDB)
+#  else
   if (grid->isType<openvdb::FloatGrid>()) {
     openvdb::tools::Dense<float, openvdb::tools::LayoutXYZ> dense(bbox, (float *)pixels);
     openvdb::tools::copyToDense(*openvdb::gridConstPtrCast<openvdb::FloatGrid>(grid), dense);
@@ -202,7 +206,7 @@ bool VDBImageLoader::load_pixels(const ImageMetaData &, void *pixels, const size
     openvdb::tools::Dense<float, openvdb::tools::LayoutXYZ> dense(bbox, (float *)pixels);
     openvdb::tools::copyToDense(*openvdb::gridConstPtrCast<openvdb::MaskGrid>(grid), dense);
   }
-
+#  endif
   return true;
 #else
   (void)pixels;

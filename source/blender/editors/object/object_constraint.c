@@ -706,11 +706,10 @@ static bool edit_constraint_poll_generic(bContext *C,
     return false;
   }
 
-  if (ID_IS_OVERRIDE_LIBRARY(ob) && !is_liboverride_allowed) {
-    if ((con == NULL) || (con->flag & CONSTRAINT_OVERRIDE_LIBRARY_LOCAL) == 0) {
-      CTX_wm_operator_poll_msg_set(C, "Cannot edit constraints coming from library override");
-      return false;
-    }
+  if (!is_liboverride_allowed && BKE_constraint_is_nonlocal_in_liboverride(ob, con)) {
+    CTX_wm_operator_poll_msg_set(
+        C, "Cannot edit constraints coming from linked data in a library override");
+    return false;
   }
 
   return true;
@@ -2219,7 +2218,7 @@ static const EnumPropertyItem *object_constraint_add_itemf(bContext *UNUSED(C),
   int totitem = 0;
 
   while (item->identifier) {
-    if ((item->value != CONSTRAINT_TYPE_KINEMATIC) && (item->value != CONSTRAINT_TYPE_SPLINEIK)) {
+    if (!ELEM(item->value, CONSTRAINT_TYPE_KINEMATIC, CONSTRAINT_TYPE_SPLINEIK)) {
       RNA_enum_item_add(&object_constraint_items, &totitem, item);
     }
     item++;

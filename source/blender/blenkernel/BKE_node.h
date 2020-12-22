@@ -112,20 +112,26 @@ namespace blender {
 namespace nodes {
 class SocketMFNetworkBuilder;
 class NodeMFNetworkBuilder;
+class GeoNodeExecParams;
 }  // namespace nodes
 namespace fn {
+class CPPType;
 class MFDataType;
-}
+}  // namespace fn
 }  // namespace blender
 
 using NodeExpandInMFNetworkFunction = void (*)(blender::nodes::NodeMFNetworkBuilder &builder);
-using SocketGetMFDataTypeFunction = blender::fn::MFDataType (*)();
+using NodeGeometryExecFunction = void (*)(blender::nodes::GeoNodeExecParams params);
+using SocketGetCPPTypeFunction = const blender::fn::CPPType *(*)();
+using SocketGetCPPValueFunction = void (*)(const struct bNodeSocket &socket, void *r_value);
 using SocketExpandInMFNetworkFunction = void (*)(blender::nodes::SocketMFNetworkBuilder &builder);
 
 #else
 typedef void *NodeExpandInMFNetworkFunction;
-typedef void *SocketGetMFDataTypeFunction;
 typedef void *SocketExpandInMFNetworkFunction;
+typedef void *NodeGeometryExecFunction;
+typedef void *SocketGetCPPTypeFunction;
+typedef void *SocketGetCPPValueFunction;
 #endif
 
 /**
@@ -181,10 +187,12 @@ typedef struct bNodeSocketType {
   /* Callback to free the socket type. */
   void (*free_self)(struct bNodeSocketType *stype);
 
-  /* Returns the multi-function data type of this socket type. */
-  SocketGetMFDataTypeFunction get_mf_data_type;
   /* Expands the socket into a multi-function node that outputs the socket value. */
   SocketExpandInMFNetworkFunction expand_in_mf_network;
+  /* Return the CPPType of this socket. */
+  SocketGetCPPTypeFunction get_cpp_type;
+  /* Get the value of this socket in a generic way. */
+  SocketGetCPPValueFunction get_cpp_value;
 } bNodeSocketType;
 
 typedef void *(*NodeInitExecFunction)(struct bNodeExecContext *context,
@@ -302,6 +310,9 @@ typedef struct bNodeType {
   /* Expands the bNode into nodes in a multi-function network, which will be evaluated later on. */
   NodeExpandInMFNetworkFunction expand_in_mf_network;
 
+  /* Execute a geometry node. */
+  NodeGeometryExecFunction geometry_node_execute;
+
   /* RNA integration */
   ExtensionRNA rna_ext;
 } bNodeType;
@@ -332,6 +343,8 @@ typedef struct bNodeType {
 #define NODE_CLASS_SCRIPT 32
 #define NODE_CLASS_INTERFACE 33
 #define NODE_CLASS_SHADER 40
+#define NODE_CLASS_GEOMETRY 41
+#define NODE_CLASS_ATTRIBUTE 42
 #define NODE_CLASS_LAYOUT 100
 
 /* node resize directions */
@@ -438,7 +451,7 @@ bool ntreeHasType(const struct bNodeTree *ntree, int type);
 bool ntreeHasTree(const struct bNodeTree *ntree, const struct bNodeTree *lookup);
 void ntreeUpdateTree(struct Main *main, struct bNodeTree *ntree);
 void ntreeUpdateAllNew(struct Main *main);
-void ntreeUpdateAllUsers(struct Main *main, struct ID *ngroup);
+void ntreeUpdateAllUsers(struct Main *main, struct ID *id);
 
 void ntreeGetDependencyList(struct bNodeTree *ntree, struct bNode ***deplist, int *totnodes);
 
@@ -501,7 +514,7 @@ void ntreeInterfaceTypeUpdate(struct bNodeTree *ntree);
 struct bNodeType *nodeTypeFind(const char *idname);
 void nodeRegisterType(struct bNodeType *ntype);
 void nodeUnregisterType(struct bNodeType *ntype);
-bool nodeIsRegistered(struct bNode *node);
+bool nodeTypeUndefined(struct bNode *node);
 struct GHashIterator *nodeTypeGetIterator(void);
 
 /* helper macros for iterating over node types */
@@ -880,8 +893,7 @@ void BKE_node_tree_unlink_id(ID *id, struct bNodeTree *ntree);
  * } FOREACH_NODETREE_END;
  * \endcode
  *
- * \{
- */
+ * \{ */
 
 /* should be an opaque type, only for internal use by BKE_node_tree_iter_*** */
 struct NodeTreeIterStore {
@@ -1324,6 +1336,29 @@ int ntreeTexExecTree(struct bNodeTree *ntree,
 /** \} */
 
 /* -------------------------------------------------------------------- */
+/** \name Geometry Nodes
+ * \{ */
+
+#define GEO_NODE_TRIANGULATE 1000
+#define GEO_NODE_EDGE_SPLIT 1001
+#define GEO_NODE_TRANSFORM 1002
+#define GEO_NODE_BOOLEAN 1003
+#define GEO_NODE_POINT_DISTRIBUTE 1004
+#define GEO_NODE_POINT_INSTANCE 1005
+#define GEO_NODE_SUBDIVISION_SURFACE 1006
+#define GEO_NODE_OBJECT_INFO 1007
+#define GEO_NODE_ATTRIBUTE_RANDOMIZE 1008
+#define GEO_NODE_ATTRIBUTE_MATH 1009
+#define GEO_NODE_JOIN_GEOMETRY 1010
+#define GEO_NODE_ATTRIBUTE_FILL 1011
+#define GEO_NODE_ATTRIBUTE_MIX 1012
+#define GEO_NODE_ATTRIBUTE_COLOR_RAMP 1013
+#define GEO_NODE_POINT_SEPARATE 1014
+#define GEO_NODE_ATTRIBUTE_COMPARE 1015
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
 /** \name Function Nodes
  * \{ */
 
@@ -1334,11 +1369,12 @@ int ntreeTexExecTree(struct bNodeTree *ntree,
 #define FN_NODE_COMBINE_STRINGS 1204
 #define FN_NODE_OBJECT_TRANSFORMS 1205
 #define FN_NODE_RANDOM_FLOAT 1206
+#define FN_NODE_INPUT_VECTOR 1207
 
 /** \} */
 
-void init_nodesystem(void);
-void free_nodesystem(void);
+void BKE_node_system_init(void);
+void BKE_node_system_exit(void);
 
 /* -------------------------------------------------------------------- */
 /* evaluation support, */

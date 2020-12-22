@@ -401,7 +401,7 @@ static void eevee_id_world_update(void *vedata, World *wo)
   EEVEE_StorageList *stl = ((EEVEE_Data *)vedata)->stl;
   LightCache *lcache = stl->g_data->light_cache;
 
-  if (lcache == NULL || lcache == stl->lookdev_lightcache) {
+  if (ELEM(lcache, NULL, stl->lookdev_lightcache)) {
     /* Avoid Lookdev viewport clearing the update flag (see T67741). */
     return;
   }
@@ -570,6 +570,8 @@ static void eevee_render_to_image(void *vedata,
   EEVEE_motion_blur_data_free(&ved->stl->effects->motion_blur);
 
   if (RE_engine_test_break(engine)) {
+    /* Cryptomatte buffers are freed during render_read_result */
+    EEVEE_cryptomatte_free(vedata);
     return;
   }
 

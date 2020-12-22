@@ -27,6 +27,7 @@
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "BLI_array_utils.h"
 #include "BLI_listbase.h"
@@ -118,6 +119,7 @@ typedef struct UndoMesh {
 
 #ifdef USE_ARRAY_STORE
 
+/* -------------------------------------------------------------------- */
 /** \name Array Store
  * \{ */
 

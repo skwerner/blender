@@ -44,11 +44,12 @@
 #include "BKE_gpencil.h"
 #include "BKE_main.h"
 #include "BKE_node.h"
-#include "BKE_sequencer.h"
 
 #include "DEG_depsgraph.h"
 
 #include "RNA_access.h"
+
+#include "SEQ_sequencer.h"
 
 #include "ED_anim_api.h"
 
@@ -215,10 +216,12 @@ static void animchan_sync_fcurve_scene(bAnimListElem *ale)
 
   /* get strip name, and check if this strip is selected */
   char *seq_name = BLI_str_quoted_substrN(fcu->rna_path, "sequences_all[");
-  Sequence *seq = BKE_sequence_get_by_name(ed->seqbasep, seq_name, false);
-  if (seq_name) {
-    MEM_freeN(seq_name);
+  if (seq_name == NULL) {
+    return;
   }
+
+  Sequence *seq = BKE_sequence_get_by_name(ed->seqbasep, seq_name, false);
+  MEM_freeN(seq_name);
 
   if (seq == NULL) {
     return;

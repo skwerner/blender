@@ -75,7 +75,7 @@
 #include "ED_uvedit.h"
 #include "ED_view3d.h"
 
-#include "RE_render_ext.h"
+#include "RE_texture.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -180,7 +180,7 @@ void MESH_OT_subdivide(wmOperatorType *ot)
                   "ngon",
                   true,
                   "Create N-Gons",
-                  "When disabled, newly created faces are limited to 3-4 sided faces");
+                  "When disabled, newly created faces are limited to 3 and 4 sided faces");
   RNA_def_enum(
       ot->srna,
       "quadcorner",
@@ -395,7 +395,7 @@ void MESH_OT_unsubdivide(wmOperatorType *ot)
 {
   /* identifiers */
   ot->name = "Un-Subdivide";
-  ot->description = "UnSubdivide selected edges & faces";
+  ot->description = "Un-subdivide selected edges and faces";
   ot->idname = "MESH_OT_unsubdivide";
 
   /* api callbacks */
@@ -698,7 +698,7 @@ void MESH_OT_edge_collapse(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Collapse Edges & Faces";
   ot->description =
-      "Collapse isolated edges & faces regions, merging data such as UV's and vertex colors. "
+      "Collapse isolated edge and face regions, merging data such as UV's and vertex colors. "
       "This can collapse edge-rings as well as regions of connected faces into vertices";
   ot->idname = "MESH_OT_edge_collapse";
 
@@ -875,7 +875,7 @@ static void edbm_add_edge_face_exec__tricky_finalize_sel(BMesh *bm, BMElem *ele_
   }
   else {
     BMLoop *l = BM_face_edge_share_loop(f, (BMEdge *)ele_desel);
-    BLI_assert(f->len == 4 || f->len == 3);
+    BLI_assert(ELEM(f->len, 4, 3));
 
     BM_edge_select_set(bm, (BMEdge *)ele_desel, false);
     if (f->len == 4) {
@@ -1765,10 +1765,15 @@ static bool edbm_edge_split_selected_edges(wmOperator *op, Object *obedit, BMEdi
   if (bm->totedgesel == 0) {
     return false;
   }
+
+  BM_custom_loop_normals_to_vector_layer(em->bm);
+
   if (!EDBM_op_call_and_selectf(
           em, op, "edges.out", false, "split_edges edges=%he", BM_ELEM_SELECT)) {
     return false;
   }
+
+  BM_custom_loop_normals_from_vector_layer(em->bm, false);
 
   EDBM_select_flush(em);
   EDBM_update_generic(obedit->data, true, true);
@@ -1805,6 +1810,8 @@ static bool edbm_edge_split_selected_verts(wmOperator *op, Object *obedit, BMEdi
     }
   }
 
+  BM_custom_loop_normals_to_vector_layer(em->bm);
+
   if (!EDBM_op_callf(em,
                      op,
                      "split_edges edges=%he verts=%hv use_verts=%b",
@@ -1835,6 +1842,8 @@ static bool edbm_edge_split_selected_verts(wmOperator *op, Object *obedit, BMEdi
       }
     }
   }
+
+  BM_custom_loop_normals_from_vector_layer(em->bm, false);
 
   EDBM_select_flush(em);
   EDBM_update_generic(obedit->data, true, true);
@@ -1895,7 +1904,7 @@ void MESH_OT_edge_split(wmOperatorType *ot)
        "VERT",
        0,
        "Faces & Edges by Vertices",
-       "Split faces & edges connected to selected vertices"},
+       "Split faces and edges connected to selected vertices"},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -4073,7 +4082,7 @@ static int edbm_knife_cut_exec(bContext *C, wmOperator *op)
         isect = bm_edge_seg_isect(sco_a, sco_b, mouse_path, len, mode, &isected);
 
         if (isect != 0.0f) {
-          if (mode != KNIFE_MULTICUT && mode != KNIFE_MIDPOINT) {
+          if (!ELEM(mode, KNIFE_MULTICUT, KNIFE_MIDPOINT)) {
             BMO_slot_map_float_insert(&bmop, slot_edge_percents, be, isect);
           }
         }
@@ -4233,24 +4242,26 @@ static Base *mesh_separate_arrays(Main *bmain,
                                   BMFace **faces,
                                   uint faces_len)
 {
+  const BMAllocTemplate bm_new_allocsize = {
+      .totvert = verts_len,
+      .totedge = edges_len,
+      .totloop = faces_len * 3,
+      .totface = faces_len,
+  };
+  const bool use_custom_normals = (bm_old->lnor_spacearr != NULL);
+
   Base *base_new;
   Object *obedit = base_old->object;
-  BMesh *bm_new;
 
-  bm_new = BM_mesh_create(&bm_mesh_allocsize_default,
-                          &((struct BMeshCreateParams){
-                              .use_toolflags = true,
-                          }));
+  BMesh *bm_new = BM_mesh_create(&bm_new_allocsize, &((struct BMeshCreateParams){0}));
 
-  CustomData_copy(&bm_old->vdata, &bm_new->vdata, CD_MASK_BMESH.vmask, CD_CALLOC, 0);
-  CustomData_copy(&bm_old->edata, &bm_new->edata, CD_MASK_BMESH.emask, CD_CALLOC, 0);
-  CustomData_copy(&bm_old->ldata, &bm_new->ldata, CD_MASK_BMESH.lmask, CD_CALLOC, 0);
-  CustomData_copy(&bm_old->pdata, &bm_new->pdata, CD_MASK_BMESH.pmask, CD_CALLOC, 0);
-
-  CustomData_bmesh_init_pool(&bm_new->vdata, verts_len, BM_VERT);
-  CustomData_bmesh_init_pool(&bm_new->edata, edges_len, BM_EDGE);
-  CustomData_bmesh_init_pool(&bm_new->ldata, faces_len * 3, BM_LOOP);
-  CustomData_bmesh_init_pool(&bm_new->pdata, faces_len, BM_FACE);
+  if (use_custom_normals) {
+    /* Needed so the temporary normal layer is copied too. */
+    BM_mesh_copy_init_customdata_all_layers(bm_new, bm_old, BM_ALL, &bm_new_allocsize);
+  }
+  else {
+    BM_mesh_copy_init_customdata(bm_new, bm_old, &bm_new_allocsize);
+  }
 
   /* Take into account user preferences for duplicating actions. */
   const eDupli_ID_Flags dupflag = USER_DUP_MESH | (U.dupflag & USER_DUP_ACT);
@@ -4269,6 +4280,10 @@ static Base *mesh_separate_arrays(Main *bmain,
   ED_object_base_select(base_new, BA_SELECT);
 
   BM_mesh_copy_arrays(bm_old, bm_new, verts, verts_len, edges, edges_len, faces, faces_len);
+
+  if (use_custom_normals) {
+    BM_custom_loop_normals_from_vector_layer(bm_new, false);
+  }
 
   for (uint i = 0; i < verts_len; i++) {
     BM_vert_kill(bm_old, verts[i]);
@@ -4431,6 +4446,8 @@ static bool mesh_separate_loose(
   if (clear_object_data) {
     ED_mesh_geometry_clear(base_old->object->data);
   }
+
+  BM_custom_loop_normals_to_vector_layer(bm_old);
 
   /* Separate out all groups except the first. */
   uint group_ofs[3] = {UNPACK3(groups[0])};
@@ -5276,6 +5293,8 @@ static int edbm_quads_convert_to_tris_exec(bContext *C, wmOperator *op)
     BMOIter oiter;
     BMFace *f;
 
+    BM_custom_loop_normals_to_vector_layer(em->bm);
+
     EDBM_op_init(em,
                  &bmop,
                  op,
@@ -5299,6 +5318,8 @@ static int edbm_quads_convert_to_tris_exec(bContext *C, wmOperator *op)
     if (!EDBM_op_finish(em, &bmop, op, true)) {
       continue;
     }
+
+    BM_custom_loop_normals_from_vector_layer(em->bm, false);
 
     EDBM_update_generic(obedit->data, true, true);
   }
@@ -5989,6 +6010,8 @@ static int edbm_dissolve_limited_exec(bContext *C, wmOperator *op)
       dissolve_flag = BM_ELEM_SELECT;
     }
 
+    BM_custom_loop_normals_to_vector_layer(em->bm);
+
     EDBM_op_call_and_selectf(
         em,
         op,
@@ -6000,6 +6023,8 @@ static int edbm_dissolve_limited_exec(bContext *C, wmOperator *op)
         angle_limit,
         use_dissolve_boundaries,
         delimit);
+
+    BM_custom_loop_normals_from_vector_layer(em->bm, false);
 
     EDBM_update_generic(obedit->data, true, true);
   }
@@ -6225,12 +6250,16 @@ static int edbm_split_exec(bContext *C, wmOperator *op)
     if ((em->bm->totvertsel == 0) && (em->bm->totedgesel == 0) && (em->bm->totfacesel == 0)) {
       continue;
     }
+    BM_custom_loop_normals_to_vector_layer(em->bm);
+
     BMOperator bmop;
     EDBM_op_init(em, &bmop, op, "split geom=%hvef use_only_faces=%b", BM_ELEM_SELECT, false);
     BMO_op_exec(em->bm, &bmop);
     BM_mesh_elem_hflag_disable_all(em->bm, BM_VERT | BM_EDGE | BM_FACE, BM_ELEM_SELECT, false);
     BMO_slot_buffer_hflag_enable(
         em->bm, bmop.slots_out, "geom.out", BM_ALL_NOLOOP, BM_ELEM_SELECT, true);
+
+    BM_custom_loop_normals_from_vector_layer(em->bm, false);
 
     if (!EDBM_op_finish(em, &bmop, op, true)) {
       continue;

@@ -1266,7 +1266,7 @@ static int edbm_select_similar_region_exec(bContext *C, wmOperator *op)
 
   groups_array = MEM_mallocN(sizeof(*groups_array) * bm->totfacesel, __func__);
   group_tot = BM_mesh_calc_face_groups(
-      bm, groups_array, &group_index, NULL, NULL, BM_ELEM_SELECT, BM_VERT);
+      bm, groups_array, &group_index, NULL, NULL, NULL, BM_ELEM_SELECT, BM_VERT);
 
   BM_mesh_elem_table_ensure(bm, BM_FACE);
 
@@ -2822,7 +2822,7 @@ bool EDBM_select_interior_faces(BMEditMesh *em)
 
   fgroup_array = MEM_mallocN(sizeof(*fgroup_array) * bm->totface, __func__);
   fgroup_len = BM_mesh_calc_face_groups(
-      bm, fgroup_array, &fgroup_index, bm_interior_loop_filter_fn, NULL, 0, BM_EDGE);
+      bm, fgroup_array, &fgroup_index, bm_interior_loop_filter_fn, NULL, NULL, 0, BM_EDGE);
 
   int *fgroup_recalc_stack = MEM_mallocN(sizeof(*fgroup_recalc_stack) * fgroup_len, __func__);
   STACK_DECLARE(fgroup_recalc_stack);
@@ -3574,7 +3574,7 @@ static int edbm_select_linked_pick_invoke(bContext *C, wmOperator *op, const wmE
 
   /* To support redo. */
   {
-    /* Note that the `base_index` can't be used as the index depends on the view-port
+    /* Note that the `base_index` can't be used as the index depends on the 3D Viewport
      * which might not be available on redo. */
     BM_mesh_elem_index_ensure(bm, ele->head.htype);
     int object_index;
@@ -4552,7 +4552,8 @@ void MESH_OT_select_non_manifold(wmOperatorType *ot)
   /* edges */
   RNA_def_boolean(ot->srna, "use_wire", true, "Wire", "Wire edges");
   RNA_def_boolean(ot->srna, "use_boundary", true, "Boundaries", "Boundary edges");
-  RNA_def_boolean(ot->srna, "use_multi_face", true, "Multiple Faces", "Edges shared by 3+ faces");
+  RNA_def_boolean(
+      ot->srna, "use_multi_face", true, "Multiple Faces", "Edges shared by more than two faces");
   RNA_def_boolean(ot->srna,
                   "use_non_contiguous",
                   true,

@@ -1481,7 +1481,7 @@ void GHOST_SystemWayland::getAllDisplayDimensions(GHOST_TUns32 &width, GHOST_TUn
   getMainDisplayDimensions(width, height);
 }
 
-GHOST_IContext *GHOST_SystemWayland::createOffscreenContext()
+GHOST_IContext *GHOST_SystemWayland::createOffscreenContext(GHOST_GLSettings glSettings)
 {
   /* Create new off-screen window. */
   wl_surface *os_surface = wl_compositor_create_surface(compositor());
@@ -1527,7 +1527,7 @@ GHOST_IWindow *GHOST_SystemWayland::createWindow(const char *title,
                                                  GHOST_TDrawingContextType type,
                                                  GHOST_GLSettings glSettings,
                                                  const bool exclusive,
-                                                 const bool /*is_dialog*/,
+                                                 const bool is_dialog,
                                                  const GHOST_IWindow *parentWindow)
 {
   GHOST_WindowWayland *window = new GHOST_WindowWayland(
@@ -1540,6 +1540,7 @@ GHOST_IWindow *GHOST_SystemWayland::createWindow(const char *title,
       state,
       parentWindow,
       type,
+      is_dialog,
       ((glSettings.flags & GHOST_glStereoVisual) != 0),
       exclusive);
 

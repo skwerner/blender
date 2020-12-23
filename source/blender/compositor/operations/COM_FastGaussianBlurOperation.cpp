@@ -16,7 +16,7 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#include <limits.h>
+#include <climits>
 
 #include "BLI_utildefines.h"
 #include "COM_FastGaussianBlurOperation.h"
@@ -24,7 +24,7 @@
 
 FastGaussianBlurOperation::FastGaussianBlurOperation() : BlurBaseOperation(COM_DT_COLOR)
 {
-  this->m_iirgaus = NULL;
+  this->m_iirgaus = nullptr;
 }
 
 void FastGaussianBlurOperation::executePixel(float output[4], int x, int y, void *data)
@@ -47,18 +47,17 @@ bool FastGaussianBlurOperation::determineDependingAreaOfInterest(
   if (operation->determineDependingAreaOfInterest(&sizeInput, readOperation, output)) {
     return true;
   }
-  else {
-    if (this->m_iirgaus) {
-      return false;
-    }
-    else {
-      newInput.xmin = 0;
-      newInput.ymin = 0;
-      newInput.xmax = this->getWidth();
-      newInput.ymax = this->getHeight();
-    }
-    return NodeOperation::determineDependingAreaOfInterest(&newInput, readOperation, output);
+
+  if (this->m_iirgaus) {
+    return false;
   }
+
+  newInput.xmin = 0;
+  newInput.ymin = 0;
+  newInput.xmax = this->getWidth();
+  newInput.ymax = this->getHeight();
+
+  return NodeOperation::determineDependingAreaOfInterest(&newInput, readOperation, output);
 }
 
 void FastGaussianBlurOperation::initExecution()
@@ -71,7 +70,7 @@ void FastGaussianBlurOperation::deinitExecution()
 {
   if (this->m_iirgaus) {
     delete this->m_iirgaus;
-    this->m_iirgaus = NULL;
+    this->m_iirgaus = nullptr;
   }
   BlurBaseOperation::deinitMutex();
 }
@@ -257,12 +256,12 @@ void FastGaussianBlurOperation::IIR_gauss(MemoryBuffer *src,
 }
 
 ///
-FastGaussianBlurValueOperation::FastGaussianBlurValueOperation() : NodeOperation()
+FastGaussianBlurValueOperation::FastGaussianBlurValueOperation()
 {
   this->addInputSocket(COM_DT_VALUE);
   this->addOutputSocket(COM_DT_VALUE);
-  this->m_iirgaus = NULL;
-  this->m_inputprogram = NULL;
+  this->m_iirgaus = nullptr;
+  this->m_inputprogram = nullptr;
   this->m_sigma = 1.0f;
   this->m_overlay = 0;
   setComplex(true);
@@ -282,12 +281,12 @@ bool FastGaussianBlurValueOperation::determineDependingAreaOfInterest(
   if (this->m_iirgaus) {
     return false;
   }
-  else {
-    newInput.xmin = 0;
-    newInput.ymin = 0;
-    newInput.xmax = this->getWidth();
-    newInput.ymax = this->getHeight();
-  }
+
+  newInput.xmin = 0;
+  newInput.ymin = 0;
+  newInput.xmax = this->getWidth();
+  newInput.ymax = this->getHeight();
+
   return NodeOperation::determineDependingAreaOfInterest(&newInput, readOperation, output);
 }
 
@@ -301,7 +300,7 @@ void FastGaussianBlurValueOperation::deinitExecution()
 {
   if (this->m_iirgaus) {
     delete this->m_iirgaus;
-    this->m_iirgaus = NULL;
+    this->m_iirgaus = nullptr;
   }
   deinitMutex();
 }

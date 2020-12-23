@@ -57,7 +57,6 @@
 #include "BKE_report.h"
 #include "BKE_scene.h"
 #include "BKE_screen.h"
-#include "BKE_sequencer.h"
 #include "BKE_undo_system.h"
 
 #include "DEG_depsgraph.h"
@@ -82,6 +81,8 @@
 
 #include "RNA_access.h"
 #include "RNA_define.h"
+
+#include "SEQ_sequencer.h"
 
 #include "BLO_undofile.h"
 
@@ -220,12 +221,10 @@ static void image_buffer_rect_update(RenderJob *rj,
         ibuf->userflags |= IB_DISPLAY_BUFFER_INVALID;
         return;
       }
-      else {
-        if (rr->renlay == NULL) {
-          return;
-        }
-        rectf = RE_RenderLayerGetPass(rr->renlay, RE_PASSNAME_COMBINED, viewname);
+      if (rr->renlay == NULL) {
+        return;
       }
+      rectf = RE_RenderLayerGetPass(rr->renlay, RE_PASSNAME_COMBINED, viewname);
     }
     if (rectf == NULL) {
       return;
@@ -365,7 +364,7 @@ static int screen_render_exec(bContext *C, wmOperator *op)
 
   RE_SetReports(re, NULL);
 
-  // no redraw needed, we leave state as we entered it
+  /* No redraw needed, we leave state as we entered it. */
   ED_update_for_newframe(mainp, CTX_data_depsgraph_pointer(C));
 
   WM_event_add_notifier(C, NC_SCENE | ND_RENDER_RESULT, scene);
@@ -388,7 +387,7 @@ static void make_renderinfo_string(const RenderStats *rs,
                                    const char *error,
                                    char *str)
 {
-  char info_time_str[32];  // used to be extern to header_info.c
+  char info_time_str[32]; /* used to be extern to header_info.c */
   uintptr_t mem_in_use, peak_memory;
   float megs_used_memory, megs_peak_memory;
   char *spos = str;
@@ -437,44 +436,12 @@ static void make_renderinfo_string(const RenderStats *rs,
     }
   }
   else {
-    if (rs->totvert || rs->totface || rs->tothalo || rs->totstrand || rs->totlamp) {
-      spos += sprintf(spos, "| ");
-    }
-
-    if (rs->totvert) {
-      spos += sprintf(spos, TIP_("Ve:%d "), rs->totvert);
-    }
-    if (rs->totface) {
-      spos += sprintf(spos, TIP_("Fa:%d "), rs->totface);
-    }
-    if (rs->tothalo) {
-      spos += sprintf(spos, TIP_("Ha:%d "), rs->tothalo);
-    }
-    if (rs->totstrand) {
-      spos += sprintf(spos, TIP_("St:%d "), rs->totstrand);
-    }
-    if (rs->totlamp) {
-      spos += sprintf(spos, TIP_("Li:%d "), rs->totlamp);
-    }
-
     if (rs->mem_peak == 0.0f) {
       spos += sprintf(spos, TIP_("| Mem:%.2fM (Peak %.2fM) "), megs_used_memory, megs_peak_memory);
     }
     else {
       spos += sprintf(spos, TIP_("| Mem:%.2fM, Peak: %.2fM "), rs->mem_used, rs->mem_peak);
     }
-
-    if (rs->curfield) {
-      spos += sprintf(spos, TIP_("Field %d "), rs->curfield);
-    }
-    if (rs->curblur) {
-      spos += sprintf(spos, TIP_("Blur %d "), rs->curblur);
-    }
-  }
-
-  /* full sample */
-  if (rs->curfsa) {
-    spos += sprintf(spos, TIP_("| Full Sample %d "), rs->curfsa);
   }
 
   /* extra info */
@@ -546,7 +513,7 @@ static void render_image_update_pass_and_layer(RenderJob *rj, RenderResult *rr, 
       LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
         if (area->spacetype == SPACE_IMAGE) {
           SpaceImage *sima = area->spacedata.first;
-          // area->spacedata might be empty when toggling fullscreen mode.
+          /* area->spacedata might be empty when toggling full-screen mode. */
           if (sima != NULL && sima->image == rj->image) {
             if (first_area == NULL) {
               first_area = area;
@@ -597,7 +564,7 @@ static void image_rect_update(void *rjv, RenderResult *rr, volatile rcti *renrec
     rj->image_outdated = true;
     return;
   }
-  else if (rj->image_outdated) {
+  if (rj->image_outdated) {
     /* update entire render */
     rj->image_outdated = false;
     BKE_image_signal(rj->main, ima, NULL, IMA_SIGNAL_COLORMANAGE);
@@ -624,6 +591,7 @@ static void image_rect_update(void *rjv, RenderResult *rr, volatile rcti *renrec
         ED_draw_imbuf_method(ibuf) != IMAGE_DRAW_METHOD_GLSL) {
       image_buffer_rect_update(rj, rr, ibuf, &rj->iuser, renrect, viewname);
     }
+    ima->gpuflag |= IMA_GPU_REFRESH;
 
     /* make jobs timer to send notifier */
     *(rj->do_update) = true;
@@ -963,9 +931,9 @@ static int screen_render_invoke(bContext *C, wmOperator *op, const wmEvent *even
    * since sequence rendering can call that recursively... (peter) */
   BKE_sequencer_cache_cleanup(scene);
 
-  // store spare
-  // get view3d layer, local layer, make this nice api call to render
-  // store spare
+  /* store spare
+   * get view3d layer, local layer, make this nice api call to render
+   * store spare */
 
   /* ensure at least 1 area shows result */
   area = render_view_open(C, event->x, event->y, op->reports);
@@ -1067,8 +1035,7 @@ static int screen_render_invoke(bContext *C, wmOperator *op, const wmEvent *even
 
   /* store actual owner of job, so modal operator could check for it,
    * the reason of this is that active scene could change when rendering
-   * several layers from compositor [#31800]
-   */
+   * several layers from compositor T31800. */
   op->customdata = scene;
 
   WM_jobs_start(CTX_wm_manager(C), wm_job);

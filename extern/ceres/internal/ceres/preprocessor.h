@@ -31,6 +31,7 @@
 #ifndef CERES_INTERNAL_PREPROCESSOR_H_
 #define CERES_INTERNAL_PREPROCESSOR_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -38,7 +39,6 @@
 #include "ceres/evaluator.h"
 #include "ceres/internal/eigen.h"
 #include "ceres/internal/port.h"
-#include "ceres/internal/scoped_ptr.h"
 #include "ceres/iteration_callback.h"
 #include "ceres/linear_solver.h"
 #include "ceres/minimizer.h"
@@ -67,7 +67,7 @@ struct PreprocessedProblem;
 //
 // The output of the Preprocessor is stored in a PreprocessedProblem
 // object.
-class Preprocessor {
+class CERES_EXPORT_INTERNAL Preprocessor {
  public:
   // Factory.
   static Preprocessor* Create(MinimizerType minimizer_type);
@@ -80,9 +80,7 @@ class Preprocessor {
 // A PreprocessedProblem is the result of running the Preprocessor on
 // a Problem and Solver::Options object.
 struct PreprocessedProblem {
-  PreprocessedProblem()
-      : fixed_cost(0.0) {
-  }
+  PreprocessedProblem() : fixed_cost(0.0) {}
 
   std::string error;
   Solver::Options options;
@@ -91,14 +89,14 @@ struct PreprocessedProblem {
   Minimizer::Options minimizer_options;
 
   ProblemImpl* problem;
-  scoped_ptr<ProblemImpl> gradient_checking_problem;
-  scoped_ptr<Program> reduced_program;
-  scoped_ptr<LinearSolver> linear_solver;
-  scoped_ptr<IterationCallback> logging_callback;
-  scoped_ptr<IterationCallback> state_updating_callback;
+  std::unique_ptr<ProblemImpl> gradient_checking_problem;
+  std::unique_ptr<Program> reduced_program;
+  std::unique_ptr<LinearSolver> linear_solver;
+  std::unique_ptr<IterationCallback> logging_callback;
+  std::unique_ptr<IterationCallback> state_updating_callback;
 
-  shared_ptr<Evaluator> evaluator;
-  shared_ptr<CoordinateDescentMinimizer> inner_iteration_minimizer;
+  std::shared_ptr<Evaluator> evaluator;
+  std::shared_ptr<CoordinateDescentMinimizer> inner_iteration_minimizer;
 
   std::vector<double*> removed_parameter_blocks;
   Vector reduced_parameters;
@@ -107,8 +105,9 @@ struct PreprocessedProblem {
 
 // Common functions used by various preprocessors.
 
-// If OpenMP support is not available and user has requested more than
-// one thread, then set the *_num_threads options as needed to 1.
+// If the user has specified a num_threads > the maximum number of threads
+// available from the compiled threading model, bound the number of threads
+// to the maximum.
 void ChangeNumThreadsIfNeeded(Solver::Options* options);
 
 // Extract the effective parameter vector from the preprocessed

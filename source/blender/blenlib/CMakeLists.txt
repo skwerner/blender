@@ -32,11 +32,13 @@ set(INC
 set(INC_SYS
   ${ZLIB_INCLUDE_DIRS}
   ${FREETYPE_INCLUDE_DIRS}
+  ${GMP_INCLUDE_DIRS}
 )
 
 set(SRC
   intern/BLI_args.c
   intern/BLI_array.c
+  intern/BLI_assert.c
   intern/BLI_dial_2d.c
   intern/BLI_dynstr.c
   intern/BLI_filelist.c
@@ -63,7 +65,7 @@ set(SRC
   intern/boxpack_2d.c
   intern/buffer.c
   intern/convexhull_2d.c
-  intern/delaunay_2d.c
+  intern/delaunay_2d.cc
   intern/dot_export.cc
   intern/dynlib.c
   intern/easing.c
@@ -86,7 +88,9 @@ set(SRC
   intern/listbase.c
   intern/math_base.c
   intern/math_base_inline.c
+  intern/math_base_safe_inline.c
   intern/math_bits_inline.c
+  intern/math_boolean.cc
   intern/math_color.c
   intern/math_color_blend_inline.c
   intern/math_color_inline.c
@@ -97,18 +101,22 @@ set(SRC
   intern/math_rotation.c
   intern/math_solvers.c
   intern/math_statistics.c
+  intern/math_vec.cc
   intern/math_vector.c
   intern/math_vector_inline.c
   intern/memory_utils.c
+  intern/mesh_boolean.cc
+  intern/mesh_intersect.cc
   intern/noise.c
   intern/path_util.c
   intern/polyfill_2d.c
   intern/polyfill_2d_beautify.c
   intern/quadric.c
-  intern/rand.c
+  intern/rand.cc
   intern/rct.c
   intern/scanfill.c
   intern/scanfill_utils.c
+  intern/session_uuid.c
   intern/smallhash.c
   intern/sort.c
   intern/sort_utils.c
@@ -116,6 +124,7 @@ set(SRC
   intern/storage.c
   intern/string.c
   intern/string_cursor_utf8.c
+  intern/string_search.cc
   intern/string_utf8.c
   intern/string_utils.c
   intern/system.c
@@ -124,7 +133,7 @@ set(SRC
   intern/task_pool.cc
   intern/task_range.cc
   intern/task_scheduler.cc
-  intern/threads.c
+  intern/threads.cc
   intern/time.c
   intern/timecode.c
   intern/timeit.cc
@@ -139,16 +148,15 @@ set(SRC
   intern/list_sort_impl.h
 
 
-  BLI_asan.h
   BLI_alloca.h
   BLI_allocator.hh
   BLI_args.h
   BLI_array.h
   BLI_array.hh
-  BLI_array_ref.hh
   BLI_array_store.h
   BLI_array_store_utils.h
   BLI_array_utils.h
+  BLI_asan.h
   BLI_assert.h
   BLI_astar.h
   BLI_bitmap.h
@@ -164,9 +172,12 @@ set(SRC
   BLI_convexhull_2d.h
   BLI_delaunay_2d.h
   BLI_dial_2d.h
+  BLI_disjoint_set.hh
   BLI_dlrbTree.h
   BLI_dot_export.hh
   BLI_dot_export_attribute_enums.hh
+  BLI_double2.hh
+  BLI_double3.hh
   BLI_dynlib.h
   BLI_dynstr.h
   BLI_easing.h
@@ -187,8 +198,10 @@ set(SRC
   BLI_hash_md5.h
   BLI_hash_mm2a.h
   BLI_hash_mm3.h
+  BLI_hash_tables.hh
   BLI_heap.h
   BLI_heap_simple.h
+  BLI_index_mask.hh
   BLI_index_range.hh
   BLI_iterator.h
   BLI_jitter_2d.h
@@ -196,6 +209,7 @@ set(SRC
   BLI_kdtree.h
   BLI_kdtree_impl.h
   BLI_lasso_2d.h
+  BLI_linear_allocator.hh
   BLI_link_utils.h
   BLI_linklist.h
   BLI_linklist_lockfree.h
@@ -203,15 +217,19 @@ set(SRC
   BLI_listbase.h
   BLI_listbase_wrapper.hh
   BLI_map.hh
+  BLI_map_slots.hh
   BLI_math.h
   BLI_math_base.h
+  BLI_math_base_safe.h
   BLI_math_bits.h
+  BLI_math_boolean.hh
   BLI_math_color.h
   BLI_math_color_blend.h
   BLI_math_geom.h
   BLI_math_inline.h
   BLI_math_interp.h
   BLI_math_matrix.h
+  BLI_math_mpq.hh
   BLI_math_rotation.h
   BLI_math_solvers.h
   BLI_math_statistics.h
@@ -222,27 +240,36 @@ set(SRC
   BLI_memory_utils.h
   BLI_memory_utils.hh
   BLI_mempool.h
+  BLI_mesh_boolean.hh
+  BLI_mesh_intersect.hh
+  BLI_mpq2.hh
+  BLI_mpq3.hh
+  BLI_multi_value_map.hh
   BLI_noise.h
-  BLI_open_addressing.hh
-  BLI_optional.hh
   BLI_path_util.h
   BLI_polyfill_2d.h
   BLI_polyfill_2d_beautify.h
+  BLI_probing_strategies.hh
   BLI_quadric.h
   BLI_rand.h
+  BLI_rand.hh
   BLI_rect.h
+  BLI_resource_collector.hh
   BLI_scanfill.h
+  BLI_session_uuid.h
   BLI_set.hh
+  BLI_set_slots.hh
   BLI_smallhash.h
   BLI_sort.h
   BLI_sort_utils.h
+  BLI_span.hh
   BLI_stack.h
   BLI_stack.hh
   BLI_strict_flags.h
   BLI_string.h
   BLI_string_cursor_utf8.h
-  BLI_string_map.hh
   BLI_string_ref.hh
+  BLI_string_search.h
   BLI_string_utf8.h
   BLI_string_utils.h
   BLI_sys_types.h
@@ -252,6 +279,7 @@ set(SRC
   BLI_timecode.h
   BLI_timeit.hh
   BLI_timer.h
+  BLI_user_counter.hh
   BLI_utildefines.h
   BLI_utildefines_iter.h
   BLI_utildefines_stack.h
@@ -259,7 +287,9 @@ set(SRC
   BLI_utility_mixins.hh
   BLI_uvproject.h
   BLI_vector.hh
+  BLI_vector_adaptor.hh
   BLI_vector_set.hh
+  BLI_vector_set_slots.hh
   BLI_vfontdata.h
   BLI_voronoi_2d.h
   BLI_voxel.h
@@ -275,6 +305,7 @@ set(LIB
   extern_wcwidth
 
   ${FREETYPE_LIBRARY}
+  ${ZLIB_LIBRARIES}
 )
 
 if(WITH_MEM_VALGRIND)
@@ -290,6 +321,18 @@ if(WITH_TBB)
 
   list(APPEND LIB
     ${TBB_LIBRARIES}
+  )
+endif()
+
+if(WITH_GMP)
+  add_definitions(-DWITH_GMP)
+
+  list(APPEND INC_SYS
+    ${GMP_INCLUDE_DIRS}
+  )
+
+  list(APPEND LIB
+    ${GMP_LIBRARIES}
   )
 endif()
 
@@ -321,6 +364,7 @@ endif()
 # no need to compile object files for inline headers.
 set_source_files_properties(
   intern/math_base_inline.c
+  intern/math_base_safe_inline.c
   intern/math_bits_inline.c
   intern/math_color_blend_inline.c
   intern/math_color_inline.c
@@ -330,3 +374,68 @@ set_source_files_properties(
 )
 
 blender_add_lib(bf_blenlib "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
+
+if(WITH_GTESTS)
+  set(TEST_SRC
+    tests/BLI_array_store_test.cc
+    tests/BLI_array_test.cc
+    tests/BLI_array_utils_test.cc
+    tests/BLI_delaunay_2d_test.cc
+    tests/BLI_disjoint_set_test.cc
+    tests/BLI_edgehash_test.cc
+    tests/BLI_expr_pylike_eval_test.cc
+    tests/BLI_ghash_test.cc
+    tests/BLI_hash_mm2a_test.cc
+    tests/BLI_heap_simple_test.cc
+    tests/BLI_heap_test.cc
+    tests/BLI_index_mask_test.cc
+    tests/BLI_index_range_test.cc
+    tests/BLI_kdopbvh_test.cc
+    tests/BLI_linear_allocator_test.cc
+    tests/BLI_linklist_lockfree_test.cc
+    tests/BLI_listbase_test.cc
+    tests/BLI_map_test.cc
+    tests/BLI_math_base_safe_test.cc
+    tests/BLI_math_base_test.cc
+    tests/BLI_math_bits_test.cc
+    tests/BLI_math_color_test.cc
+    tests/BLI_math_geom_test.cc
+    tests/BLI_math_matrix_test.cc
+    tests/BLI_math_rotation_test.cc
+    tests/BLI_math_solvers_test.cc
+    tests/BLI_math_vector_test.cc
+    tests/BLI_memiter_test.cc
+    tests/BLI_memory_utils_test.cc
+    tests/BLI_mesh_boolean_test.cc
+    tests/BLI_mesh_intersect_test.cc
+    tests/BLI_multi_value_map_test.cc
+    tests/BLI_path_util_test.cc
+    tests/BLI_polyfill_2d_test.cc
+    tests/BLI_ressource_strings.h
+    tests/BLI_session_uuid_test.cc
+    tests/BLI_set_test.cc
+    tests/BLI_span_test.cc
+    tests/BLI_stack_cxx_test.cc
+    tests/BLI_stack_test.cc
+    tests/BLI_string_ref_test.cc
+    tests/BLI_string_search_test.cc
+    tests/BLI_string_test.cc
+    tests/BLI_string_utf8_test.cc
+    tests/BLI_task_graph_test.cc
+    tests/BLI_task_test.cc
+    tests/BLI_vector_set_test.cc
+    tests/BLI_vector_test.cc
+
+    tests/BLI_exception_safety_test_utils.hh
+  )
+  set(TEST_INC
+    ../imbuf
+  )
+  set(TEST_LIB
+    bf_blenlib
+  )
+  include(GTestTesting)
+  blender_add_test_executable(blenlib "${TEST_SRC}" "${INC};${TEST_INC}" "${INC_SYS}" "${LIB};${TEST_LIB}")
+
+  add_subdirectory(tests/performance)
+endif()

@@ -25,8 +25,8 @@
 
 #include "intern/builder/deg_builder_nodes.h"
 
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstdlib>
 
 #include "MEM_guardedalloc.h"
 
@@ -54,7 +54,7 @@
 #include "intern/node/deg_node_component.h"
 #include "intern/node/deg_node_operation.h"
 
-namespace DEG {
+namespace blender::deg {
 
 void DepsgraphNodeBuilder::build_pose_constraints(Object *object,
                                                   bPoseChannel *pchan,
@@ -117,6 +117,13 @@ void DepsgraphNodeBuilder::build_splineik_pose(Object *object,
 
   /* Find the chain's root. */
   bPoseChannel *rootchan = BKE_armature_splineik_solver_find_root(pchan, data);
+
+  if (has_operation_node(&object->id,
+                         NodeType::EVAL_POSE,
+                         rootchan->name,
+                         OperationCode::POSE_SPLINE_IK_SOLVER)) {
+    return;
+  }
 
   /* Operation node for evaluating/running Spline IK Solver.
    * Store the "root bone" of this chain in the solver, so it knows where to
@@ -283,7 +290,7 @@ void DepsgraphNodeBuilder::build_rig(Object *object, bool is_object_visible)
   }
 }
 
-void DepsgraphNodeBuilder::build_proxy_rig(Object *object)
+void DepsgraphNodeBuilder::build_proxy_rig(Object *object, bool is_object_visible)
 {
   bArmature *armature = (bArmature *)object->data;
   OperationNode *op_node;
@@ -326,6 +333,11 @@ void DepsgraphNodeBuilder::build_proxy_rig(Object *object)
           &object->id, NodeType::PARAMETERS, OperationCode::PARAMETERS_EVAL, nullptr, pchan->name);
     }
 
+    /* Custom shape. */
+    if (pchan->custom != nullptr) {
+      build_object(-1, pchan->custom, DEG_ID_LINKED_INDIRECTLY, is_object_visible);
+    }
+
     pchan_index++;
   }
   op_node = add_operation_node(&object->id,
@@ -339,4 +351,4 @@ void DepsgraphNodeBuilder::build_proxy_rig(Object *object)
   op_node->set_as_exit();
 }
 
-}  // namespace DEG
+}  // namespace blender::deg

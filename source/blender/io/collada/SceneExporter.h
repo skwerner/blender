@@ -18,8 +18,7 @@
  * \ingroup collada
  */
 
-#ifndef __SCENEEXPORTER_H__
-#define __SCENEEXPORTER_H__
+#pragma once
 
 #include <math.h>
 #include <stdio.h>
@@ -81,8 +80,6 @@
 #include "ArmatureExporter.h"
 #include "ExportSettings.h"
 
-extern void bc_get_children(std::vector<Object *> &child_set, Object *ob, ViewLayer *view_layer);
-
 class SceneExporter : COLLADASW::LibraryVisualScenes,
                       protected TransformWriter,
                       protected InstanceWriter {
@@ -110,5 +107,3 @@ class SceneExporter : COLLADASW::LibraryVisualScenes,
   void writeNodeList(std::vector<Object *> &child_objects, Object *parent);
   void writeNode(Object *ob);
 };
-
-#endif

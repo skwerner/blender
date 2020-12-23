@@ -35,9 +35,7 @@
 #include "transform_mode.h"
 
 /* -------------------------------------------------------------------- */
-/* Transform (Align) */
-
-/** \name Transform Align
+/** \name Transform (Align)
  * \{ */
 
 static void applyAlign(TransInfo *t, const int UNUSED(mval[2]))
@@ -51,10 +49,6 @@ static void applyAlign(TransInfo *t, const int UNUSED(mval[2]))
     TransData *td = tc->data;
     for (i = 0; i < tc->data_len; i++, td++) {
       float mat[3][3], invmat[3][3];
-
-      if (td->flag & TD_NOACTION) {
-        break;
-      }
 
       if (td->flag & TD_SKIP) {
         continue;

@@ -7,6 +7,7 @@ from bpy.props import (
 DIRNAME, FILENAME = os.path.split(__file__)
 IDNAME = os.path.splitext(FILENAME)[0]
 
+
 def update_fn(_self, _context):
     load()
 
@@ -32,14 +33,15 @@ class Prefs(bpy.types.KeyConfigPreferences):
     )
 
     def draw(self, layout):
-        split = layout.split()
-        col = split.column()
-        col.label(text="Select With:")
-        col.row().prop(self, "select_mouse", expand=True)
-        split.column()
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+
+        col = layout.column()
+        col.row().prop(self, "select_mouse", text="Select with Mouse Button", expand=True)
 
 
 blender_default = bpy.utils.execfile(os.path.join(DIRNAME, "keymap_data", "blender_default.py"))
+
 
 def load():
     from sys import platform
@@ -67,7 +69,6 @@ def load():
     if platform == 'darwin':
         from bl_keymap_utils.platform_helpers import keyconfig_data_oskey_from_ctrl_for_macos
         keyconfig_data = keyconfig_data_oskey_from_ctrl_for_macos(keyconfig_data)
-
 
     keyconfig_init_from_data(kc, keyconfig_data)
 

@@ -25,8 +25,8 @@
 
 #include "intern/builder/deg_builder_nodes.h"
 
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstdlib>
 
 #include "MEM_guardedalloc.h"
 
@@ -96,7 +96,6 @@
 #include "BKE_pointcache.h"
 #include "BKE_rigidbody.h"
 #include "BKE_scene.h"
-#include "BKE_sequencer.h"
 #include "BKE_shader_fx.h"
 #include "BKE_simulation.h"
 #include "BKE_sound.h"
@@ -110,6 +109,8 @@
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
 
+#include "SEQ_sequencer.h"
+
 #include "intern/builder/deg_builder.h"
 #include "intern/depsgraph.h"
 #include "intern/depsgraph_type.h"
@@ -119,7 +120,7 @@
 #include "intern/node/deg_node_id.h"
 #include "intern/node/deg_node_operation.h"
 
-namespace DEG {
+namespace blender::deg {
 
 /* ************ */
 /* Node Builder */
@@ -179,7 +180,7 @@ IDNode *DepsgraphNodeBuilder::add_id_node(ID *id)
         OperationCode::COPY_ON_WRITE,
         "",
         -1);
-    graph_->operations.push_back(op_cow);
+    graph_->operations.append(op_cow);
   }
   return id_node;
 }
@@ -213,7 +214,7 @@ OperationNode *DepsgraphNodeBuilder::add_operation_node(ComponentNode *comp_node
   OperationNode *op_node = comp_node->find_operation(opcode, name, name_tag);
   if (op_node == nullptr) {
     op_node = comp_node->add_operation(op, opcode, name, name_tag);
-    graph_->operations.push_back(op_node);
+    graph_->operations.append(op_node);
   }
   else {
     fprintf(stderr,
@@ -347,7 +348,7 @@ void DepsgraphNodeBuilder::begin_build()
     entry_tag.opcode = op_node->opcode;
     entry_tag.name = op_node->name;
     entry_tag.name_tag = op_node->name_tag;
-    saved_entry_tags_.push_back(entry_tag);
+    saved_entry_tags_.append(entry_tag);
   }
 
   /* Make sure graph has no nodes left from previous state. */
@@ -510,7 +511,7 @@ void DepsgraphNodeBuilder::build_collection(LayerCollection *from_layer_collecti
     }
     else if (from_layer_collection == nullptr && !id_node->is_collection_fully_expanded) {
       /* Initially collection was built from layer now, and was requested
-       * to not recurs into object. But now it's asked to recurs into all objects. */
+       * to not recurse into object. But now it's asked to recurse into all objects. */
     }
     else {
       return;
@@ -594,7 +595,7 @@ void DepsgraphNodeBuilder::build_object(int base_index,
   }
   id_node->has_base |= (base_index != -1);
   /* Various flags, flushing from bases/collections. */
-  build_object_flags(base_index, object, linked_state);
+  build_object_from_layer(base_index, object, linked_state);
   /* Transform. */
   build_object_transform(object);
   /* Parent. */
@@ -662,6 +663,21 @@ void DepsgraphNodeBuilder::build_object(int base_index,
                      function_bind(BKE_object_sync_to_original, _1, object_cow));
 }
 
+void DepsgraphNodeBuilder::build_object_from_layer(int base_index,
+                                                   Object *object,
+                                                   eDepsNode_LinkedState_Type linked_state)
+{
+
+  OperationNode *entry_node = add_operation_node(
+      &object->id, NodeType::OBJECT_FROM_LAYER, OperationCode::OBJECT_FROM_LAYER_ENTRY);
+  entry_node->set_as_entry();
+  OperationNode *exit_node = add_operation_node(
+      &object->id, NodeType::OBJECT_FROM_LAYER, OperationCode::OBJECT_FROM_LAYER_EXIT);
+  exit_node->set_as_exit();
+
+  build_object_flags(base_index, object, linked_state);
+}
+
 void DepsgraphNodeBuilder::build_object_flags(int base_index,
                                               Object *object,
                                               eDepsNode_LinkedState_Type linked_state)
@@ -685,20 +701,20 @@ void DepsgraphNodeBuilder::build_object_flags(int base_index,
                                    is_from_set));
 }
 
-void DepsgraphNodeBuilder::build_object_proxy_from(Object *object, bool is_visible)
+void DepsgraphNodeBuilder::build_object_proxy_from(Object *object, bool is_object_visible)
 {
   if (object->proxy_from == nullptr) {
     return;
   }
-  build_object(-1, object->proxy_from, DEG_ID_LINKED_INDIRECTLY, is_visible);
+  build_object(-1, object->proxy_from, DEG_ID_LINKED_INDIRECTLY, is_object_visible);
 }
 
-void DepsgraphNodeBuilder::build_object_proxy_group(Object *object, bool is_visible)
+void DepsgraphNodeBuilder::build_object_proxy_group(Object *object, bool is_object_visible)
 {
   if (object->proxy_group == nullptr) {
     return;
   }
-  build_object(-1, object->proxy_group, DEG_ID_LINKED_INDIRECTLY, is_visible);
+  build_object(-1, object->proxy_group, DEG_ID_LINKED_INDIRECTLY, is_object_visible);
 }
 
 void DepsgraphNodeBuilder::build_object_instance_collection(Object *object, bool is_object_visible)
@@ -733,7 +749,7 @@ void DepsgraphNodeBuilder::build_object_data(Object *object, bool is_object_visi
       break;
     case OB_ARMATURE:
       if (ID_IS_LINKED(object) && object->proxy_from != nullptr) {
-        build_proxy_rig(object);
+        build_proxy_rig(object, is_object_visible);
       }
       else {
         build_rig(object, is_object_visible);
@@ -1110,6 +1126,14 @@ void DepsgraphNodeBuilder::build_rigidbody(Scene *scene)
       if (object->type != OB_MESH) {
         continue;
       }
+      if (object->rigidbody_object == nullptr) {
+        continue;
+      }
+
+      if (object->rigidbody_object->type == RBO_TYPE_PASSIVE) {
+        continue;
+      }
+
       /* Create operation for flushing results. */
       /* Object's transform component - where the rigidbody operation
        * lives. */
@@ -1175,7 +1199,7 @@ void DepsgraphNodeBuilder::build_particle_systems(Object *object, bool is_object
     /* Keyed particle targets. */
     if (ELEM(part->phystype, PART_PHYS_KEYED, PART_PHYS_BOIDS)) {
       LISTBASE_FOREACH (ParticleTarget *, particle_target, &psys->targets) {
-        if (particle_target->ob == nullptr || particle_target->ob == object) {
+        if (ELEM(particle_target->ob, nullptr, object)) {
           continue;
         }
         build_object(-1, particle_target->ob, DEG_ID_LINKED_INDIRECTLY, is_object_visible);
@@ -1223,8 +1247,7 @@ void DepsgraphNodeBuilder::build_particle_settings(ParticleSettings *particle_se
       &particle_settings->id, NodeType::PARTICLE_SETTINGS, OperationCode::PARTICLE_SETTINGS_EVAL);
   op_node->set_as_exit();
   /* Texture slots. */
-  for (int mtex_index = 0; mtex_index < MAX_MTEX; mtex_index++) {
-    MTex *mtex = particle_settings->mtex[mtex_index];
+  for (MTex *mtex : particle_settings->mtex) {
     if (mtex == nullptr || mtex->tex == nullptr) {
       continue;
     }
@@ -1450,6 +1473,21 @@ void DepsgraphNodeBuilder::build_light(Light *lamp)
                      function_bind(BKE_light_eval, _1, lamp_cow));
 }
 
+void DepsgraphNodeBuilder::build_nodetree_socket(bNodeSocket *socket)
+{
+  build_idproperties(socket->prop);
+
+  if (socket->type == SOCK_OBJECT) {
+    build_id((ID *)((bNodeSocketValueObject *)socket->default_value)->value);
+  }
+  else if (socket->type == SOCK_IMAGE) {
+    build_id((ID *)((bNodeSocketValueImage *)socket->default_value)->value);
+  }
+  else if (socket->type == SOCK_COLLECTION) {
+    build_id((ID *)((bNodeSocketValueCollection *)socket->default_value)->value);
+  }
+}
+
 void DepsgraphNodeBuilder::build_nodetree(bNodeTree *ntree)
 {
   if (ntree == nullptr) {
@@ -1478,10 +1516,10 @@ void DepsgraphNodeBuilder::build_nodetree(bNodeTree *ntree)
   LISTBASE_FOREACH (bNode *, bnode, &ntree->nodes) {
     build_idproperties(bnode->prop);
     LISTBASE_FOREACH (bNodeSocket *, socket, &bnode->inputs) {
-      build_idproperties(socket->prop);
+      build_nodetree_socket(socket);
     }
     LISTBASE_FOREACH (bNodeSocket *, socket, &bnode->outputs) {
-      build_idproperties(socket->prop);
+      build_nodetree_socket(socket);
     }
 
     ID *id = bnode->id;
@@ -1581,6 +1619,7 @@ void DepsgraphNodeBuilder::build_texture(Tex *texture)
     return;
   }
   /* Texture itself. */
+  add_id_node(&texture->id);
   build_idproperties(texture->id.properties);
   build_animdata(&texture->id);
   build_parameters(&texture->id);
@@ -1763,8 +1802,10 @@ void DepsgraphNodeBuilder::build_simulation(Simulation *simulation)
     return;
   }
   add_id_node(&simulation->id);
+  build_idproperties(simulation->id.properties);
   build_animdata(&simulation->id);
   build_parameters(&simulation->id);
+  build_nodetree(simulation->nodetree);
 
   Simulation *simulation_cow = get_cow_datablock(simulation);
   Scene *scene_cow = get_cow_datablock(scene_);
@@ -1780,6 +1821,9 @@ void DepsgraphNodeBuilder::build_scene_sequencer(Scene *scene)
   if (scene->ed == nullptr) {
     return;
   }
+  if (built_map_.checkIsBuiltAndTag(scene, BuilderMap::TAG_SCENE_SEQUENCER)) {
+    return;
+  }
   build_scene_audio(scene);
   Scene *scene_cow = get_cow_datablock(scene);
   add_operation_node(&scene->id,
@@ -1788,7 +1832,7 @@ void DepsgraphNodeBuilder::build_scene_sequencer(Scene *scene)
                      function_bind(BKE_scene_eval_sequencer_sequences, _1, scene_cow));
   /* Make sure data for sequences is in the graph. */
   Sequence *seq;
-  SEQ_BEGIN (scene->ed, seq) {
+  SEQ_ALL_BEGIN (scene->ed, seq) {
     build_idproperties(seq->prop);
     if (seq->sound != nullptr) {
       build_sound(seq->sound);
@@ -1805,7 +1849,7 @@ void DepsgraphNodeBuilder::build_scene_sequencer(Scene *scene)
     }
     /* TODO(sergey): Movie clip, scene, camera, mask. */
   }
-  SEQ_END;
+  SEQ_ALL_END;
 }
 
 void DepsgraphNodeBuilder::build_scene_audio(Scene *scene)
@@ -1813,6 +1857,10 @@ void DepsgraphNodeBuilder::build_scene_audio(Scene *scene)
   if (built_map_.checkIsBuiltAndTag(scene, BuilderMap::TAG_SCENE_AUDIO)) {
     return;
   }
+
+  OperationNode *audio_entry_node = add_operation_node(
+      &scene->id, NodeType::AUDIO, OperationCode::AUDIO_ENTRY);
+  audio_entry_node->set_as_entry();
 
   add_operation_node(&scene->id, NodeType::AUDIO, OperationCode::SOUND_EVAL);
 
@@ -1883,4 +1931,4 @@ void DepsgraphNodeBuilder::constraint_walk(bConstraint * /*con*/,
   }
 }
 
-}  // namespace DEG
+}  // namespace blender::deg

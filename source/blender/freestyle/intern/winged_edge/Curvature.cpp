@@ -33,7 +33,7 @@
  * \brief OGF/Graphite: Geometry and Graphics Programming Library + Utilities
  */
 
-#include <assert.h>
+#include <cassert>
 #include <cstdlib>  // for malloc and free
 #include <set>
 #include <stack>
@@ -59,7 +59,7 @@ static bool angle_obtuse(WVertex *v, WFace *f)
 
 // FIXME
 // WVvertex is useless but kept for history reasons
-static bool triangle_obtuse(WVertex *, WFace *f)
+static bool triangle_obtuse(WVertex *UNUSED(v), WFace *f)
 {
   bool b = false;
   for (int i = 0; i < 3; i++) {

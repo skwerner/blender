@@ -455,15 +455,15 @@ void imm_draw_cylinder_fill_normal_3d(
     for (int j = 0; j < stacks; j++) {
       float fac1 = (float)j / (float)stacks;
       float fac2 = (float)(j + 1) / (float)stacks;
-      float r1 = base * (1.f - fac1) + top * fac1;
-      float r2 = base * (1.f - fac2) + top * fac2;
+      float r1 = base * (1.0f - fac1) + top * fac1;
+      float r2 = base * (1.0f - fac2) + top * fac2;
       float h1 = height * ((float)j / (float)stacks);
       float h2 = height * ((float)(j + 1) / (float)stacks);
 
-      float v1[3] = {r1 * cos2, r1 * sin2, h1};
-      float v2[3] = {r2 * cos2, r2 * sin2, h2};
-      float v3[3] = {r2 * cos1, r2 * sin1, h2};
-      float v4[3] = {r1 * cos1, r1 * sin1, h1};
+      const float v1[3] = {r1 * cos2, r1 * sin2, h1};
+      const float v2[3] = {r2 * cos2, r2 * sin2, h2};
+      const float v3[3] = {r2 * cos1, r2 * sin1, h2};
+      const float v4[3] = {r1 * cos1, r1 * sin1, h1};
       float n1[3], n2[3];
 
       /* calc normals */
@@ -511,15 +511,15 @@ void imm_draw_cylinder_wire_3d(
     for (int j = 0; j < stacks; j++) {
       float fac1 = (float)j / (float)stacks;
       float fac2 = (float)(j + 1) / (float)stacks;
-      float r1 = base * (1.f - fac1) + top * fac1;
-      float r2 = base * (1.f - fac2) + top * fac2;
+      float r1 = base * (1.0f - fac1) + top * fac1;
+      float r2 = base * (1.0f - fac2) + top * fac2;
       float h1 = height * ((float)j / (float)stacks);
       float h2 = height * ((float)(j + 1) / (float)stacks);
 
-      float v1[3] = {r1 * cos2, r1 * sin2, h1};
-      float v2[3] = {r2 * cos2, r2 * sin2, h2};
-      float v3[3] = {r2 * cos1, r2 * sin1, h2};
-      float v4[3] = {r1 * cos1, r1 * sin1, h1};
+      const float v1[3] = {r1 * cos2, r1 * sin2, h1};
+      const float v2[3] = {r2 * cos2, r2 * sin2, h2};
+      const float v3[3] = {r2 * cos1, r2 * sin1, h2};
+      const float v4[3] = {r1 * cos1, r1 * sin1, h1};
 
       immVertex3fv(pos, v1);
       immVertex3fv(pos, v2);
@@ -549,15 +549,15 @@ void imm_draw_cylinder_fill_3d(
     for (int j = 0; j < stacks; j++) {
       float fac1 = (float)j / (float)stacks;
       float fac2 = (float)(j + 1) / (float)stacks;
-      float r1 = base * (1.f - fac1) + top * fac1;
-      float r2 = base * (1.f - fac2) + top * fac2;
+      float r1 = base * (1.0f - fac1) + top * fac1;
+      float r2 = base * (1.0f - fac2) + top * fac2;
       float h1 = height * ((float)j / (float)stacks);
       float h2 = height * ((float)(j + 1) / (float)stacks);
 
-      float v1[3] = {r1 * cos2, r1 * sin2, h1};
-      float v2[3] = {r2 * cos2, r2 * sin2, h2};
-      float v3[3] = {r2 * cos1, r2 * sin1, h2};
-      float v4[3] = {r1 * cos1, r1 * sin1, h1};
+      const float v1[3] = {r1 * cos2, r1 * sin2, h1};
+      const float v2[3] = {r2 * cos2, r2 * sin2, h2};
+      const float v3[3] = {r2 * cos1, r2 * sin1, h2};
+      const float v4[3] = {r1 * cos1, r1 * sin1, h1};
 
       /* first tri */
       immVertex3fv(pos, v1);

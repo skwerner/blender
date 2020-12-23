@@ -38,6 +38,7 @@
 #include "DNA_workspace_types.h"
 
 #include "BLI_bitmap.h"
+#include "BLI_hash.h"
 #include "BLI_listbase.h"
 #include "BLI_math_vector.h"
 #include "BLI_utildefines.h"
@@ -72,6 +73,8 @@
 
 #include "RNA_enum_types.h"
 
+#include "BLO_read_write.h"
+
 #include "bmesh.h"
 
 static void palette_init_data(ID *id)
@@ -102,6 +105,36 @@ static void palette_free_data(ID *id)
   BLI_freelistN(&palette->colors);
 }
 
+static void palette_blend_write(BlendWriter *writer, ID *id, const void *id_address)
+{
+  Palette *palette = (Palette *)id;
+  if (palette->id.us > 0 || BLO_write_is_undo(writer)) {
+    PaletteColor *color;
+    BLO_write_id_struct(writer, Palette, id_address, &palette->id);
+    BKE_id_blend_write(writer, &palette->id);
+
+    for (color = palette->colors.first; color; color = color->next) {
+      BLO_write_struct(writer, PaletteColor, color);
+    }
+  }
+}
+
+static void palette_blend_read_data(BlendDataReader *reader, ID *id)
+{
+  Palette *palette = (Palette *)id;
+  BLO_read_list(reader, &palette->colors);
+}
+
+static void palette_undo_preserve(BlendLibReader *UNUSED(reader), ID *id_new, ID *id_old)
+{
+  /* Whole Palette is preserved accross undo's, and it has no extra pointer, simple. */
+  /* Note: We do not care about potential internal references to self here, Palette has none. */
+  /* Note: We do not swap IDProperties, as dealing with potential ID pointers in those would be
+   *       fairly delicate. */
+  BKE_lib_id_swap(NULL, id_new, id_old);
+  SWAP(IDProperty *, id_new->properties, id_old->properties);
+}
+
 IDTypeInfo IDType_ID_PAL = {
     .id_code = ID_PAL,
     .id_filter = FILTER_ID_PAL,
@@ -110,13 +143,21 @@ IDTypeInfo IDType_ID_PAL = {
     .name = "Palette",
     .name_plural = "palettes",
     .translation_context = BLT_I18NCONTEXT_ID_PALETTE,
-    .flags = 0,
+    .flags = IDTYPE_FLAGS_NO_ANIMDATA,
 
     .init_data = palette_init_data,
     .copy_data = palette_copy_data,
     .free_data = palette_free_data,
     .make_local = NULL,
     .foreach_id = NULL,
+    .foreach_cache = NULL,
+
+    .blend_write = palette_blend_write,
+    .blend_read_data = palette_blend_read_data,
+    .blend_read_lib = NULL,
+    .blend_read_expand = NULL,
+
+    .blend_read_undo_preserve = palette_undo_preserve,
 };
 
 static void paint_curve_copy_data(Main *UNUSED(bmain),
@@ -140,6 +181,23 @@ static void paint_curve_free_data(ID *id)
   paint_curve->tot_points = 0;
 }
 
+static void paint_curve_blend_write(BlendWriter *writer, ID *id, const void *id_address)
+{
+  PaintCurve *pc = (PaintCurve *)id;
+  if (pc->id.us > 0 || BLO_write_is_undo(writer)) {
+    BLO_write_id_struct(writer, PaintCurve, id_address, &pc->id);
+    BKE_id_blend_write(writer, &pc->id);
+
+    BLO_write_struct_array(writer, PaintCurvePoint, pc->tot_points, pc->points);
+  }
+}
+
+static void paint_curve_blend_read_data(BlendDataReader *reader, ID *id)
+{
+  PaintCurve *pc = (PaintCurve *)id;
+  BLO_read_data_address(reader, &pc->points);
+}
+
 IDTypeInfo IDType_ID_PC = {
     .id_code = ID_PC,
     .id_filter = FILTER_ID_PC,
@@ -148,13 +206,21 @@ IDTypeInfo IDType_ID_PC = {
     .name = "PaintCurve",
     .name_plural = "paint_curves",
     .translation_context = BLT_I18NCONTEXT_ID_PAINTCURVE,
-    .flags = 0,
+    .flags = IDTYPE_FLAGS_NO_ANIMDATA,
 
     .init_data = NULL,
     .copy_data = paint_curve_copy_data,
     .free_data = paint_curve_free_data,
     .make_local = NULL,
     .foreach_id = NULL,
+    .foreach_cache = NULL,
+
+    .blend_write = paint_curve_blend_write,
+    .blend_read_data = paint_curve_blend_read_data,
+    .blend_read_lib = NULL,
+    .blend_read_expand = NULL,
+
+    .blend_read_undo_preserve = NULL,
 };
 
 const char PAINT_CURSOR_SCULPT[3] = {255, 100, 100};
@@ -364,10 +430,12 @@ const char *BKE_paint_get_tool_prop_id_from_paintmode(ePaintMode mode)
       return "gpencil_sculpt_tool";
     case PAINT_MODE_WEIGHT_GPENCIL:
       return "gpencil_weight_tool";
-    default:
-      /* invalid paint mode */
-      return NULL;
+    case PAINT_MODE_INVALID:
+      break;
   }
+
+  /* Invalid paint mode. */
+  return NULL;
 }
 
 Paint *BKE_paint_get_active(Scene *sce, ViewLayer *view_layer)
@@ -394,7 +462,7 @@ Paint *BKE_paint_get_active(Scene *sce, ViewLayer *view_layer)
         case OB_MODE_WEIGHT_GPENCIL:
           return &ts->gp_weightpaint->paint;
         case OB_MODE_EDIT:
-          return &ts->uvsculpt->paint;
+          return ts->uvsculpt ? &ts->uvsculpt->paint : NULL;
         default:
           break;
       }
@@ -426,7 +494,7 @@ Paint *BKE_paint_get_active_from_context(const bContext *C)
         if (sima->mode == SI_MODE_PAINT) {
           return &ts->imapaint.paint;
         }
-        else if (sima->mode == SI_MODE_UV) {
+        if (sima->mode == SI_MODE_UV) {
           return &ts->uvsculpt->paint;
         }
       }
@@ -460,7 +528,7 @@ ePaintMode BKE_paintmode_get_active_from_context(const bContext *C)
         if (sima->mode == SI_MODE_PAINT) {
           return PAINT_MODE_TEXTURE_2D;
         }
-        else if (sima->mode == SI_MODE_UV) {
+        if (sima->mode == SI_MODE_UV) {
           return PAINT_MODE_SCULPT_UV;
         }
       }
@@ -618,16 +686,9 @@ PaintCurve *BKE_paint_curve_add(Main *bmain, const char *name)
 {
   PaintCurve *pc;
 
-  pc = BKE_libblock_alloc(bmain, ID_PC, name, 0);
+  pc = BKE_id_new(bmain, ID_PC, name);
 
   return pc;
-}
-
-PaintCurve *BKE_paint_curve_copy(Main *bmain, const PaintCurve *pc)
-{
-  PaintCurve *pc_copy;
-  BKE_id_copy(bmain, &pc->id, (ID **)&pc_copy);
-  return pc_copy;
 }
 
 Palette *BKE_paint_palette(Paint *p)
@@ -687,13 +748,6 @@ Palette *BKE_palette_add(Main *bmain, const char *name)
   return palette;
 }
 
-Palette *BKE_palette_copy(Main *bmain, const Palette *palette)
-{
-  Palette *palette_copy;
-  BKE_id_copy(bmain, &palette->id, (ID **)&palette_copy);
-  return palette_copy;
-}
-
 PaletteColor *BKE_palette_color_add(Palette *palette)
 {
   PaletteColor *color = MEM_callocN(sizeof(*color), "Palette Color");
@@ -715,7 +769,7 @@ static int palettecolor_compare_hsv(const void *a1, const void *a2)
   if (ps1->h > ps2->h) {
     return 1;
   }
-  else if (ps1->h < ps2->h) {
+  if (ps1->h < ps2->h) {
     return -1;
   }
 
@@ -723,7 +777,7 @@ static int palettecolor_compare_hsv(const void *a1, const void *a2)
   if (ps1->s > ps2->s) {
     return 1;
   }
-  else if (ps1->s < ps2->s) {
+  if (ps1->s < ps2->s) {
     return -1;
   }
 
@@ -731,7 +785,7 @@ static int palettecolor_compare_hsv(const void *a1, const void *a2)
   if (1.0f - ps1->v > 1.0f - ps2->v) {
     return 1;
   }
-  else if (1.0f - ps1->v < 1.0f - ps2->v) {
+  if (1.0f - ps1->v < 1.0f - ps2->v) {
     return -1;
   }
 
@@ -747,7 +801,7 @@ static int palettecolor_compare_svh(const void *a1, const void *a2)
   if (ps1->s > ps2->s) {
     return 1;
   }
-  else if (ps1->s < ps2->s) {
+  if (ps1->s < ps2->s) {
     return -1;
   }
 
@@ -755,7 +809,7 @@ static int palettecolor_compare_svh(const void *a1, const void *a2)
   if (1.0f - ps1->v > 1.0f - ps2->v) {
     return 1;
   }
-  else if (1.0f - ps1->v < 1.0f - ps2->v) {
+  if (1.0f - ps1->v < 1.0f - ps2->v) {
     return -1;
   }
 
@@ -763,7 +817,7 @@ static int palettecolor_compare_svh(const void *a1, const void *a2)
   if (ps1->h > ps2->h) {
     return 1;
   }
-  else if (ps1->h < ps2->h) {
+  if (ps1->h < ps2->h) {
     return -1;
   }
 
@@ -778,7 +832,7 @@ static int palettecolor_compare_vhs(const void *a1, const void *a2)
   if (1.0f - ps1->v > 1.0f - ps2->v) {
     return 1;
   }
-  else if (1.0f - ps1->v < 1.0f - ps2->v) {
+  if (1.0f - ps1->v < 1.0f - ps2->v) {
     return -1;
   }
 
@@ -786,7 +840,7 @@ static int palettecolor_compare_vhs(const void *a1, const void *a2)
   if (ps1->h > ps2->h) {
     return 1;
   }
-  else if (ps1->h < ps2->h) {
+  if (ps1->h < ps2->h) {
     return -1;
   }
 
@@ -794,7 +848,7 @@ static int palettecolor_compare_vhs(const void *a1, const void *a2)
   if (ps1->s > ps2->s) {
     return 1;
   }
-  else if (ps1->s < ps2->s) {
+  if (ps1->s < ps2->s) {
     return -1;
   }
 
@@ -811,7 +865,7 @@ static int palettecolor_compare_luminance(const void *a1, const void *a2)
   if (lumi1 > lumi2) {
     return -1;
   }
-  else if (lumi1 < lumi2) {
+  if (lumi1 < lumi2) {
     return 1;
   }
 
@@ -1090,7 +1144,7 @@ void BKE_paint_free(Paint *paint)
 }
 
 /* called when copying scene settings, so even if 'src' and 'tar' are the same
- * still do a id_us_plus(), rather then if we were copying between 2 existing
+ * still do a id_us_plus(), rather than if we were copying between 2 existing
  * scenes where a matching value should decrease the existing user count as
  * with paint_brush_set() */
 void BKE_paint_copy(Paint *src, Paint *tar, const int flag)
@@ -1119,6 +1173,56 @@ void BKE_paint_stroke_get_average(Scene *scene, Object *ob, float stroke[3])
   }
   else {
     copy_v3_v3(stroke, ob->obmat[3]);
+  }
+}
+
+void BKE_paint_blend_write(BlendWriter *writer, Paint *p)
+{
+  if (p->cavity_curve) {
+    BKE_curvemapping_blend_write(writer, p->cavity_curve);
+  }
+  BLO_write_struct_array(writer, PaintToolSlot, p->tool_slots_len, p->tool_slots);
+}
+
+void BKE_paint_blend_read_data(BlendDataReader *reader, const Scene *scene, Paint *p)
+{
+  if (p->num_input_samples < 1) {
+    p->num_input_samples = 1;
+  }
+
+  BLO_read_data_address(reader, &p->cavity_curve);
+  if (p->cavity_curve) {
+    BKE_curvemapping_blend_read(reader, p->cavity_curve);
+  }
+  else {
+    BKE_paint_cavity_curve_preset(p, CURVE_PRESET_LINE);
+  }
+
+  BLO_read_data_address(reader, &p->tool_slots);
+
+  /* Workaround for invalid data written in older versions. */
+  const size_t expected_size = sizeof(PaintToolSlot) * p->tool_slots_len;
+  if (p->tool_slots && MEM_allocN_len(p->tool_slots) < expected_size) {
+    MEM_freeN(p->tool_slots);
+    p->tool_slots = MEM_callocN(expected_size, "PaintToolSlot");
+  }
+
+  BKE_paint_runtime_init(scene->toolsettings, p);
+}
+
+void BKE_paint_blend_read_lib(BlendLibReader *reader, Scene *sce, Paint *p)
+{
+  if (p) {
+    BLO_read_id_address(reader, sce->id.lib, &p->brush);
+    for (int i = 0; i < p->tool_slots_len; i++) {
+      if (p->tool_slots[i].brush != NULL) {
+        BLO_read_id_address(reader, sce->id.lib, &p->tool_slots[i].brush);
+      }
+    }
+    BLO_read_id_address(reader, sce->id.lib, &p->palette);
+    p->paint_cursor = NULL;
+
+    BKE_paint_runtime_init(sce->toolsettings, p);
   }
 }
 
@@ -1258,7 +1362,9 @@ void BKE_sculptsession_free_vwpaint_data(struct SculptSession *ss)
   MEM_SAFE_FREE(gmap->poly_map_mem);
 }
 
-/* Write out the sculpt dynamic-topology BMesh to the Mesh */
+/**
+ * Write out the sculpt dynamic-topology #BMesh to the #Mesh.
+ */
 static void sculptsession_bm_to_me_update_data_only(Object *ob, bool reorder)
 {
   SculptSession *ss = ob->sculpt;
@@ -1310,10 +1416,17 @@ static void sculptsession_free_pbvh(Object *object)
   MEM_SAFE_FREE(ss->pmap);
   MEM_SAFE_FREE(ss->pmap_mem);
 
-  MEM_SAFE_FREE(ss->layer_base);
+  MEM_SAFE_FREE(ss->persistent_base);
 
   MEM_SAFE_FREE(ss->preview_vert_index_list);
   ss->preview_vert_index_count = 0;
+
+  MEM_SAFE_FREE(ss->preview_vert_index_list);
+
+  MEM_SAFE_FREE(ss->vertex_info.connected_component);
+  MEM_SAFE_FREE(ss->vertex_info.boundary);
+
+  MEM_SAFE_FREE(ss->fake_neighbors.fake_neighbor_index);
 }
 
 void BKE_sculptsession_bm_to_me_for_render(Object *object)
@@ -1366,8 +1479,6 @@ void BKE_sculptsession_free(Object *ob)
     MEM_SAFE_FREE(ss->deform_cos);
     MEM_SAFE_FREE(ss->deform_imats);
 
-    MEM_SAFE_FREE(ss->preview_vert_index_list);
-
     if (ss->pose_ik_chain_preview) {
       for (int i = 0; i < ss->pose_ik_chain_preview->tot_segments; i++) {
         MEM_SAFE_FREE(ss->pose_ik_chain_preview->segments[i].weights);
@@ -1416,12 +1527,11 @@ MultiresModifierData *BKE_sculpt_multires_active(Scene *scene, Object *ob)
         continue;
       }
 
-      if (mmd->sculptlvl > 0) {
+      if (mmd->sculptlvl > 0 && !(mmd->flags & eMultiresModifierFlag_UseSculptBaseMesh)) {
         return mmd;
       }
-      else {
-        return NULL;
-      }
+
+      return NULL;
     }
   }
 
@@ -1433,10 +1543,9 @@ static bool sculpt_modifiers_active(Scene *scene, Sculpt *sd, Object *ob)
 {
   ModifierData *md;
   Mesh *me = (Mesh *)ob->data;
-  MultiresModifierData *mmd = BKE_sculpt_multires_active(scene, ob);
   VirtualModifierData virtualModifierData;
 
-  if (mmd || ob->sculpt->bm) {
+  if (ob->sculpt->bm || BKE_sculpt_multires_active(scene, ob)) {
     return false;
   }
 
@@ -1454,7 +1563,10 @@ static bool sculpt_modifiers_active(Scene *scene, Sculpt *sd, Object *ob)
       continue;
     }
     if (md->type == eModifierType_Multires && (ob->mode & OB_MODE_SCULPT)) {
-      continue;
+      MultiresModifierData *mmd = (MultiresModifierData *)md;
+      if (!(mmd->flags & eMultiresModifierFlag_UseSculptBaseMesh)) {
+        continue;
+      }
     }
     if (md->type == eModifierType_ShapeKey) {
       continue;
@@ -1463,7 +1575,7 @@ static bool sculpt_modifiers_active(Scene *scene, Sculpt *sd, Object *ob)
     if (mti->type == eModifierTypeType_OnlyDeform) {
       return true;
     }
-    else if ((sd->flags & SCULPT_ONLY_DEFORM) == 0) {
+    if ((sd->flags & SCULPT_ONLY_DEFORM) == 0) {
       return true;
     }
   }
@@ -1474,8 +1586,12 @@ static bool sculpt_modifiers_active(Scene *scene, Sculpt *sd, Object *ob)
 /**
  * \param need_mask: So that the evaluated mesh that is returned has mask data.
  */
-static void sculpt_update_object(
-    Depsgraph *depsgraph, Object *ob, Mesh *me_eval, bool need_pmap, bool need_mask)
+static void sculpt_update_object(Depsgraph *depsgraph,
+                                 Object *ob,
+                                 Mesh *me_eval,
+                                 bool need_pmap,
+                                 bool need_mask,
+                                 bool UNUSED(need_colors))
 {
   Scene *scene = DEG_get_input_scene(depsgraph);
   Sculpt *sd = scene->toolsettings->sculpt;
@@ -1484,11 +1600,15 @@ static void sculpt_update_object(
   MultiresModifierData *mmd = BKE_sculpt_multires_active(scene, ob);
   const bool use_face_sets = (ob->mode & OB_MODE_SCULPT) != 0;
 
+  ss->depsgraph = depsgraph;
+
   ss->deform_modifiers_active = sculpt_modifiers_active(scene, sd, ob);
   ss->show_mask = (sd->flags & SCULPT_HIDE_MASK) == 0;
   ss->show_face_sets = (sd->flags & SCULPT_HIDE_FACE_SETS) == 0;
 
   ss->building_vp_handle = false;
+
+  ss->scene = scene;
 
   if (need_mask) {
     if (mmd == NULL) {
@@ -1535,19 +1655,16 @@ static void sculpt_update_object(
     ss->multires.modifier = NULL;
     ss->multires.level = 0;
     ss->vmask = CustomData_get_layer(&me->vdata, CD_PAINT_MASK);
+    ss->vcol = CustomData_get_layer(&me->vdata, CD_PROP_COLOR);
   }
 
   /* Sculpt Face Sets. */
   if (use_face_sets) {
     if (!CustomData_has_layer(&me->pdata, CD_SCULPT_FACE_SETS)) {
-      ss->face_sets = CustomData_add_layer(
-          &me->pdata, CD_SCULPT_FACE_SETS, CD_CALLOC, NULL, me->totpoly);
-      for (int i = 0; i < me->totpoly; i++) {
-        ss->face_sets[i] = 1;
-      }
-
-      /* Set the default face set color if the datalayer did not exist. */
-      me->face_sets_color_default = 1;
+      /* By checking here if the data-layer already exist this avoids copying the visibility from
+       * the mesh and looping over all vertices on every sculpt editing operation, using this
+       * function only the first time the Face Sets data-layer needs to be created. */
+      BKE_sculpt_face_sets_ensure_from_base_mesh_visibility(me);
     }
     ss->face_sets = CustomData_get_layer(&me->pdata, CD_SCULPT_FACE_SETS);
   }
@@ -1662,24 +1779,36 @@ void BKE_sculpt_update_object_after_eval(Depsgraph *depsgraph, Object *ob_eval)
   Mesh *me_eval = BKE_object_get_evaluated_mesh(ob_eval);
 
   BLI_assert(me_eval != NULL);
-
-  sculpt_update_object(depsgraph, ob_orig, me_eval, false, false);
+  sculpt_update_object(depsgraph, ob_orig, me_eval, false, false, false);
 }
 
-void BKE_sculpt_update_object_for_edit(Depsgraph *depsgraph,
-                                       Object *ob_orig,
-                                       bool need_pmap,
-                                       bool need_mask)
+void BKE_sculpt_color_layer_create_if_needed(struct Object *object)
 {
-  /* Update from sculpt operators and undo, to update sculpt session
-   * and PBVH after edits. */
-  Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
-  Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob_orig);
-  Mesh *me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_eval, &CD_MASK_BAREMESH);
+  Mesh *orig_me = BKE_object_get_original_mesh(object);
+  if (!U.experimental.use_sculpt_vertex_colors) {
+    return;
+  }
 
+  if (CustomData_has_layer(&orig_me->vdata, CD_PROP_COLOR)) {
+    return;
+  }
+
+  CustomData_add_layer(&orig_me->vdata, CD_PROP_COLOR, CD_DEFAULT, NULL, orig_me->totvert);
+  BKE_mesh_update_customdata_pointers(orig_me, true);
+  DEG_id_tag_update(&orig_me->id, ID_RECALC_GEOMETRY);
+}
+
+/** \warning Expects a fully evaluated depsgraph. */
+void BKE_sculpt_update_object_for_edit(
+    Depsgraph *depsgraph, Object *ob_orig, bool need_pmap, bool need_mask, bool need_colors)
+{
   BLI_assert(ob_orig == DEG_get_original_object(ob_orig));
 
-  sculpt_update_object(depsgraph, ob_orig, me_eval, need_pmap, need_mask);
+  Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob_orig);
+  Mesh *me_eval = BKE_object_get_evaluated_mesh(ob_eval);
+  BLI_assert(me_eval != NULL);
+
+  sculpt_update_object(depsgraph, ob_orig, me_eval, need_pmap, need_mask, need_colors);
 }
 
 int BKE_sculpt_mask_layers_ensure(Object *ob, MultiresModifierData *mmd)
@@ -1799,6 +1928,107 @@ static bool check_sculpt_object_deformed(Object *object, const bool for_construc
   return deformed;
 }
 
+void BKE_sculpt_face_sets_ensure_from_base_mesh_visibility(Mesh *mesh)
+{
+  const int face_sets_default_visible_id = 1;
+  const int face_sets_default_hidden_id = -(face_sets_default_visible_id + 1);
+
+  bool initialize_new_face_sets = false;
+
+  if (CustomData_has_layer(&mesh->pdata, CD_SCULPT_FACE_SETS)) {
+    /* Make everything visible. */
+    int *current_face_sets = CustomData_get_layer(&mesh->pdata, CD_SCULPT_FACE_SETS);
+    for (int i = 0; i < mesh->totpoly; i++) {
+      current_face_sets[i] = abs(current_face_sets[i]);
+    }
+  }
+  else {
+    initialize_new_face_sets = true;
+    int *new_face_sets = CustomData_add_layer(
+        &mesh->pdata, CD_SCULPT_FACE_SETS, CD_CALLOC, NULL, mesh->totpoly);
+
+    /* Initialize the new Face Set data-layer with a default valid visible ID and set the default
+     * color to render it white. */
+    for (int i = 0; i < mesh->totpoly; i++) {
+      new_face_sets[i] = face_sets_default_visible_id;
+    }
+    mesh->face_sets_color_default = face_sets_default_visible_id;
+  }
+
+  int *face_sets = CustomData_get_layer(&mesh->pdata, CD_SCULPT_FACE_SETS);
+
+  for (int i = 0; i < mesh->totpoly; i++) {
+    if (!(mesh->mpoly[i].flag & ME_HIDE)) {
+      continue;
+    }
+
+    if (initialize_new_face_sets) {
+      /* When initializing a new Face Set data-layer, assign a new hidden Face Set ID to hidden
+       * vertices. This way, we get at initial split in two Face Sets between hidden and
+       * visible vertices based on the previous mesh visibly from other mode that can be
+       * useful in some cases. */
+      face_sets[i] = face_sets_default_hidden_id;
+    }
+    else {
+      /* Otherwise, set the already existing Face Set ID to hidden. */
+      face_sets[i] = -abs(face_sets[i]);
+    }
+  }
+}
+
+void BKE_sculpt_sync_face_sets_visibility_to_base_mesh(Mesh *mesh)
+{
+  int *face_sets = CustomData_get_layer(&mesh->pdata, CD_SCULPT_FACE_SETS);
+  if (!face_sets) {
+    return;
+  }
+
+  for (int i = 0; i < mesh->totpoly; i++) {
+    const bool is_face_set_visible = face_sets[i] >= 0;
+    SET_FLAG_FROM_TEST(mesh->mpoly[i].flag, !is_face_set_visible, ME_HIDE);
+  }
+
+  BKE_mesh_flush_hidden_from_polys(mesh);
+}
+
+void BKE_sculpt_sync_face_sets_visibility_to_grids(Mesh *mesh, SubdivCCG *subdiv_ccg)
+{
+  int *face_sets = CustomData_get_layer(&mesh->pdata, CD_SCULPT_FACE_SETS);
+  if (!face_sets) {
+    return;
+  }
+
+  if (!subdiv_ccg) {
+    return;
+  }
+
+  CCGKey key;
+  BKE_subdiv_ccg_key_top_level(&key, subdiv_ccg);
+  for (int i = 0; i < mesh->totloop; i++) {
+    const int face_index = BKE_subdiv_ccg_grid_to_face_index(subdiv_ccg, i);
+    const bool is_hidden = (face_sets[face_index] < 0);
+
+    /* Avoid creating and modifying the grid_hidden bitmap if the base mesh face is visible and
+     * there is not bitmap for the grid. This is because missing grid_hidden implies grid is fully
+     * visible. */
+    if (is_hidden) {
+      BKE_subdiv_ccg_grid_hidden_ensure(subdiv_ccg, i);
+    }
+
+    BLI_bitmap *gh = subdiv_ccg->grid_hidden[i];
+    if (gh) {
+      BLI_bitmap_set_all(gh, is_hidden, key.grid_area);
+    }
+  }
+}
+
+void BKE_sculpt_sync_face_set_visibility(struct Mesh *mesh, struct SubdivCCG *subdiv_ccg)
+{
+  BKE_sculpt_face_sets_ensure_from_base_mesh_visibility(mesh);
+  BKE_sculpt_sync_face_sets_visibility_to_base_mesh(mesh);
+  BKE_sculpt_sync_face_sets_visibility_to_grids(mesh, subdiv_ccg);
+}
+
 static PBVH *build_pbvh_for_dynamic_topology(Object *ob)
 {
   PBVH *pbvh = BKE_pbvh_new();
@@ -1823,6 +2053,8 @@ static PBVH *build_pbvh_from_regular_mesh(Object *ob, Mesh *me_eval_deform, bool
   MLoopTri *looptri = MEM_malloc_arrayN(looptris_num, sizeof(*looptri), __func__);
 
   BKE_mesh_recalc_looptri(me->mloop, me->mpoly, me->mvert, me->totloop, me->totpoly, looptri);
+
+  BKE_sculpt_sync_face_set_visibility(me, NULL);
 
   BKE_pbvh_build_mesh(pbvh,
                       me,
@@ -1856,6 +2088,10 @@ static PBVH *build_pbvh_from_ccg(Object *ob, SubdivCCG *subdiv_ccg, bool respect
   BKE_subdiv_ccg_key_top_level(&key, subdiv_ccg);
   PBVH *pbvh = BKE_pbvh_new();
   BKE_pbvh_respect_hide_set(pbvh, respect_hide);
+
+  Mesh *base_mesh = BKE_mesh_from_object(ob);
+  BKE_sculpt_sync_face_set_visibility(base_mesh, subdiv_ccg);
+
   BKE_pbvh_build_grids(pbvh,
                        subdiv_ccg->grids,
                        subdiv_ccg->num_grids,
@@ -1939,8 +2175,25 @@ bool BKE_sculptsession_use_pbvh_draw(const Object *ob, const View3D *v3d)
     const bool full_shading = (v3d && (v3d->shading.type > OB_SOLID));
     return !(ss->shapekey_active || ss->deform_modifiers_active || full_shading);
   }
-  else {
-    /* Multires and dyntopo always draw directly from the PBVH. */
-    return true;
-  }
+
+  /* Multires and dyntopo always draw directly from the PBVH. */
+  return true;
+}
+
+/* Returns the Face Set random color for rendering in the overlay given its ID and a color seed. */
+#define GOLDEN_RATIO_CONJUGATE 0.618033988749895f
+void BKE_paint_face_set_overlay_color_get(const int face_set, const int seed, uchar r_color[4])
+{
+  float rgba[4];
+  float random_mod_hue = GOLDEN_RATIO_CONJUGATE * (abs(face_set) + (seed % 10));
+  random_mod_hue = random_mod_hue - floorf(random_mod_hue);
+  const float random_mod_sat = BLI_hash_int_01(abs(face_set) + seed + 1);
+  const float random_mod_val = BLI_hash_int_01(abs(face_set) + seed + 2);
+  hsv_to_rgb(random_mod_hue,
+             0.6f + (random_mod_sat * 0.25f),
+             1.0f - (random_mod_val * 0.35f),
+             &rgba[0],
+             &rgba[1],
+             &rgba[2]);
+  rgba_float_to_uchar(r_color, rgba);
 }

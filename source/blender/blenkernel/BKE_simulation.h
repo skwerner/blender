@@ -14,16 +14,16 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BKE_SIMULATION_H__
-#define __BKE_SIMULATION_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-struct Main;
-struct Simulation;
 struct Depsgraph;
+struct Main;
+struct Scene;
+struct Simulation;
 
 void *BKE_simulation_add(struct Main *bmain, const char *name);
 
@@ -34,5 +34,3 @@ void BKE_simulation_data_update(struct Depsgraph *depsgraph,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_SIMULATION_H__ */

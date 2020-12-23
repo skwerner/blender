@@ -39,34 +39,29 @@
 #include "BLI_array_utils.h"
 #include "BLI_listbase.h"
 #include "BLI_math.h"
-#include "BLI_string.h"
 #include "BLI_utildefines.h"
 
 #include "BKE_action.h"
+#include "BKE_armature.h"
 #include "BKE_context.h"
 #include "BKE_curve.h"
 #include "BKE_editmesh.h"
 #include "BKE_global.h"
 #include "BKE_gpencil.h"
-#include "BKE_lattice.h"
 #include "BKE_layer.h"
 #include "BKE_object.h"
 #include "BKE_paint.h"
-#include "BKE_particle.h"
 #include "BKE_pointcache.h"
 #include "BKE_scene.h"
-#include "BKE_workspace.h"
 
 #include "DEG_depsgraph.h"
 
 #include "WM_api.h"
 #include "WM_message.h"
-#include "WM_toolsystem.h"
 #include "WM_types.h"
 #include "wm.h"
 
 #include "ED_armature.h"
-#include "ED_curve.h"
 #include "ED_gizmo_library.h"
 #include "ED_gizmo_utils.h"
 #include "ED_gpencil.h"
@@ -89,8 +84,6 @@
 #include "MEM_guardedalloc.h"
 
 #include "GPU_state.h"
-
-#include "DEG_depsgraph_query.h"
 
 /* return codes for select, and drawing flags */
 
@@ -572,6 +565,9 @@ static bool test_rotmode_euler(short rotmode)
   return (ELEM(rotmode, ROT_MODE_AXISANGLE, ROT_MODE_QUAT)) ? 0 : 1;
 }
 
+/**
+ * Return false when no gimbal for selection.
+ */
 bool gimbal_axis(Object *ob, float gmat[3][3])
 {
   if (ob->mode & OB_MODE_POSE) {
@@ -595,7 +591,9 @@ bool gimbal_axis(Object *ob, float gmat[3][3])
       if (pchan->parent) {
         float parent_mat[3][3];
 
-        copy_m3_m4(parent_mat, pchan->parent->pose_mat);
+        copy_m3_m4(parent_mat,
+                   (pchan->bone->flag & BONE_HINGE) ? pchan->parent->bone->arm_mat :
+                                                      pchan->parent->pose_mat);
         mul_m3_m3m3(mat, parent_mat, tmat);
 
         /* needed if object transformation isn't identity */
@@ -635,101 +633,6 @@ bool gimbal_axis(Object *ob, float gmat[3][3])
   return 0;
 }
 
-void ED_transform_calc_orientation_from_type(const bContext *C, float r_mat[3][3])
-{
-  ARegion *region = CTX_wm_region(C);
-  Scene *scene = CTX_data_scene(C);
-  ViewLayer *view_layer = CTX_data_view_layer(C);
-  Object *obedit = CTX_data_edit_object(C);
-  RegionView3D *rv3d = region->regiondata;
-  Object *ob = OBACT(view_layer);
-  const short orientation_type = scene->orientation_slots[SCE_ORIENT_DEFAULT].type;
-  const short orientation_index_custom = scene->orientation_slots[SCE_ORIENT_DEFAULT].index_custom;
-  const int pivot_point = scene->toolsettings->transform_pivot_point;
-
-  ED_transform_calc_orientation_from_type_ex(
-      C, r_mat, scene, rv3d, ob, obedit, orientation_type, orientation_index_custom, pivot_point);
-}
-
-void ED_transform_calc_orientation_from_type_ex(const bContext *C,
-                                                float r_mat[3][3],
-                                                /* extra args (can be accessed from context) */
-                                                Scene *scene,
-                                                RegionView3D *rv3d,
-                                                Object *ob,
-                                                Object *obedit,
-                                                const short orientation_type,
-                                                int orientation_index_custom,
-                                                const int pivot_point)
-{
-  bool ok = false;
-
-  switch (orientation_type) {
-    case V3D_ORIENT_GLOBAL: {
-      break; /* nothing to do */
-    }
-    case V3D_ORIENT_GIMBAL: {
-      if (gimbal_axis(ob, r_mat)) {
-        ok = true;
-        break;
-      }
-      /* if not gimbal, fall through to normal */
-      ATTR_FALLTHROUGH;
-    }
-    case V3D_ORIENT_NORMAL: {
-      if (obedit || ob->mode & OB_MODE_POSE) {
-        ED_getTransformOrientationMatrix(C, r_mat, pivot_point);
-        ok = true;
-        break;
-      }
-      /* no break we define 'normal' as 'local' in Object mode */
-      ATTR_FALLTHROUGH;
-    }
-    case V3D_ORIENT_LOCAL: {
-      if (ob->mode & OB_MODE_POSE) {
-        /* each bone moves on its own local axis, but  to avoid confusion,
-         * use the active pones axis for display [#33575], this works as expected on a single bone
-         * and users who select many bones will understand what's going on and what local means
-         * when they start transforming */
-        ED_getTransformOrientationMatrix(C, r_mat, pivot_point);
-        ok = true;
-        break;
-      }
-      copy_m3_m4(r_mat, ob->obmat);
-      normalize_m3(r_mat);
-      ok = true;
-      break;
-    }
-    case V3D_ORIENT_VIEW: {
-      if (rv3d != NULL) {
-        copy_m3_m4(r_mat, rv3d->viewinv);
-        normalize_m3(r_mat);
-        ok = true;
-      }
-      break;
-    }
-    case V3D_ORIENT_CURSOR: {
-      BKE_scene_cursor_rot_to_mat3(&scene->cursor, r_mat);
-      ok = true;
-      break;
-    }
-    case V3D_ORIENT_CUSTOM:
-    default: {
-      BLI_assert(orientation_type >= V3D_ORIENT_CUSTOM);
-      TransformOrientation *custom_orientation = BKE_scene_transform_orientation_find(
-          scene, orientation_index_custom);
-      if (applyTransformOrientation(custom_orientation, r_mat, NULL)) {
-        ok = true;
-      }
-      break;
-    }
-  }
-
-  if (!ok) {
-    unit_m3(r_mat);
-  }
-}
-
 /* centroid, boundbox, of selection */
 /* returns total items selected */
 int ED_transform_calc_gizmo_stats(const bContext *C,
@@ -750,6 +653,7 @@ int ED_transform_calc_gizmo_stats(const bContext *C,
   Object *ob = OBACT(view_layer);
   bGPdata *gpd = CTX_data_gpencil_data(C);
   const bool is_gp_edit = GPENCIL_ANY_MODE(gpd);
+  const bool is_curve_edit = GPENCIL_CURVE_EDIT_SESSIONS_ON(gpd);
   int a, totsel = 0;
 
   const int pivot_point = scene->toolsettings->transform_pivot_point;
@@ -808,16 +712,39 @@ int ED_transform_calc_gizmo_stats(const bContext *C,
             continue;
           }
 
-          /* we're only interested in selected points here... */
-          if (gps->flag & GP_STROKE_SELECT) {
-            bGPDspoint *pt;
-            int i;
+          if (is_curve_edit) {
+            if (gps->editcurve == NULL) {
+              continue;
+            }
 
-            /* Change selection status of all points, then make the stroke match */
-            for (i = 0, pt = gps->points; i < gps->totpoints; i++, pt++) {
-              if (pt->flag & GP_SPOINT_SELECT) {
-                calc_tw_center_with_matrix(tbounds, &pt->x, use_mat_local, diff_mat);
-                totsel++;
+            bGPDcurve *gpc = gps->editcurve;
+            if (gpc->flag & GP_CURVE_SELECT) {
+              for (uint32_t i = 0; i < gpc->tot_curve_points; i++) {
+                bGPDcurve_point *gpc_pt = &gpc->curve_points[i];
+                BezTriple *bezt = &gpc_pt->bezt;
+                if (gpc_pt->flag & GP_CURVE_POINT_SELECT) {
+                  for (uint32_t j = 0; j < 3; j++) {
+                    if (BEZT_ISSEL_IDX(bezt, j)) {
+                      calc_tw_center_with_matrix(tbounds, bezt->vec[j], use_mat_local, diff_mat);
+                      totsel++;
+                    }
+                  }
+                }
+              }
+            }
+          }
+          else {
+            /* we're only interested in selected points here... */
+            if (gps->flag & GP_STROKE_SELECT) {
+              bGPDspoint *pt;
+              int i;
+
+              /* Change selection status of all points, then make the stroke match */
+              for (i = 0, pt = gps->points; i < gps->totpoints; i++, pt++) {
+                if (pt->flag & GP_SPOINT_SELECT) {
+                  calc_tw_center_with_matrix(tbounds, &pt->x, use_mat_local, diff_mat);
+                  totsel++;
+                }
               }
             }
           }
@@ -929,7 +856,7 @@ int ED_transform_calc_gizmo_stats(const bContext *C,
                * if handles are hidden then only check the center points.
                * If the center knot is selected then only use this as the center point.
                */
-              if ((v3d->overlay.edit_flag & V3D_OVERLAY_EDIT_CU_HANDLES) == 0) {
+              if (v3d->overlay.handle_display == CURVE_HANDLE_NONE) {
                 if (bezt->f2 & SELECT) {
                   calc_tw_center_with_matrix(tbounds, bezt->vec[1], use_mat_local, mat_local);
                   totsel++;
@@ -1015,7 +942,7 @@ int ED_transform_calc_gizmo_stats(const bContext *C,
 
     /* selection center */
     if (totsel) {
-      mul_v3_fl(tbounds->center, 1.0f / (float)totsel);  // centroid!
+      mul_v3_fl(tbounds->center, 1.0f / (float)totsel); /* centroid! */
       mul_m4_v3(obedit->obmat, tbounds->center);
       mul_m4_v3(obedit->obmat, tbounds->min);
       mul_m4_v3(obedit->obmat, tbounds->max);
@@ -1058,7 +985,7 @@ int ED_transform_calc_gizmo_stats(const bContext *C,
     MEM_freeN(objects);
 
     if (totsel) {
-      mul_v3_fl(tbounds->center, 1.0f / (float)totsel);  // centroid!
+      mul_v3_fl(tbounds->center, 1.0f / (float)totsel); /* centroid! */
       mul_m4_v3(ob->obmat, tbounds->center);
       mul_m4_v3(ob->obmat, tbounds->min);
       mul_m4_v3(ob->obmat, tbounds->max);
@@ -1096,7 +1023,7 @@ int ED_transform_calc_gizmo_stats(const bContext *C,
 
       /* selection center */
       if (totsel) {
-        mul_v3_fl(tbounds->center, 1.0f / (float)totsel);  // centroid!
+        mul_v3_fl(tbounds->center, 1.0f / (float)totsel); /* centroid! */
       }
     }
   }
@@ -1144,7 +1071,7 @@ int ED_transform_calc_gizmo_stats(const bContext *C,
 
     /* selection center */
     if (totsel) {
-      mul_v3_fl(tbounds->center, 1.0f / (float)totsel);  // centroid!
+      mul_v3_fl(tbounds->center, 1.0f / (float)totsel); /* centroid! */
     }
   }
 
@@ -1380,7 +1307,7 @@ void drawDial3d(const TransInfo *t)
     float mat_basis[4][4];
     float mat_final[4][4];
     float color[4];
-    float increment;
+    float increment = 0.0f;
     float line_with = GIZMO_AXIS_LINE_WIDTH + 1.0f;
     float scale = UI_DPI_FAC * U.gizmo_size;
 
@@ -1404,7 +1331,7 @@ void drawDial3d(const TransInfo *t)
     }
     else {
       axis_idx = MAN_AXIS_ROT_C;
-      copy_v3_v3(mat_basis[2], t->spacemtx[t->orient_axis]);
+      negate_v3_v3(mat_basis[2], t->spacemtx[t->orient_axis]);
       scale *= 1.2f;
       line_with -= 1.0f;
     }
@@ -1435,17 +1362,14 @@ void drawDial3d(const TransInfo *t)
 
     if (activeSnap(t) && (!transformModeUseSnap(t) ||
                           (t->tsnap.mode & (SCE_SNAP_MODE_INCREMENT | SCE_SNAP_MODE_GRID)))) {
-      increment = (t->modifiers & MOD_PRECISION) ? t->snap[2] : t->snap[1];
-    }
-    else {
-      increment = t->snap[0];
+      increment = (t->modifiers & MOD_PRECISION) ? t->snap[1] : t->snap[0];
     }
 
     BLI_assert(axis_idx >= MAN_AXIS_RANGE_ROT_START && axis_idx < MAN_AXIS_RANGE_ROT_END);
     gizmo_get_axis_color(axis_idx, NULL, color, color);
 
-    GPU_depth_test(false);
-    GPU_blend(true);
+    GPU_depth_test(GPU_DEPTH_NONE);
+    GPU_blend(GPU_BLEND_ALPHA);
     GPU_line_smooth(true);
 
     ED_gizmotypes_dial_3d_draw_util(mat_basis,
@@ -1455,13 +1379,13 @@ void drawDial3d(const TransInfo *t)
                                     false,
                                     &(struct Dial3dParams){
                                         .draw_options = ED_GIZMO_DIAL_DRAW_FLAG_ANGLE_VALUE,
-                                        .angle_delta = t->values[0],
+                                        .angle_delta = t->values_final[0],
                                         .angle_increment = increment,
                                     });
 
     GPU_line_smooth(false);
-    GPU_depth_test(true);
-    GPU_blend(false);
+    GPU_depth_test(GPU_DEPTH_LESS_EQUAL);
+    GPU_blend(GPU_BLEND_NONE);
   }
 }
 
@@ -2154,7 +2078,7 @@ static void WIDGETGROUP_xform_cage_setup(const bContext *UNUSED(C), wmGizmoGroup
     for (int x = 0; x < 3; x++) {
       for (int y = 0; y < 3; y++) {
         for (int z = 0; z < 3; z++) {
-          bool constraint[3] = {x != 1, y != 1, z != 1};
+          const bool constraint[3] = {x != 1, y != 1, z != 1};
           ptr = WM_gizmo_operator_set(gz, i, ot_resize, NULL);
           if (prop_release_confirm == NULL) {
             prop_release_confirm = RNA_struct_find_property(ptr, "release_confirm");

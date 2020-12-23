@@ -30,7 +30,7 @@
 #include "DNA_light_types.h"
 #include "DNA_object_types.h"
 
-namespace USD {
+namespace blender::io::usd {
 
 USDLightWriter::USDLightWriter(const USDExporterContext &ctx) : USDAbstractWriter(ctx)
 {
@@ -99,7 +99,7 @@ void USDLightWriter::do_write(HierarchyContext &context)
     usd_intensity = light->energy;
   }
   else {
-    usd_intensity = light->energy / 100.f;
+    usd_intensity = light->energy / 100.0f;
   }
   usd_light.CreateIntensityAttr().Set(usd_intensity, timecode);
 
@@ -107,4 +107,4 @@ void USDLightWriter::do_write(HierarchyContext &context)
   usd_light.CreateSpecularAttr().Set(light->spec_fac, timecode);
 }
 
-}  // namespace USD
+}  // namespace blender::io::usd

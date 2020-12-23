@@ -780,13 +780,25 @@ bool OpenCLInfo::device_supported(const string &platform_name, const cl_device_i
     return true;
   }
 
-  /* It is possible to have Iris GPU on AMD/Apple OpenCL framework
-   * (aka, it will not be on Intel framework). This isn't supported
-   * and needs an explicit blacklist.
-   */
-  if (strstr(device_name.c_str(), "Iris")) {
+  /* Allow Intel GPUs on Intel OpenCL platform. */
+  if (platform_name.find("Intel") != string::npos) {
+    if (device_type != CL_DEVICE_TYPE_GPU) {
+      /* OpenCL on Intel CPU is not an officially supported configuration.
+       * Use hybrid CPU+GPU rendering to utilize both GPU and CPU. */
+      return false;
+    }
+
+#  ifdef __APPLE__
+    /* Apple uses own framework, which can also put Iris onto AMD frame-work.
+     * This isn't supported configuration. */
     return false;
+#  else
+    if (device_name.find("Iris") != string::npos || device_name.find("Xe") != string::npos) {
+      return true;
+    }
+#  endif
   }
+
   if (platform_name == "AMD Accelerated Parallel Processing" &&
       device_type == CL_DEVICE_TYPE_GPU) {
     if (driver_major < 2236) {
@@ -1172,9 +1184,20 @@ bool OpenCLInfo::get_device_extensions(cl_device_id device_id,
                                        string *device_extensions,
                                        cl_int *error)
 {
-  char buffer[1024];
+  size_t extension_length = 0;
   cl_int err;
-  if ((err = clGetDeviceInfo(device_id, CL_DEVICE_EXTENSIONS, sizeof(buffer), &buffer, NULL)) !=
+  /* Determine the size of the extension string*/
+  if ((err = clGetDeviceInfo(device_id, CL_DEVICE_EXTENSIONS, 0, 0, &extension_length)) !=
+      CL_SUCCESS) {
+    if (error != NULL) {
+      *error = err;
+    }
+    *device_extensions = "";
+    return false;
+  }
+  vector<char> buffer(extension_length);
+  if ((err = clGetDeviceInfo(
+           device_id, CL_DEVICE_EXTENSIONS, extension_length, buffer.data(), NULL)) !=
       CL_SUCCESS) {
     if (error != NULL) {
       *error = err;
@@ -1185,7 +1208,7 @@ bool OpenCLInfo::get_device_extensions(cl_device_id device_id,
   if (error != NULL) {
     *error = CL_SUCCESS;
   }
-  *device_extensions = buffer;
+  *device_extensions = string(buffer.data());
   return true;
 }
 

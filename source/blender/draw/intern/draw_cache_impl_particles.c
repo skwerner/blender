@@ -38,6 +38,7 @@
 #include "DNA_modifier_types.h"
 #include "DNA_particle_types.h"
 
+#include "BKE_customdata.h"
 #include "BKE_mesh.h"
 #include "BKE_particle.h"
 #include "BKE_pointcache.h"
@@ -128,9 +129,8 @@ static bool particle_batch_cache_valid(ParticleSystem *psys)
   if (cache->is_dirty == false) {
     return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 
   return true;
 }
@@ -302,12 +302,12 @@ static void particle_calculate_parent_uvs(ParticleSystem *psys,
   }
   ParticleData *particle = &psys->particles[parent_index];
   int num = particle->num_dmcache;
-  if (num == DMCACHE_NOTFOUND || num == DMCACHE_ISCHILD) {
+  if (ELEM(num, DMCACHE_NOTFOUND, DMCACHE_ISCHILD)) {
     if (particle->num < psmd->mesh_final->totface) {
       num = particle->num;
     }
   }
-  if (num != DMCACHE_NOTFOUND && num != DMCACHE_ISCHILD) {
+  if (!ELEM(num, DMCACHE_NOTFOUND, DMCACHE_ISCHILD)) {
     MFace *mface = &psmd->mesh_final->mface[num];
     for (int j = 0; j < num_uv_layers; j++) {
       psys_interpolate_uvs(mtfaces[j] + num, mface->v4, particle->fuv, r_uv[j]);
@@ -331,12 +331,12 @@ static void particle_calculate_parent_mcol(ParticleSystem *psys,
   }
   ParticleData *particle = &psys->particles[parent_index];
   int num = particle->num_dmcache;
-  if (num == DMCACHE_NOTFOUND || num == DMCACHE_ISCHILD) {
+  if (ELEM(num, DMCACHE_NOTFOUND, DMCACHE_ISCHILD)) {
     if (particle->num < psmd->mesh_final->totface) {
       num = particle->num;
     }
   }
-  if (num != DMCACHE_NOTFOUND && num != DMCACHE_ISCHILD) {
+  if (!ELEM(num, DMCACHE_NOTFOUND, DMCACHE_ISCHILD)) {
     MFace *mface = &psmd->mesh_final->mface[num];
     for (int j = 0; j < num_col_layers; j++) {
       /* CustomDataLayer CD_MCOL has 4 structs per face. */
@@ -647,14 +647,13 @@ static float particle_key_weight(const ParticleData *particle, int strand, float
   if (t == 1.0) {
     return hkeys[part->totkey - 1].weight;
   }
-  else {
-    float interp = t / edit_key_seg_t;
-    int index = (int)interp;
-    interp -= floorf(interp); /* Time between 2 edit key */
-    float s1 = hkeys[index].weight;
-    float s2 = hkeys[index + 1].weight;
-    return s1 + interp * (s2 - s1);
-  }
+
+  float interp = t / edit_key_seg_t;
+  int index = (int)interp;
+  interp -= floorf(interp); /* Time between 2 edit key */
+  float s1 = hkeys[index].weight;
+  float s2 = hkeys[index + 1].weight;
+  return s1 + interp * (s2 - s1);
 }
 
 static int particle_batch_cache_fill_segments_edit(
@@ -811,7 +810,8 @@ static void particle_batch_cache_ensure_procedural_final_points(ParticleHairCach
   /* Create vbo immediately to bind to texture buffer. */
   GPU_vertbuf_use(cache->final[subdiv].proc_buf);
 
-  cache->final[subdiv].proc_tex = GPU_texture_create_from_vertbuf(cache->final[subdiv].proc_buf);
+  cache->final[subdiv].proc_tex = GPU_texture_create_from_vertbuf("part_proc",
+                                                                  cache->final[subdiv].proc_buf);
 }
 
 static void particle_batch_cache_ensure_procedural_strand_data(PTCacheEdit *edit,
@@ -1010,18 +1010,19 @@ static void particle_batch_cache_ensure_procedural_strand_data(PTCacheEdit *edit
 
   /* Create vbo immediately to bind to texture buffer. */
   GPU_vertbuf_use(cache->proc_strand_buf);
-  cache->strand_tex = GPU_texture_create_from_vertbuf(cache->proc_strand_buf);
+  cache->strand_tex = GPU_texture_create_from_vertbuf("part_strand", cache->proc_strand_buf);
 
   GPU_vertbuf_use(cache->proc_strand_seg_buf);
-  cache->strand_seg_tex = GPU_texture_create_from_vertbuf(cache->proc_strand_seg_buf);
+  cache->strand_seg_tex = GPU_texture_create_from_vertbuf("part_strand_seg",
+                                                          cache->proc_strand_seg_buf);
 
   for (int i = 0; i < cache->num_uv_layers; i++) {
     GPU_vertbuf_use(cache->proc_uv_buf[i]);
-    cache->uv_tex[i] = GPU_texture_create_from_vertbuf(cache->proc_uv_buf[i]);
+    cache->uv_tex[i] = GPU_texture_create_from_vertbuf("part_uv", cache->proc_uv_buf[i]);
   }
   for (int i = 0; i < cache->num_col_layers; i++) {
     GPU_vertbuf_use(cache->proc_col_buf[i]);
-    cache->col_tex[i] = GPU_texture_create_from_vertbuf(cache->proc_col_buf[i]);
+    cache->col_tex[i] = GPU_texture_create_from_vertbuf("part_col", cache->proc_col_buf[i]);
   }
 }
 
@@ -1111,7 +1112,7 @@ static void particle_batch_cache_ensure_procedural_pos(PTCacheEdit *edit,
   /* Create vbo immediately to bind to texture buffer. */
   GPU_vertbuf_use(cache->proc_point_buf);
 
-  cache->point_tex = GPU_texture_create_from_vertbuf(cache->proc_point_buf);
+  cache->point_tex = GPU_texture_create_from_vertbuf("part_point", cache->proc_point_buf);
 }
 
 static void particle_batch_cache_ensure_pos_and_seg(PTCacheEdit *edit,

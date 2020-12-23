@@ -26,15 +26,12 @@ endif()
 message("HARVEST_TARGET = ${HARVEST_TARGET}")
 
 if(WIN32)
+
 if(BUILD_MODE STREQUAL Release)
   add_custom_target(Harvest_Release_Results
     COMMAND # jpeg rename libfile + copy include
         ${CMAKE_COMMAND} -E copy ${LIBDIR}/jpg/lib/jpeg-static.lib ${HARVEST_TARGET}/jpeg/lib/libjpeg.lib &&
         ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/jpg/include/ ${HARVEST_TARGET}/jpeg/include/ &&
-        # OpenImageIO
-        ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/OpenImageIO/include ${HARVEST_TARGET}/OpenImageIO/include &&
-        ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/OpenImageIO/lib ${HARVEST_TARGET}/OpenImageIO/lib &&
-        ${CMAKE_COMMAND} -E copy ${LIBDIR}/OpenImageIO/bin/idiff.exe ${HARVEST_TARGET}/OpenImageIO/bin/idiff.exe &&
         # png
         ${CMAKE_COMMAND} -E copy ${LIBDIR}/png/lib/libpng16_static.lib ${HARVEST_TARGET}/png/lib/libpng.lib &&
         ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/png/include/ ${HARVEST_TARGET}/png/include/ &&
@@ -46,21 +43,8 @@ if(BUILD_MODE STREQUAL Release)
         ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/glew/include/ ${HARVEST_TARGET}/opengl/include/ &&
         # tiff
         ${CMAKE_COMMAND} -E copy ${LIBDIR}/tiff/lib/tiff.lib ${HARVEST_TARGET}/tiff/lib/libtiff.lib &&
-        ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/tiff/include/ ${HARVEST_TARGET}/tiff/include/ &&
-        # hidapi
-        ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/hidapi/ ${HARVEST_TARGET}/hidapi/
+        ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/tiff/include/ ${HARVEST_TARGET}/tiff/include/
     DEPENDS
-  )
-endif()
-
-if(BUILD_MODE STREQUAL Debug)
-  add_custom_target(Harvest_Debug_Results
-        # OpenImageIO
-    COMMAND ${CMAKE_COMMAND} -E copy ${LIBDIR}/openimageio/lib/OpenImageIO.lib ${HARVEST_TARGET}/openimageio/lib/OpenImageIO_d.lib &&
-        ${CMAKE_COMMAND} -E copy ${LIBDIR}/openimageio/lib/OpenImageIO_Util.lib ${HARVEST_TARGET}/openimageio/lib/OpenImageIO_Util_d.lib &&
-        # hdf5
-        ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/hdf5/lib ${HARVEST_TARGET}/hdf5/lib &&
-    DEPENDS Package_Python
   )
 endif()
 
@@ -106,12 +90,18 @@ harvest(freetype/include freetype/include "*.h")
 harvest(freetype/lib/libfreetype2ST.a freetype/lib/libfreetype.a)
 harvest(glew/include glew/include "*.h")
 harvest(glew/lib glew/lib "*.a")
+harvest(gmp/include gmp/include "*.h")
+harvest(gmp/lib gmp/lib "*.a")
 harvest(jemalloc/include jemalloc/include "*.h")
 harvest(jemalloc/lib jemalloc/lib "*.a")
 harvest(jpg/include jpeg/include "*.h")
 harvest(jpg/lib jpeg/lib "libjpeg.a")
 harvest(lame/lib ffmpeg/lib "*.a")
 harvest(clang/bin llvm/bin "clang-format")
+if(BUILD_CLANG_TOOLS)
+  harvest(clang/bin llvm/bin "clang-tidy")
+  harvest(clang/share/clang llvm/share "run-clang-tidy.py")
+endif()
 harvest(clang/include llvm/include "*")
 harvest(llvm/include llvm/include "*")
 harvest(llvm/bin llvm/bin "llvm-config")
@@ -149,14 +139,19 @@ harvest(openimageio/bin openimageio/bin "maketx")
 harvest(openimageio/bin openimageio/bin "oiiotool")
 harvest(openimageio/include openimageio/include "*")
 harvest(openimageio/lib openimageio/lib "*.a")
-harvest(openimagedenoise/include openimagedenoise/include "*")
-harvest(openimagedenoise/lib openimagedenoise/lib "*.a")
+if((NOT APPLE) OR ("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "x86_64"))
+  harvest(openimagedenoise/include openimagedenoise/include "*")
+  harvest(openimagedenoise/lib openimagedenoise/lib "*.a")
+  harvest(embree/include embree/include "*.h")
+  harvest(embree/lib embree/lib "*.a")
+endif()
 harvest(openjpeg/include/openjpeg-2.3 openjpeg/include "*.h")
 harvest(openjpeg/lib openjpeg/lib "*.a")
 harvest(opensubdiv/include opensubdiv/include "*.h")
 harvest(opensubdiv/lib opensubdiv/lib "*.a")
 harvest(openvdb/include/openvdb openvdb/include/openvdb "*.h")
 harvest(openvdb/lib openvdb/lib "*.a")
+harvest(nanovdb/nanovdb nanovdb/include/nanovdb "*.h")
 harvest(xr_openxr_sdk/include/openxr xr_openxr_sdk/include/openxr "*.h")
 harvest(xr_openxr_sdk/lib xr_openxr_sdk/lib "*.a")
 harvest(osl/bin osl/bin "oslc")
@@ -165,6 +160,8 @@ harvest(osl/lib osl/lib "*.a")
 harvest(osl/shaders osl/shaders "*.h")
 harvest(png/include png/include "*.h")
 harvest(png/lib png/lib "*.a")
+harvest(pugixml/include pugixml/include "*.hpp")
+harvest(pugixml/lib pugixml/lib "*.a")
 harvest(python/bin python/bin "python${PYTHON_SHORT_VERSION}m")
 harvest(python/include python/include "*h")
 harvest(python/lib python/lib "*")
@@ -185,11 +182,11 @@ harvest(vpx/lib ffmpeg/lib "*.a")
 harvest(webp/lib ffmpeg/lib "*.a")
 harvest(x264/lib ffmpeg/lib "*.a")
 harvest(xvidcore/lib ffmpeg/lib "*.a")
-harvest(embree/include embree/include "*.h")
-harvest(embree/lib embree/lib "*.a")
 harvest(usd/include usd/include "*.h")
 harvest(usd/lib/usd usd/lib/usd "*")
 harvest(usd/plugin usd/plugin "*")
+harvest(potrace/include potrace/include "*.h")
+harvest(potrace/lib potrace/lib "*.a")
 
 if(UNIX AND NOT APPLE)
   harvest(libglu/lib mesa/lib "*.so*")

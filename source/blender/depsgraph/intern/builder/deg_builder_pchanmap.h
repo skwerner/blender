@@ -25,10 +25,11 @@
 
 #include "intern/depsgraph_type.h"
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 struct RootPChanMap {
-  /* ctor and dtor - Create and free the internal map respectively. */
+  /* Constructor and destructor - Create and free the internal map respectively. */
   RootPChanMap();
   ~RootPChanMap();
 
@@ -49,4 +50,5 @@ struct RootPChanMap {
   Map<StringRefNull, Set<StringRefNull>> map_;
 };
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

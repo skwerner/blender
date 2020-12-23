@@ -27,35 +27,46 @@
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
 
+#include "BLT_translation.h"
+
+#include "DNA_defaults.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
 
 #include "BKE_colortools.h"
+#include "BKE_context.h"
 #include "BKE_deform.h"
 #include "BKE_gpencil.h"
 #include "BKE_gpencil_modifier.h"
 #include "BKE_lib_query.h"
 #include "BKE_modifier.h"
+#include "BKE_screen.h"
 
 #include "DEG_depsgraph.h"
 
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
+
 #include "MOD_gpencil_modifiertypes.h"
+#include "MOD_gpencil_ui_common.h"
 #include "MOD_gpencil_util.h"
 
 static void initData(GpencilModifierData *md)
 {
   ThickGpencilModifierData *gpmd = (ThickGpencilModifierData *)md;
-  gpmd->pass_index = 0;
-  gpmd->thickness_fac = 1.0f;
-  gpmd->thickness = 30;
-  gpmd->material = NULL;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(gpmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(gpmd, DNA_struct_default_get(ThickGpencilModifierData), modifier);
+
   gpmd->curve_thickness = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
-  if (gpmd->curve_thickness) {
-    BKE_curvemapping_initialize(gpmd->curve_thickness);
-  }
+  BKE_curvemapping_init(gpmd->curve_thickness);
 }
 
 static void freeData(GpencilModifierData *md)
@@ -166,6 +177,45 @@ static void foreachIDLink(GpencilModifierData *md, Object *ob, IDWalkFunc walk, 
   walk(userData, ob, (ID **)&mmd->material, IDWALK_CB_USER);
 }
 
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, NULL);
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, ptr, "normalize_thickness", 0, NULL, ICON_NONE);
+
+  if (RNA_boolean_get(ptr, "normalize_thickness")) {
+    uiItemR(layout, ptr, "thickness", 0, NULL, ICON_NONE);
+  }
+  else {
+    uiItemR(layout, ptr, "thickness_factor", 0, NULL, ICON_NONE);
+  }
+
+  gpencil_modifier_panel_end(layout, ptr);
+}
+
+static void mask_panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  gpencil_modifier_masking_panel_draw(panel, true, true);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  PanelType *panel_type = gpencil_modifier_panel_register(
+      region_type, eGpencilModifierType_Thick, panel_draw);
+  PanelType *mask_panel_type = gpencil_modifier_subpanel_register(
+      region_type, "mask", "Influence", NULL, mask_panel_draw, panel_type);
+  gpencil_modifier_subpanel_register(region_type,
+                                     "curve",
+                                     "",
+                                     gpencil_modifier_curve_header_draw,
+                                     gpencil_modifier_curve_panel_draw,
+                                     mask_panel_type);
+}
+
 GpencilModifierTypeInfo modifierType_Gpencil_Thick = {
     /* name */ "Thickness",
     /* structName */ "ThickGpencilModifierData",
@@ -185,7 +235,7 @@ GpencilModifierTypeInfo modifierType_Gpencil_Thick = {
     /* isDisabled */ NULL,
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ NULL,
-    /* foreachObjectLink */ NULL,
     /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
+    /* panelRegister */ panelRegister,
 };

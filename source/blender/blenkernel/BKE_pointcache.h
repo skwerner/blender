@@ -17,18 +17,16 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_POINTCACHE_H__
-#define __BKE_POINTCACHE_H__
+#pragma once
 
 /** \file
  * \ingroup bke
  */
 
-#include "DNA_ID.h"
-#include "DNA_boid_types.h"
-#include "DNA_dynamicpaint_types.h"
-#include "DNA_object_force_types.h"
-#include <stdio.h> /* for FILE */
+#include "DNA_boid_types.h"       /* for #BoidData */
+#include "DNA_pointcache_types.h" /* for #BPHYS_TOT_DATA */
+
+#include <stdio.h> /* for #FILE */
 
 #ifdef __cplusplus
 extern "C" {
@@ -64,6 +62,7 @@ extern "C" {
 #define PTCACHE_TYPE_SMOKE_HIGHRES 4
 #define PTCACHE_TYPE_DYNAMICPAINT 5
 #define PTCACHE_TYPE_RIGIDBODY 6
+#define PTCACHE_TYPE_SIM_PARTICLES 7
 
 /* high bits reserved for flags that need to be stored in file */
 #define PTCACHE_TYPEFLAG_COMPRESS (1 << 16)
@@ -90,9 +89,9 @@ struct RigidBodyWorld;
 struct Scene;
 struct SoftBody;
 struct ViewLayer;
-
-struct OpenVDBReader;
-struct OpenVDBWriter;
+struct BlendWriter;
+struct BlendDataReader;
+struct DynamicPaintSurface;
 
 /* temp structure for read/write */
 typedef struct PTCacheData {
@@ -121,14 +120,13 @@ typedef struct PTCacheFile {
 
 enum {
   PTCACHE_FILE_PTCACHE = 0,
-  PTCACHE_FILE_OPENVDB = 1,
 };
 
 typedef struct PTCacheID {
   struct PTCacheID *next, *prev;
 
   struct Scene *scene;
-  struct Object *ob;
+  struct ID *owner_id;
   void *calldata;
   unsigned int type, file_type;
   unsigned int stack_index;
@@ -143,7 +141,7 @@ typedef struct PTCacheID {
   /* copies point data to cache data */
   int (*write_point)(int index, void *calldata, void **data, int cfra);
   /* copies cache cata to point data */
-  void (*read_point)(int index, void *calldata, void **data, float cfra, float *old_data);
+  void (*read_point)(int index, void *calldata, void **data, float cfra, const float *old_data);
   /* interpolated between previously read point data and cache data */
   void (*interpolate_point)(int index,
                             void *calldata,
@@ -151,17 +149,12 @@ typedef struct PTCacheID {
                             float cfra,
                             float cfra1,
                             float cfra2,
-                            float *old_data);
+                            const float *old_data);
 
   /* copies point data to cache data */
   int (*write_stream)(PTCacheFile *pf, void *calldata);
   /* copies cache cata to point data */
   int (*read_stream)(PTCacheFile *pf, void *calldata);
-
-  /* copies point data to cache data */
-  int (*write_openvdb_stream)(struct OpenVDBWriter *writer, void *calldata);
-  /* copies cache cata to point data */
-  int (*read_openvdb_stream)(struct OpenVDBReader *reader, void *calldata);
 
   /* copies custom extradata to cache data */
   void (*write_extra_data)(void *calldata, struct PTCacheMem *pm, int cfra);
@@ -175,7 +168,7 @@ typedef struct PTCacheID {
    * (the cfra parameter is just for using same function pointer with totwrite). */
   int (*totpoint)(void *calldata, int cfra);
   /* report error if number of points does not match */
-  void (*error)(void *calldata, const char *message);
+  void (*error)(const struct ID *owner_id, void *calldata, const char *message);
   /* number of points written for current cache frame */
   int (*totwrite)(void *calldata, int cfra);
 
@@ -287,7 +280,7 @@ void BKE_ptcache_make_particle_key(struct ParticleKey *key, int index, void **da
 void BKE_ptcache_id_from_softbody(PTCacheID *pid, struct Object *ob, struct SoftBody *sb);
 void BKE_ptcache_id_from_particles(PTCacheID *pid, struct Object *ob, struct ParticleSystem *psys);
 void BKE_ptcache_id_from_cloth(PTCacheID *pid, struct Object *ob, struct ClothModifierData *clmd);
-void BKE_ptcache_id_from_smoke(PTCacheID *pid, struct Object *ob, struct FluidModifierData *mmd);
+void BKE_ptcache_id_from_smoke(PTCacheID *pid, struct Object *ob, struct FluidModifierData *fmd);
 void BKE_ptcache_id_from_dynamicpaint(PTCacheID *pid,
                                       struct Object *ob,
                                       struct DynamicPaintSurface *surface);
@@ -330,9 +323,11 @@ int BKE_ptcache_data_size(int data_type);
 int BKE_ptcache_mem_index_find(struct PTCacheMem *pm, unsigned int index);
 
 /* Memory cache read/write helpers. */
-void BKE_ptcache_mem_pointers_init(struct PTCacheMem *pm);
-void BKE_ptcache_mem_pointers_incr(struct PTCacheMem *pm);
-int BKE_ptcache_mem_pointers_seek(int point_index, struct PTCacheMem *pm);
+void BKE_ptcache_mem_pointers_init(struct PTCacheMem *pm, void *cur[BPHYS_TOT_DATA]);
+void BKE_ptcache_mem_pointers_incr(void *cur[BPHYS_TOT_DATA]);
+int BKE_ptcache_mem_pointers_seek(int point_index,
+                                  struct PTCacheMem *pm,
+                                  void *cur[BPHYS_TOT_DATA]);
 
 /* Main cache reading call. */
 int BKE_ptcache_read(PTCacheID *pid, float cfra, bool no_extrapolate_old);
@@ -382,8 +377,14 @@ void BKE_ptcache_validate(struct PointCache *cache, int framenr);
 /* Set correct flags after unsuccessful simulation step */
 void BKE_ptcache_invalidate(struct PointCache *cache);
 
+/********************** .blend File I/O *********************/
+
+void BKE_ptcache_blend_write(struct BlendWriter *writer, struct ListBase *ptcaches);
+void BKE_ptcache_blend_read_data(struct BlendDataReader *reader,
+                                 struct ListBase *ptcaches,
+                                 struct PointCache **ocache,
+                                 int force_disk);
+
 #ifdef __cplusplus
 }
-#endif
-
 #endif

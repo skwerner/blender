@@ -26,9 +26,16 @@ CCL_NAMESPACE_BEGIN
 
 /* Node Type */
 
+NodeOwner::~NodeOwner()
+{
+}
+
 Node::Node(const NodeType *type_, ustring name_) : name(name_), type(type_)
 {
   assert(type);
+
+  owner = nullptr;
+  tag_modified();
 
   /* assign non-empty name, convenient for debugging */
   if (name.empty()) {
@@ -43,11 +50,6 @@ Node::Node(const NodeType *type_, ustring name_) : name(name_), type(type_)
 
 Node::~Node()
 {
-}
-
-template<typename T> static T &get_socket_value(const Node *node, const SocketType &socket)
-{
-  return (T &)*(((char *)node) + socket.struct_offset);
 }
 
 #ifndef NDEBUG
@@ -68,37 +70,37 @@ static bool is_socket_array_float3(const SocketType &socket)
 void Node::set(const SocketType &input, bool value)
 {
   assert(input.type == SocketType::BOOLEAN);
-  get_socket_value<bool>(this, input) = value;
+  set_if_different(input, value);
 }
 
 void Node::set(const SocketType &input, int value)
 {
   assert((input.type == SocketType::INT || input.type == SocketType::ENUM));
-  get_socket_value<int>(this, input) = value;
+  set_if_different(input, value);
 }
 
 void Node::set(const SocketType &input, uint value)
 {
   assert(input.type == SocketType::UINT);
-  get_socket_value<uint>(this, input) = value;
+  set_if_different(input, value);
 }
 
 void Node::set(const SocketType &input, float value)
 {
   assert(input.type == SocketType::FLOAT);
-  get_socket_value<float>(this, input) = value;
+  set_if_different(input, value);
 }
 
 void Node::set(const SocketType &input, float2 value)
 {
-  assert(input.type == SocketType::FLOAT);
-  get_socket_value<float2>(this, input) = value;
+  assert(input.type == SocketType::POINT2);
+  set_if_different(input, value);
 }
 
 void Node::set(const SocketType &input, float3 value)
 {
   assert(is_socket_float3(input));
-  get_socket_value<float3>(this, input) = value;
+  set_if_different(input, value);
 }
 
 void Node::set(const SocketType &input, const char *value)
@@ -109,12 +111,12 @@ void Node::set(const SocketType &input, const char *value)
 void Node::set(const SocketType &input, ustring value)
 {
   if (input.type == SocketType::STRING) {
-    get_socket_value<ustring>(this, input) = value;
+    set_if_different(input, value);
   }
   else if (input.type == SocketType::ENUM) {
     const NodeEnum &enm = *input.enum_values;
     if (enm.exists(value)) {
-      get_socket_value<int>(this, input) = enm[value];
+      set_if_different(input, enm[value]);
     }
     else {
       assert(0);
@@ -128,62 +130,62 @@ void Node::set(const SocketType &input, ustring value)
 void Node::set(const SocketType &input, const Transform &value)
 {
   assert(input.type == SocketType::TRANSFORM);
-  get_socket_value<Transform>(this, input) = value;
+  set_if_different(input, value);
 }
 
 void Node::set(const SocketType &input, Node *value)
 {
   assert(input.type == SocketType::NODE);
-  get_socket_value<Node *>(this, input) = value;
+  set_if_different(input, value);
 }
 
 /* set array values */
 void Node::set(const SocketType &input, array<bool> &value)
 {
   assert(input.type == SocketType::BOOLEAN_ARRAY);
-  get_socket_value<array<bool>>(this, input).steal_data(value);
+  set_if_different(input, value);
 }
 
 void Node::set(const SocketType &input, array<int> &value)
 {
   assert(input.type == SocketType::INT_ARRAY);
-  get_socket_value<array<int>>(this, input).steal_data(value);
+  set_if_different(input, value);
 }
 
 void Node::set(const SocketType &input, array<float> &value)
 {
   assert(input.type == SocketType::FLOAT_ARRAY);
-  get_socket_value<array<float>>(this, input).steal_data(value);
+  set_if_different(input, value);
 }
 
 void Node::set(const SocketType &input, array<float2> &value)
 {
-  assert(input.type == SocketType::FLOAT_ARRAY);
-  get_socket_value<array<float2>>(this, input).steal_data(value);
+  assert(input.type == SocketType::POINT2_ARRAY);
+  set_if_different(input, value);
 }
 
 void Node::set(const SocketType &input, array<float3> &value)
 {
   assert(is_socket_array_float3(input));
-  get_socket_value<array<float3>>(this, input).steal_data(value);
+  set_if_different(input, value);
 }
 
 void Node::set(const SocketType &input, array<ustring> &value)
 {
   assert(input.type == SocketType::STRING_ARRAY);
-  get_socket_value<array<ustring>>(this, input).steal_data(value);
+  set_if_different(input, value);
 }
 
 void Node::set(const SocketType &input, array<Transform> &value)
 {
   assert(input.type == SocketType::TRANSFORM_ARRAY);
-  get_socket_value<array<Transform>>(this, input).steal_data(value);
+  set_if_different(input, value);
 }
 
 void Node::set(const SocketType &input, array<Node *> &value)
 {
-  assert(input.type == SocketType::TRANSFORM_ARRAY);
-  get_socket_value<array<Node *>>(this, input).steal_data(value);
+  assert(input.type == SocketType::NODE_ARRAY);
+  set_if_different(input, value);
 }
 
 /* get values */
@@ -377,6 +379,87 @@ void Node::copy_value(const SocketType &socket, const Node &other, const SocketT
     const void *src = ((char *)&other) + other_socket.struct_offset;
     void *dst = ((char *)this) + socket.struct_offset;
     memcpy(dst, src, socket.size());
+  }
+}
+
+void Node::set_value(const SocketType &socket, const Node &other, const SocketType &other_socket)
+{
+  assert(socket.type == other_socket.type);
+  (void)other_socket;
+
+  if (socket.is_array()) {
+    switch (socket.type) {
+      case SocketType::BOOLEAN_ARRAY:
+        set(socket, get_socket_value<array<bool>>(&other, socket));
+        break;
+      case SocketType::FLOAT_ARRAY:
+        set(socket, get_socket_value<array<float>>(&other, socket));
+        break;
+      case SocketType::INT_ARRAY:
+        set(socket, get_socket_value<array<int>>(&other, socket));
+        break;
+      case SocketType::COLOR_ARRAY:
+      case SocketType::VECTOR_ARRAY:
+      case SocketType::POINT_ARRAY:
+      case SocketType::NORMAL_ARRAY:
+        set(socket, get_socket_value<array<float3>>(&other, socket));
+        break;
+      case SocketType::POINT2_ARRAY:
+        set(socket, get_socket_value<array<float2>>(&other, socket));
+        break;
+      case SocketType::STRING_ARRAY:
+        set(socket, get_socket_value<array<ustring>>(&other, socket));
+        break;
+      case SocketType::TRANSFORM_ARRAY:
+        set(socket, get_socket_value<array<Transform>>(&other, socket));
+        break;
+      case SocketType::NODE_ARRAY:
+        set(socket, get_socket_value<array<Node *>>(&other, socket));
+        break;
+      default:
+        assert(0);
+        break;
+    }
+  }
+  else {
+    switch (socket.type) {
+      case SocketType::BOOLEAN:
+        set(socket, get_socket_value<bool>(&other, socket));
+        break;
+      case SocketType::FLOAT:
+        set(socket, get_socket_value<float>(&other, socket));
+        break;
+      case SocketType::INT:
+        set(socket, get_socket_value<int>(&other, socket));
+        break;
+      case SocketType::UINT:
+        set(socket, get_socket_value<uint>(&other, socket));
+        break;
+      case SocketType::COLOR:
+      case SocketType::VECTOR:
+      case SocketType::POINT:
+      case SocketType::NORMAL:
+        set(socket, get_socket_value<float3>(&other, socket));
+        break;
+      case SocketType::POINT2:
+        set(socket, get_socket_value<float2>(&other, socket));
+        break;
+      case SocketType::STRING:
+        set(socket, get_socket_value<ustring>(&other, socket));
+        break;
+      case SocketType::ENUM:
+        set(socket, get_socket_value<int>(&other, socket));
+        break;
+      case SocketType::TRANSFORM:
+        set(socket, get_socket_value<Transform>(&other, socket));
+        break;
+      case SocketType::NODE:
+        set(socket, get_socket_value<Node *>(&other, socket));
+        break;
+      default:
+        assert(0);
+        break;
+    }
   }
 }
 
@@ -677,6 +760,69 @@ bool Node::is_a(const NodeType *type_)
     }
   }
   return false;
+}
+
+const NodeOwner *Node::get_owner() const
+{
+  return owner;
+}
+
+void Node::set_owner(const NodeOwner *owner_)
+{
+  assert(owner_);
+  owner = owner_;
+}
+
+bool Node::socket_is_modified(const SocketType &input) const
+{
+  return (socket_modified & input.modified_flag_bit) != 0;
+}
+
+bool Node::is_modified()
+{
+  return socket_modified != 0;
+}
+
+void Node::tag_modified()
+{
+  socket_modified = ~0ull;
+}
+
+void Node::clear_modified()
+{
+  socket_modified = 0;
+}
+
+template<typename T> void Node::set_if_different(const SocketType &input, T value)
+{
+  if (get_socket_value<T>(this, input) == value) {
+    return;
+  }
+
+  get_socket_value<T>(this, input) = value;
+  socket_modified |= input.modified_flag_bit;
+}
+
+template<typename T> void Node::set_if_different(const SocketType &input, array<T> &value)
+{
+  if (!socket_is_modified(input)) {
+    if (get_socket_value<array<T>>(this, input) == value) {
+      return;
+    }
+  }
+
+  get_socket_value<array<T>>(this, input).steal_data(value);
+  socket_modified |= input.modified_flag_bit;
+}
+
+void Node::print_modified_sockets() const
+{
+  printf("Node : %s\n", name.c_str());
+  for (auto &socket : type->inputs) {
+    if (socket_is_modified(socket)) {
+      printf("-- socket modified : %s\n", socket.name.c_str());
+    }
+  }
 }
 
 CCL_NAMESPACE_END

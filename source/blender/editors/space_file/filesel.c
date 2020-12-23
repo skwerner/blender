@@ -61,6 +61,7 @@
 #include "BLF_api.h"
 
 #include "ED_fileselect.h"
+#include "ED_screen.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -76,18 +77,20 @@
 
 #define VERTLIST_MAJORCOLUMN_WIDTH (25 * UI_UNIT_X)
 
-FileSelectParams *ED_fileselect_get_params(struct SpaceFile *sfile)
+FileSelectParams *ED_fileselect_get_active_params(const SpaceFile *sfile)
 {
-  if (!sfile->params) {
-    ED_fileselect_set_params(sfile);
+  if (!sfile) {
+    /* Sometimes called in poll before space type was checked. */
+    return NULL;
   }
+
   return sfile->params;
 }
 
 /**
  * \note RNA_struct_property_is_set_ex is used here because we want
- *       the previously used settings to be used here rather then overriding them */
-short ED_fileselect_set_params(SpaceFile *sfile)
+ *       the previously used settings to be used here rather than overriding them */
+static FileSelectParams *fileselect_ensure_updated_file_params(SpaceFile *sfile)
 {
   FileSelectParams *params;
   wmOperator *op = sfile->op;
@@ -135,20 +138,17 @@ short ED_fileselect_set_params(SpaceFile *sfile)
       RNA_string_get(op->ptr, "filepath", name);
       if (params->type == FILE_LOADLIB) {
         BLI_strncpy(params->dir, name, sizeof(params->dir));
-        sfile->params->file[0] = '\0';
+        params->file[0] = '\0';
       }
       else {
-        BLI_split_dirfile(name,
-                          sfile->params->dir,
-                          sfile->params->file,
-                          sizeof(sfile->params->dir),
-                          sizeof(sfile->params->file));
+        BLI_split_dirfile(
+            name, params->dir, params->file, sizeof(params->dir), sizeof(params->file));
       }
     }
     else {
       if (is_directory && RNA_struct_property_is_set_ex(op->ptr, "directory", false)) {
         RNA_string_get(op->ptr, "directory", params->dir);
-        sfile->params->file[0] = '\0';
+        params->file[0] = '\0';
       }
 
       if (is_filename && RNA_struct_property_is_set_ex(op->ptr, "filename", false)) {
@@ -266,15 +266,16 @@ short ED_fileselect_set_params(SpaceFile *sfile)
       params->display = RNA_property_enum_get(op->ptr, prop);
     }
 
+    if (params->display == FILE_DEFAULTDISPLAY) {
+      params->display = U_default.file_space_data.display_type;
+    }
+
     if ((prop = RNA_struct_find_property(op->ptr, "sort_method"))) {
       params->sort = RNA_property_enum_get(op->ptr, prop);
     }
-    else {
-      params->sort = U_default.file_space_data.sort_type;
-    }
 
-    if (params->display == FILE_DEFAULTDISPLAY) {
-      params->display = U_default.file_space_data.display_type;
+    if (params->sort == FILE_SORT_DEFAULT) {
+      params->sort = U_default.file_space_data.sort_type;
     }
 
     if (is_relative_path) {
@@ -304,30 +305,39 @@ short ED_fileselect_set_params(SpaceFile *sfile)
     sfile->folders_prev = folderlist_new();
   }
 
-  if (!sfile->params->dir[0]) {
+  if (!params->dir[0]) {
     if (blendfile_path[0] != '\0') {
-      BLI_split_dir_part(blendfile_path, sfile->params->dir, sizeof(sfile->params->dir));
+      BLI_split_dir_part(blendfile_path, params->dir, sizeof(params->dir));
     }
     else {
       const char *doc_path = BKE_appdir_folder_default();
       if (doc_path) {
-        BLI_strncpy(sfile->params->dir, doc_path, sizeof(sfile->params->dir));
+        BLI_strncpy(params->dir, doc_path, sizeof(params->dir));
       }
     }
   }
 
-  folderlist_pushdir(sfile->folders_prev, sfile->params->dir);
+  folderlist_pushdir(sfile->folders_prev, params->dir);
 
-  /* switching thumbnails needs to recalc layout [#28809] */
+  /* Switching thumbnails needs to recalc layout T28809. */
   if (sfile->layout) {
     sfile->layout->dirty = true;
   }
 
-  return 1;
+  return params;
 }
 
-/* The subset of FileSelectParams.flag items we store into preferences. */
-#define PARAMS_FLAGS_REMEMBERED (FILE_HIDE_DOT | FILE_SORT_INVERT)
+FileSelectParams *ED_fileselect_ensure_active_params(SpaceFile *sfile)
+{
+  if (!sfile->params) {
+    fileselect_ensure_updated_file_params(sfile);
+  }
+  return sfile->params;
+}
+
+/* The subset of FileSelectParams.flag items we store into preferences. Note that FILE_SORT_ALPHA
+ * may also be remembered, but only conditionally. */
+#define PARAMS_FLAGS_REMEMBERED (FILE_HIDE_DOT)
 
 void ED_fileselect_window_params_get(const wmWindow *win, int win_size[2], bool *is_maximized)
 {
@@ -340,30 +350,48 @@ void ED_fileselect_window_params_get(const wmWindow *win, int win_size[2], bool 
   *is_maximized = WM_window_is_maximized(win);
 }
 
+static bool file_select_use_default_display_type(const SpaceFile *sfile)
+{
+  PropertyRNA *prop;
+  return (sfile->op == NULL) ||
+         !(prop = RNA_struct_find_property(sfile->op->ptr, "display_type")) ||
+         (RNA_property_enum_get(sfile->op->ptr, prop) == FILE_DEFAULTDISPLAY);
+}
+
+static bool file_select_use_default_sort_type(const SpaceFile *sfile)
+{
+  PropertyRNA *prop;
+  return (sfile->op == NULL) ||
+         !(prop = RNA_struct_find_property(sfile->op->ptr, "sort_method")) ||
+         (RNA_property_enum_get(sfile->op->ptr, prop) == FILE_SORT_DEFAULT);
+}
+
 void ED_fileselect_set_params_from_userdef(SpaceFile *sfile)
 {
   wmOperator *op = sfile->op;
   UserDef_FileSpaceData *sfile_udata = &U.file_space_data;
 
-  ED_fileselect_set_params(sfile);
-
+  FileSelectParams *params = fileselect_ensure_updated_file_params(sfile);
   if (!op) {
     return;
   }
 
-  if (!RNA_struct_property_is_set(op->ptr, "display_type")) {
-    sfile->params->display = sfile_udata->display_type;
-  }
-  if (!RNA_struct_property_is_set(op->ptr, "sort_method")) {
-    sfile->params->sort = sfile_udata->sort_type;
-  }
-  sfile->params->thumbnail_size = sfile_udata->thumbnail_size;
-  sfile->params->details_flags = sfile_udata->details_flags;
-  sfile->params->filter_id = sfile_udata->filter_id;
+  params->thumbnail_size = sfile_udata->thumbnail_size;
+  params->details_flags = sfile_udata->details_flags;
+  params->filter_id = sfile_udata->filter_id;
 
   /* Combine flags we take from params with the flags we take from userdef. */
-  sfile->params->flag = (sfile->params->flag & ~PARAMS_FLAGS_REMEMBERED) |
-                        (sfile_udata->flag & PARAMS_FLAGS_REMEMBERED);
+  params->flag = (params->flag & ~PARAMS_FLAGS_REMEMBERED) |
+                 (sfile_udata->flag & PARAMS_FLAGS_REMEMBERED);
+
+  if (file_select_use_default_display_type(sfile)) {
+    params->display = sfile_udata->display_type;
+  }
+  if (file_select_use_default_sort_type(sfile)) {
+    params->sort = sfile_udata->sort_type;
+    /* For the default sorting, also take invert flag from userdef. */
+    params->flag = (params->flag & ~FILE_SORT_INVERT) | (sfile_udata->flag & FILE_SORT_INVERT);
+  }
 }
 
 /**
@@ -374,18 +402,30 @@ void ED_fileselect_set_params_from_userdef(SpaceFile *sfile)
  * pass its size here so we can store that in the preferences. Otherwise NULL.
  */
 void ED_fileselect_params_to_userdef(SpaceFile *sfile,
-                                     int temp_win_size[2],
+                                     const int temp_win_size[2],
                                      const bool is_maximized)
 {
+  FileSelectParams *params = ED_fileselect_get_active_params(sfile);
   UserDef_FileSpaceData *sfile_udata_new = &U.file_space_data;
   UserDef_FileSpaceData sfile_udata_old = U.file_space_data;
 
-  sfile_udata_new->display_type = sfile->params->display;
-  sfile_udata_new->thumbnail_size = sfile->params->thumbnail_size;
-  sfile_udata_new->sort_type = sfile->params->sort;
-  sfile_udata_new->details_flags = sfile->params->details_flags;
-  sfile_udata_new->flag = sfile->params->flag & PARAMS_FLAGS_REMEMBERED;
-  sfile_udata_new->filter_id = sfile->params->filter_id;
+  sfile_udata_new->thumbnail_size = params->thumbnail_size;
+  sfile_udata_new->details_flags = params->details_flags;
+  sfile_udata_new->flag = params->flag & PARAMS_FLAGS_REMEMBERED;
+  sfile_udata_new->filter_id = params->filter_id;
+
+  /* In some rare cases, operators ask for a specific display or sort type (e.g. chronological
+   * sorting for "Recover Auto Save"). So the settings are optimized for a specific operation.
+   * Don't let that change the userdef memory for more general cases. */
+  if (file_select_use_default_display_type(sfile)) {
+    sfile_udata_new->display_type = params->display;
+  }
+  if (file_select_use_default_sort_type(sfile)) {
+    sfile_udata_new->sort_type = params->sort;
+    /* In this case also remember the invert flag. */
+    sfile_udata_new->flag = (sfile_udata_new->flag & ~FILE_SORT_INVERT) |
+                            (params->flag & FILE_SORT_INVERT);
+  }
 
   if (temp_win_size && !is_maximized) {
     sfile_udata_new->temp_win_sizex = temp_win_size[0];
@@ -400,10 +440,11 @@ void ED_fileselect_params_to_userdef(SpaceFile *sfile,
 
 void ED_fileselect_reset_params(SpaceFile *sfile)
 {
-  sfile->params->type = FILE_UNIX;
-  sfile->params->flag = 0;
-  sfile->params->title[0] = '\0';
-  sfile->params->active_file = -1;
+  FileSelectParams *params = ED_fileselect_get_active_params(sfile);
+  params->type = FILE_UNIX;
+  params->flag = 0;
+  params->title[0] = '\0';
+  params->active_file = -1;
 }
 
 /**
@@ -413,7 +454,8 @@ void fileselect_file_set(SpaceFile *sfile, const int index)
 {
   const struct FileDirEntry *file = filelist_file(sfile->files, index);
   if (file && file->relpath && file->relpath[0] && !(file->typeflag & FILE_TYPE_DIR)) {
-    BLI_strncpy(sfile->params->file, file->relpath, FILE_MAXFILE);
+    FileSelectParams *params = ED_fileselect_get_active_params(sfile);
+    BLI_strncpy(params->file, file->relpath, FILE_MAXFILE);
   }
 }
 
@@ -438,13 +480,12 @@ int ED_fileselect_layout_numfiles(FileLayout *layout, ARegion *region)
     numfiles = (int)((float)(x_view + x_over) / (float)(x_item));
     return numfiles * layout->rows;
   }
-  else {
-    const int y_item = layout->tile_h + (2 * layout->tile_border_y);
-    const int y_view = (int)(BLI_rctf_size_y(&region->v2d.cur)) - layout->offset_top;
-    const int y_over = y_item - (y_view % y_item);
-    numfiles = (int)((float)(y_view + y_over) / (float)(y_item));
-    return numfiles * layout->flow_columns;
-  }
+
+  const int y_item = layout->tile_h + (2 * layout->tile_border_y);
+  const int y_view = (int)(BLI_rctf_size_y(&region->v2d.cur)) - layout->offset_top;
+  const int y_over = y_item - (y_view % y_item);
+  numfiles = (int)((float)(y_view + y_over) / (float)(y_item));
+  return numfiles * layout->flow_columns;
 }
 
 static bool is_inside(int x, int y, int cols, int rows)
@@ -726,7 +767,7 @@ static void file_attribute_columns_init(const FileSelectParams *params, FileLayo
 
 void ED_fileselect_init_layout(struct SpaceFile *sfile, ARegion *region)
 {
-  FileSelectParams *params = ED_fileselect_get_params(sfile);
+  FileSelectParams *params = ED_fileselect_get_active_params(sfile);
   FileLayout *layout = NULL;
   View2D *v2d = &region->v2d;
   int numfiles;
@@ -829,48 +870,64 @@ FileLayout *ED_fileselect_get_layout(struct SpaceFile *sfile, ARegion *region)
   return sfile->layout;
 }
 
-void ED_file_change_dir(bContext *C)
+/**
+ * Support updating the directory even when this isn't the active space
+ * needed so RNA properties update function isn't context sensitive, see T70255.
+ */
+void ED_file_change_dir_ex(bContext *C, bScreen *screen, ScrArea *area)
 {
-  wmWindowManager *wm = CTX_wm_manager(C);
-  SpaceFile *sfile = CTX_wm_space_file(C);
-
-  if (sfile->params) {
-    ED_fileselect_clear(wm, CTX_data_scene(C), sfile);
+  /* May happen when manipulating non-active spaces. */
+  if (UNLIKELY(area->spacetype != SPACE_FILE)) {
+    return;
+  }
+  SpaceFile *sfile = area->spacedata.first;
+  FileSelectParams *params = ED_fileselect_get_active_params(sfile);
+  if (params) {
+    wmWindowManager *wm = CTX_wm_manager(C);
+    Scene *scene = WM_windows_scene_get_from_screen(wm, screen);
+    if (LIKELY(scene != NULL)) {
+      ED_fileselect_clear(wm, scene, sfile);
+    }
 
     /* Clear search string, it is very rare to want to keep that filter while changing dir,
      * and usually very annoying to keep it actually! */
-    sfile->params->filter_search[0] = '\0';
-    sfile->params->active_file = -1;
+    params->filter_search[0] = '\0';
+    params->active_file = -1;
 
-    if (!filelist_is_dir(sfile->files, sfile->params->dir)) {
-      BLI_strncpy(sfile->params->dir, filelist_dir(sfile->files), sizeof(sfile->params->dir));
+    if (!filelist_is_dir(sfile->files, params->dir)) {
+      BLI_strncpy(params->dir, filelist_dir(sfile->files), sizeof(params->dir));
       /* could return but just refresh the current dir */
     }
-    filelist_setdir(sfile->files, sfile->params->dir);
+    filelist_setdir(sfile->files, params->dir);
 
     if (folderlist_clear_next(sfile)) {
       folderlist_free(sfile->folders_next);
     }
 
-    folderlist_pushdir(sfile->folders_prev, sfile->params->dir);
+    folderlist_pushdir(sfile->folders_prev, params->dir);
 
-    file_draw_check(C);
+    file_draw_check_ex(C, area);
   }
+}
+
+void ED_file_change_dir(bContext *C)
+{
+  bScreen *screen = CTX_wm_screen(C);
+  ScrArea *area = CTX_wm_area(C);
+  ED_file_change_dir_ex(C, screen, area);
 }
 
 int file_select_match(struct SpaceFile *sfile, const char *pattern, char *matched_file)
 {
   int match = 0;
 
-  int i;
-  FileDirEntry *file;
   int n = filelist_files_ensure(sfile->files);
 
   /* select any file that matches the pattern, this includes exact match
    * if the user selects a single file by entering the filename
    */
-  for (i = 0; i < n; i++) {
-    file = filelist_file(sfile->files, i);
+  for (int i = 0; i < n; i++) {
+    FileDirEntry *file = filelist_file(sfile->files, i);
     /* Do not check whether file is a file or dir here! Causes T44243
      * (we do accept dirs at this stage). */
     if (fnmatch(pattern, file->relpath, 0) == 0) {
@@ -942,9 +999,8 @@ int autocomplete_file(struct bContext *C, char *str, void *UNUSED(arg_v))
   if (str[0] && sfile->files) {
     AutoComplete *autocpl = UI_autocomplete_begin(str, FILE_MAX);
     int nentries = filelist_files_ensure(sfile->files);
-    int i;
 
-    for (i = 0; i < nentries; i++) {
+    for (int i = 0; i < nentries; i++) {
       FileDirEntry *file = filelist_file(sfile->files, i);
       UI_autocomplete_update_name(autocpl, file->relpath);
     }
@@ -956,14 +1012,15 @@ int autocomplete_file(struct bContext *C, char *str, void *UNUSED(arg_v))
 
 void ED_fileselect_clear(wmWindowManager *wm, Scene *owner_scene, SpaceFile *sfile)
 {
-  /* only NULL in rare cases - [#29734] */
+  /* only NULL in rare cases - T29734. */
   if (sfile->files) {
     filelist_readjob_stop(wm, owner_scene);
     filelist_freelib(sfile->files);
     filelist_clear(sfile->files);
   }
 
-  sfile->params->highlight_file = -1;
+  FileSelectParams *params = ED_fileselect_get_active_params(sfile);
+  params->highlight_file = -1;
   WM_main_add_notifier(NC_SPACE | ND_SPACE_FILE_LIST, NULL);
 }
 
@@ -1036,4 +1093,21 @@ void file_params_renamefile_activate(SpaceFile *sfile, FileSelectParams *params)
     params->renamefile[0] = '\0';
     params->rename_flag = 0;
   }
+}
+
+ScrArea *ED_fileselect_handler_area_find(const wmWindow *win, const wmOperator *file_operator)
+{
+  bScreen *screen = WM_window_get_active_screen(win);
+
+  ED_screen_areas_iter (win, screen, area) {
+    if (area->spacetype == SPACE_FILE) {
+      SpaceFile *sfile = area->spacedata.first;
+
+      if (sfile->op == file_operator) {
+        return area;
+      }
+    }
+  }
+
+  return NULL;
 }

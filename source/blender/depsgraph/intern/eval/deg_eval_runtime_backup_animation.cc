@@ -32,7 +32,7 @@
 
 #include "intern/depsgraph.h"
 
-namespace DEG {
+namespace blender::deg {
 
 namespace {
 
@@ -70,7 +70,7 @@ void animated_property_store_cb(ID *id, FCurve *fcurve, void *data_v)
     return;
   }
 
-  data->backup->values_backup.emplace_back(fcurve->rna_path, fcurve->array_index, value);
+  data->backup->values_backup.append({fcurve->rna_path, fcurve->array_index, value});
 }
 
 }  // namespace
@@ -141,4 +141,4 @@ void AnimationBackup::restore_to_id(ID *id)
   }
 }
 
-}  // namespace DEG
+}  // namespace blender::deg

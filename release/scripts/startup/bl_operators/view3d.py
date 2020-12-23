@@ -60,7 +60,7 @@ class VIEW3D_OT_edit_mesh_extrude_individual_move(Operator):
             bpy.ops.mesh.extrude_vertices_move('INVOKE_REGION_WIN')
 
         # ignore return from operators above because they are 'RUNNING_MODAL',
-        # and cause this one not to be freed. [#24671]
+        # and cause this one not to be freed. T24671.
         return {'FINISHED'}
 
     def invoke(self, context, _event):
@@ -73,10 +73,10 @@ class VIEW3D_OT_edit_mesh_extrude_move(Operator):
     bl_idname = "view3d.edit_mesh_extrude_move_normal"
 
     dissolve_and_intersect: BoolProperty(
-            name="dissolve_and_intersect",
-            default=False,
-            description="Dissolves adjacent faces and intersects new geometry"
-            )
+        name="dissolve_and_intersect",
+        default=False,
+        description="Dissolves adjacent faces and intersects new geometry"
+    )
 
     @classmethod
     def poll(cls, context):
@@ -98,7 +98,7 @@ class VIEW3D_OT_edit_mesh_extrude_move(Operator):
                     TRANSFORM_OT_shrink_fatten={},
                 )
             elif dissolve_and_intersect:
-                bpy.ops.mesh.extrude_region_dissolve_move_intersect(
+                bpy.ops.mesh.extrude_manifold(
                     'INVOKE_REGION_WIN',
                     MESH_OT_extrude_region={
                         "use_dissolve_ortho_edges": True,
@@ -132,7 +132,7 @@ class VIEW3D_OT_edit_mesh_extrude_move(Operator):
             bpy.ops.mesh.extrude_region_move('INVOKE_REGION_WIN')
 
         # ignore return from operators above because they are 'RUNNING_MODAL',
-        # and cause this one not to be freed. [#24671]
+        # and cause this one not to be freed. T24671.
         return {'FINISHED'}
 
     def execute(self, context):
@@ -159,6 +159,33 @@ class VIEW3D_OT_edit_mesh_extrude_shrink_fatten(Operator):
         return self.execute(context)
 
 
+class VIEW3D_OT_edit_mesh_extrude_manifold_normal(Operator):
+    """Extrude manifold region along normals"""
+    bl_label = "Extrude Manifold Along Normals"
+    bl_idname = "view3d.edit_mesh_extrude_manifold_normal"
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return (obj is not None and obj.mode == 'EDIT')
+
+    def execute(self, context):
+        bpy.ops.mesh.extrude_manifold(
+            'INVOKE_REGION_WIN',
+            MESH_OT_extrude_region={
+                "use_dissolve_ortho_edges": True,
+            },
+            TRANSFORM_OT_translate={
+                "orient_type": 'NORMAL',
+                "constraint_axis": (False, False, True),
+            },
+        )
+        return {'FINISHED'}
+
+    def invoke(self, context, _event):
+        return self.execute(context)
+
+
 class VIEW3D_OT_transform_gizmo_set(Operator):
     """Set the current transform gizmo"""
     bl_label = "Transform Gizmo Set"
@@ -166,9 +193,11 @@ class VIEW3D_OT_transform_gizmo_set(Operator):
     bl_idname = "view3d.transform_gizmo_set"
 
     extend: BoolProperty(
+        name="Extend",
         default=False,
     )
     type: EnumProperty(
+        name="Type",
         items=(
             ('TRANSLATE', "Move", ""),
             ('ROTATE', "Rotate", ""),
@@ -208,5 +237,6 @@ classes = (
     VIEW3D_OT_edit_mesh_extrude_individual_move,
     VIEW3D_OT_edit_mesh_extrude_move,
     VIEW3D_OT_edit_mesh_extrude_shrink_fatten,
+    VIEW3D_OT_edit_mesh_extrude_manifold_normal,
     VIEW3D_OT_transform_gizmo_set,
 )

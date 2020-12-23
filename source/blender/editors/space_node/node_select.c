@@ -24,22 +24,27 @@
 #include <stdlib.h>
 
 #include "DNA_node_types.h"
+#include "DNA_windowmanager_types.h"
 
+#include "BLI_alloca.h"
 #include "BLI_lasso_2d.h"
 #include "BLI_listbase.h"
 #include "BLI_math.h"
 #include "BLI_rect.h"
 #include "BLI_string.h"
+#include "BLI_string_search.h"
 #include "BLI_string_utf8.h"
 #include "BLI_utildefines.h"
 
 #include "BKE_context.h"
 #include "BKE_main.h"
 #include "BKE_node.h"
+#include "BKE_workspace.h"
 
 #include "ED_node.h" /* own include */
 #include "ED_screen.h"
 #include "ED_select_utils.h"
+#include "ED_view3d.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -56,6 +61,36 @@
 #include "MEM_guardedalloc.h"
 
 #include "node_intern.h" /* own include */
+
+/* Function to detect if there is a visible view3d that uses workbench in texture mode.
+ * This function is for fixing T76970 for Blender 2.83. The actual fix should add a mechanism in
+ * the depsgraph that can be used by the draw engines to check if they need to be redrawn.
+ *
+ * We don't want to add these risky changes this close before releasing 2.83 without good testing
+ * hence this workaround. There are still cases were too many updates happen. For example when you
+ * have both a Cycles and workbench with textures viewport.
+ * */
+static bool has_workbench_in_texture_color(const wmWindowManager *wm,
+                                           const Scene *scene,
+                                           const Object *ob)
+{
+  LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
+    if (win->scene != scene) {
+      continue;
+    }
+    const bScreen *screen = BKE_workspace_active_screen_get(win->workspace_hook);
+    LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+      if (area->spacetype == SPACE_VIEW3D) {
+        const View3D *v3d = area->spacedata.first;
+
+        if (ED_view3d_has_workbench_in_texture_color(scene, ob, v3d)) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
 
 /* -------------------------------------------------------------------- */
 /** \name Public Node Selection API
@@ -415,6 +450,10 @@ void node_select_single(bContext *C, bNode *node)
 {
   Main *bmain = CTX_data_main(C);
   SpaceNode *snode = CTX_wm_space_node(C);
+  const Object *ob = CTX_data_active_object(C);
+  const Scene *scene = CTX_data_scene(C);
+  const wmWindowManager *wm = CTX_wm_manager(C);
+  bool active_texture_changed = false;
   bNode *tnode;
 
   for (tnode = snode->edittree->nodes.first; tnode; tnode = tnode->next) {
@@ -424,10 +463,13 @@ void node_select_single(bContext *C, bNode *node)
   }
   nodeSetSelected(node, true);
 
-  ED_node_set_active(bmain, snode->edittree, node);
+  ED_node_set_active(bmain, snode->edittree, node, &active_texture_changed);
   ED_node_set_active_viewer_key(snode);
 
   ED_node_sort(snode->edittree);
+  if (active_texture_changed && has_workbench_in_texture_color(wm, scene, ob)) {
+    DEG_id_tag_update(&snode->edittree->id, ID_RECALC_COPY_ON_WRITE);
+  }
 
   WM_event_add_notifier(C, NC_NODE | NA_SELECTED, NULL);
 }
@@ -440,6 +482,9 @@ static int node_mouse_select(bContext *C,
   Main *bmain = CTX_data_main(C);
   SpaceNode *snode = CTX_wm_space_node(C);
   ARegion *region = CTX_wm_region(C);
+  const Object *ob = CTX_data_active_object(C);
+  const Scene *scene = CTX_data_scene(C);
+  const wmWindowManager *wm = CTX_wm_manager(C);
   bNode *node, *tnode;
   bNodeSocket *sock = NULL;
   bNodeSocket *tsock;
@@ -546,12 +591,15 @@ static int node_mouse_select(bContext *C,
 
   /* update node order */
   if (ret_value != OPERATOR_CANCELLED) {
+    bool active_texture_changed = false;
     if (node != NULL && ret_value != OPERATOR_RUNNING_MODAL) {
-      ED_node_set_active(bmain, snode->edittree, node);
+      ED_node_set_active(bmain, snode->edittree, node, &active_texture_changed);
     }
     ED_node_set_active_viewer_key(snode);
     ED_node_sort(snode->edittree);
-    DEG_id_tag_update(&snode->edittree->id, ID_RECALC_COPY_ON_WRITE);
+    if (active_texture_changed && has_workbench_in_texture_color(wm, scene, ob)) {
+      DEG_id_tag_update(&snode->edittree->id, ID_RECALC_COPY_ON_WRITE);
+    }
 
     WM_event_add_notifier(C, NC_NODE | NA_SELECTED, NULL);
   }
@@ -1051,9 +1099,7 @@ static int node_select_same_type_step_exec(bContext *C, wmOperator *op)
         if (node->type == active->type) {
           break;
         }
-        else {
-          node = NULL;
-        }
+        node = NULL;
       }
       if (node) {
         active = node;
@@ -1118,6 +1164,16 @@ void NODE_OT_select_same_type_step(wmOperatorType *ot)
 /** \name Find Node by Name Operator
  * \{ */
 
+static void node_find_create_label(const bNode *node, char *str, int maxlen)
+{
+  if (node->label[0]) {
+    BLI_snprintf(str, maxlen, "%s (%s)", node->name, node->label);
+  }
+  else {
+    BLI_strncpy(str, node->name, maxlen);
+  }
+}
+
 /* generic  search invoke */
 static void node_find_update_fn(const struct bContext *C,
                                 void *UNUSED(arg),
@@ -1125,24 +1181,29 @@ static void node_find_update_fn(const struct bContext *C,
                                 uiSearchItems *items)
 {
   SpaceNode *snode = CTX_wm_space_node(C);
-  bNode *node;
 
-  for (node = snode->edittree->nodes.first; node; node = node->next) {
+  StringSearch *search = BLI_string_search_new();
 
-    if (BLI_strcasestr(node->name, str) || BLI_strcasestr(node->label, str)) {
-      char name[256];
+  LISTBASE_FOREACH (bNode *, node, &snode->edittree->nodes) {
+    char name[256];
+    node_find_create_label(node, name, ARRAY_SIZE(name));
+    BLI_string_search_add(search, name, node);
+  }
 
-      if (node->label[0]) {
-        BLI_snprintf(name, 256, "%s (%s)", node->name, node->label);
-      }
-      else {
-        BLI_strncpy(name, node->name, 256);
-      }
-      if (!UI_search_item_add(items, name, node, ICON_NONE, 0)) {
-        break;
-      }
+  bNode **filtered_nodes;
+  int filtered_amount = BLI_string_search_query(search, str, (void ***)&filtered_nodes);
+
+  for (int i = 0; i < filtered_amount; i++) {
+    bNode *node = filtered_nodes[i];
+    char name[256];
+    node_find_create_label(node, name, ARRAY_SIZE(name));
+    if (!UI_search_item_add(items, name, node, ICON_NONE, 0, 0)) {
+      break;
     }
   }
+
+  MEM_freeN(filtered_nodes);
+  BLI_string_search_free(search);
 }
 
 static void node_find_exec_fn(struct bContext *C, void *UNUSED(arg1), void *arg2)
@@ -1220,7 +1281,7 @@ void NODE_OT_find_node(wmOperatorType *ot)
 {
   /* identifiers */
   ot->name = "Find Node";
-  ot->description = "Search for named node and allow to select and activate it";
+  ot->description = "Search for a node by name and focus and select it";
   ot->idname = "NODE_OT_find_node";
 
   /* api callbacks */

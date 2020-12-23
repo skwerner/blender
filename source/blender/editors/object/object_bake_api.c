@@ -68,8 +68,6 @@
 #include "ED_screen.h"
 #include "ED_uvedit.h"
 
-#include "GPU_draw.h"
-
 #include "object_intern.h"
 
 /* prototypes */
@@ -303,12 +301,11 @@ static bool write_internal_bake_pixels(Image *image,
 /* force OpenGL reload */
 static void refresh_images(BakeImages *bake_images)
 {
-  int i;
-  for (i = 0; i < bake_images->size; i++) {
+  for (int i = 0; i < bake_images->size; i++) {
     Image *ima = bake_images->data[i].image;
     LISTBASE_FOREACH (ImageTile *, tile, &ima->tiles) {
       if (tile->ok == IMA_OK_LOADED) {
-        GPU_free_image(ima);
+        BKE_image_free_gputextures(ima);
         DEG_id_tag_update(&ima->id, 0);
         break;
       }
@@ -415,10 +412,7 @@ static bool is_noncolor_pass(eScenePassType pass_type)
 /* if all is good tag image and return true */
 static bool bake_object_check(ViewLayer *view_layer, Object *ob, ReportList *reports)
 {
-  Image *image;
   Base *base = BKE_view_layer_base_find(view_layer, ob);
-  void *lock;
-  int i;
 
   if (base == NULL) {
     BKE_reportf(reports, RPT_ERROR, "Object \"%s\" is not in view layer", ob->id.name + 2);
@@ -434,20 +428,19 @@ static bool bake_object_check(ViewLayer *view_layer, Object *ob, ReportList *rep
     BKE_reportf(reports, RPT_ERROR, "Object \"%s\" is not a mesh", ob->id.name + 2);
     return false;
   }
-  else {
-    Mesh *me = (Mesh *)ob->data;
 
-    if (CustomData_get_active_layer_index(&me->ldata, CD_MLOOPUV) == -1) {
-      BKE_reportf(
-          reports, RPT_ERROR, "No active UV layer found in the object \"%s\"", ob->id.name + 2);
-      return false;
-    }
+  Mesh *me = (Mesh *)ob->data;
+  if (CustomData_get_active_layer_index(&me->ldata, CD_MLOOPUV) == -1) {
+    BKE_reportf(
+        reports, RPT_ERROR, "No active UV layer found in the object \"%s\"", ob->id.name + 2);
+    return false;
   }
 
-  for (i = 0; i < ob->totcol; i++) {
+  for (int i = 0; i < ob->totcol; i++) {
     bNodeTree *ntree = NULL;
     bNode *node = NULL;
     const int mat_nr = i + 1;
+    Image *image;
     ED_object_get_active_image(ob, mat_nr, &image, NULL, &node, &ntree);
 
     if (image) {
@@ -466,6 +459,7 @@ static bool bake_object_check(ViewLayer *view_layer, Object *ob, ReportList *rep
         }
       }
 
+      void *lock;
       ibuf = BKE_image_acquire_ibuf(image, NULL, &lock);
 
       if (ibuf) {
@@ -542,14 +536,11 @@ static bool bake_pass_filter_check(eScenePassType pass_type,
 
         return false;
       }
-      else {
-        BKE_report(reports,
-                   RPT_ERROR,
-                   "Combined bake pass requires Emit, or a light pass with "
-                   "Direct or Indirect contributions enabled");
-        return false;
-      }
-      break;
+      BKE_report(reports,
+                 RPT_ERROR,
+                 "Combined bake pass requires Emit, or a light pass with "
+                 "Direct or Indirect contributions enabled");
+      return false;
     case SCE_PASS_DIFFUSE_COLOR:
     case SCE_PASS_GLOSSY_COLOR:
     case SCE_PASS_TRANSM_COLOR:
@@ -644,13 +635,12 @@ static void bake_images_clear(Main *bmain, const bool is_tangent)
 static void build_image_lookup(Main *bmain, Object *ob, BakeImages *bake_images)
 {
   const int tot_mat = ob->totcol;
-  int i, j;
   int tot_images = 0;
 
   /* error handling and tag (in case multiple materials share the same image) */
   BKE_main_id_tag_idcode(bmain, ID_IM, LIB_TAG_DOIT, false);
 
-  for (i = 0; i < tot_mat; i++) {
+  for (int i = 0; i < tot_mat; i++) {
     Image *image;
     ED_object_get_active_image(ob, i + 1, &image, NULL, NULL, NULL);
 
@@ -659,7 +649,7 @@ static void build_image_lookup(Main *bmain, Object *ob, BakeImages *bake_images)
       bake_images->lookup[i] = -1;
     }
     else if (image->id.tag & LIB_TAG_DOIT) {
-      for (j = 0; j < i; j++) {
+      for (int j = 0; j < i; j++) {
         if (bake_images->data[j].image == image) {
           bake_images->lookup[i] = j;
           break;
@@ -680,17 +670,14 @@ static void build_image_lookup(Main *bmain, Object *ob, BakeImages *bake_images)
 /*
  * returns the total number of pixels
  */
-static size_t initialize_internal_images(BakeImages *bake_images, ReportList *reports)
+static size_t init_internal_images(BakeImages *bake_images, ReportList *reports)
 {
-  int i;
   size_t tot_size = 0;
 
-  for (i = 0; i < bake_images->size; i++) {
-    ImBuf *ibuf;
-    void *lock;
-
+  for (int i = 0; i < bake_images->size; i++) {
     BakeImage *bk_image = &bake_images->data[i];
-    ibuf = BKE_image_acquire_ibuf(bk_image->image, NULL, &lock);
+    void *lock;
+    ImBuf *ibuf = BKE_image_acquire_ibuf(bk_image->image, NULL, &lock);
 
     if (ibuf) {
       bk_image->width = ibuf->x;
@@ -752,7 +739,7 @@ static int bake(Render *re,
   /* We build a depsgraph for the baking,
    * so we don't need to change the original data to adjust visibility and modifiers. */
   Depsgraph *depsgraph = DEG_graph_new(bmain, scene, view_layer, DAG_EVAL_RENDER);
-  DEG_graph_build_from_view_layer(depsgraph, bmain, scene, view_layer);
+  DEG_graph_build_from_view_layer(depsgraph);
 
   int op_result = OPERATOR_CANCELLED;
   bool ok = false;
@@ -835,7 +822,7 @@ static int bake(Render *re,
   build_image_lookup(bmain, ob_low, &bake_images);
 
   if (is_save_internal) {
-    num_pixels = initialize_internal_images(&bake_images, reports);
+    num_pixels = init_internal_images(&bake_images, reports);
 
     if (num_pixels == 0) {
       goto cleanup;
@@ -1071,10 +1058,7 @@ static int bake(Render *re,
             (normal_swizzle[2] == R_BAKE_POSZ)) {
           break;
         }
-        else {
-          RE_bake_normal_world_to_world(
-              pixel_array_low, num_pixels, depth, result, normal_swizzle);
-        }
+        RE_bake_normal_world_to_world(pixel_array_low, num_pixels, depth, result, normal_swizzle);
         break;
       }
       case R_BAKE_SPACE_OBJECT: {
@@ -1238,8 +1222,7 @@ static int bake(Render *re,
 cleanup:
 
   if (highpoly) {
-    int i;
-    for (i = 0; i < tot_highpoly; i++) {
+    for (int i = 0; i < tot_highpoly; i++) {
       if (highpoly[i].me != NULL) {
         BKE_id_free(NULL, &highpoly[i].me->id);
       }
@@ -1606,9 +1589,8 @@ static void bake_set_props(wmOperator *op, Scene *scene)
 
   prop = RNA_struct_find_property(op->ptr, "cage_object");
   if (!RNA_property_is_set(op->ptr, prop)) {
-    if (bake->cage_object) {
-      RNA_property_string_set(op->ptr, prop, bake->cage_object->id.name + 2);
-    }
+    RNA_property_string_set(
+        op->ptr, prop, (bake->cage_object) ? bake->cage_object->id.name + 2 : "");
   }
 
   prop = RNA_struct_find_property(op->ptr, "normal_space");

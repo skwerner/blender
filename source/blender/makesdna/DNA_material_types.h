@@ -21,12 +21,15 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_MATERIAL_TYPES_H__
-#define __DNA_MATERIAL_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #ifndef MAX_MTEX
 #  define MAX_MTEX 18
@@ -100,7 +103,8 @@ typedef struct MaterialGPencilStyle {
   float mix_stroke_factor;
   /** Mode used to align Dots and Boxes with stroke drawing path and object rotation */
   int alignment_mode;
-  char _pad[4];
+  /** Rotation for texture for Dots and Squares. */
+  float alignment_rotation;
 } MaterialGPencilStyle;
 
 /* MaterialGPencilStyle->flag */
@@ -112,7 +116,7 @@ typedef enum eMaterialGPencilStyle_Flag {
   /* protected from further editing */
   GP_MATERIAL_LOCKED = (1 << 2),
   /* do onion skinning */
-  GP_MATERIAL_ONIONSKIN = (1 << 3),
+  GP_MATERIAL_HIDE_ONIONSKIN = (1 << 3),
   /* clamp texture */
   GP_MATERIAL_TEX_CLAMP = (1 << 4),
   /* mix fill texture */
@@ -129,6 +133,10 @@ typedef enum eMaterialGPencilStyle_Flag {
   GP_MATERIAL_STROKE_TEX_MIX = (1 << 11),
   /* disable stencil clipping (overlap) */
   GP_MATERIAL_DISABLE_STENCIL = (1 << 12),
+  /* Material used as stroke masking. */
+  GP_MATERIAL_IS_STROKE_HOLDOUT = (1 << 13),
+  /* Material used as fill masking. */
+  GP_MATERIAL_IS_FILL_HOLDOUT = (1 << 14),
 } eMaterialGPencilStyle_Flag;
 
 typedef enum eMaterialGPencilStyle_Mode {
@@ -355,4 +363,7 @@ enum {
   GP_MATERIAL_FOLLOW_OBJ = 1,
   GP_MATERIAL_FOLLOW_FIXED = 2,
 };
+
+#ifdef __cplusplus
+}
 #endif

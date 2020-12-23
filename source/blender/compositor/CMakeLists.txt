@@ -34,8 +34,8 @@ set(INC
   ../windowmanager
   ../nodes/composite
   ../nodes/intern
-  ../render/extern/include
-  ../render/intern/include
+  ../render
+  ../render/intern
   ../../../extern/clew/include
   ../../../intern/atomic
   ../../../intern/guardedalloc
@@ -353,6 +353,8 @@ set(SRC
   operations/COM_KeyingDespillOperation.h
   operations/COM_KeyingOperation.cpp
   operations/COM_KeyingOperation.h
+  operations/COM_KeyingSetAlphaOperation.cpp
+  operations/COM_KeyingSetAlphaOperation.h
 
   operations/COM_ColorSpillOperation.cpp
   operations/COM_ColorSpillOperation.h

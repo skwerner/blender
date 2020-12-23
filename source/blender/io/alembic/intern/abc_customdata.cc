@@ -50,6 +50,7 @@ using Alembic::Abc::V2fArraySample;
 
 using Alembic::AbcGeom::OC4fGeomParam;
 using Alembic::AbcGeom::OV2fGeomParam;
+namespace blender::io::alembic {
 
 static void get_uvs(const CDStreamConfig &config,
                     std::vector<Imath::V2f> &uvs,
@@ -144,7 +145,7 @@ const char *get_uv_sample(UVSample &sample, const CDStreamConfig &config, Custom
  * - (optional due to its behavior) tag as UV using Alembic::AbcGeom::SetIsUV
  */
 static void write_uv(const OCompoundProperty &prop,
-                     const CDStreamConfig &config,
+                     CDStreamConfig &config,
                      void *data,
                      const char *name)
 {
@@ -157,13 +158,18 @@ static void write_uv(const OCompoundProperty &prop,
     return;
   }
 
-  OV2fGeomParam param(prop, name, true, kFacevaryingScope, 1);
+  std::string uv_map_name(name);
+  OV2fGeomParam param = config.abc_uv_maps[uv_map_name];
 
+  if (!param.valid()) {
+    param = OV2fGeomParam(prop, name, true, kFacevaryingScope, 1);
+  }
   OV2fGeomParam::Sample sample(V2fArraySample(&uvs.front(), uvs.size()),
                                UInt32ArraySample(&indices.front(), indices.size()),
                                kFacevaryingScope);
-
   param.set(sample);
+
+  config.abc_uv_maps[uv_map_name] = param;
 }
 
 /* Convention to write Vertex Colors:
@@ -217,7 +223,7 @@ static void write_mcol(const OCompoundProperty &prop,
 }
 
 void write_custom_data(const OCompoundProperty &prop,
-                       const CDStreamConfig &config,
+                       CDStreamConfig &config,
                        CustomData *data,
                        int data_type)
 {
@@ -322,7 +328,7 @@ static void read_custom_data_mcols(const std::string &iobject_full_name,
   if (IC3fGeomParam::matches(prop_header)) {
     IC3fGeomParam color_param(arbGeomParams, prop_header.getName());
     IC3fGeomParam::Sample sample;
-    BLI_assert(!strcmp("rgb", color_param.getInterpretation()));
+    BLI_assert(STREQ("rgb", color_param.getInterpretation()));
 
     color_param.getIndexed(sample, iss);
     is_facevarying = sample.getScope() == kFacevaryingScope &&
@@ -335,7 +341,7 @@ static void read_custom_data_mcols(const std::string &iobject_full_name,
   else if (IC4fGeomParam::matches(prop_header)) {
     IC4fGeomParam color_param(arbGeomParams, prop_header.getName());
     IC4fGeomParam::Sample sample;
-    BLI_assert(!strcmp("rgba", color_param.getInterpretation()));
+    BLI_assert(STREQ("rgba", color_param.getInterpretation()));
 
     color_param.getIndexed(sample, iss);
     is_facevarying = sample.getScope() == kFacevaryingScope &&
@@ -480,3 +486,5 @@ void read_custom_data(const std::string &iobject_full_name,
     }
   }
 }
+
+}  // namespace blender::io::alembic

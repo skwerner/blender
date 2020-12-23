@@ -31,8 +31,8 @@
 #include "BLO_readfile.h" /* own include */
 
 const UserDef U_default = {
-    .versionfile = BLENDER_VERSION,
-    .subversionfile = BLENDER_SUBVERSION,
+    .versionfile = BLENDER_FILE_VERSION,
+    .subversionfile = BLENDER_FILE_SUBVERSION,
     .flag = (USER_AUTOSAVE | USER_TOOLTIPS | USER_SAVE_PREVIEWS | USER_RELPATHS |
              USER_RELEASECONFIRM | USER_SCRIPT_AUTOEXEC_DISABLE | USER_NONEGFRAMES),
     .dupflag = USER_DUP_MESH | USER_DUP_CURVE | USER_DUP_SURF | USER_DUP_FONT | USER_DUP_MBALL |
@@ -55,7 +55,6 @@ const UserDef U_default = {
     .timecode_style = USER_TIMECODE_MINIMAL,
     .versions = 1,
     .dbl_click_time = 350,
-    .wheellinescroll = 3,
     .mini_axis_type = USER_MINI_AXIS_TYPE_GIZMO,
     .uiflag = (USER_FILTERFILEEXTS | USER_DRAWVIEWINFO | USER_PLAINMENUS |
                USER_LOCK_CURSOR_ADJUST | USER_DEPTH_CURSOR | USER_AUTOPERSP | USER_GLOBALUNDO |
@@ -109,7 +108,7 @@ const UserDef U_default = {
     .keyconfigstr = "blender",
     .undosteps = 32,
     .undomemory = 0,
-    .gp_manhattendist = 1,
+    .gp_manhattandist = 1,
     .gp_euclideandist = 2,
     .gp_eraser = 25,
     .gp_settings = 0,
@@ -218,7 +217,7 @@ const UserDef U_default = {
             .flag = FILE_HIDE_DOT,
             .filter_id = FILTER_ID_ALL,
 
-            .temp_win_sizex = 1020,
+            .temp_win_sizex = 1060,
             .temp_win_sizey = 600,
         },
 
@@ -228,6 +227,8 @@ const UserDef U_default = {
     .sequencer_disk_cache_flag = 0,
 
     .collection_instance_empty_size = 1.0f,
+
+    .statusbar_flag = STATUSBAR_SHOW_VERSION,
 
     .runtime =
         {

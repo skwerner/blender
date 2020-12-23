@@ -230,6 +230,8 @@ class device_memory {
   void swap_device(Device *new_device, size_t new_device_size, device_ptr new_device_ptr);
   void restore_device();
 
+  bool is_resident(Device *sub_device) const;
+
  protected:
   friend class CUDADevice;
   friend class OptiXDevice;
@@ -446,6 +448,14 @@ template<typename T> class device_vector : public device_memory {
   void zero_to_device()
   {
     device_zero();
+  }
+
+  void move_device(Device *new_device)
+  {
+    copy_from_device();
+    device_free();
+    device = new_device;
+    copy_to_device();
   }
 
  protected:

@@ -242,7 +242,7 @@ static void object_clear_rot(Object *ob, const bool clear_delta)
         copy_v3_v3(ob->rot, eul);
       }
     }
-  }  // Duplicated in source/blender/editors/armature/editarmature.c
+  } /* Duplicated in source/blender/editors/armature/editarmature.c */
   else {
     if (ob->rotmode == ROT_MODE_QUAT) {
       unit_qt(ob->quat);
@@ -565,7 +565,7 @@ static void append_sorted_object_parent_hierarchy(Object *root_object,
                                                   Object **sorted_objects,
                                                   int *object_index)
 {
-  if (object->parent != NULL && object->parent != root_object) {
+  if (!ELEM(object->parent, NULL, root_object)) {
     append_sorted_object_parent_hierarchy(
         root_object, object->parent, sorted_objects, object_index);
   }
@@ -834,11 +834,10 @@ static int apply_objects_internal(bContext *C,
     }
     else if (ob->type == OB_FONT) {
       Curve *cu = ob->data;
-      int i;
 
       scale = mat3_to_scale(rsmat);
 
-      for (i = 0; i < cu->totbox; i++) {
+      for (int i = 0; i < cu->totbox; i++) {
         TextBox *tb = &cu->tb[i];
         tb->x *= scale;
         tb->y *= scale;
@@ -1002,10 +1001,8 @@ static int object_transform_apply_exec(bContext *C, wmOperator *op)
   if (loc || rot || sca) {
     return apply_objects_internal(C, op->reports, loc, rot, sca, do_props);
   }
-  else {
-    /* allow for redo */
-    return OPERATOR_FINISHED;
-  }
+  /* allow for redo */
+  return OPERATOR_FINISHED;
 }
 
 void OBJECT_OT_transform_apply(wmOperatorType *ot)
@@ -1098,21 +1095,21 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
         mul_m4_v3(obedit->imat, cent);
       }
       else {
-        if (around == V3D_AROUND_CENTER_MEDIAN) {
-          if (em->bm->totvert) {
-            const float total_div = 1.0f / (float)em->bm->totvert;
-            BM_ITER_MESH (eve, &iter, em->bm, BM_VERTS_OF_MESH) {
-              madd_v3_v3fl(cent, eve->co, total_div);
-            }
-          }
-        }
-        else {
+        if (around == V3D_AROUND_CENTER_BOUNDS) {
           float min[3], max[3];
           INIT_MINMAX(min, max);
           BM_ITER_MESH (eve, &iter, em->bm, BM_VERTS_OF_MESH) {
             minmax_v3v3_v3(min, max, eve->co);
           }
           mid_v3_v3v3(cent, min, max);
+        }
+        else { /* #V3D_AROUND_CENTER_MEDIAN. */
+          if (em->bm->totvert) {
+            const float total_div = 1.0f / (float)em->bm->totvert;
+            BM_ITER_MESH (eve, &iter, em->bm, BM_VERTS_OF_MESH) {
+              madd_v3_v3fl(cent, eve->co, total_div);
+            }
+          }
         }
       }
 
@@ -1211,11 +1208,11 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
         else if (centermode == ORIGIN_TO_CENTER_OF_MASS_VOLUME) {
           BKE_mesh_center_of_volume(me, cent);
         }
-        else if (around == V3D_AROUND_CENTER_MEDIAN) {
-          BKE_mesh_center_median(me, cent);
-        }
-        else {
+        else if (around == V3D_AROUND_CENTER_BOUNDS) {
           BKE_mesh_center_bounds(me, cent);
+        }
+        else { /* #V3D_AROUND_CENTER_MEDIAN. */
+          BKE_mesh_center_median(me, cent);
         }
 
         negate_v3_v3(cent_neg, cent);
@@ -1231,11 +1228,11 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
         if (centermode == ORIGIN_TO_CURSOR) {
           /* done */
         }
-        else if (around == V3D_AROUND_CENTER_MEDIAN) {
-          BKE_curve_center_median(cu, cent);
-        }
-        else {
+        else if (around == V3D_AROUND_CENTER_BOUNDS) {
           BKE_curve_center_bounds(cu, cent);
+        }
+        else { /* #V3D_AROUND_CENTER_MEDIAN. */
+          BKE_curve_center_median(cu, cent);
         }
 
         /* don't allow Z change if curve is 2D */
@@ -1324,11 +1321,11 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
         if (centermode == ORIGIN_TO_CURSOR) {
           /* done */
         }
-        else if (around == V3D_AROUND_CENTER_MEDIAN) {
-          BKE_mball_center_median(mb, cent);
-        }
-        else {
+        else if (around == V3D_AROUND_CENTER_BOUNDS) {
           BKE_mball_center_bounds(mb, cent);
+        }
+        else { /* #V3D_AROUND_CENTER_MEDIAN. */
+          BKE_mball_center_median(mb, cent);
         }
 
         negate_v3_v3(cent_neg, cent);
@@ -1351,11 +1348,11 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
         if (centermode == ORIGIN_TO_CURSOR) {
           /* done */
         }
-        else if (around == V3D_AROUND_CENTER_MEDIAN) {
-          BKE_lattice_center_median(lt, cent);
-        }
-        else {
+        else if (around == V3D_AROUND_CENTER_BOUNDS) {
           BKE_lattice_center_bounds(lt, cent);
+        }
+        else { /* #V3D_AROUND_CENTER_MEDIAN. */
+          BKE_lattice_center_median(lt, cent);
         }
 
         negate_v3_v3(cent_neg, cent);
@@ -1377,7 +1374,7 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
           if (centermode == ORIGIN_TO_CURSOR) {
             copy_v3_v3(gpcenter, cursor);
           }
-          if ((centermode == ORIGIN_TO_GEOMETRY) || (centermode == ORIGIN_TO_CURSOR)) {
+          if (ELEM(centermode, ORIGIN_TO_GEOMETRY, ORIGIN_TO_CURSOR)) {
             bGPDspoint *pt;
             float imat[3][3], bmat[3][3];
             float offset_global[3];
@@ -1909,7 +1906,7 @@ static int object_transform_axis_target_modal(bContext *C, wmOperator *op, const
               for (int x = -ofs; x <= ofs; x += ofs / 2) {
                 for (int y = -ofs; y <= ofs; y += ofs / 2) {
                   if (x != 0 && y != 0) {
-                    int mval_ofs[2] = {event->mval[0] + x, event->mval[1] + y};
+                    const int mval_ofs[2] = {event->mval[0] + x, event->mval[1] + y};
                     float n[3];
                     if (ED_view3d_depth_read_cached_normal(&xfd->vc, mval_ofs, n)) {
                       add_v3_v3(normal, n);
@@ -2036,7 +2033,7 @@ static int object_transform_axis_target_modal(bContext *C, wmOperator *op, const
     object_transform_axis_target_free_data(op);
     return OPERATOR_FINISHED;
   }
-  else if (ELEM(event->type, EVT_ESCKEY, RIGHTMOUSE)) {
+  if (ELEM(event->type, EVT_ESCKEY, RIGHTMOUSE)) {
     object_transform_axis_target_cancel(C, op);
     return OPERATOR_CANCELLED;
   }

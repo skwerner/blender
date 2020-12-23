@@ -17,11 +17,14 @@
 #include <sstream>
 #include <stdlib.h>
 
+#include "bvh/bvh_multi.h"
+
 #include "device/device.h"
 #include "device/device_intern.h"
 #include "device/device_network.h"
 
 #include "render/buffers.h"
+#include "render/geometry.h"
 
 #include "util/util_foreach.h"
 #include "util/util_list.h"
@@ -34,37 +37,88 @@ CCL_NAMESPACE_BEGIN
 class MultiDevice : public Device {
  public:
   struct SubDevice {
-    explicit SubDevice(Device *device_) : device(device_)
-    {
-    }
-
+    Stats stats;
     Device *device;
     map<device_ptr, device_ptr> ptr_map;
+    int peer_island_index = -1;
   };
 
   list<SubDevice> devices, denoising_devices;
   device_ptr unique_key;
+  vector<vector<SubDevice *>> peer_islands;
+  bool matching_rendering_and_denoising_devices;
 
   MultiDevice(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background_)
       : Device(info, stats, profiler, background_), unique_key(1)
   {
     foreach (DeviceInfo &subinfo, info.multi_devices) {
-      Device *device = Device::create(subinfo, sub_stats_, profiler, background);
-
       /* Always add CPU devices at the back since GPU devices can change
        * host memory pointers, which CPU uses as device pointer. */
+      SubDevice *sub;
       if (subinfo.type == DEVICE_CPU) {
-        devices.push_back(SubDevice(device));
+        devices.emplace_back();
+        sub = &devices.back();
       }
       else {
-        devices.push_front(SubDevice(device));
+        devices.emplace_front();
+        sub = &devices.front();
       }
+
+      /* The pointer to 'sub->stats' will stay valid even after new devices
+       * are added, since 'devices' is a linked list. */
+      sub->device = Device::create(subinfo, sub->stats, profiler, background);
     }
 
     foreach (DeviceInfo &subinfo, info.denoising_devices) {
-      Device *device = Device::create(subinfo, sub_stats_, profiler, background);
+      denoising_devices.emplace_front();
+      SubDevice *sub = &denoising_devices.front();
 
-      denoising_devices.push_back(SubDevice(device));
+      sub->device = Device::create(subinfo, sub->stats, profiler, background);
+    }
+
+    /* Build a list of peer islands for the available render devices */
+    foreach (SubDevice &sub, devices) {
+      /* First ensure that every device is in at least once peer island */
+      if (sub.peer_island_index < 0) {
+        peer_islands.emplace_back();
+        sub.peer_island_index = (int)peer_islands.size() - 1;
+        peer_islands[sub.peer_island_index].push_back(&sub);
+      }
+
+      if (!info.has_peer_memory) {
+        continue;
+      }
+
+      /* Second check peer access between devices and fill up the islands accordingly */
+      foreach (SubDevice &peer_sub, devices) {
+        if (peer_sub.peer_island_index < 0 &&
+            peer_sub.device->info.type == sub.device->info.type &&
+            peer_sub.device->check_peer_access(sub.device)) {
+          peer_sub.peer_island_index = sub.peer_island_index;
+          peer_islands[sub.peer_island_index].push_back(&peer_sub);
+        }
+      }
+    }
+
+    /* Try to re-use memory when denoising and render devices use the same physical devices
+     * (e.g. OptiX denoising and CUDA rendering device pointing to the same GPU).
+     * Ordering has to match as well, so that 'DeviceTask::split' behaves consistent. */
+    matching_rendering_and_denoising_devices = denoising_devices.empty() ||
+                                               (devices.size() == denoising_devices.size());
+    if (matching_rendering_and_denoising_devices) {
+      for (list<SubDevice>::iterator device_it = devices.begin(),
+                                     denoising_device_it = denoising_devices.begin();
+           device_it != devices.end() && denoising_device_it != denoising_devices.end();
+           ++device_it, ++denoising_device_it) {
+        const DeviceInfo &info = device_it->device->info;
+        const DeviceInfo &denoising_info = denoising_device_it->device->info;
+        if ((info.type != DEVICE_CUDA && info.type != DEVICE_OPTIX) ||
+            (denoising_info.type != DEVICE_CUDA && denoising_info.type != DEVICE_OPTIX) ||
+            info.num != denoising_info.num) {
+          matching_rendering_and_denoising_devices = false;
+          break;
+        }
+      }
     }
 
 #ifdef WITH_NETWORK
@@ -90,7 +144,7 @@ class MultiDevice : public Device {
       delete sub.device;
   }
 
-  const string &error_message()
+  const string &error_message() override
   {
     error_msg.clear();
 
@@ -102,7 +156,7 @@ class MultiDevice : public Device {
     return error_msg;
   }
 
-  virtual bool show_samples() const
+  virtual bool show_samples() const override
   {
     if (devices.size() > 1) {
       return false;
@@ -110,31 +164,49 @@ class MultiDevice : public Device {
     return devices.front().device->show_samples();
   }
 
-  virtual BVHLayoutMask get_bvh_layout_mask() const
+  virtual BVHLayoutMask get_bvh_layout_mask() const override
   {
     BVHLayoutMask bvh_layout_mask = BVH_LAYOUT_ALL;
+    BVHLayoutMask bvh_layout_mask_all = BVH_LAYOUT_NONE;
     foreach (const SubDevice &sub_device, devices) {
-      bvh_layout_mask &= sub_device.device->get_bvh_layout_mask();
+      BVHLayoutMask device_bvh_layout_mask = sub_device.device->get_bvh_layout_mask();
+      bvh_layout_mask &= device_bvh_layout_mask;
+      bvh_layout_mask_all |= device_bvh_layout_mask;
     }
+
+    /* With multiple OptiX devices, every device needs its own acceleration structure */
+    if (bvh_layout_mask == BVH_LAYOUT_OPTIX) {
+      return BVH_LAYOUT_MULTI_OPTIX;
+    }
+
+    /* When devices do not share a common BVH layout, fall back to creating one for each */
+    const BVHLayoutMask BVH_LAYOUT_OPTIX_EMBREE = (BVH_LAYOUT_OPTIX | BVH_LAYOUT_EMBREE);
+    if ((bvh_layout_mask_all & BVH_LAYOUT_OPTIX_EMBREE) == BVH_LAYOUT_OPTIX_EMBREE) {
+      return BVH_LAYOUT_MULTI_OPTIX_EMBREE;
+    }
+
     return bvh_layout_mask;
   }
 
-  bool load_kernels(const DeviceRequestedFeatures &requested_features)
+  bool load_kernels(const DeviceRequestedFeatures &requested_features) override
   {
     foreach (SubDevice &sub, devices)
       if (!sub.device->load_kernels(requested_features))
         return false;
 
     if (requested_features.use_denoising) {
+      /* Only need denoising feature, everything else is unused. */
+      DeviceRequestedFeatures denoising_features;
+      denoising_features.use_denoising = true;
       foreach (SubDevice &sub, denoising_devices)
-        if (!sub.device->load_kernels(requested_features))
+        if (!sub.device->load_kernels(denoising_features))
           return false;
     }
 
     return true;
   }
 
-  bool wait_for_availability(const DeviceRequestedFeatures &requested_features)
+  bool wait_for_availability(const DeviceRequestedFeatures &requested_features) override
   {
     foreach (SubDevice &sub, devices)
       if (!sub.device->wait_for_availability(requested_features))
@@ -149,7 +221,7 @@ class MultiDevice : public Device {
     return true;
   }
 
-  DeviceKernelStatus get_active_kernel_switch_state()
+  DeviceKernelStatus get_active_kernel_switch_state() override
   {
     DeviceKernelStatus result = DEVICE_KERNEL_USING_FEATURE_KERNEL;
 
@@ -173,17 +245,61 @@ class MultiDevice : public Device {
     return result;
   }
 
-  bool build_optix_bvh(BVH *bvh)
+  void build_bvh(BVH *bvh, Progress &progress, bool refit) override
   {
-    // Broadcast acceleration structure build to all render devices
-    foreach (SubDevice &sub, devices)
-      if (!sub.device->build_optix_bvh(bvh))
-        return false;
+    /* Try to build and share a single acceleration structure, if possible */
+    if (bvh->params.bvh_layout == BVH_LAYOUT_BVH2) {
+      devices.back().device->build_bvh(bvh, progress, refit);
+      return;
+    }
 
-    return true;
+    BVHMulti *const bvh_multi = static_cast<BVHMulti *>(bvh);
+    bvh_multi->sub_bvhs.resize(devices.size());
+
+    vector<BVHMulti *> geom_bvhs;
+    geom_bvhs.reserve(bvh->geometry.size());
+    foreach (Geometry *geom, bvh->geometry) {
+      geom_bvhs.push_back(static_cast<BVHMulti *>(geom->bvh));
+    }
+
+    /* Broadcast acceleration structure build to all render devices */
+    size_t i = 0;
+    foreach (SubDevice &sub, devices) {
+      /* Change geometry BVH pointers to the sub BVH */
+      for (size_t k = 0; k < bvh->geometry.size(); ++k) {
+        bvh->geometry[k]->bvh = geom_bvhs[k]->sub_bvhs[i];
+      }
+
+      if (!bvh_multi->sub_bvhs[i]) {
+        BVHParams params = bvh->params;
+        if (bvh->params.bvh_layout == BVH_LAYOUT_MULTI_OPTIX)
+          params.bvh_layout = BVH_LAYOUT_OPTIX;
+        else if (bvh->params.bvh_layout == BVH_LAYOUT_MULTI_OPTIX_EMBREE)
+          params.bvh_layout = sub.device->info.type == DEVICE_OPTIX ? BVH_LAYOUT_OPTIX :
+                                                                      BVH_LAYOUT_EMBREE;
+
+        /* Skip building a bottom level acceleration structure for non-instanced geometry on Embree
+         * (since they are put into the top level directly, see bvh_embree.cpp) */
+        if (!params.top_level && params.bvh_layout == BVH_LAYOUT_EMBREE &&
+            !bvh->geometry[0]->is_instanced()) {
+          i++;
+          continue;
+        }
+
+        bvh_multi->sub_bvhs[i] = BVH::create(params, bvh->geometry, bvh->objects, sub.device);
+      }
+
+      sub.device->build_bvh(bvh_multi->sub_bvhs[i], progress, refit);
+      i++;
+    }
+
+    /* Change geomtry BVH pointers back to the multi BVH */
+    for (size_t k = 0; k < bvh->geometry.size(); ++k) {
+      bvh->geometry[k]->bvh = geom_bvhs[k];
+    }
   }
 
-  virtual void *osl_memory()
+  virtual void *osl_memory() override
   {
     if (devices.size() > 1) {
       return NULL;
@@ -191,17 +307,82 @@ class MultiDevice : public Device {
     return devices.front().device->osl_memory();
   }
 
-  void mem_alloc(device_memory &mem)
+  bool is_resident(device_ptr key, Device *sub_device) override
+  {
+    foreach (SubDevice &sub, devices) {
+      if (sub.device == sub_device) {
+        return find_matching_mem_device(key, sub)->device == sub_device;
+      }
+    }
+    return false;
+  }
+
+  SubDevice *find_matching_mem_device(device_ptr key, SubDevice &sub)
+  {
+    assert(key != 0 && (sub.peer_island_index >= 0 || sub.ptr_map.find(key) != sub.ptr_map.end()));
+
+    /* Get the memory owner of this key (first try current device, then peer devices) */
+    SubDevice *owner_sub = &sub;
+    if (owner_sub->ptr_map.find(key) == owner_sub->ptr_map.end()) {
+      foreach (SubDevice *island_sub, peer_islands[sub.peer_island_index]) {
+        if (island_sub != owner_sub &&
+            island_sub->ptr_map.find(key) != island_sub->ptr_map.end()) {
+          owner_sub = island_sub;
+        }
+      }
+    }
+    return owner_sub;
+  }
+
+  SubDevice *find_suitable_mem_device(device_ptr key, const vector<SubDevice *> &island)
+  {
+    assert(!island.empty());
+
+    /* Get the memory owner of this key or the device with the lowest memory usage when new */
+    SubDevice *owner_sub = island.front();
+    foreach (SubDevice *island_sub, island) {
+      if (key ? (island_sub->ptr_map.find(key) != island_sub->ptr_map.end()) :
+                (island_sub->device->stats.mem_used < owner_sub->device->stats.mem_used)) {
+        owner_sub = island_sub;
+      }
+    }
+    return owner_sub;
+  }
+
+  inline device_ptr find_matching_mem(device_ptr key, SubDevice &sub)
+  {
+    return find_matching_mem_device(key, sub)->ptr_map[key];
+  }
+
+  void mem_alloc(device_memory &mem) override
   {
     device_ptr key = unique_key++;
 
-    foreach (SubDevice &sub, devices) {
-      mem.device = sub.device;
-      mem.device_pointer = 0;
-      mem.device_size = 0;
+    if (mem.type == MEM_PIXELS) {
+      /* Always allocate pixels memory on all devices
+       * This is necessary to ensure PBOs are registered everywhere, which FILM_CONVERT uses */
+      foreach (SubDevice &sub, devices) {
+        mem.device = sub.device;
+        mem.device_pointer = 0;
+        mem.device_size = 0;
 
-      sub.device->mem_alloc(mem);
-      sub.ptr_map[key] = mem.device_pointer;
+        sub.device->mem_alloc(mem);
+        sub.ptr_map[key] = mem.device_pointer;
+      }
+    }
+    else {
+      assert(mem.type == MEM_READ_ONLY || mem.type == MEM_READ_WRITE ||
+             mem.type == MEM_DEVICE_ONLY);
+      /* The remaining memory types can be distributed across devices */
+      foreach (const vector<SubDevice *> &island, peer_islands) {
+        SubDevice *owner_sub = find_suitable_mem_device(key, island);
+        mem.device = owner_sub->device;
+        mem.device_pointer = 0;
+        mem.device_size = 0;
+
+        owner_sub->device->mem_alloc(mem);
+        owner_sub->ptr_map[key] = mem.device_pointer;
+      }
     }
 
     mem.device = this;
@@ -209,69 +390,41 @@ class MultiDevice : public Device {
     stats.mem_alloc(mem.device_size);
   }
 
-  void mem_copy_to(device_memory &mem)
+  void mem_copy_to(device_memory &mem) override
   {
     device_ptr existing_key = mem.device_pointer;
     device_ptr key = (existing_key) ? existing_key : unique_key++;
     size_t existing_size = mem.device_size;
 
-    foreach (SubDevice &sub, devices) {
-      mem.device = sub.device;
-      mem.device_pointer = (existing_key) ? sub.ptr_map[existing_key] : 0;
-      mem.device_size = existing_size;
-
-      sub.device->mem_copy_to(mem);
-      sub.ptr_map[key] = mem.device_pointer;
-    }
-
-    mem.device = this;
-    mem.device_pointer = key;
-    stats.mem_alloc(mem.device_size - existing_size);
-  }
-
-  void mem_copy_from(device_memory &mem, int y, int w, int h, int elem)
-  {
-    device_ptr key = mem.device_pointer;
-    int i = 0, sub_h = h / devices.size();
-
-    foreach (SubDevice &sub, devices) {
-      int sy = y + i * sub_h;
-      int sh = (i == (int)devices.size() - 1) ? h - sub_h * i : sub_h;
-
-      mem.device = sub.device;
-      mem.device_pointer = sub.ptr_map[key];
-
-      sub.device->mem_copy_from(mem, sy, w, sh, elem);
-      i++;
-    }
-
-    mem.device = this;
-    mem.device_pointer = key;
-  }
-
-  void mem_zero(device_memory &mem)
-  {
-    device_ptr existing_key = mem.device_pointer;
-    device_ptr key = (existing_key) ? existing_key : unique_key++;
-    size_t existing_size = mem.device_size;
-
-    foreach (SubDevice &sub, devices) {
-      mem.device = sub.device;
-      mem.device_pointer = (existing_key) ? sub.ptr_map[existing_key] : 0;
-      mem.device_size = existing_size;
-
-      sub.device->mem_zero(mem);
-      sub.ptr_map[key] = mem.device_pointer;
-    }
-
+    /* The tile buffers are allocated on each device (see below), so copy to all of them */
     if (strcmp(mem.name, "RenderBuffers") == 0) {
-      foreach (SubDevice &sub, denoising_devices) {
+      foreach (SubDevice &sub, devices) {
         mem.device = sub.device;
         mem.device_pointer = (existing_key) ? sub.ptr_map[existing_key] : 0;
         mem.device_size = existing_size;
 
-        sub.device->mem_zero(mem);
+        sub.device->mem_copy_to(mem);
         sub.ptr_map[key] = mem.device_pointer;
+      }
+    }
+    else {
+      foreach (const vector<SubDevice *> &island, peer_islands) {
+        SubDevice *owner_sub = find_suitable_mem_device(existing_key, island);
+        mem.device = owner_sub->device;
+        mem.device_pointer = (existing_key) ? owner_sub->ptr_map[existing_key] : 0;
+        mem.device_size = existing_size;
+
+        owner_sub->device->mem_copy_to(mem);
+        owner_sub->ptr_map[key] = mem.device_pointer;
+
+        if (mem.type == MEM_GLOBAL || mem.type == MEM_TEXTURE) {
+          /* Need to create texture objects and update pointer in kernel globals on all devices */
+          foreach (SubDevice *island_sub, island) {
+            if (island_sub != owner_sub) {
+              island_sub->device->mem_copy_to(mem);
+            }
+          }
+        }
       }
     }
 
@@ -280,28 +433,129 @@ class MultiDevice : public Device {
     stats.mem_alloc(mem.device_size - existing_size);
   }
 
-  void mem_free(device_memory &mem)
+  void mem_copy_from(device_memory &mem, int y, int w, int h, int elem) override
+  {
+    device_ptr key = mem.device_pointer;
+    int i = 0, sub_h = h / devices.size();
+
+    foreach (SubDevice &sub, devices) {
+      int sy = y + i * sub_h;
+      int sh = (i == (int)devices.size() - 1) ? h - sub_h * i : sub_h;
+
+      SubDevice *owner_sub = find_matching_mem_device(key, sub);
+      mem.device = owner_sub->device;
+      mem.device_pointer = owner_sub->ptr_map[key];
+
+      owner_sub->device->mem_copy_from(mem, sy, w, sh, elem);
+      i++;
+    }
+
+    mem.device = this;
+    mem.device_pointer = key;
+  }
+
+  void mem_zero(device_memory &mem) override
+  {
+    device_ptr existing_key = mem.device_pointer;
+    device_ptr key = (existing_key) ? existing_key : unique_key++;
+    size_t existing_size = mem.device_size;
+
+    /* This is a hack to only allocate the tile buffers on denoising devices
+     * Similarly the tile buffers also need to be allocated separately on all devices so any
+     * overlap rendered for denoising does not interfere with each other */
+    if (strcmp(mem.name, "RenderBuffers") == 0) {
+      vector<device_ptr> device_pointers;
+      device_pointers.reserve(devices.size());
+
+      foreach (SubDevice &sub, devices) {
+        mem.device = sub.device;
+        mem.device_pointer = (existing_key) ? sub.ptr_map[existing_key] : 0;
+        mem.device_size = existing_size;
+
+        sub.device->mem_zero(mem);
+        sub.ptr_map[key] = mem.device_pointer;
+
+        device_pointers.push_back(mem.device_pointer);
+      }
+      foreach (SubDevice &sub, denoising_devices) {
+        if (matching_rendering_and_denoising_devices) {
+          sub.ptr_map[key] = device_pointers.front();
+          device_pointers.erase(device_pointers.begin());
+        }
+        else {
+          mem.device = sub.device;
+          mem.device_pointer = (existing_key) ? sub.ptr_map[existing_key] : 0;
+          mem.device_size = existing_size;
+
+          sub.device->mem_zero(mem);
+          sub.ptr_map[key] = mem.device_pointer;
+        }
+      }
+    }
+    else {
+      foreach (const vector<SubDevice *> &island, peer_islands) {
+        SubDevice *owner_sub = find_suitable_mem_device(existing_key, island);
+        mem.device = owner_sub->device;
+        mem.device_pointer = (existing_key) ? owner_sub->ptr_map[existing_key] : 0;
+        mem.device_size = existing_size;
+
+        owner_sub->device->mem_zero(mem);
+        owner_sub->ptr_map[key] = mem.device_pointer;
+      }
+    }
+
+    mem.device = this;
+    mem.device_pointer = key;
+    stats.mem_alloc(mem.device_size - existing_size);
+  }
+
+  void mem_free(device_memory &mem) override
   {
     device_ptr key = mem.device_pointer;
     size_t existing_size = mem.device_size;
 
-    foreach (SubDevice &sub, devices) {
-      mem.device = sub.device;
-      mem.device_pointer = sub.ptr_map[key];
-      mem.device_size = existing_size;
-
-      sub.device->mem_free(mem);
-      sub.ptr_map.erase(sub.ptr_map.find(key));
-    }
-
-    if (strcmp(mem.name, "RenderBuffers") == 0) {
-      foreach (SubDevice &sub, denoising_devices) {
+    /* Free memory that was allocated for all devices (see above) on each device */
+    if (strcmp(mem.name, "RenderBuffers") == 0 || mem.type == MEM_PIXELS) {
+      foreach (SubDevice &sub, devices) {
         mem.device = sub.device;
         mem.device_pointer = sub.ptr_map[key];
         mem.device_size = existing_size;
 
         sub.device->mem_free(mem);
         sub.ptr_map.erase(sub.ptr_map.find(key));
+      }
+      foreach (SubDevice &sub, denoising_devices) {
+        if (matching_rendering_and_denoising_devices) {
+          sub.ptr_map.erase(key);
+        }
+        else {
+          mem.device = sub.device;
+          mem.device_pointer = sub.ptr_map[key];
+          mem.device_size = existing_size;
+
+          sub.device->mem_free(mem);
+          sub.ptr_map.erase(sub.ptr_map.find(key));
+        }
+      }
+    }
+    else {
+      foreach (const vector<SubDevice *> &island, peer_islands) {
+        SubDevice *owner_sub = find_matching_mem_device(key, *island.front());
+        mem.device = owner_sub->device;
+        mem.device_pointer = owner_sub->ptr_map[key];
+        mem.device_size = existing_size;
+
+        owner_sub->device->mem_free(mem);
+        owner_sub->ptr_map.erase(owner_sub->ptr_map.find(key));
+
+        if (mem.type == MEM_TEXTURE) {
+          /* Free texture objects on all devices */
+          foreach (SubDevice *island_sub, island) {
+            if (island_sub != owner_sub) {
+              island_sub->device->mem_free(mem);
+            }
+          }
+        }
       }
     }
 
@@ -311,7 +565,7 @@ class MultiDevice : public Device {
     stats.mem_free(existing_size);
   }
 
-  void const_copy_to(const char *name, void *host, size_t size)
+  void const_copy_to(const char *name, void *host, size_t size) override
   {
     foreach (SubDevice &sub, devices)
       sub.device->const_copy_to(name, host, size);
@@ -328,8 +582,10 @@ class MultiDevice : public Device {
                    int dw,
                    int dh,
                    bool transparent,
-                   const DeviceDrawParams &draw_params)
+                   const DeviceDrawParams &draw_params) override
   {
+    assert(rgba.type == MEM_PIXELS);
+
     device_ptr key = rgba.device_pointer;
     int i = 0, sub_h = h / devices.size();
     int sub_height = height / devices.size();
@@ -350,7 +606,7 @@ class MultiDevice : public Device {
     rgba.device_pointer = key;
   }
 
-  void map_tile(Device *sub_device, RenderTile &tile)
+  void map_tile(Device *sub_device, RenderTile &tile) override
   {
     if (!tile.buffer) {
       return;
@@ -358,7 +614,7 @@ class MultiDevice : public Device {
 
     foreach (SubDevice &sub, devices) {
       if (sub.device == sub_device) {
-        tile.buffer = sub.ptr_map[tile.buffer];
+        tile.buffer = find_matching_mem(tile.buffer, sub);
         return;
       }
     }
@@ -371,7 +627,7 @@ class MultiDevice : public Device {
     }
   }
 
-  int device_number(Device *sub_device)
+  int device_number(Device *sub_device) override
   {
     int i = 0;
 
@@ -390,20 +646,22 @@ class MultiDevice : public Device {
     return -1;
   }
 
-  void map_neighbor_tiles(Device *sub_device, RenderTile *tiles)
+  void map_neighbor_tiles(Device *sub_device, RenderTileNeighbors &neighbors) override
   {
-    for (int i = 0; i < 9; i++) {
-      if (!tiles[i].buffers) {
+    for (int i = 0; i < RenderTileNeighbors::SIZE; i++) {
+      RenderTile &tile = neighbors.tiles[i];
+
+      if (!tile.buffers) {
         continue;
       }
 
-      device_vector<float> &mem = tiles[i].buffers->buffer;
-      tiles[i].buffer = mem.device_pointer;
+      device_vector<float> &mem = tile.buffers->buffer;
+      tile.buffer = mem.device_pointer;
 
-      if (mem.device == this && denoising_devices.empty()) {
+      if (mem.device == this && matching_rendering_and_denoising_devices) {
         /* Skip unnecessary copies in viewport mode (buffer covers the
          * whole image), but still need to fix up the tile device pointer. */
-        map_tile(sub_device, tiles[i]);
+        map_tile(sub_device, tile);
         continue;
       }
 
@@ -416,15 +674,15 @@ class MultiDevice : public Device {
          * also required for the case where a CPU thread is denoising
          * a tile rendered on the GPU. In that case we have to avoid
          * overwriting the buffer being de-noised by the CPU thread. */
-        if (!tiles[i].buffers->map_neighbor_copied) {
-          tiles[i].buffers->map_neighbor_copied = true;
+        if (!tile.buffers->map_neighbor_copied) {
+          tile.buffers->map_neighbor_copied = true;
           mem.copy_from_device();
         }
 
         if (mem.device == this) {
           /* Can re-use memory if tile is already allocated on the sub device. */
-          map_tile(sub_device, tiles[i]);
-          mem.swap_device(sub_device, mem.device_size, tiles[i].buffer);
+          map_tile(sub_device, tile);
+          mem.swap_device(sub_device, mem.device_size, tile.buffer);
         }
         else {
           mem.swap_device(sub_device, 0, 0);
@@ -432,47 +690,49 @@ class MultiDevice : public Device {
 
         mem.copy_to_device();
 
-        tiles[i].buffer = mem.device_pointer;
-        tiles[i].device_size = mem.device_size;
+        tile.buffer = mem.device_pointer;
+        tile.device_size = mem.device_size;
 
         mem.restore_device();
       }
     }
   }
 
-  void unmap_neighbor_tiles(Device *sub_device, RenderTile *tiles)
+  void unmap_neighbor_tiles(Device *sub_device, RenderTileNeighbors &neighbors) override
   {
-    device_vector<float> &mem = tiles[9].buffers->buffer;
+    RenderTile &target_tile = neighbors.target;
+    device_vector<float> &mem = target_tile.buffers->buffer;
 
-    if (mem.device == this && denoising_devices.empty()) {
+    if (mem.device == this && matching_rendering_and_denoising_devices) {
       return;
     }
 
     /* Copy denoised result back to the host. */
-    mem.swap_device(sub_device, tiles[9].device_size, tiles[9].buffer);
+    mem.swap_device(sub_device, target_tile.device_size, target_tile.buffer);
     mem.copy_from_device();
     mem.restore_device();
 
     /* Copy denoised result to the original device. */
     mem.copy_to_device();
 
-    for (int i = 0; i < 9; i++) {
-      if (!tiles[i].buffers) {
+    for (int i = 0; i < RenderTileNeighbors::SIZE; i++) {
+      RenderTile &tile = neighbors.tiles[i];
+      if (!tile.buffers) {
         continue;
       }
 
-      device_vector<float> &mem = tiles[i].buffers->buffer;
+      device_vector<float> &mem = tile.buffers->buffer;
 
       if (mem.device != sub_device && mem.device != this) {
         /* Free up memory again if it was allocated for the copy above. */
-        mem.swap_device(sub_device, tiles[i].device_size, tiles[i].buffer);
+        mem.swap_device(sub_device, tile.device_size, tile.buffer);
         sub_device->mem_free(mem);
         mem.restore_device();
       }
     }
   }
 
-  int get_split_task_count(DeviceTask &task)
+  int get_split_task_count(DeviceTask &task) override
   {
     int total_tasks = 0;
     list<DeviceTask> tasks;
@@ -488,7 +748,7 @@ class MultiDevice : public Device {
     return total_tasks;
   }
 
-  void task_add(DeviceTask &task)
+  void task_add(DeviceTask &task) override
   {
     list<SubDevice> task_devices = devices;
     if (!denoising_devices.empty()) {
@@ -518,22 +778,27 @@ class MultiDevice : public Device {
         tasks.pop_front();
 
         if (task.buffer)
-          subtask.buffer = sub.ptr_map[task.buffer];
+          subtask.buffer = find_matching_mem(task.buffer, sub);
         if (task.rgba_byte)
           subtask.rgba_byte = sub.ptr_map[task.rgba_byte];
         if (task.rgba_half)
           subtask.rgba_half = sub.ptr_map[task.rgba_half];
         if (task.shader_input)
-          subtask.shader_input = sub.ptr_map[task.shader_input];
+          subtask.shader_input = find_matching_mem(task.shader_input, sub);
         if (task.shader_output)
-          subtask.shader_output = sub.ptr_map[task.shader_output];
+          subtask.shader_output = find_matching_mem(task.shader_output, sub);
 
         sub.device->task_add(subtask);
+
+        if (task.buffers && task.buffers->buffer.device == this) {
+          /* Synchronize access to RenderBuffers, since 'map_neighbor_tiles' is not thread-safe. */
+          sub.device->task_wait();
+        }
       }
     }
   }
 
-  void task_wait()
+  void task_wait() override
   {
     foreach (SubDevice &sub, devices)
       sub.device->task_wait();
@@ -541,16 +806,13 @@ class MultiDevice : public Device {
       sub.device->task_wait();
   }
 
-  void task_cancel()
+  void task_cancel() override
   {
     foreach (SubDevice &sub, devices)
       sub.device->task_cancel();
     foreach (SubDevice &sub, denoising_devices)
       sub.device->task_cancel();
   }
-
- protected:
-  Stats sub_stats_;
 };
 
 Device *device_multi_create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background)

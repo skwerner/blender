@@ -24,41 +24,6 @@
 #include <stdlib.h>
 
 #include "DNA_anim_types.h"
-#include "DNA_armature_types.h"
-#include "DNA_brush_types.h"
-#include "DNA_camera_types.h"
-#include "DNA_collection_types.h"
-#include "DNA_constraint_types.h"
-#include "DNA_gpencil_types.h"
-#include "DNA_hair_types.h"
-#include "DNA_key_types.h"
-#include "DNA_lattice_types.h"
-#include "DNA_light_types.h"
-#include "DNA_lightprobe_types.h"
-#include "DNA_linestyle_types.h"
-#include "DNA_mask_types.h"
-#include "DNA_material_types.h"
-#include "DNA_mesh_types.h"
-#include "DNA_meta_types.h"
-#include "DNA_movieclip_types.h"
-#include "DNA_node_types.h"
-#include "DNA_object_force_types.h"
-#include "DNA_outliner_types.h"
-#include "DNA_pointcloud_types.h"
-#include "DNA_rigidbody_types.h"
-#include "DNA_scene_types.h"
-#include "DNA_screen_types.h"
-#include "DNA_sequence_types.h"
-#include "DNA_simulation_types.h"
-#include "DNA_sound_types.h"
-#include "DNA_space_types.h"
-#include "DNA_speaker_types.h"
-#include "DNA_text_types.h"
-#include "DNA_vfont_types.h"
-#include "DNA_volume_types.h"
-#include "DNA_windowmanager_types.h"
-#include "DNA_workspace_types.h"
-#include "DNA_world_types.h"
 
 #include "BLI_ghash.h"
 #include "BLI_linklist_stack.h"
@@ -66,24 +31,12 @@
 #include "BLI_utildefines.h"
 
 #include "BKE_anim_data.h"
-#include "BKE_collection.h"
-#include "BKE_constraint.h"
-#include "BKE_fcurve_driver.h"
-#include "BKE_gpencil_modifier.h"
 #include "BKE_idprop.h"
 #include "BKE_idtype.h"
 #include "BKE_lib_id.h"
 #include "BKE_lib_query.h"
 #include "BKE_main.h"
-#include "BKE_modifier.h"
 #include "BKE_node.h"
-#include "BKE_particle.h"
-#include "BKE_rigidbody.h"
-#include "BKE_screen.h"
-#include "BKE_sequencer.h"
-#include "BKE_shader_fx.h"
-#include "BKE_texture.h"
-#include "BKE_workspace.h"
 
 /* status */
 enum {
@@ -143,9 +96,8 @@ bool BKE_lib_query_foreachid_process(LibraryForeachIDData *data, ID **id_pp, int
     }
     return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 int BKE_lib_query_foreachid_process_flags_get(LibraryForeachIDData *data)
@@ -181,39 +133,6 @@ void BKE_lib_query_idpropertiesForeachIDLink_callback(IDProperty *id_prop, void 
 
   LibraryForeachIDData *data = (LibraryForeachIDData *)user_data;
   BKE_LIB_FOREACHID_PROCESS_ID(data, id_prop->data.pointer, IDWALK_CB_USER);
-}
-
-static void library_foreach_nla_strip(LibraryForeachIDData *data, NlaStrip *strip)
-{
-  BKE_LIB_FOREACHID_PROCESS(data, strip->act, IDWALK_CB_USER);
-
-  LISTBASE_FOREACH (NlaStrip *, substrip, &strip->strips) {
-    library_foreach_nla_strip(data, substrip);
-  }
-}
-
-static void library_foreach_animationData(LibraryForeachIDData *data, AnimData *adt)
-{
-  LISTBASE_FOREACH (FCurve *, fcu, &adt->drivers) {
-    ChannelDriver *driver = fcu->driver;
-
-    LISTBASE_FOREACH (DriverVar *, dvar, &driver->variables) {
-      /* only used targets */
-      DRIVER_TARGETS_USED_LOOPER_BEGIN (dvar) {
-        BKE_LIB_FOREACHID_PROCESS_ID(data, dtar->id, IDWALK_CB_NOP);
-      }
-      DRIVER_TARGETS_LOOPER_END;
-    }
-  }
-
-  BKE_LIB_FOREACHID_PROCESS(data, adt->action, IDWALK_CB_USER);
-  BKE_LIB_FOREACHID_PROCESS(data, adt->tmpact, IDWALK_CB_USER);
-
-  LISTBASE_FOREACH (NlaTrack *, nla_track, &adt->nla_tracks) {
-    LISTBASE_FOREACH (NlaStrip *, nla_strip, &nla_track->strips) {
-      library_foreach_nla_strip(data, nla_strip);
-    }
-  }
 }
 
 bool BKE_library_foreach_ID_embedded(LibraryForeachIDData *data, ID **id_pp)
@@ -342,7 +261,7 @@ static void library_foreach_ID_link(Main *bmain,
 
     AnimData *adt = BKE_animdata_from_id(id);
     if (adt) {
-      library_foreach_animationData(&data, adt);
+      BKE_animdata_foreach_id(adt, &data);
     }
 
     const IDTypeInfo *id_type = BKE_idtype_get_info_from_id(id);
@@ -492,6 +411,8 @@ bool BKE_library_id_can_use_idtype(ID *id_owner, const short id_type_used)
       return ELEM(id_type_used, ID_MA);
     case ID_VO:
       return ELEM(id_type_used, ID_MA);
+    case ID_SIM:
+      return ELEM(id_type_used, ID_OB, ID_IM);
     case ID_IM:
     case ID_VF:
     case ID_TXT:
@@ -502,7 +423,6 @@ bool BKE_library_id_can_use_idtype(ID *id_owner, const short id_type_used)
     case ID_PAL:
     case ID_PC:
     case ID_CF:
-    case ID_SIM:
       /* Those types never use/reference other IDs... */
       return false;
     case ID_IP:

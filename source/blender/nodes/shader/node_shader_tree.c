@@ -50,7 +50,7 @@
 
 #include "GPU_material.h"
 
-#include "RE_shader_ext.h"
+#include "RE_texture.h"
 
 #include "NOD_common.h"
 
@@ -344,15 +344,23 @@ static void ntree_shader_unlink_hidden_value_sockets(bNode *group_node, bNodeSoc
   bool removed_link = false;
 
   for (node = group_ntree->nodes.first; node; node = node->next) {
+    const bool is_group = ELEM(node->type, NODE_GROUP, NODE_CUSTOM_GROUP) && (node->id != NULL);
+
     LISTBASE_FOREACH (bNodeSocket *, sock, &node->inputs) {
-      if ((sock->flag & SOCK_HIDE_VALUE) == 0) {
+      if (!is_group && (sock->flag & SOCK_HIDE_VALUE) == 0) {
         continue;
       }
       /* If socket is linked to a group input node and sockets id match. */
       if (sock && sock->link && sock->link->fromnode->type == NODE_GROUP_INPUT) {
         if (STREQ(isock->identifier, sock->link->fromsock->identifier)) {
-          nodeRemLink(group_ntree, sock->link);
-          removed_link = true;
+          if (is_group) {
+            /* Recursively unlink sockets within the nested group. */
+            ntree_shader_unlink_hidden_value_sockets(node, sock);
+          }
+          else {
+            nodeRemLink(group_ntree, sock->link);
+            removed_link = true;
+          }
         }
       }
     }
@@ -527,7 +535,7 @@ static void ntree_shader_groups_flatten(bNodeTree *localtree)
 
 /* Check whether shader has a displacement.
  *
- * Will also return a node and it's socket which is connected to a displacement
+ * Will also return a node and its socket which is connected to a displacement
  * output. Additionally, link which is attached to the displacement output is
  * also returned.
  */
@@ -895,6 +903,16 @@ void ntreeGPUMaterialNodes(bNodeTree *localtree,
   /* Duplicate bump height branches for manual derivatives.
    */
   nodeChainIterBackwards(localtree, output, ntree_shader_bump_branches, localtree, 0);
+  LISTBASE_FOREACH (bNode *, node, &localtree->nodes) {
+    if (node->type == SH_NODE_OUTPUT_AOV) {
+      nodeChainIterBackwards(localtree, node, ntree_shader_bump_branches, localtree, 0);
+      nTreeTags tags = {
+          .ssr_id = 1.0,
+          .sss_id = 1.0,
+      };
+      ntree_shader_tag_nodes(localtree, node, &tags);
+    }
+  }
 
   /* TODO(fclem): consider moving this to the gpu shader tree evaluation. */
   nTreeTags tags = {
@@ -905,6 +923,11 @@ void ntreeGPUMaterialNodes(bNodeTree *localtree,
 
   exec = ntreeShaderBeginExecTree(localtree);
   ntreeExecGPUNodes(exec, mat, output);
+  LISTBASE_FOREACH (bNode *, node, &localtree->nodes) {
+    if (node->type == SH_NODE_OUTPUT_AOV) {
+      ntreeExecGPUNodes(exec, mat, node);
+    }
+  }
   ntreeShaderEndExecTree(exec);
 
   /* EEVEE: Find which material domain was used (volume, surface ...). */

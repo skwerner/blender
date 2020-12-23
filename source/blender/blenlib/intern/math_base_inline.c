@@ -360,7 +360,7 @@ MINLINE int divide_floor_i(int a, int b)
 }
 
 /**
- * Integer division that ceils the result, instead of flooring like normal C division.
+ * Integer division that returns the ceiling, instead of flooring like normal C division.
  */
 MINLINE uint divide_ceil_u(uint a, uint b)
 {
@@ -385,6 +385,14 @@ MINLINE float wrapf(float value, float max, float min)
 {
   float range = max - min;
   return (range != 0.0f) ? value - (range * floorf((value - min) / range)) : min;
+}
+
+MINLINE float pingpongf(float value, float scale)
+{
+  if (scale == 0.0f) {
+    return 0.0f;
+  }
+  return fabsf(fractf((value - scale) / (scale * 2.0f)) * scale * 2.0f - scale);
 }
 
 // Square.
@@ -611,7 +619,7 @@ MINLINE int compare_ff_relative(float a, float b, const float max_diff, const in
 
 MINLINE float signf(float f)
 {
-  return (f < 0.f) ? -1.f : 1.f;
+  return (f < 0.0f) ? -1.0f : 1.0f;
 }
 
 MINLINE float compatible_signf(float f)

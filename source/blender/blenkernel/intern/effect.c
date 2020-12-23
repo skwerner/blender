@@ -68,15 +68,12 @@
 #include "DEG_depsgraph_physics.h"
 #include "DEG_depsgraph_query.h"
 
-#include "RE_render_ext.h"
-#include "RE_shader_ext.h"
+#include "RE_texture.h"
 
 EffectorWeights *BKE_effector_add_weights(Collection *collection)
 {
   EffectorWeights *weights = MEM_callocN(sizeof(EffectorWeights), "EffectorWeights");
-  int i;
-
-  for (i = 0; i < NUM_PFIELD_TYPES; i++) {
+  for (int i = 0; i < NUM_PFIELD_TYPES; i++) {
     weights->weight[i] = 1.0f;
   }
 
@@ -108,7 +105,8 @@ PartDeflect *BKE_partdeflect_new(int type)
       break;
     case PFIELD_WIND:
       pd->shape = PFIELD_SHAPE_PLANE;
-      pd->f_flow = 1.0f; /* realistic wind behavior */
+      pd->f_flow = 1.0f;        /* realistic wind behavior */
+      pd->f_wind_factor = 1.0f; /* only act perpendicularly to a surface */
       break;
     case PFIELD_TEXTURE:
       pd->f_size = 1.0f;
@@ -312,10 +310,10 @@ ListBase *BKE_effectors_create(Depsgraph *depsgraph,
       if (ob == ob_src) {
         continue;
       }
-      else if (weights->weight[ob->pd->forcefield] == 0.0f) {
+      if (weights->weight[ob->pd->forcefield] == 0.0f) {
         continue;
       }
-      else if (ob->pd->shape == PFIELD_SHAPE_POINTS && BKE_object_get_evaluated_mesh(ob) == NULL) {
+      if (ob->pd->shape == PFIELD_SHAPE_POINTS && BKE_object_get_evaluated_mesh(ob) == NULL) {
         continue;
       }
 
@@ -428,7 +426,7 @@ static float eff_calc_visibility(ListBase *colliders,
                                  EffectorData *efd,
                                  EffectedPoint *point)
 {
-  const int raycast_flag = BVH_RAYCAST_DEFAULT & ~(BVH_RAYCAST_WATERTIGHT);
+  const int raycast_flag = BVH_RAYCAST_DEFAULT & ~BVH_RAYCAST_WATERTIGHT;
   ListBase *colls = colliders;
   ColliderCache *col;
   float norm[3], len = 0.0;
@@ -700,8 +698,8 @@ int get_effector_data(EffectorCache *eff,
       copy_v3_v3(efd->loc, state.co);
 
       /* rather than use the velocity use rotated x-axis (defaults to velocity) */
-      efd->nor[0] = 1.f;
-      efd->nor[1] = efd->nor[2] = 0.f;
+      efd->nor[0] = 1.0f;
+      efd->nor[1] = efd->nor[2] = 0.0f;
       mul_qt_v3(state.rot, efd->nor);
 
       if (real_velocity) {
@@ -1010,9 +1008,12 @@ static void do_physical_effector(EffectorCache *eff,
       else {
         add_v3_v3v3(temp, efd->vec_to_point2, efd->nor2);
       }
-      force[0] = -1.0f + 2.0f * BLI_gTurbulence(pd->f_size, temp[0], temp[1], temp[2], 2, 0, 2);
-      force[1] = -1.0f + 2.0f * BLI_gTurbulence(pd->f_size, temp[1], temp[2], temp[0], 2, 0, 2);
-      force[2] = -1.0f + 2.0f * BLI_gTurbulence(pd->f_size, temp[2], temp[0], temp[1], 2, 0, 2);
+      force[0] = -1.0f + 2.0f * BLI_noise_generic_turbulence(
+                                    pd->f_size, temp[0], temp[1], temp[2], 2, 0, 2);
+      force[1] = -1.0f + 2.0f * BLI_noise_generic_turbulence(
+                                    pd->f_size, temp[1], temp[2], temp[0], 2, 0, 2);
+      force[2] = -1.0f + 2.0f * BLI_noise_generic_turbulence(
+                                    pd->f_size, temp[2], temp[0], temp[1], 2, 0, 2);
       mul_v3_fl(force, strength * efd->falloff);
       break;
     case PFIELD_DRAG:
@@ -1052,9 +1053,6 @@ static void do_physical_effector(EffectorCache *eff,
     }
   }
 
-  if (point->ave) {
-    zero_v3(point->ave);
-  }
   if (pd->flag & PFIELD_DO_ROTATION && point->ave && point->rot) {
     float xvec[3] = {1.0f, 0.0f, 0.0f};
     float dave[3];
@@ -1072,7 +1070,8 @@ static void do_physical_effector(EffectorCache *eff,
  * scene       = scene where it runs in, for time and stuff
  * lb           = listbase with objects that take part in effecting
  * opco     = global coord, as input
- * force        = force accumulator
+ * force        = accumulator for force
+ * wind_force   = accumulator for force only acting perpendicular to a surface
  * speed        = actual current speed which can be altered
  * cur_time = "external" time in frames, is constant for static particles
  * loc_time = "local" time in frames, range <0-1> for the lifetime of particle
@@ -1085,17 +1084,18 @@ void BKE_effectors_apply(ListBase *effectors,
                          EffectorWeights *weights,
                          EffectedPoint *point,
                          float *force,
+                         float *wind_force,
                          float *impulse)
 {
   /*
    * Modifies the force on a particle according to its
    * relation with the effector object
    * Different kind of effectors include:
-   *     Forcefields: Gravity-like attractor
+   *     Force-fields: Gravity-like attractor
    *     (force power is related to the inverse of distance to the power of a falloff value)
    *     Vortex fields: swirling effectors
    *     (particles rotate around Z-axis of the object. otherwise, same relation as)
-   *     (Forcefields, but this is not done through a force/acceleration)
+   *     (Force-fields, but this is not done through a force/acceleration)
    *     Guide: particles on a path
    *     (particles are guided along a curve bezier or old nurbs)
    *     (is independent of other effectors)
@@ -1120,22 +1120,27 @@ void BKE_effectors_apply(ListBase *effectors,
           if (efd.falloff > 0.0f) {
             efd.falloff *= eff_calc_visibility(colliders, eff, &efd, point);
           }
-          if (efd.falloff <= 0.0f) {
-            /* don't do anything */
-          }
-          else if (eff->pd->forcefield == PFIELD_TEXTURE) {
-            do_texture_effector(eff, &efd, point, force);
-          }
-          else {
-            float temp1[3] = {0, 0, 0}, temp2[3];
-            copy_v3_v3(temp1, force);
+          if (efd.falloff > 0.0f) {
+            float out_force[3] = {0, 0, 0};
 
-            do_physical_effector(eff, &efd, point, force);
+            if (eff->pd->forcefield == PFIELD_TEXTURE) {
+              do_texture_effector(eff, &efd, point, out_force);
+            }
+            else {
+              do_physical_effector(eff, &efd, point, out_force);
 
-            /* for softbody backward compatibility */
-            if (point->flag & PE_WIND_AS_SPEED && impulse) {
-              sub_v3_v3v3(temp2, force, temp1);
-              sub_v3_v3v3(impulse, impulse, temp2);
+              /* for softbody backward compatibility */
+              if (point->flag & PE_WIND_AS_SPEED && impulse) {
+                sub_v3_v3v3(impulse, impulse, out_force);
+              }
+            }
+
+            if (wind_force) {
+              madd_v3_v3fl(force, out_force, 1.0f - eff->pd->f_wind_factor);
+              madd_v3_v3fl(wind_force, out_force, eff->pd->f_wind_factor);
+            }
+            else {
+              add_v3_v3(force, out_force);
             }
           }
         }
@@ -1199,9 +1204,9 @@ static bool debug_element_compare(const void *a, const void *b)
   const SimDebugElement *elem2 = b;
 
   if (elem1->hash == elem2->hash) {
-    return 0;
+    return false;
   }
-  return 1;
+  return true;
 }
 
 static void debug_element_free(void *val)

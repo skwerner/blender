@@ -215,7 +215,7 @@ static void use_values_from_fcurves(StabContext *ctx, bool toggle)
 /* Prepare per call private working area.
  * Used for access to possibly animated values: retrieve available F-curves.
  */
-static StabContext *initialize_stabilization_working_context(MovieClip *clip)
+static StabContext *init_stabilization_working_context(MovieClip *clip)
 {
   StabContext *ctx = MEM_callocN(sizeof(StabContext), "2D stabilization animation runtime data");
   ctx->clip = clip;
@@ -270,21 +270,8 @@ static bool is_effectively_disabled(StabContext *ctx,
 
 static int search_closest_marker_index(MovieTrackingTrack *track, int ref_frame)
 {
-  MovieTrackingMarker *markers = track->markers;
-  int end = track->markersnr;
-  int i = track->last_marker;
-
-  i = MAX2(0, i);
-  i = MIN2(i, end - 1);
-  for (; i < end - 1 && markers[i].framenr <= ref_frame; i++) {
-    /* pass */
-  }
-  for (; 0 < i && markers[i].framenr > ref_frame; i--) {
-    /* pass */
-  }
-
-  track->last_marker = i;
-  return i;
+  const MovieTrackingMarker *marker = BKE_tracking_marker_get(track, ref_frame);
+  return marker - track->markers;
 }
 
 static void retrieve_next_higher_usable_frame(
@@ -357,9 +344,8 @@ static MovieTrackingMarker *get_closest_marker(StabContext *ctx,
   if ((next_higher - ref_frame) < (ref_frame - next_lower)) {
     return BKE_tracking_marker_get_exact(track, next_higher);
   }
-  else {
-    return BKE_tracking_marker_get_exact(track, next_lower);
-  }
+
+  return BKE_tracking_marker_get_exact(track, next_lower);
 }
 
 /* Retrieve tracking data, if available and applicable for this frame.
@@ -377,11 +363,10 @@ static MovieTrackingMarker *get_tracking_data_point(StabContext *ctx,
     *r_weight = get_animated_weight(ctx, track, framenr);
     return marker;
   }
-  else {
-    /* No marker at this frame (=gap) or marker disabled. */
-    *r_weight = 0.0f;
-    return NULL;
-  }
+
+  /* No marker at this frame (=gap) or marker disabled. */
+  *r_weight = 0.0f;
+  return NULL;
 }
 
 /* Define the reference point for rotation/scale measurement and compensation.
@@ -841,14 +826,14 @@ static int establish_track_initialization_order(StabContext *ctx, TrackInitOrder
  *
  * NOTE: when done, this track is marked as initialized
  */
-static void initialize_track_for_stabilization(StabContext *ctx,
-                                               MovieTrackingTrack *track,
-                                               int reference_frame,
-                                               float aspect,
-                                               const float average_translation[2],
-                                               const float pivot[2],
-                                               const float average_angle,
-                                               const float average_scale_step)
+static void init_track_for_stabilization(StabContext *ctx,
+                                         MovieTrackingTrack *track,
+                                         int reference_frame,
+                                         float aspect,
+                                         const float average_translation[2],
+                                         const float pivot[2],
+                                         const float average_angle,
+                                         const float average_scale_step)
 {
   float pos[2], angle, len;
   TrackStabilizationBase *local_data = access_stabilization_baseline_data(ctx, track);
@@ -876,7 +861,7 @@ static void initialize_track_for_stabilization(StabContext *ctx,
   local_data->is_init_for_stabilization = true;
 }
 
-static void initialize_all_tracks(StabContext *ctx, float aspect)
+static void init_all_tracks(StabContext *ctx, float aspect)
 {
   size_t track_len = 0;
   MovieClip *clip = ctx->clip;
@@ -936,14 +921,14 @@ static void initialize_all_tracks(StabContext *ctx, float aspect)
                                   &average_angle,
                                   &average_scale_step);
     }
-    initialize_track_for_stabilization(ctx,
-                                       track,
-                                       reference_frame,
-                                       aspect,
-                                       average_translation,
-                                       pivot,
-                                       average_angle,
-                                       average_scale_step);
+    init_track_for_stabilization(ctx,
+                                 track,
+                                 reference_frame,
+                                 aspect,
+                                 average_translation,
+                                 pivot,
+                                 average_angle,
+                                 average_scale_step);
   }
 
 cleanup:
@@ -1094,7 +1079,7 @@ static void stabilization_data_to_mat4(float pixel_aspect,
 {
   float translation_mat[4][4], rotation_mat[4][4], scale_mat[4][4], pivot_mat[4][4],
       inv_pivot_mat[4][4], aspect_mat[4][4], inv_aspect_mat[4][4];
-  float scale_vector[3] = {scale, scale, 1.0f};
+  const float scale_vector[3] = {scale, scale, 1.0f};
 
   unit_m4(translation_mat);
   unit_m4(rotation_mat);
@@ -1257,9 +1242,9 @@ static float calculate_autoscale_factor(StabContext *ctx, int size, float aspect
  */
 static StabContext *init_stabilizer(MovieClip *clip, int size, float aspect)
 {
-  StabContext *ctx = initialize_stabilization_working_context(clip);
+  StabContext *ctx = init_stabilization_working_context(clip);
   BLI_assert(ctx != NULL);
-  initialize_all_tracks(ctx, aspect);
+  init_all_tracks(ctx, aspect);
   if (ctx->stab->flag & TRACKING_AUTOSCALE) {
     ctx->stab->scale = 1.0;
     ctx->stab->scale = calculate_autoscale_factor(ctx, size, aspect);
@@ -1494,7 +1479,7 @@ void BKE_tracking_stabilization_data_to_mat4(int buffer_width,
    * applied after rotation/scale anyway. Thus effectively the image gets
    * rotated around the desired pivot point
    */
-  /* TODO(sergey) pivot shouldn't be calculated here, rather received
+  /* TODO(sergey): pivot shouldn't be calculated here, rather received
    * as a parameter.
    */
   float pivot[2];

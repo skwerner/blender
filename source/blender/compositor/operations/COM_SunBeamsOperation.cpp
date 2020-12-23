@@ -19,7 +19,7 @@
 
 #include "COM_SunBeamsOperation.h"
 
-SunBeamsOperation::SunBeamsOperation() : NodeOperation()
+SunBeamsOperation::SunBeamsOperation()
 {
   this->addInputSocket(COM_DT_COLOR);
   this->addOutputSocket(COM_DT_COLOR);
@@ -172,7 +172,7 @@ template<int fxu, int fxv, int fyu, int fyv> struct BufferLineAccumulator {
       return;
     }
 
-    /* initialise the iteration variables */
+    /* Initialize the iteration variables. */
     float *buffer = init_buffer_iterator(
         input, source, co, dist_min, dist_max, x, y, num, v, dv, falloff_factor);
     zero_v3(border);
@@ -310,7 +310,7 @@ static void accumulate_line(MemoryBuffer *input,
 
 void *SunBeamsOperation::initializeTileData(rcti * /*rect*/)
 {
-  void *buffer = getInputOperation(0)->initializeTileData(NULL);
+  void *buffer = getInputOperation(0)->initializeTileData(nullptr);
   return buffer;
 }
 

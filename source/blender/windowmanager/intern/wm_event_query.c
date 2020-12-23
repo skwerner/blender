@@ -222,7 +222,7 @@ bool WM_event_is_modal_tweak_exit(const wmEvent *event, int tweak_event)
     }
     else {
       /* if the initial event wasn't a tweak event then
-       * ignore USER_RELEASECONFIRM setting: see [#26756] */
+       * ignore USER_RELEASECONFIRM setting: see T26756. */
       if (ELEM(tweak_event, EVT_TWEAK_L, EVT_TWEAK_M, EVT_TWEAK_R) == 0) {
         return 1;
       }
@@ -418,6 +418,38 @@ float WM_event_tablet_data(const wmEvent *event, int *pen_flip, float tilt[2])
 bool WM_event_is_tablet(const struct wmEvent *event)
 {
   return (event->tablet.active != EVT_TABLET_NONE);
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Event Scroll's Absolute Deltas
+ *
+ * User may change the scroll behavior, and the deltas are automatically inverted.
+ * These functions return the absolute direction, swipe up/right gives positive values.
+ *
+ * \{ */
+
+int WM_event_absolute_delta_x(const struct wmEvent *event)
+{
+  int dx = event->x - event->prevx;
+
+  if (!event->is_direction_inverted) {
+    dx = -dx;
+  }
+
+  return dx;
+}
+
+int WM_event_absolute_delta_y(const struct wmEvent *event)
+{
+  int dy = event->y - event->prevy;
+
+  if (!event->is_direction_inverted) {
+    dy = -dy;
+  }
+
+  return dy;
 }
 
 /** \} */

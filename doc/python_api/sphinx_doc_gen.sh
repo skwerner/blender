@@ -36,16 +36,10 @@ fi
 blender_srcdir=$(dirname -- $0)/../..
 blender_version_header="$blender_srcdir/source/blender/blenkernel/BKE_blender_version.h"
 blender_version=$(grep "BLENDER_VERSION\s" "$blender_version_header" | awk '{print $3}')
-blender_version_char=$(grep "BLENDER_VERSION_CHAR\s" "$blender_version_header" | awk '{print $3}')
 blender_version_cycle=$(grep "BLENDER_VERSION_CYCLE\s" "$blender_version_header" | awk '{print $3}')
-blender_subversion=$(grep "BLENDER_SUBVERSION\s" "$blender_version_header" | awk '{print $3}')
 unset blender_version_header
 
-if [ "$blender_version_cycle" = "release" ] ; then
-  BLENDER_VERSION=$(expr $blender_version / 100)_$(expr $blender_version % 100)$blender_version_char"_release"
-else
-  BLENDER_VERSION=$(expr $blender_version / 100)_$(expr $blender_version % 100)_$blender_subversion
-fi
+BLENDER_VERSION=$(expr $blender_version / 100)_$(expr $blender_version % 100)
 
 SSH_UPLOAD_FULL=$SSH_UPLOAD/"blender_python_api_"$BLENDER_VERSION
 
@@ -82,11 +76,7 @@ fi
 # Generate HTML (sphinx)
 
 if $DO_OUT_HTML ; then
-  # sphinx-build -n -b html $SPHINX_WORKDIR/sphinx-in $SPHINX_WORKDIR/sphinx-out
-
-  # annoying bug in sphinx makes it very slow unless we do this. should report.
-  cd $SPHINX_WORKDIR
-  sphinx-build -b html sphinx-in sphinx-out
+  sphinx-build -b html -j auto $SPHINX_WORKDIR/sphinx-in $SPHINX_WORKDIR/sphinx-out
 
   # XXX, saves space on upload and zip, should move HTML outside
   # and zip up there, for now this is OK
@@ -113,8 +103,7 @@ fi
 # Generate PDF (sphinx/laytex)
 
 if $DO_OUT_PDF ; then
-  cd $SPHINX_WORKDIR
-  sphinx-build -n -b latex $SPHINX_WORKDIR/sphinx-in $SPHINX_WORKDIR/sphinx-out
+  sphinx-build -n -b latex -j auto $SPHINX_WORKDIR/sphinx-in $SPHINX_WORKDIR/sphinx-out
   make -C $SPHINX_WORKDIR/sphinx-out
   mv $SPHINX_WORKDIR/sphinx-out/contents.pdf \
      $SPHINX_WORKDIR/sphinx-out/blender_python_reference_$BLENDER_VERSION.pdf

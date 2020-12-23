@@ -17,27 +17,24 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_MULTIRES_H__
-#define __BKE_MULTIRES_H__
+#pragma once
 
 /** \file
  * \ingroup bke
  */
 
+#include "BKE_subsurf.h"
 #include "BLI_compiler_compat.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-enum MultiresModifiedFlags;
-
 struct Depsgraph;
 struct DerivedMesh;
 struct MDisps;
 struct Mesh;
 struct ModifierData;
-struct Multires;
 struct MultiresModifierData;
 struct Object;
 struct Scene;
@@ -115,21 +112,11 @@ int multiresModifier_rebuild_subdiv(struct Depsgraph *depsgraph,
                                     struct MultiresModifierData *mmd,
                                     int rebuild_limit,
                                     bool switch_view_to_lower_level);
-void multiresModifier_subdivide_legacy(struct MultiresModifierData *mmd,
-                                       struct Scene *scene,
-                                       struct Object *ob,
-                                       int updateblock,
-                                       int simple);
 void multiresModifier_sync_levels_ex(struct Object *ob_dst,
                                      struct MultiresModifierData *mmd_src,
                                      struct MultiresModifierData *mmd_dst);
 
 void multires_stitch_grids(struct Object *);
-
-/* Related to the old multires */
-void multires_free(struct Multires *mr);
-void multires_load_old(struct Object *ob, struct Mesh *me);
-void multires_load_old_250(struct Mesh *);
 
 void multiresModifier_scale_disp(struct Depsgraph *depsgraph,
                                  struct Scene *scene,
@@ -152,7 +139,7 @@ void multiresModifier_ensure_external_read(struct Mesh *mesh,
 void old_mdisps_bilinear(float out[3], float (*disps)[3], const int st, float u, float v);
 int mdisp_rot_face_to_crn(struct MVert *mvert,
                           struct MPoly *mpoly,
-                          struct MLoop *mloops,
+                          struct MLoop *mloop,
                           const struct MLoopTri *lt,
                           const int face_side,
                           const float u,
@@ -230,10 +217,15 @@ BLI_INLINE void BKE_multires_construct_tangent_matrix(float tangent_matrix[3][3]
                                                       const float dPdv[3],
                                                       const int corner);
 
+/* Versioning. */
+
+/* Convert displacement which is stored for simply-subdivided mesh to a Catmull-Clark
+ * subdivided mesh.  */
+void multires_do_versions_simple_to_catmull_clark(struct Object *object,
+                                                  struct MultiresModifierData *mmd);
+
 #ifdef __cplusplus
 }
 #endif
 
 #include "intern/multires_inline.h"
-
-#endif /* __BKE_MULTIRES_H__ */

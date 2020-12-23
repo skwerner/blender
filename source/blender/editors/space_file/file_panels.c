@@ -103,7 +103,7 @@ void file_tool_props_region_panels_register(ARegionType *art)
   strcpy(pt->idname, "FILE_PT_operator");
   strcpy(pt->label, N_("Operator"));
   strcpy(pt->translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA);
-  pt->flag = PNL_NO_HEADER;
+  pt->flag = PANEL_TYPE_NO_HEADER;
   pt->poll = file_panel_operator_poll;
   pt->draw_header = file_panel_operator_header;
   pt->draw = file_panel_operator;
@@ -132,7 +132,7 @@ static void file_panel_execution_buttons_draw(const bContext *C, Panel *panel)
 {
   bScreen *screen = CTX_wm_screen(C);
   SpaceFile *sfile = CTX_wm_space_file(C);
-  FileSelectParams *params = ED_fileselect_get_params(sfile);
+  FileSelectParams *params = ED_fileselect_get_active_params(sfile);
   uiBlock *block = uiLayoutGetBlock(panel->layout);
   uiBut *but;
   uiLayout *row;
@@ -181,11 +181,11 @@ static void file_panel_execution_buttons_draw(const bContext *C, Panel *panel)
 
   if (params->flag & FILE_CHECK_EXISTING) {
     but_extra_rna_ptr = UI_but_extra_operator_icon_add(
-        but, "FILE_OT_filenum", WM_OP_EXEC_REGION_WIN, ICON_ADD);
-    RNA_int_set(but_extra_rna_ptr, "increment", 1);
-    but_extra_rna_ptr = UI_but_extra_operator_icon_add(
         but, "FILE_OT_filenum", WM_OP_EXEC_REGION_WIN, ICON_REMOVE);
     RNA_int_set(but_extra_rna_ptr, "increment", -1);
+    but_extra_rna_ptr = UI_but_extra_operator_icon_add(
+        but, "FILE_OT_filenum", WM_OP_EXEC_REGION_WIN, ICON_ADD);
+    RNA_int_set(but_extra_rna_ptr, "increment", 1);
   }
 
   /* check if this overrides a file and if the operator option is used */
@@ -217,7 +217,7 @@ void file_execute_region_panels_register(ARegionType *art)
   strcpy(pt->idname, "FILE_PT_execution_buttons");
   strcpy(pt->label, N_("Execute Buttons"));
   strcpy(pt->translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA);
-  pt->flag = PNL_NO_HEADER;
+  pt->flag = PANEL_TYPE_NO_HEADER;
   pt->poll = file_panel_operator_poll;
   pt->draw = file_panel_execution_buttons_draw;
   BLI_addtail(&art->paneltypes, pt);

@@ -17,8 +17,7 @@
  * This is a new part of Blender
  */
 
-#ifndef __BKE_GPENCIL_H__
-#define __BKE_GPENCIL_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -28,6 +27,7 @@
 extern "C" {
 #endif
 
+struct BlendDataReader;
 struct Brush;
 struct CurveMapping;
 struct Depsgraph;
@@ -41,12 +41,14 @@ struct Object;
 struct Scene;
 struct SpaceImage;
 struct ToolSettings;
+struct ViewLayer;
 struct bDeformGroup;
 struct bGPDframe;
 struct bGPDlayer;
 struct bGPDlayer_Mask;
 struct bGPDspoint;
 struct bGPDstroke;
+struct bGPDcurve;
 struct bGPdata;
 
 #define GPENCIL_SIMPLIFY(scene) ((scene->r.simplify_gpencil & SIMPLIFY_GPENCIL_ENABLE))
@@ -88,6 +90,7 @@ struct bGPdata;
 
 void BKE_gpencil_free_point_weights(struct MDeformVert *dvert);
 void BKE_gpencil_free_stroke_weights(struct bGPDstroke *gps);
+void BKE_gpencil_free_stroke_editcurve(struct bGPDstroke *gps);
 void BKE_gpencil_free_stroke(struct bGPDstroke *gps);
 bool BKE_gpencil_free_strokes(struct bGPDframe *gpf);
 void BKE_gpencil_free_frames(struct bGPDlayer *gpl);
@@ -95,11 +98,13 @@ void BKE_gpencil_free_layers(struct ListBase *list);
 void BKE_gpencil_free(struct bGPdata *gpd, bool free_all);
 void BKE_gpencil_eval_delete(struct bGPdata *gpd_eval);
 void BKE_gpencil_free_layer_masks(struct bGPDlayer *gpl);
+void BKE_gpencil_tag(struct bGPdata *gpd);
 
 void BKE_gpencil_batch_cache_dirty_tag(struct bGPdata *gpd);
 void BKE_gpencil_batch_cache_free(struct bGPdata *gpd);
 
 void BKE_gpencil_stroke_sync_selection(struct bGPDstroke *gps);
+void BKE_gpencil_curve_sync_selection(struct bGPDstroke *gps);
 
 struct bGPDframe *BKE_gpencil_frame_addnew(struct bGPDlayer *gpl, int cframe);
 struct bGPDframe *BKE_gpencil_frame_addcopy(struct bGPDlayer *gpl, int cframe);
@@ -109,9 +114,10 @@ struct bGPdata *BKE_gpencil_data_addnew(struct Main *bmain, const char name[]);
 struct bGPDframe *BKE_gpencil_frame_duplicate(const struct bGPDframe *gpf_src);
 struct bGPDlayer *BKE_gpencil_layer_duplicate(const struct bGPDlayer *gpl_src);
 void BKE_gpencil_frame_copy_strokes(struct bGPDframe *gpf_src, struct bGPDframe *gpf_dst);
-struct bGPDstroke *BKE_gpencil_stroke_duplicate(struct bGPDstroke *gps_src, const bool dup_points);
-
-struct bGPdata *BKE_gpencil_copy(struct Main *bmain, const struct bGPdata *gpd);
+struct bGPDcurve *BKE_gpencil_stroke_curve_duplicate(struct bGPDcurve *gpc_src);
+struct bGPDstroke *BKE_gpencil_stroke_duplicate(struct bGPDstroke *gps_src,
+                                                const bool dup_points,
+                                                const bool dup_curve);
 
 struct bGPdata *BKE_gpencil_data_duplicate(struct Main *bmain,
                                            const struct bGPdata *gpd,
@@ -130,6 +136,11 @@ bool BKE_gpencil_merge_materials_table_get(struct Object *ob,
                                            const float sat_threshold,
                                            const float val_threshold,
                                            struct GHash *r_mat_table);
+bool BKE_gpencil_merge_materials(struct Object *ob,
+                                 const float hue_threshold,
+                                 const float sat_threshold,
+                                 const float val_threshold,
+                                 int *r_removed);
 
 /* statistics functions */
 void BKE_gpencil_stats_update(struct bGPdata *gpd);
@@ -154,6 +165,8 @@ struct bGPDstroke *BKE_gpencil_stroke_add_existing_style(struct bGPDframe *gpf,
                                                          int mat_idx,
                                                          int totpoints,
                                                          short thickness);
+
+struct bGPDcurve *BKE_gpencil_stroke_editcurve_new(const int tot_curve_points);
 
 /* Stroke and Fill - Alpha Visibility Threshold */
 #define GPENCIL_ALPHA_OPACITY_THRESH 0.001f
@@ -242,6 +255,7 @@ float BKE_gpencil_multiframe_falloff_calc(
 void BKE_gpencil_palette_ensure(struct Main *bmain, struct Scene *scene);
 
 bool BKE_gpencil_from_image(struct SpaceImage *sima,
+                            struct bGPdata *gpd,
                             struct bGPDframe *gpf,
                             const float size,
                             const bool mask);
@@ -253,7 +267,8 @@ typedef void (*gpIterCb)(struct bGPDlayer *layer,
                          struct bGPDstroke *stroke,
                          void *thunk);
 
-void BKE_gpencil_visible_stroke_iter(struct Object *ob,
+void BKE_gpencil_visible_stroke_iter(struct ViewLayer *view_layer,
+                                     struct Object *ob,
                                      gpIterCb layer_cb,
                                      gpIterCb stroke_cb,
                                      void *thunk,
@@ -274,8 +289,10 @@ void BKE_gpencil_parent_matrix_get(const struct Depsgraph *depsgraph,
 
 void BKE_gpencil_update_layer_parent(const struct Depsgraph *depsgraph, struct Object *ob);
 
+int BKE_gpencil_material_find_index_by_name_prefix(struct Object *ob, const char *name_prefix);
+
+void BKE_gpencil_blend_read_data(struct BlendDataReader *reader, struct bGPdata *gpd);
+
 #ifdef __cplusplus
 }
 #endif
-
-#endif /*  __BKE_GPENCIL_H__ */

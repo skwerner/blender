@@ -28,16 +28,22 @@
 #include "BLI_listbase.h"
 #include "BLI_math.h"
 
+#include "BLT_translation.h"
+
+#include "DNA_defaults.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
+#include "DNA_material_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
 
 #include "BKE_action.h"
 #include "BKE_colorband.h"
 #include "BKE_colortools.h"
+#include "BKE_context.h"
 #include "BKE_deform.h"
 #include "BKE_gpencil.h"
 #include "BKE_gpencil_modifier.h"
@@ -47,10 +53,17 @@
 #include "BKE_material.h"
 #include "BKE_modifier.h"
 #include "BKE_scene.h"
+#include "BKE_screen.h"
 
 #include "MEM_guardedalloc.h"
 
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
+
 #include "MOD_gpencil_modifiertypes.h"
+#include "MOD_gpencil_ui_common.h"
 #include "MOD_gpencil_util.h"
 
 #include "DEG_depsgraph.h"
@@ -60,13 +73,10 @@
 static void initData(GpencilModifierData *md)
 {
   TintGpencilModifierData *gpmd = (TintGpencilModifierData *)md;
-  gpmd->pass_index = 0;
-  gpmd->material = NULL;
-  gpmd->object = NULL;
-  gpmd->radius = 1.0f;
-  gpmd->factor = 0.5f;
-  ARRAY_SET_ITEMS(gpmd->rgb, 1.0f, 1.0f, 1.0f);
-  gpmd->mode = GPPAINT_MODE_BOTH;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(gpmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(gpmd, DNA_struct_default_get(TintGpencilModifierData), modifier);
 
   /* Add default color ramp. */
   gpmd->colorband = BKE_colorband_add(false);
@@ -83,10 +93,7 @@ static void initData(GpencilModifierData *md)
   }
 
   gpmd->curve_intensity = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
-  if (gpmd->curve_intensity) {
-    CurveMapping *curve = gpmd->curve_intensity;
-    BKE_curvemapping_initialize(curve);
-  }
+  BKE_curvemapping_init(gpmd->curve_intensity);
 }
 
 static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
@@ -248,7 +255,10 @@ static void deformStroke(GpencilModifierData *md,
 /* FIXME: Ideally we be doing this on a copy of the main depsgraph
  * (i.e. one where we don't have to worry about restoring state)
  */
-static void bakeModifier(Main *bmain, Depsgraph *depsgraph, GpencilModifierData *md, Object *ob)
+static void bakeModifier(Main *UNUSED(bmain),
+                         Depsgraph *depsgraph,
+                         GpencilModifierData *md,
+                         Object *ob)
 {
   TintGpencilModifierData *mmd = (TintGpencilModifierData *)md;
   Scene *scene = DEG_get_evaluated_scene(depsgraph);
@@ -265,7 +275,7 @@ static void bakeModifier(Main *bmain, Depsgraph *depsgraph, GpencilModifierData 
        * NOTE: this assumes that we don't want animation on non-keyframed frames
        */
       CFRA = gpf->framenum;
-      BKE_scene_graph_update_for_newframe(depsgraph, bmain);
+      BKE_scene_graph_update_for_newframe(depsgraph);
 
       /* compute effects on this frame */
       LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
@@ -276,7 +286,7 @@ static void bakeModifier(Main *bmain, Depsgraph *depsgraph, GpencilModifierData 
 
   /* return frame state and DB to original state */
   CFRA = oldframe;
-  BKE_scene_graph_update_for_newframe(depsgraph, bmain);
+  BKE_scene_graph_update_for_newframe(depsgraph);
 }
 
 static void freeData(GpencilModifierData *md)
@@ -311,23 +321,61 @@ static void updateDepsgraph(GpencilModifierData *md, const ModifierUpdateDepsgra
   DEG_add_object_relation(ctx->node, ctx->object, DEG_OB_COMP_TRANSFORM, "Vertexcolor Modifier");
 }
 
-static void foreachObjectLink(GpencilModifierData *md,
-                              Object *ob,
-                              ObjectWalkFunc walk,
-                              void *userData)
-{
-  TintGpencilModifierData *mmd = (TintGpencilModifierData *)md;
-
-  walk(userData, ob, &mmd->object, IDWALK_CB_NOP);
-}
-
 static void foreachIDLink(GpencilModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   TintGpencilModifierData *mmd = (TintGpencilModifierData *)md;
 
   walk(userData, ob, (ID **)&mmd->material, IDWALK_CB_USER);
+  walk(userData, ob, (ID **)&mmd->object, IDWALK_CB_NOP);
+}
 
-  foreachObjectLink(md, ob, (ObjectWalkFunc)walk, userData);
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *col;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, NULL);
+
+  int tint_type = RNA_enum_get(ptr, "tint_type");
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, ptr, "vertex_mode", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "factor", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "tint_type", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+
+  if (tint_type == GP_TINT_UNIFORM) {
+    uiItemR(layout, ptr, "color", 0, NULL, ICON_NONE);
+  }
+  else {
+    col = uiLayoutColumn(layout, false);
+    uiLayoutSetPropSep(col, false);
+    uiTemplateColorRamp(col, ptr, "colors", true);
+    uiItemS(layout);
+    uiItemR(layout, ptr, "object", 0, NULL, ICON_NONE);
+    uiItemR(layout, ptr, "radius", 0, NULL, ICON_NONE);
+  }
+
+  gpencil_modifier_panel_end(layout, ptr);
+}
+
+static void mask_panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  gpencil_modifier_masking_panel_draw(panel, true, true);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  PanelType *panel_type = gpencil_modifier_panel_register(
+      region_type, eGpencilModifierType_Tint, panel_draw);
+  PanelType *mask_panel_type = gpencil_modifier_subpanel_register(
+      region_type, "mask", "Influence", NULL, mask_panel_draw, panel_type);
+  gpencil_modifier_subpanel_register(region_type,
+                                     "curve",
+                                     "",
+                                     gpencil_modifier_curve_header_draw,
+                                     gpencil_modifier_curve_panel_draw,
+                                     mask_panel_type);
 }
 
 GpencilModifierTypeInfo modifierType_Gpencil_Tint = {
@@ -349,7 +397,7 @@ GpencilModifierTypeInfo modifierType_Gpencil_Tint = {
     /* isDisabled */ isDisabled,
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
     /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
+    /* panelRegister */ panelRegister,
 };

@@ -21,8 +21,7 @@
  * \ingroup GHOST
  */
 
-#ifndef __GHOST_SYSTEMPATHSWIN32_H__
-#define __GHOST_SYSTEMPATHSWIN32_H__
+#pragma once
 
 #ifndef WIN32
 #  error WIN32 only!
@@ -64,6 +63,12 @@ class GHOST_SystemPathsWin32 : public GHOST_SystemPaths {
   const GHOST_TUns8 *getUserDir(int version, const char *versionstr) const;
 
   /**
+   * Determine a special ("well known") and easy to reach user directory.
+   * \return Unsigned char string pointing to user dir (eg `~/Documents/`).
+   */
+  const GHOST_TUns8 *getUserSpecialDir(GHOST_TUserSpecialDirTypes type) const;
+
+  /**
    * Determine the directory of the current binary
    * \return Unsigned char string pointing to the binary dir
    */
@@ -74,5 +79,3 @@ class GHOST_SystemPathsWin32 : public GHOST_SystemPaths {
    */
   void addToSystemRecentFiles(const char *filename) const;
 };
-
-#endif  // __GHOST_SYSTEMPATHSWIN32_H__

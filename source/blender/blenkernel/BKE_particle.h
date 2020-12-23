@@ -20,8 +20,7 @@
  * Copyright 2011-2012 AutoCRC
  */
 
-#ifndef __BKE_PARTICLE_H__
-#define __BKE_PARTICLE_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -30,10 +29,7 @@
 #include "BLI_buffer.h"
 #include "BLI_utildefines.h"
 
-#include "DNA_object_types.h"
 #include "DNA_particle_types.h"
-
-#include "BKE_customdata.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -46,8 +42,10 @@ struct ParticleSystemModifierData;
 
 struct BVHTreeRay;
 struct BVHTreeRayHit;
+struct BlendWriter;
+struct BlendDataReader;
+struct BlendLibReader;
 struct CustomData_MeshMasks;
-struct Depsgraph;
 struct Depsgraph;
 struct EdgeHash;
 struct KDTree_3d;
@@ -218,7 +216,7 @@ typedef struct ParticleCollision {
   /** Collision modifier for current object. */
   struct CollisionModifierData *md;
 
-  /** Time factor of previous collision, needed for substracting face velocity. */
+  /** Time factor of previous collision, needed for subtracting face velocity. */
   float f;
   float fac1, fac2;
 
@@ -263,7 +261,7 @@ extern unsigned int PSYS_FRAND_SEED_OFFSET[PSYS_FRAND_COUNT];
 extern unsigned int PSYS_FRAND_SEED_MULTIPLIER[PSYS_FRAND_COUNT];
 extern float PSYS_FRAND_BASE[PSYS_FRAND_COUNT];
 
-void psys_init_rng(void);
+void BKE_particle_init_rng(void);
 
 BLI_INLINE float psys_frand(ParticleSystem *psys, unsigned int seed)
 {
@@ -301,7 +299,7 @@ int psys_get_tot_child(struct Scene *scene,
 struct ParticleSystem *psys_get_current(struct Object *ob);
 /* for rna */
 short psys_get_current_num(struct Object *ob);
-void psys_set_current_num(Object *ob, int index);
+void psys_set_current_num(struct Object *ob, int index);
 /* UNUSED */
 // struct Object *psys_find_object(struct Scene *scene, struct ParticleSystem *psys);
 
@@ -349,7 +347,7 @@ void copy_particle_key(struct ParticleKey *to, struct ParticleKey *from, int tim
 void psys_emitter_customdata_mask(struct ParticleSystem *psys,
                                   struct CustomData_MeshMasks *r_cddata_masks);
 void psys_particle_on_emitter(struct ParticleSystemModifierData *psmd,
-                              int distr,
+                              int from,
                               int index,
                               int index_dmcache,
                               float fuv[4],
@@ -366,10 +364,12 @@ struct ModifierData *object_add_particle_system(struct Main *bmain,
                                                 struct Scene *scene,
                                                 struct Object *ob,
                                                 const char *name);
+struct ModifierData *object_copy_particle_system(struct Main *bmain,
+                                                 struct Scene *scene,
+                                                 struct Object *ob,
+                                                 const struct ParticleSystem *psys_orig);
 void object_remove_particle_system(struct Main *bmain, struct Scene *scene, struct Object *ob);
 struct ParticleSettings *BKE_particlesettings_add(struct Main *bmain, const char *name);
-struct ParticleSettings *BKE_particlesettings_copy(struct Main *bmain,
-                                                   const struct ParticleSettings *part);
 void psys_reset(struct ParticleSystem *psys, int mode);
 
 void psys_find_parents(struct ParticleSimulationData *sim, const bool use_render_params);
@@ -393,7 +393,7 @@ int do_guides(struct Depsgraph *depsgraph,
               struct ParticleSettings *part,
               struct ListBase *effectors,
               ParticleKey *state,
-              int pa_num,
+              int index,
               float time);
 void precalc_guides(struct ParticleSimulationData *sim, struct ListBase *effectors);
 float psys_get_timestep(struct ParticleSimulationData *sim);
@@ -430,7 +430,7 @@ void psys_apply_child_modifiers(struct ParticleThreadContext *ctx,
                                 const float parent_orco[3]);
 
 void psys_sph_init(struct ParticleSimulationData *sim, struct SPHData *sphdata);
-void psys_sph_finalise(struct SPHData *sphdata);
+void psys_sph_finalize(struct SPHData *sphdata);
 void psys_sph_density(struct BVHTree *tree, struct SPHData *data, float co[3], float vars[2]);
 
 /* for anim.c */
@@ -577,7 +577,7 @@ void psys_particle_on_dm(struct Mesh *mesh_final,
 
 /* particle_system.c */
 void distribute_particles(struct ParticleSimulationData *sim, int from);
-void initialize_particle(struct ParticleSimulationData *sim, struct ParticleData *pa);
+void init_particle(struct ParticleSimulationData *sim, struct ParticleData *pa);
 void psys_calc_dmcache(struct Object *ob,
                        struct Mesh *mesh_final,
                        struct Mesh *mesh_original,
@@ -625,8 +625,20 @@ void BKE_particle_batch_cache_free(struct ParticleSystem *psys);
 extern void (*BKE_particle_batch_cache_dirty_tag_cb)(struct ParticleSystem *psys, int mode);
 extern void (*BKE_particle_batch_cache_free_cb)(struct ParticleSystem *psys);
 
+/* .blend file I/O */
+void BKE_particle_partdeflect_blend_read_data(struct BlendDataReader *reader,
+                                              struct PartDeflect *pd);
+void BKE_particle_partdeflect_blend_read_lib(struct BlendLibReader *reader,
+                                             struct ID *id,
+                                             struct PartDeflect *pd);
+void BKE_particle_system_blend_write(struct BlendWriter *writer, struct ListBase *particles);
+void BKE_particle_system_blend_read_data(struct BlendDataReader *reader,
+                                         struct ListBase *particles);
+void BKE_particle_system_blend_read_lib(struct BlendLibReader *reader,
+                                        struct Object *ob,
+                                        struct ID *id,
+                                        struct ListBase *particles);
+
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_PARTICLE_H__ */

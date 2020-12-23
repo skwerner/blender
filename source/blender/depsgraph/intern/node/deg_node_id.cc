@@ -23,8 +23,8 @@
 
 #include "intern/node/deg_node_id.h"
 
+#include <cstdio>
 #include <cstring> /* required for STREQ later on. */
-#include <stdio.h>
 
 #include "BLI_string.h"
 #include "BLI_utildefines.h"
@@ -41,7 +41,7 @@
 #include "intern/node/deg_node_factory.h"
 #include "intern/node/deg_node_time.h"
 
-namespace DEG {
+namespace blender::deg {
 
 const char *linkedStateAsString(eDepsNode_LinkedState_Type linked_state)
 {
@@ -64,6 +64,13 @@ IDNode::ComponentIDKey::ComponentIDKey(NodeType type, const char *name) : type(t
 bool IDNode::ComponentIDKey::operator==(const ComponentIDKey &other) const
 {
   return type == other.type && STREQ(name, other.name);
+}
+
+uint64_t IDNode::ComponentIDKey::hash() const
+{
+  const int type_as_int = static_cast<int>(type);
+  return BLI_ghashutil_combine_hash(BLI_ghashutil_uinthash(type_as_int),
+                                    BLI_ghashutil_strhash_p(name));
 }
 
 /* Initialize 'id' node - from pointer data given. */
@@ -125,11 +132,11 @@ void IDNode::destroy()
   }
 
   for (ComponentNode *comp_node : components.values()) {
-    OBJECT_GUARDED_DELETE(comp_node, ComponentNode);
+    delete comp_node;
   }
 
   /* Free memory used by this CoW ID. */
-  if (id_cow != id_orig && id_cow != nullptr) {
+  if (!ELEM(id_cow, id_orig, nullptr)) {
     deg_free_copy_on_write_datablock(id_cow);
     MEM_freeN(id_cow);
     id_cow = nullptr;
@@ -205,4 +212,4 @@ IDComponentsMask IDNode::get_visible_components_mask() const
   return result;
 }
 
-}  // namespace DEG
+}  // namespace blender::deg

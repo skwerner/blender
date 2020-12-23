@@ -21,7 +21,6 @@
  * \ingroup edphys
  */
 
-#include <assert.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -203,9 +202,10 @@ ParticleEditSettings *PE_settings(Scene *scene)
 
 static float pe_brush_size_get(const Scene *UNUSED(scene), ParticleBrushData *brush)
 {
-  // here we can enable unified brush size, needs more work...
-  // UnifiedPaintSettings *ups = &scene->toolsettings->unified_paint_settings;
-  // float size = (ups->flag & UNIFIED_PAINT_SIZE) ? ups->size : brush->size;
+#if 0 /* TODO: Here we can enable unified brush size, needs more work. */
+  UnifiedPaintSettings *ups = &scene->toolsettings->unified_paint_settings;
+  float size = (ups->flag & UNIFIED_PAINT_SIZE) ? ups->size : brush->size;
+#endif
 
   return brush->size;
 }
@@ -216,11 +216,9 @@ PTCacheEdit *PE_get_current_from_psys(ParticleSystem *psys)
     if ((psys->flag & PSYS_HAIR_DYNAMICS) != 0 && (psys->pointcache->flag & PTCACHE_BAKED) != 0) {
       return psys->pointcache->edit;
     }
-    else {
-      return psys->edit;
-    }
+    return psys->edit;
   }
-  else if (psys->pointcache->flag & PTCACHE_BAKED) {
+  if (psys->pointcache->flag & PTCACHE_BAKED) {
     return psys->pointcache->edit;
   }
   return NULL;
@@ -405,7 +403,7 @@ void PE_hide_keys_time(Scene *scene, PTCacheEdit *edit, float cfra)
 static int pe_x_mirror(Object *ob)
 {
   if (ob->type == OB_MESH) {
-    return (((Mesh *)ob->data)->editflag & ME_EDIT_MIRROR_X);
+    return (((Mesh *)ob->data)->symmetry & ME_SYMMETRY_X);
   }
 
   return 0;
@@ -561,9 +559,7 @@ static bool key_test_depth(const PEData *data, const float co[3], const int scre
   if (win[2] - 0.00001f > depth) {
     return 0;
   }
-  else {
-    return 1;
-  }
+  return 1;
 }
 
 static bool key_inside_circle(const PEData *data, float rad, const float co[3], float *distance)
@@ -618,9 +614,7 @@ static bool key_inside_test(PEData *data, const float co[3])
   if (data->mval) {
     return key_inside_circle(data, data->rad, co, NULL);
   }
-  else {
-    return key_inside_rect(data, co);
-  }
+  return key_inside_rect(data, co);
 }
 
 static bool point_is_selected(PTCacheEditPoint *point)
@@ -1392,7 +1386,7 @@ void recalc_emitter_field(Depsgraph *UNUSED(depsgraph), Object *UNUSED(ob), Part
   totface = mesh->totface;
   /*totvert=dm->getNumVerts(dm);*/ /*UNUSED*/
 
-  edit->emitter_cosnos = MEM_callocN(totface * 6 * sizeof(float), "emitter cosnos");
+  edit->emitter_cosnos = MEM_callocN(sizeof(float[6]) * totface, "emitter cosnos");
 
   edit->emitter_field = BLI_kdtree_3d_new(totface);
 
@@ -2260,8 +2254,6 @@ int PE_lasso_select(bContext *C, const int mcoords[][2], const int mcoords_len, 
   ARegion *region = CTX_wm_region(C);
   ParticleEditSettings *pset = PE_settings(scene);
   PTCacheEdit *edit = PE_get_current(depsgraph, scene, ob);
-  ParticleSystem *psys = edit->psys;
-  ParticleSystemModifierData *psmd_eval = edit->psmd_eval;
   POINT_P;
   KEY_K;
   float co[3], mat[4][4];
@@ -2282,6 +2274,8 @@ int PE_lasso_select(bContext *C, const int mcoords[][2], const int mcoords_len, 
     data.is_changed |= PE_deselect_all_visible_ex(edit);
   }
 
+  ParticleSystem *psys = edit->psys;
+  ParticleSystemModifierData *psmd_eval = edit->psmd_eval;
   LOOP_VISIBLE_POINTS {
     if (edit->psys && !(psys->flag & PSYS_GLOBAL_HAIR)) {
       psys_mat_hair_to_global(
@@ -3219,28 +3213,28 @@ static void brush_drawcursor(bContext *C, int x, int y, void *UNUSED(customdata)
     immUniformColor4ub(255, 255, 255, 128);
 
     GPU_line_smooth(true);
-    GPU_blend(true);
+    GPU_blend(GPU_BLEND_ALPHA);
 
     imm_draw_circle_wire_2d(pos, (float)x, (float)y, pe_brush_size_get(scene, brush), 40);
 
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
     GPU_line_smooth(false);
 
     immUnbindProgram();
   }
 }
 
-static void toggle_particle_cursor(bContext *C, int enable)
+static void toggle_particle_cursor(Scene *scene, bool enable)
 {
-  ParticleEditSettings *pset = PE_settings(CTX_data_scene(C));
+  ParticleEditSettings *pset = PE_settings(scene);
 
   if (pset->paintcursor && !enable) {
-    WM_paint_cursor_end(CTX_wm_manager(C), pset->paintcursor);
+    WM_paint_cursor_end(pset->paintcursor);
     pset->paintcursor = NULL;
   }
   else if (enable) {
     pset->paintcursor = WM_paint_cursor_activate(
-        CTX_wm_manager(C), SPACE_VIEW3D, RGN_TYPE_WINDOW, PE_poll_view3d, brush_drawcursor, NULL);
+        SPACE_VIEW3D, RGN_TYPE_WINDOW, PE_poll_view3d, brush_drawcursor, NULL);
   }
 }
 
@@ -3372,9 +3366,7 @@ static void PE_mirror_x(Depsgraph *depsgraph, Scene *scene, Object *ob, int tagg
           PE_mirror_particle(ob, psmd_eval->mesh_final, psys, pa, NULL);
           continue;
         }
-        else {
-          point->flag |= PEP_TAG;
-        }
+        point->flag |= PEP_TAG;
       }
     }
 
@@ -3760,7 +3752,7 @@ static void brush_puff(PEData *data, int point_index, float mouse_distance)
         /* blend between the current and straight position */
         sub_v3_v3v3(dco, kco, co);
         madd_v3_v3fl(co, dco, fac);
-        /* keep the same distance from the root or we get glitches [#35406] */
+        /* keep the same distance from the root or we get glitches T35406. */
         dist_ensure_v3_v3fl(co, co_root, length_accum);
 
         /* re-use dco to compare before and after translation and add to the offset  */
@@ -3784,7 +3776,8 @@ static void brush_puff(PEData *data, int point_index, float mouse_distance)
 #else
           /* translate (not rotate) the rest of the hair if its not selected  */
           {
-#  if 0 /* kindof works but looks worse then what's below */
+/* NOLINTNEXTLINE: readability-redundant-preprocessor */
+#  if 0 /* kindof works but looks worse than what's below */
 
             /* Move the unselected point on a vector based on the
              * hair direction and the offset */
@@ -4103,7 +4096,7 @@ static void brush_add_count_iter(void *__restrict iter_data_v,
   BrushAddCountIterTLSData *tls = tls_v->userdata_chunk;
   const int number = iter_data->number;
   const short size = iter_data->size;
-  const short size2 = size * size;
+  const int size2 = size * size;
   float dmx, dmy;
   if (number > 1) {
     dmx = size;
@@ -4354,7 +4347,7 @@ static int brush_add(const bContext *C, PEData *data, short number)
       }
 
       pa->size = 1.0f;
-      initialize_particle(&sim, pa);
+      init_particle(&sim, pa);
       reset_particle(&sim, pa, 0.0, 1.0);
       point->flag |= PEP_EDIT_RECALC;
       if (pe_x_mirror(ob)) {
@@ -4445,7 +4438,7 @@ static int brush_add(const bContext *C, PEData *data, short number)
         for (k = 0, hkey = pa->hair; k < pset->totaddkey; k++, hkey++) {
           madd_v3_v3v3fl(hkey->co, pa->state.co, pa->state.vel, k * framestep * timestep);
           hkey->time += k * framestep;
-          hkey->weight = 1.f - (float)k / (float)(pset->totaddkey - 1);
+          hkey->weight = 1.0f - (float)k / (float)(pset->totaddkey - 1);
         }
       }
       for (k = 0, hkey = pa->hair; k < pset->totaddkey; k++, hkey++) {
@@ -4568,7 +4561,7 @@ static void brush_edit_apply(bContext *C, wmOperator *op, PointerRNA *itemptr)
            (dx != 0 || dy != 0)) ||
       bedit->first) {
     PEData data = bedit->data;
-    data.context = C;  // TODO(mai): why isnt this set in bedit->data?
+    data.context = C; /* TODO(mai): why isnt this set in bedit->data? */
 
     view3d_operator_needs_opengl(C);
     selected = (short)count_selected_keys(scene, edit);
@@ -4791,7 +4784,7 @@ static void brush_edit_apply_event(bContext *C, wmOperator *op, const wmEvent *e
   RNA_collection_add(op->ptr, "stroke", &itemptr);
 
   RNA_float_set_array(&itemptr, "mouse", mouse);
-  RNA_boolean_set(&itemptr, "pen_flip", event->shift != false);  // XXX hardcoded
+  RNA_boolean_set(&itemptr, "pen_flip", event->shift != false); /* XXX hardcoded */
 
   /* apply */
   brush_edit_apply(C, op, &itemptr);
@@ -4815,7 +4808,7 @@ static int brush_edit_modal(bContext *C, wmOperator *op, const wmEvent *event)
   switch (event->type) {
     case LEFTMOUSE:
     case MIDDLEMOUSE:
-    case RIGHTMOUSE:  // XXX hardcoded
+    case RIGHTMOUSE: /* XXX hardcoded */
       if (event->val == KM_RELEASE) {
         brush_edit_exit(op);
         return OPERATOR_FINISHED;
@@ -5207,7 +5200,8 @@ void PE_create_particle_edit(
 
       for (pm = cache->mem_cache.first; pm; pm = pm->next) {
         LOOP_POINTS {
-          if (BKE_ptcache_mem_pointers_seek(p, pm) == 0) {
+          void *cur[BPHYS_TOT_DATA];
+          if (BKE_ptcache_mem_pointers_seek(p, pm, cur) == 0) {
             continue;
           }
 
@@ -5219,12 +5213,12 @@ void PE_create_particle_edit(
             key = point->keys + point->totkey;
           }
 
-          key->co = pm->cur[BPHYS_DATA_LOCATION];
-          key->vel = pm->cur[BPHYS_DATA_VELOCITY];
-          key->rot = pm->cur[BPHYS_DATA_ROTATION];
+          key->co = cur[BPHYS_DATA_LOCATION];
+          key->vel = cur[BPHYS_DATA_VELOCITY];
+          key->rot = cur[BPHYS_DATA_ROTATION];
           key->ftime = (float)pm->frame;
           key->time = &key->ftime;
-          BKE_ptcache_mem_pointers_incr(pm);
+          BKE_ptcache_mem_pointers_incr(cur);
 
           point->totkey++;
         }
@@ -5268,10 +5262,60 @@ static void free_all_psys_edit(Object *object)
   }
 }
 
+void ED_object_particle_edit_mode_enter_ex(Depsgraph *depsgraph, Scene *scene, Object *ob)
+{
+  PTCacheEdit *edit;
+
+  ob->mode |= OB_MODE_PARTICLE_EDIT;
+
+  edit = PE_create_current(depsgraph, scene, ob);
+
+  /* Mesh may have changed since last entering editmode.
+   * note, this may have run before if the edit data was just created,
+   * so could avoid this and speed up a little. */
+  if (edit && edit->psys) {
+    /* Make sure pointer to the evaluated modifier data is up to date,
+     * with possible changes applied when object was outside of the
+     * edit mode. */
+    Object *object_eval = DEG_get_evaluated_object(depsgraph, ob);
+    edit->psmd_eval = (ParticleSystemModifierData *)BKE_modifiers_findby_name(
+        object_eval, edit->psmd->modifier.name);
+    recalc_emitter_field(depsgraph, ob, edit->psys);
+  }
+
+  toggle_particle_cursor(scene, true);
+  DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY | ID_RECALC_COPY_ON_WRITE);
+  WM_main_add_notifier(NC_SCENE | ND_MODE | NS_MODE_PARTICLE, NULL);
+}
+
+void ED_object_particle_edit_mode_enter(bContext *C)
+{
+  Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
+  Scene *scene = CTX_data_scene(C);
+  Object *ob = CTX_data_active_object(C);
+  ED_object_particle_edit_mode_enter_ex(depsgraph, scene, ob);
+}
+
+void ED_object_particle_edit_mode_exit_ex(Scene *scene, Object *ob)
+{
+  ob->mode &= ~OB_MODE_PARTICLE_EDIT;
+  toggle_particle_cursor(scene, false);
+  free_all_psys_edit(ob);
+
+  DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY | ID_RECALC_COPY_ON_WRITE);
+  WM_main_add_notifier(NC_SCENE | ND_MODE | NS_MODE_OBJECT, NULL);
+}
+
+void ED_object_particle_edit_mode_exit(bContext *C)
+{
+  Scene *scene = CTX_data_scene(C);
+  Object *ob = CTX_data_active_object(C);
+  ED_object_particle_edit_mode_exit_ex(scene, ob);
+}
+
 static int particle_edit_toggle_exec(bContext *C, wmOperator *op)
 {
   struct wmMsgBus *mbus = CTX_wm_message_bus(C);
-  Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
   Scene *scene = CTX_data_scene(C);
   Object *ob = CTX_data_active_object(C);
   const int mode_flag = OB_MODE_PARTICLE_EDIT;
@@ -5284,36 +5328,12 @@ static int particle_edit_toggle_exec(bContext *C, wmOperator *op)
   }
 
   if (!is_mode_set) {
-    PTCacheEdit *edit;
-
-    ob->mode |= mode_flag;
-
-    edit = PE_create_current(depsgraph, scene, ob);
-
-    /* Mesh may have changed since last entering editmode.
-     * note, this may have run before if the edit data was just created,
-     * so could avoid this and speed up a little. */
-    if (edit && edit->psys) {
-      /* Make sure pointer to the evaluated modifier data is up to date,
-       * with possible changes applied when object was outside of the
-       * edit mode. */
-      Object *object_eval = DEG_get_evaluated_object(depsgraph, ob);
-      edit->psmd_eval = (ParticleSystemModifierData *)BKE_modifiers_findby_name(
-          object_eval, edit->psmd->modifier.name);
-      recalc_emitter_field(depsgraph, ob, edit->psys);
-    }
-
-    toggle_particle_cursor(C, 1);
-    WM_event_add_notifier(C, NC_SCENE | ND_MODE | NS_MODE_PARTICLE, NULL);
+    Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
+    ED_object_particle_edit_mode_enter_ex(depsgraph, scene, ob);
   }
   else {
-    ob->mode &= ~mode_flag;
-    toggle_particle_cursor(C, 0);
-    free_all_psys_edit(ob);
-    WM_event_add_notifier(C, NC_SCENE | ND_MODE | NS_MODE_OBJECT, NULL);
+    ED_object_particle_edit_mode_exit_ex(scene, ob);
   }
-
-  DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY | ID_RECALC_COPY_ON_WRITE);
 
   WM_msg_publish_rna_prop(mbus, &ob->id, ob, Object, mode);
 
@@ -5372,11 +5392,6 @@ static int clear_edited_exec(bContext *C, wmOperator *UNUSED(op))
   return OPERATOR_FINISHED;
 }
 
-static int clear_edited_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
-{
-  return WM_operator_confirm_message(C, op, "Lose changes done in particle mode? (no undo)");
-}
-
 void PARTICLE_OT_edited_clear(wmOperatorType *ot)
 {
   /* identifiers */
@@ -5387,7 +5402,6 @@ void PARTICLE_OT_edited_clear(wmOperatorType *ot)
   /* api callbacks */
   ot->exec = clear_edited_exec;
   ot->poll = particle_edit_toggle_poll;
-  ot->invoke = clear_edited_invoke;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;

@@ -67,8 +67,6 @@
 #include "BLI_strict_flags.h"
 
 /* -------------------------------------------------------------------- */
-/* UUID-Walk API */
-
 /** \name Internal UUIDWalk API
  * \{ */
 
@@ -139,9 +137,7 @@ BLI_INLINE bool bm_uuidwalk_face_test(UUIDWalk *uuidwalk, BMFace *f)
   if (uuidwalk->use_face_isolate) {
     return BM_elem_flag_test_bool(f, BM_ELEM_TAG);
   }
-  else {
-    return true;
-  }
+  return true;
 }
 
 BLI_INLINE bool bm_uuidwalk_vert_lookup(UUIDWalk *uuidwalk, BMVert *v, UUID_Int *r_uuid)
@@ -152,9 +148,7 @@ BLI_INLINE bool bm_uuidwalk_vert_lookup(UUIDWalk *uuidwalk, BMVert *v, UUID_Int 
     *r_uuid = (UUID_Int)(*ret);
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 BLI_INLINE bool bm_uuidwalk_face_lookup(UUIDWalk *uuidwalk, BMFace *f, UUID_Int *r_uuid)
@@ -165,9 +159,7 @@ BLI_INLINE bool bm_uuidwalk_face_lookup(UUIDWalk *uuidwalk, BMFace *f, UUID_Int 
     *r_uuid = (UUID_Int)(*ret);
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 static uint ghashutil_bmelem_indexhash(const void *key)
@@ -566,12 +558,10 @@ static int bm_face_len_cmp(const void *v1, const void *v2)
   if (f1->len > f2->len) {
     return 1;
   }
-  else if (f1->len < f2->len) {
+  if (f1->len < f2->len) {
     return -1;
   }
-  else {
-    return 0;
-  }
+  return 0;
 }
 
 static uint bm_uuidwalk_init_from_edge(UUIDWalk *uuidwalk, BMEdge *e)
@@ -623,6 +613,7 @@ static uint bm_uuidwalk_init_from_edge(UUIDWalk *uuidwalk, BMEdge *e)
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name Internal UUIDFaceStep API
  * \{ */
 
@@ -915,6 +906,7 @@ static void bm_face_array_visit(BMFace **faces,
 
 #ifdef USE_PIVOT_SEARCH
 
+/* -------------------------------------------------------------------- */
 /** \name Internal UUIDWalk API
  * \{ */
 
@@ -937,10 +929,8 @@ static bool bm_edge_is_region_boundary(BMEdge *e)
     } while ((l_iter = l_iter->radial_next) != e->l);
     return false;
   }
-  else {
-    /* boundary */
-    return true;
-  }
+  /* boundary */
+  return true;
 }
 
 static void bm_face_region_pivot_edge_use_best(GHash *gh,
@@ -1236,11 +1226,11 @@ static BMEdge *bm_face_region_pivot_edge_find(BMFace **faces_region,
 
 #endif /* USE_PIVOT_SEARCH */
 
-/* -------------------------------------------------------------------- */
 /* Quick UUID pass - identify candidates */
 
 #ifdef USE_PIVOT_FASTMATCH
 
+/* -------------------------------------------------------------------- */
 /** \name Fast Match
  * \{ */
 
@@ -1309,7 +1299,9 @@ static UUIDFashMatch *bm_vert_fasthash_create(BMesh *bm, const uint depth)
   return id_curr;
 }
 
-static void bm_vert_fasthash_edge_order(UUIDFashMatch *fm, const BMEdge *e, UUIDFashMatch e_fm[2])
+static void bm_vert_fasthash_edge_order(const UUIDFashMatch *fm,
+                                        const BMEdge *e,
+                                        UUIDFashMatch e_fm[2])
 {
   e_fm[0] = fm[BM_elem_index_get(e->v1)];
   e_fm[1] = fm[BM_elem_index_get(e->v2)];

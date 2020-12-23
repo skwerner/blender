@@ -1,3 +1,17 @@
+# Copyright 2011-2020 Blender Foundation
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 # Standalone or with Blender
 if(NOT WITH_BLENDER AND WITH_CYCLES_STANDALONE)
   set(CYCLES_INSTALL_PATH "")
@@ -31,8 +45,24 @@ if(WITH_CYCLES_NATIVE_ONLY)
   )
 
   if(NOT MSVC)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
+    string(APPEND CMAKE_CXX_FLAGS " -march=native")
     set(CYCLES_KERNEL_FLAGS "-march=native")
+  else()
+    if(NOT MSVC_NATIVE_ARCH_FLAGS)
+        TRY_RUN(
+            arch_run_result
+            arch_compile_result
+            ${CMAKE_CURRENT_BINARY_DIR}/
+            ${CMAKE_CURRENT_SOURCE_DIR}/cmake/msvc_arch_flags.c
+            COMPILE_OUTPUT_VARIABLE arch_compile_output
+            RUN_OUTPUT_VARIABLE arch_run_output
+        )
+        if(arch_compile_result AND "${arch_run_result}" EQUAL "0")
+            string(STRIP ${arch_run_output} arch_run_output)
+            set(MSVC_NATIVE_ARCH_FLAGS ${arch_run_output} CACHE STRING "MSVC Native architecture flags")
+        endif()
+    endif()
+    set(CYCLES_KERNEL_FLAGS "${MSVC_NATIVE_ARCH_FLAGS}")
   endif()
 elseif(NOT WITH_CPU_SSE)
   set(CXX_HAS_SSE FALSE)
@@ -71,10 +101,10 @@ elseif(WIN32 AND MSVC AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     set(CYCLES_AVX2_KERNEL_FLAGS "${CYCLES_AVX2_ARCH_FLAGS} ${CYCLES_KERNEL_FLAGS}")
   endif()
 
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CYCLES_KERNEL_FLAGS}")
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Ox")
-  set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /Ox")
-  set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} /Ox")
+  string(APPEND CMAKE_CXX_FLAGS " ${CYCLES_KERNEL_FLAGS}")
+  string(APPEND CMAKE_CXX_FLAGS_RELEASE " /Ox")
+  string(APPEND CMAKE_CXX_FLAGS_RELWITHDEBINFO " /Ox")
+  string(APPEND CMAKE_CXX_FLAGS_MINSIZEREL " /Ox")
 elseif(CMAKE_COMPILER_IS_GNUCC OR (CMAKE_CXX_COMPILER_ID MATCHES "Clang"))
   check_cxx_compiler_flag(-msse CXX_HAS_SSE)
   check_cxx_compiler_flag(-mavx CXX_HAS_AVX)
@@ -83,20 +113,20 @@ elseif(CMAKE_COMPILER_IS_GNUCC OR (CMAKE_CXX_COMPILER_ID MATCHES "Clang"))
   # Assume no signal trapping for better code generation.
   set(CYCLES_KERNEL_FLAGS "-fno-trapping-math")
   # Avoid overhead of setting errno for NaNs.
-  set(CYCLES_KERNEL_FLAGS "${CYCLES_KERNEL_FLAGS} -fno-math-errno")
+  string(APPEND CYCLES_KERNEL_FLAGS " -fno-math-errno")
   # Let compiler optimize 0.0 - x without worrying about signed zeros.
-  set(CYCLES_KERNEL_FLAGS "${CYCLES_KERNEL_FLAGS} -fno-signed-zeros")
+  string(APPEND CYCLES_KERNEL_FLAGS " -fno-signed-zeros")
 
   if(CMAKE_COMPILER_IS_GNUCC)
     # Assume no signal trapping for better code generation.
-    set(CYCLES_KERNEL_FLAGS "${CYCLES_KERNEL_FLAGS} -fno-signaling-nans")
+    string(APPEND CYCLES_KERNEL_FLAGS " -fno-signaling-nans")
     # Assume a fixed rounding mode for better constant folding.
-    set(CYCLES_KERNEL_FLAGS "${CYCLES_KERNEL_FLAGS} -fno-rounding-math")
+    string(APPEND CYCLES_KERNEL_FLAGS " -fno-rounding-math")
   endif()
 
   if(CXX_HAS_SSE)
     if(CMAKE_COMPILER_IS_GNUCC)
-      set(CYCLES_KERNEL_FLAGS "${CYCLES_KERNEL_FLAGS} -mfpmath=sse")
+      string(APPEND CYCLES_KERNEL_FLAGS " -mfpmath=sse")
     endif()
 
     set(CYCLES_SSE2_KERNEL_FLAGS "${CYCLES_KERNEL_FLAGS} -msse -msse2")
@@ -110,7 +140,7 @@ elseif(CMAKE_COMPILER_IS_GNUCC OR (CMAKE_CXX_COMPILER_ID MATCHES "Clang"))
     endif()
   endif()
 
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CYCLES_KERNEL_FLAGS}")
+  string(APPEND CMAKE_CXX_FLAGS " ${CYCLES_KERNEL_FLAGS}")
 elseif(WIN32 AND CMAKE_CXX_COMPILER_ID MATCHES "Intel")
   check_cxx_compiler_flag(/QxSSE2 CXX_HAS_SSE)
   check_cxx_compiler_flag(/arch:AVX CXX_HAS_AVX)
@@ -240,11 +270,19 @@ if(WITH_CYCLES_EMBREE)
   )
 endif()
 
+if(WITH_NANOVDB)
+  add_definitions(-DWITH_NANOVDB)
+  include_directories(
+    SYSTEM
+    ${NANOVDB_INCLUDE_DIR}
+  )
+endif()
+
 if(WITH_OPENSUBDIV)
   add_definitions(-DWITH_OPENSUBDIV)
   include_directories(
     SYSTEM
-    ${OPENSUBDIV_INCLUDE_DIR}
+    ${OPENSUBDIV_INCLUDE_DIRS}
   )
 endif()
 
@@ -286,6 +324,7 @@ include_directories(
   ${OPENEXR_INCLUDE_DIR}
   ${OPENEXR_INCLUDE_DIRS}
   ${PUGIXML_INCLUDE_DIR}
+  ${TBB_INCLUDE_DIRS}
 )
 
 if(CYCLES_STANDALONE_REPOSITORY)
@@ -313,7 +352,7 @@ if(WITH_CYCLES_CUDA_BINARIES AND (NOT WITH_CYCLES_CUBIN_COMPILER))
       set(MAX_MSVC 1910)
     elseif(${CUDA_VERSION} EQUAL "9.1")
       set(MAX_MSVC 1911)
-    elseif(${CUDA_VERSION} LESS "11.0")
+    elseif(${CUDA_VERSION} VERSION_GREATER_EQUAL 10.0)
       set(MAX_MSVC 1999)
     endif()
     if(NOT MSVC_VERSION LESS ${MAX_MSVC} OR CMAKE_C_COMPILER_ID MATCHES "Clang")

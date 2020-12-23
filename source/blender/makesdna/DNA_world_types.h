@@ -21,11 +21,14 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_WORLD_TYPES_H__
-#define __DNA_WORLD_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_defs.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct AnimData;
 struct Ipo;
@@ -51,12 +54,10 @@ typedef struct World {
   float horr, horg, horb;
 
   /**
-   * Exposure= mult factor. unused now, but maybe back later. Kept in to be upward compat.
-   * New is exp/range control. linfac & logfac are constants... don't belong in
-   * file, but allocating 8 bytes for temp mem isn't useful either.
+   * Exposure is a multiplication factor. Unused now, but maybe back later.
+   * Kept in to be upward compatible.
    */
   float exposure, exp, range;
-  float linfac, logfac;
 
   /**
    * Some world modes
@@ -114,4 +115,6 @@ enum {
  */
 #define WO_DS_SHOW_TEXS (1 << 2)
 
+#ifdef __cplusplus
+}
 #endif

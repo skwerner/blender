@@ -21,8 +21,7 @@
  * \ingroup blf
  */
 
-#ifndef __BLF_INTERNAL_TYPES_H__
-#define __BLF_INTERNAL_TYPES_H__
+#pragma once
 
 #include "GPU_texture.h"
 #include "GPU_vertex_buffer.h"
@@ -64,6 +63,9 @@ typedef struct GlyphCacheBLF {
 
   /* and dpi. */
   unsigned int dpi;
+
+  bool bold;
+  bool italic;
 
   /* and the glyphs. */
   ListBase bucket[257];
@@ -218,13 +220,10 @@ typedef struct FontBLF {
   /* font options. */
   int flags;
 
-  /* list of glyph cache for this font. */
-  ListBase cache;
-
-  /* current glyph cache, size and dpi.
+  /* List of glyph caches (GlyphCacheBLF) for this font for size, dpi, bold, italic.
    * Use blf_glyph_cache_acquire(font) and blf_glyph_cache_release(font) to access cache!
    */
-  GlyphCacheBLF *glyph_cache;
+  ListBase cache;
 
   /* list of kerning cache for this font. */
   ListBase kerning_caches;
@@ -258,5 +257,3 @@ typedef struct DirBLF {
   /* full path where search fonts. */
   char *path;
 } DirBLF;
-
-#endif /* __BLF_INTERNAL_TYPES_H__ */

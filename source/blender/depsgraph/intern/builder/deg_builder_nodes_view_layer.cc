@@ -25,8 +25,8 @@
 
 #include "intern/builder/deg_builder_nodes.h"
 
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstdlib>
 
 #include "MEM_guardedalloc.h"
 
@@ -34,6 +34,7 @@
 #include "BLI_string.h"
 #include "BLI_utildefines.h"
 
+#include "DNA_collection_types.h"
 #include "DNA_freestyle_types.h"
 #include "DNA_layer_types.h"
 #include "DNA_linestyle_types.h"
@@ -55,7 +56,7 @@
 #include "intern/node/deg_node_component.h"
 #include "intern/node/deg_node_operation.h"
 
-namespace DEG {
+namespace blender::deg {
 
 void DepsgraphNodeBuilder::build_layer_collections(ListBase *lb)
 {
@@ -174,4 +175,4 @@ void DepsgraphNodeBuilder::build_view_layer(Scene *scene,
   }
 }
 
-}  // namespace DEG
+}  // namespace blender::deg

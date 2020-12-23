@@ -24,6 +24,7 @@ import re
 import subprocess
 import sys
 
+
 def is_tool(name):
     """Check whether `name` is on PATH and marked as executable."""
 
@@ -32,43 +33,47 @@ def is_tool(name):
 
     return which(name) is not None
 
+
 class Builder:
-    def __init__(self, name, branch):
+    def __init__(self, name, branch, codesign):
         self.name = name
         self.branch = branch
         self.is_release_branch = re.match("^blender-v(.*)-release$", branch) is not None
+        self.codesign = codesign
 
         # Buildbot runs from build/ directory
         self.blender_dir = os.path.abspath(os.path.join('..', 'blender.git'))
-        self.build_dir = os.path.abspath(os.path.join('..', 'build', name))
-        self.install_dir = os.path.abspath(os.path.join('..', 'install', name))
+        self.build_dir = os.path.abspath(os.path.join('..', 'build'))
+        self.install_dir = os.path.abspath(os.path.join('..', 'install'))
         self.upload_dir = os.path.abspath(os.path.join('..', 'install'))
 
         # Detect platform
         if name.startswith('mac'):
             self.platform = 'mac'
-            self.command_prefix =  []
+            self.command_prefix = []
         elif name.startswith('linux'):
             self.platform = 'linux'
             if is_tool('scl'):
-                self.command_prefix =  ['scl', 'enable', 'devtoolset-6', '--']
+                self.command_prefix = ['scl', 'enable', 'devtoolset-9', '--']
             else:
-                self.command_prefix =  []
+                self.command_prefix = []
         elif name.startswith('win'):
             self.platform = 'win'
-            self.command_prefix =  []
+            self.command_prefix = []
         else:
             raise ValueError('Unkonw platform for builder ' + self.platform)
 
         # Always 64 bit now
         self.bits = 64
 
+
 def create_builder_from_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument('builder_name')
     parser.add_argument('branch', default='master', nargs='?')
+    parser.add_argument("--codesign", action="store_true")
     args = parser.parse_args()
-    return Builder(args.builder_name, args.branch)
+    return Builder(args.builder_name, args.branch, args.codesign)
 
 
 class VersionInfo:
@@ -78,32 +83,31 @@ class VersionInfo:
         blender_h = os.path.join(builder.blender_dir, "source", "blender", "blenkernel", "BKE_blender_version.h")
 
         version_number = int(self._parse_header_file(blender_h, 'BLENDER_VERSION'))
-        self.version = "%d.%d" % (version_number // 100, version_number % 100)
-        self.version_char = self._parse_header_file(blender_h, 'BLENDER_VERSION_CHAR')
+        version_number_patch = int(self._parse_header_file(blender_h, 'BLENDER_VERSION_PATCH'))
+        version_numbers = (version_number // 100, version_number % 100, version_number_patch)
+        self.short_version = "%d.%02d" % (version_numbers[0], version_numbers[1])
+        self.version = "%d.%02d.%d" % version_numbers
         self.version_cycle = self._parse_header_file(blender_h, 'BLENDER_VERSION_CYCLE')
         self.version_cycle_number = self._parse_header_file(blender_h, 'BLENDER_VERSION_CYCLE_NUMBER')
         self.hash = self._parse_header_file(buildinfo_h, 'BUILD_HASH')[1:-1]
 
         if self.version_cycle == "release":
             # Final release
-            self.full_version = self.version + self.version_char
+            self.full_version = self.version
             self.is_development_build = False
         elif self.version_cycle == "rc":
             # Release candidate
             version_cycle = self.version_cycle + self.version_cycle_number
-            if len(self.version_char) == 0:
-                self.full_version = self.version + version_cycle
-            else:
-                self.full_version = self.version + self.version_char + '-' + version_cycle
+            self.full_version = self.version + version_cycle
             self.is_development_build = False
         else:
             # Development build
-            self.full_version = self.version + self.version_char + '-' + self.hash
+            self.full_version = self.version + '-' + self.hash
             self.is_development_build = True
 
     def _parse_header_file(self, filename, define):
         import re
-        regex = re.compile("^#\s*define\s+%s\s+(.*)" % define)
+        regex = re.compile(r"^#\s*define\s+%s\s+(.*)" % define)
         with open(filename, "r") as file:
             for l in file:
                 match = regex.match(l)

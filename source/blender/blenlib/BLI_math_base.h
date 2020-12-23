@@ -20,8 +20,7 @@
  *
  * */
 
-#ifndef __BLI_MATH_BASE_H__
-#define __BLI_MATH_BASE_H__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -220,6 +219,9 @@ MINLINE unsigned int round_db_to_uint_clamp(double a);
 int pow_i(int base, int exp);
 double double_round(double x, int ndigits);
 
+float floor_power_of_10(float f);
+float ceil_power_of_10(float f);
+
 #ifdef BLI_MATH_GCC_WARN_PRAGMA
 #  pragma GCC diagnostic pop
 #endif
@@ -240,6 +242,14 @@ double double_round(double x, int ndigits);
       const float _test_unit = len_squared_v3(v); \
       BLI_assert(!(fabsf(_test_unit - 1.0f) >= BLI_ASSERT_UNIT_EPSILON) || \
                  !(fabsf(_test_unit) >= BLI_ASSERT_UNIT_EPSILON)); \
+    } \
+    (void)0
+
+#  define BLI_ASSERT_UNIT_V3_DB(v) \
+    { \
+      const double _test_unit = len_squared_v3_db(v); \
+      BLI_assert(!(fabs(_test_unit - 1.0) >= BLI_ASSERT_UNIT_EPSILON) || \
+                 !(fabs(_test_unit) >= BLI_ASSERT_UNIT_EPSILON)); \
     } \
     (void)0
 
@@ -289,5 +299,3 @@ double double_round(double x, int ndigits);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLI_MATH_BASE_H__ */

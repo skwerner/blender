@@ -72,12 +72,6 @@ static void wm_block_close(bContext *C, void *arg_block, void *UNUSED(arg))
   UI_popup_block_close(C, win, arg_block);
 }
 
-static void wm_block_splash_refreshmenu(bContext *C, void *UNUSED(arg_block), void *UNUSED(arg))
-{
-  ARegion *region_menu = CTX_wm_menu(C);
-  ED_region_tag_refresh_ui(region_menu);
-}
-
 static void wm_block_splash_add_label(uiBlock *block, const char *label, int x, int y)
 {
   if (!(label && label[0])) {
@@ -94,39 +88,6 @@ static void wm_block_splash_add_label(uiBlock *block, const char *label, int x, 
   /* 1 = UI_SELECT, internal flag to draw in white. */
   UI_but_flag_enable(but, 1);
   UI_block_emboss_set(block, UI_EMBOSS);
-}
-
-static void get_version_string(char *ver, const int max_length)
-{
-  /* Version number. */
-  const char *version_cycle = NULL;
-
-  if (STREQ(STRINGIFY(BLENDER_VERSION_CYCLE), "alpha")) {
-    version_cycle = " Alpha";
-  }
-  else if (STREQ(STRINGIFY(BLENDER_VERSION_CYCLE), "beta")) {
-    version_cycle = " Beta";
-  }
-  else if (STREQ(STRINGIFY(BLENDER_VERSION_CYCLE), "rc")) {
-    version_cycle = " Release Candidate";
-  }
-  else if (STREQ(STRINGIFY(BLENDER_VERSION_CYCLE), "release")) {
-    version_cycle = STRINGIFY(BLENDER_VERSION_CHAR);
-  }
-
-  const char *version_cycle_number = "";
-  if (strlen(STRINGIFY(BLENDER_VERSION_CYCLE_NUMBER))) {
-    version_cycle_number = " " STRINGIFY(BLENDER_VERSION_CYCLE_NUMBER);
-  }
-
-  BLI_snprintf(ver,
-               max_length,
-               "%d.%d.%d%s%s",
-               BLENDER_VERSION / 100,
-               BLENDER_VERSION % 100,
-               BLENDER_SUBVERSION,
-               version_cycle,
-               version_cycle_number);
 }
 
 #ifndef WITH_HEADLESS
@@ -189,8 +150,6 @@ static ImBuf *wm_block_splash_image(int width, int *r_height)
   extern int datatoc_splash_png_size;
 
   ImBuf *ibuf = NULL;
-  int height = 0;
-
   if (U.app_template[0] != '\0') {
     char splash_filepath[FILE_MAX];
     char template_directory[FILE_MAX];
@@ -207,6 +166,7 @@ static ImBuf *wm_block_splash_image(int width, int *r_height)
     ibuf = IMB_ibImageFromMemory(splash_data, splash_data_size, IB_rect, NULL, "<splash screen>");
   }
 
+  int height = 0;
   if (ibuf) {
     height = (width * ibuf->y) / ibuf->x;
     if (width != ibuf->x || height != ibuf->y) {
@@ -228,33 +188,32 @@ static ImBuf *wm_block_splash_image(int width, int *r_height)
 
 static uiBlock *wm_block_create_splash(bContext *C, ARegion *region, void *UNUSED(arg))
 {
-  uiBlock *block;
-  uiBut *but;
   const uiStyle *style = UI_style_get_dpi();
 
-  block = UI_block_begin(C, region, "splash", UI_EMBOSS);
+  uiBlock *block = UI_block_begin(C, region, "splash", UI_EMBOSS);
 
   /* note on UI_BLOCK_NO_WIN_CLIP, the window size is not always synchronized
    * with the OS when the splash shows, window clipping in this case gives
-   * ugly results and clipping the splash isn't useful anyway, just disable it [#32938] */
+   * ugly results and clipping the splash isn't useful anyway, just disable it T32938. */
   UI_block_flag_enable(block, UI_BLOCK_LOOP | UI_BLOCK_KEEP_OPEN | UI_BLOCK_NO_WIN_CLIP);
   UI_block_theme_style_set(block, UI_BLOCK_THEME_STYLE_POPUP);
 
-  int splash_width = 500.0f * U.dpi_fac;
+  const int text_points_max = MAX2(style->widget.points, style->widgetlabel.points);
+  int splash_width = text_points_max * 45 * U.dpi_fac;
+  CLAMP_MAX(splash_width, CTX_wm_window(C)->sizex * 0.7f);
   int splash_height;
 
   /* Would be nice to support caching this, so it only has to be re-read (and likely resized) on
    * first draw or if the image changed. */
   ImBuf *ibuf = wm_block_splash_image(splash_width, &splash_height);
 
-  but = uiDefButImage(block, ibuf, 0, 0.5f * U.widget_unit, splash_width, splash_height, NULL);
+  uiBut *but = uiDefButImage(
+      block, ibuf, 0, 0.5f * U.widget_unit, splash_width, splash_height, NULL);
 
   UI_but_func_set(but, wm_block_close, block, NULL);
-  UI_block_func_set(block, wm_block_splash_refreshmenu, block, NULL);
 
-  char version_buf[256] = "\0";
-  get_version_string(version_buf, sizeof(version_buf));
-  wm_block_splash_add_label(block, version_buf, splash_width, splash_height - 13.0 * U.dpi_fac);
+  wm_block_splash_add_label(
+      block, BKE_blender_version_string(), splash_width, splash_height - 13.0 * U.dpi_fac);
 
   const int layout_margin_x = U.dpi_fac * 26;
   uiLayout *layout = UI_block_layout(block,
@@ -296,73 +255,63 @@ void WM_OT_splash(wmOperatorType *ot)
 
 static uiBlock *wm_block_create_about(bContext *C, ARegion *region, void *UNUSED(arg))
 {
-  uiBlock *block;
   const uiStyle *style = UI_style_get_dpi();
-  const int dialog_width = U.widget_unit * 24;
-  const short logo_size = 128 * U.dpi_fac;
+  const int text_points_max = MAX2(style->widget.points, style->widgetlabel.points);
+  const int dialog_width = text_points_max * 42 * U.dpi_fac;
 
-  /* Calculate icon column factor. */
-  const float split_factor = (float)logo_size / (float)(dialog_width - style->columnspace);
+  uiBlock *block = UI_block_begin(C, region, "about", UI_EMBOSS);
 
-  block = UI_block_begin(C, region, "about", UI_EMBOSS);
-
-  UI_block_flag_enable(
-      block, UI_BLOCK_KEEP_OPEN | UI_BLOCK_LOOP | UI_BLOCK_NO_WIN_CLIP | UI_BLOCK_NUMSELECT);
+  UI_block_flag_enable(block, UI_BLOCK_KEEP_OPEN | UI_BLOCK_LOOP | UI_BLOCK_NO_WIN_CLIP);
   UI_block_theme_style_set(block, UI_BLOCK_THEME_STYLE_POPUP);
-  UI_block_emboss_set(block, UI_EMBOSS);
 
-  uiLayout *block_layout = UI_block_layout(
+  uiLayout *layout = UI_block_layout(
       block, UI_LAYOUT_VERTICAL, UI_LAYOUT_PANEL, 0, 0, dialog_width, 0, 0, style);
 
-  /* Split layout to put Blender logo on left side. */
-  uiLayout *split_block = uiLayoutSplit(block_layout, split_factor, false);
+  /* Blender logo. */
+#ifndef WITH_HEADLESS
+  extern char datatoc_blender_logo_png[];
+  extern int datatoc_blender_logo_png_size;
 
-  /* Blender Logo. */
-  uiLayout *layout = uiLayoutColumn(split_block, false);
-  uiDefButAlert(block, ALERT_ICON_BLENDER, 0, 0, 0, logo_size);
+  const uchar *blender_logo_data = (const uchar *)datatoc_blender_logo_png;
+  size_t blender_logo_data_size = datatoc_blender_logo_png_size;
+  ImBuf *ibuf = IMB_ibImageFromMemory(
+      blender_logo_data, blender_logo_data_size, IB_rect, NULL, "blender_logo");
 
-  /* The rest of the content on the right. */
-  layout = uiLayoutColumn(split_block, false);
+  if (ibuf) {
+    int width = 0.5 * dialog_width;
+    int height = (width * ibuf->y) / ibuf->x;
 
-  uiLayoutSetScaleY(layout, 0.7f);
+    IMB_premultiply_alpha(ibuf);
+    IMB_scaleImBuf(ibuf, width, height);
 
-  uiItemS_ex(layout, 1.0f);
+    bTheme *btheme = UI_GetTheme();
+    const uchar *color = btheme->tui.wcol_menu_back.text_sel;
 
-  /* Title. */
-  uiItemL_ex(layout, "Blender", ICON_NONE, true, false);
+    /* The top margin. */
+    uiLayout *row = uiLayoutRow(layout, false);
+    uiItemS_ex(row, 0.2f);
 
-  /* Version. */
-  char str_buf[256] = "\0";
-  get_version_string(str_buf, sizeof(str_buf));
-  uiItemL(layout, str_buf, ICON_NONE);
+    /* The logo image. */
+    row = uiLayoutRow(layout, false);
+    uiLayoutSetAlignment(row, UI_LAYOUT_ALIGN_LEFT);
+    uiDefButImage(block, ibuf, 0, U.widget_unit, width, height, color);
 
-  uiItemS_ex(layout, 3.0f);
+    /* Padding below the logo. */
+    row = uiLayoutRow(layout, false);
+    uiItemS_ex(row, 2.7f);
+  }
+#endif /* WITH_HEADLESS */
 
-#ifdef WITH_BUILDINFO
+  uiLayout *col = uiLayoutColumn(layout, true);
 
-  extern char build_hash[], build_commit_date[], build_commit_time[], build_branch[];
-
-  BLI_snprintf(str_buf, sizeof(str_buf), "Date: %s %s", build_commit_date, build_commit_time);
-  uiItemL(layout, str_buf, ICON_NONE);
-
-  BLI_snprintf(str_buf, sizeof(str_buf), "Hash: %s", build_hash);
-  uiItemL(layout, str_buf, ICON_NONE);
-
-  BLI_snprintf(str_buf, sizeof(str_buf), "Branch: %s", build_branch);
-  uiItemL(layout, str_buf, ICON_NONE);
-
-#endif /* WITH_BUILDINFO */
-
-  uiItemS_ex(layout, 1.5f);
+  uiItemL_ex(col, N_("Blender"), ICON_NONE, true, false);
 
   MenuType *mt = WM_menutype_find("WM_MT_splash_about", true);
   if (mt) {
-    UI_menutype_draw(C, mt, layout);
+    UI_menutype_draw(C, mt, col);
   }
 
-  uiItemS_ex(layout, 2.0f);
-
-  UI_block_bounds_set_centered(block, 14 * U.dpi_fac);
+  UI_block_bounds_set_centered(block, 22 * U.dpi_fac);
 
   return block;
 }

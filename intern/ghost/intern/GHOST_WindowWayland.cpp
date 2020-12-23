@@ -39,6 +39,7 @@ struct window_t {
   bool is_maximised;
   bool is_fullscreen;
   bool is_active;
+  bool is_dialog;
   int32_t width, height;
 };
 
@@ -144,6 +145,7 @@ GHOST_WindowWayland::GHOST_WindowWayland(GHOST_SystemWayland *system,
                                          GHOST_TWindowState state,
                                          const GHOST_IWindow *parentWindow,
                                          GHOST_TDrawingContextType type,
+                                         const bool is_dialog,
                                          const bool stereoVisual,
                                          const bool exclusive)
     : GHOST_Window(width, height, state, stereoVisual, exclusive),
@@ -154,6 +156,8 @@ GHOST_WindowWayland::GHOST_WindowWayland(GHOST_SystemWayland *system,
 
   w->width = int32_t(width);
   w->height = int32_t(height);
+
+  w->is_dialog = is_dialog;
 
   /* Window surfaces. */
   w->surface = wl_compositor_create_surface(m_system->compositor());
@@ -175,6 +179,10 @@ GHOST_WindowWayland::GHOST_WindowWayland(GHOST_SystemWayland *system,
   /* Call top-level callbacks. */
   wl_surface_commit(w->surface);
   wl_display_roundtrip(m_system->display());
+
+#ifdef GHOST_OPENGL_ALPHA
+  setOpaque();
+#endif
 
   setState(state);
 
@@ -210,6 +218,10 @@ GHOST_TSuccess GHOST_WindowWayland::deactivate()
 
 GHOST_TSuccess GHOST_WindowWayland::notify_size()
 {
+#ifdef GHOST_OPENGL_ALPHA
+  setOpaque();
+#endif
+
   return m_system->pushEvent(
       new GHOST_Event(m_system->getMilliSeconds(), GHOST_kEventWindowSize, this));
 }
@@ -376,8 +388,26 @@ GHOST_TSuccess GHOST_WindowWayland::endFullScreen() const
   return GHOST_kSuccess;
 }
 
+bool GHOST_WindowWayland::isDialog() const
+{
+  return w->is_dialog;
+}
+
+#ifdef GHOST_OPENGL_ALPHA
+void GHOST_WindowWayland::setOpaque() const
+{
+  struct wl_region *region;
+
+  /* Make the window opaque. */
+  region = wl_compositor_create_region(m_system->compositor());
+  wl_region_add(region, 0, 0, w->width, w->height);
+  wl_surface_set_opaque_region(w->surface, region);
+  wl_region_destroy(region);
+}
+#endif
+
 /**
- * \param type  The type of rendering context create.
+ * \param type: The type of rendering context create.
  * \return Indication of success.
  */
 GHOST_Context *GHOST_WindowWayland::newDrawingContext(GHOST_TDrawingContextType type)

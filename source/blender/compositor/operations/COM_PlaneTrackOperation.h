@@ -16,8 +16,7 @@
  * Copyright 2013, Blender Foundation.
  */
 
-#ifndef __COM_PLANETRACKOPERATION_H__
-#define __COM_PLANETRACKOPERATION_H__
+#pragma once
 
 #include <string.h>
 
@@ -65,7 +64,7 @@ class PlaneTrackCommon {
 
 class PlaneTrackMaskOperation : public PlaneDistortMaskOperation, public PlaneTrackCommon {
  public:
-  PlaneTrackMaskOperation() : PlaneDistortMaskOperation(), PlaneTrackCommon()
+  PlaneTrackMaskOperation()
   {
   }
 
@@ -83,7 +82,7 @@ class PlaneTrackMaskOperation : public PlaneDistortMaskOperation, public PlaneTr
 class PlaneTrackWarpImageOperation : public PlaneDistortWarpImageOperation,
                                      public PlaneTrackCommon {
  public:
-  PlaneTrackWarpImageOperation() : PlaneDistortWarpImageOperation(), PlaneTrackCommon()
+  PlaneTrackWarpImageOperation() : PlaneTrackCommon()
   {
   }
 
@@ -96,5 +95,3 @@ class PlaneTrackWarpImageOperation : public PlaneDistortWarpImageOperation,
     NodeOperation::determineResolution(temp, resolution);
   }
 };
-
-#endif

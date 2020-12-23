@@ -29,7 +29,6 @@
 #include "BKE_context.h"
 
 #include "GPU_batch.h"
-#include "GPU_glew.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -108,7 +107,7 @@ wmGizmo *WM_gizmo_new_ptr(const wmGizmoType *gzt, wmGizmoGroup *gzgroup, Pointer
 }
 
 /**
- * \param name: Must be a valid gizmo type name,
+ * \param idname: Must be a valid gizmo type name,
  * if you need to check it exists use #WM_gizmo_new_ptr
  * because callers of this function don't NULL check the return value.
  */
@@ -375,7 +374,7 @@ void WM_gizmo_set_color_highlight(wmGizmo *gz, const float color_hi[4])
   copy_v4_v4(gz->color_hi, color_hi);
 }
 
-/** \} */  // Gizmo Creation API
+/** \} */ /* Gizmo Creation API. */
 
 /* -------------------------------------------------------------------- */
 /** \name Gizmo Callback Assignment
@@ -453,9 +452,7 @@ bool wm_gizmo_select_and_highlight(bContext *C, wmGizmoMap *gzmap, wmGizmo *gz)
     wm_gizmomap_highlight_set(gzmap, C, gz, gz->highlight_part);
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 /**
@@ -614,6 +611,7 @@ void WM_gizmo_calc_matrix_final(const wmGizmo *gz, float r_mat[4][4])
                                     r_mat);
 }
 
+/* -------------------------------------------------------------------- */
 /** \name Gizmo Property Access
  *
  * Matches `WM_operator_properties` conventions.
@@ -758,6 +756,7 @@ void WM_gizmo_properties_free(PointerRNA *ptr)
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name General Utilities
  *
  * \{ */

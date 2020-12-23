@@ -65,7 +65,7 @@
 
 #include "UI_view2d.h"
 
-#include "clip_intern.h"  // own include
+#include "clip_intern.h" /* own include */
 
 /* ******** operactor poll functions ******** */
 
@@ -381,21 +381,20 @@ static bool selected_boundbox(const bContext *C, float min[2], float max[2])
   if (sc->mode == SC_MODE_TRACKING) {
     return selected_tracking_boundbox(sc, min, max);
   }
-  else {
-    if (ED_mask_selected_minmax(C, min, max)) {
-      MovieClip *clip = ED_space_clip_get_clip(sc);
-      int width, height;
-      ED_space_clip_get_size(sc, &width, &height);
-      BKE_mask_coord_to_movieclip(clip, &sc->user, min, min);
-      BKE_mask_coord_to_movieclip(clip, &sc->user, max, max);
-      min[0] *= width;
-      min[1] *= height;
-      max[0] *= width;
-      max[1] *= height;
-      return true;
-    }
-    return false;
+
+  if (ED_mask_selected_minmax(C, min, max)) {
+    MovieClip *clip = ED_space_clip_get_clip(sc);
+    int width, height;
+    ED_space_clip_get_size(sc, &width, &height);
+    BKE_mask_coord_to_movieclip(clip, &sc->user, min, min);
+    BKE_mask_coord_to_movieclip(clip, &sc->user, max, max);
+    min[0] *= width;
+    min[1] *= height;
+    max[0] *= width;
+    max[1] *= height;
+    return true;
   }
+  return false;
 }
 
 bool ED_clip_view_selection(const bContext *C, ARegion *region, bool fit)
@@ -676,7 +675,7 @@ void ED_space_clip_set_clip(bContext *C, bScreen *screen, SpaceClip *sc, MovieCl
               }
             }
             else {
-              if (cur_sc->clip == old_clip || cur_sc->clip == NULL) {
+              if (ELEM(cur_sc->clip, old_clip, NULL)) {
                 cur_sc->clip = clip;
               }
             }
@@ -686,7 +685,7 @@ void ED_space_clip_set_clip(bContext *C, bScreen *screen, SpaceClip *sc, MovieCl
     }
   }
 
-  /* If clip is no longer visible on screen, free memory used by it's cache */
+  /* If clip is no longer visible on screen, free memory used by its cache */
   if (old_clip && old_clip != clip && !old_clip_visible) {
     BKE_movieclip_clear_cache(old_clip);
   }
@@ -726,7 +725,7 @@ typedef struct PrefetchQueue {
   int initial_frame, current_frame, start_frame, end_frame;
   short render_size, render_flag;
 
-  /* If true prefecthing goes forward in time,
+  /* If true pre-fetching goes forward in time,
    * otherwise it goes backwards in time (starting from current frame).
    */
   bool forward;
@@ -941,11 +940,10 @@ static void start_prefetch_threads(MovieClip *clip,
                                    short *do_update,
                                    float *progress)
 {
-  PrefetchQueue queue;
-  TaskPool *task_pool;
-  int i, tot_thread = BLI_task_scheduler_num_threads();
+  int tot_thread = BLI_task_scheduler_num_threads();
 
   /* initialize queue */
+  PrefetchQueue queue;
   BLI_spin_init(&queue.spin);
 
   queue.current_frame = current_frame;
@@ -960,8 +958,8 @@ static void start_prefetch_threads(MovieClip *clip,
   queue.do_update = do_update;
   queue.progress = progress;
 
-  task_pool = BLI_task_pool_create(&queue, TASK_PRIORITY_LOW);
-  for (i = 0; i < tot_thread; i++) {
+  TaskPool *task_pool = BLI_task_pool_create(&queue, TASK_PRIORITY_LOW);
+  for (int i = 0; i < tot_thread; i++) {
     BLI_task_pool_push(task_pool, prefetch_task_func, clip, false, NULL);
   }
   BLI_task_pool_work_and_wait(task_pool);

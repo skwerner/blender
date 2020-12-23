@@ -28,16 +28,22 @@
 using namespace std;
 namespace Manta {
 
-ParticleBase::ParticleBase(FluidSolver *parent)
-    : PbClass(parent), mAllowCompress(true), mFreePdata(false)
+int ParticleBase::globalSeed = 9832;
+
+ParticleBase::ParticleBase(FluidSolver *parent, int fixedSeed)
+    : PbClass(parent), mMaxParticles(0), mAllowCompress(true), mFreePdata(false), mSeed(fixedSeed)
 {
+  // use global random seed if none is given
+  if (fixedSeed == -1) {
+    mSeed = globalSeed;
+  }
 }
 
 ParticleBase::~ParticleBase()
 {
   // make sure data fields now parent system is deleted
   for (IndexInt i = 0; i < (IndexInt)mPartData.size(); ++i)
-    mPartData[i]->setParticleSys(NULL);
+    mPartData[i]->setParticleSys(nullptr);
 
   if (mFreePdata) {
     for (IndexInt i = 0; i < (IndexInt)mPartData.size(); ++i)
@@ -93,7 +99,7 @@ PbClass *ParticleBase::create(PbType t, PbTypeVec T, const string &name)
         "Unable to get particle data pointer from newly created object. Only create ParticleData "
         "type with a ParticleSys.creat() call, eg, PdataReal, PdataVec3 etc.");
     delete pyObj;
-    return NULL;
+    return nullptr;
   }
   else {
     this->registerPdata(pdata);
@@ -102,7 +108,7 @@ PbClass *ParticleBase::create(PbType t, PbTypeVec T, const string &name)
   // directly init size of new pdata field:
   pdata->resize(this->getSizeSlow());
 #else
-  PbClass *pyObj = NULL;
+  PbClass *pyObj = nullptr;
 #endif
   return pyObj;
 }
@@ -214,20 +220,26 @@ void BasicParticleSystem::writeParticlesRawVelocityGz(const string name) const
 #endif
 }
 
-void BasicParticleSystem::load(const string name)
+int BasicParticleSystem::load(const string name)
 {
   if (name.find_last_of('.') == string::npos)
     errMsg("file '" + name + "' does not have an extension");
   string ext = name.substr(name.find_last_of('.'));
   if (ext == ".uni")
-    readParticlesUni(name, this);
+    return readParticlesUni(name, this);
+  else if (ext == ".vdb") {
+    std::vector<PbClass *> parts;
+    parts.push_back(this);
+    return readObjectsVDB(name, &parts);
+  }
   else if (ext == ".raw")  // raw = uni for now
-    readParticlesUni(name, this);
+    return readParticlesUni(name, this);
   else
     errMsg("particle '" + name + "' filetype not supported for loading");
+  return 0;
 }
 
-void BasicParticleSystem::save(const string name) const
+int BasicParticleSystem::save(const string name)
 {
   if (name.find_last_of('.') == string::npos)
     errMsg("file '" + name + "' does not have an extension");
@@ -235,16 +247,22 @@ void BasicParticleSystem::save(const string name) const
   if (ext == ".txt")
     this->writeParticlesText(name);
   else if (ext == ".uni")
-    writeParticlesUni(name, this);
+    return writeParticlesUni(name, this);
   else if (ext == ".raw")  // raw = uni for now
-    writeParticlesUni(name, this);
-  // raw data formats, very basic for simple data transfer to other programs
+    return writeParticlesUni(name, this);
+  else if (ext == ".vdb") {
+    std::vector<PbClass *> parts;
+    parts.push_back(this);
+    return writeObjectsVDB(name, &parts);
+    // raw data formats, very basic for simple data transfer to other programs
+  }
   else if (ext == ".posgz")
     this->writeParticlesRawPositionsGz(name);
   else if (ext == ".velgz")
     this->writeParticlesRawVelocityGz(name);
   else
     errMsg("particle '" + name + "' filetype not supported for saving");
+  return 0;
 }
 
 void BasicParticleSystem::printParts(IndexInt start, IndexInt stop, bool printIndex)
@@ -285,7 +303,7 @@ void BasicParticleSystem::readParticles(BasicParticleSystem *from)
 
 // particle data
 
-ParticleDataBase::ParticleDataBase(FluidSolver *parent) : PbClass(parent), mpParticleSys(NULL)
+ParticleDataBase::ParticleDataBase(FluidSolver *parent) : PbClass(parent), mpParticleSys(nullptr)
 {
 }
 
@@ -300,13 +318,13 @@ ParticleDataBase::~ParticleDataBase()
 
 template<class T>
 ParticleDataImpl<T>::ParticleDataImpl(FluidSolver *parent)
-    : ParticleDataBase(parent), mpGridSource(NULL), mGridSourceMAC(false)
+    : ParticleDataBase(parent), mpGridSource(nullptr), mGridSourceMAC(false)
 {
 }
 
 template<class T>
 ParticleDataImpl<T>::ParticleDataImpl(FluidSolver *parent, ParticleDataImpl<T> *other)
-    : ParticleDataBase(parent), mpGridSource(NULL), mGridSourceMAC(false)
+    : ParticleDataBase(parent), mpGridSource(nullptr), mGridSourceMAC(false)
 {
   this->mData = other->mData;
   setName(other->getName());
@@ -347,8 +365,8 @@ template<class T> void ParticleDataImpl<T>::setSource(Grid<T> *grid, bool isMAC)
 {
   mpGridSource = grid;
   mGridSourceMAC = isMAC;
-  if (isMAC)
-    assertMsg(dynamic_cast<MACGrid *>(grid) != NULL, "Given grid is not a valid MAC grid");
+  if (grid && isMAC)
+    assertMsg(grid->getType() & GridBase::TypeMAC, "Given grid is not a valid MAC grid");
 }
 
 template<class T> void ParticleDataImpl<T>::initNewValue(IndexInt idx, Vec3 pos)
@@ -372,30 +390,42 @@ template<> void ParticleDataImpl<Vec3>::initNewValue(IndexInt idx, Vec3 pos)
   }
 }
 
-template<typename T> void ParticleDataImpl<T>::load(string name)
+template<typename T> int ParticleDataImpl<T>::load(string name)
 {
   if (name.find_last_of('.') == string::npos)
     errMsg("file '" + name + "' does not have an extension");
   string ext = name.substr(name.find_last_of('.'));
   if (ext == ".uni")
-    readPdataUni<T>(name, this);
+    return readPdataUni<T>(name, this);
+  else if (ext == ".vdb") {
+    std::vector<PbClass *> parts;
+    parts.push_back(this);
+    return readObjectsVDB(name, &parts);
+  }
   else if (ext == ".raw")  // raw = uni for now
-    readPdataUni<T>(name, this);
+    return readPdataUni<T>(name, this);
   else
     errMsg("particle data '" + name + "' filetype not supported for loading");
+  return 0;
 }
 
-template<typename T> void ParticleDataImpl<T>::save(string name)
+template<typename T> int ParticleDataImpl<T>::save(string name)
 {
   if (name.find_last_of('.') == string::npos)
     errMsg("file '" + name + "' does not have an extension");
   string ext = name.substr(name.find_last_of('.'));
   if (ext == ".uni")
-    writePdataUni<T>(name, this);
+    return writePdataUni<T>(name, this);
+  else if (ext == ".vdb") {
+    std::vector<PbClass *> parts;
+    parts.push_back(this);
+    return writeObjectsVDB(name, &parts);
+  }
   else if (ext == ".raw")  // raw = uni for now
-    writePdataUni<T>(name, this);
+    return writePdataUni<T>(name, this);
   else
     errMsg("particle data '" + name + "' filetype not supported for saving");
+  return 0;
 }
 
 // specializations

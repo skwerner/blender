@@ -40,6 +40,7 @@
 #include "DNA_particle_types.h"
 #include "DNA_scene_types.h"
 
+#include "BKE_customdata.h"
 #include "BKE_global.h"
 #include "BKE_lib_id.h"
 #include "BKE_mesh.h"
@@ -150,9 +151,9 @@ static void distribute_grid(Mesh *mesh, ParticleSystem *psys)
   size[2] = MAX2(size[2], 1);
 
   /* no full offset for flat/thin objects */
-  min[0] += d < delta[0] ? d / 2.f : delta[0] / 2.f;
-  min[1] += d < delta[1] ? d / 2.f : delta[1] / 2.f;
-  min[2] += d < delta[2] ? d / 2.f : delta[2] / 2.f;
+  min[0] += d < delta[0] ? d / 2.0f : delta[0] / 2.0f;
+  min[1] += d < delta[1] ? d / 2.0f : delta[1] / 2.0f;
+  min[2] += d < delta[2] ? d / 2.0f : delta[2] / 2.0f;
 
   for (i = 0, p = 0, pa = psys->particles; i < res; i++) {
     for (j = 0; j < res; j++) {
@@ -220,7 +221,7 @@ static void distribute_grid(Mesh *mesh, ParticleSystem *psys)
 
           pa = psys->particles + a1 * a1mul + a2 * a2mul;
           copy_v3_v3(co1, pa->fuv);
-          co1[a] -= d < delta[a] ? d / 2.f : delta[a] / 2.f;
+          co1[a] -= d < delta[a] ? d / 2.0f : delta[a] / 2.0f;
           copy_v3_v3(co2, co1);
           co2[a] += delta[a] + 0.001f * d;
           co1[a] -= 0.001f * d;
@@ -295,12 +296,12 @@ static void distribute_grid(Mesh *mesh, ParticleSystem *psys)
       for (j = 0; j < res; j++) {
         for (k = 0; k < res; k++, p++, pa++) {
           if (j % 2) {
-            pa->fuv[0] += d / 2.f;
+            pa->fuv[0] += d / 2.0f;
           }
 
           if (k % 2) {
-            pa->fuv[0] += d / 2.f;
-            pa->fuv[1] += d / 2.f;
+            pa->fuv[0] += d / 2.0f;
+            pa->fuv[1] += d / 2.0f;
           }
         }
       }
@@ -318,7 +319,7 @@ static void distribute_grid(Mesh *mesh, ParticleSystem *psys)
     }
   }
 
-  if (psys->part->grid_rand > 0.f) {
+  if (psys->part->grid_rand > 0.0f) {
     float rfac = d * psys->part->grid_rand;
     for (p = 0, pa = psys->particles; p < psys->totpart; p++, pa++) {
       if (pa->flag & PARS_UNEXIST) {
@@ -382,7 +383,7 @@ static void init_mv_jit(float *jit, int num, int seed2, float amount)
     x -= (float)floor(x);
   }
 
-  jit2 = MEM_mallocN(12 + 2 * sizeof(float) * num, "initjit");
+  jit2 = MEM_mallocN(12 + sizeof(float[2]) * num, "initjit");
 
   for (i = 0; i < 4; i++) {
     BLI_jitterate1((float(*)[2])jit, (float(*)[2])jit2, num, rad1);
@@ -433,7 +434,7 @@ static void psys_uv_to_w(float u, float v, int quad, float *w)
 }
 
 /* Find the index in "sum" array before "value" is crossed. */
-static int distribute_binary_search(float *sum, int n, float value)
+static int distribute_binary_search(const float *sum, int n, float value)
 {
   int mid, low = 0, high = n - 1;
 
@@ -829,22 +830,20 @@ static int distribute_compare_orig_index(const void *p1, const void *p2, void *u
   if (index1 < index2) {
     return -1;
   }
-  else if (index1 == index2) {
+  if (index1 == index2) {
     /* this pointer comparison appears to make qsort stable for glibc,
      * and apparently on solaris too, makes the renders reproducible */
     if (p1 < p2) {
       return -1;
     }
-    else if (p1 == p2) {
+    if (p1 == p2) {
       return 0;
     }
-    else {
-      return 1;
-    }
-  }
-  else {
+
     return 1;
   }
+
+  return 1;
 }
 
 static void distribute_invalid(ParticleSimulationData *sim, int from)
@@ -944,7 +943,7 @@ static int psys_thread_context_init_distribute(ParticleThreadContext *ctx,
         mesh = final_mesh;
       }
       else {
-        BKE_id_copy_ex(NULL, ob->data, (ID **)&mesh, LIB_ID_COPY_LOCALIZE);
+        mesh = (Mesh *)BKE_id_copy_ex(NULL, ob->data, NULL, LIB_ID_COPY_LOCALIZE);
       }
       BKE_mesh_tessface_ensure(mesh);
 
@@ -992,7 +991,7 @@ static int psys_thread_context_init_distribute(ParticleThreadContext *ctx,
       mesh = final_mesh;
     }
     else {
-      BKE_id_copy_ex(NULL, ob->data, (ID **)&mesh, LIB_ID_COPY_LOCALIZE);
+      mesh = (Mesh *)BKE_id_copy_ex(NULL, ob->data, NULL, LIB_ID_COPY_LOCALIZE);
     }
 
     BKE_mesh_tessface_ensure(mesh);
@@ -1054,7 +1053,7 @@ static int psys_thread_context_init_distribute(ParticleThreadContext *ctx,
   /* Calculate weights from face areas */
   if ((part->flag & PART_EDISTR || children) && from != PART_FROM_VERT) {
     MVert *v1, *v2, *v3, *v4;
-    float totarea = 0.f, co1[3], co2[3], co3[3], co4[3];
+    float totarea = 0.0f, co1[3], co2[3], co3[3], co4[3];
     float(*orcodata)[3];
 
     orcodata = CustomData_get_layer(&mesh->vdata, CD_ORCO);
@@ -1282,7 +1281,7 @@ static int psys_thread_context_init_distribute(ParticleThreadContext *ctx,
       hammersley_create(jit, jitlevel + 1, psys->seed, part->jitfac);
     }
     BLI_array_randomize(
-        jit, 2 * sizeof(float), jitlevel, psys->seed); /* for custom jit or even distribution */
+        jit, sizeof(float[2]), jitlevel, psys->seed); /* for custom jit or even distribution */
   }
 
   /* Setup things for threaded distribution */

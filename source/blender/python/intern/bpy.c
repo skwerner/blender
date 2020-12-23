@@ -35,6 +35,8 @@
 #include "RNA_access.h"
 #include "RNA_types.h"
 
+#include "GPU_state.h"
+
 #include "bpy.h"
 #include "bpy_app.h"
 #include "bpy_capi_utils.h"
@@ -145,7 +147,7 @@ static PyObject *bpy_blend_paths(PyObject *UNUSED(self), PyObject *args, PyObjec
   return list;
 }
 
-// PyDoc_STRVAR(bpy_user_resource_doc[] = // now in bpy/utils.py
+// PyDoc_STRVAR(bpy_user_resource_doc[] = /* now in bpy/utils.py */
 static PyObject *bpy_user_resource(PyObject *UNUSED(self), PyObject *args, PyObject *kw)
 {
   const struct PyC_StringEnumItems type_items[] = {
@@ -258,25 +260,19 @@ PyDoc_STRVAR(bpy_escape_identifier_doc,
              "   :rtype: string\n");
 static PyObject *bpy_escape_identifier(PyObject *UNUSED(self), PyObject *value)
 {
-  const char *value_str;
   Py_ssize_t value_str_len;
-
-  char *value_escape_str;
-  Py_ssize_t value_escape_str_len;
-  PyObject *value_escape;
-  size_t size;
-
-  value_str = _PyUnicode_AsStringAndSize(value, &value_str_len);
+  const char *value_str = _PyUnicode_AsStringAndSize(value, &value_str_len);
 
   if (value_str == NULL) {
     PyErr_SetString(PyExc_TypeError, "expected a string");
     return NULL;
   }
 
-  size = (value_str_len * 2) + 1;
-  value_escape_str = PyMem_MALLOC(size);
-  value_escape_str_len = BLI_strescape(value_escape_str, value_str, size);
+  const size_t size = (value_str_len * 2) + 1;
+  char *value_escape_str = PyMem_MALLOC(size);
+  const Py_ssize_t value_escape_str_len = BLI_str_escape(value_escape_str, value_str, size);
 
+  PyObject *value_escape;
   if (value_escape_str_len == value_str_len) {
     Py_INCREF(value);
     value_escape = value;
@@ -288,6 +284,44 @@ static PyObject *bpy_escape_identifier(PyObject *UNUSED(self), PyObject *value)
   PyMem_FREE(value_escape_str);
 
   return value_escape;
+}
+
+PyDoc_STRVAR(bpy_unescape_identifier_doc,
+             ".. function:: unescape_identifier(string)\n"
+             "\n"
+             "   Simple string un-escape function used for animation paths.\n"
+             "   This performs the reverse of `escape_identifier`.\n"
+             "\n"
+             "   :arg string: text\n"
+             "   :type string: string\n"
+             "   :return: The un-escaped string.\n"
+             "   :rtype: string\n");
+static PyObject *bpy_unescape_identifier(PyObject *UNUSED(self), PyObject *value)
+{
+  Py_ssize_t value_str_len;
+  const char *value_str = _PyUnicode_AsStringAndSize(value, &value_str_len);
+
+  if (value_str == NULL) {
+    PyErr_SetString(PyExc_TypeError, "expected a string");
+    return NULL;
+  }
+
+  const size_t size = value_str_len + 1;
+  char *value_unescape_str = PyMem_MALLOC(size);
+  const Py_ssize_t value_unescape_str_len = BLI_str_unescape(value_unescape_str, value_str, size);
+
+  PyObject *value_unescape;
+  if (value_unescape_str_len == value_str_len) {
+    Py_INCREF(value);
+    value_unescape = value;
+  }
+  else {
+    value_unescape = PyUnicode_FromStringAndSize(value_unescape_str, value_unescape_str_len);
+  }
+
+  PyMem_FREE(value_unescape_str);
+
+  return value_unescape;
 }
 
 static PyMethodDef meth_bpy_script_paths = {
@@ -326,10 +360,19 @@ static PyMethodDef meth_bpy_escape_identifier = {
     METH_O,
     bpy_escape_identifier_doc,
 };
+static PyMethodDef meth_bpy_unescape_identifier = {
+    "unescape_identifier",
+    (PyCFunction)bpy_unescape_identifier,
+    METH_O,
+    bpy_unescape_identifier_doc,
+};
 
 static PyObject *bpy_import_test(const char *modname)
 {
   PyObject *mod = PyImport_ImportModuleLevel(modname, NULL, NULL, NULL, 0);
+
+  GPU_bgl_end();
+
   if (mod) {
     Py_DECREF(mod);
   }
@@ -344,7 +387,7 @@ static PyObject *bpy_import_test(const char *modname)
 /******************************************************************************
  * Description: Creates the bpy module and adds it to sys.modules for importing
  ******************************************************************************/
-void BPy_init_modules(void)
+void BPy_init_modules(struct bContext *C)
 {
   PointerRNA ctx_ptr;
   PyObject *mod;
@@ -380,10 +423,7 @@ void BPy_init_modules(void)
   PyModule_AddObject(mod, "types", BPY_rna_types());
 
   /* needs to be first so bpy_types can run */
-  BPY_library_load_module(mod);
-  BPY_library_write_module(mod);
-
-  BPY_rna_id_collection_module(mod);
+  BPY_library_load_type_ready();
 
   BPY_rna_gizmo_module(mod);
 
@@ -398,8 +438,7 @@ void BPy_init_modules(void)
   PyModule_AddObject(mod, "_utils_previews", BPY_utils_previews_module());
   PyModule_AddObject(mod, "msgbus", BPY_msgbus_module());
 
-  /* bpy context */
-  RNA_pointer_create(NULL, &RNA_Context, (void *)BPy_GetContext(), &ctx_ptr);
+  RNA_pointer_create(NULL, &RNA_Context, C, &ctx_ptr);
   bpy_context_module = (BPy_StructRNA *)pyrna_struct_CreatePyObject(&ctx_ptr);
   /* odd that this is needed, 1 ref on creation and another for the module
    * but without we get a crash on exit */
@@ -428,6 +467,9 @@ void BPy_init_modules(void)
   PyModule_AddObject(mod,
                      meth_bpy_escape_identifier.ml_name,
                      (PyObject *)PyCFunction_New(&meth_bpy_escape_identifier, NULL));
+  PyModule_AddObject(mod,
+                     meth_bpy_unescape_identifier.ml_name,
+                     (PyObject *)PyCFunction_New(&meth_bpy_unescape_identifier, NULL));
 
   /* register funcs (bpy_rna.c) */
   PyModule_AddObject(mod,

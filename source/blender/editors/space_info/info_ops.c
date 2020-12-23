@@ -161,7 +161,7 @@ static int pack_all_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(ev
   Main *bmain = CTX_data_main(C);
   Image *ima;
 
-  // first check for dirty images
+  /* First check for dirty images. */
   for (ima = bmain->images.first; ima; ima = ima->id.next) {
     if (BKE_image_is_dirty(ima)) {
       break;
@@ -516,7 +516,7 @@ void FILE_OT_find_missing_files(wmOperatorType *ot)
                                  FILE_OPENFILE,
                                  WM_FILESEL_DIRECTORY,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 }
 
 /********************* report box operator *********************/

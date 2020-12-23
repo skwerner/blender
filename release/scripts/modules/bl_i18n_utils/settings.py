@@ -30,7 +30,11 @@ import os
 import sys
 import types
 
-import bpy
+try:
+    import bpy
+except ModuleNotFoundError:
+    print("Could not import bpy, some features are not available when not run from Blender.")
+    bpy = None
 
 ###############################################################################
 # MISC
@@ -98,8 +102,10 @@ LANGUAGES = (
     (47, "Slovak (Slovenčina)", "sk_SK"),
 )
 
-# Default context, in py!
-DEFAULT_CONTEXT = bpy.app.translations.contexts.default
+# Default context, in py (keep in sync with `BLT_translation.h`)!
+if bpy is not None:
+    assert(bpy.app.translations.contexts.default == "*")
+DEFAULT_CONTEXT = "*"
 
 # Name of language file used by Blender to generate translations' menu.
 LANGUAGES_FILE = "languages"
@@ -376,6 +382,7 @@ WARN_MSGID_NOT_CAPITALIZED_ALLOWED = {
     "multi-res modifier",
     "non-triangle face",
     "normal",
+    "performance impact!",
     "right",
     "the lazy dog",
     "unable to load movie clip",
@@ -601,8 +608,11 @@ class I18nSettings:
         return json.dumps(export_dict)
 
     def load(self, fname, reset=False):
+        reset = reset or fname is None
         if reset:
             self.__dict__ = {uid: data for uid, data in globals().items() if not uid.startswith("_")}
+        if fname is None:
+            return
         if isinstance(fname, str):
             if not os.path.isfile(fname):
                 # Assume it is already real JSon string...

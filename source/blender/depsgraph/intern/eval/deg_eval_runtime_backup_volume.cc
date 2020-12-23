@@ -31,9 +31,9 @@
 
 #include "BKE_volume.h"
 
-#include <stdio.h>
+#include <cstdio>
 
-namespace DEG {
+namespace blender::deg {
 
 VolumeBackup::VolumeBackup(const Depsgraph * /*depsgraph*/) : grids(nullptr)
 {
@@ -57,4 +57,4 @@ void VolumeBackup::restore_to_volume(Volume *volume)
   }
 }
 
-}  // namespace DEG
+}  // namespace blender::deg

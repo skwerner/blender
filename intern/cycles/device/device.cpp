@@ -17,6 +17,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "bvh/bvh2.h"
+
 #include "device/device.h"
 #include "device/device_intern.h"
 
@@ -77,7 +79,7 @@ std::ostream &operator<<(std::ostream &os, const DeviceRequestedFeatures &reques
 
 /* Device */
 
-Device::~Device()
+Device::~Device() noexcept(false)
 {
   if (!background) {
     if (vertex_buffer != 0) {
@@ -209,13 +211,13 @@ bool Device::bind_fallback_display_space_shader(const float width, const float h
     glUseProgram(fallback_shader_program);
     image_texture_location = glGetUniformLocation(fallback_shader_program, "image_texture");
     if (image_texture_location < 0) {
-      LOG(ERROR) << "Shader doesn't containt the 'image_texture' uniform.";
+      LOG(ERROR) << "Shader doesn't contain the 'image_texture' uniform.";
       return false;
     }
 
     fullscreen_location = glGetUniformLocation(fallback_shader_program, "fullscreen");
     if (fullscreen_location < 0) {
-      LOG(ERROR) << "Shader doesn't containt the 'fullscreen' uniform.";
+      LOG(ERROR) << "Shader doesn't contain the 'fullscreen' uniform.";
       return false;
     }
 
@@ -364,6 +366,19 @@ void Device::draw_pixels(device_memory &rgba,
   }
 }
 
+void Device::build_bvh(BVH *bvh, Progress &progress, bool refit)
+{
+  assert(bvh->params.bvh_layout == BVH_LAYOUT_BVH2);
+
+  BVH2 *const bvh2 = static_cast<BVH2 *>(bvh);
+  if (refit) {
+    bvh2->refit(progress);
+  }
+  else {
+    bvh2->build(progress, &stats);
+  }
+}
+
 Device *Device::create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background)
 {
 #ifdef WITH_MULTI
@@ -375,7 +390,7 @@ Device *Device::create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool 
   }
 #endif
 
-  Device *device;
+  Device *device = NULL;
 
   switch (info.type) {
     case DEVICE_CPU:
@@ -385,16 +400,12 @@ Device *Device::create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool 
     case DEVICE_CUDA:
       if (device_cuda_init())
         device = device_cuda_create(info, stats, profiler, background);
-      else
-        device = NULL;
       break;
 #endif
 #ifdef WITH_OPTIX
     case DEVICE_OPTIX:
       if (device_optix_init())
         device = device_optix_create(info, stats, profiler, background);
-      else
-        device = NULL;
       break;
 #endif
 #ifdef WITH_NETWORK
@@ -406,12 +417,14 @@ Device *Device::create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool 
     case DEVICE_OPENCL:
       if (device_opencl_init())
         device = device_opencl_create(info, stats, profiler, background);
-      else
-        device = NULL;
       break;
 #endif
     default:
-      return NULL;
+      break;
+  }
+
+  if (device == NULL) {
+    device = device_dummy_create(info, stats, profiler, background);
   }
 
   return device;
@@ -549,6 +562,14 @@ vector<DeviceInfo> Device::available_devices(uint mask)
   return devices;
 }
 
+DeviceInfo Device::dummy_device(const string &error_msg)
+{
+  DeviceInfo info;
+  info.type = DEVICE_DUMMY;
+  info.error_msg = error_msg;
+  return info;
+}
+
 string Device::device_capabilities(uint mask)
 {
   thread_scoped_lock lock(device_mutex);
@@ -602,6 +623,8 @@ DeviceInfo Device::get_multi_device(const vector<DeviceInfo> &subdevices,
   info.has_adaptive_stop_per_sample = true;
   info.has_osl = true;
   info.has_profiling = true;
+  info.has_peer_memory = false;
+  info.denoisers = DENOISER_ALL;
 
   foreach (const DeviceInfo &device, subdevices) {
     /* Ensure CPU device does not slow down GPU. */
@@ -645,6 +668,8 @@ DeviceInfo Device::get_multi_device(const vector<DeviceInfo> &subdevices,
     info.has_adaptive_stop_per_sample &= device.has_adaptive_stop_per_sample;
     info.has_osl &= device.has_osl;
     info.has_profiling &= device.has_profiling;
+    info.has_peer_memory |= device.has_peer_memory;
+    info.denoisers &= device.denoisers;
   }
 
   return info;
@@ -663,6 +688,57 @@ void Device::free_memory()
   opencl_devices.free_memory();
   cpu_devices.free_memory();
   network_devices.free_memory();
+}
+
+/* DeviceInfo */
+
+void DeviceInfo::add_denoising_devices(DenoiserType denoiser_type)
+{
+  assert(denoising_devices.empty());
+
+  if (denoiser_type == DENOISER_OPTIX && type != DEVICE_OPTIX) {
+    vector<DeviceInfo> optix_devices = Device::available_devices(DEVICE_MASK_OPTIX);
+    if (!optix_devices.empty()) {
+      /* Convert to a special multi device with separate denoising devices. */
+      if (multi_devices.empty()) {
+        multi_devices.push_back(*this);
+      }
+
+      /* Try to use the same physical devices for denoising. */
+      for (const DeviceInfo &cuda_device : multi_devices) {
+        if (cuda_device.type == DEVICE_CUDA) {
+          for (const DeviceInfo &optix_device : optix_devices) {
+            if (cuda_device.num == optix_device.num) {
+              id += optix_device.id;
+              denoising_devices.push_back(optix_device);
+              break;
+            }
+          }
+        }
+      }
+
+      if (denoising_devices.empty()) {
+        /* Simply use the first available OptiX device. */
+        const DeviceInfo optix_device = optix_devices.front();
+        id += optix_device.id; /* Uniquely identify this special multi device. */
+        denoising_devices.push_back(optix_device);
+      }
+
+      denoisers = denoiser_type;
+    }
+  }
+  else if (denoiser_type == DENOISER_OPENIMAGEDENOISE && type != DEVICE_CPU) {
+    /* Convert to a special multi device with separate denoising devices. */
+    if (multi_devices.empty()) {
+      multi_devices.push_back(*this);
+    }
+
+    /* Add CPU denoising devices. */
+    DeviceInfo cpu_device = Device::available_devices(DEVICE_MASK_CPU).front();
+    denoising_devices.push_back(cpu_device);
+
+    denoisers = denoiser_type;
+  }
 }
 
 CCL_NAMESPACE_END

@@ -51,6 +51,7 @@
 #include "BKE_object.h"
 #include "BKE_object_deform.h" /* own include */
 
+/* -------------------------------------------------------------------- */
 /** \name Misc helpers
  * \{ */
 
@@ -68,7 +69,7 @@ static Lattice *object_defgroup_lattice_get(ID *id)
  *
  * \param map: an array mapping old indices to new indices.
  */
-void BKE_object_defgroup_remap_update_users(Object *ob, int *map)
+void BKE_object_defgroup_remap_update_users(Object *ob, const int *map)
 {
   ModifierData *md;
   ParticleSystem *psys;
@@ -106,6 +107,7 @@ void BKE_object_defgroup_remap_update_users(Object *ob, int *map)
 }
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name Group creation
  * \{ */
 
@@ -145,7 +147,7 @@ MDeformVert *BKE_object_defgroup_data_create(ID *id)
     me->dvert = CustomData_add_layer(&me->vdata, CD_MDEFORMVERT, CD_CALLOC, NULL, me->totvert);
     return me->dvert;
   }
-  else if (GS(id->name) == ID_LT) {
+  if (GS(id->name) == ID_LT) {
     Lattice *lt = (Lattice *)id;
     lt->dvert = MEM_callocN(sizeof(MDeformVert) * lt->pntsu * lt->pntsv * lt->pntsw,
                             "lattice deformVert");
@@ -156,6 +158,7 @@ MDeformVert *BKE_object_defgroup_data_create(ID *id)
 }
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name Group clearing
  * \{ */
 
@@ -256,6 +259,7 @@ bool BKE_object_defgroup_clear_all(Object *ob, const bool use_selection)
 }
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name Group removal
  * \{ */
 

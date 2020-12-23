@@ -21,8 +21,7 @@
  * \ingroup bke
  */
 
-#ifndef __BKE_INTERN_MULTIRES_RESHAPE_H__
-#define __BKE_INTERN_MULTIRES_RESHAPE_H__
+#pragma once
 
 #include "BLI_sys_types.h"
 
@@ -168,10 +167,16 @@ bool multires_reshape_context_create_from_ccg(MultiresReshapeContext *reshape_co
                                               struct Mesh *base_mesh,
                                               int top_level);
 
-bool multires_reshape_context_create_from_subdivide(MultiresReshapeContext *reshape_context,
-                                                    struct Object *object,
-                                                    struct MultiresModifierData *mmd,
-                                                    int top_level);
+bool multires_reshape_context_create_from_modifier(MultiresReshapeContext *reshape_context,
+                                                   struct Object *object,
+                                                   struct MultiresModifierData *mmd,
+                                                   int top_level);
+
+bool multires_reshape_context_create_from_subdiv(MultiresReshapeContext *reshape_context,
+                                                 struct Object *object,
+                                                 struct MultiresModifierData *mmd,
+                                                 struct Subdiv *subdiv,
+                                                 int top_level);
 
 void multires_reshape_free_original_grids(MultiresReshapeContext *reshape_context);
 void multires_reshape_context_free(MultiresReshapeContext *reshape_context);
@@ -331,4 +336,3 @@ void multires_reshape_apply_base_refine_from_base(MultiresReshapeContext *reshap
  *
  * NOTE: Will re-evaluate all leading modifiers, so it's not cheap. */
 void multires_reshape_apply_base_refine_from_deform(MultiresReshapeContext *reshape_context);
-#endif /* __BKE_INTERN_MULTIRES_RESHAPE_H__ */

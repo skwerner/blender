@@ -26,15 +26,24 @@
 #include "DNA_gpencil_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
 
 #include "BLI_math_base.h"
 #include "BLI_utildefines.h"
 
+#include "BKE_context.h"
 #include "BKE_lib_query.h"
 #include "BKE_modifier.h"
+#include "BKE_screen.h"
 #include "BKE_shader_fx.h"
 
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
+
 #include "FX_shader_types.h"
+#include "FX_ui_common.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
@@ -67,14 +76,31 @@ static bool isDisabled(ShaderFxData *fx, int UNUSED(userRenderParams))
   return !fxd->object;
 }
 
-static void foreachObjectLink(ShaderFxData *fx,
-                              Object *ob,
-                              ShaderFxObjectWalkFunc walk,
-                              void *userData)
+static void foreachIDLink(ShaderFxData *fx, Object *ob, IDWalkFunc walk, void *userData)
 {
   SwirlShaderFxData *fxd = (SwirlShaderFxData *)fx;
 
-  walk(userData, ob, &fxd->object, IDWALK_CB_NOP);
+  walk(userData, ob, (ID **)&fxd->object, IDWALK_CB_NOP);
+}
+
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = shaderfx_panel_get_property_pointers(panel, NULL);
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, ptr, "object", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "radius", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "angle", 0, NULL, ICON_NONE);
+
+  shaderfx_panel_end(layout, ptr);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  shaderfx_panel_register(region_type, eShaderFxType_Swirl, panel_draw);
 }
 
 ShaderFxTypeInfo shaderfx_Type_Swirl = {
@@ -91,6 +117,6 @@ ShaderFxTypeInfo shaderfx_Type_Swirl = {
     /* isDisabled */ isDisabled,
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
+    /* panelRegister */ panelRegister,
 };

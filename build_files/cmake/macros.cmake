@@ -60,6 +60,19 @@ function(list_assert_duplicates
   unset(_len_after)
 endfunction()
 
+# Adds a native path separator to the end of the path:
+#
+# - 'example' -> 'example/'
+# - '/example///' -> '/example/'
+#
+macro(path_ensure_trailing_slash
+  path_new path_input
+  )
+  file(TO_NATIVE_PATH "/" _path_sep)
+  string(REGEX REPLACE "[${_path_sep}]+$" "" ${path_new} ${path_input})
+  set(${path_new} "${${path_new}}${_path_sep}")
+  unset(_path_sep)
+endmacro()
 
 # foo_bar.spam --> foo_barMySuffix.spam
 macro(file_suffix
@@ -169,6 +182,26 @@ function(blender_include_dirs_sys
   include_directories(SYSTEM ${_ALL_INCS})
 endfunction()
 
+# Set include paths for header files included with "*.h" syntax.
+# This enables auto-complete suggestions for user header files on Xcode.
+# Build process is not affected since the include paths are the same
+# as in HEADER_SEARCH_PATHS.
+function(blender_user_header_search_paths
+  name
+  includes
+  )
+
+  if(XCODE)
+    set(_ALL_INCS "")
+    foreach(_INC ${includes})
+      get_filename_component(_ABS_INC ${_INC} ABSOLUTE)
+      # _ALL_INCS is a space-separated string of file paths in quotes.
+      string(APPEND _ALL_INCS " \"${_ABS_INC}\"")
+    endforeach()
+    set_target_properties(${name} PROPERTIES XCODE_ATTRIBUTE_USER_HEADER_SEARCH_PATHS "${_ALL_INCS}")
+  endif()
+endfunction()
+
 function(blender_source_group
   name
   sources
@@ -230,11 +263,11 @@ macro(add_cc_flags_custom_test
   string(TOUPPER ${name} _name_upper)
   if(DEFINED CMAKE_C_FLAGS_${_name_upper})
     message(STATUS "Using custom CFLAGS: CMAKE_C_FLAGS_${_name_upper} in \"${CMAKE_CURRENT_SOURCE_DIR}\"")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_${_name_upper}}" ${ARGV1})
+    string(APPEND CMAKE_C_FLAGS " ${CMAKE_C_FLAGS_${_name_upper}}" ${ARGV1})
   endif()
   if(DEFINED CMAKE_CXX_FLAGS_${_name_upper})
     message(STATUS "Using custom CXXFLAGS: CMAKE_CXX_FLAGS_${_name_upper} in \"${CMAKE_CURRENT_SOURCE_DIR}\"")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${_name_upper}}" ${ARGV1})
+    string(APPEND CMAKE_CXX_FLAGS " ${CMAKE_CXX_FLAGS_${_name_upper}}" ${ARGV1})
   endif()
   unset(_name_upper)
 
@@ -282,14 +315,14 @@ function(blender_add_lib__impl
   #
   # What this code does it traverses library_deps and extracts information about whether
   # library is to provided as general, debug or optimized. This is a little state machine which
-  # keeps track of whiuch build type library is to provided for:
+  # keeps track of which build type library is to provided for:
   #
   # - If "debug" or "optimized" word is found, the next element in the list is expected to be
   #   a library which will be passed to target_link_libraries() under corresponding build type.
   #
   # - If there is no "debug" or "optimized" used library is specified for all build types.
   #
-  # NOTE: If separated libraries for debug and release ar eneeded every library is the list are
+  # NOTE: If separated libraries for debug and release are needed every library is the list are
   # to be prefixed explicitly.
   #
   #  Use: "optimized libfoo optimized libbar debug libfoo_d debug libbar_d"
@@ -317,6 +350,7 @@ function(blender_add_lib__impl
   # works fine without having the includes
   # listed is helpful for IDE's (QtCreator/MSVC)
   blender_source_group("${name}" "${sources}")
+  blender_user_header_search_paths("${name}" "${includes}")
 
   list_assert_duplicates("${sources}")
   list_assert_duplicates("${includes}")
@@ -354,6 +388,83 @@ function(blender_add_lib
   set_property(GLOBAL APPEND PROPERTY BLENDER_LINK_LIBS ${name})
 endfunction()
 
+# Add tests for a Blender library, to be called in tandem with blender_add_lib().
+# The tests will be part of the blender_test executable (see tests/gtests/runner).
+function(blender_add_test_lib
+  name
+  sources
+  includes
+  includes_sys
+  library_deps
+  )
+
+  add_cc_flags_custom_test(${name} PARENT_SCOPE)
+
+  # Otherwise external projects will produce warnings that we cannot fix.
+  remove_strict_flags()
+
+  # This duplicates logic that's also in GTestTesting.cmake, macro BLENDER_SRC_GTEST_EX.
+  # TODO(Sybren): deduplicate after the general approach in D7649 has been approved.
+  LIST(APPEND includes
+    ${CMAKE_SOURCE_DIR}/tests/gtests
+  )
+  LIST(APPEND includes_sys
+    ${GLOG_INCLUDE_DIRS}
+    ${GFLAGS_INCLUDE_DIRS}
+    ${CMAKE_SOURCE_DIR}/extern/gtest/include
+    ${CMAKE_SOURCE_DIR}/extern/gmock/include
+  )
+  add_definitions(-DBLENDER_GFLAGS_NAMESPACE=${GFLAGS_NAMESPACE})
+  add_definitions(${GFLAGS_DEFINES})
+  add_definitions(${GLOG_DEFINES})
+
+  blender_add_lib__impl(${name} "${sources}" "${includes}" "${includes_sys}" "${library_deps}")
+
+  set_property(GLOBAL APPEND PROPERTY BLENDER_TEST_LIBS ${name})
+endfunction()
+
+
+# Add tests for a Blender library, to be called in tandem with blender_add_lib().
+# Test will be compiled into a ${name}_test executable.
+#
+# To be used for smaller isolated libraries, that do not have many dependencies.
+# For libraries that do drag in many other Blender libraries and would create a
+# very large executable, blender_add_test_lib() should be used instead.
+function(blender_add_test_executable
+  name
+  sources
+  includes
+  includes_sys
+  library_deps
+  )
+
+  add_cc_flags_custom_test(${name} PARENT_SCOPE)
+
+  ## Otherwise external projects will produce warnings that we cannot fix.
+  remove_strict_flags()
+
+  include_directories(${includes})
+  include_directories(${includes_sys})
+  setup_libdirs()
+
+  BLENDER_SRC_GTEST_EX(
+    NAME ${name}
+    SRC "${sources}"
+    EXTRA_LIBS "${library_deps}"
+    SKIP_ADD_TEST
+  )
+
+  include(GTest)
+  set(_GOOGLETEST_DISCOVER_TESTS_SCRIPT
+    ${CMAKE_SOURCE_DIR}/build_files/cmake/Modules/GTestAddTests.cmake
+  )
+
+  gtest_discover_tests(${name}_test
+    DISCOVERY_MODE PRE_TEST
+    WORKING_DIRECTORY "${TEST_INSTALL_DIR}"
+  )
+endfunction()
+
 # Ninja only: assign 'heavy pool' to some targets that are especially RAM-consuming to build.
 function(setup_heavy_lib_pool)
   if(WITH_NINJA_POOL_JOBS AND NINJA_MAX_NUM_PARALLEL_COMPILE_HEAVY_JOBS)
@@ -361,7 +472,7 @@ function(setup_heavy_lib_pool)
       list(APPEND _HEAVY_LIBS "cycles_device" "cycles_kernel")
     endif()
     if(WITH_LIBMV)
-      list(APPEND _HEAVY_LIBS "bf_intern_libmv")
+      list(APPEND _HEAVY_LIBS "extern_ceres" "bf_intern_libmv")
     endif()
     if(WITH_OPENVDB)
       list(APPEND _HEAVY_LIBS "bf_intern_openvdb")
@@ -379,8 +490,8 @@ function(SETUP_LIBDIRS)
 
   # NOTE: For all new libraries, use absolute library paths.
   # This should eventually be phased out.
-
-  if(NOT MSVC)
+  # APPLE plaform uses full paths for linking libraries, and avoids link_directories.
+  if(NOT MSVC AND NOT APPLE)
     link_directories(${JPEG_LIBPATH} ${PNG_LIBPATH} ${ZLIB_LIBPATH} ${FREETYPE_LIBPATH})
 
     if(WITH_PYTHON)  #  AND NOT WITH_PYTHON_MODULE  # WIN32 needs
@@ -437,7 +548,10 @@ function(SETUP_LIBDIRS)
 
     if(WITH_ALEMBIC)
       link_directories(${ALEMBIC_LIBPATH})
-      link_directories(${HDF5_LIBPATH})
+    endif()
+
+    if(WITH_GMP)
+      link_directories(${GMP_LIBPATH})
     endif()
 
     if(WITH_GHOST_WAYLAND)
@@ -454,33 +568,18 @@ function(SETUP_LIBDIRS)
   endif()
 endfunction()
 
-macro(setup_platform_linker_flags)
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${PLATFORM_LINKFLAGS}")
-  set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} ${PLATFORM_LINKFLAGS_RELEASE}")
-  set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} ${PLATFORM_LINKFLAGS_DEBUG}")
-endmacro()
+# Platform specific linker flags for targets.
+function(setup_platform_linker_flags
+  target)
+  set_property(TARGET ${target} APPEND_STRING PROPERTY LINK_FLAGS " ${PLATFORM_LINKFLAGS}")
+  set_property(TARGET ${target} APPEND_STRING PROPERTY LINK_FLAGS_RELEASE " ${PLATFORM_LINKFLAGS_RELEASE}")
+  set_property(TARGET ${target} APPEND_STRING PROPERTY LINK_FLAGS_DEBUG " ${PLATFORM_LINKFLAGS_DEBUG}")
+endfunction()
 
-function(setup_liblinks
+# Platform specific libraries for targets.
+function(setup_platform_linker_libs
   target
   )
-
-  # NOTE: This might look like it affects global scope, accumulating linker flags on every call
-  # to setup_liblinks, but this isn't how CMake works. These flags will only affect current
-  # directory from where the function is called.
-  # This means that setup_liblinks() called for ffmpeg_test will not affect blender, and each
-  # of thsoe targets will have single set of linker flags.
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${PLATFORM_LINKFLAGS}" PARENT_SCOPE)
-  set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} ${PLATFORM_LINKFLAGS_DEBUG}" PARENT_SCOPE)
-  set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} ${PLATFORM_LINKFLAGS_RELEASE}" PARENT_SCOPE)
-
-  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${PLATFORM_LINKFLAGS}" PARENT_SCOPE)
-  set(CMAKE_SHARED_LINKER_FLAGS_DEBUG "${CMAKE_SHARED_LINKER_FLAGS_DEBUG} ${PLATFORM_LINKFLAGS_DEBUG}" PARENT_SCOPE)
-  set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} ${PLATFORM_LINKFLAGS_RELEASE}" PARENT_SCOPE)
-
-  set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${PLATFORM_LINKFLAGS}" PARENT_SCOPE)
-  set(CMAKE_MODULE_LINKER_FLAGS_DEBUG "${CMAKE_MODULE_LINKER_FLAGS_DEBUG} ${PLATFORM_LINKFLAGS_DEBUG}" PARENT_SCOPE)
-  set(CMAKE_MODULE_LINKER_FLAGS_RELEASE "${CMAKE_MODULE_LINKER_FLAGS_RELEASE} ${PLATFORM_LINKFLAGS_RELEASE}" PARENT_SCOPE)
-
   # jemalloc must be early in the list, to be before pthread (see T57998)
   if(WITH_MEM_JEMALLOC)
     target_link_libraries(${target} ${JEMALLOC_LIBRARIES})
@@ -589,14 +688,14 @@ endmacro()
 macro(add_c_flag
   flag)
 
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${flag}")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flag}")
+  string(APPEND CMAKE_C_FLAGS " ${flag}")
+  string(APPEND CMAKE_CXX_FLAGS " ${flag}")
 endmacro()
 
 macro(add_cxx_flag
   flag)
 
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flag}")
+  string(APPEND CMAKE_CXX_FLAGS " ${flag}")
 endmacro()
 
 macro(remove_strict_flags)
@@ -756,8 +855,7 @@ function(get_blender_version)
   # - BLENDER_VERSION (major.minor)
   # - BLENDER_VERSION_MAJOR
   # - BLENDER_VERSION_MINOR
-  # - BLENDER_SUBVERSION (used for internal versioning mainly)
-  # - BLENDER_VERSION_CHAR (a, b, c, ...or empty string)
+  # - BLENDER_VERSION_PATCH
   # - BLENDER_VERSION_CYCLE (alpha, beta, rc, release)
 
   # So cmake depends on BKE_blender.h, beware of inf-loops!
@@ -767,25 +865,15 @@ function(get_blender_version)
   file(STRINGS ${CMAKE_SOURCE_DIR}/source/blender/blenkernel/BKE_blender_version.h _contents REGEX "^#define[ \t]+BLENDER_.*$")
 
   string(REGEX REPLACE ".*#define[ \t]+BLENDER_VERSION[ \t]+([0-9]+).*" "\\1" _out_version "${_contents}")
-  string(REGEX REPLACE ".*#define[ \t]+BLENDER_SUBVERSION[ \t]+([0-9]+).*" "\\1" _out_subversion "${_contents}")
-  string(REGEX REPLACE ".*#define[ \t]+BLENDER_VERSION_CHAR[ \t]+([a-z]+).*" "\\1" _out_version_char "${_contents}")
+  string(REGEX REPLACE ".*#define[ \t]+BLENDER_VERSION_PATCH[ \t]+([0-9]+).*" "\\1" _out_version_patch "${_contents}")
   string(REGEX REPLACE ".*#define[ \t]+BLENDER_VERSION_CYCLE[ \t]+([a-z]+).*" "\\1" _out_version_cycle "${_contents}")
 
   if(NOT ${_out_version} MATCHES "[0-9]+")
     message(FATAL_ERROR "Version parsing failed for BLENDER_VERSION")
   endif()
 
-  if(NOT ${_out_subversion} MATCHES "[0-9]+")
-    message(FATAL_ERROR "Version parsing failed for BLENDER_SUBVERSION")
-  endif()
-
-  # clumsy regex, only single char are ok but it could be unset
-
-  string(LENGTH "${_out_version_char}" _out_version_char_len)
-  if(NOT _out_version_char_len EQUAL 1)
-    set(_out_version_char "")
-  elseif(NOT ${_out_version_char} MATCHES "[a-z]+")
-    message(FATAL_ERROR "Version parsing failed for BLENDER_VERSION_CHAR")
+  if(NOT ${_out_version_patch} MATCHES "[0-9]+")
+    message(FATAL_ERROR "Version parsing failed for BLENDER_VERSION_PATCH")
   endif()
 
   if(NOT ${_out_version_cycle} MATCHES "[a-z]+")
@@ -795,23 +883,11 @@ function(get_blender_version)
   math(EXPR _out_version_major "${_out_version} / 100")
   math(EXPR _out_version_minor "${_out_version} % 100")
 
-  # for packaging, alpha to numbers
-  string(COMPARE EQUAL "${_out_version_char}" "" _out_version_char_empty)
-  if(${_out_version_char_empty})
-    set(_out_version_char_index "0")
-  else()
-    set(_char_ls a b c d e f g h i j k l m n o p q r s t u v w x y z)
-    list(FIND _char_ls ${_out_version_char} _out_version_char_index)
-    math(EXPR _out_version_char_index "${_out_version_char_index} + 1")
-  endif()
-
   # output vars
   set(BLENDER_VERSION "${_out_version_major}.${_out_version_minor}" PARENT_SCOPE)
   set(BLENDER_VERSION_MAJOR "${_out_version_major}" PARENT_SCOPE)
   set(BLENDER_VERSION_MINOR "${_out_version_minor}" PARENT_SCOPE)
-  set(BLENDER_SUBVERSION "${_out_subversion}" PARENT_SCOPE)
-  set(BLENDER_VERSION_CHAR "${_out_version_char}" PARENT_SCOPE)
-  set(BLENDER_VERSION_CHAR_INDEX "${_out_version_char_index}" PARENT_SCOPE)
+  set(BLENDER_VERSION_PATCH "${_out_version_patch}" PARENT_SCOPE)
   set(BLENDER_VERSION_CYCLE "${_out_version_cycle}" PARENT_SCOPE)
 
 endfunction()
@@ -1063,6 +1139,7 @@ endfunction()
 
 function(find_python_package
   package
+  relative_include_dir
   )
 
   string(TOUPPER ${package} _upper_package)
@@ -1094,7 +1171,10 @@ function(find_python_package
         dist-packages
         vendor-packages
        NO_DEFAULT_PATH
+       DOC
+         "Path to python site-packages or dist-packages containing '${package}' module"
     )
+    mark_as_advanced(PYTHON_${_upper_package}_PATH)
 
     if(NOT EXISTS "${PYTHON_${_upper_package}_PATH}")
       message(WARNING
@@ -1112,6 +1192,50 @@ function(find_python_package
       set(WITH_PYTHON_INSTALL_${_upper_package} OFF PARENT_SCOPE)
     else()
       message(STATUS "${package} found at '${PYTHON_${_upper_package}_PATH}'")
+      
+      if(NOT "${relative_include_dir}" STREQUAL "")
+        set(_relative_include_dir "${package}/${relative_include_dir}")
+        unset(PYTHON_${_upper_package}_INCLUDE_DIRS CACHE)
+        find_path(PYTHON_${_upper_package}_INCLUDE_DIRS
+          NAMES
+            "${_relative_include_dir}"
+          HINTS
+            "${PYTHON_LIBPATH}/"
+            "${PYTHON_LIBPATH}/python${PYTHON_VERSION}/"
+            "${PYTHON_LIBPATH}/python${_PY_VER_MAJOR}/"
+          PATH_SUFFIXES
+            "site-packages/"
+            "dist-packages/"
+            "vendor-packages/"
+          NO_DEFAULT_PATH
+          DOC
+            "Path to python site-packages or dist-packages containing '${package}' module header files"
+        )
+        mark_as_advanced(PYTHON_${_upper_package}_INCLUDE_DIRS)
+
+        if(NOT EXISTS "${PYTHON_${_upper_package}_INCLUDE_DIRS}")
+          message(WARNING
+            "Python package '${package}' include dir path could not be found in:\n"
+            "'${PYTHON_LIBPATH}/python${PYTHON_VERSION}/site-packages/${_relative_include_dir}', "
+            "'${PYTHON_LIBPATH}/python${_PY_VER_MAJOR}/site-packages/${_relative_include_dir}', "
+            "'${PYTHON_LIBPATH}/python${PYTHON_VERSION}/dist-packages/${_relative_include_dir}', "
+            "'${PYTHON_LIBPATH}/python${_PY_VER_MAJOR}/dist-packages/${_relative_include_dir}', "
+            "'${PYTHON_LIBPATH}/python${PYTHON_VERSION}/vendor-packages/${_relative_include_dir}', "
+            "'${PYTHON_LIBPATH}/python${_PY_VER_MAJOR}/vendor-packages/${_relative_include_dir}', "
+            "\n"
+            "The 'WITH_PYTHON_${_upper_package}' option will be disabled.\n"
+            "The build will be usable, only add-ons that depend on this package won't be functional."
+          )
+          set(WITH_PYTHON_${_upper_package} OFF PARENT_SCOPE)
+        else()
+          set(_temp "${PYTHON_${_upper_package}_INCLUDE_DIRS}/${package}/${relative_include_dir}")
+          unset(PYTHON_${_upper_package}_INCLUDE_DIRS CACHE)
+          set(PYTHON_${_upper_package}_INCLUDE_DIRS "${_temp}"
+              CACHE PATH "Path to the include directory of the ${package} module")
+
+          message(STATUS "${package} include files found at '${PYTHON_${_upper_package}_INCLUDE_DIRS}'")
+        endif()
+      endif()
     endif()
   endif()
 endfunction()
@@ -1178,8 +1302,16 @@ endmacro()
 
 macro(without_system_libs_begin)
   set(CMAKE_IGNORE_PATH "${CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES};${CMAKE_SYSTEM_INCLUDE_PATH};${CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES};${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES}")
+  if(APPLE)
+    # Avoid searching for headers in frameworks (like Mono), and libraries in LIBDIR.
+    set(CMAKE_FIND_FRAMEWORK NEVER)
+  endif()
 endmacro()
 
 macro(without_system_libs_end)
   unset(CMAKE_IGNORE_PATH)
+  if(APPLE)
+    # FIRST is the default.
+    set(CMAKE_FIND_FRAMEWORK FIRST)
+  endif()
 endmacro()

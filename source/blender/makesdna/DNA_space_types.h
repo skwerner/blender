@@ -1,4 +1,4 @@
-/*
+﻿/*
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -22,8 +22,7 @@
  * Structs for each of space type in the user interface.
  */
 
-#ifndef __DNA_SPACE_TYPES_H__
-#define __DNA_SPACE_TYPES_H__
+#pragma once
 
 #include "DNA_color_types.h" /* for Histogram */
 #include "DNA_defs.h"
@@ -36,6 +35,10 @@
 #include "DNA_vec_types.h"
 /* Hum ... Not really nice... but needed for spacebuts. */
 #include "DNA_view2d_types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct BLI_mempool;
 struct FileLayout;
@@ -57,9 +60,8 @@ struct bNodeTree;
 struct wmOperator;
 struct wmTimer;
 
-/* TODO 2.8: We don't write the global areas to files currently. Uncomment
- * define to enable writing (should become the default in a bit). */
-//#define WITH_GLOBAL_AREA_WRITING
+/* Defined in `buttons_intern.h`. */
+typedef struct SpaceProperties_Runtime SpaceProperties_Runtime;
 
 /* -------------------------------------------------------------------- */
 /** \name SpaceLink (Base)
@@ -160,6 +162,9 @@ typedef struct SpaceProperties {
   ID *pinid;
 
   void *texuser;
+
+  /* Doesn't necessarily need to be a pointer, but runtime structs are still written to files. */
+  struct SpaceProperties_Runtime *runtime;
 } SpaceProperties;
 
 /* button defines (deprecated) */
@@ -233,6 +238,9 @@ typedef enum eSpaceButtons_Flag {
 /** \name Outliner
  * \{ */
 
+/* Defined in `outliner_intern.h`. */
+typedef struct SpaceOutliner_Runtime SpaceOutliner_Runtime;
+
 /* Outliner */
 typedef struct SpaceOutliner {
   SpaceLink *next, *prev;
@@ -271,10 +279,7 @@ typedef struct SpaceOutliner {
   char show_restrict_flags;
   short filter_id_type;
 
-  /**
-   * Pointers to treestore elements, grouped by (id, type, nr)
-   * in hashtable for faster searching */
-  void *treehash;
+  SpaceOutliner_Runtime *runtime;
 } SpaceOutliner;
 
 /* SpaceOutliner.flag */
@@ -285,6 +290,7 @@ typedef enum eSpaceOutliner_Flag {
   /* SO_HIDE_KEYINGSETINFO = (1 << 3), */ /* UNUSED */
   SO_SKIP_SORT_ALPHA = (1 << 4),
   SO_SYNC_SELECT = (1 << 5),
+  SO_MODE_COLUMN = (1 << 6),
 } eSpaceOutliner_Flag;
 
 /* SpaceOutliner.filter */
@@ -303,9 +309,9 @@ typedef enum eSpaceOutliner_Filter {
   SO_FILTER_NO_OB_CAMERA = (1 << 10),
   SO_FILTER_NO_OB_OTHERS = (1 << 11),
 
-  SO_FILTER_UNUSED_12 = (1 << 12),         /* cleared */
-  SO_FILTER_OB_STATE_VISIBLE = (1 << 13),  /* Not set via DNA. */
-  SO_FILTER_OB_STATE_HIDDEN = (1 << 14),   /* Not set via DNA. */
+  SO_FILTER_OB_STATE_SELECTABLE = (1 << 12), /* Not set via DNA. */
+  SO_FILTER_OB_STATE_VISIBLE = (1 << 13),    /* Not set via DNA. */
+  SO_FILTER_OB_STATE_INVERSE = (1 << 14),
   SO_FILTER_OB_STATE_SELECTED = (1 << 15), /* Not set via DNA. */
   SO_FILTER_OB_STATE_ACTIVE = (1 << 16),   /* Not set via DNA. */
   SO_FILTER_NO_COLLECTION = (1 << 17),
@@ -318,8 +324,8 @@ typedef enum eSpaceOutliner_Filter {
    SO_FILTER_NO_OB_LAMP | SO_FILTER_NO_OB_CAMERA | SO_FILTER_NO_OB_OTHERS)
 
 #define SO_FILTER_OB_STATE \
-  (SO_FILTER_OB_STATE_VISIBLE | SO_FILTER_OB_STATE_HIDDEN | SO_FILTER_OB_STATE_SELECTED | \
-   SO_FILTER_OB_STATE_ACTIVE)
+  (SO_FILTER_OB_STATE_VISIBLE | SO_FILTER_OB_STATE_SELECTED | SO_FILTER_OB_STATE_ACTIVE | \
+   SO_FILTER_OB_STATE_SELECTABLE)
 
 #define SO_FILTER_ANY \
   (SO_FILTER_NO_OB_CONTENT | SO_FILTER_NO_CHILDREN | SO_FILTER_OB_TYPE | SO_FILTER_OB_STATE | \
@@ -329,9 +335,10 @@ typedef enum eSpaceOutliner_Filter {
 typedef enum eSpaceOutliner_StateFilter {
   SO_FILTER_OB_ALL = 0,
   SO_FILTER_OB_VISIBLE = 1,
-  SO_FILTER_OB_HIDDEN = 2,
+  SO_FILTER_OB_HIDDEN = 2, /* deprecated */
   SO_FILTER_OB_SELECTED = 3,
   SO_FILTER_OB_ACTIVE = 4,
+  SO_FILTER_OB_SELECTABLE = 5,
 } eSpaceOutliner_StateFilter;
 
 /* SpaceOutliner.show_restrict_flags */
@@ -462,7 +469,7 @@ typedef enum eGraphEdit_Flag {
   /* don't draw curves with AA ("beauty-draw") for performance */
   SIPO_BEAUTYDRAW_OFF = (1 << 12),
   /* draw grouped channels with colors set in group */
-  SIPO_NODRAWGCOLORS = (1 << 13),
+  /* SIPO_NODRAWGCOLORS = (1 << 13), DEPRECATED */
   /* normalize curves on display */
   SIPO_NORMALIZE = (1 << 14),
   SIPO_NORMALIZE_FREEZE = (1 << 15),
@@ -613,6 +620,7 @@ typedef enum eSpaceSeq_Flag {
   SEQ_SHOW_SAFE_CENTER = (1 << 9),
   SEQ_SHOW_METADATA = (1 << 10),
   SEQ_SHOW_MARKERS = (1 << 11), /* show markers region */
+  SEQ_ZOOM_TO_FIT = (1 << 12),
 } eSpaceSeq_Flag;
 
 /* SpaceSeq.view */
@@ -624,13 +632,13 @@ typedef enum eSpaceSeq_Displays {
 
 /* SpaceSeq.render_size */
 typedef enum eSpaceSeq_Proxy_RenderSize {
-  SEQ_PROXY_RENDER_SIZE_NONE = -1,
-  SEQ_PROXY_RENDER_SIZE_SCENE = 0,
-  SEQ_PROXY_RENDER_SIZE_25 = 25,
-  SEQ_PROXY_RENDER_SIZE_50 = 50,
-  SEQ_PROXY_RENDER_SIZE_75 = 75,
-  SEQ_PROXY_RENDER_SIZE_100 = 99,
-  SEQ_PROXY_RENDER_SIZE_FULL = 100,
+  SEQ_RENDER_SIZE_NONE = -1,
+  SEQ_RENDER_SIZE_SCENE = 0,
+  SEQ_RENDER_SIZE_PROXY_25 = 25,
+  SEQ_RENDER_SIZE_PROXY_50 = 50,
+  SEQ_RENDER_SIZE_PROXY_75 = 75,
+  SEQ_RENDER_SIZE_PROXY_100 = 99,
+  SEQ_RENDER_SIZE_FULL = 100,
 } eSpaceSeq_Proxy_RenderSize;
 
 typedef struct MaskSpaceInfo {
@@ -690,7 +698,7 @@ typedef struct FileSelectParams {
 
   /* short */
   /** XXXXX for now store type here, should be moved to the operator. */
-  short type;
+  short type; /* eFileSelectType */
   /** Settings for filter, hiding dots files. */
   short flag;
   /** Sort order. */
@@ -757,7 +765,13 @@ typedef struct SpaceFile {
 
 /* FileSelectParams.display */
 enum eFileDisplayType {
+  /** Internal (not exposed to users): Keep whatever display type was used during the last File
+   * Browser use, or the default if no such record is found. Use this unless there's a good reason
+   * to set a specific display type. */
   FILE_DEFAULTDISPLAY = 0,
+
+  /* User selectable choices. */
+
   FILE_VERTICALDISPLAY = 1,
   FILE_HORIZONTALDISPLAY = 2,
   FILE_IMGDISPLAY = 3,
@@ -765,7 +779,13 @@ enum eFileDisplayType {
 
 /* FileSelectParams.sort */
 enum eFileSortType {
-  FILE_SORT_NONE = 0,
+  /** Internal (not exposed to users): Sort by whatever was sorted by during the last File Browser
+   * use, or the default if no such record is found. Use this unless there's a good reason to set a
+   * specific sort order. */
+  FILE_SORT_DEFAULT = 0,
+
+  /* User selectable choices. */
+
   FILE_SORT_ALPHA = 1,
   FILE_SORT_EXTENSION = 2,
   FILE_SORT_TIME = 3,
@@ -787,12 +807,14 @@ enum eFileDetails {
 #define FILE_MAX_LIBEXTRA (FILE_MAX + MAX_ID_NAME)
 
 /* filesel types */
-#define FILE_UNIX 8
-#define FILE_BLENDER 8 /* don't display relative paths */
-#define FILE_SPECIAL 9
+typedef enum eFileSelectType {
+  FILE_LOADLIB = 1,
+  FILE_MAIN = 2,
 
-#define FILE_LOADLIB 1
-#define FILE_MAIN 2
+  FILE_UNIX = 8,
+  FILE_BLENDER = 8, /* don't display relative paths */
+  FILE_SPECIAL = 9,
+} eFileSelectType;
 
 /* filesel op property -> action */
 typedef enum eFileSel_Action {
@@ -801,8 +823,10 @@ typedef enum eFileSel_Action {
 } eFileSel_Action;
 
 /* sfile->params->flag */
-/* Note: short flag, also used as 16 lower bits of flags in link/append code
- *       (WM and BLO code area, see BLO_LibLinkFlags in BLO_readfile.h). */
+/**
+ * \note short flag, also used as 16 lower bits of flags in link/append code
+ * (WM and BLO code area, see #eBLOLibLinkFlags in BLO_readfile.h).
+ */
 typedef enum eFileSel_Params_Flag {
   FILE_PARAMS_FLAG_UNUSED_1 = (1 << 0), /* cleared */
   FILE_RELPATH = (1 << 1),
@@ -813,8 +837,8 @@ typedef enum eFileSel_Params_Flag {
   FILE_PARAMS_FLAG_UNUSED_6 = (1 << 6), /* cleared */
   FILE_DIRSEL_ONLY = (1 << 7),
   FILE_FILTER = (1 << 8),
-  FILE_PARAMS_FLAG_UNUSED_9 = (1 << 9), /* cleared */
-  FILE_GROUP_INSTANCE = (1 << 10),
+  FILE_OBDATA_INSTANCE = (1 << 9),
+  FILE_COLLECTION_INSTANCE = (1 << 10),
   FILE_SORT_INVERT = (1 << 11),
   FILE_HIDE_TOOL_PROPS = (1 << 12),
   FILE_CHECK_EXISTING = (1 << 13),
@@ -833,9 +857,10 @@ typedef enum eFileSel_Params_RenameFlag {
   FILE_PARAMS_RENAME_POSTSCROLL_ACTIVE = 1 << 3,
 } eFileSel_Params_RenameFlag;
 
-/* files in filesel list: file types
- * Note we could use mere values (instead of bitflags) for file types themselves,
- * but since we do not lack of bytes currently...
+/**
+ * Files in the file selector list: file types
+ * Note we could use mere values (instead of bit-flags) for file types themselves,
+ * but since we do not lack of bytes currently.
  */
 typedef enum eFileSel_File_Types {
   FILE_TYPE_BLENDER = (1 << 2),
@@ -1023,6 +1048,12 @@ enum {
  * \{ */
 
 /* Image/UV Editor */
+
+typedef struct SpaceImageOverlay {
+  int flag;
+  char _pad[4];
+} SpaceImageOverlay;
+
 typedef struct SpaceImage {
   SpaceLink *next, *prev;
   /** Storage of regions for inactive spaces. */
@@ -1082,6 +1113,7 @@ typedef struct SpaceImage {
   int tile_grid_shape[2];
 
   MaskSpaceInfo mask_info;
+  SpaceImageOverlay overlay;
 } SpaceImage;
 
 /* SpaceImage.dt_uv */
@@ -1144,14 +1176,15 @@ typedef enum eSpaceImage_Flag {
   SI_PREVSPACE = (1 << 15),
   SI_FULLWINDOW = (1 << 16),
 
-  SI_FLAG_UNUSED_17 = (1 << 17), /* cleared */
+  SI_FLAG_UNUSED_17 = (1 << 17),
   SI_FLAG_UNUSED_18 = (1 << 18), /* cleared */
 
-  /* this means that the image is drawn until it reaches the view edge,
-   * in the image view, it's unrelated to the 'tile' mode for texface
+  /**
+   * This means that the image is drawn until it reaches the view edge,
+   * in the image view, it's unrelated to UDIM tiles.
    */
   SI_DRAW_TILE = (1 << 19),
-  SI_SMOOTH_UV = (1 << 20),
+  SI_FLAG_UNUSED_20 = (1 << 20), /* cleared */
   SI_DRAW_STRETCH = (1 << 21),
   SI_SHOW_GPENCIL = (1 << 22),
   SI_FLAG_UNUSED_23 = (1 << 23), /* cleared */
@@ -1165,6 +1198,10 @@ typedef enum eSpaceImage_Flag {
   SI_SHOW_G = (1 << 28),
   SI_SHOW_B = (1 << 29),
 } eSpaceImage_Flag;
+
+typedef enum eSpaceImageOverlay_Flag {
+  SI_OVERLAY_SHOW_OVERLAYS = (1 << 0),
+} eSpaceImageOverlay_Flag;
 
 /** \} */
 
@@ -1219,7 +1256,11 @@ typedef struct SpaceText {
 
   struct Text *text;
 
-  int top, left;
+  /** Determines at what line the top of the text is displayed. */
+  int top;
+
+  /** Determines the horizontal scroll (in columns). */
+  int left;
   char _pad1[4];
 
   short flags;
@@ -1646,10 +1687,6 @@ typedef enum eSpaceClip_GPencil_Source {
 /** \name Top Bar
  * \{ */
 
-/* These two lines with # tell makesdna this struct can be excluded.
- * Should be: #ifndef WITH_GLOBAL_AREA_WRITING */
-#
-#
 typedef struct SpaceTopBar {
   SpaceLink *next, *prev;
   /** Storage of regions for inactive spaces. */
@@ -1666,10 +1703,6 @@ typedef struct SpaceTopBar {
 /** \name Status Bar
  * \{ */
 
-/* These two lines with # tell makesdna this struct can be excluded.
- * Should be: #ifndef WITH_GLOBAL_AREA_WRITING */
-#
-#
 typedef struct SpaceStatusBar {
   SpaceLink *next, *prev;
   /** Storage of regions for inactive spaces. */
@@ -1730,4 +1763,6 @@ typedef enum eSpace_Type {
 
 /** \} */
 
-#endif /* __DNA_SPACE_TYPES_H__ */
+#ifdef __cplusplus
+}
+#endif

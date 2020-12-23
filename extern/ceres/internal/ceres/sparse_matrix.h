@@ -34,8 +34,10 @@
 #define CERES_INTERNAL_SPARSE_MATRIX_H_
 
 #include <cstdio>
-#include "ceres/linear_operator.h"
+
 #include "ceres/internal/eigen.h"
+#include "ceres/internal/port.h"
+#include "ceres/linear_operator.h"
 #include "ceres/types.h"
 
 namespace ceres {
@@ -62,7 +64,7 @@ namespace internal {
 // matrix type dependent and we are at this stage unable to come up
 // with an efficient high level interface that spans multiple sparse
 // matrix types.
-class SparseMatrix : public LinearOperator {
+class CERES_EXPORT_INTERNAL SparseMatrix : public LinearOperator {
  public:
   virtual ~SparseMatrix();
 
@@ -90,7 +92,7 @@ class SparseMatrix : public LinearOperator {
   virtual void ToTextFile(FILE* file) const = 0;
 
   // Accessors for the values array that stores the entries of the
-  // sparse matrix. The exact interpreptation of the values of this
+  // sparse matrix. The exact interpretation of the values of this
   // array depends on the particular kind of SparseMatrix being
   // accessed.
   virtual double* mutable_values() = 0;

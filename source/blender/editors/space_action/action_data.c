@@ -108,7 +108,7 @@ static bAction *action_create_new(bContext *C, bAction *oldact)
    */
   if (oldact && GS(oldact->id.name) == ID_AC) {
     /* make a copy of the existing action */
-    action = BKE_action_copy(CTX_data_main(C), oldact);
+    action = (bAction *)BKE_id_copy(CTX_data_main(C), &oldact->id);
   }
   else {
     /* just make a new (empty) action */
@@ -240,7 +240,7 @@ static int action_new_exec(bContext *C, wmOperator *UNUSED(op))
     /* Perform stashing operation - But only if there is an action */
     if (adt && oldact) {
       /* stash the action */
-      if (BKE_nla_action_stash(adt)) {
+      if (BKE_nla_action_stash(adt, ID_IS_OVERRIDE_LIBRARY(ptr.owner_id))) {
         /* The stash operation will remove the user already
          * (and unlink the action from the AnimData action slot).
          * Hence, we must unset the ref to the action in the
@@ -337,10 +337,10 @@ static int action_pushdown_exec(bContext *C, wmOperator *op)
       BKE_report(op->reports, RPT_WARNING, "Action must have at least one keyframe or F-Modifier");
       return OPERATOR_CANCELLED;
     }
-    else {
-      /* action can be safely added */
-      BKE_nla_action_pushdown(adt);
-    }
+
+    /* action can be safely added */
+    const Object *ob = CTX_data_active_object(C);
+    BKE_nla_action_pushdown(adt, ID_IS_OVERRIDE_LIBRARY(ob));
 
     /* Stop displaying this action in this editor
      * NOTE: The editor itself doesn't set a user...
@@ -383,24 +383,24 @@ static int action_stash_exec(bContext *C, wmOperator *op)
       BKE_report(op->reports, RPT_WARNING, "Action must have at least one keyframe or F-Modifier");
       return OPERATOR_CANCELLED;
     }
-    else {
-      /* stash the action */
-      if (BKE_nla_action_stash(adt)) {
-        /* The stash operation will remove the user already,
-         * so the flushing step later shouldn't double up
-         * the user-count fixes. Hence, we must unset this ref
-         * first before setting the new action.
-         */
-        saction->action = NULL;
-      }
-      else {
-        /* action has already been added - simply warn about this, and clear */
-        BKE_report(op->reports, RPT_ERROR, "Action has already been stashed");
-      }
 
-      /* clear action refs from editor, and then also the backing data (not necessary) */
-      actedit_change_action(C, NULL);
+    /* stash the action */
+    Object *ob = CTX_data_active_object(C);
+    if (BKE_nla_action_stash(adt, ID_IS_OVERRIDE_LIBRARY(ob))) {
+      /* The stash operation will remove the user already,
+       * so the flushing step later shouldn't double up
+       * the user-count fixes. Hence, we must unset this ref
+       * first before setting the new action.
+       */
+      saction->action = NULL;
     }
+    else {
+      /* action has already been added - simply warn about this, and clear */
+      BKE_report(op->reports, RPT_ERROR, "Action has already been stashed");
+    }
+
+    /* clear action refs from editor, and then also the backing data (not necessary) */
+    actedit_change_action(C, NULL);
   }
 
   /* Send notifiers that stuff has changed */
@@ -486,28 +486,28 @@ static int action_stash_create_exec(bContext *C, wmOperator *op)
       BKE_report(op->reports, RPT_WARNING, "Action must have at least one keyframe or F-Modifier");
       return OPERATOR_CANCELLED;
     }
+
+    /* stash the action */
+    Object *ob = CTX_data_active_object(C);
+    if (BKE_nla_action_stash(adt, ID_IS_OVERRIDE_LIBRARY(ob))) {
+      bAction *new_action = NULL;
+
+      /* Create new action not based on the old one
+       * (since the "new" operator already does that). */
+      new_action = action_create_new(C, NULL);
+
+      /* The stash operation will remove the user already,
+       * so the flushing step later shouldn't double up
+       * the user-count fixes. Hence, we must unset this ref
+       * first before setting the new action.
+       */
+      saction->action = NULL;
+      actedit_change_action(C, new_action);
+    }
     else {
-      /* stash the action */
-      if (BKE_nla_action_stash(adt)) {
-        bAction *new_action = NULL;
-
-        /* Create new action not based on the old one
-         * (since the "new" operator already does that). */
-        new_action = action_create_new(C, NULL);
-
-        /* The stash operation will remove the user already,
-         * so the flushing step later shouldn't double up
-         * the user-count fixes. Hence, we must unset this ref
-         * first before setting the new action.
-         */
-        saction->action = NULL;
-        actedit_change_action(C, new_action);
-      }
-      else {
-        /* action has already been added - simply warn about this, and clear */
-        BKE_report(op->reports, RPT_ERROR, "Action has already been stashed");
-        actedit_change_action(C, NULL);
-      }
+      /* action has already been added - simply warn about this, and clear */
+      BKE_report(op->reports, RPT_ERROR, "Action has already been stashed");
+      actedit_change_action(C, NULL);
     }
   }
 
@@ -709,11 +709,11 @@ static NlaStrip *action_layer_get_nlastrip(ListBase *strips, float ctime)
       /* in range - use this one */
       return strip;
     }
-    else if ((ctime < strip->start) && (strip->prev == NULL)) {
+    if ((ctime < strip->start) && (strip->prev == NULL)) {
       /* before first - use this one */
       return strip;
     }
-    else if ((ctime > strip->end) && (strip->next == NULL)) {
+    if ((ctime > strip->end) && (strip->next == NULL)) {
       /* after last - use this one */
       return strip;
     }
@@ -760,7 +760,7 @@ static void action_layer_switch_strip(
       adt->flag |= ADT_NLA_SOLO_TRACK;
       nlt->flag |= NLATRACK_SOLO;
 
-      // TODO: Needs rest-pose flushing (when we get reference track)
+      /* TODO: Needs rest-pose flushing (when we get reference track) */
     }
   }
 
@@ -854,7 +854,7 @@ static int action_layer_next_exec(bContext *C, wmOperator *op)
       /* turn on NLA muting (to keep same effect) */
       adt->flag |= ADT_NLA_EVAL_OFF;
 
-      // TODO: Needs rest-pose flushing (when we get reference track)
+      /* TODO: Needs rest-pose flushing (when we get reference track) */
     }
   }
 

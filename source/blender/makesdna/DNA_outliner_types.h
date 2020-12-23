@@ -21,10 +21,13 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_OUTLINER_TYPES_H__
-#define __DNA_OUTLINER_TYPES_H__
+#pragma once
 
 #include "DNA_defs.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct ID;
 
@@ -62,9 +65,10 @@ enum {
   TSE_DRAG_AFTER = (1 << 8),
   /* Needed because outliner-only elements can be active */
   TSE_ACTIVE = (1 << 9),
-  /* Needed because walk selection should not activate */
-  TSE_ACTIVE_WALK = (1 << 10),
+  /* TSE_ACTIVE_WALK = (1 << 10), */ /* Unused */
+  TSE_HIGHLIGHTED_ICON = (1 << 11),
   TSE_DRAG_ANY = (TSE_DRAG_INTO | TSE_DRAG_BEFORE | TSE_DRAG_AFTER),
+  TSE_HIGHLIGHTED_ANY = (TSE_HIGHLIGHTED | TSE_HIGHLIGHTED_ICON),
 };
 
 /* TreeStoreElem->types */
@@ -111,6 +115,8 @@ enum {
 #define TSE_SCENE_COLLECTION_BASE 39
 #define TSE_VIEW_COLLECTION_BASE 40
 #define TSE_SCENE_OBJECTS_BASE 41
+#define TSE_GPENCIL_EFFECT_BASE 42
+#define TSE_GPENCIL_EFFECT 43
 
 /* Check whether given TreeStoreElem should have a real ID in its ->id member. */
 #define TSE_IS_REAL_ID(_tse) \
@@ -129,4 +135,6 @@ enum {
          TSE_ID_BASE, \
          TSE_GP_LAYER))
 
+#ifdef __cplusplus
+}
 #endif

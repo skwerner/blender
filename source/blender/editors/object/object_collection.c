@@ -50,6 +50,8 @@
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
 
+#include "UI_interface_icons.h"
+
 #include "object_intern.h"
 
 /********************* 3d view operators ***********************/
@@ -94,7 +96,7 @@ static const EnumPropertyItem *collection_object_active_itemf(bContext *C,
     collection = NULL;
     while ((collection = BKE_collection_object_find(bmain, scene, collection, ob))) {
       item_tmp.identifier = item_tmp.name = collection->id.name + 2;
-      /* item_tmp.icon = ICON_ARMATURE_DATA; */
+      item_tmp.icon = UI_icon_color_from_collection(collection);
       item_tmp.value = i;
       RNA_enum_item_add(&item, &totitem, &item_tmp);
       i++;
@@ -483,13 +485,13 @@ static int collection_link_exec(bContext *C, wmOperator *op)
 
   /* Currently this should not be allowed (might be supported in the future though...). */
   if (ID_IS_OVERRIDE_LIBRARY(&collection->id)) {
-    BKE_report(op->reports, RPT_ERROR, "Could not add the collection because it is overridden.");
+    BKE_report(op->reports, RPT_ERROR, "Could not add the collection because it is overridden");
     return OPERATOR_CANCELLED;
   }
   /* Linked collections are already checked for by using RNA_collection_local_itemf
    * but operator can be called without invoke */
   if (ID_IS_LINKED(&collection->id)) {
-    BKE_report(op->reports, RPT_ERROR, "Could not add the collection because it is linked.");
+    BKE_report(op->reports, RPT_ERROR, "Could not add the collection because it is linked");
     return OPERATOR_CANCELLED;
   }
 

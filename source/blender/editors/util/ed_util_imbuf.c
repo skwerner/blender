@@ -30,7 +30,6 @@
 #include "BKE_image.h"
 #include "BKE_main.h"
 #include "BKE_screen.h"
-#include "BKE_sequencer.h"
 
 #include "ED_image.h"
 #include "ED_screen.h"
@@ -42,6 +41,8 @@
 #include "IMB_colormanagement.h"
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
+
+#include "SEQ_sequencer.h"
 
 #include "UI_view2d.h"
 
@@ -273,7 +274,7 @@ static void image_sample_apply(bContext *C, wmOperator *op, const wmEvent *event
       }
     }
 
-    // XXX node curve integration ..
+    /* XXX node curve integration. */
 #if 0
     {
       ScrArea *sa, *cur = curarea;
@@ -305,7 +306,7 @@ static void sequencer_sample_apply(bContext *C, wmOperator *op, const wmEvent *e
   Scene *scene = CTX_data_scene(C);
   SpaceSeq *sseq = (SpaceSeq *)CTX_wm_space_data(C);
   ARegion *region = CTX_wm_region(C);
-  ImBuf *ibuf = sequencer_ibuf_get(bmain, depsgraph, scene, sseq, CFRA, 0, NULL);
+  ImBuf *ibuf = sequencer_ibuf_get(bmain, region, depsgraph, scene, sseq, CFRA, 0, NULL);
   ImageSampleInfo *info = op->customdata;
   float fx, fy;
 
@@ -369,7 +370,7 @@ static void sequencer_sample_apply(bContext *C, wmOperator *op, const wmEvent *e
 
       /* sequencer's image buffers are in non-linear space, need to make them linear */
       copy_v4_v4(info->linearcol, info->colf);
-      BKE_sequencer_pixel_from_sequencer_space_v4(scene, info->linearcol);
+      SEQ_render_pixel_from_sequencer_space_v4(scene, info->linearcol);
 
       info->color_manage = true;
     }
@@ -447,15 +448,16 @@ void ED_imbuf_sample_draw(const bContext *C, ARegion *region, void *arg_info)
           (float[2]){event->x - region->winrct.xmin, event->y - region->winrct.ymin},
           (float)(info->sample_size / 2.0f) * sima->zoom);
 
-      glEnable(GL_COLOR_LOGIC_OP);
-      glLogicOp(GL_XOR);
+      GPU_logic_op_xor_set(true);
+
       GPU_line_width(1.0f);
       imm_draw_box_wire_2d(pos,
                            (float)sample_rect_fl.xmin,
                            (float)sample_rect_fl.ymin,
                            (float)sample_rect_fl.xmax,
                            (float)sample_rect_fl.ymax);
-      glDisable(GL_COLOR_LOGIC_OP);
+
+      GPU_logic_op_xor_set(false);
 
       immUnbindProgram();
     }
@@ -511,7 +513,7 @@ int ED_imbuf_sample_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
   switch (event->type) {
     case LEFTMOUSE:
-    case RIGHTMOUSE:  // XXX hardcoded
+    case RIGHTMOUSE: /* XXX hardcoded */
       if (event->val == KM_RELEASE) {
         ED_imbuf_sample_exit(C, op);
         return OPERATOR_CANCELLED;

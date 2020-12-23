@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
  */
-#ifndef __BKE_MAIN_H__
-#define __BKE_MAIN_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -87,7 +86,7 @@ enum {
 typedef struct Main {
   struct Main *next, *prev;
   char name[1024];                   /* 1024 = FILE_MAX */
-  short versionfile, subversionfile; /* see BLENDER_VERSION, BLENDER_SUBVERSION */
+  short versionfile, subversionfile; /* see BLENDER_FILE_VERSION, BLENDER_FILE_SUBVERSION */
   short minversionfile, minsubversionfile;
   uint64_t build_commit_timestamp; /* commit's timestamp from buildinfo */
   char build_hash[16];             /* hash from buildinfo */
@@ -95,12 +94,12 @@ typedef struct Main {
   /** All current ID's exist in the last memfile undo step. */
   char is_memfile_undo_written;
   /**
-   * An ID needs it's data to be flushed back.
+   * An ID needs its data to be flushed back.
    * use "needs_flush_to_id" in edit data to flag data which needs updating.
    */
   char is_memfile_undo_flush_needed;
   /**
-   * Indicates that next memfile undo step should not allow to re-use old bmain when re-read, but
+   * Indicates that next memfile undo step should not allow reusing old bmain when re-read, but
    * instead do a complete full re-read/update from stored memfile.
    */
   char use_memfile_full_barrier;
@@ -173,6 +172,7 @@ void BKE_main_unlock(struct Main *bmain);
 
 void BKE_main_relations_create(struct Main *bmain, const short flag);
 void BKE_main_relations_free(struct Main *bmain);
+void BKE_main_relations_ID_remove(struct Main *bmain, struct ID *id);
 
 struct GSet *BKE_main_gset_create(struct Main *bmain, struct GSet *gset);
 
@@ -225,7 +225,7 @@ void BKE_main_thumbnail_create(struct Main *bmain);
 const char *BKE_main_blendfile_path(const struct Main *bmain) ATTR_NONNULL();
 const char *BKE_main_blendfile_path_from_global(void);
 
-struct ListBase *which_libbase(struct Main *mainlib, short type);
+struct ListBase *which_libbase(struct Main *bmain, short type);
 
 #define MAX_LIBARRAY 41
 int set_listbasepointers(struct Main *main, struct ListBase *lb[MAX_LIBARRAY]);
@@ -249,5 +249,3 @@ int set_listbasepointers(struct Main *main, struct ListBase *lb[MAX_LIBARRAY]);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_MAIN_H__ */

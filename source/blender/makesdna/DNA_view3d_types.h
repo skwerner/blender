@@ -21,8 +21,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_VIEW3D_TYPES_H__
-#define __DNA_VIEW3D_TYPES_H__
+#pragma once
 
 struct BoundBox;
 struct Object;
@@ -39,6 +38,10 @@ struct wmTimer;
 #include "DNA_movieclip_types.h"
 #include "DNA_object_types.h"
 #include "DNA_view3d_enums.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct RegionView3D {
 
@@ -189,8 +192,10 @@ typedef struct View3DShading {
 
   /* Render pass displayed in the viewport. Is an `eScenePassType` where one bit is set */
   int render_pass;
+  char aov_name[64];
 
   struct IDProperty *prop;
+  void *_pad2;
 } View3DShading;
 
 /** 3D Viewport Overlay settings. */
@@ -218,8 +223,12 @@ typedef struct View3DOverlay {
   /** Armature edit/pose mode settings. */
   float xray_alpha_bone;
 
+  /** Darken Inactive. */
+  float fade_alpha;
+
   /** Other settings. */
   float wireframe_threshold;
+  float wireframe_opacity;
 
   /** Grease pencil settings. */
   float gpencil_paper_opacity;
@@ -228,8 +237,19 @@ typedef struct View3DOverlay {
 
   /** Factor for mixing vertex paint with original color */
   float gpencil_vertex_paint_opacity;
-  char _pad4[4];
+  /** Handles display type for curves. */
+  int handle_display;
 } View3DOverlay;
+
+/* View3DOverlay->handle_display */
+typedef enum eHandleDisplay {
+  /* Display only selected points. */
+  CURVE_HANDLE_SELECTED = 0,
+  /* Display all handles. */
+  CURVE_HANDLE_ALL = 1,
+  /* No display handles. */
+  CURVE_HANDLE_NONE = 2,
+} eHandleDisplay;
 
 typedef struct View3D_Runtime {
   /** Nkey panel stores stuff here. */
@@ -468,6 +488,7 @@ enum {
   V3D_SHADING_DEPTH_OF_FIELD = (1 << 11),
   V3D_SHADING_SCENE_LIGHTS_RENDER = (1 << 12),
   V3D_SHADING_SCENE_WORLD_RENDER = (1 << 13),
+  V3D_SHADING_STUDIOLIGHT_VIEW_ROTATION = (1 << 14),
 };
 
 /** #View3DShading.cavity_type */
@@ -491,6 +512,7 @@ enum {
   V3D_OVERLAY_HIDE_OBJECT_XTRAS = (1 << 9),
   V3D_OVERLAY_HIDE_OBJECT_ORIGINS = (1 << 10),
   V3D_OVERLAY_STATS = (1 << 11),
+  V3D_OVERLAY_FADE_INACTIVE = (1 << 12),
 };
 
 /** #View3DOverlay.edit_flag */
@@ -522,7 +544,9 @@ enum {
   V3D_OVERLAY_EDIT_FACE_AREA = (1 << 18),
   V3D_OVERLAY_EDIT_INDICES = (1 << 19),
 
-  V3D_OVERLAY_EDIT_CU_HANDLES = (1 << 20),
+  /* Deprecated. */
+  /* V3D_OVERLAY_EDIT_CU_HANDLES = (1 << 20),  */
+
   V3D_OVERLAY_EDIT_CU_NORMALS = (1 << 21),
 };
 
@@ -617,4 +641,6 @@ enum {
 #define RV3D_CAMZOOM_MIN_FACTOR 0.1657359312880714853f
 #define RV3D_CAMZOOM_MAX_FACTOR 44.9852813742385702928f
 
+#ifdef __cplusplus
+}
 #endif

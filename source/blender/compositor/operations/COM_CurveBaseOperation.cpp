@@ -20,34 +20,34 @@
 
 #include "BKE_colortools.h"
 
-CurveBaseOperation::CurveBaseOperation() : NodeOperation()
+CurveBaseOperation::CurveBaseOperation()
 {
-  this->m_curveMapping = NULL;
+  this->m_curveMapping = nullptr;
 }
 
 CurveBaseOperation::~CurveBaseOperation()
 {
   if (this->m_curveMapping) {
     BKE_curvemapping_free(this->m_curveMapping);
-    this->m_curveMapping = NULL;
+    this->m_curveMapping = nullptr;
   }
 }
 
 void CurveBaseOperation::initExecution()
 {
-  BKE_curvemapping_initialize(this->m_curveMapping);
+  BKE_curvemapping_init(this->m_curveMapping);
 }
 void CurveBaseOperation::deinitExecution()
 {
   if (this->m_curveMapping) {
     BKE_curvemapping_free(this->m_curveMapping);
-    this->m_curveMapping = NULL;
+    this->m_curveMapping = nullptr;
   }
 }
 
 void CurveBaseOperation::setCurveMapping(CurveMapping *mapping)
 {
-  /* duplicate the curve to avoid glitches while drawing, see bug [#32374] */
+  /* duplicate the curve to avoid glitches while drawing, see bug T32374. */
   if (this->m_curveMapping) {
     BKE_curvemapping_free(this->m_curveMapping);
   }

@@ -29,37 +29,47 @@
 #include "BLI_math_color.h"
 #include "BLI_math_vector.h"
 
+#include "BLT_translation.h"
+
+#include "DNA_defaults.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
+#include "DNA_material_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
 
 #include "BKE_colortools.h"
+#include "BKE_context.h"
 #include "BKE_gpencil.h"
 #include "BKE_gpencil_modifier.h"
 #include "BKE_lib_query.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
+#include "BKE_screen.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
 #include "BKE_modifier.h"
+#include "RNA_access.h"
 
 #include "DEG_depsgraph.h"
 
 #include "MOD_gpencil_modifiertypes.h"
+#include "MOD_gpencil_ui_common.h"
 #include "MOD_gpencil_util.h"
 
 static void initData(GpencilModifierData *md)
 {
   ColorGpencilModifierData *gpmd = (ColorGpencilModifierData *)md;
-  gpmd->pass_index = 0;
-  ARRAY_SET_ITEMS(gpmd->hsv, 0.5f, 1.0f, 1.0f);
-  gpmd->material = NULL;
-  gpmd->modify_color = GP_MODIFY_COLOR_BOTH;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(gpmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(gpmd, DNA_struct_default_get(ColorGpencilModifierData), modifier);
 
   gpmd->curve_intensity = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
-  if (gpmd->curve_intensity) {
-    CurveMapping *curve = gpmd->curve_intensity;
-    BKE_curvemapping_initialize(curve);
-  }
+  BKE_curvemapping_init(gpmd->curve_intensity);
 }
 
 static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
@@ -186,6 +196,41 @@ static void foreachIDLink(GpencilModifierData *md, Object *ob, IDWalkFunc walk, 
   walk(userData, ob, (ID **)&mmd->material, IDWALK_CB_USER);
 }
 
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, NULL);
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, ptr, "modify_color", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "hue", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "saturation", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "value", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
+
+  gpencil_modifier_panel_end(layout, ptr);
+}
+
+static void mask_panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  gpencil_modifier_masking_panel_draw(panel, true, false);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  PanelType *panel_type = gpencil_modifier_panel_register(
+      region_type, eGpencilModifierType_Color, panel_draw);
+  PanelType *mask_panel_type = gpencil_modifier_subpanel_register(
+      region_type, "mask", "Influence", NULL, mask_panel_draw, panel_type);
+  gpencil_modifier_subpanel_register(region_type,
+                                     "curve",
+                                     "",
+                                     gpencil_modifier_curve_header_draw,
+                                     gpencil_modifier_curve_panel_draw,
+                                     mask_panel_type);
+}
+
 GpencilModifierTypeInfo modifierType_Gpencil_Color = {
     /* name */ "Hue/Saturation",
     /* structName */ "ColorGpencilModifierData",
@@ -205,7 +250,7 @@ GpencilModifierTypeInfo modifierType_Gpencil_Color = {
     /* isDisabled */ NULL,
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ NULL,
-    /* foreachObjectLink */ NULL,
     /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
+    /* panelRegister */ panelRegister,
 };

@@ -26,15 +26,14 @@
 #include "intern/node/deg_node.h"
 #include "intern/node/deg_node_operation.h"
 
-#include "BLI_ghash.h"
-#include "BLI_hash.hh"
 #include "BLI_string.h"
 #include "BLI_utildefines.h"
 
 struct ID;
 struct bPoseChannel;
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 struct BoneComponentNode;
 struct Depsgraph;
@@ -55,6 +54,7 @@ struct ComponentNode : public Node {
 
     string identifier() const;
     bool operator==(const OperationIDKey &other) const;
+    uint64_t hash() const;
   };
 
   /* Typedef for container of operations */
@@ -84,12 +84,9 @@ struct ComponentNode : public Node {
    * when node may have been partially created earlier (e.g. parent ref before
    * parent item is added)
    *
-   * \param type: Operation node type (corresponding to context/component that
-   *              it operates in)
-   * \param optype: Role that operation plays within component
-   *                (i.e. where in eval process)
-   * \param op: The operation to perform
-   * \param name: Identifier for operation - used to find/locate it again */
+   * \param opcode: The operation to perform.
+   * \param name: Identifier for operation - used to find/locate it again.
+   */
   OperationNode *add_operation(const DepsEvalOperationCb &op,
                                OperationCode opcode,
                                const char *name,
@@ -120,7 +117,7 @@ struct ComponentNode : public Node {
 
   /* This is a "normal" list of operations, used by evaluation
    * and other routines after construction. */
-  vector<OperationNode *> operations;
+  Vector<OperationNode *> operations;
 
   OperationNode *entry_operation;
   OperationNode *exit_operation;
@@ -204,19 +201,5 @@ struct BoneComponentNode : public ComponentNode {
 
 void deg_register_component_depsnodes();
 
-}  // namespace DEG
-
-namespace BLI {
-
-template<> struct DefaultHash<DEG::ComponentNode::OperationIDKey> {
-  uint32_t operator()(const DEG::ComponentNode::OperationIDKey &key) const
-  {
-    const int opcode_as_int = static_cast<int>(key.opcode);
-    return BLI_ghashutil_combine_hash(
-        key.name_tag,
-        BLI_ghashutil_combine_hash(BLI_ghashutil_uinthash(opcode_as_int),
-                                   BLI_ghashutil_strhash_p(key.name)));
-  }
-};
-
-}  // namespace BLI
+}  // namespace deg
+}  // namespace blender

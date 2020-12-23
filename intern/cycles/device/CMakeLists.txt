@@ -1,3 +1,16 @@
+# Copyright 2011-2020 Blender Foundation
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 set(INC
   ..
@@ -26,6 +39,7 @@ set(SRC
   device_cpu.cpp
   device_cuda.cpp
   device_denoising.cpp
+  device_dummy.cpp
   device_memory.cpp
   device_multi.cpp
   device_opencl.cpp
@@ -67,6 +81,7 @@ set(LIB
   cycles_render
   cycles_kernel
   cycles_util
+  ${CYCLES_GL_LIBRARIES}
 )
 
 if(WITH_CUDA_DYNLOAD)
@@ -97,6 +112,18 @@ if(WITH_CYCLES_DEVICE_OPTIX)
 endif()
 if(WITH_CYCLES_DEVICE_MULTI)
   add_definitions(-DWITH_MULTI)
+endif()
+
+if(WITH_OPENIMAGEDENOISE)
+  add_definitions(-DWITH_OPENIMAGEDENOISE)
+  add_definitions(-DOIDN_STATIC_LIB)
+  list(APPEND INC_SYS
+    ${OPENIMAGEDENOISE_INCLUDE_DIRS}
+  )
+  list(APPEND LIB
+    ${OPENIMAGEDENOISE_LIBRARIES}
+    ${TBB_LIBRARIES}
+  )
 endif()
 
 include_directories(${INC})

@@ -18,10 +18,14 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_DYNAMICPAINT_TYPES_H__
-#define __DNA_DYNAMICPAINT_TYPES_H__
+#pragma once
 
 #include "DNA_listBase.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct PaintSurfaceData;
 
 /* surface format */
@@ -263,4 +267,6 @@ typedef struct DynamicPaintBrushSettings {
   float max_velocity, smudge_strength;
 } DynamicPaintBrushSettings;
 
+#ifdef __cplusplus
+}
 #endif

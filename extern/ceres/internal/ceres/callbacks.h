@@ -32,8 +32,9 @@
 #define CERES_INTERNAL_CALLBACKS_H_
 
 #include <string>
-#include "ceres/iteration_callback.h"
+
 #include "ceres/internal/port.h"
+#include "ceres/iteration_callback.h"
 
 namespace ceres {
 namespace internal {
@@ -46,10 +47,27 @@ class StateUpdatingCallback : public IterationCallback {
  public:
   StateUpdatingCallback(Program* program, double* parameters);
   virtual ~StateUpdatingCallback();
-  virtual CallbackReturnType operator()(const IterationSummary& summary);
+  CallbackReturnType operator()(const IterationSummary& summary) final;
+
  private:
   Program* program_;
   double* parameters_;
+};
+
+// Callback for updating the externally visible state of the
+// parameters vector for GradientProblemSolver.
+class GradientProblemSolverStateUpdatingCallback : public IterationCallback {
+ public:
+  GradientProblemSolverStateUpdatingCallback(int num_parameters,
+                                             const double* internal_parameters,
+                                             double* user_parameters);
+  virtual ~GradientProblemSolverStateUpdatingCallback();
+  CallbackReturnType operator()(const IterationSummary& summary) final;
+
+ private:
+  int num_parameters_;
+  const double* internal_parameters_;
+  double* user_parameters_;
 };
 
 // Callback for logging the state of the minimizer to STDERR or
@@ -58,7 +76,7 @@ class LoggingCallback : public IterationCallback {
  public:
   LoggingCallback(MinimizerType minimizer_type, bool log_to_stdout);
   virtual ~LoggingCallback();
-  virtual CallbackReturnType operator()(const IterationSummary& summary);
+  CallbackReturnType operator()(const IterationSummary& summary) final;
 
  private:
   const MinimizerType minimizer_type;

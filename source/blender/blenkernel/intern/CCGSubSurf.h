@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __CCGSUBSURF_H__
-#define __CCGSUBSURF_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -73,7 +72,7 @@ typedef enum {
 /***/
 
 CCGSubSurf *ccgSubSurf_new(CCGMeshIFC *ifc,
-                           int subdivisionLevels,
+                           int subdivLevels,
                            CCGAllocatorIFC *allocatorIFC,
                            CCGAllocatorHDL allocator);
 void ccgSubSurf_free(CCGSubSurf *ss);
@@ -101,11 +100,14 @@ CCGError ccgSubSurf_syncFaceDel(CCGSubSurf *ss, CCGFaceHDL fHDL);
 
 CCGError ccgSubSurf_processSync(CCGSubSurf *ss);
 
-CCGError ccgSubSurf_updateFromFaces(CCGSubSurf *ss, int lvl, CCGFace **faces, int numFaces);
-CCGError ccgSubSurf_updateToFaces(CCGSubSurf *ss, int lvl, CCGFace **faces, int numFaces);
-CCGError ccgSubSurf_updateNormals(CCGSubSurf *ss, CCGFace **faces, int numFaces);
-CCGError ccgSubSurf_updateLevels(CCGSubSurf *ss, int lvl, CCGFace **faces, int numFaces);
-CCGError ccgSubSurf_stitchFaces(CCGSubSurf *ss, int lvl, CCGFace **faces, int numFaces);
+CCGError ccgSubSurf_updateFromFaces(CCGSubSurf *ss,
+                                    int lvl,
+                                    CCGFace **effectedF,
+                                    int numEffectedF);
+CCGError ccgSubSurf_updateToFaces(CCGSubSurf *ss, int lvl, CCGFace **effectedF, int numEffectedF);
+CCGError ccgSubSurf_updateNormals(CCGSubSurf *ss, CCGFace **effectedF, int numEffectedF);
+CCGError ccgSubSurf_updateLevels(CCGSubSurf *ss, int lvl, CCGFace **effectedF, int numEffectedF);
+CCGError ccgSubSurf_stitchFaces(CCGSubSurf *ss, int lvl, CCGFace **effectedF, int numEffectedF);
 
 CCGError ccgSubSurf_setSubdivisionLevels(CCGSubSurf *ss, int subdivisionLevels);
 
@@ -210,5 +212,3 @@ void ccgEdgeIterator_next(CCGEdgeIterator *ei);
 CCGFace *ccgFaceIterator_getCurrent(CCGFaceIterator *fi);
 int ccgFaceIterator_isStopped(CCGFaceIterator *fi);
 void ccgFaceIterator_next(CCGFaceIterator *fi);
-
-#endif /* __CCGSUBSURF_H__ */

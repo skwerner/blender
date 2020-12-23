@@ -142,7 +142,11 @@ if(WITH_HEADLESS OR WITH_GHOST_SDL)
     list(APPEND INC_SYS
       ${SDL_INCLUDE_DIR}
     )
-    if(NOT WITH_SDL_DYNLOAD)
+    if(WITH_SDL_DYNLOAD)
+      list(APPEND LIB
+        extern_sdlew
+      )
+    else()
       list(APPEND LIB
         ${SDL_LIBRARY}
       )
@@ -332,7 +336,7 @@ elseif(WITH_GHOST_X11 OR WITH_GHOST_WAYLAND)
 elseif(WIN32)
   # # Warnings as errors, this is too strict!
   # if(MSVC)
-  #   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /WX")
+  #   string(APPEND CMAKE_CXX_FLAGS " /WX")
   # endif()
 
   list(APPEND INC_SYS
@@ -429,6 +433,7 @@ if(WITH_XR_OPENXR)
     GHOST_IXrContext.h
     intern/GHOST_IXrGraphicsBinding.h
     intern/GHOST_XrContext.h
+    intern/GHOST_XrException.h
     intern/GHOST_XrSession.h
     intern/GHOST_XrSwapchain.h
     intern/GHOST_Xr_intern.h

@@ -132,7 +132,7 @@ static char *rna_PoseBone_path(PointerRNA *ptr)
   bPoseChannel *pchan = ptr->data;
   char name_esc[sizeof(pchan->name) * 2];
 
-  BLI_strescape(name_esc, pchan->name, sizeof(name_esc));
+  BLI_str_escape(name_esc, pchan->name, sizeof(name_esc));
   return BLI_sprintfN("pose.bones[\"%s\"]", name_esc);
 }
 
@@ -375,14 +375,14 @@ static void rna_Itasc_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerR
   if (itasc->feedback < 0.01f) {
     itasc->feedback = 0.01f;
   }
-  if (itasc->feedback > 100.f) {
-    itasc->feedback = 100.f;
+  if (itasc->feedback > 100.0f) {
+    itasc->feedback = 100.0f;
   }
   if (itasc->maxvel < 0.01f) {
     itasc->maxvel = 0.01f;
   }
-  if (itasc->maxvel > 100.f) {
-    itasc->maxvel = 100.f;
+  if (itasc->maxvel > 100.0f) {
+    itasc->maxvel = 100.0f;
   }
   BIK_update_param(ob->pose);
 
@@ -637,6 +637,21 @@ static void rna_PoseChannel_constraints_move(
   WM_main_add_notifier(NC_OBJECT | ND_CONSTRAINT, ob);
 }
 
+static bConstraint *rna_PoseChannel_constraints_copy(ID *id,
+                                                     bPoseChannel *pchan,
+                                                     Main *bmain,
+                                                     PointerRNA *con_ptr)
+{
+  Object *ob = (Object *)id;
+  bConstraint *con = con_ptr->data;
+  bConstraint *new_con = BKE_constraint_copy_for_pose(ob, pchan, con);
+
+  ED_object_constraint_dependency_tag_update(bmain, ob, new_con);
+  WM_main_add_notifier(NC_OBJECT | ND_CONSTRAINT | NA_ADDED, id);
+
+  return new_con;
+}
+
 bool rna_PoseChannel_constraints_override_apply(Main *UNUSED(bmain),
                                                 PointerRNA *ptr_dst,
                                                 PointerRNA *ptr_src,
@@ -796,7 +811,7 @@ static int rna_PoseChannel_rotation_4d_editable(PointerRNA *ptr, int index)
   return PROP_EDITABLE;
 }
 
-/* not essential, but much faster then the default lookup function */
+/* not essential, but much faster than the default lookup function */
 static int rna_PoseBones_lookup_string(PointerRNA *ptr, const char *key, PointerRNA *r_ptr)
 {
   bPose *pose = (bPose *)ptr->data;
@@ -978,6 +993,21 @@ static void rna_def_pose_channel_constraints(BlenderRNA *brna, PropertyRNA *cpro
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
   parm = RNA_def_int(func, "to_index", -1, INT_MIN, INT_MAX, "To Index", "Target index", 0, 10000);
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
+
+  func = RNA_def_function(srna, "copy", "rna_PoseChannel_constraints_copy");
+  RNA_def_function_ui_description(func, "Add a new constraint that is a copy of the given one");
+  RNA_def_function_flag(func, FUNC_USE_MAIN | FUNC_USE_SELF_ID);
+  /* constraint to copy */
+  parm = RNA_def_pointer(func,
+                         "constraint",
+                         "Constraint",
+                         "",
+                         "Constraint to copy - may belong to a different object");
+  RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED | PARM_RNAPTR);
+  RNA_def_parameter_clear_flags(parm, PROP_THICK_WRAP, 0);
+  /* return type */
+  parm = RNA_def_pointer(func, "new_constraint", "Constraint", "", "New constraint");
+  RNA_def_function_return(func, parm);
 }
 
 static void rna_def_pose_channel(BlenderRNA *brna)
@@ -1211,14 +1241,14 @@ static void rna_def_pose_channel(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "use_ik_rotation_control", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "ikflag", BONE_IK_ROTCTL);
-  RNA_def_property_ui_text(prop, "IK rot control", "Apply channel rotation as IK constraint");
+  RNA_def_property_ui_text(prop, "IK Rotation Control", "Apply channel rotation as IK constraint");
   RNA_def_property_editable_func(prop, "rna_PoseChannel_proxy_editable");
   RNA_def_property_update(prop, NC_OBJECT | ND_POSE, "rna_Pose_IK_update");
 
   prop = RNA_def_property(srna, "use_ik_linear_control", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "ikflag", BONE_IK_LINCTL);
   RNA_def_property_ui_text(
-      prop, "IK rot control", "Apply channel size as IK constraint if stretching is enabled");
+      prop, "IK Linear Control", "Apply channel size as IK constraint if stretching is enabled");
   RNA_def_property_editable_func(prop, "rna_PoseChannel_proxy_editable");
   RNA_def_property_update(prop, NC_OBJECT | ND_POSE, "rna_Pose_IK_update");
 
@@ -1295,7 +1325,7 @@ static void rna_def_pose_channel(BlenderRNA *brna)
   prop = RNA_def_property(srna, "ik_rotation_weight", PROP_FLOAT, PROP_FACTOR);
   RNA_def_property_float_sdna(prop, NULL, "ikrotweight");
   RNA_def_property_range(prop, 0.0f, 1.0f);
-  RNA_def_property_ui_text(prop, "IK Rot Weight", "Weight of rotation constraint for IK");
+  RNA_def_property_ui_text(prop, "IK Rotation Weight", "Weight of rotation constraint for IK");
   RNA_def_property_editable_func(prop, "rna_PoseChannel_proxy_editable");
   RNA_def_property_update(prop, NC_OBJECT | ND_POSE, "rna_Pose_update");
 
@@ -1353,7 +1383,7 @@ static void rna_def_pose_channel(BlenderRNA *brna)
                              "rna_PoseChannel_bone_group_index_set",
                              "rna_PoseChannel_bone_group_index_range");
   RNA_def_property_ui_text(
-      prop, "Bone Group Index", "Bone Group this pose channel belongs to (0=no group)");
+      prop, "Bone Group Index", "Bone group this pose channel belongs to (0 means no group)");
   RNA_def_property_editable_func(prop, "rna_PoseChannel_proxy_editable");
   RNA_def_property_update(prop, NC_OBJECT | ND_POSE, "rna_Pose_update");
 
@@ -1474,7 +1504,7 @@ static void rna_def_pose_itasc(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "step_count", PROP_INT, PROP_NONE);
   RNA_def_property_int_sdna(prop, NULL, "numstep");
-  RNA_def_property_range(prop, 1.f, 50.f);
+  RNA_def_property_range(prop, 1.0f, 50.0f);
   RNA_def_property_ui_text(prop, "Num Steps", "Divide the frame interval into this many steps");
   RNA_def_property_update(prop, NC_OBJECT | ND_POSE, "rna_Itasc_update");
 
@@ -1521,14 +1551,13 @@ static void rna_def_pose_itasc(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop,
       "Feedback",
-      "Feedback coefficient for error correction, average response time is 1/feedback "
-      "(default=20)");
+      "Feedback coefficient for error correction, average response time is 1/feedback");
   RNA_def_property_update(prop, NC_OBJECT | ND_POSE, "rna_Itasc_update");
 
   prop = RNA_def_property(srna, "velocity_max", PROP_FLOAT, PROP_NONE);
   RNA_def_property_float_sdna(prop, NULL, "maxvel");
   RNA_def_property_range(prop, 0.0f, 100.0f);
-  RNA_def_property_ui_text(prop, "Max Velocity", "Maximum joint velocity in rad/s (default=50)");
+  RNA_def_property_ui_text(prop, "Max Velocity", "Maximum joint velocity in radians/second");
   RNA_def_property_update(prop, NC_OBJECT | ND_POSE, "rna_Itasc_update");
 
   prop = RNA_def_property(srna, "solver", PROP_ENUM, PROP_NONE);
@@ -1544,7 +1573,7 @@ static void rna_def_pose_itasc(BlenderRNA *brna)
   RNA_def_property_ui_text(prop,
                            "Damp",
                            "Maximum damping coefficient when singular value is nearly 0 "
-                           "(higher values=more stability, less reactivity - default=0.5)");
+                           "(higher values produce results with more stability, less reactivity)");
   RNA_def_property_update(prop, NC_OBJECT | ND_POSE, "rna_Itasc_update");
 
   prop = RNA_def_property(srna, "damping_epsilon", PROP_FLOAT, PROP_FACTOR);
@@ -1553,7 +1582,7 @@ static void rna_def_pose_itasc(BlenderRNA *brna)
   RNA_def_property_ui_text(prop,
                            "Epsilon",
                            "Singular value under which damping is progressively applied "
-                           "(higher values=more stability, less reactivity - default=0.1)");
+                           "(higher values produce results with more stability, less reactivity)");
   RNA_def_property_update(prop, NC_OBJECT | ND_POSE, "rna_Itasc_update");
 }
 
@@ -1665,6 +1694,8 @@ static void rna_def_pose(BlenderRNA *brna)
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
   RNA_def_property_ui_text(prop, "IK Param", "Parameters for IK solver");
 
+  RNA_define_lib_overridable(true);
+
   /* pose edit options */
   prop = RNA_def_property(srna, "use_mirror_x", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", POSE_MIRROR_EDIT);
@@ -1691,6 +1722,8 @@ static void rna_def_pose(BlenderRNA *brna)
   RNA_def_struct_path_func(srna, "rna_Pose_path");
   RNA_def_property_update(prop, 0, "rna_Pose_update");
   RNA_def_property_flag(prop, PROP_LIB_EXCEPTION);
+
+  RNA_define_lib_overridable(false);
 
   /* animviz */
   rna_def_animviz_common(srna);

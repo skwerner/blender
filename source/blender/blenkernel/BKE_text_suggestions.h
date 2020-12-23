@@ -16,14 +16,11 @@
  * The Original Code is Copyright (C) 2008, Blender Foundation
  * All rights reserved.
  */
-#ifndef __BKE_TEXT_SUGGESTIONS_H__
-#define __BKE_TEXT_SUGGESTIONS_H__
+#pragma once
 
 /** \file
  * \ingroup bke
  */
-
-#include "DNA_text_types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -63,9 +60,9 @@ typedef struct SuggList {
 void free_texttools(void);
 
 /* Used to identify which Text object the current tools should appear against */
-void texttool_text_set_active(Text *text);
+void texttool_text_set_active(struct Text *text);
 void texttool_text_clear(void);
-short texttool_text_is_active(Text *text);
+short texttool_text_is_active(struct Text *text);
 
 /* Suggestions */
 void texttool_suggest_add(const char *name, char type);
@@ -85,5 +82,3 @@ void texttool_docs_clear(void);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_TEXT_SUGGESTIONS_H__ */

@@ -141,6 +141,7 @@ class OBJECT_PT_relations(ObjectButtonsPanel, Panel):
         if parent and ob.parent_type == 'BONE' and parent.type == 'ARMATURE':
             sub.prop_search(ob, "parent_bone", parent.data, "bones")
         sub.active = (parent is not None)
+        sub.prop(ob, "use_camera_lock_parent")
 
         col.separator()
 
@@ -212,7 +213,6 @@ class OBJECT_PT_display(ObjectButtonsPanel, Panel):
         layout = self.layout
         layout.use_property_split = True
 
-
         obj = context.object
         obj_type = obj.type
         is_geometry = (obj_type in {'MESH', 'CURVE', 'SURFACE', 'META', 'FONT', 'VOLUME', 'HAIR', 'POINTCLOUD'})
@@ -237,10 +237,11 @@ class OBJECT_PT_display(ObjectButtonsPanel, Panel):
         col.prop(obj, "show_in_front", text="In Front")
         # if obj_type == 'MESH' or is_empty_image:
         #    col.prop(obj, "show_transparent", text="Transparency")
+        sub = layout.column()
         if is_wire:
             # wire objects only use the max. display type for duplis
-            col.active = is_dupli
-        col.prop(obj, "display_type", text="Display As")
+            sub.active = is_dupli
+        sub.prop(obj, "display_type", text="Display As")
 
         if is_geometry or is_dupli or is_empty_image or is_gpencil:
             # Only useful with object having faces/materials...
@@ -364,7 +365,7 @@ class OBJECT_PT_visibility(ObjectButtonsPanel, Panel):
 
         layout.prop(ob, "hide_select", text="Selectable", toggle=False, invert_checkbox=True)
 
-        col = layout.column(heading="Show in")
+        col = layout.column(heading="Show In")
         col.prop(ob, "hide_viewport", text="Viewports", toggle=False, invert_checkbox=True)
         col.prop(ob, "hide_render", text="Renders", toggle=False, invert_checkbox=True)
 

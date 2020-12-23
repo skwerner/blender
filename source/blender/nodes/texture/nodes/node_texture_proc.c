@@ -24,7 +24,7 @@
 #include "NOD_texture.h"
 #include "node_texture_util.h"
 
-#include "RE_shader_ext.h"
+#include "RE_texture.h"
 
 /*
  * In this file: wrappers to use procedural textures as nodes
@@ -137,10 +137,12 @@ static int count_outputs(bNode *node)
                           bNodeStack **out) \
   { \
     int outs = count_outputs(node); \
-    if (outs >= 1) \
+    if (outs >= 1) { \
       tex_output(node, execdata, in, out[0], &name##_colorfn, data); \
-    if (outs >= 2) \
+    } \
+    if (outs >= 2) { \
       tex_output(node, execdata, in, out[1], &name##_normalfn, data); \
+    } \
   }
 
 /* --- VORONOI -- */

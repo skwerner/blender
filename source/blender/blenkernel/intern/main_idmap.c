@@ -36,6 +36,7 @@
  * Utility functions for faster ID lookups.
  */
 
+/* -------------------------------------------------------------------- */
 /** \name BKE_main_idmap API
  *
  * Cache ID (name, library lookups).
@@ -48,7 +49,7 @@
  * \{ */
 
 struct IDNameLib_Key {
-  /** ``ID.name + 2``: without the ID type prefix, since each id type gets it's own 'map' */
+  /** ``ID.name + 2``: without the ID type prefix, since each id type gets its own 'map' */
   const char *name;
   /** ``ID.lib``: */
   const Library *lib;
@@ -166,7 +167,7 @@ static bool idkey_cmp(const void *a, const void *b)
 {
   const struct IDNameLib_Key *idkey_a = a;
   const struct IDNameLib_Key *idkey_b = b;
-  return strcmp(idkey_a->name, idkey_b->name) || (idkey_a->lib != idkey_b->lib);
+  return !STREQ(idkey_a->name, idkey_b->name) || (idkey_a->lib != idkey_b->lib);
 }
 
 ID *BKE_main_idmap_lookup_name(struct IDNameLib_Map *id_map,

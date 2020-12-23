@@ -16,8 +16,7 @@
 
 #include "BLI_timeit.hh"
 
-namespace BLI {
-namespace Timeit {
+namespace blender::timeit {
 
 void print_duration(Nanoseconds duration)
 {
@@ -32,5 +31,4 @@ void print_duration(Nanoseconds duration)
   }
 }
 
-}  // namespace Timeit
-}  // namespace BLI
+}  // namespace blender::timeit

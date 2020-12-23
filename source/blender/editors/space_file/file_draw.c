@@ -69,7 +69,7 @@
 
 #include "filelist.h"
 
-#include "file_intern.h"  // own include
+#include "file_intern.h" /* own include */
 
 void ED_file_path_button(bScreen *screen,
                          const SpaceFile *sfile,
@@ -220,7 +220,8 @@ static void file_draw_preview(uiBlock *block,
                               const bool is_icon,
                               const int typeflags,
                               const bool drag,
-                              const bool dimmed)
+                              const bool dimmed,
+                              const bool is_link)
 {
   uiBut *but;
   float fx, fy;
@@ -266,7 +267,7 @@ static void file_draw_preview(uiBlock *block,
   xco = sx + (int)dx;
   yco = sy - layout->prv_h + (int)dy;
 
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
 
   /* the large image */
 
@@ -289,8 +290,7 @@ static void file_draw_preview(uiBlock *block,
 
   if (!is_icon && typeflags & FILE_TYPE_BLENDERLIB) {
     /* Datablock preview images use premultiplied alpha. */
-    GPU_blend_set_func_separate(
-        GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+    GPU_blend(GPU_BLEND_ALPHA_PREMULT);
   }
 
   IMMDrawPixelsTexState state = immDrawPixelsTexSetup(GPU_SHADER_2D_IMAGE_COLOR);
@@ -299,9 +299,8 @@ static void file_draw_preview(uiBlock *block,
                          (float)yco,
                          imb->x,
                          imb->y,
-                         GL_RGBA,
-                         GL_UNSIGNED_BYTE,
-                         GL_NEAREST,
+                         GPU_RGBA8,
+                         false,
                          imb->rect,
                          scale,
                          scale,
@@ -309,40 +308,59 @@ static void file_draw_preview(uiBlock *block,
                          1.0f,
                          col);
 
-  GPU_blend_set_func_separate(
-      GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+  GPU_blend(GPU_BLEND_ALPHA);
 
-  if (icon && !(typeflags & FILE_TYPE_FTFONT)) {
-    /* size of center icon is scaled to fit container and UI scale */
+  if (icon && is_icon) {
+    /* Small icon in the middle of large image, scaled to fit container and UI scale */
     float icon_x, icon_y;
-
-    if (is_icon) {
-      const float icon_size = 16.0f / icon_aspect * U.dpi_fac;
-      float icon_opacity = 0.3f;
-      uchar icon_color[4] = {0, 0, 0, 255};
-      float bgcolor[4];
-      UI_GetThemeColor4fv(TH_ICON_FOLDER, bgcolor);
-      if (rgb_to_grayscale(bgcolor) < 0.5f) {
-        icon_color[0] = 255;
-        icon_color[1] = 255;
-        icon_color[2] = 255;
-      }
-      icon_x = xco + (ex / 2.0f) - (icon_size / 2.0f);
-      icon_y = yco + (ey / 2.0f) - (icon_size * ((typeflags & FILE_TYPE_DIR) ? 0.78f : 0.75f));
-      UI_icon_draw_ex(
-          icon_x, icon_y, icon, icon_aspect / U.dpi_fac, icon_opacity, 0.0f, icon_color, false);
+    const float icon_size = 16.0f / icon_aspect * U.dpi_fac;
+    float icon_opacity = 0.3f;
+    uchar icon_color[4] = {0, 0, 0, 255};
+    float bgcolor[4];
+    UI_GetThemeColor4fv(TH_ICON_FOLDER, bgcolor);
+    if (rgb_to_grayscale(bgcolor) < 0.5f) {
+      icon_color[0] = 255;
+      icon_color[1] = 255;
+      icon_color[2] = 255;
     }
-    else {
+    icon_x = xco + (ex / 2.0f) - (icon_size / 2.0f);
+    icon_y = yco + (ey / 2.0f) - (icon_size * ((typeflags & FILE_TYPE_DIR) ? 0.78f : 0.75f));
+    UI_icon_draw_ex(
+        icon_x, icon_y, icon, icon_aspect / U.dpi_fac, icon_opacity, 0.0f, icon_color, false);
+  }
+
+  if (is_link) {
+    /* Arrow icon to indicate it is a shortcut, link, or alias. */
+    float icon_x, icon_y;
+    icon_x = xco + (2.0f * UI_DPI_FAC);
+    icon_y = yco + (2.0f * UI_DPI_FAC);
+    const int arrow = ICON_LOOP_FORWARDS;
+    if (!is_icon) {
+      /* Arrow at very bottom-left if preview style. */
       const uchar dark[4] = {0, 0, 0, 255};
       const uchar light[4] = {255, 255, 255, 255};
-
-      /* Smaller, fainter icon for preview image thumbnail. */
-      icon_x = xco + (2.0f * UI_DPI_FAC);
-      icon_y = yco + (2.0f * UI_DPI_FAC);
-
-      UI_icon_draw_ex(icon_x + 1, icon_y - 1, icon, 1.0f / U.dpi_fac, 0.2f, 0.0f, dark, false);
-      UI_icon_draw_ex(icon_x, icon_y, icon, 1.0f / U.dpi_fac, 0.6f, 0.0f, light, false);
+      UI_icon_draw_ex(icon_x + 1, icon_y - 1, arrow, 1.0f / U.dpi_fac, 0.2f, 0.0f, dark, false);
+      UI_icon_draw_ex(icon_x, icon_y, arrow, 1.0f / U.dpi_fac, 0.6f, 0.0f, light, false);
     }
+    else {
+      /* Link to folder or non-previewed file. */
+      uchar icon_color[4];
+      UI_GetThemeColor4ubv(TH_BACK, icon_color);
+      icon_x = xco + ((typeflags & FILE_TYPE_DIR) ? 0.14f : 0.23f) * scaledx;
+      icon_y = yco + ((typeflags & FILE_TYPE_DIR) ? 0.24f : 0.14f) * scaledy;
+      UI_icon_draw_ex(
+          icon_x, icon_y, arrow, icon_aspect / U.dpi_fac * 1.8, 0.3f, 0.0f, icon_color, false);
+    }
+  }
+  else if (icon && !is_icon && !(typeflags & FILE_TYPE_FTFONT)) {
+    /* Smaller, fainter icon at bottom-left for preview image thumbnail, but not for fonts. */
+    float icon_x, icon_y;
+    const uchar dark[4] = {0, 0, 0, 255};
+    const uchar light[4] = {255, 255, 255, 255};
+    icon_x = xco + (2.0f * UI_DPI_FAC);
+    icon_y = yco + (2.0f * UI_DPI_FAC);
+    UI_icon_draw_ex(icon_x + 1, icon_y - 1, icon, 1.0f / U.dpi_fac, 0.2f, 0.0f, dark, false);
+    UI_icon_draw_ex(icon_x, icon_y, icon, 1.0f / U.dpi_fac, 0.6f, 0.0f, light, false);
   }
 
   /* Contrasting outline around some preview types. */
@@ -371,7 +389,7 @@ static void file_draw_preview(uiBlock *block,
     UI_but_drag_set_image(but, BLI_strdup(path), icon, imb, scale, true);
   }
 
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 }
 
 static void renamebutton_cb(bContext *C, void *UNUSED(arg1), char *oldname)
@@ -382,11 +400,12 @@ static void renamebutton_cb(bContext *C, void *UNUSED(arg1), char *oldname)
   wmWindowManager *wm = CTX_wm_manager(C);
   SpaceFile *sfile = (SpaceFile *)CTX_wm_space_data(C);
   ARegion *region = CTX_wm_region(C);
+  FileSelectParams *params = ED_fileselect_get_active_params(sfile);
 
-  BLI_join_dirfile(orgname, sizeof(orgname), sfile->params->dir, oldname);
-  BLI_strncpy(filename, sfile->params->renamefile, sizeof(filename));
+  BLI_join_dirfile(orgname, sizeof(orgname), params->dir, oldname);
+  BLI_strncpy(filename, params->renamefile, sizeof(filename));
   BLI_filename_make_safe(filename);
-  BLI_join_dirfile(newname, sizeof(newname), sfile->params->dir, filename);
+  BLI_join_dirfile(newname, sizeof(newname), params->dir, filename);
 
   if (!STREQ(orgname, newname)) {
     if (!BLI_exists(newname)) {
@@ -397,8 +416,8 @@ static void renamebutton_cb(bContext *C, void *UNUSED(arg1), char *oldname)
       }
       else {
         /* If rename is successful, scroll to newly renamed entry. */
-        BLI_strncpy(sfile->params->renamefile, filename, sizeof(sfile->params->renamefile));
-        sfile->params->rename_flag = FILE_PARAMS_RENAME_POSTSCROLL_PENDING;
+        BLI_strncpy(params->renamefile, filename, sizeof(params->renamefile));
+        params->rename_flag = FILE_PARAMS_RENAME_POSTSCROLL_PENDING;
 
         if (sfile->smoothscroll_timer != NULL) {
           WM_event_remove_timer(CTX_wm_manager(C), CTX_wm_window(C), sfile->smoothscroll_timer);
@@ -423,7 +442,9 @@ static void draw_background(FileLayout *layout, View2D *v2d)
 
   uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
   immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
-  immUniformThemeColorShade(TH_BACK, -7);
+  float col_alternating[4];
+  UI_GetThemeColor4fv(TH_ROW_ALTERNATE, col_alternating);
+  immUniformThemeColorBlend(TH_BACK, TH_ROW_ALTERNATE, col_alternating[3]);
 
   /* alternating flat shade background */
   for (i = 2; (i <= layout->rows + 1); i += 2) {
@@ -668,7 +689,7 @@ static void draw_details_columns(const FileSelectParams *params,
 void file_draw_list(const bContext *C, ARegion *region)
 {
   SpaceFile *sfile = CTX_wm_space_file(C);
-  FileSelectParams *params = ED_fileselect_get_params(sfile);
+  FileSelectParams *params = ED_fileselect_get_active_params(sfile);
   FileLayout *layout = ED_fileselect_get_layout(sfile, region);
   View2D *v2d = &region->v2d;
   struct FileList *files = sfile->files;
@@ -788,6 +809,7 @@ void file_draw_list(const bContext *C, ARegion *region)
     /* don't drag parent or refresh items */
     do_drag = !(FILENAME_IS_CURRPAR(file->relpath));
     const bool is_hidden = (file->attributes & FILE_ATTR_HIDDEN);
+    const bool is_link = (file->attributes & FILE_ATTR_ANY_LINK);
 
     if (FILE_IMGDISPLAY == params->display) {
       const int icon = filelist_geticon(files, i, false);
@@ -809,7 +831,8 @@ void file_draw_list(const bContext *C, ARegion *region)
                         is_icon,
                         file->typeflag,
                         do_drag,
-                        is_hidden);
+                        is_hidden,
+                        is_link);
     }
     else {
       file_draw_icon(block,
@@ -825,26 +848,25 @@ void file_draw_list(const bContext *C, ARegion *region)
     }
 
     if (file_selflag & FILE_SEL_EDITING) {
-      uiBut *but;
       const short width = (params->display == FILE_IMGDISPLAY) ?
                               textwidth :
                               layout->attribute_columns[COLUMN_NAME].width -
                                   ATTRIBUTE_COLUMN_PADDING;
 
-      but = uiDefBut(block,
-                     UI_BTYPE_TEXT,
-                     1,
-                     "",
-                     sx + icon_ofs,
-                     sy - layout->tile_h - 0.15f * UI_UNIT_X,
-                     width - icon_ofs,
-                     textheight,
-                     sfile->params->renamefile,
-                     1.0f,
-                     (float)sizeof(sfile->params->renamefile),
-                     0,
-                     0,
-                     "");
+      uiBut *but = uiDefBut(block,
+                            UI_BTYPE_TEXT,
+                            1,
+                            "",
+                            sx + icon_ofs,
+                            sy - layout->tile_h - 0.15f * UI_UNIT_X,
+                            width - icon_ofs,
+                            textheight,
+                            params->renamefile,
+                            1.0f,
+                            (float)sizeof(params->renamefile),
+                            0,
+                            0,
+                            "");
       UI_but_func_rename_set(but, renamebutton_cb, file);
       UI_but_flag_enable(but, UI_BUT_NO_UTF8); /* allow non utf8 names */
       UI_but_flag_disable(but, UI_BUT_UNDO);
@@ -853,7 +875,9 @@ void file_draw_list(const bContext *C, ARegion *region)
             sfile->files, file, FILE_SEL_REMOVE, FILE_SEL_EDITING, CHECK_ALL);
       }
     }
-    else {
+
+    /* file_selflag might have been modified by branch above. */
+    if ((file_selflag & FILE_SEL_EDITING) == 0) {
       const int txpos = (params->display == FILE_IMGDISPLAY) ? sx : sx + 1 + icon_ofs;
       const int typos = (params->display == FILE_IMGDISPLAY) ?
                             sy - layout->tile_h + layout->textheight :

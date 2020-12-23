@@ -26,8 +26,7 @@
  *   All defines, etc. are only still maintained to provide backwards compatibility for old files.
  */
 
-#ifndef __DNA_IPO_TYPES_H__
-#define __DNA_IPO_TYPES_H__
+#pragma once
 
 #include "DNA_curve_types.h"
 #include "DNA_listBase.h"
@@ -36,6 +35,10 @@
 #include "DNA_ID.h"
 
 #include "BLI_compiler_attrs.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* -------------------------- Type Defines --------------------------- */
 
@@ -518,4 +521,6 @@ typedef struct Ipo {
 /* invalid flag: currently only used for buggy pydriver expressions */
 #define IPO_DRIVER_FLAG_INVALID (1 << 0)
 
+#ifdef __cplusplus
+}
 #endif

@@ -33,19 +33,19 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <numeric>
 #include <string>
 #include <vector>
 
+#include "ceres/dynamic_numeric_diff_cost_function.h"
 #include "ceres/gradient_checker.h"
 #include "ceres/internal/eigen.h"
-#include "ceres/internal/scoped_ptr.h"
 #include "ceres/parameter_block.h"
 #include "ceres/problem.h"
 #include "ceres/problem_impl.h"
 #include "ceres/program.h"
 #include "ceres/residual_block.h"
-#include "ceres/dynamic_numeric_diff_cost_function.h"
 #include "ceres/stringprintf.h"
 #include "ceres/types.h"
 #include "glog/logging.h"
@@ -74,27 +74,26 @@ class GradientCheckingCostFunction : public CostFunction {
         relative_precision_(relative_precision),
         extra_info_(extra_info),
         callback_(callback) {
-    CHECK_NOTNULL(callback_);
-    const vector<int32>& parameter_block_sizes =
+    CHECK(callback_ != nullptr);
+    const vector<int32_t>& parameter_block_sizes =
         function->parameter_block_sizes();
     *mutable_parameter_block_sizes() = parameter_block_sizes;
     set_num_residuals(function->num_residuals());
   }
 
-  virtual ~GradientCheckingCostFunction() { }
+  virtual ~GradientCheckingCostFunction() {}
 
-  virtual bool Evaluate(double const* const* parameters,
-                        double* residuals,
-                        double** jacobians) const {
+  bool Evaluate(double const* const* parameters,
+                double* residuals,
+                double** jacobians) const final {
     if (!jacobians) {
       // Nothing to check in this case; just forward.
       return function_->Evaluate(parameters, residuals, NULL);
     }
 
     GradientChecker::ProbeResults results;
-    bool okay = gradient_checker_.Probe(parameters,
-                                        relative_precision_,
-                                        &results);
+    bool okay =
+        gradient_checker_.Probe(parameters, relative_precision_, &results);
 
     // If the cost function returned false, there's nothing we can say about
     // the gradients.
@@ -107,7 +106,7 @@ class GradientCheckingCostFunction : public CostFunction {
     MatrixRef(residuals, num_residuals, 1) = results.residuals;
 
     // Copy the original jacobian blocks into the jacobians array.
-    const vector<int32>& block_sizes = function_->parameter_block_sizes();
+    const vector<int32_t>& block_sizes = function_->parameter_block_sizes();
     for (int k = 0; k < block_sizes.size(); k++) {
       if (jacobians[k] != NULL) {
         MatrixRef(jacobians[k],
@@ -117,8 +116,9 @@ class GradientCheckingCostFunction : public CostFunction {
     }
 
     if (!okay) {
-      std::string error_log = "Gradient Error detected!\nExtra info for "
-          "this residual: " + extra_info_ + "\n" + results.error_log;
+      std::string error_log =
+          "Gradient Error detected!\nExtra info for this residual: " +
+          extra_info_ + "\n" + results.error_log;
       callback_->SetGradientErrorDetected(error_log);
     }
     return true;
@@ -135,23 +135,21 @@ class GradientCheckingCostFunction : public CostFunction {
 }  // namespace
 
 GradientCheckingIterationCallback::GradientCheckingIterationCallback()
-    : gradient_error_detected_(false) {
-}
+    : gradient_error_detected_(false) {}
 
 CallbackReturnType GradientCheckingIterationCallback::operator()(
     const IterationSummary& summary) {
   if (gradient_error_detected_) {
-    LOG(ERROR)<< "Gradient error detected. Terminating solver.";
+    LOG(ERROR) << "Gradient error detected. Terminating solver.";
     return SOLVER_ABORT;
   }
   return SOLVER_CONTINUE;
 }
 void GradientCheckingIterationCallback::SetGradientErrorDetected(
     std::string& error_log) {
-  mutex_.Lock();
+  std::lock_guard<std::mutex> l(mutex_);
   gradient_error_detected_ = true;
   error_log_ += "\n" + error_log;
-  mutex_.Unlock();
 }
 
 CostFunction* CreateGradientCheckingCostFunction(
@@ -167,7 +165,8 @@ CostFunction* CreateGradientCheckingCostFunction(
   return new GradientCheckingCostFunction(cost_function,
                                           local_parameterizations,
                                           numeric_diff_options,
-                                          relative_precision, extra_info,
+                                          relative_precision,
+                                          extra_info,
                                           callback);
 }
 
@@ -176,7 +175,7 @@ ProblemImpl* CreateGradientCheckingProblemImpl(
     double relative_step_size,
     double relative_precision,
     GradientCheckingIterationCallback* callback) {
-  CHECK_NOTNULL(callback);
+  CHECK(callback != nullptr);
   // We create new CostFunctions by wrapping the original CostFunction
   // in a gradient checking CostFunction. So its okay for the
   // ProblemImpl to take ownership of it and destroy it. The
@@ -189,12 +188,13 @@ ProblemImpl* CreateGradientCheckingProblemImpl(
       DO_NOT_TAKE_OWNERSHIP;
   gradient_checking_problem_options.local_parameterization_ownership =
       DO_NOT_TAKE_OWNERSHIP;
+  gradient_checking_problem_options.context = problem_impl->context();
 
   NumericDiffOptions numeric_diff_options;
   numeric_diff_options.relative_step_size = relative_step_size;
 
-  ProblemImpl* gradient_checking_problem_impl = new ProblemImpl(
-      gradient_checking_problem_options);
+  ProblemImpl* gradient_checking_problem_impl =
+      new ProblemImpl(gradient_checking_problem_options);
 
   Program* program = problem_impl->mutable_program();
 
@@ -212,6 +212,17 @@ ProblemImpl* CreateGradientCheckingProblemImpl(
       gradient_checking_problem_impl->SetParameterBlockConstant(
           parameter_block->mutable_user_state());
     }
+
+    for (int i = 0; i < parameter_block->Size(); ++i) {
+      gradient_checking_problem_impl->SetParameterUpperBound(
+          parameter_block->mutable_user_state(),
+          i,
+          parameter_block->UpperBound(i));
+      gradient_checking_problem_impl->SetParameterLowerBound(
+          parameter_block->mutable_user_state(),
+          i,
+          parameter_block->LowerBound(i));
+    }
   }
 
   // For every ResidualBlock in problem_impl, create a new
@@ -224,8 +235,8 @@ ProblemImpl* CreateGradientCheckingProblemImpl(
     // Build a human readable string which identifies the
     // ResidualBlock. This is used by the GradientCheckingCostFunction
     // when logging debugging information.
-    string extra_info = StringPrintf(
-        "Residual block id %d; depends on parameters [", i);
+    string extra_info =
+        StringPrintf("Residual block id %d; depends on parameters [", i);
     vector<double*> parameter_blocks;
     vector<const LocalParameterization*> local_parameterizations;
     parameter_blocks.reserve(residual_block->NumParameterBlocks());
@@ -255,7 +266,8 @@ ProblemImpl* CreateGradientCheckingProblemImpl(
     gradient_checking_problem_impl->AddResidualBlock(
         gradient_checking_cost_function,
         const_cast<LossFunction*>(residual_block->loss_function()),
-        parameter_blocks);
+        parameter_blocks.data(),
+        static_cast<int>(parameter_blocks.size()));
   }
 
   // Normally, when a problem is given to the solver, we guarantee
@@ -265,13 +277,11 @@ ProblemImpl* CreateGradientCheckingProblemImpl(
   // depend on this being the case, so we explicitly call
   // SetParameterBlockStatePtrsToUserStatePtrs to ensure that this is
   // the case.
-  gradient_checking_problem_impl
-      ->mutable_program()
+  gradient_checking_problem_impl->mutable_program()
       ->SetParameterBlockStatePtrsToUserStatePtrs();
 
   return gradient_checking_problem_impl;
 }
-
 
 }  // namespace internal
 }  // namespace ceres

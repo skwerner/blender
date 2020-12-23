@@ -18,19 +18,24 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_SIMULATION_TYPES_H__
-#define __DNA_SIMULATION_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
+#include "DNA_customdata_types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct Simulation {
   ID id;
   struct AnimData *adt; /* animation data (must be immediately after id) */
 
+  /* This nodetree is embedded into the data block. */
   struct bNodeTree *nodetree;
 
-  int flag;
-  int _pad1[1];
+  uint32_t flag;
+  char _pad[4];
 } Simulation;
 
 /* Simulation.flag */
@@ -38,4 +43,6 @@ enum {
   SIM_DS_EXPAND = (1 << 0),
 };
 
-#endif /* __DNA_SIMULATION_TYPES_H__ */
+#ifdef __cplusplus
+}
+#endif

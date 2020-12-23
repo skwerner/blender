@@ -51,13 +51,15 @@
 #include "BKE_icons.h"
 #include "BKE_studiolight.h"
 
-#include "BLI_sys_types.h"  // for intptr_t support
+#include "BLI_sys_types.h" /* for intptr_t support */
 
 #include "GPU_texture.h"
 
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
 #include "IMB_thumbs.h"
+
+#include "BLO_read_write.h"
 
 /**
  * Only allow non-managed icons to be removed (by Python for eg).
@@ -214,21 +216,32 @@ void BKE_icons_deferred_free(void)
 
 static PreviewImage *previewimg_create_ex(size_t deferred_data_size)
 {
-  PreviewImage *prv_img = NULL;
-  int i;
-
-  prv_img = MEM_mallocN(sizeof(PreviewImage) + deferred_data_size, "img_prv");
+  PreviewImage *prv_img = MEM_mallocN(sizeof(PreviewImage) + deferred_data_size, "img_prv");
   memset(prv_img, 0, sizeof(*prv_img)); /* leave deferred data dirty */
 
   if (deferred_data_size) {
     prv_img->tag |= PRV_TAG_DEFFERED;
   }
 
-  for (i = 0; i < NUM_ICON_SIZES; i++) {
+  for (int i = 0; i < NUM_ICON_SIZES; i++) {
     prv_img->flag[i] |= PRV_CHANGED;
     prv_img->changed_timestamp[i] = 0;
   }
   return prv_img;
+}
+
+static PreviewImage *previewimg_deferred_create(const char *path, int source)
+{
+  /* We pack needed data for lazy loading (source type, in a single char, and path). */
+  const size_t deferred_data_size = strlen(path) + 2;
+  char *deferred_data;
+
+  PreviewImage *prv = previewimg_create_ex(deferred_data_size);
+  deferred_data = (char *)PRV_DEFERRED_DATA(prv);
+  deferred_data[0] = source;
+  memcpy(&deferred_data[1], path, deferred_data_size - 1);
+
+  return prv;
 }
 
 PreviewImage *BKE_previewimg_create(void)
@@ -240,9 +253,7 @@ void BKE_previewimg_freefunc(void *link)
 {
   PreviewImage *prv = (PreviewImage *)link;
   if (prv) {
-    int i;
-
-    for (i = 0; i < NUM_ICON_SIZES; i++) {
+    for (int i = 0; i < NUM_ICON_SIZES; i++) {
       if (prv->rect[i]) {
         MEM_freeN(prv->rect[i]);
       }
@@ -277,8 +288,7 @@ void BKE_previewimg_clear_single(struct PreviewImage *prv, enum eIconSizes size)
 
 void BKE_previewimg_clear(struct PreviewImage *prv)
 {
-  int i;
-  for (i = 0; i < NUM_ICON_SIZES; i++) {
+  for (int i = 0; i < NUM_ICON_SIZES; i++) {
     BKE_previewimg_clear_single(prv, i);
   }
 }
@@ -286,11 +296,10 @@ void BKE_previewimg_clear(struct PreviewImage *prv)
 PreviewImage *BKE_previewimg_copy(const PreviewImage *prv)
 {
   PreviewImage *prv_img = NULL;
-  int i;
 
   if (prv) {
     prv_img = MEM_dupallocN(prv);
-    for (i = 0; i < NUM_ICON_SIZES; i++) {
+    for (int i = 0; i < NUM_ICON_SIZES; i++) {
       if (prv->rect[i]) {
         prv_img->rect[i] = MEM_dupallocN(prv->rect[i]);
       }
@@ -369,6 +378,42 @@ PreviewImage *BKE_previewimg_id_ensure(ID *id)
   return NULL;
 }
 
+void BKE_previewimg_deferred_release(PreviewImage *prv)
+{
+  if (prv) {
+    if (prv->tag & PRV_TAG_DEFFERED_RENDERING) {
+      /* We cannot delete the preview while it is being loaded in another thread... */
+      prv->tag |= PRV_TAG_DEFFERED_DELETE;
+      return;
+    }
+    if (prv->icon_id) {
+      BKE_icon_delete(prv->icon_id);
+    }
+    BKE_previewimg_freefunc(prv);
+  }
+}
+
+void BKE_previewimg_id_custom_set(ID *id, const char *path)
+{
+  PreviewImage **prv = BKE_previewimg_id_get_p(id);
+
+  /* Thumbnail previews must use the deferred pipeline. But we force them to be immediately
+   * generated here still. */
+
+  if (*prv) {
+    BKE_previewimg_deferred_release(*prv);
+  }
+  *prv = previewimg_deferred_create(path, THB_SOURCE_IMAGE);
+
+  /* Can't lazy-render the preview on access. ID previews are saved to files and we want them to be
+   * there in time. Not only if something happened to have accessed it meanwhile. */
+  for (int i = 0; i < NUM_ICON_SIZES; i++) {
+    BKE_previewimg_ensure(*prv, i);
+    /* Prevent auto-updates. */
+    (*prv)->flag[i] |= PRV_USER_EDITED;
+  }
+}
+
 PreviewImage *BKE_previewimg_cached_get(const char *name)
 {
   return BLI_ghash_lookup(gCachedPreviews, name);
@@ -422,15 +467,7 @@ PreviewImage *BKE_previewimg_cached_thumbnail_read(const char *name,
   }
 
   if (!prv) {
-    /* We pack needed data for lazy loading (source type, in a single char, and path). */
-    const size_t deferred_data_size = strlen(path) + 2;
-    char *deferred_data;
-
-    prv = previewimg_create_ex(deferred_data_size);
-    deferred_data = PRV_DEFERRED_DATA(prv);
-    deferred_data[0] = source;
-    memcpy(&deferred_data[1], path, deferred_data_size - 1);
-
+    prv = previewimg_deferred_create(path, source);
     force_update = true;
   }
 
@@ -446,26 +483,11 @@ PreviewImage *BKE_previewimg_cached_thumbnail_read(const char *name,
   return prv;
 }
 
-void BKE_previewimg_cached_release_pointer(PreviewImage *prv)
-{
-  if (prv) {
-    if (prv->tag & PRV_TAG_DEFFERED_RENDERING) {
-      /* We cannot delete the preview while it is being loaded in another thread... */
-      prv->tag |= PRV_TAG_DEFFERED_DELETE;
-      return;
-    }
-    if (prv->icon_id) {
-      BKE_icon_delete(prv->icon_id);
-    }
-    BKE_previewimg_freefunc(prv);
-  }
-}
-
 void BKE_previewimg_cached_release(const char *name)
 {
   PreviewImage *prv = BLI_ghash_popkey(gCachedPreviews, name, MEM_freeN);
 
-  BKE_previewimg_cached_release_pointer(prv);
+  BKE_previewimg_deferred_release(prv);
 }
 
 /**
@@ -522,6 +544,48 @@ void BKE_previewimg_ensure(PreviewImage *prv, const int size)
   }
 }
 
+void BKE_previewimg_blend_write(BlendWriter *writer, const PreviewImage *prv)
+{
+  /* Note we write previews also for undo steps. It takes up some memory,
+   * but not doing so would causes all previews to be re-rendered after
+   * undo which is too expensive. */
+
+  if (prv == NULL) {
+    return;
+  }
+
+  PreviewImage prv_copy = *prv;
+  /* don't write out large previews if not requested */
+  if (!(U.flag & USER_SAVE_PREVIEWS)) {
+    prv_copy.w[1] = 0;
+    prv_copy.h[1] = 0;
+    prv_copy.rect[1] = NULL;
+  }
+  BLO_write_struct_at_address(writer, PreviewImage, prv, &prv_copy);
+  if (prv_copy.rect[0]) {
+    BLO_write_uint32_array(writer, prv_copy.w[0] * prv_copy.h[0], prv_copy.rect[0]);
+  }
+  if (prv_copy.rect[1]) {
+    BLO_write_uint32_array(writer, prv_copy.w[1] * prv_copy.h[1], prv_copy.rect[1]);
+  }
+}
+
+void BKE_previewimg_blend_read(BlendDataReader *reader, PreviewImage *prv)
+{
+  if (prv == NULL) {
+    return;
+  }
+
+  for (int i = 0; i < NUM_ICON_SIZES; i++) {
+    if (prv->rect[i]) {
+      BLO_read_data_address(reader, &prv->rect[i]);
+    }
+    prv->gputexture[i] = NULL;
+  }
+  prv->icon_id = 0;
+  prv->tag = 0;
+}
+
 void BKE_icon_changed(const int icon_id)
 {
   BLI_assert(BLI_thread_is_main());
@@ -546,8 +610,7 @@ void BKE_icon_changed(const int icon_id)
 
     /* If we have previews, they all are now invalid changed. */
     if (p_prv && *p_prv) {
-      int i;
-      for (i = 0; i < NUM_ICON_SIZES; i++) {
+      for (int i = 0; i < NUM_ICON_SIZES; i++) {
         (*p_prv)->flag[i] |= PRV_CHANGED;
         (*p_prv)->changed_timestamp[i]++;
       }
@@ -765,9 +828,8 @@ bool BKE_icon_delete(const int icon_id)
     icon_free(icon);
     return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 bool BKE_icon_delete_unmanaged(const int icon_id)
@@ -783,15 +845,13 @@ bool BKE_icon_delete_unmanaged(const int icon_id)
       BLI_ghash_insert(gIcons, POINTER_FROM_INT(icon_id), icon);
       return false;
     }
-    else {
-      icon_free_data(icon_id, icon);
-      icon_free(icon);
-      return true;
-    }
+
+    icon_free_data(icon_id, icon);
+    icon_free(icon);
+    return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 /* -------------------------------------------------------------------- */
@@ -866,8 +926,10 @@ struct Icon_Geom *BKE_icon_geom_from_file(const char *filename)
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name Studio Light Icon
  * \{ */
+
 int BKE_icon_ensure_studio_light(struct StudioLight *sl, int id_type)
 {
   int icon_id = get_next_free_id();

@@ -42,7 +42,6 @@
 #include "BLI_utildefines.h"
 
 #include "BKE_context.h"
-#include "BKE_scene.h"
 
 #include "ED_view3d.h"
 
@@ -51,6 +50,7 @@
 #include "UI_resources.h"
 
 #include "transform.h"
+#include "transform_orientations.h"
 #include "transform_snap.h"
 
 /* Own include. */
@@ -80,22 +80,25 @@ static void projection_matrix_calc(const TransInfo *t, float r_pmtx[3][3])
 }
 
 /* ************************** CONSTRAINTS ************************* */
-static void constraintValuesFinal(TransInfo *t, float vec[3])
-{
-  int mode = t->con.mode;
-  if (mode & CON_APPLY) {
-    float nval = (t->flag & T_NULL_ONE) ? 1.0f : 0.0f;
+#define CONSTRAIN_EPSILON 0.0001f
 
-    if ((mode & CON_AXIS0) == 0) {
-      vec[0] = nval;
-    }
-    if ((mode & CON_AXIS1) == 0) {
-      vec[1] = nval;
-    }
-    if ((mode & CON_AXIS2) == 0) {
-      vec[2] = nval;
+static void constraint_plane_calc(TransInfo *t, float r_plane[4])
+{
+  const float *constraint_vector[2];
+  int n = 0;
+  for (int i = 0; i < 3; i++) {
+    if (t->con.mode & (CON_AXIS0 << i)) {
+      constraint_vector[n++] = t->spacemtx[i];
+      if (n == 2) {
+        break;
+      }
     }
   }
+  BLI_assert(n == 2);
+
+  cross_v3_v3v3(r_plane, constraint_vector[0], constraint_vector[1]);
+  normalize_v3(r_plane);
+  r_plane[3] = -dot_v3v3(r_plane, t->center_global);
 }
 
 void constraintNumInput(TransInfo *t, float vec[3])
@@ -141,41 +144,6 @@ void constraintNumInput(TransInfo *t, float vec[3])
       }
     }
   }
-}
-
-static void postConstraintChecks(TransInfo *t, float vec[3])
-{
-  mul_m3_v3(t->spacemtx_inv, vec);
-
-  snapGridIncrement(t, vec);
-
-  if (t->flag & T_NULL_ONE) {
-    if (!(t->con.mode & CON_AXIS0)) {
-      vec[0] = 1.0f;
-    }
-
-    if (!(t->con.mode & CON_AXIS1)) {
-      vec[1] = 1.0f;
-    }
-
-    if (!(t->con.mode & CON_AXIS2)) {
-      vec[2] = 1.0f;
-    }
-  }
-
-  if (applyNumInput(&t->num, vec)) {
-    constraintNumInput(t, vec);
-    removeAspectRatio(t, vec);
-  }
-
-  /* If `t->values` is operator param, use that directly but not if snapping is forced */
-  if (t->flag & T_INPUT_IS_VALUES_FINAL && (t->tsnap.status & SNAP_FORCED) == 0) {
-    copy_v3_v3(vec, t->values);
-    constraintValuesFinal(t, vec);
-    /* inverse transformation at the end */
-  }
-
-  mul_m3_v3(t->spacemtx, vec);
 }
 
 static void viewAxisCorrectCenter(const TransInfo *t, float t_con_center[3])
@@ -298,32 +266,85 @@ static void axisProjection(const TransInfo *t,
 }
 
 /**
+ * Snap to the intersection between the edge direction and the constraint plane.
+ */
+static void constraint_snap_plane_to_edge(const TransInfo *t, const float plane[4], float r_out[3])
+{
+  float lambda;
+  const float *edge_snap_point = t->tsnap.snapPoint;
+  const float *edge_dir = t->tsnap.snapNormal;
+  bool is_aligned = fabsf(dot_v3v3(edge_dir, plane)) < CONSTRAIN_EPSILON;
+  if (!is_aligned && isect_ray_plane_v3(edge_snap_point, edge_dir, plane, &lambda, false)) {
+    madd_v3_v3v3fl(r_out, edge_snap_point, edge_dir, lambda);
+    sub_v3_v3(r_out, t->tsnap.snapTarget);
+  }
+}
+
+/**
+ * Snap to the nearest point between the snap point and the line that
+ * intersects the face plane with the constraint plane.
+ */
+static void UNUSED_FUNCTION(constraint_snap_plane_to_face(const TransInfo *t,
+                                                          const float plane[4],
+                                                          float r_out[3]))
+{
+  float face_plane[4], isect_orig[3], isect_dir[3];
+  const float *face_snap_point = t->tsnap.snapPoint;
+  const float *face_normal = t->tsnap.snapNormal;
+  plane_from_point_normal_v3(face_plane, face_snap_point, face_normal);
+  bool is_aligned = fabsf(dot_v3v3(plane, face_plane)) > (1.0f - CONSTRAIN_EPSILON);
+  if (!is_aligned && isect_plane_plane_v3(plane, face_plane, isect_orig, isect_dir)) {
+    closest_to_ray_v3(r_out, face_snap_point, isect_orig, isect_dir);
+    sub_v3_v3(r_out, t->tsnap.snapTarget);
+  }
+}
+
+/**
+ * Snap to the nearest point on the axis to the edge/line element.
+ */
+void transform_constraint_snap_axis_to_edge(const TransInfo *t,
+                                            const float axis[3],
+                                            float r_out[3])
+{
+  float lambda;
+  const float *edge_snap_point = t->tsnap.snapPoint;
+  const float *edge_dir = t->tsnap.snapNormal;
+  bool is_aligned = fabsf(dot_v3v3(axis, edge_dir)) > (1.0f - CONSTRAIN_EPSILON);
+  if (!is_aligned &&
+      isect_ray_ray_v3(t->tsnap.snapTarget, axis, edge_snap_point, edge_dir, &lambda, NULL)) {
+    mul_v3_v3fl(r_out, axis, lambda);
+  }
+}
+
+/**
+ * Snap to the intersection of the axis and the plane defined by the face.
+ */
+void transform_constraint_snap_axis_to_face(const TransInfo *t,
+                                            const float axis[3],
+                                            float r_out[3])
+{
+  float lambda;
+  float face_plane[4];
+  const float *face_snap_point = t->tsnap.snapPoint;
+  const float *face_normal = t->tsnap.snapNormal;
+  plane_from_point_normal_v3(face_plane, face_snap_point, face_normal);
+  bool is_aligned = fabsf(dot_v3v3(axis, face_plane)) < CONSTRAIN_EPSILON;
+  if (!is_aligned && isect_ray_plane_v3(t->tsnap.snapTarget, axis, face_plane, &lambda, false)) {
+    mul_v3_v3fl(r_out, axis, lambda);
+  }
+}
+
+/**
  * Return true if the 2x axis are both aligned when projected into the view.
  * In this case, we can't usefully project the cursor onto the plane.
  */
-static bool isPlaneProjectionViewAligned(const TransInfo *t)
+static bool isPlaneProjectionViewAligned(const TransInfo *t, const float plane[4])
 {
   const float eps = 0.001f;
-  const float *constraint_vector[2];
-  int n = 0;
-  for (int i = 0; i < 3; i++) {
-    if (t->con.mode & (CON_AXIS0 << i)) {
-      constraint_vector[n++] = t->spacemtx[i];
-      if (n == 2) {
-        break;
-      }
-    }
-  }
-  BLI_assert(n == 2);
-
-  float view_to_plane[3], plane_normal[3];
-
+  float view_to_plane[3];
   getViewVector(t, t->center_global, view_to_plane);
 
-  cross_v3_v3v3(plane_normal, constraint_vector[0], constraint_vector[1]);
-  normalize_v3(plane_normal);
-
-  float factor = dot_v3v3(plane_normal, view_to_plane);
+  float factor = dot_v3v3(plane, view_to_plane);
   return fabsf(factor) < eps;
 }
 
@@ -361,15 +382,40 @@ static void applyAxisConstraintVec(
 {
   copy_v3_v3(out, in);
   if (!td && t->con.mode & CON_APPLY) {
+    bool is_snap_to_point = false, is_snap_to_edge = false, is_snap_to_face = false;
     mul_m3_v3(t->con.pmtx, out);
 
-    // With snap, a projection is alright, no need to correct for view alignment
-    if (!validSnap(t)) {
+    if (activeSnap(t)) {
+      if (validSnap(t)) {
+        is_snap_to_edge = (t->tsnap.snapElem & SCE_SNAP_MODE_EDGE) != 0;
+        is_snap_to_face = (t->tsnap.snapElem & SCE_SNAP_MODE_FACE) != 0;
+        is_snap_to_point = !is_snap_to_edge && !is_snap_to_face;
+      }
+      else if (t->tsnap.snapElem & SCE_SNAP_MODE_GRID) {
+        is_snap_to_point = true;
+      }
+    }
+
+    /* With snap points, a projection is alright, no adjustments needed. */
+    if (!is_snap_to_point || is_snap_to_edge || is_snap_to_face) {
       const int dims = getConstraintSpaceDimension(t);
       if (dims == 2) {
         if (!is_zero_v3(out)) {
-          if (!isPlaneProjectionViewAligned(t)) {
-            planeProjection(t, in, out);
+          float plane[4];
+          constraint_plane_calc(t, plane);
+
+          if (is_snap_to_edge) {
+            constraint_snap_plane_to_edge(t, plane, out);
+          }
+          else if (is_snap_to_face) {
+            /* Disabled, as it has not proven to be really useful. (See T82386). */
+            // constraint_snap_plane_to_face(t, plane, out);
+          }
+          else {
+            /* View alignment correction. */
+            if (!isPlaneProjectionViewAligned(t, plane)) {
+              planeProjection(t, in, out);
+            }
           }
         }
       }
@@ -382,13 +428,23 @@ static void applyAxisConstraintVec(
         else if (t->con.mode & CON_AXIS1) {
           copy_v3_v3(c, t->spacemtx[1]);
         }
-        else if (t->con.mode & CON_AXIS2) {
+        else {
+          BLI_assert(t->con.mode & CON_AXIS2);
           copy_v3_v3(c, t->spacemtx[2]);
         }
-        axisProjection(t, c, in, out);
+
+        if (is_snap_to_edge) {
+          transform_constraint_snap_axis_to_edge(t, c, out);
+        }
+        else if (is_snap_to_face) {
+          transform_constraint_snap_axis_to_face(t, c, out);
+        }
+        else {
+          /* View alignment correction. */
+          axisProjection(t, c, in, out);
+        }
       }
     }
-    postConstraintChecks(t, out);
   }
 }
 
@@ -412,10 +468,12 @@ static void applyObjectConstraintVec(
   else {
     /* Specific TransData's space. */
     copy_v3_v3(out, in);
-    mul_m3_v3(t->spacemtx_inv, out);
-    mul_m3_v3(td->axismtx, out);
-    if (t->flag & T_EDIT) {
-      mul_m3_v3(tc->mat3_unit, out);
+    if (t->con.mode & CON_APPLY) {
+      mul_m3_v3(t->spacemtx_inv, out);
+      mul_m3_v3(td->axismtx, out);
+      if (t->flag & T_EDIT) {
+        mul_m3_v3(tc->mat3_unit, out);
+      }
     }
   }
 }
@@ -633,31 +691,46 @@ void setLocalConstraint(TransInfo *t, int mode, const char text[])
  * ftext is a format string passed to BLI_snprintf. It will add the name of
  * the orientation where %s is (logically).
  */
-void setUserConstraint(TransInfo *t, short orientation, int mode, const char ftext[])
+void setUserConstraint(TransInfo *t, int mode, const char ftext[])
 {
   char text[256];
+  short orientation = t->orient[t->orient_curr].type;
+  if (orientation == V3D_ORIENT_CUSTOM_MATRIX) {
+    /* Use the real value of the "orient_type". */
+    orientation = t->orient[0].type;
+  }
+
   const char *spacename = transform_orientations_spacename_get(t, orientation);
   BLI_snprintf(text, sizeof(text), ftext, spacename);
 
-  switch (orientation) {
-    case V3D_ORIENT_LOCAL:
-      setLocalConstraint(t, mode, text);
-      break;
-    case V3D_ORIENT_NORMAL:
-      if (checkUseAxisMatrix(t)) {
-        setAxisMatrixConstraint(t, mode, text);
+  if (t->modifiers & (MOD_CONSTRAINT_SELECT | MOD_CONSTRAINT_PLANE)) {
+    /* Force the orientation of the active object.
+     * Although possible, it is not convenient to use the local or axis constraint
+     * with the modifier to select constraint.
+     * This also follows the convention of older versions. */
+    setConstraint(t, mode, text);
+  }
+  else {
+    switch (orientation) {
+      case V3D_ORIENT_LOCAL:
+        setLocalConstraint(t, mode, text);
+        break;
+      case V3D_ORIENT_NORMAL:
+        if (checkUseAxisMatrix(t)) {
+          setAxisMatrixConstraint(t, mode, text);
+          break;
+        }
+        ATTR_FALLTHROUGH;
+      case V3D_ORIENT_GLOBAL:
+      case V3D_ORIENT_VIEW:
+      case V3D_ORIENT_CURSOR:
+      case V3D_ORIENT_GIMBAL:
+      case V3D_ORIENT_CUSTOM_MATRIX:
+      case V3D_ORIENT_CUSTOM:
+      default: {
+        setConstraint(t, mode, text);
         break;
       }
-      ATTR_FALLTHROUGH;
-    case V3D_ORIENT_GLOBAL:
-    case V3D_ORIENT_VIEW:
-    case V3D_ORIENT_CURSOR:
-    case V3D_ORIENT_GIMBAL:
-    case V3D_ORIENT_CUSTOM_MATRIX:
-    case V3D_ORIENT_CUSTOM:
-    default: {
-      setConstraint(t, mode, text);
-      break;
     }
   }
   t->con.mode |= CON_USER;
@@ -685,7 +758,6 @@ void drawConstraint(TransInfo *t)
   else {
     if (tc->mode & CON_SELECT) {
       float vec[3];
-      int depth_test_enabled;
 
       convertViewVec(t, vec, (t->mval[0] - t->con.imval[0]), (t->mval[1] - t->con.imval[1]));
       add_v3_v3(vec, t->center_global);
@@ -694,9 +766,9 @@ void drawConstraint(TransInfo *t)
       drawLine(t, t->center_global, t->spacemtx[1], 'Y', 0);
       drawLine(t, t->center_global, t->spacemtx[2], 'Z', 0);
 
-      depth_test_enabled = GPU_depth_test_enabled();
+      eGPUDepthTest depth_test_enabled = GPU_depth_test_get();
       if (depth_test_enabled) {
-        GPU_depth_test(false);
+        GPU_depth_test(GPU_DEPTH_NONE);
       }
 
       const uint shdr_pos = GPU_vertformat_attr_add(
@@ -721,7 +793,7 @@ void drawConstraint(TransInfo *t)
       immUnbindProgram();
 
       if (depth_test_enabled) {
-        GPU_depth_test(true);
+        GPU_depth_test(GPU_DEPTH_LESS_EQUAL);
       }
     }
 
@@ -743,7 +815,6 @@ void drawPropCircle(const struct bContext *C, TransInfo *t)
   if (t->flag & T_PROP_EDIT) {
     RegionView3D *rv3d = CTX_wm_region_view3d(C);
     float tmat[4][4], imat[4][4];
-    int depth_test_enabled;
 
     if (t->spacetype == SPACE_VIEW3D && rv3d != NULL) {
       copy_m4_m4(tmat, rv3d->viewmat);
@@ -773,24 +844,33 @@ void drawPropCircle(const struct bContext *C, TransInfo *t)
       GPU_matrix_scale_2f(1.0f, (ysize / xsize) * (xmask / ymask));
     }
 
-    depth_test_enabled = GPU_depth_test_enabled();
+    eGPUDepthTest depth_test_enabled = GPU_depth_test_get();
     if (depth_test_enabled) {
-      GPU_depth_test(false);
+      GPU_depth_test(GPU_DEPTH_NONE);
     }
 
     uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
 
-    immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
-    immUniformThemeColor(TH_GRID);
+    immBindBuiltinProgram(GPU_SHADER_3D_POLYLINE_UNIFORM_COLOR);
 
-    GPU_logic_op_invert_set(true);
+    float viewport[4];
+    GPU_viewport_size_get_f(viewport);
+    GPU_blend(GPU_BLEND_ALPHA);
+
+    immUniform2fv("viewportSize", &viewport[2]);
+    immUniform1f("lineWidth", 3.0f * U.pixelsize);
+
+    immUniformThemeColorShadeAlpha(TH_GRID, -20, 255);
     imm_drawcircball(t->center_global, t->prop_size, imat, pos);
-    GPU_logic_op_invert_set(false);
+
+    immUniform1f("lineWidth", 1.0f * U.pixelsize);
+    immUniformThemeColorShadeAlpha(TH_GRID, 20, 255);
+    imm_drawcircball(t->center_global, t->prop_size, imat, pos);
 
     immUnbindProgram();
 
     if (depth_test_enabled) {
-      GPU_depth_test(true);
+      GPU_depth_test(GPU_DEPTH_LESS_EQUAL);
     }
 
     GPU_matrix_pop();
@@ -806,12 +886,11 @@ static void drawObjectConstraint(TransInfo *t)
    * Without drawing the first light, users have little clue what they are doing.
    */
   short options = DRAWLIGHT;
-  int i;
   float tmp_axismtx[3][3];
 
   FOREACH_TRANS_DATA_CONTAINER (t, tc) {
     TransData *td = tc->data;
-    for (i = 0; i < tc->data_len; i++, td++) {
+    for (int i = 0; i < tc->data_len; i++, td++) {
       float co[3];
       float(*axismtx)[3];
 
@@ -829,11 +908,7 @@ static void drawObjectConstraint(TransInfo *t)
         }
       }
 
-      if (t->flag & T_OBJECT) {
-        copy_v3_v3(co, td->ob->obmat[3]);
-        axismtx = td->axismtx;
-      }
-      else if (t->flag & T_EDIT) {
+      if (t->flag & T_EDIT) {
         mul_v3_m4v3(co, tc->mat, td->center);
 
         mul_m3_m3m3(tmp_axismtx, tc->mat3_unit, td->axismtx);
@@ -873,6 +948,11 @@ void startConstraint(TransInfo *t)
 
 void stopConstraint(TransInfo *t)
 {
+  if (t->orient_curr != 0) {
+    t->orient_curr = 0;
+    transform_orientations_current_set(t, t->orient_curr);
+  }
+
   t->con.mode &= ~(CON_APPLY | CON_SELECT);
   *t->con.text = '\0';
   t->num.idx_max = t->idx_max;
@@ -880,21 +960,13 @@ void stopConstraint(TransInfo *t)
 
 /*------------------------- MMB Select -------------------------------*/
 
-void initSelectConstraint(TransInfo *t, bool force_global)
+void initSelectConstraint(TransInfo *t)
 {
-  short orientation;
-  if (force_global) {
-    orientation = V3D_ORIENT_GLOBAL;
-  }
-  else {
-    if (t->orient_curr == 0) {
-      t->orient_curr = 1;
-      transform_orientations_current_set(t, t->orient_curr);
-    }
-    orientation = t->orient[t->orient_curr].type;
+  if (t->orient_curr == 0) {
+    transform_orientations_current_set(t, 1);
   }
 
-  setUserConstraint(t, orientation, CON_APPLY | CON_SELECT, "");
+  setUserConstraint(t, CON_APPLY | CON_SELECT, "%s");
   setNearestAxis(t);
 }
 
@@ -1053,16 +1125,6 @@ int constraintModeToIndex(const TransInfo *t)
     default:
       return -1;
   }
-}
-
-char constraintModeToChar(const TransInfo *t)
-{
-  int index = constraintModeToIndex(t);
-  if (index == -1) {
-    return '\0';
-  }
-  BLI_assert((uint)index < 3);
-  return 'X' + index;
 }
 
 bool isLockConstraint(TransInfo *t)

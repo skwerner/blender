@@ -34,6 +34,7 @@
 #include "BKE_report.h"
 #include "BKE_unit.h"
 
+#include "ED_node.h"
 #include "ED_screen.h"
 
 #include "WM_api.h"
@@ -48,9 +49,7 @@
 #include "transform_snap.h"
 
 /* -------------------------------------------------------------------- */
-/* Transform (Translation) */
-
-/** \name Transform Translation
+/** \name Transform (Translation)
  * \{ */
 
 static void headerTranslation(TransInfo *t, const float vec[3], char str[UI_MAX_DRAW_STR])
@@ -61,28 +60,49 @@ static void headerTranslation(TransInfo *t, const float vec[3], char str[UI_MAX_
   char autoik[NUM_STR_REP_LEN];
   float dist;
 
+  UnitSettings *unit = NULL;
+  if (!(t->flag & T_2D_EDIT)) {
+    unit = &t->scene->unit;
+  }
+
   if (hasNumInput(&t->num)) {
     outputNumInput(&(t->num), tvec, &t->scene->unit);
     dist = len_v3(t->num.val);
   }
   else {
     float dvec[3];
+    if (t->con.mode & CON_APPLY) {
+      int i = 0;
+      zero_v3(dvec);
+      if (t->con.mode & CON_AXIS0) {
+        dvec[i++] = vec[0];
+      }
+      if (t->con.mode & CON_AXIS1) {
+        dvec[i++] = vec[1];
+      }
+      if (t->con.mode & CON_AXIS2) {
+        dvec[i++] = vec[2];
+      }
+    }
+    else {
+      copy_v3_v3(dvec, vec);
+    }
 
-    copy_v3_v3(dvec, vec);
-    applyAspectRatio(t, dvec);
+    if (t->flag & T_2D_EDIT) {
+      applyAspectRatio(t, dvec);
+    }
 
-    dist = len_v3(vec);
-    if (!(t->flag & T_2D_EDIT) && t->scene->unit.system) {
-      int i;
+    dist = len_v3(dvec);
 
-      for (i = 0; i < 3; i++) {
-        bUnit_AsString2(&tvec[NUM_STR_REP_LEN * i],
-                        NUM_STR_REP_LEN,
-                        dvec[i] * t->scene->unit.scale_length,
-                        4,
-                        B_UNIT_LENGTH,
-                        &t->scene->unit,
-                        true);
+    if (unit) {
+      for (int i = 0; i < 3; i++) {
+        BKE_unit_value_as_string(&tvec[NUM_STR_REP_LEN * i],
+                                 NUM_STR_REP_LEN,
+                                 dvec[i] * unit->scale_length,
+                                 4,
+                                 B_UNIT_LENGTH,
+                                 unit,
+                                 true);
       }
     }
     else {
@@ -92,14 +112,9 @@ static void headerTranslation(TransInfo *t, const float vec[3], char str[UI_MAX_
     }
   }
 
-  if (!(t->flag & T_2D_EDIT) && t->scene->unit.system) {
-    bUnit_AsString2(distvec,
-                    sizeof(distvec),
-                    dist * t->scene->unit.scale_length,
-                    4,
-                    B_UNIT_LENGTH,
-                    &t->scene->unit,
-                    false);
+  if (unit) {
+    BKE_unit_value_as_string(
+        distvec, sizeof(distvec), dist * unit->scale_length, 4, B_UNIT_LENGTH, unit, false);
   }
   else if (dist > 1e10f || dist < -1e10f) {
     /* prevent string buffer overflow */
@@ -214,6 +229,34 @@ static void headerTranslation(TransInfo *t, const float vec[3], char str[UI_MAX_
   }
 }
 
+static void ApplySnapTranslation(TransInfo *t, float vec[3])
+{
+  float point[3];
+  getSnapPoint(t, point);
+
+  if (t->spacetype == SPACE_NODE) {
+    char border = t->tsnap.snapNodeBorder;
+    if (border & (NODE_LEFT | NODE_RIGHT)) {
+      vec[0] = point[0] - t->tsnap.snapTarget[0];
+    }
+    if (border & (NODE_BOTTOM | NODE_TOP)) {
+      vec[1] = point[1] - t->tsnap.snapTarget[1];
+    }
+  }
+  else {
+    if (t->spacetype == SPACE_VIEW3D) {
+      if (t->options & CTX_PAINT_CURVE) {
+        if (ED_view3d_project_float_global(t->region, point, point, V3D_PROJ_TEST_NOP) !=
+            V3D_PROJ_RET_OK) {
+          zero_v3(point); /* no good answer here... */
+        }
+      }
+    }
+
+    sub_v3_v3v3(vec, point, t->tsnap.snapTarget);
+  }
+}
+
 static void applyTranslationValue(TransInfo *t, const float vec[3])
 {
   const bool apply_snap_align_rotation = usingSnappingNormal(
@@ -236,10 +279,6 @@ static void applyTranslationValue(TransInfo *t, const float vec[3])
 
     TransData *td = tc->data;
     for (int i = 0; i < tc->data_len; i++, td++) {
-      if (td->flag & TD_NOACTION) {
-        break;
-      }
-
       if (td->flag & TD_SKIP) {
         continue;
       }
@@ -318,34 +357,57 @@ static void applyTranslationValue(TransInfo *t, const float vec[3])
 static void applyTranslation(TransInfo *t, const int UNUSED(mval[2]))
 {
   char str[UI_MAX_DRAW_STR];
-  float global_dir[3];
+  float global_dir[3] = {0.0f};
 
   if (t->flag & T_INPUT_IS_VALUES_FINAL) {
     mul_v3_m3v3(global_dir, t->spacemtx, t->values);
   }
+  else if (applyNumInput(&t->num, global_dir)) {
+    if (t->con.mode & CON_APPLY) {
+      if (t->con.mode & CON_AXIS0) {
+        mul_v3_v3fl(global_dir, t->spacemtx[0], global_dir[0]);
+      }
+      else if (t->con.mode & CON_AXIS1) {
+        mul_v3_v3fl(global_dir, t->spacemtx[1], global_dir[0]);
+      }
+      else if (t->con.mode & CON_AXIS2) {
+        mul_v3_v3fl(global_dir, t->spacemtx[2], global_dir[0]);
+      }
+    }
+    else {
+      mul_v3_m3v3(global_dir, t->spacemtx, global_dir);
+    }
+  }
   else {
     copy_v3_v3(global_dir, t->values);
-    if ((t->con.mode & CON_APPLY) == 0) {
-      snapGridIncrement(t, global_dir);
-    }
 
-    if (applyNumInput(&t->num, global_dir)) {
-      removeAspectRatio(t, global_dir);
-    }
-
+    t->tsnap.snapElem = 0;
     applySnapping(t, global_dir);
+    transform_snap_grid(t, global_dir);
+
+    if (t->con.mode & CON_APPLY) {
+      float in[3];
+      copy_v3_v3(in, global_dir);
+      t->con.applyVec(t, NULL, NULL, in, global_dir);
+    }
+
+    float incr_dir[3];
+    mul_v3_m3v3(incr_dir, t->spacemtx_inv, global_dir);
+    if (!(activeSnap(t) && validSnap(t)) && transform_snap_increment(t, incr_dir)) {
+      mul_v3_m3v3(incr_dir, t->spacemtx, incr_dir);
+
+      /* Test for mixed snap with grid. */
+      float snap_dist_sq = FLT_MAX;
+      if (t->tsnap.snapElem != 0) {
+        snap_dist_sq = len_squared_v3v3(t->values, global_dir);
+      }
+      if ((snap_dist_sq == FLT_MAX) || (len_squared_v3v3(global_dir, incr_dir) < snap_dist_sq)) {
+        copy_v3_v3(global_dir, incr_dir);
+      }
+    }
   }
 
-  if (t->con.mode & CON_APPLY) {
-    float in[3];
-    copy_v3_v3(in, global_dir);
-    t->con.applyVec(t, NULL, NULL, in, global_dir);
-    headerTranslation(t, global_dir, str);
-  }
-  else {
-    headerTranslation(t, global_dir, str);
-  }
-
+  headerTranslation(t, global_dir, str);
   applyTranslationValue(t, global_dir);
 
   /* evil hack - redo translation if clipping needed */
@@ -356,7 +418,7 @@ static void applyTranslation(TransInfo *t, const int UNUSED(mval[2]))
     /* vertices in the radius of the brush end */
     /* outside the clipping area               */
     /* XXX HACK - dg */
-    if (t->flag & T_PROP_EDIT_ALL) {
+    if (t->flag & T_PROP_EDIT) {
       clipUVData(t);
     }
   }
@@ -380,6 +442,8 @@ void initTranslation(TransInfo *t)
   }
 
   t->transform = applyTranslation;
+  t->tsnap.applySnap = ApplySnapTranslation;
+  t->tsnap.distance = transform_snap_distance_len_squared_fn;
 
   initMouseInputMode(t, &t->mouse, INPUT_VECTOR);
 
@@ -387,9 +451,9 @@ void initTranslation(TransInfo *t)
   t->num.flag = 0;
   t->num.idx_max = t->idx_max;
 
-  copy_v3_v3(t->snap, t->snap_spatial);
+  copy_v2_v2(t->snap, t->snap_spatial);
 
-  copy_v3_fl(t->num.val_inc, t->snap[1]);
+  copy_v3_fl(t->num.val_inc, t->snap[0]);
   t->num.unit_sys = t->scene->unit.system;
   if (t->spacetype == SPACE_VIEW3D) {
     /* Handling units makes only sense in 3Dview... See T38877. */

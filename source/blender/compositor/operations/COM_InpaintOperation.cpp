@@ -27,24 +27,24 @@
   BLI_assert(x >= 0 && x < this->getWidth() && y >= 0 && y < this->getHeight())
 
 // Inpaint (simple convolve using average of known pixels)
-InpaintSimpleOperation::InpaintSimpleOperation() : NodeOperation()
+InpaintSimpleOperation::InpaintSimpleOperation()
 {
   this->addInputSocket(COM_DT_COLOR);
   this->addOutputSocket(COM_DT_COLOR);
   this->setComplex(true);
-  this->m_inputImageProgram = NULL;
-  this->m_pixelorder = NULL;
-  this->m_manhatten_distance = NULL;
-  this->m_cached_buffer = NULL;
+  this->m_inputImageProgram = nullptr;
+  this->m_pixelorder = nullptr;
+  this->m_manhattan_distance = nullptr;
+  this->m_cached_buffer = nullptr;
   this->m_cached_buffer_ready = false;
 }
 void InpaintSimpleOperation::initExecution()
 {
   this->m_inputImageProgram = this->getInputSocketReader(0);
 
-  this->m_pixelorder = NULL;
-  this->m_manhatten_distance = NULL;
-  this->m_cached_buffer = NULL;
+  this->m_pixelorder = nullptr;
+  this->m_manhattan_distance = nullptr;
+  this->m_cached_buffer = nullptr;
   this->m_cached_buffer_ready = false;
 
   this->initMutex();
@@ -85,7 +85,7 @@ int InpaintSimpleOperation::mdist(int x, int y)
 
   ASSERT_XY_RANGE(x, y);
 
-  return this->m_manhatten_distance[y * width + x];
+  return this->m_manhattan_distance[y * width + x];
 }
 
 bool InpaintSimpleOperation::next_pixel(int &x, int &y, int &curr, int iters)
@@ -108,11 +108,11 @@ bool InpaintSimpleOperation::next_pixel(int &x, int &y, int &curr, int iters)
   return true;
 }
 
-void InpaintSimpleOperation::calc_manhatten_distance()
+void InpaintSimpleOperation::calc_manhattan_distance()
 {
   int width = this->getWidth();
   int height = this->getHeight();
-  short *m = this->m_manhatten_distance = (short *)MEM_mallocN(sizeof(short) * width * height,
+  short *m = this->m_manhattan_distance = (short *)MEM_mallocN(sizeof(short) * width * height,
                                                                __func__);
   int *offsets;
 
@@ -223,7 +223,7 @@ void *InpaintSimpleOperation::initializeTileData(rcti *rect)
     MemoryBuffer *buf = (MemoryBuffer *)this->m_inputImageProgram->initializeTileData(rect);
     this->m_cached_buffer = (float *)MEM_dupallocN(buf->getBuffer());
 
-    this->calc_manhatten_distance();
+    this->calc_manhattan_distance();
 
     int curr = 0;
     int x, y;
@@ -246,21 +246,21 @@ void InpaintSimpleOperation::executePixel(float output[4], int x, int y, void * 
 
 void InpaintSimpleOperation::deinitExecution()
 {
-  this->m_inputImageProgram = NULL;
+  this->m_inputImageProgram = nullptr;
   this->deinitMutex();
   if (this->m_cached_buffer) {
     MEM_freeN(this->m_cached_buffer);
-    this->m_cached_buffer = NULL;
+    this->m_cached_buffer = nullptr;
   }
 
   if (this->m_pixelorder) {
     MEM_freeN(this->m_pixelorder);
-    this->m_pixelorder = NULL;
+    this->m_pixelorder = nullptr;
   }
 
-  if (this->m_manhatten_distance) {
-    MEM_freeN(this->m_manhatten_distance);
-    this->m_manhatten_distance = NULL;
+  if (this->m_manhattan_distance) {
+    MEM_freeN(this->m_manhattan_distance);
+    this->m_manhattan_distance = nullptr;
   }
   this->m_cached_buffer_ready = false;
 }
@@ -272,14 +272,13 @@ bool InpaintSimpleOperation::determineDependingAreaOfInterest(rcti * /*input*/,
   if (this->m_cached_buffer_ready) {
     return false;
   }
-  else {
-    rcti newInput;
 
-    newInput.xmax = getWidth();
-    newInput.xmin = 0;
-    newInput.ymax = getHeight();
-    newInput.ymin = 0;
+  rcti newInput;
 
-    return NodeOperation::determineDependingAreaOfInterest(&newInput, readOperation, output);
-  }
+  newInput.xmax = getWidth();
+  newInput.xmin = 0;
+  newInput.ymax = getHeight();
+  newInput.ymin = 0;
+
+  return NodeOperation::determineDependingAreaOfInterest(&newInput, readOperation, output);
 }

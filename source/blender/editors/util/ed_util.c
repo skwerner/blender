@@ -35,6 +35,7 @@
 #include "DNA_screen_types.h"
 #include "DNA_space_types.h"
 
+#include "BLI_fileops.h"
 #include "BLI_listbase.h"
 #include "BLI_path_util.h"
 #include "BLI_string.h"
@@ -44,6 +45,7 @@
 
 #include "BKE_context.h"
 #include "BKE_global.h"
+#include "BKE_icons.h"
 #include "BKE_layer.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
@@ -51,6 +53,7 @@
 #include "BKE_object.h"
 #include "BKE_packedFile.h"
 #include "BKE_paint.h"
+#include "BKE_report.h"
 #include "BKE_screen.h"
 #include "BKE_undo_system.h"
 #include "BKE_workspace.h"
@@ -58,7 +61,6 @@
 #include "DEG_depsgraph.h"
 
 #include "ED_armature.h"
-#include "ED_buttons.h"
 #include "ED_image.h"
 #include "ED_mesh.h"
 #include "ED_node.h"
@@ -92,7 +94,7 @@ void ED_editors_init_for_undo(Main *bmain)
         Scene *scene = WM_window_get_active_scene(win);
 
         BKE_texpaint_slots_refresh_object(scene, ob);
-        BKE_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
+        ED_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
       }
     }
   }
@@ -123,10 +125,10 @@ void ED_editors_init(bContext *C)
     if (mode == OB_MODE_OBJECT) {
       continue;
     }
-    else if (BKE_object_has_mode_data(ob, mode)) {
+    if (BKE_object_has_mode_data(ob, mode)) {
       continue;
     }
-    else if (ob->type == OB_GPENCIL) {
+    if (ob->type == OB_GPENCIL) {
       /* For multi-edit mode we may already have mode data (grease pencil does not need it).
        * However we may have a non-active object stuck in a grease-pencil edit mode. */
       if (ob != obact) {
@@ -153,10 +155,10 @@ void ED_editors_init(bContext *C)
             ED_object_sculptmode_enter_ex(bmain, depsgraph, scene, ob, true, reports);
           }
           else if (mode == OB_MODE_VERTEX_PAINT) {
-            ED_object_vpaintmode_enter_ex(bmain, depsgraph, wm, scene, ob);
+            ED_object_vpaintmode_enter_ex(bmain, depsgraph, scene, ob);
           }
           else if (mode == OB_MODE_WEIGHT_PAINT) {
-            ED_object_wpaintmode_enter_ex(bmain, depsgraph, wm, scene, ob);
+            ED_object_wpaintmode_enter_ex(bmain, depsgraph, scene, ob);
           }
           else {
             BLI_assert(0);
@@ -174,7 +176,7 @@ void ED_editors_init(bContext *C)
       else {
         /* TODO(campbell): avoid operator calls. */
         if (obact == ob) {
-          ED_object_mode_toggle(C, mode);
+          ED_object_mode_set(C, mode);
         }
       }
     }
@@ -501,4 +503,73 @@ void ED_OT_flush_edits(wmOperatorType *ot)
 
   /* flags */
   ot->flag = OPTYPE_INTERNAL;
+}
+
+static bool lib_id_load_custom_preview_poll(bContext *C)
+{
+  const PointerRNA idptr = CTX_data_pointer_get(C, "active_id");
+  BLI_assert(!idptr.data || RNA_struct_is_ID(idptr.type));
+
+  const ID *id = idptr.data;
+  if (!id) {
+    return false;
+  }
+  if (ID_IS_LINKED(id)) {
+    CTX_wm_operator_poll_msg_set(C, TIP_("Can't edit external library data"));
+    return false;
+  }
+  if (ID_IS_OVERRIDE_LIBRARY(id)) {
+    CTX_wm_operator_poll_msg_set(C, TIP_("Can't edit previews of overridden library data"));
+    return false;
+  }
+  if (!BKE_previewimg_id_get_p(id)) {
+    CTX_wm_operator_poll_msg_set(C, TIP_("Data-block does not support previews"));
+    return false;
+  }
+
+  return true;
+}
+
+static int lib_id_load_custom_preview_exec(bContext *C, wmOperator *op)
+{
+  char path[FILE_MAX];
+
+  RNA_string_get(op->ptr, "filepath", path);
+
+  if (!BLI_is_file(path)) {
+    BKE_reportf(op->reports, RPT_ERROR, "File not found '%s'", path);
+    return OPERATOR_CANCELLED;
+  }
+
+  PointerRNA idptr = CTX_data_pointer_get(C, "active_id");
+  ID *id = idptr.data;
+
+  BKE_previewimg_id_custom_set(id, path);
+
+  // WM_event_add_notifier(C, NC_ASSET, NULL);
+
+  return OPERATOR_FINISHED;
+}
+
+void ED_OT_lib_id_load_custom_preview(wmOperatorType *ot)
+{
+  ot->name = "Load Custom Preview";
+  ot->description = "Choose an image to help identify the data-block visually";
+  ot->idname = "ED_OT_lib_id_load_custom_preview";
+
+  /* api callbacks */
+  ot->poll = lib_id_load_custom_preview_poll;
+  ot->exec = lib_id_load_custom_preview_exec;
+  ot->invoke = WM_operator_filesel;
+
+  /* flags */
+  ot->flag = OPTYPE_INTERNAL;
+
+  WM_operator_properties_filesel(ot,
+                                 FILE_TYPE_FOLDER | FILE_TYPE_IMAGE,
+                                 FILE_SPECIAL,
+                                 FILE_OPENFILE,
+                                 WM_FILESEL_FILEPATH,
+                                 FILE_DEFAULTDISPLAY,
+                                 FILE_SORT_DEFAULT);
 }

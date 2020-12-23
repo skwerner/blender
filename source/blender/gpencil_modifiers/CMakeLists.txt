@@ -25,13 +25,19 @@ set(INC
   ../blenfont
   ../blenkernel
   ../blenlib
+  ../blentranslation
   ../bmesh
   ../depsgraph
+  ../editors/include
   ../makesdna
   ../makesrna
-  ../render/extern/include
+  ../render
+  ../windowmanager
   ../../../intern/eigen
   ../../../intern/guardedalloc
+
+  # dna_type_offsets.h in BLO_read_write.h
+  ${CMAKE_BINARY_DIR}/source/blender/makesdna/intern
 )
 
 set(INC_SYS
@@ -39,7 +45,7 @@ set(INC_SYS
 )
 
 set(SRC
-  intern/MOD_gpencil_util.h
+  intern/MOD_gpencil_ui_common.c
 
   intern/MOD_gpencil_util.c
   intern/MOD_gpencilarmature.c
@@ -62,6 +68,8 @@ set(SRC
   intern/MOD_gpenciltint.c
 
   MOD_gpencil_modifiertypes.h
+  intern/MOD_gpencil_ui_common.h
+  intern/MOD_gpencil_util.h
 )
 
 set(LIB
@@ -71,6 +79,7 @@ if(WITH_INTERNATIONAL)
   add_definitions(-DWITH_INTERNATIONAL)
 endif()
 
-add_definitions(${GL_DEFINITIONS})
 
 blender_add_lib(bf_gpencil_modifiers "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
+
+add_dependencies(bf_gpencil_modifiers bf_dna)

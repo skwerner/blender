@@ -57,11 +57,10 @@ static int py_imbuf_valid_check(Py_ImBuf *self)
   if (LIKELY(self->ibuf)) {
     return 0;
   }
-  else {
-    PyErr_Format(
-        PyExc_ReferenceError, "ImBuf data of type %.200s has been freed", Py_TYPE(self)->tp_name);
-    return -1;
-  }
+
+  PyErr_Format(
+      PyExc_ReferenceError, "ImBuf data of type %.200s has been freed", Py_TYPE(self)->tp_name);
+  return -1;
 }
 
 #define PY_IMBUF_CHECK_OBJ(obj) \
@@ -261,7 +260,7 @@ static int py_imbuf_filepath_set(Py_ImBuf *self, PyObject *value, void *UNUSED(c
   }
 
   ImBuf *ibuf = self->ibuf;
-  Py_ssize_t value_str_len_max = sizeof(ibuf->name);
+  const Py_ssize_t value_str_len_max = sizeof(ibuf->name);
   Py_ssize_t value_str_len;
   const char *value_str = _PyUnicode_AsStringAndSize(value, &value_str_len);
   if (value_str_len >= value_str_len_max) {
@@ -324,9 +323,8 @@ static PyObject *py_imbuf_repr(Py_ImBuf *self)
     return PyUnicode_FromFormat(
         "<imbuf: address=%p, filepath='%s', size=(%d, %d)>", ibuf, ibuf->name, ibuf->x, ibuf->y);
   }
-  else {
-    return PyUnicode_FromString("<imbuf: address=0x0>");
-  }
+
+  return PyUnicode_FromString("<imbuf: address=0x0>");
 }
 
 static Py_hash_t py_imbuf_hash(Py_ImBuf *self)
@@ -344,11 +342,15 @@ PyTypeObject Py_ImBuf_Type = {
     /* Methods to implement standard operations */
 
     (destructor)py_imbuf_dealloc, /* destructor tp_dealloc; */
-    (printfunc)NULL,              /* printfunc tp_print; */
-    NULL,                         /* getattrfunc tp_getattr; */
-    NULL,                         /* setattrfunc tp_setattr; */
-    NULL,                         /* cmpfunc tp_compare; */
-    (reprfunc)py_imbuf_repr,      /* reprfunc tp_repr; */
+#if PY_VERSION_HEX >= 0x03080000
+    0, /* tp_vectorcall_offset */
+#else
+    (printfunc)NULL, /* printfunc tp_print */
+#endif
+    NULL,                    /* getattrfunc tp_getattr; */
+    NULL,                    /* setattrfunc tp_setattr; */
+    NULL,                    /* cmpfunc tp_compare; */
+    (reprfunc)py_imbuf_repr, /* reprfunc tp_repr; */
 
     /* Method suites for standard classes */
 
@@ -427,8 +429,8 @@ static PyObject *M_imbuf_new(PyObject *UNUSED(self), PyObject *args, PyObject *k
   }
 
   /* TODO, make options */
-  uchar planes = 4;
-  uint flags = IB_rect;
+  const uchar planes = 4;
+  const uint flags = IB_rect;
 
   ImBuf *ibuf = IMB_allocImBuf(UNPACK2(size), planes, flags);
   if (ibuf == NULL) {
@@ -502,7 +504,7 @@ static PyObject *M_imbuf_write(PyObject *UNUSED(self), PyObject *args, PyObject 
     filepath = py_imb->ibuf->name;
   }
 
-  bool ok = IMB_saveiff(py_imb->ibuf, filepath, IB_rect);
+  const bool ok = IMB_saveiff(py_imb->ibuf, filepath, IB_rect);
   if (ok == false) {
     PyErr_Format(
         PyExc_IOError, "write: Unable to write image file (%s) '%s'", strerror(errno), filepath);

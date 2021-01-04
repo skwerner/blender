@@ -1019,8 +1019,8 @@ void ShaderGraph::add_differentials()
       /* Insert mapping nodes that are duplicates of what's inside the image node.
        * This is somewhat wasteful, it would be better to have a MappingNode
        * that does three transforms at a time. */
-      MappingNode *mapping1 = new MappingNode;
-      MappingNode *mapping2 = new MappingNode;
+      MappingNode *mapping1 = create_node<MappingNode>();
+      MappingNode *mapping2 = create_node<MappingNode>();
       mapping1->set_location(((ImageTextureNode *)node)->tex_mapping.translation);
       mapping1->set_rotation(((ImageTextureNode *)node)->tex_mapping.rotation);
       mapping1->set_scale(((ImageTextureNode *)node)->tex_mapping.scale);

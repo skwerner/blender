@@ -218,15 +218,14 @@ typedef struct bNode {
   char name[64];
   int flag;
   short type;
-  char _pad[2];
   /** Both for dependency and sorting. */
   short done, level;
-  /** Lasty: check preview render status, menunr: browse ID blocks. */
-  short lasty, menunr;
-  /** For groupnode, offset in global caller stack. */
-  short stack_index;
-  /** Number of this node in list, used for UI exec events. */
-  short nr;
+
+  /** Used as a boolean for execution. */
+  uint8_t need_exec;
+
+  char _pad[1];
+
   /** Custom user-defined color. */
   float color[3];
 
@@ -264,10 +263,8 @@ typedef struct bNode {
   short custom1, custom2;
   float custom3, custom4;
 
-  /** Need_exec is set as UI execution event, exec is flag during exec. */
-  short need_exec, exec;
-  /** Optional extra storage for use in thread (read only then!). */
-  void *threaddata;
+  char _pad1[4];
+
   /** Entire boundbox (worldspace). */
   rctf totr;
   /** Optional buttons area. */
@@ -1114,6 +1111,19 @@ typedef struct NodeInputVector {
   float vector[3];
 } NodeInputVector;
 
+typedef struct NodeGeometryRotatePoints {
+  /* GeometryNodeRotatePointsType */
+  uint8_t type;
+  /* GeometryNodeRotatePointsSpace */
+  uint8_t space;
+
+  /* GeometryNodeAttributeInputMode */
+  uint8_t input_type_axis;
+  uint8_t input_type_angle;
+  uint8_t input_type_rotation;
+  char _pad[3];
+} NodeGeometryRotatePoints;
+
 /* script node mode */
 #define NODE_SCRIPT_INTERNAL 0
 #define NODE_SCRIPT_EXTERNAL 1
@@ -1531,6 +1541,16 @@ typedef enum GeometryNodePointDistributeMethod {
   GEO_NODE_POINT_DISTRIBUTE_RANDOM = 0,
   GEO_NODE_POINT_DISTRIBUTE_POISSON = 1,
 } GeometryNodePointDistributeMethod;
+
+typedef enum GeometryNodeRotatePointsType {
+  GEO_NODE_ROTATE_POINTS_TYPE_EULER = 0,
+  GEO_NODE_ROTATE_POINTS_TYPE_AXIS_ANGLE = 1,
+} GeometryNodeRotatePointsType;
+
+typedef enum GeometryNodeRotatePointsSpace {
+  GEO_NODE_ROTATE_POINTS_SPACE_OBJECT = 0,
+  GEO_NODE_ROTATE_POINTS_SPACE_POINT = 1,
+} GeometryNodeRotatePointsSpace;
 
 #ifdef __cplusplus
 }

@@ -1204,6 +1204,7 @@ void ntreeGPUMaterialNodes(struct bNodeTree *localtree,
 #define CMP_NODE_SWITCH_VIEW 322
 #define CMP_NODE_CRYPTOMATTE 323
 #define CMP_NODE_DENOISE 324
+#define CMP_NODE_EXPOSURE 325
 
 /* channel toggles */
 #define CMP_CHAN_RGB 1
@@ -1355,6 +1356,7 @@ int ntreeTexExecTree(struct bNodeTree *ntree,
 #define GEO_NODE_ATTRIBUTE_COLOR_RAMP 1013
 #define GEO_NODE_POINT_SEPARATE 1014
 #define GEO_NODE_ATTRIBUTE_COMPARE 1015
+#define GEO_NODE_ROTATE_POINTS 1016
 
 /** \} */
 

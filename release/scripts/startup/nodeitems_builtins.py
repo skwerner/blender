@@ -330,6 +330,7 @@ compositor_node_categories = [
         NodeItem("CompositorNodeHueCorrect"),
         NodeItem("CompositorNodeBrightContrast"),
         NodeItem("CompositorNodeGamma"),
+        NodeItem("CompositorNodeExposure"),        
         NodeItem("CompositorNodeColorCorrection"),
         NodeItem("CompositorNodeTonemap"),
         NodeItem("CompositorNodeZcombine"),
@@ -513,6 +514,7 @@ geometry_node_categories = [
         NodeItem("GeometryNodePointDistribute"),
         NodeItem("GeometryNodePointInstance"),
         NodeItem("GeometryNodePointSeparate"),
+        NodeItem("GeometryNodeRotatePoints"),
     ]),
     GeometryNodeCategory("GEO_UTILITIES", "Utilities", items=[
         NodeItem("ShaderNodeMapRange"),

@@ -1468,7 +1468,7 @@ typedef struct KernelObject {
   Transform tfm;
   Transform itfm;
 
-  float surface_area;
+  float volume_density;
   float pass_id;
   float random_number;
   float color[3];

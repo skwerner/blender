@@ -88,7 +88,7 @@ ccl_device bool ray_aligned_disk_intersect(float3 ray_P,
 ccl_device_forceinline bool ray_triangle_intersect(float3 ray_P,
                                                    float3 ray_dir,
                                                    float ray_t,
-#if defined(__KERNEL_SSE2__) && defined(__KERNEL_SSE__)
+#if defined(__KERNEL_SSE2_OR_NEON__) && defined(__KERNEL_SSE_OR_NEON__)
                                                    const ssef *ssef_verts,
 #else
                                                    const float3 tri_a,
@@ -99,7 +99,7 @@ ccl_device_forceinline bool ray_triangle_intersect(float3 ray_P,
                                                    float *isect_v,
                                                    float *isect_t)
 {
-#if defined(__KERNEL_SSE2__) && defined(__KERNEL_SSE__)
+#if defined(__KERNEL_SSE2_OR_NEON__) && defined(__KERNEL_SSE_OR_NEON__)
   typedef ssef float3;
   const float3 tri_a(ssef_verts[0]);
   const float3 tri_b(ssef_verts[1]);
@@ -123,7 +123,7 @@ ccl_device_forceinline bool ray_triangle_intersect(float3 ray_P,
   const float3 e2 = v1 - v2;
 
   /* Perform edge tests. */
-#if defined(__KERNEL_SSE2__) && defined(__KERNEL_SSE__)
+#if defined(__KERNEL_SSE2_OR_NEON__) && defined(__KERNEL_SSE_OR_NEON__)
   const float3 crossU = cross(v2 + v0, e0);
   const float3 crossV = cross(v0 + v1, e1);
   const float3 crossW = cross(v1 + v2, e2);
@@ -139,13 +139,13 @@ ccl_device_forceinline bool ray_triangle_intersect(float3 ray_P,
   const ssef dirZ(ray_dir.z);
 
   ssef UVWW = madd(crossX, dirX, madd(crossY, dirY, crossZ * dirZ));
-#else  /* __KERNEL_SSE2__ */
+#else  /* __KERNEL_SSE2_OR_NEON__ */
   const float U = dot(cross(v2 + v0, e0), ray_dir);
   const float V = dot(cross(v0 + v1, e1), ray_dir);
   const float W = dot(cross(v1 + v2, e2), ray_dir);
-#endif /* __KERNEL_SSE2__ */
+#endif /* __KERNEL_SSE2_OR_NEON__ */
 
-#if defined(__KERNEL_SSE2__) && defined(__KERNEL_SSE__)
+#if defined(__KERNEL_SSE2_OR_NEON__) && defined(__KERNEL_SSE_OR_NEON__)
   int uvw_sign = movemask(UVWW) & 0x7;
   if (uvw_sign != 0) {
     if (uvw_sign != 0x7) {
@@ -180,7 +180,7 @@ ccl_device_forceinline bool ray_triangle_intersect(float3 ray_P,
   }
 
   const float inv_den = 1.0f / den;
-#if defined(__KERNEL_SSE2__) && defined(__KERNEL_SSE__)
+#if defined(__KERNEL_SSE2_OR_NEON__) && defined(__KERNEL_SSE_OR_NEON__)
   UVWW *= inv_den;
   _mm_store_ss(isect_u, UVWW);
   _mm_store_ss(isect_v, shuffle<1, 1, 3, 3>(UVWW));

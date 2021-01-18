@@ -515,7 +515,7 @@ ccl_device_forceinline void triangle_light_sample(KernelGlobals *kg,
     if (!ray_triangle_intersect(P,
                                 ls->D,
                                 FLT_MAX,
-#if defined(__KERNEL_SSE2__) && defined(__KERNEL_SSE__)
+#if defined(__KERNEL_SSE2_OR_NEON__) && defined(__KERNEL_SSE_OR_NEON__)
                                 (ssef *)V,
 #else
                                 V[0],

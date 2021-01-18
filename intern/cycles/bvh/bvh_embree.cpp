@@ -31,9 +31,10 @@
 #ifdef WITH_EMBREE
 
 #  include <embree3/rtcore_geometry.h>
-#  include <pmmintrin.h>
-#  include <xmmintrin.h>
-
+#  if !defined(__aarch64__)
+#    include <pmmintrin.h>
+#    include <xmmintrin.h>
+#  endif
 #  include "bvh/bvh_embree.h"
 
 /* Kernel includes are necessary so that the filter function for Embree can access the packed BVH.
@@ -306,8 +307,10 @@ BVHEmbree::BVHEmbree(const BVHParams &params_,
       rtc_device(NULL),
       build_quality(RTC_BUILD_QUALITY_REFIT)
 {
+#if !defined(__aarch64__)
   _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
   _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
+#endif
 }
 
 BVHEmbree::~BVHEmbree()

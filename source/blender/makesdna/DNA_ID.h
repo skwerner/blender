@@ -254,7 +254,7 @@ typedef struct IDOverrideLibrary {
 /**
  * ID is the first thing included in all serializable types. It
  * provides a common handle to place all data in double-linked lists.
- * */
+ */
 
 /* 2 characters for ID code and 64 for actual name */
 #define MAX_ID_NAME 66
@@ -526,7 +526,8 @@ typedef enum ID_Type {
 #define ID_IS_ASSET(_id) (((const ID *)(_id))->asset_data != NULL)
 
 /* Check whether datablock type is covered by copy-on-write. */
-#define ID_TYPE_IS_COW(_id_type) (!ELEM(_id_type, ID_BR, ID_PAL, ID_IM))
+#define ID_TYPE_IS_COW(_id_type) \
+  (!ELEM(_id_type, ID_LI, ID_IP, ID_SCR, ID_VF, ID_BR, ID_WM, ID_PAL, ID_PC, ID_WS, ID_IM))
 
 #ifdef GS
 #  undef GS

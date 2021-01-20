@@ -36,6 +36,7 @@
 #include "ED_markers.h"
 
 #include "WM_api.h"
+#include "WM_types.h"
 
 #include "RNA_access.h"
 
@@ -484,7 +485,7 @@ void recalcData_nla(TransInfo *t)
         for (track = tdn->nlt->next, n = 0; (track) && (n < delta); track = track->next, n++) {
           /* check if space in this track for the strip */
           if (BKE_nlatrack_has_space(track, strip->start, strip->end) &&
-              !BKE_nlatrack_is_nonlocal_in_liboverride(tdn->id, tdn->nlt)) {
+              !BKE_nlatrack_is_nonlocal_in_liboverride(tdn->id, track)) {
             /* move strip to this track */
             BLI_remlink(&tdn->nlt->strips, strip);
             BKE_nlatrack_add_strip(track, strip, is_liboverride);
@@ -504,7 +505,7 @@ void recalcData_nla(TransInfo *t)
         for (track = tdn->nlt->prev, n = 0; (track) && (n < delta); track = track->prev, n++) {
           /* check if space in this track for the strip */
           if (BKE_nlatrack_has_space(track, strip->start, strip->end) &&
-              !BKE_nlatrack_is_nonlocal_in_liboverride(tdn->id, tdn->nlt)) {
+              !BKE_nlatrack_is_nonlocal_in_liboverride(tdn->id, track)) {
             /* move strip to this track */
             BLI_remlink(&tdn->nlt->strips, strip);
             BKE_nlatrack_add_strip(track, strip, is_liboverride);
@@ -553,6 +554,12 @@ void special_aftertrans_update__nla(bContext *C, TransInfo *UNUSED(t))
       /* remove the temp metas */
       BKE_nlastrips_clear_metas(&nlt->strips, 0, 1);
     }
+
+    /* General refresh for the outliner because the following might have happened:
+     * - strips moved between tracks
+     * - strips swapped order
+     * - duplicate-move moves to different track. */
+    WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_ADDED, NULL);
 
     /* free temp memory */
     ANIM_animdata_freelist(&anim_data);

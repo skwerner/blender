@@ -459,13 +459,21 @@ bool Session::acquire_tile(RenderTile &rtile, Device *tile_device, uint tile_typ
   int device_num = device->device_number(tile_device);
 
   while (!tile_manager.next_tile(tile, device_num, tile_types)) {
+    /* Can only steal tiles on devices that support rendering
+     * This is because denoising tiles cannot be stolen (see below)
+     */
+    if ((tile_types & (RenderTile::PATH_TRACE | RenderTile::BAKE)) &&
+        steal_tile(rtile, tile_device, tile_lock)) {
+      return true;
+    }
+
     /* Wait for denoising tiles to become available */
     if ((tile_types & RenderTile::DENOISE) && !progress.get_cancel() && tile_manager.has_tiles()) {
       denoising_cond.wait(tile_lock);
       continue;
     }
 
-    return steal_tile(rtile, tile_device, tile_lock);
+    return false;
   }
 
   /* fill render tile */
@@ -477,6 +485,7 @@ bool Session::acquire_tile(RenderTile &rtile, Device *tile_device, uint tile_typ
   rtile.num_samples = tile_manager.state.num_samples;
   rtile.resolution = tile_manager.state.resolution_divider;
   rtile.tile_index = tile->index;
+  rtile.stealing_state = RenderTile::NO_STEALING;
 
   if (tile->state == Tile::DENOISE) {
     rtile.task = RenderTile::DENOISE;
@@ -530,6 +539,10 @@ bool Session::acquire_tile(RenderTile &rtile, Device *tile_device, uint tile_typ
     /* allocate buffers */
     tile->buffers = new RenderBuffers(tile_device);
     tile->buffers->reset(buffer_params);
+  }
+  else if (tile->buffers->buffer.device != tile_device) {
+    /* Move buffer to current tile device again in case it was stolen before. */
+    tile->buffers->buffer.move_device(tile_device);
   }
 
   tile->buffers->map_neighbor_copied = false;

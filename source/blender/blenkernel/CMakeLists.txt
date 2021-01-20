@@ -275,6 +275,7 @@ set(SRC
   BKE_asset.h
   BKE_attribute.h
   BKE_attribute_access.hh
+  BKE_attribute_math.hh
   BKE_autoexec.h
   BKE_blender.h
   BKE_blender_copybuffer.h
@@ -299,6 +300,8 @@ set(SRC
   BKE_constraint.h
   BKE_context.h
   BKE_crazyspace.h
+  BKE_cryptomatte.h
+  BKE_cryptomatte.hh
   BKE_curve.h
   BKE_curveprofile.h
   BKE_customdata.h
@@ -362,6 +365,7 @@ set(SRC
   BKE_mesh_remesh_voxel.h
   BKE_mesh_runtime.h
   BKE_mesh_tangent.h
+  BKE_mesh_types.h
   BKE_mesh_wrapper.h
   BKE_modifier.h
   BKE_movieclip.h
@@ -731,6 +735,7 @@ add_dependencies(bf_blenkernel bf_dna)
 if(WITH_GTESTS)
   set(TEST_SRC
     intern/armature_test.cc
+    intern/cryptomatte_test.cc
     intern/fcurve_test.cc
     intern/lattice_deform_test.cc
     intern/layer_test.cc

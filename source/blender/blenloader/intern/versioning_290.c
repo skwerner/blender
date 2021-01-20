@@ -499,7 +499,7 @@ void do_versions_after_linking_290(Main *bmain, ReportList *UNUSED(reports))
     /**
      * Make sure Emission Alpha fcurve and drivers is properly mapped after the Emission Strength
      * got introduced.
-     * */
+     */
 
     /**
      * Effectively we are replacing the (animation of) node socket input 18 with 19.
@@ -510,7 +510,7 @@ void do_versions_after_linking_290(Main *bmain, ReportList *UNUSED(reports))
      *
      * The for loop for the input ids is at the top level otherwise we lose the animation
      * keyframe data.
-     * */
+     */
     for (int input_id = 21; input_id >= 18; input_id--) {
       FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
         if (ntree->type == NTREE_SHADER) {
@@ -704,6 +704,33 @@ static void do_versions_strip_cache_settings_recursive(const ListBase *seqbase)
     seq->cache_flag = 0;
     if (seq->type == SEQ_TYPE_META) {
       do_versions_strip_cache_settings_recursive(&seq->seqbase);
+    }
+  }
+}
+
+static void version_node_socket_name(bNodeTree *ntree,
+                                     const int node_type,
+                                     const char *old_name,
+                                     const char *new_name)
+{
+  LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+    if (node->type == node_type) {
+      LISTBASE_FOREACH (bNodeSocket *, socket, &node->inputs) {
+        if (STREQ(socket->name, old_name)) {
+          strcpy(socket->name, new_name);
+        }
+        if (STREQ(socket->identifier, old_name)) {
+          strcpy(socket->identifier, new_name);
+        }
+      }
+      LISTBASE_FOREACH (bNodeSocket *, socket, &node->outputs) {
+        if (STREQ(socket->name, old_name)) {
+          strcpy(socket->name, new_name);
+        }
+        if (STREQ(socket->identifier, old_name)) {
+          strcpy(socket->identifier, new_name);
+        }
+      }
     }
   }
 }
@@ -1217,20 +1244,6 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
         part->phystype = PART_PHYS_NO;
       }
     }
-    /* Init grease pencil default curve resolution. */
-    if (!DNA_struct_elem_find(fd->filesdna, "bGPdata", "int", "curve_edit_resolution")) {
-      LISTBASE_FOREACH (bGPdata *, gpd, &bmain->gpencils) {
-        gpd->curve_edit_resolution = GP_DEFAULT_CURVE_RESOLUTION;
-        gpd->flag |= GP_DATA_CURVE_ADAPTIVE_RESOLUTION;
-      }
-    }
-    /* Init grease pencil curve editing error threshold. */
-    if (!DNA_struct_elem_find(fd->filesdna, "bGPdata", "float", "curve_edit_threshold")) {
-      LISTBASE_FOREACH (bGPdata *, gpd, &bmain->gpencils) {
-        gpd->curve_edit_threshold = GP_DEFAULT_CURVE_ERROR;
-        gpd->curve_edit_corner_angle = GP_DEFAULT_CURVE_EDIT_CORNER_ANGLE;
-      }
-    }
   }
 
   if (!MAIN_VERSION_ATLEAST(bmain, 291, 9)) {
@@ -1491,13 +1504,11 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
 
   if (!MAIN_VERSION_ATLEAST(bmain, 292, 10)) {
     if (!DNA_struct_find(fd->filesdna, "NodeSetAlpha")) {
-      LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
-        bNodeTree *nodetree = scene->nodetree;
-        if (nodetree == NULL) {
+      LISTBASE_FOREACH (bNodeTree *, ntree, &bmain->nodetrees) {
+        if (ntree->type != NTREE_COMPOSIT) {
           continue;
         }
-
-        LISTBASE_FOREACH (bNode *, node, &nodetree->nodes) {
+        LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
           if (node->type != CMP_NODE_SETALPHA) {
             continue;
           }
@@ -1507,15 +1518,97 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
         }
       }
     }
+
+    LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+      Editing *ed = SEQ_editing_get(scene, false);
+      if (ed == NULL) {
+        continue;
+      }
+      ed->cache_flag = (SEQ_CACHE_STORE_RAW | SEQ_CACHE_STORE_FINAL_OUT);
+      do_versions_strip_cache_settings_recursive(&ed->seqbase);
+    }
   }
 
-  LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
-    Editing *ed = SEQ_editing_get(scene, false);
-    if (ed == NULL) {
-      continue;
+  /* Enable "Save as Render" option for file output node by default (apply view transform to image
+   * on save) */
+  if (!MAIN_VERSION_ATLEAST(bmain, 292, 11)) {
+    FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
+      if (ntree->type == NTREE_COMPOSIT) {
+        LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+          if (node->type == CMP_NODE_OUTPUT_FILE) {
+            LISTBASE_FOREACH (bNodeSocket *, sock, &node->inputs) {
+              NodeImageMultiFileSocket *simf = sock->storage;
+              simf->save_as_render = true;
+            }
+          }
+        }
+      }
     }
-    ed->cache_flag = (SEQ_CACHE_STORE_RAW | SEQ_CACHE_STORE_FINAL_OUT);
-    do_versions_strip_cache_settings_recursive(&ed->seqbase);
+    FOREACH_NODETREE_END;
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 293, 1)) {
+    FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
+      if (ntree->type == NTREE_GEOMETRY) {
+        version_node_socket_name(ntree, GEO_NODE_BOOLEAN, "Geometry A", "Geometry 1");
+        version_node_socket_name(ntree, GEO_NODE_BOOLEAN, "Geometry B", "Geometry 2");
+      }
+    }
+    FOREACH_NODETREE_END;
+
+    /* Init grease pencil default curve resolution. */
+    if (!DNA_struct_elem_find(fd->filesdna, "bGPdata", "int", "curve_edit_resolution")) {
+      LISTBASE_FOREACH (bGPdata *, gpd, &bmain->gpencils) {
+        gpd->curve_edit_resolution = GP_DEFAULT_CURVE_RESOLUTION;
+        gpd->flag |= GP_DATA_CURVE_ADAPTIVE_RESOLUTION;
+      }
+    }
+    /* Init grease pencil curve editing error threshold. */
+    if (!DNA_struct_elem_find(fd->filesdna, "bGPdata", "float", "curve_edit_threshold")) {
+      LISTBASE_FOREACH (bGPdata *, gpd, &bmain->gpencils) {
+        gpd->curve_edit_threshold = GP_DEFAULT_CURVE_ERROR;
+        gpd->curve_edit_corner_angle = GP_DEFAULT_CURVE_EDIT_CORNER_ANGLE;
+      }
+    }
+  }
+
+  if ((!MAIN_VERSION_ATLEAST(bmain, 292, 14)) ||
+      ((bmain->versionfile == 293) && (!MAIN_VERSION_ATLEAST(bmain, 293, 1)))) {
+    FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
+      if (ntree->type != NTREE_GEOMETRY) {
+        continue;
+      }
+      LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+        if (node->type == GEO_NODE_OBJECT_INFO && node->storage == NULL) {
+          NodeGeometryObjectInfo *data = (NodeGeometryObjectInfo *)MEM_callocN(
+              sizeof(NodeGeometryObjectInfo), __func__);
+          data->transform_space = GEO_NODE_TRANSFORM_SPACE_RELATIVE;
+          node->storage = data;
+        }
+      }
+    }
+    FOREACH_NODETREE_END;
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 293, 1)) {
+    /* Grease pencil layer transform matrix. */
+    if (!DNA_struct_elem_find(fd->filesdna, "bGPDlayer", "float", "location[0]")) {
+      LISTBASE_FOREACH (bGPdata *, gpd, &bmain->gpencils) {
+        LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
+          zero_v3(gpl->location);
+          zero_v3(gpl->rotation);
+          copy_v3_fl(gpl->scale, 1.0f);
+          loc_eul_size_to_mat4(gpl->layer_mat, gpl->location, gpl->rotation, gpl->scale);
+          invert_m4_m4(gpl->layer_invmat, gpl->layer_mat);
+        }
+      }
+    }
+    /* Fix Fill factor for grease pencil fill brushes. */
+    LISTBASE_FOREACH (Brush *, brush, &bmain->brushes) {
+      if ((brush->gpencil_settings) && (brush->gpencil_settings->fill_factor == 0.0f)) {
+        brush->gpencil_settings->fill_factor = 1.0f;
+      }
+    }
   }
 
   /**

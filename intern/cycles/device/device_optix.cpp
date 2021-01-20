@@ -314,6 +314,14 @@ class OptiXDevice : public CUDADevice {
       common_cflags += string_printf(" -I\"%s/include\"", optix_sdk_path);
     }
 
+    // Specialization for shader raytracing
+    if (requested_features.use_shader_raytrace) {
+      common_cflags += " --keep-device-functions";
+    }
+    else {
+      common_cflags += " -D __NO_SHADER_RAYTRACE__";
+    }
+
     return common_cflags;
   }
 
@@ -1240,6 +1248,12 @@ class OptiXDevice : public CUDADevice {
 
   void build_bvh(BVH *bvh, Progress &progress, bool refit) override
   {
+    if (bvh->params.bvh_layout == BVH_LAYOUT_BVH2) {
+      /* For baking CUDA is used, build appropriate BVH for that. */
+      Device::build_bvh(bvh, progress, refit);
+      return;
+    }
+
     BVHOptiX *const bvh_optix = static_cast<BVHOptiX *>(bvh);
 
     progress.set_substatus("Building OptiX acceleration structure");
@@ -1505,6 +1519,16 @@ class OptiXDevice : public CUDADevice {
       bvh_optix->traversable_handle = 0;
       bvh_optix->motion_transform_data.free();
 
+#  if OPTIX_ABI_VERSION < 23
+      if (bvh->objects.size() > 0x7FFFFF) {
+#  else
+      if (bvh->objects.size() > 0x7FFFFFF) {
+#  endif
+        progress.set_error(
+            "Failed to build OptiX acceleration structure because there are too many instances");
+        return;
+      }
+
       // Fill instance descriptions
 #  if OPTIX_ABI_VERSION < 41
       device_vector<OptixAabb> aabbs(this, "optix tlas aabbs", MEM_READ_ONLY);
@@ -1667,7 +1691,11 @@ class OptiXDevice : public CUDADevice {
             instance.flags = OPTIX_INSTANCE_FLAG_DISABLE_TRANSFORM;
             // Non-instanced objects read ID from prim_object, so
             // distinguish them from instanced objects with high bit set
+#  if OPTIX_ABI_VERSION < 23
             instance.instanceId |= 0x800000;
+#  else
+            instance.instanceId |= 0x8000000;
+#  endif
           }
         }
       }

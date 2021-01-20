@@ -592,7 +592,7 @@ class GreasePencilMaterialsPanel:
             if show_full_ui:
                 row = layout.row()
 
-                row.template_ID(ob, "active_material", new="material.new", live_icon=True)
+                row.template_ID(ob, "active_material", new="material.new", duplicate="material.duplicate", live_icon=True)
 
                 slot = context.material_slot
                 if slot:
@@ -867,7 +867,7 @@ class GreasePencilLayerDisplayPanel:
 class GreasePencilFlipTintColors(Operator):
     bl_label = "Flip Colors"
     bl_idname = "gpencil.tint_flip"
-    bl_description = "Switch Tint colors"
+    bl_description = "Switch tint colors"
 
     def execute(self, context):
         try:

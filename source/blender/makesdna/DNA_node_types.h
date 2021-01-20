@@ -835,6 +835,11 @@ typedef struct NodeMask {
   int size_x, size_y;
 } NodeMask;
 
+typedef struct NodeSetAlpha {
+  char mode;
+  char _pad[7];
+} NodeSetAlpha;
+
 typedef struct NodeTexBase {
   TexMapping tex_mapping;
   ColorMapping color_mapping;
@@ -1110,6 +1115,19 @@ typedef struct NodeAttributeColorRamp {
 typedef struct NodeInputVector {
   float vector[3];
 } NodeInputVector;
+
+typedef struct NodeGeometryRotatePoints {
+  /* GeometryNodeRotatePointsType */
+  uint8_t type;
+  /* GeometryNodeRotatePointsSpace */
+  uint8_t space;
+
+  /* GeometryNodeAttributeInputMode */
+  uint8_t input_type_axis;
+  uint8_t input_type_angle;
+  uint8_t input_type_rotation;
+  char _pad[3];
+} NodeGeometryRotatePoints;
 
 /* script node mode */
 #define NODE_SCRIPT_INTERNAL 0
@@ -1455,6 +1473,13 @@ enum {
   CMP_NODEFLAG_STABILIZE_INVERSE = 1,
 };
 
+/* Set Alpha Node. */
+/* `NodeSetAlpha.mode` */
+typedef enum CMPNodeSetAlphaMode {
+  CMP_NODE_SETALPHA_MODE_APPLY = 0,
+  CMP_NODE_SETALPHA_MODE_REPLACE_ALPHA = 1,
+} CMPNodeSetAlphaMode;
+
 #define CMP_NODE_PLANETRACKDEFORM_MBLUR_SAMPLES_MAX 64
 
 /* Point Density shader node */
@@ -1528,6 +1553,16 @@ typedef enum GeometryNodePointDistributeMethod {
   GEO_NODE_POINT_DISTRIBUTE_RANDOM = 0,
   GEO_NODE_POINT_DISTRIBUTE_POISSON = 1,
 } GeometryNodePointDistributeMethod;
+
+typedef enum GeometryNodeRotatePointsType {
+  GEO_NODE_ROTATE_POINTS_TYPE_EULER = 0,
+  GEO_NODE_ROTATE_POINTS_TYPE_AXIS_ANGLE = 1,
+} GeometryNodeRotatePointsType;
+
+typedef enum GeometryNodeRotatePointsSpace {
+  GEO_NODE_ROTATE_POINTS_SPACE_OBJECT = 0,
+  GEO_NODE_ROTATE_POINTS_SPACE_POINT = 1,
+} GeometryNodeRotatePointsSpace;
 
 #ifdef __cplusplus
 }

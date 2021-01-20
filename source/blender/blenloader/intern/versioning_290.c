@@ -113,7 +113,9 @@ static void seq_convert_transform_animation(const Scene *scene,
     BezTriple *bezt = fcu->bezt;
     for (int i = 0; i < fcu->totvert; i++, bezt++) {
       /* Same math as with old_image_center_*, but simplified. */
+      bezt->vec[0][1] = image_size / 2 + bezt->vec[0][1] - scene->r.xsch / 2;
       bezt->vec[1][1] = image_size / 2 + bezt->vec[1][1] - scene->r.xsch / 2;
+      bezt->vec[2][1] = image_size / 2 + bezt->vec[2][1] - scene->r.xsch / 2;
     }
   }
 }
@@ -250,7 +252,9 @@ static void seq_convert_transform_animation_2(const Scene *scene,
     BezTriple *bezt = fcu->bezt;
     for (int i = 0; i < fcu->totvert; i++, bezt++) {
       /* Same math as with old_image_center_*, but simplified. */
+      bezt->vec[0][1] *= scale_to_fit_factor;
       bezt->vec[1][1] *= scale_to_fit_factor;
+      bezt->vec[2][1] *= scale_to_fit_factor;
     }
   }
 }
@@ -691,6 +695,16 @@ static void do_versions_291_fcurve_handles_limit(FCurve *fcu)
     madd_v2_v2v2fl(bezt->vec[2], v1, delta1, -factor); /* vec[2] = v1 - factor * delta1 */
     /* Next keyframe's left handle: */
     madd_v2_v2v2fl(nextbezt->vec[0], v4, delta2, -factor); /* vec[0] = v4 - factor * delta2 */
+  }
+}
+
+static void do_versions_strip_cache_settings_recursive(const ListBase *seqbase)
+{
+  LISTBASE_FOREACH (Sequence *, seq, seqbase) {
+    seq->cache_flag = 0;
+    if (seq->type == SEQ_TYPE_META) {
+      do_versions_strip_cache_settings_recursive(&seq->seqbase);
+    }
   }
 }
 
@@ -1426,18 +1440,7 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
     }
   }
 
-  /**
-   * Versioning code until next subversion bump goes here.
-   *
-   * \note Be sure to check when bumping the version:
-   * - "versioning_userdef.c", #blo_do_versions_userdef
-   * - "versioning_userdef.c", #do_versions_theme
-   *
-   * \note Keep this message at the bottom of the function.
-   */
-  {
-    /* Keep this block, even when empty. */
-
+  if (!MAIN_VERSION_ATLEAST(bmain, 292, 9)) {
     FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
       if (ntree->type == NTREE_GEOMETRY) {
         LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
@@ -1458,5 +1461,73 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
       }
     }
     FOREACH_NODETREE_END;
+
+    /* Default properties editors to auto outliner sync. */
+    LISTBASE_FOREACH (bScreen *, screen, &bmain->screens) {
+      LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+        LISTBASE_FOREACH (SpaceLink *, space, &area->spacedata) {
+          if (space->spacetype == SPACE_PROPERTIES) {
+            SpaceProperties *space_properties = (SpaceProperties *)space;
+            space_properties->outliner_sync = PROPERTIES_SYNC_AUTO;
+          }
+        }
+      }
+    }
+
+    /* Ensure that new viscosity strength field is initialized correctly. */
+    if (!DNA_struct_elem_find(fd->filesdna, "FluidModifierData", "float", "viscosity_value")) {
+      LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
+        LISTBASE_FOREACH (ModifierData *, md, &ob->modifiers) {
+          if (md->type == eModifierType_Fluid) {
+            FluidModifierData *fmd = (FluidModifierData *)md;
+            if (fmd->domain != NULL) {
+              fmd->domain->viscosity_value = 0.05;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 292, 10)) {
+    if (!DNA_struct_find(fd->filesdna, "NodeSetAlpha")) {
+      LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+        bNodeTree *nodetree = scene->nodetree;
+        if (nodetree == NULL) {
+          continue;
+        }
+
+        LISTBASE_FOREACH (bNode *, node, &nodetree->nodes) {
+          if (node->type != CMP_NODE_SETALPHA) {
+            continue;
+          }
+          NodeSetAlpha *storage = MEM_callocN(sizeof(NodeSetAlpha), "NodeSetAlpha");
+          storage->mode = CMP_NODE_SETALPHA_MODE_REPLACE_ALPHA;
+          node->storage = storage;
+        }
+      }
+    }
+  }
+
+  LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+    Editing *ed = SEQ_editing_get(scene, false);
+    if (ed == NULL) {
+      continue;
+    }
+    ed->cache_flag = (SEQ_CACHE_STORE_RAW | SEQ_CACHE_STORE_FINAL_OUT);
+    do_versions_strip_cache_settings_recursive(&ed->seqbase);
+  }
+
+  /**
+   * Versioning code until next subversion bump goes here.
+   *
+   * \note Be sure to check when bumping the version:
+   * - "versioning_userdef.c", #blo_do_versions_userdef
+   * - "versioning_userdef.c", #do_versions_theme
+   *
+   * \note Keep this message at the bottom of the function.
+   */
+  {
+    /* Keep this block, even when empty. */
   }
 }

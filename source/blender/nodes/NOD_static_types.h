@@ -151,7 +151,7 @@ DefNode(CompositorNode, CMP_NODE_TIME,           def_time,               "TIME",
 DefNode(CompositorNode, CMP_NODE_VECBLUR,        def_cmp_vector_blur,    "VECBLUR",        VecBlur,          "Vector Blur",       ""              )
 DefNode(CompositorNode, CMP_NODE_SEPRGBA,        0,                      "SEPRGBA",        SepRGBA,          "Separate RGBA",     ""              )
 DefNode(CompositorNode, CMP_NODE_SEPHSVA,        0,                      "SEPHSVA",        SepHSVA,          "Separate HSVA",     ""              )
-DefNode(CompositorNode, CMP_NODE_SETALPHA,       0,                      "SETALPHA",       SetAlpha,         "Set Alpha",         ""              )
+DefNode(CompositorNode, CMP_NODE_SETALPHA,       def_cmp_set_alpha,      "SETALPHA",       SetAlpha,         "Set Alpha",         ""              )
 DefNode(CompositorNode, CMP_NODE_HUE_SAT,        0,                      "HUE_SAT",        HueSat,           "Hue Saturation Value",""            )
 DefNode(CompositorNode, CMP_NODE_IMAGE,          def_cmp_image,          "IMAGE",          Image,            "Image",             ""              )
 DefNode(CompositorNode, CMP_NODE_R_LAYERS,       def_cmp_render_layers,  "R_LAYERS",       RLayers,          "Render Layers",     ""              )
@@ -284,6 +284,7 @@ DefNode(GeometryNode, GEO_NODE_ATTRIBUTE_MIX, def_geo_attribute_mix, "ATTRIBUTE_
 DefNode(GeometryNode, GEO_NODE_ATTRIBUTE_COLOR_RAMP, def_geo_attribute_color_ramp, "ATTRIBUTE_COLOR_RAMP", AttributeColorRamp, "Attribute Color Ramp", "")
 DefNode(GeometryNode, GEO_NODE_POINT_SEPARATE, 0, "POINT_SEPARATE", PointSeparate, "Point Separate", "")
 DefNode(GeometryNode, GEO_NODE_ATTRIBUTE_COMPARE, def_geo_attribute_attribute_compare, "ATTRIBUTE_COMPARE", AttributeCompare, "Attribute Compare", "")
+DefNode(GeometryNode, GEO_NODE_ROTATE_POINTS, def_geo_rotate_points, "ROTATE_POINTS", RotatePoints, "Rotate Points", "")
 
 /* undefine macros */
 #undef DefNode

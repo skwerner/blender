@@ -189,7 +189,10 @@ static void node_buts_curvecol(uiLayout *layout, bContext *UNUSED(C), PointerRNA
     cumap->flag &= ~CUMA_DRAW_SAMPLE;
   }
 
-  uiTemplateCurveMapping(layout, ptr, "mapping", 'c', false, false, false, true);
+  /* "Tone" (Standard/Filmlike) only used in the Compositor. */
+  bNodeTree *ntree = (bNodeTree *)ptr->owner_id;
+  uiTemplateCurveMapping(
+      layout, ptr, "mapping", 'c', false, false, false, (ntree->type == NTREE_COMPOSIT));
 }
 
 static void node_buts_normal(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
@@ -2331,6 +2334,11 @@ static void node_composit_buts_colorcorrection_ex(uiLayout *layout,
   uiItemR(row, ptr, "midtones_end", DEFAULT_FLAGS, NULL, ICON_NONE);
 }
 
+static void node_composit_buts_set_alpha(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
+{
+  uiItemR(layout, ptr, "mode", DEFAULT_FLAGS, NULL, ICON_NONE);
+}
+
 static void node_composit_buts_switch(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 {
   uiItemR(layout, ptr, "check", DEFAULT_FLAGS, NULL, ICON_NONE);
@@ -2928,6 +2936,9 @@ static void node_composit_set_butfunc(bNodeType *ntype)
       ntype->draw_buttons = node_composit_buts_colorcorrection;
       ntype->draw_buttons_ex = node_composit_buts_colorcorrection_ex;
       break;
+    case CMP_NODE_SETALPHA:
+      ntype->draw_buttons = node_composit_buts_set_alpha;
+      break;
     case CMP_NODE_SWITCH:
       ntype->draw_buttons = node_composit_buts_switch;
       break;
@@ -3260,6 +3271,25 @@ static void node_geometry_buts_attribute_color_ramp(uiLayout *layout,
   uiTemplateColorRamp(layout, ptr, "color_ramp", 0);
 }
 
+static void node_geometry_buts_rotate_points(uiLayout *layout,
+                                             bContext *UNUSED(C),
+                                             PointerRNA *ptr)
+{
+  NodeGeometryRotatePoints *storage = (NodeGeometryRotatePoints *)((bNode *)ptr->data)->storage;
+
+  uiItemR(layout, ptr, "type", DEFAULT_FLAGS | UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "space", DEFAULT_FLAGS | UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+
+  uiLayout *col = uiLayoutColumn(layout, false);
+  if (storage->type == GEO_NODE_ROTATE_POINTS_TYPE_AXIS_ANGLE) {
+    uiItemR(col, ptr, "input_type_axis", DEFAULT_FLAGS, IFACE_("Axis"), ICON_NONE);
+    uiItemR(col, ptr, "input_type_angle", DEFAULT_FLAGS, IFACE_("Angle"), ICON_NONE);
+  }
+  else {
+    uiItemR(col, ptr, "input_type_rotation", DEFAULT_FLAGS, IFACE_("Rotation"), ICON_NONE);
+  }
+}
+
 static void node_geometry_set_butfunc(bNodeType *ntype)
 {
   switch (ntype->type) {
@@ -3295,6 +3325,9 @@ static void node_geometry_set_butfunc(bNodeType *ntype)
       break;
     case GEO_NODE_ATTRIBUTE_COLOR_RAMP:
       ntype->draw_buttons = node_geometry_buts_attribute_color_ramp;
+      break;
+    case GEO_NODE_ROTATE_POINTS:
+      ntype->draw_buttons = node_geometry_buts_rotate_points;
       break;
   }
 }

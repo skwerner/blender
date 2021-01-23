@@ -541,8 +541,12 @@ bool Session::acquire_tile(RenderTile &rtile, Device *tile_device, uint tile_typ
     tile->buffers->reset(buffer_params);
   }
   else if (tile->buffers->buffer.device != tile_device) {
-    /* Move buffer to current tile device again in case it was stolen before. */
-    tile->buffers->buffer.move_device(tile_device);
+    /* Move buffer to current tile device again in case it was stolen before.
+     * Not needed for denoising since that already handles mapping of tiles and
+     * neighbors to its own device. */
+    if (rtile.task != RenderTile::DENOISE) {
+      tile->buffers->buffer.move_device(tile_device);
+    }
   }
 
   tile->buffers->map_neighbor_copied = false;
@@ -555,7 +559,7 @@ bool Session::acquire_tile(RenderTile &rtile, Device *tile_device, uint tile_typ
 
   if (read_bake_tile_cb) {
     /* This will read any passes needed as input for baking. */
-    {
+    if (tile_manager.state.sample == tile_manager.range_start_sample) {
       thread_scoped_lock tile_lock(tile_mutex);
       read_bake_tile_cb(rtile);
     }

@@ -16,13 +16,14 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#include "COM_defines.h"
+#pragma once
+
 #include "COM_Node.h"
-#include "DNA_node_types.h"
+#include "COM_defines.h"
 #include "DNA_image_types.h"
-extern "C" {
+#include "DNA_node_types.h"
+
 #include "RE_engine.h"
-}
 
 /**
  * \brief ImageNode
@@ -36,7 +37,7 @@ class ImageNode : public Node {
                                    ImageUser *user,
                                    int framenumber,
                                    int outputsocketIndex,
-                                   int passtype,
+                                   int passindex,
                                    int view,
                                    DataType datatype) const;
 

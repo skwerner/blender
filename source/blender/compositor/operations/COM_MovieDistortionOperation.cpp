@@ -18,19 +18,18 @@
 
 #include "COM_MovieDistortionOperation.h"
 
-extern "C" {
-#include "BKE_tracking.h"
 #include "BKE_movieclip.h"
-#include "BLI_linklist.h"
-}
+#include "BKE_tracking.h"
 
-MovieDistortionOperation::MovieDistortionOperation(bool distortion) : NodeOperation()
+#include "BLI_linklist.h"
+
+MovieDistortionOperation::MovieDistortionOperation(bool distortion)
 {
   this->addInputSocket(COM_DT_COLOR);
   this->addOutputSocket(COM_DT_COLOR);
   this->setResolutionInputSocketIndex(0);
-  this->m_inputOperation = NULL;
-  this->m_movieClip = NULL;
+  this->m_inputOperation = nullptr;
+  this->m_movieClip = nullptr;
   this->m_apply = distortion;
 }
 
@@ -50,7 +49,8 @@ void MovieDistortionOperation::initExecution()
     full_frame.xmin = full_frame.ymin = 0;
     full_frame.xmax = this->m_width;
     full_frame.ymax = this->m_height;
-    BKE_tracking_max_distortion_delta_across_bound(tracking, &full_frame, !this->m_apply, delta);
+    BKE_tracking_max_distortion_delta_across_bound(
+        tracking, this->m_width, this->m_height, &full_frame, !this->m_apply, delta);
 
     /* 5 is just in case we didn't hit real max of distortion in
      * BKE_tracking_max_undistortion_delta_across_bound
@@ -66,15 +66,15 @@ void MovieDistortionOperation::initExecution()
   }
   else {
     m_margin[0] = m_margin[1] = 0;
-    this->m_distortion = NULL;
+    this->m_distortion = nullptr;
   }
 }
 
 void MovieDistortionOperation::deinitExecution()
 {
-  this->m_inputOperation = NULL;
-  this->m_movieClip = NULL;
-  if (this->m_distortion != NULL) {
+  this->m_inputOperation = nullptr;
+  this->m_movieClip = nullptr;
+  if (this->m_distortion != nullptr) {
     BKE_tracking_distortion_free(this->m_distortion);
   }
 }
@@ -84,7 +84,7 @@ void MovieDistortionOperation::executePixelSampled(float output[4],
                                                    float y,
                                                    PixelSampler /*sampler*/)
 {
-  if (this->m_distortion != NULL) {
+  if (this->m_distortion != nullptr) {
     /* float overscan = 0.0f; */
     const float pixel_aspect = this->m_pixel_aspect;
     const float w = (float)this->m_width /* / (1 + overscan) */;

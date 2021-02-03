@@ -17,6 +17,7 @@
 
 set(INC
   ../include
+  ../space_sequencer
   ../../blenkernel
   ../../blenlib
   ../../blentranslation
@@ -26,34 +27,34 @@ set(INC
   ../../imbuf
   ../../makesdna
   ../../makesrna
+  ../../sequencer
   ../../windowmanager
   ../../../../intern/clog
   ../../../../intern/glew-mx
   ../../../../intern/guardedalloc
 )
 
-set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
-)
 
 set(SRC
   ed_transverts.c
   ed_util.c
+  ed_util_imbuf.c
+  ed_util_ops.c
   gizmo_utils.c
   numinput.c
-  select_buffer_utils.c
   select_utils.c
 
   # general includes
-  ../include/BIF_gl.h
   ../include/BIF_glutil.h
   ../include/ED_anim_api.h
   ../include/ED_armature.h
+  ../include/ED_asset.h
   ../include/ED_buttons.h
   ../include/ED_clip.h
   ../include/ED_curve.h
   ../include/ED_datafiles.h
   ../include/ED_fileselect.h
+  ../include/ED_geometry.h
   ../include/ED_gizmo_library.h
   ../include/ED_gizmo_utils.h
   ../include/ED_gpencil.h
@@ -63,7 +64,6 @@ set(SRC
   ../include/ED_keyframes_edit.h
   ../include/ED_keyframing.h
   ../include/ED_lattice.h
-  ../include/ED_logic.h
   ../include/ED_markers.h
   ../include/ED_mask.h
   ../include/ED_mball.h
@@ -80,7 +80,6 @@ set(SRC
   ../include/ED_screen.h
   ../include/ED_screen_types.h
   ../include/ED_sculpt.h
-  ../include/ED_select_buffer_utils.h
   ../include/ED_select_utils.h
   ../include/ED_sequencer.h
   ../include/ED_sound.h
@@ -92,9 +91,12 @@ set(SRC
   ../include/ED_transverts.h
   ../include/ED_types.h
   ../include/ED_undo.h
+  ../include/ED_userpref.h
   ../include/ED_util.h
+  ../include/ED_util_imbuf.h
   ../include/ED_uvedit.h
   ../include/ED_view3d.h
+  ../include/ED_view3d_offscreen.h
   ../include/UI_icons.h
   ../include/UI_interface.h
   ../include/UI_interface_icons.h
@@ -105,7 +107,6 @@ set(SRC
 set(LIB
 )
 
-add_definitions(${GL_DEFINITIONS})
 
 if(WITH_INTERNATIONAL)
   add_definitions(-DWITH_INTERNATIONAL)

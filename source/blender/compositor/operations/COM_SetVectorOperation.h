@@ -16,8 +16,8 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_SETVECTOROPERATION_H__
-#define __COM_SETVECTOROPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
 
 /**
@@ -71,7 +71,7 @@ class SetVectorOperation : public NodeOperation {
   }
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
 
@@ -88,4 +88,3 @@ class SetVectorOperation : public NodeOperation {
     setZ(vector[2]);
   }
 };
-#endif

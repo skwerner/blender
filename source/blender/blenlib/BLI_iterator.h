@@ -14,12 +14,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLI_ITERATOR_H__
-#define __BLI_ITERATOR_H__
+#pragma once
 
 /** \file
  * \ingroup bli
  */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct BLI_Iterator {
   void *current; /* current pointer we iterate over */
@@ -51,4 +54,6 @@ typedef void (*IteratorBeginCb)(BLI_Iterator *iter, void *data_in);
   } \
   ((void)0)
 
-#endif /* __BLI_ITERATOR_H__ */
+#ifdef __cplusplus
+}
+#endif

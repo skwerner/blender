@@ -17,39 +17,39 @@
  */
 
 #include "COM_CompositorOperation.h"
-#include "BLI_listbase.h"
 #include "BKE_global.h"
 #include "BKE_image.h"
-
-extern "C" {
-#include "BLI_threads.h"
-#include "RE_pipeline.h"
-#include "RE_shader_ext.h"
-#include "RE_render_ext.h"
+#include "BLI_listbase.h"
 #include "MEM_guardedalloc.h"
+
+#include "BLI_threads.h"
+
+#include "RE_pipeline.h"
+#include "RE_texture.h"
+
 #include "render_types.h"
-}
+
 #include "PIL_time.h"
 
-CompositorOperation::CompositorOperation() : NodeOperation()
+CompositorOperation::CompositorOperation()
 {
   this->addInputSocket(COM_DT_COLOR);
   this->addInputSocket(COM_DT_VALUE);
   this->addInputSocket(COM_DT_VALUE);
 
-  this->setRenderData(NULL);
-  this->m_outputBuffer = NULL;
-  this->m_depthBuffer = NULL;
-  this->m_imageInput = NULL;
-  this->m_alphaInput = NULL;
-  this->m_depthInput = NULL;
+  this->setRenderData(nullptr);
+  this->m_outputBuffer = nullptr;
+  this->m_depthBuffer = nullptr;
+  this->m_imageInput = nullptr;
+  this->m_alphaInput = nullptr;
+  this->m_depthInput = nullptr;
 
   this->m_useAlphaInput = false;
   this->m_active = false;
 
-  this->m_scene = NULL;
+  this->m_scene = nullptr;
   this->m_sceneName[0] = '\0';
-  this->m_viewName = NULL;
+  this->m_viewName = nullptr;
 }
 
 void CompositorOperation::initExecution()
@@ -64,11 +64,11 @@ void CompositorOperation::initExecution()
   this->m_depthInput = getInputSocketReader(2);
   if (this->getWidth() * this->getHeight() != 0) {
     this->m_outputBuffer = (float *)MEM_callocN(
-        this->getWidth() * this->getHeight() * 4 * sizeof(float), "CompositorOperation");
+        sizeof(float[4]) * this->getWidth() * this->getHeight(), "CompositorOperation");
   }
-  if (this->m_depthInput != NULL) {
+  if (this->m_depthInput != nullptr) {
     this->m_depthBuffer = (float *)MEM_callocN(
-        this->getWidth() * this->getHeight() * sizeof(float), "CompositorOperation");
+        sizeof(float) * this->getWidth() * this->getHeight(), "CompositorOperation");
   }
 }
 
@@ -78,18 +78,18 @@ void CompositorOperation::deinitExecution()
     return;
   }
 
-  if (!isBreaked()) {
+  if (!isBraked()) {
     Render *re = RE_GetSceneRender(this->m_scene);
     RenderResult *rr = RE_AcquireResultWrite(re);
 
     if (rr) {
       RenderView *rv = RE_RenderViewGetByName(rr, this->m_viewName);
 
-      if (rv->rectf != NULL) {
+      if (rv->rectf != nullptr) {
         MEM_freeN(rv->rectf);
       }
       rv->rectf = this->m_outputBuffer;
-      if (rv->rectz != NULL) {
+      if (rv->rectz != nullptr) {
         MEM_freeN(rv->rectz);
       }
       rv->rectz = this->m_depthBuffer;
@@ -106,13 +106,13 @@ void CompositorOperation::deinitExecution()
 
     if (re) {
       RE_ReleaseResult(re);
-      re = NULL;
+      re = nullptr;
     }
 
     BLI_thread_lock(LOCK_DRAW_IMAGE);
     BKE_image_signal(G.main,
-                     BKE_image_verify_viewer(G.main, IMA_TYPE_R_RESULT, "Render Result"),
-                     NULL,
+                     BKE_image_ensure_viewer(G.main, IMA_TYPE_R_RESULT, "Render Result"),
+                     nullptr,
                      IMA_SIGNAL_FREE);
     BLI_thread_unlock(LOCK_DRAW_IMAGE);
   }
@@ -125,11 +125,11 @@ void CompositorOperation::deinitExecution()
     }
   }
 
-  this->m_outputBuffer = NULL;
-  this->m_depthBuffer = NULL;
-  this->m_imageInput = NULL;
-  this->m_alphaInput = NULL;
-  this->m_depthInput = NULL;
+  this->m_outputBuffer = nullptr;
+  this->m_depthBuffer = nullptr;
+  this->m_imageInput = nullptr;
+  this->m_alphaInput = nullptr;
+  this->m_depthInput = nullptr;
 }
 
 void CompositorOperation::executeRegion(rcti *rect, unsigned int /*tileNumber*/)
@@ -207,7 +207,7 @@ void CompositorOperation::executeRegion(rcti *rect, unsigned int /*tileNumber*/)
       zbuffer[offset] = color[0];
       offset4 += COM_NUM_CHANNELS_COLOR;
       offset++;
-      if (isBreaked()) {
+      if (isBraked()) {
         breaked = true;
       }
     }

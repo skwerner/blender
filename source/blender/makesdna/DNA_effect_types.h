@@ -21,8 +21,11 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_EFFECT_TYPES_H__
-#define __DNA_EFFECT_TYPES_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* don't forget, new effects also in writefile.c for dna!!! */
 
@@ -131,4 +134,6 @@ typedef struct WaveEff {
 
 } WaveEff;
 
+#ifdef __cplusplus
+}
 #endif

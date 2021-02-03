@@ -16,13 +16,11 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#include <string.h>
+#include <cstring>
 
-extern "C" {
 #include "BKE_node.h"
 
 #include "RNA_access.h"
-}
 
 #include "COM_ExecutionSystem.h"
 #include "COM_NodeOperation.h"
@@ -39,14 +37,14 @@ extern "C" {
  **************/
 
 Node::Node(bNode *editorNode, bool create_sockets)
-    : m_editorNodeTree(NULL),
+    : m_editorNodeTree(nullptr),
       m_editorNode(editorNode),
       m_inActiveGroup(false),
       m_instanceKey(NODE_INSTANCE_KEY_NONE)
 {
   if (create_sockets) {
     bNodeSocket *input = (bNodeSocket *)editorNode->inputs.first;
-    while (input != NULL) {
+    while (input != nullptr) {
       DataType dt = COM_DT_VALUE;
       if (input->type == SOCK_RGBA) {
         dt = COM_DT_COLOR;
@@ -59,7 +57,7 @@ Node::Node(bNode *editorNode, bool create_sockets)
       input = input->next;
     }
     bNodeSocket *output = (bNodeSocket *)editorNode->outputs.first;
-    while (output != NULL) {
+    while (output != nullptr) {
       DataType dt = COM_DT_VALUE;
       if (output->type == SOCK_RGBA) {
         dt = COM_DT_COLOR;
@@ -88,7 +86,7 @@ Node::~Node()
 
 void Node::addInputSocket(DataType datatype)
 {
-  this->addInputSocket(datatype, NULL);
+  this->addInputSocket(datatype, nullptr);
 }
 
 void Node::addInputSocket(DataType datatype, bNodeSocket *bSocket)
@@ -99,7 +97,7 @@ void Node::addInputSocket(DataType datatype, bNodeSocket *bSocket)
 
 void Node::addOutputSocket(DataType datatype)
 {
-  this->addOutputSocket(datatype, NULL);
+  this->addOutputSocket(datatype, nullptr);
 }
 void Node::addOutputSocket(DataType datatype, bNodeSocket *bSocket)
 {
@@ -123,27 +121,27 @@ bNodeSocket *Node::getEditorInputSocket(int editorNodeInputSocketIndex)
 {
   bNodeSocket *bSock = (bNodeSocket *)this->getbNode()->inputs.first;
   int index = 0;
-  while (bSock != NULL) {
+  while (bSock != nullptr) {
     if (index == editorNodeInputSocketIndex) {
       return bSock;
     }
     index++;
     bSock = bSock->next;
   }
-  return NULL;
+  return nullptr;
 }
-bNodeSocket *Node::getEditorOutputSocket(int editorNodeInputSocketIndex)
+bNodeSocket *Node::getEditorOutputSocket(int editorNodeOutputSocketIndex)
 {
   bNodeSocket *bSock = (bNodeSocket *)this->getbNode()->outputs.first;
   int index = 0;
-  while (bSock != NULL) {
-    if (index == editorNodeInputSocketIndex) {
+  while (bSock != nullptr) {
+    if (index == editorNodeOutputSocketIndex) {
       return bSock;
     }
     index++;
     bSock = bSock->next;
   }
-  return NULL;
+  return nullptr;
 }
 
 /*******************
@@ -151,7 +149,7 @@ bNodeSocket *Node::getEditorOutputSocket(int editorNodeInputSocketIndex)
  *******************/
 
 NodeInput::NodeInput(Node *node, bNodeSocket *b_socket, DataType datatype)
-    : m_node(node), m_editorSocket(b_socket), m_datatype(datatype), m_link(NULL)
+    : m_node(node), m_editorSocket(b_socket), m_datatype(datatype), m_link(nullptr)
 {
 }
 

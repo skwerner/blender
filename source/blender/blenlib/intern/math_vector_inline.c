@@ -17,8 +17,7 @@
  * All rights reserved.
  *
  * The Original Code is: some of this file.
- *
- * */
+ */
 
 /** \file
  * \ingroup bli
@@ -123,6 +122,27 @@ MINLINE void copy_v4_v4_uchar(unsigned char r[4], const unsigned char a[4])
   r[3] = a[3];
 }
 
+MINLINE void copy_v2_uchar(unsigned char r[2], const unsigned char a)
+{
+  r[0] = a;
+  r[1] = a;
+}
+
+MINLINE void copy_v3_uchar(unsigned char r[3], const unsigned char a)
+{
+  r[0] = a;
+  r[1] = a;
+  r[2] = a;
+}
+
+MINLINE void copy_v4_uchar(unsigned char r[4], const unsigned char a)
+{
+  r[0] = a;
+  r[1] = a;
+  r[2] = a;
+  r[3] = a;
+}
+
 /* char */
 MINLINE void copy_v2_v2_char(char r[2], const char a[2])
 {
@@ -169,6 +189,12 @@ MINLINE void copy_v4_v4_short(short r[4], const short a[4])
 }
 
 /* int */
+MINLINE void zero_v2_int(int r[2])
+{
+  r[0] = 0;
+  r[1] = 0;
+}
+
 MINLINE void zero_v3_int(int r[3])
 {
   r[0] = 0;
@@ -355,10 +381,22 @@ MINLINE void add_v2_v2(float r[2], const float a[2])
   r[1] += a[1];
 }
 
+MINLINE void add_v2_v2_db(double r[2], const double a[2])
+{
+  r[0] += a[0];
+  r[1] += a[1];
+}
+
 MINLINE void add_v2_v2v2(float r[2], const float a[2], const float b[2])
 {
   r[0] = a[0] + b[0];
   r[1] = a[1] + b[1];
+}
+
+MINLINE void add_v2_v2_int(int r[2], const int a[2])
+{
+  r[0] = r[0] + a[0];
+  r[1] = r[1] + a[1];
 }
 
 MINLINE void add_v2_v2v2_int(int r[2], const int a[2], const int b[2])
@@ -368,6 +406,13 @@ MINLINE void add_v2_v2v2_int(int r[2], const int a[2], const int b[2])
 }
 
 MINLINE void add_v3_v3(float r[3], const float a[3])
+{
+  r[0] += a[0];
+  r[1] += a[1];
+  r[2] += a[2];
+}
+
+MINLINE void add_v3_v3_db(double r[3], const double a[3])
 {
   r[0] += a[0];
   r[1] += a[1];
@@ -423,6 +468,12 @@ MINLINE void sub_v2_v2v2(float r[2], const float a[2], const float b[2])
   r[1] = a[1] - b[1];
 }
 
+MINLINE void sub_v2_v2v2_db(double r[2], const double a[2], const double b[2])
+{
+  r[0] = a[0] - b[0];
+  r[1] = a[1] - b[1];
+}
+
 MINLINE void sub_v2_v2v2_int(int r[2], const int a[2], const int b[2])
 {
   r[0] = a[0] - b[0];
@@ -448,6 +499,19 @@ MINLINE void sub_v3_v3v3_int(int r[3], const int a[3], const int b[3])
   r[0] = a[0] - b[0];
   r[1] = a[1] - b[1];
   r[2] = a[2] - b[2];
+}
+
+MINLINE void sub_v3_v3v3_db(double r[3], const double a[3], const double b[3])
+{
+  r[0] = a[0] - b[0];
+  r[1] = a[1] - b[1];
+  r[2] = a[2] - b[2];
+}
+
+MINLINE void sub_v2db_v2fl_v2fl(double r[2], const float a[2], const float b[2])
+{
+  r[0] = (double)a[0] - (double)b[0];
+  r[1] = (double)a[1] - (double)b[1];
 }
 
 MINLINE void sub_v3db_v3fl_v3fl(double r[3], const float a[3], const float b[3])
@@ -492,7 +556,21 @@ MINLINE void mul_v3_fl(float r[3], float f)
   r[2] *= f;
 }
 
+MINLINE void mul_v3db_db(double r[3], double f)
+{
+  r[0] *= f;
+  r[1] *= f;
+  r[2] *= f;
+}
+
 MINLINE void mul_v3_v3fl(float r[3], const float a[3], float f)
+{
+  r[0] = a[0] * f;
+  r[1] = a[1] * f;
+  r[2] = a[2] * f;
+}
+
+MINLINE void mul_v3_v3db_db(double r[3], const double a[3], double f)
 {
   r[0] = a[0] * f;
   r[1] = a[1] * f;
@@ -809,6 +887,11 @@ MINLINE float dot_v2v2(const float a[2], const float b[2])
   return a[0] * b[0] + a[1] * b[1];
 }
 
+MINLINE double dot_v2v2_db(const double a[2], const double b[2])
+{
+  return a[0] * b[0] + a[1] * b[1];
+}
+
 MINLINE float dot_v3v3(const float a[3], const float b[3])
 {
   return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -836,7 +919,17 @@ MINLINE double dot_v3db_v3fl(const double a[3], const float b[3])
   return a[0] * (double)b[0] + a[1] * (double)b[1] + a[2] * (double)b[2];
 }
 
+MINLINE double dot_v3v3_db(const double a[3], const double b[3])
+{
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
 MINLINE float cross_v2v2(const float a[2], const float b[2])
+{
+  return a[0] * b[1] - a[1] * b[0];
+}
+
+MINLINE double cross_v2v2_db(const double a[2], const double b[2])
 {
   return a[0] * b[1] - a[1] * b[0];
 }
@@ -857,6 +950,14 @@ MINLINE void cross_v3_v3v3_hi_prec(float r[3], const float a[3], const float b[3
   r[0] = (float)((double)a[1] * (double)b[2] - (double)a[2] * (double)b[1]);
   r[1] = (float)((double)a[2] * (double)b[0] - (double)a[0] * (double)b[2]);
   r[2] = (float)((double)a[0] * (double)b[1] - (double)a[1] * (double)b[0]);
+}
+
+MINLINE void cross_v3_v3v3_db(double r[3], const double a[3], const double b[3])
+{
+  BLI_assert(r != a && r != b);
+  r[0] = a[1] * b[2] - a[2] * b[1];
+  r[1] = a[2] * b[0] - a[0] * b[2];
+  r[2] = a[0] * b[1] - a[1] * b[0];
 }
 
 /* Newell's Method */
@@ -893,6 +994,11 @@ MINLINE float len_squared_v3(const float v[3])
   return v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
 }
 
+MINLINE double len_squared_v3_db(const double v[3])
+{
+  return v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
+}
+
 MINLINE float len_manhattan_v2(const float v[2])
 {
   return fabsf(v[0]) + fabsf(v[1]);
@@ -913,6 +1019,11 @@ MINLINE float len_v2(const float v[2])
   return sqrtf(v[0] * v[0] + v[1] * v[1]);
 }
 
+MINLINE double len_v2_db(const double v[2])
+{
+  return sqrt(v[0] * v[0] + v[1] * v[1]);
+}
+
 MINLINE float len_v2v2(const float v1[2], const float v2[2])
 {
   float x, y;
@@ -920,6 +1031,15 @@ MINLINE float len_v2v2(const float v1[2], const float v2[2])
   x = v1[0] - v2[0];
   y = v1[1] - v2[1];
   return sqrtf(x * x + y * y);
+}
+
+MINLINE double len_v2v2_db(const double v1[2], const double v2[2])
+{
+  double x, y;
+
+  x = v1[0] - v2[0];
+  y = v1[1] - v2[1];
+  return sqrt(x * x + y * y);
 }
 
 MINLINE float len_v2v2_int(const int v1[2], const int v2[2])
@@ -936,12 +1056,25 @@ MINLINE float len_v3(const float a[3])
   return sqrtf(dot_v3v3(a, a));
 }
 
+MINLINE double len_v3_db(const double a[3])
+{
+  return sqrt(dot_v3v3_db(a, a));
+}
+
 MINLINE float len_squared_v2v2(const float a[2], const float b[2])
 {
   float d[2];
 
   sub_v2_v2v2(d, b, a);
   return dot_v2v2(d, d);
+}
+
+MINLINE double len_squared_v2v2_db(const double a[2], const double b[2])
+{
+  double d[2];
+
+  sub_v2_v2v2_db(d, b, a);
+  return dot_v2v2_db(d, d);
 }
 
 MINLINE float len_squared_v3v3(const float a[3], const float b[3])
@@ -1044,7 +1177,29 @@ MINLINE float normalize_v3_v3(float r[3], const float a[3])
   return normalize_v3_v3_length(r, a, 1.0f);
 }
 
-MINLINE double normalize_v3_length_d(double n[3], const double unit_length)
+MINLINE double normalize_v3_v3_length_db(double r[3], const double a[3], double const unit_length)
+{
+  double d = dot_v3v3_db(a, a);
+
+  /* a larger value causes normalize errors in a
+   * scaled down models with camera extreme close */
+  if (d > 1.0e-70) {
+    d = sqrt(d);
+    mul_v3_v3db_db(r, a, unit_length / d);
+  }
+  else {
+    zero_v3_db(r);
+    d = 0.0;
+  }
+
+  return d;
+}
+MINLINE double normalize_v3_v3_db(double r[3], const double a[3])
+{
+  return normalize_v3_v3_length_db(r, a, 1.0);
+}
+
+MINLINE double normalize_v3_length_db(double n[3], const double unit_length)
 {
   double d = n[0] * n[0] + n[1] * n[1] + n[2] * n[2];
 
@@ -1067,9 +1222,9 @@ MINLINE double normalize_v3_length_d(double n[3], const double unit_length)
 
   return d;
 }
-MINLINE double normalize_v3_d(double n[3])
+MINLINE double normalize_v3_db(double n[3])
 {
-  return normalize_v3_length_d(n, 1.0);
+  return normalize_v3_length_db(n, 1.0);
 }
 
 MINLINE float normalize_v3_length(float n[3], const float unit_length)
@@ -1132,6 +1287,7 @@ MINLINE bool is_one_v3(const float v[3])
   return (v[0] == 1.0f && v[1] == 1.0f && v[2] == 1.0f);
 }
 
+/* -------------------------------------------------------------------- */
 /** \name Vector Comparison
  *
  * \note use ``value <= limit``, so a limit of zero doesn't fail on an exact match.
@@ -1148,6 +1304,21 @@ MINLINE bool equals_v3v3(const float v1[3], const float v2[3])
 }
 
 MINLINE bool equals_v4v4(const float v1[4], const float v2[4])
+{
+  return ((v1[0] == v2[0]) && (v1[1] == v2[1]) && (v1[2] == v2[2]) && (v1[3] == v2[3]));
+}
+
+MINLINE bool equals_v2v2_int(const int v1[2], const int v2[2])
+{
+  return ((v1[0] == v2[0]) && (v1[1] == v2[1]));
+}
+
+MINLINE bool equals_v3v3_int(const int v1[3], const int v2[3])
+{
+  return ((v1[0] == v2[0]) && (v1[1] == v2[1]) && (v1[2] == v2[2]));
+}
+
+MINLINE bool equals_v4v4_int(const int v1[4], const int v2[4])
 {
   return ((v1[0] == v2[0]) && (v1[1] == v2[1]) && (v1[2] == v2[2]) && (v1[3] == v2[3]));
 }
@@ -1205,6 +1376,72 @@ MINLINE bool compare_len_v3v3(const float v1[3], const float v2[3], const float 
   sub_v3_v3v3(d, v1, v2);
   return (dot_v3v3(d, d) <= (limit * limit));
 }
+
+MINLINE bool compare_size_v3v3(const float v1[3], const float v2[3], const float limit)
+{
+  for (int i = 0; i < 3; i++) {
+    if (v2[i] == 0.0f) {
+      /* Catch division by zero. */
+      if (v1[i] != v2[i]) {
+        return false;
+      }
+    }
+    else {
+      if (fabsf(v1[i] / v2[i] - 1.0f) > limit) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+/* -------------------------------------------------------------------- */
+/** \name Vector Clamping
+ * \{ */
+
+MINLINE void clamp_v2(float vec[2], const float min, const float max)
+{
+  CLAMP(vec[0], min, max);
+  CLAMP(vec[1], min, max);
+}
+
+MINLINE void clamp_v3(float vec[3], const float min, const float max)
+{
+  CLAMP(vec[0], min, max);
+  CLAMP(vec[1], min, max);
+  CLAMP(vec[2], min, max);
+}
+
+MINLINE void clamp_v4(float vec[4], const float min, const float max)
+{
+  CLAMP(vec[0], min, max);
+  CLAMP(vec[1], min, max);
+  CLAMP(vec[2], min, max);
+  CLAMP(vec[3], min, max);
+}
+
+MINLINE void clamp_v2_v2v2(float vec[2], const float min[2], const float max[2])
+{
+  CLAMP(vec[0], min[0], max[0]);
+  CLAMP(vec[1], min[1], max[1]);
+}
+
+MINLINE void clamp_v3_v3v3(float vec[3], const float min[3], const float max[3])
+{
+  CLAMP(vec[0], min[0], max[0]);
+  CLAMP(vec[1], min[1], max[1]);
+  CLAMP(vec[2], min[2], max[2]);
+}
+
+MINLINE void clamp_v4_v4v4(float vec[4], const float min[4], const float max[4])
+{
+  CLAMP(vec[0], min[0], max[0]);
+  CLAMP(vec[1], min[1], max[1]);
+  CLAMP(vec[2], min[2], max[2]);
+  CLAMP(vec[3], min[3], max[3]);
+}
+
+/** \} */
 
 /**
  * <pre>

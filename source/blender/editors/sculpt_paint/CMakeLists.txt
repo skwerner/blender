@@ -23,18 +23,18 @@ set(INC
   ../../blentranslation
   ../../bmesh
   ../../depsgraph
+  ../../draw
   ../../gpu
   ../../imbuf
   ../../makesdna
   ../../makesrna
-  ../../render/extern/include
+  ../../render
   ../../windowmanager
+  ../../../../intern/atomic
+  ../../../../intern/clog
+  ../../../../intern/eigen
   ../../../../intern/glew-mx
   ../../../../intern/guardedalloc
-)
-
-set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
 )
 
 set(SRC
@@ -45,7 +45,6 @@ set(SRC
   paint_image.c
   paint_image_2d.c
   paint_image_proj.c
-  paint_image_undo.c
   paint_mask.c
   paint_ops.c
   paint_stroke.c
@@ -57,6 +56,21 @@ set(SRC
   paint_vertex_weight_ops.c
   paint_vertex_weight_utils.c
   sculpt.c
+  sculpt_automasking.c
+  sculpt_boundary.c
+  sculpt_cloth.c
+  sculpt_detail.c
+  sculpt_dyntopo.c
+  sculpt_face_set.c
+  sculpt_filter_color.c
+  sculpt_filter_mask.c
+  sculpt_filter_mesh.c
+  sculpt_mask_expand.c
+  sculpt_multiplane_scrape.c
+  sculpt_paint_color.c
+  sculpt_pose.c
+  sculpt_smooth.c
+  sculpt_transform.c
   sculpt_undo.c
   sculpt_uv.c
 
@@ -73,6 +87,5 @@ if(WITH_INTERNATIONAL)
   add_definitions(-DWITH_INTERNATIONAL)
 endif()
 
-add_definitions(${GL_DEFINITIONS})
 
 blender_add_lib(bf_editor_sculpt_paint "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

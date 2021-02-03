@@ -17,20 +17,20 @@
  */
 
 #include "COM_DirectionalBlurOperation.h"
-#include "BLI_math.h"
 #include "COM_OpenCLDevice.h"
-extern "C" {
-#include "RE_pipeline.h"
-}
 
-DirectionalBlurOperation::DirectionalBlurOperation() : NodeOperation()
+#include "BLI_math.h"
+
+#include "RE_pipeline.h"
+
+DirectionalBlurOperation::DirectionalBlurOperation()
 {
   this->addInputSocket(COM_DT_COLOR);
   this->addOutputSocket(COM_DT_COLOR);
   this->setComplex(true);
 
   this->setOpenCL(true);
-  this->m_inputProgram = NULL;
+  this->m_inputProgram = nullptr;
 }
 
 void DirectionalBlurOperation::initExecution()
@@ -72,7 +72,7 @@ void DirectionalBlurOperation::executePixel(float output[4], int x, int y, void 
   float lsc = this->m_sc;
   float lrot = this->m_rot;
   /* blur the image */
-  for (int i = 0; i < iterations; ++i) {
+  for (int i = 0; i < iterations; i++) {
     const float cs = cosf(lrot), ss = sinf(lrot);
     const float isc = 1.0f / (1.0f + lsc);
 
@@ -103,7 +103,7 @@ void DirectionalBlurOperation::executeOpenCL(OpenCLDevice *device,
                                              list<cl_mem> *clMemToCleanUp,
                                              list<cl_kernel> * /*clKernelsToCleanUp*/)
 {
-  cl_kernel directionalBlurKernel = device->COM_clCreateKernel("directionalBlurKernel", NULL);
+  cl_kernel directionalBlurKernel = device->COM_clCreateKernel("directionalBlurKernel", nullptr);
 
   cl_int iterations = pow(2.0f, this->m_data->iter);
   cl_float2 ltxy = {{this->m_tx, this->m_ty}};
@@ -128,7 +128,7 @@ void DirectionalBlurOperation::executeOpenCL(OpenCLDevice *device,
 
 void DirectionalBlurOperation::deinitExecution()
 {
-  this->m_inputProgram = NULL;
+  this->m_inputProgram = nullptr;
 }
 
 bool DirectionalBlurOperation::determineDependingAreaOfInterest(rcti * /*input*/,

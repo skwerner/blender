@@ -20,16 +20,14 @@
 
 #include "MEM_guardedalloc.h"
 
-extern "C" {
+#include "BLI_jitter_2d.h"
 #include "BLI_listbase.h"
 #include "BLI_math.h"
 #include "BLI_math_color.h"
-#include "BLI_jitter_2d.h"
 
 #include "BKE_movieclip.h"
 #include "BKE_node.h"
 #include "BKE_tracking.h"
-}
 
 /* ******** PlaneDistort WarpImage ******** */
 
@@ -46,11 +44,11 @@ BLI_INLINE void warpCoord(float x, float y, float matrix[3][3], float uv[2], flo
   deriv[1][1] = (matrix[1][1] - matrix[1][2] * uv[1]) / vec[2];
 }
 
-PlaneDistortWarpImageOperation::PlaneDistortWarpImageOperation() : NodeOperation()
+PlaneDistortWarpImageOperation::PlaneDistortWarpImageOperation()
 {
   this->addInputSocket(COM_DT_COLOR, COM_SC_NO_RESIZE);
   this->addOutputSocket(COM_DT_COLOR);
-  this->m_pixelReader = NULL;
+  this->m_pixelReader = nullptr;
   this->m_motion_blur_samples = 1;
   this->m_motion_blur_shutter = 0.5f;
   this->setComplex(true);
@@ -89,7 +87,7 @@ void PlaneDistortWarpImageOperation::initExecution()
 
 void PlaneDistortWarpImageOperation::deinitExecution()
 {
-  this->m_pixelReader = NULL;
+  this->m_pixelReader = nullptr;
 }
 
 void PlaneDistortWarpImageOperation::executePixelSampled(float output[4],
@@ -105,7 +103,7 @@ void PlaneDistortWarpImageOperation::executePixelSampled(float output[4],
   }
   else {
     zero_v4(output);
-    for (int sample = 0; sample < this->m_motion_blur_samples; ++sample) {
+    for (int sample = 0; sample < this->m_motion_blur_samples; sample++) {
       float color[4];
       warpCoord(x, y, this->m_samples[sample].perspectiveMatrix, uv, deriv);
       m_pixelReader->readFiltered(color, uv[0], uv[1], deriv[0], deriv[1]);
@@ -121,7 +119,7 @@ bool PlaneDistortWarpImageOperation::determineDependingAreaOfInterest(
   float min[2], max[2];
   INIT_MINMAX2(min, max);
 
-  for (int sample = 0; sample < this->m_motion_blur_samples; ++sample) {
+  for (int sample = 0; sample < this->m_motion_blur_samples; sample++) {
     float UVs[4][2];
     float deriv[2][2];
     MotionSample *sample_data = &this->m_samples[sample];
@@ -147,7 +145,7 @@ bool PlaneDistortWarpImageOperation::determineDependingAreaOfInterest(
 
 /* ******** PlaneDistort Mask ******** */
 
-PlaneDistortMaskOperation::PlaneDistortMaskOperation() : NodeOperation()
+PlaneDistortMaskOperation::PlaneDistortMaskOperation()
 {
   addOutputSocket(COM_DT_VALUE);
 
@@ -208,9 +206,9 @@ void PlaneDistortMaskOperation::executePixelSampled(float output[4],
     output[0] = (float)inside_counter / this->m_osa;
   }
   else {
-    for (int motion_sample = 0; motion_sample < this->m_motion_blur_samples; ++motion_sample) {
+    for (int motion_sample = 0; motion_sample < this->m_motion_blur_samples; motion_sample++) {
       MotionSample *sample_data = &this->m_samples[motion_sample];
-      for (int osa_sample = 0; osa_sample < this->m_osa; ++osa_sample) {
+      for (int osa_sample = 0; osa_sample < this->m_osa; osa_sample++) {
         point[0] = x + this->m_jitter[osa_sample][0];
         point[1] = y + this->m_jitter[osa_sample][1];
         if (isect_point_tri_v2(point,

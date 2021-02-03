@@ -29,16 +29,16 @@
 #include "BLI_ghash.h"
 
 #include "BKE_context.h"
-#include "BKE_text.h"
 #include "BKE_screen.h"
-#include "BKE_suggestions.h"
+#include "BKE_text.h"
+#include "BKE_text_suggestions.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
 
+#include "ED_screen.h"
 #include "ED_text.h"
 #include "ED_undo.h"
-#include "ED_screen.h"
 
 #include "UI_interface.h"
 
@@ -46,17 +46,18 @@
 #include "text_intern.h" /* own include */
 
 /* -------------------------------------------------------------------- */
-/* Public API */
+/** \name Public API
+ * \{ */
 
-int text_do_suggest_select(SpaceText *st, ARegion *ar)
+bool text_do_suggest_select(SpaceText *st, ARegion *region, const int mval[2])
 {
+  const int lheight = TXT_LINE_HEIGHT(st);
   SuggItem *item, *first, *last /* , *sel */ /* UNUSED */;
   TextLine *tmp;
   int l, x, y, w, h, i;
   int tgti, *top;
-  int mval[2] = {0, 0};
 
-  if (!st || !st->text) {
+  if (!st->text) {
     return 0;
   }
   if (!texttool_text_is_active(st->text)) {
@@ -82,18 +83,11 @@ int text_do_suggest_select(SpaceText *st, ARegion *ar)
 
   text_update_character_width(st);
 
-  if (st->showlinenrs) {
-    x = st->cwidth * (st->text->curc - st->left) + TXT_OFFSET + TEXTXLOC - 4;
-  }
-  else {
-    x = st->cwidth * (st->text->curc - st->left) + TXT_OFFSET - 4;
-  }
-  y = ar->winy - st->lheight_dpi * l - 2;
+  x = TXT_BODY_LEFT(st) + (st->runtime.cwidth_px * (st->text->curc - st->left));
+  y = region->winy - lheight * l - 2;
 
-  w = SUGG_LIST_WIDTH * st->cwidth + U.widget_unit;
-  h = SUGG_LIST_SIZE * st->lheight_dpi + 0.4f * U.widget_unit;
-
-  // XXX getmouseco_areawin(mval);
+  w = SUGG_LIST_WIDTH * st->runtime.cwidth_px + U.widget_unit;
+  h = SUGG_LIST_SIZE * lheight + 0.4f * U.widget_unit;
 
   if (mval[0] < x || x + w < mval[0] || mval[1] < y - h || y < mval[1]) {
     return 0;
@@ -105,7 +99,7 @@ int text_do_suggest_select(SpaceText *st, ARegion *ar)
   }
 
   /* Work out the target item index in the visible list */
-  tgti = (y - mval[1] - 4) / st->lheight_dpi;
+  tgti = (y - mval[1] - 4) / lheight;
   if (tgti < 0 || tgti > SUGG_LIST_SIZE) {
     return 1;
   }
@@ -141,8 +135,11 @@ void text_pop_suggest_list(void)
   }
 }
 
+/** \} */
+
 /* -------------------------------------------------------------------- */
-/* Private API */
+/** \name Private API
+ * \{ */
 
 static void text_autocomplete_free(bContext *C, wmOperator *op);
 
@@ -293,7 +290,11 @@ static void confirm_suggestion(Text *text)
   texttool_text_clear();
 }
 
-/* -- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Auto Complete Operator
+ * \{ */
 
 static int text_autocomplete_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
 {
@@ -315,30 +316,25 @@ static int text_autocomplete_invoke(bContext *C, wmOperator *op, const wmEvent *
       ED_undo_push(C, op->type->name);
       return OPERATOR_FINISHED;
     }
-    else {
-      WM_event_add_modal_handler(C, op);
-      return OPERATOR_RUNNING_MODAL;
-    }
+
+    WM_event_add_modal_handler(C, op);
+    return OPERATOR_RUNNING_MODAL;
   }
-  else {
-    text_autocomplete_free(C, op);
-    return OPERATOR_CANCELLED;
-  }
+  text_autocomplete_free(C, op);
+  return OPERATOR_CANCELLED;
 }
 
 static int doc_scroll = 0;
 
 static int text_autocomplete_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
+  /* NOTE(campbell): this code could be refactored or rewritten. */
   SpaceText *st = CTX_wm_space_text(C);
-  ScrArea *sa = CTX_wm_area(C);
-  ARegion *ar = BKE_area_find_region_type(sa, RGN_TYPE_WINDOW);
+  ScrArea *area = CTX_wm_area(C);
+  ARegion *region = BKE_area_find_region_type(area, RGN_TYPE_WINDOW);
 
   int draw = 0, tools = 0, swallow = 0, scroll = 1;
-  Text *text = CTX_data_edit_text(C);
   int retval = OPERATOR_RUNNING_MODAL;
-
-  (void)text;
 
   if (st->doplugins && texttool_text_is_active(st->text)) {
     if (texttool_suggest_first()) {
@@ -350,10 +346,30 @@ static int text_autocomplete_modal(bContext *C, wmOperator *op, const wmEvent *e
   }
 
   switch (event->type) {
+    case MOUSEMOVE: {
+      if (text_do_suggest_select(st, region, event->mval)) {
+        draw = 1;
+      }
+      swallow = 1;
+      break;
+    }
     case LEFTMOUSE:
       if (event->val == KM_PRESS) {
-        if (text_do_suggest_select(st, ar)) {
-          swallow = 1;
+        if (text_do_suggest_select(st, region, event->mval)) {
+          if (tools & TOOL_SUGG_LIST) {
+            ED_text_undo_push_init(C);
+            confirm_suggestion(st->text);
+            text_update_line_edited(st->text->curl);
+            ED_undo_push(C, op->type->name);
+            swallow = 1;
+            draw = 1;
+          }
+          if (tools & TOOL_DOCUMENT) {
+            texttool_docs_clear();
+            doc_scroll = 0;
+            draw = 1;
+          }
+          retval = OPERATOR_FINISHED;
         }
         else {
           if (tools & TOOL_SUGG_LIST) {
@@ -363,34 +379,12 @@ static int text_autocomplete_modal(bContext *C, wmOperator *op, const wmEvent *e
             texttool_docs_clear();
             doc_scroll = 0;
           }
-          retval = OPERATOR_FINISHED;
+          retval = OPERATOR_CANCELLED;
         }
         draw = 1;
       }
       break;
-    case MIDDLEMOUSE:
-      if (event->val == KM_PRESS) {
-        if (text_do_suggest_select(st, ar)) {
-          ED_text_undo_push_init(C);
-          confirm_suggestion(st->text);
-          text_update_line_edited(st->text->curl);
-          ED_undo_push(C, op->type->name);
-          swallow = 1;
-        }
-        else {
-          if (tools & TOOL_SUGG_LIST) {
-            texttool_suggest_clear();
-          }
-          if (tools & TOOL_DOCUMENT) {
-            texttool_docs_clear();
-            doc_scroll = 0;
-          }
-          retval = OPERATOR_FINISHED;
-        }
-        draw = 1;
-      }
-      break;
-    case ESCKEY:
+    case EVT_ESCKEY:
       if (event->val == KM_PRESS) {
         draw = swallow = 1;
         if (tools & TOOL_SUGG_LIST) {
@@ -406,8 +400,8 @@ static int text_autocomplete_modal(bContext *C, wmOperator *op, const wmEvent *e
         retval = OPERATOR_CANCELLED;
       }
       break;
-    case RETKEY:
-    case PADENTER:
+    case EVT_RETKEY:
+    case EVT_PADENTER:
       if (event->val == KM_PRESS) {
         if (tools & TOOL_SUGG_LIST) {
           ED_text_undo_push_init(C);
@@ -425,13 +419,14 @@ static int text_autocomplete_modal(bContext *C, wmOperator *op, const wmEvent *e
         retval = OPERATOR_FINISHED;
       }
       break;
-    case LEFTARROWKEY:
-    case BACKSPACEKEY:
+    case EVT_LEFTARROWKEY:
+    case EVT_BACKSPACEKEY:
       if (event->val == KM_PRESS) {
         if (tools & TOOL_SUGG_LIST) {
           if (event->ctrl) {
             texttool_suggest_clear();
             retval = OPERATOR_CANCELLED;
+            draw = 1;
           }
           else {
             /* Work out which char we are about to delete/pass */
@@ -440,15 +435,19 @@ static int text_autocomplete_modal(bContext *C, wmOperator *op, const wmEvent *e
               if ((ch == '_' || !ispunct(ch)) && !text_check_whitespace(ch)) {
                 get_suggest_prefix(st->text, -1);
                 text_pop_suggest_list();
+                txt_move_left(st->text, false);
+                draw = 1;
               }
               else {
                 texttool_suggest_clear();
                 retval = OPERATOR_CANCELLED;
+                draw = 1;
               }
             }
             else {
               texttool_suggest_clear();
               retval = OPERATOR_CANCELLED;
+              draw = 1;
             }
           }
         }
@@ -458,29 +457,34 @@ static int text_autocomplete_modal(bContext *C, wmOperator *op, const wmEvent *e
         }
       }
       break;
-    case RIGHTARROWKEY:
+    case EVT_RIGHTARROWKEY:
       if (event->val == KM_PRESS) {
         if (tools & TOOL_SUGG_LIST) {
           if (event->ctrl) {
             texttool_suggest_clear();
             retval = OPERATOR_CANCELLED;
+            draw = 1;
           }
           else {
             /* Work out which char we are about to pass */
             if (st->text->curl && st->text->curc < st->text->curl->len) {
-              char ch = st->text->curl->line[st->text->curc + 1];
+              char ch = st->text->curl->line[st->text->curc];
               if ((ch == '_' || !ispunct(ch)) && !text_check_whitespace(ch)) {
                 get_suggest_prefix(st->text, 1);
                 text_pop_suggest_list();
+                txt_move_right(st->text, false);
+                draw = 1;
               }
               else {
                 texttool_suggest_clear();
                 retval = OPERATOR_CANCELLED;
+                draw = 1;
               }
             }
             else {
               texttool_suggest_clear();
               retval = OPERATOR_CANCELLED;
+              draw = 1;
             }
           }
         }
@@ -490,11 +494,11 @@ static int text_autocomplete_modal(bContext *C, wmOperator *op, const wmEvent *e
         }
       }
       break;
-    case PAGEDOWNKEY:
+    case EVT_PAGEDOWNKEY:
       scroll = SUGG_LIST_SIZE - 1;
       ATTR_FALLTHROUGH;
     case WHEELDOWNMOUSE:
-    case DOWNARROWKEY:
+    case EVT_DOWNARROWKEY:
       if (event->val == KM_PRESS) {
         if (tools & TOOL_DOCUMENT) {
           doc_scroll++;
@@ -524,11 +528,11 @@ static int text_autocomplete_modal(bContext *C, wmOperator *op, const wmEvent *e
         }
       }
       break;
-    case PAGEUPKEY:
+    case EVT_PAGEUPKEY:
       scroll = SUGG_LIST_SIZE - 1;
       ATTR_FALLTHROUGH;
     case WHEELUPMOUSE:
-    case UPARROWKEY:
+    case EVT_UPARROWKEY:
       if (event->val == KM_PRESS) {
         if (tools & TOOL_DOCUMENT) {
           if (doc_scroll > 0) {
@@ -555,8 +559,8 @@ static int text_autocomplete_modal(bContext *C, wmOperator *op, const wmEvent *e
         }
       }
       break;
-    case RIGHTSHIFTKEY:
-    case LEFTSHIFTKEY:
+    case EVT_RIGHTSHIFTKEY:
+    case EVT_LEFTSHIFTKEY:
       break;
 #if 0
     default:
@@ -573,7 +577,7 @@ static int text_autocomplete_modal(bContext *C, wmOperator *op, const wmEvent *e
   }
 
   if (draw) {
-    ED_area_tag_redraw(sa);
+    ED_area_tag_redraw(area);
   }
 
   //  if (swallow) {
@@ -586,10 +590,8 @@ static int text_autocomplete_modal(bContext *C, wmOperator *op, const wmEvent *e
     }
     return retval;
   }
-  else {
-    text_autocomplete_free(C, op);
-    return OPERATOR_FINISHED;
-  }
+  text_autocomplete_free(C, op);
+  return OPERATOR_FINISHED;
 }
 
 static void text_autocomplete_free(bContext *C, wmOperator *op)
@@ -630,3 +632,5 @@ void TEXT_OT_autocomplete(wmOperatorType *ot)
   /* Undo is handled conditionally by this operator. */
   ot->flag = OPTYPE_BLOCKING;
 }
+
+/** \} */

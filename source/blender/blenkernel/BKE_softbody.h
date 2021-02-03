@@ -16,12 +16,15 @@
  * The Original Code is Copyright (C) Blender Foundation.
  * All rights reserved.
  */
-#ifndef __BKE_SOFTBODY_H__
-#define __BKE_SOFTBODY_H__
+#pragma once
 
 /** \file
  * \ingroup bke
  */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct Depsgraph;
 struct Object;
@@ -37,7 +40,7 @@ typedef struct BodyPoint {
   int *springs;
   float choke, choke2, frozen;
   float colball;
-  short loc_flag;  // reserved by locale module specific states
+  short loc_flag; /* reserved by locale module specific states */
   // char octantflag;
   float mass;
   float springweight;
@@ -56,7 +59,7 @@ extern void sbFreeSimulation(struct SoftBody *sb);
 extern void sbObjectStep(struct Depsgraph *depsgraph,
                          struct Scene *scene,
                          struct Object *ob,
-                         float framnr,
+                         float cfra,
                          float (*vertexCos)[3],
                          int numVerts);
 
@@ -69,4 +72,6 @@ extern void sbSetInterruptCallBack(int (*f)(void));
 
 extern void SB_estimate_transform(Object *ob, float lloc[3], float lrot[3][3], float lscale[3][3]);
 
+#ifdef __cplusplus
+}
 #endif

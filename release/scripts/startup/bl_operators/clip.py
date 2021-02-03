@@ -39,6 +39,17 @@ def CLIP_spaces_walk(context, all_screens, tarea, tspace, callback, *args):
 
 
 def CLIP_set_viewport_background(context, clip, clip_user):
+
+    def check_camera_has_distortion(tracking_camera):
+        if tracking_camera.distortion_model == 'POLYNOMIAL':
+            return not all(k == 0 for k in (tracking_camera.k1,
+                                            tracking_camera.k2,
+                                            tracking_camera.k3))
+        elif tracking_camera.distortion_model == 'DIVISION':
+            return not all(k == 0 for k in (tracking_camera.division_k1,
+                                            tracking_camera.division_k2))
+        return False
+
     def set_background(cam, clip, user):
         bgpic = None
 
@@ -53,7 +64,8 @@ def CLIP_set_viewport_background(context, clip, clip_user):
         bgpic.source = 'MOVIE_CLIP'
         bgpic.clip = clip
         bgpic.clip_user.proxy_render_size = user.proxy_render_size
-        bgpic.clip_user.use_render_undistorted = True
+        if check_camera_has_distortion(clip.tracking.camera):
+            bgpic.clip_user.use_render_undistorted = True
         bgpic.use_camera_clip = False
 
         cam.show_background_images = True
@@ -375,9 +387,12 @@ class CLIP_OT_delete_proxy(Operator):
             self._rmproxy(d + "_undistorted")
             self._rmproxy(os.path.join(absproxy, "proxy_%d.avi" % x))
 
-        tc = ("free_run.blen_tc",
-              "interp_free_run.blen_tc",
-              "record_run.blen_tc")
+        tc = (
+            "free_run.blen_tc",
+            "interp_free_run.blen_tc",
+            "record_run.blen_tc",
+            "record_run_no_gaps.blen_tc",
+        )
 
         for x in tc:
             self._rmproxy(os.path.join(absproxy, x))
@@ -399,8 +414,8 @@ class CLIP_OT_delete_proxy(Operator):
 
 
 class CLIP_OT_set_viewport_background(Operator):
-    """Set current movie clip as a camera background in 3D view-port """ \
-        """(works only when a 3D view-port is visible)"""
+    """Set current movie clip as a camera background in 3D Viewport """ \
+        """(works only when a 3D Viewport is visible)"""
 
     bl_idname = "clip.set_viewport_background"
     bl_label = "Set as Background"
@@ -471,7 +486,21 @@ class CLIP_OT_constraint_to_fcurve(Operator):
             return {'FINISHED'}
 
         # Find start and end frames.
-        for track in clip.tracking.tracks:
+        if con.type == 'CAMERA_SOLVER':
+            # Camera solver constraint is always referring to camera.
+            tracks = clip.tracking.tracks
+        elif con.object:
+            tracking_object = clip.tracking.objects.get(con.object, None)
+            if not tracking_object:
+                self.report({'ERROR'}, "Motion Tracking object not found")
+
+                return {'CANCELLED'}
+
+            tracks = tracking_object.tracks
+        else:
+            tracks = clip.tracking.tracks
+
+        for track in tracks:
             if sfra is None:
                 sfra = track.markers[0].frame
             else:
@@ -982,7 +1011,7 @@ class CLIP_OT_track_settings_as_default(Operator):
     """Copy tracking settings from active track to default settings"""
 
     bl_idname = "clip.track_settings_as_default"
-    bl_label = "Track Settings As Default"
+    bl_label = "Track Settings as Default"
     bl_options = {'UNDO', 'REGISTER'}
 
     @classmethod

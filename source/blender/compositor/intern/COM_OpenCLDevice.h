@@ -18,13 +18,12 @@
 
 class OpenCLDevice;
 
-#ifndef __COM_OPENCLDEVICE_H__
-#define __COM_OPENCLDEVICE_H__
+#pragma once
 
 #include "COM_Device.h"
-#include "clew.h"
-#include "COM_WorkScheduler.h"
 #include "COM_ReadBufferOperation.h"
+#include "COM_WorkScheduler.h"
+#include "clew.h"
 
 using std::list;
 
@@ -78,8 +77,8 @@ class OpenCLDevice : public Device {
   bool initialize();
 
   /**
-   * \brief deinitialize the device
-   * During deintiialization the command queue is cleared
+   * \brief de-initialize the device
+   * During de-initialization the command queue is cleared
    */
   void deinitialize();
 
@@ -133,5 +132,3 @@ class OpenCLDevice : public Device {
                           NodeOperation *operation);
   cl_kernel COM_clCreateKernel(const char *kernelname, list<cl_kernel> *clKernelsToCleanUp);
 };
-
-#endif

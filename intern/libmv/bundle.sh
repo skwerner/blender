@@ -117,6 +117,8 @@ set(LIB
 )
 
 if(WITH_LIBMV)
+  setup_libdirs()
+
   add_definitions(\${GFLAGS_DEFINES})
   add_definitions(\${GLOG_DEFINES})
   add_definitions(\${CERES_DEFINES})
@@ -125,8 +127,6 @@ if(WITH_LIBMV)
   list(APPEND INC
     \${GFLAGS_INCLUDE_DIRS}
     \${GLOG_INCLUDE_DIRS}
-    ../../extern/ceres/include
-    ../../extern/ceres/config
     ../guardedalloc
   )
 
@@ -134,11 +134,16 @@ if(WITH_LIBMV)
     \${EIGEN3_INCLUDE_DIRS}
     \${PNG_INCLUDE_DIRS}
     \${ZLIB_INCLUDE_DIRS}
+    ../../extern/ceres/include
+    ../../extern/ceres/config
   )
 
   list(APPEND LIB
     extern_ceres
-    extern_glog
+
+    \${GLOG_LIBRARIES}
+    \${GFLAGS_LIBRARIES}
+    \${PNG_LIBRARIES}
   )
 
   add_definitions(
@@ -169,9 +174,11 @@ ${third_sources}
     intern/image.h
     intern/logging.h
     intern/reconstruction.h
+    intern/region.h
     intern/track_region.h
     intern/tracks.h
     intern/tracksN.h
+    intern/utildefines.h
 ${headers}
 
 ${third_headers}

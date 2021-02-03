@@ -24,15 +24,18 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_endian_switch.h"
-#include "BLI_path_util.h"
-#include "BLI_string.h"
 #include "BLI_fileops.h"
 #include "BLI_ghash.h"
+#include "BLI_path_util.h"
+#include "BLI_string.h"
+#include "BLI_utildefines.h"
+#ifdef _WIN32
+#  include "BLI_winstuff.h"
+#endif
 
-#include "IMB_indexer.h"
 #include "IMB_anim.h"
+#include "IMB_indexer.h"
 #include "imbuf.h"
 
 #include "BKE_global.h"
@@ -96,25 +99,22 @@ anim_index_builder *IMB_index_builder_create(const char *name)
   return rv;
 }
 
-void IMB_index_builder_add_entry(anim_index_builder *fp,
-                                 int frameno,
-                                 unsigned long long seek_pos,
-                                 unsigned long long seek_pos_dts,
-                                 unsigned long long pts)
+void IMB_index_builder_add_entry(
+    anim_index_builder *fp, int frameno, uint64_t seek_pos, uint64_t seek_pos_dts, uint64_t pts)
 {
   fwrite(&frameno, sizeof(int), 1, fp->fp);
-  fwrite(&seek_pos, sizeof(unsigned long long), 1, fp->fp);
-  fwrite(&seek_pos_dts, sizeof(unsigned long long), 1, fp->fp);
-  fwrite(&pts, sizeof(unsigned long long), 1, fp->fp);
+  fwrite(&seek_pos, sizeof(uint64_t), 1, fp->fp);
+  fwrite(&seek_pos_dts, sizeof(uint64_t), 1, fp->fp);
+  fwrite(&pts, sizeof(uint64_t), 1, fp->fp);
 }
 
 void IMB_index_builder_proc_frame(anim_index_builder *fp,
-                                  unsigned char *buffer,
+                                  uchar *buffer,
                                   int data_size,
                                   int frameno,
-                                  unsigned long long seek_pos,
-                                  unsigned long long seek_pos_dts,
-                                  unsigned long long pts)
+                                  uint64_t seek_pos,
+                                  uint64_t seek_pos_dts,
+                                  uint64_t pts)
 {
   if (fp->proc_frame) {
     anim_index_entry e;
@@ -183,10 +183,10 @@ struct anim_index *IMB_indexer_open(const char *name)
 
   fseek(fp, 0, SEEK_END);
 
-  idx->num_entries = (ftell(fp) - 12) / (sizeof(int) +                /* framepos */
-                                         sizeof(unsigned long long) + /* seek_pos */
-                                         sizeof(unsigned long long) + /* seek_pos_dts */
-                                         sizeof(unsigned long long)   /* pts */
+  idx->num_entries = (ftell(fp) - 12) / (sizeof(int) +      /* framepos */
+                                         sizeof(uint64_t) + /* seek_pos */
+                                         sizeof(uint64_t) + /* seek_pos_dts */
+                                         sizeof(uint64_t)   /* pts */
                                         );
 
   fseek(fp, 12, SEEK_SET);
@@ -194,19 +194,28 @@ struct anim_index *IMB_indexer_open(const char *name)
   idx->entries = MEM_callocN(sizeof(struct anim_index_entry) * idx->num_entries,
                              "anim_index_entries");
 
+  size_t items_read = 0;
   for (i = 0; i < idx->num_entries; i++) {
-    fread(&idx->entries[i].frameno, sizeof(int), 1, fp);
-    fread(&idx->entries[i].seek_pos, sizeof(unsigned long long), 1, fp);
-    fread(&idx->entries[i].seek_pos_dts, sizeof(unsigned long long), 1, fp);
-    fread(&idx->entries[i].pts, sizeof(unsigned long long), 1, fp);
+    items_read += fread(&idx->entries[i].frameno, sizeof(int), 1, fp);
+    items_read += fread(&idx->entries[i].seek_pos, sizeof(uint64_t), 1, fp);
+    items_read += fread(&idx->entries[i].seek_pos_dts, sizeof(uint64_t), 1, fp);
+    items_read += fread(&idx->entries[i].pts, sizeof(uint64_t), 1, fp);
+  }
+
+  if (UNLIKELY(items_read != idx->num_entries * 4)) {
+    perror("error reading animation index file");
+    MEM_freeN(idx->entries);
+    MEM_freeN(idx);
+    fclose(fp);
+    return NULL;
   }
 
   if (((ENDIAN_ORDER == B_ENDIAN) != (header[8] == 'V'))) {
     for (i = 0; i < idx->num_entries; i++) {
       BLI_endian_switch_int32(&idx->entries[i].frameno);
-      BLI_endian_switch_int64((int64_t *)&idx->entries[i].seek_pos);
-      BLI_endian_switch_int64((int64_t *)&idx->entries[i].seek_pos_dts);
-      BLI_endian_switch_int64((int64_t *)&idx->entries[i].pts);
+      BLI_endian_switch_uint64(&idx->entries[i].seek_pos);
+      BLI_endian_switch_uint64(&idx->entries[i].seek_pos_dts);
+      BLI_endian_switch_uint64(&idx->entries[i].pts);
     }
   }
 
@@ -215,7 +224,7 @@ struct anim_index *IMB_indexer_open(const char *name)
   return idx;
 }
 
-unsigned long long IMB_indexer_get_seek_pos(struct anim_index *idx, int frame_index)
+uint64_t IMB_indexer_get_seek_pos(struct anim_index *idx, int frame_index)
 {
   if (frame_index < 0) {
     frame_index = 0;
@@ -226,7 +235,7 @@ unsigned long long IMB_indexer_get_seek_pos(struct anim_index *idx, int frame_in
   return idx->entries[frame_index].seek_pos;
 }
 
-unsigned long long IMB_indexer_get_seek_pos_dts(struct anim_index *idx, int frame_index)
+uint64_t IMB_indexer_get_seek_pos_dts(struct anim_index *idx, int frame_index)
 {
   if (frame_index < 0) {
     frame_index = 0;
@@ -265,12 +274,11 @@ int IMB_indexer_get_frame_index(struct anim_index *idx, int frameno)
   if (first == idx->num_entries) {
     return idx->num_entries - 1;
   }
-  else {
-    return first;
-  }
+
+  return first;
 }
 
-unsigned long long IMB_indexer_get_pts(struct anim_index *idx, int frame_index)
+uint64_t IMB_indexer_get_pts(struct anim_index *idx, int frame_index)
 {
   if (frame_index < 0) {
     frame_index = 0;
@@ -366,7 +374,7 @@ void IMB_anim_get_fname(struct anim *anim, char *file, int size)
   BLI_strncpy(file, fname, size);
 }
 
-static void get_proxy_filename(struct anim *anim,
+static bool get_proxy_filename(struct anim *anim,
                                IMB_Proxy_Size preview_size,
                                char *fname,
                                bool temp)
@@ -393,7 +401,12 @@ static void get_proxy_filename(struct anim *anim,
 
   get_index_dir(anim, index_dir, sizeof(index_dir));
 
+  if (BLI_path_ncmp(anim->name, index_dir, FILE_MAXDIR) == 0) {
+    return false;
+  }
+
   BLI_join_dirfile(fname, FILE_MAXFILE + FILE_MAXDIR, index_dir, proxy_name);
+  return true;
 }
 
 static void get_tc_filename(struct anim *anim, IMB_Timecode_Type tc, char *fname)
@@ -464,10 +477,6 @@ static struct proxy_output_ctx *alloc_proxy_output_ffmpeg(
 
   char fname[FILE_MAX];
   int ffmpeg_quality;
-
-  /* JPEG requires this */
-  width = round_up(width, 8);
-  height = round_up(height, 8);
 
   rv->proxy_size = proxy_size;
   rv->anim = anim;
@@ -625,9 +634,8 @@ static int add_to_proxy_output_ffmpeg(struct proxy_output_ctx *ctx, AVFrame *fra
 
     return 1;
   }
-  else {
-    return 0;
-  }
+
+  return 0;
 }
 
 static void free_proxy_output_ffmpeg(struct proxy_output_ctx *ctx, int rollback)
@@ -696,12 +704,12 @@ typedef struct FFmpegIndexBuilderContext {
   IMB_Timecode_Type tcs_in_use;
   IMB_Proxy_Size proxy_sizes_in_use;
 
-  unsigned long long seek_pos;
-  unsigned long long last_seek_pos;
-  unsigned long long seek_pos_dts;
-  unsigned long long seek_pos_pts;
-  unsigned long long last_seek_pos_dts;
-  unsigned long long start_pts;
+  uint64_t seek_pos;
+  uint64_t last_seek_pos;
+  uint64_t seek_pos_dts;
+  uint64_t seek_pos_pts;
+  uint64_t last_seek_pos_dts;
+  uint64_t start_pts;
   double frame_rate;
   double pts_time_base;
   int frameno, frameno_gapless;
@@ -836,9 +844,9 @@ static void index_rebuild_ffmpeg_proc_decoded_frame(FFmpegIndexBuilderContext *c
                                                     AVFrame *in_frame)
 {
   int i;
-  unsigned long long s_pos = context->seek_pos;
-  unsigned long long s_dts = context->seek_pos_dts;
-  unsigned long long pts = av_get_pts_from_frame(context->iFormatCtx, in_frame);
+  uint64_t s_pos = context->seek_pos;
+  uint64_t s_dts = context->seek_pos_dts;
+  uint64_t pts = av_get_pts_from_frame(context->iFormatCtx, in_frame);
 
   for (i = 0; i < context->num_proxy_sizes; i++) {
     add_to_proxy_output_ffmpeg(context->proxy_ctx[i], in_frame);
@@ -886,7 +894,7 @@ static void index_rebuild_ffmpeg_proc_decoded_frame(FFmpegIndexBuilderContext *c
 }
 
 static int index_rebuild_ffmpeg(FFmpegIndexBuilderContext *context,
-                                short *stop,
+                                const short *stop,
                                 short *do_update,
                                 float *progress)
 {
@@ -900,7 +908,7 @@ static int index_rebuild_ffmpeg(FFmpegIndexBuilderContext *context,
 
   stream_size = avio_size(context->iFormatCtx->pb);
 
-  context->frame_rate = av_q2d(av_get_r_frame_rate_compat(context->iFormatCtx, context->iStream));
+  context->frame_rate = av_q2d(av_guess_frame_rate(context->iFormatCtx, context->iStream, NULL));
   context->pts_time_base = av_q2d(context->iStream->time_base);
 
   while (av_read_frame(context->iFormatCtx, &next_packet) >= 0) {
@@ -1082,7 +1090,7 @@ static void index_rebuild_fallback_finish(FallbackIndexBuilderContext *context, 
 }
 
 static void index_rebuild_fallback(FallbackIndexBuilderContext *context,
-                                   short *stop,
+                                   const short *stop,
                                    short *do_update,
                                    float *progress)
 {
@@ -1150,12 +1158,13 @@ IndexBuildContext *IMB_anim_index_rebuild_context(struct anim *anim,
 
   /* Don't generate the same file twice! */
   if (file_list) {
-    for (i = 0; i < IMB_PROXY_MAX_SLOT; ++i) {
+    for (i = 0; i < IMB_PROXY_MAX_SLOT; i++) {
       IMB_Proxy_Size proxy_size = proxy_sizes[i];
       if (proxy_size & proxy_sizes_to_build) {
         char filename[FILE_MAX];
-        get_proxy_filename(anim, proxy_size, filename, false);
-
+        if (get_proxy_filename(anim, proxy_size, filename, false) == false) {
+          return NULL;
+        }
         void **filename_key_p;
         if (!BLI_gset_ensure_p_ex(file_list, filename, &filename_key_p)) {
           *filename_key_p = BLI_strdup(filename);
@@ -1172,11 +1181,13 @@ IndexBuildContext *IMB_anim_index_rebuild_context(struct anim *anim,
     IMB_Proxy_Size built_proxies = IMB_anim_proxy_get_existing(anim);
     if (built_proxies != 0) {
 
-      for (i = 0; i < IMB_PROXY_MAX_SLOT; ++i) {
+      for (i = 0; i < IMB_PROXY_MAX_SLOT; i++) {
         IMB_Proxy_Size proxy_size = proxy_sizes[i];
         if (proxy_size & built_proxies) {
           char filename[FILE_MAX];
-          get_proxy_filename(anim, proxy_size, filename, false);
+          if (get_proxy_filename(anim, proxy_size, filename, false) == false) {
+            return NULL;
+          }
           printf("Skipping proxy: %s\n", filename);
         }
       }
@@ -1213,8 +1224,11 @@ IndexBuildContext *IMB_anim_index_rebuild_context(struct anim *anim,
 }
 
 void IMB_anim_index_rebuild(struct IndexBuildContext *context,
+                            /* NOLINTNEXTLINE: readability-non-const-parameter. */
                             short *stop,
+                            /* NOLINTNEXTLINE: readability-non-const-parameter. */
                             short *do_update,
+                            /* NOLINTNEXTLINE: readability-non-const-parameter. */
                             float *progress)
 {
   switch (context->anim_type) {
@@ -1345,7 +1359,7 @@ IMB_Proxy_Size IMB_anim_proxy_get_existing(struct anim *anim)
   const int num_proxy_sizes = IMB_PROXY_MAX_SLOT;
   IMB_Proxy_Size existing = 0;
   int i;
-  for (i = 0; i < num_proxy_sizes; ++i) {
+  for (i = 0; i < num_proxy_sizes; i++) {
     IMB_Proxy_Size proxy_size = proxy_sizes[i];
     char filename[FILE_MAX];
     get_proxy_filename(anim, proxy_size, filename, false);

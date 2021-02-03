@@ -23,9 +23,9 @@
 
 #include "DNA_node_types.h"
 
+#include "BLI_math.h"
 #include "BLI_rect.h"
 #include "BLI_utildefines.h"
-#include "BLI_math.h"
 
 #include "BKE_context.h"
 #include "BKE_image.h"
@@ -33,10 +33,10 @@
 #include "BKE_node.h"
 #include "BKE_screen.h"
 
+#include "ED_image.h"
 #include "ED_node.h" /* own include */
 #include "ED_screen.h"
 #include "ED_space_api.h"
-#include "ED_image.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -52,13 +52,15 @@
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
 
-#include "node_intern.h" /* own include */
 #include "NOD_composite.h"
+#include "node_intern.h" /* own include */
 
-/* **************** View All Operator ************** */
+/* -------------------------------------------------------------------- */
+/** \name View All Operator
+ * \{ */
 
 int space_node_view_flag(
-    bContext *C, SpaceNode *snode, ARegion *ar, const int node_flag, const int smooth_viewtx)
+    bContext *C, SpaceNode *snode, ARegion *region, const int node_flag, const int smooth_viewtx)
 {
   bNode *node;
   rctf cur_new;
@@ -67,8 +69,8 @@ int space_node_view_flag(
   int tot = 0;
   bool has_frame = false;
 
-  oldwidth = BLI_rctf_size_x(&ar->v2d.cur);
-  oldheight = BLI_rctf_size_y(&ar->v2d.cur);
+  oldwidth = BLI_rctf_size_x(&region->v2d.cur);
+  oldheight = BLI_rctf_size_y(&region->v2d.cur);
 
   oldasp = oldwidth / oldheight;
 
@@ -114,7 +116,7 @@ int space_node_view_flag(
       BLI_rctf_scale(&cur_new, 1.1f);
     }
 
-    UI_view2d_smooth_view(C, ar, &cur_new, smooth_viewtx);
+    UI_view2d_smooth_view(C, region, &cur_new, smooth_viewtx);
   }
 
   return (tot != 0);
@@ -122,7 +124,7 @@ int space_node_view_flag(
 
 static int node_view_all_exec(bContext *C, wmOperator *op)
 {
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   SpaceNode *snode = CTX_wm_space_node(C);
   const int smooth_viewtx = WM_operator_smooth_viewtx_get(op);
 
@@ -130,18 +132,16 @@ static int node_view_all_exec(bContext *C, wmOperator *op)
   snode->xof = 0;
   snode->yof = 0;
 
-  if (space_node_view_flag(C, snode, ar, 0, smooth_viewtx)) {
+  if (space_node_view_flag(C, snode, region, 0, smooth_viewtx)) {
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void NODE_OT_view_all(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "View All";
+  ot->name = "Frame All";
   ot->idname = "NODE_OT_view_all";
   ot->description = "Resize view so you can see all nodes";
 
@@ -150,27 +150,31 @@ void NODE_OT_view_all(wmOperatorType *ot)
   ot->poll = ED_operator_node_active;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = 0;
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name View Selected Operator
+ * \{ */
 
 static int node_view_selected_exec(bContext *C, wmOperator *op)
 {
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   SpaceNode *snode = CTX_wm_space_node(C);
   const int smooth_viewtx = WM_operator_smooth_viewtx_get(op);
 
-  if (space_node_view_flag(C, snode, ar, NODE_SELECT, smooth_viewtx)) {
+  if (space_node_view_flag(C, snode, region, NODE_SELECT, smooth_viewtx)) {
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void NODE_OT_view_selected(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "View Selected";
+  ot->name = "Frame Selected";
   ot->idname = "NODE_OT_view_selected";
   ot->description = "Resize view so you can see selected nodes";
 
@@ -179,10 +183,14 @@ void NODE_OT_view_selected(wmOperatorType *ot)
   ot->poll = ED_operator_node_active;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = 0;
 }
 
-/* **************** Background Image Operators ************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Background Image Operators
+ * \{ */
 
 typedef struct NodeViewMove {
   int mvalo[2];
@@ -192,7 +200,7 @@ typedef struct NodeViewMove {
 static int snode_bg_viewmove_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
   SpaceNode *snode = CTX_wm_space_node(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   NodeViewMove *nvm = op->customdata;
 
   switch (event->type) {
@@ -207,8 +215,9 @@ static int snode_bg_viewmove_modal(bContext *C, wmOperator *op, const wmEvent *e
       CLAMP(snode->xof, nvm->xmin, nvm->xmax);
       CLAMP(snode->yof, nvm->ymin, nvm->ymax);
 
-      ED_region_tag_redraw(ar);
+      ED_region_tag_redraw(region);
       WM_main_add_notifier(NC_NODE | ND_DISPLAY, NULL);
+      WM_main_add_notifier(NC_SPACE | ND_SPACE_NODE_VIEW, NULL);
 
       break;
 
@@ -230,15 +239,15 @@ static int snode_bg_viewmove_invoke(bContext *C, wmOperator *op, const wmEvent *
 {
   Main *bmain = CTX_data_main(C);
   SpaceNode *snode = CTX_wm_space_node(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   NodeViewMove *nvm;
   Image *ima;
   ImBuf *ibuf;
-  const float pad = 32.0f; /* better be bigger then scrollbars */
+  const float pad = 32.0f; /* better be bigger than scrollbars */
 
   void *lock;
 
-  ima = BKE_image_verify_viewer(bmain, IMA_TYPE_COMPOSITE, "Viewer Node");
+  ima = BKE_image_ensure_viewer(bmain, IMA_TYPE_COMPOSITE, "Viewer Node");
   ibuf = BKE_image_acquire_ibuf(ima, NULL, &lock);
 
   if (ibuf == NULL) {
@@ -251,10 +260,10 @@ static int snode_bg_viewmove_invoke(bContext *C, wmOperator *op, const wmEvent *
   nvm->mvalo[0] = event->mval[0];
   nvm->mvalo[1] = event->mval[1];
 
-  nvm->xmin = -(ar->winx / 2) - (ibuf->x * (0.5f * snode->zoom)) + pad;
-  nvm->xmax = (ar->winx / 2) + (ibuf->x * (0.5f * snode->zoom)) - pad;
-  nvm->ymin = -(ar->winy / 2) - (ibuf->y * (0.5f * snode->zoom)) + pad;
-  nvm->ymax = (ar->winy / 2) + (ibuf->y * (0.5f * snode->zoom)) - pad;
+  nvm->xmin = -(region->winx / 2) - (ibuf->x * (0.5f * snode->zoom)) + pad;
+  nvm->xmax = (region->winx / 2) + (ibuf->x * (0.5f * snode->zoom)) - pad;
+  nvm->ymin = -(region->winy / 2) - (ibuf->y * (0.5f * snode->zoom)) + pad;
+  nvm->ymax = (region->winy / 2) + (ibuf->y * (0.5f * snode->zoom)) - pad;
 
   BKE_image_release_ibuf(ima, ibuf, lock);
 
@@ -274,7 +283,7 @@ void NODE_OT_backimage_move(wmOperatorType *ot)
 {
   /* identifiers */
   ot->name = "Background Image Move";
-  ot->description = "Move Node backdrop";
+  ot->description = "Move node backdrop";
   ot->idname = "NODE_OT_backimage_move";
 
   /* api callbacks */
@@ -287,14 +296,20 @@ void NODE_OT_backimage_move(wmOperatorType *ot)
   ot->flag = OPTYPE_BLOCKING | OPTYPE_GRAB_CURSOR_XY;
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Background Image Zoom
+ * \{ */
+
 static int backimage_zoom_exec(bContext *C, wmOperator *op)
 {
   SpaceNode *snode = CTX_wm_space_node(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   float fac = RNA_float_get(op->ptr, "factor");
 
   snode->zoom *= fac;
-  ED_region_tag_redraw(ar);
+  ED_region_tag_redraw(region);
   WM_main_add_notifier(NC_NODE | ND_DISPLAY, NULL);
 
   return OPERATOR_FINISHED;
@@ -319,11 +334,17 @@ void NODE_OT_backimage_zoom(wmOperatorType *ot)
   RNA_def_float(ot->srna, "factor", 1.2f, 0.0f, 10.0f, "Factor", "", 0.0f, 10.0f);
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Background Image Fit
+ * \{ */
+
 static int backimage_fit_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Main *bmain = CTX_data_main(C);
   SpaceNode *snode = CTX_wm_space_node(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
 
   Image *ima;
   ImBuf *ibuf;
@@ -334,7 +355,7 @@ static int backimage_fit_exec(bContext *C, wmOperator *UNUSED(op))
 
   float facx, facy;
 
-  ima = BKE_image_verify_viewer(bmain, IMA_TYPE_COMPOSITE, "Viewer Node");
+  ima = BKE_image_ensure_viewer(bmain, IMA_TYPE_COMPOSITE, "Viewer Node");
   ibuf = BKE_image_acquire_ibuf(ima, NULL, &lock);
 
   if ((ibuf == NULL) || (ibuf->x == 0) || (ibuf->y == 0)) {
@@ -342,8 +363,8 @@ static int backimage_fit_exec(bContext *C, wmOperator *UNUSED(op))
     return OPERATOR_CANCELLED;
   }
 
-  facx = 1.0f * (ar->sizex - pad) / (ibuf->x * snode->zoom);
-  facy = 1.0f * (ar->sizey - pad) / (ibuf->y * snode->zoom);
+  facx = 1.0f * (region->sizex - pad) / (ibuf->x * snode->zoom);
+  facy = 1.0f * (region->sizey - pad) / (ibuf->y * snode->zoom);
 
   BKE_image_release_ibuf(ima, ibuf, lock);
 
@@ -352,8 +373,9 @@ static int backimage_fit_exec(bContext *C, wmOperator *UNUSED(op))
   snode->xof = 0;
   snode->yof = 0;
 
-  ED_region_tag_redraw(ar);
+  ED_region_tag_redraw(region);
   WM_main_add_notifier(NC_NODE | ND_DISPLAY, NULL);
+  WM_main_add_notifier(NC_SPACE | ND_SPACE_NODE_VIEW, NULL);
 
   return OPERATOR_FINISHED;
 }
@@ -374,7 +396,11 @@ void NODE_OT_backimage_fit(wmOperatorType *ot)
   ot->flag = OPTYPE_BLOCKING;
 }
 
-/******************** sample backdrop operator ********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Sample Backdrop Operator
+ * \{ */
 
 typedef struct ImageSampleInfo {
   ARegionType *art;
@@ -382,7 +408,7 @@ typedef struct ImageSampleInfo {
   int x, y;
   int channels;
 
-  unsigned char col[4];
+  uchar col[4];
   float colf[4];
   float linearcol[4];
 
@@ -396,14 +422,14 @@ typedef struct ImageSampleInfo {
   int color_manage;
 } ImageSampleInfo;
 
-static void sample_draw(const bContext *C, ARegion *ar, void *arg_info)
+static void sample_draw(const bContext *C, ARegion *region, void *arg_info)
 {
   Scene *scene = CTX_data_scene(C);
   ImageSampleInfo *info = arg_info;
 
   if (info->draw) {
     ED_image_draw_info(scene,
-                       ar,
+                       region,
                        info->color_manage,
                        false,
                        info->channels,
@@ -421,7 +447,7 @@ static void sample_draw(const bContext *C, ARegion *ar, void *arg_info)
  * And here we've got recursion in the comments tips...
  */
 bool ED_space_node_color_sample(
-    Main *bmain, SpaceNode *snode, ARegion *ar, int mval[2], float r_col[3])
+    Main *bmain, SpaceNode *snode, ARegion *region, const int mval[2], float r_col[3])
 {
   void *lock;
   Image *ima;
@@ -436,7 +462,7 @@ bool ED_space_node_color_sample(
     return false;
   }
 
-  ima = BKE_image_verify_viewer(bmain, IMA_TYPE_COMPOSITE, "Viewer Node");
+  ima = BKE_image_ensure_viewer(bmain, IMA_TYPE_COMPOSITE, "Viewer Node");
   ibuf = BKE_image_acquire_ibuf(ima, NULL, &lock);
   if (!ibuf) {
     return false;
@@ -445,12 +471,12 @@ bool ED_space_node_color_sample(
   /* map the mouse coords to the backdrop image space */
   bufx = ibuf->x * snode->zoom;
   bufy = ibuf->y * snode->zoom;
-  fx = (bufx > 0.0f ? ((float)mval[0] - 0.5f * ar->winx - snode->xof) / bufx + 0.5f : 0.0f);
-  fy = (bufy > 0.0f ? ((float)mval[1] - 0.5f * ar->winy - snode->yof) / bufy + 0.5f : 0.0f);
+  fx = (bufx > 0.0f ? ((float)mval[0] - 0.5f * region->winx - snode->xof) / bufx + 0.5f : 0.0f);
+  fy = (bufy > 0.0f ? ((float)mval[1] - 0.5f * region->winy - snode->yof) / bufy + 0.5f : 0.0f);
 
   if (fx >= 0.0f && fy >= 0.0f && fx < 1.0f && fy < 1.0f) {
     const float *fp;
-    unsigned char *cp;
+    uchar *cp;
     int x = (int)(fx * ibuf->x), y = (int)(fy * ibuf->y);
 
     CLAMP(x, 0, ibuf->x - 1);
@@ -458,12 +484,12 @@ bool ED_space_node_color_sample(
 
     if (ibuf->rect_float) {
       fp = (ibuf->rect_float + (ibuf->channels) * (y * ibuf->x + x));
-      /* IB_PROFILE_NONE is default but infact its linear */
+      /* #IB_PROFILE_NONE is default but in fact its linear. */
       copy_v3_v3(r_col, fp);
       ret = true;
     }
     else if (ibuf->rect) {
-      cp = (unsigned char *)(ibuf->rect + y * ibuf->x + x);
+      cp = (uchar *)(ibuf->rect + y * ibuf->x + x);
       rgb_uchar_to_float(r_col, cp);
       IMB_colormanagement_colorspace_to_scene_linear_v3(r_col, ibuf->rect_colorspace);
       ret = true;
@@ -479,14 +505,14 @@ static void sample_apply(bContext *C, wmOperator *op, const wmEvent *event)
 {
   Main *bmain = CTX_data_main(C);
   SpaceNode *snode = CTX_wm_space_node(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   ImageSampleInfo *info = op->customdata;
   void *lock;
   Image *ima;
   ImBuf *ibuf;
   float fx, fy, bufx, bufy;
 
-  ima = BKE_image_verify_viewer(bmain, IMA_TYPE_COMPOSITE, "Viewer Node");
+  ima = BKE_image_ensure_viewer(bmain, IMA_TYPE_COMPOSITE, "Viewer Node");
   ibuf = BKE_image_acquire_ibuf(ima, NULL, &lock);
   if (!ibuf) {
     info->draw = 0;
@@ -500,12 +526,14 @@ static void sample_apply(bContext *C, wmOperator *op, const wmEvent *event)
   /* map the mouse coords to the backdrop image space */
   bufx = ibuf->x * snode->zoom;
   bufy = ibuf->y * snode->zoom;
-  fx = (bufx > 0.0f ? ((float)event->mval[0] - 0.5f * ar->winx - snode->xof) / bufx + 0.5f : 0.0f);
-  fy = (bufy > 0.0f ? ((float)event->mval[1] - 0.5f * ar->winy - snode->yof) / bufy + 0.5f : 0.0f);
+  fx = (bufx > 0.0f ? ((float)event->mval[0] - 0.5f * region->winx - snode->xof) / bufx + 0.5f :
+                      0.0f);
+  fy = (bufy > 0.0f ? ((float)event->mval[1] - 0.5f * region->winy - snode->yof) / bufy + 0.5f :
+                      0.0f);
 
   if (fx >= 0.0f && fy >= 0.0f && fx < 1.0f && fy < 1.0f) {
     const float *fp;
-    unsigned char *cp;
+    uchar *cp;
     int x = (int)(fx * ibuf->x), y = (int)(fy * ibuf->y);
 
     CLAMP(x, 0, ibuf->x - 1);
@@ -520,7 +548,7 @@ static void sample_apply(bContext *C, wmOperator *op, const wmEvent *event)
     info->zfp = NULL;
 
     if (ibuf->rect) {
-      cp = (unsigned char *)(ibuf->rect + y * ibuf->x + x);
+      cp = (uchar *)(ibuf->rect + y * ibuf->x + x);
 
       info->col[0] = cp[0];
       info->col[1] = cp[1];
@@ -583,7 +611,7 @@ static void sample_exit(bContext *C, wmOperator *op)
 static int sample_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
   SpaceNode *snode = CTX_wm_space_node(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   ImageSampleInfo *info;
 
   if (!ED_node_is_compositor(snode) || !(snode->flag & SNODE_BACKDRAW)) {
@@ -591,9 +619,9 @@ static int sample_invoke(bContext *C, wmOperator *op, const wmEvent *event)
   }
 
   info = MEM_callocN(sizeof(ImageSampleInfo), "ImageSampleInfo");
-  info->art = ar->type;
+  info->art = region->type;
   info->draw_handle = ED_region_draw_cb_activate(
-      ar->type, sample_draw, info, REGION_DRAW_POST_PIXEL);
+      region->type, sample_draw, info, REGION_DRAW_POST_PIXEL);
   op->customdata = info;
 
   sample_apply(C, op, event);
@@ -607,7 +635,7 @@ static int sample_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
   switch (event->type) {
     case LEFTMOUSE:
-    case RIGHTMOUSE:  // XXX hardcoded
+    case RIGHTMOUSE: /* XXX hardcoded */
       if (event->val == KM_RELEASE) {
         sample_exit(C, op);
         return OPERATOR_CANCELLED;
@@ -642,3 +670,5 @@ void NODE_OT_backimage_sample(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_BLOCKING;
 }
+
+/** \} */

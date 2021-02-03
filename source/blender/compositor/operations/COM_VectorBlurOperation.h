@@ -16,11 +16,11 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_VECTORBLUROPERATION_H__
-#define __COM_VECTORBLUROPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
-#include "DNA_node_types.h"
 #include "COM_QualityStepHelper.h"
+#include "DNA_node_types.h"
 
 class VectorBlurOperation : public NodeOperation, public QualityStepHelper {
  private:
@@ -42,7 +42,7 @@ class VectorBlurOperation : public NodeOperation, public QualityStepHelper {
   VectorBlurOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixel(float output[4], int x, int y, void *data);
 
@@ -72,4 +72,3 @@ class VectorBlurOperation : public NodeOperation, public QualityStepHelper {
                           MemoryBuffer *inputSpeed,
                           MemoryBuffer *inputZ);
 };
-#endif

@@ -18,22 +18,21 @@
 
 class ExecutionGroup;
 
-#ifndef __COM_EXECUTIONSYSTEM_H__
-#define __COM_EXECUTIONSYSTEM_H__
+#pragma once
 
-#include "DNA_color_types.h"
-#include "DNA_node_types.h"
-#include "COM_Node.h"
 #include "BKE_text.h"
 #include "COM_ExecutionGroup.h"
+#include "COM_Node.h"
 #include "COM_NodeOperation.h"
+#include "DNA_color_types.h"
+#include "DNA_node_types.h"
 
 /**
  * \page execution Execution model
  * In order to get to an efficient model for execution, several steps are being done. these steps
  * are explained below.
  *
- * \section EM_Step1 Step 1: translating blender node system to the new compsitor system
+ * \section EM_Step1 Step 1: translating blender node system to the new compositor system
  * Blenders node structure is based on C structs (DNA). These structs are not efficient in the new
  * architecture. We want to use classes in order to simplify the system. during this step the
  * blender node_tree is evaluated and converted to a CPP node system.
@@ -196,5 +195,3 @@ class ExecutionSystem {
   MEM_CXX_CLASS_ALLOC_FUNCS("COM:ExecutionSystem")
 #endif
 };
-
-#endif /* __COM_EXECUTIONSYSTEM_H__ */

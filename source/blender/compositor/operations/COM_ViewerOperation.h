@@ -16,12 +16,12 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_VIEWEROPERATION_H__
-#define __COM_VIEWEROPERATION_H__
+#pragma once
+
+#include "BKE_global.h"
+#include "BLI_rect.h"
 #include "COM_NodeOperation.h"
 #include "DNA_image_types.h"
-#include "BLI_rect.h"
-#include "BKE_global.h"
 
 class ViewerOperation : public NodeOperation {
  private:
@@ -129,4 +129,3 @@ class ViewerOperation : public NodeOperation {
   void updateImage(rcti *rect);
   void initImage();
 };
-#endif

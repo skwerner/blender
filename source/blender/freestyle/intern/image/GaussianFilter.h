@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GAUSSIANFILTER_H__
-#define __GAUSSIANFILTER_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -27,9 +26,7 @@
 
 #include "../system/FreestyleConfig.h"
 
-extern "C" {
 #include "BLI_math.h"
-}
 
 #ifdef WITH_CXX_GUARDEDALLOC
 #  include "MEM_guardedalloc.h"
@@ -39,7 +36,7 @@ namespace Freestyle {
 
 class GaussianFilter {
  protected:
-  /* The mask is a symetrical 2d array (with respect to the middle point).
+  /* The mask is a symmetrical 2d array (with respect to the middle point).
    * Thus, M(i,j) = M(-i,j) = M(i,-j) = M(-i,-j).
    * For this reason, to represent a NxN array (N odd), we only store a ((N+1)/2)x((N+1)/2) array.
    */
@@ -153,5 +150,3 @@ template<class Map> float GaussianFilter::getSmoothedPixel(Map *map, int x, int 
 }
 
 } /* namespace Freestyle */
-
-#endif  // __GAUSSIANFILTER_H__

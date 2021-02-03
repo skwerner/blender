@@ -26,16 +26,16 @@
 #include "BPy_BinaryPredicate1D.h"
 #include "BPy_FrsMaterial.h"
 #include "BPy_Id.h"
+#include "BPy_StrokeShader.h"
 #include "BPy_UnaryFunction0D.h"
 #include "BPy_UnaryFunction1D.h"
 #include "BPy_UnaryPredicate0D.h"
 #include "BPy_UnaryPredicate1D.h"
-#include "BPy_StrokeShader.h"
-#include "Iterator/BPy_ChainingIterator.h"
-#include "Iterator/BPy_Interface0DIterator.h"
+#include "BPy_ViewShape.h"
 #include "Interface1D/BPy_Stroke.h"
 #include "Interface1D/BPy_ViewEdge.h"
-#include "BPy_ViewShape.h"
+#include "Iterator/BPy_ChainingIterator.h"
+#include "Iterator/BPy_Interface0DIterator.h"
 
 #include "UnaryFunction0D/BPy_UnaryFunction0DDouble.h"
 #include "UnaryFunction0D/BPy_UnaryFunction0DEdgeNature.h"
@@ -195,7 +195,7 @@ int Director_BPy_ChainingIterator_init(ChainingIterator *c_it)
     PyErr_SetString(PyExc_RuntimeError, "Reference to Python object (py_c_it) not initialized");
     return -1;
   }
-  PyObject *result = PyObject_CallMethod((PyObject *)c_it->py_c_it, "init", NULL);
+  PyObject *result = PyObject_CallMethod((PyObject *)c_it->py_c_it, "init", nullptr);
   if (!result) {
     return -1;
   }
@@ -222,7 +222,7 @@ int Director_BPy_ChainingIterator_traverse(ChainingIterator *c_it, AdjacencyIter
     c_it->result = ((BPy_ViewEdge *)result)->ve;
   }
   else if (result == Py_None) {
-    c_it->result = NULL;
+    c_it->result = nullptr;
   }
   else {
     PyErr_SetString(PyExc_RuntimeError, "traverse method returned a wrong value");

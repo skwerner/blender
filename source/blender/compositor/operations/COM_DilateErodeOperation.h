@@ -16,8 +16,8 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_DILATEERODEOPERATION_H__
-#define __COM_DILATEERODEOPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
 
 class DilateErodeThresholdOperation : public NodeOperation {
@@ -41,7 +41,7 @@ class DilateErodeThresholdOperation : public NodeOperation {
   DilateErodeThresholdOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixel(float output[4], int x, int y, void *data);
 
@@ -88,7 +88,7 @@ class DilateDistanceOperation : public NodeOperation {
   DilateDistanceOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixel(float output[4], int x, int y, void *data);
 
@@ -123,7 +123,7 @@ class ErodeDistanceOperation : public DilateDistanceOperation {
   ErodeDistanceOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixel(float output[4], int x, int y, void *data);
 
@@ -148,7 +148,7 @@ class DilateStepOperation : public NodeOperation {
   DilateStepOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixel(float output[4], int x, int y, void *data);
 
@@ -180,5 +180,3 @@ class ErodeStepOperation : public DilateStepOperation {
 
   void *initializeTileData(rcti *rect);
 };
-
-#endif

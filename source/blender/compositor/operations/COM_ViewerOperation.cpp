@@ -17,44 +17,42 @@
  */
 
 #include "COM_ViewerOperation.h"
-#include "BLI_listbase.h"
 #include "BKE_image.h"
 #include "BKE_scene.h"
-#include "WM_api.h"
-#include "WM_types.h"
-#include "PIL_time.h"
-#include "BLI_utildefines.h"
+#include "BLI_listbase.h"
 #include "BLI_math_color.h"
 #include "BLI_math_vector.h"
-
-extern "C" {
+#include "BLI_utildefines.h"
 #include "MEM_guardedalloc.h"
+#include "PIL_time.h"
+#include "WM_api.h"
+#include "WM_types.h"
+
+#include "IMB_colormanagement.h"
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
-#include "IMB_colormanagement.h"
-}
 
-ViewerOperation::ViewerOperation() : NodeOperation()
+ViewerOperation::ViewerOperation()
 {
-  this->setImage(NULL);
-  this->setImageUser(NULL);
-  this->m_outputBuffer = NULL;
-  this->m_depthBuffer = NULL;
+  this->setImage(nullptr);
+  this->setImageUser(nullptr);
+  this->m_outputBuffer = nullptr;
+  this->m_depthBuffer = nullptr;
   this->m_active = false;
   this->m_doDepthBuffer = false;
-  this->m_viewSettings = NULL;
-  this->m_displaySettings = NULL;
+  this->m_viewSettings = nullptr;
+  this->m_displaySettings = nullptr;
   this->m_useAlphaInput = false;
 
   this->addInputSocket(COM_DT_COLOR);
   this->addInputSocket(COM_DT_VALUE);
   this->addInputSocket(COM_DT_VALUE);
 
-  this->m_imageInput = NULL;
-  this->m_alphaInput = NULL;
-  this->m_depthInput = NULL;
-  this->m_rd = NULL;
-  this->m_viewName = NULL;
+  this->m_imageInput = nullptr;
+  this->m_alphaInput = nullptr;
+  this->m_depthInput = nullptr;
+  this->m_rd = nullptr;
+  this->m_viewName = nullptr;
 }
 
 void ViewerOperation::initExecution()
@@ -63,7 +61,7 @@ void ViewerOperation::initExecution()
   this->m_imageInput = getInputSocketReader(0);
   this->m_alphaInput = getInputSocketReader(1);
   this->m_depthInput = getInputSocketReader(2);
-  this->m_doDepthBuffer = (this->m_depthInput != NULL);
+  this->m_doDepthBuffer = (this->m_depthInput != nullptr);
 
   if (isActiveViewerOutput()) {
     initImage();
@@ -72,10 +70,10 @@ void ViewerOperation::initExecution()
 
 void ViewerOperation::deinitExecution()
 {
-  this->m_imageInput = NULL;
-  this->m_alphaInput = NULL;
-  this->m_depthInput = NULL;
-  this->m_outputBuffer = NULL;
+  this->m_imageInput = nullptr;
+  this->m_alphaInput = nullptr;
+  this->m_depthInput = nullptr;
+  this->m_outputBuffer = nullptr;
 }
 
 void ViewerOperation::executeRegion(rcti *rect, unsigned int /*tileNumber*/)
@@ -111,7 +109,7 @@ void ViewerOperation::executeRegion(rcti *rect, unsigned int /*tileNumber*/)
       offset++;
       offset4 += 4;
     }
-    if (isBreaked()) {
+    if (isBraked()) {
       breaked = true;
     }
     offset += offsetadd;
@@ -129,7 +127,7 @@ void ViewerOperation::initImage()
 
   /* make sure the image has the correct number of views */
   if (ima && BKE_scene_multiview_is_render_view_first(this->m_rd, this->m_viewName)) {
-    BKE_image_verify_viewer_views(this->m_rd, ima, this->m_imageUser);
+    BKE_image_ensure_viewer_views(this->m_rd, ima, this->m_imageUser);
   }
 
   BLI_thread_lock(LOCK_DRAW_IMAGE);
@@ -153,7 +151,8 @@ void ViewerOperation::initImage()
     if (ibuf->x > 0 && ibuf->y > 0) {
       imb_addrectfloatImBuf(ibuf);
     }
-    ima->ok = IMA_OK_LOADED;
+    ImageTile *tile = BKE_image_get_tile(ima, 0);
+    tile->ok = IMA_OK_LOADED;
 
     ibuf->userflags |= IB_DISPLAY_BUFFER_INVALID;
   }
@@ -181,7 +180,7 @@ void ViewerOperation::updateImage(rcti *rect)
 {
   IMB_partial_display_buffer_update(this->m_ibuf,
                                     this->m_outputBuffer,
-                                    NULL,
+                                    nullptr,
                                     getWidth(),
                                     0,
                                     0,
@@ -191,7 +190,7 @@ void ViewerOperation::updateImage(rcti *rect)
                                     rect->ymin,
                                     rect->xmax,
                                     rect->ymax);
-
+  this->m_image->gpuflag |= IMA_GPU_REFRESH;
   this->updateDraw();
 }
 
@@ -200,7 +199,6 @@ CompositorPriority ViewerOperation::getRenderPriority() const
   if (this->isActiveViewerOutput()) {
     return COM_PRIORITY_HIGH;
   }
-  else {
-    return COM_PRIORITY_LOW;
-  }
+
+  return COM_PRIORITY_LOW;
 }

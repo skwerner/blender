@@ -23,15 +23,15 @@
 
 #include <string.h>
 
-#include "BLI_utildefines.h"
 #include "BLI_fileops.h"
+#include "BLI_utildefines.h"
 
 #include "MEM_guardedalloc.h"
 
-#include "imbuf.h"
-#include "IMB_imbuf_types.h"
-#include "IMB_imbuf.h"
 #include "IMB_filetype.h"
+#include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
+#include "imbuf.h"
 
 #include "IMB_colormanagement.h"
 #include "IMB_colormanagement_intern.h"
@@ -109,7 +109,7 @@ static void readheader(MFileOffset *inf, IMAGE *image);
 static int writeheader(FILE *outf, IMAGE *image);
 
 static ushort getshort(MFileOffset *inf);
-static uint getlong(MFileOffset *inf);
+static uint getlong(MFileOffset *mofs);
 static void putshort(FILE *outf, ushort val);
 static int putlong(FILE *outf, uint val);
 static int writetab(FILE *outf, uint *tab, int len);
@@ -122,7 +122,7 @@ static int expandrow2(
 static void interleaverow(uchar *lptr, const uchar *cptr, int z, int n);
 static void interleaverow2(float *lptr, const uchar *cptr, int z, int n);
 static int compressrow(uchar *lbuf, uchar *rlebuf, int z, int cnt);
-static void lumrow(uchar *rgbptr, uchar *lumptr, int n);
+static void lumrow(const uchar *rgbptr, uchar *lumptr, int n);
 
 /*
  * byte order independent read/write of shorts and ints.
@@ -243,8 +243,11 @@ static void test_endian_zbuf(struct ImBuf *ibuf)
 /* this one is only def-ed once, strangely... */
 #define GSS(x) (((uchar *)(x))[1] << 8 | ((uchar *)(x))[0])
 
-int imb_is_a_iris(const uchar *mem)
+bool imb_is_a_iris(const uchar *mem, size_t size)
 {
+  if (size < 2) {
+    return false;
+  }
   return ((GS(mem) == IMAGIC) || (GSS(mem) == IMAGIC));
 }
 
@@ -271,7 +274,7 @@ struct ImBuf *imb_loadiris(const uchar *mem, size_t size, int flags, char colors
     return NULL;
   }
 
-  if (!imb_is_a_iris(mem)) {
+  if (!imb_is_a_iris(mem, size)) {
     return NULL;
   }
 
@@ -281,18 +284,18 @@ struct ImBuf *imb_loadiris(const uchar *mem, size_t size, int flags, char colors
   readheader(inf, &image);
   if (image.imagic != IMAGIC) {
     fprintf(stderr, "longimagedata: bad magic number in image file\n");
-    return (NULL);
+    return NULL;
   }
 
   rle = ISRLE(image.type);
   bpp = BPP(image.type);
-  if (bpp != 1 && bpp != 2) {
+  if (!ELEM(bpp, 1, 2)) {
     fprintf(stderr, "longimagedata: image must have 1 or 2 byte per pix chan\n");
-    return (NULL);
+    return NULL;
   }
   if ((uint)image.zsize > 8) {
     fprintf(stderr, "longimagedata: channels over 8 not supported\n");
-    return (NULL);
+    return NULL;
   }
 
   const int xsize = image.xsize;
@@ -304,7 +307,7 @@ struct ImBuf *imb_loadiris(const uchar *mem, size_t size, int flags, char colors
     if (ibuf) {
       ibuf->ftype = IMB_FTYPE_IMAGIC;
     }
-    return (ibuf);
+    return ibuf;
   }
 
   if (rle) {
@@ -598,7 +601,7 @@ struct ImBuf *imb_loadiris(const uchar *mem, size_t size, int flags, char colors
     IMB_convert_rgba_to_abgr(ibuf);
   }
 
-  return (ibuf);
+  return ibuf;
 }
 
 /* static utility functions for longimagedata */
@@ -807,7 +810,7 @@ fail:
  * Added: zbuf write
  */
 
-static int output_iris(uint *lptr, int xsize, int ysize, int zsize, const char *name, int *zptr)
+static bool output_iris(uint *lptr, int xsize, int ysize, int zsize, const char *name, int *zptr)
 {
   FILE *outf;
   IMAGE *image;
@@ -892,15 +895,14 @@ static int output_iris(uint *lptr, int xsize, int ysize, int zsize, const char *
   if (goodwrite) {
     return 1;
   }
-  else {
-    fprintf(stderr, "output_iris: not enough space for image!!\n");
-    return 0;
-  }
+
+  fprintf(stderr, "output_iris: not enough space for image!!\n");
+  return 0;
 }
 
 /* static utility functions for output_iris */
 
-static void lumrow(uchar *rgbptr, uchar *lumptr, int n)
+static void lumrow(const uchar *rgbptr, uchar *lumptr, int n)
 {
   lumptr += CHANOFFSET(0);
   while (n--) {
@@ -970,10 +972,9 @@ static int compressrow(uchar *lbuf, uchar *rlebuf, int z, int cnt)
   return optr - (uchar *)rlebuf;
 }
 
-int imb_saveiris(struct ImBuf *ibuf, const char *name, int flags)
+bool imb_saveiris(struct ImBuf *ibuf, const char *filepath, int flags)
 {
   short zsize;
-  int ret;
 
   zsize = (ibuf->planes + 7) >> 3;
   if (flags & IB_zbuf && ibuf->zbuf != NULL) {
@@ -983,11 +984,11 @@ int imb_saveiris(struct ImBuf *ibuf, const char *name, int flags)
   IMB_convert_rgba_to_abgr(ibuf);
   test_endian_zbuf(ibuf);
 
-  ret = output_iris(ibuf->rect, ibuf->x, ibuf->y, zsize, name, ibuf->zbuf);
+  const bool ok = output_iris(ibuf->rect, ibuf->x, ibuf->y, zsize, filepath, ibuf->zbuf);
 
   /* restore! Quite clumsy, 2 times a switch... maybe better a malloc ? */
   IMB_convert_rgba_to_abgr(ibuf);
   test_endian_zbuf(ibuf);
 
-  return (ret);
+  return ok;
 }

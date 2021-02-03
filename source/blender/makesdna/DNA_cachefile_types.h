@@ -21,8 +21,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_CACHEFILE_TYPES_H__
-#define __DNA_CACHEFILE_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 
@@ -38,10 +37,12 @@ enum {
   CACHEFILE_UNUSED_0 = (1 << 1),
 };
 
+#if 0 /* UNUSED */
 /* CacheFile::draw_flag */
 enum {
   CACHEFILE_KEYFRAME_DRAWN = (1 << 0),
 };
+#endif
 
 /* Representation of an object's path inside the Alembic file.
  * Note that this is not a file path. */
@@ -50,6 +51,13 @@ typedef struct AlembicObjectPath {
 
   char path[4096];
 } AlembicObjectPath;
+
+/* CacheFile::velocity_unit
+ * Determines what temporal unit is used to interpret velocity vectors for motion blur effects. */
+enum {
+  CACHEFILE_VELOCITY_UNIT_FRAME,
+  CACHEFILE_VELOCITY_UNIT_SECOND,
+};
 
 typedef struct CacheFile {
   ID id;
@@ -74,9 +82,13 @@ typedef struct CacheFile {
 
   /** Animation flag. */
   short flag;
-  short draw_flag;
+  short draw_flag; /* UNUSED */
 
-  char _pad[4];
+  char _pad[3];
+
+  char velocity_unit;
+  /* Name of the velocity property in the Alembic file. */
+  char velocity_name[64];
 
   /* Runtime */
   struct AbcArchiveHandle *handle;
@@ -87,5 +99,3 @@ typedef struct CacheFile {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __DNA_CACHEFILE_TYPES_H__ */

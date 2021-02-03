@@ -18,11 +18,11 @@
  * \ingroup datatoc
  */
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
 #include <assert.h>
 #include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 /* for bool */
 #include "../blenlib/BLI_sys_types.h"
@@ -269,7 +269,7 @@ static bool icon_merge(const char *file_src,
     /* init once */
     *r_canvas_w = head.canvas_w;
     *r_canvas_h = head.canvas_h;
-    *r_pixels_canvas = calloc(1, (head.canvas_w * head.canvas_h) * sizeof(unsigned char[4]));
+    *r_pixels_canvas = calloc(1, (head.canvas_w * head.canvas_h) * sizeof(const unsigned char[4]));
   }
 
   canvas_w = *r_canvas_w;

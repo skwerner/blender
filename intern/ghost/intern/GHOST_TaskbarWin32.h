@@ -17,20 +17,15 @@
 /** \file
  * \ingroup GHOST
  */
-#ifndef __GHOST_TASKBARWIN32_H__
-#define __GHOST_TASKBARWIN32_H__
+#pragma once
 
 #ifndef WIN32
 #  error WIN32 only!
 #endif  // WIN32
 
-/* require Windows XP or newer */
-#undef _WIN32_WINNT
-#define _WIN32_WINNT 0x501
-
 #define WIN32_LEAN_AND_MEAN
-#include <windows.h>
 #include <shlobj.h>
+#include <windows.h>
 
 // ITaskbarList, ITaskbarList2 and ITaskbarList3 might be missing, present here in that case.
 // Note, ITaskbarList3 is supported only since Windows 7, though. Check for that is done in
@@ -132,5 +127,3 @@ class ITaskbarList3 : public ITaskbarList2 {
   virtual HRESULT STDMETHODCALLTYPE SetThumbnailClip(HWND hwnd, RECT *prcClip) = 0;
 };
 #endif /* ITaskbarList3 */
-
-#endif /*__GHOST_TASKBARWIN32_H__*/

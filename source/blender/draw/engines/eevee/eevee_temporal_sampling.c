@@ -30,8 +30,8 @@
 
 #include "DEG_depsgraph_query.h"
 
-#include "eevee_private.h"
 #include "GPU_texture.h"
+#include "eevee_private.h"
 
 #define FILTER_CDF_TABLE_SIZE 512
 
@@ -40,10 +40,6 @@ static struct {
   bool inited;
   float inverted_cdf[FILTER_CDF_TABLE_SIZE];
 } e_data = {false}; /* Engine data */
-
-extern char datatoc_common_uniforms_lib_glsl[];
-extern char datatoc_common_view_lib_glsl[];
-extern char datatoc_bsdf_common_lib_glsl[];
 
 static float UNUSED_FUNCTION(filter_box)(float UNUSED(x))
 {
@@ -63,7 +59,7 @@ static void compute_cdf(float (*func)(float x), float cdf[FILTER_CDF_TABLE_SIZE]
 {
   cdf[0] = 0.0f;
   /* Actual CDF evaluation. */
-  for (int u = 0; u < FILTER_CDF_TABLE_SIZE - 1; ++u) {
+  for (int u = 0; u < FILTER_CDF_TABLE_SIZE - 1; u++) {
     float x = (float)(u + 1) / (float)(FILTER_CDF_TABLE_SIZE - 1);
     cdf[u + 1] = cdf[u] + func(x - 0.5f); /* [-0.5..0.5]. We resize later. */
   }
@@ -80,7 +76,7 @@ static void invert_cdf(const float cdf[FILTER_CDF_TABLE_SIZE],
 {
   for (int u = 0; u < FILTER_CDF_TABLE_SIZE; u++) {
     float x = (float)u / (float)(FILTER_CDF_TABLE_SIZE - 1);
-    for (int i = 0; i < FILTER_CDF_TABLE_SIZE; ++i) {
+    for (int i = 0; i < FILTER_CDF_TABLE_SIZE; i++) {
       if (cdf[i] >= x) {
         if (i == FILTER_CDF_TABLE_SIZE - 1) {
           invert_cdf[u] = 1.0f;
@@ -96,7 +92,7 @@ static void invert_cdf(const float cdf[FILTER_CDF_TABLE_SIZE],
 }
 
 /* Evaluate a discrete function table with linear interpolation. */
-static float eval_table(float *table, float x)
+static float eval_table(const float *table, float x)
 {
   CLAMP(x, 0.0f, 1.0f);
   x = x * (FILTER_CDF_TABLE_SIZE - 1);
@@ -123,7 +119,7 @@ static void eevee_create_cdf_table_temporal_sampling(void)
   invert_cdf(cdf_table, e_data.inverted_cdf);
 
   /* Scale and offset table. */
-  for (int i = 0; i < FILTER_CDF_TABLE_SIZE; ++i) {
+  for (int i = 0; i < FILTER_CDF_TABLE_SIZE; i++) {
     e_data.inverted_cdf[i] = (e_data.inverted_cdf[i] - 0.5f) * filter_width;
   }
 
@@ -171,7 +167,7 @@ void EEVEE_temporal_sampling_update_matrices(EEVEE_Data *vedata)
 
   double ht_point[2];
   double ht_offset[2] = {0.0, 0.0};
-  uint ht_primes[2] = {2, 3};
+  const uint ht_primes[2] = {2, 3};
 
   BLI_halton_2d(ht_primes, ht_offset, effects->taa_current_sample - 1, ht_point);
 
@@ -186,6 +182,18 @@ void EEVEE_temporal_sampling_reset(EEVEE_Data *vedata)
   vedata->stl->effects->taa_current_sample = 1;
 }
 
+void EEVEE_temporal_sampling_create_view(EEVEE_Data *vedata)
+{
+  EEVEE_EffectsInfo *effects = vedata->stl->effects;
+  /* Create a sub view to disable clipping planes (if any). */
+  const DRWView *default_view = DRW_view_default_get();
+  float viewmat[4][4], winmat[4][4];
+  DRW_view_viewmat_get(default_view, viewmat, false);
+  DRW_view_winmat_get(default_view, winmat, false);
+  effects->taa_view = DRW_view_create_sub(default_view, viewmat, winmat);
+  DRW_view_clip_planes_set(effects->taa_view, NULL, 0);
+}
+
 int EEVEE_temporal_sampling_init(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *vedata)
 {
   EEVEE_StorageList *stl = vedata->stl;
@@ -198,18 +206,14 @@ int EEVEE_temporal_sampling_init(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data
 
   /**
    * Reset for each "redraw". When rendering using ogl render,
-   * we accumulate the redraw inside the drawing loop in eevee_draw_background().
-   **/
-  effects->taa_render_sample = 1;
-  effects->taa_view = NULL;
+   * we accumulate the redraw inside the drawing loop in eevee_draw_scene().
+   */
+  if (DRW_state_is_opengl_render()) {
+    effects->taa_render_sample = 1;
+  }
+  effects->bypass_drawing = false;
 
-  /* Create a sub view to disable clipping planes (if any). */
-  const DRWView *default_view = DRW_view_default_get();
-  float viewmat[4][4], winmat[4][4];
-  DRW_view_viewmat_get(default_view, viewmat, false);
-  DRW_view_winmat_get(default_view, winmat, false);
-  effects->taa_view = DRW_view_create_sub(default_view, viewmat, winmat);
-  DRW_view_clip_planes_set(effects->taa_view, NULL, 0);
+  EEVEE_temporal_sampling_create_view(vedata);
 
   const DRWContextState *draw_ctx = DRW_context_state_get();
   const Scene *scene_eval = DEG_get_evaluated_scene(draw_ctx->depsgraph);
@@ -234,22 +238,28 @@ int EEVEE_temporal_sampling_init(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data
       view_is_valid = view_is_valid && (ED_screen_animation_no_scrub(wm) == NULL);
     }
 
-    effects->taa_total_sample = scene_eval->eevee.taa_samples;
+    const bool first_sample_only = EEVEE_renderpasses_only_first_sample_pass_active(vedata);
+    view_is_valid = view_is_valid && !first_sample_only;
+    effects->taa_total_sample = first_sample_only ? 1 : scene_eval->eevee.taa_samples;
     MAX2(effects->taa_total_sample, 0);
 
-    DRW_view_persmat_get(NULL, persmat, false);
-    view_is_valid = view_is_valid && compare_m4m4(persmat, effects->prev_drw_persmat, FLT_MIN);
-    copy_m4_m4(effects->prev_drw_persmat, persmat);
+    /* Motion blur steps could reset the sampling when camera is animated (see T79970). */
+    if (!DRW_state_is_scene_render()) {
+      DRW_view_persmat_get(NULL, persmat, false);
+      view_is_valid = view_is_valid && compare_m4m4(persmat, effects->prev_drw_persmat, FLT_MIN);
+    }
 
     /* Prevent ghosting from probe data. */
-    view_is_valid = view_is_valid && (effects->prev_drw_support == DRW_state_draw_support());
+    view_is_valid = view_is_valid && (effects->prev_drw_support == DRW_state_draw_support()) &&
+                    (effects->prev_is_navigating == DRW_state_is_navigating());
     effects->prev_drw_support = DRW_state_draw_support();
+    effects->prev_is_navigating = DRW_state_is_navigating();
 
     if (((effects->taa_total_sample == 0) ||
          (effects->taa_current_sample < effects->taa_total_sample)) ||
-        DRW_state_is_image_render()) {
+        (!view_is_valid) || DRW_state_is_image_render()) {
       if (view_is_valid) {
-        /* Viewport rendering updates the matrices in `eevee_draw_background` */
+        /* Viewport rendering updates the matrices in `eevee_draw_scene` */
         if (!DRW_state_is_image_render()) {
           effects->taa_current_sample += 1;
           repro_flag = 0;
@@ -260,7 +270,14 @@ int EEVEE_temporal_sampling_init(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data
       }
     }
     else {
-      effects->taa_current_sample = 1;
+      const bool all_shaders_compiled = stl->g_data->queued_shaders_count_prev == 0;
+      /* Fix Texture painting (see T79370) and shader compilation (see T78520). */
+      if (DRW_state_is_navigating() || !all_shaders_compiled) {
+        effects->taa_current_sample = 1;
+      }
+      else {
+        effects->bypass_drawing = true;
+      }
     }
 
     return repro_flag | EFFECT_TAA | EFFECT_DOUBLE_BUFFER | EFFECT_DEPTH_DOUBLE_BUFFER |
@@ -279,7 +296,7 @@ void EEVEE_temporal_sampling_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data 
   EEVEE_TextureList *txl = vedata->txl;
   EEVEE_EffectsInfo *effects = stl->effects;
 
-  if ((effects->enabled_effects & (EFFECT_TAA | EFFECT_TAA_REPROJECT)) != 0) {
+  if (effects->enabled_effects & EFFECT_TAA) {
     struct GPUShader *sh = EEVEE_shaders_taa_resolve_sh_get(effects->enabled_effects);
 
     DRW_PASS_CREATE(psl->taa_resolve, DRW_STATE_WRITE_COLOR);
@@ -288,10 +305,12 @@ void EEVEE_temporal_sampling_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data 
     DRW_shgroup_uniform_texture_ref(grp, "colorHistoryBuffer", &txl->taa_history);
     DRW_shgroup_uniform_texture_ref(grp, "colorBuffer", &effects->source_buffer);
     DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
+    DRW_shgroup_uniform_block(grp, "renderpass_block", sldata->renderpass_ubo.combined);
 
     if (effects->enabled_effects & EFFECT_TAA_REPROJECT) {
-      // DefaultTextureList *dtxl = DRW_viewport_texture_list_get();
-      DRW_shgroup_uniform_texture_ref(grp, "velocityBuffer", &effects->velocity_tx);
+      DefaultTextureList *dtxl = DRW_viewport_texture_list_get();
+      DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &dtxl->depth);
+      DRW_shgroup_uniform_mat4(grp, "prevViewProjectionMatrix", effects->prev_drw_persmat);
     }
     else {
       DRW_shgroup_uniform_float(grp, "alpha", &effects->taa_alpha, 1);
@@ -354,10 +373,13 @@ void EEVEE_temporal_sampling_draw(EEVEE_Data *vedata)
       effects->taa_current_sample += 1;
     }
     else {
-      if ((effects->taa_total_sample == 0) ||
-          (effects->taa_current_sample < effects->taa_total_sample)) {
+      if (!DRW_state_is_playback() &&
+          ((effects->taa_total_sample == 0) ||
+           (effects->taa_current_sample < effects->taa_total_sample))) {
         DRW_viewport_request_redraw();
       }
     }
+
+    DRW_view_persmat_get(NULL, effects->prev_drw_persmat, false);
   }
 }

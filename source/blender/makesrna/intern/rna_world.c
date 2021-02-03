@@ -48,17 +48,17 @@
 
 static PointerRNA rna_World_lighting_get(PointerRNA *ptr)
 {
-  return rna_pointer_inherit_refine(ptr, &RNA_WorldLighting, ptr->id.data);
+  return rna_pointer_inherit_refine(ptr, &RNA_WorldLighting, ptr->owner_id);
 }
 
 static PointerRNA rna_World_mist_get(PointerRNA *ptr)
 {
-  return rna_pointer_inherit_refine(ptr, &RNA_WorldMistSettings, ptr->id.data);
+  return rna_pointer_inherit_refine(ptr, &RNA_WorldMistSettings, ptr->owner_id);
 }
 
 static void rna_World_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
 {
-  World *wo = ptr->id.data;
+  World *wo = (World *)ptr->owner_id;
 
   DEG_id_tag_update(&wo->id, 0);
   WM_main_add_notifier(NC_WORLD | ND_WORLD, wo);
@@ -67,7 +67,7 @@ static void rna_World_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerR
 #  if 0
 static void rna_World_draw_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
 {
-  World *wo = ptr->id.data;
+  World *wo = (World *)ptr->owner_id;
 
   DEG_id_tag_update(&wo->id, 0);
   WM_main_add_notifier(NC_WORLD | ND_WORLD_DRAW, wo);
@@ -76,7 +76,7 @@ static void rna_World_draw_update(Main *UNUSED(bmain), Scene *UNUSED(scene), Poi
 
 static void rna_World_draw_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
 {
-  World *wo = ptr->id.data;
+  World *wo = (World *)ptr->owner_id;
 
   DEG_id_tag_update(&wo->id, 0);
   WM_main_add_notifier(NC_WORLD | ND_WORLD_DRAW, wo);
@@ -236,6 +236,7 @@ void RNA_def_world(BlenderRNA *brna)
   /* nodes */
   prop = RNA_def_property(srna, "node_tree", PROP_POINTER, PROP_NONE);
   RNA_def_property_pointer_sdna(prop, NULL, "nodetree");
+  RNA_def_property_clear_flag(prop, PROP_PTR_NO_OWNERSHIP);
   RNA_def_property_ui_text(prop, "Node Tree", "Node tree for node based worlds");
 
   prop = RNA_def_property(srna, "use_nodes", PROP_BOOLEAN, PROP_NONE);

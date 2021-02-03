@@ -14,14 +14,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_CURVE_ADVANCED_ITERATORS_H__
-#define __FREESTYLE_CURVE_ADVANCED_ITERATORS_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
  * \brief Iterators used to iterate over the elements of the Curve. Can't be used in python
  */
 
+#include "CurveIterators.h"
 #include "Stroke.h"
 
 namespace Freestyle {
@@ -50,8 +50,8 @@ class CurvePoint_nonconst_traits : public Nonconst_traits<CurvePoint *> {
 /*                                */
 /**********************************/
 
-/*! iterator on a curve. Allows an iterating outside  initial vertices. A CurvePoint is
- * instanciated an returned when the iterator is dereferenced.
+/*! iterator on a curve. Allows an iterating outside initial vertices. A CurvePoint is
+ * instantiated and returned when the iterator is dereferenced.
  */
 template<class Traits>
 class __point_iterator : public IteratorBase<Traits, BidirectionalIteratorTag_Traits> {
@@ -387,5 +387,3 @@ class __point_iterator : public IteratorBase<Traits, BidirectionalIteratorTag_Tr
 }  // end of namespace CurveInternal
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_CURVE_ADVANCED_ITERATORS_H__

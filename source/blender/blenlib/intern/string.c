@@ -21,11 +21,12 @@
  * \ingroup bli
  */
 
-#include <string.h>
-#include <stdlib.h>
-#include <stdarg.h>
 #include <ctype.h>
 #include <inttypes.h>
+#include <math.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
@@ -86,7 +87,7 @@ char *BLI_strdupcat(const char *__restrict str1, const char *__restrict str2)
   str = MEM_mallocN(str1_len + str2_len, "strdupcat");
   s = str;
 
-  memcpy(s, str1, str1_len);
+  memcpy(s, str1, str1_len); /* NOLINT: bugprone-not-null-terminated-result */
   s += str1_len;
   memcpy(s, str2, str2_len);
 
@@ -316,99 +317,140 @@ char *BLI_sprintfN(const char *__restrict format, ...)
   return n;
 }
 
-/* match pythons string escaping, assume double quotes - (")
- * TODO: should be used to create RNA animation paths.
- * TODO: support more fancy string escaping. current code is primitive
- *    this basically is an ascii version of PyUnicode_EncodeUnicodeEscape()
- *    which is a useful reference. */
-size_t BLI_strescape(char *__restrict dst, const char *__restrict src, const size_t maxncpy)
+/**
+ * This roughly matches C and Python's string escaping with double quotes - `"`.
+ *
+ * Since every character may need escaping,
+ * it's common to create a buffer twice as large as the input.
+ *
+ * \param dst: The destination string, at least \a dst_maxncpy, typically `(strlen(src) * 2) + 1`.
+ * \param src: The un-escaped source string.
+ * \param dst_maxncpy: The maximum number of bytes allowable to copy.
+ *
+ * \note This is used for creating animation paths in blend files.
+ */
+size_t BLI_str_escape(char *__restrict dst, const char *__restrict src, const size_t dst_maxncpy)
 {
+
+  BLI_assert(dst_maxncpy != 0);
+
   size_t len = 0;
-
-  BLI_assert(maxncpy != 0);
-
-  while (len < maxncpy) {
-    switch (*src) {
-      case '\0':
-        goto escape_finish;
-      case '\\':
-      case '"':
-        ATTR_FALLTHROUGH;
-
-      /* less common but should also be support */
-      case '\t':
-      case '\n':
-      case '\r':
-        if (len + 1 < maxncpy) {
-          *dst++ = '\\';
-          len++;
-        }
-        else {
-          /* not enough space to escape */
-          break;
-        }
-        ATTR_FALLTHROUGH;
-      default:
-        *dst = *src;
+  for (; (len < dst_maxncpy) && (*src != '\0'); dst++, src++, len++) {
+    char c = *src;
+    if (ELEM(c, '\\', '"') ||                       /* Use as-is. */
+        ((c == '\t') && ((void)(c = 't'), true)) || /* Tab. */
+        ((c == '\n') && ((void)(c = 'n'), true)) || /* Newline. */
+        ((c == '\r') && ((void)(c = 'r'), true)) || /* Carriage return. */
+        ((c == '\a') && ((void)(c = 'a'), true)) || /* Bell. */
+        ((c == '\b') && ((void)(c = 'b'), true)) || /* Backspace. */
+        ((c == '\f') && ((void)(c = 'f'), true)))   /* Form-feed. */
+    {
+      if (UNLIKELY(len + 1 >= dst_maxncpy)) {
+        /* Not enough space to escape. */
         break;
+      }
+      *dst++ = '\\';
+      len++;
     }
-    dst++;
-    src++;
-    len++;
+    *dst = c;
   }
-
-escape_finish:
-
   *dst = '\0';
 
   return len;
 }
 
 /**
- * Makes a copy of the text within the "" that appear after some text 'blahblah'
- * i.e. for string 'pose["apples"]' with prefix 'pose[', it should grab "apples"
+ * This roughly matches C and Python's string escaping with double quotes - `"`.
  *
- * - str: is the entire string to chop
- * - prefix: is the part of the string to leave out
+ * The destination will never be larger than the source, it will either be the same
+ * or up to half when all characters are escaped.
  *
- * Assume that the strings returned must be freed afterwards, and that the inputs will contain
- * data we want...
+ * \param dst: The destination string, at least the size of `strlen(src) + 1`.
+ * \param src: The escaped source string.
+ * \param dst_maxncpy: The maximum number of bytes allowable to copy.
  *
- * \return the offset and a length so as to avoid doing an allocation.
+ * \note This is used for for parsing animation paths in blend files.
+ */
+size_t BLI_str_unescape(char *__restrict dst, const char *__restrict src, const size_t src_maxncpy)
+{
+  size_t len = 0;
+  for (size_t i = 0; i < src_maxncpy && (*src != '\0'); i++, src++) {
+    char c = *src;
+    if (c == '\\') {
+      char c_next = *(src + 1);
+      if (((c_next == '"') && ((void)(c = '"'), true)) ||   /* Quote. */
+          ((c_next == '\\') && ((void)(c = '\\'), true)) || /* Backslash. */
+          ((c_next == 't') && ((void)(c = '\t'), true)) ||  /* Tab. */
+          ((c_next == 'n') && ((void)(c = '\n'), true)) ||  /* Newline. */
+          ((c_next == 'r') && ((void)(c = '\r'), true)) ||  /* Carriage return. */
+          ((c_next == 'a') && ((void)(c = '\a'), true)) ||  /* Bell. */
+          ((c_next == 'b') && ((void)(c = '\b'), true)) ||  /* Backspace. */
+          ((c_next == 'f') && ((void)(c = '\f'), true)))    /* Form-feed. */
+      {
+        i++;
+        src++;
+      }
+    }
+
+    dst[len++] = c;
+  }
+  dst[len] = 0;
+  return len;
+}
+
+/**
+ * Find the first un-escaped quote in the string (to find the end of the string).
+ */
+const char *BLI_str_escape_find_quote(const char *str)
+{
+  bool escape = false;
+  while (*str && (*str != '"' || escape)) {
+    /* A pair of back-slashes represents a single back-slash,
+     * only use a single back-slash for escaping. */
+    escape = (escape == false) && (*str == '\\');
+    str++;
+  }
+  return (*str == '"') ? str : NULL;
+}
+
+/**
+ * Makes a copy of the text within the "" that appear after some text `blahblah`.
+ * i.e. for string `pose["apples"]` with prefix `pose[`, it will return `apples`.
+ *
+ * \param str: is the entire string to chop.
+ * \param prefix: is the part of the string to step over.
+ *
+ * Assume that the strings returned must be freed afterwards,
+ * and that the inputs will contain data we want.
  */
 char *BLI_str_quoted_substrN(const char *__restrict str, const char *__restrict prefix)
 {
-  const char *startMatch, *endMatch;
+  const char *start_match, *end_match;
 
-  /* get the starting point (i.e. where prefix starts, and add prefixLen+1
+  /* get the starting point (i.e. where prefix starts, and add prefix_len+1
    * to it to get be after the first " */
-  startMatch = strstr(str, prefix);
-  if (startMatch) {
-    const size_t prefixLen = strlen(prefix);
-    startMatch += prefixLen + 1;
+  start_match = strstr(str, prefix);
+  if (start_match) {
+    const size_t prefix_len = strlen(prefix);
+    start_match += prefix_len + 1;
     /* get the end point (i.e. where the next occurrence of " is after the starting point) */
-
-    endMatch = startMatch;
-    while ((endMatch = strchr(endMatch, '"'))) {
-      if (LIKELY(*(endMatch - 1) != '\\')) {
-        break;
+    end_match = BLI_str_escape_find_quote(start_match);
+    if (end_match) {
+      const size_t unescaped_len = (size_t)(end_match - start_match);
+      char *result = MEM_mallocN(sizeof(char) * (unescaped_len + 1), __func__);
+      const size_t escaped_len = BLI_str_unescape(result, start_match, unescaped_len);
+      if (escaped_len != unescaped_len) {
+        result = MEM_reallocN(result, sizeof(char) * (escaped_len + 1));
       }
-      else {
-        endMatch++;
-      }
-    }
-
-    if (endMatch) {
-      /* return the slice indicated */
-      return BLI_strdupn(startMatch, (size_t)(endMatch - startMatch));
+      return result;
     }
   }
-  return BLI_strdupn("", 0);
+  return NULL;
 }
 
 /**
  * string with all instances of substr_old replaced with substr_new,
- * Returns a copy of the cstring \a str into a newly mallocN'd
+ * Returns a copy of the c-string \a str into a newly #MEM_mallocN'd
  * and returns it.
  *
  * \note A rather wasteful string-replacement utility, though this shall do for now...
@@ -429,55 +471,49 @@ char *BLI_str_replaceN(const char *__restrict str,
 
   BLI_assert(substr_old[0] != '\0');
 
-  /* while we can still find a match for the old substring that we're searching for,
-   * keep dicing and replacing
-   */
+  /* While we can still find a match for the old sub-string that we're searching for,
+   * keep dicing and replacing. */
   while ((match = strstr(str, substr_old))) {
     /* the assembly buffer only gets created when we actually need to rebuild the string */
     if (ds == NULL) {
       ds = BLI_dynstr_new();
     }
 
-    /* if the match position does not match the current position in the string,
-     * copy the text up to this position and advance the current position in the string
-     */
+    /* If the match position does not match the current position in the string,
+     * copy the text up to this position and advance the current position in the string. */
     if (str != match) {
-      /* add the segment of the string from str to match to the buffer,
-       * then restore the value at match */
+      /* Add the segment of the string from `str` to match to the buffer,
+       * then restore the value at match. */
       BLI_dynstr_nappend(ds, str, (match - str));
 
       /* now our current position should be set on the start of the match */
       str = match;
     }
 
-    /* add the replacement text to the accumulation buffer */
+    /* Add the replacement text to the accumulation buffer. */
     BLI_dynstr_append(ds, substr_new);
 
-    /* advance the current position of the string up to the end of the replaced segment */
+    /* Advance the current position of the string up to the end of the replaced segment. */
     str += len_old;
   }
 
-  /* finish off and return a new string that has had all occurrences of */
+  /* Finish off and return a new string that has had all occurrences of. */
   if (ds) {
     char *str_new;
 
-    /* add what's left of the string to the assembly buffer
-     * - we've been adjusting str to point at the end of the replaced segments
-     */
+    /* Add what's left of the string to the assembly buffer
+     * - we've been adjusting `str` to point at the end of the replaced segments. */
     BLI_dynstr_append(ds, str);
 
-    /* convert to new c-string (MEM_malloc'd), and free the buffer */
+    /* Convert to new c-string (MEM_malloc'd), and free the buffer. */
     str_new = BLI_dynstr_get_cstring(ds);
     BLI_dynstr_free(ds);
 
     return str_new;
   }
-  else {
-    /* just create a new copy of the entire string - we avoid going through the assembly buffer
-     * for what should be a bit more efficiency...
-     */
-    return BLI_strdup(str);
-  }
+  /* Just create a new copy of the entire string - we avoid going through the assembly buffer
+   * for what should be a bit more efficiency. */
+  return BLI_strdup(str);
 }
 
 /**
@@ -512,8 +548,8 @@ int BLI_strcaseeq(const char *a, const char *b)
  */
 char *BLI_strcasestr(const char *s, const char *find)
 {
-  register char c, sc;
-  register size_t len;
+  char c, sc;
+  size_t len;
 
   if ((c = *find++) != 0) {
     c = tolower(c);
@@ -521,7 +557,7 @@ char *BLI_strcasestr(const char *s, const char *find)
     do {
       do {
         if ((sc = *s++) == 0) {
-          return (NULL);
+          return NULL;
         }
         sc = tolower(sc);
       } while (sc != c);
@@ -531,12 +567,45 @@ char *BLI_strcasestr(const char *s, const char *find)
   return ((char *)s);
 }
 
+int BLI_string_max_possible_word_count(const int str_len)
+{
+  return (str_len / 2) + 1;
+}
+
+bool BLI_string_has_word_prefix(const char *haystack, const char *needle, size_t needle_len)
+{
+  const char *match = BLI_strncasestr(haystack, needle, needle_len);
+  if (match) {
+    if ((match == haystack) || (*(match - 1) == ' ') || ispunct(*(match - 1))) {
+      return true;
+    }
+    return BLI_string_has_word_prefix(match + 1, needle, needle_len);
+  }
+  return false;
+}
+
+bool BLI_string_all_words_matched(const char *name,
+                                  const char *str,
+                                  int (*words)[2],
+                                  const int words_len)
+{
+  int index;
+  for (index = 0; index < words_len; index++) {
+    if (!BLI_string_has_word_prefix(name, str + words[index][0], (size_t)words[index][1])) {
+      break;
+    }
+  }
+  const bool all_words_matched = (index == words_len);
+
+  return all_words_matched;
+}
+
 /**
  * Variation of #BLI_strcasestr with string length limited to \a len
  */
 char *BLI_strncasestr(const char *s, const char *find, size_t len)
 {
-  register char c, sc;
+  char c, sc;
 
   if ((c = *find++) != 0) {
     c = tolower(c);
@@ -567,8 +636,8 @@ char *BLI_strncasestr(const char *s, const char *find, size_t len)
 
 int BLI_strcasecmp(const char *s1, const char *s2)
 {
-  register int i;
-  register char c1, c2;
+  int i;
+  char c1, c2;
 
   for (i = 0;; i++) {
     c1 = tolower(s1[i]);
@@ -577,10 +646,10 @@ int BLI_strcasecmp(const char *s1, const char *s2)
     if (c1 < c2) {
       return -1;
     }
-    else if (c1 > c2) {
+    if (c1 > c2) {
       return 1;
     }
-    else if (c1 == 0) {
+    if (c1 == 0) {
       break;
     }
   }
@@ -590,8 +659,8 @@ int BLI_strcasecmp(const char *s1, const char *s2)
 
 int BLI_strncasecmp(const char *s1, const char *s2, size_t len)
 {
-  register size_t i;
-  register char c1, c2;
+  size_t i;
+  char c1, c2;
 
   for (i = 0; i < len; i++) {
     c1 = tolower(s1[i]);
@@ -600,10 +669,10 @@ int BLI_strncasecmp(const char *s1, const char *s2, size_t len)
     if (c1 < c2) {
       return -1;
     }
-    else if (c1 > c2) {
+    if (c1 > c2) {
       return 1;
     }
-    else if (c1 == 0) {
+    if (c1 == 0) {
       break;
     }
   }
@@ -630,15 +699,13 @@ static int left_number_strcmp(const char *s1, const char *s2, int *tiebreaker)
     if (isdigit(*(p1 + numdigit)) && isdigit(*(p2 + numdigit))) {
       continue;
     }
-    else if (isdigit(*(p1 + numdigit))) {
+    if (isdigit(*(p1 + numdigit))) {
       return 1; /* s2 is bigger */
     }
-    else if (isdigit(*(p2 + numdigit))) {
+    if (isdigit(*(p2 + numdigit))) {
       return -1; /* s1 is bigger */
     }
-    else {
-      break;
-    }
+    break;
   }
 
   /* same number of digits, compare size of number */
@@ -663,11 +730,14 @@ static int left_number_strcmp(const char *s1, const char *s2, int *tiebreaker)
   return 0;
 }
 
-/* natural string compare, keeping numbers in order */
-int BLI_natstrcmp(const char *s1, const char *s2)
+/**
+ * Case insensitive, *natural* string comparison,
+ * keeping numbers in order.
+ */
+int BLI_strcasecmp_natural(const char *s1, const char *s2)
 {
-  register int d1 = 0, d2 = 0;
-  register char c1, c2;
+  int d1 = 0, d2 = 0;
+  char c1, c2;
   int tiebreaker = 0;
 
   /* if both chars are numeric, to a left_number_strcmp().
@@ -675,16 +745,14 @@ int BLI_natstrcmp(const char *s1, const char *s2)
    * numeric, else do a tolower and char compare */
 
   while (1) {
-    c1 = tolower(s1[d1]);
-    c2 = tolower(s2[d2]);
-
-    if (isdigit(c1) && isdigit(c2)) {
+    if (isdigit(s1[d1]) && isdigit(s2[d2])) {
       int numcompare = left_number_strcmp(s1 + d1, s2 + d2, &tiebreaker);
 
       if (numcompare != 0) {
         return numcompare;
       }
 
+      /* Some wasted work here, left_number_strcmp already consumes at least some digits. */
       d1++;
       while (isdigit(s1[d1])) {
         d1++;
@@ -693,16 +761,24 @@ int BLI_natstrcmp(const char *s1, const char *s2)
       while (isdigit(s2[d2])) {
         d2++;
       }
-
-      c1 = tolower(s1[d1]);
-      c2 = tolower(s2[d2]);
     }
 
-    /* first check for '.' so "foo.bar" comes before "foo 1.bar" */
-    if (c1 == '.' && c2 != '.') {
+    /* Test for end of strings first so that shorter strings are ordered in front. */
+    if (ELEM(0, s1[d1], s2[d2])) {
+      break;
+    }
+
+    c1 = tolower(s1[d1]);
+    c2 = tolower(s2[d2]);
+
+    if (c1 == c2) {
+      /* Continue iteration */
+    }
+    /* Check for '.' so "foo.bar" comes before "foo 1.bar". */
+    else if (c1 == '.') {
       return -1;
     }
-    if (c1 != '.' && c2 == '.') {
+    else if (c2 == '.') {
       return 1;
     }
     else if (c1 < c2) {
@@ -711,9 +787,7 @@ int BLI_natstrcmp(const char *s1, const char *s2)
     else if (c1 > c2) {
       return 1;
     }
-    else if (c1 == 0) {
-      break;
-    }
+
     d1++;
     d2++;
   }
@@ -755,14 +829,14 @@ int BLI_strcmp_ignore_pad(const char *str1, const char *str2, const char pad)
   if (str1_len == str2_len) {
     return strncmp(str1, str2, str2_len);
   }
-  else if (str1_len > str2_len) {
+  if (str1_len > str2_len) {
     int ret = strncmp(str1, str2, str2_len);
     if (ret == 0) {
       ret = 1;
     }
     return ret;
   }
-  else {
+  {
     int ret = strncmp(str1, str2, str1_len);
     if (ret == 0) {
       ret = -1;
@@ -811,7 +885,7 @@ void BLI_str_toupper_ascii(char *str, const size_t len)
  */
 void BLI_str_rstrip(char *str)
 {
-  for (int i = (int)strlen(str) - 1; i > 0; i--) {
+  for (int i = (int)strlen(str) - 1; i >= 0; i--) {
     if (isspace(str[i])) {
       str[i] = '\0';
     }
@@ -891,6 +965,24 @@ int BLI_str_index_in_array(const char *__restrict str, const char **__restrict s
     }
   }
   return -1;
+}
+
+/**
+ * Find if a string starts with another string.
+ *
+ * \param str: The string to search within.
+ * \param start: The string we look for at the start.
+ * \return If str starts with start.
+ */
+bool BLI_str_startswith(const char *__restrict str, const char *__restrict start)
+{
+  for (; *str && *start; str++, start++) {
+    if (*str != *start) {
+      return false;
+    }
+  }
+
+  return (*start == '\0');
 }
 
 bool BLI_strn_endswith(const char *__restrict str, const char *__restrict end, size_t slength)
@@ -978,7 +1070,7 @@ size_t BLI_str_partition_ex(const char *str,
 
   *sep = *suf = NULL;
 
-  for (d = delim; *d != '\0'; ++d) {
+  for (d = delim; *d != '\0'; d++) {
     const char *tmp;
 
     if (end) {
@@ -1094,7 +1186,7 @@ void BLI_str_format_byte_unit(char dst[15], long long int bytes, const bool base
 
   BLI_STATIC_ASSERT(ARRAY_SIZE(units_base_2) == ARRAY_SIZE(units_base_10), "array size mismatch");
 
-  while ((ABS(bytes_converted) >= base) && ((order + 1) < tot_units)) {
+  while ((fabs(bytes_converted) >= base) && ((order + 1) < tot_units)) {
     bytes_converted /= base;
     order++;
   }

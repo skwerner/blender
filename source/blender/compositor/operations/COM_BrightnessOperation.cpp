@@ -18,13 +18,13 @@
 
 #include "COM_BrightnessOperation.h"
 
-BrightnessOperation::BrightnessOperation() : NodeOperation()
+BrightnessOperation::BrightnessOperation()
 {
   this->addInputSocket(COM_DT_COLOR);
   this->addInputSocket(COM_DT_VALUE);
   this->addInputSocket(COM_DT_VALUE);
   this->addOutputSocket(COM_DT_COLOR);
-  this->m_inputProgram = NULL;
+  this->m_inputProgram = nullptr;
   this->m_use_premultiply = false;
 }
 
@@ -56,19 +56,20 @@ void BrightnessOperation::executePixelSampled(float output[4],
   float contrast = inputContrast[0];
   brightness /= 100.0f;
   float delta = contrast / 200.0f;
-  a = 1.0f - delta * 2.0f;
   /*
    * The algorithm is by Werner D. Streidt
    * (http://visca.com/ffactory/archives/5-99/msg00021.html)
    * Extracted of OpenCV demhist.c
    */
   if (contrast > 0) {
-    a = 1.0f / a;
+    a = 1.0f - delta * 2.0f;
+    a = 1.0f / max_ff(a, FLT_EPSILON);
     b = a * (brightness - delta);
   }
   else {
     delta *= -1;
-    b = a * (brightness + delta);
+    a = max_ff(1.0f - delta * 2.0f, 0.0f);
+    b = a * brightness + delta;
   }
   if (this->m_use_premultiply) {
     premul_to_straight_v4(inputValue);
@@ -84,7 +85,7 @@ void BrightnessOperation::executePixelSampled(float output[4],
 
 void BrightnessOperation::deinitExecution()
 {
-  this->m_inputProgram = NULL;
-  this->m_inputBrightnessProgram = NULL;
-  this->m_inputContrastProgram = NULL;
+  this->m_inputProgram = nullptr;
+  this->m_inputBrightnessProgram = nullptr;
+  this->m_inputContrastProgram = nullptr;
 }

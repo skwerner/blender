@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
  */
-#ifndef __BKE_MESH_RUNTIME_H__
-#define __BKE_MESH_RUNTIME_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -27,7 +26,10 @@
 
 //#include "BKE_customdata.h"  /* for CustomDataMask */
 
-struct ColorBand;
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct CustomData;
 struct CustomData_MeshMasks;
 struct Depsgraph;
@@ -46,6 +48,7 @@ void BKE_mesh_runtime_looptri_recalc(struct Mesh *mesh);
 const struct MLoopTri *BKE_mesh_runtime_looptri_ensure(struct Mesh *mesh);
 bool BKE_mesh_runtime_ensure_edit_data(struct Mesh *mesh);
 bool BKE_mesh_runtime_clear_edit_data(struct Mesh *mesh);
+bool BKE_mesh_runtime_reset_edit_data(struct Mesh *mesh);
 void BKE_mesh_runtime_clear_geometry(struct Mesh *mesh);
 void BKE_mesh_runtime_clear_cache(struct Mesh *mesh);
 
@@ -54,9 +57,9 @@ void BKE_mesh_runtime_verttri_from_looptri(struct MVertTri *r_verttri,
                                            const struct MLoopTri *looptri,
                                            int looptri_num);
 
-/* NOTE: the functions below are defined in DerivedMesh.c, and are intended to be moved
+/* NOTE: the functions below are defined in DerivedMesh.cc, and are intended to be moved
  * to a more suitable location when that file is removed.
- * They should also be renamed to use conventions from BKE, not old DerivedMesh.c.
+ * They should also be renamed to use conventions from BKE, not old DerivedMesh.cc.
  * For now keep the names similar to avoid confusion. */
 struct Mesh *mesh_get_eval_final(struct Depsgraph *depsgraph,
                                  struct Scene *scene,
@@ -68,21 +71,16 @@ struct Mesh *mesh_get_eval_deform(struct Depsgraph *depsgraph,
                                   struct Object *ob,
                                   const struct CustomData_MeshMasks *dataMask);
 
-struct Mesh *mesh_create_eval_final_render(struct Depsgraph *depsgraph,
-                                           struct Scene *scene,
-                                           struct Object *ob,
-                                           const struct CustomData_MeshMasks *dataMask);
+struct Mesh *mesh_create_eval_final(struct Depsgraph *depsgraph,
+                                    struct Scene *scene,
+                                    struct Object *ob,
+                                    const struct CustomData_MeshMasks *dataMask);
 
 struct Mesh *mesh_create_eval_final_index_render(struct Depsgraph *depsgraph,
                                                  struct Scene *scene,
                                                  struct Object *ob,
                                                  const struct CustomData_MeshMasks *dataMask,
                                                  int index);
-
-struct Mesh *mesh_create_eval_final_view(struct Depsgraph *depsgraph,
-                                         struct Scene *scene,
-                                         struct Object *ob,
-                                         const struct CustomData_MeshMasks *dataMask);
 
 struct Mesh *mesh_create_eval_no_deform(struct Depsgraph *depsgraph,
                                         struct Scene *scene,
@@ -104,4 +102,6 @@ void BKE_mesh_runtime_debug_print_cdlayers(struct CustomData *data);
 bool BKE_mesh_runtime_is_valid(struct Mesh *me_eval);
 #endif /* NDEBUG */
 
-#endif /* __BKE_MESH_RUNTIME_H__ */
+#ifdef __cplusplus
+}
+#endif

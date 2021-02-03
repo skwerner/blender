@@ -25,41 +25,44 @@
 
 #include <cstring>
 
+#include "DNA_ID.h"
 #include "DNA_anim_types.h"
 #include "DNA_armature_types.h"
 #include "DNA_layer_types.h"
-#include "DNA_ID.h"
 #include "DNA_object_types.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_ghash.h"
 #include "BLI_stack.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_action.h"
 
-extern "C" {
-#include "BKE_animsys.h"
-}
-
+#include "intern/builder/deg_builder_cache.h"
+#include "intern/builder/deg_builder_remove_noop.h"
 #include "intern/depsgraph.h"
+#include "intern/depsgraph_relation.h"
 #include "intern/depsgraph_tag.h"
 #include "intern/depsgraph_type.h"
-#include "intern/builder/deg_builder_cache.h"
 #include "intern/eval/deg_eval_copy_on_write.h"
 #include "intern/node/deg_node.h"
-#include "intern/node/deg_node_id.h"
 #include "intern/node/deg_node_component.h"
+#include "intern/node/deg_node_id.h"
 #include "intern/node/deg_node_operation.h"
 
 #include "DEG_depsgraph.h"
 
-namespace DEG {
+namespace blender::deg {
+
+bool deg_check_id_in_depsgraph(const Depsgraph *graph, ID *id_orig)
+{
+  IDNode *id_node = graph->find_id_node(id_orig);
+  return id_node != nullptr;
+}
 
 bool deg_check_base_in_depsgraph(const Depsgraph *graph, Base *base)
 {
   Object *object_orig = base->base_orig->object;
   IDNode *id_node = graph->find_id_node(&object_orig->id);
-  if (id_node == NULL) {
+  if (id_node == nullptr) {
     return false;
   }
   return id_node->has_base;
@@ -71,6 +74,10 @@ bool deg_check_base_in_depsgraph(const Depsgraph *graph, Base *base)
 
 DepsgraphBuilder::DepsgraphBuilder(Main *bmain, Depsgraph *graph, DepsgraphBuilderCache *cache)
     : bmain_(bmain), graph_(graph), cache_(cache)
+{
+}
+
+DepsgraphBuilder::~DepsgraphBuilder()
 {
 }
 
@@ -103,7 +110,7 @@ bool DepsgraphBuilder::need_pull_base_into_graph(Base *base)
 bool DepsgraphBuilder::check_pchan_has_bbone(Object *object, const bPoseChannel *pchan)
 {
   BLI_assert(object->type == OB_ARMATURE);
-  if (pchan == NULL || pchan->bone == NULL) {
+  if (pchan == nullptr || pchan->bone == nullptr) {
     return false;
   }
   /* We don't really care whether segments are higher than 1 due to static user input (as in,
@@ -123,7 +130,7 @@ bool DepsgraphBuilder::check_pchan_has_bbone(Object *object, const bPoseChannel 
 bool DepsgraphBuilder::check_pchan_has_bbone_segments(Object *object, const bPoseChannel *pchan)
 {
   /* Proxies don't have BONE_SEGMENTS */
-  if (ID_IS_LINKED(object) && object->proxy_from != NULL) {
+  if (ID_IS_LINKED(object) && object->proxy_from != nullptr) {
     return false;
   }
   return check_pchan_has_bbone(object, pchan);
@@ -149,10 +156,9 @@ void deg_graph_build_flush_visibility(Depsgraph *graph)
 
   BLI_Stack *stack = BLI_stack_new(sizeof(OperationNode *), "DEG flush layers stack");
   for (IDNode *id_node : graph->id_nodes) {
-    GHASH_FOREACH_BEGIN (ComponentNode *, comp_node, id_node->components) {
+    for (ComponentNode *comp_node : id_node->components.values()) {
       comp_node->affects_directly_visible |= id_node->is_directly_visible;
     }
-    GHASH_FOREACH_END();
   }
   for (OperationNode *op_node : graph->operations) {
     op_node->custom_flags = 0;
@@ -201,10 +207,12 @@ void deg_graph_build_finalize(Main *bmain, Depsgraph *graph)
 {
   /* Make sure dependencies of visible ID datablocks are visible. */
   deg_graph_build_flush_visibility(graph);
+  deg_graph_remove_unused_noops(graph);
+
   /* Re-tag IDs for update if it was tagged before the relations
    * update tag. */
   for (IDNode *id_node : graph->id_nodes) {
-    ID *id = id_node->id_orig;
+    ID *id_orig = id_node->id_orig;
     id_node->finalize_build(graph);
     int flag = 0;
     /* Tag rebuild if special evaluation flags changed. */
@@ -219,14 +227,17 @@ void deg_graph_build_finalize(Main *bmain, Depsgraph *graph)
       flag |= ID_RECALC_COPY_ON_WRITE;
       /* This means ID is being added to the dependency graph first
        * time, which is similar to "ob-visible-change" */
-      if (GS(id->name) == ID_OB) {
+      if (GS(id_orig->name) == ID_OB) {
         flag |= ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY;
       }
     }
+    /* Restore recalc flags from original ID, which could possibly contain recalc flags set by
+     * an operator and then were carried on by the undo system. */
+    flag |= id_orig->recalc;
     if (flag != 0) {
       graph_id_tag_update(bmain, graph, id_node->id_orig, flag, DEG_UPDATE_SOURCE_RELATIONS);
     }
   }
 }
 
-}  // namespace DEG
+}  // namespace blender::deg

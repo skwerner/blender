@@ -16,10 +16,10 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_GAUSSIANYBLUROPERATION_H__
-#define __COM_GAUSSIANYBLUROPERATION_H__
-#include "COM_NodeOperation.h"
+#pragma once
+
 #include "COM_BlurBaseOperation.h"
+#include "COM_NodeOperation.h"
 
 class GaussianYBlurOperation : public BlurBaseOperation {
  private:
@@ -34,7 +34,7 @@ class GaussianYBlurOperation : public BlurBaseOperation {
   GaussianYBlurOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixel(float output[4], int x, int y, void *data);
 
@@ -65,4 +65,3 @@ class GaussianYBlurOperation : public BlurBaseOperation {
     this->setOpenCL(m_data.sizex >= 128);
   }
 };
-#endif

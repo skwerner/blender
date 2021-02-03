@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __SWEEPLINE_H__
-#define __SWEEPLINE_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -31,7 +30,7 @@
 
 namespace Freestyle {
 
-/*! Class to define the intersection berween two segments*/
+/*! Class to define the intersection between two segments*/
 template<class Edge> class Intersection {
  public:
   template<class EdgeClass> Intersection(EdgeClass *eA, real ta, EdgeClass *eB, real tb)
@@ -347,5 +346,3 @@ template<class T, class Point> class SweepLine {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __SWEEPLINE_H__

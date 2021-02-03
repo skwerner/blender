@@ -17,12 +17,15 @@
  * All rights reserved.
  */
 
-#ifndef __BLI_SORT_UTILS_H__
-#define __BLI_SORT_UTILS_H__
+#pragma once
 
 /** \file
  * \ingroup bli
  */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * \note keep \a sort_value first,
@@ -57,4 +60,6 @@ int BLI_sortutil_cmp_int_reverse(const void *a_, const void *b_);
 int BLI_sortutil_cmp_ptr(const void *a_, const void *b_);
 int BLI_sortutil_cmp_ptr_reverse(const void *a_, const void *b_);
 
-#endif /* __BLI_SORT_UTILS_H__ */
+#ifdef __cplusplus
+}
+#endif

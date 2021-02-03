@@ -23,21 +23,36 @@
  * GPU vertex buffer
  */
 
-#ifndef __GPU_VERTEX_BUFFER_H__
-#define __GPU_VERTEX_BUFFER_H__
+#pragma once
+
+#include "BLI_utildefines.h"
 
 #include "GPU_vertex_format.h"
 
-#define VRAM_USAGE 1
+typedef enum {
+  /** Initial state. */
+  GPU_VERTBUF_INVALID = 0,
+  /** Was init with a vertex format. */
+  GPU_VERTBUF_INIT = (1 << 0),
+  /** Data has been touched and need to be reuploaded. */
+  GPU_VERTBUF_DATA_DIRTY = (1 << 1),
+  /** The buffer has been created inside GPU memory. */
+  GPU_VERTBUF_DATA_UPLOADED = (1 << 2),
+} GPUVertBufStatus;
+
+ENUM_OPERATORS(GPUVertBufStatus, GPU_VERTBUF_DATA_UPLOADED)
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * How to create a #GPUVertBuf:
- * 1) verts = GPU_vertbuf_create() or GPU_vertbuf_init(verts)
+ * 1) verts = GPU_vertbuf_calloc()
  * 2) GPU_vertformat_attr_add(verts->format, ...)
  * 3) GPU_vertbuf_data_alloc(verts, vertex_len) <-- finalizes/packs vertex format
  * 4) GPU_vertbuf_attr_fill(verts, pos, application_pos_buffer)
  */
-
-/* Is GPUVertBuf always used as part of a GPUBatch? */
 
 typedef enum {
   /* can be extended to support more types */
@@ -46,22 +61,10 @@ typedef enum {
   GPU_USAGE_DYNAMIC,
 } GPUUsageType;
 
-typedef struct GPUVertBuf {
-  GPUVertFormat format;
-  /** Number of verts we want to draw. */
-  uint vertex_len;
-  /** Number of verts data. */
-  uint vertex_alloc;
-  /** 0 indicates not yet allocated. */
-  uint32_t vbo_id;
-  /** Usage hint for GL optimisation. */
-  uint usage : 2;
-  /** Data has been touched and need to be reuploaded to GPU. */
-  uint dirty : 1;
-  unsigned char *data; /* NULL indicates data in VRAM (unmapped) */
-} GPUVertBuf;
+/** Opaque type hiding blender::gpu::VertBuf. */
+typedef struct GPUVertBuf GPUVertBuf;
 
-GPUVertBuf *GPU_vertbuf_create(GPUUsageType);
+GPUVertBuf *GPU_vertbuf_calloc(void);
 GPUVertBuf *GPU_vertbuf_create_with_format_ex(const GPUVertFormat *, GPUUsageType);
 
 #define GPU_vertbuf_create_with_format(format) \
@@ -70,13 +73,17 @@ GPUVertBuf *GPU_vertbuf_create_with_format_ex(const GPUVertFormat *, GPUUsageTyp
 void GPU_vertbuf_clear(GPUVertBuf *verts);
 void GPU_vertbuf_discard(GPUVertBuf *);
 
-void GPU_vertbuf_init(GPUVertBuf *, GPUUsageType);
+/* Avoid GPUVertBuf datablock being free but not its data. */
+void GPU_vertbuf_handle_ref_add(GPUVertBuf *verts);
+void GPU_vertbuf_handle_ref_remove(GPUVertBuf *verts);
+
 void GPU_vertbuf_init_with_format_ex(GPUVertBuf *, const GPUVertFormat *, GPUUsageType);
 
 #define GPU_vertbuf_init_with_format(verts, format) \
   GPU_vertbuf_init_with_format_ex(verts, format, GPU_USAGE_STATIC)
 
-uint GPU_vertbuf_size_get(const GPUVertBuf *);
+GPUVertBuf *GPU_vertbuf_duplicate(GPUVertBuf *verts);
+
 void GPU_vertbuf_data_alloc(GPUVertBuf *, uint v_len);
 void GPU_vertbuf_data_resize(GPUVertBuf *, uint v_len);
 void GPU_vertbuf_data_len_set(GPUVertBuf *, uint v_len);
@@ -87,9 +94,12 @@ void GPU_vertbuf_data_len_set(GPUVertBuf *, uint v_len);
  * should not be a problem. */
 
 void GPU_vertbuf_attr_set(GPUVertBuf *, uint a_idx, uint v_idx, const void *data);
-void GPU_vertbuf_attr_fill(GPUVertBuf *,
-                           uint a_idx,
-                           const void *data); /* tightly packed, non interleaved input data */
+
+void GPU_vertbuf_vert_set(GPUVertBuf *verts, uint v_idx, const void *data);
+
+/* Tightly packed, non interleaved input data. */
+void GPU_vertbuf_attr_fill(GPUVertBuf *, uint a_idx, const void *data);
+
 void GPU_vertbuf_attr_fill_stride(GPUVertBuf *, uint a_idx, uint stride, const void *data);
 
 /* For low level access only */
@@ -98,7 +108,7 @@ typedef struct GPUVertBufRaw {
   uint stride;
   unsigned char *data;
   unsigned char *data_init;
-#if TRUST_NO_ONE
+#ifdef DEBUG
   /* Only for overflow check */
   unsigned char *_data_end;
 #endif
@@ -108,9 +118,7 @@ GPU_INLINE void *GPU_vertbuf_raw_step(GPUVertBufRaw *a)
 {
   unsigned char *data = a->data;
   a->data += a->stride;
-#if TRUST_NO_ONE
-  assert(data < a->_data_end);
-#endif
+  BLI_assert(data < a->_data_end);
   return (void *)data;
 }
 
@@ -121,7 +129,18 @@ GPU_INLINE uint GPU_vertbuf_raw_used(GPUVertBufRaw *a)
 
 void GPU_vertbuf_attr_get_raw_data(GPUVertBuf *, uint a_idx, GPUVertBufRaw *access);
 
+void *GPU_vertbuf_steal_data(GPUVertBuf *verts);
+
+void *GPU_vertbuf_get_data(const GPUVertBuf *verts);
+const GPUVertFormat *GPU_vertbuf_get_format(const GPUVertBuf *verts);
+uint GPU_vertbuf_get_vertex_alloc(const GPUVertBuf *verts);
+uint GPU_vertbuf_get_vertex_len(const GPUVertBuf *verts);
+GPUVertBufStatus GPU_vertbuf_get_status(const GPUVertBuf *verts);
+
 void GPU_vertbuf_use(GPUVertBuf *);
+
+/* XXX do not use. */
+void GPU_vertbuf_update_sub(GPUVertBuf *verts, uint start, uint len, void *data);
 
 /* Metrics */
 uint GPU_vertbuf_get_memory_usage(void);
@@ -135,4 +154,6 @@ uint GPU_vertbuf_get_memory_usage(void);
     } \
   } while (0)
 
-#endif /* __GPU_VERTEX_BUFFER_H__ */
+#ifdef __cplusplus
+}
+#endif

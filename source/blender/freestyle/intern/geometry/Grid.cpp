@@ -75,7 +75,7 @@ void firstIntersectionGridVisitor::examineOccluder(Polygon3r *occ)
       }
     }
     else {
-      occ->userdata2 = 0;
+      occ->userdata2 = nullptr;
     }
   }
 }
@@ -93,7 +93,7 @@ bool firstIntersectionGridVisitor::stop()
 /////////////////
 void Grid::clear()
 {
-  if (_occluders.size() != 0) {
+  if (!_occluders.empty()) {
     for (OccludersSet::iterator it = _occluders.begin(); it != _occluders.end(); it++) {
       delete (*it);
     }
@@ -154,7 +154,7 @@ void Grid::configure(const Vec3r &orig, const Vec3r &size, unsigned nb)
 void Grid::insertOccluder(Polygon3r *occluder)
 {
   const vector<Vec3r> vertices = occluder->getVertices();
-  if (vertices.size() == 0) {
+  if (vertices.empty()) {
     return;
   }
 
@@ -165,7 +165,7 @@ void Grid::insertOccluder(Polygon3r *occluder)
   Vec3r min, max;
   occluder->getBBox(min, max);
 
-  // Retrieve the cell x, y, z cordinates associated with these min and max
+  // Retrieve the cell x, y, z coordinates associated with these min and max
   Vec3u imax, imin;
   getCellCoordinates(max, imax);
   getCellCoordinates(min, imin);
@@ -245,7 +245,7 @@ bool Grid::nextRayCell(Vec3u &current_cell, Vec3u &next_cell)
   unsigned coord = 0;  // predominant coord(0=x, 1=y, 2=z)
 
   // using a parametric equation of a line : B = A + t u, we find the tx, ty and tz respectively
-  // coresponding to the intersections with the plans:
+  // corresponding to the intersections with the plans:
   //     x = _cell_size[0], y = _cell_size[1], z = _cell_size[2]
   for (i = 0; i < 3; i++) {
     if (_ray_dir[i] == 0) {
@@ -321,11 +321,11 @@ void Grid::castInfiniteRay(const Vec3r &orig,
 Polygon3r *Grid::castRayToFindFirstIntersection(
     const Vec3r &orig, const Vec3r &dir, double &t, double &u, double &v, unsigned timestamp)
 {
-  Polygon3r *occluder = 0;
+  Polygon3r *occluder = nullptr;
   Vec3r end = Vec3r(orig + FLT_MAX * dir / dir.norm());
   bool inter = initInfiniteRay(orig, dir, timestamp);
   if (!inter) {
-    return 0;
+    return nullptr;
   }
   firstIntersectionGridVisitor visitor(orig, dir, _cell_size);
   castRayInternal(visitor);

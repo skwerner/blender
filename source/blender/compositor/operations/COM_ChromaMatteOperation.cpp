@@ -19,14 +19,14 @@
 #include "COM_ChromaMatteOperation.h"
 #include "BLI_math.h"
 
-ChromaMatteOperation::ChromaMatteOperation() : NodeOperation()
+ChromaMatteOperation::ChromaMatteOperation()
 {
   addInputSocket(COM_DT_COLOR);
   addInputSocket(COM_DT_COLOR);
   addOutputSocket(COM_DT_VALUE);
 
-  this->m_inputImageProgram = NULL;
-  this->m_inputKeyProgram = NULL;
+  this->m_inputImageProgram = nullptr;
+  this->m_inputKeyProgram = nullptr;
 }
 
 void ChromaMatteOperation::initExecution()
@@ -37,8 +37,8 @@ void ChromaMatteOperation::initExecution()
 
 void ChromaMatteOperation::deinitExecution()
 {
-  this->m_inputImageProgram = NULL;
-  this->m_inputKeyProgram = NULL;
+  this->m_inputImageProgram = nullptr;
+  this->m_inputKeyProgram = nullptr;
 }
 
 void ChromaMatteOperation::executePixelSampled(float output[4],
@@ -60,8 +60,8 @@ void ChromaMatteOperation::executePixelSampled(float output[4],
   this->m_inputKeyProgram->readSampled(inKey, x, y, sampler);
   this->m_inputImageProgram->readSampled(inImage, x, y, sampler);
 
-  /* store matte(alpha) value in [0] to go with
-   * COM_SetAlphaOperation and the Value output
+  /* Store matte(alpha) value in [0] to go with
+   * COM_SetAlphaMultiplyOperation and the Value output.
    */
 
   /* Algorithm from book "Video Demistified," does not include the spill reduction part */

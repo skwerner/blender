@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __HASHGRID_H__
-#define __HASHGRID_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -81,7 +80,7 @@ class HashGrid : public Grid {
    */
   virtual void configure(const Vec3r &orig, const Vec3r &size, unsigned nb);
 
-  /*! returns the cell whose coordinates are pased as argument */
+  /*! returns the cell whose coordinates are passed as argument */
   virtual Cell *getCell(const Vec3u &p)
   {
     Cell *found_cell = NULL;
@@ -104,5 +103,3 @@ class HashGrid : public Grid {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __HASHGRID_H__

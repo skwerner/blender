@@ -78,7 +78,7 @@ bool SoftwareDevice::SoftwareHandle::pause(bool keep)
 }
 
 SoftwareDevice::SoftwareHandle::SoftwareHandle(SoftwareDevice* device, std::shared_ptr<IReader> reader, std::shared_ptr<PitchReader> pitch, std::shared_ptr<ResampleReader> resampler, std::shared_ptr<ChannelMapperReader> mapper, bool keep) :
-	m_reader(reader), m_pitch(pitch), m_resampler(resampler), m_mapper(mapper), m_keep(keep), m_user_pitch(1.0f), m_user_volume(1.0f), m_user_pan(0.0f), m_volume(1.0f), m_old_volume(0), m_loopcount(0),
+	m_reader(reader), m_pitch(pitch), m_resampler(resampler), m_mapper(mapper), m_first_reading(true), m_keep(keep), m_user_pitch(1.0f), m_user_volume(1.0f), m_user_pan(0.0f), m_volume(0.0f), m_old_volume(0.0f), m_loopcount(0),
 	m_relative(true), m_volume_max(1.0f), m_volume_min(0), m_distance_max(std::numeric_limits<float>::max()),
 	m_distance_reference(1.0f), m_attenuation(1.0f), m_cone_angle_outer(M_PI), m_cone_angle_inner(M_PI), m_cone_volume_outer(0),
 	m_flags(RENDER_CONE), m_stop(nullptr), m_stop_data(nullptr), m_status(STATUS_PLAYING), m_device(device)
@@ -106,6 +106,14 @@ void SoftwareDevice::SoftwareHandle::update()
 	if(m_pitch->getSpecs().channels != CHANNELS_MONO)
 	{
 		m_volume = m_user_volume;
+
+		// we don't know a previous volume if this source has never been read before
+		if(m_first_reading)
+		{
+			m_old_volume = m_volume;
+			m_first_reading = false;
+		}
+
 		m_pitch->setPitch(m_user_pitch);
 		return;
 	}
@@ -212,6 +220,13 @@ void SoftwareDevice::SoftwareHandle::update()
 		// Volume
 
 		m_volume *= m_user_volume;
+	}
+
+	// we don't know a previous volume if this source has never been read before
+	if(m_first_reading)
+	{
+		m_old_volume = m_volume;
+		m_first_reading = false;
 	}
 
 	// 3D Cue
@@ -347,7 +362,7 @@ bool SoftwareDevice::SoftwareHandle::setKeep(bool keep)
 	return true;
 }
 
-bool SoftwareDevice::SoftwareHandle::seek(float position)
+bool SoftwareDevice::SoftwareHandle::seek(double position)
 {
 	if(!m_status)
 		return false;
@@ -366,7 +381,7 @@ bool SoftwareDevice::SoftwareHandle::seek(float position)
 	return true;
 }
 
-float SoftwareDevice::SoftwareHandle::getPosition()
+double SoftwareDevice::SoftwareHandle::getPosition()
 {
 	if(!m_status)
 		return false;
@@ -376,7 +391,7 @@ float SoftwareDevice::SoftwareHandle::getPosition()
 	if(!m_status)
 		return 0.0f;
 
-	float position = m_reader->getPosition() / (float)m_device->m_specs.rate;
+	double position = m_reader->getPosition() / (double)m_device->m_specs.rate;
 
 	return position;
 }
@@ -753,6 +768,8 @@ void SoftwareDevice::mix(data_t* buffer, int length)
 				while(pos + len < length && sound->m_loopcount && eos)
 				{
 					m_mixer->mix(buf, pos, len, sound->m_volume, sound->m_old_volume);
+
+					sound->m_old_volume = sound->m_volume;
 
 					pos += len;
 

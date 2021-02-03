@@ -18,16 +18,11 @@
 
 #include "COM_ColorCurveOperation.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 #include "BKE_colortools.h"
-#ifdef __cplusplus
-}
-#  include "MEM_guardedalloc.h"
-#endif
 
-ColorCurveOperation::ColorCurveOperation() : CurveBaseOperation()
+#include "MEM_guardedalloc.h"
+
+ColorCurveOperation::ColorCurveOperation()
 {
   this->addInputSocket(COM_DT_VALUE);
   this->addInputSocket(COM_DT_COLOR);
@@ -35,10 +30,10 @@ ColorCurveOperation::ColorCurveOperation() : CurveBaseOperation()
   this->addInputSocket(COM_DT_COLOR);
   this->addOutputSocket(COM_DT_COLOR);
 
-  this->m_inputFacProgram = NULL;
-  this->m_inputImageProgram = NULL;
-  this->m_inputBlackProgram = NULL;
-  this->m_inputWhiteProgram = NULL;
+  this->m_inputFacProgram = nullptr;
+  this->m_inputImageProgram = nullptr;
+  this->m_inputBlackProgram = nullptr;
+  this->m_inputWhiteProgram = nullptr;
 
   this->setResolutionInputSocketIndex(1);
 }
@@ -50,7 +45,7 @@ void ColorCurveOperation::initExecution()
   this->m_inputBlackProgram = this->getInputSocketReader(2);
   this->m_inputWhiteProgram = this->getInputSocketReader(3);
 
-  curvemapping_premultiply(this->m_curveMapping, 0);
+  BKE_curvemapping_premultiply(this->m_curveMapping, 0);
 }
 
 void ColorCurveOperation::executePixelSampled(float output[4],
@@ -73,20 +68,20 @@ void ColorCurveOperation::executePixelSampled(float output[4],
 
   /* get our own local bwmul value,
    * since we can't be threadsafe and use cumap->bwmul & friends */
-  curvemapping_set_black_white_ex(black, white, bwmul);
+  BKE_curvemapping_set_black_white_ex(black, white, bwmul);
 
   this->m_inputFacProgram->readSampled(fac, x, y, sampler);
   this->m_inputImageProgram->readSampled(image, x, y, sampler);
 
   if (*fac >= 1.0f) {
-    curvemapping_evaluate_premulRGBF_ex(cumap, output, image, black, bwmul);
+    BKE_curvemapping_evaluate_premulRGBF_ex(cumap, output, image, black, bwmul);
   }
   else if (*fac <= 0.0f) {
     copy_v3_v3(output, image);
   }
   else {
     float col[4];
-    curvemapping_evaluate_premulRGBF_ex(cumap, col, image, black, bwmul);
+    BKE_curvemapping_evaluate_premulRGBF_ex(cumap, col, image, black, bwmul);
     interp_v3_v3v3(output, image, col, *fac);
   }
   output[3] = image[3];
@@ -95,22 +90,22 @@ void ColorCurveOperation::executePixelSampled(float output[4],
 void ColorCurveOperation::deinitExecution()
 {
   CurveBaseOperation::deinitExecution();
-  this->m_inputFacProgram = NULL;
-  this->m_inputImageProgram = NULL;
-  this->m_inputBlackProgram = NULL;
-  this->m_inputWhiteProgram = NULL;
+  this->m_inputFacProgram = nullptr;
+  this->m_inputImageProgram = nullptr;
+  this->m_inputBlackProgram = nullptr;
+  this->m_inputWhiteProgram = nullptr;
 }
 
 // Constant level curve mapping
 
-ConstantLevelColorCurveOperation::ConstantLevelColorCurveOperation() : CurveBaseOperation()
+ConstantLevelColorCurveOperation::ConstantLevelColorCurveOperation()
 {
   this->addInputSocket(COM_DT_VALUE);
   this->addInputSocket(COM_DT_COLOR);
   this->addOutputSocket(COM_DT_COLOR);
 
-  this->m_inputFacProgram = NULL;
-  this->m_inputImageProgram = NULL;
+  this->m_inputFacProgram = nullptr;
+  this->m_inputImageProgram = nullptr;
 
   this->setResolutionInputSocketIndex(1);
 }
@@ -120,9 +115,9 @@ void ConstantLevelColorCurveOperation::initExecution()
   this->m_inputFacProgram = this->getInputSocketReader(0);
   this->m_inputImageProgram = this->getInputSocketReader(1);
 
-  curvemapping_premultiply(this->m_curveMapping, 0);
+  BKE_curvemapping_premultiply(this->m_curveMapping, 0);
 
-  curvemapping_set_black_white(this->m_curveMapping, this->m_black, this->m_white);
+  BKE_curvemapping_set_black_white(this->m_curveMapping, this->m_black, this->m_white);
 }
 
 void ConstantLevelColorCurveOperation::executePixelSampled(float output[4],
@@ -137,14 +132,14 @@ void ConstantLevelColorCurveOperation::executePixelSampled(float output[4],
   this->m_inputImageProgram->readSampled(image, x, y, sampler);
 
   if (*fac >= 1.0f) {
-    curvemapping_evaluate_premulRGBF(this->m_curveMapping, output, image);
+    BKE_curvemapping_evaluate_premulRGBF(this->m_curveMapping, output, image);
   }
   else if (*fac <= 0.0f) {
     copy_v3_v3(output, image);
   }
   else {
     float col[4];
-    curvemapping_evaluate_premulRGBF(this->m_curveMapping, col, image);
+    BKE_curvemapping_evaluate_premulRGBF(this->m_curveMapping, col, image);
     interp_v3_v3v3(output, image, col, *fac);
   }
   output[3] = image[3];
@@ -153,6 +148,6 @@ void ConstantLevelColorCurveOperation::executePixelSampled(float output[4],
 void ConstantLevelColorCurveOperation::deinitExecution()
 {
   CurveBaseOperation::deinitExecution();
-  this->m_inputFacProgram = NULL;
-  this->m_inputImageProgram = NULL;
+  this->m_inputFacProgram = nullptr;
+  this->m_inputImageProgram = nullptr;
 }

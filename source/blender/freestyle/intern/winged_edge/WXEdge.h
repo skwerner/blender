@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_WX_EDGE_H__
-#define __FREESTYLE_WX_EDGE_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -108,7 +107,7 @@ class WXEdge : public WEdge {
  private:
   // flag to indicate whether the edge is a silhouette edge or not
   WXNature _nature;
-  // 0: the order doesn't matter. 1: the order is the orginal one. -1: the order is not good
+  // 0: the order doesn't matter. 1: the order is the original one. -1: the order is not good
   short _order;
   // A front facing edge is an edge for which the bording face which is the nearest from the
   // viewpoint is front. A back facing edge is the opposite.
@@ -845,5 +844,3 @@ bool WXVertex::isFeature()
 }
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_WX_EDGE_H__

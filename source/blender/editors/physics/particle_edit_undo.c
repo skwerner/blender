@@ -21,15 +21,14 @@
  * \ingroup edphys
  */
 
-#include <stdlib.h>
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 
 #include "MEM_guardedalloc.h"
 
-#include "DNA_scene_types.h"
 #include "DNA_meshdata_types.h"
+#include "DNA_scene_types.h"
 #include "DNA_windowmanager_types.h"
 
 #include "BLI_listbase.h"
@@ -57,7 +56,6 @@
 static void undoptcache_from_editcache(PTCacheUndo *undo, PTCacheEdit *edit)
 {
   PTCacheEditPoint *point;
-  int i;
 
   size_t mem_used_prev = MEM_get_memory_in_use();
 
@@ -68,7 +66,7 @@ static void undoptcache_from_editcache(PTCacheUndo *undo, PTCacheEdit *edit)
 
     pa = undo->particles = MEM_dupallocN(edit->psys->particles);
 
-    for (i = 0; i < edit->totpoint; i++, pa++) {
+    for (int i = 0; i < edit->totpoint; i++, pa++) {
       pa->hair = MEM_dupallocN(pa->hair);
     }
 
@@ -81,7 +79,7 @@ static void undoptcache_from_editcache(PTCacheUndo *undo, PTCacheEdit *edit)
     pm = undo->mem_cache.first;
 
     for (; pm; pm = pm->next) {
-      for (i = 0; i < BPHYS_TOT_DATA; i++) {
+      for (int i = 0; i < BPHYS_TOT_DATA; i++) {
         pm->data[i] = MEM_dupallocN(pm->data[i]);
       }
     }
@@ -90,7 +88,7 @@ static void undoptcache_from_editcache(PTCacheUndo *undo, PTCacheEdit *edit)
   point = undo->points = MEM_dupallocN(edit->points);
   undo->totpoint = edit->totpoint;
 
-  for (i = 0; i < edit->totpoint; i++, point++) {
+  for (int i = 0; i < edit->totpoint; i++, point++) {
     point->keys = MEM_dupallocN(point->keys);
     /* no need to update edit key->co & key->time pointers here */
   }
@@ -109,8 +107,7 @@ static void undoptcache_to_editcache(PTCacheUndo *undo, PTCacheEdit *edit)
   POINT_P;
   KEY_K;
 
-  LOOP_POINTS
-  {
+  LOOP_POINTS {
     if (psys && psys->particles[p].hair) {
       MEM_freeN(psys->particles[p].hair);
     }
@@ -133,8 +130,7 @@ static void undoptcache_to_editcache(PTCacheUndo *undo, PTCacheEdit *edit)
   edit->points = MEM_dupallocN(undo->points);
   edit->totpoint = undo->totpoint;
 
-  LOOP_POINTS
-  {
+  LOOP_POINTS {
     point->keys = MEM_dupallocN(point->keys);
   }
 
@@ -143,13 +139,11 @@ static void undoptcache_to_editcache(PTCacheUndo *undo, PTCacheEdit *edit)
 
     psys->totpart = undo->totpoint;
 
-    LOOP_POINTS
-    {
+    LOOP_POINTS {
       pa = psys->particles + p;
       hkey = pa->hair = MEM_dupallocN(pa->hair);
 
-      LOOP_KEYS
-      {
+      LOOP_KEYS {
         key->co = hkey->co;
         key->time = &hkey->time;
         hkey++;
@@ -172,20 +166,19 @@ static void undoptcache_to_editcache(PTCacheUndo *undo, PTCacheEdit *edit)
       for (i = 0; i < BPHYS_TOT_DATA; i++) {
         pm->data[i] = MEM_dupallocN(pm->data[i]);
       }
-      BKE_ptcache_mem_pointers_init(pm);
+      void *cur[BPHYS_TOT_DATA];
+      BKE_ptcache_mem_pointers_init(pm, cur);
 
-      LOOP_POINTS
-      {
-        LOOP_KEYS
-        {
+      LOOP_POINTS {
+        LOOP_KEYS {
           if ((int)key->ftime == (int)pm->frame) {
-            key->co = pm->cur[BPHYS_DATA_LOCATION];
-            key->vel = pm->cur[BPHYS_DATA_VELOCITY];
-            key->rot = pm->cur[BPHYS_DATA_ROTATION];
+            key->co = cur[BPHYS_DATA_LOCATION];
+            key->vel = cur[BPHYS_DATA_VELOCITY];
+            key->rot = cur[BPHYS_DATA_ROTATION];
             key->time = &key->ftime;
           }
         }
-        BKE_ptcache_mem_pointers_incr(pm);
+        BKE_ptcache_mem_pointers_incr(cur);
       }
     }
   }
@@ -228,10 +221,11 @@ typedef struct ParticleUndoStep {
 
 static bool particle_undosys_poll(struct bContext *C)
 {
+  Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
   Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
   Object *ob = OBACT(view_layer);
-  PTCacheEdit *edit = PE_get_current(scene, ob);
+  PTCacheEdit *edit = PE_get_current(depsgraph, scene, ob);
 
   return (edit != NULL);
 }
@@ -240,11 +234,12 @@ static bool particle_undosys_step_encode(struct bContext *C,
                                          struct Main *UNUSED(bmain),
                                          UndoStep *us_p)
 {
+  Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
   ParticleUndoStep *us = (ParticleUndoStep *)us_p;
   ViewLayer *view_layer = CTX_data_view_layer(C);
   us->scene_ref.ptr = CTX_data_scene(C);
   us->object_ref.ptr = OBACT(view_layer);
-  PTCacheEdit *edit = PE_get_current(us->scene_ref.ptr, us->object_ref.ptr);
+  PTCacheEdit *edit = PE_get_current(depsgraph, us->scene_ref.ptr, us->object_ref.ptr);
   undoptcache_from_editcache(&us->data, edit);
   return true;
 }
@@ -255,16 +250,22 @@ static void particle_undosys_step_decode(struct bContext *C,
                                          int UNUSED(dir),
                                          bool UNUSED(is_final))
 {
+  Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
   /* TODO(campbell): undo_system: use low-level API to set mode. */
-  ED_object_mode_set(C, OB_MODE_PARTICLE_EDIT);
+  ED_object_mode_set_ex(C, OB_MODE_PARTICLE_EDIT, false, NULL);
   BLI_assert(particle_undosys_poll(C));
 
   ParticleUndoStep *us = (ParticleUndoStep *)us_p;
   Scene *scene = us->scene_ref.ptr;
   Object *ob = us->object_ref.ptr;
-  PTCacheEdit *edit = PE_get_current(scene, ob);
+  PTCacheEdit *edit = PE_get_current(depsgraph, scene, ob);
   if (edit) {
     undoptcache_to_editcache(&us->data, edit);
+    ParticleEditSettings *pset = &scene->toolsettings->particle;
+    if ((pset->flag & PE_DRAW_PART) != 0) {
+      psys_free_path_cache(NULL, edit);
+      BKE_particle_batch_cache_dirty_tag(edit->psys, BKE_PARTICLE_BATCH_DIRTY_ALL);
+    }
     DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
   }
   else {
@@ -298,7 +299,7 @@ void ED_particle_undosys_type(UndoType *ut)
 
   ut->step_foreach_ID_ref = particle_undosys_foreach_ID_ref;
 
-  ut->use_context = true;
+  ut->flags = UNDOTYPE_FLAG_NEED_CONTEXT_FOR_ENCODE;
 
   ut->step_size = sizeof(ParticleUndoStep);
 }

@@ -35,15 +35,15 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
-#include "ED_view3d.h"
 #include "ED_transverts.h"
+#include "ED_view3d.h"
 
 #include "object_intern.h"
 
 static void object_warp_calc_view_matrix(float r_mat_view[4][4],
                                          float r_center_view[3],
                                          Object *obedit,
-                                         float viewmat[4][4],
+                                         const float viewmat[4][4],
                                          const float center[3],
                                          const float offset_angle)
 {
@@ -62,7 +62,7 @@ static void object_warp_calc_view_matrix(float r_mat_view[4][4],
 }
 
 static void object_warp_transverts_minmax_x(TransVertStore *tvs,
-                                            float mat_view[4][4],
+                                            const float mat_view[4][4],
                                             const float center_view[3],
                                             float *r_min,
                                             float *r_max)
@@ -71,11 +71,8 @@ static void object_warp_transverts_minmax_x(TransVertStore *tvs,
   const float x_ofs = (mat_view[3][0] - center_view[0]);
   float min = FLT_MAX, max = -FLT_MAX;
 
-  TransVert *tv;
-  int i;
-
-  tv = tvs->transverts;
-  for (i = 0; i < tvs->transverts_tot; i++, tv++) {
+  TransVert *tv = tvs->transverts;
+  for (int i = 0; i < tvs->transverts_tot; i++, tv++) {
     float val;
 
     /* convert objectspace->viewspace */
@@ -90,14 +87,13 @@ static void object_warp_transverts_minmax_x(TransVertStore *tvs,
 }
 
 static void object_warp_transverts(TransVertStore *tvs,
-                                   float mat_view[4][4],
+                                   const float mat_view[4][4],
                                    const float center_view[3],
                                    const float angle_,
                                    const float min,
                                    const float max)
 {
   TransVert *tv;
-  int i;
   const float angle = -angle_;
   /* cache vars for tiny speedup */
 #if 1
@@ -123,7 +119,7 @@ static void object_warp_transverts(TransVertStore *tvs,
   }
 
   tv = tvs->transverts;
-  for (i = 0; i < tvs->transverts_tot; i++, tv++) {
+  for (int i = 0; i < tvs->transverts_tot; i++, tv++) {
     float co[3], co_add[2];
     float val, phi;
 

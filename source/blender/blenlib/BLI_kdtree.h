@@ -14,8 +14,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLI_KDTREE_H__
-#define __BLI_KDTREE_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /** \file
  * \ingroup bli
@@ -66,4 +69,6 @@
 #undef KDTreeNearest
 #undef KDTREE_PREFIX_ID
 
-#endif /* __BLI_KDTREE_H__ */
+#ifdef __cplusplus
+}
+#endif

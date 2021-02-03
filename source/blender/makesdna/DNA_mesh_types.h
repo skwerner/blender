@@ -21,17 +21,20 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_MESH_TYPES_H__
-#define __DNA_MESH_TYPES_H__
+#pragma once
 
-#include "DNA_defs.h"
 #include "DNA_ID.h"
 #include "DNA_customdata_types.h"
+#include "DNA_defs.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct AnimData;
+struct BVHCache;
 struct Ipo;
 struct Key;
-struct LinkNode;
 struct MCol;
 struct MEdge;
 struct MFace;
@@ -40,11 +43,9 @@ struct MLoopCol;
 struct MLoopTri;
 struct MLoopUV;
 struct MPoly;
-struct MTexPoly;
 struct MVert;
 struct Material;
 struct Mesh;
-struct Multires;
 struct SubdivCCG;
 
 #
@@ -75,8 +76,8 @@ struct MLoopTri_Store {
 
 /* not saved in file! */
 typedef struct Mesh_Runtime {
-  /* Evaluated mesh for objects which do not have effective modifiers. This mesh is sued as a
-   * result of modifier stack evaluation.
+  /* Evaluated mesh for objects which do not have effective modifiers.
+   * This mesh is used as a result of modifier stack evaluation.
    * Since modifier stack evaluation is threaded on object level we need some synchronization. */
   struct Mesh *mesh_eval;
   void *eval_mutex;
@@ -96,8 +97,8 @@ typedef struct Mesh_Runtime {
 
   struct MLoopTri_Store looptris;
 
-  /** 'BVHCache', for 'BKE_bvhutil.c' */
-  struct LinkNode *bvh_cache;
+  /** `BVHCache` defined in 'BKE_bvhutil.c' */
+  struct BVHCache *bvh_cache;
 
   /** Non-manifold boundary data for Shrinkwrap Target Project. */
   struct ShrinkwrapBoundaryData *shrinkwrap_data;
@@ -105,19 +106,33 @@ typedef struct Mesh_Runtime {
   /** Set by modifier stack if only deformed from original. */
   char deformed_only;
   /**
-   * Copied from edit-mesh (hint, draw with editmesh data).
-   * In the future we may leave the mesh-data empty
-   * since its not needed if we can use edit-mesh data. */
+   * Copied from edit-mesh (hint, draw with edit-mesh data when true).
+   *
+   * Modifiers that edit the mesh data in-place must set this to false
+   * (most #eModifierTypeType_NonGeometrical modifiers). Otherwise the edit-mesh
+   * data will be used for drawing, missing changes from modifiers. See T79517.
+   */
   char is_original;
-  char _pad[6];
+
+  /** #eMeshWrapperType and others. */
+  char wrapper_type;
+  /**
+   * A type mask from wrapper_type,
+   * in case there are differences in finalizing logic between types.
+   */
+  char wrapper_type_finalize;
+
+  char _pad[4];
+
+  /** Needed in case we need to lazily initialize the mesh. */
+  CustomData_MeshMasks cd_mask_extra;
+
 } Mesh_Runtime;
 
 typedef struct Mesh {
   ID id;
   /** Animation data (must be immediately after id for utilities to use it). */
   struct AnimData *adt;
-
-  struct BoundBox *bb;
 
   /** Old animation system, deprecated for 2.5. */
   struct Ipo *ipo DNA_DEPRECATED;
@@ -133,9 +148,13 @@ typedef struct Mesh {
   struct MLoopCol *mloopcol;
   /* END BMESH ONLY */
 
-  /* mface stores the tessellation (triangulation) of the mesh,
-   * real faces are now stored in nface.*/
-  /** Array of mesh object mode faces for tessellation. */
+  /**
+   * Legacy face storage (quads & tries only),
+   * faces are now stored in #Mesh.mpoly & #Mesh.mloop arrays.
+   *
+   * \note This would be marked deprecated however the particles still use this at run-time
+   * for placing particles on the mesh (something which should be eventually upgraded).
+   */
   struct MFace *mface;
   /** Store tessellation face UV's and texture here. */
   struct MTFace *mtface;
@@ -169,6 +188,9 @@ typedef struct Mesh {
   int totpoly, totloop;
   /* END BMESH ONLY */
 
+  int attributes_active_index;
+  int _pad3;
+
   /* the last selected vertex/edge/face are used for the active face however
    * this means the active face must always be selected, this is to keep track
    * of the last selected face and is similar to the old active face flag where
@@ -178,7 +200,6 @@ typedef struct Mesh {
   /* texture space, copied as one block in editobject.c */
   float loc[3];
   float size[3];
-  float rot[3];
 
   short texflag, flag;
   float smoothresh;
@@ -193,15 +214,26 @@ typedef struct Mesh {
 
   short totcol;
 
-  /** Deprecated multiresolution modeling data, only keep for loading old files. */
-  struct Multires *mr DNA_DEPRECATED;
-  void *_pad1;
+  float remesh_voxel_size;
+  float remesh_voxel_adaptivity;
+  char remesh_mode;
+
+  /* Indicates the symmetry that a mesh has, according to the artist, so that tools can
+   * consistently ensure that this symmetry is maintained. */
+  char symmetry;
+
+  char _pad1[2];
+
+  int face_sets_color_seed;
+  /* Stores the initial Face Set to be rendered white. This way the overlay can be enabled by
+   * default and Face Sets can be used without affecting the color of the mesh. */
+  int face_sets_color_default;
 
   Mesh_Runtime runtime;
 } Mesh;
 
 /* deprecated by MTFace, only here for file reading */
-#ifdef DNA_DEPRECATED
+#ifdef DNA_DEPRECATED_ALLOW
 typedef struct TFace {
   /** The faces image for the active UVLayer. */
   void *tpage;
@@ -214,14 +246,24 @@ typedef struct TFace {
 
 /* **************** MESH ********************* */
 
+/** #Mesh_Runtime.wrapper_type */
+typedef enum eMeshWrapperType {
+  /** Use mesh data (#Mesh.mvert, #Mesh.medge, #Mesh.mloop, #Mesh.mpoly). */
+  ME_WRAPPER_TYPE_MDATA = 0,
+  /** Use edit-mesh data (#Mesh.edit_mesh, #Mesh_Runtime.edit_data). */
+  ME_WRAPPER_TYPE_BMESH = 1,
+  /* ME_WRAPPER_TYPE_SUBD = 2, */ /* TODO */
+} eMeshWrapperType;
+
 /* texflag */
 enum {
   ME_AUTOSPACE = 1,
+  ME_AUTOSPACE_EVALUATED = 2,
 };
 
 /* me->editflag */
 enum {
-  ME_EDIT_MIRROR_X = 1 << 0,
+  ME_EDIT_VERTEX_GROUPS_X_SYMMETRY = 1 << 0,
   ME_EDIT_MIRROR_Y = 1 << 1, /* unused so far */
   ME_EDIT_MIRROR_Z = 1 << 2, /* unused so far */
 
@@ -233,9 +275,9 @@ enum {
 /* we cant have both flags enabled at once,
  * flags defined in DNA_scene_types.h */
 #define ME_EDIT_PAINT_SEL_MODE(_me) \
-  ((_me->editflag & ME_EDIT_PAINT_FACE_SEL) ? \
+  (((_me)->editflag & ME_EDIT_PAINT_FACE_SEL) ? \
        SCE_SELECT_FACE : \
-       (_me->editflag & ME_EDIT_PAINT_VERT_SEL) ? SCE_SELECT_VERTEX : 0)
+       ((_me)->editflag & ME_EDIT_PAINT_VERT_SEL) ? SCE_SELECT_VERTEX : 0)
 
 /* me->flag */
 enum {
@@ -247,9 +289,14 @@ enum {
   ME_AUTOSMOOTH = 1 << 5,
   ME_FLAG_UNUSED_6 = 1 << 6, /* cleared */
   ME_FLAG_UNUSED_7 = 1 << 7, /* cleared */
-  ME_FLAG_UNUSED_8 = 1 << 8, /* cleared */
+  ME_REMESH_REPROJECT_VERTEX_COLORS = 1 << 8,
   ME_DS_EXPAND = 1 << 9,
   ME_SCULPT_DYNAMIC_TOPOLOGY = 1 << 10,
+  ME_REMESH_SMOOTH_NORMALS = 1 << 11,
+  ME_REMESH_REPROJECT_PAINT_MASK = 1 << 12,
+  ME_REMESH_FIX_POLES = 1 << 13,
+  ME_REMESH_REPROJECT_VOLUME = 1 << 14,
+  ME_REMESH_REPROJECT_SCULPT_FACE_SETS = 1 << 15,
 };
 
 /* me->cd_flag */
@@ -259,18 +306,27 @@ enum {
   ME_CDFLAG_EDGE_CREASE = 1 << 2,
 };
 
+/* me->remesh_mode */
+enum {
+  REMESH_VOXEL = 0,
+  REMESH_QUAD = 1,
+};
+
 /* Subsurf Type */
 enum {
   ME_CC_SUBSURF = 0,
   ME_SIMPLE_SUBSURF = 1,
 };
 
+/* me->symmetry */
+typedef enum eMeshSymmetryType {
+  ME_SYMMETRY_X = 1 << 0,
+  ME_SYMMETRY_Y = 1 << 1,
+  ME_SYMMETRY_Z = 1 << 2,
+} eMeshSymmetryType;
+
 #define MESH_MAX_VERTS 2000000000L
 
-/* this is so we can save bmesh files that load in trunk, ignoring NGons
- * will eventually be removed */
-
-/* enable this so meshes get tessfaces calculated by default */
-/* #define USE_TESSFACE_DEFAULT */
-
+#ifdef __cplusplus
+}
 #endif

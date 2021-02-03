@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BLI_ASTAR_H__
-#define __BLI_ASTAR_H__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -28,6 +27,10 @@
 #include "BLI_utildefines.h"
 
 #include "BLI_bitmap.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* -------------------------------------------------------------------- */
 
@@ -114,4 +117,6 @@ bool BLI_astar_graph_solve(BLI_AStarGraph *as_graph,
                            BLI_AStarSolution *r_solution,
                            const int max_steps);
 
-#endif /* __BLI_ASTAR_H__ */
+#ifdef __cplusplus
+}
+#endif

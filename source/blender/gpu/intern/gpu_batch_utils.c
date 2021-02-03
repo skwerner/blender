@@ -20,15 +20,14 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_rect.h"
 #include "BLI_math.h"
 #include "BLI_polyfill_2d.h"
+#include "BLI_rect.h"
 #include "BLI_sort_utils.h"
+#include "BLI_utildefines.h"
 
 #include "GPU_batch.h"
 #include "GPU_batch_utils.h" /* own include */
-#include "gpu_shader_private.h"
 
 /* -------------------------------------------------------------------- */
 /** \name Polygon Creation (2D)
@@ -164,7 +163,6 @@ GPUBatch *GPU_batch_wire_from_poly_2d_encoded(const uchar *polys_flat,
       BLI_assert(polys_step_len >= 2);
       for (uint i_prev = polys_step_len - 1, i = 0; i < polys_step_len; i_prev = i++) {
         union {
-          uint8_t as_u8[4];
           uint16_t as_u16[2];
           uint32_t as_u32;
         } data;

@@ -18,8 +18,8 @@
  * \ingroup RNA
  */
 
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "DNA_color_types.h"
 #include "DNA_texture_types.h"
@@ -49,10 +49,9 @@
 #  include "BKE_colorband.h"
 #  include "BKE_colortools.h"
 #  include "BKE_image.h"
+#  include "BKE_linestyle.h"
 #  include "BKE_movieclip.h"
 #  include "BKE_node.h"
-#  include "BKE_sequencer.h"
-#  include "BKE_linestyle.h"
 
 #  include "DEG_depsgraph.h"
 
@@ -60,6 +59,9 @@
 
 #  include "IMB_colormanagement.h"
 #  include "IMB_imbuf.h"
+
+#  include "SEQ_iterator.h"
+#  include "SEQ_relations.h"
 
 static int rna_CurveMapping_curves_length(PointerRNA *ptr)
 {
@@ -94,7 +96,7 @@ static void rna_CurveMapping_clip_set(PointerRNA *ptr, bool value)
     cumap->flag &= ~CUMA_DO_CLIP;
   }
 
-  curvemapping_changed(cumap, false);
+  BKE_curvemapping_changed(cumap, false);
 }
 
 static void rna_CurveMapping_black_level_set(PointerRNA *ptr, const float *values)
@@ -103,7 +105,7 @@ static void rna_CurveMapping_black_level_set(PointerRNA *ptr, const float *value
   cumap->black[0] = values[0];
   cumap->black[1] = values[1];
   cumap->black[2] = values[2];
-  curvemapping_set_black_white(cumap, NULL, NULL);
+  BKE_curvemapping_set_black_white(cumap, NULL, NULL);
 }
 
 static void rna_CurveMapping_white_level_set(PointerRNA *ptr, const float *values)
@@ -112,12 +114,20 @@ static void rna_CurveMapping_white_level_set(PointerRNA *ptr, const float *value
   cumap->white[0] = values[0];
   cumap->white[1] = values[1];
   cumap->white[2] = values[2];
-  curvemapping_set_black_white(cumap, NULL, NULL);
+  BKE_curvemapping_set_black_white(cumap, NULL, NULL);
 }
 
 static void rna_CurveMapping_tone_update(Main *UNUSED(bmain),
                                          Scene *UNUSED(scene),
                                          PointerRNA *UNUSED(ptr))
+{
+  WM_main_add_notifier(NC_NODE | NA_EDITED, NULL);
+  WM_main_add_notifier(NC_SCENE | ND_SEQUENCER, NULL);
+}
+
+static void rna_CurveMapping_extend_update(Main *UNUSED(bmain),
+                                           Scene *UNUSED(scene),
+                                           PointerRNA *UNUSED(ptr))
 {
   WM_main_add_notifier(NC_NODE | NA_EDITED, NULL);
   WM_main_add_notifier(NC_SCENE | ND_SEQUENCER, NULL);
@@ -164,8 +174,8 @@ static char *rna_ColorRamp_path(PointerRNA *ptr)
   char *path = NULL;
 
   /* handle the cases where a single data-block may have 2 ramp types */
-  if (ptr->id.data) {
-    ID *id = ptr->id.data;
+  if (ptr->owner_id) {
+    ID *id = ptr->owner_id;
 
     switch (GS(id->name)) {
       case ID_NT: {
@@ -237,8 +247,8 @@ static char *rna_ColorRampElement_path(PointerRNA *ptr)
 
   /* determine the path from the ID-block to the ramp */
   /* FIXME: this is a very slow way to do it, but it will have to suffice... */
-  if (ptr->id.data) {
-    ID *id = ptr->id.data;
+  if (ptr->owner_id) {
+    ID *id = ptr->owner_id;
 
     switch (GS(id->name)) {
       case ID_NT: {
@@ -286,12 +296,12 @@ static char *rna_ColorRampElement_path(PointerRNA *ptr)
 
 static void rna_ColorRamp_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
 {
-  if (ptr->id.data) {
-    ID *id = ptr->id.data;
+  if (ptr->owner_id) {
+    ID *id = ptr->owner_id;
 
     switch (GS(id->name)) {
       case ID_MA: {
-        Material *ma = ptr->id.data;
+        Material *ma = (Material *)ptr->owner_id;
 
         DEG_id_tag_update(&ma->id, 0);
         WM_main_add_notifier(NC_MATERIAL | ND_SHADING_DRAW, ma);
@@ -309,22 +319,23 @@ static void rna_ColorRamp_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *
         break;
       }
       case ID_TE: {
-        Tex *tex = ptr->id.data;
+        Tex *tex = (Tex *)ptr->owner_id;
 
         DEG_id_tag_update(&tex->id, 0);
         WM_main_add_notifier(NC_TEXTURE, tex);
         break;
       }
       case ID_LS: {
-        FreestyleLineStyle *linestyle = ptr->id.data;
+        FreestyleLineStyle *linestyle = (FreestyleLineStyle *)ptr->owner_id;
 
         WM_main_add_notifier(NC_LINESTYLE, linestyle);
         break;
       }
+      /* ColorRamp for particle display is owned by the object (see T54422) */
+      case ID_OB:
       case ID_PA: {
-        ParticleSettings *part = ptr->id.data;
+        ParticleSettings *part = (ParticleSettings *)ptr->owner_id;
 
-        DEG_id_tag_update(&part->id, ID_RECALC_GEOMETRY | ID_RECALC_PSYS_REDO);
         WM_main_add_notifier(NC_OBJECT | ND_PARTICLE | NA_EDITED, part);
       }
       default:
@@ -357,7 +368,7 @@ static void rna_ColorRampElement_remove(struct ColorBand *coba,
 {
   CBData *element = element_ptr->data;
   int index = (int)(element - coba->data);
-  if (BKE_colorband_element_remove(coba, index) == false) {
+  if (!BKE_colorband_element_remove(coba, index)) {
     BKE_report(reports, RPT_ERROR, "Element not found in element collection or last element");
     return;
   }
@@ -368,7 +379,7 @@ static void rna_ColorRampElement_remove(struct ColorBand *coba,
 static void rna_CurveMap_remove_point(CurveMap *cuma, ReportList *reports, PointerRNA *point_ptr)
 {
   CurveMapPoint *point = point_ptr->data;
-  if (curvemap_remove_point(cuma, point) == false) {
+  if (BKE_curvemap_remove_point(cuma, point) == false) {
     BKE_report(reports, RPT_ERROR, "Unable to remove curve point");
     return;
   }
@@ -417,7 +428,7 @@ static void rna_ColorManagedDisplaySettings_display_device_update(Main *bmain,
                                                                   Scene *UNUSED(scene),
                                                                   PointerRNA *ptr)
 {
-  ID *id = ptr->id.data;
+  ID *id = ptr->owner_id;
 
   if (!id) {
     return;
@@ -518,7 +529,7 @@ static void rna_ColorManagedViewSettings_use_curves_set(PointerRNA *ptr, bool va
     view_settings->flag |= COLORMANAGE_VIEW_USE_CURVES;
 
     if (view_settings->curve_mapping == NULL) {
-      view_settings->curve_mapping = curvemapping_add(4, 0.0f, 0.0f, 1.0f, 1.0f);
+      view_settings->curve_mapping = BKE_curvemapping_add(4, 0.0f, 0.0f, 1.0f, 1.0f);
     }
   }
   else {
@@ -582,7 +593,7 @@ static void rna_ColorManagedColorspaceSettings_reload_update(Main *bmain,
                                                              Scene *UNUSED(scene),
                                                              PointerRNA *ptr)
 {
-  ID *id = ptr->id.data;
+  ID *id = ptr->owner_id;
 
   if (GS(id->name) == ID_IM) {
     Image *ima = (Image *)id;
@@ -597,15 +608,15 @@ static void rna_ColorManagedColorspaceSettings_reload_update(Main *bmain,
   else if (GS(id->name) == ID_MC) {
     MovieClip *clip = (MovieClip *)id;
 
-    BKE_movieclip_reload(bmain, clip);
-    BKE_sequence_invalidate_movieclip_strips(bmain, clip);
+    DEG_id_tag_update(&clip->id, ID_RECALC_SOURCE);
+    SEQ_relations_invalidate_movieclip_strips(bmain, clip);
 
     WM_main_add_notifier(NC_MOVIECLIP | ND_DISPLAY, &clip->id);
     WM_main_add_notifier(NC_MOVIECLIP | NA_EDITED, &clip->id);
   }
   else if (GS(id->name) == ID_SCE) {
     Scene *scene = (Scene *)id;
-    BKE_sequence_invalidate_scene_strips(bmain, scene);
+    SEQ_relations_invalidate_scene_strips(bmain, scene);
 
     if (scene->ed) {
       ColorManagedColorspaceSettings *colorspace_settings = (ColorManagedColorspaceSettings *)
@@ -614,30 +625,30 @@ static void rna_ColorManagedColorspaceSettings_reload_update(Main *bmain,
       bool seq_found = false;
 
       if (&scene->sequencer_colorspace_settings != colorspace_settings) {
-        SEQ_BEGIN (scene->ed, seq) {
+        SEQ_ALL_BEGIN (scene->ed, seq) {
           if (seq->strip && &seq->strip->colorspace_settings == colorspace_settings) {
             seq_found = true;
             break;
           }
         }
-        SEQ_END;
+        SEQ_ALL_END;
       }
 
       if (seq_found) {
-        BKE_sequence_free_anim(seq);
+        SEQ_relations_sequence_free_anim(seq);
 
         if (seq->strip->proxy && seq->strip->proxy->anim) {
           IMB_free_anim(seq->strip->proxy->anim);
           seq->strip->proxy->anim = NULL;
         }
 
-        BKE_sequence_invalidate_cache_preprocessed(scene, seq);
+        SEQ_relations_invalidate_cache_preprocessed(scene, seq);
       }
       else {
-        SEQ_BEGIN (scene->ed, seq) {
-          BKE_sequence_free_anim(seq);
+        SEQ_ALL_BEGIN (scene->ed, seq) {
+          SEQ_relations_sequence_free_anim(seq);
         }
-        SEQ_END;
+        SEQ_ALL_END;
       }
 
       WM_main_add_notifier(NC_SCENE | ND_SEQUENCER, NULL);
@@ -657,7 +668,7 @@ static char *rna_ColorManagedInputColorspaceSettings_path(PointerRNA *UNUSED(ptr
 
 static void rna_ColorManagement_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
 {
-  ID *id = ptr->id.data;
+  ID *id = ptr->owner_id;
 
   if (!id) {
     return;
@@ -669,9 +680,18 @@ static void rna_ColorManagement_update(Main *UNUSED(bmain), Scene *UNUSED(scene)
   }
 }
 
-/* this function only exists because #curvemap_evaluateF uses a 'const' qualifier */
-static float rna_CurveMap_evaluateF(struct CurveMap *cuma, ReportList *reports, float value)
+/* this function only exists because #BKE_curvemap_evaluateF uses a 'const' qualifier */
+static float rna_CurveMapping_evaluateF(struct CurveMapping *cumap,
+                                        ReportList *reports,
+                                        struct CurveMap *cuma,
+                                        float value)
 {
+  if (&cumap->cm[0] != cuma && &cumap->cm[1] != cuma && &cumap->cm[2] != cuma &&
+      &cumap->cm[3] != cuma) {
+    BKE_report(reports, RPT_ERROR, "CurveMapping does not own CurveMap");
+    return 0.0f;
+  }
+
   if (!cuma->table) {
     BKE_report(
         reports,
@@ -679,12 +699,12 @@ static float rna_CurveMap_evaluateF(struct CurveMap *cuma, ReportList *reports, 
         "CurveMap table not initialized, call initialize() on CurveMapping owner of the CurveMap");
     return 0.0f;
   }
-  return curvemap_evaluateF(cuma, value);
+  return BKE_curvemap_evaluateF(cumap, cuma, value);
 }
 
 static void rna_CurveMap_initialize(struct CurveMapping *cumap)
 {
-  curvemapping_initialize(cumap);
+  BKE_curvemapping_init(cumap);
 }
 #else
 
@@ -729,7 +749,7 @@ static void rna_def_curvemap_points_api(BlenderRNA *brna, PropertyRNA *cprop)
   RNA_def_struct_sdna(srna, "CurveMap");
   RNA_def_struct_ui_text(srna, "Curve Map Point", "Collection of Curve Map Points");
 
-  func = RNA_def_function(srna, "new", "curvemap_insert");
+  func = RNA_def_function(srna, "new", "BKE_curvemap_insert");
   RNA_def_function_ui_description(func, "Add point to CurveMap");
   parm = RNA_def_float(func,
                        "position",
@@ -758,63 +778,33 @@ static void rna_def_curvemap_points_api(BlenderRNA *brna, PropertyRNA *cprop)
 static void rna_def_curvemap(BlenderRNA *brna)
 {
   StructRNA *srna;
-  PropertyRNA *prop, *parm;
-  FunctionRNA *func;
-
-  static const EnumPropertyItem prop_extend_items[] = {
-      {0, "HORIZONTAL", 0, "Horizontal", ""},
-      {CUMA_EXTEND_EXTRAPOLATE, "EXTRAPOLATED", 0, "Extrapolated", ""},
-      {0, NULL, 0, NULL, NULL},
-  };
+  PropertyRNA *prop;
 
   srna = RNA_def_struct(brna, "CurveMap", NULL);
   RNA_def_struct_ui_text(srna, "CurveMap", "Curve in a curve mapping");
-
-  prop = RNA_def_property(srna, "extend", PROP_ENUM, PROP_NONE);
-  RNA_def_property_enum_bitflag_sdna(prop, NULL, "flag");
-  RNA_def_property_enum_items(prop, prop_extend_items);
-  RNA_def_property_ui_text(prop, "Extend", "Extrapolate the curve or extend it horizontally");
 
   prop = RNA_def_property(srna, "points", PROP_COLLECTION, PROP_NONE);
   RNA_def_property_collection_sdna(prop, NULL, "curve", "totpoint");
   RNA_def_property_struct_type(prop, "CurveMapPoint");
   RNA_def_property_ui_text(prop, "Points", "");
   rna_def_curvemap_points_api(brna, prop);
-
-  func = RNA_def_function(srna, "evaluate", "rna_CurveMap_evaluateF");
-  RNA_def_function_flag(func, FUNC_USE_REPORTS);
-  RNA_def_function_ui_description(func, "Evaluate curve at given location");
-  parm = RNA_def_float(func,
-                       "position",
-                       0.0f,
-                       -FLT_MAX,
-                       FLT_MAX,
-                       "Position",
-                       "Position to evaluate curve at",
-                       -FLT_MAX,
-                       FLT_MAX);
-  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
-  parm = RNA_def_float(func,
-                       "value",
-                       0.0f,
-                       -FLT_MAX,
-                       FLT_MAX,
-                       "Value",
-                       "Value of curve at given location",
-                       -FLT_MAX,
-                       FLT_MAX);
-  RNA_def_function_return(func, parm);
 }
 
 static void rna_def_curvemapping(BlenderRNA *brna)
 {
   StructRNA *srna;
-  PropertyRNA *prop;
+  PropertyRNA *prop, *parm;
   FunctionRNA *func;
 
   static const EnumPropertyItem tone_items[] = {
       {CURVE_TONE_STANDARD, "STANDARD", 0, "Standard", ""},
-      {CURVE_TONE_FILMLIKE, "FILMLIKE", 0, "Film like", ""},
+      {CURVE_TONE_FILMLIKE, "FILMLIKE", 0, "Filmlike", ""},
+      {0, NULL, 0, NULL, NULL},
+  };
+
+  static const EnumPropertyItem prop_extend_items[] = {
+      {0, "HORIZONTAL", 0, "Horizontal", ""},
+      {CUMA_EXTEND_EXTRAPOLATE, "EXTRAPOLATED", 0, "Extrapolated", ""},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -860,6 +850,12 @@ static void rna_def_curvemapping(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Clip Max Y", "");
   RNA_def_property_float_funcs(prop, NULL, NULL, "rna_CurveMapping_clipmaxy_range");
 
+  prop = RNA_def_property(srna, "extend", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_bitflag_sdna(prop, NULL, "flag");
+  RNA_def_property_enum_items(prop, prop_extend_items);
+  RNA_def_property_ui_text(prop, "Extend", "Extrapolate the curve or extend it horizontally");
+  RNA_def_property_update(prop, 0, "rna_CurveMapping_extend_update");
+
   prop = RNA_def_property(srna, "curves", PROP_COLLECTION, PROP_NONE);
   RNA_def_property_collection_funcs(prop,
                                     "rna_CurveMapping_curves_begin",
@@ -889,11 +885,37 @@ static void rna_def_curvemapping(BlenderRNA *brna)
       prop, "White Level", "For RGB curves, the color that white is mapped to");
   RNA_def_property_float_funcs(prop, NULL, "rna_CurveMapping_white_level_set", NULL);
 
-  func = RNA_def_function(srna, "update", "curvemapping_changed_all");
+  func = RNA_def_function(srna, "update", "BKE_curvemapping_changed_all");
   RNA_def_function_ui_description(func, "Update curve mapping after making changes");
 
   func = RNA_def_function(srna, "initialize", "rna_CurveMap_initialize");
   RNA_def_function_ui_description(func, "Initialize curve");
+
+  func = RNA_def_function(srna, "evaluate", "rna_CurveMapping_evaluateF");
+  RNA_def_function_flag(func, FUNC_USE_REPORTS);
+  RNA_def_function_ui_description(func, "Evaluate curve at given location");
+  parm = RNA_def_pointer(func, "curve", "CurveMap", "curve", "Curve to evaluate");
+  RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED);
+  parm = RNA_def_float(func,
+                       "position",
+                       0.0f,
+                       -FLT_MAX,
+                       FLT_MAX,
+                       "Position",
+                       "Position to evaluate curve at",
+                       -FLT_MAX,
+                       FLT_MAX);
+  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
+  parm = RNA_def_float(func,
+                       "value",
+                       0.0f,
+                       -FLT_MAX,
+                       FLT_MAX,
+                       "Value",
+                       "Value of curve at given location",
+                       -FLT_MAX,
+                       FLT_MAX);
+  RNA_def_function_return(func, parm);
 }
 
 static void rna_def_color_ramp_element(BlenderRNA *brna)
@@ -921,6 +943,7 @@ static void rna_def_color_ramp_element(BlenderRNA *brna)
   prop = RNA_def_property(srna, "position", PROP_FLOAT, PROP_NONE);
   RNA_def_property_float_sdna(prop, NULL, "pos");
   RNA_def_property_range(prop, 0, 1);
+  RNA_def_property_ui_range(prop, 0, 1, 1, 3);
   RNA_def_property_ui_text(prop, "Position", "Set position of selected color stop");
   RNA_def_property_update(prop, 0, "rna_ColorRamp_update");
 }
@@ -1202,7 +1225,7 @@ static void rna_def_colormanage(BlenderRNA *brna)
                               "rna_ColorManagedViewSettings_look_set",
                               "rna_ColorManagedViewSettings_look_itemf");
   RNA_def_property_ui_text(
-      prop, "Look", "Additional transform applied before view transform for an artistic needs");
+      prop, "Look", "Additional transform applied before view transform for artistic needs");
   RNA_def_property_update(prop, NC_WINDOW, "rna_ColorManagement_update");
 
   prop = RNA_def_property(srna, "view_transform", PROP_ENUM, PROP_NONE);

@@ -21,8 +21,8 @@
 
 #include "BLI_blenlib.h"
 
-#include "DNA_text_types.h"
 #include "DNA_space_types.h"
+#include "DNA_text_types.h"
 
 #include "BKE_text.h"
 
@@ -48,7 +48,7 @@ static int txtfmt_pov_find_keyword(const char *string)
 
   int i, len;
   /* Language Directives */
-  if      (STR_LITERAL_STARTSWITH(string, "deprecated",  len)) { i = len;
+  if        (STR_LITERAL_STARTSWITH(string, "deprecated",  len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "persistent",  len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "statistics",  len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "version",     len)) { i = len;
@@ -80,8 +80,8 @@ static int txtfmt_pov_find_keyword(const char *string)
   } else if (STR_LITERAL_STARTSWITH(string, "end",         len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "for",         len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "if",          len)) { i = len;
-  } else {                                                         i = 0;
-}
+  } else                                                         { i = 0;
+  }
 
   /* clang-format on */
 
@@ -101,7 +101,7 @@ static int txtfmt_pov_find_reserved_keywords(const char *string)
   /* clang-format off */
 
   /* Float Functions */
-  if      (STR_LITERAL_STARTSWITH(string, "conserve_energy",    len)) { i = len;
+  if        (STR_LITERAL_STARTSWITH(string, "conserve_energy",    len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "max_intersections",  len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "dimension_size",     len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "bitwise_and",        len)) { i = len;
@@ -239,8 +239,8 @@ static int txtfmt_pov_find_reserved_keywords(const char *string)
   } else if (STR_LITERAL_STARTSWITH(string, "vstr",               len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "chr",                len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "str",                len)) { i = len;
-  } else {                                                                i = 0;
-}
+  } else                                                                { i = 0;
+  }
 
   /* clang-format on */
 
@@ -261,7 +261,7 @@ static int txtfmt_pov_find_reserved_builtins(const char *string)
   /* clang-format off */
 
   /* Language Keywords */
-  if      (STR_LITERAL_STARTSWITH(string, "reflection_exponent", len)) { i = len;
+  if        (STR_LITERAL_STARTSWITH(string, "reflection_exponent", len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "area_illumination",   len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "all_intersections",   len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "cutaway_textures",    len)) { i = len;
@@ -475,8 +475,8 @@ static int txtfmt_pov_find_reserved_builtins(const char *string)
   } else if (STR_LITERAL_STARTSWITH(string, "x",                   len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "y",                   len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "z",                   len)) { i = len;
-  } else {                                                                 i = 0;
-}
+  } else                                                                 { i = 0;
+  }
 
   /* clang-format off */
 
@@ -500,7 +500,7 @@ static int txtfmt_pov_find_specialvar(const char *string)
 {
   int i, len;
   /* Modifiers */
-  if      (STR_LITERAL_STARTSWITH(string, "dispersion_samples", len)) { i = len;
+  if        (STR_LITERAL_STARTSWITH(string, "dispersion_samples", len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "projected_through",  len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "double_illuminate",  len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "expand_thresholds",  len)) { i = len;
@@ -695,8 +695,8 @@ static int txtfmt_pov_find_specialvar(const char *string)
   } else if (STR_LITERAL_STARTSWITH(string, "edwards",                  len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "peters",                   len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "gall",                     len)) { i = len;
-  } else {                                                                i = 0;
-}
+  } else                                                                      { i = 0;
+  }
 
   /* If next source char is an identifier (eg. 'i' in "definite") no match */
   return (i == 0 || text_check_identifier(string[i])) ? -1 : i;
@@ -710,7 +710,7 @@ static int txtfmt_pov_find_bool(const char *string)
   /* clang-format off */
 
   /* Built-in Constants */
-  if      (STR_LITERAL_STARTSWITH(string, "unofficial",          len)) { i = len;
+  if        (STR_LITERAL_STARTSWITH(string, "unofficial",          len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "false",               len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "no",                  len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "off",                 len)) { i = len;
@@ -746,8 +746,8 @@ static int txtfmt_pov_find_bool(const char *string)
   } else if (STR_LITERAL_STARTSWITH(string, "sys",                 len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "tga",                 len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "ttf",                 len)) { i = len;
-  } else {                                                                 i = 0;
-}
+  } else                                                                 { i = 0;
+  }
 
   /* clang-format on */
 
@@ -762,12 +762,12 @@ static char txtfmt_pov_format_identifier(const char *str)
   /* Keep aligned args for readability. */
   /* clang-format off */
 
-  if      ((txtfmt_pov_find_specialvar(str))        != -1) { fmt = FMT_TYPE_SPECIAL;
+  if        ((txtfmt_pov_find_specialvar(str))        != -1) { fmt = FMT_TYPE_SPECIAL;
   } else if ((txtfmt_pov_find_keyword(str))           != -1) { fmt = FMT_TYPE_KEYWORD;
   } else if ((txtfmt_pov_find_reserved_keywords(str)) != -1) { fmt = FMT_TYPE_RESERVED;
   } else if ((txtfmt_pov_find_reserved_builtins(str)) != -1) { fmt = FMT_TYPE_DIRECTIVE;
-  } else {                                                     fmt = FMT_TYPE_DEFAULT;
-}
+  } else                                                     { fmt = FMT_TYPE_DEFAULT;
+  }
 
   /* clang-format on */
 
@@ -825,7 +825,7 @@ static void txtfmt_pov_format_line(SpaceText *st, TextLine *line, const bool do_
       continue;
     }
     /* Handle continuations */
-    else if (cont) {
+    if (cont) {
       /* C-Style comments */
       if (cont & FMT_CONT_COMMENT_C) {
         if (*str == '*' && *(str + 1) == '/') {
@@ -864,7 +864,7 @@ static void txtfmt_pov_format_line(SpaceText *st, TextLine *line, const bool do_
       else if (*str == '/' && *(str + 1) == '/') {
         text_format_fill(&str, &fmt, FMT_TYPE_COMMENT, len - (int)(fmt - line->format));
       }
-      else if (*str == '"' || *str == '\'') {
+      else if (ELEM(*str, '"', '\'')) {
         /* Strings */
         find = *str;
         cont = (*str == '"') ? FMT_CONT_QUOTEDOUBLE : FMT_CONT_QUOTESINGLE;
@@ -905,11 +905,11 @@ static void txtfmt_pov_format_line(SpaceText *st, TextLine *line, const bool do_
 
         /* Special vars(v) or built-in keywords(b) */
         /* keep in sync with 'txtfmt_pov_format_identifier()' */
-        if      ((i = txtfmt_pov_find_specialvar(str))        != -1) { prev = FMT_TYPE_SPECIAL;
+        if        ((i = txtfmt_pov_find_specialvar(str))        != -1) { prev = FMT_TYPE_SPECIAL;
         } else if ((i = txtfmt_pov_find_keyword(str))           != -1) { prev = FMT_TYPE_KEYWORD;
         } else if ((i = txtfmt_pov_find_reserved_keywords(str)) != -1) { prev = FMT_TYPE_RESERVED;
         } else if ((i = txtfmt_pov_find_reserved_builtins(str)) != -1) { prev = FMT_TYPE_DIRECTIVE;
-}
+        }
 
         /* clang-format on */
 

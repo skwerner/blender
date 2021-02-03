@@ -17,10 +17,10 @@
  */
 
 #include "COM_FilterNode.h"
-#include "COM_ConvolutionFilterOperation.h"
-#include "COM_ConvolutionEdgeFilterOperation.h"
-#include "COM_ExecutionSystem.h"
 #include "BKE_node.h"
+#include "COM_ConvolutionEdgeFilterOperation.h"
+#include "COM_ConvolutionFilterOperation.h"
+#include "COM_ExecutionSystem.h"
 #include "COM_MixOperation.h"
 
 FilterNode::FilterNode(bNode *editorNode) : Node(editorNode)
@@ -34,7 +34,7 @@ void FilterNode::convertToOperations(NodeConverter &converter,
   NodeInput *inputSocket = this->getInputSocket(0);
   NodeInput *inputImageSocket = this->getInputSocket(1);
   NodeOutput *outputSocket = this->getOutputSocket(0);
-  ConvolutionFilterOperation *operation = NULL;
+  ConvolutionFilterOperation *operation = nullptr;
 
   switch (this->getbNode()->custom1) {
     case CMP_FILT_SOFT:

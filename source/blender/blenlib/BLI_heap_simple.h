@@ -14,13 +14,16 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLI_HEAP_SIMPLE_H__
-#define __BLI_HEAP_SIMPLE_H__
+#pragma once
 
 /** \file
  * \ingroup bli
  * \brief A min-heap / priority queue ADT
  */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct HeapSimple;
 typedef struct HeapSimple HeapSimple;
@@ -37,4 +40,6 @@ uint BLI_heapsimple_len(const HeapSimple *heap) ATTR_WARN_UNUSED_RESULT ATTR_NON
 float BLI_heapsimple_top_value(const HeapSimple *heap) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL(1);
 void *BLI_heapsimple_pop_min(HeapSimple *heap) ATTR_NONNULL(1);
 
-#endif /* __BLI_HEAP_SIMPLE_H__ */
+#ifdef __cplusplus
+}
+#endif

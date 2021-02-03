@@ -22,18 +22,18 @@
  * \ingroup edgpencil
  */
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <stddef.h>
 #include <math.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
 #include "BLI_blenlib.h"
-#include "BLI_utildefines.h"
 #include "BLI_easing.h"
 #include "BLI_math.h"
+#include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
@@ -50,6 +50,7 @@
 #include "BKE_context.h"
 #include "BKE_deform.h"
 #include "BKE_gpencil.h"
+#include "BKE_gpencil_geom.h"
 #include "BKE_report.h"
 
 #include "UI_interface.h"
@@ -67,8 +68,8 @@
 #include "ED_gpencil.h"
 #include "ED_object.h"
 #include "ED_screen.h"
-#include "ED_view3d.h"
 #include "ED_space_api.h"
+#include "ED_view3d.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
@@ -85,8 +86,8 @@ static bool gpencil_view3d_poll(bContext *C)
   bGPDlayer *gpl = CTX_data_active_gpencil_layer(C);
 
   /* only 3D view */
-  ScrArea *sa = CTX_wm_area(C);
-  if (sa && sa->spacetype != SPACE_VIEW3D) {
+  ScrArea *area = CTX_wm_area(C);
+  if (area && area->spacetype != SPACE_VIEW3D) {
     return 0;
   }
 
@@ -99,10 +100,10 @@ static bool gpencil_view3d_poll(bContext *C)
 }
 
 /* Perform interpolation */
-static void gp_interpolate_update_points(const bGPDstroke *gps_from,
-                                         const bGPDstroke *gps_to,
-                                         bGPDstroke *new_stroke,
-                                         float factor)
+static void gpencil_interpolate_update_points(const bGPDstroke *gps_from,
+                                              const bGPDstroke *gps_to,
+                                              bGPDstroke *new_stroke,
+                                              float factor)
 {
   /* update points */
   for (int i = 0; i < new_stroke->totpoints; i++) {
@@ -115,31 +116,55 @@ static void gp_interpolate_update_points(const bGPDstroke *gps_from,
     pt->pressure = interpf(prev->pressure, next->pressure, 1.0f - factor);
     pt->strength = interpf(prev->strength, next->strength, 1.0f - factor);
     CLAMP(pt->strength, GPENCIL_STRENGTH_MIN, 1.0f);
-
-    /* GPXX interpolate dverts */
-#if 0
-    MDeformVert *dvert = &new_stroke->dvert[i];
-    dvert->totweight = 0;
-    dvert->dw = NULL;
-#endif
   }
 }
 
 /* ****************** Interpolate Interactive *********************** */
+/* Helper: free all temp strokes for display. */
+static void gpencil_interpolate_free_temp_strokes(bGPDframe *gpf)
+{
+  if (gpf == NULL) {
+    return;
+  }
+
+  LISTBASE_FOREACH_MUTABLE (bGPDstroke *, gps, &gpf->strokes) {
+    if (gps->flag & GP_STROKE_TAG) {
+      BLI_remlink(&gpf->strokes, gps);
+      BKE_gpencil_free_stroke(gps);
+    }
+  }
+}
+
+/* Helper: Untag all strokes. */
+static void gpencil_interpolate_untag_strokes(bGPDlayer *gpl)
+{
+  if (gpl == NULL) {
+    return;
+  }
+
+  LISTBASE_FOREACH (bGPDframe *, gpf, &gpl->frames) {
+    LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
+      if (gps->flag & GP_STROKE_TAG) {
+        gps->flag &= ~GP_STROKE_TAG;
+      }
+    }
+  }
+}
 
 /* Helper: Update all strokes interpolated */
-static void gp_interpolate_update_strokes(bContext *C, tGPDinterpolate *tgpi)
+static void gpencil_interpolate_update_strokes(bContext *C, tGPDinterpolate *tgpi)
 {
   bGPdata *gpd = tgpi->gpd;
-  tGPDinterpolate_layer *tgpil;
   const float shift = tgpi->shift;
 
-  for (tgpil = tgpi->ilayers.first; tgpil; tgpil = tgpil->next) {
-    bGPDstroke *new_stroke;
+  LISTBASE_FOREACH (tGPDinterpolate_layer *, tgpil, &tgpi->ilayers) {
     const float factor = tgpil->factor + shift;
 
-    for (new_stroke = tgpil->interFrame->strokes.first; new_stroke;
-         new_stroke = new_stroke->next) {
+    bGPDframe *gpf = tgpil->gpl->actframe;
+    /* Free temp strokes. */
+    gpencil_interpolate_free_temp_strokes(gpf);
+
+    LISTBASE_FOREACH (bGPDstroke *, new_stroke, &tgpil->interFrame->strokes) {
       bGPDstroke *gps_from, *gps_to;
       int stroke_idx;
 
@@ -155,7 +180,14 @@ static void gp_interpolate_update_strokes(bContext *C, tGPDinterpolate *tgpi)
 
       /* update points position */
       if ((gps_from) && (gps_to)) {
-        gp_interpolate_update_points(gps_from, gps_to, new_stroke, factor);
+        gpencil_interpolate_update_points(gps_from, gps_to, new_stroke, factor);
+
+        /* Add temp strokes. */
+        if (gpf) {
+          bGPDstroke *gps_eval = BKE_gpencil_stroke_duplicate(new_stroke, true, true);
+          gps_eval->flag |= GP_STROKE_TAG;
+          BLI_addtail(&gpf->strokes, gps_eval);
+        }
       }
     }
   }
@@ -165,31 +197,30 @@ static void gp_interpolate_update_strokes(bContext *C, tGPDinterpolate *tgpi)
 }
 
 /* Helper: Verify valid strokes for interpolation */
-static bool gp_interpolate_check_todo(bContext *C, bGPdata *gpd)
+static bool gpencil_interpolate_check_todo(bContext *C, bGPdata *gpd)
 {
   Object *ob = CTX_data_active_object(C);
   ToolSettings *ts = CTX_data_tool_settings(C);
   eGP_Interpolate_SettingsFlag flag = ts->gp_interpolate.flag;
 
   /* get layers */
-  for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
+  LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
     /* all layers or only active */
     if (!(flag & GP_TOOLFLAG_INTERPOLATE_ALL_LAYERS) && !(gpl->flag & GP_LAYER_ACTIVE)) {
       continue;
     }
     /* only editable and visible layers are considered */
-    if (!gpencil_layer_is_editable(gpl) || (gpl->actframe == NULL)) {
+    if (!BKE_gpencil_layer_is_editable(gpl) || (gpl->actframe == NULL)) {
       continue;
     }
 
     /* read strokes */
-    for (bGPDstroke *gps_from = gpl->actframe->strokes.first; gps_from;
-         gps_from = gps_from->next) {
+    LISTBASE_FOREACH (bGPDstroke *, gps_from, &gpl->actframe->strokes) {
       bGPDstroke *gps_to;
       int fFrame;
 
       /* only selected */
-      if ((flag & GP_TOOLFLAG_INTERPOLATE_ONLY_SELECTED) &&
+      if ((GPENCIL_EDIT_MODE(gpd)) && (flag & GP_TOOLFLAG_INTERPOLATE_ONLY_SELECTED) &&
           ((gps_from->flag & GP_STROKE_SELECT) == 0)) {
         continue;
       }
@@ -198,13 +229,15 @@ static bool gp_interpolate_check_todo(bContext *C, bGPdata *gpd)
         continue;
       }
       /* check if the color is editable */
-      if (ED_gpencil_stroke_color_use(ob, gpl, gps_from) == false) {
+      if (ED_gpencil_stroke_material_editable(ob, gpl, gps_from) == false) {
         continue;
       }
 
       /* get final stroke to interpolate */
       fFrame = BLI_findindex(&gpl->actframe->strokes, gps_from);
-      gps_to = BLI_findlink(&gpl->actframe->next->strokes, fFrame);
+      gps_to = (gpl->actframe->next != NULL) ?
+                   BLI_findlink(&gpl->actframe->next->strokes, fFrame) :
+                   NULL;
       if (gps_to == NULL) {
         continue;
       }
@@ -216,7 +249,7 @@ static bool gp_interpolate_check_todo(bContext *C, bGPdata *gpd)
 }
 
 /* Helper: Create internal strokes interpolated */
-static void gp_interpolate_set_points(bContext *C, tGPDinterpolate *tgpi)
+static void gpencil_interpolate_set_points(bContext *C, tGPDinterpolate *tgpi)
 {
   bGPdata *gpd = tgpi->gpd;
   bGPDlayer *active_gpl = CTX_data_active_gpencil_layer(C);
@@ -232,15 +265,17 @@ static void gp_interpolate_set_points(bContext *C, tGPDinterpolate *tgpi)
   tgpi->high_limit = 2.0f - tgpi->init_factor;
 
   /* set layers */
-  for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
+  LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
     tGPDinterpolate_layer *tgpil;
-
     /* all layers or only active */
     if (!(tgpi->flag & GP_TOOLFLAG_INTERPOLATE_ALL_LAYERS) && (gpl != active_gpl)) {
       continue;
     }
     /* only editable and visible layers are considered */
-    if (!gpencil_layer_is_editable(gpl) || (gpl->actframe == NULL)) {
+    if (!BKE_gpencil_layer_is_editable(gpl) || (gpl->actframe == NULL)) {
+      continue;
+    }
+    if ((gpl->actframe == NULL) || (gpl->actframe->next == NULL)) {
       continue;
     }
 
@@ -248,8 +283,8 @@ static void gp_interpolate_set_points(bContext *C, tGPDinterpolate *tgpi)
     tgpil = MEM_callocN(sizeof(tGPDinterpolate_layer), "GPencil Interpolate Layer");
 
     tgpil->gpl = gpl;
-    tgpil->prevFrame = gpl->actframe;
-    tgpil->nextFrame = gpl->actframe->next;
+    tgpil->prevFrame = BKE_gpencil_frame_duplicate(gpl->actframe, true);
+    tgpil->nextFrame = BKE_gpencil_frame_duplicate(gpl->actframe->next, true);
 
     BLI_addtail(&tgpi->ilayers, tgpil);
 
@@ -262,8 +297,7 @@ static void gp_interpolate_set_points(bContext *C, tGPDinterpolate *tgpi)
                     (tgpil->nextFrame->framenum - tgpil->prevFrame->framenum + 1);
 
     /* create new strokes data with interpolated points reading original stroke */
-    for (bGPDstroke *gps_from = tgpil->prevFrame->strokes.first; gps_from;
-         gps_from = gps_from->next) {
+    LISTBASE_FOREACH (bGPDstroke *, gps_from, &tgpil->prevFrame->strokes) {
       bGPDstroke *gps_to;
       int fFrame;
 
@@ -271,7 +305,7 @@ static void gp_interpolate_set_points(bContext *C, tGPDinterpolate *tgpi)
       bool valid = true;
 
       /* only selected */
-      if ((tgpi->flag & GP_TOOLFLAG_INTERPOLATE_ONLY_SELECTED) &&
+      if ((GPENCIL_EDIT_MODE(gpd)) && (tgpi->flag & GP_TOOLFLAG_INTERPOLATE_ONLY_SELECTED) &&
           ((gps_from->flag & GP_STROKE_SELECT) == 0)) {
         valid = false;
       }
@@ -281,7 +315,7 @@ static void gp_interpolate_set_points(bContext *C, tGPDinterpolate *tgpi)
       }
 
       /* check if the color is editable */
-      if (ED_gpencil_stroke_color_use(ob, tgpil->gpl, gps_from) == false) {
+      if (ED_gpencil_stroke_material_editable(ob, tgpil->gpl, gps_from) == false) {
         valid = false;
       }
 
@@ -292,61 +326,39 @@ static void gp_interpolate_set_points(bContext *C, tGPDinterpolate *tgpi)
         valid = false;
       }
 
-      /* create new stroke */
-      new_stroke = BKE_gpencil_stroke_duplicate(gps_from);
-
       if (valid) {
         /* if destination stroke is smaller, resize new_stroke to size of gps_to stroke */
         if (gps_from->totpoints > gps_to->totpoints) {
-          new_stroke->points = MEM_recallocN(new_stroke->points,
-                                             sizeof(*new_stroke->points) * gps_to->totpoints);
-          if (new_stroke->dvert != NULL) {
-            new_stroke->dvert = MEM_recallocN(new_stroke->dvert,
-                                              sizeof(*new_stroke->dvert) * gps_to->totpoints);
-          }
-          new_stroke->totpoints = gps_to->totpoints;
-          new_stroke->tot_triangles = 0;
-          new_stroke->flag |= GP_STROKE_RECALC_GEOMETRY;
+          BKE_gpencil_stroke_uniform_subdivide(gpd, gps_to, gps_from->totpoints, true);
         }
-        /* update points position */
-        gp_interpolate_update_points(gps_from, gps_to, new_stroke, tgpil->factor);
+        if (gps_to->totpoints > gps_from->totpoints) {
+          BKE_gpencil_stroke_uniform_subdivide(gpd, gps_from, gps_to->totpoints, true);
+        }
+
+        /* Create new stroke. */
+        new_stroke = BKE_gpencil_stroke_duplicate(gps_from, true, true);
+
+        /* Update points position. */
+        gpencil_interpolate_update_points(gps_from, gps_to, new_stroke, tgpil->factor);
       }
       else {
+        /* Create new stroke. */
+        new_stroke = BKE_gpencil_stroke_duplicate(gps_from, true, true);
+
         /* need an empty stroke to keep index correct for lookup, but resize to smallest size */
         new_stroke->totpoints = 0;
         new_stroke->points = MEM_recallocN(new_stroke->points, sizeof(*new_stroke->points));
         if (new_stroke->dvert != NULL) {
           new_stroke->dvert = MEM_recallocN(new_stroke->dvert, sizeof(*new_stroke->dvert));
         }
-        new_stroke->tot_triangles = 0;
-        new_stroke->triangles = MEM_recallocN(new_stroke->triangles,
-                                              sizeof(*new_stroke->triangles));
-        new_stroke->flag |= GP_STROKE_RECALC_GEOMETRY;
       }
 
+      /* Calc geometry data. */
+      BKE_gpencil_stroke_geometry_update(gpd, new_stroke);
       /* add to strokes */
       BLI_addtail(&tgpil->interFrame->strokes, new_stroke);
     }
   }
-}
-
-/* ----------------------- */
-/* Drawing Callbacks */
-
-/* Drawing callback for modal operator in screen mode */
-static void gpencil_interpolate_draw_screen(const struct bContext *C,
-                                            ARegion *UNUSED(ar),
-                                            void *arg)
-{
-  tGPDinterpolate *tgpi = (tGPDinterpolate *)arg;
-  ED_gp_draw_interpolation(C, tgpi, REGION_DRAW_POST_PIXEL);
-}
-
-/* Drawing callback for modal operator in 3d mode */
-static void gpencil_interpolate_draw_3d(const bContext *C, ARegion *UNUSED(ar), void *arg)
-{
-  tGPDinterpolate *tgpi = (tGPDinterpolate *)arg;
-  ED_gp_draw_interpolation(C, tgpi, REGION_DRAW_POST_VIEW);
 }
 
 /* ----------------------- */
@@ -356,8 +368,8 @@ static void gpencil_interpolate_draw_3d(const bContext *C, ARegion *UNUSED(ar), 
  */
 static void gpencil_mouse_update_shift(tGPDinterpolate *tgpi, wmOperator *op, const wmEvent *event)
 {
-  float mid = (float)(tgpi->ar->winx - tgpi->ar->winrct.xmin) / 2.0f;
-  float mpos = event->x - tgpi->ar->winrct.xmin;
+  float mid = (float)(tgpi->region->winx - tgpi->region->winrct.xmin) / 2.0f;
+  float mpos = event->x - tgpi->region->winrct.xmin;
 
   if (mpos >= mid) {
     tgpi->shift = ((mpos - mid) * tgpi->high_limit) / mid;
@@ -393,7 +405,7 @@ static void gpencil_interpolate_status_indicators(bContext *C, tGPDinterpolate *
                  (int)((p->init_factor + p->shift) * 100.0f));
   }
 
-  ED_area_status_text(p->sa, status_str);
+  ED_area_status_text(p->area, status_str);
   ED_workspace_status_text(
       C, TIP_("ESC/RMB to cancel, Enter/LMB to confirm, WHEEL/MOVE to adjust factor"));
 }
@@ -406,7 +418,7 @@ static void gpencil_interpolate_update(bContext *C, wmOperator *op, tGPDinterpol
   /* apply... */
   tgpi->shift = RNA_float_get(op->ptr, "shift");
   /* update points position */
-  gp_interpolate_update_strokes(C, tgpi);
+  gpencil_interpolate_update_strokes(C, tgpi);
 }
 
 /* ----------------------- */
@@ -415,31 +427,33 @@ static void gpencil_interpolate_update(bContext *C, wmOperator *op, tGPDinterpol
 static void gpencil_interpolate_exit(bContext *C, wmOperator *op)
 {
   tGPDinterpolate *tgpi = op->customdata;
-  tGPDinterpolate_layer *tgpil;
   bGPdata *gpd = tgpi->gpd;
 
   /* don't assume that operator data exists at all */
   if (tgpi) {
-    /* remove drawing handler */
-    if (tgpi->draw_handle_screen) {
-      ED_region_draw_cb_exit(tgpi->ar->type, tgpi->draw_handle_screen);
-    }
-    if (tgpi->draw_handle_3d) {
-      ED_region_draw_cb_exit(tgpi->ar->type, tgpi->draw_handle_3d);
-    }
-
     /* clear status message area */
-    ED_area_status_text(tgpi->sa, NULL);
+    ED_area_status_text(tgpi->area, NULL);
     ED_workspace_status_text(C, NULL);
 
+    /* Clear any temp stroke. */
+    LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
+      LISTBASE_FOREACH (bGPDframe *, gpf, &gpl->frames) {
+        gpencil_interpolate_free_temp_strokes(gpf);
+      }
+    }
+
     /* finally, free memory used by temp data */
-    for (tgpil = tgpi->ilayers.first; tgpil; tgpil = tgpil->next) {
+    LISTBASE_FOREACH (tGPDinterpolate_layer *, tgpil, &tgpi->ilayers) {
+      BKE_gpencil_free_strokes(tgpil->prevFrame);
+      BKE_gpencil_free_strokes(tgpil->nextFrame);
       BKE_gpencil_free_strokes(tgpil->interFrame);
-      MEM_freeN(tgpil->interFrame);
+      MEM_SAFE_FREE(tgpil->prevFrame);
+      MEM_SAFE_FREE(tgpil->nextFrame);
+      MEM_SAFE_FREE(tgpil->interFrame);
     }
 
     BLI_freelistN(&tgpi->ilayers);
-    MEM_freeN(tgpi);
+    MEM_SAFE_FREE(tgpi);
   }
   DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
   WM_event_add_notifier(C, NC_GPENCIL | NA_EDITED, NULL);
@@ -449,15 +463,16 @@ static void gpencil_interpolate_exit(bContext *C, wmOperator *op)
 }
 
 /* Init new temporary interpolation data */
-static bool gp_interpolate_set_init_values(bContext *C, wmOperator *op, tGPDinterpolate *tgpi)
+static bool gpencil_interpolate_set_init_values(bContext *C, wmOperator *op, tGPDinterpolate *tgpi)
 {
   ToolSettings *ts = CTX_data_tool_settings(C);
   bGPdata *gpd = CTX_data_gpencil_data(C);
 
   /* set current scene and window */
+  tgpi->depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   tgpi->scene = CTX_data_scene(C);
-  tgpi->sa = CTX_wm_area(C);
-  tgpi->ar = CTX_wm_region(C);
+  tgpi->area = CTX_wm_area(C);
+  tgpi->region = CTX_wm_region(C);
   tgpi->flag = ts->gp_interpolate.flag;
 
   /* set current frame number */
@@ -468,19 +483,25 @@ static bool gp_interpolate_set_init_values(bContext *C, wmOperator *op, tGPDinte
 
   /* set interpolation weight */
   tgpi->shift = RNA_float_get(op->ptr, "shift");
-  /* set layers */
-  gp_interpolate_set_points(C, tgpi);
+
+  /* Untag strokes to be sure nothing is pending due any canceled process. */
+  LISTBASE_FOREACH (bGPDlayer *, gpl, &tgpi->gpd->layers) {
+    gpencil_interpolate_untag_strokes(gpl);
+  }
+
+  /* Set layers */
+  gpencil_interpolate_set_points(C, tgpi);
 
   return 1;
 }
 
 /* Allocate memory and initialize values */
-static tGPDinterpolate *gp_session_init_interpolation(bContext *C, wmOperator *op)
+static tGPDinterpolate *gpencil_session_init_interpolation(bContext *C, wmOperator *op)
 {
   tGPDinterpolate *tgpi = MEM_callocN(sizeof(tGPDinterpolate), "GPencil Interpolate Data");
 
   /* define initial values */
-  gp_interpolate_set_init_values(C, op, tgpi);
+  gpencil_interpolate_set_init_values(C, op, tgpi);
 
   /* return context data for running operator */
   return tgpi;
@@ -492,7 +513,7 @@ static int gpencil_interpolate_init(bContext *C, wmOperator *op)
   tGPDinterpolate *tgpi;
 
   /* check context */
-  tgpi = op->customdata = gp_session_init_interpolation(C, op);
+  tgpi = op->customdata = gpencil_session_init_interpolation(C, op);
   if (tgpi == NULL) {
     /* something wasn't set correctly in context */
     gpencil_interpolate_exit(C, op);
@@ -511,8 +532,8 @@ static int gpencil_interpolate_invoke(bContext *C, wmOperator *op, const wmEvent
   wmWindow *win = CTX_wm_window(C);
   bGPdata *gpd = CTX_data_gpencil_data(C);
   bGPDlayer *gpl = CTX_data_active_gpencil_layer(C);
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
-  int cfra_eval = (int)DEG_get_ctime(depsgraph);
+  Scene *scene = CTX_data_scene(C);
+  int cfra = CFRA;
   bGPDframe *actframe = gpl->actframe;
   tGPDinterpolate *tgpi = NULL;
 
@@ -526,15 +547,20 @@ static int gpencil_interpolate_invoke(bContext *C, wmOperator *op, const wmEvent
   }
 
   /* cannot interpolate in extremes */
-  if (ELEM(cfra_eval, actframe->framenum, actframe->next->framenum)) {
+  if (ELEM(cfra, actframe->framenum, actframe->next->framenum)) {
     BKE_report(op->reports,
                RPT_ERROR,
                "Cannot interpolate as current frame already has existing grease pencil frames");
     return OPERATOR_CANCELLED;
   }
 
+  if (GPENCIL_CURVE_EDIT_SESSIONS_ON(gpd)) {
+    BKE_report(op->reports, RPT_ERROR, "Cannot interpolate in curve edit mode");
+    return OPERATOR_CANCELLED;
+  }
+
   /* need editable strokes */
-  if (!gp_interpolate_check_todo(C, gpd)) {
+  if (!gpencil_interpolate_check_todo(C, gpd)) {
     BKE_report(op->reports, RPT_ERROR, "Interpolation requires some editable strokes");
     return OPERATOR_CANCELLED;
   }
@@ -546,21 +572,10 @@ static int gpencil_interpolate_invoke(bContext *C, wmOperator *op, const wmEvent
     }
     return OPERATOR_CANCELLED;
   }
-  else {
-    tgpi = op->customdata;
-  }
-
-  /* Enable custom drawing handlers
-   * It needs 2 handlers because strokes can in 3d space and screen space
-   * and each handler use different coord system
-   */
-  tgpi->draw_handle_screen = ED_region_draw_cb_activate(
-      tgpi->ar->type, gpencil_interpolate_draw_screen, tgpi, REGION_DRAW_POST_PIXEL);
-  tgpi->draw_handle_3d = ED_region_draw_cb_activate(
-      tgpi->ar->type, gpencil_interpolate_draw_3d, tgpi, REGION_DRAW_POST_VIEW);
+  tgpi = op->customdata;
 
   /* set cursor to indicate modal */
-  WM_cursor_modal_set(win, BC_EW_SCROLLCURSOR);
+  WM_cursor_modal_set(win, WM_CURSOR_EW_SCROLL);
 
   /* update shift indicator in header */
   gpencil_interpolate_status_indicators(C, tgpi);
@@ -579,39 +594,37 @@ static int gpencil_interpolate_modal(bContext *C, wmOperator *op, const wmEvent 
   tGPDinterpolate *tgpi = op->customdata;
   wmWindow *win = CTX_wm_window(C);
   bGPDframe *gpf_dst;
-  bGPDstroke *gps_src, *gps_dst;
-  tGPDinterpolate_layer *tgpil;
+  bGPDstroke *gps_dst;
   const bool has_numinput = hasNumInput(&tgpi->num);
 
   switch (event->type) {
     case LEFTMOUSE: /* confirm */
-    case RETKEY: {
+    case EVT_PADENTER:
+    case EVT_RETKEY: {
       /* return to normal cursor and header status */
-      ED_area_status_text(tgpi->sa, NULL);
+      ED_area_status_text(tgpi->area, NULL);
       ED_workspace_status_text(C, NULL);
       WM_cursor_modal_restore(win);
 
       /* insert keyframes as required... */
-      for (tgpil = tgpi->ilayers.first; tgpil; tgpil = tgpil->next) {
-        gpf_dst = BKE_gpencil_layer_getframe(tgpil->gpl, tgpi->cframe, GP_GETFRAME_ADD_NEW);
+      LISTBASE_FOREACH (tGPDinterpolate_layer *, tgpil, &tgpi->ilayers) {
+        gpf_dst = BKE_gpencil_layer_frame_get(tgpil->gpl, tgpi->cframe, GP_GETFRAME_ADD_NEW);
         gpf_dst->key_type = BEZT_KEYTYPE_BREAKDOWN;
 
         /* copy strokes */
         BLI_listbase_clear(&gpf_dst->strokes);
-        for (gps_src = tgpil->interFrame->strokes.first; gps_src; gps_src = gps_src->next) {
+        LISTBASE_FOREACH (bGPDstroke *, gps_src, &tgpil->interFrame->strokes) {
           if (gps_src->totpoints == 0) {
             continue;
           }
 
           /* make copy of source stroke, then adjust pointer to points too */
-          gps_dst = MEM_dupallocN(gps_src);
-          gps_dst->points = MEM_dupallocN(gps_src->points);
-          if (gps_src->dvert != NULL) {
-            gps_dst->dvert = MEM_dupallocN(gps_src->dvert);
-            BKE_gpencil_stroke_weights_duplicate(gps_src, gps_dst);
-          }
-          gps_dst->triangles = MEM_dupallocN(gps_src->triangles);
-          gps_dst->flag |= GP_STROKE_RECALC_GEOMETRY;
+          gps_dst = BKE_gpencil_stroke_duplicate(gps_src, true, true);
+          gps_dst->flag &= ~GP_STROKE_TAG;
+
+          /* Calc geometry data. */
+          BKE_gpencil_stroke_geometry_update(tgpi->gpd, gps_dst);
+
           BLI_addtail(&gpf_dst->strokes, gps_dst);
         }
       }
@@ -623,10 +636,10 @@ static int gpencil_interpolate_modal(bContext *C, wmOperator *op, const wmEvent 
       return OPERATOR_FINISHED;
     }
 
-    case ESCKEY: /* cancel */
+    case EVT_ESCKEY: /* cancel */
     case RIGHTMOUSE: {
       /* return to normal cursor and header status */
-      ED_area_status_text(tgpi->sa, NULL);
+      ED_area_status_text(tgpi->area, NULL);
       ED_workspace_status_text(C, NULL);
       WM_cursor_modal_restore(win);
 
@@ -688,10 +701,8 @@ static int gpencil_interpolate_modal(bContext *C, wmOperator *op, const wmEvent 
 
         break;
       }
-      else {
-        /* unhandled event - allow to pass through */
-        return OPERATOR_RUNNING_MODAL | OPERATOR_PASS_THROUGH;
-      }
+      /* unhandled event - allow to pass through */
+      return OPERATOR_RUNNING_MODAL | OPERATOR_PASS_THROUGH;
     }
   }
 
@@ -723,7 +734,7 @@ void GPENCIL_OT_interpolate(wmOperatorType *ot)
   ot->flag = OPTYPE_UNDO | OPTYPE_BLOCKING;
 
   /* properties */
-  RNA_def_float_percentage(
+  RNA_def_float_factor(
       ot->srna,
       "shift",
       0.0f,
@@ -738,7 +749,7 @@ void GPENCIL_OT_interpolate(wmOperatorType *ot)
 /* ****************** Interpolate Sequence *********************** */
 
 /* Helper: Perform easing equation calculations for GP interpolation operator */
-static float gp_interpolate_seq_easing_calc(GP_Interpolate_Settings *ipo_settings, float time)
+static float gpencil_interpolate_seq_easing_calc(GP_Interpolate_Settings *ipo_settings, float time)
 {
   const float begin = 0.0f;
   const float change = 1.0f;
@@ -949,11 +960,12 @@ static int gpencil_interpolate_seq_exec(bContext *C, wmOperator *op)
 
   Object *ob = CTX_data_active_object(C);
   ToolSettings *ts = CTX_data_tool_settings(C);
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
-  int cfra_eval = (int)DEG_get_ctime(depsgraph);
+  Scene *scene = CTX_data_scene(C);
+  int cfra = CFRA;
 
   GP_Interpolate_Settings *ipo_settings = &ts->gp_interpolate;
   eGP_Interpolate_SettingsFlag flag = ipo_settings->flag;
+  const int step = ipo_settings->step;
 
   /* cannot interpolate if not between 2 frames */
   if (ELEM(NULL, actframe, actframe->next)) {
@@ -964,34 +976,43 @@ static int gpencil_interpolate_seq_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
   /* cannot interpolate in extremes */
-  if (ELEM(cfra_eval, actframe->framenum, actframe->next->framenum)) {
+  if (ELEM(cfra, actframe->framenum, actframe->next->framenum)) {
     BKE_report(op->reports,
                RPT_ERROR,
                "Cannot interpolate as current frame already has existing grease pencil frames");
     return OPERATOR_CANCELLED;
   }
 
+  if (GPENCIL_CURVE_EDIT_SESSIONS_ON(gpd)) {
+    BKE_report(op->reports, RPT_ERROR, "Cannot interpolate in curve edit mode");
+    return OPERATOR_CANCELLED;
+  }
+
   /* loop all layer to check if need interpolation */
-  for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
+  LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
     bGPDframe *prevFrame, *nextFrame;
     bGPDstroke *gps_from, *gps_to;
     int cframe, fFrame;
 
+    /* Need a set of frames to interpolate. */
+    if ((gpl->actframe == NULL) || (gpl->actframe->next == NULL)) {
+      continue;
+    }
     /* all layers or only active */
     if (((flag & GP_TOOLFLAG_INTERPOLATE_ALL_LAYERS) == 0) && (gpl != active_gpl)) {
       continue;
     }
     /* only editable and visible layers are considered */
-    if (!gpencil_layer_is_editable(gpl) || (gpl->actframe == NULL)) {
+    if (!BKE_gpencil_layer_is_editable(gpl)) {
       continue;
     }
 
     /* store extremes */
-    prevFrame = gpl->actframe;
-    nextFrame = gpl->actframe->next;
+    prevFrame = BKE_gpencil_frame_duplicate(gpl->actframe, true);
+    nextFrame = BKE_gpencil_frame_duplicate(gpl->actframe->next, true);
 
     /* Loop over intermediary frames and create the interpolation */
-    for (cframe = prevFrame->framenum + 1; cframe < nextFrame->framenum; cframe++) {
+    for (cframe = prevFrame->framenum + step; cframe < nextFrame->framenum; cframe += step) {
       bGPDframe *interFrame = NULL;
       float factor;
 
@@ -1003,7 +1024,7 @@ static int gpencil_interpolate_seq_exec(bContext *C, wmOperator *op)
       if (ipo_settings->type == GP_IPO_CURVEMAP) {
         /* custom curvemap */
         if (ipo_settings->custom_ipo) {
-          factor = curvemapping_evaluateF(ipo_settings->custom_ipo, 0, factor);
+          factor = BKE_curvemapping_evaluateF(ipo_settings->custom_ipo, 0, factor);
         }
         else {
           BKE_report(op->reports, RPT_ERROR, "Custom interpolation curve does not exist");
@@ -1011,15 +1032,14 @@ static int gpencil_interpolate_seq_exec(bContext *C, wmOperator *op)
       }
       else if (ipo_settings->type >= GP_IPO_BACK) {
         /* easing equation... */
-        factor = gp_interpolate_seq_easing_calc(ipo_settings, factor);
+        factor = gpencil_interpolate_seq_easing_calc(ipo_settings, factor);
       }
 
       /* create new strokes data with interpolated points reading original stroke */
       for (gps_from = prevFrame->strokes.first; gps_from; gps_from = gps_from->next) {
-        bGPDstroke *new_stroke = NULL;
 
         /* only selected */
-        if ((flag & GP_TOOLFLAG_INTERPOLATE_ONLY_SELECTED) &&
+        if ((GPENCIL_EDIT_MODE(gpd)) && (flag & GP_TOOLFLAG_INTERPOLATE_ONLY_SELECTED) &&
             ((gps_from->flag & GP_STROKE_SELECT) == 0)) {
           continue;
         }
@@ -1028,7 +1048,7 @@ static int gpencil_interpolate_seq_exec(bContext *C, wmOperator *op)
           continue;
         }
         /* check if the color is editable */
-        if (ED_gpencil_stroke_color_use(ob, gpl, gps_from) == false) {
+        if (ED_gpencil_stroke_material_editable(ob, gpl, gps_from) == false) {
           continue;
         }
 
@@ -1041,40 +1061,36 @@ static int gpencil_interpolate_seq_exec(bContext *C, wmOperator *op)
 
         /* create a new frame if needed */
         if (interFrame == NULL) {
-          interFrame = BKE_gpencil_layer_getframe(gpl, cframe, GP_GETFRAME_ADD_NEW);
+          interFrame = BKE_gpencil_layer_frame_get(gpl, cframe, GP_GETFRAME_ADD_NEW);
           interFrame->key_type = BEZT_KEYTYPE_BREAKDOWN;
         }
 
-        /* create new stroke */
-        new_stroke = BKE_gpencil_stroke_duplicate(gps_from);
-
         /* if destination stroke is smaller, resize new_stroke to size of gps_to stroke */
         if (gps_from->totpoints > gps_to->totpoints) {
-          /* free weights of removed points */
-          if (gps_from->dvert != NULL) {
-            BKE_defvert_array_free_elems(gps_from->dvert + gps_to->totpoints,
-                                         gps_from->totpoints - gps_to->totpoints);
-          }
-
-          new_stroke->points = MEM_recallocN(new_stroke->points,
-                                             sizeof(*new_stroke->points) * gps_to->totpoints);
-
-          if (new_stroke->dvert != NULL) {
-            new_stroke->dvert = MEM_recallocN(new_stroke->dvert,
-                                              sizeof(*new_stroke->dvert) * gps_to->totpoints);
-          }
-          new_stroke->totpoints = gps_to->totpoints;
-          new_stroke->tot_triangles = 0;
-          new_stroke->flag |= GP_STROKE_RECALC_GEOMETRY;
+          BKE_gpencil_stroke_uniform_subdivide(gpd, gps_to, gps_from->totpoints, true);
+        }
+        if (gps_to->totpoints > gps_from->totpoints) {
+          BKE_gpencil_stroke_uniform_subdivide(gpd, gps_from, gps_to->totpoints, true);
         }
 
+        /* create new stroke */
+        bGPDstroke *new_stroke = BKE_gpencil_stroke_duplicate(gps_from, true, true);
+
         /* update points position */
-        gp_interpolate_update_points(gps_from, gps_to, new_stroke, factor);
+        gpencil_interpolate_update_points(gps_from, gps_to, new_stroke, factor);
+
+        /* Calc geometry data. */
+        BKE_gpencil_stroke_geometry_update(gpd, new_stroke);
 
         /* add to strokes */
         BLI_addtail(&interFrame->strokes, new_stroke);
       }
     }
+
+    BKE_gpencil_free_strokes(prevFrame);
+    BKE_gpencil_free_strokes(nextFrame);
+    MEM_SAFE_FREE(prevFrame);
+    MEM_SAFE_FREE(nextFrame);
   }
 
   /* notifiers */

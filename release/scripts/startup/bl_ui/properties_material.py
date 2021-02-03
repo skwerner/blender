@@ -32,6 +32,7 @@ class MATERIAL_MT_context_menu(Menu):
         layout.operator("material.copy", icon='COPYDOWN')
         layout.operator("object.material_slot_copy")
         layout.operator("material.paste", icon='PASTEDOWN')
+        layout.operator("object.material_slot_remove_unused")
 
 
 class MATERIAL_UL_matslots(UIList):
@@ -41,6 +42,9 @@ class MATERIAL_UL_matslots(UIList):
         # ob = data
         slot = item
         ma = slot.material
+
+        layout.context_pointer_set("id", ma)
+
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
             if ma:
                 layout.prop(ma, "name", text="", emboss=False, icon_value=icon)
@@ -73,7 +77,7 @@ class MATERIAL_PT_preview(MaterialButtonsPanel, Panel):
 
 
 class MATERIAL_PT_custom_props(MaterialButtonsPanel, PropertyPanel, Panel):
-    COMPAT_ENGINES = {'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
     _context_path = "material"
     _property_type = bpy.types.Material
 
@@ -171,10 +175,11 @@ class EEVEE_MATERIAL_PT_surface(MaterialButtonsPanel, Panel):
         layout.prop(mat, "use_nodes", icon='NODETREE')
         layout.separator()
 
+        layout.use_property_split = True
+
         if mat.use_nodes:
             panel_node_draw(layout, mat.node_tree, 'OUTPUT_MATERIAL', "Surface")
         else:
-            layout.use_property_split = True
             layout.prop(mat, "diffuse_color", text="Base Color")
             layout.prop(mat, "metallic")
             layout.prop(mat, "specular_intensity", text="Specular")
@@ -196,9 +201,35 @@ class EEVEE_MATERIAL_PT_volume(MaterialButtonsPanel, Panel):
     def draw(self, context):
         layout = self.layout
 
+        layout.use_property_split = True
+
         mat = context.material
 
         panel_node_draw(layout, mat.node_tree, 'OUTPUT_MATERIAL', "Volume")
+
+
+def draw_material_settings(self, context):
+    layout = self.layout
+    layout.use_property_split = True
+    layout.use_property_decorate = False
+
+    mat = context.material
+
+    layout.prop(mat, "use_backface_culling")
+    layout.prop(mat, "blend_method")
+    layout.prop(mat, "shadow_method")
+
+    row = layout.row()
+    row.active = ((mat.blend_method == 'CLIP') or (mat.shadow_method == 'CLIP'))
+    row.prop(mat, "alpha_threshold")
+
+    if mat.blend_method not in {'OPAQUE', 'CLIP', 'HASHED'}:
+        layout.prop(mat, "show_transparent_back")
+
+    layout.prop(mat, "use_screen_refraction")
+    layout.prop(mat, "refraction_depth")
+    layout.prop(mat, "use_sss_translucency")
+    layout.prop(mat, "pass_index")
 
 
 class EEVEE_MATERIAL_PT_settings(MaterialButtonsPanel, Panel):
@@ -207,27 +238,17 @@ class EEVEE_MATERIAL_PT_settings(MaterialButtonsPanel, Panel):
     COMPAT_ENGINES = {'BLENDER_EEVEE'}
 
     def draw(self, context):
-        layout = self.layout
-        layout.use_property_split = True
-        layout.use_property_decorate = False
+        draw_material_settings(self, context)
 
-        mat = context.material
 
-        layout.prop(mat, "use_backface_culling")
-        layout.prop(mat, "blend_method")
-        layout.prop(mat, "shadow_method")
+class EEVEE_MATERIAL_PT_viewport_settings(MaterialButtonsPanel, Panel):
+    bl_label = "Settings"
+    bl_context = "material"
+    bl_parent_id = "MATERIAL_PT_viewport"
+    COMPAT_ENGINES = {'BLENDER_RENDER'}
 
-        row = layout.row()
-        row.active = ((mat.blend_method == 'CLIP') or (mat.shadow_method == 'CLIP'))
-        row.prop(mat, "alpha_threshold")
-
-        if mat.blend_method not in {'OPAQUE', 'CLIP', 'HASHED'}:
-            layout.prop(mat, "show_transparent_back")
-
-        layout.prop(mat, "use_screen_refraction")
-        layout.prop(mat, "refraction_depth")
-        layout.prop(mat, "use_sss_translucency")
-        layout.prop(mat, "pass_index")
+    def draw(self, context):
+        draw_material_settings(self, context)
 
 
 class MATERIAL_PT_viewport(MaterialButtonsPanel, Panel):
@@ -262,6 +283,7 @@ classes = (
     EEVEE_MATERIAL_PT_volume,
     EEVEE_MATERIAL_PT_settings,
     MATERIAL_PT_viewport,
+    EEVEE_MATERIAL_PT_viewport_settings,
     MATERIAL_PT_custom_props,
 )
 

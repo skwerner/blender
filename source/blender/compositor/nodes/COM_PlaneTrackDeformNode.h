@@ -16,12 +16,12 @@
  * Copyright 2013, Blender Foundation.
  */
 
+#pragma once
+
 #include "COM_Node.h"
 
-extern "C" {
 #include "DNA_movieclip_types.h"
 #include "DNA_node_types.h"
-}
 
 /**
  * \brief PlaneTrackDeformNode

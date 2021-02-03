@@ -17,22 +17,22 @@
  */
 
 #include "COM_WriteBufferOperation.h"
-#include "COM_defines.h"
-#include <stdio.h>
 #include "COM_OpenCLDevice.h"
+#include "COM_defines.h"
+#include <cstdio>
 
-WriteBufferOperation::WriteBufferOperation(DataType datatype) : NodeOperation()
+WriteBufferOperation::WriteBufferOperation(DataType datatype)
 {
   this->addInputSocket(datatype);
   this->m_memoryProxy = new MemoryProxy(datatype);
   this->m_memoryProxy->setWriteBufferOperation(this);
-  this->m_memoryProxy->setExecutor(NULL);
+  this->m_memoryProxy->setExecutor(nullptr);
 }
 WriteBufferOperation::~WriteBufferOperation()
 {
   if (this->m_memoryProxy) {
     delete this->m_memoryProxy;
-    this->m_memoryProxy = NULL;
+    this->m_memoryProxy = nullptr;
   }
 }
 
@@ -52,7 +52,7 @@ void WriteBufferOperation::initExecution()
 
 void WriteBufferOperation::deinitExecution()
 {
-  this->m_input = NULL;
+  this->m_input = nullptr;
   this->m_memoryProxy->free();
 }
 
@@ -76,13 +76,13 @@ void WriteBufferOperation::executeRegion(rcti *rect, unsigned int /*tileNumber*/
         this->m_input->read(&(buffer[offset4]), x, y, data);
         offset4 += num_channels;
       }
-      if (isBreaked()) {
+      if (isBraked()) {
         breaked = true;
       }
     }
     if (data) {
       this->m_input->deinitializeTileData(rect, data);
-      data = NULL;
+      data = nullptr;
     }
   }
   else {
@@ -100,7 +100,7 @@ void WriteBufferOperation::executeRegion(rcti *rect, unsigned int /*tileNumber*/
         this->m_input->readSampled(&(buffer[offset4]), x, y, COM_PS_NEAREST);
         offset4 += num_channels;
       }
-      if (isBreaked()) {
+      if (isBraked()) {
         breaked = true;
       }
     }
@@ -119,7 +119,7 @@ void WriteBufferOperation::executeOpenCLRegion(OpenCLDevice *device,
   /*
    * 1. create cl_mem from outputbuffer
    * 2. call NodeOperation (input) executeOpenCLChunk(.....)
-   * 3. schedule readback from opencl to main device (outputbuffer)
+   * 3. schedule read back from opencl to main device (outputbuffer)
    * 4. schedule native callback
    *
    * note: list of cl_mem will be filled by 2, and needs to be cleaned up by 4
@@ -128,7 +128,7 @@ void WriteBufferOperation::executeOpenCLRegion(OpenCLDevice *device,
   const unsigned int outputBufferWidth = outputBuffer->getWidth();
   const unsigned int outputBufferHeight = outputBuffer->getHeight();
 
-  const cl_image_format *imageFormat = device->determineImageFormat(outputBuffer);
+  const cl_image_format *imageFormat = OpenCLDevice::determineImageFormat(outputBuffer);
 
   cl_mem clOutputBuffer = clCreateImage2D(device->getContext(),
                                           CL_MEM_WRITE_ONLY | CL_MEM_USE_HOST_PTR,
@@ -175,8 +175,8 @@ void WriteBufferOperation::executeOpenCLRegion(OpenCLDevice *device,
                              0,
                              outputFloatBuffer,
                              0,
-                             NULL,
-                             NULL);
+                             nullptr,
+                             nullptr);
   if (error != CL_SUCCESS) {
     printf("CLERROR[%d]: %s\n", error, clewErrorString(error));
   }

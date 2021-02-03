@@ -24,7 +24,7 @@
 
 #ifdef WIN32
 
-/* standalone for inclusion in binaries other then blender */
+/* standalone for inclusion in binaries other than blender */
 #  ifdef USE_STANDALONE
 #    define MEM_mallocN(size, str) ((void)str, malloc(size))
 #    define MEM_callocN(size, str) ((void)str, calloc(size, 1))
@@ -34,8 +34,8 @@
 #  endif
 
 #  define WIN32_SKIP_HKEY_PROTECTION  // need to use HKEY
-#  include "BLI_winstuff.h"
 #  include "BLI_utildefines.h"
+#  include "BLI_winstuff.h"
 #  include "utfconv.h"
 
 #  define PATH_SUFFIX "\\*"

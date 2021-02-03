@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
@@ -18,12 +18,11 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_LIGHTPROBE_TYPES_H__
-#define __DNA_LIGHTPROBE_TYPES_H__
+#pragma once
 
+#include "DNA_ID.h"
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
-#include "DNA_ID.h"
 
 #include "BLI_assert.h"
 
@@ -142,7 +141,7 @@ typedef struct LightGridCache {
   float visibility_bias, visibility_bleed, visibility_range, _pad5;
 } LightGridCache;
 
-/* Theses are used as ubo data. They need to be aligned to size of vec4. */
+/* These are used as ubo data. They need to be aligned to size of vec4. */
 BLI_STATIC_ASSERT_ALIGN(LightProbeCache, 16)
 BLI_STATIC_ASSERT_ALIGN(LightGridCache, 16)
 
@@ -150,7 +149,7 @@ BLI_STATIC_ASSERT_ALIGN(LightGridCache, 16)
 
 typedef struct LightCacheTexture {
   struct GPUTexture *tex;
-  /* Copy of GPU datas to create GPUTextures on file read. */
+  /** Copy of GPU datas to create GPUTextures on file read. */
   char *data;
   int tex_size[3];
   char data_type;
@@ -160,6 +159,10 @@ typedef struct LightCacheTexture {
 
 typedef struct LightCache {
   int flag;
+  /** Version number to know if the cache data is compatible with this version of blender. */
+  int version;
+  /** Type of data this cache contains. */
+  int type;
   /* only a single cache for now */
   /** Number of probes to use for rendering. */
   int cube_len, grid_len;
@@ -181,6 +184,14 @@ typedef struct LightCache {
   LightGridCache *grid_data;
 } LightCache;
 
+/* Bump the version number for lightcache data structure changes. */
+#define LIGHTCACHE_STATIC_VERSION 1
+
+/* LightCache->type */
+enum {
+  LIGHTCACHE_TYPE_STATIC = 0,
+};
+
 /* LightCache->flag */
 enum {
   LIGHTCACHE_BAKED = (1 << 0),
@@ -192,6 +203,10 @@ enum {
   LIGHTCACHE_UPDATE_GRID = (1 << 5),
   LIGHTCACHE_UPDATE_WORLD = (1 << 6),
   LIGHTCACHE_UPDATE_AUTO = (1 << 7),
+  /** Invalid means we tried to alloc it but failed. */
+  LIGHTCACHE_INVALID = (1 << 8),
+  /** The data present in the cache is valid but unusable on this GPU. */
+  LIGHTCACHE_NOT_USABLE = (1 << 9),
 };
 
 /* EEVEE_LightCacheTexture->data_type */
@@ -204,5 +219,3 @@ enum {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __DNA_LIGHTPROBE_TYPES_H__ */

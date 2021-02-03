@@ -22,11 +22,12 @@
  */
 
 #include <assert.h>
-#include <stdio.h>
-#include <math.h>
-#include <string.h>
 #include <float.h>
+#include <limits.h>
+#include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "mikktspace.h"
 
@@ -134,6 +135,17 @@ MIKK_INLINE tbool VNotZero(const SVec3 v)
   return NotZero(v.x) || NotZero(v.y) || NotZero(v.z);
 }
 #endif
+
+// Shift operations in C are only defined for shift values which are
+// not negative and smaller than sizeof(value) * CHAR_BIT.
+// The mask, used with bitwise-and (&), prevents undefined behaviour
+// when the shift count is 0 or >= the width of unsigned int.
+MIKK_INLINE unsigned int rotl(unsigned int value, unsigned int count)
+{
+  const unsigned int mask = CHAR_BIT * sizeof(value) - 1;
+  count &= mask;
+  return (value << count) | (value >> (-count & mask));
+}
 
 typedef struct {
   int iNrFaces;
@@ -459,11 +471,6 @@ tbool genTangSpace(const SMikkTSpaceContext *pContext, const float fAngularThres
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-
-typedef struct {
-  float vert[3];
-  int index;
-} STmpVert;
 
 static void GenerateSharedVerticesIndexListSlow(int piTriList_in_and_out[],
                                                 const SMikkTSpaceContext *pContext,
@@ -1069,7 +1076,7 @@ static tbool AssignRecur(const int piTriListIn[],
     return TFALSE;
   if ((pMyTriInfo->iFlag & GROUP_WITH_ANY) != 0) {
     // first to group with a group-with-anything triangle
-    // determines it's orientation.
+    // determines its orientation.
     // This is the only existing order dependency in the code!!
     if (pMyTriInfo->AssignedGroup[0] == NULL && pMyTriInfo->AssignedGroup[1] == NULL &&
         pMyTriInfo->AssignedGroup[2] == NULL) {
@@ -1385,7 +1392,7 @@ static void QuickSort(int *pSortBuffer, int iLeft, int iRight, unsigned int uSee
 
   // Random
   unsigned int t = uSeed & 31;
-  t = (uSeed << t) | (uSeed >> (32 - t));
+  t = rotl(uSeed, t);
   uSeed = uSeed + t + 3;
   // Random end
 
@@ -1610,7 +1617,7 @@ static void QuickSortEdges(
 
   // Random
   t = uSeed & 31;
-  t = (uSeed << t) | (uSeed >> (32 - t));
+  t = rotl(uSeed, t);
   uSeed = uSeed + t + 3;
   // Random end
 

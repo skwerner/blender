@@ -24,9 +24,7 @@
 #include "BLI_math.h"
 #include "BLI_math_color.h"
 
-extern "C" {
 #include "BKE_node.h"
-}
 
 static bool check_corners(float corners[4][2])
 {
@@ -60,7 +58,7 @@ static bool check_corners(float corners[4][2])
 
 static void readCornersFromSockets(rcti *rect, SocketReader *readers[4], float corners[4][2])
 {
-  for (int i = 0; i < 4; ++i) {
+  for (int i = 0; i < 4; i++) {
     float result[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     readers[i]->readSampled(result, rect->xmin, rect->ymin, COM_PS_NEAREST);
     corners[i][0] = result[0];
@@ -89,8 +87,7 @@ static void readCornersFromSockets(rcti *rect, SocketReader *readers[4], float c
 
 /* ******** PlaneCornerPinMaskOperation ******** */
 
-PlaneCornerPinMaskOperation::PlaneCornerPinMaskOperation()
-    : PlaneDistortMaskOperation(), m_corners_ready(false)
+PlaneCornerPinMaskOperation::PlaneCornerPinMaskOperation() : m_corners_ready(false)
 {
   addInputSocket(COM_DT_VECTOR);
   addInputSocket(COM_DT_VECTOR);
@@ -154,8 +151,7 @@ void PlaneCornerPinMaskOperation::determineResolution(unsigned int resolution[2]
 
 /* ******** PlaneCornerPinWarpImageOperation ******** */
 
-PlaneCornerPinWarpImageOperation::PlaneCornerPinWarpImageOperation()
-    : PlaneDistortWarpImageOperation(), m_corners_ready(false)
+PlaneCornerPinWarpImageOperation::PlaneCornerPinWarpImageOperation() : m_corners_ready(false)
 {
   addInputSocket(COM_DT_VECTOR);
   addInputSocket(COM_DT_VECTOR);
@@ -208,7 +204,7 @@ void *PlaneCornerPinWarpImageOperation::initializeTileData(rcti *rect)
 bool PlaneCornerPinWarpImageOperation::determineDependingAreaOfInterest(
     rcti *input, ReadBufferOperation *readOperation, rcti *output)
 {
-  for (int i = 0; i < 4; ++i) {
+  for (int i = 0; i < 4; i++) {
     if (getInputOperation(i + 1)->determineDependingAreaOfInterest(input, readOperation, output)) {
       return true;
     }

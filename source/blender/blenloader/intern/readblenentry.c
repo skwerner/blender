@@ -24,28 +24,29 @@
 
 #include <stddef.h>
 
+#include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
-#include <math.h>
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_ghash.h"
 #include "BLI_linklist.h"
 #include "BLI_listbase.h"
 #include "BLI_string.h"
+#include "BLI_utildefines.h"
 
 #include "DNA_genfile.h"
 #include "DNA_sdna_types.h"
 
+#include "BKE_icons.h"
+#include "BKE_idtype.h"
 #include "BKE_main.h"
-#include "BKE_idcode.h"
 
+#include "BLO_blend_defs.h"
 #include "BLO_readfile.h"
 #include "BLO_undofile.h"
-#include "BLO_blend_defs.h"
 
 #include "readfile.h"
 
@@ -56,7 +57,7 @@
 #endif
 
 /* local prototypes --------------------- */
-void BLO_blendhandle_print_sizes(BlendHandle *, void *);
+void BLO_blendhandle_print_sizes(BlendHandle *bh, void *fp);
 
 /* Access routines used by filesel. */
 
@@ -102,28 +103,27 @@ void BLO_blendhandle_print_sizes(BlendHandle *bh, void *fp)
     if (bhead->code == ENDB) {
       break;
     }
-    else {
-      const short *sp = fd->filesdna->structs[bhead->SDNAnr];
-      const char *name = fd->filesdna->types[sp[0]];
-      char buf[4];
 
-      buf[0] = (bhead->code >> 24) & 0xFF;
-      buf[1] = (bhead->code >> 16) & 0xFF;
-      buf[2] = (bhead->code >> 8) & 0xFF;
-      buf[3] = (bhead->code >> 0) & 0xFF;
+    const SDNA_Struct *struct_info = fd->filesdna->structs[bhead->SDNAnr];
+    const char *name = fd->filesdna->types[struct_info->type];
+    char buf[4];
 
-      buf[0] = buf[0] ? buf[0] : ' ';
-      buf[1] = buf[1] ? buf[1] : ' ';
-      buf[2] = buf[2] ? buf[2] : ' ';
-      buf[3] = buf[3] ? buf[3] : ' ';
+    buf[0] = (bhead->code >> 24) & 0xFF;
+    buf[1] = (bhead->code >> 16) & 0xFF;
+    buf[2] = (bhead->code >> 8) & 0xFF;
+    buf[3] = (bhead->code >> 0) & 0xFF;
 
-      fprintf(fp,
-              "['%.4s', '%s', %d, %ld ],\n",
-              buf,
-              name,
-              bhead->nr,
-              (long int)(bhead->len + sizeof(BHead)));
-    }
+    buf[0] = buf[0] ? buf[0] : ' ';
+    buf[1] = buf[1] ? buf[1] : ' ';
+    buf[2] = buf[2] ? buf[2] : ' ';
+    buf[3] = buf[3] ? buf[3] : ' ';
+
+    fprintf(fp,
+            "['%.4s', '%s', %d, %ld ],\n",
+            buf,
+            name,
+            bhead->nr,
+            (long int)(bhead->len + sizeof(BHead)));
   }
   fprintf(fp, "]\n");
 }
@@ -135,7 +135,7 @@ void BLO_blendhandle_print_sizes(BlendHandle *bh, void *fp)
  * \param bh: The blendhandle to access.
  * \param ofblocktype: The type of names to get.
  * \param tot_names: The length of the returned list.
- * \return A BLI_linklist of strings. The string links should be freed with malloc.
+ * \return A BLI_linklist of strings. The string links should be freed with #MEM_freeN().
  */
 LinkNode *BLO_blendhandle_get_datablock_names(BlendHandle *bh, int ofblocktype, int *tot_names)
 {
@@ -148,7 +148,7 @@ LinkNode *BLO_blendhandle_get_datablock_names(BlendHandle *bh, int ofblocktype, 
     if (bhead->code == ofblocktype) {
       const char *idname = blo_bhead_id_name(fd, bhead);
 
-      BLI_linklist_prepend(&names, strdup(idname + 2));
+      BLI_linklist_prepend(&names, BLI_strdup(idname + 2));
       tot++;
     }
     else if (bhead->code == ENDB) {
@@ -158,6 +158,51 @@ LinkNode *BLO_blendhandle_get_datablock_names(BlendHandle *bh, int ofblocktype, 
 
   *tot_names = tot;
   return names;
+}
+
+/**
+ * Gets the names and asset-data (if ID is an asset) of all the data-blocks in a file of a certain
+ * type (e.g. all the scene names in a file).
+ *
+ * \param bh: The blendhandle to access.
+ * \param ofblocktype: The type of names to get.
+ * \param tot_info_items: The length of the returned list.
+ * \return A BLI_linklist of BLODataBlockInfo *. The links and #BLODataBlockInfo.asset_data should
+ *         be freed with MEM_freeN.
+ */
+LinkNode *BLO_blendhandle_get_datablock_info(BlendHandle *bh, int ofblocktype, int *tot_info_items)
+{
+  FileData *fd = (FileData *)bh;
+  LinkNode *infos = NULL;
+  BHead *bhead;
+  int tot = 0;
+
+  for (bhead = blo_bhead_first(fd); bhead; bhead = blo_bhead_next(fd, bhead)) {
+    if (bhead->code == ofblocktype) {
+      struct BLODataBlockInfo *info = MEM_mallocN(sizeof(*info), __func__);
+      const char *name = blo_bhead_id_name(fd, bhead) + 2;
+
+      STRNCPY(info->name, name);
+
+      /* Lastly, read asset data from the following blocks. */
+      info->asset_data = blo_bhead_id_asset_data_address(fd, bhead);
+      if (info->asset_data) {
+        bhead = blo_read_asset_data_block(fd, bhead, &info->asset_data);
+        /* blo_read_asset_data_block() reads all DATA heads and already advances bhead to the next
+         * non-DATA one. Go back, so the loop doesn't skip the non-DATA head. */
+        bhead = blo_bhead_prev(fd, bhead);
+      }
+
+      BLI_linklist_prepend(&infos, info);
+      tot++;
+    }
+    else if (bhead->code == ENDB) {
+      break;
+    }
+  }
+
+  *tot_info_items = tot;
+  return infos;
 }
 
 /**
@@ -204,6 +249,7 @@ LinkNode *BLO_blendhandle_get_previews(BlendHandle *bh, int ofblocktype, int *to
       if (looking) {
         if (bhead->SDNAnr == DNA_struct_find_nr(fd->filesdna, "PreviewImage")) {
           prv = BLO_library_read_struct(fd, bhead, "PreviewImage");
+
           if (prv) {
             memcpy(new_prv, prv, sizeof(PreviewImage));
             if (prv->rect[0] && prv->w[0] && prv->h[0]) {
@@ -218,6 +264,7 @@ LinkNode *BLO_blendhandle_get_previews(BlendHandle *bh, int ofblocktype, int *to
               new_prv->rect[0] = NULL;
               new_prv->w[0] = new_prv->h[0] = 0;
             }
+            BKE_previewimg_finish(new_prv, 0);
 
             if (prv->rect[1] && prv->w[1] && prv->h[1]) {
               bhead = blo_bhead_next(fd, bhead);
@@ -231,6 +278,7 @@ LinkNode *BLO_blendhandle_get_previews(BlendHandle *bh, int ofblocktype, int *to
               new_prv->rect[1] = NULL;
               new_prv->w[1] = new_prv->h[1] = 0;
             }
+            BKE_previewimg_finish(new_prv, 1);
             MEM_freeN(prv);
           }
         }
@@ -255,7 +303,7 @@ LinkNode *BLO_blendhandle_get_previews(BlendHandle *bh, int ofblocktype, int *to
  * (e.g. "Scene", "Mesh", "Light", etc.).
  *
  * \param bh: The blendhandle to access.
- * \return A BLI_linklist of strings. The string links should be freed with malloc.
+ * \return A BLI_linklist of strings. The string links should be freed with #MEM_freeN().
  */
 LinkNode *BLO_blendhandle_get_linkable_groups(BlendHandle *bh)
 {
@@ -268,12 +316,12 @@ LinkNode *BLO_blendhandle_get_linkable_groups(BlendHandle *bh)
     if (bhead->code == ENDB) {
       break;
     }
-    else if (BKE_idcode_is_valid(bhead->code)) {
-      if (BKE_idcode_is_linkable(bhead->code)) {
-        const char *str = BKE_idcode_to_name(bhead->code);
+    if (BKE_idtype_idcode_is_valid(bhead->code)) {
+      if (BKE_idtype_idcode_is_linkable(bhead->code)) {
+        const char *str = BKE_idtype_idcode_to_name(bhead->code);
 
         if (BLI_gset_add(gathered, (void *)str)) {
-          BLI_linklist_prepend(&names, strdup(str));
+          BLI_linklist_prepend(&names, BLI_strdup(str));
         }
       }
     }
@@ -363,17 +411,17 @@ BlendFileData *BLO_read_from_memory(const void *mem,
 BlendFileData *BLO_read_from_memfile(Main *oldmain,
                                      const char *filename,
                                      MemFile *memfile,
-                                     eBLOReadSkip skip_flags,
+                                     const struct BlendFileReadParams *params,
                                      ReportList *reports)
 {
   BlendFileData *bfd = NULL;
   FileData *fd;
   ListBase old_mainlist;
 
-  fd = blo_filedata_from_memfile(memfile, reports);
+  fd = blo_filedata_from_memfile(memfile, params, reports);
   if (fd) {
     fd->reports = reports;
-    fd->skip_flags = skip_flags;
+    fd->skip_flags = params->skip_flags;
     BLI_strncpy(fd->relabase, filename, sizeof(fd->relabase));
 
     /* clear ob->proxy_from pointers in old main */
@@ -384,72 +432,26 @@ BlendFileData *BLO_read_from_memfile(Main *oldmain,
     /* add the library pointers in oldmap lookup */
     blo_add_library_pointer_map(&old_mainlist, fd);
 
-    /* makes lookup of existing images in old main */
-    blo_make_image_pointer_map(fd, oldmain);
-
-    /* makes lookup of existing light caches in old main */
-    blo_make_scene_pointer_map(fd, oldmain);
-
-    /* makes lookup of existing video clips in old main */
-    blo_make_movieclip_pointer_map(fd, oldmain);
-
-    /* make lookups of existing sound data in old main */
-    blo_make_sound_pointer_map(fd, oldmain);
+    if ((params->skip_flags & BLO_READ_SKIP_UNDO_OLD_MAIN) == 0) {
+      /* Build idmap of old main (we only care about local data here, so we can do that after
+       * split_main() call. */
+      blo_make_old_idmap_from_main(fd, old_mainlist.first);
+    }
 
     /* removed packed data from this trick - it's internal data that needs saves */
 
+    /* Store all existing ID caches pointers into a mapping, to allow restoring them into newly
+     * read IDs whenever possible. */
+    blo_cache_storage_init(fd, oldmain);
+
     bfd = blo_read_file_internal(fd, filename);
 
-    /* ensures relinked light caches are not freed */
-    blo_end_scene_pointer_map(fd, oldmain);
-
-    /* ensures relinked images are not freed */
-    blo_end_image_pointer_map(fd, oldmain);
-
-    /* ensures relinked movie clips are not freed */
-    blo_end_movieclip_pointer_map(fd, oldmain);
-
-    /* ensures relinked sounds are not freed */
-    blo_end_sound_pointer_map(fd, oldmain);
+    /* Ensure relinked caches are not freed together with their old IDs. */
+    blo_cache_storage_old_bmain_clear(fd, oldmain);
 
     /* Still in-use libraries have already been moved from oldmain to new mainlist,
      * but oldmain itself shall *never* be 'transferred' to new mainlist! */
     BLI_assert(old_mainlist.first == oldmain);
-
-    if (bfd && old_mainlist.first != old_mainlist.last) {
-      /* Even though directly used libs have been already moved to new main,
-       * indirect ones have not.
-       * This is a bit annoying, but we have no choice but to keep them all for now -
-       * means some now unused data may remain in memory, but think we'll have to live with it. */
-      Main *libmain, *libmain_next;
-      Main *newmain = bfd->main;
-      ListBase new_mainlist = {newmain, newmain};
-
-      for (libmain = oldmain->next; libmain; libmain = libmain_next) {
-        libmain_next = libmain->next;
-        /* Note that LIB_INDIRECT does not work with libraries themselves, so we use non-NULL
-         * parent to detect indirect-linked ones. */
-        if (libmain->curlib && (libmain->curlib->parent != NULL)) {
-          BLI_remlink(&old_mainlist, libmain);
-          BLI_addtail(&new_mainlist, libmain);
-        }
-        else {
-#ifdef PRINT_DEBUG
-          printf("Dropped Main for lib: %s\n", libmain->curlib->id.name);
-#endif
-        }
-      }
-      /* In any case, we need to move all lib data-blocks themselves - those are
-       * 'first level data', getting rid of them would imply updating spaces & co
-       * to prevent invalid pointers access. */
-      BLI_movelisttolist(&newmain->libraries, &oldmain->libraries);
-
-      blo_join_main(&new_mainlist);
-    }
-
-#if 0
-    printf("Remaining mains/libs in oldmain: %d\n", BLI_listbase_count(&fd->old_mainlist) - 1);
-#endif
 
     /* That way, libs (aka mains) we did not reuse in new undone/redone state
      * will be cleared together with oldmain... */

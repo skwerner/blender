@@ -23,10 +23,10 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_math.h"
-#include "BLI_linklist.h"
-#include "BLI_utildefines_stack.h"
 #include "BLI_alloca.h"
+#include "BLI_linklist.h"
+#include "BLI_math.h"
+#include "BLI_utildefines_stack.h"
 
 #include "bmesh.h"
 #include "bmesh_path_region.h" /* own include */
@@ -74,6 +74,7 @@ static bool bm_vert_pair_ends(BMVert *v_pivot, BMVert *v_end_pair[2])
 }
 #endif /* USE_EDGE_CHAIN */
 
+/* -------------------------------------------------------------------- */
 /** \name Vertex in Region Checks
  * \{ */
 
@@ -91,9 +92,9 @@ static bool bm_vert_region_test_chain(BMVert *v, int *const depths[2], const int
   if (bm_vert_region_test(v, depths, pass)) {
     return true;
   }
-  else if (BM_vert_is_edge_pair_manifold(v) && bm_vert_pair_ends(v, v_end_pair) &&
-           bm_vert_region_test(v_end_pair[0], depths, pass) &&
-           bm_vert_region_test(v_end_pair[1], depths, pass)) {
+  if (BM_vert_is_edge_pair_manifold(v) && bm_vert_pair_ends(v, v_end_pair) &&
+      bm_vert_region_test(v_end_pair[0], depths, pass) &&
+      bm_vert_region_test(v_end_pair[1], depths, pass)) {
     return true;
   }
 
@@ -224,7 +225,7 @@ static LinkNode *mesh_calc_path_region_elem(BMesh *bm,
 #endif /* USE_EDGE_CHAIN */
 
     /* Keep walking over connected geometry until we find all the vertices in
-     * `ele_verts[side_other]`, or exit the loop when theres no connection. */
+     * `ele_verts[side_other]`, or exit the loop when there's no connection. */
     found_all = false;
     for (pass = 1; (STACK_SIZE(stack) != 0); pass++) {
       while (STACK_SIZE(stack) != 0) {
@@ -268,7 +269,7 @@ static LinkNode *mesh_calc_path_region_elem(BMesh *bm,
         } while ((e = BM_DISK_EDGE_NEXT(e, v_a)) != v_a->e);
       }
 
-      /* Stop searching once theres none left.
+      /* Stop searching once there's none left.
        * Note that this looks in-efficient, however until the target elements reached,
        * it will exit immediately.
        * After that, it takes as many passes as the element has edges to finish off. */
@@ -386,6 +387,7 @@ static LinkNode *mesh_calc_path_region_elem(BMesh *bm,
 
 #undef USE_EDGE_CHAIN
 
+/* -------------------------------------------------------------------- */
 /** \name Main Functions (exposed externally).
  * \{ */
 

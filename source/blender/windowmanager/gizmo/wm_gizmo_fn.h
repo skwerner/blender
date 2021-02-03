@@ -20,10 +20,15 @@
  * Callback function definitions, needed for both Types & API headers.
  */
 
-#ifndef __WM_GIZMO_FN_H__
-#define __WM_GIZMO_FN_H__
+#pragma once
 
 #include "BLI_compiler_attrs.h"
+
+struct wmMsgBus;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* wmGizmoGroup */
 typedef bool (*wmGizmoGroupFnPoll)(const struct bContext *,
@@ -57,6 +62,9 @@ typedef void (*wmGizmoFnMatrixBasisGet)(const struct wmGizmo *, float[4][4]);
 typedef int (*wmGizmoFnInvoke)(struct bContext *, struct wmGizmo *, const struct wmEvent *);
 typedef void (*wmGizmoFnExit)(struct bContext *, struct wmGizmo *, const bool);
 typedef int (*wmGizmoFnCursorGet)(struct wmGizmo *);
+typedef void (*wmGizmoFnScreenBoundsGet)(struct bContext *,
+                                         struct wmGizmo *,
+                                         rcti *r_bounding_box);
 typedef void (*wmGizmoFnSelectRefresh)(struct wmGizmo *);
 typedef void (*wmGizmoFnFree)(struct wmGizmo *);
 
@@ -83,4 +91,6 @@ typedef struct wmGizmoPropertyFnParams {
   void *user_data;
 } wmGizmoPropertyFnParams;
 
-#endif /* __WM_GIZMO_FN_H__ */
+#ifdef __cplusplus
+}
+#endif

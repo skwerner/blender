@@ -45,7 +45,7 @@
 
 #  endif
 
-#  if defined(__x86_64__) || defined(__i386__) || defined(_M_X64) || defined(_M_IX86)
+#  if defined(__x86_64__) || defined(_M_X64)
 #    define SIMD_SET_FLUSH_TO_ZERO \
       _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON); \
       _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
@@ -75,6 +75,28 @@ static struct FalseTy {
   }
 } False ccl_maybe_unused;
 
+static struct ZeroTy {
+  __forceinline operator float() const
+  {
+    return 0;
+  }
+  __forceinline operator int() const
+  {
+    return 0;
+  }
+} zero ccl_maybe_unused;
+
+static struct OneTy {
+  __forceinline operator float() const
+  {
+    return 1;
+  }
+  __forceinline operator int() const
+  {
+    return 1;
+  }
+} one ccl_maybe_unused;
+
 static struct NegInfTy {
   __forceinline operator float() const
   {
@@ -96,6 +118,9 @@ static struct PosInfTy {
     return std::numeric_limits<int>::max();
   }
 } inf ccl_maybe_unused, pos_inf ccl_maybe_unused;
+
+static struct StepTy {
+} step ccl_maybe_unused;
 
 /* Intrinsics Functions */
 
@@ -562,6 +587,13 @@ __forceinline __m128 _mm_round_ps_emu(__m128 value, const int flags)
 }
 
 #    endif /* !(defined(__KERNEL_SSE41__) || defined(__SSE4_1__) || defined(__SSE4_2__)) */
+
+/* Older GCC versions do not have _mm256_cvtss_f32 yet, so define it ourselves.
+ * _mm256_castps256_ps128 generates no instructions so this is just as efficient. */
+#    if defined(__KERNEL_AVX__) || defined(__KERNEL_AVX2__)
+#      undef _mm256_cvtss_f32
+#      define _mm256_cvtss_f32(a) (_mm_cvtss_f32(_mm256_castps256_ps128(a)))
+#    endif
 
 #  else /* __KERNEL_SSE2__ */
 

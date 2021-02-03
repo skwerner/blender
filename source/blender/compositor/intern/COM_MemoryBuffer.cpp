@@ -83,7 +83,7 @@ MemoryBuffer::MemoryBuffer(DataType dataType, rcti *rect)
   this->m_width = BLI_rcti_size_x(&this->m_rect);
   this->m_height = BLI_rcti_size_y(&this->m_rect);
   this->m_height = this->m_rect.ymax - this->m_rect.ymin;
-  this->m_memoryProxy = NULL;
+  this->m_memoryProxy = nullptr;
   this->m_chunkNumber = -1;
   this->m_num_channels = determine_num_channels(dataType);
   this->m_buffer = (float *)MEM_mallocN_aligned(
@@ -136,17 +136,16 @@ float MemoryBuffer::getMaximumValue(rcti *rect)
     delete temp;
     return result;
   }
-  else {
-    BLI_assert(0);
-    return 0.0f;
-  }
+
+  BLI_assert(0);
+  return 0.0f;
 }
 
 MemoryBuffer::~MemoryBuffer()
 {
   if (this->m_buffer) {
     MEM_freeN(this->m_buffer);
-    this->m_buffer = NULL;
+    this->m_buffer = nullptr;
   }
 }
 

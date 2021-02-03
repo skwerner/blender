@@ -46,8 +46,9 @@ def physics_add(layout, md, name, type, typeicon, toggles):
             icon='X',
         )
         if toggles:
-            row.prop(md, "show_render", text="")
             row.prop(md, "show_viewport", text="")
+            row.prop(md, "show_render", text="")
+        return row
     else:
         row.operator(
             "object.modifier_add",
@@ -89,7 +90,10 @@ class PHYSICS_PT_add(PhysicButtonsPanel, Panel):
             col.operator("object.forcefield_toggle", text="Force Field", icon='X')
 
         if obj.type == 'MESH':
-            physics_add(col, context.collision, "Collision", 'COLLISION', 'MOD_PHYSICS', False)
+            row = physics_add(col, context.collision, "Collision", 'COLLISION', 'MOD_PHYSICS', False)
+            if row and obj.collision:
+                row.prop(obj.collision, "use", text="", icon='HIDE_OFF' if obj.collision.use else 'HIDE_ON')
+
             physics_add(col, context.cloth, "Cloth", 'CLOTH', 'MOD_CLOTH', True)
             physics_add(col, context.dynamic_paint, "Dynamic Paint", 'DYNAMIC_PAINT', 'MOD_DYNAMICPAINT', True)
 
@@ -99,8 +103,7 @@ class PHYSICS_PT_add(PhysicButtonsPanel, Panel):
             physics_add(col, context.soft_body, "Soft Body", 'SOFT_BODY', 'MOD_SOFT', True)
 
         if obj.type == 'MESH':
-            physics_add(col, context.fluid, "Fluid", 'FLUID_SIMULATION', 'MOD_FLUIDSIM', True)
-            physics_add(col, context.smoke, "Smoke", 'SMOKE', 'MOD_SMOKE', True)
+            physics_add(col, context.fluid, "Fluid", 'FLUID', 'MOD_FLUIDSIM', True)
 
             physics_add_special(
                 col, obj.rigid_body, "Rigid Body",
@@ -118,7 +121,7 @@ class PHYSICS_PT_add(PhysicButtonsPanel, Panel):
         )
 
 
-# cache-type can be 'PSYS' 'HAIR' 'SMOKE' etc.
+# cache-type can be 'PSYS' 'HAIR' 'FLUID' etc.
 
 def point_cache_ui(self, cache, enabled, cachetype):
     layout = self.layout
@@ -127,8 +130,9 @@ def point_cache_ui(self, cache, enabled, cachetype):
     layout.context_pointer_set("point_cache", cache)
 
     is_saved = bpy.data.is_saved
+    is_liboverride = cache.id_data.override_library is not None
 
-    # NOTE: TODO temporarly used until the animate properties are properly skipped.
+    # NOTE: TODO temporarily used until the animate properties are properly skipped.
     layout.use_property_decorate = False  # No animation (remove this later on).
 
     if not cachetype == 'RIGID_BODY':
@@ -141,10 +145,10 @@ def point_cache_ui(self, cache, enabled, cachetype):
         col.operator("ptcache.add", icon='ADD', text="")
         col.operator("ptcache.remove", icon='REMOVE', text="")
 
-    if cachetype in {'PSYS', 'HAIR', 'SMOKE'}:
+    if cachetype in {'PSYS', 'HAIR', 'FLUID'}:
         col = layout.column()
 
-        if cachetype == 'SMOKE':
+        if cachetype == 'FLUID':
             col.prop(cache, "use_library_path", text="Use Library Path")
 
         col.prop(cache, "use_external")
@@ -160,14 +164,14 @@ def point_cache_ui(self, cache, enabled, cachetype):
             col.alignment = 'RIGHT'
             col.label(text=cache_info)
     else:
-        if cachetype in {'SMOKE', 'DYNAMIC_PAINT'}:
+        if cachetype in {'FLUID', 'DYNAMIC_PAINT'}:
             if not is_saved:
                 col = layout.column(align=True)
                 col.alignment = 'RIGHT'
                 col.label(text="Cache is disabled until the file is saved")
                 layout.enabled = False
 
-    if not cache.use_external or cachetype == 'SMOKE':
+    if not cache.use_external or cachetype == 'FLUID':
         col = layout.column(align=True)
 
         if cachetype not in {'PSYS', 'DYNAMIC_PAINT'}:
@@ -175,18 +179,18 @@ def point_cache_ui(self, cache, enabled, cachetype):
             col.prop(cache, "frame_start", text="Simulation Start")
             col.prop(cache, "frame_end")
 
-        if cachetype not in {'SMOKE', 'CLOTH', 'DYNAMIC_PAINT', 'RIGID_BODY'}:
+        if cachetype not in {'FLUID', 'CLOTH', 'DYNAMIC_PAINT', 'RIGID_BODY'}:
             col.prop(cache, "frame_step")
 
         cache_info = cache.info
-        if cachetype != 'SMOKE' and cache_info:  # avoid empty space.
+        if cachetype != 'FLUID' and cache_info:  # avoid empty space.
             col = layout.column(align=True)
             col.alignment = 'RIGHT'
             col.label(text=cache_info)
 
         can_bake = True
 
-        if cachetype not in {'SMOKE', 'DYNAMIC_PAINT', 'RIGID_BODY'}:
+        if cachetype not in {'FLUID', 'DYNAMIC_PAINT', 'RIGID_BODY'}:
             if not is_saved:
                 col = layout.column(align=True)
                 col.alignment = 'RIGHT'
@@ -222,14 +226,16 @@ def point_cache_ui(self, cache, enabled, cachetype):
         col = flow.column()
         col.active = can_bake
 
-        if cache.is_baked is True:
+        if is_liboverride and not cache.use_disk_cache:
+            col.operator("ptcache.bake", icon='ERROR', text="Bake (Disk Cache mandatory)")
+        elif cache.is_baked is True:
             col.operator("ptcache.free_bake", text="Delete Bake")
         else:
             col.operator("ptcache.bake", text="Bake").bake = True
 
         sub = col.row()
-        sub.enabled = (cache.is_frame_skip or cache.is_outdated) and enabled
-        sub.operator("ptcache.bake", text="Calculate To Frame").bake = False
+        sub.enabled = enabled
+        sub.operator("ptcache.bake", text="Calculate to Frame").bake = False
 
         sub = col.column()
         sub.enabled = enabled
@@ -238,14 +244,14 @@ def point_cache_ui(self, cache, enabled, cachetype):
         col = flow.column()
         col.operator("ptcache.bake_all", text="Bake All Dynamics").bake = True
         col.operator("ptcache.free_bake_all", text="Delete All Bakes")
-        col.operator("ptcache.bake_all", text="Update All To Frame").bake = False
+        col.operator("ptcache.bake_all", text="Update All to Frame").bake = False
 
 
 def effector_weights_ui(self, weights, weight_type):
     layout = self.layout
     layout.use_property_split = True
 
-    # NOTE: TODO temporarly used until the animate properties are properly skipped.
+    # NOTE: TODO temporarily used until the animate properties are properly skipped.
     layout.use_property_decorate = False  # No animation (remove this later on).
 
     layout.prop(weights, "collection")
@@ -269,7 +275,7 @@ def effector_weights_ui(self, weights, weight_type):
     col.prop(weights, "curve_guide", slider=True)
     col.prop(weights, "texture", slider=True)
 
-    if weight_type != 'SMOKE':
+    if weight_type != 'FLUID':
         col.prop(weights, "smokeflow", slider=True)
 
     col = flow.column()
@@ -311,8 +317,10 @@ def basic_force_field_settings_ui(self, field):
     else:
         col.prop(field, "flow")
 
-    col.prop(field, "apply_to_location", text="Affect Location")
-    col.prop(field, "apply_to_rotation", text="Affect Rotation")
+    sub = col.column(heading="Affect")
+
+    sub.prop(field, "apply_to_location", text="Location")
+    sub.prop(field, "apply_to_rotation", text="Rotation")
 
     col = flow.column()
     sub = col.column(align=True)
@@ -329,6 +337,7 @@ def basic_force_field_settings_ui(self, field):
         col.prop(field, "use_gravity_falloff", text="Gravitation")
 
     col.prop(field, "use_absorption")
+    col.prop(field, "wind_factor")
 
 
 def basic_force_field_falloff_ui(self, field):
@@ -337,25 +346,29 @@ def basic_force_field_falloff_ui(self, field):
     if not field or field.type == 'NONE':
         return
 
-    flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=True)
-
-    col = flow.column()
+    col = layout.column()
     col.prop(field, "z_direction")
     col.prop(field, "falloff_power", text="Power")
 
-    col = flow.column()
-    col.prop(field, "use_min_distance", text="Use Minimum")
-
-    sub = col.column(align=True)
+    col = layout.column(align=False, heading="Min Distance")
+    col.use_property_decorate = False
+    row = col.row(align=True)
+    sub = row.row(align=True)
+    sub.prop(field, "use_min_distance", text="")
+    sub = sub.row(align=True)
     sub.active = field.use_min_distance
-    sub.prop(field, "distance_min", text="Min Distance")
+    sub.prop(field, "distance_min", text="")
+    row.prop_decorator(field, "distance_min")
 
-    col = flow.column()
-    col.prop(field, "use_max_distance", text="Use Maximum")
-
-    sub = col.column(align=True)
+    col = layout.column(align=False, heading="Max Distance")
+    col.use_property_decorate = False
+    row = col.row(align=True)
+    sub = row.row(align=True)
+    sub.prop(field, "use_max_distance", text="")
+    sub = sub.row(align=True)
     sub.active = field.use_max_distance
-    sub.prop(field, "distance_max", text="Max Distance")
+    sub.prop(field, "distance_max", text="")
+    row.prop_decorator(field, "distance_max")
 
 
 classes = (

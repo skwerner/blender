@@ -14,26 +14,24 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLI_MEMITER_H__
-#define __BLI_MEMITER_H__
+#pragma once
 
 /** \file
  * \ingroup bli
  */
 
+#include "BLI_compiler_attrs.h"
+#include "BLI_compiler_compat.h"
+#include "BLI_sys_types.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "BLI_sys_types.h"
-#include "BLI_compiler_attrs.h"
-#include "BLI_compiler_compat.h"
 
 /* 512kb, good default for small elems. */
 #define BLI_MEMITER_DEFAULT_SIZE (1 << 19)
 
 struct BLI_memiter;
-struct BLI_memiter_chunk;
 
 typedef struct BLI_memiter BLI_memiter;
 
@@ -70,5 +68,3 @@ void *BLI_memiter_iter_step_size(BLI_memiter_handle *iter, uint *r_size) ATTR_WA
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLI_MEMITER_H__ */

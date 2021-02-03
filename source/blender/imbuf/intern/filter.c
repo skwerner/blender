@@ -22,14 +22,16 @@
  * \ingroup imbuf
  */
 
+#include <math.h>
+
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_math_base.h"
+#include "BLI_utildefines.h"
 
-#include "IMB_imbuf_types.h"
-#include "IMB_imbuf.h"
 #include "IMB_filter.h"
+#include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
 
 #include "imbuf.h"
 
@@ -363,7 +365,7 @@ void IMB_mask_filter_extend(char *mask, int width, int height)
   MEM_freeN(temprect);
 }
 
-void IMB_mask_clear(ImBuf *ibuf, char *mask, int val)
+void IMB_mask_clear(ImBuf *ibuf, const char *mask, int val)
 {
   int x, y;
   if (ibuf->rect_float) {
@@ -394,9 +396,8 @@ static int filter_make_index(const int x, const int y, const int w, const int h)
   if (x < 0 || x >= w || y < 0 || y >= h) {
     return -1; /* return bad index */
   }
-  else {
-    return y * w + x;
-  }
+
+  return y * w + x;
 }
 
 static int check_pixel_assigned(
@@ -424,7 +425,7 @@ static int check_pixel_assigned(
  *
  * When a mask is given, only effect pixels with a mask value of 1,
  * defined as #BAKE_MASK_MARGIN in rendercore.c
- * */
+ */
 void IMB_filter_extend(struct ImBuf *ibuf, char *mask, int filter)
 {
   const int width = ibuf->x;
@@ -528,7 +529,7 @@ void IMB_filter_extend(struct ImBuf *ibuf, char *mask, int filter)
               else {
                 for (c = 0; c < depth; c++) {
                   ((unsigned char *)dstbuf)[depth * index + c] =
-                      acc[c] > 255 ? 255 : (acc[c] < 0 ? 0 : ((unsigned char)(acc[c] + 0.5f)));
+                      acc[c] > 255 ? 255 : (acc[c] < 0 ? 0 : (unsigned char)roundf(acc[c]));
                 }
               }
 

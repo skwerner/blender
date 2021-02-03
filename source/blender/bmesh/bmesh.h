@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BMESH_H__
-#define __BMESH_H__
+#pragma once
 
 /** \file
  * \ingroup bmesh
@@ -42,7 +41,7 @@
  * \subsection bm_faces Faces
  *
  * Faces in BMesh are stored as a circular linked list of loops. Loops store per-face-vertex data
- * (amongst other things outlined later in this document), and define the face boundary.
+ * (among other things outlined later in this document), and define the face boundary.
  * \subsection bm_loop The Loop
  *
  * Loops can be thought of as a *face-corner*, since faces don't reference verts or edges directly.
@@ -121,7 +120,7 @@
  * which are private to an operator.
  * These flags may be used by the client operator code as needed
  * (a common example is flagging elements for use in another operator).
- * Each call to an operator allocates it's own set of tool flags when it's executed,
+ * Each call to an operator allocates its own set of tool flags when it's executed,
  * avoiding flag conflicts between operators.
  *
  * These flags should not be confused with header flags, which are used to store persistent flags
@@ -165,7 +164,7 @@
  *
  * - ``bmesh_kernel_*()`` - Low level API, for primitive functions that others are built ontop of.
  * - ``bmesh_***()`` - Low level API function.
- * - ``bm_***()`` -     'static' functions, not apart of the API at all,
+ * - ``bm_***()`` -     'static' functions, not a part of the API at all,
  *   but use prefix since they operate on BMesh data.
  * - ``BM_***()`` -     High level BMesh API function for use anywhere.
  * - ``BMO_***()`` -    High level operator API function for use anywhere.
@@ -188,26 +187,25 @@
  * - Use two different iterator types for BMO map/buffer types.
  */
 
+#include "DNA_customdata_types.h" /* BMesh struct in bmesh_class.h uses */
+#include "DNA_listBase.h"         /* selection history uses */
+
+#include <stdio.h>
+#include <stdlib.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include "DNA_listBase.h"         /* selection history uses */
-#include "DNA_customdata_types.h" /* BMesh struct in bmesh_class.h uses */
-
-#include <stdlib.h>
-#include <stdio.h>
-#include <assert.h>
-
 #include "bmesh_class.h"
 
 /* include the rest of the API */
-#include "intern/bmesh_operator_api.h"
 #include "intern/bmesh_error.h"
+#include "intern/bmesh_operator_api.h"
 
-#include "intern/bmesh_core.h"
 #include "intern/bmesh_callback_generic.h"
 #include "intern/bmesh_construct.h"
+#include "intern/bmesh_core.h"
 #include "intern/bmesh_delete.h"
 #include "intern/bmesh_edgeloop.h"
 #include "intern/bmesh_interp.h"
@@ -215,13 +213,15 @@ extern "C" {
 #include "intern/bmesh_log.h"
 #include "intern/bmesh_marking.h"
 #include "intern/bmesh_mesh.h"
-#include "intern/bmesh_mesh_conv.h"
+#include "intern/bmesh_mesh_convert.h"
+#include "intern/bmesh_mesh_duplicate.h"
 #include "intern/bmesh_mesh_validate.h"
 #include "intern/bmesh_mods.h"
 #include "intern/bmesh_operators.h"
 #include "intern/bmesh_polygon.h"
 #include "intern/bmesh_polygon_edgenet.h"
 #include "intern/bmesh_query.h"
+#include "intern/bmesh_query_uv.h"
 #include "intern/bmesh_walkers.h"
 
 #include "intern/bmesh_inline.h"
@@ -229,5 +229,3 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BMESH_H__ */

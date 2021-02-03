@@ -18,21 +18,20 @@
 
 #include "COM_ScreenLensDistortionOperation.h"
 
-extern "C" {
 #include "BLI_math.h"
-#include "BLI_utildefines.h"
 #include "BLI_rand.h"
-#include "PIL_time.h"
-}
+#include "BLI_utildefines.h"
 
-ScreenLensDistortionOperation::ScreenLensDistortionOperation() : NodeOperation()
+#include "PIL_time.h"
+
+ScreenLensDistortionOperation::ScreenLensDistortionOperation()
 {
   this->addInputSocket(COM_DT_COLOR);
   this->addInputSocket(COM_DT_VALUE);
   this->addInputSocket(COM_DT_VALUE);
   this->addOutputSocket(COM_DT_COLOR);
   this->setComplex(true);
-  this->m_inputProgram = NULL;
+  this->m_inputProgram = nullptr;
   this->m_distortion = 0.0f;
   this->m_dispersion = 0.0f;
   this->m_distortion_const = false;
@@ -73,7 +72,7 @@ void ScreenLensDistortionOperation::initExecution()
 
 void *ScreenLensDistortionOperation::initializeTileData(rcti * /*rect*/)
 {
-  void *buffer = this->m_inputProgram->initializeTileData(NULL);
+  void *buffer = this->m_inputProgram->initializeTileData(nullptr);
 
   /* get distortion/dispersion values once, by reading inputs at (0,0)
    * XXX this assumes invariable values (no image inputs),
@@ -125,9 +124,8 @@ bool ScreenLensDistortionOperation::get_delta(float r_sq,
     distort_uv(uv, t, delta);
     return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 void ScreenLensDistortionOperation::accumulate(MemoryBuffer *buffer,
@@ -148,7 +146,7 @@ void ScreenLensDistortionOperation::accumulate(MemoryBuffer *buffer,
   float k4 = m_k4[a];
   float dk4 = m_dk4[a];
 
-  for (float z = 0; z < ds; ++z) {
+  for (float z = 0; z < ds; z++) {
     float tz = (z + (m_jitter ? BLI_rng_get_float(m_rng) : 0.5f)) * sd;
     float t = 1.0f - (k4 + tz * dk4) * r_sq;
 
@@ -204,7 +202,7 @@ void ScreenLensDistortionOperation::executePixel(float output[4], int x, int y, 
 void ScreenLensDistortionOperation::deinitExecution()
 {
   this->deinitMutex();
-  this->m_inputProgram = NULL;
+  this->m_inputProgram = nullptr;
   BLI_rng_free(this->m_rng);
 }
 

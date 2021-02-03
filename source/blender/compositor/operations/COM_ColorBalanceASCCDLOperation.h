@@ -16,8 +16,8 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_COLORBALANCEASCCDLOPERATION_H__
-#define __COM_COLORBALANCEASCCDLOPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
 
 /**
@@ -43,7 +43,7 @@ class ColorBalanceASCCDLOperation : public NodeOperation {
   ColorBalanceASCCDLOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
 
@@ -70,4 +70,3 @@ class ColorBalanceASCCDLOperation : public NodeOperation {
     copy_v3_v3(this->m_slope, slope);
   }
 };
-#endif

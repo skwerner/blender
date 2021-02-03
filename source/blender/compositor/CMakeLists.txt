@@ -34,8 +34,8 @@ set(INC
   ../windowmanager
   ../nodes/composite
   ../nodes/intern
-  ../render/extern/include
-  ../render/intern/include
+  ../render
+  ../render/intern
   ../../../extern/clew/include
   ../../../intern/atomic
   ../../../intern/guardedalloc
@@ -71,6 +71,8 @@ set(SRC
   intern/COM_MemoryBuffer.h
   intern/COM_MemoryProxy.cpp
   intern/COM_MemoryProxy.h
+  intern/COM_MetaData.cpp
+  intern/COM_MetaData.h
   intern/COM_Node.cpp
   intern/COM_Node.h
   intern/COM_NodeConverter.cpp
@@ -213,6 +215,8 @@ set(SRC
   nodes/COM_ColorCorrectionNode.h
   nodes/COM_ColorCurveNode.cpp
   nodes/COM_ColorCurveNode.h
+  nodes/COM_ColorExposureNode.cpp
+  nodes/COM_ColorExposureNode.h
   nodes/COM_ColorRampNode.cpp
   nodes/COM_ColorRampNode.h
   nodes/COM_ColorToBWNode.cpp
@@ -276,11 +280,12 @@ set(SRC
   nodes/COM_VectorBlurNode.h
   operations/COM_VectorBlurOperation.cpp
   operations/COM_VectorBlurOperation.h
-
   nodes/COM_BlurNode.cpp
   nodes/COM_BlurNode.h
   nodes/COM_BokehBlurNode.cpp
   nodes/COM_BokehBlurNode.h
+  nodes/COM_DenoiseNode.cpp
+  nodes/COM_DenoiseNode.h
   nodes/COM_DespeckleNode.cpp
   nodes/COM_DespeckleNode.h
   nodes/COM_DilateErodeNode.cpp
@@ -396,6 +401,8 @@ set(SRC
   operations/COM_ChromaMatteOperation.h
   operations/COM_ColorCurveOperation.cpp
   operations/COM_ColorCurveOperation.h
+  operations/COM_ColorExposureOperation.cpp
+  operations/COM_ColorExposureOperation.h
   operations/COM_ColorMatteOperation.cpp
   operations/COM_ColorMatteOperation.h
   operations/COM_ColorRampOperation.cpp
@@ -454,8 +461,10 @@ set(SRC
   operations/COM_MapRangeOperation.h
   operations/COM_MapValueOperation.cpp
   operations/COM_MapValueOperation.h
-  operations/COM_SetAlphaOperation.cpp
-  operations/COM_SetAlphaOperation.h
+  operations/COM_SetAlphaMultiplyOperation.cpp
+  operations/COM_SetAlphaMultiplyOperation.h
+  operations/COM_SetAlphaReplaceOperation.cpp
+  operations/COM_SetAlphaReplaceOperation.h
 
   # Distort operation
   operations/COM_DisplaceOperation.cpp
@@ -485,11 +494,13 @@ set(SRC
   operations/COM_WrapOperation.cpp
   operations/COM_WrapOperation.h
 
-  #Filter operations
+  # Filter operations
   operations/COM_ConvolutionEdgeFilterOperation.cpp
   operations/COM_ConvolutionEdgeFilterOperation.h
   operations/COM_ConvolutionFilterOperation.cpp
   operations/COM_ConvolutionFilterOperation.h
+  operations/COM_DenoiseOperation.cpp
+  operations/COM_DenoiseOperation.h
   operations/COM_DespeckleOperation.cpp
   operations/COM_DespeckleOperation.h
   operations/COM_DilateErodeOperation.cpp
@@ -512,7 +523,7 @@ set(SRC
   operations/COM_SetSamplerOperation.h
 
 
-  #Convert operations
+  # Convert operations
   operations/COM_ConvertOperation.cpp
   operations/COM_ConvertOperation.h
   operations/COM_IDMaskOperation.cpp
@@ -549,13 +560,29 @@ list(APPEND INC
   ${CMAKE_CURRENT_BINARY_DIR}/operations
 )
 
-data_to_c(${CMAKE_CURRENT_SOURCE_DIR}/operations/COM_OpenCLKernels.cl
-          ${CMAKE_CURRENT_BINARY_DIR}/operations/COM_OpenCLKernels.cl.h SRC)
+data_to_c(
+  ${CMAKE_CURRENT_SOURCE_DIR}/operations/COM_OpenCLKernels.cl
+  ${CMAKE_CURRENT_BINARY_DIR}/operations/COM_OpenCLKernels.cl.h
+  SRC
+)
 
 add_definitions(-DCL_USE_DEPRECATED_OPENCL_1_1_APIS)
 
 if(WITH_INTERNATIONAL)
   add_definitions(-DWITH_INTERNATIONAL)
+endif()
+
+if(WITH_OPENIMAGEDENOISE)
+  add_definitions(-DWITH_OPENIMAGEDENOISE)
+  add_definitions(-DOIDN_STATIC_LIB)
+  list(APPEND INC_SYS
+    ${OPENIMAGEDENOISE_INCLUDE_DIRS}
+    ${TBB_INCLUDE_DIRS}
+  )
+  list(APPEND LIB
+    ${OPENIMAGEDENOISE_LIBRARIES}
+    ${TBB_LIBRARIES}
+  )
 endif()
 
 blender_add_lib(bf_compositor "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

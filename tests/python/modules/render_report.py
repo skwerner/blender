@@ -52,10 +52,21 @@ def print_message(message, type=None, status=''):
     sys.stdout.flush()
 
 
-def blend_list(dirpath):
+def blend_list(dirpath, device, blacklist):
+    import re
+
     for root, dirs, files in os.walk(dirpath):
         for filename in files:
-            if filename.lower().endswith(".blend"):
+            if not filename.lower().endswith(".blend"):
+                continue
+
+            skip = False
+            for blacklist_entry in blacklist:
+                if re.match(blacklist_entry, filename):
+                    skip = True
+                    break
+
+            if not skip:
                 filepath = os.path.join(root, filename)
                 yield filepath
 
@@ -93,23 +104,37 @@ class Report:
     __slots__ = (
         'title',
         'output_dir',
+        'global_dir',
         'reference_dir',
         'idiff',
         'pixelated',
+        'fail_threshold',
+        'fail_percent',
         'verbose',
         'update',
         'failed_tests',
         'passed_tests',
         'compare_tests',
-        'compare_engines'
+        'compare_engine',
+        'device',
+        'blacklist',
     )
 
-    def __init__(self, title, output_dir, idiff):
+    def __init__(self, title, output_dir, idiff, device=None, blacklist=[]):
         self.title = title
         self.output_dir = output_dir
+        self.global_dir = os.path.dirname(output_dir)
         self.reference_dir = 'reference_renders'
         self.idiff = idiff
-        self.compare_engines = None
+        self.compare_engine = None
+        self.fail_threshold = 0.016
+        self.fail_percent = 1
+        self.device = device
+        self.blacklist = blacklist
+
+        if device:
+            self.title = self._engine_title(title, device)
+            self.output_dir = self._engine_path(self.output_dir, device.lower())
 
         self.pixelated = False
         self.verbose = os.environ.get("BLENDER_VERBOSE") is not None
@@ -128,11 +153,14 @@ class Report:
     def set_pixelated(self, pixelated):
         self.pixelated = pixelated
 
+    def set_fail_threshold(self, threshold):
+        self.fail_threshold = threshold
+
     def set_reference_dir(self, reference_dir):
         self.reference_dir = reference_dir
 
-    def set_compare_engines(self, engine, other_engine):
-        self.compare_engines = (engine, other_engine)
+    def set_compare_engine(self, other_engine, other_device=None):
+        self.compare_engine = (other_engine, other_device)
 
     def run(self, dirpath, blender, arguments_cb, batch=False):
         # Run tests and output report.
@@ -140,7 +168,7 @@ class Report:
         ok = self._run_all_tests(dirname, dirpath, blender, arguments_cb, batch)
         self._write_data(dirname)
         self._write_html()
-        if self.compare_engines:
+        if self.compare_engine:
             self._write_html(comparison=True)
         return ok
 
@@ -155,7 +183,7 @@ class Report:
         filepath = os.path.join(outdir, "passed.data")
         pathlib.Path(filepath).write_text(self.passed_tests)
 
-        if self.compare_engines:
+        if self.compare_engine:
             filepath = os.path.join(outdir, "compare.data")
             pathlib.Path(filepath).write_text(self.compare_tests)
 
@@ -165,12 +193,26 @@ class Report:
         else:
             return """<li class="breadcrumb-item"><a href="%s">%s</a></li>""" % (href, title)
 
+    def _engine_title(self, engine, device):
+        if device:
+            return engine.title() + ' ' + device
+        else:
+            return engine.title()
+
+    def _engine_path(self, path, device):
+        if device:
+            return os.path.join(path, device.lower())
+        else:
+            return path
+
     def _navigation_html(self, comparison):
         html = """<nav aria-label="breadcrumb"><ol class="breadcrumb">"""
-        html += self._navigation_item("Test Reports", "../report.html", False)
+        base_path = os.path.relpath(self.global_dir, self.output_dir)
+        global_report_path = os.path.join(base_path, "report.html")
+        html += self._navigation_item("Test Reports", global_report_path, False)
         html += self._navigation_item(self.title, "report.html", not comparison)
-        if self.compare_engines:
-            compare_title = "Compare with %s" % self.compare_engines[1].capitalize()
+        if self.compare_engine:
+            compare_title = "Compare with %s" % self._engine_title(*self.compare_engine)
             html += self._navigation_item(compare_title, "compare.html", comparison)
         html += """</ol></nav>"""
 
@@ -217,8 +259,8 @@ class Report:
 
         if comparison:
             title = self.title + " Test Compare"
-            engine_self = self.compare_engines[0].capitalize()
-            engine_other = self.compare_engines[1].capitalize()
+            engine_self = self.title
+            engine_other = self._engine_title(*self.compare_engine)
             columns_html = "<tr><th>Name</th><th>%s</th><th>%s</th>" % (engine_self, engine_other)
         else:
             title = self.title + " Test Report"
@@ -284,9 +326,8 @@ class Report:
 
         # Update global report
         if not comparison:
-            global_output_dir = os.path.dirname(self.output_dir)
             global_failed = failed if not comparison else None
-            global_report.add(global_output_dir, "Render", self.title, filepath, global_failed)
+            global_report.add(self.global_dir, "Render", self.title, filepath, global_failed)
 
     def _relative_url(self, filepath):
         relpath = os.path.relpath(filepath, self.output_dir)
@@ -324,8 +365,9 @@ class Report:
         else:
             self.passed_tests += test_html
 
-        if self.compare_engines:
-            ref_url = os.path.join("..", self.compare_engines[1], new_url)
+        if self.compare_engine:
+            base_path = os.path.relpath(self.global_dir, self.output_dir)
+            ref_url = os.path.join(base_path, self._engine_path(*self.compare_engine), new_url)
 
             test_html = """
                 <tr{tr_style}>
@@ -358,8 +400,8 @@ class Report:
             # Diff images test with threshold.
             command = (
                 self.idiff,
-                "-fail", "0.016",
-                "-failpercent", "1",
+                "-fail", str(self.fail_threshold),
+                "-failpercent", str(self.fail_percent),
                 ref_img,
                 tmp_filepath,
             )
@@ -429,17 +471,23 @@ class Report:
                 if not batch:
                     break
 
+            if self.device:
+                command.extend(['--', '--cycles-device', self.device])
+
             # Run process
             crash = False
+            output = None
             try:
-                output = subprocess.check_output(command)
-            except subprocess.CalledProcessError as e:
-                crash = True
+                completed_process = subprocess.run(command, stdout=subprocess.PIPE)
+                if completed_process.returncode != 0:
+                    crash = True
+                output = completed_process.stdout
             except BaseException as e:
                 crash = True
 
             if verbose:
                 print(" ".join(command))
+            if (verbose or crash) and output:
                 print(output.decode("utf-8"))
 
             # Detect missing filepaths and consider those errors
@@ -447,7 +495,7 @@ class Report:
                 remaining_filepaths.pop(0)
 
                 if crash:
-                    # In case of crash, stop after missing files and re-render remaing
+                    # In case of crash, stop after missing files and re-render remaining
                     if not os.path.exists(output_filepath):
                         errors.append("CRASH")
                         print_message("Crash running Blender")
@@ -476,7 +524,7 @@ class Report:
     def _run_all_tests(self, dirname, dirpath, blender, arguments_cb, batch):
         passed_tests = []
         failed_tests = []
-        all_files = list(blend_list(dirpath))
+        all_files = list(blend_list(dirpath, self.device, self.blacklist))
         all_files.sort()
         print_message("Running {} tests from 1 test case." .
                       format(len(all_files)),

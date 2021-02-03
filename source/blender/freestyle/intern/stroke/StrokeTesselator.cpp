@@ -19,19 +19,19 @@
  * \brief Class to build a Node Tree designed to be displayed from a set of strokes structure.
  */
 
-#include "StrokeAdvancedIterators.h"
 #include "StrokeTesselator.h"
+#include "StrokeAdvancedIterators.h"
 
-#include "../scene_graph/OrientedLineRep.h"
 #include "../scene_graph/NodeGroup.h"
 #include "../scene_graph/NodeShape.h"
+#include "../scene_graph/OrientedLineRep.h"
 
 namespace Freestyle {
 
 LineRep *StrokeTesselator::Tesselate(Stroke *iStroke)
 {
-  if (0 == iStroke) {
-    return 0;
+  if (nullptr == iStroke) {
+    return nullptr;
   }
 
   LineRep *line;

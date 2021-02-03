@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_VIEW_EDGE_X_BUILDER_H__
-#define __FREESTYLE_VIEW_EDGE_X_BUILDER_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -265,18 +264,18 @@ class ViewEdgeXBuilder {
 
   // SHARP //
   /*! checks whether a WEdge has already been processed or not */
-  bool stopSharpViewEdge(WXEdge *iFace);
+  bool stopSharpViewEdge(WXEdge *iEdge);
   int retrieveFaceMarks(WXEdge *iEdge);
   OWXEdge FindNextWEdge(const OWXEdge &iEdge);
   OWXEdge FindPreviousWEdge(const OWXEdge &iEdge);
   FEdge *BuildSharpFEdge(FEdge *feprevious, const OWXEdge &iwe);
 
   // GENERAL //
-  /*! Instanciate a SVertex */
+  /*! Instantiate a SVertex */
   SVertex *MakeSVertex(Vec3r &iPoint);
-  /*! Instanciate a SVertex if it hasn't been already created */
+  /*! Instantiate a SVertex if it hasn't been already created */
   SVertex *MakeSVertex(Vec3r &iPoint, bool shared);
-  /*! instanciate a ViewVertex from a SVertex, if it doesn't exist yet */
+  /*! instantiate a ViewVertex from a SVertex, if it doesn't exist yet */
   ViewVertex *MakeViewVertex(SVertex *iSVertex);
 
   // oldtmp values
@@ -292,5 +291,3 @@ class ViewEdgeXBuilder {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_VIEW_EDGE_X_BUILDER_H__

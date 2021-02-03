@@ -25,17 +25,15 @@
 #include "BLI_math.h"
 #include "BLI_math_color.h"
 
-extern "C" {
 #include "BKE_movieclip.h"
 #include "BKE_node.h"
 #include "BKE_tracking.h"
-}
 
 /* ******** PlaneTrackCommon ******** */
 
 PlaneTrackCommon::PlaneTrackCommon()
 {
-  this->m_movieClip = NULL;
+  this->m_movieClip = nullptr;
   this->m_framenumber = 0;
   this->m_trackingObjectName[0] = '\0';
   this->m_planeTrackName[0] = '\0';
@@ -93,7 +91,7 @@ void PlaneTrackMaskOperation::initExecution()
     const float frame = (float)this->m_framenumber - this->m_motion_blur_shutter;
     const float frame_step = (this->m_motion_blur_shutter * 2.0f) / this->m_motion_blur_samples;
     float frame_iter = frame;
-    for (int sample = 0; sample < this->m_motion_blur_samples; ++sample) {
+    for (int sample = 0; sample < this->m_motion_blur_samples; sample++) {
       readCornersFromTrack(corners, frame_iter);
       calculateCorners(corners, true, sample);
       frame_iter += frame_step;
@@ -116,7 +114,7 @@ void PlaneTrackWarpImageOperation::initExecution()
     const float frame = (float)this->m_framenumber - this->m_motion_blur_shutter;
     const float frame_step = (this->m_motion_blur_shutter * 2.0f) / this->m_motion_blur_samples;
     float frame_iter = frame;
-    for (int sample = 0; sample < this->m_motion_blur_samples; ++sample) {
+    for (int sample = 0; sample < this->m_motion_blur_samples; sample++) {
       readCornersFromTrack(corners, frame_iter);
       calculateCorners(corners, true, sample);
       frame_iter += frame_step;

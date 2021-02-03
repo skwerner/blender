@@ -29,15 +29,13 @@
 
 #include "BLI_utildefines.h"
 
-extern "C" {
 #include "BKE_animsys.h"
-}
 
-namespace DEG {
+namespace blender::deg {
 
 /* Animated property storage. */
 
-AnimatedPropertyID::AnimatedPropertyID() : data(NULL), property_rna(NULL)
+AnimatedPropertyID::AnimatedPropertyID() : data(nullptr), property_rna(nullptr)
 {
 }
 
@@ -68,15 +66,16 @@ AnimatedPropertyID::AnimatedPropertyID(ID * /*id*/,
   property_rna = RNA_struct_type_find_property(type, property_name);
 }
 
-bool AnimatedPropertyID::operator<(const AnimatedPropertyID &other) const
+bool operator==(const AnimatedPropertyID &a, const AnimatedPropertyID &b)
 {
-  if (data < other.data) {
-    return true;
-  }
-  else if (data == other.data) {
-    return property_rna < other.property_rna;
-  }
-  return false;
+  return a.data == b.data && a.property_rna == b.property_rna;
+}
+
+uint64_t AnimatedPropertyID::hash() const
+{
+  uintptr_t ptr1 = (uintptr_t)data;
+  uintptr_t ptr2 = (uintptr_t)property_rna;
+  return static_cast<uint64_t>(((ptr1 >> 4) * 33) ^ (ptr2 >> 4));
 }
 
 namespace {
@@ -89,13 +88,13 @@ struct AnimatedPropertyCallbackData {
 
 void animated_property_cb(ID * /*id*/, FCurve *fcurve, void *data_v)
 {
-  if (fcurve->rna_path == NULL || fcurve->rna_path[0] == '\0') {
+  if (fcurve->rna_path == nullptr || fcurve->rna_path[0] == '\0') {
     return;
   }
   AnimatedPropertyCallbackData *data = static_cast<AnimatedPropertyCallbackData *>(data_v);
   /* Resolve property. */
   PointerRNA pointer_rna;
-  PropertyRNA *property_rna = NULL;
+  PropertyRNA *property_rna = nullptr;
   if (!RNA_path_resolve_property(
           &data->pointer_rna, fcurve->rna_path, &pointer_rna, &property_rna)) {
     return;
@@ -103,9 +102,9 @@ void animated_property_cb(ID * /*id*/, FCurve *fcurve, void *data_v)
   /* Get storage for the ID.
    * This is needed to deal with cases when nested datablock is animated by its parent. */
   AnimatedPropertyStorage *animated_property_storage = data->animated_property_storage;
-  if (pointer_rna.id.data != data->pointer_rna.id.data) {
+  if (pointer_rna.owner_id != data->pointer_rna.owner_id) {
     animated_property_storage = data->builder_cache->ensureAnimatedPropertyStorage(
-        reinterpret_cast<ID *>(pointer_rna.id.data));
+        pointer_rna.owner_id);
   }
   /* Set the property as animated. */
   animated_property_storage->tagPropertyAsAnimated(&pointer_rna, property_rna);
@@ -128,7 +127,7 @@ void AnimatedPropertyStorage::initializeFromID(DepsgraphBuilderCache *builder_ca
 
 void AnimatedPropertyStorage::tagPropertyAsAnimated(const AnimatedPropertyID &property_id)
 {
-  animated_properties_set.insert(property_id);
+  animated_properties_set.add(property_id);
 }
 
 void AnimatedPropertyStorage::tagPropertyAsAnimated(const PointerRNA *pointer_rna,
@@ -139,7 +138,7 @@ void AnimatedPropertyStorage::tagPropertyAsAnimated(const PointerRNA *pointer_rn
 
 bool AnimatedPropertyStorage::isPropertyAnimated(const AnimatedPropertyID &property_id)
 {
-  return animated_properties_set.find(property_id) != animated_properties_set.end();
+  return animated_properties_set.contains(property_id);
 }
 
 bool AnimatedPropertyStorage::isPropertyAnimated(const PointerRNA *pointer_rna,
@@ -156,21 +155,16 @@ DepsgraphBuilderCache::DepsgraphBuilderCache()
 
 DepsgraphBuilderCache::~DepsgraphBuilderCache()
 {
-  for (AnimatedPropertyStorageMap::value_type &iter : animated_property_storage_map_) {
-    AnimatedPropertyStorage *animated_property_storage = iter.second;
-    OBJECT_GUARDED_DELETE(animated_property_storage, AnimatedPropertyStorage);
+  for (AnimatedPropertyStorage *animated_property_storage :
+       animated_property_storage_map_.values()) {
+    delete animated_property_storage;
   }
 }
 
 AnimatedPropertyStorage *DepsgraphBuilderCache::ensureAnimatedPropertyStorage(ID *id)
 {
-  AnimatedPropertyStorageMap::iterator it = animated_property_storage_map_.find(id);
-  if (it != animated_property_storage_map_.end()) {
-    return it->second;
-  }
-  AnimatedPropertyStorage *animated_property_storage = OBJECT_GUARDED_NEW(AnimatedPropertyStorage);
-  animated_property_storage_map_.insert(make_pair(id, animated_property_storage));
-  return animated_property_storage;
+  return animated_property_storage_map_.lookup_or_add_cb(
+      id, []() { return new AnimatedPropertyStorage(); });
 }
 
 AnimatedPropertyStorage *DepsgraphBuilderCache::ensureInitializedAnimatedPropertyStorage(ID *id)
@@ -183,4 +177,4 @@ AnimatedPropertyStorage *DepsgraphBuilderCache::ensureInitializedAnimatedPropert
   return animated_property_storage;
 }
 
-}  // namespace DEG
+}  // namespace blender::deg

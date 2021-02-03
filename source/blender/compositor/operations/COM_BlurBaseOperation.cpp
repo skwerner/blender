@@ -20,18 +20,16 @@
 #include "BLI_math.h"
 #include "MEM_guardedalloc.h"
 
-extern "C" {
 #include "RE_pipeline.h"
-}
 
-BlurBaseOperation::BlurBaseOperation(DataType data_type) : NodeOperation()
+BlurBaseOperation::BlurBaseOperation(DataType data_type)
 {
   /* data_type is almost always COM_DT_COLOR except for alpha-blur */
   this->addInputSocket(data_type);
   this->addInputSocket(COM_DT_VALUE);
   this->addOutputSocket(data_type);
   this->setComplex(true);
-  this->m_inputProgram = NULL;
+  this->m_inputProgram = nullptr;
   memset(&m_data, 0, sizeof(NodeBlurData));
   this->m_size = 1.0f;
   this->m_sizeavailable = false;
@@ -44,20 +42,22 @@ void BlurBaseOperation::initExecution()
   this->m_data.image_in_width = this->getWidth();
   this->m_data.image_in_height = this->getHeight();
   if (this->m_data.relative) {
+    int sizex, sizey;
     switch (this->m_data.aspect) {
-      case CMP_NODE_BLUR_ASPECT_NONE:
-        this->m_data.sizex = (int)(this->m_data.percentx * 0.01f * this->m_data.image_in_width);
-        this->m_data.sizey = (int)(this->m_data.percenty * 0.01f * this->m_data.image_in_height);
-        break;
       case CMP_NODE_BLUR_ASPECT_Y:
-        this->m_data.sizex = (int)(this->m_data.percentx * 0.01f * this->m_data.image_in_width);
-        this->m_data.sizey = (int)(this->m_data.percenty * 0.01f * this->m_data.image_in_width);
+        sizex = sizey = this->m_data.image_in_width;
         break;
       case CMP_NODE_BLUR_ASPECT_X:
-        this->m_data.sizex = (int)(this->m_data.percentx * 0.01f * this->m_data.image_in_height);
-        this->m_data.sizey = (int)(this->m_data.percenty * 0.01f * this->m_data.image_in_height);
+        sizex = sizey = this->m_data.image_in_height;
+        break;
+      default:
+        BLI_assert(this->m_data.aspect == CMP_NODE_BLUR_ASPECT_NONE);
+        sizex = this->m_data.image_in_width;
+        sizey = this->m_data.image_in_height;
         break;
     }
+    this->m_data.sizex = round_fl_to_int(this->m_data.percentx * 0.01f * sizex);
+    this->m_data.sizey = round_fl_to_int(this->m_data.percenty * 0.01f * sizey);
   }
 
   QualityStepHelper::initExecution(COM_QH_MULTIPLY);
@@ -93,7 +93,7 @@ __m128 *BlurBaseOperation::convert_gausstab_sse(const float *gausstab, int size)
 {
   int n = 2 * size + 1;
   __m128 *gausstab_sse = (__m128 *)MEM_mallocN_aligned(sizeof(__m128) * n, 16, "gausstab sse");
-  for (int i = 0; i < n; ++i) {
+  for (int i = 0; i < n; i++) {
     gausstab_sse[i] = _mm_set1_ps(gausstab[i]);
   }
   return gausstab_sse;
@@ -154,8 +154,8 @@ float *BlurBaseOperation::make_dist_fac_inverse(float rad, int size, int falloff
 
 void BlurBaseOperation::deinitExecution()
 {
-  this->m_inputProgram = NULL;
-  this->m_inputSize = NULL;
+  this->m_inputProgram = nullptr;
+  this->m_inputSize = nullptr;
 }
 
 void BlurBaseOperation::setData(const NodeBlurData *data)

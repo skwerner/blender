@@ -25,7 +25,6 @@ from bpy.app.translations import contexts as i18n_contexts
 from bl_ui.utils import PresetPanel
 from bl_ui.properties_grease_pencil_common import (
     AnnotationDataPanel,
-    GreasePencilToolsPanel,
 )
 from bl_ui.space_toolsystem_common import (
     ToolActivePanelHelper,
@@ -77,8 +76,9 @@ class NODE_HT_header(Header):
 
                 layout.separator_spacer()
 
-                types_that_support_material = {'MESH', 'CURVE', 'SURFACE', 'FONT', 'META', 'GPENCIL'}
-                # disable material slot buttons when pinned, cannot find correct slot within id_from (#36589)
+                types_that_support_material = {'MESH', 'CURVE', 'SURFACE', 'FONT', 'META',
+                                               'GPENCIL', 'VOLUME', 'HAIR', 'POINTCLOUD'}
+                # disable material slot buttons when pinned, cannot find correct slot within id_from (T36589)
                 # disable also when the selected object does not support materials
                 has_material_slots = not snode.pin and ob_type in types_that_support_material
 
@@ -151,6 +151,23 @@ class NODE_HT_header(Header):
             if snode_id:
                 layout.prop(snode_id, "use_nodes")
 
+        elif snode.tree_type == 'GeometryNodeTree':
+            NODE_MT_editor_menus.draw_collapsible(context, layout)
+            layout.separator_spacer()
+
+            ob = context.object
+
+            row = layout.row()
+            if snode.pin:
+                row.enabled = False
+                row.template_ID(snode, "node_tree", new="node.new_geometry_node_group_assign")
+            elif ob:
+                active_modifier = ob.modifiers.active
+                if active_modifier and active_modifier.type == "NODES":
+                    row.template_ID(active_modifier, "node_group", new="node.new_geometry_node_group_assign")
+                else:
+                    row.template_ID(snode, "node_tree", new="node.new_geometry_nodes_modifier")
+
         else:
             # Custom node tree is edited as independent ID block
             NODE_MT_editor_menus.draw_collapsible(context, layout)
@@ -173,9 +190,9 @@ class NODE_HT_header(Header):
 
         # Backdrop
         if is_compositor:
-            row=layout.row(align=True)
+            row = layout.row(align=True)
             row.prop(snode, "show_backdrop", toggle=True)
-            sub=row.row(align=True)
+            sub = row.row(align=True)
             sub.active = snode.show_backdrop
             sub.prop(snode, "backdrop_channels", icon_only=True, text="", expand=True)
 
@@ -208,13 +225,15 @@ class NODE_MT_add(bpy.types.Menu):
         layout = self.layout
 
         layout.operator_context = 'INVOKE_DEFAULT'
-        props = layout.operator("node.add_search", text="Search...", icon='VIEWZOOM')
-        props.use_transform = True
 
-        layout.separator()
+        if nodeitems_utils.has_node_categories(context):
+            props = layout.operator("node.add_search", text="Search...", icon='VIEWZOOM')
+            props.use_transform = True
 
-        # actual node submenus are defined by draw functions from node categories
-        nodeitems_utils.draw_node_categories_menu(self, context)
+            layout.separator()
+
+            # actual node submenus are defined by draw functions from node categories
+            nodeitems_utils.draw_node_categories_menu(self, context)
 
 
 class NODE_MT_view(Menu):
@@ -235,8 +254,10 @@ class NODE_MT_view(Menu):
 
         layout.separator()
 
-        layout.operator("view2d.zoom_in")
-        layout.operator("view2d.zoom_out")
+        sub = layout.column()
+        sub.operator_context = 'EXEC_REGION_WIN'
+        sub.operator("view2d.zoom_in")
+        sub.operator("view2d.zoom_out")
 
         layout.separator()
 
@@ -267,7 +288,7 @@ class NODE_MT_select(Menu):
 
         layout.separator()
         layout.operator("node.select_all").action = 'TOGGLE'
-        layout.operator("node.select_all", text="Inverse").action = 'INVERT'
+        layout.operator("node.select_all", text="Invert").action = 'INVERT'
         layout.operator("node.select_linked_from")
         layout.operator("node.select_linked_to")
 
@@ -374,6 +395,12 @@ class NODE_PT_material_slots(Panel):
             col.operator("object.material_slot_move", icon='TRIA_UP', text="").direction = 'UP'
             col.operator("object.material_slot_move", icon='TRIA_DOWN', text="").direction = 'DOWN'
 
+        if ob.mode == 'EDIT':
+            row = layout.row(align=True)
+            row.operator("object.material_slot_assign", text="Assign")
+            row.operator("object.material_slot_select", text="Select")
+            row.operator("object.material_slot_deselect", text="Deselect")
+
 
 class NODE_PT_node_color_presets(PresetPanel, Panel):
     """Predefined node color"""
@@ -413,10 +440,13 @@ class NODE_MT_context_menu(Menu):
         # If something is selected
         layout.operator_context = 'INVOKE_DEFAULT'
         layout.operator("node.duplicate_move")
+        props = layout.operator("wm.call_panel", text="Rename...")
+        props.name = "TOPBAR_PT_name"
+        props.keep_open = False
         layout.operator("node.delete")
         layout.operator("node.clipboard_copy", text="Copy")
         layout.operator("node.clipboard_paste", text="Paste")
-        layout.operator_context = 'EXEC_DEFAULT'
+        layout.operator_context = 'EXEC_REGION_WIN'
 
         layout.operator("node.delete_reconnect")
 
@@ -516,13 +546,21 @@ class NODE_PT_active_node_properties(Panel):
 
         # XXX this could be filtered further to exclude socket types
         # which don't have meaningful input values (e.g. cycles shader)
-        value_inputs = [socket for socket in node.inputs if socket.enabled and not socket.is_linked]
+        value_inputs = [socket for socket in node.inputs if self.show_socket_input(socket)]
         if value_inputs:
             layout.separator()
             layout.label(text="Inputs:")
             for socket in value_inputs:
                 row = layout.row()
-                socket.draw(context, row, node, iface_(socket.name, socket.bl_rna.translation_context))
+                socket.draw(
+                    context,
+                    row,
+                    node,
+                    iface_(socket.label if socket.label else socket.name, socket.bl_rna.translation_context),
+                )
+
+    def show_socket_input(self, socket):
+        return hasattr(socket, 'draw') and socket.enabled and not socket.is_linked
 
 
 class NODE_PT_texture_mapping(Panel):
@@ -640,23 +678,15 @@ class NODE_UL_interface_sockets(bpy.types.UIList):
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
             row = layout.row(align=True)
 
-            # inputs get icon on the left
-            if not socket.is_output:
-                row.template_node_socket(color=color)
-
+            row.template_node_socket(color=color)
             row.prop(socket, "name", text="", emboss=False, icon_value=icon)
-
-            # outputs get icon on the right
-            if socket.is_output:
-                row.template_node_socket(color=color)
-
         elif self.layout_type == 'GRID':
             layout.alignment = 'CENTER'
             layout.template_node_socket(color=color)
 
 
 # Grease Pencil properties
-class NODE_PT_grease_pencil(AnnotationDataPanel, Panel):
+class NODE_PT_annotation(AnnotationDataPanel, Panel):
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'
     bl_category = "View"
@@ -670,17 +700,6 @@ class NODE_PT_grease_pencil(AnnotationDataPanel, Panel):
         return snode is not None and snode.node_tree is not None
 
 
-class NODE_PT_grease_pencil_tools(GreasePencilToolsPanel, Panel):
-    bl_space_type = 'NODE_EDITOR'
-    bl_region_type = 'UI'
-    bl_category = "View"
-    bl_options = {'DEFAULT_CLOSED'}
-
-    # NOTE: this is just a wrapper around the generic GP tools panel
-    # It contains access to some essential tools usually found only in
-    # toolbar, but which may not necessarily be open
-
-
 def node_draw_tree_view(_layout, _context):
     pass
 
@@ -688,7 +707,12 @@ def node_draw_tree_view(_layout, _context):
 # Adapt properties editor panel to display in node editor. We have to
 # copy the class rather than inherit due to the way bpy registration works.
 def node_panel(cls):
-    node_cls = type('NODE_' + cls.__name__, cls.__bases__, dict(cls.__dict__))
+    node_cls_dict = cls.__dict__.copy()
+
+    # Needed for re-registration.
+    node_cls_dict.pop("bl_rna", None)
+
+    node_cls = type('NODE_' + cls.__name__, cls.__bases__, node_cls_dict)
 
     node_cls.bl_space_type = 'NODE_EDITOR'
     node_cls.bl_region_type = 'UI'
@@ -717,8 +741,7 @@ classes = (
     NODE_PT_active_tool,
     NODE_PT_backdrop,
     NODE_PT_quality,
-    NODE_PT_grease_pencil,
-    NODE_PT_grease_pencil_tools,
+    NODE_PT_annotation,
     NODE_UL_interface_sockets,
 
     node_panel(EEVEE_MATERIAL_PT_settings),

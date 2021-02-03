@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GRID_H__
-#define __GRID_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -33,9 +32,7 @@
 
 #include "../system/FreestyleConfig.h"
 
-extern "C" {
 #include "BLI_utildefines.h"
-}
 
 #ifdef WITH_CXX_GUARDEDALLOC
 #  include "MEM_guardedalloc.h"
@@ -243,7 +240,7 @@ class Grid {
   /*! Fills the case corresponding to coord with the cell */
   virtual void fillCell(const Vec3u &coord, Cell &cell) = 0;
 
-  /*! returns the cell whose coordinates are pased as argument */
+  /*! returns the cell whose coordinates are passed as argument */
   virtual Cell *getCell(const Vec3u &coord) = 0;
 
   /*! returns the cell containing the point passed as argument.
@@ -290,7 +287,7 @@ class Grid {
    *  This method is quite coarse insofar as it adds all cells intersecting the polygon bounding
    * box convex_poly The list of 3D points constituting a convex polygon
    */
-  void insertOccluder(Polygon3r *convex_poly);
+  void insertOccluder(Polygon3r *occluder);
 
   /*! Adds an occluder to the list of occluders */
   void addOccluder(Polygon3r *occluder)
@@ -435,5 +432,3 @@ class VirtualOccludersSet {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __GRID_H__

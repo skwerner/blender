@@ -23,8 +23,8 @@
 #include "render/buffers.h"
 
 #include "util/util_string.h"
-#include "util/util_vector.h"
 #include "util/util_unique_ptr.h"
+#include "util/util_vector.h"
 
 #include <OpenImageIO/imageio.h>
 
@@ -196,8 +196,8 @@ class DenoiseTask {
 
   /* Device task callbacks */
   bool acquire_tile(Device *device, Device *tile_device, RenderTile &tile);
-  void map_neighboring_tiles(RenderTile *tiles, Device *tile_device);
-  void unmap_neighboring_tiles(RenderTile *tiles);
+  void map_neighboring_tiles(RenderTileNeighbors &neighbors, Device *tile_device);
+  void unmap_neighboring_tiles(RenderTileNeighbors &neighbors);
   void release_tile();
   bool get_cancel();
 };

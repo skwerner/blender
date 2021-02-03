@@ -37,7 +37,6 @@ class DATA_PT_empty(DataButtonsPanel, Panel):
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
-        layout.use_property_decorate = False
 
         ob = context.object
 
@@ -45,21 +44,30 @@ class DATA_PT_empty(DataButtonsPanel, Panel):
         layout.prop(ob, "empty_display_size", text="Size")
 
         if ob.empty_display_type == 'IMAGE':
-            layout.prop(ob, "use_empty_image_alpha")
-
-            col = layout.column()
-            col.active = ob.use_empty_image_alpha
-            col.prop(ob, "color", text="Transparency", index=3, slider=True)
-
             col = layout.column(align=True)
             col.prop(ob, "empty_image_offset", text="Offset X", index=0)
             col.prop(ob, "empty_image_offset", text="Y", index=1)
 
             col = layout.column()
-            col.row().prop(ob, "empty_image_depth", text="Depth", expand=True)
+            depth_row = col.row()
+            depth_row.enabled = not ob.show_in_front
+            depth_row.prop(ob, "empty_image_depth", text="Depth", expand=True)
             col.row().prop(ob, "empty_image_side", text="Side", expand=True)
-            col.prop(ob, "show_empty_image_orthographic", text="Display Orthographic")
-            col.prop(ob, "show_empty_image_perspective", text="Display Perspective")
+
+            col = layout.column(heading="Show In", align=True)
+            col.prop(ob, "show_empty_image_orthographic", text="Orthographic")
+            col.prop(ob, "show_empty_image_perspective", text="Perspective")
+            col.prop(ob, "show_empty_image_only_axis_aligned", text="Only Axis Aligned")
+
+            col = layout.column(align=False, heading="Opacity")
+            col.use_property_decorate = False
+            row = col.row(align=True)
+            sub = row.row(align=True)
+            sub.prop(ob, "use_empty_image_alpha", text="")
+            sub = sub.row(align=True)
+            sub.active = ob.use_empty_image_alpha
+            sub.prop(ob, "color", text="", index=3, slider=True)
+            row.prop_decorator(ob, "color", index=3)
 
 
 class DATA_PT_empty_image(DataButtonsPanel, Panel):

@@ -17,22 +17,25 @@
  * All rights reserved.
  */
 
-#ifndef __DNA_LINESTYLE_TYPES_H__
-#define __DNA_LINESTYLE_TYPES_H__
+#pragma once
 
 /** \file
  * \ingroup DNA
  */
 
-#include "DNA_listBase.h"
 #include "DNA_ID.h"
+#include "DNA_listBase.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #ifndef MAX_MTEX
 #  define MAX_MTEX 18
 #endif
 
 /* texco (also in DNA_material_types.h) */
-#define TEXCO_STROKE 16 /* actually it's UV */
+#define TEXCO_STROKE 16 /* actually its UV */
 
 struct AnimData;
 struct ColorBand;
@@ -577,4 +580,6 @@ typedef struct FreestyleLineStyle {
   ListBase geometry_modifiers;
 } FreestyleLineStyle;
 
+#ifdef __cplusplus
+}
 #endif

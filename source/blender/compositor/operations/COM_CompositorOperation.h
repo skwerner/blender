@@ -16,11 +16,11 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_COMPOSITOROPERATION_H__
-#define __COM_COMPOSITOROPERATION_H__
-#include "COM_NodeOperation.h"
+#pragma once
+
 #include "BLI_rect.h"
 #include "BLI_string.h"
+#include "COM_NodeOperation.h"
 
 struct Scene;
 
@@ -123,4 +123,3 @@ class CompositorOperation : public NodeOperation {
     this->m_active = active;
   }
 };
-#endif

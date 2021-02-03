@@ -29,9 +29,9 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_heap_simple.h"
 #include "BLI_strict_flags.h"
+#include "BLI_utildefines.h"
 
 #define HEAP_PARENT(i) (((i)-1) >> 1)
 
@@ -225,7 +225,7 @@ float BLI_heapsimple_top_value(const HeapSimple *heap)
 }
 
 /**
- * Pop the top node off the heap and return it's pointer.
+ * Pop the top node off the heap and return its pointer.
  */
 void *BLI_heapsimple_pop_min(HeapSimple *heap)
 {

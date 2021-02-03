@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_SPHERICAL_GRID_H__
-#define __FREESTYLE_SPHERICAL_GRID_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -34,9 +33,9 @@
 #include "OccluderSource.h"
 #include "ViewMap.h"
 
-#include "../geometry/Polygon.h"
 #include "../geometry/BBox.h"
 #include "../geometry/GridHelpers.h"
+#include "../geometry/Polygon.h"
 
 #include "../system/PointerSequence.h"
 
@@ -434,5 +433,3 @@ inline bool SphericalGrid::insertOccluder(OccluderSource &source, OccluderData *
 }
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_SPHERICAL_GRID_H__

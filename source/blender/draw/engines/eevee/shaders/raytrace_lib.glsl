@@ -1,3 +1,11 @@
+
+#pragma BLENDER_REQUIRE(common_view_lib.glsl)
+#pragma BLENDER_REQUIRE(common_math_lib.glsl)
+#pragma BLENDER_REQUIRE(common_uniforms_lib.glsl)
+
+uniform sampler2D maxzBuffer;
+uniform sampler2DArray planarDepth;
+
 #define MAX_STEP 256
 
 float sample_depth(vec2 uv, int index, float lod)
@@ -8,6 +16,7 @@ float sample_depth(vec2 uv, int index, float lod)
   }
   else {
 #endif
+    lod = clamp(floor(lod), 0.0, 8.0);
     /* Correct UVs for mipmaping mis-alignment */
     uv *= mipRatio[int(lod) + hizMipOffset];
     return textureLod(maxzBuffer, uv, lod).r;
@@ -83,8 +92,8 @@ void prepare_raycast(vec3 ray_origin,
   ss_start.w = project_point(ProjectionMatrix, ray_origin).z;
   ss_end.w = project_point(ProjectionMatrix, ray_end).z;
 
-  /* XXX This is a hack a better method is welcome ! */
-  /* We take the delta between the offseted depth and the depth and substract it from the ray
+  /* XXX This is a hack. A better method is welcome! */
+  /* We take the delta between the offsetted depth and the depth and subtract it from the ray
    * depth. This will change the world space thickness appearance a bit but we can have negative
    * values without worries. We cannot do this in viewspace because of the perspective division. */
   ss_start.w = 2.0 * ss_start.z - ss_start.w;
@@ -96,7 +105,9 @@ void prepare_raycast(vec3 ray_origin,
 
   /* If the line is degenerate, make it cover at least one pixel
    * to not have to handle zero-pixel extent as a special case later */
-  ss_step.xy += vec2((dot(ss_step.xy, ss_step.xy) < 0.00001) ? 0.001 : 0.0);
+  if (dot(ss_step.xy, ss_step.xy) < 0.00001) {
+    ss_step.xy = vec2(0.0, 0.0001);
+  }
 
   /* Make ss_step cover one pixel. */
   ss_step /= max(abs(ss_step.x), abs(ss_step.y));
@@ -104,9 +115,10 @@ void prepare_raycast(vec3 ray_origin,
 
   /* Clip to segment's end. */
   max_time /= length(ss_step.xyz);
-
   /* Clipping to frustum sides. */
   max_time = min(max_time, line_unit_box_intersect_dist(ss_start.xyz, ss_step.xyz));
+  /* Avoid no iteration. */
+  max_time = max(max_time, 1.0);
 
   /* Convert to texture coords. Z component included
    * since this is how it's stored in the depth buffer.
@@ -120,7 +132,8 @@ void prepare_raycast(vec3 ray_origin,
   ss_ray = ss_start * m.xyyy + 0.5;
   ss_step *= m.xyyy;
 
-  ss_ray.xy += m * ssrPixelSize * 2.0; /* take the center of the texel. * 2 because halfres. */
+  /* take the center of the texel. */
+  // ss_ray.xy += sign(ss_ray.xy) * m * ssrPixelSize * (1.0 + hizMipOffset);
 }
 
 /* See times_and_deltas. */
@@ -131,7 +144,7 @@ void prepare_raycast(vec3 ray_origin,
 
 // #define GROUPED_FETCHES /* is still slower, need to see where is the bottleneck. */
 /* Return the hit position, and negate the z component (making it positive) if not hit occurred. */
-/* __ray_dir__ is the ray direction premultiplied by it's maximum length */
+/* __ray_dir__ is the ray direction premultiplied by its maximum length */
 vec3 raycast(int index,
              vec3 ray_origin,
              vec3 ray_dir,
@@ -163,7 +176,8 @@ vec3 raycast(int index,
   float iter;
   for (iter = 1.0; !hit && (ray_time < max_time) && (iter < MAX_STEP); iter++) {
     /* Minimum stride of 2 because we are using half res minmax zbuffer. */
-    float stride = max(1.0, iter * trace_quality) * 2.0;
+    /* WORKAROUND: Factor is a bit higher than 2 to avoid some banding. To investigate. */
+    float stride = max(1.0, iter * trace_quality) * (2.0 + 0.05);
     float lod = log2(stride * 0.5 * trace_quality) * lod_fac;
     ray_time += stride;
 
@@ -224,9 +238,10 @@ vec3 raycast(int index,
 #endif
   }
 
-  if (discard_backface) {
-    /* Discard backface hits */
-    hit = hit && (prev_delta > 0.0);
+  /* Discard backface hits. Only do this if the ray traveled enough to avoid loosing intricate
+   * contact reflections. This is only used for SSReflections. */
+  if (discard_backface && prev_delta < 0.0 && curr_time > 4.1) {
+    hit = false;
   }
 
   /* Reject hit if background. */
@@ -249,7 +264,7 @@ float screen_border_mask(vec2 hit_co)
 {
   const float margin = 0.003;
   float atten = ssrBorderFac + margin; /* Screen percentage */
-  hit_co = smoothstep(margin, atten, hit_co) * (1 - smoothstep(1.0 - atten, 1.0 - margin, hit_co));
+  hit_co = smoothstep(0.0, atten, hit_co) * (1.0 - smoothstep(1.0 - atten, 1.0, hit_co));
 
   float screenfade = hit_co.x * hit_co.y;
 

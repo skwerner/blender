@@ -16,8 +16,8 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_PROJECTORLENSDISTORTIONOPERATION_H__
-#define __COM_PROJECTORLENSDISTORTIONOPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
 #include "DNA_node_types.h"
 
@@ -37,7 +37,7 @@ class ProjectorLensDistortionOperation : public NodeOperation {
   ProjectorLensDistortionOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixel(float output[4], int x, int y, void *data);
 
@@ -58,4 +58,3 @@ class ProjectorLensDistortionOperation : public NodeOperation {
 
   void updateDispersion();
 };
-#endif

@@ -22,8 +22,7 @@
  * Declaration of GHOST_EventTrackpad class.
  */
 
-#ifndef __GHOST_EVENTTRACKPAD_H__
-#define __GHOST_EVENTTRACKPAD_H__
+#pragma once
 
 #include "GHOST_Event.h"
 
@@ -34,11 +33,11 @@ class GHOST_EventTrackpad : public GHOST_Event {
  public:
   /**
    * Constructor.
-   * \param msec      The time this event was generated.
+   * \param msec: The time this event was generated.
    * \param window: The window of this event.
-   * \param subtype   The subtype of the event.
-   * \param x         The x-delta of the pan event.
-   * \param y         The y-delta of the pan event.
+   * \param subtype: The subtype of the event.
+   * \param x: The x-delta of the pan event.
+   * \param y: The y-delta of the pan event.
    */
   GHOST_EventTrackpad(GHOST_TUns64 msec,
                       GHOST_IWindow *window,
@@ -46,7 +45,8 @@ class GHOST_EventTrackpad : public GHOST_Event {
                       GHOST_TInt32 x,
                       GHOST_TInt32 y,
                       GHOST_TInt32 deltaX,
-                      GHOST_TInt32 deltaY)
+                      GHOST_TInt32 deltaY,
+                      bool isDirectionInverted)
       : GHOST_Event(msec, GHOST_kEventTrackpad, window)
   {
     m_trackpadEventData.subtype = subtype;
@@ -54,6 +54,7 @@ class GHOST_EventTrackpad : public GHOST_Event {
     m_trackpadEventData.y = y;
     m_trackpadEventData.deltaX = deltaX;
     m_trackpadEventData.deltaY = deltaY;
+    m_trackpadEventData.isDirectionInverted = isDirectionInverted;
     m_data = &m_trackpadEventData;
   }
 
@@ -61,5 +62,3 @@ class GHOST_EventTrackpad : public GHOST_Event {
   /** The mouse pan data */
   GHOST_TEventTrackpadData m_trackpadEventData;
 };
-
-#endif  // _GHOST_EVENT_PAN_H_

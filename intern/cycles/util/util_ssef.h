@@ -18,6 +18,8 @@
 #ifndef __UTIL_SSEF_H__
 #define __UTIL_SSEF_H__
 
+#include "util_ssei.h"
+
 CCL_NAMESPACE_BEGIN
 
 #ifdef __KERNEL_SSE2__
@@ -523,13 +525,29 @@ __forceinline ssei truncatei(const ssef &a)
   return _mm_cvttps_epi32(a.m128);
 }
 
+/* This is about 25% faster than straightforward floor to integer conversion
+ * due to better pipelining.
+ *
+ * Unsaturated add 0xffffffff (a < 0) is the same as subtract -1.
+ */
 __forceinline ssei floori(const ssef &a)
 {
-#  if defined(__KERNEL_SSE41__)
-  return ssei(floor(a));
-#  else
-  return ssei(a - ssef(0.5f));
-#  endif
+  return truncatei(a) + cast((a < 0.0f).m128);
+}
+
+__forceinline ssef floorfrac(const ssef &x, ssei *i)
+{
+  *i = floori(x);
+  return x - ssef(*i);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Common Functions
+////////////////////////////////////////////////////////////////////////////////
+
+__forceinline ssef mix(const ssef &a, const ssef &b, const ssef &t)
+{
+  return madd(t, b, (ssef(1.0f) - t) * a);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

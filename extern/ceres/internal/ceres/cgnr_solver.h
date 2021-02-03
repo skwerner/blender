@@ -31,7 +31,8 @@
 #ifndef CERES_INTERNAL_CGNR_SOLVER_H_
 #define CERES_INTERNAL_CGNR_SOLVER_H_
 
-#include "ceres/internal/scoped_ptr.h"
+#include <memory>
+
 #include "ceres/linear_solver.h"
 
 namespace ceres {
@@ -51,16 +52,18 @@ class BlockJacobiPreconditioner;
 class CgnrSolver : public BlockSparseMatrixSolver {
  public:
   explicit CgnrSolver(const LinearSolver::Options& options);
-  virtual Summary SolveImpl(
-      BlockSparseMatrix* A,
-      const double* b,
-      const LinearSolver::PerSolveOptions& per_solve_options,
-      double* x);
+  CgnrSolver(const CgnrSolver&) = delete;
+  void operator=(const CgnrSolver&) = delete;
+  virtual ~CgnrSolver();
+
+  Summary SolveImpl(BlockSparseMatrix* A,
+                    const double* b,
+                    const LinearSolver::PerSolveOptions& per_solve_options,
+                    double* x) final;
 
  private:
   const LinearSolver::Options options_;
-  scoped_ptr<Preconditioner> preconditioner_;
-  CERES_DISALLOW_COPY_AND_ASSIGN(CgnrSolver);
+  std::unique_ptr<Preconditioner> preconditioner_;
 };
 
 }  // namespace internal

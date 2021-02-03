@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -27,35 +27,52 @@
 
 #include "BLI_listbase.h"
 
+#include "BLT_translation.h"
+
 #include "DNA_cloth_types.h"
+#include "DNA_defaults.h"
 #include "DNA_key_types.h"
 #include "DNA_mesh_types.h"
-#include "DNA_scene_types.h"
+#include "DNA_object_force_types.h"
 #include "DNA_object_types.h"
+#include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
 
 #include "MEM_guardedalloc.h"
 
 #include "BKE_cloth.h"
+#include "BKE_context.h"
 #include "BKE_effect.h"
 #include "BKE_global.h"
 #include "BKE_key.h"
-#include "BKE_library.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
 #include "BKE_pointcache.h"
+#include "BKE_screen.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
 
 #include "DEG_depsgraph_physics.h"
 #include "DEG_depsgraph_query.h"
 
+#include "MOD_ui_common.h"
 #include "MOD_util.h"
 
 static void initData(ModifierData *md)
 {
   ClothModifierData *clmd = (ClothModifierData *)md;
 
-  clmd->sim_parms = MEM_callocN(sizeof(ClothSimSettings), "cloth sim parms");
-  clmd->coll_parms = MEM_callocN(sizeof(ClothCollSettings), "cloth coll parms");
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(clmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(clmd, DNA_struct_default_get(ClothModifierData), modifier);
+  clmd->sim_parms = DNA_struct_default_alloc(ClothSimSettings);
+  clmd->coll_parms = DNA_struct_default_alloc(ClothCollSettings);
+
   clmd->point_cache = BKE_ptcache_add(&clmd->ptcaches);
 
   /* check for alloc failing */
@@ -63,7 +80,13 @@ static void initData(ModifierData *md)
     return;
   }
 
-  cloth_init(clmd);
+  if (!clmd->sim_parms->effector_weights) {
+    clmd->sim_parms->effector_weights = BKE_effector_add_weights(NULL);
+  }
+
+  if (clmd->point_cache) {
+    clmd->point_cache->step = 1;
+  }
 }
 
 static void deformVerts(ModifierData *md,
@@ -91,10 +114,10 @@ static void deformVerts(ModifierData *md,
   else {
     /* Not possible to use get_mesh() in this case as we'll modify its vertices
      * and get_mesh() would return 'mesh' directly. */
-    BKE_id_copy_ex(NULL, (ID *)mesh, (ID **)&mesh_src, LIB_ID_COPY_LOCALIZE);
+    mesh_src = (Mesh *)BKE_id_copy_ex(NULL, (ID *)mesh, NULL, LIB_ID_COPY_LOCALIZE);
   }
 
-  /* TODO(sergey): For now it actually duplicates logic from DerivedMesh.c
+  /* TODO(sergey): For now it actually duplicates logic from DerivedMesh.cc
    * and needs some more generic solution. But starting experimenting with
    * this so close to the release is not that nice..
    *
@@ -110,11 +133,11 @@ static void deformVerts(ModifierData *md,
             &mesh_src->vdata, CD_CLOTH_ORCO, CD_CALLOC, NULL, mesh_src->totvert);
       }
 
-      memcpy(layerorco, kb->data, sizeof(float) * 3 * numVerts);
+      memcpy(layerorco, kb->data, sizeof(float[3]) * numVerts);
     }
   }
 
-  BKE_mesh_apply_vert_coords(mesh_src, vertexCos);
+  BKE_mesh_vert_coords_apply(mesh_src, vertexCos);
 
   clothModifier_do(clmd, ctx->depsgraph, scene, ctx->object, mesh_src, vertexCos);
 
@@ -179,7 +202,11 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
   }
   else {
     tclmd->point_cache = BKE_ptcache_add(&tclmd->ptcaches);
-    tclmd->point_cache->step = 1;
+    if (clmd->point_cache != NULL) {
+      tclmd->point_cache->step = clmd->point_cache->step;
+      tclmd->point_cache->startframe = clmd->point_cache->startframe;
+      tclmd->point_cache->endframe = clmd->point_cache->endframe;
+    }
   }
 
   tclmd->sim_parms = MEM_dupallocN(clmd->sim_parms);
@@ -249,13 +276,31 @@ static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *u
   }
 }
 
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
+
+  uiItemL(layout, IFACE_("Settings are inside the Physics tab"), ICON_NONE);
+
+  modifier_panel_end(layout, ptr);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  modifier_panel_register(region_type, eModifierType_Cloth, panel_draw);
+}
+
 ModifierTypeInfo modifierType_Cloth = {
     /* name */ "Cloth",
     /* structName */ "ClothModifierData",
     /* structSize */ sizeof(ClothModifierData),
+    /* srna */ &RNA_ClothModifier,
     /* type */ eModifierTypeType_OnlyDeform,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_UsesPointCache |
         eModifierTypeFlag_Single,
+    /* icon */ ICON_MOD_CLOTH,
 
     /* copyData */ copyData,
 
@@ -263,7 +308,10 @@ ModifierTypeInfo modifierType_Cloth = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyGeometrySet */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,
@@ -272,8 +320,10 @@ ModifierTypeInfo modifierType_Cloth = {
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ dependsOnTime,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ NULL,
     /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

@@ -17,17 +17,17 @@
  */
 
 #include "COM_MovieClipNode.h"
+#include "COM_ConvertColorProfileOperation.h"
 #include "COM_ExecutionSystem.h"
 #include "COM_MovieClipOperation.h"
 #include "COM_SetValueOperation.h"
-#include "COM_ConvertColorProfileOperation.h"
 
-extern "C" {
-#include "DNA_movieclip_types.h"
 #include "BKE_movieclip.h"
 #include "BKE_tracking.h"
+
+#include "DNA_movieclip_types.h"
+
 #include "IMB_imbuf.h"
-}
 
 MovieClipNode::MovieClipNode(bNode *editorNode) : Node(editorNode)
 {
@@ -49,7 +49,7 @@ void MovieClipNode::convertToOperations(NodeConverter &converter,
   MovieClipUser *movieClipUser = (MovieClipUser *)editorNode->storage;
   bool cacheFrame = !context.isRendering();
 
-  ImBuf *ibuf = NULL;
+  ImBuf *ibuf = nullptr;
   if (movieClip) {
     if (cacheFrame) {
       ibuf = BKE_movieclip_get_ibuf(movieClip, movieClipUser);

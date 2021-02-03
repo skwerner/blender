@@ -23,10 +23,10 @@
 
 #include <cstdio>
 
-#include "intern/GHOST_Debug.h"
-#include "GHOST_Types.h"
-#include "GHOST_Path-api.h"
 #include "GHOST_ISystemPaths.h"
+#include "GHOST_Path-api.h"
+#include "GHOST_Types.h"
+#include "intern/GHOST_Debug.h"
 
 GHOST_TSuccess GHOST_CreateSystemPaths(void)
 {
@@ -48,6 +48,12 @@ const GHOST_TUns8 *GHOST_getUserDir(int version, const char *versionstr)
 {
   GHOST_ISystemPaths *systemPaths = GHOST_ISystemPaths::get();
   return systemPaths ? systemPaths->getUserDir(version, versionstr) : NULL; /* shouldn't be NULL */
+}
+
+const GHOST_TUns8 *GHOST_getUserSpecialDir(GHOST_TUserSpecialDirTypes type)
+{
+  GHOST_ISystemPaths *systemPaths = GHOST_ISystemPaths::get();
+  return systemPaths ? systemPaths->getUserSpecialDir(type) : NULL; /* shouldn't be NULL */
 }
 
 const GHOST_TUns8 *GHOST_getBinaryDir()

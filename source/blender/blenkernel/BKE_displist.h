@@ -17,26 +17,37 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_DISPLIST_H__
-#define __BKE_DISPLIST_H__
+#pragma once
 
 /** \file
  * \ingroup bke
  * \brief display list (or rather multi purpose list) stuff.
  */
-#include "DNA_customdata_types.h"
 #include "BKE_customdata.h"
+#include "DNA_customdata_types.h"
 
-/* dl->type */
-#define DL_POLY 0
-#define DL_SEGM 1
-#define DL_SURF 2
-#define DL_INDEX3 4
-#define DL_INDEX4 5
-// #define DL_VERTCOL              6  // UNUSED
-#define DL_VERTS 7
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-/* dl->flag */
+/** #DispList.type */
+enum {
+  /** A closed polygon (that can be filled).  */
+  DL_POLY = 0,
+  /** An open polygon.  */
+  DL_SEGM = 1,
+  /** A grid surface that respects #DL_CYCL_U & #DL_CYCL_V.  */
+  DL_SURF = 2,
+  /** Triangles. */
+  DL_INDEX3 = 4,
+  /** Quads, with support for triangles (when values of the 3rd and 4th indices match). */
+  DL_INDEX4 = 5,
+  // DL_VERTCOL = 6, /* UNUSED */
+  /** Isolated points. */
+  DL_VERTS = 7,
+};
+
+/** #DispList.type */
 enum {
   /** U/V swapped here compared with #Nurb.flagu, #Nurb.flagv and #CU_NURB_CYCLIC */
   DL_CYCL_U = (1 << 0),
@@ -49,9 +60,7 @@ enum {
 /* prototypes */
 
 struct Depsgraph;
-struct LinkNode;
 struct ListBase;
-struct Main;
 struct Mesh;
 struct Object;
 struct Scene;
@@ -114,4 +123,6 @@ float BKE_displist_calc_taper(
 
 void BKE_displist_minmax(struct ListBase *dispbase, float min[3], float max[3]);
 
+#ifdef __cplusplus
+}
 #endif

@@ -16,16 +16,15 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_COMPOSITORCONTEXT_H__
-#define __COM_COMPOSITORCONTEXT_H__
+#pragma once
 
-#include <vector>
-#include <string>
-#include "DNA_node_types.h"
-#include "DNA_color_types.h"
 #include "BLI_rect.h"
-#include "DNA_scene_types.h"
 #include "COM_defines.h"
+#include "DNA_color_types.h"
+#include "DNA_node_types.h"
+#include "DNA_scene_types.h"
+#include <string>
+#include <vector>
 
 /**
  * \brief Overall context of the compositor
@@ -215,7 +214,7 @@ class CompositorContext {
   }
 
   /**
-   * \brief get the current framenumber of the scene in this context
+   * \brief get the current frame-number of the scene in this context
    */
   int getFramenumber() const;
 
@@ -268,6 +267,13 @@ class CompositorContext {
   {
     return (this->getbNodeTree()->flag & NTREE_COM_GROUPNODE_BUFFER) != 0;
   }
-};
 
-#endif
+  /**
+   * \brief Get the render percentage as a factor.
+   * The compositor uses a factor i.o. a percentage.
+   */
+  float getRenderPercentageAsFactor() const
+  {
+    return m_rd->size * 0.01f;
+  }
+};

@@ -18,11 +18,11 @@
  * \ingroup RNA
  */
 
-#include <stdlib.h>
 #include <limits.h>
+#include <stdlib.h>
 
-#include "BKE_modifier.h"
 #include "BKE_dynamicpaint.h"
+#include "BKE_modifier.h"
 
 #include "DNA_dynamicpaint_types.h"
 #include "DNA_modifier_types.h"
@@ -57,7 +57,7 @@ static char *rna_DynamicPaintCanvasSettings_path(PointerRNA *ptr)
   ModifierData *md = (ModifierData *)settings->pmd;
   char name_esc[sizeof(md->name) * 2];
 
-  BLI_strescape(name_esc, md->name, sizeof(name_esc));
+  BLI_str_escape(name_esc, md->name, sizeof(name_esc));
   return BLI_sprintfN("modifiers[\"%s\"].canvas_settings", name_esc);
 }
 
@@ -67,7 +67,7 @@ static char *rna_DynamicPaintBrushSettings_path(PointerRNA *ptr)
   ModifierData *md = (ModifierData *)settings->pmd;
   char name_esc[sizeof(md->name) * 2];
 
-  BLI_strescape(name_esc, md->name, sizeof(name_esc));
+  BLI_str_escape(name_esc, md->name, sizeof(name_esc));
   return BLI_sprintfN("modifiers[\"%s\"].brush_settings", name_esc);
 }
 
@@ -78,8 +78,8 @@ static char *rna_DynamicPaintSurface_path(PointerRNA *ptr)
   char name_esc[sizeof(md->name) * 2];
   char name_esc_surface[sizeof(surface->name) * 2];
 
-  BLI_strescape(name_esc, md->name, sizeof(name_esc));
-  BLI_strescape(name_esc_surface, surface->name, sizeof(name_esc_surface));
+  BLI_str_escape(name_esc, md->name, sizeof(name_esc));
+  BLI_str_escape(name_esc_surface, surface->name, sizeof(name_esc_surface));
   return BLI_sprintfN(
       "modifiers[\"%s\"].canvas_settings.canvas_surfaces[\"%s\"]", name_esc, name_esc_surface);
 }
@@ -92,7 +92,7 @@ static void rna_DynamicPaint_redoModifier(Main *UNUSED(bmain),
                                           Scene *UNUSED(scene),
                                           PointerRNA *ptr)
 {
-  DEG_id_tag_update(ptr->id.data, ID_RECALC_GEOMETRY);
+  DEG_id_tag_update(ptr->owner_id, ID_RECALC_GEOMETRY);
 }
 
 static void rna_DynamicPaintSurfaces_updateFrames(Main *UNUSED(bmain),
@@ -472,7 +472,7 @@ static void rna_def_canvas_surface(BlenderRNA *brna)
   prop = RNA_def_property(srna, "use_antialiasing", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_DPAINT_ANTIALIAS);
-  RNA_def_property_ui_text(prop, "Anti-aliasing", "Use 5x multisampling to smooth paint edges");
+  RNA_def_property_ui_text(prop, "Anti-Aliasing", "Use 5x multisampling to smooth paint edges");
   RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_DynamicPaintSurface_reset");
 
   prop = RNA_def_property(srna, "brush_influence_scale", PROP_FLOAT, PROP_FACTOR);
@@ -610,7 +610,7 @@ static void rna_def_canvas_surface(BlenderRNA *brna)
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_DPAINT_MULALPHA);
   RNA_def_property_ui_text(
-      prop, "Premultiply alpha", "Multiply color by alpha (recommended for Blender input)");
+      prop, "Premultiply Alpha", "Multiply color by alpha (recommended for Blender input)");
 
   prop = RNA_def_property(srna, "image_output_path", PROP_STRING, PROP_DIRPATH);
   RNA_def_property_string_sdna(prop, NULL, "image_output_path");

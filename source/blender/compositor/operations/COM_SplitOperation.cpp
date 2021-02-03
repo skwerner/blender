@@ -17,25 +17,23 @@
  */
 
 #include "COM_SplitOperation.h"
-#include "BLI_listbase.h"
 #include "BKE_image.h"
-#include "BLI_utildefines.h"
+#include "BLI_listbase.h"
 #include "BLI_math_color.h"
 #include "BLI_math_vector.h"
-
-extern "C" {
+#include "BLI_utildefines.h"
 #include "MEM_guardedalloc.h"
+
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
-}
 
-SplitOperation::SplitOperation() : NodeOperation()
+SplitOperation::SplitOperation()
 {
   this->addInputSocket(COM_DT_COLOR);
   this->addInputSocket(COM_DT_COLOR);
   this->addOutputSocket(COM_DT_COLOR);
-  this->m_image1Input = NULL;
-  this->m_image2Input = NULL;
+  this->m_image1Input = nullptr;
+  this->m_image2Input = nullptr;
 }
 
 void SplitOperation::initExecution()
@@ -47,8 +45,8 @@ void SplitOperation::initExecution()
 
 void SplitOperation::deinitExecution()
 {
-  this->m_image1Input = NULL;
-  this->m_image2Input = NULL;
+  this->m_image1Input = nullptr;
+  this->m_image2Input = nullptr;
 }
 
 void SplitOperation::executePixelSampled(float output[4],

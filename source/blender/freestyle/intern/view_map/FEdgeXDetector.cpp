@@ -19,7 +19,7 @@
  * \brief Detects/flags/builds extended features edges on the WXEdge structure
  */
 
-#include <float.h>
+#include <cfloat>
 
 #include "FEdgeXDetector.h"
 
@@ -39,7 +39,7 @@ void FEdgeXDetector::processShapes(WingedEdge &we)
   vector<WShape *> wshapes = we.getWShapes();
   WXShape *wxs;
 
-  if (_pProgressBar != NULL) {
+  if (_pProgressBar != nullptr) {
     _pProgressBar->reset();
     _pProgressBar->setLabelText("Detecting feature lines");
     _pProgressBar->setTotalSteps(wshapes.size() * 3);
@@ -132,7 +132,7 @@ void FEdgeXDetector::preProcessShape(WXShape *iWShape)
 
   vector<WFace *> &wfaces = iWShape->GetFaceList();
   vector<WFace *>::iterator f, fend;
-  // view dependant stuff
+  // view dependent stuff
   for (f = wfaces.begin(), fend = wfaces.end(); f != fend; ++f) {
     preProcessFace((WXFace *)(*f));
   }
@@ -226,9 +226,9 @@ void FEdgeXDetector::computeCurvatures(WXVertex *vertex)
       _minK1 = absK1;
     }
   }
-  // view dependant
+  // view dependent
   C = vertex->curvatures();
-  if (C == 0) {
+  if (C == nullptr) {
     return;
   }
 
@@ -370,7 +370,7 @@ void FEdgeXDetector::ProcessBorderEdge(WXEdge *iEdge)
 {
   // first check whether it is a border edge: BORDER ?
   //---------
-  if (iEdge->GetaFace() == 0) {
+  if (iEdge->GetaFace() == nullptr) {
     // it is a border edge
     iEdge->AddNature(Nature::BORDER);
   }

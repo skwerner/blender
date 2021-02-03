@@ -24,9 +24,9 @@
  */
 
 #include <float.h>
-#include <string.h>
-#include <stdio.h>
 #include <math.h>
+#include <stdio.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
@@ -44,6 +44,8 @@
 #include "BLI_threads.h"
 #include "BLI_utildefines.h"
 
+#include "atomic_ops.h"
+
 #include "BLT_translation.h"
 
 #include "IMB_imbuf.h"
@@ -59,12 +61,13 @@
 #include "BKE_brush.h"
 #include "BKE_camera.h"
 #include "BKE_colorband.h"
-#include "BKE_context.h"
 #include "BKE_colortools.h"
+#include "BKE_context.h"
 #include "BKE_customdata.h"
+#include "BKE_global.h"
 #include "BKE_idprop.h"
 #include "BKE_image.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_mesh.h"
@@ -75,22 +78,20 @@
 #include "BKE_report.h"
 #include "BKE_scene.h"
 #include "BKE_screen.h"
-#include "BKE_texture.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
 
-#include "UI_interface.h"
-
-#include "ED_object.h"
-#include "ED_mesh.h"
 #include "ED_node.h"
+#include "ED_object.h"
 #include "ED_paint.h"
 #include "ED_screen.h"
 #include "ED_uvedit.h"
 #include "ED_view3d.h"
+#include "ED_view3d_offscreen.h"
 
-#include "GPU_extensions.h"
+#include "GPU_capabilities.h"
+#include "GPU_init_exit.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -99,11 +100,8 @@
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
 
-#include "GPU_draw.h"
-
 #include "IMB_colormanagement.h"
 
-#include "bmesh.h"
 //#include "bmesh_tools.h"
 
 #include "paint_intern.h"
@@ -112,7 +110,7 @@ static void partial_redraw_array_init(ImagePaintPartialRedraw *pr);
 
 /* Defines and Structs */
 /* unit_float_to_uchar_clamp as inline function */
-BLI_INLINE unsigned char f_to_char(const float val)
+BLI_INLINE uchar f_to_char(const float val)
 {
   return unit_float_to_uchar_clamp(val);
 }
@@ -192,18 +190,21 @@ BLI_INLINE unsigned char f_to_char(const float val)
 /* to avoid locking in tile initialization */
 #define TILE_PENDING POINTER_FROM_INT(-1)
 
-/** This is mainly a convenience struct used so we can keep an array of images we use -
+/**
+ * This is mainly a convenience struct used so we can keep an array of images we use -
  * their imbufs, etc, in 1 array, When using threads this array is copied for each thread
- * because 'partRedrawRect' and 'touch' values would not be thread safe */
+ * because 'partRedrawRect' and 'touch' values would not be thread safe.
+ */
 typedef struct ProjPaintImage {
   Image *ima;
+  ImageUser iuser;
   ImBuf *ibuf;
   ImagePaintPartialRedraw *partRedrawRect;
   /** Only used to build undo tiles during painting. */
   volatile void **undoRect;
   /** The mask accumulation must happen on canvas, not on space screen bucket.
    * Here we store the mask rectangle. */
-  unsigned short **maskRect;
+  ushort **maskRect;
   /** Store flag to enforce validation of undo rectangle. */
   bool **valid;
   bool touch;
@@ -242,7 +243,7 @@ typedef struct LoopSeamData {
 typedef struct ProjPaintState {
   View3D *v3d;
   RegionView3D *rv3d;
-  ARegion *ar;
+  ARegion *region;
   Depsgraph *depsgraph;
   Scene *scene;
   /* PROJ_SRC_**** */
@@ -276,7 +277,7 @@ typedef struct ProjPaintState {
   /** bucketRect aligned array linkList of faces overlapping each bucket. */
   LinkNode **bucketFaces;
   /** store if the bucks have been initialized. */
-  unsigned char *bucketFlags;
+  uchar *bucketFlags;
 
   /** store options per vert, now only store if the vert is pointing away from the view. */
   char *vertFlags;
@@ -366,7 +367,7 @@ typedef struct ProjPaintState {
   int bucketMin[2];
   int bucketMax[2];
   /** must lock threads while accessing these. */
-  int context_bucket_x, context_bucket_y;
+  int context_bucket_index;
 
   struct CurveMapping *cavity_curve;
   BlurKernel *blurkernel;
@@ -406,7 +407,6 @@ typedef struct ProjPaintState {
   SpinLock *tile_lock;
 
   Mesh *me_eval;
-  bool me_eval_free;
   int totlooptri_eval;
   int totloop_eval;
   int totpoly_eval;
@@ -440,13 +440,13 @@ typedef union pixelPointer {
   /** float buffer. */
   float *f_pt;
   /** 2 ways to access a char buffer. */
-  unsigned int *uint_pt;
-  unsigned char *ch_pt;
+  uint *uint_pt;
+  uchar *ch_pt;
 } PixelPointer;
 
 typedef union pixelStore {
-  unsigned char ch[4];
-  unsigned int uint;
+  uchar ch[4];
+  uint uint;
   float f[4];
 } PixelStore;
 
@@ -458,17 +458,17 @@ typedef struct ProjPixel {
   short x_px, y_px;
 
   /** if anyone wants to paint onto more than 65535 images they can bite me. */
-  unsigned short image_index;
-  unsigned char bb_cell_index;
+  ushort image_index;
+  uchar bb_cell_index;
 
   /* for various reasons we may want to mask out painting onto this pixel */
-  unsigned short mask;
+  ushort mask;
 
   /* Only used when the airbrush is disabled.
    * Store the max mask value to avoid painting over an area with a lower opacity
    * with an advantage that we can avoid touching the pixel at all, if the
-   * new mask value is lower then mask_accum */
-  unsigned short *mask_accum;
+   * new mask value is lower than mask_accum */
+  ushort *mask_accum;
 
   /* horrible hack, store tile valid flag pointer here to re-validate tiles
    * used for anchored and drag-dot strokes */
@@ -488,7 +488,7 @@ typedef struct ProjPixelClone {
 typedef struct {
   SpinLock *lock;
   bool masked;
-  unsigned short tile_width;
+  ushort tile_width;
   ImBuf **tmpibuf;
   ProjPaintImage *pjima;
 } TileInfo;
@@ -530,6 +530,18 @@ BLI_INLINE const MPoly *ps_tri_index_to_mpoly(const ProjPaintState *ps, int tri_
 
 /* Finish projection painting structs */
 
+static int project_paint_face_paint_tile(Image *ima, const float *uv)
+{
+  if (ima == NULL || ima->source != IMA_SRC_TILED) {
+    return 0;
+  }
+
+  /* Currently, faces are assumed to belong to one tile, so checking the first loop is enough. */
+  int tx = (int)uv[0];
+  int ty = (int)uv[1];
+  return 1001 + 10 * ty + tx;
+}
+
 static TexPaintSlot *project_paint_face_paint_slot(const ProjPaintState *ps, int tri_index)
 {
   const MPoly *mp = ps_tri_index_to_mpoly(ps, tri_index);
@@ -542,12 +554,11 @@ static Image *project_paint_face_paint_image(const ProjPaintState *ps, int tri_i
   if (ps->do_stencil_brush) {
     return ps->stencil_ima;
   }
-  else {
-    const MPoly *mp = ps_tri_index_to_mpoly(ps, tri_index);
-    Material *ma = ps->mat_array[mp->mat_nr];
-    TexPaintSlot *slot = ma ? ma->texpaintslot + ma->paint_active_slot : NULL;
-    return slot ? slot->ima : ps->canvas_ima;
-  }
+
+  const MPoly *mp = ps_tri_index_to_mpoly(ps, tri_index);
+  Material *ma = ps->mat_array[mp->mat_nr];
+  TexPaintSlot *slot = ma ? ma->texpaintslot + ma->paint_active_slot : NULL;
+  return slot ? slot->ima : ps->canvas_ima;
 }
 
 static TexPaintSlot *project_paint_face_clone_slot(const ProjPaintState *ps, int tri_index)
@@ -590,9 +601,7 @@ static int project_bucket_offset_safe(const ProjPaintState *ps, const float proj
   if (bucket_index < 0 || bucket_index >= ps->buckets_x * ps->buckets_y) {
     return -1;
   }
-  else {
-    return bucket_index;
-  }
+  return bucket_index;
 }
 
 static float VecZDepthOrtho(
@@ -702,11 +711,8 @@ static void uvco_to_wrapped_pxco(const float uv[2], int ibuf_x, int ibuf_y, floa
 
 /* Set the top-most face color that the screen space coord 'pt' touches
  * (or return 0 if none touch) */
-static bool project_paint_PickColor(const ProjPaintState *ps,
-                                    const float pt[2],
-                                    float *rgba_fp,
-                                    unsigned char *rgba,
-                                    const bool interp)
+static bool project_paint_PickColor(
+    const ProjPaintState *ps, const float pt[2], float *rgba_fp, uchar *rgba, const bool interp)
 {
   const MLoopTri *lt;
   const float *lt_tri_uv[3];
@@ -719,7 +725,7 @@ static bool project_paint_PickColor(const ProjPaintState *ps,
   tri_index = project_paint_PickFace(ps, pt, w);
 
   if (tri_index == -1) {
-    return 0;
+    return false;
   }
 
   lt = &ps->mlooptri_eval[tri_index];
@@ -729,9 +735,15 @@ static bool project_paint_PickColor(const ProjPaintState *ps,
 
   ima = project_paint_face_paint_image(ps, tri_index);
   /** we must have got the imbuf before getting here. */
-  ibuf = BKE_image_get_first_ibuf(ima);
-  if (!ibuf) {
-    return 0;
+  int tile_number = project_paint_face_paint_tile(ima, lt_tri_uv[0]);
+  /* XXX get appropriate ImageUser instead */
+  ImageUser iuser;
+  BKE_imageuser_default(&iuser);
+  iuser.tile = tile_number;
+  iuser.framenr = ima->lastframe;
+  ibuf = BKE_image_acquire_ibuf(ima, &iuser, NULL);
+  if (ibuf == NULL) {
+    return false;
   }
 
   if (interp) {
@@ -753,7 +765,7 @@ static bool project_paint_PickColor(const ProjPaintState *ps,
         bilinear_interpolation_color_wrap(ibuf, rgba, NULL, x, y);
       }
       else {
-        unsigned char rgba_tmp[4];
+        uchar rgba_tmp[4];
         bilinear_interpolation_color_wrap(ibuf, rgba_tmp, NULL, x, y);
         straight_uchar_to_premul_float(rgba_fp, rgba_tmp);
       }
@@ -762,7 +774,7 @@ static bool project_paint_PickColor(const ProjPaintState *ps,
   else {
     // xi = (int)((uv[0]*ibuf->x) + 0.5f);
     // yi = (int)((uv[1]*ibuf->y) + 0.5f);
-    // if (xi < 0 || xi >= ibuf->x  ||  yi < 0 || yi >= ibuf->y) return 0;
+    // if (xi < 0 || xi >= ibuf->x  ||  yi < 0 || yi >= ibuf->y) return false;
 
     /* wrap */
     xi = mod_i((int)(uv[0] * ibuf->x), ibuf->x);
@@ -774,8 +786,7 @@ static bool project_paint_PickColor(const ProjPaintState *ps,
         premul_float_to_straight_uchar(rgba, rgba_tmp_fp);
       }
       else {
-        *((unsigned int *)rgba) = *(unsigned int *)(((char *)ibuf->rect) +
-                                                    ((xi + yi * ibuf->x) * 4));
+        *((uint *)rgba) = *(uint *)(((char *)ibuf->rect) + ((xi + yi * ibuf->x) * 4));
       }
     }
 
@@ -784,17 +795,17 @@ static bool project_paint_PickColor(const ProjPaintState *ps,
         copy_v4_v4(rgba_fp, (ibuf->rect_float + ((xi + yi * ibuf->x) * 4)));
       }
       else {
-        unsigned char *tmp_ch = ((unsigned char *)ibuf->rect) + ((xi + yi * ibuf->x) * 4);
+        uchar *tmp_ch = ((uchar *)ibuf->rect) + ((xi + yi * ibuf->x) * 4);
         straight_uchar_to_premul_float(rgba_fp, tmp_ch);
       }
     }
   }
   BKE_image_release_ibuf(ima, ibuf, NULL);
-  return 1;
+  return true;
 }
 
 /**
- * Check if 'pt' is infront of the 3 verts on the Z axis (used for screenspace occlusion test)
+ * Check if 'pt' is in front of the 3 verts on the Z axis (used for screen-space occlusion test)
  * \return
  * -  `0`:   no occlusion
  * - `-1`: no occlusion but 2D intersection is true
@@ -819,22 +830,21 @@ static int project_paint_occlude_ptv(const float pt[3],
   }
 
   /* From here on we know there IS an intersection */
-  /* if ALL of the verts are infront of us then we know it intersects ? */
+  /* if ALL of the verts are in front of us then we know it intersects ? */
   if (v1[2] < pt[2] && v2[2] < pt[2] && v3[2] < pt[2]) {
     return 1;
   }
-  else {
-    /* we intersect? - find the exact depth at the point of intersection */
-    /* Is this point is occluded by another face? */
-    if (is_ortho) {
-      if (VecZDepthOrtho(pt, v1, v2, v3, w) < pt[2]) {
-        return 2;
-      }
+
+  /* we intersect? - find the exact depth at the point of intersection */
+  /* Is this point is occluded by another face? */
+  if (is_ortho) {
+    if (VecZDepthOrtho(pt, v1, v2, v3, w) < pt[2]) {
+      return 2;
     }
-    else {
-      if (VecZDepthPersp(pt, v1, v2, v3, w) < pt[2]) {
-        return 2;
-      }
+  }
+  else {
+    if (VecZDepthPersp(pt, v1, v2, v3, w) < pt[2]) {
+      return 2;
     }
   }
   return -1;
@@ -887,9 +897,9 @@ static bool project_bucket_point_occluded(const ProjPaintState *ps,
                                           const float pixelScreenCo[4])
 {
   int isect_ret;
-  const bool do_clip = ps->rv3d ? (ps->rv3d->rflag & RV3D_CLIPPING) != 0 : 0;
+  const bool do_clip = RV3D_CLIPPING_ENABLED(ps->v3d, ps->rv3d);
 
-  /* we could return 0 for 1 face buckets, as long as this function assumes
+  /* we could return false for 1 face buckets, as long as this function assumes
    * that the point its testing is only every originated from an existing face */
 
   for (; bucketFace; bucketFace = bucketFace->next) {
@@ -960,14 +970,12 @@ static int line_isect_y(const float p1[2], const float p2[2], const float y_leve
     *x_isect = (p2[0] * (p1[1] - y_level) + p1[0] * (y_level - p2[1])) / y_diff;
     return ISECT_TRUE;
   }
-  else if (p1[1] < y_level && p2[1] > y_level) {
+  if (p1[1] < y_level && p2[1] > y_level) {
     /* (p2[1] - p1[1]); */
     *x_isect = (p2[0] * (y_level - p1[1]) + p1[0] * (p2[1] - y_level)) / y_diff;
     return ISECT_TRUE;
   }
-  else {
-    return 0;
-  }
+  return 0;
 }
 
 static int line_isect_x(const float p1[2], const float p2[2], const float x_level, float *y_isect)
@@ -997,14 +1005,12 @@ static int line_isect_x(const float p1[2], const float p2[2], const float x_leve
     *y_isect = (p2[1] * (p1[0] - x_level) + p1[1] * (x_level - p2[0])) / x_diff;
     return ISECT_TRUE;
   }
-  else if (p1[0] < x_level && p2[0] > x_level) {
+  if (p1[0] < x_level && p2[0] > x_level) {
     /* (p2[0] - p1[0]); */
     *y_isect = (p2[1] * (x_level - p1[0]) + p1[1] * (p2[0] - x_level)) / x_diff;
     return ISECT_TRUE;
   }
-  else {
-    return 0;
-  }
+  return 0;
 }
 
 /* simple func use for comparing UV locations to check if there are seams.
@@ -1035,8 +1041,9 @@ static bool cmp_uv(const float vec2a[2], const float vec2b[2])
     yb += 1.0f;
   }
 
-  return ((fabsf(xa - xb) < PROJ_GEOM_TOLERANCE) && (fabsf(ya - yb) < PROJ_GEOM_TOLERANCE)) ? 1 :
-                                                                                              0;
+  return ((fabsf(xa - xb) < PROJ_GEOM_TOLERANCE) && (fabsf(ya - yb) < PROJ_GEOM_TOLERANCE)) ?
+             true :
+             false;
 }
 #endif
 
@@ -1067,7 +1074,7 @@ static bool pixel_bounds_uv(const float uv_quad[4][2],
   /*printf("%d %d %d %d\n", min_px[0], min_px[1], max_px[0], max_px[1]);*/
 
   /* face uses no UV area when quantized to pixels? */
-  return (bounds_px->xmin == bounds_px->xmax || bounds_px->ymin == bounds_px->ymax) ? 0 : 1;
+  return (bounds_px->xmin == bounds_px->xmax || bounds_px->ymin == bounds_px->ymax) ? false : true;
 }
 #endif
 
@@ -1078,7 +1085,7 @@ static bool pixel_bounds_array(
   float min_uv[2], max_uv[2];
 
   if (tot == 0) {
-    return 0;
+    return false;
   }
 
   INIT_MINMAX2(min_uv, max_uv);
@@ -1097,7 +1104,7 @@ static bool pixel_bounds_array(
   /*printf("%d %d %d %d\n", min_px[0], min_px[1], max_px[0], max_px[1]);*/
 
   /* face uses no UV area when quantized to pixels? */
-  return (bounds_px->xmin == bounds_px->xmax || bounds_px->ymin == bounds_px->ymax) ? 0 : 1;
+  return (bounds_px->xmin == bounds_px->xmax || bounds_px->ymin == bounds_px->ymax) ? false : true;
 }
 
 #ifndef PROJ_DEBUG_NOSEAMBLEED
@@ -1128,8 +1135,8 @@ static bool check_seam(const ProjPaintState *ps,
   const MLoopTri *orig_lt = &ps->mlooptri_eval[orig_face];
   const float *orig_lt_tri_uv[3] = {PS_LOOPTRI_AS_UV_3(ps->poly_to_loop_uv, orig_lt)};
   /* vert indices from face vert order indices */
-  const unsigned int i1 = ps->mloop_eval[orig_lt->tri[orig_i1_fidx]].v;
-  const unsigned int i2 = ps->mloop_eval[orig_lt->tri[orig_i2_fidx]].v;
+  const uint i1 = ps->mloop_eval[orig_lt->tri[orig_i1_fidx]].v;
+  const uint i2 = ps->mloop_eval[orig_lt->tri[orig_i2_fidx]].v;
   LinkNode *node;
   /* index in face */
   int i1_fidx = -1, i2_fidx = -1;
@@ -1154,6 +1161,8 @@ static bool check_seam(const ProjPaintState *ps,
         const float *lt_tri_uv[3] = {PS_LOOPTRI_AS_UV_3(ps->poly_to_loop_uv, lt)};
         Image *tpage = project_paint_face_paint_image(ps, tri_index);
         Image *orig_tpage = project_paint_face_paint_image(ps, orig_face);
+        int tile = project_paint_face_paint_tile(tpage, lt_tri_uv[0]);
+        int orig_tile = project_paint_face_paint_tile(orig_tpage, orig_lt_tri_uv[0]);
 
         BLI_assert(i1_fidx != -1);
 
@@ -1171,28 +1180,27 @@ static bool check_seam(const ProjPaintState *ps,
         }
 
         /* first test if they have the same image */
-        if ((orig_tpage == tpage) && cmp_uv(orig_lt_tri_uv[orig_i1_fidx], lt_tri_uv[i1_fidx]) &&
+        if ((orig_tpage == tpage) && (orig_tile == tile) &&
+            cmp_uv(orig_lt_tri_uv[orig_i1_fidx], lt_tri_uv[i1_fidx]) &&
             cmp_uv(orig_lt_tri_uv[orig_i2_fidx], lt_tri_uv[i2_fidx])) {
           /* if faces don't have the same winding in uv space,
            * they are on the same side so edge is boundary */
           if ((ps->faceWindingFlags[tri_index] & PROJ_FACE_WINDING_CW) !=
               (ps->faceWindingFlags[orig_face] & PROJ_FACE_WINDING_CW)) {
-            return 1;
+            return true;
           }
 
           // printf("SEAM (NONE)\n");
-          return 0;
+          return false;
         }
-        else {
-          // printf("SEAM (UV GAP)\n");
-          return 1;
-        }
+        // printf("SEAM (UV GAP)\n");
+        return true;
       }
     }
   }
   // printf("SEAM (NO FACE)\n");
   *other_face = -1;
-  return 1;
+  return true;
 }
 
 static VertSeam *find_adjacent_seam(const ProjPaintState *ps,
@@ -1328,7 +1336,7 @@ static void uv_image_outset(const ProjPaintState *ps,
 
       if (tri_ang > 0.0f) {
         const float dist = ps->seam_bleed_px * tanf(tri_ang);
-        seam_data->corner_dist_sq[i] = SQUARE(dist);
+        seam_data->corner_dist_sq[i] = square_f(dist);
       }
       else {
         seam_data->corner_dist_sq[i] = 0.0f;
@@ -1374,7 +1382,7 @@ static void insert_seam_vert_array(const ProjPaintState *ps,
   const int fidx[2] = {fidx1, ((fidx1 + 1) % 3)};
   float vec[2];
 
-  VertSeam *vseam = BLI_memarena_alloc(arena, sizeof(VertSeam) * 2);
+  VertSeam *vseam = BLI_memarena_alloc(arena, sizeof(VertSeam[2]));
 
   vseam->prev = NULL;
   vseam->next = NULL;
@@ -1415,7 +1423,7 @@ static void insert_seam_vert_array(const ProjPaintState *ps,
  * Be tricky with flags, first 4 bits are #PROJ_FACE_SEAM0 to 4,
  * last 4 bits are #PROJ_FACE_NOSEAM0 to 4. `1 << i` - where i is `(0..3)`.
  *
- * If we're multithreadng, make sure threads are locked when this is called.
+ * If we're multi-threading, make sure threads are locked when this is called.
  */
 static void project_face_seams_init(const ProjPaintState *ps,
                                     MemArena *arena,
@@ -1616,7 +1624,7 @@ static float screen_px_line_point_factor_v2_persp(const ProjPaintState *ps,
 static void project_face_pixel(const float *lt_tri_uv[3],
                                ImBuf *ibuf_other,
                                const float w[3],
-                               unsigned char rgba_ub[4],
+                               uchar rgba_ub[4],
                                float rgba_f[4])
 {
   float uv_other[2], x, y;
@@ -1652,7 +1660,7 @@ static float project_paint_uvpixel_mask(const ProjPaintState *ps,
       const float *lt_other_tri_uv[3] = {PS_LOOPTRI_AS_UV_3(ps->poly_to_loop_uv, lt_other)};
 
       /* BKE_image_acquire_ibuf - TODO - this may be slow */
-      unsigned char rgba_ub[4];
+      uchar rgba_ub[4];
       float rgba_f[4];
 
       project_face_pixel(lt_other_tri_uv, ibuf_other, w, rgba_ub, rgba_f);
@@ -1693,7 +1701,7 @@ static float project_paint_uvpixel_mask(const ProjPaintState *ps,
     ca3 = ps->cavities[lt_vtri[2]];
 
     ca_mask = w[0] * ca1 + w[1] * ca2 + w[2] * ca3;
-    ca_mask = curvemapping_evaluateF(ps->cavity_curve, 0, ca_mask);
+    ca_mask = BKE_curvemapping_evaluateF(ps->cavity_curve, 0, ca_mask);
     CLAMP(ca_mask, 0.0f, 1.0f);
     mask *= ca_mask;
   }
@@ -1717,9 +1725,9 @@ static float project_paint_uvpixel_mask(const ProjPaintState *ps,
       normalize_v3(no);
     }
     else {
-      /* incase the */
 #if 1
-      /* normalizing per pixel isn't optimal, we could cache or check ps->*/
+      /* In case the normalizing per pixel isn't optimal,
+       * we could cache or access from evaluated mesh. */
       normal_tri_v3(no,
                     ps->mvert_eval[lt_vtri[0]].co,
                     ps->mvert_eval[lt_vtri[1]].co,
@@ -1767,9 +1775,9 @@ static float project_paint_uvpixel_mask(const ProjPaintState *ps,
       /* outsize the normal limit*/
       return 0.0f;
     }
-    else if (angle_cos < ps->normal_angle_inner__cos) {
+    if (angle_cos < ps->normal_angle_inner__cos) {
       mask *= (ps->normal_angle - acosf(angle_cos)) / ps->normal_angle_range;
-    } /* otherwise no mask normal is needed, were within the limit */
+    } /* otherwise no mask normal is needed, we're within the limit */
   }
 
   /* This only works when the opacity doesn't change while painting, stylus pressure messes with
@@ -1781,12 +1789,10 @@ static float project_paint_uvpixel_mask(const ProjPaintState *ps,
 
 static int project_paint_pixel_sizeof(const short tool)
 {
-  if ((tool == PAINT_TOOL_CLONE) || (tool == PAINT_TOOL_SMEAR)) {
+  if (ELEM(tool, PAINT_TOOL_CLONE, PAINT_TOOL_SMEAR)) {
     return sizeof(ProjPixelClone);
   }
-  else {
-    return sizeof(ProjPixel);
-  }
+  return sizeof(ProjPixel);
 }
 
 static int project_paint_undo_subtiles(const TileInfo *tinf, int tx, int ty)
@@ -1810,31 +1816,33 @@ static int project_paint_undo_subtiles(const TileInfo *tinf, int tx, int ty)
   }
 
   if (generate_tile) {
-    ListBase *undo_tiles = ED_image_undo_get_tiles();
+    ListBase *undo_tiles = ED_image_paint_tile_list_get();
     volatile void *undorect;
     if (tinf->masked) {
-      undorect = image_undo_push_tile(undo_tiles,
-                                      pjIma->ima,
-                                      pjIma->ibuf,
-                                      tinf->tmpibuf,
-                                      tx,
-                                      ty,
-                                      &pjIma->maskRect[tile_index],
-                                      &pjIma->valid[tile_index],
-                                      true,
-                                      false);
+      undorect = ED_image_paint_tile_push(undo_tiles,
+                                          pjIma->ima,
+                                          pjIma->ibuf,
+                                          tinf->tmpibuf,
+                                          &pjIma->iuser,
+                                          tx,
+                                          ty,
+                                          &pjIma->maskRect[tile_index],
+                                          &pjIma->valid[tile_index],
+                                          true,
+                                          false);
     }
     else {
-      undorect = image_undo_push_tile(undo_tiles,
-                                      pjIma->ima,
-                                      pjIma->ibuf,
-                                      tinf->tmpibuf,
-                                      tx,
-                                      ty,
-                                      NULL,
-                                      &pjIma->valid[tile_index],
-                                      true,
-                                      false);
+      undorect = ED_image_paint_tile_push(undo_tiles,
+                                          pjIma->ima,
+                                          pjIma->ibuf,
+                                          tinf->tmpibuf,
+                                          &pjIma->iuser,
+                                          tx,
+                                          ty,
+                                          NULL,
+                                          &pjIma->valid[tile_index],
+                                          true,
+                                          false);
     }
 
     BKE_image_mark_dirty(pjIma->ima, pjIma->ibuf);
@@ -1883,14 +1891,14 @@ static ProjPixel *project_paint_uvpixel_init(const ProjPaintState *ps,
 
   /* calculate the undo tile offset of the pixel, used to store the original
    * pixel color and accumulated mask if any */
-  x_tile = x_px >> IMAPAINT_TILE_BITS;
-  y_tile = y_px >> IMAPAINT_TILE_BITS;
+  x_tile = x_px >> ED_IMAGE_UNDO_TILE_BITS;
+  y_tile = y_px >> ED_IMAGE_UNDO_TILE_BITS;
 
-  x_round = x_tile * IMAPAINT_TILE_SIZE;
-  y_round = y_tile * IMAPAINT_TILE_SIZE;
+  x_round = x_tile * ED_IMAGE_UNDO_TILE_SIZE;
+  y_round = y_tile * ED_IMAGE_UNDO_TILE_SIZE;
   // memset(projPixel, 0, size);
 
-  tile_offset = (x_px - x_round) + (y_px - y_round) * IMAPAINT_TILE_SIZE;
+  tile_offset = (x_px - x_round) + (y_px - y_round) * ED_IMAGE_UNDO_TILE_SIZE;
   tile_index = project_paint_undo_subtiles(tinf, x_tile, y_tile);
 
   /* other thread may be initializing the tile so wait here */
@@ -1898,8 +1906,9 @@ static ProjPixel *project_paint_uvpixel_init(const ProjPaintState *ps,
     /* pass */
   }
 
-  BLI_assert(tile_index < (IMAPAINT_TILE_NUMBER(ibuf->x) * IMAPAINT_TILE_NUMBER(ibuf->y)));
-  BLI_assert(tile_offset < (IMAPAINT_TILE_SIZE * IMAPAINT_TILE_SIZE));
+  BLI_assert(tile_index <
+             (ED_IMAGE_UNDO_TILE_NUMBER(ibuf->x) * ED_IMAGE_UNDO_TILE_NUMBER(ibuf->y)));
+  BLI_assert(tile_offset < (ED_IMAGE_UNDO_TILE_SIZE * ED_IMAGE_UNDO_TILE_SIZE));
 
   projPixel->valid = projima->valid[tile_index];
 
@@ -1909,8 +1918,8 @@ static ProjPixel *project_paint_uvpixel_init(const ProjPaintState *ps,
     zero_v4(projPixel->newColor.f);
   }
   else {
-    projPixel->pixel.ch_pt = (unsigned char *)(ibuf->rect + (x_px + y_px * ibuf->x));
-    projPixel->origColor.uint_pt = (unsigned int *)projima->undoRect[tile_index] + tile_offset;
+    projPixel->pixel.ch_pt = (uchar *)(ibuf->rect + (x_px + y_px * ibuf->x));
+    projPixel->origColor.uint_pt = (uint *)projima->undoRect[tile_index] + tile_offset;
     projPixel->newColor.uint = 0;
   }
 
@@ -1924,7 +1933,7 @@ static ProjPixel *project_paint_uvpixel_init(const ProjPaintState *ps,
   projPixel->x_px = x_px;
   projPixel->y_px = y_px;
 
-  projPixel->mask = (unsigned short)(mask * 65535);
+  projPixel->mask = (ushort)(mask * 65535);
   if (ps->do_masking) {
     projPixel->mask_accum = projima->maskRect[tile_index] + tile_offset;
   }
@@ -1956,7 +1965,7 @@ static ProjPixel *project_paint_uvpixel_init(const ProjPaintState *ps,
                 lt_other_tri_uv, ibuf_other, w, NULL, ((ProjPixelClone *)projPixel)->clonepx.f);
           }
           else { /* from char to float */
-            unsigned char rgba_ub[4];
+            uchar rgba_ub[4];
             float rgba[4];
             project_face_pixel(lt_other_tri_uv, ibuf_other, w, rgba_ub, NULL);
             if (ps->use_colormanagement) {
@@ -2045,11 +2054,11 @@ static bool line_clip_rect2f(const rctf *cliprect,
   if (fabsf(l1[1] - l2[1]) < PROJ_PIXEL_TOLERANCE) {
     /* is the line out of range on its Y axis? */
     if (l1[1] < rect->ymin || l1[1] > rect->ymax) {
-      return 0;
+      return false;
     }
     /* line is out of range on its X axis */
     if ((l1[0] < rect->xmin && l2[0] < rect->xmin) || (l1[0] > rect->xmax && l2[0] > rect->xmax)) {
-      return 0;
+      return false;
     }
 
     /* this is a single point  (or close to)*/
@@ -2057,28 +2066,26 @@ static bool line_clip_rect2f(const rctf *cliprect,
       if (BLI_rctf_isect_pt_v(rect, l1)) {
         copy_v2_v2(l1_clip, l1);
         copy_v2_v2(l2_clip, l2);
-        return 1;
+        return true;
       }
-      else {
-        return 0;
-      }
+      return false;
     }
 
     copy_v2_v2(l1_clip, l1);
     copy_v2_v2(l2_clip, l2);
     CLAMP(l1_clip[0], rect->xmin, rect->xmax);
     CLAMP(l2_clip[0], rect->xmin, rect->xmax);
-    return 1;
+    return true;
   }
-  else if (fabsf(l1[0] - l2[0]) < PROJ_PIXEL_TOLERANCE) {
+  if (fabsf(l1[0] - l2[0]) < PROJ_PIXEL_TOLERANCE) {
     /* is the line out of range on its X axis? */
     if (l1[0] < rect->xmin || l1[0] > rect->xmax) {
-      return 0;
+      return false;
     }
 
     /* line is out of range on its Y axis */
     if ((l1[1] < rect->ymin && l2[1] < rect->ymin) || (l1[1] > rect->ymax && l2[1] > rect->ymax)) {
-      return 0;
+      return false;
     }
 
     /* this is a single point  (or close to)*/
@@ -2086,119 +2093,114 @@ static bool line_clip_rect2f(const rctf *cliprect,
       if (BLI_rctf_isect_pt_v(rect, l1)) {
         copy_v2_v2(l1_clip, l1);
         copy_v2_v2(l2_clip, l2);
-        return 1;
+        return true;
       }
-      else {
-        return 0;
-      }
+      return false;
     }
 
     copy_v2_v2(l1_clip, l1);
     copy_v2_v2(l2_clip, l2);
     CLAMP(l1_clip[1], rect->ymin, rect->ymax);
     CLAMP(l2_clip[1], rect->ymin, rect->ymax);
-    return 1;
+    return true;
   }
-  else {
-    float isect;
-    short ok1 = 0;
-    short ok2 = 0;
 
-    /* Done with vertical lines */
+  float isect;
+  short ok1 = 0;
+  short ok2 = 0;
 
-    /* are either of the points inside the rectangle ? */
-    if (BLI_rctf_isect_pt_v(rect, l1)) {
-      copy_v2_v2(l1_clip, l1);
+  /* Done with vertical lines */
+
+  /* are either of the points inside the rectangle ? */
+  if (BLI_rctf_isect_pt_v(rect, l1)) {
+    copy_v2_v2(l1_clip, l1);
+    ok1 = 1;
+  }
+
+  if (BLI_rctf_isect_pt_v(rect, l2)) {
+    copy_v2_v2(l2_clip, l2);
+    ok2 = 1;
+  }
+
+  /* line inside rect */
+  if (ok1 && ok2) {
+    return true;
+  }
+
+  /* top/bottom */
+  if (line_isect_y(l1, l2, rect->ymin, &isect) && (isect >= cliprect->xmin) &&
+      (isect <= cliprect->xmax)) {
+    if (l1[1] < l2[1]) { /* line 1 is outside */
+      l1_clip[0] = isect;
+      l1_clip[1] = rect->ymin;
       ok1 = 1;
     }
-
-    if (BLI_rctf_isect_pt_v(rect, l2)) {
-      copy_v2_v2(l2_clip, l2);
-      ok2 = 1;
-    }
-
-    /* line inside rect */
-    if (ok1 && ok2) {
-      return 1;
-    }
-
-    /* top/bottom */
-    if (line_isect_y(l1, l2, rect->ymin, &isect) && (isect >= cliprect->xmin) &&
-        (isect <= cliprect->xmax)) {
-      if (l1[1] < l2[1]) { /* line 1 is outside */
-        l1_clip[0] = isect;
-        l1_clip[1] = rect->ymin;
-        ok1 = 1;
-      }
-      else {
-        l2_clip[0] = isect;
-        l2_clip[1] = rect->ymin;
-        ok2 = 2;
-      }
-    }
-
-    if (ok1 && ok2) {
-      return 1;
-    }
-
-    if (line_isect_y(l1, l2, rect->ymax, &isect) && (isect >= cliprect->xmin) &&
-        (isect <= cliprect->xmax)) {
-      if (l1[1] > l2[1]) { /* line 1 is outside */
-        l1_clip[0] = isect;
-        l1_clip[1] = rect->ymax;
-        ok1 = 1;
-      }
-      else {
-        l2_clip[0] = isect;
-        l2_clip[1] = rect->ymax;
-        ok2 = 2;
-      }
-    }
-
-    if (ok1 && ok2) {
-      return 1;
-    }
-
-    /* left/right */
-    if (line_isect_x(l1, l2, rect->xmin, &isect) && (isect >= cliprect->ymin) &&
-        (isect <= cliprect->ymax)) {
-      if (l1[0] < l2[0]) { /* line 1 is outside */
-        l1_clip[0] = rect->xmin;
-        l1_clip[1] = isect;
-        ok1 = 1;
-      }
-      else {
-        l2_clip[0] = rect->xmin;
-        l2_clip[1] = isect;
-        ok2 = 2;
-      }
-    }
-
-    if (ok1 && ok2) {
-      return 1;
-    }
-
-    if (line_isect_x(l1, l2, rect->xmax, &isect) && (isect >= cliprect->ymin) &&
-        (isect <= cliprect->ymax)) {
-      if (l1[0] > l2[0]) { /* line 1 is outside */
-        l1_clip[0] = rect->xmax;
-        l1_clip[1] = isect;
-        ok1 = 1;
-      }
-      else {
-        l2_clip[0] = rect->xmax;
-        l2_clip[1] = isect;
-        ok2 = 2;
-      }
-    }
-
-    if (ok1 && ok2) {
-      return 1;
-    }
     else {
-      return 0;
+      l2_clip[0] = isect;
+      l2_clip[1] = rect->ymin;
+      ok2 = 2;
     }
   }
+
+  if (ok1 && ok2) {
+    return true;
+  }
+
+  if (line_isect_y(l1, l2, rect->ymax, &isect) && (isect >= cliprect->xmin) &&
+      (isect <= cliprect->xmax)) {
+    if (l1[1] > l2[1]) { /* line 1 is outside */
+      l1_clip[0] = isect;
+      l1_clip[1] = rect->ymax;
+      ok1 = 1;
+    }
+    else {
+      l2_clip[0] = isect;
+      l2_clip[1] = rect->ymax;
+      ok2 = 2;
+    }
+  }
+
+  if (ok1 && ok2) {
+    return true;
+  }
+
+  /* left/right */
+  if (line_isect_x(l1, l2, rect->xmin, &isect) && (isect >= cliprect->ymin) &&
+      (isect <= cliprect->ymax)) {
+    if (l1[0] < l2[0]) { /* line 1 is outside */
+      l1_clip[0] = rect->xmin;
+      l1_clip[1] = isect;
+      ok1 = 1;
+    }
+    else {
+      l2_clip[0] = rect->xmin;
+      l2_clip[1] = isect;
+      ok2 = 2;
+    }
+  }
+
+  if (ok1 && ok2) {
+    return true;
+  }
+
+  if (line_isect_x(l1, l2, rect->xmax, &isect) && (isect >= cliprect->ymin) &&
+      (isect <= cliprect->ymax)) {
+    if (l1[0] > l2[0]) { /* line 1 is outside */
+      l1_clip[0] = rect->xmax;
+      l1_clip[1] = isect;
+      ok1 = 1;
+    }
+    else {
+      l2_clip[0] = rect->xmax;
+      l2_clip[1] = isect;
+      ok2 = 2;
+    }
+  }
+
+  if (ok1 && ok2) {
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -2208,7 +2210,7 @@ static bool line_clip_rect2f(const rctf *cliprect,
  */
 #ifndef PROJ_DEBUG_NOSEAMBLEED
 
-static void scale_tri(float insetCos[3][3], const float *origCos[4], const float inset)
+static void scale_tri(float insetCos[3][3], const float *origCos[3], const float inset)
 {
   float cent[3];
   cent[0] = (origCos[0][0] + origCos[1][0] + origCos[2][0]) * (1.0f / 3.0f);
@@ -2252,17 +2254,17 @@ static bool project_bucket_isect_circle(const float cent[2],
   /* Would normally to a simple intersection test,
    * however we know the bounds of these 2 already intersect so we only need to test
    * if the center is inside the vertical or horizontal bounds on either axis,
-   * this is even less work then an intersection test.
+   * this is even less work than an intersection test.
    */
 #if 0
   if (BLI_rctf_isect_pt_v(bucket_bounds, cent)) {
-    return 1;
+    return true;
   }
 #endif
 
   if ((bucket_bounds->xmin <= cent[0] && bucket_bounds->xmax >= cent[0]) ||
       (bucket_bounds->ymin <= cent[1] && bucket_bounds->ymax >= cent[1])) {
-    return 1;
+    return true;
   }
 
   /* out of bounds left */
@@ -2271,15 +2273,15 @@ static bool project_bucket_isect_circle(const float cent[2],
     if (cent[1] < bucket_bounds->ymin) {
       return (len_squared_v2v2_alt(cent, bucket_bounds->xmin, bucket_bounds->ymin) <
               radius_squared) ?
-                 1 :
-                 0;
+                 true :
+                 false;
     }
     /* top left test */
-    else if (cent[1] > bucket_bounds->ymax) {
+    if (cent[1] > bucket_bounds->ymax) {
       return (len_squared_v2v2_alt(cent, bucket_bounds->xmin, bucket_bounds->ymax) <
               radius_squared) ?
-                 1 :
-                 0;
+                 true :
+                 false;
     }
   }
   else if (cent[0] > bucket_bounds->xmax) {
@@ -2287,19 +2289,19 @@ static bool project_bucket_isect_circle(const float cent[2],
     if (cent[1] < bucket_bounds->ymin) {
       return (len_squared_v2v2_alt(cent, bucket_bounds->xmax, bucket_bounds->ymin) <
               radius_squared) ?
-                 1 :
-                 0;
+                 true :
+                 false;
     }
     /* top right test */
-    else if (cent[1] > bucket_bounds->ymax) {
+    if (cent[1] > bucket_bounds->ymax) {
       return (len_squared_v2v2_alt(cent, bucket_bounds->xmax, bucket_bounds->ymax) <
               radius_squared) ?
-                 1 :
-                 0;
+                 true :
+                 false;
     }
   }
 
-  return 0;
+  return false;
 }
 
 /* Note for rect_to_uvspace_ortho() and rect_to_uvspace_persp()
@@ -2413,9 +2415,10 @@ static bool IsectPT2Df_limit(
           (area_tri_v2(v1, v2, v3))) < limit;
 }
 
-/* Clip the face by a bucket and set the uv-space bucket_bounds_uv
+/**
+ * Clip the face by a bucket and set the uv-space bucket_bounds_uv
  * so we have the clipped UV's to do pixel intersection tests with
- * */
+ */
 static int float_z_sort_flip(const void *p1, const void *p2)
 {
   return (((float *)p1)[2] < ((float *)p2)[2] ? 1 : -1);
@@ -2646,7 +2649,8 @@ static void project_bucket_clip_face(const bool is_ortho,
     *tot = 4;
     return;
   }
-  else {
+
+  {
     /* The Complicated Case!
      *
      * The 2 cases above are where the face is inside the bucket
@@ -2657,7 +2661,7 @@ static void project_bucket_clip_face(const bool is_ortho,
      *
      * There are a number of ways this could be done, currently it just collects all
      * intersecting verts, and line intersections, then sorts them clockwise, this is
-     * a lot easier then evaluating the geometry to do a correct clipping on both shapes.
+     * a lot easier than evaluating the geometry to do a correct clipping on both shapes.
      */
 
     /* Add a bunch of points, we know must make up the convex hull
@@ -2673,7 +2677,6 @@ static void project_bucket_clip_face(const bool is_ortho,
     /* calc center */
     float cent[2] = {0.0f, 0.0f};
     /*float up[2] = {0.0f, 1.0f};*/
-    int i;
     bool doubles;
 
     (*tot) = 0;
@@ -2754,7 +2757,7 @@ static void project_bucket_clip_face(const bool is_ortho,
 
     /* now we have all points we need, collect their angles and sort them clockwise */
 
-    for (i = 0; i < (*tot); i++) {
+    for (int i = 0; i < (*tot); i++) {
       cent[0] += isectVCosSS[i][0];
       cent[1] += isectVCosSS[i][1];
     }
@@ -2763,8 +2766,8 @@ static void project_bucket_clip_face(const bool is_ortho,
 
     /* Collect angles for every point around the center point */
 
-#if 0 /* uses a few more cycles then the above loop */
-    for (i = 0; i < (*tot); i++) {
+#if 0 /* uses a few more cycles than the above loop */
+    for (int i = 0; i < (*tot); i++) {
       isectVCosSS[i][2] = angle_2d_clockwise(up, cent, isectVCosSS[i]);
     }
 #endif
@@ -2773,7 +2776,7 @@ static void project_bucket_clip_face(const bool is_ortho,
     v1_clipSS[0] = cent[0];
     v1_clipSS[1] = cent[1] + 1.0f;
 
-    for (i = 0; i < (*tot); i++) {
+    for (int i = 0; i < (*tot); i++) {
       v2_clipSS[0] = isectVCosSS[i][0] - cent[0];
       v2_clipSS[1] = isectVCosSS[i][1] - cent[1];
       isectVCosSS[i][2] = atan2f(v1_clipSS[0] * v2_clipSS[1] - v1_clipSS[1] * v2_clipSS[0],
@@ -2781,21 +2784,20 @@ static void project_bucket_clip_face(const bool is_ortho,
     }
 
     if (flip) {
-      qsort(isectVCosSS, *tot, sizeof(float) * 3, float_z_sort_flip);
+      qsort(isectVCosSS, *tot, sizeof(float[3]), float_z_sort_flip);
     }
     else {
-      qsort(isectVCosSS, *tot, sizeof(float) * 3, float_z_sort);
+      qsort(isectVCosSS, *tot, sizeof(float[3]), float_z_sort);
     }
 
     doubles = true;
     while (doubles == true) {
       doubles = false;
 
-      for (i = 0; i < (*tot); i++) {
+      for (int i = 0; i < (*tot); i++) {
         if (fabsf(isectVCosSS[(i + 1) % *tot][0] - isectVCosSS[i][0]) < PROJ_PIXEL_TOLERANCE &&
             fabsf(isectVCosSS[(i + 1) % *tot][1] - isectVCosSS[i][1]) < PROJ_PIXEL_TOLERANCE) {
-          int j;
-          for (j = i; j < (*tot) - 1; j++) {
+          for (int j = i; j < (*tot) - 1; j++) {
             isectVCosSS[j][0] = isectVCosSS[j + 1][0];
             isectVCosSS[j][1] = isectVCosSS[j + 1][1];
           }
@@ -2814,13 +2816,13 @@ static void project_bucket_clip_face(const bool is_ortho,
     }
 
     if (is_ortho) {
-      for (i = 0; i < (*tot); i++) {
+      for (int i = 0; i < (*tot); i++) {
         barycentric_weights_v2(v1coSS, v2coSS, v3coSS, isectVCosSS[i], w);
         interp_v2_v2v2v2(bucket_bounds_uv[i], uv1co, uv2co, uv3co, w);
       }
     }
     else {
-      for (i = 0; i < (*tot); i++) {
+      for (int i = 0; i < (*tot); i++) {
         barycentric_weights_v2_persp(v1coSS, v2coSS, v3coSS, isectVCosSS[i], w);
         interp_v2_v2v2v2(bucket_bounds_uv[i], uv1co, uv2co, uv3co, w);
       }
@@ -2861,7 +2863,7 @@ static void project_bucket_clip_face(const bool is_ortho,
            uv3co[1]);
 
     printf("[");
-    for (i = 0; i < (*tot); i++) {
+    for (int i = 0; i < (*tot); i++) {
       printf("(%f, %f),", bucket_bounds_uv[i][0], bucket_bounds_uv[i][1]);
     }
     printf("]),\\\n");
@@ -2924,33 +2926,32 @@ static void project_bucket_clip_face(const bool is_ortho,
 
 /* checks if pt is inside a convex 2D polyline, the polyline must be ordered rotating clockwise
  * otherwise it would have to test for mixed (line_point_side_v2 > 0.0f) cases */
-static bool IsectPoly2Df(const float pt[2], float uv[][2], const int tot)
+static bool IsectPoly2Df(const float pt[2], const float uv[][2], const int tot)
 {
   int i;
   if (line_point_side_v2(uv[tot - 1], uv[0], pt) < 0.0f) {
-    return 0;
+    return false;
   }
 
   for (i = 1; i < tot; i++) {
     if (line_point_side_v2(uv[i - 1], uv[i], pt) < 0.0f) {
-      return 0;
+      return false;
     }
   }
 
-  return 1;
+  return true;
 }
-static bool IsectPoly2Df_twoside(const float pt[2], float uv[][2], const int tot)
+static bool IsectPoly2Df_twoside(const float pt[2], const float uv[][2], const int tot)
 {
-  int i;
-  bool side = (line_point_side_v2(uv[tot - 1], uv[0], pt) > 0.0f);
+  const bool side = (line_point_side_v2(uv[tot - 1], uv[0], pt) > 0.0f);
 
-  for (i = 1; i < tot; i++) {
+  for (int i = 1; i < tot; i++) {
     if ((line_point_side_v2(uv[i - 1], uv[i], pt) > 0.0f) != side) {
-      return 0;
+      return false;
     }
   }
 
-  return 1;
+  return true;
 }
 
 /* One of the most important function for projection painting,
@@ -2977,7 +2978,7 @@ static void project_paint_face_init(const ProjPaintState *ps,
   TileInfo tinf = {
       ps->tile_lock,
       ps->do_masking,
-      IMAPAINT_TILE_NUMBER(ibuf->x),
+      ED_IMAGE_UNDO_TILE_NUMBER(ibuf->x),
       tmpibuf,
       ps->projImages + image_index,
   };
@@ -3023,7 +3024,7 @@ static void project_paint_face_init(const ProjPaintState *ps,
   const bool is_ortho = ps->is_ortho;
   const bool is_flip_object = ps->is_flip_object;
   const bool do_backfacecull = ps->do_backfacecull;
-  const bool do_clip = ps->rv3d ? ps->rv3d->rflag & RV3D_CLIPPING : 0;
+  const bool do_clip = RV3D_CLIPPING_ENABLED(ps->v3d, ps->rv3d);
 
   vCo[0] = ps->mvert_eval[lt_vtri[0]].co;
   vCo[1] = ps->mvert_eval[lt_vtri[1]].co;
@@ -3054,9 +3055,9 @@ static void project_paint_face_init(const ProjPaintState *ps,
   lt_uv_pxoffset[2][1] = lt_tri_uv[2][1] - yhalfpx;
 
   {
-    uv1co = lt_uv_pxoffset[0];  // was lt_tri_uv[i1];
-    uv2co = lt_uv_pxoffset[1];  // was lt_tri_uv[i2];
-    uv3co = lt_uv_pxoffset[2];  // was lt_tri_uv[i3];
+    uv1co = lt_uv_pxoffset[0]; /* was lt_tri_uv[i1]; */
+    uv2co = lt_uv_pxoffset[1]; /* was lt_tri_uv[i2]; */
+    uv3co = lt_uv_pxoffset[2]; /* was lt_tri_uv[i3]; */
 
     v1coSS = ps->screenCoords[lt_vtri[0]];
     v2coSS = ps->screenCoords[lt_vtri[1]];
@@ -3157,7 +3158,7 @@ static void project_paint_face_init(const ProjPaintState *ps,
           //#endif
         }
 
-#if 0 /* TODO - investigate why this dosnt work sometimes! it should! */
+#if 0 /* TODO - investigate why this doesn't work sometimes! it should! */
         /* no intersection for this entire row,
          * after some intersection above means we can quit now */
         if (has_x_isect == 0 && has_isect) {
@@ -3213,7 +3214,7 @@ static void project_paint_face_init(const ProjPaintState *ps,
        * clipped by the bucket's screen aligned rectangle. */
       float bucket_clip_edges[2][2];
       float edge_verts_inset_clip[2][3];
-      /* face edge pairs - loop throuh these:
+      /* face edge pairs - loop through these:
        * ((0,1), (1,2), (2,3), (3,0)) or ((0,1), (1,2), (2,0)) for a tri */
       int fidx1, fidx2;
 
@@ -3248,7 +3249,7 @@ static void project_paint_face_init(const ProjPaintState *ps,
       vCoSS[1] = ps->screenCoords[lt_vtri[1]];
       vCoSS[2] = ps->screenCoords[lt_vtri[2]];
 
-      /* PROJ_FACE_SCALE_SEAM must be slightly less then 1.0f */
+      /* PROJ_FACE_SCALE_SEAM must be slightly less than 1.0f */
       if (is_ortho) {
         scale_tri(insetCos, vCoSS, PROJ_FACE_SCALE_SEAM);
       }
@@ -3306,7 +3307,7 @@ static void project_paint_face_init(const ProjPaintState *ps,
 
                 has_x_isect = 0;
                 for (x = bounds_px.xmin; x < bounds_px.xmax; x++) {
-                  float puv[2] = {(float)x, (float)y};
+                  const float puv[2] = {(float)x, (float)y};
                   bool in_bounds;
                   // uv[0] = (((float)x) + 0.5f) / (float)ibuf->x;
                   /* use offset uvs instead */
@@ -3393,12 +3394,12 @@ static void project_paint_face_init(const ProjPaintState *ps,
                   }
                   else if (has_x_isect) {
                     /* assuming the face is not a bow-tie - we know
-                     * we cant intersect again on the X */
+                     * we can't intersect again on the X */
                     break;
                   }
                 }
 
-#  if 0 /* TODO - investigate why this dosnt work sometimes! it should! */
+#  if 0 /* TODO - investigate why this doesn't work sometimes! it should! */
                 /* no intersection for this entire row,
                  * after some intersection above means we can quit now */
                 if (has_x_isect == 0 && has_isect) {
@@ -3414,7 +3415,7 @@ static void project_paint_face_init(const ProjPaintState *ps,
   }
 #else
   UNUSED_VARS(vCo, threaded);
-#endif  // PROJ_DEBUG_NOSEAMBLEED
+#endif /* PROJ_DEBUG_NOSEAMBLEED */
 }
 
 /**
@@ -3485,6 +3486,7 @@ static void project_bucket_init(const ProjPaintState *ps,
   ImBuf *ibuf = NULL;
   Image *tpage_last = NULL, *tpage;
   ImBuf *tmpibuf = NULL;
+  int tile_last = 0;
 
   if (ps->image_tot == 1) {
     /* Simple loop, no context switching */
@@ -3508,17 +3510,25 @@ static void project_bucket_init(const ProjPaintState *ps,
     for (node = ps->bucketFaces[bucket_index]; node; node = node->next) {
       tri_index = POINTER_AS_INT(node->link);
 
+      const MLoopTri *lt = &ps->mlooptri_eval[tri_index];
+      const float *lt_tri_uv[3] = {PS_LOOPTRI_AS_UV_3(ps->poly_to_loop_uv, lt)};
+
       /* Image context switching */
       tpage = project_paint_face_paint_image(ps, tri_index);
-      if (tpage_last != tpage) {
+      int tile = project_paint_face_paint_tile(tpage, lt_tri_uv[0]);
+      if (tpage_last != tpage || tile_last != tile) {
         tpage_last = tpage;
+        tile_last = tile;
 
+        ibuf = NULL;
         for (image_index = 0; image_index < ps->image_tot; image_index++) {
-          if (ps->projImages[image_index].ima == tpage_last) {
-            ibuf = ps->projImages[image_index].ibuf;
+          ProjPaintImage *projIma = &ps->projImages[image_index];
+          if ((projIma->ima == tpage) && (projIma->iuser.tile == tile)) {
+            ibuf = projIma->ibuf;
             break;
           }
         }
+        BLI_assert(ibuf != NULL);
       }
       /* context switching done */
 
@@ -3552,8 +3562,8 @@ static bool project_bucket_face_isect(ProjPaintState *ps,
                                       int bucket_y,
                                       const MLoopTri *lt)
 {
-  /* TODO - replace this with a tricker method that uses sideofline for all
-   * screenCoords's edges against the closest bucket corner */
+  /* TODO - replace this with a trickier method that uses side-of-line for all
+   * #ProjPaintState.screenCoords edges against the closest bucket corner. */
   const int lt_vtri[3] = {PS_LOOPTRI_AS_VERT_INDEX_3(ps, lt)};
   rctf bucket_bounds;
   float p1[2], p2[2], p3[2], p4[2];
@@ -3568,7 +3578,7 @@ static bool project_bucket_face_isect(ProjPaintState *ps,
   do {
     v = ps->screenCoords[lt_vtri[fidx]];
     if (BLI_rctf_isect_pt_v(&bucket_bounds, v)) {
-      return 1;
+      return true;
     }
   } while (fidx--);
 
@@ -3592,10 +3602,10 @@ static bool project_bucket_face_isect(ProjPaintState *ps,
       (isect_seg_seg_v2(p2, p3, v1, v2) || isect_seg_seg_v2(p2, p3, v2, v3)) ||
       (isect_seg_seg_v2(p3, p4, v1, v2) || isect_seg_seg_v2(p3, p4, v2, v3)) ||
       (isect_seg_seg_v2(p4, p1, v1, v2) || isect_seg_seg_v2(p4, p1, v2, v3))) {
-    return 1;
+    return true;
   }
 
-  return 0;
+  return false;
 }
 
 /* Add faces to the bucket but don't initialize its pixels
@@ -3686,8 +3696,8 @@ static void proj_paint_state_viewport_init(ProjPaintState *ps, const char symmet
 
   if (ELEM(ps->source, PROJ_SRC_VIEW, PROJ_SRC_VIEW_FILL)) {
     /* normal drawing */
-    ps->winx = ps->ar->winx;
-    ps->winy = ps->ar->winy;
+    ps->winx = ps->region->winx;
+    ps->winy = ps->region->winy;
 
     copy_m4_m4(viewmat, ps->rv3d->viewmat);
     copy_m4_m4(viewinv, ps->rv3d->viewinv);
@@ -3860,7 +3870,7 @@ static void proj_paint_state_cavity_init(ProjPaintState *ps)
 
   if (ps->do_mask_cavity) {
     int *counter = MEM_callocN(sizeof(int) * ps->totvert_eval, "counter");
-    float(*edges)[3] = MEM_callocN(sizeof(float) * 3 * ps->totvert_eval, "edges");
+    float(*edges)[3] = MEM_callocN(sizeof(float[3]) * ps->totvert_eval, "edges");
     ps->cavities = MEM_mallocN(sizeof(float) * ps->totvert_eval, "ProjectPaint Cavities");
     cavities = ps->cavities;
 
@@ -3907,8 +3917,6 @@ static void proj_paint_state_seam_bleed_init(ProjPaintState *ps)
 
 static void proj_paint_state_thread_init(ProjPaintState *ps, const bool reset_threads)
 {
-  int a;
-
   /* Thread stuff
    *
    * very small brushes run a lot slower multi-threaded since the advantage with
@@ -3917,7 +3925,7 @@ static void proj_paint_state_thread_init(ProjPaintState *ps, const bool reset_th
 
   ps->thread_tot = BKE_scene_num_threads(ps->scene);
 
-  /* workaround for #35057, disable threading if diameter is less than is possible for
+  /* workaround for T35057, disable threading if diameter is less than is possible for
    * optimum bucket number generation */
   if (reset_threads) {
     ps->thread_tot = 1;
@@ -3929,10 +3937,10 @@ static void proj_paint_state_thread_init(ProjPaintState *ps, const bool reset_th
       BLI_spin_init(ps->tile_lock);
     }
 
-    image_undo_init_locks();
+    ED_image_paint_tile_lock_init();
   }
 
-  for (a = 0; a < ps->thread_tot; a++) {
+  for (int a = 0; a < ps->thread_tot; a++) {
     ps->arena_mt[a] = BLI_memarena_new(MEM_SIZE_OPTIMAL(1 << 16), "project paint arena");
   }
 }
@@ -3992,7 +4000,7 @@ static void project_paint_bleed_add_face_user(const ProjPaintState *ps,
      * Ideally this would be checked later, not to add to the cost of computing non-degenerate
      * triangles, but that would allow other triangles to still find adjacent seams on degenerate
      * triangles, potentially causing incorrect results. */
-    if (area_tri_v2(UNPACK3(lt_tri_uv)) > FLT_EPSILON) {
+    if (area_tri_v2(UNPACK3(lt_tri_uv)) > 0.0f) {
       const int lt_vtri[3] = {PS_LOOPTRI_AS_VERT_INDEX_3(ps, lt)};
       void *tri_index_p = POINTER_FROM_INT(tri_index);
 
@@ -4010,7 +4018,7 @@ static void project_paint_bleed_add_face_user(const ProjPaintState *ps,
 /* Return true if evaluated mesh can be painted on, false otherwise */
 static bool proj_paint_state_mesh_eval_init(const bContext *C, ProjPaintState *ps)
 {
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Object *ob = ps->ob;
 
   Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
@@ -4023,27 +4031,14 @@ static bool proj_paint_state_mesh_eval_init(const bContext *C, ProjPaintState *p
   CustomData_MeshMasks cddata_masks = scene_eval->customdata_mask;
   cddata_masks.fmask |= CD_MASK_MTFACE;
   cddata_masks.lmask |= CD_MASK_MLOOPUV;
-
-  /* Workaround for subsurf selection, try the display mesh first */
-  if (ps->source == PROJ_SRC_IMAGE_CAM) {
-    /* using render mesh, assume only camera was rendered from */
-    ps->me_eval = mesh_create_eval_final_render(depsgraph, scene_eval, ob_eval, &cddata_masks);
-    ps->me_eval_free = true;
+  if (ps->do_face_sel) {
+    cddata_masks.vmask |= CD_MASK_ORIGINDEX;
+    cddata_masks.emask |= CD_MASK_ORIGINDEX;
+    cddata_masks.pmask |= CD_MASK_ORIGINDEX;
   }
-  else {
-    if (ps->do_face_sel) {
-      cddata_masks.vmask |= CD_MASK_ORIGINDEX;
-      cddata_masks.emask |= CD_MASK_ORIGINDEX;
-      cddata_masks.pmask |= CD_MASK_ORIGINDEX;
-    }
-    ps->me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_eval, &cddata_masks);
-    ps->me_eval_free = false;
-  }
+  ps->me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_eval, &cddata_masks);
 
   if (!CustomData_has_layer(&ps->me_eval->ldata, CD_MLOOPUV)) {
-    if (ps->me_eval_free) {
-      BKE_id_free(NULL, ps->me_eval);
-    }
     ps->me_eval = NULL;
     return false;
   }
@@ -4056,7 +4051,7 @@ static bool proj_paint_state_mesh_eval_init(const bContext *C, ProjPaintState *p
    * the materials by using the mf->mat_nr directly and leaving the last
    * material as NULL in case no materials exist on mesh, so indexing will not fail. */
   for (int i = 0; i < totmat - 1; i++) {
-    ps->mat_array[i] = give_current_material(ob, i + 1);
+    ps->mat_array[i] = BKE_object_material_get(ob, i + 1);
   }
   ps->mat_array[totmat - 1] = NULL;
 
@@ -4179,9 +4174,7 @@ static bool project_paint_check_face_sel(const ProjPaintState *ps,
 
     return ((mp->flag & ME_FACE_SEL) != 0);
   }
-  else {
-    return true;
-  }
+  return true;
 }
 
 typedef struct {
@@ -4229,26 +4222,38 @@ static bool project_paint_winclip(const ProjPaintState *ps, const ProjPaintFaceC
            (coSS->v1[1] > ps->screenMax[1] && coSS->v2[1] > ps->screenMax[1] &&
             coSS->v3[1] > ps->screenMax[1])));
 }
-#endif  // PROJ_DEBUG_WINCLIP
+#endif /* PROJ_DEBUG_WINCLIP */
+
+typedef struct PrepareImageEntry {
+  struct PrepareImageEntry *next, *prev;
+  Image *ima;
+  ImageUser iuser;
+} PrepareImageEntry;
 
 static void project_paint_build_proj_ima(ProjPaintState *ps,
                                          MemArena *arena,
-                                         LinkNode *image_LinkList)
+                                         ListBase *used_images)
 {
   ProjPaintImage *projIma;
-  LinkNode *node;
+  PrepareImageEntry *entry;
   int i;
 
   /* build an array of images we use */
   projIma = ps->projImages = BLI_memarena_alloc(arena, sizeof(ProjPaintImage) * ps->image_tot);
 
-  for (node = image_LinkList, i = 0; node; node = node->next, i++, projIma++) {
+  for (entry = used_images->first, i = 0; entry; entry = entry->next, i++, projIma++) {
+    projIma->iuser = entry->iuser;
     int size;
-    projIma->ima = node->link;
+    projIma->ima = entry->ima;
     projIma->touch = 0;
-    projIma->ibuf = BKE_image_acquire_ibuf(projIma->ima, NULL, NULL);
-    size = sizeof(void **) * IMAPAINT_TILE_NUMBER(projIma->ibuf->x) *
-           IMAPAINT_TILE_NUMBER(projIma->ibuf->y);
+    projIma->ibuf = BKE_image_acquire_ibuf(projIma->ima, &projIma->iuser, NULL);
+    if (projIma->ibuf == NULL) {
+      projIma->iuser.tile = 0;
+      projIma->ibuf = BKE_image_acquire_ibuf(projIma->ima, &projIma->iuser, NULL);
+      BLI_assert(projIma->ibuf != NULL);
+    }
+    size = sizeof(void **) * ED_IMAGE_UNDO_TILE_NUMBER(projIma->ibuf->x) *
+           ED_IMAGE_UNDO_TILE_NUMBER(projIma->ibuf->y);
     projIma->partRedrawRect = BLI_memarena_alloc(
         arena, sizeof(ImagePaintPartialRedraw) * PROJ_BOUNDBOX_SQUARED);
     partial_redraw_array_init(projIma->partRedrawRect);
@@ -4269,14 +4274,17 @@ static void project_paint_prepare_all_faces(ProjPaintState *ps,
                                             const bool is_multi_view)
 {
   /* Image Vars - keep track of images we have used */
-  LinkNodePair image_LinkList = {NULL, NULL};
+  ListBase used_images = {NULL};
 
   Image *tpage_last = NULL, *tpage;
   TexPaintSlot *slot_last = NULL;
   TexPaintSlot *slot = NULL;
+  int tile_last = -1, tile;
   const MLoopTri *lt;
   int image_index = -1, tri_index;
   int prev_poly = -1;
+
+  BLI_assert(ps->image_tot == 0);
 
   for (tri_index = 0, lt = ps->mlooptri_eval; tri_index < ps->totlooptri_eval; tri_index++, lt++) {
     bool is_face_sel;
@@ -4319,6 +4327,8 @@ static void project_paint_prepare_all_faces(ProjPaintState *ps,
     }
 
     ps->poly_to_loop_uv[lt->poly] = mloopuv_base;
+
+    tile = project_paint_face_paint_tile(tpage, mloopuv_base[lt->tri[0]].uv);
 
 #ifndef PROJ_DEBUG_NOSEAMBLEED
     project_paint_bleed_add_face_user(ps, arena, lt, tri_index);
@@ -4381,18 +4391,34 @@ static void project_paint_prepare_all_faces(ProjPaintState *ps,
         }
       }
 
-      if (tpage_last != tpage) {
+      if (tpage_last != tpage || tile_last != tile) {
+        image_index = 0;
+        for (PrepareImageEntry *e = used_images.first; e; e = e->next, image_index++) {
+          if (e->ima == tpage && e->iuser.tile == tile) {
+            break;
+          }
+        }
 
-        image_index = BLI_linklist_index(image_LinkList.list, tpage);
-
-        if (image_index == -1 && BKE_image_has_ibuf(tpage, NULL)) {
-          /* MemArena dosnt have an append func */
-          BLI_linklist_append(&image_LinkList, tpage);
-          image_index = ps->image_tot;
-          ps->image_tot++;
+        if (image_index == ps->image_tot) {
+          /* XXX get appropriate ImageUser instead */
+          ImageUser iuser;
+          BKE_imageuser_default(&iuser);
+          iuser.tile = tile;
+          iuser.framenr = tpage->lastframe;
+          if (BKE_image_has_ibuf(tpage, &iuser)) {
+            PrepareImageEntry *e = MEM_callocN(sizeof(PrepareImageEntry), "PrepareImageEntry");
+            e->ima = tpage;
+            e->iuser = iuser;
+            BLI_addtail(&used_images, e);
+            ps->image_tot++;
+          }
+          else {
+            image_index = -1;
+          }
         }
 
         tpage_last = tpage;
+        tile_last = tile;
       }
 
       if (image_index != -1) {
@@ -4405,11 +4431,11 @@ static void project_paint_prepare_all_faces(ProjPaintState *ps,
 
   /* build an array of images we use*/
   if (ps->is_shared_user == false) {
-    project_paint_build_proj_ima(ps, arena, image_LinkList.list);
+    project_paint_build_proj_ima(ps, arena, &used_images);
   }
 
   /* we have built the array, discard the linked list */
-  BLI_linklist_free(image_LinkList.list, NULL);
+  BLI_freelistN(&used_images);
 }
 
 /* run once per stroke before projection painting */
@@ -4538,8 +4564,6 @@ static void project_paint_end(ProjPaintState *ps)
 {
   int a;
 
-  image_undo_remove_masks();
-
   /* dereference used image buffers */
   if (ps->is_shared_user == false) {
     ProjPaintImage *projIma;
@@ -4581,7 +4605,7 @@ static void project_paint_end(ProjPaintState *ps)
       MEM_freeN((void *)ps->tile_lock);
     }
 
-    image_undo_end_locks();
+    ED_image_paint_tile_lock_end();
 
 #ifndef PROJ_DEBUG_NOSEAMBLEED
     if (ps->seam_bleed_px > 0.0f) {
@@ -4597,9 +4621,6 @@ static void project_paint_end(ProjPaintState *ps)
       MEM_freeN(ps->cavities);
     }
 
-    if (ps->me_eval_free) {
-      BKE_id_free(NULL, ps->me_eval);
-    }
     ps->me_eval = NULL;
   }
 
@@ -4676,7 +4697,7 @@ static bool project_image_refresh_tagged(ProjPaintState *ps)
         pr = &(projIma->partRedrawRect[i]);
         if (pr->x2 != -1) { /* TODO - use 'enabled' ? */
           set_imapaintpartial(pr);
-          imapaint_image_update(NULL, projIma->ima, projIma->ibuf, true);
+          imapaint_image_update(NULL, projIma->ima, projIma->ibuf, &projIma->iuser, true);
           redraw = 1;
         }
 
@@ -4699,7 +4720,12 @@ static bool project_bucket_iter_init(ProjPaintState *ps, const float mval_f[2])
     const float radius = ps->brush_size;
 
     /* so we don't have a bucket bounds that is way too small to paint into */
-    // if (radius < 1.0f) radius = 1.0f; // this doesn't work yet :/
+#if 0
+    /* This doesn't work yet. */
+    if (radius < 1.0f) {
+      radius = 1.0f;
+    }
+#endif
 
     min_brush[0] = mval_f[0] - radius;
     min_brush[1] = mval_f[1] - radius;
@@ -4712,11 +4738,8 @@ static bool project_bucket_iter_init(ProjPaintState *ps, const float mval_f[2])
 
     /* mouse outside the model areas? */
     if (ps->bucketMin[0] == ps->bucketMax[0] || ps->bucketMin[1] == ps->bucketMax[1]) {
-      return 0;
+      return false;
     }
-
-    ps->context_bucket_x = ps->bucketMin[0];
-    ps->context_bucket_y = ps->bucketMin[1];
   }
   else { /* reproject: PROJ_SRC_* */
     ps->bucketMin[0] = 0;
@@ -4724,11 +4747,10 @@ static bool project_bucket_iter_init(ProjPaintState *ps, const float mval_f[2])
 
     ps->bucketMax[0] = ps->buckets_x;
     ps->bucketMax[1] = ps->buckets_y;
-
-    ps->context_bucket_x = 0;
-    ps->context_bucket_y = 0;
   }
-  return 1;
+
+  ps->context_bucket_index = ps->bucketMin[0] + ps->bucketMin[1] * ps->buckets_x;
+  return true;
 }
 
 static bool project_bucket_iter_next(ProjPaintState *ps,
@@ -4738,37 +4760,28 @@ static bool project_bucket_iter_next(ProjPaintState *ps,
 {
   const int diameter = 2 * ps->brush_size;
 
-  if (ps->thread_tot > 1) {
-    BLI_thread_lock(LOCK_CUSTOM1);
-  }
+  const int max_bucket_idx = ps->bucketMax[0] + (ps->bucketMax[1] - 1) * ps->buckets_x;
 
-  // printf("%d %d\n", ps->context_bucket_x, ps->context_bucket_y);
+  for (int bidx = atomic_fetch_and_add_int32(&ps->context_bucket_index, 1); bidx < max_bucket_idx;
+       bidx = atomic_fetch_and_add_int32(&ps->context_bucket_index, 1)) {
+    const int bucket_y = bidx / ps->buckets_x;
+    const int bucket_x = bidx - (bucket_y * ps->buckets_x);
 
-  for (; ps->context_bucket_y < ps->bucketMax[1]; ps->context_bucket_y++) {
-    for (; ps->context_bucket_x < ps->bucketMax[0]; ps->context_bucket_x++) {
-
+    BLI_assert(bucket_y >= ps->bucketMin[1] && bucket_y < ps->bucketMax[1]);
+    if (bucket_x >= ps->bucketMin[0] && bucket_x < ps->bucketMax[0]) {
       /* use bucket_bounds for project_bucket_isect_circle and project_bucket_init*/
-      project_bucket_bounds(ps, ps->context_bucket_x, ps->context_bucket_y, bucket_bounds);
+      project_bucket_bounds(ps, bucket_x, bucket_y, bucket_bounds);
 
       if ((ps->source != PROJ_SRC_VIEW) ||
           project_bucket_isect_circle(mval, (float)(diameter * diameter), bucket_bounds)) {
-        *bucket_index = ps->context_bucket_x + (ps->context_bucket_y * ps->buckets_x);
-        ps->context_bucket_x++;
+        *bucket_index = bidx;
 
-        if (ps->thread_tot > 1) {
-          BLI_thread_unlock(LOCK_CUSTOM1);
-        }
-
-        return 1;
+        return true;
       }
     }
-    ps->context_bucket_x = ps->bucketMin[0];
   }
 
-  if (ps->thread_tot > 1) {
-    BLI_thread_unlock(LOCK_CUSTOM1);
-  }
-  return 0;
+  return false;
 }
 
 /* Each thread gets one of these, also used as an argument to pass to project_paint_op */
@@ -4792,15 +4805,15 @@ typedef struct ProjectHandle {
 
 static void do_projectpaint_clone(ProjPaintState *ps, ProjPixel *projPixel, float mask)
 {
-  const unsigned char *clone_pt = ((ProjPixelClone *)projPixel)->clonepx.ch;
+  const uchar *clone_pt = ((ProjPixelClone *)projPixel)->clonepx.ch;
 
   if (clone_pt[3]) {
-    unsigned char clone_rgba[4];
+    uchar clone_rgba[4];
 
     clone_rgba[0] = clone_pt[0];
     clone_rgba[1] = clone_pt[1];
     clone_rgba[2] = clone_pt[2];
-    clone_rgba[3] = (unsigned char)(clone_pt[3] * mask);
+    clone_rgba[3] = (uchar)(clone_pt[3] * mask);
 
     if (ps->do_masking) {
       IMB_blend_color_byte(
@@ -4843,7 +4856,7 @@ static void do_projectpaint_smear(ProjPaintState *ps,
                                   LinkNode **smearPixels,
                                   const float co[2])
 {
-  unsigned char rgba_ub[4];
+  uchar rgba_ub[4];
 
   if (project_paint_PickColor(ps, co, NULL, rgba_ub, 1) == 0) {
     return;
@@ -4883,7 +4896,7 @@ static void do_projectpaint_soften_f(ProjPaintState *ps,
   BlurKernel *kernel = ps->blurkernel;
   float *rgba = projPixel->newColor.f;
 
-  /* rather then painting, accumulate surrounding colors */
+  /* rather than painting, accumulate surrounding colors */
   zero_v4(rgba);
 
   for (yk = 0; yk < kernel->side; yk++) {
@@ -4944,7 +4957,7 @@ static void do_projectpaint_soften(ProjPaintState *ps,
   /* convert to byte after */
   float rgba[4];
 
-  /* rather then painting, accumulate surrounding colors */
+  /* rather than painting, accumulate surrounding colors */
   zero_v4(rgba);
 
   for (yk = 0; yk < kernel->side; yk++) {
@@ -4964,7 +4977,7 @@ static void do_projectpaint_soften(ProjPaintState *ps,
   }
 
   if (LIKELY(accum_tot != 0)) {
-    unsigned char *rgba_ub = projPixel->newColor.ch;
+    uchar *rgba_ub = projPixel->newColor.ch;
 
     mul_v4_fl(rgba, 1.0f / (float)accum_tot);
 
@@ -5009,7 +5022,7 @@ static void do_projectpaint_draw(ProjPaintState *ps,
                                  float v)
 {
   float rgb[3];
-  unsigned char rgba_ub[4];
+  uchar rgba_ub[4];
 
   if (ps->is_texbrush) {
     mul_v3_v3v3(rgb, texrgb, ps->paint_color_linear);
@@ -5067,7 +5080,7 @@ static void do_projectpaint_draw_f(ProjPaintState *ps,
 
 static void do_projectpaint_mask(ProjPaintState *ps, ProjPixel *projPixel, float mask)
 {
-  unsigned char rgba_ub[4];
+  uchar rgba_ub[4];
   rgba_ub[0] = rgba_ub[1] = rgba_ub[2] = ps->stencil_value * 255.0f;
   rgba_ub[3] = f_to_char(mask);
 
@@ -5103,10 +5116,24 @@ static void image_paint_partial_redraw_expand(ImagePaintPartialRedraw *cell,
   cell->y2 = max_ii(cell->y2, (int)projPixel->y_px + 1);
 }
 
+static void copy_original_alpha_channel(ProjPixel *pixel, bool is_floatbuf)
+{
+  /* Use the original alpha channel data instead of the modified one */
+  if (is_floatbuf) {
+    /* slightly more involved case since floats are in premultiplied space we need
+     * to make sure alpha is consistent, see T44627 */
+    float rgb_straight[4];
+    premul_to_straight_v4_v4(rgb_straight, pixel->pixel.f_pt);
+    rgb_straight[3] = pixel->origColor.f_pt[3];
+    straight_to_premul_v4_v4(pixel->pixel.f_pt, rgb_straight);
+  }
+  else {
+    pixel->pixel.ch_pt[3] = pixel->origColor.ch_pt[3];
+  }
+}
+
 /* Run this for single and multi-threaded painting. */
-static void do_projectpaint_thread(TaskPool *__restrict UNUSED(pool),
-                                   void *ph_v,
-                                   int UNUSED(threadid))
+static void do_projectpaint_thread(TaskPool *__restrict UNUSED(pool), void *ph_v)
 {
   /* First unpack args from the struct */
   ProjPaintState *ps = ((ProjectHandle *)ph_v)->ps;
@@ -5136,7 +5163,7 @@ static void do_projectpaint_thread(TaskPool *__restrict UNUSED(pool),
   /* for smear only */
   float pos_ofs[2] = {0};
   float co[2];
-  unsigned short mask_short;
+  ushort mask_short;
   const float brush_alpha = BKE_brush_alpha_get(ps->scene, brush);
   const float brush_radius = ps->brush_size;
   /* avoid a square root with every dist comparison */
@@ -5207,8 +5234,10 @@ static void do_projectpaint_thread(TaskPool *__restrict UNUSED(pool),
             float line_len_sq_inv, line_len;
             float f;
             float color_f[4];
-            float p[2] = {projPixel->projCoSS[0] - lastpos[0],
-                          projPixel->projCoSS[1] - lastpos[1]};
+            const float p[2] = {
+                projPixel->projCoSS[0] - lastpos[0],
+                projPixel->projCoSS[1] - lastpos[1],
+            };
 
             sub_v2_v2v2(tangent, pos, lastpos);
             line_len = len_squared_v2(tangent);
@@ -5227,7 +5256,7 @@ static void do_projectpaint_thread(TaskPool *__restrict UNUSED(pool),
               }
             }
             BKE_colorband_evaluate(brush->gradient, f, color_f);
-            color_f[3] *= ((float)projPixel->mask) * (1.0f / 65535.0f) * brush->alpha;
+            color_f[3] *= ((float)projPixel->mask) * (1.0f / 65535.0f) * brush_alpha;
 
             if (is_floatbuf) {
               /* convert to premultipied */
@@ -5255,7 +5284,7 @@ static void do_projectpaint_thread(TaskPool *__restrict UNUSED(pool),
           else {
             if (is_floatbuf) {
               float newColor_f[4];
-              newColor_f[3] = ((float)projPixel->mask) * (1.0f / 65535.0f) * brush->alpha;
+              newColor_f[3] = ((float)projPixel->mask) * (1.0f / 65535.0f) * brush_alpha;
               copy_v3_v3(newColor_f, ps->paint_color_linear);
 
               IMB_blend_color_float(
@@ -5263,7 +5292,7 @@ static void do_projectpaint_thread(TaskPool *__restrict UNUSED(pool),
             }
             else {
               float mask = ((float)projPixel->mask) * (1.0f / 65535.0f);
-              projPixel->newColor.ch[3] = mask * 255 * brush->alpha;
+              projPixel->newColor.ch[3] = mask * 255 * brush_alpha;
 
               rgb_float_to_uchar(projPixel->newColor.ch, ps->paint_color);
               IMB_blend_color_byte(projPixel->pixel.ch_pt,
@@ -5274,17 +5303,7 @@ static void do_projectpaint_thread(TaskPool *__restrict UNUSED(pool),
           }
 
           if (lock_alpha) {
-            if (is_floatbuf) {
-              /* slightly more involved case since floats are in premultiplied space we need
-               * to make sure alpha is consistent, see T44627 */
-              float rgb_straight[4];
-              premul_to_straight_v4_v4(rgb_straight, projPixel->pixel.f_pt);
-              rgb_straight[3] = projPixel->origColor.f_pt[3];
-              straight_to_premul_v4_v4(projPixel->pixel.f_pt, rgb_straight);
-            }
-            else {
-              projPixel->pixel.ch_pt[3] = projPixel->origColor.ch_pt[3];
-            }
+            copy_original_alpha_channel(projPixel, is_floatbuf);
           }
 
           last_partial_redraw_cell = last_projIma->partRedrawRect + projPixel->bb_cell_index;
@@ -5292,10 +5311,7 @@ static void do_projectpaint_thread(TaskPool *__restrict UNUSED(pool),
         }
         else {
           if (is_floatbuf) {
-            if (UNLIKELY(ps->reproject_ibuf->rect_float == NULL)) {
-              IMB_float_from_rect(ps->reproject_ibuf);
-              ps->reproject_ibuf_free_float = true;
-            }
+            BLI_assert(ps->reproject_ibuf->rect_float != NULL);
 
             bicubic_interpolation_color(ps->reproject_ibuf,
                                         NULL,
@@ -5312,10 +5328,7 @@ static void do_projectpaint_thread(TaskPool *__restrict UNUSED(pool),
             }
           }
           else {
-            if (UNLIKELY(ps->reproject_ibuf->rect == NULL)) {
-              IMB_rect_from_float(ps->reproject_ibuf);
-              ps->reproject_ibuf_free_uchar = true;
-            }
+            BLI_assert(ps->reproject_ibuf->rect != NULL);
 
             bicubic_interpolation_color(ps->reproject_ibuf,
                                         projPixel->newColor.ch,
@@ -5408,7 +5421,7 @@ static void do_projectpaint_thread(TaskPool *__restrict UNUSED(pool),
               }
 
               mask = min_ff(mask, 65535.0f);
-              mask_short = (unsigned short)mask;
+              mask_short = (ushort)mask;
 
               if (mask_short > *projPixel->mask_accum) {
                 *projPixel->mask_accum = mask_short;
@@ -5489,17 +5502,7 @@ static void do_projectpaint_thread(TaskPool *__restrict UNUSED(pool),
               }
 
               if (lock_alpha) {
-                if (is_floatbuf) {
-                  /* slightly more involved case since floats are in premultiplied space we need
-                   * to make sure alpha is consistent, see T44627 */
-                  float rgb_straight[4];
-                  premul_to_straight_v4_v4(rgb_straight, projPixel->pixel.f_pt);
-                  rgb_straight[3] = projPixel->origColor.f_pt[3];
-                  straight_to_premul_v4_v4(projPixel->pixel.f_pt, rgb_straight);
-                }
-                else {
-                  projPixel->pixel.ch_pt[3] = projPixel->origColor.ch_pt[3];
-                }
+                copy_original_alpha_channel(projPixel, is_floatbuf);
               }
             }
 
@@ -5515,11 +5518,17 @@ static void do_projectpaint_thread(TaskPool *__restrict UNUSED(pool),
     for (node = smearPixels; node; node = node->next) { /* this wont run for a float image */
       projPixel = node->link;
       *projPixel->pixel.uint_pt = ((ProjPixelClone *)projPixel)->clonepx.uint;
+      if (lock_alpha) {
+        copy_original_alpha_channel(projPixel, false);
+      }
     }
 
     for (node = smearPixels_f; node; node = node->next) {
       projPixel = node->link;
       copy_v4_v4(projPixel->pixel.f_pt, ((ProjPixelClone *)projPixel)->clonepx.f);
+      if (lock_alpha) {
+        copy_original_alpha_channel(projPixel, true);
+      }
     }
 
     BLI_memarena_free(smearArena);
@@ -5529,11 +5538,17 @@ static void do_projectpaint_thread(TaskPool *__restrict UNUSED(pool),
     for (node = softenPixels; node; node = node->next) { /* this wont run for a float image */
       projPixel = node->link;
       *projPixel->pixel.uint_pt = projPixel->newColor.uint;
+      if (lock_alpha) {
+        copy_original_alpha_channel(projPixel, false);
+      }
     }
 
     for (node = softenPixels_f; node; node = node->next) {
       projPixel = node->link;
       copy_v4_v4(projPixel->pixel.f_pt, projPixel->newColor.f);
+      if (lock_alpha) {
+        copy_original_alpha_channel(projPixel, true);
+      }
     }
 
     BLI_memarena_free(softenArena);
@@ -5547,7 +5562,6 @@ static bool project_paint_op(void *state, const float lastpos[2], const float po
   bool touch_any = false;
 
   ProjectHandle handles[BLENDER_MAX_THREADS];
-  TaskScheduler *scheduler = NULL;
   TaskPool *task_pool = NULL;
   int a, i;
 
@@ -5558,11 +5572,36 @@ static bool project_paint_op(void *state, const float lastpos[2], const float po
   }
 
   if (ps->thread_tot > 1) {
-    scheduler = BLI_task_scheduler_get();
-    task_pool = BLI_task_pool_create_suspended(scheduler, NULL);
+    task_pool = BLI_task_pool_create_suspended(NULL, TASK_PRIORITY_HIGH);
   }
 
   image_pool = BKE_image_pool_new();
+
+  if (!ELEM(ps->source, PROJ_SRC_VIEW, PROJ_SRC_VIEW_FILL)) {
+    /* This means we are reprojecting an image, make sure the image has the needed data available.
+     */
+    bool float_dest = false;
+    bool uchar_dest = false;
+    /* Check if the destination images are float or uchar. */
+    for (i = 0; i < ps->image_tot; i++) {
+      if (ps->projImages[i].ibuf->rect != NULL) {
+        uchar_dest = true;
+      }
+      if (ps->projImages[i].ibuf->rect_float != NULL) {
+        float_dest = true;
+      }
+    }
+
+    /* Generate missing data if needed. */
+    if (float_dest && ps->reproject_ibuf->rect_float == NULL) {
+      IMB_float_from_rect(ps->reproject_ibuf);
+      ps->reproject_ibuf_free_float = true;
+    }
+    if (uchar_dest && ps->reproject_ibuf->rect == NULL) {
+      IMB_rect_from_float(ps->reproject_ibuf);
+      ps->reproject_ibuf_free_uchar = true;
+    }
+  }
 
   /* get the threads running */
   for (a = 0; a < ps->thread_tot; a++) {
@@ -5594,8 +5633,7 @@ static bool project_paint_op(void *state, const float lastpos[2], const float po
     handles[a].pool = image_pool;
 
     if (task_pool != NULL) {
-      BLI_task_pool_push(
-          task_pool, do_projectpaint_thread, &handles[a], false, TASK_PRIORITY_HIGH);
+      BLI_task_pool_push(task_pool, do_projectpaint_thread, &handles[a], false, NULL);
     }
   }
 
@@ -5604,7 +5642,7 @@ static bool project_paint_op(void *state, const float lastpos[2], const float po
     BLI_task_pool_free(task_pool);
   }
   else {
-    do_projectpaint_thread(NULL, &handles[0], 0);
+    do_projectpaint_thread(NULL, &handles[0]);
   }
 
   BKE_image_pool_free(image_pool);
@@ -5624,7 +5662,7 @@ static bool project_paint_op(void *state, const float lastpos[2], const float po
     }
   }
 
-  /* calculate pivot for rotation around seletion if needed */
+  /* Calculate pivot for rotation around selection if needed. */
   if (U.uiflag & USER_ORBIT_SELECTION) {
     float w[3];
     int tri_index;
@@ -5721,19 +5759,20 @@ void paint_proj_stroke(const bContext *C,
   /* clone gets special treatment here to avoid going through image initialization */
   if (ps_handle->is_clone_cursor_pick) {
     Scene *scene = ps_handle->scene;
-    struct Depsgraph *depsgraph = CTX_data_depsgraph(C);
+    struct Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
     View3D *v3d = CTX_wm_view3d(C);
-    ARegion *ar = CTX_wm_region(C);
+    ARegion *region = CTX_wm_region(C);
     float *cursor = scene->cursor.location;
-    int mval_i[2] = {(int)pos[0], (int)pos[1]};
+    const int mval_i[2] = {(int)pos[0], (int)pos[1]};
 
     view3d_operator_needs_opengl(C);
 
-    if (!ED_view3d_autodist(depsgraph, ar, v3d, mval_i, cursor, false, NULL)) {
+    if (!ED_view3d_autodist(depsgraph, region, v3d, mval_i, cursor, false, NULL)) {
       return;
     }
 
-    ED_region_tag_redraw(ar);
+    DEG_id_tag_update(&scene->id, ID_RECALC_COPY_ON_WRITE);
+    ED_region_tag_redraw(region);
 
     return;
   }
@@ -5787,9 +5826,9 @@ static void project_state_init(bContext *C, Object *ob, ProjPaintState *ps, int 
   /* these can be NULL */
   ps->v3d = CTX_wm_view3d(C);
   ps->rv3d = CTX_wm_region_view3d(C);
-  ps->ar = CTX_wm_region(C);
+  ps->region = CTX_wm_region(C);
 
-  ps->depsgraph = CTX_data_depsgraph(C);
+  ps->depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ps->scene = scene;
   /* allow override of active object */
   ps->ob = ob;
@@ -5826,7 +5865,7 @@ static void project_state_init(bContext *C, Object *ob, ProjPaintState *ps, int 
 #ifndef PROJ_DEBUG_NOSEAMBLEED
   /* pixel num to bleed */
   ps->seam_bleed_px = settings->imapaint.seam_bleed;
-  ps->seam_bleed_px_sq = SQUARE(settings->imapaint.seam_bleed);
+  ps->seam_bleed_px_sq = square_s(settings->imapaint.seam_bleed);
 #endif
 
   if (ps->do_mask_normal) {
@@ -5852,8 +5891,6 @@ static void project_state_init(bContext *C, Object *ob, ProjPaintState *ps, int 
   ps->dither = settings->imapaint.dither;
 
   ps->use_colormanagement = BKE_scene_check_color_management_enabled(CTX_data_scene(C));
-
-  return;
 }
 
 void *paint_proj_new_stroke(bContext *C, Object *ob, const float mouse[2], int mode)
@@ -5861,8 +5898,6 @@ void *paint_proj_new_stroke(bContext *C, Object *ob, const float mouse[2], int m
   ProjStrokeHandle *ps_handle;
   Scene *scene = CTX_data_scene(C);
   ToolSettings *settings = scene->toolsettings;
-  int i;
-  bool is_multi_view;
   char symmetry_flag_views[ARRAY_SIZE(ps_handle->ps_views)] = {0};
 
   ps_handle = MEM_callocN(sizeof(ProjStrokeHandle), "ProjStrokeHandle");
@@ -5878,11 +5913,12 @@ void *paint_proj_new_stroke(bContext *C, Object *ob, const float mouse[2], int m
 
   ps_handle->orig_brush_size = BKE_brush_size_get(scene, ps_handle->brush);
 
-  ps_handle->symmetry_flags = settings->imapaint.paint.symmetry_flags & PAINT_SYMM_AXIS_ALL;
+  Mesh *mesh = BKE_mesh_from_object(ob);
+  ps_handle->symmetry_flags = mesh->symmetry;
   ps_handle->ps_views_tot = 1 + (pow_i(2, count_bits_i(ps_handle->symmetry_flags)) - 1);
-  is_multi_view = (ps_handle->ps_views_tot != 1);
+  bool is_multi_view = (ps_handle->ps_views_tot != 1);
 
-  for (i = 0; i < ps_handle->ps_views_tot; i++) {
+  for (int i = 0; i < ps_handle->ps_views_tot; i++) {
     ProjPaintState *ps = MEM_callocN(sizeof(ProjPaintState), "ProjectionPaintState");
     ps_handle->ps_views[i] = ps;
   }
@@ -5905,7 +5941,7 @@ void *paint_proj_new_stroke(bContext *C, Object *ob, const float mouse[2], int m
     BLI_assert(index == ps_handle->ps_views_tot);
   }
 
-  for (i = 0; i < ps_handle->ps_views_tot; i++) {
+  for (int i = 0; i < ps_handle->ps_views_tot; i++) {
     ProjPaintState *ps = ps_handle->ps_views[i];
 
     project_state_init(C, ob, ps, mode);
@@ -5923,7 +5959,7 @@ void *paint_proj_new_stroke(bContext *C, Object *ob, const float mouse[2], int m
 
   /* allocate and initialize spatial data structures */
 
-  for (i = 0; i < ps_handle->ps_views_tot; i++) {
+  for (int i = 0; i < ps_handle->ps_views_tot; i++) {
     ProjPaintState *ps = ps_handle->ps_views[i];
 
     ps->source = (ps->tool == PAINT_TOOL_FILL) ? PROJ_SRC_VIEW_FILL : PROJ_SRC_VIEW;
@@ -5948,7 +5984,7 @@ void *paint_proj_new_stroke(bContext *C, Object *ob, const float mouse[2], int m
   return ps_handle;
 
 fail:
-  for (i = 0; i < ps_handle->ps_views_tot; i++) {
+  for (int i = 0; i < ps_handle->ps_views_tot; i++) {
     ProjPaintState *ps = ps_handle->ps_views[i];
     MEM_freeN(ps);
   }
@@ -5980,14 +6016,13 @@ void paint_proj_stroke_done(void *ps_handle_p)
 {
   ProjStrokeHandle *ps_handle = ps_handle_p;
   Scene *scene = ps_handle->scene;
-  int i;
 
   if (ps_handle->is_clone_cursor_pick) {
     MEM_freeN(ps_handle);
     return;
   }
 
-  for (i = 1; i < ps_handle->ps_views_tot; i++) {
+  for (int i = 1; i < ps_handle->ps_views_tot; i++) {
     PROJ_PAINT_STATE_SHARED_CLEAR(ps_handle->ps_views[i]);
   }
 
@@ -5995,7 +6030,7 @@ void paint_proj_stroke_done(void *ps_handle_p)
 
   paint_brush_exit_tex(ps_handle->brush);
 
-  for (i = 0; i < ps_handle->ps_views_tot; i++) {
+  for (int i = 0; i < ps_handle->ps_views_tot; i++) {
     ProjPaintState *ps;
     ps = ps_handle->ps_views[i];
     project_paint_end(ps);
@@ -6007,7 +6042,8 @@ void paint_proj_stroke_done(void *ps_handle_p)
 /* use project paint to re-apply an image */
 static int texture_paint_camera_project_exec(bContext *C, wmOperator *op)
 {
-  Image *image = BLI_findlink(&CTX_data_main(C)->images, RNA_enum_get(op->ptr, "image"));
+  Main *bmain = CTX_data_main(C);
+  Image *image = BLI_findlink(&bmain->images, RNA_enum_get(op->ptr, "image"));
   Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
   ProjPaintState ps = {NULL};
@@ -6022,8 +6058,8 @@ static int texture_paint_camera_project_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
-  if (!BKE_paint_proj_mesh_data_check(scene, ob, &uvs, &mat, &tex, NULL)) {
-    BKE_paint_data_warning(op->reports, uvs, mat, tex, true);
+  if (!ED_paint_proj_mesh_data_check(scene, ob, &uvs, &mat, &tex, NULL)) {
+    ED_paint_data_warning(op->reports, uvs, mat, tex, true);
     WM_event_add_notifier(C, NC_SCENE | ND_TOOLSETTINGS, NULL);
     return OPERATOR_CANCELLED;
   }
@@ -6082,8 +6118,6 @@ static int texture_paint_camera_project_exec(bContext *C, wmOperator *op)
 
   scene->toolsettings->imapaint.flag |= IMAGEPAINT_DRAWING;
 
-  ED_image_undo_push_begin(op->type->name, PAINT_MODE_TEXTURE_3D);
-
   /* allocate and initialize spatial data structures */
   project_paint_begin(C, &ps, false, 0);
 
@@ -6092,22 +6126,25 @@ static int texture_paint_camera_project_exec(bContext *C, wmOperator *op)
     BKE_report(op->reports, RPT_ERROR, "Could not get valid evaluated mesh");
     return OPERATOR_CANCELLED;
   }
-  else {
-    float pos[2] = {0.0, 0.0};
-    float lastpos[2] = {0.0, 0.0};
-    int a;
 
-    project_paint_op(&ps, lastpos, pos);
+  ED_image_undo_push_begin(op->type->name, PAINT_MODE_TEXTURE_3D);
 
-    project_image_refresh_tagged(&ps);
+  const float pos[2] = {0.0, 0.0};
+  const float lastpos[2] = {0.0, 0.0};
+  int a;
 
-    for (a = 0; a < ps.image_tot; a++) {
-      GPU_free_image(ps.projImages[a].ima);
-      WM_event_add_notifier(C, NC_IMAGE | NA_EDITED, ps.projImages[a].ima);
-    }
+  project_paint_op(&ps, lastpos, pos);
+
+  project_image_refresh_tagged(&ps);
+
+  for (a = 0; a < ps.image_tot; a++) {
+    BKE_image_free_gputextures(ps.projImages[a].ima);
+    WM_event_add_notifier(C, NC_IMAGE | NA_EDITED, ps.projImages[a].ima);
   }
 
   project_paint_end(&ps);
+
+  ED_image_undo_push_end();
 
   scene->toolsettings->imapaint.flag &= ~IMAGEPAINT_DRAWING;
   BKE_brush_size_set(scene, ps.brush, orig_brush_size);
@@ -6139,8 +6176,12 @@ void PAINT_OT_project_image(wmOperatorType *ot)
 
 static bool texture_paint_image_from_view_poll(bContext *C)
 {
-  if (BKE_screen_find_big_area(CTX_wm_screen(C), SPACE_VIEW3D, 0) == NULL) {
+  bScreen *screen = CTX_wm_screen(C);
+  if (!(screen && BKE_screen_find_big_area(screen, SPACE_VIEW3D, 0))) {
     CTX_wm_operator_poll_msg_set(C, "No 3D viewport found to create image from");
+    return false;
+  }
+  if (G.background || !GPU_is_init()) {
     return false;
   }
   return true;
@@ -6153,7 +6194,7 @@ static int texture_paint_image_from_view_exec(bContext *C, wmOperator *op)
   char filename[FILE_MAX];
 
   Main *bmain = CTX_data_main(C);
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Scene *scene = CTX_data_scene(C);
   ToolSettings *settings = scene->toolsettings;
   int w = settings->imapaint.screen_grab_size[0];
@@ -6161,18 +6202,18 @@ static int texture_paint_image_from_view_exec(bContext *C, wmOperator *op)
   int maxsize;
   char err_out[256] = "unknown";
 
-  ScrArea *sa = BKE_screen_find_big_area(CTX_wm_screen(C), SPACE_VIEW3D, 0);
-  if (!sa) {
+  ScrArea *area = BKE_screen_find_big_area(CTX_wm_screen(C), SPACE_VIEW3D, 0);
+  if (!area) {
     BKE_report(op->reports, RPT_ERROR, "No 3D viewport found to create image from");
     return OPERATOR_CANCELLED;
   }
 
-  ARegion *ar = BKE_area_find_region_active_win(sa);
-  if (!ar) {
+  ARegion *region = BKE_area_find_region_active_win(area);
+  if (!region) {
     BKE_report(op->reports, RPT_ERROR, "No 3D viewport found to create image from");
     return OPERATOR_CANCELLED;
   }
-  RegionView3D *rv3d = ar->regiondata;
+  RegionView3D *rv3d = region->regiondata;
 
   RNA_string_get(op->ptr, "filepath", filename);
 
@@ -6187,7 +6228,7 @@ static int texture_paint_image_from_view_exec(bContext *C, wmOperator *op)
 
   /* Create a copy of the overlays where they are all turned off, except the
    * texture paint overlay opacity */
-  View3D *v3d = sa->spacedata.first;
+  View3D *v3d = area->spacedata.first;
   View3D v3d_copy = *v3d;
   v3d_copy.gridflag = 0;
   v3d_copy.flag2 = 0;
@@ -6204,12 +6245,11 @@ static int texture_paint_image_from_view_exec(bContext *C, wmOperator *op)
                                         scene,
                                         v3d_copy.shading.type,
                                         &v3d_copy,
-                                        ar,
+                                        region,
                                         w,
                                         h,
                                         IB_rect,
                                         R_ALPHAPREMUL,
-                                        0,
                                         NULL,
                                         NULL,
                                         err_out);
@@ -6244,10 +6284,9 @@ static int texture_paint_image_from_view_exec(bContext *C, wmOperator *op)
     array += sizeof(rv3d->winmat) / sizeof(float);
     memcpy(array, rv3d->viewmat, sizeof(rv3d->viewmat));
     array += sizeof(rv3d->viewmat) / sizeof(float);
-    is_ortho = ED_view3d_clip_range_get(
-        CTX_data_depsgraph(C), v3d, rv3d, &array[0], &array[1], true);
+    is_ortho = ED_view3d_clip_range_get(depsgraph, v3d, rv3d, &array[0], &array[1], true);
     /* using float for a bool is dodgy but since its an extra member in the array...
-     * easier then adding a single bool prop */
+     * easier than adding a single bool prop */
     array[2] = is_ortho ? 1.0f : 0.0f;
 
     IDP_AddToGroup(idgroup, view_data);
@@ -6261,7 +6300,7 @@ void PAINT_OT_image_from_view(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Image from View";
   ot->idname = "PAINT_OT_image_from_view";
-  ot->description = "Make an image from biggest 3D view for re-projection";
+  ot->description = "Make an image from biggest 3D view for reprojection";
 
   /* api callbacks */
   ot->exec = texture_paint_image_from_view_exec;
@@ -6277,7 +6316,7 @@ void PAINT_OT_image_from_view(wmOperatorType *ot)
  * Data generation for projective texturing  *
  * *******************************************/
 
-void BKE_paint_data_warning(struct ReportList *reports, bool uvs, bool mat, bool tex, bool stencil)
+void ED_paint_data_warning(struct ReportList *reports, bool uvs, bool mat, bool tex, bool stencil)
 {
   BKE_reportf(reports,
               RPT_WARNING,
@@ -6290,7 +6329,7 @@ void BKE_paint_data_warning(struct ReportList *reports, bool uvs, bool mat, bool
 
 /* Make sure that active object has a material,
  * and assign UVs and image layers if they do not exist */
-bool BKE_paint_proj_mesh_data_check(
+bool ED_paint_proj_mesh_data_check(
     Scene *scene, Object *ob, bool *uvs, bool *mat, bool *tex, bool *stencil)
 {
   Mesh *me;
@@ -6314,26 +6353,21 @@ bool BKE_paint_proj_mesh_data_check(
     }
     else {
       /* there may be material slots but they may be empty, check */
-      int i;
       hasmat = false;
       hastex = false;
 
-      for (i = 1; i < ob->totcol + 1; i++) {
-        Material *ma = give_current_material(ob, i);
+      for (int i = 1; i < ob->totcol + 1; i++) {
+        Material *ma = BKE_object_material_get(ob, i);
 
-        if (ma) {
+        if (ma && !ID_IS_LINKED(ma)) {
           hasmat = true;
-          if (!ma->texpaintslot) {
+          if (ma->texpaintslot == NULL) {
             /* refresh here just in case */
             BKE_texpaint_slot_refresh_cache(scene, ma);
-
-            /* if still no slots, we have to add */
-            if (ma->texpaintslot) {
-              hastex = true;
-              break;
-            }
           }
-          else {
+          if (ma->texpaintslot != NULL &&
+              (ma->texpaintslot[ma->paint_active_slot].ima == NULL ||
+               !ID_IS_LINKED(ma->texpaintslot[ma->paint_active_slot].ima))) {
             hastex = true;
             break;
           }
@@ -6342,7 +6376,7 @@ bool BKE_paint_proj_mesh_data_check(
     }
   }
   else if (imapaint->mode == IMAGEPAINT_MODE_IMAGE) {
-    if (imapaint->canvas == NULL) {
+    if (imapaint->canvas == NULL || ID_IS_LINKED(imapaint->canvas)) {
       hastex = false;
     }
   }
@@ -6443,7 +6477,8 @@ static Image *proj_paint_image_create(wmOperator *op, Main *bmain, bool is_data)
                                 gen_type,
                                 color,
                                 false,
-                                is_data);
+                                is_data,
+                                false); /* TODO(lukas): Add option */
 
   return ima;
 }
@@ -6510,7 +6545,7 @@ static bool proj_paint_add_slot(bContext *C, wmOperator *op)
     return false;
   }
 
-  ma = give_current_material(ob, ob->actcol);
+  ma = BKE_object_material_get(ob, ob->actcol);
 
   if (ma) {
     Main *bmain = CTX_data_main(C);
@@ -6605,7 +6640,7 @@ static bool proj_paint_add_slot(bContext *C, wmOperator *op)
     DEG_id_tag_update(&ma->id, ID_RECALC_SHADING);
     ED_area_tag_redraw(CTX_wm_area(C));
 
-    BKE_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
+    ED_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
 
     return true;
   }
@@ -6623,11 +6658,11 @@ static int get_texture_layer_type(wmOperator *op, const char *prop_name)
 
 static Material *get_or_create_current_material(bContext *C, Object *ob)
 {
-  Material *ma = give_current_material(ob, ob->actcol);
+  Material *ma = BKE_object_material_get(ob, ob->actcol);
   if (!ma) {
     Main *bmain = CTX_data_main(C);
     ma = BKE_material_add(bmain, "Material");
-    assign_material(bmain, ob, ma, ob->actcol, BKE_MAT_ASSIGN_USERPREF);
+    BKE_object_material_assign(bmain, ob, ma, ob->actcol, BKE_MAT_ASSIGN_USERPREF);
   }
   return ma;
 }
@@ -6643,9 +6678,7 @@ static int texture_paint_add_texture_paint_slot_exec(bContext *C, wmOperator *op
   if (proj_paint_add_slot(C, op)) {
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 static void get_default_texture_layer_name_for_object(Object *ob,
@@ -6653,7 +6686,7 @@ static void get_default_texture_layer_name_for_object(Object *ob,
                                                       char *dst,
                                                       int dst_length)
 {
-  Material *ma = give_current_material(ob, ob->actcol);
+  Material *ma = BKE_object_material_get(ob, ob->actcol);
   const char *base_name = ma ? &ma->id.name[2] : &ob->id.name[2];
   BLI_snprintf(dst, dst_length, "%s %s", base_name, layer_type_items[texture_type].name);
 }
@@ -6673,7 +6706,7 @@ static int texture_paint_add_texture_paint_slot_invoke(bContext *C,
   get_default_texture_layer_name_for_object(ob, type, (char *)&imagename, sizeof(imagename));
   RNA_string_set(op->ptr, "name", imagename);
 
-  return WM_operator_props_dialog_popup(C, op, 300, 100);
+  return WM_operator_props_dialog_popup(C, op, 300);
 }
 
 #define IMA_DEF_NAME N_("Untitled")
@@ -6691,7 +6724,7 @@ void PAINT_OT_add_texture_paint_slot(wmOperatorType *ot)
   /* api callbacks */
   ot->invoke = texture_paint_add_texture_paint_slot_invoke;
   ot->exec = texture_paint_add_texture_paint_slot_exec;
-  ot->poll = ED_operator_object_active;
+  ot->poll = ED_operator_object_active_editable_mesh;
 
   /* flags */
   ot->flag = OPTYPE_UNDO;
@@ -6708,7 +6741,7 @@ void PAINT_OT_add_texture_paint_slot(wmOperatorType *ot)
       ot->srna, "color", 4, NULL, 0.0f, FLT_MAX, "Color", "Default fill color", 0.0f, 1.0f);
   RNA_def_property_subtype(prop, PROP_COLOR_GAMMA);
   RNA_def_property_float_array_default(prop, default_color);
-  RNA_def_boolean(ot->srna, "alpha", 1, "Alpha", "Create an image with an alpha channel");
+  RNA_def_boolean(ot->srna, "alpha", true, "Alpha", "Create an image with an alpha channel");
   RNA_def_enum(ot->srna,
                "generated_type",
                rna_enum_image_generated_type_items,
@@ -6716,7 +6749,7 @@ void PAINT_OT_add_texture_paint_slot(wmOperatorType *ot)
                "Generated Type",
                "Fill the image with a grid for UV map testing");
   RNA_def_boolean(
-      ot->srna, "float", 0, "32 bit Float", "Create image with 32 bit floating point bit depth");
+      ot->srna, "float", 0, "32-bit Float", "Create image with 32-bit floating-point bit depth");
 }
 
 static int add_simple_uvs_exec(bContext *C, wmOperator *UNUSED(op))
@@ -6728,7 +6761,7 @@ static int add_simple_uvs_exec(bContext *C, wmOperator *UNUSED(op))
 
   ED_uvedit_add_simple_uvs(bmain, scene, ob);
 
-  BKE_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
+  ED_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
 
   DEG_id_tag_update(ob->data, 0);
   WM_event_add_notifier(C, NC_GEOM | ND_DATA, ob->data);
@@ -6749,7 +6782,7 @@ static bool add_simple_uvs_poll(bContext *C)
 void PAINT_OT_add_simple_uvs(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Add simple UVs";
+  ot->name = "Add Simple UVs";
   ot->description = "Add cube map uvs on mesh";
   ot->idname = "PAINT_OT_add_simple_uvs";
 

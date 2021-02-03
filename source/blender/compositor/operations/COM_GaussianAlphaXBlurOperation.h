@@ -16,10 +16,10 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_GAUSSIANALPHAXBLUROPERATION_H__
-#define __COM_GAUSSIANALPHAXBLUROPERATION_H__
-#include "COM_NodeOperation.h"
+#pragma once
+
 #include "COM_BlurBaseOperation.h"
+#include "COM_NodeOperation.h"
 
 class GaussianAlphaXBlurOperation : public BlurBaseOperation {
  private:
@@ -34,7 +34,7 @@ class GaussianAlphaXBlurOperation : public BlurBaseOperation {
   GaussianAlphaXBlurOperation();
 
   /**
-   * \brief the inner loop of this program
+   * \brief The inner loop of this operation.
    */
   void executePixel(float output[4], int x, int y, void *data);
 
@@ -65,4 +65,3 @@ class GaussianAlphaXBlurOperation : public BlurBaseOperation {
     this->m_falloff = falloff;
   }
 };
-#endif

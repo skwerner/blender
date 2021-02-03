@@ -21,11 +21,14 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_LIGHT_TYPES_H__
-#define __DNA_LIGHT_TYPES_H__
+#pragma once
 
-#include "DNA_defs.h"
 #include "DNA_ID.h"
+#include "DNA_defs.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #ifndef MAX_MTEX
 #  define MAX_MTEX 18
@@ -34,7 +37,6 @@
 struct AnimData;
 struct CurveMapping;
 struct Ipo;
-struct MTex;
 struct bNodeTree;
 
 typedef struct Light {
@@ -59,7 +61,10 @@ typedef struct Light {
   char _pad2[2];
 
   float clipsta, clipend;
-  float bias, soft, bleedbias, bleedexp;
+  float bias;
+  float soft;      /* DEPRECATED kept for compatibility. */
+  float bleedbias; /* DEPRECATED kept for compatibility. */
+  float bleedexp;  /* DEPRECATED kept for compatibility. */
   short bufsize, samp, buffers, filtertype;
   char bufflag, buftype;
 
@@ -83,7 +88,10 @@ typedef struct Light {
   float cascade_fade;
   int cascade_count;
 
-  float contact_dist, contact_bias, contact_spread, contact_thickness;
+  float contact_dist;
+  float contact_bias;
+  float contact_spread; /* DEPRECATED kept for compatibility. */
+  float contact_thickness;
 
   float spec_fac, att_dist;
 
@@ -151,4 +159,6 @@ typedef struct Light {
 #define LA_AREA_DISK 4
 #define LA_AREA_ELLIPSE 5
 
-#endif /* __DNA_LIGHT_TYPES_H__ */
+#ifdef __cplusplus
+}
+#endif

@@ -21,12 +21,15 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_META_TYPES_H__
-#define __DNA_META_TYPES_H__
+#pragma once
 
+#include "DNA_ID.h"
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
-#include "DNA_ID.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct AnimData;
 struct BoundBox;
@@ -81,7 +84,13 @@ typedef struct MetaBall {
   short totcol;
   /** Used to store MB_AUTOSPACE. */
   short texflag;
-  char _pad[2];
+  char _pad[1];
+
+  /**
+   * ID data is older than edit-mode data (TODO: move to edit-mode struct).
+   * Set #Main.is_memfile_undo_flush_needed when enabling.
+   */
+  char needs_flush_to_id;
 
   /* texture space, copied as one block in editobject.c */
   float loc[3];
@@ -134,4 +143,6 @@ typedef struct MetaBall {
 #define MB_HIDE 8
 #define MB_SCALE_RAD 16
 
+#ifdef __cplusplus
+}
 #endif

@@ -16,8 +16,8 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_DOUBLEEDGEMASKOPERATION_H__
-#define __COM_DOUBLEEDGEMASKOPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
 
 class DoubleEdgeMaskOperation : public NodeOperation {
@@ -34,9 +34,9 @@ class DoubleEdgeMaskOperation : public NodeOperation {
  public:
   DoubleEdgeMaskOperation();
 
-  void doDoubleEdgeMask(float *inner, float *outer, float *res);
+  void doDoubleEdgeMask(float *imask, float *omask, float *res);
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixel(float output[4], int x, int y, void *data);
 
@@ -65,4 +65,3 @@ class DoubleEdgeMaskOperation : public NodeOperation {
     this->m_keepInside = keepInside;
   }
 };
-#endif

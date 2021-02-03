@@ -23,25 +23,25 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "DNA_scene_types.h"
-#include "DNA_object_types.h"
 #include "DNA_mesh_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 #include "DNA_windowmanager_types.h"
 
 #ifdef WITH_FREESTYLE
 #  include "DNA_meshdata_types.h"
 #endif
 
-#include "BLI_math.h"
 #include "BLI_linklist.h"
+#include "BLI_math.h"
 
-#include "BKE_layer.h"
 #include "BKE_context.h"
 #include "BKE_editmesh.h"
+#include "BKE_layer.h"
 #include "BKE_report.h"
 
-#include "ED_object.h"
 #include "ED_mesh.h"
+#include "ED_object.h"
 #include "ED_screen.h"
 #include "ED_uvedit.h"
 #include "ED_view3d.h"
@@ -239,8 +239,7 @@ static void mouse_mesh_shortest_path_vert(Scene *UNUSED(scene),
       }
     } while ((node = node->next));
 
-    /* We need to start as if just *after* a 'skip' block... */
-    int depth = op_params->interval_params.skip;
+    int depth = -1;
     node = path;
     do {
       if ((is_path_ordered == false) ||
@@ -271,7 +270,7 @@ static void mouse_mesh_shortest_path_vert(Scene *UNUSED(scene),
     }
   }
 
-  EDBM_update_generic(em, false, false);
+  EDBM_update_generic(obedit->data, false, false);
 }
 
 /** \} */
@@ -430,8 +429,7 @@ static void mouse_mesh_shortest_path_edge(Scene *scene,
       }
     } while ((node = node->next));
 
-    /* We need to start as if just *after* a 'skip' block... */
-    int depth = op_params->interval_params.skip;
+    int depth = -1;
     node = path;
     do {
       if ((is_path_ordered == false) ||
@@ -476,7 +474,7 @@ static void mouse_mesh_shortest_path_edge(Scene *scene,
     }
   }
 
-  EDBM_update_generic(em, false, false);
+  EDBM_update_generic(obedit->data, false, false);
 
   if (op_params->edge_mode == EDGE_MODE_TAG_SEAM) {
     ED_uvedit_live_unwrap(scene, &obedit, 1);
@@ -561,8 +559,7 @@ static void mouse_mesh_shortest_path_face(Scene *UNUSED(scene),
       }
     } while ((node = node->next));
 
-    /* We need to start as if just *after* a 'skip' block... */
-    int depth = op_params->interval_params.skip;
+    int depth = -1;
     node = path;
     do {
       if ((is_path_ordered == false) ||
@@ -594,7 +591,7 @@ static void mouse_mesh_shortest_path_face(Scene *UNUSED(scene),
     BM_mesh_active_face_set(bm, f_dst_last);
   }
 
-  EDBM_update_generic(em, false, false);
+  EDBM_update_generic(obedit->data, false, false);
 }
 
 /** \} */
@@ -645,10 +642,10 @@ static BMElem *edbm_elem_find_nearest(ViewContext *vc, const char htype)
   if ((em->selectmode & SCE_SELECT_VERTEX) && (htype == BM_VERT)) {
     return (BMElem *)EDBM_vert_find_nearest(vc, &dist);
   }
-  else if ((em->selectmode & SCE_SELECT_EDGE) && (htype == BM_EDGE)) {
+  if ((em->selectmode & SCE_SELECT_EDGE) && (htype == BM_EDGE)) {
     return (BMElem *)EDBM_edge_find_nearest(vc, &dist);
   }
-  else if ((em->selectmode & SCE_SELECT_FACE) && (htype == BM_FACE)) {
+  if ((em->selectmode & SCE_SELECT_FACE) && (htype == BM_FACE)) {
     return (BMElem *)EDBM_face_find_nearest(vc, &dist);
   }
 
@@ -701,10 +698,9 @@ static int edbm_shortest_path_pick_invoke(bContext *C, wmOperator *op, const wmE
 
   /* If nothing is selected, let's select the picked vertex/edge/face. */
   if ((vc.em->bm->totvertsel == 0) && (eve || eed || efa)) {
-    /* TODO (dfelinto) right now we try to find the closest element twice.
+    /* TODO(dfelinto): right now we try to find the closest element twice.
      * The ideal is to refactor EDBM_select_pick so it doesn't
-     * have to pick the nearest vert/edge/face again.
-     */
+     * have to pick the nearest vert/edge/face again. */
     EDBM_select_pick(C, event->mval, true, false, false);
     return OPERATOR_FINISHED;
   }

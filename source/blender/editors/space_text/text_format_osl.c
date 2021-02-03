@@ -21,8 +21,8 @@
 
 #include "BLI_blenlib.h"
 
-#include "DNA_text_types.h"
 #include "DNA_space_types.h"
+#include "DNA_text_types.h"
 
 #include "BKE_text.h"
 
@@ -40,7 +40,7 @@ static int txtfmt_osl_find_builtinfunc(const char *string)
   /* list is from
    * https://github.com/imageworks/OpenShadingLanguage/raw/master/src/doc/osl-languagespec.pdf
    */
-  if      (STR_LITERAL_STARTSWITH(string, "break",        len)) { i = len;
+  if        (STR_LITERAL_STARTSWITH(string, "break",        len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "closure",      len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "color",        len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "continue",     len)) { i = len;
@@ -64,8 +64,8 @@ static int txtfmt_osl_find_builtinfunc(const char *string)
   } else if (STR_LITERAL_STARTSWITH(string, "vector",       len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "void",         len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "while",        len)) { i = len;
-  } else {                                                          i = 0;
-}
+  } else                                                          { i = 0;
+  }
 
   /* clang-format on */
 
@@ -86,7 +86,7 @@ static int txtfmt_osl_find_reserved(const char *string)
   /* list is from...
    * https://github.com/imageworks/OpenShadingLanguage/raw/master/src/doc/osl-languagespec.pdf
    */
-  if      (STR_LITERAL_STARTSWITH(string, "bool",         len)) { i = len;
+  if        (STR_LITERAL_STARTSWITH(string, "bool",         len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "case",         len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "catch",        len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "char",         len)) { i = len;
@@ -122,8 +122,8 @@ static int txtfmt_osl_find_reserved(const char *string)
   } else if (STR_LITERAL_STARTSWITH(string, "varying",      len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "virtual",      len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "volatile",     len)) { i = len;
-  } else {                                                          i = 0;
-}
+  } else                                                          { i = 0;
+  }
 
   /* clang-format on */
 
@@ -149,12 +149,12 @@ static int txtfmt_osl_find_specialvar(const char *string)
   /* clang-format off */
 
   /* OSL shader types */
-  if      (STR_LITERAL_STARTSWITH(string, "shader",       len)) { i = len;
+  if        (STR_LITERAL_STARTSWITH(string, "shader",       len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "surface",      len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "volume",       len)) { i = len;
   } else if (STR_LITERAL_STARTSWITH(string, "displacement", len)) { i = len;
-  } else {                                                    i = 0;
-}
+  } else                                                          { i = 0;
+  }
 
   /* clang-format on */
 
@@ -189,12 +189,12 @@ static char txtfmt_osl_format_identifier(const char *str)
   /* Keep aligned args for readability. */
   /* clang-format off */
 
-  if      ((txtfmt_osl_find_specialvar(str))   != -1) { fmt = FMT_TYPE_SPECIAL;
+  if        ((txtfmt_osl_find_specialvar(str))   != -1) { fmt = FMT_TYPE_SPECIAL;
   } else if ((txtfmt_osl_find_builtinfunc(str))  != -1) { fmt = FMT_TYPE_KEYWORD;
   } else if ((txtfmt_osl_find_reserved(str))     != -1) { fmt = FMT_TYPE_RESERVED;
   } else if ((txtfmt_osl_find_preprocessor(str)) != -1) { fmt = FMT_TYPE_DIRECTIVE;
-  } else {                                                fmt = FMT_TYPE_DEFAULT;
-}
+  } else                                                { fmt = FMT_TYPE_DEFAULT;
+  }
 
   /* clang-format on */
 
@@ -252,7 +252,7 @@ static void txtfmt_osl_format_line(SpaceText *st, TextLine *line, const bool do_
       continue;
     }
     /* Handle continuations */
-    else if (cont) {
+    if (cont) {
       /* C-Style comments */
       if (cont & FMT_CONT_COMMENT_C) {
         if (*str == '*' && *(str + 1) == '/') {
@@ -292,7 +292,7 @@ static void txtfmt_osl_format_line(SpaceText *st, TextLine *line, const bool do_
         str++;
         *fmt = FMT_TYPE_COMMENT;
       }
-      else if (*str == '"' || *str == '\'') {
+      else if (ELEM(*str, '"', '\'')) {
         /* Strings */
         find = *str;
         cont = (*str == '"') ? FMT_CONT_QUOTEDOUBLE : FMT_CONT_QUOTESINGLE;
@@ -323,11 +323,11 @@ static void txtfmt_osl_format_line(SpaceText *st, TextLine *line, const bool do_
 
         /* Special vars(v) or built-in keywords(b) */
         /* keep in sync with 'txtfmt_osl_format_identifier()' */
-        if      ((i = txtfmt_osl_find_specialvar(str))   != -1) { prev = FMT_TYPE_SPECIAL;
+        if        ((i = txtfmt_osl_find_specialvar(str))   != -1) { prev = FMT_TYPE_SPECIAL;
         } else if ((i = txtfmt_osl_find_builtinfunc(str))  != -1) { prev = FMT_TYPE_KEYWORD;
         } else if ((i = txtfmt_osl_find_reserved(str))     != -1) { prev = FMT_TYPE_RESERVED;
         } else if ((i = txtfmt_osl_find_preprocessor(str)) != -1) { prev = FMT_TYPE_DIRECTIVE;
-}
+        }
 
         /* clang-format on */
 

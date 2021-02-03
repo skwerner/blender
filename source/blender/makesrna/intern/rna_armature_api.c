@@ -21,8 +21,8 @@
  * \ingroup RNA
  */
 
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
@@ -36,8 +36,8 @@
 
 #  include "DNA_armature_types.h"
 
-#  include "BLI_math_vector.h"
 #  include "BKE_armature.h"
+#  include "BLI_math_vector.h"
 
 static void rna_EditBone_align_roll(EditBone *ebo, float no[3])
 {
@@ -71,14 +71,15 @@ static void rna_Bone_convert_local_to_pose(Bone *bone,
 
   if (is_zero_m4(parent_pose_mat) || is_zero_m4(parent_arm_mat)) {
     /* No parent case. */
-    BKE_bone_parent_transform_calc_from_matrices(bone->flag, bone_arm_mat, NULL, NULL, &bpt);
+    BKE_bone_parent_transform_calc_from_matrices(
+        bone->flag, bone->inherit_scale_mode, bone_arm_mat, NULL, NULL, &bpt);
   }
   else {
     invert_m4_m4(offs_bone, parent_arm_mat);
     mul_m4_m4m4(offs_bone, offs_bone, bone_arm_mat);
 
     BKE_bone_parent_transform_calc_from_matrices(
-        bone->flag, offs_bone, parent_arm_mat, parent_pose_mat, &bpt);
+        bone->flag, bone->inherit_scale_mode, offs_bone, parent_arm_mat, parent_pose_mat, &bpt);
   }
 
   if (invert) {
@@ -195,7 +196,9 @@ void RNA_api_bone(StructRNA *srna)
 
   func = RNA_def_function(srna, "AxisRollFromMatrix", "rna_Bone_AxisRollFromMatrix");
   RNA_def_function_ui_description(func,
-                                  "Convert a rotational matrix to the axis + roll representation");
+                                  "Convert a rotational matrix to the axis + roll representation. "
+                                  "Note that the resulting value of the roll may not be as "
+                                  "expected if the matrix has shear or negative determinant.");
   RNA_def_function_flag(func, FUNC_NO_SELF);
   parm = RNA_def_property(func, "matrix", PROP_FLOAT, PROP_MATRIX);
   RNA_def_property_multi_array(parm, 2, rna_matrix_dimsize_3x3);

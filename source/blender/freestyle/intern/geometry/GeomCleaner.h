@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GEOMCLEANER_H__
-#define __GEOMCLEANER_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -59,7 +58,7 @@ class GeomCleaner {
    *      Output of sorted vertices.
    *      A vertex v1 precedes another one v2 in this array
    *      if v1.x<v2.x, or v1.x=v2.x && v1.y < v2.y or v1.x=v2.y && v1.y=v2.y && v1.z < v2.z.
-   *      The array is organized as a 3-float serie giving the vertices coordinates: XYZXYZXYZ...
+   *      The array is organized as a 3-float series giving the vertices coordinates: XYZXYZXYZ...
    *    oIndices
    *      Output corresponding to the iIndices array but reorganized in
    *      order to match the sorted vertex array.
@@ -72,7 +71,7 @@ class GeomCleaner {
                                      unsigned **oIndices);
 
   /*! Compress a SORTED indexed vertex array by eliminating multiple
-   *  appearing occurences of a single vertex.
+   *  appearing occurrences of a single vertex.
    *    iVertices
    *      The SORTED vertex array to compress.
    *      It is organized as a float series of vertex coordinates: XYZXYZXYZ...
@@ -86,7 +85,7 @@ class GeomCleaner {
    *      The size of iIndices array
    *    oVertices
    *      The vertex array, result of the compression.
-   *      The array is organized as a 3-float serie giving the vertices coordinates: XYZXYZXYZ...
+   *      The array is organized as a 3-float series giving the vertices coordinates: XYZXYZXYZ...
    *    oVSize
    *      The size of oVertices.
    *    oIndices
@@ -114,7 +113,7 @@ class GeomCleaner {
    *      The size of iIndices array
    *    oVertices
    *      The vertex array, result of the sorting-compression.
-   *      The array is organized as a 3-float serie giving the vertices coordinates: XYZXYZXYZ...
+   *      The array is organized as a 3-float series giving the vertices coordinates: XYZXYZXYZ...
    *    oVSize
    *      The size of oVertices.
    *    oIndices
@@ -143,7 +142,7 @@ class GeomCleaner {
    *      The size of iIndices array
    *    oVertices
    *      The vertex array, result of the sorting-compression.
-   *      The array is organized as a 3-float serie giving the vertices coordinates: XYZXYZXYZ...
+   *      The array is organized as a 3-float series giving the vertices coordinates: XYZXYZXYZ...
    *    oVSize
    *      The size of oVertices.
    *    oIndices
@@ -257,5 +256,3 @@ bool operator<(const IndexedVertex &iv1, const IndexedVertex &iv2)
 #endif
 
 } /* namespace Freestyle */
-
-#endif  // __GEOMCLEANER_H__

@@ -29,9 +29,8 @@
 #include "DNA_screen_types.h"
 #include "DNA_windowmanager_types.h"
 
-#include "BIF_gl.h"
-
 #include "GPU_matrix.h"
+#include "GPU_viewport.h"
 
 #include "WM_api.h"
 
@@ -40,8 +39,8 @@ void wmViewport(const rcti *winrct)
   int width = BLI_rcti_size_x(winrct) + 1;
   int height = BLI_rcti_size_y(winrct) + 1;
 
-  glViewport(winrct->xmin, winrct->ymin, width, height);
-  glScissor(winrct->xmin, winrct->ymin, width, height);
+  GPU_viewport(winrct->xmin, winrct->ymin, width, height);
+  GPU_scissor(winrct->xmin, winrct->ymin, width, height);
 
   wmOrtho2_pixelspace(width, height);
   GPU_matrix_identity_set();
@@ -79,8 +78,8 @@ void wmPartialViewport(rcti *drawrct, const rcti *winrct, const rcti *partialrct
     scissor_height += 1;
   }
 
-  glViewport(0, 0, width, height);
-  glScissor(x, y, scissor_width, scissor_height);
+  GPU_viewport(0, 0, width, height);
+  GPU_scissor(x, y, scissor_width, scissor_height);
 
   wmOrtho2_pixelspace(width, height);
   GPU_matrix_identity_set();
@@ -91,8 +90,8 @@ void wmWindowViewport(wmWindow *win)
   int width = WM_window_pixels_x(win);
   int height = WM_window_pixels_y(win);
 
-  glViewport(0, 0, width, height);
-  glScissor(0, 0, width, height);
+  GPU_viewport(0, 0, width, height);
+  GPU_scissor(0, 0, width, height);
 
   wmOrtho2_pixelspace(width, height);
   GPU_matrix_identity_set();
@@ -108,7 +107,8 @@ void wmOrtho2(float x1, float x2, float y1, float y2)
     y2 += 1.0f;
   }
 
-  GPU_matrix_ortho_set(x1, x2, y1, y2, -100, 100);
+  GPU_matrix_ortho_set(
+      x1, x2, y1, y2, GPU_MATRIX_ORTHO_CLIP_NEAR_DEFAULT, GPU_MATRIX_ORTHO_CLIP_FAR_DEFAULT);
 }
 
 static void wmOrtho2_offset(const float x, const float y, const float ofs)
@@ -117,9 +117,9 @@ static void wmOrtho2_offset(const float x, const float y, const float ofs)
 }
 
 /* Default pixel alignment for regions. */
-void wmOrtho2_region_pixelspace(const ARegion *ar)
+void wmOrtho2_region_pixelspace(const ARegion *region)
 {
-  wmOrtho2_offset(ar->winx, ar->winy, -0.01f);
+  wmOrtho2_offset(region->winx, region->winy, -0.01f);
 }
 
 void wmOrtho2_pixelspace(const float x, const float y)
@@ -136,6 +136,6 @@ void wmGetProjectionMatrix(float mat[4][4], const rcti *winrct)
                   (float)width - GLA_PIXEL_OFS,
                   -GLA_PIXEL_OFS,
                   (float)height - GLA_PIXEL_OFS,
-                  -100,
-                  100);
+                  GPU_MATRIX_ORTHO_CLIP_NEAR_DEFAULT,
+                  GPU_MATRIX_ORTHO_CLIP_FAR_DEFAULT);
 }

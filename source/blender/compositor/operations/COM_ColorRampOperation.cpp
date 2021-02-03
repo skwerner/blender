@@ -18,21 +18,15 @@
 
 #include "COM_ColorRampOperation.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 #include "BKE_colorband.h"
-#ifdef __cplusplus
-}
-#endif
 
-ColorRampOperation::ColorRampOperation() : NodeOperation()
+ColorRampOperation::ColorRampOperation()
 {
   this->addInputSocket(COM_DT_VALUE);
   this->addOutputSocket(COM_DT_COLOR);
 
-  this->m_inputProgram = NULL;
-  this->m_colorBand = NULL;
+  this->m_inputProgram = nullptr;
+  this->m_colorBand = nullptr;
 }
 void ColorRampOperation::initExecution()
 {
@@ -52,5 +46,5 @@ void ColorRampOperation::executePixelSampled(float output[4],
 
 void ColorRampOperation::deinitExecution()
 {
-  this->m_inputProgram = NULL;
+  this->m_inputProgram = nullptr;
 }

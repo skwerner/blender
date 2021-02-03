@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_CURVE_H__
-#define __FREESTYLE_CURVE_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -56,7 +55,7 @@ using namespace Geometry;
 /*! Class to represent a point of a curve.
  *  A CurvePoint can be any point of a 1D curve (it doesn't have to be a vertex of the curve).
  *  Any Interface1D is built upon ViewEdges, themselves built upon FEdges. Therefore, a curve is
- * basically a polyline made of a list SVertex. Thus, a CurvePoint is built by lineraly
+ * basically a polyline made of a list SVertex. Thus, a CurvePoint is built by linearly
  * interpolating two SVertex. CurvePoint can be used as virtual points while querying 0D
  * information along a curve at a given resolution.
  */
@@ -205,7 +204,7 @@ class CurvePoint : public Interface0D {
   Vec3r _Point3d;
 
  public:
-  /*! Defult Constructor. */
+  /*! Default Constructor. */
   CurvePoint();
 
   /*! Builds a CurvePoint from two SVertex and an interpolation parameter.
@@ -213,20 +212,20 @@ class CurvePoint : public Interface0D {
    *    The first SVertex
    *  \param iB:
    *    The second SVertex
-   *  \param t2d:
+   *  \param t:
    *    A 2D interpolation parameter used to linearly interpolate \a iA and \a iB
    */
-  CurvePoint(SVertex *iA, SVertex *iB, float t2d);
+  CurvePoint(SVertex *iA, SVertex *iB, float t);
 
   /*! Builds a CurvePoint from two CurvePoint and an interpolation parameter.
    *  \param iA:
    *    The first CurvePoint
    *  \param iB:
    *    The second CurvePoint
-   *  \param t2d:
+   *  \param t:
    *    The 2D interpolation parameter used to linearly interpolate \a iA and \a iB.
    */
-  CurvePoint(CurvePoint *iA, CurvePoint *iB, float t2d);
+  CurvePoint(CurvePoint *iA, CurvePoint *iB, float t);
 
   // CurvePoint(SVertex *iA, SVertex *iB, float t2d, float t3d);
 
@@ -326,7 +325,7 @@ class CurvePoint : public Interface0D {
   int occluders_size() const;
   const Polygon3r &occludee() const;
   const SShape *occluded_shape() const;
-  const bool occludee_empty() const;
+  bool occludee_empty() const;
   real z_discontinuity() const;
 #if 0
   float local_average_depth() const;
@@ -604,5 +603,3 @@ class Curve : public Interface1D {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_CURVE_H__

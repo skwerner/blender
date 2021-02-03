@@ -29,15 +29,13 @@
 #include "BKE_context.h"
 
 #include "GPU_batch.h"
-#include "GPU_glew.h"
-#include "GPU_immediate.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
 
 #include "BKE_global.h"
-#include "BKE_main.h"
 #include "BKE_idprop.h"
+#include "BKE_main.h"
 
 #include "WM_api.h"
 #include "WM_toolsystem.h"
@@ -56,8 +54,8 @@
 #include "wm.h"
 
 /* own includes */
-#include "wm_gizmo_wmapi.h"
 #include "wm_gizmo_intern.h"
+#include "wm_gizmo_wmapi.h"
 
 static void wm_gizmo_register(wmGizmoGroup *gzgroup, wmGizmo *gz);
 
@@ -109,7 +107,7 @@ wmGizmo *WM_gizmo_new_ptr(const wmGizmoType *gzt, wmGizmoGroup *gzgroup, Pointer
 }
 
 /**
- * \param name: Must be a valid gizmo type name,
+ * \param idname: Must be a valid gizmo type name,
  * if you need to check it exists use #WM_gizmo_new_ptr
  * because callers of this function don't NULL check the return value.
  */
@@ -376,7 +374,7 @@ void WM_gizmo_set_color_highlight(wmGizmo *gz, const float color_hi[4])
   copy_v4_v4(gz->color_hi, color_hi);
 }
 
-/** \} */  // Gizmo Creation API
+/** \} */ /* Gizmo Creation API. */
 
 /* -------------------------------------------------------------------- */
 /** \name Gizmo Callback Assignment
@@ -454,9 +452,7 @@ bool wm_gizmo_select_and_highlight(bContext *C, wmGizmoMap *gzmap, wmGizmo *gz)
     wm_gizmomap_highlight_set(gzmap, C, gz, gz->highlight_part);
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 /**
@@ -503,9 +499,6 @@ void wm_gizmo_calculate_scale(wmGizmo *gz, const bContext *C)
 
       /* Exclude matrix_offset from scale. */
       scale *= ED_view3d_pixel_size_no_ui_scale(rv3d, matrix_world[3]);
-    }
-    else {
-      scale *= 0.02f;
     }
   }
 
@@ -618,6 +611,7 @@ void WM_gizmo_calc_matrix_final(const wmGizmo *gz, float r_mat[4][4])
                                     r_mat);
 }
 
+/* -------------------------------------------------------------------- */
 /** \name Gizmo Property Access
  *
  * Matches `WM_operator_properties` conventions.
@@ -687,11 +681,13 @@ void WM_gizmo_properties_sanitize(PointerRNA *ptr, const bool no_context)
   RNA_STRUCT_END;
 }
 
-/** set all props to their default,
+/**
+ * Set all props to their default.
+ *
  * \param do_update: Only update un-initialized props.
  *
- * \note, there's nothing specific to gizmos here.
- * this could be made a general function.
+ * \note There's nothing specific to gizmos here.
+ * This could be made a general function.
  */
 bool WM_gizmo_properties_default(PointerRNA *ptr, const bool do_update)
 {
@@ -760,6 +756,7 @@ void WM_gizmo_properties_free(PointerRNA *ptr)
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name General Utilities
  *
  * \{ */

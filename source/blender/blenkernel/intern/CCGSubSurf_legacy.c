@@ -18,12 +18,12 @@
  * \ingroup bke
  */
 
+#include "BLI_sys_types.h" /* for intptr_t support */
 #include "MEM_guardedalloc.h"
-#include "BLI_sys_types.h"  // for intptr_t support
 
-#include "BLI_utildefines.h" /* for BLI_assert */
 #include "BLI_math.h"
 #include "BLI_task.h"
+#include "BLI_utildefines.h" /* for BLI_assert */
 
 #include "CCGSubSurf.h"
 #include "CCGSubSurf_intern.h"
@@ -38,9 +38,7 @@ static void *_edge_getCoVert(CCGEdge *e, CCGVert *v, int lvl, int x, int dataSiz
   if (v == e->v0) {
     return &EDGE_getLevelData(e)[dataSize * (levelBase + x)];
   }
-  else {
-    return &EDGE_getLevelData(e)[dataSize * (levelBase + (1 << lvl) - x)];
-  }
+  return &EDGE_getLevelData(e)[dataSize * (levelBase + (1 << lvl) - x)];
 }
 /* *************************************************** */
 
@@ -49,15 +47,14 @@ static int _edge_isBoundary(const CCGEdge *e)
   return e->numFaces < 2;
 }
 
-static int _vert_isBoundary(const CCGVert *v)
+static bool _vert_isBoundary(const CCGVert *v)
 {
-  int i;
-  for (i = 0; i < v->numEdges; i++) {
+  for (int i = 0; i < v->numEdges; i++) {
     if (_edge_isBoundary(v->edges[i])) {
-      return 1;
+      return true;
     }
   }
-  return 0;
+  return false;
 }
 
 static CCGVert *_edge_getOtherVert(CCGEdge *e, CCGVert *vQ)
@@ -65,9 +62,8 @@ static CCGVert *_edge_getOtherVert(CCGEdge *e, CCGVert *vQ)
   if (vQ == e->v0) {
     return e->v1;
   }
-  else {
-    return e->v0;
-  }
+
+  return e->v0;
 }
 
 static float *_face_getIFNoEdge(CCGFace *f,
@@ -111,15 +107,13 @@ static float EDGE_getSharpness(CCGEdge *e, int lvl)
   if (!lvl) {
     return e->crease;
   }
-  else if (!e->crease) {
+  if (!e->crease) {
     return 0.0f;
   }
-  else if (e->crease - lvl < 0.0f) {
+  if (e->crease - lvl < 0.0f) {
     return 0.0f;
   }
-  else {
-    return e->crease - lvl;
-  }
+  return e->crease - lvl;
 }
 
 typedef struct CCGSubSurfCalcSubdivData {
@@ -135,7 +129,7 @@ typedef struct CCGSubSurfCalcSubdivData {
 } CCGSubSurfCalcSubdivData;
 
 static void ccgSubSurf__calcVertNormals_faces_accumulate_cb(
-    void *__restrict userdata, const int ptrIdx, const ParallelRangeTLS *__restrict UNUSED(tls))
+    void *__restrict userdata, const int ptrIdx, const TaskParallelTLS *__restrict UNUSED(tls))
 {
   CCGSubSurfCalcSubdivData *data = userdata;
 
@@ -234,7 +228,7 @@ static void ccgSubSurf__calcVertNormals_faces_accumulate_cb(
 }
 
 static void ccgSubSurf__calcVertNormals_faces_finalize_cb(
-    void *__restrict userdata, const int ptrIdx, const ParallelRangeTLS *__restrict UNUSED(tls))
+    void *__restrict userdata, const int ptrIdx, const TaskParallelTLS *__restrict UNUSED(tls))
 {
   CCGSubSurfCalcSubdivData *data = userdata;
 
@@ -273,7 +267,7 @@ static void ccgSubSurf__calcVertNormals_faces_finalize_cb(
 }
 
 static void ccgSubSurf__calcVertNormals_edges_accumulate_cb(
-    void *__restrict userdata, const int ptrIdx, const ParallelRangeTLS *__restrict UNUSED(tls))
+    void *__restrict userdata, const int ptrIdx, const TaskParallelTLS *__restrict UNUSED(tls))
 {
   CCGSubSurfCalcSubdivData *data = userdata;
 
@@ -347,7 +341,7 @@ static void ccgSubSurf__calcVertNormals(CCGSubSurf *ss,
   };
 
   {
-    ParallelRangeSettings settings;
+    TaskParallelSettings settings;
     BLI_parallel_range_settings_defaults(&settings);
     settings.min_iter_per_thread = CCG_TASK_LIMIT;
     BLI_task_parallel_range(
@@ -379,7 +373,7 @@ static void ccgSubSurf__calcVertNormals(CCGSubSurf *ss,
   }
 
   {
-    ParallelRangeSettings settings;
+    TaskParallelSettings settings;
     BLI_parallel_range_settings_defaults(&settings);
     settings.min_iter_per_thread = CCG_TASK_LIMIT;
     BLI_task_parallel_range(
@@ -387,7 +381,7 @@ static void ccgSubSurf__calcVertNormals(CCGSubSurf *ss,
   }
 
   {
-    ParallelRangeSettings settings;
+    TaskParallelSettings settings;
     BLI_parallel_range_settings_defaults(&settings);
     settings.min_iter_per_thread = CCG_TASK_LIMIT;
     BLI_task_parallel_range(
@@ -425,7 +419,7 @@ static void ccgSubSurf__calcVertNormals(CCGSubSurf *ss,
 }
 
 static void ccgSubSurf__calcSubdivLevel_interior_faces_edges_midpoints_cb(
-    void *__restrict userdata, const int ptrIdx, const ParallelRangeTLS *__restrict UNUSED(tls))
+    void *__restrict userdata, const int ptrIdx, const TaskParallelTLS *__restrict UNUSED(tls))
 {
   CCGSubSurfCalcSubdivData *data = userdata;
 
@@ -513,7 +507,7 @@ static void ccgSubSurf__calcSubdivLevel_interior_faces_edges_midpoints_cb(
 }
 
 static void ccgSubSurf__calcSubdivLevel_interior_faces_edges_centerpoints_shift_cb(
-    void *__restrict userdata, const int ptrIdx, const ParallelRangeTLS *__restrict UNUSED(tls))
+    void *__restrict userdata, const int ptrIdx, const TaskParallelTLS *__restrict UNUSED(tls))
 {
   CCGSubSurfCalcSubdivData *data = userdata;
 
@@ -619,7 +613,7 @@ static void ccgSubSurf__calcSubdivLevel_interior_faces_edges_centerpoints_shift_
 }
 
 static void ccgSubSurf__calcSubdivLevel_verts_copydata_cb(
-    void *__restrict userdata, const int ptrIdx, const ParallelRangeTLS *__restrict UNUSED(tls))
+    void *__restrict userdata, const int ptrIdx, const TaskParallelTLS *__restrict UNUSED(tls))
 {
   CCGSubSurfCalcSubdivData *data = userdata;
 
@@ -691,7 +685,7 @@ static void ccgSubSurf__calcSubdivLevel(CCGSubSurf *ss,
   };
 
   {
-    ParallelRangeSettings settings;
+    TaskParallelSettings settings;
     BLI_parallel_range_settings_defaults(&settings);
     settings.min_iter_per_thread = CCG_TASK_LIMIT;
     BLI_task_parallel_range(0,
@@ -991,7 +985,7 @@ static void ccgSubSurf__calcSubdivLevel(CCGSubSurf *ss,
   }
 
   {
-    ParallelRangeSettings settings;
+    TaskParallelSettings settings;
     BLI_parallel_range_settings_defaults(&settings);
     settings.min_iter_per_thread = CCG_TASK_LIMIT;
     BLI_task_parallel_range(0,
@@ -1012,7 +1006,7 @@ static void ccgSubSurf__calcSubdivLevel(CCGSubSurf *ss,
   }
 
   {
-    ParallelRangeSettings settings;
+    TaskParallelSettings settings;
     BLI_parallel_range_settings_defaults(&settings);
     settings.min_iter_per_thread = CCG_TASK_LIMIT;
     BLI_task_parallel_range(
@@ -1323,7 +1317,7 @@ CCGError ccgSubSurf_updateNormals(CCGSubSurf *ss, CCGFace **effectedF, int numEf
   int i, numEffectedV, numEffectedE, freeF;
 
   ccgSubSurf__allFaces(ss, &effectedF, &numEffectedF, &freeF);
-  ccgSubSurf__effectedFaceNeighbours(
+  ccgSubSurf__effectedFaceNeighbors(
       ss, effectedF, numEffectedF, &effectedV, &numEffectedV, &effectedE, &numEffectedE);
 
   if (ss->calcVertNormals) {
@@ -1361,7 +1355,7 @@ CCGError ccgSubSurf_updateLevels(CCGSubSurf *ss, int lvl, CCGFace **effectedF, i
   int curLvl, subdivLevels = ss->subdivLevels;
 
   ccgSubSurf__allFaces(ss, &effectedF, &numEffectedF, &freeF);
-  ccgSubSurf__effectedFaceNeighbours(
+  ccgSubSurf__effectedFaceNeighbors(
       ss, effectedF, numEffectedF, &effectedV, &numEffectedV, &effectedE, &numEffectedE);
 
   for (curLvl = lvl; curLvl < subdivLevels; curLvl++) {

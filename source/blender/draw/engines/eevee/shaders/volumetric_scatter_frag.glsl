@@ -1,4 +1,6 @@
 
+#pragma BLENDER_REQUIRE(volumetric_lib.glsl)
+
 /* Based on Frosbite Unified Volumetric.
  * https://www.ea.com/frostbite/news/physically-based-unified-volumetric-rendering-in-frostbite */
 
@@ -38,7 +40,7 @@ void main()
                        phase_function_isotropic();
 
 #ifdef VOLUME_LIGHTING /* Lights */
-  for (int i = 0; i < MAX_LIGHT && i < laNumLight; ++i) {
+  for (int i = 0; i < MAX_LIGHT && i < laNumLight; i++) {
 
     LightData ld = lights_data[i];
 

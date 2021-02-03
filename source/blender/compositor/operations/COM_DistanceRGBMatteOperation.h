@@ -16,8 +16,8 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_DISTANCERGBMATTEOPERATION_H__
-#define __COM_DISTANCERGBMATTEOPERATION_H__
+#pragma once
+
 #include "COM_MixOperation.h"
 
 /**
@@ -39,7 +39,7 @@ class DistanceRGBMatteOperation : public NodeOperation {
   DistanceRGBMatteOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
 
@@ -51,4 +51,3 @@ class DistanceRGBMatteOperation : public NodeOperation {
     this->m_settings = nodeChroma;
   }
 };
-#endif

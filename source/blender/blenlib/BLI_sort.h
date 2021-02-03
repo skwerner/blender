@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BLI_SORT_H__
-#define __BLI_SORT_H__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -31,7 +30,7 @@
 #  define BLI_qsort_r qsort_r
 #endif
 
-/* Quick sort reentrant */
+/* Quick sort re-entrant */
 typedef int (*BLI_sort_cmp_t)(const void *a, const void *b, void *ctx);
 
 void BLI_qsort_r(void *a, size_t n, size_t es, BLI_sort_cmp_t cmp, void *thunk)
@@ -39,5 +38,3 @@ void BLI_qsort_r(void *a, size_t n, size_t es, BLI_sort_cmp_t cmp, void *thunk)
     __attribute__((nonnull(1, 5)))
 #endif
     ;
-
-#endif /* __BLI_SORT_H__ */

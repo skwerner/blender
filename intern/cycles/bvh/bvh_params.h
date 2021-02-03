@@ -69,9 +69,6 @@ class BVHParams {
   /* BVH layout to be built. */
   BVHLayout bvh_layout;
 
-  /* Mask of primitives to be included into the BVH. */
-  int primitive_mask;
-
   /* Use unaligned bounding boxes.
    * Only used for curves BVH.
    */
@@ -92,7 +89,6 @@ class BVHParams {
   int bvh_type;
 
   /* These are needed for Embree. */
-  int curve_flags;
   int curve_subdivisions;
 
   /* fixed parameters */
@@ -120,14 +116,11 @@ class BVHParams {
     bvh_layout = BVH_LAYOUT_BVH2;
     use_unaligned_nodes = false;
 
-    primitive_mask = PRIMITIVE_ALL;
-
     num_motion_curve_steps = 0;
     num_motion_triangle_steps = 0;
 
     bvh_type = 0;
 
-    curve_flags = 0;
     curve_subdivisions = 4;
   }
 

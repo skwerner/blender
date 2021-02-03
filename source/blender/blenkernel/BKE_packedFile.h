@@ -16,21 +16,28 @@
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
  */
-#ifndef __BKE_PACKEDFILE_H__
-#define __BKE_PACKEDFILE_H__
+#pragma once
 
 /** \file
  * \ingroup bke
  */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define RET_OK 0
 #define RET_ERROR 1
 
+struct BlendDataReader;
+struct BlendWriter;
 struct ID;
 struct Image;
 struct Main;
 struct PackedFile;
 struct ReportList;
 struct VFont;
+struct Volume;
 struct bSound;
 
 enum ePF_FileCompare {
@@ -46,7 +53,6 @@ enum ePF_FileStatus {
   PF_USE_ORIGINAL = 6,
   PF_KEEP = 7,
   PF_REMOVE = 8,
-  PF_NOOP = 9,
 
   PF_ASK = 10,
 };
@@ -55,7 +61,7 @@ enum ePF_FileStatus {
 struct PackedFile *BKE_packedfile_duplicate(const struct PackedFile *pf_src);
 struct PackedFile *BKE_packedfile_new(struct ReportList *reports,
                                       const char *filename,
-                                      const char *relabase);
+                                      const char *basepath);
 struct PackedFile *BKE_packedfile_new_from_memory(void *mem, int memlen);
 
 void BKE_packedfile_pack_all(struct Main *bmain, struct ReportList *reports, bool verbose);
@@ -80,6 +86,10 @@ int BKE_packedfile_unpack_image(struct Main *bmain,
                                 struct ReportList *reports,
                                 struct Image *ima,
                                 enum ePF_FileStatus how);
+int BKE_packedfile_unpack_volume(struct Main *bmain,
+                                 struct ReportList *reports,
+                                 struct Volume *volume,
+                                 enum ePF_FileStatus how);
 void BKE_packedfile_unpack_all(struct Main *bmain,
                                struct ReportList *reports,
                                enum ePF_FileStatus how);
@@ -113,4 +123,9 @@ void BKE_packedfile_id_unpack(struct Main *bmain,
                               struct ReportList *reports,
                               enum ePF_FileStatus how);
 
+void BKE_packedfile_blend_write(struct BlendWriter *writer, struct PackedFile *pf);
+void BKE_packedfile_blend_read(struct BlendDataReader *reader, struct PackedFile **pf_p);
+
+#ifdef __cplusplus
+}
 #endif

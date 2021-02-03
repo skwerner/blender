@@ -23,8 +23,9 @@
  * Public API for Querying Depsgraph.
  */
 
-#ifndef __DEG_DEPSGRAPH_QUERY_H__
-#define __DEG_DEPSGRAPH_QUERY_H__
+#pragma once
+
+#include "BLI_iterator.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
@@ -32,14 +33,13 @@
 /* Needed for the instance iterator. */
 #include "DNA_object_types.h"
 
-struct ID;
-
 struct BLI_Iterator;
-struct Base;
 struct CustomData_MeshMasks;
 struct Depsgraph;
 struct DupliObject;
+struct ID;
 struct ListBase;
+struct PointerRNA;
 struct Scene;
 struct ViewLayer;
 
@@ -54,6 +54,9 @@ struct Scene *DEG_get_input_scene(const Depsgraph *graph);
 
 /* Get view layer that depsgraph was built for. */
 struct ViewLayer *DEG_get_input_view_layer(const Depsgraph *graph);
+
+/* Get bmain that depsgraph was built for. */
+struct Main *DEG_get_bmain(const Depsgraph *graph);
 
 /* Get evaluation mode that depsgraph was built for. */
 eEvaluationMode DEG_get_mode(const Depsgraph *graph);
@@ -110,14 +113,14 @@ struct ID *DEG_get_original_id(struct ID *id);
  *
  * Original IDs are considered all the IDs which are not covered by copy-on-write system and are
  * not out-of-main localized data-blocks. */
-bool DEG_is_original_id(struct ID *id);
-bool DEG_is_original_object(struct Object *object);
+bool DEG_is_original_id(const struct ID *id);
+bool DEG_is_original_object(const struct Object *object);
 
 /* Opposite of the above.
  *
  * If the data-block is not original it must be evaluated, and vice versa. */
-bool DEG_is_evaluated_id(struct ID *id);
-bool DEG_is_evaluated_object(struct Object *object);
+bool DEG_is_evaluated_id(const struct ID *id);
+bool DEG_is_evaluated_object(const struct Object *object);
 
 /* Check whether depsgraph os fully evaluated. This includes the following checks:
  * - Relations are up-to-date.
@@ -141,6 +144,16 @@ typedef struct DEGObjectIterData {
   struct Scene *scene;
 
   eEvaluationMode eval_mode;
+
+  /* **** Iteration over geometry components **** */
+
+  /* The object whose components we currently iterate over.
+   * This might point to #temp_dupli_object. */
+  struct Object *geometry_component_owner;
+  /* Some identifier that is used to determine which geometry component should be returned next. */
+  int geometry_component_id;
+  /* Temporary storage for an object that is created from a component. */
+  struct Object temp_geometry_component_object;
 
   /* **** Iteration over dupli-list. *** */
 
@@ -237,9 +250,21 @@ void DEG_foreach_dependent_ID(const Depsgraph *depsgraph,
 
 /* Starts traversal from given component of the given ID, invokes callback for every other
  * component  which is directly on indirectly dependent on the source one. */
+enum {
+  /* Ignore transform solvers which depends on multiple inputs and affects final transform.
+   * Is used for cases like snapping objects which are part of a rigid body simulation:
+   * without this there will be "false-positive" dependencies between transform components of
+   * objects:
+   *
+   *     object 1 transform before solver ---> solver ------> object 1 final transform
+   *     object 2 transform before solver -----^     \------> object 2 final transform
+   */
+  DEG_FOREACH_COMPONENT_IGNORE_TRANSFORM_SOLVERS = (1 << 0),
+};
 void DEG_foreach_dependent_ID_component(const Depsgraph *depsgraph,
                                         const ID *id,
                                         eDepsObjectComponentType source_component_type,
+                                        int flags,
                                         DEGForeachIDComponentCallback callback,
                                         void *user_data);
 
@@ -248,5 +273,3 @@ void DEG_foreach_ID(const Depsgraph *depsgraph, DEGForeachIDCallback callback, v
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
-
-#endif /* __DEG_DEPSGRAPH_QUERY_H__ */

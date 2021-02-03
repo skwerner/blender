@@ -21,12 +21,10 @@
  * \ingroup spgraph
  */
 
-#ifndef __GRAPH_INTERN_H__
-#define __GRAPH_INTERN_H__
+#pragma once
 
 struct ARegion;
 struct ARegionType;
-struct ScrArea;
 struct SpaceGraph;
 struct bAnimContext;
 struct bAnimListElem;
@@ -36,13 +34,15 @@ struct bContext;
 
 /* ***************************************** */
 /* graph_draw.c */
-void graph_draw_channel_names(struct bContext *C, struct bAnimContext *ac, struct ARegion *ar);
+void graph_draw_channel_names(struct bContext *C, struct bAnimContext *ac, struct ARegion *region);
 
 void graph_draw_curves(struct bAnimContext *ac,
                        struct SpaceGraph *sipo,
-                       struct ARegion *ar,
+                       struct ARegion *region,
                        short sel);
-void graph_draw_ghost_curves(struct bAnimContext *ac, struct SpaceGraph *sipo, struct ARegion *ar);
+void graph_draw_ghost_curves(struct bAnimContext *ac,
+                             struct SpaceGraph *sipo,
+                             struct ARegion *region);
 
 /* ***************************************** */
 /* graph_select.c */
@@ -83,7 +83,7 @@ void get_graph_keyframe_extents(struct bAnimContext *ac,
                                 float *xmax,
                                 float *ymin,
                                 float *ymax,
-                                const bool do_selected,
+                                const bool do_sel_only,
                                 const bool include_handles);
 
 void GRAPH_OT_previewrange_set(struct wmOperatorType *ot);
@@ -100,8 +100,10 @@ void GRAPH_OT_paste(struct wmOperatorType *ot);
 void GRAPH_OT_duplicate(struct wmOperatorType *ot);
 void GRAPH_OT_delete(struct wmOperatorType *ot);
 void GRAPH_OT_clean(struct wmOperatorType *ot);
+void GRAPH_OT_decimate(struct wmOperatorType *ot);
 void GRAPH_OT_sample(struct wmOperatorType *ot);
 void GRAPH_OT_bake(struct wmOperatorType *ot);
+void GRAPH_OT_unbake(struct wmOperatorType *ot);
 void GRAPH_OT_sound_bake(struct wmOperatorType *ot);
 void GRAPH_OT_smooth(struct wmOperatorType *ot);
 void GRAPH_OT_euler_filter(struct wmOperatorType *ot);
@@ -112,6 +114,7 @@ void GRAPH_OT_extrapolation_type(struct wmOperatorType *ot);
 void GRAPH_OT_easing_type(struct wmOperatorType *ot);
 
 void GRAPH_OT_frame_jump(struct wmOperatorType *ot);
+void GRAPH_OT_snap_cursor_value(struct wmOperatorType *ot);
 void GRAPH_OT_snap(struct wmOperatorType *ot);
 void GRAPH_OT_mirror(struct wmOperatorType *ot);
 
@@ -175,5 +178,3 @@ bool graphop_selected_fcurve_poll(struct bContext *C);
 /* graph_ops.c */
 void graphedit_keymap(struct wmKeyConfig *keyconf);
 void graphedit_operatortypes(void);
-
-#endif /* __GRAPH_INTERN_H__ */

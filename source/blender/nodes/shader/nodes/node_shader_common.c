@@ -28,10 +28,10 @@
 
 #include "BKE_node.h"
 
-#include "node_shader_util.h"
 #include "NOD_common.h"
 #include "node_common.h"
 #include "node_exec.h"
+#include "node_shader_util.h"
 
 #include "RNA_access.h"
 
@@ -98,7 +98,7 @@ static void group_copy_inputs(bNode *gnode, bNodeStack **in, bNodeStack *gstack)
 
   for (node = ngroup->nodes.first; node; node = node->next) {
     if (node->type == NODE_GROUP_INPUT) {
-      for (sock = node->outputs.first, a = 0; sock; sock = sock->next, ++a) {
+      for (sock = node->outputs.first, a = 0; sock; sock = sock->next, a++) {
         ns = node_get_socket_stack(gstack, sock);
         if (ns) {
           copy_stack(ns, in[a]);
@@ -120,7 +120,7 @@ static void group_move_outputs(bNode *gnode, bNodeStack **out, bNodeStack *gstac
 
   for (node = ngroup->nodes.first; node; node = node->next) {
     if (node->type == NODE_GROUP_OUTPUT && (node->flag & NODE_DO_OUTPUT)) {
-      for (sock = node->inputs.first, a = 0; sock; sock = sock->next, ++a) {
+      for (sock = node->inputs.first, a = 0; sock; sock = sock->next, a++) {
         ns = node_get_socket_stack(gstack, sock);
         if (ns) {
           move_stack(out[a], ns);
@@ -174,7 +174,7 @@ static void group_gpu_copy_inputs(bNode *gnode, GPUNodeStack *in, bNodeStack *gs
 
   for (node = ngroup->nodes.first; node; node = node->next) {
     if (node->type == NODE_GROUP_INPUT) {
-      for (sock = node->outputs.first, a = 0; sock; sock = sock->next, ++a) {
+      for (sock = node->outputs.first, a = 0; sock; sock = sock->next, a++) {
         ns = node_get_socket_stack(gstack, sock);
         if (ns) {
           /* convert the external gpu stack back to internal node stack data */
@@ -197,7 +197,7 @@ static void group_gpu_move_outputs(bNode *gnode, GPUNodeStack *out, bNodeStack *
 
   for (node = ngroup->nodes.first; node; node = node->next) {
     if (node->type == NODE_GROUP_OUTPUT && (node->flag & NODE_DO_OUTPUT)) {
-      for (sock = node->inputs.first, a = 0; sock; sock = sock->next, ++a) {
+      for (sock = node->inputs.first, a = 0; sock; sock = sock->next, a++) {
         ns = node_get_socket_stack(gstack, sock);
         if (ns) {
           /* convert the node stack data result back to gpu stack */
@@ -238,9 +238,9 @@ void register_node_type_sh_group(void)
   ntype.poll_instance = node_group_poll_instance;
   ntype.insert_link = node_insert_link_default;
   ntype.update_internal_links = node_update_internal_links_default;
-  ntype.ext.srna = RNA_struct_find("ShaderNodeGroup");
-  BLI_assert(ntype.ext.srna != NULL);
-  RNA_struct_blender_type_set(ntype.ext.srna, &ntype);
+  ntype.rna_ext.srna = RNA_struct_find("ShaderNodeGroup");
+  BLI_assert(ntype.rna_ext.srna != NULL);
+  RNA_struct_blender_type_set(ntype.rna_ext.srna, &ntype);
 
   node_type_socket_templates(&ntype, NULL, NULL);
   node_type_size(&ntype, 140, 60, 400);
@@ -254,7 +254,7 @@ void register_node_type_sh_group(void)
 
 void register_node_type_sh_custom_group(bNodeType *ntype)
 {
-  /* These methods can be overriden but need a default implementation otherwise. */
+  /* These methods can be overridden but need a default implementation otherwise. */
   if (ntype->poll == NULL) {
     ntype->poll = sh_node_poll_default;
   }

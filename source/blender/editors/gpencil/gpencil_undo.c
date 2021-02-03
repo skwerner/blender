@@ -27,8 +27,8 @@
 #include "MEM_guardedalloc.h"
 
 #include "DNA_gpencil_types.h"
-#include "DNA_object_types.h"
 #include "DNA_listBase.h"
+#include "DNA_object_types.h"
 #include "DNA_windowmanager_types.h"
 
 #include "BLI_listbase.h"
@@ -61,28 +61,22 @@ int ED_gpencil_session_active(void)
   return (BLI_listbase_is_empty(&undo_nodes) == false);
 }
 
-int ED_undo_gpencil_step(bContext *C, int step, const char *name)
+int ED_undo_gpencil_step(bContext *C, const int step)
 {
   bGPdata **gpd_ptr = NULL, *new_gpd = NULL;
 
   gpd_ptr = ED_gpencil_data_get_pointers(C, NULL);
 
-  if (step == 1) { /* undo */
-    // printf("\t\tGP - undo step\n");
+  if (step == -1) { /* undo */
     if (cur_node->prev) {
-      if (!name || STREQ(cur_node->name, name)) {
-        cur_node = cur_node->prev;
-        new_gpd = cur_node->gpd;
-      }
+      cur_node = cur_node->prev;
+      new_gpd = cur_node->gpd;
     }
   }
-  else if (step == -1) {
-    // printf("\t\tGP - redo step\n");
+  else if (step == 1) {
     if (cur_node->next) {
-      if (!name || STREQ(cur_node->name, name)) {
-        cur_node = cur_node->next;
-        new_gpd = cur_node->gpd;
-      }
+      cur_node = cur_node->next;
+      new_gpd = cur_node->gpd;
     }
   }
 
@@ -90,16 +84,16 @@ int ED_undo_gpencil_step(bContext *C, int step, const char *name)
     if (gpd_ptr) {
       if (*gpd_ptr) {
         bGPdata *gpd = *gpd_ptr;
-        bGPDlayer *gpl, *gpld;
+        bGPDlayer *gpld;
 
         BKE_gpencil_free_layers(&gpd->layers);
 
         /* copy layers */
         BLI_listbase_clear(&gpd->layers);
 
-        for (gpl = new_gpd->layers.first; gpl; gpl = gpl->next) {
+        LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
           /* make a copy of source layer and its data */
-          gpld = BKE_gpencil_layer_duplicate(gpl);
+          gpld = BKE_gpencil_layer_duplicate(gpl, true, true);
           BLI_addtail(&gpd->layers, gpld);
         }
       }

@@ -13,13 +13,18 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
-#ifndef __BKE_AUTOEXEC_H__
-#define __BKE_AUTOEXEC_H__
+#pragma once
 
 /** \file
  * \ingroup bke
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 bool BKE_autoexec_match(const char *path);
 
-#endif /* __BKE_AUTOEXEC_H__ */
+#ifdef __cplusplus
+}
+#endif

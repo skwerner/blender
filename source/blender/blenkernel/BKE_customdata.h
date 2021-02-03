@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2006 Blender Foundation.
@@ -22,19 +22,20 @@
  * \brief CustomData interface, see also DNA_customdata_types.h.
  */
 
-#ifndef __BKE_CUSTOMDATA_H__
-#define __BKE_CUSTOMDATA_H__
-
-#ifdef __cplusplus
-extern "C" {
-#endif
+#pragma once
 
 #include "BLI_sys_types.h"
 #include "BLI_utildefines.h"
 
 #include "DNA_customdata_types.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct BMesh;
+struct BlendDataReader;
+struct BlendWriter;
 struct CustomData;
 struct CustomData_MeshMasks;
 struct ID;
@@ -168,8 +169,8 @@ bool CustomData_bmesh_merge(const struct CustomData *source,
 /** NULL's all members and resets the typemap. */
 void CustomData_reset(struct CustomData *data);
 
-/** frees data associated with a CustomData object (doesn't free the object
- * itself, though)
+/**
+ * Frees data associated with a CustomData object (doesn't free the object itself, though).
  */
 void CustomData_free(struct CustomData *data, int totelem);
 
@@ -258,6 +259,11 @@ void CustomData_bmesh_copy_data(const struct CustomData *source,
                                 struct CustomData *dest,
                                 void *src_block,
                                 void **dest_block);
+void CustomData_bmesh_copy_data_exclude_by_type(const struct CustomData *source,
+                                                struct CustomData *dest,
+                                                void *src_block,
+                                                void **dest_block,
+                                                const CustomDataMask mask_exclude);
 
 /* Copies data of a single layer of a given type. */
 void CustomData_copy_layer_type_data(const struct CustomData *source,
@@ -392,6 +398,9 @@ void CustomData_clear_layer_flag(struct CustomData *data, int type, int flag);
 void CustomData_bmesh_set_default(struct CustomData *data, void **block);
 void CustomData_bmesh_free_block(struct CustomData *data, void **block);
 void CustomData_bmesh_free_block_data(struct CustomData *data, void *block);
+void CustomData_bmesh_free_block_data_exclude_by_type(struct CustomData *data,
+                                                      void *block,
+                                                      const CustomDataMask mask_exclude);
 
 /* copy custom data to/from layers as in mesh/derivedmesh, to editmesh
  * blocks of data. the CustomData's must not be compatible */
@@ -404,11 +413,6 @@ void CustomData_from_bmesh_block(const struct CustomData *source,
                                  struct CustomData *dest,
                                  void *src_block,
                                  int dest_index);
-
-void CustomData_file_write_prepare(struct CustomData *data,
-                                   struct CustomDataLayer **r_write_layers,
-                                   struct CustomDataLayer *write_layers_buff,
-                                   size_t write_layers_size);
 
 /* query info over types */
 void CustomData_file_write_info(int type, const char **r_struct_name, int *r_struct_num);
@@ -447,6 +451,7 @@ bool CustomData_from_bmeshpoly_test(CustomData *fdata, CustomData *ldata, bool f
 bool CustomData_layer_validate(struct CustomDataLayer *layer,
                                const uint totitems,
                                const bool do_fixes);
+void CustomData_layers__print(struct CustomData *data);
 
 /* External file storage */
 
@@ -563,8 +568,20 @@ typedef struct CustomDataTransferLayerMap {
 void CustomData_data_transfer(const struct MeshPairRemap *me_remap,
                               const CustomDataTransferLayerMap *laymap);
 
+/* .blend file I/O */
+void CustomData_blend_write_prepare(struct CustomData *data,
+                                    struct CustomDataLayer **r_write_layers,
+                                    struct CustomDataLayer *write_layers_buff,
+                                    size_t write_layers_size);
+
+void CustomData_blend_write(struct BlendWriter *writer,
+                            struct CustomData *data,
+                            CustomDataLayer *layers,
+                            int count,
+                            CustomDataMask cddata_mask,
+                            struct ID *id);
+void CustomData_blend_read(struct BlendDataReader *reader, struct CustomData *data, int count);
+
 #ifdef __cplusplus
 }
-#endif
-
 #endif

@@ -183,10 +183,8 @@ bNodeTreeExec *ntree_exec_begin(bNodeExecContext *context,
 
   /* set stack indices */
   index = 0;
-  for (n = 0; n < totnodes; ++n) {
+  for (n = 0; n < totnodes; n++) {
     node = nodelist[n];
-
-    node->stack_index = index;
 
     /* init node socket stack indexes */
     for (sock = node->inputs.first; sock; sock = sock->next) {
@@ -213,12 +211,12 @@ bNodeTreeExec *ntree_exec_begin(bNodeExecContext *context,
   exec->stack = MEM_callocN(exec->stacksize * sizeof(bNodeStack), "bNodeStack");
 
   /* all non-const results are considered inputs */
-  for (n = 0; n < exec->stacksize; ++n) {
+  for (n = 0; n < exec->stacksize; n++) {
     exec->stack[n].hasinput = 1;
   }
 
   /* prepare all nodes for execution */
-  for (n = 0, nodeexec = exec->nodeexec; n < totnodes; ++n, ++nodeexec) {
+  for (n = 0, nodeexec = exec->nodeexec; n < totnodes; n++, nodeexec++) {
     node = nodeexec->node = nodelist[n];
     nodeexec->freeexecfunc = node->typeinfo->freeexecfunc;
 
@@ -265,7 +263,7 @@ void ntree_exec_end(bNodeTreeExec *exec)
     MEM_freeN(exec->stack);
   }
 
-  for (n = 0, nodeexec = exec->nodeexec; n < exec->totnodes; ++n, ++nodeexec) {
+  for (n = 0, nodeexec = exec->nodeexec; n < exec->totnodes; n++, nodeexec++) {
     if (nodeexec->freeexecfunc) {
       nodeexec->freeexecfunc(nodeexec->data.data);
     }
@@ -317,7 +315,7 @@ bool ntreeExecThreadNodes(bNodeTreeExec *exec, bNodeThreadStack *nts, void *call
 
   /* nodes are presorted, so exec is in order of list */
 
-  for (n = 0, nodeexec = exec->nodeexec; n < exec->totnodes; ++n, ++nodeexec) {
+  for (n = 0, nodeexec = exec->nodeexec; n < exec->totnodes; n++, nodeexec++) {
     node = nodeexec->node;
     if (node->need_exec) {
       node_get_stack(node, nts->stack, nsin, nsout);

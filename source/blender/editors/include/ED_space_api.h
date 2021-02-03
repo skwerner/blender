@@ -21,8 +21,11 @@
  * \ingroup editors
  */
 
-#ifndef __ED_SPACE_API_H__
-#define __ED_SPACE_API_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct ARegionType;
 struct bContext;
@@ -64,14 +67,18 @@ void ED_file_exit(void);
 #define REGION_DRAW_PRE_VIEW 2
 #define REGION_DRAW_BACKDROP 3
 
-void *ED_region_draw_cb_activate(struct ARegionType *,
+void *ED_region_draw_cb_activate(struct ARegionType *art,
                                  void (*draw)(const struct bContext *, struct ARegion *, void *),
-                                 void *custumdata,
+                                 void *customdata,
                                  int type);
 void ED_region_draw_cb_draw(const struct bContext *, struct ARegion *, int);
 void ED_region_draw_cb_exit(struct ARegionType *, void *);
 /* generic callbacks */
 /* ed_util.c */
-void ED_region_draw_mouse_line_cb(const struct bContext *C, struct ARegion *ar, void *arg_info);
+void ED_region_draw_mouse_line_cb(const struct bContext *C,
+                                  struct ARegion *region,
+                                  void *arg_info);
 
-#endif /* __ED_SPACE_API_H__ */
+#ifdef __cplusplus
+}
+#endif

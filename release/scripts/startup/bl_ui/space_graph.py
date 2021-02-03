@@ -18,6 +18,7 @@
 
 # <pep8 compliant>
 
+import bpy
 from bpy.types import Header, Menu, Panel
 from bl_ui.space_dopesheet import (
     DopesheetFilterPopoverBase,
@@ -93,11 +94,13 @@ class GRAPH_MT_editor_menus(Menu):
     bl_idname = "GRAPH_MT_editor_menus"
     bl_label = ""
 
-    def draw(self, _context):
+    def draw(self, context):
+        st = context.space_data
         layout = self.layout
         layout.menu("GRAPH_MT_view")
         layout.menu("GRAPH_MT_select")
-        layout.menu("GRAPH_MT_marker")
+        if st.mode != 'DRIVERS' and st.show_markers:
+            layout.menu("GRAPH_MT_marker")
         layout.menu("GRAPH_MT_channel")
         layout.menu("GRAPH_MT_key")
 
@@ -111,15 +114,21 @@ class GRAPH_MT_view(Menu):
         st = context.space_data
 
         layout.prop(st, "show_region_ui")
+        layout.prop(st, "show_region_hud")
         layout.separator()
 
         layout.prop(st, "use_realtime_update")
-        layout.prop(st, "show_frame_indicator")
         layout.prop(st, "show_cursor")
         layout.prop(st, "show_sliders")
-        layout.prop(st, "show_group_colors")
-        layout.prop(st, "show_marker_lines")
+
+        if bpy.app.version < (2, 93):
+            layout.operator("anim.show_group_colors_deprecated", icon='CHECKBOX_HLT')
+
         layout.prop(st, "use_auto_merge_keyframes")
+
+        if st.mode != 'DRIVERS':
+            layout.separator()
+            layout.prop(st, "show_markers")
 
         layout.separator()
         layout.prop(st, "use_beauty_drawing")
@@ -166,14 +175,10 @@ class GRAPH_MT_select(Menu):
 
         layout.separator()
 
-        props = layout.operator("graph.select_box")
-        props.axis_range = False
-        props.include_handles = False
-        props = layout.operator("graph.select_box", text="Border Axis Range")
+        layout.operator("graph.select_box")
+        props = layout.operator("graph.select_box", text="Box Select (Axis Range)")
         props.axis_range = True
-        props.include_handles = False
-        props = layout.operator("graph.select_box", text="Border (Include Handles)")
-        props.axis_range = False
+        props = layout.operator("graph.select_box", text="Box Select (Include Handles)")
         props.include_handles = True
 
         layout.operator("graph.select_circle")
@@ -261,8 +266,7 @@ class GRAPH_MT_key(Menu):
         layout = self.layout
 
         layout.menu("GRAPH_MT_key_transform", text="Transform")
-
-        layout.operator_menu_enum("graph.snap", "type", text="Snap")
+        layout.menu("GRAPH_MT_key_snap", text="Snap")
         layout.operator_menu_enum("graph.mirror", "type", text="Mirror")
 
         layout.separator()
@@ -286,11 +290,22 @@ class GRAPH_MT_key(Menu):
         layout.operator_menu_enum("graph.easing_type", "type", text="Easing Type")
 
         layout.separator()
+        operator_context = layout.operator_context
+
+        layout.operator("graph.decimate", text="Decimate (Ratio)").mode = 'RATIO'
+
+        # Using the modal operation doesn't make sense for this variant
+        # as we do not have a modal mode for it, so just execute it.
+        layout.operator_context = 'EXEC_REGION_WIN'
+        layout.operator("graph.decimate", text="Decimate (Allowed Change)").mode = 'ERROR'
+        layout.operator_context = operator_context
+
         layout.operator("graph.clean").channels = False
         layout.operator("graph.clean", text="Clean Channels").channels = True
         layout.operator("graph.smooth")
         layout.operator("graph.sample")
         layout.operator("graph.bake")
+        layout.operator("graph.unbake")
 
         layout.separator()
         layout.operator("graph.euler_filter", text="Discontinuity (Euler) Filter")
@@ -306,6 +321,23 @@ class GRAPH_MT_key_transform(Menu):
         layout.operator("transform.transform", text="Extend").mode = 'TIME_EXTEND'
         layout.operator("transform.rotate", text="Rotate")
         layout.operator("transform.resize", text="Scale")
+
+
+class GRAPH_MT_key_snap(Menu):
+    bl_label = "Snap"
+
+    def draw(self, _context):
+        layout = self.layout
+
+        layout.operator("graph.snap", text="Selection to Current Frame").type = 'CFRA'
+        layout.operator("graph.snap", text="Selection to Cursor Value").type = 'VALUE'
+        layout.operator("graph.snap", text="Selection to Nearest Frame").type = 'NEAREST_FRAME'
+        layout.operator("graph.snap", text="Selection to Nearest Second").type = 'NEAREST_SECOND'
+        layout.operator("graph.snap", text="Selection to Nearest Marker").type = 'NEAREST_MARKER'
+        layout.operator("graph.snap", text="Flatten Handles").type = 'HORIZONTAL'
+        layout.separator()
+        layout.operator("graph.frame_jump", text="Cursor to Selection")
+        layout.operator("graph.snap_cursor_value", text="Cursor Value to Selection")
 
 
 class GRAPH_MT_delete(Menu):
@@ -336,7 +368,6 @@ class GRAPH_MT_context_menu(Menu):
 
         layout.separator()
 
-        layout.operator_menu_enum("graph.keyframe_type", "type", text="Keyframe Type")
         layout.operator_menu_enum("graph.handle_type", "type", text="Handle Type")
         layout.operator_menu_enum("graph.interpolation_type", "type", text="Interpolation Mode")
         layout.operator_menu_enum("graph.easing_type", "type", text="Easing Type")
@@ -373,12 +404,14 @@ class GRAPH_MT_snap_pie(Menu):
         layout = self.layout
         pie = layout.menu_pie()
 
-        pie.operator("graph.snap", text="Current Frame").type = 'CFRA'
-        pie.operator("graph.snap", text="Cursor Value").type = 'VALUE'
-        pie.operator("graph.snap", text="Nearest Frame").type = 'NEAREST_FRAME'
-        pie.operator("graph.snap", text="Nearest Second").type = 'NEAREST_SECOND'
-        pie.operator("graph.snap", text="Nearest Marker").type = 'NEAREST_MARKER'
+        pie.operator("graph.snap", text="Selection to Current Frame").type = 'CFRA'
+        pie.operator("graph.snap", text="Selection to Cursor Value").type = 'VALUE'
+        pie.operator("graph.snap", text="Selection to Nearest Frame").type = 'NEAREST_FRAME'
+        pie.operator("graph.snap", text="Selection to Nearest Second").type = 'NEAREST_SECOND'
+        pie.operator("graph.snap", text="Selection to Nearest Marker").type = 'NEAREST_MARKER'
         pie.operator("graph.snap", text="Flatten Handles").type = 'HORIZONTAL'
+        pie.operator("graph.frame_jump", text="Cursor to Selection")
+        pie.operator("graph.snap_cursor_value", text="Cursor Value to Selection")
 
 
 class GRAPH_MT_channel_context_menu(Menu):
@@ -431,6 +464,7 @@ classes = (
     GRAPH_MT_channel,
     GRAPH_MT_key,
     GRAPH_MT_key_transform,
+    GRAPH_MT_key_snap,
     GRAPH_MT_delete,
     GRAPH_MT_context_menu,
     GRAPH_MT_channel_context_menu,

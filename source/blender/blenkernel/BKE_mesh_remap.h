@@ -14,12 +14,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BKE_MESH_REMAP_H__
-#define __BKE_MESH_REMAP_H__
+#pragma once
 
 /** \file
  * \ingroup bke
  */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct CustomData;
 struct CustomData_MeshMasks;
@@ -227,4 +230,6 @@ void BKE_mesh_remap_calc_polys_from_mesh(const int mode,
                                          struct Mesh *me_src,
                                          struct MeshPairRemap *r_map);
 
-#endif /* __BKE_MESH_REMAP_H__ */
+#ifdef __cplusplus
+}
+#endif

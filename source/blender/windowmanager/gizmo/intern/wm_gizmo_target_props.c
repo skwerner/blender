@@ -28,17 +28,18 @@
 #include "RNA_access.h"
 
 #include "WM_api.h"
-#include "WM_types.h"
 #include "WM_message.h"
+#include "WM_types.h"
 
 #include "wm.h"
 
+#include "ED_keyframing.h"
 #include "ED_screen.h"
 #include "ED_view3d.h"
 
 /* own includes */
-#include "wm_gizmo_wmapi.h"
 #include "wm_gizmo_intern.h"
+#include "wm_gizmo_wmapi.h"
 
 /* -------------------------------------------------------------------- */
 /** \name Property Definition
@@ -69,9 +70,7 @@ wmGizmoProperty *WM_gizmo_target_property_find(wmGizmo *gz, const char *idname)
   if (index != -1) {
     return WM_gizmo_target_property_at_index(gz, index);
   }
-  else {
-    return NULL;
-  }
+  return NULL;
 }
 
 void WM_gizmo_target_property_def_rna_ptr(wmGizmo *gz,
@@ -84,6 +83,7 @@ void WM_gizmo_target_property_def_rna_ptr(wmGizmo *gz,
 
   /* if gizmo evokes an operator we cannot use it for property manipulation */
   BLI_assert(gz->op_data == NULL);
+  BLI_assert(prop != NULL);
 
   gz_prop->type = gz_prop_type;
 
@@ -101,6 +101,9 @@ void WM_gizmo_target_property_def_rna(
 {
   const wmGizmoPropertyType *gz_prop_type = WM_gizmotype_target_property_find(gz->type, idname);
   PropertyRNA *prop = RNA_struct_find_property(ptr, propname);
+  if (prop == NULL) {
+    RNA_warning("%s: %s.%s not found", __func__, RNA_struct_identifier(ptr->type), propname);
+  }
   WM_gizmo_target_property_def_rna_ptr(gz, gz_prop_type, ptr, prop, index);
 }
 
@@ -190,9 +193,7 @@ float WM_gizmo_target_property_float_get(const wmGizmo *gz, wmGizmoProperty *gz_
   if (gz_prop->index == -1) {
     return RNA_property_float_get(&gz_prop->ptr, gz_prop->prop);
   }
-  else {
-    return RNA_property_float_get_index(&gz_prop->ptr, gz_prop->prop, gz_prop->index);
-  }
+  return RNA_property_float_get_index(&gz_prop->ptr, gz_prop->prop, gz_prop->index);
 }
 
 void WM_gizmo_target_property_float_set(bContext *C,
@@ -250,9 +251,7 @@ bool WM_gizmo_target_property_float_range_get(const wmGizmo *gz,
       gz_prop->custom_func.range_get_fn(gz, gz_prop, range);
       return true;
     }
-    else {
-      return false;
-    }
+    return false;
   }
 
   float step, precision;
@@ -310,10 +309,12 @@ void WM_gizmo_do_msg_notify_tag_refresh(bContext *UNUSED(C),
                                         wmMsgSubscribeKey *UNUSED(msg_key),
                                         wmMsgSubscribeValue *msg_val)
 {
-  ARegion *ar = msg_val->owner;
+  ARegion *region = msg_val->owner;
   wmGizmoMap *gzmap = msg_val->user_data;
 
-  ED_region_tag_redraw(ar);
+  ED_region_tag_redraw(
+      region); /* Could possibly avoid a full redraw and only tag for editor overlays
+                * redraw in some cases, see #ED_region_tag_redraw_editor_overlays(). */
   WM_gizmomap_tag_refresh(gzmap);
 }
 
@@ -321,7 +322,7 @@ void WM_gizmo_do_msg_notify_tag_refresh(bContext *UNUSED(C),
  * Runs on the "prepare draw" pass,
  * drawing the region clears.
  */
-void WM_gizmo_target_property_subscribe_all(wmGizmo *gz, struct wmMsgBus *mbus, ARegion *ar)
+void WM_gizmo_target_property_subscribe_all(wmGizmo *gz, struct wmMsgBus *mbus, ARegion *region)
 {
   if (gz->type->target_property_defs_len) {
     wmGizmoProperty *gz_prop_array = WM_gizmo_target_property_array(gz);
@@ -333,8 +334,8 @@ void WM_gizmo_target_property_subscribe_all(wmGizmo *gz, struct wmMsgBus *mbus, 
                                &gz_prop->ptr,
                                gz_prop->prop,
                                &(const wmMsgSubscribeValue){
-                                   .owner = ar,
-                                   .user_data = ar,
+                                   .owner = region,
+                                   .user_data = region,
                                    .notify = ED_region_do_msg_notify_tag_redraw,
                                },
                                __func__);
@@ -342,7 +343,7 @@ void WM_gizmo_target_property_subscribe_all(wmGizmo *gz, struct wmMsgBus *mbus, 
                                &gz_prop->ptr,
                                gz_prop->prop,
                                &(const wmMsgSubscribeValue){
-                                   .owner = ar,
+                                   .owner = region,
                                    .user_data = gz->parent_gzgroup->parent_gzmap,
                                    .notify = WM_gizmo_do_msg_notify_tag_refresh,
                                },
@@ -350,6 +351,21 @@ void WM_gizmo_target_property_subscribe_all(wmGizmo *gz, struct wmMsgBus *mbus, 
         }
       }
     }
+  }
+}
+
+/**
+ * Auto-key function if auto-key is enabled.
+ */
+void WM_gizmo_target_property_anim_autokey(bContext *C,
+                                           const wmGizmo *UNUSED(gz),
+                                           wmGizmoProperty *gz_prop)
+{
+  if (gz_prop->prop != NULL) {
+    Scene *scene = CTX_data_scene(C);
+    const float cfra = (float)CFRA;
+    const int index = gz_prop->index == -1 ? 0 : gz_prop->index;
+    ED_autokeyframe_property(C, scene, &gz_prop->ptr, gz_prop->prop, index, cfra);
   }
 }
 

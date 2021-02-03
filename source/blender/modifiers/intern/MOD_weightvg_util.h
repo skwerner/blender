@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2011 by Bastien Montagne.
@@ -21,8 +21,7 @@
  * \ingroup modifiers
  */
 
-#ifndef __MOD_WEIGHTVG_UTIL_H__
-#define __MOD_WEIGHTVG_UTIL_H__
+#pragma once
 
 struct CurveMapping;
 struct MDeformVert;
@@ -30,9 +29,11 @@ struct MDeformWeight;
 struct Mesh;
 struct ModifierEvalContext;
 struct Object;
+struct PointerRNA;
 struct RNG;
 struct Scene;
 struct Tex;
+struct uiLayout;
 
 /*
  * XXX I'd like to make modified weights visible in WeightPaint mode,
@@ -52,8 +53,12 @@ struct Tex;
  */
 #define MOD_WVG_ZEROFLOOR 1.0e-32f
 
-void weightvg_do_map(
-    int num, float *new_w, short mode, struct CurveMapping *cmap, struct RNG *rng);
+void weightvg_do_map(int num,
+                     float *new_w,
+                     short falloff_type,
+                     const bool do_invert,
+                     struct CurveMapping *cmap,
+                     struct RNG *rng);
 
 void weightvg_do_mask(const ModifierEvalContext *ctx,
                       const int num,
@@ -69,7 +74,9 @@ void weightvg_do_mask(const ModifierEvalContext *ctx,
                       const int tex_use_channel,
                       const int tex_mapping,
                       Object *tex_map_object,
-                      const char *tex_uvlayer_name);
+                      const char *text_map_bone,
+                      const char *tex_uvlayer_name,
+                      const bool invert_vgroup_mask);
 
 void weightvg_update_vg(struct MDeformVert *dvert,
                         int defgrp_idx,
@@ -80,6 +87,7 @@ void weightvg_update_vg(struct MDeformVert *dvert,
                         const bool do_add,
                         const float add_thresh,
                         const bool do_rem,
-                        const float rem_thresh);
+                        const float rem_thresh,
+                        const bool do_normalize);
 
-#endif /* __MOD_WEIGHTVG_UTIL_H__ */
+void weightvg_ui_common(const bContext *C, PointerRNA *ob_ptr, PointerRNA *ptr, uiLayout *layout);

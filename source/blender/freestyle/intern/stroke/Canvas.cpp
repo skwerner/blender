@@ -26,13 +26,13 @@
 #include "StrokeRenderer.h"
 #include "StyleModule.h"
 
-#include "../image/Image.h"
 #include "../image/GaussianFilter.h"
+#include "../image/Image.h"
 #include "../image/ImagePyramid.h"
 
 #include "../system/FreestyleConfig.h"
-#include "../system/TimeStamp.h"
 #include "../system/PseudoNoise.h"
+#include "../system/TimeStamp.h"
 
 #include "../view_map/SteerableViewMap.h"
 
@@ -41,26 +41,24 @@
 // soc #include <qimage.h>
 // soc #include <QString>
 
-extern "C" {
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
-}
 
 using namespace std;
 
 namespace Freestyle {
 
-Canvas *Canvas::_pInstance = 0;
+Canvas *Canvas::_pInstance = nullptr;
 
-const char *Canvas::_MapsPath = 0;
+const char *Canvas::_MapsPath = nullptr;
 
 Canvas::Canvas()
 {
-  _SelectedFEdge = 0;
+  _SelectedFEdge = nullptr;
   _pInstance = this;
   PseudoNoise::init(42);
-  _Renderer = 0;
-  _current_sm = NULL;
+  _Renderer = nullptr;
+  _current_sm = nullptr;
   _steerableViewMap = new SteerableViewMap(NB_STEERABLE_VIEWMAP - 1);
   _basic = false;
 }
@@ -78,12 +76,12 @@ Canvas::Canvas(const Canvas &iBrother)
 
 Canvas::~Canvas()
 {
-  _pInstance = 0;
+  _pInstance = nullptr;
 
   Clear();
   if (_Renderer) {
     delete _Renderer;
-    _Renderer = 0;
+    _Renderer = nullptr;
   }
   // FIXME: think about an easy control for the maps memory management...
   if (!_maps.empty()) {
@@ -92,9 +90,7 @@ Canvas::~Canvas()
     }
     _maps.clear();
   }
-  if (_steerableViewMap) {
-    delete _steerableViewMap;
-  }
+  delete _steerableViewMap;
 }
 
 void Canvas::preDraw()
@@ -351,8 +347,8 @@ void Canvas::loadMap(const char *iFileName,
   qimg = &newMap;
 #endif
   /* OCIO_TODO: support different input color space */
-  ImBuf *qimg = IMB_loadiffname(filePath.c_str(), 0, NULL);
-  if (qimg == 0) {
+  ImBuf *qimg = IMB_loadiffname(filePath.c_str(), 0, nullptr);
+  if (qimg == nullptr) {
     cerr << "Could not load image file " << filePath << endl;
     return;
   }

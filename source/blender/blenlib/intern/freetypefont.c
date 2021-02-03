@@ -15,7 +15,8 @@
  *
  * The Original Code is written by Rob Haarsma (phase)
  * All rights reserved.
- * This code parses the Freetype font outline data to chains of Blender's beziertriples.
+ *
+ * This code parses the Freetype font outline data to chains of Blender's bezier-triples.
  * Additional information can be found at the bottom of this file.
  *
  * Code that uses exotic character maps is present but commented out.
@@ -35,16 +36,16 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_ghash.h"
+#include "BLI_listbase.h"
+#include "BLI_math.h"
+#include "BLI_string.h"
 #include "BLI_utildefines.h"
 #include "BLI_vfontdata.h"
-#include "BLI_listbase.h"
-#include "BLI_ghash.h"
-#include "BLI_string.h"
-#include "BLI_math.h"
 
-#include "DNA_vfont_types.h"
-#include "DNA_packedFile_types.h"
 #include "DNA_curve_types.h"
+#include "DNA_packedFile_types.h"
+#include "DNA_vfont_types.h"
 
 /* local variables */
 static FT_Library library;
@@ -565,7 +566,7 @@ VChar *BLI_vfontchar_copy(const VChar *vchar_src, const int UNUSED(flag))
  *       between them
  * </pre>
  *
- * Each glyph's original outline points are located on a grid of indivisible units.
+ * Each glyphs original outline points are located on a grid of indivisible units.
  * The points are stored in the font file as 16-bit integer grid coordinates,
  * with the grid origin's being at (0, 0); they thus range from -16384 to 16383.
  *

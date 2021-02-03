@@ -21,8 +21,7 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_OBJECT_FLUIDSIM_TYPES_H__
-#define __DNA_OBJECT_FLUIDSIM_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_defs.h"
@@ -32,7 +31,6 @@ extern "C" {
 #endif
 
 struct Ipo;
-struct Mesh;
 
 typedef struct FluidVertexVelocity {
   float vel[3];
@@ -177,14 +175,6 @@ typedef struct FluidsimSettings {
 #define OB_FLUIDSIM_ACTIVE (1 << 1)
 #define OB_FLUIDSIM_OVERRIDE_TIME (1 << 2)
 
-#define OB_FLUIDSIM_SURF_DIR_DEFAULT "cache_fluid"
-#define OB_FLUIDSIM_SURF_PREVIEW_OBJ_FNAME "fluidsurface_preview_####.bobj.gz"
-#define OB_FLUIDSIM_SURF_FINAL_OBJ_FNAME "fluidsurface_final_####.bobj.gz"
-#define OB_FLUIDSIM_SURF_FINAL_VEL_FNAME "fluidsurface_final_####.bvel.gz"
-#define OB_FLUIDSIM_SURF_PARTICLES_FNAME "fluidsurface_particles_####.gz"
-
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __DNA_OBJECT_FLUIDSIM_TYPES_H__ */

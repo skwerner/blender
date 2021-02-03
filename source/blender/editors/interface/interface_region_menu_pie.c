@@ -26,7 +26,6 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 
 #include "MEM_guardedalloc.h"
 
@@ -104,13 +103,12 @@ static float ui_pie_menu_title_width(const char *name, int icon)
 
 uiPieMenu *UI_pie_menu_begin(struct bContext *C, const char *title, int icon, const wmEvent *event)
 {
-  uiStyle *style;
+  const uiStyle *style = UI_style_get_dpi();
   uiPieMenu *pie;
   short event_type;
 
   wmWindow *win = CTX_wm_window(C);
 
-  style = UI_style_get_dpi();
   pie = MEM_callocN(sizeof(*pie), "pie menu");
 
   pie->block_radial = UI_block_begin(C, NULL, __func__, UI_EMBOSS);
@@ -213,7 +211,7 @@ void UI_pie_menu_end(bContext *C, uiPieMenu *pie)
   menu->towardstime = PIL_check_seconds_timer();
 
   UI_popup_handlers_add(C, &window->modalhandlers, menu, WM_HANDLER_ACCEPT_DBL_CLICK);
-  WM_event_add_mousemove(C);
+  WM_event_add_mousemove(window);
 
   MEM_freeN(pie);
 }
@@ -388,7 +386,7 @@ void ui_pie_menu_level_create(uiBlock *block,
 {
   const int totitem_parent = PIE_MAX_ITEMS - 1;
   const int totitem_remain = totitem - totitem_parent;
-  size_t array_size = sizeof(EnumPropertyItem) * totitem_remain;
+  const size_t array_size = sizeof(EnumPropertyItem) * totitem_remain;
 
   /* used as but->func_argN so freeing is handled elsewhere */
   EnumPropertyItem *remaining = MEM_mallocN(array_size + sizeof(EnumPropertyItem),

@@ -16,18 +16,16 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_IMAGEOPERATION_H__
-#define __COM_IMAGEOPERATION_H__
+#pragma once
 
-#include "COM_NodeOperation.h"
-#include "BLI_listbase.h"
 #include "BKE_image.h"
-extern "C" {
-#include "RE_pipeline.h"
-#include "RE_shader_ext.h"
-#include "RE_render_ext.h"
+#include "BLI_listbase.h"
+#include "BLI_utildefines.h"
+#include "COM_NodeOperation.h"
 #include "MEM_guardedalloc.h"
-}
+
+#include "RE_pipeline.h"
+#include "RE_texture.h"
 
 /**
  * \brief Base class for all image operations
@@ -103,4 +101,3 @@ class ImageDepthOperation : public BaseImageOperation {
   ImageDepthOperation();
   void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
 };
-#endif

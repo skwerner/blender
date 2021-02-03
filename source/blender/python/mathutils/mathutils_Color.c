@@ -25,8 +25,8 @@
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
 
-#include "../generic/python_utildefines.h"
 #include "../generic/py_capi_utils.h"
+#include "../generic/python_utildefines.h"
 
 #ifndef MATH_STANDALONE
 #  include "BLI_dynstr.h"
@@ -347,7 +347,7 @@ static PyObject *Color_subscript(ColorObject *self, PyObject *item)
     }
     return Color_item(self, i);
   }
-  else if (PySlice_Check(item)) {
+  if (PySlice_Check(item)) {
     Py_ssize_t start, stop, step, slicelength;
 
     if (PySlice_GetIndicesEx(item, COLOR_SIZE, &start, &stop, &step, &slicelength) < 0) {
@@ -357,19 +357,17 @@ static PyObject *Color_subscript(ColorObject *self, PyObject *item)
     if (slicelength <= 0) {
       return PyTuple_New(0);
     }
-    else if (step == 1) {
+    if (step == 1) {
       return Color_slice(self, start, stop);
     }
-    else {
-      PyErr_SetString(PyExc_IndexError, "slice steps not supported with color");
-      return NULL;
-    }
-  }
-  else {
-    PyErr_Format(
-        PyExc_TypeError, "color indices must be integers, not %.200s", Py_TYPE(item)->tp_name);
+
+    PyErr_SetString(PyExc_IndexError, "slice steps not supported with color");
     return NULL;
   }
+
+  PyErr_Format(
+      PyExc_TypeError, "color indices must be integers, not %.200s", Py_TYPE(item)->tp_name);
+  return NULL;
 }
 
 static int Color_ass_subscript(ColorObject *self, PyObject *item, PyObject *value)
@@ -384,7 +382,7 @@ static int Color_ass_subscript(ColorObject *self, PyObject *item, PyObject *valu
     }
     return Color_ass_item(self, i, value);
   }
-  else if (PySlice_Check(item)) {
+  if (PySlice_Check(item)) {
     Py_ssize_t start, stop, step, slicelength;
 
     if (PySlice_GetIndicesEx(item, COLOR_SIZE, &start, &stop, &step, &slicelength) < 0) {
@@ -394,16 +392,14 @@ static int Color_ass_subscript(ColorObject *self, PyObject *item, PyObject *valu
     if (step == 1) {
       return Color_ass_slice(self, start, stop, value);
     }
-    else {
-      PyErr_SetString(PyExc_IndexError, "slice steps not supported with color");
-      return -1;
-    }
-  }
-  else {
-    PyErr_Format(
-        PyExc_TypeError, "color indices must be integers, not %.200s", Py_TYPE(item)->tp_name);
+
+    PyErr_SetString(PyExc_IndexError, "slice steps not supported with color");
     return -1;
   }
+
+  PyErr_Format(
+      PyExc_TypeError, "color indices must be integers, not %.200s", Py_TYPE(item)->tp_name);
+  return -1;
 }
 
 /* -----------------PROTCOL DECLARATIONS-------------------------- */
@@ -753,7 +749,7 @@ PyDoc_STRVAR(Color_channel_hsv_v_doc, "HSV Value component in [0, 1].\n\n:type: 
 static PyObject *Color_channel_hsv_get(ColorObject *self, void *type)
 {
   float hsv[3];
-  int i = POINTER_AS_INT(type);
+  const int i = POINTER_AS_INT(type);
 
   if (BaseMath_ReadCallback(self) == -1) {
     return NULL;
@@ -767,7 +763,7 @@ static PyObject *Color_channel_hsv_get(ColorObject *self, void *type)
 static int Color_channel_hsv_set(ColorObject *self, PyObject *value, void *type)
 {
   float hsv[3];
-  int i = POINTER_AS_INT(type);
+  const int i = POINTER_AS_INT(type);
   float f = PyFloat_AsDouble(value);
 
   if (f == -1 && PyErr_Occurred()) {
@@ -824,10 +820,7 @@ static int Color_hsv_set(ColorObject *self, PyObject *value, void *UNUSED(closur
     return -1;
   }
 
-  CLAMP(hsv[0], 0.0f, 1.0f);
-  CLAMP(hsv[1], 0.0f, 1.0f);
-  CLAMP(hsv[2], 0.0f, 1.0f);
-
+  clamp_v3(hsv, 0.0f, 1.0f);
   hsv_to_rgb_v(hsv, self->col);
 
   if (BaseMath_WriteCallback(self) == -1) {
@@ -841,59 +834,39 @@ static int Color_hsv_set(ColorObject *self, PyObject *value, void *UNUSED(closur
 /* Python attributes get/set structure:                                      */
 /*****************************************************************************/
 static PyGetSetDef Color_getseters[] = {
-    {(char *)"r",
-     (getter)Color_channel_get,
-     (setter)Color_channel_set,
-     Color_channel_r_doc,
+    {"r", (getter)Color_channel_get, (setter)Color_channel_set, Color_channel_r_doc, (void *)0},
+    {"g", (getter)Color_channel_get, (setter)Color_channel_set, Color_channel_g_doc, (void *)1},
+    {"b", (getter)Color_channel_get, (setter)Color_channel_set, Color_channel_b_doc, (void *)2},
+
+    {"h",
+     (getter)Color_channel_hsv_get,
+     (setter)Color_channel_hsv_set,
+     Color_channel_hsv_h_doc,
      (void *)0},
-    {(char *)"g",
-     (getter)Color_channel_get,
-     (setter)Color_channel_set,
-     Color_channel_g_doc,
+    {"s",
+     (getter)Color_channel_hsv_get,
+     (setter)Color_channel_hsv_set,
+     Color_channel_hsv_s_doc,
      (void *)1},
-    {(char *)"b",
-     (getter)Color_channel_get,
-     (setter)Color_channel_set,
-     Color_channel_b_doc,
+    {"v",
+     (getter)Color_channel_hsv_get,
+     (setter)Color_channel_hsv_set,
+     Color_channel_hsv_v_doc,
      (void *)2},
 
-    {(char *)"h",
-     (getter)Color_channel_hsv_get,
-     (setter)Color_channel_hsv_set,
-     (char *)Color_channel_hsv_h_doc,
-     (void *)0},
-    {(char *)"s",
-     (getter)Color_channel_hsv_get,
-     (setter)Color_channel_hsv_set,
-     (char *)Color_channel_hsv_s_doc,
-     (void *)1},
-    {(char *)"v",
-     (getter)Color_channel_hsv_get,
-     (setter)Color_channel_hsv_set,
-     (char *)Color_channel_hsv_v_doc,
-     (void *)2},
+    {"hsv", (getter)Color_hsv_get, (setter)Color_hsv_set, Color_hsv_doc, (void *)0},
 
-    {(char *)"hsv",
-     (getter)Color_hsv_get,
-     (setter)Color_hsv_set,
-     (char *)Color_hsv_doc,
-     (void *)0},
-
-    {(char *)"is_wrapped",
+    {"is_wrapped",
      (getter)BaseMathObject_is_wrapped_get,
      (setter)NULL,
      BaseMathObject_is_wrapped_doc,
      NULL},
-    {(char *)"is_frozen",
+    {"is_frozen",
      (getter)BaseMathObject_is_frozen_get,
      (setter)NULL,
      BaseMathObject_is_frozen_doc,
      NULL},
-    {(char *)"owner",
-     (getter)BaseMathObject_owner_get,
-     (setter)NULL,
-     BaseMathObject_owner_doc,
-     NULL},
+    {"owner", (getter)BaseMathObject_owner_get, (setter)NULL, BaseMathObject_owner_doc, NULL},
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };
 
@@ -921,7 +894,7 @@ PyTypeObject color_Type = {
     sizeof(ColorObject),                    /* tp_basicsize */
     0,                                      /* tp_itemsize */
     (destructor)BaseMathObject_dealloc,     /* tp_dealloc */
-    NULL,                                   /* tp_print */
+    (printfunc)NULL,                        /* tp_print */
     NULL,                                   /* tp_getattr */
     NULL,                                   /* tp_setattr */
     NULL,                                   /* tp_compare */
@@ -1024,9 +997,7 @@ PyObject *Color_CreatePyObject_wrap(float col[3], PyTypeObject *base_type)
   return (PyObject *)self;
 }
 
-PyObject *Color_CreatePyObject_cb(PyObject *cb_user,
-                                  unsigned char cb_type,
-                                  unsigned char cb_subtype)
+PyObject *Color_CreatePyObject_cb(PyObject *cb_user, uchar cb_type, uchar cb_subtype)
 {
   ColorObject *self = (ColorObject *)Color_CreatePyObject(NULL, NULL);
   if (self) {

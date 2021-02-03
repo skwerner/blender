@@ -20,8 +20,8 @@
  * implies that this geom engine has as member data the viewpoint, transformations, projections...
  */
 
-#include <cstring>
 #include <cstdio>
+#include <cstring>
 
 #include "Silhouette.h"
 #include "SilhouetteGeomEngine.h"
@@ -73,7 +73,7 @@ real SilhouetteGeomEngine::_znear = 0.0;
 real SilhouetteGeomEngine::_zfar = 100.0;
 bool SilhouetteGeomEngine::_isOrthographicProjection = false;
 
-SilhouetteGeomEngine *SilhouetteGeomEngine::_pInstance = NULL;
+SilhouetteGeomEngine *SilhouetteGeomEngine::_pInstance = nullptr;
 
 void SilhouetteGeomEngine::setTransform(const real iModelViewMatrix[4][4],
                                         const real iProjectionMatrix[4][4],
@@ -124,7 +124,7 @@ void SilhouetteGeomEngine::setFrustum(real iZNear, real iZFar)
 
 void SilhouetteGeomEngine::retrieveViewport(int viewport[4])
 {
-  memcpy(viewport, _viewport, 4 * sizeof(int));
+  memcpy(viewport, _viewport, sizeof(int[4]));
 }
 
 void SilhouetteGeomEngine::ProjectSilhouette(vector<SVertex *> &ioVertices)

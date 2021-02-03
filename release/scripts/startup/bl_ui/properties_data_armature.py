@@ -84,17 +84,12 @@ class DATA_PT_display(ArmatureButtonsPanel, Panel):
 
         layout.prop(arm, "display_type", text="Display As")
 
-        flow = layout.grid_flow(row_major=False, columns=0, even_columns=False, even_rows=False, align=True)
-        col = flow.column()
+        col = layout.column(heading="Show")
         col.prop(arm, "show_names", text="Names")
-        col = flow.column()
         col.prop(arm, "show_axes", text="Axes")
-        col = flow.column()
         col.prop(arm, "show_bone_custom_shapes", text="Shapes")
-        col = flow.column()
         col.prop(arm, "show_group_colors", text="Group Colors")
         if ob:
-            col = flow.column()
             col.prop(ob, "show_in_front", text="In Front")
 
 
@@ -138,7 +133,6 @@ class DATA_PT_bone_groups(ArmatureButtonsPanel, Panel):
         )
 
         col = row.column(align=True)
-        col.active = (ob.proxy is None)
         col.operator("pose.group_add", icon='ADD', text="")
         col.operator("pose.group_remove", icon='REMOVE', text="")
         col.menu("DATA_MT_bone_group_context_menu", icon='DOWNARROW_HLT', text="")
@@ -161,7 +155,6 @@ class DATA_PT_bone_groups(ArmatureButtonsPanel, Panel):
                 sub.prop(group.colors, "active", text="")
 
         row = layout.row()
-        row.active = (ob.proxy is None)
 
         sub = row.row(align=True)
         sub.operator("pose.group_assign", text="Assign")

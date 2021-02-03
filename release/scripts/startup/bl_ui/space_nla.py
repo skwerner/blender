@@ -70,11 +70,13 @@ class NLA_MT_editor_menus(Menu):
     bl_idname = "NLA_MT_editor_menus"
     bl_label = ""
 
-    def draw(self, _context):
+    def draw(self, context):
+        st = context.space_data
         layout = self.layout
         layout.menu("NLA_MT_view")
         layout.menu("NLA_MT_select")
-        layout.menu("NLA_MT_marker")
+        if st.show_markers:
+            layout.menu("NLA_MT_marker")
         layout.menu("NLA_MT_edit")
         layout.menu("NLA_MT_add")
 
@@ -91,14 +93,15 @@ class NLA_MT_view(Menu):
         layout.separator()
 
         layout.prop(st, "use_realtime_update")
-        layout.prop(st, "show_frame_indicator")
 
         layout.prop(st, "show_seconds")
         layout.prop(st, "show_locked_time")
 
         layout.prop(st, "show_strip_curves")
+
+        layout.separator()
+        layout.prop(st, "show_markers")
         layout.prop(st, "show_local_markers")
-        layout.prop(st, "show_marker_lines")
 
         layout.separator()
         layout.operator("anim.previewrange_set")
@@ -126,7 +129,7 @@ class NLA_MT_select(Menu):
 
         layout.separator()
         layout.operator("nla.select_box").axis_range = False
-        layout.operator("nla.select_box", text="Border Axis Range").axis_range = True
+        layout.operator("nla.select_box", text="Box Select (Axis Range)").axis_range = True
 
         layout.separator()
         props = layout.operator("nla.select_leftright", text="Before Current Frame")
@@ -164,6 +167,7 @@ class NLA_MT_edit(Menu):
         layout.operator("nla.duplicate", text="Linked Duplicate").linked = True
         layout.operator("nla.split")
         layout.operator("nla.delete")
+        layout.operator("nla.tracks_delete")
 
         layout.separator()
         layout.operator("nla.mute_toggle")
@@ -237,10 +241,10 @@ class NLA_MT_snap_pie(Menu):
         layout = self.layout
         pie = layout.menu_pie()
 
-        pie.operator("nla.snap", text="Current Frame").type = 'CFRA'
-        pie.operator("nla.snap", text="Nearest Frame").type = 'NEAREST_FRAME'
-        pie.operator("nla.snap", text="Nearest Second").type = 'NEAREST_SECOND'
-        pie.operator("nla.snap", text="Nearest Marker").type = 'NEAREST_MARKER'
+        pie.operator("nla.snap", text="Selection to Current Frame").type = 'CFRA'
+        pie.operator("nla.snap", text="Selection to Nearest Frame").type = 'NEAREST_FRAME'
+        pie.operator("nla.snap", text="Selection to Nearest Second").type = 'NEAREST_SECOND'
+        pie.operator("nla.snap", text="Selection to Nearest Marker").type = 'NEAREST_MARKER'
 
 
 class NLA_MT_context_menu(Menu):

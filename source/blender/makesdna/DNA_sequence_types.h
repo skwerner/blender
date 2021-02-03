@@ -28,18 +28,22 @@
  * - Meta Strip (SEQ_TYPE_META): Support for nesting Sequences.
  */
 
-#ifndef __DNA_SEQUENCE_TYPES_H__
-#define __DNA_SEQUENCE_TYPES_H__
+#pragma once
 
-#include "DNA_defs.h"
 #include "DNA_color_types.h"
+#include "DNA_defs.h"
 #include "DNA_listBase.h"
-#include "DNA_vec_types.h"
-#include "DNA_vfont_types.h"
+#include "DNA_session_uuid_types.h" /* for #SessionUUID */
+#include "DNA_vec_types.h"          /* for #rctf */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct Ipo;
 struct MovieClip;
 struct Scene;
+struct VFont;
 struct bSound;
 
 /* strlens; 256= FILE_MAXFILE, 768= FILE_MAXDIR */
@@ -64,6 +68,9 @@ typedef struct StripCrop {
 typedef struct StripTransform {
   int xofs;
   int yofs;
+  float scale_x;
+  float scale_y;
+  float rotation;
 } StripTransform;
 
 typedef struct StripColorBalance {
@@ -72,24 +79,24 @@ typedef struct StripColorBalance {
   float gain[3];
   int flag;
   char _pad[4];
-  // float exposure;
-  // float saturation;
+  /* float exposure; */
+  /* float saturation; */
 } StripColorBalance;
 
 typedef struct StripProxy {
-  char dir[768];  // custom directory for index and proxy files
-                  // (defaults to BL_proxy)
+  char dir[768]; /* custom directory for index and proxy files */
+                 /* (defaults to BL_proxy) */
 
-  char file[256];     // custom file
-  struct anim *anim;  // custom proxy anim file
+  char file[256];    /* custom file */
+  struct anim *anim; /* custom proxy anim file */
 
-  short tc;  // time code in use
+  short tc; /* time code in use */
 
-  short quality;           // proxy build quality
-  short build_size_flags;  // size flags (see below) of all proxies
-                           // to build
-  short build_tc_flags;    // time code flags (see below) of all tc indices
-                           // to build
+  short quality;          /* proxy build quality */
+  short build_size_flags; /* size flags (see below) of all proxies */
+                          /* to build */
+  short build_tc_flags;   /* time code flags (see below) of all tc indices */
+                          /* to build */
   short build_flags;
   char storage;
   char _pad[5];
@@ -114,6 +121,10 @@ typedef struct Strip {
   /* color management */
   ColorManagedColorspaceSettings colorspace_settings;
 } Strip;
+
+typedef struct SequenceRuntime {
+  SessionUUID session_uuid;
+} SequenceRuntime;
 
 /**
  * The sequence structure is the basic struct used by any strip.
@@ -233,8 +244,7 @@ typedef struct Sequence {
   int cache_flag;
   int _pad2[3];
 
-  struct Sequence *orig_sequence;
-  void *_pad3;
+  SequenceRuntime runtime;
 } Sequence;
 
 typedef struct MetaStack {
@@ -268,8 +278,13 @@ typedef struct Editing {
   struct SeqCache *cache;
 
   /* Cache control */
-  float recycle_max_cost;
+  float recycle_max_cost; /* UNUSED only for versioning. */
   int cache_flag;
+
+  struct PrefetchJob *prefetch_job;
+
+  /* Must be initialized only by seq_cache_create() */
+  int64_t disk_cache_timestamp;
 } Editing;
 
 /* ************* Effect Variable Structs ********* */
@@ -323,20 +338,22 @@ typedef struct GaussianBlurVars {
 
 typedef struct TextVars {
   char text[512];
-  VFont *text_font;
+  struct VFont *text_font;
   int text_blf_id;
   int text_size;
-  float color[4], shadow_color[4];
+  float color[4], shadow_color[4], box_color[4];
   float loc[2];
   float wrap_width;
+  float box_margin;
   char flag;
   char align, align_y;
-  char _pad[1];
+  char _pad[5];
 } TextVars;
 
 /* TextVars.flag */
 enum {
   SEQ_TEXT_SHADOW = (1 << 0),
+  SEQ_TEXT_BOX = (1 << 1),
 };
 
 /* TextVars.align */
@@ -459,6 +476,7 @@ typedef struct SequencerScopes {
 #define SEQ_SPEED_INTEGRATE (1 << 0)
 #define SEQ_SPEED_UNUSED_1 (1 << 1) /* cleared */
 #define SEQ_SPEED_COMPRESS_IPO_Y (1 << 2)
+#define SEQ_SPEED_USE_INTERPOLATION (1 << 3)
 
 /* ***************** SEQUENCE ****************** */
 #define SEQ_NAME_MAXSTR 64
@@ -481,8 +499,8 @@ enum {
   SEQ_MAKE_FLOAT = (1 << 13),
   SEQ_LOCK = (1 << 14),
   SEQ_USE_PROXY = (1 << 15),
-  SEQ_USE_TRANSFORM = (1 << 16),
-  SEQ_USE_CROP = (1 << 17),
+  SEQ_FLAG_UNUSED_23 = (1 << 16), /* cleared */
+  SEQ_FLAG_UNUSED_22 = (1 << 17), /* cleared */
   SEQ_FLAG_UNUSED_18 = (1 << 18), /* cleared */
   SEQ_FLAG_UNUSED_19 = (1 << 19), /* cleared */
   SEQ_FLAG_UNUSED_21 = (1 << 21), /* cleared */
@@ -584,7 +602,7 @@ enum {
   SEQ_TYPE_LIGHTEN = 44,
   SEQ_TYPE_DODGE = 45,
   SEQ_TYPE_DARKEN = 46,
-  SEQ_TYPE_BURN = 47,
+  SEQ_TYPE_COLOR_BURN = 47,
   SEQ_TYPE_LINEAR_BURN = 48,
   SEQ_TYPE_OVERLAY = 49,
   SEQ_TYPE_HARD_LIGHT = 50,
@@ -625,7 +643,7 @@ enum {
   seqModifierType_Mask = 5,
   seqModifierType_WhiteBalance = 6,
   seqModifierType_Tonemap = 7,
-
+  /* Keep last. */
   NUM_SEQUENCE_MODIFIER_TYPES,
 };
 
@@ -674,6 +692,11 @@ enum {
   SEQ_CACHE_VIEW_PREPROCESSED = (1 << 7),
   SEQ_CACHE_VIEW_COMPOSITE = (1 << 8),
   SEQ_CACHE_VIEW_FINAL_OUT = (1 << 9),
+
+  SEQ_CACHE_PREFETCH_ENABLE = (1 << 10),
+  SEQ_CACHE_DISK_CACHE_ENABLE = (1 << 11),
 };
 
-#endif /* __DNA_SEQUENCE_TYPES_H__ */
+#ifdef __cplusplus
+}
+#endif

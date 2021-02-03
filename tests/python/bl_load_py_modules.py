@@ -37,6 +37,8 @@ BLACKLIST = {
     "io_export_dxf",  # TODO, check on why this fails
     'io_import_dxf',  # Because of cydxfentity.so dependency
 
+    # Utility scripts not meant to be used as modules
+    os.path.join("power_sequencer", "scripts"),
     # The unpacked wheel is only loaded when actually used, not directly on import:
     os.path.join("io_blend_utils", "blender_bam-unpacked.whl"),
 }
@@ -53,6 +55,9 @@ MODULE_SYS_PATHS = {
 
 if not bpy.app.build_options.freestyle:
     BLACKLIST.add("render_freestyle_svg")
+
+if not bpy.app.build_options.xr_openxr:
+    BLACKLIST.add("viewport_vr_preview")
 
 BLACKLIST_DIRS = (
     os.path.join(bpy.utils.resource_path('USER'), "scripts"),
@@ -229,10 +234,4 @@ def main():
 
 
 if __name__ == "__main__":
-    # So a python error exits(1)
-    try:
-        main()
-    except:
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+    main()

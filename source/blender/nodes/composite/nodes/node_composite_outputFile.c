@@ -21,9 +21,9 @@
  * \ingroup cmpnodes
  */
 
-#include <string.h>
-#include "BLI_utildefines.h"
 #include "BLI_string_utils.h"
+#include "BLI_utildefines.h"
+#include <string.h>
 
 #include "BKE_context.h"
 
@@ -146,6 +146,7 @@ bNodeSocket *ntreeCompositOutputFileAddSocket(bNodeTree *ntree,
   }
   /* use node data format by default */
   sockdata->use_node_format = true;
+  sockdata->save_as_render = true;
 
   nimf->active_input = BLI_findindex(&node->inputs, sock);
 
@@ -191,7 +192,7 @@ void ntreeCompositOutputFileSetLayer(bNode *node, bNodeSocket *sock, const char 
 static void init_output_file(const bContext *C, PointerRNA *ptr)
 {
   Scene *scene = CTX_data_scene(C);
-  bNodeTree *ntree = ptr->id.data;
+  bNodeTree *ntree = (bNodeTree *)ptr->owner_id;
   bNode *node = ptr->data;
   NodeImageMultiFile *nimf = MEM_callocN(sizeof(NodeImageMultiFile), "node image multi file");
   ImageFormatData *format = NULL;
@@ -249,7 +250,7 @@ static void update_output_file(bNodeTree *ntree, bNode *node)
   bNodeSocket *sock, *sock_next;
   PointerRNA ptr;
 
-  /* XXX fix for #36706: remove invalid sockets added with bpy API.
+  /* XXX fix for T36706: remove invalid sockets added with bpy API.
    * This is not ideal, but prevents crashes from missing storage.
    * FileOutput node needs a redesign to support this properly.
    */

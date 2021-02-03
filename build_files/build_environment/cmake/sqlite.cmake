@@ -19,8 +19,10 @@
 set(SQLITE_CONFIGURE_ENV echo .)
 set(SQLITE_CONFIGURATION_ARGS)
 
-if(UNIX AND NOT APPLE)
-  set(SQLITE_LDFLAGS -Wl,--as-needed)
+if(UNIX)
+  if(NOT APPLE)
+    set(SQLITE_LDFLAGS -Wl,--as-needed)
+  endif()
   set(SQLITE_CFLAGS
     "-DSQLITE_SECURE_DELETE -DSQLITE_ENABLE_COLUMN_METADATA \
     -DSQLITE_ENABLE_FTS3 -DSQLITE_ENABLE_FTS3_PARENTHESIS \
@@ -49,7 +51,7 @@ ExternalProject_Add(external_sqlite
   DOWNLOAD_DIR ${DOWNLOAD_DIR}
   URL_HASH SHA1=${SQLITE_HASH}
   PREFIX ${BUILD_DIR}/sqlite
-  PATCH_COMMAND ${SQLITE_PATCH_CMD}
+  PATCH_COMMAND ${PATCH_CMD} -p 1 -d ${BUILD_DIR}/sqlite/src/external_sqlite < ${PATCH_DIR}/sqlite.diff
   CONFIGURE_COMMAND ${SQLITE_CONFIGURE_ENV} && cd ${BUILD_DIR}/sqlite/src/external_sqlite/ && ${CONFIGURE_COMMAND} --prefix=${LIBDIR}/sqlite ${SQLITE_CONFIGURATION_ARGS}
   BUILD_COMMAND ${CONFIGURE_ENV} && cd ${BUILD_DIR}/sqlite/src/external_sqlite/ && make -j${MAKE_THREADS}
   INSTALL_COMMAND ${CONFIGURE_ENV} && cd ${BUILD_DIR}/sqlite/src/external_sqlite/ && make install

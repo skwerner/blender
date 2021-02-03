@@ -31,26 +31,32 @@
 #include "DNA_workspace_types.h"
 
 #include "BLI_listbase.h"
-#include "BLI_string.h"
 #include "BLI_path_util.h"
+#include "BLI_string.h"
+#include "BLI_system.h"
 #include "BLI_utildefines.h"
 
 #include "IMB_colormanagement.h"
 
+#include "BKE_addon.h"
 #include "BKE_appdir.h"
 #include "BKE_blender.h"
 #include "BKE_blender_version.h"
 #include "BKE_blendfile.h"
 #include "BKE_bpath.h"
+#include "BKE_colorband.h"
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_ipo.h"
+#include "BKE_keyconfig.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
+#include "BKE_preferences.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
 #include "BKE_screen.h"
+#include "BKE_studiolight.h"
 #include "BKE_workspace.h"
 
 #include "BLO_readfile.h"
@@ -71,7 +77,7 @@
 static bool clean_paths_visit_cb(void *UNUSED(userdata), char *path_dst, const char *path_src)
 {
   strcpy(path_dst, path_src);
-  BLI_path_native_slash(path_dst);
+  BLI_path_slash_native(path_dst);
   return !STREQ(path_dst, path_src);
 }
 
@@ -83,7 +89,7 @@ static void clean_paths(Main *main)
   BKE_bpath_traverse_main(main, clean_paths_visit_cb, BKE_BPATH_TRAVERSE_SKIP_MULTIFILE, NULL);
 
   for (scene = main->scenes.first; scene; scene = scene->id.next) {
-    BLI_path_native_slash(scene->r.pic);
+    BLI_path_slash_native(scene->r.pic);
   }
 }
 
@@ -129,27 +135,30 @@ static void setup_app_userdef(BlendFileData *bfd)
 static void setup_app_data(bContext *C,
                            BlendFileData *bfd,
                            const char *filepath,
-                           const bool is_startup,
+                           const struct BlendFileReadParams *params,
                            ReportList *reports)
 {
   Main *bmain = G_MAIN;
   Scene *curscene = NULL;
   const bool recover = (G.fileflags & G_FILE_RECOVER) != 0;
+  const bool is_startup = params->is_startup;
   enum {
     LOAD_UI = 1,
     LOAD_UI_OFF,
     LOAD_UNDO,
   } mode;
 
-  /* may happen with library files - UNDO file should never have NULL cursccene... */
-  if (ELEM(NULL, bfd->curscreen, bfd->curscene)) {
+  if (params->undo_direction != 0) {
+    BLI_assert(bfd->curscene != NULL);
+    mode = LOAD_UNDO;
+  }
+  /* may happen with library files - UNDO file should never have NULL curscene (but may have a
+   * NULL curscreen)... */
+  else if (ELEM(NULL, bfd->curscreen, bfd->curscene)) {
     BKE_report(reports, RPT_WARNING, "Library file, loading empty scene");
     mode = LOAD_UI_OFF;
   }
-  else if (BLI_listbase_is_empty(&bfd->main->screens)) {
-    mode = LOAD_UNDO;
-  }
-  else if ((G.fileflags & G_FILE_NO_UI) && (is_startup == false)) {
+  else if (G.fileflags & G_FILE_NO_UI) {
     mode = LOAD_UI_OFF;
   }
   else {
@@ -192,6 +201,27 @@ static void setup_app_data(bContext *C,
     SWAP(ListBase, bmain->wm, bfd->main->wm);
     SWAP(ListBase, bmain->workspaces, bfd->main->workspaces);
     SWAP(ListBase, bmain->screens, bfd->main->screens);
+
+    /* In case of actual new file reading without loading UI, we need to regenerate the session
+     * uuid of the UI-related datablocks we are keeping from previous session, otherwise their uuid
+     * will collide with some generated for newly read data. */
+    if (mode != LOAD_UNDO) {
+      ID *id;
+      FOREACH_MAIN_LISTBASE_ID_BEGIN (&bfd->main->wm, id) {
+        BKE_lib_libblock_session_uuid_renew(id);
+      }
+      FOREACH_MAIN_LISTBASE_ID_END;
+
+      FOREACH_MAIN_LISTBASE_ID_BEGIN (&bfd->main->workspaces, id) {
+        BKE_lib_libblock_session_uuid_renew(id);
+      }
+      FOREACH_MAIN_LISTBASE_ID_END;
+
+      FOREACH_MAIN_LISTBASE_ID_BEGIN (&bfd->main->screens, id) {
+        BKE_lib_libblock_session_uuid_renew(id);
+      }
+      FOREACH_MAIN_LISTBASE_ID_END;
+    }
 
     /* we re-use current window and screen */
     win = CTX_wm_window(C);
@@ -250,9 +280,6 @@ static void setup_app_data(bContext *C,
   //  CTX_wm_manager_set(C, NULL);
   BKE_blender_globals_clear();
 
-  /* clear old property update cache, in case some old references are left dangling */
-  RNA_property_update_cache_free();
-
   bmain = G_MAIN = bfd->main;
   bfd->main = NULL;
 
@@ -304,7 +331,9 @@ static void setup_app_data(bContext *C,
 
 #ifdef WITH_PYTHON
   /* let python know about new main */
-  BPY_context_update(C);
+  if (CTX_py_init_get(C)) {
+    BPY_context_update(C);
+  }
 #endif
 
   /* FIXME: this version patching should really be part of the file-reading code,
@@ -337,7 +366,7 @@ static void setup_app_data(bContext *C,
     wmWindowManager *wm = bmain->wm.first;
 
     if (wm) {
-      for (wmWindow *win = wm->windows.first; win; win = win->next) {
+      LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
         if (win->scene && win->scene != curscene) {
           BKE_scene_set_background(bmain, win->scene);
         }
@@ -366,8 +395,10 @@ static void setup_app_data(bContext *C,
      * means that we do not reset their user count, however we do increase that one when doing
      * lib_link on local IDs using linked ones.
      * There is no real way to predict amount of changes here, so we have to fully redo
-     * refcounting . */
-    BLE_main_id_refcount_recompute(bmain, true);
+     * refcounting.
+     * Now that we re-use (and do not liblink in readfile.c) most local datablocks as well, we have
+     * to recompute refcount for all local IDs too. */
+    BKE_main_id_refcount_recompute(bmain, false);
   }
 }
 
@@ -381,86 +412,94 @@ static void setup_app_blend_file_data(bContext *C,
     setup_app_userdef(bfd);
   }
   if ((params->skip_flags & BLO_READ_SKIP_DATA) == 0) {
-    setup_app_data(C, bfd, filepath, params->is_startup, reports);
+    setup_app_data(C, bfd, filepath, params, reports);
   }
 }
 
-static int handle_subversion_warning(Main *main, ReportList *reports)
+static void handle_subversion_warning(Main *main, ReportList *reports)
 {
-  if (main->minversionfile > BLENDER_VERSION ||
-      (main->minversionfile == BLENDER_VERSION && main->minsubversionfile > BLENDER_SUBVERSION)) {
+  if (main->minversionfile > BLENDER_FILE_VERSION ||
+      (main->minversionfile == BLENDER_FILE_VERSION &&
+       main->minsubversionfile > BLENDER_FILE_SUBVERSION)) {
     BKE_reportf(reports,
                 RPT_ERROR,
                 "File written by newer Blender binary (%d.%d), expect loss of data!",
                 main->minversionfile,
                 main->minsubversionfile);
   }
-
-  return 1;
 }
 
-int BKE_blendfile_read(bContext *C,
-                       const char *filepath,
-                       const struct BlendFileReadParams *params,
-                       ReportList *reports)
+bool BKE_blendfile_read_ex(bContext *C,
+                           const char *filepath,
+                           const struct BlendFileReadParams *params,
+                           ReportList *reports,
+                           /* Extra args. */
+                           const bool startup_update_defaults,
+                           const char *startup_app_template)
 {
-  BlendFileData *bfd;
-  int retval = BKE_BLENDFILE_READ_OK;
 
-  /* don't print user-pref loading */
-  if (strstr(filepath, BLENDER_STARTUP_FILE) == NULL) {
+  /* Don't print startup file loading. */
+  if (params->is_startup == false) {
     printf("Read blend: %s\n", filepath);
   }
 
-  bfd = BLO_read_from_file(filepath, params->skip_flags, reports);
+  BlendFileData *bfd = BLO_read_from_file(filepath, params->skip_flags, reports);
   if (bfd) {
-    if (bfd->user) {
-      retval = BKE_BLENDFILE_READ_OK_USERPREFS;
+    handle_subversion_warning(bfd->main, reports);
+    if (startup_update_defaults) {
+      if ((params->skip_flags & BLO_READ_SKIP_DATA) == 0) {
+        BLO_update_defaults_startup_blend(bfd->main, startup_app_template);
+      }
     }
-
-    if (0 == handle_subversion_warning(bfd->main, reports)) {
-      BKE_main_free(bfd->main);
-      MEM_freeN(bfd);
-      bfd = NULL;
-      retval = BKE_BLENDFILE_READ_FAIL;
-    }
-    else {
-      setup_app_blend_file_data(C, bfd, filepath, params, reports);
-      BLO_blendfiledata_free(bfd);
-    }
+    setup_app_blend_file_data(C, bfd, filepath, params, reports);
+    BLO_blendfiledata_free(bfd);
   }
   else {
     BKE_reports_prependf(reports, "Loading '%s' failed: ", filepath);
   }
-
-  return (bfd ? retval : BKE_BLENDFILE_READ_FAIL);
+  return (bfd != NULL);
 }
 
-bool BKE_blendfile_read_from_memory(bContext *C,
-                                    const void *filebuf,
-                                    int filelength,
-                                    bool update_defaults,
-                                    const struct BlendFileReadParams *params,
-                                    ReportList *reports)
+bool BKE_blendfile_read(bContext *C,
+                        const char *filepath,
+                        const struct BlendFileReadParams *params,
+                        ReportList *reports)
 {
-  BlendFileData *bfd;
+  return BKE_blendfile_read_ex(C, filepath, params, reports, false, NULL);
+}
 
-  bfd = BLO_read_from_memory(filebuf, filelength, params->skip_flags, reports);
+bool BKE_blendfile_read_from_memory_ex(bContext *C,
+                                       const void *filebuf,
+                                       int filelength,
+                                       const struct BlendFileReadParams *params,
+                                       ReportList *reports,
+                                       /* Extra args. */
+                                       const bool startup_update_defaults,
+                                       const char *startup_app_template)
+{
+  BlendFileData *bfd = BLO_read_from_memory(filebuf, filelength, params->skip_flags, reports);
   if (bfd) {
-    if (update_defaults) {
+    if (startup_update_defaults) {
       if ((params->skip_flags & BLO_READ_SKIP_DATA) == 0) {
-        BLO_update_defaults_startup_blend(bfd->main, NULL);
+        BLO_update_defaults_startup_blend(bfd->main, startup_app_template);
       }
     }
-
     setup_app_blend_file_data(C, bfd, "<memory2>", params, reports);
     BLO_blendfiledata_free(bfd);
   }
   else {
     BKE_reports_prepend(reports, "Loading failed: ");
   }
-
   return (bfd != NULL);
+}
+
+bool BKE_blendfile_read_from_memory(bContext *C,
+                                    const void *filebuf,
+                                    int filelength,
+                                    const struct BlendFileReadParams *params,
+                                    ReportList *reports)
+{
+  return BKE_blendfile_read_from_memory_ex(C, filebuf, filelength, params, reports, false, NULL);
 }
 
 /* memfile is the undo buffer */
@@ -470,18 +509,16 @@ bool BKE_blendfile_read_from_memfile(bContext *C,
                                      ReportList *reports)
 {
   Main *bmain = CTX_data_main(C);
-  BlendFileData *bfd;
-
-  bfd = BLO_read_from_memfile(
-      bmain, BKE_main_blendfile_path(bmain), memfile, params->skip_flags, reports);
+  BlendFileData *bfd = BLO_read_from_memfile(
+      bmain, BKE_main_blendfile_path(bmain), memfile, params, reports);
   if (bfd) {
-    /* remove the unused screens and wm */
-    while (bfd->main->wm.first) {
-      BKE_id_free(bfd->main, bfd->main->wm.first);
-    }
-    while (bfd->main->screens.first) {
-      BKE_id_free(bfd->main, bfd->main->screens.first);
-    }
+    /* Removing the unused workspaces, screens and wm is useless here, setup_app_data will switch
+     * those lists with the ones from old bmain, which freeing is much more efficient than
+     * individual calls to `BKE_id_free()`.
+     * Further more, those are expected to be empty anyway with new memfile reading code. */
+    BLI_assert(BLI_listbase_is_empty(&bfd->main->wm));
+    BLI_assert(BLI_listbase_is_empty(&bfd->main->workspaces));
+    BLI_assert(BLI_listbase_is_empty(&bfd->main->screens));
 
     setup_app_blend_file_data(C, bfd, "<memory1>", params, reports);
     BLO_blendfiledata_free(bfd);
@@ -489,7 +526,6 @@ bool BKE_blendfile_read_from_memfile(bContext *C,
   else {
     BKE_reports_prepend(reports, "Loading failed: ");
   }
-
   return (bfd != NULL);
 }
 
@@ -556,6 +592,69 @@ UserDef *BKE_blendfile_userdef_read_from_memory(const void *filebuf,
   return userdef;
 }
 
+UserDef *BKE_blendfile_userdef_from_defaults(void)
+{
+  UserDef *userdef = MEM_mallocN(sizeof(*userdef), __func__);
+  memcpy(userdef, &U_default, sizeof(*userdef));
+
+  /* Add-ons. */
+  {
+    const char *addons[] = {
+        "io_anim_bvh",
+        "io_curve_svg",
+        "io_mesh_ply",
+        "io_mesh_stl",
+        "io_mesh_uv_layout",
+        "io_scene_fbx",
+        "io_scene_gltf2",
+        "io_scene_obj",
+        "io_scene_x3d",
+        "cycles",
+    };
+    for (int i = 0; i < ARRAY_SIZE(addons); i++) {
+      bAddon *addon = BKE_addon_new();
+      STRNCPY(addon->module, addons[i]);
+      BLI_addtail(&userdef->addons, addon);
+    }
+  }
+
+  /* Theme. */
+  {
+    bTheme *btheme = MEM_mallocN(sizeof(*btheme), __func__);
+    memcpy(btheme, &U_theme_default, sizeof(*btheme));
+
+    BLI_addtail(&userdef->themes, btheme);
+  }
+
+#ifdef WITH_PYTHON_SECURITY
+  /* use alternative setting for security nuts
+   * otherwise we'd need to patch the binary blob - startup.blend.c */
+  userdef->flag |= USER_SCRIPT_AUTOEXEC_DISABLE;
+#else
+  userdef->flag &= ~USER_SCRIPT_AUTOEXEC_DISABLE;
+#endif
+
+  /* System-specific fonts directory. */
+  BKE_appdir_font_folder_default(userdef->fontdir);
+
+  userdef->memcachelimit = min_ii(BLI_system_memory_max_in_megabytes_int() / 2,
+                                  userdef->memcachelimit);
+
+  /* Init weight paint range. */
+  BKE_colorband_init(&userdef->coba_weight, true);
+
+  /* Default studio light. */
+  BKE_studiolight_default(userdef->light_param, userdef->light_ambient);
+
+  BKE_preferences_asset_library_default_add(userdef);
+  /* Enable asset browser features by default for alpha testing.
+   * BLO_sanitize_experimental_features_userpref_blend() will disable it again for non-alpha
+   * builds. */
+  userdef->experimental.use_asset_browser = true;
+
+  return userdef;
+}
+
 /**
  * Only write the userdef in a .blend
  * \return success
@@ -565,7 +664,13 @@ bool BKE_blendfile_userdef_write(const char *filepath, ReportList *reports)
   Main *mainb = MEM_callocN(sizeof(Main), "empty main");
   bool ok = false;
 
-  if (BLO_write_file(mainb, filepath, G_FILE_USERPREFS, reports, NULL)) {
+  if (BLO_write_file(mainb,
+                     filepath,
+                     0,
+                     &(const struct BlendFileWriteParams){
+                         .use_userdef = true,
+                     },
+                     reports)) {
     ok = true;
   }
 
@@ -687,7 +792,7 @@ WorkspaceConfigFileData *BKE_blendfile_workspace_config_read(const char *filepat
 
 bool BKE_blendfile_workspace_config_write(Main *bmain, const char *filepath, ReportList *reports)
 {
-  int fileflags = G.fileflags & ~(G_FILE_NO_UI | G_FILE_HISTORY);
+  const int fileflags = G.fileflags & ~G_FILE_NO_UI;
   bool retval = false;
 
   BKE_blendfile_write_partial_begin(bmain);
@@ -696,7 +801,8 @@ bool BKE_blendfile_workspace_config_write(Main *bmain, const char *filepath, Rep
     BKE_blendfile_write_partial_tag_ID(&workspace->id, true);
   }
 
-  if (BKE_blendfile_write_partial(bmain, filepath, fileflags, reports)) {
+  if (BKE_blendfile_write_partial(
+          bmain, filepath, fileflags, BLO_WRITE_PATH_REMAP_NONE, reports)) {
     retval = true;
   }
 
@@ -748,11 +854,13 @@ static void blendfile_write_partial_cb(void *UNUSED(handle), Main *UNUSED(bmain)
 }
 
 /**
+ * \param remap_mode: Choose the kind of path remapping or none #eBLO_WritePathRemap.
  * \return Success.
  */
 bool BKE_blendfile_write_partial(Main *bmain_src,
                                  const char *filepath,
                                  const int write_flags,
+                                 const int remap_mode,
                                  ReportList *reports)
 {
   Main *bmain_dst = MEM_callocN(sizeof(Main), "copybuffer");
@@ -794,12 +902,18 @@ bool BKE_blendfile_write_partial(Main *bmain_src,
    * This happens because id_sort_by_name does not take into account
    * string case or the library name, so the order is not strictly
    * defined for two linked data-blocks with the same name! */
-  if (write_flags & G_FILE_RELATIVE_REMAP) {
+  if (remap_mode != BLO_WRITE_PATH_REMAP_NONE) {
     path_list_backup = BKE_bpath_list_backup(bmain_dst, path_list_flag);
   }
 
   /* save the buffer */
-  retval = BLO_write_file(bmain_dst, filepath, write_flags, reports, NULL);
+  retval = BLO_write_file(bmain_dst,
+                          filepath,
+                          write_flags,
+                          &(const struct BlendFileWriteParams){
+                              .remap_mode = remap_mode,
+                          },
+                          reports);
 
   if (path_list_backup) {
     BKE_bpath_list_restore(bmain_dst, path_list_flag, path_list_backup);
@@ -815,7 +929,7 @@ bool BKE_blendfile_write_partial(Main *bmain_src,
 
     while ((id = BLI_pophead(lb_src))) {
       BLI_addtail(lb_dst, id);
-      id_sort_by_name(lb_dst, id);
+      id_sort_by_name(lb_dst, id, NULL);
     }
   }
 

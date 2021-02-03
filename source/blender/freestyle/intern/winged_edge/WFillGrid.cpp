@@ -19,8 +19,8 @@
  * \brief Class to fill in a grid from a SceneGraph (uses only the WingedEdge structures)
  */
 
-#include "WEdge.h"
 #include "WFillGrid.h"
+#include "WEdge.h"
 
 namespace Freestyle {
 
@@ -42,7 +42,7 @@ void WFillGrid::fillGrid()
       (*f)->RetrieveVertexList(fvertices);
 
       for (vector<WVertex *>::const_iterator wv = fvertices.begin(); wv != fvertices.end(); ++wv) {
-        vectors.push_back(Vec3r((*wv)->GetVertex()));
+        vectors.emplace_back((*wv)->GetVertex());
       }
 
       // occluder will be deleted by the grid

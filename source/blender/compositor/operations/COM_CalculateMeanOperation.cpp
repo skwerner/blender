@@ -20,15 +20,13 @@
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
 
-extern "C" {
 #include "IMB_colormanagement.h"
-}
 
-CalculateMeanOperation::CalculateMeanOperation() : NodeOperation()
+CalculateMeanOperation::CalculateMeanOperation()
 {
   this->addInputSocket(COM_DT_COLOR, COM_SC_NO_RESIZE);
   this->addOutputSocket(COM_DT_VALUE);
-  this->m_imageReader = NULL;
+  this->m_imageReader = nullptr;
   this->m_iscalculated = false;
   this->m_setting = 1;
   this->setComplex(true);
@@ -47,7 +45,7 @@ void CalculateMeanOperation::executePixel(float output[4], int /*x*/, int /*y*/,
 
 void CalculateMeanOperation::deinitExecution()
 {
-  this->m_imageReader = NULL;
+  this->m_imageReader = nullptr;
   NodeOperation::deinitMutex();
 }
 
@@ -79,7 +77,7 @@ void *CalculateMeanOperation::initializeTileData(rcti *rect)
     this->m_iscalculated = true;
   }
   unlockMutex();
-  return NULL;
+  return nullptr;
 }
 
 void CalculateMeanOperation::calculateMean(MemoryBuffer *tile)

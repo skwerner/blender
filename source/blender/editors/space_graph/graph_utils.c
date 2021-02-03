@@ -21,14 +21,14 @@
  * \ingroup spgraph
  */
 
-#include <string.h>
-#include <stdio.h>
-#include <math.h>
 #include <float.h>
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
 
 #include "DNA_anim_types.h"
-#include "DNA_space_types.h"
 #include "DNA_screen_types.h"
+#include "DNA_space_types.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -46,48 +46,48 @@
 
 #include "RNA_access.h"
 
-#include "graph_intern.h"  // own include
+#include "graph_intern.h" /* own include */
 
 /* ************************************************************** */
 /* Set Up Drivers Editor */
 
 /* Set up UI configuration for Drivers Editor */
-/* NOTE: Currently called from windowmanager
+/* NOTE: Currently called from window-manager
  * (new drivers editor window) and RNA (mode switching) */
-void ED_drivers_editor_init(bContext *C, ScrArea *sa)
+void ED_drivers_editor_init(bContext *C, ScrArea *area)
 {
-  SpaceGraph *sipo = (SpaceGraph *)sa->spacedata.first;
+  SpaceGraph *sipo = (SpaceGraph *)area->spacedata.first;
 
   /* Set mode */
   sipo->mode = SIPO_MODE_DRIVERS;
 
   /* Show Properties Region (or else the settings can't be edited) */
-  ARegion *ar_props = BKE_area_find_region_type(sa, RGN_TYPE_UI);
-  if (ar_props) {
-    UI_panel_category_active_set(ar_props, "Drivers");
+  ARegion *region_props = BKE_area_find_region_type(area, RGN_TYPE_UI);
+  if (region_props) {
+    UI_panel_category_active_set(region_props, "Drivers");
 
-    ar_props->flag &= ~RGN_FLAG_HIDDEN;
+    region_props->flag &= ~RGN_FLAG_HIDDEN;
     /* XXX: Adjust width of this too? */
 
-    ED_region_visibility_change_update(C, sa, ar_props);
+    ED_region_visibility_change_update(C, area, region_props);
   }
   else {
-    printf("%s: Couldn't find properties region for Drivers Editor - %p\n", __func__, sa);
+    printf("%s: Couldn't find properties region for Drivers Editor - %p\n", __func__, area);
   }
 
   /* Adjust framing in graph region */
   /* TODO: Have a way of not resetting this every time?
    * (e.g. So that switching back and forth between editors doesn't keep jumping?)
    */
-  ARegion *ar_main = BKE_area_find_region_type(sa, RGN_TYPE_WINDOW);
-  if (ar_main) {
+  ARegion *region_main = BKE_area_find_region_type(area, RGN_TYPE_WINDOW);
+  if (region_main) {
     /* XXX: Ideally we recenter based on the range instead... */
-    ar_main->v2d.tot.xmin = -2.0f;
-    ar_main->v2d.tot.ymin = -2.0f;
-    ar_main->v2d.tot.xmax = 2.0f;
-    ar_main->v2d.tot.ymax = 2.0f;
+    region_main->v2d.tot.xmin = -2.0f;
+    region_main->v2d.tot.ymin = -2.0f;
+    region_main->v2d.tot.xmax = 2.0f;
+    region_main->v2d.tot.ymax = 2.0f;
 
-    ar_main->v2d.cur = ar_main->v2d.tot;
+    region_main->v2d.cur = region_main->v2d.tot;
   }
 }
 
@@ -135,20 +135,20 @@ bool graphop_visible_keyframes_poll(bContext *C)
   bAnimContext ac;
   bAnimListElem *ale;
   ListBase anim_data = {NULL, NULL};
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
   size_t items;
   int filter;
-  short found = 0;
+  bool found = false;
 
   /* firstly, check if in Graph Editor */
-  // TODO: also check for region?
-  if ((sa == NULL) || (sa->spacetype != SPACE_GRAPH)) {
-    return 0;
+  /* TODO: also check for region? */
+  if ((area == NULL) || (area->spacetype != SPACE_GRAPH)) {
+    return found;
   }
 
   /* try to init Anim-Context stuff ourselves and check */
   if (ANIM_animdata_get_context(C, &ac) == 0) {
-    return 0;
+    return found;
   }
 
   /* loop over the visible (selection doesn't matter) F-Curves, and see if they're suitable
@@ -157,7 +157,7 @@ bool graphop_visible_keyframes_poll(bContext *C)
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_CURVE_VISIBLE);
   items = ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
   if (items == 0) {
-    return 0;
+    return found;
   }
 
   for (ale = anim_data.first; ale; ale = ale->next) {
@@ -171,8 +171,8 @@ bool graphop_visible_keyframes_poll(bContext *C)
     if (fcu->bezt == NULL) {
       continue;
     }
-    if (fcurve_are_keyframes_usable(fcu)) {
-      found = 1;
+    if (BKE_fcurve_are_keyframes_usable(fcu)) {
+      found = true;
       break;
     }
   }
@@ -188,20 +188,20 @@ bool graphop_editable_keyframes_poll(bContext *C)
   bAnimContext ac;
   bAnimListElem *ale;
   ListBase anim_data = {NULL, NULL};
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
   size_t items;
   int filter;
-  short found = 0;
+  bool found = false;
 
   /* firstly, check if in Graph Editor */
-  // TODO: also check for region?
-  if ((sa == NULL) || (sa->spacetype != SPACE_GRAPH)) {
-    return 0;
+  /* TODO: also check for region? */
+  if ((area == NULL) || (area->spacetype != SPACE_GRAPH)) {
+    return found;
   }
 
   /* try to init Anim-Context stuff ourselves and check */
   if (ANIM_animdata_get_context(C, &ac) == 0) {
-    return 0;
+    return found;
   }
 
   /* loop over the editable F-Curves, and see if they're suitable
@@ -210,7 +210,7 @@ bool graphop_editable_keyframes_poll(bContext *C)
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_FOREDIT | ANIMFILTER_CURVE_VISIBLE);
   items = ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
   if (items == 0) {
-    return 0;
+    return found;
   }
 
   for (ale = anim_data.first; ale; ale = ale->next) {
@@ -222,11 +222,12 @@ bool graphop_editable_keyframes_poll(bContext *C)
      * - F-Curve modifiers do not interfere with the result too much
      *   (i.e. the modifier-control drawing check returns false)
      */
-    if (fcu->bezt == NULL) {
+    if (fcu->bezt == NULL && fcu->fpt != NULL) {
+      /* This is a baked curve, it is never editable. */
       continue;
     }
-    if (fcurve_is_keyframable(fcu)) {
-      found = 1;
+    if (BKE_fcurve_is_keyframable(fcu)) {
+      found = true;
       break;
     }
   }
@@ -241,24 +242,24 @@ bool graphop_active_fcurve_poll(bContext *C)
 {
   bAnimContext ac;
   bAnimListElem *ale;
-  ScrArea *sa = CTX_wm_area(C);
-  bool has_fcurve = 0;
+  ScrArea *area = CTX_wm_area(C);
+  bool has_fcurve = false;
 
   /* firstly, check if in Graph Editor */
-  // TODO: also check for region?
-  if ((sa == NULL) || (sa->spacetype != SPACE_GRAPH)) {
-    return 0;
+  /* TODO: also check for region? */
+  if ((area == NULL) || (area->spacetype != SPACE_GRAPH)) {
+    return has_fcurve;
   }
 
   /* try to init Anim-Context stuff ourselves and check */
   if (ANIM_animdata_get_context(C, &ac) == 0) {
-    return 0;
+    return has_fcurve;
   }
 
   /* try to get the Active F-Curve */
   ale = get_active_fcurve_channel(&ac);
   if (ale == NULL) {
-    return 0;
+    return has_fcurve;
   }
 
   /* Do we have a suitable F-Curves?
@@ -293,19 +294,19 @@ bool graphop_selected_fcurve_poll(bContext *C)
 {
   bAnimContext ac;
   ListBase anim_data = {NULL, NULL};
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
   size_t items;
   int filter;
 
   /* firstly, check if in Graph Editor */
-  // TODO: also check for region?
-  if ((sa == NULL) || (sa->spacetype != SPACE_GRAPH)) {
-    return 0;
+  /* TODO: also check for region? */
+  if ((area == NULL) || (area->spacetype != SPACE_GRAPH)) {
+    return false;
   }
 
   /* try to init Anim-Context stuff ourselves and check */
   if (ANIM_animdata_get_context(C, &ac) == 0) {
-    return 0;
+    return false;
   }
 
   /* Get the editable + selected F-Curves, and as long as we got some, we can return.
@@ -314,12 +315,12 @@ bool graphop_selected_fcurve_poll(bContext *C)
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_SEL | ANIMFILTER_FOREDIT);
   items = ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
   if (items == 0) {
-    return 0;
+    return false;
   }
 
   /* cleanup and return findings */
   ANIM_animdata_freelist(&anim_data);
-  return 1;
+  return true;
 }
 
 /* ************************************************************** */

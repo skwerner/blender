@@ -16,8 +16,8 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_MIXOPERATION_H__
-#define __COM_MIXOPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
 
 /**
@@ -39,10 +39,7 @@ class MixBaseOperation : public NodeOperation {
   inline void clampIfNeeded(float color[4])
   {
     if (m_useClamp) {
-      CLAMP(color[0], 0.0f, 1.0f);
-      CLAMP(color[1], 0.0f, 1.0f);
-      CLAMP(color[2], 0.0f, 1.0f);
-      CLAMP(color[3], 0.0f, 1.0f);
+      clamp_v4(color, 0.0f, 1.0f);
     }
   }
 
@@ -53,7 +50,7 @@ class MixBaseOperation : public NodeOperation {
   MixBaseOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
 
@@ -95,9 +92,9 @@ class MixBlendOperation : public MixBaseOperation {
   void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
 };
 
-class MixBurnOperation : public MixBaseOperation {
+class MixColorBurnOperation : public MixBaseOperation {
  public:
-  MixBurnOperation();
+  MixColorBurnOperation();
   void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
 };
 
@@ -196,5 +193,3 @@ class MixValueOperation : public MixBaseOperation {
   MixValueOperation();
   void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
 };
-
-#endif

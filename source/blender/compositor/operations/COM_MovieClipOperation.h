@@ -16,12 +16,11 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_MOVIECLIPOPERATION_H__
-#define __COM_MOVIECLIPOPERATION_H__
+#pragma once
 
+#include "BLI_listbase.h"
 #include "COM_NodeOperation.h"
 #include "DNA_movieclip_types.h"
-#include "BLI_listbase.h"
 #include "IMB_imbuf_types.h"
 
 /**
@@ -77,5 +76,3 @@ class MovieClipAlphaOperation : public MovieClipBaseOperation {
   MovieClipAlphaOperation();
   void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
 };
-
-#endif

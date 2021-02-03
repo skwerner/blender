@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_STROKE_H__
-#define __FREESTYLE_STROKE_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -194,13 +193,13 @@ class StrokeAttribute {
    */
   Vec3f getAttributeVec3f(const char *iName) const;
 
-  /*! Checks whether the attribute iName is availbale */
+  /*! Checks whether the attribute iName is available */
   bool isAttributeAvailableReal(const char *iName) const;
 
-  /*! Checks whether the attribute iName is availbale */
+  /*! Checks whether the attribute iName is available */
   bool isAttributeAvailableVec2f(const char *iName) const;
 
-  /*! Checks whether the attribute iName is availbale */
+  /*! Checks whether the attribute iName is available */
   bool isAttributeAvailableVec3f(const char *iName) const;
 
   /* modifiers */
@@ -590,7 +589,8 @@ class Stroke : public Interface1D {
   /*! Resampling method.
    *  Resamples the curve so that it eventually has iNPoints. That means it is going to add
    * iNPoints-vertices_size, if vertices_size is the number of points we already have. If
-   * vertices_size >= iNPoints, no resampling is done. \param iNPoints: The number of vertices we
+   * vertices_size >= iNPoints, no resampling is done.
+   * \param iNPoints: The number of vertices we
    * eventually want in our stroke.
    */
   int Resample(int iNPoints);
@@ -619,7 +619,7 @@ class Stroke : public Interface1D {
    *  \param iVertex:
    *    The StrokeVertex to insert in the Stroke.
    *  \param next:
-   *    A StrokeVertexIterator pointing to the StrokeVeretx before which iVertex must be inserted.
+   *    A StrokeVertexIterator pointing to the StrokeVertex before which iVertex must be inserted.
    */
   void InsertVertex(StrokeVertex *iVertex, StrokeInternal::StrokeVertexIterator next);
 
@@ -653,7 +653,7 @@ class Stroke : public Interface1D {
     return _textureId;
   }
 
-  /*! Returns the spacing of texture coordinates along the stroke lenght */
+  /*! Returns the spacing of texture coordinates along the stroke length */
   inline float getTextureStep()
   {
     return _textureStep;
@@ -766,7 +766,7 @@ class Stroke : public Interface1D {
     _textureId = id;
   }
 
-  /*! sets the spacing of texture coordinates along the stroke lenght. */
+  /*! sets the spacing of texture coordinates along the stroke length. */
   inline void setTextureStep(float step)
   {
     _textureStep = step;
@@ -835,13 +835,15 @@ class Stroke : public Interface1D {
 
   // embedding vertex iterator
   const_vertex_iterator vertices_begin() const;
-  vertex_iterator vertices_begin(float t = 0.0f);
+  vertex_iterator vertices_begin(float sampling = 0.0f);
   const_vertex_iterator vertices_end() const;
   vertex_iterator vertices_end();
 
   /*! Returns a StrokeVertexIterator pointing on the first StrokeVertex of the Stroke. One can
-   * specify a sampling value to resample the Stroke on the fly if needed. \param t: The resampling
-   * value with which we want our Stroke to be resampled. If 0 is specified, no resampling is done.
+   * specify a sampling value to re-sample the Stroke on the fly if needed.
+   *
+   * \param t: The resampling value with which we want our Stroke to be resampled.
+   * If 0 is specified, no resampling is done.
    */
   StrokeInternal::StrokeVertexIterator strokeVerticesBegin(float t = 0.0f);
 
@@ -891,5 +893,3 @@ Stroke::Stroke(InputVertexIterator iBegin, InputVertexIterator iEnd)
 }
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_STROKE_H__

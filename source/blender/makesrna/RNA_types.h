@@ -18,6 +18,7 @@
  * \ingroup RNA
  */
 
+/* Use a define instead of `#pragma once` because of `BKE_addon.h`, `ED_object.h` & others. */
 #ifndef __RNA_TYPES_H__
 #define __RNA_TYPES_H__
 
@@ -29,6 +30,7 @@ extern "C" {
 
 struct BlenderRNA;
 struct FunctionRNA;
+struct ID;
 struct Main;
 struct ParameterList;
 struct PropertyRNA;
@@ -36,7 +38,8 @@ struct ReportList;
 struct StructRNA;
 struct bContext;
 
-/** Pointer
+/**
+ * Pointer
  *
  * RNA pointers are not a single C pointer but include the type,
  * and a pointer to the ID struct that owns the struct, since
@@ -44,10 +47,7 @@ struct bContext;
  * the properties and validate them. */
 
 typedef struct PointerRNA {
-  struct {
-    void *data;
-  } id;
-
+  struct ID *owner_id;
   struct StructRNA *type;
   void *data;
 } PointerRNA;
@@ -92,6 +92,7 @@ typedef enum PropertyUnit {
   PROP_UNIT_ACCELERATION = (8 << 16), /* m/(s^2) */
   PROP_UNIT_CAMERA = (9 << 16),       /* mm */
   PROP_UNIT_POWER = (10 << 16),       /* W */
+  PROP_UNIT_TEMPERATURE = (11 << 16), /* C */
 } PropertyUnit;
 
 #define RNA_SUBTYPE_UNIT(subtype) ((subtype)&0x00FF0000)
@@ -105,7 +106,7 @@ typedef enum PropertyUnit {
 #define RNA_STACK_ARRAY 32
 
 /**
- * \note Also update enums in bpy_props.c when adding items here.
+ * \note Also update enums in bpy_props.c and rna_rna.c when adding items here.
  * Watch it: these values are written to files as part of node socket button subtypes!
  */
 typedef enum PropertySubType {
@@ -122,6 +123,8 @@ typedef enum PropertySubType {
   PROP_PASSWORD = 6,
 
   /* numbers */
+  /** A dimension in pixel units, possibly before DPI scaling (so value may not be the final pixel
+   * value but the one to apply DPI scale to). */
   PROP_PIXEL = 12,
   PROP_UNSIGNED = 13,
   PROP_PERCENTAGE = 14,
@@ -155,6 +158,9 @@ typedef enum PropertySubType {
 
   /** Light */
   PROP_POWER = 42 | PROP_UNIT_POWER,
+
+  /* temperature */
+  PROP_TEMPERATURE = 43 | PROP_UNIT_TEMPERATURE,
 } PropertySubType;
 
 /* Make sure enums are updated with these */
@@ -181,8 +187,8 @@ typedef enum PropertyFlag {
    */
   PROP_ANIMATABLE = (1 << 1),
   /**
-   * This flag means when the property's widget is in 'textedit' mode, it will be updated
-   * after every typed char, instead of waiting final validation. Used e.g. for text searchbox.
+   * This flag means when the property's widget is in 'text-edit' mode, it will be updated
+   * after every typed char, instead of waiting final validation. Used e.g. for text search-box.
    * It will also cause UI_BUT_VALUE_CLEAR to be set for text buttons. We could add an own flag
    * for search/filter properties, but this works just fine for now.
    */
@@ -253,8 +259,13 @@ typedef enum PropertyFlag {
   PROP_REGISTER_OPTIONAL = PROP_REGISTER | (1 << 5),
 
   /**
-   * Use for arrays or for any data that should not have a reference kept
-   * most common case is functions that return arrays where the array.
+   * Use for allocated function return values of arrays or strings
+   * for any data that should not have a reference kept.
+   *
+   * It can be used for properties which are dynamically allocated too.
+   *
+   * \note Currently dynamic sized thick wrapped data isn't supported.
+   * This would be a useful addition and avoid a fixed maximum sized as in done at the moment.
    */
   PROP_THICK_WRAP = (1 << 23),
 
@@ -288,8 +299,22 @@ typedef enum PropertyOverrideFlag {
   /**
    * Forbid usage of this property in comparison (& hence override) code.
    * Useful e.g. for collections of data like mesh's geometry, particles, etc.
+   * Also for runtime data that should never be considered as part of actual Blend data (e.g.
+   * depsgraph from ViewLayers...).
    */
   PROPOVERRIDE_NO_COMPARISON = (1 << 1),
+
+  /**
+   * Means the property can be fully ignored by override process.
+   * Unlike NO_COMPARISON, it can still be used by diffing code, but no override operation will be
+   * created for it, and no attempt to restore the data from linked reference either.
+   *
+   * WARNING: This flag should be used with a lot of caution, as it completely by-passes override
+   * system. It is currently only used for ID's names, since we cannot prevent local override to
+   * get a different name from the linked reference, and ID names are 'rna name property' (i.e. are
+   * used in overrides of collections of IDs). See also `BKE_lib_override_library_update()` where
+   * we deal manually with the value of that property at DNA level. */
+  PROPOVERRIDE_IGNORE = (1 << 2),
 
   /*** Collections-related ***/
 
@@ -354,6 +379,11 @@ typedef struct ArrayIterator {
   IteratorSkipFunc skip;
 } ArrayIterator;
 
+typedef struct CountIterator {
+  void *ptr;
+  int item;
+} CountIterator;
+
 typedef struct CollectionPropertyIterator {
   /* internal */
   PointerRNA parent;
@@ -362,6 +392,7 @@ typedef struct CollectionPropertyIterator {
   union {
     ArrayIterator array;
     ListBaseIterator listbase;
+    CountIterator count;
     void *custom;
   } internal;
   int idprop;
@@ -384,7 +415,7 @@ typedef struct CollectionListBase {
 
 typedef enum RawPropertyType {
   PROP_RAW_UNSET = -1,
-  PROP_RAW_INT,  // XXX - abused for types that are not set, eg. MFace.verts, needs fixing.
+  PROP_RAW_INT, /* XXX - abused for types that are not set, eg. MFace.verts, needs fixing. */
   PROP_RAW_SHORT,
   PROP_RAW_CHAR,
   PROP_RAW_BOOLEAN,
@@ -529,7 +560,7 @@ typedef struct ParameterDynAlloc {
 typedef enum FunctionFlag {
   /**
    * Pass ID owning 'self' data
-   * (i.e. ptr->id.data, might be same as self in case data is an ID...).
+   * (i.e. ptr->owner_id, might be same as self in case data is an ID...).
    */
   FUNC_USE_SELF_ID = (1 << 11),
 
@@ -593,7 +624,7 @@ typedef enum StructFlag {
 
   /* internal flags */
   STRUCT_RUNTIME = (1 << 3),
-  STRUCT_GENERATED = (1 << 4),
+  /* STRUCT_GENERATED = (1 << 4), */ /* UNUSED */
   STRUCT_FREE_POINTERS = (1 << 5),
   /** Menus and Panels don't need properties */
   STRUCT_NO_IDPROPERTIES = (1 << 6),
@@ -637,7 +668,7 @@ typedef struct BlenderRNA BlenderRNA;
  * Extending
  *
  * This struct must be embedded in *Type structs in
- * order to make then definable through RNA.
+ * order to make them definable through RNA.
  */
 typedef struct ExtensionRNA {
   void *data;

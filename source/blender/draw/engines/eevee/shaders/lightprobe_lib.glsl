@@ -1,7 +1,16 @@
+
+#pragma BLENDER_REQUIRE(common_math_geom_lib.glsl)
+#pragma BLENDER_REQUIRE(common_view_lib.glsl)
+#pragma BLENDER_REQUIRE(common_utiltex_lib.glsl)
+#pragma BLENDER_REQUIRE(common_uniforms_lib.glsl)
+#pragma BLENDER_REQUIRE(cubemap_lib.glsl)
+#pragma BLENDER_REQUIRE(ambient_occlusion_lib.glsl)
+#pragma BLENDER_REQUIRE(irradiance_lib.glsl)
+
 /* ----------- Uniforms --------- */
 
 uniform sampler2DArray probePlanars;
-uniform sampler2DArray probeCubes;
+uniform samplerCubeArray probeCubes;
 
 /* ----------- Structures --------- */
 
@@ -72,12 +81,6 @@ struct GridData {
 #ifndef MAX_PLANAR
 #  define MAX_PLANAR 1
 #endif
-
-#ifndef UTIL_TEX
-#  define UTIL_TEX
-uniform sampler2DArray utilTex;
-#  define texelfetch_noise_tex(coord) texelFetch(utilTex, ivec3(ivec2(coord) % LUT_SIZE, 2.0), 0)
-#endif /* UTIL_TEX */
 
 layout(std140) uniform probe_block
 {
@@ -172,15 +175,12 @@ vec3 probe_evaluate_cube(int pd_id, vec3 W, vec3 R, float roughness)
   float fac = saturate(original_roughness * 2.0 - 1.0);
   R = mix(intersection, R, fac * fac);
 
-  return textureLod_octahedron(
-             probeCubes, vec4(R, float(pd_id)), roughness * prbLodCubeMax, prbLodCubeMax)
-      .rgb;
+  return textureLod_cubemapArray(probeCubes, vec4(R, float(pd_id)), roughness * prbLodCubeMax).rgb;
 }
 
 vec3 probe_evaluate_world_spec(vec3 R, float roughness)
 {
-  return textureLod_octahedron(probeCubes, vec4(R, 0.0), roughness * prbLodCubeMax, prbLodCubeMax)
-      .rgb;
+  return textureLod_cubemapArray(probeCubes, vec4(R, 0.0), roughness * prbLodCubeMax).rgb;
 }
 
 vec3 probe_evaluate_planar(
@@ -221,7 +221,7 @@ void fallback_cubemap(vec3 N,
                       inout vec4 spec_accum)
 {
   /* Specular probes */
-  vec3 spec_dir = get_specular_reflection_dominant_dir(N, V, roughnessSquared);
+  vec3 spec_dir = specular_dominant_dir(N, V, roughnessSquared);
 
 #ifdef SSR_AO
   vec4 rand = texelfetch_noise_tex(gl_FragCoord.xy);
@@ -233,7 +233,7 @@ void fallback_cubemap(vec3 N,
 #endif
 
   /* Starts at 1 because 0 is world probe */
-  for (int i = 1; i < MAX_PROBE && i < prbNumRenderCube && spec_accum.a < 0.999; ++i) {
+  for (int i = 1; i < MAX_PROBE && i < prbNumRenderCube && spec_accum.a < 0.999; i++) {
     float fade = probe_attenuation_cube(i, W);
 
     if (fade > 0.0) {
@@ -249,7 +249,6 @@ void fallback_cubemap(vec3 N,
   }
 }
 
-#ifdef IRRADIANCE_LIB
 vec3 probe_evaluate_grid(GridData gd, vec3 W, vec3 N, vec3 localpos)
 {
   localpos = localpos * 0.5 + 0.5;
@@ -261,8 +260,8 @@ vec3 probe_evaluate_grid(GridData gd, vec3 W, vec3 N, vec3 localpos)
   float weight_accum = 0.0;
   vec3 irradiance_accum = vec3(0.0);
 
-  /* For each neighboor cells */
-  for (int i = 0; i < 8; ++i) {
+  /* For each neighbor cells */
+  for (int i = 0; i < 8; i++) {
     ivec3 offset = ivec3(i, i >> 1, i >> 2) & ivec3(1);
     vec3 cell_cos = clamp(localpos_floored + vec3(offset), vec3(0.0), vec3(gd.g_resolution) - 1.0);
 
@@ -311,5 +310,3 @@ vec3 probe_evaluate_world_diff(vec3 N)
 {
   return irradiance_from_cell_get(0, N);
 }
-
-#endif /* IRRADIANCE_LIB */

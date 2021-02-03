@@ -53,7 +53,7 @@ typedef unsigned short ushort;
 /* Fixed Bits Types */
 
 #ifdef __KERNEL_OPENCL__
-typedef ulong uint64_t;
+typedef unsigned long uint64_t;
 #endif
 
 #ifndef __KERNEL_GPU__
@@ -99,6 +99,11 @@ ccl_device_inline size_t round_up(size_t x, size_t multiple)
 ccl_device_inline size_t round_down(size_t x, size_t multiple)
 {
   return (x / multiple) * multiple;
+}
+
+ccl_device_inline bool is_power_of_two(size_t x)
+{
+  return (x & (x - 1)) == 0;
 }
 
 CCL_NAMESPACE_END
@@ -148,11 +153,12 @@ CCL_NAMESPACE_END
 /* SSE types. */
 #ifndef __KERNEL_GPU__
 #  include "util/util_sseb.h"
-#  include "util/util_ssei.h"
 #  include "util/util_ssef.h"
+#  include "util/util_ssei.h"
 #  if defined(__KERNEL_AVX__) || defined(__KERNEL_AVX2__)
 #    include "util/util_avxb.h"
 #    include "util/util_avxf.h"
+#    include "util/util_avxi.h"
 #  endif
 #endif
 

@@ -16,12 +16,16 @@
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
  */
-#ifndef __BKE_MBALL_H__
-#define __BKE_MBALL_H__
+#pragma once
 
 /** \file
  * \ingroup bke
  */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct Base;
 struct BoundBox;
 struct Depsgraph;
@@ -31,16 +35,7 @@ struct MetaElem;
 struct Object;
 struct Scene;
 
-void BKE_mball_free(struct MetaBall *mb);
-void BKE_mball_init(struct MetaBall *mb);
 struct MetaBall *BKE_mball_add(struct Main *bmain, const char *name);
-void BKE_mball_copy_data(struct Main *bmain,
-                         struct MetaBall *mb_dst,
-                         const struct MetaBall *mb_src,
-                         const int flag);
-struct MetaBall *BKE_mball_copy(struct Main *bmain, const struct MetaBall *mb);
-
-void BKE_mball_make_local(struct Main *bmain, struct MetaBall *mb, const bool lib_local);
 
 bool BKE_mball_is_any_selected(const struct MetaBall *mb);
 bool BKE_mball_is_any_selected_multi(struct Base **bases, int bases_len);
@@ -63,7 +58,7 @@ bool BKE_mball_minmax_ex(const struct MetaBall *mb,
 bool BKE_mball_minmax(const struct MetaBall *mb, float min[3], float max[3]);
 bool BKE_mball_center_median(const struct MetaBall *mb, float r_cent[3]);
 bool BKE_mball_center_bounds(const struct MetaBall *mb, float r_cent[3]);
-void BKE_mball_transform(struct MetaBall *mb, float mat[4][4], const bool do_props);
+void BKE_mball_transform(struct MetaBall *mb, const float mat[4][4], const bool do_props);
 void BKE_mball_translate(struct MetaBall *mb, const float offset[3]);
 
 struct MetaElem *BKE_mball_element_add(struct MetaBall *mb, const int type);
@@ -92,4 +87,6 @@ void BKE_mball_batch_cache_free(struct MetaBall *mb);
 extern void (*BKE_mball_batch_cache_dirty_tag_cb)(struct MetaBall *mb, int mode);
 extern void (*BKE_mball_batch_cache_free_cb)(struct MetaBall *mb);
 
+#ifdef __cplusplus
+}
 #endif

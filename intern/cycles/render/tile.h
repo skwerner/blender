@@ -89,6 +89,7 @@ class TileManager {
   } state;
 
   int num_samples;
+  int slice_overlap;
 
   TileManager(bool progressive,
               int num_samples,
@@ -105,14 +106,18 @@ class TileManager {
   void reset(BufferParams &params, int num_samples);
   void set_samples(int num_samples);
   bool next();
-  bool next_tile(Tile *&tile, int device = 0);
-  bool finish_tile(int index, bool &delete_tile);
+  bool next_tile(Tile *&tile, int device, uint tile_types);
+  bool finish_tile(const int index, const bool need_denoise, bool &delete_tile);
   bool done();
+  bool has_tiles();
 
   void set_tile_order(TileOrder tile_order_)
   {
     tile_order = tile_order_;
   }
+
+  int get_neighbor_index(int index, int neighbor);
+  bool check_neighbor_state(int index, Tile::State state);
 
   /* ** Sample range rendering. ** */
 
@@ -153,16 +158,13 @@ class TileManager {
    *
    * however viewport rendering expects tiles to be allocated in a special way,
    * meaning image is being sliced horizontally first and every device handles
-   * it's own slice
+   * its own slice
    */
   bool background;
 
   /* Generate tile list, return number of tiles. */
   int gen_tiles(bool sliced);
   void gen_render_tiles();
-
-  int get_neighbor_index(int index, int neighbor);
-  bool check_neighbor_state(int index, Tile::State state);
 };
 
 CCL_NAMESPACE_END

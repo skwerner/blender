@@ -166,7 +166,7 @@ static bool bm_edge_delimit_cdata(CustomData *ldata,
   r_delim_cd->cd_type = type;
   r_delim_cd->cd_size = CustomData_sizeof(r_delim_cd->cd_type);
   r_delim_cd->cd_offset = CustomData_get_n_offset(ldata, type, 0);
-  r_delim_cd->cd_offset_end = r_delim_cd->cd_size * layer_len;
+  r_delim_cd->cd_offset_end = r_delim_cd->cd_offset + (r_delim_cd->cd_size * layer_len);
   return (r_delim_cd->cd_offset != -1);
 }
 
@@ -260,7 +260,7 @@ void bmo_join_triangles_exec(BMesh *bm, BMOperator *op)
   BMEdge *e;
   /* data: edge-to-join, sort_value: error weight */
   struct SortPtrByFloat *jedges;
-  unsigned i, totedge;
+  uint i, totedge;
   uint totedge_tag = 0;
 
   struct DelimitData delimit_data = {0};

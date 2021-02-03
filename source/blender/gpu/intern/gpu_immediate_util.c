@@ -23,12 +23,13 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "BLI_utildefines.h"
 #include "BLI_math.h"
+#include "BLI_utildefines.h"
 
 #include "GPU_immediate.h"
 #include "GPU_immediate_util.h"
-#include "GPU_matrix.h"
+
+#include "UI_resources.h"
 
 static const float cube_coords[8][3] = {
     {-1, -1, -1},
@@ -167,7 +168,7 @@ static void imm_draw_circle(GPUPrimType prim_type,
                             int nsegments)
 {
   immBegin(prim_type, nsegments);
-  for (int i = 0; i < nsegments; ++i) {
+  for (int i = 0; i < nsegments; i++) {
     const float angle = (float)(2 * M_PI) * ((float)i / (float)nsegments);
     immVertex2f(shdr_pos, x + (rad_x * cosf(angle)), y + (rad_y * sinf(angle)));
   }
@@ -229,7 +230,7 @@ static void imm_draw_circle_partial(GPUPrimType prim_type,
   const float angle_end = -(DEG2RADF(sweep) - angle_start);
   nsegments += 1;
   immBegin(prim_type, nsegments);
-  for (int i = 0; i < nsegments; ++i) {
+  for (int i = 0; i < nsegments; i++) {
     const float angle = interpf(angle_start, angle_end, ((float)i / (float)(nsegments - 1)));
     const float angle_sin = sinf(angle);
     const float angle_cos = cosf(angle);
@@ -263,7 +264,7 @@ static void imm_draw_disk_partial(GPUPrimType prim_type,
   const float angle_end = -(DEG2RADF(sweep) - angle_start);
   nsegments += 1;
   immBegin(prim_type, nsegments * 2);
-  for (int i = 0; i < nsegments; ++i) {
+  for (int i = 0; i < nsegments; i++) {
     const float angle = interpf(angle_start, angle_end, ((float)i / (float)(nsegments - 1)));
     const float angle_sin = sinf(angle);
     const float angle_cos = cosf(angle);
@@ -305,7 +306,7 @@ static void imm_draw_circle_3D(
     GPUPrimType prim_type, uint pos, float x, float y, float rad, int nsegments)
 {
   immBegin(prim_type, nsegments);
-  for (int i = 0; i < nsegments; ++i) {
+  for (int i = 0; i < nsegments; i++) {
     float angle = (float)(2 * M_PI) * ((float)i / (float)nsegments);
     immVertex3f(pos, x + rad * cosf(angle), y + rad * sinf(angle), 0.0f);
   }
@@ -315,6 +316,11 @@ static void imm_draw_circle_3D(
 void imm_draw_circle_wire_3d(uint pos, float x, float y, float rad, int nsegments)
 {
   imm_draw_circle_3D(GPU_PRIM_LINE_LOOP, pos, x, y, rad, nsegments);
+}
+
+void imm_draw_circle_dashed_3d(uint pos, float x, float y, float rad, int nsegments)
+{
+  imm_draw_circle_3D(GPU_PRIM_LINES, pos, x, y, rad, nsegments / 2);
 }
 
 void imm_draw_circle_fill_3d(uint pos, float x, float y, float rad, int nsegments)
@@ -355,18 +361,34 @@ void imm_draw_box_wire_3d(uint pos, float x1, float y1, float x2, float y2)
 /**
  * Draw a standard checkerboard to indicate transparent backgrounds.
  */
-void imm_draw_box_checker_2d(float x1, float y1, float x2, float y2)
+void imm_draw_box_checker_2d_ex(float x1,
+                                float y1,
+                                float x2,
+                                float y2,
+                                const float color_primary[4],
+                                const float color_secondary[4],
+                                int checker_size)
 {
   uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+
   immBindBuiltinProgram(GPU_SHADER_2D_CHECKER);
 
-  immUniform4f("color1", 0.15f, 0.15f, 0.15f, 1.0f);
-  immUniform4f("color2", 0.2f, 0.2f, 0.2f, 1.0f);
-  immUniform1i("size", 8);
+  immUniform4fv("color1", color_primary);
+  immUniform4fv("color2", color_secondary);
+  immUniform1i("size", checker_size);
 
   immRectf(pos, x1, y1, x2, y2);
 
   immUnbindProgram();
+}
+void imm_draw_box_checker_2d(float x1, float y1, float x2, float y2)
+{
+  float checker_primary[4];
+  float checker_secondary[4];
+  UI_GetThemeColor4fv(TH_TRANSPARENT_CHECKER_PRIMARY, checker_primary);
+  UI_GetThemeColor4fv(TH_TRANSPARENT_CHECKER_SECONDARY, checker_secondary);
+  int checker_size = UI_GetThemeValue(TH_TRANSPARENT_CHECKER_SIZE);
+  imm_draw_box_checker_2d_ex(x1, y1, x2, y2, checker_primary, checker_secondary, checker_size);
 }
 
 void imm_draw_cube_fill_3d(uint pos, const float co[3], const float aspect[3])
@@ -422,7 +444,7 @@ void imm_draw_cylinder_fill_normal_3d(
     uint pos, uint nor, float base, float top, float height, int slices, int stacks)
 {
   immBegin(GPU_PRIM_TRIS, 6 * slices * stacks);
-  for (int i = 0; i < slices; ++i) {
+  for (int i = 0; i < slices; i++) {
     const float angle1 = (float)(2 * M_PI) * ((float)i / (float)slices);
     const float angle2 = (float)(2 * M_PI) * ((float)(i + 1) / (float)slices);
     const float cos1 = cosf(angle1);
@@ -430,18 +452,18 @@ void imm_draw_cylinder_fill_normal_3d(
     const float cos2 = cosf(angle2);
     const float sin2 = sinf(angle2);
 
-    for (int j = 0; j < stacks; ++j) {
+    for (int j = 0; j < stacks; j++) {
       float fac1 = (float)j / (float)stacks;
       float fac2 = (float)(j + 1) / (float)stacks;
-      float r1 = base * (1.f - fac1) + top * fac1;
-      float r2 = base * (1.f - fac2) + top * fac2;
+      float r1 = base * (1.0f - fac1) + top * fac1;
+      float r2 = base * (1.0f - fac2) + top * fac2;
       float h1 = height * ((float)j / (float)stacks);
       float h2 = height * ((float)(j + 1) / (float)stacks);
 
-      float v1[3] = {r1 * cos2, r1 * sin2, h1};
-      float v2[3] = {r2 * cos2, r2 * sin2, h2};
-      float v3[3] = {r2 * cos1, r2 * sin1, h2};
-      float v4[3] = {r1 * cos1, r1 * sin1, h1};
+      const float v1[3] = {r1 * cos2, r1 * sin2, h1};
+      const float v2[3] = {r2 * cos2, r2 * sin2, h2};
+      const float v3[3] = {r2 * cos1, r2 * sin1, h2};
+      const float v4[3] = {r1 * cos1, r1 * sin1, h1};
       float n1[3], n2[3];
 
       /* calc normals */
@@ -478,7 +500,7 @@ void imm_draw_cylinder_wire_3d(
     uint pos, float base, float top, float height, int slices, int stacks)
 {
   immBegin(GPU_PRIM_LINES, 6 * slices * stacks);
-  for (int i = 0; i < slices; ++i) {
+  for (int i = 0; i < slices; i++) {
     const float angle1 = (float)(2 * M_PI) * ((float)i / (float)slices);
     const float angle2 = (float)(2 * M_PI) * ((float)(i + 1) / (float)slices);
     const float cos1 = cosf(angle1);
@@ -486,18 +508,18 @@ void imm_draw_cylinder_wire_3d(
     const float cos2 = cosf(angle2);
     const float sin2 = sinf(angle2);
 
-    for (int j = 0; j < stacks; ++j) {
+    for (int j = 0; j < stacks; j++) {
       float fac1 = (float)j / (float)stacks;
       float fac2 = (float)(j + 1) / (float)stacks;
-      float r1 = base * (1.f - fac1) + top * fac1;
-      float r2 = base * (1.f - fac2) + top * fac2;
+      float r1 = base * (1.0f - fac1) + top * fac1;
+      float r2 = base * (1.0f - fac2) + top * fac2;
       float h1 = height * ((float)j / (float)stacks);
       float h2 = height * ((float)(j + 1) / (float)stacks);
 
-      float v1[3] = {r1 * cos2, r1 * sin2, h1};
-      float v2[3] = {r2 * cos2, r2 * sin2, h2};
-      float v3[3] = {r2 * cos1, r2 * sin1, h2};
-      float v4[3] = {r1 * cos1, r1 * sin1, h1};
+      const float v1[3] = {r1 * cos2, r1 * sin2, h1};
+      const float v2[3] = {r2 * cos2, r2 * sin2, h2};
+      const float v3[3] = {r2 * cos1, r2 * sin1, h2};
+      const float v4[3] = {r1 * cos1, r1 * sin1, h1};
 
       immVertex3fv(pos, v1);
       immVertex3fv(pos, v2);
@@ -516,7 +538,7 @@ void imm_draw_cylinder_fill_3d(
     uint pos, float base, float top, float height, int slices, int stacks)
 {
   immBegin(GPU_PRIM_TRIS, 6 * slices * stacks);
-  for (int i = 0; i < slices; ++i) {
+  for (int i = 0; i < slices; i++) {
     const float angle1 = (float)(2 * M_PI) * ((float)i / (float)slices);
     const float angle2 = (float)(2 * M_PI) * ((float)(i + 1) / (float)slices);
     const float cos1 = cosf(angle1);
@@ -524,18 +546,18 @@ void imm_draw_cylinder_fill_3d(
     const float cos2 = cosf(angle2);
     const float sin2 = sinf(angle2);
 
-    for (int j = 0; j < stacks; ++j) {
+    for (int j = 0; j < stacks; j++) {
       float fac1 = (float)j / (float)stacks;
       float fac2 = (float)(j + 1) / (float)stacks;
-      float r1 = base * (1.f - fac1) + top * fac1;
-      float r2 = base * (1.f - fac2) + top * fac2;
+      float r1 = base * (1.0f - fac1) + top * fac1;
+      float r2 = base * (1.0f - fac2) + top * fac2;
       float h1 = height * ((float)j / (float)stacks);
       float h2 = height * ((float)(j + 1) / (float)stacks);
 
-      float v1[3] = {r1 * cos2, r1 * sin2, h1};
-      float v2[3] = {r2 * cos2, r2 * sin2, h2};
-      float v3[3] = {r2 * cos1, r2 * sin1, h2};
-      float v4[3] = {r1 * cos1, r1 * sin1, h1};
+      const float v1[3] = {r1 * cos2, r1 * sin2, h1};
+      const float v2[3] = {r2 * cos2, r2 * sin2, h2};
+      const float v3[3] = {r2 * cos1, r2 * sin1, h2};
+      const float v4[3] = {r1 * cos1, r1 * sin1, h1};
 
       /* first tri */
       immVertex3fv(pos, v1);

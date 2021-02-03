@@ -17,10 +17,13 @@
  * All rights reserved.
  */
 
-#ifndef __IMB_IMBUF_TYPES_H__
-#define __IMB_IMBUF_TYPES_H__
+#pragma once
 
 #include "DNA_vec_types.h" /* for rcti */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /** \file
  * \ingroup imbuf
@@ -66,7 +69,7 @@ typedef struct DDSData {
  * See T46524. */
 
 /** #ImBuf.ftype flag, main image types. */
-enum eImbTypes {
+enum eImbFileType {
   IMB_FTYPE_PNG = 1,
   IMB_FTYPE_TGA = 2,
   IMB_FTYPE_JPG = 3,
@@ -94,6 +97,9 @@ enum eImbTypes {
   IMB_FTYPE_DDS = 13,
 #endif
 };
+
+/* Only for readability. */
+#define IMB_FTYPE_NONE 0
 
 /* ibuf->foptions flag, type specific options.
  * Some formats include compression rations on some bits */
@@ -137,6 +143,38 @@ typedef struct ImbFormatOptions {
   char quality;
 } ImbFormatOptions;
 
+/**
+ * \name Imbuf Component flags
+ * \brief These flags determine the components of an ImBuf struct.
+ *
+ * \{ */
+
+typedef enum eImBufFlags {
+  IB_rect = 1 << 0,
+  IB_test = 1 << 1,
+  IB_zbuf = 1 << 3,
+  IB_mem = 1 << 4,
+  IB_rectfloat = 1 << 5,
+  IB_zbuffloat = 1 << 6,
+  IB_multilayer = 1 << 7,
+  IB_metadata = 1 << 8,
+  IB_animdeinterlace = 1 << 9,
+  IB_tiles = 1 << 10,
+  IB_tilecache = 1 << 11,
+  /** indicates whether image on disk have premul alpha */
+  IB_alphamode_premul = 1 << 12,
+  /** if this flag is set, alpha mode would be guessed from file */
+  IB_alphamode_detect = 1 << 13,
+  /* alpha channel is unrelated to RGB and should not affect it */
+  IB_alphamode_channel_packed = 1 << 14,
+  /** ignore alpha on load and substitute it with 1.0f */
+  IB_alphamode_ignore = 1 << 15,
+  IB_thumbnail = 1 << 16,
+  IB_multiview = 1 << 17,
+  IB_halffloat = 1 << 18,
+} eImBufFlags;
+
+/** \} */
 typedef struct ImBuf {
   struct ImBuf *next, *prev; /**< allow lists of ImBufs, for caches or flipbooks */
 
@@ -173,7 +211,7 @@ typedef struct ImBuf {
    */
   float *rect_float;
 
-  /* resolution - pixels per meter */
+  /** Resolution in pixels per meter. Multiply by `0.0254` for DPI. */
   double ppm[2];
 
   /* tiled pixel storage */
@@ -208,7 +246,7 @@ typedef struct ImBuf {
 
   /* file information */
   /** file type we are going to save as */
-  enum eImbTypes ftype;
+  enum eImbFileType ftype;
   /** file format specific flags */
   ImbFormatOptions foptions;
   /** filename associated with this image */
@@ -264,38 +302,6 @@ enum {
 };
 
 /**
- * \name Imbuf Component flags
- * \brief These flags determine the components of an ImBuf struct.
- *
- * \{ */
-
-enum {
-  IB_rect = 1 << 0,
-  IB_test = 1 << 1,
-  IB_zbuf = 1 << 3,
-  IB_mem = 1 << 4,
-  IB_rectfloat = 1 << 5,
-  IB_zbuffloat = 1 << 6,
-  IB_multilayer = 1 << 7,
-  IB_metadata = 1 << 8,
-  IB_animdeinterlace = 1 << 9,
-  IB_tiles = 1 << 10,
-  IB_tilecache = 1 << 11,
-  /** indicates whether image on disk have premul alpha */
-  IB_alphamode_premul = 1 << 12,
-  /** if this flag is set, alpha mode would be guessed from file */
-  IB_alphamode_detect = 1 << 13,
-  /* alpha channel is unrelated to RGB and should not affect it */
-  IB_alphamode_channel_packed = 1 << 14,
-  /** ignore alpha on load and substitute it with 1.0f */
-  IB_alphamode_ignore = 1 << 15,
-  IB_thumbnail = 1 << 16,
-  IB_multiview = 1 << 17,
-};
-
-/** \} */
-
-/**
  * \name Imbuf preset profile tags
  * \brief Some predefined color space profiles that 8 bit imbufs can represent
  *
@@ -346,4 +352,6 @@ enum {
 
 /** \} */
 
-#endif /* __IMB_IMBUF_TYPES_H__ */
+#ifdef __cplusplus
+}
+#endif

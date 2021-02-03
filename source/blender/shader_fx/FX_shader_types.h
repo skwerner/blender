@@ -18,8 +18,7 @@
  * \ingroup shader_fx
  */
 
-#ifndef __FX_SHADER_TYPES_H__
-#define __FX_SHADER_TYPES_H__
+#pragma once
 
 #include "BKE_shader_fx.h"
 
@@ -30,7 +29,6 @@ extern ShaderFxTypeInfo shaderfx_Type_Blur;
 extern ShaderFxTypeInfo shaderfx_Type_Colorize;
 extern ShaderFxTypeInfo shaderfx_Type_Flip;
 extern ShaderFxTypeInfo shaderfx_Type_Glow;
-extern ShaderFxTypeInfo shaderfx_Type_Light;
 extern ShaderFxTypeInfo shaderfx_Type_Pixel;
 extern ShaderFxTypeInfo shaderfx_Type_Rim;
 extern ShaderFxTypeInfo shaderfx_Type_Shadow;
@@ -39,5 +37,3 @@ extern ShaderFxTypeInfo shaderfx_Type_Wave;
 
 /* FX_shaderfx_util.c */
 void shaderfx_type_init(ShaderFxTypeInfo *types[]);
-
-#endif /* __FX_SHADER_TYPES_H__ */

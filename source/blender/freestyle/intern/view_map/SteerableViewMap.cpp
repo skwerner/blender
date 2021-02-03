@@ -27,16 +27,14 @@
 
 #include "../geometry/Geom.h"
 
-#include "../image/ImagePyramid.h"
 #include "../image/Image.h"
+#include "../image/ImagePyramid.h"
 
 #include "BKE_global.h"
 #include "BLI_math.h"
 
-extern "C" {
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
-}
 
 namespace Freestyle {
 
@@ -47,8 +45,8 @@ SteerableViewMap::SteerableViewMap(unsigned int nbOrientations)
   _nbOrientations = nbOrientations;
   _bound = cos(M_PI / (float)_nbOrientations);
   for (unsigned int i = 0; i < _nbOrientations; ++i) {
-    _directions.push_back(Vec2d(cos((float)i * M_PI / (float)_nbOrientations),
-                                sin((float)i * M_PI / (float)_nbOrientations)));
+    _directions.emplace_back(cos((float)i * M_PI / (float)_nbOrientations),
+                             sin((float)i * M_PI / (float)_nbOrientations));
   }
   Build();
 }
@@ -90,7 +88,7 @@ void SteerableViewMap::Clear()
       }
     }
     delete[] _imagesPyramids;
-    _imagesPyramids = 0;
+    _imagesPyramids = nullptr;
   }
   if (!_mapping.empty()) {
     for (map<unsigned int, double *>::iterator m = _mapping.begin(), mend = _mapping.end();
@@ -148,9 +146,8 @@ double *SteerableViewMap::AddFEdge(FEdge *iFEdge)
   return res;
 }
 
-unsigned SteerableViewMap::getSVMNumber(const Vec2f &orient)
+unsigned SteerableViewMap::getSVMNumber(Vec2f dir)
 {
-  Vec2f dir(orient);
   // soc unsigned res = 0;
   real norm = dir.norm();
   if (norm < 1.0e-6) {
@@ -195,9 +192,7 @@ void SteerableViewMap::buildImagesPyramids(GrayImage **steerableBases,
 {
   for (unsigned int i = 0; i <= _nbOrientations; ++i) {
     ImagePyramid *svm = (_imagesPyramids)[i];
-    if (svm) {
-      delete svm;
-    }
+    delete svm;
     if (copy) {
       svm = new GaussianPyramid(*(steerableBases[i]), iNbLevels, iSigma);
     }
@@ -245,7 +240,7 @@ unsigned int SteerableViewMap::getNumberOfPyramidLevels() const
 void SteerableViewMap::saveSteerableViewMap() const
 {
   for (unsigned int i = 0; i <= _nbOrientations; ++i) {
-    if (_imagesPyramids[i] == 0) {
+    if (_imagesPyramids[i] == nullptr) {
       cerr << "SteerableViewMap warning: orientation " << i
            << " of steerable View Map whas not been computed yet" << endl;
       continue;

@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLI_COMPILER_TYPECHECK_H__
-#define __BLI_COMPILER_TYPECHECK_H__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -23,6 +22,8 @@
  * Type checking macros (often used to ensure valid use of macro args).
  * These depend on compiler extensions and c11 in some cases.
  */
+
+#include "BLI_utildefines_variadic.h"
 
 /* Causes warning:
  * incompatible types when assigning to type 'Foo' from type 'Bar'
@@ -690,5 +691,3 @@
 /* clang-format on */
 
 #define GENERIC_TYPE_ANY(...) VA_NARGS_CALL_OVERLOAD(_VA_GENERIC_TYPE_ANY, __VA_ARGS__)
-
-#endif /* __BLI_COMPILER_TYPECHECK_H__ */

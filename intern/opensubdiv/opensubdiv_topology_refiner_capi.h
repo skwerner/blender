@@ -28,7 +28,7 @@ extern "C" {
 #endif
 
 struct OpenSubdiv_Converter;
-struct OpenSubdiv_TopologyRefinerInternal;
+struct OpenSubdiv_TopologyRefinerImpl;
 
 // Those settings don't really belong to OpenSubdiv's topology refiner, but
 // we are keeping track of them on our side of topology refiner. This is to
@@ -40,6 +40,10 @@ typedef struct OpenSubdiv_TopologyRefinerSettings {
   int level;
 } OpenSubdiv_TopologyRefinerSettings;
 
+// C-style wrapper around actual topology refiner.
+//
+// The only purpose is to allow C-only code to access C++ implementation of the
+// topology refiner.
 typedef struct OpenSubdiv_TopologyRefiner {
   // Query subdivision level the refiner is created for.
   int (*getSubdivisionLevel)(const struct OpenSubdiv_TopologyRefiner *topology_refiner);
@@ -58,11 +62,13 @@ typedef struct OpenSubdiv_TopologyRefiner {
   int (*getNumVertices)(const struct OpenSubdiv_TopologyRefiner *topology_refiner);
   int (*getNumEdges)(const struct OpenSubdiv_TopologyRefiner *topology_refiner);
   int (*getNumFaces)(const struct OpenSubdiv_TopologyRefiner *topology_refiner);
+
   int (*getNumFaceVertices)(const struct OpenSubdiv_TopologyRefiner *topology_refiner,
                             const int face_index);
   void (*getFaceVertices)(const struct OpenSubdiv_TopologyRefiner *topology_refiner,
                           const int face_index,
                           int *face_vertices_indices);
+
   int (*getNumFaceEdges)(const struct OpenSubdiv_TopologyRefiner *topology_refiner,
                          const int face_index);
   void (*getFaceEdges)(const struct OpenSubdiv_TopologyRefiner *topology_refiner,
@@ -71,6 +77,12 @@ typedef struct OpenSubdiv_TopologyRefiner {
   void (*getEdgeVertices)(const struct OpenSubdiv_TopologyRefiner *topology_refiner,
                           const int edge_index,
                           int edge_vertices_indices[2]);
+
+  int (*getNumVertexEdges)(const struct OpenSubdiv_TopologyRefiner *topology_refiner,
+                           const int vertex_index);
+  void (*getVertexEdges)(const struct OpenSubdiv_TopologyRefiner *topology_refiner,
+                         const int vertex_index,
+                         int *vertex_edges_indices);
 
   //////////////////////////////////////////////////////////////////////////////
   // PTex face geometry queries.
@@ -117,11 +129,8 @@ typedef struct OpenSubdiv_TopologyRefiner {
   //////////////////////////////////////////////////////////////////////////////
   // Internal use.
 
-  // Internal storage for the use in this module only.
-  //
-  // Tease: Contains actual OpenSubdiv's refiner and (optionally) some other
-  // data and state needed for an internbal use.
-  struct OpenSubdiv_TopologyRefinerInternal *internal;
+  // Implementation of the topology refiner.
+  struct OpenSubdiv_TopologyRefinerImpl *impl;
 } OpenSubdiv_TopologyRefiner;
 
 // NOTE: Will return NULL in cases of bad topology.

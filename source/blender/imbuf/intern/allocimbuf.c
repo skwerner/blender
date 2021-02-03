@@ -30,16 +30,16 @@
 #include "IMB_imbuf_types.h"
 
 #include "IMB_allocimbuf.h"
+#include "IMB_colormanagement_intern.h"
 #include "IMB_filetype.h"
 #include "IMB_metadata.h"
-#include "IMB_colormanagement_intern.h"
 
 #include "imbuf.h"
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_threads.h"
+#include "BLI_utildefines.h"
 
 static SpinLock refcounter_spin;
 
@@ -53,7 +53,7 @@ void imb_refcounter_lock_exit(void)
   BLI_spin_end(&refcounter_spin);
 }
 
-#ifdef WIN32
+#ifndef WIN32
 static SpinLock mmap_spin;
 
 void imb_mmap_lock_init(void)
@@ -197,6 +197,17 @@ void IMB_freezbuffloatImBuf(ImBuf *ibuf)
   ibuf->mall &= ~IB_zbuffloat;
 }
 
+/** Free all pixel data (assosiated with image size). */
+void imb_freerectImbuf_all(ImBuf *ibuf)
+{
+  imb_freerectImBuf(ibuf);
+  imb_freerectfloatImBuf(ibuf);
+  imb_freetilesImBuf(ibuf);
+  IMB_freezbufImBuf(ibuf);
+  IMB_freezbuffloatImBuf(ibuf);
+  freeencodedbufferImBuf(ibuf);
+}
+
 void IMB_freeImBuf(ImBuf *ibuf)
 {
   if (ibuf) {
@@ -212,12 +223,7 @@ void IMB_freeImBuf(ImBuf *ibuf)
     BLI_spin_unlock(&refcounter_spin);
 
     if (needs_free) {
-      imb_freerectImBuf(ibuf);
-      imb_freerectfloatImBuf(ibuf);
-      imb_freetilesImBuf(ibuf);
-      IMB_freezbufImBuf(ibuf);
-      IMB_freezbuffloatImBuf(ibuf);
-      freeencodedbufferImBuf(ibuf);
+      imb_freerectImbuf_all(ibuf);
       IMB_metadata_free(ibuf->metadata);
       colormanage_cache_free(ibuf);
 
@@ -374,7 +380,7 @@ void *imb_alloc_pixels(
   }
 
   size_t size = (size_t)x * (size_t)y * (size_t)channels * typesize;
-  return MEM_mapallocN(size, name);
+  return MEM_callocN(size, name);
 }
 
 bool imb_addrectfloatImBuf(ImBuf *ibuf)
@@ -417,9 +423,8 @@ bool imb_addrectImBuf(ImBuf *ibuf)
     if (ibuf->planes > 32) {
       return (addzbufImBuf(ibuf));
     }
-    else {
-      return true;
-    }
+
+    return true;
   }
 
   return false;
@@ -428,7 +433,8 @@ bool imb_addrectImBuf(ImBuf *ibuf)
 struct ImBuf *IMB_allocFromBuffer(const unsigned int *rect,
                                   const float *rectf,
                                   unsigned int w,
-                                  unsigned int h)
+                                  unsigned int h,
+                                  unsigned int channels)
 {
   ImBuf *ibuf = NULL;
 
@@ -438,6 +444,7 @@ struct ImBuf *IMB_allocFromBuffer(const unsigned int *rect,
 
   ibuf = IMB_allocImBuf(w, h, 32, 0);
 
+  ibuf->channels = channels;
   if (rectf) {
     ibuf->rect_float = MEM_dupallocN(rectf);
     ibuf->flags |= IB_rectfloat;
@@ -481,7 +488,7 @@ ImBuf *IMB_allocImBuf(unsigned int x, unsigned int y, uchar planes, unsigned int
     }
   }
 
-  return (ibuf);
+  return ibuf;
 }
 
 bool IMB_initImBuf(
@@ -616,7 +623,7 @@ ImBuf *IMB_dupImBuf(const ImBuf *ibuf1)
 
   *ibuf2 = tbuf;
 
-  return (ibuf2);
+  return ibuf2;
 }
 
 size_t IMB_get_size_in_memory(ImBuf *ibuf)

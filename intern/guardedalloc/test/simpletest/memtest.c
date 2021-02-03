@@ -29,10 +29,10 @@
 /* Number of chunks to test with */
 #define NUM_BLOCKS 10
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
 #include "MEM_guardedalloc.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 static void mem_error_cb(const char *errorStr)
 {
@@ -148,7 +148,7 @@ int main(int argc, char *argv[])
       fprintf(stderr, "|\n|--* Errors were detected\n");
     }
     else {
-      fprintf(stderr, "|\n|--* Test exited succesfully\n");
+      fprintf(stderr, "|\n|--* Test exited successfully\n");
     }
 
     fprintf(stderr, "|\n*** Finished test\n\n");

@@ -4,15 +4,16 @@ from bpy.props import (
     EnumProperty,
 )
 
-dirname, filename = os.path.split(__file__)
-idname = os.path.splitext(filename)[0]
+DIRNAME, FILENAME = os.path.split(__file__)
+IDNAME = os.path.splitext(FILENAME)[0]
+
 
 def update_fn(_self, _context):
     load()
 
 
 class Prefs(bpy.types.KeyConfigPreferences):
-    bl_idname = idname
+    bl_idname = IDNAME
 
     select_mouse: EnumProperty(
         name="Select Mouse",
@@ -32,14 +33,15 @@ class Prefs(bpy.types.KeyConfigPreferences):
     )
 
     def draw(self, layout):
-        split = layout.split()
-        col = split.column()
-        col.label(text="Select With:")
-        col.row().prop(self, "select_mouse", expand=True)
-        split.column()
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+
+        col = layout.column()
+        col.row().prop(self, "select_mouse", text="Select with Mouse Button", expand=True)
 
 
-blender_default = bpy.utils.execfile(os.path.join(dirname, "keymap_data", "blender_default.py"))
+blender_default = bpy.utils.execfile(os.path.join(DIRNAME, "keymap_data", "blender_default.py"))
+
 
 def load():
     from sys import platform
@@ -47,13 +49,16 @@ def load():
     from bl_keymap_utils.io import keyconfig_init_from_data
 
     prefs = context.preferences
-    kc = context.window_manager.keyconfigs.new(idname)
+    kc = context.window_manager.keyconfigs.new(IDNAME)
     kc_prefs = kc.preferences
 
     keyconfig_data = blender_default.generate_keymaps(
         blender_default.Params(
             select_mouse=kc_prefs.select_mouse,
-            use_mouse_emulate_3_button=prefs.inputs.use_mouse_emulate_3_button,
+            use_mouse_emulate_3_button=(
+                prefs.inputs.use_mouse_emulate_3_button and
+                prefs.inputs.mouse_emulate_3_button_modifier == 'ALT'
+            ),
             spacebar_action='SEARCH',
             use_select_all_toggle=True,
             use_gizmo_drag=False,
@@ -64,7 +69,6 @@ def load():
     if platform == 'darwin':
         from bl_keymap_utils.platform_helpers import keyconfig_data_oskey_from_ctrl_for_macos
         keyconfig_data = keyconfig_data_oskey_from_ctrl_for_macos(keyconfig_data)
-
 
     keyconfig_init_from_data(kc, keyconfig_data)
 

@@ -29,26 +29,122 @@
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_fileops.h"
 #include "BLI_ghash.h"
 #include "BLI_listbase.h"
 #include "BLI_path_util.h"
 #include "BLI_string.h"
 #include "BLI_threads.h"
+#include "BLI_utildefines.h"
 
-#include "BKE_animsys.h"
+#include "BLT_translation.h"
+
+#include "BKE_anim_data.h"
 #include "BKE_cachefile.h"
-#include "BKE_library.h"
+#include "BKE_idtype.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_modifier.h"
 #include "BKE_scene.h"
 
 #include "DEG_depsgraph_query.h"
 
+#include "BLO_read_write.h"
+
 #ifdef WITH_ALEMBIC
 #  include "ABC_alembic.h"
 #endif
+
+static void cachefile_handle_free(CacheFile *cache_file);
+
+static void cache_file_init_data(ID *id)
+{
+  CacheFile *cache_file = (CacheFile *)id;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(cache_file, id));
+
+  cache_file->scale = 1.0f;
+  cache_file->velocity_unit = CACHEFILE_VELOCITY_UNIT_SECOND;
+  BLI_strncpy(cache_file->velocity_name, ".velocities", sizeof(cache_file->velocity_name));
+}
+
+static void cache_file_copy_data(Main *UNUSED(bmain),
+                                 ID *id_dst,
+                                 const ID *id_src,
+                                 const int UNUSED(flag))
+{
+  CacheFile *cache_file_dst = (CacheFile *)id_dst;
+  const CacheFile *cache_file_src = (const CacheFile *)id_src;
+
+  cache_file_dst->handle = NULL;
+  cache_file_dst->handle_readers = NULL;
+  BLI_duplicatelist(&cache_file_dst->object_paths, &cache_file_src->object_paths);
+}
+
+static void cache_file_free_data(ID *id)
+{
+  CacheFile *cache_file = (CacheFile *)id;
+  cachefile_handle_free(cache_file);
+  BLI_freelistN(&cache_file->object_paths);
+}
+
+static void cache_file_blend_write(BlendWriter *writer, ID *id, const void *id_address)
+{
+  CacheFile *cache_file = (CacheFile *)id;
+  if (cache_file->id.us > 0 || BLO_write_is_undo(writer)) {
+    /* Clean up, important in undo case to reduce false detection of changed datablocks. */
+    BLI_listbase_clear(&cache_file->object_paths);
+    cache_file->handle = NULL;
+    memset(cache_file->handle_filepath, 0, sizeof(cache_file->handle_filepath));
+    cache_file->handle_readers = NULL;
+
+    BLO_write_id_struct(writer, CacheFile, id_address, &cache_file->id);
+
+    if (cache_file->adt) {
+      BKE_animdata_blend_write(writer, cache_file->adt);
+    }
+  }
+}
+
+static void cache_file_blend_read_data(BlendDataReader *reader, ID *id)
+{
+  CacheFile *cache_file = (CacheFile *)id;
+  BLI_listbase_clear(&cache_file->object_paths);
+  cache_file->handle = NULL;
+  cache_file->handle_filepath[0] = '\0';
+  cache_file->handle_readers = NULL;
+
+  /* relink animdata */
+  BLO_read_data_address(reader, &cache_file->adt);
+  BKE_animdata_blend_read_data(reader, cache_file->adt);
+}
+
+IDTypeInfo IDType_ID_CF = {
+    .id_code = ID_CF,
+    .id_filter = FILTER_ID_CF,
+    .main_listbase_index = INDEX_ID_CF,
+    .struct_size = sizeof(CacheFile),
+    .name = "CacheFile",
+    .name_plural = "cache_files",
+    .translation_context = BLT_I18NCONTEXT_ID_CACHEFILE,
+    .flags = 0,
+
+    .init_data = cache_file_init_data,
+    .copy_data = cache_file_copy_data,
+    .free_data = cache_file_free_data,
+    .make_local = NULL,
+    .foreach_id = NULL,
+    .foreach_cache = NULL,
+
+    .blend_write = cache_file_blend_write,
+    .blend_read_data = cache_file_blend_read_data,
+    .blend_read_lib = NULL,
+    .blend_read_expand = NULL,
+
+    .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
+};
 
 /* TODO: make this per cache file to avoid global locks. */
 static SpinLock spin;
@@ -155,65 +251,9 @@ static void cachefile_handle_free(CacheFile *cache_file)
 
 void *BKE_cachefile_add(Main *bmain, const char *name)
 {
-  CacheFile *cache_file = BKE_libblock_alloc(bmain, ID_CF, name, 0);
-
-  BKE_cachefile_init(cache_file);
+  CacheFile *cache_file = BKE_id_new(bmain, ID_CF, name);
 
   return cache_file;
-}
-
-void BKE_cachefile_init(CacheFile *cache_file)
-{
-  cache_file->filepath[0] = '\0';
-  cache_file->override_frame = false;
-  cache_file->frame = 0.0f;
-  cache_file->is_sequence = false;
-  cache_file->scale = 1.0f;
-  BLI_listbase_clear(&cache_file->object_paths);
-
-  cache_file->handle = NULL;
-  cache_file->handle_filepath[0] = '\0';
-  cache_file->handle_readers = NULL;
-}
-
-/** Free (or release) any data used by this cachefile (does not free the cachefile itself). */
-void BKE_cachefile_free(CacheFile *cache_file)
-{
-  BKE_animdata_free((ID *)cache_file, false);
-  cachefile_handle_free(cache_file);
-  BLI_freelistN(&cache_file->object_paths);
-}
-
-/**
- * Only copy internal data of CacheFile ID from source to already
- * allocated/initialized destination.
- * You probably never want to use that directly,
- * use #BKE_id_copy or #BKE_id_copy_ex for typical needs.
- *
- * WARNING! This function will not handle ID user count!
- *
- * \param flag: Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
- */
-void BKE_cachefile_copy_data(Main *UNUSED(bmain),
-                             CacheFile *cache_file_dst,
-                             const CacheFile *UNUSED(cache_file_src),
-                             const int UNUSED(flag))
-{
-  cache_file_dst->handle = NULL;
-  cache_file_dst->handle_readers = NULL;
-  BLI_duplicatelist(&cache_file_dst->object_paths, &cache_file_dst->object_paths);
-}
-
-CacheFile *BKE_cachefile_copy(Main *bmain, const CacheFile *cache_file)
-{
-  CacheFile *cache_file_copy;
-  BKE_id_copy(bmain, &cache_file->id, (ID **)&cache_file_copy);
-  return cache_file_copy;
-}
-
-void BKE_cachefile_make_local(Main *bmain, CacheFile *cache_file, const bool lib_local)
-{
-  BKE_id_make_local_generic(bmain, &cache_file->id, true, lib_local);
 }
 
 void BKE_cachefile_reload(Depsgraph *depsgraph, CacheFile *cache_file)
@@ -246,7 +286,7 @@ void BKE_cachefile_eval(Main *bmain, Depsgraph *depsgraph, CacheFile *cache_file
   BLI_freelistN(&cache_file->object_paths);
 
 #ifdef WITH_ALEMBIC
-  cache_file->handle = ABC_create_handle(filepath, &cache_file->object_paths);
+  cache_file->handle = ABC_create_handle(bmain, filepath, &cache_file->object_paths);
   BLI_strncpy(cache_file->handle_filepath, filepath, FILE_MAX);
 #endif
 

@@ -20,8 +20,8 @@
 
 #include <stdlib.h>
 
-#include "BLI_utildefines.h"
 #include "BLI_path_util.h"
+#include "BLI_utildefines.h"
 
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
@@ -43,7 +43,9 @@
 #  include "BLI_iterator.h"
 #  include "BLI_math.h"
 
-#  include "BKE_anim.h"
+#  include "RNA_access.h"
+
+#  include "BKE_duplilist.h"
 #  include "BKE_object.h"
 #  include "BKE_scene.h"
 
@@ -203,6 +205,12 @@ static bool rna_DepsgraphUpdate_is_updated_transform_get(PointerRNA *ptr)
   return ((id->recalc & ID_RECALC_TRANSFORM) != 0);
 }
 
+static bool rna_DepsgraphUpdate_is_updated_shading_get(PointerRNA *ptr)
+{
+  ID *id = ptr->data;
+  return ((id->recalc & ID_RECALC_SHADING) != 0);
+}
+
 static bool rna_DepsgraphUpdate_is_updated_geometry_get(PointerRNA *ptr)
 {
   ID *id = ptr->data;
@@ -255,14 +263,19 @@ static void rna_Depsgraph_debug_stats(Depsgraph *depsgraph, char *result)
   DEG_stats_simple(depsgraph, &outer, &ops, &rels);
   BLI_snprintf(result,
                STATS_MAX_SIZE,
-               "Approx %lu Operations, %lu Relations, %lu Outer Nodes",
+               "Approx %zu Operations, %zu Relations, %zu Outer Nodes",
                ops,
                rels,
                outer);
 }
 
-static void rna_Depsgraph_update(Depsgraph *depsgraph, Main *bmain)
+static void rna_Depsgraph_update(Depsgraph *depsgraph, Main *bmain, ReportList *reports)
 {
+  if (DEG_is_evaluating(depsgraph)) {
+    BKE_report(reports, RPT_ERROR, "Dependency graph update requested during evaluation");
+    return;
+  }
+
 #  ifdef WITH_PYTHON
   /* Allow drivers to be evaluated */
   BPy_BEGIN_ALLOW_THREADS;
@@ -346,7 +359,7 @@ static void rna_Depsgraph_object_instances_next(CollectionPropertyIterator *iter
   RNA_Depsgraph_Instances_Iterator *di_it = (RNA_Depsgraph_Instances_Iterator *)
                                                 iter->internal.custom;
 
-  /* We need to copy current iterator status to next one beeing worked on. */
+  /* We need to copy current iterator status to next one being worked on. */
   di_it->iterators[(di_it->counter + 1) % 2] = di_it->iterators[di_it->counter % 2];
   di_it->deg_data[(di_it->counter + 1) % 2] = di_it->deg_data[di_it->counter % 2];
   di_it->counter++;
@@ -450,28 +463,38 @@ static PointerRNA rna_Depsgraph_scene_get(PointerRNA *ptr)
 {
   Depsgraph *depsgraph = (Depsgraph *)ptr->data;
   Scene *scene = DEG_get_input_scene(depsgraph);
-  return rna_pointer_inherit_refine(ptr, &RNA_Scene, scene);
+  PointerRNA newptr;
+  RNA_pointer_create(&scene->id, &RNA_Scene, scene, &newptr);
+  return newptr;
 }
 
 static PointerRNA rna_Depsgraph_view_layer_get(PointerRNA *ptr)
 {
   Depsgraph *depsgraph = (Depsgraph *)ptr->data;
+  Scene *scene = DEG_get_input_scene(depsgraph);
   ViewLayer *view_layer = DEG_get_input_view_layer(depsgraph);
-  return rna_pointer_inherit_refine(ptr, &RNA_ViewLayer, view_layer);
+  PointerRNA newptr;
+  RNA_pointer_create(&scene->id, &RNA_ViewLayer, view_layer, &newptr);
+  return newptr;
 }
 
 static PointerRNA rna_Depsgraph_scene_eval_get(PointerRNA *ptr)
 {
   Depsgraph *depsgraph = (Depsgraph *)ptr->data;
   Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
-  return rna_pointer_inherit_refine(ptr, &RNA_Scene, scene_eval);
+  PointerRNA newptr;
+  RNA_pointer_create(&scene_eval->id, &RNA_Scene, scene_eval, &newptr);
+  return newptr;
 }
 
 static PointerRNA rna_Depsgraph_view_layer_eval_get(PointerRNA *ptr)
 {
   Depsgraph *depsgraph = (Depsgraph *)ptr->data;
+  Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
   ViewLayer *view_layer_eval = DEG_get_evaluated_view_layer(depsgraph);
-  return rna_pointer_inherit_refine(ptr, &RNA_ViewLayer, view_layer_eval);
+  PointerRNA newptr;
+  RNA_pointer_create(&scene_eval->id, &RNA_ViewLayer, view_layer_eval, &newptr);
+  return newptr;
 }
 
 #else
@@ -540,7 +563,7 @@ static void rna_def_depsgraph_instance(BlenderRNA *brna)
       prop,
       "Persistent ID",
       "Persistent identifier for inter-frame matching of objects with motion blur");
-  RNA_def_property_array(prop, 2 * MAX_DUPLI_RECUR);
+  RNA_def_property_array(prop, MAX_DUPLI_RECUR);
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE | PROP_EDITABLE);
   RNA_def_property_int_funcs(prop, "rna_DepsgraphObjectInstance_persistent_id_get", NULL, NULL);
 
@@ -580,7 +603,7 @@ static void rna_def_depsgraph_update(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "id", PROP_POINTER, PROP_NONE);
   RNA_def_property_struct_type(prop, "ID");
-  RNA_def_property_ui_text(prop, "ID", "Updated datablock");
+  RNA_def_property_ui_text(prop, "ID", "Updated data-block");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE | PROP_EDITABLE);
   RNA_def_property_pointer_funcs(prop, "rna_DepsgraphUpdate_id_get", NULL, NULL, NULL);
 
@@ -596,6 +619,11 @@ static void rna_def_depsgraph_update(BlenderRNA *brna)
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE | PROP_EDITABLE);
   RNA_def_property_ui_text(prop, "Geometry", "Object geometry is updated");
   RNA_def_property_boolean_funcs(prop, "rna_DepsgraphUpdate_is_updated_geometry_get", NULL);
+
+  prop = RNA_def_property(srna, "is_updated_shading", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE | PROP_EDITABLE);
+  RNA_def_property_ui_text(prop, "Shading", "Object shading is updated");
+  RNA_def_property_boolean_funcs(prop, "rna_DepsgraphUpdate_is_updated_shading_get", NULL);
 }
 
 static void rna_def_depsgraph(BlenderRNA *brna)
@@ -654,7 +682,7 @@ static void rna_def_depsgraph(BlenderRNA *brna)
       func,
       "Re-evaluate any modified data-blocks, for example for animation or modifiers. "
       "This invalidates all references to evaluated data-blocks from this dependency graph.");
-  RNA_def_function_flag(func, FUNC_USE_MAIN);
+  RNA_def_function_flag(func, FUNC_USE_MAIN | FUNC_USE_REPORTS);
 
   /* Queries for original datablockls (the ones depsgraph is built for). */
 
@@ -716,7 +744,7 @@ static void rna_def_depsgraph(BlenderRNA *brna)
                                     NULL,
                                     NULL,
                                     NULL);
-  RNA_def_property_ui_text(prop, "IDs", "All evaluated datablocks");
+  RNA_def_property_ui_text(prop, "IDs", "All evaluated data-blocks");
 
   prop = RNA_def_property(srna, "objects", PROP_COLLECTION, PROP_NONE);
   RNA_def_property_struct_type(prop, "Object");
@@ -759,7 +787,7 @@ static void rna_def_depsgraph(BlenderRNA *brna)
                                     NULL,
                                     NULL,
                                     NULL);
-  RNA_def_property_ui_text(prop, "Updates", "Updates to datablocks");
+  RNA_def_property_ui_text(prop, "Updates", "Updates to data-blocks");
 }
 
 void RNA_def_depsgraph(BlenderRNA *brna)

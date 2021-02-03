@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_ADVANCED_FUNCTIONS_1D_H__
-#define __FREESTYLE_ADVANCED_FUNCTIONS_1D_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -208,7 +207,7 @@ class GetDirectionalViewMapDensityF1D : public UnaryFunction1D<double> {
 
 // GetSteerableViewMapDensityF1D
 /*! Returns the density of the viewmap for a given Interface1D. The density of each FEdge is
- * evaluated in the proper steerable ViewMap depending on its oorientation.
+ * evaluated in the proper steerable ViewMap depending on its orientation.
  */
 class GetSteerableViewMapDensityF1D : public UnaryFunction1D<double> {
  private:
@@ -250,7 +249,7 @@ class GetSteerableViewMapDensityF1D : public UnaryFunction1D<double> {
 
 // GetViewMapGradientNormF1D
 /*! Returns the density of the viewmap for a given Interface1D. The density of each FEdge is
- * evaluated in the proper steerable ViewMap depending on its oorientation.
+ * evaluated in the proper steerable ViewMap depending on its orientation.
  */
 class GetViewMapGradientNormF1D : public UnaryFunction1D<double> {
  private:
@@ -289,5 +288,3 @@ class GetViewMapGradientNormF1D : public UnaryFunction1D<double> {
 }  // end of namespace Functions1D
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_ADVANCED_FUNCTIONS_1D_H__

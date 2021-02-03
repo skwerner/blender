@@ -21,8 +21,11 @@
  * \ingroup bke
  */
 
-#ifndef __BKE_EDITMESH_BVH_H__
-#define __BKE_EDITMESH_BVH_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct BMBVHTree;
 struct BMEditMesh;
@@ -72,8 +75,8 @@ struct BMFace *BKE_bmbvh_ray_cast_filter(BMBVHTree *tree,
                                          float *r_dist,
                                          float r_hitout[3],
                                          float r_cagehit[3],
-                                         BMBVHTree_FaceFilter filter,
-                                         void *filter_cb);
+                                         BMBVHTree_FaceFilter filter_cb,
+                                         void *filter_userdata);
 
 /* find a vert closest to co in a sphere of radius dist_max */
 struct BMVert *BKE_bmbvh_find_vert_closest(BMBVHTree *tree,
@@ -87,6 +90,9 @@ struct BVHTreeOverlap *BKE_bmbvh_overlap(const BMBVHTree *bmtree_a,
                                          const BMBVHTree *bmtree_b,
                                          unsigned int *r_overlap_tot);
 
+struct BVHTreeOverlap *BKE_bmbvh_overlap_self(const BMBVHTree *bmtree,
+                                              unsigned int *r_overlap_tot);
+
 /** #BKE_bmbvh_new flag parameter. */
 enum {
   /** Use with 'cos_cage', returns hits in relation to original geometry. */
@@ -97,4 +103,6 @@ enum {
   BMBVH_RESPECT_HIDDEN = (1 << 2),
 };
 
-#endif /* __BKE_EDITMESH_BVH_H__ */
+#ifdef __cplusplus
+}
+#endif

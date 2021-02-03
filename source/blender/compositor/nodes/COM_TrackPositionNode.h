@@ -16,6 +16,8 @@
  * Copyright 2012, Blender Foundation.
  */
 
+#pragma once
+
 #include "COM_Node.h"
 #include "DNA_node_types.h"
 

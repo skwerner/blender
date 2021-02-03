@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BMESH_OPERATORS_H__
-#define __BMESH_OPERATORS_H__
+#pragma once
 
 /** \file
  * \ingroup bmesh
@@ -109,9 +108,16 @@ enum {
   BEVEL_AMT_WIDTH,
   BEVEL_AMT_DEPTH,
   BEVEL_AMT_PERCENT,
+  BEVEL_AMT_ABSOLUTE,
 };
 
-/* Bevel face_strength_mode values: should match face_str mode enum in DNA_modifer_types.h */
+/* Bevel profile type */
+enum {
+  BEVEL_PROFILE_SUPERELLIPSE,
+  BEVEL_PROFILE_CUSTOM,
+};
+
+/* Bevel face_strength_mode values: should match face_str mode enum in DNA_modifier_types.h */
 enum {
   BEVEL_FACE_STRENGTH_NONE,
   BEVEL_FACE_STRENGTH_NEW,
@@ -124,6 +130,18 @@ enum {
   BEVEL_MITER_SHARP,
   BEVEL_MITER_PATCH,
   BEVEL_MITER_ARC,
+};
+
+/* Bevel vertex mesh creation methods */
+enum {
+  BEVEL_VMESH_ADJ,
+  BEVEL_VMESH_CUTOFF,
+};
+
+/* Bevel affect option. */
+enum {
+  BEVEL_AFFECT_VERTICES = 0,
+  BEVEL_AFFECT_EDGES = 1,
 };
 
 /* Normal Face Strength values */
@@ -174,5 +192,3 @@ void BM_mesh_calc_uvs_cone(BMesh *bm,
 void BM_mesh_calc_uvs_cube(BMesh *bm, const short oflag);
 
 #include "intern/bmesh_operator_api_inline.h"
-
-#endif /* __BMESH_OPERATORS_H__ */

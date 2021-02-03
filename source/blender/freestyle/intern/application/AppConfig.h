@@ -14,16 +14,16 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __APP_CONFIG_H__
-#define __APP_CONFIG_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
  * \brief Configuration file
  */
 
-#include <string>
 #include <algorithm>
+#include <string>
+
 #include "../system/Precision.h"
 
 #ifdef WITH_CXX_GUARDEDALLOC
@@ -43,7 +43,6 @@ class Path {
   string _ModelsPath;
   string _PatternsPath;
   string _BrushesPath;
-  string _PythonPath;
   string _EnvMapDir;
   string _MapsDir;
   string _HomeDir;
@@ -71,10 +70,6 @@ class Path {
   const string &getBrushesPath() const
   {
     return _BrushesPath;
-  }
-  const string &getPythonPath() const
-  {
-    return _PythonPath;
   }
   const string &getEnvMapDir() const
   {
@@ -127,5 +122,3 @@ static const real DEFAULT_DKR_EPSILON = 0.0;
 }  // namespace Config
 
 } /* namespace Freestyle */
-
-#endif  // __APP_CONFIG_H__

@@ -26,17 +26,17 @@
 
 #include "BLI_utildefines.h"
 
-#include "bpy_capi_utils.h"
 #include "bpy.h" /* own include */
+#include "bpy_capi_utils.h"
 
 #include "WM_api.h"
 
 static PyObject *bpy_atexit(PyObject *UNUSED(self), PyObject *UNUSED(args), PyObject *UNUSED(kw))
 {
   /* close down enough of blender at least not to crash */
-  struct bContext *C = BPy_GetContext();
+  struct bContext *C = BPY_context_get();
 
-  WM_exit_ext(C, 0);
+  WM_exit_ex(C, false);
 
   Py_RETURN_NONE;
 }

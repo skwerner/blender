@@ -138,7 +138,7 @@ ccl_device void subsurface_color_bump_blur(
 
   if (bump || texture_blur > 0.0f) {
     /* average color and normal at incoming point */
-    shader_eval_surface(kg, sd, state, state->flag);
+    shader_eval_surface(kg, sd, state, NULL, state->flag);
     float3 in_color = shader_bssrdf_sum(sd, (bump) ? N : NULL, NULL);
 
     /* we simply divide out the average color and multiply with the average
@@ -222,7 +222,7 @@ ccl_device_inline int subsurface_scatter_disk(KernelGlobals *kg,
 
   /* intersect with the same object. if multiple intersections are found it
    * will use at most BSSRDF_MAX_HITS hits, a random subset of all hits */
-  scene_intersect_local(kg, *ray, ss_isect, sd->object, lcg_state, BSSRDF_MAX_HITS);
+  scene_intersect_local(kg, ray, ss_isect, sd->object, lcg_state, BSSRDF_MAX_HITS);
   int num_eval_hits = min(ss_isect->num_hits, BSSRDF_MAX_HITS);
 
   for (int hit = 0; hit < num_eval_hits; hit++) {
@@ -281,13 +281,28 @@ ccl_device_inline int subsurface_scatter_disk(KernelGlobals *kg,
   return num_eval_hits;
 }
 
-ccl_device_noinline void subsurface_scatter_multi_setup(KernelGlobals *kg,
-                                                        LocalIntersection *ss_isect,
-                                                        int hit,
-                                                        ShaderData *sd,
-                                                        ccl_addr_space PathState *state,
-                                                        ClosureType type,
-                                                        float roughness)
+#if defined(__KERNEL_OPTIX__) && defined(__SHADER_RAYTRACE__)
+ccl_device_inline void subsurface_scatter_multi_setup(KernelGlobals *kg,
+                                                      LocalIntersection *ss_isect,
+                                                      int hit,
+                                                      ShaderData *sd,
+                                                      ccl_addr_space PathState *state,
+                                                      ClosureType type,
+                                                      float roughness)
+{
+  optixDirectCall<void>(2, kg, ss_isect, hit, sd, state, type, roughness);
+}
+extern "C" __device__ void __direct_callable__subsurface_scatter_multi_setup(
+#else
+ccl_device_noinline void subsurface_scatter_multi_setup(
+#endif
+    KernelGlobals *kg,
+    LocalIntersection *ss_isect,
+    int hit,
+    ShaderData *sd,
+    ccl_addr_space PathState *state,
+    ClosureType type,
+    float roughness)
 {
 #ifdef __SPLIT_KERNEL__
   Ray ray_object = ss_isect->ray;
@@ -353,13 +368,19 @@ ccl_device void subsurface_random_walk_coefficients(const ShaderClosure *sc,
   *weight = safe_divide_color(bssrdf->weight, A);
 }
 
-ccl_device_noinline bool subsurface_random_walk(KernelGlobals *kg,
-                                                LocalIntersection *ss_isect,
-                                                ShaderData *sd,
-                                                ccl_addr_space PathState *state,
-                                                const ShaderClosure *sc,
-                                                const float bssrdf_u,
-                                                const float bssrdf_v)
+#ifdef __KERNEL_OPTIX__
+ccl_device_inline /* inline trace calls */
+#else
+ccl_device_noinline
+#endif
+    bool
+    subsurface_random_walk(KernelGlobals *kg,
+                           LocalIntersection *ss_isect,
+                           ShaderData *sd,
+                           ccl_addr_space PathState *state,
+                           const ShaderClosure *sc,
+                           const float bssrdf_u,
+                           const float bssrdf_v)
 {
   /* Sample diffuse surface scatter into the object. */
   float3 D;
@@ -418,16 +439,21 @@ ccl_device_noinline bool subsurface_random_walk(KernelGlobals *kg,
     float t = -logf(1.0f - rdist) / sample_sigma_t;
 
     ray->t = t;
-    scene_intersect_local(kg, *ray, ss_isect, sd->object, NULL, 1);
+    scene_intersect_local(kg, ray, ss_isect, sd->object, NULL, 1);
     hit = (ss_isect->num_hits > 0);
 
     if (hit) {
+#ifdef __KERNEL_OPTIX__
+      /* t is always in world space with OptiX. */
+      t = ss_isect->hits[0].t;
+#else
       /* Compute world space distance to surface hit. */
       float3 D = ray->D;
       object_inverse_dir_transform(kg, sd, &D);
       D = normalize(D) * ss_isect->hits[0].t;
       object_dir_transform(kg, sd, &D);
       t = len(D);
+#endif
     }
 
     /* Advance to new scatter location. */

@@ -20,7 +20,7 @@
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
 
-DisplaceOperation::DisplaceOperation() : NodeOperation()
+DisplaceOperation::DisplaceOperation()
 {
   this->addInputSocket(COM_DT_COLOR);
   this->addInputSocket(COM_DT_VECTOR);
@@ -29,10 +29,10 @@ DisplaceOperation::DisplaceOperation() : NodeOperation()
   this->addOutputSocket(COM_DT_COLOR);
   this->setComplex(true);
 
-  this->m_inputColorProgram = NULL;
-  this->m_inputVectorProgram = NULL;
-  this->m_inputScaleXProgram = NULL;
-  this->m_inputScaleYProgram = NULL;
+  this->m_inputColorProgram = nullptr;
+  this->m_inputVectorProgram = nullptr;
+  this->m_inputScaleXProgram = nullptr;
+  this->m_inputScaleYProgram = nullptr;
 }
 
 void DisplaceOperation::initExecution()
@@ -74,13 +74,12 @@ bool DisplaceOperation::read_displacement(
     r_v = 0.0f;
     return false;
   }
-  else {
-    float col[4];
-    m_inputVectorProgram->readSampled(col, x, y, COM_PS_BILINEAR);
-    r_u = origin[0] - col[0] * xscale;
-    r_v = origin[1] - col[1] * yscale;
-    return true;
-  }
+
+  float col[4];
+  m_inputVectorProgram->readSampled(col, x, y, COM_PS_BILINEAR);
+  r_u = origin[0] - col[0] * xscale;
+  r_v = origin[1] - col[1] * yscale;
+  return true;
 }
 
 void DisplaceOperation::pixelTransform(const float xy[2], float r_uv[2], float r_deriv[2][2])
@@ -111,12 +110,12 @@ void DisplaceOperation::pixelTransform(const float xy[2], float r_uv[2], float r
   if (read_displacement(xy[0] + epsilon[0], xy[1], xs, ys, xy, uv[0], uv[1])) {
     r_deriv[0][0] += uv[0] - r_uv[0];
     r_deriv[1][0] += uv[1] - r_uv[1];
-    ++num;
+    num++;
   }
   if (read_displacement(xy[0] - epsilon[0], xy[1], xs, ys, xy, uv[0], uv[1])) {
     r_deriv[0][0] += r_uv[0] - uv[0];
     r_deriv[1][0] += r_uv[1] - uv[1];
-    ++num;
+    num++;
   }
   if (num > 0) {
     float numinv = 1.0f / (float)num;
@@ -128,12 +127,12 @@ void DisplaceOperation::pixelTransform(const float xy[2], float r_uv[2], float r
   if (read_displacement(xy[0], xy[1] + epsilon[1], xs, ys, xy, uv[0], uv[1])) {
     r_deriv[0][1] += uv[0] - r_uv[0];
     r_deriv[1][1] += uv[1] - r_uv[1];
-    ++num;
+    num++;
   }
   if (read_displacement(xy[0], xy[1] - epsilon[1], xs, ys, xy, uv[0], uv[1])) {
     r_deriv[0][1] += r_uv[0] - uv[0];
     r_deriv[1][1] += r_uv[1] - uv[1];
-    ++num;
+    num++;
   }
   if (num > 0) {
     float numinv = 1.0f / (float)num;
@@ -144,10 +143,10 @@ void DisplaceOperation::pixelTransform(const float xy[2], float r_uv[2], float r
 
 void DisplaceOperation::deinitExecution()
 {
-  this->m_inputColorProgram = NULL;
-  this->m_inputVectorProgram = NULL;
-  this->m_inputScaleXProgram = NULL;
-  this->m_inputScaleYProgram = NULL;
+  this->m_inputColorProgram = nullptr;
+  this->m_inputVectorProgram = nullptr;
+  this->m_inputScaleXProgram = nullptr;
+  this->m_inputScaleYProgram = nullptr;
 }
 
 bool DisplaceOperation::determineDependingAreaOfInterest(rcti *input,
@@ -156,7 +155,7 @@ bool DisplaceOperation::determineDependingAreaOfInterest(rcti *input,
 {
   rcti colorInput;
   rcti vectorInput;
-  NodeOperation *operation = NULL;
+  NodeOperation *operation = nullptr;
 
   /* the vector buffer only needs a 2x2 buffer. The image needs whole buffer */
   /* image */

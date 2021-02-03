@@ -10,6 +10,13 @@
 #  OPENGLES_LIBRARIES       - all libraries needed for OpenGLES
 #  OPENGLES_INCLUDES        - all includes needed for OpenGLES
 
+#=============================================================================
+# Copyright 2014 Blender Foundation.
+#
+# Distributed under the OSI-approved BSD 3-Clause License,
+# see accompanying file BSD-3-Clause-license.txt for details.
+#=============================================================================
+
 # If OPENGLES_ROOT_DIR was defined in the environment, use it.
 IF(NOT OPENGLES_ROOT_DIR AND NOT $ENV{OPENGLES_ROOT_DIR} STREQUAL "")
   SET(OPENGLES_ROOT_DIR $ENV{OPENGLES_ROOT_DIR})
@@ -17,7 +24,6 @@ ENDIF()
 
 SET(_opengles_SEARCH_DIRS
   ${OPENGLES_ROOT_DIR}
-  /usr/local
 )
 
 FIND_PATH(OPENGLES_INCLUDE_DIR

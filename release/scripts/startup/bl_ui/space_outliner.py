@@ -19,6 +19,10 @@
 # <pep8 compliant>
 import bpy
 from bpy.types import Header, Menu, Panel
+from bpy.app.translations import (
+    contexts as i18n_contexts,
+    pgettext_iface as iface_,
+)
 
 
 class OUTLINER_HT_header(Header):
@@ -45,6 +49,10 @@ class OUTLINER_HT_header(Header):
         row.prop(space, "filter_text", icon='VIEWZOOM', text="")
 
         layout.separator_spacer()
+
+        if display_mode == 'SEQUENCE':
+            row = layout.row(align=True)
+            row.prop(space, "use_sync_select", icon='UV_SYNC_SELECT', text="")
 
         row = layout.row(align=True)
         if display_mode in {'SCENES', 'VIEW_LAYER'}:
@@ -96,20 +104,30 @@ class OUTLINER_MT_editor_menus(Menu):
             layout.menu("OUTLINER_MT_edit_datablocks")
 
 
-class OUTLINER_MT_context(Menu):
-    bl_label = "Outliner"
+class OUTLINER_MT_context_menu(Menu):
+    bl_label = "Outliner Context Menu"
 
-    def draw(self, _context):
-        layout = self.layout
-
-        layout.menu("OUTLINER_MT_context_view")
+    @staticmethod
+    def draw_common_operators(layout):
+        layout.menu("OUTLINER_MT_context_menu_view")
 
         layout.separator()
 
         layout.menu("INFO_MT_area")
 
+    def draw(self, context):
+        space = context.space_data
 
-class OUTLINER_MT_context_view(Menu):
+        layout = self.layout
+
+        if space.display_mode == 'VIEW_LAYER':
+            OUTLINER_MT_collection_new.draw_without_context_menu(context, layout)
+            layout.separator()
+
+        OUTLINER_MT_context_menu.draw_common_operators(layout)
+
+
+class OUTLINER_MT_context_menu_view(Menu):
     bl_label = "View"
 
     def draw(self, _context):
@@ -198,8 +216,8 @@ class OUTLINER_MT_collection(Menu):
 
         layout.separator()
 
-        layout.operator("outliner.collection_delete", text="Delete", icon='X').hierarchy = False
-        layout.operator("outliner.collection_delete", text="Delete Hierarchy").hierarchy = True
+        layout.operator("outliner.delete", text="Delete", icon='X')
+        layout.operator("outliner.delete", text="Delete Hierarchy").hierarchy = True
 
         layout.separator()
 
@@ -221,6 +239,10 @@ class OUTLINER_MT_collection(Menu):
         if space.display_mode == 'VIEW_LAYER':
             layout.separator()
             layout.menu("OUTLINER_MT_collection_view_layer", icon='RENDERLAYERS')
+            layout.separator()
+
+            row = layout.row(align=True)
+            row.operator_enum("outliner.collection_color_tag_set", "color", icon_only=True)
 
         layout.separator()
 
@@ -228,21 +250,25 @@ class OUTLINER_MT_collection(Menu):
 
         layout.separator()
 
-        OUTLINER_MT_context.draw(self, context)
+        OUTLINER_MT_context_menu.draw_common_operators(layout)
 
 
 class OUTLINER_MT_collection_new(Menu):
     bl_label = "Collection"
 
+    @staticmethod
+    def draw_without_context_menu(context, layout):
+        layout.operator("outliner.collection_new", text="New Collection").nested = True
+        layout.operator("outliner.id_paste", text="Paste Data-Blocks", icon='PASTEDOWN')
+
     def draw(self, context):
         layout = self.layout
 
-        layout.operator("outliner.collection_new", text="New").nested = False
-        layout.operator("outliner.id_paste", text="Paste", icon='PASTEDOWN')
+        self.draw_without_context_menu(context, layout)
 
         layout.separator()
 
-        OUTLINER_MT_context.draw(self, context)
+        OUTLINER_MT_context_menu.draw_common_operators(layout)
 
 
 class OUTLINER_MT_object(Menu):
@@ -253,17 +279,14 @@ class OUTLINER_MT_object(Menu):
 
         space = context.space_data
         obj = context.active_object
-        object_mode = 'OBJECT' if obj is None else obj.mode
 
         layout.operator("outliner.id_copy", text="Copy", icon='COPYDOWN')
         layout.operator("outliner.id_paste", text="Paste", icon='PASTEDOWN')
 
         layout.separator()
 
-        layout.operator("outliner.object_operation", text="Delete", icon='X').type = 'DELETE'
-
-        if space.display_mode == 'VIEW_LAYER' and not space.use_filter_collection:
-            layout.operator("outliner.object_operation", text="Delete Hierarchy").type = 'DELETE_HIERARCHY'
+        layout.operator("outliner.delete", text="Delete", icon='X')
+        layout.operator("outliner.delete", text="Delete Hierarchy").hierarchy = True
 
         layout.separator()
 
@@ -273,23 +296,19 @@ class OUTLINER_MT_object(Menu):
 
         layout.separator()
 
-        if object_mode in {'EDIT', 'POSE'}:
-            name = bpy.types.Object.bl_rna.properties["mode"].enum_items[object_mode].name
-            layout.operator("outliner.object_operation", text=f"{name:s} Set").type = 'OBJECT_MODE_ENTER'
-            layout.operator("outliner.object_operation", text=f"{name:s} Clear").type = 'OBJECT_MODE_EXIT'
-            del name
-
-            layout.separator()
-
         if not (space.display_mode == 'VIEW_LAYER' and not space.use_filter_collection):
             layout.operator("outliner.id_operation", text="Unlink").type = 'UNLINK'
             layout.separator()
+
+        layout.operator("outliner.collection_new", text="New Collection").nested = True
+
+        layout.separator()
 
         layout.operator_menu_enum("outliner.id_operation", "type", text="ID Data")
 
         layout.separator()
 
-        OUTLINER_MT_context.draw(self, context)
+        OUTLINER_MT_context_menu.draw_common_operators(layout)
 
 
 class OUTLINER_PT_filter(Panel):
@@ -326,7 +345,13 @@ class OUTLINER_PT_filter(Panel):
         if display_mode != 'DATA_API':
             col = layout.column(align=True)
             col.prop(space, "use_sort_alpha")
-            layout.separator()
+
+        row = layout.row(align=True)
+        row.prop(space, "use_sync_select", text="Sync Selection")
+
+        row = layout.row(align=True)
+        row.prop(space, "show_mode_column", text="Show Mode Column")
+        layout.separator()
 
         col = layout.column(align=True)
         col.label(text="Search:")
@@ -343,12 +368,18 @@ class OUTLINER_PT_filter(Panel):
         col = layout.column(align=True)
 
         row = col.row()
-        row.label(icon='GROUP')
+        row.label(icon='OUTLINER_COLLECTION')
         row.prop(space, "use_filter_collection", text="Collections")
+
         row = col.row()
         row.label(icon='OBJECT_DATAMODE')
         row.prop(space, "use_filter_object", text="Objects")
+        row = col.row(align=True)
+        row.label(icon='BLANK1')
         row.prop(space, "filter_state", text="")
+        sub = row.row(align=True)
+        sub.enabled = space.filter_state != 'ALL'
+        sub.prop(space, "filter_invert", text="", icon='ARROW_LEFTRIGHT')
 
         sub = col.column(align=True)
         sub.active = space.use_filter_object
@@ -379,10 +410,17 @@ class OUTLINER_PT_filter(Panel):
         row = sub.row()
         row.label(icon='EMPTY_DATA')
         row.prop(space, "use_filter_object_empty", text="Empties")
+        row = sub.row()
+        if bpy.data.libraries:
+            row.label(icon='LIBRARY_DATA_OVERRIDE')
+            row.prop(space, "use_filter_lib_override", text="Library Overrides")
 
         if (
                 bpy.data.curves or
                 bpy.data.metaballs or
+                (hasattr(bpy.data, "hairs") and bpy.data.hairs) or
+                (hasattr(bpy.data, "pointclouds") and bpy.data.pointclouds) or
+                bpy.data.volumes or
                 bpy.data.lightprobes or
                 bpy.data.lattices or
                 bpy.data.fonts or
@@ -402,8 +440,8 @@ classes = (
     OUTLINER_MT_collection_visibility,
     OUTLINER_MT_collection_view_layer,
     OUTLINER_MT_object,
-    OUTLINER_MT_context,
-    OUTLINER_MT_context_view,
+    OUTLINER_MT_context_menu,
+    OUTLINER_MT_context_menu_view,
     OUTLINER_PT_filter,
 )
 

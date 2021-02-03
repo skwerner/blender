@@ -16,11 +16,10 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_WRITEBUFFEROPERATION_H__
-#define __COM_WRITEBUFFEROPERATION_H__
+#pragma once
 
-#include "COM_NodeOperation.h"
 #include "COM_MemoryProxy.h"
+#include "COM_NodeOperation.h"
 #include "COM_SocketReader.h"
 /**
  * \brief NodeOperation to write to a tile
@@ -63,4 +62,3 @@ class WriteBufferOperation : public NodeOperation {
     return m_input;
   }
 };
-#endif

@@ -17,12 +17,15 @@
  * All rights reserved.
  */
 
-#ifndef __BLI_QUADRIC_H__
-#define __BLI_QUADRIC_H__
+#pragma once
 
 /** \file
  * \ingroup bli
  */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct Quadric {
   double a2, ab, ac, ad, b2, bc, bd, c2, cd, d2;
@@ -43,4 +46,6 @@ void BLI_quadric_mul(Quadric *a, const double scalar);
 double BLI_quadric_evaluate(const Quadric *q, const double v[3]);
 bool BLI_quadric_optimize(const Quadric *q, double v[3], const double epsilon);
 
-#endif /* __BLI_QUADRIC_H__ */
+#ifdef __cplusplus
+}
+#endif

@@ -29,8 +29,8 @@
  *   (optionally when using the #BLI_MEMPOOL_ALLOW_ITER flag).
  */
 
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "atomic_ops.h"
 
@@ -65,7 +65,7 @@
  * Important that this value is an is _not_  aligned with ``sizeof(void *)``.
  * So having a pointer to 2/4/8... aligned memory is enough to ensure
  * the freeword will never be used.
- * To be safe, use a word thats the same in both directions.
+ * To be safe, use a word that's the same in both directions.
  */
 #define FREEWORD \
   ((sizeof(void *) > sizeof(int32_t)) ? MAKE_ID_8('e', 'e', 'r', 'f', 'f', 'r', 'e', 'e') : \
@@ -526,7 +526,7 @@ void BLI_mempool_as_array(BLI_mempool *pool, void *data)
  */
 void *BLI_mempool_as_arrayN(BLI_mempool *pool, const char *allocstr)
 {
-  char *data = MEM_mallocN((size_t)(pool->totused * pool->esize), allocstr);
+  char *data = MEM_malloc_arrayN(pool->totused, pool->esize, allocstr);
   BLI_mempool_as_array(pool, data);
   return data;
 }

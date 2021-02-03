@@ -32,6 +32,11 @@ bool sh_node_poll_default(bNodeType *UNUSED(ntype), bNodeTree *ntree)
   return STREQ(ntree->idname, "ShaderNodeTree");
 }
 
+static bool sh_fn_poll_default(bNodeType *UNUSED(ntype), bNodeTree *ntree)
+{
+  return STREQ(ntree->idname, "ShaderNodeTree") || STREQ(ntree->idname, "GeometryNodeTree");
+}
+
 void sh_node_type_base(
     struct bNodeType *ntype, int type, const char *name, short nclass, short flag)
 {
@@ -40,6 +45,12 @@ void sh_node_type_base(
   ntype->poll = sh_node_poll_default;
   ntype->insert_link = node_insert_link_default;
   ntype->update_internal_links = node_update_internal_links_default;
+}
+
+void sh_fn_node_type_base(bNodeType *ntype, int type, const char *name, short nclass, short flag)
+{
+  sh_node_type_base(ntype, type, name, nclass, flag);
+  ntype->poll = sh_fn_poll_default;
 }
 
 /* ****** */
@@ -231,7 +242,7 @@ void ntreeExecGPUNodes(bNodeTreeExec *exec, GPUMaterial *mat, bNode *output_node
 
   stack = exec->stack;
 
-  for (n = 0, nodeexec = exec->nodeexec; n < exec->totnodes; ++n, ++nodeexec) {
+  for (n = 0, nodeexec = exec->nodeexec; n < exec->totnodes; n++, nodeexec++) {
     node = nodeexec->node;
 
     do_it = false;
@@ -258,6 +269,30 @@ void ntreeExecGPUNodes(bNodeTreeExec *exec, GPUMaterial *mat, bNode *output_node
   }
 }
 
+void node_shader_gpu_bump_tex_coord(GPUMaterial *mat, bNode *node, GPUNodeLink **link)
+{
+  if (node->branch_tag == 1) {
+    /* Add one time the value fo derivative to the input vector. */
+    GPU_link(mat, "dfdx_v3", *link, link);
+  }
+  else if (node->branch_tag == 2) {
+    /* Add one time the value fo derivative to the input vector. */
+    GPU_link(mat, "dfdy_v3", *link, link);
+  }
+  else {
+    /* nothing to do, reference center value. */
+  }
+}
+
+void node_shader_gpu_default_tex_coord(GPUMaterial *mat, bNode *node, GPUNodeLink **link)
+{
+  if (!*link) {
+    *link = GPU_attribute(mat, CD_ORCO, "");
+    GPU_link(mat, "generated_texco", GPU_builtin(GPU_VIEW_POSITION), *link, link);
+    node_shader_gpu_bump_tex_coord(mat, node, link);
+  }
+}
+
 void node_shader_gpu_tex_mapping(GPUMaterial *mat,
                                  bNode *node,
                                  GPUNodeStack *in,
@@ -280,10 +315,10 @@ void node_shader_gpu_tex_mapping(GPUMaterial *mat,
     tmat2 = GPU_uniform((float *)texmap->mat[2]);
     tmat3 = GPU_uniform((float *)texmap->mat[3]);
 
-    GPU_link(mat, "mapping", in[0].link, tmat0, tmat1, tmat2, tmat3, tmin, tmax, &in[0].link);
+    GPU_link(mat, "mapping_mat4", in[0].link, tmat0, tmat1, tmat2, tmat3, tmin, tmax, &in[0].link);
 
     if (texmap->type == TEXMAP_TYPE_NORMAL) {
-      GPU_link(mat, "texco_norm", in[0].link, &in[0].link);
+      GPU_link(mat, "vector_normalize", in[0].link, &in[0].link);
     }
   }
 }

@@ -17,11 +17,11 @@
  */
 
 #include "COM_MovieClipAttributeOperation.h"
-extern "C" {
-#include "BKE_tracking.h"
+
 #include "BKE_movieclip.h"
-}
-MovieClipAttributeOperation::MovieClipAttributeOperation() : NodeOperation()
+#include "BKE_tracking.h"
+
+MovieClipAttributeOperation::MovieClipAttributeOperation()
 {
   this->addOutputSocket(COM_DT_VALUE);
   this->m_framenumber = 0;
@@ -31,7 +31,7 @@ MovieClipAttributeOperation::MovieClipAttributeOperation() : NodeOperation()
 
 void MovieClipAttributeOperation::initExecution()
 {
-  if (this->m_clip == NULL) {
+  if (this->m_clip == nullptr) {
     return;
   }
   float loc[2], scale, angle;

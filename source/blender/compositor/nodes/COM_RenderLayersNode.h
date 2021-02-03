@@ -16,9 +16,11 @@
  * Copyright 2011, Blender Foundation.
  */
 
+#pragma once
+
 #include "COM_Node.h"
-#include "DNA_node_types.h"
 #include "COM_RenderLayersProg.h"
+#include "DNA_node_types.h"
 
 struct Render;
 

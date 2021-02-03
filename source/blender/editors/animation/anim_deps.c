@@ -28,26 +28,29 @@
 #include "DNA_anim_types.h"
 #include "DNA_armature_types.h"
 #include "DNA_gpencil_types.h"
-#include "DNA_object_types.h"
+#include "DNA_mask_types.h"
 #include "DNA_node_types.h"
+#include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_sequence_types.h"
 
 #include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
 
-#include "BKE_animsys.h"
 #include "BKE_action.h"
+#include "BKE_anim_data.h"
 #include "BKE_context.h"
 #include "BKE_fcurve.h"
 #include "BKE_gpencil.h"
 #include "BKE_main.h"
 #include "BKE_node.h"
-#include "BKE_sequencer.h"
 
 #include "DEG_depsgraph.h"
 
 #include "RNA_access.h"
+
+#include "SEQ_sequencer.h"
+#include "SEQ_utils.h"
 
 #include "ED_anim_api.h"
 
@@ -107,7 +110,7 @@ void ANIM_list_elem_update(Main *bmain, Scene *scene, bAnimListElem *ale)
      * we'd be calling property update functions here too ... */
     DEG_id_tag_update(id,
                       ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY |
-                          ID_RECALC_ANIMATION);  // XXX or do we want something more restrictive?
+                          ID_RECALC_ANIMATION); /* XXX or do we want something more restrictive? */
   }
 }
 
@@ -120,7 +123,7 @@ void ANIM_id_update(Main *bmain, ID *id)
         bmain,
         id,
         ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY |
-            ID_RECALC_ANIMATION);  // XXX or do we want something more restrictive?
+            ID_RECALC_ANIMATION); /* XXX or do we want something more restrictive? */
   }
 }
 
@@ -198,10 +201,44 @@ static void animchan_sync_group(bAnimContext *ac, bAnimListElem *ale, bActionGro
   }
 }
 
+static void animchan_sync_fcurve_scene(bAnimListElem *ale)
+{
+  ID *owner_id = ale->id;
+  BLI_assert(GS(owner_id->name) == ID_SCE);
+  Scene *scene = (Scene *)owner_id;
+  FCurve *fcu = (FCurve *)ale->data;
+
+  /* only affect if F-Curve involves sequence_editor.sequences */
+  if (!strstr(fcu->rna_path, "sequences_all")) {
+    return;
+  }
+
+  Editing *ed = SEQ_editing_get(scene, false);
+
+  /* get strip name, and check if this strip is selected */
+  char *seq_name = BLI_str_quoted_substrN(fcu->rna_path, "sequences_all[");
+  if (seq_name == NULL) {
+    return;
+  }
+
+  Sequence *seq = SEQ_get_sequence_by_name(ed->seqbasep, seq_name, false);
+  MEM_freeN(seq_name);
+
+  if (seq == NULL) {
+    return;
+  }
+
+  /* update selection status */
+  if (seq->flag & SELECT) {
+    fcu->flag |= FCURVE_SELECTED;
+  }
+  else {
+    fcu->flag &= ~FCURVE_SELECTED;
+  }
+}
+
 /* perform syncing updates for F-Curves */
-static void animchan_sync_fcurve(bAnimContext *UNUSED(ac),
-                                 bAnimListElem *ale,
-                                 FCurve **active_fcurve)
+static void animchan_sync_fcurve(bAnimListElem *ale)
 {
   FCurve *fcu = (FCurve *)ale->data;
   ID *owner_id = ale->id;
@@ -213,82 +250,17 @@ static void animchan_sync_fcurve(bAnimContext *UNUSED(ac),
     return;
   }
 
-  if (GS(owner_id->name) == ID_SCE) {
-    Scene *scene = (Scene *)owner_id;
-
-    /* only affect if F-Curve involves sequence_editor.sequences */
-    if ((fcu->rna_path) && strstr(fcu->rna_path, "sequences_all")) {
-      Editing *ed = BKE_sequencer_editing_get(scene, false);
-      Sequence *seq;
-      char *seq_name;
-
-      /* get strip name, and check if this strip is selected */
-      seq_name = BLI_str_quoted_substrN(fcu->rna_path, "sequences_all[");
-      seq = BKE_sequence_get_by_name(ed->seqbasep, seq_name, false);
-      if (seq_name) {
-        MEM_freeN(seq_name);
-      }
-
-      /* update selection status */
-      if (seq) {
-        if (seq->flag & SELECT) {
-          fcu->flag |= FCURVE_SELECTED;
-        }
-        else {
-          fcu->flag &= ~FCURVE_SELECTED;
-        }
-      }
-    }
-  }
-  else if (GS(owner_id->name) == ID_NT) {
-    bNodeTree *ntree = (bNodeTree *)owner_id;
-
-    /* check for selected nodes */
-    if ((fcu->rna_path) && strstr(fcu->rna_path, "nodes")) {
-      bNode *node;
-      char *node_name;
-
-      /* get strip name, and check if this strip is selected */
-      node_name = BLI_str_quoted_substrN(fcu->rna_path, "nodes[");
-      node = nodeFindNodebyName(ntree, node_name);
-      if (node_name) {
-        MEM_freeN(node_name);
-      }
-
-      /* update selection/active status */
-      if (node) {
-        /* update selection status */
-        if (node->flag & NODE_SELECT) {
-          fcu->flag |= FCURVE_SELECTED;
-        }
-        else {
-          fcu->flag &= ~FCURVE_SELECTED;
-        }
-
-        /* update active status */
-        /* XXX: this may interfere with setting bones as active if both exist at once;
-         * then again, if that's the case, production setups aren't likely to be animating
-         * nodes while working with bones?
-         */
-        if (node->flag & NODE_ACTIVE) {
-          if (*active_fcurve == NULL) {
-            fcu->flag |= FCURVE_ACTIVE;
-            *active_fcurve = fcu;
-          }
-          else {
-            fcu->flag &= ~FCURVE_ACTIVE;
-          }
-        }
-        else {
-          fcu->flag &= ~FCURVE_ACTIVE;
-        }
-      }
-    }
+  switch (GS(owner_id->name)) {
+    case ID_SCE:
+      animchan_sync_fcurve_scene(ale);
+      break;
+    default:
+      break;
   }
 }
 
 /* perform syncing updates for GPencil Layers */
-static void animchan_sync_gplayer(bAnimContext *UNUSED(ac), bAnimListElem *ale)
+static void animchan_sync_gplayer(bAnimListElem *ale)
 {
   bGPDlayer *gpl = (bGPDlayer *)ale->data;
 
@@ -320,7 +292,6 @@ void ANIM_sync_animchannels_to_data(const bContext *C)
   int filter;
 
   bActionGroup *active_agrp = NULL;
-  FCurve *active_fcurve = NULL;
 
   /* get animation context info for filtering the channels */
   if (ANIM_animdata_get_context(C, &ac) == 0) {
@@ -344,11 +315,11 @@ void ANIM_sync_animchannels_to_data(const bContext *C)
         break;
 
       case ANIMTYPE_FCURVE:
-        animchan_sync_fcurve(&ac, ale, &active_fcurve);
+        animchan_sync_fcurve(ale);
         break;
 
       case ANIMTYPE_GPLAYER:
-        animchan_sync_gplayer(&ac, ale);
+        animchan_sync_gplayer(ale);
         break;
     }
   }
@@ -360,16 +331,6 @@ void ANIM_animdata_update(bAnimContext *ac, ListBase *anim_data)
 {
   bAnimListElem *ale;
 
-  if (ELEM(ac->datatype, ANIMCONT_MASK)) {
-#ifdef DEBUG
-    /* quiet assert */
-    for (ale = anim_data->first; ale; ale = ale->next) {
-      ale->update = 0;
-    }
-#endif
-    return;
-  }
-
   for (ale = anim_data->first; ale; ale = ale->next) {
     if (ale->type == ANIMTYPE_GPLAYER) {
       bGPDlayer *gpl = ale->data;
@@ -377,7 +338,7 @@ void ANIM_animdata_update(bAnimContext *ac, ListBase *anim_data)
       if (ale->update & ANIM_UPDATE_ORDER) {
         ale->update &= ~ANIM_UPDATE_ORDER;
         if (gpl) {
-          // gpencil_sort_frames(gpl);
+          BKE_gpencil_layer_frames_sort(gpl, NULL);
         }
       }
 
@@ -386,6 +347,27 @@ void ANIM_animdata_update(bAnimContext *ac, ListBase *anim_data)
         ANIM_list_elem_update(ac->bmain, ac->scene, ale);
       }
       /* disable handles to avoid crash */
+      if (ale->update & ANIM_UPDATE_HANDLES) {
+        ale->update &= ~ANIM_UPDATE_HANDLES;
+      }
+    }
+    else if (ale->datatype == ALE_MASKLAY) {
+      MaskLayer *masklay = ale->data;
+
+      if (ale->update & ANIM_UPDATE_ORDER) {
+        ale->update &= ~ANIM_UPDATE_ORDER;
+        if (masklay) {
+          /* While correct & we could enable it: 'posttrans_mask_clean' currently
+           * both sorts and removes doubles, so this is not necessary here. */
+          // BKE_mask_layer_shape_sort(masklay);
+        }
+      }
+
+      if (ale->update & ANIM_UPDATE_DEPS) {
+        ale->update &= ~ANIM_UPDATE_DEPS;
+        ANIM_list_elem_update(ac->bmain, ac->scene, ale);
+      }
+      /* Disable handles to avoid assert. */
       if (ale->update & ANIM_UPDATE_HANDLES) {
         ale->update &= ~ANIM_UPDATE_HANDLES;
       }

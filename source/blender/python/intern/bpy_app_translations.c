@@ -33,17 +33,21 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLT_translation.h"
 #include "BLT_lang.h"
+#include "BLT_translation.h"
 
 #include "RNA_types.h"
 
 #include "../generic/python_utildefines.h"
 
 #ifdef WITH_INTERNATIONAL
-#  include "BLI_string.h"
 #  include "BLI_ghash.h"
+#  include "BLI_string.h"
 #endif
+
+/* ------------------------------------------------------------------- */
+/** \name Local Struct to Store Translation
+ * \{ */
 
 typedef struct {
   PyObject_HEAD
@@ -63,9 +67,14 @@ typedef struct {
 /* Our singleton instance pointer */
 static BlenderAppTranslations *_translations = NULL;
 
+/** \} */
+
 #ifdef WITH_INTERNATIONAL
 
-/***** Helpers for ghash *****/
+/* ------------------------------------------------------------------- */
+/** \name Helpers for GHash
+ * \{ */
+
 typedef struct GHashKey {
   const char *msgctxt;
   const char *msgid;
@@ -80,10 +89,10 @@ static GHashKey *_ghashutil_keyalloc(const void *msgctxt, const void *msgid)
   return key;
 }
 
-static unsigned int _ghashutil_keyhash(const void *ptr)
+static uint _ghashutil_keyhash(const void *ptr)
 {
   const GHashKey *key = ptr;
-  unsigned int hash = BLI_ghashutil_strhash(key->msgctxt);
+  const uint hash = BLI_ghashutil_strhash(key->msgctxt);
   return hash ^ BLI_ghashutil_strhash(key->msgid);
 }
 
@@ -111,7 +120,11 @@ static void _ghashutil_keyfree(void *ptr)
 
 #  define _ghashutil_valfree MEM_freeN
 
-/***** Python's messages cache *****/
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Python'S Messages Cache
+ * \{ */
 
 /* We cache all messages available for a given locale from all py dicts into a single ghash.
  * Changing of locale is not so common, while looking for a message translation is,
@@ -389,7 +402,12 @@ static PyObject *app_translations_py_messages_unregister(BlenderAppTranslations 
   Py_RETURN_NONE;
 }
 
-/***** C-defined contexts *****/
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name C-defined Contexts
+ * \{ */
+
 /* This is always available (even when WITH_INTERNATIONAL is not defined). */
 
 static PyTypeObject BlenderAppTranslationsContextsType;
@@ -402,9 +420,9 @@ static BLT_i18n_contexts_descriptor _contexts[] = BLT_I18NCONTEXTS_DESC;
 static PyStructSequence_Field app_translations_contexts_fields[ARRAY_SIZE(_contexts)] = {{NULL}};
 
 static PyStructSequence_Desc app_translations_contexts_desc = {
-    (char *)"bpy.app.translations.contexts",                                  /* name */
-    (char *)"This named tuple contains all pre-defined translation contexts", /* doc */
-    app_translations_contexts_fields,                                         /* fields */
+    "bpy.app.translations.contexts",                                 /* name */
+    "This named tuple contains all predefined translation contexts", /* doc */
+    app_translations_contexts_fields,                                /* fields */
     ARRAY_SIZE(app_translations_contexts_fields) - 1,
 };
 
@@ -439,10 +457,14 @@ static PyObject *app_translations_contexts_make(void)
   return translations_contexts;
 }
 
-/***** Main BlenderAppTranslations Py object definition *****/
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Main #BlenderAppTranslations #PyObject Definition
+ * \{ */
 
 PyDoc_STRVAR(app_translations_contexts_doc,
-             "A named tuple containing all pre-defined translation contexts.\n"
+             "A named tuple containing all predefined translation contexts.\n"
              "\n"
              ".. warning::\n"
              "   Never use a (new) context starting with \"" BLT_I18NCONTEXT_DEFAULT_BPYRNA
@@ -453,12 +475,12 @@ PyDoc_STRVAR(app_translations_contexts_C_to_py_doc,
              "A readonly dict mapping contexts' C-identifiers to their py-identifiers.");
 
 static PyMemberDef app_translations_members[] = {
-    {(char *)"contexts",
+    {"contexts",
      T_OBJECT_EX,
      offsetof(BlenderAppTranslations, contexts),
      READONLY,
      app_translations_contexts_doc},
-    {(char *)"contexts_C_to_py",
+    {"contexts_C_to_py",
      T_OBJECT_EX,
      offsetof(BlenderAppTranslations, contexts_C_to_py),
      READONLY,
@@ -508,16 +530,8 @@ static PyObject *app_translations_locales_get(PyObject *UNUSED(self), void *UNUS
 
 static PyGetSetDef app_translations_getseters[] = {
     /* {name, getter, setter, doc, userdata} */
-    {(char *)"locale",
-     (getter)app_translations_locale_get,
-     NULL,
-     app_translations_locale_doc,
-     NULL},
-    {(char *)"locales",
-     (getter)app_translations_locales_get,
-     NULL,
-     app_translations_locales_doc,
-     NULL},
+    {"locale", (getter)app_translations_locale_get, NULL, app_translations_locale_doc, NULL},
+    {"locales", (getter)app_translations_locales_get, NULL, app_translations_locales_doc, NULL},
     {NULL},
 };
 
@@ -552,7 +566,7 @@ static PyObject *_py_pgettext(PyObject *args,
 
 PyDoc_STRVAR(
     app_translations_pgettext_doc,
-    ".. method:: pgettext(msgid, msgctxt)\n"
+    ".. method:: pgettext(msgid, msgctxt=None)\n"
     "\n"
     "   Try to translate the given msgid (with optional msgctxt).\n"
     "\n"
@@ -586,7 +600,7 @@ static PyObject *app_translations_pgettext(BlenderAppTranslations *UNUSED(self),
 }
 
 PyDoc_STRVAR(app_translations_pgettext_iface_doc,
-             ".. method:: pgettext_iface(msgid, msgctxt)\n"
+             ".. method:: pgettext_iface(msgid, msgctxt=None)\n"
              "\n"
              "   Try to translate the given msgid (with optional msgctxt), if labels' translation "
              "is enabled.\n"
@@ -608,7 +622,7 @@ static PyObject *app_translations_pgettext_iface(BlenderAppTranslations *UNUSED(
 }
 
 PyDoc_STRVAR(app_translations_pgettext_tip_doc,
-             ".. method:: pgettext_tip(msgid, msgctxt)\n"
+             ".. method:: pgettext_tip(msgid, msgctxt=None)\n"
              "\n"
              "   Try to translate the given msgid (with optional msgctxt), if tooltips' "
              "translation is enabled.\n"
@@ -630,7 +644,7 @@ static PyObject *app_translations_pgettext_tip(BlenderAppTranslations *UNUSED(se
 }
 
 PyDoc_STRVAR(app_translations_pgettext_data_doc,
-             ".. method:: pgettext_data(msgid, msgctxt)\n"
+             ".. method:: pgettext_data(msgid, msgctxt=None)\n"
              "\n"
              "   Try to translate the given msgid (with optional msgctxt), if new data name's "
              "translation is enabled.\n"
@@ -781,7 +795,11 @@ static PyTypeObject BlenderAppTranslationsType = {
     /* methods */
     /* No destructor, this is a singleton! */
     NULL, /* tp_dealloc */
-    NULL, /* printfunc tp_print; */
+#if PY_VERSION_HEX >= 0x03080000
+    0, /* tp_vectorcall_offset */
+#else
+    (printfunc)NULL, /* printfunc tp_print */
+#endif
     NULL, /* getattrfunc tp_getattr; */
     NULL, /* setattrfunc tp_setattr; */
     NULL,
@@ -865,7 +883,7 @@ PyObject *BPY_app_translations_struct(void)
     /* We really populate the contexts' fields here! */
     for (ctxt = _contexts, desc = app_translations_contexts_desc.fields; ctxt->c_id;
          ctxt++, desc++) {
-      desc->name = (char *)ctxt->py_id;
+      desc->name = ctxt->py_id;
       desc->doc = NULL;
     }
     desc->name = desc->doc = NULL; /* End sentinel! */
@@ -882,7 +900,7 @@ PyObject *BPY_app_translations_struct(void)
 
   /* prevent user from creating new instances */
   BlenderAppTranslationsType.tp_new = NULL;
-  /* without this we can't do set(sys.modules) [#29635] */
+  /* without this we can't do set(sys.modules) T29635. */
   BlenderAppTranslationsType.tp_hash = (hashfunc)_Py_HashPointer;
 
   return ret;
@@ -890,8 +908,10 @@ PyObject *BPY_app_translations_struct(void)
 
 void BPY_app_translations_end(void)
 {
-  /* Incase the object remains in a module's namespace, see T44127. */
+  /* In case the object remains in a module's name-space, see T44127. */
 #ifdef WITH_INTERNATIONAL
   _clear_translations_cache();
 #endif
 }
+
+/** \} */

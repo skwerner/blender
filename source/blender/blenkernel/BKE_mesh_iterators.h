@@ -13,19 +13,16 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
-#ifndef __BKE_MESH_ITERATORS_H__
-#define __BKE_MESH_ITERATORS_H__
+#pragma once
 
 /** \file
  * \ingroup bke
  */
 
-struct MEdge;
-struct MLoop;
-struct MLoopTri;
-struct MLoopUV;
-struct MPoly;
-struct MVert;
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct Mesh;
 
 typedef enum MeshForeachFlag {
@@ -69,4 +66,6 @@ void BKE_mesh_foreach_mapped_vert_coords_get(struct Mesh *me_eval,
                                              float (*r_cos)[3],
                                              const int totcos);
 
-#endif /* __BKE_MESH_ITERATORS_H__ */
+#ifdef __cplusplus
+}
+#endif

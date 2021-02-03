@@ -14,17 +14,26 @@
  * limitations under the License.
  */
 
+#include "render/integrator.h"
 #include "device/device.h"
 #include "render/background.h"
-#include "render/integrator.h"
+#include "render/camera.h"
 #include "render/film.h"
+#include "render/jitter.h"
 #include "render/light.h"
+#include "render/object.h"
 #include "render/scene.h"
 #include "render/shader.h"
 #include "render/sobol.h"
+#include "render/stats.h"
+
+#include "kernel/kernel_types.h"
 
 #include "util/util_foreach.h"
 #include "util/util_hash.h"
+#include "util/util_logging.h"
+#include "util/util_task.h"
+#include "util/util_time.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -46,7 +55,7 @@ NODE_DEFINE(Integrator)
   SOCKET_INT(ao_bounces, "AO Bounces", 0);
 
   SOCKET_INT(volume_max_steps, "Volume Max Steps", 1024);
-  SOCKET_FLOAT(volume_step_size, "Volume Step Size", 0.1f);
+  SOCKET_FLOAT(volume_step_rate, "Volume Step Rate", 1.0f);
 
   SOCKET_BOOLEAN(caustics_reflective, "Reflective Caustics", true);
   SOCKET_BOOLEAN(caustics_refractive, "Refractive Caustics", true);
@@ -66,6 +75,9 @@ NODE_DEFINE(Integrator)
   SOCKET_INT(volume_samples, "Volume Samples", 1);
   SOCKET_INT(start_sample, "Start Sample", 0);
 
+  SOCKET_FLOAT(adaptive_threshold, "Adaptive Threshold", 0.0f);
+  SOCKET_INT(adaptive_min_samples, "Adaptive Min Samples", 0);
+
   SOCKET_BOOLEAN(sample_all_lights_direct, "Sample All Lights Direct", true);
   SOCKET_BOOLEAN(sample_all_lights_indirect, "Sample All Lights Indirect", true);
   SOCKET_FLOAT(light_sampling_threshold, "Light Sampling Threshold", 0.05f);
@@ -78,6 +90,7 @@ NODE_DEFINE(Integrator)
   static NodeEnum sampling_pattern_enum;
   sampling_pattern_enum.insert("sobol", SAMPLING_PATTERN_SOBOL);
   sampling_pattern_enum.insert("cmj", SAMPLING_PATTERN_CMJ);
+  sampling_pattern_enum.insert("pmj", SAMPLING_PATTERN_PMJ);
   SOCKET_ENUM(sampling_pattern, "Sampling Pattern", sampling_pattern_enum, SAMPLING_PATTERN_SOBOL);
 
   return type;
@@ -85,7 +98,6 @@ NODE_DEFINE(Integrator)
 
 Integrator::Integrator() : Node(node_type)
 {
-  need_update = true;
 }
 
 Integrator::~Integrator()
@@ -94,8 +106,18 @@ Integrator::~Integrator()
 
 void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 {
-  if (!need_update)
+  if (!is_modified())
     return;
+
+  scoped_callback_timer timer([scene](double time) {
+    if (scene->update_stats) {
+      scene->update_stats->integrator.times.add_entry({"device_update", time});
+    }
+  });
+
+  if (sampling_pattern_is_modified()) {
+    dscene->sample_pattern_lut.tag_realloc();
+  }
 
   device_free(device, dscene);
 
@@ -127,7 +149,7 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
   kintegrator->transparent_shadows = false;
   foreach (Shader *shader, scene->shaders) {
     /* keep this in sync with SD_HAS_TRANSPARENT_SHADOW in shader.cpp */
-    if ((shader->has_surface_transparent && shader->use_transparent_shadow) ||
+    if ((shader->has_surface_transparent && shader->get_use_transparent_shadow()) ||
         shader->has_volume) {
       kintegrator->transparent_shadows = true;
       break;
@@ -135,15 +157,15 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
   }
 
   kintegrator->volume_max_steps = volume_max_steps;
-  kintegrator->volume_step_size = volume_step_size;
+  kintegrator->volume_step_rate = volume_step_rate;
 
   kintegrator->caustics_reflective = caustics_reflective;
   kintegrator->caustics_refractive = caustics_refractive;
   kintegrator->filter_glossy = (filter_glossy == 0.0f) ? FLT_MAX : 1.0f / filter_glossy;
 
-  kintegrator->seed = hash_int(seed);
+  kintegrator->seed = hash_uint2(seed, 0);
 
-  kintegrator->use_ambient_occlusion = ((Pass::contains(scene->film->passes, PASS_AO)) ||
+  kintegrator->use_ambient_occlusion = ((Pass::contains(scene->passes, PASS_AO)) ||
                                         dscene->data.background.ao_factor != 0.0f);
 
   kintegrator->sample_clamp_direct = (sample_clamp_direct == 0.0f) ? FLT_MAX :
@@ -152,7 +174,7 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
                                            FLT_MAX :
                                            sample_clamp_indirect * 3.0f;
 
-  kintegrator->branched = (method == BRANCHED_PATH);
+  kintegrator->branched = (method == BRANCHED_PATH) && device->info.has_branched_path;
   kintegrator->volume_decoupled = device->info.has_volume_decoupled;
   kintegrator->diffuse_samples = diffuse_samples;
   kintegrator->glossy_samples = glossy_samples;
@@ -163,7 +185,7 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
   kintegrator->volume_samples = volume_samples;
   kintegrator->start_sample = start_sample;
 
-  if (method == BRANCHED_PATH) {
+  if (kintegrator->branched) {
     kintegrator->sample_all_lights_direct = sample_all_lights_direct;
     kintegrator->sample_all_lights_indirect = sample_all_lights_indirect;
   }
@@ -174,6 +196,29 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
 
   kintegrator->sampling_pattern = sampling_pattern;
   kintegrator->aa_samples = aa_samples;
+  if (aa_samples > 0 && adaptive_min_samples == 0) {
+    kintegrator->adaptive_min_samples = max(4, (int)sqrtf(aa_samples));
+    VLOG(1) << "Cycles adaptive sampling: automatic min samples = "
+            << kintegrator->adaptive_min_samples;
+  }
+  else {
+    kintegrator->adaptive_min_samples = max(4, adaptive_min_samples);
+  }
+
+  kintegrator->adaptive_step = 4;
+  kintegrator->adaptive_stop_per_sample = device->info.has_adaptive_stop_per_sample;
+
+  /* Adaptive step must be a power of two for bitwise operations to work. */
+  assert((kintegrator->adaptive_step & (kintegrator->adaptive_step - 1)) == 0);
+
+  if (aa_samples > 0 && adaptive_threshold == 0.0f) {
+    kintegrator->adaptive_threshold = max(0.001f, 1.0f / (float)aa_samples);
+    VLOG(1) << "Cycles adaptive sampling: automatic threshold = "
+            << kintegrator->adaptive_threshold;
+  }
+  else {
+    kintegrator->adaptive_threshold = adaptive_threshold;
+  }
 
   if (light_sampling_threshold > 0.0f) {
     kintegrator->light_inv_rr_threshold = 1.0f / light_sampling_threshold;
@@ -185,9 +230,9 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
   /* sobol directions table */
   int max_samples = 1;
 
-  if (method == BRANCHED_PATH) {
+  if (kintegrator->branched) {
     foreach (Light *light, scene->lights)
-      max_samples = max(max_samples, light->samples);
+      max_samples = max(max_samples, light->get_samples());
 
     max_samples = max(max_samples,
                       max(diffuse_samples, max(glossy_samples, transmission_samples)));
@@ -203,41 +248,63 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
   int dimensions = PRNG_BASE_NUM + max_samples * PRNG_BOUNCE_NUM;
   dimensions = min(dimensions, SOBOL_MAX_DIMENSIONS);
 
-  uint *directions = dscene->sobol_directions.alloc(SOBOL_BITS * dimensions);
+  if (sampling_pattern_is_modified()) {
+    if (sampling_pattern == SAMPLING_PATTERN_SOBOL) {
+      uint *directions = dscene->sample_pattern_lut.alloc(SOBOL_BITS * dimensions);
 
-  sobol_generate_direction_vectors((uint(*)[SOBOL_BITS])directions, dimensions);
+      sobol_generate_direction_vectors((uint(*)[SOBOL_BITS])directions, dimensions);
 
-  dscene->sobol_directions.copy_to_device();
-
-  /* Clamping. */
-  bool use_sample_clamp = (sample_clamp_direct != 0.0f || sample_clamp_indirect != 0.0f);
-  if (use_sample_clamp != scene->film->use_sample_clamp) {
-    scene->film->use_sample_clamp = use_sample_clamp;
-    scene->film->tag_update(scene);
-  }
-
-  need_update = false;
-}
-
-void Integrator::device_free(Device *, DeviceScene *dscene)
-{
-  dscene->sobol_directions.free();
-}
-
-bool Integrator::modified(const Integrator &integrator)
-{
-  return !Node::equals(integrator);
-}
-
-void Integrator::tag_update(Scene *scene)
-{
-  foreach (Shader *shader, scene->shaders) {
-    if (shader->has_integrator_dependency) {
-      scene->shader_manager->need_update = true;
-      break;
+      dscene->sample_pattern_lut.copy_to_device();
+    }
+    else {
+      constexpr int sequence_size = NUM_PMJ_SAMPLES;
+      constexpr int num_sequences = NUM_PMJ_PATTERNS;
+      float2 *directions = (float2 *)dscene->sample_pattern_lut.alloc(sequence_size *
+                                                                      num_sequences * 2);
+      TaskPool pool;
+      for (int j = 0; j < num_sequences; ++j) {
+        float2 *sequence = directions + j * sequence_size;
+        pool.push(
+            function_bind(&progressive_multi_jitter_02_generate_2D, sequence, sequence_size, j));
+      }
+      pool.wait_work();
+      dscene->sample_pattern_lut.copy_to_device();
     }
   }
-  need_update = true;
+
+  clear_modified();
+}
+
+void Integrator::device_free(Device *, DeviceScene *dscene, bool force_free)
+{
+  dscene->sample_pattern_lut.free_if_need_realloc(force_free);
+}
+
+void Integrator::tag_update(Scene *scene, uint32_t flag)
+{
+  if (flag & UPDATE_ALL) {
+    tag_modified();
+  }
+
+  if (flag & (AO_PASS_MODIFIED | BACKGROUND_AO_MODIFIED)) {
+    /* tag only the ao_bounces socket as modified so we avoid updating sample_pattern_lut
+     * unnecessarily */
+    tag_ao_bounces_modified();
+  }
+
+  if (filter_glossy_is_modified()) {
+    foreach (Shader *shader, scene->shaders) {
+      if (shader->has_integrator_dependency) {
+        scene->shader_manager->tag_update(scene, ShaderManager::INTEGRATOR_MODIFIED);
+        break;
+      }
+    }
+  }
+
+  if (motion_blur_is_modified()) {
+    scene->object_manager->tag_update(scene, ObjectManager::MOTION_BLUR_MODIFIED);
+    scene->camera->tag_modified();
+  }
 }
 
 CCL_NAMESPACE_END

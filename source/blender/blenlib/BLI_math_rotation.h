@@ -17,16 +17,15 @@
  * All rights reserved.
  *
  * The Original Code is: some of this file.
- *
- * */
+ */
 
-#ifndef __BLI_MATH_ROTATION_H__
-#define __BLI_MATH_ROTATION_H__
+#pragma once
 
 /** \file
  * \ingroup bli
  */
 
+#include "BLI_utildefines.h"
 #include "DNA_vec_types.h"
 
 #ifdef __cplusplus
@@ -64,7 +63,7 @@ void conjugate_qt(float q[4]);
 void conjugate_qt_qt(float q1[4], const float q2[4]);
 float dot_qtqt(const float a[4], const float b[4]);
 float normalize_qt(float q[4]);
-float normalize_qt_qt(float q1[4], const float q2[4]);
+float normalize_qt_qt(float r[4], const float q[4]);
 
 /* comparison */
 bool is_zero_qt(const float q[4]);
@@ -95,6 +94,8 @@ void vec_to_quat(float q[4], const float vec[3], short axis, const short upflag)
 void rotation_between_vecs_to_mat3(float m[3][3], const float v1[3], const float v2[3]);
 void rotation_between_vecs_to_quat(float q[4], const float v1[3], const float v2[3]);
 void rotation_between_quats_to_quat(float q[4], const float q1[4], const float q2[4]);
+
+float quat_split_swing_and_twist(const float q[4], int axis, float r_swing[4], float r_twist[4]);
 
 float angle_normalized_qt(const float q[4]);
 float angle_normalized_qtqt(const float q1[4], const float q2[4]);
@@ -219,10 +220,10 @@ void rotate_eulO(float eul[3], const short order, char axis, float angle);
 
 void copy_dq_dq(DualQuat *r, const DualQuat *dq);
 void normalize_dq(DualQuat *dq, float totw);
-void add_weighted_dq_dq(DualQuat *r, const DualQuat *dq, float weight);
+void add_weighted_dq_dq(DualQuat *dq_sum, const DualQuat *dq, float weight);
 void mul_v3m3_dq(float r[3], float R[3][3], DualQuat *dq);
 
-void mat4_to_dquat(DualQuat *r, const float base[4][4], const float M[4][4]);
+void mat4_to_dquat(DualQuat *dq, const float basemat[4][4], const float mat[4][4]);
 void dquat_to_mat4(float R[4][4], const DualQuat *dq);
 
 void quat_apply_track(float quat[4], short axis, short upflag);
@@ -243,5 +244,3 @@ bool mat3_from_axis_conversion_single(int src_axis, int dst_axis, float r_mat[3]
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLI_MATH_ROTATION_H__ */

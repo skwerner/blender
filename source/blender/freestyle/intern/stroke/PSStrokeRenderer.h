@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_PS_STROKE_RENDERER_H__
-#define __FREESTYLE_PS_STROKE_RENDERER_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -41,19 +40,13 @@ namespace Freestyle {
 class PSStrokeRenderer : public StrokeRenderer {
  public:
   PSStrokeRenderer(const char *iFileName = NULL);
-  virtual ~PSStrokeRenderer();
 
   /*! Renders a stroke rep */
   virtual void RenderStrokeRep(StrokeRep *iStrokeRep) const;
   virtual void RenderStrokeRepBasic(StrokeRep *iStrokeRep) const;
-
-  /*! Closes the output PS file */
-  void Close();
 
  protected:
   mutable ofstream _ofstream;
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_PS_STROKE_RENDERER_H__

@@ -1,102 +1,120 @@
-diff -Naur openvdb.orig/openvdb/CMakeLists.txt openvdb/openvdb/CMakeLists.txt
---- openvdb.orig/openvdb/CMakeLists.txt	2018-04-10 12:22:17 -0600
-+++ openvdb/openvdb/CMakeLists.txt	2018-08-15 19:04:52 -0600
-@@ -82,6 +82,9 @@
- IF (WIN32 AND OPENVDB_DISABLE_BOOST_IMPLICIT_LINKING)
-   ADD_DEFINITIONS ( -DBOOST_ALL_NO_LIB )
- ENDIF ()
-+if(WIN32)
-+ADD_DEFINITIONS ( -D__TBB_NO_IMPLICIT_LINKAGE )
-+endif()
- 
- FIND_PACKAGE ( Blosc REQUIRED )
- FIND_PACKAGE ( TBB REQUIRED )
-@@ -195,6 +198,7 @@
-   ${Ilmbase_HALF_LIBRARY}
-   ${ZLIB_LIBRARY}
-   ${BLOSC_blosc_LIBRARY}
-+  ${EXTRA_LIBS}
+diff -Naur orig/cmake/FindIlmBase.cmake openvdb/cmake/FindIlmBase.cmake
+--- orig/cmake/FindIlmBase.cmake	2019-12-06 12:11:33 -0700
++++ openvdb/cmake/FindIlmBase.cmake	2020-08-12 12:48:44 -0600
+@@ -225,6 +225,12 @@
+   list(APPEND CMAKE_FIND_LIBRARY_SUFFIXES
+     "-${IlmBase_VERSION_MAJOR}_${IlmBase_VERSION_MINOR}.lib"
    )
-
- IF (WIN32)
-@@ -225,13 +228,16 @@
-   ${VDB_PRINT_SOURCE_FILES}
-   )
- 
-+if(NOT WIN32)
-+	set(EXTRA_LIBS m stdc++ dl)
-+endif()
-+  
- TARGET_LINK_LIBRARIES ( vdb_print
-   openvdb_shared
-   ${CMAKE_THREAD_LIBS_INIT}
-   ${BLOSC_blosc_LIBRARY}
--  m
--  stdc++
--  )
-+  ${EXTRA_LIBS}
-+)
- 
- SET ( VDB_RENDER_SOURCE_FILES cmd/openvdb_render/main.cc )
- SET_SOURCE_FILES_PROPERTIES ( ${VDB_RENDER_SOURCE_FILES}
-@@ -249,8 +255,7 @@
-   ${Openexr_ILMIMF_LIBRARY}
-   ${Ilmbase_ILMTHREAD_LIBRARY}
-   ${Ilmbase_IEX_LIBRARY}
--  m
--  stdc++
-+  ${EXTRA_LIBS}
-   )
- 
- SET ( VDB_VIEW_SOURCE_FILES
-@@ -270,7 +270,7 @@
-   PROPERTIES
-   COMPILE_FLAGS "-DOPENVDB_USE_BLOSC ${OPENVDB_USE_GLFW_FLAG} -DGL_GLEXT_PROTOTYPES=1"
-   )
--IF (NOT WIN32)
-+IF (FALSE)
-   ADD_EXECUTABLE ( vdb_view
-     ${VDB_VIEW_SOURCE_FILES}
-     )
-@@ -283,9 +288,8 @@
-     ${GLFW_LINK_LIBRARY}
-     ${GLFW_DEPENDENT_LIBRARIES}
-     ${GLEW_GLEW_LIBRARY}
--    m
--    stdc++
--    )
-+	${EXTRA_LIBS}
++  list(APPEND CMAKE_FIND_LIBRARY_SUFFIXES
++    "_s.lib"
 +  )
- ENDIF ()
++  list(APPEND CMAKE_FIND_LIBRARY_SUFFIXES
++    "_s_d.lib"
++  )
+ else()
+   if(ILMBASE_USE_STATIC_LIBS)
+     list(APPEND CMAKE_FIND_LIBRARY_SUFFIXES
+diff -Naur orig/cmake/FindOpenEXR.cmake openvdb/cmake/FindOpenEXR.cmake
+--- orig/cmake/FindOpenEXR.cmake	2019-12-06 12:11:33 -0700
++++ openvdb/cmake/FindOpenEXR.cmake	2020-08-12 12:48:44 -0600
+@@ -218,6 +218,12 @@
+   list(APPEND CMAKE_FIND_LIBRARY_SUFFIXES
+     "-${OpenEXR_VERSION_MAJOR}_${OpenEXR_VERSION_MINOR}.lib"
+   )
++  list(APPEND CMAKE_FIND_LIBRARY_SUFFIXES
++    "_s.lib"
++  )
++  list(APPEND CMAKE_FIND_LIBRARY_SUFFIXES
++    "_s_d.lib"
++  )
+ else()
+   if(OPENEXR_USE_STATIC_LIBS)
+     list(APPEND CMAKE_FIND_LIBRARY_SUFFIXES
+diff -Naur orig/openvdb/CMakeLists.txt openvdb/openvdb/CMakeLists.txt
+--- orig/openvdb/CMakeLists.txt	2019-12-06 12:11:33 -0700
++++ openvdb/openvdb/CMakeLists.txt	2020-08-12 14:12:26 -0600
+@@ -105,7 +105,9 @@
+   #        http://boost.2283326.n4.nabble.com/CMake-config-scripts-broken-in-1-70-td4708957.html
+   #        https://github.com/boostorg/boost_install/commit/160c7cb2b2c720e74463865ef0454d4c4cd9ae7c
+   set(BUILD_SHARED_LIBS ON)
+-  set(Boost_USE_STATIC_LIBS OFF)
++  if(NOT WIN32) # blender links boost statically on windows
++    set(Boost_USE_STATIC_LIBS OFF)
++  endif()
+ endif()
  
- SET ( UNITTEST_SOURCE_FILES
-@@ -392,8 +396,7 @@
-   TARGET_LINK_LIBRARIES ( vdb_test
-     ${CPPUnit_cppunit_LIBRARY}
-     openvdb_shared
--    m
--    stdc++
-+    ${EXTRA_LIBS}
-     )
+ find_package(Boost ${MINIMUM_BOOST_VERSION} REQUIRED COMPONENTS iostreams system)
+@@ -193,6 +195,7 @@
+   if(OPENVDB_DISABLE_BOOST_IMPLICIT_LINKING)
+     add_definitions(-DBOOST_ALL_NO_LIB)
+   endif()
++  add_definitions(-D__TBB_NO_IMPLICIT_LINKAGE -DOPENVDB_OPENEXR_STATICLIB)
+ endif()
  
-   ADD_TEST ( vdb_unit_test vdb_test )
-@@ -422,7 +422,7 @@
- ENDIF ()
+ # @todo Should be target definitions
+@@ -383,7 +386,12 @@
+ # imported targets.
  
- # Installation
--IF ( NOT WIN32 )
-+IF ( FALSE )
-   INSTALL ( TARGETS
-     vdb_view
-     DESTINATION
-diff -Naur openvdb.orig/openvdb/math/Coord.h openvdb/openvdb/math/Coord.h
---- openvdb.orig/openvdb/math/Coord.h	2018-04-10 12:22:17 -0600
-+++ openvdb/openvdb/math/Coord.h	2018-08-15 20:32:43 -0600
-@@ -35,6 +35,7 @@
- #include <array> // for std::array
- #include <iostream>
- #include <limits>
-+#define NOMINMAX
- #include <openvdb/Platform.h>
- #include "Math.h"
- #include "Vec3.h"
+ if(OPENVDB_CORE_SHARED)
+-  add_library(openvdb_shared SHARED ${OPENVDB_LIBRARY_SOURCE_FILES})
++  if(WIN32)
++    configure_file(version.rc.in ${CMAKE_CURRENT_BINARY_DIR}/version.rc @ONLY)
++    add_library(openvdb_shared SHARED ${OPENVDB_LIBRARY_SOURCE_FILES} ${CMAKE_CURRENT_BINARY_DIR}/version.rc)
++  else()
++    add_library(openvdb_shared SHARED ${OPENVDB_LIBRARY_SOURCE_FILES})
++  endif()
+ endif()
+ 
+ if(OPENVDB_CORE_STATIC)
+diff -Naur orig/openvdb/version.rc.in openvdb/openvdb/version.rc.in
+--- orig/openvdb/version.rc.in	1969-12-31 17:00:00 -0700
++++ openvdb/openvdb/version.rc.in	2020-08-12 14:15:01 -0600
+@@ -0,0 +1,48 @@
++#include <winver.h>
++
++#define VER_FILEVERSION             @OpenVDB_MAJOR_VERSION@,@OpenVDB_MINOR_VERSION@,@OpenVDB_PATCH_VERSION@,0
++#define VER_FILEVERSION_STR         "@OpenVDB_MAJOR_VERSION@.@OpenVDB_MINOR_VERSION@.@OpenVDB_PATCH_VERSION@.0\0"
++
++#define VER_PRODUCTVERSION          @OpenVDB_MAJOR_VERSION@,@OpenVDB_MINOR_VERSION@,@OpenVDB_PATCH_VERSION@,0
++#define VER_PRODUCTVERSION_STR      "@OpenVDB_MAJOR_VERSION@.@OpenVDB_MINOR_VERSION@\0"
++
++#ifndef DEBUG
++#define VER_DEBUG                   0
++#else
++#define VER_DEBUG                   VS_FF_DEBUG
++#endif
++
++VS_VERSION_INFO VERSIONINFO
++FILEVERSION     VER_FILEVERSION
++PRODUCTVERSION  VER_PRODUCTVERSION
++FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
++FILEFLAGS       (VER_DEBUG)
++FILEOS          VOS__WINDOWS32
++FILETYPE        VFT_DLL
++FILESUBTYPE     VFT2_UNKNOWN
++BEGIN
++    BLOCK "StringFileInfo"
++    BEGIN
++        BLOCK "040904E4"
++        BEGIN
++            VALUE "FileDescription",  "OpenVDB"
++            VALUE "FileVersion",      VER_FILEVERSION_STR
++            VALUE "InternalName",     "OpenVDB"
++            VALUE "ProductName",      "OpenVDB"
++            VALUE "ProductVersion",   VER_PRODUCTVERSION_STR
++        END
++    END
++
++    BLOCK "VarFileInfo"
++    BEGIN
++        /* The following line should only be modified for localized versions.     */
++        /* It consists of any number of WORD,WORD pairs, with each pair           */
++        /* describing a language,codepage combination supported by the file.      */
++        /*                                                                        */
++        /* For example, a file might have values "0x409,1252" indicating that it  */
++        /* supports English language (0x409) in the Windows ANSI codepage (1252). */
++
++        VALUE "Translation", 0x409, 1252
++
++    END
++END

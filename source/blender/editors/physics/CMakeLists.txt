@@ -27,10 +27,7 @@ set(INC
   ../../windowmanager
   ../../../../intern/glew-mx
   ../../../../intern/guardedalloc
-)
-
-set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
+  ../../../../intern/mantaflow/extern
 )
 
 set(SRC
@@ -56,19 +53,10 @@ set(LIB
 )
 
 if(WITH_MOD_FLUID)
-  list(APPEND INC
-    ../../../../intern/elbeem/extern
-  )
   list(APPEND LIB
-    bf_intern_elbeem
+    bf_intern_mantaflow
   )
-  add_definitions(-DWITH_MOD_FLUID)
-endif()
-
-if(WITH_MOD_SMOKE)
-  list(APPEND LIB
-    bf_intern_smoke
-  )
+  add_definitions(-DWITH_FLUID)
 endif()
 
 if(WITH_INTERNATIONAL)
@@ -82,6 +70,5 @@ if(WITH_BULLET)
   add_definitions(-DWITH_BULLET)
 endif()
 
-add_definitions(${GL_DEFINITIONS})
 
 blender_add_lib(bf_editor_physics "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

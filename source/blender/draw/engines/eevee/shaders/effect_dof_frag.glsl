@@ -1,5 +1,7 @@
 
-uniform mat4 ProjectionMatrix;
+
+#pragma BLENDER_REQUIRE(common_view_lib.glsl)
+#pragma BLENDER_REQUIRE(common_math_lib.glsl)
 
 uniform sampler2D colorBuffer;
 uniform sampler2D depthBuffer;
@@ -20,9 +22,6 @@ uniform vec4 bokehParams[2];
 
 uniform vec2 nearFar; /* Near & far view depths values */
 
-#define M_PI 3.1415926535897932384626433832795
-#define M_2PI 6.2831853071795864769252868
-
 /* -------------- Utils ------------- */
 
 /* divide by sensor size to get the normalized size */
@@ -36,9 +35,10 @@ uniform vec2 nearFar; /* Near & far view depths values */
 #define weighted_sum(a, b, c, d, e) \
   (a * e.x + b * e.y + c * e.z + d * e.w) / max(1e-6, dot(e, vec4(1.0)));
 
-float max_v4(vec4 v)
+vec4 safe_color(vec4 c)
 {
-  return max(max(v.x, v.y), max(v.z, v.w));
+  /* Clamp to avoid black square artifacts if a pixel goes NaN. */
+  return clamp(c, vec4(0.0), vec4(1e20)); /* 1e20 arbitrary. */
 }
 
 #define THRESHOLD 1.0
@@ -57,10 +57,10 @@ void main(void)
   ivec4 uvs = ivec4(gl_FragCoord.xyxy) * 2 + ivec4(0, 0, 1, 1);
 
   /* custom downsampling */
-  vec4 color1 = texelFetch(colorBuffer, uvs.xy, 0);
-  vec4 color2 = texelFetch(colorBuffer, uvs.zw, 0);
-  vec4 color3 = texelFetch(colorBuffer, uvs.zy, 0);
-  vec4 color4 = texelFetch(colorBuffer, uvs.xw, 0);
+  vec4 color1 = safe_color(texelFetch(colorBuffer, uvs.xy, 0));
+  vec4 color2 = safe_color(texelFetch(colorBuffer, uvs.zw, 0));
+  vec4 color3 = safe_color(texelFetch(colorBuffer, uvs.zy, 0));
+  vec4 color4 = safe_color(texelFetch(colorBuffer, uvs.xw, 0));
 
   /* Leverage SIMD by combining 4 depth samples into a vec4 */
   vec4 depth;
@@ -121,7 +121,7 @@ void main(void)
   /* Circle Dof */
   float dist = length(particlecoord);
 
-  /* Ouside of bokeh shape */
+  /* Outside of bokeh shape */
   if (dist > 1.0) {
     discard;
   }
@@ -141,7 +141,7 @@ void main(void)
      * Giving us the new linear radius to the shape edge. */
     dist /= r;
 
-    /* Ouside of bokeh shape */
+    /* Outside of bokeh shape */
     if (dist > 1.0) {
       discard;
     }

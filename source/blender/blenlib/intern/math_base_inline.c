@@ -17,8 +17,7 @@
  * All rights reserved.
  *
  * The Original Code is: some of this file.
- *
- * */
+ */
 
 /** \file
  * \ingroup bli
@@ -28,15 +27,19 @@
 #define __MATH_BASE_INLINE_C__
 
 #include <float.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <limits.h>
 
 #ifdef __SSE2__
 #  include <emmintrin.h>
 #endif
 
 #include "BLI_math_base.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* copied from BLI_utildefines.h */
 #ifdef __GNUC__
@@ -57,6 +60,10 @@ MINLINE float pow3f(float x)
 MINLINE float pow4f(float x)
 {
   return pow2f(pow2f(x));
+}
+MINLINE float pow5f(float x)
+{
+  return pow4f(x) * x;
 }
 MINLINE float pow7f(float x)
 {
@@ -171,6 +178,11 @@ MINLINE float interpf(float target, float origin, float fac)
   return (fac * target) + (1.0f - fac) * origin;
 }
 
+MINLINE double interpd(double target, double origin, double fac)
+{
+  return (fac * target) + (1.0f - fac) * origin;
+}
+
 /* used for zoom values*/
 MINLINE float power_of_2(float val)
 {
@@ -215,7 +227,7 @@ MINLINE unsigned int power_of_2_max_u(unsigned int x)
   return x + 1;
 }
 
-MINLINE unsigned power_of_2_min_u(unsigned x)
+MINLINE unsigned int power_of_2_min_u(unsigned int x)
 {
   x |= (x >> 1);
   x |= (x >> 2);
@@ -223,6 +235,21 @@ MINLINE unsigned power_of_2_min_u(unsigned x)
   x |= (x >> 8);
   x |= (x >> 16);
   return x - (x >> 1);
+}
+
+MINLINE unsigned int log2_floor_u(unsigned int x)
+{
+  return x <= 1 ? 0 : 1 + log2_floor_u(x >> 1);
+}
+
+MINLINE unsigned int log2_ceil_u(unsigned int x)
+{
+  if (is_power_of_2_i((int)x)) {
+    return log2_floor_u(x);
+  }
+  else {
+    return log2_floor_u(x) + 1;
+  }
 }
 
 /* rounding and clamping */
@@ -332,6 +359,14 @@ MINLINE int divide_floor_i(int a, int b)
 }
 
 /**
+ * Integer division that returns the ceiling, instead of flooring like normal C division.
+ */
+MINLINE uint divide_ceil_u(uint a, uint b)
+{
+  return (a + b - 1) / b;
+}
+
+/**
  * modulo that handles negative numbers, works the same as Python's.
  */
 MINLINE int mod_i(int i, int n)
@@ -339,11 +374,117 @@ MINLINE int mod_i(int i, int n)
   return (i % n + n) % n;
 }
 
+MINLINE float fractf(float a)
+{
+  return a - floorf(a);
+}
+
+/* Adapted from godotengine math_funcs.h. */
+MINLINE float wrapf(float value, float max, float min)
+{
+  float range = max - min;
+  return (range != 0.0f) ? value - (range * floorf((value - min) / range)) : min;
+}
+
+MINLINE float pingpongf(float value, float scale)
+{
+  if (scale == 0.0f) {
+    return 0.0f;
+  }
+  return fabsf(fractf((value - scale) / (scale * 2.0f)) * scale * 2.0f - scale);
+}
+
+// Square.
+
+MINLINE int square_s(short a)
+{
+  return a * a;
+}
+
+MINLINE int square_i(int a)
+{
+  return a * a;
+}
+
+MINLINE unsigned int square_uint(unsigned int a)
+{
+  return a * a;
+}
+
+MINLINE int square_uchar(unsigned char a)
+{
+  return a * a;
+}
+
+MINLINE float square_f(float a)
+{
+  return a * a;
+}
+
+MINLINE double square_d(double a)
+{
+  return a * a;
+}
+
+// Cube.
+
+MINLINE int cube_s(short a)
+{
+  return a * a * a;
+}
+
+MINLINE int cube_i(int a)
+{
+  return a * a * a;
+}
+
+MINLINE unsigned int cube_uint(unsigned int a)
+{
+  return a * a * a;
+}
+
+MINLINE int cube_uchar(unsigned char a)
+{
+  return a * a * a;
+}
+
+MINLINE float cube_f(float a)
+{
+  return a * a * a;
+}
+
+MINLINE double cube_d(double a)
+{
+  return a * a * a;
+}
+
+// Min/max
+
 MINLINE float min_ff(float a, float b)
 {
   return (a < b) ? a : b;
 }
 MINLINE float max_ff(float a, float b)
+{
+  return (a > b) ? a : b;
+}
+/* See: https://www.iquilezles.org/www/articles/smin/smin.htm. */
+MINLINE float smoothminf(float a, float b, float c)
+{
+  if (c != 0.0f) {
+    float h = max_ff(c - fabsf(a - b), 0.0f) / c;
+    return min_ff(a, b) - h * h * h * c * (1.0f / 6.0f);
+  }
+  else {
+    return min_ff(a, b);
+  }
+}
+
+MINLINE double min_dd(double a, double b)
+{
+  return (a < b) ? a : b;
+}
+MINLINE double max_dd(double a, double b)
 {
   return (a > b) ? a : b;
 }
@@ -398,6 +539,15 @@ MINLINE size_t min_zz(size_t a, size_t b)
   return (a < b) ? a : b;
 }
 MINLINE size_t max_zz(size_t a, size_t b)
+{
+  return (b < a) ? a : b;
+}
+
+MINLINE char min_cc(char a, char b)
+{
+  return (a < b) ? a : b;
+}
+MINLINE char max_cc(char a, char b)
 {
   return (b < a) ? a : b;
 }
@@ -468,7 +618,20 @@ MINLINE int compare_ff_relative(float a, float b, const float max_diff, const in
 
 MINLINE float signf(float f)
 {
-  return (f < 0.f) ? -1.f : 1.f;
+  return (f < 0.0f) ? -1.0f : 1.0f;
+}
+
+MINLINE float compatible_signf(float f)
+{
+  if (f > 0.0f) {
+    return 1.0f;
+  }
+  if (f < 0.0f) {
+    return -1.0f;
+  }
+  else {
+    return 0.0f;
+  }
 }
 
 MINLINE int signum_i_ex(float a, float eps)
@@ -497,15 +660,19 @@ MINLINE int signum_i(float a)
   }
 }
 
-/** Returns number of (base ten) *significant* digits of integer part of given float
- * (negative in case of decimal-only floats, 0.01 returns -1 e.g.). */
+/**
+ * Returns number of (base ten) *significant* digits of integer part of given float
+ * (negative in case of decimal-only floats, 0.01 returns -1 e.g.).
+ */
 MINLINE int integer_digits_f(const float f)
 {
   return (f == 0.0f) ? 0 : (int)floor(log10(fabs(f))) + 1;
 }
 
-/** Returns number of (base ten) *significant* digits of integer part of given double
- * (negative in case of decimal-only floats, 0.01 returns -1 e.g.). */
+/**
+ * Returns number of (base ten) *significant* digits of integer part of given double
+ * (negative in case of decimal-only floats, 0.01 returns -1 e.g.).
+ */
 MINLINE int integer_digits_d(const double d)
 {
   return (d == 0.0) ? 0 : (int)floor(log10(fabs(d))) + 1;
@@ -525,7 +692,7 @@ MINLINE int integer_digits_i(const int i)
 
 /* Calculate initial guess for arg^exp based on float representation
  * This method gives a constant bias, which can be easily compensated by
- * multiplicating with bias_coeff.
+ * multiplying with bias_coeff.
  * Gives better results for exponents near 1 (e. g. 4/5).
  * exp = exponent, encoded as uint32_t
  * e2coeff = 2^(127/exponent - 127) * bias_coeff^(1/exponent), encoded as
@@ -644,5 +811,9 @@ MINLINE unsigned char unit_ushort_to_uchar(unsigned short val)
     (v1)[3] = unit_float_to_uchar_clamp((v2[3])); \
   } \
   ((void)0)
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __MATH_BASE_INLINE_C__ */

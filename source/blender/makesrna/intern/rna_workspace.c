@@ -58,8 +58,8 @@ static void rna_window_update_all(Main *UNUSED(bmain),
 
 void rna_workspace_screens_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
 {
-  WorkSpace *workspace = ptr->id.data;
-  rna_iterator_listbase_begin(iter, BKE_workspace_layouts_get(workspace), NULL);
+  WorkSpace *workspace = (WorkSpace *)ptr->owner_id;
+  rna_iterator_listbase_begin(iter, &workspace->layouts, NULL);
 }
 
 static PointerRNA rna_workspace_screens_item_get(CollectionPropertyIterator *iter)
@@ -152,7 +152,17 @@ static bToolRef *rna_WorkSpace_tools_from_space_node(WorkSpace *workspace, bool 
                                        },
                                        create);
 }
-
+static bToolRef *rna_WorkSpace_tools_from_space_sequencer(WorkSpace *workspace,
+                                                          int mode,
+                                                          bool create)
+{
+  return rna_WorkSpace_tools_from_tkey(workspace,
+                                       &(bToolKey){
+                                           .space_type = SPACE_SEQ,
+                                           .mode = mode,
+                                       },
+                                       create);
+}
 const EnumPropertyItem *rna_WorkSpace_tools_mode_itemf(bContext *UNUSED(C),
                                                        PointerRNA *ptr,
                                                        PropertyRNA *UNUSED(prop),
@@ -164,6 +174,8 @@ const EnumPropertyItem *rna_WorkSpace_tools_mode_itemf(bContext *UNUSED(C),
       return rna_enum_context_mode_items;
     case SPACE_IMAGE:
       return rna_enum_space_image_mode_all_items;
+    case SPACE_SEQ:
+      return rna_enum_space_sequencer_view_type_items;
   }
   return DummyRNA_DEFAULT_items;
 }
@@ -258,6 +270,9 @@ static void rna_def_workspace_tool(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Identifier", "");
   RNA_def_struct_name_property(srna, prop);
 
+  prop = RNA_def_property(srna, "idname_fallback", PROP_STRING, PROP_NONE);
+  RNA_def_property_ui_text(prop, "Identifier Fallback", "");
+
   prop = RNA_def_property(srna, "index", PROP_INT, PROP_NONE);
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
   RNA_def_property_ui_text(prop, "Index", "");
@@ -279,7 +294,7 @@ static void rna_def_workspace_tool(BlenderRNA *brna)
   RNA_define_verify_sdna(0);
   prop = RNA_def_property(srna, "has_datablock", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-  RNA_def_property_ui_text(prop, "Has Datablock", "");
+  RNA_def_property_ui_text(prop, "Has Data-Block", "");
   RNA_def_property_boolean_funcs(prop, "rna_WorkSpaceTool_has_datablock_get", NULL);
   RNA_define_verify_sdna(1);
 
@@ -288,7 +303,6 @@ static void rna_def_workspace_tool(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Widget", "");
   RNA_def_property_string_funcs(
       prop, "rna_WorkSpaceTool_widget_get", "rna_WorkSpaceTool_widget_length", NULL);
-  RNA_define_verify_sdna(1);
 
   RNA_api_workspace_tool(srna);
 }
@@ -328,6 +342,16 @@ static void rna_def_workspace_tools(BlenderRNA *brna, PropertyRNA *cprop)
 
   func = RNA_def_function(srna, "from_space_node", "rna_WorkSpace_tools_from_space_node");
   RNA_def_function_ui_description(func, "");
+  RNA_def_boolean(func, "create", false, "Create", "");
+  /* return type */
+  parm = RNA_def_pointer(func, "result", "WorkSpaceTool", "", "");
+  RNA_def_function_return(func, parm);
+
+  func = RNA_def_function(
+      srna, "from_space_sequencer", "rna_WorkSpace_tools_from_space_sequencer");
+  RNA_def_function_ui_description(func, "");
+  parm = RNA_def_enum(func, "mode", rna_enum_space_sequencer_view_type_items, 0, "", "");
+  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
   RNA_def_boolean(func, "create", false, "Create", "");
   /* return type */
   parm = RNA_def_pointer(func, "result", "WorkSpaceTool", "", "");

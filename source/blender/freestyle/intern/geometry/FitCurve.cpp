@@ -20,9 +20,9 @@
  * \brief from "Graphics Gems", Academic Press, 1990
  */
 
+#include <cmath>
+#include <cstdio>
 #include <cstdlib>  // for malloc and free
-#include <stdio.h>
-#include <math.h>
 
 #include "FitCurve.h"
 
@@ -30,7 +30,7 @@ using namespace std;
 
 namespace Freestyle {
 
-typedef Vector2 *BezierCurve;
+using BezierCurve = Vector2 *;
 
 /* Forward declarations */
 static double *Reparameterize(Vector2 *d, int first, int last, double *u, BezierCurve bezCurve);
@@ -202,7 +202,7 @@ static BezierCurve GenerateBezier(
   bezCurve[3] = d[last];
   V2Add(&bezCurve[0], V2Scale(&tHat1, alpha_l), &bezCurve[1]);
   V2Add(&bezCurve[3], V2Scale(&tHat2, alpha_r), &bezCurve[2]);
-  return (bezCurve);
+  return bezCurve;
 }
 
 /*
@@ -223,7 +223,7 @@ static double *Reparameterize(Vector2 *d, int first, int last, double *u, Bezier
   for (i = first; i <= last; i++) {
     uPrime[i - first] = NewtonRaphsonRootFind(bezCurve, d[i], u[i - first]);
   }
-  return (uPrime);
+  return uPrime;
 }
 
 /*
@@ -493,7 +493,7 @@ void FitCurveWrapper::FitCurve(vector<Vec2d> &data, vector<Vec2d> &oCurve, doubl
 
   // copy results
   for (vector<Vector2>::iterator v = _vertices.begin(), vend = _vertices.end(); v != vend; ++v) {
-    oCurve.push_back(Vec2d(v->x(), v->y()));
+    oCurve.emplace_back(v->x(), v->y());
   }
 }
 

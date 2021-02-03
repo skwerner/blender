@@ -33,26 +33,32 @@
 
 /* TODO(sergey): Ideally we'll just use char* and statically allocated strings
  * to avoid any possible overhead caused by string (re)allocation/formatting. */
-#include <string>
-#include <vector>
 #include <algorithm>
+#include <deque>
 #include <map>
 #include <set>
-#include <unordered_map>
+#include <string>
+#include <vector>
+
+#include "BLI_map.hh"
+#include "BLI_set.hh"
+#include "BLI_string_ref.hh"
+#include "BLI_vector.hh"
+#include "BLI_vector_set.hh"
 
 struct Depsgraph;
 
 struct CustomData_MeshMasks;
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 /* Commonly used types. */
-using std::map;
+using std::deque;
+using std::optional;
 using std::pair;
-using std::set;
 using std::string;
-using std::unordered_map;
-using std::vector;
+using std::unique_ptr;
 
 /* Commonly used functions. */
 using std::make_pair;
@@ -163,4 +169,5 @@ struct DEGCustomDataMeshMasks {
   }
 };
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

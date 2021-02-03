@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -28,31 +28,46 @@
 #include "BLI_math.h"
 #include "BLI_rand.h"
 
-#include "DNA_meshdata_types.h"
-#include "DNA_scene_types.h"
-#include "DNA_object_types.h"
-#include "DNA_mesh_types.h"
+#include "BLT_translation.h"
 
+#include "DNA_defaults.h"
+#include "DNA_mesh_types.h"
+#include "DNA_meshdata_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
+
+#include "BKE_context.h"
 #include "BKE_deform.h"
 #include "BKE_lattice.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
 #include "BKE_particle.h"
 #include "BKE_scene.h"
+#include "BKE_screen.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "BLO_read_write.h"
+
+#include "RNA_access.h"
 
 #include "DEG_depsgraph_query.h"
 
 #include "MEM_guardedalloc.h"
 
 #include "MOD_modifiertypes.h"
+#include "MOD_ui_common.h"
 
 static void initData(ModifierData *md)
 {
   ExplodeModifierData *emd = (ExplodeModifierData *)md;
 
-  emd->facepa = NULL;
-  emd->flag |= eExplodeFlag_Unborn + eExplodeFlag_Alive + eExplodeFlag_Dead;
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(emd, modifier));
+
+  MEMCPY_STRUCT_AFTER(emd, DNA_struct_default_get(ExplodeModifierData), modifier);
 }
 static void freeData(ModifierData *md)
 {
@@ -67,7 +82,7 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
 #endif
   ExplodeModifierData *temd = (ExplodeModifierData *)target;
 
-  modifier_copyData_generic(md, target, flag);
+  BKE_modifier_copydata_generic(md, target, flag);
 
   temd->facepa = NULL;
 }
@@ -97,6 +112,7 @@ static void createFacepa(ExplodeModifierData *emd, ParticleSystemModifierData *p
   float center[3], co[3];
   int *facepa = NULL, *vertpa = NULL, totvert = 0, totface = 0, totpart = 0;
   int i, p, v1, v2, v3, v4 = 0;
+  const bool invert_vgroup = (emd->flag & eExplodeFlag_INVERT_VGROUP) != 0;
 
   mvert = mesh->mvert;
   mface = mesh->mface;
@@ -129,7 +145,9 @@ static void createFacepa(ExplodeModifierData *emd, ParticleSystemModifierData *p
       for (i = 0; i < totvert; i++, dvert++) {
         float val = BLI_rng_get_float(rng);
         val = (1.0f - emd->protect) * val + emd->protect * 0.5f;
-        if (val < defvert_find_weight(dvert, defgrp_index)) {
+        const float weight = invert_vgroup ? 1.0f - BKE_defvert_find_weight(dvert, defgrp_index) :
+                                             BKE_defvert_find_weight(dvert, defgrp_index);
+        if (val < weight) {
           vertpa[i] = -1;
         }
       }
@@ -201,7 +219,7 @@ static void createFacepa(ExplodeModifierData *emd, ParticleSystemModifierData *p
   BLI_rng_free(rng);
 }
 
-static int edgecut_get(EdgeHash *edgehash, unsigned int v1, unsigned int v2)
+static int edgecut_get(EdgeHash *edgehash, uint v1, uint v2)
 {
   return POINTER_AS_INT(BLI_edgehash_lookup(edgehash, v1, v2));
 }
@@ -238,7 +256,7 @@ static void remap_faces_3_6_9_12(Mesh *mesh,
                                  Mesh *split,
                                  MFace *mf,
                                  int *facepa,
-                                 int *vertpa,
+                                 const int *vertpa,
                                  int i,
                                  EdgeHash *eh,
                                  int cur,
@@ -306,7 +324,7 @@ static void remap_faces_5_10(Mesh *mesh,
                              Mesh *split,
                              MFace *mf,
                              int *facepa,
-                             int *vertpa,
+                             const int *vertpa,
                              int i,
                              EdgeHash *eh,
                              int cur,
@@ -362,7 +380,7 @@ static void remap_faces_15(Mesh *mesh,
                            Mesh *split,
                            MFace *mf,
                            int *facepa,
-                           int *vertpa,
+                           const int *vertpa,
                            int i,
                            EdgeHash *eh,
                            int cur,
@@ -446,7 +464,7 @@ static void remap_faces_7_11_13_14(Mesh *mesh,
                                    Mesh *split,
                                    MFace *mf,
                                    int *facepa,
-                                   int *vertpa,
+                                   const int *vertpa,
                                    int i,
                                    EdgeHash *eh,
                                    int cur,
@@ -515,7 +533,7 @@ static void remap_faces_19_21_22(Mesh *mesh,
                                  Mesh *split,
                                  MFace *mf,
                                  int *facepa,
-                                 int *vertpa,
+                                 const int *vertpa,
                                  int i,
                                  EdgeHash *eh,
                                  int cur,
@@ -569,7 +587,7 @@ static void remap_faces_23(Mesh *mesh,
                            Mesh *split,
                            MFace *mf,
                            int *facepa,
-                           int *vertpa,
+                           const int *vertpa,
                            int i,
                            EdgeHash *eh,
                            int cur,
@@ -649,7 +667,7 @@ static Mesh *cutEdges(ExplodeModifierData *emd, Mesh *mesh)
   int i, v1, v2, v3, v4, esplit, v[4] = {0, 0, 0, 0}, /* To quite gcc barking... */
       uv[4] = {0, 0, 0, 0};                           /* To quite gcc barking... */
   int numlayer;
-  unsigned int ed_v1, ed_v2;
+  uint ed_v1, ed_v2;
 
   edgehash = BLI_edgehash_new(__func__);
 
@@ -906,7 +924,7 @@ static Mesh *explodeMesh(ExplodeModifierData *emd,
   const int *facepa = emd->facepa;
   int totdup = 0, totvert = 0, totface = 0, totpart = 0, delface = 0;
   int i, v, u;
-  unsigned int ed_v1, ed_v2, mindex = 0;
+  uint ed_v1, ed_v2, mindex = 0;
   MTFace *mtface = NULL, *mtf;
 
   totface = mesh->totface;
@@ -938,10 +956,13 @@ static Mesh *explodeMesh(ExplodeModifierData *emd,
         continue;
       }
     }
+    else {
+      pa = NULL;
+    }
 
     /* do mindex + totvert to ensure the vertex index to be the first
      * with BLI_edgehashIterator_getKey */
-    if (facepa[i] == totpart || cfra < (pars + facepa[i])->time) {
+    if (pa == NULL || cfra < pa->time) {
       mindex = totvert + totpart;
     }
     else {
@@ -971,7 +992,6 @@ static Mesh *explodeMesh(ExplodeModifierData *emd,
   explode = BKE_mesh_new_nomain_from_template(mesh, totdup, 0, totface - delface, 0, 0);
 
   mtface = CustomData_get_layer_named(&explode->fdata, CD_MTFACE, emd->uvname);
-  /*dupvert = CDDM_get_verts(explode);*/
 
   /* getting back to object space */
   invert_m4_m4(imat, ctx->object->obmat);
@@ -1022,6 +1042,9 @@ static Mesh *explodeMesh(ExplodeModifierData *emd,
 
       mul_m4_v3(imat, vertco);
     }
+    else {
+      pa = NULL;
+    }
   }
   BLI_edgehashIterator_free(ehi);
 
@@ -1043,13 +1066,17 @@ static Mesh *explodeMesh(ExplodeModifierData *emd,
         continue;
       }
     }
+    else {
+      pa = NULL;
+    }
 
     source = mesh->mface[i];
     mf = &explode->mface[u];
 
     orig_v4 = source.v4;
 
-    if (facepa[i] != totpart && cfra < pa->time) {
+    /* Same as above in the first loop over mesh's faces. */
+    if (pa == NULL || cfra < pa->time) {
       mindex = totvert + totpart;
     }
     else {
@@ -1069,7 +1096,7 @@ static Mesh *explodeMesh(ExplodeModifierData *emd,
 
     /* override uv channel for particle age */
     if (mtface) {
-      float age = (cfra - pa->time) / pa->lifetime;
+      float age = (pa != NULL) ? (cfra - pa->time) / pa->lifetime : 0.0f;
       /* Clamp to this range to avoid flipping to the other side of the coordinates. */
       CLAMP(age, 0.001f, 0.999f);
 
@@ -1092,7 +1119,7 @@ static Mesh *explodeMesh(ExplodeModifierData *emd,
   explode->runtime.cd_dirty_vert |= CD_MASK_NORMAL;
 
   if (psmd->psys->lattice_deform_data) {
-    end_latt_deform(psmd->psys->lattice_deform_data);
+    BKE_lattice_deform_data_destroy(psmd->psys->lattice_deform_data);
     psmd->psys->lattice_deform_data = NULL;
   }
 
@@ -1111,7 +1138,7 @@ static ParticleSystemModifierData *findPrecedingParticlesystem(Object *ob, Modif
   }
   return psmd;
 }
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   ExplodeModifierData *emd = (ExplodeModifierData *)md;
   ParticleSystemModifierData *psmd = findPrecedingParticlesystem(ctx->object, md);
@@ -1155,26 +1182,80 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
       BKE_id_free(NULL, split_m);
       return explode;
     }
-    else {
-      return explodeMesh(emd, psmd, ctx, scene, mesh);
-    }
+
+    return explodeMesh(emd, psmd, ctx, scene, mesh);
   }
   return mesh;
+}
+
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *row, *col;
+  uiLayout *layout = panel->layout;
+  int toggles_flag = UI_ITEM_R_TOGGLE | UI_ITEM_R_FORCE_BLANK_DECORATE;
+
+  PointerRNA ob_ptr;
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
+
+  PointerRNA obj_data_ptr = RNA_pointer_get(&ob_ptr, "data");
+  bool has_vertex_group = RNA_string_length(ptr, "vertex_group") != 0;
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemPointerR(layout, ptr, "particle_uv", &obj_data_ptr, "uv_layers", NULL, ICON_NONE);
+
+  row = uiLayoutRowWithHeading(layout, true, IFACE_("Show"));
+  uiItemR(row, ptr, "show_alive", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, ptr, "show_dead", toggles_flag, NULL, ICON_NONE);
+  uiItemR(row, ptr, "show_unborn", toggles_flag, NULL, ICON_NONE);
+
+  uiLayoutSetPropSep(layout, true);
+
+  col = uiLayoutColumn(layout, false);
+  uiItemR(col, ptr, "use_edge_cut", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "use_size", 0, NULL, ICON_NONE);
+
+  modifier_vgroup_ui(layout, ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
+
+  row = uiLayoutRow(layout, false);
+  uiLayoutSetActive(row, has_vertex_group);
+  uiItemR(row, ptr, "protect", 0, NULL, ICON_NONE);
+
+  uiItemO(layout, IFACE_("Refresh"), ICON_NONE, "OBJECT_OT_explode_refresh");
+
+  modifier_panel_end(layout, ptr);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  modifier_panel_register(region_type, eModifierType_Explode, panel_draw);
+}
+
+static void blendRead(BlendDataReader *UNUSED(reader), ModifierData *md)
+{
+  ExplodeModifierData *psmd = (ExplodeModifierData *)md;
+
+  psmd->facepa = NULL;
 }
 
 ModifierTypeInfo modifierType_Explode = {
     /* name */ "Explode",
     /* structName */ "ExplodeModifierData",
     /* structSize */ sizeof(ExplodeModifierData),
+    /* srna */ &RNA_ExplodeModifier,
     /* type */ eModifierTypeType_Constructive,
     /* flags */ eModifierTypeFlag_AcceptsMesh,
+    /* icon */ ICON_MOD_EXPLODE,
     /* copyData */ copyData,
 
     /* deformVerts */ NULL,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyGeometrySet */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,
@@ -1183,8 +1264,10 @@ ModifierTypeInfo modifierType_Explode = {
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ dependsOnTime,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ NULL,
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ blendRead,
 };

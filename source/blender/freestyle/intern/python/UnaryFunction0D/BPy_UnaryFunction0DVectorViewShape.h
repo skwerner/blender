@@ -18,13 +18,12 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_UNARYFUNCTION0DVECTORVIEWSHAPE_H__
-#define __FREESTYLE_PYTHON_UNARYFUNCTION0DVECTORVIEWSHAPE_H__
+#pragma once
 
 #include "../BPy_UnaryFunction0D.h"
 
-#include <vector>
 #include "../../view_map/ViewMap.h"
+#include <vector>
 
 #ifdef __cplusplus
 extern "C" {
@@ -53,5 +52,3 @@ int UnaryFunction0DVectorViewShape_Init(PyObject *module);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_UNARYFUNCTION0DVECTORVIEWSHAPE_H__ */

@@ -1,6 +1,6 @@
 Project: Google Flags
 URL: https://github.com/gflags/gflags
-License: New BSD
+License: BSD 3-Clause
 Upstream version: 2.2.1 (46f73f88b18)
 Local modifications:
 
@@ -12,6 +12,9 @@ Local modifications:
   * OS_WINDOWS need to be conditinally defined from inside #ifdef WIN32
   * Same applies to HAVE_SHLWAPI_H
   * Disabeld HAVE_FNMATCH_H
+  * Forced disabled GFLAGS_IS_A_DLL
+
+- gflags_declare.h was modified
   * Forced disabled GFLAGS_IS_A_DLL
 
 - Applied some modifications from fork https://github.com/Nazg-Gul/gflags.git

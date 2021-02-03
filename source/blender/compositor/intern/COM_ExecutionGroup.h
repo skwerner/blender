@@ -16,16 +16,19 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_EXECUTIONGROUP_H__
-#define __COM_EXECUTIONGROUP_H__
+#pragma once
 
+#ifdef WITH_CXX_GUARDEDALLOC
+#  include "MEM_guardedalloc.h"
+#endif
+
+#include "BLI_rect.h"
+#include "COM_CompositorContext.h"
+#include "COM_Device.h"
+#include "COM_MemoryProxy.h"
 #include "COM_Node.h"
 #include "COM_NodeOperation.h"
 #include <vector>
-#include "BLI_rect.h"
-#include "COM_MemoryProxy.h"
-#include "COM_Device.h"
-#include "COM_CompositorContext.h"
 
 using std::vector;
 
@@ -195,7 +198,7 @@ class ExecutionGroup {
 
   /**
    * \brief Determine the rect (minx, maxx, miny, maxy) of a chunk at a position.
-   * \note Only gives useful results ater the determination of the chunksize
+   * \note Only gives useful results after the determination of the chunksize
    * \see determineChunkSize()
    */
   void determineChunkRect(rcti *rect, const unsigned int xChunk, const unsigned int yChunk) const;
@@ -224,12 +227,12 @@ class ExecutionGroup {
    * \note Check if a certain area is available, when not available this are will be checked.
    * \note This method is called from other ExecutionGroup's.
    * \param graph:
-   * \param rect:
+   * \param area:
    * \return [true:false]
    * true: package(s) are scheduled
    * false: scheduling is deferred (depending workpackages are scheduled)
    */
-  bool scheduleAreaWhenPossible(ExecutionSystem *graph, rcti *rect);
+  bool scheduleAreaWhenPossible(ExecutionSystem *graph, rcti *area);
 
   /**
    * \brief add a chunk to the WorkScheduler.
@@ -333,7 +336,7 @@ class ExecutionGroup {
    * \brief compose multiple chunks into a single chunk
    * \return Memorybuffer *consolidated chunk
    */
-  MemoryBuffer *constructConsolidatedMemoryBuffer(MemoryProxy *memoryProxy, rcti *output);
+  MemoryBuffer *constructConsolidatedMemoryBuffer(MemoryProxy *memoryProxy, rcti *rect);
 
   /**
    * \brief initExecution is called just before the execution of the whole graph will be done.
@@ -392,9 +395,9 @@ class ExecutionGroup {
    * After determining the order of the chunks the chunks will be scheduled
    *
    * \see ViewerOperation
-   * \param system:
+   * \param graph:
    */
-  void execute(ExecutionSystem *system);
+  void execute(ExecutionSystem *graph);
 
   /**
    * \brief this method determines the MemoryProxy's where this execution group depends on.
@@ -406,7 +409,7 @@ class ExecutionGroup {
 
   /**
    * \brief Determine the rect (minx, maxx, miny, maxy) of a chunk.
-   * \note Only gives useful results ater the determination of the chunksize
+   * \note Only gives useful results after the determination of the chunksize
    * \see determineChunkSize()
    */
   void determineChunkRect(rcti *rect, const unsigned int chunkNumber) const;
@@ -443,5 +446,3 @@ class ExecutionGroup {
   MEM_CXX_CLASS_ALLOC_FUNCS("COM:ExecutionGroup")
 #endif
 };
-
-#endif

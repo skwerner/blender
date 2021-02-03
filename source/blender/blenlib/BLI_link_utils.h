@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLI_LINK_UTILS_H__
-#define __BLI_LINK_UTILS_H__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -61,11 +60,9 @@
 #define BLI_LINKS_FREE(list) \
   { \
     while (list) { \
-      void *next = list->next; \
+      void *next = (list)->next; \
       MEM_freeN(list); \
       list = next; \
     } \
   } \
   (void)0
-
-#endif /* __BLI_LINK_UTILS_H__ */

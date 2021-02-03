@@ -17,9 +17,9 @@
 #ifndef __UTIL_STRING_H__
 #define __UTIL_STRING_H__
 
+#include <sstream>
 #include <string.h>
 #include <string>
-#include <sstream>
 
 #include "util/util_vector.h"
 
@@ -46,7 +46,7 @@ void string_split(vector<string> &tokens,
                   bool skip_empty_tokens = true);
 void string_replace(string &haystack, const string &needle, const string &other);
 bool string_startswith(const string &s, const char *start);
-bool string_endswith(const string &s, const char *end);
+bool string_endswith(const string &s, const string &end);
 string string_strip(const string &s);
 string string_remove_trademark(const string &s);
 string string_from_bool(const bool var);

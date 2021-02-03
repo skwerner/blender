@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BLI_FILEOPS_TYPES_H__
-#define __BLI_FILEOPS_TYPES_H__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -26,6 +25,10 @@
  */
 
 #include <sys/stat.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #if defined(WIN32)
 typedef unsigned int mode_t;
@@ -57,4 +60,6 @@ struct dirlink {
   char *name;
 };
 
-#endif /* __BLI_FILEOPS_TYPES_H__ */
+#ifdef __cplusplus
+}
+#endif

@@ -18,10 +18,10 @@
 
 #include "COM_TranslateNode.h"
 
+#include "COM_ExecutionSystem.h"
 #include "COM_TranslateOperation.h"
 #include "COM_WrapOperation.h"
 #include "COM_WriteBufferOperation.h"
-#include "COM_ExecutionSystem.h"
 
 TranslateNode::TranslateNode(bNode *editorNode) : Node(editorNode)
 {
@@ -42,8 +42,9 @@ void TranslateNode::convertToOperations(NodeConverter &converter,
   TranslateOperation *operation = new TranslateOperation();
   if (data->relative) {
     const RenderData *rd = context.getRenderData();
-    float fx = rd->xsch * rd->size / 100.0f;
-    float fy = rd->ysch * rd->size / 100.0f;
+    const float render_size_factor = context.getRenderPercentageAsFactor();
+    float fx = rd->xsch * render_size_factor;
+    float fy = rd->ysch * render_size_factor;
 
     operation->setFactorXY(fx, fy);
   }

@@ -17,15 +17,15 @@
  */
 
 #include "COM_GlareNode.h"
-#include "DNA_node_types.h"
-#include "COM_GlareThresholdOperation.h"
+#include "COM_FastGaussianBlurOperation.h"
+#include "COM_GlareFogGlowOperation.h"
+#include "COM_GlareGhostOperation.h"
 #include "COM_GlareSimpleStarOperation.h"
 #include "COM_GlareStreaksOperation.h"
-#include "COM_SetValueOperation.h"
+#include "COM_GlareThresholdOperation.h"
 #include "COM_MixOperation.h"
-#include "COM_FastGaussianBlurOperation.h"
-#include "COM_GlareGhostOperation.h"
-#include "COM_GlareFogGlowOperation.h"
+#include "COM_SetValueOperation.h"
+#include "DNA_node_types.h"
 
 GlareNode::GlareNode(bNode *editorNode) : Node(editorNode)
 {
@@ -38,7 +38,7 @@ void GlareNode::convertToOperations(NodeConverter &converter,
   bNode *node = this->getbNode();
   NodeGlare *glare = (NodeGlare *)node->storage;
 
-  GlareBaseOperation *glareoperation = NULL;
+  GlareBaseOperation *glareoperation = nullptr;
   switch (glare->type) {
     default:
     case 3:

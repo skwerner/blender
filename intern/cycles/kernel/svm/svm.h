@@ -20,7 +20,7 @@
 /* Shader Virtual Machine
  *
  * A shader is a list of nodes to be executed. These are simply read one after
- * the other and executed, using an node counter. Each node and it's associated
+ * the other and executed, using an node counter. Each node and its associated
  * data is encoded as one or more uint4's in a 1D texture. If the data is larger
  * than an uint4, the node can increase the node counter to compensate for this.
  * Floats are encoded as int and then converted to float again.
@@ -132,16 +132,25 @@ ccl_device_inline float4 fetch_node_float(KernelGlobals *kg, int offset)
                      __uint_as_float(node.w));
 }
 
-ccl_device_inline void decode_node_uchar4(uint i, uint *x, uint *y, uint *z, uint *w)
+ccl_device_forceinline void svm_unpack_node_uchar2(uint i, uint *x, uint *y)
 {
-  if (x)
-    *x = (i & 0xFF);
-  if (y)
-    *y = ((i >> 8) & 0xFF);
-  if (z)
-    *z = ((i >> 16) & 0xFF);
-  if (w)
-    *w = ((i >> 24) & 0xFF);
+  *x = (i & 0xFF);
+  *y = ((i >> 8) & 0xFF);
+}
+
+ccl_device_forceinline void svm_unpack_node_uchar3(uint i, uint *x, uint *y, uint *z)
+{
+  *x = (i & 0xFF);
+  *y = ((i >> 8) & 0xFF);
+  *z = ((i >> 16) & 0xFF);
+}
+
+ccl_device_forceinline void svm_unpack_node_uchar4(uint i, uint *x, uint *y, uint *z, uint *w)
+{
+  *x = (i & 0xFF);
+  *y = ((i >> 8) & 0xFF);
+  *z = ((i >> 16) & 0xFF);
+  *w = ((i >> 24) & 0xFF);
 }
 
 CCL_NAMESPACE_END
@@ -149,49 +158,56 @@ CCL_NAMESPACE_END
 /* Nodes */
 
 #include "kernel/svm/svm_noise.h"
-#include "svm_texture.h"
+#include "svm_fractal_noise.h"
 
 #include "kernel/svm/svm_color_util.h"
+#include "kernel/svm/svm_mapping_util.h"
 #include "kernel/svm/svm_math_util.h"
 
+#include "kernel/svm/svm_aov.h"
 #include "kernel/svm/svm_attribute.h"
-#include "kernel/svm/svm_gradient.h"
 #include "kernel/svm/svm_blackbody.h"
+#include "kernel/svm/svm_brick.h"
+#include "kernel/svm/svm_brightness.h"
+#include "kernel/svm/svm_bump.h"
+#include "kernel/svm/svm_camera.h"
+#include "kernel/svm/svm_checker.h"
+#include "kernel/svm/svm_clamp.h"
 #include "kernel/svm/svm_closure.h"
-#include "kernel/svm/svm_noisetex.h"
 #include "kernel/svm/svm_convert.h"
 #include "kernel/svm/svm_displace.h"
 #include "kernel/svm/svm_fresnel.h"
-#include "kernel/svm/svm_wireframe.h"
-#include "kernel/svm/svm_wavelength.h"
-#include "kernel/svm/svm_camera.h"
+#include "kernel/svm/svm_gamma.h"
 #include "kernel/svm/svm_geometry.h"
+#include "kernel/svm/svm_gradient.h"
 #include "kernel/svm/svm_hsv.h"
 #include "kernel/svm/svm_ies.h"
 #include "kernel/svm/svm_image.h"
-#include "kernel/svm/svm_gamma.h"
-#include "kernel/svm/svm_brightness.h"
 #include "kernel/svm/svm_invert.h"
 #include "kernel/svm/svm_light_path.h"
 #include "kernel/svm/svm_magic.h"
+#include "kernel/svm/svm_map_range.h"
 #include "kernel/svm/svm_mapping.h"
-#include "kernel/svm/svm_normal.h"
-#include "kernel/svm/svm_wave.h"
 #include "kernel/svm/svm_math.h"
 #include "kernel/svm/svm_mix.h"
+#include "kernel/svm/svm_musgrave.h"
+#include "kernel/svm/svm_noisetex.h"
+#include "kernel/svm/svm_normal.h"
 #include "kernel/svm/svm_ramp.h"
 #include "kernel/svm/svm_sepcomb_hsv.h"
 #include "kernel/svm/svm_sepcomb_vector.h"
-#include "kernel/svm/svm_musgrave.h"
 #include "kernel/svm/svm_sky.h"
 #include "kernel/svm/svm_tex_coord.h"
 #include "kernel/svm/svm_value.h"
-#include "kernel/svm/svm_voronoi.h"
-#include "kernel/svm/svm_checker.h"
-#include "kernel/svm/svm_brick.h"
+#include "kernel/svm/svm_vector_rotate.h"
 #include "kernel/svm/svm_vector_transform.h"
+#include "kernel/svm/svm_vertex_color.h"
+#include "kernel/svm/svm_voronoi.h"
 #include "kernel/svm/svm_voxel.h"
-#include "kernel/svm/svm_bump.h"
+#include "kernel/svm/svm_wave.h"
+#include "kernel/svm/svm_wavelength.h"
+#include "kernel/svm/svm_white_noise.h"
+#include "kernel/svm/svm_wireframe.h"
 
 #ifdef __SHADER_RAYTRACE__
 #  include "kernel/svm/svm_ao.h"
@@ -200,15 +216,27 @@ CCL_NAMESPACE_END
 
 CCL_NAMESPACE_BEGIN
 
-#define NODES_GROUP(group) ((group) <= __NODES_MAX_GROUP__)
-#define NODES_FEATURE(feature) ((__NODES_FEATURES__ & (feature)) != 0)
-
 /* Main Interpreter Loop */
-ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg,
-                                        ShaderData *sd,
-                                        ccl_addr_space PathState *state,
-                                        ShaderType type,
-                                        int path_flag)
+#if defined(__KERNEL_OPTIX__) && defined(__SHADER_RAYTRACE__)
+ccl_device_inline void svm_eval_nodes(KernelGlobals *kg,
+                                      ShaderData *sd,
+                                      ccl_addr_space PathState *state,
+                                      ccl_global float *buffer,
+                                      ShaderType type,
+                                      int path_flag)
+{
+  optixDirectCall<void>(0, kg, sd, state, buffer, type, path_flag);
+}
+extern "C" __device__ void __direct_callable__svm_eval_nodes(
+#else
+ccl_device_noinline void svm_eval_nodes(
+#endif
+    KernelGlobals *kg,
+    ShaderData *sd,
+    ccl_addr_space PathState *state,
+    ccl_global float *buffer,
+    ShaderType type,
+    int path_flag)
 {
   float stack[SVM_STACK_SIZE];
   int offset = sd->shader & SHADER_MASK;
@@ -217,6 +245,8 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg,
     uint4 node = read_node(kg, &offset);
 
     switch (node.x) {
+      case NODE_END:
+        return;
 #if NODES_GROUP(NODE_GROUP_LEVEL_0)
       case NODE_SHADER_JUMP: {
         if (type == SHADER_TYPE_SURFACE)
@@ -276,6 +306,9 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg,
       case NODE_ATTR:
         svm_node_attr(kg, sd, stack, node);
         break;
+      case NODE_VERTEX_COLOR:
+        svm_node_vertex_color(kg, sd, stack, node.y, node.z, node.w);
+        break;
 #  if NODES_FEATURE(NODE_FEATURE_BUMP)
       case NODE_GEOMETRY_BUMP_DX:
         svm_node_geometry_bump_dx(kg, sd, stack, node.y, node.z);
@@ -293,19 +326,16 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg,
         svm_node_vector_displacement(kg, sd, stack, node, &offset);
         break;
 #  endif /* NODES_FEATURE(NODE_FEATURE_BUMP) */
-#  ifdef __TEXTURES__
       case NODE_TEX_IMAGE:
-        svm_node_tex_image(kg, sd, stack, node);
+        svm_node_tex_image(kg, sd, stack, node, &offset);
         break;
       case NODE_TEX_IMAGE_BOX:
         svm_node_tex_image_box(kg, sd, stack, node);
         break;
       case NODE_TEX_NOISE:
-        svm_node_tex_noise(kg, sd, stack, node, &offset);
+        svm_node_tex_noise(kg, sd, stack, node.y, node.z, node.w, &offset);
         break;
-#  endif /* __TEXTURES__ */
-#  ifdef __EXTRA_NODES__
-#    if NODES_FEATURE(NODE_FEATURE_BUMP)
+#  if NODES_FEATURE(NODE_FEATURE_BUMP)
       case NODE_SET_BUMP:
         svm_node_set_bump(kg, sd, stack, node);
         break;
@@ -314,6 +344,12 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg,
         break;
       case NODE_ATTR_BUMP_DY:
         svm_node_attr_bump_dy(kg, sd, stack, node);
+        break;
+      case NODE_VERTEX_COLOR_BUMP_DX:
+        svm_node_vertex_color_bump_dx(kg, sd, stack, node.y, node.z, node.w);
+        break;
+      case NODE_VERTEX_COLOR_BUMP_DY:
+        svm_node_vertex_color_bump_dy(kg, sd, stack, node.y, node.z, node.w);
         break;
       case NODE_TEX_COORD_BUMP_DX:
         svm_node_tex_coord_bump_dx(kg, sd, path_flag, stack, node, &offset);
@@ -324,20 +360,19 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg,
       case NODE_CLOSURE_SET_NORMAL:
         svm_node_set_normal(kg, sd, stack, node.y, node.z);
         break;
-#      if NODES_FEATURE(NODE_FEATURE_BUMP_STATE)
+#    if NODES_FEATURE(NODE_FEATURE_BUMP_STATE)
       case NODE_ENTER_BUMP_EVAL:
         svm_node_enter_bump_eval(kg, sd, stack, node.y);
         break;
       case NODE_LEAVE_BUMP_EVAL:
         svm_node_leave_bump_eval(kg, sd, stack, node.y);
         break;
-#      endif /* NODES_FEATURE(NODE_FEATURE_BUMP_STATE) */
-#    endif   /* NODES_FEATURE(NODE_FEATURE_BUMP) */
+#    endif /* NODES_FEATURE(NODE_FEATURE_BUMP_STATE) */
+#  endif   /* NODES_FEATURE(NODE_FEATURE_BUMP) */
       case NODE_HSV:
         svm_node_hsv(kg, sd, stack, node, &offset);
         break;
-#  endif /* __EXTRA_NODES__ */
-#endif   /* NODES_GROUP(NODE_GROUP_LEVEL_0) */
+#endif /* NODES_GROUP(NODE_GROUP_LEVEL_0) */
 
 #if NODES_GROUP(NODE_GROUP_LEVEL_1)
       case NODE_CLOSURE_HOLDOUT:
@@ -357,7 +392,6 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg,
         svm_node_principled_volume(kg, sd, stack, node, type, path_flag, &offset);
         break;
 #  endif /* NODES_FEATURE(NODE_FEATURE_VOLUME) */
-#  ifdef __EXTRA_NODES__
       case NODE_MATH:
         svm_node_math(kg, sd, stack, node.y, node.z, node.w, &offset);
         break;
@@ -382,19 +416,19 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg,
       case NODE_PARTICLE_INFO:
         svm_node_particle_info(kg, sd, stack, node.y, node.z);
         break;
-#    ifdef __HAIR__
-#      if NODES_FEATURE(NODE_FEATURE_HAIR)
+#  if defined(__HAIR__) && NODES_FEATURE(NODE_FEATURE_HAIR)
       case NODE_HAIR_INFO:
         svm_node_hair_info(kg, sd, stack, node.y, node.z);
         break;
-#      endif /* NODES_FEATURE(NODE_FEATURE_HAIR) */
-#    endif   /* __HAIR__ */
-#  endif     /* __EXTRA_NODES__ */
-#endif       /* NODES_GROUP(NODE_GROUP_LEVEL_1) */
+#  endif /* NODES_FEATURE(NODE_FEATURE_HAIR) */
+#endif   /* NODES_GROUP(NODE_GROUP_LEVEL_1) */
 
 #if NODES_GROUP(NODE_GROUP_LEVEL_2)
+      case NODE_TEXTURE_MAPPING:
+        svm_node_texture_mapping(kg, sd, stack, node.y, node.z, &offset);
+        break;
       case NODE_MAPPING:
-        svm_node_mapping(kg, sd, stack, node.y, node.z, &offset);
+        svm_node_mapping(kg, sd, stack, node.y, node.z, node.w, &offset);
         break;
       case NODE_MIN_MAX:
         svm_node_min_max(kg, sd, stack, node.y, node.z, &offset);
@@ -402,7 +436,6 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg,
       case NODE_CAMERA:
         svm_node_camera(kg, sd, stack, node.y, node.z, node.w);
         break;
-#  ifdef __TEXTURES__
       case NODE_TEX_ENVIRONMENT:
         svm_node_tex_environment(kg, sd, stack, node);
         break;
@@ -413,10 +446,10 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg,
         svm_node_tex_gradient(sd, stack, node);
         break;
       case NODE_TEX_VORONOI:
-        svm_node_tex_voronoi(kg, sd, stack, node, &offset);
+        svm_node_tex_voronoi(kg, sd, stack, node.y, node.z, node.w, &offset);
         break;
       case NODE_TEX_MUSGRAVE:
-        svm_node_tex_musgrave(kg, sd, stack, node, &offset);
+        svm_node_tex_musgrave(kg, sd, stack, node.y, node.z, node.w, &offset);
         break;
       case NODE_TEX_WAVE:
         svm_node_tex_wave(kg, sd, stack, node, &offset);
@@ -430,8 +463,9 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg,
       case NODE_TEX_BRICK:
         svm_node_tex_brick(kg, sd, stack, node, &offset);
         break;
-#  endif /* __TEXTURES__ */
-#  ifdef __EXTRA_NODES__
+      case NODE_TEX_WHITE_NOISE:
+        svm_node_tex_white_noise(kg, sd, stack, node.y, node.z, node.w, &offset);
+        break;
       case NODE_NORMAL:
         svm_node_normal(kg, sd, stack, node.y, node.z, node.w, &offset);
         break;
@@ -441,8 +475,7 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg,
       case NODE_IES:
         svm_node_ies(kg, sd, stack, node, &offset);
         break;
-#  endif /* __EXTRA_NODES__ */
-#endif   /* NODES_GROUP(NODE_GROUP_LEVEL_2) */
+#endif /* NODES_GROUP(NODE_GROUP_LEVEL_2) */
 
 #if NODES_GROUP(NODE_GROUP_LEVEL_3)
       case NODE_RGB_CURVES:
@@ -455,7 +488,6 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg,
       case NODE_NORMAL_MAP:
         svm_node_normal_map(kg, sd, stack, node);
         break;
-#  ifdef __EXTRA_NODES__
       case NODE_INVERT:
         svm_node_invert(sd, stack, node.y, node.z, node.w);
         break;
@@ -474,6 +506,9 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg,
       case NODE_COMBINE_HSV:
         svm_node_combine_hsv(kg, sd, stack, node.y, node.z, node.w, &offset);
         break;
+      case NODE_VECTOR_ROTATE:
+        svm_node_vector_rotate(sd, stack, node.y, node.z, node.w);
+        break;
       case NODE_VECTOR_TRANSFORM:
         svm_node_vector_transform(kg, sd, stack, node);
         break;
@@ -486,12 +521,12 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg,
       case NODE_BLACKBODY:
         svm_node_blackbody(kg, sd, stack, node.y, node.z);
         break;
-#  endif /* __EXTRA_NODES__ */
-#  if NODES_FEATURE(NODE_FEATURE_VOLUME)
-      case NODE_TEX_VOXEL:
-        svm_node_tex_voxel(kg, sd, stack, node, &offset);
+      case NODE_MAP_RANGE:
+        svm_node_map_range(kg, sd, stack, node.y, node.z, node.w, &offset);
         break;
-#  endif /* NODES_FEATURE(NODE_FEATURE_VOLUME) */
+      case NODE_CLAMP:
+        svm_node_clamp(kg, sd, stack, node.y, node.z, node.w, &offset);
+        break;
 #  ifdef __SHADER_RAYTRACE__
       case NODE_BEVEL:
         svm_node_bevel(kg, sd, state, stack, node);
@@ -501,17 +536,31 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg,
         break;
 #  endif /* __SHADER_RAYTRACE__ */
 #endif   /* NODES_GROUP(NODE_GROUP_LEVEL_3) */
-      case NODE_END:
-        return;
+
+#if NODES_GROUP(NODE_GROUP_LEVEL_4)
+#  if NODES_FEATURE(NODE_FEATURE_VOLUME)
+      case NODE_TEX_VOXEL:
+        svm_node_tex_voxel(kg, sd, stack, node, &offset);
+        break;
+#  endif /* NODES_FEATURE(NODE_FEATURE_VOLUME) */
+      case NODE_AOV_START:
+        if (!svm_node_aov_check(state, buffer)) {
+          return;
+        }
+        break;
+      case NODE_AOV_COLOR:
+        svm_node_aov_color(kg, sd, stack, node, buffer);
+        break;
+      case NODE_AOV_VALUE:
+        svm_node_aov_value(kg, sd, stack, node, buffer);
+        break;
+#endif /* NODES_GROUP(NODE_GROUP_LEVEL_4) */
       default:
         kernel_assert(!"Unknown node type was passed to the SVM machine");
         return;
     }
   }
 }
-
-#undef NODES_GROUP
-#undef NODES_FEATURE
 
 CCL_NAMESPACE_END
 

@@ -34,9 +34,11 @@
 #ifndef TEXTSTROKERENDERER_H
 #define TEXTSTROKERENDERER_H
 
-#include "StrokeRenderer.h"
-#include "../system/FreestyleConfig.h"
 #include <fstream>
+
+#include "StrokeRenderer.h"
+
+#include "../system/FreestyleConfig.h"
 
 namespace Freestyle {
 
@@ -51,14 +53,10 @@ namespace Freestyle {
 class TextStrokeRenderer : public StrokeRenderer {
  public:
   TextStrokeRenderer(const char *iFileName = NULL);
-  virtual ~TextStrokeRenderer();
 
   /*! Renders a stroke rep */
   virtual void RenderStrokeRep(StrokeRep *iStrokeRep) const;
   virtual void RenderStrokeRepBasic(StrokeRep *iStrokeRep) const;
-
-  /*! Closes the output file */
-  void Close();
 
  protected:
   mutable ofstream _ofstream;

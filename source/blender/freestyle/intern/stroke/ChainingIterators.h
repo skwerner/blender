@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_CHAINING_ITERATORS_H__
-#define __FREESTYLE_CHAINING_ITERATORS_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -29,8 +28,8 @@
 #include "../system/Iterator.h"
 
 #include "../view_map/ViewMap.h"
-#include "../view_map/ViewMapIterators.h"
 #include "../view_map/ViewMapAdvancedIterators.h"
+#include "../view_map/ViewMapIterators.h"
 
 // using namespace ViewEdgeInternal;
 
@@ -415,5 +414,3 @@ class ChainPredicateIterator : public ChainingIterator {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_CHAINING_ITERATORS_H__

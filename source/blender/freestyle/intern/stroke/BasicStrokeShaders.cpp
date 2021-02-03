@@ -37,14 +37,10 @@
 
 #include "BKE_global.h"
 
-extern "C" {
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
-}
 
-namespace Freestyle {
-
-namespace StrokeShaders {
+namespace Freestyle::StrokeShaders {
 
 //
 //  Thickness modifiers
@@ -57,7 +53,7 @@ int ConstantThicknessShader::shade(Stroke &stroke) const
   int i = 0;
   int size = stroke.strokeVerticesSize();
   for (v = stroke.strokeVerticesBegin(), vend = stroke.strokeVerticesEnd(); v != vend; ++v) {
-    // XXX What's the use of i here? And is not the thickness always overriden by the last line of
+    // XXX What's the use of i here? And is not the thickness always overridden by the last line of
     // the loop?
     if ((1 == i) || (size - 2 == i)) {
       v->attribute().setThickness(_thickness / 4.0, _thickness / 4.0);
@@ -77,7 +73,7 @@ int ConstantExternThicknessShader::shade(Stroke &stroke) const
   int i = 0;
   int size = stroke.strokeVerticesSize();
   for (v = stroke.strokeVerticesBegin(), vend = stroke.strokeVerticesEnd(); v != vend; ++v) {
-    // XXX What's the use of i here? And is not the thickness always overriden by the last line of
+    // XXX What's the use of i here? And is not the thickness always overridden by the last line of
     // the loop?
     if ((1 == i) || (size - 2 == i)) {
       v->attribute().setThickness(_thickness / 2.0, 0);
@@ -156,7 +152,7 @@ int LengthDependingThicknessShader::shade(Stroke &stroke) const
   int i = 0;
   int size = stroke.strokeVerticesSize();
   for (v = stroke.strokeVerticesBegin(), vend = stroke.strokeVerticesEnd(); v != vend; ++v) {
-    // XXX What's the use of i here? And is not the thickness always overriden by the last line of
+    // XXX What's the use of i here? And is not the thickness always overridden by the last line of
     // the loop?
     if ((1 == i) || (size - 2 == i)) {
       v->attribute().setThickness(thickness / 4.0, thickness / 4.0);
@@ -172,13 +168,13 @@ int LengthDependingThicknessShader::shade(Stroke &stroke) const
 
 static const unsigned NB_VALUE_NOISE = 512;
 
-ThicknessNoiseShader::ThicknessNoiseShader() : StrokeShader()
+ThicknessNoiseShader::ThicknessNoiseShader()
 {
   _amplitude = 1.0f;
   _scale = 1.0f / 2.0f / (float)NB_VALUE_NOISE;
 }
 
-ThicknessNoiseShader::ThicknessNoiseShader(float iAmplitude, float iPeriod) : StrokeShader()
+ThicknessNoiseShader::ThicknessNoiseShader(float iAmplitude, float iPeriod)
 {
   _amplitude = iAmplitude;
   _scale = 1.0f / iPeriod / (float)NB_VALUE_NOISE;
@@ -258,13 +254,13 @@ int MaterialColorShader::shade(Stroke &stroke) const
   return 0;
 }
 
-ColorNoiseShader::ColorNoiseShader() : StrokeShader()
+ColorNoiseShader::ColorNoiseShader()
 {
   _amplitude = 1.0f;
   _scale = 1.0f / 2.0f / (float)NB_VALUE_NOISE;
 }
 
-ColorNoiseShader::ColorNoiseShader(float iAmplitude, float iPeriod) : StrokeShader()
+ColorNoiseShader::ColorNoiseShader(float iAmplitude, float iPeriod)
 {
   _amplitude = iAmplitude;
   _scale = 1.0f / iPeriod / (float)NB_VALUE_NOISE;
@@ -386,13 +382,13 @@ int BezierCurveShader::shade(Stroke &stroke) const
   // Build the Bezier curve from this set of data points:
   vector<Vec2d> data;
   StrokeInternal::StrokeVertexIterator v = stroke.strokeVerticesBegin(), vend;
-  data.push_back(Vec2d(v->x(), v->y()));  // first one
+  data.emplace_back(v->x(), v->y());  // first one
   StrokeInternal::StrokeVertexIterator previous = v;
   ++v;
   for (vend = stroke.strokeVerticesEnd(); v != vend; ++v) {
     if (!((fabs(v->x() - (previous)->x()) < M_EPSILON) &&
           ((fabs(v->y() - (previous)->y()) < M_EPSILON)))) {
-      data.push_back(Vec2d(v->x(), v->y()));
+      data.emplace_back(v->x(), v->y());
     }
     previous = v;
   }
@@ -417,7 +413,7 @@ int BezierCurveShader::shade(Stroke &stroke) const
     }
   }
 
-  // Resample the Stroke depending on the number of vertices of the bezier curve:
+  // Re-sample the Stroke depending on the number of vertices of the bezier curve:
   int originalSize = CurveVertices.size();
 #if 0
   float sampling = stroke.ComputeSampling(originalSize);
@@ -427,7 +423,7 @@ int BezierCurveShader::shade(Stroke &stroke) const
   int newsize = stroke.strokeVerticesSize();
   int nExtraVertex = 0;
   if (newsize < originalSize) {
-    cerr << "Warning: unsufficient resampling" << endl;
+    cerr << "Warning: insufficient resampling" << endl;
   }
   else {
     nExtraVertex = newsize - originalSize;
@@ -648,7 +644,7 @@ int GuidingLinesShader::shade(Stroke &stroke) const
 //
 /////////////////////////////////////////
 
-TipRemoverShader::TipRemoverShader(real tipLength) : StrokeShader()
+TipRemoverShader::TipRemoverShader(real tipLength)
 {
   _tipLength = tipLength;
 }
@@ -699,6 +695,4 @@ int TipRemoverShader::shade(Stroke &stroke) const
   return 0;
 }
 
-}  // end of namespace StrokeShaders
-
-} /* namespace Freestyle */
+}  // namespace Freestyle::StrokeShaders

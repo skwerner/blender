@@ -72,6 +72,9 @@ protected:
 		/// The channel mapper reader in between.
 		std::shared_ptr<ChannelMapperReader> m_mapper;
 
+		/// Whether the source is being read for the first time.
+		bool m_first_reading;
+
 		/// Whether to keep the source if end of it is reached.
 		bool m_keep;
 
@@ -180,8 +183,8 @@ protected:
 		virtual bool stop();
 		virtual bool getKeep();
 		virtual bool setKeep(bool keep);
-		virtual bool seek(float position);
-		virtual float getPosition();
+		virtual bool seek(double position);
+		virtual double getPosition();
 		virtual Status getStatus();
 		virtual float getVolume();
 		virtual bool setVolume(float volume);

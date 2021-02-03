@@ -18,17 +18,14 @@
 
 class MemoryBuffer;
 
-#ifndef __COM_MEMORYBUFFER_H__
-#define __COM_MEMORYBUFFER_H__
+#pragma once
 
 #include "COM_ExecutionGroup.h"
 #include "COM_MemoryProxy.h"
 #include "COM_SocketReader.h"
 
-extern "C" {
 #include "BLI_math.h"
 #include "BLI_rect.h"
-}
 
 /**
  * \brief state of a memory buffer
@@ -73,7 +70,7 @@ class MemoryBuffer {
   rcti m_rect;
 
   /**
-   * brief refers to the chunknumber within the executiongroup where related to the MemoryProxy
+   * brief refers to the chunk-number within the execution-group where related to the MemoryProxy
    * \see memoryProxy
    */
   unsigned int m_chunkNumber;
@@ -359,5 +356,3 @@ class MemoryBuffer {
   MEM_CXX_CLASS_ALLOC_FUNCS("COM:MemoryBuffer")
 #endif
 };
-
-#endif

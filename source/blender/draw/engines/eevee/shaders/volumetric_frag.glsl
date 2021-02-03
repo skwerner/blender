@@ -1,17 +1,20 @@
 
+#pragma BLENDER_REQUIRE(volumetric_lib.glsl)
+#pragma BLENDER_REQUIRE(closure_lib.glsl)
+
 /* Based on Frosbite Unified Volumetric.
  * https://www.ea.com/frostbite/news/physically-based-unified-volumetric-rendering-in-frostbite */
-
-#define NODETREE_EXEC
 
 #ifdef MESH_SHADER
 uniform vec3 volumeOrcoLoc;
 uniform vec3 volumeOrcoSize;
+uniform mat4 volumeObjectToTexture;
+uniform float volumeDensityScale = 1.0;
 #endif
 
 flat in int slice;
 
-/* Warning: theses are not attributes, theses are global vars. */
+/* Warning: these are not attributes, these are global vars. */
 vec3 worldPosition = vec3(0.0);
 vec3 viewPosition = vec3(0.0);
 vec3 viewNormal = vec3(0.0);
@@ -35,8 +38,10 @@ void main()
   worldPosition = point_view_to_world(viewPosition);
 #ifdef MESH_SHADER
   volumeObjectLocalCoord = point_world_to_object(worldPosition);
+  /* TODO: redundant transform */
   volumeObjectLocalCoord = (volumeObjectLocalCoord - volumeOrcoLoc + volumeOrcoSize) /
                            (volumeOrcoSize * 2.0);
+  volumeObjectLocalCoord = (volumeObjectToTexture * vec4(volumeObjectLocalCoord, 1.0)).xyz;
 
   if (any(lessThan(volumeObjectLocalCoord, vec3(0.0))) ||
       any(greaterThan(volumeObjectLocalCoord, vec3(1.0))))
@@ -47,6 +52,12 @@ void main()
   Closure cl = CLOSURE_DEFAULT;
 #else
   Closure cl = nodetree_exec();
+#endif
+
+#ifdef MESH_SHADER
+  cl.scatter *= volumeDensityScale;
+  cl.absorption *= volumeDensityScale;
+  cl.emission *= volumeDensityScale;
 #endif
 
   volumeScattering = vec4(cl.scatter, 1.0);

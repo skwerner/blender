@@ -16,9 +16,9 @@
 
 #include <stdio.h>
 
-#include <sstream>
 #include <algorithm>
 #include <iterator>
+#include <sstream>
 
 #include "graph/node_xml.h"
 
@@ -107,7 +107,7 @@ static bool xml_read_int_array(vector<int> &value, xml_node node, const char *na
   return false;
 }
 
-static void xml_write_int_array(const vector<int> &value, xml_node node, const char *name)
+static void xml_write_int_array(const array<int> &value, xml_node node, const char *name)
 {
   xml_attribute attr = node.append_attribute(name);
 
@@ -120,7 +120,7 @@ static void xml_write_int_array(const vector<int> &value, xml_node node, const c
   }
 }
 
-static void xml_write_bool_array(const vector<bool> &value, xml_node node, const char *name)
+static void xml_write_bool_array(const array<bool> &value, xml_node node, const char *name)
 {
   xml_attribute attr = node.append_attribute(name);
 
@@ -250,23 +250,24 @@ static void xml_read_camera(XMLReadState &state, xml_node node)
 {
   Camera *cam = state.scene->camera;
 
-  xml_read_int(&cam->width, node, "width");
-  xml_read_int(&cam->height, node, "height");
+  int width = -1, height = -1;
+  xml_read_int(&width, node, "width");
+  xml_read_int(&height, node, "height");
 
-  cam->full_width = cam->width;
-  cam->full_height = cam->height;
+  cam->set_full_width(width);
+  cam->set_full_height(height);
 
   xml_read_node(state, cam, node);
 
-  cam->matrix = state.tfm;
+  cam->set_matrix(state.tfm);
 
-  cam->need_update = true;
+  cam->need_flags_update = true;
   cam->update(state.scene);
 }
 
 static void xml_write_camera(Camera *cam, xml_node node)
 {
-  xml_node transform = xml_write_transform(cam->matrix, node);
+  xml_node transform = xml_write_transform(cam->get_matrix(), node);
   xml_write_node(cam, transform);
 }
 
@@ -349,7 +350,7 @@ static void xml_read_shader_graph(XMLReadState &state, Shader *shader, xml_node 
             filepath = path_join(state.base, filepath);
           }
 
-          snode = ((OSLShaderManager *)manager)->osl_node(filepath);
+          snode = OSLShaderManager::osl_node(graph, manager, filepath, "");
 
           if (!snode) {
             fprintf(stderr, "Failed to create OSL node from \"%s\".\n", filepath.c_str());
@@ -383,6 +384,10 @@ static void xml_read_shader_graph(XMLReadState &state, Shader *shader, xml_node 
         fprintf(stderr, "Node type \"%s\" is not a shader node.\n", node_type->name.c_str());
         continue;
       }
+      else if (node_type->create == NULL) {
+        fprintf(stderr, "Can't create abstract node type \"%s\".\n", node_type->name.c_str());
+        continue;
+      }
 
       snode = (ShaderNode *)node_type->create(node_type);
     }
@@ -391,11 +396,13 @@ static void xml_read_shader_graph(XMLReadState &state, Shader *shader, xml_node 
 
     if (node_name == "image_texture") {
       ImageTextureNode *img = (ImageTextureNode *)snode;
-      img->filename = path_join(state.base, img->filename.string());
+      ustring filename(path_join(state.base, img->get_filename().string()));
+      img->set_filename(filename);
     }
     else if (node_name == "environment_texture") {
       EnvironmentTextureNode *env = (EnvironmentTextureNode *)snode;
-      env->filename = path_join(state.base, env->filename.string());
+      ustring filename(path_join(state.base, env->get_filename().string()));
+      env->set_filename(filename);
     }
 
     if (snode) {
@@ -472,9 +479,9 @@ static void xml_write_background(Background *background, xml_node node)
   /* Background Settings */
   xml_node background_node = xml_write_node(background, node);
 
-  if (background->shader) {
+  if (background->get_shader()) {
     /* Background Shader */
-    xml_write_shader(background->shader, background_node);
+    xml_write_shader(background->get_shader(), background_node);
   }
 }
 
@@ -484,12 +491,12 @@ static Mesh *xml_add_mesh(Scene *scene, const Transform &tfm)
 {
   /* create mesh */
   Mesh *mesh = new Mesh();
-  scene->meshes.push_back(mesh);
+  scene->geometry.push_back(mesh);
 
   /* create object*/
   Object *object = new Object();
-  object->mesh = mesh;
-  object->tfm = tfm;
+  object->set_geometry(mesh);
+  object->set_tfm(tfm);
   scene->objects.push_back(object);
 
   return mesh;
@@ -499,7 +506,9 @@ static void xml_read_mesh(const XMLReadState &state, xml_node node)
 {
   /* add mesh */
   Mesh *mesh = xml_add_mesh(state.scene, state.tfm);
-  mesh->used_shaders.push_back(state.shader);
+  array<Node *> used_shaders = mesh->get_used_shaders();
+  used_shaders.push_back_slow(state.shader);
+  mesh->set_used_shaders(used_shaders);
 
   /* read state */
   int shader = 0;
@@ -515,20 +524,24 @@ static void xml_read_mesh(const XMLReadState &state, xml_node node)
   xml_read_int_array(nverts, node, "nverts");
 
   if (xml_equal_string(node, "subdivision", "catmull-clark")) {
-    mesh->subdivision_type = Mesh::SUBDIVISION_CATMULL_CLARK;
+    mesh->set_subdivision_type(Mesh::SUBDIVISION_CATMULL_CLARK);
   }
   else if (xml_equal_string(node, "subdivision", "linear")) {
-    mesh->subdivision_type = Mesh::SUBDIVISION_LINEAR;
+    mesh->set_subdivision_type(Mesh::SUBDIVISION_LINEAR);
   }
 
-  if (mesh->subdivision_type == Mesh::SUBDIVISION_NONE) {
+  array<float3> P_array;
+  P_array = P;
+
+  if (mesh->get_subdivision_type() == Mesh::SUBDIVISION_NONE) {
     /* create vertices */
-    mesh->verts = P;
+
+    mesh->set_verts(P_array);
 
     size_t num_triangles = 0;
     for (size_t i = 0; i < nverts.size(); i++)
       num_triangles += nverts[i] - 2;
-    mesh->reserve_mesh(mesh->verts.size(), num_triangles);
+    mesh->reserve_mesh(mesh->get_verts().size(), num_triangles);
 
     /* create triangles */
     int index_offset = 0;
@@ -578,7 +591,7 @@ static void xml_read_mesh(const XMLReadState &state, xml_node node)
   }
   else {
     /* create vertices */
-    mesh->verts = P;
+    mesh->set_verts(P_array);
 
     size_t num_ngons = 0;
     size_t num_corners = 0;
@@ -617,23 +630,20 @@ static void xml_read_mesh(const XMLReadState &state, xml_node node)
     }
 
     /* setup subd params */
-    if (!mesh->subd_params) {
-      mesh->subd_params = new SubdParams(mesh);
-    }
-    SubdParams &sdparams = *mesh->subd_params;
+    float dicing_rate = state.dicing_rate;
+    xml_read_float(&dicing_rate, node, "dicing_rate");
+    dicing_rate = std::max(0.1f, dicing_rate);
 
-    sdparams.dicing_rate = state.dicing_rate;
-    xml_read_float(&sdparams.dicing_rate, node, "dicing_rate");
-    sdparams.dicing_rate = std::max(0.1f, sdparams.dicing_rate);
-
-    sdparams.objecttoworld = state.tfm;
+    mesh->set_subd_dicing_rate(dicing_rate);
+    mesh->set_subd_objecttoworld(state.tfm);
   }
 
   /* we don't yet support arbitrary attributes, for now add vertex
    * coordinates as generated coordinates if requested */
   if (mesh->need_attribute(state.scene, ATTR_STD_GENERATED)) {
     Attribute *attr = mesh->attributes.add(ATTR_STD_GENERATED);
-    memcpy(attr->data_float3(), mesh->verts.data(), sizeof(float3) * mesh->verts.size());
+    memcpy(
+        attr->data_float3(), mesh->get_verts().data(), sizeof(float3) * mesh->get_verts().size());
   }
 }
 
@@ -696,46 +706,33 @@ static void xml_write_attribute(const Attribute &attr, xml_node attribute)
   attribute.append_child(pugi::node_pcdata).set_value(encoded.c_str());
 }
 
-static void xml_write_mesh(const Mesh *mesh, xml_node node)
+static void xml_write_mesh(Mesh *mesh, xml_node node)
 {
   xml_node mesh_node = xml_write_node(mesh, node);
   mesh_node.attribute("name") = ustring::format("%s:%zx", mesh->name.c_str(), mesh).c_str();
 
   /* Subdivison surfaces must be written explicitly. */
-  vector<int> start_corners;
-  vector<int> num_corners;
-  vector<int> shader;
-  vector<bool> smooth;
-  vector<int> ptex_offset;
-  for (size_t i = 0; i < mesh->subd_faces.size(); ++i) {
-    const Mesh::SubdFace &face = mesh->subd_faces[i];
-    start_corners.push_back(face.start_corner);
-    num_corners.push_back(face.num_corners);
-    shader.push_back(face.shader);
-    smooth.push_back(face.smooth);
-    ptex_offset.push_back(face.ptex_offset);
-  }
-  xml_write_int_array(start_corners, mesh_node, "subd.start_corners");
-  xml_write_int_array(num_corners, mesh_node, "subd.num_corners");
-  xml_write_int_array(shader, mesh_node, "subd.shader");
-  xml_write_bool_array(smooth, mesh_node, "subd.num_corners");
-  xml_write_int_array(ptex_offset, mesh_node, "subd.ptex_offset");
+  xml_write_int_array(mesh->get_subd_start_corner(), mesh_node, "subd.start_corners");
+  xml_write_int_array(mesh->get_subd_num_corners(), mesh_node, "subd.num_corners");
+  xml_write_int_array(mesh->get_subd_shader(), mesh_node, "subd.shader");
+  xml_write_bool_array(mesh->get_subd_smooth(), mesh_node, "subd.smooth");
+  xml_write_int_array(mesh->get_subd_ptex_offset(), mesh_node, "subd.ptex_offset");
 
-  if (mesh->subd_params) {
-    mesh_node.append_attribute("subd_params.ptex").set_value(mesh->subd_params->ptex);
-    mesh_node.append_attribute("subd_params.test_steps").set_value(mesh->subd_params->test_steps);
+  if (mesh->get_subd_params()) {
+    mesh_node.append_attribute("subd_params.ptex").set_value(mesh->get_subd_params()->ptex);
+    mesh_node.append_attribute("subd_params.test_steps").set_value(mesh->get_subd_params()->test_steps);
     mesh_node.append_attribute("subd_params.split_threshold")
-        .set_value(mesh->subd_params->split_threshold);
+        .set_value(mesh->get_subd_params()->split_threshold);
     mesh_node.append_attribute("subd_params.dicing_rate")
-        .set_value(mesh->subd_params->dicing_rate);
-    mesh_node.append_attribute("subd_params.max_level").set_value(mesh->subd_params->max_level);
+        .set_value(mesh->get_subd_params()->dicing_rate);
+    mesh_node.append_attribute("subd_params.max_level").set_value(mesh->get_subd_params()->max_level);
   }
 
   std::stringstream ss;
-  for (size_t i = 0; i < mesh->used_shaders.size(); ++i) {
-    const Shader *shader = mesh->used_shaders[i];
+  for (size_t i = 0; i < mesh->get_used_shaders().size(); ++i) {
+    const Shader *shader = static_cast<const Shader *>(mesh->get_used_shaders()[i]);
     ss << shader->name.c_str();
-    if (i != mesh->used_shaders.size() - 1) {
+    if (i != mesh->get_used_shaders().size() - 1) {
       ss << " ";
     }
   }
@@ -745,11 +742,21 @@ static void xml_write_mesh(const Mesh *mesh, xml_node node)
   foreach (const Attribute &attr, mesh->attributes.attributes) {
     xml_write_attribute(attr, mesh_node.append_child("attribute"));
   }
-  foreach (const Attribute &attr, mesh->curve_attributes.attributes) {
-    xml_write_attribute(attr, mesh_node.append_child("curve_attribute"));
-  }
   foreach (const Attribute &attr, mesh->subd_attributes.attributes) {
     xml_write_attribute(attr, mesh_node.append_child("subd_attribute"));
+  }
+}
+
+static void xml_write_geometry(Geometry *geom, xml_node node)
+{
+  if(geom->is_mesh()) {
+    xml_write_mesh(static_cast<Mesh*>(geom), node);
+  }
+  else if (geom->is_hair()) {
+    // TODO
+  }
+  else if (geom->is_volume()) {
+    // TODO
   }
 }
 
@@ -759,7 +766,7 @@ static void xml_read_light(XMLReadState &state, xml_node node)
 {
   Light *light = new Light();
 
-  light->shader = state.shader;
+  light->set_shader(state.shader);
   xml_read_node(state, light, node);
 
   state.scene->lights.push_back(light);
@@ -801,9 +808,9 @@ static void xml_read_transform(xml_node node, Transform &tfm)
 static void xml_write_object(const Object *object, xml_node node)
 {
   xml_node object_node = xml_write_node(object, node);
-  if (object->mesh) {
+  if (object->get_geometry()) {
     object_node.attribute(
-        "mesh") = ustring::format("%s:%zx", object->mesh->name.c_str(), object->mesh).c_str();
+        "mesh") = ustring::format("%s:%zx", object->get_geometry()->name.c_str(), object->get_geometry()).c_str();
   }
 }
 
@@ -907,8 +914,8 @@ static void xml_write_scene(const Scene *scene, const SessionParams *params, xml
     xml_write_node(light, node);
   }
 
-  foreach (Mesh *mesh, scene->meshes) {
-    xml_write_mesh(mesh, node);
+  foreach (Geometry *geom, scene->geometry) {
+    xml_write_geometry(geom, node);
   }
 
   foreach (Object *object, scene->objects) {

@@ -231,7 +231,7 @@ ccl_device float bssrdf_burley_eval(const float d, float r)
    * NOTES:
    * - Surface albedo is already included into sc->weight, no need to
    *   multiply by this term here.
-   * - This is normalized diffuse model, so the equation is mutliplied
+   * - This is normalized diffuse model, so the equation is multiplied
    *   by 2*pi, which also matches cdf().
    */
   float exp_r_3_d = expf(-r / (3.0f * d));
@@ -438,7 +438,8 @@ ccl_device void bssrdf_sample(const ShaderClosure *sc, float xi, float *r, float
   }
   else if (xi < 2.0f) {
     xi -= 1.0f;
-    radius = (bssrdf->radius.x > 0.0f) ? bssrdf->radius.y : bssrdf->radius.z;
+    radius = (bssrdf->radius.x > 0.0f && bssrdf->radius.y > 0.0f) ? bssrdf->radius.y :
+                                                                    bssrdf->radius.z;
   }
   else {
     xi -= 2.0f;

@@ -32,7 +32,7 @@
 
 #include "BKE_collection.h"
 #include "BKE_context.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_object.h"
 #include "BKE_report.h"
@@ -40,8 +40,8 @@
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
 
-#include "ED_screen.h"
 #include "ED_object.h"
+#include "ED_screen.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -49,6 +49,8 @@
 #include "RNA_access.h"
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
+
+#include "UI_interface_icons.h"
 
 #include "object_intern.h"
 
@@ -94,7 +96,7 @@ static const EnumPropertyItem *collection_object_active_itemf(bContext *C,
     collection = NULL;
     while ((collection = BKE_collection_object_find(bmain, scene, collection, ob))) {
       item_tmp.identifier = item_tmp.name = collection->id.name + 2;
-      /* item_tmp.icon = ICON_ARMATURE_DATA; */
+      item_tmp.icon = UI_icon_color_from_collection(collection);
       item_tmp.value = i;
       RNA_enum_item_add(&item, &totitem, &item_tmp);
       i++;
@@ -186,7 +188,7 @@ void COLLECTION_OT_objects_add_active(wmOperatorType *ot)
   PropertyRNA *prop;
 
   /* identifiers */
-  ot->name = "Add Selected To Active Collection";
+  ot->name = "Add Selected to Active Collection";
   ot->description = "Add the object to an object collection that contains the active object";
   ot->idname = "COLLECTION_OT_objects_add_active";
 
@@ -259,7 +261,7 @@ void COLLECTION_OT_objects_remove_active(wmOperatorType *ot)
   PropertyRNA *prop;
 
   /* identifiers */
-  ot->name = "Remove Selected From Active Collection";
+  ot->name = "Remove Selected from Active Collection";
   ot->description = "Remove the object from an object collection that contains the active object";
   ot->idname = "COLLECTION_OT_objects_remove_active";
 
@@ -302,8 +304,8 @@ static int collection_objects_remove_all_exec(bContext *C, wmOperator *UNUSED(op
 void COLLECTION_OT_objects_remove_all(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Remove From All Unlinked Collections";
-  ot->description = "Remove selected objects from all collections not used in a scene";
+  ot->name = "Remove from All Collections";
+  ot->description = "Remove selected objects from all collections";
   ot->idname = "COLLECTION_OT_objects_remove_all";
 
   /* api callbacks */
@@ -361,7 +363,7 @@ void COLLECTION_OT_objects_remove(wmOperatorType *ot)
   PropertyRNA *prop;
 
   /* identifiers */
-  ot->name = "Remove From Collection";
+  ot->name = "Remove from Collection";
   ot->description = "Remove selected objects from a collection";
   ot->idname = "COLLECTION_OT_objects_remove";
 
@@ -481,9 +483,21 @@ static int collection_link_exec(bContext *C, wmOperator *op)
     return OPERATOR_FINISHED;
   }
 
+  /* Currently this should not be allowed (might be supported in the future though...). */
+  if (ID_IS_OVERRIDE_LIBRARY(&collection->id)) {
+    BKE_report(op->reports, RPT_ERROR, "Could not add the collection because it is overridden");
+    return OPERATOR_CANCELLED;
+  }
+  /* Linked collections are already checked for by using RNA_collection_local_itemf
+   * but operator can be called without invoke */
+  if (ID_IS_LINKED(&collection->id)) {
+    BKE_report(op->reports, RPT_ERROR, "Could not add the collection because it is linked");
+    return OPERATOR_CANCELLED;
+  }
+
   /* Adding object to collection which is used as dupli-collection for self is bad idea.
    *
-   * It is also  bad idea to add object to collection which is in collection which
+   * It is also bad idea to add object to collection which is in collection which
    * contains our current object.
    */
   if (BKE_collection_object_cyclic_check(bmain, ob, collection)) {

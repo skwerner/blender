@@ -25,15 +25,15 @@
 #  include <io.h>
 #endif
 
-#include "BLI_utildefines.h"
 #include "BLI_fileops.h"
+#include "BLI_utildefines.h"
 
 #include "MEM_guardedalloc.h"
 
 #include "imbuf.h"
 
-#include "IMB_imbuf_types.h"
 #include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
 
 #include "IMB_filetype.h"
 
@@ -59,6 +59,14 @@ typedef struct TARGA {
   unsigned char pixsize;
   unsigned char imgdes;
 } TARGA;
+
+/**
+ * On-disk header size.
+ *
+ * \note In theory it's possible padding would make the struct and on-disk size differ,
+ * so use a constant instead of `sizeof(TARGA)`.
+ */
+#define TARGA_HEADER_SIZE 18
 
 /***/
 
@@ -127,9 +135,9 @@ static int tga_out4(unsigned int data, FILE *file)
 
 static bool makebody_tga(ImBuf *ibuf, FILE *file, int (*out)(unsigned int, FILE *))
 {
-  register int last, this;
-  register int copy, bytes;
-  register unsigned int *rect, *rectstart, *temp;
+  int last, this;
+  int copy, bytes;
+  unsigned int *rect, *rectstart, *temp;
   int y;
 
   for (y = 0; y < ibuf->y; y++) {
@@ -286,13 +294,11 @@ static bool dumptarga(struct ImBuf *ibuf, FILE *file)
   return 1;
 }
 
-int imb_savetarga(struct ImBuf *ibuf, const char *name, int flags)
+bool imb_savetarga(struct ImBuf *ibuf, const char *filepath, int UNUSED(flags))
 {
-  char buf[20] = {0};
+  char buf[TARGA_HEADER_SIZE] = {0};
   FILE *fildes;
   bool ok = false;
-
-  (void)flags; /* unused */
 
   buf[16] = (ibuf->planes + 0x7) & ~0x7;
   if (ibuf->planes > 8) {
@@ -321,12 +327,12 @@ int imb_savetarga(struct ImBuf *ibuf, const char *name, int flags)
   if (ibuf->planes == 32) {
     buf[17] |= 0x08;
   }
-  fildes = BLI_fopen(name, "wb");
+  fildes = BLI_fopen(filepath, "wb");
   if (!fildes) {
     return 0;
   }
 
-  if (fwrite(buf, 1, 18, fildes) != 18) {
+  if (fwrite(buf, 1, TARGA_HEADER_SIZE, fildes) != TARGA_HEADER_SIZE) {
     fclose(fildes);
     return 0;
   }
@@ -355,8 +361,12 @@ int imb_savetarga(struct ImBuf *ibuf, const char *name, int flags)
   return ok;
 }
 
-static int checktarga(TARGA *tga, const unsigned char *mem)
+static bool checktarga(TARGA *tga, const unsigned char *mem, const size_t size)
 {
+  if (size < TARGA_HEADER_SIZE) {
+    return false;
+  }
+
   tga->numid = mem[0];
   tga->maptyp = mem[1];
   tga->imgtyp = mem[2];
@@ -372,7 +382,7 @@ static int checktarga(TARGA *tga, const unsigned char *mem)
   tga->imgdes = mem[17];
 
   if (tga->maptyp > 1) {
-    return 0;
+    return false;
   }
   switch (tga->imgtyp) {
     case 1:  /* raw cmap */
@@ -383,31 +393,31 @@ static int checktarga(TARGA *tga, const unsigned char *mem)
     case 11: /* b&w */
       break;
     default:
-      return 0;
+      return false;
   }
   if (tga->mapsize && tga->mapbits > 32) {
-    return 0;
+    return false;
   }
   if (tga->xsize <= 0) {
-    return 0;
+    return false;
   }
   if (tga->ysize <= 0) {
-    return 0;
+    return false;
   }
   if (tga->pixsize > 32) {
-    return 0;
+    return false;
   }
   if (tga->pixsize == 0) {
-    return 0;
+    return false;
   }
-  return 1;
+  return true;
 }
 
-int imb_is_a_targa(const unsigned char *buf)
+bool imb_is_a_targa(const unsigned char *buf, size_t size)
 {
   TARGA tga;
 
-  return checktarga(&tga, buf);
+  return checktarga(&tga, buf, size);
 }
 
 static void complete_partial_load(struct ImBuf *ibuf, unsigned int *rect)
@@ -627,7 +637,7 @@ ImBuf *imb_loadtarga(const unsigned char *mem,
   int32_t cp_data;
   uchar *cp = (uchar *)&cp_data;
 
-  if (checktarga(&tga, mem) == 0) {
+  if (checktarga(&tga, mem, mem_size) == 0) {
     return NULL;
   }
 
@@ -647,7 +657,7 @@ ImBuf *imb_loadtarga(const unsigned char *mem,
   if (tga.imgtyp < 4) {
     ibuf->foptions.flag |= RAWTGA;
   }
-  mem = mem + 18 + tga.numid;
+  mem = mem + TARGA_HEADER_SIZE + tga.numid;
 
   cp[0] = 0xff;
   cp[1] = cp[2] = 0;
@@ -703,7 +713,7 @@ ImBuf *imb_loadtarga(const unsigned char *mem,
     return ibuf;
   }
 
-  if (tga.imgtyp != 1 && tga.imgtyp != 9) { /* happens sometimes (beuh) */
+  if (!ELEM(tga.imgtyp, 1, 9)) { /* happens sometimes (beuh) */
     if (cmap) {
       MEM_freeN(cmap);
       cmap = NULL;
@@ -748,7 +758,7 @@ ImBuf *imb_loadtarga(const unsigned char *mem,
   if (cmap) {
     /* apply color map */
     rect = ibuf->rect;
-    for (size = ibuf->x * ibuf->y; size > 0; --size, ++rect) {
+    for (size = ibuf->x * ibuf->y; size > 0; size--, rect++) {
       int cmap_index = *rect;
       if (cmap_index >= 0 && cmap_index < cmap_max) {
         *rect = cmap[cmap_index];
@@ -761,7 +771,7 @@ ImBuf *imb_loadtarga(const unsigned char *mem,
   if (tga.pixsize == 16) {
     unsigned int col;
     rect = ibuf->rect;
-    for (size = ibuf->x * ibuf->y; size > 0; --size, ++rect) {
+    for (size = ibuf->x * ibuf->y; size > 0; size--, rect++) {
       col = *rect;
       cp = (uchar *)rect;
       mem = (uchar *)&col;
@@ -777,7 +787,7 @@ ImBuf *imb_loadtarga(const unsigned char *mem,
     ibuf->planes = 24;
   }
 
-  if (tga.imgtyp == 3 || tga.imgtyp == 11) {
+  if (ELEM(tga.imgtyp, 3, 11)) {
     uchar *crect;
     unsigned int *lrect, col;
 

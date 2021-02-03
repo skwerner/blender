@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BLI_GHASH_H__
-#define __BLI_GHASH_H__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -28,8 +27,9 @@
  * This is also used to implement a 'set' (see #GSet below).
  */
 
-#include "BLI_sys_types.h" /* for bool */
 #include "BLI_compiler_attrs.h"
+#include "BLI_compiler_compat.h"
+#include "BLI_sys_types.h" /* for bool */
 
 #ifdef __cplusplus
 extern "C" {
@@ -74,6 +74,7 @@ enum {
 #endif
 };
 
+/* -------------------------------------------------------------------- */
 /** \name GHash API
  *
  * Defined in ``BLI_ghash.c``
@@ -124,6 +125,7 @@ void BLI_ghash_flag_clear(GHash *gh, unsigned int flag);
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name GHash Iterator
  * \{ */
 
@@ -175,6 +177,7 @@ BLI_INLINE bool BLI_ghashIterator_done(GHashIterator *ghi)
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name GSet API
  * A 'set' implementation (unordered collection of unique elements).
  *
@@ -204,7 +207,7 @@ unsigned int BLI_gset_len(GSet *gs) ATTR_WARN_UNUSED_RESULT;
 void BLI_gset_flag_set(GSet *gs, unsigned int flag);
 void BLI_gset_flag_clear(GSet *gs, unsigned int flag);
 void BLI_gset_free(GSet *gs, GSetKeyFreeFP keyfreefp);
-void BLI_gset_insert(GSet *gh, void *key);
+void BLI_gset_insert(GSet *gs, void *key);
 bool BLI_gset_add(GSet *gs, void *key);
 bool BLI_gset_ensure_p_ex(GSet *gs, const void *key, void ***r_key);
 bool BLI_gset_reinsert(GSet *gh, void *key, GSetKeyFreeFP keyfreefp);
@@ -217,11 +220,12 @@ void BLI_gset_clear_ex(GSet *gs, GSetKeyFreeFP keyfreefp, const unsigned int nen
 void BLI_gset_clear(GSet *gs, GSetKeyFreeFP keyfreefp);
 
 /* When set's are used for key & value. */
-void *BLI_gset_lookup(GSet *gh, const void *key) ATTR_WARN_UNUSED_RESULT;
+void *BLI_gset_lookup(GSet *gs, const void *key) ATTR_WARN_UNUSED_RESULT;
 void *BLI_gset_pop_key(GSet *gs, const void *key) ATTR_WARN_UNUSED_RESULT;
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name GSet Iterator
  * \{ */
 
@@ -272,6 +276,7 @@ BLI_INLINE bool BLI_gsetIterator_done(GSetIterator *gsi)
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name GHash/GSet Debugging API's
  * \{ */
 
@@ -297,6 +302,7 @@ double BLI_gset_calc_quality(GSet *gs);
 #endif /* GHASH_INTERNAL_API */
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name GHash/GSet Macros
  * \{ */
 
@@ -324,6 +330,7 @@ double BLI_gset_calc_quality(GSet *gs);
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name GHash/GSet Utils
  *
  * Defined in ``BLI_ghash_utils.c``
@@ -342,8 +349,8 @@ bool BLI_ghashutil_ptrcmp(const void *a, const void *b);
 unsigned int BLI_ghashutil_strhash_n(const char *key, size_t n);
 #define BLI_ghashutil_strhash(key) \
   (CHECK_TYPE_ANY(key, char *, const char *, const char *const), BLI_ghashutil_strhash_p(key))
-unsigned int BLI_ghashutil_strhash_p(const void *key);
-unsigned int BLI_ghashutil_strhash_p_murmur(const void *key);
+unsigned int BLI_ghashutil_strhash_p(const void *ptr);
+unsigned int BLI_ghashutil_strhash_p_murmur(const void *ptr);
 bool BLI_ghashutil_strcmp(const void *a, const void *b);
 
 #define BLI_ghashutil_inthash(key) \
@@ -406,11 +413,12 @@ GSet *BLI_gset_str_new(const char *info);
 GSet *BLI_gset_pair_new_ex(const char *info, const unsigned int nentries_reserve)
     ATTR_MALLOC ATTR_WARN_UNUSED_RESULT;
 GSet *BLI_gset_pair_new(const char *info) ATTR_MALLOC ATTR_WARN_UNUSED_RESULT;
+GSet *BLI_gset_int_new_ex(const char *info,
+                          const unsigned int nentries_reserve) ATTR_MALLOC ATTR_WARN_UNUSED_RESULT;
+GSet *BLI_gset_int_new(const char *info) ATTR_MALLOC ATTR_WARN_UNUSED_RESULT;
 
 /** \} */
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLI_GHASH_H__ */

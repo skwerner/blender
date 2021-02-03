@@ -16,11 +16,11 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_GLAREGHOSTOPERATION_H__
-#define __COM_GLAREGHOSTOPERATION_H__
+#pragma once
+
+#include "COM_GlareBaseOperation.h"
 #include "COM_NodeOperation.h"
 #include "DNA_node_types.h"
-#include "COM_GlareBaseOperation.h"
 
 class GlareGhostOperation : public GlareBaseOperation {
  public:
@@ -31,4 +31,3 @@ class GlareGhostOperation : public GlareBaseOperation {
  protected:
   void generateGlare(float *data, MemoryBuffer *inputTile, NodeGlare *settings);
 };
-#endif

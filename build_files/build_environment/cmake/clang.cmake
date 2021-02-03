@@ -17,12 +17,13 @@
 # ***** END GPL LICENSE BLOCK *****
 
 set(CLANG_EXTRA_ARGS
-  -DCLANG_PATH_TO_LLVM_SOURCE=${BUILD_DIR}/ll/src/ll
-  -DCLANG_PATH_TO_LLVM_BUILD=${LIBDIR}/llvm
-  -DLLVM_USE_CRT_RELEASE=MT
-  -DLLVM_USE_CRT_DEBUG=MTd
+  -DLLVM_DIR="${LIBDIR}/llvm/lib/cmake/llvm/"
+  -DLLVM_USE_CRT_RELEASE=MD
+  -DLLVM_USE_CRT_DEBUG=MDd
   -DLLVM_CONFIG=${LIBDIR}/llvm/bin/llvm-config
 )
+
+set(BUILD_CLANG_TOOLS OFF)
 
 if(WIN32)
   set(CLANG_GENERATOR "Ninja")
@@ -30,6 +31,32 @@ else()
   set(CLANG_GENERATOR "Unix Makefiles")
 endif()
 
+if(APPLE)
+  set(BUILD_CLANG_TOOLS ON)
+  set(CLANG_EXTRA_ARGS ${CLANG_EXTRA_ARGS}
+    -DLIBXML2_LIBRARY=${LIBDIR}/xml2/lib/libxml2.a
+  )
+endif()
+
+if(BUILD_CLANG_TOOLS)
+  # ExternalProject_Add does not allow multiple tarballs to be
+  # downloaded. Work around this by having an empty build action
+  # for the extra tools, and referring the clang build to the location
+  # of the clang-tools-extra source.
+  ExternalProject_Add(external_clang_tools
+    URL ${CLANG_TOOLS_URI}
+    DOWNLOAD_DIR ${DOWNLOAD_DIR}
+    URL_HASH MD5=${CLANG_TOOLS_HASH}
+    INSTALL_DIR ${LIBDIR}/clang_tools
+    PREFIX ${BUILD_DIR}/clang_tools
+    CONFIGURE_COMMAND echo "."
+    BUILD_COMMAND echo "."
+    INSTALL_COMMAND echo "."
+  )
+  list(APPEND CLANG_EXTRA_ARGS
+    -DLLVM_EXTERNAL_CLANG_TOOLS_EXTRA_SOURCE_DIR=${BUILD_DIR}/clang_tools/src/external_clang_tools/
+  )
+endif()
 
 ExternalProject_Add(external_clang
   URL ${CLANG_URI}
@@ -46,9 +73,7 @@ if(MSVC)
     set(CLANG_HARVEST_COMMAND ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/clang/ ${HARVEST_TARGET}/llvm/)
   else()
     set(CLANG_HARVEST_COMMAND
-      ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/clang/lib/ ${HARVEST_TARGET}/llvm/debug/lib/ &&
-      ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/clang/bin/ ${HARVEST_TARGET}/llvm/debug/bin/ &&
-      ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/clang/include/ ${HARVEST_TARGET}/llvm/debug/include/
+      ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/clang/lib/ ${HARVEST_TARGET}/llvm/debug/lib/
     )
   endif()
   ExternalProject_Add_Step(external_clang after_install
@@ -61,3 +86,19 @@ add_dependencies(
   external_clang
   ll
 )
+
+if(BUILD_CLANG_TOOLS)
+  # `external_clang_tools` is for downloading the source, not compiling it.
+  add_dependencies(
+    external_clang
+    external_clang_tools
+  )
+endif()
+
+# We currently do not build libxml2 on Windows.
+if(NOT WIN32)
+  add_dependencies(
+    external_clang
+    external_xml2
+  )
+endif()

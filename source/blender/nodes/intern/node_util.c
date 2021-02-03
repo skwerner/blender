@@ -43,11 +43,13 @@
 
 #include "node_util.h"
 
-/**** Storage Data ****/
+/* -------------------------------------------------------------------- */
+/** \name Storage Data
+ * \{ */
 
 void node_free_curves(bNode *node)
 {
-  curvemapping_free(node->storage);
+  BKE_curvemapping_free(node->storage);
 }
 
 void node_free_standard_storage(bNode *node)
@@ -59,7 +61,7 @@ void node_free_standard_storage(bNode *node)
 
 void node_copy_curves(bNodeTree *UNUSED(dest_ntree), bNode *dest_node, const bNode *src_node)
 {
-  dest_node->storage = curvemapping_copy(src_node->storage);
+  dest_node->storage = BKE_curvemapping_copy(src_node->storage);
 }
 
 void node_copy_standard_storage(bNodeTree *UNUSED(dest_ntree),
@@ -73,16 +75,123 @@ void *node_initexec_curves(bNodeExecContext *UNUSED(context),
                            bNode *node,
                            bNodeInstanceKey UNUSED(key))
 {
-  curvemapping_initialize(node->storage);
+  BKE_curvemapping_init(node->storage);
   return NULL; /* unused return */
 }
 
-/**** Labels ****/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Updates
+ * \{ */
+
+void node_sock_label(bNodeSocket *sock, const char *name)
+{
+  BLI_strncpy(sock->label, name, MAX_NAME);
+}
+
+void node_math_update(bNodeTree *UNUSED(ntree), bNode *node)
+{
+  bNodeSocket *sock1 = BLI_findlink(&node->inputs, 0);
+  bNodeSocket *sock2 = BLI_findlink(&node->inputs, 1);
+  bNodeSocket *sock3 = BLI_findlink(&node->inputs, 2);
+  nodeSetSocketAvailability(sock2,
+                            !ELEM(node->custom1,
+                                  NODE_MATH_SQRT,
+                                  NODE_MATH_SIGN,
+                                  NODE_MATH_CEIL,
+                                  NODE_MATH_SINE,
+                                  NODE_MATH_ROUND,
+                                  NODE_MATH_FLOOR,
+                                  NODE_MATH_COSINE,
+                                  NODE_MATH_ARCSINE,
+                                  NODE_MATH_TANGENT,
+                                  NODE_MATH_ABSOLUTE,
+                                  NODE_MATH_RADIANS,
+                                  NODE_MATH_DEGREES,
+                                  NODE_MATH_FRACTION,
+                                  NODE_MATH_ARCCOSINE,
+                                  NODE_MATH_ARCTANGENT) &&
+                                !ELEM(node->custom1,
+                                      NODE_MATH_INV_SQRT,
+                                      NODE_MATH_TRUNC,
+                                      NODE_MATH_EXPONENT,
+                                      NODE_MATH_COSH,
+                                      NODE_MATH_SINH,
+                                      NODE_MATH_TANH));
+  nodeSetSocketAvailability(sock3,
+                            ELEM(node->custom1,
+                                 NODE_MATH_COMPARE,
+                                 NODE_MATH_MULTIPLY_ADD,
+                                 NODE_MATH_WRAP,
+                                 NODE_MATH_SMOOTH_MIN,
+                                 NODE_MATH_SMOOTH_MAX));
+
+  if (sock1->label[0] != '\0') {
+    sock1->label[0] = '\0';
+  }
+  if (sock2->label[0] != '\0') {
+    sock2->label[0] = '\0';
+  }
+  if (sock3->label[0] != '\0') {
+    sock3->label[0] = '\0';
+  }
+
+  switch (node->custom1) {
+    case NODE_MATH_WRAP:
+      node_sock_label(sock2, "Min");
+      node_sock_label(sock3, "Max");
+      break;
+    case NODE_MATH_MULTIPLY_ADD:
+      node_sock_label(sock2, "Multiplier");
+      node_sock_label(sock3, "Addend");
+      break;
+    case NODE_MATH_LESS_THAN:
+    case NODE_MATH_GREATER_THAN:
+      node_sock_label(sock2, "Threshold");
+      break;
+    case NODE_MATH_PINGPONG:
+      node_sock_label(sock2, "Scale");
+      break;
+    case NODE_MATH_SNAP:
+      node_sock_label(sock2, "Increment");
+      break;
+    case NODE_MATH_POWER:
+      node_sock_label(sock1, "Base");
+      node_sock_label(sock2, "Exponent");
+      break;
+    case NODE_MATH_LOGARITHM:
+      node_sock_label(sock2, "Base");
+      break;
+    case NODE_MATH_DEGREES:
+      node_sock_label(sock1, "Radians");
+      break;
+    case NODE_MATH_RADIANS:
+      node_sock_label(sock1, "Degrees");
+      break;
+    case NODE_MATH_COMPARE:
+      node_sock_label(sock3, "Epsilon");
+      break;
+    case NODE_MATH_SMOOTH_MAX:
+    case NODE_MATH_SMOOTH_MIN:
+      node_sock_label(sock3, "Distance");
+      break;
+  }
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Labels
+ * \{ */
 
 void node_blend_label(bNodeTree *UNUSED(ntree), bNode *node, char *label, int maxlen)
 {
   const char *name;
-  RNA_enum_name(rna_enum_ramp_blend_items, node->custom1, &name);
+  bool enum_label = RNA_enum_name(rna_enum_ramp_blend_items, node->custom1, &name);
+  if (!enum_label) {
+    name = "Unknown";
+  }
   BLI_strncpy(label, IFACE_(name), maxlen);
 }
 
@@ -96,25 +205,38 @@ void node_image_label(bNodeTree *UNUSED(ntree), bNode *node, char *label, int ma
 void node_math_label(bNodeTree *UNUSED(ntree), bNode *node, char *label, int maxlen)
 {
   const char *name;
-  RNA_enum_name(rna_enum_node_math_items, node->custom1, &name);
+  bool enum_label = RNA_enum_name(rna_enum_node_math_items, node->custom1, &name);
+  if (!enum_label) {
+    name = "Unknown";
+  }
   BLI_strncpy(label, IFACE_(name), maxlen);
 }
 
-void node_vect_math_label(bNodeTree *UNUSED(ntree), bNode *node, char *label, int maxlen)
+void node_vector_math_label(bNodeTree *UNUSED(ntree), bNode *node, char *label, int maxlen)
 {
   const char *name;
-  RNA_enum_name(rna_enum_node_vec_math_items, node->custom1, &name);
+  bool enum_label = RNA_enum_name(rna_enum_node_vec_math_items, node->custom1, &name);
+  if (!enum_label) {
+    name = "Unknown";
+  }
   BLI_strncpy(label, IFACE_(name), maxlen);
 }
 
 void node_filter_label(bNodeTree *UNUSED(ntree), bNode *node, char *label, int maxlen)
 {
   const char *name;
-  RNA_enum_name(rna_enum_node_filter_items, node->custom1, &name);
+  bool enum_label = RNA_enum_name(rna_enum_node_filter_items, node->custom1, &name);
+  if (!enum_label) {
+    name = "Unknown";
+  }
   BLI_strncpy(label, IFACE_(name), maxlen);
 }
 
-/*** Link Insertion ***/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Link Insertion
+ * \{ */
 
 /* test if two sockets are interchangeable */
 static bool node_link_socket_match(bNodeSocket *a, bNodeSocket *b)
@@ -130,7 +252,7 @@ static bool node_link_socket_match(bNodeSocket *a, bNodeSocket *b)
    */
   int prefix_len = 0;
   char *ca = a->name, *cb = b->name;
-  for (; *ca != '\0' && *cb != '\0'; ++ca, ++cb) {
+  for (; *ca != '\0' && *cb != '\0'; ca++, cb++) {
     /* end of common prefix? */
     if (*ca != *cb) {
       /* prefix delimited by non-alphabetic char */
@@ -139,7 +261,7 @@ static bool node_link_socket_match(bNodeSocket *a, bNodeSocket *b)
       }
       break;
     }
-    ++prefix_len;
+    prefix_len++;
   }
   return prefix_len > 0;
 }
@@ -150,10 +272,10 @@ static int node_count_links(bNodeTree *ntree, bNodeSocket *sock)
   int count = 0;
   for (link = ntree->links.first; link; link = link->next) {
     if (link->fromsock == sock) {
-      ++count;
+      count++;
     }
     if (link->tosock == sock) {
-      ++count;
+      count++;
     }
   }
   return count;
@@ -172,7 +294,7 @@ static bNodeSocket *node_find_linkable_socket(bNodeTree *ntree, bNode *node, bNo
     if (!nodeSocketIsHidden(sock) && node_link_socket_match(sock, cur)) {
       int link_count = node_count_links(ntree, sock);
       /* take +1 into account since we would add a new link */
-      if (link_count + 1 <= sock->limit) {
+      if (link_count + 1 <= nodeSocketLinkLimit(sock)) {
         return sock; /* found a valid free socket we can swap to */
       }
     }
@@ -213,12 +335,17 @@ void node_insert_link_default(bNodeTree *ntree, bNode *node, bNodeLink *link)
   }
 }
 
-/**** Internal Links (mute and disconnect) ****/
+/** \} */
 
-/* common datatype priorities, works for compositor, shader and texture nodes alike
+/* -------------------------------------------------------------------- */
+/** \name Internal Links (mute and disconnect)
+ * \{ */
+
+/**
+ * Common datatype priorities, works for compositor, shader and texture nodes alike
  * defines priority of datatype connection based on output type (to):
- *   < 0  : never connect these types
- *   >= 0 : priority of connection (higher values chosen first)
+ * `<  0`: never connect these types.
+ * `>= 0`: priority of connection (higher values chosen first).
  */
 static int node_datatype_priority(eNodeSocketDatatype from, eNodeSocketDatatype to)
 {
@@ -308,6 +435,30 @@ static int node_datatype_priority(eNodeSocketDatatype from, eNodeSocketDatatype 
         default:
           return -1;
       }
+    case SOCK_OBJECT: {
+      switch (from) {
+        case SOCK_OBJECT:
+          return 1;
+        default:
+          return -1;
+      }
+    }
+    case SOCK_GEOMETRY: {
+      switch (from) {
+        case SOCK_GEOMETRY:
+          return 1;
+        default:
+          return -1;
+      }
+    }
+    case SOCK_COLLECTION: {
+      switch (from) {
+        case SOCK_COLLECTION:
+          return 1;
+        default:
+          return -1;
+      }
+    }
     default:
       return -1;
   }
@@ -321,7 +472,7 @@ static bNodeSocket *select_internal_link_input(bNode *node, bNodeSocket *output)
   int sel_priority = -1;
   bool sel_is_linked = false;
 
-  for (input = node->inputs.first, i = 0; input; input = input->next, ++i) {
+  for (input = node->inputs.first, i = 0; input; input = input->next, i++) {
     int priority = node_datatype_priority(input->type, output->type);
     bool is_linked = (input->link != NULL);
     bool preferred;
@@ -399,7 +550,11 @@ void node_update_internal_links_default(bNodeTree *ntree, bNode *node)
   }
 }
 
-/**** Default value RNA access ****/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Default value RNA access
+ * \{ */
 
 float node_socket_get_float(bNodeTree *ntree, bNode *UNUSED(node), bNodeSocket *sock)
 {
@@ -448,3 +603,5 @@ void node_socket_set_vector(bNodeTree *ntree,
   RNA_pointer_create((ID *)ntree, &RNA_NodeSocket, sock, &ptr);
   RNA_float_set_array(&ptr, "default_value", value);
 }
+
+/** \} */

@@ -21,8 +21,13 @@
  * \ingroup editors
  */
 
-#ifndef __ED_KEYFRAMES_EDIT_H__
-#define __ED_KEYFRAMES_EDIT_H__
+#pragma once
+
+#include "ED_anim_api.h" /* for enum eAnimFilter_Flags */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct BezTriple;
 struct FCurve;
@@ -100,8 +105,8 @@ typedef enum eEditKeyframes_Mirror {
 typedef struct KeyframeEdit_LassoData {
   rctf *rectf_scaled;
   const rctf *rectf_view;
-  const int (*mcords)[2];
-  int mcords_tot;
+  const int (*mcoords)[2];
+  int mcoords_len;
 } KeyframeEdit_LassoData;
 
 /* use with BEZT_OK_REGION_CIRCLE */
@@ -141,6 +146,12 @@ typedef enum eKeyframeIterFlags {
 
   /* Perform NLA time remapping (global -> strip) for the "f2" parameter */
   KED_F2_NLA_UNMAP = (1 << 2),
+
+  /* Set this when handles aren't visible by default and you want to perform additional checks to
+   * get the actual visibility state. E.g. in some cases handles are only drawn if either a handle
+   * or their control point is selected. The selection state will have to be checked in the
+   * iterator callbacks then. */
+  KEYFRAME_ITER_HANDLES_DEFAULT_INVISIBLE = (1 << 3),
 } eKeyframeIterFlags;
 
 /* --- Generic Properties for Keyframe Edit Tools ----- */
@@ -241,6 +252,12 @@ short ANIM_animchanneldata_keyframes_loop(KeyframeEditData *ked,
                                           KeyframeEditFunc key_cb,
                                           FcuEditFunc fcu_cb);
 
+/* Calls callback_fn() for each keyframe in each fcurve in the filtered animation context.
+ * Assumes the callback updates keys. */
+void ANIM_animdata_keyframe_callback(struct bAnimContext *ac,
+                                     eAnimFilter_Flags filter,
+                                     KeyframeEditFunc callback_fn);
+
 /* functions for making sure all keyframes are in good order */
 void ANIM_editkeyframes_refresh(struct bAnimContext *ac);
 
@@ -303,6 +320,7 @@ void clean_fcurve(struct bAnimContext *ac,
                   struct bAnimListElem *ale,
                   float thresh,
                   bool cleardefault);
+bool decimate_fcurve(struct bAnimListElem *ale, float remove_ratio, float error_sq_max);
 void smooth_fcurve(struct FCurve *fcu);
 void sample_fcurve(struct FCurve *fcu);
 
@@ -318,4 +336,6 @@ short paste_animedit_keys(struct bAnimContext *ac,
 
 /* ************************************************ */
 
-#endif /* __ED_KEYFRAMES_EDIT_H__ */
+#ifdef __cplusplus
+}
+#endif

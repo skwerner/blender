@@ -21,8 +21,7 @@
  * \ingroup blt
  */
 
-#ifndef __BLT_TRANSLATION_H__
-#define __BLT_TRANSLATION_H__
+#pragma once
 
 #include "BLI_utildefines.h" /* for bool type */
 
@@ -65,9 +64,9 @@ bool BLT_lang_is_ime_supported(void);
 #  define IFACE_(msgid) msgid
 #  define TIP_(msgid) msgid
 #  define DATA_(msgid) msgid
-#  define CTX_IFACE_(context, msgid) msgid
-#  define CTX_TIP_(context, msgid) msgid
-#  define CTX_DATA_(context, msgid) msgid
+#  define CTX_IFACE_(context, msgid) ((void)(0 ? (context) : 0), msgid)
+#  define CTX_TIP_(context, msgid) ((void)(0 ? (context) : 0), msgid)
+#  define CTX_DATA_(context, msgid) ((void)(0 ? (context) : 0), msgid)
 #endif
 
 /* Helper macro, when we want to define a same msgid for multiple msgctxt...
@@ -89,7 +88,7 @@ bool BLT_lang_is_ime_supported(void);
  * NOTE: We translate BLT_I18NCONTEXT_DEFAULT as BLT_I18NCONTEXT_DEFAULT_BPY in Python,
  *       as we can't use "natural" None value in rna string properties... :/
  *       The void string "" is also interpreted as BLT_I18NCONTEXT_DEFAULT.
- *       For perf reason, we only use the first char to detect this context,
+ *       For performance reason, we only use the first char to detect this context,
  *       so other contexts should never start with the same char!
  */
 #define BLT_I18NCONTEXT_DEFAULT NULL
@@ -117,10 +116,12 @@ bool BLT_lang_is_ime_supported(void);
 #define BLT_I18NCONTEXT_ID_CURVE "Curve"
 #define BLT_I18NCONTEXT_ID_FREESTYLELINESTYLE "FreestyleLineStyle"
 #define BLT_I18NCONTEXT_ID_GPENCIL "GPencil"
+#define BLT_I18NCONTEXT_ID_HAIR "Hair"
 #define BLT_I18NCONTEXT_ID_ID "ID"
 #define BLT_I18NCONTEXT_ID_IMAGE "Image"
 /*#define BLT_I18NCONTEXT_ID_IPO                  "Ipo"*/ /* Deprecated */
 #define BLT_I18NCONTEXT_ID_SHAPEKEY "Key"
+#define BLT_I18NCONTEXT_ID_SIMULATION "Simulation"
 #define BLT_I18NCONTEXT_ID_LIGHT "Light"
 #define BLT_I18NCONTEXT_ID_LIBRARY "Library"
 #define BLT_I18NCONTEXT_ID_LATTICE "Lattice"
@@ -132,6 +133,7 @@ bool BLT_lang_is_ime_supported(void);
 #define BLT_I18NCONTEXT_ID_PAINTCURVE "PaintCurve"
 #define BLT_I18NCONTEXT_ID_PALETTE "Palette"
 #define BLT_I18NCONTEXT_ID_PARTICLESETTINGS "ParticleSettings"
+#define BLT_I18NCONTEXT_ID_POINTCLOUD "PointCloud"
 #define BLT_I18NCONTEXT_ID_LIGHTPROBE "LightProbe"
 #define BLT_I18NCONTEXT_ID_SCENE "Scene"
 #define BLT_I18NCONTEXT_ID_SCREEN "Screen"
@@ -141,6 +143,7 @@ bool BLT_lang_is_ime_supported(void);
 #define BLT_I18NCONTEXT_ID_TEXTURE "Texture"
 #define BLT_I18NCONTEXT_ID_TEXT "Text"
 #define BLT_I18NCONTEXT_ID_VFONT "VFont"
+#define BLT_I18NCONTEXT_ID_VOLUME "Volume"
 #define BLT_I18NCONTEXT_ID_WORLD "World"
 #define BLT_I18NCONTEXT_ID_WORKSPACE "WorkSpace"
 #define BLT_I18NCONTEXT_ID_WINDOWMANAGER "WindowManager"
@@ -175,6 +178,7 @@ typedef struct {
         BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_CURVE, "id_curve"), \
         BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_FREESTYLELINESTYLE, "id_fs_linestyle"), \
         BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_GPENCIL, "id_gpencil"), \
+        BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_HAIR, "id_hair"), \
         BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_ID, "id_id"), \
         BLT_I18NCONTEXTS_ITEM( \
             BLT_I18NCONTEXT_ID_IMAGE, \
@@ -193,15 +197,18 @@ typedef struct {
         BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_PAINTCURVE, "id_paintcurve"), \
         BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_PALETTE, "id_palette"), \
         BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_PARTICLESETTINGS, "id_particlesettings"), \
+        BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_POINTCLOUD, "id_pointcloud"), \
         BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_LIGHTPROBE, "id_lightprobe"), \
         BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_SCENE, "id_scene"), \
         BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_SCREEN, "id_screen"), \
         BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_SEQUENCE, "id_sequence"), \
+        BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_SIMULATION, "id_simulation"), \
         BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_SPEAKER, "id_speaker"), \
         BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_SOUND, "id_sound"), \
         BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_TEXTURE, "id_texture"), \
         BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_TEXT, "id_text"), \
         BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_VFONT, "id_vfont"), \
+        BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_VOLUME, "id_volume"), \
         BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_WORLD, "id_world"), \
         BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_WORKSPACE, "id_workspace"), \
         BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_WINDOWMANAGER, "id_windowmanager"), \
@@ -213,5 +220,3 @@ typedef struct {
 #ifdef __cplusplus
 };
 #endif
-
-#endif /* __BLT_TRANSLATION_H__ */

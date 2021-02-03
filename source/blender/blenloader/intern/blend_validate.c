@@ -23,7 +23,7 @@
  * \note Does not *fix* anything, only reports found errors.
  */
 
-#include <string.h>  // for strrchr strncmp strstr
+#include <string.h> /* for strrchr strncmp strstr */
 
 #include "BLI_utildefines.h"
 
@@ -32,11 +32,12 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "DNA_sdna_types.h"
 #include "DNA_key_types.h"
+#include "DNA_sdna_types.h"
 #include "DNA_windowmanager_types.h"
 
 #include "BKE_key.h"
+#include "BKE_lib_id.h"
 #include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
@@ -69,7 +70,7 @@ bool BLO_main_validate_libraries(Main *bmain, ReportList *reports)
                     RPT_ERROR,
                     "ID %s is in local database while being linked from library %s!",
                     id->name,
-                    id->lib->name);
+                    id->lib->filepath);
       }
     }
   }
@@ -81,15 +82,15 @@ bool BLO_main_validate_libraries(Main *bmain, ReportList *reports)
       continue;
     }
 
-    BKE_library_filepath_set(bmain, curlib, curlib->name);
-    BlendHandle *bh = BLO_blendhandle_from_file(curlib->filepath, reports);
+    BKE_library_filepath_set(bmain, curlib, curlib->filepath);
+    BlendHandle *bh = BLO_blendhandle_from_file(curlib->filepath_abs, reports);
 
     if (bh == NULL) {
       BKE_reportf(reports,
                   RPT_ERROR,
                   "Library ID %s not found at expected path %s!",
                   curlib->id.name,
-                  curlib->filepath);
+                  curlib->filepath_abs);
       continue;
     }
 
@@ -106,7 +107,7 @@ bool BLO_main_validate_libraries(Main *bmain, ReportList *reports)
                     RPT_ERROR,
                     "Library ID %s in library %s, this should not happen!",
                     id->name,
-                    curlib->name);
+                    curlib->filepath);
         continue;
       }
 
@@ -119,7 +120,7 @@ bool BLO_main_validate_libraries(Main *bmain, ReportList *reports)
                       RPT_ERROR,
                       "ID %s has NULL lib pointer while being in library %s!",
                       id->name,
-                      curlib->name);
+                      curlib->filepath);
           continue;
         }
         if (id->lib != curlib) {
@@ -142,12 +143,12 @@ bool BLO_main_validate_libraries(Main *bmain, ReportList *reports)
                       RPT_ERROR,
                       "ID %s not found in library %s anymore!",
                       id->name,
-                      id->lib->name);
+                      id->lib->filepath);
           continue;
         }
       }
 
-      BLI_linklist_free(names, free);
+      BLI_linklist_freeN(names);
     }
 
     BLO_blendhandle_close(bh);

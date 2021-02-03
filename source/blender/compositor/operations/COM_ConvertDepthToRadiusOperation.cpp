@@ -17,19 +17,19 @@
  */
 
 #include "COM_ConvertDepthToRadiusOperation.h"
-#include "BLI_math.h"
 #include "BKE_camera.h"
+#include "BLI_math.h"
 #include "DNA_camera_types.h"
 
-ConvertDepthToRadiusOperation::ConvertDepthToRadiusOperation() : NodeOperation()
+ConvertDepthToRadiusOperation::ConvertDepthToRadiusOperation()
 {
   this->addInputSocket(COM_DT_VALUE);
   this->addOutputSocket(COM_DT_VALUE);
-  this->m_inputOperation = NULL;
+  this->m_inputOperation = nullptr;
   this->m_fStop = 128.0f;
-  this->m_cameraObject = NULL;
+  this->m_cameraObject = nullptr;
   this->m_maxRadius = 32.0f;
-  this->m_blurPostOperation = NULL;
+  this->m_blurPostOperation = nullptr;
 }
 
 float ConvertDepthToRadiusOperation::determineFocalDistance()
@@ -39,15 +39,14 @@ float ConvertDepthToRadiusOperation::determineFocalDistance()
     this->m_cam_lens = camera->lens;
     return BKE_camera_object_dof_distance(this->m_cameraObject);
   }
-  else {
-    return 10.0f;
-  }
+
+  return 10.0f;
 }
 
 void ConvertDepthToRadiusOperation::initExecution()
 {
   float cam_sensor = DEFAULT_SENSOR_WIDTH;
-  Camera *camera = NULL;
+  Camera *camera = nullptr;
 
   if (this->m_cameraObject && this->m_cameraObject->type == OB_CAMERA) {
     camera = (Camera *)this->m_cameraObject->data;
@@ -87,7 +86,7 @@ void ConvertDepthToRadiusOperation::executePixelSampled(float output[4],
   if (z != 0.0f) {
     float iZ = (1.0f / z);
 
-    // bug #6656 part 2b, do not rescale
+    /* bug T6656 part 2b, do not re-scale. */
 #if 0
     bcrad = 0.5f * fabs(aperture * (dof_sp * (cam_invfdist - iZ) - 1.0f));
     // scale crad back to original maximum and blend
@@ -95,8 +94,8 @@ void ConvertDepthToRadiusOperation::executePixelSampled(float output[4],
 #endif
     radius = 0.5f * fabsf(this->m_aperture *
                           (this->m_dof_sp * (this->m_inverseFocalDistance - iZ) - 1.0f));
-    // 'bug' #6615, limit minimum radius to 1 pixel, not really a solution, but somewhat mitigates
-    // the problem
+    /* 'bug' T6615, limit minimum radius to 1 pixel,
+     * not really a solution, but somewhat mitigates the problem. */
     if (radius < 0.0f) {
       radius = 0.0f;
     }
@@ -112,5 +111,5 @@ void ConvertDepthToRadiusOperation::executePixelSampled(float output[4],
 
 void ConvertDepthToRadiusOperation::deinitExecution()
 {
-  this->m_inputOperation = NULL;
+  this->m_inputOperation = nullptr;
 }

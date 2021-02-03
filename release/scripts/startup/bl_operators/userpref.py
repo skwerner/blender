@@ -50,6 +50,49 @@ def module_filesystem_remove(path_base, module_name):
                 os.remove(f_full)
 
 
+# This duplicates shutil.copytree from Python 3.8, with the new dirs_exist_ok
+# argument that we need. Once we upgrade to 3.8 we can remove this.
+def _preferences_copytree(entries, src, dst):
+    import os
+    import shutil
+    from shutil import Error
+
+    os.makedirs(dst, exist_ok=True)
+    errors = []
+
+    for srcentry in entries:
+        srcname = os.path.join(src, srcentry.name)
+        dstname = os.path.join(dst, srcentry.name)
+        srcobj = srcentry
+        try:
+            if srcentry.is_symlink():
+                linkto = os.readlink(srcname)
+                os.symlink(linkto, dstname)
+                shutil.copystat(srcobj, dstname, follow_symlinks=False)
+            elif srcentry.is_dir():
+                preferences_copytree(srcobj, dstname)
+            else:
+                shutil.copy2(srcentry, dstname)
+        except Error as err:
+            errors.extend(err.args[0])
+        except OSError as why:
+            errors.append((srcname, dstname, str(why)))
+    try:
+        shutil.copystat(src, dst)
+    except OSError as why:
+        if getattr(why, 'winerror', None) is None:
+            errors.append((src, dst, str(why)))
+    if errors:
+        raise Error(errors)
+    return dst
+
+
+def preferences_copytree(src, dst):
+    import os
+    with os.scandir(src) as entries:
+        return _preferences_copytree(entries=entries, src=src, dst=dst)
+
+
 class PREFERENCES_OT_keyconfig_activate(Operator):
     bl_idname = "preferences.keyconfig_activate"
     bl_label = "Activate Keyconfig"
@@ -70,20 +113,33 @@ class PREFERENCES_OT_copy_prev(Operator):
     bl_idname = "preferences.copy_prev"
     bl_label = "Copy Previous Settings"
 
-    @staticmethod
-    def previous_version():
-        ver = bpy.app.version
-        ver_old = ((ver[0] * 100) + ver[1]) - 1
-        return ver_old // 100, ver_old % 100
+    @classmethod
+    def _old_version_path(cls, version):
+        return bpy.utils.resource_path('USER', version[0], version[1])
 
-    @staticmethod
-    def _old_path():
-        ver = bpy.app.version
-        ver_old = ((ver[0] * 100) + ver[1]) - 1
-        return bpy.utils.resource_path('USER', ver_old // 100, ver_old % 100)
+    @classmethod
+    def previous_version(cls):
+        # Find config folder from previous version.
+        import os
+        version = bpy.app.version
+        version_new = ((version[0] * 100) + version[1])
+        version_old = ((version[0] * 100) + version[1]) - 1
+        # Ensure we only try to copy files from a point release.
+        # The check below ensures the second numbers match.
+        while (version_new % 100) // 10 == (version_old % 100) // 10:
+            version_split = version_old // 100, version_old % 100
+            if os.path.isdir(cls._old_version_path(version_split)):
+                return version_split
+            version_old = version_old - 1
+        return None
 
-    @staticmethod
-    def _new_path():
+    @classmethod
+    def _old_path(cls):
+        version_old = cls.previous_version()
+        return cls._old_version_path(version_old) if version_old else None
+
+    @classmethod
+    def _new_path(cls):
         return bpy.utils.resource_path('USER')
 
     @classmethod
@@ -92,8 +148,10 @@ class PREFERENCES_OT_copy_prev(Operator):
 
         old = cls._old_path()
         new = cls._new_path()
+        if not old:
+            return False
 
-        # Disable operator in case config path is overriden with environment
+        # Disable operator in case config path is overridden with environment
         # variable. That case has no automatic per-version configuration.
         userconfig_path = os.path.normpath(bpy.utils.user_resource('CONFIG'))
         new_userconfig_path = os.path.normpath(os.path.join(new, "config"))
@@ -110,11 +168,13 @@ class PREFERENCES_OT_copy_prev(Operator):
         return os.path.isfile(old_userpref) and not os.path.isfile(new_userpref)
 
     def execute(self, _context):
-        import shutil
+        # Use this instead once we upgrade to Python 3.8 with dirs_exist_ok.
+        # import shutil
+        # shutil.copytree(self._old_path(), self._new_path(), dirs_exist_ok=True)
+        preferences_copytree(self._old_path(), self._new_path())
 
-        shutil.copytree(self._old_path(), self._new_path(), symlinks=True)
-
-        # reload recent-files.txt
+        # reload preferences and recent-files.txt
+        bpy.ops.wm.read_userpref()
         bpy.ops.wm.read_history()
 
         # don't loose users work if they open the splash later.
@@ -127,7 +187,7 @@ class PREFERENCES_OT_copy_prev(Operator):
 
 
 class PREFERENCES_OT_keyconfig_test(Operator):
-    """Test key-config for conflicts"""
+    """Test key configuration for conflicts"""
     bl_idname = "preferences.keyconfig_test"
     bl_label = "Test Key Configuration for Conflicts"
 
@@ -168,7 +228,7 @@ class PREFERENCES_OT_keyconfig_import(Operator):
         options={'HIDDEN'},
     )
     keep_original: BoolProperty(
-        name="Keep original",
+        name="Keep Original",
         description="Keep original file after copying to configuration folder",
         default=True,
     )
@@ -297,7 +357,7 @@ class PREFERENCES_OT_keyitem_restore(Operator):
 
     item_id: IntProperty(
         name="Item Identifier",
-        description="Identifier of the item to remove",
+        description="Identifier of the item to restore",
     )
 
     @classmethod
@@ -537,7 +597,7 @@ class PREFERENCES_OT_addon_refresh(Operator):
 class PREFERENCES_OT_addon_install(Operator):
     """Install an add-on"""
     bl_idname = "preferences.addon_install"
-    bl_label = "Install Add-on from File..."
+    bl_label = "Install Add-on"
 
     overwrite: BoolProperty(
         name="Overwrite",
@@ -656,7 +716,7 @@ class PREFERENCES_OT_addon_install(Operator):
         addons_new.discard("modules")
 
         # disable any addons we may have enabled previously and removed.
-        # this is unlikely but do just in case. bug [#23978]
+        # this is unlikely but do just in case. bug T23978.
         for new_addon in addons_new:
             addon_utils.disable(new_addon, default_set=True)
 
@@ -667,6 +727,7 @@ class PREFERENCES_OT_addon_install(Operator):
                 info = addon_utils.module_bl_info(mod)
 
                 # show the newly installed addon.
+                context.preferences.view.show_addons_enabled_only = False
                 context.window_manager.addon_filter = 'All'
                 context.window_manager.addon_search = info["name"]
                 break
@@ -796,6 +857,7 @@ class PREFERENCES_OT_addon_show(Operator):
             info["show_expanded"] = True
 
             context.preferences.active_section = 'ADDONS'
+            context.preferences.view.show_addons_enabled_only = False
             context.window_manager.addon_filter = 'All'
             context.window_manager.addon_search = info["name"]
             bpy.ops.screen.userpref_show('INVOKE_DEFAULT')
@@ -806,7 +868,7 @@ class PREFERENCES_OT_addon_show(Operator):
 # Note: shares some logic with PREFERENCES_OT_addon_install
 # but not enough to de-duplicate. Fixes here may apply to both.
 class PREFERENCES_OT_app_template_install(Operator):
-    """Install an application-template"""
+    """Install an application template"""
     bl_idname = "preferences.app_template_install"
     bl_label = "Install Template from File..."
 
@@ -907,9 +969,9 @@ class PREFERENCES_OT_app_template_install(Operator):
 # Studio Light Operations
 
 class PREFERENCES_OT_studiolight_install(Operator):
-    """Install a user defined studio light"""
+    """Install a user defined light"""
     bl_idname = "preferences.studiolight_install"
-    bl_label = "Install Custom Studio Light"
+    bl_label = "Install Light"
 
     files: CollectionProperty(
         name="File Path",
@@ -919,7 +981,7 @@ class PREFERENCES_OT_studiolight_install(Operator):
         subtype='DIR_PATH',
     )
     filter_folder: BoolProperty(
-        name="Filter folders",
+        name="Filter Folders",
         default=True,
         options={'HIDDEN'},
     )
@@ -928,10 +990,11 @@ class PREFERENCES_OT_studiolight_install(Operator):
         options={'HIDDEN'},
     )
     type: EnumProperty(
+        name="Type",
         items=(
-            ('MATCAP', "MatCap", ""),
-            ('WORLD', "World", ""),
-            ('STUDIO', "Studio", ""),
+            ('MATCAP', "MatCap", "Install custom MatCaps"),
+            ('WORLD', "World", "Install custom HDRIs"),
+            ('STUDIO', "Studio", "Install custom Studio Lights"),
         )
     )
 
@@ -996,7 +1059,7 @@ class PREFERENCES_OT_studiolight_new(Operator):
         if os.path.isfile(filepath_final):
             if not self.ask_overide:
                 self.ask_overide = True
-                return wm.invoke_props_dialog(self, width=600)
+                return wm.invoke_props_dialog(self, width=320)
             else:
                 for studio_light in prefs.studio_lights:
                     if studio_light.name == filename:
@@ -1022,14 +1085,14 @@ class PREFERENCES_OT_studiolight_new(Operator):
 
     def invoke(self, context, _event):
         wm = context.window_manager
-        return wm.invoke_props_dialog(self, width=600)
+        return wm.invoke_props_dialog(self, width=320)
 
 
 class PREFERENCES_OT_studiolight_uninstall(Operator):
     """Delete Studio Light"""
     bl_idname = "preferences.studiolight_uninstall"
     bl_label = "Uninstall Studio Light"
-    index: bpy.props.IntProperty()
+    index: IntProperty()
 
     def execute(self, context):
         import os
@@ -1049,10 +1112,10 @@ class PREFERENCES_OT_studiolight_uninstall(Operator):
 
 
 class PREFERENCES_OT_studiolight_copy_settings(Operator):
-    """Copy Studio Light settings to the Studio light editor"""
+    """Copy Studio Light settings to the Studio Light editor"""
     bl_idname = "preferences.studiolight_copy_settings"
-    bl_label = "Copy Studio Light settings"
-    index: bpy.props.IntProperty()
+    bl_label = "Copy Studio Light Settings"
+    index: IntProperty()
 
     def execute(self, context):
         prefs = context.preferences

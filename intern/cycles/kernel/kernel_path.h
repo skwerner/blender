@@ -18,6 +18,7 @@
 #  include "kernel/osl/osl_shader.h"
 #endif
 
+// clang-format off
 #include "kernel/kernel_random.h"
 #include "kernel/kernel_projection.h"
 #include "kernel/kernel_montecarlo.h"
@@ -27,9 +28,11 @@
 #include "kernel/geom/geom.h"
 #include "kernel/bvh/bvh.h"
 
+#include "kernel/kernel_write_passes.h"
 #include "kernel/kernel_accumulate.h"
 #include "kernel/kernel_shader.h"
 #include "kernel/kernel_light.h"
+#include "kernel/kernel_adaptive_sampling.h"
 #include "kernel/kernel_passes.h"
 
 #if defined(__VOLUME__) || defined(__SUBSURFACE__)
@@ -47,6 +50,7 @@
 #include "kernel/kernel_path_surface.h"
 #include "kernel/kernel_path_volume.h"
 #include "kernel/kernel_path_subsurface.h"
+// clang-format on
 
 CCL_NAMESPACE_BEGIN
 
@@ -65,7 +69,7 @@ ccl_device_forceinline bool kernel_path_scene_intersect(KernelGlobals *kg,
     ray->t = kernel_data.background.ao_distance;
   }
 
-  bool hit = scene_intersect(kg, *ray, visibility, isect);
+  bool hit = scene_intersect(kg, ray, visibility, isect);
 
 #ifdef __KERNEL_DEBUG__
   if (state->flag & PATH_RAY_CAMERA) {
@@ -92,7 +96,7 @@ ccl_device_forceinline void kernel_path_lamp_emission(KernelGlobals *kg,
 #ifdef __LAMP_MIS__
   if (kernel_data.integrator.use_lamp_mis && !(state->flag & PATH_RAY_CAMERA)) {
     /* ray starting from previous non-transparent bounce */
-    Ray light_ray;
+    Ray light_ray ccl_optional_struct_init;
 
     light_ray.P = ray->P - state->ray_t * ray->D;
     state->ray_t += isect->t;
@@ -103,10 +107,7 @@ ccl_device_forceinline void kernel_path_lamp_emission(KernelGlobals *kg,
     light_ray.dP = ray->dP;
 
     /* intersect with lamp */
-    float3 emission;
-
-    if (indirect_lamp_emission(kg, emission_sd, state, &light_ray, &emission))
-      path_radiance_accum_emission(L, state, throughput, emission);
+    indirect_lamp_emission(kg, emission_sd, state, L, &light_ray, throughput);
   }
 #endif /* __LAMP_MIS__ */
 }
@@ -116,6 +117,7 @@ ccl_device_forceinline void kernel_path_background(KernelGlobals *kg,
                                                    ccl_addr_space Ray *ray,
                                                    float3 throughput,
                                                    ShaderData *sd,
+                                                   ccl_global float *buffer,
                                                    PathRadiance *L)
 {
   /* eval background shader if nothing hit */
@@ -136,8 +138,8 @@ ccl_device_forceinline void kernel_path_background(KernelGlobals *kg,
 
 #ifdef __BACKGROUND__
   /* sample background shader */
-  float3 L_background = indirect_background(kg, sd, state, ray);
-  path_radiance_accum_background(L, state, throughput, L_background);
+  float3 L_background = indirect_background(kg, sd, state, buffer, ray);
+  path_radiance_accum_background(kg, L, state, throughput, L_background);
 #endif /* __BACKGROUND__ */
 }
 
@@ -169,25 +171,25 @@ ccl_device_forceinline VolumeIntegrateResult kernel_path_volume(KernelGlobals *k
   Ray volume_ray = *ray;
   volume_ray.t = (hit) ? isect->t : FLT_MAX;
 
-  bool heterogeneous = volume_stack_is_heterogeneous(kg, state->volume_stack);
+  float step_size = volume_stack_step_size(kg, state->volume_stack);
 
 #    ifdef __VOLUME_DECOUPLED__
   int sampling_method = volume_stack_sampling_method(kg, state->volume_stack);
   bool direct = (state->flag & PATH_RAY_CAMERA) != 0;
-  bool decoupled = kernel_volume_use_decoupled(kg, heterogeneous, direct, sampling_method);
+  bool decoupled = kernel_volume_use_decoupled(kg, step_size, direct, sampling_method);
 
   if (decoupled) {
     /* cache steps along volume for repeated sampling */
     VolumeSegment volume_segment;
 
     shader_setup_from_volume(kg, sd, &volume_ray);
-    kernel_volume_decoupled_record(kg, state, &volume_ray, sd, &volume_segment, heterogeneous);
+    kernel_volume_decoupled_record(kg, state, &volume_ray, sd, &volume_segment, step_size);
 
     volume_segment.sampling_method = sampling_method;
 
     /* emission */
     if (volume_segment.closure_flag & SD_EMISSION)
-      path_radiance_accum_emission(L, state, *throughput, volume_segment.accum_emission);
+      path_radiance_accum_emission(kg, L, state, *throughput, volume_segment.accum_emission);
 
     /* scattering */
     VolumeIntegrateResult result = VOLUME_PATH_ATTENUATED;
@@ -227,7 +229,7 @@ ccl_device_forceinline VolumeIntegrateResult kernel_path_volume(KernelGlobals *k
   {
     /* integrate along volume segment with distance sampling */
     VolumeIntegrateResult result = kernel_volume_integrate(
-        kg, state, sd, &volume_ray, L, throughput, heterogeneous);
+        kg, state, sd, &volume_ray, L, throughput, step_size);
 
 #    ifdef __VOLUME_SCATTER__
     if (result == VOLUME_PATH_SCATTERED) {
@@ -267,7 +269,7 @@ ccl_device_forceinline bool kernel_path_shader_apply(KernelGlobals *kg,
 
       float3 bg = make_float3(0.0f, 0.0f, 0.0f);
       if (!kernel_data.background.transparent) {
-        bg = indirect_background(kg, emission_sd, state, ray);
+        bg = indirect_background(kg, emission_sd, state, NULL, ray);
       }
       path_radiance_accum_shadowcatcher(L, throughput, bg);
     }
@@ -282,19 +284,11 @@ ccl_device_forceinline bool kernel_path_shader_apply(KernelGlobals *kg,
 #ifdef __HOLDOUT__
   if (((sd->flag & SD_HOLDOUT) || (sd->object_flag & SD_OBJECT_HOLDOUT_MASK)) &&
       (state->flag & PATH_RAY_TRANSPARENT_BACKGROUND)) {
+    const float3 holdout_weight = shader_holdout_apply(kg, sd);
     if (kernel_data.background.transparent) {
-      float3 holdout_weight;
-      if (sd->object_flag & SD_OBJECT_HOLDOUT_MASK) {
-        holdout_weight = make_float3(1.0f, 1.0f, 1.0f);
-      }
-      else {
-        holdout_weight = shader_holdout_eval(kg, sd);
-      }
-      /* any throughput is ok, should all be identical here */
       L->transparent += average(holdout_weight * throughput);
     }
-
-    if (sd->object_flag & SD_OBJECT_HOLDOUT_MASK) {
+    if (isequal_float3(holdout_weight, make_float3(1.0f, 1.0f, 1.0f))) {
       return false;
     }
   }
@@ -319,20 +313,26 @@ ccl_device_forceinline bool kernel_path_shader_apply(KernelGlobals *kg,
   if (sd->flag & SD_EMISSION) {
     float3 emission = indirect_primitive_emission(
         kg, sd, sd->ray_length, state->flag, state->ray_pdf);
-    path_radiance_accum_emission(L, state, throughput, emission);
+    path_radiance_accum_emission(kg, L, state, throughput, emission);
   }
 #endif /* __EMISSION__ */
 
   return true;
 }
 
-ccl_device_noinline void kernel_path_ao(KernelGlobals *kg,
-                                        ShaderData *sd,
-                                        ShaderData *emission_sd,
-                                        PathRadiance *L,
-                                        ccl_addr_space PathState *state,
-                                        float3 throughput,
-                                        float3 ao_alpha)
+#ifdef __KERNEL_OPTIX__
+ccl_device_inline /* inline trace calls */
+#else
+ccl_device_noinline
+#endif
+    void
+    kernel_path_ao(KernelGlobals *kg,
+                   ShaderData *sd,
+                   ShaderData *emission_sd,
+                   PathRadiance *L,
+                   ccl_addr_space PathState *state,
+                   float3 throughput,
+                   float3 ao_alpha)
 {
   PROFILING_INIT(kg, PROFILING_AO);
 
@@ -361,7 +361,7 @@ ccl_device_noinline void kernel_path_ao(KernelGlobals *kg,
     light_ray.dD = differential3_zero();
 
     if (!shadow_blocked(kg, sd, emission_sd, state, &light_ray, &ao_shadow)) {
-      path_radiance_accum_ao(L, state, throughput, ao_alpha, ao_bsdf, ao_shadow);
+      path_radiance_accum_ao(kg, L, state, throughput, ao_alpha, ao_bsdf, ao_shadow);
     }
     else {
       path_radiance_accum_total_ao(L, state, throughput, ao_bsdf);
@@ -412,7 +412,7 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 
       /* Shade background. */
       if (!hit) {
-        kernel_path_background(kg, state, ray, throughput, sd, L);
+        kernel_path_background(kg, state, ray, throughput, sd, NULL, L);
         break;
       }
       else if (path_state_ao_bounce(kg, state)) {
@@ -428,7 +428,7 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 #    endif
 
         /* Evaluate shader. */
-        shader_eval_surface(kg, sd, state, state->flag);
+        shader_eval_surface(kg, sd, state, NULL, state->flag);
         shader_prepare_closures(sd, state);
 
         /* Apply shadow catcher, holdout, emission. */
@@ -453,7 +453,9 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
           throughput /= probability;
         }
 
+#    ifdef __DENOISING_FEATURES__
         kernel_update_denoising_features(kg, sd, state, L);
+#    endif
 
 #    ifdef __AO__
         /* ambient occlusion */
@@ -474,12 +476,10 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 #    endif /* __SUBSURFACE__ */
 
 #    if defined(__EMISSION__)
-        if (kernel_data.integrator.use_direct_light) {
-          int all = (kernel_data.integrator.sample_all_lights_indirect) ||
-                    (state->flag & PATH_RAY_SHADOW_CATCHER);
-          kernel_branched_path_surface_connect_light(
-              kg, sd, emission_sd, state, throughput, 1.0f, L, all);
-        }
+        int all = (kernel_data.integrator.sample_all_lights_indirect) ||
+                  (state->flag & PATH_RAY_SHADOW_CATCHER);
+        kernel_branched_path_surface_connect_light(
+            kg, sd, emission_sd, state, throughput, 1.0f, L, all);
 #    endif /* defined(__EMISSION__) */
 
 #    ifdef __VOLUME__
@@ -550,7 +550,7 @@ ccl_device_forceinline void kernel_path_integrate(KernelGlobals *kg,
 
       /* Shade background. */
       if (!hit) {
-        kernel_path_background(kg, state, ray, throughput, &sd, L);
+        kernel_path_background(kg, state, ray, throughput, &sd, buffer, L);
         break;
       }
       else if (path_state_ao_bounce(kg, state)) {
@@ -566,7 +566,7 @@ ccl_device_forceinline void kernel_path_integrate(KernelGlobals *kg,
 #  endif
 
         /* Evaluate shader. */
-        shader_eval_surface(kg, &sd, state, state->flag);
+        shader_eval_surface(kg, &sd, state, buffer, state->flag);
         shader_prepare_closures(&sd, state);
 
         /* Apply shadow catcher, holdout, emission. */
@@ -590,7 +590,9 @@ ccl_device_forceinline void kernel_path_integrate(KernelGlobals *kg,
           throughput /= probability;
         }
 
+#  ifdef __DENOISING_FEATURES__
         kernel_update_denoising_features(kg, &sd, state, L);
+#  endif
 
 #  ifdef __AO__
         /* ambient occlusion */
@@ -610,8 +612,10 @@ ccl_device_forceinline void kernel_path_integrate(KernelGlobals *kg,
         }
 #  endif /* __SUBSURFACE__ */
 
+#  ifdef __EMISSION__
         /* direct lighting */
         kernel_path_surface_connect_light(kg, &sd, emission_sd, throughput, state, L);
+#  endif /* __EMISSION__ */
 
 #  ifdef __VOLUME__
       }
@@ -647,6 +651,14 @@ ccl_device void kernel_path_trace(
 
   buffer += index * pass_stride;
 
+  if (kernel_data.film.pass_adaptive_aux_buffer) {
+    ccl_global float4 *aux = (ccl_global float4 *)(buffer +
+                                                   kernel_data.film.pass_adaptive_aux_buffer);
+    if ((*aux).w > 0.0f) {
+      return;
+    }
+  }
+
   /* Initialize random numbers and sample ray. */
   uint rng_hash;
   Ray ray;
@@ -661,13 +673,20 @@ ccl_device void kernel_path_trace(
   float3 throughput = make_float3(1.0f, 1.0f, 1.0f);
 
   PathRadiance L;
-  path_radiance_init(&L, kernel_data.film.use_light_pass);
+  path_radiance_init(kg, &L);
 
   ShaderDataTinyStorage emission_sd_storage;
   ShaderData *emission_sd = AS_SHADER_DATA(&emission_sd_storage);
 
   PathState state;
   path_state_init(kg, emission_sd, &state, rng_hash, sample, &ray);
+
+#  ifdef __KERNEL_OPTIX__
+  /* Force struct into local memory to avoid costly spilling on trace calls. */
+  if (pass_stride < 0) /* This is never executed and just prevents the compiler from doing SROA. */
+    for (int i = 0; i < sizeof(L); ++i)
+      reinterpret_cast<unsigned char *>(&L)[-pass_stride + i] = 0;
+#  endif
 
   /* Integrate. */
   kernel_path_integrate(kg, &state, throughput, &ray, &L, buffer, emission_sd);

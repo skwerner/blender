@@ -21,10 +21,10 @@
  * \ingroup spaction
  */
 
-#include <string.h>
-#include <stdio.h>
-#include <math.h>
 #include <float.h>
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
 
 #include "DNA_anim_types.h"
 #include "DNA_object_types.h"
@@ -54,7 +54,7 @@
 #include "UI_interface.h"
 #include "UI_resources.h"
 
-#include "action_intern.h"  // own include
+#include "action_intern.h" /* own include */
 
 /* ******************* action editor space & buttons ************** */
 
@@ -65,7 +65,7 @@ void action_buttons_register(ARegionType *UNUSED(art))
 #if 0
   PanelType *pt;
 
-  // TODO: AnimData / Actions List
+  /* TODO: AnimData / Actions List */
 
   pt = MEM_callocN(sizeof(PanelType), "spacetype action panel properties");
   strcpy(pt->idname, "ACTION_PT_properties");

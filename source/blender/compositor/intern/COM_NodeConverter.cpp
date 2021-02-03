@@ -16,17 +16,15 @@
  * Copyright 2013, Blender Foundation.
  */
 
-extern "C" {
 #include "BLI_utildefines.h"
-}
 
 #include "COM_Debug.h"
 
-#include "COM_NodeOperationBuilder.h"
 #include "COM_NodeOperation.h"
+#include "COM_NodeOperationBuilder.h"
+#include "COM_SetColorOperation.h"
 #include "COM_SetValueOperation.h"
 #include "COM_SetVectorOperation.h"
-#include "COM_SetColorOperation.h"
 #include "COM_SocketProxyOperation.h"
 
 #include "COM_NodeConverter.h" /* own include */

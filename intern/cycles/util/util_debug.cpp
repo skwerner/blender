@@ -31,7 +31,7 @@ DebugFlags::CPU::CPU()
       sse41(true),
       sse3(true),
       sse2(true),
-      bvh_layout(BVH_LAYOUT_DEFAULT),
+      bvh_layout(BVH_LAYOUT_AUTO),
       split_kernel(false)
 {
   reset();
@@ -57,18 +57,7 @@ void DebugFlags::CPU::reset()
 #undef STRINGIFY
 #undef CHECK_CPU_FLAGS
 
-  if (getenv("CYCLES_BVH2") != NULL) {
-    bvh_layout = BVH_LAYOUT_BVH2;
-  }
-  else if (getenv("CYCLES_BVH4") != NULL) {
-    bvh_layout = BVH_LAYOUT_BVH4;
-  }
-  else if (getenv("CYCLES_BVH8") != NULL) {
-    bvh_layout = BVH_LAYOUT_BVH8;
-  }
-  else {
-    bvh_layout = BVH_LAYOUT_DEFAULT;
-  }
+  bvh_layout = BVH_LAYOUT_AUTO;
 
   split_kernel = false;
 }
@@ -84,6 +73,17 @@ void DebugFlags::CUDA::reset()
     adaptive_compile = true;
 
   split_kernel = false;
+}
+
+DebugFlags::OptiX::OptiX()
+{
+  reset();
+}
+
+void DebugFlags::OptiX::reset()
+{
+  cuda_streams = 1;
+  curves_api = false;
 }
 
 DebugFlags::OpenCL::OpenCL() : device_type(DebugFlags::OpenCL::DEVICE_ALL), debug(false)
@@ -120,7 +120,7 @@ void DebugFlags::OpenCL::reset()
   debug = (getenv("CYCLES_OPENCL_DEBUG") != NULL);
 }
 
-DebugFlags::DebugFlags() : viewport_static_bvh(false)
+DebugFlags::DebugFlags() : viewport_static_bvh(false), running_inside_blender(false)
 {
   /* Nothing for now. */
 }
@@ -130,6 +130,7 @@ void DebugFlags::reset()
   viewport_static_bvh = false;
   cpu.reset();
   cuda.reset();
+  optix.reset();
   opencl.reset();
 }
 
@@ -145,7 +146,10 @@ std::ostream &operator<<(std::ostream &os, DebugFlagsConstRef debug_flags)
      << "  Split      : " << string_from_bool(debug_flags.cpu.split_kernel) << "\n";
 
   os << "CUDA flags:\n"
-     << " Adaptive Compile: " << string_from_bool(debug_flags.cuda.adaptive_compile) << "\n";
+     << "  Adaptive Compile : " << string_from_bool(debug_flags.cuda.adaptive_compile) << "\n";
+
+  os << "OptiX flags:\n"
+     << "  CUDA streams : " << debug_flags.optix.cuda_streams << "\n";
 
   const char *opencl_device_type;
   switch (debug_flags.opencl.device_type) {

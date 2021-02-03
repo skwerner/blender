@@ -40,3 +40,9 @@ Desktop.ini
 
 # in-source lib downloads
 /build_files/build_environment/downloads
+
+# in-source buildbot signing configuration
+/build_files/buildbot/codesign/config_server.py
+
+# smoke simulation noise tile (generated)
+waveletNoiseTile.bin

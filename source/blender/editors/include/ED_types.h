@@ -21,8 +21,11 @@
  * \ingroup editors
  */
 
-#ifndef __ED_TYPES_H__
-#define __ED_TYPES_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* **************** GENERAL EDITOR-WIDE TYPES AND DEFINES ************************** */
 
@@ -35,4 +38,6 @@
 // #define BASACT                    (scene->basact)
 // #define OBACT                     (BASACT ? BASACT->object : NULL)
 
-#endif /* __ED_TYPES_H__ */
+#ifdef __cplusplus
+}
+#endif

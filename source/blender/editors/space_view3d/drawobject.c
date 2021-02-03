@@ -22,24 +22,22 @@
  */
 
 #include "DNA_mesh_types.h"
-#include "DNA_scene_types.h"
 #include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "BLI_math.h"
 
 #include "BKE_DerivedMesh.h"
-#include "BKE_global.h"
-
 #include "BKE_editmesh.h"
+#include "BKE_global.h"
+#include "BKE_object.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
 
-#include "GPU_draw.h"
-#include "GPU_shader.h"
-#include "GPU_immediate.h"
 #include "GPU_batch.h"
-#include "GPU_matrix.h"
+#include "GPU_immediate.h"
+#include "GPU_shader.h"
 #include "GPU_state.h"
 
 #include "ED_mesh.h"
@@ -71,7 +69,7 @@ static const float cosval[CIRCLE_RESOL] = {
     0.82076344,  0.91895781,  0.97952994,  1.00000000,
 };
 
-static void circball_array_fill(float verts[CIRCLE_RESOL][3],
+static void circball_array_fill(const float verts[CIRCLE_RESOL][3],
                                 const float cent[3],
                                 float rad,
                                 const float tmat[4][4])
@@ -89,14 +87,14 @@ static void circball_array_fill(float verts[CIRCLE_RESOL][3],
   }
 }
 
-void imm_drawcircball(const float cent[3], float rad, const float tmat[4][4], unsigned pos)
+void imm_drawcircball(const float cent[3], float rad, const float tmat[4][4], uint pos)
 {
   float verts[CIRCLE_RESOL][3];
 
   circball_array_fill(verts, cent, rad, tmat);
 
   immBegin(GPU_PRIM_LINE_LOOP, CIRCLE_RESOL);
-  for (int i = 0; i < CIRCLE_RESOL; ++i) {
+  for (int i = 0; i < CIRCLE_RESOL; i++) {
     immVertex3fv(pos, verts[i]);
   }
   immEnd();
@@ -122,19 +120,18 @@ void ED_draw_object_facemap(Depsgraph *depsgraph,
   Mesh *me = ob->data;
   {
     Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
-    if (ob_eval->runtime.mesh_eval) {
-      me = ob_eval->runtime.mesh_eval;
+    Mesh *me_eval = BKE_object_get_evaluated_mesh(ob_eval);
+    if (me_eval != NULL) {
+      me = me_eval;
     }
   }
 
-  glFrontFace((ob->transflag & OB_NEG_SCALE) ? GL_CW : GL_CCW);
+  GPU_front_facing(ob->transflag & OB_NEG_SCALE);
 
   /* Just to create the data to pass to immediate mode, grr! */
   const int *facemap_data = CustomData_get_layer(&me->pdata, CD_FACEMAP);
   if (facemap_data) {
-    GPU_blend_set_func_separate(
-        GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
-    GPU_blend(true);
+    GPU_blend(GPU_BLEND_ALPHA);
 
     const MVert *mvert = me->mvert;
     const MPoly *mpoly = me->mpoly;
@@ -145,7 +142,7 @@ void ED_draw_object_facemap(Depsgraph *depsgraph,
 
     facemap_data = CustomData_get_layer(&me->pdata, CD_FACEMAP);
 
-    /* use gawain immediate mode fore now */
+    /* Make a batch and free it each time for now. */
     const int looptris_len = poly_to_tri_count(mpoly_len, mloop_len);
     const int vbo_len_capacity = looptris_len * 3;
     int vbo_len_used = 0;
@@ -210,6 +207,6 @@ void ED_draw_object_facemap(Depsgraph *depsgraph,
     GPU_batch_discard(draw_batch);
     GPU_vertbuf_discard(vbo_pos);
 
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
   }
 }

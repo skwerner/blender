@@ -21,8 +21,11 @@
  * \ingroup editors
  */
 
-#ifndef __ED_TRANSVERTS_H__
-#define __ED_TRANSVERTS_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct Object;
 
@@ -68,4 +71,6 @@ enum {
   TX_VERT_USE_NORMAL = (1 << 2), /* avoid nonzero check */
 };
 
-#endif /* __ED_TRANSVERTS_H__ */
+#ifdef __cplusplus
+}
+#endif

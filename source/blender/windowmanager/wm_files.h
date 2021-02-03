@@ -21,12 +21,15 @@
  * \ingroup wm
  */
 
-#ifndef __WM_FILES_H__
-#define __WM_FILES_H__
+#pragma once
 
 struct Main;
 struct wmGenericCallback;
 struct wmOperatorType;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* wm_files.c */
 void wm_history_file_read(void);
@@ -42,11 +45,9 @@ void wm_homefile_read(struct bContext *C,
 void wm_file_read_report(bContext *C, struct Main *bmain);
 
 void wm_close_file_dialog(bContext *C, struct wmGenericCallback *post_action);
-bool wm_file_or_image_is_modified(const struct bContext *C);
+bool wm_file_or_image_is_modified(const Main *bmain, const wmWindowManager *wm);
 
 void WM_OT_save_homefile(struct wmOperatorType *ot);
-void WM_OT_userpref_autoexec_path_add(struct wmOperatorType *ot);
-void WM_OT_userpref_autoexec_path_remove(struct wmOperatorType *ot);
 void WM_OT_save_userpref(struct wmOperatorType *ot);
 void WM_OT_read_userpref(struct wmOperatorType *ot);
 void WM_OT_read_factory_userpref(struct wmOperatorType *ot);
@@ -70,4 +71,6 @@ void WM_OT_append(struct wmOperatorType *ot);
 void WM_OT_lib_relocate(struct wmOperatorType *ot);
 void WM_OT_lib_reload(struct wmOperatorType *ot);
 
-#endif /* __WM_FILES_H__ */
+#ifdef __cplusplus
+}
+#endif

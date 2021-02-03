@@ -20,8 +20,8 @@
 
 #include <stdlib.h>
 
-#include "DNA_anim_types.h"
 #include "DNA_action_types.h"
+#include "DNA_anim_types.h"
 #include "DNA_scene_types.h"
 
 #include "BLI_utildefines.h"
@@ -113,6 +113,7 @@ const EnumPropertyItem rna_enum_keying_flag_items_api[] = {
 
 #  include "BLI_math_base.h"
 
+#  include "BKE_anim_data.h"
 #  include "BKE_animsys.h"
 #  include "BKE_fcurve.h"
 #  include "BKE_nla.h"
@@ -128,7 +129,7 @@ const EnumPropertyItem rna_enum_keying_flag_items_api[] = {
 
 static void rna_AnimData_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
 {
-  ID *id = ptr->id.data;
+  ID *id = ptr->owner_id;
 
   ANIM_id_update(bmain, id);
 }
@@ -143,21 +144,14 @@ static void rna_AnimData_dependency_update(Main *bmain, Scene *scene, PointerRNA
 static int rna_AnimData_action_editable(PointerRNA *ptr, const char **UNUSED(r_info))
 {
   AnimData *adt = (AnimData *)ptr->data;
-
-  /* active action is only editable when it is not a tweaking strip */
-  if ((adt->flag & ADT_NLA_EDIT_ON) || (adt->actstrip) || (adt->tmpact)) {
-    return 0;
-  }
-  else {
-    return PROP_EDITABLE;
-  }
+  return BKE_animdata_action_editable(adt) ? PROP_EDITABLE : 0;
 }
 
 static void rna_AnimData_action_set(PointerRNA *ptr,
                                     PointerRNA value,
                                     struct ReportList *UNUSED(reports))
 {
-  ID *ownerId = (ID *)ptr->id.data;
+  ID *ownerId = ptr->owner_id;
 
   /* set action */
   BKE_animdata_set_action(NULL, ownerId, value.data);
@@ -193,7 +187,7 @@ static bool RKS_POLL_rna_internal(KeyingSetInfo *ksi, bContext *C)
   void *ret;
   int ok;
 
-  RNA_pointer_create(NULL, ksi->ext.srna, ksi, &ptr);
+  RNA_pointer_create(NULL, ksi->rna_ext.srna, ksi, &ptr);
   func = &rna_KeyingSetInfo_poll_func; /* RNA_struct_find_function(&ptr, "poll"); */
 
   RNA_parameter_list_create(&list, &ptr, func);
@@ -203,7 +197,7 @@ static bool RKS_POLL_rna_internal(KeyingSetInfo *ksi, bContext *C)
     RNA_parameter_set_lookup(&list, "context", &C);
 
     /* execute the function */
-    ksi->ext.call(C, &ptr, func, &list);
+    ksi->rna_ext.call(C, &ptr, func, &list);
 
     /* read the result */
     RNA_parameter_get_lookup(&list, "ok", &ret);
@@ -223,7 +217,7 @@ static void RKS_ITER_rna_internal(KeyingSetInfo *ksi, bContext *C, KeyingSet *ks
   ParameterList list;
   FunctionRNA *func;
 
-  RNA_pointer_create(NULL, ksi->ext.srna, ksi, &ptr);
+  RNA_pointer_create(NULL, ksi->rna_ext.srna, ksi, &ptr);
   func = &rna_KeyingSetInfo_iterator_func; /* RNA_struct_find_function(&ptr, "poll"); */
 
   RNA_parameter_list_create(&list, &ptr, func);
@@ -234,7 +228,7 @@ static void RKS_ITER_rna_internal(KeyingSetInfo *ksi, bContext *C, KeyingSet *ks
     RNA_parameter_set_lookup(&list, "ks", &ks);
 
     /* execute the function */
-    ksi->ext.call(C, &ptr, func, &list);
+    ksi->rna_ext.call(C, &ptr, func, &list);
   }
   RNA_parameter_list_free(&list);
 }
@@ -248,7 +242,7 @@ static void RKS_GEN_rna_internal(KeyingSetInfo *ksi, bContext *C, KeyingSet *ks,
   ParameterList list;
   FunctionRNA *func;
 
-  RNA_pointer_create(NULL, ksi->ext.srna, ksi, &ptr);
+  RNA_pointer_create(NULL, ksi->rna_ext.srna, ksi, &ptr);
   func = &rna_KeyingSetInfo_generate_func; /* RNA_struct_find_generate(&ptr, "poll"); */
 
   RNA_parameter_list_create(&list, &ptr, func);
@@ -260,7 +254,7 @@ static void RKS_GEN_rna_internal(KeyingSetInfo *ksi, bContext *C, KeyingSet *ks,
     RNA_parameter_set_lookup(&list, "data", data);
 
     /* execute the function */
-    ksi->ext.call(C, &ptr, func, &list);
+    ksi->rna_ext.call(C, &ptr, func, &list);
   }
   RNA_parameter_list_free(&list);
 }
@@ -272,7 +266,7 @@ static void RKS_GEN_rna_internal(KeyingSetInfo *ksi, bContext *C, KeyingSet *ks,
 static StructRNA *rna_KeyingSetInfo_refine(PointerRNA *ptr)
 {
   KeyingSetInfo *ksi = (KeyingSetInfo *)ptr->data;
-  return (ksi->ext.srna) ? ksi->ext.srna : &RNA_KeyingSetInfo;
+  return (ksi->rna_ext.srna) ? ksi->rna_ext.srna : &RNA_KeyingSetInfo;
 }
 
 static void rna_KeyingSetInfo_unregister(Main *bmain, StructRNA *type)
@@ -284,7 +278,7 @@ static void rna_KeyingSetInfo_unregister(Main *bmain, StructRNA *type)
   }
 
   /* free RNA data referencing this */
-  RNA_struct_free_extension(type, &ksi->ext);
+  RNA_struct_free_extension(type, &ksi->rna_ext);
   RNA_struct_free(&BLENDER_RNA, type);
 
   WM_main_add_notifier(NC_WINDOW, NULL);
@@ -303,7 +297,7 @@ static StructRNA *rna_KeyingSetInfo_register(Main *bmain,
 {
   KeyingSetInfo dummyksi = {NULL};
   KeyingSetInfo *ksi;
-  PointerRNA dummyptr = {{NULL}};
+  PointerRNA dummyptr = {NULL};
   int have_function[3];
 
   /* setup dummy type info to store static properties in */
@@ -327,20 +321,20 @@ static StructRNA *rna_KeyingSetInfo_register(Main *bmain,
 
   /* check if we have registered this info before, and remove it */
   ksi = ANIM_keyingset_info_find_name(dummyksi.idname);
-  if (ksi && ksi->ext.srna) {
-    rna_KeyingSetInfo_unregister(bmain, ksi->ext.srna);
+  if (ksi && ksi->rna_ext.srna) {
+    rna_KeyingSetInfo_unregister(bmain, ksi->rna_ext.srna);
   }
 
   /* create a new KeyingSetInfo type */
-  ksi = MEM_callocN(sizeof(KeyingSetInfo), "python keying set info");
+  ksi = MEM_mallocN(sizeof(KeyingSetInfo), "python keying set info");
   memcpy(ksi, &dummyksi, sizeof(KeyingSetInfo));
 
   /* set RNA-extensions info */
-  ksi->ext.srna = RNA_def_struct_ptr(&BLENDER_RNA, ksi->idname, &RNA_KeyingSetInfo);
-  ksi->ext.data = data;
-  ksi->ext.call = call;
-  ksi->ext.free = free;
-  RNA_struct_blender_type_set(ksi->ext.srna, ksi);
+  ksi->rna_ext.srna = RNA_def_struct_ptr(&BLENDER_RNA, ksi->idname, &RNA_KeyingSetInfo);
+  ksi->rna_ext.data = data;
+  ksi->rna_ext.call = call;
+  ksi->rna_ext.free = free;
+  RNA_struct_blender_type_set(ksi->rna_ext.srna, ksi);
 
   /* set callbacks */
   /* NOTE: we really should have all of these...  */
@@ -354,7 +348,7 @@ static StructRNA *rna_KeyingSetInfo_register(Main *bmain,
   WM_main_add_notifier(NC_WINDOW, NULL);
 
   /* return the struct-rna added */
-  return ksi->ext.srna;
+  return ksi->rna_ext.srna;
 }
 
 /* ****************************** */
@@ -593,7 +587,7 @@ static void rna_KeyingSet_paths_clear(KeyingSet *keyingset, ReportList *reports)
 /* needs wrapper function to push notifier */
 static NlaTrack *rna_NlaTrack_new(ID *id, AnimData *adt, Main *bmain, bContext *C, NlaTrack *track)
 {
-  NlaTrack *new_track = BKE_nlatrack_add(adt, track);
+  NlaTrack *new_track = BKE_nlatrack_add(adt, track, ID_IS_OVERRIDE_LIBRARY(id));
 
   WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_ADDED, NULL);
 
@@ -647,7 +641,7 @@ static FCurve *rna_Driver_from_existing(AnimData *adt, bContext *C, FCurve *src_
   }
   else {
     /* just make a copy of the existing one and add to self */
-    FCurve *new_fcu = copy_fcurve(src_driver);
+    FCurve *new_fcu = BKE_fcurve_copy(src_driver);
 
     /* XXX: if we impose any ordering on these someday, this will be problematic */
     BLI_addtail(&adt->drivers, new_fcu);
@@ -663,13 +657,12 @@ static FCurve *rna_Driver_new(
     return NULL;
   }
 
-  if (list_find_fcurve(&adt->drivers, rna_path, array_index)) {
+  if (BKE_fcurve_find(&adt->drivers, rna_path, array_index)) {
     BKE_reportf(reports, RPT_ERROR, "Driver '%s[%d]' already exists", rna_path, array_index);
     return NULL;
   }
 
-  short add_mode = 1;
-  FCurve *fcu = verify_driver_fcurve(id, rna_path, array_index, add_mode);
+  FCurve *fcu = verify_driver_fcurve(id, rna_path, array_index, DRIVER_FCURVE_KEYFRAMES);
   BLI_assert(fcu != NULL);
 
   DEG_relations_tag_update(bmain);
@@ -683,7 +676,7 @@ static void rna_Driver_remove(AnimData *adt, Main *bmain, ReportList *reports, F
     BKE_report(reports, RPT_ERROR, "Driver not found in this animation data");
     return;
   }
-  free_fcurve(fcu);
+  BKE_fcurve_free(fcu);
   DEG_relations_tag_update(bmain);
 }
 
@@ -698,7 +691,7 @@ static FCurve *rna_Driver_find(AnimData *adt,
   }
 
   /* Returns NULL if not found. */
-  return list_find_fcurve(&adt->drivers, data_path, index);
+  return BKE_fcurve_find(&adt->drivers, data_path, index);
 }
 
 bool rna_AnimaData_override_apply(Main *UNUSED(bmain),
@@ -727,16 +720,70 @@ bool rna_AnimaData_override_apply(Main *UNUSED(bmain),
 
   if (adt_dst == NULL && adt_src != NULL) {
     /* Copy anim data from reference into final local ID. */
-    BKE_animdata_copy_id(NULL, ptr_dst->id.data, ptr_src->id.data, 0);
+    BKE_animdata_copy_id(NULL, ptr_dst->owner_id, ptr_src->owner_id, 0);
     return true;
   }
   else if (adt_dst != NULL && adt_src == NULL) {
     /* Override has cleared/removed anim data from its reference. */
-    BKE_animdata_free(ptr_dst->id.data, true);
+    BKE_animdata_free(ptr_dst->owner_id, true);
     return true;
   }
 
   return false;
+}
+
+bool rna_NLA_tracks_override_apply(Main *bmain,
+                                   PointerRNA *ptr_dst,
+                                   PointerRNA *ptr_src,
+                                   PointerRNA *UNUSED(ptr_storage),
+                                   PropertyRNA *UNUSED(prop_dst),
+                                   PropertyRNA *UNUSED(prop_src),
+                                   PropertyRNA *UNUSED(prop_storage),
+                                   const int UNUSED(len_dst),
+                                   const int UNUSED(len_src),
+                                   const int UNUSED(len_storage),
+                                   PointerRNA *UNUSED(ptr_item_dst),
+                                   PointerRNA *UNUSED(ptr_item_src),
+                                   PointerRNA *UNUSED(ptr_item_storage),
+                                   IDOverrideLibraryPropertyOperation *opop)
+{
+  BLI_assert(opop->operation == IDOVERRIDE_LIBRARY_OP_INSERT_AFTER &&
+             "Unsupported RNA override operation on constraints collection");
+
+  AnimData *anim_data_dst = (AnimData *)ptr_dst->data;
+  AnimData *anim_data_src = (AnimData *)ptr_src->data;
+
+  /* Remember that insertion operations are defined and stored in correct order, which means that
+   * even if we insert several items in a row, we always insert first one, then second one, etc.
+   * So we should always find 'anchor' track in both _src *and* _dst. */
+  NlaTrack *nla_track_anchor = NULL;
+#  if 0
+  /* This is not working so well with index-based insertion, especially in case some tracks get
+   * added to lib linked data. So we simply add locale tracks at the end of the list always, order
+   * of override operations should ensure order of local tracks is preserved properly. */
+  if (opop->subitem_local_index >= 0) {
+    nla_track_anchor = BLI_findlink(&anim_data_dst->nla_tracks, opop->subitem_local_index);
+  }
+  /* Otherwise we just insert in first position. */
+#  else
+  nla_track_anchor = anim_data_dst->nla_tracks.last;
+#  endif
+
+  NlaTrack *nla_track_src = NULL;
+  if (opop->subitem_local_index >= 0) {
+    nla_track_src = BLI_findlink(&anim_data_src->nla_tracks, opop->subitem_local_index);
+  }
+  nla_track_src = nla_track_src ? nla_track_src->next : anim_data_src->nla_tracks.first;
+
+  BLI_assert(nla_track_src != NULL);
+
+  NlaTrack *nla_track_dst = BKE_nlatrack_copy(bmain, nla_track_src, true, 0);
+
+  /* This handles NULL anchor as expected by adding at head of list. */
+  BLI_insertlinkafter(&anim_data_dst->nla_tracks, nla_track_anchor, nla_track_dst);
+
+  // printf("%s: We inserted a NLA Track...\n", __func__);
+  return true;
 }
 
 #else
@@ -1167,7 +1214,7 @@ static void rna_api_animdata_nla_tracks(BlenderRNA *brna, PropertyRNA *cprop)
   RNA_def_property_pointer_funcs(
       prop, "rna_NlaTrack_active_get", "rna_NlaTrack_active_set", NULL, NULL);
   RNA_def_property_flag(prop, PROP_EDITABLE);
-  RNA_def_property_ui_text(prop, "Active Constraint", "Active Object constraint");
+  RNA_def_property_ui_text(prop, "Active Track", "Active NLA Track");
   /* XXX: should (but doesn't) update the active track in the NLA window */
   RNA_def_property_update(prop, NC_ANIMATION | ND_NLA | NA_SELECTED, NULL);
 }
@@ -1258,14 +1305,19 @@ static void rna_def_animdata(BlenderRNA *brna)
   RNA_def_property_collection_sdna(prop, NULL, "nla_tracks", NULL);
   RNA_def_property_struct_type(prop, "NlaTrack");
   RNA_def_property_ui_text(prop, "NLA Tracks", "NLA Tracks (i.e. Animation Layers)");
+  RNA_def_property_override_flag(prop,
+                                 PROPOVERRIDE_OVERRIDABLE_LIBRARY |
+                                     PROPOVERRIDE_LIBRARY_INSERTION | PROPOVERRIDE_NO_PROP_NAME);
+  RNA_def_property_override_funcs(prop, NULL, NULL, "rna_NLA_tracks_override_apply");
 
   rna_api_animdata_nla_tracks(brna, prop);
+
+  RNA_define_lib_overridable(true);
 
   /* Active Action */
   prop = RNA_def_property(srna, "action", PROP_POINTER, PROP_NONE);
   /* this flag as well as the dynamic test must be defined for this to be editable... */
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_REFCOUNT);
-  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_pointer_funcs(
       prop, NULL, "rna_AnimData_action_set", NULL, "rna_Action_id_poll");
   RNA_def_property_editable_func(prop, "rna_AnimData_action_editable");
@@ -1304,10 +1356,13 @@ static void rna_def_animdata(BlenderRNA *brna)
   prop = RNA_def_property(srna, "drivers", PROP_COLLECTION, PROP_NONE);
   RNA_def_property_collection_sdna(prop, NULL, "drivers", NULL);
   RNA_def_property_struct_type(prop, "FCurve");
-  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_ui_text(prop, "Drivers", "The Drivers/Expressions for this data-block");
 
+  RNA_define_lib_overridable(false);
+
   rna_api_animdata_drivers(brna, prop);
+
+  RNA_define_lib_overridable(true);
 
   /* General Settings */
   prop = RNA_def_property(srna, "use_nla", PROP_BOOLEAN, PROP_NONE);
@@ -1322,6 +1377,14 @@ static void rna_def_animdata(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop, "Use NLA Tweak Mode", "Whether to enable or disable tweak mode in NLA");
   RNA_def_property_update(prop, NC_ANIMATION | ND_NLA, "rna_AnimData_update");
+
+  prop = RNA_def_property(srna, "use_pin", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_flag(prop, PROP_NO_DEG_UPDATE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flag", ADT_CURVES_ALWAYS_VISIBLE);
+  RNA_def_property_ui_text(prop, "Pin in Graph Editor", "");
+  RNA_def_property_update(prop, NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, NULL);
+
+  RNA_define_lib_overridable(false);
 
   /* Animation Data API */
   RNA_api_animdata(srna);

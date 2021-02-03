@@ -21,8 +21,11 @@
  * \ingroup editors
  */
 
-#ifndef __ED_CURVE_H__
-#define __ED_CURVE_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct BPoint;
 struct Base;
@@ -62,7 +65,7 @@ int ED_curve_nurb_select_count(struct View3D *v3d, struct Nurb *nu);
 bool ED_curve_nurb_select_all(const struct Nurb *nu);
 bool ED_curve_nurb_deselect_all(const struct Nurb *nu);
 
-int join_curve_exec(struct bContext *C, struct wmOperator *op);
+int ED_curve_join_objects_exec(struct bContext *C, struct wmOperator *op);
 
 /* editcurve_select.c */
 bool ED_curve_select_check(struct View3D *v3d, struct EditNurb *editnurb);
@@ -81,7 +84,7 @@ void ED_curve_editfont_load(struct Object *obedit);
 void ED_curve_editfont_make(struct Object *obedit);
 void ED_curve_editfont_free(struct Object *obedit);
 
-void ED_text_to_object(struct bContext *C, struct Text *text, const bool split_lines);
+void ED_text_to_object(struct bContext *C, const struct Text *text, const bool split_lines);
 
 void ED_curve_beztcpy(struct EditNurb *editnurb,
                       struct BezTriple *dst,
@@ -104,4 +107,6 @@ void ED_font_undosys_type(struct UndoType *ut);
 void printknots(struct Object *obedit);
 #endif
 
-#endif /* __ED_CURVE_H__ */
+#ifdef __cplusplus
+}
+#endif

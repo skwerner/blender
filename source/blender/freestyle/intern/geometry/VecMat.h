@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __VECMAT_H__
-#define __VECMAT_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -474,7 +473,7 @@ template<class T> class HVec3 : public Vec<T, 4> {
     return this->_coord[3];
   }
 
-  // Acces to non-homogeneous coordinates in 3D
+  // Access to non-homogeneous coordinates in 3D
   inline value_type x() const
   {
     return this->_coord[0] / this->_coord[3];
@@ -1005,5 +1004,3 @@ inline std::ostream &operator<<(std::ostream &s, const Matrix<T, M, N> &m)
 }  // end of namespace VecMat
 
 } /* namespace Freestyle */
-
-#endif  // __VECMAT_H__

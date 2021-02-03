@@ -16,8 +16,8 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_MOVIECLIPATTRIBUTEOPERATION_H__
-#define __COM_MOVIECLIPATTRIBUTEOPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
 #include "DNA_movieclip_types.h"
 
@@ -48,7 +48,7 @@ class MovieClipAttributeOperation : public NodeOperation {
   void initExecution();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
   void determineResolution(unsigned int resolution[2], unsigned int preferredResolution[2]);
@@ -70,4 +70,3 @@ class MovieClipAttributeOperation : public NodeOperation {
     this->m_invert = invert;
   }
 };
-#endif

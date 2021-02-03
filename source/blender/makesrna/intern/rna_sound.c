@@ -28,11 +28,12 @@
 
 #ifdef RNA_RUNTIME
 
-#  include "BKE_sound.h"
 #  include "BKE_context.h"
-#  include "BKE_sequencer.h"
+#  include "BKE_sound.h"
 
 #  include "DEG_depsgraph.h"
+
+#  include "SEQ_sequencer.h"
 
 static void rna_Sound_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
 {
@@ -62,7 +63,7 @@ static void rna_def_sound(BlenderRNA *brna)
   /*rna_def_ipo_common(srna); */
 
   prop = RNA_def_property(srna, "filepath", PROP_STRING, PROP_FILEPATH);
-  RNA_def_property_string_sdna(prop, NULL, "name");
+  RNA_def_property_string_sdna(prop, NULL, "filepath");
   RNA_def_property_ui_text(prop, "File Path", "Sound sample file used by this Sound data-block");
   RNA_def_property_update(prop, 0, "rna_Sound_update");
 

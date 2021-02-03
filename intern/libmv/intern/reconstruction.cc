@@ -95,12 +95,23 @@ void libmv_solveRefineIntrinsics(
   if (refine_intrinsics & LIBMV_REFINE_PRINCIPAL_POINT) {
     bundle_intrinsics |= libmv::BUNDLE_PRINCIPAL_POINT;
   }
-  if (refine_intrinsics & LIBMV_REFINE_RADIAL_DISTORTION_K1) {
-    bundle_intrinsics |= libmv::BUNDLE_RADIAL_K1;
-  }
-  if (refine_intrinsics & LIBMV_REFINE_RADIAL_DISTORTION_K2) {
-    bundle_intrinsics |= libmv::BUNDLE_RADIAL_K2;
-  }
+
+#define SET_DISTORTION_FLAG_CHECKED(type, coefficient) \
+  do { \
+    if (refine_intrinsics & LIBMV_REFINE_ ##  type ##_DISTORTION_ ## coefficient) { \
+      bundle_intrinsics |= libmv::BUNDLE_ ## type ## _ ## coefficient; \
+    } \
+  } while (0)
+
+  SET_DISTORTION_FLAG_CHECKED(RADIAL, K1);
+  SET_DISTORTION_FLAG_CHECKED(RADIAL, K2);
+  SET_DISTORTION_FLAG_CHECKED(RADIAL, K3);
+  SET_DISTORTION_FLAG_CHECKED(RADIAL, K4);
+
+  SET_DISTORTION_FLAG_CHECKED(TANGENTIAL, P1);
+  SET_DISTORTION_FLAG_CHECKED(TANGENTIAL, P2);
+
+#undef SET_DISTORTION_FLAG_CHECKED
 
   progress_update_callback(callback_customdata, 1.0, "Refining solution");
 
@@ -264,15 +275,15 @@ libmv_Reconstruction *libmv_solveReconstruction(
 
     update_callback.invoke(0, "Selecting keyframes");
 
-    selectTwoKeyframesBasedOnGRICAndVariance(tracks,
+    if (selectTwoKeyframesBasedOnGRICAndVariance(tracks,
                                              normalized_tracks,
                                              *camera_intrinsics,
                                              keyframe1,
-                                             keyframe2);
-
-    /* so keyframes in the interface would be updated */
-    libmv_reconstruction_options->keyframe1 = keyframe1;
-    libmv_reconstruction_options->keyframe2 = keyframe2;
+                                             keyframe2)) {
+      /* so keyframes in the interface would be updated */
+      libmv_reconstruction_options->keyframe1 = keyframe1;
+      libmv_reconstruction_options->keyframe2 = keyframe2;
+    }
   }
 
   /* Actual reconstruction. */
@@ -283,7 +294,7 @@ libmv_Reconstruction *libmv_solveReconstruction(
 
   LG << "number of markers for init: " << keyframe_markers.size();
 
-  if (keyframe_markers.size() < 8) {
+  if (keyframe_markers.size() < 16) {
     LG << "No enough markers to initialize from";
     libmv_reconstruction->is_valid = false;
     return libmv_reconstruction;
@@ -291,13 +302,18 @@ libmv_Reconstruction *libmv_solveReconstruction(
 
   update_callback.invoke(0, "Initial reconstruction");
 
-  EuclideanReconstructTwoFrames(keyframe_markers, &reconstruction);
+  if (!EuclideanReconstructTwoFrames(keyframe_markers, &reconstruction)) {
+    LG << "Failed to initialize reconstruction";
+    libmv_reconstruction->is_valid = false;
+    return libmv_reconstruction;
+  }
+
   EuclideanBundle(normalized_tracks, &reconstruction);
   EuclideanCompleteReconstruction(normalized_tracks,
                                   &reconstruction,
                                   &update_callback);
 
-  /* Refinement/ */
+  /* Refinement. */
   if (libmv_reconstruction_options->refine_intrinsics) {
     libmv_solveRefineIntrinsics(
                                 tracks,

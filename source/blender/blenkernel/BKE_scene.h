@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
  */
-#ifndef __BKE_SCENE_H__
-#define __BKE_SCENE_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -30,6 +29,7 @@ extern "C" {
 struct AviCodecData;
 struct Collection;
 struct Depsgraph;
+struct GHash;
 struct Main;
 struct Object;
 struct RenderData;
@@ -38,8 +38,6 @@ struct TransformOrientation;
 struct UnitSettings;
 struct View3DCursor;
 struct ViewLayer;
-struct ViewRender;
-struct WorkSpace;
 
 typedef enum eSceneCopyMethod {
   SCE_COPY_NEW = 0,
@@ -72,15 +70,15 @@ struct Base *_setlooper_base_step(struct Scene **sce_iter,
 
 void free_avicodecdata(struct AviCodecData *acd);
 
-void BKE_scene_free_ex(struct Scene *sce, const bool do_id_user);
-void BKE_scene_free(struct Scene *sce);
-void BKE_scene_init(struct Scene *sce);
 struct Scene *BKE_scene_add(struct Main *bmain, const char *name);
 
-void BKE_scene_remove_rigidbody_object(struct Main *bmain, struct Scene *scene, struct Object *ob);
+void BKE_scene_remove_rigidbody_object(struct Main *bmain,
+                                       struct Scene *scene,
+                                       struct Object *ob,
+                                       const bool free_us);
 
 bool BKE_scene_object_find(struct Scene *scene, struct Object *ob);
-struct Object *BKE_scene_object_find_by_name(struct Scene *scene, const char *name);
+struct Object *BKE_scene_object_find_by_name(const struct Scene *scene, const char *name);
 
 /* Scene base iteration function.
  * Define struct here, so no need to bother with alloc/free it.
@@ -109,25 +107,22 @@ struct Scene *BKE_scene_set_name(struct Main *bmain, const char *name);
 struct ToolSettings *BKE_toolsettings_copy(struct ToolSettings *toolsettings, const int flag);
 void BKE_toolsettings_free(struct ToolSettings *toolsettings);
 
-void BKE_scene_copy_data(struct Main *bmain,
-                         struct Scene *sce_dst,
-                         const struct Scene *sce_src,
-                         const int flag);
-struct Scene *BKE_scene_copy(struct Main *bmain, struct Scene *sce, int type);
+struct Scene *BKE_scene_duplicate(struct Main *bmain, struct Scene *sce, eSceneCopyMethod type);
 void BKE_scene_groups_relink(struct Scene *sce);
 
-void BKE_scene_make_local(struct Main *bmain, struct Scene *sce, const bool lib_local);
+bool BKE_scene_can_be_removed(const struct Main *bmain, const struct Scene *scene);
 
+bool BKE_scene_has_view_layer(const struct Scene *scene, const struct ViewLayer *layer);
 struct Scene *BKE_scene_find_from_collection(const struct Main *bmain,
                                              const struct Collection *collection);
 
 #ifdef DURIAN_CAMERA_SWITCH
-struct Object *BKE_scene_camera_switch_find(struct Scene *scene);  // DURIAN_CAMERA_SWITCH
+struct Object *BKE_scene_camera_switch_find(struct Scene *scene); /* DURIAN_CAMERA_SWITCH */
 #endif
-int BKE_scene_camera_switch_update(struct Scene *scene);
+bool BKE_scene_camera_switch_update(struct Scene *scene);
 
-char *BKE_scene_find_marker_name(struct Scene *scene, int frame);
-char *BKE_scene_find_last_marker_name(struct Scene *scene, int frame);
+const char *BKE_scene_find_marker_name(const struct Scene *scene, int frame);
+const char *BKE_scene_find_last_marker_name(const struct Scene *scene, int frame);
 
 int BKE_scene_frame_snap_by_seconds(struct Scene *scene, double interval_in_seconds, int cfra);
 
@@ -135,12 +130,13 @@ int BKE_scene_frame_snap_by_seconds(struct Scene *scene, double interval_in_seco
 bool BKE_scene_validate_setscene(struct Main *bmain, struct Scene *sce);
 
 float BKE_scene_frame_get(const struct Scene *scene);
-float BKE_scene_frame_get_from_ctime(const struct Scene *scene, const float frame);
+float BKE_scene_frame_to_ctime(const struct Scene *scene, const float frame);
 void BKE_scene_frame_set(struct Scene *scene, double cfra);
 
 struct TransformOrientationSlot *BKE_scene_orientation_slot_get_from_flag(struct Scene *scene,
-                                                                          int slot_index);
-struct TransformOrientationSlot *BKE_scene_orientation_slot_get(struct Scene *scene, int flag);
+                                                                          int flag);
+struct TransformOrientationSlot *BKE_scene_orientation_slot_get(struct Scene *scene,
+                                                                int slot_index);
 void BKE_scene_orientation_slot_set_index(struct TransformOrientationSlot *orient_slot,
                                           int orientation);
 int BKE_scene_orientation_slot_get_index(const struct TransformOrientationSlot *orient_slot);
@@ -148,11 +144,12 @@ int BKE_scene_orientation_slot_get_index(const struct TransformOrientationSlot *
 /* **  Scene evaluation ** */
 
 void BKE_scene_update_sound(struct Depsgraph *depsgraph, struct Main *bmain);
+void BKE_scene_update_tag_audio_volume(struct Depsgraph *, struct Scene *scene);
 
 void BKE_scene_graph_update_tagged(struct Depsgraph *depsgraph, struct Main *bmain);
 void BKE_scene_graph_evaluated_ensure(struct Depsgraph *depsgraph, struct Main *bmain);
 
-void BKE_scene_graph_update_for_newframe(struct Depsgraph *depsgraph, struct Main *bmain);
+void BKE_scene_graph_update_for_newframe(struct Depsgraph *depsgraph);
 
 void BKE_scene_view_layer_graph_evaluated_ensure(struct Main *bmain,
                                                  struct Scene *scene,
@@ -162,7 +159,7 @@ struct SceneRenderView *BKE_scene_add_render_view(struct Scene *sce, const char 
 bool BKE_scene_remove_render_view(struct Scene *scene, struct SceneRenderView *srv);
 
 /* render profile */
-int get_render_subsurf_level(const struct RenderData *r, int level, bool for_render);
+int get_render_subsurf_level(const struct RenderData *r, int lvl, bool for_render);
 int get_render_child_particle_number(const struct RenderData *r, int num, bool for_render);
 
 bool BKE_scene_use_shading_nodes_custom(struct Scene *scene);
@@ -171,6 +168,8 @@ bool BKE_scene_use_spherical_stereo(struct Scene *scene);
 bool BKE_scene_uses_blender_eevee(const struct Scene *scene);
 bool BKE_scene_uses_blender_workbench(const struct Scene *scene);
 bool BKE_scene_uses_cycles(const struct Scene *scene);
+
+void BKE_scene_copy_data_eevee(struct Scene *sce_dst, const struct Scene *sce_src);
 
 void BKE_scene_disable_color_management(struct Scene *scene);
 bool BKE_scene_check_color_management_enabled(const struct Scene *scene);
@@ -208,8 +207,8 @@ const char *BKE_scene_multiview_view_suffix_get(const struct RenderData *rd, con
 const char *BKE_scene_multiview_view_id_suffix_get(const struct RenderData *rd, const int view_id);
 void BKE_scene_multiview_view_prefix_get(struct Scene *scene,
                                          const char *name,
-                                         char *rprefix,
-                                         const char **rext);
+                                         char *r_prefix,
+                                         const char **r_ext);
 void BKE_scene_multiview_videos_dimensions_get(const struct RenderData *rd,
                                                const size_t width,
                                                const size_t height,
@@ -221,10 +220,17 @@ int BKE_scene_multiview_num_videos_get(const struct RenderData *rd);
 void BKE_scene_allocate_depsgraph_hash(struct Scene *scene);
 void BKE_scene_ensure_depsgraph_hash(struct Scene *scene);
 void BKE_scene_free_depsgraph_hash(struct Scene *scene);
+void BKE_scene_free_view_layer_depsgraph(struct Scene *scene, struct ViewLayer *view_layer);
 
-struct Depsgraph *BKE_scene_get_depsgraph(struct Scene *scene,
-                                          struct ViewLayer *view_layer,
-                                          bool allocate);
+/* Do not allocate new depsgraph. */
+struct Depsgraph *BKE_scene_get_depsgraph(struct Scene *scene, struct ViewLayer *view_layer);
+/* Allocate new depsgraph if necessary. */
+struct Depsgraph *BKE_scene_ensure_depsgraph(struct Main *bmain,
+                                             struct Scene *scene,
+                                             struct ViewLayer *view_layer);
+
+struct GHash *BKE_scene_undo_depsgraphs_extract(struct Main *bmain);
+void BKE_scene_undo_depsgraphs_restore(struct Main *bmain, struct GHash *depsgraph_extract);
 
 void BKE_scene_transform_orientation_remove(struct Scene *scene,
                                             struct TransformOrientation *orientation);
@@ -258,6 +264,4 @@ void BKE_scene_eval_sequencer_sequences(struct Depsgraph *depsgraph, struct Scen
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

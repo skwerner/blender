@@ -24,8 +24,8 @@
 #include <stdio.h>
 
 #include "DNA_color_types.h"
-#include "DNA_scene_types.h"
 #include "DNA_node_types.h"
+#include "DNA_scene_types.h"
 
 #include "BLT_translation.h"
 
@@ -101,9 +101,8 @@ static void localize(bNodeTree *localtree, bNodeTree *ntree)
   bNode *node = ntree->nodes.first;
   bNode *local_node = localtree->nodes.first;
   while (node != NULL) {
-    local_node->original = node;
 
-    /* ensure new user input gets handled ok */
+    /* Ensure new user input gets handled ok. */
     node->need_exec = 0;
     local_node->original = node;
 
@@ -229,7 +228,7 @@ void register_node_tree_type_cmp(void)
   tt->get_from_context = composite_get_from_context;
   tt->node_add_init = composite_node_add_init;
 
-  tt->ext.srna = &RNA_CompositorNodeTree;
+  tt->rna_ext.srna = &RNA_CompositorNodeTree;
 
   ntreeTypeAdd(tt);
 }
@@ -281,8 +280,11 @@ void ntreeCompositUpdateRLayers(bNodeTree *ntree)
   }
 }
 
-void ntreeCompositRegisterPass(
-    bNodeTree *ntree, Scene *scene, ViewLayer *view_layer, const char *name, int type)
+void ntreeCompositRegisterPass(bNodeTree *ntree,
+                               Scene *scene,
+                               ViewLayer *view_layer,
+                               const char *name,
+                               eNodeSocketDatatype type)
 {
   bNode *node;
 
@@ -299,25 +301,23 @@ void ntreeCompositRegisterPass(
 
 /* called from render pipeline, to tag render input and output */
 /* need to do all scenes, to prevent errors when you re-render 1 scene */
-void ntreeCompositTagRender(Scene *curscene)
+void ntreeCompositTagRender(Scene *scene)
 {
-  Scene *sce;
-
   /* XXX Think using G_MAIN here is valid, since you want to update current file's scene nodes,
    * not the ones in temp main generated for rendering?
    * This is still rather weak though,
    * ideally render struct would store own main AND original G_MAIN. */
 
-  for (sce = G_MAIN->scenes.first; sce; sce = sce->id.next) {
-    if (sce->nodetree) {
+  for (Scene *sce_iter = G_MAIN->scenes.first; sce_iter; sce_iter = sce_iter->id.next) {
+    if (sce_iter->nodetree) {
       bNode *node;
 
-      for (node = sce->nodetree->nodes.first; node; node = node->next) {
-        if (node->id == (ID *)curscene || node->type == CMP_NODE_COMPOSITE) {
-          nodeUpdate(sce->nodetree, node);
+      for (node = sce_iter->nodetree->nodes.first; node; node = node->next) {
+        if (node->id == (ID *)scene || node->type == CMP_NODE_COMPOSITE) {
+          nodeUpdate(sce_iter->nodetree, node);
         }
         else if (node->type == CMP_NODE_TEXTURE) /* uses scene sizex/sizey */ {
-          nodeUpdate(sce->nodetree, node);
+          nodeUpdate(sce_iter->nodetree, node);
         }
       }
     }

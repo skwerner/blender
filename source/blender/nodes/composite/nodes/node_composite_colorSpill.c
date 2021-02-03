@@ -23,16 +23,16 @@
 
 #include "node_composite_util.h"
 
-/* ******************* Color Spill Supression ********************************* */
+/* ******************* Color Spill Suppression ********************************* */
 static bNodeSocketTemplate cmp_node_color_spill_in[] = {
-    {SOCK_RGBA, 1, N_("Image"), 1.0f, 1.0f, 1.0f, 1.0f},
-    {SOCK_FLOAT, 1, N_("Fac"), 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, PROP_FACTOR},
-    {-1, 0, ""},
+    {SOCK_RGBA, N_("Image"), 1.0f, 1.0f, 1.0f, 1.0f},
+    {SOCK_FLOAT, N_("Fac"), 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, PROP_FACTOR},
+    {-1, ""},
 };
 
 static bNodeSocketTemplate cmp_node_color_spill_out[] = {
-    {SOCK_RGBA, 0, N_("Image")},
-    {-1, 0, ""},
+    {SOCK_RGBA, N_("Image")},
+    {-1, ""},
 };
 
 static void node_composit_init_color_spill(bNodeTree *UNUSED(ntree), bNode *node)
@@ -40,7 +40,7 @@ static void node_composit_init_color_spill(bNodeTree *UNUSED(ntree), bNode *node
   NodeColorspill *ncs = MEM_callocN(sizeof(NodeColorspill), "node colorspill");
   node->storage = ncs;
   node->custom1 = 2;    /* green channel */
-  node->custom2 = 0;    /* simple limit algo*/
+  node->custom2 = 0;    /* simple limit algorithm */
   ncs->limchan = 0;     /* limit by red */
   ncs->limscale = 1.0f; /* limit scaling factor */
   ncs->unspill = 0;     /* do not use unspill */

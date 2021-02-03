@@ -20,11 +20,6 @@
  * \ingroup draw_engine
  */
 
-#ifndef __WORKBENCH_ENGINE_H__
-#define __WORKBENCH_ENGINE_H__
+#pragma once
 
-extern DrawEngineType draw_engine_workbench_solid;
-extern DrawEngineType draw_engine_workbench_transparent;
 extern RenderEngineType DRW_engine_viewport_workbench_type;
-
-#endif /* __WORKBENCH_ENGINE_H__ */

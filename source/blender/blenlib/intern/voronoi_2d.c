@@ -28,8 +28,8 @@
 
 #include "BLI_listbase.h"
 #include "BLI_math.h"
-#include "BLI_voronoi_2d.h"
 #include "BLI_utildefines.h"
+#include "BLI_voronoi_2d.h"
 
 #define VORONOI_EPS 1e-2f
 
@@ -83,7 +83,9 @@ static void voronoi_insertEvent(VoronoiProcess *process, VoronoiEvent *event)
 }
 
 /* edge */
-static VoronoiEdge *voronoiEdge_new(float start[2], float left[2], float right[2])
+static VoronoiEdge *voronoiEdge_new(const float start[2],
+                                    const float left[2],
+                                    const float right[2])
 {
   VoronoiEdge *edge = MEM_callocN(sizeof(VoronoiEdge), "voronoi edge");
 
@@ -118,7 +120,7 @@ static VoronoiParabola *voronoiParabola_new(void)
   return parabola;
 }
 
-static VoronoiParabola *voronoiParabola_newSite(float site[2])
+static VoronoiParabola *voronoiParabola_newSite(const float site[2])
 {
   VoronoiParabola *parabola = MEM_callocN(sizeof(VoronoiParabola), "voronoi parabola site");
 
@@ -213,7 +215,7 @@ static void voronoiParabola_setRight(VoronoiParabola *parabola, VoronoiParabola 
   right->parent = parabola;
 }
 
-static float voronoi_getY(VoronoiProcess *process, float p[2], float x)
+static float voronoi_getY(VoronoiProcess *process, const float p[2], float x)
 {
   float ly = process->current_y;
 
@@ -581,7 +583,7 @@ static void voronoi_clampEdges(ListBase *edges, int width, int height, ListBase 
 }
 
 static int voronoi_getNextSideCoord(
-    ListBase *edges, float coord[2], int dim, int dir, float next_coord[2])
+    ListBase *edges, const float coord[2], int dim, int dir, float next_coord[2])
 {
   VoronoiEdge *edge = edges->first;
   float distance = FLT_MAX;
@@ -766,24 +768,25 @@ static int voronoi_addTriangulationPoint(const float coord[2],
   return (*triangulated_points_total) - 1;
 }
 
-static void voronoi_addTriangle(int v1, int v2, int v3, int (**triangles)[3], int *triangles_total)
+static void voronoi_addTriangle(
+    int v1, int v2, int v3, int (**r_triangles)[3], int *r_triangles_total)
 {
   int *triangle;
 
-  if (*triangles) {
-    *triangles = MEM_reallocN(*triangles, sizeof(int[3]) * (*triangles_total + 1));
+  if (*r_triangles) {
+    *r_triangles = MEM_reallocN(*r_triangles, sizeof(int[3]) * (*r_triangles_total + 1));
   }
   else {
-    *triangles = MEM_callocN(sizeof(int[3]), "trianglulation triangles");
+    *r_triangles = MEM_callocN(sizeof(int[3]), "trianglulation triangles");
   }
 
-  triangle = (int *)&(*triangles)[(*triangles_total)];
+  triangle = (int *)&(*r_triangles)[(*r_triangles_total)];
 
   triangle[0] = v1;
   triangle[1] = v2;
   triangle[2] = v3;
 
-  (*triangles_total)++;
+  (*r_triangles_total)++;
 }
 
 void BLI_voronoi_triangulate(const VoronoiSite *sites,
@@ -791,10 +794,10 @@ void BLI_voronoi_triangulate(const VoronoiSite *sites,
                              ListBase *edges,
                              int width,
                              int height,
-                             VoronoiTriangulationPoint **triangulated_points_r,
-                             int *triangulated_points_total_r,
-                             int (**triangles_r)[3],
-                             int *triangles_total_r)
+                             VoronoiTriangulationPoint **r_triangulated_points,
+                             int *r_triangulated_points_total,
+                             int (**r_triangles)[3],
+                             int *r_triangles_total)
 {
   VoronoiTriangulationPoint *triangulated_points = NULL;
   int(*triangles)[3] = NULL;
@@ -852,11 +855,11 @@ void BLI_voronoi_triangulate(const VoronoiSite *sites,
     mul_v3_fl(triangulation_point->color, 1.0f / triangulation_point->power);
   }
 
-  *triangulated_points_r = triangulated_points;
-  *triangulated_points_total_r = triangulated_points_total;
+  *r_triangulated_points = triangulated_points;
+  *r_triangulated_points_total = triangulated_points_total;
 
-  *triangles_r = triangles;
-  *triangles_total_r = triangles_total;
+  *r_triangles = triangles;
+  *r_triangles_total = triangles_total;
 
   BLI_freelistN(&boundary_edges);
 }

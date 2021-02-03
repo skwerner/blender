@@ -20,10 +20,10 @@
 
 #include "COM_ExecutionSystem.h"
 
-#include "COM_KeyingOperation.h"
 #include "COM_KeyingBlurOperation.h"
-#include "COM_KeyingDespillOperation.h"
 #include "COM_KeyingClipOperation.h"
+#include "COM_KeyingDespillOperation.h"
+#include "COM_KeyingOperation.h"
 
 #include "COM_MathBaseOperation.h"
 
@@ -32,7 +32,7 @@
 
 #include "COM_DilateErodeOperation.h"
 
-#include "COM_SetAlphaOperation.h"
+#include "COM_SetAlphaMultiplyOperation.h"
 
 #include "COM_GaussianAlphaXBlurOperation.h"
 #include "COM_GaussianAlphaYBlurOperation.h"
@@ -63,7 +63,7 @@ NodeOperationOutput *KeyingNode::setupPreBlur(NodeConverter &converter,
     converter.addLink(convertRGBToYCCOperation->getOutputSocket(0),
                       separateOperation->getInputSocket(0));
 
-    if (channel == 0 || channel == 3) {
+    if (ELEM(channel, 0, 3)) {
       converter.addLink(separateOperation->getOutputSocket(0),
                         combineOperation->getInputSocket(channel));
     }
@@ -228,7 +228,8 @@ void KeyingNode::convertToOperations(NodeConverter &converter,
   NodeOutput *outputImage = this->getOutputSocket(0);
   NodeOutput *outputMatte = this->getOutputSocket(1);
   NodeOutput *outputEdges = this->getOutputSocket(2);
-  NodeOperationOutput *postprocessedMatte = NULL, *postprocessedImage = NULL, *edgesMatte = NULL;
+  NodeOperationOutput *postprocessedMatte = nullptr, *postprocessedImage = nullptr,
+                      *edgesMatte = nullptr;
 
   /* keying operation */
   KeyingOperation *keyingOperation = new KeyingOperation();
@@ -322,7 +323,7 @@ void KeyingNode::convertToOperations(NodeConverter &converter,
   }
 
   /* set alpha channel to output image */
-  SetAlphaOperation *alphaOperation = new SetAlphaOperation();
+  SetAlphaMultiplyOperation *alphaOperation = new SetAlphaMultiplyOperation();
   converter.addOperation(alphaOperation);
 
   converter.mapInputSocket(inputImage, alphaOperation->getInputSocket(0));

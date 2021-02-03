@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_CURVE_ITERATORS_H__
-#define __FREESTYLE_CURVE_ITERATORS_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -30,7 +29,7 @@ namespace Freestyle {
 namespace CurveInternal {
 
 /*! iterator on a curve. Allows an iterating outside
- *  initial vertices. A CurvePoint is instanciated an returned
+ *  initial vertices. A CurvePoint is instantiated an returned
  *  when the iterator is dereferenced.
  */
 
@@ -303,5 +302,3 @@ class CurvePointIterator : public Interface0DIteratorNested {
 }  // end of namespace CurveInternal
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_CURVE_ITERATORS_H__

@@ -22,7 +22,7 @@
 
 #include "COM_ExecutionSystem.h"
 #include "COM_SetValueOperation.h"
-#include "DNA_material_types.h"  // the ramp types
+#include "DNA_material_types.h" /* the ramp types */
 
 MixNode::MixNode(bNode *editorNode) : Node(editorNode)
 {
@@ -52,7 +52,7 @@ void MixNode::convertToOperations(NodeConverter &converter,
       convertProg = new MixLightenOperation();
       break;
     case MA_RAMP_BURN:
-      convertProg = new MixBurnOperation();
+      convertProg = new MixColorBurnOperation();
       break;
     case MA_RAMP_HUE:
       convertProg = new MixHueOperation();

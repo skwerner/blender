@@ -21,12 +21,15 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_IMAGE_TYPES_H__
-#define __DNA_IMAGE_TYPES_H__
+#pragma once
 
-#include "DNA_defs.h"
 #include "DNA_ID.h"
 #include "DNA_color_types.h" /* for color management */
+#include "DNA_defs.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct GPUTexture;
 struct MovieCache;
@@ -55,6 +58,9 @@ typedef struct ImageUser {
   char multiview_eye;
   short pass;
   char _pad1[2];
+
+  int tile;
+  int _pad2;
 
   /** Listbase indices, for menu browsing or retrieve buffer. */
   short multi_index, view, layer;
@@ -88,6 +94,25 @@ typedef struct RenderSlot {
   struct RenderResult *render;
 } RenderSlot;
 
+typedef struct ImageTile_Runtime {
+  int tilearray_layer;
+  int _pad;
+  int tilearray_offset[2];
+  int tilearray_size[2];
+} ImageTile_Runtime;
+
+typedef struct ImageTile {
+  struct ImageTile *next, *prev;
+
+  struct ImageTile_Runtime runtime;
+
+  char ok;
+  char _pad[3];
+
+  int tile_number;
+  char label[64];
+} ImageTile;
+
 /* iuser->flag */
 #define IMA_ANIM_ALWAYS (1 << 0)
 /* #define IMA_UNUSED_1         (1 << 1) */
@@ -95,22 +120,24 @@ typedef struct RenderSlot {
 #define IMA_NEED_FRAME_RECALC (1 << 3)
 #define IMA_SHOW_STEREO (1 << 4)
 
-enum {
-  TEXTARGET_TEXTURE_2D = 0,
-  TEXTARGET_TEXTURE_CUBE_MAP = 1,
-  TEXTARGET_COUNT = 2,
-};
+/* Used to get the correct gpu texture from an Image datablock. */
+typedef enum eGPUTextureTarget {
+  TEXTARGET_2D = 0,
+  TEXTARGET_2D_ARRAY,
+  TEXTARGET_TILE_MAPPING,
+  TEXTARGET_COUNT,
+} eGPUTextureTarget;
 
 typedef struct Image {
   ID id;
 
   /** File path, 1024 = FILE_MAX. */
-  char name[1024];
+  char filepath[1024];
 
   /** Not written in file. */
   struct MovieCache *cache;
-  /** Not written in file 2 = TEXTARGET_COUNT. */
-  struct GPUTexture *gputexture[2];
+  /** Not written in file 3 = TEXTARGET_COUNT, 2 = stereo eyes. */
+  struct GPUTexture *gputexture[3][2];
 
   /* sources from: */
   ListBase anims;
@@ -124,9 +151,14 @@ typedef struct Image {
   int lastframe;
 
   /* GPU texture flag. */
-  short gpuflag;
-  char _pad2[2];
+  /* Contains `ImagePartialRefresh`. */
+  ListBase gpu_refresh_areas;
   int gpuframenr;
+  short gpuflag;
+  short gpu_pass;
+  short gpu_layer;
+  short gpu_view;
+  char _pad2[4];
 
   /** Deprecated. */
   struct PackedFile *packedfile DNA_DEPRECATED;
@@ -134,8 +166,6 @@ typedef struct Image {
   struct PreviewImage *preview;
 
   int lastused;
-  short ok;
-  char _pad4[6];
 
   /* for generated images */
   int gen_x, gen_y;
@@ -150,12 +180,17 @@ typedef struct Image {
   ColorManagedColorspaceSettings colorspace_settings;
   char alpha_mode;
 
-  char _pad[5];
+  char _pad;
 
   /* Multiview */
   /** For viewer node stereoscopy. */
   char eye;
   char views_format;
+
+  /* ImageTile list for UDIMs. */
+  int active_tile_index;
+  ListBase tiles;
+
   /** ImageView. */
   ListBase views;
   struct Stereo3dFormat *stereo3d_format;
@@ -165,9 +200,9 @@ typedef struct Image {
 
 /* Image.flag */
 enum {
-  IMA_FLAG_UNUSED_0 = (1 << 0), /* cleared */
+  IMA_HIGH_BITDEPTH = (1 << 0),
   IMA_FLAG_UNUSED_1 = (1 << 1), /* cleared */
-#ifdef DNA_DEPRECATED
+#ifdef DNA_DEPRECATED_ALLOW
   IMA_DO_PREMUL = (1 << 2),
 #endif
   IMA_FLAG_UNUSED_4 = (1 << 4), /* cleared */
@@ -190,18 +225,21 @@ enum {
 enum {
   /** GPU texture needs to be refreshed. */
   IMA_GPU_REFRESH = (1 << 0),
+  /** GPU texture needs to be partially refreshed. */
+  IMA_GPU_PARTIAL_REFRESH = (1 << 1),
   /** All mipmap levels in OpenGL texture set? */
-  IMA_GPU_MIPMAP_COMPLETE = (1 << 1),
+  IMA_GPU_MIPMAP_COMPLETE = (1 << 2),
 };
 
 /* Image.source, where the image comes from */
 enum {
-  IMA_SRC_CHECK = 0,
+  /* IMA_SRC_CHECK = 0, */ /* UNUSED */
   IMA_SRC_FILE = 1,
   IMA_SRC_SEQUENCE = 2,
   IMA_SRC_MOVIE = 3,
   IMA_SRC_GENERATED = 4,
   IMA_SRC_VIEWER = 5,
+  IMA_SRC_TILED = 6,
 };
 
 /* Image.type, how to handle or generate the image */
@@ -238,4 +276,6 @@ enum {
   IMA_ALPHA_IGNORE = 3,
 };
 
+#ifdef __cplusplus
+}
 #endif

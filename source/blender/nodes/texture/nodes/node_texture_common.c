@@ -28,10 +28,10 @@
 
 #include "BKE_node.h"
 
-#include "node_texture_util.h"
 #include "NOD_common.h"
 #include "node_common.h"
 #include "node_exec.h"
+#include "node_texture_util.h"
 
 #include "RNA_access.h"
 
@@ -84,8 +84,8 @@ static void group_copy_inputs(bNode *gnode, bNodeStack **in, bNodeStack *gstack)
 
   for (node = ngroup->nodes.first; node; node = node->next) {
     if (node->type == NODE_GROUP_INPUT) {
-      for (sock = node->outputs.first, a = 0; sock; sock = sock->next, ++a) {
-        if (in[a]) { /* shouldn't need to check this [#36694] */
+      for (sock = node->outputs.first, a = 0; sock; sock = sock->next, a++) {
+        if (in[a]) { /* shouldn't need to check this T36694. */
           ns = node_get_socket_stack(gstack, sock);
           if (ns) {
             copy_stack(ns, in[a]);
@@ -108,8 +108,8 @@ static void group_copy_outputs(bNode *gnode, bNodeStack **out, bNodeStack *gstac
 
   for (node = ngroup->nodes.first; node; node = node->next) {
     if (node->type == NODE_GROUP_OUTPUT && (node->flag & NODE_DO_OUTPUT)) {
-      for (sock = node->inputs.first, a = 0; sock; sock = sock->next, ++a) {
-        if (out[a]) { /* shouldn't need to check this [#36694] */
+      for (sock = node->inputs.first, a = 0; sock; sock = sock->next, a++) {
+        if (out[a]) { /* shouldn't need to check this T36694. */
           ns = node_get_socket_stack(gstack, sock);
           if (ns) {
             copy_stack(out[a], ns);
@@ -167,9 +167,9 @@ void register_node_type_tex_group(void)
   ntype.poll_instance = node_group_poll_instance;
   ntype.insert_link = node_insert_link_default;
   ntype.update_internal_links = node_update_internal_links_default;
-  ntype.ext.srna = RNA_struct_find("TextureNodeGroup");
-  BLI_assert(ntype.ext.srna != NULL);
-  RNA_struct_blender_type_set(ntype.ext.srna, &ntype);
+  ntype.rna_ext.srna = RNA_struct_find("TextureNodeGroup");
+  BLI_assert(ntype.rna_ext.srna != NULL);
+  RNA_struct_blender_type_set(ntype.rna_ext.srna, &ntype);
 
   node_type_socket_templates(&ntype, NULL, NULL);
   node_type_size(&ntype, 140, 60, 400);

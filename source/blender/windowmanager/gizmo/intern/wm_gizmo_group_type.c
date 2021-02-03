@@ -18,8 +18,8 @@
  * \ingroup wm
  */
 
-#include "BLI_utildefines.h"
 #include "BLI_ghash.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_context.h"
 
@@ -35,9 +35,10 @@
 #include "wm.h"
 
 /* own includes */
-#include "wm_gizmo_wmapi.h"
 #include "wm_gizmo_intern.h"
+#include "wm_gizmo_wmapi.h"
 
+/* -------------------------------------------------------------------- */
 /** \name GizmoGroup Type Append
  *
  * \note This follows conventions from #WM_operatortype_find #WM_operatortype_append & friends.
@@ -144,7 +145,7 @@ wmGizmoGroupTypeRef *WM_gizmogrouptype_append_and_link(wmGizmoMapType *gzmap_typ
  */
 static void gizmogrouptype_free(wmGizmoGroupType *gzgt)
 {
-  if (gzgt->ext.srna) { /* python gizmo group, allocs own string */
+  if (gzgt->rna_ext.srna) { /* python gizmo group, allocs own string */
     MEM_freeN((void *)gzgt->idname);
   }
 

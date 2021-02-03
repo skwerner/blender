@@ -20,20 +20,20 @@
 /** \file
  * \ingroup bke
  */
-#include <string.h>  // for memcpy
+#include <string.h> /* for memcpy */
 
 #include "MEM_guardedalloc.h"
 
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_utildefines_stack.h"
 #include "BLI_edgehash.h"
 #include "BLI_ghash.h"
+#include "BLI_utildefines.h"
+#include "BLI_utildefines_stack.h"
 
 #include "BKE_customdata.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_mapping.h"
 
@@ -61,7 +61,7 @@ static int cddm_poly_compare(MLoop *mloop_array,
 
   MLoop *mloop_source, *mloop_target;
 
-  BLI_assert(direct_reverse == 1 || direct_reverse == -1);
+  BLI_assert(ELEM(direct_reverse, 1, -1));
 
   i_loop_source = 0;
   mloop_source = mloop_array + mpoly_source->loopstart;
@@ -115,11 +115,10 @@ static int cddm_poly_compare(MLoop *mloop_array,
           same_loops = true;
           break; /* Polys are identical */
         }
-        else {
-          compare_completed = true;
-          same_loops = false;
-          break; /* Polys are different */
-        }
+
+        compare_completed = true;
+        same_loops = false;
+        break; /* Polys are different */
       }
 
       mloop_source++;
@@ -201,9 +200,8 @@ static bool poly_gset_compare_fn(const void *k1, const void *k2)
     /* Equality - note that this does not mean equality of polys */
     return false;
   }
-  else {
-    return true;
-  }
+
+  return true;
 }
 
 /**
@@ -235,7 +233,7 @@ static bool poly_gset_compare_fn(const void *k1, const void *k2)
  * but the additional checks are costly and not necessary in the case of mirror,
  * because each vertex is only merged to its own mirror.
  *
- * \note #BKE_mesh_recalc_tessellation has to run on the returned DM
+ * \note #BKE_mesh_tessface_calc_ex has to run on the returned DM
  * if you want to access tessfaces.
  */
 Mesh *BKE_mesh_merge_verts(Mesh *mesh,
@@ -412,7 +410,7 @@ Mesh *BKE_mesh_merge_verts(Mesh *mesh,
         /* In this mode, all vertices merged is enough to dump face */
         continue;
       }
-      else if (merge_mode == MESH_MERGE_VERTS_DUMP_IF_EQUAL) {
+      if (merge_mode == MESH_MERGE_VERTS_DUMP_IF_EQUAL) {
         /* Additional condition for face dump:  target vertices must make up an identical face */
         /* The test has 2 steps:  (1) first step is fast ghash lookup, but not failproof       */
         /*                        (2) second step is thorough but more costly poly compare     */
@@ -578,7 +576,7 @@ Mesh *BKE_mesh_merge_verts(Mesh *mesh,
       BLI_assert(created_edges == 0);
       continue;
     }
-    else if (UNLIKELY(c < 3)) {
+    if (UNLIKELY(c < 3)) {
       STACK_DISCARD(oldl, c);
       STACK_DISCARD(mloop, c);
       if (created_edges > 0) {

@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BKE_OBJECT_FACEMAP_H__
-#define __BKE_OBJECT_FACEMAP_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -40,8 +39,11 @@ void BKE_object_facemap_unique_name(struct Object *ob, struct bFaceMap *fmap);
 struct bFaceMap *BKE_object_facemap_find_name(struct Object *ob, const char *name);
 void BKE_object_facemap_copy_list(struct ListBase *outbase, const struct ListBase *inbase);
 
+int *BKE_object_facemap_index_map_create(struct Object *ob_src,
+                                         struct Object *ob_dst,
+                                         int *r_map_len);
+void BKE_object_facemap_index_map_apply(int *fmap, int fmap_len, const int *map, int map_len);
+
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_OBJECT_FACEMAP_H__ */

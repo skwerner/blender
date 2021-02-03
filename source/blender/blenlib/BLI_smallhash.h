@@ -17,14 +17,17 @@
  * All rights reserved.
  */
 
-#ifndef __BLI_SMALLHASH_H__
-#define __BLI_SMALLHASH_H__
+#pragma once
 
 /** \file
  * \ingroup bli
  */
 
 #include "BLI_compiler_attrs.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct {
   uintptr_t key;
@@ -74,4 +77,6 @@ void **BLI_smallhash_iternew_p(const SmallHash *sh, SmallHashIter *iter, uintptr
 double BLI_smallhash_calc_quality(SmallHash *sh);
 #endif
 
-#endif /* __BLI_SMALLHASH_H__ */
+#ifdef __cplusplus
+}
+#endif

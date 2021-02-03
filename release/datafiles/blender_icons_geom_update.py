@@ -21,10 +21,10 @@ def edit_text_file(filename, marker_begin, marker_end, content):
     while data[marker_end_index - 1] in {'\t', ' '}:
         marker_end_index -= 1
     if marker_begin_index == -1:
-        print('Error: {!r} not found'.format(marker_begin))
+        print('Error: %r not found' % marker_begin)
         return
     if marker_end_index == -1:
-        print('Error: {!r} not found'.format(marker_end))
+        print('Error: %r not found' % marker_end)
         return
     marker_begin_index += len(marker_begin) + 1
     data_update = data[:marker_begin_index] + content + data[marker_end_index:]
@@ -86,5 +86,5 @@ edit_text_file(
     os.path.join(ROOTDIR, "source", "blender", "editors", "datafiles", "CMakeLists.txt"),
     "# BEGIN ICON_GEOM_NAMES",
     "# END ICON_GEOM_NAMES",
-    "\t" + "\n\t".join(icon_files) + "\n",
+    "  " + "\n  ".join(icon_files) + "\n",
 )

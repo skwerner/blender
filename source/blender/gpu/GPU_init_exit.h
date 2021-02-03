@@ -21,8 +21,9 @@
  * \ingroup gpu
  */
 
-#ifndef __GPU_INIT_EXIT_H__
-#define __GPU_INIT_EXIT_H__
+#pragma once
+
+#include "BLI_utildefines.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -30,10 +31,8 @@ extern "C" {
 
 void GPU_init(void);
 void GPU_exit(void);
-bool GPU_is_initialized(void);
+bool GPU_is_init(void);
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __GPU_INIT_EXIT_H__ */

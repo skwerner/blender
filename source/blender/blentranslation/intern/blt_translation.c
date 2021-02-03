@@ -81,7 +81,7 @@ const char *BLT_pgettext(const char *msgctxt, const char *msgid)
 bool BLT_translate(void)
 {
 #ifdef WITH_INTERNATIONAL
-  return BLI_thread_is_main() && (U.transopts & USER_DOTRANSLATE);
+  return BLI_thread_is_main() && (U.language != ULANGUAGE_ENGLISH);
 #else
   return false;
 #endif
@@ -120,9 +120,9 @@ const char *BLT_translate_do(const char *msgctxt, const char *msgid)
   if (BLT_translate()) {
     return BLT_pgettext(msgctxt, msgid);
   }
-  else {
-    return msgid;
-  }
+
+  return msgid;
+
 #else
   (void)msgctxt;
   return msgid;
@@ -135,9 +135,9 @@ const char *BLT_translate_do_iface(const char *msgctxt, const char *msgid)
   if (BLT_translate_iface()) {
     return BLT_pgettext(msgctxt, msgid);
   }
-  else {
-    return msgid;
-  }
+
+  return msgid;
+
 #else
   (void)msgctxt;
   return msgid;
@@ -150,9 +150,9 @@ const char *BLT_translate_do_tooltip(const char *msgctxt, const char *msgid)
   if (BLT_translate_tooltips()) {
     return BLT_pgettext(msgctxt, msgid);
   }
-  else {
-    return msgid;
-  }
+
+  return msgid;
+
 #else
   (void)msgctxt;
   return msgid;
@@ -165,9 +165,9 @@ const char *BLT_translate_do_new_dataname(const char *msgctxt, const char *msgid
   if (BLT_translate_new_dataname()) {
     return BLT_pgettext(msgctxt, msgid);
   }
-  else {
-    return msgid;
-  }
+
+  return msgid;
+
 #else
   (void)msgctxt;
   return msgid;

@@ -16,8 +16,8 @@
  * Copyright 2012, Blender Foundation.
  */
 
-#ifndef __COM_DISPLACESIMPLEOPERATION_H__
-#define __COM_DISPLACESIMPLEOPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
 
 class DisplaceSimpleOperation : public NodeOperation {
@@ -44,7 +44,7 @@ class DisplaceSimpleOperation : public NodeOperation {
                                         rcti *output);
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
 
@@ -58,4 +58,3 @@ class DisplaceSimpleOperation : public NodeOperation {
    */
   void deinitExecution();
 };
-#endif

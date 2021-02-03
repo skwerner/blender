@@ -18,16 +18,15 @@
 
 #include "COM_Stabilize2dNode.h"
 #include "COM_ExecutionSystem.h"
-#include "COM_TranslateOperation.h"
+#include "COM_MovieClipAttributeOperation.h"
 #include "COM_RotateOperation.h"
 #include "COM_ScaleOperation.h"
-#include "COM_MovieClipAttributeOperation.h"
 #include "COM_SetSamplerOperation.h"
+#include "COM_TranslateOperation.h"
 
-extern "C" {
-#include "DNA_movieclip_types.h"
 #include "BKE_tracking.h"
-}
+
+#include "DNA_movieclip_types.h"
 
 Stabilize2dNode::Stabilize2dNode(bNode *editorNode) : Node(editorNode)
 {
@@ -83,17 +82,32 @@ void Stabilize2dNode::convertToOperations(NodeConverter &converter,
   converter.addOperation(rotateOperation);
   converter.addOperation(psoperation);
 
-  converter.mapInputSocket(imageInput, scaleOperation->getInputSocket(0));
   converter.addLink(scaleAttribute->getOutputSocket(), scaleOperation->getInputSocket(1));
   converter.addLink(scaleAttribute->getOutputSocket(), scaleOperation->getInputSocket(2));
 
-  converter.addLink(scaleOperation->getOutputSocket(), rotateOperation->getInputSocket(0));
   converter.addLink(angleAttribute->getOutputSocket(), rotateOperation->getInputSocket(1));
 
-  converter.addLink(rotateOperation->getOutputSocket(), translateOperation->getInputSocket(0));
   converter.addLink(xAttribute->getOutputSocket(), translateOperation->getInputSocket(1));
   converter.addLink(yAttribute->getOutputSocket(), translateOperation->getInputSocket(2));
 
-  converter.addLink(translateOperation->getOutputSocket(), psoperation->getInputSocket(0));
   converter.mapOutputSocket(getOutputSocket(), psoperation->getOutputSocket());
+
+  if (invert) {
+    // Translate -> Rotate -> Scale.
+    converter.mapInputSocket(imageInput, translateOperation->getInputSocket(0));
+
+    converter.addLink(translateOperation->getOutputSocket(), rotateOperation->getInputSocket(0));
+    converter.addLink(rotateOperation->getOutputSocket(), scaleOperation->getInputSocket(0));
+
+    converter.addLink(scaleOperation->getOutputSocket(), psoperation->getInputSocket(0));
+  }
+  else {
+    // Scale  -> Rotate -> Translate.
+    converter.mapInputSocket(imageInput, scaleOperation->getInputSocket(0));
+
+    converter.addLink(scaleOperation->getOutputSocket(), rotateOperation->getInputSocket(0));
+    converter.addLink(rotateOperation->getOutputSocket(), translateOperation->getInputSocket(0));
+
+    converter.addLink(translateOperation->getOutputSocket(), psoperation->getInputSocket(0));
+  }
 }

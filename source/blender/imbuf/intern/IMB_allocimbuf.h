@@ -21,15 +21,18 @@
  * \ingroup imbuf
  * \brief Header file for allocimbuf.c
  */
-#ifndef __IMB_ALLOCIMBUF_H__
-#define __IMB_ALLOCIMBUF_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct ImBuf;
 
 void imb_refcounter_lock_init(void);
 void imb_refcounter_lock_exit(void);
 
-#ifdef WIN32
+#ifndef WIN32
 void imb_mmap_lock_init(void);
 void imb_mmap_lock_exit(void);
 void imb_mmap_lock(void);
@@ -44,4 +47,6 @@ void imb_mmap_unlock(void);
 bool imb_addencodedbufferImBuf(struct ImBuf *ibuf);
 bool imb_enlargeencodedbufferImBuf(struct ImBuf *ibuf);
 
+#ifdef __cplusplus
+}
 #endif

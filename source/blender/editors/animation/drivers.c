@@ -21,23 +21,26 @@
  * \ingroup edanimation
  */
 
+#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "MEM_guardedalloc.h"
 
 #include "BLI_blenlib.h"
-#include "BLI_utildefines.h"
 #include "BLI_string.h"
+#include "BLI_utildefines.h"
 
 #include "DNA_anim_types.h"
 #include "DNA_object_types.h"
 #include "DNA_space_types.h"
 #include "DNA_texture_types.h"
 
+#include "BKE_anim_data.h"
 #include "BKE_animsys.h"
-#include "BKE_fcurve.h"
 #include "BKE_context.h"
+#include "BKE_fcurve.h"
+#include "BKE_fcurve_driver.h"
 #include "BKE_report.h"
 
 #include "DEG_depsgraph.h"
@@ -61,13 +64,11 @@
 
 /* Get (or add relevant data to be able to do so) F-Curve from the driver stack,
  * for the given Animation Data block. This assumes that all the destinations are valid.
- *
- * - add: 0 - don't add anything if not found,
- *        1 - add new Driver FCurve (with keyframes for visual tweaking),
- *        2 - add new Driver FCurve (with generator, for script backwards compatibility)
- *        -1 - add new Driver FCurve without driver stuff (for pasting)
  */
-FCurve *verify_driver_fcurve(ID *id, const char rna_path[], const int array_index, short add)
+FCurve *verify_driver_fcurve(ID *id,
+                             const char rna_path[],
+                             const int array_index,
+                             eDriverFCurveCreationMode creation_mode)
 {
   AnimData *adt;
   FCurve *fcu;
@@ -79,7 +80,7 @@ FCurve *verify_driver_fcurve(ID *id, const char rna_path[], const int array_inde
 
   /* init animdata if none available yet */
   adt = BKE_animdata_from_id(id);
-  if ((adt == NULL) && (add)) {
+  if (adt == NULL && creation_mode != DRIVER_FCURVE_LOOKUP_ONLY) {
     adt = BKE_animdata_add_id(id);
   }
   if (adt == NULL) {
@@ -91,60 +92,61 @@ FCurve *verify_driver_fcurve(ID *id, const char rna_path[], const int array_inde
    * - add if not found and allowed to add one
    * TODO: add auto-grouping support? how this works will need to be resolved
    */
-  fcu = list_find_fcurve(&adt->drivers, rna_path, array_index);
+  fcu = BKE_fcurve_find(&adt->drivers, rna_path, array_index);
 
-  if ((fcu == NULL) && (add)) {
+  if (fcu == NULL && creation_mode != DRIVER_FCURVE_LOOKUP_ONLY) {
     /* use default settings to make a F-Curve */
-    fcu = MEM_callocN(sizeof(FCurve), "FCurve");
-
-    fcu->flag = (FCURVE_VISIBLE | FCURVE_SELECTED);
-    fcu->auto_smoothing = FCURVE_SMOOTH_CONT_ACCEL;
-
-    /* store path - make copy, and store that */
-    fcu->rna_path = BLI_strdup(rna_path);
-    fcu->array_index = array_index;
-
-    /* If add is negative, don't init this data yet,
-     * since it will be filled in by the pasted driver. */
-    if (add > 0) {
-      BezTriple *bezt;
-      size_t i;
-
-      /* add some new driver data */
-      fcu->driver = MEM_callocN(sizeof(ChannelDriver), "ChannelDriver");
-
-      /* F-Modifier or Keyframes? */
-      // FIXME: replace these magic numbers with defines
-      if (add == 2) {
-        /* Python API Backwards compatibility hack:
-         * Create FModifier so that old scripts won't break
-         * for now before 2.7 series -- (September 4, 2013)
-         */
-        add_fmodifier(&fcu->modifiers, FMODIFIER_TYPE_GENERATOR, fcu);
-      }
-      else {
-        /* add 2 keyframes so that user has something to work with
-         * - These are configured to 0,0 and 1,1 to give a 1-1 mapping
-         *   which can be easily tweaked from there.
-         */
-        insert_vert_fcurve(fcu, 0.0f, 0.0f, BEZT_KEYTYPE_KEYFRAME, INSERTKEY_FAST);
-        insert_vert_fcurve(fcu, 1.0f, 1.0f, BEZT_KEYTYPE_KEYFRAME, INSERTKEY_FAST);
-
-        /* configure this curve to extrapolate */
-        for (i = 0, bezt = fcu->bezt; (i < fcu->totvert) && bezt; i++, bezt++) {
-          bezt->h1 = bezt->h2 = HD_VECT;
-        }
-
-        fcu->extend = FCURVE_EXTRAPOLATE_LINEAR;
-        calchandles_fcurve(fcu);
-      }
-    }
+    fcu = alloc_driver_fcurve(rna_path, array_index, creation_mode);
 
     /* just add F-Curve to end of driver list */
     BLI_addtail(&adt->drivers, fcu);
   }
 
   /* return the F-Curve */
+  return fcu;
+}
+
+struct FCurve *alloc_driver_fcurve(const char rna_path[],
+                                   const int array_index,
+                                   eDriverFCurveCreationMode creation_mode)
+{
+  FCurve *fcu = BKE_fcurve_create();
+
+  fcu->flag = (FCURVE_VISIBLE | FCURVE_SELECTED);
+  fcu->auto_smoothing = U.auto_smoothing_new;
+
+  /* store path - make copy, and store that */
+  if (rna_path) {
+    fcu->rna_path = BLI_strdup(rna_path);
+  }
+  fcu->array_index = array_index;
+
+  if (!ELEM(creation_mode, DRIVER_FCURVE_LOOKUP_ONLY, DRIVER_FCURVE_EMPTY)) {
+    /* add some new driver data */
+    fcu->driver = MEM_callocN(sizeof(ChannelDriver), "ChannelDriver");
+
+    /* F-Modifier or Keyframes? */
+    if (creation_mode == DRIVER_FCURVE_GENERATOR) {
+      /* Python API Backwards compatibility hack:
+       * Create FModifier so that old scripts won't break
+       * for now before 2.7 series -- (September 4, 2013)
+       */
+      add_fmodifier(&fcu->modifiers, FMODIFIER_TYPE_GENERATOR, fcu);
+    }
+    else {
+      /* add 2 keyframes so that user has something to work with
+       * - These are configured to 0,0 and 1,1 to give a 1-1 mapping
+       *   which can be easily tweaked from there.
+       */
+      insert_vert_fcurve(
+          fcu, 0.0f, 0.0f, BEZT_KEYTYPE_KEYFRAME, INSERTKEY_FAST | INSERTKEY_NO_USERPREF);
+      insert_vert_fcurve(
+          fcu, 1.0f, 1.0f, BEZT_KEYTYPE_KEYFRAME, INSERTKEY_FAST | INSERTKEY_NO_USERPREF);
+      fcu->extend = FCURVE_EXTRAPOLATE_LINEAR;
+      calchandles_fcurve(fcu);
+    }
+  }
+
   return fcu;
 }
 
@@ -167,7 +169,8 @@ static int add_driver_with_target(ReportList *UNUSED(reports),
                                   int driver_type)
 {
   FCurve *fcu;
-  short add_mode = (flag & CREATEDRIVER_WITH_FMODIFIER) ? 2 : 1;
+  short add_mode = (flag & CREATEDRIVER_WITH_FMODIFIER) ? DRIVER_FCURVE_GENERATOR :
+                                                          DRIVER_FCURVE_KEYFRAMES;
   const char *prop_name = RNA_property_identifier(src_prop);
 
   /* Create F-Curve with Driver */
@@ -208,7 +211,7 @@ static int add_driver_with_target(ReportList *UNUSED(reports),
 
     /* Create a driver variable for the target
      *   - For transform properties, we want to automatically use "transform channel" instead
-     *     (The only issue is with quat rotations vs euler channels...)
+     *     (The only issue is with quaternion rotations vs euler channels...)
      *   - To avoid problems with transform properties depending on the final transform that they
      *     control (thus creating pseudo-cycles - see T48734), we don't use transform channels
      *     when both the source and destinations are in same places.
@@ -352,9 +355,8 @@ int ANIM_add_driver_with_target(ReportList *reports,
       int src_len = (RNA_property_array_check(prop)) ? RNA_property_array_length(&ptr2, prop2) : 1;
 
       int len = MIN2(dst_len, src_len);
-      int i;
 
-      for (i = 0; i < len; i++) {
+      for (int i = 0; i < len; i++) {
         done_tot += add_driver_with_target(reports,
                                            dst_id,
                                            dst_path,
@@ -375,9 +377,8 @@ int ANIM_add_driver_with_target(ReportList *reports,
     case CREATEDRIVER_MAPPING_1_N: /* 1-N - Specified target index for all */
     default: {
       int len = (RNA_property_array_check(prop)) ? RNA_property_array_length(&ptr, prop) : 1;
-      int i;
 
-      for (i = 0; i < len; i++) {
+      for (int i = 0; i < len; i++) {
         done_tot += add_driver_with_target(reports,
                                            dst_id,
                                            dst_path,
@@ -420,7 +421,8 @@ int ANIM_add_driver_with_target(ReportList *reports,
 
 /* --------------------------------- */
 
-/* Main Driver Management API calls:
+/**
+ * Main Driver Management API calls:
  * Add a new driver for the specified property on the given ID block
  */
 int ANIM_add_driver(
@@ -566,13 +568,13 @@ bool ANIM_remove_driver(ReportList *UNUSED(reports),
       /* step through all drivers, removing all of those with the same base path */
       FCurve *fcu_iter = adt->drivers.first;
 
-      while ((fcu = iter_step_fcurve(fcu_iter, rna_path)) != NULL) {
+      while ((fcu = BKE_fcurve_iter_step(fcu_iter, rna_path)) != NULL) {
         /* store the next fcurve for looping  */
         fcu_iter = fcu->next;
 
         /* remove F-Curve from driver stack, then free it */
         BLI_remlink(&adt->drivers, fcu);
-        free_fcurve(fcu);
+        BKE_fcurve_free(fcu);
 
         /* done successfully */
         success = true;
@@ -583,10 +585,10 @@ bool ANIM_remove_driver(ReportList *UNUSED(reports),
        * Note: here is one of the places where we don't want new F-Curve + Driver added!
        *      so 'add' var must be 0
        */
-      fcu = verify_driver_fcurve(id, rna_path, array_index, 0);
+      fcu = verify_driver_fcurve(id, rna_path, array_index, DRIVER_FCURVE_LOOKUP_ONLY);
       if (fcu) {
         BLI_remlink(&adt->drivers, fcu);
-        free_fcurve(fcu);
+        BKE_fcurve_free(fcu);
 
         success = true;
       }
@@ -607,7 +609,7 @@ void ANIM_drivers_copybuf_free(void)
 {
   /* free the buffer F-Curve if it exists, as if it were just another F-Curve */
   if (channeldriver_copypaste_buf) {
-    free_fcurve(channeldriver_copypaste_buf);
+    BKE_fcurve_free(channeldriver_copypaste_buf);
   }
   channeldriver_copypaste_buf = NULL;
 }
@@ -643,7 +645,7 @@ bool ANIM_copy_driver(
   }
 
   /* try to get F-Curve with Driver */
-  fcu = verify_driver_fcurve(id, rna_path, array_index, 0);
+  fcu = verify_driver_fcurve(id, rna_path, array_index, DRIVER_FCURVE_LOOKUP_ONLY);
 
   /* clear copy/paste buffer first (for consistency with other copy/paste buffers) */
   ANIM_drivers_copybuf_free();
@@ -658,7 +660,7 @@ bool ANIM_copy_driver(
     fcu->rna_path = NULL;
 
     /* make a copy of the F-Curve with */
-    channeldriver_copypaste_buf = copy_fcurve(fcu);
+    channeldriver_copypaste_buf = BKE_fcurve_copy(fcu);
 
     /* restore the path */
     fcu->rna_path = tmp_path;
@@ -701,7 +703,7 @@ bool ANIM_paste_driver(
   }
 
   /* create Driver F-Curve, but without data which will be copied across... */
-  fcu = verify_driver_fcurve(id, rna_path, array_index, -1);
+  fcu = verify_driver_fcurve(id, rna_path, array_index, DRIVER_FCURVE_EMPTY);
 
   if (fcu) {
     /* copy across the curve data from the buffer curve
@@ -834,14 +836,59 @@ bool ANIM_driver_vars_paste(ReportList *reports, FCurve *fcu, bool replace)
   return true;
 }
 
+/* -------------------------------------------------- */
+
+/* Create a driver & variable that reads the specified property,
+ * and store it in the buffers for Paste Driver and Paste Variables. */
+void ANIM_copy_as_driver(struct ID *target_id, const char *target_path, const char *var_name)
+{
+  /* Clear copy/paste buffer first (for consistency with other copy/paste buffers). */
+  ANIM_drivers_copybuf_free();
+  ANIM_driver_vars_copybuf_free();
+
+  /* Create a dummy driver F-Curve. */
+  FCurve *fcu = alloc_driver_fcurve(NULL, 0, DRIVER_FCURVE_KEYFRAMES);
+  ChannelDriver *driver = fcu->driver;
+
+  /* Create a variable. */
+  DriverVar *var = driver_add_new_variable(driver);
+  DriverTarget *target = &var->targets[0];
+
+  target->idtype = GS(target_id->name);
+  target->id = target_id;
+  target->rna_path = MEM_dupallocN(target_path);
+
+  /* Set the variable name. */
+  if (var_name) {
+    BLI_strncpy(var->name, var_name, sizeof(var->name));
+
+    /* Sanitize the name. */
+    for (int i = 0; var->name[i]; i++) {
+      if (!(i > 0 ? isalnum(var->name[i]) : isalpha(var->name[i]))) {
+        var->name[i] = '_';
+      }
+    }
+  }
+
+  BLI_strncpy(driver->expression, var->name, sizeof(driver->expression));
+
+  /* Store the driver into the copy/paste buffers. */
+  channeldriver_copypaste_buf = fcu;
+
+  driver_variables_copy(&driver_vars_copybuf, &driver->variables);
+}
+
 /* ************************************************** */
 /* UI-Button Interface */
 
 /* Add Driver - Enum Defines ------------------------- */
 
-/* Mapping Types enum for operators */
-/* NOTE: Used by ANIM_OT_driver_button_add and UI_OT_eyedropper_driver */
-// XXX: These names need reviewing
+/**
+ * Mapping Types enum for operators.
+ * \note Used by #ANIM_OT_driver_button_add and #UI_OT_eyedropper_driver.
+ *
+ * XXX: These names need reviewing.
+ */
 EnumPropertyItem prop_driver_create_mapping_types[] = {
     {CREATEDRIVER_MAPPING_1_N,
      "SINGLE_MANY",
@@ -882,7 +929,7 @@ static const EnumPropertyItem *driver_mapping_type_itemsf(bContext *C,
   EnumPropertyItem *input = prop_driver_create_mapping_types;
   EnumPropertyItem *item = NULL;
 
-  PointerRNA ptr = {{NULL}};
+  PointerRNA ptr = {NULL};
   PropertyRNA *prop = NULL;
   int index;
 
@@ -894,7 +941,7 @@ static const EnumPropertyItem *driver_mapping_type_itemsf(bContext *C,
 
   UI_context_active_but_prop_get(C, &ptr, &prop, &index);
 
-  if (ptr.id.data && ptr.data && prop && RNA_property_animateable(&ptr, prop)) {
+  if (ptr.owner_id && ptr.data && prop && RNA_property_animateable(&ptr, prop)) {
     const bool is_array = RNA_property_array_check(prop);
 
     while (input->identifier) {
@@ -919,7 +966,7 @@ static const EnumPropertyItem *driver_mapping_type_itemsf(bContext *C,
 
 static bool add_driver_button_poll(bContext *C)
 {
-  PointerRNA ptr = {{NULL}};
+  PointerRNA ptr = {NULL};
   PropertyRNA *prop = NULL;
   int index;
   bool driven, special;
@@ -927,7 +974,7 @@ static bool add_driver_button_poll(bContext *C)
   /* this operator can only run if there's a property button active, and it can be animated */
   UI_context_active_but_prop_get(C, &ptr, &prop, &index);
 
-  if (!(ptr.id.data && ptr.data && prop)) {
+  if (!(ptr.owner_id && ptr.data && prop)) {
     return false;
   }
   if (!RNA_property_animateable(&ptr, prop)) {
@@ -935,7 +982,8 @@ static bool add_driver_button_poll(bContext *C)
   }
 
   /* Don't do anything if there is an fcurve for animation without a driver. */
-  FCurve *fcu = rna_get_fcurve_context_ui(C, &ptr, prop, index, NULL, NULL, &driven, &special);
+  FCurve *fcu = BKE_fcurve_find_by_rna_context_ui(
+      C, &ptr, prop, index, NULL, NULL, &driven, &special);
   return (fcu == NULL || fcu->driver);
 }
 
@@ -943,7 +991,7 @@ static bool add_driver_button_poll(bContext *C)
  * (i.e. "manual/add later"). */
 static int add_driver_button_none(bContext *C, wmOperator *op, short mapping_type)
 {
-  PointerRNA ptr = {{NULL}};
+  PointerRNA ptr = {NULL};
   PropertyRNA *prop = NULL;
   int index;
   int success = 0;
@@ -954,12 +1002,13 @@ static int add_driver_button_none(bContext *C, wmOperator *op, short mapping_typ
     index = -1;
   }
 
-  if (ptr.id.data && ptr.data && prop && RNA_property_animateable(&ptr, prop)) {
+  if (ptr.owner_id && ptr.data && prop && RNA_property_animateable(&ptr, prop)) {
     char *path = BKE_animdata_driver_path_hack(C, &ptr, prop, NULL);
     short flags = CREATEDRIVER_WITH_DEFAULT_DVAR;
 
     if (path) {
-      success += ANIM_add_driver(op->reports, ptr.id.data, path, index, flags, DRIVER_TYPE_PYTHON);
+      success += ANIM_add_driver(
+          op->reports, ptr.owner_id, path, index, flags, DRIVER_TYPE_PYTHON);
       MEM_freeN(path);
     }
   }
@@ -968,13 +1017,11 @@ static int add_driver_button_none(bContext *C, wmOperator *op, short mapping_typ
     /* send updates */
     UI_context_update_anim_flag(C);
     DEG_relations_tag_update(CTX_data_main(C));
-    WM_event_add_notifier(C, NC_ANIMATION | ND_FCURVES_ORDER, NULL);  // XXX
+    WM_event_add_notifier(C, NC_ANIMATION | ND_FCURVES_ORDER, NULL); /* XXX */
 
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 static int add_driver_button_menu_exec(bContext *C, wmOperator *op)
@@ -984,16 +1031,15 @@ static int add_driver_button_menu_exec(bContext *C, wmOperator *op)
     /* Just create driver with no targets */
     return add_driver_button_none(C, op, mapping_type);
   }
-  else {
-    /* Create Driver using Eyedropper */
-    wmOperatorType *ot = WM_operatortype_find("UI_OT_eyedropper_driver", true);
 
-    /* XXX: We assume that it's fine to use the same set of properties,
-     * since they're actually the same. */
-    WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, op->ptr);
+  /* Create Driver using Eyedropper */
+  wmOperatorType *ot = WM_operatortype_find("UI_OT_eyedropper_driver", true);
 
-    return OPERATOR_FINISHED;
-  }
+  /* XXX: We assume that it's fine to use the same set of properties,
+   * since they're actually the same. */
+  WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, op->ptr);
+
+  return OPERATOR_FINISHED;
 }
 
 /* Show menu or create drivers */
@@ -1006,12 +1052,11 @@ static int add_driver_button_menu_invoke(bContext *C, wmOperator *op, const wmEv
     /* Mapping Type is Set - Directly go into creating drivers */
     return add_driver_button_menu_exec(C, op);
   }
-  else {
-    /* Show menu */
-    // TODO: This should get filtered by the enum filter
-    /* important to execute in the region we're currently in */
-    return WM_menu_invoke_ex(C, op, WM_OP_INVOKE_DEFAULT);
-  }
+
+  /* Show menu */
+  /* TODO: This should get filtered by the enum filter. */
+  /* important to execute in the region we're currently in. */
+  return WM_menu_invoke_ex(C, op, WM_OP_INVOKE_DEFAULT);
 }
 
 static void UNUSED_FUNCTION(ANIM_OT_driver_button_add_menu)(wmOperatorType *ot)
@@ -1043,28 +1088,29 @@ static void UNUSED_FUNCTION(ANIM_OT_driver_button_add_menu)(wmOperatorType *ot)
 
 static int add_driver_button_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
 {
-  PointerRNA ptr = {{NULL}};
+  PointerRNA ptr = {NULL};
   PropertyRNA *prop = NULL;
   int index;
 
   /* try to find driver using property retrieved from UI */
   UI_context_active_but_prop_get(C, &ptr, &prop, &index);
 
-  if (ptr.id.data && ptr.data && prop && RNA_property_animateable(&ptr, prop)) {
+  if (ptr.owner_id && ptr.data && prop && RNA_property_animateable(&ptr, prop)) {
     /* 1) Create a new "empty" driver for this property */
     char *path = BKE_animdata_driver_path_hack(C, &ptr, prop, NULL);
     short flags = CREATEDRIVER_WITH_DEFAULT_DVAR;
-    short success = 0;
+    bool changed = false;
 
     if (path) {
-      success += ANIM_add_driver(op->reports, ptr.id.data, path, index, flags, DRIVER_TYPE_PYTHON);
+      changed |= (ANIM_add_driver(
+                      op->reports, ptr.owner_id, path, index, flags, DRIVER_TYPE_PYTHON) != 0);
       MEM_freeN(path);
     }
 
-    if (success) {
+    if (changed) {
       /* send updates */
       UI_context_update_anim_flag(C);
-      DEG_id_tag_update(ptr.id.data, ID_RECALC_COPY_ON_WRITE);
+      DEG_id_tag_update(ptr.owner_id, ID_RECALC_COPY_ON_WRITE);
       DEG_relations_tag_update(CTX_data_main(C));
       WM_event_add_notifier(C, NC_ANIMATION | ND_FCURVES_ORDER, NULL);
     }
@@ -1097,9 +1143,9 @@ void ANIM_OT_driver_button_add(wmOperatorType *ot)
 
 static int remove_driver_button_exec(bContext *C, wmOperator *op)
 {
-  PointerRNA ptr = {{NULL}};
+  PointerRNA ptr = {NULL};
   PropertyRNA *prop = NULL;
-  short success = 0;
+  bool changed = false;
   int index;
   const bool all = RNA_boolean_get(op->ptr, "all");
 
@@ -1110,24 +1156,24 @@ static int remove_driver_button_exec(bContext *C, wmOperator *op)
     index = -1;
   }
 
-  if (ptr.id.data && ptr.data && prop) {
+  if (ptr.owner_id && ptr.data && prop) {
     char *path = BKE_animdata_driver_path_hack(C, &ptr, prop, NULL);
 
     if (path) {
-      success = ANIM_remove_driver(op->reports, ptr.id.data, path, index, 0);
+      changed = ANIM_remove_driver(op->reports, ptr.owner_id, path, index, 0);
 
       MEM_freeN(path);
     }
   }
 
-  if (success) {
+  if (changed) {
     /* send updates */
     UI_context_update_anim_flag(C);
     DEG_relations_tag_update(CTX_data_main(C));
-    WM_event_add_notifier(C, NC_ANIMATION | ND_FCURVES_ORDER, NULL);  // XXX
+    WM_event_add_notifier(C, NC_ANIMATION | ND_FCURVES_ORDER, NULL); /* XXX */
   }
 
-  return (success) ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
+  return (changed) ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
 }
 
 void ANIM_OT_driver_button_remove(wmOperatorType *ot)
@@ -1140,7 +1186,7 @@ void ANIM_OT_driver_button_remove(wmOperatorType *ot)
 
   /* callbacks */
   ot->exec = remove_driver_button_exec;
-  // op->poll = ??? // TODO: need to have some driver to be able to do this...
+  /* TODO: `op->poll` need to have some driver to be able to do this. */
 
   /* flags */
   ot->flag = OPTYPE_UNDO | OPTYPE_INTERNAL;
@@ -1153,14 +1199,14 @@ void ANIM_OT_driver_button_remove(wmOperatorType *ot)
 
 static int edit_driver_button_exec(bContext *C, wmOperator *op)
 {
-  PointerRNA ptr = {{NULL}};
+  PointerRNA ptr = {NULL};
   PropertyRNA *prop = NULL;
   int index;
 
   /* try to find driver using property retrieved from UI */
   UI_context_active_but_prop_get(C, &ptr, &prop, &index);
 
-  if (ptr.id.data && ptr.data && prop) {
+  if (ptr.owner_id && ptr.data && prop) {
     UI_popover_panel_invoke(C, "GRAPH_PT_drivers_popover", true, op->reports);
   }
 
@@ -1177,7 +1223,7 @@ void ANIM_OT_driver_button_edit(wmOperatorType *ot)
 
   /* callbacks */
   ot->exec = edit_driver_button_exec;
-  // op->poll = ??? // TODO: need to have some driver to be able to do this...
+  /* TODO: `op->poll` need to have some driver to be able to do this. */
 
   /* flags */
   ot->flag = OPTYPE_UNDO | OPTYPE_INTERNAL;
@@ -1187,20 +1233,20 @@ void ANIM_OT_driver_button_edit(wmOperatorType *ot)
 
 static int copy_driver_button_exec(bContext *C, wmOperator *op)
 {
-  PointerRNA ptr = {{NULL}};
+  PointerRNA ptr = {NULL};
   PropertyRNA *prop = NULL;
-  short success = 0;
+  bool changed = false;
   int index;
 
   /* try to create driver using property retrieved from UI */
   UI_context_active_but_prop_get(C, &ptr, &prop, &index);
 
-  if (ptr.id.data && ptr.data && prop && RNA_property_animateable(&ptr, prop)) {
+  if (ptr.owner_id && ptr.data && prop && RNA_property_animateable(&ptr, prop)) {
     char *path = BKE_animdata_driver_path_hack(C, &ptr, prop, NULL);
 
     if (path) {
       /* only copy the driver for the button that this was involved for */
-      success = ANIM_copy_driver(op->reports, ptr.id.data, path, index, 0);
+      changed = ANIM_copy_driver(op->reports, ptr.owner_id, path, index, 0);
 
       UI_context_update_anim_flag(C);
 
@@ -1209,7 +1255,7 @@ static int copy_driver_button_exec(bContext *C, wmOperator *op)
   }
 
   /* since we're just copying, we don't really need to do anything else...*/
-  return (success) ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
+  return (changed) ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
 }
 
 void ANIM_OT_copy_driver_button(wmOperatorType *ot)
@@ -1221,7 +1267,7 @@ void ANIM_OT_copy_driver_button(wmOperatorType *ot)
 
   /* callbacks */
   ot->exec = copy_driver_button_exec;
-  // op->poll = ??? // TODO: need to have some driver to be able to do this...
+  /* TODO: `op->poll` need to have some driver to be able to do this. */
 
   /* flags */
   ot->flag = OPTYPE_UNDO | OPTYPE_INTERNAL;
@@ -1231,35 +1277,35 @@ void ANIM_OT_copy_driver_button(wmOperatorType *ot)
 
 static int paste_driver_button_exec(bContext *C, wmOperator *op)
 {
-  PointerRNA ptr = {{NULL}};
+  PointerRNA ptr = {NULL};
   PropertyRNA *prop = NULL;
-  short success = 0;
+  bool changed = false;
   int index;
 
   /* try to create driver using property retrieved from UI */
   UI_context_active_but_prop_get(C, &ptr, &prop, &index);
 
-  if (ptr.id.data && ptr.data && prop && RNA_property_animateable(&ptr, prop)) {
+  if (ptr.owner_id && ptr.data && prop && RNA_property_animateable(&ptr, prop)) {
     char *path = BKE_animdata_driver_path_hack(C, &ptr, prop, NULL);
 
     if (path) {
       /* only copy the driver for the button that this was involved for */
-      success = ANIM_paste_driver(op->reports, ptr.id.data, path, index, 0);
+      changed = ANIM_paste_driver(op->reports, ptr.owner_id, path, index, 0);
 
       UI_context_update_anim_flag(C);
 
       DEG_relations_tag_update(CTX_data_main(C));
 
-      DEG_id_tag_update(ptr.id.data, ID_RECALC_ANIMATION);
+      DEG_id_tag_update(ptr.owner_id, ID_RECALC_ANIMATION);
 
-      WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME_PROP, NULL);  // XXX
+      WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME_PROP, NULL); /* XXX */
 
       MEM_freeN(path);
     }
   }
 
   /* since we're just copying, we don't really need to do anything else...*/
-  return (success) ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
+  return (changed) ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
 }
 
 void ANIM_OT_paste_driver_button(wmOperatorType *ot)
@@ -1271,7 +1317,7 @@ void ANIM_OT_paste_driver_button(wmOperatorType *ot)
 
   /* callbacks */
   ot->exec = paste_driver_button_exec;
-  // op->poll = ??? // TODO: need to have some driver to be able to do this...
+  /* TODO: `op->poll` need to have some driver to be able to do this. */
 
   /* flags */
   ot->flag = OPTYPE_UNDO | OPTYPE_INTERNAL;

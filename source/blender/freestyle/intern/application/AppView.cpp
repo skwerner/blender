@@ -20,19 +20,19 @@
 
 #include <iostream>
 
-#include "Controller.h"
 #include "AppConfig.h"
 #include "AppView.h"
-#include "../view_map/Silhouette.h"
-#include "../view_map/ViewMap.h"
+#include "Controller.h"
+
 #include "../scene_graph/LineRep.h"
 #include "../scene_graph/NodeLight.h"
 #include "../scene_graph/NodeShape.h"
 #include "../scene_graph/VertexRep.h"
 #include "../stroke/Canvas.h"
 #include "../system/StringUtils.h"
+#include "../view_map/Silhouette.h"
+#include "../view_map/ViewMap.h"
 
-extern "C" {
 #include "BLI_blenlib.h"
 
 #include "IMB_imbuf.h"
@@ -44,7 +44,6 @@ extern "C" {
 #endif
 
 #include "FRS_freestyle.h"
-}
 
 namespace Freestyle {
 

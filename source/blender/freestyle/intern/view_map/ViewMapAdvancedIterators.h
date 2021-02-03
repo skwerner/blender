@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_VIEW_MAP_ADVANCED_ITERATORS_H__
-#define __FREESTYLE_VIEW_MAP_ADVANCED_ITERATORS_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -24,6 +23,7 @@
  */
 
 #include "ViewMap.h"
+#include "ViewMapIterators.h"
 
 #include "../system/Iterator.h"  //soc
 
@@ -498,7 +498,7 @@ class edge_iterator_base : public IteratorBase<Traits, BidirectionalIteratorTag_
   // dereferencing
   virtual reference operator*() const
   {
-    return (_ViewEdge);
+    return _ViewEdge;
   }
 
   virtual pointer operator->() const
@@ -626,7 +626,7 @@ class fedge_iterator_base : public IteratorBase<Traits, BidirectionalIteratorTag
   // dereferencing
   virtual reference operator*() const
   {
-    return (_FEdge);
+    return _FEdge;
   }
 
   virtual pointer operator->() const
@@ -774,7 +774,7 @@ class vertex_iterator_base : public IteratorBase<Traits, BidirectionalIteratorTa
   // dereferencing
   virtual reference operator*() const
   {
-    return (_SVertex);
+    return _SVertex;
   }
 
   virtual pointer operator->() const
@@ -815,5 +815,3 @@ class vertex_iterator_base : public IteratorBase<Traits, BidirectionalIteratorTa
 }  // end of namespace ViewEdgeInternal
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_VIEW_MAP_ADVANCED_ITERATORS_H__

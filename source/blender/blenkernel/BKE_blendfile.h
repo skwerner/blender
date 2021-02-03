@@ -13,8 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
-#ifndef __BKE_BLENDFILE_H__
-#define __BKE_BLENDFILE_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -32,22 +31,32 @@ struct ReportList;
 struct UserDef;
 struct bContext;
 
-enum {
-  BKE_BLENDFILE_READ_FAIL = 0,         /* no load */
-  BKE_BLENDFILE_READ_OK = 1,           /* OK */
-  BKE_BLENDFILE_READ_OK_USERPREFS = 2, /* OK, and with new user settings */
-};
+bool BKE_blendfile_read_ex(struct bContext *C,
+                           const char *filepath,
+                           const struct BlendFileReadParams *params,
+                           struct ReportList *reports,
+                           /* Extra args. */
+                           const bool startup_update_defaults,
+                           const char *startup_app_template);
+bool BKE_blendfile_read(struct bContext *C,
+                        const char *filepath,
+                        const struct BlendFileReadParams *params,
+                        struct ReportList *reports);
 
-int BKE_blendfile_read(struct bContext *C,
-                       const char *filepath,
-                       const struct BlendFileReadParams *params,
-                       struct ReportList *reports);
+bool BKE_blendfile_read_from_memory_ex(struct bContext *C,
+                                       const void *filebuf,
+                                       int filelength,
+                                       const struct BlendFileReadParams *params,
+                                       struct ReportList *reports,
+                                       /* Extra args. */
+                                       const bool startup_update_defaults,
+                                       const char *startup_app_template);
 bool BKE_blendfile_read_from_memory(struct bContext *C,
                                     const void *filebuf,
                                     int filelength,
-                                    bool update_defaults,
                                     const struct BlendFileReadParams *params,
                                     struct ReportList *reports);
+
 bool BKE_blendfile_read_from_memfile(struct bContext *C,
                                      struct MemFile *memfile,
                                      const struct BlendFileReadParams *params,
@@ -58,6 +67,7 @@ struct UserDef *BKE_blendfile_userdef_read(const char *filepath, struct ReportLi
 struct UserDef *BKE_blendfile_userdef_read_from_memory(const void *filebuf,
                                                        int filelength,
                                                        struct ReportList *reports);
+struct UserDef *BKE_blendfile_userdef_from_defaults(void);
 
 bool BKE_blendfile_userdef_write(const char *filepath, struct ReportList *reports);
 bool BKE_blendfile_userdef_write_app_template(const char *filepath, struct ReportList *reports);
@@ -79,11 +89,10 @@ void BKE_blendfile_write_partial_begin(struct Main *bmain_src);
 bool BKE_blendfile_write_partial(struct Main *bmain_src,
                                  const char *filepath,
                                  const int write_flags,
+                                 const int remap_mode,
                                  struct ReportList *reports);
 void BKE_blendfile_write_partial_end(struct Main *bmain_src);
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_BLENDFILE_H__ */

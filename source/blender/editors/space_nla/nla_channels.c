@@ -21,10 +21,10 @@
  * \ingroup spnla
  */
 
-#include <string.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <math.h>
+#include <string.h>
 
 #include "DNA_anim_types.h"
 #include "DNA_object_types.h"
@@ -33,13 +33,13 @@
 #include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
 
-#include "BKE_animsys.h"
-#include "BKE_nla.h"
+#include "BKE_anim_data.h"
 #include "BKE_context.h"
 #include "BKE_global.h"
+#include "BKE_nla.h"
+#include "BKE_report.h"
 #include "BKE_scene.h"
 #include "BKE_screen.h"
-#include "BKE_report.h"
 
 #include "ED_anim_api.h"
 #include "ED_keyframes_edit.h"
@@ -59,7 +59,7 @@
 
 #include "UI_view2d.h"
 
-#include "nla_intern.h"  // own include
+#include "nla_intern.h" /* own include */
 
 /* *********************************************** */
 /* Operators for NLA channels-list which need to be different
@@ -81,7 +81,7 @@ static int mouse_nla_channels(
   bAnimListElem *ale;
   int filter;
 
-  View2D *v2d = &ac->ar->v2d;
+  View2D *v2d = &ac->region->v2d;
   int notifierFlags = 0;
 
   /* get the channel that was clicked on */
@@ -103,7 +103,7 @@ static int mouse_nla_channels(
   }
 
   /* action to take depends on what channel we've got */
-  // WARNING: must keep this in sync with the equivalent function in anim_channels_edit.c
+  /* WARNING: must keep this in sync with the equivalent function in anim_channels_edit.c */
   switch (ale->type) {
     case ANIMTYPE_SCENE: {
       Scene *sce = (Scene *)ale->data;
@@ -146,7 +146,7 @@ static int mouse_nla_channels(
         else {
           /* deselect all */
           /* TODO: should this deselect all other types of channels too? */
-          for (Base *b = view_layer->object_bases.first; b; b = b->next) {
+          LISTBASE_FOREACH (Base *, b, &view_layer->object_bases) {
             ED_object_base_select(b, BA_DESELECT);
             if (b->object->adt) {
               b->object->adt->flag &= ~(ADT_UI_SELECTED | ADT_UI_ACTIVE);
@@ -161,7 +161,7 @@ static int mouse_nla_channels(
         }
 
         /* change active object - regardless of whether it is now selected [T37883] */
-        ED_object_base_activate(C, base); /* adds notifier */
+        ED_object_base_activate_with_mode_exit_if_needed(C, base); /* adds notifier */
 
         if ((adt) && (adt->flag & ADT_UI_SELECTED)) {
           adt->flag |= ADT_UI_ACTIVE;
@@ -190,7 +190,11 @@ static int mouse_nla_channels(
     case ANIMTYPE_DSLINESTYLE:
     case ANIMTYPE_DSSPK:
     case ANIMTYPE_DSGPENCIL:
-    case ANIMTYPE_PALETTE: {
+    case ANIMTYPE_PALETTE:
+    case ANIMTYPE_DSHAIR:
+    case ANIMTYPE_DSPOINTCLOUD:
+    case ANIMTYPE_DSVOLUME:
+    case ANIMTYPE_DSSIMULATION: {
       /* sanity checking... */
       if (ale->adt) {
         /* select/deselect */
@@ -200,7 +204,7 @@ static int mouse_nla_channels(
         }
         else {
           /* select AnimData block by itself */
-          ANIM_deselect_anim_channels(ac, ac->data, ac->datatype, 0, ACHANNEL_SETFLAG_CLEAR);
+          ANIM_anim_channels_select_set(ac, ACHANNEL_SETFLAG_CLEAR);
           ale->adt->flag |= ADT_UI_SELECTED;
         }
 
@@ -263,7 +267,7 @@ static int mouse_nla_channels(
         }
         else {
           /* select F-Curve by itself */
-          ANIM_deselect_anim_channels(ac, ac->data, ac->datatype, 0, ACHANNEL_SETFLAG_CLEAR);
+          ANIM_anim_channels_select_set(ac, ACHANNEL_SETFLAG_CLEAR);
           nlt->flag |= NLATRACK_SELECTED;
         }
 
@@ -288,7 +292,7 @@ static int mouse_nla_channels(
           /* TODO: make this use the operator instead of calling the function directly
            * however, calling the operator requires that we supply the args,
            * and that works with proper buttons only */
-          BKE_nla_action_pushdown(adt);
+          BKE_nla_action_pushdown(adt, ID_IS_OVERRIDE_LIBRARY(ale->id));
         }
         else {
           /* when in tweakmode, this button becomes the toggle for mapped editing */
@@ -325,7 +329,7 @@ static int mouse_nla_channels(
           }
           else {
             /* select AnimData block by itself */
-            ANIM_deselect_anim_channels(ac, ac->data, ac->datatype, 0, ACHANNEL_SETFLAG_CLEAR);
+            ANIM_anim_channels_select_set(ac, ACHANNEL_SETFLAG_CLEAR);
             adt->flag |= ADT_UI_SELECTED;
           }
 
@@ -361,7 +365,7 @@ static int nlachannels_mouseclick_invoke(bContext *C, wmOperator *op, const wmEv
 {
   bAnimContext ac;
   SpaceNla *snla;
-  ARegion *ar;
+  ARegion *region;
   View2D *v2d;
   int channel_index;
   int notifierFlags = 0;
@@ -375,8 +379,8 @@ static int nlachannels_mouseclick_invoke(bContext *C, wmOperator *op, const wmEv
 
   /* get useful pointers from animation context data */
   snla = (SpaceNla *)ac.sl;
-  ar = ac.ar;
-  v2d = &ar->v2d;
+  region = ac.region;
+  v2d = &region->v2d;
 
   /* select mode is either replace (deselect all, then add) or add/extend */
   if (RNA_boolean_get(op->ptr, "extend")) {
@@ -423,7 +427,7 @@ void NLA_OT_channels_click(wmOperatorType *ot)
   ot->flag = OPTYPE_UNDO;
 
   /* props */
-  prop = RNA_def_boolean(ot->srna, "extend", 0, "Extend Select", "");  // SHIFTKEY
+  prop = RNA_def_boolean(ot->srna, "extend", 0, "Extend Select", ""); /* SHIFTKEY */
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
 
@@ -446,7 +450,7 @@ static int nlachannels_pushdown_exec(bContext *C, wmOperator *op)
 
   /* get anim-channel to use (or more specifically, the animdata block behind it) */
   if (channel_index == -1) {
-    PointerRNA adt_ptr = {{NULL}};
+    PointerRNA adt_ptr = {NULL};
 
     /* active animdata block */
     if (nla_panel_context(C, &adt_ptr, NULL, NULL) == 0 || (adt_ptr.data == NULL)) {
@@ -457,10 +461,9 @@ static int nlachannels_pushdown_exec(bContext *C, wmOperator *op)
                  "block)");
       return OPERATOR_CANCELLED;
     }
-    else {
-      id = adt_ptr.id.data;
-      adt = adt_ptr.data;
-    }
+
+    id = adt_ptr.owner_id;
+    adt = adt_ptr.data;
   }
   else {
     /* indexed channel */
@@ -479,7 +482,7 @@ static int nlachannels_pushdown_exec(bContext *C, wmOperator *op)
       ANIM_animdata_freelist(&anim_data);
       return OPERATOR_CANCELLED;
     }
-    else if (ale->type != ANIMTYPE_NLAACTION) {
+    if (ale->type != ANIMTYPE_NLAACTION) {
       BKE_reportf(op->reports,
                   RPT_ERROR,
                   "Animation channel at index %d is not a NLA 'Active Action' channel",
@@ -501,22 +504,26 @@ static int nlachannels_pushdown_exec(bContext *C, wmOperator *op)
     BKE_report(op->reports, RPT_WARNING, "Internal Error - AnimData block is not valid");
     return OPERATOR_CANCELLED;
   }
-  else if (nlaedit_is_tweakmode_on(&ac)) {
+  if (nlaedit_is_tweakmode_on(&ac)) {
     BKE_report(op->reports,
                RPT_WARNING,
                "Cannot push down actions while tweaking a strip's action, exit tweak mode first");
     return OPERATOR_CANCELLED;
   }
-  else if (adt->action == NULL) {
+  if (adt->action == NULL) {
     BKE_report(op->reports, RPT_WARNING, "No active action to push down");
     return OPERATOR_CANCELLED;
   }
-  else {
-    /* 'push-down' action - only usable when not in TweakMode */
-    BKE_nla_action_pushdown(adt);
 
-    DEG_id_tag_update_ex(CTX_data_main(C), id, ID_RECALC_ANIMATION | ID_RECALC_COPY_ON_WRITE);
-  }
+  /* 'push-down' action - only usable when not in TweakMode */
+  BKE_nla_action_pushdown(adt, ID_IS_OVERRIDE_LIBRARY(id));
+
+  struct Main *bmain = CTX_data_main(C);
+  DEG_id_tag_update_ex(bmain, id, ID_RECALC_ANIMATION);
+
+  /* The action needs updating too, as FCurve modifiers are to be reevaluated. They won't extend
+   * beyond the NLA strip after pushing down to the NLA. */
+  DEG_id_tag_update_ex(bmain, &adt->action->id, ID_RECALC_ANIMATION);
 
   /* set notifier that things have changed */
   WM_event_add_notifier(C, NC_ANIMATION | ND_NLA_ACTCHANGE, NULL);
@@ -579,9 +586,9 @@ static int nla_action_unlink_exec(bContext *C, wmOperator *op)
   }
 
   /* do unlinking */
-  if (adt && adt->action) {
+  if (adt->action) {
     bool force_delete = RNA_boolean_get(op->ptr, "force_delete");
-    ED_animedit_unlink_action(C, adt_ptr.id.data, adt, adt->action, op->reports, force_delete);
+    ED_animedit_unlink_action(C, adt_ptr.owner_id, adt, adt->action, op->reports, force_delete);
   }
 
   return OPERATOR_FINISHED;
@@ -614,7 +621,7 @@ void NLA_OT_action_unlink(wmOperatorType *ot)
                          "force_delete",
                          false,
                          "Force Delete",
-                         "Clear Fake User and remove copy stashed in this datablock's NLA stack");
+                         "Clear Fake User and remove copy stashed in this data-block's NLA stack");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
 
@@ -641,19 +648,21 @@ bool nlaedit_add_tracks_existing(bAnimContext *ac, bool above_sel)
       NlaTrack *nlt = (NlaTrack *)ale->data;
       AnimData *adt = ale->adt;
 
+      const bool is_liboverride = ID_IS_OVERRIDE_LIBRARY(ale->id);
+
       /* check if just adding a new track above this one,
        * or whether we're adding a new one to the top of the stack that this one belongs to
        */
       if (above_sel) {
         /* just add a new one above this one */
-        BKE_nlatrack_add(adt, nlt);
+        BKE_nlatrack_add(adt, nlt, is_liboverride);
         ale->update = ANIM_UPDATE_DEPS;
         added = true;
       }
       else if ((lastAdt == NULL) || (adt != lastAdt)) {
         /* add one track to the top of the owning AnimData's stack,
          * then don't add anymore to this stack */
-        BKE_nlatrack_add(adt, NULL);
+        BKE_nlatrack_add(adt, NULL, is_liboverride);
         lastAdt = adt;
         ale->update = ANIM_UPDATE_DEPS;
         added = true;
@@ -691,7 +700,7 @@ bool nlaedit_add_tracks_empty(bAnimContext *ac)
     /* ensure it is empty */
     if (BLI_listbase_is_empty(&adt->nla_tracks)) {
       /* add new track to this AnimData block then */
-      BKE_nlatrack_add(adt, NULL);
+      BKE_nlatrack_add(adt, NULL, ID_IS_OVERRIDE_LIBRARY(ale->id));
       ale->update = ANIM_UPDATE_DEPS;
       added = true;
     }
@@ -726,19 +735,18 @@ static int nlaedit_add_tracks_exec(bContext *C, wmOperator *op)
     DEG_relations_tag_update(CTX_data_main(C));
 
     /* set notifier that things have changed */
-    WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_EDITED, NULL);
+    WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_ADDED, NULL);
 
     /* done */
     return OPERATOR_FINISHED;
   }
-  else {
-    /* failed to add any tracks */
-    BKE_report(
-        op->reports, RPT_WARNING, "Select an existing NLA Track or an empty action line first");
 
-    /* not done */
-    return OPERATOR_CANCELLED;
-  }
+  /* failed to add any tracks */
+  BKE_report(
+      op->reports, RPT_WARNING, "Select an existing NLA Track or an empty action line first");
+
+  /* not done */
+  return OPERATOR_CANCELLED;
 }
 
 void NLA_OT_tracks_add(wmOperatorType *ot)
@@ -790,6 +798,11 @@ static int nlaedit_delete_tracks_exec(bContext *C, wmOperator *UNUSED(op))
       NlaTrack *nlt = (NlaTrack *)ale->data;
       AnimData *adt = ale->adt;
 
+      if (BKE_nlatrack_is_nonlocal_in_liboverride(ale->id, nlt)) {
+        /* No deletion of non-local tracks of override data. */
+        continue;
+      }
+
       /* if track is currently 'solo', then AnimData should have its
        * 'has solo' flag disabled
        */
@@ -810,7 +823,7 @@ static int nlaedit_delete_tracks_exec(bContext *C, wmOperator *UNUSED(op))
   DEG_relations_tag_update(ac.bmain);
 
   /* set notifier that things have changed */
-  WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_EDITED, NULL);
+  WM_event_add_notifier(C, NC_ANIMATION | ND_NLA | NA_REMOVED, NULL);
 
   /* done */
   return OPERATOR_FINISHED;

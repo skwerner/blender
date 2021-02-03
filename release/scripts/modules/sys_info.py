@@ -70,18 +70,22 @@ def write_sysinfo(filepath):
             output.write("build linkflags: %s\n" % prepr(bpy.app.build_linkflags))
             output.write("build system: %s\n" % prepr(bpy.app.build_system))
 
-            # python info
+            # Python info.
             output.write(title("Python"))
-            output.write("version: %s\n" % (sys.version))
+            output.write("version: %s\n" % (sys.version.replace("\n", " ")))
+            output.write("file system encoding: %s:%s\n" % (
+                sys.getfilesystemencoding(),
+                sys.getfilesystemencodeerrors(),
+            ))
             output.write("paths:\n")
             for p in sys.path:
                 output.write("\t%r\n" % p)
 
             output.write(title("Python (External Binary)"))
-            output.write("binary path: %s\n" % prepr(bpy.app.binary_path_python))
+            output.write("binary path: %s\n" % prepr(sys.executable))
             try:
                 py_ver = prepr(subprocess.check_output([
-                    bpy.app.binary_path_python,
+                    sys.executable,
                     "--version",
                 ]).strip())
             except Exception as e:
@@ -171,6 +175,13 @@ def write_sysinfo(filepath):
                 output.write("%s\n" % alembic.version_string)
             else:
                 output.write("Blender was built without Alembic support\n")
+
+            usd = bpy.app.usd
+            output.write("USD: ")
+            if usd.supported:
+                output.write("%s\n" % usd.version_string)
+            else:
+                output.write("Blender was built without USD support\n")
 
             if not bpy.app.build_options.sdl:
                 output.write("SDL: Blender was built without SDL support\n")

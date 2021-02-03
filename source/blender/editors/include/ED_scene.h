@@ -18,10 +18,13 @@
  * \ingroup editors
  */
 
-#ifndef __ED_SCENE_H__
-#define __ED_SCENE_H__
+#pragma once
 
 #include "BLI_compiler_attrs.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 enum eSceneCopyMethod;
 
@@ -39,4 +42,6 @@ bool ED_scene_view_layer_delete(struct Main *bmain,
 
 void ED_operatortypes_scene(void);
 
-#endif /* __ED_SCENE_H__ */
+#ifdef __cplusplus
+}
+#endif

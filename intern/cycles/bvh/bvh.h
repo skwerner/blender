@@ -25,14 +25,16 @@
 
 CCL_NAMESPACE_BEGIN
 
-class Stats;
-class BVHNode;
-struct BVHStackEntry;
-class BVHParams;
 class BoundBox;
+class BVHNode;
+class BVHParams;
+class Device;
+class DeviceScene;
+class Geometry;
 class LeafNode;
 class Object;
 class Progress;
+class Stats;
 
 #define BVH_ALIGN 4096
 #define TRI_NODE_SIZE 3
@@ -73,51 +75,26 @@ struct PackedBVH {
   }
 };
 
-enum BVH_TYPE { bvh2, bvh4, bvh8 };
-
 /* BVH */
 
 class BVH {
  public:
-  PackedBVH pack;
   BVHParams params;
+  vector<Geometry *> geometry;
   vector<Object *> objects;
 
-  static BVH *create(const BVHParams &params, const vector<Object *> &objects);
+  static BVH *create(const BVHParams &params,
+                     const vector<Geometry *> &geometry,
+                     const vector<Object *> &objects,
+                     Device *device);
   virtual ~BVH()
   {
   }
 
-  virtual void build(Progress &progress, Stats *stats = NULL);
-  void refit(Progress &progress);
-
  protected:
-  BVH(const BVHParams &params, const vector<Object *> &objects);
-
-  /* Refit range of primitives. */
-  void refit_primitives(int start, int end, BoundBox &bbox, uint &visibility);
-
-  /* triangles and strands */
-  void pack_primitives();
-  void pack_triangle(int idx, float4 storage[3]);
-
-  /* merge instance BVH's */
-  void pack_instances(size_t nodes_size, size_t leaf_nodes_size);
-
-  /* for subclasses to implement */
-  virtual void pack_nodes(const BVHNode *root) = 0;
-  virtual void refit_nodes() = 0;
-
-  virtual BVHNode *widen_children_nodes(const BVHNode *root) = 0;
-};
-
-/* Pack Utility */
-struct BVHStackEntry {
-  const BVHNode *node;
-  int idx;
-
-  BVHStackEntry(const BVHNode *n = 0, int i = 0);
-  int encodeIdx() const;
+  BVH(const BVHParams &params,
+      const vector<Geometry *> &geometry,
+      const vector<Object *> &objects);
 };
 
 CCL_NAMESPACE_END

@@ -23,26 +23,26 @@
 
 #include <string.h>
 
-#include "DNA_object_types.h"
 #include "DNA_mesh_types.h"
+#include "DNA_object_types.h"
 
-#include "BLI_utildefines.h"
+#include "BLI_listbase.h"
 #include "BLI_string.h"
 #include "BLI_string_utils.h"
-#include "BLI_listbase.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_customdata.h"
 #include "BKE_editmesh.h"
 #include "BKE_object.h"
-#include "BKE_object_facemap.h" /* own include */
 #include "BKE_object_deform.h"
+#include "BKE_object_facemap.h" /* own include */
 
 #include "BLT_translation.h"
 
 #include "MEM_guardedalloc.h"
 
-#include "RNA_define.h"
 #include "RNA_access.h"
+#include "RNA_define.h"
 
 static bool fmap_unique_check(void *arg, const char *name)
 {
@@ -55,7 +55,7 @@ static bool fmap_unique_check(void *arg, const char *name)
 
   for (fmap = data->ob->fmaps.first; fmap; fmap = fmap->next) {
     if (data->fm != fmap) {
-      if (!strcmp(fmap->name, name)) {
+      if (STREQ(fmap->name, name)) {
         return true;
       }
     }
@@ -260,4 +260,42 @@ int BKE_object_facemap_name_index(Object *ob, const char *name)
 bFaceMap *BKE_object_facemap_find_name(Object *ob, const char *name)
 {
   return BLI_findstring(&ob->fmaps, name, offsetof(bFaceMap, name));
+}
+
+int *BKE_object_facemap_index_map_create(Object *ob_src, Object *ob_dst, int *r_map_len)
+{
+  /* Build src to merged mapping of facemap indices. */
+  if (BLI_listbase_is_empty(&ob_src->fmaps) || BLI_listbase_is_empty(&ob_dst->fmaps)) {
+    *r_map_len = 0;
+    return NULL;
+  }
+
+  *r_map_len = BLI_listbase_count(&ob_src->fmaps);
+  int *fmap_index_map = MEM_malloc_arrayN(
+      *r_map_len, sizeof(*fmap_index_map), "defgroup index map create");
+  bool is_fmap_remap_needed = false;
+
+  int i = 0;
+  for (bFaceMap *fmap_src = ob_src->fmaps.first; fmap_src; fmap_src = fmap_src->next, i++) {
+    fmap_index_map[i] = BKE_object_facemap_name_index(ob_dst, fmap_src->name);
+    is_fmap_remap_needed = is_fmap_remap_needed || (fmap_index_map[i] != i);
+  }
+
+  if (!is_fmap_remap_needed) {
+    MEM_freeN(fmap_index_map);
+    fmap_index_map = NULL;
+    *r_map_len = 0;
+  }
+
+  return fmap_index_map;
+}
+
+void BKE_object_facemap_index_map_apply(int *fmap, int fmap_len, const int *map, int map_len)
+{
+  if (map == NULL || map_len == 0) {
+    return;
+  }
+  for (int i = 0; i < fmap_len; i++, fmap++) {
+    *fmap = (*fmap < map_len && *fmap != -1) ? map[*fmap] : -1;
+  }
 }

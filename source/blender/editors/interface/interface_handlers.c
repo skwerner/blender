@@ -4193,9 +4193,17 @@ static uiButExtraOpIcon *ui_but_extra_operator_icon_mouse_over_get(uiBut *but,
     return NULL;
   }
 
+  /* Same as in 'widget_draw_extra_icons', icon padding from the right edge. */
+  xmax -= 0.2 * icon_size;
+
+  /* Handle the padding space from the right edge as the last button. */
+  if (x > xmax) {
+    return but->extra_op_icons.last;
+  }
+
   /* Inverse order, from right to left. */
   LISTBASE_FOREACH_BACKWARD (uiButExtraOpIcon *, op_icon, &but->extra_op_icons) {
-    if ((x > (xmax - icon_size)) && x < xmax) {
+    if ((x > (xmax - icon_size)) && x <= xmax) {
       return op_icon;
     }
     xmax -= icon_size;
@@ -8997,6 +9005,7 @@ static int ui_handle_list_event(bContext *C, const wmEvent *event, ARegion *regi
 {
   int retval = WM_UI_HANDLER_CONTINUE;
   int type = event->type, val = event->val;
+  int scroll_dir = 1;
   bool redraw = false;
 
   uiList *ui_list = listbox->custom_data;
@@ -9012,6 +9021,11 @@ static int ui_handle_list_event(bContext *C, const wmEvent *event, ARegion *regi
   /* Convert pan to scroll-wheel. */
   if (type == MOUSEPAN) {
     ui_pan_to_scroll(event, &type, &val);
+
+    /* 'ui_pan_to_scroll' gives the absolute direction. */
+    if (event->is_direction_inverted) {
+      scroll_dir = -1;
+    }
 
     /* If type still is mouse-pan, we call it handled, since delta-y accumulate. */
     /* also see wm_event_system.c do_wheel_ui hack */
@@ -9107,7 +9121,7 @@ static int ui_handle_list_event(bContext *C, const wmEvent *event, ARegion *regi
     else if (ELEM(type, WHEELUPMOUSE, WHEELDOWNMOUSE)) {
       if (dyn_data->height > dyn_data->visual_height) {
         /* list template will clamp */
-        ui_list->list_scroll += (type == WHEELUPMOUSE) ? -1 : 1;
+        ui_list->list_scroll += scroll_dir * ((type == WHEELUPMOUSE) ? -1 : 1);
 
         redraw = true;
         retval = WM_UI_HANDLER_BREAK;
@@ -9905,6 +9919,12 @@ static int ui_handle_menu_event(bContext *C,
               break;
             }
 
+            /* Only respond to explicit press to avoid the event that opened the menu
+             * activating an item when the key is held. */
+            if (event->is_repeat) {
+              break;
+            }
+
             if (event->alt) {
               act += 10;
             }
@@ -9984,8 +10004,11 @@ static int ui_handle_menu_event(bContext *C,
         case EVT_XKEY:
         case EVT_YKEY:
         case EVT_ZKEY: {
-          if ((event->val == KM_PRESS || event->val == KM_DBL_CLICK) &&
-              !IS_EVENT_MOD(event, shift, ctrl, oskey)) {
+          if (ELEM(event->val, KM_PRESS, KM_DBL_CLICK) &&
+              !IS_EVENT_MOD(event, shift, ctrl, oskey) &&
+              /* Only respond to explicit press to avoid the event that opened the menu
+               * activating an item when the key is held. */
+              !event->is_repeat) {
             if (ui_menu_pass_event_to_parent_if_nonactive(menu, but, level, retval)) {
               break;
             }

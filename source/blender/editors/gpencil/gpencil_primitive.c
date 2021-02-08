@@ -711,10 +711,10 @@ static void gpencil_primitive_update_strokes(bContext *C, tGPDprimitive *tgpi)
   bGPDstroke *gps = tgpi->gpf->strokes.first;
   GP_Sculpt_Settings *gset = &ts->gp_sculpt;
   int depth_margin = (ts->gpencil_v3d_align & GP_PROJECT_DEPTH_STROKE) ? 4 : 0;
-  const char *align_flag = &ts->gpencil_v3d_align;
-  bool is_depth = (bool)(*align_flag & (GP_PROJECT_DEPTH_VIEW | GP_PROJECT_DEPTH_STROKE));
-  const bool is_camera = (bool)(ts->gp_sculpt.lock_axis == 0) &&
-                         (tgpi->rv3d->persp == RV3D_CAMOB) && (!is_depth);
+  const char align_flag = ts->gpencil_v3d_align;
+  bool is_depth = (bool)(align_flag & (GP_PROJECT_DEPTH_VIEW | GP_PROJECT_DEPTH_STROKE));
+  const bool is_lock_axis_view = (bool)(ts->gp_sculpt.lock_axis == 0);
+  const bool is_camera = is_lock_axis_view && (tgpi->rv3d->persp == RV3D_CAMOB) && (!is_depth);
 
   if (tgpi->type == GP_STROKE_BOX) {
     tgpi->tot_edges--;
@@ -1077,8 +1077,8 @@ static void gpencil_primitive_update_strokes(bContext *C, tGPDprimitive *tgpi)
     gpencil_apply_parent_point(tgpi->depsgraph, tgpi->ob, tgpi->gpl, pt);
   }
 
-  /* if camera view, reproject flat to view to avoid perspective effect */
-  if (is_camera) {
+  /* If camera view or view projection, reproject flat to view to avoid perspective effect. */
+  if (((align_flag & GP_PROJECT_VIEWSPACE) && is_lock_axis_view) || is_camera) {
     ED_gpencil_project_stroke_to_view(C, tgpi->gpl, gps);
   }
 
